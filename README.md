@@ -56,8 +56,8 @@ cd review_agent
 # Install dependencies
 pip install openai python-dotenv claude-code-sdk
 
-# Clone the benchmark dataset
-git clone https://github.com/SakanaAI/AI-Scientist.git
+# Dataset is loaded automatically from HuggingFace (davidheineman/iclr-2026)
+pip install datasets
 
 # Set your OpenRouter API key
 echo 'OPENROUTER_API_KEY="sk-or-v1-..."' > .env
@@ -78,7 +78,9 @@ python paper_reviewer.py paper.txt --parallel --venue NeurIPS
 python paper_reviewer.py paper.txt --parallel --no-related-work --no-spark
 ```
 
-### Run the ICLR benchmark
+### Run the ICLR 2026 benchmark
+
+Uses `davidheineman/iclr-2026` from HuggingFace (17K+ papers with abstracts and reviewer scores, no final decisions yet — accept/reject is inferred from average score >= 5.5).
 
 ```bash
 # 10 papers, random sampling
@@ -94,16 +96,16 @@ python run_iclr_bench.py 10 42 --parallel --no-spark --no-related-work
 ### Run the baselines
 
 ```bash
-# Always-predict-6 baseline (random sampling)
+# Always-predict-6 baseline
 python run_baseline.py 100 4112
 
-# Always-predict-6 baseline (balanced sampling)
-python run_baseline_balanced.py 100 4112
+# Balanced sampling baseline
+python run_baseline.py 100 4112 --balanced
 ```
 
 ## Sampling Methods
 
-The ICLR benchmark dataset (500 papers from ICLR 2022) has a heavily skewed score distribution:
+The ICLR 2026 dataset (17K+ papers) has a skewed score distribution (reviewer ratings 0-10, even numbers only):
 
 ```
 Score ~2:  13 papers    ██
@@ -143,7 +145,6 @@ With balanced sampling:
 | `bench_scores.csv` | Per-paper: predicted score, GT avg score, all GT reviewer scores, match |
 | `bench_run.log` | Complete stdout/stderr log of the run |
 | `baseline_scores.csv` | Baseline results (random sampling) |
-| `baseline_balanced_scores.csv` | Baseline results (balanced sampling) |
 | `*_review.md` | Individual paper review output |
 
 ## CLI Flags

@@ -1,13 +1,15 @@
 """
-ICLR Benchmark Runner — hybrid Claude Code SDK + OpenRouter.
+ICLR 2026 Benchmark Runner — hybrid Claude Code SDK + OpenRouter.
 
-Claude calls (critic + merger) are free via Claude Code SDK.
-All other calls go through OpenRouter.
+Uses davidheineman/iclr-2026 dataset (abstracts + reviewer scores).
+Since ICLR 2026 has no final decisions yet, we benchmark score prediction
+against the average reviewer rating and infer accept/reject from score.
 
 Usage:
   python run_iclr_bench.py                          # 10 papers, sequential
   python run_iclr_bench.py 5                        # 5 papers
   python run_iclr_bench.py 10 42 --parallel         # parallel OpenRouter agents
+  python run_iclr_bench.py 100 4112 --balanced      # stratified sampling
 """
 
 import asyncio
@@ -17,6 +19,7 @@ import random
 import re
 import sys
 import time
+from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
 
@@ -61,43 +64,47 @@ from paper_reviewer import (
     sanitize_text,
 )
 
-# ── Paths ─────────────────────────────────────────────────────────────
+# ── Dataset loading ───────────────────────────────────────────────────
 
-BENCH_DIR = Path(__file__).parent / "AI-Scientist" / "review_iclr_bench"
-RATINGS_FILE = BENCH_DIR / "ratings_subset.tsv"
-PAPERS_DIR = BENCH_DIR / "iclr_parsed"
-
-# ── Helpers ───────────────────────────────────────────────────────────
+# Accept/reject threshold: papers with avg score >= this are "Accept"
+ACCEPT_THRESHOLD = 5.5
 
 
-def load_ground_truth() -> list[dict]:
+def load_iclr2026() -> list[dict]:
+    """Load ICLR 2026 dataset from HuggingFace."""
+    from datasets import load_dataset
+    ds = load_dataset("davidheineman/iclr-2026")["main"]
+
     rows = []
-    with open(RATINGS_FILE, "r") as f:
-        reader = csv.DictReader(f, delimiter="\t")
-        for row in reader:
-            scores = []
-            for i in range(7):
-                val = row.get(str(i), "").strip()
-                if val:
-                    scores.append(float(val))
-            decision = row["decision"].strip()
-            gt_binary = "Accept" if "Accept" in decision else "Reject"
-            rows.append({
-                "paper_id": row["paper_id"].strip(),
-                "scores": scores,
-                "avg_score": sum(scores) / len(scores) if scores else 0,
-                "decision": decision,
-                "gt_binary": gt_binary,
-            })
+    for item in ds:
+        # Skip withdrawn
+        if "Withdrawn" in item["venue"]:
+            continue
+        # Skip papers with no reviews
+        if not item["reviews"]:
+            continue
+
+        scores = [r["rating"] for r in item["reviews"] if r["rating"] and r["rating"] > 0]
+        if not scores:
+            continue
+
+        avg_score = sum(scores) / len(scores)
+        # Infer decision from average score (no official decisions yet)
+        gt_binary = "Accept" if avg_score >= ACCEPT_THRESHOLD else "Reject"
+
+        rows.append({
+            "paper_id": item["url"].split("=")[-1] if item["url"] else item["title"][:20],
+            "title": item["title"],
+            "abstract": item["abstract"],
+            "scores": scores,
+            "avg_score": avg_score,
+            "decision": f"Inferred ({'Accept' if avg_score >= ACCEPT_THRESHOLD else 'Reject'})",
+            "gt_binary": gt_binary,
+        })
     return rows
 
 
-VALID_SCORES = [1.0, 3.0, 5.0, 6.0, 8.0, 10.0]
-
-
-def _snap_score(raw: float) -> float:
-    """Snap a raw score to the nearest valid ICLR score."""
-    return min(VALID_SCORES, key=lambda v: abs(v - raw))
+# ── Helpers ───────────────────────────────────────────────────────────
 
 
 def parse_score_and_decision(review_text: str) -> tuple[float | None, str | None]:
@@ -121,7 +128,7 @@ def parse_score_and_decision(review_text: str) -> tuple[float | None, str | None
             if dec.lower() in ("accept", "reject"):
                 decision = dec.capitalize()
             if decision is None and score is not None:
-                decision = "Accept" if score >= 5.5 else "Reject"
+                decision = "Accept" if score >= ACCEPT_THRESHOLD else "Reject"
             return score, decision
         except (json.JSONDecodeError, ValueError, TypeError):
             pass
@@ -140,27 +147,53 @@ def parse_score_and_decision(review_text: str) -> tuple[float | None, str | None
         decision = dec_match.group(1).capitalize()
 
     if decision is None and score is not None:
-        decision = "Accept" if score >= 5.5 else "Reject"
+        decision = "Accept" if score >= ACCEPT_THRESHOLD else "Reject"
 
     return score, decision
 
 
-async def review_single_paper(
-    paper_id: str, paper_path: Path, parallel: bool = False, skip_related_work: bool = False, skip_spark: bool = False,
-) -> dict:
-    """Run the full pipeline on one paper."""
-    paper_content = paper_path.read_text(encoding="utf-8", errors="replace")
-    paper_content = sanitize_text(paper_content)
+def stratified_sample(papers: list[dict], n: int, seed: int) -> list[dict]:
+    """Sample equally from each score bin (rounded to int)."""
+    rng = random.Random(seed)
+    bins = defaultdict(list)
+    for p in papers:
+        bins[round(p["avg_score"])].append(p)
+    for k in bins:
+        rng.shuffle(bins[k])
+    sorted_bins = sorted(bins.keys())
+    n_bins = len(sorted_bins)
+    per_bin = n // n_bins
+    remainder = n % n_bins
+    print(f"Stratified sampling: {n_bins} bins, {per_bin} per bin (+{remainder} extra)")
+    print(f"Bins: {', '.join(f'{k}({len(bins[k])})' for k in sorted_bins)}")
+    samples = []
+    for i, k in enumerate(sorted_bins):
+        take = per_bin + (1 if i < remainder else 0)
+        take = min(take, len(bins[k]))
+        samples.extend(bins[k][:take])
+    rng.shuffle(samples)
+    print(f"Total sampled: {len(samples)}\n")
+    return samples
 
-    max_chars = 60_000
-    if len(paper_content) > max_chars:
-        paper_content = paper_content[:max_chars] + "\n\n[... truncated for length ...]"
+
+# ── Review pipeline ───────────────────────────────────────────────────
+
+
+async def review_single_paper(
+    paper_info: dict, parallel: bool = False, skip_related_work: bool = False, skip_spark: bool = False,
+) -> dict:
+    """Run the full pipeline on one paper (using abstract as content)."""
+    # Build paper content from title + abstract
+    paper_content = (
+        f"# {paper_info['title']}\n\n"
+        f"## Abstract\n\n{paper_info['abstract']}\n"
+    )
+    paper_content = sanitize_text(paper_content)
 
     print(f"  Paper length: {len(paper_content):,} chars")
 
     client = _get_client()
-    pp = str(paper_path)
-
+    pp = paper_info["paper_id"]
     sep = "~" * 60
 
     # Stage 1: Critic (Claude SDK) || Neutral + Related Work (OpenRouter)
@@ -199,7 +232,7 @@ async def review_single_paper(
         spark_review = await run_reviewer_claude(
             "spark_finder", SPARK_FINDER_PROMPT, pp, paper_content, MODEL_SPARK, venue="ICLR",
         )
-        print(f"\n  {sep}\n  [spark_finder output]\n  {sep}\n{spark_review}\n")
+        print(f"\n  {sep}\n  [spark_finder output] ({len(spark_review)} chars)\n  {sep}\n{spark_review}\n")
     else:
         spark_review = "Spark finder was skipped."
 
@@ -209,7 +242,7 @@ async def review_single_paper(
         harsh_review, neutral_review,
         spark_review, related_work, paper_content,
     )
-    print(f"\n  {sep}\n  [merger output]\n  {sep}\n{final_review}\n")
+    print(f"\n  {sep}\n  [merger output] ({len(final_review)} chars)\n  {sep}\n{final_review}\n")
 
     score, decision = parse_score_and_decision(final_review)
 
@@ -223,87 +256,69 @@ async def review_single_paper(
 # ── Main ──────────────────────────────────────────────────────────────
 
 
-def stratified_sample(papers: list[dict], n: int, seed: int) -> list[dict]:
-    """Sample equally from each score bin (rounded to int)."""
-    from collections import defaultdict
-    rng = random.Random(seed)
-    bins = defaultdict(list)
-    for p in papers:
-        bins[round(p["avg_score"])].append(p)
-    for k in bins:
-        rng.shuffle(bins[k])
-    sorted_bins = sorted(bins.keys())
-    n_bins = len(sorted_bins)
-    per_bin = n // n_bins
-    remainder = n % n_bins
-    print(f"Stratified sampling: {n_bins} bins, {per_bin} per bin (+{remainder} extra)")
-    print(f"Bins: {', '.join(f'{k}({len(bins[k])})' for k in sorted_bins)}")
-    samples = []
-    for i, k in enumerate(sorted_bins):
-        take = per_bin + (1 if i < remainder else 0)
-        take = min(take, len(bins[k]))
-        samples.extend(bins[k][:take])
-    rng.shuffle(samples)
-    print(f"Total sampled: {len(samples)}\n")
-    return samples
-
-
 async def main(n_samples: int = 10, seed: int = 42, parallel: bool = False, skip_related_work: bool = False, skip_spark: bool = False, balanced: bool = False):
     print("=" * 72)
-    print("ICLR Benchmark: Multi-Agent Paper Reviewer")
-    print("  Claude SDK (free): critic + merger")
+    print("ICLR 2026 Benchmark: Multi-Agent Paper Reviewer")
+    print("  Dataset: davidheineman/iclr-2026 (abstracts + reviewer scores)")
+    print("  Claude SDK (free): critic + spark + merger")
     print("  OpenRouter (paid): neutral + related work")
     print("=" * 72)
     print(f"Mode: {'parallel' if parallel else 'sequential'}")
     print(f"Sampling: {'balanced (stratified)' if balanced else 'random'}")
+    print(f"Accept threshold: avg score >= {ACCEPT_THRESHOLD}")
     print(f"Models:")
     print(f"  Critic/Spark/Merger (Claude SDK): {MODEL_HARSH}")
     print(f"  Neutral (OpenRouter):            {MODEL_NEUTRAL}")
     print(f"  Related Work (OpenRouter):       {MODEL_RELATED_WORK}")
 
-    gt_data = load_ground_truth()
-    print(f"\nLoaded {len(gt_data)} papers from ground truth.")
-
-    available = [r for r in gt_data if (PAPERS_DIR / f"{r['paper_id']}.txt").exists()]
-    print(f"Papers with parsed text: {len(available)}")
+    print("\nLoading dataset...")
+    gt_data = load_iclr2026()
+    print(f"Loaded {len(gt_data)} papers with reviews.")
 
     if balanced:
-        samples = stratified_sample(available, n_samples, seed)
+        samples = stratified_sample(gt_data, n_samples, seed)
     else:
         random.seed(seed)
-        samples = random.sample(available, min(n_samples, len(available)))
+        samples = random.sample(gt_data, min(n_samples, len(gt_data)))
         print(f"Selected {len(samples)} papers (seed={seed}).\n")
 
     results = []
     total_start = time.time()
 
-    # Write results incrementally — header now, append after each paper
+    # Write results incrementally
     output_path = Path(__file__).parent / "bench_results.md"
     csv_path = Path(__file__).parent / "bench_scores.csv"
     with open(output_path, "w") as f:
-        f.write(f"# ICLR Benchmark Results\n\n")
+        f.write(f"# ICLR 2026 Benchmark Results\n\n")
         f.write(f"Date: {datetime.now().strftime('%Y-%m-%d %H:%M')}\n")
+        f.write(f"Dataset: davidheineman/iclr-2026\n")
         f.write(f"Critic/Merger: {MODEL_HARSH} (Claude SDK, free)\n")
         f.write(f"Neutral: {MODEL_NEUTRAL}, ")
         f.write(f"Related Work: {MODEL_RELATED_WORK} (OpenRouter)\n\n")
     with open(csv_path, "w", newline="") as f:
         w = csv.writer(f)
-        w.writerow(["paper_id", "pred_score", "pred_decision", "gt_avg_score", "gt_decision", "gt_binary", "match",
-                     "gt_score_0", "gt_score_1", "gt_score_2", "gt_score_3", "gt_score_4", "gt_score_5", "gt_score_6"])
+        w.writerow(["paper_id", "title", "pred_score", "pred_decision",
+                     "gt_avg_score", "gt_decision", "gt_binary", "match",
+                     "gt_score_0", "gt_score_1", "gt_score_2", "gt_score_3",
+                     "gt_score_4", "gt_score_5", "gt_score_6"])
 
     for i, paper_info in enumerate(samples, 1):
         pid = paper_info["paper_id"]
-        paper_path = PAPERS_DIR / f"{pid}.txt"
+        title = paper_info["title"]
 
         print(f"\n{'─' * 72}")
-        print(f"[{i}/{len(samples)}] Paper: {pid}")
-        print(f"  GT Decision: {paper_info['decision']}  |  GT Avg Score: {paper_info['avg_score']:.1f}")
-        print(f"  GT Reviewer Scores: {paper_info['scores']}")
+        print(f"[{i}/{len(samples)}] {title[:70]}")
+        print(f"  ID: {pid}")
+        print(f"  GT Avg Score: {paper_info['avg_score']:.1f}  |  GT Scores: {paper_info['scores']}")
+        print(f"  GT Binary: {paper_info['gt_binary']}  ({paper_info['decision']})")
         print(f"{'─' * 72}")
 
         start = time.time()
         try:
-            review_result = await review_single_paper(pid, paper_path, parallel=parallel, skip_related_work=skip_related_work, skip_spark=skip_spark)
+            review_result = await review_single_paper(
+                paper_info, parallel=parallel,
+                skip_related_work=skip_related_work, skip_spark=skip_spark,
+            )
             elapsed = time.time() - start
 
             pred_score = review_result["predicted_score"]
@@ -318,6 +333,7 @@ async def main(n_samples: int = 10, seed: int = 42, parallel: bool = False, skip
 
             r = {
                 "paper_id": pid,
+                "title": title,
                 "gt_decision": paper_info["decision"],
                 "gt_binary": paper_info["gt_binary"],
                 "gt_avg_score": paper_info["avg_score"],
@@ -336,6 +352,7 @@ async def main(n_samples: int = 10, seed: int = 42, parallel: bool = False, skip
             print(f"  Time: {elapsed:.1f}s")
             r = {
                 "paper_id": pid,
+                "title": title,
                 "gt_decision": paper_info["decision"],
                 "gt_binary": paper_info["gt_binary"],
                 "gt_avg_score": paper_info["avg_score"],
@@ -348,26 +365,23 @@ async def main(n_samples: int = 10, seed: int = 42, parallel: bool = False, skip
             }
             results.append(r)
 
-        # Append this paper's result to files immediately
+        # Append to files immediately
         with open(output_path, "a") as f:
-            f.write(f"## {r['paper_id']}\n\n")
-            f.write(f"- GT: {r['gt_decision']} (avg {r['gt_avg_score']:.1f})\n")
+            f.write(f"## {r['title']}\n\n")
+            f.write(f"- ID: {r['paper_id']}\n")
+            f.write(f"- GT: {r['gt_decision']} (avg {r['gt_avg_score']:.1f}, scores {r['gt_scores']})\n")
             f.write(f"- Predicted: {r['predicted_decision']} ({r['predicted_score']}/10)\n")
             f.write(f"- Match: {'Yes' if r['match'] else ('No' if r['match'] is not None else 'Parse fail')}\n\n")
             f.write(f"### Final Review\n\n{r['final_review']}\n\n---\n\n")
         with open(csv_path, "a", newline="") as f:
             w = csv.writer(f)
-            gt_scores_padded = r["gt_scores"] + [""] * (7 - len(r["gt_scores"]))
+            gt_padded = r["gt_scores"] + [""] * (7 - len(r["gt_scores"]))
             match_str = "YES" if r["match"] else ("NO" if r["match"] is not None else "PARSE_FAIL")
             w.writerow([
-                r["paper_id"],
-                r["predicted_score"],
-                r["predicted_decision"],
-                f"{r['gt_avg_score']:.2f}",
-                r["gt_decision"],
-                r["gt_binary"],
-                match_str,
-                *gt_scores_padded,
+                r["paper_id"], r["title"],
+                r["predicted_score"], r["predicted_decision"],
+                f"{r['gt_avg_score']:.2f}", r["gt_decision"], r["gt_binary"], match_str,
+                *gt_padded[:7],
             ])
 
     total_elapsed = time.time() - total_start
@@ -388,15 +402,15 @@ async def main(n_samples: int = 10, seed: int = 42, parallel: bool = False, skip
     print(f"Total time:       {total_elapsed:.1f}s")
     print(f"Avg time/paper:   {total_elapsed / len(results):.1f}s")
 
-    print(f"\n{'Paper ID':<20} {'GT':>10} {'Predicted':>10} {'GT Score':>10} {'Pred Score':>11} {'Match':>7}")
-    print("─" * 72)
+    print(f"\n{'Paper ID':<15} {'GT':>8} {'Pred':>8} {'GT Sc':>7} {'Pred Sc':>8} {'Match':>6}")
+    print("─" * 56)
     for r in results:
         gt = r["gt_binary"]
         pred = r["predicted_decision"] or "N/A"
         gt_sc = f"{r['gt_avg_score']:.1f}"
         pred_sc = f"{r['predicted_score']:.1f}" if r["predicted_score"] else "N/A"
         match_str = "YES" if r["match"] else ("NO" if r["match"] is not None else "ERR")
-        print(f"{r['paper_id']:<20} {gt:>10} {pred:>10} {gt_sc:>10} {pred_sc:>11} {match_str:>7}")
+        print(f"{r['paper_id']:<15} {gt:>8} {pred:>8} {gt_sc:>7} {pred_sc:>8} {match_str:>6}")
 
     paired = [(r["gt_avg_score"], r["predicted_score"]) for r in results if r["predicted_score"] is not None]
     if len(paired) >= 2:
@@ -408,11 +422,12 @@ async def main(n_samples: int = 10, seed: int = 42, parallel: bool = False, skip
         print(f"Mean Pred Score:    {mean_pred:.2f}")
         print(f"Score diff (avg):   {sum(abs(g - p) for g, p in paired) / len(paired):.2f}")
 
-    # Append summary to the file
+    # Append summary to results file
     with open(output_path, "a") as f:
         f.write(f"\n# Summary\n\nPapers: {len(results)} | Accuracy: {accuracy:.1%}\n")
 
     print(f"\nDetailed results saved to: {output_path}")
+    print(f"CSV saved to: {csv_path}")
 
     return results
 
