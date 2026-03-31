@@ -1,0 +1,735 @@
+"""
+Multi-Agent Paper Reviewer — hybrid Claude Code SDK + OpenRouter.
+
+Pipeline (5 agents, each with its own model):
+  1. Harsh Critic (claude-opus-4.6 via Claude Code SDK — free)
+  2. Neutral Reviewer (glm-5 via OpenRouter)
+  3. Spark Finder (claude-opus-4.6 via Claude Code SDK — free)
+  4. Related Work Scout (perplexity/sonar-pro via OpenRouter)
+     → filtered by glm-5 to remove already-cited & loosely related work
+  5. Merger (claude-opus-4.6 via Claude Code SDK — free)
+
+Claude calls (critic + merger) go through Claude Code SDK (no API cost).
+All other calls go through OpenRouter.
+
+Usage:
+  python paper_reviewer.py <paper.txt>                 # sequential (default)
+  python paper_reviewer.py <paper.txt> --parallel      # parallel non-Claude agents
+"""
+
+import asyncio
+import os
+import sys
+from pathlib import Path
+
+
+from dotenv import load_dotenv
+from openai import AsyncOpenAI
+
+from claude_code_sdk import (
+    AssistantMessage,
+    ClaudeCodeOptions,
+    ClaudeSDKClient,
+    ResultMessage,
+    TextBlock,
+)
+
+load_dotenv()  # loads .env from cwd or parent dirs
+
+# ── Config ────────────────────────────────────────────────────────────
+
+OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
+OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
+
+# Per-stage model assignments
+MODEL_HARSH = "claude-sonnet-4-6"           # via Claude Code SDK (free)
+# MODEL_SUPPORTIVE removed — was inflating scores
+MODEL_NEUTRAL = "z-ai/glm-5"              # via OpenRouter
+MODEL_SPARK = "claude-sonnet-4-6"                      # via Claude Code SDK (free)
+MODEL_RELATED_WORK = "perplexity/sonar-pro"          # via OpenRouter
+MODEL_FILTER = "z-ai/glm-5"               # via OpenRouter
+MODEL_MERGER = "claude-sonnet-4-6"           # via Claude Code SDK (free)
+
+MAX_RETRIES = 3
+RETRY_DELAY = 10
+
+# ── Agent system prompts ──────────────────────────────────────────────
+
+HARSH_CRITIC_PROMPT = """\
+You are a deeply thoughtful, experienced academic reviewer. You are NOT trying \
+to be picky or find fault for its own sake. Instead, you engage seriously with \
+the paper and raise genuine questions, concerns, and insights that the authors \
+need to address.
+
+Your job:
+- Identify real concerns: Are the claims actually supported by the evidence? \
+  Are there logical gaps in the reasoning? Are key assumptions stated and justified?
+- Raise substantive questions: What would you need to see to be convinced? \
+  What experiments or analyses are missing that would materially change the \
+  conclusions?
+- Offer critical insights: Where does the paper's approach have fundamental \
+  limitations the authors may not have recognized? What failure modes exist?
+- Distinguish severity honestly: Not everything is critical. Be calibrated — \
+  a missing ablation is not the same as a flawed proof.
+
+Do NOT nitpick formatting, style, or minor phrasing. Do NOT invent problems \
+that aren't there. Do NOT penalize intentional scope decisions. Focus on what \
+actually matters for the paper's contribution.
+
+Output format (strictly follow):
+## Critical Review
+
+### Substantive Concerns
+- ... (things that undermine the paper's claims if unaddressed)
+
+### Open Questions
+- ... (things you'd want the authors to clarify or investigate)
+
+### Limitations & Blind Spots
+- ... (fundamental limitations the authors may have missed)
+
+### Overall Assessment
+One paragraph. Be honest and direct, but fair.
+"""
+
+SUPPORTIVE_CHAMPION_PROMPT = """\
+You are a supportive, encouraging academic reviewer who champions good work. \
+You genuinely want papers to succeed and look for reasons to accept.
+
+Your job:
+- Identify and celebrate the paper's strengths generously.
+- Give the authors the benefit of the doubt on ambiguous points.
+- Reframe potential weaknesses as opportunities or future work.
+- Highlight what the paper does RIGHT and why it matters.
+- If you must mention a weakness, be constructive and kind about it.
+
+Output format (strictly follow):
+## Supportive Review
+
+### What This Paper Does Well
+1. ...
+
+### Why This Work Matters
+...
+
+### Areas for Growth (not criticism)
+1. ...
+
+### Encouraging Summary
+One paragraph. Be genuinely supportive but still grounded in evidence.
+"""
+
+NEUTRAL_REVIEWER_PROMPT = """\
+You are a fair, balanced academic reviewer. You give credit where due and \
+critique where warranted, without bias in either direction.
+
+Your job:
+- Summarize the paper's main contribution in 2-3 sentences.
+- List concrete strengths (with evidence from the paper).
+- List concrete weaknesses (with evidence from the paper).
+- Assess novelty, clarity, reproducibility, and significance.
+- Suggest specific improvements.
+
+Output format (strictly follow):
+## Balanced Review
+
+### Summary
+...
+
+### Strengths
+1. ...
+
+### Weaknesses
+1. ...
+
+### Novelty & Significance
+...
+
+### Suggestions for Improvement
+1. ...
+"""
+
+SPARK_FINDER_PROMPT = """\
+You are NOT a traditional reviewer. You are an intellectual explorer looking \
+for hidden gems, unexpected connections, and creative sparks in this paper.
+
+Your job:
+- Identify the most exciting or novel ideas, even if under-developed.
+- Suggest surprising connections to other fields or problems.
+- Propose creative extensions or applications the authors may not have considered.
+- Highlight any unconventional methodology that could inspire new directions.
+- Ignore minor writing/formatting issues — focus on the IDEAS.
+
+Output format (strictly follow):
+## Spark & Insight Report
+
+### Most Exciting Ideas
+1. ...
+
+### Unexpected Connections
+1. ...
+
+### Creative Extensions
+1. ...
+
+### Sleeper Potential
+What's the one thing in this paper that could become much bigger than the \
+authors realize? Explain why.
+"""
+
+RELATED_WORK_PROMPT = """\
+You are a research librarian and literature scout. Given a paper's title, \
+abstract, and key contributions, your job is to find REAL, EXISTING related \
+work that the authors should be aware of.
+
+Your job:
+- Search for closely related papers, especially recent ones (2022-2026).
+- Include papers that use similar methods on different problems.
+- Include papers that tackle the same problem with different methods.
+- Include foundational/seminal work that should be cited.
+- For each paper, provide: title, authors, year, venue, and a 1-sentence \
+  explanation of why it's relevant.
+
+Output format (strictly follow):
+## Related Work Search Results
+
+### Closely Related (same problem + similar approach)
+1. **Title** — Authors (Year, Venue). Why relevant: ...
+
+### Same Problem, Different Approach
+1. **Title** — Authors (Year, Venue). Why relevant: ...
+
+### Same Method, Different Problem
+1. **Title** — Authors (Year, Venue). Why relevant: ...
+
+### Foundational Work
+1. **Title** — Authors (Year, Venue). Why relevant: ...
+"""
+
+RELATED_WORK_FILTER_PROMPT = """\
+You are given a paper and a list of potentially related works found by a \
+search agent. Your job is to FILTER this list:
+
+1. REMOVE any work that is ALREADY CITED in the paper. Check the references \
+   section and in-text citations carefully. If the paper already mentions it \
+   (even by a different abbreviation or partial title), remove it.
+2. REMOVE any work that is only TANGENTIALLY related — if the connection is \
+   a stretch or requires multiple leaps of logic, drop it.
+3. KEEP only works that are genuinely relevant AND not already cited.
+
+For each kept work, briefly explain why it's a potentially missed reference.
+
+Output format (strictly follow):
+## Potentially Missed Related Work
+
+(These are suggestions, not definitive omissions. The authors may have \
+intentionally excluded them or been unaware of them.)
+
+1. **Title** — Authors (Year, Venue).
+   Why potentially missed: ...
+
+If all works are already cited or not relevant, say:
+"No significant potentially missed related work identified."
+"""
+
+MERGER_PROMPT = """\
+You are a senior meta-reviewer / area chair. You have received five inputs \
+about the same paper:
+
+1. A **harsh critic** review (may be overly critical)
+2. A **neutral/balanced** review
+3. A **spark finder** report (focuses on insights, not flaws)
+4. A **potentially missed related work** report (these are SUGGESTIONS, not \
+   definitive omissions — the authors may have good reasons for not citing them)
+
+Your job is to synthesize these into ONE authoritative final review.
+
+IMPORTANT — many criticisms from the harsh reviewer may be NONSENSICAL, \
+OVERLY PICKY, or WRONG. LLM reviewers are notorious for inventing flaws \
+that don't exist, nitpicking irrelevant details, or misunderstanding the \
+paper. You MUST cross-check every criticism against the actual paper content \
+and the other reviews before including it.
+
+Rules:
+- REMOVE nonsensical criticisms: if the harsh critic flags something that \
+  doesn't actually exist in the paper or misunderstands the contribution, \
+  drop it immediately.
+- REMOVE overly picky nitpicks: formatting, minor phrasing, stylistic \
+  preferences — these are NOT real weaknesses.
+- REMOVE false positives: if the harsh critic flags something that the neutral \
+  reviewer found acceptable and it's genuinely fine, drop it.
+- KEEP ONLY criticisms that are: (a) factually correct about the paper, \
+  (b) substantive enough to affect the contribution, AND (c) corroborated \
+  by at least one other reviewer or clearly evident in the paper.
+- KEEP genuine strengths that the neutral reviewer identifies with evidence.
+- KEEP creative insights from the spark finder that are grounded and actionable.
+- For the potentially missed related work: present them as SUGGESTIONS for the \
+  authors to consider, NOT as definitive gaps. Use language like "the authors \
+  may wish to consider" or "potentially relevant work includes". Do NOT penalize \
+  the paper's score for these — they are informational only.
+- When in doubt, FAVOR the paper — a real area chair gives authors the benefit \
+  of the doubt on borderline issues.
+
+SCOPE CHECK — for EVERY weakness, you MUST ask yourself:
+1. Is this a REAL weakness that undermines the paper's claims, or is it a \
+   "nice-to-have" that would improve the paper but is not necessary for the \
+   contribution to stand? Only real weaknesses go in "weaknesses". \
+   Nice-to-haves go in "nice_to_haves".
+2. Could this be INTENTIONAL? Papers have limited space and must make scope \
+   decisions. If the authors likely omitted something deliberately to stay \
+   focused (e.g., not testing on every dataset, not comparing every baseline, \
+   not including proofs for standard results), that is a scope decision, not \
+   a weakness. Think WITH the paper, not against it.
+3. Is this within the paper's stated scope? If the paper says "we focus on X" \
+   and the criticism is "they didn't do Y", that's out of scope — put it in \
+   nice_to_haves at best, or drop it entirely.
+
+Only penalize the score for REAL weaknesses. Nice-to-haves and out-of-scope \
+items should NOT affect the score.
+
+You MUST output your final review as a single JSON object (no markdown, no \
+extra text before or after). Use this exact schema:
+
+{
+  "summary": "2-3 sentence paper summary",
+  "strengths": ["strength 1 with evidence", "strength 2 with evidence"],
+  "weaknesses": ["REAL weakness 1 — affects the core contribution", "REAL weakness 2"],
+  "nice_to_haves": ["would improve but not required 1", "out-of-scope suggestion 2"],
+  "novel_insights": "synthesized from spark finder, grounded observations only",
+  "missed_related_work": ["paper 1 — why relevant", "paper 2 — why relevant"],
+  "suggestions": ["suggestion 1", "suggestion 2"],
+  "score": <float>,
+  "score_justification": "one-line justification",
+  "decision": "<Accept or Reject>"
+}
+
+The "score" field is a CONTINUOUS value from 1.0 to 10.0 (e.g. 3.5, 4.7, 6.2, 8.1). \
+Use the full range — do NOT cluster around 5-6. Be DISCRIMINATIVE:
+- A truly bad paper deserves a 2.0, not a 4.5.
+- A truly great paper deserves a 9.0, not a 7.0.
+- Do NOT hedge toward the middle. Commit to your assessment.
+
+Scoring guide:
+- 9.0-10.0: Strong accept. Exceptional, field-advancing contribution.
+- 7.0-8.9:  Accept. Clear contribution, solid execution, minor issues.
+- 5.5-6.9:  Borderline. Has merit but real weaknesses hold it back.
+- 3.5-5.4:  Reject. Significant issues with claims, method, or evaluation.
+- 1.0-3.4:  Strong reject. Fundamental flaws, unclear contribution, or wrong.
+
+The "decision" field MUST be exactly "Accept" or "Reject".
+
+Output ONLY the JSON object. No other text.
+"""
+
+
+# ── Core logic ────────────────────────────────────────────────────────
+
+def sanitize_text(text: str) -> str:
+    """Remove null bytes and other problematic characters from text."""
+    return text.replace("\x00", "")
+
+
+def _get_client() -> AsyncOpenAI:
+    """Create an AsyncOpenAI client pointed at OpenRouter."""
+    if not OPENROUTER_API_KEY:
+        raise ValueError(
+            "OPENROUTER_API_KEY environment variable not set.\n"
+            "Set it in .env or export it. Get one at https://openrouter.ai/keys"
+        )
+    return AsyncOpenAI(
+        base_url=OPENROUTER_BASE_URL,
+        api_key=OPENROUTER_API_KEY,
+    )
+
+
+# ── Claude Code SDK call (free, using ClaudeSDKClient agent mode) ─────
+
+async def _call_claude_sdk(
+    name: str,
+    system_prompt: str,
+    user_prompt: str,
+    model: str = MODEL_HARSH,
+) -> str:
+    """Call Claude via ClaudeSDKClient agent mode (no API cost).
+
+    Uses the interactive client with the Read tool so Claude can read
+    paper files directly — avoids stuffing huge content into CLI args.
+    """
+    for attempt in range(1, MAX_RETRIES + 1):
+        try:
+            options = ClaudeCodeOptions(
+                system_prompt=system_prompt,
+                model=model,
+                max_turns=10,
+                allowed_tools=["TodoRead", "TodoWrite", "WebSearch", "WebFetch"],
+                permission_mode="bypassPermissions",
+                env={"CLAUDECODE": ""},  # Fix #573: clear inherited env var
+                extra_args={"effort": "high"},
+            )
+            chunks: list[str] = []
+            got_result = False
+            try:
+                async with ClaudeSDKClient(options=options) as client:
+                    await client.query(user_prompt)
+                    async for msg in client.receive_response():
+                        if isinstance(msg, AssistantMessage):
+                            for block in msg.content:
+                                if isinstance(block, TextBlock):
+                                    chunks.append(block.text)
+                        elif isinstance(msg, ResultMessage):
+                            got_result = True
+                            cost = f"${msg.total_cost_usd:.4f}" if msg.total_cost_usd else "free"
+                            print(f"  [{name}] done — {model} (SDK) — {msg.num_turns} turns, cost {cost}")
+            except Exception as e:
+                if got_result and chunks:
+                    print(f"  [{name}] ignoring post-result exit error: {e}")
+                else:
+                    raise
+            return "\n".join(chunks)
+        except Exception as e:
+            err_str = str(e).lower()
+            is_retryable = any(
+                kw in err_str
+                for kw in ["rate_limit", "overloaded", "429", "529", "exit code"]
+            )
+            if is_retryable and attempt < MAX_RETRIES:
+                wait = RETRY_DELAY * attempt
+                print(f"  [{name}] error (attempt {attempt}/{MAX_RETRIES}): {e}")
+                print(f"  [{name}] retrying in {wait}s ...")
+                await asyncio.sleep(wait)
+            else:
+                raise
+    return ""
+
+
+# ── OpenRouter call (for everything else) ─────────────────────────────
+
+async def _call_openrouter(
+    client: AsyncOpenAI,
+    name: str,
+    system_prompt: str,
+    user_prompt: str,
+    model: str,
+) -> str:
+    """Call OpenRouter with retry logic for rate limits."""
+    for attempt in range(1, MAX_RETRIES + 1):
+        try:
+            response = await client.chat.completions.create(
+                model=model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+                max_tokens=4096,
+            )
+            result = response.choices[0].message.content or ""
+            usage = response.usage
+            tokens = f"{usage.prompt_tokens}in/{usage.completion_tokens}out" if usage else "n/a"
+            model_short = model.split("/")[-1]
+            if not result.strip():
+                if attempt < MAX_RETRIES:
+                    print(f"  [{name}] empty response (attempt {attempt}/{MAX_RETRIES}), retrying ...")
+                    await asyncio.sleep(RETRY_DELAY)
+                    continue
+                print(f"  [{name}] empty response after {MAX_RETRIES} attempts")
+            print(f"  [{name}] done — {model_short} (OpenRouter) — {tokens} tokens")
+            return result
+        except Exception as e:
+            err_str = str(e).lower()
+            is_retryable = any(
+                kw in err_str for kw in ["rate_limit", "overloaded", "429", "529", "timeout"]
+            )
+            if is_retryable and attempt < MAX_RETRIES:
+                wait = RETRY_DELAY * attempt
+                print(f"  [{name}] rate limited (attempt {attempt}/{MAX_RETRIES}), waiting {wait}s ...")
+                await asyncio.sleep(wait)
+            else:
+                raise
+    return ""
+
+
+# ── Agent runners ─────────────────────────────────────────────────────
+
+async def run_reviewer_claude(
+    name: str,
+    system_prompt: str,
+    paper_path: str,
+    paper_content: str,
+    model: str,
+    venue: str = "",
+) -> str:
+    """Run a reviewer via Claude Code SDK."""
+    print(f"  [{name}] started (Claude SDK) ...")
+    venue_line = (
+        f"This paper was submitted to **{venue}**. "
+        f"You MUST evaluate it against {venue}'s specific standards, acceptance bar, "
+        f"and expectations. Consider what {venue} reviewers typically look for.\n\n"
+    ) if venue else ""
+    user_prompt = (
+        f"{venue_line}"
+        f"Review the following paper thoroughly.\n\n"
+        f"Paper file: {paper_path}\n\n"
+        f"--- PAPER CONTENT START ---\n"
+        f"{paper_content}\n"
+        f"--- PAPER CONTENT END ---"
+    )
+    return await _call_claude_sdk(name, system_prompt, user_prompt, model)
+
+
+async def run_reviewer_openrouter(
+    client: AsyncOpenAI,
+    name: str,
+    system_prompt: str,
+    paper_path: str,
+    paper_content: str,
+    model: str,
+    venue: str = "",
+) -> str:
+    """Run a reviewer via OpenRouter."""
+    print(f"  [{name}] started (OpenRouter) ...")
+    venue_line = (
+        f"This paper was submitted to **{venue}**. "
+        f"You MUST evaluate it against {venue}'s specific standards, acceptance bar, "
+        f"and expectations. Consider what {venue} reviewers typically look for.\n\n"
+    ) if venue else ""
+    user_prompt = (
+        f"{venue_line}"
+        f"Review the following paper thoroughly.\n\n"
+        f"Paper file: {paper_path}\n\n"
+        f"--- PAPER CONTENT START ---\n"
+        f"{paper_content}\n"
+        f"--- PAPER CONTENT END ---"
+    )
+    return await _call_openrouter(client, name, system_prompt, user_prompt, model)
+
+
+async def run_related_work_search(
+    client: AsyncOpenAI,
+    paper_content: str,
+) -> str:
+    """
+    Two-step related work pipeline (both via OpenRouter):
+    1. Perplexity sonar-pro searches for related papers
+    2. kimi-k2.5 filters already-cited and loosely related ones
+    """
+    abstract_section = paper_content[:3000]
+
+    print("  [related_work_search] started (OpenRouter) ...")
+    raw_results = await _call_openrouter(
+        client,
+        "related_work_search",
+        RELATED_WORK_PROMPT,
+        (
+            f"Find related work for this paper. Here is the title and abstract:\n\n"
+            f"{abstract_section}\n\n"
+            f"Search for real, published papers that are closely related."
+        ),
+        MODEL_RELATED_WORK,
+    )
+
+    print("  [related_work_filter] started (OpenRouter) ...")
+    filtered = await _call_openrouter(
+        client,
+        "related_work_filter",
+        RELATED_WORK_FILTER_PROMPT,
+        (
+            f"Here is the FULL PAPER (check references and citations carefully):\n\n"
+            f"--- PAPER CONTENT START ---\n"
+            f"{paper_content}\n"
+            f"--- PAPER CONTENT END ---\n\n"
+            f"Here are the related works found by the search agent:\n\n"
+            f"{raw_results}\n\n"
+            f"Filter out already-cited and loosely related works."
+        ),
+        MODEL_FILTER,
+    )
+
+    return filtered
+
+
+async def run_merger(
+    harsh_review: str,
+    neutral_review: str,
+    spark_review: str,
+    related_work: str,
+    paper_content: str,
+) -> str:
+    """Run the merger via Claude Code SDK (free)."""
+    print("  [merger] started (Claude SDK) ...")
+    user_prompt = (
+        f"Here is the paper being reviewed:\n\n"
+        f"--- PAPER CONTENT START ---\n"
+        f"{paper_content}\n"
+        f"--- PAPER CONTENT END ---\n\n"
+        f"Here are the four inputs:\n\n"
+        f"# Review 1: Harsh Critic\n{harsh_review}\n\n"
+        f"# Review 2: Neutral Reviewer\n{neutral_review}\n\n"
+        f"# Review 3: Spark Finder\n{spark_review}\n\n"
+        f"# Report 4: Potentially Missed Related Work\n"
+        f"(NOTE: These are SUGGESTIONS only. The search agent may have found \n"
+        f"works that are not truly missed or are only tangentially related. \n"
+        f"Do NOT penalize the paper's score for these.)\n"
+        f"{related_work}\n\n"
+        f"Now produce the final consolidated review following your instructions. "
+        f"Remember: many of the harsh critic's points may be nonsensical or overly "
+        f"picky — cross-check everything against the actual paper before including it."
+    )
+    return await _call_claude_sdk("merger", MERGER_PROMPT, user_prompt, MODEL_MERGER)
+
+
+# ── Main orchestration ────────────────────────────────────────────────
+
+async def review_paper(
+    paper_path: str,
+    parallel: bool = False,
+    skip_related_work: bool = False,
+    skip_spark: bool = False,
+    venue: str = "",
+) -> str:
+    """
+    Main entry point.
+
+    3-stage pipeline (Claude SDK calls are never parallel with each other):
+
+      Stage 1 (parallel if --parallel):
+        - Harsh Critic ──── Claude SDK (reads file via Read tool)
+        - Supportive ────── OpenRouter  ─┐
+        - Neutral ──────── OpenRouter    ├─ parallel with Critic
+        - Related Work ──── OpenRouter  ─┘  (skipped with --no-related-work)
+
+      Stage 2: Spark Finder ── Claude SDK (reads file via Read tool)
+
+      Stage 3: Merger ───────── Claude SDK (can Read file to cross-check)
+    """
+    path = Path(paper_path).expanduser().resolve()
+    if not path.exists():
+        raise FileNotFoundError(f"Paper not found: {path}")
+
+    paper_content = path.read_text(encoding="utf-8", errors="replace")
+    paper_content = sanitize_text(paper_content)
+    print(f"Loaded paper: {path.name} ({len(paper_content):,} chars)")
+    print(f"Mode: {'parallel' if parallel else 'sequential'}")
+    print(f"Related work: {'disabled' if skip_related_work else 'enabled'}")
+    print(f"Spark finder: {'disabled' if skip_spark else 'enabled'}")
+    if venue:
+        print(f"Venue: {venue}")
+    print(f"Models:")
+    print(f"  Harsh Critic (Claude SDK):   {MODEL_HARSH}")
+    print(f"  Neutral (OpenRouter):        {MODEL_NEUTRAL}")
+    if not skip_spark:
+        print(f"  Spark Finder (Claude SDK):   {MODEL_SPARK}")
+    if not skip_related_work:
+        print(f"  Related Work (OpenRouter):   {MODEL_RELATED_WORK}")
+    print(f"  Merger (Claude SDK):         {MODEL_MERGER}\n")
+
+    client = _get_client()
+    pp = str(path)
+
+    # ── Stage 1: Critic (Claude) + Neutral/Related Work (OpenRouter) ──
+    if parallel:
+        tasks = [
+            run_reviewer_claude("harsh_critic", HARSH_CRITIC_PROMPT, pp, paper_content, MODEL_HARSH, venue=venue),
+            run_reviewer_openrouter(client, "neutral", NEUTRAL_REVIEWER_PROMPT, pp, paper_content, MODEL_NEUTRAL, venue=venue),
+        ]
+        if not skip_related_work:
+            print("Stage 1: Critic (Claude SDK) || Neutral + Related Work (OpenRouter) ...")
+            tasks.append(run_related_work_search(client, paper_content))
+            harsh_review, neutral_review, related_work = await asyncio.gather(*tasks)
+        else:
+            print("Stage 1: Critic (Claude SDK) || Neutral (OpenRouter) ...")
+            harsh_review, neutral_review = await asyncio.gather(*tasks)
+            related_work = "Related work search was skipped."
+    else:
+        print("Stage 1: Critic + Neutral (sequential) ...")
+        harsh_review = await run_reviewer_claude("harsh_critic", HARSH_CRITIC_PROMPT, pp, paper_content, MODEL_HARSH, venue=venue)
+        neutral_review = await run_reviewer_openrouter(client, "neutral", NEUTRAL_REVIEWER_PROMPT, pp, paper_content, MODEL_NEUTRAL, venue=venue)
+        if not skip_related_work:
+            related_work = await run_related_work_search(client, paper_content)
+        else:
+            related_work = "Related work search was skipped."
+
+    # ── Stage 2: Spark Finder (Claude SDK — must wait for stage 1) ──
+    if not skip_spark:
+        print("\nStage 2: Spark Finder (Claude SDK) ...")
+        spark_review = await run_reviewer_claude(
+            "spark_finder", SPARK_FINDER_PROMPT, pp, paper_content, MODEL_SPARK, venue=venue,
+        )
+    else:
+        spark_review = "Spark finder was skipped."
+
+    # ── Stage 3: Merger (Claude SDK — must wait for everything) ──
+    print("\nStage 3: Merger (Claude SDK) ...")
+    final_review = await run_merger(
+        harsh_review, neutral_review,
+        spark_review, related_work, paper_content,
+    )
+
+    # ── Output ────────────────────────────────────────────────────
+    separator = "=" * 72
+    full_output = (
+        f"\n{separator}\n"
+        f"INDIVIDUAL REVIEWS\n"
+        f"{separator}\n\n"
+        f"{'─' * 40}\n"
+        f"HARSH CRITIC ({MODEL_HARSH} via Claude SDK)\n"
+        f"{'─' * 40}\n"
+        f"{harsh_review}\n\n"
+        f"{'─' * 40}\n"
+        f"NEUTRAL REVIEWER ({MODEL_NEUTRAL} via OpenRouter)\n"
+        f"{'─' * 40}\n"
+        f"{neutral_review}\n\n"
+        f"{'─' * 40}\n"
+        f"SPARK FINDER ({MODEL_SPARK} via Claude SDK)\n"
+        f"{'─' * 40}\n"
+        f"{spark_review}\n\n"
+        f"{'─' * 40}\n"
+        f"POTENTIALLY MISSED RELATED WORK ({MODEL_RELATED_WORK} via OpenRouter)\n"
+        f"{'─' * 40}\n"
+        f"{related_work}\n\n"
+        f"{separator}\n"
+        f"FINAL CONSOLIDATED REVIEW ({MODEL_MERGER} via Claude SDK)\n"
+        f"{separator}\n\n"
+        f"{final_review}\n"
+    )
+
+    output_path = path.parent / f"{path.stem}_review.md"
+    output_path.write_text(full_output, encoding="utf-8")
+    print(f"\nReview saved to: {output_path}")
+
+    return full_output
+
+
+# ── CLI ───────────────────────────────────────────────────────────────
+
+if __name__ == "__main__":
+    if len(sys.argv) < 2 or sys.argv[1] in ("-h", "--help"):
+        print("Usage: python paper_reviewer.py <paper.txt> [options]")
+        print()
+        print("Flags:")
+        print("  --parallel          Run OpenRouter agents in parallel")
+        print("  --no-related-work   Skip related work search & filter")
+        print("  --no-spark          Skip spark finder agent")
+        print("  --venue <name>      Set venue (e.g. ICLR, NeurIPS, ICML)")
+        print()
+        print("Environment variables (or set in .env):")
+        print("  OPENROUTER_API_KEY   (required) Your OpenRouter API key")
+        print()
+        print("Models per stage:")
+        print(f"  Harsh Critic (Claude SDK):  {MODEL_HARSH}")
+        print(f"  Neutral (OpenRouter):       {MODEL_NEUTRAL}")
+        print(f"  Spark Finder (Claude SDK):  {MODEL_SPARK}")
+        print(f"  Related Work (OpenRouter):  {MODEL_RELATED_WORK}")
+        print(f"  Merger (Claude SDK):        {MODEL_MERGER}")
+        sys.exit(0 if "--help" in sys.argv else 1)
+
+    parallel = "--parallel" in sys.argv
+    skip_related = "--no-related-work" in sys.argv
+    skip_spark = "--no-spark" in sys.argv
+    venue = ""
+    if "--venue" in sys.argv:
+        idx = sys.argv.index("--venue")
+        if idx + 1 < len(sys.argv):
+            venue = sys.argv[idx + 1]
+    paper_file = [a for a in sys.argv[1:] if not a.startswith("--") and a != venue][0]
+    result = asyncio.run(review_paper(paper_file, parallel=parallel, skip_related_work=skip_related, skip_spark=skip_spark, venue=venue))
+    print(result)
