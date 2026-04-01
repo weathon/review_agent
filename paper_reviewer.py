@@ -34,7 +34,7 @@ MODEL_NEUTRAL = "z-ai/glm-5"
 MODEL_SPARK = "z-ai/glm-5"
 MODEL_RELATED_WORK = "z-ai/glm-5:online"
 MODEL_FILTER = "z-ai/glm-5"
-MODEL_MERGER = "gpt-5.4"
+MODEL_MERGER = "z-ai/glm-5"
 
 MAX_RETRIES = 3
 RETRY_DELAY = 10
@@ -63,19 +63,18 @@ def score_to_decision(score: float | None) -> str | None:
 # ── Agent system prompts ──────────────────────────────────────────────
 
 HARSH_CRITIC_PROMPT = """\
-You are a rigorous, experienced academic reviewer who holds papers to a high \
-standard. You engage seriously with the paper and will not let weak claims, \
-insufficient experiments, or hand-waved reasoning pass unchallenged. Be direct \
-and specific — do not soften valid criticisms with unnecessary hedging.
+You are a deeply thoughtful, experienced academic reviewer. You are NOT trying \
+to be picky or find fault for its own sake. Instead, you engage seriously with \
+the paper and raise genuine questions, concerns, and insights that the authors \
+need to address.
 
 You MUST evaluate EACH section of the paper individually using the rubric below. \
 Do not give vague general comments — cite specific sections, equations, figures, \
 tables, or claims when raising concerns.
 
-Do NOT invent problems that aren't there, but do NOT give the authors the \
-benefit of the doubt either — if a claim is unsupported, say so plainly. \
-Focus on substantive issues: weak evidence, overclaiming, missing baselines, \
-logical gaps, and unjustified assumptions.
+Do NOT nitpick formatting, style, or minor phrasing. Do NOT invent problems \
+that aren't there. Do NOT penalize intentional scope decisions. Focus on what \
+actually matters for the paper's contribution.
 
 Output format (strictly follow — evaluate EVERY section):
 
@@ -123,8 +122,8 @@ impede understanding of the contribution.)
 - Are there failure modes or negative societal impacts not discussed?
 
 ### Overall Assessment
-One paragraph. State the most important flaws plainly and whether the \
-contribution survives them. Do not pad with encouragement — be honest and direct.
+One paragraph. Summarize the most important concerns and whether the \
+contribution stands despite them. Be honest, direct, and calibrated.
 """
 
 
@@ -292,6 +291,11 @@ Return your final review using the provided structured response schema.
 Do NOT output any numerical scores or subscores. Do NOT output an accept/reject \
 decision. Your job is ONLY to produce the qualitative review. Scoring will be \
 done separately.
+
+When you are later asked to score: be DISCRIMINATIVE. A weak paper is weak — \
+give it a low score (1-3). A strong paper is strong — give it a high score (7-9). \
+Do not cluster everything around 5. The quality difference between papers is real \
+and your scores should reflect it.
 """
 
 
@@ -419,7 +423,7 @@ async def _call_openai(
                 timeout=REQUEST_TIMEOUT,
             )
             if model in REASONING_MODELS:
-                kwargs["extra_body"] = {"reasoning": {"effort": "medium"}} # "provider": {"only": ["baseten/fp4"]}
+                kwargs["extra_body"] = {"reasoning": {"effort": "low"}} # "provider": {"only": ["baseten/fp4"]}
             response = await client.chat.completions.create(**kwargs)
             result = response.choices[0].message.content or ""
             usage = getattr(response, "usage", None)
@@ -625,7 +629,7 @@ async def run_merger(
         f"--- PAPER CONTENT END ---\n\n"
         f"Here are the four inputs:\n\n"
         f"# Review 1: Harsh Critic\n{harsh_review}\n\n"
-        f"# Review 2: Supportive/Cheering Reviewer (treat strengths cautiously)\n{neutral_review}\n\n"
+        f"# Review 2: Neutral Reviewer\n{neutral_review}\n\n"
         f"# Review 3: Spark Finder\n{spark_review}\n\n"
         f"# Report 4: Potentially Missed Related Work\n"
         f"(NOTE: These are SUGGESTIONS only. The search agent may have found \n"
@@ -670,8 +674,11 @@ async def run_merger(
         score_user += "Now score this paper.\n\n"
 
     score_user += (
-        "Based on the review you just wrote, assign a single overall score "
-        "following the comparative scoring procedure."
+        "Based on the review you just wrote, assign a single overall score.\n\n"
+        "IMPORTANT — use the FULL range from 1.0 to 10.0. Do NOT compress "
+        "scores into 4-6. A paper with fundamental flaws deserves 1-3. "
+        "A strong paper with clear contributions deserves 7-9. "
+        "Commit to your assessment — do not hedge toward the middle."
     )
     messages.append({"role": "user", "content": score_user})
 
@@ -816,7 +823,7 @@ async def review_paper(
         f"{'─' * 40}\n"
         f"{harsh_review}\n\n"
         f"{'─' * 40}\n"
-        f"SUPPORTIVE REVIEWER ({MODEL_NEUTRAL} via OpenRouter)\n"
+        f"NEUTRAL REVIEWER ({MODEL_NEUTRAL} via OpenRouter)\n"
         f"{'─' * 40}\n"
         f"{neutral_review}\n\n"
         f"{'─' * 40}\n"

@@ -6,32 +6,28 @@ An automated academic paper review system that uses multiple LLM agents with dif
 
 ```
 Phase 1 (all parallel via OpenRouter chat completions):
-  ├── Critical Reviewer ──── minimax/minimax-m2.7
-  ├── Neutral Reviewer ───── minimax/minimax-m2.7
-  ├── Spark Finder ───────── minimax/minimax-m2.7
-  └── Related Work Scout ─── minimax/minimax-m2.7:online → minimax/minimax-m2.7 filter
+  ├── Critical Reviewer ──── z-ai/glm-5
+  ├── Supportive Reviewer ── z-ai/glm-5
+  ├── Spark Finder ───────── z-ai/glm-5
+  └── Related Work Scout ─── z-ai/glm-5:online → z-ai/glm-5 filter
 
-Phase 2:
-  └── Merger ──────────────── minimax/minimax-m2.7
-
-Phase 3:
-  └── Score Predictor ─────── minimax/minimax-m2.7
-      (optionally calibrated with few-shot examples)
+Phase 2 (two-turn conversation with the same model):
+  ├── Turn 1: Merger ─────── gpt-5.4  (consolidated review, no scores)
+  └── Turn 2: Scorer ─────── gpt-5.4  (calibrated score from the same conversation)
 ```
 
 **Agents:**
 
 | Agent | Model | Role |
 |-------|-------|------|
-| Critical Reviewer | `minimax/minimax-m2.7` | Section-by-section rubric review — raises genuine concerns, not nitpicks |
-| Neutral Reviewer | `minimax/minimax-m2.7` | Balanced assessment with strengths, weaknesses, novelty |
-| Spark Finder | `minimax/minimax-m2.7` | Identifies missing experiments, deeper analysis, untapped applications |
-| Related Work Scout | `minimax/minimax-m2.7:online` | Proposes potentially missed references using OpenRouter's online model variant |
-| Related Work Filter | `minimax/minimax-m2.7` | Removes already-cited and loosely related results |
-| Merger | `minimax/minimax-m2.7` | Synthesizes all inputs into a final structured review with subscores |
-| Score Predictor | `minimax/minimax-m2.7` | Predicts a continuous score from the multi-agent reviews |
+| Critical Reviewer | `z-ai/glm-5` | Section-by-section rubric review — raises genuine concerns, not nitpicks |
+| Supportive Reviewer | `z-ai/glm-5` | Balanced assessment with strengths, weaknesses, novelty. Labeled "supportive/cheering" for the merger — strengths are cross-checked cautiously |
+| Spark Finder | `z-ai/glm-5` | Identifies top 3-5 missing experiments, deeper analysis, obvious next steps |
+| Related Work Scout | `z-ai/glm-5:online` | Proposes potentially missed references using OpenRouter's online model variant |
+| Related Work Filter | `z-ai/glm-5` | Removes already-cited and loosely related results |
+| Merger + Scorer | `gpt-5.4` | Turn 1: synthesizes all inputs into a final structured review (no scores). Turn 2: scores the paper using calibration examples injected into the same conversation |
 
-All calls now go through OpenRouter using chat completions. Structured outputs for merger and score prediction are still enforced, and reasoning configuration is passed through `extra_body` where supported.
+All calls go through OpenRouter using chat completions. Structured outputs for merger and scoring are enforced via Pydantic schemas, and reasoning configuration is passed through `extra_body` where supported.
 
 ## Review And Scoring Design
 
@@ -46,7 +42,7 @@ The merger acts as an area chair and applies several filters:
 - **Calibration**: Uses score distribution priors (~5% strong accept, ~40% borderline reject, ~30% clear reject) to prevent score inflation
 - **Few-shot calibration** (optional): Injects real examples of multi-agent review bundles paired with human scores/decisions into the score predictor
 
-Real weaknesses go in `"weaknesses"` and inform the final assessment. Nice-to-haves go in `"nice_to_haves"` and should not be treated like core flaws. The merger outputs structured JSON; the separate score predictor outputs a **continuous score from 1.0 to 10.0** using the review bundle, with optional calibration examples.
+Real weaknesses go in `"weaknesses"` and inform the final assessment. Nice-to-haves go in `"nice_to_haves"` and should not be treated like core flaws. The merger outputs a structured review with no scores (turn 1), then scores the paper in a second turn of the same conversation using calibration examples. This ensures the scoring agent has full context of its own review when assigning the score.
 
 ## Motivation
 
@@ -175,7 +171,7 @@ Score distribution (ICLR 2025 reviewer ratings: 1, 3, 5, 6, 8, 10):
 | ~7  | 13     | 0      | 13    |
 | ~8  | 6      | 0      | 6     |
 
-**Use `--balanced` for evaluation** — random sampling oversamples bin 6 (45% of data) and inflates baseline performance.
+**You MUST use `--balanced` for evaluation.** Without it, random sampling heavily oversamples bin 6 (45% of data), which compresses the score range of test papers and dramatically reduces measured correlation (Pearson, Spearman). A model that is actually discriminative will appear to have collapsed variance simply because the test set lacks spread. The `--balanced` flag stratifies across score bins so there are enough low-scoring and high-scoring papers to measure correlation properly. This single flag can make the difference between a Pearson of ~0.3 and ~0.6+.
 
 ## Metrics
 
@@ -265,4 +261,4 @@ Requires OPENREVIEW_USERNAME and OPENREVIEW_PASSWORD in .env
 
 ## Cost
 
-All API calls now go through OpenRouter using `minimax/minimax-m2.7`, with `minimax/minimax-m2.7:online` used for the related-work search stage. Exact cost depends on current OpenRouter pricing, paper length, output length, and online-search usage. Reusing a single model family across all stages simplifies deployment and reduces score shifts caused by mixing providers.
+All API calls go through OpenRouter. Sub-agents (critic, supportive, spark, related work) use `z-ai/glm-5`; the merger/scorer uses `gpt-5.4`. Exact cost depends on current OpenRouter pricing, paper length, output length, and online-search usage.
