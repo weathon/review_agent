@@ -53,7 +53,6 @@ from paper_reviewer import (
     run_merger,
     run_related_work_search,
     run_reviewer,
-    run_score_predictor,
     sanitize_text,
     score_to_decision,
 )
@@ -186,24 +185,17 @@ async def review_single_paper(
     if not skip_related_work:
         print(f"\n  {sep}\n  [related_work output] ({len(related_work)} chars)\n  {sep}\n{related_work}\n")
 
-    # Phase 2: Merger (review only, no score)
+    # Phase 2: Merger + Score (same conversation)
     print("  Phase 2: Merger ...")
-    final_review = await run_merger(
+    final_review, score = await run_merger(
         client, harsh_review, neutral_review,
         spark_review, related_work, paper_content,
-    )
-    print(f"\n  {sep}\n  [merger output] ({len(final_review)} chars)\n  {sep}\n{final_review}\n")
-
-    # Phase 3: Score predictor (with calibration)
-    print("  Phase 3: Score predictor ...")
-    score = await run_score_predictor(
-        client, harsh_review, neutral_review,
-        spark_review, related_work, final_review,
         calibration_context=calibration_context,
     )
     score = round(float(score), 1)
     decision = score_to_decision(score)
-    print(f"  [score_predictor] structured score: {score}")
+    print(f"\n  {sep}\n  [merger output] ({len(final_review)} chars)\n  {sep}\n{final_review}\n")
+    print(f"  [merger_score] structured score: {score}")
 
     return {
         "final_review": final_review,

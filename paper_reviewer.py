@@ -49,11 +49,6 @@ class FinalReviewSchema(BaseModel):
     novel_insights: str
     missed_related_work: list[str]
     suggestions: list[str]
-    novelty: float
-    technical_soundness: float
-    empirical_support: float
-    significance: float
-    clarity: float
 
 
 class ScoreSchema(BaseModel):
@@ -296,31 +291,22 @@ Rules:
 - For potentially missed related work: present as suggestions, do not penalize.
 
 Return your final review using the provided structured response schema.
-Also provide calibrated subscores from 1.0 to 10.0 for:
-- novelty
-- technical_soundness
-- empirical_support
-- significance
-- clarity
 
-These subscores should reflect the paper itself after filtering reviewer noise.
-Do NOT output an accept/reject decision.
+Do NOT output any numerical scores or subscores. Do NOT output an accept/reject \
+decision. Your job is ONLY to produce the qualitative review. Scoring will be \
+done separately.
 """
 
 
 
 SCORE_PROMPT = """\
-You are a paper review agent performing COMPARATIVE scoring. You have received:
+You previously wrote a consolidated review of a paper. Now you must assign \
+a calibrated overall score from 1.0 to 10.0 using COMPARATIVE SCORING \
+against calibration examples.
 
-1. A **harsh critic** review (may be overly critical)
-2. A **neutral/balanced** review
-3. A **spark finder** report (focuses on insights, not flaws)
-4. A **potentially missed related work** report (these are SUGGESTIONS, not \
-   definitive omissions — the authors may have good reasons for not citing them)
-5. A final consolidated review with subscores
-
-Your task is to predict a calibrated overall score from 1.0 to 10.0 using \
-COMPARATIVE SCORING against the calibration set.
+Base your score on YOUR OWN review above — the strengths, weaknesses, \
+nice-to-haves, and suggestions you already identified. Do not re-evaluate \
+from scratch.
 
 ## Comparative Scoring Procedure (MANDATORY when calibration examples exist)
 
@@ -339,8 +325,8 @@ paper's level. Note its human average score — this is your score ceiling.
 **Step 3 — Compare dimension by dimension.**
 For BOTH the lower and upper bound papers, compare against the current paper on:
 - novelty
-- technical_soundness
-- empirical_support
+- technical soundness
+- empirical support
 - significance
 - clarity
 
@@ -389,23 +375,6 @@ Before deciding on the final score, ask:
 - Are the main concerns actually central to the paper's claims?
 - Would these concerns realistically cause rejection at the target venue?
 - Is the paper still a meaningful contribution despite its weaknesses?
-- Are you reacting to true flaws, or to reviewer-style negativity in the input reviews?
-
-If the review bundle contains some overly harsh or low-precision criticism, \
-do not let that alone drag the score down.
-
-## Calibration Examples
-
-You will be given a set of calibration examples (if available). Each contains:
-- one final consolidated review
-- merger subscores
-- actual human reviewer scores and average score
-
-These examples are your PRIMARY scoring anchor. You MUST use the comparative \
-bounding procedure above — do NOT ignore the calibration set and score from \
-scratch. The calibration examples define the score scale; your job is to place \
-the current paper on that scale by finding where it falls relative to the \
-examples.
 
 Return the score using the provided structured response schema.
 """
@@ -639,25 +608,19 @@ async def run_merger(
     related_work: str,
     paper_content: str,
     calibration_context: str = "",
-) -> str:
-    """Run the merger via OpenRouter chat completions."""
+) -> tuple[str, float]:
+    """
+    Two-turn merger:
+      Turn 1 — produce the consolidated review (no scores).
+      Turn 2 — with calibration context appended, produce a score.
+    Same model, same conversation history.
+
+    Returns (review_json, score).
+    """
     print(f"  [merger] started ({MODEL_MERGER}) ...")
 
-    calibration_block = ""
-    # if calibration_context:
-    #     calibration_block = (
-    #         f"Here are examples of sub-agent reviews for other papers, paired with\n"
-    #         f"the ACTUAL human reviewer scores and decisions. Use these to calibrate\n"
-    #         f"your scoring — they show what real scores look like for different\n"
-    #         f"quality levels:\n\n"
-    #         f"--- CALIBRATION EXAMPLES ---\n"
-    #         f"{calibration_context}\n"
-    #         f"--- END CALIBRATION EXAMPLES ---\n\n"
-    #         f"Now review the current paper:\n\n"
-    #     )
-
-    user_prompt = (
-        # f"{calibration_block}"
+    # ── Turn 1: Review only ──────────────────────────────────────────
+    user_prompt_review = (
         f"Here is the paper being reviewed (extracted from PDF — formatting "
         f"artifacts are parser issues, not paper problems):\n\n"
         f"--- PAPER CONTENT START ---\n"
@@ -669,8 +632,7 @@ async def run_merger(
         f"# Review 3: Spark Finder\n{spark_review}\n\n"
         f"# Report 4: Potentially Missed Related Work\n"
         f"(NOTE: These are SUGGESTIONS only. The search agent may have found \n"
-        f"works that are not truly missed or are only tangentially related. \n"
-        # f"Do NOT penalize the paper's score for these.)\n"
+        f"works that are not truly missed or are only tangentially related.)\n"
         f"{related_work}\n\n"
         f"Now produce the final consolidated review following your instructions. "
         f"Remember: many of the harsh critic's points may be nonsensical or overly "
@@ -680,53 +642,84 @@ async def run_merger(
         client,
         "merger",
         MERGER_PROMPT,
-        user_prompt,
+        user_prompt_review,
         MODEL_MERGER,
         FinalReviewSchema,
     )
-    return parsed.model_dump_json(indent=2)
+    review_json = parsed.model_dump_json(indent=2)
 
+    # ── Turn 2: Score (same conversation, calibration injected) ──────
+    print(f"  [merger_score] scoring with calibration ({MODEL_MERGER}) ...")
 
+    # Build the conversation history: system + turn1_user + turn1_assistant + turn2_user
+    messages = [
+        {"role": "system", "content": MERGER_PROMPT},
+        {"role": "user", "content": user_prompt_review},
+        {"role": "assistant", "content": review_json},
+    ]
 
-async def run_score_predictor(
-    client: AsyncOpenAI,
-    harsh_review: str,
-    neutral_review: str,
-    spark_review: str,
-    related_work: str,
-    final_review: str,
-    calibration_context: str = "",
-) -> float:
-    """Run a score predictor (optional, can be used for calibration)."""
-
-    user_prompt = ""
+    # Turn 2 user message: calibration + scoring instruction
+    score_user = ""
     if calibration_context:
-        user_prompt = (
-            f"Here are examples of reviews for other papers, paired with\n"
-            f"the ACTUAL human reviewer scores and decisions. Use these to calibrate\n"
-            f"your scoring — they show what real scores look like for different\n"
-            f"quality levels:\n\n"
+        score_user += (
+            f"Now score this paper. Here are calibration examples — reviews of \n"
+            f"other papers paired with ACTUAL human reviewer scores. Use these as \n"
+            f"your primary scoring anchor:\n\n"
             f"--- CALIBRATION EXAMPLES ---\n"
             f"{calibration_context}\n"
             f"--- END CALIBRATION EXAMPLES ---\n\n"
         )
-    user_prompt += (
-        f"Score the current paper using only the reviews below.\n\n"
-        f"Harsh Critic Review:\n{harsh_review}\n\n"
-        f"Neutral Review:\n{neutral_review}\n\n"
-        f"Spark Finder Review:\n{spark_review}\n\n"
-        f"Related Work Review:\n{related_work}\n\n"
-        f"Final Review:\n{final_review}\n\n"
+    else:
+        score_user += "Now score this paper.\n\n"
+
+    score_user += (
+        "Based on the review you just wrote, assign a single overall score "
+        "following the comparative scoring procedure."
     )
-    parsed = await _parse_openai(
-        client,
-        "score_predictor",
-        SCORE_PROMPT,
-        user_prompt,
-        MODEL_MERGER,
-        ScoreSchema,
-    )
-    return parsed.score
+    messages.append({"role": "user", "content": score_user})
+
+    # Call with multi-turn messages for structured score
+    for attempt in range(1, MAX_RETRIES + 1):
+        try:
+            kwargs = dict(
+                model=MODEL_MERGER,
+                messages=messages,
+                response_format=ScoreSchema,
+                timeout=REQUEST_TIMEOUT,
+            )
+            response = await client.beta.chat.completions.parse(**kwargs)
+            score_parsed = response.choices[0].message.parsed
+            if score_parsed is None:
+                if attempt < MAX_RETRIES:
+                    print(f"  [merger_score] empty response (attempt {attempt}/{MAX_RETRIES}), retrying ...")
+                    await asyncio.sleep(RETRY_DELAY + _random.uniform(0, 5))
+                    continue
+                raise ValueError("merger_score returned no parsed output")
+            usage = getattr(response, "usage", None)
+            input_tokens = getattr(usage, "prompt_tokens", None) if usage else None
+            output_tokens = getattr(usage, "completion_tokens", None) if usage else None
+            tokens = f"{input_tokens}in/{output_tokens}out" if input_tokens and output_tokens else "n/a"
+            print(f"  [merger_score] done — {MODEL_MERGER} (OpenRouter structured) — {tokens} tokens")
+            return review_json, score_parsed.score
+        except APITimeoutError:
+            if attempt < MAX_RETRIES:
+                wait = RETRY_DELAY * attempt
+                print(f"  [merger_score] timeout (attempt {attempt}/{MAX_RETRIES}), waiting {wait}s ...")
+                await asyncio.sleep(wait)
+                continue
+            raise
+        except Exception as e:
+            err_str = str(e).lower()
+            is_retryable = any(
+                kw in err_str for kw in ["rate_limit", "overloaded", "429", "529", "timeout", "gateway", "502", "503", "504"]
+            )
+            if is_retryable and attempt < MAX_RETRIES:
+                wait = RETRY_DELAY * attempt
+                print(f"  [merger_score] transient error (attempt {attempt}/{MAX_RETRIES}), waiting {wait}s ...")
+                await asyncio.sleep(wait)
+            else:
+                raise
+    raise RuntimeError("merger_score failed after all retries")
 
 
 # ── Main orchestration ────────────────────────────────────────────────
@@ -805,22 +798,11 @@ async def review_paper(
         else:
             related_work = "Related work search was skipped."
 
-    # ── Phase 2: Merger (waits for all reviewers) ─────────────────
+    # ── Phase 2: Merger + Score (same conversation) ───────────────
     print("\nPhase 2: Merger ...")
-    final_review = await run_merger(
+    final_review, final_score = await run_merger(
         client, harsh_review, neutral_review,
         spark_review, related_work, paper_content,
-        calibration_context=calibration_context,
-    )
-
-
-    final_score = await run_score_predictor(
-        client,
-        harsh_review,
-        neutral_review,
-        spark_review,
-        related_work,
-        final_review,
         calibration_context=calibration_context,
     )
     final_score = round(float(final_score), 1)

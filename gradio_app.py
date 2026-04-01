@@ -123,7 +123,7 @@ def run_review(
 ) -> Generator[tuple[str, str, str | None], None, None]:
     api_key = (api_key or "").strip()
     if not api_key:
-        raise gr.Error("Please enter an OpenAI API key.")
+        raise gr.Error("Please enter an OpenRouter API key.")
 
     yield "Running: reading input...", "Review started. Preparing input.", None
 
@@ -169,14 +169,14 @@ with gr.Blocks(title="Paper Reviewer", theme=APP_THEME, css=APP_CSS) as demo:
     gr.Markdown(
         """
         # Multi-Agent Paper Reviewer
-        Local-only, no auth, BYOK. Enter an OpenAI API key, then upload a paper file or paste the paper text directly.
+        Local-only, no auth, BYOK. Enter an OpenRouter API key, then upload a paper file or paste the paper text directly.
         PDF upload is supported and reuses the parser from the dataset builder.
         """
     )
 
     with gr.Row():
         api_key = gr.Textbox(
-            label="OpenAI API Key",
+            label="OpenRouter API key",
             type="password",
             placeholder="sk-...",
         )

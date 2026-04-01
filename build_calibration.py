@@ -109,9 +109,9 @@ async def run_sub_agents_and_merger(
         else:
             related_work = ""
 
-    # Phase 2: Merger (review only, no score)
-    print("  Running merger (no score) ...")
-    merged_review = await run_merger(
+    # Phase 2: Merger (review + score, but we only keep the review for calibration)
+    print("  Running merger ...")
+    merged_review, _ = await run_merger(
         client, harsh_review, neutral_review,
         spark_review, related_work, paper_content,
     )
@@ -126,7 +126,7 @@ async def run_sub_agents_and_merger(
 
 
 def build_calibration_md(results: list[dict]) -> str:
-    """Build compact calibration markdown from final review + subscores + human scores."""
+    """Build compact calibration markdown from final review + human scores."""
     parts = []
     for i, r in enumerate(results, 1):
         merged = json.loads(r["merged_review"])
@@ -152,13 +152,6 @@ def build_calibration_md(results: list[dict]) -> str:
         parts.append("Suggestions:")
         for item in merged["suggestions"]:
             parts.append(f"- {item}")
-        parts.append("")
-        parts.append("# Merger Subscores")
-        parts.append(f"Novelty: {merged['novelty']:.1f}")
-        parts.append(f"Technical soundness: {merged['technical_soundness']:.1f}")
-        parts.append(f"Empirical support: {merged['empirical_support']:.1f}")
-        parts.append(f"Significance: {merged['significance']:.1f}")
-        parts.append(f"Clarity: {merged['clarity']:.1f}")
         parts.append("")
         parts.append("# Actual Human Scores")
         parts.append(f"Individual reviewer scores: {r['scores']}")
