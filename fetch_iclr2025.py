@@ -36,21 +36,7 @@ OPENREVIEW_URL = "https://openreview.net"
 
 def fetch_notes():
     """Fetch all ICLR 2025 submission notes with reviews via OpenReview API."""
-    import openreview
-
-    username = os.environ.get("OPENREVIEW_USERNAME")
-    password = os.environ.get("OPENREVIEW_PASSWORD")
-    if not username or not password:
-        raise ValueError(
-            "Set OPENREVIEW_USERNAME and OPENREVIEW_PASSWORD in .env\n"
-            "Sign up at https://openreview.net/signup"
-        )
-
-    print("Connecting to OpenReview API v2...")
-    client = openreview.api.OpenReviewClient(
-        username=username, password=password,
-        baseurl="https://api2.openreview.net",
-    )
+    client = get_or_client()
 
     venue = "ICLR.cc/2025/Conference"
     print(f"Fetching submissions for {venue}...")
@@ -128,22 +114,35 @@ def parse_note(note) -> dict | None:
     }
 
 
-def download_pdf(paper_id: str, pdf_url: str) -> Path | None:
-    """Download a PDF from OpenReview."""
-    import requests
+def get_or_client():
+    """Get an authenticated OpenReview API client."""
+    import openreview
+    username = os.environ.get("OPENREVIEW_USERNAME")
+    password = os.environ.get("OPENREVIEW_PASSWORD")
+    if not username or not password:
+        raise ValueError(
+            "Set OPENREVIEW_USERNAME and OPENREVIEW_PASSWORD in .env\n"
+            "Sign up at https://openreview.net/signup"
+        )
+    return openreview.api.OpenReviewClient(
+        username=username, password=password,
+        baseurl="https://api2.openreview.net",
+    )
 
+
+def download_pdf(or_client, paper_id: str) -> Path | None:
+    """Download a PDF from OpenReview using the authenticated API."""
     outfile = PDFS_DIR / f"{paper_id}.pdf"
     if outfile.exists() and outfile.stat().st_size > 0:
         return outfile
 
-    url = OPENREVIEW_URL + pdf_url
     try:
-        r = requests.get(url, timeout=30)
-        if r.status_code == 200 and len(r.content) > 1000:
-            outfile.write_bytes(r.content)
+        pdf_bytes = or_client.get_pdf(paper_id)
+        if len(pdf_bytes) > 1000:
+            outfile.write_bytes(pdf_bytes)
             return outfile
         else:
-            print(f"    Download failed: status={r.status_code}, size={len(r.content)}")
+            print(f"    Download failed: got {len(pdf_bytes)} bytes")
             return None
     except Exception as e:
         print(f"    Download error: {e}")
@@ -237,6 +236,9 @@ def main(n_samples: int = 100, seed: int = 42, balanced: bool = False):
     print(f"Selected {len(samples)} papers.\n")
 
     # Download PDFs and convert to markdown
+    print("Authenticating with OpenReview for PDF downloads...")
+    or_client = get_or_client()
+
     success = 0
     with open(RATINGS_FILE, "w", newline="") as f:
         w = csv.writer(f)
@@ -256,7 +258,7 @@ def main(n_samples: int = 100, seed: int = 42, balanced: bool = False):
         else:
             # Download PDF
             print(f"  Downloading PDF...")
-            pdf_path = download_pdf(pid, paper["pdf_url"])
+            pdf_path = download_pdf(or_client, pid)
             if not pdf_path:
                 print(f"  SKIPPED (download failed)")
                 continue
