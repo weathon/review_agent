@@ -152,7 +152,9 @@ async def main(
     samples = sample_one_per_bin(available, seed)
 
     results = []
-    for i, paper_info in enumerate(samples, 1):
+    CONCURRENCY = 3
+
+    async def process_one(i, paper_info):
         pid = paper_info["paper_id"]
         paper_path = papers_dir / f"{pid}.txt"
 
@@ -167,16 +169,28 @@ async def main(
             parallel=parallel, skip_spark=skip_spark, skip_related_work=skip_related_work,
         )
         elapsed = time.time() - start
-        print(f"  Done in {elapsed:.1f}s")
+        print(f"  [{pid}] Done in {elapsed:.1f}s")
 
-        results.append({
+        return {
             **outputs,
             "paper_id": pid,
             "scores": paper_info["scores"],
             "avg_score": paper_info["avg_score"],
             "decision": paper_info["decision"],
             "gt_binary": paper_info["gt_binary"],
-        })
+        }
+
+    # Run calibration papers concurrently
+    semaphore = asyncio.Semaphore(CONCURRENCY)
+
+    async def limited(i, paper_info):
+        async with semaphore:
+            return await process_one(i, paper_info)
+
+    print(f"Running {len(samples)} calibration papers (concurrency={CONCURRENCY}) ...")
+    results = await asyncio.gather(*(
+        limited(i, p) for i, p in enumerate(samples, 1)
+    ))
 
     # Save calibration.md
     cal_md = build_calibration_md(results)
