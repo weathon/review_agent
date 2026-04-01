@@ -1,0 +1,740 @@
+## - HIRA: PARAMETER-EFFICIENT HADAMARD HIGH RANK ADAPTATION FOR LARGE LANGUAGE MODELS 
+
+**Qiushi Huang**[1] _[,]_[2] _[∗]_ **, Tom Ko**[3] **, Zhan Zhuang**[1] _[,]_[4] **, Lilian Tang**[2] **, Yu Zhang**[1] _[†]_ 1Southern University of Science and Technology, 2University of Surrey 
+
+3ByteDance, 4City University of Hong Kong 
+
+_{_ qiushi.huang.cs, tomkocse, yu.zhang.ust _}_ @gmail.com, h.tang@surrey.ac.uk, 12250063@mail.sustech.edu.cn 
+
+## ABSTRACT 
+
+We propose Hadamard High-Rank Adaptation (HiRA), a parameter-efficient finetuning (PEFT) method that enhances the adaptability of Large Language Models (LLMs). While Low-rank Adaptation (LoRA) is widely used to reduce resource demands, its low-rank updates may limit its expressiveness for new tasks. HiRA addresses this by using a Hadamard product to retain high-rank update parameters, improving the model capacity. Empirically, HiRA outperforms LoRA and its variants on several tasks, with extensive ablation studies validating its effectiveness. Our code is available at https://github.com/hqsiswiliam/hira. 
+
+## 1 INTRODUCTION 
+
+Recent advancements in pre-trained Large Language Models (LLMs) (Touvron et al., 2023; Zhang et al., 2022; Achiam et al., 2023) have significantly enhanced performance across various natural language processing tasks. Traditionally, adapting those LLMs to specific tasks required full finetuning, wherein all model parameters are updated. However, due to the massive number of parameters in those LLMs, full fine-tuning becomes computationally prohibitive, especially in resourceconstrained environments. 
+
+To address this challenge, parameter-efficient fine-tuning (PEFT) methods have been developed to adapt LLMs by updating only a small subset of parameters. Building on this approach, several recent studies (Lester et al., 2021; Liu et al., 2022; Hu et al., 2021; Liu et al., 2024) have introduced methods that maintain the integrity of the original architecture by freezing the majority of the model parameters and introducing updates to a limited set. Notably, LoRA (Hu et al., 2021) exemplifies PEFT by integrating a low-rank matrix decomposition into the update ∆ _W_ = _L_ 1 _L_ 2, where _L_ 1 _∈_ R _[d][×][r]_ and _L_ 2 _∈_ R _[r][×][k]_ are low-rank matrices with the rank at most _r_ . This technique significantly reduces computational costs required compared to updating the full-rank parameter matrix _W_ . 
+
+However, previous studies (Jiang et al., 2024; Liu et al., 2023; 2024; Zhuang et al., 2024) have shown that LoRA and most of its variants (Lialin et al., 2023; Hayou et al., 2024) do not perform well when applied to complex tasks, such as commonsense reasoning that requires training on a single dataset but evaluating across multiple sub-tasks. One potential reason for LoRA’s limitations in these scenarios is that its update matrix, ∆ _W_ , which is derived from the multiplication of lowrank matrices _L_ 1 and _L_ 2, is confined to a maximum rank of _r_ . Consequently, although ∆ _W_ is a _d × k_ matrix, its rank cannot exceed _r_ , which may limit the expressiveness of ∆ _W_ , particularly for more complex tasks. A natural solution to this issue is to raise the rank of the update parameter matrix to increase its capability. However, due to resource constraints, we still hope to follow the PEFT strategy. This gives rise to our research question: “ _Is it possible to achieve a higher-rank adaptation for LLMs under the PEFT strategy?_ ” 
+
+To answer this question, in this paper, we propose a Hadamard high-Rank Adaptation (HiRA) for LLMs. The central innovation of HiRA is to express the update parameter matrix ∆ _W_ as the Hadamard product (a.k.a. elementwise product) of the original parameter matrix in the LLM and a 
+
+> _∗_ Work done as an intern at ByteDance. 
+
+> _†_ Corresponding author. 
+
+1 
+
+low-rank matrix to achieve a high-rank adaptation, thus increasing its rank and also expressiveness. Due to a property of the Hadamard product that Rank( _O_ 1 _⊙ O_ 2) _≤_ Rank( _O_ 1) _×_ Rank( _O_ 2) for two matrices _O_ 1 and _O_ 2 with an equal size (Million, 2007), where _⊙_ denotes the Hadamard product and _·_ Rank( ) gives the rank of a matrix, the Hadamard product could have a higher rank even though one of the two matrices in the Hadamard product is low-rank. 
+
+As an illustration, where the experimental setting is detailed in Appendix A.1, Figure 1 shows that the average rank of update parameters in HiRA is much higher than that in LoRA (i.e., 2837 vs. 32), which demonstrates that the proposed HiRA could possess high-rank update parameter matrices while keeping the same number of trainable parameters as LoRA. The increased rank of ∆ _W_ in HiRA could enhance its expressiveness, as demonstrated in our experimental section. 
+
+Through comprehensive experiments, we demonstrate that HiRA significantly outperforms LoRA and its variants, showcasing the effectiveness of the proposed HiRA. Extensive ablation studies further elucidate the impact of different components in the HiRA, confirming its advantages and practical utility. 
+
+**==> picture [159 x 122] intentionally omitted <==**
+
+**----- Start of picture text -----**<br>
+2800<br>500<br>400<br>300 HiRA: Rank( W)<br>LoRA: Rank( W)<br>200 MoRA: Rank( W)<br>0<br>2 4 8 16 24 28 30 32<br>r<br> Rank<br>W<br>**----- End of picture text -----**<br>
+
+
+Figure 1: Rank comparison of update parameters ∆ _W_ among LoRA, MoRA, and the proposed HiRA. 
+
+In summary, the contributions of this paper are as follows. 
+
+- We are the first to apply the Hadamard product to the parameter-efficient adaptation of LLMs. 
+
+- Based on the Hadamard product, we propose HiRA, a novel high-rank adaptation strategy for LLMs. The proposed HiRA method significantly increases the rank of update parameter matrices, enhancing the model’s expressive power and adaptability. 
+
+- We conduct extensive experiments and analyses to demonstrate the effectiveness of HiRA. 
+
+## 2 RELATED WORKS 
+
+**Low-rank adaptation (LoRA).** PEFT methods aim to efficiently adapt LLMs to downstream tasks by training a small subset of additional parameters while keeping most pretrained weights frozen. Current prevalent PEFT methods can be broadly categorized into three main types, with low-rank adaptation being a major category. LoRA (Hu et al., 2021) factorizes the update weight into two low-rank matrices, allowing seamless integration into the original model without modifying its architecture or increasing inference overhead. As an extension, DoRA (Liu et al., 2024) decomposes weight updates into magnitude and direction, updating the directional component in the same manner as LoRA. MoRA (Jiang et al., 2024) compresses inputs via predefined functions, transforms them via a square “higher-rank” matrix, and then decompresses them to achieve a higherrank adaptation. Different from LoRA which relies on the low-rank structure of the update weight, HiRA aims to learn the update weight with a high rank to enhance the expressive power. However, unlike MoRA, which relies on complex static compression and decompression functions that can complicate weight merging, HiRA merges seamlessly into the pretrained model, just as LoRA does. 
+
+Recently, FLoRA (Wen & Chaudhuri, 2024) uses the Hadamard product to implement an examplespecific adapter, enabling efficient batching, while PACE (Ni et al., 2024) applies element-wise multiplicative noise to improve generalization cost-efficiently. In contrast, HiRA employs the Hadamard product to achieve a higher-rank adaptation (as empirically demonstrated in Figures 1 and 7) with a more in-depth analysis, which makes them significantly different. 
+
+**Other PEFT methods.** The second category comprises prompt-based methods, which integrate extra trainable virtual tokens into the input of LLMs and focus exclusively on training those tokens. Representative methods include Prompt Tuning (Lester et al., 2021), which introduces a series of virtual tokens for task-specific adaptations at the initial layer, and P-Tuning (Liu et al., 2022), which adds virtual tokens at every layer instead of the initial layer. Although prompt-based methods add a negligible number of trainable parameters into the input, they are notably sensitive to initialization 
+
+2 
+
+**==> picture [135 x 56] intentionally omitted <==**
+
+**==> picture [65 x 39] intentionally omitted <==**
+
+**==> picture [47 x 80] intentionally omitted <==**
+
+**----- Start of picture text -----**<br>
+decompose<br>decompose<br>**----- End of picture text -----**<br>
+
+
+**==> picture [187 x 60] intentionally omitted <==**
+
+**==> picture [131 x 78] intentionally omitted <==**
+
+Figure 3: An illustration of the proposed HiRA method in comparison to the LoRA method. (Wu et al., 2024). Moreover, due to the quadratic computational complexity of transformer architectures (Vaswani et al., 2017), prompt-based approaches could increase computational costs during inference proportionally to the length of the prompt. The third category includes adapter-based methods. Those methods insert trainable modules, such as adapter layers, into the original frozen LLMs. Typical methods include Adapters (Houlsby et al., 2019) and Compacter (Karimi Mahabadi et al., 2021) that add linear layers to LLMs. Parallel adapters (He et al., 2021) integrate adapters in parallel for performance enhancement. Those methods modify the architecture of original models during training and inference, potentially increasing overhead compared to the original LLMs. 
+
+## 3 MOTIVATIONS 
+
+Effective fine-tuning of LLMs requires a careful balance between model expressiveness and computational efficiency. Hence, existing studies use LoRA with lower ranks (e.g., 32 or 64). Such setting achieves good performance on some tasks. For more complex tasks such as commonsense reasoning, we find that LoRA with higher ranks can significantly enhance performance of Llama3-8B as illustrated in Figure 2. Our results indicate that especially for complex tasks, updates on model parameters with a higher rank could be helpful to achieve better performance. This observation complements existing research by highlighting scenarios where high-rank adaptations offer significant advantages. 
+
+**==> picture [159 x 127] intentionally omitted <==**
+
+**----- Start of picture text -----**<br>
+95<br>90<br>85<br>80<br>75<br>70 BoolQ ARC-C HellaS<br>PIQA ARC-E WinoG<br>SIQA OBQA Average<br>65<br>32 128 256 512 1024<br>r<br>Performance (%)<br>**----- End of picture text -----**<br>
+
+
+Figure 2: Performance of Llama-3-8B on commonsense reasoning using different LoRA configurations. 
+
+However, increasing the rank in LoRA results in heightferent LoRA configurations. ened computational demands, which conflicts with the objectives of PEFT, and it becomes more difficult to train, often leading to issues like gradient explosion, as detailed in Appendix A.3. Therefore, there is a need for a method that enables highrank adaptation without incurring additional computational burdens. The proposed HiRA method addresses this need, as introduced in the next section. 
+
+## 4 METHODOLOGY 
+
+## 4.1 RANK ANALYSIS 
+
+A limitation of LoRA and its variants relying on the product between two low-rank matrices is that the maximum achievable rank of the update parameter is inherently constrained. _W_ 0 _∈_ R _[d][×][k]_ denotes the original parameter matrix and its rank is denoted by _r_ 0, where _r_ 0 _≤_ min( _d, k_ ). The update parameter matrix ∆ _W_ in LoRA is assumed to be the product of _L_ 1 _∈_ R _[d][×][r]_ and _L_ 2 _∈_ R _[r][×][k]_ , where _r_ is much smaller than _d_ and _k_ , i.e., ∆ _W_ = _L_ 1 _L_ 2. Due to the property of the rank, the 
+
+3 
+
+maximum rank of ∆ _W_ is _r_ . Thus, the low-rank property of ∆ _W_ may limit its capability to capture high-rank updates. As a result, such a low-rank update parameter may limit the rank of the final tuned parameter denoted by _W[′]_ (i.e., _W[′]_ = _W_ 0 + ∆ _W_ ) since 
+
+**==> picture [232 x 11] intentionally omitted <==**
+
+where the first equality holds due to the property of the rank function. Therefore, _W[′]_ has a maximum rank of min(min( _d, k_ ) _, r_ 0 + _r_ ). Consequently, the low-rank property of ∆ _W_ may limit the expressiveness of _W[′]_ . To address this, we propose the HiRA method to learn ∆ _W_ with a higher rank under the PEFT strategy, which could enhance expressiveness and performance. 
+
+## 4.2 ENHANCING THE RANK VIA HADAMARD PRODUCT 
+
+The Hadamard product of two matrices _P_ and _Q_ with the same size gives a matrix _O_ satisfying _oij_ = _pijqij_ , where _pij_ , _qij_ , and _oij_ denote the ( _i, j_ )th entry in _P_ , _Q_ , and _O_ , respectively. So the Hadamard product is also known as the elementwise product between two matrices. A nice property of the Hadamard product is that 
+
+**==> picture [279 x 11] intentionally omitted <==**
+
+where _⊙_ denotes the Hadamard product. According to the inequality (1), we can see that the maximal achievable rank of the Hadamard product of two matrices is upper-bounded by the product of their ranks. When _P_ and _Q_ have appropriate sizes to make matrix multiplication feasible, we have 
+
+**==> picture [281 x 11] intentionally omitted <==**
+
+Compared the inequalities (1) and (2), we can see that the upper-bound of the rank of the Hadamard product is much larger than that of the matrix multiplication even when _P_ or _Q_ or both have a low rank. Note that the update parameter in LoRA relies on the matrix multiplication of two lowrank matrices and inequality (2) implies that the update parameter in LoRA is low-rank. From this perspective of the upper-bound of the rank, the Hadamard product could help improve that. 
+
+The upper-bound of the rank may not precisely reflect the actual rank, but it gives the possible maximal rank of the Hadamard product. To the best of our knowledge, the lower-bound analysis of the rank for the Hadamard product is only for _P_ and _Q_ with special structures (e.g., positive semidefinite matrices (Horn & Yang, 2020)). Empirically we find that the Hadamard product could enhance the rank as demonstrated in Figures 1 and 7. 
+
+## 4.3 FORMULATION 
+
+Built on the Hadamard product, we give a general formulation for the update parameter matrix as 
+
+**==> picture [236 x 10] intentionally omitted <==**
+
+where _Whi_ is the trainable parameter and _R_ is a fixed matrix. Based on inequality (1), we obtain 
+
+**==> picture [279 x 11] intentionally omitted <==**
+
+When _R_ has a high rank, inequality (4) suggests that ∆ _W_ can also achieve a high rank, potentially exceeding min( _d, k_ ). To ensure parameter efficiency, we restrict _Whi_ to be low-rank, that is, 
+
+**==> picture [224 x 11] intentionally omitted <==**
+
+where _A ∈_ R _[d][×][r]_ , _B ∈_ R _[r][×][k]_ , and _r_ is much smaller than min( _d, k_ ). This decomposition defined in Eq. (5) indicates that _Whi_ has a maximum rank of _r_ , confirming its low-rank nature. 
+
+Based on Eqs. (3) and (5), it is easy to see that when _R_ is chosen to be a matrix of all ones, Eq. (3) gives the formulation of the update parameter matrix in LoRA, making LoRA a special case of HiRA. However, this setting of _R_ is not so informative as it does not utilize any information in the pre-trained LLMs. Instead, in HiRA, we use the frozen parameter _W_ 0 in LLMs to be _R_ since _W_ 0 could contain useful information of LLMs. By combining all the above considerations together, we can obtain the update parameter for the proposed HiRA method as 
+
+∆ _W_ = _W_ 0 _⊙_ ( _AB_ ) _._ (6) 
+
+4 
+
+Based on the inequality (4), the rank of ∆ _W_ defined in Eq. (6) is upper-bounded by _r_ 0 _r_ , allowing for potentially high rank, as illustrated in Figure 3. Here, _r_ is set equal to the dimension of LoRA, ensuring that the number of trainable parameters remains same and meets the requirements of PEFT. 
+
+During the training, _W_ 0 remains frozen, while _A_ and _B_ serve as trainable parameters to facilitate the model updating. For a linear layer _h_ = _W_ 0 _x_ , HiRA modifies the forward pass of this layer as 
+
+**==> picture [150 x 11] intentionally omitted <==**
+
+The calculation of _W[′]_ yields a computational complexity _O_ ( _drk_ + _dk_ ) = _O_ ( _drk_ ), which is equivalent to that in LoRA. To ensure that the initial value of update parameters will not modify the original LLMs, we require the initial value of update parameters to be zero matrices. To achieve that, the initial values for _Whi_ could be zero matrix. Under this requirement, _A_ is initialized to be zero matrices, while _B_ is initialized with the kaiming initialization (He et al., 2015). 
+
+## 4.4 EFFICIENT MODEL ADAPTATION FOR INFERENCE 
+
+During production deployment, HiRA facilitates efficient inference by pre-computing and merging the update parameters into _W_ 0 to form _W[′]_ = _W_ 0 + _W_ 0 _⊙_ ( _AB_ ). This enables LLMs to switch between tasks swiftly, as the original parameters can be recovered by through element-wise division by _AB_ + 1. Then, the LLM can be adapted to new tasks using HiRA. Notably, integrating the update parameters directly into _W_ 0 eliminates computational overhead during inference and avoids additional latency commonly associated with other PEFT techniques like Prompt Tuning and P- Tuning. Moreover, MoRA introduces complex mapping functions to compress the input into a relatively high dimension and then decompress back, which cannot be easily merged into the original parameters in LLMs only if the function mappings in the compression and decompression can be represented by a transformation matrix and will incur additionally computational overhead. 
+
+## 4.5 RELATIONS WITH INTRINSIC DIMENSIONALITY 
+
+Previous studies (Li et al., 2018; Aghajanyan et al., 2021) show that LLMs have a low intrinsic dimensionality, meaning that only a small subset of trainable parameters is necessary for effective fine-tuning. While LoRA (Hu et al., 2021) suggests a low rank for the update parameter matrix ∆ _W_ , our findings complement this by showing that the rank of ∆ _W_ can be enhanced under the low intrinsic dimensionality of _Whi_ based on the Hadamard product. It is crucial to differentiate between the intrinsic dimensionality and the rank of ∆ _W_ ; although a low intrinsic dimensionality implies that only a few parameters need to be fine-tuned, it does not inherently mandate low rank. Our method highlights that increasing the rank of ∆ _W_ is beneficial for enhancing model flexibility and performance, even within a compact parameter space of a low intrinsic dimensionality. 
+
+## 4.6 THE EXPRESSIVE POWER OF HIRA 
+
+In this section, we analyze the expressive power of HiRA, building on Zeng & Lee (2024), which originally examined the expressive power of LoRA. In HiRA, given the pre-trained weight matrix _W_ 0, the updated weight is defined as _W_ 0 + _W_ 0 _⊙_ ( _AB_ ). We denote by _E_ the optimal update and measure the expressive power by the minimal difference between the updated weight and _E_ . For LoRA with rank _r_ , the minimum difference is equal to the ( _r_ + 1)-th largest singular value, denoted by _σr_ +1( _E_ ). In Theorem 1, we analyze the expressive power of HiRA. 
+
+**Theorem 1.** (The Expressive Power of HiRA) _Consider the optimal parameter update E and the HiRA update with the form W_ 0 _⊙ Whi, where the rank of Whi is less than r. Then we have_ 
+
+**==> picture [258 x 18] intentionally omitted <==**
+
+_where ⊘ denotes the element-wise division._ 
+
+According to Theorem 1, the expressive power of HiRA depends on _E ⊘ W_ 0 rather than _E_ alone in LoRA. A detailed proof and analysis are provided in Appendix B. The key distinction between HiRA and LoRA lies in the role of _W_ 0, whose high-rank properties are inherently tied to the contained information. In this context, _W_ 0 in HiRA serves a dual role: it confines and facilitates the adaptation. While the information in _W_ 0 limits the flexibility of the update matrix, preventing it 
+
+5 
+
+from achieving an unconstrained high-rank matrix, the pre-trained knowledge embedded in _W_ 0 also aids the adaptation process, allowing for more efficient fine-tuning. 
+
+## 4.7 GRADIENT ANALYSIS 
+
+The distinction between HiRA and LoRA also lies in how their gradients interact with the pretrained weight matrix, _W_ 0. Let _y[′]_ = _W_ 0 _x_ + ∆ _Wx_ and _y_ represent the predicted and true labels. For simplicity, we consider a linear neural network with the mean squared error loss _L_ . 
+
+In LoRA, the gradients are computed as _∂A[∂][L]_[=] _[B][⊤]_[(] _[y][−][y][′]_[)(] _[−][x][⊤]_[)][and] _∂B[∂][L]_[=][(] _[y][−][y][′]_[)(] _[−][x][⊤]_[)] _[A]_[,] which are independent of _W_ 0. In contrast, the gradients in HiRA are given by 
+
+**==> picture [313 x 22] intentionally omitted <==**
+
+This reveals that HiRA could leverage the information encoded in _W_ 0 to guide the adaptation. Thus, HiRA can potentially enhance performance when the pre-trained model has already captured patterns relevant to downstream tasks. 
+
+## 5 EXPERIMENT 
+
+In this section, we conduct experiments on three tasks to evaluate the proposed HiRA method. 
+
+## 5.1 DATASETS 
+
+**Commonsense Reasoning.** We utilize eight sub-tasks with predefined training and testing datasets (Hu et al., 2023)[1] , combining 170,420 query-answer pairs for fine-tuning LLMs and selecting 120 random entries as a validation set. The sub-tasks include BoolQ (Clark et al., 2019) (yes/no QA), PIQA (Bisk et al., 2020) (physical commonsense), SIQA (Sap et al., 2019) (social reasoning), HellaSwag (Zellers et al., 2019) (commonsense NLI), WinoGrande (Sakaguchi et al., 2021) (fill-inthe-blank), ARC-c and ARC-e (Clark et al., 2018) (multiple-choice science questions), and OBQA (Mihaylov et al., 2018) (multi-step reasoning). Table 11 presents the dataset statistics. 
+
+**Open-domain Dialogue Generation.** We use the ConvAI2 dataset (Dinan et al., 2019), including 17,878 training and 1,000 testing multi-turn conversations. Each dialogue features persona profiles of 4–5 descriptive sentences and conversational history. Following (Liu et al., 2020; Song et al., 2021; Huang et al., 2023b;a; 2024), we adopt a self-persona setting, revealing only the speaker’s persona. 
+
+**Mathematical Reasoning.** For this task, we employ MetaMath (Yu et al., 2023) as the training corpus and GSM8K (Cobbe et al., 2021) as the test dataset. 
+
+## 5.2 EXPERIMENTAL SETTINGS 
+
+**Evaluation Metric.** To assess the performance on the commonsense reasoning datasets, we employ accuracy as the primary metric for each sub-task. For each test instance, the language models decode answers from the provided queries. We then search for the presence of specific answer keywords (e.g., ”true” or ”false” for BoolQ). The first occurrence of the keyword is recorded as the model’s response. If no relevant keywords are identified, the model is considered to have failed to correctly answer the commonsense reasoning question. This method allows us to consistently evaluate the performance of model responses across all eight sub-tasks, and is adopted by (Hu et al., 2023; Liu et al., 2024). For the CONVAI2 dataset, we use the BLEU (Papineni et al., 2002) and BERT Score (Zhang et al., 2019) as the evaluation metrics. For the mathematical reasoning task, we utilize the accuracy as the evaluation metric. 
+
+**Baseline Methods.** We compare the HiRA with prompt-based methods including Prompt Tuning (Lester et al., 2021) and P-tuning (Liu et al., 2022), and low-rank adaptation methods including LoRA (Hu et al., 2021), DoRA (Liu et al., 2024), and MoRA (Jiang et al., 2024). Our experiments use the Llama-2-7B (Touvron et al., 2023) and Llama-3-8B (Dubey et al., 2024) open-source LLMs. 
+
+> 1https://github.com/AGI-Edgerunners/LLM-Adapters/tree/main/dataset 
+
+6 
+
+Table 1: Accuracy comparison among various PEFT methods on commonsense reasoning datasets. Results for ChatGPT, LoRA, and DoRA are sourced from (Liu et al., 2024). The best performance within each LLM is indicated in **bold** , while the second best performance is highlighted in underline. 
+
+|Model|Method|Params (%)|BoolQ|PIQA|SIQA|ARC-c|ARC-e|OBQA|HellaS|WinoG|Average|
+|---|---|---|---|---|---|---|---|---|---|---|---|
+|ChatGPT|-|-|73.10|85.40|68.50|79.90|89.80|74.80|78.50|66.10|77.01|
+||Prompt Tuning|0.0012|55.93|12.35|30.50|6.06|8.63|9.40|6.91|40.57|21.29|
+||P-Tuning|0.7428|58.75|36.02|0.20|0.17|1.98|0.80|0.01|0.00|12.24|
+||LoRA(_r_ = 32)|0.8256|69.80|79.90|79.50|64.70|79.80|81.00|83.60|82.60|77.61|
+|Llama-2-7B|DoRA(_r_ = 32)<br>MoRA(_r_ = 32)|0.8256<br>0.8241|71.80<br>**72.17**|**83.70**<br>80.79|76.00<br>**79.53**|68.20<br>71.42|83.70<br>85.31|82.40<br>81.20|**89.10**<br>29.09|82.60<br>80.19|79.69<br>72.46|
+||HiRA(_r_ = 16)|0.4128|69.82|80.20|78.20|71.33|85.90|81.00|86.99|83.43|79.61|
+||HiRA(_r_ = 32)|0.8256|71.22|83.35|**79.53**|**73.81**|**86.74**|**84.60**|88.12|**83.98**|**81.42**|
+||Prompt Tuning|0.0010|56.85|45.05|36.13|31.57|32.74|29.20|14.01|50.12|36.96|
+||P-Tuning|0.6240|59.97|11.64|8.19|7.42|8.63|9.60|1.77|37.65|18.11|
+||LoRA(_r_ = 32)|0.7002|70.80|85.20|79.90|71.20|84.20|79.00|91.70|84.30|80.79|
+|Llama-3-8B|DoRA(_r_ = 32)<br>MoRA(_r_ = 32)|0.7002<br>0.6997|74.60<br>74.28|89.30<br>87.43|79.90<br>80.71|80.40<br>79.61|90.50<br>91.16|85.80<br>85.60|95.50<br>43.53|85.60<br>86.74|85.20<br>78.63|
+||HiRA(_r_ = 16)|0.3513|73.85|89.12|81.06|82.59|93.06|87.40|94.85|86.74|86.08|
+||HiRA(_r_ = 32)|0.7002|**75.40**|**89.70**|**81.15**|**82.90**|**93.27**|**88.32**|**95.36**|**87.70**|**86.72**|
+
+
+**Implementation Details.** Following the identical training setup to (Liu et al., 2024) except learning rate adjustments, we implement HiRA on the Llama-2-7B and Llama-3-8B models with _r_ = 16 and _r_ = 32, respectively. The AdamW optimizer (Loshchilov & Hutter, 2019) is employed with a learning rate 0 _._ 001, which warms up for 100 steps. For the commonsense reasoning dataset, we fine-tune LLMs for 3 epochs, with evaluations at every 80 step to select the best checkpoint based on the validation set. We place LoRA, DoRA, MoRA and HiRA on the query, key, value weights, and two linear layers (i.e., down and up projection) in attention modules. To ensure fair comparisons among LoRA, DoRA, MoRA, and HiRA, we maintain the same or comparable numbers of trainable parameters. For Prompt Tuning and P-Tuning, which inherently involve fewer trainable parameters due to their reliance on prefix soft prompts, we adjust accordingly to keep the number of trainable parameters comparable. The detail can be found in Appendix A.1. HiRA is evaluated over 5 runs with different random seeds. Experiments on the CONVAI2 dataset use 1 training epoch, while the mathematical reasoning task uses 2 epochs, which is the only difference from the settings above. 
+
+## 5.3 RESULTS ON COMMONSENSE REASONING TASKS 
+
+As shown in Table 1, HiRA consistently outperforms all baseline methods in terms of average accuracy across both the Llama-2-7B and Llama-3-8B models. For _r_ = 32, HiRA achieves an average accuracy of 81.42% for the Llama-2-7B model, surpassing the best baseline, DoRA, which records 79.69%. In the case of the Llama-3-8B model, HiRA shows a significant improvement in terms of the average accuracy (86.72% vs. 85.20%) over the best-performing baseline (i.e., DoRA). These results underscore HiRA’s effectiveness in leveraging the Hadamard product to enhance the model capacity and performance within the PEFT strategy. 
+
+In contrast, for _r_ = 16, HiRA achieves an average accuracy of 79.61% for Llama-2-7B model, utilizing half the number of trainable parameters compared to LoRA and DoRA while achieving comparable or even performance. Similarly, for the Llama-3-8B model, HiRA with _r_ = 16 achieves an impressive average accuracy of 86.08%. This demonstrates HiRA’s capability to deliver strong performance while maintaining a lower intrinsic dimensionality. 
+
+## 5.4 RESULTS ON CONVERSATIONAL TASK 
+
+According to the results on the CONVAI2 dataset as shown in Table 2, HiRA consistently outperforms all baseline methods across all comparison metrics. Specifically, HiRA with _r_ = 32 achieves the highest average score of 47.80%, closely followed by HiRA with _r_ = 16, which also performs exceptionally well with an average score of 47.79% despite using only half of the number of trainable parameters in LoRA and its variants. Both configurations of HiRA surpass DoRA and LoRA, which exhibit similar results with average scores of 46.62% and 46.59%, respectively. MoRA, while not as strong as LoRA in this task, still outperforms Prompt Tuning. Those results further substantiate the superiority of HiRA in both parameter efficiency and performance across various tasks. 
+
+7 
+
+Table 2: Results on the CONVAI2 dataset, where BERT F1, BERT-R, and BERT-P denote the F1, Precision, and Recall based on the BERT score, respectively. 
+
+|Model|Method|Params (%)|BLEU|BERT F1|BERT-R|BERT-P|Meteor|R-L|Average|
+|---|---|---|---|---|---|---|---|---|---|
+||Prompt Tuning|0.0012|0.04|72.44|77.38|68.23|0.80|0.80|36.62|
+||P-Tuning|0.7428|0.60|83.29|83.33|83.28|**15.11**|12.36|46.33|
+||MoRA(_r_ = 32)|0.8241|1.09|84.09|84.65|83.59|10.97|9.57|45.66|
+|Llama-2-7B|LoRA(_r_ = 32)|0.8256|1.82|84.41|84.71|84.16|11.38|10.55|46.17|
+||DoRA(_r_ = 32)|0.8256|1.73|84.18|84.61|83.81|11.25|10.41|46.00|
+||HiRA(_r_ = 16)|0.4128|2.56|83.97|84.12|83.86|13.35|12.58|46.74|
+||HiRA(_r_ = 32)|0.8256|**2.70**|**84.86**|**84.98**|**84.77**|13.56|**12.80**|**47.28**|
+||Prompt Tuning|0.0012|1.45|82.99|82.99|83.05|14.72|13.13|46.39|
+||P-Tuning|0.7428|1.50|81.52|81.07|82.01|**15.49**|13.55|45.86|
+||MoRA(_r_ = 32)|0.8241|1.60|84.22|84.06|84.43|12.37|11.19|46.31|
+|Llama-3-8B|LoRA(_r_ = 32)|0.8256|2.26|84.32|84.00|84.67|12.51|11.77|46.59|
+||DoRA(_r_ = 32)|0.8256|2.29|84.32|84.06|84.62|12.63|11.78|46.62|
+||HiRA(_r_ = 16)|0.4128|3.32|**84.84**|**84.41**|**85.30**|14.93|13.94|47.79|
+||HiRA(_r_ = 32)|0.8256|**3.41**|84.81|84.40|85.25|14.87|**14.05**|**47.80**|
+
+
+5.5 RESULTS ON MATHEMATICAL REASONING TASKS 
+
+We evaluate the performance of HiRA on mathematical reasoning tasks using the MetaMath dataset for training and the GSM8K benchmark for evaluation. As shown in Table 3, HiRA significantly outperforms baseline methods, achieving an accuracy of 70.81%. This represents a notable improvement over LoRA (65.89%), DoRA (66.12%), and MoRA (67.98%). Even with fewer trainable parameters ( _r_ = 16), HiRA remains competitive, achieving 67.63%. On the Llama-2-7B model, HiRA delivers strong results, achieving 46.85%, a substantial increase compared to LoRA (15.16%) and its variants. 
+
+Table 3: Results on mathematical reasoning tasks. 
+
+||Model|Method<br>Prompt Tuning<br>P-Tuning|Trainable<br>0.0012<br>0.7428|GSM8K<br>15.62<br>2.65|
+|---|---|---|---|---|
+||Llama-3-8B|LoRA(_r_ = 32)<br>DoRA(_r_ = 32)<br>MoRA(_r_ = 32)|0.7002<br>0.7002<br>0.6997|65.89<br>66.12<br>67.98|
+|||HiRA(_r_ = 16)<br>HiRA(_r_ = 32)|0.4128<br>0.7002|67.63<br>**70.81**|
+
+
+These results demonstrate HiRA’s superior ability to adapt to complex mathematical reasoning, attributed to its high-rank updates, which enhance the model’s expressive power while maintaining parameter efficiency. 
+
+## 6 ABLATION STUDIES 
+
+6.1 SINGULAR VALUE ANALYSIS OF FULL FINE-TUNING, LORA AND HIRA 
+
+To further analyze the advantages of HiRA, we calculate the singular values of update parameter matrix in full fine-tuning (FFT), LoRA, and HiRA. In Figure 4, we present the number of singular 
+
+**==> picture [390 x 65] intentionally omitted <==**
+
+**----- Start of picture text -----**<br>
+Wq Wk Wv Wup Wdown<br>4000 1000 1000 4000 4000 FFT<br>3000 800 800 3000 3000 LoRA r=32<br>2000 600 600 2000 2000 LoRA r=128<br>400 400 LoRA r=512<br>1000 200 200 1000 1000 MoRA<br>0 0 0 0 0 HiRA<br>0 10 20 30 0 10 20 30 0 10 20 30 0 10 20 30 0 10 20 30<br>Model Layer (r=32) Model Layer (r=32) Model Layer (r=32) Model Layer (r=32) Model Layer (r=32)<br>**----- End of picture text -----**<br>
+
+
+Figure 4: Count of singular values exceeding 0.005 across layers for FFT, LoRA, MoRA, and HiRA. 
+
+values exceeding 0.005 for each layer. FFT produces diverse singular value distributions across different layers, reflecting the difference in the ease of updating layers for fine-tuning. Notably, HiRA exhibits similar trends to those of FFT, indicating its higher rank is crucial for effective optimization. In contrast, the inherently low-rank structure of LoRA may limit its expressive power. 
+
+Figure 5 presents the sum of the squared singular values per layer, which corresponds to the squared Frobenius norm. The results indicate that MoRA and LoRA with rank=32 yields substantially larger singular values, as reported in (Lialin et al., 2024). Those large singular values suggest that its updates make strong adjustments in certain directions on the pre-trained model to swiftly adapt to new tasks. However, excessively large singular values (i.e., the spectral norm) may increase the risk of overfitting, consequently impairing the generalization ability (Bartlett et al., 2017). Moreover, 
+
+8 
+
+**==> picture [390 x 65] intentionally omitted <==**
+
+**----- Start of picture text -----**<br>
+10 [2] Wq 10 [1] Wk 10 [1] Wv 10 [2] Wup 10 [2] Wdown FFT<br>10 [1] 10 [0] 10 [0] 10 [1] 10 [1] LoRA r=32<br>10101012 [0] 1010 12 1010 12 10101 [0] 10101012 [0] LoRA r=128LoRA r=512MoRAHiRA<br>0 10 20 30 0 10 20 30 0 10 20 30 0 10 20 30 0 10 20 30<br>Model Layer (r=32) Model Layer (r=32) Model Layer (r=32) Model Layer (r=32) Model Layer (r=32)<br>**----- End of picture text -----**<br>
+
+
+Figure 5: Sum of squared singular values across layers for FFT, LoRA, MoRA, and HiRA. 
+
+overly large singular values can induce gradient explosion or vanishing issues, thereby compromising the stability and convergence rate of subsequent training (Pennington et al., 2017). In contrast, HiRA tends to maintain smaller singular values as FFT did. 
+
+## 6.2 IMPACT OF _r_ ON MODEL PERFORMANCE 
+
+Figure 6 illustrates the impact of the parameter dimen95 sion _r_ to the model performance across multiple com90 monsense reasoning tasks. As _r_ increases from 2 to 32, 85 there is a consistent and notable improvement in perfor80 mance, with the average accuracy rising from 83 _._ 16% to 86 _._ 72%. This trend underscores the importance of 75 a higher-rank structure in enhancing the model ability 70 BoolQ ARC-c HellaS to generalize across diverse tasks. Notably, tasks such 65 PIQA ARC-e WinoG SIQA OBQA Average as PIQA and HellaSwag exhibit significant gains, with 60 PIQA improving by 2 _._ 37% as _r_ increases, highlighting 2 4 8 16r 20 24 28 32 the critical role of _r_ in tasks that require advanced reaFigure 6: Performance of HiRA across soning capabilities. Interestingly, even at _r_ = 8, HiRA tasks when _r_ increases. still outperforms LoRA with _r_ = 32, demonstrating the superiority of HiRA to efficiently leverage a smaller number of trainable parameters to achieve good performance, making HiRA a compelling choice even under constrained resources. 
+
+## 6.3 IMPACT OF DIFFERENT CHOICES OF _R_ 
+
+Table 4: Performance comparison between different choices of _R_ defined in Eq. (3). HiRA _rand_ denotes a variant using randomly initialized _R_ instead of _W_ 0. HiRA denotes the vanilla version where _R_ equals _W_ 0. Both methods are tuned on the Llama-3-8B model. 
+
+|Model|BoolQ|PIQA|SIQA|ARC-c|ARC-e|OBQA|HellaS|WinoG|Average|
+|---|---|---|---|---|---|---|---|---|---|
+|HiRA|**75.40**|**89.70**|**81.15**|**82.90**|**93.27**|**88.32**|**95.36**|**87.70**|**86.72**|
+|HiRA_rand_|62.17|50.38|33.62|26.62|26.39|26.40|25.06|50.36|37.63|
+
+
+In this section, we explore the impact of different choices for _R_ in Eq. (3) on performance in commonsense reasoning tasks. Specifically, we compare with a variant, HiRA _rand_ , where _R_ is randomly generated from a uniform distribution [0 _,_ 1] before the training and remains fixed. As shown in Table 4, both methods use identical training protocols by utilizing the same optimizer, learning rate, and training epochs, yet HiRA significantly outperforms HiRA _rand_ . This highlights the effectiveness of using _W_ 0 as _R_ . Moreover, as discusses in Section 4.4, using _W_ 0 for _R_ aids in recovering _W_ 0 from the merged parameters _W[′]_ given _A_ and _B_ , whereas HiRA _rand_ requires storing separately to achieve that, which could lead to additional storage costs. 
+
+## 6.4 RANK ANALYSIS 
+
+In this section, we compare the average rank of the update parameter matrix ∆ _W_ over layers for HiRA, LoRA, and MoRA, which have comparable numbers of trainable parameters. As shown in Figure 7, HiRA possess ∆ _W_ with much higher ranks than LoRA and MoRA, indicating that HiRA can achieve high-rank adaptation under the PEFT strategy via the Hadamard product. Notably, as the layer goes deeper, the rank of ∆ _W_ first increases and then fluctuates, which indicates that deeper layers may need a higher-rank ∆ _W_ to adapt to new tasks. Overall, HiRA attains higher-rank ∆ _W_ ’s across all layers, which correlates with improved performance as detailed in Table 1. 
+
+9 
+
+Table 5: Performance of the Llama-3-8B model with HiRA integrated into various components. 
+
+|Table 5: Performance of the Llama-3-8B model with HiRA integrated into various components.|Table 5: Performance of the Llama-3-8B model with HiRA integrated into various components.|Table 5: Performance of the Llama-3-8B model with HiRA integrated into various components.|
+|---|---|---|
+|Component<br>BoolQ<br>PIQA<br>SIQA<br>ARC-c<br>ARC-e<br>OBQA<br>HellaS<br>WinoG<br>Average|||
+|FC, QKV<br>**75.40**<br>**89.70**<br>81.15<br>**82.90**<br>**93.27**<br>**88.32**<br>FC<br>73.30<br>89.45<br>**81.17**<br>82.51<br>92.89<br>87.60<br>QV<br>73.09<br>88.85<br>81.06<br>80.38<br>92.68<br>86.20<br>QKV<br>72.26<br>89.23<br>80.30<br>80.89<br>92.97<br>84.80<br>QK<br>71.38<br>87.49<br>78.92<br>80.80<br>91.29<br>83.00<br>V<br>67.46<br>87.60<br>79.48<br>79.01<br>91.20<br>82.20<br>Q<br>68.59<br>86.51<br>77.64<br>79.61<br>90.99<br>81.20<br>K<br>68.20<br>86.07<br>77.74<br>80.03<br>90.82<br>80.00|**95.36**<br>**87.70**<br>**86.72**<br>94.82<br>86.58<br>86.04<br>94.37<br>85.87<br>85.31<br>94.37<br>86.19<br>85.13<br>93.68<br>84.37<br>83.86<br>92.91<br>83.58<br>82.93<br>92.68<br>81.93<br>82.39<br>92.29<br>81.37<br>82.07||
+|6.5<br>ANALYSIS ONPLACEMENT OFHIRA INTRANSFORMERS<br>2500<br>2600<br>2700<br>2800<br>2900<br>500<br>600<br>0<br>5<br>10<br>15<br>20<br>25<br>30<br>0<br>100<br>Model Layer (r= 32)<br>Rank( W)<br>HiRA: Rank( W)<br>MoRA: Rank( W)<br>LoRA: Rank( W)<br>Figure 7: Average rank of ∆_W_<br>for HiRA, MoRA, and LoRA<br>tuned on the Llama-3-8B.<br>As shown in Table 5, we analyze the effectiveness of HiRA when<br>applied to any subset of weight matrices within the Transformer,<br>including fully connected (FC) layers and query (Q), key (K),<br>and value (V) in attention module, across multiple commonsense<br>reasoning tasks. The results indicate that applying HiRA to the<br>FC layers and the combination of QKV matrices yields the best<br>performance across most tasks. In contrast, applying HiRA to<br>individual components leads to inferior performance. Hence, we<br>choose to apply HiRA on both FC layers and the combined QKV<br>matrices.|||
+||||
+||HiRA: Rank( W)<br>MoRA: Rank( W)<br>||
+|||HiRA: Rank( W)<br>MoRA: Rank( W)<br>|
+|||LoRA: Rank( W)|
+||||
+||||
+||||
+||0<br>5<br>10<br>15<br>20<br>25<br>30<br>Model Layer (r= 32)||
+
+
+Table 6: The results of the HiLoRA, where the Llama-3-8B model is used. The best performance is shown in **bold** , while the second best performance is highlighted in underline. 
+
+|Model|BoolQ|PIQA|SIQA|ARC-c|ARC-e|OBQA|HellaS|WinoG|Average|
+|---|---|---|---|---|---|---|---|---|---|
+|LoRA(_r_ = 32)|70.80|85.20|79.90|71.20|84.20|79.00|91.70|84.30|80.79|
+|HiRA(_r_ = 32)|75.40|89.70|81.15|82.90|93.27|88.32|95.36|87.70|86.72|
+|HiLoRA(_r_1 = 2_, r_2 = 30)|73.76|84.98|80.60|74.57|88.38|84.60|88.68|86.27|82.73|
+|HiLoRA(_r_1 = 4_, r_2 = 28)|74.22|90.26|82.80|82.25|93.48|**89.80**|96.13|88.48|87.18|
+|HiLoRA(_r_1 = 8_, r_2 = 24)|73.52|89.77|82.65|83.36|**93.81**|89.60|96.04|89.03|87.22|
+|HiLoRA(_r_1 = 16_, r_2 = 16)|74.77|89.88|81.73|83.28|92.93|88.20|95.52|88.08|86.80|
+|HiLoRA(_r_1 = 20_, r_2 = 12)|**75.84**|**90.42**|82.14|**84.22**|93.73|87.80|**96.45**|89.27|**87.48**|
+|HiLoRA(_r_1 = 24_, r_2 = 8)|74.89|89.61|81.68|82.85|92.93|86.20|95.68|**89.34**|86.65|
+|HiLoRA(_r_1 = 28_, r_2 = 4)|73.64|88.96|81.06|83.11|93.14|87.80|95.51|88.71|86.49|
+|HiLoRA(_r_1 = 30_, r_2 = 2)|73.46|89.50|**83.06**|82.34|93.10|89.00|95.86|88.87|86.90|
+
+
+6.6 COMBINATION WITH LORA 
+
+In this section, we explore the combination of HiRA with LoRA to investigate the impact of integrating both techniques into the performance. Specifically, such combination, which is called **HiLoRA** in this section for clarity, formulates the update parameter matrix as ∆ _W_ = _W_ 0 _⊙ AB_ + _L_ 1 _L_ 2, where _A ∈_ R _[d][×][r]_[1] , _B ∈_ R _[r]_[1] _[×][k]_ , _L_ 1 _∈_ R _[d][×][r]_[2] , and _L_ 2 _∈_ R _[r]_[2] _[×][k]_ . It is easy to see that when _r_ 2 becomes 0, HiLoRA degenerates to HiRA, and if _r_ 1 equals 0, HiLoRA becomes LoRA. 
+
+To compare HiLoRA with HiRA and LoRA fairly, we ensure the same numbers of trainable parameters by setting _r_ in HiRA and LoRA to _r_ 1 + _r_ 2. Table 6 presents the results of HiLoRA with various configurations on _r_ 1 and _r_ 2. The results indicate that increasing _r_ 1 generally improves performance. HiLoRA with _r_ 1 = 20 and _r_ 2 = 12 achieves the highest average score, excelling in tasks like HellaSwag and ARC-c. This suggests that a higher intrinsic dimension for HiRA is preferable over LoRA in HiLoRA, which demonstrates the usefulness of HiRA that could have larger capacity. Moreover, most configurations of _r_ 1 and _r_ 2 perform comparably or better than HiRA and LoRA with _r_ = 32, indicating that the combination of LoRA and HiRA is promising for fine-tuning LLMs. 
+
+## 7 CONCLUSION 
+
+In this paper, we introduced HiRA, a novel high-rank adaptation that maintains comparable numbers of trainable parameters while enhancing the rank of update parameters. HiRA offers a cost-effective alternative to LoRA, providing similar benefits but without additional inference overhead. Extensive experiments demonstrate the effectiveness of the HiRA method. In our future work, we are interested in applying HiRA to more applications. 
+
+10 
+
+## ACKNOWLEDGEMENTS 
+
+This work is supported by National Key R&D Program of China 2022ZD0160300 and NSFC key grant under grant no. 62136005. 
+
+## REFERENCES 
+
+- Josh Achiam, Steven Adler, Sandhini Agarwal, Lama Ahmad, Ilge Akkaya, Florencia Leoni Aleman, Diogo Almeida, Janko Altenschmidt, Sam Altman, Shyamal Anadkat, et al. Gpt-4 technical report. _arXiv preprint arXiv:2303.08774_ , 2023. 
+
+- Armen Aghajanyan, Sonal Gupta, and Luke Zettlemoyer. Intrinsic dimensionality explains the effectiveness of language model fine-tuning. In Chengqing Zong, Fei Xia, Wenjie Li, and Roberto Navigli (eds.), _Proceedings of the 59th Annual Meeting of the Association for Computational Linguistics and the 11th International Joint Conference on Natural Language Processing (Volume 1: Long Papers)_ , pp. 7319–7328, Online, August 2021. Association for Computational Linguistics. doi: 10.18653/v1/2021.acl-long.568. URL https://aclanthology.org/2021. acl-long.568. 
+
+- Peter L Bartlett, Dylan J Foster, and Matus J Telgarsky. Spectrally-normalized margin bounds for neural networks. _Advances in neural information processing systems_ , 30, 2017. 
+
+- Yonatan Bisk, Rowan Zellers, Jianfeng Gao, Yejin Choi, et al. Piqa: Reasoning about physical commonsense in natural language. In _Proceedings of the AAAI conference on artificial intelligence_ , volume 34, pp. 7432–7439, 2020. 
+
+- Christopher Clark, Kenton Lee, Ming-Wei Chang, Tom Kwiatkowski, Michael Collins, and Kristina Toutanova. BoolQ: Exploring the surprising difficulty of natural yes/no questions. In Jill Burstein, Christy Doran, and Thamar Solorio (eds.), _Proceedings of the 2019 Conference of the North American Chapter of the Association for Computational Linguistics: Human Language Technologies, Volume 1 (Long and Short Papers)_ , pp. 2924–2936, Minneapolis, Minnesota, June 2019. Association for Computational Linguistics. doi: 10.18653/v1/N19-1300. URL https://aclanthology.org/N19-1300. 
+
+- Peter Clark, Isaac Cowhey, Oren Etzioni, Tushar Khot, Ashish Sabharwal, Carissa Schoenick, and Oyvind Tafjord. Think you have solved question answering? try arc, the ai2 reasoning challenge. _arXiv preprint arXiv:1803.05457_ , 2018. 
+
+- Karl Cobbe, Vineet Kosaraju, Mohammad Bavarian, Mark Chen, Heewoo Jun, Lukasz Kaiser, Matthias Plappert, Jerry Tworek, Jacob Hilton, Reiichiro Nakano, Christopher Hesse, and John Schulman. Training verifiers to solve math word problems. _arXiv preprint arXiv:2110.14168_ , 2021. 
+
+- Emily Dinan, Varvara Logacheva, Valentin Malykh, Alexander H. Miller, Kurt Shuster, Jack Urbanek, Douwe Kiela, Arthur D. Szlam, Iulian Serban, Ryan Lowe, Shrimai Prabhumoye, Alan W. Black, Alexander I. Rudnicky, Jason Williams, Joelle Pineau, Mikhail S. Burtsev, and Jason Weston. The second conversational intelligence challenge (convai2). _arXiv:1902.00098_ , 2019. 
+
+- Abhimanyu Dubey, Abhinav Jauhri, Abhinav Pandey, Abhishek Kadian, Ahmad Al-Dahle, Aiesha Letman, Akhil Mathur, Alan Schelten, Amy Yang, Angela Fan, et al. The llama 3 herd of models. _arXiv preprint arXiv:2407.21783_ , 2024. 
+
+- Carl Eckart and Gale Young. The approximation of one matrix by another of lower rank. _Psychometrika_ , 1(3):211–218, 1936. 
+
+- Soufiane Hayou, Nikhil Ghosh, and Bin Yu. Lora+: Efficient low rank adaptation of large models. _ArXiv_ , abs/2402.12354, 2024. URL https://api.semanticscholar.org/ CorpusID:267750102. 
+
+- Junxian He, Chunting Zhou, Xuezhe Ma, Taylor Berg-Kirkpatrick, and Graham Neubig. Towards a unified view of parameter-efficient transfer learning. _arXiv preprint arXiv:2110.04366_ , 2021. 
+
+11 
+
+Kaiming He, Xiangyu Zhang, Shaoqing Ren, and Jian Sun. Delving deep into rectifiers: Surpassing human-level performance on imagenet classification. In _Proceedings of the IEEE international conference on computer vision_ , pp. 1026–1034, 2015. 
+
+- Roger A Horn and Charles R Johnson. _Topics in matrix analysis_ . Cambridge university press, 1994. 
+
+- Roger A. Horn and Zai Yang. Rank of a Hadamard product. _Linear Algebra and Its Applications_ , 591:87–98, 2020. 
+
+- Neil Houlsby, Andrei Giurgiu, Stanislaw Jastrzebski, Bruna Morrone, Quentin De Laroussilhe, Andrea Gesmundo, Mona Attariyan, and Sylvain Gelly. Parameter-efficient transfer learning for nlp. In _International conference on machine learning_ , pp. 2790–2799. PMLR, 2019. 
+
+- Edward J Hu, Yelong Shen, Phillip Wallis, Zeyuan Allen-Zhu, Yuanzhi Li, Shean Wang, Lu Wang, and Weizhu Chen. Lora: Low-rank adaptation of large language models. _arXiv preprint arXiv:2106.09685_ , 2021. 
+
+- Zhiqiang Hu, Lei Wang, Yihuai Lan, Wanyu Xu, Ee-Peng Lim, Lidong Bing, Xing Xu, Soujanya Poria, and Roy Lee. LLM-adapters: An adapter family for parameter-efficient fine-tuning of large language models. In Houda Bouamor, Juan Pino, and Kalika Bali (eds.), _Proceedings of the 2023 Conference on Empirical Methods in Natural Language Processing_ , pp. 5254–5276, Singapore, December 2023. Association for Computational Linguistics. doi: 10.18653/v1/2023.emnlp-main. 319. URL https://aclanthology.org/2023.emnlp-main.319. 
+
+- Qiushi Huang, Shuai Fu, Xubo Liu, Wenwu Wang, Tom Ko, Yu Zhang, and Lilian Tang. Learning retrieval augmentation for personalized dialogue generation. In Houda Bouamor, Juan Pino, and Kalika Bali (eds.), _Proceedings of the 2023 Conference on Empirical Methods in Natural Language Processing_ , pp. 2523–2540, Singapore, December 2023a. Association for Computational Linguistics. doi: 10.18653/v1/2023.emnlp-main.154. URL https://aclanthology.org/ 2023.emnlp-main.154. 
+
+- Qiushi Huang, Yu Zhang, Tom Ko, Xubo Liu, Bo Wu, Wenwu Wang, and H Tang. Personalized dialogue generation with persona-adaptive attention. _Proceedings of the AAAI Conference on Artificial Intelligence_ , 37(11):12916–12923, Jun. 2023b. doi: 10.1609/aaai.v37i11.26518. URL https://ojs.aaai.org/index.php/AAAI/article/view/26518. 
+
+- Qiushi Huang, Xubo Liu, Tom Ko, Bo Wu, Wenwu Wang, Yu Zhang, and Lilian Tang. Selective prompting tuning for personalized conversations with LLMs. In Lun-Wei Ku, Andre Martins, and Vivek Srikumar (eds.), _Findings of the Association for Computational Linguistics: ACL 2024_ , pp. 16212–16226, Bangkok, Thailand, August 2024. Association for Computational Linguistics. doi: 10.18653/v1/2024.findings-acl.959. URL https://aclanthology.org/ 2024.findings-acl.959/. 
+
+- Ting Jiang, Shaohan Huang, Shengyue Luo, Zihan Zhang, Haizhen Huang, Furu Wei, Weiwei Deng, Feng Sun, Qi Zhang, Deqing Wang, et al. Mora: High-rank updating for parameter-efficient finetuning. _arXiv preprint arXiv:2405.12130_ , 2024. 
+
+- Rabeeh Karimi Mahabadi, James Henderson, and Sebastian Ruder. Compacter: Efficient low-rank hypercomplex adapter layers. In _Advances in Neural Information Processing Systems_ , pp. 1022– 1035, 2021. 
+
+- Brian Lester, Rami Al-Rfou, and Noah Constant. The power of scale for parameter-efficient prompt tuning. In Marie-Francine Moens, Xuanjing Huang, Lucia Specia, and Scott Wentau Yih (eds.), _Proceedings of the 2021 Conference on Empirical Methods in Natural Language Processing_ , pp. 3045–3059, Online and Punta Cana, Dominican Republic, November 2021. Association for Computational Linguistics. doi: 10.18653/v1/2021.emnlp-main.243. URL https://aclanthology.org/2021.emnlp-main.243. 
+
+- Chunyuan Li, Heerad Farkhoor, Rosanne Liu, and Jason Yosinski. Measuring the intrinsic dimension of objective landscapes. _arXiv preprint arXiv:1804.08838_ , 2018. 
+
+- Vladislav Lialin, Namrata Shivagunde, Sherin Muckatira, and Anna Rumshisky. Relora: High-rank training through low-rank updates. In _International Conference on Learning Representations_ , 2023. URL https://api.semanticscholar.org/CorpusID:259836974. 
+
+12 
+
+- Vladislav Lialin, Sherin Muckatira, Namrata Shivagunde, and Anna Rumshisky. ReloRA: Highrank training through low-rank updates. In _The Twelfth International Conference on Learning Representations_ , 2024. 
+
+- Mingjie Liu, Teodor-Dumitru Ene, Robert Kirby, Chris Cheng, Nathaniel Pinckney, Rongjian Liang, Jonah Alben, Himyanshu Anand, Sanmitra Banerjee, Ismet Bayraktaroglu, Bonita Bhaskaran, Bryan Catanzaro, Arjun Chaudhuri, Sharon Clay, Bill Dally, Laura Dang, Parikshit Deshpande, Siddhanth Dhodhi, Sameer Halepete, Eric Hill, Jiashang Hu, Sumit Jain, Brucek Khailany, Kishor Kunal, Xiaowei Li, Hao Liu, Stuart F. Oberman, Sujeet Omar, Sreedhar Pratty, Jonathan Raiman, Ambar Sarkar, Zhengjiang Shao, Hanfei Sun, Pratik P Suthar, Varun Tej, Kaizhe Xu, and Haoxin Ren. Chipnemo: Domain-adapted llms for chip design. _ArXiv_ , abs/2311.00176, 2023. URL https://api.semanticscholar.org/CorpusID:264833257. 
+
+- Qian Liu, Yihong Chen, Bei Chen, Jian-Guang Lou, Zixuan Chen, Bin Zhou, and Dongmei Zhang. You impress me: Dialogue generation via mutual persona perception. In _Proceedings of the 58th Annual Meeting of the Association for Computational Linguistics_ , pp. 1417–1427, Online, July 2020. Association for Computational Linguistics. doi: 10.18653/v1/2020.acl-main.131. URL https://aclanthology.org/2020.acl-main.131. 
+
+- Shih-Yang Liu, Chien-Yi Wang, Hongxu Yin, Pavlo Molchanov, Yu-Chiang Frank Wang, Kwang-Ting Cheng, and Min-Hung Chen. Dora: Weight-decomposed low-rank adaptation. _ArXiv_ , abs/2402.09353, 2024. URL https://api.semanticscholar.org/ CorpusID:267657886. 
+
+- Xiao Liu, Kaixuan Ji, Yicheng Fu, Weng Tam, Zhengxiao Du, Zhilin Yang, and Jie Tang. P-tuning: Prompt tuning can be comparable to fine-tuning across scales and tasks. In Smaranda Muresan, Preslav Nakov, and Aline Villavicencio (eds.), _Proceedings of the 60th Annual Meeting of the Association for Computational Linguistics (Volume 2: Short Papers)_ , pp. 61–68, Dublin, Ireland, May 2022. Association for Computational Linguistics. doi: 10.18653/v1/2022.acl-short.8. URL https://aclanthology.org/2022.acl-short.8. 
+
+- Ilya Loshchilov and Frank Hutter. Decoupled weight decay regularization. In _International Conference on Learning Representations_ , 2019. URL https://openreview.net/forum?id= Bkg6RiCqY7. 
+
+- Todor Mihaylov, Peter Clark, Tushar Khot, and Ashish Sabharwal. Can a suit of armor conduct electricity? a new dataset for open book question answering. In Ellen Riloff, David Chiang, Julia Hockenmaier, and Jun’ichi Tsujii (eds.), _Proceedings of the 2018 Conference on Empirical Methods in Natural Language Processing_ , pp. 2381–2391, Brussels, Belgium, OctoberNovember 2018. Association for Computational Linguistics. doi: 10.18653/v1/D18-1260. URL https://aclanthology.org/D18-1260. 
+
+Elizabeth Million. The hadamard product. _Course Notes_ , 3(6):1–7, 2007. 
+
+- Yao Ni, Shan Zhang, and Piotr Koniusz. PACE: marrying the generalization of PArameter-efficient fine-tuning with consistency regularization. In _The Thirty-eighth Annual Conference on Neural Information Processing Systems_ , 2024. URL https://openreview.net/forum?id= cOuLbPhOT1. 
+
+- Kishore Papineni, Salim Roukos, Todd Ward, and Wei-Jing Zhu. Bleu: A method for automatic evaluation of machine translation. In _Proceedings of the 40th Annual Meeting on Association for Computational Linguistics_ , Association for Computational Linguistics, pp. 311–318, USA, 2002. Association for Computational Linguistics. doi: 10.3115/1073083.1073135. URL https: //doi.org/10.3115/1073083.1073135. 
+
+- Jeffrey Pennington, Samuel Schoenholz, and Surya Ganguli. Resurrecting the sigmoid in deep learning through dynamical isometry: theory and practice. _Advances in neural information processing systems_ , 30, 2017. 
+
+- Olivier Roy and Martin Vetterli. The effective rank: A measure of effective dimensionality. In _2007 15th European signal processing conference_ , pp. 606–610. IEEE, 2007. 
+
+13 
+
+- Keisuke Sakaguchi, Ronan Le Bras, Chandra Bhagavatula, and Yejin Choi. Winogrande: An adversarial winograd schema challenge at scale. _Communications of the ACM_ , 64(9):99–106, 2021. 
+
+- Maarten Sap, Hannah Rashkin, Derek Chen, Ronan LeBras, and Yejin Choi. Socialiqa: Commonsense reasoning about social interactions. _arXiv preprint arXiv:1904.09728_ , 2019. 
+
+- Reece Shuttleworth, Jacob Andreas, Antonio Torralba, and Pratyusha Sharma. Lora vs full finetuning: An illusion of equivalence. _arXiv preprint arXiv:2410.21228_ , 2024. 
+
+- Haoyu Song, Yan Wang, Kaiyan Zhang, Weinan Zhang, and Ting Liu. Bob: Bert over bert for training persona-based dialogue models from limited personalized data. In _Association for Computational Linguistics_ , 2021. 
+
+- Nathan Srebro and Tommi Jaakkola. Weighted low-rank approximations. In _Proceedings of the 20th international conference on machine learning (ICML-03)_ , pp. 720–727, 2003. 
+
+- Hugo Touvron, Louis Martin, Kevin Stone, Peter Albert, Amjad Almahairi, Yasmine Babaei, Nikolay Bashlykov, Soumya Batra, Prajjwal Bhargava, Shruti Bhosale, et al. Llama 2: Open foundation and fine-tuned chat models. _arXiv preprint arXiv:2307.09288_ , 2023. 
+
+- Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N Gomez, Łukasz Kaiser, and Illia Polosukhin. Attention is all you need. In _Advances in neural information processing systems_ , 2017. 
+
+Yeming Wen and Swarat Chaudhuri. Batched low-rank adaptation of foundation models. In _The Twelfth International Conference on Learning Representations_ , 2024. URL https:// openreview.net/forum?id=w4abltTZ2f. 
+
+- Junda Wu, Tong Yu, Rui Wang, Zhao Song, Ruiyi Zhang, Handong Zhao, Chaochao Lu, Shuai Li, and Ricardo Henao. Infoprompt: Information-theoretic soft prompt tuning for natural language understanding. _Advances in Neural Information Processing Systems_ , 36, 2024. 
+
+- Longhui Yu, Weisen Jiang, Han Shi, Jincheng Yu, Zhengying Liu, Yu Zhang, James T Kwok, Zhenguo Li, Adrian Weller, and Weiyang Liu. Metamath: Bootstrap your own mathematical questions for large language models. _arXiv preprint arXiv:2309.12284_ , 2023. 
+
+- Rowan Zellers, Ari Holtzman, Yonatan Bisk, Ali Farhadi, and Yejin Choi. Hellaswag: Can a machine really finish your sentence? _arXiv preprint arXiv:1905.07830_ , 2019. 
+
+- Yuchen Zeng and Kangwook Lee. The expressive power of low-rank adaptation. In _The Twelfth International Conference on Learning Representations_ , 2024. 
+
+- Susan Zhang, Stephen Roller, Naman Goyal, Mikel Artetxe, Moya Chen, Shuohui Chen, Christopher Dewan, Mona Diab, Xian Li, Xi Victoria Lin, et al. Opt: Open pre-trained transformer language models. _arXiv preprint arXiv:2205.01068_ , 2022. 
+
+- Tianyi Zhang, Varsha Kishore, Felix Wu, Kilian Q Weinberger, and Yoav Artzi. Bertscore: Evaluating text generation with bert. _arXiv preprint arXiv:1904.09675_ , 2019. 
+
+- Zhan Zhuang, Yulong Zhang, Xuehao Wang, Jiangang Lu, Ying Wei, and Yu Zhang. Timevarying loRA: Towards effective cross-domain fine-tuning of diffusion models. In _The Thirtyeighth Annual Conference on Neural Information Processing Systems_ , 2024. URL https: //openreview.net/forum?id=SgODU2mx9T. 
+
+14 
+
+## A TRAINING DETAILS 
+
+## A.1 TRAINING HYPERPARAMETERS 
+
+Table 7 outlines hyperparameters used for tuning the Llama-2-7B and Llama-3-8B models with HiRA across two tasks: commonsense reasoning and CONVAI2. Both tasks utilize the same hyperparameter set, with the primary distinction being the number of epochs; the commonsense reasoning task runs for three epochs, whereas CONVAI2 runs for a single epoch. Each experiment is conducted separately, employing varying _r_ for a single run on each model. The best results are chosen based on the validation loss. For baseline methods, the hyperparameters also reuse the above configurations. Different PEFT methods could have different hyperparameters to be set for comparable or the same number of trainable parameters. 
+
+Table 7: Hyperparameters for HiRA. 
+
+|**Hyperparameter**|**Value**|||||
+|---|---|---|---|---|---|
+|Optimizer|AdamW|||||
+|Weight Decay|0|||||
+|Base Model|[Llama-2-7B, Llama-3-8B]|||||
+|Learning Rate|[0.0001, 0.0002]|||||
+|r|[2_,_4_,_8_,_16_,_24_,_28_,_30_,_32]|||||
+|Warm Up|100 steps|||||
+|Batch Size|32|||||
+|Target Modules|q<br>~~p~~roj, k|~~p~~roj, v|~~p~~roj, up|~~p~~roj, down|~~p~~roj|
+|Evaluation Steps|Every 80|steps||||
+
+
+Table 8: The statistics of the CONVAI2 dataset. 
+
+|Data Split|Utterances|Dialogues|Personas|
+|---|---|---|---|
+|Train|131,438|17,878|1,155|
+|Test|7,801|1,000|100|
+
+
+## A.2 STATISTICS OF THE CONVAI2 DATASET 
+
+We conduct experiments using the ConvAI2 dataset (Dinan et al., 2019), a benchmark for opendomain dialogue generation tasks. As shown in Table 8, this dataset consists of 17,878 training and 1,000 testing multi-turn conversations collected from crowdworkers. Each dialogue features persona profiles that provide four to five sentences describing each speaker’s background, along with the conversational history between the two interlocutors. In our experiments, by following (Liu et al., 2020; Song et al., 2021; Huang et al., 2023b;a), we utilize a self-persona setting, where only the speaking interlocutor’s persona is revealed, while the persona of the other remains undisclosed. 
+
+## A.3 EXPERIMENTAL SETTINGS FOR LORA WITH DIFFERENT RANKS 
+
+In this section, we detail the experimental settings used for fine-tuning the Llama-3-8B model with various LoRA configurations. The specific hyperparameters, including the rank ( _r_ ), learning rate (lr), and batch size, are outlined in Table 9. 
+
+Table 9 lists the specific configurations used for each LoRA rank. Higher ranks, such as _r_ = 1024, required a lower learning rate of 1 _._ 00 _e −_ 06 and a smaller batch size of 8 to prevent issues like gradient explosion. In contrast, lower ranks like _r_ = 32 could be trained with a higher learning rate of 1 _._ 00 _e −_ 04 and a larger batch size of 72. 
+
+Table 10 provides the general hyperparameters that were consistent across all experiments, ensuring a fair comparison between different configurations. These settings were designed to optimize the fine-tuning process for the Llama-3-8B model while maintaining computational efficiency. 
+
+15 
+
+Table 9: LoRA Configurations with Different Ranks, Learning Rates, and Batch Sizes. 
+
+|**LoRA Confg**|**Learning Rate (lr)**|**Batch Size**|
+|---|---|---|
+|r=1024|1.00e-06|8|
+|r=512|1.00e-06|16|
+|r=256|1.00e-05|32|
+|r=128|5.00e-05|72|
+|r=32|1.00e-04|72|
+
+
+Table 10: General Hyperparameters Used Across All Experiments. 
+
+|**Hyperparameter**|**Value**|||||
+|---|---|---|---|---|---|
+|Optimizer|AdamW|||||
+|Weight Decay|0|||||
+|Base Model|Llama-3-8B|||||
+|Warm Up|100 steps|||||
+|Target Modules|q<br>~~p~~roj, k|~~p~~roj, v|~~p~~roj, up|~~p~~roj, down|~~p~~roj|
+|Evaluation Steps|Every 80|steps||||
+
+
+## A.4 TRAINING COST 
+
+The computational cost for training on the commonsense reasoning task requires 14 GPU hours over 3 epochs on Nvidia-A100 80G GPU on Llama-3-8B, while the CONVAI2 task requires 9 GPU hours for a single epoch under the HiRA ( _r_ = 32) on Nvidia-A100 80G on Llama-3-8B. 
+
+## A.5 STATISTICS OF COMMONSENSE REASONING DATASET 
+
+As illustrated in Table 11, the training set comprises a mix of eight sub-tasks totalling 170 _,_ 300 entries, while the validation set contains a random selection of 120 entries. The test dataset also covers these eight sub-tasks and is evaluated using a single trained model. 
+
+Table 11: The detailed statistics of commonsense reasoning datasets. 
+
+|Dataset|Data Number|Type|
+|---|---|---|
+|Train|170,300|Mixed|
+|Validation|120|Mixed|
+|Test|||
+|BoolQ|3,270|Yes/No|
+|PIQA|1,830|Option|
+|SIQA|1,954|Option|
+|HellaSwag|10,042|Option|
+|WinoGrande|1,267|Option|
+|ARC-e|2,376|Option|
+|ARC-c|1,172|Option|
+|OBQA|500|Option|
+
+
+## A.6 GPU MEMORY CONSUMPTION AND RUNNING TIME ANALYSIS 
+
+This section presents a comparative analysis of GPU memory consumption and running time between the LoRA method and the proposed HiRA configurations under similar settings of trainable parameters. The experiments were conducted using the LLaMA-3-8B model. 
+
+16 
+
+Table 12: Comparison of GPU Memory Consumption and Running Time 
+
+|**Confguration**|**GRAM (GB)**|**Training Hours**|
+|---|---|---|
+|LoRA(_r_ = 32)|65_._48|15 hours 0 minutes 56 seconds|
+|HiRA(_r_ = 32)|61_._49|14 hours 09 minutes 32 seconds|
+
+
+## EXPERIMENTAL SETUP 
+
+- **Model:** LLaMA-3-8B 
+
+- **Batch Size:** 72 
+
+- **Epochs:** 3 
+
+- **Data Size:** 170k entries 
+
+- **LoRA Rank:** 32 
+
+- **HiRA Rank:** 32 
+
+## B PROOF OF HIRA’S EXPRESSIVE POWER 
+
+In this section, we give the details proof of the expressive power of HiRA in comparison to LoRA. We begin by introducing the Eckart-Young-Mirsky Theorem (Eckart & Young, 1936), which provides the optimal low-rank approximation of a matrix. We will refer to this theorem as Lemma 1. 
+
+**Lemma 1.** (Eckart-Young-Mirsky Theorem) _The best rank-r approximation of a matrix W in the spectral norm is given by the_ ( _r_ + 1) _-th largest singular value, i.e.,_ 
+
+**==> picture [156 x 23] intentionally omitted <==**
+
+According to Theorem 5.5.1 in (Horn & Johnson, 1994), we have the following Lemma 2. 
+
+**Lemma 2.** _For matrices A and B, the Hadamard product satisfies ∥A ⊙ B∥_ 2 _≤∥A∥_ 2 _∥B∥_ 2 _._ 
+
+**Theorem 1.** (The Expressive Power of HiRA) _Consider the optimal parameter update E and the HiRA update with the form W_ 0 _⊙ Whi, where the rank of Whi is less than r. Then we have_ 
+
+**==> picture [258 x 18] intentionally omitted <==**
+
+_where ⊘ denotes the element-wise division._ 
+
+_Proof._ The proof proceeds as follows 
+
+**==> picture [246 x 56] intentionally omitted <==**
+
+In this analysis, we assume that _W_ 0 contains no zeros and use _⊘_ to denote the element-wise division. The optimization objective min _Whi_ �� _W_ 0 _⊙_ ( _Whi − E ⊘ W_ 0)��2[is equivalent to the weighted low-] rank approximation problem, which is NP-hard (Srebro & Jaakkola, 2003). As a result, we can analyze it by applying the upper bound provided by Lemma 2. This indicate that HiRA’s expressive power is linked to the singular value of _E ⊘ W_ 0. 
+
+Notably, HiRA can exhibit greater expressive power than LoRA, particularly since the updated weights correspond to the original weights. For instance, consider the following matrices 
+
+**==> picture [234 x 25] intentionally omitted <==**
+
+In this toy example, we find that _σr_ +1( _E ⊘ W_ ) = 0, while _σr_ +1( _E_ ) = 1. Thus we have _σr_ +1( _E ⊘ W_ ) _∥W ∥_ 2 _< σr_ +1( _E_ ). 
+
+17 
+
+## C COMPARISON OF EFFECTIVE RANK WITH DIFFERENT METHODS 
+
+We conducted additional experiments to analyze the effective rank (Roy & Vetterli, 2007) of different fine-tuning methods, as presented in Figure 8. 
+
+**==> picture [388 x 64] intentionally omitted <==**
+
+**----- Start of picture text -----**<br>
+Wq 1000 Wk 1000 Wv 4000 Wup 4000 Wdown<br>30002000 [| preeeereferensan.an [JV] [rote] a | [tenefoon][eseethe] a 0 | 800600 j pelea f Loaf 800600 rreressy Ay yeortths, coesstes 30002000 30002000 Messe ve, ona —_—— FFTLoRA r=32LoRA r=128<br>1000 400200 400200 1000 1000 LoRA r=512MoRA<br>0 0 10 $tettecoees 20 30 0 0 10 20 30 0 0 10 Pelpesnancetes 20 30 0 0 10 20 30 0 0 sssanacaane 10 20 30 — HiRA<br>Model Layer (r=32) Model Layer (r=32) Model Layer (r=32) Model Layer (r=32) Model Layer (r=32)<br>**----- End of picture text -----**<br>
+
+
+Figure 8: Effective rank across layers for FFT, LoRA, MoRA, and HiRA. 
+
+Unlike simply calculating the rank or counting the number of singular values above a given threshold, the effective rank accounts for the full singular value spectrum. For a matrix _A_ of size _M × N_ with _K_ = min _{M, N }_ , the effective rank is defined as follows: 
+
+**==> picture [212 x 31] intentionally omitted <==**
+
+where _σk_ denotes the _k_ -th largest singular value and _∥· ∥_ 1 is the _l_ 1-norm of the singular values. 
+
+From the results, we can observe that the update matrix obtained by FFT achieves the highest effective rank. For the query component, MoRA shows behavior closer to FFT, while for the value component—and especially for the projection layer (up and down components)—HiRA exhibits better. Conversely, even LoRA with rank=512 offers a relatively lower effective rank. This analysis follows a similar approach to that in (Shuttleworth et al., 2024). 
+
+## D EVALUATION ON TRANSFER LEARNING TASKS 
+
+We trained HiRA and LoRA separately on eight commonsense reasoning tasks and evaluated their performance on these tasks. As shown in the Figure 9, HiRA demonstrates strong transferability across tasks, achieving high scores on related tasks. This indicates its ability to generalize effectively beyond the specific task it was trained on. 
+
+**==> picture [213 x 9] intentionally omitted <==**
+
+**----- Start of picture text -----**<br>
+(a) (b)<br>**----- End of picture text -----**<br>
+
+
+Figure 9: Transferability analysis for (a) LoRA and (b) HiRA. Each row represents the performance of a fine-tuned model trained on a specific task dataset when evaluated across eight different tasks. 
+
+In comparison, LoRA exhibits more pronounced overfitting. While it performs well on its training task (e.g., boolq-lora scores 71.44 on boolq), its performance drops significantly on other tasks. In 
+
+18 
+
+contrast, HiRA maintains respectable transferability, as seen with arce-hira, which achieves 64.23 on siqa, 70.20 on obqa, and 58.56 on winog, outperforming LoRA in these cases. HiRA also excels at harder tasks requiring more complex reasoning, such as HellaSwag (hellas) and WinoGrande (winog). On the other hand, LoRA performs relatively better on simpler tasks like BoolQ and PIQA, but its overfitting tendency causes significant drops in performance on unrelated tasks. 
+
+In summary, HiRA shows superior generalization and is less prone to overfitting compared to LoRA. Evaluating HiRA on transfer learning tasks could further validate its robustness and adaptability. 
+
+## E IMPACT OF MORE CHOICES OF _R_ 
+
+## E.1 REDUCING THE RANK OF _R_ 
+
+To validate the correlation between the rank of ∆ _W_ and expressiveness, we conducted an additional experiment by reducing the rank of _R_ on LLaMA-3-8B across commonsense reasoning tasks. Specifically, _R_ is derived from _W_ 0, the pretrained weight matrix, using SVD decomposition. We retained only the top- _v_ singular values and the corresponding singular vectors to form a reducedrank version, _W_ 0[: _v_ ]. The results, presented in Table 13, show that increasing the rank of _R_ generally improves the performance across tasks. 
+
+Table 13: Performance comparison between _R_ with different ranks based on _W_ 0. 
+
+|Model|Rank|BoolQ|PIQA|SIQA|ARC-c|ARC-e|OBQA|HellaS|WinoG|Average|
+|---|---|---|---|---|---|---|---|---|---|---|
+|_R_=_W_0_,_[:32]|32|73.67|88.63|80.04|80.97|93.18|86.00|94.31|86.58|85.42|
+|_R_=_W_0_,_[:128]|128|74.16|89.23|82.04|80.89|93.10|87.20|95.11|87.45|86.15|
+|_R_=_W_0_,_[:512]|512|74.34|**89.88**|**81.99**|82.25|**93.86**|88.20|**95.38**|87.61|86.69|
+|_R_=_W_0(Ours)|2852|**75.40**|89.70|81.15|**82.90**|93.27|**88.32**|95.36|**87.70**|**86.72**|
+
+
+## E.2 USING _W_ 0’S IN ADJACENT LAYERS AS _R_ 
+
+We experimented with a smoothed version of _W_ 0 by incorporating information from adjacent layers. Specifically, the smoothed _W_ 0 ( _R_ = _Wsmooth_ ) was computed as the average of the upper, current, and lower layers for the same transformer component. The results, summarized in the Table 14, show that the smoothed _W_ 0 achieves an average score of 83.71, slightly lower than the original _W_ 0, which achieves 86.72. While smoothing provides competitive performance, the original _W_ 0 retains a clear advantage, likely due to its direct alignment with the pretrained weights, preserving task-specific expressiveness and parameter efficiency. 
+
+Table 14: Performance comparison between smoothed _W_ 0 and _W_ 0 used as _R_ . 
+
+|Model|BoolQ|PIQA|SIQA|ARC-c|ARC-e|OBQA|HellaS|WinoG|Average|
+|---|---|---|---|---|---|---|---|---|---|
+|_R_=_Wsmooth_|72.02|83.84|79.84|81.23|90.24|85.60|92.07|84.85|83.71|
+|_R_=_W_0(Ours)|**75.40**|**89.70**|**81.15**|**82.90**|**93.27**|**88.32**|**95.36**|**87.70**|**86.72**|
+
+
+## F EXPERIMENTAL EVIDENCE ON HIRA’S EXPRESSIVE POWER 
+
+Theorem 1 establishes an upper bound on the approximation error of HiRA, which is proportional to _σr_ +1( _E ⊘ W_ 0), in contrast to the _σr_ +1( _E_ ) in LoRA. In this section, we use experimental evidence to prove the advantages of _σr_ +1( _E ⊘ W_ 0). 
+
+Since the optimal update matrix _E_ comes from a complex distribution and is not predetermined, directly proving this inequality is challenging. We approximate the optimal update matrix _E_ through the update matrix of full fine-tuning (FFT), denoted by _E_[�] , such that: 
+
+**==> picture [121 x 12] intentionally omitted <==**
+
+where _W_ fft denotes the weights of the fully fine-tuned models. 
+
+19 
+
+Directly comparing the singular values of _E_[�] _⊘ W_ 0 and _E_[�] may be influenced by the norm of _W_ 0. To mitigate this, we compute the normalized singular values for comparison. Additionally, we analyze the effective rank as described in Appendix C to provide further insights. 
+
+**==> picture [390 x 65] intentionally omitted <==**
+
+**----- Start of picture text -----**<br>
+0.4 Wq 0.6 Wk 0.5 Wv 0.20 Wup 0.20 Wdown E<br>0.3 0.4 0.40.3 0.15 0.15 E W 0<br>0.2 0.10 0.10<br>0.2<br>0.1 0.2 0.1 0.05 0.05<br>0.0 0.0 0.0 0.00 0.00<br>0 1000 2000 3000 4000 0 200 400 600 800 1000 0 200 400 600 800 1000 0 1000 2000 3000 4000 0 1000 2000 3000 4000<br>Model Layer (r=32) Model Layer (r=32) Model Layer (r=32) Model Layer (r=32) Model Layer (r=32)<br>**----- End of picture text -----**<br>
+
+
+Figure 10: Normalized singular values of layers for _E_[�] and _E_[�] _⊘ W_ 0. 
+
+**==> picture [390 x 65] intentionally omitted <==**
+
+**----- Start of picture text -----**<br>
+Wq 1000 Wk 1000 Wv 4000 Wup 4000 Wdown<br>3000250020001500 800600400 800600400 3500300025002000 3500300025002000 EE W0<br>1000500 200 200 15001000 15001000<br>0 10 20 30 0 10 20 30 0 10 20 30 0 10 20 30 0 10 20 30<br>Model Layer (r=32) Model Layer (r=32) Model Layer (r=32) Model Layer (r=32) Model Layer (r=32)<br>**----- End of picture text -----**<br>
+
+
+Figure 11: Effective rank across layers for _E_[�] and _E_[�] _⊘ W_ 0. 
+
+The singular values of _E_[�] _⊘ W_ 0 exhibit a faster rate of decline compared to those of _E_[�] , as demonstrated in Figure 10. This comparison uses normalized singular values to account for the influence of _W_ 0’s scaling. Furthermore, Figure 11 demonstrates that the effective rank of _E_[�] _⊘ W_ 0 is lower than that of _E_[�] . Those findings indicate that _E_[�] _⊘ W_ 0 aligns more effectively with low-rank approximations compared to _E_[�] , supporting the conclusion that HiRA can leverage the Hadamard product to fully utilize the knowledge embedded in the full-rank _W_ 0. 
+
+20

@@ -1,0 +1,395 @@
+## - ADAFM: ADAPTIVE VARIANCE-REDUCED ALGO RITHM FOR STOCHASTIC MINIMAX OPTIMIZATION 
+
+**004 005 Anonymous authors 006** Paper under double-blind review ABSTRACT In stochastic minimax optimization, variance-reduction techniques have been widely developed to mitigate the inherent variances introduced by stochastic gra- dients. Most of these techniques employ carefully designed estimators and learn- ing rates, successfully reducing variance. Although these approaches achieve optimal theoretical convergence rates, they require the careful selection of numerous hyperparameters, which heavily depend on problem-dependent param- eters. This complexity makes them difficult to implement in practical model training. To address this, our paper introduces Adaptive Filtered Momentum (AdaFM), an adaptive variance-reduced algorithm for stochastic minimax opti- mization. AdaFM adaptively adjusts hyperparameters based solely on historical estimator information, eliminating the need for manual parameter tuning. The- oretical results show that AdaFM can achieve a near-optimal sample complex- ity of _O_ ( _ϵ[−]_[3] ) to find an _ϵ_ -stationary point in non-convex-strongly-concave and non-convex-Polyak-Łojasiewicz objectives, matching the performance of the best existing non-parameter-free algorithms. Extensive experiments across various applications validate the effectiveness and robustness of AdaFM. 1 INTRODUCTION Typically, the stochastic minimax optimization problem Nouiehed et al. (2019); Lin et al. (2020); Lu et al. (2020); Huang et al. (2022; 2023) can be formulated as follows: **031032** _x_ min _∈_ R _[d]_[1][max] _y∈Y[f]_[(] _[x, y]_[) =][ E] _[ξ][∈D]_[[] _[f]_[(] _[x, y, ξ]_[)]] _[,]_ (1) where data sample _ξ_ is a random variable following an unknown distribution _D_ . _Y ⊂_ R _[d]_[2] is closed and convex, and _f_ : R _[d]_[1] _×_ R _[d]_[2] _→_ R is non-convex in _x_ . We call _x_ the primal variable and _y_ the dual variable. Problem in equation 1 is widely used in many machine learning applications, e.g., adversarial training Goodfellow et al. (2014b); Miller et al. (2020), Generative Adversarial Network (GAN) Arjovsky et al. (2017); Goodfellow et al. (2014a), deep Area Under the Curve (AUC) Yuan et al. (2021; 2022), and sharpness-aware minimization Foret et al. (2021); Qu et al. (2022). Since stochastic gradients on both the primal and dual parameters inherently exhibit variance Johnson & Zhang (2013); Dubey et al. (2016), which slows down the convergence rate, recent studies have focused on Variance-Reduction (VR) techniques Reddi et al. (2016); Xu et al. (2017); Cutkosky & Orabona (2019); Ward et al. (2020); Huang et al. (2022); Xu et al. (2023); Huang et al. (2023); Liu et al. (2023) to mitigate this variance, demonstrating the ability to achieve optimal sample complexity of _O_ ( _ϵ[−]_[3] ) for finding an _ϵ_ -stationary point. While the aforementioned VR-based algorithms have proven highly successful at the theoretical level, they often perform poorly in actual model training Defazio & Bottou (2019); Arjevani (2017). One significant reason is that VR techniques introduce numerous hyperparameters that must be carefully selected in minimax optimization to ensure the effectiveness of the VR techniques. For instance, in stochastic minimax optimization, the VR-based algorithms mentioned above do not always guarantee convergence if the ratio of the learning rates for _x_ and _y_ is not selected appropriately Yang et al. (2022a). Moreover, the large number of hyperparameters makes the algorithm highly sensitive, such that even small hyperparameter changes can prevent the algorithm from converging. To verify the above issues, we conducted real model training, specifically using WGAN-GP Gulrajani et al. (2017), on CIFAR10 and CIFAR100 Krizhevsky et al. (2009). From Figure 1, we observe that 
+
+1 
+
+E 00s ae E wR Eos ne Ee ne Learning rate x Learning rate x ‘Learning rate x Learning rate x (a) [0 _,_ 0 _._ 1] _,_ [0 _,_ 0 _._ 1] (b) [0 _,_ 0 _._ 01] _,_ [0 _,_ 0 _._ 01] (c) [0 _,_ 0 _._ 1] _,_ [0 _,_ 0 _._ 1] (d) [0 _,_ 0 _._ 01] _,_ [0 _,_ 0 _._ 01] Figure 1: The hyperparameter grid search of RSGDA on CIFAR10 and CIFAR100. Figures 1a and 1b display the results of the search on CIFAR10 using two different hyperparameter grids. Similarly, Figures 1c and 1d show the results on CIFAR100. The grid search was performed in the range [0, 0.1] with a step size of 0.005 and in the range [0, 0.01] with a step size of 0.0002. RSGDA faces several challenges. First, when we select the parameters from a large space, i.e., [0 _,_ 0 _._ 1] of the two learning rates in Figures 1a and 1c, we can see that most results are not desired enough. As such, we need to compress the searching space. Consequently, the parameters are highly sensitive; for example, as shown in Figure 1b, when the learning rate of _x_ is very small (i.e., less than 0.002), even a slight change in the learning rate of _y_ can directly prevent the algorithm from functioning properly, particularly when the learning rate of _y_ is around 0.002 or 0.001. Lastly, changes in the dataset cause the space of effective parameters to shift dramatically, making it difficult to provide a default combination of parameters for different datasets and tasks. This results in a highly computationally laborious hyperparameter search for various tasks. Therefore, to enhance the practicality of VR-based algorithms, it is necessary to address the issue of excessive hyperparameters. In minimization problems, the parameter-free approach Kingma & Ba (2014); Li & Orabona (2019); Ward et al. (2020); Levy et al. (2021) offers an intuitive solution to enhance VR-based algorithms by automatically adapting hyperparameters, thus avoiding manual tuning. However, implementing VR techniques in a parameter-free manner for minimax problems remains highly challenging because minimax problems require the simultaneous consideration of updates to both variables. As a result, traditional VR-based algorithms for minimax problems involve nearly twice as many hyperparameters compared to those used in minimization problems. specifically, VR techniques maintain gradient estimators _vt_ and _wt_ for _x_ and _y_ , respectively, with the corresponding learning rates _ηx[t]_[and] _[η] y[t]_ carefully designed based on _vt_ and _wt_ . Many hyperparameters in _vt_ , _wt_ , _ηx[t]_[, and] _[ η] y[t]_[require knowledge] of problem-dependent parameters to be chosen properly, ensuring the effectiveness of VR-based algorithms. These problem-dependent parameters, such as the smoothness constant _L_ and the gradient bound _G_ , are difficult to determine during actual model training. This raises a natural question: **088 089 Can we design an adaptive VR-based algorithm to achieve the optimal convergence rate in 090 the minimax optimization problem? 091 092** In this paper, we introduce an adaptive VR-based algorithm named Adaptive Filtered Momentum (AdaFM) for stochastic minimax optimization problems. Inspired by STORM Cutkosky & Orabona (2019), AdaFM incorporates variance reduction with momentum correction and features a novel update method for both momentum parameters and learning rates, making them adaptive and simpli- fying their computation, thus enhancing ease of use. Specifically, The momentum parameter only decreases with the number of iterations, thus avoiding parameter tuning and improving the stability of the algorithm. The learning rate takes multiple factors into full account. On one hand, the learning rate decreases as the cumulative value of the estimator increases. On the other hand, the learning rates of _x_ and _y_ interact with each other, ensuring that the step sizes of _x_ and _y_ adapt to the desired ratio. The main contributions of this paper are summarized as follows: • We introduce AdaFM, the first adaptive VR-based algorithm for stochastic minimax opti- mizations. AdaFM is an adaptive method that achieves the near optimal convergence rate in the minimax optimization problem. AdaFM dynamically adjusts the momentum parameters according to the number of iterations and automatically adjusts the learning rate based on the current momentum parameters and historical estimator information. • We provide detailed analyses of AdaFM in both Non-Convex-Strongly-Concave (NC-SC) 
+
+- We introduce AdaFM, the first adaptive VR-based algorithm for stochastic minimax optimizations. AdaFM is an adaptive method that achieves the near optimal convergence rate in the minimax optimization problem. AdaFM dynamically adjusts the momentum parameters according to the number of iterations and automatically adjusts the learning rate based on the current momentum parameters and historical estimator information. 
+
+- We provide detailed analyses of AdaFM in both Non-Convex-Strongly-Concave (NC-SC) and Non-Convex-Polyak-Łojasiewicz minimax (NC-PL) settings. Although the theoretical 
+
+2 
+
+- result in the NC-PL setting is worse than NC-SC due to the more complicated property, both 
+
+- of them can achieve an _ϵ_ -stationary point with an optimal complexity of _O_ ( _ϵ[−]_[3] ) in short. 
+
+- They match the best result among existing VR-based parametric algorithms. 
+
+- We evaluate our AdaFM across various learning tasks formulated by the stochastic minimax 
+
+- optimization, including (1) two distinct test functions, (2) deep AUC Yuan et al. (2021) on 
+
+- an NC-SC objective, and (3) training Wasserstein-GANs Arjovsky et al. (2017) to validate the NC-PL objective. Experimental results indicate that AdaFM exhibits greater robustness than other traditional parametric VR-based algorithms and consistently outperforms TiAda. 
+
+2 RELATED WORK **119 Stochastic Minimax Optimization.** Stochastic minimax optimization has gained significant traction in various machine learning applications. The prevailing approach for solving minimax optimization problems typically involves alternating between optimizing the minimization and maximization sub- problems, which are typically addressed by stochastic gradient descent ascent (SGDA) Nouiehed et al. (2019); Lin et al. (2020); Lu et al. (2020). Notably, they can achieve a sample complexity of _O_ ( _ϵ[−]_[4] ) in stochastic settings Nouiehed et al. (2019); Lin et al. (2020); Yang et al. (2020). Subsequently, some accelerated algorithms utilizing adaptive learning rates have been extended to minimax optimization, both theoretically and practically. These include approaches for strongly-convex strongly-concave problems Antonakopoulos et al. (2021), nonconvex-convex problems Yang et al. (2022a); Huang et al. (2023), and nonconvex-PL problems Huang (2023); Guo et al. (2023). For example, Guo et al. (2023) proposes PES to address the primal objective and duality gaps under the NC-PL setting. **130 VR Techniques.** VR techniques have gained prominence in stochastic optimization, addressing the inherent variance issue associated with stochastic gradients. Notable approaches include stochastic variance reduced gradient Johnson & Zhang (2013); Reddi et al. (2016), SPIDER Fang et al. (2018); Li et al. (2023b), and STORM Cutkosky & Orabona (2019); Levy et al. (2021), which have accelerated the convergence. SPIDER has led to the development of fast HAPG Shen et al. (2019) and SVRPG Xu et al. (2020b). Momentum-based techniques such as ProxHSPGA Pham et al. (2020), SVMR Jiang et al. (2022), and NSTORM Liu et al. (2023) have emerged from STORM’s principles, addressing various optimization scenarios. While VR-based algorithms have demonstrated efficient convergence results, the challenge of reducing the search space for hyper-parameters remains under-explored. **138 139 Parameter-Free Algorithms.** Parameter-free algorithms have significantly enhanced their utility by adapting to various parameters without the need for extensive manual tuning. Some adaptive optimizers that achieve this property include AdaGrad Duchi et al. (2011), Adam Reddi et al. (2016), and STORM+ Levy et al. (2021). TiAda Li et al. (2023a) extends this adaptivity to minimax optimizations by separating the two timescales. Additionally, parameter-free algorithms have been extensively developed in online learning. For instance, Beygelzimer et al. (2015) focuses on online boosting, Xu et al. (2020a) addresses online reinforcement learning, and Hanneke et al. (2023) explores multi-class online learning. In these contexts, the primary goal is for the learner to compete with the performance of the best possible function _f_ , thereby achieving minimal regret. Note that online learning primarily addresses the cold data streaming problem, which is parallel to this paper. 3 THE PROPOSED ALGORITHM To achieve the adaptive method, we introduce the parameter-free algorithm, called Adaptive Filtered Momentum (AdaFM), to solve the minimax optimization problem in equation 1, which is illustrated in Algorithm 1. Specifically, we leverage similar VR estimators for the primal variable _x_ and the dual variable _y_ , denoted as _vt_ and _wt_ inspired by STORM Cutkosky & Orabona (2019). In each iteration _t_ , the two estimators _vt_ and _wt_ can be calculated as follows: 
+
+**==> picture [329 x 26] intentionally omitted <==**
+
+> However, if the original momentum parameter update method is directly used, it has been proven by Huang et al. (2023); Huang & Gao (2023); Liu et al. (2023) that designing different momentum parameters _βt[x]_[and] _[ β] t[y]_[for the two variables] _[ x]_[ and] _[ y]_[is required.][This inevitably introduces more] additional hyperparameters. To address this problem, we simplify the momentum parameters for both 
+
+3 
+
+**162 Algorithm 1** Learning procedure of AdaFM. **163 164 Initialization:** ( _x_ 1 _, y_ 1), _γ, λ >_ 0,[1] 3 _[> δ][>]_[ 0][;] 1: **for** _t_ = 1 to _T_ **do 165 166** 2: sample _ξt[x]_[and] _[ ξ] t[y]_[;] 3: **if** _t_ = 1 **then 167 168** 4: _vt_ = _∇xf_ ( _xt, yt_ ; _ξt[x]_[)][,] _[ w][t]_[=] _[ ∇][y][f]_[(] _[x][t][, y][t]_[;] _[ ξ] t[y]_[)][;] 5: **else 169** 6: Update the estimators _vt_ and _wt_ via equation 2-equation 3; 7: **end if 171** 8: Update the momentum parameter _βt_ +1 = 1 _/t_[2] _[/]_[3] ; 9: Update _αt[x]_[and] _[ α] t[y]_[via equation 5;] 10: Update learning rates _ηt[x]_[and] _[ η] t[y]_[via equation 4;] 11: _xt_ +1 = _xt − ηt[x][v][t][,][y][t]_[+1][=] _[ P][Y]_[(] _[y][t]_[+] _[ η] t[y][w][t]_[)] 12: **end for 176** 
+
+variables by setting _βt_ +1 = 1 _/t_[2] _[/]_[3] . This means that _βt_ only changes with the number of iterations, making it tuning-free. Such a simplification is made possible by our careful design of the learning rates. Below, we describe how to update the learning rates _ηt[x]_[and] _[ η] t[y]_[for the two variables:] _γ λ_ _ηt[x]_[=] max _{αt[x][, α] t[y][}]_[1] _[/]_[3+] _[δ][,] ηt[y]_[=] ( _αt[y]_[)][1] _[/]_[3] _[−][δ][,]_ (4) where _t t ∥vi∥_[2] _∥wi∥_[2] _αt[x]_[=] � _, αt[y]_[=] � _._ (5) _i_ =1 _βi_ +1 _i_ =1 _βi_ +1 It seems that there are three extra hyperparameters appearing in learning rates _ηt[x]_[and] _[ η] t[y]_[in equation 4:] _γ_ , _λ_ , and _δ_ , require manual tuning. In particular, we will delve into these hyperparameters later and demonstrate that convergence can be achieved even without manual adjustments. Now we explain why we choose the momentum parameters and learning rates this way. Our choices are inspired by the analysis of dynamic errors in both variables, denoted as _ϵ[x] t_[:=] _[ v][t][−∇][x][f]_[(] _[x][t][, y][t]_[)][ and] _ϵ[y] t_[:=] _[ w][t][−∇][y][f]_[(] _[x][t][, y][t]_[)][.][Dynamic error reflects the error between the current estimator and the true] gradient on each iteration _t_ . More specifically, based on the update rule of _vt_ and _wt_ in our proposed AdaFM algorithm, the error dynamics can be obtained as follows: **==> picture [344 x 26] intentionally omitted <==**
+
+_ϵt[ −][t][ϵ] t−_ 1 _[ −][t] t_[+] _[t][x][x][t][, y][t]_[;] _t[x][x][t][, y][t][,]_ _ϵ[y] t_[= (1] _[ −][β][t]_[)] _[ϵ][y] t−_ 1[+ (1] _[ −][β][t]_[)] _[Z] t[y]_[+] _[ β][t]_[(] _[∇][y][f]_[(] _[x][t][, y][t]_[;] _[ ξ] t[y]_[)] _[ −∇][y][f]_[(] _[x][t][, y][t]_[))] _[,]_ (7) where _Zt[x]_[=(] _[∇][x][f]_[(] _[x][t][, y][t]_[;] _[ ξ] t[x]_[)] _[ −∇][x][f]_[(] _[x][t][−]_[1] _[, y][t][−]_[1][;] _[ ξ] t[x]_[))] _[ −]_[(] _[∇][x][f]_[(] _[x][t][, y][t]_[)] _[ −∇][x][f]_[(] _[x][t][−]_[1] _[, y][t][−]_[1][))] _[,]_ _Zt[y]_[=(] _[∇][y][f]_[(] _[x][t][, y][t]_[;] _[ ξ] t[y]_[)] _[ −∇][y][f]_[(] _[x][t][−]_[1] _[, y][t][−]_[1][;] _[ ξ] t[y]_[))] _[ −]_[(] _[∇][y][f]_[(] _[x][t][, y][t]_[)] _[ −∇][y][f]_[(] _[x][t][−]_[1] _[, y][t][−]_[1][))] _[.]_ The third term on the RHS of equation 6-equation 7, namely _∇xf_ ( _xt, yt_ ; _ξt[x]_[)] _[ −∇][x][f]_[(] _[x][t][, y][t]_[)][ and] _∇yf_ ( _xt, yt_ ; _ξt[y]_[)] _[ −∇][y][f]_[(] _[x][t][, y][t]_[)][,][represents][the][error][between][the][stochastic][gradient][and][the][true] gradient. This error is generally controlled by choosing a decreasing value for the momentum parameter _βt_ . For instance, in STORM Cutkosky & Orabona (2019), the momentum parameter is defined as _βt_ +1 = _cηt_[2][,][where] _[η][t]_[=] _[θ/]_[(] _[w]_[+] _[t]_[)][1] _[/]_[3][.][However,][the][three][hyperparameters] _[θ]_[,] _w_ , and _c_ , which are linked to _L_ and _G_ , necessitate configurations that are dictated by problem- dependent parameters. To fulfill our objectives, we streamlined the momentum parameters, setting _βt_ +1 = 1 _/t_[2] _[/]_[3] for both _x_ and _y_ . As iterations increase, the momentum parameter gradually approaches zero. This ensures that in early iterations, it remains large enough to leverage the acceleration effect of momentum, while in later iterations, it decreases, dissipating the accumulated "momentum potential energy." As a result, the algorithm transitions to Simple SGD, allowing it to converge near the stationary point. Then, we prepare the choice of learning rate _ηt[x]_[and] _[ η] t[y]_[to afford the parameter-free manner.][For] the error dynamics, while we have addressed the last terms _∇xf_ ( _xt, yt_ ; _ξt[x]_[)] _[ −∇][x][f]_[(] _[x][t][, y][t]_[)][and] _∇yf_ ( _xt, yt_ ; _ξt[y]_[)] _[ −∇][y][f]_[(] _[x][t][, y][t]_[)][,][there][are][still][elements] _[Z] t[x]_[and] _[Z] t[y]_[that][require][attention.][These] 
+
+4 
+
+elements reflect the differences in model weights before and after each update. Our analysis suggests that _Zt[x]_[and] _[ Z] t[y]_[can be upper-bounded as follows:] _[ ∥][Z] t[x][∥]_[2] _[≤]_[8] _[L]_[2][((] _[η] t[x] −_ 1[)][2] _[∥][v][t][−]_[1] _[∥]_[2][+(] _[η] t[y] −_ 1[)][2] _[∥][w][t][−]_[1] _[∥]_[2][)] and _∥Zt[y][∥]_[2] _[≤]_[8] _[L]_[2][((] _[η] t[x] −_ 1[)][2] _[∥][v][t][−]_[1] _[∥]_[2][+ (] _[η] t[y] −_ 1[)][2] _[∥][w][t][−]_[1] _[∥]_[2][)][.][It][is][worth][noting][that][these][bounds][are] closely related to the learning rates with the smooth property of the functions. Therefore, in order to achieve adaptivity and at the same time fulfill the above requirements, a natural idea is to relate the learning rates to historical estimators’ information. Inspired by Adagrad Duchi et al. (2011), we let the learning rates decrease as the historical estimators values accumulate, that is _ηt[x]_[=] _O_ (1 _/_[�] _[t] i_ =1 _[∥][v][i][∥]_[2][)][1] _[/]_[3+] _[δ]_[and] _[ η] t[y]_[=] _[ O]_[(1] _[/]_[ �] _[t] i_ =1 _[∥][w][i][∥]_[2][)][1] _[/]_[3] _[−][δ]_[, where] _[ δ]_[ is an arbitrarily small value.] However, relying solely on historical estimator information makes it difficult to ensure a strictly monotonically decreasing learning rate due to the inherent variance of stochastic gradients. This assurance is crucial. For instance, when the algorithm approaches a stationary point after only a few iterations, the cumulative estimator values[�] _[t] i_ =1 _[∥][v][i][∥]_[2][are still quite small, which can lead to a high] learning rate _ηt[x]_[that is hard to reduce further.][This can easily result in oscillations near the stationary] point, making it difficult to achieve stability accurately. Therefore, we combine the learning rate with the momentum parameter to ensure a strictly monotonic decrease in the learning rate. Specifically, **231232** we define _ηt[x]_[=] _[ O]_[(] � _ti_ =1 _[∥][v]_ 1 _[i][∥]_[2] _[/β][i]_[+1][)][1] _[/]_[3+] _[δ]_[and] _[ η] t[y]_[=] _[ O]_[(] � _ti_ =1 _[∥][w]_ 1 _[i][∥]_[2] _[/β][i]_[+1][)][1] _[/]_[3] _[−][δ]_[.] Moreover, minimax optimizations bring additional challenges in determining the learning rates for both variables. A consensus Lin et al. (2020); Li et al. (2023a) suggests updating _y_ at a higher learning rate than _x_ to ensure that _y_ reaches optimal first. Therefore, _x_ should be updated cautiously if the inner maximization sub-problem is unresolved. Based on these principles, it becomes clear that discussing the learning rates of _x_ and _y_ separately is insufficient. Consequently, when updating _x_ , we also consider the learning rate of _y_ by setting _ηt[x]_[=] _[ O]_[(1] _[/]_[ max] _[{][α] t[x][, α] t[y][}]_[)][1] _[/]_[3+] _[δ]_[.][This ensures that if] the inner maximization sub-problem has not yet been accurately solved, the update of _x_ is always slowed. The final strategy is shown in equation 4. Through this method, we use only information about the number of iterations and the cumulative estimator values to achieve adaptive learning rates. Finally, we discuss the three parameters: _γ_ , _λ_ , and _δ_ . The purpose of _γ_ and _λ_ is to enable AdaFM to adapt more quickly to various application scenarios. In our proof, we will show that even if we simply set _γ_ = _λ_ = 1, our theorems still hold. Regarding _δ_ , it reflects the degree of scale adjustment of the learning rates for _x_ and _y_ . In our proof, we demonstrate that in complex settings, where _δ_ takes an arbitrarily small value, we can ensure that the convergence rate remains close to _O_ ( _T[−]_[1] _[/]_[3] ), as explained in the next section. Therefore, adjusting these three parameters presents no difficulty, which is consistent with our claim that AdaFM is adaptive. 4 THEORETICAL ANALYSIS In this section, we present the convergence result and sample complexity of our AdaFM algorithm under Non-Convex-Strongly-Concave (NC-SC) and Non-Convex-Polyak-Łojasiewicz (NC-PL) ob- jectives, respectively. We define ( _x, y_ ) as an _ϵ_ -stationary point if both E _∥∇xf_ ( _x, y_ ) _∥≤ ϵ_ and E _∥∇yf_ ( _x, y_ ) _∥≤ ϵ_ , where the expectation accounts for all algorithmic randomness. As shown in Yang et al. (2022a;b); Huang et al. (2023); Huang & Gao (2023); Xu et al. (2023), this def- inition of stationary can be conveniently translated to the near-stationary of the primal function Φ( _x_ ) = max _y∈Y f_ ( _x, y_ ). Before presenting the theoretical results, we set _δx_ = 1 _/_ 3 + _δ_ and _δy_ = 1 _/_ 3 _− δ_ to simplify the notation in the following sections. We then state some useful assump- tions to facilitate our analysis. **260 Assumption 1** (Smoothness) **.** _There exists a constant L >_ 0 _, such that_ _∥∇f_ ( _x_ 1 _, y_ 1; _ξ_ ) _−∇f_ ( _x_ 2 _, y_ 2; _ξ_ ) _∥≤ L∥_ ( _x_ 1 _, y_ 1) _−_ ( _x_ 2 _, y_ 2) _∥,_ _where x_ 1 _, x_ 2 _∈_ R _[d]_[1] _and y_ 1 _, y_ 2 _∈Y._ **264 Assumption 2** (Bounded Gradient) **.** _For any x ∈_ R _[d]_[1] _and y ∈Y, there exists a constant G such that_ _∥∇xF_ ( _x, y_ ; _ξ[x]_ ) _∥≤ G and ∥∇yF_ ( _x, y_ ; _ξ[y]_ ) _∥≤ G._ It is worth noting that the problem-dependent in these assumptions are only presented to facilitate our proof; we do not need the information from these assumptions for the implementation of the algorithm. 
+
+It is worth noting that the problem-dependent in these assumptions are only presented to facilitate our proof; we do not need the information from these assumptions for the implementation of the algorithm. In equation 1, we represent _y[∗]_ ( _x_ ) := arg max _y∈Y f_ ( _x, y_ ) as the solution of the inner maximization 
+
+5 
+
+> sub-problem. We use _PY_ ( _·_ ) as projection operator onto set _Y_ . _κ_ = _L/µ_ is the condition number. In 
+
+> addition, we aim to find a near-stationary point for the minimax problem. Accordingly, we introduce 
+
+> an additional assumption as follows: **273 Assumption 3.** _(Bounded Primal Function Value) There exists a constant_ Φ _∗ such that for any_ _x ∈_ R _[d]_[1] _,_ Φ( _x_ ) _is upper bounded by_ Φ _∗._ > **276 Remark 1.** Assumptions 1-2 are used in numerous studies involving adaptive algorithms and minimax 
+
+> optimizations such as Carmon et al. (2019); Yang et al. (2020); Levy et al. (2021); Kavis et al. (2022); Huang et al. (2023); Liu et al. (2023). Particularly noteworthy is Assumption 3, which signifies the bounded nature of the domain of _y_ -a condition also considered in AdaGrad Levy (2017); Levy et al. (2018). In neural networks featuring rectified activations, the scale-invariance property Dinh et al. (2017) renders the imposition of boundedness on _y_ compatible with expressive modeling. Additionally, Wasserstein GANs Arjovsky et al. (2017) utilize critic projections to confine weights within a small cube centered around the origin. 4.1 ANALYSIS OF THE NC-SC SETTING We use the following assumption to show the strong concavity property in the dual parameter _y_ . **287 288 Assumption 4** (Strongly Concave in _y_ ) **.** _Function f_ ( _x, y_ ) _is µ-strongly-concave (µ >_ 0 _) in y, that is, for any x ∈_ R _[d]_[1] _and y_ 1 _, y_ 2 _∈Y, we have_ > **290291** _f_ ( _x, y_ 1) _≥ f_ ( _x, y_ 2) + _⟨∇yf_ ( _x, y_ 1) _, y_ 1 _− y_ 2 _⟩_ + _[µ]_ 2 _[∥][y]_[1] _[ −][y]_[2] _[∥]_[2] _[ .]_ 
+
+> **292 Theorem 1** (Convergence, NC-SC) **.** _Under Assumptions 1-4, after T training epochs, AdaFM in_ 
+
+> _Algorithm 1 satisfies_ **294 295296** � _t_ =1 _T ∥∇xf_ ( _xt, yt_ ) _∥_[2] + � _t_ =1 _T ∥∇yf_ ( _xt, yt_ ) _∥_[2] = _O_ � _κ_[2+] 5+53 _δyδy T_ 1 _−_ 3 _δy_ 2 _δy_ + _κ_ 1 _−_ 3 _δx T_ 3(12 _−δxδx_ ) � _._ _Then according to the setting of δx and δy, we can get_ 
+
+> 1 _T T κ_ 4 _._ 5 
+
+> **300301** _T_ �E � _t_ =1 _∥∇xf_ ( _xt, yt_ ) _∥_ + E � _t_ =1 _∥∇yf_ ( _xt, yt_ ) _∥_ � = _O_ � _T_[1] _[/]_[3+] _[δ]_ � _._ Our proof of the NC-SC setting can be categorized into four cases based on the magnitude of the 
+
+> cumulative error terms, E[�] _[T] t_ =1 _[∥][ϵ] t[x][∥]_[2][and][E][ �] _[T] t_ =1 _[∥][ϵ] t[y][∥]_[2][,][as][well][as][the][cumulative][value][of][the] 
+
+> gradients, E[�] _[T] t_ =1 _[∥∇][x][f]_[(] _[x][t][, y][t]_[)] _[∥]_[2][and][ E][ �] _[T] t_ =1 _[∥∇][y][f]_[(] _[x][t][, y][t]_[)] _[∥]_[2][.][When the cumulative error term is] 
+
+> relatively large, it acts as an upper bound for the cumulative gradient. However, when the accumulated 
+
+> error term is small, we may not establish an upper bound for the cumulative gradient based solely on the error term. In these situations, we can provide additional information to determine the upper bound for the cumulative gradient. 
+
+> **310 Remark 2.** If we aim to achieve the _ϵ_ -stationary point by AdaFM in the NC-SC setting, under 
+
+> the setting that _δ_ is close to 0, the total number of training epochs should satisfy that the iteration 
+
+> _T_ is arbitrarily close _O_ ( _ϵ[−]_[3] ). In addition, because AdaFM only needs two samples, i.e., _O_ (1), to 
+
+> compute estimators and gradients in each training epoch, the total sample complexity can arbitrarily achieve _O_ ( _ϵ[−]_[3] ). According to the analysis, Theorem 1 also holds by simply setting both _γ_ and _λ_ to 1. It is worth noting that the sample complexity of AdaFM is infinitely close to the optimal sample complexity of parametric algorithms Luo et al. (2020); Huang & Gao (2023); Huang et al. (2023); Xu et al. (2023) in stochastic minimax optimizations. In contrast, as far as we know, Tiada Li et al. (2023a), the only remaining parameter-free algorithm in minimax optimization based on SGDA Nouiehed et al. (2019); Lin et al. (2020), can only achieve the near sample complexity of _O_ ( _ϵ[−]_[4] ), which is worse than our proposed AdaFM algorithm. **320 321 Remark 3.** We detail a comparison between AdaFM and VRAdaGDA Huang et al. (2023). Both algorithms employ similar estimators, but VRAdaGDA requires unique momentum parameters and learning rates for each variable. Specifically, VRAdaGDA sets _βtt[[x]]_[[=]] _[[ c]]_[[1][(]][[(]] _[[η]] t[[x]]_[[)][2][ for]][[2][ for]][[ for]] _[[ x]]_[[ and]] _[[ β]] t[[y]]_[[=]] _[[ c]]_[[2][(]][[(]] _[[η]] t[[y]]_[[)][2]][[2]] 
+
+**Remark 3.** We detail a comparison between AdaFM and VRAdaGDA Huang et al. (2023). Both algorithms employ similar estimators, but VRAdaGDA requires unique momentum parameters and learning rates for each variable. Specifically, VRAdaGDA sets _βtt[[x]]_[[=]] _[[ c]]_[[1][(]][[(]] _[[η]] t[[x]]_[[)][2][ for]][[2][ for]][[ for]] _[[ x]]_[[ and]] _[[ β]] t[[y]]_[[=]] _[[ c]]_[[2][(]][[(]] _[[η]] t[[y]]_[[)][2]][[2]] for _y_ , with _ηt[x]_[=] _[kγ/]_[(] _[m]_[ +] _[ t]_[)][1] _[/]_[3][and] _[ η] t[y]_[=] _[kλ/]_[(] _[m]_[ +] _[ t]_[)][1] _[/]_[3][.][It is crucial to note that the settings of] 
+
+6 
+
+_c_ 1 _, c_ 2 _, k, γ, λ_ , and _m_ are all dependent on problem-dependent parameters, and the precise settings of these parameters are vital for the algorithm’s convergence. This dependency significantly restricts the algorithm’s practical application. We will further explore the algorithm’s sensitivity to these parameter settings and the challenges of identifying the optimal parameter combination in experiments. ## 4.2 ANALYSIS OF THE NC-PL SETTING 
+
+The PL condition appears to relax the strongly convex or concave setting. Strongly Concave requires that the second derivative of the function (Hessian matrix) is negative definite over the entire domain, which is a strict assumption, while PL does not require the existence or nature of the second derivative. This kind of setting is often more common in machine learning Nouiehed et al. (2019); Huang et al. (2023); Huang (2023); Lei et al. (2017). Under the PL conditions, the variable _y_ may also be non-concave. Accordingly, we leverage the following assumption to indicate the PL condition and then present the corresponding convergence result. **337 338 Assumption 5** (PL condition in _y_ ) **.** _Assume function f_ ( _x, y_ ) _satisfies µy-PL condition in variable y_ _for any fixed x ∈_ R _[d]_[1] _and y ∈Y, such that_ _∥∇yf_ ( _x, y_ ) _∥_[2] _≥_ 2 _µy_ max _._ � _y[∗][f]_[(] _[x, y][∗]_[)] _[ −][f]_[(] _[x, y]_[)] � **342 343 Theorem 2** (Convergence of NC-PL) **.** _Under Assumptions 1-3 and 5, after T training epochs, AdaFM_ _in Algorithm 1 satisfies_ _T T_ 20 2 _δx_ 10 1 _−_ 2 _δy_ E � _∥∇xf_ ( _xt, yt_ ) _∥_[2] + E � _∥∇yf_ ( _xt, yt_ ) _∥_[2] = _O κ_ 3(1 _−δx_ ) _T_ 3(1 _−δx_ ) + _κ_ 3 _δy T_ 3 _δy ._ _t_ =1 _t_ =1 � � _Then according to the setting of δx and δy, we can get_ _T T_ 1 _κ_[5] _T_ �E � _t_ =1 _∥∇xf_ ( _xt, yt_ ) _∥_ + E � _t_ =1 _∥∇yf_ ( _xt, yt_ ) _∥_ � = _O_ � _T_[1] _[/]_[3+] _[δ]_ � _._ In this setting, obtaining a direct upper bound for E[�] _[T] t_ =1 _[∥∇][y][f]_[(] _[x][t][, y][y]_[)] _[∥]_[2][proves challenging due to] the absence of the strong concavity condition. However, by leveraging the smoothness properties of both variables and the _µy_ -PL condition, we can establish an upper bound for E[�] _[T] t_ =1[[Φ(] _[x][t]_[)] _[ −]_ _f_ ( _xt, yt_ )]. Furthermore, we can transform this into E[�] _[T] t_ =1[[] _[∥∇][x][f]_[(] _[x][t][, y][t]_[)] _[∥]_[2][]][using the][quadratic] growth condition Karimi et al. (2016), which is the condition is interchangeable with the _µy_ -PL condition. It allows us to derive the final result. Therefore, modifying this setting solely affects the upper bound of E[�] _[T] t_ =1 _[∥∇][y][f]_[(] _[x][t][, y][t]_[)] _[∥]_[2][.] **361 Remark 4.** In Theorem 2, AdaFM achieves a convergence rate close to _O_ ( _κ_[5] _/T_[1] _[/]_[3+] _[δ]_ ), with the total number of training epochs required such that the iteration _T_ is arbitrarily close to _O_ (1 _/ϵ[−]_[3] ) under the setting that _δ_ is close to 0. Although the NC-PL setting is more strict than NC-SC, we can see that AdaFM’s performance is only slightly below the rate of _O_ ( _κ_[4] _[.]_[5] _/T_[1] _[/]_[3+] _[δ]_ ) in the NC-SC setting, demonstrating its effectiveness under the NC-PL setting. This highlights the scalability of AdaFM and affords many different machine learning scenarios. The slight performance drop occurs because we use the PL condition to deduce E[�] _[T] t_ =1[[Φ(] _[x][t]_[)] _[ −][f]_[(] _[x][t][, y][t]_[)]][ from][ E][ �] _[T] t_ =1[[] _[∥∇][x][f]_[(] _[x][t][, y][t]_[)] _[∥]_[2][]][ rather] than directly obtaining its upper bound from the strongly-concave condition. To the best of our knowledge, AdaFM is the first algorithm to achieve parameter-free optimization under the NC-PL setting while also nearing the optimal convergence rate Huang (2023). 5 EXPERIMENTS In this section, we evaluate the performance of our proposed AdaFM algorithm compared to RSGDA Huang & Gao (2023), VRAdaGDA Huang et al. (2023), and TiAda Li et al. (2023a) under three different learning tasks: (1) a test function with synthetic datasets, (2) optimizing the deep AUC loss (an NC-SC objective) in Yuan et al. (2021), and (3) training the NC-PL objective on Wasserstein-GAN 
+
+In this section, we evaluate the performance of our proposed AdaFM algorithm compared to RSGDA Huang & Gao (2023), VRAdaGDA Huang et al. (2023), and TiAda Li et al. (2023a) under three different learning tasks: (1) a test function with synthetic datasets, (2) optimizing the deep AUC loss (an NC-SC objective) in Yuan et al. (2021), and (3) training the NC-PL objective on Wasserstein-GAN with Gradient Penalty (WGAN-GP) Sinha et al. (2018). In this paper, we uniformly denote the initial 
+
+7 
+
+**378379380** 5040 ————— TiAdaAdaFMVRAdaGDARSGDA OYi/-iyey 4100~e-273 0.40050oas ———— TiAdaVRAdaGDA(ngRSGDAIng' /nf =5)/ nf = 5) 353025 ——————— TiAdaAdaFMVRAdaGDARSGDA 30 4}== stationary points * / f} sae —— AdaFM = YY / “682 mexe 088 == mint=iK Sx 2 20 7KyMf -19 © 030025 = —---------~~~ +--+ 5S 10 Z -956 10 A 7 -1092 0.20 5 | ty 0. ° = 5 10 5 20 25 -1228 os ° 2000 gradient4000 calls6000 8000 10000 ° ° 2000 gradient40006000calls 800010000 (a) trajectory (b) stepsize ratio (c) gradient Figure 2: Numerical results on the test function _f_ ( _x, y_ ) = 2[1] _[y]_[2][ +] _[ Lxy][ −][L]_ 2[2] _[x]_[2][, where] _[ L]_[ = 2][.] 090 ' 0.64 008 0.68 oe "aiWiybyi ]yh | 7 8 g «075 | fly Bz oso. .$B ovo «Sos0.62 0.70 | — pscDa oss — pscpa oss — 0.65 | ——ne— VRAdaGDAAdarM oe **—** —— VRAdaGDATiAdaAdarM Ose: —_— vRaaesDATAdaAeor 0.58“eos6 — **——** — TidaVRAdaGDAAdarRSGDA oe % ® Epoch ® rs 7% rr Efpoch a w 300wo OO ° % 40 Epoch © 0 360 ° %3 7%i Epoch ®7 80100- (a) CIFAR10 (5%) (b) CIFAR100 (5%) (c) CIFAR10 (10%) (d) CIFAR100 (10%) Figure 3: Convergence curves of deep AUC with an imbalance ratio of 5% and 10%. learning rates for variables _x_ and _y_ as _γ_ and _λ_ respectively, for the aforementioned algorithms, to ensure clarity. It is worth noting that setting the initial learning rate does not imply that the learning rate will remain unchanged during the iteration. Additional experimental setups and results will be deferred to Appendix A in detail. 5.1 TEST FUNCTIONS We use the example _f_ ( _x, y_ ) =[[1]] 2 _[[y]]_[[2][ +]][[ +]] _[[ Lxy][ −]][[ −]][[L]]_ 2[[2]] _[[x]]_[[2][, proposed in TiAda Li et al. (2023a), to evaluate]][[, proposed in TiAda Li et al. (2023a), to evaluate]] the four algorithms. We adopt the same setting as in TiAda, i.e., _γ/λ_ = 5,, _L_ = 2, and introduce a, and introduce a small amount of noise into the gradient. We set _δ_ = 0 _._ 1 in all toy examples. in all toy examples. We select the initial point as (0 (0 _._ 1 _,_ 0).. As Figure 2a depicts, both TiAda and AdaFM manage this poor initial stepsize ratio effectively, while VRAdaGDA and RSGDA struggle to converge. Figure 2b illustrates that, both TiAda and AdaFM are able to adaptively adjust the stepsize to the desired ratio, i.e., 1 1 _/κ_ , and it can be seen that AdaFM adjusts the stepsize ratio more quickly. In contrast, RSGDA and VRAdaGDA do not inherently have the ability to dynamically adjust the stepsize ratio. Moreover, as can be seen in Figure 2c, AdaFM approaches the stationary points more quickly after a relatively large initial divergence. However, TiAda approaches the stationary points at a very slow rate, even though it can adaptively adjust the learning rate. In addition, RSGDA and VRAdaGDA exhibit divergences. 5.2 DEEP AUC An impactful application of the minimax problem is to optimize margin-based min-max surrogate losses, which can be considered as deep AUC maximization. In situations where imbalanced datasets can skew a model’s performance metrics, the optimization of AUC scores has paramount significance. The the AUC margin Loss Yuan et al. (2021) is formulated as follows: **425426 x** _∈_ R _[d]_[1] min( _a,b_ ) _∈_ R[2][ max] _y∈Y[f]_[(] _[x, a, b, y]_[) :=][ E] _[ξ]_[[] _[F]_[(] _[x, a, b, y]_[;] _[ ξ]_[)]] _[.]_ (8) 
+
+We use the example _f_ ( _x, y_ ) =[[1]] 2 _[[y]]_[[2][ +]][[ +]] _[[ Lxy][ −]][[ −]][[L]]_ 2[[2]] _[[x]]_[[2][, proposed in TiAda Li et al. (2023a), to evaluate]][[, proposed in TiAda Li et al. (2023a), to evaluate]] the four algorithms. We adopt the same setting as in TiAda, i.e., _γ/λ_ = 5,, _L_ = 2, and introduce a, and introduce a small amount of noise into the gradient. We set _δ_ = 0 _._ 1 in all toy examples. in all toy examples. We select the initial point as (0 (0 _._ 1 _,_ 0).. As Figure 2a depicts, both TiAda and AdaFM manage this poor initial stepsize ratio effectively, while VRAdaGDA and RSGDA struggle to converge. Figure 2b illustrates that, both TiAda and AdaFM are able to adaptively adjust the stepsize to the desired ratio, i.e., 1 1 _/κ_ , and it can be seen that AdaFM adjusts the stepsize ratio more quickly. In contrast, RSGDA and VRAdaGDA do not inherently have the ability to dynamically adjust the stepsize ratio. Moreover, as can be seen in Figure 2c, AdaFM approaches the stationary points more quickly after a relatively large initial divergence. However, TiAda approaches the stationary points at a very slow rate, even though it can adaptively adjust the learning rate. In addition, RSGDA and VRAdaGDA exhibit divergences. 
+
+An impactful application of the minimax problem is to optimize margin-based min-max surrogate losses, which can be considered as deep AUC maximization. In situations where imbalanced datasets can skew a model’s performance metrics, the optimization of AUC scores has paramount significance. The the AUC margin Loss Yuan et al. (2021) is formulated as follows: 
+
+**==> picture [309 x 18] intentionally omitted <==**
+
+> The experimental results shown in Figure 3 were conducted on the CIFAR10 and CIFAR100 datasets 
+
+> with an imbalance ratio of 5% and 10%. It can be observed that under more challenging conditions, 
+
+> specifically when the imbalance ratio is 5%, TiAda performs very poorly on both CIFAR10 and CIFAR100. Compared to the best-performing algorithm, TiAda’s AUC on the two datasets was 5% and 2% lower, respectively. Notably, RSGDA is highly unstable during the training process, experiencing severe drops in performance across all four scenarios. Although hyperparameter 
+
+8 
+
+**==> picture [334 x 15] intentionally omitted <==**
+
+**----- Start of picture text -----**<br>
+(b) Real images. (c) Generated images.<br>(a) Inception score.<br>**----- End of picture text -----**<br>
+
+
+Figure 4: Inception score and visualization from WGAN-GP on CIFAR10. 
+
+**==> picture [246 x 9] intentionally omitted <==**
+
+**----- Start of picture text -----**<br>
+(a) AdaFM - CIFAR10 (b) AdaFM - CIFAR100<br>**----- End of picture text -----**<br>
+
+
+Figure 5: The hyperparameter grid search of AdaFM. 
+
+searches were conducted on the learning rates of all four algorithms using the same step size, and an additional hyperparameter search was performed for the momentum parameters in the case of RSGDA and VRAdaGDA, AdaFM consistently outperforms the others in almost cases. 
+
+## 5.3 WGAN-GP 
+
+Generative Adversarial Networks (GANs), as elucidated in Arjovsky et al. (2017), exemplify the efficacy of minimax optimization in the realm of machine learning. Conventionally, a discriminator network discerns whether an image originates from the authentic dataset, while a generator crafts images that are virtually indistinguishable from genuine dataset images, effectively ’deceiving’ the discriminator. We employed the WGAN-GP loss proposed by Sinha et al. (2017) on the CIFAR10 dataset to enhance discriminator performance. Further findings on CIFAR100 utilizing the WGANGP approach are expounded in Appendix A, showcasing its efficacy across various datasets. 
+
+Figure 4a display inception scores on WGAN-GP. At the start of training, the inception score drops, likely due to updating the discriminator once per iteration, weakening its early discriminatory ability. However, as training continues, the discriminator improves, enhancing the generator’s performance and leading to a rise in the inception score. Notably, AdaFM not only outperforms these algorithms but also achieves higher scores more rapidly and consistently as it converges. In contrast, TiAda’s inception score is approximately 0.5 points lower than those of the other algorithms. Besides, Figures 4b-4c present a set of real samples from CIFAR10 alongside samples generated by AdaFM, showcasing its effectiveness in generating high-quality images. 
+
+In addition, we compared the hyperparameter grid search results of RSGDA and AdaFM within the same intervals. The hyperparameter grid search was performed in the range [0, 0.1] with a step size of 0.005, as shown in Figure 5. It can be observed that within this parameter space, AdaFM performs well for the vast majority of parameter combinations, while RSGDA struggles to train the model. Additionally, AdaFM’s inception score significantly exceeds that of RSGDA. 
+
+9 
+
+## 6 CONCLUSION In this paper, we present AdaFM, an adaptive variance-reduced algorithm that eliminates the need for manual hyper-parameter tuning, improving the practical application of variance-reduction techniques in stochastic minimax optimizations. AdaFM uniquely adjusts momentum parameters based on iteration count and adaptively modifies learning rates using historical estimator information combined with momentum parameters. Although the theoretical result in the NC-PL setting is _O_ ( _κ_[5] _T[−]_[1] _[/]_[3] ), which is worse than the NC-SC setting’s _O_ ( _κ_[4] _[.]_[5] _T[−]_[1] _[/]_[3] ) due to the more complex properties, both achieve an _ϵ_ -stationary point with an optimal complexity of _O_ ( _ϵ[−]_[3] ), which align the best results among existing parametric algorithms. Extensive experimental evidence validates the effectiveness and robustness of AdaFM across various scenarios. In the future, we aim to develop parameter- free algorithms for more complex scenarios, e.g., minimax optimization without projection and compositional minimax optimizations, and relax conditions, e.g., non-convex non-concave settings. 
+
+> REFERENCES Kimon Antonakopoulos, Veronica Belmega, and Panayotis Mertikopoulos. Adaptive extra-gradient methods for min-max optimization and games. In _International Conference on Learning Represen-_ _tations_ , 2021. - Yossi Arjevani. Limitations on variance-reduction and acceleration schemes for finite sums optimiza- tion. _Advances in Neural Information Processing Systems_ , 30, 2017. Martin Arjovsky, Soumith Chintala, and Léon Bottou. Wasserstein generative adversarial networks. 
+
+- In _International conference on machine learning_ , pp. 214–223. PMLR, 2017. 
+
+- Alina Beygelzimer, Satyen Kale, and Haipeng Luo. Optimal and adaptive algorithms for online boosting. In _International Conference on Machine Learning_ , pp. 2323–2331. PMLR, 2015. - Yair Carmon, Yujia Jin, Aaron Sidford, and Kevin Tian. Variance reduction for matrix games. _Advances in Neural Information Processing Systems_ , 32, 2019. 
+
+- - Ashok Cutkosky and Francesco Orabona. Momentum-based variance reduction in non-convex sgd. _Advances in neural information processing systems_ , 32, 2019. - Constantinos Daskalakis, Andrew Ilyas, Vasilis Syrgkanis, and Haoyang Zeng. Training gans with optimism. _International Conference on Learning Representations_ , 2018. 
+
+- Aaron Defazio and Léon Bottou. On the ineffectiveness of variance reduced optimization for deep learning. _Advances in Neural Information Processing Systems_ , 32, 2019. Laurent Dinh, Razvan Pascanu, Samy Bengio, and Yoshua Bengio. Sharp minima can generalize for deep nets. In _International Conference on Machine Learning_ , pp. 1019–1028. PMLR, 2017. 
+
+- Kumar Avinava Dubey, Sashank J Reddi, Sinead A Williamson, Barnabas Poczos, Alexander J Smola, and Eric P Xing. Variance reduction in stochastic gradient langevin dynamics. _Advances in neural_ _information processing systems_ , 29, 2016. John Duchi, Elad Hazan, and Yoram Singer. Adaptive subgradient methods for online learning and 
+
+- stochastic optimization. _Journal of machine learning research_ , 12(7), 2011. 
+
+- - Cong Fang, Chris Junchi Li, Zhouchen Lin, and Tong Zhang. Spider: Near-optimal non-convex optimization via stochastic path-integrated differential estimator. _Advances in neural information_ _processing systems_ , 31, 2018. 
+
+- - Pierre Foret, Ariel Kleiner, Hossein Mobahi, and Behnam Neyshabur. Sharpness-aware minimization 
+
+- for efficiently improving generalization. _International Conference on Learning Representations_ , 
+
+- 2021. - Ian Goodfellow, Jean Pouget-Abadie, Mehdi Mirza, Bing Xu, David Warde-Farley, Sherjil Ozair, Aaron Courville, and Yoshua Bengio. Generative adversarial nets. _Advances in neural information processing systems_ , 27, 2014a. 
+
+10 
+
+Ian J Goodfellow, Jonathon Shlens, and Christian Szegedy. Explaining and harnessing adversarial examples. _arXiv preprint arXiv:1412.6572_ , 2014b. - Ishaan Gulrajani, Faruk Ahmed, Martin Arjovsky, Vincent Dumoulin, and Aaron C Courville. Improved training of wasserstein gans. _Advances in neural information processing systems_ , 30, 2017. 
+
+- > Zhishuai Guo, Yan Yan, Zhuoning Yuan, and Tianbao Yang. Fast objective & duality gap convergence 
+
+> for non-convex strongly-concave min-max problems with pl condition. _Journal of Machine_ 
+
+> _Learning Research_ , 24:1–63, 2023. - Steve Hanneke, Shay Moran, Vinod Raman, Unique Subedi, and Ambuj Tewari. Multiclass online learning and uniform convergence. In _The Thirty Sixth Annual Conference on Learning Theory_ , pp. 5682–5696. PMLR, 2023. 
+
+> Feihu Huang. Enhanced adaptive gradient algorithms for nonconvex-pl minimax optimization. _arXiv_ 
+
+> _preprint arXiv:2303.03984_ , 2023. Feihu Huang and Shangqian Gao. Gradient descent ascent for minimax problems on riemannian manifolds. _IEEE Transactions on Pattern Analysis and Machine Intelligence_ , 2023. > Feihu Huang, Shangqian Gao, Jian Pei, and Heng Huang. Accelerated zeroth-order and first-order 
+
+> momentum methods from mini to minimax optimization. _The Journal of Machine Learning_ 
+
+> _Research_ , 23(1):1616–1685, 2022. Feihu Huang, Xidong Wu, and Zhengmian Hu. Adagda: Faster adaptive gradient descent ascent methods for minimax optimization. In _International Conference on Artificial Intelligence and_ _Statistics_ , pp. 2365–2389. PMLR, 2023. > Wei Jiang, Bokun Wang, Yibo Wang, Lijun Zhang, and Tianbao Yang. Optimal algorithms for stochastic multi-level compositional optimization. In _International Conference on Machine_ _Learning_ , pp. 10195–10216. PMLR, 2022. Rie Johnson and Tong Zhang. Accelerating stochastic gradient descent using predictive variance reduction. _Advances in neural information processing systems_ , 26, 2013. Hamed Karimi, Julie Nutini, and Mark Schmidt. Linear convergence of gradient and proximal- gradient methods under the polyak-łojasiewicz condition. In _Machine Learning and Knowledge_ _Discovery in Databases: European Conference, ECML PKDD 2016_ , pp. 795–811. Springer, 2016. Ali Kavis, Kfir Yehuda Levy, and Volkan Cevher. High probability bounds for a class of nonconvex 
+
+> algorithms with adagrad stepsize. In _International Conference on Learning Representations_ , 2022. Diederik P Kingma and Jimmy Ba. Adam: A method for stochastic optimization. _arXiv preprint_ _arXiv:1412.6980_ , 2014. Alex Krizhevsky, Geoffrey Hinton, et al. Learning multiple layers of features from tiny images. 2009. - Lihua Lei, Cheng Ju, Jianbo Chen, and Michael I Jordan. Non-convex finite-sum optimization via scsg methods. _Advances in Neural Information Processing Systems_ , 30, 2017. 
+
+- Kfir Levy. Online to offline conversions, universality and adaptive minibatch sizes. _Advances in_ 
+
+- _Neural Information Processing Systems_ , 30, 2017. 
+
+- Kfir Levy, Ali Kavis, and Volkan Cevher. Storm+: Fully adaptive sgd with recursive momentum for nonconvex optimization. _Advances in Neural Information Processing Systems_ , 34:20571–20582, 2021. Kfir Y Levy, Alp Yurtsever, and Volkan Cevher. Online adaptive methods, universality and accelera- 
+
+- tion. _Advances in neural information processing systems_ , 31, 2018. Xiang Li, Junchi YANG, and Niao He. Tiada: A time-scale adaptive algorithm for nonconvex minimax optimization. In _The Eleventh International Conference on Learning Representations_ , 2023a. 
+
+11 
+
+Xiaoyu Li and Francesco Orabona. On the convergence of stochastic gradient descent with adaptive stepsizes. In _The 22nd international conference on artificial intelligence and statistics_ , pp. 983–992. PMLR, 2019. Xingyu Li, Zhe Qu, Bo Tang, and Zhuo Lu. Fedlga: Toward system-heterogeneity of federated learning via local gradient approximation. _IEEE Transactions on Cybernetics_ , 2023b. Tianyi Lin, Chi Jin, and Michael Jordan. On gradient descent ascent for nonconvex-concave minimax problems. In _International Conference on Machine Learning_ , pp. 6083–6093. PMLR, 2020. Jin Liu, Xiaokang Pan, Junwen Duan, Hongdong Li, Youqi Li, and Zhe Qu. Breaking the complexity barrier in compositional minimax optimization. _arXiv preprint arXiv:2308.09604_ , 2023. Songtao Lu, Ioannis Tsaknakis, Mingyi Hong, and Yongxin Chen. Hybrid block successive ap- proximation for one-sided non-convex min-max problems: algorithms and applications. _IEEE_ _Transactions on Signal Processing_ , 68:3676–3691, 2020. Luo Luo, Haishan Ye, Zhichao Huang, and Tong Zhang. Stochastic recursive gradient descent ascent for stochastic nonconvex-strongly-concave minimax problems. _Advances in Neural Information Processing Systems_ , 33:20566–20577, 2020. David J Miller, Zhen Xiang, and George Kesidis. Adversarial learning targeting deep neural network classification: A comprehensive review of defenses against attacks. _Proceedings of the IEEE_ , 108 (3):402–433, 2020. Maher Nouiehed, Maziar Sanjabi, Tianjian Huang, Jason D Lee, and Meisam Razaviyayn. Solving a class of non-convex min-max games using iterative first order methods. _Advances in Neural_ _Information Processing Systems_ , 32, 2019. Nhan Pham, Lam Nguyen, Dzung Phan, Phuong Ha Nguyen, Marten Dijk, and Quoc Tran-Dinh. A hybrid stochastic policy gradient algorithm for reinforcement learning. In _International Conference_ _on Artificial Intelligence and Statistics_ , pp. 374–385. PMLR, 2020. Zhe Qu, Xingyu Li, Rui Duan, Yao Liu, Bo Tang, and Zhuo Lu. Generalized federated learning via sharpness aware minimization. In _International Conference on Machine Learning_ , pp. 18250– 18280. PMLR, 2022. Sashank J Reddi, Ahmed Hefny, Suvrit Sra, Barnabas Poczos, and Alex Smola. Stochastic variance reduction for nonconvex optimization. In _International conference on machine learning_ , pp. 314–323. PMLR, 2016. Zebang Shen, Alejandro Ribeiro, Hamed Hassani, Hui Qian, and Chao Mi. Hessian aided policy gradient. In _International conference on machine learning_ , pp. 5729–5738. PMLR, 2019. Aman Sinha, Hongseok Namkoong, and John Duchi. Certifying some distributional robustness with principled adversarial training. In _International Conference on Learning Representations_ , 2018. Rachel Ward, Xiaoxia Wu, and Leon Bottou. Adagrad stepsizes: Sharp convergence over nonconvex landscapes. _The Journal of Machine Learning Research_ , 21(1):9047–9076, 2020. Mengdi Xu, Wenhao Ding, Jiacheng Zhu, Zuxin Liu, Baiming Chen, and Ding Zhao. Task-agnostic online reinforcement learning with an infinite mixture of gaussian processes. _Advances in Neural_ _Information Processing Systems_ , 33:6429–6440, 2020a. Pan Xu, Felicia Gao, and Quanquan Gu. An improved convergence analysis of stochastic variance- reduced policy gradient. In _Uncertainty in Artificial Intelligence_ , pp. 541–551. PMLR, 2020b. Yi Xu, Qihang Lin, and Tianbao Yang. Stochastic convex optimization: Faster local growth implies faster global convergence. In _International Conference on Machine Learning_ , pp. 3821–3830. PMLR, 2017. Zi Xu, Zi-Qi Wang, Jun-Lin Wang, and Yu-Hong Dai. Zeroth-order alternating gradient descent ascent algorithms for a class of nonconvex-nonconcave minimax problems. _Journal of Machine Learning Research_ , 24(313):1–25, 2023. 
+
+12 
+
+- Junchi Yang, Negar Kiyavash, and Niao He. Global convergence and variance-reduced optimization 
+
+- for a class of nonconvex-nonconcave minimax problems. _arXiv preprint arXiv:2002.09621_ , 2020. Junchi Yang, Xiang Li, and Niao He. Nest your adaptive algorithm for parameter-agnostic nonconvex minimax optimization. _Advances in Neural Information Processing Systems_ , 35:11202–11216, 2022a. Junchi Yang, Antonio Orvieto, Aurelien Lucchi, and Niao He. Faster single-loop algorithms for mini- 
+
+- max optimization without strong concavity. In _International Conference on Artificial Intelligence_ 
+
+- _and Statistics_ , pp. 5485–5517. PMLR, 2022b. Zhuoning Yuan, Yan Yan, Milan Sonka, and Tianbao Yang. Large-scale robust deep auc maximization: A new surrogate loss and empirical studies on medical image classification. In _Proceedings of the_ _IEEE/CVF International Conference on Computer Vision_ , pp. 3040–3049, 2021. Zhuoning Yuan, Zhishuai Guo, Nitesh Chawla, and Tianbao Yang. Compositional training for 
+
+- end-to-end deep AUC maximization. In _International Conference on Learning Representations_ , 2022. A ADDITIONAL EXPERIMENTAL - A.1 RESULTS OF ADDITIONAL TEST FUNCTIONS 
+
+- In addition to the test functions presented in Sections 5, we have incorporated one additional test results to further validate the robustness and versatility of our AdaFM algorithm. To emulate stochastic gradient behavior, we introduced Gaussian noise with a mean of 0 and a variance of 0.1 to the function gradients of both the primal variable _x_ and the dual variable _y_ . _r_ = _γ/λ_ is the initial stepsize ratio. We chose the _r_ = 1 _/_ 0 _._ 01, _r_ = 1 _/_ 0 _._ 03 and _r_ = 1 _/_ 0 _._ 05 settings aligned with TiAda. It can be observed that AdaFM performs best across all three learning rate ratios, whereas TiAda only adapts its learning rate very slowly, approaching the optimal point at a sluggish pace. It is also worth noting that with less appropriate learning rate ratios, such as _r_ = 1 _/_ 0 _._ 05, RSGDA and VRAdaGDA exhibit worse performance at the beginning of the iteration due to their inability to adjust the learning rate ratios adaptively, as shown in Figure 6c. 2.00 —— RSGDA 2.00 2.00 75 —— VRAdaGDA 178 175 1.50 — TiAda 1.50 =~ 2125 — AdaFM =Ey 125 —— RSGDA =F= 1ss150 3S 1.00 S100 = 4 **—** TiddavRAdacpa | => 100 **684685** Bors0.50 B ors0.50 — AdarM e 0.75oso| —— VRAdaGDARSGDA 0.25 0.25 — Tidda 0.00 0.00 0.251 —— AdaFM 0 2000 4000 gradient6000 8000calls10000 12000 14000 0 2000 4000gradient calls6000 8000 10000 ° 2000 4000gradient calls6000 8000 10000 (a) r = 1 / 0.01 (b) r = 1 / 0.03 (c) r = 1/ 0.05 Figure 6: Results on McCormick function _f_ ( _x, y_ ) = sin( _x_ + _y_ ) + ( _x − y_ )[2] _−_ 1 _._ 5 _x_ + 2 _._ 5 _y_ + 1. A.2 EXPERIMENTAL SETUPS A.2.1 SETUPS OF DEEP AUC To generate imbalanced data, we utilized the approach described by Yuan et al. (2021). In particular, we divided the training data into two equal portions based on class ID, designating them as positive and negative classes. We then randomly eliminated certain samples from the positive class to create the imbalance, while the testing set remained unchanged. Our experiments were conducted using ResNet20, and we examined imbalance ratios of 5%, 10%, and 30%. For AdaFM, we set _δ_ to 0 _._ 001. For TiAda, we set _α_ and _β_ to 0 _._ 5 + 0 _._ 001 and 0 _._ 5 _−_ 0 _._ 001. To further demonstrate AdaFM’s ease of implementation, we limited the hyperparameter search to a narrow range for both TiAda and AdaFM. 
+
+13 
+
+Specifically, we searched for the initial learning rate _γ_ within [0 _._ 1 _,_ 0 _._ 5] using a step size of 0.1, and for _λ_ within [0 _._ 6 _,_ 1 _._ 0] with the same step size. For RSGDA and AdaFM, the search range for both _γ_ and _λ_ was [0 _._ 1 _,_ 1] with a finer step size of 0.05. Additionally, we searched within [0 _._ 05 _,_ 0 _._ 95] in increments of 0.05 for both their _βx_ and _βy_ . The decay rate was applied at 50% and 75% of the total training duration, consistent with the settings in Yuan et al. (2022). The batch size was standardized at 128 for all datasets, and a weight decay of 1 _e_ -4 was uniformly implemented across all methodologies. A.2.2 SETUPS OF W-GAN In this section, we adapted the code from Li et al. (2023a) for our experiments. For the implemen- tation, we used a four-layer CNN for the discriminator and another four-layer CNN with transpose convolution layers for the generator, following the architecture specified in Daskalakis et al. (2018). We set the batch size to 512, the dimension of the latent variable to 50, and assigned a weight of 10 _[−]_[4] for the gradient penalty term. To compute the inception score, we utilized a pre-trained inception network, processing 8,000 synthesized samples. Since all the optimizers mentioned above are one-loop algorithms, we updated the discriminator only once for each generator to ensure a fair comparison. On CIFAR10 and CIFAR100, we performed 40,000 iterations on both the discriminators and generators. For AdaFM, we set _δ_ to 0 _._ 001, while for TiAda, we set _α_ and _β_ to 0 _._ 5 + 0 _._ 001 and 0 _._ 5 _−_ 0 _._ 001, respectively. For several algorithms, we selected different hyperparameter search ranges. Specifically, we performed a hyperparameter search for RSGDA and VRAdaGDA’s learning rates for both _x_ and _y_ , using a step size of 0 _._ 0002 within the range of 0 to 0 _._ 01, while the hyperparameter search for _βx_ and _βy_ ranged from 0.5 to 0.9 in steps of 0.1. Figure 1 in section 1 shows the case of _βx_ = _βy_ = 0 _._ 9 after 10,000 iterations. Similarly, Figure 5 shows the inception score after 10,000 iteration, swith the hyperparameters search for _γ_ and _λ_ ranging from 0 to 0.1 in steps of 0.005 for AdaFM. A.3 ADDITIONAL RESULTS ON REALISTIC MACHINE LEARNING SCENARIOS AND DATASETS A.3.1 ADDITIONAL DEEP AUC RESULTS We conducted another experiment on both CIFAR-10 and CIFAR-100 with a 30% imbalance ratio, as shown in Figure 7. It can be noticed from Figure 7a that both RSGDA and VRAdaGDA are very unstable during the training process, with large fluctuations in the training curves. In addition, due to the 30% imbalance ratio at this time, the task is relatively simple, and the four algorithms do not differ significantly in performance. 0.95 ATAss 0.75 0.90 Li AW,1 S \ iW <= 070 <=8% oes0.80 N\My| iI iti y8% 065 4 — RSGDA 0.60 — RSGDA 0.75 {' **—** VRAdaGDATiAda **—** VRAdaGDATiAda 0.70 oO | 20 40 60 — 80Adar 100 055 oO 20 40 60 — 80Adar 100 Epoch Epoch (a) CIFAR10 (30%) (b) CIFAR100 (30%) Figure 7: Convergence curves of deep AUC on CIFAR10 with an imbalance ratio of 30%. > A.3.2 ADDITIONAL WGAN-GP RESULTS > We similarly tested the performance of the four algorithms on CIFAR100. It can be observed that AdaFM achieves the highest inception score in this case as well, while TiAda performs significantly worse than the other three algorithms, as shown in 8a. Figures 8b and 8c show a set of real images from CIFAR100 and a set of images generated by AdaFM training, respectively. 
+
+14 
+
+Erras"sgers (Cesi Wy:eaarTear== yels 60 = — rs, rx. Praga a> We I ESCasa SSE= AmeaSOn™& g50 VW z S mae Dt Cag > =| on! a f Ve } wa ST ie a eo) el lala ae we g IN * ‘Hea ee PaeoR ee | = al EmeoA “ aa} ES L ——=[RSGDA] eee st“|| oS PN ae = oo _OAT= a . = Bo J 8 ives ic a yi] rs 2S oe — Tata 5 Su = Ear I SA sai Rie Fas |S 3° © 5000 10000 15000 20000 25000 30000— 35000Adar 40000 |k = yp al a2 ela > | : aePD”7” TyeelyraeAe LA2} AS rk| —é =| mnLN | #Gradient Calls (b) Real images. (c) Generated images. (a) Inception score. Figure 8: Inception score on CIFAR100. 200_ 2 —= AdaFM (5=0) oe100 as so — AdaFM (5 = 0) 40ss 73 — AdaFM (5=0) 150 2 4—— AdaFMAdaFM (6=0.1)(5 = 0.05) .e200 30 0 —— AdareAdaFM (6=(6= 0.05) 0.1) a0 —— AdaFMAdak (6=(6 = 0.1) 0.05) 5) 3 i == stationary points 24300 25 _ **772773774** 1001sof //7v7‘7 F F j F 324004050048600see >S20Ss10 ——— AdaFMAdaFMAdaFM(6(6=0)(5=0.1)= 0.05) DP==”=x 207 xe© a8201s10 . 25a0;‘a25 «650 «75 «100 125 150 175 200 =12900 os 8200 adgradient600calls 8002000 i gradient calls 05 gradient calls = 1e2 (a) trajectory (b) stepsize ratio (c) gradient (d) learning rate _ηt[x]_ Figure 9: Ablation Study on the test function A.4 ABLATION STUDY ON _δ_ In this section, we demonstrate the effect of _δ_ on the algorithm. From the settings of _ηt[x]_[and] _[ η] t[y]_[, it can] be observed that an increase in the value of _δ_ further reduces the learning rate of _x_ while increasing the learning rate of _y_ . This adjustment causes the learning rates of _x_ and _y_ to reach the desired ratio more quickly in some scenarios. However, due to the rapid decrease in the learning rate of _x_ , it may also slow down the overall convergence rate. We use the same test function as shown in Figure 2, which helps us visualize the role of _δ_ . It can be observed that AdaFM fails to converge at _δ_ = 0,, as shown in Figure 9a, and loses the ability to adaptively control the stepsize ratio, as shown in Figure 9b. As _δ_ increases, AdaFM adjusts more effectively, and the trajectory curve approaches the stationary points with greater curvature. Meanwhile, the stepsize ratio reaches the desired value more quickly. However, this also causes the learning rate of _x_ to decrease more rapidly, as illustrated in Figure 9d. In addition, we show the effect of _δ_ under a complex task, i.e., training WGAN-GP. By simply choosing _γ_ = _λ_ = 0 _._ 005, and varying _δ_ in the range of [0.1, 0.2, 0.3], as shown in Figure 10. We can find that in this case, the smaller the value of _δ_ , the better inception socre. 55} momen— 5-02§ =0.1 5.0 — 5=03 " (rt Ni?f| as NYA a) sc5 a0 “ V 4 \] Ia ' aa fs ;voll° "2500 5000 7500 10000 12500 «15000-17500 +2000 #Gradient Calls We use the same test function as shown in Figure 2, which helps us visualize the role of _δ_ . It can be observed that AdaFM fails to converge at _δ_ = 0,, as shown in Figure 9a, and loses the ability to adaptively control the stepsize ratio, as shown in Figure 9b. As _δ_ increases, AdaFM adjusts more effectively, and the trajectory curve approaches the stationary points with greater curvature. Meanwhile, the stepsize ratio reaches the desired value more quickly. However, this also causes the learning rate of _x_ to decrease more rapidly, as illustrated in Figure 9d. 
+
+Figure 10: Ablation study on WGAN-GP 
+
+15 
+
+**==> picture [439 x 641] intentionally omitted <==**
+
+Then we bound the term on the RHS of above inequality. 
+
+16 
+
+**864 865 Bounding the term** (i) **.** Since _βT ≤_ 1, we can get _−_[E][[] _[∥] β[ϵ][T] T[ ∥]_[2][]] _≤−_ E[ _∥_ **866 Bounding the term** (ii) **.** Note that _g_ ( _a_ ) = _z_[[2]] _[[/]]_[[3]] is a concave function in R+. any _a_ 1 _, a_ 2 _≥_ 0, (, ( ( _a_ 1 + + _a_ 2))[[2]] _[[/]]_[[3]] _− a_[[2]] 1 _[[/]]_[[3]] _≤_ 3[[2]] _[[a]]_ 1 _[[−]]_[[1]] _[[/]]_[[3]] _a_ 2.. Therefore, for any 1 _−_[1] = _t_[2] _[/]_[3] _−_ ( _t −_ 1)[2] _[/]_[3] _≤_[2] _βt_ +1 _βt_ 3[(] _[t][ −]_[1)] _[−]_[1] _[/]_ Then we can get (ii) _≤_ 3[2][E][[] _[∥][ϵ][t][∥]_[2][]][.] **873 874 Bounding the term** (iii) **.** According to the definition of _βt_ , we can get 
+
+**==> picture [305 x 17] intentionally omitted <==**
+
+**Bounding the term** (ii) **.** Note that _g_ ( _a_ ) = _z_[[2]] _[[/]]_[[3]] is a concave function in R+. Thus we can get for any _a_ 1 _, a_ 2 _≥_ 0, (, ( ( _a_ 1 + + _a_ 2))[[2]] _[[/]]_[[3]] _− a_[[2]] 1 _[[/]]_[[3]] _≤_ 3[[2]] _[[a]]_ 1 _[[−]]_[[1]] _[[/]]_[[3]] _a_ 2.. Therefore, for any _t ≥_ 2, we can get 
+
+**==> picture [219 x 24] intentionally omitted <==**
+
+**==> picture [188 x 30] intentionally omitted <==**
+
+**==> picture [439 x 474] intentionally omitted <==**
+
+Next we give the bound of[�] _[T] t_ =1 _[∥∇][x][f]_[(] _[x][t][, y][t]_[)] _[∥]_[2][.] 
+
+17 
+
+> **918919 Lemma 5.** _Under Assumptions 1-3 ,term_[�] _[T] t_ =1 _[∥∇][x][f]_[(] _[x][t][, y][t]_[)] _[∥]_[2] _[ can be upper-bounded as follows:]_ _T T T T L_ **921922** � _t_ =1 _∥∇xf_ ( _xt, yt_ ) _∥_[2] _≤_ � _t_ =1 _∥ϵ[x] t[∥]_[2][+4Φ] _[∗]_[(1] _[/β][T]_[ +1][)] _[δ][x]_[(] � _t_ =1 _∥vt∥_[2] + _∥wt∥_[2] ) _[δ][x]_ + 1 _−_ 2 _δx_ (� _t_ =1 _∥vt∥_[2] )[1] _[−]_[2] _[δ][x] ._ _Proof._ From Assumption 1 we know that _f_ ( _x, y_ ) is smooth with respect to _x_ , so we have: _t_[)][2] _f_ ( _xt_ +1 _, yt_ ) _− f_ ( _xt, yt_ ) _≤−ηt[x][⟨∇][x][f]_[(] _[x][t][, y][t]_[)] _[, v][t][⟩]_[+] _[L]_[(] _[η][x] ∥vt∥_[2] 2 _t_[)][2] _≤−ηt[x][∥∇][x][f]_[(] _[x][t][, y][t]_[)] _[∥]_[2] _[ −][η] t[x][⟨∇][x][f]_[(] _[x][t][, y][t]_[)] _[, ϵ][x] t[⟩]_[+] _[L]_[(] _[η]_ 2 _[x] ∥vt∥_[2] > _≤−[η]_ 2 _t[x][∥∇][x][f]_[(] _[x][t][, y][t]_[)] _[∥]_[2][ +] _[η]_ 2 _t[x][∥][ϵ] t[x][∥]_[2][ +] _[L]_[(] _[η]_ 2 _t[x]_[)][2] _∥vt∥_[2] _._ > Define ∆1 = _f_ ( _x_ 1 _, y_ 1) and _∀t ≥_ 2, > ∆ _t_ = _f_ ( _xt, yt−_ 1) + _f_ ( _xt, yt_ ) _, f_ ( _xt, yt_ ) _≥ f_ ( _xt, yt−_ 1) _,_ � _f_ ( _xt, yt_ ) _, f_ ( _xt, yt_ ) _< f_ ( _xt, yt−_ 1) _._ From Assumption 3 we can get ∆ _t ≤∥_ Φ( _xt_ ) _∥_ + _∥_ Φ( _xt−_ 1) _∥≤_ 2Φ _∗_ . Re-arranging the above, and summing over _t_ , we have: _T_ � _∥∇xf_ ( _xt, yt_ ) _∥_[2] _t_ =1 _T T T_ 2 
+
+> _≤_ � ( _f_ ( _xt, yt_ ) _− f_ ( _xt_ +1 _, yt_ )) + � _∥ϵ[x] t[∥]_[2][ +] � _Lηt[x][∥][v][t][∥]_[2] _t_ =1 _ηt[x] t_ =1 _t_ =1 _T T T_ 1 _≤_ 2 �([1] _−_ )∆ _t −_[2∆] _[T]_[ +1] + � _∥ϵ[x] t[∥]_[2][ +] � _Lηt[x][∥][v][t][∥]_[2] (10) _t_ =2 _ηt[x] ηt[x] −_ 1 _ηT[x] t_ =1 _t_ =1 _T T_ _≤_ � _∥ϵ[x] t[∥]_[2][ +][4Φ] _[∗]_ + _L_ � _∥vt∥_[2] _t_ =1 _ηT[x] t_ =1 ([�] _[t] i_ =1 _[∥][v][i][∥]_[2][)] _[δ][x]_ _T T L T_ **953954** _≤_ � _t_ =1 _∥ϵ[x] t[∥]_[2][ + 4Φ] _[∗]_[(1] _[/β][T]_[ +1][)] _[δ][x]_[(] � _t_ =1 _∥vt∥_[2] + _∥wt∥_[2] ) _[δ][x]_ + 1 _− δx_ (� _t_ =1 _∥vt∥_[2] )[1] _[−][δ][x] ,_ 
+
+> where the last second inequality holds by _βt <_ 1. This complete the proof. > Before bounding the term E[�] _[T] t_ =1 _[∥∇][y][f]_[(] _[x][t][, y][t]_[)] _[∥]_[2][, we first provide some useful lemmas.] **959 Lemma 6.** _Given Assumptions 1 to 4, if for t_ = _t_ 0 _to t_ 1 _−_ 1 _and any λt >_ 0 _, St,_ > _∥yt_ +1 _− yt[∗]_ +1 _[∥]_[2] _[≤]_[(1 +] _[ λ][t]_[)] _[∥][y][t]_[+1] _[−][y] t[∗][∥]_[2][ +] _[ S][t][,]_ _then we have:_ _t_ 1 _−_ 1 
+
+> E � ( _f_ ( _xt, yt[∗]_[)] _[ −][f]_[ (] _[x][t][, y][t]_[))] � _t_ = _t_ 0 � 
+
+> **967968969** _≤_ E � _t_ = _t_ �1 _t−_ 0+11 � 2 _−_ 4 _ηηt[y] ty[µ] ∥yt − yt[∗][∥]_[2] _[ −]_ 2 _ηt[y]_[(1 +] 1 _[ λ][t]_[)] �� _yt_ +1 _− yt∗_ +1��2�[�] 
+
+> **970971** + E _t_ 1 _−_ 1 _ηt[y][w]_[2] + E _t_ 1 _−_ 1 _St_ + E _t_ 1 _−_ 1 4 _[ϵ][y]_[2] 
+
+**==> picture [294 x 141] intentionally omitted <==**
+
+18 
+
+**==> picture [451 x 641] intentionally omitted <==**
+
+**==> picture [288 x 25] intentionally omitted <==**
+
+19 
+
+**==> picture [411 x 641] intentionally omitted <==**
+
+**==> picture [287 x 169] intentionally omitted <==**
+
+20 
+
+**==> picture [432 x 641] intentionally omitted <==**
+
+Now, we come to the proof of Theorem 1. 
+
+21 
+
+**==> picture [433 x 653] intentionally omitted <==**
+
+22 
+
+**==> picture [410 x 653] intentionally omitted <==**
+
+**Case 2:** Assume E[�] _[T] t_ =1 _[∥∇][x][f]_[(] _[x][t][, y][t]_[)] _[∥]_[2] _[≤][S]_[E][ �] _[T] t_ =1 _[∥][ϵ] t[x][∥]_[2][and][E][ �] _[T] t_ =1 _[∥∇][y][f]_[(] _[x][t][, y][t]_[)] _[∥]_[2] _[≥] S_ E[�] _[T] t_ =1 _[∥][ϵ] t[y][∥]_[2][.][Using the condition of this subcase implies] 
+
+23 
+
+**==> picture [433 x 641] intentionally omitted <==**
+
+**==> picture [379 x 29] intentionally omitted <==**
+
+24 
+
+**==> picture [432 x 654] intentionally omitted <==**
+
+25 
+
+**==> picture [432 x 641] intentionally omitted <==**
+
+**==> picture [398 x 143] intentionally omitted <==**
+
+26 
+
+**==> picture [432 x 653] intentionally omitted <==**
+
+27 
+
+**==> picture [432 x 652] intentionally omitted <==**
+
+28 
+
+**==> picture [432 x 641] intentionally omitted <==**
+
+**==> picture [315 x 71] intentionally omitted <==**
+
+29 
+
+**1566** _Proof._ Using the smoothness of _f_ ( _x, ·_ ) we have: **1567 1568** _f_ ( _xt_ +1 _, yt_ ) _≤ f_ ( _xt_ +1 _, yt_ +1) _− ηt[y][⟨∇][y][f]_[(] _[x][t]_[+1] _[, y][t]_[)] _[, w][t][⟩]_[+] _[L]_ 2 _[∥][y][t]_[+1] _[ −][y][t][∥]_[2] _[.]_ **1569 1570** For the term _−ηt[y][⟨∇][y][f]_[(] _[x][t]_[+1] _[, y][t]_[)] _[, w][t][⟩]_[, we have] **1571** _− ηt[y][⟨∇][y][f]_[(] _[x][t]_[+1] _[, y][t]_[)] _[, w][t][⟩]_ **1572 1573** _≤−[η] t[y]_ � _∥∇yf_ ( _xt_ +1 _, yt_ ) _∥_[2] + _∥wt∥_[2] _−∥∇yf_ ( _xt_ +1 _, yt_ ) _−∇yf_ ( _xt, yt_ ) + _∇yf_ ( _xt, yt_ ) _− wt∥_[2][�] 2 **1574 1575** _≤−[η]_ 2 _t[y][∥∇][y][f]_[(] _[x][t]_[+1] _[, y][t]_[)] _[∥]_[2] _[ −][η]_ 2 _t[y][∥][w][t][∥]_[2][ +] _[ η] t[y][L]_[2] _[∥][x][t]_[+1] _[−][x][t][∥]_[2][ +] _[ η] t[y][∥∇][y][f]_[(] _[x][t][, y][t]_[)] _[ −][w][t][∥]_[2] **1576 15771578** _≤−ηt[y][µ][y]_[(Φ(] _[x][t]_[+1][)] _[ −][f]_[(] _[x][t]_[+1] _[, y][t]_[))] _[ −][η]_ 2 _t[y][∥][w][t][∥]_[2][ +] _[ η] t[y][L]_[2] _[∥][x][t]_[+1] _[−][x][t][∥]_[2][ +] _[ η] t[y][∥∇][y][f]_[(] _[x][t][, y][t]_[)] _[ −][w][t][∥]_[2] _[,]_ **1579** where the last inequality holds by _µy_ -PL condition. Then we have **1580** _t_ **1581** _f_ ( _xt_ +1 _, yt_ ) _≤ f_ ( _xt_ +1 _, yt_ +1) _− ηt[y][µ][y]_[(Φ(] _[x][t]_[+1][)] _[ −][f]_[(] _[x][t]_[+1] _[, y][t]_[))] _[ −][η][y]_ 2 _[∥][w][t][∥]_[2] **15821583** + _ηt[y][L]_[2] _[∥][x][t]_[+1] _[−][x][t][∥]_[2][ +] _[ η] t[y][∥∇][y][f]_[(] _[x][t][, y][t]_[)] _[ −][w][t][∥]_[2][ +] _[L]_ 2 _[∥][y][t]_[+1] _[ −][y][t][∥]_[2] _[.]_ **1584** Rearranging the above, we have: **1585 1586** Φ( _xt_ +1) _− f_ ( _xt_ +1 _, yt_ +1) **1587** _t_ **1588** _≤_ (1 _− µyηt[y]_[) (Φ(] _[x][t]_[+1][)] _[ −][f]_[(] _[x][t]_[+1] _[, y][t]_[))] _[ −][η]_ 2 _[y][∥][w][t][∥]_[2][ +] _[ η] t[y][L]_[2] _[∥][x][t]_[+1] _[−][x][t][∥]_[2] (27) **15891590** + _ηt[y][∥∇][y][f]_[(] _[x][t][, y][t]_[)] _[ −][w][t][∥]_[2][ +] _[L]_ 2 _[∥][y][t]_[+1] _[ −][y][t][∥]_[2] _[.]_ **1591** _·_ Next, using smoothness of _f_ ( _, y_ ), we have: **1592 1593** _f_ ( _xt, yt_ ) + _⟨∇xf_ ( _xt, yt_ ) _, xt_ +1 _− xt⟩−[L][≤][f]_[(] _[x][t]_[+1] _[, y][t]_[)] _[.]_ 2 _[∥][x][t]_[+1] _[ −][x][t][∥]_[2] **1594** Then we have **1595 1596** _f_ ( _xt, yt_ ) _− f_ ( _xt_ +1 _, yt_ ) **1597** _≤−⟨∇xf_ ( _xt, yt_ ) _, xt_ +1 _− xt⟩_ + _[L]_ **1598** 2 _[∥][x][t]_[+1] _[ −][x][t][∥]_[2] **1599 1600** = _ηt[x][⟨∇][x][f]_[(] _[x][t][, y][t]_[)] _[ −∇]_[Φ(] _[x][t]_[)] _[, v][t][⟩−⟨∇]_[Φ(] _[x][t]_[)] _[, x][t]_[+1] _[−][x][t][⟩]_[+] _[L]_ 2 _[∥][x][t]_[+1] _[ −][x][t][∥]_[2] **16011602** _≤ ηt[x][ω][t][∥∇]_[Φ(] _[x][t]_[)] _[ −∇][x][f]_[(] _[x][t][, y][t]_[)] _[∥]_[2][ +] _[η] ωt[x] t ∥vt∥_[2] + Φ( _xt_ ) _−_ Φ( _xt_ +1) +[(] _[η] t[x]_[)] 2[2] _[L]_[Φ] _∥vt∥_[2] + _[L]_[(] _[η]_ 2 _t[x]_[)][2] _∥vt∥_[2] **1603 1604** _≤ L_[2] _ωtηt[x][∥][y][t][−][y] t[∗][∥]_[2][ +] _[η] t[x] ∥vt∥_[2] + Φ( _xt_ ) _−_ Φ( _xt_ +1) + _L_ Φ( _ηt[x]_[)][2] _[∥][v][t][∥]_[2] _ωt_ **1605 1606** _≤_[2] _[L]_[2] _[ω][t][η] t[x]_ (Φ( _xt_ ) _− f_ ( _xt, yt_ )) + _[η] t[x] ∥vt∥_[2] + Φ( _xt_ ) _−_ Φ( _xt_ +1) + _L_ Φ( _ηt[x]_[)][2] _[∥][v][t][∥]_[2] _[,]_ **1607** _µy ωt_ **1608** where the second inequality holds by smoothness of Φ( _xt_ ) and the last two inequality holds by **1609** _L < L_ Φ. The parameter _ωt_ will be determined later. Then we have **1610** Φ( _xt_ +1) _− f_ ( _xt_ +1 _, yt_ ) = Φ( _xt_ +1) _−_ Φ( _xt_ ) + Φ( _xt_ ) _− f_ ( _xt, yt_ ) + _f_ ( _xt, yt_ ) _− f_ ( _xt_ +1 _, yt_ ) **1611** _t t_[(28)] **1612** _≤_ (1 +[2] _[L]_[2] _[ω][t][η][x]_ )(Φ( _xt_ ) _− f_ ( _xt, yt_ )) + _[η][x] ∥vt∥_[2] + _L_ Φ( _ηt[x]_[)][2] _[∥][v][t][∥]_[2] **1613** _µy ωt_ **1614** Plugging equation 28 into equation 27, we have **1615** Φ( _xt_ +1) _− f_ ( _xt_ +1 _, yt_ +1) **1616** _t t_[)] _[η] t[x]_ **1617** _≤_ (1 _− µyηt[y]_[)(1 +][2] _[L]_[2] _[ω][t][η][x]_ )(Φ( _xt_ ) _− f_ ( _xt, yt_ )) +[(][1] _[ −][µ][y][η][y] ∥vt∥_[2] **1618** _µy ωt_ **1619**[2] _[x]_[2][2] _L_ 2 _ηty[−]_[1][2][2] 
+
+**==> picture [324 x 68] intentionally omitted <==**
+
+30 
+
+**==> picture [452 x 641] intentionally omitted <==**
+
+31 
+
+**1674** D.2 PROOF OF THEOREM 2 **1675** 
+
+> **1676** If we change the Assumption from strongly concave to _µ_ -PL condition, this will only affect the upper 
+
+> **1677** bound of E[�] _[T] t_ =1 _[∥∇][y][f]_[(] _[x][t][, y][t]_[)] _[∥]_[2][.][We need to reclassify four cases.][Introduce constant] _[ P]_[and we] 
+
+> **1678** will give the detailed definition later. **1679 1680 Case 1:** Assume E[�] _[T] t_ =1 _[∥∇][x][f]_[(] _[x][t][, y][t]_[)] _[∥]_[2] _[≤][P]_[E][ �] _[T] t_ =1 _[∥][ϵ] t[x][∥]_[2][and][E][ �] _[T] t_ =1 _[∥∇][y][f]_[(] _[x][t][, y][t]_[)] _[∥]_[2] _[≤]_ **1681** _P_ E[�] _[T] t_ =1 _[∥][ϵ] t[y][∥]_[2][.][Using the condition of this subcase implies] **1682** _T T_ 
+
+> **1683** E �( _∥vt∥_[2] + _wt∥_[2] ) _≤_ (2 + 2 _P_ )E �( _∥ϵ[x] t[∥]_[2][ +] _[ ∥][ϵ][y] t[∥]_[2][)] _[.]_ **1684** _t_ =1 _t_ =1 
+
+> **1685** Similarly, the inequality equation 12 obtained by combining Lemma 3 and 4 does not change when 
+
+> **1686** SC is replaced with PL. Then we can get **1687** _T T −_ 1 
+
+> **16881689** E � _t_ =1( _∥ϵ[x] t[∥]_[2][ +] _[ ∥][ϵ][y] t[∥]_[2][)] _[ ≤]_[96] _[G]_[2] _[T]_ 31 + 1 _−_ 48 _γ_ 2[2] _δx T_ 2 _−_ 34 _δx_ (E � _t_ =1 _∥vt∥_[2] )[1] _[−]_[2] _[δ][x]_ **1690** � �� � **1691** (I) (29) _T −_ 1 
+
+> **1692** 48 _λ_[2] 2 _−_ 4 _δy_ **16931694** + �1 _−_ 2 _δy T_ 3 (E��� _t_ =1 _∥wt∥_[2] )[1] _[−]_[2] _[δ][y]_ � **1695** (II) **1696 1697** Setting _ρ_ = (96 _γ_[2] (2 + 2 _P_ ))[1] _[−]_[2] _[δ][x]_ for Term (I) and _ρ_ = (96 _λ_[2] (2 + 2 _P_ ))[1] _[−]_[2] _[δ][y]_ for Term (II) we **1698** have: **1699 1700** _T_ **1701** E �( _∥ϵ[x] t[∥]_[2][ +] _[ ∥][ϵ][y] t[∥]_[2][)] **1702** _t_ =1 **1703** _T T_ 
+
+> 1 1 1 **17041705** _≤_ 96 _G_[2] _T_ 3 + 2(2 + 2 _P_ )[E] � _t_ =1 _∥vt∥_[2] + 2(2 + 2 _P_ )[E] � _t_ =1 _∥wt∥_[2] 
+
+> **1706** +[96] _[γ]_[2] _[δ][x]_ (96 _γ_[2] (2 + 2 _P_ )) 1 _−_ 2 _δx_ 2 _δx T_ 1 _−_ 3 _δx_ 2 _δx_ +[96] _[λ]_[2] _[δ][y]_ (96 _λ_[2] (2 + 2 _P_ )) 1 _−_ 2 _δy_ 2 _δy T_ 1 _−_ 3 _δy_ 2 _δy ._ 
+
+> **1707** 1 _−_ 2 _δx_ 1 _−_ 2 _δy_ **1708** 
+
+> **17091710** _δ_ Denote _x > δy P>_ 1 0= max, we have _{_[96] 1 _−[γ]_ 2[2] _δ[δ] x[x]_[(96] _[γ]_[2][(2+2] _[P]_[))] 1 _−_ 2 _δx_ 2 _δx ,_[96] 1 _−[λ]_ 2[2] _δ[δ] y[y]_[(96] _[λ]_[2][(2+2] _[P]_[))] 1 _−_ 2 _δy_ 2 _δy }_ , according to 1 _/_ 2 _>_ **1711** _T_ **1712 1713** E �( _∥ϵ[x] t[∥]_[2][ +] _[ ∥][ϵ][y] t[∥]_[2][)] _t_ =1 **1714 1715** 1 1 _T_ 1 _T_ 1 _−_ 2 _δy_ **1716** _≤_ 96 _G_[2] _T_ 3 + 2(2 + 2 _P_ )[E] � _t_ =1 _∥vt∥_[2] + 2(2 + 2 _P_ )[E] � _t_ =1 _∥wt∥_[2] + 2 _P_ 1 _T_ 3 _δy ._ **1717 1718** Then we can get: 
+
+> **17191720** 21[E] � _T_ ( _∥ϵ[x] t[∥]_[2][ +] _[ ∥][ϵ][y] t[∥]_[2][)] _[ ≤]_[96] _[G]_[2] _[T]_ 13 + 2 _P_ 1 _T_ 1 _−_ 3 _δy_ 2 _δy . t_ =1 **1721 1722** Above implies, **1723** _T T_ 
+
+> **1724** E � _∥∇xf_ ( _xt, yt_ ) _∥_[2] + E � _∥∇yf_ ( _xt, yt_ ) _∥_[2] **1725** _t_ =1 _t_ =1 **1726** _T_ 1 1 _−_ 2 _δy_ **1727** _[x]_[2] _[y]_[2][2] 3 3 _δy_ 
+
+**==> picture [346 x 99] intentionally omitted <==**
+
+**==> picture [322 x 203] intentionally omitted <==**
+
+32 
+
+**==> picture [432 x 641] intentionally omitted <==**
+
+**==> picture [344 x 29] intentionally omitted <==**
+
+33 
+
+**==> picture [388 x 641] intentionally omitted <==**
+
+**==> picture [394 x 51] intentionally omitted <==**
+
+**Case 3:** Assume E[�] _[T] t_ =1 _[∥∇][x][f]_[(] _[x][t][, y][t]_[)] _[∥]_[2] _[≥][P]_[E][ �] _[T] t_ =1 _[∥][ϵ] t[x][∥]_[2][and][E][ �] _[T] t_ =1 _[∥∇][y][f]_[(] _[x][t][, y][t]_[)] _[∥]_[2] _[≤] P_ E[�] _[T] t_ =1 _[∥][ϵ] t[y][∥]_[2][.Using the condition of this subcase implies] 
+
+**==> picture [340 x 188] intentionally omitted <==**
+
+**==> picture [318 x 30] intentionally omitted <==**
+
+**==> picture [272 x 29] intentionally omitted <==**
+
+34 
+
+**==> picture [432 x 641] intentionally omitted <==**
+
+According to Case 4, we can get 
+
+35 
+
+**==> picture [416 x 641] intentionally omitted <==**
+
+**==> picture [398 x 229] intentionally omitted <==**
+
+36 
+
+**1944 1945** setting _δx_ =[1] 3[+] _[ δ]_[ and] _[ δ][y]_[=] 3[1] _[−][δ]_[, we can get] **1946** _T T_ 1 **1947** E � _∥∇xf_ ( _xt, yt_ ) _∥_[2] + E � _∥∇yf_ ( _xt, yt_ ) _∥_[2] _≤ O_ ( _κ_[10] _T_ 3 ) _._ **1948** _t_ =1 _t_ =1 **1949** Utilizing the Cauchy-Schwarz inequality, we can readily derive **1950** _T T_ **1951** 1 **1952** _T_ E � _∥∇xf_ ( _xt, yt_ ) _∥_ + E � _∥∇yf_ ( _xt, yt_ ) _∥_ � _t_ =1 _t_ =1 � **1953** ~~�~~ **195419551956** _≤_ ~~_√_~~ _√T_ 2 ���E � _t_ =1 _T ∥∇xf_ ( _xt, yt_ ) _∥_[2] + E � _t_ =1 _T ∥∇yf_ ( _xt, yt_ ) _∥_[2]  _≤ O_ ( _T[κ]_[1][5] _[/]_[3][)] _[.]_ **1957 1958** This completes the proof. □ **1959 1960 1961 1962 1963 1964 1965 1966 1967 1968 1969 1970 1971 1972 1973 1974 1975 1976 1977 1978 1979 1980 1981 1982 1983 1984 1985 1986 1987 1988 1989 1990 1991 1992 1993 1994 1995 1996 1997** 
+
+37

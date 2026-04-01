@@ -1,0 +1,1294 @@
+> REACTREE: HIERARCHICAL TASK PLANNING WITH > DYNAMIC TREE EXPANSION USING LLM AGENT NODES **005 006 Anonymous authors 007** Paper under double-blind review ABSTRACT Recent advancements in task planning using large language models (LLMs) have made remarkable progress. However, most existing methods, such as ReAct, face limitations when handling complex, long-horizon tasks due to inefficiencies in processing entire tasks through a single sequential decision-making process. To address these challenges, we propose ReAcTree, a hierarchical task planning method that automatically decomposes complex tasks into manageable subgoals within a tree structure. This tree consists of control flow nodes, which manage 
+
+> the execution order of agent nodes, and agent nodes that reason, act, and expand 
+
+> nodes into subgoals to achieve their goals. To further enhance performance, we 
+
+> introduce memory systems: each agent node retrieves goal-specific, agent-level 
+
+> experiences from episodic memory to use as in-context examples, and all agent nodes share and recall information obtained during task execution via working memory. Experiments on the WAH-NL dataset demonstrate that ReAcTree con- sistently outperforms ReAct across various LLMs and model sizes. For example, when using Qwen2.5 72B, ReAcTree achieves a goal success rate of 63%, signif- icantly surpassing ReAct’s 24%. 1 INTRODUCTION In recent years, large language models (LLMs) have emerged as powerful tools for task planning, ex- tending the capabilities of traditional approaches such as task and motion planning and hierarchical reinforcement learning. Early works, including Zero-Shot Planner (Huang et al., 2022a) and Say- Can (Ahn et al., 2022), demonstrated the potential of pre-trained LLMs to generate executable skill sequences from natural language instructions without the need for parameter updates. These meth- 
+
+> ods leverage the general procedural knowledge encoded during pre-training, along with in-context 
+
+> examples, to generate contextually appropriate skill sequences. Further advancements introduced 
+
+> feedback mechanisms, wherein LLMs receive textual observations from the environment following 
+
+> skill execution, enabling more adaptive planning (Huang et al., 2022b). Building on these develop- ments, ReAct (Yao et al., 2023) incorporated reasoning capabilities into LLM-based task planners, significantly improving their overall planning performance. 
+
+> Despite recent advancements, most existing LLM-based methods, including ReAct, still struggle 
+
+> with complex, long-horizon tasks. One key inefficiency stems from attempting to solve entire tasks 
+
+> using a single sequential decision-making process. Zhou et al. (2023) has shown that LLMs perform 
+
+> more effectively when breaking down complex problems into a series of simpler subproblems. Sev- eral LLM-based task planning methods have adopted such decomposition strategies (Wang et al., 2023; Sun et al., 2023; Chen et al., 2024; Wang et al., 2024a; Wong et al., 2023). However, many of these approaches either limit the hierarchy to only two stages or are effective only within predefined domains. Another significant inefficiency arises from the accumulation of long text trajectories en- compassing reasoning, actions, and observations. Although providing relevant in-context examples has been shown to significantly enhance performance (Wang et al., 2024b; Rubin et al., 2022), as text trajectories grow, it becomes increasingly difficult to include diverse and detailed examples. In this paper, we propose ReAcTree, a hierarchical task planning method designed to automatically decompose complex tasks into manageable subgoals. ReAcTree constructs a tree structure with two 
+
+1 
+
+**==> picture [432 x 652] intentionally omitted <==**
+
+**----- Start of picture text -----**<br>
+054 1 Agent Node 3: Find and pick up pudding<br>055 Please bring one pudding and one juice on the coffee table Retrieved In-Context Examples (Top-1 Example)<br>056 Goal: Find and pick up cupcakeObs: You are in the house, and there are 4 rooms: bathroom (1), bedroom (1), …<br>Think: To solve the task, I need to recall the location of the cupcake. Retrieve<br>057 Act: recall location of cupcake<br>Obs: You saw cupcake 1 near fridge 2 in kitchen 1.<br>058059 on coffee tableMove pudding  2 on coffee tableMove juice  7 Think: I can find cupcake 1 near fridge 2.Act: go to kitchen 1Obs: You move to the kitchen (1). Looking quickly around the room, you see bench(1, 2), bookshelf (1, 2), chair (1, 2), dishwasher (1), fridge (1, 2), … EpisodicMemory<br>060 Act: go to fridge 2…<br>061 Generated Trajectory<br>3 6 8 9 Goal: Find and pick up pudding Observe<br>062 Find and pick  Find coffee table and  Find and pick  Find coffee table  Obs: You are in the house, and there are 4 rooms: kitchen (1), living room (1), …Think: To solve the task, I need to recall the location of the pudding.<br>063 up pudding put down pudding up juice and put down juice Act: recall location of puddingObs: You have not seen pudding before. Act Environment<br>Think: Now, I need to find and pick up the pudding in one of the rooms. The cupcake<br>064 ? is more likely to appear in kitchen 1 or living room 1. I can check each room one by  Recall<br>one until I find and pick up the cupcake.<br>065066 Find and pick up  4 Find and pick up  5 Expand:- Control flow: fallback- Subgoals: find and pick up pudding in kitchen 1, find and pick up pudding in living  Update Working<br>pudding in kitchen pudding in living room room 1 Memory<br>067<br>068 Figure 1: An illustrative example of how ReAcTree generates a tree structure for the natural language<br>069 instruction:  Please bring one pudding and one juice to the coffee table.  The left side shows the tree<br>070 structure with agent nodes represented as circles and control flow nodes as squares. Each agent node<br>071 is annotated with its corresponding natural language goal and execution sequence. The right side<br>072 presents the text trajectory generated by agent node 3, which includes reasoning, acting, expanding,<br>073 and retrieval of in-context examples from episodic memory, as well as access to working memory.<br>074<br>075<br>076 primary components: control flow nodes and agent nodes. Control flow nodes, inspired by behavior<br>trees (Colledanchise et al., 2018), are responsible for selecting which agent node to execute at each<br>077<br>step. Agent nodes, each functioning as an LLM-based task planner, handle reasoning, acting, and<br>078<br>expanding—where expanding involves decomposing goals into subgoals and extending the node<br>079 into a subtree that includes one control flow node and new agent nodes, each assigned a specific<br>080 subgoal. To further enhance planning capabilities of ReAcTree, we introduce a memory system.<br>081 Each agent node retrieves relevant experiences from episodic memory, where past task planning<br>082 experiences—segmented at the agent level—are stored. This enables the retrieval of experiences<br>083 closely aligned with the agent node’s current goal. Additionally, all agent nodes utilize working<br>084 memory to update and recall observations during task execution. By sharing observations across<br>085 all agent nodes, ReAcTree enables more efficient task planning. Figure 1 illustrates an example<br>086 outcome produced by ReAcTree.<br>087 To evaluate the effectiveness of ReAcTree, we conducted extensive experiments using the WAH-<br>088 NL dataset (Choi et al., 2024; Puig et al., 2021). The WAH-NL dataset involves solving tasks via<br>089 natural language commands in household environments, each consisting of multiple rooms and long-<br>090 horizon tasks composed of several subgoals. We implemented a partially observable setting within<br>091 the VirtualHome simulator (Puig et al., 2018), where agents operate with limited perceptual in-<br>092 formation, simulating real-world conditions. Our experimental results demonstrate that ReAcTree<br>093 consistently outperforms the ReAct baseline across various LLMs. Specifically, ReAcTree attains<br>a 53% goal success rate (GSR) with the LLaMA-3.1 70B model, significantly surpassing ReAct’s<br>094<br>20%. Furthermore, even with the smaller LLaMA-3.1 8B model, ReAcTree achieves a GSR of 30%,<br>095<br>outperforming ReAct on the larger LLaMA-3.1 70B model. These results highlight ReAcTree’s su-<br>096 perior ability to handle complex tasks through its hierarchical task decomposition. Additionally, our<br>097 analysis confirms the effectiveness of ReAcTree’s memory systems, with both episodic memory and<br>098 working memory contributing substantially to the observed performance improvements.<br>099<br>In summary, this paper presents the following contributions: (1) We propose ReAcTree, a novel<br>100<br>hierarchical task planning algorithm that automatically decomposes complex tasks into manage-<br>101<br>able subgoals using a tree structure. Each subgoal is handled by an agent node, which performs<br>102 LLM-based task planning through reasoning, acting, and expanding—decomposing tasks further<br>103 into smaller subgoals. (2) We introduce memory systems, including episodic memory and working<br>104 memory, to enhance the performance of ReAcTree by enabling the retrieval of relevant agent-level<br>105 experiences and facilitating the sharing of information across agent nodes during task execution. (3)<br>106 We conduct extensive experiments in a partially observable setting to demonstrate the superiority of<br>107 ReAcTree over the baseline model, ReAct. Additionally, we will release our code to support future<br>research (anonymous code for review is available at figshare.com/s/97dd86282bd050f66d11).<br>**----- End of picture text -----**<br>
+
+
+2 
+
+> 2 RELATED WORKS **109 110 LLM-based Task Planning.** Since the inception of LLMs, researchers have continuously explored their emerging capabilities. In particular, their reasoning abilities have recently been applied to 
+
+> decision-making processes for embodied agents, such as robots. Huang et al. (2022a) were among 
+
+> the first to demonstrate that LLMs can infer task procedures for embodied agents without requiring 
+
+> additional training, while SayCan (Ahn et al., 2022) introduced more robust planning by integrat- 
+
+> ing visual affordances from a robot’s perspective. Following these foundational studies, various approaches have evolved. For example, Inner Monologue (Huang et al., 2022b) enhanced procedu- ral inference by allowing agents to revise plans based on textual feedback, such as the success of individual steps, object detection results, and Q&A with humans. Additionally, ReAct (Yao et al., 2023) adopted Chain-of-Thought prompting (Wei et al., 2022), enabling agents to explicitly reason through tasks, leading to improved planning performance. 
+
+> **121 Hierarchical Task Planning with LLMs.** Recently, research has increasingly focused on hierarchi- cal task planning with LLMs to address complex, long-horizon tasks. These approaches often utilize bi-level hierarchies, where an overall plan is refined through next-step decisions, as demonstrated in DEPS (Wang et al., 2023) and AdaPlanner (Sun et al., 2023). Classical planning integrated with LLMs, such as in Ada (Chen et al., 2024), offers flexibility but remains constrained by predefined environments. While these methods enable interactive and adaptive planning, they are limited in hierarchical depth, unlike ReAcTree, which employs a deeper structure that allows for dynamic sub- goal decomposition. MOSAIC (Wang et al., 2024a) proposed a task planner for robots collaborating with humans in cooking. This planner organizes reasoning into a tree structure with LLM agents, 
+
+> where nodes determine whether to define subtasks or seek clarification from the human. However, 
+
+> this study relies on a manually designed structure specific to cooking tasks and lacks generalizability 
+
+> to other domains. In contrast, our approach dynamically generates behavior trees for various tasks 
+
+> in household environments. **133 Tree Search-Based Planning with LLMs.** Another line of research explores tree search-based methods. These approaches construct action/thought trees to look ahead and evaluate multiple future 
+
+> paths to select the best next step. Tree of Thoughts (Yao et al., 2024) and Graph of Thoughts (Besta 
+
+> et al., 2024) demonstrate how systematic tree search improves decision-making by exploring and 
+
+> evaluating reasoning paths. LLM-MCTS (Zhao et al., 2024) extends these ideas to task planning by 
+
+> constructing action trees and applying Monte Carlo Tree Search but relies on ground-truth transition functions, limiting its applicability to real-world scenarios. Tree-Planner (Hu et al., 2023) constructs action trees, executes actions, and observes outcomes, avoiding explicit state prediction. However, it assumes reversible actions (e.g., _pick–place_ ), which are not feasible for irreversible actions like slicing. While these methods focus on constructing action or thought trees to search for the best trajectory, ReAcTree takes a fundamentally different approach by building an LLM agent tree. It divides complex goals into manageable subgoals, dynamically assigns specialized agent nodes, and determines their execution order using control flow strategies such as sequence and fallback nodes. > 3 PRELIMINARIES > **149 Problem Formulation.** We consider the task planning problem as a sequential decision-making 
+
+> problem aimed at achieving a goal _g_ expressed in natural language. At each time step _t_ , the agent has access the context _ct_ = ( _o_ 1 _, a_ 1 _, o_ 2 _, a_ 2 _, · · · , at−_ 1 _, ot_ ), where _oi_ and _ai_ represent the observation and action at each previous time step _i_ , respectively. The objective of agent is to generate the next appropriate action _at_ based on the context _ct_ , with the aim of eventually achieving the goal _g_ . **154 ReAct (Yao et al., 2023).** ReAct is a representative method that leverages a pre-trained LLM, _pLLM_ , 
+
+> to solve the task planning problem by interleaving reasoning and action execution. The LLM defines 
+
+> the action policy as follows: _at ∼ pLLM_ ( _·|P, g, ct_ ), where _P_ = ( _Psys, Pic_ ) is the initial prompt, composed of a system prompt, _Psys_ , and in-context examples, _Pic_ . The key idea of ReAct is to use 
+
+> the augmented action space, _A_[ˆ] _t_ = _At ∪L_ , where _At_ is the set of executable skills available at 
+
+> time _t_ , and _L_ is the language space representing reasoning steps or thoughts. If _at ∈At_ , the agent executes the action and obtains a text observation from the environment. If _at ∈L_ , it is called a thought or reasoning trace, which aids in the logical inference of the LLM. In this case, the agent does not receive a new observation from the environment, i.e., _ot_ +1 = _ϕ_ . 
+
+3 
+
+_Control Flow Node Execution Agent Node Execution_ _Reasoning Expanding_ _Sequence_ Agent Node Selection 𝑎𝑡𝑛 _Fallback_ ? Decision-Making 𝑐𝑡+1𝑛 _Acting_ 𝑓[𝑛] _Parallel_ 𝑎𝑡𝑛~𝑝𝐿𝐿𝑀(𝑃𝑛, 𝑔𝑛, 𝑐𝑡𝑛) 𝑎𝑡𝑛 𝑜𝑡+1𝑛 𝑔1𝑛 𝑔2𝑛 𝑔𝐾𝑛 ∙∙∙ ∙∙∙ ∙∙∙ Environment Tree Expansion Control Flow Node Agent Node Execution Execution Figure 2: Illustration of control flow node execution and agent node execution in ReAcTree. 4 REACTREE In this section, we introduce ReAcTree, a hierarchical task planning algorithm designed to effi- ciently manage complex tasks by decomposing them into subgoals using a tree structure. The tree is composed of two types of nodes: control flow nodes and agent nodes. Control flow nodes determine which agent node should be executed next. Each agent node operates as an LLM-based task planner, with its goal expressed in natural language. A key feature of ReAcTree is the augmentation of each agent node’s action space to include not only reasoning and acting but also expanding, which allows the decomposition of its goal into subgoals and the creation of a subtree. This subtree consists of a child control flow node and grandchild agent nodes, each assigned a specific subgoal. Figure 2 illustrates the node execution process for both control flow nodes and agent nodes. The details are described in Section 4.1. We introduce a memory system designed to enhance the performance of ReAcTree. Episodic mem- ory is employed to construct in-context examples for each agent node. Each node retrieves relevant, agent-level experiences from episodic memory. Additionally, working memory stores information gathered by agent nodes through their interactions with the environment during task execution. This working memory is shared among all agent nodes, enabling them to access and utilize the stored information as needed. Further details are provided in Section 4.2. 4.1 REACTREE ALGORITHM ReAcTree is an LLM-based hierarchical task planning algorithm that generates a tree structure _T_ , composed of control flow nodes and agent nodes, to achieve a task goal _g_ expressed in natural language. In the following, we offer a detailed explanation of the execution process for both control flow nodes and agent nodes, as well as the overall ReAcTree algorithm. **198 199 Control Flow Nodes.** Control flow nodes, inspired by behavior trees (Colledanchise et al., 2018), manage the selection and execution of agent nodes within the tree. Each control flow node has child nodes, which are agent nodes assigned specific natural language goals. Executing a control flow node involves executing its child nodes sequentially. Each child node reports its execution status (success or failure) to its parent, the control flow node. Based on the status of its child nodes, the control flow node decides whether to proceed with the next child node or to return its own status to its parent node. The specific behavior of the control flow node depends on its type. ReAcTree employs three types of control flow nodes. The first is the _sequence node_ ( _→_ ), which executes its child nodes in order. It returns success if all child nodes succeed; however, if any child node fails, the sequence node returns failure. The second type is the _fallback node_ (?), which also executes its child nodes sequentially but returns success as soon as any child node succeeds. If none of the child nodes succeed, it returns failure. The third type is the _parallel node_ ( _⇒_ ), a variation of the traditional parallel node concept. While the traditional definition of a parallel node involves executing child nodes simultaneously, in ReAcTree, simultaneous execution is not possible. Instead, the parallel node executes its child nodes independently, regardless of their individual success or failure. After all nodes are executed, the outcomes are aggregated according to a predefined policy to determine the overall success or failure. This node is particularly useful in tasks such as household chores, where multiple subgoals, like picking and placing objects, need to be executed sequentially without interruption, yet their success or failure does not immediately halt the overall task. 
+
+4 
+
+**216 Agent Nodes.** Each agent node operates as an LLM-based task planner with a specific natural lan- guage goal, responsible for making sequential decisions to achieve that goal. These decisions include _acting_ , _reasoning_ , and _expanding_ . Similar to the ReAct framework, _acting_ refers to executing actions and receiving feedback in the form of textual observations, while _reasoning_ enables logical infer- ence. Additionally, _expanding_ decomposes the agent node’s current goal into subgoals and combines them with a specific control flow strategy to further expand the tree structure. An agent node _n_ is first initialized with a goal _g[n]_ . Executing the agent node involves sequential decision-making, where the agent returns its status (whether the goal was achieved) after execution. More specifically, when executing an agent node, an initial prompt _P[n]_ = ( _Psys, Pic[n]_[)][ is constructed,] where _Psys_ is the system prompt, and _Pic[n]_[consists of in-context examples specific to agent node] _[ n]_[.] At each time step _t_ , the agent node accesses its context _c[n] t_[=][(] _[o][n]_ 1 _[, a][n]_ 1 _[, o][n]_ 2 _[, a][n]_ 2 _[, . . . , a][n] t−_ 1 _[, o][n] t_[)][, where] _o[n] i_[and] _[ a][n] i_[represent the observation and action at each previous time step] _[ i]_[. The action policy is then] defined using the pre-trained LLM, _PLLM_ , as: _at ∼ pLLM_ ( _·|P[n] , g[n] , c[n] t_[)][. A key feature of ReAcTree] is its extended action space, _A_[ˆ] _[n] t_[=] _[ A][n] t[∪L ∪E]_[, where] _[ A][n] t_[represents the set of executable skills at] time _t_ (e.g., _move_ , _pick_ , _turn on_ ); _L_ is the language space, used for generating self-reasoning text and specifying subgoals in natural language; and _E_ = _F × L_ is the expand space, where _F_ represents the set of control flow types. If the action _a[n] t[∈A][n] t_[or] _[ a][n] t[∈L]_[, the agent operates as in the ReAct framework, either performing] actions or engaging in reasoning. However, if _a[n] t[∈E]_[,][the][agent][expands][the][tree][structure][by] adding a control flow node and handing over execution to it. In this case, the action is represented as _a[n] t_[=][(] _[f][ n][,]_[ [] _[g]_ 1 _[n][, . . . , g] K[n]_[])][,][where] _[f][ n]_[is][the][control][flow][type][and] _[g] i[n]_[are][the][subgoals][expressed] in natural language. A control flow node _nf_ , with type _f[n]_ , is added as a child of node _n_ , and agent nodes _ni_ are initialized with their corresponding subgoals _gi[n]_[and][added][as][children][of] _[n][f]_[.][The] agent then waits for _nf_ to complete execution. The agent node terminates when one of the following occurs: generating the action _done_ (resulting in success), generating action _failure_ or reaching the maximum decision count (both resulting in failure), or completing the execution of the control flow node (returning success or failure based on its result). **242 243 Overall Algorithm.** The overall process of Re- AcTree is outlined in Algorithm 1. It begins by **Algorithm 1** ReAcTree Algorithm initializing the root agent node _n_ with the goal **Input:** Natural language goal _g_ _g_ (line 1). The agent node is then executed un1: _n ←_ INITAGENTNODE( _g_ ) til meets a termination condition _TC_ (line 2). 2: _TC ←_ EXECAGENTNODE( _n_ ) If _TC_ is _done_ , it indicates that the agent has 3: **if** _TC_ is _done_ **then 248** successfully achieved the goal, and the agent 4: **return** Success node returns _Success_ status (lines 3-4). If _TC_ 5: **else if** _TC_ is _failure_ or max decision **then 250** is _failure_ or the maximum decision count is 6: **return** Failure reached, it indicates failure, and the agent node 7: **else if** _TC_ is Expand **then 252** returns _Failure_ status (lines 5-6). If _TC_ is _Ex-_ 8: ( _f[n] ,_ [ _g_ 1 _[n][,][ · · ·][, g] K[n]_[])] _[ ←]_[E][XPAND][I][NFO] _pand_ , the agent has decided to decompose the 9: _nf ←_ INITCTRLFLOWNODE( _f[n]_ ) goal into subgoals. The expansion information 10: ADDCHILD( _n_ , _nf_ ) ( _f[n] ,_ [ _g_ 1 _[n][,][ · · ·][, g] K[n]_[])][is][retrieved][(line][8),][where] 11: **for** _i_ = 1 to _K_ **do 256** _f[n]_ is the control flow type and _gi[n]_[are the sub-] 12: _ni ←_ INITAGENTNODE( _gi[n]_[)] goals. A control flow node _nf_ is initialized (line 13: ADDCHILD( _nf_ , _ni_ ) 9) and added as a child of the current agent node 14: **end for 258** _n_ (line 10). For each subgoal, a new agent node 15: **return** EXECCTRLFLOWNODE( _nf_ ) _ni_ is initialized (line 12) and added as a child 16: **end if 260** of the control flow node _nf_ (line 13). The con- trol flow node _nf_ is then executed (line 15), where it selects one of its child agent nodes based on its control flow strategy. The selected agent node is then executed, and its status is returned to the control flow node. This process repeats until the control flow node completes execution, after which it returns its resulting status (success or failure). 4.2 MEMORY SYSTEMS To enhance the performance of ReAcTree, we introduce two complementary memory systems: _episodic memory_ and _working memory_ . Episodic memory is used to retrieve relevant past agent- 
+
+To enhance the performance of ReAcTree, we introduce two complementary memory systems: _episodic memory_ and _working memory_ . Episodic memory is used to retrieve relevant past agentlevel experiences and incorporate them as in-context examples before each agent node begins its 
+
+5 
+
+decision-making process. On the other hand, working memory is designed to share key observa- tions, such as the latest location of movable objects, across agent nodes during task execution. In the following, we provide a detailed explanation of how each memory is utilized and integrated with agent nodes of ReAcTree. **274 275 Episodic Memory.** Episodic memory, _Mep_ , stores the agent-level experiences of all ReAcTree agent nodes involve in successfully completing tasks. The agent-level experience of an agent node _e_ , with a goal sentence _g[e]_ and a final time step is _T_ , is defined as ( _t[e] , v[e] , s[e]_ ). Here, _t[e]_ = ( _g[e] , o[e]_ 1 _[, a][e]_ 1 _[, . . . , o][e] T[, a][e] T_[)][represents][the][full][text][trajectory,][where] _[o][e] t_[and] _[a][e] t_[denote][the][ob-] servation and action at each time step _t_ . The vector _v[e]_ = _f_ sen( _g[e]_ ) is the goal embedding generated using the sentence embedding model _f_ sen. Finally, _s[e]_ indicates the termination state of the agent node, categorized as _success_ , _failure_ , or _expand_ . 
+
+Before an agent node begins its decision-making process, it retrieves in-context examples by com- paring its goal _g[n]_ to the stored goals in episodic memory using cosine similarity. Specifically, the agent embeds its goal as _v[n]_ = _f_ sen( _g[n]_ ) and computes the similarity with stored embeddings: _sim_ ( _v[n] , v[e]_ ) = _v[n] · v[e] /_ ( _|v[n] ||v[e] |_ ) _, ∀v[e] ∈ Mep_ . Based on the similarity scores, the system retrieves the top _k_ examples until a predefined token limit is reached. To handle cases where multiple stored experiences yield identical similarity scores, the termination state _s_ is used to break ties. When sim- ilarity scores are tied, examples are sampled uniformly across termination states, _success_ , _failure_ , or _expand_ . This mechanism promotes diversity in the retrieved in-context examples. Since ReAcTree is designed to decompose complex goals into manageable subgoals, it generates concise trajectories tailored to specific tasks, unlike the monolithic trajectories used by ReAct. For instance, while ReAct stores a single trajectory for _Bring one pudding and onne juice to the coffee_ _table,_ ReAcTree breaks this down into subgoals like _find and pick up pudding in kitchen,_ producing shorter and more specific examples. This enables ReAcTree to retrieve highly relevant and focused trajectories from episodic memory, enhancing its task-planning effectiveness. **295 Working Memory.** Working memory serves as a shared repository for storing and recalling key observations during task execution. In this paper, working memory focuses on tracking the latest locations of movable objects to minimize redundant interactions with the environment and mitigate potential hallucinations by providing accurate, environment-specific data. Working memory is integrated into agent nodes of ReAcTree through two key mechanisms. First, the executable skill set _A[n] t_[is augmented with special actions like] _[ recall location of][ <][movable object][>]_[,] which are predefined for all movable objects in the environment, enabling agents to retrieve stored object locations directly from working memory instead of interacting with the environment. Second, working memory is automatically updated whenever an agent interacts with the environment and detects movable objects. For instance, if an agent opens a fridge and observes juice, working memory updates the location of juice as near fridge for future use. Such interactions can also be viewed as an extension of how tool usage is integrated into language models, as discussed in (Schick et al., 2024). 5 EXPERIMENTS 5.1 EXPERIMENTAL SETUP **311 312 Datasets and Simulators.** We primarily evaluate LLM-based task planning using the WAH-NL dataset within the VirtualHome simulator, as introduced in LoTa-Bench (Choi et al., 2024). The WAH-NL dataset, derived from the Watch-and-Help dataset (Puig et al., 2021), was originally de- signed for human-agent collaboration. It has been adapted for autonomous agents, with natural lan- guage commands collected via crowdsourcing. Each data instance comprises a natural language instruction, an initial environment setup, and a goal condition. The dataset includes 250 tasks in the training set and 100 tasks in the test set, covering five task categories: _Setup a dinner table_ , _Put_ _groceries_ , _Prepare a meal_ , _Wash dishes_ , and _Prepare snacks_ . Each task involves multiple subgoals, making WAH-NL well-suited for evaluating task planning in complex, long-horizon scenarios. All experiments are conducted in the VirtualHome simulator, which provides a simulated household environment where agents can perform various actions such as _pick up_ , _open_ , _close_ , _turn on_ , _put_ _down_ , and _go to_ . Unlike the fully observable setting in LoTa-Bench, we implement a partially observable setting in VirtualHome to simulate real-world conditions. In this configuration, the agent 
+
+6 
+
+has access to limited observations. Specifically, objects are identified by both their class name and instance (e.g., _cup 1_ , _cup 2_ ). After executing an action, the agent receives a text-based observation reflecting its surroundings. For instance, after performing a _go to room_ action, the agent can observe all receptacles (e.g., tables, shelves) within the room. If the action is _go to object_ , the agent observes nearby visible objects, provided they are not inside closed receptacles. For actions like _pick up_ or _open_ , the agent receives feedback indicating whether the action was successful or not. A more de- tailed implementation of the partially observable setting is described in Appendix A, and we will release our code and modified simulator for reproducibility (anonymous code for review is available at figshare.com/s/97dd86282bd050f66d11). **333 Evaluations.** To assess the effectiveness of ReAcTree, we compare it against ReAct, with both utilizing the same underlying LLMs. We evaluate performance using the goal success rate (GSR), defined as the percentage of tasks in which the agent successfully achieves the given task goal, and the subgoal success rate (SSR), which is the ratio of successfully completed subgoals to the total number of subgoals. Both methods were evaluated under the same maximum decision count, set to a sufficiently large value of 199 for all experiments, ensuring fair comparisons. All results are averaged across the entire test set. **340 Episodic Memory Construction.** To construct the episodic memory, we first collect human- annotated text trajectories for WAH-NL in both ReAct and ReAcTree formats. Specifically, one random task from each task category is selected for trajectory collection, resulting in five tasks for WAH-NL. Subsequently, we run both ReAct and ReAcTree on the training set using the LLaMA-3 70B model (Dubey et al., 2024). Only the trajectories of tasks that are successfully completed are added to the episodic memory. To encode the agent’s goals, we use Sentence BERT (Reimers & Gurevych, 2019)for sentence embeddings. 5.2 MAIN RESULTS Table 1 summarizes the comparison between ReAcTree and ReAct across various LLMs, including LLaMA 3, LLaMA 3.1 (Dubey et al., 2024), Qwen2, Qwen2.5 (Yang et al., 2024), Mistral (Jiang et al., 2023), Gemma (Team et al., 2024), and GPT-4o (see Appendix B for the complete list). Perfor- mance was evaluated using GSR and SSR metrics, with the primary results presented in Table 1 and additional results provided in Appendix D. Since direct access to log probabilities is not available for GPT-4o, its implementation was slightly modified. These details are in Appendix C. Overall, ReAcTree consistently outperforms ReAct across all model types and sizes. For instance, with the Qwen2.5 72B model, ReAcTree achieves a GSR of 63.00%, compared to ReAct’s GSR of 24.00%. This consistent performance improvement highlights the effectiveness of ReAcTree’s task decomposition approach. The results clearly demonstrate the advantage of breaking tasks into manageable subgoals, enabling more efficient task completion, particularly in complex, long-horizon tasks. In terms of computational cost with this model, ReAcTree incurs a higher average decision steps (75.00) compared to ReAct (58.08) for tasks where both methods succeed. However, its hier- archical design resets the input prompt for each agent node, mitigating computational overhead. Table 1: Performance comparison of ReAct and ReAcTree across different models and sizes. WM (✓) indicates the use of working memory for task planning, while (✗) denotes its absence. Metric Method WM LLaMA 3.1 Qwen2.5 Mistral GPT-4o 8B 70B 7B 72B 7B ✗ 10.00 23.00 6.00 20.00 3.00 - GSR (%) ReAct ✓ 15.00 20.00 13.00 24.00 6.00 33.00 ReAcTree ✗ 17.00 30.00 12.00 51.00 10.00 - ✓ **30.00 53.00 35.00 63.00 20.00 46.00 374** ✗ 29.45 49.35 24.55 45.13 21.72 - SSR (%) ReAct ✓ 42.27 52.87 35.77 48.43 31.03 57.30 ✗ 53.28 62.83 42.43 70.95 37.43 - ReAcTree 
+
+|Metric|Method<br>WM<br>LLaMA 3.1<br>Qwen2.5<br>Mistral<br>GPT-4o<br>8B<br>70B<br>7B<br>72B<br>7B|
+|---|---|
+|GSR (%)|ReAct<br>✗<br>10.00<br>23.00<br>6.00<br>20.00<br>3.00<br>-<br>✓<br>15.00<br>20.00<br>13.00<br>24.00<br>6.00<br>33.00|
+||ReAcTree<br>✗<br>17.00<br>30.00<br>12.00<br>51.00<br>10.00<br>-<br>✓<br>**30.00**<br>**53.00**<br>**35.00**<br>**63.00**<br>**20.00**<br>**46.00**|
+|SSR (%)|ReAct<br>✗<br>29.45<br>49.35<br>24.55<br>45.13<br>21.72<br>-<br>✓<br>42.27<br>52.87<br>35.77<br>48.43<br>31.03<br>57.30|
+||ReAcTree<br>✗<br>53.28<br>62.83<br>42.43<br>70.95<br>37.43<br>-<br>✓<br>**60.60**<br>**73.43**<br>**58.80**<br>**79.37**<br>**43.83**<br>**62.77**|
+
+
+7 
+
+Figure 3: Success case of ReAcTree on the WAH-NL dataset using LLaMA 3 70B. 
+
+Moreover, the results suggest that ReAcTree with smaller models can perform even better than larger models running ReAct. For instance, ReAcTree using the LLaMA 3.1 8B model achieves a GSR of 30.00%, outperforming ReAct’s GSR of 20.00% when using the significantly larger LLaMA 3.1 70B model. This performance improvement can be attributed to ReAcTree’s ability to decompose tasks into simpler subproblems, allowing smaller models to efficiently manage less complex components while retrieving more relevant in-context examples. By focusing on these smaller, more manageable tasks, ReAcTree effectively compensates for the limitations of smaller models. 
+
+We also present qualitative results comparing failed trajectories in ReAct with successful ones in ReAcTree using the LLaMA 3 70B model. The natural language instruction for the task is, _Put the_ 
+
+8 
+
+GSR Comparison Average Length Comparison with WM On and Off 60 Agent-Level Retrieve 100 WM On Task-Level Retrieve WM Off 50 80 40 60 30 20 40 10 20 0 LLaMA 3 8B LLaMA 3 70BModelsLLaMA 3.1 8B LLaMA 3.1 70B 0 LLaMA 3.1 8B LLaMA 3.1 70BModelsQwen 2 7B Qwen 2 72B (a) (b) Figure 4: (a) GSR for retrieve methods and (b) Working memory average decision length. _apple, pancake, cupcake, and juice on the kitchen table_ , which requires locating and moving multiple objects. ReAcTree breaks down the instruction into specific subgoals, such as _move the apple to the_ _kitchen table_ , _move the pancake to the kitchen table_ , _move the cupcake to the kitchen table_ , and _move the juice to the kitchen table_ , using a persistent sequence node. Notably, during the search for the pancake, ReAcTree utilizes a fallback node to explore different rooms. In contrast, ReAct struggles to locate the pancake, as it only searches the initial room, the kitchen. Furthermore, ReAct misidentifies a pudding as the pancake, and redundantly moves an already relocated apple. Figure 3 illustrates the successful trajectories from ReAcTree, while Figure 5 in Appendix G.1 shows the failed trajectories from ReAct. The full text trajectories for both ReAcTree and ReAct are provided in List 11 and List 12 in Appendix H.1, respectively. For a more detailed analysis of ReAcTree’s failure cases, including examples and common error patterns, please refer to Appendix E. 5.3 EPISODIC MEMORY In this section, we investigate the impact of episodic memory on the performance of ReAcTree. Re- AcTree utilizes episodic memory by retrieving similar past experiences at the agent level, providing in-context examples to each agent. This allows agents to reference relevant trajectories. To evaluate the effectiveness of this approach, we compare it with task-level example retrieval. In the agent-level retrieval method, each agent independently retrieves the most contextually similar experiences from episodic memory, irrespective of the task. This enables each agent to draw from a diverse set of agent-specific experiences. In contrast, task-level retrieval selects the most similar past task and uses the entire sequence of trajectories from all agents involved in solving that task as the in-context example. This approach gives the agent access to a complete set of trajectories used to solve a previous task that closely resembles the current one. The performance results are shown in Figure 4a. Our findings demonstrate that agent-level retrieval yields better performance, especially as model size decreases. Smaller models benefit more from decomposing complex tasks into simpler subgoals and retrieving contextually similar examples for each subgoal, resulting in more efficient problem-solving. By contrast, task-level retrieval, which provides a broader set of trajectories, may offer a wider contextual understanding but can be less effective for fine-tuned decision-making at the subgoal level. 5.4 WORKING MEMORY In this section, we analyze the impact of the working memory component on the performance of both ReAcTree and ReAct models. As shown in Table 1, incorporating working memory consistently leads to performance improvements across various LLMs and model sizes. This enhancement is observed not only in ReAcTree but also in the ReAct baseline. In most cases, the performance improvement occurs because the agent retrieves stored object locations from working memory using the _recall location of_ action, rather than generating locations through text. This finding aligns with previous research on tool usage in LLMs (Schick et al., 2024), which also demonstrated similar benefits. In ReAcTree, working memory additionally contributes to efficiency improvements through information sharing between agent nodes. When one agent node identifies the location of an object or 
+
+9 
+
+gathers relevant information, it updates this data in the working memory. Other agent nodes can then access this information, eliminating redundant searches and actions. This inter-node communication streamlines decision-making and accelerates task completion. To quantify the efficiency gains provided by working memory, Figure 4b illustrates the average number of decision-making steps required to complete tasks that are commonly solved both with and without working memory. The figure shows that across all models, using working memory significantly reduces the number of steps needed to achieve task success. This reduction indicates that agents can plan more efficiently and execute tasks with fewer unnecessary actions by leveraging the shared information stored in working memory. 5.5 EXPERIMENTS ON ALFRED **497 498 Datasets and Simulators.** We further extended our experiments to include the ALFRED dataset (Shridhar et al., 2020), which, similar to WAH-NL, involves task planning based on LLM in a household environment setting. This dataset provides NL instructions, an initial state of the environment, and a goal condition related to various household tasks. The task types in this experi- ment are similar to those used in LoTa-Bench (Choi et al., 2024). We used the AI2-THOR simulator, which corresponds to the ALFRED dataset. **504 Evaluations.** The ALFRED is consists of three sets: _train, valid-seen, valid-unseen_ . The planning performance of both ReAct and ReAcTree models was evaluated using the _valid-seen_ set. We evalu- ated using only 30% of the _valid-seen_ set, which consists of 208 task trajectories. We measured plan- ning performance using the goal success rate (GSR) for ALFRED. GSR is determined by whether the goal condition of the dataset matches the final state of the simulator after completing the plan- ning. **510 Experimental Results.** Table 2 summarizes Table 2: Goal success rate comparison of ReAct the comparison between ReAct and ReAcTree and ReAcTree on ALFRED with working memory. across different LLM models. The proposed ReAcTree method demonstrates a 2.88% perMethod LLaMA 3 Qwen2 formance improvement over ReAct in both the 8B 70B 7B 72B LLaMA 3 70B and Qwen2 72B models. For smaller models, ReAcTree also outperforms ReAct 5.77 16.35 **7.73** 14.90 ReAct by 2.93% in the LLaMA 3 8B model. ReAcTree **8.70 19.23** 4.33 **19.71** However, in the Qwen2 7B model, ReAct sur- passes ReAcTree with a 3.4% advantage. Overall, except for the Qwen2 7B model, ReAcTree con- sistently improves task planning performance. Visualizations and full text trajectories for a specific ALFRED task where ReAcTree succeeds and ReAct fails are provided in Appendix G.2 and H.2, respectively. Please refer to Appendix F for details on the experiments with the ALFRED. 6 CONCLUSION In this paper, we presented ReAcTree, a hierarchical task planning method that automatically de- composes complex tasks into subgoals. Our approach uses a tree structure that integrates control flow nodes for managing tasks and agent nodes to perform sequential decision-making through an extended action space, which includes not only _reasoning_ and _acting_ , but also _expanding_ . Addition- ally, we introduced memory systems, with episodic memory retrieving agent-level experiences and working memory sharing observations between nodes. Our experiments on the WAH-NL dataset show that ReAcTree consistently outperforms the ReAct baseline, achieving 35% and 63% success rates with Qwen2.5 7B and 72B, respectively, compared to 24% with ReAct using Qwen2.5 72B. We also demonstrated the effectiveness of our memory systems. One limitation of our approach is that the observations obtained after executing actions rely on ground truth from a simulator, with pre-specified formats for certain action types. These observa- tions may not always be optimal for solving the current subgoal. Additionally, while ReAcTree shows significant improvement with smaller models, further enhancements are still needed. For fu- ture work, we will explore methods to gather more relevant observations from the environment after action execution. We will also focus on improving the performance of ReAcTree with smaller models. 
+
+Table 2: Goal success rate comparison of ReAct and ReAcTree on ALFRED with working memory. 
+
+10 
+
+> REFERENCES Michael Ahn, Anthony Brohan, Noah Brown, Yevgen Chebotar, Omar Cortes, Byron David, Chelsea Finn, Chuyuan Fu, Keerthana Gopalakrishnan, Karol Hausman, et al. Do as i can, not as i say: Grounding language in robotic affordances. _arXiv preprint arXiv:2204.01691_ , 2022. 
+
+Maciej Besta, Nils Blach, Ales Kubicek, Robert Gerstenberger, Michal Podstawski, Lukas Gian- inazzi, Joanna Gajda, Tomasz Lehmann, Hubert Niewiadomski, Piotr Nyczyk, et al. Graph of thoughts: Solving elaborate problems with large language models. In _Proceedings of the AAAI_ _Conference on Artificial Intelligence_ , volume 38, pp. 17682–17690, 2024. Xinglin Chen, Yishuai Cai, Yunxin Mao, Minglong Li, Wenjing Yang, Weixia Xu, and Ji Wang. Integrating intent understanding and optimal behavior planning for behavior tree generation from human instructions. _arXiv preprint arXiv:2405.07474_ , 2024. Jae-Woo Choi, Youngwoo Yoon, Hyobin Ong, Jaehong Kim, and Minsu Jang. Lota-bench: Bench- marking language-oriented task planners for embodied agents. In _The Twelfth International Con-_ _ference on Learning Representations_ , 2024. Michele Colledanchise, Ramviyas Parasuraman, and Petter Ogren.[¨] Learning of behavior trees for autonomous agents. _IEEE Transactions on Games_ , 11(2):183–189, 2018. Abhimanyu Dubey, Abhinav Jauhri, Abhinav Pandey, Abhishek Kadian, Ahmad Al-Dahle, Aiesha Letman, Akhil Mathur, Alan Schelten, Amy Yang, Angela Fan, et al. The llama 3 herd of models. _arXiv preprint arXiv:2407.21783_ , 2024. Mengkang Hu, Yao Mu, Xinmiao Yu, Mingyu Ding, Shiguang Wu, Wenqi Shao, Qiguang Chen, Bin Wang, Yu Qiao, and Ping Luo. Tree-planner: Efficient close-loop task planning with large language models. _arXiv preprint arXiv:2310.08582_ , 2023. Wenlong Huang, Pieter Abbeel, Deepak Pathak, and Igor Mordatch. Language models as zero-shot planners: Extracting actionable knowledge for embodied agents. In _International conference on_ _machine learning_ , pp. 9118–9147. PMLR, 2022a. Wenlong Huang, Fei Xia, Ted Xiao, Harris Chan, Jacky Liang, Pete Florence, Andy Zeng, Jonathan Tompson, Igor Mordatch, Yevgen Chebotar, et al. Inner monologue: Embodied reasoning through planning with language models. _arXiv preprint arXiv:2207.05608_ , 2022b. Albert Q Jiang, Alexandre Sablayrolles, Arthur Mensch, Chris Bamford, Devendra Singh Chaplot, Diego de las Casas, Florian Bressand, Gianna Lengyel, Guillaume Lample, Lucile Saulnier, et al. Mistral 7b. _arXiv preprint arXiv:2310.06825_ , 2023. Xavier Puig, Kevin Ra, Marko Boben, Jiaman Li, Tingwu Wang, Sanja Fidler, and Antonio Torralba. Virtualhome: Simulating household activities via programs. In _Proceedings of the IEEE_ _Conference on Computer Vision and Pattern Recognition_ , pp. 8494–8502, 2018. Xavier Puig, Tianmin Shu, Shuang Li, Zilin Wang, Yuan-Hong Liao, Joshua B. Tenenbaum, Sanja Fidler, and Antonio Torralba. Watch-and-help: A challenge for social perception and human-ai collaboration. In _International Conference on Learning Representations_ , 2021. - Nils Reimers and Iryna Gurevych. Sentence-bert: Sentence embeddings using siamese bert- networks. In _Proceedings of the 2019 Conference on Empirical Methods in Natural Language_ _Processing_ , 11 2019. Ohad Rubin, Jonathan Herzig, and Jonathan Berant. Learning to retrieve prompts for in-context 
+
+- learning. In _Proceedings of the 2022 Conference of the North American Chapter of the Associa-_ _tion for Computational Linguistics: Human Language Technologies_ , pp. 2655–2671, 2022. 
+
+- Timo Schick, Jane Dwivedi-Yu, Roberto Dess`ı, Roberta Raileanu, Maria Lomeli, Eric Hambro, Luke Zettlemoyer, Nicola Cancedda, and Thomas Scialom. Toolformer: Language models can teach themselves to use tools. _Advances in Neural Information Processing Systems_ , 36, 2024. 
+
+11 
+
+- Mohit Shridhar, Jesse Thomason, Daniel Gordon, Yonatan Bisk, Winson Han, Roozbeh Mottaghi, 
+
+- Luke Zettlemoyer, and Dieter Fox. Alfred: A benchmark for interpreting grounded instructions for everyday tasks. In _Proceedings of the IEEE/CVF conference on computer vision and pattern_ _recognition_ , pp. 10740–10749, 2020. Haotian Sun, Yuchen Zhuang, Lingkai Kong, Bo Dai, and Chao Zhang. Adaplanner: adaptive plan- ning from feedback with language models. In _Proceedings of the 37th International Conference on Neural Information Processing Systems_ , pp. 58202–58245, 2023. 
+
+- Gemma Team, Thomas Mesnard, Cassidy Hardin, Robert Dadashi, Surya Bhupatiraju, Shreya Pathak, Laurent Sifre, Morgane Rivi`ere, Mihir Sanjay Kale, Juliette Love, et al. Gemma: Open models based on gemini research and technology. _arXiv preprint arXiv:2403.08295_ , 2024. Huaxiaoyue Wang, Kushal Kedia, Juntao Ren, Rahma Abdullah, Atiksh Bhardwaj, Angela Chao, 
+
+- Kelly Y Chen, Nathaniel Chin, Prithwish Dan, Xinyi Fan, Gonzalo Gonzalez-Pumariega, Aditya 
+
+- Kompella, Maximus Adrian Pace, Yash Sharma, Xiangwan Sun, Neha Sunkara, and Sanjiban 
+
+- Choudhury. Mosaic: A modular system for assistive and interactive cooking, 2024a. Liang Wang, Nan Yang, and Furu Wei. Learning to retrieve in-context examples for large language models. In _Proceedings of the 18th Conference of the European Chapter of the Association for_ _Computational Linguistics (Volume 1: Long Papers)_ , pp. 1752–1767, 2024b. Zihao Wang, Shaofei Cai, Guanzhou Chen, Anji Liu, Xiaojian Ma, Yitao Liang, and Team Craft- Jarvis. Describe, explain, plan and select: interactive planning with large language models enables open-world multi-task agents. In _Proceedings of the 37th International Conference on Neural In-_ _formation Processing Systems_ , pp. 34153–34189, 2023. Jason Wei, Xuezhi Wang, Dale Schuurmans, Maarten Bosma, Fei Xia, Ed Chi, Quoc V Le, Denny Zhou, et al. Chain-of-thought prompting elicits reasoning in large language models. _Advances in_ 
+
+- _neural information processing systems_ , 35:24824–24837, 2022. 
+
+- Lionel Wong, Jiayuan Mao, Pratyusha Sharma, Zachary S Siegel, Jiahai Feng, Noa Korneev, Joshua B Tenenbaum, and Jacob Andreas. Learning adaptive planning representations with natu- ral language guidance. _arXiv preprint arXiv:2312.08566_ , 2023. An Yang, Baosong Yang, Binyuan Hui, Bo Zheng, Bowen Yu, Chang Zhou, Chengpeng Li, 
+
+- Chengyuan Li, Dayiheng Liu, Fei Huang, Guanting Dong, Haoran Wei, Huan Lin, Jialong Tang, 
+
+- Jialin Wang, Jian Yang, Jianhong Tu, Jianwei Zhang, Jianxin Ma, Jin Xu, Jingren Zhou, Jinze Bai, Jinzheng He, Junyang Lin, Kai Dang, Keming Lu, Keqin Chen, Kexin Yang, Mei Li, Mingfeng Xue, Na Ni, Pei Zhang, Peng Wang, Ru Peng, Rui Men, Ruize Gao, Runji Lin, Shijie Wang, Shuai Bai, Sinan Tan, Tianhang Zhu, Tianhao Li, Tianyu Liu, Wenbin Ge, Xiaodong Deng, Xiaohuan Zhou, Xingzhang Ren, Xinyu Zhang, Xipin Wei, Xuancheng Ren, Yang Fan, Yang Yao, Yichang Zhang, Yu Wan, Yunfei Chu, Yuqiong Liu, Zeyu Cui, Zhenru Zhang, and Zhihao Fan. Qwen2 technical report. _arXiv preprint arXiv:2407.10671_ , 2024. 
+
+- Shunyu Yao, Jeffrey Zhao, Dian Yu, Nan Du, Izhak Shafran, Karthik R Narasimhan, and Yuan 
+
+- Cao. React: Synergizing reasoning and acting in language models. In _The Eleventh International_ _Conference on Learning Representations_ , 2023. Shunyu Yao, Dian Yu, Jeffrey Zhao, Izhak Shafran, Tom Griffiths, Yuan Cao, and Karthik Narasimhan. Tree of thoughts: Deliberate problem solving with large language models. _Advances_ _in Neural Information Processing Systems_ , 36, 2024. Zirui Zhao, Wee Sun Lee, and David Hsu. Large language models as commonsense knowledge for large-scale task planning. _Advances in Neural Information Processing Systems_ , 36, 2024. - Denny Zhou, Nathanael Sch¨arli, Le Hou, Jason Wei, Nathan Scales, Xuezhi Wang, Dale Schuur- mans, Claire Cui, Olivier Bousquet, Quoc V Le, et al. Least-to-most prompting enables complex reasoning in large language models. In _The Eleventh International Conference on Learning Rep-_ 
+
+- _resentations_ , 2023. 
+
+- 12 
+
+|<br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br>|A<br>IMPLEMENTATIONDETAILS FORPARTIALLYOBSERVABLESETTINGS<br>As outlined in Section 5, we adapt LoTa-bench (Choi et al., 2024) to support partial observability.<br>Oracle-generated partial observation feedback signals are incorporated into the context information<br>provided to the LLM. Tables 3 and 4 present detailed example trajectories for each action type under<br>partial observation. In this setup, the agent is aware only of the receptacles in the current room and<br>can only see the objects visible within its ego-centric view. VirtualHome is a multi-room apartment<br>simulator, so it has a “_go to room_” action type. On the other hand, AI2-THOR is a single-room<br>studio apartment simulator, so it does not use the “_go to room_” action type because there is no need<br>to move between rooms. Table 3 illustrates an example of partial observation feedback from the<br>VirtualHome simulator, while Table 4 provides a similar example from the AI2-THOR simulator.<br>Table 3: Action types and sample text observations in the VirtualHome simulator.|
+|---|---|
+||**Action Type**<br>**Action**<br>**Text Observation**|
+||_initialization_<br>-<br>You are in the house, and there are 4 rooms: bathroom (1), bed-<br>room (1), kitchen (1), living room (1). You are in the middle of<br>a bathroom (1). Looking quickly around the room, you see bath-<br>room cabinet (1), bathroom counter (1), faucet (1), sink (1), toilet<br>(1), towel rack (1), washing machine (1).<br>_go to room_<br>go to kitchen 1<br>You move to the kitchen (1). Looking quickly around the room,<br>you see chair (1, 2, 3, 4), dishwasher (1), faucet (1), fridge (1),<br>kitchen cabinet (1, 2, 3, 4, 5, 6, 7, 8), kitchen counter (1, 3),<br>kitchen table (1), microwave oven (1), nightstand (1, 2), sink (1),<br>sofa (1), stove (1), toaster (1).<br>_go to receptacle_<br>go to kitchen table 1<br>You arrive at the kitchen table (1). You see apple (2), book (1),<br>bowl (2, 3), cereal (1), chair (1, 2, 3, 4), chocolate syrup (1),<br>condiment bottle (1, 2), condiment shaker (1, 2), cupcake (1, 2),<br>cutlery fork (2, 3, 4), cutlery knife (3, 5, 6), juice (1), kitchen ta-<br>ble (1), pancake (1), pear (1), plate (2, 3, 4, 5), pudding (2), water<br>glass (1, 2, 4)<br>_pick up object_<br>pick up juice 1<br>You pick up juice. You hold juice (1).<br>_put down object_<br>put down apple 1<br>You put down apple on coffee table.<br>_open receptacle_<br>open fridge 1<br>You open fridge. You see bench (1), cupcake (1), fridge (1, 2),<br>juice (1).<br>_close receptacle_<br>close dishwasher 1<br>You close dishwasher.<br>_turn on receptacle_<br>turn on dishwasher 1<br>You turn on dishwasher.|
+|||
+
+
+13 
+
+|<br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br>|Table 4: Action types and sample text observations in the AI2-THOR simulator.|
+|---|---|
+||**Action Type**<br>**Action**<br>**Text Observation**|
+||_initialization_<br>-<br>You are in the house, and you arrive at the bathroom, Look-<br>ing quickly around the room, you see TowelHolder (1), Toilet<br>(1), ToiletPaperHanger (1), Sink (1), SinkBasin (1), Shelf (1,<br>2, 3), HandTowelHolder (1), GarbageCan (1), BathtubBasin<br>(1).<br>_go to receptacle_<br>go to BathtubBasin (1)<br>You arrive at BathtubBasin (1). You see SoapBar (2), Cloth<br>(1), Bathtub (1), BathtubBasin (1).<br>_pick up object_<br>pick up SoapBar (2)<br>You pick up SoapBar (2). You see SoapBar (2), Cloth (1),<br>Bathtub (1), BathtubBasin (1). I am holding SoapBar (2)<br>now.<br>_put down object_<br>put down SoapBar (2)<br>You put SoapBar (2) on Shelf (1). You see SoapBar (1, 2, 3),<br>Shelf (1), Candle (2).<br>_open receptacle_<br>open Microwave (1)<br>You open Microwave (1). You see StoveKnob (1, 2, 3, 4),<br>StoveBurner (3), Potato (1), Pan (1, 2), Microwave (1), Bowl<br>(3).<br>_drop object_<br>put down DishSponge (1)<br>You put down failed, drop it. You see SoapBar (3), Sink (1),<br>SinkBasin (1), HandTowel (1), Faucet (2), DishSponge (1).<br>_close receptacle_<br>close Microwave (1)<br>You close Microwave (1). You see StoveKnob (1, 2, 3, 4),<br>StoveBurner (3), Pan (1, 2), Microwave (1).<br>_turn on receptacle_<br>turn on Microwave (1)<br>You turn on Microwave (1). You see Microwave (1), Drawer<br>(5, 6), Cabinet (7, 8, 10).<br>_turn off receptacle_<br>turn off Microwave (1)<br>You turn off Microwave (1). You see Microwave (1), Drawer<br>(5, 6), Cabinet (7, 8, 10).|
+|||
+
+
+14 
+
+> B LANGUAGE MODELS Table 5 lists the exact language model names used in the experiments. > Table 5: List of language models used in the experiments. Model names are either from HuggingFace 
+
+> model hub or OpenAI API. > Class Model name Model size meta-llama/Meta-Llama-3-8B 8B LLaMA 3 meta-llama/Meta-Llama-3-70B 70B meta-llama/Llama-3.1-8B 8B 
+
+> LLaMA 3.1 meta-llama/Llama-3.1-70B 70B Qwen/Qwen2-7B 7B Qwen2 Qwen/Qwen2-72B 72B 
+
+> Qwen/Qwen2.5-7B 7B Qwen2.5 Qwen/Qwen2.5-72B 72B Mistral mistralai/Mistral-7B-v0.3 7B Gemma google/gemma-7b 7B 
+
+> GPT-4o gpt-4o-2024-05-13 - > C GPT-4O IMPLEMENTATION DETAILS GPT-4o was implemented slightly differently due to the lack of access to log probabilities. At each 
+
+> time step _t_ , the next action _at_ was generated using the OpenAI API. If _at_ was a _reasoning_ action, it 
+
+> was handled in the same way as with other models. For _acting_ actions, we first checked if _at_ was a 
+
+> valid skill in _At_ . If it was valid, it was processed as usual. If not, the following corrective observation 
+
+> was provided to GPT-4o: You should only output sentences that begin with Think, Act, or Expand. If you output Act, you should use one of actions of this list: [go to, pick up, put down, open, close, turn on, recall location of, done, failure]. > Similarly, for _expanding_ actions, if _at_ was valid, it proceeded as normal. If not, the same correc- tive observation was added, prompting GPT-4o to refine its decision. This method ensured GPT-4o remained consistent with the task’s action space, despite the lack of log probability access. 15 
+
+> D EXTENDED RESULTS Table 6: Performance comparison of ReAct and ReAcTree on WaH dataset. GSR and SSR represent goal success rate and subgoal success rate, respectively. WM represents the use of the working memory. Metric Method WM LLaMA 3 Qwen2 Gemma 8B 70B 7B 72B 7B > GSR (%) ReAct ✗ 3.00 17.00 9.00 20.00 2.00 ✓ 8.00 23.00 13.13 23.00 8.00 ✗ 13.00 53.00 16.00 58.00 10.00 ReAcTree ✓ **27.00 59.00 28.00 61.00 36.00** 
+
+> ✗ 26.82 45.83 26.60 48.02 22.20 SSR (%) ReAct ✓ 34.22 51.25 32.98 47.58 28.48 ✗ 50.32 **78.38** 42.73 77.08 43.52 ReAcTree ✓ **61.53** 77.08 **54.80 77.28 59.83 827 828 829** We compare ReAct and ReAcTree on WaH using various recent LLMs. Table 6 presents results for additional LLMs not included in Table 1. Across both large-scale and lighter models, ReAcTree consistently outperforms ReAct, with or without working memory. This indicates that the ReAcTree structure consistently enhances task planning performance by adaptively breaking down complex tasks into solvable agent-level tasks with control flow, allowing the same LLM to handle tasks more effectively and easily. We used Llama 3, Qwen 2, and Gemma 2 as off-the-shelf LLMs. The strong 
+
+> performance of the proposed ReAcTree without working memory further emphasizes its robustness, 
+
+> making it an effective approach for both lightweight and large-scale language model. D.1 WITH WORKING MEMORY RESULTS For the lightweight models, in the case of the LLaMA 3 8B model, ReAcTree shows significant im- provements over ReAct, with a 19% increase in GSR and a 27.31% increase in SSR. Similarly, in the Qwen 2 7B model, ReAcTree achieves a 14.87% improvement in GSR and a 21.82% improvement in SSR compared to ReAct. In the Gemma 2 7B model, ReAcTree demonstrates the most impressive gains in lightweight model, with a 28% increase in GSR and a 31.35% increase in SSR. 
+
+> For large-scale models such as LLaMA 3 70B and Qwen2 72B, ReAcTree also significantly out- performs ReAct. In the LLaMA 3 70B model, ReAcTree outperforms ReAct by 36% in GSR and by 25.83% in SSR. In the Qwen 2 72B model, ReAcTree shows a 38% improvement in GSR and a 29.06% improvement in SSR over ReAct. D.2 WITHOUT WORKING MEMORY RESULTS Even without working memory, ReAcTree surpasses ReAct by a significant margin. In lightweight models, ReAcTree shows notable improvements over ReAct, with a 10% increase in GSR and a 23.5% increase in SSR. Similar trends are observed in the Qwen 2 7B and Gemma 2 7B models, where ReAcTree consistently outperforms ReAct in both GSR and SSR. For large-scale models, ReAcTree continues to outperform ReAct. In the LLaMA 3 70B model, Re- AcTree achieves a 36% improvement in GSR and a 32.55% increase in SSR over ReAct. Similarly, in the Qwen 2 72B model, ReAcTree surpasses ReAct by 38% in GSR and 29.06% in SSR, even without working memory. 16 
+
+E FAILURE ANALYSIS E.1 FAILURE TYPES In this section, we categorize the failure cases of the proposed ReAcTree on the WAH-NL results using QWEN-2.5 72B model. The failure cases are classified into four types: _Expand-level_ , _Agent-_ _level_ , _Constraints_ , and _Instruction errors_ . Table 7 summarizes these failure types. First, _Expand-level_ failures occur during the expand procedure of ReAcTree. These failures are cate- gorized _Task decomposition_ , _Control-flow selection_ , and _Expand-level infinite loop_ failures. Second, _Agent-level_ failures arises during the planning process within individual agent nodes. These include _Navigation & search_ , _Agent-level planning_ , _Agent-level infinite loop_ , and _Termination reasoning_ failures. Third _Constraints_ failures happen when tasks could be completed with more relaxed limits but fail due to the current thresholds. This category includes _Max step_ failures, where the maximum number of decision steps is exceeded. Finally, _Instruction error_ stems from issues in task instruc- tions of WAH-NL test set. These are divided into _Incorrect instructions_ , where the instruction differs from the goal, and _Ambiguous instructions_ , where the instructions are unclear. Table 7: Failure types observed in the WAH-NL results of the proposed ReAcTree using the QWEN2.5 72B model. **886 887 Hierarchy Failiure Type Details 888** Failure to break down instructions Task decomposition into agent-level sub-goals Incorrect selection of control flow **891 Expand-level** Control-flow selection within expand-level decomposition Expand-level infinite loop Infinite loop in expand-level decomposition Failure in object search & navigation Navigation & search under partial observability **896 Agent-level** Agent-level planning Failure in sub-goal planning Agent-level infinite loop Infinite loop in agent-level decomposition Termination condition check failure Termination reasoning in reasoning Exceeded the maximum **902 Constraints** Max step allowable number of steps When the goal stated in the instructions **Instruction error** Incorrect Instruction differs from the actual goal When the goal state cannot be determined Ambiguous Instruction solely from the instructions E.2 FAILURE ANALYSIS In this section, we analyze the failure cases of ReAcTree using the QWEN-2.5 72B model, both with and without working memory. ReAcTree without working memory exhibited a total of 41 failure cases, categorized into _Expand-level_ (9 cases), _Agent-level_ (30 cases), _Constraints (1 case)_ , and _Instruction error_ failures (9 cases). In contrast, ReAcTree with WM showed fewer failures, with a total of 37 cases distributed as _Expand-level_ (6 cases), _Agent-level_ (22 cases), _Constraints_ (0 cases), and _Instruction error_ failures (9 cases). In both settings, _Agent-level_ failures were the most prevalent. 
+
+17 
+
+> Table 8: Comparison of failure cases with and without the proposed working memory. We analyze 
+
+> the failure cases from a test set of 100 samples on the WAH-NL benchmark. A failure is defined 
+
+> as any instance where at least one sub-goal remains unsatisfied. The table also report the average sub-goal success rate (SSR). In the table, ”WM” denotes working memory, and ”diff.” represents the difference in SSR between cases with and without working memory. **923 924 Failure Type Number of failures Avg. SSR w.o. WM w. WM w.o. WM w. WM diff. 925** Task decomposition 6 5 **(-1)** 58.33 66.67 **+8.34 926** Control-flow selection 2 1 **(-1)** 16.67 66.67 **+50.00 927** Expand-level infinite loop 1 0 **(-1)** 0 100 **+100** 
+
+> Navigation & search 4 5 (+1) 72.08 70.42 -1.66 
+
+> Agent-level planning 14 9 **(-5)** 57.70 73.73 **+16.03** 
+
+> Agent-level infinite loop 3 4 (+1) 39.72 41.67 +1.95 
+
+> Termination reasoning 9 4 **(-5)** 29.24 57.73 **+28.49 932** Max step 1 0 **(-1)** 60 100 **+40 933** Incorrect Instruction 4 4 37.50 37.50 0 Ambiguous Instruction 5 5 40.56 39.17 -1.39 > To further understand the impact of working memory, we measured the average subgoal success rate 
+
+> (SSR) for each failure type across tasks that failed in either configuration. Table 8 summarizes these 
+
+> results, reporting the number of failures and the corresponding average SSR for each failure type. For example, in the case of _Task decomposition_ failures, the total number of unique tasks used to compute SSR was 9. These tasks included task IDs 3, 10, 12, 23, 37, 38, and 62 from the without working memory configuration, and task IDs 12, 23, 37, 38, 47, and 77 from the with working memory setting. The union of these task sets is _{_ 3 _,_ 10 _,_ 12 _,_ 23 _,_ 37 _,_ 38 _,_ 47 _,_ 62 _,_ 77 _}_ . We calculated the average SSR for both configurations using this union set of failure cases. 
+
+> The following sections provide a detailed analysis of the major failure types to gain deeper insights into ReAcTree’s performance. 
+
+> **947 Task decomposition is working well.** In the expanding process of ReAcTree, the agent node selects 
+
+> a control flow and breaks down its goal sentence into multiple subgoals. _Task decomposition_ failure 
+
+> occurs when this process generates incorrect subgoals. In our experiments on the WAH-NL test set, 
+
+> ReAcTree encountered these failures in 6 sample cases (6%) without utilizing working memory. 
+
+> However, with the integration of the proposed working memory, this number was reduced to 5 cases (5%), as shown in Table 8. Furthermore, the adoption of working memory significantly improved the average SSR (Avg. SSR in Table 8), with an increase of 8.34% point, from 58.33% to 66.67%. This demonstrates that the proposed working memory enhances subgoal success rates, ensuring partial success even when expand-level task decomposition is not entirely successful. 
+
+> **956 Working memory enhance Agent-level planning performance.** The proposed working memory 
+
+> significantly reduce the number of _Agent-level planning_ failures. As demonstrated in Table 8, incor- porating the proposed working memory reduces the number of Agent-level planning failure cases from 14 to 9, while improving the average SSR by 16.03%. By recalling the locations from previous observations, the context length is shortened, and the number of nodes is reduced, enabling the LLM to generate more accurate plans. This improvement effectively minimizes Agent-level planning failures. > **963 Working memory improves step efficiency in long-horizon task.** The proposed working memory reduces the number of search steps required in partially observable environments. In max step failure cases, ReAcTree achieves an average SSR of 60.00% without working memory. However, with the adoption of working memory, these cases are resolved without reaching the maximum step limit. 
+
+> **967 Limitations.** While the proposed ReAcTree and its memory mechanisms enhance embodied task 
+
+> planning capabilities, certain limitations persist. First, ReAcTree faces challenges in searching for 
+
+> target objects in partially observable environments. Unlike previous work Choi et al. (2024), which assumes a fully observable environment, ReAcTree operates in settings with partial observability, adding significant complexity. As a result, 5% of the evaluation samples fail due to navigation and search failures, with an average SSR of 70.42%. 
+
+18 
+
+Second, there is a risk of error propagation. While expand-level decomposition failures occur in only 5% of the evaluation samples, with an average SSR of 66.67%, such errors in expand-level planning can propagate and potentially disrupt the entire process. This limitation could be mitigated in future work by introducing an additional verification step for expand-level planning 
+
+|<br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br>**1000**<br>**1001**<br>**1002**<br>**1003**<br>**1004**<br>**1005**<br>**1006**<br>**1007**<br>**1008**<br>**1009**<br>**1010**<br>**1011**<br>**1012**<br>**1013**<br>**1014**<br>**1015**<br>**1016**<br>**1017**<br>**1018**<br>**1019**<br>**1020**<br>**1021**<br>**1022**<br>**1023**<br>**1024**<br>**1025**|Third, unpredictable errors, such as infnite loops in agent-level planning and termination reasoning<br>failures, remain signifcant challenges. In our experiments, infnite loops in agent-level planning ac-<br>counted for 4% of the evaluation set, with an average SSR of 41.67%, while termination reasoning<br>failures also made up 4%, with an average SSR of 57.73%. Although this work focuses on designing<br>an effcient architecture for agent nodes and implementing effective memory mechanisms, further<br>improvements to the agent node itself are essential. To address these issues, a robust verifcation<br>process is needed, where each node evaluates the current progress of the task. While this evalua-<br>tion is weakly performed in the “Think stage” of ReAct, additional verifcation mechanisms could<br>signifcantly mitigate these problems.<br>E.3<br>DETAILED DESCRIPTIONS OF THE FAILURE TYPES<br>E.3.1<br>TASKDECOMPOSITIONFAILURE<br>Listing1: The example of the task decomposition failure.|
+|---|---|
+||### Agent Node 1<br>Your task is to: Home service robot, input 1 cutlery fork, 1 wine glass and 1<br>plate into the dishwasher. When complete then turn the dishwasher on.<br>...<br>Think: To solve the task, I need to accomplish 4 subgoals independently. Find and<br>open the dishwasher, move the cutlery fork in the dishwasher, move the wine<br>glass in the dishwasher, and close and turn on the dishwasher.<br>Expand: {’control_flow’: ’parallel’, ’conditions’: ’find and open the dishwasher,<br>move the cutlery fork in the dishwasher, move the wine glass in the dishwasher<br>, close and turn on the dishwasher’}|
+||Task decomposition failure occurs when the system initially generates an incorrect sequence of<br>sub-goal instructions to address the given instruction. For instance, in Listing 1, the agent fails to<br>decompose one of the sub-goals during the expand-level task decomposition process.<br>E.3.2<br>CONTROL-FLOW SELECTIONFAILURE<br>Listing2: The example of the control-fow selection failure.|
+||### Agent Node 1<br>Your task is to: Please serve a water glass on the kitchen table<br>...<br>Think: To solve the task, I need to accomplish 2 subgoals sequentially. Find and<br>pick up the water glass, and find the kitchen table and put down the water<br>glass.<br>Expand: {’control_flow’: ’sequence’, ’conditions’: ’find and pick up the water<br>glass, find the kitchen table and put down the water glass’}<br>### Agent Node 2<br>Your primary goal is to: Please serve a water glass on the kitchen table|
+
+
+19 
+
+|**1026**||
+|---|---|
+|**1027**|To achieve this, you should perform your sibling tasks in sequence. At this level,<br>your sibling tasks are: find and pick up the water glass, and find the|
+|**1028**|kitchen table and put down the water glass.|
+|**1029**||
+|**1030**|Your task is to: find and pick up the water glass|
+|**1031**|You are in the house, and there are 4 rooms: bathroom (1), bedroom (1), kitchen|
+|**1032**|(1), living room (1). You are in the middle of a bathroom (1). Looking quickly<br>around the room, you see ...|
+|**1033**|Think: To solve the task, I need to recall the location of the water glass.|
+|**1034**|Act: recall location of water glass|
+|**1035**|You have not seen water glass before.|
+|**1036**|Think: Now, I need to find and pick up the water glass in one of the rooms. The|
+|**1037**|water glass is more likely to appear in kitchen 1, living room 1, or bedroom<br>1. I can check each room one by one until I find and pick up the water glass.|
+|**1038**|Expand: {’control_flow’: ’fallback’, ’conditions’: ’find and pick up the water|
+|**1039**|glass in kitchen 1, find and pick up the water glass in living room 1, find|
+|**1040**|and pick up the water glass in bedroom 1’}|
+|**1041**||
+|**1042**|### Agent Node 3<br>Your primary goal is to: find and pick up the water glass|
+|**1043**|To achieve this, you should perform your sibling tasks using a fallback strategy.|
+|**1044**|At this level, your sibling tasks are: find and pick up the water glass in|
+|**1045**|kitchen 1, find and pick up the water glass in living room 1, and find and|
+|**1046**|pick up the water glass in bedroom 1.|
+|**1047**|Your task is to: find and pick up the water glass in kitchen 1<br>You are in the house, and there are 4 rooms: bathroom (1), bedroom (1), kitchen|
+|**1048**|(1), living room (1). You are in the middle of a bathroom (1). Looking quickly|
+|**1049**|around the room, you see ...|
+|**1050**|Think: I am in bathroom 1. Now, I need to find the water glass. The water glass is|
+|**1051**|more likely to appear on bathroom counter (1), or in bathroom cabinet (1). I|
+|**1052**|can check each place one by one, starting from bathroom counter 1, until I<br>find the water glass.|
+|**1053**|Act: go to bathroom counter 1|
+|**1054**|...|
+|**1055**|Think: I cannot find the water glass in bathroom 1.|
+|**1056**|Act: failure|
+|**1057**|### Agent Node 4|
+|**1058**|Your primary goal is to: find and pick up the water glass|
+|**1059**|To achieve this, you should perform your sibling tasks using a fallback strategy.|
+|**1060**|At this level, your sibling tasks are: find and pick up the water glass in|
+|**1061**|kitchen 1, find and pick up the water glass in living room 1, and find and|
+|**1062**|pick up the water glass in bedroom 1.<br>Your task is to: find and pick up the water glass in living room 1|
+|**1063**|You are in the house, and there are 4 rooms: bathroom (1), bedroom (1), kitchen|
+|**1064**|(1), living room (1). You are in the middle of a bathroom (1). Looking quickly|
+|**1065**|around the room, you see ...|
+|**1066**|Think: I am in bathroom 1. Now, I need to go to living room 1.|
+|**1067**|Act: go to living room 1|
+||...|
+|**1068**|Think: I cannot find the water glass in living room 1.|
+|**1069**|Act: failure|
+|**1070**||
+|**1071**|### Agent Node 5|
+|**1072**|Your primary goal is to: find and pick up the water glass<br>To achieve this, you should perform your sibling tasks using a fallback strategy.|
+|**1073**|At this level, your sibling tasks are: find and pick up the water glass in|
+|**1074**|kitchen 1, find and pick up the water glass in living room 1, and find and|
+|**1075**|pick up the water glass in bedroom 1.|
+|**1076**|Your task is to: find and pick up the water glass in bedroom 1|
+|**1077**|You are in the house, and there are 4 rooms: bathroom (1), bedroom (1), kitchen<br>(1), living room (1). You are in the middle of a living room (1). Looking|
+|**1078**|quickly around the room, you see ...|
+|**1079**|Think: I am in living room 1. Now, I need to go to bedroom 1.|
+||Act: go to bedroom 1|
+
+
+20 
+
+|**1080**<br>**1081**<br>**1082**<br>**1083**<br>**1084**<br>**1085**<br>**1086**<br>**1087**<br>**1088**<br>**1089**<br>**1090**<br>**1091**<br>**1092**<br>**1093**<br>**1094**<br>**1095**<br>**1096**<br>**1097**<br>**1098**<br>**1099**<br>**1100**<br>**1101**<br>**1102**<br>**1103**<br>**1104**<br>**1105**<br>**1106**<br>**1107**<br>**1108**<br>**1109**<br>**1110**<br>**1111**<br>**1112**<br>**1113**<br>**1114**<br>**1115**<br>**1116**<br>**1117**<br>**1118**<br>**1119**<br>**1120**<br>**1121**<br>**1122**<br>**1123**<br>**1124**<br>**1125**<br>**1126**<br>**1127**<br>**1128**<br>**1129**<br>**1130**<br>**1131**<br>**1132**<br>**1133**||
+|---|---|
+||Think: I cannot find the water glass in bedroom 1.<br>Act: failure<br>[The parent sequence node terminates because the fallback node returns a failure.]|
+||Control-fow selection failure arises from selecting an inappropriate control fow, often involving<br>cases where a ”fallback” node is used for object searching. If the parent node of the ”fallback”<br>node is not a ”parallel” node but a ”sequence” node, and all child nodes of the ”fallback” fail, the<br>”sequence” node does not fully execute and terminates prematurely. An example is summarized in<br>Listing 2.<br>E.3.3<br>EXPAND-LEVEL INFINITE LOOP<br>Listing3: The example of the expand-level infnite loopfailure|
+||Your task is to: move the wine in the fridge<br>...<br>Expand: {’control_flow’: ’sequence’, ’conditions’: ’find and pick up the wine,<br>find the fridge and put down the wine’}<br>### find and pick up the wine<br>Your task is to: find and pick up the wine<br>...<br>Expand: {’control_flow’: ’fallback’, ’conditions’: ’find and pick up the wine in<br>kitchen 1, find and pick up the wine in living room 1, find and pick up the<br>wine in bedroom 1’}<br>Your task is to: find and pick up the wine in kitchen 1<br>...<br>Act: failure<br>Your task is to: find and pick up the wine in living room 1<br>...<br>Act: failure<br>Your task is to: find and pick up the wine in bedroom 1<br>...<br>Act: done<br>### find the fridge and put down the wine<br>[The agent start the infinite loop]<br>Your task is to: find the fridge and put down the wine<br>...<br>Expand: {’control_flow’: ’sequence’, ’conditions’: ’find and pick up the wine,<br>find the fridge and put down the wine’}<br>### find and pick up the wine<br>Your task is to: find and pick up the wine<br>...<br>Expand: {’control_flow’: ’fallback’, ’conditions’: ’find and pick up the wine in<br>kitchen 1, find and pick up the wine in living room 1, find and pick up the<br>wine in bedroom 1’}<br>Your task is to: find and pick up the wine in kitchen 1<br>...<br>Act: failure<br>Your task is to: find and pick up the wine in living room 1|
+
+
+21 
+
+|**1134**<br>**1135**<br>**1136**<br>**1137**<br>**1138**<br>**1139**<br>**1140**<br>**1141**<br>**1142**<br>**1143**<br>**1144**<br>**1145**<br>**1146**<br>**1147**<br>**1148**<br>**1149**<br>**1150**<br>**1151**<br>**1152**<br>**1153**<br>**1154**<br>**1155**<br>**1156**<br>**1157**<br>**1158**<br>**1159**<br>**1160**<br>**1161**<br>**1162**<br>**1163**<br>**1164**<br>**1165**<br>**1166**<br>**1167**<br>**1168**<br>**1169**<br>**1170**<br>**1171**<br>**1172**<br>**1173**<br>**1174**<br>**1175**<br>**1176**<br>**1177**<br>**1178**<br>**1179**<br>**1180**<br>**1181**<br>**1182**<br>**1183**<br>**1184**<br>**1185**<br>**1186**<br>**1187**||
+|---|---|
+||...<br>Act: failure<br>Your task is to: find and pick up the wine in bedroom 1<br>...<br>Act: done<br>### find the fridge and put down the wine<br>Your task is to: find the fridge and put down the wine<br>Expand: {’control_flow’: ’sequence’, ’conditions’: ’find and pick up the wine,<br>find the fridge and put down the wine’}<br>[The agent try to find the wine again already found]<br>### find and pick up the wine<br>Your task is to: find and pick up the wine<br>Expand: {’control_flow’: ’fallback’, ’conditions’: ’find and pick up the wine in<br>kitchen 1, find and pick up the wine in living room 1, find and pick up the<br>wine in bedroom 1’}<br>...|
+||Lastly, an expand-level infnite loop occurs when the expand-level decomposition succeeds, but a<br>repetitive sub-goal sequence is endlessly generated, causing the tree structure to expand infnitely.<br>While this issue arises in only one sample with ReAcTree without working memory and is com-<br>pletely absent when working memory is employed, it represents a critical failure type. In such cases,<br>the system is unable to execute actions correctly and continues to expand indefnitely, making the<br>goal impossible to achieve.<br>E.3.4<br>NAVIGATION& SEARCHFAILURE<br>Listing4: The example of the navigation & search failure.|
+||...<br>Your primary goal is to: move the glass of water in the dishwasher<br>To achieve this, you should perform your sibling tasks in sequence. At this level,<br>your sibling tasks are: find and pick up the glass of water, and find the<br>dishwasher and put down the glass of water.<br>Your task is to: find and pick up the glass of water<br>You are in the house, and there are 4 rooms: bathroom (1), bedroom (1), kitchen<br>(1), living room (1). You are in the middle of a kitchen (1). Looking quickly<br>around the room, you see chair (1, 2, 3, 4), dishwasher (1), faucet (1),<br>fridge (1), kitchen cabinet (1, 2, 3, 4, 5, 6, 7, 8), kitchen counter (1, 2),<br>kitchen table (1), microwave oven (1), nightstand (1, 2), sink (1), sofa (1),<br>stove (1), toaster (1).<br>Think: To solve the task, I need to recall the location of the glass of water.<br>Act: recall location of glasses<br>You have not seen glasses before.<br>Think: Now, I need to find and pick up the glass of water in one of the rooms. The<br>glass of water is more likely to appear in kitchen 1, living room 1, or<br>bedroom 1. I can check each room one by one until I find and pick up the glass<br>of water.<br>Expand: {’control_flow’: ’fallback’, ’conditions’: ’find and pick up the glass of<br>water in kitchen 1, find and pick up the glass of water in living room 1, find<br>and pick up the glass of water in bedroom 1’}<br>[Starting search for the water glass.]<br>Your primary goal is to: find and pick up the glass of water<br>To achieve this, you should perform your sibling tasks using a fallback strategy.<br>At this level, your sibling tasks are: find and pick up the glass of water in<br>kitchen 1, find and pick up the glass of water in living room 1, and find and<br>pick up the glass of water in bedroom 1.|
+
+
+22 
+
+|**1188**<br>**1189**<br>**1190**<br>**1191**<br>**1192**<br>**1193**<br>**1194**<br>**1195**<br>**1196**<br>**1197**<br>**1198**<br>**1199**<br>**1200**<br>**1201**<br>**1202**<br>**1203**<br>**1204**<br>**1205**<br>**1206**<br>**1207**<br>**1208**<br>**1209**<br>**1210**<br>**1211**<br>**1212**<br>**1213**<br>**1214**<br>**1215**<br>**1216**<br>**1217**<br>**1218**<br>**1219**<br>**1220**<br>**1221**<br>**1222**<br>**1223**<br>**1224**<br>**1225**<br>**1226**<br>**1227**<br>**1228**<br>**1229**<br>**1230**<br>**1231**<br>**1232**<br>**1233**<br>**1234**<br>**1235**<br>**1236**<br>**1237**<br>**1238**<br>**1239**<br>**1240**<br>**1241**||
+|---|---|
+||Your task is to: find and pick up the glass of water in kitchen 1<br>...<br>Think: I cannot find the glass of water in kitchen 1.<br>Act: failure<br>Your primary goal is to: find and pick up the glass of water<br>To achieve this, you should perform your sibling tasks using a fallback strategy.<br>At this level, your sibling tasks are: find and pick up the glass of water in<br>kitchen 1, find and pick up the glass of water in living room 1, and find and<br>pick up the glass of water in bedroom 1.<br>Your task is to: find and pick up the glass of water in living room 1<br>...<br>Think: I cannot find the glass of water in living room 1.<br>Act: failure<br>Your primary goal is to: find and pick up the glass of water<br>To achieve this, you should perform your sibling tasks using a fallback strategy.<br>At this level, your sibling tasks are: find and pick up the glass of water in<br>kitchen 1, find and pick up the glass of water in living room 1, and find and<br>pick up the glass of water in bedroom 1.<br>Your task is to: find and pick up the glass of water in bedroom 1<br>...<br>Think: I cannot find the glass of water in bedroom 1.<br>Act: failure<br>[Unable to find the water glass, proceeding to the next parallel node]<br>Your primary goal is to: Please put a cutlery fork and a glass of water in the<br>dishwasher, then turn the diswasher on.<br>To achieve this, you should perform your sibling tasks in parallel. At this level,<br>your sibling tasks are: find and open the dishwasher, move the cutlery fork<br>in the dishwasher, move the glass of water in the dishwasher, and close and<br>turn on the dishwasher.<br>Your task is to: close and turn on the dishwasher<br>...|
+||Navigation & search failure occurs when the agent is unable to fnd the target object despite exe-<br>cuting the entire generated search action sequence(commonly associated with the ”fallback” node<br>in ReAcTree). Object navigation is particularly challenging due to partial observability, which can<br>prevent the task from being completed even if the expand-level plan is successfully generated.<br>E.3.5<br>AGENT-LEVEL PLANNINGFAILURE<br>Listing5: The example of the agent-levelplanningfailure.|
+||Your primary goal is to: find and pick up the cake<br>To achieve this, you should perform your sibling tasks using a fallback strategy.<br>At this level, your sibling tasks are: find and pick up the cake in kitchen 1,<br>find and pick up the cake in living room 1, and find and pick up the cake in<br>bedroom 1.<br>Your task is to: find and pick up the cake in bedroom 1<br>...<br>Think: I am in living room 1. Now, I need to go to bedroom 1.<br>Act: go to bedroom 1<br>You move to the bedroom (1). Looking quickly around the room, you see ..<br>Think: Now, I need to find the cake. The cake is more likely to appear on coffee<br>table (2), desk (2, 3), or in cabinet (1). I can check each place one by one,<br>starting from coffee table 2, until I find the cake.<br>...<br>You open cabinet. You see apple (2), cabinet (1), computer (2), desk (2), light<br>switch (4), pound cake (1), sundae (1)<br>Think: I find pound cake 1. Now, I need to pick it up.<br>Act: pick up pound cake 1|
+
+
+23 
+
+|**1242**<br>**1243**<br>**1244**<br>**1245**<br>**1246**<br>**1247**<br>**1248**<br>**1249**<br>**1250**<br>**1251**<br>**1252**<br>**1253**<br>**1254**<br>**1255**<br>**1256**<br>**1257**<br>**1258**<br>**1259**<br>**1260**<br>**1261**<br>**1262**<br>**1263**<br>**1264**<br>**1265**<br>**1266**<br>**1267**<br>**1268**<br>**1269**<br>**1270**<br>**1271**<br>**1272**<br>**1273**<br>**1274**<br>**1275**<br>**1276**<br>**1277**<br>**1278**<br>**1279**<br>**1280**<br>**1281**<br>**1282**<br>**1283**<br>**1284**<br>**1285**<br>**1286**<br>**1287**<br>**1288**<br>**1289**<br>**1290**<br>**1291**<br>**1292**<br>**1293**<br>**1294**<br>**1295**||
+|---|---|
+||You pick up pound cake. You hold pound cake (1).<br>Think: Now I accomplish the goal.<br>Act: done|
+||Agent-level planning failure occurs when the agent generates an incorrect or meaningless action<br>sequence within action-performing nodes. This can happen when the action sequence is misaligned<br>with the provided sub-goal instructions or when the actions executed do not align with the previous<br>reasoning outcomes. For example, in Listing 5, the sub-goal is_”Find and pick up the cake in bed-_<br>_room 1.”_The agent reasons correctly, stating:_”Think: Now I need to fnd the cake. The cake is more_<br>_likely to be on coffee table (2), desk (2, 3), or in cabinet (1). I can check each place one by one,_<br>_starting from coffee table 2, until I fnd the cake.”_However, instead of picking up the cake, the agent<br>mistakenly picks up a pound cake.<br>E.3.6<br>AGENT-LEVELINFINITE LOOP<br>Listing6: The example of the agent-level infnite loop.|
+||Your task is to: go find a bottle of win and a pudding there on the coffee table.<br>[Starting to search a wine and pudding]<br>Think: I need to find a bottle of wine and a pudding. The wine is more likely to<br>appear in kitchen 1, and the pudding is more likely to appear in living room<br>1.<br>...<br>Think: I can see fridge 1. I need to open fridge 1 to find the wine.<br>Act: go to fridge 1<br>You arrive at the fridge (1). The fridge (1) is closed. You see fridge (1), mug<br>(3)<br>Think: I need to open fridge 1.<br>Act: open fridge 1<br>You open fridge. You see apple (1), fridge (1), mug (3), sofa (1)<br>[Picked up an apple instead of wine]<br>Think: I can see apple 1. I need to pick up apple 1.<br>Act: pick up apple 1<br>You pick up apple. You hold apple (1).<br>[Search the pudding]<br>Think: Now, I need to find the pudding. The pudding is more likely to appear in<br>living room 1.<br>...<br>Think: I can see coffee table 1. I need to go to coffee table 1 to find the<br>pudding.<br>Act: go to coffee table 1<br>You arrive at the coffee table (1). You see apple (1), coffee table (1), sofa (2),<br>tv (1) You hold apple (1).<br>[Put down apple]<br>Think: I can see apple 1. I need to put down apple 1.<br>Act: put down apple 1<br>You put down apple on coffee table<br>Think: Now, I need to find the pudding. The pudding is more likely to appear in<br>living room 1.<br>Act: go to living room 1<br>You move to the living room (1). Looking quickly around the room, you see ...<br>Think: I can see coffee table 1. I need to go to coffee table 1 to find the<br>pudding.<br>Act: go to coffee table 1<br>You arrive at the coffee table (1). You see apple (1), coffee table (1), sofa (2),<br>tv (1)<br>[Pick up apple again]|
+
+
+24 
+
+|**1296**<br>**1297**<br>**1298**<br>**1299**<br>**1300**<br>**1301**<br>**1302**<br>**1303**<br>**1304**<br>**1305**<br>**1306**<br>**1307**<br>**1308**<br>**1309**<br>**1310**<br>**1311**<br>**1312**<br>**1313**<br>**1314**<br>**1315**<br>**1316**<br>**1317**<br>**1318**<br>**1319**<br>**1320**<br>**1321**<br>**1322**<br>**1323**<br>**1324**<br>**1325**<br>**1326**<br>**1327**<br>**1328**<br>**1329**<br>**1330**<br>**1331**<br>**1332**<br>**1333**<br>**1334**<br>**1335**<br>**1336**<br>**1337**<br>**1338**<br>**1339**<br>**1340**<br>**1341**<br>**1342**<br>**1343**<br>**1344**<br>**1345**<br>**1346**<br>**1347**<br>**1348**<br>**1349**||
+|---|---|
+||Think: I can see apple 1. I need to pick up apple 1.<br>Act: pick up apple 1<br>You pick up apple. You hold apple (1).<br>Think: Now, I need to find the pudding. The pudding is more likely to appear in<br>living room 1.<br>Act: go to living room 1<br>You move to the living room (1). Looking quickly around the room, you see<br>bookshelf (2, 3), chair (6), closet (1), coffee table (1), computer (1), desk<br>(2), nightstand (4), sofa (2, 3), tv (1). You hold apple (1).<br>Think: I can see coffee table 1. I need to go to coffee table 1 to find the<br>pudding.<br>Act: go to coffee table 1<br>You arrive at the coffee table (1). You see apple (1), coffee table (1), sofa (2),<br>tv (1) You hold apple (1).<br>[Put down apple]<br>Think: I can see apple 1. I need to put down apple 1.<br>Act: put down apple 1<br>You put down apple on coffee table<br>[Search the pudding]<br>Think: Now, I need to find the pudding. The pudding is more likely to appear in<br>living room 1.<br>Act: go to living room 1<br>You move to the living room (1). Looking quickly around the room, you see<br>bookshelf (2, 3), chair (6), closet (1), coffee table (1), computer (1), desk<br>(2), nightstand (4), sofa (2, 3), tv (1).<br>Think: I can see coffee table 1. I need to go to coffee table 1 to find the<br>pudding.<br>Act: go to coffee table 1<br>You arrive at the coffee table (1). You see apple (1), coffee table (1), sofa (2),<br>tv (1)<br>Think: I can see apple 1. I need to pick up apple 1.<br>...|
+||An agent-level infnite loop occurs when the agent gets trapped in a continuous cycle of actions<br>during its execution and cannot break free. Unlike the previous planning failure, where the agent<br>could transition to the next node, this failure is more severe as it causes the agent’s performance to<br>stall at a specifc node. For example, as shown in Listing 6, the agent repeatedly picks up and puts<br>down an apple in a loop, an action unrelated to achieving the task’s sub-goal.<br>E.3.7<br>TERMINATION REASONINGFAILURE<br>Listing7: The example of the termination reasoningfailure.|
+||Your primary goal is to: find and pick up the juice<br>To achieve this, you should perform your sibling tasks using a fallback strategy.<br>At this level, your sibling tasks are: find and pick up the juice in kitchen<br>1, find and pick up the juice in living room 1, and find and pick up the juice<br>in bedroom 1.<br>Your task is to: find and pick up the juice in kitchen 1<br>You are in the house, and there are 4 rooms: bathroom (1), bedroom (1), kitchen<br>(1), living room (1). You are in the middle of a kitchen (1). Looking quickly<br>around the room, you see chair (1, 2, 3, 4), dishwasher (1), faucet (1),<br>fridge (1), kitchen cabinet (1, 2, 3, 4, 5, 6, 7, 8), kitchen counter (1, 3),<br>kitchen table (1), microwave oven (1), nightstand (1, 2), sink (1), sofa (1),<br>stove (1), toaster (1).<br>Think: I am in kitchen 1. Now, I need to find the juice. The juice is more likely<br>to appear on kitchen counter (1, 3), kitchen table (1), or in fridge (1),|
+
+
+25 
+
+|**1350**<br>**1351**<br>**1352**<br>**1353**<br>**1354**<br>**1355**<br>**1356**<br>**1357**<br>**1358**<br>**1359**<br>**1360**<br>**1361**<br>**1362**<br>**1363**<br>**1364**<br>**1365**<br>**1366**<br>**1367**<br>**1368**<br>**1369**<br>**1370**<br>**1371**<br>**1372**<br>**1373**<br>**1374**<br>**1375**<br>**1376**<br>**1377**<br>**1378**<br>**1379**<br>**1380**<br>**1381**<br>**1382**<br>**1383**<br>**1384**<br>**1385**<br>**1386**<br>**1387**<br>**1388**<br>**1389**<br>**1390**<br>**1391**<br>**1392**<br>**1393**<br>**1394**<br>**1395**<br>**1396**<br>**1397**<br>**1398**<br>**1399**<br>**1400**<br>**1401**<br>**1402**<br>**1403**||
+|---|---|
+||kitchen cabinet (1, 2, 3, 4, 5, 6, 7, 8). I can check each place one by one,<br>starting from kitchen counter 1, until I find the juice.<br>Act: go to kitchen counter 1<br>...<br>Think: I cannot find the juice. Now, I need to go to living room 1.<br>[The agent fail to terminate the node]<br>Act: go to living room 1<br>You move to the living room (1). Looking quickly around the room, you see<br>bookshelf (2, 3), chair (6), closet (1), coffee table (1), computer (1), desk<br>(2), nightstand (4), sofa (2, 3), tv (1).<br>Think: I am in living room 1. Now, I need to find the juice. The juice is more<br>likely to appear on coffee table (1), desk (2), or in nightstand (4). I can<br>check each place one by one, starting from coffee table 1, until I find the<br>juice.<br>Act: go to coffee table 1<br>...<br>[The agent fail to terminate the node]<br>Think: I cannot find the juice. Now, I need to go to kitchen 1.<br>Act: go to kitchen 1<br>...<br>[The agent fail to terminate the node]<br>Think: I cannot find the juice. Now, I need to go to living room 1.<br>Act: go to living room 1<br>...<br>[The agent fail to terminate the node]<br>Think: I cannot find the juice. Now, I need to go to bedroom 1.<br>Act: go to bedroom 1<br>...<br>[The agent fail to terminate the node]<br>Think: I cannot find the juice. Now, I need to go to kitchen 1.<br>Act: go to kitchen 1<br>...<br>Max steps|
+||A termination reasoning failure occurs when the agent either fails to recognize that the necessary<br>actions have been completed and cannot decide to terminate the node or prematurely terminates the<br>node before fully executing the planned action sequence. Unlike the agent-level infnite loop, where<br>the agent endlessly repeats actions that are unrelated or only partially related to task completion, a<br>termination reasoning failure arises when the agent fails to identify task completion or failure and re-<br>peats the process, even after executing the entire action sequence derived from sub-goal instructions<br>and reasoning processes.|
+
+
+26 
+
+|**1404**<br>**1405**<br>**1406**<br>**1407**<br>**1408**<br>**1409**<br>**1410**<br>**1411**<br>**1412**<br>**1413**<br>**1414**<br>**1415**<br>**1416**<br>**1417**<br>**1418**<br>**1419**<br>**1420**<br>**1421**<br>**1422**<br>**1423**<br>**1424**<br>**1425**<br>**1426**<br>**1427**<br>**1428**<br>**1429**<br>**1430**<br>**1431**<br>**1432**<br>**1433**<br>**1434**<br>**1435**<br>**1436**<br>**1437**<br>**1438**<br>**1439**<br>**1440**<br>**1441**<br>**1442**<br>**1443**<br>**1444**<br>**1445**<br>**1446**<br>**1447**<br>**1448**<br>**1449**<br>**1450**<br>**1451**<br>**1452**<br>**1453**<br>**1454**<br>**1455**<br>**1456**<br>**1457**|E.3.8<br>MAXSTEP<br>Listing8: The example of the Max Stepfailure.|
+|---|---|
+||### Generated ReAcTree<br>Instruction : Put a wine a juice a pound cake<br>a pudding and an apple on the kitchen table.<br>[a1]rootnode (parallel)<br>[a2]move the wine on the kitchen table (sequence)<br>[a3]find and pick up the wine (fallback)<br>[a4]find and pick up the wine in kitchen 1 [S]<br>find and pick up the wine in living room 1<br>find and pick up the wine in bedroom 1<br>[a5]find the kitchen table and put down the wine [S]<br>[a6]move the juice on the kitchen table (sequence)<br>[a7]find and pick up the juice (fallback)<br>[a8]find and pick up the juice in kitchen 1 [F]<br>[a9]find and pick up the juice in living room 1 [S]<br>find and pick up the juice in bedroom 1<br>[a10]find the kitchen table and put down the juice [S]<br>[a11]move the pound cake on the kitchen table (sequence)<br>[a12]find and pick up the pound cake (sequence)<br>[a13]find and pick up the pound cake in kitchen 1 [S]<br>find and pick up the pound cake in living room 1<br>find and pick up the pound cake in bedroom 1<br>[a14]find the kitchen table and put down the pound cake [S]<br>[a15]move the pudding on the kitchen table (sequence)<br>[a16]find and pick up the pudding (fallback)<br>[a17]find and pick up the pudding in kitchen 1 [F]<br>[a18]find and pick up the pudding in living room 1 [S]<br>find and pick up the pudding in bedroom 1<br>[a19]find the kitchen table and put down the pudding [S]<br>[a20]move the apple on the kitchen table (sequence)<br>[a21]find and pick up the apple (fallback1)<br>[a22]find and pick up the apple in kitchen 1 [MSE]<br>find and pick up the apple in living room 1 [MSE]<br>find and pick up the apple in bedroom 1 [MSE]<br>find the kitchen table and put down the apple [MSE]<br>[S]<br>: Success,<br>[F] : Failure, [MSE] : Max Step Error<br>[An] : n-th agent<br>### Agent 22<br>Your primary goal is to: find and pick up the apple<br>To achieve this, you should perform your sibling tasks using a fallback strategy.<br>At this level, your sibling tasks are: find and pick up the apple in kitchen<br>1, find and pick up the apple in living room 1, and find and pick up the apple<br>in bedroom 1.<br>Your task is to: find and pick up the apple in kitchen 1<br>You are in the house, and there are 4 rooms: bathroom (1), bedroom (1), kitchen<br>(1), living room (1). You are in the middle of a kitchen (1). Looking quickly<br>around the room, you see bench (1, 2), bookshelf (1, 2), chair (1, 2),<br>dishwasher (1), faucet (2), fridge (1, 2), garbage can (1), kitchen cabinet|
+
+
+27 
+
+|**1458**<br>**1459**<br>**1460**<br>**1461**<br>**1462**<br>**1463**<br>**1464**<br>**1465**<br>**1466**<br>**1467**<br>**1468**<br>**1469**<br>**1470**<br>**1471**<br>**1472**<br>**1473**<br>**1474**<br>**1475**<br>**1476**<br>**1477**<br>**1478**<br>**1479**<br>**1480**<br>**1481**<br>**1482**<br>**1483**<br>**1484**<br>**1485**<br>**1486**<br>**1487**<br>**1488**<br>**1489**<br>**1490**<br>**1491**<br>**1492**<br>**1493**<br>**1494**<br>**1495**<br>**1496**<br>**1497**<br>**1498**<br>**1499**<br>**1500**<br>**1501**<br>**1502**<br>**1503**<br>**1504**<br>**1505**<br>**1506**<br>**1507**<br>**1508**<br>**1509**<br>**1510**<br>**1511**||
+|---|---|
+||(1, 2, 3, 4, 5, 6, 7, 8), kitchen counter (1, 2), kitchen table (1), microwave<br>oven (1), sink (2), stove (1), toaster (1).<br>Think: I am in kitchen 1. Now, I need to find the apple. The apple is more likely<br>to appear on kitchen counter (1, 2), kitchen table (1), or in fridge (1, 2),<br>kitchen cabinet (1, 2, 3, 4, 5, 6, 7, 8). I can check each place one by one,<br>starting from kitchen counter 1, until I find the apple.<br>Act: go to kitchen counter 1<br>You arrive at the kitchen counter (1). You see bowl (1, 2, 3, 4, 5), chair (2),<br>chicken (1), cutlets (1), dishwashing liquid (1), faucet (2), kitchen cabinet<br>(1, 2, 3, 4, 5, 6, 7, 8), kitchen counter (1), plate (1, 2, 3, 4), sink (2),<br>washing sponge (1), wine (2)<br>Act: go to kitchen counter 2<br>You arrive at the kitchen counter (2). You see chair (1, 2), kitchen cabinet (3,<br>5, 6, 7, 8), kitchen counter (1, 2), light switch (2), plate (1, 2, 3, 4),<br>wine (2)<br>Act: go to kitchen table 1<br>You arrive at the kitchen table (1). You see bench (2), book (1), bowl (6), coffee<br>pot (1), condiment shaker (1, 2), juice (1), kitchen table (1), pound cake<br>(1), pudding (2), wine (1)<br>Act: go to fridge 1<br>You arrive at the fridge (1). The fridge (1) is open. You see bench (1), fridge<br>(1)<br>Act: go to fridge 2<br>You arrive at the fridge (2). The fridge (2) is open. You see bench (1), fridge<br>(1, 2), pancake (1)<br>Act: go to kitchen cabinet 1<br>You arrive at the kitchen cabinet (1). The kitchen cabinet (1) is open. You see<br>chicken (1), cooking pot (1), cutlery knife (1, 2), cutlets (1), dishwashing<br>liquid (1), faucet (2), frying pan (1), garbage can (1), kitchen cabinet (1,<br>4), kitchen counter (1), sink (2), stove (1)<br>Act: go to kitchen cabinet 2<br>You arrive at the kitchen cabinet (2). The kitchen cabinet (2) is open. You see<br>bowl (1, 2, 3, 4, 5), chair (2), chicken (1), cutlery knife (1, 2), cutlets<br>(1), dishwashing liquid (1), faucet (2), kitchen cabinet (1, 2, 3, 4, 5, 6, 7)<br>, kitchen counter (1), plate (1, 2, 3, 4), sink (2), washing sponge (1)<br>Act: go to kitchen cabinet 3<br>You arrive at the kitchen cabinet (3). The kitchen cabinet (3) is open. You see<br>bowl (1, 2, 3, 4, 5), chair (1, 2), dishwashing liquid (1), faucet (2),<br>kitchen cabinet (2, 3, 4, 5, 6, 7), kitchen counter (1, 2), plate (1, 2, 3, 4)<br>, sink (2), washing sponge (1), wine (2)<br>Act: go to kitchen cabinet 4<br>You arrive at the kitchen cabinet (4). The kitchen cabinet (4) is open. You see<br>bowl (1, 2, 3, 4, 5), chicken (1), cooking pot (1), cutlery knife (1, 2),<br>cutlets (1), dishwashing liquid (1), faucet (2), garbage can (1), kitchen<br>cabinet (1, 2, 4), kitchen counter (1), sink (2), washing sponge (1)<br>Act: go to kitchen cabinet 5<br>You arrive at the kitchen cabinet (5). The kitchen cabinet (5) is open. You see<br>bowl (1, 2, 3, 4, 5), chair (1, 2), cutlets (1), dishwashing liquid (1),<br>faucet (2), kitchen cabinet (2, 3, 4, 5, 6, 7, 8), kitchen counter (1, 2),<br>plate (1, 2, 3, 4), sink (2), washing sponge (1), wine (2)<br>Max steps|
+||A max step error occurs when the agent successfully generates a valid agent tree and executes the<br>plans correctly but is forced to terminate upon reaching the maximum step limit. This type of failure<br>is likely solvable if the agent is given a higher step limit. An example of this case is presented<br>in Listing 8, with the generated agent tree structure. Here, fve sub-goals are correctly managed<br>within the expand-level and agent-level instruction tree and executed properly by the agent until<br>the maximum step limit is reached. The SSR achieved in this case is 60.00% as described in Table<br>8. However, the proposed working memory signifcantly enhances step effciency in such cases,<br>enabling all sub-goals to be resolved within the given step limit.|
+
+
+28 
+
+|**1512**<br>**1513**<br>**1514**<br>**1515**<br>**1516**<br>**1517**<br>**1518**<br>**1519**<br>**1520**<br>**1521**<br>**1522**<br>**1523**<br>**1524**<br>**1525**<br>**1526**<br>**1527**<br>**1528**<br>**1529**<br>**1530**<br>**1531**<br>**1532**<br>**1533**<br>**1534**<br>**1535**<br>**1536**<br>**1537**<br>**1538**<br>**1539**<br>**1540**<br>**1541**<br>**1542**<br>**1543**<br>**1544**<br>**1545**<br>**1546**<br>**1547**<br>**1548**<br>**1549**<br>**1550**<br>**1551**<br>**1552**<br>**1553**<br>**1554**<br>**1555**<br>**1556**<br>**1557**<br>**1558**<br>**1559**<br>**1560**<br>**1561**<br>**1562**<br>**1563**<br>**1564**|E.3.9<br>INCORRECT INSTRUCTION<br>Listing9: The example of the incorrect instruction.|
+|---|---|
+||### Instruction<br>Please, put 1 wine glass, 1 water glass, and 1 plate on the<br>table<br>### Goal condition<br>"on_plate_kitchentable": 1,<br>"on_waterglass_kitchentable": 1,<br>"on_wineglass_kitchentable": 1,<br>"on_cutleryfork_kitchentable": 1|
+||Incorrect instructions occur when the instructions fail to specify all the required sub-goals. In such<br>cases, no task planning agent can complete the task due to insuffcient information. For example,<br>as shown in Listing 9, there are four sub-goals, but the instruction specifes only three, omitting the<br>step of placing a cutlery fork on the kitchen table. Additionally, the instruction is ambiguous, as<br>it does not clarify which type of table is the intended target receptacle. Despite this incorrectness,<br>ReAcTree successfully completes the three specifed sub-goals in Listing. 9, but achieving an SSR<br>of 75.00%.<br>E.3.10<br>AMBIGUOUS INSTRUCTION<br>Listing10: The example of the ambiguous instruction.|
+||[Case 1]<br>### Instruction<br>give me an apple, a pudding and serve a glass of wine<br>### Goal condition<br>"on_wine_coffeetable": 1,<br>"on_pudding_coffeetable": 1,<br>"on_apple_coffeetable": 1<br>[Case 2]<br>### Instruction<br>Always get a glass of water first before anything else,<br>before food on the table with a cutlery fork and knife<br>### Goal condition<br>"on_plate_kitchentable": 1,<br>"on_waterglass_kitchentable": 1,<br>"on_cutleryfork_kitchentable": 1|
+||The WAH-NL dataset also contains ambiguous instructions. In such cases, the instructions fail to<br>explicitly describe the goal condition, use unclear object names, or refer to objects with high-level<br>conceptual nouns. This ambiguity can confuse the LLM when reasoning about the goal state, leading<br>to the generation of incorrect plans.|
+
+
+**1565** 
+
+29 
+
+> **1566** F EXPERIMENTS DETAILS OF ALFRED DATASET **1567 1568** F.1 AI2THOR SIMLUATOR AND ALFRED DATASET **1569** 
+
+> **1570** AI2THOR simulator supports 9 interaction actions: “pick up,” “open,” “close,” “turn on,” “turn off,” **1571** “slice,” and “put down,” “drop,” and one navigation action “go to.” ALFRED dataset consists of 7 **1572** task types: _simple pick & place_ , _pick & place with movable receptacle_ , _cool & place_ , _heat & place_ , **1573** _pick two object & place_ , _clean & place_ , and _look object in light_ . Following previous work (Choi et al., **1574** 2024), the _pick two object and place_ is excluded. In LoTa-Bench, the AI2THOR simulation used the **1575** “find” for navigation action, but since it wasn’t a partially observable settings, once “find [object]” **1576** was selected as an action, the agent moved directly to the object without considering whether it was inside a receptacle or an unobserved object. However, in this experiment, we improved this **1577** limitation by applying a partially observable settings, changing the navigation action name from 
+
+> **1578** “find” to “go to” directing the agent to either the object or its receptacle. **1579 1580** F.2 MEMORY CONSTRUCTION **1581** 
+
+> **1582** To construct the episodic memory, we began by randomly selecting three task trajectories for each 
+
+> **1583** task type from the ALFRED training set. Then, we collected human-annotated text trajectories **1584** with working memory applied for both the ReAct and ReAcTree models. Next, while running the **1585** LLaMa 3 70B model on the training set, we embedded the human-annotated text trajectories as in- **1586** context examples. Due to the large size of the ALFRED dataset, we sampled 5% of the training set. **1587** Only the trajectories from successfully completed tasks were added to the episodic memory, with no **1588** more than five per task type. Finally, we combined these human-annotated text trajectories with the successfully completed task trajectories to form the episodic memory for both ReAct and ReAcTree. **1589 1590 1591** F.3 QUALATATIVE RESULTS **1592** Figures 6 and 7 show the qualitative results comparing a failed trajectory in ReAct and a successful 
+
+> **1593** trajectory in ReAcTree for the _heat & place_ task type using the LLaMA 3 70B model. The NL in- 
+
+> **1594** struction for the task is “put the cooked tomato slice on the kitchen island”, which requires slicing 
+
+> **1595** and moving the object. there are a challenge with the ALFRED dataset, where ambiguous NL in- 
+
+> **1596** structions complicate task resolution. For example, in this task, the instruction ambiguously states to **1597** place the item on the “kitchen island,” yet the agent placed it on the countertop since the simulator **1598** does not provide a receptacle explicitly labeled “kitchen island.” Such ambiguity can hinder accurate **1599** task interpretation and execution. 
+
+> **1600** ReAcTree successfully expands and executes the instruction using sequence control flow with eight 
+
+> **1601** subtask sqeuence, such as: “find and pick up the knife, find and slice and then pick up the tomato, 
+
+> **1602** find and open the microwave, find the microwave and put down the tomato, find and close and turn **1603** on the microwave, find and turn off and open microwave, find and pick up tomato in microwave, and **1604** find a countertop and put down the tomato on the countertop.” In contrast, ReAct failed by initially **1605** navigating to SinkBasin (1) and picking up the tomato before the knife, causing the task to fail as the **1606** knife should have been picked up and used to slice the tomato first. Meanwhile, ReAcTree correctly **1607** searched through CounterTop (1) and CounterTop (2) to locate the knife, leading to the successful completion of the task. Please refer to Appendix H for detailed text trajectories. **1608 1609 1610 1611 1612 1613 1614 1615 1616 1617** 
+
+**1618** 
+
+**1619** 
+
+30 
+
+> **1620** G EXAMPLE OF PLANNING RESULTS **1621 1622** G.1 WAH-NL EXAMPLE CASES **1623 1624 1625** Put the apple, pancake, cupcake, and juice on the kitchen table. **1626** init go to kitchen 1 go to kitchen go to kitchen go to kitchen “go to **16271628** 7%{ t t counters,1—s counter 2 5 Ua cesacetaltable 1.7iBE **1629** =) = = ss **1630** : i ee l **1631** open fridge 1 pick up cupcake go to kitchen ~~ put down cupcake” recall location ~ go to 
+
+> **1632** me i t i table 1. fh ie of pancake cabinet 
+
+> **1633** \ io! wy 6 **1634 1635 1636** (@ oad **1637** open kitchen go to kitchen open kitchen go to kitchen open kitchen go to cabinet 1 cabinet 2 cabinet 2 cabinet 3 cabinet 3 cabinet **1638 1639 1640** SA et) foe’ ov eV a ae **1641 1642** open kitchen go to kitchen open kitchen pick up pudding go to kitchen “put **1643** cabinet 4 cabinet 5 cabinet 5 e table 1. 2. **1644** a _— al —— 
+
+> **1645** ~ i | oo l Vi **1646 1647** ; — **1648** recall Location ~ go to kitchen open kitchen go to kitchen open kitchen pick of juice cabinet 6 cabinet 6 cabinet 7 cabinet 7 **1649 1650 1651** ‘ : 
+
+> **1652** f wl | _‘\ a i} , \ ‘ean "f\ alp \ a. FAM \ . **1653** go to kitchen ~~ put down apple fT recall location go to*kitchen pick up pancake ‘go to 
+
+> **1654** table 1. . a of pancake cabinet 7 . table 
+
+> **1655** _— oe al — | -_ a] _— -_ a] 7" ‘i **1656 1657** f f f | “fh w q "\ i 
+
+> **1658** \ \ **1659** put down pancake’ recall Locatton go to kitchen open kitchen go to fridge 1. »go.to **1660** 1. & of juice GSbinet 8 Cabinet 8 tie **1661** 
+
+> **1662** f =SAA= = =wm =AA FE E \yi 4 **1663 1664** open fridge 2 pick up apple go to kitchen “put down apple 2 recall location **1665** table 1. L a of juice **1666** | | _— J —— | Fr —— aj 
+
+> **16671668** i >MAT P} **A** A }¢ |]¢ |y **1669** , i **1670 1671** Figure 5: Failure case of ReAct on the WAH-NL dataset using LLaMA 3 70B. **1672 1673** 
+
+31 
+
+**==> picture [399 x 640] intentionally omitted <==**
+
+**----- Start of picture text -----**<br>
+1674<br>G.2 ALFRED EXAMPLE CASES<br>1675<br>1676<br>1677<br>1678 Instruction: Put the cooked tomato slice on the kitchen island<br>16791680 ¥ iterTo 1) J go to CounterTop =~) pick up Knife (1 done<br>1681<br>1682 Z SS 21 31 @<br>1683 / -—ts-—_~Vei:<br>1684 a<br>1685 wr wr ww<br>16861687 b [\] to SinkBasin_—ae = rygo ————‘omato ( |; Nas ————omato ( i, — we put} —s——n Knife i. — pickp Tomato<br>1688 —— Wa ot er —<br>1689<br>1690<br>1691<br>1692 do—- 7 _o- a<br>1693 , } L. go to Microvmve (1) open Microw (1) done go to Microvpyve<br>1694<br>1695 a we i RA,’ Fa, Fa<br>1696<br>1697<br>1698<br>1699<br>put down Tompto (9) done E go to ee = (1) close ee = (1) as on i<br>1700<br>1701 Asn Met 2h <€ ‘es<br>1702<br>1703<br>1704<br>1705 a ———— a | a ———"——an 7 a,<br>1706<br>done E go to ae = (1) as of f ; = open ae - (1) done [<br>1707<br>1708<br>8 | ey es<br>1709<br>1710<br>-E = a. a<br>1711<br>1712<br>1713 go to i = (1) pick up he 2 (9) done E \ erlo ' T<br>1714 — " —_ " —_ \ | l \<br>1715<br>Aen 2) 22 0 aaa~<br>1716 ve N<br>:<br>1717<br>1718 ———_=,7 ><br>1719<br>1720<br>1721<br>1722<br>1723<br>1724<br>1725<br>1726 Figure 6: Success case of ReAcTree on the ALFRED dataset using LLaMA 3 70B.<br>1727<br>**----- End of picture text -----**<br>
+
+
+32 
+
+**==> picture [389 x 389] intentionally omitted <==**
+
+**----- Start of picture text -----**<br>
+1728<br>1729 Instruction: Put the cooked tomato slice on the kitchen island<br>1730 recall location of ko SinkBasin k lp Tomato ( BLL<br>Knife \ \ \ l \ \ } l \ ato<br>1731<br>1732<br>1733 iVe Ve<br>1734 aSOSamy —— _<br>1735<br>1736<br>to SinkBasin omato (1) inkBasin ip Tomato (<br>1737 \ | | | |<br>1738<br>1739 -—6—-~Ve xy -—6—-~Ve ba -—¢@—-~ve = -—6®—Ve -~ ba<br>1740 / A / A / 4 / 4 ; /<br>_—“== SES = s= =  —s S<br>1741<br>1742<br>1743 % inkBasin inkBasin Tomato ip Tomato (<br>1744 \ | |<br>1745<br>1746 Ve Ve We Ve<br>/ 4 / A / A - A \ .<br>1747 == SS “— IE——— ——— —_<br>1748<br>1749<br>1750<br>| \<br>1751 E [\] 4 ridge (1) ¥ Tomato<br>1752 -—_e-——~Ve a! -—Vea—-——~ bs<br>1753 / A / A<br>1754 _— = eh hLUMULUU<br>1755<br>1756<br>1757 Figure 7: Failure case of ReAct on the ALFRED dataset using LLaMA 3 70B.<br>1758<br>1759<br>1760 H EXAMPLE OF TEXT TRAJECTORIES<br>**----- End of picture text -----**<br>
+
+
+**1761 1762** H.1 WAH-NL EXAMPLE CASES 
+
+**1763 1764** Listing 11: Success trajectory of ReAcTree on the WAH-NL dataset using LLaMA 3 70B. **1765** ### Agent Node 1 **1766** Your task is to: Put the apple, pancake, cupcake, and juice on the kitchen table. **1767** You are in the house, and there are 4 rooms: bathroom (1), bedroom (1), kitchen **1768** (1), living room (1). You are in the middle of a kitchen (1). Looking quickly around the room, you see bench (1, 2), bookshelf (1, 2), chair (1, 2), **1769** dishwasher (1), faucet (2), fridge (1, 2), garbage can (1), kitchen cabinet **1770** (1, 2, 3, 4, 5, 6, 7, 8), kitchen counter (1, 2), kitchen table (1), microwave **1771** oven (1), sink (2), stove (1), toaster (1). **1772** Think: To solve the task, I need to accomplish 4 subgoals independently. Move the **1773** apple on the kitchen table, move the pancake on the kitchen table, move the cupcake on the kitchen table, and move the juice on the kitchen table. **1774** Expand: **1775** - control flow: parallel **1776** - subgoals: move the apple on the kitchen table, move the pancake on the kitchen **1777** table, move the cupcake on the kitchen table, move the juice on the kitchen **1778** table **1779 1780** ### Agent Node 2 **1781** Your is to: Put the and on the kitchen 
+
+- Your primary goal is to: Put the apple, pancake, cupcake, and juice on the kitchen table. 
+
+33 
+
+|**1782**||
+|---|---|
+|**1783**|To achieve this, you should perform your sibling tasks in parallel. At this level,<br>your sibling tasks are: move the apple on the kitchen table, move the pancake|
+|**1784**|on the kitchen table, move the cupcake on the kitchen table, and move the|
+|**1785**|juice on the kitchen table.|
+|**1786**|Your task is to: move the apple on the kitchen table|
+|**1787**|You are in the house, and there are 4 rooms: bathroom (1), bedroom (1), kitchen|
+|**1788**|(1), living room (1). You are in the middle of a kitchen (1). Looking quickly<br>around the room, you see bench (1, 2), bookshelf (1, 2), chair (1, 2),|
+|**1789**|dishwasher (1), faucet (2), fridge (1, 2), garbage can (1), kitchen cabinet|
+|**1790**|(1, 2, 3, 4, 5, 6, 7, 8), kitchen counter (1, 2), kitchen table (1), microwave|
+|**1791**|oven (1), sink (2), stove (1), toaster (1).|
+|**1792**|Think: To solve the task, I need to accomplish 2 subgoals sequentially. Find and|
+|**1793**|pick up the apple, and find the kitchen table and put down the apple.<br>Expand|
+|**1794**|- control flow: sequence|
+|**1795**|- subgoals: find and pick up the apple, find the kitchen table and put down the|
+|**1796**|apple|
+|**1797**||
+|**1798**|### Agent Node 3|
+|**1799**|Your primary goal is to: move the apple on the kitchen table|
+|**1800**|To achieve this, you should perform your sibling tasks in sequence. At this level,|
+|**1801**|your sibling tasks are: find and pick up the apple, and find the kitchen|
+|**1802**|table and put down the apple.|
+|**1803**|Your task is to: find and pick up the apple<br>You are in the house, and there are 4 rooms: bathroom (1), bedroom (1), kitchen|
+|**1804**|(1), living room (1). You are in the middle of a kitchen (1). Looking quickly|
+|**1805**|around the room, you see bench (1, 2), bookshelf (1, 2), chair (1, 2),|
+|**1806**|dishwasher (1), faucet (2), fridge (1, 2), garbage can (1), kitchen cabinet|
+|**1807**|(1, 2, 3, 4, 5, 6, 7, 8), kitchen counter (1, 2), kitchen table (1), microwave|
+|**1808**|oven (1), sink (2), stove (1), toaster (1).<br>Think: To solve the task, I need to recall the location of the apple.|
+|**1809**|Act: recall location of apple|
+|**1810**|You have not seen apple before.|
+|**1811**|Think: Now, I need to find and pick up the apple in one of the rooms. The apple is|
+|**1812**|more likely to appear in kitchen 1, living room 1, or bedroom 1. I can check|
+|**1813**|each room one by one until I find and pick up the apple.<br>Expand:|
+|**1814**|- control flow: fallback|
+|**1815**|- subgoals: find and pick up the apple in kitchen 1, find and pick up the apple|
+|**1816**|in living room 1, find and pick up the apple in bedroom 1|
+|**1817**||
+|**1818**|### Agent Node 4|
+|**1819**|Your primary goal is to: find and pick up the apple|
+|**1820**|To achieve this, you should perform your sibling tasks using a fallback strategy.|
+|**1821**|At this level, your sibling tasks are: find and pick up the apple in kitchen|
+|**1822**|1, find and pick up the apple in living room 1, and find and pick up the apple|
+||in bedroom 1.|
+|**1823**|Your task is to: find and pick up the apple in kitchen 1|
+|**1824**|You are in the house, and there are 4 rooms: bathroom (1), bedroom (1), kitchen|
+|**1825**|(1), living room (1). You are in the middle of a kitchen (1). Looking quickly|
+|**1826**|around the room, you see bench (1, 2), bookshelf (1, 2), chair (1, 2),|
+|**1827**|dishwasher (1), faucet (2), fridge (1, 2), garbage can (1), kitchen cabinet|
+|**1828**|(1, 2, 3, 4, 5, 6, 7, 8), kitchen counter (1, 2), kitchen table (1), microwave<br>oven (1), sink (2), stove (1), toaster (1).|
+|**1829**|Think: I am in kitchen 1. Now, I need to find the apple. The apple is more likely|
+|**1830**|to appear on kitchen counter (1, 2), kitchen table (1), or in fridge (1, 2),|
+|**1831**|kitchen cabinet (1, 2, 3, 4, 5, 6, 7, 8). I can check each place one by one,|
+|**1832**|starting from kitchen counter 1, until I find the apple.|
+|**1833**|Act: go to kitchen counter 1<br>You arrive at the kitchen counter (1). You see bowl (1, 2, 3, 4, 5), chair (2),|
+|**1834**|chicken (1), cutlets (1), dishwashing liquid (1), faucet (2), kitchen cabinet|
+|**1835**|(1, 2, 3, 4, 5, 6, 7), kitchen counter (1), plate (1, 2, 3, 4), sink (2),|
+||washing sponge (1)|
+
+
+34 
+
+|**1836**||
+|---|---|
+|**1837**|Act: go to kitchen counter 2<br>You arrive at the kitchen counter (2). You see chair (1, 2), kitchen cabinet (5,|
+|**1838**|6, 7, 8), kitchen counter (1, 2), light switch (2), plate (1, 2, 3, 4)|
+|**1839**|Act: go to kitchen table 1|
+|**1840**|You arrive at the kitchen table (1). You see bench (2), book (1), bowl (6),|
+|**1841**|condiment shaker (1, 2), kitchen table (1)|
+|**1842**|Act: go to fridge 1<br>You arrive at the fridge (1). The fridge (1) is closed. You see bench (1), fridge|
+|**1843**|(1)|
+|**1844**|Act: open fridge 1|
+|**1845**|You open fridge. You see bench (1), cupcake (1), fridge (1), pudding (3)|
+|**1846**|Act: go to fridge 2|
+|**1847**|You arrive at the fridge (2). The fridge (2) is closed. You see bench (1), cupcake<br>(1), fridge (1, 2), pudding (3)|
+|**1848**|Act: open fridge 2|
+|**1849**|You open fridge. You see apple (2), bench (1), cupcake (1), fridge (1, 2), pudding|
+|**1850**|(3)|
+|**1851**|Think: I find apple 2. Now, I need to pick it up.|
+|**1852**|Act: pick up apple 2<br>You pick up apple. You hold apple (2).|
+|**1853**|Think: Now I accomplish the goal.|
+|**1854**|Act: done|
+|**1855**||
+|**1856**||
+|**1857**|### Agent Node 5<br>Your primary goal is to: move the apple on the kitchen table|
+|**1858**|To achieve this, you should perform your sibling tasks in sequence. At this level,|
+|**1859**|your sibling tasks are: find and pick up the apple, and find the kitchen|
+|**1860**|table and put down the apple.|
+|**1861**|Your task is to: find the kitchen table and put down the apple|
+|**1862**|You are in the house, and there are 4 rooms: bathroom (1), bedroom (1), kitchen<br>(1), living room (1). You are in the middle of a kitchen (1). Looking quickly|
+|**1863**|around the room, you see bench (1, 2), bookshelf (1, 2), chair (1, 2),|
+|**1864**|dishwasher (1), faucet (2), fridge (1, 2), garbage can (1), kitchen cabinet|
+|**1865**|(1, 2, 3, 4, 5, 6, 7, 8), kitchen counter (1, 2), kitchen table (1), microwave|
+|**1866**|oven (1), sink (2), stove (1), toaster (1). You hold apple (2).|
+|**1867**|Think: I hold apple 2. Now, I need to find the kitchen table. I can see kitchen<br>table 1.|
+|**1868**|Act: go to kitchen table 1|
+|**1869**|You arrive at the kitchen table (1). You see apple (2), bench (2), book (1), bowl|
+|**1870**|(6), condiment shaker (1, 2), kitchen table (1) You hold apple (2).|
+|**1871**|Think: Now, I need to put down apple 2.|
+|**1872**|Act: put down apple 2<br>You put down apple on kitchen table|
+|**1873**|Think: Now I accomplish the goal.|
+|**1874**|Act: done|
+|**1875**||
+|**1876**||
+|**1877**|### Agent Node 6<br>Your primary goal is to: Put the apple, pancake, cupcake, and juice on the kitchen|
+|**1878**|table.|
+|**1879**|To achieve this, you should perform your sibling tasks in parallel. At this level,|
+|**1880**|your sibling tasks are: move the apple on the kitchen table, move the pancake|
+|**1881**|on the kitchen table, move the cupcake on the kitchen table, and move the|
+|**1882**|juice on the kitchen table.<br>Your task is to: move the pancake on the kitchen table|
+|**1883**|You are in the house, and there are 4 rooms: bathroom (1), bedroom (1), kitchen|
+|**1884**|(1), living room (1). You are in the middle of a kitchen (1). Looking quickly|
+|**1885**|around the room, you see bench (1, 2), bookshelf (1, 2), chair (1, 2),|
+|**1886**|dishwasher (1), faucet (2), fridge (1, 2), garbage can (1), kitchen cabinet|
+|**1887**|(1, 2, 3, 4, 5, 6, 7, 8), kitchen counter (1, 2), kitchen table (1), microwave<br>oven (1), sink (2), stove (1), toaster (1).|
+|**1888**|Think: To solve the task, I need to accomplish 2 subgoals sequentially. Find and|
+|**1889**|pick up the pancake, and find the kitchen table and put down the pancake.|
+||Expand:|
+
+
+35 
+
+|**1890**||
+|---|---|
+|**1891**|- control flow: sequence<br>- subgoals: find and pick up the pancake, find the kitchen table and put down the|
+|**1892**|pancake|
+|**1893**||
+|**1894**||
+|**1895**|### Agent Node 7|
+|**1896**|Your primary goal is to: move the pancake on the kitchen table<br>To achieve this, you should perform your sibling tasks in sequence. At this level,|
+|**1897**|your sibling tasks are: find and pick up the pancake, and find the kitchen|
+|**1898**|table and put down the pancake.|
+|**1899**|Your task is to: find and pick up the pancake|
+|**1900**|You are in the house, and there are 4 rooms: bathroom (1), bedroom (1), kitchen|
+|**1901**|(1), living room (1). You are in the middle of a kitchen (1). Looking quickly<br>around the room, you see bench (1, 2), bookshelf (1, 2), chair (1, 2),|
+|**1902**|dishwasher (1), faucet (2), fridge (1, 2), garbage can (1), kitchen cabinet|
+|**1903**|(1, 2, 3, 4, 5, 6, 7, 8), kitchen counter (1, 2), kitchen table (1), microwave|
+|**1904**|oven (1), sink (2), stove (1), toaster (1).|
+|**1905**|Think: To solve the task, I need to recall the location of the pancake|
+|**1906**|Act: recall location of pancake<br>You have not seen pancake before.|
+|**1907**|Think: Now, I need to find and pick up the pancake in one of the rooms. The|
+|**1908**|pancake is more likely to appear in kitchen 1, living room 1, or bedroom 1. I|
+|**1909**|can check each room one by one until I find and pick up the pancake.|
+|**1910**|Expand|
+||- control flow: fallback|
+|**1911**|- subgoals: find and pick up the pancake in kitchen 1, find and pick up the|
+|**1912**|pancake in living room 1, find and pick up the pancake in bedroom 1|
+|**1913**||
+|**1914**||
+|**1915**|### Agent Node 8|
+|**1916**|Your primary goal is to: find and pick up the pancake<br>To achieve this, you should perform your sibling tasks using a fallback strategy.|
+|**1917**|At this level, your sibling tasks are: find and pick up the pancake in kitchen|
+|**1918**|1, find and pick up the pancake in living room 1, and find and pick up the|
+|**1919**|pancake in bedroom 1.|
+|**1920**|Your task is to: find and pick up the pancake in kitchen 1|
+|**1921**|You are in the house, and there are 4 rooms: bathroom (1), bedroom (1), kitchen<br>(1), living room (1). You are in the middle of a kitchen (1). Looking quickly|
+|**1922**|around the room, you see bench (1, 2), bookshelf (1, 2), chair (1, 2),|
+|**1923**|dishwasher (1), faucet (2), fridge (1, 2), garbage can (1), kitchen cabinet|
+|**1924**|(1, 2, 3, 4, 5, 6, 7, 8), kitchen counter (1, 2), kitchen table (1), microwave|
+|**1925**|oven (1), sink (2), stove (1), toaster (1).|
+|**1926**|Think: I am in kitchen 1. Now, I need to find the pancake. The pancake is more<br>likely to appear on kitchen counter (1, 2), kitchen table (1), or in fridge|
+|**1927**|(1, 2), kitchen cabinet (1, 2, 3, 4, 5, 6, 7, 8). I can check each place one|
+|**1928**|by one, starting from kitchen counter 1, until I find the pancake.|
+|**1929**|Act: go to kitchen counter 1|
+|**1930**|You arrive at the kitchen counter (1). You see bowl (1, 2, 3, 4, 5), chair (2),|
+|**1931**|chicken (1), cutlets (1), dishwashing liquid (1), faucet (2), kitchen cabinet<br>(1, 2, 3, 4, 5, 6, 7), kitchen counter (1), plate (1, 2, 3, 4), sink (2),|
+|**1932**|washing sponge (1)|
+|**1933**|Act: go to kitchen counter 2|
+|**1934**|You arrive at the kitchen counter (2). You see chair (1, 2), kitchen cabinet (5,|
+|**1935**|6, 7, 8), kitchen counter (1, 2), light switch (2), plate (1, 2, 3, 4)|
+|**1936**|Act: go to kitchen table 1<br>You arrive at the kitchen table (1). You see apple (2), bench (2), book (1), bowl|
+|**1937**|(6), condiment shaker (1, 2), kitchen table (1)|
+|**1938**|Act: go to fridge 1|
+|**1939**|You arrive at the fridge (1). The fridge (1) is open. You see bench (1), cupcake|
+|**1940**|(1), fridge (1), pudding (3)|
+|**1941**|Act: go to fridge 2<br>You arrive at the fridge (2). The fridge (2) is open. You see bench (1), cupcake|
+|**1942**|(1), fridge (1, 2), pudding (3)|
+|**1943**|Act: go to kitchen cabinet 1|
+
+
+36 
+
+|**1944**||
+|---|---|
+|**1945**|You arrive at the kitchen cabinet (1). The kitchen cabinet (1) is closed. You see<br>chicken (1), cooking pot (1), cutlery knife (1, 2), cutlets (1), dishwashing|
+|**1946**|liquid (1), faucet (2), frying pan (1), garbage can (1), kitchen cabinet (1,|
+|**1947**|4), kitchen counter (1), sink (2), stove (1)|
+|**1948**|Act: go to kitchen cabinet 2|
+|**1949**|You arrive at the kitchen cabinet (2). The kitchen cabinet (2) is closed. You see|
+|**1950**|bowl (1, 2, 3, 4, 5), chair (2), chicken (1), cutlery knife (1, 2), cutlets<br>(1), dishwashing liquid (1), faucet (2), kitchen cabinet (1, 2, 3, 4, 5, 6),|
+|**1951**|kitchen counter (1), plate (1, 2, 3, 4), sink (2), washing sponge (1)|
+|**1952**|Act: go to kitchen cabinet 3|
+|**1953**|You arrive at the kitchen cabinet (3). The kitchen cabinet (3) is closed. You see|
+|**1954**|bowl (1, 2, 3, 4, 5), chair (1, 2), dishwashing liquid (1), faucet (2),|
+|**1955**|kitchen cabinet (2, 3, 4, 5, 6, 7), kitchen counter (1, 2), plate (1, 2, 3, 4)<br>, sink (2), washing sponge (1)|
+|**1956**|Act: go to kitchen cabinet 4|
+|**1957**|You arrive at the kitchen cabinet (4). The kitchen cabinet (4) is closed. You see|
+|**1958**|bowl (1, 2, 3, 4, 5), chicken (1), cooking pot (1), cutlery knife (1, 2),|
+|**1959**|cutlets (1), dishwashing liquid (1), faucet (2), garbage can (1), kitchen|
+|**1960**|cabinet (1, 2, 4), kitchen counter (1), sink (2), washing sponge (1)<br>Act: go to kitchen cabinet 5|
+|**1961**|You arrive at the kitchen cabinet (5). The kitchen cabinet (5) is closed. You see|
+|**1962**|bowl (1, 2, 3, 4, 5), chair (1, 2), cutlets (1), dishwashing liquid (1),|
+|**1963**|faucet (2), kitchen cabinet (2, 3, 4, 5, 6, 7), kitchen counter (1, 2), plate|
+|**1964**|(1, 2, 3, 4), sink (2), washing sponge (1)|
+|**1965**|Act: go to kitchen cabinet 6<br>You arrive at the kitchen cabinet (6). The kitchen cabinet (6) is closed. You see|
+|**1966**|bowl (1, 2, 3, 4, 5), chair (1, 2), dishwashing liquid (1), faucet (2),|
+|**1967**|kitchen cabinet (2, 3, 4, 5, 6, 7, 8), kitchen counter (1, 2), plate (1, 2, 3,|
+|**1968**|4), sink (2), washing sponge (1)|
+|**1969**|Act: go to kitchen cabinet 7|
+|**1970**|You arrive at the kitchen cabinet (7). The kitchen cabinet (7) is closed. You see<br>bowl (1, 2, 3, 4, 5), chair (1, 2), kitchen cabinet (2, 5, 6, 7, 8), kitchen|
+|**1971**|counter (1), light switch (2), plate (1, 2, 3, 4), sink (2)|
+|**1972**|Act: go to kitchen cabinet 8|
+|**1973**|You arrive at the kitchen cabinet (8). The kitchen cabinet (8) is closed. You see|
+|**1974**|bench (2), chair (1, 2), kitchen cabinet (5, 6, 7, 8), light switch (2)|
+|**1975**|Think: I cannot find the pancake in kitchen 1.<br>Act: failure|
+|**1976**||
+|**1977**||
+|**1978**|### Agent Node 9|
+|**1979**|Your primary goal is to: find and pick up the pancake|
+|**1980**|To achieve this, you should perform your sibling tasks using a fallback strategy.<br>At this level, your sibling tasks are: find and pick up the pancake in kitchen|
+|**1981**|1, find and pick up the pancake in living room 1, and find and pick up the|
+|**1982**|pancake in bedroom 1.|
+|**1983**|Your task is to: find and pick up the pancake in living room 1|
+|**1984**|You are in the house, and there are 4 rooms: bathroom (1), bedroom (1), kitchen|
+|**1985**|(1), living room (1). You are in the middle of a kitchen (1). Looking quickly<br>around the room, you see bench (1, 2), bookshelf (1, 2), chair (1, 2),|
+|**1986**|dishwasher (1), faucet (2), fridge (1, 2), garbage can (1), kitchen cabinet|
+|**1987**|(1, 2, 3, 4, 5, 6, 7, 8), kitchen counter (1, 2), kitchen table (1), microwave|
+|**1988**|oven (1), sink (2), stove (1), toaster (1).|
+|**1989**|Think: I am in kitchen 1. Now, I need to go to living room 1.|
+|**1990**|Act: go to living room 1<br>You move to the living room (1). Looking quickly around the room, you see|
+|**1991**|bookshelf (3), chair (3), closet (1), coffee table (1), computer (1), desk (1)|
+|**1992**|, garbage can (2), nightstand (1), sofa (1), tv (1).|
+|**1993**|Think: Now, I need to find the pancake. The pancake is more likely to appear on|
+|**1994**|coffee table (1), desk (1), or in closet (1). I can check each place one by|
+|**1995**|one, starting from coffee table 1, until I find the pancake.<br>Act: go to coffee table 1|
+|**1996**|You arrive at the coffee table (1). You see alcohol (2), bananas (1), book (3, 6),|
+|**1997**|bowl (7), cell phone (1, 2), coffee table (1), juice (1), lime (1), mug (1),|
+||plum (1, 2), sofa (1)|
+
+
+37 
+
+|**1998**||
+|---|---|
+|**1999**|Act: go to desk 1<br>You arrive at the desk (1). You see book (7), chair (3), computer (1), desk (1),|
+|**2000**|nightstand (1), water glass (2)|
+|**2001**|Act: go to closet 1|
+|**2002**|You arrive at the closet (1). The closet (1) is closed. You see closet (1), light|
+|**2003**|switch (3)|
+|**2004**|Act: open closet 1<br>You open closet. You see closet (1), light switch (3)|
+|**2005**|Think: I cannot find the pancake in living room 1.|
+|**2006**|Act: failure|
+|**2007**||
+|**2008**||
+|**2009**|### Agent Node 10<br>Your primary goal is to: find and pick up the pancake|
+|**2010**|To achieve this, you should perform your sibling tasks using a fallback strategy.|
+|**2011**|At this level, your sibling tasks are: find and pick up the pancake in kitchen|
+|**2012**|1, find and pick up the pancake in living room 1, and find and pick up the|
+|**2013**|pancake in bedroom 1.|
+|**2014**|Your task is to: find and pick up the pancake in bedroom 1<br>You are in the house, and there are 4 rooms: bathroom (1), bedroom (1), kitchen|
+|**2015**|(1), living room (1). You are in the middle of a living room (1). Looking|
+|**2016**|quickly around the room, you see bookshelf (3), chair (3), closet (1), coffee|
+|**2017**|table (1), computer (1), desk (1), garbage can (2), nightstand (1), sofa (1),|
+|**2018**|tv (1).|
+|**2019**|Think: I am in living room 1. Now, I need to go to bedroom 1.<br>Act: go to bedroom 1|
+|**2020**|You move to the bedroom (1). Looking quickly around the room, you see bed (1),|
+|**2021**|bookshelf (4), cabinet (1), chair (4), closet (2), coffee table (2), computer|
+|**2022**|(2), desk (2, 3), garbage can (3).|
+|**2023**|Think: Now, I need to find the pancake. The pancake is more likely to appear on|
+|**2024**|bed (1), coffee table (2), desk (2, 3), or in cabinet (1). I can check each<br>place one by one, starting from bed 1, until I find the pancake.|
+|**2025**|Act: go to bed 1|
+|**2026**|You arrive at the bed (1). You see bed (1), candy bar (1), coffee table (2),|
+|**2027**|pancake (2)|
+|**2028**|Think: I find pancake 2. Now, I need to pick it up.|
+|**2029**|Act: pick up pancake 2<br>You pick up pancake. You hold pancake (2).|
+|**2030**|Think: Now I accomplish the goal.|
+|**2031**|Act: done|
+|**2032**||
+|**2033**||
+|**2034**|### Agent Node 11<br>Your primary goal is to: move the pancake on the kitchen table|
+|**2035**|To achieve this, you should perform your sibling tasks in sequence. At this level,|
+|**2036**|your sibling tasks are: find and pick up the pancake, and find the kitchen|
+|**2037**|table and put down the pancake.|
+|**2038**|Your task is to: find the kitchen table and put down the pancake|
+|**2039**|You are in the house, and there are 4 rooms: bathroom (1), bedroom (1), kitchen<br>(1), living room (1). You are in the middle of a bedroom (1). Looking quickly|
+|**2040**|around the room, you see bed (1), bookshelf (4), cabinet (1), chair (4),|
+|**2041**|closet (2), coffee table (2), computer (2), desk (2, 3), garbage can (3). You|
+|**2042**|hold pancake (2).|
+|**2043**|Think: I hold pancake 2. Now, I need to find the kitchen table. The kitchen table|
+|**2044**|is more likely to appear in kitchen 1.<br>Act: go to kitchen 1|
+|**2045**|You move to the kitchen (1). Looking quickly around the room, you see bench (1, 2)|
+|**2046**|, bookshelf (1, 2), chair (1, 2), dishwasher (1), faucet (2), fridge (1, 2),|
+|**2047**|garbage can (1), kitchen cabinet (1, 2, 3, 4, 5, 6, 7, 8), kitchen counter (1,|
+|**2048**|2), kitchen table (1), microwave oven (1), sink (2), stove (1), toaster (1).|
+|**2049**|You hold pancake (2).<br>Think: I can see kitchen table 1.|
+|**2050**|Act: go to kitchen table 1|
+|**2051**||
+
+
+38 
+
+|**2052**||
+|---|---|
+|**2053**|You arrive at the kitchen table (1). You see apple (2), bench (2), book (1), bowl<br>(6), condiment shaker (1, 2), kitchen table (1), pancake (2) You hold pancake|
+|**2054**|(2).|
+|**2055**|Think: Now, I need to put down pancake 2.|
+|**2056**|Act: put down pancake 2|
+|**2057**|You put down pancake on kitchen table|
+|**2058**|Think: Now I accomplish the goal.<br>Act: done|
+|**2059**||
+|**2060**||
+|**2061**|### Agent Node 11|
+|**2062**|Your primary goal is to: Put the apple, pancake, cupcake, and juice on the kitchen|
+||table.|
+|**2063**|To achieve this, you should perform your sibling tasks in parallel. At this level,|
+|**2064**|your sibling tasks are: move the apple on the kitchen table, move the pancake|
+|**2065**|on the kitchen table, move the cupcake on the kitchen table, and move the|
+|**2066**|juice on the kitchen table.|
+|**2067**|Your task is to: move the cupcake on the kitchen table|
+|**2068**|You are in the house, and there are 4 rooms: bathroom (1), bedroom (1), kitchen<br>(1), living room (1). You are in the middle of a kitchen (1). Looking quickly|
+|**2069**|around the room, you see bench (1, 2), bookshelf (1, 2), chair (1, 2),|
+|**2070**|dishwasher (1), faucet (2), fridge (1, 2), garbage can (1), kitchen cabinet|
+|**2071**|(1, 2, 3, 4, 5, 6, 7, 8), kitchen counter (1, 2), kitchen table (1), microwave|
+|**2072**|oven (1), sink (2), stove (1), toaster (1).|
+|**2073**|Think: To solve the task, I need to accomplish 2 subgoals sequentially. Find and<br>pick up the cupcake, and find the kitchen table and put down the cupcake.|
+|**2074**|Expand:|
+|**2075**|- control flow: sequence|
+|**2076**|- subgoals: find and pick up the cupcake, find the kitchen table and put down the|
+|**2077**|cupcake|
+|**2078**||
+|**2079**|### Agent Node 12|
+|**2080**|Your primary goal is to: move the cupcake on the kitchen table|
+|**2081**|To achieve this, you should perform your sibling tasks in sequence. At this level,|
+|**2082**|your sibling tasks are: find and pick up the cupcake, and find the kitchen|
+|**2083**|table and put down the cupcake.<br>Your task is to: find and pick up the cupcake|
+|**2084**|You are in the house, and there are 4 rooms: bathroom (1), bedroom (1), kitchen|
+|**2085**|(1), living room (1). You are in the middle of a kitchen (1). Looking quickly|
+|**2086**|around the room, you see bench (1, 2), bookshelf (1, 2), chair (1, 2),|
+|**2087**|dishwasher (1), faucet (2), fridge (1, 2), garbage can (1), kitchen cabinet|
+|**2088**|(1, 2, 3, 4, 5, 6, 7, 8), kitchen counter (1, 2), kitchen table (1), microwave<br>oven (1), sink (2), stove (1), toaster (1).|
+|**2089**|Think: To solve the task, I need to recall the location of the cupcake|
+|**2090**|Act: recall location of cupcake|
+|**2091**|You saw cupcake 1 near fridge 2 in kitchen 1.|
+|**2092**|Think: Now, I need to go to fridge 2.|
+|**2093**|Act: go to fridge 2<br>You arrive at the fridge (2). The fridge (2) is open. You see bench (1), cupcake|
+|**2094**|(1), fridge (1, 2), pudding (3)|
+|**2095**|Think: I find cupcake 1. Now, I need to pick it up.|
+|**2096**|Act: pick up cupcake 1|
+|**2097**|You pick up cupcake. You hold cupcake (1).|
+|**2098**|Think: Now I accomplish the goal.<br>Act: done|
+|**2099**||
+|**2100**||
+|**2101**|### Agent Node 13|
+|**2102**|Your primary goal is to: move the cupcake on the kitchen table|
+|**2103**|To achieve this, you should perform your sibling tasks in sequence. At this level,<br>your sibling tasks are: find and pick up the cupcake, and find the kitchen|
+|**2104**|table and put down the cupcake.|
+|**2105**|Your task is to: find the kitchen table and put down the cupcake|
+
+
+39 
+
+|**2106**||
+|---|---|
+|**2107**|You are in the house, and there are 4 rooms: bathroom (1), bedroom (1), kitchen<br>(1), living room (1). You are in the middle of a kitchen (1). Looking quickly|
+|**2108**|around the room, you see bench (1, 2), bookshelf (1, 2), chair (1, 2),|
+|**2109**|dishwasher (1), faucet (2), fridge (1, 2), garbage can (1), kitchen cabinet|
+|**2110**|(1, 2, 3, 4, 5, 6, 7, 8), kitchen counter (1, 2), kitchen table (1), microwave|
+|**2111**|oven (1), sink (2), stove (1), toaster (1). You hold cupcake (1).|
+|**2112**|Think: I hold cupcake 1. Now, I need to find the kitchen table. I can see kitchen<br>table 1.|
+|**2113**|Act: go to kitchen table 1|
+|**2114**|You arrive at the kitchen table (1). You see apple (2), bench (2), book (1), bowl|
+|**2115**|(6), condiment shaker (1, 2), cupcake (1), kitchen table (1), pancake (2) You|
+|**2116**|hold cupcake (1).|
+|**2117**|Think: Now, I need to put down cupcake 1.<br>Act: put down cupcake 1|
+|**2118**|You put down cupcake on kitchen table|
+|**2119**|Think: Now I accomplish the goal.|
+|**2120**|Act: done|
+|**2121**||
+|**2122**|### Agent Node 14|
+|**2123**|Your primary goal is to: Put the apple, pancake, cupcake, and juice on the kitchen|
+|**2124**|table.|
+|**2125**|To achieve this, you should perform your sibling tasks in parallel. At this level,|
+|**2126**|your sibling tasks are: move the apple on the kitchen table, move the pancake|
+|**2127**|on the kitchen table, move the cupcake on the kitchen table, and move the<br>juice on the kitchen table.|
+|**2128**|Your task is to: move the juice on the kitchen table|
+|**2129**|You are in the house, and there are 4 rooms: bathroom (1), bedroom (1), kitchen|
+|**2130**|(1), living room (1). You are in the middle of a kitchen (1). Looking quickly|
+|**2131**|around the room, you see bench (1, 2), bookshelf (1, 2), chair (1, 2),|
+|**2132**|dishwasher (1), faucet (2), fridge (1, 2), garbage can (1), kitchen cabinet<br>(1, 2, 3, 4, 5, 6, 7, 8), kitchen counter (1, 2), kitchen table (1), microwave|
+|**2133**|oven (1), sink (2), stove (1), toaster (1).|
+|**2134**|Think: To solve the task, I need to accomplish 2 subgoals sequentially. Find and|
+|**2135**|pick up the juice, and find the kitchen table and put down the juice.|
+|**2136**|Expand:|
+|**2137**|- control flow sequence<br>- subgoals: find and pick up the juice, find the kitchen table and put down the|
+|**2138**|juice|
+|**2139**||
+|**2140**||
+|**2141**|### Agent Node 15|
+|**2142**|Your primary goal is to: move the juice on the kitchen table<br>To achieve this, you should perform your sibling tasks in sequence. At this level,|
+|**2143**|your sibling tasks are: find and pick up the juice, and find the kitchen|
+|**2144**|table and put down the juice.|
+|**2145**|Your task is to: find and pick up the juice|
+|**2146**|You are in the house, and there are 4 rooms: bathroom (1), bedroom (1), kitchen|
+|**2147**|(1), living room (1). You are in the middle of a kitchen (1). Looking quickly<br>around the room, you see bench (1, 2), bookshelf (1, 2), chair (1, 2),|
+|**2148**|dishwasher (1), faucet (2), fridge (1, 2), garbage can (1), kitchen cabinet|
+|**2149**|(1, 2, 3, 4, 5, 6, 7, 8), kitchen counter (1, 2), kitchen table (1), microwave|
+|**2150**|oven (1), sink (2), stove (1), toaster (1).|
+|**2151**|Think: To solve the task, I need to recall the location of the juice.|
+|**2152**|Act: recall location of juice<br>You saw juice 1 near coffee table 1 in living room 1.|
+|**2153**|Think: I can find juice 1 near coffee table 1.|
+|**2154**|Act: go to living room 1|
+|**2155**|You move to the living room (1). Looking quickly around the room, you see|
+|**2156**|bookshelf (3), chair (3), closet (1), coffee table (1), computer (1), desk (1)|
+|**2157**|, garbage can (2), nightstand (1), sofa (1), tv (1).<br>Act: go to coffee table 1|
+|**2158**|You arrive at the coffee table (1). You see alcohol (2), bananas (1), book (3, 6),|
+|**2159**|bowl (7), cell phone (1, 2), coffee table (1), juice (1), lime (1), mug (1),|
+||plum (1, 2), sofa (1)|
+
+
+40 
+
+|**2160**<br>**2161**<br>**2162**<br>**2163**<br>**2164**<br>**2165**<br>**2166**<br>**2167**<br>**2168**<br>**2169**<br>**2170**<br>**2171**<br>**2172**<br>**2173**<br>**2174**<br>**2175**<br>**2176**<br>**2177**<br>**2178**<br>**2179**<br>**2180**<br>**2181**<br>**2182**<br>**2183**<br>**2184**<br>**2185**<br>**2186**<br>**2187**<br>**2188**<br>**2189**<br>**2190**<br>**2191**<br>**2192**<br>**2193**<br>**2194**<br>**2195**<br>**2196**<br>**2197**<br>**2198**<br>**2199**<br>**2200**<br>**2201**<br>**2202**<br>**2203**<br>**2204**<br>**2205**<br>**2206**<br>**2207**<br>**2208**<br>**2209**<br>**2210**<br>**2211**<br>**2212**<br>**2213**||
+|---|---|
+||Think: I find juice 1. Now I need to pick it up.<br>Act: pick up juice 1<br>You pick up juice. You hold juice (1).<br>Think: Now I accomplish the goal.<br>Act: done<br>### Agent 16<br>Your primary goal is to: move the juice on the kitchen table<br>To achieve this, you should perform your sibling tasks in sequence. At this level,<br>your sibling tasks are: find and pick up the juice, and find the kitchen<br>table and put down the juice.<br>Your task is to: find the kitchen table and put down the juice<br>You are in the house, and there are 4 rooms: bathroom (1), bedroom (1), kitchen<br>(1), living room (1). You are in the middle of a living room (1). Looking<br>quickly around the room, you see bookshelf (3), chair (3), closet (1), coffee<br>table (1), computer (1), desk (1), garbage can (2), nightstand (1), sofa (1),<br>tv (1). You hold juice (1).<br>Think: I hold juice 1. Now, I need to find the kitchen table. The kitchen table is<br>more likely to appear in kitchen 1.<br>Act: go to kitchen 1<br>You move to the kitchen (1). Looking quickly around the room, you see bench (1, 2)<br>, bookshelf (1, 2), chair (1, 2), dishwasher (1), faucet (2), fridge (1, 2),<br>garbage can (1), kitchen cabinet (1, 2, 3, 4, 5, 6, 7, 8), kitchen counter (1,<br>2), kitchen table (1), microwave oven (1), sink (2), stove (1), toaster (1).<br>You hold juice (1).<br>Think: I can see kitchen table 1.<br>Act: go to kitchen table 1<br>You arrive at the kitchen table (1). You see apple (2), bench (2), book (1), bowl<br>(6), condiment shaker (1, 2), cupcake (1), juice (1), kitchen table (1),<br>pancake (2) You hold juice (1).<br>Think: Now, I need to put down juice 1.<br>Act: put down juice 1<br>You put down juice on kitchen table<br>Think: Now I accomplish the goal.<br>Act: done|
+||Listing12: Failure trajectoryof ReAct on the WAH-NL dataset usingLLaMA 3 70B.|
+||Your task is to: Put the apple, pancake, cupcake, and juice on the kitchen table.<br>You are in the house, and there are 4 rooms: bathroom (1), bedroom (1), kitchen<br>(1), living room (1). You are in the middle of a kitchen (1). Looking quickly<br>around the room, you see bench (1, 2), bookshelf (1, 2), chair (1, 2),<br>dishwasher (1), faucet (2), fridge (1, 2), garbage can (1), kitchen cabinet<br>(1, 2, 3, 4, 5, 6, 7, 8), kitchen counter (1, 2), kitchen table (1), microwave<br>oven (1), sink (2), stove (1), toaster (1).<br>Think: To solve the task, I need to find and pick up the apple, then put it on the<br>kitchen table. And I need to find and pick up the pancake, then put it on the<br>kitchen table. And I need to find and pick up the cupcake, then put it on the<br>kitchen table. And I need to find and pick up the juice, then put it on the<br>kitchen table.<br>Think: First, I need to find the apple. The apple is more likely to appear in<br>kitchen 1.<br>Act: go to kitchen 1<br>You move to the kitchen (1). Looking quickly around the room, you see bench (1, 2)<br>, bookshelf (1, 2), chair (1, 2), dishwasher (1), faucet (2), fridge (1, 2),<br>garbage can (1), kitchen cabinet (1, 2, 3, 4, 5, 6, 7, 8), kitchen counter (1,<br>2), kitchen table (1), microwave oven (1), sink (2), stove (1), toaster (1).<br>Think: Now, I need to find the apple. The apple is more likely to appear on<br>kitchen conter (1, 2), kitchen table (1), or in fridge (1, 2), kitchen cabinet<br>(1, 2, 3, 4, 5, 6, 7, 8). I can check each place one by one, starting from<br>kitchen counter 1, until I find the apple.<br>Act: go to kitchen counter 1<br>You arrive at the kitchen counter (1). You see bowl (1, 2, 3, 4, 5), chair (2),<br>chicken (1), cutlets (1), dishwashing liquid (1), faucet (2), kitchen cabinet|
+
+
+41 
+
+|**2214**||
+|---|---|
+|**2215**|(1, 2, 3, 4, 5, 6, 7), kitchen counter (1), plate (1, 2, 3, 4), sink (2),<br>washing sponge (1)|
+|**2216**|Act: go to kitchen counter 2|
+|**2217**|You arrive at the kitchen counter (2). You see chair (1, 2), kitchen cabinet (5,|
+|**2218**|6, 7, 8), kitchen counter (1, 2), light switch (2), plate (1, 2, 3, 4)|
+|**2219**|Act: go to kitchen table 1|
+|**2220**|You arrive at the kitchen table (1). You see bench (2), book (1), bowl (6),<br>condiment shaker (1, 2), kitchen table (1)|
+|**2221**|Act: go to fridge 1|
+|**2222**|You arrive at the fridge (1). The fridge (1) is closed. You see bench (1), fridge|
+|**2223**|(1)|
+|**2224**|Act: open fridge 1|
+|**2225**|You open fridge. You see bench (1), cupcake (1), fridge (1), pudding (3)<br>Think: I find cupcake 1. Now, I need to pick it up.|
+|**2226**|Act: pick up cupcake 1|
+|**2227**|You pick up cupcake. You hold cupcake (1).|
+|**2228**|Think: I hold cupcake 1. Now, I need to put it on the kitchen table.|
+|**2229**|Act: go to kitchen table 1|
+|**2230**|You arrive at the kitchen table (1). You see bench (2), book (1), bowl (6),<br>condiment shaker (1, 2), cupcake (1), kitchen table (1) You hold cupcake (1).|
+|**2231**|Think: Now, I need to put down cupcake 1.|
+|**2232**|Act: put down cupcake 1|
+|**2233**|You put down cupcake on kitchen table|
+|**2234**|Think: I put down cupcake 1 on kitchen table 1. Now, I need to recall the location|
+|**2235**|of the pancake.<br>Act: recall location of pancake|
+|**2236**|You have not seen pancake before.|
+|**2237**|Think: Now, I need to find the pancake. The pancake is more likely to appear in|
+|**2238**|kitchen cabinet (1, 2, 3, 4, 5, 6, 7, 8). I can check each place one by one,|
+|**2239**|starting from kitchen cabinet 1, until I find the pancake.|
+|**2240**|Act: go to kitchen cabinet 1<br>You arrive at the kitchen cabinet (1). The kitchen cabinet (1) is closed. You see|
+|**2241**|chicken (1), cooking pot (1), cutlery knife (1, 2), cutlets (1), dishwashing|
+|**2242**|liquid (1), faucet (2), frying pan (1), garbage can (1), kitchen cabinet (1,|
+|**2243**|4), kitchen counter (1), sink (2), stove (1)|
+|**2244**|Act: open kitchen cabinet 1|
+|**2245**|You open kitchen cabinet. You see chicken (1), cooking pot (1), cutlery knife (1,<br>2), cutlets (1), dishwashing liquid (1), faucet (2), frying pan (1), garbage|
+|**2246**|can (1), kitchen cabinet (1, 4), kitchen counter (1), sink (2), stove (1)|
+|**2247**|Act: go to kitchen cabinet 2|
+|**2248**|You arrive at the kitchen cabinet (2). The kitchen cabinet (2) is closed. You see|
+|**2249**|bowl (1, 2, 3, 4, 5), chair (2), chicken (1), cutlery knife (1, 2), cutlets|
+|**2250**|(1), dishwashing liquid (1), faucet (2), kitchen cabinet (1, 2, 3, 4, 5, 6),<br>kitchen counter (1), plate (1, 2, 3, 4), sink (2), washing sponge (1)|
+|**2251**|Act: open kitchen cabinet 2|
+|**2252**|You open kitchen cabinet. You see bowl (1, 2, 3, 4, 5), chair (2), chicken (1),|
+|**2253**|cutlery knife (1, 2), cutlets (1), dishwashing liquid (1), faucet (2), kitchen|
+|**2254**|cabinet (1, 2, 3, 4, 5, 6), kitchen counter (1), plate (1, 2, 3, 4), sink (2)|
+|**2255**|, washing sponge (1)<br>Act: go to kitchen cabinet 3|
+|**2256**|You arrive at the kitchen cabinet (3). The kitchen cabinet (3) is closed. You see|
+|**2257**|bowl (1, 2, 3, 4, 5), chair (1, 2), dishwashing liquid (1), faucet (2),|
+|**2258**|kitchen cabinet (2, 3, 4, 5, 6, 7), kitchen counter (1, 2), plate (1, 2, 3, 4)|
+|**2259**|, sink (2), washing sponge (1)|
+|**2260**|Act: open kitchen cabinet 3<br>You open kitchen cabinet. You see bowl (1, 2, 3, 4, 5), chair (1, 2), dishwashing|
+|**2261**|liquid (1), faucet (2), kitchen cabinet (2, 3, 4, 5, 6, 7), kitchen counter|
+|**2262**|(1, 2), plate (1, 2, 3, 4), sink (2), washing sponge (1)|
+|**2263**|Act: go to kitchen cabinet 4|
+|**2264**|You arrive at the kitchen cabinet (4). The kitchen cabinet (4) is closed. You see|
+|**2265**|bowl (1, 2, 3, 4, 5), chicken (1), cooking pot (1), cutlery knife (1, 2),<br>cutlets (1), dishwashing liquid (1), faucet (2), garbage can (1), kitchen|
+|**2266**|cabinet (1, 2, 4), kitchen counter (1), sink (2), washing sponge (1)|
+|**2267**|Act: open kitchen cabinet 4|
+
+
+42 
+
+|**2268**||
+|---|---|
+|**2269**|You open kitchen cabinet. You see bowl (1, 2, 3, 4, 5), chicken (1), cooking pot<br>(1), cutlery knife (1, 2), cutlets (1), dishwashing liquid (1), faucet (2),|
+|**2270**|garbage can (1), kitchen cabinet (1, 2, 4), kitchen counter (1), sink (2),|
+|**2271**|washing sponge (1)|
+|**2272**|Act: go to kitchen cabinet 5|
+|**2273**|You arrive at the kitchen cabinet (5). The kitchen cabinet (5) is closed. You see|
+|**2274**|bowl (1, 2, 3, 4, 5), chair (1, 2), cutlets (1), dishwashing liquid (1),<br>faucet (2), kitchen cabinet (2, 3, 4, 5, 6, 7), kitchen counter (1, 2), plate|
+|**2275**|(1, 2, 3, 4), sink (2), washing sponge (1)|
+|**2276**|Act: open kitchen cabinet 5|
+|**2277**|You open kitchen cabinet. You see bowl (1, 2, 3, 4, 5), chair (1, 2), cutlets (1),|
+|**2278**|dishwashing liquid (1), faucet (2), kitchen cabinet (2, 3, 4, 5, 6, 7),|
+|**2279**|kitchen counter (1, 2), plate (1, 2, 3, 4), pudding (2), sink (2), washing<br>sponge (1)|
+|**2280**|Think: I find pudding 2. Now, I need to pick it up.|
+|**2281**|Act: pick up pudding 2|
+|**2282**|You pick up pudding. You hold pudding (2).|
+|**2283**|Think: I hold pudding 2. Now, I need to put it on the kitchen table.|
+|**2284**|Act: go to kitchen table 1<br>You arrive at the kitchen table (1). You see bench (2), book (1), bowl (6),|
+|**2285**|condiment shaker (1, 2), cupcake (1), kitchen table (1), pudding (2) You hold|
+|**2286**|pudding (2).|
+|**2287**|Think: Now, I need to put down pudding 2.|
+|**2288**|Act: put down pudding 2|
+|**2289**|You put down pudding on kitchen table<br>Think: I put down pudding 2 on kitchen table 1. Now, I need to recall the location|
+|**2290**|of the juice.|
+|**2291**|Act: recall location of juice|
+|**2292**|You have not seen juice before.|
+|**2293**|Think: Now, I need to find the juice. The juice is more likely to appear in|
+|**2294**|kitchen cabinet (1, 2, 3, 4, 5, 6, 7, 8). I can check each place one by one,<br>starting from kitchen cabinet 1, until I find the juice.|
+|**2295**|Act: go to kitchen cabinet 6|
+|**2296**|You arrive at the kitchen cabinet (6). The kitchen cabinet (6) is closed. You see|
+|**2297**|bowl (1, 2, 3, 4, 5), chair (1, 2), dishwashing liquid (1), faucet (2),|
+|**2298**|kitchen cabinet (2, 3, 4, 5, 6, 7, 8), kitchen counter (1, 2), plate (1, 2, 3,|
+|**2299**|4), sink (2), washing sponge (1)<br>Act: open kitchen cabinet 6|
+|**2300**|You open kitchen cabinet. You see bowl (1, 2, 3, 4, 5), chair (1, 2), dishwashing|
+|**2301**|liquid (1), faucet (2), kitchen cabinet (2, 3, 4, 5, 6, 7, 8), kitchen counter|
+|**2302**|(1, 2), plate (1, 2, 3, 4), sink (2), washing sponge (1)|
+|**2303**|Act: go to kitchen cabinet 7|
+|**2304**|You arrive at the kitchen cabinet (7). The kitchen cabinet (7) is closed. You see<br>bowl (1, 2, 3, 4, 5), chair (1, 2), kitchen cabinet (2, 3, 4, 5, 6, 7, 8),|
+|**2305**|kitchen counter (1), light switch (2), plate (1, 2, 3, 4), sink (2)|
+|**2306**|Act: open kitchen cabinet 7|
+|**2307**|You open kitchen cabinet. You see apple (1), bowl (1, 2, 3, 4, 5), chair (1, 2),|
+|**2308**|kitchen cabinet (2, 3, 4, 5, 6, 7, 8), kitchen counter (1), light switch (2),|
+|**2309**|pancake (1), plate (1, 2, 3, 4), sink (2)<br>Think: I find apple 1. Now, I need to pick it up.|
+|**2310**|Act: pick up apple 1|
+|**2311**|You pick up apple. You hold apple (1).|
+|**2312**|Think: I hold apple 1. Now, I need to put it on the kitchen table.|
+|**2313**|Act: go to kitchen table 1|
+|**2314**|You arrive at the kitchen table (1). You see apple (1), bench (2), book (1), bowl<br>(6), condiment shaker (1, 2), cupcake (1), kitchen table (1), pudding (2) You|
+|**2315**|hold apple (1).|
+|**2316**|Think: Now, I need to put down apple 1.|
+|**2317**|Act: put down apple 1|
+|**2318**|You put down apple on kitchen table|
+|**2319**|Think: I put down apple 1 on kitchen table 1. Now, I need to recall the location<br>of the pancake.|
+|**2320**|Act: recall location of pancake|
+|**2321**|You saw pancake 1 near kitchen cabinet 7 in kitchen 1.|
+||Act: go to kitchen cabinet 7|
+
+
+43 
+
+|**2322**<br>**2323**<br>**2324**<br>**2325**<br>**2326**<br>**2327**<br>**2328**<br>**2329**<br>**2330**<br>**2331**<br>**2332**<br>**2333**<br>**2334**<br>**2335**<br>**2336**<br>**2337**<br>**2338**<br>**2339**<br>**2340**<br>**2341**<br>**2342**<br>**2343**<br>**2344**<br>**2345**<br>**2346**<br>**2347**<br>**2348**<br>**2349**<br>**2350**<br>**2351**<br>**2352**<br>**2353**<br>**2354**<br>**2355**<br>**2356**<br>**2357**<br>**2358**<br>**2359**<br>**2360**<br>**2361**<br>**2362**<br>**2363**<br>**2364**<br>**2365**<br>**2366**<br>**2367**<br>**2368**<br>**2369**<br>**2370**<br>**2371**<br>**2372**<br>**2373**<br>**2374**<br>**2375**||
+|---|---|
+||You arrive at the kitchen cabinet (7). The kitchen cabinet (7) is open. You see<br>bowl (1, 2, 3, 4, 5), chair (1, 2), kitchen cabinet (2, 3, 4, 5, 6, 7, 8),<br>kitchen counter (1), light switch (2), pancake (1), plate (1, 2, 3, 4), sink<br>(2)<br>Think: I find pancake 1. Now, I need to pick it up.<br>Act: pick up pancake 1<br>You pick up pancake. You hold pancake (1).<br>Think: I hold pancake 1. Now, I need to put it on the kitchen table.<br>Act: go to kitchen table 1<br>You arrive at the kitchen table (1). You see apple (1), bench (2), book (1), bowl<br>(6), condiment shaker (1, 2), cupcake (1), kitchen table (1), pancake (1),<br>pudding (2) You hold pancake (1).<br>Think: Now, I need to put down pancake 1.<br>Act: put down pancake 1<br>You put down pancake on kitchen table<br>Think: I put down pancake 1 on kitchen table 1. Now, I need to recall the location<br>of the juice.<br>Act: recall location of juice<br>You have not seen juice before.<br>Think: Now, I need to find the juice. The juice is more likely to appear in<br>kitchen cabinet (1, 2, 3, 4, 5, 6, 7, 8). I can check each place one by one,<br>starting from kitchen cabinet 1, until I find the juice.<br>Act: go to kitchen cabinet 8<br>You arrive at the kitchen cabinet (8). The kitchen cabinet (8) is closed. You see<br>bench (2), chair (1, 2), kitchen cabinet (5, 6, 7, 8), light switch (2)<br>Act: open kitchen cabinet 8<br>You open kitchen cabinet. You see bench (2), chair (1, 2), kitchen cabinet (5, 6,<br>7, 8), light switch (2)<br>Think: I cannot find juice in kitchen 1. The juice is more likely to appear in<br>fridge 1, 2.<br>Act: go to fridge 1<br>You arrive at the fridge (1). The fridge (1) is open. You see bench (1), fridge<br>(1), pudding (3)<br>Act: go to fridge 2<br>You arrive at the fridge (2). The fridge (2) is closed. You see bench (1), fridge<br>(1, 2), pudding (3)<br>Act: open fridge 2<br>You open fridge. You see apple (2), bench (1), fridge (1, 2), pudding (3)<br>Think: I find apple 2. Now, I need to pick it up.<br>Act: pick up apple 2<br>You pick up apple. You hold apple (2).<br>Think: I hold apple 2. Now, I need to put it on the kitchen table.<br>Act: go to kitchen table 1<br>You arrive at the kitchen table (1). You see apple (1, 2), bench (2), book (1),<br>bowl (6), condiment shaker (1, 2), cupcake (1), kitchen table (1), pancake (1)<br>, pudding (2) You hold apple (2).<br>Think: Now, I need to put down apple 2.<br>Act: put down apple 2<br>You put down apple on kitchen table<br>Think: I put down apple 2 on kitchen table 1. Now, I need to recall the location<br>of the juice.<br>Act: recall location of juice<br>You have not seen juice before.<br>Failure: maximum context window size of 8192|
+||H.2<br>ALFRED EXAMPLE CASES<br>Listing13: Success trajectoryof ReAcTree on the ALFRED dataset usingLLaMA 3 70B.|
+||### Agent Node 1<br>Your task is to: Put the cooked tomato slice on the kitchen island<br>You are in the house, and you arrive at the kitchen, Looking quickly around the<br>room, you see Toaster (1), StoveBurner (1, 2, 3, 4, 5, 6), SinkBasin (1),<br>Microwave (1), GarbageCan (1), Fridge (1), Drawer (1, 2, 3, 4, 5, 6, 7, 8, 9,|
+
+
+44 
+
+|**2376**||
+|---|---|
+|**2377**|10, 11, 12, 13), CounterTop (1, 2), CoffeeMachine (1), Cabinet (1, 2, 3, 4, 5,<br>6, 7, 8, 9).|
+|**2378**|Think: To solve the task, I need to accomplish 8 subgoals sequentially. find and|
+|**2379**|pick up the knife, find and slice and then pick up the tomato, find and open|
+|**2380**|the microwave, find the microwave and put down the tomato, find and close and|
+|**2381**|turn on the microwave, find and turn off and open microwave, find and pick up|
+|**2382**|tomato in microwave, and find a countertop and put down the tomato on the<br>countertop.|
+|**2383**|Expand:|
+|**2384**|- control flow: sequence|
+|**2385**|- subgoals: find and pick up the knife, find and slice and then pick up the tomato|
+|**2386**|, find and open the microwave, find the microwave and put down the tomato,|
+|**2387**|find and close and turn on the microwave, find and turn off and open microwave<br>, find and pick up tomato in microwave, and find a countertop and put down the|
+|**2388**|tomato on the countertop.|
+|**2389**||
+|**2390**||
+|**2391**|### Agent Node 2|
+|**2392**|Your primary goal is to: Put the cooked tomato slice on the kitchen island<br>To achieve this, you should perform your sibling tasks in sequence. At this level,|
+|**2393**|your sibling tasks are: find and pick up the knife, find and slice and then|
+|**2394**|pick up the tomato, find and open the microwave, find the microwave and put|
+|**2395**|down the tomato, find and close and turn on the microwave, find and turn off|
+|**2396**|and open microwave, find and pick up tomato in microwave, and and find a|
+|**2397**|countertop and put down the tomato on the countertop.<br>Your task is to: find and pick up the knife|
+|**2398**|You are in the house, and you arrive at the kitchen, Looking quickly around the|
+|**2399**|room, you see Toaster (1), StoveBurner (1, 2, 3, 4, 5, 6), SinkBasin (1),|
+|**2400**|Microwave (1), GarbageCan (1), Fridge (1), Drawer (1, 2, 3, 4, 5, 6, 7, 8, 9,|
+|**2401**|10, 11, 12, 13), CounterTop (1, 2), CoffeeMachine (1), Cabinet (1, 2, 3, 4, 5,|
+|**2402**|6, 7, 8, 9).<br>Think: To solve the task, I need to recall location of knife.|
+|**2403**|Think: Now I need to find Knife. A knife is more likely to appear in CounterTop|
+|**2404**|(1-2), SinkBasin (1), Cabinet (1-9). I can check one by one, starting with|
+|**2405**|CounterTop (1).|
+|**2406**|Act: go to CounterTop (1)|
+|**2407**|You arrive at CounterTop (1). You see Window (2), Tomato (1), Sink (1), SinkBasin<br>(1), Lettuce (2), Fork (1), Faucet (1), Egg (2), DishSponge (1), CounterTop|
+|**2408**|(1), Cabinet (1, 8).|
+|**2409**|Act: go to CounterTop (2)|
+|**2410**|You arrive at CounterTop (2). You see Tomato (2), SoapBottle (2), Pot (1),|
+|**2411**|PepperShaker (2), Mug (2), Knife (1, 2), Kettle (2), CounterTop (1, 2),|
+|**2412**|CellPhone (2), Bread (1, 2).<br>Think: Now I find Knife (1, 2). Next, I need to pick it up.|
+|**2413**|Act: pick up Knife (1)|
+|**2414**|You pick up Knife (1). You see Tomato (2), SoapBottle (2), Pot (1), PepperShaker|
+|**2415**|(2), Mug (2), Knife (1, 2), Kettle (2), CounterTop (1, 2), CellPhone (2),|
+|**2416**|Bread (1, 2). I am holding Knife (1) now.|
+|**2417**|Think: Now I find and pick up Knife (1)<br>Act: done|
+|**2418**||
+|**2419**||
+|**2420**|### Agent Node 3|
+|**2421**|Your primary goal is to: Put the cooked tomato slice on the kitchen island|
+|**2422**|To achieve this, you should perform your sibling tasks in sequence. At this level,<br>your sibling tasks are: find and pick up the knife, find and slice and then|
+|**2423**|pick up the tomato, find and open the microwave, find the microwave and put|
+|**2424**|down the tomato, find and close and turn on the microwave, find and turn off|
+|**2425**|and open microwave, find and pick up tomato in microwave, and and find a|
+|**2426**|countertop and put down the tomato on the countertop.|
+|**2427**|Your task is to: find and slice and then pick up the tomato<br>You are in the house, and you arrive at the kitchen, Looking quickly around the|
+|**2428**|room, you see Toaster (1), StoveBurner (1, 2, 3, 4, 5, 6), SinkBasin (1),|
+|**2429**|Microwave (1), GarbageCan (1), Fridge (1), Drawer (1, 2, 3, 4, 5, 6, 7, 8, 9,|
+
+
+45 
+
+|**2430**||
+|---|---|
+|**2431**|10, 11, 12, 13), CounterTop (1, 2), CoffeeMachine (1), Cabinet (1, 2, 3, 4, 5,<br>6, 7, 8, 9). I am holding Knife (1) now.|
+|**2432**|Think: To solve the task, I need to recall location of tomato.|
+|**2433**|Think: I saw Tomato (1) near SinkBasin (1). I need to go to SinkBasin (1), then|
+|**2434**|slice the Tomato (1).|
+|**2435**|Act: go to SinkBasin (1)|
+|**2436**|You arrive at SinkBasin (1). You see Tomato (1), Sink (1), SinkBasin (1), Lettuce<br>(2), Knife (1), Fork (1), Faucet (1), Egg (2), Drawer (1, 6), DishSponge (1),|
+|**2437**|CounterTop (1), Cabinet (1, 8).<br>I am holding Knife (1) now.|
+|**2438**|Think: Now I find a part of the Tomato (1). I need to go in front of the Tomato|
+|**2439**|(1) to see the whole thing.|
+|**2440**|Act: go to Tomato (1)|
+|**2441**|You see Tomato (1), Sink (1), SinkBasin (1), Lettuce (2), Knife (1), Fork (1),<br>Faucet (1), Egg (2), Drawer (1, 6), DishSponge (1), CounterTop (1), Cabinet|
+|**2442**|(1, 8).<br>I am holding Knife (1) now.|
+|**2443**|Act: slice Tomato (1)|
+|**2444**|You slice Tomato (1). You see Tomato (9, 10), Sink (1), SinkBasin (1), Lettuce (2)|
+|**2445**|, Knife (1), Fork (1), Faucet (1), Egg (2), Drawer (1, 6), DishSponge (1),|
+|**2446**|CounterTop (1), Cabinet (1, 8). I am holding Knife (1) now.<br>Think: Now I slice the Tomato (1), and I do not need to hold Knife (1). I need to|
+|**2447**|drop the Knife (1).|
+|**2448**|Act: put down Knife (1)|
+|**2449**|You put down failed, drop it. You see Tomato (9, 10), Sink (1), SinkBasin (1),|
+|**2450**|Lettuce (2), Fork (1), Faucet (1), Egg (2), Drawer (1, 6), DishSponge (1),|
+|**2451**|CounterTop (1), Cabinet (1, 8).<br>Think: Now I put down Knife (1). Next, I need to pick up the Tomato (9).|
+|**2452**|Act: pick up Tomato (9)|
+|**2453**|You pick up Tomato (9). You see Tomato (7, 8, 9, 10), Sink (1), SinkBasin (1),|
+|**2454**|Lettuce (2), Fork (1), Faucet (1), Egg (2), Drawer (1, 6), DishSponge (1),|
+|**2455**|CounterTop (1), Cabinet (1, 8). I am holding Tomato (9) now.|
+|**2456**|Think: Now I pick up Tomato (9).<br>Act: done|
+|**2457**||
+|**2458**||
+|**2459**|### Agent Node 4|
+|**2460**|Your primary goal is to: Put the cooked tomato slice on the kitchen island|
+|**2461**|To achieve this, you should perform your sibling tasks in sequence. At this level,<br>your sibling tasks are: find and pick up the knife, find and slice and then|
+|**2462**|pick up the tomato, find and open the microwave, find the microwave and put|
+|**2463**|down the tomato, find and close and turn on the microwave, find and turn off|
+|**2464**|and open microwave, find and pick up tomato in microwave, and and find a|
+|**2465**|countertop and put down the tomato on the countertop.|
+|**2466**|Your task is to: find and open the microwave<br>You are in the house, and you arrive at the kitchen, Looking quickly around the|
+|**2467**|room, you see Toaster (1), StoveBurner (1, 2, 3, 4, 5, 6), SinkBasin (1),|
+|**2468**|Microwave (1), GarbageCan (1), Fridge (1), Drawer (1, 2, 3, 4, 5, 6, 7, 8, 9,|
+|**2469**|10, 11, 12, 13), CounterTop (1, 2), CoffeeMachine (1), Cabinet (1, 2, 3, 4, 5,|
+|**2470**|6, 7, 8, 9). I am holding Tomato (9) now.|
+|**2471**|Act: go to Microwave (1)<br>You arrive at Microwave (1). You see Window (1), Tomato (9), Toaster (1),|
+|**2472**|Microwave (1), Drawer (4), CounterTop (1). Microwave (1) is closed.<br>I am|
+|**2473**|holding Tomato (9) now.|
+|**2474**|Act: open Microwave (1)|
+|**2475**|You open Microwave (1). You see Window (1), Tomato (9), Toaster (1), Microwave (1)|
+|**2476**|, Egg (1), Drawer (4), CounterTop (1). I am holding Tomato (9) now.<br>Think: Now I find and open the Microwave (1).|
+|**2477**|Act: done|
+|**2478**||
+|**2479**||
+|**2480**|### Agent Node 5|
+|**2481**|Your primary goal is to: Put the cooked tomato slice on the kitchen island<br>To achieve this, you should perform your sibling tasks in sequence. At this level,|
+|**2482**|your sibling tasks are: find and pick up the knife, find and slice and then|
+|**2483**|pick up the tomato, find and open the microwave, find the microwave and put|
+||down the tomato, find and close and turn on the microwave, find and turn off|
+
+
+46 
+
+|**2484**|||
+|---|---|---|
+|**2485**|and open microwave, find and pick up tomato in microwave, and and find a<br>countertop and put down the tomato on the countertop.||
+|**2486**|Your task is to: find the microwave and put down the tomato||
+|**2487**|You are in the house, and you arrive at the kitchen, Looking quickly around the||
+|**2488**|room, you see Toaster (1), StoveBurner (1, 2, 3, 4, 5, 6), SinkBasin (1),||
+|**2489**|Microwave (1), GarbageCan (1), Fridge (1), Drawer (1, 2, 3, 4, 5, 6, 7, 8, 9,||
+|**2490**|10, 11, 12, 13), CounterTop (1, 2), CoffeeMachine (1), Cabinet (1, 2, 3, 4, <br>6, 7, 8, 9). I am holding Tomato (9) now.|5,|
+|**2491**|Think: To solve the task, I need to go to Microwave (1) and put down the Tomato||
+|**2492**|(9).||
+|**2493**|Act: go to Microwave (1)||
+|**2494**|You arrive at Microwave (1). You see Window (1), Tomato (9), Toaster (1),||
+|**2495**|Microwave (1), Egg (1), Drawer (4), CounterTop (1). Microwave (1) is open.<br>am holding Tomato (9) now.|I|
+|**2496**|Think: Now I find a Microwave (1). The Microwave (1) is already open, so I need to||
+|**2497**|put the Tomato (9) down.||
+|**2498**|Act: put down Tomato (9)||
+|**2499**|You put Tomato (9) on Microwave (1). You see Window (1), Tomato (9), Toaster (1),||
+|**2500**|Microwave (1), Egg (1), Drawer (4), CounterTop (1).<br>Think: Now I put down Tomato (9) in the Microwave (1).||
+|**2501**|Act: done||
+|**2502**|||
+|**2503**|||
+|**2504**|### Agent Node 6||
+|**2505**|Your primary goal is to: Put the cooked tomato slice on the kitchen island<br>To achieve this, you should perform your sibling tasks in sequence. At this level,||
+|**2506**|your sibling tasks are: find and pick up the knife, find and slice and then||
+|**2507**|pick up the tomato, find and open the microwave, find the microwave and put||
+|**2508**|down the tomato, find and close and turn on the microwave, find and turn off||
+|**2509**|and open microwave, find and pick up tomato in microwave, and and find a||
+|**2510**|countertop and put down the tomato on the countertop.<br>Your task is to: find and close and turn on the microwave||
+|**2511**|You are in the house, and you arrive at the kitchen, Looking quickly around the||
+|**2512**|room, you see Toaster (1), StoveBurner (1, 2, 3, 4, 5, 6), SinkBasin (1),||
+|**2513**|Microwave (1), GarbageCan (1), Fridge (1), Drawer (1, 2, 3, 4, 5, 6, 7, 8, 9,||
+|**2514**|10, 11, 12, 13), CounterTop (1, 2), CoffeeMachine (1), Cabinet (1, 2, 3, 4,|5,|
+|**2515**|6, 7, 8, 9).<br>Think: To solve the task, I need to go to Microwave (1), close the Microwave (1)||
+|**2516**|and turn on the Microwave (1).||
+|**2517**|Act: go to Microwave (1)||
+|**2518**|You arrive at Microwave (1). You see Window (1), Tomato (9), Toaster (1),||
+|**2519**|Microwave (1), Egg (1), Drawer (4), CounterTop (1). Microwave (1) is open.||
+|**2520**|Think: The Microwave (1) is already open and I need to close the Microwave (1).<br>Act: close Microwave (1)||
+|**2521**|You close Microwave (1). You see Window (1), Toaster (1), Microwave (1), Drawer||
+|**2522**|(4), CounterTop (1).||
+|**2523**|Act: turn on Microwave (1)||
+|**2524**|You turn on Microwave (1). You see Window (1), Toaster (1), Microwave (1), Drawer||
+|**2525**|(4), CounterTop (1).<br>Think: Now I find and close and turn on the Microwave (1).||
+|**2526**|Act: done||
+|**2527**|||
+|**2528**|||
+|**2529**|### Agent Node 7||
+|**2530**|Your primary goal is to: Put the cooked tomato slice on the kitchen island<br>To achieve this, you should perform your sibling tasks in sequence. At this level,||
+|**2531**|your sibling tasks are: find and pick up the knife, find and slice and then||
+|**2532**|pick up the tomato, find and open the microwave, find the microwave and put||
+|**2533**|down the tomato, find and close and turn on the microwave, find and turn off||
+|**2534**|and open microwave, find and pick up tomato in microwave, and and find a||
+|**2535**|countertop and put down the tomato on the countertop.<br>Your task is to: find and turn off and open microwave||
+|**2536**|You are in the house, and you arrive at the kitchen, Looking quickly around the||
+|**2537**|room, you see Toaster (1), StoveBurner (1, 2, 3, 4, 5, 6), SinkBasin (1),||
+||Microwave (1), GarbageCan (1), Fridge (1), Drawer (1, 2, 3, 4, 5, 6, 7, 8, 9,||
+
+
+47 
+
+|**2538**||
+|---|---|
+|**2539**|10, 11, 12, 13), CounterTop (1, 2), CoffeeMachine (1), Cabinet (1, 2, 3, 4, 5,<br>6, 7, 8, 9).|
+|**2540**|Think: To solve the task, I need to go to Microwave (1), turn off and open the|
+|**2541**|Microwave (1).|
+|**2542**|Act: go to Microwave (1)|
+|**2543**|You arrive at Microwave (1). You see Window (1), Toaster (1), Microwave (1),|
+|**2544**|Drawer (4), CounterTop (1). Microwave (1) is closed. Microwave (1) is already<br>turned on.|
+|**2545**|Think: Now I find a Microwave (1). The Microwave (1) is already turned on, so I|
+|**2546**|need to turn off the Microwave (1).|
+|**2547**|Act: turn off Microwave (1)|
+|**2548**|You turn off Microwave (1). You see Window (1), Toaster (1), Microwave (1), Drawer|
+|**2549**|(4), CounterTop (1).<br>Act: open Microwave (1)|
+|**2550**|You open Microwave (1). You see Window (1), Tomato (9), Toaster (1), Microwave (1)|
+|**2551**|, Egg (1), Drawer (4), CounterTop (1).|
+|**2552**|Think: Now I turn off and open the Microwave (1).|
+|**2553**|Act: done|
+|**2554**||
+|**2555**|### Agent Node 8|
+|**2556**|Your primary goal is to: Put the cooked tomato slice on the kitchen island|
+|**2557**|To achieve this, you should perform your sibling tasks in sequence. At this level,|
+|**2558**|your sibling tasks are: find and pick up the knife, find and slice and then|
+|**2559**|pick up the tomato, find and open the microwave, find the microwave and put<br>down the tomato, find and close and turn on the microwave, find and turn off|
+|**2560**|and open microwave, find and pick up tomato in microwave, and and find a|
+|**2561**|countertop and put down the tomato on the countertop.|
+|**2562**|Your task is to: find and pick up tomato in microwave|
+|**2563**|You are in the house, and you arrive at the kitchen, Looking quickly around the|
+|**2564**|room, you see Toaster (1), StoveBurner (1, 2, 3, 4, 5, 6), SinkBasin (1),<br>Microwave (1), GarbageCan (1), Fridge (1), Drawer (1, 2, 3, 4, 5, 6, 7, 8, 9,|
+|**2565**|10, 11, 12, 13), CounterTop (1, 2), CoffeeMachine (1), Cabinet (1, 2, 3, 4, 5,|
+|**2566**|6, 7, 8, 9).|
+|**2567**|Think: To solve the task, I need to recall the location of tomato.|
+|**2568**|Think: I saw Tomato (2) near Microwave (1). I need to go to Microwave (1), then|
+|**2569**|pick up Tomato (2).<br>Act: go to Microwave (1)|
+|**2570**|You arrive at Microwave (1). You see Window (1), Tomato (9), Toaster (1),|
+|**2571**|Microwave (1), Egg (1), Drawer (4), CounterTop (1). Microwave (1) is open.|
+|**2572**|Think: Now, I find a Microwave (1). The Microwave (1) is already open, so I need|
+|**2573**|to pick up Tomato (2).|
+|**2574**|Act: pick up Tomato (9)<br>You pick up Tomato (9). You see Window (1), Tomato (9), Toaster (1), Microwave (1)|
+|**2575**|, Egg (1), Drawer (4), CounterTop (1). I am holding Tomato (9) now.|
+|**2576**|Think: Now I find and pick up the Tomato (9) in Microwave (1).|
+|**2577**|Act: done|
+|**2578**||
+|**2579**|### Agent Node 9|
+|**2580**|Your primary goal is to: Put the cooked tomato slice on the kitchen island|
+|**2581**|To achieve this, you should perform your sibling tasks in sequence. At this level,|
+|**2582**|your sibling tasks are: find and pick up the knife, find and slice and then|
+|**2583**|pick up the tomato, find and open the microwave, find the microwave and put|
+|**2584**|down the tomato, find and close and turn on the microwave, find and turn off<br>and open microwave, find and pick up tomato in microwave, and and find a|
+|**2585**|countertop and put down the tomato on the countertop.|
+|**2586**|Your task is to: and find a countertop and put down the tomato on the countertop.|
+|**2587**|You are in the house, and you arrive at the kitchen, Looking quickly around the|
+|**2588**|room, you see Toaster (1), StoveBurner (1, 2, 3, 4, 5, 6), SinkBasin (1),|
+|**2589**|Microwave (1), GarbageCan (1), Fridge (1), Drawer (1, 2, 3, 4, 5, 6, 7, 8, 9,<br>10, 11, 12, 13), CounterTop (1, 2), CoffeeMachine (1), Cabinet (1, 2, 3, 4, 5,|
+|**2590**|6, 7, 8, 9). I am holding Tomato (9) now.|
+|**2591**|Think: To solve the task, I need to go to CounterTop (1) and put down the Tomato|
+||(9) on the CounterTop (1).|
+
+
+48 
+
+|**2592**<br>**2593**<br>**2594**<br>**2595**<br>**2596**<br>**2597**<br>**2598**<br>**2599**<br>**2600**<br>**2601**<br>**2602**<br>**2603**<br>**2604**<br>**2605**<br>**2606**<br>**2607**<br>**2608**<br>**2609**<br>**2610**<br>**2611**<br>**2612**<br>**2613**<br>**2614**<br>**2615**<br>**2616**<br>**2617**<br>**2618**<br>**2619**<br>**2620**<br>**2621**<br>**2622**<br>**2623**<br>**2624**<br>**2625**<br>**2626**<br>**2627**<br>**2628**<br>**2629**<br>**2630**<br>**2631**<br>**2632**<br>**2633**<br>**2634**<br>**2635**<br>**2636**<br>**2637**<br>**2638**<br>**2639**<br>**2640**<br>**2641**<br>**2642**<br>**2643**<br>**2644**<br>**2645**||
+|---|---|
+||Act: go to CounterTop (1)<br>You arrive at CounterTop (1). You see Window (2), Tomato (7, 8, 9, 10), Sink (1),<br>SinkBasin (1), Lettuce (2), Fork (1), Faucet (1), Egg (2), DishSponge (1),<br>CounterTop (1), Cabinet (1, 8).<br>I am holding Tomato (9) now.<br>Act: put down Tomato (9)<br>You put Tomato (9) on CounterTop (1). You see Window (2), Tomato (7, 8, 9, 10),<br>Sink (1), SinkBasin (1), Lettuce (2), Fork (1), Faucet (1), Egg (2),<br>DishSponge (1), CounterTop (1), Cabinet (1, 8).<br>Think: Now I put Tomato (9) on the CounterTop (1).<br>Act: done|
+||Listing14: Failure trajectoryof ReAct on the ALFRED dataset usingLLaMA 3 70B.|
+||Your task is to : Put the cooked tomato slice on the kitchen island<br>You are in the house, and you arrive at the kitchen, Looking quickly around the<br>room, you see Toaster (1), StoveBurner (1, 2, 3, 4, 5, 6), SinkBasin (1),<br>Microwave (1), GarbageCan (1), Fridge (1), Drawer (1, 2, 3, 4, 5, 6, 7, 8, 9,<br>10, 11, 12, 13), CounterTop (1, 2), CoffeeMachine (1), Cabinet (1, 2, 3, 4, 5,<br>6, 7, 8, 9).<br>Think: To solve the task, I need to find and pick up knife, then find and slice<br>tomato and then pick up tomato, then find plate and put tomato on plte, then<br>find and pick up plate, then find fridge and put plate on fridge<br>Think: First, I need to recall location of knife<br>Act: recall location of Knife<br>You have not seen Knife before.<br>Think: Now I need to find and pick up knife. A knife is more likely to appear in<br>SinkBasin (1), Sink (1), DiningTable (1), CounterTop (1-3), Cabinet (1-2),<br>Drawer (1-6). I can check one by one, starting with SinkBasin (1).<br>Act: go to SinkBasin (1)<br>You arrive at SinkBasin (1). You see Tomato (1), Sink (1), SinkBasin (1), Lettuce<br>(2), Fork (1), Faucet (1), Egg (2), Drawer (1, 6), DishSponge (1), CounterTop<br>(1), Cabinet (1, 8).<br>Think: Now I find Knife (1). Next, I need to pick it up.<br>Act: pick up Tomato (1)<br>You pick up Tomato (1). You see Tomato (1), Sink (1), SinkBasin (1), Lettuce (2),<br>Fork (1), Faucet (1), Egg (2), Drawer (1, 6), DishSponge (1), CounterTop (1),<br>Cabinet (1, 8). I am holding Tomato (1) now.<br>Think: Now I find and pick up Knife (1).<br>Think: Next, I need to recall location of tomato<br>Act: recall location of Tomato<br>You are holding Tomato (1).<br>Think: I saw Tomato (3) near SinkBasin (1)<br>Act: go to SinkBasin (1)<br>You arrive at SinkBasin (1). You see Tomato (1), Sink (1), SinkBasin (1), Lettuce<br>(2), Fork (1), Faucet (1), Egg (2), Drawer (1, 6), DishSponge (1), CounterTop<br>(1), Cabinet (1, 8).<br>I am holding Tomato (1) now.<br>Think: Now I find Tomato (3). Next, I need to slice it<br>Act: slice Tomato (1)<br>The Tomato (1) slice failed. I am holding Tomato (1) now.<br>Think: Now I slice Tomato (3). Next, I need to drop Knife (1) because I do not<br>need to hold it now.<br>Act: go to SinkBasin (1)<br>You arrive at SinkBasin (1). You see Tomato (1), Sink (1), SinkBasin (1), Lettuce<br>(2), Fork (1), Faucet (1), Egg (2), Drawer (1, 6), DishSponge (1), CounterTop<br>(1), Cabinet (1, 8).<br>I am holding Tomato (1) now.<br>Think: Next, I need to pick up Tomato (5)<br>Act: pick up Tomato (1)<br>You are currently holding Tomato (1). I am holding Tomato (1) now.<br>Think: Now I find and slice Tomato (3), then pick up Tomato (5)<br>Think: Next, I need to recall location of plate.<br>Act: recall location of Plate<br>You have not seen Plate before.<br>Think: I saw Plate (1) near SinkBasin (1).<br>Act: go to SinkBasin (1)|
+
+
+49 
+
+|**2646**<br>**2647**<br>**2648**<br>**2649**<br>**2650**<br>**2651**<br>**2652**<br>**2653**<br>**2654**<br>**2655**<br>**2656**<br>**2657**<br>**2658**<br>**2659**<br>**2660**<br>**2661**<br>**2662**<br>**2663**<br>**2664**<br>**2665**<br>**2666**<br>**2667**<br>**2668**<br>**2669**<br>**2670**<br>**2671**<br>**2672**<br>**2673**<br>**2674**<br>**2675**<br>**2676**<br>**2677**<br>**2678**<br>**2679**<br>**2680**<br>**2681**<br>**2682**<br>**2683**<br>**2684**<br>**2685**<br>**2686**<br>**2687**<br>**2688**<br>**2689**<br>**2690**<br>**2691**<br>**2692**||
+|---|---|
+||You arrive at SinkBasin (1). You see Tomato (1), Sink (1), SinkBasin (1), Lettuce<br>(2), Fork (1), Faucet (1), Egg (2), Drawer (1, 6), DishSponge (1), CounterTop<br>(1), Cabinet (1, 8).<br>I am holding Tomato (1) now.<br>Think: I need to go to Plate (1), then put Tomato (5) on Plate (1)<br>Act: go to SinkBasin (1)<br>You arrive at SinkBasin (1). You see Tomato (1), Sink (1), SinkBasin (1), Lettuce<br>(2), Fork (1), Faucet (1), Egg (2), Drawer (1, 6), DishSponge (1), CounterTop<br>(1), Cabinet (1, 8).<br>I am holding Tomato (1) now.<br>Act: put down Tomato (1)<br>You put Tomato (1) on SinkBasin (1). You see Tomato (1), Sink (1), SinkBasin (1),<br>Lettuce (2), Fork (1), Faucet (1), Egg (2), Drawer (1, 6), DishSponge (1),<br>CounterTop (1), Cabinet (1, 8).<br>Think: Now I find Plate (1), then put Tomato (5) on Plate (1)<br>Think: Next, I need to pick up Plate (1) again.<br>Act: pick up Tomato (1)<br>You pick up Tomato (1). You see Tomato (1), Sink (1), SinkBasin (1), Lettuce (2),<br>Fork (1), Faucet (1), Egg (2), Drawer (1, 6), DishSponge (1), CounterTop (1),<br>Cabinet (1, 8). I am holding Tomato (1) now.<br>Think: Now I find and pick up Plate (1). Next, I need to find fridge, then put<br>plate on fridge.<br>Act: go to SinkBasin (1)<br>You arrive at SinkBasin (1). You see Tomato (1), Sink (1), SinkBasin (1), Lettuce<br>(2), Fork (1), Faucet (1), Egg (2), Drawer (1, 6), DishSponge (1), CounterTop<br>(1), Cabinet (1, 8).<br>I am holding Tomato (1) now.<br>Act: open Fridge (1)<br>The Fridge (1) is not close to you. I am holding Tomato (1) now.<br>Act: put down Tomato (1)<br>You put Tomato (1) on SinkBasin (1). You see Tomato (1), Sink (1), SinkBasin (1),<br>Lettuce (2), Fork (1), Faucet (1), Egg (2), Drawer (1, 6), DishSponge (1),<br>CounterTop (1), Cabinet (1, 8).<br>Think: Now I put Plate (1) on Fridge (1).<br>Act: done|
+|||
+
+
+**2693 2694 2695 2696 2697 2698** 
+
+**2699** 
+
+50

@@ -1,0 +1,459 @@
+## D-FINE: REDEFINE REGRESSION TASK IN DETRS AS - FINE GRAINED DISTRIBUTION REFINEMENT 
+
+## **Yansong Peng[1] , Hebei Li[1] , Peixi Wu[1] , Yueyi Zhang[1] , Xiaoyan Sun** _[∗]_ **[1, 2]** _[∗]_ **, Feng Wu[1, 2]** 
+
+1University of Science and Technology of China 
+
+2Institute of Artificial Intelligence, Hefei Comprehensive National Science Center _{_ pengyansong, lihebei, wupeixi _}_ @mail.ustc.edu.cn _{_ zhyuey, sunxiaoyan, fengwu _}_ @ustc.edu.cn 
+
+Figure 1: Comparisons with other detectors in terms of latency (left), model size (mid), and computational cost (right). We measure end-to-end latency using TensorRT FP16 on an NVIDIA T4 GPU. 
+
+## ABSTRACT 
+
+We introduce **D-FINE** , a powerful real-time object detector that achieves outstanding localization precision by redefining the bounding box regression task in DETR models. D-FINE comprises two key components: **Fine-grained Distribution Refinement (FDR)** and **Global Optimal Localization Self-Distillation (GO-LSD)** . FDR transforms the regression process from predicting fixed coordinates to iteratively refining probability distributions, providing a fine-grained intermediate representation that significantly enhances localization accuracy. GOLSD is a bidirectional optimization strategy that transfers localization knowledge from refined distributions to shallower layers through self-distillation, while also simplifying the residual prediction tasks for deeper layers. Additionally, D-FINE incorporates lightweight optimizations in computationally intensive modules and operations, achieving a better balance between speed and accuracy. Specifically, D-FINE-L / X achieves 54.0% / 55.8% AP on the COCO dataset at 124 / 78 FPS on an NVIDIA T4 GPU. When pretrained on Objects365, D-FINE-L / X attains 57.1% / 59.3% AP, surpassing all existing real-time detectors. Furthermore, our method significantly enhances the performance of a wide range of DETR models by up to 5.3% AP with negligible extra parameters and training costs. Our code and models: https://github.com/Peterande/D-FINE. 
+
+## 1 INTRODUCTION 
+
+The demand for real-time object detection has been increasing across various applications (Arani et al., 2022). Among the most influential real-time detectors are the YOLO series (Redmon et al., 2016a; Wang et al., 2023a;b; Glenn., 2023; Wang & Liao, 2024; Wang et al., 2024a; Glenn., 2024), widely recognized for their efficiency and robust community ecosystem. As a strong competitor, the Detection Transformer (DETR) (Carion et al., 2020; Zhu et al., 2020; Liu et al., 2021; Li et al., 2022; Zhang et al., 2022) offers distinct advantages due to its transformer-based architecture, which allows 
+
+> _∗_ Corresponding authors 
+
+1 
+
+for global context modeling and direct set prediction without reliance on Non-Maximum Suppression (NMS) and anchor boxes. However, they are often hindered by high latency and computational demands (Zhu et al., 2020; Liu et al., 2021; Li et al., 2022; Zhang et al., 2022). RT-DETR (Zhao et al., 2024) addresses these limitations by developing a real-time variant, offering an end-to-end alternative to YOLO detectors. Moreover, LW-DETR (Chen et al., 2024) has shown that DETR can achieve higher performance ceilings than YOLO, especially when trained on large-scale datasets like Objects365 (Shao et al., 2019). 
+
+Despite the substantial progress made in real-time object detection, there remain potential aspects for improvement in detector performance. One key aspect is the formulation of bounding box regression. Most detectors predict bounding boxes by regressing fixed coordinates, treating edges as precise values modeled by Dirac delta distributions (Liu et al., 2016; Ren et al., 2015; Tian et al., 2019; Lyu et al., 2022). While this approach has shown significant success in maintaining efficiency, using fixed coordinates inherently comes with limitations in modeling localization uncertainty. Consequently, models are constrained to use L1 loss and IoU loss, which provide insufficient guidance for adjusting each edge independently (Girshick, 2015). This makes the optimization process sensitive to small coordinate changes, potentially leading to slow convergence and suboptimal performance. Although methods like GFocal (Li et al., 2020; 2021) address uncertainty through probability distributions, they remain limited by anchor dependency, coarse localization, and lack of iterative refinement. Another aspect lies in maximizing the efficiency of real-time detectors, which are constrained by limited computation and parameter budgets to maintain speed. Knowledge distillation (KD) is a promising solution, transferring knowledge from larger teachers to smaller students to improve performance without increasing costs (Hinton et al., 2015). However, traditional KD methods like Logit Mimicking and Feature Imitation have proven inefficient for detection tasks and can even cause performance drops in state-of-the-art models (Zheng et al., 2022). In contrast, localization distillation (LD) has shown better results for detection. Nevertheless, integrating LD remains challenging due to its substantial training overhead and incompatibility with anchor-free detectors. 
+
+To address these issues, we propose **D-FINE** , a novel real-time object detector that redefines bounding box regression and introduces an effective self-distillation strategy. Our approach tackles the problems of difficult optimization in fixed-coordinate regression, the inability to model localization uncertainty, and the need for effective distillation with less training cost. We introduce **Finegrained Distribution Refinement (FDR)** to transform bounding box regression from predicting fixed coordinates to modeling probability distributions, providing a more fine-grained intermediate representation. FDR refines these distributions iteratively in a residual manner, allowing for progressively finer adjustments and improving localization precision. Recognizing that deeper layers produce more accurate predictions by capturing richer localization information within their probability distributions, we introduce **Global Optimal Localization Self-Distillation (GO-LSD)** . GO-LSD transfers localization knowledge from deeper layers to shallower ones with negligible extra training cost. By aligning shallower layers’ predictions with refined outputs from later layers, the model learns to produce better early adjustments, accelerating convergence and improving overall performance. Furthermore, we streamline computationally intensive modules and operations in existing real-time DETR architectures (Zhao et al., 2024; Chen et al., 2024), making D-FINE faster and more lightweight. While such modifications typically result in performance loss, FDR and GO-LSD effectively mitigate this degradation, achieving a better balance between speed and accuracy. 
+
+Experimental results on the COCO dataset (Lin et al., 2014a) demonstrate that D-FINE achieves state-of-the-art performance in real-time object detection, surpassing existing models in accuracy and efficiency. D-FINE-L and D-FINE-X achieve 54.0% and 55.8% AP, respectively on COCO val2017, running at 124 FPS and 78 FPS on an NVIDIA T4 GPU. After pretraining on larger datasets like Objects365 (Shao et al., 2019), the D-FINE series attains up to 59.3% AP, surpassing all existing real-time detectors, showcasing both scalability and robustness. Moreover, our method enhances a variety of DETR models by up to 5.3% AP with negligible extra parameters and training costs, demonstrating its flexibility and generalizability. In conclusion, D-FINE pushes the performance boundaries of real-time detectors. By addressing key challenges in bounding box regression and distillation efficiency through FDR and GO-LSD, we offer a meaningful step forward in object detection, inspiring further exploration in the field. 
+
+2 
+
+## 2 RELATED WORK 
+
+**Real-Time / End-to-End Object Detectors.** The YOLO series has led the way in real-time object detection, evolving through innovations in architecture, data augmentation, and training techniques (Redmon et al., 2016a; Wang et al., 2023a;b; Glenn., 2023; Wang & Liao, 2024; Glenn., 2024). While efficient, YOLOs typically rely on Non-Maximum Suppression (NMS), which introduces latency and instability between speed and accuracy. DETR (Carion et al., 2020) revolutionizes object detection by removing the need for hand-crafted components like NMS and anchors. Traditional DETRs (Zhu et al., 2020; Meng et al., 2021; Zhang et al., 2022; Wang et al., 2022; Liu et al., 2021; Li et al., 2022; Chen et al., 2022a;c) have achieved excelling performance but at the cost of high computational demands, making them unsuitable for real-time applications. Recently, RTDETR (Zhao et al., 2024) and LW-DETR (Chen et al., 2024) have successfully adapted DETR for real-time use. Concurrently, YOLOv10 (Wang et al., 2024a) also eliminates the need for NMS, marking a significant shift towards end-to-end detection within the YOLO series. 
+
+**Distribution-Based Object Detection.** Traditional bounding box regression methods (Redmon et al., 2016b; Liu et al., 2016; Ren et al., 2015) rely on Dirac delta distributions, treating bounding box edges as precise and fixed, which makes modeling localization uncertainty challenging. To address this, recent models have employed Gaussian or discrete distributions to represent bounding boxes (Choi et al., 2019; Li et al., 2020; Qiu et al., 2020; Li et al., 2021), enhancing the modeling of uncertainty. However, these methods all rely on anchor-based frameworks, which limits their compatibility with modern anchor-free detectors like YOLOX (Ge et al., 2021) and DETR (Carion et al., 2020). Furthermore, their distribution representations are often formulated in a coarse-grained manner and lack effective refinement, hindering their ability to achieve more accurate predictions. 
+
+**Knowledge Distillation.** Knowledge distillation (KD) (Hinton et al., 2015) is a powerful model compression technique. Traditional KD typically focuses on transferring knowledge through Logit Mimicking (Zagoruyko & Komodakis, 2017; Mirzadeh et al., 2020; Son et al., 2021). FitNets (Romero et al., 2015) initially propose Feature Imitation, which has inspired a series of subsequent works that further expand upon this idea (Chen et al., 2017; Dai et al., 2021; Guo et al., 2021; Li et al., 2017; Wang et al., 2019). Most approaches for DETR (Chang et al., 2023; Wang et al., 2024b) incorporate hybrid distillations of both logit and various intermediate representations. Recently, localization distillation (LD) (Zheng et al., 2022) demonstrates that transferring localization knowledge is more effective for detection tasks. Self-distillation (Zhang et al., 2019; 2021) is a special case of KD which enables earlier layers to learn from the model’s own refined outputs, requiring far fewer additional training costs since there’s no need to separately train a teacher model. 
+
+## 3 PRELIMINARIES 
+
+**Bounding box regression** in object detection has traditionally relied on modeling Dirac delta distributions, either using centroid-based _{x, y, w, h}_ or edge-distance _{_ **c** _,_ **d** _}_ forms, where the distances **d** = _{t, b, l, r}_ are measured from the anchor point **c** = _{xc, yc}_ . However, the Dirac delta assumption, which treats bounding box edges as precise and fixed, makes it difficult to model localization uncertainty, especially in ambiguous cases. This rigid representation may limit optimization and potentially lead to localization errors with small prediction shifts. 
+
+To address these problems, GFocal (Li et al., 2020; 2021) regresses the distances from anchor points to the four edges using discretized probability distributions, offering a more flexible modeling of the bounding box. In practice, bounding box distances **d** = _{t, b, l, r}_ is modeled as: 
+
+**==> picture [247 x 30] intentionally omitted <==**
+
+where _d_ max is a scalar that limits the maximum distance from the anchor center, and **P** ( _n_ ) denotes the probability of each candidate distance of four edges. While GFocal introduces a step forward in handling ambiguity and uncertainty through probability distributions, specific challenges in its regression approach persist: (1) _Anchor Dependency_ : Regression is tied to the anchor box center, limiting prediction diversity and compatibility with anchor-free frameworks. (2) _No Iterative Refinement_ : Predictions are made in one shot without iterative refinements, reducing regression robustness. 
+
+3 
+
+(3) _Coarse Localization_ : Fixed distance ranges and uniform bin intervals can lead to coarse localization, especially for small objects, because each bin represents a wide range of possible values. 
+
+**Localization Distillation (LD)** is a promising approach, demonstrating that transferring localization knowledge is more effective for detection tasks (Zheng et al., 2022). Built upon GFocal, it enhances student models by distilling valuable localization knowledge from teacher models, rather than simply mimicking classification logits or feature maps. Despite its advantages, the method still relies on anchor-based architectures and incurs additional training costs. 
+
+## 4 METHOD 
+
+We propose **D-FINE** , a powerful real-time object detector that excels in speed, size, computational cost, and accuracy. D-FINE addresses the shortcomings of existing bounding box regression approaches by leveraging two key components: **Fine-grained Distribution Refinement (FDR)** and **Global Optimal Localization Self-Distillation (GO-LSD)** , which work in tandem to significantly enhance performance with negligible additional parameters and training time cost. 
+
+**(1) FDR** iteratively optimizes probability distributions that act as corrections to the bounding box predictions, providing a more fine-grained intermediate representation. This approach captures and optimizes the uncertainty of each edge independently. By leveraging the non-uniform weighting function, FDR allows for more precise and incremental adjustments at each decoder layer, improving localization accuracy and reducing prediction errors. FDR operates within an anchor-free, end-toend framework, enabling a more flexible and robust optimization process. 
+
+**(2) GO-LSD** distill localization knowledge from refined distributions into shallower layers. As training progresses, the final layer produces increasingly precise soft labels. Shallower layers align their predictions with these labels through GO-LSD, leading to more accurate predictions. As earlystage predictions improve, the subsequent layers can focus on refining smaller residuals. This mutual reinforcement creates a synergistic effect, leading to progressively more accurate localization. 
+
+To further enhance the efficiency of D-FINE, we streamline computationally intensive modules and operations in existing real-time DETR architectures (Zhao et al., 2024), making D-FINE faster and more lightweight. Although these modifications typically result in some performance loss, FDR and GO-LSD effectively mitigate this degradation. The detailed modifications are listed in Table 4. 
+
+## 4.1 FINE-GRAINED DISTRIBUTION REFINEMENT 
+
+**Fine-grained Distribution Refinement (FDR)** iteratively optimizes a fine-grained distribution generated by the decoder layers, as shown in Figure 2. In the first decoder layer, preliminary bounding boxes are predicted by a traditional bounding box regression head, while the D-FINE head generates the initial probability distributions for the four edges (top, bottom, left, right). The preliminary bounding boxes serve as reference boxes, while subsequent layers focus on refining them by adjusting distributions in a residual manner. The refined distributions are then applied to adjust the four edges of the corresponding initial bounding box, progressively improving its accuracy with each iteration. Mathematically, let **b**[0] = _{x, y, w, h}_ denote the initial bounding box prediction, where _{x, y}_ represents the predicted center of the bounding box, and _{w, h}_ represent the width and height of the box. We can then convert **b**[0] into the center coordinates **c**[0] = _{x, y}_ and the edge distances **d**[0] = _{t, b, l, r}_ , which represent the distances from the center to the top, bottom, left, and right edges. For the _l_ -th layer, the refined edge distances **d** _[l]_ = _{t[l] , b[l] , l[l] , r[l] }_ are computed as: 
+
+**==> picture [329 x 30] intentionally omitted <==**
+
+where **Pr** _[l]_ ( _n_ ) = _{_ Pr _[l] t_[(] _[n]_[)] _[,]_[ Pr] _[l] b_[(] _[n]_[)] _[,]_[ Pr] _[l] l_[(] _[n]_[)] _[,]_[ Pr] _[l] r_[(] _[n]_[)] _[}]_[represents][four][separate][distributions,][one][for] each edge. Each distribution predicts the likelihood of candidate offset values for the corresponding edge. These candidates are determined by the weighting function _W_ ( _n_ ), where _n_ indexes the discrete bins out of _N_ , with each bin corresponding to a potential edge offset. The weighted sum of the distributions produces the edge offsets. These edge offsets are then scaled by the height _h_ and width _w_ of the initial bounding box, ensuring the adjustments are proportional to the box size. 
+
+4 
+
+**==> picture [368 x 147] intentionally omitted <==**
+
+**----- Start of picture text -----**<br>
+Refined Distributions Pr(n) Weighted Distributions W(n)Pr(n)<br>(x, y)<br>s : ym eh<br>a<br>Traditional Head<br>Initial BBox<br>Initial BBox 0.2aH<br>0.3aW<br>W (x, y) (x, y)<br>H × ∑<br>Weighting Function W(n) Edge Offsets  ∑ W(n)Pr(n)<br>Refined BBox<br>D-FINE Head<br>Decoder Layer 2 D-FINE Head<br>Layer 3<br>Decoder  D-FINE Head<br>**----- End of picture text -----**<br>
+
+
+Figure 2: Overview of D-FINE with FDR. The probability distributions that act as a more finegrained intermediate representation are iteratively refined by the decoder layers in a residual manner. Non-uniform weighting functions are applied to allow for finer localization. 
+
+The refined distributions are updated using residual adjustments, defined as follows: 
+
+**==> picture [351 x 19] intentionally omitted <==**
+
+where logits from the previous layer _logits[l][−]_[1] ( _n_ ) reflect the confidence in each bin’s offset value for the four edges. The current layer predicts the residual logits ∆ _logits[l]_ ( _n_ ), which are added to the previous logits to form updated logits _logits[l]_ ( _n_ ). These updated logits are then normalized using the softmax function, producing the refined probability distributions. 
+
+To facilitate precise and flexible adjustments, the weighting function _W_ ( _n_ ) is defined as: 
+
+**==> picture [308 x 72] intentionally omitted <==**
+
+where _a_ and _c_ are hyper-parameters controlling the upper bounds and curvature of the function. As shown in Figure 2, the shape of _W_ ( _n_ ) ensures that when bounding box prediction is near accurate, small curvature in _W_ ( _n_ ) allows for finer adjustments. Conversely, if the bounding box prediction is far from accurate, the larger curvature near the edges and the sharp changes at the boundaries of _W_ ( _n_ ) ensure sufficient flexibility for substantial corrections. 
+
+To further improve the accuracy of our distribution predictions and align them with ground truth values, inspired by Distribution Focal Loss (DFL) (Li et al., 2020), we propose a new loss function, Fine-Grained Localization (FGL) Loss, which is computed as: 
+
+**==> picture [366 x 59] intentionally omitted <==**
+
+where **Pr** _[l]_ ( _n_ ) _k_ represents the probability distributions corresponding to the _k_ -th prediction. _ϕ_ is the relative offset calculated as _ϕ_ = ( **d** _[GT] −_ **d**[0] ) _/{h, h, w, w}_ . **d** _[GT]_ represents the ground truth edgedistance and _n←, n→_ are the bin indices adjacent to _ϕ_ . The cross-entropy (CE) losses with weights _ω←_ and _ω→_ ensure that the interpolation between bins aligns precisely with the ground truth offset. By incorporating IoU-based weighting, FGL loss encourages distributions with lower uncertainty to become more concentrated, resulting in more precise and reliable bounding box regression. 
+
+5 
+
+**==> picture [359 x 116] intentionally omitted <==**
+
+**----- Start of picture text -----**<br>
+Unmatched Prediction<br>Matched PredictionSelf-Distillation βk Localization Knowledge βk Localization Knowledge<br>DDF Loss Weight × K u × K u × K u<br>0                        N/2                         N  0                        N/2                         N  0                        N/2                         N<br>αk αk<br>× K m × K m × K m<br>0                        N/2                         N  0                        N/2                         N  0                        N/2                         N<br>a i sed<br>Student Teacher<br>Decoder Layer Decoder Layer Decoder Layer<br>Student<br>**----- End of picture text -----**<br>
+
+
+Figure 3: Overview of GO-LSD process. Localization knowledge from the final layer’s refined distributions is distilled into shallower layers through DDF loss with decoupled weighting strategies. 
+
+## 4.2 GLOBAL OPTIMAL LOCALIZATION SELF-DISTILLATION 
+
+**Global Optimal Localization Self-Distillation** (GO-LSD) utilizes the final layer’s refined distribution predictions to distill localization knowledge into the shallower layers, as shown in Figure 3. This process begins by applying Hungarian Matching (Carion et al., 2020) to the predictions from each layer, identifying the local bounding box matches at every stage of the model. To perform a global optimization, GO-LSD aggregates the matching indices from all layers into a unified union set. This union set combines the most accurate candidate predictions across layers, ensuring that they all benefit from the distillation process. In addition to refining the global matches, GO-LSD also optimizes unmatched predictions during training to improve overall stability, leading to improved overall performance. Although the localization is optimized through this union set, the classification task still follows a one-to-one matching principle, ensuring that there are no redundant boxes. This strict matching means that some predictions in the union set are well-localized but have low confidence scores. These low-confidence predictions often represent candidates with precise localization, which still need to be distilled effectively. 
+
+To address this, we introduce Decoupled Distillation Focal (DDF) Loss, which applies decoupled weighting strategies to ensure that high-IoU but low-confidence predictions are given appropriate weight. The DDF Loss also weights matched and unmatched predictions according to their quantity, balancing their overall contribution and individual losses. This approach results in more stable and effective distillation. The Decoupled Distillation Focal Loss _L_ DDF is then formulated as: 
+
+**==> picture [390 x 60] intentionally omitted <==**
+
+where **KL** represents the Kullback-Leibler divergence (Hinton et al., 2015), and _T_ is the temperature parameter used for smoothing logits. The distillation loss for the _k_ -th matched prediction is weighted by _αk_ , where _Km_ and _Ku_ are the numbers of matched and unmatched predictions, respectively. For the _k_ -th unmatched prediction, the weight is _βk_ , with Conf _k_ denoting the classification confidence. 
+
+## 5 EXPERIMENTS 
+
+## 5.1 EXPERIMENT SETUP 
+
+To validate the effectiveness of our proposed methods, we conduct experiments on the COCO (Lin et al., 2014a) and Objects365 (Shao et al., 2019) datasets. We evaluate our D-FINE using the standard COCO metrics, including Average Precision (AP) averaged over IoU thresholds from 0.50 to 0.95, as well as AP at specific thresholds (AP50 and AP75) and AP across different object scales: small (AP _S_ ), medium (AP _M_ ), and large (AP _L_ ). Additionally, we provide model efficiency metrics by reporting the number of parameters (#Params.), computational cost (GFLOPs), and end-to-end latency. The latency is measured using TensorRT FP16 on an NVIDIA T4 GPU. 
+
+6 
+
+Table 1: Performance comparison of various real-time object detectors on COCO val2017. 
+
+|Model<br>#Params.<br>GFLOPs<br>Latency (ms)<br>AP_val_<br>AP_val_<br>50<br>AP_val_<br>75<br>AP_val_<br>_S_<br>AP_val_<br>_M_<br>AP_val_<br>_L_|Model<br>#Params.<br>GFLOPs<br>Latency (ms)<br>AP_val_<br>AP_val_<br>50<br>AP_val_<br>75<br>AP_val_<br>_S_<br>AP_val_<br>_M_<br>AP_val_<br>_L_|Model<br>#Params.<br>GFLOPs<br>Latency (ms)<br>AP_val_<br>AP_val_<br>50<br>AP_val_<br>75<br>AP_val_<br>_S_<br>AP_val_<br>_M_<br>AP_val_<br>_L_|
+|---|---|---|
+|_Non-end-to-end Real-time Object Detectors_|||
+|YOLOv6-L<br>59M<br>150<br>9.04<br>52.8<br>70.3<br>57.7<br>34.4<br>58.1<br>70.1<br>YOLOv7-L<br>36M<br>104<br>16.81<br>51.2<br>69.7<br>55.5<br>35.2<br>55.9<br>66.7<br>YOLOv7-X<br>71M<br>189<br>21.57<br>52.9<br>71.1<br>57.4<br>36.9<br>57.7<br>68.6<br>YOLOv8-L<br>43M<br>165<br>12.31<br>52.9<br>69.8<br>57.5<br>35.3<br>58.3<br>69.8<br>YOLOv8-X<br>68M<br>257<br>16.59<br>53.9<br>71.0<br>58.7<br>35.7<br>59.3<br>70.7<br>YOLOv9-C<br>25M<br>102<br>10.66<br>53.0<br>70.2<br>57.8<br>36.2<br>58.5<br>69.3<br>YOLOv9-E<br>57M<br>189<br>20.53<br>55.6<br>72.8<br>60.6<br>40.2<br>61.0<br>71.4<br>Gold-YOLO-L<br>75M<br>152<br>9.21<br>53.3<br>70.9<br>-<br>33.8<br>58.9<br>69.9<br>RTMDet-L<br>52M<br>80<br>14.23<br>51.3<br>68.9<br>55.9<br>33.0<br>55.9<br>68.4<br>RTMDet-X<br>95M<br>142<br>21.59<br>52.8<br>70.4<br>57.2<br>35.9<br>57.3<br>69.1<br>YOLO11-L<br>25M<br>87<br>10.28<br>53.4<br>70.1<br>58.2<br>35.6<br>59.1<br>69.2<br>YOLO11-X<br>57M<br>195<br>14.39<br>54.7<br>71.6<br>59.5<br>37.7<br>59.7<br>70.2<br>YOLO11-L_⋆_<br>25M<br>87<br>6.31<br>52.9<br>69.4<br>57.7<br>35.2<br>58.7<br>68.8<br>YOLO11-X_⋆_<br>57M<br>195<br>10.52<br>54.1<br>70.8<br>58.9<br>37.0<br>59.2<br>69.7|||
+|_End-to-end Real-time Object Detectors_|||
+|YOLOv10-L<br>YOLOv10-X<br>RT-DETR-R50<br>RT-DETR-R101<br>RT-DETR-HG-L<br>RT-DETR-HG-X<br>RT-DETRv2-L<br>RT-DETRv2-X<br>RT-DETRv3-L<br>RT-DETRv3-X<br>LW-DETR-L<br>LW-DETR-X|24M<br>120<br>7.66<br>30M<br>160<br>10.74<br>42M<br>136<br>9.12<br>76M<br>259<br>13.61<br>32M<br>107<br>9.25<br>67M<br>234<br>14.01<br>42M<br>136<br>9.15<br>76M<br>259<br>13.66<br>42M<br>136<br>9.12<br>76M<br>259<br>13.61<br>47M<br>72<br>8.21<br>118M<br>174<br>16.06|53.2<br>70.1<br>58.1<br>35.8<br>58.5<br>69.4<br>54.4<br>71.3<br>59.3<br>37.0<br>59.8<br>70.9<br>53.1<br>71.3<br>57.7<br>34.8<br>58.0<br>70.0<br>54.3<br>72.7<br>58.6<br>36.0<br>58.8<br>72.1<br>53.0<br>71.7<br>57.3<br>34.6<br>57.4<br>71.2<br>54.8<br>73.1<br>59.4<br>35.7<br>59.6<br>72.9<br>53.4<br>71.6<br>57.4<br>36.1<br>57.9<br>70.8<br>54.3<br>72.8<br>58.8<br>35.8<br>58.8<br>72.1<br>53.4<br>71.7<br>-<br>-<br>-<br>-<br>54.6<br>73.1<br>-<br>-<br>-<br>-<br>49.5<br>-<br>-<br>-<br>-<br>-<br>53.0<br>-<br>-<br>-<br>-<br>-|
+|**D-FINE-L**(Ours)|31M<br>91<br>8.07|**54.0**<br>71.6<br>58.4<br>36.5<br>58.0<br>71.9|
+|**D-FINE-X**(Ours)<br>62M<br>202<br>12.89<br>**55.8**<br>73.7<br>60.2<br>37.3<br>60.5<br>73.4|||
+|_End-to-end Real-time Object Detectors (Pretrained on Objects365)_|||
+|YOLOv10-L<br>YOLOv10-X<br>RT-DETR-R50<br>RT-DETR-R101<br>LW-DETR-L<br>LW-DETR-X|24M<br>120<br>7.66<br>30M<br>160<br>10.74<br>42M<br>136<br>9.12<br>76M<br>259<br>13.61<br>47M<br>72<br>8.21<br>118M<br>174<br>16.06|54.0<br>71.0<br>58.9<br>36.5<br>59.2<br>70.5<br>54.9<br>71.9<br>59.8<br>37.6<br>60.2<br>71.7<br>55.3<br>73.4<br>60.1<br>37.9<br>59.9<br>71.8<br>56.2<br>74.6<br>61.3<br>38.3<br>60.5<br>73.5<br>56.1<br>74.6<br>60.9<br>37.2<br>60.4<br>73.0<br>58.3<br>76.9<br>63.3<br>40.9<br>63.3<br>74.8|
+|**D-FINE-L**(Ours)|31M<br>91<br>8.07|**57.1**<br>74.7<br>62.0<br>40.0<br>61.5<br>74.2|
+|**D-FINE-X**(Ours)|62M<br>202<br>12.89|**59.3**<br>76.8<br>64.6<br>42.3<br>64.2<br>76.4|
+
+
+_⋆_ : NMS is tuned with a confidence threshold of 0.01. 
+
+## 5.2 COMPARISON WITH REAL-TIME DETECTORS 
+
+Table 1 provides a comprehensive comparison between D-FINE and various real-time object detectors on COCO val2017. D-FINE achieves an excellent balance between efficiency and accuracy across multiple metrics. Specifically, **D-FINE-L** attains an AP of 54.0% with 31M parameters and 91 GFLOPs, maintaining a low latency of 8.07 ms. Additionally, **D-FINE-X** achieves an AP of 55.8% with 62M parameters and 202 GFLOPs, operating with a latency of 12.89 ms. As depicted in Figure 1, which shows scatter plots of latency vs. AP, parameter count vs. AP, and FLOPs vs. AP, D-FINE consistently outperforms other state-of-the-art models across all key dimensions. **D-FINEL** achieves a higher AP (54.0%) compared to YOLOv10-L (53.2%), RT-DETR-R50 (53.1%), and LW-DETR-X (53.0%), while requiring fewer computational resources (91 GFLOPs vs. 120, 136, and 174). Similarly, **D-FINE-X** surpasses YOLOv10-X and RT-DETR-R101 by achieving superior performance (55.8% AP vs. 54.4% and 54.3%) and demonstrating greater efficiency in terms of lower parameter count, GFLOPs, and latency. 
+
+We further pretrain D-FINE and YOLOv10 on the Objects365 dataset (Shao et al., 2019), before finetuning them on COCO. After pretraining, both **D-FINE-L** and **D-FINE-X** exhibit significant performance improvements, achieving AP of 57.1% and 59.3%, respectively. These enhancements 
+
+7 
+
+Table 2: Performance comparison of various real-time object detectors on CrowdHuman. 
+
+|Model|#Params.<br>GFLOPs<br>Latency (ms)|AP_val_<br>AP_val_<br>50<br>AP_val_<br>75<br>AP_val_<br>_S_<br>AP_val_<br>_M_<br>AP_val_<br>_L_|
+|---|---|---|
+|YOLOv8-S<br>YOLOv9-S<br>YOLOv10-S<br>RT-DETR-R18<br>RT-DETRv2-S|11M<br>29<br>6.96<br>7M<br>26<br>8.02<br>7M<br>22<br>2.65<br>20M<br>61<br>4.63<br>20M<br>60<br>4.59|50.4<br>78.1<br>-<br>-<br>-<br>-<br>50.5<br>77.1<br>-<br>-<br>-<br>-<br>50.6<br>78.6<br>-<br>-<br>-<br>-<br>54.1<br>82.3<br>-<br>-<br>-<br>-<br>54.2<br>82.6<br>52.2<br>19.4<br>36.8<br>47.2|
+|**D-FINE-S**(Ours)|10M<br>25<br>3.49|**55.5**<br>**87.1**<br>60.1<br>28.4<br>44.5<br>52.7|
+
+
+Table 3: Effectiveness of FDR and GO-LSD across various DETR models on COCO val2017. 
+
+|Model|#Params.<br>#Epochs|AP_val_<br>AP_val_<br>50<br>AP_val_<br>75<br>AP_val_<br>_S_<br>AP_val_<br>_M_<br>AP_val_<br>_L_|
+|---|---|---|
+|Deformable-DETR|40M<br>12|43.7<br>62.2<br>46.9<br>26.4<br>46.4<br>57.9|
+|+ FDR & GO-LSD|40M<br>12|47.1(+3.4)<br>64.7<br>50.8<br>29.0<br>50.3<br>62.8|
+|DAB-DETR<br>48M<br>12<br>44.2<br>62.5<br>47.3<br>27.5<br>47.1<br>58.6|||
+|+ FDR & GO-LSD|48M<br>12|49.5(+5.3)<br>67.2<br>54.1<br>31.8<br>53.2<br>63.3|
+|DN-DETR<br>48M<br>12<br>46.0<br>64.8<br>49.9<br>27.7<br>49.1<br>62.3|||
+|+ FDR & GO-LSD|48M<br>12|49.7(+3.7)<br>67.5<br>54.4<br>31.8<br>53.4<br>63.8|
+|DINO<br>47M<br>12<br>49.0<br>66.6<br>53.5<br>32.0<br>52.3<br>63.0|||
+|+ FDR & GO-LSD|47M<br>12|51.6(+2.6)<br>68.6<br>56.3<br>33.8<br>55.6<br>65.3|
+|DINO<br>47M<br>24<br>50.4<br>68.3<br>54.8<br>33.3<br>53.7<br>64.8|||
+|+ FDR & GO-LSD|47M<br>24|52.4(+2.0)<br>69.5<br>56.9<br>34.6<br>55.7<br>66.2|
+
+
+enable them to outperform YOLOv10-L and YOLOv10-X by 3.1% and 4.4% AP, thereby positioning them as the top-performing models in this comparison. What’s more, following the pretraining protocol of YOLOv8 (Glenn., 2023), YOLOv10 is pretrained on Objects365 for 300 epochs. In contrast, D-FINE requires only 21 epochs to achieve its substantial performance gains. These findings corroborate the conclusions of LW-DETR (Chen et al., 2024), demonstrating that DETR-based models benefit substantially more from pretraining compared to other detectors like YOLOs. 
+
+Table 2 compares D-FINE-S with state-of-the-art real-time detectors on the CrowdHuman dataset (Shao et al., 2018). D-FINE-S achieves the highest AP[val] (55.5%) and AP[val] 50[(87.1%) among] all models, with only 10M parameters, 25 GFLOPs, and a latency of 3.49ms. 
+
+## 5.3 EFFECTIVENESS ON VARIOUS DETR MODELS 
+
+Table 3 demonstrates the effectiveness of FDR and GO-LSD across multiple DETR-based object detectors on COCO val2017. These methods are designed for flexibility and can be seamlessly integrated into Deformable DETR, DAD-DETR, DN-DETR, and DINO, consistently boosting detection accuracy by 2.0% to 5.3% without increasing the number of parameters and computational burden. These results highlight the effectiveness of FDR and GO-LSD in enhancing localization precision and maximizing efficiency, demonstrating their adaptability and substantial impact across various end-to-end detection frameworks. 
+
+## 5.4 ABLATION STUDY 
+
+## 5.4.1 THE ROADMAP TO D-FINE 
+
+Table 4 showcases the stepwise progression from the baseline model (RT-DETR-HGNetv2-L (Zhao et al., 2024)) to our proposed D-FINE framework. Starting with the baseline metrics of 53.0% AP, 32M parameters, 110 GFLOPs, and 9.25 ms latency, we first remove all the decoder projection layers. This modification reduces GFLOPs to 97 and cuts the latency to 8.02 ms, although it decreases AP to 52.4%. To address this drop, we introduce the Target Gating Layer, which recovers the AP to 52.8% with only a marginal increase in computational cost. 
+
+8 
+
+Table 4: Step-by-step modifications from baseline model to D-FINE. Each step shows changes in AP, the number of parameters, latency, and FLOPs. 
+
+|Model|AP_val_<br>#Params.<br>Latency (ms) GFLOPs|
+|---|---|
+|baseline: RT-DETR-HGNetv2-L (Zhao et al., 2024)<br>Remove Decoder Projection Layers<br>+**Target Gating Layers**<br>Encoder CSP layers_→_GELAN (Wang & Liao, 2024)<br>Reduce Hidden Dimension in GELAN by half<br>Uneven Sampling Points (S: 3, M: 6, L: 3)<br>RT-DETRv2 Training Strategy (Lv et al., 2024)<br>+**FDR**<br>+**GO-LSD**|53.0<br>32M<br>9.25<br>110<br>52.4<br>32M<br>8.02<br>97<br>52.8<br>33M<br>8.15<br>98<br>53.5<br>46M<br>10.69<br>167<br>52.8<br>31M<br>8.01<br>91<br>52.9<br>31M<br>7.90<br>91<br>53.0<br>31M<br>7.90<br>91<br>53.5<br>31M<br>8.07<br>91<br>**54.0**(+1.0) **31M**(-3%)<br>**8.07**(-13%)<br>**91**(-17%)|
+
+
+Table 5: Distillation methods comparison in terms of performance, training time, and GPU memory usage. GO-LSD achieves the highest AP _[val]_ with minimal additional training cost. 
+
+|Methods|AP_val_ Time/Epoch Memory|FDR-based Methods|AP_val_ Time/Epoch Memory|
+|---|---|---|---|
+|baseline<br>Logit Mimicking<br>Feature Imitation|53.0<br>29min<br>8552M<br>52.6<br>31min<br>8554M<br>52.9<br>31min<br>8554M|baseline+ FDR<br>Localization Distill.<br>GO-LSD|53.8<br>30min<br>8730M<br>53.7<br>31min<br>8734M<br>**54.5**<br>31min<br>8734M|
+
+
+The Target Gating Layer is strategically placed after the decoder’s cross-attention module, replacing the residual connection. It allows queries to dynamically switch their focus on different targets across layers, effectively preventing information entanglement. The mechanism operates as follows: 
+
+**==> picture [325 x 14] intentionally omitted <==**
+
+where **x1** represents the previous queries and **x2** is the cross-attention result. _σ_ is the sigmoid activation function applied to the concatenated outputs, and [ _._ ] represents the concatenation operation. 
+
+Next, we replace the encoder’s CSP layers with GELAN layers (Wang & Liao, 2024). This substitution increases AP to 53.5% but also raises the parameter count, GFLOPs, and latency. To mitigate the increased complexity, we reduce the hidden dimension of GELAN, which balances the model’s complexity and maintains AP at 52.8% while improving efficiency. We further optimize the sampling points by implementing uneven sampling across different scales (S: 3, M: 6, L: 3), which slightly increases AP to 52.9%. However, alternative sampling combinations such as (S: 6, M: 3, L: 3) and (S: 3, M: 3, L: 6) result in a minor performance drop of 0.1% AP. Adopting the RT-DETRv2 training strategy (Lv et al., 2024) (see Appendix A.1.1 for details) enhances AP to 53.0% without affecting the number of parameters or latency. Finally, the integration of FDR and GO-LSD modules elevates AP to 54.0%, achieving a 13% reduction in latency and a 17% reduction in GFLOPs compared to the baseline model. These incremental modifications demonstrate the robustness and effectiveness of our D-FINE framework. 
+
+## 5.4.2 COMPARISON OF DISTILLATION METHODS 
+
+Table 5 compares different distillation methods based on performance, training time, and GPU memory usage. The baseline model achieves an AP of 53.0%, with a training time of 29 minutes per epoch and memory usage of 8552 MB on four NVIDIA RTX 4090 GPUs. Due to the instability of one-to-one matching in DETR, traditional distillation techniques like Logit Mimicking and Feature Imitation do not improve performance; Logit Mimicking reduces AP to 52.6%, while Feature Imitation achieves 52.9%. Incorporating our FDR module increases AP to 53.8% with minimal additional training cost. Applying vanilla Localization Distillation (Zheng et al., 2022) further increases AP to 53.7%. Our GO-LSD method achieves the highest AP of 54.5%, with only a 6% increase in training time and a 2% rise in memory usage compared to the baseline. Notably, no lightweight optimizations are applied in this comparison, focusing purely on distillation performance. 
+
+9 
+
+Figure 4: Visualization of FDR across detection scenarios with initial and refined bounding boxes, along with unweighted and weighted distributions, highlighting improved localization accuracy. 
+
+## 5.5 VISUALIZATION ANALYSIS 
+
+Figure 4 illustrates the process of FDR across various detection scenarios. We display the filtered detection results with two bounding boxes overlaid on the images. The red boxes represent the initial predictions from the first decoder layer, while the green boxes denote the refined predictions from the final decoder layer. The final predictions align more closely with the target objects. The first row under the images shows the unweighted probability distributions for the four edges (left, top, right, bottom). The second row shows the weighted distributions, where the weighting function _W_ ( _n_ ) has been applied. The red curves represent the initial distributions, while the green curves show the final, refined distributions. The weighted distributions emphasize finer adjustments near accurate predictions and allow for enabling rapid changes for larger adjustments, further illustrating how FDR refines the offsets of initial bounding boxes, leading to increasingly precise localization. 
+
+## 6 CONCLUSION 
+
+In this paper, we introduce D-FINE, a powerful real-time object detector that redefines the bounding box regression task in DETR models through Fine-grained Distribution Refinement (FDR) and Global Optimal Localization Self-Distillation (GO-LSD). Experimental results on the COCO dataset demonstrate that D-FINE achieves state-of-the-art accuracy and efficiency, surpassing all existing real-time detectors. **Limitation and Future Work:** However, the performance gap between lighter D-FINE models and other compact models remains small. One possible reason is that shallow decoder layers may yield less accurate final-layer predictions, limiting the effectiveness of distilling localization knowledge into earlier layers. Addressing this challenge necessitates enhancing the localization capabilities of lighter models without increasing inference latency. Future research could investigate advanced architectural designs or novel training paradigms that allow for the inclusion of additional sophisticated decoder layers during training while maintaining lightweight inference by simply discarding them at test time. We hope D-FINE inspires further advancements in this area. 
+
+10 
+
+## ACKNOWLEDGMENTS 
+
+This work was supported in part by the National Natural Science Foundation of China under Grants 62472399, 62021001, and 62032006. 
+
+## REFERENCES 
+
+- Elahe Arani, Shruthi Gowda, Ratnajit Mukherjee, Omar Magdy, Senthilkumar Kathiresan, and Bahram Zonooz. A comprehensive study of real-time object detection networks across multiple domains: A survey. _arXiv preprint arXiv:2208.10895_ , 2022. 
+
+- Nicolas Carion, Francisco Massa, Gabriel Synnaeve, Nicolas Usunier, Alexander Kirillov, and Sergey Zagoruyko. End-to-end object detection with transformers. In _European Conference on Computer Vision_ , pp. 213–229. Springer, 2020. 
+
+- Jiahao Chang, Shuo Wang, Hai-Ming Xu, Zehui Chen, Chenhongyi Yang, and Feng Zhao. Detrdistill: A universal knowledge distillation framework for detr-families. In _Proceedings of the IEEE/CVF International Conference on Computer Vision_ , pp. 6898–6908, 2023. 
+
+- Guobin Chen, Wongun Choi, Xiang Yu, Tony Han, and Manmohan Chandraker. Learning efficient object detection models with knowledge distillation. In _NeurIPS_ , 2017. 
+
+- Qiang Chen, Xiaokang Chen, Gang Zeng, and Jingdong Wang. Group detr: Fast training convergence with decoupled one-to-many label assignment. _arXiv preprint arXiv:2207.13085_ , 2022a. 
+
+- Qiang Chen, Jian Wang, Chuchu Han, Shan Zhang, Zexian Li, Xiaokang Chen, Jiahui Chen, Xiaodi Wang, Shuming Han, Gang Zhang, Haocheng Feng, Kun Yao, Junyu Han, Errui Ding, and Jingdong Wang. Group detr v2: Strong object detector with encoder-decoder pretraining, 2022b. 
+
+- Qiang Chen, Jian Wang, Chuchu Han, Shan Zhang, Zexian Li, Xiaokang Chen, Jiahui Chen, Xiaodi Wang, Shuming Han, Gang Zhang, et al. Group detr v2: Strong object detector with encoderdecoder pretraining. _arXiv preprint arXiv:2211.03594_ , 2022c. 
+
+- Qiang Chen, Xiangbo Su, Xinyu Zhang, Jian Wang, Jiahui Chen, Yunpeng Shen, Chuchu Han, Ziliang Chen, Weixiang Xu, Fanrong Li, et al. Lw-detr: A transformer replacement to yolo for real-time detection. _arXiv preprint arXiv:2406.03459_ , 2024. 
+
+- Jiwoong Choi, Dayoung Chun, Hyun Kim, and Hyuk-Jae Lee. Gaussian YOLOv3: An accurate and fast object detector using localization uncertainty for autonomous driving. In _ICCV_ , 2019. 
+
+- Cheng Cui, Ruoyu Guo, Yuning Du, Dongliang He, Fu Li, Zewu Wu, Qiwen Liu, Shilei Wen, Jizhou Huang, Xiaoguang Hu, Dianhai Yu, Errui Ding, and Yanjun Ma. Beyond self-supervision: A simple yet effective network distillation alternative to improve backbones, 2021. 
+
+- Xing Dai, Zeren Jiang, Zhao Wu, Yiping Bao, Zhicheng Wang, Si Liu, and Erjin Zhou. General instance distillation for object detection. In _CVPR_ , 2021. 
+
+Zheng Ge, Songtao Liu, Feng Wang, Zeming Li, and Jian Sun. Yolox: Exceeding yolo series in 2021. _arXiv preprint arXiv:2107.08430_ , 2021. 
+
+## Ross Girshick. Fast R-CNN. In _ICCV_ , 2015. 
+
+Jocher Glenn. Yolov8. _https://docs.ultralytics.com/models/yolov8/_ , 2023. 
+
+Jocher Glenn. Yolo11. _https://docs.ultralytics.com/models/yolo11/_ , 2024. 
+
+Jianyuan Guo, Kai Han, Yunhe Wang, Han Wu, Xinghao Chen, Chunjing Xu, and Chang Xu. Distilling object detectors via decoupled features. In _CVPR_ , 2021. 
+
+- Geoffrey Hinton, Oriol Vinyals, and Jeff Dean. Distilling the knowledge in a neural network. _arXiv preprint arXiv:1503.02531_ , 2015. 
+
+- Feng Li, Hao Zhang, Shilong Liu, Jian Guo, Lionel M Ni, and Lei Zhang. Dn-detr: Accelerate detr training by introducing query denoising. In _Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition_ , pp. 13619–13627, 2022. 
+
+11 
+
+Quanquan Li, Shengying Jin, and Junjie Yan. Mimicking very efficient network for object detection. In _CVPR_ , 2017. 
+
+- Xiang Li, Wenhai Wang, Lijun Wu, Shuo Chen, Xiaolin Hu, Jun Li, Jinhui Tang, and Jian Yang. Generalized Focal Loss: learning qualified and distributed bounding boxes for dense object detection. In _NeurIPS_ , 2020. 
+
+- Xiang Li, Wenhai Wang, Xiaolin Hu, Jun Li, Jinhui Tang, and Jian Yang. Generalized focal loss v2: Learning reliable localization quality estimation for dense object detection. In _CVPR_ , 2021. 
+
+- Tsung-Yi Lin, Michael Maire, Serge Belongie, James Hays, Pietro Perona, Deva Ramanan, Piotr Doll´ar, and C. Lawrence Zitnick. Microsoft coco: Common objects in context. In _ECCV_ , 2014a. 
+
+- Tsung-Yi Lin, Michael Maire, Serge Belongie, James Hays, Pietro Perona, Deva Ramanan, Piotr Doll´ar, and C Lawrence Zitnick. Microsoft coco: Common objects in context. In _European Conference on Computer Vision_ , pp. 740–755. Springer, 2014b. 
+
+- Shilong Liu, Feng Li, Hao Zhang, Xiao Yang, Xianbiao Qi, Hang Su, Jun Zhu, and Lei Zhang. Dabdetr: Dynamic anchor boxes are better queries for detr. In _International Conference on Learning Representations_ , 2021. 
+
+- Wei Liu, Dragomir Anguelov, Dumitru Erhan, Christian Szegedy, Scott Reed, Cheng-Yang Fu, and Alexander C. Berg. Ssd: Single shot multibox detector. In _ECCV_ , 2016. 
+
+Wenyu Lv, Yian Zhao, Qinyao Chang, Kui Huang, Guanzhong Wang, and Yi Liu. Rt-detrv2: Improved baseline with bag-of-freebies for real-time detection transformer, 2024. 
+
+- Chengqi Lyu, Wenwei Zhang, Haian Huang, Yue Zhou, Yudong Wang, Yanyi Liu, Shilong Zhang, and Kai Chen. Rtmdet: An empirical study of designing real-time object detectors. _ArXiv_ , abs/2212.07784, 2022. 
+
+- Depu Meng, Xiaokang Chen, Zejia Fan, Gang Zeng, Houqiang Li, Yuhui Yuan, Lei Sun, and Jingdong Wang. Conditional detr for fast training convergence. In _Proceedings of the IEEE/CVF International Conference on Computer Vision_ , pp. 3651–3660, 2021. 
+
+- Seyed Iman Mirzadeh, Mehrdad Farajtabar, Ang Li, Nir Levine, Akihiro Matsukawa, and Hassan Ghasemzadeh. Improved knowledge distillation via teacher assistant. In _AAAI_ , 2020. 
+
+- Heqian Qiu, Hongliang Li, Qingbo Wu, and Hengcan Shi. Offset bin classification network for accurate object detection. In _CVPR_ , 2020. 
+
+- Joseph Redmon, Santosh Divvala, Ross Girshick, and Ali Farhadi. You only look once: Unified, real-time object detection. In _Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition_ , pp. 779–788, 2016a. 
+
+- Joseph Redmon, Santosh Divvala, Ross Girshick, and Ali Farhadi. You only look once: Unified, real-time object detection. In _CVPR_ , 2016b. 
+
+- Shaoqing Ren, Kaiming He, Ross Girshick, and Jian Sun. Faster R-CNN: Towards real-time object detection with region proposal networks. In _NeurIPS_ , 2015. 
+
+- Adriana Romero, Nicolas Ballas, Samira Ebrahimi Kahou, Antoine Chassang, Carlo Gatta, and Yoshua Bengio. Fitnets: Hints for thin deep nets. In _ICLR_ , 2015. 
+
+- Olga Russakovsky, Jia Deng, Hao Su, Jonathan Krause, Sanjeev Satheesh, Sean Ma, Zhiheng Huang, Andrej Karpathy, Aditya Khosla, Michael Bernstein, et al. Imagenet large scale visual recognition challenge. _International Journal of Computer Vision_ , 115:211–252, 2015. 
+
+- Shuai Shao, Zijian Zhao, Boxun Li, Tete Xiao, Gang Yu, Xiangyu Zhang, and Jian Sun. Crowdhuman: A benchmark for detecting human in a crowd. _arXiv preprint arXiv:1805.00123_ , 2018. 
+
+- Shuai Shao, Zeming Li, Tianyuan Zhang, Chao Peng, Gang Yu, Xiangyu Zhang, Jing Li, and Jian Sun. Objects365: A large-scale, high-quality dataset for object detection. In _Proceedings of the IEEE/CVF International Conference on Computer Vision_ , pp. 8430–8439, 2019. 
+
+12 
+
+- Wonchul Son, Jaemin Na, Junyong Choi, and Wonjun Hwang. Densely guided knowledge distillation using multiple teacher assistants. In _ICCV_ , 2021. 
+
+- Zhi Tian, Chunhua Shen, Hao Chen, and Tong He. FCOS: Fully convolutional one-stage object detection. In _ICCV_ , 2019. 
+
+- Ao Wang, Hui Chen, Lihao Liu, Kai Chen, Zijia Lin, Jungong Han, and Guiguang Ding. Yolov10: Real-time end-to-end object detection. In _The European Conference on Computer Vision (ECCV)_ , 2024a. 
+
+- Chengcheng Wang, Wei He, Ying Nie, Jianyuan Guo, Chuanjian Liu, Yunhe Wang, and Kai Han. Gold-yolo: Efficient object detector via gather-and-distribute mechanism. In _Advances in Neural Information Processing Systems_ . Curran Associates, Inc., 2023a. 
+
+- Chien-Yao Wang and Hong-Yuan Mark Liao. YOLOv9: Learning what you want to learn using programmable gradient information. _arXiv preprint arXiv:2402.13616_ , 2024. 
+
+- Chien-Yao Wang, Alexey Bochkovskiy, and Hong-Yuan Mark Liao. Yolov7: Trainable bag-offreebies sets new state-of-the-art for real-time object detectors. In _Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition_ , pp. 7464–7475, 2023b. 
+
+- Tao Wang, Li Yuan, Xiaopeng Zhang, and Jiashi Feng. Distilling object detectors with fine-grained feature imitation. In _CVPR_ , 2019. 
+
+- Yingming Wang, Xiangyu Zhang, Tong Yang, and Jian Sun. Anchor detr: Query design for transformer-based detector. In _Proceedings of the AAAI Conference on Artificial Intelligence_ , pp. 2567–2575, 2022. 
+
+- Yu Wang, Xin Li, Shengzhao Weng, Gang Zhang, Haixiao Yue, Haocheng Feng, Junyu Han, and Errui Ding. Kd-detr: Knowledge distillation for detection transformer with consistent distillation points sampling. In _Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition_ , pp. 16016–16025, 2024b. 
+
+- Sergey Zagoruyko and Nikos Komodakis. Paying more attention to attention: Improving the performance of convolutional neural networks via attention transfer. In _ICLR_ , 2017. 
+
+- Hao Zhang, Feng Li, Shilong Liu, Lei Zhang, Hang Su, Jun Zhu, Lionel Ni, and Heung-Yeung Shum. Dino: Detr with improved denoising anchor boxes for end-to-end object detection. In _International Conference on Learning Representations_ , 2022. 
+
+- Linfeng Zhang, Jiebo Song, Anni Gao, Jingwei Chen, Chenglong Bao, and Kaisheng Ma. Be your own teacher: Improve the performance of convolutional neural networks via self distillation. In _ICCV_ , pp. 3713–3722, 2019. 
+
+- Linfeng Zhang, Chenglong Bao, and Kaisheng Ma. Self-distillation: Towards efficient and compact neural networks. _IEEE Transactions on Pattern Analysis and Machine Intelligence_ , 44(8):4388– 4403, 2021. 
+
+- Yian Zhao, Wenyu Lv, Shangliang Xu, Jinman Wei, Guanzhong Wang, Qingqing Dang, Yi Liu, and Jie Chen. Detrs beat yolos on real-time object detection. In _The IEEE Conference on Computer Vision and Pattern Recognition (CVPR)_ , 2024. 
+
+- Zhaohui Zheng, Rongguang Ye, Ping Wang, Dongwei Ren, Wangmeng Zuo, Qibin Hou, and MingMing Cheng. Localization distillation for dense object detection. In _Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition_ , pp. 9407–9416, 2022. 
+
+- Xizhou Zhu, Weijie Su, Lewei Lu, Bin Li, Xiaogang Wang, and Jifeng Dai. Deformable detr: Deformable transformers for end-to-end object detection. In _International Conference on Learning Representations_ , 2020. 
+
+13 
+
+## A APPENDIX 
+
+## A.1 IMPLEMENTATION DETAILS 
+
+## A.1.1 HYPERPARAMETER CONFIGURATIONS 
+
+Table 6 summarizes the hyperparameter configurations for the D-FINE models. All variants use HGNetV2 backbones pretrained on ImageNet (Cui et al., 2021; Russakovsky et al., 2015) and the AdamW optimizer. D-FINE-X is set with an embedding dimension of 384 and a feedforward dimension of 2048, while the other models use 256 and 1024, respectively. The D-FINE-X and D-FINE-L have 6 decoder layers, while D-FINE-M and D-FINE-S have 4 and 3 decoder layers. The GELAN module progressively reduces hidden dimension and depth from D-FINE-X with 192 dimensions and 3 layers to D-FINE-S with 64 dimensions and 1 layer. The base learning rate and weight decay for D-FINE-X and D-FINE-L are 2 _._ 5 _×_ 10 _[−]_[4] and 1 _._ 25 _×_ 10 _[−]_[4] , respectively, while D-FINE-M and D-FINE-S use 2 _×_ 10 _[−]_[4] and 1 _×_ 10 _[−]_[4] . Smaller models also have higher backbone learning rates than larger models. The total batch size is 32 across all variants. Training schedules include 72 epochs with advanced augmentation (RandomPhotometricDistort, RandomZoomOut, RandomIoUCrop, and RMultiScaleInput) followed by 2 epochs without advanced augmentation for D-FINE-X and D-FINE-L, and 120 epochs with advanced augmentation followed by 4 epochs without advanced augmentation for D-FINE-M and D-FINE-S (RT-DETRv2 Training Strategy (Lv et al., 2024) in Table 4). The number of pretraining epochs is 21 for D-FINE-X and D- FINE-L models, while for D-FINE-M and D-FINE-S models, it ranges from 28 to 29 epochs. 
+
+Table 6: Hyperparameter configurations for different D-FINE models. 
+
+|**Setting**|**D-FINE-X**<br>**D-FINE-L**<br>**D-FINE-M**<br>**D-FINE-S**|
+|---|---|
+|Backbone Name<br>Optimizer<br>Embedding Dimension<br>Feedforward Dimension<br>GELAN Hidden Dimension<br>GELAN Depth<br>Decoder Layers<br>Queries<br>_a_,_c_in_W_(_n_)<br>Bin Number_N_<br>Sampling Point Number<br>Temporature_T_<br>Base LR<br>Backbone LR<br>Weight Decay<br>Weight of_L_VFL<br>Weight of_L_BBox<br>Weight of_L_GIOU<br>Weight of_L_FGL<br>Weight of_L_DDF<br>Total Batch Size<br>EMA Decay<br>Epochs (w/ + w/o Adv. Aug.)<br>Epochs (Pretrain + Finetune)|HGNetv2-B5<br>HGNetv2-B4<br>HGNetv2-B2<br>HGNetv2-B0<br>AdamW<br>AdamW<br>AdamW<br>AdamW<br>384<br>256<br>256<br>256<br>2048<br>1024<br>1024<br>1024<br>192<br>128<br>128<br>64<br>3<br>3<br>2<br>1<br>6<br>6<br>4<br>3<br>300<br>300<br>300<br>300<br>0.5, 0.125<br>0.5, 0.25<br>0.5, 0.25<br>0.5, 0.25<br>32<br>32<br>32<br>32<br>(S: 3, M: 6, L: 3)<br>(S: 3, M: 6, L: 3)<br>(S: 3, M: 6, L: 3)<br>(S: 3, M: 6, L: 3)<br>5<br>5<br>5<br>5<br>2.5e-4<br>2.5e-4<br>2e-4<br>2e-4<br>2.5e-6<br>1.25e-5<br>2e-5<br>1e-4<br>1.25e-4<br>1.25e-4<br>1e-4<br>1e-4<br>1<br>1<br>1<br>1<br>5<br>5<br>5<br>5<br>2<br>2<br>2<br>2<br>0.15<br>0.15<br>0.15<br>0.15<br>1.5<br>1.5<br>1.5<br>1.5<br>32<br>32<br>32<br>32<br>0.9999<br>0.9999<br>0.9999<br>0.9999<br>72 + 2<br>72 + 2<br>120 + 4<br>120 + 4<br>21 + 31<br>21 + 32<br>29 + 49<br>28 + 58|
+
+
+## A.1.2 DATASETS SETTINGS 
+
+For pretraining, following the approach in (Chen et al., 2022b; Zhang et al., 2022; Chen et al., 2024), we combine the images from the Objects365 (Shao et al., 2019) train set with the validate set, excluding the first 5k images. To further improve training efficiency, we resize all images with resolutions exceeding 640 _×_ 640 down to 640 _×_ 640 beforehand. We use the standard COCO2017 (Lin et al., 2014b) data splitting policy, training on COCO train2017, and evaluating on COCO val2017. 
+
+14 
+
+## A.2 VISUALIZATION OF D-FINE PREDICTIONS 
+
+Figure 5 demonstrates the robustness of the D-FINE-X model, visualizing its predictions in various challenging scenarios. These include occlusion, low-light conditions, motion blur, depth of field effects, rotation, and densely populated scenes with numerous objects in close proximity. Despite these difficulties, the model accurately identifies and localizes objects, such as animals, vehicles, and people. This visualization highlights the model’s ability to handle complex real-world conditions while maintaining robust detection performance. 
+
+Figure 5: Visualization of D-FINE-X (without pre-training on Objects365) predictions under challenging conditions, including occlusion, low light, motion blur, depth of field effects, rotation, and densely populated scenes (confidence threshold=0.5). 
+
+15 
+
+## A.3 COMPARISON WITH LIGHTER DETECTORS 
+
+Table 7 presents a comprehensive comparison of D-FINE models with various lightweight real-time object detectors in the S and M model sizes on the COCO val2017. D-FINE-S achieves an impressive AP of 48.5%, surpassing other lightweight models such as Gold-YOLO-S (46.4%) and RT-DETRv2-S (48.1%), while maintaining a low latency of 3.49 ms with only 10.2M parameters and 25.2 GFLOPs. Pretraining on Objects365 further boosts D-FINE-S to 50.7%, marking an improvement of +2.2%. Similarly, D-FINE-M attains an AP of 52.3% with 19.2M parameters and 56.6 GFLOPs at 5.62 ms, outperforming YOLOv10-M (51.1%) and RT-DETRv2-M (49.9%). Pretraining on Objects365 consistently enhances D-FINE-M, yielding a +2.8% gain. These results demonstrate that D-FINE models strike an excellent balance between accuracy and efficiency, consistently surpassing other state-of-the-art lightweight detectors while preserving real-time performance. 
+
+Table 7: Performance comparison of S and M sized real-time object detectors on COCO val2017. 
+
+|Model<br>#Params.<br>GFLOPs<br>Latency (ms)<br>AP_val_<br>AP_val_<br>50<br>AP_val_<br>75<br>AP_val_<br>_S_<br>AP_val_<br>_M_<br>AP_val_<br>_L_|Model<br>#Params.<br>GFLOPs<br>Latency (ms)<br>AP_val_<br>AP_val_<br>50<br>AP_val_<br>75<br>AP_val_<br>_S_<br>AP_val_<br>_M_<br>AP_val_<br>_L_|Model<br>#Params.<br>GFLOPs<br>Latency (ms)<br>AP_val_<br>AP_val_<br>50<br>AP_val_<br>75<br>AP_val_<br>_S_<br>AP_val_<br>_M_<br>AP_val_<br>_L_|
+|---|---|---|
+|_Non-end-to-end Real-time Object Detectors_|||
+|YOLOv6-S<br>7M<br>17<br>3.62<br>45.0<br>61.8<br>48.9<br>24.3<br>50.2<br>62.7<br>YOLOv6-M<br>35M<br>86<br>5.48<br>50.0<br>66.9<br>54.6<br>30.6<br>55.4<br>67.3<br>YOLOv8-S<br>11M<br>29<br>6.96<br>44.9<br>61.8<br>48.6<br>25.7<br>49.9<br>61.0<br>YOLOv8-M<br>26M<br>79<br>9.66<br>50.2<br>67.2<br>54.6<br>32.0<br>55.7<br>66.4<br>YOLOv9-S<br>7M<br>26<br>8.02<br>44.9<br>61.8<br>48.6<br>25.7<br>49.9<br>61.0<br>YOLOv9-M<br>20M<br>76<br>10.15<br>50.2<br>67.2<br>54.6<br>32.0<br>55.7<br>66.4<br>Gold-YOLO-S<br>22M<br>46<br>2.01<br>46.4<br>63.4<br>-<br>25.3<br>51.3<br>63.6<br>Gold-YOLO-M<br>41M<br>88<br>3.21<br>51.1<br>68.5<br>-<br>32.3<br>56.1<br>68.6<br>RTMDet-S<br>9M<br>15<br>7.77<br>44.6<br>61.9<br>48.1<br>24.9<br>48.5<br>62.5<br>RTMDet-M<br>25M<br>39<br>10.62<br>49.4<br>66.8<br>53.7<br>30.3<br>53.9<br>66.2<br>YOLO11-S<br>9M<br>22<br>6.81<br>46.6<br>63.4<br>50.3<br>28.7<br>51.3<br>64.1<br>YOLO11-M<br>20M<br>68<br>8.79<br>51.2<br>67.9<br>55.3<br>33.0<br>56.7<br>67.5<br>YOLO11-S_⋆_<br>9M<br>22<br>2.86<br>47.0<br>63.9<br>50.7<br>29.0<br>51.7<br>64.4<br>YOLO11-M_⋆_<br>20M<br>68<br>4.95<br>51.5<br>68.5<br>55.7<br>33.4<br>57.1<br>67.9|||
+|_End-to-end Real-time Object Detectors_|||
+|YOLOv10-S<br>YOLOv10-M<br>RT-DETR-R18<br>RT-DETR-R34<br>RT-DETRv2-S<br>RT-DETRv2-M<br>RT-DETRv3-R18<br>RT-DETRv3-R34<br>LW-DETR-S<br>LW-DETR-M|7M<br>22<br>2.65<br>15M<br>59<br>4.97<br>20M<br>61<br>4.63<br>31M<br>93<br>6.43<br>20M<br>60<br>4.59<br>31M<br>92<br>6.40<br>20M<br>61<br>4.63<br>31M<br>93<br>6.43<br>15M<br>17<br>3.02<br>28M<br>43<br>5.23|46.3<br>63.0<br>50.4<br>26.8<br>51.0<br>63.8<br>51.1<br>68.1<br>55.8<br>33.8<br>56.5<br>67.0<br>46.5<br>63.8<br>50.4<br>28.4<br>49.8<br>63.0<br>48.9<br>66.8<br>52.9<br>30.6<br>52.4<br>66.3<br>48.1<br>65.1<br>57.4<br>36.1<br>57.9<br>70.8<br>49.9<br>67.5<br>58.6<br>35.8<br>58.6<br>72.1<br>48.1<br>66.2<br>-<br>-<br>-<br>-<br>49.9<br>67.7<br>-<br>-<br>-<br>-<br>43.6<br>-<br>-<br>-<br>-<br>-<br>47.2<br>-<br>-<br>-<br>-<br>-|
+|**D-FINE-N**(Ours)|4M<br>7.2<br>2.12|**42.8**<br>60.2<br>45.4<br>22.8<br>46.8<br>61.9|
+|**D-FINE-S**(Ours)|10M<br>25<br>3.49|**48.5**<br>65.6<br>52.6<br>29.1<br>52.2<br>65.4|
+|**D-FINE-M**(Ours)<br>19M<br>57<br>5.55<br>**52.3**<br>69.8<br>56.4<br>33.2<br>56.5<br>70.2|||
+|_End-to-end Real-time Object Detectors (Pretrained on Objects365)_|||
+|RT-DETR-R18<br>LW-DETR-S<br>LW-DETR-M|20M<br>61<br>4.63<br>15M<br>17<br>3.02<br>28M<br>43<br>5.23|49.2<br>66.6<br>53.5<br>33.2<br>52.3<br>64.8<br>48.0<br>66.9<br>51.7<br>26.8<br>52.5<br>65.5<br>52.6<br>72.0<br>56.7<br>32.6<br>57.7<br>70.7|
+|**D-FINE-S**(Ours)|10M<br>25<br>3.49|**50.7**<br>67.6<br>55.1<br>32.7<br>54.6<br>66.5|
+|**D-FINE-M**(Ours)|19M<br>57<br>5.62|**55.1**<br>72.6<br>59.7<br>37.9<br>59.4<br>71.7|
+
+
+_⋆_ : NMS is tuned with a confidence threshold of 0.01. 
+
+Table 8 presents a concise performance comparison on Objects365. Our D-FINE models consistently deliver high AP scores while maintaining low latency and minimal computational overhead. In particular, D-FINE-X achieves an impressive 49.5% AP with 62M parameters at 12.89 ms, and even the lightweight D-FINE-S registers a competitive 31.0% AP with only 10M parameters. These results underscore the excellent balance between accuracy and efficiency offered by the D-FINE series on the complex, large-scale dataset, outperforming both RT-DETR and YOLOv10 models. 
+
+16 
+
+Table 8: Performance comparison of real-time object detectors on Objects365. 
+
+|Model|#Params.<br>GFLOPs<br>Latency (ms)|AP_val_<br>AP_val_<br>50|
+|---|---|---|
+|RT-DETR-R18<br>RT-DETR-R50<br>RT-DETR-R101<br>YOLOv10-L<br>YOLOv10-X|20M<br>61<br>4.63<br>42M<br>136<br>9.12<br>76M<br>259<br>13.61<br>24M<br>120<br>7.66<br>30M<br>160<br>10.74|22.9<br>31.2<br>35.1<br>46.2<br>36.8<br>48.3<br>34.2<br>44.9<br>34.9<br>45.8|
+|**D-FINE-S**(Ours)|10M<br>25<br>3.49|**31.0**<br>41.0|
+|**D-FINE-M**(Ours)|19M<br>57<br>5.55|**38.6**<br>49.7|
+|**D-FINE-L**(Ours)|31M<br>91<br>8.07|**44.7**<br>56.9|
+|**D-FINE-X**(Ours)|62M<br>202<br>12.89|**49.5**<br>62.4|
+
+
+Table 9: Hyperparameter ablation studies on D-FINE-L. _ϵ_ is a very small value. � _a_ , � _c_ indicate that _a_ and _c_ are learnable parameters. 
+
+|_a_,_c_|1<br>4, 1<br>4<br>1<br>2, 1<br>_ϵ_<br>**1**<br>**2**, **1**<br>**4**<br>1<br>2, 1<br>8 1, 1<br>4<br>�_a_,�_c_|
+|---|---|
+|||
+|AP_val_|52.7 53.0 **53.3** 53.2 53.2 53.1|
+|||
+|_N_|4<br>8<br>16<br>**32**<br>64<br>128|
+|AP_val_<br>53.3 53.4 53.5 **53.7** 53.6 53.6||
+|||
+|_T_|1<br>2.5<br>**5**<br>7.5<br>10<br>20|
+|||
+|AP_val_|53.2 53.7 **54.0** 53.8 53.7 53.5|
+
+
+## A.4 HYPERPARAMETER SENSITIVITY ANALYSIS 
+
+Appendix A.3 presents a subset of hyperparameter ablation studies evaluating the sensitivity of our model to key parameters in the FDR and GO-LSD modules. We examine the weighting function parameters _a_ and _c_ , the number of distribution bins _N_ , and the temperature _T_ used for smoothing logits in the KL divergence. 
+
+**(1)** parameters ( Setting _aa,_ ˜ = ˜ _c_ ) slightly decreases AP to 53.1%, suggesting that fixed values simplify the optimiza-2[1][and] _[ c]_[ =][1] 4[yields the highest AP of 53.3%.][Notably, treating] _[ a]_[ and] _[ c]_[ as learnable] tion process. When _c_ is extremely large, the weighting function approximates the linear function with equal intervals, resulting in a suboptimal AP of 53.0%. Additionally, values of _a_ that are too large or too small can reduce fineness or limit flexibility, adversely affecting localization precision. **(2)** Increasing the number of distribution bins improves performance, with a maximum AP of 53.7% achieved at _N_ = 32. Beyond _N_ = 32, no significant gain is observed. **(3)** The temperature _T_ controls the smoothing of logits during distillation. An optimal AP of 54.0% is achieved at _T_ = 5, indicating a balance between softening the distribution and preserving effective knowledge transfer. 
+
+A.5 CLARIFICATION ON THE INITIAL LAYER REFINEMENT 
+
+In the main text, we define the refined distributions at layer _l_ as: 
+
+**==> picture [301 x 19] intentionally omitted <==**
+
+where ∆logits _[l]_ ( _n_ ) are the residual logits predicted by layer _l_ , and logits _[l][−]_[1] ( _n_ ) are the logits from the previous layer. 
+
+For the initial layer ( _l_ = 1), there is no previous layer, so the formula simplifies to: 
+
+**==> picture [266 x 14] intentionally omitted <==**
+
+Here, logits[1] ( _n_ ) are the logits predicted by the first layer. 
+
+This clarification ensures the formulation is consistent and mathematically rigorous for all layers. 
+
+17

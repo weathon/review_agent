@@ -1,0 +1,638 @@
+## ADAPTIVE LENGTH IMAGE TOKENIZATION VIA RECURRENT ALLOCATION 
+
+## **Shivam Duggal Phillip Isola Antonio Torralba William T. Freeman** MIT CSAIL 
+
+## ABSTRACT 
+
+Current vision systems typically assign fixed-length representations to images, regardless of the information content. This contrasts with human intelligence —and even large language models—which allocate varying representational capacities based on entropy, context and familiarity. Inspired by this, we propose an approach to learn variable-length token representations for 2D images. Our encoder-decoder architecture recursively processes 2D image tokens, distilling them into 1D latent tokens over multiple iterations of recurrent rollouts. Each iteration refines the 2D tokens, updates the existing 1D latent tokens, and adaptively increases representational capacity by adding new tokens. This enables compression of images into a variable number of tokens, ranging from 32 to 256. We validate our tokenizer using reconstruction loss and FID metrics, demonstrating that token count aligns with image entropy, familiarity and downstream task requirements. Recurrent token processing with increasing representational capacity in each iteration shows signs of token specialization, revealing potential for object / part discovery. Code available at https://github.com/ ShivamDuggal4/adaptive-length-tokenizer. 
+
+## 1 INTRODUCTION 
+
+Representation learning (Bengio et al., 2013), which involves extracting meaningful and useful information from input observations, is crucial for decision-making. An effective representation should be compact while encoding all relevant information. However, what constitutes “relevant” information varies based on the specific task; for example, a coarse classification task may require a different latent representation compression factor for satisfactory performance compared to a task demanding perfect pixel-level reconstruction, which necessitates denser representations. This notion of a useful representation aligns closely with aspects of human intelligence (Legg & Hutter, 2007), particularly the concept of adaptive and variable-compressible representations (Hutter, 2006). Similarly, language models can describe content at various levels of abstraction depending on complexity, context (Graves, 2016; Dehghani et al., 2018), and familiarity (Baevski & Auli, 2018). In contrast, most current visual systems, such as VAEs, VQGANs, and ViTs (Kingma & Welling, 2022; Esser et al., 2020; Dosovitskiy et al., 2020), generate fixed-size representations for all images. In this work, we take a step toward learning adaptive and variable-length visual representations, emphasizing that each image requires a different representation capacity (see Sec. 4). 
+
+A common framework for learning image embeddings or representations is the encoder-decoder approach, where an encoder compresses input data into a compact latent representation, which can later be decoded and compared with the original image as a learning objective. While there are other encoder-only methods, such as contrastive learning (Chen et al., 2021) and self-distillation (Caron et al., 2021), we focus on encoder-decoder approaches because a reconstruction objective intuitively promotes the learning of adaptive representations by capturing varying level-of-details necessary for better reconstruction. The current state-of-the-art (transformer-based) encoder-decoder approaches (Dosovitskiy et al., 2020) operate in the discrete token space, by encoding images into learned tokens and then decoding them back to image pixels. To generate these tokens, these approaches compress (slightly) at the input patch-level and then maintain the number of tokens (= number of patches) throughout the encoder-decoder network depth. Thus, the representation length for all images is fixed to the number of tokens, equivalent to the fixed patch-size decided by the human-engineer. Moreover, by having number of tokens equal to number of patches, such approaches are tied to the natural 2D inductive bias of images, preventing any form of adaptive representation or compression 
+
+1 
+
+**==> picture [396 x 159] intentionally omitted <==**
+
+**----- Start of picture text -----**<br>
+Recurrent Processing  w/  Adaptive Token Mem.  Decoding required either for  Reconstruction<br>(looping multiple recurrent iterations) or  Optional Dynamic Halting  during Training<br>i)<br>0 0 s CI<br>oO oO s 0)<br>@ @ G<br>GO - > B<br>Go Oo<br>a i es COO) i<br>Soe sn | oe] sane Oss .<br>a Ga<br>Dynamic Halting : Tokens reconstructed  well are masked  Reconstruction Loss with Image 2D Tokens (t=0)<br>from further processing since latent already has info. provides mask for (optional) dynamic halting.<br>8<br>14<br>77<br>(Initialized) (Initialized) 111<br>New 1D Tokens   New 1D Tokens   … …<br>23 1D Tokens<br>Latent 1D  Tokens (t=2) 15 Quantized Latent<br>Latent 1D  75<br>Tokens (t=1) Factorize & Quantize<br>Latent-Distillation Encoder (t=1) Latent-Distillation Encoder Latent-Distillation Decoder<br>Input Image Image Encoder Image 2D Tokens (t=0) 2D Tokens  2D Tokens (t=2) Masked  2D Tokens Reconstructed Image  2D Tokens (t=0) Image Decoder Reconstructed Image<br>**----- End of picture text -----**<br>
+
+
+Figure 1: **Adaptive Length Image Tokenizer (ALIT):** Given an image, we first convert it into 2D image tokens before applying the 2D _→_ 1D latent distillation. ALIT recurrently distills 2D image tokens into variable 1D latent tokens, with each iteration adding new latent tokens and processing them with the existing 2D image tokens and the old latent tokens. Training focuses on reconstructing 2D image tokens through reverse distillation from latent 1D to masked 2D tokens. Based on token-reconstruction quality, we can optionally mask specific 2D tokens from further processing, enabling dynamic halting per token. **Recurrent processing with Adaptive Memory** leads to compressible representations, flexible tokenization & specialized tokens focusing on objects/parts. 
+
+of different images. Moving away from this inductive bias and with the goal of having modalityagnostic architecture, Google DeepMind proposed Perceiver (Jaegle et al., 2021b;a), a transformerbased architecture which distills input data tokens to a set of fixed 1D tokens. This process of **latent-token distillation** refers to compressing a higher-dimensional input (e.g., 2D image tokens) into a more compact set of latent variables (1D tokens), capturing the most relevant features. Like Perceiver, we also fall into the category of latent-token distillation, where we encode 2D image tokens into much fewer 1D latent tokens via a self-supervised reconstruction objective. While 1Dtokenization of an image overcomes the patch to token constraint and allows much more efficient compression of the input image, a more universal tokenizer would be one which adaptively assigns variable tokens to each input based on content entropy, familiarity etc (Sec. 4). 
+
+We tackle the challenge of adaptive or variable-length representation learning by auto-regressively distilling input visual observations into an increasing number of 1D latent tokens. To achieve this, we draw inspiration from foundational works on recurrent computation (Graves, 2016; Dehghani et al., 2018). Recurrent neural networks are often viewed as adaptive thinking modules (Schwarzschild et al., 2021), capable of enhancing the computational requirements of a specific input through recursive processing with the same neural network architecture. Thus, unlike the Matryoshka style (Kusupati et al., 2022) approach of learning multiple representations of varying lengths simultaneously in one-go, we adopt a recurrent computing approach for visual representation learning. In our framework, recurrent computing involves recursively distilling an input image or 2D image tokens into 1D latent tokens through a shared encoder-decoder architecture until each image token has been sufficiently processed/distilled into the latent tokens. At each iteration of this recurrent rollout, _we provide additional computational resources in the form of new learnable latent tokens, enabling the model to learn adaptive and variable-length representations across different iterations_ . 
+
+We refer to our approach as **ALIT** ( **A** daptive **L** ength **I** mage **T** okenizer), and train it using selfsupervised image reconstruction objective. Credited to the increasing representational capacity, _each recurrent update leads to the latent tokens specializing and attending to localized regions, hinting at object / part discovery_ (see, Fig. 7, Fig. 8, Appendix Fig. 15 and Fig. 16). We validate the effectiveness of the learned tokenizer by demonstrating comparable reconstruction metrics (L1 loss and FID) on multiple datasets (IN, COCO, Places, Art-dataset and even randomly selected internet images Fig. 20) and linear probing results on ImageNet-1K, relative to the 2D VQGAN tokenizer (Esser et al., 2020) and fixed-latent 1D tokenizer, Titok (Yu et al., 2024), while also allowing for flexible token counts per image. By utilizing variable representations per image, we introduce cumulative dataset representations & emphasize the key aspects of effective representations: _required capacity aligns w/ image’s information entropy, familiarity, & knowledge of downstream tasks / models_ . 
+
+2 
+
+**==> picture [452 x 115] intentionally omitted <==**
+
+**----- Start of picture text -----**<br>
+Titok-L-32 Titok-S-128 VQGAN-256 Ours-32 Ours-128 Ours-256 Ground Truth Histogram of # Images vs L1 Recon. Loss<br>em<=a - Nea,| ox aem SAN,> Vor| <ax | A) ”2. vALeery) ee> |Nalie Uh | aL.A“a ” 7elé 800 TON IAN, —— —*— ——  Ou  Ou Ours-32rsrs-128 -256| |  L1:  L1:L1:  0.076  0.1180.088<br>alm ma, Te UN ea ae ten 4 i \ \ Titok-L-32 | L1: 0.123<br>‘ » ' A) or”. Md: ah 600 A === Tito k - S -128| L1: 0,097<br>ao , A a ‘ 4 - ‘ a 3 a . ‘ \ | a : A 4 A 400 q f if \, i =--  VQGAN | L1: 0.080<br>Ne A ae ap e a ge OL 1<br>_ : 200; //) \<br>in Wie. aN)ys “pe’ y bee. e%ye ar |Uy. °C 0 Hi: f XO Se<br>avsega & ¢ |( 4 ‘we i\ fa fi ee 4 0.05 L1 Reconstruction Loss 010 015 020 025 0.30<br>Number of Images (IN-100)<br>**----- End of picture text -----**<br>
+
+
+Figure 2: **Reconstruction Analysis on ImageNet-100:** Our approach outperforms all baselines in terms of reconstruction loss (right). Comparing Row-1 (high complexity) and Row-2 (low complexity) demonstrates the effectiveness of adaptive tokenization. Even with fewer tokens, our reconstructions maintain reasonable global alignment with ground truth, with an expected loss in detail. 
+
+## 2 RELATED WORK 
+
+The goal of image tokenization is to map high-dimensional 2D images into compressed latent representations. Modern vision systems often use self-supervised learning objectives, such as contrastive learning, self-distillation, in-painting, and generative modeling, to achieve this. Architecturally, these methods typically convert images into 2D feature embeddings using convolutional backbones or transformers after splitting images into patches. However, this approach constrains and tightly binds the processing, compression, and representation capacities to a **fixed number of processing units, down-sampling steps or patches, regardless of the input image.** Several prior works have explored such issues with different motivations, as discuss below – 
+
+**Dynamic Token Processing:** Several works (Bolya et al., 2023; Rao et al., 2021; Yin et al., 2022) focus on dynamically processing tokens in the ViT architecture by pruning or merging them across layers. Token Merging (Bolya et al., 2023) accelerates ViT by merging a fixed number of tokens per layer, resulting in a consistent token count for each image. Inspired by ACT (Graves, 2016) and Universal Transformers (Dehghani et al., 2018), DynamicVIT (Rao et al., 2021) and A-ViT (Yin et al., 2022) adaptively prune tokens or dynamically halt processing for different tokens, with a focus on classification tasks. Concurrent work (Jain et al., 2024) extends this by routing 2D image tokens through different experts, rather than pruning or merging, for classification and image retrieval. Tokens in these works remain tightly coupled to image patches. Our approach also involves dynamic token processing but primarily focuses on distilling images into a variable-length compressed 1D latent space via a self-supervised reconstruction objective, allowing each image to have flexible representational capacity beyond patch-based tokens. 
+
+**Flexible or Variable-Length Representation Learning:** Each image has varying levels of detail, making a single patch size insufficient for vision transformers. FlexViT (Beyer et al., 2022) uses variable patch sizes for multiple image representations, though theoretically its capacity is still limited by the smallest patch size and 2D token-patch bias. Matryoshka Representation Learning (Kusupati et al., 2022) learns flexible but fixed representations (bounded by the feature dimension) by ensuring low-dimensional subsets of a feature vector can perform classification and image retrieval. Concurrent works (Hu et al., 2024; Cai et al., 2024) extend this to token space, enforcing subsets of tokens to support vision-language tasks. We also learn variable-length token representations, but _unlike static Matryoshka methods, which learn all the representations in one go, we focus on recurrent processing & adaptive memory—iteratively refining & adding new latent tokens—opening doors for longer representations (for streaming data) through longer rollouts in future._ Recently published on arXiv, ElasticTok (Yan et al., 2024)—similar to Matryoshka representations—learns variable-length encodings for images and videos by learning a fixed, max-sized representation in one step, then searching for a mask to sample a subset of this full-length representation. 
+
+**Latent Tokens or 1D Tokenization:** To overcome the 2D token-patch bias, Perceiver (Jaegle et al., 2021b;a) distills 2D image tokens into 1D latent tokens not tied to specific patches, aiming for modality-agnostic transformers. Similar approaches, such as Recurrent Interface Networks (RIN) (Jabri et al., 2023), AdaTape (Xue et al., 2023), and Titok (Yu et al., 2024), perform 2D-to1D distillation or read-write operations for generation, recognition, and reconstruction, respectively. RIN and Titok use fixed-length token representations, while AdaTape allows a one-time selection of 
+
+3 
+
+**==> picture [375 x 129] intentionally omitted <==**
+
+**----- Start of picture text -----**<br>
+r- Number of Latent Tokens (32, 64, 128, 192, 256) ---—> Ground Truth Low Complexity Art Hypothesis<br>1<br>1 2 5 6<br>pM a(Wiouvsee Srosercisuse| oteulusieese 224<br>| DOERR CO 1 9 2<br>| OO coo toncoononce<br>1 1 6 0<br>I‘hae re Za),Te 7a)"Ss < Wa Z 128<br>1 9 6<br>I<br>5 5 @ a 64<br>iy a oa ls a AI . & \l 3 2<br>1a NY ws , f Sh 7 eae! 15 25 35 45 55 65 75 85<br>va ~, Image Complexity Human Score<br>Number of Tokens<br>Human Predicted Image Complexity<br>**----- End of picture text -----**<br>
+
+
+Figure 3: **Compression vs. Information Entropy Hypothesis on the Out-of-Distribution PeopleArt Dataset:** Adaptive tokenization enables analysis of the Low-Complexity Art Hypothesis by examining token requirements for images of varying complexity. The plot on the right clearly shows that as (human-annotated) **image complexity increases, so does the need for more computational tokens.** More complex images have higher L1 reconstruction loss at fewer token count. 
+
+variable-length latent tokens per input image. RIN uniquely performs recurrent read-write between image and latent tokens. Unlike these, we integrate 2D-to-1D distillation with both recurrent processing and adaptive memory—iteratively refining image and existing latent tokens, and adaptively adding more latent tokens as new memory. We also enable optional dynamic halting for improved distillation in regions needing further refinement. Beyond the technical differences, we emphasize that each image requires unique representation depending on complexity, familiarity, downstream model/task (Sec. 4). Moreover, the proposed recurrent computing with adaptive memory promotes emergent token specialization for object/part discovery, Fig. 7, Fig. 8, Appendix Fig. 15 and Fig. 16 
+
+**Relevant works on large-language models** include (Goyal et al., 2024; Herel & Mikolov, 2024) which allocate additional compute budget in terms of fixed additional “thinking” tokens, separate from input tokens. They demonstrate improved reasoning capabilities w/ thinking tokens for LLMs. 
+
+## 3 ADAPTIVE LENGTH IMAGE TOKENIZATION 
+
+Tokenization refers to the process of breaking down input data into discrete units or tokens, that are suitable for a specific downstream task. General-purpose tokenizers are usually trained with selfsupervised objectives such as auto-encoding, next-token prediction, contrastive learning, or selfdistillation. In the visual domain, prominent tokenizers like VAEs (Kingma & Welling, 2022), VQGAN (Esser et al., 2020), and ViT (Dosovitskiy et al., 2020) rely heavily on the 2D spatial inductive bias of images, treating 2D patches as tokens. This approach ties the tokenizer’s architecture closely to the inductive bias of the visual domain and limits its representational capacity to a fixed number of tokens based on the number of image patches. The Perceiver line of research (Jaegle et al., 2021b;a) overcomes the 2D inductive bias limitation, (proposing a modality-agnositic architecture) while _still_ distilling 2D image tokens into a _fixed_ one-dimensional learned representation. In this work, we argue that **each image is unique and warrants different number of tokens** . To address this, we propose a novel framework that auto-regressively allocates more representational capacity (i.e., tokens) to an image, allowing for a variable number of tokens for each image at test time. We first outline the core auto-encoding modules — latent-distillation encoder and decoder — that distill 2D images into 1D tokens and back, and then introduce our approach of auto-regressive token allocation per image. Fig. 1 provides an overview of Adaptive Length Image Tokenizer (ALIT). 
+
+**Latent Distillation of 2D Image Tokens to 1D Tokens:** We want to map an input image to 1D latent tokens. Focusing on the core problem of compressive / adaptive representation learning (and primarily for compute reasons), we first leverage an existing VQGAN image tokenizer to first map an input image to a set of 2D image tokens, **K**[t=0] 2D[.][Credited to years of research done on quantized] 2D auto-encoders, the pre-trained VQGAN model can map a 256 _×_ 256 image to 16 _×_ 16 2D spatial tokens, without much loss of detail. Each of the 16 _×_ 16 tokens is a pointer to one of the quantized codes in the trained VQGAN codebook. In this section, we distill the **K** 2D (= 256 for 256dimensional image) spatial tokens to a few **K** 1D( _≪_ 256) 1D tokens. For majority of the experiments, we set this atomic (min. token count per image) number, **K** 1D to 32, for ease of experimentation. 
+
+4 
+
+**==> picture [394 x 151] intentionally omitted <==**
+
+**----- Start of picture text -----**<br>
+TSC:  Top-X Classification Accuracy TSC:  Dataset Depth Error < Threshold<br>1.01 © Max-Token  Performance te  AlexNet 0.95 _ o le Max-Token  Performance - 0.95 Ss<br>0.9 1 © Depth Anything V3 wi r ) =<br>O ResNet18 x & Depth Anything (VIT-S) . g<br>0.83 a~ Q 083 HE<br>0.8 ae% ~ 0.8 O o% <<br>0.7 o¢2< #@° aa5<br>= 3 2 ce<br>°°0.6 Top-1 Classification Acc. (TOI) using Top-1 Classification as TSC (TSC = TOI) O71 ‘5x8= 5 0.6 8 % Q on 4%=6 28<br>04) Qs 0.4 & 28<br>Ox 059 FG 0.59 rs}<br>°3 @ x,y 8 =<br>0.2 Ce Fs & ke : G 0.2 a.<br>, 012 45 7 10. $...0 12 15 @ 0.46 0.00 0.41 0.66 0.90 1.15: 1 A7 0.46 2<br>X for Top-X Classification Abs. Relative Depth Error Thresholds<br>Dataset representation or cumulative token Matching TSC w/ TOI Improves TOI performance<br>count satisfies  nice pareto w/ TSC complexity Latent optimized for classification performs better<br>(Top-1 requires more tokens than Top-5) on classification than latent optimized for depth.<br>↑<br>↑<br>(as % of max dataset tokens) (as % of max dataset tokens)<br>Min Tokens using Token Selection Criteria Min Tokens using Token Selection Criteria<br>**----- End of picture text -----**<br>
+
+
+Figure 4: **Analysing Dataset Representation Capacity** : We vary tokens per image using different **Token Selection Criteria (TSC)**[2] – Best Top-X Classification Accuracy (Left) and Depth Error _<_ Threshold (Right). We use GT class/depth maps for computing TSC classification/depth errors. We then evaluate Classification Accuracy ( **Task of Interest, TOI** ) on the dataset reconstructed using different TSCs. X-axis = TSC, Y-axis = Dataset Token Count, Marker-Color = TOI Perf. 
+
+**2D** _→_ **1D** _→_ **2D Distillation** –– Given **K** 2D spatial image tokens / features, each of dimension **d** 2D, we append them with **K** 1D latent tokens along the token axis, and pass then through the latentdistillation-encoder, **Enc** . **K** 1D are initialized with learned embeddings. The distillation encoder performs joint self-attention on all the tokens and distills **K2D** _→_ **K1D** . Although previous works (Jaegle et al., 2021b; Jabri et al., 2022) have experimented with cross-attention, we do not focus on this aspect of the architecture for this work and leave it for future analysis. The distilled latent tokens, **K** 1D, are then passed to the distillation decoder **Dec** , which appends them to **M** 2D masked tokens and performs the reverse task of distilling the latent tokens back to the 2D spatial tokens i.e **K1D** _→_ **M2D** . All inputs to the distillation-encoder and distillation-decoder masked tokens are added with positional encoding (separate ones for 2D image tokens, 1D latent tokens and 2D masked tokens). We factorize and quantize the distilled latent tokens (output of **Enc** ) before passing them to the distillation-decoder, by sampling from a learned 1D codebook via closest codebook logic, following (Yu et al., 2021; 2024). Among other techniques (Zhu et al., 2024; Huh et al., 2023), we found factorization to be most useful for learning quantized 1D codebook. 
+
+**==> picture [315 x 28] intentionally omitted <==**
+
+**K** 1D _→_ **K** 1D denotes an encoder update to map initialized latent embedding to learned distilled embedding. Likewise, **M** 2D _→_ **M** 2D denotes reverse distillation using learned latent tokens ( **K** 1D) to map masked 2D tokens to reconstructed image tokens. t=0 to t=1 denotes one encoder update. The main learning objective is reconstruction loss between **M** 2D and **K**[t=0] 2D[.][[; ]][ denotes concatenation.] 
+
+**Auto-regressive Framework for Variable Tokenization:** In the previous section, we explained the core module for 2D _→_ 1D distillation module. We now describe the **auto-regressive rolling of the encoder-decoder distillation module for learning variable tokens per image** , with **K[t] 1D**[=] **[1]**[as] the minimum tokens per image. Multiple works (Dehghani et al., 2018; Graves, 2016) in sequential decision making and natural language processing perform recursive roll-out of the _same thinking_ (Schwarzschild et al., 2021) architecture to provide more computational budget to the input task. In a similar vein, we perform recurrent processing of the input image with the objective of learning variable-length compressed representations. With each roll-out iteration, we not only provide more processing capacity by recursively rolling out the distillation **Enc** _−_ **Dec** architecture, but also provide _additional computational memory in terms of new writeable tokens to better distill image tokens into more 1D latents_ . We now dive into the details. 
+
+> 2 **Token-Selection Criteria (TSC) Example** – Selecting per-image tokens using TSC = Top-X Classification means – identifying the minimum number of tokens for each image such that the corresponding reconstructed image is correctly classified (by comparing against GT label) among the Top X predictions by ResNet-18. 
+
+5 
+
+**==> picture [394 x 92] intentionally omitted <==**
+
+**----- Start of picture text -----**<br>
+1. 0/@009, 0.6 1.00009, 14 1.0 22.57<br>0.9 e Se 0.9 (e} L 0.9<br>o80.706 60% Max Tokens ee#.e 057°G0.53 £¢1s}c6 os0.70.6 60% Max Tokens °°*.fe) 121.01 u”°22 080.70.6 60% Max Tokens 18.9915.41 me}O3<br>05 ° a 0.5 ® fas 05 g<br>0.4 @ aS) e £<br>5 05S 0.4 6 0.81 0.4 ne %<br>030.2 [o}eo,Oo 0.46 8Oe 030.2 @6ee 0.62 030.2 g25 <5Ww©<br>0.03 0.05 0.08 0.10 0.12 0.15 0.03 0.05 0.08 0.10 0.12 0.15 0.03 0.05 0.08 0.10 0.12 0.15<br>L1 Reconstruction Loss Thresholds L1 Reconstruction Loss Thresholds L1 Reconstruction Loss Thresholds<br>↓<br>↑<br> Loss < Threshold ↓<br>Recon<br>for<br>Min Tokens (as % of max tokens)<br>**----- End of picture text -----**<br>
+
+
+Figure 5: **TSC–TOI Alignment determines Dataset Representation Capacity** : We vary tokens per image via **“Reconstruction Loss** _<_ **Threshold” as automatic Token Selection Criteria (TSC)** and evaluate multiple Tasks of Interest (TOI) on the reconstructions. Since TSC determines dataset token count, _strong TSC–TOI alignment enables desired TOI performance at compressed representations –– 60% of max-tokens (selected via Recon. TSC) achieve similar perf. on all TOIs as max tokens perf., supporting adaptive-tokenization._ Fig. 13 / 14 show classification / depth TSC plots. 
+
+At each iteration of latent distillation, we concatenate the latent tokens from the previous iteration, **K**[t=T] 1D[, with additional newly initialized tokens (initialized with learned embeddings),] **K** 1D. Optionally, to help the distillation encoder focus on image tokens that _were not perfectly distilled in the previous iteration_ , we apply a masking / dynamic halting operation ( **Mask** ) to the processed image tokens from the last iteration, **K**[t=T] 2D[. This mask is determined by the alignment between reconstructed] output **M**[t=T] 2D[and original image tokens] **[ K]**[t=0] 2D[.][The masked image tokens are then concatenated with] the latent tokens and passed through the distillation encoder-decoder, **Enc** _−_ **Dec** . This process is repeated across multiple iterations. As in single-step distillation, the primary training objective is to minimize the reconstruction loss between the new reconstruction, **M**[t=T+1] 2D , and the original image tokens **K**[t=0] 2D[.][At each iteration, the distilled latent tokens are factorized and quantized using a shared] 1D codebook –– tokens learned across different iterations belong to the same embedding space. 
+
+**==> picture [381 x 62] intentionally omitted <==**
+
+In summary, at each iteration of the recurrent rollout, the latent tokens from the previous iteration receive residual updates, while new computational memory (additional latent tokens) is introduced. These new tokens give the existing latent tokens the freedom to focus on specialized regions, leading to sharper & sparser attention, as shown in Fig. 7, Fig. 8, Appendix Fig. 15 and Fig. 16. 
+
+**Training Procedure:** Our training follows a multi-stage approach similar to (Esser et al., 2020; Yu et al., 2024). We begin by reconstructing pre-trained VQGAN image tokens from distilled latent tokens, using smooth cross-entropy loss on the discrete VQGAN tokens (as explained above). Next, we jointly optimize VQGAN encoder-decoder and the distillation **Enc** _−_ **Dec** with an objective to reconstruct image pixels. Following (Esser et al., 2020), we introduce GAN loss later in the training process, once the image reconstruction quality has reached a satisfactory level across multiple representations, to further improve photo-realism. In addition to recon. and adversarial losses, we apply quantization losses throughout the training to facilitate the learning of 1D latent codebook. Please refer to Appendix Sec. A.6 for more details on the training procedure & implementation details. 
+
+## 4 NOT ALL IMAGES ARE WORTH THE SAME REPRESENTATION 
+
+_Each image is unique and requires a different number of tokens as representation_ . Additionally, _each image or observation can have multiple valid representations_ , echoing Epicurus’ notion of multiple explanations. By mapping an image to various quantized latent spaces, the model learns to sample different tokens from the training set’s codebook, optimizing the reconstruction objective at different levels of computational capacity. In this section, we provide experimental insights into how learning adaptive representations can help support and expand upon these concepts. 
+
+6 
+
+**==> picture [365 x 105] intentionally omitted <==**
+
+**----- Start of picture text -----**<br>
+Depth Estimation NYUv2 Classification Imagenet100 = VLM LLaVA-Bench-COCO<br>08 © depth _a nything _v it _s 0.40 3 O AlexNet is 35 LSOS 80<br>07 $8 depth_anything_vit_b oss eN } DenseNet121 40<br>Ps > 1 depthdpt l a _a rgnythinge _va i t| 030 o€ 80) ©ge Inceptionv3ResnNet101 ° $ & °@° =N 10 o ° ° o &<br>06 = $3 ResnNet18 g 5. ° ° 2 © ° 8 ogo<br>© fe) yo] O Resnnetso Gg O © 4 £ 60 / Aa °<br>08 a© °Qo ° 020 26= 60 O yeruits> x © e &O8S 2g oOo8 Fy 0° 8 3 Zzrey: 50 + a > CO)A. tlava-v1.5-136blip llava-2-vi. op t-6- 6.75 vicuna-7b<br>0.4 O ia} © 8 9 6 5 010015 wr)oyLU 50 o& 8 w &O= ao, * &P3  instructblipblip2-flan-t zt 5-- flanxxi -t 5 -x<br>03 ° 0.05 _Oa ° 090 0 OO 4 5 Oo1 0 go" @a 4 8A 8 a4be<br>a <x ° 12 20) a4<br>32 64 «96 128 160 192 224 256 oT 000 | 40 32. 64 «96 128 160 192 224 256 GT ad 32 64 96 128 160 192 224 256<br># Latent Tokens # Latent Tokens # Latent Tokens<br>Abs. Rel Depth Error Top-1 Accuracy (%)<br>Relative Score w.r.t GPT4-o<br>**----- End of picture text -----**<br>
+
+
+Figure 6: **Tokens vs. Model Strength:** Stronger models outperform weaker ones across all token counts but are more sensitive to fewer-token reconstructions, showing a sharper perf. drop ( _∼_ color) at fewer tokens. In contrast, **weaker models (lower GT perf.) can manage with fewer tokens.** 
+
+**Representation Capacity or Compression Depends on Information Entropy / Complexity:** Schmidhuber’s Low Complexity Art theory (Schmidhuber, 1996) correlates an image’s perceptual complexity with its compressibility—the smallest description length of an image often aligns with its complexity. Given that our approach generates multiple compressed representations for a given image, we evaluate such correlation between human-labeled complexity estimates (ranging from 0 to 100) (Saraee et al., 2018) and the L1 reconstruction loss using our adaptive tokenizer at varying token capacities. Fig. 3 (left) illustrates reconstructions of completely out-of-distribution (OOD) images from the PeopleART dataset (Westlake et al., 2016), using between 32 and 256 tokens for images of different complexities. These reconstructions are produced using a model trained on ImageNet-100, which contains no art-related images and is significantly different from PeopleART. As seen, the low-complexity image (top row) is adequately reconstructed with fewer tokens, while the highly complex image (bottom row) requires more tokens for accurate reconstruction. Furthermore, the complexity-reconstruction correlation plot in Fig. 3 (right) perfectly highlights two observations: (a) _as image complexity increases, reconstructions with fewer tokens result in higher L1 errors, necessitating a larger memory budget_ ; and (b) at a fixed image complexity, increasing the computational budget (i.e., number of tokens) reduces the loss, _demonstrating the efficiency of the adaptive representation model_ . See Appendix Fig. 11 and Fig. 12 for more such results. 
+
+**Representation Capacity Depends on Familiarity with the Training Set:** Similar to how outof-syllabus questions require more effort, reconstructing OOD images demands more computational tokens. By learning quantized adaptive representations, our model maps test images to adaptive tokens by sampling from a learned trainset codebook. _This enables us to distinguish between indistribution (IID) and out-of-distribution (OOD) images. IID images are more efficiently reconstructed with fewer tokens, as they can sample familiar representations from the trained codebook, whereas OOD images require more tokens._ From Tab. 1, the FID gap between 64 and 256 tokens is smallest on in-distribution ImageNet-100 validation set (7 _._ 92), larger on less in-distribution COCO dataset (12 _._ 56), and largest on highly OOD Wikipedia images (23 _._ 32). In summary, while all models exhibit performance loss on OOD images, the loss is most pronounced with fewer tokens. However, training larger adaptive tokenizers on larger datasets (eg: LAION) over longer periods may close the distribution gap, as evidenced by improved performance on IN-1K vs IN-100 (Fig. 9 third plot). 
+
+**Representational Capacity Depends on Downstream Task:** We utilize our variable-length representations to demonstrate how dataset representations vary across downstream tasks. To achieve this, we select different tokens for each image based on specific token-selection criteria (TSC) and analyze the minimum dataset representations required for optimal performance, plotting cumulative image token counts as a fraction of the total VQGAN tokens. By **dataset representation** , we mean cumulative token count for the dataset when different images are reconstructed using different token counts. For TSC=Classification[2] , we evaluate the minimum tokens needed for the best top-1, top-2, ..., top-X accuracy. For TSC=Depth Estimation, we determine the token count necessary to achieve per-image relative depth errors below thresholds such as 0 _._ 2 _,_ 0 _._ 4 _,_ 0 _._ 6. Likewise TSC=Reconstruction Loss, selects per image tokens based on L1 recon. loss _<_ certain thresholds. Notably – _Reconstruction Loss serves as an automatic (self-supervised) token selection criteria_ , while Classification / Depth Error as TSC requires GT class-labels / Pseudo-GT depth maps. 
+
+In Fig. 4, we select minimum tokens based on two criteria: classification (left) and depth (right). The images reconstructed using selected tokens are then assessed using ResNet-18 for Classification Accuracy as the task-of-interest (TOI). _The resulting Pareto curves indicate that as token-selection_ 
+
+7 
+
+**==> picture [363 x 29] intentionally omitted <==**
+
+**----- Start of picture text -----**<br>
+Mean IOU w/ GT Seg.  57.8 56.3 53.1 47.6 39.0 25.1<br>(IN-S) by thresholding<br>attn. weights to keep  _ - - eee<br>Top X% of mass . 40% 50% 60% 70% 80% 90%<br>**----- End of picture text -----**<br>
+
+
+Figure 7: **Visualizing Latent Token Attention Maps:** The learned latent tokens effectively bind to distinct objects, suggesting potential for object discovery as future research. This contrasts with 2D tokenizers, where tokens are strongly biased to predefined patches (also see Appendix Fig. 15). 
+
+**==> picture [341 x 89] intentionally omitted <==**
+
+**----- Start of picture text -----**<br>
+Ground Truth Image Reconstruction Token  5 Token  9 Token  17 Token  24 Token  31<br>qi} re Py > ' ’ ' ><br>me an Ales PA eg a.<br>1<br>Iteration<br>8<br>Iteration<br>**----- End of picture text -----**<br>
+
+
+Figure 8: **Role of Recurrence on Latent Tokens:** Credited to increasing number of tokens in each iteration, the recurrent update on existing latent tokens makes them focus on sparser & more localized regions, leading to improved alignment w/ GT segmentation over iterations (see Tab. 6). 
+
+_criteria (TSC) increases in complexity, the representation capacity requirement also rises;_ for example, achieving a depth error _<_ 0 _._ 41 requires more tokens per image than a depth error _<_ 1 _._ 4. Moreover, _optimal performance on task of interest occurs when tokens are selected using the same criteria as the downstream task (i.e. TSC=TOI, Best Top-1 Accuracy is achieved when both TSC and TOI are Classification (Fig. 4, left)_ , compared to when TSC=Depth, TOI=Classification (Fig. 4, right)) and (b) selecting tokens based on arbitrary thresholds for depth or reconstruction loss has small impact on classification accuracy i.e. _classification accuracy with TSC = Depth Loss < 0.41 is similar to that with TSC = Depth Loss < 1.40_ , suggesting that classification requires fewer tokens (as supported by Linear Probing Experiments in Sec. 5). Thus, optimal tokens per image depends on both token-selection criteria & the desired task. 
+
+Next, we explore the scenario where the token-selection criteria remain constant, but the task of interest (TOI) varies. Since the TSC enables sampling different dataset representations, _the optimal compression of dataset representations for maximum TOI performance depends on the alignment between the TSC and the TOI. In other words, dataset representations are more compressible when optimized and tested on a similar task._ This also aligns with the idea that representational capacity is influenced by familiarity with the training data. For instance, in Fig. 5, we allocate variable tokens per image using image reconstruction loss below a threshold as the token-selection criteria. The resulting token-reconstructions are then evaluated across three tasks: classification accuracy using ResNet-18, depth estimation accuracy using DepthAnythingV2, and FID using VGG16 features. _Approximately 60% of the total dataset representations (sampled using Reconstruction Loss as TSC) are sufficient to achieve near-optimal performance across all tasks—classification, depth estimation, and FID, highlighting that reconstruction loss could be a good self-supervised objective to select tokens per-image._ Appendix Fig. 14 and Fig. 13 analyze different Tasks of Interest (TOIs) performance using Depth Error Thresholding and Best Classification Accuracy as TSC respectively. 
+
+**Representational Capacity Depends on Model Strength or Current Knowledge** Fig. 6 examines the relationship between downstream model strength and tokenized representations for tasks such as depth estimation, classification, and vision-language modeling. Weaker models exhibit _smaller performance drops with reduced token counts_ , as shown by the color in Fig. 6, which repre- 
+
+8 
+
+|Approach|32|64|96|ImageNet100<br>128<br>160|ImageNet100<br>128<br>160|192|224|256|32# / 64|COCO<br>128|256|Wikipedia (WIT)<br>32# / 64<br>128<br>256|Wikipedia (WIT)<br>32# / 64<br>128<br>256|Wikipedia (WIT)<br>32# / 64<br>128<br>256|
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+|Titok-L-32|11.60|-|-|-|-|-|-|-|14_._18#|-|-|53_._57#|-|-|
+|Titok-B-64|-|8.22|-|-|-|-|-|-|9.15|-|-|42.86|-|-|
+|Titok-S-128|-|-|-|8.22|-|-|-|-|-|9.15|-|-|38.16|-|
+|VQ-GAN|-|-|-|-|-|-|-|7.04|-|-|7.77|-|-|31.27|
+|Ours-S(IN1K)|22.69|14.99|11.97|10.17|9.54|8.85|8.48|8.02|-|-|-|-|-|-|
+|Ours-S (IN100)|22.57|16.17|13.30|11.69|10.22|9.30|8.55|8.25|22.28|14.22|9.72|61.77|47.91|38.45|
+|Ours-SemiLarge(IN100)|19.70|13.92|11.39|10.41|9.23|8.75|8.22|8.03|-|-|-|-|-|-|
+
+
+Table 1: **Reconstruction FID** ( _↓_ ) **on different evaluation datasets** Our method performs comparably to VQGAN and Titok, despite being amortized over multiple iterations, allowing flexible representations. Longer training on larger datasets, w/ deeper n/w could bridge the gap (see Fig. 9 for scaling laws)[3] . The numbers below dataset titles are the variable token counts. 
+
+sents the perf. gap between GT and reconstructed images. For instance, fewer-token reconstructions have minimal impact on AlexNet (Classification) and the Blip model (vision-language modeling). Fig. 6 VLM experiments support concurrent works of Matryoshka VLMs (Hu et al., 2024; Cai et al., 2024), further promoting recurrent and adaptive tokenization using VLMs as TSC and TOI. 
+
+## 5 FURTHER EXPERIMENTS & ABLATIONS 
+
+In this section, we present additional experiments to evaluate our adaptive and recursive representations. We begin with image reconstruction experiments, followed by linear probing of learned representations for Top-1 classification. Next, we ablate the use of continuous vs. discrete tokenizers for reconstruction task and finally analyze the learned tokens, showcasing alignment with GT segmentation (with tokens hinting at object discovery), and the role of recurrent processing in achieving that. For implementation details, please refer to the Appendix Sec. A.6. 
+
+**Image Reconstruction:** We compare our adaptive tokenizer with the fixed-length 1D tokenizer Titok (Yu et al., 2024) and 2D tokenizer VQGAN (Esser et al., 2020) based on L1 reconstruction loss and FID scores on ImageNet100, COCO and Wikipedia Image-Text (WIT) datasets[3] . The reconstruction loss metrics and the number of images at different sampled reconstruction loss thresholds are shown in Fig. 2 (right plot). Unlike baselines with fixed-length representations, we _amortize the learning of variable length representations using a smaller network_ – Titok-L-32 uses 24-layer encoder/decoder to generate 32 tokens, while Ours-S uses the same 8-layers to learn variable (32 to 256) tokens. Despite that, as shown in Fig. 2, _our method achieves slightly lower reconstruction loss compared to baselines, maintaining significant details of the input image, while the baselines, optimtized for realism with GAN loss, achieve slightly better FID than ours for low-token reconstructions_ . Through the ablations shown in Fig. 9, we conjecture that multiple factors could enable further improving the slight FID loss (at low tokens) when training an amortized architecture for variable-length tokenization – larger models via both network depth and feature dimension (plot 1 & Fig. 17), training on larger dataset IN-1K vs IN-100 (plot 3 & row 5 vs row 6), longer training (plot 3), and most significantly GAN training (Sec. 3 Training Procedure). 
+
+**Linear Probing for ImageNet-1K Classification:** We evaluate the learned adaptive representations on the downstream task of classification by linear probing the latent representations, following standard practices (He et al., 2021). Specifically, we use the output of the latent-distillation encoder (mean pooling both the processed image tokens and 1D latent tokens). Our linear probe performance is on par with Titok models—Ours-S-32 (after 1[st] iteration) achieves 49 _._ 9% Top-1 Accuracy, compared to Titok-S-32’s 48 _._ 0%, and Ours-SemiLarge achieves 59 _._ 5% compared to Titok-L-32’s 60 _._ 0%, despite our model having a much smaller network (SemiLarge = 16 layers vs. L = 24 layers). Two key observations: (a) **Role of Recurrent Processing** —the single iteration output of Ours-L distillation encoder with 32 latent tokens achieves 55 _._ 6% Top-1 Accuracy, while recurrent processing through the encoder 2–3 times improves this to 59 _._ 5%. (b) **Distilling 2D tokens into 64 to 128 1D tokens is sufficient for the coarse classification task** ; mean pool of first 64 to 128 latent tokens yield better linear-probing classification accuracy than pooling all (max. 256) latent tokens. Thus, the first few tokens capture most of the information required for classification, while additional tokens are crucial for reconstruction refinement. _Thus, recurrent processing sharpens/localizes token attention, improving both reconstruction and classification._ 
+
+> 3Unless mentioned, all experiments / visualizations were done using IN100 training of latent-distillation modules w/ base VQGAN/VAE tokenizer trained on IN1K. The results of the INK trained model are only in Tab. 1 and Appendix Tab. 2) 
+
+9 
+
+**==> picture [377 x 107] intentionally omitted <==**
+
+**----- Start of picture text -----**<br>
+Enc / Dec Depth & Latent Dim Multi-Stage Training Larger Dataset, Longer Training Cont. vs Discrete Tokenization<br>Number of Latent tokens Number of Latent tokens Number of Latent tokens Number of Latent tokens<br>↓<br>Fréchet Inception Dist. (FID)<br>**----- End of picture text -----**<br>
+
+
+Figure 9: **(Plots 1-3)** Ablating FID improvements w/ larger n/w, longer training, larger datasets, and multi-stage GAN training. **(Plot 4)** Ablating quantized vs continuous 2D and 1D tokenizers. 
+
+**Continuous vs Discrete Tokenizer:** We learn adaptive representations by distilling a discrete VQGAN tokenizer into quantized 1D latents. Fig. 9 (plot 4), Appendix Tab. 7 and Appendix Fig. 18 compare continuous vs discrete tokenizers at both 2D image-token and 1D latent-token hierarchies. Using continuous 1D latents (i.e., no discrete quantization between distillation encoder/decoder) may improve FID more than a continuous 2D base tokenizer (both VAE and VQGAN with continuous 1D representations perform well). However, quantized 1D representations can achieve more compressed encodings (32 _×_ 12 bits per image for a 4096-size codebook) compared to continuous embeddings (32 _×_ 12 _×_ 32 bits). Additionally, quantization could potentially help distinguish OOD from IID test images (see Sec. 4, second point). 
+
+**Analyzing Learned Tokens for Object Discovery:** We analyze the attention maps of learned 1D latent tokens to 2D image tokens. Fig. 7 shows attention maps corresponding to four tokens from the 7 _[th]_ layer of Ours-S distillation-decoder. Many latent tokens correspond to _semantically meaningful objects or parts, suggesting emergence of object discovery_ . This contrasts with 2D tokenizers, where each token inductively maps to an image patch, and only single class token attention heads (Caron et al., 2021) hold such semantic information. To further investigate this, following DINO (Caron et al., 2021), we computed attention map alignment with ImageNet-S GT segmentation by thresholding the top X% of attention maps as emergent seg maps. With 40% attention, we achieve 57 _._ 8 mean IOU, and by adjusting the threshold per image, we reach 71 _._ 8 mIOU. Notably, our tokens are not optimized for segmentation. Such high-alignment with segmentation is an emergent property. 
+
+**Ablating Recurrence on Latent Tokens:** We ablate the effect of recurrent updates on latent tokens. As outlined in Sec. 3, with each iteration of recurrent and adaptive tokenization, previous tokens receive residual updates while new tokens are added. Fig. 8 illustrates how the attention maps of the first 32 tokens evolve after 8 iterations. Initially, _under constrained memory/few token settings, these tokens attend broadly to reconstruct the image well, but as more memory/latent tokens are added, they focus on sparser, more meaningful regions._ This sharpening, as seen in Fig. 8 token numbers 17 _,_ 24 _,_ and 31, attending to the eyes, locket, and floor regions, demonstrates the impact of recurrence (see Appendix Fig. 15 and Fig. 16 for more interesting and dense visualizations). 
+
+## 6 CONCLUSION 
+
+In this work, we propose a variable-length tokenizer for 2D images that operates by recurrently processing 2D image tokens, distilling them into 1D latent tokens, and adaptively adding new 1D tokens as computational resources for future iterations. This recurrent processing and adaptive computation enable the learned latent tokens to correspond to semantically meaningful objects or parts in the input image. We demonstrate comparable performance on reconstruction metrics and ImageNet1K linear-probing experiments. Finally, we utilize per-image learned adaptive representations (and cumulative dataset representations) to highlight alignment of the required image representational capacity with – information entropy, familiarity with train set, knowledge of downstream tasks/models. 
+
+**Future Work:** We believe that recurrently learning variable-length representations could open up intriguing directions, such as large-scale video representation learning or long-horizon video understanding, where simply learning fixed-length representations may not even be a feasible solution. Other interesting avenues include exploring adaptive and recurrent nature of the proposed tokenizer as test-time thinking units and training for tasks like vision-language & visual-abstract reasoning (e.g.: ARC (Chollet, 2019)). Variable-token compression could speed up generative models. 
+
+10 
+
+## REFERENCES 
+
+- Alexei Baevski and Michael Auli. Adaptive input representations for neural language modeling. _CoRR_ , abs/1809.10853, 2018. URL http://arxiv.org/abs/1809.10853. 
+
+- Yoshua Bengio, Aaron Courville, and Pascal Vincent. Representation learning: A review and new perspectives. _IEEE Transactions on Pattern Analysis and Machine Intelligence_ , 35(8):1798–1828, 2013. doi: 10.1109/TPAMI.2013.50. 
+
+- Lucas Beyer, Pavel Izmailov, Alexander Kolesnikov, Mathilde Caron, Simon Kornblith, Xiaohua Zhai, Matthias Minderer, Michael Tschannen, Ibrahim Alabdulmohsin, and Filip Pavetic. Flexivit: One model for all patch sizes. _arXiv preprint arXiv:2212.08013_ , 2022. 
+
+- Daniel Bolya, Cheng-Yang Fu, Xiaoliang Dai, Peizhao Zhang, Christoph Feichtenhofer, and Judy Hoffman. Token merging: Your ViT but faster. In _International Conference on Learning Representations_ , 2023. 
+
+- Mu Cai, Jianwei Yang, Jianfeng Gao, and Yong Jae Lee. Matryoshka multimodal models. _arXiv preprint arXiv:2405.17430_ , 2024. 
+
+- Mathilde Caron, Hugo Touvron, Ishan Misra, Herv´e J´egou, Julien Mairal, Piotr Bojanowski, and Armand Joulin. Emerging properties in self-supervised vision transformers. In _Proceedings of the International Conference on Computer Vision (ICCV)_ , 2021. 
+
+- Xinlei Chen, Saining Xie, and Kaiming He. An empirical study of training self-supervised vision transformers. _arXiv preprint arXiv:2104.02057_ , 2021. 
+
+- Franc¸ois Chollet. On the measure of intelligence, 2019. URL https://arxiv.org/abs/ 1911.01547. 
+
+- Mostafa Dehghani, Stephan Gouws, Oriol Vinyals, Jakob Uszkoreit, and Lukasz Kaiser. Universal transformers. _ArXiv_ , abs/1807.03819, 2018. URL https://api.semanticscholar. org/CorpusID:49667762. 
+
+- Alexey Dosovitskiy, Lucas Beyer, Alexander Kolesnikov, Dirk Weissenborn, Xiaohua Zhai, Thomas Unterthiner, Mostafa Dehghani, Matthias Minderer, Georg Heigold, Sylvain Gelly, Jakob Uszkoreit, and Neil Houlsby. An image is worth 16x16 words: Transformers for image recognition at scale. _CoRR_ , abs/2010.11929, 2020. URL https://arxiv.org/abs/2010.11929. 
+
+- Patrick Esser, Robin Rombach, and Bj¨orn Ommer. Taming transformers for high-resolution image synthesis, 2020. 
+
+- Sachin Goyal, Ziwei Ji, Ankit Singh Rawat, Aditya Krishna Menon, Sanjiv Kumar, and Vaishnavh Nagarajan. Think before you speak: Training language models with pause tokens, 2024. URL https://arxiv.org/abs/2310.02226. 
+
+- Alex Graves. Adaptive computation time for recurrent neural networks. _ArXiv_ , abs/1603.08983, 2016. URL https://api.semanticscholar.org/CorpusID:8224916. 
+
+- Kaiming He, Xinlei Chen, Saining Xie, Yanghao Li, Piotr Doll´ar, and Ross Girshick. Masked autoencoders are scalable vision learners. _arXiv:2111.06377_ , 2021. 
+
+- David Herel and Tomas Mikolov. Thinking tokens for language modeling, 2024. URL https: //arxiv.org/abs/2405.08644. 
+
+- Wenbo Hu, Zi-Yi Dou, Liunian Harold Li, Amita Kamath, Nanyun Peng, and Kai-Wei Chang. Matryoshka query transformer for large vision-language models, 2024. 
+
+- Minyoung Huh, Brian Cheung, Pulkit Agrawal, and Phillip Isola. Straightening out the straightthrough estimator: Overcoming optimization challenges in vector quantized networks, 2023. URL https://arxiv.org/abs/2305.08842. 
+
+- Marcus Hutter. The hutter prize. http://prize.hutter1.net, 2006. 
+
+11 
+
+- Allan Jabri, David Fleet, and Ting Chen. Scalable adaptive computation for iterative generation, 2022. 
+
+- Allan Jabri, David Fleet, and Ting Chen. Scalable adaptive computation for iterative generation, 2023. URL https://arxiv.org/abs/2212.11972. 
+
+- Andrew Jaegle, Sebastian Borgeaud, Jean-Baptiste Alayrac, Carl Doersch, Catalin Ionescu, David Ding, Skanda Koppula, Daniel Zoran, Andrew Brock, Evan Shelhamer, Olivier J. H´enaff, Matthew M. Botvinick, Andrew Zisserman, Oriol Vinyals, and Jo˜ao Carreira. Perceiver IO: A general architecture for structured inputs & outputs. _CoRR_ , abs/2107.14795, 2021a. URL https://arxiv.org/abs/2107.14795. 
+
+- Andrew Jaegle, Felix Gimeno, Andrew Brock, Andrew Zisserman, Oriol Vinyals, and Joao Carreira. Perceiver: General perception with iterative attention, 2021b. URL https://arxiv.org/ abs/2103.03206. 
+
+- Gagan Jain, Nidhi Hegde, Aditya Kusupati, Arsha Nagrani, Shyamal Buch, Prateek Jain, Anurag Arnab, and Sujoy Paul. Mixture of nested experts: Adaptive processing of visual tokens, 2024. URL https://arxiv.org/abs/2407.19985. 
+
+Diederik P Kingma and Max Welling. Auto-encoding variational bayes, 2022. URL https: //arxiv.org/abs/1312.6114. 
+
+- Aditya Kusupati, Gantavya Bhatt, Aniket Rege, Matthew Wallingford, Aditya Sinha, Vivek Ramanujan, William Howard-Snyder, Kaifeng Chen, Sham Kakade, Prateek Jain, et al. Matryoshka representation learning. In _Advances in Neural Information Processing Systems_ , December 2022. 
+
+- Shane Legg and Marcus Hutter. Universal intelligence: A definition of machine intelligence. _CoRR_ , abs/0712.3329, 2007. URL http://arxiv.org/abs/0712.3329. 
+
+- Pushmeet Kohli Nathan Silberman, Derek Hoiem and Rob Fergus. Indoor segmentation and support inference from rgbd images. In _ECCV_ , 2012. 
+
+- Yongming Rao, Wenliang Zhao, Benlin Liu, Jiwen Lu, Jie Zhou, and Cho-Jui Hsieh. Dynamicvit: Efficient vision transformers with dynamic token sparsification. In _Advances in Neural Information Processing Systems (NeurIPS)_ , 2021. 
+
+Elham Saraee, Mona Jalal, and Margrit Betke. Savoias: A diverse, multi-category visual complexity dataset. _arXiv preprint arXiv:1810.01771_ , 2018. 
+
+- J¨urgen Schmidhuber. Low-complexity art. _Leonardo_ , 30(2):97–103, 1996. doi: 10.2307/1576418. 
+
+- Avi Schwarzschild, Eitan Borgnia, Arjun Gupta, Furong Huang, Uzi Vishkin, Micah Goldblum, and Tom Goldstein. Can you learn an algorithm? generalizing from easy to hard problems with recurrent networks, 2021. URL https://arxiv.org/abs/2106.04537. 
+
+- Krishna Srinivasan, Karthik Raman, Jiecao Chen, Michael Bendersky, and Marc Najork. Wit: Wikipedia-based image text dataset for multimodal multilingual machine learning. In _Proceedings of the 44th International ACM SIGIR Conference on Research and Development in Information Retrieval_ , SIGIR ’21, pp. 2443–2449, New York, NY, USA, 2021. Association for Computing Machinery. ISBN 9781450380379. doi: 10.1145/3404835.3463257. URL https://doi.org/10.1145/3404835.3463257. 
+
+- Tongzhou Wang and Phillip Isola. Understanding contrastive representation learning through alignment and uniformity on the hypersphere, 2022. URL https://arxiv.org/abs/2005. 10242. 
+
+- Nicholas Westlake, Hongping Cai, and Peter Hall. Detecting people in artwork with cnns. _CoRR_ , abs/1610.08871, 2016. URL http://arxiv.org/abs/1610.08871. 
+
+- Fuzhao Xue, Valerii Likhosherstov, Anurag Arnab, Neil Houlsby, Mostafa Dehghani, and Yang You. Adaptive computation with elastic input sequence, 2023. URL https://arxiv.org/abs/ 2301.13195. 
+
+12 
+
+Wilson Yan, Matei Zaharia, Volodymyr Mnih, Pieter Abbeel, Aleksandra Faust, and Hao Liu. Elastictok: Adaptive tokenization for image and video. _arXiv preprint_ , 2024. 
+
+- Hongxu Yin, Arash Vahdat, Jose Alvarez, Arun Mallya, Jan Kautz, and Pavlo Molchanov. A-ViT: Adaptive tokens for efficient vision transformer. In _Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition_ , 2022. 
+
+- Jiahui Yu, Xin Li, Jing Yu Koh, Han Zhang, Ruoming Pang, James Qin, Alexander Ku, Yuanzhong Xu, Jason Baldridge, and Yonghui Wu. Vector-quantized image modeling with improved VQGAN. _CoRR_ , abs/2110.04627, 2021. URL https://arxiv.org/abs/2110.04627. 
+
+- Qihang Yu, Mark Weber, Xueqing Deng, Xiaohui Shen, Daniel Cremers, and Liang-Chieh Chen. An image is worth 32 tokens for reconstruction and generation. _arxiv: 2406.07550_ , 2024. 
+
+- Lei Zhu, Fangyun Wei, Yanye Lu, and Dong Chen. Scaling the codebook size of vqgan to 100,000 with a utilization rate of 99URL https://arxiv.org/abs/2406.11837. 
+
+13 
+
+## A APPENDIX 
+
+## A.1 ACKNOWLEDGMENTS 
+
+This work was supported by the Defence Science and Technology Agency, Singapore, MIT/IBM Agreement No. W1771646, MIT/Hyundai Motor Company RD Center Agmt Dtd 2/22/23, NSF CIF 1955864 (Occlusion and Directional Resolution in Computational Imaging), NSF PHY-2019786 (The NSF AI Institute for Artificial Intelligence and Fundamental Interactions, http://iaifi.org/) and the Department of the Air Force Artificial Intelligence Accelerator and was accomplished under Cooperative Agreement Number FA8750-19-2-1000. 
+
+We would like to thank our lab members –– Ayush, Congyue, Ishaan, Jyo, Kabir, Manel, Prafull, Shamit, Tianwei, Tianyuan, Yichen for feedback and support & Qihang Yu for questions regarding Titok baseline. 
+
+- A.2 LIST OF FIGURES 
+
+   - [Figure 1] ALIT Architecture Figure. 
+
+   - [Figure 10] ALIT Overview 
+
+   - [Figure 2] Reconstruction Comparison on Imagenet100K. 
+
+   - [Figure 3, Figure 11, Figure 12] Low Complexity Art Hypothesis. 
+
+   - [Figure 4] Dataset Representation Capacity. 
+
+   - [Figure 5] Dataset Representation Capacity using (self-supervised) Automatic TSC. 
+
+   - [Figure 13] Dataset Representation Capacity using Oracle Classification as TSC. 
+
+   - [Figure 14] Dataset Representation Capacity using Oracle Depth Map as TSC. 
+
+   - [Figure 6] Representation Capacity vs Downstream Model Strength. 
+
+   - [Figure 7] Semantic Segmentation Emergence. 
+
+   - [Figure 8, Figure 15, Figure 16] Token Visualization (notice the Object-Token Binding). 
+
+   - [Figure 9] Scaling Laws Ablation. 
+
+   - [Figure 17] Model Size Ablation. 
+
+   - [Figure 18] Discrete vs Continuous Tokenization Ablation. 
+
+   - [Figure 19] DINO vs ALIT Token Visualization. 
+
+   - [Figure 20] ALIT on Internet Images. 
+
+   - [Figure 21] ALIT vs Matryoshka-style Encoder w/ ALIT Decoder. 
+
+   - [Figure 22] Role of Recurrence on Token Codebook Utilization. 
+
+- A.3 LIST OF TABLES 
+
+   - [Table 1] FID Comparison on IN100 (and IN1K) with VQGAN & Titok. 
+
+   - [Table 2] Reconstruction L1 Loss Comparison on IN100 (and IN1K) w/ VQGAN & Titok. 
+
+   - [Table 3] Dense FID-metric Table for Scaling Laws Figure 9. 
+
+   - [Table 4] FID Comparison on IN100 w/ Matryoshka & FlexVIT-style recons. baselines. 
+
+   - [Table 5] FID Comparison on OOD Coco and WIT w/ Matryoshka-style baseline. 
+
+   - [Table 6] Recurrence for token-object binding (unsupervised segmentation emergence). 
+
+   - [Table 7] FID Ablation on Continuous vs Discrete Tokenization. 
+
+   - [Table 8] Inference time comparison w/ fixed-length Titok. 
+
+   - [Table 9] Gflops comparison w/ fixed-length Titok. 
+
+   - [Table 10] Ablation of 1D Codebook sharing over recurrent timesteps. 
+
+   - [Table 11] Ablation of 1D Codebook size. 
+
+   - [Table 12] Ablating dynamic halting of well-reconstructed image tokens ( stage 1). 
+
+14 
+
+**==> picture [394 x 317] intentionally omitted <==**
+
+**----- Start of picture text -----**<br>
+Recurrent Token Allocation 32 Token  Depth Estimation<br>Reconstruction<br>GPT4 A small black and white Shih Tzu dog with long,<br>slightly shaggy fur, sitting on a patch of green<br>grass. There are no additional visible objects.<br>96 Token  Depth Estimation<br>Reconstruction<br>GPT4 A small black-and-white Shih Tzu sits on green<br>grass with a brown leaf nearby.<br>128 Token  Reconstruction and Depth i 256 Token  Reconstruction and Depth fs GT  Image and Depth<br>Oe<br>GPT4: This bathroom features a vanity with a GPT4: The bathroom has a vanity with GPT4: The image shows a bathroom with a<br>stone countertop, a window providing cabinets, drawers, countertop with a sink and vanity featuring a countertop, sink, faucet, and<br>natural light, a textured wall, and a raised faucet, and a wall-mounted mirror. There’s a soap dispenser, with cabinets and drawers<br>platform leading to a shower area. window on the right and a glass-enclosed below. To the right is a glass-enclosed shower,<br>shower with a step leading in. The tiled floor and the room has tiled flooring. A window is<br>completes the clean, minimal design. near the shower.<br>32 Token  Reconstruction and Depth 64 Token  Reconstruction and Depth GT  Image and Depth<br>= = St<br>GPT4:  The image shows a natural setting with  GPT4: The image shows dense green foliage GPT4: The image shows a tree in a green,<br>a tree, greenery, and a dirt path or open area  with a tree in the center and a dry, sandy bushy area with a dirt or muddy ground,<br>in the foreground, possibly in a forest or park. foreground with scattered branches. suggesting a natural, forested setting.<br>Adaptive Length  Image Tokenizer<br>**----- End of picture text -----**<br>
+
+
+Figure 10: **Adaptive Length Image Tokenization** maps an image to multiple variable-length representations through a recurrent token allocation process, **enabling task-specific sampling** . We learn the tokenizer via image reconstruction as a self-supervised objective. While a compressed representation can be optimized for specific tasks (e.g., fewer tokens for “dog”, “leaf”, “grass” may suffice for a VLM task), reconstruction objective supports learning a universal, task-agnostic tokenizer. 
+
+A.4 ADDITIONAL EXPERIMENTAL RESULTS 
+
+**Low-Complexity Art Hypothesis or Representation Capacity** _∼_ **Image Entropy** Here, we provide additional experimental analysis supporting _representation capacity alignment with image entropy_ claim made in the main paper, Sec. 4. We extracted human-annotated image complexity scores for the MSCOCO and Places2 subsets of the SAVOIAS dataset (Saraee et al., 2018). We leverage a model trained on ImageNet-100 to study this hypothesis, though both COCO and Places may be slightly out-of-distribution (OOD) relative to the learned codebook samples. The complexityreconstruction loss alignment plots in Fig. 12 and Fig. 11 reaffirm the analysis in the paper—an increase in image complexity demands more tokens, and more tokens lead to smaller recon. loss. 
+
+**Representational capacity depends on downstream tasks:** In addition to Fig. 5 in the main paper, where we evaluated Reconstruction Loss Thresholding as a Token Selection Criterion (TSC), we further assess GT-oracle-based Classification and pseudo-GT-oracle-based Depth Error metrics as TSC through Fig. 13 and Fig. 14. For Top-X Classification as TSC, an image receives 32 latent tokens if ResNet-18’s top-X predictions from the 32-token reconstruction include the ground truth class. **Key Takeaways** – Compared to depth, reconstruction loss, and FID as the tasks of interest (TOI), the decrease in classification accuracy with a reduction in dataset representation capacity (cumulative tokens per dataset) is relatively smaller due to classification being a coarser task. When TSC _̸_ = TOI, using different TSCs to sample _the same fraction of tokens yields similar TOI performance_ . For example, FID and Reconstruction Loss at 40% of max token capacity are comparable (compare 2 _[nd] ,_ 3 _[rd]_ plots of Fig. 13 and Fig. 14), regardless of whether depth or classification was the token-selection criterion. However, compared to Top-X classification, choosing the more granular tasks of depth and reconstruction as TSC provide finer support for token sampling – therefore better/ diverse performance range for the TOI. Reconstruction loss serves as self-supervised TSC. 
+
+15 
+
+**Comparison with Flexible Embedding Baselines:** At the time of submission, Matryoshka (Kusupati et al., 2022) and FlexVIT-based (Beyer et al., 2022) approaches had only been explored for classification. The application of Matryoshka to reconstruction was a concurrent ICLR 2025 work (Yan et al., 2024). We implemented FlexVIT for reconstruction by applying variable patching on VQGAN 2D image tokens and designed a Matryoshka-style model by selecting a variable subset (either 32, 64, 128, or the full 256) of distilled 1D tokens during training with no recurrence. Tab. 4 compares ALIT with both approaches—our experiments indicate that both Matryoshka- and FlexVIT-based methods required larger parameter counts to match ALIT’s performance. Fig. 21 visually compares the tokens learned by ALIT and the Matryoshka-based approach. Thanks to its recurrent nature, ALIT refines tokens over multiple iterations, leading to more specialized token bindings. Tab. 5 compares Matryoshka-style model with ALIT on OOD Coco and WIT datasets. 
+
+Finally, some more comparison between recurrent (ALIT) and masking-based (Matryoshka) approaches: (a) Compared to the Matryoshka approach, an ALIT model with the same number of parameters _utilizes more FLOPs at test time to learn longer representations due to its recurrent nature._ (b) In Matryoshka and other masking-based approaches, the 256-token representation always includes the same first 32 tokens as the 32-token representation, _which may not be optimal, as a higher token budget could allow for a more efficient utilization of those 32 tokens._ (c) Combining ALIT with both Matryoshka and FlexVIT approaches could yield a highly efficient tokenizer by leveraging the benefits of flexible 2D patches, adaptability at each recurrent step, and the ability to allocate more FLOPs through recurrence. 
+
+**Additional Ablations:** Tab. 3 and Tab. 7 specify the exact metrics used to generate the plots in Fig. 9. Both the plots and the tables clearly indicate that longer training, larger datasets (IN-100 vs. IN-1K), and multi-stage training are vital for achieving photo-realistic reconstructions. Furthermore, Fig. 17 qualitatively highlights the benefits of using larger models (ALIT-L vs ALIT-B vs ALITS) on image reconstruction quality. Fig. 18 visually analyses the use of continuous vs discrete tokenization at both 2D and 1D token levels. Continuous 1D Tokenization performs best on imagereconstruction task. That said, studying the benefits of quantization for retrieval and long-horizon tasks like visual abstract reasoning, video question answering would be useful. Furthermore, Tab. 10 and Tab. 11 ablate the role of 1D latent token codebook sharing and codebook size on reconstruction FID. Tab. 12 ablates dynamic halting procedure (see Fig. 1 or method section to understand where dynamic halting is performed). Finally, Tab. 8 and Tab. 9 describe the computational needs of ALIT in terms of inference time and gflops. 
+
+## A.5 ANALYSING THE LEARNED LATENT TOKENS 
+
+**Emergent Object Binding:** Compared to 2D tokenizers, where each token is bound to a patch (other than class or global tokens), the learned 1D tokens demonstrate signs of object binding and localization. In addition to Fig. 7 and Fig. 8, we showcase more examples of how the learned latent tokens bind to semantically meaningful objects on COCO dataset. For instance, in Fig. 15, note the token-zebra binding in the second example, the near-perfect segmentation of the bicycle symbol on the lane in row 3, the segmentation of the frisbee and human into different tokens in example 4, and the clustering of both plants (as indicated by high attention weights) in the final example. 
+
+**Comparison with DINO for Emergent Object Binding:** Fig. 19 visualizes the tokens learned by DINO and ALIT. Despite being trained with different objectives on different datasets, both representation learning systems exhibit intriguing emergent object discovery behavior. For DINO, the number of token-attention map visualizations is fixed and determined by the number of attention heads (=6 for DINO-S) multiplied by the number of class tokens (=1). Additionally, since DINO is trained with a self-distillation regime that matches intra-image crop representations, it is primarily optimized for classification. As a result, the class-token attention heads tend to focus on regions crucial for image classification (e.g., in Fig. 19, row 4, the tokens attend either to the human or the phone, aiding in ”selfie” classification). In contrast, ALIT employs a variable number of tokens, leading to a flexible number of token-attention maps and enabling the discovery of multiple objects—notice, for instance, the switch segment detected on the background wall (row 4 of Fig. 19). We believe this strong emergent behavior arises from ALIT’s reconstruction-based training objective, the discrete nature of its learned representation, and the recurrent refinement of its tokens. 
+
+**Recurrent Processing of Latent Tokens:** We further explore the role of recurrence in enhancing token attention and binding to semantic objects and parts. With each iteration of the model rollout, new tokens are added, allowing existing tokens to focus on specialized tasks rather than covering 
+
+16 
+
+**==> picture [372 x 128] intentionally omitted <==**
+
+**----- Start of picture text -----**<br>
+r- Number of Latent Tokens (32, 64, 128, 192, 256) ---> Ground Truth Low Complexity Art Hypothesis<br>!<br>! 256<br>;<br>s<br>! Fo no 4 4 224<br>! 192<br>f<br>it t t t r T 160<br>11 | I it 7 . 128<br>! 96<br>!<br>|= Tan ae| pets) a 4 —- NS 4 64<br>ee oe Pee ww) Cop sy Eo Hes ne 32<br>>Aenwaa emtiio Oe “ie pt meiiST| YC aYes 15 25 35 45 55 65 75 85<br>Image Complexity Human Score<br>Number of Tokens<br>Human Predicted Image Complexity<br>**----- End of picture text -----**<br>
+
+
+Figure 11: **Compression vs. Entropy Hypothesis on the Places Dataset:** Adaptive tokenization enables analysis of Low-Complexity Art Hypothesis by examining token requirements for images of varying complexity. The plot on the right clearly shows that as image complexity increases, so does the need for more computational tokens. These reconstructions use Imagenet100-trained model. 
+
+**==> picture [373 x 128] intentionally omitted <==**
+
+**----- Start of picture text -----**<br>
+i - Number of Latent Tokens (32, 64, 128, 192, 256) oo -> Ground Truth Low Complexity Art Hypothesis<br>1 = - ; — -<br>1 4 , ~ - < “<br>I<br>ARAL1 AA SSE4<br>! 192<br>r 160<br>; f »<br>19.6 © ‘ 12896<br>I' Ji A it ratO-\ i Be j fall)i 1 bs AALt 4] 1 Lh4) m yAi] 64<br>|1 ee . eeip ttUa ie iCOR” ( AT] Fae Con© oeee"AFoePWN 15 25 35 45 55 65 75 85<br>Image Complexity Human Score<br>Number of Tokens<br>Human Predicted Image Complexity<br>**----- End of picture text -----**<br>
+
+
+Figure 12: **Compression vs. Information Entropy Hypothesis on the MSCOCO Objects Dataset:** Adaptive tokenization enables analysis of Low-Complexity Art Hypothesis by examining token requirements for images of varying complexity. The plot on the right clearly shows that as image complexity increases, so does the need for more computational tokens. 
+
+the entire image. Figure 16 illustrates five examples from the COCO dataset, showing how the attention maps of selected tokens receive residual updates over eight recurrent iterations, leading to improved object binding. To quantitatively support this enhanced localization, we calculate mIOU segmentation metrics at different recurrent iterations in Tab. 6. These metrics reinforce the visual results, with mIOU consistently increasing across iterations at various attention masking percentiles. 
+
+**Analyzing the Role of Recurrence in 1D Codebook Utilization:** We visualize the frequency with which each code in the learned codebook is sampled across 5K validation images in Fig. 22. As shown in the figure, at later iterations, more tokens exhibit higher sampling frequencies (x-axis: token sampling frequency/count, y-axis: number of tokens at that frequency). This suggests that with more recurrent iterations, certain specialized tokens are sampled more frequently, reinforcing their role in capturing emergent object representations. This aligns with the token-object binding visualizations presented throughout the paper. 
+
+## A.6 EXPERIMENTAL DETAILS 
+
+**Training Details** In this section, we provide additional training details (see Sec. 3 for approach details and training procedure summary). We train ALIT in two phases – _latent-distillation pretraining and full fine-tuning stage (with gan loss)_ . In the **latent-distillation pre-training stage** , we leverage a pre-trained image tokenizer (VQGAN or VAE) which maps an input image to 2D tokens. We only train the latent-distillation encoder-decoder modules in this stage, using image token reconstruction loss as the core-learning objective. With VQGAN as base tokenzier, we use cross-entropy loss comparing predicted logits with the ground-truth VQGAN-codebook index at each 2D token position. We use mean-squre reconstruction loss when using VAE as the basetokenizer. We unroll the recurrent token allocation procedure for 8 iterations, expanding token memory from 32 (in 1 _[st]_ iteration) to 256 (in 8 _[th]_ ) during training. All the recurrent rollouts are trained end-to-end. At each iteration, we process the image-tokens, the existing 1D latent tokens 
+
+17 
+
+**==> picture [393 x 98] intentionally omitted <==**
+
+**----- Start of picture text -----**<br>
+10; 0 © ResNet18 1.222 1.0; 0 © ResNet18 0.112 10; @ © ResNet18 18.811 a<br>0.9 0.9 8 0.9 =<br>08 1071 56 08 0.103 &° 08 16.171<br>0.7 x= 0.7 soO> 0.7 xo}2:<br>0.6 092 5 0.6 0.094 0.6 13.531 5<br>0.5 rat 0.5 0.5 g<br>O4 @ 0.769 o4 e 0.085 o4 e 10.89 &<br>© © © 3<br>03} 03, 03,<br>0.2. e 8 ee 0.2 c° ee 0.2 2 © 06 ee o<br>012 45 7 yo 12°15 0.618 . 012 45 7 yo 12 «15 0.076 . 012 45 7 yo 12° «15 8.25 of<br>X for Top-X Classification X for Top-X Classification X for Top-X Classification<br>↓<br>↓<br>↓<br>Best Top-X Classification Accuracy<br>Min Tokens (as % of max tokens)   for<br>**----- End of picture text -----**<br>
+
+
+Figure 13: **Dataset Representation Analysis as factor of TSC-TOI Alignment** : We vary tokens per image using **“Best Top-X Classification” Accuracy as the Token Selection Criteria (TSC)** and evaluate different Tasks of Interest (TOI) on the reconstructions. We sample tokens per image such that each reconstructed image is classified correctly under Top-X Classification criteria, and then evaluate different downstream tasks of interests (TOIs) on the reconstructed dataset. 
+
+**==> picture [395 x 93] intentionally omitted <==**
+
+**----- Start of picture text -----**<br>
+10 {@ 0.6 0.11 18.492<br>lo 1. 0{0 10 1@ (a)=<br>0.9 xe 0.9 8 0.9 z<br>os eA 0.575 netS os O°5 0.101 G° os eA 15.932<br>0.7 *, ¢ 0.7 % oat2 0.7 * me]2<br>0.60.5 % 0.55 223G 0.60.5 s 0.093 = 0.60.5 % 13.371 &5oi)<br>0.4 0.526 0.4 0.085 0.4 10.811<br>0.3 8 2<br>o 0.3 0.3 S<br>0.2 0.00 0.41 0.66 0.90 1.15 1.40 0.501 0.2 0.00 0.41 0.66 0.90 1.15 1.40 0.076 0.2 0.00 0.41 0.66 0.90 1.15 1.40 825 oob<br>Abs. Rel Depth Error Thresholds Abs. Rel Depth Error Thresholds Abs. Rel Depth Error Thresholds<br>↓<br>↑ ↓<br>for Depth Error < Threshold<br>Min Tokens (as % of max tokens)<br>**----- End of picture text -----**<br>
+
+
+Figure 14: **Dataset Representation as a factor of TSC-TOI Alignment** : We vary tokens per image using **“Depth Loss** _<_ **some Threshold” as the Token Selection Criteria (TSC)** and evaluate different Tasks of Interest (TOI) on the reconstructions. Being a dense task, depth error thresholding at several continuous thresholds provide more granular and diverse support to dataset representation compression and TOI performance, compared to Top-X Classification (X being discrete integer). 
+
+and add new latent tokens. During this training phase, we perform dynamic halting of the image tokens in each iteration, allowing the latent-distillation modules to focus on distilling image tokens which cannot be reconstructed perfectly till current iterations. We use transformer backbones for both latent-distillation encoder and decoder, performing self-attention among 2D image tokens and latent 1D tokens. In the **next training phase, we jointly fine-tune** both the base image tokenizer modules and the latent-distillation encoder-decoder modules with losses directly at the pixel-space. The training objectives are pixel-level reconstruction and adversarial losses (gan generator and discriminator losses) inspired from VQGAN (Esser et al., 2020) training procedure. We optimize for reconstruction loss for first few epochs, later switching to both reconstruction and adversarial losses. We recurrently map an image to variable-tokens (increasing token count by 32 in each iteration) for 8 iterations. However, unlike previous stage, we only compute loss at only iteration, thus we only need to perform recurrent processing of the latent-distillation encoder in each training run, executing the latent-distillation decoder and the base tokenizer decoder only once. This helps speed up the training and the compute memory requirements. No dynamic halting is performed in this phase. Thanks to the gan losses, this phase help boost the photo-realism / FID metric of the reconstructions, specially at lower-token counts. For more low-level details, please refer to our codebase – https://github.com/ShivamDuggal4/adaptive-length-tokenizer. 
+
+**Dataset** For training the adaptive tokenizer, we mainly utilize Imagenet-100 (100 classes of ImageNet-1K as used in (Wang & Isola, 2022)) and ImageNet-1K datasets. Fig. 9 showcase the scaling potential of training on larger datasets. For exact details of the 100 classes, please refer to our codebase. **Following are pointers to image sources used to create the paper figures and plots** –– The three images shown in Fig. 10 are from ImageNet-100 valiation set (dog image), OOD indoor scene image is from NYUV2 dataset (Nathan Silberman & Fergus, 2012) and tree example is from WIT dataset (Srinivasan et al., 2021). Fig. 3, Fig. 11, Fig. 12 all leverage data from SAVOIAS dataset, which again is different from ImageNet-100 classes. Plots in Fig. 4, Fig. 5, Fig. 14, Fig. 13 all leverage ImageNet-100 validation set. Fig. 7 and Fig. 8 use ImageNet images for token visualzation, Fig. 15 and Fig. 16) use COCO images. Fig. 17 and Fig. 18 showcase randomly sampled images from ImageNet-100 validation set. 
+
+18 
+
+|Approach|32|64|96|ImageNet100<br>128<br>160|ImageNet100<br>128<br>160|192|224|256|
+|---|---|---|---|---|---|---|---|---|
+|Titok-L-32|12.29|-|-|-|-|-|-|-|
+|Titok-B-64|-|**9.72**|-|-|-|-|-|-|
+|Titok-S-128|-|-|9.72|-|-|-|-|-|
+|VQ-GAN|-|-|-|-|-|-|-|7.99|
+|Ours-S(IN1K)|**11.50**|9.81|**8.78**|**8.36**|**8.01**|**7.65**|**7.53**|**7.48**|
+|Ours-S (IN100)|11.77|10.13|9.26|8.77|8.32|7.95|7.81|7.62|
+|Ours-SemiLarge(IN100)|11.81|10.09|9.16|8.62|8.36|8.01|7.79|7.63|
+
+
+Table 2: **Reconstruction L1 Loss** ( _×_ 100 _↓_ ) **evaluated on IN100 validation set.** For last two rows, our latent-distillation modules are only trained on IN100, rest everything is trained on IN1K. 
+
+|Train|Train|Train|Enc./ Dec.|Embed.||||Number of Tokens|Number of Tokens||||
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+|Dataset|Stage|Epochs|Depth|Dim.|32|64|96|128|160|192|224|256|
+|IN-100|Stage1|200|small (8)|512|71.53|49.18|35.11|26.97|20.31|15.38|10.84|8.77|
+|IN -100|Stage1|200|base (12)|768|49.88|35.16|25.79|18.29|14.52|11.27|8.77|7.74|
+|IN-100|Stage1|200|semi-large (16)|1024|43.97|27.56|19.94|16.22|13.48|11.19|8.86|7.64|
+|IN-100|Stage1|200|small (8)|1024|53.47|35.66|27.51|21.18|16.66|12.94|9.66|7.29|
+|IN-100|Stage2|200|small (8)|1024|22.57|16.17|13.30|11.69|10.22|9.30|8.55|8.25|
+|IN-100|Stage2|200|base (12)|768|22.15|15.88|12.57|10.44|9.50|8.96|8.39|8.19|
+|IN-1K|Stage1|200|small (8)|1024|43.73|29.56|21.55|16.30|13.45|11.33|9.11|7.59|
+|IN-1K|Stage1|400|small (8)|1024|41.46|28.26|20.90|16.21|13.21|10.74|8.68|7.39|
+|IN-1K|Stage1|200|semi-large(16)|1024|30.84|19.56|15.72|12.87|11.90|10.11|8.76|7.78|
+
+
+Table 3: **Image Reconstruction Ablations (FID metric):** The ablations clearly highlights – longer training, larger dataset, larger network depth helps in improving FID. GAN base-training is critical. 
+
+|Approach|32|64|96|ImageNet100<br>128<br>160|ImageNet100<br>128<br>160|192|224|256|
+|---|---|---|---|---|---|---|---|---|
+|Matryoshka Enc-S w/ ALIT Dec-S|33.11|20.08|15.10|12.84|11.45|10.51|9.90|9.50|
+|Matryoshka Enc-SemiLarge w/ ALIT Dec-S#|32.12|19.25|14.52|12.48|11.23|10.11|9.48|9.14|
+|**Matryoshka Enc-SemiLarge w/ ALIT Dec-SemiLarge**|**22.85**|**14.51**|**11.63**|**10.13**|**9.23**|**8.83**|**8.42**|**8.11**|
+|FlexVIT Enc-S w/ ALIT Dec-S|79.84|39.73|-|15.16|-|-|-|12.64|
+|FlexVIT Enc-SemiLarge w/ ALIT Dec-S|25.62|15.77|-|10.21|-|-|-|7.90|
+|**FlexVIT Enc-SemiLarge w/ ALIT Dec-SemiLarge**|**23.30**|**14.73**|-|**9.92**|-|-|-|**7.80**|
+|Ours-S|22.57|16.17|13.30|11.69|10.22|9.30|8.55|8.25|
+|**Ours-SemiLarge**|**19.70**|**13.92**|**11.39**|**10.41**|**9.23**|**8.75**|**8.22**|**8.03**|
+
+
+Table 4: **Reconstruction FID** ( _↓_ ) **comparison on ImageNet100:** Matryoshka and FlexVIT were originally proposed for classification tasks. We adapt them for dense reconstruction by employing ALIT-style 1D token decoding. We believe that combining Matryoshka-style masking and FlexVITstyle variable 2D patch-size approaches with the ALIT-style recurrent method could yield further benefits. (# indicates that the GAN discriminator runs 4 times more than the generator). 
+
+|Approach|64 Tokens|COCO<br>128 Tokens|256 Tokens|64 Tokens|Wikipedia (WIT)<br>128 Tokens<br>256 Tokens|Wikipedia (WIT)<br>128 Tokens<br>256 Tokens|
+|---|---|---|---|---|---|---|
+|Matryoshka-L|23.05|14.43|10.66|62.02|48.21|40.28|
+|Ours-S|22.28|14.22|9.72|61.77|47.91|**38.45**|
+|Ours-L|**21.44**|**13.64**|**9.71**|**60.11**|**47.52**|38.69|
+
+
+Table 5: **Reconstruction FID** ( _↓_ ) **on COCO and Wikipedia Image-Text (WIT)** . All models are trained on Imagenet100. Our method (Ours-S, Ours-L) outperforms Matryoshka-L on the OOD datasets. Here “L” = “Semi-Large”. 
+
+|Attention Threshold.|||Recurrent|Recurrent|Iteration|Iteration|||
+|---|---|---|---|---|---|---|---|---|
+|Percentile|1|2|3|4|5|6|7|8|
+|40%|56.7|57.4|57.5|57.6|57.6|57.7|57.7|**57.8**|
+|60%|51.5|52.4|52.5|52.7|52.8|52.9|53.0|**53.1**|
+|80%|37.1|38.6|38.4|38.6|38.7|38.8|39.0|**39.0**|
+
+
+Table 6: **Recurrent Processing enhances Alignment of Token Attn Maps with GT Segments.** _Note – we did not optimize for segmentation, and token attention maps binding to segments is an emergent property._ This binding improves with recurrent processing (under increasing memory constraint). To extract a segment from a token attn map, we threshold the top X% of the attn map. 
+
+19 
+
+|Base 2D|Latent|Latent||||Number of Tokens|Number of Tokens||||
+|---|---|---|---|---|---|---|---|---|---|---|
+|Tokenizer|Dimension|Quantization|32|64|96|128|160|192|224|256|
+|VAE|12|✓|27.90|19.62|16.07|13.95|12.50|11.16|12.62|9.95|
+|VAE|12|_×_|22.14|14.15|10.88|9.00|7.68|6.76|6.22|5.66|
+|VQGAN|12|✓|22.57|16.17|13.30|11.69|10.22|9.30|8.55|8.25|
+|VQGAN|12|_×_|21.77|10.39|8.02|7.38|7.30|7.44|7.36|7.14|
+
+
+Table 7: **Continuous vs. Discrete Tokenization:** Continuous 1D latents (without quantization) are advantageous for image reconstruction, while quantization provides the benefit of compressed encoding. All token-object binding visualizations are performed using the VQGAN + latent quantization approach, showcasing the advantages of quantization beyond compression and error bounding. 
+
+|Approach|Iter 1|Iter 2|Iter|Number of Iterations<br>3<br>Iter 4<br>Iter 5<br>Iter 6|Number of Iterations<br>3<br>Iter 4<br>Iter 5<br>Iter 6|Number of Iterations<br>3<br>Iter 4<br>Iter 5<br>Iter 6|Number of Iterations<br>3<br>Iter 4<br>Iter 5<br>Iter 6|Iter 7|Iter 8|
+|---|---|---|---|---|---|---|---|---|---|
+|Titok-L-32|9.54|-|-||-|-|-|-|-|
+|Ours-S|6.84|10.40|14.13||18.04|22.03|25.99|30.20|34.74|
+
+
+Table 8: **Iteration-wise Inference Time (ms) Comparison** on a single H100 GPU with FP32 precision for single-image encoding. The overhead of running an additional iteration of the adaptive tokenizer encoder is actually quite small: 4ms run time and _<_ +30 gflops on a single H100 gpu. Overall, +30 gflops overhead per iteration is very less for modern compute and can be further reduced by using techniques like KV caching previous layer attentions etc. 
+
+|Approach|Iter 1|Iter 2|Iter 3|Number of Iterations<br>Iter 4<br>Iter 5|Number of Iterations<br>Iter 4<br>Iter 5|Iter 6|Iter 7|Iter 8|
+|---|---|---|---|---|---|---|---|---|
+|Titok-L-32|58.44|-|-|-|-|-|-|-|
+|Ours-S|83.88|105.45|129.16|155.03|183.04|213.21|245.53|278.00|
+
+
+Table 9: **GFlops Comparison on a single H100 GPU for single-image encoding.** For 32 tokens, we our latent-distillation encoder has 8 transformer layers much smaller than Titok-L-32 (with same number of attention heads, feature dim and same number of tokens). Despite that, we have more GFlops because of using VQGAN image encoder + a small additional patch embedding layer as the image 2D embedding. We can switch to Titok-L-32 style image encoding and reduce upto 50 gflops. 
+
+|Codebook|Size|Codebook|Sharing|32|64|Number<br>96<br>128|Number<br>96<br>128|of tokens<br>160|192|224|256|
+|---|---|---|---|---|---|---|---|---|---|---|---|
+|4096||_×_||26.84|18.71|14.71|12.82|10.91|10.02|9.05|8.61|
+|4096||✓||**22.57**|**16.17**|**13.30**|**11.69**|**10.22**|**9.30**|**8.55**|**8.25**|
+
+
+Table 10: **Effect of Codebook Sharing on Reconstruction FID** ( _↓_ ). Shared codebook leads to (a) more compression in terms of total codes. (b) theoretically allows one to rollout the adaptive tokenizer for much longer rollouts than done during training by having timestep-invariant codebook. 
+
+|Codebook|Size|32|64|Number<br>96<br>128|Number<br>96<br>128|of tokens<br>160|192|224|256|
+|---|---|---|---|---|---|---|---|---|---|
+|2048||26.65|18.91|14.76|12.20|10.86|10.03|9.49|9.13|
+|4096||**22.57**|**16.17**|13.30|11.69|10.22|9.30|**8.55**|**8.25**|
+|8196||23.76|16.55|**13.11**|**11.14**|**9.75**|**9.17**|8.61|8.42|
+
+
+Table 11: **Reconstruction FID vs 1D Codebook Size** There is not much (marginal) difference in performance between 4096 and 8196 codebook size, stating that the tokenizer is less sensitive to the codebook size. That said, when scaling to large models, scaling up the codebook while maintaining utilization would be an intruiging research question. 4096 is a usual codebook size for Imagenet. 
+
+|Dynamic|Halting|32|64|Number of tokens<br>96<br>128<br>160|Number of tokens<br>96<br>128<br>160|Number of tokens<br>96<br>128<br>160|192|224|256|
+|---|---|---|---|---|---|---|---|---|---|
+|_×_||24.38|17.00|13.49|**11.53**|10.30|9.43|8.76|8.29|
+|✓||**22.57**|**16.17**|**13.30**|11.69|**10.22**|**9.30**|**8.55**|**8.25**|
+
+
+Table 12: **Ablating Dynamic Halting for Reconstruction FID metric.** Dynamic Halting is done only in stage 1 of training (and is optional). 
+
+20 
+
+Figure 15: **Recurrent processing of Latent Tokens on COCO Validation Set:** Recurrent processing with increasing computational tokens leads to specialization of attention. We showcase all the first 32 tokens after the 1 _[st]_ & 8 _[th]_ iterations (out of total 256 tokens at the 8 _[th]_ iteration). (Left) A broader comparison b/w iteration 1 vs 8 attention maps highlight emerging sparsity in attention. 
+
+21 
+
+**==> picture [390 x 7] intentionally omitted <==**
+
+**----- Start of picture text -----**<br>
+GT Image Iteration 1 Iteration 2 Iteration 3 Iteration 4 Iteration 5 Iteration 6 Iteration 7 Iteration 8<br>**----- End of picture text -----**<br>
+
+
+Figure 16: **Token Visualization over Multiple Recurrent Iteration:** Recurrent processing leads to sparse attention & specialization of tokens to localised objects, parts etc. For example – recurrence led to near-perfect bed segmentation (row 1), bicycle-sign segmentation (row 2), improved human segmentation (row 3), zebra-instance segmentation (row 4), and potted-plants segmentation (row 5). 
+
+**==> picture [392 x 298] intentionally omitted <==**
+
+**----- Start of picture text -----**<br>
+ALIT-S ALIT-B ALIT-L Ground Truth ALIT-S ALIT-B ALIT-L Ground Truth<br>aN V7 ay pest! xy rey “<br>Ao Taty 5-35 Oxi. | | 3<br>a a yid a aT ai 3<br>¥ a AN an < ki j » et | + nem B | el ! ae<br>‘ "he y A wR, Ld | % | & A | * : 4 a<br>ALIT-S ALIT-B ALIT-L Ground Truth ALIT-S ALIT-B ALIT-L Ground Truth<br>we. es 4 > , b 4 P<br>4 4 a Da 6 '<br>32 Tokens<br>128 Tokens<br>256 Tokens<br>32 Tokens<br>128 Tokens<br>256 Tokens<br>**----- End of picture text -----**<br>
+
+
+Figure 17: **Effect of Model Size on Image Reconstruction Quality.** Increasing model size enhances reconstruction quality. This visualization uses VQGAN as the base tokenizer (discrete 2D) distilled into discrete 1D latent tokens. With 256 tokens, the reconstruction quality closely aligns with VQGAN results and approaches ground truth, even for complex images, supporting the use of adaptive representations. (Zoom in for details.) 
+
+22 
+
+**==> picture [392 x 487] intentionally omitted <==**
+
+**----- Start of picture text -----**<br>
+Quant-2D Quant-2D Cont-2D Ground Truth Quant-2D Quant-2D Cont-2D Ground Truth<br>Quant-1D Cont-1D Cont-1D Quant-1D Cont-1D Cont-1D<br>Baa OMeSP acellPag a. aeeabE ie“3<br>Quant-2D Quant-2D Cont-2D Ground Truth Quant-2D Quant-2D Cont-2D Ground Truth<br>Quant-1D Cont-1D Cont-1D Quant-1D Cont-1D Cont-1D<br>BREN~ fa CSS= 4 {SN|S ee <AES rE<br>Quant-2D Quant-2D Cont-2D Ground Truth Quant-2D Quant-2D Cont-2D Ground Truth<br>Quant-1D Cont-1D Cont-1D Quant-1D Cont-1D Cont-1D<br>REO EL ~\<br>| A / f / =~ = 4 iO oe —J<br>7 7 S97 J = oe<br>64 Tokens<br>128 Tokens<br>256 Tokens<br>64 Tokens<br>128 Tokens<br>256 Tokens<br>64 Tokens<br>128 Tokens<br>256 Tokens<br>**----- End of picture text -----**<br>
+
+
+**==> picture [172 x 16] intentionally omitted <==**
+
+**----- Start of picture text -----**<br>
+Quant-2D Quant-2D Cont-2D Ground Truth<br>Quant-1D Cont-1D Cont-1D<br>**----- End of picture text -----**<br>
+
+
+Figure 18: **Impact of Discrete vs. Continuous Tokenization on Image Reconstruction.** Continuous 1D latent representations yield the best reconstructions overall. The advantage of using VAE as the base tokenizer (third column of Cont-2D + Cont-1D) becomes more significant at higher token counts. VQGAN (discrete 2D) combined with continuous 1D (second column) also performs well, especially at lower token counts, possibly due to the learning ease of the discrete cross-entropy training framework. Note: ALIT-S is used in this visualization, and reconstructions may improve with a larger model. (Zoom in for details.) 
+
+23 
+
+**DINO-S** visualizing all CLS token attn maps **ALIT-S** visualizing 6 **ALIT-S** visualizing all Input Image (number of heads = 6) selected attn maps first 32 attn maps 
+
+Figure 19: **DINO vs ALIT Token Visualization:** Compared to DINO-S, which has one class token and 6 attention-heads per token, leading to 6 token-attention maps, we have arbitrary attention maps (= number of latent tokens). _Dino being trained with self-distillation implicitly has some bias towards attending patches which lead to better classification, like “attending to phone and man for implicit selfie representation”, while ALIT being trained with reconstruction even attends to the small switch on the wall in the background behind the man._ **Note:** we are not an alternative to DINO, both approaches have orthogonal contributions. 
+
+24 
+
+**==> picture [369 x 23] intentionally omitted <==**
+
+**----- Start of picture text -----**<br>
+Input Image  64 Token 128 Token 256 Token<br>(from Internet) Reconstruction Reconstruction Reconstruction<br>**----- End of picture text -----**<br>
+
+
+Figure 20: **Generalization of ALIT trained on Imagenet100 on Internet Images:** ALIT performs quite well even on OOD imagesmost times, with great potential of being an “any-image” generalizable adaptive tokenizer with some scaling. 
+
+25 
+
+**==> picture [316 x 474] intentionally omitted <==**
+
+**----- Start of picture text -----**<br>
+Four Interesting Tokens<br>All First 32 Tokens<br>(Manually Sampled)<br>>a >,eeois a fee<br>| rte<br>a<br>ay<br>= See Pe<br>- Soy<br>b f wksm Be aay= es 4 = tera YS<br>2 *<br>as aad os<br>ery RS |<br>Matryoshka-style  (Large) Encoder w/  ALIT-style Decoder<br>(Ours)<br>ALIT-Small<br>Matryoshka-style  (Large) Encoder w/  ALIT-style Decoder<br>(Ours)<br>ALIT-Small<br>**----- End of picture text -----**<br>
+
+
+Figure 21: **Comparing ALIT adaptive tokenizer vs Matryoshka-Style tokenizer:** Thanks to recurrent processing in presence of additonal compute (a.k.a tokens), ALIT learns more sharper attention maps over multiple iterations. Unlike ALIT where the first 32 tokens imporve over iterations, Matryoshka-style approach learn a fixed-length (static) embedding in one go. **Note: This is ALIT-style decoding with Matryoshka-style encoding.** One could also combine MatryoshkaStyle encoding with recurrent encoding, which would be interesting future work. 
+
+26 
+
+**==> picture [400 x 299] intentionally omitted <==**
+
+**----- Start of picture text -----**<br>
+Iteration 1 Iteration 2 Iteration 3<br>(Cum. Tokens = 32 * 5K) (Cum. Tokens = 64 * 5K) (Cum. Tokens = 96 * 5K)<br>1400 1600 1600<br>1200 1400 1400<br>sooo 200 1200<br>800 1000 1000<br>800 800<br>600 600 600<br>400 00 200<br>200 200 200<br>°D 100 200 300-400-500 600-700-800 900-1000 0 0-100-200-3300 -«400~«500 «600 ~«700:+«800 «900 ~—«:1000 0 0 100-200» «300 400-~«500+~«600-~«700:~«80 «900<br>Code Sampling Count Code Sampling Count Code Sampling Count<br>Iteration 4 Iteration 5 Iteration 6<br>(Cum. Tokens = 128 * 5K) (Cum. Tokens = 160 * 5K) (Cum. Tokens = 192 * 5K)<br>1400 1750 3000<br>1200 1500 2500<br>1000 2 50 2000<br>800 1000 1500<br>600 750<br>400 500 1000<br>200 250 500<br>0 ‘0 100 200 300 400 500600 700 800 960 1000 0 ‘0100-200 300 400 500 600 700 800 900 1000 ° 0 100 200 300 400 © 500 600 700 800 900<br>Code Sampling Count Code Sampling Count Code Sampling Count<br>Iteration 7 Iteration 8<br>(Cum. Tokens = 224 * 5K) (Cum. Tokens = 256 * 5K)<br>3000 2500<br>2500<br>2000<br>2000<br>1500<br>1500<br>1000 1000<br>500 500<br>0 ‘0100200 300 400 500 600 700 800 900 1000 0 ‘0100 200 300 400 500 600 700 800 900 1000<br>Code Sampling Count Code Sampling Count<br>(How many times is a code is sampled  (How many times is a code is sampled<br>from codebook of size 4096)  from codebook of size 4096)<br>Number of Codes  Number of Codes  Number of Codes<br>with that sampling count with that sampling count with that sampling count<br>Number of Codes  Number of Codes<br>Number of Codes<br>with that sampling count with that sampling count<br>with that sampling count<br>Number of Codes  Number of Codes<br>with that sampling count with that sampling count<br>**----- End of picture text -----**<br>
+
+
+Figure 22: **Codebook Utilization at different recurrent iterations by ALIT-Small:** As mentioned before, recurrent processing with adaptive memory (tokens), leads to token specialization. This can also be seen from the fact –– at larger iterations, there are more number of higher frequency tokens. **When you have more memory / tokens, some of the memory can be utilized for specialization.** Note – almost no code is sampled 0 times, that’s just a artifact of low x-axis tick sampling. “*5K” = cumulative tokens from 5K Imagenet100 validation images. 
+
+27

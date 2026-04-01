@@ -1,0 +1,1260 @@
+## - MASKED DIFFUSION MODELS ARE SECRETLY TIME - AGNOSTIC MASKED MODELS AND EXPLOIT INACCU RATE CATEGORICAL SAMPLING 
+
+**Kaiwen Zheng**[1] _[∗]_ **, Yongxin Chen**[2] **, Hanzi Mao**[2] **, Ming-Yu Liu**[2] **, Jun Zhu**[1] _[†]_ **, Qinsheng Zhang**[2] 1Department of Computer Science & Technology, Institute for AI, Tsinghua University 2NVIDIA 
+
+zkwthu@gmail.com; dcszj@mail.tsinghua.edu.cn; {qinshengz,yongxinc,hanzim,mingyul}@nvidia.com 
+
+## ABSTRACT 
+
+Masked diffusion models (MDMs) have emerged as a popular research topic for generative modeling of discrete data, thanks to their superior performance over other discrete diffusion models, and are rivaling the auto-regressive models (ARMs) for language modeling tasks. The recent effort in simplifying the masked diffusion framework further leads to alignment with continuous-space diffusion models and more principled training and sampling recipes. In this paper, however, we reveal that both training and sampling of MDMs are theoretically free from the time variable, arguably the key signature of diffusion models, and are instead equivalent to masked models. The connection on the sampling aspect is drawn by our proposed first-hitting sampler (FHS). Specifically, we show that the FHS is theoretically equivalent to MDMs’ original generation process while significantly alleviating the time-consuming categorical sampling and achieving a 20 _×_ speedup. In addition, our investigation raises doubts about whether MDMs can truly beat ARMs in text generation. We identify, for the first time, an underlying numerical issue, even with the commonly used 32-bit floating-point precision, which results in inaccurate categorical sampling. We show that it lowers the effective temperature both theoretically and empirically, and the resulting decrease in token diversity makes previous evaluations, which assess the generation quality solely through the incomplete generative perplexity metric, somewhat unfair. 
+
+## 1 INTRODUCTION 
+
+**==> picture [112 x 139] intentionally omitted <==**
+
+**----- Start of picture text -----**<br>
+Discrete<br>Diffusion<br>MDM<br>Masked<br>ARM<br>Model<br>Time-Agnostic<br>Token-by-Token<br>We prove:  MDM = Masked Model<br>**----- End of picture text -----**<br>
+
+
+There are three primary paradigms of generative models. Diffusion **Diffusion models** (Ho et al., 2020; Song et al., 2021c) have been the prevalent way for generative modeling of _continu-_ MDM _ous data_ with both theoretical and empirical success. They are SOTA in image, speech, video synthesis (Dhariwal & Nichol, 2021; Karras et al., 2022; Chen et al., 2021; Ho Masked et al., 2022) and serve as the cornerstone of large-scale Model ARM text-to-image (Rombach et al., 2022; Balaji et al., 2022; Esser et al., 2024) and text-to-video (Gupta et al., 2023; Bao et al., 2024) generation systems. **Auto-regressive models** _Time-Agnostic_ (ARMs) have dominated the generation of _discrete data_ es- _Token-by-Token_ pecially languages (Radford et al., 2018; 2019; Brown et al., We prove: **MDM = Masked Model** 2020; Achiam et al., 2023; Touvron et al., 2023), due to the scalability and generalizability of the straightforward nextFigure 1: Trilemma of generative token-prediction mechanism based on transformer architecmodeling for discrete data. tures (Vaswani et al., 2017). **Masked models** , such as BERT (Devlin et al., 2019) for masked language modeling and MaskGIT (Chang et al., 2022) for masked image generation, are trained to 
+
+> _∗_ Work done during an internship at NVIDIA; _†_ The corresponding author. 
+
+1 
+
+reconstruct randomly masked tokens and sampled by order-agnostic decoding. They are an alternative approach to model _discrete data_ while suffering from insufficient theoretical foundations. 
+
+Diffusion models have been extended to discrete data spaces with principled training and sampling (Austin et al., 2021; Campbell et al., 2022; Meng et al., 2022; Lou et al., 2023). Compared to ARMs, they predict all tokens simultaneously and offer a favorable trade-off between generation quality and sampling efficiency. Recently, **masked diffusion models** (MDMs), the leading variant of discrete diffusion formulations, are emerging as a promising contender of ARMs (Lou et al., 2023). Recent works (Shi et al., 2024; Sahoo et al., 2024) have simplified MDMs to align with the design space of diffusion models via continuous-time forward processes, training objectives, and sampling procedures, resulting in a unified view and empirical improvements. Positioned at the intersection of diffusion models and masked models, MDMs are considered promising as they inherit both the theoretical principles from diffusion models and the simple mechanism from masked models. Moreover, it is believed that MDMs can outperform ARMs in text generation when measured by the common generative perplexity metric (Lou et al., 2023; Shi et al., 2024; Sahoo et al., 2024). 
+
+However, we argue that the current understanding of MDMs is still quite limited in both theoretical and empirical aspects. In this paper[1] , we conduct a thorough and comprehensive investigation and demonstrate that **MDMs are essentially a theoretically and empirically equivalent form of typical masked models while being complicated, inefficient, and numerically unstable** : 
+
+1. The **training objective** of MDMs is equivalent to that of masked models, differing only by nuanced likelihood-based loss weighting. The introduction of an additional time variable in the loss function provides little benefit in practice. (Section 3) 
+
+2. The **sampling process** of MDMs, being computationally expensive and inefficient, has a theoretically equivalent alternative (our first-hitting sampler) that is up to **20** _×_ faster and mirrors the random-order, token-by-token decoding process of masked models. (Section 4) 
+
+3. The previously reported superiority of MDMs over ARMs on text generation stems from **numerical issues** that hack the generative perplexity metric during sampling by lowering the effective temperature, rather than genuine advantages. (Section 5) 
+
+Based on these findings, we argue that the community should reconsider investing efforts in MDMs. That being said, MDMs do provide theoretical insights and supplementary perspectives to masked models, but in practice, **the simpler masked models are not only sufficient but also free from above inefficiency and numerical instability issues** . Moreover, **scaling up MDMs on text encounters fundamental inference inefficiency challenges compared to ARMs** , as the bidirectional attention in masked models is incompatible with _KV caching_ , a crucial technique for accelerating modern large language models (LLMs) that require long context length. This has been largely overlooked or intentionally downplayed by most existing works on diffusion language models[2] . Considering the critical role of infrastructure and cost-effective inference in the deployment of LLMs, MDMs (or masked models) lack a clear and compelling prospect to replace ARMs. 
+
+## 2 BACKGROUND: MASKED DIFFUSION MODELS (MDMS) 
+
+Let _X_ = _{_ 0 _,_ 1 _, . . . , m −_ 1 _}_ be the discrete data space, with an extra mask token _m_ added to _X_ . Denote ∆ _[m]_ = _{_ _**π** ∈_ R _[m]_[+1] _|_[�] _[m] i_ =0 _[π][i]_[=][1] _[,]_ _**[ π]**[≥]_[0] _[}]_[ as the standard] _[ m]_[-simplex.][For any data token] or mask token _x ∈X_ , denote _**e** x ∈_ R _[m]_[+1] as the corresponding one-hot vector. Continuous-time discrete-space masked diffusion models (MDMs) (Shi et al., 2024; Sahoo et al., 2024) can be defined akin to diffusion models, with a continuous-time forward noising process 
+
+_qt|_ 0( _xt|x_ 0) = Cat( _αt_ _**e** x_ 0 + (1 _− αt_ ) _**e** m_ ) (1) 
+
+where _αt_ is the predefined _noise schedule_ function satisfying _α_ 0 _≈_ 1 _, α_ 1 _≈_ 0, and Cat( _**π**_ ) denotes the _categorical distribution_ over the class probabilities _**π** ∈_ ∆ _[m]_ . The forward process has a time reversal for _s < t_ given _x_ 0: 
+
+**==> picture [328 x 31] intentionally omitted <==**
+
+> 1We present our views in a straightforward manner. The earlier version is available in Appendix I. 
+
+> 2Given our findings, it may be more appropriate to call them **masked language models** if based on MDMs. 
+
+2 
+
+Following DDPM (Ho et al., 2020), the parameterized model is defined by replacing _**e** x_ 0 in the reversal with a data prediction model _**µ** θ_ : _X ×_ R _�→_ ∆ _[m]_ : 
+
+**==> picture [279 x 11] intentionally omitted <==**
+
+and _**µ** θ_ is further parameterized by _**f** θ_ : _X ×_ R _�→_ R _[m]_ as 
+
+**==> picture [302 x 25] intentionally omitted <==**
+
+so that it satisfies (1) the predicted vector contains valid class probabilities sum to 1; (2) the predicted _x_ 0 has zero probability of being the mask token; (3) if a token is already unmasked, it no longer changes. When _α_ 0 _→_ 1 _, α_ 1 _→_ 0 and the number of timesteps tends to infinity, it is proven that the parameterized model _pθ_ has an _evidence lower bound_ (ELBO) log _pθ_ ( _x_ 0) _≥−L∞_ , where 
+
+**==> picture [314 x 26] intentionally omitted <==**
+
+is a time-weighted cross-entropy loss, _αt[′]_[=][d] d _[α] t[t]_[, and] _[ δ][x][t][,m]_[is a indicator function.][We refer to] _[ L][∞]_[,] the training objective, as the negative ELBO (NELBO). 
+
+**Multi-Dimensional Case** For a token sequence _**x** ∈X[L]_ = _{_ 0 _,_ 1 _, . . . , m −_ 1 _, m}[L]_ of length _L_ , MDMs choose a factorized forward process _qt|_ 0( _**x** t|_ _**x**_ 0) =[�] _[L] l_ =1 _[q][t][|]_[0][(] _[x] t_[(] _[l]_[)] _[|][x]_[(] 0 _[l]_[)][)][over][different] dimensions, where _x_[(] _[l]_[)] denotes the _l_ -th token of _**x**_ . As a result, the reversal _qs|t,_ 0( _**x** s|_ _**x** t,_ _**x**_ 0) = � _Ll_ =1 _[q][s][|][t,]_[0][(] _[x] s_[(] _[l]_[)] _[|][x]_[(] _t[l]_[)] _[, x]_[(] 0 _[l]_[)][)][and][the][parameterized][model] _[p][θ]_[(] _**[x]**[s][|]_ _**[x]**[t]_[)][=][�] _[L] l_ =1 _[q]_[(] _[x] s_[(] _[l]_[)] _[|][x]_[(] _t[l]_[)] _[,]_ _**[ e]** x_[(] 0 _[l]_[)] _←_ _**µ**_[(] _θ[l]_[)][(] _**[x]**[t][, t]_[))][ also factorize.][Here the network] _**[ µ]**[θ]_[:] _[X][ L][ ×]_[ R] _[�→]_[(∆] _[m]_[)] _[L]_[predicts the probabilities at] all positions at a time, and we use _**µ**_[(] _θ[l]_[)] to denote the _l_ -th column of _**µ** θ_ . The ELBO loss in Eqn. (5) under multi-dimension can be written as 
+
+**==> picture [335 x 27] intentionally omitted <==**
+
+**Context of Discrete Diffusion Models** MDMs described above are a simplified version of the best-performing masked (or absorbing) case in discrete-space diffusion models. Discrete diffusion models, originated from D3PM (Austin et al., 2021), rely on discrete-time or continuous-time Markov chains to model transitions in discrete space. Notably, _concrete score_ (Meng et al., 2022) in discrete diffusion acts as an analog of the score function in continuous diffusion, and a recent work SEDD (Lou et al., 2023) proposes _score entropy_ for robust and scalable learning of the concrete score. The model definition (Markov chain, score parameterization), training objective (diffusionweighted denoising score entropy) and sampling procedure (Tweedie _τ_ -leaping) of SEDD Absorb can be proven equivalent to the simplified expressions (Eqn. (1) (3) (4) (5)) in MDMs. Interested readers can refer to Appendix D for further details. 
+
+## 3 REVISITING THE TRAINING OF MDMS 
+
+MDMs are defined and trained by the continuous-time forward process (Eqn. (1)), time-dependent network parameterization (Eqn. (4)) and continuous-time ELBO (Eqn. (5)). However, different from continuous-time diffusion models (Song et al., 2021c), the evolution of _**x** t_ is discrete. The evolution trajectories of ( _**x** t, t_ ) are like pairs of “phenotype" and “genotype", where the continuous changes in time _t_ may not be reflected on the observable traits of _**x** t_ . In this section, we aim to disentangle the internal time variable _t_ and the external traits of the masked sequence _**x** t_ in the training of MDMs. 
+
+## 3.1 REFORMULATING THE ELBO WITH THE NUMBER OF MASKED TOKENS 
+
+Previous works (Shi et al., 2024; Sahoo et al., 2024) show the invariance of the ELBO to the noise _αt_ schedule _αt_ by performing the time change-of-variable _γ_ = log(1 _− αt_ ) or _λ_ = log 1 _−αt_[following] VDM (Kingma et al., 2021). However, this does not get to the essence as they still rely on an internal continuous time. In the following proposition, we show that the sequence NELBO of MDMs can be expressed as a partition by the number of masked tokens instead of the continuous time. 
+
+3 
+
+**Proposition 3.1** (ELBO by the Number of Masked Tokens) **.** _For_ _**x**_ 0 _with sequence length L, denote_ _**x** n as a sequence with n masked tokens, and q_ ˜( _**x** n|_ _**x**_ 0) _as the discrete forward process which randomly and uniformly masks n tokens of_ _**x**_ 0 _. Suppose the noise schedule αt satisfies α_ 0 = 1 _, α_ 1 = 0 _. The sequence NELBO in Eqn._ (6) _can be reformulated as_ 
+
+**==> picture [324 x 30] intentionally omitted <==**
+
+_where_ 
+
+**==> picture [314 x 13] intentionally omitted <==**
+
+_α[−]_[1] _is the inverse function of αt satisfying α[−]_[1] ( _αt_ ) = _t, and B_ ( _a, b_ ) _denotes the Beta distribution with shape parameters a, b >_ 0 _._ 
+
+**==> picture [120 x 91] intentionally omitted <==**
+
+**----- Start of picture text -----**<br>
+40<br>n  = 128<br>n  = 256<br>30 n  = 512<br>20<br>10<br>0<br>0 . 0 0 . 2 0 . 4 0 . 6 0 . 8 1 . 0<br>α<br>Density<br>**----- End of picture text -----**<br>
+
+
+This expression offers two aspects of theoretical insights: 
+
+**Mixture of Experts** From Eqn. (8), the time-dependent net20 work _**µ**_ ¯ _θ_ ( _**x µ**_ ) by _θ_ ( _**x**_ aggregating _, t_ ) implicitly parameterizes a time-independent networkthe logarithm at the same _**x**_ but different _t_ , 10 which can be seen as an ensemble. The time _t_ is sampled unevenly so that _αt_ follows a Beta distribution _B_ ( _L−n_ +1 _, n_ ). This distribu0 0 _._ 0 0 _._ 2 0 _._ 4 0 _._ 6 0 _._ 8 1 _._ 0 tion has the mode (peak) _[L] L[−] −[n]_ 1[and variance] ( _Ln_ +1)( _L−_[2] _n_ ( _L_ ++2)1) _[≤]_ 4( _L_ 1+2)[.] _α_ butionWith a large sequence lengthis concentrated around _L_ the, the variance is small and the distri-mode, as illustrated in Figure 2. Figurefunction (PDF) of2: Probability _B_ ( _L−n_ density+1 _, n_ ) with _L_ = 1024. Moreover, under the best-performing linear schedule _αt_ = 1 _− t_ in MDMs (Lou et al., 2023; Shi et al., 2024; Sahoo et al., 2024), the mode of _t_ is _L[n][−] −_[1] 1[,][close][to][the] _masked ratio[n]_[Therefore, the time variable] _[ t]_[ can be seen as a continuous relaxation and smoothing] _L_[.] of the masked ratio, and we can directly condition the network on the discretely distributed masked ratio instead of the continuous time while yielding similar performance (Appendix J.1). 
+
+**Discrete ELBO** From Eqn. (7), the sequence NELBO can be expressed discretely with the timeagnostic network _**µ**_ ¯ _θ_ ( _**x**_ ). Therefore, Eqn. (7) can serve as a NELBO of masked models in a straight- _n_ forwardrandomway:tokens _uniformly_ in _**x**_ 0 chooseto obtainthe _**x**_ number _n_ , and computeof maskedthetokens _averagen_ fromcross-entropy _{_ 1 _, . . . , L}_ loss, _uniformly_ of _**µ**_ ¯ _θ_ ( _**x**_ mask) on these _n_ positions. The weighting _n_[1][in this NELBO resembles the] _[ likelihood weighting]_[ in diffusion] models (Song et al., 2021b; Kingma et al., 2021; Lu et al., 2022a; Zheng et al., 2023b), facilitating _maximum likelihood training_ of masked models. Note that early works on order-agnostic autoregressive models (Uria et al., 2014; Hoogeboom et al., 2021a) already reveal this weighting from a different perspective[3] . While in the context of masked models, there are few discussions on the ELBO. Discussions on related work are placed in Appendix B. 
+
+## 3.2 TIME-INDEPENDENT NETWORK PARAMETERIZATION 
+
+When the original network _**µ** θ_ is parameterized without the time input, we have _**µ**_ ¯ _θ_ = _**µ** θ_ in Eqn (7). In this case, the training of MDMs is completely free from the time variable and behaves like masked models. The rationality of time-independent network parameterization has been discussed in recent works (Ou et al., 2024; Sahoo et al., 2024). Here we restate this conclusion with our simplified notations from the perspective of the optimal model. 
+
+**Proposition 3.2** (Optimal Masked Diffusion Model) **.** _Given unlimited model capacity, the optimal network θ[∗] that minimizes the NELBO in Eqn._ (6) _satisfies_ 
+
+**==> picture [268 x 19] intentionally omitted <==**
+
+_whereq_ ˜0 _|n_ ( _**x**_ 0 _N|_ _**x**_ ( _n_ _**x**_ )) _is the posterior distribution of the discrete forward processis a deterministic function that counts the number of maskedq_ ˜ _n|_ 0( _**x** n|tokens_ _**x**_ 0) _. in_ _**x** , and_ 
+
+> 3The relation between ELBOs of order-agnostic ARMs and MDMs was also mentioned in a recent work (Ou et al., 2024), while they only consider an originally time-agnostic network instead of mixture-of-experts. 
+
+4 
+
+From the above expression, the optimal MDM is irrelevant to the time variable, justifying the feasibility of removing the time input. Besides, it can be extended to a general weighted cross-entropy loss _L_[(] _**w**[L]_[)] = _−_[�] _[L] n_ =1 _[w][n]_[E] _[q]_[˜] _n|_ 0[(] _**[x]** n[|]_ _**[x]**_ 0[)] �� _l_ : _x_[(] _n[l]_[)][=] _[m]_ _**[ e]**[⊤] x_[(] 0 _[l]_[)][log] _**[ µ]** θ_[(] _[l]_[)][(] _**[x]**[n]_[)] � of masked models. _L_[(] _**w**[L]_[)] with arbitrary positive weights _**w** >_ 0 yields the same optimal solution as Eqn. (9), thus acting as a surrogate objective of the NELBO. This theoretically supports a wide range of objectives for training masked models, such as the loss in MaskGIT (Chang et al., 2022). 
+
+## 3.3 PRACTICAL CONSIDERATIONS 
+
+While there are theoretically equivalent variants for training MDMs (continuous-time/discrete ELBO, time-conditioned/time-independent network), these choices may have practical implications due to differences in network inputs and loss variances. We present some training comparisons and our attempts to improve training (e.g., variance reduction, flow matching) in Appendix J.1. Overall, all options yield similar performance, and the low-discrepancy sampler (Kingma et al., 2021), when applied to time or the number of masked tokens, can significantly reduce the loss variance. 
+
+Note that while several works (Lou et al., 2023; Shi et al., 2024) suggest that MDMs are competitive with ARMs in language modeling (beating GPT-2 (Radford et al., 2019) when measured by test/zero-shot perplexity), a more fair comparison (retraining ARMs with the same configurations, Appendix J.1) (Sahoo et al., 2024) indicates that MDMs are only advantageous in language understanding tasks (surpassing ARMs and BERT on the GLUE metric (Wang et al., 2018)). 
+
+## 4 REVISITING THE SAMPLING OF MDMS 
+
+In the previous section, we demonstrate how the training of MDMs, both theoretically and empirically, can be disentangled with the continuous time variable and behave like masked models. In this section, we turn our attention to the sampling of MDMs, which is also performed in continuous time and seems distinct from masked models. We aim to address its current inefficiency problem as well as establish essential insights into its connection with masked models. 
+
+## 4.1 INEFFICIENCY OF CURRENT SAMPLING 
+
+MDMs are sampled in an ancestral way following the parameterized reverse-time process in Eqn. (3). Specifically, the sampling step _**x** t →_ _**x** s_ from time _t_ to _s < t_ can be expressed as 
+
+**==> picture [346 x 40] intentionally omitted <==**
+
+Given the number of sampling steps _N_ , the sampling process involves first discretizing the timesteps as 0 = _t_ 0 _< t_ 1 _< · · · < tN_ = 1, and then performing reverse steps _tN → tN −_ 1 _→· · · → t_ 0 according to Eqn. (10). Notable characteristics of MDM’s sampling include: (1) Any mask token can only be unmasked once with no further changes. (2) Each sampling step requires a forward pass through the network _**µ** θ_ and conducting at most _L_ times of _|X|_ -dimensional categorical sampling, where _L_ is the sequence length and _|X|_ is the vocabulary size. (3) The number of sampling steps _N_ can be significantly larger than _L_ , and a single sampling step may result in no changes to any token in the sequence. (4) As MDMs are trained with the continuous-time ELBO which assumes an infinite number of reverse steps, it is theoretically rigorous to employ an equivalently large _N_ . 
+
+Recent works propose a simple _caching strategy_ (Ou et al., 2024; Sahoo et al., 2024) to speedup the sampling of MDMs: when the network _**µ** θ_ is parameterized without time input[4] , and the sequence is not changed in a sampling step _t → s_ (i.e., _**x** s_ = _**x** t_ ), we can reuse the network output at the last step as _**µ** θ_ ( _**x** s_ ) = _**µ** θ_ ( _**x** t_ ). As the sequence changes at most _L_ times during sampling, the number of function evaluations (NFE) can be reduced to no more than _L_ . However, sampling with the caching strategy still suffers from two major inefficiency problems: 
+
+> 4In our practice, the time-dependent network also exhibits no performance degradation with the caching strategy, so this assumption is unnecessary. 
+
+5 
+
+**==> picture [398 x 67] intentionally omitted <==**
+
+**----- Start of picture text -----**<br>
+𝑡= 1 𝑡= 0<br>𝑡5 = 1.0 𝑡4 = 0.8 𝑡3 = 0.6 𝑡2 = 0.4 𝑡1 = 0.2 𝑡0 = 0.0<br>Time Discretization [M] [M] [M] [M] [M] [M] [M] B [M] A B [M] A B [M] A B C<br>𝜏3 = 1.0 𝜏2 = 0.76 𝜏1 = 0.48 𝜏0 = 0.03<br>First-Hitting [M] [M] [M] [M] B [M] A B [M] A B C<br>**----- End of picture text -----**<br>
+
+
+Figure 4: Illustration of the first-hitting sampler in comparison to the original sampling procedure. 
+
+**Categorical Sampling is Time-Consuming** In diffusion models, NFE is an efficient indicator of the sampling speed, as the computation overhead beyond the network forward passes is negligible. However, in MDMs, the Gumbel-based[5] categorical sampling, which requires sampling a total number of _O_ ( _NL|X|_ ) uniform variables and performing logarithmic operations on them, can be expensive compared to network evaluations. As illustrated in Figure 3a, when the number of sampling steps _N ≫ L_ , the sampling time scales with _N_ instead of the NFE. Categorical sampling steps that do not result in token changes are wasted, as they contribute no information gain. 
+
+**Caching Strategy Degrades in** 50 Total batch size=1 **Batched Sampling** When using 40 Network Forward 5000 batch size=8 the caching strategy in batched 30 4000 sampling, the network output can 3000 only be reused directly when all 20 ~~Categorical Sampling~~ 2000 the sequences in the batch re10 1000 main unchanged after a sampling 0 0 step[6] . Suppose the batch size is 0 2000 Sampling40004000 Steps60006000 8000 10000 0 2000 Sampling40004000 Steps60006000 8000 _B_ scheduleused.uniform, andThetimesteps _α_ the _texpected_ =default1 _−tNFEk t_ linearas=underwell _Nk_ noisetheasis Figure(a)(caching strategy, batch size=1)Sampling3: Illustrationtime per sequenceof sampling(b) NFE (caching strategy)ineffciency using precaching strategy can be derived as trained models of MDLM (Sahoo et al., 2024) ( _L_ = 1024). _N_ (1 _−_ (1 _− N_ 1[)] _[BL]_[)][(proof][in][Appendix][E),][similar][to][the] _[B]_[=][1][case][in][Ou][et][al.][(2024).][As] lim _N →∞ N_ (1 _−_ (1 _− N_[1][)] _[BL]_[)][=] _[BL]_[, the NFE is no longer upper bounded by the sequence length] but scales with the batch size (Figure 3b). 
+
+**==> picture [239 x 88] intentionally omitted <==**
+
+**----- Start of picture text -----**<br>
+50<br>Total batch size=1<br>40 Network Forward 5000 batch size=8<br>4000<br>30<br>3000<br>20 Categorical Sampling 2000<br>10 1000<br>0 0<br>0 2000 Sampling40004000 Steps60006000 8000 10000 0 2000 Sampling40004000 Steps60006000 8000 10000<br>(s)<br>NFE<br>Time/Sequence<br>**----- End of picture text -----**<br>
+
+
+## **Algorithm 1** First-Hitting Sampling of MDMs 
+
+## 4.2 FIRST-HITTING SAMPLER 
+
+**Require:** the sequence length _L_ , the vocabulary _X_ = _{_ 0 _, . . . , m −_ 1 _, m}_ where _m_ is the mask token, the noise schedule _αt_ and its inverse function _α[−]_[1] , the pretrained masked diffusion model _**µ** θ_ 
+
+The current sampling methods of MDMs, including the caching strategy, are neither efficient nor insightful into the essence of MDMs. To address this, we reexamine the sampling step in Eqn. (10). 
+
+1: _**x** L ←_ [ _m m . . . m_ ] 
+
+2: _τL ←_ 1 
+
+3: **for** _n ← L_ **to** 1 **do** 
+
+4: Sample _un ∼U_ (0 _,_ 1) 5: _τn−_ 1 _← α[−]_[1] (1 _− u_[1] _n[/n]_ (1 _− ατn_ )) 6: _**µ** n ←_ _**µ** θ_ ( _**x** n, τn−_ 1) 7: Randomly and uniformly select an index _l_ from _{i_ : _x_[(] _n[i]_[)] = _m}_ (i.e., masked positions in _**x** n_ ) 8: _**x** n−_ 1 _←_ _**x** n, x_[(] _n[l] −_[)] 1 _[←][x][∼]_[Cat][(] _**[µ]**_[(] _n[l]_[)][)] 9: **end for** 
+
+When the number of sampling steps _N →∞_ and the maximum step size max1 _≤i≤N |ti − ti−_ 1 _| →_ 0, Eqn. (10) tends to an infinitesimal jump. In this case, the reverse sampling process becomes a continuous-time Markov chain 
+
+**Output:** _**x**_ 0 
+
+(or Markov process), where each mask token is unmasked at some moment according to the network prediction. Our _key insight_ involves three folds: (1) _Whether a mask token will transit or not_ during a time interval [ _s, t_ ] is independent of the network. The network output only determines _which token is the transition target_ given the condition that the transition happens. (2) The transition probability _α_ 1 _s−−ααtt_[is equal for masked tokens at different positions.][Therefore,][each mask token has the same] probability of being first unmasked. (3) The _first-hitting time_ , which denotes the first moment any of the remaining masked tokens is unmasked, can be _analytically sampled_ : 
+
+**Proposition 4.1** (Analytic Sampling of First-Hitting Time) **.** _Denote τL_ = 1 _as the initial time. Suppose there are n masked tokens, and the last time a token is unmasked happens at τn, then the_ 
+
+> 5We will introduce Gumbel-based categorical sampling in the next section. 
+
+> 6We can reuse only the unchanged part of a batch, but this potentially reduce parallel efficiency. 
+
+6 
+
+**==> picture [318 x 113] intentionally omitted <==**
+
+**----- Start of picture text -----**<br>
+𝜏𝑙 𝒙𝑙 𝜏𝑙 𝒙𝑙 𝜏𝑙 𝒙𝑙 𝜏𝑙 𝒙𝑙 𝝁𝑙 ෝ𝒙𝑙<br>𝝁𝑙 𝝁𝑙 𝝁𝑙<br>𝝁𝑙+2<br>𝜏𝑙−1 𝒙𝑙−1 𝜏𝑙−1 𝒙𝑙−1 𝜏𝑙−1 𝒙𝑙−1 𝝁𝑙<br>𝝁𝑙−1 𝝁𝑙 ෝ𝝁𝑙−1 ෝ𝝁𝑙−1<br>𝑡<br>𝜏𝑙−2 𝒙𝑙−2 𝜏𝑙−2 𝒙𝑙−2 𝜏𝑙−2 𝒙𝑙−2 𝜏𝑙−2 𝒙𝑙−2 𝝁𝑙−2 ෝ𝒙𝑙−2<br>Token-by-Token Parallel Extrapolation Predictor-Corrector<br>(NFE = L) (NFE < L) (NFE < L) (NFE ≤ L)<br>First-Order High-Order<br>**----- End of picture text -----**<br>
+
+
+Figure 5: Variants of the first-hitting sampler. _**x** l_ denotes the sequence with _l_ remaining mask tokens, and _**µ** l_ = _**µ** θ_ ( _**x** l, τl−_ 1) denotes the network prediction at the step _l_ . 
+
+_next time a token is unmasked can be analytically sampled by_ 
+
+**==> picture [300 x 12] intentionally omitted <==**
+
+## _where U_ (0 _,_ 1) _is the uniform distribution on_ [0 _,_ 1] _._ 
+
+As outlined in Algorithm 1, by recursively sampling the next time when any of the remaining mask tokens is first unmasked, then uniformly choosing a mask token and unmasking it according to the network output, we obtain a token-by-token sampling procedure of MDMs. Denote _**x** n_ as the sequence with _n_ remaining mask tokens. Since the transition _**x** n →_ _**x** n−_ 1 can be considered to happen in the infinitesimal step _τn−_ 1 + d _t → τn−_ 1, using the network output _**µ** θ_ ( _**x** n, τn−_ 1) at time _τn−_ 1 incurs no approximation errors. Therefore, the first-hitting sampler (FHS) is _theoretically equivalent_ as simulating the continuous-time reverse Markov sampling process. We illustrate the comparison between the FHS and the original sampling procedure in Figure 4. 
+
+The FHS demonstrates appealing properties: 
+
+**Tackling the Sampling Inefficiency** The FHS can tackle the two inefficiency problems described in Section 4.1. Firstly, as the categorical sampling is only conducted for determining the transition target of the single chosen mask token at each step, the total computation cost is reduced to _O_ ( _L|X|_ ). Secondly, the first-hitting time _τn_ can be sampled independently and asynchronously across different samples in a batch, avoiding performance degradation in batched sampling. 
+
+**Connection to the Sampling of Masked Models** When the network parameterization is independent of the time, the FHS in Algorithm 1 can be completely free from the time and become a token-by-token decoding process akin to masked models. This connection serves as supporting evidence for the typical sampling procedure of masked models, as it is theoretically equivalent to the more principled reverse Markov sampling process of MDMs. 
+
+## 4.3 PARALLEL DECODING AND HIGH-ORDER VARIANTS 
+
+The token-by-token decoding process of MDMs can be extended to parallel decoding by unmasking multiple tokens per step, as the network _**µ** θ_ predicts tokens at all positions. This enables speedquality trade-offs similar to diffusion models. As illustrated in Figure 5, parallel decoding essentially reuses the previous network output to reduce the NFE, thus functioning as an approximation method. 
+
+To reduce the approximation error, we follow the recipes of high-order diffusion solvers (Karras et al., 2022; Zhang & Chen, 2022; Lu et al., 2022b; Zheng et al., 2023a) to develop high-order samplers of MDMs. We propose two variants: one based on extrapolating previous network outputs, and the other utilizing a predictor-corrector method to refine the samples (algorithms in Appendix G.1). 
+
+- 5 ARE MDMS BETTER THAN ARMS? A CRITICAL FAULT IN LOW-PRECISION GUMBEL-BASED CATEGORICAL SAMPLING 
+
+Before we proceed to verify the effectiveness of our proposed first-hitting sampler, we have to point out a critical fault in MDMs’ original sampling implementation. As suggested by previous 
+
+7 
+
+There is the following definition: The “right lane” on the lane lane lane. From the lane lane lane from lane lane to lane lane on a lane in lane lane on a front lane. From lane lane lane the lane lane lane on the right lane from lane front lane lane to top lane. From the right lane from a lane lane lane with the lane on the lane lane lane. The “that lane lane” on the rear lane. 
+
+Figure 6: Segment of generated text by SEDD Absorb (Lou et al., 2023) at 50k sampling steps. 
+
+Table 1: Maximum Gumbel under different floating-point precisions. 
+
+|Data Type|Structure (bits)<br>Sign<br>Exponent<br>Fraction|Maximum Value (_<_1) Representable|Maximum Gumbel|
+|---|---|---|---|
+|foat32<br>1<br>8<br>23<br>1_−_2_−_24 _≈_0_._9999999404<br>_−_log(_−_log(1_−_2_−_24))_≈_16_._6355<br>foat64<br>1<br>11<br>52<br>1_−_2_−_53 _≈_0_._999999999999999889<br>_−_log(_−_log(1_−_2_−_53))_≈_36_._7368||||
+
+
+works (Lou et al., 2023; Shi et al., 2024; Sahoo et al., 2024), MDMs seem to surpass ARMs with a sufficient number of sampling steps when measured by the generative perplexity (Gen PPL)[7] , as shown in Figure 7a. However, in this section, we identify for the first time a hidden numerical issue existing in previous codebases that makes this observation questionable. 
+
+## 5.1 LOW TOKEN DIVERSITY UNDER NUMEROUS SAMPLING STEPS 
+
+Empirically, a reduction in Gen PPL is observed by increasing the inference budget. In particular, an exceptionally low Gen PPL ( _<_ 15) is achieved when the number of sampling steps approaches 50k. 
+
+**==> picture [234 x 102] intentionally omitted <==**
+
+**----- Start of picture text -----**<br>
+90 AR (batch size=8) 5 . 6 AR (batch size=8)<br>80 SEDD Absorb (batch size=8) 5 . 5 SEDD Absorb (batch size=8)<br>70 MDLMMDLM (batchw/ cachingsize=8)(batch size=8) 5 . 4 MDLMMDLM (batchw/ cachingsize=8)(batch size=8)<br>60 MDLM w/ caching (batch size=1) 5 . 3 MDLM w/ caching (batch size=1)<br>50 5 . 2<br>40 5 . 1<br>30 5 . 0<br>20 4 . 9<br>0 20 40 60 80 100 120 0 20 40 60 80 100 120<br>Sampling Time/Sequence (s) Sampling Time/Sequence (s)<br>(a) Generative Perplexity (b) Entropy<br>Perplexity<br>Entropy<br>Generative<br>**----- End of picture text -----**<br>
+
+
+However, when we check the gen20 0 20 40 60 80 erated content, we discover that the Sampling Time/Sequence quality is compromised by low token diversity (an extreme case is shown Figure 7: in Figure 6). We further quantify sorb (Lou et al., this phenomenon by measuring the OpenWebText sentence entropy (Figure 7b). With the original sampler, the Gen PPL of MDMs surpasses ARMs at around 2k the sampling steps _N_ steps, but _the entropy is always lower and keeps decreasing_ . 
+
+Figure 7: Comparisons of different models (AR, SEDD Absorb (Lou et al., 2023), MDLM (Sahoo et al., 2024)) trained on OpenWebText (Gokaslan et al., 2019) with the same network architecture and configurations. We generate 64 samples using their original codebase on a single NVIDIA RTX A6000 GPU, and vary the sampling steps _N ∈{_ 100 _,_ 500 _,_ 1000 _,_ 5000 _,_ 10000 _}_ . 
+
+This low generation quality is unexpected, as theory suggests that increasing sampling steps should yield lower discretization errors and more faithfully reflect the true model performance. We therefore consider this a hidden implementation issue and investigate further to identify the root cause. 
+
+## 5.2 IDENTIFYING THE NUMERICAL PRECISION PROBLEM 
+
+Our _key observation_ is that, when we alter the floating-point precision during sampling from 32bit to 64-bit, the entropy returns to a normal level similar to ARMs, but with a generative perplexity _≈_ 100. After careful ablations, we identify the root cause as the inaccuracy in previous Gumbel-based categorical sampling. To sample from a categorical distribution with class probabilities _{πi}[K] i_ =1[,][Gumbel-max][trick][8][is][used][by][first][sampling] _[K]_[independent][uniform][variables] _ui ∼U_ (0 _,_ 1), then transforming them into samples from the standard Gumbel distribution _G_ (0 _,_ 1) by _gi_ = _−_ log( _−_ log _ui_ ), and finally obtaining the categorical sample _n_ = argmax _i_ (log _πi_ + _gi_ ). The operation _g_ = _−_ log( _−_ log _u_ ) theoretically maps _u ∈_ [0 _,_ 1] to _g ∈_ ( _−∞,_ + _∞_ ). But due to the limited representation ability of floating-point numbers in implementation, _u_ is constrained to [0 _,_ 1 _− ϵ_ ] and _g_ is constrained to ( _−∞, M_ ], as shown in Table 1. Therefore, the sample _g_ instead follows a _truncated Gumbel distribution_ , denoted _T G_ (0 _,_ 1 _, M_ ), which refers to the Gumbel distri- 
+
+> 7The evaluation metrics used in this paper are introduced in Appendix H.1. 
+
+> 8A brief introduction to Gumbel tricks is provided in Appendix F 
+
+8 
+
+|`def sample_categorical_Gumbel(probs):`<br>`u = torch.rand(`<br>`*probs.shape,`<br>`device=probs.device,`<br>`dtype=...`<br>`...`<br>`return (probs / (-u.log())).argmax(dim=-1)`<br>`torch.rand(...dtype=torch`<br>`torch.rand(...dtype=torch`<br>`torch.rand(...dtype=torch`|`.float64`<br>`)`<br>`.float32`<br>`)`|`0.9999999404`<br>**_32-bit_**<br>**_64-bit_**<br>**_64-bit +truncation_**|
+|---|---|---|
+||`.float`<br>`64) * `||
+||||
+
+
+Figure 8: Code for different versions of Gumbel-based categorical sampling. The operation argmax _i_ (log _πi −_ log( _−_ log _ui_ )) is simplified to argmax _i_ ( _πi/_ ( _−_ log _ui_ )) to save computation cost. 
+
+bution _G_ (0 _,_ 1) conditioned on _g ≤ M_ . This tricky difference theoretically makes the categorical sampling inaccurate, i.e., argmax _i_ (log _πi_ + _gi_ ) no longer follows the class probabilities _{πi}[K] i_ =1[.] To verify that truncation is the fundamental issue, we conduct ablaTable 2: Results with different As shown versions of categorical sampling. 
+
+To verify that truncation is the fundamental issue, we conduct ablations by only modifying the categorical sampling code. As shown in Figure 8, we manually scale 64-bit uniform samples to match the truncation in the 32-bit case. We then randomly generate 8 samples with 2048 steps and compare the average generative perplexity and entropy in Table 2. The similar results between the 32-bit and truncated 64-bit cases confirm the impact of truncation. 
+
+||Version|Gen PPL|Entropy|
+|---|---|---|---|
+||32-bit<br>64-bit<br>64-bit + trunc|31.24<br>126.11<br>28.64|5.17<br>5.66<br>5.12|
+
+
+_Remark_ 5.1 _._ Note that auto-regressive LLMs like Llama (Touvron et al., 2023) and Mistral (Jiang et al., 2023) use torch.multinomial for categorical sampling, which is also implemented with the Gumbel-max trick in the low-level C++ code of PyTorch. In contrast, we find **the token-bytoken decoding process of ARMs and MDMs (by our first-hitting sampler) does not suffer from notable numerical issues under 32-bit precision** (illustrations and explanations in Appendix J.2.2). 
+
+## 5.3 CATEGORICAL SAMPLING WITH TRUNCATED GUMBEL 
+
+In the previous section, we empirically observe that truncated Gumbel-based categorical sampling reduces token diversity. Surprisingly, such effects can be precisely depicted in _closed-form_ . 
+
+**Proposition 5.2** (Closed-Form Categorical Sampling with Truncated Gumbel) **.** _Suppose the class probabilities are sorted as π_ 1 _≤· · · ≤ πK, and gi ∼T G_ (0 _,_ 1 _, M_ ) _are truncated Gumbel samples with maximum value M . Denote π_ 0 = 0 _. For_ 1 _≤ n ≤ K, we have P_ (argmax _i_ (log _πi_ + _gi_ ) = _n n_ ) = _πn_ � _i_ =1 _[β]_[(] _[i]_[)] _[, where]_ 
+
+**==> picture [327 x 37] intentionally omitted <==**
+
+_To the best of our knowledge, this formulation has not been revealed in previous works_ . Intuitively, _n_ with truncated Gumbel, the original class probabilities _πn_ are shifted to _πn[′]_[=] _[π][n]_ � _i_ =1 _[β]_[(] _[i]_[)][.][This] has two main implications: (1) As _β_ ( _i_ ) _≥_ 0 and _πn_ are sorted, if _πn_ 1 _> πn_ 2, the adjusted class probabilities satisfy _ππnn[′][′]_ 12 _[>] ππnn_ 12[.][This indicates that relatively larger probabilities are further ampli-] fied, creating an effect similar to lowering the temperature. (2) In the sampling step, the probability of unmasking is adjusted based on the network output, resulting in unequal unmasking probabilities at different positions in a sequence. This implies that some tokens are prioritized to be unmasked, further reducing the randomness and overall entropy. 
+
+In both aspects, the inaccurate categorical sampling deviates from theoretical correctness and reduces the generation diversity, leading to unfair evaluations of MDMs’ generative performance. 
+
+## 6 A FAIR EVALUATION OF MDMS’ GENERATION 
+
+In this section, we will fairly evaluate the generation performance of MDMs and examine the impact of our proposed sampler and the temperature. Our experiments are based on the codebase of MDLM (Sahoo et al., 2024) which is inherited from SEDD (Lou et al., 2023). We fix the categorical sampling to 64-bit floating-point precision so that the numerical truncation is negligible. We 
+
+9 
+
+directly use pretrained models (AR, SEDD Absorb, MDLM) provided by MDLM, which share the same network architecture and were trained with the same configuration. Additional experiment details are provided in Appendix H. We display some generated text in Appendix J.3.1 to illustrate the token diversity under different sampling strategies. 
+
+## 6.1 ORIGINAL SAMPLER V.S. FIRST-HITTING SAMPLER 
+
+**==> picture [332 x 111] intentionally omitted <==**
+
+**----- Start of picture text -----**<br>
+140 55 .. 800775 ARSEDD(batchAbsorbsize=8)(batch size=8)<br>120 5 . 750 MDLM (batch size=8)<br>100 5 . 725 MDLMMDLM w/w/ cachingcaching (batch(batch size=8)size=1)<br>AR (batch size=8) 5 . 700 MDLM w/ frst-hitting (batch size=8)<br>80 SEDD Absorb (batch size=8) 5 . 675 MDLM w/ first-hitting high-order (batch size=8)<br>MDLM (batch size=8)<br>60 MDLMMDLM w/w/ cachingcaching (batch(batch size=8)size=1) 55 .. 650625<br>MDLM w/ first-hitting (batch size=8)<br>40 MDLM w/ frst-hitting high-order (batch size=8) 5 . 600<br>0 1 2 5 10 30 100 300 0 1 2 5 10 30 100 300<br>Sampling Time/Sequence (s) Sampling Time/Sequence (s)<br>(a) Generative Perplexity (b) Entropy<br>Perplexity<br>Entropy<br>Generative<br>**----- End of picture text -----**<br>
+
+
+Figure 9: Comparisons of different models after fixing the categorical sampling to 64-bit. We additional compare our propose first-hitting sampler with steps _N ∈{_ 64 _,_ 128 _,_ 256 _,_ 512 _,_ 1024 _}_ . 
+
+Figure 9 compares both the generative perplexity and the entropy of different models. For the baselines, SEDD is sampled by their analytic sampler (Tweedie _τ_ -leaping), and MDLM is sampled with and without the caching strategy. For our first-hitting sampler, the parallel decoding is performed by unmasking the same number of tokens per step. High-order variants employ the extrapolation strategy when the number of sampling steps _N ≤_ 128, and the predictor-corrector strategy otherwise. 
+
+_∼_ After the numerical problem is fixed, the entropy returns to a normal level (5.60 5.70) for all models. Besides, our sampler can be up to 20 _×_ faster than previous sampling strategies of MDMs in terms of the wall-clock time[9] . Despite the notable speedup, the true generative perplexity of MDMs is revealed to be around 100, significantly lagging behind that of counterpart ARMs ( _<_ 40). 
+
+## 6.2 TRADING OFF GENERATIVE PERPLEXITY AND ENTROPY VIA TEMPERATURE 
+
+The truncation effect of 32-bit floating-point numbers creates a trade-off between generative perplexity and entropy by varying the number of sampling steps (Figure 7). This trade-off arises from a tricky interplay of inaccurate categorical sampling and the approximation error at limited discretization steps. In Figure 10, we demonstrate that this trade-off can be achieved at a lower time cost by using the correct sampling (our 1024-step high-order sampler) and manually adjusting the temperature within the range [0 _._ 8 _,_ 1 _._ 0]. The trade-off curve of our method is slightly better than the original MDM sampling, while still significantly lagging behind ARMs. 
+
+**==> picture [120 x 91] intentionally omitted <==**
+
+**----- Start of picture text -----**<br>
+5 . 6<br>5 . 4<br>5 . 2<br>5 . 0<br>AR + temperature<br>4 . 8 MDLM (32-bit)<br>4 . 6 MDLM (Ours) + temperature<br>20 40 60 80 100<br>Gen PPL<br>Entropy<br>**----- End of picture text -----**<br>
+
+
+Figure 10: Trade-off of generative perplexity and entropy. 
+
+## 7 CONCLUSION 
+
+In this work, we advance our understanding of masked diffusion models (MDMs) by revealing their theoretical equivalence to masked models and uncovering a hidden numerical issue that compromised the fairness of previous evaluations of MDMs’ generative performance. Our findings challenge earlier claims that MDMs can surpass ARMs in text generation. Despite these negative results, we acknowledge that our text-based experiments may inherently favor ARMs, as text naturally follows a left-to-right order that ARMs are better suited to model. Nevertheless, we believe that MDMs may hold potential for applications where an order-agnostic data structure is a key prior, and in practice, simply using masked models may be a better choice. 
+
+> 9The efficiency gains (measured by inference wall-clock time) can depend on many factors and may not be as large as 20x in other settings (analyzed in Appendix J.3). 
+
+10 
+
+## ACKNOWLEDGMENTS 
+
+The team would like to thank Aaron Lou, Cheng Lu from OpenAI, and Jiaxin Shi from Google DeepMind for their valuable discussions and comments. K. Z and J. Z were also supported by the National Natural Science Foundation of China (Nos. 62350080, 62106120, 92270001), Tsinghua Institute for Guo Qiang, and the High Performance Computing Center, Tsinghua University; J. Z was also supported by the XPlorer Prize. 
+
+## REFERENCES 
+
+- Josh Achiam, Steven Adler, Sandhini Agarwal, Lama Ahmad, Ilge Akkaya, Florencia Leoni Aleman, Diogo Almeida, Janko Altenschmidt, Sam Altman, Shyamal Anadkat, et al. Gpt-4 technical report. _arXiv preprint arXiv:2303.08774_ , 2023. 
+
+- William J Anderson. _Continuous-time Markov chains: An applications-oriented approach_ . Springer Science & Business Media, 2012. 
+
+- Jacob Austin, Daniel D Johnson, Jonathan Ho, Daniel Tarlow, and Rianne Van Den Berg. Structured denoising diffusion models in discrete state-spaces. _Advances in Neural Information Processing Systems_ , 34:17981–17993, 2021. 
+
+- Yogesh Balaji, Seungjun Nah, Xun Huang, Arash Vahdat, Jiaming Song, Qinsheng Zhang, Karsten Kreis, Miika Aittala, Timo Aila, Samuli Laine, et al. ediff-i: Text-to-image diffusion models with an ensemble of expert denoisers. _arXiv preprint arXiv:2211.01324_ , 2022. 
+
+- Fan Bao, Chendong Xiang, Gang Yue, Guande He, Hongzhou Zhu, Kaiwen Zheng, Min Zhao, Shilong Liu, Yaole Wang, and Jun Zhu. Vidu: a highly consistent, dynamic and skilled text-tovideo generator with diffusion models. _arXiv preprint arXiv:2405.04233_ , 2024. 
+
+- Tom Brown, Benjamin Mann, Nick Ryder, Melanie Subbiah, Jared D Kaplan, Prafulla Dhariwal, Arvind Neelakantan, Pranav Shyam, Girish Sastry, Amanda Askell, et al. Language models are few-shot learners. _Advances in neural information processing systems_ , 33:1877–1901, 2020. 
+
+- Andrew Campbell, Joe Benton, Valentin De Bortoli, Thomas Rainforth, George Deligiannidis, and Arnaud Doucet. A continuous time framework for discrete denoising models. _Advances in Neural Information Processing Systems_ , 35:28266–28279, 2022. 
+
+- Huiwen Chang, Han Zhang, Lu Jiang, Ce Liu, and William T Freeman. Maskgit: Masked generative image transformer. In _Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition_ , pp. 11315–11325, 2022. 
+
+- Hongrui Chen and Lexing Ying. Convergence analysis of discrete diffusion model: Exact implementation through uniformization. _arXiv preprint arXiv:2402.08095_ , 2024. 
+
+- Nanxin Chen, Yu Zhang, Heiga Zen, Ron J. Weiss, Mohammad Norouzi, and William Chan. Wavegrad: Estimating gradients for waveform generation. In _International Conference on Learning Representations_ , 2021. 
+
+- Ting Chen, Ruixiang Zhang, and Geoffrey Hinton. Analog bits: Generating discrete data using diffusion models with self-conditioning. _arXiv preprint arXiv:2208.04202_ , 2022. 
+
+- Zixiang Chen, Huizhuo Yuan, Yongqian Li, Yiwen Kou, Junkai Zhang, and Quanquan Gu. Fast sampling via de-randomization for discrete diffusion models. _arXiv preprint arXiv:2312.09193_ , 2023. 
+
+- Jacob Devlin, Ming-Wei Chang, Kenton Lee, and Kristina Toutanova. Bert: Pre-training of deep bidirectional transformers for language understanding. In _Proceedings of the 2019 Conference of the North American Chapter of the Association for Computational Linguistics: Human Language Technologies, Volume 1 (Long and Short Papers)_ , pp. 4171–4186, 2019. 
+
+- Prafulla Dhariwal and Alexander Quinn Nichol. Diffusion models beat GANs on image synthesis. In _Advances in Neural Information Processing Systems_ , volume 34, pp. 8780–8794, 2021. 
+
+11 
+
+- Patrick Esser, Sumith Kulal, Andreas Blattmann, Rahim Entezari, Jonas Müller, Harry Saini, Yam Levi, Dominik Lorenz, Axel Sauer, Frederic Boesel, et al. Scaling rectified flow transformers for high-resolution image synthesis. In _Forty-first International Conference on Machine Learning_ , 2024. 
+
+- Marjan Ghazvininejad, Omer Levy, Yinhan Liu, and Luke Zettlemoyer. Mask-predict: Parallel decoding of conditional masked language models. In _Proceedings of the 2019 Conference on Empirical Methods in Natural Language Processing and the 9th International Joint Conference on Natural Language Processing (EMNLP-IJCNLP)_ , pp. 6112–6121, 2019. 
+
+- Aaron Gokaslan, Vanya Cohen, Ellie Pavlick, and Stefanie Tellex. Openwebtext corpus. http: //Skylion007.github.io/OpenWebTextCorpus, 2019. 
+
+- Martin Gonzalez, Nelson Fernandez Pinto, Thuy Tran, Hatem Hajri, Nader Masmoudi, et al. Seeds: Exponential sde solvers for fast high-quality sampling from diffusion models. _Advances in Neural Information Processing Systems_ , 36, 2024. 
+
+- Emil Julius Gumbel. Les valeurs extrêmes des distributions statistiques. In _Annales de l’institut Henri Poincaré_ , volume 5, pp. 115–158, 1935. 
+
+- Emil Julius Gumbel. _Statistical theory of extreme values and some practical applications: a series of lectures_ , volume 33. US Government Printing Office, 1954. 
+
+- Agrim Gupta, Lijun Yu, Kihyuk Sohn, Xiuye Gu, Meera Hahn, Li Fei-Fei, Irfan Essa, Lu Jiang, and José Lezama. Photorealistic video generation with diffusion models. _arXiv preprint arXiv:2312.06662_ , 2023. 
+
+- Kaiming He, Xinlei Chen, Saining Xie, Yanghao Li, Piotr Dollár, and Ross Girshick. Masked autoencoders are scalable vision learners. In _Proceedings of the IEEE/CVF conference on computer vision and pattern recognition_ , pp. 16000–16009, 2022. 
+
+- Jonathan Ho, Ajay Jain, and Pieter Abbeel. Denoising diffusion probabilistic models. In _Advances in Neural Information Processing Systems_ , volume 33, pp. 6840–6851, 2020. 
+
+- Jonathan Ho, William Chan, Chitwan Saharia, Jay Whang, Ruiqi Gao, Alexey Gritsenko, Diederik P Kingma, Ben Poole, Mohammad Norouzi, David J Fleet, et al. Imagen video: High definition video generation with diffusion models. _arXiv preprint arXiv:2210.02303_ , 2022. 
+
+- Emiel Hoogeboom, Alexey A Gritsenko, Jasmijn Bastings, Ben Poole, Rianne van den Berg, and Tim Salimans. Autoregressive diffusion models. _arXiv preprint arXiv:2110.02037_ , 2021a. 
+
+- Emiel Hoogeboom, Didrik Nielsen, Priyank Jaini, Patrick Forré, and Max Welling. Argmax flows and multinomial diffusion: Learning categorical distributions. _Advances in Neural Information Processing Systems_ , 34:12454–12465, 2021b. 
+
+- Eric Jang, Shixiang Gu, and Ben Poole. Categorical reparameterization with gumbel-softmax. _arXiv preprint arXiv:1611.01144_ , 2016. 
+
+- Albert Q Jiang, Alexandre Sablayrolles, Arthur Mensch, Chris Bamford, Devendra Singh Chaplot, Diego de las Casas, Florian Bressand, Gianna Lengyel, Guillaume Lample, Lucile Saulnier, et al. Mistral 7b. _arXiv preprint arXiv:2310.06825_ , 2023. 
+
+- Tero Karras, Miika Aittala, Timo Aila, and Samuli Laine. Elucidating the design space of diffusionbased generative models. In _Advances in Neural Information Processing Systems_ , 2022. 
+
+- Frank P Kelly. _Reversibility and stochastic networks_ . Cambridge University Press, 2011. 
+
+- Diederik P. Kingma and Max Welling. Auto-encoding variational bayes. In _International Conference on Learning Representations_ , 2014. 
+
+- Diederik P Kingma, Tim Salimans, Ben Poole, and Jonathan Ho. Variational diffusion models. In _Advances in Neural Information Processing Systems_ , 2021. 
+
+- Yaron Lipman, Ricky TQ Chen, Heli Ben-Hamu, Maximilian Nickel, and Matt Le. Flow matching for generative modeling. _arXiv preprint arXiv:2210.02747_ , 2022. 
+
+12 
+
+- Aaron Lou, Chenlin Meng, and Stefano Ermon. Discrete diffusion language modeling by estimating the ratios of the data distribution. _arXiv preprint arXiv:2310.16834_ , 2023. 
+
+- Cheng Lu, Kaiwen Zheng, Fan Bao, Jianfei Chen, Chongxuan Li, and Jun Zhu. Maximum likelihood training for score-based diffusion odes by high order denoising score matching. In _International Conference on Machine Learning_ , pp. 14429–14460. PMLR, 2022a. 
+
+- Cheng Lu, Yuhao Zhou, Fan Bao, Jianfei Chen, Chongxuan Li, and Jun Zhu. Dpm-solver: A fast ode solver for diffusion probabilistic model sampling in around 10 steps. In _Advances in Neural Information Processing Systems_ , 2022b. 
+
+- Chenlin Meng, Kristy Choi, Jiaming Song, and Stefano Ermon. Concrete score matching: Generalized score matching for discrete data. _Advances in Neural Information Processing Systems_ , 35: 34532–34545, 2022. 
+
+- Alexander Quinn Nichol and Prafulla Dhariwal. Improved denoising diffusion probabilistic models. In _International Conference on Machine Learning_ , pp. 8162–8171. PMLR, 2021. 
+
+- Jingyang Ou, Shen Nie, Kaiwen Xue, Fengqi Zhu, Jiacheng Sun, Zhenguo Li, and Chongxuan Li. Your absorbing discrete diffusion secretly models the conditional distributions of clean data. _arXiv preprint arXiv:2406.03736_ , 2024. 
+
+- William Peebles and Saining Xie. Scalable diffusion models with transformers. In _Proceedings of the IEEE/CVF International Conference on Computer Vision_ , pp. 4195–4205, 2023. 
+
+- Alec Radford, Karthik Narasimhan, Tim Salimans, Ilya Sutskever, et al. Improving language understanding by generative pre-training. 2018. 
+
+- Alec Radford, Jeffrey Wu, Rewon Child, David Luan, Dario Amodei, Ilya Sutskever, et al. Language models are unsupervised multitask learners. _OpenAI blog_ , 1(8):9, 2019. 
+
+- Robin Rombach, Andreas Blattmann, Dominik Lorenz, Patrick Esser, and Björn Ommer. Highresolution image synthesis with latent diffusion models. In _Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition_ , pp. 10684–10695, 2022. 
+
+- Subham Sekhar Sahoo, Marianne Arriola, Yair Schiff, Aaron Gokaslan, Edgar Marroquin, Justin T Chiu, Alexander Rush, and Volodymyr Kuleshov. Simple and effective masked diffusion language models. _arXiv preprint arXiv:2406.07524_ , 2024. 
+
+- Jiaxin Shi, Kehang Han, Zhe Wang, Arnaud Doucet, and Michalis K Titsias. Simplified and generalized masked diffusion for discrete data. _arXiv preprint arXiv:2406.04329_ , 2024. 
+
+- Jascha Sohl-Dickstein, Eric Weiss, Niru Maheswaranathan, and Surya Ganguli. Deep unsupervised learning using nonequilibrium thermodynamics. In _International Conference on Machine Learning_ , pp. 2256–2265. PMLR, 2015. 
+
+- Jiaming Song, Chenlin Meng, and Stefano Ermon. Denoising diffusion implicit models. In _International Conference on Learning Representations_ , 2021a. 
+
+- Yang Song, Conor Durkan, Iain Murray, and Stefano Ermon. Maximum likelihood training of scorebased diffusion models. In _Advances in Neural Information Processing Systems_ , volume 34, pp. 1415–1428, 2021b. 
+
+- Yang Song, Jascha Sohl-Dickstein, Diederik P. Kingma, Abhishek Kumar, Stefano Ermon, and Ben Poole. Score-based generative modeling through stochastic differential equations. In _International Conference on Learning Representations_ , 2021c. 
+
+- Jianlin Su, Murtadha Ahmed, Yu Lu, Shengfeng Pan, Wen Bo, and Yunfeng Liu. Roformer: Enhanced transformer with rotary position embedding. _Neurocomputing_ , 568:127063, 2024. 
+
+- Haoran Sun, Lijun Yu, Bo Dai, Dale Schuurmans, and Hanjun Dai. Score-based continuous-time discrete diffusion models. _arXiv preprint arXiv:2211.16750_ , 2022. 
+
+13 
+
+Hugo Touvron, Thibaut Lavril, Gautier Izacard, Xavier Martinet, Marie-Anne Lachaux, Timothée Lacroix, Baptiste Rozière, Naman Goyal, Eric Hambro, Faisal Azhar, et al. Llama: Open and efficient foundation language models. _arXiv preprint arXiv:2302.13971_ , 2023. 
+
+- Benigno Uria, Iain Murray, and Hugo Larochelle. A deep and tractable density estimator. In _International Conference on Machine Learning_ , pp. 467–475. PMLR, 2014. 
+
+- Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N Gomez, Łukasz Kaiser, and Illia Polosukhin. Attention is all you need. _Advances in neural information processing systems_ , 30, 2017. 
+
+- Alex Wang, Amanpreet Singh, Julian Michael, Felix Hill, Omer Levy, and Samuel R Bowman. Glue: A multi-task benchmark and analysis platform for natural language understanding. _arXiv preprint arXiv:1804.07461_ , 2018. 
+
+- Dongchao Yang, Jianwei Yu, Helin Wang, Wen Wang, Chao Weng, Yuexian Zou, and Dong Yu. Diffsound: Discrete diffusion model for text-to-sound generation. _IEEE/ACM Transactions on Audio, Speech, and Language Processing_ , 31:1720–1733, 2023. 
+
+- Jintao Zhang, Haofeng Huang, Pengle Zhang, Jia Wei, Jun Zhu, and Jianfei Chen. Sageattention2: Efficient attention with thorough outlier smoothing and per-thread int4 quantization. _arXiv preprint arXiv:2411.10958_ , 2024. 
+
+- Jintao Zhang, Jia Wei, Pengle Zhang, Jun Zhu, and Jianfei Chen. Sageattention: Accurate 8-bit attention for plug-and-play inference acceleration. In _International Conference on Learning Representations (ICLR)_ , 2025a. 
+
+- Jintao Zhang, Chendong Xiang, Haofeng Huang, Jia Wei, Haocheng Xi, Jun Zhu, and Jianfei Chen. Spargeattn: Accurate sparse attention accelerating any model inference. _arXiv preprint arXiv:2502.18137_ , 2025b. 
+
+- Qinsheng Zhang and Yongxin Chen. Fast sampling of diffusion models with exponential integrator. In _The Eleventh International Conference on Learning Representations_ , 2022. 
+
+- Kaiwen Zheng, Cheng Lu, Jianfei Chen, and Jun Zhu. Dpm-solver-v3: Improved diffusion ode solver with empirical model statistics. In _Thirty-seventh Conference on Neural Information Processing Systems_ , 2023a. 
+
+- Kaiwen Zheng, Cheng Lu, Jianfei Chen, and Jun Zhu. Improved techniques for maximum likelihood estimation for diffusion odes. In _International Conference on Machine Learning_ , pp. 42363– 42389. PMLR, 2023b. 
+
+- Kaiwen Zheng, Guande He, Jianfei Chen, Fan Bao, and Jun Zhu. Diffusion bridge implicit models. _arXiv preprint arXiv:2405.15885_ , 2024. 
+
+14 
+
+|CONTENTS|CONTENTS||||||
+|---|---|---|---|---|---|---|
+|**1**|**Introduction**|||||**1**|
+|**2**|**Background: Masked Diffusion Models (MDMs)**|||||**2**|
+|**3**|**Revisiting the Training of MDMs**|||||**3**|
+||3.1<br>Reformulating the ELBO with the Number of Masked Tokens||||. . . . . . . . . . .|3|
+||3.2<br>Time-Independent Network Parameterization||. . . . .|. . . .|. . . . . . . . . . .|4|
+||3.3<br>Practical Considerations<br>. . . . . . . . . .|.|. . . . .|. . . .|. . . . . . . . . . .|5|
+|**4**|**Revisiting the Sampling of MDMs**|||||**5**|
+||4.1<br>Ineffciency of Current Sampling . . . . . .|.|. . . . .|. . . .|. . . . . . . . . . .|5|
+||4.2<br>First-Hitting Sampler . . . . . . . . . . . .|.|. . . . .|. . . .|. . . . . . . . . . .|6|
+||4.3<br>Parallel Decoding and High-Order Variants|.|. . . . .|. . . .|. . . . . . . . . . .|7|
+|**5**|**Are MDMs Better than ARMs? A Critical Fault in Low-Precision**||||**Gumbel-Based Cat-**||
+||**egorical Sampling**|||||**7**|
+||5.1<br>Low Token Diversity under Numerous Sampling Steps|||. . . .|. . . . . . . . . . .|8|
+||5.2<br>Identifying the Numerical Precision Problem||. . . . .|. . . .|. . . . . . . . . . .|8|
+||5.3<br>Categorical Sampling with Truncated Gumbel||. . . . .|. . . .|. . . . . . . . . . .|9|
+|**6**|**A Fair Evaluation of MDMs’ Generation**|||||**9**|
+||6.1<br>Original Sampler v.s. First-Hitting Sampler|.|. . . . .|. . . .|. . . . . . . . . . .|10|
+||6.2<br>Trading Off Generative Perplexity and Entropy via Temperature||||. . . . . . . . . .|10|
+|**7**|**Conclusion**|||||**10**|
+|**A **|**Notations and Defnitions**|||||**16**|
+|**B**|**Related Work**|||||**18**|
+|**C **|**Proof**|||||**20**|
+||C.1<br>Proof of Proposition 3.1 . . . . . . . . . . .|.|. . . . .|. . . .|. . . . . . . . . . .|20|
+||C.2<br>Proof of Proposition 3.2 . . . . . . . . . . .|.|. . . . .|. . . .|. . . . . . . . . . .|21|
+||C.3<br>Proof of Proposition 4.1 . . . . . . . . . . .|.|. . . . .|. . . .|. . . . . . . . . . .|21|
+||C.4<br>Proof of Proposition 5.2 . . . . . . . . . . .|.|. . . . .|. . . .|. . . . . . . . . . .|23|
+|**D **|**Relationship between Masked Diffusion Models**|**and Previous Discrete Diffusion Mod-**|||||
+||**els**|||||**24**|
+||D.1<br>Discrete Diffusion via Continuous-Time Markov Chains|||. . .|. . . . . . . . . . .|24|
+||D.2<br>Score-Entropy Discrete Diffusion (SEDD) .|.|. . . . .|. . . .|. . . . . . . . . . .|25|
+||D.3<br>Connection between MDMs and SEDD Absorb . . . .|||. . . .|. . . . . . . . . . .|26|
+
+
+15 
+
+|||D.3.1<br>Equivalence of Training|. . . . . . . . . . . . . . . . . . . . . . . . . . .|26|
+|---|---|---|---|---|
+|||D.3.2<br>Equivalence of Sampling . . . . . . . . . . . . . . . . . . . . . . . . . . .||27|
+|**E**|**Expected NFE in Batched Sampling Using the Caching Strategy**|||**29**|
+|**F**|**A Brief Introduction to Gumbel Tricks**|||**29**|
+||F.1|The Gumbel Distribution . . .|. . . . . . . . . . . . . . . . . . . . . . . . . . . .|30|
+||F.2|Gumbel-Max Trick . . . . . .|. . . . . . . . . . . . . . . . . . . . . . . . . . . .|30|
+||F.3|Gumbel-Softmax Distribution|. . . . . . . . . . . . . . . . . . . . . . . . . . . .|30|
+|**G **|**Implementation Details**|||**30**|
+||G.1|Algorithms<br>. . . . . . . . . .|. . . . . . . . . . . . . . . . . . . . . . . . . . . .|30|
+||G.2|Low-Discrepancy Sampler . .|. . . . . . . . . . . . . . . . . . . . . . . . . . . .|32|
+|**H **|**Experiment Details**|||**32**|
+||H.1|Evaluation Metrics<br>. . . . . .|. . . . . . . . . . . . . . . . . . . . . . . . . . . .|32|
+||H.2|Model and Dataset Details<br>. .|. . . . . . . . . . . . . . . . . . . . . . . . . . . .|33|
+||H.3|Training Details . . . . . . . .|. . . . . . . . . . . . . . . . . . . . . . . . . . . .|33|
+||H.4|Sampling Details . . . . . . .|. . . . . . . . . . . . . . . . . . . . . . . . . . . .|33|
+|**I**|**Old**|**Version of the Introduction**||**34**|
+|**J**|**Additional Results**|||**34**|
+||J.1|Training Results . . . . . . . .|. . . . . . . . . . . . . . . . . . . . . . . . . . . .|34|
+|||J.1.1<br>Comparison of Training|Variants . . . . . . . . . . . . . . . . . . . . . . .|34|
+|||J.1.2<br>Failed Training Attempts . . . . . . . . . . . . . . . . . . . . . . . . . . .||35|
+||J.2|Sampling Results . . . . . . .|. . . . . . . . . . . . . . . . . . . . . . . . . . . .|36|
+|||J.2.1<br>Comparison of High-Order Variants . . . . . . . . . . . . . . . . . . . . .||36|
+|||J.2.2<br>Impact of Numerical Precision on Our Sampler . . . . . . . . . . . . . . .||37|
+||J.3|Anaysis of the Effciency Gain by Our Sampler . . . . . . . . . . . . . . . . . . .||38|
+|||J.3.1<br>Examples of Generated|Text . . . . . . . . . . . . . . . . . . . . . . . . .|38|
+
+
+A NOTATIONS AND DEFINITIONS 
+
+**Numbers and Arrays** 
+
+16 
+
+_x_ A scalar representing a discrete token _**x**_ A vector representing a sequence of discrete tokens _x_[(] _[l]_[)] The _l_ -th element of _**x** xt,_ _**x** t_ The state(s) at time _t_ _**x** n_ The sequence with _n_ masked tokens _t_ The continuous time _m_ The mask token _n_ The number of masked tokens in a sequence _**µ**_ A matrix, where the _l_ -th column represents the predicted transition probabilities at the _l_ -th position in a sequence _**µ**_[(] _[l]_[)] The _l_ -th column of _**µ π**_ The class probabilities _πi_ The _i_ -th element of _**π** L_ The sequence length _N_ The number of sampling steps _B_ The batch size _θ_ The neural network parameters _τ_ The first-hitting time 
+
+- _L∞_ The continuous-time NELBO loss for a single token 
+
+- _L∞_[(] _[L]_[)] The continuous-time NELBO loss for a sequence of length _L_ 
+
+## **Sets** 
+
+- R The set of real numbers 
+
+- _X_ The discrete data space (vocabulary) _{_ 0 _,_ 1 _, . . . , m}_ where _m_ is the added mask token 
+
+- ∆ _[m]_ The standard _m_ -simplex _{_ _**π** ∈_ R _[m]_[+1] _|_[�] _[m] i_ =0 _[π][i]_[= 1] _[,]_ _**[ π]**[≥]_[0] _[}]_ 
+
+## **Functions** 
+
+- _αt_ The pre-defined noise schedule, which is a decreasing function of time _t αt[′]_ The derivative of the noise schedule w.r.t. the time 
+
+- _α[−]_[1] ( _a_ ) The inverse function of the noise schedule satisfying _αα−_ 1( _a_ ) = _a δx,y_ The indicator function (1 when _x_ = _y_ and 0 when _x ̸_ = _y_ ) 
+
+- _**e** x_ The one-hot vector of the token _x_ 
+
+- _**µ** θ_ ( _**x** , t_ ) The network prediction given the sequence _**x**_ and the time _t_ as input 
+
+- softmax( _**z**_ ) The Softmax operation to transform logits into class probabilities 
+
+- log _**µ**_ The element-wise natural logarithm _N_ ( _**x**_ ) The function counting the number of masked tokens in the sequence _**x** |X|_ The size of the vocabulary _X_ 
+
+## **Distributions** 
+
+17 
+
+_q_ The continuous-time forward process _q_ ˜ The discrete forward process _pθ_ The parameterized reverse process _U_ ( _a, b_ ) The uniform distribution on the interval [ _a, b_ ] _B_ ( _a, b_ ) The Beta distribution with parameters _a, b >_ 0 _G_ (0 _,_ 1) The standard Gumbel distribution _T G_ (0 _,_ 1 _, M_ ) The right-truncated standard Gumbel distribution with threshold _M_ Cat( _**π**_ ) The categorical distribution over the class probabilities _**π**_ 
+
+## **Abbreviations** 
+
+MDMs Masked Diffusion Models ARMs Auto-Regressive Models (N)ELBO (Negative) Evidence Lower Bound NFE The Number of Function Evaluations PPL Perplexity Gen PPL Generative Perplexity 
+
+## B RELATED WORK 
+
+**Discrete Diffusion Models** Diffusion models are originally built on discrete-time continuousspace Markov chains with Gaussian transition kernels (Sohl-Dickstein et al., 2015; Ho et al., 2020). They are later extended to continuous time with the theory of stochastic processes and score matching (Song et al., 2021c). 
+
+Discrete diffusion models arise from similar contexts of Markov chains but with discrete data space (Sohl-Dickstein et al., 2015; Hoogeboom et al., 2021b). D3PM (Austin et al., 2021) considers discrete-time Markov chains with several types of transition matrices (uniform, absorbing, discretized Gaussian) and derives the discrete-time variational objective (or ELBO), which is further extended to continuous-time Markov chain (CTMC) and the corresponding ELBO(Campbell et al., 2022). They employ the mean-parameterization to learn the reverse density _q_ 0 _|t_ . 
+
+Another line of work (Meng et al., 2022; Lou et al., 2023) argues that D3PM implicitly learns the ratio of the marginal distributions _[q] qt[t]_ ([(] _[x] x_[ˆ][)] )[,][which][is][referred][to][as][the][concrete][score—a][discrete] analog to the score function in continuous diffusion. This ratio is proposed to be directly learned via a regression objective known as concrete score matching (Meng et al., 2022), similar to score matching in continuous diffusion. However, this approach faces challenges in practice due to the incompatibility of the _L_ 2 loss and the fact that the ratio _q[q] t[t]_ ([(] _x[x]_[ˆ] )[)][must][be][positive.][To][address][this] issue, SEDD (Lou et al., 2023) introduces the score entropy objective as a theoretically more robust surrogate, which also connects the concrete score with the continuous-time ELBO. 
+
+Though SEDD considers two types of transitions (uniform, absorb), the absorbing case (masked diffusion) is much more performant in practice. It involves adding a [MASK] token as the absorbing state and modeling the simple transitions between the mask state and unmasked states, akin to the mechanism of masked models. Recent studies (Shi et al., 2024; Sahoo et al., 2024) have further aligned the masked diffusion framework with continuous diffusion, resulting in simple and principled training and sampling recipes. This not only provides a unified understanding of masked diffusion models but also enables both theoretical and empirical advancements through improved parameterization and engineering techniques. We mainly follow their framework in this work. 
+
+**Masked Models and Order-Agnostic Auto-regressive Models** Learning to reconstruct masked tokens (or patches) is an efficient self-supervised manner for both representation learning and generative modeling. The masked modeling paradigm, originally introduced by BERT (Devlin et al., 
+
+18 
+
+2019), was not initially designed for generative purposes. BERT masks a fixed portion (15%) of tokens at random[10] , which supports representation learning and language understanding rather than generating text from scratch. Similarly, the masked autoencoder (MAE) (He et al., 2022) adopts this approach for image representation learning but employs a higher masked ratio (75%). 
+
+Masked models can be generative when trained on sequences with a range of masked ratios. MaskPredict (Ghazvininejad et al., 2019) extends the number of masked tokens seen during training in BERT and uses the following objective to train a language generation model: 
+
+**==> picture [328 x 19] intentionally omitted <==**
+
+where _p_ ( _n_ ) is the uniform distribution over the sequence length _L_ . MaskGIT (Chang et al., 2022) uses a similar objective for image generation, but selects the number of masked tokens _n_ according to a mask scheduling function _γ_ ( _t_ ): sample _t ∼U_ (0 _,_ 1), and set _n_ = _⌈γ_ ( _t_ ) _L⌉_ . Both Mask-Predict and MaskGIT generate samples by parallel decoding. Compared to MDMs, these methods have less theoretical grounding in training and sampling. Specifically, there is no discussion of the ELBO (Eqn. (7)) where the likelihood weighting _n_[1][is necessary.][Nevertheless, as discussed in Section 3.2,] their objectives can still lead to the same optimal solution. 
+
+The ELBO of masked models is instead revealed in the context of order-agnostic auto-regressive models (Uria et al., 2014; Hoogeboom et al., 2021a). They factorize the model distribution as _pθ_ ( _**x**_ 0) = E _σ∼U_ ( _SL_ ) � _Ln_ =1 _[p][θ]_[(] _[x][σ]_ 0[(] _[n]_[)] _|_ _**x**[σ]_ 0[(] _[<n]_[)] ) in the style of ARMs, but with an additional expectation over the index permutation _σ_ sampled from the uniform distribution on the set of _L_ -permutations _SL_ . By applying Jensen’s inequality, the ELBO can be derived as: 
+
+**==> picture [336 x 67] intentionally omitted <==**
+
+Here log _pθ_ ( _x_[(] 0 _[k]_[)] _[|]_ _**[x]**[σ]_ 0[(] _[<n]_[)] ) (predicted data probability given known tokens) is an equivalent expression for the cross-entropy term _**e**[⊤] x_[(] 0 _[k]_[)] log _**µ**_[(] _θ[k]_[)][(] _**[x]**_ 0 _[σ]_[(] _[<n]_[)] ): the cross-entropy extracts the _x_[(] 0 _[k]_[)][-th][ele-] ment, _µ_[(] _θ[k]_[)][(] _**[x]**[σ]_ 0[(] _[<n]_[)] ) _x_ (0 _k_ )[,][from][the][network][prediction] _**[µ]**_[(] _θ[k]_[)][(] _**[x]**_ 0 _[σ]_[(] _[<n]_[)] ) as _pθ_ ( _x_[(] 0 _[k]_[)] _[|]_ _**[x]**[σ]_ 0[(] _[<n]_[)] ). This can be interpreted as a masked prediction where _**x**[σ]_ 0[(] _[<n]_[)] (the first _n −_ 1 tokens) is known and _**x**[σ]_ 0[(] _[≥][n]_[)] (the remaining _L − n_ + 1 tokens) is masked and to be predicted. The cross-entropy loss is averaged over the masked positions. As the last _L − n_ +1 positions in a random permutation are equivalent to _L − n_ + 1 random positions without permutation, this ELBO is equivalent to the ELBO in Eqn. (7). 
+
+**Training and Sampling Improvements of Diffusion Models** Since the inception of diffusion models (Ho et al., 2020; Song et al., 2021c), numerous efforts have been undertaken to enhance their performance, leading to well-established training and sampling recipes. 
+
+Prevalent training improvements include designing noise schedules, modifying the parameterization and applying variance reduction techniques (Nichol & Dhariwal, 2021; Kingma et al., 2021). Notably, flow matching (Lipman et al., 2022) provides a theoretically equivalent variant of diffusion models by employing the straight-line diffusion paths and velocity parameterization. These techniques have been validated in likelihood training of diffusion models, achieving improved density estimation results on image benchmarks (Zheng et al., 2023b). The state-of-the-art image diffusion model, EDM (Karras et al., 2022), designs the parameterization according to their proposed preconditioning and first principles, which is deeply connected to velocity parameterization (Zheng et al., 2023b). When targeted at maximum likelihood training with the ELBO, instead of improving generation quality (such as FID of generated images), the design space is relatively limited. This is also the case in discrete diffusion for text generation as the perplexity metric is based on likelihood. 
+
+Training-free accelerations of diffusion sampling mainly focus on two aspects: reducing stochasticity in the sampling process and leveraging higher-order information. DDIM (Song et al., 2021a), 
+
+> 10More specifically, among the 15% tokens, 80% are replaced with the [MASK] token, 10% are replaced with random tokens, and 10% remain unchanged. 
+
+19 
+
+along with the extension to diffusion bridges (Zheng et al., 2024), generalizes the diffusion process to non-Markovian ones with lower levels of stochasticity, enabling faster sampling. Later works connect it to the probability flow ordinary differential equation (PF-ODE) formulations of diffusion models, and build dedicated high-order numerical differential equation solvers (Zhang & Chen, 2022; Lu et al., 2022b; Zheng et al., 2023a; Gonzalez et al., 2024). 
+
+However, adapting these sampling recipes to discrete diffusion is not feasible, as the underlying evolution process of discrete data cannot be described by an ODE. Designing effective samplers for discrete diffusion requires a specialized inspection of the reverse-time Markov chain. Previous works (Chen & Ying, 2024; Chen et al., 2023) leverage the uniformization to convert continuoustime Markov chains into discrete ones, while still requiring time discretizations or approximations of the transition time distribution. Our study is the first to demonstrate that the transition time in MDMs can be sampled analytically without hyperparameter tuning or approximation errors. Infrastructure improvements, such as quantized or sparse attention (Zhang et al., 2025a;b; 2024), can also be used to accelerate the inference of discrete diffusion models, which are beyond the scope of this work. 
+
+## C PROOF 
+
+## C.1 PROOF OF PROPOSITION 3.1 
+
+_Proof._ Denote _nt_ = _N_ ( _**x** t_ ) as the number of masked tokens at time _t_ . According to the forward process in Eqn. (1), each token is independently masked with a probability 1 _− αt_ , and _nt_ follows the Binomial distribution _B_ ( _L,_ 1 _− αt_ ). The probability mass function is 
+
+**==> picture [306 x 25] intentionally omitted <==**
+
+We can rearrange the sequence NELBO in Eqn. (6) as a partition by the number of masked tokens: 
+
+**==> picture [374 x 137] intentionally omitted <==**
+
+The time-related term can be further simplified as 
+
+**==> picture [338 x 176] intentionally omitted <==**
+
+which completes the proof. 
+
+20 
+
+## C.2 PROOF OF PROPOSITION 3.2 
+
+_Proof._ We consider minimizing the sequence NELBO (Eqn. (6)) under the expectation of the data distribution _q_ 0( _**x**_ 0): 
+
+**==> picture [390 x 84] intentionally omitted <==**
+
+The objective is an aggregation of cross-entropy terms over different _t,_ _**x** t, l_ . The global minimum is achieved when each cross-entropy term is optimal: 
+
+**==> picture [282 x 22] intentionally omitted <==**
+
+Note that _**µ**_[(] _θ[l]_[)] = softmax( _**f** θ_[(] _[l]_[)][)][is][a][set][of][valid][class][probabilities][that][sum][to][1,][and] E _q_ 0 _|t_ ( _**x**_ 0 _|_ _**x** t_ ) � _**e** x_ (0 _l_ )� also sum to 1. Denote them as _**P**_ and _**P**_[ˆ] respectively, we are essentially minimizing _−_ _**P**_ log _**P**_[ˆ] = _D_ KL( _**P** ∥_ _**P**_[ˆ] ) + _H_ ( _**P**_ ) _≥ H_ ( _**P**_ ), where _D_ KL( _· ∥·_ ) is the Kullback–Leibler (KL) divergence and _H_ ( _·_ ) is the entropy. According to the property of KL divergence, the equality holds if and only if _**P**_[ˆ] = _**P**_ . This implies that the optimal _θ[∗]_ satisfies 
+
+**==> picture [264 x 19] intentionally omitted <==**
+
+This expression is similar to continuous diffusion, where the optimal data predictor is _**µ** θ∗_ ( _**x** t, t_ ) = E _q_ 0 _|t_ ( _**x**_ 0 _|_ _**x** t_ ) [ _**x**_ 0]. The key difference is that, the posterior _q_ 0 _|t_ ( _**x**_ 0 _|_ _**x** t_ ) in MDMs only depends on _**x** t_ and is irrelevant to the time _t_ . Denote _nt_ as the number of masked tokens at time _t_ , we have 
+
+**==> picture [397 x 36] intentionally omitted <==**
+
+where _pt_ ( _nt_ ) is distribution of _nt_ at time _t_ , and _q_ ˜ _nt|_ 0 is the discrete forward process that randomly _q_ ˜ _nt|_ 0( _**x**_ masks _t|_ _**x**_ 0) = 0 _nt_ fortokens. _nt_ =As _N_ ( _**xx** tt_ )is. Therefore,known, the number of masked tokens is fixed as _N_ ( _**x** t_ ), and 
+
+**==> picture [347 x 27] intentionally omitted <==**
+
+which completes the proof. 
+
+C.3 PROOF OF PROPOSITION 4.1 
+
+We first present a lemma that enables sequential sampling of order statistics and supports the recursive process for sampling the first hitting time. 
+
+**Lemma C.1** (Uniform Distribution Conditioned on the Maximum) **.** _Suppose n random variables u_ 1 _, u_ 2 _, . . . , un are independent samples from the uniform distribution U_ (0 _, θ_ ) _(θ >_ 0 _). Given the condition that u_ = max _{u_ 1 _, · · · , un}, the remaining variables ui (ui_ = _u) follow the distribution U_ (0 _, u_ ) _._ 
+
+_Proof._ Without loss of generality, we derive the conditional distribution of _u_ 1. Other remaining variables follow the same distribution due to symmetry. For _x ≤ y ≤ θ_ , we have 
+
+**==> picture [384 x 39] intentionally omitted <==**
+
+21 
+
+**==> picture [390 x 29] intentionally omitted <==**
+
+and 
+
+**==> picture [281 x 22] intentionally omitted <==**
+
+Therefore, 
+
+**==> picture [385 x 51] intentionally omitted <==**
+
+By taking derivatives w.r.t. _x_ and _y_ , we obtain the density _p_ ( _u_ 1 = _x, u_ = _y|u_ 1 = _u_ ) = _[n][y] θ[y][n][−]_[2] . Similarly, _P_ ( _u ≤ y_ ) = _[y] θ[n][n]_[, and the density] _[ p]_[(] _[u]_[ =] _[ y]_[) =] _[n][y] θ[n][n][−]_[1] . Therefore 
+
+**==> picture [319 x 24] intentionally omitted <==**
+
+We conclude that _u_ 1 ( _u_ 1 = _u_ ) follows a uniform distribution over the interval [0 _, u_ ]. 
+
+Then we prove Proposition 4.1 below. 
+
+_Proof._ We first consider the case of a single token undergoing the reverse process described in Eqn. (10). Starting from time _t_ , when _xt_ = _m_ is the mask token, we denote _τ_ as the time at which the unmasking transition occurs (i.e., _xτ_ +d _t_ = _m_ and _xτ_ = _m_ ). The transition time _τ_ is a random variable, whose cumulative distribution function (CDF) is available: 
+
+**==> picture [288 x 23] intentionally omitted <==**
+
+Therefore, using _inverse transform sampling_ , _τ_ can be analytically sampled by (1) drawing _u ∼ U_ (0 _,_ 1), and (2) solving the equation[1] 1 _[−] −[α] α[τ] t_[=] _[ u]_[.] 
+
+Next, we consider the case of multiple tokens in a sequence of length _L_ . Thanks to the theoretical assumptions of MDMs, the transition times of different tokens are independent in the reverse process. However, to enable token-by-token decoding, we need to sample the _L_ transition times in descending order, i.e., 1 _> τL−_ 1 _> · · · > τ_ 0. Starting from _t_ = 1 with _α_ 1 = 0, each transition time _τ_ can be sampled by drawing _u ∼U_ (0 _,_ 1) and solving 1 _− ατ_ = _u_ according to the single token case. In order to sample _τ_ sequentially, we are essentially drawing the order statistics _u_ ( _L−_ 1) _> · · · > u_ (0) of _L_ independent uniform variables on [0 _,_ 1]. 
+
+According to Lemma C.1, this process can be conducted in a recursive manner without sorting. Suppose there are currently _n_ remaining masked tokens, and the most recent unmasking occurred at time _τn_ . The transition time _τn_ corresponds to the _n_ -th smallest uniform variable _u_ ( _n_ ) through the relation 1 _− ατn_ = _u_ ( _n_ ). To obtain the next transition time _τn−_ 1, we need to sample the next order statistic _u_ ( _n−_ 1). By recursively applying Lemma C.1, we know that the remaining _n_ smallest uniform variables follow the distribution _U_ (0 _, u_ ( _n_ )), if not considering their relative order. Furthermore, _u_ ( _n−_ 1), as the maximum of these _n_ variables, has the CDF _P_ ( _u_ ( _n−_ 1) _≤ x_ ) = _ux[n]_ ( _[n] n_ )[and] 
+
+can be sampled by solving _uu[n]_ ( _n[n]_ ( _−n_ )1) = _un_ , where _un ∼U_ (0 _,_ 1) (using inverse transform sampling). Therefore, the next transition time _τn−_ 1 satisfies 
+
+**==> picture [295 x 16] intentionally omitted <==**
+
+which is equivalent to Eqn. (10) using the inverse noise schedule function _τn−_ 1 = _α[−]_[1] ( _ατn−_ 1). 
+
+22 
+
+## C.4 PROOF OF PROPOSITION 5.2 
+
+_Proof._ The truncated standard Gumbel distribution _T G_ (0 _,_ 1 _, M_ ) has the probability density function (PDF) and cumulative distribution function (CDF) defined as follows: 
+
+**==> picture [301 x 25] intentionally omitted <==**
+
+where 
+
+**==> picture [270 x 13] intentionally omitted <==**
+
+are the PDF and CDF of the standard Gumbel distribution _G_ (0 _,_ 1), and _M_ is the right truncation point. Suppose the class probabilities are sorted as _π_ 1 _≤· · · ≤ πK_ , and denote _π_ 0 = 0 _, θn_ = log _πn_ for simplicity. To conduct truncated Gumbel-based categorical sampling, _K_ i.i.d. samples _{gi}[K] i_ =1 are drawn from _T G_ (0 _,_ 1 _, M_ ). The resulting categorical probability of class _n_ is 
+
+**==> picture [391 x 161] intentionally omitted <==**
+
+where the integral has a closed-form solution by 
+
+**==> picture [266 x 25] intentionally omitted <==**
+
+With this, Eqn. (32) can be further simplified to 
+
+**==> picture [363 x 125] intentionally omitted <==**
+
+Therefore, the original class probabilities _{πn}[K] n_ =1[are shifted to] _[ {][π] n[′][}][K] n_ =1[if the Gumbel variables] used in categorical sampling are right-truncated to _M_ . _πn[′]_[is given by] 
+
+**==> picture [331 x 79] intentionally omitted <==**
+
+23 
+
+We can verify that _{πn[′][}][K] n_ =1[are valid class probabilities that sum to 1:] 
+
+**==> picture [396 x 160] intentionally omitted <==**
+
+## D RELATIONSHIP BETWEEN MASKED DIFFUSION MODELS AND PREVIOUS DISCRETE DIFFUSION MODELS 
+
+Our framework and notations are based on recent studies of MDMs (Shi et al., 2024; Sahoo et al., 2024), which offer a theoretically simplified and empirically improved version of the bestperforming absorbing case in discrete diffusion models (Austin et al., 2021; Campbell et al., 2022; Lou et al., 2023). In this section, we present a summary of some background information on previous formulations: generative modeling of discrete data via continuous-time Markov chains (Section D.1), robust and principled training and sampling with score parameterization (Section D.2), and their equivalence to MDMs (Section D.3). 
+
+## D.1 DISCRETE DIFFUSION VIA CONTINUOUS-TIME MARKOV CHAINS 
+
+Continuous-time Markov chains (CTMCs) (Anderson, 2012) are a fundamental concept in stochastic processes used to model systems that transition between discrete states continuously over time. 
+
+**Forward Process** Denote _X_ as the state space and _x ∈X_ as a state. The probability of transitioning from one state _x_ to another state _x_ ˆ near time _t_ is governed by the transition rate matrix _**Q** t ∈_ R _[|X|×|X|]_ . Specifically, denote _Qt_ ( _x,_ ˆ _x_ ) as the transition rate from _x_ to _x_ ˆ, the transition probability during a small time interval ∆ _t_ is _pt_ +∆ _t|t_ (ˆ _x|x_ ) = _δx,x_ ˆ + _Qt_ ( _x,_ ˆ _x_ )∆ _t_ + _O_ ((∆ _t_ )[2] ) (37) ˆ The off-diagonal elements _Qt_ ( _x,_ ˆ _x_ ) ( _x ̸_ = _x_ ) are non-negative, and the diagonal elements _Qt_ ( _x, x_ ) = _−_[�] _x_ ˆ= _x[Q][t]_[(] _[x,]_[ ˆ] _[x]_[)] _[≤]_[0][, ensuring that each row of] _**[ Q]**[t]_[sums to zero (so that] _[ p][t]_[does not gain or lose] total mass). Equivalently, the transition rate can be defined by the transition probability as 
+
+**==> picture [275 x 23] intentionally omitted <==**
+
+Denote _**p** t_ = _{pt_ ( _x_ ) _}x∈X_ as the marginal distributions of all states at time _t_ , and _**P** t|s ∈_ R _[|X|×|X|]_ as the forward transition matrix from time _s_ to time _t_ satisfying _Pt|s_ ( _x,_ ˆ _x_ ) = _pt|s_ (ˆ _x|x_ ). The Kolmogorov forward (or Fokker-Planck) equations describe the evolution of both the marginals _**p** t_ (starting from the data distribution) and the transition matrix _**P** t|s_ : 
+
+**==> picture [264 x 22] intentionally omitted <==**
+
+In practice, the forward process is designed to be simple degradation (Campbell et al., 2022; Lou et al., 2023), such that _pt_ approaches a stationary distribution _p_ base that is easy to sample from as _t_ increases, akin to the Gaussian noising process in continuous diffusion. Specifically, the transition rate matrix _**Q** t_ is set to _σ_ ( _t_ ) _**Q**_ where _σ_ ( _t_ ) is a scalar noise schedule function and _**Q**_ is a constant 
+
+24 
+
+matrix with low ranks. In this case, the transition matrix can be solved analytically as _**P** t|s_ = ¯ _t e_[(¯] _[σ]_[(] _[t]_[)] _[−][σ]_[¯][(] _[s]_[))] _**[Q]**_ where _σ_ ( _t_ ) = �0 _[σ]_[(] _[τ]_[)d] _[τ]_[.][Common choices of] _**[ Q]**_[ (Lou et al., 2023) include:] 
+
+**==> picture [385 x 84] intentionally omitted <==**
+
+The former disturbs the data distribution into a uniform one, and the latter additionally adds a [MASK] token as the absorbing state. 
+
+**Time Reversal** Similar to continuous diffusion, discrete diffusion defined above has a time reversal (Kelly, 2011; Sun et al., 2022) described by the reverse transition rate matrix _**Q**_[¯] _t_ which satisfies 
+
+**==> picture [287 x 38] intentionally omitted <==**
+
+The intractable ratio _[p][t]_[(] _[x]_[ˆ][)] _pt_ ( _x_ )[, named concrete score (Meng et al., 2022), acts as an analog to the score] function (Song et al., 2021c) in continuous diffusion. The reverse process can be described as 
+
+**==> picture [274 x 22] intentionally omitted <==**
+
+which evolves backward in time with _s_ decreasing to 0 and _s < t_ . It is sufficient to simulate the whole process as long as the concrete score, the only unknown term in _**Q**_[¯] _t_ , is estimated. 
+
+D.2 SCORE-ENTROPY DISCRETE DIFFUSION (SEDD) SEDD (Lou et al., 2023) provides principled, robust and scalable techniques for score-based training and sampling of discrete diffusion models. 
+
+**Parameterization** SEDD parameterizes a score prediction network _**s** θ_ ( _x, t_ ) _∈_ R _[|X|]_ to learn the _pt_ ( _x_ ˆ) unknown concrete score � _pt_ ( _x_ ) � _x_ ˆ _∈X_[.][We use] _[ s][θ]_[(] _[x, t]_[)] _[y]_[to denote its] _[ y]_[-th element.] 
+
+**Training Objective** SEDD proposes the diffusion-weighted denoising score entropy (DWDSE) objective to optimize _**s** θ_ ( _x, t_ ): 
+
+**==> picture [380 x 30] intentionally omitted <==**
+
+where _I_ ( _a, b_ ) := _a − b_ log _a_ + _K_ ( _b_ ), and _K_ ( _b_ ) := _b_ log _b − b_ is a normalizing constant function that ensures _I_ ( _a, b_ ) _≥_ 0. Eqn. (43) not only admits the optimal solution as the concrete score, but also serves as a NELBO for discrete diffusion models by _−_ log _p[θ]_ 0[(] _**[x]**_[0][)] _[≤L]_[DWDSE][(] _[x]_[0][)][+] _D_ KL( _pT |_ 0( _·|x_ 0) _∥ p_ base), where _p_ base is the stationary distribution when _T →∞_ . 
+
+**Sampling Procedures** Denote _**s** t_ ( _x_ ) = � _pptt_ (( _xx_ ˆ)) � _x_ ˆ _∈X_[as][the][ground-truth][concrete][score,][and] _st_ ( _x_ ) _y_ as its _y_ -th element. We use _**s** t_ ( _x_ ) to demonstrate the sampling process, while in practice it is replaced with the learned score _**s** θ_ ( _x, t_ ). SEDD offers two sampling procedures: Euler sampling and analytic sampling with Tweedie _τ_ -Leaping. 
+
+Euler sampling applies the Euler discretization to the reverse process (Eqn. (42)), producing a reverse transition similar to the forward transition in Eqn. (37): 
+
+**==> picture [285 x 15] intentionally omitted <==**
+
+25 
+
+It can be expressed by the concrete score _**s** t_ as 
+
+**==> picture [317 x 31] intentionally omitted <==**
+
+The Euler sampling implicitly assumes a constant reverse rate matrix _**Q**_[¯] _τ_ = _**Q**_[¯] _t_ for _τ ∈_ [ _s, t_ ], producing approximation errors and even resulting in negative probabilities at _xs_ = _xt_ . 
+
+Tweedie _τ_ -leaping operates similarly to the posterior sampling in DDPM (Ho et al., 2020), by analytically solving the posterior _ps|t_ ( _xs|xt_ ) given the ground-truth concrete score. Specifically, 
+
+**==> picture [274 x 25] intentionally omitted <==**
+
+Under the special choice _**Q** t_ = _σ_ ( _t_ ) _**Q**_ described in the previous section, we have 
+
+**==> picture [299 x 21] intentionally omitted <==**
+
+and 
+
+Therefore, 
+
+**==> picture [335 x 88] intentionally omitted <==**
+
+**Multi-Dimensional Case** For a token sequence _**x** ∈X[L]_ of length _L_ , we use _−l_ to denote the indexes of all tokens except the _l_ -th one. The concrete score _**s** t_ ( _**x**_ ) _∈_ R _[|X|×][L]_ is defined between sequences that differ by a Hamming distance of 1: 
+
+**==> picture [296 x 24] intentionally omitted <==**
+
+The forward and reverse processes are factorized across dimensions in the same manner as in MDMs described in the main text. The parameterized score network _**s** θ_ ( _**x** , t_ ) _∈_ R _[|X|×][L]_ also predicts the scores at all positions at a time. Consequently, both the training and sampling are conducted simultaneously and independently for all dimensions, except that the network input _**x**_ contains the current sequence information. 
+
+## D.3 CONNECTION BETWEEN MDMS AND SEDD ABSORB 
+
+The absorbing case ( _**Q**_ = _**Q**_ absorb) of discrete diffusion has demonstrated both simple formulations and superior performance. As revealed in previous and concurrent works (Shi et al., 2024; Ou et al., 2024), SEDD Absorb is theoretically equivalent to MDMs in multiple aspects. For simplicity, we focus on the single-token case, as the factorization approach used in both MDMs and SEDD Absorb ensures that equivalence in one dimension implies equivalence in multiple dimensions. 
+
+## D.3.1 EQUIVALENCE OF TRAINING 
+
+**Relation between Forward Processes** The forward transition matrix of SEDD Absorb is _**P** t|_ 0 = _e[σ]_[¯][(] _[t]_[)] _**[Q]**_[absorb] . It can be verified by mathematical induction that _**Q**[n]_ absorb[=][(] _[−]_[1)] _[n][−]_[1] _**[Q]**_[absorb][for any] positive integer _n_ . With this identity, _**P** t|_ 0 can be simplified as 
+
+**==> picture [353 x 51] intentionally omitted <==**
+
+This is equivalent to the forward process (Eqn. (1)) in MDMs with the relation _αt_ = _e[−][σ]_[¯][(] _[t]_[)] . 
+
+26 
+
+**Relation between Parameterizations** For coherence, we use _m_ to denote the [MASK] token. We only need to consider the concrete score _**s** t_ ( _m_ ) at _m_ , since _**s** t_ ( _x_ ) for _x ̸_ = _m_ can be converted from _**s** t_ ( _m_ ) by _st_ ( _x_ ) _x_ ˆ = _[s] s[t] t_[(] ( _[m] m_[)] ) _[x] x_[ˆ][.][We have] 
+
+**==> picture [264 x 29] intentionally omitted <==**
+
+Substituting the expression of _**P** t|_ 0 in Eqn. (51) into Eqn. (52), for _x ̸_ = _m_ , we have 
+
+and 
+
+**==> picture [363 x 99] intentionally omitted <==**
+
+This implies that the score parameterization is related to the mean parameterization _**µ** θ_ ( _x, t_ ) in MDMs (excluding the _m_ -th dimension) by 
+
+**==> picture [252 x 21] intentionally omitted <==**
+
+**Equivalence of ELBOs** Substituting this relation between _**s** θ_ and _**µ** θ_ into the score entropy objective of SEDD (Eqn. 43), we have 
+
+**==> picture [386 x 86] intentionally omitted <==**
+
+Observing that _I_ ( _a,_ 0) = _a_ ,[�] _x_ = _m[µ][θ]_[(] _[m, t]_[)] _[x]_[= 1][, we have] 
+
+**==> picture [354 x 86] intentionally omitted <==**
+
+Using _αt[′]_[=] _[ −][σ]_[(] _[t]_[)] _[α][t]_[, the objective] _[ L]_[DWDSE][(] _[x]_[0][)][ can be simplified to] 
+
+**==> picture [349 x 56] intentionally omitted <==**
+
+As log _µθ_ ( _xt, t_ ) _x_ 0 and _**e**[⊤] x_ 0[log] _**[ µ]**[θ]_[(] _[x][t][, t]_[)][are][equivalent][expressions][for][the][cross][entropy,][we][con-] clude that _L_ DWDSE( _x_ 0) is equal to the NELBO for MDMs (Eqn. (5)) when _T_ = 1. 
+
+## D.3.2 EQUIVALENCE OF SAMPLING 
+
+**Euler Sampler and Tweedie** _τ_ **-Leaping Sampler in SEDD** are equivalent in the absorbing case under the linear noise schedule _αt_ = _e[−][σ]_[¯][(] _[t]_[)] = 1 _− t_ . 
+
+27 
+
+On the one hand, the Euler sampler (Eqn. (45)) with score parameterization network _**s** θ_ is 
+
+**==> picture [340 x 31] intentionally omitted <==**
+
+When _xs_ = _xt_ , using the identities _sθ_ ( _x, t_ ) _x_ = 1 and ( _**Q**_ absorb) _xs,xt_ = _δm,xt − δxs,xt_ , _p_[Euler] _s|t_ can be simplified to 
+
+**==> picture [308 x 24] intentionally omitted <==**
+
+When _xs_ = _xt_ , from Eqn. (56) we know[�] _x∈X\{m}[s][θ]_[(] _[m, t]_[)] _[x]_[=] 1 _−ααt t_ � _x∈X\{m}[µ][θ]_[(] _[m, t]_[)] _[x]_[=] 1 _−ααt t_[.][Hence,] _[ p]_[Euler] _s|t_ can be calculated as 
+
+**==> picture [301 x 31] intentionally omitted <==**
+
+Combining Eqn. (61) and Eqn. (62), the Euler sampler is simplified to 
+
+**==> picture [327 x 42] intentionally omitted <==**
+
+On the other hand, the Tweedie _τ_ -Leaping sampler (Eqn. (49)) is 
+
+**==> picture [345 x 147] intentionally omitted <==**
+
+When _**Q**_ = _**Q**_ absorb, similar to Eqn. (51), we have 
+
+Using the identities _sθ_ ( _x, t_ ) _x_ = 1 and ( _**Q**_ absorb) _xs,xt_ = _δm,xt − δxs,xt_ , we have 
+
+and 
+
+**==> picture [389 x 167] intentionally omitted <==**
+
+Therefore, 
+
+(68) 
+
+Substituting Eqn. (66) and Eqn. (68) into Eqn. (64), the Tweedie _τ_ -Leaping sampler is simplified to 
+
+**==> picture [343 x 42] intentionally omitted <==**
+
+28 
+
+Under the linear noise schedule, as _e[−][σ]_[¯][(] _[t]_[)] = 1 _− t_ , we have ¯ _σ_ ( _t_ ) = _−_ log(1 _− t_ ) and _σ_ ( _t_ ) = 1 _−_ 1 _t_[=] _e[σ]_[¯][(] _[t]_[)] . Consequently, ( _t − s_ ) _σ_ ( _t_ ) = _e[σ]_[¯][(] _[t]_[)] _[−][σ]_[¯][(] _[s]_[)] _−_ 1, and the Euler sampler in Eqn. (63) is the same as Tweedie _τ_ -Leaping sampler in Eqn. (69). 
+
+**Tweedie** _τ_ **-Leaping Sampler in SEDD and the Reverse Sampling Process in MDMs** are equivalent in the absorbing case. By the relation _αt_ = _e[−][σ]_[¯][(] _[t]_[)] and _sθ_ ( _xt, t_ ) _xs_ = 1 _−ααt t[µ][θ]_[(] _[x][t][, t]_[)] _[x][s]_[(] _[x][t]_[=] _m, xs_ = _m_ ), the Tweedie _τ_ -Leaping sampler in Eqn. (69) is converted to 
+
+**==> picture [322 x 43] intentionally omitted <==**
+
+which is the same as the reverse process in MDMs (Eqn. (3)). 
+
+## E EXPECTED NFE IN BATCHED SAMPLING USING THE CACHING STRATEGY 
+
+Suppose the sampling is performed on timesteps 1 = _tN → tN −_ 1 _→· · · → t_ 0 = 0, and denote _**x** t ∈X[BL]_ as the concatenation of the batched sequences at time _t_ . During the sampling step _ti → ti−_ 1, the NFE increases by 1 when _**x** ti−_ 1 = _**x** ti_ , and remains the same otherwise. Therefore, the expected NFE (E-NFE) can be expressed by 
+
+**==> picture [383 x 65] intentionally omitted <==**
+
+As noted in the main text, an unmasked token will no longer change, and whether a mask token will change during a sampling step is independent of the network output. Given that the reverse sampling process is factorized across dimensions, and the only interaction between dimensions is through the sequence-conditioned network, which does not affect whether a token will change, we conclude that the events _{x_[(] _ti[l] −_[)] 1[=] _[x]_[(] _ti[l]_[)] _[}]_[ are independent for different] _[ l]_[.][Therefore,][the probability] _P_ � _x_[(] _ti[l] −_[)] 1[=] _[ x] t_[(] _i[l]_[)] _[, l]_[ = 1] _[,]_[ 2] _[, . . . , BL]_ � can be factorized as[�] _[BL] l_ =1 _[P]_ � _x_[(] _ti[l] −_[)] 1[=] _[ x] t_[(] _i[l]_[)] �, where 
+
+**==> picture [358 x 60] intentionally omitted <==**
+
+The expected NFE is finally simplified to 
+
+**==> picture [289 x 30] intentionally omitted <==**
+
+Using the default linear noise schedule _αt_ = 1 _− t_ as well as uniform timesteps _tk_ = _Nk_[, we have] _αti−_ 1 _− αti_ = _N_[1][, and the expected NFE is] _[ N]_ �1 _−_ (1 _− N_[1][)] _[BL]_[�] . 
+
+## F A BRIEF INTRODUCTION TO GUMBEL TRICKS 
+
+Gumbel tricks are widely used in machine learning and statistics to handle the challenges associated with discrete random variables. Based on the properties of the Gumbel distribution, these techniques offer powerful tools for approximating discrete distributions and optimizing over discrete spaces, facilitating the integration of discrete variables into continuous models. 
+
+29 
+
+## F.1 THE GUMBEL DISTRIBUTION 
+
+The Gumbel distribution (Gumbel, 1935) is related to the extreme value theory and is commonly used to model the distribution of the maximum of random variables. The Gumbel distribution _G_ ( _µ, β_ ), with the location parameter _µ_ and the scale parameter _β_ , has the following PDF and CDF: 
+
+**==> picture [331 x 23] intentionally omitted <==**
+
+A widely used special case is the standard Gumbel distribution _G_ (0 _,_ 1), where _µ_ = 0 and _β_ = 1. For this distribution, the CDF is given by _P_ ( _g ≤ x_ ) = _e[−][e][−][x]_ . Using inverse transform sampling, a random variable _g_ following _G_ (0 _,_ 1) can be sampled by drawing _u ∼U_ (0 _,_ 1) and performing two negative logarithm operations _g_ = _−_ log( _−_ log _u_ ). 
+
+## F.2 GUMBEL-MAX TRICK 
+
+The Gumbel-max trick (Gumbel, 1954) allows us to sample from a categorical distribution using continuous random variables. It leverages the following property of the Gumbel distribution: for _**π**_ = ( _π_ 1 _, π_ 2 _, . . . , πK_ ) satisfying _**π** ≥_ 0 and[�] _[K] i_ =1 _[π][i][>]_[0][,][and][let] _[g]_[1] _[, . . . , g][K]_[be][independent] samples from _G_ (0 _,_ 1), we have 
+
+and 
+
+**==> picture [282 x 77] intentionally omitted <==**
+
+This implies that sampling a discrete variable from a categorical distribution can be achieved by operating on continuous variables that include the known class probabilities and the sampled Gumbel variables. Therefore, the Gumbel-max trick acts as the _reparameterization trick_ for categorical sampling, akin to the Gaussian case used in variational auto-encoders (Kingma & Welling, 2014). 
+
+## F.3 GUMBEL-SOFTMAX DISTRIBUTION 
+
+The Gumbel-Softmax distribution (Jang et al., 2016) introduces a differentiable approximation to the categorical distribution, facilitating gradient-based optimization in neural network training. It smooths the non-differentiable argmax operation in the Gumbel-max trick by replacing it with the differentiable Softmax function plus a temperature factor _T_ . Specifically, the one-hot random vector _**e** x_ , where _x ∼_ Cat( _**π**_ ), is approximated by a continuous vector _**y**_ defined as 
+
+**==> picture [290 x 30] intentionally omitted <==**
+
+It approaches the one-hot representation of the categorical variable when _T →_ 0, and tends to be uniform when _T →∞_ . 
+
+## G IMPLEMENTATION DETAILS 
+
+## G.1 ALGORITHMS 
+
+For parallel decoding, suppose the sampling step is _N_ and the sequence length is _L_ , we define a decoding schedule _{Ln}[N] n_ =1[which satisfies][ �] _[N] n_ =1 _[L][n]_[=] _[ L]_[ to specify the number of tokens decoded] at each step. This includes the token-by-token decoding as a special case where _N_ = _L_ and _Ln_ = 1. In practice, we decode the same number of tokens per step so that _L_ is divisible by _N_ . 
+
+We present the parallel decoding procedure in Algorithm 2, which can be interpreted as a firstorder method. Algorithm 3 and Algorithm 4 describe two types of high-order extensions, inspired by high-order numerical differential equation solvers in diffusion models. Algorithm 3 leverages 
+
+30 
+
+Lagrange polynomials to interpolate the previous network outputs along the time axis, yielding an approximate network prediction for the current time step. Our implementation only uses the two most recent predictions, making it a second-order method, as we empirically find that higher-order methods tend to degrade performance. Algorithm 4 employs a predictor-corrector approach, refining the first-order decoding result at the last step using the current network prediction, also resulting in a second-order method. After refining the intermediate sample, we avoid feeding it back into the network for prediction updates, thus preventing extra NFEs. 
+
+**Algorithm 2** First-Hitting Sampling of MDMs (parallel decoding) 
+
+**Require:** the sequence length _L_ , the vocabulary _X_ = _{_ 0 _, . . . , m −_ 1 _, m}_ where _m_ is the mask token, the noise schedule _αt_ and its inverse function _α[−]_[1] , the pretrained masked diffusion model _**µ** θ_ , the number of sampling steps _N_ , the decoding schedule _{Ln}n[N]_ =1 1: _**x** L ←_ [ _m m . . . m_ ] 2: _τL ←_ 1 3: _l ← L_ 4: **for** _n ← N_ **to** 1 **do** 5: **for** _i ←_ 1 **to** _Ln_ **do** 6: Sample _ul ∼U_ (0 _,_ 1) 7: _τl−_ 1 _← α[−]_[1] (1 _− u_[1] _l[/l]_ (1 _− ατl_ )) 8: **if** _i_ = 1 **then** 9: _**µ** ←_ _**µ** θ_ ( _**x** l, τl−_ 1) 10: **end if** 11: Randomly and uniformly select an index _k_ from _{j_ : _x_[(] _l[j]_[)] = _m}_ (i.e., masked positions in _**x** l_ ) 12: _**x** l−_ 1 _←_ _**x** l, x_[(] _l−[k]_[)] 1 _[←][x][ ∼]_[Cat][(] _**[µ]**_[(] _[k]_[)][)] 13: _l ← l −_ 1 14: **end for** 15: **end for Output:** _**x**_ 0 
+
+**Algorithm 3** First-Hitting Sampling of MDMs (extrapolation) 
+
+**Require:** the sequence length _L_ , the vocabulary _X_ = _{_ 0 _, . . . , m −_ 1 _, m}_ where _m_ is the mask token, the noise schedule _αt_ and its inverse function _α[−]_[1] , the pretrained masked diffusion model _**µ** θ_ , the number of sampling steps _N_ , the decoding schedule _{Ln}n[N]_ =1 1: _**x** L ←_ [ _m m . . . m_ ] 2: _τL ←_ 1 3: _l ← L_ 4: **for** _n ← N_ **to** 1 **do** 5: **for** _i ←_ 1 **to** _Ln_ **do** 6: Sample _ul ∼U_ (0 _,_ 1) 7: _τl−_ 1 _← α[−]_[1] (1 _− u_[1] _l[/l]_ (1 _− ατl_ )) 8: **if** _i_ = 1 **then** 9: _**µ** ←_ _**µ** θ_ ( _**x** l, τl−_ 1) 10: _τ ← τl−_ 1 11: **end if** 12: **if** _n_ = _N_ **then** 13: _**µ**_ ˆ = _**µ**_ 14: **else** 15: _**µ**_ ˆ = _[τ][l] τ[−]_[1] _−[ −] τ_ ˜ _[τ]_[˜] _**µ**_ + _[τ][l] τ_ ˜ _[−]_[1] _−[ −] τ[τ]_ _**µ**_ ˜ (Lagrange interpolation) 16: **end if** 17: Randomly and uniformly select an index _k_ from _{j_ : _x_[(] _l[j]_[)] = _m}_ (i.e., masked positions in _**x** l_ ) 18: _**x** l−_ 1 _←_ _**x** l, x_[(] _l−[k]_[)] 1 _[←][x][ ∼]_[Cat][(ˆ] _**[µ]**_[(] _[k]_[)][)] 19: _l ← l −_ 1 20: **end for** 21:22: _**µ** τ_ ˜˜ _←← τ_ _**µ**_ 23: **end for Output:** _**x**_ 0 
+
+31 
+
+**Algorithm 4** First-Hitting Sampling of MDMs (predictor-corrector) 
+
+**Require:** the sequence length _L_ , the vocabulary _X_ = _{_ 0 _, . . . , m −_ 1 _, m}_ where _m_ is the mask token, the noise schedule _αt_ and its inverse function _α[−]_[1] , the pretrained masked diffusion model _**µ** θ_ , the number of sampling steps _N_ , the decoding schedule _{Ln}n[N]_ =1 1: _**x** L ←_ [ _m m . . . m_ ] 2: _τL ←_ 1 3: _l ← L_ 4: **for** _n ← N_ **to** 1 **do** 5: **for** _i ←_ 1 **to** _Ln_ **do** 6: Sample _ul ∼U_ (0 _,_ 1) 7: _τl−_ 1 _← α[−]_[1] (1 _− u_[1] _l[/l]_ (1 _− ατl_ )) 8: **if** _i_ = 1 **then** 9: _**µ** ←_ _**µ** θ_ ( _**x** l, τl−_ 1) 10: **if** _n < N_ **then** 11: _**x** l ←_ _**x**_ ˆ 12: **for** _r ←_ 1 to _Ln_ +1 **do** 13: Randomly and uniformly select an index _k_ from _{j_ : _x_[(] _l[j]_[)] = _m}_ 14: _x_[(] _l[k]_[)] _← x ∼_ Cat( _**µ**_[(] _[k]_[)] ) 15: **end for** 16: **end if** 17: _**x**_ ˆ _←_ _**x** l_ 18: **end if** 19: Randomly and uniformly select an index _k_ from _{j_ : _x_[(] _l[j]_[)] = _m}_ (i.e., masked positions in _**x** l_ ) 20: _**x** l−_ 1 _←_ _**x** l, x_[(] _l−[k]_[)] 1 _[←][x][ ∼]_[Cat][(] _**[µ]**_[(] _[k]_[)][)] 21: _l ← l −_ 1 22: **end for** 23: **end for Output:** _**x**_ 0 
+
+## G.2 LOW-DISCREPANCY SAMPLER 
+
+VDM (Kingma et al., 2021) proposes a low-discrepancy sampler for batched sampling of uniformly distributed continuous time variables, which reduces the loss variance in maximum likelihood training of diffusion models. Specifically, consider a batch of _B_ timesteps _t_[(] _[i]_[)] _[B] i_ =0 _[−]_[1][that][needs][to][be] sampled from _U_ (0 _,_ 1). Instead of sampling them independently, VDM generates correlated samples using the formula _t_[(] _[i]_[)] = mod( _u_ 0 + _i/B,_ 1), where _u_ 0 _∼U_ (0 _,_ 1). This approach ensures that each _t_[(] _[i]_[)] has the correct marginal distribution over multiple batches, while each batch of timesteps more evenly covers the interval [0 _,_ 1]. 
+
+MDLM (Sahoo et al., 2024) employs a slightly different low-discrepancy sampler where the sampled timesteps are less correlated within a batch. Specifically, _B_ independent uniform samples _{ui}[B] i_ =0 _[−]_[1][from] _[ U]_[(0] _[,]_[ 1)][ are mapped into] _[ B]_[bins by] _[ t]_[(] _[i]_[)][=][(] _[u][i]_[+] _[ i]_[)] _[/B]_[.][We adopt this approach for] sampling continuous timesteps. Additionally, we extend this low-discrepancy sampler to handle discrete timesteps _{n_[(] _[i]_[)] _}i[B]_ =0 _[−]_[1][drawn from] _[ U]_[(] _[{]_[0] _[,]_[ 1] _[, . . . , L][ −]_[1] _[}]_[)][ (e.g., the number of masked tokens in] the discrete ELBO) by mapping the continuous time _t_[(] _[i]_[)] to _n_[(] _[i]_[)] = _⌈Lt_[(] _[i]_[)] _⌉_ . 
+
+## H EXPERIMENT DETAILS 
+
+## H.1 EVALUATION METRICS 
+
+**Perplexity** is a likelihood-related metric to evaluate how well a likelihood-based model is trained. Denote the likelihood (i.e., the probability of the data under the parameterized model) for the data 
+
+32 
+
+point _**x**_ 0 as _pθ_ ( _**x**_ 0). The log-likelihood can be expressed either exactly or through an ELBO: 
+
+**==> picture [388 x 30] intentionally omitted <==**
+
+**==> picture [357 x 30] intentionally omitted <==**
+
+Here we express the log-likelihood of masked models with our derived discrete ELBO. We use log _pθ_ ( _x_[(] 0 _[l]_[)] _[|]_ _**[x]**[n]_[)][(predicted][data][probability][given][known][tokens)][as][an][alternative][expression][for] the cross-entropy term _**e**[⊤] x_[(] 0 _[l]_[)][log] _**[ µ]** θ_[(] _[l]_[)][(] _**[x]**[n]_[)][, aligning it with the common formulation in ARMs.][The] perplexity (PPL) is defined as: 
+
+**==> picture [278 x 25] intentionally omitted <==**
+
+where _D_ is the data dimension, and _p_ data is the data distribution (such as the validation/test set). 
+
+**Generative Perplexity** evaluates a model’s generation quality by measuring the perplexity of its generated samples under some off-the-shelf model. It is related to both training and sampling. We adopt GPT-2 Large as the off-the-shelf evaluator following previous works. 
+
+**Entropy** measures the diversity of tokens in a sequence. For a sequence of length _L_ that contains _K_ distinct tokens, with each token _k_ occurring _Lk_ times, the entropy is computed as _−_[�] _[K] k_ =1 _[p][k]_[ log] _[ p][k]_[,] where _pk_ = _Lk/L_ represents the probability of occurrence of token _k_ . 
+
+## H.2 MODEL AND DATASET DETAILS 
+
+Following SEDD (Lou et al., 2023) and MDLM (Sahoo et al., 2024), we utilize an encoder-only transformer with a DDiT (Peebles & Xie, 2023) architecture, incorporating RoPE (Su et al., 2024). We use the small-size model variant, which consists of 12 layers, 12 attention heads, a hidden dimension of 768, and a timestep embedding dimension of 128, amounting to approximately 170M parameters including the word embedding matrix. 
+
+Our experiments are conducted on the OpenWebText dataset (Gokaslan et al., 2019), which contains around 8 million documents, with the last 100k reserved for validation. The dataset is tokenized using the GPT-2 tokenizer, resulting in a vocabulary size of 50,257 (excluding the mask token). Sequences are concatenated and wrapped to a length of 1024 tokens, with the first, last, and inbetween tokens of concatenated sequences set to eos. 
+
+## H.3 TRAINING DETAILS 
+
+Following SEDD (Lou et al., 2023) and MDLM (Sahoo et al., 2024), we use the AdamW optimizer with a batch size of 512 and a learning rate that is linearly warmed up from 0 to 3e-4 over the first 2,500 steps. We apply a dropout rate of 0.1, clip the gradient norm to 1, and utilize an exponential moving average (EMA) with a rate of 0.9999. Mixed-precision training is enabled with bfloat16. 
+
+All our training experiments are conducted on 8 NVIDIA A100 40GB GPUs for slightly over 100k iterations, which takes around 1.5 days. 
+
+## H.4 SAMPLING DETAILS 
+
+We directly use the pretrained models (AR, SEDD Absorb, MDLM) trained on OpenWebText provided by MDLM[11] . These models share the same architecture and size (with the exception of the final layer in AR). SEDD and MDLM are trained for 1M iterations, while the corresponding AR baseline is trained for half as many steps to ensure a comparable number of tokens seen. 
+
+For the baselines, SEDD is sampled using its analytic sampler (Tweedie _τ_ -leaping), and MDLM is sampled both with and without the caching strategy. Their sampling timesteps are uniformly discretized. In our first-hitting sampler, parallel decoding is achieved by unmasking the same number 
+
+> 11https://github.com/kuleshov-group/mdlm/ 
+
+33 
+
+of tokens at each step. Although the pretrained MDLM model is claimed to be time-independent, we find that adding the time condition slightly improves performance in our sampler. All sampling experiments are conducted on a single NVIDIA RTX A6000 GPU, and the reported metrics are averaged on 64 random samples. 
+
+## I OLD VERSION OF THE INTRODUCTION 
+
+We _**highlight**_ our key findings: (1) MDMs, in both training and sampling, are essentially timeagnostic masked models (or order-agnostic auto-regressive models), enjoying **20** _×_ faster sampling and diverging from the design choices of diffusion models. This also justifies the theoretical foundation of masked models as they are equivalent and simpler formulations of the more principled MDMs. (2) We challenge previous claims that MDMs can surpass ARMs in text generation by identifying a hidden but critical numerical issue that reduces the token diversity and renders previous evaluations unfair. After fixing it, we find MDMs significantly lagging behind ARMs in generative perplexity. 
+
+For training, we prove that the continuous-time evidence lower bound (ELBO) objective of MDMs can be expressed by the number of masked tokens with an implicitly defined mixture-of-experts model. It provides a discrete ELBO for masked models and coincides with the ELBO previously derived for order-agnostic auto-regressive models (Uria et al., 2014; Hoogeboom et al., 2021a). 
+
+For sampling, by analytically sampling the time when any mask token is first unmasked, we propose a theoretically equivalent first-hitting sampler (FHS) to avoid most of the time-consuming categorical sampling and perform decoding token by token with no approximation errors. It is further extended to enable parallel decoding and incorporate high-order approximations, achieving a 20 _×_ speedup compared to previous MDM sampling procedures. When the parameterized model is independent of the time variable, we recover the sampling of masked models. 
+
+For evaluation, we discover that while MDMs exhibit extremely low generative perplexity with numerous sampling steps, the generation quality is compromised by reduced token diversity. By examining the numerical precision during sampling, we identify a previously unrecognized issue with Gumbel-based categorical sampling. Specifically, reducing the floating-point precision from 64-bit to 32-bit significantly truncates the Gumbel variables, which theoretically lowers the temperature and empirically improves the generative perplexity of pretrained models (Lou et al., 2023; Sahoo et al., 2024) from 126.11 to 31.24, but with a decreased sentence entropy from 5.66 to 5.17. 
+
+## J ADDITIONAL RESULTS 
+
+J.1 TRAINING RESULTS 
+
+- J.1.1 COMPARISON OF TRAINING VARIANTS 
+
+**==> picture [332 x 142] intentionally omitted <==**
+
+**----- Start of picture text -----**<br>
+7 discrete ELBO w/o low-discrepancycontinuous ELBO w/o low-discrepancy 55 discrete ELBO w/o low-discrepancy continuous ELBO w/o low-discrepancy<br>continuous ELBO w/o time-conditiondiscrete ELBO 50 continuous ELBO w/o timediscrete ELBO -condition<br>6 continuous ELBO continuous ELBO<br>AR 45 AR<br>5 40<br>35<br>4<br>30<br>3 25<br>20<br>2<br>0 20000 40000 60000 80000 100000 20000 40000 60000 80000 100000<br>Training Iterations Training Iterations<br>(a) Training Loss (b) Validation Perplexity<br>Training Loss<br>Validation Perplexity<br>**----- End of picture text -----**<br>
+
+
+Figure 11: Comparison of training variants. 
+
+34 
+
+We compare different training variants (continuous-time/discrete ELBO, time-conditioned/timeindependent network) of MDMs. By default, we condition the network on time for continuous-time ELBO and on the masked ratio for discrete ELBO. We also apply the low-discrepancy sampler described in Appendix G.2. Providing the network with extra conditions as auxiliary information may potentially facilitate the training process. 
+
+As shown in Figure 11, all variants exhibit similar performance in both training and validation. Adding the time condition provides a slight improvement over the time-independent network, and the discrete ELBO performs marginally worse than the continuous-time ELBO. However, these differences are negligible. The low-discrepancy sampler notably reduces the variance in training loss, though the validation perplexity curve remains relatively stable, likely due to the smoothing effect of the EMA. Nonetheless, MDMs still significantly lag behind the counterpart ARM. 
+
+## J.1.2 FAILED TRAINING ATTEMPTS 
+
+Training MDMs with the ELBO is analogous to maximum likelihood training of diffusion models (Song et al., 2021b; Kingma et al., 2021; Lu et al., 2022a; Zheng et al., 2023b). Therefore, we borrow well-established techniques from the SOTA likelihood model i-DODE (Zheng et al., 2023b) within the diffusion literature, including velocity parameterization and variance reduction. 
+
+**Flow Matching/Preconditioning** Different parameterizations are theoretically equivalent but have distinct empirical implications in diffusion models. As an alternative to data or noise prediction, velocity parameterization has proven effective in the maximum likelihood training of diffusion models (Zheng et al., 2023b). It is also related to flow matching (Lipman et al., 2022) and the preconditioning technique in EDM (Karras et al., 2022). As MDMs employ mean parameterization (or data prediction), exploring alternative parameterizations may enhance training performance. In diffusion models, different parameterizations can be understood as expressing the mean prediction model _**µ** θ_ with a “skip-connection” style preconditioning: 
+
+**==> picture [262 x 11] intentionally omitted <==**
+
+where _at, bt_ are some specific time-related coefficients, and _**F** θ_ is a free-form network. In MDMs, this general preconditioning can be formulated by the one-hot vector _**e** x_ ( _tl_ )[:] 
+
+**==> picture [272 x 17] intentionally omitted <==**
+
+However, such a formulation in MDMs makes no difference to the training. _**µ**_[(] _θ[l]_[)][(] _**[x]**[t][, t]_[)][is][only] trained when _x_[(] _t[l]_[)] = _m_ to predict the data probabilities at dimensions 0 _∼ m −_ 1. Adding _**e** x_ ( _tl_ ) (which is 0 at dimension 0 _∼ m −_ 1) to the model output does not impact the functional dimensions. To tackle this, we attempt to employ a self-conditioning technique (Chen et al., 2022) 
+
+**==> picture [267 x 11] intentionally omitted <==**
+
+where _θ[−]_ is the stop-gradient version of _θ_ . For implementation, the extra condition _**F** θ−_ (1) is concatenated to the original input along the feature dimension (2) is replaced by blank with 50% probability during training, and substituted by the earlier model prediction during inference. However, we empirically find this technique highly unstable during training, adding extra model parameters and incurring excessive training costs. 
+
+**Variance Reduction via Importance Sampling** The NELBO for both diffusion models and MDMs can be expressed as an expectation _L_ = E _t_ [ _Lt_ ] over uniformly distributed _t_ , where _t_ can be either continuous (e.g., the continuous time) or discrete (e.g., the discrete time or the number of masked tokens). Importance sampling (IS) for _t_ can be introduced by rewriting the training loss with a proposal distribution _pt_ : 
+
+**==> picture [257 x 24] intentionally omitted <==**
+
+While the overall loss _L_ remains invariant to the choice of _pt_ , the variance of the loss, Var _t∼pt L_ ˜ _t_ , � � is influenced by _pt_ . We can optimize _pt_ for variance minimization. For continuous _t_ , the density 
+
+35 
+
+**==> picture [368 x 111] intentionally omitted <==**
+
+**----- Start of picture text -----**<br>
+7 discrete ELBO 60 discrete ELBO<br>discrete ELBO + low-discrepancy discrete ELBO + low-discrepancy<br>6 discrete ELBO + adaptive IS 55 discrete ELBO + adaptive IS 0 . 0020<br>50<br>5 0 . 0015<br>45<br>4 40 0 . 0010<br>35<br>3<br>0 . 0005<br>30<br>2<br>0 20000 40000Training Iterations60000 80000 100000 20000 40000Training Iterations60000 80000 100000 0 200 400 n 600 800 1000<br>(a) Training Loss (b) Validation Perplexity (c) Importance Weights<br>pn<br>Training Loss<br>Validation Perplexity<br>**----- End of picture text -----**<br>
+
+
+Figure 12: Variance reduction methods. 
+
+_pt_ can be parameterized by a monotonic neural network and learned by gradient descent (Kingma et al., 2021; Zheng et al., 2023b). 
+
+For simplicity, we instead consider the discrete case of _t_ (the number of masked tokens in the discrete ELBO). We adopt the adaptive IS proposed by Improved DDPM (Nichol & Dhariwal, 2021). ˜ ˜ Specifically, as Var _t∼pt Lt_ = E _t∼pt L_[2] _t −L_[2] , the optimal _pt_ is given by _pt ∝_ �E [ _L_[2] _t_[]][.][Given] � � � � that E � _L_[2] _t_ � is unknown in advance and may vary throughout training, we maintain a history of the previous 10 values for each loss term and update this dynamically during training. At the beginning of training, we sample _t_ uniformly until we have 10 samples for every _t_ . 
+
+We visualize the training curves and optimized importance weights at around 100k iterations in Figure 12. Unfortunately, while the adaptive IS technique reduces the variance to a level comparable to the low-discrepancy sampler, it also results in degraded performance. We hypothesize that the dynamical updated _pt_ may make the loss estimator biased. 
+
+- J.2 SAMPLING RESULTS 
+
+- J.2.1 COMPARISON OF HIGH-ORDER VARIANTS 
+
+**==> picture [386 x 132] intentionally omitted <==**
+
+**----- Start of picture text -----**<br>
+200 MDLMMDLM ++ first-hittingfirst-hitting extrapolation 5 . 74 MDLMMDLM ++ ffirst-hittingrst-hitting extrapolation<br>MDLM + first-hitting predictor-corrector 5 . 72 MDLM + frst-hitting predictor-corrector<br>180<br>5 . 70<br>160<br>5 . 68<br>140<br>5 . 66<br>120<br>5 . 64<br>100 5 . 62<br>0 1 2 3 4 5 6 7 8 0 1 2 3 4 5 6 7 8<br>Sampling Time/Sequence (s) Sampling Time/Sequence (s)<br>(a) Generative Perplexity (b) Entropy<br>GenPPL Entropy<br>**----- End of picture text -----**<br>
+
+
+Figure 13: Comparisons of high-order variants of the first-hitting sampler with steps _N ∈ {_ 32 _,_ 64 _,_ 128 _,_ 256 _,_ 512 _,_ 1024 _}_ . 
+
+In Figure 13, we compare the two high-order variants of our proposed first-hitting sampler. In terms of the generative perplexity, The extrapolation strategy performs best when _N ≤_ 128, and the predictor-corrector strategy is more effective when _N ≥_ 256. We also observe that lower generative perplexity is associated with decreased entropy, indicating an inherent trade-off. 
+
+36 
+
+**==> picture [386 x 133] intentionally omitted <==**
+
+**----- Start of picture text -----**<br>
+MDLM + first-hitting first-order (32-bit) 5 . 74 MDLM + frst-hitting frst-order (32-bit)<br>180 MDLM + first-hitting second-order (32-bit) MDLM + first-hitting second-order (32-bit)<br>MDLM + first-hitting first-order (64-bit) 5 . 72 MDLM + frst-hitting frst-order (64-bit)<br>MDLM + first-hitting second-order (64-bit) MDLM + first-hitting second-order (64-bit)<br>160 5 . 70<br>5 . 68<br>140<br>5 . 66<br>120<br>5 . 64<br>100<br>5 . 62<br>0 1 2 3 4 5 6 7 8 0 1 2 3 4 5 6 7 8<br>Sampling Time/Sequence (s) Sampling Time/Sequence (s)<br>(a) Generative Perplexity (b) Entropy<br>GenPPL Entropy<br>**----- End of picture text -----**<br>
+
+
+Figure 14: Impact of numerical precision on the first-hitting sampler with steps _N ∈ {_ 32 _,_ 64 _,_ 128 _,_ 256 _,_ 512 _,_ 1024 _}_ . 
+
+**==> picture [397 x 126] intentionally omitted <==**
+
+**----- Start of picture text -----**<br>
+Position 1 Position 2<br>= 𝑝𝑡→𝑠remain = 𝑝𝑡→𝑠remain<br>𝝅 Equal probability of unmasking<br>A B C D E [M] A B C D E [M]<br>Shifted<br>< 𝑝𝑡→𝑠remain > 𝑝𝑡→𝑠remain<br>𝝅′ Unequal probability of unmasking<br>A B C D E [M] A B C D E [M]<br>**----- End of picture text -----**<br>
+
+
+Figure 15: Illustration of prioritized unmasking. 
+
+## J.2.2 IMPACT OF NUMERICAL PRECISION ON OUR SAMPLER 
+
+In Figure 14, we examine the impact of numerical precision on our first-hitting sampler by varying the floating-point precision in categorical sampling between 32-bit and 64-bit. For the high-order variants, we employ the extrapolation strategy when _N ≤_ 128 and the predictor-corrector strategy when _N ≥_ 256. In contrast to the observations under MDM’s original sampler, the temperaturelowering effect of the numerical truncation is significantly less influential under our sampler. Notably, the 32-bit second-order first-hitting sampler even results in slightly higher entropy compared to its 64-bit counterpart when _N ≥_ 512. 
+
+**Why the numerical issue is not notable in token-by-token decoding** With our first-hitting sampler, the inference of MDMs becomes a token-by-token decoding process, except that the time variable is additionally handled. In this case, the numerical issue becomes negligible, and 32-bit floating-point precision appears sufficient. We also observe that ARMs, which also adopt a token-bytoken sampling strategy, do not suffer from numerical issues under 32-bit precision. This suggests that _the numerical problem is a distinctive characteristic of the vanilla sampling process of MDMs (Eqn._ (10) _) that performs inaccurate categorical sampling simultaneously on all mask positions._ 
+
+This phenomenon can be explained as follows. As justified theoretically in Section 5.3, the implication of inaccurate categorical sampling includes two aspects: (1) temperature-lowering effect for a single token position and (2) prioritized unmasking for different positions (Figure 15). Both factors reduce the diversity and lower the entropy. However, when altering to token-by-token decoding, all remaining mask tokens have equal probability to be first unmasked, and the diversity decrease becomes less pronounced. This suggests that _the prioritized unmasking caused by shifted probabilities at all individual positions is the major factor_ . This effect accumulates across numerous sampling steps, eventually leading to notable diversity issues, even under 32-bit floating-point precision. 
+
+37 
+
+## J.3 ANAYSIS OF THE EFFICIENCY GAIN BY OUR SAMPLER 
+
+Due to the theoretical equivalence between the FHS and the original MDM sampling procedure, the correctness of the FHS is guaranteed and irrelevant to vocabulary size or sequence length. However, the efficiency gains (measured by inference wall-clock time) depend on several factors. 
+
+Let the sequence length be denoted as _L_ , vocabulary size as _|V |_ (excluding the mask token), the number of sampling steps (for original MDM sampling) as _N_ , the number of function evaluations as _NFE_ , and the number of categorical sampling operations as _NCS_ . As stated in Section 4, our FHS reduces inference time by minimizing _NCS_ . For original MDM sampling with the caching strategy, _NFE ≈ N_ (1 _−_ (1 _−_ 1 _/N_ ) _[L]_ ), _NCS_ = _NL|V |_ . For the FHS, _NCS_ = _L|V |_ . The total time cost can be expressed as _NFE × t_ 1 + _NCS × t_ 2, where 
+
+- _t_ 1 is the time for one network call, influenced by model size. 
+
+- _t_ 2 is the time for categorical sampling, averaged per position and class, which involves two logarithmic operations, and is fixed. 
+
+For a fair comparison, we evaluate under the **same** _NFE_ , ensuring similar generation quality. The inference time ratio between original MDM sampling and the FHS is ( _NFE × t_ 1 + _NL|V |t_ 2) : ( _NFE × t_ 1 + _L|V |t_ 2). Therefore, the FHS yields larger speedups under the following conditions: 
+
+- **Smaller Model Size:** When the model is smaller, _t_ 1 decreases, making categorical sampling relatively more expensive compared to network evaluation. 
+
+- **Larger** _NFE_ **,** _L_ **, or** _|V |_ **:** Higher values for these parameters increase _NCS_ in original MDM sampling, amplifying the speedup provided by the FHS. 
+
+Examples: 
+
+   - **Paper Case:** _|V |_ = 50 _,_ 526, _L_ = 1024. To match the original MDM sampling at _N_ = 10 _,_ 000 steps, _NFE ≈_ 973. The model size is approximately 600M parameters, with a time ratio of _t_ 1 : _L|V |t_ 2 _≈_ 1 : 1 _._ 56. In this case, the inference time ratio is around 17, corresponding to a **20** _×_ **speedup** . If _N_ = 2048, the ratio drops to around **5** _×_ . 
+
+   - **DiffSound** (Yang et al., 2023): This model is 3 _×_ larger and uses a much smaller vocabulary. Specifically, _L_ = 265, _|V |_ = 256, with _t_ 1 : _L|V |t_ 2 _≈_ 14 _._ 6 : 1. Here, categorical sampling is much cheaper relative to network evaluations. Using fewer steps, _N_ = 100, results in _NFE ≈_ 93, and the speedup ratio is only around **1.07** _×_ . 
+
+- J.3.1 EXAMPLES OF GENERATED TEXT 
+
+38 
+
+<|endoftext|> the new cars are crossovers. 
+
+AT&T Insurance Marketing Manager, Megan Maxwell, tells us that Model X was "reasonably priced, effective and inspires strong sentiment among consumers." She says: Our GM car for discussion is shown as part of our drive 20 percent around the world and even a competitor. Our GM for discussion alt shows as one of our most popular cars in the world. We are in multiple countries introducing firmware for our new vehicles. While we are confident in our prices, we rely upon GM Auto’s sales data and know we must adapt this process to meet the needs of all customers. 
+
+The proposed pricing is similar to that of the cheaper Range Rover and other cheaper sport utility vehicles, which are primarily offered through its dealerships. Alongside a Volt, Delphi XE8 includes a plug-in hybrid version called Volt Energy. 
+
+"Dynamic pricing is our way to deliver owners of more attractive or more reasonable outcomes or to find more marketable models that appeal to them more than their competitors," notes Maxwell. 
+
+Earlier this week, GM analyst Greg Clifford predicted that Intel Global Radical Charge Power Savings (STB) would start at $3,300 over the product lifecycle with an adoption rate of 50 percent by 2025.<|endoftext|>The Warner Bros. foreign distribution arm The Weinstein Company tried to keep the Weinstein Company character Harvey Weinstein out of The Bourne Identity, but now that the character has been ousted the distributor has effectively banned him from the Middle East or North Africa. 
+
+Caici International Union of Arabic and Al-Ahly Travel Negotiations president Shadi Hamid tweeted Thursday: 
+
+A merciful Allah lifts my people wherever they are, provided that I am safe and secure. — Shadi Hamid (@shadihamid) June 26, 2014 An anonymous official familiar with the matter tells The Hollywood Reporter that the tentative suspension of the sale was prompted by a request by Weinstein’s Company that The Weinstein Company not use the #BourneCostabool hashtag or its photo that appeared in the film. Weinstein’s studio says he hasn’t spoken with the history-making movie star after the film was released on Nov. 19 but that Trump’s inauguration had somewhat diminished the company’s image abroad. The awards-winning film grossed more than $411 million globally. EARLIER: 
+
+Original Screenplay for ‘The Bourne Identity’ Is Now Removed Grisly Official Appointments Express for Harvey Weinstein Probing Bourne Identity Alleged Tarantino Power Grab Shot with $42 Million Spent on Hollywood Update: is just re-issued as The Weinstein Company ban shows nothing. 
+
+BREAKING: Mancini exits technicalities in Weinstein’s sale of Leadville to Columbia pic dir. exec-to-branch. — Reginald Perag (@ReginaldCAeg) June 26, 2014 
+
+Leaked From Studio #BourneCostabool. I came out with it after #HarveyTurnedEmDown. — Reginald Perag (@ReginaldCAeg) June 25, 2014<|endoftext|>NETWORK FINALS: H. REILLARY KREATY & HARDBALL added extra 0.1 to final numbers. UNBELIEVABLE INJURY narrowly lost 0.0 from last night. NEW MIX TAPE (9P) +11.0, CNN NEWSROOM +10.6, LUTHER KING 5 +8.1, SOUTH PARK MIDDLE FIVE +2.4, DJ Khaled +2.2, WES CRAFT +1.6, HOUSE HUNTERS INTL AROUND FOOD +0.4, TEEN YEARS MOM 2015 +0.1, TINY HOUSE HUNTERS INTL +0.1, MLB TONIGHT +0.1, FLCL +0.0, SEUDAS FAMILY -0.3, ANZE +0.1, TEEN TITANS GO! +0.1. 10/24/15 –0.3 1.49 ANNCOUNTERS. BARRIERE Z PACK +0.1, NYXY +0.0, OTHER VIEWERS (-0.2) +1.0, A&E MOVIE FIXER UPPER -0.0 
+
+Broadcast Official Nationals Program Ratings Chart 
+
+CABLE HIGHLIGHTS: UBS CELEBRATES THE DAY! CLOUD CROSSWITCH was at the top with dramatic 4.121, down 23% over last night (4/27), to #4. Football Night in America was #2 (and barely a night after ending), with TIZARD (2.092, 0.919), MASTERS OF KARMA (2.108, 0.914) and SOUTH 
+
+Figure 16: The counterpart ARM. 
+
+39 
+
+<|endoftext|> I was striking out, he got it to the third out. I know it wasn’t really a catch there, but he didn’t consider that at all. I knew what it wasn’t about. We scored by one run, so it was a difficult thing for me to go to a “get-out,” but being on the board is not an easy fact. I knew it was in play, and went to the third out that it needed to be thrown to. I had nothing to say about it, and it was the only opportunity for me to get, to make an appeal that might not come back, and it was the only time he saw that at that moment. And so we continued. “So we were sitting in the plus-five-and-plus-three-at-night, because we were up on an inning. We were in pinch-hit early in the ninth. I looked at a guy and was very nervous and confused, so when I looked at this man — I can’t remember what he was doing, but to double or deadse the bases for sure — I said you’ll be the first one up, then I’m out of the ballpark. I felt like something had to be wrong with me, and he turned to me and told me, “that’s as bad as the rest,” just like that — “I bet!” I said calmly. “I bet,’” “Gotta do your best! Do not bet!’” “And when that happens, do you think I can be won by a one or two runs?” He stood there and looked stunned. “You mean that?” “Yes, absolutely.” “‘Yeah, absolutely.” “Well, is that a message to you?’“” And he looked back to me and said, “So we aren’t going out?” “Well, yes,” said me, “but I believe so I believe.”” “I bet,” “Yeah, I bet, but when we’re on the board, how much time are we gonna lose?” “Absolutely not,” “I bet,” “all right. I’m not going out. It’s me, understand.” “I bet, I believe not.” “What happened?”” “It happened!” “Did you hear a clue?” “I said, “Oh, no! I-I-I heard that fifth-dinger! Give me the clue!” The players, myself, and the “Man, Man, Man, it’s just beyond hell!” murmurs of the players. At the same time, I said, myself, “Young man, I’ve got to say — I won’t screw you right here.” I went on, “You can take it. You’re not going to lose.”” I smiled. “You know what you got to admit to yourself? This happened in baseball. I didn’t screw you in baseball, it don’t matter, I’ll screw you in a way.” He took the fifth-dinger and said, “It’s the end in baseball, it’s the end.” “That’s correct!” I said. “Yes, you can’t win in baseball,” I said. “But you’re not winning in baseball.” He turned to me. “No, really, it’s alright whether you’re winning or not.” — “I’m sure,” he said. “Good money!” — I cut off. “You’re not going to get this out. You do.” Those were a few words. As I were thinking, “What an enterprise.” “What are you in baseball?” 
+
+“Ah, and it’s a game, not a story and a number. If you believe the most in-the-30s stories are about the when-they-had-to-be-done-as-cardinals-but-recan’t-they-get-in story?” I said “suck,” and “We did stop listening to the number, and we had to come off with the number.” “Exactly,” said Mike. <|endoftext|> 
+
+Figure 17: MDLM with the original sampler (32-bit), 50k steps. 
+
+40 
+
+<|endoftext|>I know all about generators and that is one way to build an array. def call () : # calls for (t.length, i) = 0: str += " false ",t = (TController person.list objects) func("call".url("")for a,n = t.length: [T in t.T[n])): # def calls [a,n]: * str = str32(T.setUserstr() for a, t & i in i): str += str28(n = [] t[n=i] # put in a list of objects: t = tree() call [T in T.T[n i] = array(t.length) if t.length: [T[i]=[]): string d = [] t stracket3 = tail.stracket(string e) [modify: True] tarring = tail.filesPDF.print(dir: "./file") (piling: True, takeAttempts: false): if hash == 0: print "failed" call r = slacktrace(): names = t.names. relist(cherying) def up(,x, mtr) : p. stuff array. append(:xltr) # So they should have this method def bits(.[1:2]: return "x;0".bit()) #3 Ok, now we want to create a simple list. Try. It’s just junk moves. This array can have all of the objects arguments it packed in: [5].add( {instance.new = new (instance = (instance.new)) (instance = (instance.new)) (console.join(instance.new)) func R[ 3] 
+
+In our example, [1, 2], [2, 3, 4, 5 and 8 . . . (0, 31’, 42‘’]’ lists contain more elements than in normal arrays and other complex types. It might be significant to say the list includes each engine constant size if it’s not slow, but not if it contains no elements. To summarize, we get a list with 3 possible names and divide that list gradually between #3-4. Now here’s how we’ll build an array with synthetic element references: foo = Foo { 3:3:4 } observe a variable from (func yout int y) -> nil do [apply (number of]) assert false if not true # make references for foo bar x (map (variable x y = let x x as par y x x as par y]) (strip ’uoy) print(’foo bar foo’)) """.add bar x """.add (print(’foo foo’)) {any,...} observe a tuple from (func (func xs) -> nil do let.add = let element if (element == tuple[numberOf]: 0): ".add(_) done if (done == 1) return "doDone"} ".add (j2.resolve(foo), ’(WhatWhy’.by’,’Call’.d somewhere?’),) end (waffle(j1, (j2.w2](require::John method ’call)(’ of [’Ref()’]])))))) } kilobyms aren’t practical with these from a memory perspective. And don’t ask at the very end where lines are the lowest line when they won’t be allocated in memory. 
+
+(map? # add integers for Lua Lua? # do arithmetic for Emacs) end Lua? def x() # retrieve a++ list item (func (func list)) -> nil do (for method ’_of’, t) i a] puts t’m ”-L’,’N”3)) return nil def drop_list #5 Added by clip : Scratch 
+
+Now that you know it’s adding elements moves again, a lot of other tricks are used in some Perl code. Common Lisp is the lone voice of the Emacs-Stuff. I should be careful just that Lisp is good and can help out, it is easier to make the code readable even than it is to express the tested is really pretty. Having a lot of clause numbers is good enough. Still, you’ll find difficulties in extracting and adding the references pretty amazing. You have to look at code to get it to work. Each line has to introduce a name for each variable and its arguments. Combine the arguments with as1,2,2,3,4,5 . . . , changing this to one which those argument arguments is called. When we are functional it’s correct to pass in multiple elements from multiple lists: [] (x, d) list.remove() d1 . . . (0, 3, (10, 6, 12) (list(or, r))))function () is identical to the line<|endoftext|> 
+
+Figure 18: MDLM with the original sampler (64-bit), 50k steps. 
+
+41 
+
+<|endoftext|> tough cases be property/private fields in Base class for example Class or with struct containing member. -Loose the logic to possible the entry point to a species tree: class Terence__ = ‘sum__’ collections.create_species_tree( Age = Age(=’ab’). # Adult; Reward = Class Agg::PopulationId( (’Founded by:’), - ’Age’;Biometric’,’Nominal’,’Possible inhabit:’, Population’,’Life’) ) To construct a family tree then it uses join(members) creating a chain(MONS in a family tree) 
+
+Using ((each ( urn__) multi-found 10..12 sequence heads { ’Master’: ’Maiar’: (any member)? ’M’; members=BB[’Artefemp():3], col’y?’: export_to<table> - 12, ’BCG or Unright’= (’some point: NUMEGatsL’) -> X? ’B’; return unright; 1, 0, 3}))) Imple via Funrophy. . . What we need is our Fugai. Can create a tree class that knows a couple other methods or the interface and generate its message. That’s the point. Generate members are using they are ordered in a tuple as a of> from>, so that user will be told member entries: 
+
+Garage: by an ’H": This ##group belongs to all mothers. Martin#being an infant Martin = join(members) 
+
+2. Slimming the tree it might look like this: // Dont break the interface for the popular io.service and DoNot using iauto import strings = new System.getParameter(>’strings’) case latermy new System.getParameter(i auto) (rest = 0) case latermy new System.getParameter(strings, i) 
+
+-Left String, Group Deleted, Advanced Identity collection removed because the collection was updated in memory. Its correctness algorithm is to automatically append the family membership: find(my) = from(System.Families).find(’kindles’) $ Member To construct a separate one, say it wants to extract the locations of the following: struct aity := behavior.shallow(location)}(object) any : implicit struct Aggido = this. create("Addons") => implicit.add(”) You can create the following manifest |RunningSeparative relation: 
+
+You should be able to embed an Aggido rule in the Image of the JSONs until You are Aggido queries in json format. Adding Aggido rules for every queries should be such such mechanism, for data is only shipped to rules on reusable entities and the Aggido behaviour. Aggido application needs not register and read. Translation 
+
+So now, we have the # required fields, default priority and timestamp. Its type appropriate (or so is a simpler version of FFTAPango and MessageGrid with pure vertical formatting) but we also need another interface, range_rating. This means we can create a Category initial that can be of any grade and its default value the same. FFTAPango also allows us to combine use of two content names. For example: public w = Long(’yes.txt’) doIf(SignatureCaseStaining(w).get_row...), doIf == ’heading’ p.as_on(0, ’Fuh.’) p.as_low(0,”dogs ’, ”, 1.2.1000’; end p.dec_of(’2.8’, 0.9, ”, ’Content’) The simplified FFTAPang that follows has to be named as a tmuple with rvalue or an Array() after the oui’ extension at class level: public string name var nameeme = Long(’faju’) p.update_to(name,’Single Timothy’) p.as_right(name,’The British’, \’, 0, \’, 0, 0.7’) - Text expression with a """" parameter be used to generate list-expression for the word column. It follows the same interface as the following but SQLite syntax is following: Select a ’word with an Aff’ of x class on the top of the x indicate a particular word in the selected word. list_expression = h[x], Long[’jobRemoval’: "Mf,gainfree’]. If named as ‘wordcolumn’ the following image follows: public string p =Vector.Word<letter> { let a = t; // the second key p.values(’a’, ’I like w’, t’, ’Even though’; p.split(’A better, english’,’Association of ’,’, 0, 0.7; end p[’word <|endoftext|> 
+
+Figure 19: MDLM with our first-hitting predictor-corrector sampler, 1024 steps. 
+
+42

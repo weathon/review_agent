@@ -1,0 +1,800 @@
+## SYMMETRICDIFFUSERS: LEARNING DISCRETE DIFFUSION ON FINITE SYMMETRIC GROUPS 
+
+**Yongxing Zhang**[1] _[,]_[3] _[∗]_ **, Donglin Yang**[2] _[,]_[3] **, Renjie Liao**[2] _[,]_[3] 1University of Waterloo 2University of British Columbia 3Vector Institute nick.zhang@uwaterloo.ca, {ydlin, rjliao}@ece.ubc.ca 
+
+## ABSTRACT 
+
+The group of permutations _Sn_ , also known as the finite symmetric groups, are essential in fields such as combinatorics, physics, and chemistry. However, learning a probability distribution over _Sn_ poses significant challenges due to its intractable size and discrete nature. In this paper, we introduce _SymmetricDiffusers_ , a novel discrete diffusion model that simplifies the task of learning a complicated distribution over _Sn_ by decomposing it into learning simpler transitions of the reverse diffusion using deep neural networks. We identify the riffle shuffle as an effective forward transition and provide empirical guidelines for selecting the diffusion length based on the theory of random walks on finite groups. Additionally, we propose a generalized Plackett-Luce (PL) distribution for the reverse transition, which is provably more expressive than the PL distribution. We further introduce a theoretically grounded "denoising schedule" to improve sampling and learning efficiency. Extensive experiments show that our model achieves state-of-the-art or comparable performance on solving tasks including sorting 4-digit MNIST images, jigsaw puzzles, and traveling salesman problems. Our code is released at https://github.com/DSL-Lab/SymmetricDiffusers. 
+
+## 1 INTRODUCTION 
+
+As a vital area of abstract algebra, finite groups provide a structured framework for analyzing symmetries and transformations which are fundamental to a wide range of fields, including combinatorics, physics, chemistry, and computer science. One of the most important finite groups is the _finite symmetric group Sn_ , defined as the group whose elements are all the bijections (or permutations) from a set of _n_ elements to itself, with the group operation being function composition. 
+
+Classic probabilistic models for finite symmetric groups _Sn_ , such as the Plackett-Luce (PL) model (Plackett, 1975; Luce, 1959), the Mallows model (Mallows, 1957), and card shuffling methods (Diaconis, 1988), are crucial in analyzing preference data and understanding the convergence of random walks. Therefore, studying probabilistic models over _Sn_ through the lens of modern machine learning is both natural and beneficial. This problem is theoretically intriguing as it bridges abstract algebra and machine learning. For instance, Cayley’s Theorem, a fundamental result in abstract algebra, states that every group is isomorphic to a subgroup of a symmetric group. This implies that learning a probability distribution over finite symmetric groups could, in principle, yield a distribution over any finite group. Moreover, exploring this problem could lead to the development of advanced models capable of addressing tasks such as permutations in ranking problems, sequence alignment in bioinformatics, and sorting. 
+
+However, learning a probability distribution over finite symmetric groups _Sn_ poses significant challenges. First, the number of permutations of _n_ objects grows factorially with _n_ , making the inference and learning computationally expensive for large _n_ . Second, the discrete nature of the data brings difficulties in designing expressive parameterizations and impedes the gradient-based learning. 
+
+In this work, we propose a novel discrete-time discrete (state space) diffusion model over finite symmetric groups, dubbed as _SymmetricDiffusers_ . It overcomes the above challenges by decomposing the difficult problem of learning a complicated distribution over _Sn_ into a sequence of simpler 
+
+> _∗_ Work done while an intern at Vector Institute. 
+
+1 
+
+problems, _i.e_ ., learning individual transitions of a reverse diffusion process using deep neural networks. Based on the theory of random walks on finite groups, we investigate various shuffling methods as the forward process and identify the riffle shuffle as the most effective. We also provide empirical guidelines on choosing the diffusion length based on the mixing time of the riffle shuffle. Furthermore, we examine potential transitions for the reverse diffusion, such as inverse shuffling methods and the PL distribution, and introduce a novel generalized PL distribution. We prove that our generalized PL is more expressive than the PL distribution. Additionally, we propose a theoretically grounded "denoising schedule" that merges reverse steps to improve the efficiency of sampling and learning. To validate the effectiveness of our SymmetricDiffusers, we conduct extensive experiments on three tasks: sorting 4-Digit MNIST images, solving Jigsaw Puzzles on the Noisy MNIST and CIFAR-10 datasets, and addressing traveling salesman problems (TSPs). Our model achieves the state-of-the-art or comparable performance across all tasks. 
+
+## 2 RELATED WORKS 
+
+**Random Walks on Finite Groups.** The field of random walks on finite groups, especially finite symmetric groups, have been extensively studied by previous mathematicians (Reeds, 1981; Gilbert, 1955; Bayer & Diaconis, 1992; Saloff-Coste, 2004). Techniques from a variety of different fields, including probability, combinatorics, and representation theory, have been used to study random walks on finite groups (Saloff-Coste, 2004). In particular, random walks on finite symmetric groups are first studied in the application of card shuffling, with many profound theoretical results of shuffling established. A famous result in the field shows that 7 riffle shuffles are enough to mix up a deck of 52 cards (Bayer & Diaconis, 1992), where a riffle shuffle is a mathematically precise model that simulates how people shuffle cards in real life. The idea of shuffling to mix up a deck of cards aligns naturally with the idea of diffusion, and we seek to fuse the modern techniques of diffusion models with the classical theories of random walks on finite groups. 
+
+**Diffusion Models.** Diffusion models (Sohl-Dickstein et al., 2015; Song & Ermon, 2020; Ho et al., 2020; Song et al., 2021) are a powerful class of generative models that typically deals with continuous data. They consist of forward and reverse processes. The forward process is typically a discrete-time continuous-state Markov chain or a continuous-time continuous-state Markov process that gradually adds noise to data, and the reverse process learn neural networks to denoise. Discrete (state space) diffusion models have also been proposed to handle discrete data like image, text (Austin et al., 2023), and graphs (Vignac et al., 2023). However, existing discrete diffusion models focused on cases where the state space is small or has a special ( _e.g_ ., decomposable) structure and are unable to deal with intractable-sized state spaces like the symmetric group. In particular, Austin et al. (2023) requires an explicit transition matrix, which has size _n_ ! _× n_ ! in the case of finite symmetric groups and has no simple representations or sparsifications. Finally, other recent advancement includes efficient discrete transitions for sequences (Varma et al., 2024), continuous-time discrete-state diffusion models (Campbell et al., 2022; Sun et al., 2023; Shi et al., 2024) and discrete score matching models (Meng et al., 2023; Lou et al., 2024), but the nature of symmetric groups again makes it non-trivial to adapt to these existing frameworks. 
+
+**Differentiable Sorting and Learning Permutations.** A popular paradigm to learn permutations is through differentiable sorting or matching algorithms. Various differentiable sorting algorithms have been proposed that uses continuous relaxations of permutation matrices (Grover et al., 2018; Cuturi et al., 2019; Blondel et al., 2020), or uses differentiable swap functions (Petersen et al., 2021; 2022; Kim et al., 2024). The Gumbel-Sinkhorn method (Mena et al., 2018) has also been proposed to learn latent permutations using the continuous Sinkhorn operator. Such methods often focus on finding the optimal permutation instead of learning a distribution over the finite symmetric group. Moreover, they tend to be less effective as _n_ grows larger due to their high complexities. 
+
+## 3 LEARNING DIFFUSION MODELS ON FINITE SYMMETRIC GROUPS 
+
+We first introduce some notations. Fix _n ∈_ N. Let [ _n_ ] denote the set _{_ 1 _,_ 2 _, . . . , n}_ . A _permutation_ 1 2 _· · · n σ_ on [ _n_ ] is a function from [ _n_ ] to [ _n_ ], and we usually write _σ_ as � _σ_ (1) _σ_ (2) _· · · σ_ ( _n_ )�. The _identity permutation_ , denoted by Id, is the permutation given by Id( _i_ ) = _i_ for all _i ∈_ [ _n_ ]. Let _Sn_ be the set of all permutations (or bijections) from a set of _n_ elements to itself, called the _finite_ 
+
+2 
+
+**==> picture [397 x 265] intentionally omitted <==**
+
+**----- Start of picture text -----**<br>
+q ( XT  ) q ( X 1) p data( X 0)<br>231 132 231 132 231 132<br>321 123 321 123 321 123<br>312 213 312 213 312 213<br>σT σt σ 1<br>O O O<br>q ( XT |XT − 1 , σT  ) q ( Xt|Xt− 1 , σt ) q ( X 1 |X 0 , σ 1)<br>XT ⋯ Xt ⋯⋯ X 1 X 0<br>p ( Xt|XT , σT [0] [)] p ( Xt− 1 |Xt, σt [0] [)] p ( X 0 |X 1 , σ 1 [0] [)]<br>p✓ ( σT [0] [|][X][T] [)] p✓ ( σt [0][|][X][t] [)] p✓ ( σ 1 [0] [|][X] [1][)]<br>on 50= = ~----- ©<br>σT [0] σt [0] σ 1 [0]<br>O O 4<br>x 1 Probability Forward Step x 2 x 1<br>x 3 123 [ x 1 ,  x 2 ,  x 3] [>] Reverse Step x 1 x 2 3 3<br>x 2 X { x 1 ,  x 2 ,  x 3 } > Merged Reverse Step x 3 x 3 co<br>Figure 1: This figure illustrates our discrete diffusion model on finite symmetric groups. The middle<br>graphical model displays the forward and reverse diffusion processes. We demonstrate learning<br>distributions over the symmetric group  S 3 via the task of sorting three MNIST 4-digit images. The<br>top part of the figure shows the marginal distribution of a ranked list of images  Xt  at time  t , while<br>the bottom shows a randomly drawn list of images.<br>Ascending<br>**----- End of picture text -----**<br>
+
+
+_symmetric group_ , whose group operation is the function composition. For a permutation _σ ∈ Sn_ , the permutation matrix _Qσ ∈_ R _[n][×][n]_ associated with _σ_ satisfies _e[⊤] i[Q][σ]_[=] _[e][⊤] σ_ ( _i_ )[for all] _[i][∈]_[[] _[n]_[]][.][In] this paper, we consider a set of _n_ distinctive objects _X_ = _{_ **x** 1 _, . . . ,_ **x** _n}_ , where the _i_ -th object is represented by a _d_ -dimensional vector **x** _i_ . Therefore, a ranked list of objects can be represented as a matrix _X_ = [ **x** 1 _, . . . ,_ **x** _n_ ] _[⊤] ∈_ R _[n][×][d]_ , where the ordering of rows corresponds to the ordering of objects. We can permute _X_ via permutation _σ_ to obtain _QσX_ . 
+
+Our goal is to learn a distribution over _Sn_ . We propose learning discrete (state space) diffusion models, which consist of a _forward process_ and a _reverse process_ . In the forward process, starting from the unknown data distribution, we simulate a random walk until it reaches a known stationary “noise” distribution. In the reverse process, starting from the known noise distribution, we simulate another random walk, where the transition probability is computed using a neural network, until it recovers the data distribution. Learning a transition distribution over _Sn_ is often more manageable than learning the original distribution because: (1) the support size (the number of states that can be reached in one transition) could be much smaller than _n_ !, and (2) the distance between the initial and target distributions is smaller. By doing so, we break down the hard problem (learning the original distribution) into a sequence of simpler subproblems (learning the transition distribution). The overall framework is illustrated in Fig. 1. In the following, we will introduce the forward card shuffling process in Section 3.1, the reverse process in Section 3.2, the network architecture and training in Section 3.3, denoising schedule in Section 3.4, and reverse decoding methods in Section 3.5. 
+
+## 3.1 FORWARD DIFFUSION PROCESS: CARD SHUFFLING 
+
+Suppose we observe a set of objects _X_ and their ranked list _X_ 0. They are assumed to be generated iid from an unknown data distribution in an IID manner, _i.e_ ., _X_ 0 _, X ∼ p_ data( _X, X_ ). One can construct a bijection between a ranked list of _n_ objects and an ordered deck of _n_ cards. Therefore, permuting objects is equivalent to shuffling cards. In the forward diffusion process, we would like to add “random noise” to the rank list so that it reaches to some known stationary distribution like the uniform. Formally, we let _S ⊆ Sn_ be a set of permutations that are realizable by a given shuffling method in one step. _S_ does not change across steps in common shuffling methods. We will provide concrete examples later. We then define the _forward process_ as a Markov chain, 
+
+**==> picture [308 x 19] intentionally omitted <==**
+
+where _q_ ( _Xt|Xt−_ 1) = » _σt∈S[q]_[(] _[X][t][|][X][t][−]_[1] _[, σ][t]_[)] _[q]_[(] _[σ][t]_[)][ and the first equality in Eq.][(1) holds since] _[ X]_[0] implies _X_ . In the forward process, although the set _X_ does not change, the rank list of objects _Xt_ changes. Here _q_ ( _σt_ ) has the support _S_ and describes the permutation generated by the underlying 
+
+3 
+
+shuffling method. Note that common shuffling methods are time-homogeneous Markov chains, _i.e_ ., _q_ ( _σt_ ) stays the same across time. _q_ ( _Xt|Xt−_ 1 _, σt_ ) is a delta distribution _δ_ ( _Xt_ = _QσtXt−_ 1) since the permuted objects _Xt_ are uniquely determined given the permutation _σt_ and _Xt−_ 1. We denote the _neighbouring states_ of _X_ via one-step shuffling as _NS_ ( _X_ ) := _{QσX|σ ∈S}_ . Therefore, we have, 
+
+**==> picture [289 x 24] intentionally omitted <==**
+
+Note that _Xt ∈ NS_ ( _Xt−_ 1) is equivalent to _σt ∈S_ and _Xt_ = _QσtXt−_ 1. 
+
+## 3.1.1 CARD SHUFFLING METHODS 
+
+We now consider several popular shuffling methods as the forward transition, _i.e_ ., _random transpositions_ , _random insertions_ , and _riffle shuffles_ . Different shuffling methods provide different design choices of _q_ ( _σt_ ), thus corresponding to different forward diffusion processes. Although all these forward diffusion processes share the same stationary distribution, _i.e_ ., the uniform, they differ in their mixing time. We will introduce stronger quantitative results on their mixing time later. 
+
+**Random Transpositions.** One natural way of shuffling is to swap pairs of objects. Formally, a _transposition_ or a _swap_ is a permutation _σ ∈ Sn_ such that there exist _i_ = _j ∈_ [ _n_ ] with _σ_ ( _i_ ) = _j_ , _σ_ ( _j_ ) = _i_ , and _σ_ ( _k_ ) = _k_ for all _k ∈{/ i, j}_ , in which case we denote _σ_ = ( _i j_ ). We let _S_ = _{_ ( _i j_ ) : _i ̸_ = _j ∈_ [ _n_ ] _} ∪{_ Id _}_ . For any time _t_ , we define _q_ ( _σt_ ) by choosing two indices from [ _n_ ] uniformly and independently and swap the two indices. If the two chosen indices are the same, then this means that we have sampled the identity permutation. Specifically, _q_ ( _σt_ = ( _i j_ )) = 2 _/n_[2] when _i ̸_ = _j_ and _q_ ( _σt_ = Id) = 1 _/n_ . 
+
+**Random Insertions.** Another shuffling method is to insert the last piece to somewhere in the middle. Let insert _i_ denote the permutation that inserts the last piece right before the _i_[th] piece, and let _S_ := _{_ insert _i_ : _i ∈_ [ _n_ ] _}_ . Note that insert _n_ = Id. Specifically, we have _q_ ( _σt_ = insert _i_ ) = 1 _/n_ when _i ̸_ = _n_ and _q_ ( _σt_ = Id) = 1 _/n_ . 
+
+**Riffle Shuffles.** Finally, we introduce the riffle shuffle, a method similar to how serious card players shuffle cards. The process begins by roughly cutting the deck into two halves and then interleaving the two halves together. A formal mathematical model of the riffle shuffle, known as the _GSR model_ , was introduced by Gilbert and Shannon (Gilbert, 1955), and independently by Reeds (1981). The model is described as follows. A deck of _n_ cards is cut into two piles according to binomial distribution, where the probability of having _k_ cards in the top pile is � _nk_ � _/_ 2 _[n]_ for 0 _≤ k ≤ n_ . The top pile is held in the left hand and the bottom pile in the right hand. The two piles are then riffled together such that, if there are _A_ cards left in the left hand and _B_ cards in the right hand, the probability that the next card drops from the left is _A/_ ( _A_ + _B_ ), and from right is _B/_ ( _A_ + _B_ ). We implement the riffle shuffles according to the GSR model. For simplicity, we will omit the term “GSR” when referring to riffle shuffles hereafter. 
+
+There exists an exact formula for the probability over _Sn_ obtained through one-step riffle shuffle. Let _σ ∈ Sn_ . A _rising sequence_ of _σ_ is a subsequence of _σ_ constructed by finding a maximal subset of indices _i_ 1 _< i_ 2 _< · · · < ij_ such that permuted values are contiguously increasing, _i.e_ ., _σ_ ( _i_ 2) _− σ_ ( _i_ 1) = _σ_ ( _i_ 3) _− σ_ ( _i_ 2) = _· · ·_ = _σ_ ( _ij_ ) _− σ_ ( _ij−_ 1) = 1. For example, the permutation 1 2 3 4 5 has 2 rising sequences, _i.e_ ., 123 (red) and 45 (blue). Note that a permutation 1 4 2 5 3 � � has 1 rising sequence if and only if it is the identity permutation. Denoting by _q_ RS( _σ_ ) the probability of obtaining _σ_ through one-step riffle shuffle, it was shown by Bayer & Diaconis (1992) that 
+
+**==> picture [352 x 37] intentionally omitted <==**
+
+where _r_ is the number of rising sequences of _σ_ . The support _S_ is thus the set of all permutations with at most two rising sequences. We let the forward process be _q_ ( _σt_ ) = _q_ RS( _σt_ ) for all _t_ . 
+
+## 3.1.2 MIXING TIMES AND CUT-OFF PHENOMENON 
+
+All of the above shuffling methods have the uniform distribution as the stationary distribution. However, they have different mixing times ( _i.e_ ., the time until the Markov chain is close to its 
+
+4 
+
+stationary distribution measured by some distance), and there exist quantitative results on their mixing times. Let _q ∈{q_ RT _, q_ RI _, q_ RS _}_ , and for _t ∈_ N, let _q_[(] _[t]_[)] be the marginal distribution of the Markov chain after _t_ shuffles. We describe the mixing time in terms of the total variation (TV) distance between two probability distributions, _i.e_ ., _D_ TV( _q_[(] _[t]_[)] _, u_ ), where _u_ is the uniform distribution. 
+
+For all three shuffling methods, there exists a _cut-off phenomenon_ , where _D_ TV( _q_[(] _[t]_[)] _, u_ ) stays around 1 for initial steps and then abruptly drops to values that are close to 0. The _cut-off time_ is the time when the abrupt change happens. For the formal definition, we refer the readers to Definition 3.3 of SaloffCoste (2004). In Saloff-Coste (2004), they also provided the cut-off time for random transposition, random insertion, and riffle shuffle, which are _[n]_ 2[log] _[ n]_[,] _[ n]_[ log] _[ n]_[, and][3] 2[log][2] _[ n]_[ respectively.][Observe] that the riffle shuffle reaches the cut-off much faster than the other two methods, which means it has a much faster mixing time. Therefore, we use the riffle shuffle in the forward process. 
+
+## 3.2 THE REVERSE DIFFUSION PROCESS 
+
+We now model the _reverse process_ as another Markov chain conditioned on the set of objects _X_ . We denote the set of realizable _reverse permutations_ as _T_ , and the neighbours of _X_ with respect to _T_ as _NT_ ( _X_ ) := _{QσX_ : _σ ∈T }_ . The conditional joint distribution is given by 
+
+**==> picture [293 x 20] intentionally omitted <==**
+
+where _pθ_ ( _Xt−_ 1 _|Xt_ ) =[�] _σt[′][∈T][p]_[(] _[X][t][−]_[1] _[|][X][t][, σ] t[′]_[)] _[p][θ]_[(] _[σ] t[′][|][X][t]_[)][.][To sample from] _[ p]_[(] _[X][T][|X]_[)][,][one simply] samples a random permutation from the uniform distribution and then shuffle the objects accordingly to obtain _XT_ . _p_ ( _Xt−_ 1 _|Xt, σt[′]_[)][ is again a delta distribution] _[ δ]_[(] _[X][t][−]_[1][=] _[ Q][σ] t[′][X][t]_[)][.][We have] 
+
+**==> picture [302 x 24] intentionally omitted <==**
+
+where _Xt−_ 1 _∈ NT_ ( _Xt_ ) is equivalent to _σt[′][∈T]_[and] _[X][t][−]_[1][=] _[Q][σ] t[′][X][t]_[.][In][the][following,][we][will] introduce the specific design choices of the distribution _pθ_ ( _σt[′][|][X][t]_[)][.] 
+
+## 3.2.1 INVERSE CARD SHUFFLING 
+
+A natural choice is to use the inverse operations of the aforementioned card shuffling operations in the forward process. Specifically, for the forward shuffling _S_ , we introduce their inverse operations _T_ := _{σ[−]_[1] : _σ ∈S}_ , from which we can parameterize _pθ_ ( _σt[′][|][X][t]_[)][.] 
+
+**Inverse Transposition.** Since the inverse of a transposition is also a transposition, we can let _T_ := _S_ = _{_ ( _i j_ ) : _i ̸_ = _j ∈_ [ _n_ ] _} ∪{_ Id _}_ . We define a distribution of inverse transposition (IT) over _T_ using _n_ + 1 real-valued parameters **s** = ( _s_ 1 _, . . . , sn_ ) and _τ_ such that 
+
+**==> picture [389 x 53] intentionally omitted <==**
+
+where _ϕ_ ( _·_ ) is the sigmoid function. The intuition behind this parameterization is to first handle the identity permutation Id separately, where we use _ϕ_ ( _τ_ ) to denote the probability of not selecting Id. Afterwards, probabilities are assigned to the transpositions. A transposition is essentially an _unordered_ pair of _distinct_ indices, so we use _n_ parameters **s** = ( _s_ 1 _, . . . , sn_ ) to represent the logits of each index getting picked. The term in parentheses represents the probability of selecting the unordered pair _i_ and _j_ , which is equal to the probability of first picking _i_ and then _j_ , plus the probability of first picking _j_ and then _i_ . 
+
+**Inverse Insertion.** For the random insertion, the inverse operation is to insert some piece to the end. Let inverse_insert _i_ denote the permutation that moves the _i_[th] component to the end, and let _T_ := _{_ inverse_insert _i_ : _i ∈_ [ _n_ ] _}_ . We define a categorial distribution of inverse insertion (II) over _T_ using parameters **s** = ( _s_ 1 _, . . . , sn_ ) such that, 
+
+**==> picture [323 x 19] intentionally omitted <==**
+
+5 
+
+**Inverse Riffle Shuffle.** In the riffle shuffle, the deck of card is first cut into two piles, and the two piles are riffled together. So to undo a riffle shuffle, we need to figure out which pile each card belongs to, _i.e_ ., making a sequence of _n_ binary decisions. We define the Inverse Riffle Shuffle (IRS) distribution using parameters **s** = ( _s_ 1 _, . . . , sn_ ) as follows. Starting from the last (the _n_[th] ) object, each object _i_ has probability _ϕ_ ( _si_ ) of being put on the top of the left pile. Otherwise, it falls on the top of the right pile. Finally, put the left pile on top of the right pile, which gives the shuffled result. 
+
+## 3.2.2 THE PLACKETT-LUCE DISTRIBUTION AND ITS GENERALIZATION 
+
+Other than specific inverse shuffling methods to parameterize the reverse process, we also consider general distributions _pθ_ ( _σt[′][|][X][t]_[)][ whose support are the whole] _[ S][n]_[,] _[ i.e]_[.,] _[ T]_[=] _[ S][n]_[.] 
+
+**The PL Distribution.** A popular distribution over _Sn_ is the Plackett-Luce (PL) distribution (Plackett, 1975; Luce, 1959), which is constructed from _n_ scores **s** = ( _s_ 1 _, . . . , sn_ ) as follows, 
+
+**==> picture [305 x 19] intentionally omitted <==**
+
+for all _σ ∈ Sn_ . Intuitively, ( _s_ 1 _, . . . , sn_ ) represents the preference given to each index in [ _n_ ]. To sample from PL **s** , we first sample _σ_ (1) from Cat( _n,_ softmax( **s** )). Then we remove _σ_ (1) from the list and sample _σ_ (2) from the categorical distribution corresponding to the rest of the scores (logits). We continue in this manner until we have sampled _σ_ (1) _, . . . , σ_ ( _n_ ). By Cao et al. (2007), the mode of the PL distribution is the permutation that sorts **s** in descending order. However, the PL distribution is not very expressive. In particular, we have the following result, and the proof is given in Appendix E. **Proposition 1.** _The PL distribution cannot represent a delta distribution over Sn._ 
+
+**The Generalized PL (GPL) Distribution.** We then propose a generalization of the PL distribution, referred to as _Generalized Plackett-Luce (GPL) Distribution_ . Unlike the PL distribution, which uses a set of _n_ scores, the GPL distribution uses _n_[2] scores _{_ **s** 1 _, · · · ,_ **s** _n}_ , where each **s** _i_ = _{si,_ 1 _, . . . , si,n}_ consists of _n_ scores. The GPL distribution is constructed as follows, 
+
+**==> picture [314 x 19] intentionally omitted <==**
+
+Sampling of the GPL distribution begins with sampling _σ_ (1) using _n_ scores **s** 1. For 2 _≤ i ≤ n_ , we remove _i −_ 1 scores from **s** _i_ that correspond to _σ_ (1) _, . . . , σ_ ( _i −_ 1) and sample _σ_ ( _i_ ) from a categorical distribution constructed from the remaining _n − i_ + 1 scores in **s** _i_ . It is important to note that the family of PL distributions is a strict subset of the GPL family. Since the GPL distribution has more parameters than the PL distribution, it is expected to be more expressive. In fact, we prove the following significant result, and the proof is given in Appendix E. 
+
+**Theorem 2.** _The reverse diffusion process parameterized using the GPL distribution in Eq. (9) can model any distribution over Sn._ 
+
+## 3.3 NETWORK ARCHITECTURE AND TRAINING 
+
+We now briefly introduce how to use neural networks to parameterize the above distributions used in the reverse process. At any time _t_ , given _Xt ∈_ R _[n][×][d]_ , we use a neural network with parameters _θ_ to construct _pθ_ ( _σt[′][|][X][t]_[)][.][In particular, we treat] _[ n]_[ rows of] _[ X][t]_[as] _[ n]_[ tokens and use a Transformer] architecture along with the time embedding of _t_ and the positional encoding to predict the previously mentioned scores. For example, for the GPL distribution, to predict _n_[2] scores, we introduce _n_ dummy tokens that correspond to the _n_ permuted output positions. We then perform a few layers of masked self-attention (2 _n ×_ 2 _n_ ) to obtain the token embedding _Z_ 1 _∈_ R _[n][×][d]_[model] corresponding to _n_ input tokens and _Z_ 2 _∈_ R _[n][×][d]_[model] corresponding to _n_ dummy tokens. Finally, the GPL score matrix is obtained as _Sθ_ = _Z_ 1 _Z_ 2 _[⊤][∈]_[R] _[n][×][n]_[.][Since the aforementioned distributions have different numbers of] scores, the specific architectures of the Transformer differ. We provide more details in Appendix B. 
+
+To learn the diffusion model, we maximize the following variational lower bound: 
+
+**==> picture [389 x 28] intentionally omitted <==**
+
+In practice, one can draw samples to obtain the Monte Carlo estimation of the lower bound. Due to the complexity of shuffling transition in the forward process, we can not obtain _q_ ( _Xt|X_ 0) analytically, 
+
+6 
+
+as is done in common diffusion models. Therefore, we have to run the forward process to collect samples. Fortunately, it is efficient as the forward process only involves shuffling integers. We include more training details in Appendix G. 
+
+Note that most existing diffusion models, such as those proposed by Ho et al. (2020) and Austin et al. (2023), use an equivalent form of the above variational bound, which involves the analytical KL divergence between the posterior _q_ ( _Xt−_ 1 _|Xt, X_ 0) and _pθ_ ( _Xt−_ 1 _|Xt_ ) for variance control. However, this variational bound cannot be applied to _Sn_ because the transitions are not Gaussian, and _q_ ( _Xt−_ 1 _|Xt, X_ 0) is generally unavailable for most shuffling methods. Most existing diffusion models also sample a random timestep of the loss. While this technique is also available in our framework, it introduces more variance and does not improve efficiency all the time. And for riffle shuffles, the trajectory is usually short enough that we can compute the loss on the whole trajectory. A detailed discussion can be found in Appendix C. 
+
+## 3.4 DENOISING SCHEDULE VIA MERGING REVERSE STEPS 
+
+If one merges some steps in the reverse process, sampling and learning would be faster and more memory efficient. The variance of the training loss could also be reduced. Specifically, at time _t_ of the reverse process, instead of predicting _pθ_ ( _Xt−_ 1 _|Xt_ ), we can predict _pθ_ ( _Xt′|Xt_ ) for any 0 _≤ t[′] < t_ . Given a sequence of timesteps 0 = _t_ 0 _< · · · < tk_ = _T_ , we can now model the reverse process as 
+
+**==> picture [312 x 20] intentionally omitted <==**
+
+To align with the literature of diffusion models, we call the list [ _t_ 0 _, . . . , tk_ ] the _denoising schedule_ . After incorporating the denoising schedule in Eq. (10), we obtain the loss function: 
+
+**==> picture [349 x 27] intentionally omitted <==**
+
+Note that although we may not have the analytical form of _q_ ( _Xti|Xti−_ 1), we can draw samples from it. Merging is feasible if the support of _pθ_ ( _Xti−_ 1 _|Xti_ ) is equal or larger than the support of _q_ ( _Xti|Xti−_ 1); otherwise, the inverse of some forward permutations would be almost surely unrecoverable. Therefore, we can implement a non-trivial denoising schedule ( _i.e_ ., _k < T_ ), when _pθ_ ( _σt[′][|][X][t]_[)][ follows the PL or GPL distribution, as they have whole] _[ S][n]_[as their support.][However,] merging is not possible for inverse shuffling methods, as their support is smaller than that of the corresponding multi-step forward shuffling. To design a successful denoising schedule, we first describe the intuitive principles and then provide some theoretical insights. 1) The length of forward diffusion _T_ should be minimal so long as the forward process approaches the uniform distribution. 2) If distributions of _Xt_ and _Xt_ +1 are similar, we should merge these two steps. Otherwise, we should not merge them, as it would make the learning problem harder. 
+
+To quantify the similarity between distributions shown in 1) and 2), the TV distance is commonly used in the literature. In particular, we can measure _D_ TV� _q_[(] _[t]_[)] _, q_[(] _[t][′]_[)][�] for _t_ = _t[′]_ and _D_ TV� _q_[(] _[t]_[)] _, u_ �, where _q_[(] _[t]_[)] is the distribution at time _t_ in the forward process and _u_ is the uniform distribution. For riffle shuffles, the total variation distance can be computed exactly. Specifically, we first introduce the _Eulerian Numbers An,r_ (OEIS Foundation Inc., 2024), _i.e_ ., the number of permutations in _Sn_ that have exactly _r_ rising sequences where 1 _≤ r ≤ n_ . _An,r_ can be computed using the following recursive formula _An,r_ = _rAn−_ 1 _,r_ + ( _n − r_ + 1) _An−_ 1 _,r−_ 1 where _A_ 1 _,_ 1 = 1. We then have the following result. The proof is given in Appendix F. 
+
+**Proposition 3.** _Let t ̸_ = _t[′] be positive integers. Then_ 
+
+**==> picture [353 x 31] intentionally omitted <==**
+
+_and_ 
+
+**==> picture [313 x 28] intentionally omitted <==**
+
+Note that Eq. (14) was originally given by Kanungo (2020). We restate it here for completeness. Once the Eulerian numbers are precomputed, the TV distances can be computed in _O_ ( _n_ ) time instead 
+
+7 
+
+**==> picture [382 x 153] intentionally omitted <==**
+
+**----- Start of picture text -----**<br>
+1.0<br>1.0 1<br>2<br>3<br>0.8 4 0.8<br>5<br>0.6 6 0.6<br>7<br>8<br>0.4 9<br>0.4<br>10<br>11<br>0.2<br>12<br>0.2<br>13<br>0.0 14<br>1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 15<br>t 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15<br>(a) (b)<br>TV Distance to Unifrom, n=100<br>**----- End of picture text -----**<br>
+
+
+Figure 2: (a) _D_ TV () _q_ RS[(] _[t]_[)] _[, u]_[computed using Eq.][(14)][.][We choose] _[ T]_[=][15][ (red dot) based on the] threshold 0 _._ 005. (b) A heatmap for _D_ TV ( _q_ RS[(] _[t]_[)] _[, q]_ RS[(] _[t][′]_[)] ) for _n_ = 100 and 1 _≤ t < t[′] ≤_ 15, computed using Eq. (13). Rows are _t_ and columns are _t[′]_ . We choose the denoising schedule [0 _,_ 8 _,_ 10 _,_ 15]. 
+
+of _O_ ( _n_ !). Through extensive experiments, we have the following empirical observation. For the principle 1), choosing _T_ so that _D_ TV () _q_ RS[(] _[T]_[ )] _[, u][≈]_[0] _[.]_[005][ yields good results.][For the principle 2), a] denoising schedule [ _t_ 0 _, . . . , tk_ ] with _D_ TV ( _q_ RS[(] _[t][i]_[)] _[, q]_ RS[(] _[t][i]_[+1][)] ) _≈_ 0 _._ 3 for most _i_ works well. We show an example on sorting _n_ = 100 four-digit MNIST images in Fig. 2. 
+
+## 3.5 REVERSE PROCESS DECODING 
+
+We now discuss how to decode predictions from the reverse process at test time. In practice, one is often interested in the most probable state or a few states with high probabilities under _pθ_ ( _X_ 0 _|X_ ). However, since we can only draw samples from _pθ_ ( _X_ 0 _|X_ ) via running the reverse process, exact decoding is intractable. The simplest approximated method is greedy search, _i.e_ ., successively finding the mode or an approximated mode of _pθ_ ( _Xti−_ 1 _|Xti_ ). Another approach is beam search, which maintains a dynamic buffer of _k_ candidates with highest probabilities. Nevertheless, for one-step reverse transitions like the GPL distribution, even finding the mode is intractable. To address this, we employ a hierarchical beam search that performs an inner beam search within _n_[2] scores at each step of the outer beam search. Further details are provided in Appendix D. 
+
+## 4 EXPERIMENTS 
+
+We now demonstrate the general applicability and effectiveness of our model through solving a variety of tasks, including sorting 4-digit MNIST numbers, jigsaw puzzles, and traveling salesman problems (TSPs). Additional details, including an additional synthetic experiment that compares our method with other discrete diffusion models, are provided in Appendix G due to space constraints. 
+
+## 4.1 SORTING 4-DIGIT MNIST IMAGES 
+
+We first evaluate our SymmetricDiffusers on the four-digit MNIST sorting benchmark, a wellestablished testbed for differentiable sorting (Blondel et al., 2020; Cuturi et al., 2019; Grover et al., 2018; Kim et al., 2024; Petersen et al., 2021; 2022). Each four-digit image in this benchmark is obtained by concatenating 4 individual images from MNIST, and our task is to sort _n_ four-digit MNIST numbers. For evaluation, we employ several metrics to compare methods, including Kendall-Tau coefficient (measuring the correlation between rankings), accuracy (percentage of images perfectly reassembled), and correctness (percentage of pieces that are correctly placed). 
+
+**Ablation Study.** We conduct an ablation study to verify our design choices for reverse transition and decoding strategies. As shown in Table 3, when using riffle shuffles as the forward process, combining PL with either beam search (BS) or greedy search yields good results in terms of Kendall-Tau and correctness metrics. In contrast, the IRS (inverse riffle shuffle) method, along with greedy search, performs poorly across all metrics, showing the limitations of IRS in handling complicated sorting tasks. At the same time, combining GPL and BS achieves the best accuracy in correctly sorting the entire sequence of images. Finally, we see that random transpositions (RT) and random insertions 
+
+8 
+
+Table 1: Results (averaged over 5 runs) on solving the jigsaw puzzle on Noisy MNIST and CIFAR10. 
+
+|**Method**<br>**Metrics**|**Noisy MNIST**<br>2_×_2<br>3_×_3<br>4_×_4<br>5_×_5<br>6_×_6|**CIFAR-10**|
+|---|---|---|
+|||2_×_2<br>3_×_3<br>4_×_4|
+|Gumbel-<br>Sinkhorn<br>Network<br>(Mena et al.,<br>~~2018)~~<br>Kendall-Tau_↑_<br>Accuracy (%)<br>Correct (%)<br>RMSE_↓_<br>MAE_↓_|0.9984<br>0.6908<br>0.3578<br>0.2430<br>**0.1755**<br>99.81<br>44.65<br>00.86<br>0.00<br>0.00<br>99.91<br>80.20<br>49.51<br>26.94<br>14.91<br>**0.0022**<br>0.1704<br>0.4572<br>0.8915<br>1.0570<br>0.0003<br>0.0233<br>0.1005<br>0.3239<br>0.4515|0.8378<br>0.5044<br>**0.4016**<br>76.54<br>6.07<br>0.21<br>86.10<br>43.59<br>25.31<br>0.3749<br>0.9590<br>1.0960<br>0.1368<br>0.5320<br>0.6873|
+|DiffSort<br>(Petersen<br>et al., 2022)<br>Kendall-Tau_↑_<br>Accuracy (%)<br>Correct (%)<br>RMSE_↓_<br>MAE_↓_|0.9931<br>0.3054<br>0.0374<br>0.0176<br>0.0095<br>99.02<br>5.56<br>0.00<br>0.00<br>0.00<br>99.50<br>42.25<br>10.77<br>6.39<br>3.77<br>0.0689<br>1.0746<br>1.3290<br>1.4883<br>1.5478<br>0.0030<br>0.4283<br>0.6531<br>0.8204<br>0.8899|0.6463<br>0.1460<br>0.0490<br>59.18<br>0.96<br>0.00<br>75.48<br>27.87<br>12.27<br>0.7389<br>1.2691<br>1.3876<br>0.2800<br>0.8123<br>0.9737|
+|Error-free<br>DiffSort (Kim<br>et al., 2024)<br>Kendall-Tau_↑_<br>Accuracy (%)<br>Correct (%)<br>RMSE_↓_<br>MAE_↓_|0.9899<br>0.2014<br>0.0100<br>0.0034<br>-0.0021<br>98.62<br>0.82<br>0.00<br>0.00<br>0.00<br>99.28<br>32.65<br>7.40<br>4.39<br>2.50<br>0.0814<br>1.1764<br>1.3579<br>1.5084<br>1.5606<br>0.0041<br>0.5124<br>0.6818<br>0.8424<br>0.9041|0.6604<br>0.1362<br>0.0318<br>60.96<br>0.68<br>0.00<br>75.99<br>26.75<br>10.33<br>0.7295<br>1.2820<br>1.4095<br>0.2731<br>0.8260<br>0.9990|
+|Symmetric<br>Diffusers<br>(Ours)<br>Kendall-Tau_↑_<br>Accuracy (%)<br>Correct (%)<br>RMSE_↓_<br>MAE_↓_|**0.9992**<br>**0.8126**<br>**0.4859**<br>**0.2853**<br>0.1208<br>**99.88**<br>**57.38**<br>**1.38**<br>0.00<br>0.00<br>**99.94**<br>**86.16**<br>**58.51**<br>**37.91**<br>**18.54**<br>0.0026<br>**0.0241**<br>**0.1002**<br>**0.2926**<br>**0.4350**<br>**0.0001**<br>**0.0022**<br>**0.0130**<br>**0.0749**<br>**0.1587**|**0.9023**<br>**0.8363**<br>0.2518<br>**90.15**<br>**70.94**<br>**0.64**<br>**92.99**<br>**86.84**<br>**34.69**<br>**0.3248**<br>**0.3892**<br>**0.8953**<br>**0.0651**<br>**0.0977**<br>**0.5044**|
+
+
+Table 2: Results (averaged over 5 runs) on the four-digit MNIST sorting benchmark. For _n_ = 200, due to efficiency reasons, we use PL for the reverse process, and we randomly sample a timestep when computing the loss (see Appendix C.2). 
+
+|**Method**<br>**Metrics**|**Sequence Length**<br>3<br>5<br>7<br>9<br>15<br>32<br>52<br>100<br>200|
+|---|---|
+|DiffSort<br>(Petersen<br>et al., 2022)<br>Kendall-Tau_↑_<br>Accuracy (%)<br>Correct (%)|0.930<br>0.898<br>0.864<br>0.801<br>0.638<br>0.535<br>0.341<br>0.166<br>0.107<br>93.8<br>83.9<br>71.5<br>52.2<br>10.3<br>0.2<br>0.0<br>0.0<br>0.0<br>95.8<br>92.9<br>90.1<br>85.2<br>82.3<br>61.8<br>42.8<br>23.2<br>15.3|
+|Error-free<br>DiffSort (Kim<br>et al., 2024)<br>Kendall-Tau_↑_<br>Accuracy (%)<br>Correct (%)|0.974<br>**0.967**<br>**0.962**<br>**0.952**<br>**0.938**<br>**0.879**<br>0.170<br>0.140<br>0.002<br>97.7<br>95.3<br>92.9<br>89.6<br>**83.1**<br>**57.1**<br>0.0<br>0.0<br>0.0<br>98.4<br>**97.7**<br>**97.2**<br>**96.3**<br>**95.1**<br>**90.1**<br>24.2<br>20.1<br>0.8|
+|Symmetric<br>Diffusers<br>(Ours)<br>Kendall-Tau_↑_<br>Accuracy (%)<br>Correct (%)|**0.976**<br>**0.967**<br>0.959<br>0.950<br>0.932<br>0.858<br>**0.786**<br>**0.641**<br>**0.453**<br>**98.0**<br>**95.5**<br>**92.9**<br>**90.0**<br>82.6<br>55.1<br>**27.4**<br>**4.5**<br>**0.1**<br>**98.5**<br>97.6<br>96.8<br>96.1<br>94.5<br>88.3<br>**82.1**<br>**69.3**<br>**52.2**|
+
+
+(RI) are both out of memory for large instances due to their long mixing time. Given that accuracy is the most challenging metric to improve, we select riffle shuffles, GPL and BS for all remaining experiments, unless otherwise specified. More ablation study ( _e.g_ ., denoising schedule) is provided in Appendix G.3. 
+
+**Full Results.** From Table 2, we can see that Error-free DiffSort achieves the best performance in sorting sequences with lengths up to 32. However, its performance declines considerably with longer sequences (e.g., those exceeding 52 in length). Meanwhile, DiffSort performs the worst due to the error accumulation of its soft differentiable swap function (Kim et al., 2024; Petersen et al., 2021). In contrast, our method is on par with Error-free DiffSort in sorting short sequences and significantly outperforms others on long sequences. 
+
+## 4.2 JIGSAW PUZZLE 
+
+We then explore image reassembly from segmented "jigsaw" puzzles (Mena et al., 2018; Noroozi & Favaro, 2016; Santa Cruz et al., 2017). We evaluate the performance using the MNIST and the CIFAR10 datasets, which comprises puzzles of up to 6 _×_ 6 and 4 _×_ 4 pieces respectively. We add slight noise to pieces from the MNIST dataset to ensure background pieces are distinctive. To evaluate our models, we use Kendall-Tau coefficient, accuracy, correctness, RMSE (root mean square error of reassembled images), and MAE (mean absolute error) as metrics. 
+
+Table 1 presents results comparing our method with the Gumbel-Sinkhorn Network (Mena et al., 2018), Diffsort (Petersen et al., 2022), and Error-free Diffsort (Kim et al., 2024). DiffSort and Error-free DiffSort are primarily designed for sorting high-dimensional ordinal data which have clearly different patterns. Since jigsaw puzzles on MNIST and CIFAR10 contain pieces that are visually similar, these methods do not perform well. The Gumbel-Sinkhorn performs better for tasks 
+
+9 
+
+Table 3: Ablation study on transitions of reverse diffusion and decoding strategies. Results are averaged over three runs on sorting 52 four-digit MNIST images. GPL: generalized Plackett-Luce; IRS: inverse riffle shuffle; RT: random transposition; IT: inverse transposition; RI: random insertion; II: inverse insertion. 
+
+|Forward<br>Reverse|Riffe Shuffes<br>GPL + BS<br>GPL + Greedy<br>PL + Greedy<br>PL + BS<br>IRS + Greedy|RT<br>IT + Greedy|RI<br>II + Greedy|
+|---|---|---|---|
+|Kendall-Tau_↑_<br>Accuracy (%)<br>Correct (%)|0.786<br>**0.799**<br>**0.799**<br>0.797<br>0.390<br>**27.4**<br>24.4<br>26.4<br>26.4<br>0.6<br>82.1<br>81.6<br>**83.3**<br>83.1<br>44.6|Out of Memory||
+
+
+Table 4: Results on TSP-20 and TSP-50. We compare our method with OR solvers such as Concorde (Applegate et al., 2006), LKH-3 (Helsgaun, 2017), and 2-Opt (Lin & Kernighan, 1973), as well as learning-based approaches including GCN (Joshi et al., 2019) and DIFUSCO (Sun & Yang, 2023) on 20-node and 50-node TSP instances. An asterisk (*) indicates that post-processing heuristics were removed to ensure a fair comparison. Baselines for TSP-50 are taken from Sun & Yang (2023). 
+
+|**Method**|**TSP-20**<br>Tour Length_↓_<br>Optimality Gap (%)_↓_|**TSP-50**<br>Tour Length_↓_<br>Optimality Gap (%)_↓_|
+|---|---|---|
+|**OR Solvers**<br>Concorde<br>LKH-3<br>2-Opt|**3.84**<br>**0.00**<br>**3.84**<br>**0.00**<br>4.02<br>4.64|**5.69**<br>**0.00**<br>**5.69**<br>**0.00**<br>5.86<br>2.95|
+|**Learning-**<br>**Based**<br>**Models**<br>GCN<br>DIFUSCO<br>**Ours**|**3.85***<br>0.21*<br>3.88*<br>1.07*<br>**3.85**<br>**0.18**|5.87<br>3.10<br>**5.70**<br>**0.10**<br>5.71<br>0.41|
+
+
+involving fewer than 4 _×_ 4 pieces. In more challenging scenarios ( _e.g_ ., 5 _×_ 5 and 6 _×_ 6), our method significantly outperforms all competitors. 
+
+## 4.3 THE TRAVELLING SALESMAN PROBLEM 
+
+At last, we explore the travelling salesman problem (TSP) to demonstrate the general applicability of our model. TSPs are classical NP-complete combinatorial optimization problems which are solved using integer programming or heuristic solvers (Arora, 1998; Gonzalez, 2007). There exists a vast literature on learning-based models to solve TSPs (Kipf & Welling, 2017; Kool et al., 2019; Joshi et al., 2019; 2021; Bresson & Laurent, 2021; Kwon et al., 2021; Fu et al., 2021; Qiu et al., 2022; Kim et al., 2023; Sun & Yang, 2023; Min et al., 2024; Sanokowski et al., 2024). They often focus on the Euclidean TSPs, which are formulated as follows. Let _V_ = _{v_ 1 _, . . . , vn}_ be points in R[2] . We need to find some _σ ∈ Sn_ such that[�] _[n] i_ =1 _[∥][v][σ]_[(] _[i]_[)] _[ −][v][σ]_[(] _[i]_[+1)] _[∥]_[2][is minimized, where we let] _[ σ]_[(] _[n]_[ + 1) :=] _[ σ]_[(1)][.] 
+
+We compare with operations research (OR) solvers and other learning based approaches on TSP instances with 20 nodes and 50 nodes. The metrics are the total tour length and the optimality gap. Given the ground truth (GT) length produced by the best OR solver, the optimality gap is given by �predicted length _−_ (GT length)� _/_ (GT length). As shown in Table 4, SymmetricDiffusers achieves comparable results with both OR solvers and the state-of-the-art learning-based methods. Further experiment details are provided in Appendix G. 
+
+## 5 CONCLUSION 
+
+In this paper, we introduce a novel discrete diffusion model over finite symmetric groups. We identify the riffle shuffle as an effective forward transition and provide empirical rules for selecting the diffusion length. Additionally, we propose a generalized PL distribution for the reverse transition, which is provably more expressive than the PL distribution. We further introduce a theoretically grounded "denoising schedule" to improve sampling and learning efficiency. Extensive experiments verify the effectiveness of our proposed model. Despite significantly surpassing the performance of existing methods on large instances, our method still has limitations in larger scales. In the future, we would like to explore methods to improve scalability even more. We would also like to explore how we can fit other modern techniques in diffusion models like concrete scores (Meng et al., 2023) and score entropy (Lou et al., 2024) into our shuffling dynamics. Finally, we are interested in generalizing our model to general finite groups and exploring diffusion models on Lie groups. 
+
+10 
+
+## ACKNOWLEDGMENTS 
+
+We thank the anonymous reviewers for their helpful comments. This work was funded, in part, by the NSERC DG Grant (No. RGPIN-2022-04636), the Vector Institute for AI, and Canada CIFAR AI Chair. Resources used in preparing this research were provided, in part, by the Province of Ontario, the Government of Canada through the Digital Research Alliance of Canada alliance.can.ca, and companies sponsoring the Vector Institute www.vectorinstitute.ai/#partners, and Advanced Research Computing at the University of British Columbia. Additional hardware support was provided by John R. Evans Leaders Fund CFI grant. 
+
+## REFERENCES 
+
+David Applegate, Robert Bixby, Vasek Chvatal, and William Cook. Concorde tsp solver, 2006. URL https://www.math.uwaterloo.ca/tsp/concorde/index.html. 
+
+- Sanjeev Arora. Polynomial time approximation schemes for euclidean traveling salesman and other geometric problems. _J. ACM_ , 45(5):753–782, Sep 1998. ISSN 0004-5411. doi: 10.1145/290179. 290180. URL https://doi.org/10.1145/290179.290180. 
+
+- Jacob Austin, Daniel D. Johnson, Jonathan Ho, Daniel Tarlow, and Rianne van den Berg. Structured denoising diffusion models in discrete state-spaces, 2023. 
+
+- Dave Bayer and Persi Diaconis. Trailing the dovetail shuffle to its lair. _The Annals of Applied Probability_ , 2(2):294 – 313, 1992. doi: 10.1214/aoap/1177005705. URL https://doi.org/ 10.1214/aoap/1177005705. 
+
+- Mathieu Blondel, Olivier Teboul, Quentin Berthet, and Josip Djolonga. Fast differentiable sorting and ranking. In _International Conference on Machine Learning_ , pp. 950–959. PMLR, 2020. 
+
+- Xavier Bresson and Thomas Laurent. The transformer network for the traveling salesman problem, 2021. 
+
+- Andrew Campbell, Joe Benton, Valentin De Bortoli, Tom Rainforth, George Deligiannidis, and Arnaud Doucet. A continuous time framework for discrete denoising models, 2022. URL https://arxiv.org/abs/2205.14987. 
+
+- Zhe Cao, Tao Qin, Tie-Yan Liu, Ming-Feng Tsai, and Hang Li. Learning to rank: from pairwise approach to listwise approach. In _Proceedings of the 24th International Conference on Machine Learning_ , ICML ’07, pp. 129–136, New York, NY, USA, 2007. Association for Computing Machinery. ISBN 9781595937933. doi: 10.1145/1273496.1273513. URL https://doi.org/ 10.1145/1273496.1273513. 
+
+- Marco Cuturi, Olivier Teboul, and Jean-Philippe Vert. Differentiable ranking and sorting using optimal transport. _Advances in neural information processing systems_ , 32, 2019. 
+
+- Persi Diaconis. Group representations in probability and statistics. _Lecture notes-monograph series_ , 11:i–192, 1988. 
+
+- Zhang-Hua Fu, Kai-Bin Qiu, and Hongyuan Zha. Generalize a small pre-trained model to arbitrarily large tsp instances, 2021. 
+
+- E. N. Gilbert. Theory of shuffling. _Bell Telephone Laboratories Memorandum_ , 1955. 
+
+- Teofilo F. Gonzalez. _Handbook of Approximation Algorithms and Metaheuristics (Chapman & Hall/Crc Computer & Information Science Series)_ . Chapman & Hall/CRC, 2007. ISBN 1584885505. 
+
+- Aditya Grover, Eric Wang, Aaron Zweig, and Stefano Ermon. Stochastic optimization of sorting networks via continuous relaxations. In _International Conference on Learning Representations_ , 2018. 
+
+- Gurobi Optimization, LLC. Gurobi Optimizer Reference Manual, 2023. URL https://www. gurobi.com. 
+
+11 
+
+Keld Helsgaun. An extension of the lin-kernighan-helsgaun tsp solver for constrained traveling salesman and vehicle routing problems, Dec 2017. 
+
+Jonathan Ho, Ajay Jain, and Pieter Abbeel. Denoising diffusion probabilistic models, 2020. 
+
+Chaitanya K. Joshi, Thomas Laurent, and Xavier Bresson. An efficient graph convolutional network technique for the travelling salesman problem, 2019. 
+
+- Chaitanya K Joshi, Quentin Cappart, Louis-Martin Rousseau, and Thomas Laurent. Learning tsp requires rethinking generalization. In _International Conference on Principles and Practice of Constraint Programming_ , 2021. 
+
+Shihan Kanungo. Mixing time estimates for the riffle shuffle. _Euler Circle_ , 2020. 
+
+- Jungtaek Kim, Jeongbeen Yoon, and Minsu Cho. Generalized neural sorting networks with error-free differentiable swap functions. In _International Conference on Learning Representations (ICLR)_ , 2024. 
+
+- Minsu Kim, Junyoung Park, and Jinkyoo Park. Sym-nco: Leveraging symmetricity for neural combinatorial optimization, 2023. 
+
+Thomas N. Kipf and Max Welling. Semi-supervised classification with graph convolutional networks, 2017. 
+
+Wouter Kool, Herke van Hoof, and Max Welling. Attention, learn to solve routing problems!, 2019. 
+
+Yeong-Dae Kwon, Jinho Choo, Byoungjip Kim, Iljoo Yoon, Youngjune Gwon, and Seungjai Min. Pomo: Policy optimization with multiple optima for reinforcement learning, 2021. 
+
+- Shen Lin and Brian W Kernighan. An effective heuristic algorithm for the travelling-salesman problem. _Operations research_ , 21(2):498–516, 1973. 
+
+Ilya Loshchilov and Frank Hutter. Decoupled weight decay regularization, 2019. 
+
+Aaron Lou, Chenlin Meng, and Stefano Ermon. Discrete diffusion modeling by estimating the ratios of the data distribution, 2024. URL https://arxiv.org/abs/2310.16834. 
+
+- R. D. Luce. _Individual Choice Behavior_ . John Wiley, 1959. 
+
+Colin L Mallows. Non-null ranking models. i. _Biometrika_ , 44(1/2):114–130, 1957. 
+
+- Gonzalo Mena, David Belanger, Scott Linderman, and Jasper Snoek. Learning latent permutations with gumbel-sinkhorn networks. In _International Conference on Learning Representations_ , 2018. 
+
+- Chenlin Meng, Kristy Choi, Jiaming Song, and Stefano Ermon. Concrete score matching: Generalized score matching for discrete data, 2023. URL https://arxiv.org/abs/2211.00802. 
+
+- Yimeng Min, Yiwei Bai, and Carla P. Gomes. Unsupervised learning for solving the travelling salesman problem, 2024. 
+
+Mehdi Noroozi and Paolo Favaro. Unsupervised learning of visual representations by solving jigsaw puzzles. In _European conference on computer vision_ , pp. 69–84. Springer, 2016. 
+
+- OEIS Foundation Inc. The eulerian numbers, entry a008292 in the On-Line Encyclopedia of Integer Sequences, 2024. Published electronically at http://oeis.org/A008292. 
+
+- Felix Petersen, Christian Borgelt, Hilde Kuehne, and Oliver Deussen. Differentiable sorting networks for scalable sorting and ranking supervision. In _International conference on machine learning_ , pp. 8546–8555. PMLR, 2021. 
+
+- Felix Petersen, Christian Borgelt, Hilde Kuehne, and Oliver Deussen. Monotonic differentiable sorting networks. In _International Conference on Learning Representations (ICLR)_ , 2022. 
+
+- R. L. Plackett. The analysis of permutations. _Applied Statistics_ , 24(2):193 – 202, 1975. 
+
+12 
+
+Ruizhong Qiu, Zhiqing Sun, and Yiming Yang. Dimes: A differentiable meta solver for combinatorial optimization problems, 2022. 
+
+- J. Reeds. Theory of shuffling. _Unpublished Manuscript_ , 1981. 
+
+- Laurent Saloff-Coste. _Random Walks on Finite Groups_ , pp. 263–346. Springer Berlin Heidelberg, Berlin, Heidelberg, 2004. ISBN 978-3-662-09444-0. doi: 10.1007/978-3-662-09444-0_5. URL https://doi.org/10.1007/978-3-662-09444-0_5. 
+
+- Sebastian Sanokowski, Sepp Hochreiter, and Sebastian Lehner. A diffusion model framework for unsupervised neural combinatorial optimization, 2024. URL https://arxiv.org/abs/ 2406.01661. 
+
+- Rodrigo Santa Cruz, Basura Fernando, Anoop Cherian, and Stephen Gould. Deeppermnet: Visual permutation learning. In _Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition_ , pp. 3949–3957, 2017. 
+
+- Jiaxin Shi, Kehang Han, Zhe Wang, Arnaud Doucet, and Michalis K. Titsias. Simplified and generalized masked diffusion for discrete data, 2024. URL https://arxiv.org/abs/ 2406.04329. 
+
+- Jascha Sohl-Dickstein, Eric Weiss, Niru Maheswaranathan, and Surya Ganguli. Deep unsupervised learning using nonequilibrium thermodynamics. In Francis Bach and David Blei (eds.), _Proceedings of the 32nd International Conference on Machine Learning_ , volume 37 of _Proceedings of Machine Learning Research_ , pp. 2256–2265, Lille, France, 07–09 Jul 2015. PMLR. URL https:// proceedings.mlr.press/v37/sohl-dickstein15.html. 
+
+- Yang Song and Stefano Ermon. Generative modeling by estimating gradients of the data distribution, 2020. 
+
+- Yang Song, Jascha Sohl-Dickstein, Diederik P. Kingma, Abhishek Kumar, Stefano Ermon, and Ben Poole. Score-based generative modeling through stochastic differential equations, 2021. 
+
+- Haoran Sun, Lijun Yu, Bo Dai, Dale Schuurmans, and Hanjun Dai. Score-based continuous-time discrete diffusion models, 2023. URL https://arxiv.org/abs/2211.16750. 
+
+- Zhiqing Sun and Yiming Yang. Difusco: Graph-based diffusion solvers for combinatorial optimization, 2023. 
+
+- Harshit Varma, Dheeraj Nagaraj, and Karthikeyan Shanmugam. Glauber generative model: Discrete diffusion models via binary classification, 2024. URL https://arxiv.org/abs/2405. 17035. 
+
+- Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N. Gomez, Lukasz Kaiser, and Illia Polosukhin. Attention is all you need, 2023. 
+
+- Clement Vignac, Igor Krawczuk, Antoine Siraudin, Bohan Wang, Volkan Cevher, and Pascal Frossard. Digress: Discrete denoising diffusion for graph generation, 2023. 
+
+- Ronald J Williams. Simple statistical gradient-following algorithms for connectionist reinforcement learning. _Machine Learning_ , 8(3-4):229–256, 1992. 
+
+13 
+
+## A ADDITIONAL DETAILS OF THE GSR RIFFLE SHUFFLE MODEL 
+
+There are many equivalent definitions of the GSR riffle shuffle. Here we also introduce the _Geometric Description_ (Bayer & Diaconis, 1992), which is easy to implement (and is how we implement riffle shuffles in our experiments). We first sample _n_ points in the unit interval [0 _,_ 1] uniformly and independently, and suppose the points are labeled in order as _x_ 1 _< x_ 2 _< · · · < xn_ . Then, the permutation that sorts the points _{_ 2 _x_ 1 _}, . . . , {_ 2 _xn}_ follows the GSR distribution, where _{x}_ := _x −⌊x⌋_ is the fractional part of _x_ . 
+
+## B DETAILS OF OUR NETWORK ARCHITECTURE 
+
+We now discuss how to use neural networks to produce the parameters of the distributions discussed in Section 3.2.1 and 3.2.2. Fix time _t_ , and suppose _Xt_ = � **x**[(] 1 _[t]_[)] _[, . . . ,]_ **[ x]**[(] _n[t]_[)] � _⊤ ∈_ R _n×d_ . Let encoder _θ_ be an object-specific encoder such that encoder _θ_ ( _Xt_ ) _∈_ R _[n][×][d]_[model] . For example, encoder _θ_ can be a CNN if _Xt_ is an image. Let 
+
+**==> picture [351 x 15] intentionally omitted <==**
+
+where time_embd is the sinusoidal time embedding. Then, we would like to feed the embeddings into a Transformer encoder (Vaswani et al., 2023). Let transformer_encoder _θ_ be the encoder part of the Transformer architecture. However, each of the distributions we discussed previously has different number of parameters, so we will have to discuss them separately. 
+
+**Inverse Transposition.** For Inverse Transposition, we have _n_ + 1 parameters. To obtain _n_ + 1 tokens from transformer_encoder _θ_ , we append a dummy token of 0’s to _Yt_ . Then we input � **y** 1[(] _[t]_[)] _[, . . . ,]_ **[ y]** _n_[(] _[t]_[)] _[,]_[ 0] � _⊤_ into transformer_encoder _θ_ to obtain _Z ∈_ R( _n_ +1) _×d_ model. Finally, we apply an MLP to obtain ( _s_ 1 _, . . . , sn, k_ ) _∈_ R _[n]_[+1] . 
+
+**Inverse Insertion, Inverse Riffle Shuffle, PL Distribution.** These three distributions all require exactly _n_ parameters, so we can directly feed _Yt_ into transformer_encoder _θ_ . Let the output of transformer_encoder _θ_ be _Z ∈_ R _[n][×][d]_[model] , where we then apply an MLP to obtain the scores **s** _θ ∈_ R _[n]_ . 
+
+**The GPL Distribution.** The GPL distribution requires _n_[2] parameters. We first append _n_ dummy tokens of 0’s to _Yt_ , with the intent that the _j_[th] dummy token would learn information about the _j_[th] column of the GPL parameter matrix, which represents where the _j_[th] component should be placed. We then pass � **y** 1[(] _[t]_[)] _[, . . . ,]_ **[ y]** _n_[(] _[t]_[)] _[,]_[ 0] _[, . . . ,]_[ 0] � _⊤ ∈_ R2 _n×d_ model to transformer_encoder _θ_ . When computing attention, we further apply a 2 _n ×_ 2 _n_ attention mask 
+
+**==> picture [390 x 48] intentionally omitted <==**
+
+The reason for having _B_ as an upper triangular matrix of _−∞_ is that information about the _j_[th] component should only require information from the previous components. Let 
+
+**==> picture [190 x 25] intentionally omitted <==**
+
+where _Z_ 1 _, Z_ 2 _∈_ R _[n][×][d]_[model] . Finally, we obtain the GPL parameter matrix as _Sθ_ = _Z_ 1 _Z_ 2 _[⊤][∈]_[R] _[n][×][n]_[.] For hyperparameters, we refer the readers to Appendix G.5. 
+
+14 
+
+## C DISCUSSIONS ON OTHER FORMS OF THE LOSS 
+
+## C.1 USING KL DIVERGENCE 
+
+Many diffusion models will rewrite the variational bound Eq.(10) in the following equivalent form of KL divergences to reduce the variance (Austin et al., 2023; Ho et al., 2020): 
+
+**==> picture [385 x 65] intentionally omitted <==**
+
+However, we cannot use this objective for _Sn_ in most cases. In particular, since 
+
+**==> picture [291 x 24] intentionally omitted <==**
+
+we can only derive the analytical form of _q_ ( _Xt−_ 1 _|Xt, X_ 0) if we know the form of _q_ ( _Xt|X_ 0). However, _q_ ( _Xt|X_ 0) is unavailable for most shuffling methods used in the forward process except for the riffle shuffles. For riffle shuffle, _q_ ( _Xt|X_ 0) is actually available and permits efficient sampling (Bayer & Diaconis, 1992). However, _D_ KL( _q_ ( _Xt−_ 1 _|Xt, X_ 0) _∥ pθ_ ( _Xt−_ 1 _|Xt_ )) still does not have an analytical form, unlike in common diffusion models. As a result, we cannot use mean/score parameterization (Ho et al., 2020; Song et al., 2021) commonly employed in the continuous setting. Therefore, we need to rewrite the KL term as follows and resort to Monte Carlo (MC) estimation, 
+
+**==> picture [340 x 127] intentionally omitted <==**
+
+Note that _Xt ∼ q_ ( _Xt|X_ 0) and _Xt−_ 1 _∼ q_ ( _Xt−_ 1 _|X_ 0) are drawn _independently_ . However, there is a high chance that _q_ ( _Xt|Xt−_ 1) = 0 for the _Xt_ and _Xt−_ 1 that are sampled. Consequently, if we only draw a few MC samples, the resulting estimator will likely be zero with zero-valued gradients, impeding the optimization of the training objective. Therefore, writing the loss in the form of KL divergences does not help in the case of discrete diffusion on _Sn_ . 
+
+## C.2 SAMPLING A RANDOM TIMESTEP 
+
+Another technique that many diffusion models use is to randomly sample a timestep _t_ and just compute the loss at time _t_ . Our framework also allows for randomly sampling one timestep and compute the loss as 
+
+**==> picture [322 x 19] intentionally omitted <==**
+
+omitting constant terms with respect to _θ_ . With a denoising schedule of [ _t_ 0 _, . . . , tk_ ], the loss is 
+
+**==> picture [329 x 19] intentionally omitted <==**
+
+again omitting constant terms with respect to _θ_ . It is also worth noting that computing the loss on a subset of the trajectory could potentially introduce more variance during training, which leads to a tradeoff. For riffle shuffles, although we can sample _Xt−_ 1 directly for arbitrary timestep _t −_ 1 from 
+
+15 
+
+_X_ 0 as previously mentioned in this section, the whole trajectory would be really short. For other shuffling methods, we would still have to run the entire forward process to sample from _q_ ( _Xt−_ 1 _|X_ 0), which does not solve the inefficiency problem of other shuffling methods. Therefore, we opt to use the loss in Eq.(10) in most cases, and we would resort to Eq.(20) for riffle shuffling really large instances. 
+
+## D ADDITIONAL DETAILS OF DECODING 
+
+**Greedy Search.** At each timestep _ti_ in the denoising schedule, we can greedily obtain or approximate the mode of _pθ_ ( _Xti−_ 1 _|Xti_ ). We can then use the (approximated) mode _Xti−_ 1 for the next timestep _pθ_ ( _Xti−_ 2 _|Xti−_ 1). Note that the final _X_ 0 obtained using such a greedy heuristic may not necessarily be the mode of _pθ_ ( _X_ 0 _|X_ ). 
+
+**Beam Search.** We can use beam search to improve the greedy approach. The basic idea is that, at each timestep _ti_ in the denoising schedule, we compute or approximate the top- _k_ -most-probable results from _pθ_ ( _Xti−_ 1 _|Xti_ ). For each of the top- _k_ results, we sample top- _k_ from _pθ_ ( _Xti−_ 2 _|Xti−_ 1). Now we have _k_[2] candidates for _Xti−_ 2, and we only keep the top _k_ of the _k_[2] candidates. 
+
+However, it is not easy to obtain the top- _k_ -most-probable results for some of the distributions. Here we provide an algorithm to approximate top- _k_ of the PL and the GPL distribution. Since the PL distribution is a strict subset of the GPL distribution, it suffices to only consider the GPL distribution with parameter matrix _S_ . The algorithm for approximating top- _k_ of the GPL distribution is another beam search. We first pick the _k_ largest elements from the first row of _S_ . For each of the _k_ largest elements, we pick _k_ largest elements from the second row of _S_ , excluding the corresponding element picked in the first row. We now have _k_[2] candidates for the first two elements of a permutation, and we only keep the top- _k_ -most-probable candidates. We then continue in this manner. 
+
+## E THE EXPRESSIVENESS OF PL AND GPL 
+
+In this section, we prove the expressiveness results of the PL and GPL distribution. We first show that the PL distribution has limited expressiveness. 
+
+**Proposition 1.** _The PL distribution cannot represent a delta distribution over Sn._ 
+
+_Proof._ Assume for a contradiction that there exists some _σ ∈ Sn_ and **s** such that PL **s** = _δσ_ . Then we have 
+
+**==> picture [110 x 28] intentionally omitted <==**
+
+Since each of the term in the product is less than or equal to 1, we must have 
+
+**==> picture [244 x 29] intentionally omitted <==**
+
+for all _i ∈_ [ _n_ ]. In particular, we have 
+
+**==> picture [95 x 29] intentionally omitted <==**
+
+which happens if and only if _sσ_ ( _j_ ) = _−∞_ for all _j ≥_ 2. But this contradicts (21). 
+
+We then prove that the reverse process using the GPL distribution can model any target distribution. We first introduce two lemmas. 
+
+**Lemma 4.** _The GPL distribution can represent any delta distribution on Sn if allowing −∞ scores._ 
+
+_Proof._ Fix _σ ∈ Sn_ . For all _i ∈_ [ _n_ ], we let _si,σ_ ( _i_ ) = 0 and _si,j_ = _−∞_ for all _j_ = _σ_ ( _i_ ). Then it is clear that GPL( _sij_ ) = _δσ_ . 
+
+16 
+
+**==> picture [402 x 122] intentionally omitted <==**
+
+**----- Start of picture text -----**<br>
+Target 1 / 4 1 / 2 0 1 / 4 0 0<br>S 3 σ 1 = �11 22 33� π 1 = �11 23 32� σ 2 = �12 21 33� π 2 = �12 23 31� σ 3 = �13 21 32� π 3 = �13 22 31�<br>Start 1 / 6 1 / 6 1 / 6 1 / 6 1 / 6 1 / 6<br>0 1 0 0 0 0<br>1 / 4 3 / 4 0 0 0 0<br>0 3 / 4 0 1 / 4 0 0<br>Target 1 / 4 1 / 2 0 1 / 4 0 0<br>**----- End of picture text -----**<br>
+
+
+Figure 3: A simple example for the GPL expressiveness theorem on _S_ 3. 
+
+**Lemma 5.** _Let σ ∈ Sn and let π_ := ( _n −_ 1 _n_ ) _◦ σ, where_ ( _n −_ 1 _n_ ) _is a transposition that swaps the last two indices and ◦ is function composition. That is, π is obtained from σ by swapping the last two components. Let p be any probability distribution on Sn whose support is a subset of {σ, π}. Then there exists scores_ ( _sij_ ) _i,j∈_ [ _n_ ] _(possibly −∞) such that GPL_ ( _sij_ ) = _p._ 
+
+_Proof._ Note that we have 
+
+**==> picture [190 x 25] intentionally omitted <==**
+
+For all 1 _≤ i ≤ n −_ 2, we let _si,σ_ ( _i_ ) = 0 and _si,j_ = _−∞_ for all _j_ = _σ_ ( _i_ ). Let _sn−_ 1 _,σ_ ( _n−_ 1) = ln _p_ ( _σ_ ) and let _sn−_ 1 _,σ_ ( _n_ ) = ln _p_ ( _π_ ). Finally, let _sn,j_ = 0 for all _j ∈_ [ _n_ ]. It is then easy to verify that GPL( _sij_ ) = _p_ . 
+
+We then state the main expressiveness theorem. 
+
+**Theorem 6.** _Let Y_ 0 _∈ Sn be a random variable with arbitrary distribution q_ ( _Y_ 0) _. Let p be any distribution over Sn. Then there exists some k ∈_ N _and random variables Y_ 1 _, . . . , Yk with GPL (allowing −∞ scores) transition distributions q_ ( _Yi | Yi−_ 1) _for each i ∈_ [ _k_ ] _such that q_ ( _Yk_ ) = _p._ 
+
+Before proceeding to the proof, we first provide a small example illustrating the construction we are going to use. Consider Fig. 3 on _S_ 3. Suppose we start with _q_ ( _Y_ 0) being the uniform distribution, and the target distribution _p_ is listed at the top row of the diagram. We partition _S_ 3 into 3 pairs ( _σi, πi_ ) indicated by their color in the diagram. The permutations within each pair differ by one swap of the last two indices, so each pair is the pair considered in Lemma 5. The first step is to concentrate all probability mass on _π_ 1 using GPL and Lemma 4. Now note that we only need 1 _/_ 4 + 1 _/_ 2 = 3 _/_ 4 probability for the first pair ( _σ_ 1 _, π_ 1), so there is a 1 _/_ 4 excess. We then use Lemma 5 to move the excess amount to _σ_ 1. Then we use Lemma 4 to move the excess amount out of pair 1 to _π_ 2 in pair 2. Finally, we use Lemma 5 to distribute the correct mass to _σ_ 1 and _π_ 1 from the 3 _/_ 4 that _π_ 1 currently holds. We now present the formal construction. 
+
+> _Proof._ For _σ, π ∈ Sn_ , we say that _σ_ and _π_ are a pair if _π_ = ( _n −_ 1 _n_ ) _◦ σ_ . Note that we can partition _Sn_ into _n_ ! _/_ 2 disjoint pairs. We write the pairs as ( _σ_ 1 _, π_ 1) _, . . . ,_ ( _σn_ ! _/_ 2 _, πn_ ! _/_ 2). 
+
+We now give an algorithm that explicitly constructs the transitions from _Y_ 0 to the target distribution _p_ . The intuition of the algorithm is that we distribute the probability mass for one pair of permutations at a time. The variable _p_ leftover records how much mass we have yet to distribute. 
+
+17 
+
+1. Let _p_ leftover := 1. Let _q_ ( _Y_ 1 _| Y_ 0) = _δπ_ 1. 2. Iterate through all pairs ( _σi, πi_ ) for _i_ from 1 to _n_ ! _/_ 2: (a) Let _p_ excess := _p_ leftover _− p_ ( _σi_ ) _− p_ ( _πi_ ). (b) Define _q_ ( _Y_ 3 _i−_ 1 _| Y_ 3 _i−_ 2) such that _q_ ( _Y_ 3 _i−_ 1 = _σi | Y_ 3 _i−_ 2 = _πi_ ) = _[p]_[excess] _, p_ leftover _q_ ( _Y_ 3 _i−_ 1 = _πi | Y_ 3 _i−_ 2 = _πi_ ) = 1 _−[p]_[excess] _, p_ leftover and _q_ ( _Y_ 3 _i−_ 1 = _τ | Y_ 3 _i−_ 2 = _πi_ ) = 0 for all other _τ ∈{/ σi, πi}_ . Let _q_ ( _Y_ 3 _i−_ 1 _| Y_ 3 _i−_ 2 = _τ_ ) = _δτ_ for _τ ∈{/ πi}_ . (c) Define _q_ ( _Y_ 3 _i | Y_ 3 _i−_ 1) such that _q_ ( _Y_ 3 _i | Y_ 3 _i−_ 1 = _σi_ ) = _δπi_ +1 and _q_ ( _Y_ 3 _i | Y_ 3 _i−_ 1 = _τ_ ) = _δτ_ for all _τ_ = _σi_ . (d) Finally, define _q_ ( _Y_ 3 _i_ +1 _| Y_ 3 _i_ ) such that 
+
+**==> picture [353 x 115] intentionally omitted <==**
+
+Note that _q_ ( _Y_ 1 = _π_ 1) = 1. Also note that by Lemma 4 and 5, all transition distributions can be modeled by the GPL distribution. We claim that at the end of iteration _i_ , we must have 
+
+(1) _p_ leftover =[�] _[n] j_ =[!] _[/] i_[2] +1 _[p]_[(] _[σ][j]_[) +] _[ p]_[(] _[π][j]_[)][;] (2) _q_ ( _Y_ 3 _i_ +1 = _σi_ ) = _p_ ( _σi_ ) and _q_ ( _Y_ 3 _i_ +1 = _πi_ ) = _p_ ( _πi_ ); (3) _q_ ( _Y_ 3 _i_ +1 = _πi_ +1) = _p_ leftover. 
+
+We proceed by induction on _i_ . For _i_ = 1, it is clear that _p_ leftover =[�] _[n] j_ =2[!] _[/]_[2] _[p]_[(] _[σ][j]_[) +] _[ p]_[(] _[π][j]_[)][ at the end of] the first iteration. We also note that _q_ ( _Y_ 2 = _σ_ 1) = _p_ excess and _q_ ( _Y_ 2 = _π_ 1) = 1 _− p_ excess = _p_ ( _σ_ 1) + _p_ ( _π_ 1). After step 2(c) of the algorithm, we have _q_ ( _Y_ 3 = _σ_ 1) = 0, _q_ ( _Y_ 3 = _π_ 1) = _p_ ( _σ_ 1) + _p_ ( _π_ 1), and _q_ ( _Y_ 3 = _π_ 2) = _p_ excess. Finally, after step 2(d) and 2(e), we get _q_ ( _Y_ 4 = _σ_ 1) = _p_ ( _σ_ 1), _q_ ( _Y_ 4 = _π_ 1) = _p_ ( _π_ 1), and _q_ ( _Y_ 4 = _π_ 2) = _p_ leftover. 
+
+For the inductive step, let _i ≥_ 2. We know by the inductive hypothesis that at the start of iteration _i_ , we have _p_ leftover =[�] _[n] j_ =[!] _[/] i_[2] _[p]_[(] _[σ][j]_[) +] _[ p]_[(] _[π][j]_[)][.][So][ 0] _[≤][p]_[excess] _[≤]_[1][, and all transition distributions in] iteration _i_ are well-defined. It is easy to verify that: 
+
+- After step 2(b), _q_ ( _Y_ 3 _i−_ 1 = _σi_ ) = _p_ excess and _q_ ( _Y_ 3 _i−_ 1 = _πi_ ) = _p_ ( _σi_ ) + _p_ ( _πi_ ). 
+
+- After step 2(c), _q_ ( _Y_ 3 _i_ = _σi_ ) = 0, _q_ ( _Y_ 3 _i_ = _πi_ ) = _p_ ( _σi_ ) + _p_ ( _πi_ ), and _q_ ( _Y_ 3 _i_ = _πi_ +1) = _p_ excess. 
+
+- After step 2(d)(e), _q_ ( _Y_ 3 _i_ +1 = _σi_ ) = _p_ ( _σi_ ), _q_ ( _Y_ 3 _i_ +1 = _πi_ ) = _p_ ( _πi_ ), and _q_ ( _Y_ 3 _i_ +1 = _πi_ +1) = _p_ leftover =[�] _[n] j_ =[!] _[/] i_[2] +1 _[p]_[(] _[σ][j]_[) +] _[ p]_[(] _[π][j]_[)][.] 
+
+18 
+
+The _p_ leftover at the end of iteration _n_ ! _/_ 2 is _p_ excess _−p_ ( _σn_ ! _/_ 2) _−p_ ( _πn_ ! _/_ 2) = 0. This finishes the induction. Finally, we observe that after iteration _i_ , _q_ ( _Yj_ = _σi_ ) and _q_ ( _Yj_ = _πi_ ) will never be changed for _j ≥ i_ . This finishes the proof. 
+
+Finally, Theorem 2, which is stated in the main paper, follows immediately from Theorem 6 by setting _q_ ( _Y_ 0) to be the uniform distribution and _p_ to be the target distribution over _Sn_ . 
+
+**Theorem 2.** _The reverse diffusion process parameterized using the GPL distribution in Eq. (9) can model any distribution over Sn._ 
+
+## F RESULTS ON TV DISTANCES BETWEEN RIFFLE SHUFFLES 
+
+**Proposition 3.** _Let t ̸_ = _t[′] be positive integers. Then_ 
+
+_and_ 
+
+**==> picture [353 x 75] intentionally omitted <==**
+
+_Proof._ Let _σ ∈ Sn_ . It was shown in Bayer & Diaconis (1992) that 
+
+**==> picture [128 x 25] intentionally omitted <==**
+
+where _r_ is the number of rising sequences of _σ_ . Note that if two permutations have the same number of rising sequences, then they have equal probability. Hence, we have 
+
+**==> picture [340 x 64] intentionally omitted <==**
+
+as claimed. For (14), replace _q_ RS[(] _[t][′]_[)][(] _[σ]_[)][ with] _[ u]_[(] _[σ]_[) =] _n_[1] ![in the above derivations.] 
+
+## G ADDITIONAL DETAILS ON EXPERIMENTS 
+
+## G.1 ADDITIONAL SYNTHETIC EXPERIMENT: LEARNING A SINGLE PERMUTATION LIST 
+
+We present an additional synthetic experiment to illustrate the effectiveness of SymmetricDiffusers. A natural approach to modeling permutations is to represent them as sequences of numbers from _{_ 0 _,_ 1 _, . . . , n −_ 1 _}_ and apply sequence generation models. However, existing sequence generation models relax the permutation constraint, allowing numbers to repeat and modeling transitions in a larger sequence space. To highlight the advantage, _i.e_ ., restricting the diffusion trajectory to _Sn_ and modeling transitions in a smaller space ( _O_ ( _n_ !) vs _O_ ( _n[n]_ )), of our approach, we conduct a synthetic experiment: learning a delta distribution over _Sn_ , _i.e_ ., a single permutation. In particular, we compare our method with SEDD (Lou et al., 2024), one of the strongest discrete diffusion models. 
+
+In the experiment, we train models to learn the identity permutation ( _n_ = 100) and a fixed arbitrary distribution ( _n_ = 100 and 200). For details on hyperparameters and training, please refer to Appendix G.5. From Table 5, we see that our method reaches 100% accuracy in all settings. While SEDD also performs well, the gap between its accuracy and ours grows with sequence length. These experiments verify the advantage and the effectiveness of our method. 
+
+We would also like to highlight another key limitation of other discrete diffusion models (including SEDD). In fact, it is nearly impossible for other discrete diffusion models to solve the tasks introduced in our paper, including the jigsaw puzzle, sorting multi-digit MNIST numbers, and the TSP. The 
+
+19 
+
+Table 5: Results on the toy experiment of learning a single permutation list. 
+
+|**Method**|**Identity**_n_= 100<br>Accuracy (%)<br>Correct (%)|**Arbitrary Permutation**_n_= 100<br>Accuracy (%)<br>Correct (%)|**Arbitrary Permutation**_n_= 200<br>Accuracy (%)<br>Correct (%)|
+|---|---|---|---|
+|SEDD (Lou et al., 2024)<br>Ours|95.47<br>99.95<br><br>|93.24<br>99.93<br><br>|88.75<br>99.94<br><br>|
+
+
+reason is that all prior discrete diffusion models assume a fixed alphabet or vocabulary, and they model categorical distributions on the fixed alphabet. For example, in NLP tasks, the vocabulary is predefined and fixed. However, the alphabet is the set of all possible image patches for image tasks such as jigsaw puzzles and sorting MNIST numbers. It is impractical to gather the complete alphabet beforehand. We could potentially train VQVAEs to obtain quantized image embeddings. However, such an approach introduces the approximation error from the quantized alphabet. For the TSP, each node of the graph is a point in the continuous space R[2] , so it is also impossible to gather the complete alphabet. In contrast, our method can be successfully applied to these tasks because we model a distribution on the fixed alphabet _Sn_ , and we treat each permutation as a function that can be applied to an ordered list of objects. 
+
+## G.2 DATASETS USED IN THE FULL PAPER 
+
+**Jigsaw Puzzle.** We created the Noisy MNIST dataset by adding _i.i.d._ Gaussian noise with a mean of 0 and a standard deviation of 0.01 to each pixel of the MNIST images. No noise was added to the CIFAR-10 images. The noisy images are then saved as the Noisy MNIST dataset. During training, each image is divided into _n × n_ patches. A permutation is then sampled uniformly at random to shuffle these patches. The training set for Noisy MNIST comprises 60,000 images, while the CIFAR-10 training set contains 10,000 images. The Noisy MNIST test set, which is pre-shuffled, also includes 10,000 images. The CIFAR-10 test set, which shuffles images on the fly, contains 10,000 images as well. 
+
+**Sort 4-Digit MNIST Numbers.** For each training epoch, we generate 60,000 sequences of 4-digit MNIST images, each of length _n_ , constructed dynamically on the fly. These 4-digit MNIST numbers are created by concatenating four MNIST images, each selected uniformly at random from the entire MNIST dataset, which consists of 60,000 images. For testing purposes, we similarly generate 10,000 sequences of _n_ 4-digit MNIST numbers on the fly. 
+
+**TSP.** We take the TSP-20 and TSP-50 dataset from Joshi et al. (2021)[1] . The train set consists of 1,512,000 graphs, where each node is an _i.i.d_ . sample from the unit square [0 _,_ 1][2] . The labels are optimal TSP tours provided by the Concorde solver (Applegate et al., 2006). The test set consists of 1,280 graphs, with ground truth tour generated by the Concorde solver as well. 
+
+## G.3 ABLATION STUDIES 
+
+**Choices for Reverse Transition and Decoding Strategies.** As demonstrated in Table 6, we have explored various combinations of forward and inverse shuffling methods across tasks involving different sequence lengths. Both GPL and PL consistently excel in all experimental scenarios, highlighting their robustness and effectiveness. It is important to note that strategies such as random transposition and random insertion paired with their respective inverse operations, are less suitable for tasks with longer sequences. This limitation is attributed to the prolonged mixing times required by these two shuffling methods, a challenge that is thoroughly discussed in Section 3.1.2. 
+
+**Denoising Schedule.** We also conduct an ablation study on how we should merge reverse steps. As shown in Table 7, the choice of the denoising schedule can significantly affect the final performance. In particular, for _n_ = 100 on the Sort 4-Digit MNIST Numbers task, the fact that [0 _,_ 15] has 0 accuracy justifies our motivation to use diffusion to break down learning into smaller steps. The result we get also matches with our proposed heuristic in Section 3.4. 
+
+> 1https://github.com/chaitjo/learning-tsp?tab=readme-ov-file 
+
+20 
+
+Table 6: More results on sorting the 4-digit MNIST dataset using different combinations of forward process methods and reverse process methods. Results averaged over 3 runs with different seeds. RS: riffle shuffle; GPL: generalized Plackett-Luce; IRS: inverse riffle shuffle; RT: random transposition; IT: inverse transposition; RI: random insertion; II: inverse insertion. 
+
+||Sequence Length|
+|---|---|
+||9<br>32<br>52|
+|RS (forward) + GPL (reverse) + greedy<br>Denoising Schedule<br>Kendall-Tau_↑_<br>Accuracy (%)<br>Correct (%)|[0_,_3_,_5_,_9]<br>[0_,_5_,_7_,_12]<br>[0_,_5_,_6_,_7_,_10_,_13]<br>0.948<br>0.857<br>0.779<br>89.4<br>54.8<br>24.4<br>95.9<br>88.1<br>81.6|
+|RS (forward) + PL (reverse) + greedy<br>Denoising Schedule<br>Kendall-Tau<br>Accuracy (%)<br>Correct (%)|[0_,_3_,_5_,_9]<br>[0_,_5_,_7_,_12]<br>[0_,_5_,_6_,_7_,_10_,_13]<br>0.953<br>0.867<br>0.799<br>90.9<br>56.4<br>26.4<br>96.4<br>89.0<br>83.3|
+|RS (forward) + PL (reverse) + beam search<br>Denoising Schedule<br>Kendall-Tau_↑_<br>Accuracy (%)<br>Correct (%)|[0_,_3_,_5_,_9]<br>[0_,_5_,_7_,_12]<br>[0_,_5_,_6_,_7_,_10_,_13]<br>0.955<br>0.869<br>0.797<br>91.1<br>57.2<br>26.4<br>96.5<br>89.2<br>83.1|
+|RS (forward) + IRS (reverse) + greedy<br>_T_<br>Kendall-Tau_↑_<br>Accuracy (%)<br>Correct (%)|9<br>12<br>13<br>0.947<br>0.794<br>0.390<br>88.6<br>24.4<br>0.6<br>95.9<br>82.5<br>44.6|
+|RT (forward) + IT (reverse) + greedy<br>_T_ (using approx. _n_<br>2 log_n_)<br>Kendall-Tau_↑_<br>Accuracy (%)<br>Correct (%)|15<br>55<br>105<br>0.490<br>Out of Memory<br>18.0<br>59.5|
+|RI (forward) + II (reverse) + greedy<br>_T_ (using approx. _n_log_n_)<br>Kendall-Tau_↑_<br>Accuracy (%)<br>Correct (%)|25<br>110<br>205<br>0.954<br>Out of Memory<br>91.1<br>96.4|
+
+
+Table 7: Results of sorting 100 4-digit MNIST images using various denoising schedules with the combination of RS, GPL and beam search consistently applied. 
+
+|Denoising Schedule|[0_,_15]|[0_,_8_,_9_,_15]|[0_,_7_,_8_,_9_,_15]|[0_,_7_,_8_,_10_,_15]|[0_,_8_,_10_,_15]|
+|---|---|---|---|---|---|
+|Kendall-Tau_↑_|0.000|0.316|0.000|0.000|**0.646**|
+|Accuracy (%)|0.0|0.0|0.0|0.0|**4.5**|
+|Correct (%)|1.0|39.6|1.0|1.0|**69.8**|
+
+
+## G.4 LATENT LOSS IN JIGSAW PUZZLE 
+
+In the original setup of the Jigsaw Puzzle experiment using the Gumbel-Sinkhorn network (Mena et al., 2018), the permutations are latent. That is, the loss function in Gumbel-Sinkhorn is a pixel-level MSE loss and does not use the ground truth permutation label. However, our loss function (12) actually (implicitly) uses the ground truth permutation that maps the shuffled image patches to their original order. Therefore, for fair comparison with the Gumbel-Sinkhorn network in the Jigsaw Puzzle experiment, we modify our loss function so that it does not use the ground truth permutation. Recall from Section 3.2 that we defined 
+
+**==> picture [297 x 25] intentionally omitted <==**
+
+In our original setup, we defined _p_ ( _Xt−_ 1 _|Xt, σt[′]_[)][ as a delta distribution] _[ δ]_[(] _[X][t][−]_[1][=] _[ Q][σ] t[′][X][t]_[)][, but this] would require that we know the permutation that turns _Xt−_ 1 to _Xt_ , which is part of the ground truth. So instead, we parameterize _p_ ( _Xt−_ 1 _|Xt, σt[′]_[)][ as a Gaussian distribution] _[ N]_ � _Xt−_ 1 _|QσtXt, I_ �. At the same time, we note that to find the gradient of (12), it suffices to find the gradient of the log of (22). We use the REINFORCE trick (Williams, 1992) to find the gradient of log _pθ_ ( _Xt−_ 1 _|Xt_ ), which gives 
+
+21 
+
+us 
+
+**==> picture [351 x 170] intentionally omitted <==**
+
+where we have used Monte-Carlo estimation in the last step, and _σt_[(1)] _, . . . , σt_[(] _[N]_[)] _∼ pθ_ ( _σt|Xt_ ). We further add an entropy regularization term _−λ·_ E _pθ_ ( _σt|Xt_ ) [log _pθ_ ( _σt|Xt_ )] to each of log _pθ_ ( _Xt−_ 1 _|Xt_ ). Using the same REINFORCE and Monte-Carlo trick, we obtain 
+
+**==> picture [398 x 177] intentionally omitted <==**
+
+for all _n ∈_ [ _N_ ]. Finally, we also subtract the exponential moving average weight as a control variate for variance reduction, where the exponential moving average is given by ema _←_ ema_rate _·_ ema + (1 _−_ ema_rate) _·_ weight for each gradient descent step. 
+
+G.5 TRAINING DETAILS AND ARCHITECTURE HYPERPARAMETERS 
+
+**Hardware.** The Jigsaw Puzzle and Sort 4-Digit MNIST Numbers experiments are trained and evaluated on the NVIDIA A40 GPU. The TSP experiments are trained and evaluated on the NVIDIA A40 and A100 GPU. 
+
+**Learning a Single Permutation List.** The SEDD model we use in our experiments has about 25M parameters. We use 7 encoder layers, 8 heads, model dimension 512, feed-forward dimension 2048, and dropout 0.1. We use the uniform transition for the forward process following the original work. Our model only has about 2M parameters. We use 7 encoder layers, 8 heads, model dimension 128, feed-forward dimension 512, and dropout 0.1. We also use a learned embedding for the numbers. For the diffusion process, we use a denoising schedule of [0 _,_ 8 _,_ 10 _,_ 15] for _n_ = 100 and [0 _,_ 9 _,_ 10 _,_ 12] for _n_ = 200. 
+
+For _n_ = 100, we use a batch size of 512 and 30K training steps on both methods. For _n_ = 200, we use a batch size of 128 and 30K training steps on both methods. For performance evaluation, we randomly sample 2560 sequences for SEDD and 2560 permutations for our method, and we perform their respective decoding processes. 
+
+22 
+
+**Jigsaw Puzzle.** For the Jigsaw Puzzle experiments, we use the AdamW optimizer (Loshchilov & Hutter, 2019) with weight decay 1e-2, _ε_ = 1e-9, and _β_ = (0 _._ 9 _,_ 0 _._ 98). We use the Noam learning rate scheduler given in (Vaswani et al., 2023) with 51,600 warmup steps for Noisy MNIST and 46,000 steps for CIFAR-10. We train for 120 epochs with a batch size of 64. When computing the loss (12), we use Monte-Carlo estimation for the expectation and sample 3 trajectories. For REINFORCE, we sampled 10 times for the Monte-Carlo estimation in (23), and we used an entropy regularization rate _λ_ = 0 _._ 05 and an ema_rate of 0.995. The neural network architecture and related hyperparameters are given in Table 8. The denoising schedules, with riffle shuffles as the forward process and GPL as the reverse process, are give in Table 9. For beam search, we use a beam size of 200 when decoding from GPL, and we use a beam size of 20 when decoding along the diffusion denoising schedule. 
+
+Table 8: Jigsaw puzzle neural network architecture and hyperparameters. 
+
+|**Layer**|**Details**|
+|---|---|
+|Convolution|Output channels 32, kernel size 3,<br>padding 1, stride 1|
+|Batch Normalization|_−_|
+|ReLU|_−_|
+|Max-pooling|Pooling 2|
+|Fully-connected|Output dimension(dim_after_conv+ 128)_/_2|
+|ReLU|_−_|
+|Fully-connected|Output dimension 128|
+|Transformer encoder|7 layers, 8 heads, model dimension (_d_model) 128,<br>feed-forward dimension 512, dropout 0.1|
+
+
+Table 9: Denoising schedules for the Jigsaw Puzzle task, where we use riffle shuffle in the forward process and GPL in the revserse process. 
+
+|**Number of patches per side**|**Denoising schedule**|
+|---|---|
+|2_×_2|[0_,_2_,_7]|
+|3_×_3|[0_,_3_,_5_,_9]|
+|4_×_4|[0_,_4_,_6_,_10]|
+|5_×_5|[0_,_5_,_7_,_11]|
+|6_×_6|[0_,_6_,_8_,_12]|
+
+
+**Sort 4-Digit MNIST Numbers.** For the task of sorting 4-digit MNIST numbers with _n ≤_ 100, we use the exact training and beam search setup as the Jigsaw Puzzle, except that we do not need to use REINFORCE. The neural network architecture is given in Table 10, The denoising schedules, with riffle shuffles as the forward process and GPL as the reverse process, are give in Table 11. 
+
+For _n_ = 200, we use the cosine decay learning rate schedule with 2350 steps of linear warmup and maximum learning rate 5e-5. The neural network architecture is the same as that of _n ≤_ 100, with the exception that we use _d_ model = _d_ feed-forward = 768, 12 layers, and 12 heads for the transformer encoder layer. We use the PL distribution for the reverse process. When computing the loss, we randomly sample a timestep from the denoising schedule as in Eq.(20) in Appendix C.2 due to efficiency reasons. All other setups are the same as that of _n ≤_ 100. 
+
+**TSP.** For solving the TSP, we perform supervised learning to train our SymmetricDiffusers to solve the TSP. Let _σ[∗]_ be an optimal permutation, and let _X_ 0 be the list of nodes ordered by _σ[∗]_ . We note that any cyclic shift of _X_ 0 is also optimal. Thus, for simplicity and without loss of generality, we always assume _σ[∗]_ (1) = 1. In the forward process of SymmetricDiffusers, we only shuffle the second to the _n_[th] node (or component). In the reverse process, we mask certain parameters of the reverse distribution so that we will always sample a permutation with _σt_ (1) = 1. 
+
+The architecture details are slightly different for TSP-20, where we input both node and edge features into our network. Denote by _Xt_ the ordered list of nodes at time _t_ . We obtain _Yt ∈_ R _[n][×][d]_[model] as in Eq. (15), where encoder _θ_ is now a sinusoidal embedding of the 2D coordinates. Let _Dt ∈_ R _[n][×][n]_ be the 
+
+23 
+
+Table 10: Sort 4-digit MNIST numbers neural network architecture and hyperparameters. 
+
+|**Layer**|**Details**|
+|---|---|
+|Convolution|Output channels 32, kernel size 5,<br>padding 2, stride 1|
+|Batch Normalization|_−_|
+|ReLU|_−_|
+|Max-pooling|Pooling 2|
+|Convolution|Output channels 64, kernel size 5,<br>padding 2, stride 1|
+|Batch Normalization|_−_|
+|ReLU|_−_|
+|Max-pooling|Pooling 2|
+|Fully-connected|Output dimension(dim_after_conv+ 128)_/_2|
+|ReLU|_−_|
+|Fully-connected|Output dimension 128|
+|Transformer encoder|7 layers, 8 heads, model dimension (_d_model) 128,<br>feed-forward dimension 512, dropout 0.1|
+
+
+Table 11: Denoising schedules for the Sort 4-Digit MNIST Numbers task, where we use riffle shuffle in the forward process and GPL in the revserse process. 
+
+|**Sequence Length**_n_|**Denoising schedule**|
+|---|---|
+|3|[0_,_2_,_7]|
+|5|[0_,_2_,_8]|
+|7|[0_,_3_,_8]|
+|9|[0_,_3_,_5_,_9]|
+|15|[0_,_4_,_7_,_10]|
+|32|[0_,_5_,_7_,_12]|
+|52|[0_,_5_,_6_,_7_,_10_,_13]|
+|100|[0_,_8_,_10_,_15]|
+|200|[0_,_9_,_10_,_12]|
+
+
+_n_ matrix representing the pairwise distances of points in _Xt_ , respecting the order in _Xt_ . Let _Et ∈_ R[(] 2[)] be the flattened vector of the upper triangular part of _Dt_ . We also apply sinusoidal embedding to _Et n_ and add time_embd( _t_ ) to it. We call the result _Ft ∈_ R[(] 2[)] _[×][d]_[model] . 
+
+Now, instead of applying the usual transformer encoder with self-attentions, we alternate between cross-attentions and self-attentions. For cross-attention layers, we use the node representations from the previous layer as the query, and we always use _K_ = _V_ = _Ft_ . We also apply an attention mask to the cross-attention, so that each node will only attend to edges that it is incident with. For selfattention layers, we always use the node representations from the previous layer as input. We always use an even number of layers, with the first layer being a cross-attention layer, and the last layer being a self-attention layer structured to produce the required parameters for the reverse distribution as illustrated in Appendix B. For hyperparameters, we use 16 alternating layers, 8 attention heads, _d_ model = 256, feed-forward hidden dimension 1024, and dropout rate 0.1. 
+
+For training details on the TSP-20 task, we use the AdamW optimizer (Loshchilov & Hutter, 2019) with weight decay 1e-4, _ε_ = 1e-8, and _β_ = (0 _._ 9 _,_ 0 _._ 999). We use the cosine annealing learning rate scheduler starting from 2e-4 and ending at 0. We train for 50 epochs with a batch size of 512. When computing the loss (12), we use Monte-Carlo estimation for the expectation and sample 1 trajectory. We use a denoising schedule of [0 _,_ 4 _,_ 5 _,_ 7], with riffle shuffles as the forward process and GPL as the reverse process. Finally, we use beam search for decoding, and we use a beam size of 256 both when decoding from GPL and decoding along the denoising schedule. 
+
+For the TSP-50 task, we use the original architecture stated in Appendix B without the edge information. We train for 250 epochs with a batch size of 256. We use a denoising schedule of [0 _,_ 5 _,_ 6 _,_ 7]. We use a beam size of 768 when decoding from GPL and decoding along the denoising schedule. 
+
+24 
+
+When decoding, we pick the permutation that gives the least TSP tour length in the final step of the beam search. All other setups are identical with that of TSP-20. 
+
+## G.6 BASELINES IMPLEMENTATION DETAILS 
+
+**Gumbel-Sinkhorn Network.** We have re-implemented the Gumbel-Sinkhorn Network (Mena et al., 2018) for application on jigsaw puzzles, following the implementations provided in the official repository[2] . To ensure a fair comparison, we conducted a thorough grid search of the model’s hyper-parameters. The parameters included in our search space are as follows, 
+
+Table 12: Hyperparameter Search Space for the Gumbel-Sinkhorn Network 
+
+|**Hyperparameter**|**Values**|
+|---|---|
+|Learning Rate (lr)|_{_10_−_3_,_10_−_4_,_10_−_5_}_|
+|Batch Size|_{_50_}_|
+|Hidden Channels|_{_64_,_128_}_|
+|Kernel Size|_{_3_,_5_}_|
+|_τ_|_{_0_._2_,_0_._5_,_1_,_2_,_5_}_|
+|Number of Sinkhorn Iterations (n_sink_iter)|_{_20_}_|
+|Number of Samples|_{_10_}_|
+
+
+**Diffsort & Error-free Diffsort** We have implemented two differentiable sorting networks from the official repository[3] specific to error-free diffsort. For sorting 4-digit MNIST images, error-free diffsort employs TransformerL as its backbone, with detailed hyperparameters listed in Table 13. Conversely, Diffsort uses a CNN as its backbone, with a learning rate set to 10 _[−]_[3] _[.]_[5] ; the relevant hyperparameters are outlined in Table 14. 
+
+For jigsaw puzzle tasks, error-free diffsort continues to utilize a transformer, whereas Diffsort employs a CNN. For other configurations, we align the settings with those of tasks having similar sequence lengths in the 4-digit MNIST sorting task. For instance, for 3 _×_ 3 puzzles, we apply the same configuration as used for sorting tasks with a sequence length of 9. 
+
+Table 13: Hyperparameters for Error-Free Diffsort on Sorting 4-Digit MNIST Numbers 
+
+|**Sequence Length**|**Steepness**|**Sorting Network**|**Loss Weight**|**Learning Rate**|
+|---|---|---|---|---|
+|3|10|odd even|1.00|10_−_4|
+|5|26|odd even|1.00|10_−_4|
+|7|31|odd even|1.00|10_−_4|
+|9|34|odd even|1.00|10_−_4|
+|15|25|odd even|0.10|10_−_4|
+|32|124|odd even|0.10|10_−_4|
+|52|130|bitonic|0.10|10_−_3_._5|
+|100|140|bitonic|0.10|10_−_3_._5|
+|200|200|bitonic|0.10|10_−_4|
+
+
+**TSP.** For the baselines for TSP, we first have 4 traditional operations research solvers. Gurobi (Gurobi Optimization, LLC, 2023) and Concorde (Applegate et al., 2006) are known as exact solvers, while LKH-3 (Helsgaun, 2017) is a strong heuristic and 2-Opt (Lin & Kernighan, 1973) is a weak heuristic. For LKH-3, we used 500 trials, and for 2-Opt, we used 5 random initial guesses with seed 42. 
+
+For the GCN model (Joshi et al., 2019), we utilized the official repository[4] and adhered closely to its default configuration for the TSP-20 dataset. For DIFUSCO (Sun & Yang, 2023), we sourced it from 
+
+> 2https://github.com/google/gumbel_sinkhorn 
+
+> 3https://github.com/jungtaekkim/error-free-differentiable-swap-functions 
+
+> 4https://github.com/chaitjo/graph-convnet-tsp 
+
+25 
+
+Table 14: Hyperparameters for Diffsort on Sorting 4-Digit MNIST Numbers 
+
+|**Sequence Length**|**Steepness**|**Sorting Network**|
+|---|---|---|
+|3|6|odd even|
+|5|20|odd even|
+|7|29|odd even|
+|9|32|odd even|
+|15|25|odd even|
+|32|25|bitonic|
+|52|25|bitonic|
+|100|25|bitonic|
+|200|200|bitonic|
+
+
+its official repository[5] and followed the recommended configuration of TSP-50 dataset, with a minor adjustment in the batch size. We increased the batch size to 512 to accelerate the training process. For fair comparison, we also remove the post-processing heuristics in both models during the evaluation. 
+
+## H LIMITATIONS 
+
+Despite the success of this method on various tasks, the model presented in this paper still requires a time-space complexity of _O_ ( _n_[2] ) due to its reliance on the parametric representation of GPL and the backbone of transformer attention layers. This complexity poses a significant challenge in scaling up to applications involving larger symmetric groups or Lie groups. 
+
+> 5https://github.com/Edward-Sun/DIFUSCO 
+
+26

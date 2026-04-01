@@ -1,0 +1,924 @@
+## OPEN-VOCABULARY CUSTOMIZATION FROM CLIP VIA DATA-FREE KNOWLEDGE DISTILLATION 
+
+**Yongxian Wei**[1] **, Zixuan Hu**[2] **, Li Shen**[3] _[∗]_ **, Zhenyi Wang**[4] **, Chun Yuan**[1] _[∗]_ **, Dacheng Tao**[2] 1Tsinghua University, China 2Nanyang Technological University, Singapore 3Shenzhen Campus of Sun Yat-sen University, China 4University of Maryland, College Park, USA 
+
+## ABSTRACT 
+
+Vision-language models such as CLIP have demonstrated strong zero-shot performance, but their considerable size and inefficient inference limit customizable deployment for users. While knowledge distillation is a solution, it still requires the original data, which is not always available due to copyrights and privacy concerns. For many users seeking open-vocabulary customization, Data-Free Knowledge Distillation (DFKD) emerges as a promising direction. Upon rethinking DFKD, we find that existing methods fail on CLIP due to their heavy reliance on BatchNorm layers, which are unexpectedly _unusable_ in CLIP. Based on our findings, we adopt image-text matching to achieve DFKD for CLIP, enabling customization based on arbitrary class texts. This involves (i) inversing a surrogate dataset from CLIP based on text prompts; and (ii) distilling a student model from CLIP using the surrogate dataset. Specifically, we introduce style dictionary diversification to enhance the _diversity_ of synthetic images. To prevent uncontrollable semantics introduced by diversification, we propose a class consistency maintaining strategy to ensure the _consistency_ of synthetic images. Based on synthetic images with various styles, we further propose meta knowledge distillation to train the student model with good _generalization_ ability. Moreover, we introduce a simple yet effective method to enable customization based on few example images. Comprehensive experiments showcase the superiority of our approach across twelve customized tasks, achieving a 9.33% improvement compared to existing DFKD methods. 
+
+## 1 INTRODUCTION 
+
+Vision-Language Models (VLMs) such as CLIP (Radford et al., 2021) are revolutionizing the field with their outstanding performance. VLMs offer a remarkable zero-shot performance on a broad range of visual recognition tasks (Menon & Vondrick, 2023; Silva-Rodriguez et al., 2024) thanks to their open-vocabulary ability (Ilharco et al., 2022; Conti et al., 2023). However, the large model sizes, high computational resource requirements, and inefficient inference speed of these models restrict their deployment on mobile and IoT edge devices (Howard et al., 2017; Tan & Le, 2019). While knowledge distillation is a solution, it still requires the original data, which is not always available due to copyright and privacy concerns (Truong et al., 2021). Furthermore, different users have varying needs for downstream tasks, such as personalized tasks (Gal et al., 2023). This promotes us to ask: _Could we customize models based on users’ needs (_ e.g. _, arbitrary combinations of class texts or few example images) without the original data?_ In other words, can we steal any compact models from an off-the-shelf CLIP to meet customized tasks? 
+
+Data-Free Knowledge Distillation (DFKD) (Yu et al., 2023; Hong et al., 2023) aims to distill a teacher model to a student model without accessing the original data. DFKD performs knowledge distillation by inversing a surrogate dataset from the teacher model. It typically optimizes the data _**x**_ associated with a target label _y_ , which lies in the label space of the teacher model. However, applying SOTA methods to the powerful CLIP model results in significant failures (see Fig. 2). This is because existing DFKD relies on statistics stored in BatchNorm (BN) layers of the teacher model, which are used to align the distribution of synthetic images with the pre-training data distribution. However, the 
+
+> _∗_ Corresponding author 
+
+1 
+
+**==> picture [389 x 119] intentionally omitted <==**
+
+**----- Start of picture text -----**<br>
+1. Inversionclass texts Style Dictionary 𝐒𝐭𝐲𝐥𝐞𝟏 text embeddings 2. Distillation a photo of a [CLS]<br>ButterflyDog Diversification 𝐒𝐭𝐲𝐥𝐞𝑵 EncoderText 𝑻# 𝑻$ 𝑻% Surrogate Dataset EncoderImage 𝑻Text Encoder# 𝑻$ 𝑻%<br>User1 Flamingo class prompts = [—<br>target class  ,𝒚 𝐒𝐭𝐲𝐥𝐞𝟏 ... 𝐒𝐭𝐲𝐥𝐞𝑵 KL divergence ℒ)**+'<br>ℒ&'( + ℒ)*+ 𝒳&'()*<br>VQGANDecoder EncoderImage 𝑰 split styles Student θ<br>9-(-8--=-l z update —, !𝒙 img embed logits a  =| 𝐒𝐭𝐲𝐥𝐞𝟐 ... 3 |e update it adapt [—] ① Inner Loop ℒ,-&+' |<br>𝒳&+.& Student<br>User2 K -shot example images EncoderImage Class Prototype Guidance 𝒑 prototypes # 𝒑$ 𝒑% Forward Backward 𝛉𝒄 ② Outer Loop<br>aoe pa ws<br>...<br>**----- End of picture text -----**<br>
+
+
+Figure 1: **An illustration of the open-vocabulary customization.** Users input their customized needs through class texts or example images and receive a student model that can directly perform inference. Our framework uses multi-modal encoders to build a loss function that evaluates how well a (text, image) or (image, image) pair matches, then backpropagates to the latent space. Diversity can be enhanced through style dictionary diversification. We optimize synthetic images to compile a surrogate dataset for training. Finally, we split images into training and testing sets according to styles, and employ meta-learning to train a customized student model. 
+
+BN statistics stored in CLIP are unexpectedly _unusable_ . In this paper, we find that CLIP, trained on large-scale internet datasets, tends to encode _facial features_ into its BN statistics (see Fig. 3). 
+
+To address the issue of unusable or absent BN layers ( _e.g._ , architectures like ViT), we adopt an alternative inversion way via image-text matching (Xuan et al., 2023; Liu et al., 2024). By aligning the target class _**t**_ and synthetic image _**x**_ in the embedding space of CLIP, we achieve the reconstruction of original data (Liu et al., 2021; Crowson et al., 2022). However, there remain three drawbacks: (i) The diversity of synthetic images is insufficient, and they often lack photo-realism, failing to represent the real distribution; (ii) Diversifying text prompts to increase data diversity introduces uncontrollable semantics, potentially resulting in overly stylized and class-inconsistent content; (iii) Logits-based knowledge distillation tends to overfit by mimicking the teacher model’s outputs, neglecting the invariant information and thus reducing generalization. Additionally, there is a lack of attention to how image prompts could also be utilized for inversion. 
+
+In this work, we address these issues in a unified framework (see Fig. 1), enabling customization based on both texts and images. We distill small models from CLIP in a data-free manner for customized tasks, obviating the need for the text encoder. For **text-based customization** , we introduce style dictionary diversification to enhance the diversity of synthetic images. Our style dictionary contains terms that describe the real world. We start with these terms as prompts and further utilize contrastive learning for instance-level discretization. This approach not only maintains photo-realism but also enhances diversity among samples. To prevent uncontrollable semantics introduced by diversification, we further propose class consistency maintaining to ensure accurate classification of synthetic images. After synthesizing images with various styles, we use meta knowledge distillation to transfer style-agnostic knowledge from CLIP to the student model. Specifically, we minimize the loss on current styles while ensuring that the optimization direction also yields improvements across other styles. By encouraging a gradient direction suitable for all styles, the student model captures shared representations across different styles, enabling effective generalization. For **image-based customization** , we construct prototypes based on example images to reduce intra-class variance. Instead of relying solely on few example images for knowledge distillation, we expand the distribution by leveraging the teacher’s knowledge. We demonstrate that this approach effectively reduces the generalization error and enhances performance. 
+
+In summary, our main contributions are three-fold: (1) We enable open-vocabulary customization from CLIP based on only texts or few images. (2) We rethink model inversion methods in existing DFKD, uncovering the challenges posed by CLIP. (3) Our approach enhances the diversity and consistency of synthetic images, and improves the generalization of the student model. 
+
+## 2 RELATED WORK 
+
+**Vision-Language Models (VLMs).** VLMs (Jia et al., 2021; Li et al., 2022; 2023; Alayrac et al., 2022) have emerged as a promising paradigm for visual recognition with the release of CLIP (Radford et al., 2021). Zero-shot classification, _i.e._ , computing the similarity between a query image and 
+
+2 
+
+embedded texts for each class, has shown impressive results on various benchmarks. VLMs are trained on extensive datasets of image-text pairs. Unlike previous models limited to fixed classes, VLMs have the advantage of linking visual data with free-form language (Huang et al., 2024; Tang et al., 2024). Recent research has focused on optimizing input prompts, developing learnable prompts for text encoders (Zhou et al., 2022b;a), visual encoders (Bahng et al., 2022), or both jointly (Xing et al., 2023). Additionally, there’s been explorations into using synthetic images generated from available class names to aid image classification (Udandarao et al., 2023; Bansal & Grover, 2023). In contrast, we do not query generative models or external images, but propose to inverse images directly from CLIP by optimizing images with pre-defined supervision. 
+
+**Data-Free Knowledge Distillation (DFKD).** DFKD (Raikwar & Mishra, 2022; Fang et al., 2022; Yu et al., 2023) aims to transfer knowledge from a pre-trained teacher model (typically a larger model) to a student model (generally more lightweight), without access to the raw data. This research is particularly valuable in practical scenarios where data availability is limited due to data privacy, safety, or ethical concerns (Hu et al., 2024; Wei et al., 2024b). DFKD has been greatly influenced by techniques like model inversion (Fredrikson et al., 2015), which seeks to extract embedded data knowledge from pre-trained models. In particular, DeepInversion (Yin et al., 2020) regularizes the distribution of synthetic images based on statistics from BN layers of the teacher model. Another method with a generator, CMI (Fang et al., 2021) introduces a contrastive learning objective to ensure that synthetic images are distinguishable from previously synthesized ones. They typically assume a classification model with a classifier that outputs logits. Target classes are represented as labels defined in the classifier’s label space. In contrast, Xuan et al. (2023) proposed leveraging image-text matching for DFKD in VLMs, introducing three prompt diversification methods to extract out-of-distribution capacity from VLMs. In comparison, our target classes can be represented not only as texts but also as example images. Additionally, we propose consistency strategies to prevent noise semantics introduced by styles and enhance realism. 
+
+**Customization.** Adapting models to the specific needs of users has long been a goal in machine learning research. Customized models are typically seen in recommendation systems (Amat et al., 2018; Wang et al., 2023) and federated learning (Fallah et al., 2020; Atapour et al., 2024). Recently, the customization trend has extended to vision tasks, where fine-tuning generative models is common for reconstructing specific scenes (Roich et al., 2022; Gal et al., 2023; Kumari et al., 2023). PALAVRA (Cohen et al., 2022) utilizes a pre-trained CLIP model for the retrieval and segmentation of personalized objects. It identifies pseudo-words in the text embedding space of CLIP that refer to a specific object. These pseudo-words are then used to describe images for retrieval or to segment specific objects in a scene, distinguishing the personalized object from other candidates. In contrast, our focus lies in customizing smaller models that can directly perform inference to recognize objects. 
+
+## 3 PRELIMINARY 
+
+**Rethinking Model Inversion in DFKD.** Existing DFKD methods (Yin et al., 2020; Fang et al., 2021; 2022) typically employ a classification model that outputs logits, with target classes represented as labels defined in the classifier’s label space. These methods focus on inversing images from pre-trained models using a classification loss and a prior regularization loss, treating the image _**x**_ ˆ as the optimization object. The prior regularization loss aims to align the feature distribution of synthesized images with prior distribution information, _i.e._ , the mean _µ_ and variance _σ_[2] stored in BN layers, encouraging the synthetic images _**x**_ **ˆ** to mimic the distribution of original images: 
+
+**==> picture [299 x 22] intentionally omitted <==**
+
+where _µl_ ( _**x**_ **ˆ** ) and _σl_[2][(] _**[x]**_ **[ˆ]**[)][ denote the mean and variance of features at the] _[ l]_[th][convolutional layer.] _[µ]_[BN] _l_ and _σl_[BN] refer to the mean and variance of prior statistics stored in the _l_[th] BN layer. 
+
+To apply DFKD methods on VLMs, we utilize the ResNet-50 backbone of CLIP as the teacher model. However, CLIP only has a visual encoder _E_ img to extract features. Consequently, we construct a linear classifier _**W**_ upon the backbone. We then fine-tune this classifier using the testing set to form a classification model _f_ ( _·_ ) = _E_ img( _·_ )[T] _**W**_ , which replaces the teacher in DFKD methods. 
+
+As shown in Fig. 2, all DFKD methods fail when applied to CLIP. Detailed results for each dataset are provided in Table 8. This failure stems from their heavy reliance on BN layers, which store 
+
+3 
+
+**==> picture [397 x 118] intentionally omitted <==**
+
+**----- Start of picture text -----**<br>
+70 64.59 Figure 2: Comparisons with DFKD<br>60 55.26 = methods on 11 customized tasks. Aver-<br>| 51.26 = age accuracies are reported. The notation<br>50 45.37 (CLIP) refers to a teacher model of RN50<br>40 —_ pre-trainedteacher model of RN50 pre-trained on Im-by CLIP, and (IN) denotes a<br>30 ageNet. Existing DFKD methods signifi-<br>cantly fail with CLIP (single-digit accura-<br>20 cies across 100 classes), while only show-<br>10 = 7.13 = 7.63 a 6.66 ing effectiveness with (IN). Our approachachieves the best results using CLIP.<br>DeepInv (CLIP) DeepInv (IN) CMI (CLIP) CMI (IN) Fast (CLIP) Fast (IN) Ours (CLIP)<br>Accuracy (%)<br>**----- End of picture text -----**<br>
+
+
+**==> picture [256 x 58] intentionally omitted <==**
+
+**----- Start of picture text -----**<br>
+(a) DeepInversion (CLIP) (b) DeepInversion (IN)<br>(c) CMI (CLIP) ——# _ EeeGs 4 % “ka fil (d) CMI (IN) Be<br>**----- End of picture text -----**<br>
+
+
+**==> picture [72 x 7] intentionally omitted <==**
+
+**----- Start of picture text -----**<br>
+(a) DeepInversion (CLIP)<br>**----- End of picture text -----**<br>
+
+
+Figure 3: **Visualizations of synthetic images using DFKD methods.** We observe that CLIP, trained on large-scale internet datasets, tends to encode facial features into statistics of its BatchNorm layers. When using models pre-trained on ImageNet, these methods can synthesize informative images for training. 
+
+statistical knowledge from prior training. They are constrained to utilize the teacher pre-trained on training sets, which essentially stores the previously seen data. For instance, ablation experiments of DeepInversion (Yin et al., 2020) show a **40%-69%** drop in performance upon removal of the BN loss. While CLIP is pre-trained on large-scale, web-crawled datasets that often contain complex scenes with people, even though the text descriptions may not mention people (see Fig. 9 in App. B), leading to domain shifts from test images. We observe that CLIP’s BN layers tend to favor faces (see Fig. 3), resulting in corrupted images that do not accurately reflect the target class. Other VLMs also exhibit this phenomenon, as detailed in App. B. Consequently, DFKD methods struggle to utilize CLIP to synthesize high-quality images, causing a significant performance drop. 
+
+To further validate this observation, we conduct experiments using a pre-trained ResNet-50 from PyTorch, combined with a linear classifier as the teacher. In Fig. 2, results denoted with (IN) clearly show improved performance, despite only fine-tuning the classifier. In Fig. 3, synthetic images (IN) can reflect class semantics and are recognizable by human observers. This suggests that **existing DFKD methods are only effective when the teacher’s BN stored distribution closely matches the testing distribution** . Our approach enables DFKD for CLIP without relying on BN statistics, and is applicable even to transformers that lack BN layers, showcasing the superiority. Based solely on class texts, we outperform DFKD methods that utilize real data. 
+
+**Image-Text Matching.** To address the issue of unusable or absent BN layers ( _e.g._ , architectures like ViT), we adopt an alternative inversion way via image-text matching. CLIP consists of a pair of text encoder _E_ txt and image encoder _E_ img, which map a text _**t**_ and an image _**x**_ into a common latent space. Given class texts _{_ _**t**_ 1 _, · · · ,_ _**t** n}_ , we can synthesize images by aligning them in the latent space (Crowson et al., 2022; Liu et al., 2024). Specifically, we fix the CLIP parameters and adopt a pre-trained VQGAN with a decoder _G_ for more efficient parameterization, conducting optimization directly in the latent variable space _**z**_ . We start with random noise and progressively refine _**z**_ by minimizing the loss function, which measures image-text consistency: 
+
+**==> picture [298 x 16] intentionally omitted <==**
+
+ˆ where arcsin maps distances to angular space, and the image _**x**_ = _G_ ( _**z**_ ). The decoder _G_ reduces the dimensionality of the optimization target from pixel space to a low-dimensional latent space. 
+
+To enhance image diversity, we create numerous prompt templates using a style dictionary _{_ _**d**_ 1 _, · · · ,_ _**d** N }_ , such as “[ _**t**_ ] in the style of [ _**d**_ ]”, and introduce learnable styles optimized by instancelevel contrastive learning (Xuan et al., 2023). Initially, input texts are converted into a set of tokens 
+
+4 
+
+**==> picture [385 x 37] intentionally omitted <==**
+
+**----- Start of picture text -----**<br>
+Water lilly Tacos Sunflower Cup Chair Original Teacher CLIP After diversification Teacher CLIP<br>mountain?<br>skyscraper?<br>skyscraper. cloud?<br>cityscape?<br>i.<br>**----- End of picture text -----**<br>
+
+
+Figure 4: **Left:** Utilizing image-text matching directly may result in synthetic images that lack photo-realism and tend towards artistic styles. **Right:** Introducing style dictionary diversification can lead to uncontrollable semantics, potentially resulting in overly stylized and class-inconsistent content. This may even cause CLIP itself to inaccurately recognize target class labels, imparting uncertain knowledge to the student model. 
+
+_**Vt** , · · · ,_ _**Vd**_ , where each word is mapped to a vector through a fixed codebook. These tokens are then fed into the transformer module to obtain the text embedding _**T**_ . The contrastive loss is back-propagated to optimize _**Vd**_ of the style prompt _**d**_ in the token embedding space: 
+
+**==> picture [290 x 27] intentionally omitted <==**
+
+where _d_ cos measures the distance between text embeddings, and _B_ denotes the batch size. Positive samples _**T**_[+] are obtained through text augmentation by randomly shuffling letters of the frozen template “in the style of”. Negative samples _**T** b[−]_[are the other style prompts within the batch.] 
+
+## 4 METHODOLOGY 
+
+In this section, we propose a data-free framework for customizing student models from CLIP (see Fig. 1). The framework adopts a two-step paradigm, including model inversion and knowledge distillation. In Sec. 4.1, we discuss text-based customization. Our approach enhances the diversity and consistency of synthetic images, and improves the generalization of the student model. In Sec. 4.2, we discuss customization based on few example images from each class. 
+
+## 4.1 TEXT-BASED CUSTOMIZATION 
+
+**Style dictionary diversification.** Given the target class _**t**_ , we can synthesize images from CLIP by optimizing Eq. (3) and Eq. (2). Empirical observations (see Fig. 4, left) suggest that synthetic images often lack photo-realism and tend towards artistic styles. This phenomenon arises from CLIP’s training on vast internet image-text pairs, containing various domains, enabling it to grasp abstract concepts. Hence, the style dictionary we devise aims to closely emulate real-world scenes, incorporating terms like “pattern”, “illustration”, and “photorealism”. This strategy balances the maintenance of realism with the achievement of a diverse range of style prompts. 
+
+We can employ the concept of _δ_ -cover to investigate how data diversity influences the generalization error bound (Sener & Savarese, 2018; Zhang et al., 2023). A dataset _S_ is a _δ_ -cover of dataset _D_ if a set of balls of radius _δ_ , centered at samples in _S_ , cover the dataset _D_ . We define the diversity of the surrogate dataset _S_ as _δ_ div, which is the inverse of the minimal radius _δ_ min. The rationale is that if the radius _δmin_ is high, the diversity of the dataset must be low. Under some mild assumptions: 
+
+**Theorem 4.1.** _Given the original dataset_ ˆ _D_ = _{_ _**x** i, yi}i∈_ [ _m_ ] _with m i.i.d. samples and the surrogate dataset S_ = _{_ _**x** j,_ ˆ _yj}j∈_ [ _s_ ] _. Assume the hypothesis function is λ[η] -Lipschitz continuous, the loss function ℓ_ ( _**x** , y_ ) is _λ[ℓ] -Lipschitz continuous for all y, and is bounded by L, with ℓ_ (ˆ _**x** j,_ ˆ _yj_ ; _**θ**_ ) = 0 _for all j ∈_ [ _s_ ] _. If the dataset S is a δ-cover of D, with probability at least_ 1 _− γ, the bound holds:_ 
+
+**==> picture [321 x 38] intentionally omitted <==**
+
+_where C is the number of classes, and_ _**θ** ∈_ **Θ** _is the optimized student model._ 
+
+Please refer to App. A.1 for proofs. This theorem shows that the generalization error is bounded by _δdiv_ . In other words, the more diverse samples inversed from CLIP, the greater improvement in generalization can be achieved. Naive prompts result in a large covering radius _δ_ and thus the _δdiv_ is low. On the other hand, manually designing complex prompts is laborious and empirical. By 
+
+5 
+
+employing style dictionary diversification, CLIP can be guided to synthesize a diverse range of new samples, thereby enhancing the generalization of the student model. 
+
+**Class consistency maintaining.** It’s inevitable that synthetic data may contain class-inconsistent samples (He et al., 2023). This issue becomes more severe with style dictionary diversification, as it may introduce uncontrollable semantics into text prompts (see Fig. 4, right). Hence, we introduce a class consistency maintaining strategy to prevent overly stylized deviation. Unlike the instance-byinstance optimization in Eq. (2), in a scenario where we know all the classes for the customized task, we can perform global multi-class optimization. Specifically, for an _n_ -way classification, we input class names _{_ _**t**_ 1 _, · · · ,_ _**t** n}_ with prompt _**s** i_ = “a photo of a [ _**t** i_ ]” into the text encoder _E_ txt to obtain text embeddings. Then, these text embeddings _E_ txt( _**s**_ ) can be used to construct a classifier. Each latent embedding _E_ img( _G_ ( _**z**_ )) can be classified based on cosine similarity according to the classifier: 
+
+**==> picture [285 x 15] intentionally omitted <==**
+
+where _y_ ˆ _∈_ N[1 _,n_ ] is the target class label. The classification loss serves as an anchor to regularize the class semantics of the diversified data in CLIP’s embedding space. This promotes consistency between synthetic images and their corresponding class text. 
+
+**Meta knowledge distillation.** When using the surrogate dataset for distilling knowledge from CLIP, synthetic images may not cover all semantic information of real images, resulting in a gap between the training and testing distributions. In other words, the covariate shift issue (Sugiyama & Storkey, 2006) in DFKD is more significant than in knowledge distillation. To address this, we propose meta knowledge distillation to train the student model across various styles. The objective (Li et al., 2018) is to minimize the loss on current styles while ensuring that the optimization direction taken also yields improvements across other styles. 
+
+The surrogate dataset _X_ contains _N_ styles through the style dictionary. To emulate real train-test shifts, we train the student model _**θ**_ on different styles. During each iteration of training, one style _Xte_ is randomly chosen as the meta-testing (virtual-test) style, while the remaining styles _Xtr_ = _X −Xte_ form the meta-training set. The optimization objective for meta knowledge distillation is as follows: 
+
+**==> picture [390 x 15] intentionally omitted <==**
+
+where _L_ KD is the KL divergence between student logits and CLIP logits, minimizing their disagreement. CLIP logits are the cosine similarity between image embeddings _E_ img( _X_ ) and text embeddings _E_ txt( _**s**_ ). _**θ** c_ is obtained after the inner loop, and _**θ**_ is the student parameters we truly update. The outer loop evaluates the performance of _**θ** c_ on another style _Xte_ . To understand how the student learns invariant representations, we can analyze the objective from the perspective of gradient alignment. 
+
+**Theorem 4.2.** _If L_ KD _has Lipschitz Hessian, and_ _**θ** c_ = _**θ** − α∇Linner denotes a single gradient descent step on_ _**θ** with the objective Linner, where α is a learning rate, then:_ 
+
+**==> picture [386 x 28] intentionally omitted <==**
+
+Please refer to App. A.2 for proofs. The analysis reveals that the gradient of _Xte_ produces the inner product with the gradient of _Xtr_ . This implies that optimizing the student model _**θ**_ not only minimizes the expected loss across all styles _X_ (effectively the empirical risk minimization), but also maximizes the inner product between gradients of different styles _∇LKD_ ( _Xtr_ ; _**θ**_ ) _· ∇LKD_ ( _Xte_ ; _**θ**_ ). Hence, it encourages the student model to converge towards a common gradient direction across styles, learning invariant representations that generalize to new testing distributions. 
+
+## 4.2 IMAGE-BASED CUSTOMIZATION 
+
+In the above sections, we optimize synthetic images to match target texts, benefiting from CLIP’s powerful image-text alignment capability. An interesting idea is whether we can optimize synthetic images using target images _{_ _**I**_ 1 _, · · · ,_ _**I** n}_ by aligning their embeddings in the visual space, where each class has _K_ -shot example images _{_ _**i** j}[K] j_ =1[.][We can replace] _[ E]_[txt][(] _**[t]**_[)][ in Eq. (2) with] _[ E]_[img][(] _**[i]**_[)][ to] enable the image prompt. Building upon this idea, we propose class prototype guidance to further reduce the intra-class variance of synthetic images. 
+
+6 
+
+A single image may not accurately capture the characteristics of a class, leading to synthetic images exhibiting notable intra-class variance, which will hinder inter-class discrimination (Hou & Sato, 2022). Therefore, we construct a prototype representation for each class, around which data points cluster.ding spaceSpecifically, we compute the prototype _E_ img( _**i** j_ ). Synthetic images can be optimized towards the target class _**p** y_ ˆ as the mean of few example images in the embed- _y_ ˆ by classifying it with all prototypes _**p**_ : 
+
+**==> picture [356 x 16] intentionally omitted <==**
+
+Compared to solely using few example images to distill knowledge from the CLIP, our approach can be viewed as leveraging the CLIP’s knowledge to augment a new distribution. We demonstrate that the generalization of a model trained on this distribution can be quantified by its proximity to the testing distribution. We borrow the notion of divergence from Ben-David et al. (2010). 
+
+**Corollary 4.3.** _For any arbitrary distributions P and P[′] , with the trained model_ _**θ** ∈_ **Θ** _. The notion of_ **Θ** ∆ **Θ** _divergence denotes that d_ **Θ** ∆ **Θ** ( _P[′] , P_ ) = sup _**θ** ,_ _**θ** ′∈_ **Θ** _|_ P _**x** ∼P ′_ [ _**θ**_ ( _**x**_ ) _̸_ = _**θ**[′]_ ( _**x**_ )] _−_ P _**x** ∼P_ [ _**θ**_ ( _**x**_ ) _̸_ = _**θ**[′]_ ( _**x**_ )] _|. Assume there exists ζ_ ( _|_ **Θ** _| , s, γ_ ) _≥_ 0 _, a non-negative function that diminishes monotonically with s. Then, with probability at least_ 1 _− γ the following bounds hold:_ 
+
+**==> picture [248 x 22] intentionally omitted <==**
+
+_where EP ′_ ( _**θ**_ ) _is the expected error over P[′] , E_[ˆ] _P_ ( _**θ**_ ) _is the empirical error over the s training samples in the surrogate dataset S ∼P, and λ_ ( _P[′]_ ) _is a constant._ 
+
+Please refer to App. A.3 for proofs. The second term _d_ **Θ** ∆ **Θ** ( _P[′] , P_ ) represents the divergence between two distributions, underscoring that generalization performance depends on this divergence. Consequently, incorporating a distribution close to the testing distribution alongside the original data can significantly enhance generalization. This suggests that utilizing distributions generated from CLIP, a foundational model trained on a vast dataset, would be particularly beneficial due to its exposure to diverse distributions (Zhou et al., 2023). 
+
+## 5 EXPERIMENTS 
+
+In this section, we begin by detailing our experimental setup. Following that, we empirically verify the effectiveness of our proposed approach via extensive experiments. 
+
+## 5.1 EXPERIMENTAL SETUP 
+
+**Datasets and pre-trained models.** In the DFKD setting, we have no access to the training data. We employ ViT-B/32 as the visual encoder and a 12-layer 8-head transformer as the text encoder of CLIP (Radford et al., 2021). VQGAN (Esser et al., 2021) is utilized for synthesizing surrogate images. The pre-trained weights are kept fixed throughout the training process. We perform model inversion from texts sourced from datasets including Caltech-101 (Fei-Fei et al., 2004) (101 categories), ImageNet-1K (Deng et al., 2009) (1000 categories), or Flower-102 (Nilsback & Zisserman, 2008) (102 fine-grained categories). Our method is an open-vocabulary, customized approach suitable for any category recognized by CLIP. Therefore, we randomly divide ImageNet-1K into 10 splits to simulate a real customization scenario as closely as possible, reporting average results to demonstrate the robustness of our method. Each task includes over 100 categories encompassing a wide range of natural categories. Further details regarding data statistics are provided in App. H. The student model is evaluated on these datasets, including the test set of ImageNet, and the complete datasets of Caltech-101 and Flower-102, with the classification accuracy (in %) reported. 
+
+**Implementation details.** Without specific statements, we default to using a ResNet-18 as the student model. We construct a style dictionary with a size of 16 (details in App. G). The batch size for prompt learning is set to 64, with a learning rate of 0.01. Surrogate images are synthesized with a resolution of 224 _×_ 224, and optimized using the Adam optimizer with a learning rate of 0.1 for 400 iterations. For text-based customization, 64 images are generated per class. For image-based customization, each class has 4 example images, and 24 additional images are synthesized per class. The inner loop learning rate _α_ and outer loop learning rate for meta knowledge distillation are both set to 0.001, utilizing the SGD optimizer. Compared DFKD methods are implemented using the official code repository, and recommended hyperparameter settings are utilized. 
+
+7 
+
+Table 1: **Test accuracy (%) for text-based customization** . SDD: Style Dictionary Diversification; CCM: Class Consistency Maintaining; _L_ CE: supervised loss with hard labels; _L_ KD: knowledge distillation loss with soft labels; Meta: meta knowledge distillation. All inversion methods are tested with meta _L_ KD. 
+
+|soft labels; Meta: meta knowledge distillation. All inversion methods are tested with meta_L_KD.||
+|---|---|
+|Caltech-101<br>ImageNet1<br>ImageNet2<br>ImageNet3<br>ImageNet4<br>ImageNet5<br>ImageNet6<br>ImageNet7<br>ImageNet8<br>ImageNet9<br>ImageNet10|**Average**|
+|||
+|T.<br>CLIP<br>88.66<br>82.84<br>85.06<br>83.18<br>85.76<br>87.22<br>86.84<br>84.14<br>84.64<br>87.02<br>86.79|85.65|
+|||
+|Inversion<br>Baseline<br>59.64<br>59.26<br>61.12<br>61.48<br>57.14<br>61.08<br>63.04<br>59.48<br>60.56<br>62.51<br>61.39<br>+ SDD<br>61.07<br>**63.02**<br>64.98<br>65.06<br>60.14<br>66.34<br>**66.42**<br>65.56<br>63.30<br>65.24<br>**65.30**<br>+ CCM<br>60.73<br>58.44<br>59.78<br>60.86<br>56.62<br>61.52<br>61.48<br>61.28<br>60.82<br>62.07<br>60.24<br>SDD+CCM<br>**61.33**<br>62.46<br>**65.02**<br>**65.60**<br>**62.52**<br>**66.80**<br>66.24<br>**66.78**<br>**65.62**<br>**65.49**<br>65.00|60.61<br>64.22<br>60.35|
+||**64.81**|
+|Distillation<br>_L_CE<br>55.19<br>54.28<br>58.70<br>58.82<br>54.88<br>59.69<br>61.92<br>59.92<br>57.14<br>58.39<br>56.73<br>57.79<br>_L_KD<br>59.90<br>61.56<br>63.76<br>64.34<br>60.66<br>65.33<br>65.48<br>65.62<br>64.22<br>64.27<br>64.22<br>63.58<br>_L_CE+_L_KD<br>59.87<br>60.14<br>62.42<br>63.82<br>58.54<br>64.07<br>64.22<br>63.82<br>63.84<br>62.77<br>62.29<br>62.35<br>Meta_L_CE+_L_KD 59.70<br>61.20<br>64.62<br>64.24<br>61.14<br>66.44<br>66.12<br>65.84<br>65.08<br>64.83<br>63.59<br>63.89<br>Meta_L_KD<br>**61.33**<br>**62.46**<br>**65.02**<br>**65.60**<br>**62.52**<br>**66.80**<br>**66.24**<br>**66.78**<br>**65.62**<br>**65.49**<br>**65.00**<br>**64.81**||
+||**64.81**|
+
+
+## 5.2 MAIN RESULTS 
+
+**Results of text-based customization.** In Table 1, given the text _**t**_ of target classes, CLIP conducts zero-shot classification with the vanilla prompt “a photo of a [ _**t**_ ]”. Baseline (Crowson et al., 2022) synthesizes images using the vanilla prompt and performs meta knowledge distillation upon the dataset. Adding style dictionary diversification (SDD) notably improves performance, highlighting the importance of data diversity for knowledge distillation. SDD is a preliminary step with low complexity, taking only 57 seconds to train on RTX 4090. While SDD also introduces risks of noisy samples, _e.g._ , prompts may contain other confusing objects. Fortunately, with class consistency maintaining (CCM) to prevent overly stylized deviation, SDD+CCM yields consistent improvement over the baseline. It is observed that CCM sometimes brings performance drops compared with the baseline, which may be attributed to the reduction in diversity. Therefore, SDD+CCM is an effective trade-off, bringing an average performance improvement of 4.2%. 
+
+After obtaining the surrogate dataset, we explore various knowledge distillation methods. Compared to common supervised cross-entropy training, we find significant advantages in distilling knowledge from CLIP. This is because soft labels from the CLIP contain richer negative label information and higher entropy. Building upon this, we investigate the proposed meta knowledge distillation, which is an optimization approach that can be combined with different loss functions. “Meta” in Table 1 presents the effectiveness of our algorithm, where both _L_ CE+ _L_ KD and _L_ KD achieve improvements ( _↑_ 1.54%). These results illustrate that meta knowledge distillation helps to discover shared class semantics across different styles and learn a more generalizable student. 
+
+**Results of image-based customization.** We explore Table 2: **Image-based customization (%).** image-based customization, where users have only few example images and may not even know the class names. Caltech-101 ImageNet As shown in Table 2, real data augmented with standard techniques such as RandomCrop, RandomFlip, and ColReal data 83.13 72.88 orJitter achieve certain effectiveness. However, Baseline Baseline 81.83(-1.30%) 69.78(-3.10%) (simply using each image as an image prompt for inverOurs **84.78** (+1.65%) **74.54** (+1.66%) 
+
+|Real data<br>Baseline<br>Ours|Caltech-101<br>83.13<br>81.83(-1.30%) <br>**84.78**(+1.65%)|ImageNet<br>72.88<br> 69.78(-3.10%)<br> **74.54**(+1.66%)|
+|---|---|---|
+
+
+sion) results in suboptimal performance, indicating that synthetic data is much less data-efficient than real data. On the other hand, our proposed prototype guidance boosts accuracy by 2.95%-4.76%. This confirms that CLIP effectively expands the training distribution while narrowing the divergence with the testing distribution, due to CLIP being trained on diverse distributions. As indicated by Corollary 4.3, approaching the testing distribution enhances generalization. 
+
+**Computational complexity.** The CLIP model employs a ViT-B/32 visual encoder and a 12-layer 8-head text encoder, whereas the student model uses ResNet-18. As shown in Table 3, the student model not only has a more lightweight visual backbone but also omits the text encoder entirely. This leads to a significant reduction in both parameters and computational requirements. 
+
+8 
+
+Table 3: **Reductions in parameters and computational requirements compared to CLIP.** 
+
+|ImgParams<br>Txt Params<br>Total Params<br>ImgGFLOPs<br>Txt GFLOPs<br>Total GFLOPs<br>CLIP<br>87.85M<br>63.43M<br>151.28M<br>8.82<br>5.96<br>14.78<br>Student<br>11.68M<br>0M<br>11.68M<br>1.82<br>0<br>1.82<br>Table 5: **Accuracies (%) on other student/teacher architectures**for knowledge distillation.|ImgParams<br>Txt Params<br>Total Params<br>ImgGFLOPs<br>Txt GFLOPs<br>Total GFLOPs<br>CLIP<br>87.85M<br>63.43M<br>151.28M<br>8.82<br>5.96<br>14.78<br>Student<br>11.68M<br>0M<br>11.68M<br>1.82<br>0<br>1.82<br>Table 5: **Accuracies (%) on other student/teacher architectures**for knowledge distillation.|
+|---|---|
+|Student<br>Teacher<br>Caltech-101<br>ImageNet1<br>ImageNet2<br>ImageNet3<br>ImageNet4<br>ImageNet5<br>ImageNet6<br>ImageNet7<br>ImageNet8<br>ImageNet9<br>ImageNet10|**Average**|
+|||
+|ViT-T RN50<br>58.48<br>57.64<br>59.16<br>60.82<br>59.34<br>58.04<br>59.68<br>57.64<br>58.35<br>60.30<br>60.22<br>ViT-T ViT-B<br>55.17<br>56.38<br>57.14<br>57.42<br>56.52<br>60.05<br>61.64<br>60.48<br>59.54<br>60.55<br>58.61|59.06<br>58.50|
+|RN18 RN50<br>60.76<br>**63.90**<br>64.52<br>**66.40**<br>**63.18**<br>66.46<br>**67.28**<br>64.06<br>63.74<br>64.48<br>**65.71**<br>64.59<br>RN18 ViT-B<br>**61.33**<br>62.46<br>**65.02**<br>65.60<br>62.52<br>**66.80**<br>66.24<br>**66.78**<br>**65.62**<br>**65.49**<br>65.00<br>**64.81**||
+||**64.81**|
+
+
+## 5.3 FURTHER ANALYSES 
+
+**Trade-off between consistency and diversity.** The tradeoff between class consistency maintaining and style dictionary diversification is critical. The hyperparameters controlling diversity are primarily the batch size and learning rate of contrastive learning. The hyperparameter controlling consistency is mainly the coefficient of Eq. (4), which we set to 1 by default. We conduct additional ablation 
+
+Table 4: **Consistency vs. diversity (%).** 
+
+||Coef. of_Lcls_ LR=0.001 <br>0.5<br>61.64<br>1<br>62.06|LR=0.01 <br>62.10<br>62.46|LR=0.1<br>**63.22**<br>62.34|
+|---|---|---|---|
+||2<br>62.35|62.94|62.52|
+
+
+studies by keeping the batch size constant and varying the learning rate to control diversity, as well as changing the loss coefficient to control consistency. The results are shown in Table 4. It can be seen that with the same diversity (fixed learning rate), increasing consistency shows beneficial trends. When consistency is the same (fixed coefficient), intermediate diversity generally performs better. 
+
+**Knowledge distillation strategies.** Given the 65.0 ~~w/o~~ Initialization synthetic images, various training strategies 62.5 WarmupInit. + Warm have been explored in previous studies. For 60.0 instance, He et al. (2023) utilizes each class’s text features as the classifier’s initialization, as57.5 suming it can aid convergence. Due to the initial 55.0 instability of parameters and large gradients, di52.5 rectly learning the entire network may lead to 50.0 numerical instability. Therefore, we start by training the classifier for warmup and then move on to train the whole model. Results of different Figure 5: **Different training strategies.** All results use strategies are shown in Fig. 5. Surprisingly, inithe _L_ CE++ _L_ KD for knowledge distillation. tializing with text features leads to a decrease in performance, indicating a discrepancy between the feature space of CLIP and the student model’s feature space, which random initialization handles better. The effect of warmup is significant, as it helps alleviate premature overfitting to mini-batches in the initial stages, contributing to the stability of deeper layers in the student model. 
+
+Figure 5: **Different training strategies.** All results use the _L_ CE++ _L_ KD for knowledge distillation. 
+
+**Other model architectures.** While our approach and theoretical framework are adapted for broad foundation models, we also explore its effectiveness on different model architectures, as shown in Table 5. We examine a different teacher architecture, CLIP-RN50. Additionally, we consider smaller student models like ViT-T (Touvron et al., 2021), which is a transformer architecture with a significantly reduced parameter count, enhancing its efficiency for image processing. Similar to other distillation techniques, we find that our approach is capable of transferring representations across various student/teacher architectures. This underscores the versatility of our approach: once synthesized, these datasets can be readily applied to train various model architectures. 
+
+**Visualizations.** We present visualized results of synthetic images generated by our approach. Specifically, Fig. 6 showcases the synthetic images produced based on class texts, while Fig. 7 displays those generated from example images. These visualized results illustrate the effectiveness of our style dictionary diversification in creating more diverse and plausible images, as well as the ability of image-based customization to generate content-consistent images. 
+
+9 
+
+**==> picture [204 x 45] intentionally omitted <==**
+
+**----- Start of picture text -----**<br>
+Pyramid Water lilly Airplane Valley Yin-yang<br>Figure 6: Visualizations of the text-based customiza-<br>tion. Our approach enhances the diversity of synthesized<br>images, preventing repetitive content while ensuring ac-<br>curate representation of class semantics.<br>**----- End of picture text -----**<br>
+
+
+Example Images Synthetic Images Figure 7: **Visualizations of the image-based customization.** Using only few example images, we synthesize corresponding images that serve as valuable supplements to the original images. 
+
+**==> picture [162 x 93] intentionally omitted <==**
+
+**----- Start of picture text -----**<br>
+Text Prompt Synthesized Image<br>“a photo of a  Lari ats<br>globe-flower, a<br>type of flower.”<br>“a photo of a  Fhe ee<br>balloon flower, a  . ® ii]<br>type of flower.”<br>**----- End of picture text -----**<br>
+
+
+**==> picture [35 x 7] intentionally omitted <==**
+
+**----- Start of picture text -----**<br>
+Real Image<br>**----- End of picture text -----**<br>
+
+
+Figure 8: **Examples illustrating misalignment between input texts and synthesized images** , which can lead to suboptimal performance in knowledge distillation. CLIP may struggle with certain specialized terms and fine-grained classes. **Upper:** Request for a globe-flower, but CLIP ambiguously combines globe and flower. **Lower:** Balloon flower refers to a brand of flowers. 
+
+## 5.4 LIMITATION AND FUTURE WORK 
+
+In the experiments with Flower-102, a fine-grained flower dataset, we encounter limitations of CLIP inversion: incorrect synthesis of ambiguous text prompts. Short class names are inherently ambiguous (Song & Soleymani, 2019), and CLIP may misunderstand these texts or have not seen the class before, resulting in synthetic images that do not accurately represent the intended class (see Fig. 8). This issue arises not from our approach, but rather from a limitation inherent to VLMs, _i.e._ , the ambiguity of text prompts. 
+
+Table 6: **Strategies to alleviate text ambiguity (%).** 
+
+||Flower-102|
+|---|---|
+|Text prompt|15.83|
+|+ Constraint<br>+ Image prompt|18.07(+2.24%)<br> 74.72(+58.89%)|
+
+
+We outline several potential directions for future improvement: (1) Mitigating ambiguity using few example images, _i.e._ , combining both text and image prompts. (2) Employing more detailed text prompts for constraints, such as “a type of flower”. Some studies (Menon & Vondrick, 2023; Pratt et al., 2023; Roth et al., 2023) have shown effectiveness in using LLMs to generate specific descriptions for each class. (3) Leveraging larger and more advanced VLMs (Li et al., 2021; 2022; 2023), with stronger text-image alignment capabilities, to address the limitation at the pre-training level. We conduct related experiments on Flower-102, and the results are shown in Table 6. Both image prompts and more detailed text prompts demonstrate their effectiveness. We also discuss the potential societal impacts of this work in App. F. 
+
+## 6 CONCLUSION 
+
+We rethink DFKD and find that existing methods fail on CLIP due to heavy reliance on BatchNorm layers, which are unexpectedly unusable in CLIP. In this paper, we enable open-vocabulary customization from CLIP based on only texts or few images. Our approach enhances the diversity and consistency of synthetic images, and improves the generalization of the student model. The effectiveness of each module is confirmed through theoretical analyses. Comprehensive experiments showcase the superiority of our approach across customized tasks. 
+
+10 
+
+## 7 ACKNOWLEDGMENTS 
+
+This work is supported by the National Key R&D Program of China (2022YFB4701400/4701402), SSTIC Grant (KJZD20230923115106012, KJZD20230923114916032, GJHZ20240218113604008), Beijing Key Lab of Networked Multimedia, the Shenzhen Basic Research Project (Natural Science Foundation) Basic Research Key Project (NO. JCYJ20241202124430041), the Major Project in Judicial Research from Supreme People’s Court (NO. GFZDKT2024C08-3), CCF-DiDi GAIA Collaborative Research Funds (NO. CCF-DiDi GAIA 202419), and the National Research Foundation, Singapore, under its NRF Professorship Award No. NRF-P2024-001. 
+
+## REFERENCES 
+
+- Jean-Baptiste Alayrac, Jeff Donahue, Pauline Luc, Antoine Miech, Iain Barr, Yana Hasson, Karel Lenc, Arthur Mensch, Katherine Millican, Malcolm Reynolds, Roman Ring, Eliza Rutherford, Serkan Cabi, Tengda Han, Zhitao Gong, Sina Samangooei, Marianne Monteiro, Jacob L Menick, Sebastian Borgeaud, Andy Brock, Aida Nematzadeh, Sahand Sharifzadeh, Mikoł aj Bi´nkowski, Ricardo Barreira, Oriol Vinyals, Andrew Zisserman, and Karén Simonyan. Flamingo: a visual language model for few-shot learning. In _NeurIPS_ , 2022. 
+
+- Fernando Amat, Ashok Chandrashekar, Tony Jebara, and Justin Basilico. Artwork personalization at netflix. In _RecSys_ , 2018. 
+
+- Kawa Atapour, S Jamal Seyedmohammadi, Jamshid Abouei, Arash Mohammadi, and Konstantinos N Plataniotis. FedD2S: Personalized data-free federated knowledge distillation. _arXiv preprint arXiv:2402.10846_ , 2024. 
+
+- Hyojin Bahng, Ali Jahanian, Swami Sankaranarayanan, and Phillip Isola. Exploring visual prompts for adapting large-scale models. _arXiv preprint arXiv:2203.17274_ , 2022. 
+
+- Hritik Bansal and Aditya Grover. Leaving reality to imagination: Robust classification via generated datasets. _arXiv preprint arXiv:2302.02503_ , 2023. 
+
+- Shai Ben-David, John Blitzer, Koby Crammer, Alex Kulesza, Fernando Pereira, and Jennifer Wortman Vaughan. A theory of learning from different domains. _Machine learning_ , 2010. 
+
+- Christopher Berlind and Ruth Urner. Active nearest neighbors in changing environments. In _ICML_ , 2015. 
+
+- Yirui Chen, Xudong Huang, Quan Zhang, Wei Li, Mingjian Zhu, Qiangyu Yan, Simiao Li, Hanting Chen, Hailin Hu, Jie Yang, et al. GIM: A million-scale benchmark for generative image manipulation detection and localization. _arXiv preprint arXiv:2406.16531_ , 2024. 
+
+- Niv Cohen, Rinon Gal, Eli A Meirom, Gal Chechik, and Yuval Atzmon. “This is my unicorn, Fluffy”: Personalizing frozen vision-language representations. In _ECCV_ , 2022. 
+
+- Alessandro Conti, Enrico Fini, Massimiliano Mancini, Paolo Rota, Yiming Wang, and Elisa Ricci. Vocabulary-free image classification. In _NeurIPS_ , 2023. 
+
+- Katherine Crowson, Stella Biderman, Daniel Kornis, Dashiell Stander, Eric Hallahan, Louis Castricato, and Edward Raff. VQGAN-CLIP: Open domain image generation and editing with natural language guidance. In _ECCV_ , 2022. 
+
+- Jia Deng, Wei Dong, Richard Socher, Li-Jia Li, Kai Li, and Li Fei-Fei. Imagenet: A large-scale hierarchical image database. In _CVPR_ , 2009. 
+
+- Patrick Esser, Robin Rombach, and Bjorn Ommer. Taming transformers for high-resolution image synthesis. In _CVPR_ , 2021. 
+
+- Alireza Fallah, Aryan Mokhtari, and Asuman Ozdaglar. Personalized federated learning: A metalearning approach. _arXiv preprint arXiv:2002.07948_ , 2020. 
+
+- Gongfan Fang, Jie Song, Xinchao Wang, Chengchao Shen, Xingen Wang, and Mingli Song. Contrastive model inversion for data-free knowledge distillation. In _IJCAI_ , 2021. 
+
+11 
+
+Gongfan Fang, Kanya Mo, Xinchao Wang, Jie Song, Shitao Bei, Haofei Zhang, and Mingli Song. Up to 100x faster data-free knowledge distillation. In _AAAI_ , 2022. 
+
+- Yuxin Fang, Wen Wang, Binhui Xie, Quan Sun, Ledell Wu, Xinggang Wang, Tiejun Huang, Xinlong Wang, and Yue Cao. EVA: Exploring the limits of masked visual representation learning at scale. In _CVPR_ , 2023. 
+
+- Li Fei-Fei, Rob Fergus, and Pietro Perona. Learning generative visual models from few training examples: An incremental bayesian approach tested on 101 object categories. In _CVPRW_ , 2004. 
+
+- Matt Fredrikson, Somesh Jha, and Thomas Ristenpart. Model inversion attacks that exploit confidence information and basic countermeasures. In _SIGSAC_ , 2015. 
+
+- Rinon Gal, Yuval Alaluf, Yuval Atzmon, Or Patashnik, Amit Haim Bermano, Gal Chechik, and Daniel Cohen-or. An image is worth one word: Personalizing text-to-image generation using textual inversion. In _ICLR_ , 2023. 
+
+- Yuting Gao, Jinfeng Liu, Zihan Xu, Jun Zhang, Ke Li, Rongrong Ji, and Chunhua Shen. PyramidCLIP: Hierarchical feature alignment for vision-language model pretraining. In _NeurIPS_ , 2022. 
+
+- Ruifei He, Shuyang Sun, Xin Yu, Chuhui Xue, Wenqing Zhang, Philip Torr, Song Bai, and XIAOJUAN QI. Is synthetic data from generative models ready for image recognition? In _ICLR_ , 2023. 
+
+- Junyuan Hong, Yi Zeng, Shuyang Yu, Lingjuan Lyu, Ruoxi Jia, and Jiayu Zhou. Revisiting data-free knowledge distillation with poisoned teachers. In _ICML_ , 2023. 
+
+- Mingcheng Hou and Issei Sato. A closer look at prototype classifier for few-shot image classification. In _NeurIPS_ , 2022. 
+
+- Andrew G Howard, Menglong Zhu, Bo Chen, Dmitry Kalenichenko, Weijun Wang, Tobias Weyand, Marco Andreetto, and Hartwig Adam. MobileNets: Efficient convolutional neural networks for mobile vision applications. _arXiv preprint arXiv:1704.04861_ , 2017. 
+
+- Zixuan Hu, Yongxian Wei, Li Shen, Zhenyi Wang, Lei Li, Chun Yuan, and Dacheng Tao. Sparse model inversion: Efficient inversion of vision transformers for data-free applications. In _ICML_ , 2024. 
+
+- Xiaohu Huang, Hao Zhou, Kun Yao, and Kai Han. FROSTER: Frozen clip is a strong teacher for open-vocabulary action recognition. In _ICLR_ , 2024. 
+
+- Gabriel Ilharco, Mitchell Wortsman, Samir Yitzhak Gadre, Shuran Song, Hannaneh Hajishirzi, Simon Kornblith, Ali Farhadi, and Ludwig Schmidt. Patching open-vocabulary models by interpolating weights. In _NeurIPS_ , 2022. 
+
+- Chao Jia, Yinfei Yang, Ye Xia, Yi-Ting Chen, Zarana Parekh, Hieu Pham, Quoc Le, Yun-Hsuan Sung, Zhen Li, and Tom Duerig. Scaling up visual and vision-language representation learning with noisy text supervision. In _ICML_ , 2021. 
+
+- Nupur Kumari, Bingliang Zhang, Richard Zhang, Eli Shechtman, and Jun-Yan Zhu. Multi-concept customization of text-to-image diffusion. In _CVPR_ , 2023. 
+
+- Clement Laroudie, Andrei Bursuc, Mai Lan Ha, and Gianni Franchi. Improving clip robustness with knowledge distillation and self-training. _arXiv preprint arXiv:2309.10361_ , 2023. 
+
+- Da Li, Yongxin Yang, Yi-Zhe Song, and Timothy Hospedales. Learning to generalize: Meta-learning for domain generalization. In _AAAI_ , 2018. 
+
+- Junnan Li, Ramprasaath Selvaraju, Akhilesh Gotmare, Shafiq Joty, Caiming Xiong, and Steven Chu Hong Hoi. Align before fuse: Vision and language representation learning with momentum distillation. In _NeurIPS_ , 2021. 
+
+- Junnan Li, Dongxu Li, Caiming Xiong, and Steven Hoi. BLIP: Bootstrapping language-image pre-training for unified vision-language understanding and generation. In _ICML_ , 2022. 
+
+12 
+
+Junnan Li, Dongxu Li, Silvio Savarese, and Steven Hoi. BLIP-2: Bootstrapping language-image pre-training with frozen image encoders and large language models. In _ICML_ , 2023. 
+
+- Luping Liu, Yi Ren, Zhijie Lin, and Zhou Zhao. Pseudo numerical methods for diffusion models on manifolds. In _ICLR_ , 2022. 
+
+- Xingchao Liu, Chengyue Gong, Lemeng Wu, Shujian Zhang, Hao Su, and Qiang Liu. FuseDream: Training-free text-to-image generation with improved clip+ gan space optimization. _arXiv preprint arXiv:2112.01573_ , 2021. 
+
+- Xuantong Liu, Tianyang Hu, Wenjia Wang, Kenji Kawaguchi, and Yuan Yao. Referee can play: An alternative approach to conditional generation via model inversion. In _ICML_ , 2024. 
+
+- Dhruv Mahajan, Ross Girshick, Vignesh Ramanathan, Kaiming He, Manohar Paluri, Yixuan Li, Ashwin Bharambe, and Laurens Van Der Maaten. Exploring the limits of weakly supervised pretraining. In _ECCV_ , 2018. 
+
+David A McAllester. Pac-bayesian model averaging. In _COLT_ , 1999. 
+
+- Sachit Menon and Carl Vondrick. Visual classification via description from large language models. In _ICLR_ , 2023. 
+
+- Kodai Nakashima, Hirokatsu Kataoka, Asato Matsumoto, Kenji Iwata, Nakamasa Inoue, and Yutaka Satoh. Can vision transformers learn without natural images? In _AAAI_ , 2022. 
+
+Ngoc-Bao Nguyen, Keshigeyan Chandrasegaran, Milad Abdollahzadeh, and Ngai-Man Cheung. Re-thinking model inversion attacks against deep neural networks. In _CVPR_ , 2023. 
+
+- Maria-Elena Nilsback and Andrew Zisserman. Automated flower classification over a large number of classes. In _ICVGIP_ , 2008. 
+
+Sarah Pratt, Ian Covert, Rosanne Liu, and Ali Farhadi. What does a platypus look like? generating customized prompts for zero-shot image classification. In _ICCV_ , 2023. 
+
+- Alec Radford, Jong Wook Kim, Chris Hallacy, Aditya Ramesh, Gabriel Goh, Sandhini Agarwal, Girish Sastry, Amanda Askell, Pamela Mishkin, Jack Clark, Gretchen Krueger, and Ilya Sutskever. Learning transferable visual models from natural language supervision. In _ICML_ , 2021. 
+
+- Piyush Raikwar and Deepak Mishra. Discovering and overcoming limitations of noise-engineered data-free knowledge distillation. In _NeurIPS_ , 2022. 
+
+- Daniel Roich, Ron Mokady, Amit H Bermano, and Daniel Cohen-Or. Pivotal tuning for latent-based editing of real images. _TOG_ , 2022. 
+
+- Karsten Roth, Jae Myung Kim, A Koepke, Oriol Vinyals, Cordelia Schmid, and Zeynep Akata. Waffling around for performance: Visual classification with random words and broad concepts. In _ICCV_ , 2023. 
+
+- Ozan Sener and Silvio Savarese. Active learning for convolutional neural networks: A core-set approach. In _ICLR_ , 2018. 
+
+- Julio Silva-Rodriguez, Sina Hajimiri, Ismail Ben Ayed, and Jose Dolz. A closer look at the few-shot adaptation of large vision-language models. In _CVPR_ , 2024. 
+
+- Jiaming Song, Chenlin Meng, and Stefano Ermon. Denoising diffusion implicit models. In _ICLR_ , 2021. 
+
+- Yale Song and Mohammad Soleymani. Polysemous visual-semantic embedding for cross-modal retrieval. In _CVPR_ , 2019. 
+
+- Lukas Struppek, Dominik Hintersdorf, Antonio De Almeida Correia, Antonia Adler, and Kristian Kersting. Plug & play attacks: Towards robust and flexible model inversion attacks. In _ICML_ , 2022. 
+
+Masashi Sugiyama and Amos J Storkey. Mixture regression for covariate shift. In _NeurIPS_ , 2006. 
+
+13 
+
+Mingxing Tan and Quoc Le. EfficientNet: Rethinking model scaling for convolutional neural networks. In _ICML_ , 2019. 
+
+- Song Tang, Wenxin Su, Mao Ye, and Xiatian Zhu. Source-free domain adaptation with frozen multimodal foundation model. In _CVPR_ , 2024. 
+
+- Hugo Touvron, Matthieu Cord, Matthijs Douze, Francisco Massa, Alexandre Sablayrolles, and Hervé Jégou. Training data-efficient image transformers & distillation through attention. In _ICML_ , 2021. 
+
+- Jean-Baptiste Truong, Pratyush Maini, Robert J Walls, and Nicolas Papernot. Data-free model extraction. In _CVPR_ , 2021. 
+
+- Vishaal Udandarao, Ankush Gupta, and Samuel Albanie. Sus-x: Training-free name-only transfer of vision-language models. In _ICCV_ , 2023. 
+
+- Cheng Wang, Jiacheng Sun, Zhenhua Dong, Jieming Zhu, Zhenguo Li, Ruixuan Li, and Rui Zhang. Data-free knowledge distillation for reusing recommendation models. In _RecSys_ , 2023. 
+
+- Yongxian Wei, Zixuan Hu, Li Shen, Zhenyi Wang, Lei Li, Yu Li, and Chun Yuan. Meta-learning without data via unconditional diffusion models. _IEEE TCSVT_ , 2024a. 
+
+- Yongxian Wei, Zixuan Hu, Li Shen, Zhenyi Wang, Yu Li, Chun Yuan, and Dacheng Tao. Task groupings regularization: Data-free meta-learning with heterogeneous pre-trained models. In _ICML_ , 2024b. 
+
+- Yongxian Wei, Zixuan Hu, Zhenyi Wang, Li Shen, Chun Yuan, and Dacheng Tao. FREE: Faster and better data-free meta-learning. In _CVPR_ , 2024c. 
+
+- Kan Wu, Houwen Peng, Zhenghong Zhou, Bin Xiao, Mengchen Liu, Lu Yuan, Hong Xuan, Michael Valenzuela, Xi Stephen Chen, Xinggang Wang, et al. TinyCLIP: Clip distillation via affinity mimicking and weight inheritance. In _ICCV_ , 2023. 
+
+- Yinghui Xing, Qirui Wu, De Cheng, Shizhou Zhang, Guoqiang Liang, Peng Wang, and Yanning Zhang. Dual modality prompt tuning for vision-language pre-trained model. _TMM_ , 2023. 
+
+- Yunyi Xuan, Weijie Chen, Shicai Yang, Di Xie, Luojun Lin, and Yueting Zhuang. Distilling visionlanguage foundation models: A data-free approach via prompt diversification. In _MM_ , 2023. 
+
+- Chuanguang Yang, Zhulin An, Libo Huang, Junyu Bi, Xinqiang Yu, Han Yang, Boyu Diao, and Yongjun Xu. CLIP-KD: An empirical study of clip model distillation. In _CVPR_ , 2024. 
+
+- Hongxu Yin, Pavlo Molchanov, Jose M Alvarez, Zhizhong Li, Arun Mallya, Derek Hoiem, Niraj K Jha, and Jan Kautz. Dreaming to distill: Data-free knowledge transfer via deepinversion. In _CVPR_ , 2020. 
+
+- Shikang Yu, Jiachen Chen, Hu Han, and Shuqiang Jiang. Data-free knowledge distillation via feature exchange and activation region constraint. In _CVPR_ , 2023. 
+
+- Quan Zhang, Xiaoyu Liu, Wei Li, Hanting Chen, Junchao Liu, Jie Hu, Zhiwei Xiong, Chun Yuan, and Yunhe Wang. Distilling semantic priors from sam to efficient image restoration models. In _CVPR_ , 2024. 
+
+- Quan Zhang, Yuxin Qi, Xi Tang, Rui Yuan, Xi Lin, Ke Zhang, and Chun Yuan. Rethinking pseudolabel guided learning for weakly supervised temporal action localization from the perspective of noise correction. In _AAAI_ , 2025. 
+
+- Yifan Zhang, Daquan Zhou, Bryan Hooi, Kai Wang, and Jiashi Feng. Expanding small-scale datasets with guided imagination. In _NeurIPS_ , 2023. 
+
+- Andy Zhou, Jindong Wang, Yu-Xiong Wang, and Haohan Wang. Distilling out-of-distribution robustness from vision-language foundation models. In _NeurIPS_ , 2023. 
+
+- Kaiyang Zhou, Jingkang Yang, Chen Change Loy, and Ziwei Liu. Conditional prompt learning for vision-language models. In _CVPR_ , 2022a. 
+
+- Kaiyang Zhou, Jingkang Yang, Chen Change Loy, and Ziwei Liu. Learning to prompt for visionlanguage models. _IJCV_ , 2022b. 
+
+14 
+
+## A THEORETICAL PROOFS 
+
+A.1 PROOF FOR THEOREM 4.1 
+
+**Theorem A.1.** _Given the original dataset_ ˆ _D_ = _{_ _**x** i, yi}i∈_ [ _m_ ] _with m i.i.d. samples and the surrogate dataset S_ = _{_ _**x** j,_ ˆ _yj}j∈_ [ _s_ ] _. Assume the hypothesis function is λ[η] -Lipschitz continuous, the loss function ℓ_ ( _**x** , y_ ) is _λ[ℓ] -Lipschitz continuous for all y, and is bounded by L, with ℓ_ (ˆ _**x** j,_ ˆ _yj_ ; _**θ**_ ) = 0 _for all j ∈_ [ _s_ ] _. If the dataset S is a δ-cover of D, with probability at least_ 1 _− γ, the bound holds:_ 
+
+**==> picture [322 x 37] intentionally omitted <==**
+
+_where C is the number of classes, and_ _**θ** ∈_ **Θ** _is the optimized student model._ 
+
+_Proof._ Using PAC-Bayesian generalization bound (McAllester, 1999), for all _**θ** ∈_ **Θ** , with probability 1 _− γ_ over independent draws ( _**x** i, yi_ ) _∼PX×Y_ , we have: 
+
+**==> picture [280 x 38] intentionally omitted <==**
+
+Then, we reproduce and adapt the proof from Sener & Savarese (2018) in the context of core-set for completeness. We have a condition which states that there exists an _**x**_ ˆ _j_ in a _δ_ -cover around _**x** i_ . 
+
+**==> picture [394 x 94] intentionally omitted <==**
+
+where _yi ∼ ηk_ ( _**x** i_ ) denotes that _{yi_ = _k} ∼ ηk_ ( _**x** i_ ) = _p_ ( _yi_ = _k|_ _**x** i_ ). Step ( _d_ ) uses Claim 1 from Berlind & Urner (2015), and step ( _e_ ) uses the Lipschitz property of the hypothesis function and the loss bound. Considering the trained student model is assumed to have zero loss, _i.e._ , _ℓ_ (ˆ _**x** j,_ ˆ _yj_ ; _**θ**_ ) = 0. 
+
+**==> picture [358 x 69] intentionally omitted <==**
+
+Therefore, according to the definition of _δ_ -diversity, we have: 
+
+**==> picture [156 x 25] intentionally omitted <==**
+
+ˆ Since we assume a zero training error for the surrogate dataset _S_ = _{_ _**x** j,_ ˆ _yj}j∈_ [ _s_ ], applying the triangle inequality yields: 
+
+**==> picture [325 x 64] intentionally omitted <==**
+
+15 
+
+## A.2 PROOF FOR THEOREM 4.2 
+
+**Theorem A.2.** _If L_ KD _has Lipschitz Hessian, and_ _**θ** c_ = _**θ** − α∇Linner denotes a single gradient descent step on_ _**θ** with the objective Linner, where α is a learning rate, then:_ 
+
+_∇Louter_ = _∇L_ KD( _Xtr_ ; _**θ**_ ) + _∇L_ KD( _Xte_ ; _**θ**_ ) _− α∇_ ( _∇L_ KD( _Xtr_ ; _**θ**_ ) _· ∇L_ KD( _Xte_ ; _**θ**_ )) + _O_ ( _α_[2] ) _._ � �� � _Style Alignment_ 
+
+_Proof._ We have: 
+
+**==> picture [283 x 47] intentionally omitted <==**
+
+**==> picture [245 x 13] intentionally omitted <==**
+
+Applying the fundamental theorem of Taylor’s expansion to the gradient _∇L_ KD( _Xte_ ; _**θ** c_ ), we have: 
+
+**==> picture [65 x 11] intentionally omitted <==**
+
+**==> picture [252 x 60] intentionally omitted <==**
+
+**==> picture [254 x 12] intentionally omitted <==**
+
+Note that, this offers a streamlined method to ascertain the Hessian Product by evaluating the gradient of _L_ KD( _Xte_ ; _**θ** c_ ) w.r.t. _**θ** c_ (Wei et al., 2024c). As a result, this eliminates the necessity for the time-intensive and memory-consuming explicit calculation of the Hessian Product. Concurrently, any term that is a high-order term in _α_ is classified into the _O_ ( _α_[2] ) notation: 
+
+**==> picture [179 x 11] intentionally omitted <==**
+
+**==> picture [344 x 43] intentionally omitted <==**
+
+## A.3 PROOF FOR COROLLARY 4.3 
+
+**Corollary A.3.** _For any arbitrary distributions P and P[′] , with the trained model_ _**θ** ∈_ **Θ** _. The notion of_ **Θ** ∆ **Θ** _divergence denotes that d_ **Θ** ∆ **Θ** ( _P[′] , P_ ) = sup _**θ** ,_ _**θ** ′∈_ **Θ** _|_ P _**x** ∼P ′_ [ _**θ**_ ( _**x**_ ) = _**θ**[′]_ ( _**x**_ )] _−_ P _**x** ∼P_ [ _**θ**_ ( _**x**_ ) _̸_ = _**θ**[′]_ ( _**x**_ )] _|. Assume there exists ζ_ ( _|_ **Θ** _| , s, γ_ ) _≥_ 0 _, a non-negative function that diminishes monotonically with s. Then, with probability at least_ 1 _− γ the following bounds hold:_ 
+
+**==> picture [248 x 21] intentionally omitted <==**
+
+_where EP ′_ ( _**θ**_ ) _is the expected error over P[′] , E_[ˆ] _P_ ( _**θ**_ ) _is the empirical error over the s training samples in the surrogate dataset S ∼P, and λ_ ( _P[′]_ ) _is a constant._ 
+
+_Proof._ From Theorem 2 in Ben-David et al. (2010), it holds that: 
+
+**==> picture [188 x 22] intentionally omitted <==**
+
+where[1] 2 _[d]_ **[Θ]**[∆] **[Θ]**[(] _[P][′][,][ P]_[) = sup] _**[θ]**[,]_ _**[θ]**[′][∈]_ **[Θ]** _[ |]_[P] _**[x]**[∼P][′]_[[] _**[θ]**_[(] _**[x]**_[)] _[ ̸]_[=] _**[ θ]**[′]_[(] _**[x]**_[)]] _[ −]_[P] _**[x]**[∼P]_[[] _**[θ]**_[(] _**[x]**_[)] _[ ̸]_[=] _**[ θ]**[′]_[(] _**[x]**_[)]] _[|]_[ and] _[ λ]_[(] _[P][′]_[) =] min _**θ** ∈_ **Θ** _EP[′]_ ( _**θ**_ ) + _EP_ ( _**θ**_ ) is a constant. Then, with the PAC-Bayesian generalization bound: 
+
+**==> picture [228 x 31] intentionally omitted <==**
+
+16 
+
+Figure 10: Visualizations of DeepInversion on Caltech-101 using PyramidCLIP (Gao et al., 2022). 
+
+with probability at least 1 _− γ_ , the following bounds hold: 
+
+**==> picture [248 x 21] intentionally omitted <==**
+
+## B RETHINKING DFKD ON OTHER VLMS 
+
+In Sec. 3, we examine the inversion results of existing DFKD methods on CLIP and find that almost all synthesized images are related to human faces, regardless of the target class. To explore whether other VLMs exhibit similar behavior, we present further inversion visualizations. However, the backbones of most VLMs are based on ViT, which lacks BN layers. This also highlights the superiority of our method, which remains effective even in the absence of BN layers. Consequently, we chose PyramidCLIP (Gao et al., 2022) (which provides a ResNet-50 backbone) for additional validation. PyramidCLIP addresses semantic mismatches and mutual compatibility issues with image-text pairs from the internet and outperforms CLIP by more than 10%, making it a stronger VLM. 
+
+Inversion results on PyramidCLIP are shown in Figs. 10 and 11. As depicted, half of the images successfully synthesize the target object, but the other half still depict human faces. This demonstrates a common phenomenon iy y in VLMs: large-scale, web-crawled datasets invariably 3 = I wy— contain humans, even though the text descriptions may Venice Beach Wedding Dress not mention people, leading to model bias (see Fig. 9). Figure 9: **The problem in the web-crawled** Consequently, existing DFKD methods are not applicable **image-text pairs.** to open-vocabulary foundation models and are limited to settings where the teacher model and testing set share the same distribution. 
+
+Our method is applicable to VLMs with a vision encoder and text encoder structure. We also explore the performance on BLIP (Li et al., 2022) and EVA (Fang et al., 2023). As shown in Table 7, EVA achieves the best performance, followed by CLIP and BLIP. The pre-trained weights we use for BLIP are the official “blip-itm-base-coco”. We observe that BLIP’s image-text matching capability is weaker than CLIP’s. This is because BLIP’s text encoder is image-grounded and trained on a binary classification task conditioned on images. Additionally, BLIP’s pre-training dataset contains 14M 
+
+17 
+
+Figure 11: Visualizations of CMI on Caltech-101 using PyramidCLIP (Gao et al., 2022). 
+
+Table 7: **Test accuracy (%) for text-based customization across other VLMs.** 
+
+||Caltech-101|ImageNet1|ImageNet2|ImageNet3|**Average**|
+|---|---|---|---|---|---|
+|CLIP (Radford et al., 2021)|61.33|62.46|65.02|65.60|63.60|
+|BLIP (Li et al., 2022)|59.68|50.88|57.62|57.36|56.39|
+|EVA (Fang et al., 2023)|67.62|65.24|66.96|66.42|66.56|
+
+
+images, whereas CLIP is pre-trained on 400M text-image pairs. EVA achieves the highest zero-shot top-1 accuracy on ImageNet-1K, and demonstrates strong image-text matching capability. These results indicate that our method is applicable to other VLM architectures and that its performance improves with the capability of the underlying VLM. 
+
+## C WHY IMAGE-TEXT MATCHING EXCELS 
+
+While optimization in existing DFKD accurately captures the essence of a classification problem, such a formulation is sub-optimal for model inversion (Nguyen et al., 2023). In a classification setting, the primary expectation for _**x**_ **ˆ** is to be sufficiently discriminative for class _i_ . This objective can be achieved by both maximizingthe contrary, the goal of model inversion is to reconstruct training data. _E_ img( _**x**_ **ˆ** ) _· E_ txt( _**t** i_ ) or minimizing _nj_ =1 _,j_ = _i_ That is, _[E]_[img][(] _**[x]**_ **[ˆ]** in addition to[)] _[ ·][ E]_[txt][(] _**[t]**[j]_[)][.][On] _**x**_ **ˆ** being sufficiently discriminative for class _i_ , successful inversion also requires _**x**_ **ˆ** to be close to the training data representations for class _i_ represented by _**t** i_ . Therefore, image-text matching focuses on **ˆ** maximizing _E_ img( _**x**_ ) _· E_ txt( _**t** i_ ) instead of maximizing the log-likelihood. Thanks to VLMs’ powerful image-text alignment capability, we can reconstruct images close to the original data _**x**_ . 
+
+## D EXPERIMENT RESULTS 
+
+To compare our proposed text-based customization with existing DFKD methods (Yin et al., 2020; Fang et al., 2021; 2022), we summarize the results in Table 8. Conventional DFKD methods face challenges in leveraging CLIP’s BN layers to generate high-quality images, leading to a notable performance drop. The specific results of different training strategies for knowledge distillation are presented in Table 9. 
+
+We also conduct hyperparameter sensitivity experiments for the inner and outer loop learning rates _α_ , used in meta knowledge distillation, as shown in Table 10. As the outer _α_ increases, it leads to over-updating and significant performance drops. A lower step size allows the model to adapt more 
+
+18 
+
+Table 8: **Comparisons with DFKD methods on 11 customized tasks.** (CLIP) denotes a teacher model of ResNet-50 pre-trained by CLIP, and (IN) indicates a teacher model of ResNet-50 pre-trained on ImageNet. 
+
+|Caltech-101<br>ImageNet1<br>ImageNet2<br>ImageNet3<br>ImageNet4<br>ImageNet5<br>ImageNet6<br>ImageNet7<br>ImageNet8<br>ImageNet9<br>ImageNet10|**Average**|
+|---|---|
+|DeepInv (CLIP) 14.84<br>6.26<br>6.24<br>5.08<br>6.76<br>5.70<br>7.06<br>6.64<br>7.10<br>6.87<br>5.84<br>7.13<br>DeepInv (IN)<br>57.83<br>41.50<br>44.98<br>44.46<br>40.92<br>47.40<br>40.20<br>44.54<br>44.82<br>47.49<br>44.92<br>45.37<br>CMI (CLIP)<br>9.88<br>7.88<br>7.74<br>6.92<br>7.58<br>7.72<br>8.28<br>6.46<br>7.54<br>6.92<br>6.98<br>7.63<br>CMI (IN)<br>56.75<br>49.30<br>51.82<br>53.36<br>45.76<br>51.92<br>49.06<br>52.98<br>47.22<br>55.67<br>50.04<br>51.26<br>Fast (CLIP)<br>5.34<br>7.38<br>6.16<br>6.44<br>7.02<br>5.98<br>7.14<br>7.00<br>6.28<br>8.39<br>6.10<br>6.66<br>Fast (IN)<br>60.26<br>55.76<br>55.98<br>57.02<br>51.92<br>52.86<br>56.02<br>52.50<br>52.04<br>57.91<br>55.63<br>55.26<br>Ours (CLIP)<br>**60.76**<br>**63.90**<br>**64.52**<br>**66.40**<br>**63.18**<br>**66.46**<br>**67.28**<br>**64.06**<br>**63.74**<br>**64.48**<br>**65.71**<br>**64.59**||
+||**64.59**|
+
+
+Table 9: **Different training strategies.** All results use the _L_ CE+ _L_ KD for knowledge distillation. 
+
+|Caltech-101<br>ImageNet1<br>ImageNet2<br>ImageNet3<br>ImageNet4<br>ImageNet5<br>ImageNet6<br>ImageNet7<br>ImageNet8<br>ImageNet9<br>ImageNet10|**Average**|
+|---|---|
+|w/o<br>50.47<br>48.56<br>51.88<br>54.06<br>48.56<br>52.63<br>55.60<br>54.24<br>50.02<br>53.01<br>51.73<br>51.89<br>Initialization<br>48.73<br>49.98<br>53.70<br>52.44<br>50.72<br>52.01<br>53.28<br>55.42<br>49.14<br>52.13<br>50.28<br>51.62<br>Warmup<br>57.17<br>59.10<br>**62.78**<br>63.46<br>**61.12**<br>**64.33**<br>**64.96**<br>**65.24**<br>62.86<br>62.43<br>61.58<br>62.28<br>Init. + Warm<br>**59.87**<br>**60.14**<br>62.42<br>**63.82**<br>58.54<br>64.07<br>64.22<br>63.82<br>**63.84**<br>**62.77**<br>**62.29**<br>**62.35**||
+||**62.35**|
+
+
+finely to the common features of multiple tasks, rather than overfitting to any specific task. The best performance is achieved with an inner _α_ of 0.01 and an outer _α_ of 0.001. 
+
+TinyCLIP (Wu et al., 2023) and CLIP-KD (Yang et al., 2024) distill small CLIP models using relation, feature, gradient, and contrastive paradigms. Unlike our approach, they perform cross-modal distillation (students also have a text encoder) and rely on large-scale datasets such as LAION-400M, YFCC-15M, or CC3M+12M. LP-CLIP (Laroudie et al., 2023) trains a linear layer using pseudolabels produced by CLIP, enhancing robustness through knowledge distillation on the training set. In contrast, we train the student network on synthetic data via meta-learning. We explore applying LP-CLIP’s mixture of data augmentations and consistency loss to our student model distillation process. As shown in Table 11, consistency loss achieves comparable performance but slightly lags in generalization across different datasets. 
+
+## E THE ROLE OF VQGAN 
+
+It replaces the statistics stored in the BN layers of pre-trained model to provide image priors (Struppek et al., 2022). This off-the-shelf generator aligns the patterns of synthetic images with natural images. The category of synthetic images is ensured through CLIP, as described in Eq. (2). Using an external generator offers more flexibility, allowing different pre-trained generators to be selected for the target task to minimize bias. 
+
+We conduct the following experiments: directly inverting images without VQGAN, using VQGAN pre-trained on ImageNet, and using VQGAN pre-trained on OpenImages. Additionally, we experimented with training VQGAN from scratch during the inversion process but encountered severe mode collapse. As shown in Table 12, VQGAN pre-trained on ImageNet outperforms OpenImages 
+
+Table 10: Effect of the learning rate in meta knowledge distillation on ImageNet1. 
+
+|||Outer_α_= 0.001|Outer_α_= 0.01|Outer_α_= 0.1|
+|---|---|---|---|---|
+|Inner_α_=|0.001|62.46|56.88|5.44|
+|Inner_α_=|0.01|**63.58**|56.66|6.22|
+|Inner_α_=|0.1|62.04|55.82|10.68|
+
+
+19 
+
+Table 11: **Comparisons of different knowledge distillation techniques.** 
+
+|||Caltech-101|ImageNet1|ImageNet2|ImageNet3|ImageNet4|**Average**|
+|---|---|---|---|---|---|---|---|
+|Ours||61.33|**62.46**|**65.02**|**65.60**|62.52|**63.39**|
+|LP-CLIP (Laroudie et al.,|2023)|**61.40**|60.50|62.34|64.68|**63.94**|62.57|
+
+
+Table 12: **VQGAN with different pre-trained weights.** 
+
+|Generator|ImageNet1|ImageNet2|
+|---|---|---|
+|Without VQGAN|34.24|33.60|
+|ImageNet VQGAN|**62.46**|**65.02**|
+|OpenImages VQGAN|59.36|63.68|
+
+
+VQGAN when applied to ImageNet. The w/o VQGAN approach involves directly optimizing pixels for 400 iterations. While optimizing for thousands of iterations (as done in DeepInv) could improve results, this highlights the efficiency advantage of VQGAN. 
+
+We also considered using diffusion models as generators. Unlike VQGAN, which maps _**z**_ to the image _**x**_ ˆ in a single forward pass, diffusion models require a multi-step denoising process to generate images from noisy inputs or latent variables. Even advanced samplers like DDIM (Song et al., 2021) or PNDM (Liu et al., 2022) typically require more than 10 steps. Performing model inversion involves optimizing input latent variables, which need to be differentiable. This means the full computation graph must be retained. However, most existing diffusion libraries (e.g., Hugging Face’s Diffusers) use “ _no_  grad_ () _[′′]_ during generation. To address this, we implemented a differentiable version of DDIM for experimentation, but found that even with just 5 steps, the computation graph exceeded 24GB of GPU memory. In summary, we choose VQGAN for its efficiency and effectiveness. 
+
+## F BROADER IMPACTS 
+
+Using large-scale image datasets poses significant challenges regarding privacy preservation, annotation labor, and AI ethics (Nakashima et al., 2022; Chen et al., 2024; Zhang et al., 2025). Consequently, large-scale datasets involving human-related images are being retracted due to ethical considerations. Other extensive datasets like JFT-300M and Instagram-3.5B (Mahajan et al., 2018) remain inaccessible to the public. These limitations significantly constrain research opportunities in this area, leading the research community to increasingly focus on the alternative use of pre-trained models (Zhang et al., 2024; Wei et al., 2024a). 
+
+In this context, Data-Free Knowledge-Distillation elegantly resolves these issues with open-sourced pre-trained models. By complying with the licensing terms set by the providers of these models, which may allow for academic, research, or commercial use, we can freely utilize them in downstream tasks. Furthermore, our approach offers practical solutions in resource-scarce scenarios, contributing to positive social impact by fulfilling users’ customized needs. 
+
+## G STYLE DICTIONARY 
+
+The initialized style dictionary consists of 16 style words, as depicted in Table 13. Based on empirical experience, these style words have shown good performance in real-world applications. We also experiment with a style dictionary containing styles sourced from the Internet and varied the number of styles. Generally, increasing the number of styles enhances diversity. However, as shown in Table 14, we observe a saturation trend where irrelevant styles may introduce negative bias. This occurs because some styles inadvertently add class-irrelevant semantics, such as unrelated elements or complex backgrounds. To address this, we carefully select style words that do not introduce additional semantics. 
+
+20 
+
+Table 13: Our style dictionary. 
+
+|photo|pattern|natural|picture|
+|---|---|---|---|
+|image|fgure|profle|illustration|
+|photorealism|realistic|digital|daguerreotype|
+|expressionism|longexposure|isometric|view|
+
+
+Table 14: **Accuracies (%) with differently initialized style dictionaries** . 
+
+||16 styles|50 styles|86 styles|Our 16 styles|
+|---|---|---|---|---|
+|Caltech-101|57.99|60.78|60.49|**61.33**|
+
+
+## H DATASET DETAILS 
+
+```
+Caltech-101=[’accordion’,’airplane’,’anchor’,’ant’,’barrel’,’bass’,’beaver’,
+’binocular’,’bonsai’,’brain’,’brontosaurus’,’buddha’,’butterfly’,’camera’,
+’cannon’,’car_side’,’ceiling_fan’,’cellphone’,’chair’,’chandelier’,’cougar_body’,
+’cougar_face’,’crab’,’crayfish’,’crocodile’,’crocodile_head’,’cup’,’dalmatian’,
+’dollar_bill’,’dolphin’,’dragonfly’,’electric_guitar’,’elephant’,’emu’,
+’euphonium’,’ewer’,’face’,’ferry’,’flamingo’,’flamingo_head’,’garfield’,’gerenuk’,
+’gramophone’,’grand_piano’,’hawksbill’,’headphone’,’hedgehog’,’helicopter’,
+’leopard’,’motorbike’,’ibis’,’inline_skate’,’joshua_tree’,’kangaroo’,’ketch’,
+’lamp’,’laptop’,’llama’,’lobster’,’lotus’,’mandolin’,’mayfly’,’menorah’,
+’metronome’,’minaret’,’nautilus’,’octopus’,’okapi’,’pagoda’,’panda’,’pigeon’,
+’pizza’,’platypus’,’pyramid’,’revolver’,’rhino’,’rooster’,’saxophone’,’schooner’,
+’scissors’,’scorpion’,’sea_horse’,’snoopy’,’soccer_ball’,’stapler’,’starfish’,
+’stegosaurus’,’stop_sign’,’strawberry’,’sunflower’,’tick’,’trilobite’,’umbrella’,
+’watch’,’water_lilly’,’wheelchair’,’wild_cat’,’windsor_chair’,’wrench’,’yin_yang’]
+```
+
+```
+ImageNet1=[’leatherbackseaturtle’,’bolotie’,’perfume’,’seaslug’,’Soft-coated
+WheatenTerrier’,’easternhog-nosedsnake’,’Briard’,’radio’,’slidingdoor’,
+’cannon’,’horsechestnutseed’,’frilled-neckedlizard’,’barbershop’,’wildboar’,
+’radiatorgrille’,’DandieDinmontTerrier’,’cowboyboot’,’thatchedroof’,’beer
+glass’,’catamaran’,’wallet’,’jellyfish’,’ClumberSpaniel’,’henofthewoods
+mushroom’,’IrishTerrier’,’SealyhamTerrier’,’gondola’,’jeep’,’productpacket_
+packaging’,’pillbottle’,’papertowel’,’viaduct’,’geyser’,’coucal’,’pineapple’,
+’cardigan’,’otter’,’toyterrier’,’Schipperke’,’rotisserie’,’GermanShorthaired
+Pointer’,’monitor’,’baseball’,’hook’,’trombone’,’CairnTerrier’,’GordonSetter’,
+’icecream’,’platypus’,’sodabottle’,’mongoose’,’guillotine’,’greywolf’,’dung
+beetle’,’dugong’,’Carolinaanole’,’Leonberger’,’printer’,’CockerSpaniel’,
+’Pekingese’,’electricray’,’matchstick’,’waffleiron’,’windowshade’,’cauldron’,
+’chainmail’,’hotdog’,’crayfish’,’IrishWaterSpaniel’,’babybib’,’French
+Bulldog’,’marmoset’,’saltshaker’,’trenchcoat’,’black-footedferret’,’chimpanzee’,
+’nightsnake’,’Englishfoxhound’,’freightcar’,’hay’,’commonsorrelhorse’,’common
+redshank’,’sleepingbag’,’stretcher’,’threshingmachine’,’rifle’,’conch’,’wool’,
+’Pickelhaube’,’blockplane’,’minibus’,’foxsquirrel’,"yellowlady’sslipper",’Lhasa
+Apso’,’lacewing’,’bowtie’,’vespa’,’AfghanHound’,’prairiegrouse’,’barbell’]
+```
+
+```
+ImageNet2=[’go-kart’,’zebra’,’greyfox’,’throne’,’black-and-whitecolobus’,
+’apiary’,’swing’,’racecar’,’CDplayer’,’movingvan’,’sulphurbutterfly’,’agaric’,
+’huntingbow’,’housefinch’,’computerkeyboard’,’ChesapeakeBayRetriever’,’eggnog’,
+’furcoat’,’tick’,’ShetlandSheepdog’,’slothbear’,’snail’,’Mexicanhairless
+dog(xoloitzcuintli)’,’stingray’,’bee’,’tank’,’paintbrush’,’GiantSchnauzer’,
+’mudturtle’,’hummingbird’,’flagpole’,’tusker’,’greategret’,"Geoffroy’sspider
+monkey",’teacup’,’pencilcase’,’carwheel’,’automatedtellermachine’,’dough’,
+’half-track’,’southernblackwidow’,’watertower’,’tarantula’,’lakeshore’,’drink
+pitcher’,’library’,’Saharanhornedviper’,’braincoral’,’BassetHound’,’leaf
+beetle’,’one-piecebathingsuit’,’sawmill’,’wok’,’sulphur-crestedcockatoo’,
+’YorkshireTerrier’,’rickshaw’,’sailboat’,’cherimoya(custardapple)’,’tailedfrog’,
+’boathouse’,’mobilehome’,’Flat-CoatedRetriever’,’gibbon’,’saxophone’,’treefrog’,
+’seacucumber’,’vinesnake’,’semi-trailertruck’,’refrigerator’,’JapaneseChin’,
+```
+
+21 
+
+```
+’Africanrockpython’,’goose’,’necklace’,’desk’,’discbrake’,’waterjug’,’ground
+beetle’,’BorderTerrier’,’cockroach’,’tights’,’greatwhiteshark’,’volcano’,’cliff
+dwelling’,’swimtrunks_shorts’,’patio’,’Americancoot’,’convertible’,’common
+gallinule’,’stethoscope’,’stopwatch’,’guacamole’,’shipwreck’,’Europeangreen
+lizard’,’spaceheater’,’manholecover’,’tileroof’,’shoestore’,’steeldrum’,
+’Papillon’,’totempole’]
+```
+
+```
+ImageNet3=[’fiddlercrab’,’gyromitra’,’spatula’,’stinkhornmushroom’,’rugbyball’,
+’armadillo’,’tandembicycle’,’combinationlock’,’rainbarrel’,’picketfence’,’fire
+screen’,’slip-onshoe’,’brusselsgriffon’,’siamang’,’overskirt’,’ladle’,’espresso
+machine’,’greatgreyowl’,’plasticbag’,’StaffordshireBullTerrier’,’eel’,
+’barrel’,’corncob’,’Bloodhound’,’envelope’,’bullockcart’,’ladybug’,’airplane
+wing’,’BouvierdesFlandresdog’,’peafowl’,’througharchbridge’,’pedestal’,
+’Bullmastiff’,’trashcan’,’Americanblackbear’,’hare’,’NorwegianElkhound’,
+’badger’,’missile’,’showercap’,’hottub’,’terrapin’,’Maltese’,’WestHighland
+WhiteTerrier’,’GoldenRetriever’,’musicspeaker’,’whiskeyjug’,’violin’,’fire
+salamander’,’four-posterbed’,’diaper’,’brownbear’,’blackswan’,’snowleopard’,
+’bagel’,’Pomeranian’,’agama’,’pole’,’safe’,’cheetah’,’ocarina’,’jaguar’,’Shih
+Tzu’,’tigerbeetle’,’grocerystore’,’iPod’,’labcoat’,’Rottweiler’,’promontory’,
+’waterbuffalo’,’BedlingtonTerrier’,’dome’,’notebookcomputer’,’syringe’,’screw’,
+’wallclock’,’trafficorstreetsign’,’howlermonkey’,’barn’,’GreaterSwissMountain
+Dog’,’daisy’,’poncho’,’chain-linkfence’,’shojiscreen_roomdivider’,’balance
+beam’,’canopener’,’cradle’,’sunscreen’,’bustard’,’quilt’,’nematode’,’zucchini’,
+’wombat’,’borzoi’,’safetypin’,’greenhouse’,’spottedsalamander’,’pipeorgan’,
+’hometheater’,’bolete’]
+```
+
+```
+ImageNet4=[’solarthermalcollector’,’hatchet’,’bassoon’,’orangutan’,’American
+StaffordshireTerrier’,’sombrero’,’oxygenmask’,’dock’,’mousetrap’,’hairwig’,
+’fly’,’gazelle’,’Vizsla’,’baldeagle’,’lynx’,’porcupine’,’kneepad’,"potter’s
+wheel",’garfish’,’boaconstrictor’,’Europeanpolecat’,’electricguitar’,
+’lampshade’,’towtruck’,’sandbar’,’radiator’,’acorn’,’fryingpan’,’muzzle’,
+’gong’,’honeycomb’,’mashedpotatoes’,’airliner’,’drumstick’,’maraca’,’punching
+bag’,’spindle’,’meatloaf’,’mountain’,’Saluki’,’doormat’,’lighter’,’pool
+table’,’hornbill’,’reflexcamera’,’airship’,’holster’,’Otterhound’,’artichoke’,
+’bulletproofvest’,’lifeboat’,’umbrella’,’red-breastedmerganser’,’SiberianHusky’,
+’coffeemaker’,’graduationcap’,’earthstarfungus’,’leafhopper’,’pillow’,’mixing
+bowl’,’microwaveoven’,’cliff’,’Brittanydog’,’bobsleigh’,’carmirror’,’Christmas
+stocking’,’bottlecap’,’orange’,’Malinois’,’Indiancobra’,’baguette’,’backpack’,
+’jigsawpuzzle’,’parallelbars’,’partridge’,’containership’,’Dungenesscrab’,
+’lion’,’suit’,’CrockPot’,’cardboardbox_carton’,’vacuumcleaner’,’coralfungus’,
+’digitalclock’,’chocolatesyrup’,’acousticguitar’,’washingmachine’,’tabby
+cat’,’sweatshirt’,’wormsnake’,’EnglishSetter’,’LabradorRetriever’,’gaspump’,
+’dhole’,’rockcrab’,’fountainpen’,’toystore’,’KerryBlueTerrier’,’diningtable’,
+’dumbbell’]
+```
+
+```
+ImageNet5=[’seatbelt’,’NorfolkTerrier’,’drum’,’dustjacket’,’tablelamp’,
+’GreatDane’,’AlaskanMalamute’,’PembrokeWelshCorgi’,’chinacabinet’,’vase’,
+’cornet’,’bubble’,’photocopier’,’hotpot’,’jackfruit’,’chainsaw’,’hammerhead
+shark’,’cauliflower’,’lipstick’,’seasnake’,’EntlebucherSennenhund’,’sandal’,
+’ping-pongball’,’crossword’,’teddybear’,’Komododragon’,’cowboyhat’,’longhorn
+beetle’,’radiotelescope’,’binoculars’,’goblet’,’golfcart’,’tram’,’corn’,
+’Groenendaeldog’,’tripod’,’smoothnewt’,’white-headedcapuchin’,’tennisball’,
+’comicbook’,’bitternbird’,’sink’,’carbonara’,’gasmaskorrespirator’,’alligator
+lizard’,’ruddyturnstone’,’whitestork’,’lotion’,’trafficlight’,’oilfilter’,
+’jacamar’,’amphibiousvehicle’,’militaryhat(bearskinorshako)’,’militaryuniform’,
+’tray’,’marmot’,’aircraftcarrier’,’Nilecrocodile’,’uprightpiano’,’giant
+panda’,’echidna’,’kingpenguin’,’flamingo’,’chamberednautilus’,’St.Bernard’,
+’rockbeautyfish’,’bassinet’,’high-speedtrain’,’CRTmonitor’,’coffeemug’,’sea
+lion’,’harmonica’,’oceanliner’,’wardrobe’,’rooster’,’Dobermann’,’fountain’,
+’ToyPoodle’,’stationwagon’,’suspensionbridge’,’pufferfish’,’stupa’,’church’,
+’KingCharlesSpaniel’,’rockingchair’,’rulermeasuringstick’,’hourglass’,’soap
+dispenser’,’IrishSetter’,’whistle’,’turnstile’,’Americanalligator’,’Alpineibex’,
+’tiger’,’hockeypuck’,’Africanwilddog’,’foldingchair’,’vendingmachine’,’wooden
+spoon’,’analogclock’]
+```
+
+22 
+
+```
+ImageNet6=[’scarf’,’clownfish’,’sidewinderrattlesnake’,’lorikeet’,’laptop
+computer’,’cottontailrabbit’,’measuringcup’,’revolver’,’banana’,’baluster
+_handrail’,’coralreef’,’pinwheel’,’bathtub’,’jay’,’lawnmower’,’dogsled’,
+’chiton’,’bighornsheep’,’boxturtle’,’mosque’,’soupbowl’,’broom’,’snowplow’,
+’dishwasher’,’slug’,’balloon’,’ringletbutterfly’,’warthog’,’greeniguana’,
+’AustralianSilkyTerrier’,’indri’,’sundial’,’RhodesianRidgeback’,’construction
+crane’,’RedboneCoonhound’,’AustralianTerrier’,’Dalmatian’,’abaya’,’recreational
+vehicle’,’bridegroom’,’limpkin’,’barometer’,’strawberry’,’bakery’,’duck’,
+’dishcloth’,’payphone’,’tapeplayer’,’pokebonnet’,’featherboa’,’cleaver’,’piggy
+bank’,’acornsquash’,’electriclocomotive’,’palace’,’Polaroidcamera’,’dunlin’,
+’T-shirt’,’bandedgecko’,’corkscrew’,’polarbear’,’academicgown’,’bra’,’English
+SpringerSpaniel’,’vulture’,’belltower’,’dragonfly’,’ItalianGreyhound’,’cello’,
+’scabbard’,’IbizanHound’,’pickuptruck’,’tigercat’,’cassette’,’redpanda’,
+’messengerbag’,’hairclip’,’dowitcher’,’basketball’,’spiralorcoil’,’pajamas’,
+’trifle’,’bellpepper’,’beerbottle’,’cucumber’,’crutch’,’smallwhitebutterfly’,
+’Beagle’,’ringbinder’,’magneticcompass’,’mobilephone’,’sunglasses’,’quail’,
+’grasshopper’,’limousine’,’Band-Aid’,’greenmamba’,’macaw’,’spiderweb’,’apron’]
+```
+
+```
+ImageNet7=[’blackstork’,’Samoyed’,’GreatPyreneesdog’,’Persiancat’,’Norwich
+Terrier’,’BorderCollie’,’ant’,’Arcticfox’,’chickadee’,’hamper’,’chameleon’,
+’parachute’,’smoothgreensnake’,’cougar’,’slotmachine’,’snoekfish’,’Newfoundland
+dog’,’bookcase’,’bulbul’,’Kuvasz’,’sneaker’,’shield’,’gown’,’lenscap’,’isopod’,
+’moped’,’hand-heldcomputer’,’clothesiron’,’pelican’,’planetarium’,’motorboat’,
+’filingcabinet’,’pencilsharpener’,’prison’,’footballhelmet’,’pretzel’,’guenon’,
+’redwine’,’abacus’,’mountainbike’,’barberchair’,’cricketinsect’,’ram
+(adultmalesheep)’,’railroadcar’,’grandpiano’,’baboon’,’pirateship’,’mop’,
+’breastplate’,’tobaccoshop’,’rotarydialtelephone’,’GermanShepherdDog’,’baby
+pacifier’,’weevil’,’oscilloscope’,’breakwater’,’maypole’,’kingsnake’,’Alaskan
+tundrawolf’,’guineapig’,’Asianelephant’,’chain’,’storagechest’,’Affenpinscher’,
+’Frenchhorn’,’plectrum’,’cassetteplayer’,’cuirass’,’impala(antelope)’,’sea
+anemone’,’brambling’,’sturgeon’,’bookstore’,’joystick’,’trimaran’,’stickinsect’,
+’ring-neckedsnake’,’Americanrobin’,’mink’,’hen’,’waterbottle’,’greywhale’,
+’loupemagnifyingglass’,’TreeingWalkerCoonhound’,’monarchbutterfly’,’megalith’,
+’velvetfabric’,’facepowder’,’ballpointpen’,’fig’,’shoppingbasket’,’website’,
+’yellowgardenspider’,’Europeangardenspider’,’Basenji’,’sock’,’trolleybus’,
+’weighingscale’,’toiletpaper’,’littleblueheron’]
+```
+
+```
+ImageNet8=[’canoe’,’pig’,’electricalswitch’,’toolkit’,’assaultrifle’,’flute’,
+’sarong’,’schoolbus’,’stage’,’AustralianKelpie’,’panflute’,’entertainment
+center’,’winebottle’,’spinylobster’,’OldEnglishSheepdog’,’kitfox’,’sea
+urchin’,’ring-tailedlemur’,’hammer’,’paddle’,’maze’,’redfox’,’altar’,’American
+lobster’,’golfball’,’mushroom’,’SussexSpaniel’,’banjo’,’toaster’,’Boston
+Terrier’,’junco’,’desktopcomputer’,’tigershark’,’submarine’,’proboscismonkey’,
+’tractor’,’candle’,’plunger’,’coyote’,’rapeseed’,’desertgrasslandwhiptail
+lizard’,’wolfspider’,’Dutchoven’,’remotecontrol’,’eraser’,’tricycle’,’wallaby’,
+’marimba’,’cheeseburger’,’Komondor’,’albatross’,’prayingmantis’,’modem’,’paddle
+wheel’,’lemon’,’teapot’,’BerneseMountainDog’,’cardoon’,’handkerchief’,’hyena’,
+’mortarandpestle’,’llama’,’medicinecabinet’,’killerwhale’,’yurt’,’hair
+dryer’,’frontcurtain’,’triumphalarch’,’StandardSchnauzer’,’ScottishTerrier’,
+’projector’,’soccerball’,’padlock’,’parkbench’,’carvedpumpkin’,’purse’,’window
+screen’,’dam’,’couch’,’scoreboard’,’bison’,’Gilamonster’,’farmplow’,’potpie’,
+’centipede’,’popsicle’,’GrannySmithapple’,’sliderule’,’knot’,’jeans’,’valley’,
+’goldfish’,’silversalmon’,’Siamesecat’,’oboe’,’oystercatcher’,’Americandipper’,
+’neckbrace’,’sewingmachine’,’television’]
+```
+
+```
+ImageNet9=[’africangreyparrot’,’Whippet’,’beaver’,’hermitcrab’,’shower
+curtain’,’quill’,’toiletseat’,’Keeshond’,’EgyptianMau’,’gartersnake’,
+’blackgrouse’,’BluetickCoonhound’,’CardiganWelshCorgi’,’strainer’,’Boxer’,
+’volleyball’,’odometer’,’policevan’,’scorpion’,’redadmiralbutterfly’,’candy
+store’,’milkcan’,’carousel’,’mailbox’,’AppenzellerSennenhund’,’plate’,’bath
+towel’,’skunk’,’stonewall’,’baseballplayer’,’lionfish’,’kimono’,’croquet
+ball’,’ambulance’,’pizza’,’vestment’,’pier’,’ChowChow’,’schooner’,’mosquito
+net’,’wheelbarrow’,’starfish’,’three-toedsloth’,’fishingcastingreel’,’hard
+diskdrive’,’digitalwatch’,’keyboardspacebar’,’spotlight’,’ostrich’,’Tibetan
+Mastiff’,’vaultedorarchedceiling’,’gymnastichorizontalbar’,’militaryaircraft’,
+```
+
+23 
+
+```
+’redkingcrab’,’kite(birdofprey)’,’steamlocomotive’,’hamster’,’microphone’,
+’pug’,’dingo’,’Petridish’,’snorkel’,’arabiancamel’,’titimonkey’,’cocktail
+shaker’,’ptarmigan’,’lighthouse’,’indigobunting’,’snowmobile’,’flatworm’,
+’consomme’,’Chihuahua’,’hoopskirt’,’koala’,’TibetanTerrier’,’Americanbullfrog’,
+’sportscar’,’BlackandTanCoonhound’,’metalnail’,’WelshSpringerSpaniel’,
+’birdhouse’,’redwolformanedwolf’,’MiniaturePoodle’,’trilobite’,’horse-drawn
+vehicle’,’loggerheadseaturtle’,’mask’,’parkingmeter’,’torch’,’harp’,’African
+bushelephant’,’powerdrill’,’easterndiamondbackrattlesnake’,’StandardPoodle’,
+’firetruck’,’clogs’,’drillingrig’,’plantpot’,’bikini’,’cicada’]
+```
+
+```
+ImageNet10=[’meerkat’,’weasel’,’combineharvester’,’newt’,’watersnake’,
+’obelisk’,’crashhelmet’,’hippopotamus’,’pomegranate’,’butchershop’,’tent’,
+’Angorarabbit’,’unicycle’,’ScottishDeerhound’,’MiniatureSchnauzer’,’accordion’,
+’spaceshuttle’,’AiredaleTerrier’,’commonsquirrelmonkey’,’forklift’,’fordmodel
+t’,’racket’,’computermouse’,’husky’,’cabbage’,’burrito’,’gorilla’,’taxicab’,
+’magpie’,’prayerrug’,’bellorwindchime’,’Windsortie’,’WireFoxTerrier’,
+’ski’,’miniskirt’,’platerack’,’broccoli’,’scubadiver’,’mitten’,’Curly-coated
+Retriever’,’brassmemorialplaque’,’patasmonkey’,’garbagetruck’,’tench’,
+’split-railfence’,’shovel’,’electricfan’,’restaurant’,’shoppingcart’,’Lakeland
+Terrier’,’espresso’,’stove’,’swimmingcap’,’barnspider’,’IrishWolfhound’,
+’typewriterkeyboard’,’damselfly’,’triceratops’,’movietheater’,’leopard’,’buckle’,
+’fireboat’,’hairspray’,’chiffonier’,’menu’,’beach’,’butternutsquash’,’axolotl’,
+’MiniaturePinscher’,’crate’,’letteropener’,’goldfinch’,’ox’,’collie’,’spaghetti
+squash’,’castle’,’gossamer-wingedbutterfly’,’thimble’,’harvestman’,’Weimaraner’,
+’macaque’,’beaker’,’spoonbill’,’monastery’,’rhinocerosbeetle’,’minivan’,’rose
+hip’,’ruffedgrouse’,’hartebeest’,’balaclavaskimask’,’cranebird’,’bucket’,
+’screwdriver’,’beeeater’,’toucan’,’infantbed’,’langur’,’cloak’]
+```
+
+```
+Flower-102=[’pinkprimrose’,’hard-leavedpocketorchid’,’canterburybells’,
+’sweetpea’,’englishmarigold’,’tigerlily’,’moonorchid’,’birdofparadise’,
+’monkshood’,’globethistle’,’snapdragon’,"colt’sfoot",’kingprotea’,’spear
+thistle’,’yellowiris’,’globe-flower’,’purpleconeflower’,’peruvianlily’,’balloon
+flower’,’giantwhitearumlily’,’firelily’,’pincushionflower’,’fritillary’,
+’redginger’,’grapehyacinth’,’cornpoppy’,’princeofwalesfeathers’,’stemless
+gentian’,’artichoke’,’sweetwilliam’,’carnation’,’gardenphlox’,’loveinthemist’,
+’mexicanaster’,’alpineseaholly’,’ruby-lippedcattleya’,’capeflower’,’great
+masterwort’,’siamtulip’,’lentenrose’,’barbetondaisy’,’daffodil’,’swordlily’,
+’poinsettia’,’bolerodeepblue’,’wallflower’,’marigold’,’buttercup’,’oxeyedaisy’,
+’commondandelion’,’petunia’,’wildpansy’,’primula’,’sunflower’,’pelargonium’,
+’bishopofllandaff’,’gaura’,’geranium’,’orangedahlia’,’pink-yellowdahlia’,
+’cautleyaspicata’,’japaneseanemone’,’black-eyedsusan’,’silverbush’,’californian
+poppy’,’osteospermum’,’springcrocus’,’beardediris’,’windflower’,’treepoppy’,
+’gazania’,’azalea’,’waterlily’,’rose’,’thornapple’,’morningglory’,’passion
+flower’,’lotus’,’toadlily’,’anthurium’,’frangipani’,’clematis’,’hibiscus’,
+’columbine’,’desert-rose’,’treemallow’,’magnolia’,’cyclamen’,’watercress’,
+’cannalily’,’hippeastrum’,’beebalm’,’ballmoss’,’foxglove’,’bougainvillea’,
+’camellia’,’mallow’,’mexicanpetunia’,’bromelia’,’blanketflower’,’trumpet
+creeper’,’blackberrylily’]
+```
+
+24

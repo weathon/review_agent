@@ -1,0 +1,1174 @@
+- SHIFTING THE PARADIGM: A DIFFEOMORPHISM BE - TWEEN TIME SERIES DATA MANIFOLDS FOR ACHIEV ING SHIFT-INVARIANCY IN DEEP LEARNING 
+
+**Berken Utku Demirel** Department of Computer Science ETH Zurich 
+
+## **Christian Holz** 
+
+Department of Computer Science ETH Zurich 
+
+## ABSTRACT 
+
+Deep learning models lack shift invariance, making them sensitive to input shifts that cause changes in output. While recent techniques seek to address this for images, our findings show that these approaches fail to provide shift-invariance in time series, where the data generation mechanism is more challenging due to the interaction of low and high frequencies. Worse, they also decrease performance across several tasks. In this paper, we propose a novel differentiable bijective function that maps samples from their high-dimensional data manifold to another manifold of the same dimension, without any dimensional reduction. Our approach guarantees that samples—when subjected to random shifts—are mapped to a unique point in the manifold while preserving all task-relevant information without loss. We theoretically and empirically demonstrate that the proposed transformation guarantees shift-invariance in deep learning models without imposing any limits to the shift. Our experiments on six time series tasks with state-of-the-art methods show that our approach consistently improves the performance while enabling models to achieve complete shift-invariance without modifying or imposing restrictions on the model’s topology. The source code is available on GitHub. 
+
+## 1 INTRODUCTION 
+
+Inference on time series is essential for several important applications, such as heart rate (HR) estimation (Koshy et al., 2018), activity recognition (Saint-Maurice et al., 2020), and cardiovascular health monitoring (Hannun et al., 2019), which are generally performed using signals that are encoded as a sequence of discrete values over time. Most of these signals contain features that characterize the signal independently of their position in time (Waibel et al., 1989; Demirel & Holz, 2023). In other words, the information content of signals generally remains unchanged under the action of finite groups such as translations (Mallat, 2012). Therefore, ensuring the ability to accurately capture these inherent patterns is crucial for the reliability of the deep learning models in such critical human-involved health-related tasks (Akbar et al., 2019; Cutillo et al., 2020). 
+
+Deep learning networks perform downsampling by using strided-convolution and pooling (He et al., 2015; Krizhevsky et al., 2012), which cause loss of information due to high-frequency components of the input alias into lower frequencies, i.e., aliasing (Oppenheim et al., 1996). Previous works have proposed to employ a low-pass filter to prevent the aliasing and mitigate information loss during downsampling (Zhang, 2019; Mairal et al., 2014). While this additional filtering improved the robustness, the effect of employed low-pass filters is quite poor compared to the ideal implementation (see Figure 1 **a** and **b** ), which still causes high-frequency components to alias into lower ones. 
+
+Despite the potential benefits of emphasizing low-frequency components for image recognition, as it aligns with human perception (Subramanian et al., 2023), the imperfect preservation of frequency components with each subsampling layer contributes to information loss, leads to performance degradation, especially in tasks where the significance lies in both low and high-frequency components with their interactions. A more recent approach to achieve shift-invariant neural networks involves the use of adaptive subsampling grids (Chaman & Dokmanic, 2021). However, these methods still 
+
+1 
+
+**==> picture [396 x 130] intentionally omitted <==**
+
+**----- Start of picture text -----**<br>
+(a) (c) (e)<br>Magnitude (dB x 10 [2] ) Amplitude Amplitude<br>3 6<br>0<br>0 0<br>-1 Binomial Aliased<br>Ideal frequency band 0 0<br>-2  rad/sample -3 Time (s) Time (s)<br>0.2 0.5 0.8 0 8 0 10<br>(b) 1 AmplitudeIdeal Binomial (d) 140 HeartRate (HR) (f) .7 Probability SR AFIB<br>0<br>Time (s) 60 Shift .3 Shift<br>-10 0 10 -4 0 4 -5 0 5<br>**----- End of picture text -----**<br>
+
+
+Figure 1: **(a)** The magnitude response of the ideal low-pass filter and binomial filter that is employed in (Zhang, 2019) for preventing aliasing. **(b)** Time domain representations of the ideal and binomial filters with interpolation for smoother waveforms. **(c)** An 8-second signal for blood volume changes and its _t[′]_ shifted version, obtained through photoplethysmogram–—a widely utilized signal for heart rate monitoring (Perez et al., 2019). **(d)** The heart rate prediction of a trained ResNet with binomial filters to prevent aliasing. Different amounts of shifts ( _t[′] ∈_ [ _−_ 4 _,_ 4]) change the trained model output drastically from 140 to 60 beats per minute (bpm). **(e)** A 10-second electrocardiogram (ECG) signal from a patient with atrial fibrillation (AFIB). **(f)** The model misclassifies the abnormal AFIB pattern as a healthy sinus rhythm (SR), with shifts causing a complete change in output probability. 
+
+fail to guarantee shift-invariancy due to the change in content at the boundary (Rojas-Gomez et al., 2022) and impose constraints on the shift range to maintain invariance. 
+
+Consequently, the evaluation of these methods is confined to a limited range of shifts while covering a small subset of the space. Additionally, their reliance on a grid scheme introduces a dependence on sampling rates, resulting in performance gaps across the entire shift space (Michaeli et al., 2023). 
+
+In this work, we propose a differentiable bijective function that maps samples from their highdimensional data manifold to another manifold of the same dimension, without any dimensional reduction. Our method ensures that randomly shifted samples—representing variations of the same signal—are mapped to the same point in the space, preserving all task-relevant information. 
+
+Since our method modifies the data space, it can be integrated into any deep learning architecture, offering an adaptable and complementary solution for achieving shift-invariancy in time series. Summarizing our contributions in this paper: 
+
+- We introduce a novel diffeomorphism to ensure shift-invariancy in neural networks. Additionally, we incorporate the proposed diffeomorphism into the network architecture using a novel, tailored loss term to further enhance performance while ensuring invariance. 
+
+- We demonstrate both theoretically and empirically that the proposed transformation guarantees shift-invariancy in models without imposing any limits to the range of shifts or changing model topology, which enable previous methods to be used in conjuction. 
+
+- We conduct extensive experiments on six time series tasks with nine datasets. Our experiments show that the proposed approach consistently improves the performance while decreasing the variance and enabling models to achieve complete shift-invariance. 
+
+## 2 METHOD 
+
+## 2.1 NOTATIONS 
+
+We use bold lowercase symbols ( **x** ) for time series. The parametric mappings are represented as _fθ_ ( _._ ) where _θ_ is the parameter. The discrete Fourier transformation of a time series is denoted as _F_ (x), yielding a complex variable _|X_ ( _e[jω]_ ) _|e[jϕ]_[(] _[ω]_[)] which contains magnitude and phase information of each harmonic (sinusoidal). _ϕ_ ( _ωk_ ) and T _k_ represent the phase angle and period of the _k_ -th harmonic with frequency _ωk_ . We mainly used the textbook notations (Oppenheim et al., 1996) throughout the script, providing a comprehensive list of notations and detailed definitions in Appendix A.1. 
+
+2 
+
+## 2.2 OBJECTIVE 
+
+Given a dataset _D_ = _{_ ( **x** ( _t_ ) _i,_ **y** _i_ ) _}[K] i_ =1[where each] **[ x]** _[ ∈][X]_[consists of uniformly sampled real-valued] values and each **y** _∈ Y_ represents the corresponding labels, the objective is to have consistent and accurate outputs for all variants of a sample that are subjected to shifts[1] such that when a parametric model _fθ_ : _X → Y_ is evaluated on the set _D_ test = _{_ ( **x** ( _t_ ) _i,_ **y** _i_ ) _}[L] i_ =1[, the output will be the same and] true **y** _i_ for all _t[′]_ to be shift-invariant, i.e., **y** _i_ = _fθ_ ( **x** ( _t − t[′]_ ) _i_ ) _, ∀t[′] ∈_ R. 
+
+We propose a diffeomorphism that maps randomly shifted time series samples to the same point in data space, preserving all relevant information to ensure shift-invariance. The motivation and theoretical derivation of our method are presented in the following steps. 
+
+**Proposition 2.1** (Time shift as a Group Operation) **.** _Shift operation in time domain defines an Abelian Group of phase angles in the frequency domain for each harmonic with frequency ωk._ 
+
+**==> picture [351 x 12] intentionally omitted <==**
+
+_Proof._ Using _F_ ( _x_ ( _t_ + _t[′]_ )) = _|X_ ( _e[jω]_ ) _|e[jϕ]_[(] _[ω]_[)] _e[jωt][′]_ , and the multiplication of complex numbers 
+
+_∃t[′] ∈_ R _, ∀ϕ ∈_ ( _−π, π_ ] _, ϕ_ = ( _ϕ_ ( _ωk_ ) + _ωkt[′]_ ) mod 2 _π_ (2) 
+
+See Appendix A for detailed proof with group axioms. 
+
+Proposition 2.1 states that the shift variants of a sequence define a group of phase angles, known as circle group (Fuchs, 1960) T. An important observation from Equation 2 is that different shift values ( _t[′]_ ) can map to the same phase angle ( _ϕ_ ) due to modulo operation with 2 _π_ . 
+
+However, a closer look reveals that this mapping can be defined uniquely for specific harmonics using the circular shift. Specifically, we can represent every point in the shift space uniquely with the phase angle of a harmonic whose period is equal to or longer than the length of sample, i.e., T0 _≤ t_ . In the remainder of this section, we explain how this observation is framed as a novel diffeomorphism. We denote the frequency, period, and phase of this specific harmonic as _ω_ 0, T0, and _ϕ_ ( _ω_ 0), respectively. 
+
+**==> picture [204 x 109] intentionally omitted <==**
+
+**----- Start of picture text -----**<br>
+(a) (b)<br>Amplitude<br>1<br>-1<br>0 Time<br>**----- End of picture text -----**<br>
+
+
+Figure 2: **(a)** Frequency domain representation of a harmonic at frequency _ω_ 0 with different phase angles in unit circle. **(b)** Time domain representation of a signal x( _t_ ) and its shifted version x( _t − t[′]_ ). The phase angle of the harmonic can cover all (i.e., surjective _T_ ( **x** _, ϕ_ )) potential shifts. Moreover, shifts in the time domain correspond to unique (i.e., injective _T_ ( **x** _, ϕ_ )) angle rotations in the frequency domain for the sinusoidal with periodicity T0. Therefore, the proposed transformation function _T_ ( **x** _, ϕ_ ) is bijective. 
+
+The proposed transformation function, _T_ ( **x** _, ϕ_ ), takes a sample **x** and an angle _ϕ ∈_ ( _−π, π_ ]. It then applies a linear phase shift to each harmonic, mapping the time series to a new variant where the phase angle of the harmonic with frequency _ω_ 0 matches the desired angle _ϕ_ . The proposed transformation, which converts a time series to another shifted variant, is defined as in Equations 3 and 4. 
+
+**==> picture [325 x 50] intentionally omitted <==**
+
+Mainly, the transformation first decomposes a signal to its harmonics, then it calculates the phase difference, denoted as _∆ϕ_ , between the harmonic with frequency _ω_ 0 and the desired angle _ϕ_ . Finally, 
+
+> 1 _′ ′_ We represent a time shift ( _t_ ) for a sample **x** as **x** ( _t − t_ ), similar to Oppenheim et al. (1996). All the time shifts throughout the paper imply circular shift, i.e., ( _t − t[′]_ ) = ( _t − t[′]_ )% _t_ where % is the modulus. 
+
+3 
+
+It returns to the time domain by taking the inverse Fourier transform, _F[−]_[1] ( _._ ), while applying a linear phase shift to all harmonics to preserve the waveform morphology. In the end, the transformation matches the phase angle of the harmonic at frequency _ω_ 0 with the desired angle _ϕ_ . We first demonstrate that the proposed transformation is a bijective function, as shown in Theorem 2.2. 
+
+**Theorem 2.2** (Covering the Entire Time Space Injectively) **.** _Given a sample_ **x** _, the defined function T_ ( **x** _, ϕ_ ) : _Φ ×_ R _[d] →_ R _[d] × ∆Φ is bijective such that all shift variants of a sample can be covered with the unique phase angle of a harmonic whose period is longer or equal to the length of_ **x** _._ 
+
+**==> picture [204 x 26] intentionally omitted <==**
+
+_where the first and second equations represent the injection and surjection, respectively._ 
+
+We provide an intuitive demonstration in Figure 2, with a detailed mathematical proof in Appendix A. Since each point in the shift space can be uniquely defined by the phase angle of a harmonic with period T0, we use the angle of this harmonic to define manifolds[2] , _M[ϕ]_ , on which the samples lie. Specifically, we apply the proposed transformation _T_ ( **x** _, ϕ_ ) for each sample to map it to a 2 _π_ manifold defined by the angle, i.e., _T_ ( **x** _, ϕa_ ) _∈M[ϕ][a]_ , _T_ ( **x** _, ϕb_ ) _∈M[ϕ][b]_ , and al _i_ =0 _[M][ϕ][i]_[=] _[ ∅]_[(See] Appendices A.1.2 and A.2 for detailed definition of manifolds and notations). We, therefore, can map a sample and its randomly shifted variants to the same point in the space, which is sufficient for providing shift-invariancy as demonstrated in Theorem 2.3 with a detailed proof in Appendix A. 
+
+**Theorem 2.3** (Guarantees for Shift-Invariancy) **.** _Given_ **x** _and a randomly shifted variant of it_ **x** ( _t−t[′]_ ) _, if T_ ( **x** _, ϕ_ ) _is applied to both samples with the same angle ϕa, the resulting samples will be the same._ 
+
+**==> picture [289 x 12] intentionally omitted <==**
+
+_Proof._ 
+
+**==> picture [349 x 21] intentionally omitted <==**
+
+**==> picture [347 x 21] intentionally omitted <==**
+
+Therefore, the output time series samples will be the same after applying the transformation. 
+
+The proof concludes by demonstrating that the harmonics retain the same phase and magnitude after transformation, despite an unknown shift applied to the sample. Moreover, since the transformation only contains exponentials with Fourier transform, it is fully differentiable, allowing optimization with 
+
+**==> picture [397 x 174] intentionally omitted <==**
+
+**----- Start of picture text -----**<br>
+(a) y s1 2 (b) ASS (c) (d) Le = Lo + \\Var(fo.(FGO))<br>C1<br>C2<br>C3<br>Cc<br>EF oe<br>vases |F(x(#))| Esc am du woleardlx(t — t’)  fh fo,(.) |<br>Figure 3: (a)  An input signal in the time domain and complex plane representation of its decomposed<br>sinusoidal of frequency  ω 0 = [2] T [π] 0 [with the phase angle] [ ϕ] [0][.] [(b)] [ Guiding the diffeomorphism to map]<br>samples between manifolds. (c)  The obtained waveform with a phase shift applied to all frequencies<br>linearly, calculated by the angle difference, as in Equation 4, without altering the waveform. (d)  The<br>loss functions for optimizing networks with the cross-entropy and the variance of possible manifolds.<br>**----- End of picture text -----**<br>
+
+
+> 2The manifold is defined as a _d_ -dimensional Euclidean space, matching the data’s dimension, to better explain the abstract transformation. There is no manifold learning of low-dimensional space in our transformation. 
+
+4 
+
+neural networks. Therefore, we use a guidance network _fGθ_ : R _[d] → Φ_ with a shift-invariant input, absolute Fourier transform of samples, to generate an angle in radians for mapping. Simultaneously, the main classifier _fCθ_ : _X → Y_ maps the transformed samples to the label space. Both networks are optimized with cross-entropy loss. The optimizer for the guidance network ( _LG_ ) has an additional loss term to reduce variations in a batch ( _B_ ) of angles, as given in Equation 7. 
+
+**==> picture [362 x 32] intentionally omitted <==**
+
+The guidance network, optimized by the proposed loss, works as an adaptive linear constraint that limits the regions in the original data space where samples can be found. In other words, if we conceptualize the data space of samples as expanding with shift variants, as illustrated in Figure 3, the model learns to reduce the potential points where samples can be found in the data space. 
+
+Additionally, for real-world samples where optimal phase shift values are unavailable, applying trivial phase shifting may lead to suboptimal data space representations. To address this, we transform the data space using the proposed diffeomorphism for the downstream tasks using the guidance network (see Appendix F for a detailed analysis of the guidance network). Moreover, unlike traditional manifold learning methods (Lin & Zha, 2008; Wang et al., 2004), which project data into lowerdimensional spaces, our approach operates directly within the original data space. In our ablation studies, we thoroughly examine the impact of loss terms on the performance and present the findings. 
+
+## 3 EXPERIMENTS 
+
+## 3.1 DATASETS 
+
+We conducted experiments on nine datasets across six tasks, including heart rate (HR) estimation from photoplethysmography (PPG), step counting and activity recognition using inertial measurements (IMUs), cardiovascular disease classification from electrocardiogram (ECG), sleep stage classification from electroencephalography (EEG) and lung sound classification from audio. We provide short descriptions of each dataset below, and further details can be found in Appendix C. 
+
+_**Heart rate**_ We used the IEEE Signal Processing Cup in 2015 (IEEE SPC) (Zhang et al., 2015), and DaLia (Reiss et al., 2019) for PPG-based heart rate prediction. We used the leave-one-session-out (LOSO) cross-validation, which evaluates models on subjects/sessions that were not used for training. 
+
+_**Activity recognition**_ We used UCIHAR (Anguita et al., 2012), and HHAR (Stisen et al., 2015) for activity recognition from inertial measurement units from smartphones. We evaluate the cross-person generalization performance of the models, i.e., the model is evaluated on previously unseen subjects. 
+
+_**Cardiovascular disease (CVD) classification**_ We used Chapman University, Shaoxing People’s Hospital ECG (Zheng et al., 2020) and PhysioNet 2017 (Clifford et al., 2017; Goldberger et al., 2000) datasets. We selected the same four leads for the Chapman as in (Alday et al., 2020). We split the datasets into training, validation, and test sets according to the patient ID (each patient’s recordings appear in only one set) using a 60, 20, 20 ratio as in Demirel & Holz (2023); Zheng et al. (2020). 
+
+**Step counting** We used the Clemson dataset (Mattfeld et al., 2017), which released for pedometer evaluation. We conducted experiments using wrist IMUs where labels are available through videos. 
+
+_**Sleep stage classification**_ We used the Sleep-EDF dataset, from PhysioBank (Goldberger et al., 2000), which includes whole-night PSG sleep recordings, where we used a single EEG channel (i.e., Fpz-Cz) with a sampling rate of 100 Hz, following the same setup as in Eldele et al. (2021). 
+
+_**Lung sound classification**_ We used the Respiratory@TR, which contains lung sounds recorded with two digital stethoscopes (Altan et al., 2017). Two pulmonologists validated and labeled the recordings based on X-rays, pulmonary function tests (PFTs), and auscultation. The labels correspond to five COPD severity levels (COPD0–COPD4) as described in prior work (Zhang et al., 2024). 
+
+5 
+
+## 3.2 BASELINES 
+
+We compared our method and existing approaches including low-pass filtering (LPF) (Zhang, 2019), and adaptive subsampling grids (APS) (Chaman & Dokmanic, 2021). In addition to shift-invariance techniques, we evaluated our method against shift-equivariant Wavelet Networks (Romero et al., 2024) and canonical representation learning techniques for equivariance (Kaba et al., 2023; Mondal et al., 2023). Moreover, since our method can be integrated with any existing approaches, we investigate the performance of previous techniques for shift-invariancy when combined with our algorithm. 
+
+## 3.3 IMPLEMENTATION 
+
+We follow a similar implementation setup as previous work on shift-invariancy (Zhang, 2019) in supervised learning, making architectural adjustments for time series. Specifically, we employed ResNet (He et al., 2015) with eight blocks designed for time series (Hong et al., 2020), excluding signals from inertial measurement units with a single dimension. For the latter, we observed a better performance with fully connected networks (FCN). Therefore, we used a three-layer FCN for the single dimensional IMU-based task, i.e., step counting. Similarly, for guiding the transformation function, we used an FCN with a single output, which is the angle for the chosen sinusoidal. For each dataset, we set the Fourier transform length equal to the signal length, as the Fourier transformation of the same size inherently includes sinusoids with periods equal to or longer than the signal length. We use categorical cross-entropy loss, which is optimized using Adam (Kingma & Ba, 2015). The learning rate is determined through grid search for each dataset and set to the same value for all baselines given in the Appendix. During training, it was halved when the validation loss stops improving for 15 consecutive epochs. The training is terminated when 90 successive epochs show no validation performance improvements. The best model is chosen as the lowest loss on the validation set. Detailed hyperparameters and architecture specifications can be found in the Appendix C.4. 
+
+## 3.4 EVALUATION 
+
+We evaluate the performance of the models using the common evaluation metrics, i.e., accuracy, F1, for each task. For shift-invariancy, we used the shift consistency (S-Cons.) metric which measures how often the network outputs the same classification, given the same time series with two different shifts, similar to (Zhang, 2019) as in Equation 8. We applied shifts across the entire space in contrast to previous approaches where the range of shift is heavily limited (Rojas-Gomez et al., 2022). 
+
+**==> picture [289 x 19] intentionally omitted <==**
+
+where _f_[ˆ] _C_ represents the classifier’s output following the arg max operation. _t_ 1 _,_ 2 are uniformly sampled integers from the interval [1 _, t_ ], with _t_ denoting the length of the sample. 
+
+## 4 RESULTS AND DISCUSSION 
+
+We present the main results of our approach compared to state-of-the-art methods across the six time series tasks on nine datasets. Overall, our method has demonstrated a substantial performance improvement, reaching up to 10–15% in some tasks, while increasing the shift consistency up to 50–60% compared to previous techniques. 
+
+The experimental results from all the time series tasks are given in Tables 1, 2, 3 and 4. These tables demonstrate that the previous techniques fail to provide shift-invariant models when applied to time series without limiting shifts. Additionally, the models exhibit extremely low consistency (as low as 32%) in HR prediction. More importantly, applying state-of-the-art methods to enhance shift consistency in deep learning models for predicting the heart rate results in performance degradation. 
+
+We believe the main reason for the small improvements in the consistency of previous techniques is that the research to date has tended to focus on limited shifts rather than considering the whole shift space as literature is mostly concerned about images. While restricting shifts can be a valid assumption in computer vision, where the main reasoning is that the object being classified should not be near the boundary. This assumption does not apply to time series, where the whole signal 
+
+6 
+
+Table 1: Performance comparison of our method and other techniques for HR estimation 
+
+|Method|IEEE SPC22<br>S-Cons (%)_↑_<br>RMSE_↓_<br>MAE_↓_<br>_ρ_(%)_↑_|DaLiA<br>S-Cons (%)_↑_<br>RMSE_↓_<br>MAE_↓_<br>_ρ_(%)_↑_|
+|---|---|---|
+|Baseline<br>Aug.<br>LPF<br>APS<br>WaveletNet<br>Canonicalize|61.99_±_1.19<br>18.39_±_2.96<br>10.28_±_1.41<br>62.64_±_5.74<br>76.48_±_1.77<br>18.73_±_1.15<br>10.42_±_0.40<br>64.06_±_3.70<br>76.88_±_0.73<br>20.20_±_1.54<br>13.44_±_0.82<br>65.40_±_1.92<br>73.99_±_1.06<br>19.42_±_0.60<br>12.98_±_0.29<br>65.27_±_1.32<br>51.71_±_1.95<br>21.56_±_1.01<br>14.61_±_0.34<br>60.74_±_4.37<br>63.52_±_1.20<br>19.02_±_0.62<br>10.40_±_0.69<br>61.27_±_1.07|32.08_±_0.22<br>9.86_±_0.23<br>4.40_±_0.03<br>86.01_±_0.51<br>52.77_±_0.39<br>9.85_±_0.21<br>4.47_±_0.06<br>85.99_±_0.49<br>38.67_±_0.30<br>10.01_±_0.30<br>4.67_±_0.12<br>85.68_±_0.51<br>44.33_±_0.16<br>10.45_±_0.40<br>5.01_±_0.17<br>84.69_±_0.85<br>36.71_±_3.04<br>15.46_±_0.64<br>7.67_±_0.23<br>76.13_±_1.86<br>32.01_±_0.33<br>9.77_±_0.12<br>4.39_±_0.05<br>86.02_±_0.30|
+|Ours<br>Ours+LPF<br>Ours+APS|_±_**0.00**<br>**16.25**_±_**0.72**<br>**9.45**_±_**0.03**<br>**70.12**_±_**2.10**<br>100_±_0.00<br>20.34_±_1.62<br>13.77_±_0.84<br>65.60_±_2.31<br>100_±_0.00<br>18.81_±_1.59<br>12.32_±_0.84<br>67.01_±_3.79|_±_**0.00**<br>**9.75**_±_**0.15**<br>**4.39**_±_**0.03**<br>**86.06**_±_**0.19**<br>100_±_0.00<br>10.72_±_0.11<br>5.30_±_0.03<br>84.12_±_0.23<br>100_±_0.00<br>10.47_±_0.09<br>5.10_±_0.03<br>84.62_±_0.31|
+
+
+Table 2: Performance comparison of ours and other techniques in _ECG_ datasets for CVD classification 
+
+|Method|Chapman<br>S-Cons (%)_↑_<br>Acc_↑_<br>F1_↑_<br>AUC (%)_↑_|PhysioNet 2017<br>S-Cons (%)_↑_<br>Acc_↑_<br>F1_↑_<br>AUC_↑_|
+|---|---|---|
+|Baseline<br>Aug.<br>LPF<br>APS<br>WaveletNet<br>Canonicalize|98.53_±_0.17<br>91.32_±_0.23<br>91.22_±_0.24<br>98.34_±_0.16<br>99.00_±_0.16<br>91.96_±_0.19<br>91.89_±_0.22<br>98.45_±_0.18<br>98.69_±_0.14<br>92.01_±_0.23<br>91.94_±_0.58<br>98.50_±_0.24<br>98.60_±_0.17<br>90.69_±_0.89<br>89.44_±_1.00<br>98.31_±_0.24<br>91.02_±_1.14<br>90.87_±_1.02<br>90.02_±_1.00<br>97.94_±_0.21<br>98.80_±_0.24<br>91.93_±_0.13<br>90.87_±_0.18<br>98.42_±_0.15|98.37_±_0.15<br>83.22_±_0.72<br>73.50_±_1.99<br>93.21_±_0.30<br>98.96_±_0.17<br>82.28_±_1.18<br>72.32_±_2.20<br>93.20_±_0.42<br>98.94_±_0.39<br>84.40_±_0.16<br>75.68_±_0.76<br>93.80_±_0.32<br>—<br>—<br>—<br>—<br>65.03_±_0.71<br>76.06_±_0.64<br>63.35_±_3.40<br>87.02_±_0.29<br>98.26_±_0.31<br>83.34_±_0.46<br>73.97_±_0.67<br>93.68_±_0.31|
+|Ours<br>Ours+LPF<br>Ours+APS|_±_**0.00**<br>**92.10**_±_**0.25**<br>91.93_±_0.85<br>98.47_±_0.15<br>100_±_0.00<br>92.05_±_0.52<br>**91.96**_±_**0.54**<br>**98.51**_±_**0.10**<br>100_±_0.00<br>91.61_±_1.11<br>91.10_±_0.56<br>98.36_±_0.20|_±_**0.00**<br>83.15_±_0.65<br>74.12_±_1.80<br>93.28_±_0.31<br>100_±_0.00<br>**85.20**_±_**0.40**<br>**77.50**_±_**1.21**<br>**94.20**_±_**0.19**<br>—<br>—<br>—<br>—|
+
+
+carries the information (Demirel & Holz, 2023) additional to local waveform features, and as such, there is no explicit boundary condition or input area to consider for limiting the range of shifts. 
+
+The empirical results support our motivation for proposing a differentiable bijective function that maps samples with different shifts to the same point on the data manifold, avoiding the limited shift assumption. Additionally, applying low-pass filtering to prevent aliasing can degrade performance for certain tasks, where the interaction between frequencies plays a critical role (Canolty et al., 2006). 
+
+**Time delay as adversary?** An interesting finding from our experiments is the notable decline in model consistency as the number of output classes increases. This behavior in the models is similar to previous findings on adversarial examples, indicating that the robustness decreases with a higher number of classes (Fawzi et al., 2018). During our experiments, we observed the same phenomenon where the small shifts of the input change the output to another class, particularly when the task complexity increased with a higher number of classes. For example, in the case of HR estimation (Table 1), even short shifts (as low as 10–100 ms) can lead to a change in the prediction by over 80 bpm, despite no alteration in the periodicity of the signal, which is the main feature for this task. 
+
+Normally, it is expected that models learn the periodicities in these signals and infer the heart rate. However, our results indicate that the models learn something else or in a different way, because as the signal undergoes a slight shift, the model prediction jumps more than 100%, even though the periodicity of the waveform remains unchanged with the shift operation. 
+
+We believe these drastic output changes arise from the model’s sensitivity to (shortcut) features (Geirhos et al., 2020; Zhang et al., 2021), resulting in a performance decrease when evaluated on samples different from those encountered during training. Since our proposed transformation 
+
+Table 3: Performance comparison of our method with other techniques on an _EEG_ dataset for sleep stage classification and an _audio_ dataset for lung sound classification in respiratory health assessment 
+
+|Method|Sleep-EDF<br>S-Cons (%)_↑_<br>Acc_↑_<br>W-F1_↑_<br>_κ ↑_|Respiratory<br>S-Cons (%)_↑_<br>Acc_↑_<br>F1_↑_<br>W-F1_↑_|
+|---|---|---|
+|Baseline<br>Aug.<br>LPF<br>WaveletNet<br>Canonicalize|95.06_±_0.61<br>75.41_±_2.01<br>74.87_±_1.92<br>67.12_±_2.96<br>99.00_±_0.17<br>74.89_±_1.11<br>74.03_±_1.46<br>65.89_±_1.81<br>92.43_±_1.24<br>73.56_±_2.93<br>76.01_±_1.98<br>65.68_±_3.46<br>84.40_±_5.90<br>73.54_±_4.78<br>72.74_±_3.45<br>64.66_±_4.12<br>93.95_±_0.51<br>77.12_±_2.21<br>70.14_±_2.25<br>69.81_±_2.76|99.10_±_0.43<br>25.21_±_5.60<br>57.01_±_3.62<br>21.21_±_5.98<br>99.68_±_0.42<br>20.32_±_5.18<br>45.81_±_3.51<br>15.31_±_6.07<br>99.50_±_0.42<br>19.47_±_9.78<br>46.53_±_3.04<br>11.89_±_4.98<br>91.38_±_2.40<br>28.57_±_10.81<br>44.23_±_7.12<br>17.10_±_7.81<br>98.28_±_0.64<br>22.68_±_10.52<br>45.33_±_5.75<br>15.30_±_5.33|
+|Ours<br>Ours+LPF|_±_**0.00**<br>**77.90**_±_**1.92**<br>**76.77**_±_**2.58**<br>**70.01**_±_**1.10**<br>100_±_0.00<br>73.12_±_1.89<br>75.34_±_1.61<br>64.98_±_2.27|_±_**0.00**<br>**33.10**_±_**5.12**<br>**60.13**_±_**4.67**<br>**28.33**_±_**6.55**<br>100_±_0.00<br>25.77_±_2.12<br>51.82_±_2.10<br>17.99_±_4.15|
+
+
+7 
+
+Table 4: Performance comparison of our method with others in _IMU_ datasets for Activity and Step 
+
+|Method|UCIHAR<br>S-Cons (%) _↑_<br>Acc _↑_<br>F1 _↑_|HHAR<br>S-Cons (%) _↑_<br>Acc _↑_<br>F1 _↑_|Clemson<br>S-Cons (%) _↑_<br>MAPE _↓_<br>MAE _↓_|
+|---|---|---|---|
+|Baseline<br>Aug.<br>LPF<br>APS<br>WaveletNet<br>Canonicalize|94.07_±_1.38<br>85.39_±_2.30<br>83.20_±_2.94<br>96.55_±_0.80<br>85.42_±_4.50<br>83.69_±_6.74<br>95.05_±_0.21<br>83.96_±_3.44<br>81.08_±_4.21<br>96.40_±_0.03<br>81.75_±_4.11<br>79.01_±_5.33<br>94.56_±_1.31<br>82.78_±_4.62<br>80.73_±_5.59<br>97.72_±_0.37<br>84.10_±_2.10<br>81.89_±_2.89|98.27_±_0.33<br>91.87_±_1.36<br>91.16_±_1.38<br>98.38_±_0.28<br>91.97_±_0.44<br>91.31_±_0.49<br>98.10_±_0.10<br>92.10_±_0.80<br>91.43_±_0.94<br>98.30_±_0.24<br>91.83_±_1.35<br>91.01_±_1.47<br>96.76_±_0.15<br>90.72_±_0.38<br>90.71_±_0.39<br>98.27_±_0.07<br>91.56_±_1.18<br>90.73_±_1.10|54.31_±_4.40<br>4.76_±_0.11<br>2.74_±_0.08<br>61.01_±_4.88<br>4.08_±_0.14<br>2.29_±_0.07<br>59.77_±_4.40<br>4.16_±_0.16<br>2.35_±_0.11<br>45.50_±_2.69<br>4.74_±_0.16<br>2.69_±_0.07<br>59.14_±_3.10<br>5.20_±_0.66<br>2.95_±_0.41<br>55.47_±_4.87<br>4.54_±_0.46<br>2.59_±_0.29|
+|Ours<br>Ours+LPF<br>Ours+APS|_±_**0.00**<br>**87.71**_±_**1.98**<br>**85.67**_±_**2.47**<br>100_±_0.00<br>84.78_±_2.46<br>82.58_±_2.62<br>100_±_0.00<br>82.96_±_1.79<br>81.10_±_1.73|_±_**0.00**<br>91.93_±_1.14<br>91.12_±_1.03<br>100_±_0.00<br>**92.51**_±_**0.55**<br>**91.80**_±_**0.62**<br>100_±_0.00<br>91.38_±_0.32<br>90.64_±_0.32|_±_**0.00**<br>4.28_±_0.34<br>2.43_±_0.21<br>100_±_0.00<br>**3.75**_±_**0.33**<br>**2.12**_±_**0.18**<br>100_±_0.00<br>3.87_±_0.19<br>2.19_±_0.11|
+
+
+function works as an adaptive linear constraint in the data space, it reduces the potential points where samples can exist, thereby enhancing overall performance. 
+
+One distinct result from our experiments is that when previous shift-invariancy techniques are applied to the heart rate prediction task, the average error rate of the models increases by 7–10%. This performance decrease can be easily observed in the DaLiA (Table 1) for the adaptive sampling technique. The performance discrepancy between tasks can be attributed to the dataset and signal characteristics. Since DaLiA contains impulse random noise with multiple periodicities, the normbased subsampling can inadvertently emphasize the noisy waveforms instead of the desired pattern during the subsampling of feature maps, leading to a decrease in prediction performance. 
+
+We conduct detailed ablation experiments to further investigate the impact of various components, with a particular focus on the effect of the proposed mapping function under different modifications, i.e., modified loss for optimization, on the overall model’s performance across time series tasks. 
+
+## 4.1 ABLATION STUDY 
+
+We present a comprehensive investigation of our method and the effect of its components on the performance. Mainly, we investigate the effect of guiding the proposed transformation with different loss functions and without any guidance. First, we map all samples to a single manifold _M[ϕ]_[0] , i.e., _T_ ( **x** _, ϕ_ ) is applied with a constant _ϕ_ = 0 instead of learning the angle for each sample. We experimented with different values of _ϕ ∼_ ( _−π, π_ ], but observed no significant change in the performance when the mapped manifold is constant for samples. Second, we modify the loss for training the guidance network to increase the variance of angles—increasing the possible manifolds where data can be found—without changing the cross-entropy loss from the classification network as in Equation 9, ( _L_[ˆ] _G_ ). Finally, we train both networks only with the cross-entropy loss ( _L[′] G_[=] _[ L][C]_[)][. We] compared these three variants of the learning techniques with the original proposed implementation as each represents distinct approaches for manipulating the data space. For example, when all samples are mapped to a single manifold, the variations in samples decrease significantly since there is only one possible phase angle for the chosen harmonic with period T0. Additionally, the relationships among all sinusoidal components remain invariant, given that the proposed transformation is a linear function of the frequency. Conversely, optimizing the guidance network to increase the variance of angles, thereby favoring a greater sample diversity, expands the possible variations for samples. 
+
+**==> picture [277 x 13] intentionally omitted <==**
+
+Tables 5 and 6 summarize the results where we exclude the consistency metric from the tables as the models that include the proposed transformation are always completely shift-invariant. The first row ( _T_ ( **x** _, ϕ_ )) in the tables shows the performance when all the samples are mapped to a single manifold 
+
+Table 5: Ablation experiments for _HR_ (left) and _IMU_ (right) tasks 
+
+|Method|IEEE SPC22<br>DaLiA_P P G_<br>MAE_↓_<br>RMSE_↓_<br>_ρ ↑_<br>MAE_↓_<br>RMSE_↓_<br>_ρ ↑_<br>11.15<br>19.18<br>62.07<br>4.77<br>10.13<br>85.35<br>9.80<br>17.16<br>66.80<br>4.60<br>10.10<br>85.52<br>9.45<br>17.00<br>69.10<br>4.41<br>**9.63**<br>**86.35**<br>**9.45**<br>**16.25**<br>**70.12**<br>**4.39**<br>9.75<br>86.06<br>+1.70<br>+2.97<br>+8.05<br>+0.38<br>+0.38<br>+0.71|Method|UCIHAR<br>Acc_↑_<br>F1_↑_|HHAR<br>Clemson<br>Acc_↑_<br>F1_↑_<br>MAPE_↓_<br>MAE_↓_|
+|---|---|---|---|---|
+|_T_(**x**_, ϕ_)<br>_L′_<br>_G_<br>ˆ_LG_<br>Ours||_T_(**x**_, ϕ_)<br>_L′_<br>_G_<br>ˆ_LG_<br>Ours|84.67<br>82.65<br>84.30<br>82.49<br>84.82<br>81.99<br>**85.81**<br>**83.81**|**92.33**<br>**91.56**<br>4.64<br>2.67<br>91.98<br>91.18<br>4.42<br>2.52<br>91.51<br>90.83<br>4.31<br>2.45<br>91.83<br>91.12<br>**4.28**<br>**2.43**|
+|Change||Change (%)|+1.14<br>+1.16|-0.50<br>-0.44<br>+0.36<br>+0.24|
+
+
+8 
+
+Table 6: Ablation experiments for _EEG_ (left) and _ECG_ (right) tasks 
+
+|Method|Sleep-EDF<br>Acc_↑_<br>F1_↑_<br>W-F1_↑_<br>_κ ↑_<br>75.54_±_2.39<br>66.96_±_1.78<br>75.53_±_2.29<br>67.08_±_0.03<br>77.21_±_1.51<br>67.67_±_1.67<br>76.89_±_1.71<br>69.39_±_0.02<br>77.75_±_1.23<br>**68.04**_±_1.16<br>**77.01**_±_1.07<br>69.94_±_0.01<br>**77.80**_±_1.95<br>67.01_±_2.65<br>76.77_±_2.58<br>**70.01**_±_**1.10**<br>+2.26<br>+0.05<br>+1.24<br>+2.93|Method|Chapman<br>Acc _↑_<br>F1 _↑_<br>AUC _↑_|PhysioNet<br>Acc _↑_<br>F1 _↑_<br>AUC _↑_|
+|---|---|---|---|---|
+|_T_(**x**_, ϕ_)<br>_L′_<br>_G_<br>ˆ_LG_<br>Ours|||||
+|||_T_(**x**_, ϕ_)<br>_L′_<br>_G_<br>ˆ_LG_<br>Ours|91.82<br>90.76<br>98.36<br>91.27<br>90.10<br>98.38<br>91.88<br>90.84<br>98.44<br>**92.10**<br>**91.93**<br>**98.40**|83.12<br>73.67<br>93.24<br>82.81<br>73.75<br>93.45<br>**83.30**<br>73.90<br>**93.51**<br>83.15<br>**74.12**<br>93.30|
+|Change||Change (%)|+0.28<br>+1.17<br>+0.04|+0.03<br>+0.45<br>+0.06|
+
+
+i.e., without a guidance network for learning the mapping. The second row ( _L[′] G_[)][represents][the] performance when the guidance network is only optimized using the categorical cross-entropy loss. The third row ( _L_[ˆ] _G_ ) presents the performance when the variance of angles is optimized to increase during training. And, the last row (Ours) is the original implementation of the proposed method. We also report the change when the mapping function is guided using the network _fGθ_ and optimized using the loss defined in Equation 7, as opposed to being a fixed, non-learnable function. 
+
+As can be seen from the tables, when the models are trained by guiding the transformation function (with _fGθ_ ), the performance of the models increases significantly up to 8%, except for the HHAR dataset with a marginal performance decrease of 0.5%. Importantly, adding the guidance network does not bring any additional parameters that help the learning, meaning that the model achieves improved generalization with the same capacity. Furthermore, the additional model parameters introduced to the overall framework approximately amount to one percent of those in the classifier. While the performance increase can be associated with the decreased possible variations in the signals, Table 7: Ablation experiments for _Audio_ our ablation experiments show that decreasing the variations blindly using the transformation with thesame angle, decreases performance. Therefore, it is Method Respiratory Acc _↑_ F1 _↑_ W-F1 _↑_ important to guide the transformation function for reducing the dimensionality, i.e., the space and time _T_ ( **x** _, ϕ_ ) 21.28 _±_ 7.43 55.03 _±_ 2.89 18.14 _±_ 6.39 variations of a signal, of the whole data space. Over- _L_ ˆ _[′] G_ 27.17 _±_ 6.71 55.58 _±_ 9.18 21.46 _±_ 4.07 all, the results obtained from the ablation study and Ours _LG_ **33.10** 28.57 _±±_ **5.12** 8.31 **60.13** 54.28 _±±_ **4.67** 6.56 **28.33** 23.73 _±±_ **6.55** 4.65 main experiments support the previous propositions and our motivation for introducing a novel diffeoChange +11.82 +5.10 +10.19 morphism for preventing the inconsistency of deep learning models to the time shifts while increasing the generalization capability. 
+
+Additional results (i.e., the extended experiments and ablations) regarding the performance of the proposed method can be found in Appendix D. Investigations regarding the performance improvements of the proposed diffeomorphism with different model networks are given in Appendix E. Detailed analysis of the guidance network with its effect is given in Appendix F. We provide an extended discussion of related work in Appendix G and outline limitations and future directions in Appendix H. 
+
+## 5 RELATED WORK 
+
+**Shift-invariant networks** Modern deep learning architectures use strided convolution or pooling to decrease the variance to a certain extent (Fukushima, 1980). However, Azulay and Weiss have demonstrated that a shift of one pixel in an image can lead to a significant alteration in the output probability of a trained classifier (Azulay & Weiss, 2018). Previous works showed that the downsampling caused aliasing and used low-pass filtering before the downsampling to prevent information loss (Zhang, 2019; Mairal et al., 2014). However, the used filters have suboptimal frequency responses, and realizing the ideal filter in practice is unfeasible. This leads to persistent aliasing, becoming a more significant concern for time series where high-frequency components are crucial for classification. 
+
+Adaptive subsampling methods have been recently explored for shift-invariancy (Chaman & Dokmanic, 2021; Xu et al., 2021). Mainly, these methods perform subsampling on a constant (Chaman & Dokmanic, 2021) or input dependent (Rojas-Gomez et al., 2022) grid. This approach has a notable limitation in time series, particularly when nonlinear activation functions are involved. The methods tend to overlook variations in boundaries arising from the translation of samples, thereby imposing additional constraints on invariance (Rojas-Gomez et al., 2022). Consequently, the evaluation of 
+
+9 
+
+these methods is restricted to a narrow range of shifts, covering only a limited subset of the shift space. Moreover, their reliance on a grid scheme for sampling introduces a sensitivity to sampling rates, leading to performance gaps across the entire shift space (Michaeli et al., 2023). Therefore, we _shift the paradigm_ and present a bijective transformation to modify the data space. Moreover, unlike existing methods that change network topology by modifying the pooling or adding extra filters without achieving complete shift-invariancy, our method guarantees invariance in neural network models without imposing any restrictions on the model topology or shift range. 
+
+**Time-delay neural networks** Efforts to design shift-invariant models for time series predate modern deep learning methods (Hasegawa et al., 1996; Waibel et al., 1989). For example, a timedelay neural network (TDNN) network is designed to have the ability to represent relationships between events in time frames where the learned features by the network are aimed to be invariant under translation in time (Waibel et al., 1989). TDNN is trained with all time-shifted copies of samples and weights are updated by the average of all corresponding time-delayed error values. This is similar to the supervised training of a network with randomly shifted versions of samples. Although this strategy achieved shift-invariance for the first type of networks, as they do not include a pooling layer, it was shown that this approach is ineffective for modern architectures where pooling and derivatives are used (Scherer et al., 2010), and the network’s invariance is limited to patterns seen during training and fails generalization (Azulay & Weiss, 2018). In this work, as we learn the mapping for each sample, the proposed transformation ensures that all shifted variants of a sample are mapped to a single point. Hence, a single data point effectively represents all the augmented variants. 
+
+## 6 CONCLUSION 
+
+The inadequacy of shift-invariance in deep learning models, particularly in the context of temporal data, remains a significant challenge. Existing solutions designed for images not only prove ineffective for time series but also result in performance deterioration for some tasks. To address this, we have introduced a novel differentiable bijective function. Our approach builds on the insight from Proposition 2.1, which states that the shift operation forms an Abelian group for each harmonic of a sample. Leveraging this property, we uniquely represent each point in the shift space using the phase angle of a harmonic whose period is at least as long as the sample length. Our approach ensures that samples, under various shifts, are mapped to a unique point in the data manifold without reducing dimensions, preserving task-related information without any loss. We validated our method theoretically and empirically, showing that it establishes shift-invariance in deep learning models without constraints on the shift range. In extensive experiments across six tasks, our approach consistently outperforms state-of-the-art methods, demonstrating its effectiveness in achieving complete shift-invariance without limitations on the model topology. 
+
+## REFERENCES 
+
+- Saba Akbar, Enrico Coiera, and Farah Magrabi. Safety concerns with consumer-facing mobile health applications and their consequences: a scoping review. _Journal of the American Medical Informatics Association_ , 27(2):330–340, 10 2019. ISSN 1527-974X. doi: 10.1093/jamia/ocz175. URL https://doi.org/10.1093/jamia/ocz175. 
+
+- Erick A Perez Alday, Annie Gu, Amit J Shah, Chad Robichaux, An-Kwok Ian Wong, Chengyu Liu, Feifei Liu, Ali Bahrami Rad, Andoni Elola, Salman Seyedi, Qiao Li, Ashish Sharma, Gari D Clifford, and Matthew A Reyna. Classification of 12-lead ecgs: the physionet/computing in cardiology challenge 2020. _Physiological Measurement_ , 41(12):124003, dec 2020. doi: 10.1088/ 1361-6579/abc960. URL https://dx.doi.org/10.1088/1361-6579/abc960. 
+
+- Gokhan Altan, Yakup Kutlu, Yusuf Garbi, Adnan Özhan Pekmezci, and Serkan Nural. Multimedia respiratory database (respiratorydatabase@tr): Auscultation sounds and chest x-rays. _ArXiv_ , 2017. 
+
+- D. Anguita, Alessandro Ghio, L. Oneto, Xavier Parra, and Jorge Luis Reyes-Ortiz. Human activity recognition on smartphones using a multiclass hardware-friendly support vector machine. In _International Workshop on Ambient Assisted Living and Home Care_ , 2012. URL https://api. semanticscholar.org/CorpusID:13178535. 
+
+10 
+
+- Aharon Azulay and Yair Weiss. Why do deep convolutional networks generalize so poorly to small image transformations? _J. Mach. Learn. Res._ , 20:184:1–184:25, 2018. 
+
+- Siddharth Biswal, Haoqi Sun, Balaji Goparaju, M Brandon Westover, Jimeng Sun, and Matt T Bianchi. Expert-level sleep scoring with deep neural networks. _Journal of the American Medical Informatics Association_ , 25(12):1643–1650, 11 2018. ISSN 1527-974X. doi: 10.1093/jamia/ocy131. URL https://doi.org/10.1093/jamia/ocy131. 
+
+- Dwaipayan Biswas, Luke Everson, Muqing Liu, Madhuri Panwar, Bram-Ernst Verhoef, Shrishail Patki, Chris H. Kim, Amit Acharyya, Chris Van Hoof, Mario Konijnenburg, and Nick Van Helleputte. Cornet: Deep learning framework for ppg-based heart rate estimation and biometric identification in ambulant environment. _IEEE Transactions on Biomedical Circuits and Systems_ , 2019. 
+
+- R. T. Canolty, E. Edwards, S. S. Dalal, M. Soltani, S. S. Nagarajan, H. E. Kirsch, M. S. Berger, N. M. Barbaro, and R. T. Knight. High gamma power is phase-locked to theta oscillations in human neocortex. _Science_ , 313(5793):1626–1628, 2006. doi: 10.1126/science.1128115. URL https://www.science.org/doi/abs/10.1126/science.1128115. 
+
+- Ryan T. Canolty and Robert T. Knight. The functional role of cross-frequency coupling. _Trends in Cognitive Sciences_ , 14(11):506–515, November 2010. ISSN 13646613. doi: 10.1016/j.tics.2010.09.001. URL https://linkinghub.elsevier.com/retrieve/ pii/S1364661310002068. 
+
+- Yuan Cao, Zixiang Chen, Misha Belkin, and Quanquan Gu. Benign overfitting in two-layer convolutional neural networks. In Alice H. Oh, Alekh Agarwal, Danielle Belgrave, and Kyunghyun Cho (eds.), _Advances in Neural Information Processing Systems_ , 2022. URL https://openreview.net/forum?id=pF8btdPVTL_. 
+
+- A. Chaman and I. Dokmanic. Truly shift-invariant convolutional neural networks. In _2021 IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)_ , pp. 3772–3782, Los Alamitos, CA, USA, jun 2021. IEEE Computer Society. doi: 10.1109/CVPR46437.2021.00377. URL https://doi.ieeecomputersociety.org/10.1109/CVPR46437.2021.00377. 
+
+- Peter Christen, David J. Hand, and Nishadi Kirielle. A review of the f-measure: Its history, properties, criticism, and alternatives. _ACM Comput. Surv._ , 56(3), oct 2023. ISSN 0360-0300. doi: 10.1145/ 3606367. URL https://doi.org/10.1145/3606367. 
+
+- Gari D Clifford, Chengyu Liu, Benjamin Moody, Li-wei H. Lehman, Ikaro Silva, Qiao Li, A E Johnson, and Roger G. Mark. Af classification from a short single lead ecg recording: The physionet/computing in cardiology challenge 2017. In _2017 Computing in Cardiology (CinC)_ , pp. 1–4, 2017. doi: 10.22489/CinC.2017.065-469. 
+
+- Jacob Cohen. A coefficient of agreement for nominal scales. _Educational and Psychological Measurement_ , 20:37 – 46, 1960. URL https://api.semanticscholar.org/CorpusID: 15926286. 
+
+- Christine M. Cutillo, Karlie R. Sharma, Luca Foschini, Shinjini Kundu, Maxine Mackintosh, and Kenneth D. Mandl. Machine intelligence in healthcare—perspectives on trustworthiness, explainability, usability, and transparency. _npj Digital Medicine_ , 3(1):1–5, March 2020. ISSN 23986352. doi: 10.1038/s41746-020-0254-2. URL https://www.nature.com/articles/ s41746-020-0254-2. 
+
+- Berken Utku Demirel and Christian Holz. Finding order in chaos: A novel data augmentation method for time series in contrastive learning. In _Thirty-seventh Conference on Neural Information Processing Systems_ , 2023. URL https://openreview.net/forum?id=dbVRDk2wt7. 
+
+- Nicki Skafte Detlefsen, Oren Freifeld, and Søren Hauberg. Deep diffeomorphic transformer networks. In _2018 IEEE/CVF Conference on Computer Vision and Pattern Recognition_ , pp. 4403–4412, 2018. doi: 10.1109/CVPR.2018.00463. 
+
+- Luo donghao and wang xue. ModernTCN: A modern pure convolution structure for general time series analysis. In _The Twelfth International Conference on Learning Representations_ , 2024. URL https://openreview.net/forum?id=vpJMJerXHU. 
+
+11 
+
+- Emadeldeen Eldele, Mohamed Ragab, Zhenghua Chen, Min Wu, Chee Keong Kwoh, Xiaoli Li, and Cuntai Guan. Time-series representation learning via temporal and contextual contrasting. In Zhi-Hua Zhou (ed.), _Proceedings of the Thirtieth International Joint Conference on Artificial Intelligence, IJCAI-21_ , pp. 2352–2359. International Joint Conferences on Artificial Intelligence Organization, 8 2021. doi: 10.24963/ijcai.2021/324. URL https://doi.org/10.24963/ ijcai.2021/324. Main Track. 
+
+- Alhussein Fawzi, Hamza Fawzi, and Omar Fawzi. Adversarial vulnerability for any classifier. In _Proceedings of the 32nd International Conference on Neural Information Processing Systems_ , NIPS’18, pp. 1186–1195, Red Hook, NY, USA, 2018. Curran Associates Inc. 
+
+- Riccardo Femiano, Charlotte Werner, Matthias Wilhelm, and Prisca Eser. Validation of opensource step-counting algorithms for wrist-worn tri-axial accelerometers in cardiovascular patients. _Gait & Posture_ , 92:206–211, 2022. ISSN 0966-6362. doi: https://doi.org/10.1016/j. gaitpost.2021.11.035. URL https://www.sciencedirect.com/science/article/ pii/S0966636221006196. 
+
+- L. Fuchs. _Abelian Groups_ . Number Bd. 1 in International series of monographs in pure and applied mathematics. Pergamon Press, 1960. URL https://books.google.ch/books? id=F7VUzgEACAAJ. 
+
+- Kunihiko Fukushima. Neocognitron: A self-organizing neural network model for a mechanism of pattern recognition unaffected by shift in position. _Biological Cybernetics_ , 36(4):193–202, April 1980. ISSN 1432-0770. doi: 10.1007/BF00344251. URL https://doi.org/10.1007/ BF00344251. 
+
+- Robert Geirhos, Jörn-Henrik Jacobsen, Claudio Michaelis, Richard Zemel, Wieland Brendel, Matthias Bethge, and Felix A. Wichmann. Shortcut learning in deep neural networks. _Nature Machine Intelligence_ , 2(11):665–673, November 2020. ISSN 2522-5839. doi: 10.1038/s42256-020-00257-z. URL https://www.nature.com/articles/s42256-020-00257-z. 
+
+- Ary L. Goldberger, Luis A. N. Amaral, Leon Glass, Jeffrey M. Hausdorff, Plamen Ch. Ivanov, Roger G. Mark, Joseph E. Mietus, George B. Moody, Chung-Kang Peng, and H. Eugene Stanley. Physiobank, physiotoolkit, and physionet. _Circulation_ , 101(23):e215–e220, 2000. doi: 10.1161/ 01.CIR.101.23.e215. URL https://www.ahajournals.org/doi/abs/10.1161/01. CIR.101.23.e215. 
+
+- Roger Grosse, Rajat Raina, Helen Kwong, and Andrew Y. Ng. Shift-invariant sparse coding for audio classification. In _Proceedings of the Twenty-Third Conference on Uncertainty in Artificial Intelligence_ , UAI’07, pp. 149–158, Arlington, Virginia, USA, 2007. AUAI Press. ISBN 0974903930. 
+
+- Awni Y. Hannun, Pranav Rajpurkar, Masoumeh Haghpanahi, Geoffrey H. Tison, Codie Bourn, Mintu P. Turakhia, and Andrew Y. Ng. Cardiologist-level arrhythmia detection and classification in ambulatory electrocardiograms using a deep neural network. _Nature Medicine_ , 25(1):65–69, January 2019. ISSN 1546-170X. doi: 10.1038/s41591-018-0268-3. URL https://www. nature.com/articles/s41591-018-0268-3. 
+
+- Akira Hasegawa, Kazuyoshi Itoh, and Yoshiki Ichioka. Generalization of shift invariant neural networks: Image processing of corneal endothelium. _Neural Networks_ , 9(2):345–356, 1996. ISSN 0893-6080. doi: https://doi.org/10.1016/0893-6080(95)00054-2. URL https://www. sciencedirect.com/science/article/pii/0893608095000542. 
+
+- Simon Haykin and Barry Van Veen. _Signals and Systems_ . John Wiley & Sons, Inc., USA, 2nd edition, 2002. ISBN 0471164747. 
+
+Kaiming He, Xiangyu Zhang, Shaoqing Ren, and Jian Sun. Deep residual learning for image recognition, 2015. 
+
+- Shenda Hong, Yanbo Xu, Alind Khare, Satria Priambada, Kevin Maher, Alaa Aljiffry, Jimeng Sun, and Alexey Tumanov. Holmes: Health online model ensemble serving for deep learning models in intensive care units. In _Proceedings of the 26th ACM SIGKDD International Conference on Knowledge Discovery & Data Mining_ , pp. 1614–1624, 2020. 
+
+12 
+
+- Sergey Ioffe and Christian Szegedy. Batch normalization: Accelerating deep network training by reducing internal covariate shift. In Francis Bach and David Blei (eds.), _Proceedings of the 32nd International Conference on Machine Learning_ , volume 37 of _Proceedings of Machine Learning Research_ , pp. 448–456, Lille, France, 07–09 Jul 2015. PMLR. URL https://proceedings. mlr.press/v37/ioffe15.html. 
+
+- Max Jaderberg, Karen Simonyan, Andrew Zisserman, and koray kavukcuoglu. Spatial transformer networks. In C. Cortes, N. Lawrence, D. Lee, M. Sugiyama, and R. Garnett (eds.), _Advances in Neural Information Processing Systems_ , volume 28. Curran Associates, Inc., 2015. URL https://proceedings.neurips.cc/paper_files/paper/2015/ file/33ceb07bf4eeb3da587e268d663aba1a-Paper.pdf. 
+
+- Sékou-Oumar Kaba, Arnab Kumar Mondal, Yan Zhang, Yoshua Bengio, and Siamak Ravanbakhsh. Equivariance with learned canonicalization functions. In _Proceedings of the 40th International Conference on Machine Learning_ , ICML’23. JMLR.org, 2023. 
+
+- Diederik P. Kingma and Jimmy Ba. Adam: A method for stochastic optimization. In Yoshua Bengio and Yann LeCun (eds.), _3rd International Conference on Learning Representations, ICLR 2015, San Diego, CA, USA, May 7-9, 2015, Conference Track Proceedings_ , 2015. URL http: //arxiv.org/abs/1412.6980. 
+
+- Dani Kiyasseh, Tingting Zhu, and David A. Clifton. Clocs: Contrastive learning of cardiac signals across space, time, and patients. In _International Conference on Machine Learning_ , 2020. 
+
+- Risi Kondor and Shubhendu Trivedi. On the generalization of equivariance and convolution in neural networks to the action of compact groups. In Jennifer Dy and Andreas Krause (eds.), _Proceedings of the 35th International Conference on Machine Learning_ , volume 80 of _Proceedings of Machine Learning Research_ , pp. 2747–2755. PMLR, 10–15 Jul 2018. URL https://proceedings. mlr.press/v80/kondor18a.html. 
+
+- Anoop N. Koshy, Jithin K. Sajeev, Nitesh Nerlekar, Adam J. Brown, Kevin Rajakariar, Mark Zureik, Michael C. Wong, Louise Roberts, Maryann Street, Jennifer Cooke, and Andrew W. Teh. Smart watches for heart rate assessment in atrial arrhythmias. _International Journal of Cardiology_ , 266: 124–127, 2018. ISSN 0167-5273. doi: https://doi.org/10.1016/j.ijcard.2018.02.073. URL https: //www.sciencedirect.com/science/article/pii/S0167527318304017. 
+
+- Alex Krizhevsky, Ilya Sutskever, and Geoffrey E Hinton. Imagenet classification with deep convolutional neural networks. In F. Pereira, C.J. Burges, L. Bottou, and K.Q. Weinberger (eds.), _Advances in Neural Information Processing Systems_ , volume 25. Curran Associates, Inc., 2012. URL https://proceedings.neurips.cc/paper_files/paper/ 2012/file/c399862d3b9d6b76c8436e924a68c45b-Paper.pdf. 
+
+- Tong Lin and Hongbin Zha. Riemannian manifold learning. _IEEE Transactions on Pattern Analysis and Machine Intelligence_ , 30(5):796–809, 2008. doi: 10.1109/TPAMI.2007.70735. 
+
+- Minhao LIU, Ailing Zeng, Qiuxia LAI, Ruiyuan Gao, Min Li, Jing Qin, and Qiang Xu. T-wavenet: A tree-structured wavelet neural network for time series signal analysis. In _International Conference on Learning Representations_ , 2022. URL https://openreview.net/forum?id= U4uFaLyg7PV. 
+
+- Suhas Lohit, Qiao Wang, and Pavan K. Turaga. Temporal transformer networks: Joint learning of invariant and discriminative time warping. _2019 IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)_ , pp. 12418–12427, 2019. URL https://api.semanticscholar. org/CorpusID:189897590. 
+
+- Julien Mairal, Piotr Koniusz, Zaid Harchaoui, and Cordelia Schmid. Convolutional kernel networks. In Z. Ghahramani, M. Welling, C. Cortes, N. Lawrence, and K.Q. Weinberger (eds.), _Advances in Neural Information Processing Systems_ , volume 27. Curran Associates, Inc., 2014. URL https://proceedings.neurips.cc/paper_files/paper/ 2014/file/81ca0262c82e712e50c580c032d99b60-Paper.pdf. 
+
+13 
+
+- Alexander Malafeev, Dmitry Laptev, Stefan Bauer, Ximena Omlin, Aleksandra Wierzbicka, Adam Wichniak, Wojciech Jernajczyk, Robert Riener, Joachim Buhmann, and Peter Achermann. Automatic human sleep stage scoring using deep neural networks. _Frontiers in Neuroscience_ , 12, 2018. ISSN 1662-453X. doi: 10.3389/fnins.2018.00781. URL https://www.frontiersin. org/articles/10.3389/fnins.2018.00781. 
+
+- Stéphane Mallat. Group invariant scattering. _Communications on Pure and Applied Mathematics_ , 65(10):1331–1398, 2012. doi: https://doi.org/10.1002/cpa.21413. URL https: //onlinelibrary.wiley.com/doi/abs/10.1002/cpa.21413. 
+
+- Iñigo Martinez, Elisabeth Viles, and Igor G. Olaizola. Closed-form diffeomorphic transformations for time series alignment. In Kamalika Chaudhuri, Stefanie Jegelka, Le Song, Csaba Szepesvari, Gang Niu, and Sivan Sabato (eds.), _Proceedings of the 39th International Conference on Machine Learning_ , volume 162 of _Proceedings of Machine Learning Research_ , pp. 15122–15158. PMLR, 17– 23 Jul 2022. URL https://proceedings.mlr.press/v162/martinez22a.html. 
+
+- Ryan Mattfeld, Elliot Jesch, and Adam Hoover. A new dataset for evaluating pedometer performance. In _2017 IEEE International Conference on Bioinformatics and Biomedicine (BIBM)_ , pp. 865–869, 2017. doi: 10.1109/BIBM.2017.8217769. 
+
+- Hagay Michaeli, Tomer Michaeli, and Daniel Soudry. Alias-free convnets: Fractional shift invariance via polynomial activations. In _Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)_ , pp. 16333–16342, June 2023. 
+
+- Arnab Kumar Mondal, Siba Smarak Panigrahi, Oumar Kaba, Sai Rajeswar Mudumba, and Siamak Ravanbakhsh. Equivariant adaptation of large pretrained models. In A. Oh, T. Neumann, A. Globerson, K. Saenko, M. Hardt, and S. Levine (eds.), _Advances in Neural Information Processing Systems_ , volume 36, pp. 50293–50309. Curran Associates, Inc., 2023. URL https://proceedings.neurips.cc/paper_files/paper/2023/ file/9d5856318032ef3630cb580f4e24f823-Paper-Conference.pdf. 
+
+- Jeeheh Oh, Jiaxuan Wang, and Jenna Wiens. Learning to exploit invariances in clinical time-series data using sequence transformer networks. In Finale Doshi-Velez, Jim Fackler, Ken Jung, David Kale, Rajesh Ranganath, Byron Wallace, and Jenna Wiens (eds.), _Proceedings of the 3rd Machine Learning for Healthcare Conference_ , volume 85 of _Proceedings of Machine Learning Research_ , pp. 332–347. PMLR, 17–18 Aug 2018. URL https://proceedings.mlr.press/v85/ oh18a.html. 
+
+- Alan V. Oppenheim, Alan S. Willsky, and S. Hamid Nawab. _Signals & Systems (2nd Ed.)_ . PrenticeHall, Inc., USA, 1996. ISBN 0138147574. 
+
+- A Paszke et al. Pytorch: An imperative style, high-performance deep learning library. In _Advances in Neural Information Processing Systems 32_ , pp. 8024–8035. Curran Associates, Inc., 2019. 
+
+- Marco V. Perez, Kenneth W. Mahaffey, Haley Hedlin, John S. Rumsfeld, Ariadna Garcia, Todd Ferris, Vidhya Balasubramanian, Andrea M. Russo, Amol Rajmane, Lauren Cheung, Grace Hung, Justin Lee, Peter Kowey, Nisha Talati, Divya Nag, Santosh E. Gummidipundi, Alexis Beatty, Mellanie True Hills, Sumbul Desai, Christopher B. Granger, Manisha Desai, and Mintu P. Turakhia. Large-scale assessment of a smartwatch to identify atrial fibrillation. _New England Journal of Medicine_ , 381(20):1909–1917, 2019. doi: 10.1056/NEJMoa1901183. URL https: //doi.org/10.1056/NEJMoa1901183. PMID: 31722151. 
+
+- David M. W. Powers. What the f-measure doesn’t measure: Features, flaws, fallacies and fixes. _ArXiv_ , abs/1503.06410, 2015. URL https://api.semanticscholar.org/CorpusID: 10874558. 
+
+- Hangwei Qian, Sinno Jialin Pan, and Chunyan Miao. Latent independent excitation for generalizable sensor-based cross-person activity recognition. _Proceedings of the AAAI Conference on Artificial Intelligence_ , 35(13):11921–11929, May 2021. doi: 10.1609/aaai.v35i13.17416. URL https: //ojs.aaai.org/index.php/AAAI/article/view/17416. 
+
+14 
+
+- Hangwei Qian, Tian Tian, and Chunyan Miao. What makes good contrastive learning on small-scale wearable-based tasks? In _Proceedings of the 28th ACM SIGKDD Conference on Knowledge Discovery and Data Mining_ , KDD ’22, pp. 3761–3771, New York, NY, USA, 2022. Association for Computing Machinery. ISBN 9781450393850. doi: 10.1145/3534678.3539134. URL https://doi.org/10.1145/3534678.3539134. 
+
+- Nasim Rahaman, Aristide Baratin, Devansh Arpit, Felix Draxler, Min Lin, Fred Hamprecht, Yoshua Bengio, and Aaron Courville. On the spectral bias of neural networks. In Kamalika Chaudhuri and Ruslan Salakhutdinov (eds.), _Proceedings of the 36th International Conference on Machine Learning_ , volume 97 of _Proceedings of Machine Learning Research_ , pp. 5301–5310. PMLR, 09–15 Jun 2019. URL https://proceedings.mlr.press/v97/rahaman19a.html. 
+
+- Ali Rahimi and Benjamin Recht. Random features for large-scale kernel machines. In _Proceedings of the 20th International Conference on Neural Information Processing Systems_ , NIPS’07, pp. 1177–1184, Red Hook, NY, USA, 2007. Curran Associates Inc. ISBN 9781605603520. 
+
+- Attila Reiss, Ina Indlekofer, Philip Schmidt, and Kristof Van Laerhoven. Deep ppg: Large-scale heart rate estimation with convolutional neural networks. _Sensors_ , 19, 2019. 
+
+- Leandro Giacomini Rocha, Dwaipayan Biswas, Bram-Ernst Verhoef, Sergio Bampi, Chris Van Hoof, Mario Konijnenburg, Marian Verhelst, and Nick Van Helleputte. Binary cornet: Accelerator for hr estimation from wrist-ppg. _IEEE Transactions on Biomedical Circuits and Systems_ , 2020. 
+
+- Renan A. Rojas-Gomez, Teck-Yian Lim, Alex Schwing, Minh Do, and Raymond A. Yeh. Learnable polyphase sampling for shift invariant and equivariant convolutional networks. In S. Koyejo, S. Mohamed, A. Agarwal, D. Belgrave, K. Cho, and A. Oh (eds.), _Advances in Neural Information Processing Systems_ , volume 35, pp. 35755–35768. Curran Associates, Inc., 2022. 
+
+- David W. Romero, Erik J Bekkers, Jakub M. Tomczak, and Mark Hoogendoorn. Wavelet networks: Scale-translation equivariant learning from raw time-series. _Transactions on Machine Learning Research_ , 2024. ISSN 2835-8856. URL https://openreview.net/forum? id=ga5SNulYet. Expert Certification. 
+
+- Pedro F. Saint-Maurice, Richard P. Troiano, Jr Bassett, David R., Barry I. Graubard, Susan A. Carlson, Eric J. Shiroma, Janet E. Fulton, and Charles E. Matthews. Association of Daily Step Count and Step Intensity With Mortality Among US Adults. _JAMA_ , 2020. 
+
+- Dominik Scherer, Andreas Müller, and Sven Behnke. Evaluation of pooling operations in convolutional architectures for object recognition. In Konstantinos Diamantaras, Wlodek Duch, and Lazaros S. Iliadis (eds.), _Artificial Neural Networks – ICANN 2010_ , pp. 92–101, Berlin, Heidelberg, 2010. Springer Berlin Heidelberg. ISBN 978-3-642-15825-4. 
+
+- Ron Shapira Weber and Oren Freifeld. Regularization-free diffeomorphic temporal alignment nets. In Andreas Krause, Emma Brunskill, Kyunghyun Cho, Barbara Engelhardt, Sivan Sabato, and Jonathan Scarlett (eds.), _Proceedings of the 40th International Conference on Machine Learning_ , volume 202 of _Proceedings of Machine Learning Research_ , pp. 30794–30826. PMLR, 23–29 Jul 2023. URL https://proceedings.mlr.press/v202/shapira-weber23a.html. 
+
+- Ron A Shapira Weber, Matan Eyal, Nicki Skafte, Oren Shriki, and Oren Freifeld. Diffeomorphic temporal alignment nets. In H. Wallach, H. Larochelle, A. Beygelzimer, F. d'Alché-Buc, E. Fox, and R. Garnett (eds.), _Advances in Neural Information Processing Systems_ . Curran Associates, Inc., 2019. 
+
+- Nitish Srivastava, Geoffrey Hinton, Alex Krizhevsky, Ilya Sutskever, and Ruslan Salakhutdinov. Dropout: A simple way to prevent neural networks from overfitting. _Journal of Machine Learning Research_ , 15(56):1929–1958, 2014. URL http://jmlr.org/papers/v15/ srivastava14a.html. 
+
+- Allan Stisen, Henrik Blunck, Sourav Bhattacharya, Thor Siiger Prentow, Mikkel Baun Kjærgaard, Anind Dey, Tobias Sonne, and Mads Møller Jensen. Smart devices are different: Assessing and mitigatingmobile sensing heterogeneities for activity recognition. SenSys ’15. Association for Computing Machinery, 2015. ISBN 9781450336314. 
+
+15 
+
+- Ajay Subramanian, Elena Sizikova, Najib J.Majaj, and Denis G.Pelli. Spatial-frequency channels, shape bias, and adversarial robustness. In _Thirty-seventh Conference on Neural Information Processing Systems_ , 2023. 
+
+- Laurens van der Maaten and Geoffrey Hinton. Visualizing data using t-sne. _Journal of Machine Learning Research_ , 9(86):2579–2605, 2008. URL http://jmlr.org/papers/v9/ vandermaaten08a.html. 
+
+- A. Waibel, T. Hanazawa, G. Hinton, K. Shikano, and K.J. Lang. Phoneme recognition using time-delay neural networks. _IEEE Transactions on Acoustics, Speech, and Signal Processing_ , 1989. 
+
+- Jing Wang, Zhenyue Zhang, and Hongyuan Zha. Adaptive manifold learning. In L. Saul, Y. Weiss, and L. Bottou (eds.), _Advances in Neural Information Processing Systems_ , volume 17. MIT Press, 2004. URL https://proceedings.neurips.cc/paper_files/paper/ 2004/file/eb0ecdb070a1a0ac46de0cd733d39cf3-Paper.pdf. 
+
+- Yifei Wang, Qi Zhang, Yisen Wang, Jiansheng Yang, and Zhouchen Lin. Chaos is a ladder: A new theoretical understanding of contrastive learning via augmentation overlap. In _The Tenth International Conference on Learning Representations, ICLR 2022, Virtual Event, April 25-29, 2022_ , 2022. URL https://openreview.net/forum?id=ECvgmYVyeUz. 
+
+- Kaiyue Wen, Jiaye Teng, and Jingzhao Zhang. Benign overfitting in classification: Provably counter label noise with larger models. In _The Eleventh International Conference on Learning Representations_ , 2023. URL https://openreview.net/forum?id=UrEwJebCxk. 
+
+- Jin Xu, Hyunjik Kim, Tom Rainforth, and Yee Whye Teh. Group equivariant subsampling. In A. Beygelzimer, Y. Dauphin, P. Liang, and J. Wortman Vaughan (eds.), _Advances in Neural Information Processing Systems_ , 2021. URL https://openreview.net/forum?id= CtaDl9L0bIQ. 
+
+- Runze Yang, Jian Song, Baoqi Huang, Wuyungerile Li, and Guodong Qi. An Energy-Efficient Step-Counting Algorithm for Smartphones. _The Computer Journal_ , 65(3):689–700, 08 2020. ISSN 0010-4620. doi: 10.1093/comjnl/bxaa096. URL https://doi.org/10.1093/comjnl/ bxaa096. 
+
+- Cem Yüceer and Kemal Oflazer. A rotation, scaling, and translation invariant pattern classification system. _Pattern Recognition_ , 1993. 
+
+- Dinghuai Zhang, Kartik Ahuja, Yilun Xu, Yisen Wang, and Aaron Courville. Can subnetwork structure be the key to out-of-distribution generalization? In Marina Meila and Tong Zhang (eds.), _Proceedings of the 38th International Conference on Machine Learning_ , Proceedings of Machine Learning Research, pp. 12356–12367. PMLR, 2021. 
+
+- Richard Zhang. Making convolutional networks shift-invariant again. In _ICML_ , 2019. 
+
+- Yuwei Zhang, Tong Xia, Jing Han, Yu Wu, Georgios Rizos, Yang Liu, Mohammed Mosuily, Jagmohan Chauhan, and Cecilia Mascolo. Towards open respiratory acoustic foundation models: Pretraining and benchmarking. In _The Thirty-eight Conference on Neural Information Processing Systems Datasets and Benchmarks Track_ , 2024. URL https://openreview.net/forum?id= vXnGXRbOfb. 
+
+- Zhilin Zhang, Zhouyue Pi, and Benyuan Liu. Troika: A general framework for heart rate monitoring using wrist-type photoplethysmographic signals during intensive physical exercise. _IEEE Transactions on Biomedical Engineering_ , 62(2):522–531, 2015. doi: 10.1109/TBME.2014.2359372. 
+
+- Jianwei Zheng, Jianming Zhang, Sidy Danioko, Hai Yao, Hangyuan Guo, and Cyril Rakovski. A 12-lead electrocardiogram database for arrhythmia research covering more than 10,000 patients. _Scientific Data_ , 7(1):48, February 2020. ISSN 2052-4463. doi: 10.1038/s41597-020-0386-x. URL https://www.nature.com/articles/s41597-020-0386-x. 
+
+16 
+
+## APPENDIX 
+
+## A THEORETICAL ANALYSIS 
+
+Here, we present complete proofs of our theoretical study, starting with notations. We assume all the samples (time series) are absolutely summable, and finite. 
+
+## A.1 REPRESENTATIONS AND NOTATIONS 
+
+## A.1.1 FREQUENCY DOMAIN 
+
+Fourier transform of a real-valued sample with a finite duration is obtained as in Equation 10. 
+
+**==> picture [287 x 24] intentionally omitted <==**
+
+where _ω_ =[2] _[π]_[3][ in the range] T[, and] _[ ω]_[ and][ T][ are the frequency in radian and period for all sinusoidals] of Nyquist rate. _|X_ ( _e[jω]_ ) _|_ and _ϕ_ ( _ω_ ) denote the amplitude and phase for all frequencies, respectively. Thus, the amplitude and phase angle of a particular sinusoidal are represented as _|X_ ( _e[jω]_[0] ) _|_ and _ϕ_ ( _ω_ 0). Similarly, the period for this sinusoidal is T0 = 2 _π/ω_ 0. The phase difference between a sinusoidal and an angle _ϕ_ is shown in Equation 11. 
+
+**==> picture [331 x 31] intentionally omitted <==**
+
+where T0 _/_ 2 _π_ = 1 _/ω_ 0. The calculated phase difference between the sample and given angle normalizes the phase change for the sinusoidal to exactly match the angle _ϕ_ when shifted _∆ϕ_ **x** ( _t_ ) in the complex domain as in equations below. 
+
+**==> picture [354 x 46] intentionally omitted <==**
+
+## A.1.2 TRANSFORMATION AND DIFFEOMORPHISMS 
+
+The observed samples **x** ( _t_ ) from the sets with the (shift) variants are considered elements of manifolds _M[ϕ]_ according to the phase angle _ϕ_ ( _ω_ 0) of the harmonic with a period equal to or longer than the length of the segment _t_ , i.e., the specific harmonic with period T0 and frequency _ω_ 0. In other words, if the phase angle of the harmonic _ω_ 0 is _ϕa_ for a sample **x** ( _t_ ), the sample lies in manifold _M[ϕ][a]_ . The wheremapping function **x** ( _t_ ) lies in _M f_ : _[ϕ][a] M_ , and _[ϕ][a] →M_ **x** ˜( _t_ ) lies in _[ϕ][b]_ between manifolds is defined as _M[ϕ][b]_ . Similarly, the inverse mapping _T_ ( **x** ( _t f_ ) _, ϕ[−]_[1] _b_ ): _M_ = (˜ _[ϕ]_ **x** _[b]_ ( _→Mt_ ) _, ∆ϕ[ϕ] b[a]_ ) is represented as _T_ (˜ **x** ( _t_ ) _, ϕa_ ) = ( **x** ( _t_ ) _, ∆ϕa_ ). 
+
+**x** ˜( _t_ ) and **x** ( _t_ ) only differ by a random time shift _t[′]_ where this random time shift can be calculated using the phase angles of harmonics with frequency _ω_ 0, which makes the presented transformation a bijective function between time series manifolds. The differentiation of the mapping function at sample **x** ( _t_ ) is shown as _Dfx_ : _TxM[ϕ][a] → TfxM[ϕ][b]_ . 
+
+> 3Harmonics and sinusoids are used interchangeably throughout the paper. 
+
+17 
+
+## A.2 NOTATION LIST 
+
+|**Notation**|**Description**|
+|---|---|
+|**x**|Time series represented as a bold lowercase symbol|
+|_F_(x)|Discrete Fourier transformation of time seriesx|
+|∠|The complex argument for obtaining phase values|
+|_ω_|Variable that represents the frequencies in radian|
+|_|X_(_ejω_)_|_|Magnitude components of the Fourier transformation of a time series|
+|_ϕ_(_ω_)|Phase components of the Fourier transformation of a time series|
+|_ω_0|Frequency of the specifc harmonic whose period is equal or longer than the sample**x**|
+|T0 = 2_π_<br>_ω_0|Period of the specifc harmonic with frequency_ω_0|
+|_Φ_|Random variable for phase angles, i.e.,_ϕ ∼Φ_|
+|_ϕ_(_ω_0)|Phase angle of a specifc harmonic with the frequency_ω_0|
+|_ϕ_**x**(_t_)|Variable that represents phase angles of all harmonics for sample**x**(_t_)|
+|_ϕ_**x**(_t−t′_)|Variable that represents phase angles for sample**x**(_t −t′_)|
+|_ϕ_**x**(_t_)(_ω_0)|Phase angle of the specifc harmonic with the frequency_ω_0for sample**x**(_t_)|
+|_T_(**x**_, ϕ_)|The proposed transformation function|
+|_∆ϕ_|Phase difference between two angles|
+|_∆ϕ_**x**(_t_)|Phase difference between the given angle_ϕ_in the transformation and the harmonic<br>with frequency_ω_0when sample**x**(_t_)is decomposed using Fourier transformation|
+|_∆ϕ_**x**(_t−t′_)|Phase difference between the given angle_ϕ_in the transformation and the harmonic<br>with frequency_ω_0 when sample**x**(_t −t′_)is decomposed using Fourier transformation|
+|_Mϕ_|Manifold notation with an angle_ϕ_|
+|_Mϕa_|A specifc manifold with the angle_ϕa_|
+|_T_(**x**_, ϕa_)|The output of the transformation, i.e., a time series that lies on the manifold_Mϕa_|
+|_F_(_T_(**x**_, ϕ_))|Fourier transformation of the output from the proposed transformation: Since the trans-|
+||formation function produces a tuple, we specifcally apply the Fourier transformation|
+||to the frst output, which corresponds to the time series.|
+|_fθ_(_._)|Parametric mapping with parameter_θ_|
+|_fGθ_ :R_d →Φ_|The guidance network that outputs an angle to map the sample to a specifc manifold|
+|_fCθ_ :_X →Y_|The classifer neural network|
+|Var(_._)|Variance function|
+|%|Modulo operation|
+
+
+Table 8: Detailed list of notations used in this work 
+
+18 
+
+## A.3 PROOFS 
+
+**Lemma A.1** (Circular Shift) **.** _Given a sample_ **x** _in the interval_ [0 _, tint_ ] _and its shifted version_ **x** ( _t−t[′]_ ) _, where the shift is a random value from the finite real numbers, i.e., t[′] ∈_ ( _−∞, ∞_ ) _. The shift is periodic with the signal length tint, leading to the same vector representation when the shift is an integer multiple of the signal length._ 
+
+**==> picture [260 x 12] intentionally omitted <==**
+
+_Proof._ From circular shift, we know 
+
+**==> picture [269 x 26] intentionally omitted <==**
+
+Therefore, 0 = _t[′]_ (mod _tint_ ) = _⇒_ **x** ( _t_ ) = **x** ( _t − t[′]_ ) 
+
+Throughout the proofs, the length of the samples and their intervals are denoted by the same variable _t_ . In other words, the samples are assumed to start at _t_ = 0 and finish at _tint_ = _t_ . 
+
+## A.4 PROOF FOR PROPOSITION 2.1 
+
+**Proposition A.2** (Time shift as a Group Operation) **.** _Shift operation in time domain defines an Abelian Group of phase angles in the frequency domain for each harmonic with frequency ωk._ 
+
+**==> picture [346 x 11] intentionally omitted <==**
+
+_Proof._ Let **x** ( _t_ + _t[′]_ ) be randomly shifted variant of sample **x** ( _t_ ) where _t[′] ∈_ R. We can decompose these two sequences as in below using Fourier transformation. 
+
+**==> picture [339 x 16] intentionally omitted <==**
+
+The phase values of these two time series for a harmonic at the given frequency can be expressed as follows. 
+
+**==> picture [311 x 12] intentionally omitted <==**
+
+Then, we can define a set of phase angles _Φk_ with shift values _t[′]_ . 
+
+**==> picture [297 x 12] intentionally omitted <==**
+
+This set of phase angles with time shift operation defines the circle group T. The circle group is Abelian (Fuchs, 1960), with time shifts corresponding to multiplication in the complex plane. For completeness, we have shown all the group axioms. 
+
+## GROUP AXIOMS 
+
+The set of phase angles with time shift, _Φk_ = _{ϕ | ϕ_ = ( _ϕ_ ( _ωk_ ) + _ωkt[′]_ ) mod 2 _π, t[′] ∈_ R _}_ , satisfies the five axioms of an Abelian group under modular addition. 
+
+_Axiom 1: Closure_ 
+
+For any two phase angles _ϕ_ 1 _, ϕ_ 2 _∈ Φk_ , their sum is also in _Φk_ . 
+
+Let _ϕ_ 1 = ( _ϕ_ ( _ωk_ ) + _ωkt[′]_ 1[)][mod][2] _[π]_[ and] _[ ϕ]_[2][= (] _[ϕ]_[(] _[ω][k]_[) +] _[ ω][k][t][′]_ 2[)][mod][2] _[π]_[.][Then their sum is:] 
+
+**==> picture [222 x 31] intentionally omitted <==**
+
+Since _t[′]_ 1[+] _[ t][′]_ 2 _[∈]_[R][, the sum is also in] _[ Φ][k]_[, so closure holds.] 
+
+_Axiom 2: Associativity_ 
+
+For any three phase angles _ϕ_ 1 _, ϕ_ 2 _, ϕ_ 3 _∈ Φk_ , their sum is associative under addition modulo 2 _π_ . 
+
+19 
+
+(( _ϕ_ 1 + _ϕ_ 2) mod 2 _π_ ) + _ϕ_ 3) mod 2 _π_ = ( _ϕ_ 1 + ( _ϕ_ 2 + _ϕ_ 3) mod 2 _π_ ) mod 2 _π_ Let _ϕ_ 1 = ( _ϕ_ ( _ωk_ ) + _ωkt[′]_ 1[)][mod][2] _[π]_[,] _[ϕ]_[2][=][(] _[ϕ]_[(] _[ω][k]_[) +] _[ ω][k][t][′]_ 2[)][mod][2] _[π]_[,][and] _[ϕ]_[3][=][(] _[ϕ]_[(] _[ω][k]_[) +] _[ ω][k][t][′]_ 3[)] mod 2 _π_ . Then: 
+
+(( _ϕ_ 1 + _ϕ_ 2) mod 2 _π_ ) + _ϕ_ 3 = ( _ϕ_ ( _ωk_ ) + _ωkt[′]_ 1[+] _[ ω][k][t][′]_ 2[)] mod 2 _π_ + _ϕ_ 3 
+
+= ( _ϕ_ ( _ωk_ ) + _ωk_ ( _t[′]_ 1[+] _[ t][′]_ 2[)] mod 2 _π_ + _ωkt[′]_ 3[)] mod 2 _π_ 
+
+Similarly, for the right-hand side: 
+
+**==> picture [286 x 26] intentionally omitted <==**
+
+Using ( _a_ + _b_ ) mod 2 _π_ = (( _a_ mod 2 _π_ )+( _b_ mod 2 _π_ )) mod 2 _π_ , both sides simplify to ( _ϕ_ ( _ωk_ )+ _ωk_ ( _t[′]_ 1[+] _[ t][′]_ 2[+] _[ t][′]_ 3[))][mod][2] _[π]_[.][Thus, associativity holds under addition modulo][ 2] _[π]_[.] 
+
+_Axiom 3: Identity Element_ 
+
+The identity element in this group is the phase angle when no time shift has occurred, i.e., _t[′]_ = 0. 
+
+_ϕ_ 0 = ( _ϕ_ ( _ωk_ ) + _ωk ·_ 0) mod 2 _π_ = _ϕ_ ( _ωk_ ) 
+
+For any _ϕ_ 1 _∈ Φk_ , we have: 
+
+_ϕ_ 1 + _ϕ_ 0 = _ϕ_ 1 
+
+Thus, _ϕ_ 0 is the identity element. 
+
+_Axiom 4: Inverse Element_ 
+
+For any phase angle _ϕ_ 1 = ( _ϕ_ ( _ωk_ ) + _ωkt[′]_ ) mod 2 _π_ , its inverse is: 
+
+_ϕ[−]_ 1[1] = ( _−ωkt[′]_ ) mod 2 _π_ 
+
+Then: 
+
+_ϕ_ 1 + _ϕ[−]_ 1[1] = ( _ϕ_ ( _ωk_ ) + _ωkt[′] − ωkt[′]_ ) mod 2 _π_ = _ϕ_ ( _ωk_ ) 
+
+Thus, each element has an inverse. 
+
+_Axiom 5: Commutativity_ For any two phase angles _ϕ_ 1 _, ϕ_ 2 _∈ Φk_ , the sum is commutative: 
+
+_ϕ_ 1 + _ϕ_ 2 = _ϕ_ 2 + _ϕ_ 1 
+
+This follows from the commutativity of modular addition, so the group is Abelian. 
+
+Proposition 2.1 states that shift operation in time domain defines an Abelian group of phase angles for each harmonic. Proposition 2.1 holds a key role in our algorithm, as it establishes an abstract connection between the time-domain shift operation and its effects on samples in the frequency domain. 
+
+20 
+
+## A.4.1 PROOF FOR THEOREM 2.2 
+
+**Theorem A.3** (Covering the Entire Time Space Injectively) **.** _Given a sample_ **x** _, the defined function T_ ( **x** _, ϕ_ ) : _Φ ×_ R _[d] →_ R _[d] × ∆Φ is bijective such that all shift variants of a sample can be covered with the unique phase angle of a harmonic whose period is longer or equal to the length of_ **x** _._ 
+
+**==> picture [204 x 11] intentionally omitted <==**
+
+**==> picture [188 x 11] intentionally omitted <==**
+
+_Proof._ 
+
+**==> picture [277 x 67] intentionally omitted <==**
+
+Using Euler’s formula, 
+
+**==> picture [278 x 40] intentionally omitted <==**
+
+**==> picture [327 x 23] intentionally omitted <==**
+
+Thus, 
+
+**==> picture [335 x 13] intentionally omitted <==**
+
+Also, 
+
+**==> picture [358 x 53] intentionally omitted <==**
+
+∴ _∃t[′] , t[′] ∈_ R _, ¬_ ( _ϕ_ **x** ( _t_ )( _ω_ 0) _− ϕ_ **x** ( _t−t′_ )( _ω_ 0) = _ϕ_ **x** ( _t_ )( _ω_ 0) _− ϕ_ **x** ( _t−t′_ )( _ω_ 0) = _⇒ t[′]_ = _t[′]_ ) _,_ (31) which proves injection. Similarly, for surjection using Lemma A.1, 
+
+**==> picture [339 x 23] intentionally omitted <==**
+
+The final equation completes the proof by showing that the phase difference between the sample and its shifted version can get unique values for any shift, i.e., covering the whole time space. 
+
+21 
+
+## A.4.2 PROOF FOR THEOREM 2.3 
+
+**Theorem A.4** (Guarantees for Shift-Invariancy) **.** _Given a sample_ **x** _and a randomly shifted variant of it_ **x** ( _t − t[′]_ ) _, if the transformation function T_ ( **x** _, ϕ_ ) _is applied to both samples with the same angle ϕa, the resulting time series will be the same while carrying the same information._ 
+
+**==> picture [294 x 13] intentionally omitted <==**
+
+_Proof._ 
+
+**==> picture [328 x 37] intentionally omitted <==**
+
+**==> picture [249 x 12] intentionally omitted <==**
+
+Using Equation 11, the phase difference between samples ( **x** ( _t_ ) _,_ **x** ( _t − t[′]_ )) and _ϕa_ can be obtained as, 
+
+**==> picture [343 x 22] intentionally omitted <==**
+
+**==> picture [266 x 21] intentionally omitted <==**
+
+Using Fourier transform as in Equation 4, 
+
+**==> picture [294 x 13] intentionally omitted <==**
+
+**==> picture [321 x 14] intentionally omitted <==**
+
+Given that the amplitudes are identical, demonstrating equality in phase is sufficient, as shown below, 
+
+**==> picture [355 x 130] intentionally omitted <==**
+
+**==> picture [286 x 13] intentionally omitted <==**
+
+**==> picture [257 x 11] intentionally omitted <==**
+
+**==> picture [282 x 12] intentionally omitted <==**
+
+**==> picture [297 x 12] intentionally omitted <==**
+
+Therefore, the output time series samples will be the same after applying the transformation. 
+
+We complete the proof by showing the phase and magnitude of Fourier transformation of both samples are the same after transformation even though a random unknown shift is applied to the sample. Thus, the proposed transformation guarantees shift-invariancy without limiting the range of shifts. 
+
+22 
+
+## B ALGORITHM 
+
+In this section, we present the pseudocode and the PyTorch (Paszke et al, 2019) implementation for the proposed transformation function. Algorithm 1 details each step of the transformation, which takes a sample, **x** , and an angle, _ϕ_ as inputs and outputs the transformed sample. 
+
+**Algorithm 1** Algorithm for the proposed diffeomorphism. 
+
+- 1: **Input: x** , _ϕa_ 
+
+2: **Output:** _T_ ( **x** _, ϕa_ ) 
+
+_∞_ 3: _|X_ ( _e[jω]_ ) _|e[jϕ]_[(] _[ω]_[)] = � _−∞_ **[x]**[(] _[t]_[)] _[e][−][jωt] ▷_ Calculate the Fourier transformation to obtain harmonics 4: _ϕ_ ( _ω_ 0) = ∠ _|X_ ( _e[jω]_[0] ) _|e[jϕ]_[(] _[ω]_[0][)][�] _▷_ Obtain the angle for the harmonic with period T0 � 
+
+5: _θ_ = [ _ϕ_ ( _ω_ 0) _− ϕa_ ] % 2 _π_ 6: _∆ϕ_ = � ( _θθ∗_ 2 _−πT_ 022 _π[,] π_ ) _∗T_ 0 _,_ ifelse _θ > π ▷_ Calculate the phase difference between the harmonic and the angle _ϕ_ 7: _|X_ ( _e[jω]_ ) _|e[j]_[(] _[ϕ]_[(] _[ω]_[)] _[−][ω∆ϕ]_[)] = _|X_ ( _e[jω]_ ) _|e[jϕ]_[(] _[ω]_[)] _∗ e[−][jω∆ϕ] ▷_ Apply a linear phase shift to each harmonic 8: **Return:** _F[−]_[1] ( _|X_ ( _e[jω]_ ) _|e[j]_[(] _[ϕ]_[(] _[ω]_[)] _[−][ω∆ϕ]_[)] ) 
+
+Below, we provide the PyTorch implementation of our proposed transformation function, which includes two functions. The first function, distanceCalculate, computes the phase difference between the harmonic with frequency _ω_ 0 and the desired input angles. The second function, diffeomorphism, performs the main transformation: it takes as inputs the batch of samples **x** and the angles _ϕ_ , and outputs the transformed samples in the time domain. 
+
+def **distanceCalculate** (angleDiff): theta = angleDiff % (2 * torch.pi) **# Calculate the angular distance on the unit circle** theta[theta > torch.pi] -= 2 * torch.pi return theta def **diffeomorphism** (sample, desiredAngles): B, L, D = sample.shape samplesFFT = torch.fft.rfft(sample, dim=1) freq = torch.fft.rfftfreq(n=L) phAngle = torch.angle(samplesFFT) **# Get the phase angle of the harmonic with frequency T_0** angles = phAngle[torch.arange(phAngle.size(0)), 1, 0].squeeze() **# Calculate the angle difference** theta = **distanceCalculate** (angles-desiredAngles) **# Normalize it to the sepecific harmonic with frequency w_0** dtheta = theta / (2*torch.pi*freq[1]) **# Create complex exponentials with specific phase values** linShift = torch.exp(-1j*2*torch.pi*freq[None,:]*dtheta[:,None]) linShift = linShift.unsqueeze(dim=2).expand(-1, -1, D) **# Apply a linear phase shift to all harmonics** shiftedFFT = linShift*(samplesFFT) **# Return to the time domain** transformedSamples = torch.fft.irfft(shiftedFFT, n=L, dim=1) return transformedSamples 
+
+Implementation 1: PyTorch implementation of the proposed transformation 
+
+23 
+
+## C EXPERIMENTS 
+
+Here, we give a detailed description of datasets, architectures, metrics, and training details for our experiments. We performed our experiments on NVIDIA GeForce RTX 4090 GPUs, involving training with three random seeds for all datasets, totaling approximately 480 GPU hours including ablation. We reported the mean of three runs with the standard deviation. 
+
+## C.1 DATASETS 
+
+In this section, we give details about the datasets that are used during our experiments. Overall, we have used eight datasets with six different time series tasks including _heart rate prediction_ , _cardiovascular disease classification_ , _activity recognition_ , _step counting_ , _sleep stage classification_ , and _lung sound classification_ from six sensor modalities _photoplethysmography_ , _electrocardiogram_ , _inertial measurement units_ , _electroencephalography_ , and _audio_ . When selecting datasets for our experiments, we prioritized signals that provide meaningful insights into individuals’ mental and physical health, where robust inference is particularly critical. Therefore, we specifically choose signals generated by humans. Additional to main experiments, in appendix, we also included _lung audio classification_ from _audio_ signals. 
+
+## C.1.1 HEART RATE PREDICTION 
+
+**IEEE SPC** The IEEE SPC dataset overall has 22 recordings of 22 subjects, ages ranging from 18 to 58 performing three different activities (Rocha et al., 2020). Each recording has sampled data from three accelerometer signals and two PPG signals along with the ECG data with a sampling frequency of 125 Hz. All these recordings were recorded from the wearable device placed on the wrist of each individual. All recordings were captured with two 2-channel PPGs with green LEDs, a tri-axial accelerometer, and a chest ECG for the ground-truth HR estimation. We averaged the two channels of PPG for prediction. We choose the last five subjects of SPC22 to be used for source domains. Throughout our experiments, we used PPG channels without integrating any inertial measurements. 
+
+**Dalia** The PPG dataset for motion compensation and heart rate estimation in Daily Life Activities (DaLiA) was recorded from 15 subjects (8 females, 7 males, mean age of 30 _._ 6), where each recording was approximately two hours long. PPG signals were recorded while subjects went through different daily life activities, for instance sitting, walking, driving, cycling, working, and so on. PPG signals were recorded at a sampling rate of 64 Hz. The first five subjects are used as source domains, similar to Demirel & Holz (2023). 
+
+We standardize all PPG datasets as follows, same as the previous works (Biswas et al., 2019). Initially, a fourth-order Butterworth bandpass filter with a frequency range of 0.5–4 Hz is applied to PPG signals. Subsequently, a sliding window of 8 seconds with 2-second shifts is employed for segmentation, followed by z-score normalization of each segment. Lastly, the signal is resampled to a frequency of 25 Hz for each segment. We used an 8-block ResNet model with a stride of 2, a learning rate of 5 _e−_ 4, and a batch size of 32. Additional results with further experiments can be found in Appendix D. 
+
+## C.1.2 HUMAN ACTIVITY RECOGNITION 
+
+**UCIHAR** Human activity recognition using a smartphone’s dataset (UCIHAR) (Anguita et al., 2012) is collected by 30 subjects within the age range of 16 to 48 performing six daily living activities with a waist-mounted smartphone. Six activities include walking, sitting, lying, standing, walking upstairs, and walking downstairs. Data is captured by 3-axial linear acceleration and 3-axial angular velocity at a constant rate of 50 Hz. We used the pre-processing technique the same as in (Qian et al., 2021) such that the input contains nine channels with 128 features (it is sampled in a sliding window of 2.56 seconds and 50% overlap, resulting in 128 features for each window). Windows are normalized to a mean of zero and unit standard deviation before feeding it to the models. The experiments are conducted with a leave-one-domain-out strategy with the first five subjects, where one of the domains is chosen to be the unseen target (Qian et al., 2022). We used an 8-block ResNet model with a stride of 2, a learning rate of 3 _e−_ 3, and a batch size of 32. 
+
+24 
+
+**HHAR** Heterogeneity Dataset for Human Activity Recognition (HHAR) is collected by nine subjects within an age range of 25 to 30 performing six daily living activities with eight different smartphones—Although HHAR includes data from smartwatches as well, we use data from smartphones—that were kept in a tight pouch and carried by the users around their waists (Stisen et al., 2015). Subjects then perform six activities including cycling, sitting, descending stairs, ascending stairs, standing, and walking. Considering the variable sampling frequencies of smart devices in the HHAR dataset, we downsampled the readings to 50 Hz. We employed sliding windows with lengths of 100 (two seconds) and 50, using a specified step size. These windows were then normalized to a mean of zero with unit standard deviation. In our experiments, we utilized the data from the first four subjects (i.e., a, b, c, d) as source domains, following a similar approach to previous papers (Qian et al., 2022; Demirel & Holz, 2023). We used an 8-block ResNet model with a stride of 2, a learning rate of 1 _e−_ 3, and a batch size of 64. The learning rate 1 _e−_ 3 for the guidance network, was the same for the activity recognition task. 
+
+## C.1.3 CARDIOVASCULAR DISEASE (CVD) CLASSIFICATION 
+
+**Chapman** Chapman University, Shaoxing People’s Hospital (Chapman) ECG dataset which provides 12-lead ECG with a 10-second sampling rate of 500 Hz. The recordings are downsampled to 100 Hz, resulting in each ECG frame consisting of 1000 samples. The labeling setup follows the same approach as in Zheng et al. (2020) with four classes: atrial fibrillation, GSVT, sudden bradycardia, and sinus rhythm. The ECG frames are normalized to have a mean of 0 and scaled to have a standard deviation of 1. We split the dataset to 80–20% for training and testing as suggested in Zheng et al. (2020). We chose leads I, II, III, and V2 during our experiments for both ECG datasets. 
+
+**PhyioNet 2017** The 2017 PhysioNet/CinC Challenge aims to classify, from 8,528 single-lead ECG recordings (between 30 s and 60 s in length), whether the recording shows normal sinus rhythm, atrial fibrillation (AF), an alternative rhythm, or is too noisy to be classified, i.e., four classes. We normalize the signals to have zero mean and unit standard deviation. Additionally, we zero-pad the shorter recordings to ensure they have the same length. We split the dataset into training, validation, and test sets according to the patients using a 60, 20, 20 configuration. For both datasets in CVD task, we used an 8-block ResNet model with a stride of 2, a learning rate of 5 _e−_ 4, and a batch size of 32. The learning rate for the guidance network was set same as the main classifier architecture. 
+
+## C.1.4 STEP COUNTING 
+
+The Clemson dataset has 30 participants (15 males, 15 females), Each participant wore three Shimmer3 sensors. We used the IMU sensor readings from non-dominant wrists to predict step count where each sensor recorded accelerometer and gyroscope data at 15 Hz. We calculated the total magnitude of the accelerometer and fed it to the model as a pre-processing without any filtering. We used window lengths of 32 seconds without an overlap in the regular walking setting. We conducted 10-fold cross-validation, with each fold consisting of 3 subjects for testing and validation. And, six randomly selected subjects were used for training in each fold. We used a 3 layer of FCN architecture, a learning rate of 5 _e−_ 4, and a batch size of 64. The learning rate for the guidance network was set same as the main classifier architecture. 
+
+## C.1.5 SLEEP STAGE CLASSIFICATION 
+
+We used the Sleep-EDF dataset which has five classes: wake (W), three different non-rapid eye movements (N1, N2, N3), and rapid eye movement (REM). The dataset includes whole-night PSG sleep recordings, where we used a single EEG channel (i.e., Fpz-Cz) with a sampling rate of 100 Hz. We employed the identical data split as presented in the paper (Eldele et al., 2021), accessible online, without applying any additional pre-processing steps. we used a 16-block ResNet model with a stride of 2, a learning rate of 1 _e−_ 3, and a batch size of 64. We ran three distinct seeds using the same split and reported the mean and standard deviation on the test set. 
+
+25 
+
+## C.1.6 LUNG SOUND CLASSIFICATION 
+
+We used Respiratory@TR which contains lung sounds recorded from left and right sides of posterior and anterior chest wall and back using two digital stethoscopes from 42 subjects collected in Antakya State Hospital (Altan et al., 2017). The 12 channels of lung sounds are focused on upper lung, middle lung, lower lung and costophrenic angle areas of posterior and anterior sides of the chest. The recordings are validated and labeled by two pulmonologists evaluating the collected chest X-ray, PFT and auscultation sounds of the subjects. Labels fall into 5 COPD severities (COPD0, COPD1, COPD2, COPD3, COPD4). The patients aged 38 to 68 are selected from different occupational groups, socio-economic status and genders. We performed 10-fold cross-validation on data from 42 subjects, with one fold reserved for validation in each iteration. All 12 channels, combining left and right chest wall recordings from six channels each, were used. 
+
+The audio was segmented into 8-second windows with a 2-second overlap to capture temporal patterns. We used an 8-block ResNet model with a stride of 3, a learning rate of 1 _e−_ 5, and a batch size of 15. Although audio models typically use Mel-frequency spectrograms with different networks, we did not observe a significant performance difference between these models and our initial model. Therefore, we used the original model with temporal data, consistent with our main experiments. 
+
+## C.2 METRICS 
+
+We used the common evaluation metrics in the literature for each task. Specifically, we used mean absolute error (MAE), root mean square error (RMSE), and Pearson correlation coefficient ( _ρ_ ) for _heart rate prediction_ . We used accuracy (Acc), macro-F1 score (F1) for activity recognition, and an additional area under the receiver operating characteristic curve (AUC) for cardiovascular disease classification (Kiyasseh et al., 2020). We used the mean absolute percentage error (MAPE) for step counting (Yang et al., 2020; Femiano et al., 2022). For lung audio classification, we evaluated performance using accuracy, macro F1, and weighted F1 scores (F1, W-F1). For sleep stage classification, we used the same metrics—accuracy, macro F1, and weighted F1 scores (F1, W-F1)—along with Cohen’s Kappa coefficient ( _κ_ ) (Cohen, 1960). 
+
+## C.3 BASELINES 
+
+## C.3.1 LPF (BLURRING) 
+
+In convolutional neural networks, pooling layers or convolutions with strides greater than 2 would conduct downsampling on the feature maps to reduce their size. However, since features are averaged or discarded in the downsampling, information may be lost, i.e., aliasing. Traditional pooling aggregates all values within the window to a single value. In contrast, Zhang (2019) aims to minimize information loss caused by pooling via replacing the traditional kernel with a Gaussian kernel as an low-pass filtering (LPF). Specifically, LPF applies a Gaussian-weighted function to the neighborhood values around each feature for convolution, and obtains a weighted average result. 
+
+Compared to the pooling operations of simply selecting the maximum/average value within the window, LPF uses Gaussian-weighted averages to preserve the relative positions and spatial relationships between features. In our implementations, we used 1D version of LPF with a length of 5. We evaluated filter lengths of 3 _,_ 5 _,_ 7 to determine the optimum size for each task. During our experiments, we observed the best performance with a filter length of 5, except for HR prediction, where a length of 3 was optimal. 
+
+## C.3.2 APS 
+
+To make the sampling layer invariant to shifts, Chaman & Dokmanic (2021) proposed to subsample by partitioning feature maps into polyphase components and select the component with the highest norm. This approach has a significant limitation when applied to time series, especially with the nonlinear activation functions. It tends to overlook variations in boundaries arising from the translation of samples, thereby imposing additional shift constraints (Rojas-Gomez et al., 2022). Consequently, the evaluation of these methods is restricted to a narrow range of shifts, covering only a limited subset of the shift space. Moreover, as this approach selects the component with the highest norm, it requires feature maps to have unique values. 
+
+26 
+
+## C.3.3 WAVELET NETWORKS 
+
+Wavelet networks (Romero et al., 2024) consist of several stacked layers that respect scale and translation. At the beginning, the network consists of a lifting group convolution layer that lifts input time-series to the scale-translation group, followed by arbitrarily many group convolutional layers. At the end of the network, a global pooling layer is used to produce scale-translation invariant representations. Wavelet Networks are proposed for equivariant mappings between input and output. However, to turn an equivariant network into an invariant network, an extra layer that is equivariant in this degenerate sense (in practice, this often means either averaging or creating a histogram of the activations of the last layer) should be applied (Kondor & Trivedi, 2018). For example, the well-known wavelet scattering network achieves invariance by stacking equivariant layers followed by a final invariant one in that of scattering networks (Mallat, 2012). However, our proposed method does not require an additional layer as it operates on data manifolds directly. 
+
+We used the original GitHub (https://github.com/dwromero/wavelet_networks) implementation, leaving the dropout and base parameters unchanged. We searched over the learning rate (e.g., _{_ 10 _[−]_[3] _,_ 10 _[−]_[4] _,_ 10 _[−]_[5] _}_ ) using the validation set for each time series task. 
+
+## C.3.4 CANONICALIZATION 
+
+We also compared our method with a canonicalization approach which is based on learning mappings to canonical samples. Specifically, we used the equiadapt library (https://github.com/arnab39/equiadapt) (Mondal et al., 2023; Kaba et al., 2023) while adding translation equivarant architectures for shift operations. For translation equivariant canonicalization architecture, we implemented a convolutional neural network with a kernel size of five and three layers. The network avoids pooling layers to prevent aliasing and instead employs global average pooling at the final stage to aggregate information across the signal length. The output is reshaped to separate the channels corresponding to each discrete translation, followed by aggregation over the fiber channels to produce translation-equivariant activations. 
+
+We used a discrete Group representation with number of translations set to 16. The canonicalization network and classifier were trained jointly, incorporating a prior regularization loss to guide the learning process. For optimization, we employed the Adam optimizer with a learning rate of 1 _×_ 10 _[−]_[3] and no weight decay. We also performed a grid search to identify the optimal learning rate for the canonicalization network; however, no significant performance improvements were observed across different learning rates. 
+
+## C.4 IMPLEMENTATION DETAILS 
+
+Here, we have provided the details of the architectures, and hyperparameters. Primarily, we used the 1D ResNet (Hong et al., 2020) implementation in the supervised settings. While some alternative deep learning models can perform better in time series such as the combination of convolutional and LSTM layers, similar to previous works in shift consistency (Zhang, 2019), we focused on deep learning models which are mainly composed of convolutional layers. 
+
+## C.4.1 ARCHITECTURES 
+
+Here, we present the details of architectures that are investigated for the performance of shift-invariant techniques. Some details that are not given in the tables are as follows. Batch normalization (Ioffe & Szegedy, 2015) is applied after each convolutional block. ReLU activation is employed following batch normalization, in line with (He et al., 2015). We also applied a Dropout (Srivastava et al., 2014) with 0.5 after each activation and before the convolutions. Finally, a global average pooling is implemented before the linear layers. 
+
+Tables 9, 10a, and 10b give an overall for the architectures with the number of parameters for each dataset. From these tables, it can be observed that the number of parameters for the guidance network is much less than the main classifier, where the ratio is close to _≈_ 2–4%. 
+
+The parameter count of the guidance network could be further reduced by selectively inputting only the important frequencies or the frequency band for each time series task, which can be determined using prior knowledge, rather than the entire spectrum. Nevertheless, for the sake of consistency, we 
+
+27 
+
+Table 9: ResNet architecture 
+
+|Repetition Layer|Kernel Size Output Size|Kernel Size Output Size|Stride|
+|---|---|---|---|
+|1<br>Input (C,T)|-|(C, T)|-|
+|1<br>Conv|(5, 1)|(64, T/2)|1|
+|Residual Block||||
+|R<br>Conv|(5, 1)|(128, T/4)|S|
+|Conv|(5, 1)|(128, T/4)|1|
+|1<br>Linear|-|(n_classes,)|-|
+|# Parameters for_dataset_(C,T, R, S)||||
+|_IEEE SPC_(C=1, T=200, R=8, S=2)||_≈_210k||
+|_DaLiA_(C=1, T=200, R=8, S=2)||_≈_210k||
+|_Chapman_(C=4, T=1000, R=8, S=2)||_≈_197k||
+|_PhysioNet_(C=1, T=6000, R=8, S=2)||_≈_197k||
+|_UCIHAR_(C=9, T=65, R=8, S=2)||_≈_200k||
+|_HHAR_(C=6, T=51, R=8, S=2)||_≈_200k||
+|_Respiratory_(C=12, T=6000, R=8, S=3)||_≈_200k||
+|_Sleep_(C=1, T=3000, R=16, S=2)||_≈_3.2M||
+
+
+Table 10: The model topologies of the classifier _fC_ and guidance network _fG_ 
+
+|(a) FCN architecture<br>Layer<br>Kernel<br>Size<br>Output<br>Size<br>Input (C,T)<br>-<br>(C, T)<br>Conv (32 kernels)<br>(8, 1)<br>(32, T-4)<br>Max Pooling<br>(2,1)<br>(32, (T-4)/2)<br>Conv (64 kernels)<br>(8, 1)<br>(64, (T-4)/2-4)<br>Max Pooling<br>(2,1)<br>(64, (T-4)/4-2)<br>Conv (128 kernels) (8, 1)<br>(128, (T-4)/4-6)<br>Max Pooling<br>(2,1)<br>(128, (T-4)/8-3)<br>Linear<br>-<br>(n_classes,)<br># Parameters for_dataset_(C,T)<br>_Clemson_(C=1, T=240)<br>_≈_432k|(b) Guidance architecture|
+|---|---|
+||Layer<br>Kernel<br>Size<br>Output<br>Size|
+||Input (C,T)<br>—<br>(C, T)<br>Conv (4 kernels)<br>(8, 1)<br>(4, T-5)<br>Max Pooling<br>(2,1)<br>(4, (T-5)/2+1)<br>Conv (16 kernels) (5, 1)<br>(16, (T-5)/2-1)<br>Max Pooling<br>(2,1)<br>(16, (T-5)/4+1)<br>Conv (32 kernels) (3, 1)<br>(32, (T-5)/4+1)<br>Max Pooling<br>(2,1)<br>(32, (T-5)/8+1)<br>Linear<br>-<br>(n_classes,)|
+||# Parameters for_dataset_(C,T)<br>_UCIHAR_(C=9, T=65)<br>_≈_2.5k<br>_HHAR_(C=6, T=51)<br>_≈_2k<br>_Clemson_(C=1, T=240)<br>_≈_3k|
+||_IEEE SPC_(C=1, T=200)<br>_≈_2.4k<br>_DaLiA_(C=1, T=200)<br>_≈_2.4k<br>_Chapman_(C=4, T=500)<br>_≈_6k<br>_PhysioNet_(C=1, T=3000)<br>_≈_13k<br>_Respiratory_(C=1, T=1500) _≈_66k<br>_Sleep_(C=12, T=6000)<br>_≈_8k|
+
+
+perform the Fourier transform with the number of harmonics same as the length of time series and provide the entire spectrum to the guidance network as the input. 
+
+One advantage of this input modeling is that the ratio between the number of parameters for the guidance network and the main classifier decreases more when the main classifier has more blocks as they are independent. For example, the guidance network has 1000 _×_ fewer parameters than the main classifier for the sleep stage classification task where we have used 16 ResNet blocks for the classifier model for all techniques. At the same time, this addition increases the performance metrics up to 3%. Furthermore, increasing the number of parameters can decrease the performance of the models as it can cause overfitting of the training data (Cao et al., 2022; Wen et al., 2023), which is observed in our case as well (see Table 11 in Appendix D for additional results). 
+
+28 
+
+## D ADDITONAL RESULTS 
+
+## D.1 SLEEP STAGE CLASSIFICATION 
+
+Here, we present extended results for the sleep stage classification in Table 11. Specifically, we include the F1 score as an additional metric and employ a larger network to observe its impact. Although our method ranked second in F1 metric, it is important to highlight that F1 scores are a 
+
+Table 11: Performance comparison of ours with other methods in _EEG_ for sleep stage classification 
+
+|Method|Sleep-EDF<br>S-Cons_↑_<br>Acc_↑_<br>F1_↑_<br>W-F1_↑_<br>_κ ↑_|
+|---|---|
+|Baseline<br>Baseline (2_×_)<br>Aug.<br>LPF<br>APS|95.06_±_0.61<br>75.41_±_2.01<br>65.40_±_1.33<br>74.87_±_1.92<br>67.12_±_2.96<br>91.09_±_1.26<br>73.88_±_2.10<br>65.84_±_3.29<br>74.32_±_2.86<br>65.14_±_2.94<br>99.00_±_0.17<br>74.89_±_1.11<br>64.71_±_1.55<br>74.03_±_1.46<br>65.89_±_1.81<br>92.43_±_1.24<br>73.56_±_2.93<br>**68.08**_±_**1.97**<br>76.01_±_1.98<br>65.68_±_3.46<br>—<br>—<br>—<br>—<br>—|
+|Ours<br>Ours+LPF|_±_**0.00**<br>**77.90**_±_**1.92**<br>67.01_±_2.65<br>**76.77**_±_**2.58**<br>**70.01**_±_**1.10**<br>100_±_0.00<br>73.12_±_1.89<br>67.42_±_1.99<br>75.34_±_1.61<br>64.98_±_2.27|
+
+
+biased measure of classification quality (Christen et al., 2023; Powers, 2015), which is a problem when comparing recordings with a different prevalence of the classes as in sleep staging (Malafeev et al., 2018). Therefore, we reported additional metrics for measuring the performance. In particular, we included the kappa score, a metric widely used for evaluating algorithms in this task (Malafeev et al., 2018; Biswal et al., 2018). Additionally, sleep stage classification and certain other tasks have empty APS values as the authors’ original implementation encountered overflow issues with matrix repetition, particularly for longer arrays. 
+
+Overall, our proposed method demonstrates a significant performance improvement in three of the metrics, with high kappa and accuracy—both of which are commonly used in the medical domain (Biswal et al., 2018) while ranking second in the F1 metric, following the LPF approach. We also performed the same ablation experiments for investigating the behavior of the loss function on the performance of the model for the sleep stage classification and reported the results in Table 12 while excluding the consistency metric as the model that include the proposed transformation are always completely shift-invariant. 
+
+Table 12: Ablation experiments for sleep stage classification 
+
+|Method|Sleep-EDF<br>Acc_↑_<br>F1_↑_<br>W-F1_↑_<br>_κ ↑_|
+|---|---|
+|_T_(**x**_, ϕ_)<br>_L′_<br>_G_<br>ˆ_LG_<br>Ours|75.54_±_2.39<br>66.96_±_1.78<br>75.53_±_2.29<br>67.08_±_0.03<br>77.21_±_1.51<br>67.67_±_1.67<br>76.89_±_1.71<br>69.39_±_0.02<br>77.75_±_1.23<br>**68.04**_±_1.16<br>**77.01**_±_1.07<br>69.94_±_0.01<br>**77.80**_±_1.95<br>67.01_±_2.65<br>76.77_±_2.58<br>**70.01**_±_2.50|
+|Change|+2.26<br>+0.05<br>+1.24<br>+2.93|
+
+
+Table 12 also supports the previous experiments and claims regarding the advantages of guiding the proposed diffeomorphism with a neural network. When the models are trained by guiding the mapping function, the performance of the models increases up to 3% in Kappa ( _κ_ ) score. 
+
+## D.2 HEART RATE PREDICTION 
+
+Here, we conducted additional experiments to evaluate the models’ performance using varied amounts of training and testing data. Initially, we reduced the training data while increasing the testing data by dividing the datasets in half based on subjects to investigate the performance with less training data. Table 13 presents the results, where our proposed method also increases performance by 3–4% compared to the baseline architecture while reducing the variance between different runs and improving shift consistency by 40–60%, even in the low data regime. 
+
+29 
+
+Table 13: Performance comparison of ours and other methods in _PPG_ datasets for HR estimation 
+
+|Method|IEEE SPC22<br>S-Cons (%)_↑_<br>RMSE_↓_<br>MAE_↓_<br>_ρ_(%)_↑_|DaLiA<br>S-Cons (%)_↑_<br>RMSE_↓_<br>MAE_↓_<br>_ρ_(%)_↑_|
+|---|---|---|
+|Baseline<br>Aug.<br>LPF<br>APS|55.70_±_2.61<br>25.93_±_0.07<br>11.55_±_0.08<br>48.85_±_0.85<br>70.35_±_0.47<br>26.21_±_0.48<br>12.06_±_0.33<br>48.50_±_1.22<br>67.43_±_0.56<br>25.87_±_1.02<br>14.03_±_0.69<br>47.76_±_2.49<br>60.43_±_1.08<br>24.83_±_1.26<br>11.14_±_0.83<br>52.10_±_2.90|31.48_±_0.41<br>12.51_±_0.05<br>5.59_±_0.05<br>85.37_±_0.20<br>53.38_±_0.29<br>12.31_±_0.09<br>5.60_±_0.05<br>85.90_±_0.13<br>39.82_±_1.33<br>12.65_±_0.09<br>5.81_±_0.01<br>84.87_±_0.23<br>38.99_±_0.85<br>12.49_±_0.11<br>5.61_±_0.04<br>85.68_±_0.17|
+|Ours<br>Ours+LPF<br>Ours+APS|100_±_0.00<br>**24.67**_±_**0.06**<br>**11.10**_±_**0.16**<br>**52.26**_±_**0.27**<br>100_±_0.00<br>26.01_±_0.27<br>14.04_±_0.24<br>47.20_±_0.86<br>100_±_0.00<br>24.67_±_0.32<br>11.38_±_0.13<br>51.64_±_0.73|100_±_0.00<br>**12.30**_±_**0.11**<br>**5.57**_±_0.03<br>**85.95**_±_0.25<br>100_±_0.00<br>12.78_±_0.09<br>6.18_±_0.01<br>84.48_±_0.26<br>100_±_0.00<br>12.40_±_0.08<br>5.67_±_0.02<br>85.63_±_0.30|
+
+
+We also performed the same ablation studies for heart rate prediction task in the low data regime and presented the results in Table 14. 
+
+Table 14: Ablation experiments for _HR_ task with less training data 
+
+|Method|IEEE SPC22<br>MAE_↓_<br>RMSE_↓_<br>_ρ ↑_|DaLiA_P P G_<br>MAE_↓_<br>RMSE_↓_<br>_ρ ↑_|
+|---|---|---|
+|_T_(**x**_, ϕ_)<br>_L′_<br>_G_<br>ˆ_LG_<br>Ours|12.04<br>25.49<br>50.72<br>11.29<br>25.10<br>51.10<br>11.32<br>25.08<br>51.18<br>**11.10**<br>**24.67**<br>**52.26**|6.10<br>12.94<br>85.03<br>5.63<br>12.80<br>85.10<br>5.60<br>12.71<br>85.12<br>**5.57**<br>**12.30**<br>**85.95**|
+|Change|+0.94<br>+0.82<br>+1.54|+0.53<br>+0.64<br>+0.92|
+
+
+The ablation study results with a smaller training set align with our main findings, where reducing variations uniformly using the same angle negatively impacts performance. Likewise, expanding the potential solution space with _L_[ˆ] _G_ leads to a performance decline compared to our method. 
+
+30 
+
+## D.3 DIFFEOMORPHISMS IN DEEP LEARNING 
+
+In this section, we review previous transformation functions and diffeomorphisms used in deep learning models. Invariant classification of input samples with neural networks has a long-standing history, with the Spatial Transformer Network (STN) being introduced to learn transformation functions for invariant image classification (Jaderberg et al., 2015). Similarly, Temporal Transformer Networks (TTN), an adaptation of STNs for time series applications, were introduced to predict the parameter of warp functions and align time series (Lohit et al., 2019; Shapira Weber & Freifeld, 2023). Recent methods have focused on optimizing a known family of diffeomorphism, known as diffeomorphic warping functions (Martinez et al., 2022) for time series alignment, through deep learning (Detlefsen et al., 2018; Shapira Weber et al., 2019). Thus, a significant distinction between our approach and previous techniques lies in the fact that we introduce a novel tailored diffeomorphism that is capable of mapping samples subjected to shifts to the same point in the high-dimensional data manifold, to ensure shift-invariancy. 
+
+Although previous techniques were designed for different purposes, such as time-warping (Lohit et al., 2019), we also evaluated and compared the performance and shift consistency of their transformation functions. Specifically, we implemented sequence temporal transformations (STN) for clinical time series from Oh et al. (2018) and TTN (Lohit et al., 2019) where the transformation and the classifier are trained together to maximize classification performance by minimizing the cross-entropy loss for both methods. In our implementation of STN, we followed the original design, using a neural network with two convolutional layers and two pooling layers, where pooling is applied between and after the convolutions. After the pooling operations, two fully connected layers are applied to the resulting feature maps to obtain the transformation parameter. The overall results in time series tasks are presented in the tables below. 
+
+Table 15: Performance comparison of our method with different transformations in HR estimation 
+
+|Method|IEEE SPC22<br>S-Cons (%)_↑_<br>RMSE_↓_<br>MAE_↓_<br>_ρ_(%)_↑_|DaLiA<br>S-Cons (%)_↑_<br>RMSE_↓_<br>MAE_↓_<br>_ρ_(%)_↑_|
+|---|---|---|
+|Baseline<br>Aug.|61.99_±_1.19<br>18.39_±_2.96<br>10.28_±_1.41<br>62.64_±_5.74<br>76.48_±_1.77<br>18.73_±_1.15<br>10.42_±_0.40<br>64.06_±_3.70|32.08_±_0.22<br>9.86_±_0.23<br>4.40_±_0.03<br>86.01_±_0.51<br>52.77_±_0.39<br>9.85_±_0.21<br>4.47_±_0.06<br>85.99_±_0.49|
+|Baseline+STN<br>Baseline+TTN<br>Ours|67.13_±_1.53<br>18.45_±_2.73<br>10.35_±_0.73<br>63.49_±_4.10<br>60.12_±_1.10<br>20.57_±_1.23<br>11.55_±_1.87<br>60.17_±_3.64<br>_±_**0.00**<br>**16.25**_±_**0.72**<br>**9.45**_±_**0.03**<br>**70.12**_±_**2.10**|44.81_±_0.25<br>9.90_±_0.17<br>4.43_±_0.04<br>85.96_±_0.47<br>39.13_±_0.30<br>10.23_±_0.30<br>4.45_±_0.05<br>84.31_±_0.67<br>_±_**0.00**<br>**9.75**_±_**0.15**<br>**4.39**_±_**0.03**<br>**86.06**_±_**0.19**|
+
+
+Table 16: Performance comparison of our method with different transformations in _ECG_ datasets 
+
+|Method|Chapman<br>S-Cons (%)_↑_<br>Acc_↑_<br>F1_↑_<br>AUC (%)_↑_|PhysioNet 2017<br>S-Cons (%)_↑_<br>Acc_↑_<br>F1_↑_<br>AUC_↑_|
+|---|---|---|
+|Baseline<br>Aug.|98.53_±_0.17<br>91.32_±_0.23<br>91.22_±_0.24<br>98.34_±_0.16<br>99.00_±_0.16<br>91.96_±_0.19<br>91.89_±_0.22<br>98.45_±_0.18|98.37_±_0.15<br>**83.22**_±_**0.72**<br>73.50_±_1.99<br>93.21_±_0.30<br>98.96_±_0.17<br>82.28_±_1.18<br>72.32_±_2.20<br>93.20_±_0.42|
+|Baseline+STN<br>Baseline+TTN<br>Ours|98.31_±_0.13<br>91.45_±_0.20<br>91.33_±_0.19<br>98.31_±_0.14<br>97.69_±_0.15<br>91.27_±_0.17<br>90.54_±_0.38<br>98.23_±_0.21<br>_±_**0.00**<br>**92.10**_±_**0.25**<br>**91.93**_±_**0.85**<br>**98.47**_±_**0.15**|98.55_±_0.14<br>83.12_±_0.50<br>73.27_±_1.54<br>93.23_±_0.28<br>97.12_±_0.23<br>82.51_±_0.63<br>71.43_±_1.43<br>93.07_±_0.35<br>_±_**0.00**<br>83.15_±_0.65<br>**74.12**_±_**1.80**<br>**93.28**_±_**0.31**|
+
+
+Table 17: Performance comparison of our method with different transformations in _IMU_ datasets 
+
+|Method|UCIHAR<br>S-Cons (%)_↑_<br>Acc_↑_<br>F1_↑_|HHAR<br>S-Cons (%)_↑_<br>Acc_↑_<br>F1_↑_|Clemson<br>S-Cons (%)_↑_<br>MAPE_↓_<br>MAE_↓_|
+|---|---|---|---|
+|Baseline<br>Aug.|94.07_±_1.38<br>85.39_±_2.30<br>83.20_±_2.94<br>96.55_±_0.80<br>85.42_±_4.50<br>83.69_±_6.74|98.27_±_0.33<br>91.87_±_1.36<br>91.16_±_1.38<br>98.38_±_0.28<br>**91.97**_±_**0.44**<br>**91.31**_±_**0.49**|54.31_±_4.40<br>4.76_±_0.11<br>2.74_±_0.08<br>61.01_±_4.88<br>4.08_±_0.14<br>2.29_±_0.07|
+|Baseline+STN<br>Baseline+TTN<br>Ours|93.96_±_1.22<br>83.22_±_1.23<br>83.57_±_2.14<br>93.32_±_1.95<br>83.27_±_1.57<br>82.78_±_3.12<br>_±_**0.00**<br>**87.71**_±_**1.98**<br>**85.67**_±_**2.47**|98.30_±_0.24<br>88.92_±_1.10<br>89.10_±_1.20<br>97.10_±_0.78<br>90.03_±_1.74<br>90.18_±_1.10<br>_±_**0.00**<br>91.93_±_1.14<br>91.12_±_1.03|58.56_±_4.78<br>4.94_±_0.13<br>2.53_±_0.10<br>45.89_±_3.02<br>5.43_±_0.20<br>2.89_±_0.18<br>_±_**0.00**<br>**4.28**_±_**0.34**<br>**2.43**_±_**0.21**|
+
+
+As shown in the tables, other transformation functions fail to achieve true shift-invariance. While the STN method shows some improvements on certain datasets, it still lacks full shift-invariance. This limitation arises because STN relies on a neural network to estimate transformation parameters from time series data. However, this temporal transformation has no information about the position of the time series. Thus, when the input is shifted, the output changes. 
+
+31 
+
+## D.4 EXPANDED COMPARISON 
+
+Here, we compared the performance of techniques when random data augmentation (Aug.) is applied during training. In other words, the samples are randomly shifted and fed to the models during training. During inference, the performance of methods with original samples is evaluated without applying any shifts. We present the results in the tables below. 
+
+Table 18: Performance comparison of our method and other techniques with data augmentation for HR estimation 
+
+|Method|IEEE SPC22<br>S-Cons (%)_↑_<br>RMSE_↓_<br>MAE_↓_<br>_ρ_(%)_↑_|DaLiA<br>S-Cons (%)_↑_<br>RMSE_↓_<br>MAE_↓_<br>_ρ_(%)_↑_|
+|---|---|---|
+|Baseline<br>Aug.<br>LPF<br>APS<br>WaveletNet|61.99_±_1.19<br>18.39_±_2.96<br>10.28_±_1.41<br>62.64_±_5.74<br>76.48_±_1.77<br>18.73_±_1.15<br>10.42_±_0.40<br>64.06_±_3.70<br>76.88_±_0.73<br>20.20_±_1.54<br>13.44_±_0.82<br>65.40_±_1.92<br>73.99_±_1.06<br>19.42_±_0.60<br>12.98_±_0.29<br>65.27_±_1.32<br>51.71_±_1.95<br>21.56_±_1.01<br>14.61_±_0.34<br>60.74_±_4.37|32.08_±_0.22<br>9.86_±_0.23<br>4.40_±_0.03<br>86.01_±_0.51<br>52.77_±_0.39<br>9.85_±_0.21<br>4.47_±_0.06<br>85.99_±_0.49<br>38.67_±_0.30<br>10.01_±_0.30<br>4.67_±_0.12<br>85.68_±_0.51<br>44.33_±_0.16<br>10.45_±_0.40<br>5.01_±_0.17<br>84.69_±_0.85<br>36.71_±_3.04<br>15.46_±_0.64<br>7.67_±_0.23<br>76.13_±_1.86|
+|LPF + Aug.<br>APS + Aug.<br>WaveletNet + Aug.|76.17_±_1.15<br>20.39_±_1.15<br>13.22_±_0.36<br>61.72_±_2.87<br>74.88_±_0.61<br>18.01_±_0.15<br>10.57_±_0.15<br>66.40_±_2.21<br>50.14_±_0.14<br>20.10_±_1.15<br>13.41_±_0.57<br>61.90_±_3.50|55.62_±_0.21<br>12.57_±_0.19<br>6.02_±_0.11<br>84.94_±_0.40<br>53.70_±_0.08<br>12.84_±_0.10<br>6.08_±_0.02<br>85.62_±_0.65<br>36.71_±_3.04<br>15.46_±_0.64<br>7.67_±_0.23<br>76.13_±_1.86|
+|Ours<br>Ours+LPF<br>Ours+APS|_±_**0.00**<br>**16.25**_±_**0.72**<br>**9.45**_±_**0.03**<br>**70.12**_±_**2.10**<br>100_±_0.00<br>20.34_±_1.62<br>13.77_±_0.84<br>65.60_±_2.31<br>100_±_0.00<br>18.81_±_1.59<br>12.32_±_0.84<br>67.01_±_3.79|_±_**0.00**<br>**9.75**_±_**0.15**<br>**4.39**_±_**0.03**<br>**86.06**_±_**0.19**<br>100_±_0.00<br>10.72_±_0.11<br>5.30_±_0.03<br>84.12_±_0.23<br>100_±_0.00<br>10.47_±_0.09<br>5.10_±_0.03<br>84.62_±_0.31|
+
+
+Table 19: Performance comparison of ours and other techniques with data augmentation in _ECG_ datasets for CVD classification 
+
+|Method|Chapman<br>S-Cons (%)_↑_<br>Acc_↑_<br>F1_↑_<br>AUC (%)_↑_|PhysioNet 2017<br>S-Cons (%)_↑_<br>Acc_↑_<br>F1_↑_<br>AUC_↑_|
+|---|---|---|
+|Baseline<br>Aug.<br>LPF<br>APS<br>WaveletNet|98.53_±_0.17<br>91.32_±_0.23<br>91.22_±_0.24<br>98.34_±_0.16<br>99.00_±_0.16<br>91.96_±_0.19<br>91.89_±_0.22<br>98.45_±_0.18<br>98.69_±_0.14<br>92.01_±_0.23<br>91.94_±_0.58<br>98.50_±_0.24<br>98.60_±_0.17<br>90.69_±_0.89<br>89.44_±_1.00<br>98.31_±_0.24<br>91.02_±_1.14<br>90.87_±_1.02<br>90.02_±_1.00<br>97.94_±_0.21|98.37_±_0.15<br>83.22_±_0.72<br>73.50_±_1.99<br>93.21_±_0.30<br>98.96_±_0.17<br>82.28_±_1.18<br>72.32_±_2.20<br>93.20_±_0.42<br>98.94_±_0.39<br>84.40_±_0.16<br>75.68_±_0.76<br>93.80_±_0.32<br>—<br>—<br>—<br>—<br>65.03_±_0.71<br>76.06_±_0.64<br>63.35_±_3.40<br>87.02_±_0.29|
+|LPF + Aug.<br>APS + Aug.<br>WaveletNet + Aug.|98.85_±_0.20<br>92.05_±_0.13<br>91.94_±_0.40<br>**98.53**_±_**0.20**<br>98.60_±_0.17<br>90.69_±_0.89<br>89.44_±_1.00<br>98.31_±_0.24<br>91.02_±_1.14<br>90.87_±_1.02<br>90.02_±_1.00<br>97.94_±_0.21|99.00_±_0.50<br>83.27_±_0.61<br>74.03_±_1.56<br>93.20_±_0.31<br>—<br>—<br>—<br>—<br>65.03_±_0.71<br>78.90_±_0.57<br>65.88_±_1.44<br>88.67_±_0.22/|
+|Ours<br>Ours+LPF<br>Ours+APS|_±_**0.00**<br>**92.10**_±_**0.25**<br>91.93_±_0.85<br>98.47_±_0.15<br>100_±_0.00<br>92.05_±_0.52<br>**91.96**_±_**0.54**<br>98.51_±_0.10<br>100_±_0.00<br>91.61_±_1.11<br>91.10_±_0.56<br>98.36_±_0.20|_±_**0.00**<br>83.15_±_0.65<br>74.12_±_1.80<br>93.28_±_0.31<br>100_±_0.00<br>**85.20**_±_**0.40**<br>**77.50**_±_**1.21**<br>**94.20**_±_**0.19**<br>—<br>—<br>—<br>—|
+
+
+Table 20: Performance comparison of our method and others with data augmentation in _IMU_ datasets for Activity and Step 
+
+|Method|UCIHAR<br>S-Cons (%) _↑_<br>Acc _↑_<br>F1 _↑_|HHAR<br>S-Cons (%) _↑_<br>Acc _↑_<br>F1 _↑_|Clemson<br>S-Cons (%) _↑_<br>MAPE _↓_<br>MAE _↓_|
+|---|---|---|---|
+|Baseline<br>Aug.<br>LPF<br>APS<br>WaveletNet|94.07_±_1.38<br>85.39_±_2.30<br>83.20_±_2.94<br>96.55_±_0.80<br>85.42_±_4.50<br>83.69_±_6.74<br>95.05_±_0.21<br>83.96_±_3.44<br>81.08_±_4.21<br>96.40_±_0.03<br>81.75_±_4.11<br>79.01_±_5.33<br>94.56_±_1.31<br>82.78_±_4.62<br>80.73_±_5.59|98.27_±_0.33<br>91.87_±_1.36<br>91.16_±_1.38<br>98.38_±_0.28<br>91.97_±_0.44<br>91.31_±_0.49<br>98.10_±_0.10<br>92.10_±_0.80<br>91.43_±_0.94<br>98.30_±_0.24<br>91.83_±_1.35<br>91.01_±_1.47<br>96.76_±_0.15<br>90.72_±_0.38<br>90.71_±_0.39|54.31_±_4.40<br>4.76_±_0.11<br>2.74_±_0.08<br>61.01_±_4.88<br>4.08_±_0.14<br>2.29_±_0.07<br>59.77_±_4.40<br>4.16_±_0.16<br>2.35_±_0.11<br>45.50_±_2.69<br>4.74_±_0.16<br>2.69_±_0.07<br>59.14_±_3.10<br>5.20_±_0.66<br>2.95_±_0.41|
+|LPF + Aug.<br>APS + Aug.<br>WaveletNet + Aug.|97.65_±_1.30<br>84.67_±_3.45<br>83.32_±_3.50<br>96.40_±_0.03<br>78.40_±_3.75<br>75.43_±_4.33<br>94.56_±_1.31<br>82.78_±_4.62<br>80.73_±_5.59|98.65_±_0.12<br>92.45_±_0.78<br>91.70_±_0.62<br>98.87_±_0.34<br>92.40_±_0.40<br>91.49_±_0.73<br>96.76_±_0.15<br>90.72_±_0.38<br>91.71_±_0.39|59.77_±_4.40<br>3.81_±_0.13<br>2.23_±_0.10<br>45.50_±_2.69<br>3.94_±_0.10<br>2.50_±_0.07<br>60.23_±_2.54<br>5.18_±_1.02<br>3.02_±_0.48|
+|Ours<br>Ours+LPF<br>Ours+APS|_±_**0.00**<br>**87.71**_±_**1.98**<br>**85.67**_±_**2.47**<br>100_±_0.00<br>84.78_±_2.46<br>82.58_±_2.62<br>100_±_0.00<br>82.96_±_1.79<br>81.10_±_1.73|_±_**0.00**<br>91.93_±_1.14<br>91.12_±_1.03<br>100_±_0.00<br>**92.51**_±_**0.55**<br>**91.80**_±_**0.62**<br>100_±_0.00<br>91.38_±_0.32<br>90.64_±_0.32|_±_**0.00**<br>4.28_±_0.34<br>2.43_±_0.21<br>100_±_0.00<br>**3.75**_±_**0.33**<br>**2.12**_±_**0.18**<br>100_±_0.00<br>3.87_±_0.19<br>2.19_±_0.11|
+
+
+From the results, we can see that applying shift data augmentation during training did not consistently improve performance, and in some cases, it led to a decrease. For instance, in the HR prediction task, training the low-pass filtering method with randomly shifted samples resulted in lower performance. We believe that random shifts may reduce the inter-class separation between samples, causing them to overlap in the feature space (Wang et al., 2022). As a result, even though the number of training samples increases with augmentation, this reduced separation can lead to a decline in model performance. 
+
+32 
+
+## D.5 PERFORMANCE IN DIFFERENT HYPERPARAMETERS 
+
+In this section, we vary the training batch size to evaluate the performance of the proposed method. Given that the guidance network includes an additional loss function to reduce angle variance within a batch, we examined its performance under different batch sizes. The results are presented in Tables 21, 22, and 23. 
+
+Table 21: Performance comparison of our method and other techniques with a different batch size for HR estimation 
+
+|Method|IEEE SPC22<br>S-Cons (%)_↑_<br>RMSE_↓_<br>MAE_↓_<br>_ρ_(%)_↑_|DaLiA<br>S-Cons (%)_↑_<br>RMSE_↓_<br>MAE_↓_<br>_ρ_(%)_↑_|
+|---|---|---|
+|Baseline<br>Aug.<br>LPF<br>APS|64.85_±_1.87<br>19.28_±_0.41<br>11.51_±_0.21<br>65.15_±_1.43<br>78.90_±_1.12<br>19.51_±_0.93<br>11.82_±_0.49<br>63.62_±_1.55<br>72.16_±_1.13<br>20.66_±_1.26<br>13.86_±_1.06<br>65.22_±_3.06<br>71.25_±_1.19<br>19.79_±_0.92<br>12.59_±_0.68<br>67.05_±_0.85|36.34_±_0.39<br>12.47_±_0.17<br>5.53_±_0.06<br>85.65_±_0.20<br>52.77_±_0.39<br>**12.36**_±_0.09<br>5.61_±_0.06<br>85.84_±_0.16<br>42.08_±_0.18<br>12.82_±_0.26<br>5.88_±_0.07<br>84.50_±_0.47<br>42.01_±_0.26<br>12.37_±_0.18<br>**5.50**_±_0.04<br>**85.75**_±_0.39|
+|Ours<br>Ours+LPF<br>Ours+APS|_±_**0.00**<br>**18.29**_±_**0.71**<br>**11.30**_±_**0.57**<br>**69.10**_±_**1.20**<br>100_±_0.00<br>20.49_±_0.77<br>14.18_±_0.42<br>67.28_±_3.20<br>100_±_0.00<br>20.03_±_0.95<br>13.23_±_0.69<br>66.40_±_4.03|_±_**0.00**<br>12.49_±_0.16<br>5.55_±_0.07<br>85.60_±_0.23<br>100_±_0.00<br>13.17_±_0.23<br>6.43_±_0.11<br>83.63_±_0.57<br>100_±_0.00<br>12.59_±_0.17<br>5.76_±_0.05<br>85.22_±_0.27|
+
+
+Table 22: Performance comparison of ours and other techniques with a different batch size in _ECG_ datasets for CVD classification 
+
+|Method|Chapman<br>S-Cons (%)_↑_<br>Acc_↑_<br>F1_↑_<br>AUC (%)_↑_|PhysioNet 2017<br>S-Cons (%)_↑_<br>Acc_↑_<br>F1_↑_<br>AUC_↑_|
+|---|---|---|
+|Baseline<br>Aug.<br>LPF|99.00_±_0.13<br>92.56_±_0.25<br>**91.58**_±_0.26<br>98.59_±_0.12<br>99.08_±_0.16<br>92.46_±_0.18<br>91.45_±_0.16<br>98.57_±_0.20<br>98.88_±_0.17<br>92.32_±_0.15<br>91.31_±_0.17<br>98.58_±_0.14|98.41_±_0.26<br>82.71_±_1.55<br>73.16_±_3.39<br>93.00_±_0.30<br>98.73_±_0.07<br>82.03_±_1.60<br>72.61_±_4.10<br>92.63_±_0.51<br>98.92_±_0.40<br>83.07_±_1.30<br>73.98_±_3.85<br>93.60_±_0.70|
+|Ours<br>Ours+LPF|_±_**0.00**<br>**92.58**_±_**0.26**<br>91.50_±_0.30<br>**98.59**_±_0.10<br>100_±_0.00<br>92.28_±_0.25<br>91.34_±_0.27<br>98.54_±_0.20|_±_**0.00**<br>**83.14**_±_0.82<br>**74.40**_±_2.28<br>**93.60**_±_0.20<br>100_±_0.00<br>83.01_±_1.01<br>72.94_±_2.74<br>93.05_±_0.50|
+
+
+Table 23: Performance comparison of our method and others with a different batch size in _IMU_ datasets for Activity and Step 
+
+|Method|UCIHAR<br>S-Cons (%) _↑_<br>Acc _↑_<br>F1 _↑_|HHAR<br>S-Cons (%) _↑_<br>Acc _↑_<br>F1 _↑_|Clemson<br>S-Cons (%) _↑_<br>MAPE _↓_<br>MAE _↓_|
+|---|---|---|---|
+|Baseline<br>Aug.<br>LPF<br>APS|95.13_±_1.21<br>89.89_±_1.76<br>89.37_±_1.82<br>96.55_±_0.80<br>91.46_±_1.10<br>90.69_±_1.58<br>96.88_±_0.76<br>92.13_±_0.56<br>92.23_±_0.76<br>97.12_±_0.75<br>92.43_±_1.40<br>92.07_±_1.21|98.25_±_0.14<br>**91.99**_±_0.86<br>**91.20**_±_0.91<br>98.13_±_0.27<br>91.70_±_1.55<br>90.94_±_1.61<br>98.14_±_0.09<br>90.29_±_0.86<br>89.45_±_0.94<br>98.30_±_0.24<br>91.83_±_1.35<br>91.01_±_1.47|43.61_±_1.53<br>4.27_±_0.26<br>2.41_±_0.14<br>63.74_±_4.83<br>**3.81**_±_0.21<br>**2.13**_±_0.11<br>52.60_±_3.71<br>4.24_±_0.24<br>2.38_±_0.15<br>42.16_±_0.98<br>5.00_±_0.03<br>2.84_±_0.02|
+|Ours<br>Ours+LPF<br>Ours+APS|_±_**0.00**<br>**92.78**_±_**0.51**<br>**92.94**_±_**0.33**<br>100_±_0.00<br>89.78_±_1.25<br>90.04_±_1.11<br>100_±_0.00<br>90.64_±_1.46<br>90.40_±_1.62|_±_**0.00**<br>91.77_±_0.56<br>91.10_±_0.60<br>100_±_0.00<br>91.40_±_1.20<br>90.60_±_1.32<br>100_±_0.00<br>91.19_±_0.60<br>90.36_±_0.55|_±_**0.00**<br>4.06_±_0.16<br>2.24_±_0.10<br>100_±_0.00<br>4.14_±_0.09<br>2.32_±_0.06<br>100_±_0.00<br>4.41_±_0.16<br>2.48_±_0.10|
+
+
+When we doubled the batch size during training, we observed a performance decrease in some datasets for our method, such as Clemson and DaLiA. We believe this could be due to the need to adjust the guidance network’s learning rate when changing the batch size. Additionally, since the introduced loss function aims to reduce overall angle variance for a batch of samples, larger batches may pose optimization challenges for the guidance network. It is important to note that despite performance decreases in some cases, our method consistently outperformed baseline models with the original batch size used in the main experiments. 
+
+33 
+
+## E IMPROVEMENTS IN PERFORMANCE ACROSS DIFFERENT NETWORKS 
+
+In this section, we conduct experiments to observe the performance of our proposed method when it is integrated into different network architectures. First, we employed the same 1D ResNet architecture for IMU related tasks as we used the fully convolutional network without residual connections in the main results because of better performance. Second, we applied a transformer with positional encoding, which is designed for time series tasks (Qian et al., 2022), to all tasks. Specifically, we used linear layers with a stack of four identical blocks. The linear layer converts the input data to embedding vectors of 128. Each block is made up of a multi-head self-attention layer and a fully connected feed-forward layer. We use residual connections around each layer. 
+
+We have not included blurring (LPF) and adaptive sampling in the transformer network analysis, as these methods are primarily tailored for convolutional architectures. Additionally, due to lack of convergence in the heart rate prediction task, we have omitted reporting results from the transformers. We reported the results in the tables below. 
+
+Table 24: Performance comparison of our method with others in _IMU_ with ResNet 
+
+|Method|UCIHAR<br>S-Cons (%) _↑_<br>Acc _↑_<br>F1 _↑_|HHAR<br>S-Cons (%) _↑_<br>Acc _↑_<br>F1 _↑_|Clemson<br>S-Cons (%) _↑_<br>MAPE _↓_<br>MAE _↓_|
+|---|---|---|---|
+|Baseline<br>Aug.<br>LPF<br>APS|97.40_±_0.86<br>85.02_±_3.92<br>83.35_±_3.90<br>98.40_±_0.37<br>86.66_±_1.26<br>85.12_±_1.53<br>97.91_±_0.60<br>84.03_±_2.67<br>82.49_±_2.93<br>98.02_±_0.46<br>81.98_±_3.36<br>79.23_±_4.20|99.29_±_0.02<br>91.78_±_1.07<br>91.70_±_1.08<br>99.31_±_0.04<br>92.82_±_0.35<br>**92.84**_±_0.35<br>93.01_±_1.92<br>91.33_±_1.43<br>91.38_±_1.40<br>93.01_±_1.92<br>92.13_±_0.22<br>92.14_±_0.22|84.80_±_4.15<br>6.83_±_1.60<br>3.97_±_0.96<br>95.88_±_1.10<br>6.62_±_1.10<br>3.83_±_0.66<br>94.59_±_0.71<br>4.46_±_0.04<br>2.50_±_0.26<br>93.01_±_1.92<br>6.61_±_1.44<br>3.84_±_0.84|
+|Ours<br>Ours+LPF<br>Ours+APS|_±_**0.00**<br>**87.12**_±_**2.21**<br>**85.21**_±_**3.10**<br>100_±_0.00<br>83.05_±_3.86<br>80.14_±_3.62<br>100_±_0.00<br>84.33_±_2.93<br>83.01_±_3.13|_±_**0.00**<br>91.90_±_0.10<br>92.02_±_0.07<br>100_±_0.00<br>**92.45**_±_**0.45**<br>92.50_±_0.44<br>100_±_0.00<br>92.25_±_0.17<br>92.30_±_0.16|_±_**0.00**<br>6.55_±_0.75<br>3.93_±_0.61<br>100_±_0.00<br>**4.45**_±_**0.22**<br>**2.45**_±_**0.13**<br>100_±_0.00<br>6.07_±_0.47<br>3.50_±_0.28|
+
+
+Table 25: Performance comparison of our method with others in _IMU_ with Transformer 
+
+|Method|UCIHAR<br>S-Cons (%) _↑_<br>Acc _↑_<br>F1 _↑_|HHAR<br>S-Cons (%) _↑_<br>Acc _↑_<br>F1 _↑_|Clemson<br>S-Cons (%) _↑_<br>MAPE _↓_<br>MAE _↓_|
+|---|---|---|---|
+|Baseline<br>Aug.<br>Ours|90.44_±_0.48<br>69.15_±_4.79<br>65.64_±_4.59<br>93.68_±_0.64<br>73.23_±_2.75<br>69.79_±_3.63<br>_±_**0.00**<br>**74.02**_±_**3.01**<br>**70.42**_±_**3.47**|96.98_±_0.20<br>91.10_±_1.83<br>91.04_±_1.92<br>98.35_±_0.06<br>89.21_±_0.07<br>89.16_±_0.11<br>_±_**0.00**<br>**91.55**_±_**1.20**<br>**91.19**_±_**1.19**|93.87_±_2.12<br>6.55_±_0.83<br>3.77_±_0.48<br>95.46_±_2.65<br>6.54_±_0.34<br>**3.76**_±_0.17<br>_±_**0.00**<br>**6.50**_±_**0.55**<br>3.77_±_0.31|
+
+
+Table 26: Performance comparison of ours and others in _ECG_ with Transformer 
+
+|Method|Chapman<br>S-Cons (%)_↑_<br>Acc_↑_<br>F1_↑_<br>AUC (%)_↑_|PhysioNet 2017<br>S-Cons (%)_↑_<br>Acc_↑_<br>F1_↑_<br>AUC_↑_|
+|---|---|---|
+|Baseline<br>Aug.<br>Ours|98.53_±_0.17<br>91.32_±_0.23<br>91.22_±_0.24<br>98.34_±_0.16<br>99.00_±_0.16<br>91.96_±_0.19<br>91.89_±_0.22<br>**98.45**_±_**0.18**<br>_±_**0.00**<br>**92.10**_±_**0.25**<br>**91.93**_±_**0.85**<br>98.40_±_0.15|98.37_±_0.15<br>83.22_±_0.72<br>73.50_±_1.99<br>93.21_±_0.30<br>98.96_±_0.17<br>82.28_±_1.18<br>72.32_±_2.20<br>93.20_±_0.42<br>_±_**0.00**<br>**83.35**_±_**0.65**<br>**74.12**_±_**1.80**<br>**93.28**_±_**0.31**|
+
+
+34 
+
+We also integrated our proposed transformation into some recent neural networks and investigated the performance. Mainly, we employed ModernTCN (donghao & wang xue, 2024) and T-WaveNet (LIU et al., 2022) architectures. When we implemented ModernTCN, we follow the original implementation from We set the patch size and stride to 5 and 2, respectively, while keeping the backbone and dropout rate the same as in the original implementation. The stem, downsampling, and FFN ratios were set to 1. 
+
+Table 27: Performance comparison of our method for HR estimation using ModernTCN 
+
+|Method|IEEE SPC22<br>S-Cons (%)_↑_<br>RMSE_↓_<br>MAE_↓_<br>_ρ_(%)_↑_|DaLiA<br>S-Cons (%)_↑_<br>RMSE_↓_<br>MAE_↓_<br>_ρ_(%)_↑_|
+|---|---|---|
+|Baseline<br>Aug.<br>Ours|38.62_±_0.23<br>34.67_±_0.45<br>29.26_±_0.41<br>3.45_±_0.54<br>50.15_±_0.07<br>34.36_±_2.14<br>28.29_±_3.04<br>01.95_±_2.23<br>_±_**0.00**<br>**33.45**_±_**1.07**<br>**29.33**_±_**1.09**<br>**08.96**_±_**3.73**|10.24_±_0.46<br>20.52_±_0.46<br>11.90_±_0.24<br>60.16_±_1.27<br>39.10_±_1.27<br>15.36_±_1.16<br>7.25_±_0.64<br>79.97_±_2.53<br>_±_**0.00**<br>**15.20**_±_**1.22**<br>**7.13**_±_**0.10**<br>**80.05**_±_**1.08**|
+
+
+Table 28: Performance comparison of our method for ECG datasets using ModernTCN 
+
+|Method|Chapman<br>S-Cons (%)_↑_<br>Acc_↑_<br>F1_↑_<br>AUC (%)_↑_|PhysioNet 2017<br>S-Cons (%)_↑_<br>Acc_↑_<br>F1_↑_<br>AUC_↑_|
+|---|---|---|
+|Baseline<br>Aug.<br>Ours|98.53_±_0.17<br>55.48_±_1.34<br>46.07_±_1.03<br>73.35_±_0.34<br>95.51_±_3.38<br>81.93_±_3.60<br>79.15_±_4.63<br>94.88_±_1.11<br>_±_**0.00**<br>**83.80**_±_**2.06**<br>**80.73**_±_**2.70**<br>**95.41**_±_**0.33**|87.77_±_1.20<br>51.84_±_4.80<br>22.41_±_2.30<br>60.34_±_1.64<br>98.96_±_0.17<br>60.13_±_2.57<br>28.86_±_5.23<br>70.57_±_6.10<br>_±_**0.00**<br>**60.58**_±_**1.50**<br>**30.73**_±_**1.08**<br>**72.58**_±_**3.76**|
+
+
+Table 29: Performance comparison of our method for IMU datasets using ModernTCN 
+
+|Method|UCIHAR<br>S-Cons (%)_↑_<br>Acc_↑_<br>F1_↑_|HHAR<br>S-Cons (%)_↑_<br>Acc_↑_<br>F1_↑_|Clemson<br>S-Cons (%)_↑_<br>MAPE_↓_<br>MAE_↓_|
+|---|---|---|---|
+|Baseline<br>Aug.<br>Ours|95.89_±_2.10<br>86.68_±_1.53<br>85.45_±_2.35<br>96.55_±_0.80<br>85.42_±_4.50<br>83.69_±_6.74<br>_±_**0.00**<br>**88.73**_±_**1.47**<br>**87.19**_±_**1.94**|97.23_±_0.18<br>92.21_±_0.76<br>92.09_±_1.10<br>98.38_±_0.28<br>91.97_±_0.44<br>91.31_±_0.49<br>_±_**0.00**<br>**94.12**_±_**0.87**<br>**93.43**_±_**1.10**|73.96_±_2.18<br>4.03_±_0.11<br>2.32_±_0.09<br>61.01_±_4.88<br>4.08_±_0.14<br>2.29_±_0.07<br>_±_**0.00**<br>**3.88**_±_**0.26**<br>**2.15**_±_**0.16**|
+
+
+Table 30: Performance comparison of our method using ModernTCN for sleep stage classification 
+
+|Method|Sleep-EDF<br>S-Cons_↑_<br>Acc_↑_<br>F1_↑_<br>W-F1_↑_<br>_κ ↑_|
+|---|---|
+|Baseline<br>Aug.<br>Ours|71.84_±_1.78<br>69.50_±_1.81<br>62.84_±_1.39<br>71.21_±_1.66<br>60.39_±_2.20<br>95.47_±_5.75<br>72.96_±_4.72<br>64.50_±_4.14<br>73.61_±_5.12<br>64.90_±_6.13<br>_±_**0.00**<br>**73.36**_±_**3.10**<br>**65.37**_±_**2.88**<br>**74.10**_±_**1.97**<br>**65.42**_±_**3.51**|
+
+
+From these results, we can see that ModernTCN architecture performs relatively poor compared to 1D ResNet architecture in most tasks. However, for the IMU related tasks, ModernTCN outperforms other architectures. Similarly, when we integrate our method into the ModernTCN, the performance increases by 5–10% while decreasing the variation between runs. 
+
+35 
+
+We also performed experiments with T-WaveNet, a tree-structured wavelet deep neural network. The model decomposes input signals into multiple subbands and builds a tree structure with datadriven wavelet transforms the bases of which are learned using invertible neural networks. We use the original implementation from https://openreview.net/forum?id=U4uFaLyg7PV. Following the original implementation, the wavelet functions are learned together with the neural network instead of using stationary wavelet transforms like Haar. 
+
+Table 31: Performance comparison of our method for HR estimation using T-WaveNet 
+
+|Method|IEEE SPC22<br>S-Cons (%)_↑_<br>RMSE_↓_<br>MAE_↓_<br>_ρ_(%)_↑_|DaLiA<br>S-Cons (%)_↑_<br>RMSE_↓_<br>MAE_↓_<br>_ρ_(%)_↑_|
+|---|---|---|
+|Baseline<br>Aug.<br>Ours|49.73_±_1.61<br>21.78_±_1.87<br>15.77_±_1.59<br>60.30_±_4.16<br>71.11_±_1.24<br>19.29_±_2.31<br>12.16_±_1.51<br>66.50_±_6.30<br>_±_**0.00**<br>**19.03**_±_**2.41**<br>**12.10**_±_**2.10**<br>**67.76**_±_**6.55**|39.69_±_0.17<br>13.38_±_0.19<br>6.15_±_0.08<br>83.10_±_0.47<br>53.95_±_0.28<br>12.82_±_0.30<br>5.89_±_0.11<br>83.63_±_0.76<br>_±_**0.00**<br>**12.65**_±_**0.25**<br>**5.59**_±_0.10<br>**84.05**_±_**0.57**|
+
+
+Table 32: Performance comparison of our method for ECG datasets using T-WaveNet 
+
+|Method|Chapman<br>S-Cons (%)_↑_<br>Acc_↑_<br>F1_↑_<br>AUC (%)_↑_|PhysioNet 2017<br>S-Cons (%)_↑_<br>Acc_↑_<br>F1_↑_<br>AUC_↑_|
+|---|---|---|
+|Baseline<br>Aug.<br>Ours|97.23_±_0.19<br>93.17_±_0.80<br>92.40_±_0.78<br>98.87_±_0.18<br>98.19_±_0.68<br>**93.63**_±_**0.36**<br>92.89_±_0.32<br>98.96_±_0.10<br>_±_**0.00**<br>93.45_±_0.40<br>**92.92**_±_**0.50**<br>**99.00**_±_**0.15**|94.72_±_1.91<br>78.94_±_1.60<br>71.43_±_2.24<br>92.44_±_1.03<br>95.43_±_0.89<br>79.77_±_0.99<br>70.72_±_1.42<br>92.33_±_0.63<br>_±_**0.00**<br>**79.89**_±_**1.10**<br>**71.61**_±_**2.10**<br>**92.50**_±_**0.89**|
+
+
+Table 33: Performance comparison of our method for IMU datasets using T-WaveNet 
+
+|Method|UCIHAR<br>S-Cons (%) _↑_<br>Acc _↑_<br>F1 _↑_|HHAR<br>S-Cons (%) _↑_<br>Acc _↑_<br>F1 _↑_|Clemson<br>S-Cons (%) _↑_<br>MAPE _↓_<br>MAE _↓_|
+|---|---|---|---|
+|Baseline<br>Aug.<br>Ours|97.63_±_1.45<br>72.77_±_2.36<br>70.48_±_4.16<br>98.30_±_2.43<br>72.82_±_3.34<br>68.78_±_3.53<br>_±_**0.00**<br>**74.04**_±_**2.10**<br>**71.04**_±_**3.25**|98.37_±_0.96<br>92.37_±_0.89<br>91.53_±_1.03<br>98.68_±_0.65<br>92.88_±_1.15<br>**92.05**_±_**1.28**<br>_±_**0.00**<br>**92.95**_±_**1.14**<br>91.60_±_0.93|89.50_±_0.50<br>6.69_±_0.54<br>3.90_±_0.31<br>89.29_±_0.72<br>6.62_±_0.59<br>3.83_±_0.31<br>_±_**0.00**<br>**6.03**_±_**0.50**<br>**3.54**_±_**0.35**|
+
+
+Table 34: Performance comparison of our method using T-WaveNet for sleep stage classification 
+
+|Method|Sleep-EDF<br>S-Cons_↑_<br>Acc_↑_<br>F1_↑_<br>W-F1_↑_<br>_κ ↑_|
+|---|---|
+|Baseline<br>Aug.<br>Ours|71.84_±_1.78<br>69.50_±_1.81<br>62.84_±_1.39<br>71.21_±_1.66<br>60.39_±_2.20<br>95.47_±_5.75<br>72.96_±_4.72<br>64.10_±_1.23<br>73.61_±_5.12<br>64.90_±_6.13<br>_±_**0.00**<br>**73.36**_±_**5.10**<br>**65.90**_±_**1.07**<br>**74.10**_±_**3.97**<br>**65.42**_±_**3.51**|
+
+
+As shown in tables, the proposed transformation also increases the performance of the different neural networks. One important result from the comparison of these tables is that there is a correlation between the model’s ability to remain invariant to shifts and its performance, up to a certain threshold where the model performs adequately. However, beyond that point, as the model’s performance declines, the consistency in shift increases, resulting in the model consistently outputting the wrong class. For instance, in the case of step counting, the transformer architecture performs quite worse and fails to distinguish between samples. As a result, the consistency of the transformer is higher compared to ResNet and fully convolutional networks while the performance is lower. We believe that investigating the invariance of different neural architectures alongside their performance on time series tasks can shed light on model networks and the fundamental reasons behind abrupt output changes with small changes in the input signal, i.e., _≈_ 10–15 ms shift. 
+
+36 
+
+## F VISUAL EXAMPLES FOR THE GUIDANCE NETWORK 
+
+In this section, we provide some visual examples to show how the proposed transformation function works. First, we show the t-SNE (van der Maaten & Hinton, 2008) representations of the embeddings obtained from a trained model with and without applying our transformation in Figure 4. 
+
+**==> picture [396 x 105] intentionally omitted <==**
+
+**----- Start of picture text -----**<br>
+(a) (b) Baseline model (c) Embeddings with our transformation<br>10³ W/o transformation<br>With transformation<br>10²<br>10¹<br>1 0 0.1 0.2 0.3 0.4 0.5 Different samples from healthy rhythm Shifted variants of a single sample<br>Distances<br>Count<br>**----- End of picture text -----**<br>
+
+
+Figure 4: **(a)** Comparison of pairwise Euclidian distances of randomly shifted embeddings with and without applying our method. **(b)** t-SNE visualizations of embeddings without our method show some shifted samples clustering with opposite class embeddings. **(c)** With our transformation, all shifted variants of the same signal cluster correctly within their true class label. 
+
+For visualization, we selected 50 different ECG (healthy) signals from the test set. We then took a single arrhythmia ECG sample from the test set, applied 49 shifts to it (50 samples with the original), and created variants shown in blue. Finally, we compared the embeddings with and without applying our proposed transformation function. As seen in Figure 4, applying our transformation function maps the shifted samples to a single point in the embedding space, with the maximum Euclidean distance between embeddings being close to 10 _[−]_[6] . 
+
+Second, we conducted a simple experiment to investigate how the guidance network works with the proposed transformation. Specifically, we created a two-label classification task where the model classifies sinusoids by frequency. The dataset includes two waveforms: _x_ 1( _t_ ) = cos ( _ω_ 1 _t_ + _ϕ_ 1) + cos ( _ω_ 2 _t_ + _ϕ_ 2) and _x_ 2( _t_ ) = cos ( _ω_ 1 _t_ + _ϕ_ 1) + cos ( _ω_ 3 _t_ + _ϕ_ 3), with the model identifying whether the input contains frequency _ω_ 2 or _ω_ 3. Frequencies were set at 5, 24, and 25 Hz for _ω_ 1, _ω_ 2, and _ω_ 3, respectively, with _ω_ 1 included in both waveforms to increase task difficulty. We set the sampling rate of the signals to 300 Hz. 
+
+**==> picture [395 x 186] intentionally omitted <==**
+
+**----- Start of picture text -----**<br>
+(a)<br>(b)<br>Amplitude Amplitude<br>2 2<br>0 0<br>-2 -2<br>Time (s) 1 Time (s) 1<br>(c)<br>(d)<br>Amplitude Amplitude<br>2 2<br>0 0<br>-2 -2<br>Time (s) 1 Time (s) 1<br>**----- End of picture text -----**<br>
+
+
+Figure 5: Input waveforms to the classifier in the third epoch **(a)** without applying our transformation function. **(b)** with our guidance network ( _fθG_ ). Another experiment with a different seed. Input waveforms **(c)** without applying our transformation function. **(d)** with our guidance network ( _fθG_ ). 
+
+37 
+
+To add diversity, we randomly shifted _x_ 1( _t_ ) and _x_ 2( _t_ ) by angles sampled from [0 _, π_ ) and added Gaussian noise ( _ϵ_ ) with variance of 0.1. We used the FCN similar to that specified in Appendix C.4 as the architecture. This experimental setup is inspired by similar experiments exploring neural network behaviors (Rahaman et al., 2019). 
+
+Figure 5 illustrates an interesting result: after a few weight updates, the guidance network assigns angles _ϕ_ that maximize the Euclidean distance between inter-class samples. For instance, before applying the guidance network, the distance between a pair of samples is 9 _._ 12 (Figure 5 **(a)** ). After applying the guidance network, this distance increases by four to 43 _._ 6 (Figure 5 **(b)** ). Interestingly, running the same experiment with a different seed (i.e., a new random initialization of the guidance network) shows that the assigned angles differ, but the Euclidean distances between the samples remain almost unchanged, shifting only slightly from 43 _._ 6 to 42 _._ 8 (See Figure 5 **(d)** ). 
+
+This experiment can also explain the occasional performance increase when the angle variance increases with a loss term as there is no single solution for minimizing the distance, but there can be infinitely many depending on the frequency distribution of the dataset and classes. 
+
+**==> picture [394 x 104] intentionally omitted <==**
+
+**----- Start of picture text -----**<br>
+(a) (b)<br>Distance distribution<br>-0.70 -0.70 0.12 Seed 1<br>0.10 Seed 2<br>-0.80 -0.80 0.08 Seed 3<br>0.06 W/o<br>0.04<br>-0.90 -0.90<br>0.02<br>0<br>-1 -1 0 5 10 15 20 25 30<br>-0.90 -0.80 -1 -0.90 -0.80 -0.70 Euclidian Distance<br>Seed 1 Seed 2<br>Seed 2 Seed 3 Density<br>**----- End of picture text -----**<br>
+
+
+Figure 6: **(a)** Angle assignments across different seeds. **(b)** Euclidean distances between intra-class samples, compared with and without the proposed transformation (W/o _T_ ( **x** _, ϕ_ )). The results show that the Euclidean distances are highly consistent across different seeds, with the curves nearly overlapping. Additionally, when the transformation is not applied, the distances between intra-class samples are noticeably higher. 
+
+We conducted an additional experiment to analyze the angle assignments across runs using the IEEE SPC22 dataset. The experiment was performed with three random seeds, and the results are presented in Figure 6. In Figure 6 **(a)** , we reported the assigned angles in cos ( _ϕ_ ) as the angle _−π_ and _π_ are the same due to the circular property of the angles. While the assigned angles vary slightly between runs, the Euclidean distances between samples consistently converge to similar values. Specifically, the intra-class samples are closer in the transformed space compared to the case when the proposed transformation is not applied. 
+
+38 
+
+## G EXPANDED REVIEW OF RELATED WORK 
+
+**Transformation** Applying phase shifts to time series is commonly used in signal processing (Haykin & Veen, 2002; Oppenheim et al., 1996). Recently, shifting phase values of harmonics have also been applied in the machine learning community for data augmentation of time series (Demirel & Holz, 2023; Qian et al., 2022). However, our proposed transformation differs from these in two key aspects. First, our work is the first to represent every point in the shift space uniquely with the phase angle of a harmonic whose period is equal to or longer than the length of the sample, i.e., T0 _≤ t_ . This observation enables us to design a bijective transformation that ensures shift invariance. Additionally, we integrated this observation into deep learning frameworks using a novel loss function, demonstrating that our proposed method enhances model performance while ensuring shift invariance. 
+
+Second, we apply linear phase shifts to keep waveform features intact. Since if an input signal is subjected to a phase shift that is a nonlinear function of _ω_ similar to Qian et al. (2022); Demirel & Holz (2023), then the complex exponential components of the input at different frequencies will be shifted in a manner that results in a change in their relative phases. Superimposing these exponentials can result in a signal that significantly differs from the input if special precautions are not taken. Thus, this alteration in the waveform (Oppenheim et al., 1996) can potentially affect downstream labels or generate unrealistic signals. 
+
+However, our transformation applies the tailored shift linearly to all harmonics while keeping the information content unchanged (Mallat, 2012) as the transformation operates as a group action. 
+
+**Shift-invariant Kernels** Learning shift invariant representations from data has a long history in machine learning (Grosse et al., 2007; Rahimi & Recht, 2007). The initial effort focused on designing shift-invariant kernels for feature extraction (Rahimi & Recht, 2007), which were applied to support vector machines. A different approach introduced shift-invariant sparse coding technique, which reconstructs an input using all basis functions across all possible shifts (Grosse et al., 2007). However, the classification performance of these techniques were significantly outperformed by the modern networks. Thus, recent approaches have focused on integrating shift-invariant kernels into modern convolutional neural networks in a stacked manner while using Gaussian low-pass filters to prevent aliasing (Mairal et al., 2014). 
+
+However, applying low-pass filters to prevent anti-aliasing completely is not possible (Oppenheim et al., 1996). Thus, high-frequency components will always (partially) alias. This is more problematic for time series as the interaction of high and low frequencies are more common (Demirel & Holz, 2023; Canolty & Knight, 2010). Therefore, applying a low-pass filter can reduce the performance of neural networks in certain time series tasks, as shown by our experiments. The filtering may inadvertently attenuate important high-frequency components, which are essential for distinguishing patterns, leading to suboptimal model outcomes. 
+
+**Learning based Transformations** Methods to standardize inputs have been around for a long time (Yüceer & Oflazer, 1993). An important recent work along this direction is the Spatial Transformer Network (STN) being introduced to learn transformation functions for invariant image classification (Jaderberg et al., 2015). Similarly, Temporal Transformer Networks (TTN), an adaptation of STNs for time series applications, were introduced to predict the parameter of warp functions and align time series (Lohit et al., 2019; Shapira Weber & Freifeld, 2023). Recent studies have utilized canonical equivarant networks to obtain mapping points for inputs (Kaba et al., 2023). However, these methods face significant limitations as the operation order increases. Specifically, higher-order transformations in group equivarant networks require additional filter copies in the lifting layer and an increased number of parameters in the subsequent group convolution layers. While this can improve performance, it comes at the cost of significantly higher computational and model complexity. Furthermore, prior works restrict mappings to a finite number of group elements defined by the canonicalization network. In contrast, our proposed transformation eliminates this limitation entirely, enabling each sample to map to any point in the input space—infinitely many—without relying on a neural network. This is achieved by uniquely representing each point in the shift space using a specific harmonic. 
+
+39 
+
+## H DISCUSSION, LIMITATIONS AND FUTURE WORK 
+
+In this work, we propose a new diffeomorphism to achieve shift invariant deep learning models for time series in real-world tasks. While existing techniques show promise for images, they fall short in time series, where the interaction of low and high frequencies are an important part of the data generation. The proposed transformation offers a novel solution, ensuring that samples will map the same point in the high dimensional data manifold despite a random shift. Theoretical and empirical analysis demonstrates its effectiveness across several time series tasks, enhancing model robustness while improving the performance. 
+
+While our approach consistently improves the performance of deep learning models for time series data, it is worth noting the potential areas for future investigation and improvement. First, we conducted our experiments on health-related time series tasks from humans since the robustness of models is crucial in those domains. Therefore, extending the proposed transformation to images for shift or rotation invariancy presents an intriguing direction for future investigations. Thus, we believe that future research could benefit on adapting our approach to diverse domains, including images, to explore shift or rotation invariance further. Second, our approach requires samples to be expanded into the sum of periodic sinusoidals with Fourier expansion followed by using the phase angle of the one whose period equals or exceeds the length of the signal. Input samples should be decomposed the sinusoidals while considering this requirement. Therefore, we believe future work can benefit by detecting the phase of a specific sinusoidal which satisfies the condition and apply a linear phase all-pass filter without performing the operation in the frequency domain. Lastly, we observed notable performance improvements from the additional guidance network when it is used with the proposed diffeomorphism while applying a proper loss function. Thus, we believe that further performance improvements can be achieved through a refined design incorporating alternative inputs. 
+
+40

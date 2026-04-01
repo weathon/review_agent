@@ -1,0 +1,758 @@
+## - DECOUPLED GRAPH ENERGY BASED MODEL FOR - - NODE OUT OF-DISTRIBUTION DETECTION ON HET EROPHILIC GRAPHS 
+
+**Yuhan Chen**[1] _[∗]_ **& Yihong Luo**[2] **,** _[∗]_ **Yifan Song**[3] **, Pengwen Dai**[4] **, Jing Tang**[3] _[,]_[2] _[†]_ **, Xiaochun Cao**[4] _[†]_ 1 The School of Computer Science and Engineering, Sun Yat-sen University 
+
+2 The Hong Kong University of Science and Technology 
+
+3 The Hong Kong University of Science and Technology (Guangzhou) 
+
+4 The School of Cyber Science and Technology, Shenzhen Campus of Sun Yat-sen University 
+
+## ABSTRACT 
+
+Despite extensive research efforts focused on Out-of-Distribution (OOD) detection on images, OOD detection on nodes in graph learning remains underexplored. The dependence among graph nodes hinders the trivial adaptation of existing approaches on images that assume inputs to be i.i.d. sampled, since many unique features and challenges specific to graphs are not considered, such as the heterophily issue. Recently, GNNSafe, which considers node dependence, adapted energy-based detection to the graph domain with state-of-the-art performance, however, it has two serious issues: 1) it derives node energy from classification logits without specifically tailored training for modeling data distribution, making it less effective at recognizing OOD data; 2) it highly relies on energy propagation, which is based on homophily assumption and will cause significant performance degradation on heterophilic graphs, where the node tends to have dissimilar distribution with its neighbors. To address the above issues, we suggest training Energy-based Models (EBMs) by Maximum Likelihood Estimation (MLE) to enhance data distribution modeling and removing energy propagation to overcome the heterophily issues. However, training EBMs via MLE requires performing Markov Chain Monte Carlo (MCMC) sampling on both node feature and node neighbors, which is challenging due to the node interdependence and discrete graph topology. To tackle the sampling challenge, we introduce Decoupled Graph Energy-based Model (DeGEM), which decomposes the learning process into two parts—a graph encoder that leverages topology information for node representations and an energy head that operates in latent space. Additionally, we propose a Multi-Hop Graph encoder (MH) and Energy Readout (ERo) to enhance node representation learning, Conditional Energy (CE) for improved EBM training, and Recurrent Update for the graph encoder and energy head to promote each other. This approach avoids sampling adjacency matrices and removes the need for energy propagation to extract graph topology information. Extensive experiments validate that DeGEM, without OOD exposure during training, surpasses previous state-of-the-art methods, achieving an average AUROC improvement of 6.71% on _homophilic_ graphs and 20.29% on _heterophilic_ graphs, and even outperform methods trained with OOD exposure. Our code is available at: https://github.com/draym28/DeGEM. 
+
+## 1 INTRODUCTION 
+
+Detecting Out-of-Distribution (OOD) data is crucial for enhancing AI models’ robustness, reliability, and safety in real-world scenarios, where input data may deviate from the training data distribution. Many works (Hendrycks & Gimpel, 2016; Liang et al., 2018; Lee et al., 2018; Hendrycks et al., 2018; Liu et al., 2020) have been proposed for OOD detection tasks on i.i.d. data, e.g., images. Such an 
+
+> _∗_ Co-First Authors: Yuhan Chen (draym@qq.com) and Yihong Luo (yluocg@connect.ust.hk). 
+
+> _†_ Corresponding Authors: Jing Tang (jingtang@ust.hk) and Xiaochun Cao (caoxiaochun@mail.sysu.edu.cn). 
+
+1 
+
+urgent need also exists in the domains that apply graph-format data, such as medical-diagnosis (Kukar, 2003) and autonomous driving (Dai & Van Gool, 2018). However, there has been a notable lack of work focusing on graph OOD node detection, i.e., detecting OOD nodes on which the model is expected to have low confidence (Amodei et al., 2016; Liang et al., 2018). Due to the interdependence among graph nodes, it is hard to apply the methods designed for i.i.d. inputs directly. 
+
+Recently, GNNSafe (Wu et al., 2023a) adapted energy-based OOD detection for graph data mainly by using GNNs as the ©© ~HomophilicHeterophilicGraphsGraphs Twitch backbone, and output energy for nodes as confidence, achiev———— Non-GraphGraph SOTASOTA mazon ing current state-of-the-art performance. However, it is trained — Ours by classification loss and constructs node energy by classificaArxi tion logits without specifically designed training for modeling data distribution, limiting the performance of identifying OOD ‘ora nodes.GNNSafe,Moreover,heavilythe energy propagation technique,relies on the homophily assumption,used ini.e., Chai neighbors often belong to the same class. This will lead to ornell a significant performance degradation on heterophilic graphs, Actor where neighbors do not share a similar distribution. To mitigate Figure 1: AUROC across graphs. these issues, we suggest training Energy-based Models (EBMs) to detect OOD instances via Maximum Likelihood Estimation (MLE) to obtain better energy, and removing energy propagation to address the heterophily issue. However, training EBMs via MLE requires performing Markov Chain Monte Carlo (MCMC) sampling in training, which is notorious for graphs due to the complexity of graph topology. 
+
+In this paper, our proposed **De** coupled **G** raph **E** nergy-based **M** odel (DeGEM) alleviates both the heterophily issue and sampling challenges of learning EBMs for large graphs. The _key insight_ in our work is: GNNs can extract the topology information, forming latent space without interdependence. Hence, we can conduct MCMC sampling on latent space to train the energy head. This approach is computationally efficient, as it avoids sampling the adjacency matrix, and eliminates the need for energy propagation techniques, which could degrade performance on heterophilic graphs. Specifically, DeGEM decomposes the EBM into two components: graph encoder and energy head. First, the graph encoder is trained by the Graph Contrastive Learning (GCL) algorithm and classification loss for obtaining informative node representations, then the energy head, trained over latent space by MLE, outputs the energy scores of nodes, which are used as nodes’ OOD scores. By doing so, DeGEM transposes operations inherently dependent on the graph structure into the latent representation domain, thereby decoupling subsequent steps from the graph structure’s dependency. The benefits are twofold: 1) MCMC sampling can be efficiently conducted on low-dimensional latent space to sample node representations only, dramatically decreasing the computation cost; 2) the Energy head does not require a propagation operation to further extract topology information, avoiding performance degradation on heterophilic graphs. 
+
+Moreover, to better unleash the effectiveness of DeGEM in node OOD detection, we propose several principled training designs: a Multi-Hop Graph encoder (MH) and Energy Readout (ERo) to enhance node representation learning, Conditional Energy (CE) to improve EBM training, and Recurrent Update to effectively update the CE and ERo jointly, enabling the graph encoder and energy head promote each other. Furthermore, we found that existing node OOD detection methods are evaluated only on homophilic graphs, with heterophilic graphs being overlooked. We therefore conduct a comprehensive evaluation of existing methods across homophilic and heterophilic graphs. The results show that existing graph-based methods deliver even worse performance on heterophilic graphs, compared to those graph-agnostic node OOD detection methods (Fig. 1). Thanks to the powerful constructed DeGEM, our method can achieve state-of-the-art performance on OOD detection across both homophilic and heterophilic graphs without OOD exposure. 
+
+Our key contributions can be summarized as follows: 
+
+- Our proposed DeGEM decomposes EBM into two components, a graph encoder for extracting topology information and an energy head for estimating density, which avoids the notorious challenges of sampling the adjacency matrix when training via MLE and prevents serious performance degradation on heterophilic graphs. 
+
+- We are the first to evaluate node OOD detection performance on both homophilic and heterophilic graphs and provide a comprehensive assessment of existing graph-based methods. 
+
+2 
+
+**==> picture [390 x 152] intentionally omitted <==**
+
+**----- Start of picture text -----**<br>
+Augmented Node  Graph Contrastive<br>Representations Learning MCMC  Energy  C<br>Augmented Graph 𝒙𝒙𝒙 Sampling 𝒙 Function<br>Sampled Node<br>Graph  Energy  Contrastive  Original Graph Sampled Nodes Energies<br>Encoder Readout Loss<br>Original Node  Readout Traditional MCMC sampling on graphs: Difficult<br>Original Graph Representations A<br>Condition Classification Loss 𝒙𝒙𝒙 EncoderGraph  SamplingMCMC  FunctionEnergy<br>B<br>Original Node  ae Sampled Node<br>Representations sg Original Node Energies Original Graph RepresentationsOriginal Node  RepresentationsSampled Node  Energies<br>Sampled Node  Energy  EBM<br>Representations MCMC  Head Loss Our proposed MCMC sampling on graphs: Easy!<br>Sampling<br>EBM Training sg Sampled Node Energies - sg Stop-gradient Recurrent Update<br>**----- End of picture text -----**<br>
+
+
+Figure 2: **A** & **B** The detailed graph contrastive learning and EBM training process. The readout of original node representations in **A** participates in the Conditional Energy (CE) in **B** , and the original node energies in **B** are delivered to **A** for Energy Readout (ERo). We propose a Recurrent Update mechanism to jointly train the CE and ERo effectively. **C** The comparison between traditional MCMC sampling and our proposed MCMC sampling. 
+
+- We conduct extensive experiments to demonstrate the superiority of DeGEM. The results show that DeGEM, trained without OOD exposure, outperforms state-of-the-art methods—whether trained with or without OOD exposure—on both homophilic and heterophilic graphs. 
+
+## 2 PRELIMINARY 
+
+**Notations.** We denote an undirected graph without self-loops as _G_ = _{_ **X** _,_ **A** _}_ , where **X** = _{_ _**x** i}[N] i_ =1 _[∈]_ R _[N][×][d]_[0] is the initial node feature matrix, _d_ 0 is the feature dimension, and **A** _∈_ R _[N][×][N]_ is the adjacency matrix. _N_ ( _**x** i_ ) is the feature set of neighbors of node _**x** i_ . **D** is a diagonal matrix standing for the _N_ degree matrix such that **D** _ii_ = py _j_ =1 **[A]** _[ij]_[.] **[H]**[(] _[ℓ]_[)][=] _[ {]_ _**[h]**_[(] _i[ℓ]_[)] _[}] i[N]_ =1 _[∈]_[R] _[N][×][d]_[ is the representation matrix] in the _ℓ_ -th layer, where _d_ is the hidden dimension. We use **Y** = _{_ _**y** i}[N] i_ =1 _[∈]_[R] _[N][×][C]_[to denote the] ground-truth node label matrix, where _C_ is the number of classes and _**y** i_ is a one-hot vector. 
+
+**Graph Out-of-Distribution Node Detection.** OOD detection refers to identifying data samples that do not conform to the distribution of the training data, while keeping the classification capability of in-distribution (ID) data. Formally, an OOD detection score function _S_ ( _·, ·_ ) should be defined to map the node and its neighbors to a scalar score, such that _S_ ( _**x** , N_ ( _**x**_ )) yields a higher value for OOD nodes than for ID nodes. It can be seen that in the context of graph data, OOD detection becomes challenging due to the complex interplay between node features and graph topology. The OOD score for each node depends on itself and also the relational context provided by other nodes within the graph, which is distinct from OOD detection in the vision domain. 
+
+**Heterophily Issue.** Most traditional GNNs are designed based on the homophily assumption (Kipf & Welling, 2016; Velickovic et al., 2018), where linked nodes tend to be similar. However, heterophilic graphs—where linked nodes often belong to different categories—are prevalent in real-world applications, on which the traditional GCNs perform poorly (Pei et al., 2020). While extensive works have been proposed to address the heterophily issue (Abu-El-Haija et al., 2019; Bo et al., 2021; Zhu et al., 2020a; Chien et al., 2021; Li et al., 2022a; Chen et al., 2023; Luo et al., 2024a) in node classification tasks, it has not received sufficient attention in the context of node OOD detection, resulting in performance degradation when applying models designed for node OOD detection to heterophily graphs. 
+
+**Energy-based Model.** A deep EBM models (Du & Mordatch, 2019) the data distribution _pd_ ( _**x**_ ) using Boltzmann distribution _p_ _**θ**_ ( _**x**_ ) =[ex][p][(] _[−] Z[E]_ _**θ[θ]**_[(] _**[x]**_[))] with the energy function _E_ _**θ**_ ( _**x**_ ), where _Z_ _**θ**_ is the corresponding normalizing constant. EBM is trained by minimizing the negative log-likelihood (NLL) _L_ _**θ**_ of _p_ _**θ**_ ( _**x**_ ), such that _L_ _**θ**_ = _−_ E _**x** ∼pd_ ( _**x**_ ) log _p_ _**θ**_ ( _**x**_ ) . The EBM loss can be reformulated as follows: [ | 
+
+3 
+
+**==> picture [398 x 73] intentionally omitted <==**
+
+where _**x**_ ˜[(0)] is given initial samples, _λ_ is the step size, and _**ϵ**_[(] _[k]_[)] _∼N_ (0 _, σ_[2] ) with a given noise _σ_[2] . More details of derivation can be found in the Appendix D. 
+
+## 3 METHODOLOGY 
+
+## 3.1 REVISITING GRAPH EBM FOR OOD DETECTION 
+
+Different from image data, the graph data is neither continuous nor i.i.d. The inherent challenge is how to define and train an EBM over ( _**x** , N_ ( _**x**_ )). Since _N_ ( _**x**_ ) is discrete, potentially huge, and includes arbitrary neighbor nodes, it is hard to sample _N_ ( _**x**_ ) by MCMC for training EBM. 
+
+To avoid such challenge, GNNSafe (Wu et al., 2023b) proposes to train the EBMs by maximizing the conditional likelihood log _p_ _**θ**_ ( _y|_ _**x**_ ) = _y_ ex _[′]_[exp(] p( _−E[−]_ _**θ**[E]_ ( _**[θ] x**_[(] _,y_ _**[x]**_ )) _[,y][′]_[))][via][node][classification,][where] _E_ _**θ**_ ( _**x** , y_ ) = _−f_ _**θ**_ ( _**x** , N_ ( _**x**_ ))[ _y_ ] and _f_ _**θ**_ ( _·, ·_ ) is a classifier. Finally, the energy score of each node can be regarded as OOD score, i.e., _S_ ( _**x** , N_ ( _**x**_ )) = _E_ _**θ**_ ( _**x**_ ) = _−_ log ~~i~~ _y_[exp(] _[−][E]_ _**[θ]**_[(] _**[x]**[, y]_[))][.] The EBMs trained in this way exhibit limitations in terms of capability and a heavy reliance on sufficient labeled data. In particular, it has not been trained for modeling the marginal data distribution, resulting in an inferior ability to capture the data distribution. For Figure 3: Visualization cominstance, it may falter even when tasked with handling a simple 2D parison on 2D data. 
+
+The EBMs trained in this way exhibit limitations in terms of capability and a heavy reliance on sufficient labeled data. In particular, it has not been trained for modeling the marginal data distribution, resulting in an inferior ability to capture the data distribution. For Figure 3: Visualization cominstance, it may falter even when tasked with handling a simple 2D parison on 2D data. dataset, i.e., 8 Gaussians (Fig. 3). This indicates that the energy constructed by the classification logits does not effectively capture the underlying data distribution. Consequently, such methods intuitively face challenges in addressing OOD detection for graph data, particularly when labeled data are scarce. 
+
+## 3.2 OVERVIEW OF OUR METHOD: DEGEM 
+
+The framework of our proposed method is shown in Fig. 2. DeGEM first utilizes a graph enˇ ´ coder trained by GCL algorithm (Velickovic et al., 2018) to extract node representations _**h**_ = _g_ _**α**_ ( _**x** , N_ ( _**x**_ )) _∈_ R _[d]_ . In this way, the topology information of the original graph is well-encoded into _**h**_ , such that the follow-up steps can be free from **A** . Next, a _K_ -step MCMC sampling is applied over the low-dimensional latent space _**h**_[˜] _∼ q_ _**ω**_ ( _**h**_[˜] ) to learn an energy function _f_ _**ω**_ , which is defined as an MLP. Please see Appendix E.1 for detailed training algorithm. 
+
+## 3.3 OUR DESIGN 
+
+The powerful capability of EBM comes from its minimal restrictions on modeling, but at the same time, this is also a double-edged sword that leads to difficult learning. To address the difficulty of defining EBMs on graphs, we propose to restrict EBM modeling formulation to some extent. Specifically, we suggest decomposing EBM into two parts: the first part focuses on extracting graph structural information, and the second part is dedicated to learning the energy. 
+
+For node _**x**_ and its neighbor _N_ ( _**x**_ ), we can define the EBM as _E_ _**θ**_ ( _**x**_ ) = _f_ _**ω** ◦ g_ _**α**_ ( _**x** , N_ ( _**x**_ )), where _g_ _**α**_ ( _**x** , N_ ( _**x**_ )) = _**h** ∈_ R _[d]_ is a graph encoder that focuses on extracting the graph structural information, and _f_ _**ω**_ ( _**h**_ ) _∈_ R is an energy function that outputs the energy score. 
+
+Suppose we have a fixed _g_ _**α**_ that learns graph structural information well, following Eq. (1), the EBM loss for learning _f_ _**ω**_ can be reformulated as: 
+
+**==> picture [344 x 53] intentionally omitted <==**
+
+4 
+
+where _p_ _**α**_ ( _**h**_ ) = � _pd_ ( _**x**_ ) _δ_ ( _**h** − g_ _**α**_ ( _**x**_ )) _d_ _**x**_ and _q_ _**θ**_ ( _**h**_ ) = � _p_ _**θ**_ ( _**x**_ ) _δ_ ( _**h** − g_ _**α**_ ( _**x**_ )) _d_ _**x**_ are the aggregated distribution over latent space of real data and EBM samples, respectively. 
+
+It can be observed that the optimal solution is achieved at _p_ _**α**_ ( _**h**_ ) = _q_ _**θ**_ ( _**h**_ ), and optimizing the objective actually equals minimizing the KL divergence between two distributions over latent space. Hence we can formulate a surrogate optimization objective for directly learning a latent EBM _f_ _**ω**_ : 
+
+**==> picture [326 x 19] intentionally omitted <==**
+
+where _q_ _**ω**_ ( _**h**_ ) =[ex][p(] _[−] Z[f]_ _**ω[ω]**_[(] _**[h]**_[))] . Sampling from _q_ _**ω**_ ( _**h**_ ) can be achieved by running _K_ -step MCMC sampling. By the surrogate objective, we can move the MCMC sampling from ( _**x** , N_ ( _**x**_ )) space to the informative latent space, avoiding the awkward and challenging scenarios of needing to sample nodes under high-dimension and their neighbors. 
+
+A left challenge is obtaining a flexible _g_ _**α**_ to extract graph topology information. We suggest utilizing Graph Contrastive Learning (GCL) algorithm for training the graph encoder to extract node representations. This can not only extract informative features but also deal with the limited labeled data case. Among graph contrastive learning methods, we propose using DGI (Velickoviˇ c et al., 2018)´ as the learning algorithm for _g_ _**α**_ . Intuitively, DGI contrasts between nodes and the whole graph, while the OOD detection task requires detecting the outliner nodes in a whole graph, the contrast between the local features and the global can bring more benefits. The effect of different GCL algorithms will be shown in Sec. 4.4. 
+
+DGI first shuffles the rows of node features matrix to get an augmented graph _{_ **X** _[′] ,_ **A** _[′] }_ , then obtains node representations by _**h** i_ = _g_ _**α**_ ( _**x** i, N_ ( _**x** i_ )) and _**h**[′] j_[=] _[ g]_ _**[α]**_[(] _**[x]**[′] j[,][ N]_[(] _**[x]**[′] j_[))][, respectively.][The] contrastive loss for learning _g_ _**α**_ is given by: 
+
+**==> picture [339 x 37] intentionally omitted <==**
+
+_N_ whereregarded as a global view of the whole graph. _**s**_ = _N_[1] � _i_ =1 _**[h]**[i][∈]_[R] _[d]_[ is the summary readout of all the node representations, which can be] Following DGI (Velickoviˇ c et al., 2018), we use a´ bilinear scoring function for the discriminator _D_ _**ψ**_ ( _·, ·_ ), which is also learned by minimizing _L_ cl. 
+
+Additionally, the node representations _**h** i_ can be further enhanced by ID nodes classification with a ˆ prediction head _I_ _**ϕ**_ (e.g., MLP) as _**y** i_ = _I_ _**ϕ**_ ( _**h** i_ ), and the cross-entropy loss _L_ cls is used for learning the prediction head _I_ _**ϕ**_ ( _·_ ) and also graph encoder _g_ _**α**_ ( _·, ·_ ). 
+
+**Multi-Hop (MH) Graph Feature Encoder.** Simply using a one-layer GCN, as in DGI (Veliˇckovi´c et al., 2018), cannot fully extract informative representations from original graph features. Additionally, similar nodes often lie in the distance in heterophilic graphs, so combining long-range information could bring positive effects in addressing heterophily issue. Therefore, a _L_ -layer GNN is employed to learn graph node features in our proposed method. Furthermore, the weighted selfloops technique is used as a simple enhanced method for graph filter (Bo et al., 2021; Chen et al., 2023). Finally, all the intermediate features (the output of all the layers) are fused to obtain the final representations. 
+
+First, a symmetric normalized adjacency with weighted self-loops is used for extracting node features: 
+
+**==> picture [302 x 19] intentionally omitted <==**
+
+where _β_ is a hyper-parameter. Note that this operation for the positive samples can be done in preprocessing since it does not involve any learnable parameters, which greatly reduce the running time. Then the intermediate features are transformed and fused to obtain the final representations: 
+
+**==> picture [344 x 19] intentionally omitted <==**
+
+where **W** and _**b**_ are learnable weights and bias. _∥_ is a concatenation operation. The combination of Eqs. (4) and (5) is denoted by **H** = _g_ _**α**_ ( **X** _,_ **A** ). 
+
+**Conditional Energy (CE).** The readout summary _**s**_ of ID dataset can be used as supervised information in energy function _f_ _**ω**_ , to compare between node representations and global representations 
+
+5 
+
+when computing energy. For instance, _f_ _**ω**_ ( _**h** i,_ _**s**_ ) = **W** [ _**h** i∥ρ_ _**s**_ ] + _**b**_ , _f_ _**ω**_ ( _**h** i,_ _**s**_ ) = _**h**[⊤] i_ **[W]** _**[s]**_[, and etc.,] where _ρ_ is a hyper-parameter, **W** and _**b**_ are learned parameters. The benefit of the global information introduced by the proposed CE is twofold: 1) It can guide MCMC sampling, reducing the sampling difficulty; 2) It can act as global prior information when detecting OOD nodes. 
+
+**Energy Readout (ERo).** In DGI, the readout summary _**s**_ is obtained by simply averaging all the _N_ node representations _**s**_ = _N_[1] � _i_ =1 _**[h]**[i]_[.][However, the importance of each node may not be the same.] Considering that the density of a node can represent the importance of the node to some extent and energy is un-normalized density, we propose to use energy for conducting the weighted readout: 
+
+**==> picture [398 x 65] intentionally omitted <==**
+
+## 3.4 RECURRENT UPDATE FOR LEARNING DEGEM 
+
+To apply CE and ERo simultaneously, the energy readout _**s** p_ and conditional energy _f_ _**ω**_ ( _**h** i,_ _**s**_ ) should be updated recurrently. The Recurrent Update can make energy function _f_ _**ω**_ and graph encoder _g_ _**α**_ promote each other, leading to better learning. Next, we introduce the Recurrent Update in details. The weights of conditional energy are initialized as uniform distribution _**p**_ ¯[(0)] = � _N_ 1 _[,] N_[1] _[,][ · · ·][,] N_[1] � _∈_ R _[N]_ . In the _e_ -th epoch, node representations of original graph _{_ **X** _,_ **A** _}_ and shuffled graph _{_ **X** _[′] ,_ **A** _[′] }_ are first obtained by _**h** i_ = _g_ _**α**_ ( _**x** i, N_ ( _**x** i_ )) and _**h**[′] j_[=] _[g]_ _**[α]**_[(] _**[x]**[′] j[,][ N]_[(] _**[x]**[′] j_[))][, respectively, and] _**[h]**_[˜] _[u][∼][q]_ _**[ω]**_[(˜] _**[h]**_[)][ is] sampled by _K_ -step MCMC sampling, then the final learning at each iteration is conducted as follows: 
+
+**Step 1: Learning energy head** _f_ _**ω**_ **given graph encoder** _g_ _**α**_ : The energy head _f_ _**ω**_ is learned by MLE over informative latent space by a surrogate objective given the well-trained graph encoder _g_ _**α**_ and according global representation _**s**_ ¯[(] _p[e]_[)][:] 
+
+**==> picture [272 x 65] intentionally omitted <==**
+
+**Step 2: Learning graph encoder** _g_ _**α**_ **given energy head** _f_ _**ω**_ : The Graph Encoder _g_ _**α**_ is learned by the mix of graph contrastive learning and node classification given well-trained energy head _f_ _**ω**_ for weighted readout as follows: 
+
+**==> picture [170 x 71] intentionally omitted <==**
+
+where _ξ_ is a hyper-parameter, _L_ cls is the cross-entropy loss. See Algorithm 1 for the detailed learning process. 
+
+**Inference.** For an unknown node _**x** v_ , its representation is obtained by _**h** v_ = _g_ _**α**_ ( _**x** v, N_ ( _**x** v_ )), then the energy score _f_ _**ω**_ ( _**h** v,_ _**s**_[(] _[E]_[)] ) serves as the OOD score, where _**s**_[(] _[E]_[)] is the summary readout of IDˆ dataset in the final training epoch, and its label prediction is computed by _**y** v_ = _I_ _**ϕ**_ ( _**h** v_ ). 
+
+## 3.5 UNDERSTANDING OF USING DGI FOR LEARNING GRAPH ENCODER 
+
+By comparing Eq. (3) and Eq. (2), it can be found that there are some similarities between these two objectives. Actually, the learning of DGI can be understood as learning an EBM with global condition by noise contrastive estimation (Aneja et al., 2021; Gutmann & Hyvarinen, 2010) as the¨ following form: 
+
+6 
+
+Table 1: OOD detection performance on four **homophilic datasets** (Cora, Amazon, Twitch and Arxiv) measured by AUC ( _↑_ ) and Acc ( _↑_ ) with three OOD types (Structure manipulation, Feature interpolation, Label leave-out). Other results for AUPR, FPR95 are deferred to Appendix I. 
+
+|**Method**|**Cora**<br>**Structure**<br>**Feature**<br>AUC↑<br>Acc↑<br>AUC↑<br>Acc↑|**Cora**<br>**Structure**<br>**Feature**<br>AUC↑<br>Acc↑<br>AUC↑<br>Acc↑|**Lab**<br>AUC↑|**el**<br>Acc↑|**Amazon-Photo**<br>**Structure**<br>**Feature**<br>**Label**<br>AUC↑<br>Acc↑<br>AUC↑<br>Acc↑<br>AUC↑<br>Acc↑|**Amazon-Photo**<br>**Structure**<br>**Feature**<br>**Label**<br>AUC↑<br>Acc↑<br>AUC↑<br>Acc↑<br>AUC↑<br>Acc↑|**Amazon-Photo**<br>**Structure**<br>**Feature**<br>**Label**<br>AUC↑<br>Acc↑<br>AUC↑<br>Acc↑<br>AUC↑<br>Acc↑|**Twitch**<br>**ES**<br>**FR**<br>**RU**<br>Acc↑<br>AUC↑<br>AUC↑<br>AUC↑|**Arxiv**<br>**2018**<br>**2019**<br>**2020**<br>Acc↑<br>AUC↑<br>AUC↑<br>AUC↑|**Avg**<br>AUC↑<br>Acc↑|
+|---|---|---|---|---|---|---|---|---|---|---|
+|MSP<br>ODIN<br>Mahalanobis<br>Energy<br>ResidualFlow|75.05<br>77.30<br>30.57<br>74.60<br>41.03<br>71.90<br>79.48<br>79.10<br>61.23<br>82.20|85.87<br>77.30<br>21.19<br>77.50<br>63.92<br>74.20<br>89.34<br>79.30<br>60.72<br>82.20|91.10<br>20.29<br>67.45<br>93.26<br>64.69|88.29<br>87.66<br>88.92<br>90.19<br>82.20|98.94<br>93.64<br>3.50<br>91.42<br>62.40<br>93.42<br>99.94<br>93.04<br>82.58<br>93.55|97.02<br>92.89<br>5.31<br>92.91<br>72.47<br>92.88<br>98.51<br>92.76<br>75.46<br>93.55|95.49<br>95.84<br>10.16<br>96.08<br>60.80<br>95.84<br>97.13<br>95.68<br>78.31<br>93.55|66.08<br>47.40<br>57.41<br>63.89<br>43.97<br>51.84<br>49.53<br>62.05<br>46.73<br>49.69<br>38.38<br>62.95<br>58.42<br>72.91<br>69.90<br>65.59<br>62.60<br>55.59<br>67.68<br>**66.37**|61.76<br>63.52<br>67.06<br>53.87<br>44.01<br>42.63<br>38.96<br>49.29<br>57.08<br>56.76<br>56.92<br>51.59<br>64.61<br>65.90<br>70.37<br>53.92<br>62.38<br>63.82<br>62.21<br>54.84|83.07<br>80.38<br>22.67<br>78.94<br>58.74<br>78.96<br>86.46<br>81.20<br>68.47<br>81.06|
+|GKDE<br>GPN<br>OODGAT<br>GNNSafe|84.49<br>78.00<br>82.21<br>81.00<br>53.75<br>34.90<br>87.98<br>75.30|90.75<br>81.70<br>88.06<br>78.80<br>57.03<br>14.50<br>92.18<br>75.40|94.59<br>91.74<br>95.57<br>92.36|91.77<br>91.77<br>89.56<br>88.92|92.68<br>89.69<br>90.35<br>82.63<br>71.41<br>25.42<br>98.69<br>93.74|54.52<br>31.90<br>86.47<br>63.38<br>70.93<br>25.21<br>98.47<br>92.96|76.35<br>85.55<br>89.90<br>89.30<br>99.18<br>**96.16**<br>97.34<br>95.72|57.52<br>57.48<br>46.25<br>60.42<br>84.07<br>76.32<br>78.36<br>60.29<br>77.35<br>77.72<br>73.24<br>60.29<br>51.00<br>79.08<br>82.93<br>66.18|69.44<br>71.32<br>71.73<br>21.15<br>OOM<br>OOM<br>OOM<br>OOM<br>72.35<br>73.97<br>72.30<br>54.69<br>67.27<br>69.20<br>79.02<br>54.26|77.25<br>67.52<br>N/A<br>N/A<br>74.61<br>50.09<br>88.73<br>80.31|
+|**DeGEM (Ours)**|**99.93**<br>**84.20**|**99.84**<br>**84.30**|**97.58**|**93.04**|**100.00**<br>**94.49**|**99.91**<br>**93.97**|**99.28**<br>95.80|**94.83**<br>**97.36**<br>**94.76**<br>64.51|**81.30**<br>**86.00**<br>**86.01**<br>58.20|**97.08**<br>**83.56**|
+
+
+**==> picture [264 x 19] intentionally omitted <==**
+
+˜ ˜ ˜ where _q_ ( _**x** , N_ ( _**x**_ )) = � _q_ ( _**x** , N_ ( _**x**_ ) _|_ _**x** , N_ (˜ _**x**_ ) _,_ _**s**_ ) _pd_ (˜ _**x** , N_ (˜ _**x**_ )) _d_ _**x**_ , _q_ ( _**x** , N_ ( _**x**_ ) _|_ _**x** , N_ (˜ _**x**_ ) _,_ _**s**_ ) denotes the density of augmented samples given data samples, and _r_ ( _**x** , N_ ( _**x**_ ) _|_ _**s**_ ) = _D_ _**ψ**_ ( _g_ _**α**_ ( _**x** , N_ ( _**x**_ )) _,_ _**s**_ ). _pd_ ( _**x** ,N_ ( _**x**_ ) _|_ _**s**_ ) After perfectly training, the optimal _r_ has following form _r[∗]_ ( _**x** , N_ ( _**x**_ ) _|_ _**s**_ ) = _pd_ ( _**x** ,N_ ( _**x**_ ) _|_ _**s**_ )+ _q_ ( _**x** ,N_ ( _**x**_ ) _|_ _**s**_ )[.] The inherent connection between DGI and EBM enables the effectiveness of constructing energy function by the learned _g_ _**α**_ . However, the optimal DGI learns the density ratio between data distribution and randomly augmented data distribution, which is unsuitable for OOD detection, hence it still needs to learn _f_ _**ω**_ for output energy. 
+
+## 4 EXPERIMENTS 
+
+## 4.1 SETUP 
+
+**Dataset and Evaluation Metrics.** We evaluate DeGEM on seven benchmark datasets for node classification tasks (Yang et al., 2016; Shchur et al., 2018; Rozemberczki et al., 2021; Wang et al., 2020; Pei et al., 2020), including four _homophily_ datasets (Cora, Amazon-Photo, Twitch, and ogbn-Arxiv) and three _heterophily_ datasets (Chameleon, Actor, and Cornell). We mainly follow (Wu et al., 2021; 2023b) to adopt two established methods to simulate OOD scenarios. In the multi-graph context, OOD samples stem from distinct graphs or subgraphs not linked to the training nodes. Conversely, in the single-graph setting, OOD samples are part of the same graph as the training data but remain unseen during training. For Twitch, we treat one subgraph as in-distribution (ID) and others as OOD, using one for OOD exposure during training. In ogbn-Arxiv, we split the nodes by publication year for ID, OOD, and OOD exposure sets. For Cora, Amazon, Chameleon, Actor, and Cornell that have no clear domain information, we synthesize OOD data in three ways: i) Structure manipulation (S); ii) Feature interpolation (F); iii) Label leave-out (L). See detailed settings and splits in Appendix E.2. For the assessment of OOD detection performance, we employ standard metrics: Area Under the Receiver Operating Characteristic curve (AUC), Area Under the Precision-Recall curve (AUPR), and the False Positive Rate at 95% True Positive Rate (FPR95). In-distribution (ID) performance is quantified using the accuracy (Acc) metric on the testing nodes. In the following text, we use AUC to denote AUC with a little bit of abuse. Due to the space limits, we mainly present the results of AUC and Acc, the full results with AUPR and FPR95 can be found in Appendix I. 
+
+**Baseline Comparisons.** Our model is benchmarked against two categories of baseline methods. The first category comprises models that handle i.i.d. inputs, which are predominantly used in computer vision. These include MSP (Hendrycks & Gimpel, 2016), ODIN (Liang et al., 2018), Mahalanobis (Lee et al., 2018), OE (Hendrycks et al., 2018), and Energy(-FT) (Liu et al., 2020). We also include ResidualFlow (Zisselman & Tamar, 2020), a density-based method capable of modeling data distribution. For a fair comparison, we substitute the CNN backbones in these models with a GCN encoder. The second category consists of methods tailored for graphstructured data, such as GKDE (Zhao et al., 2020b), GPN (Stadler et al., 2021b), OODGAT (Song & Wang, 2022) and GNNSafe(++) (Wu et al., 2023a). It is noteworthy that OE, Energy-FT and GNNSafe++ incorporate OOD samples during the training phase, i.e., trained with OOD exposure. 
+
+**Implemetation Details.** We implement our model by PyTorch and conduct experiments on 24GB RTX-3090ti. Epoch number _E_ = 200, MH layer number _L_ = 5, hidden dimension _d_ = 512, MCMC steps _K_ = 20. We use Optuna (Akiba et al., 2019) to search hyper-parameters for our proposed model and baselines (see Appendix E.3 for detailed search space). 
+
+7 
+
+Table 2: OOD detection performance three **heterophilic datasets** (Chameleon, Actor, Cornell) measured by AUC ( _↑_ ) and Acc ( _↑_ ) on with three OOD types (Structure manipulation, Feature interpolation, Label leave-out). Other results for AUPR, FPR95 are deferred to Appendix I. 
+
+|**Method**|**Chameleon**<br>**Structure**<br>**Feature**<br>**Label**<br>AUC↑<br>Acc↑<br>AUC↑<br>Acc↑<br>AUC↑<br>Acc↑|**Chameleon**<br>**Structure**<br>**Feature**<br>**Label**<br>AUC↑<br>Acc↑<br>AUC↑<br>Acc↑<br>AUC↑<br>Acc↑|**Chameleon**<br>**Structure**<br>**Feature**<br>**Label**<br>AUC↑<br>Acc↑<br>AUC↑<br>Acc↑<br>AUC↑<br>Acc↑|**Actor**<br>**Structure**<br>**Feature**<br>**Label**<br>AUC↑<br>Acc↑<br>AUC↑<br>Acc↑<br>AUC↑<br>Acc↑|**Actor**<br>**Structure**<br>**Feature**<br>**Label**<br>AUC↑<br>Acc↑<br>AUC↑<br>Acc↑<br>AUC↑<br>Acc↑|**Actor**<br>**Structure**<br>**Feature**<br>**Label**<br>AUC↑<br>Acc↑<br>AUC↑<br>Acc↑<br>AUC↑<br>Acc↑|**Cornell**<br>**Structure**<br>**Feature**<br>**Label**<br>AUC↑<br>Acc↑<br>AUC↑<br>Acc↑<br>AUC↑<br>Acc↑|**Cornell**<br>**Structure**<br>**Feature**<br>**Label**<br>AUC↑<br>Acc↑<br>AUC↑<br>Acc↑<br>AUC↑<br>Acc↑|**Cornell**<br>**Structure**<br>**Feature**<br>**Label**<br>AUC↑<br>Acc↑<br>AUC↑<br>Acc↑<br>AUC↑<br>Acc↑|**Avg**<br>AUC↑<br>Acc↑|
+|---|---|---|---|---|---|---|---|---|---|---|
+|MSP<br>ODIN<br>Mahalanobis<br>Energy<br>ResidualFlow|99.28<br>33.41<br>60.09<br>28.80<br>99.59<br>29.90<br>91.94<br>37.14<br>48.24<br>34.50|70.92<br>32.42<br>53.20<br>33.24<br>58.93<br>33.41<br>67.75<br>37.58<br>53.82<br>34.50|53.32<br>43.89<br>68.07<br>37.01<br>42.42<br>44.54<br>59.92<br>41.69<br>56.16<br>34.50|71.38<br>21.64<br>42.32<br>22.30<br>79.96<br>24.23<br>64.26<br>25.21<br>49.72<br>27.63|59.11<br>24.34<br>52.57<br>23.90<br>65.94<br>23.72<br>51.71<br>24.33<br>50.07<br>27.63|56.32<br>37.27<br>65.10<br>35.79<br>52.58<br>31.98<br>55.00<br>36.71<br>50.68<br>27.63|81.50<br>41.50<br>67.99<br>38.78<br>69.84<br>36.73<br>83.09<br>38.10<br>67.80<br>43.54|71.89<br>43.54<br>85.76<br>38.10<br>70.08<br>43.54<br>86.70<br>38.10<br>66.33<br>43.54|68.50<br>63.81<br>42.16<br>63.81<br>81.73<br>62.86<br>69.70<br>62.86<br>73.09<br>43.54|70.25<br>37.98<br>59.69<br>35.75<br>69.01<br>36.77<br>70.01<br>37.97<br>57.32<br>35.22|
+|GKDE<br>GPN<br>OODGAT<br>GNNSafe|96.06<br>30.12<br>82.90<br>20.41<br>54.89<br>26.06<br>34.36<br>35.33|67.33<br>34.94<br>64.99<br>30.99<br>53.86<br>29.73<br>57.46<br>38.07|60.22<br>40.40<br>72.68<br>34.71<br>65.33<br>40.68<br>52.18<br>43.43|71.27<br>25.63<br>78.58<br>18.67<br>51.25<br>23.65<br>31.76<br>26.30|58.08<br>19.56<br>62.13<br>20.21<br>52.00<br>25.77<br>50.66<br>26.20|53.72<br>33.60<br>75.04<br>**38.08**<br>65.39<br>36.30<br>51.60<br>37.92|80.53<br>14.97<br>89.68<br>43.54<br>67.16<br>42.18<br>74.66<br>25.17|77.48<br>42.86<br>83.36<br>42.86<br>69.42<br>42.86<br>76.22<br>41.50|81.18<br>63.81<br>82.93<br>63.81<br>68.52<br>64.76<br>68.17<br>63.81|71.76<br>33.99<br>76.92<br>34.81<br>60.87<br>36.89<br>55.23<br>37.52|
+|**DeGEM (Ours)**<br>~~a~~|**99.99**<br>**57.82**<br>~~a~~|**99.70**<br>**57.93**<br>~~a~~|**89.68**<br>**64.46**|**99.76**<br>**31.97**|**99.98**<br>**33.87**|**100.00**<br>36.02|**97.97**<br>**48.30**|**100.00**<br>**65.31**|**90.90**<br>**77.14**|**97.55**<br>**52.53**|
+
+
+Table 3: OOD detection results on varying the available label ratio, measured by the average AUC _↑ /_ AUPR _↑ /_ FPR95 _↓_ . 
+
+||**OOD**||**Cora**|||**Twitch**|||**Chameleon**|**Chameleon**||**Cornell**|||**Avg**||
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+||**Expo**|AUC↑|AUPR↑|FPR95↓|AUC↑|AUPR↑|FPR95↓|AUC↑|AUPR↑|FPR95↓|AUC↑|AUPR↑|FPR95↓|AUC↑|AUPR↑|FPR95↓|
+|Label Rate = 10%|Label Rate = 10%||||||||||||||||
+|OE|**Yes**|65.36|47.01|88.69|63.36|71.92|91.87|67.29|74.66|89.12|58.06|65.42|94.78|63.52|64.76|91.12|
+|Energy-FT|**Yes**|72.00|53.02|83.94|86.14|90.54|70.87|56.26|62.77|85.67|60.36|70.78|99.12|68.69|69.28|84.90|
+|GNNSafe++|**Yes**|78.74|64.55|79.40|77.75|85.01|84.30|33.21|47.70|93.77|69.52|79.51|94.34|64.80|69.19|87.95|
+|**DeGEM**|**No**|**97.87**|**94.79**|**10.00**|**94.67**|**97.47**|**51.41**|**96.64**|**98.27**|**14.14**|**97.57**|**98.95**|**11.25**|**96.69**|**97.37**|**21.70**|
+|Label Rate = 50%|Label Rate = 50%||||||||||||||||
+|OE|**Yes**|78.63|60.48|70.92|58.15|68.83|93.38|76.32|79.70|67.46|73.94|79.59|90.20|71.76|72.15|80.49|
+|Energy-FT|**Yes**|77.58|56.54|65.56|87.30|90.72|53.09|68.60|74.14|88.59|67.91|75.24|94.37|75.35|74.16|75.40|
+|GNNSafe++|**Yes**|86.47|72.80|57.39|93.42|96.14|**41.11**|44.67|59.29|92.69|73.12|82.01|85.28|74.42|77.56|69.12|
+|**DeGEM**|**No**|**97.53**|**91.95**|**8.87**|**94.21**|**97.21**|49.51|**97.03**|**98.29**|**13.10**|**96.32**|**96.20**|**16.37**|**96.27**|**95.91**|**21.96**|
+|Label Rate = 100%|Label Rate = 100%||||||||||||||||
+|OE|**Yes**|83.35|68.91|67.19|62.38|73.53|88.43|81.07|82.83|52.23|71.71|72.47|74.05|74.63|74.44|70.48|
+|Energy-FT|**Yes**|89.05|74.77|44.74|87.38|90.43|46.97|79.89|82.72|54.00|78.81|85.93|84.65|83.78|83.46|57.59|
+|GNNSafe++|**Yes**|92.69|84.62|40.63|**96.58**|**98.03**|**24.76**|48.23|63.37|93.67|79.10|85.10|82.65|79.15|82.78|60.43|
+|**DeGEM**|**No**|**99.16**|**97.78**|**4.25**|95.65|97.93|29.11|**96.46**|**98.04**|**13.38**|**96.29**|**97.61**|**23.75**|**96.89**|**97.84**|**17.62**|
+
+
+## 4.2 EVALUATION RESULTS 
+
+We report the results of the proposed DeGEM and competing baselines on different datasets in Tabs. 1 and 2. Our finding indicates that the DeGEM consistently outperforms competing baselines without OOD exposure in terms of AUC and Acc across both homophilic and heterophilic datasets. Specifically, DeGEM increases the average AUC by 4.26% (resp. 20.63%) on homophilic (resp. heterophilic) graphs and improves the average Acc for homophilic (resp. heterophilic) graphs by 2.37% (resp. 13.95%). On the contrary, although the baselines tailored for graph inputs surpass those designed for i.i.d. data on homophilic graphs, they show a lower performance on heterophilic graphs. Additionally, after adding the Energy Propagation technique to Energy (i.e., GNNSafe), the average AUC decreases significantly from 70.01% to 55.23% and 56.42%, indicating that the Energy Propagation technique will cause severe performance decrease on heterophilic graphs. 
+
+The high performance of DeGEM is primarily attributed to the enhancement brought by the robust representation learned by the GCL algorithm and the classification loss, as well as the powerful data modeling capabilities of EBM trained via the MLE approach. Overall, these findings underscore the superiority of DeGEM over baseline approaches, on both homophilic and heterophilic graphs. 
+
+## 4.3 EVALUATION ON LIMITED LABELS 
+
+Given the time-consuming and labor-intensive nature of obtaining node labels on graphs in the real world, an interesting evaluation task is to evaluate the OOD detection performance of a model with limited category labels. We follow the data splits used in the experiments of Sec. 4.2 as a foundation and progressively reduce the proportion of available labels in the training set: from 100% to 50%, and then to 10%. To highlight the performance of our method, we select three baselines OE, Energy-FT 
+
+Figure 4: Performance across labeled ratios. 
+
+and GNNSafe++ which incorporate OOD samples during the training phase, i.e., trained with OOD exposure. Note that _we do not reduce the number of nodes used for OOD exposure training_ , but only decrease the number of category labels available within the distribution. We present the average results of each dataset in Tab. 3, and the average performance of each method in Fig. 4 for more intuitive comparison. We report the full results in Appendix I. The results show that our proposed DeGEM maintains high performance under different label proportions, with no significant decline; in contrast, all baselines exhibit a marked performance drop as the labels ratio decrease. In particular, when the available label rate is 100%, our method still outperforms baselines, highlighting the 
+
+8 
+
+Table 4: Ablation study measured by the average AUC _↑_ . ‘Eprop’ stands for energy propagation. ‘MLE-Energy’ indicates whether the energy head is trained via maximum likelihood estimation, otherwise, the node energy is obtained by classification logits (Classify-Energy). ‘GCL’ indicates whether a graph contrastive learning algorithm is employed when training the graph encoder. 
+
+||**Components**<br>Eprop<br>Classify-<br>MLE-<br>GCL<br>MH<br>CE<br>ERo<br>Energy<br>Energy|**Homophily**<br>**Cora**<br>**Twitch**<br>**Avg**|**Heterophily**<br>**Cham.**<br>**Cornell**<br>**Avg**|**Avg**|
+|---|---|---|---|---|
+|Energy|✓|87.36<br>67.07<br>77.22|73.20<br>79.83<br>76.51|76.87|
+|GNNSafe|✓<br>✓<br><br>|90.84<br>71.00<br>80.92<br><br><br>|48.00<br>73.02<br>60.51<br><br><br>|70.72<br>|
+||✓<br>✓|83.13<br>47.61<br>65.37|82.33<br>82.54<br>82.44|73.90|
+||✓<br><br>|69.11<br>74.43<br>71.77<br><br><br>|77.51<br>67.91<br>72.71<br><br><br>|72.24<br>|
+||✓<br>✓|88.87<br>84.77<br>86.82|90.63<br>87.00<br>88.82|87.82|
+||✓<br>✓<br>✓<br><br><br>|88.82<br>69.81<br>79.32<br><br><br>|92.57<br>84.95<br>88.76<br><br><br>|84.04<br>|
+||✓<br>✓<br>✓|92.34<br>83.12<br>87.73|93.57<br>86.31<br>89.94|88.84|
+||✓<br>✓<br>✓<br>✓<br><br><br>|92.80<br>84.77<br>88.78<br><br><br>|94.46<br>85.35<br>89.91<br><br><br>|89.35<br>|
+||✓<br>✓<br>✓|97.47<br>93.61<br>95.54|95.23<br>95.90<br>95.57|95.55|
+||✓<br>✓<br>✓<br>✓|98.03<br>94.96<br>96.50|96.24<br>95.49<br>95.87|96.18|
+||✓<br>✓<br>✓<br>✓|96.24<br>92.41<br>94.32|95.80<br>93.99<br>94.89|94.61|
+|**DeGEM**|✓<br>✓<br>✓<br>✓<br>✓|**99.12**<br>**95.65**<br>**97.38**|**96.46**<br>**96.29**<br>**96.37**|**96.88**|
+
+
+superiority of our method. These results demonstrate that our method, benefiting from its effective design, can consistently and effectively extract graph topology information and learn the data density well, thereby significantly outperforming previous state-of-the-art graph OOD detection methods in the more practical scenario of limited labels. 
+
+## 4.4 ABLATION STUDY 
+
+**The Impact of Proposed Techniques.** In what follows, we evaluate the impact of training the energy head via MLE (MLE-Energy) versus deriving node energy directly from classification logits (Classify-Energy). Additionally, we assess the use of DGI algorithm during graph encoder training (GCL), and explore the effectiveness of the Energy-Propagation technique (Eprop), the Multi-Hop Graph Feature Encoder (MH), Conditional Energy (CE), and Energy Readout (ERo). We present the results in Tab. 4. The baseline (Row 1) utilizes a GCN for node classification and obtains the node energy by the classification logits. Since Eprop is based on homophily assumption, the performance increases slightly (Avg +3.7%) on homophilic graphs but shows a dramatic degradation (Avg -16%) on heterophilic graphs (Row 2). Compared to the baseline (Avg 76.87%), solely utilizing the MLE for training the energy head (Avg 72.24%) or employing GCL algorithm for training the graph encoder (Avg 73.90%) does not work. It is the combination of MLE and GCL algorithm that brings positive effects for OOD detection tasks (Avg 87.82%). More detailed discussion can be found on **Observation 1–4** below. With MH, DeGEM achieves a significant performance boost (Avg +11%, Row 9), demonstrating that combining local and global information simultaneously enhances performance on both homophilic and heterophilic graphs. CE alone can improve the average performance (Avg +0.63%, Row 10); however, using ERo on its own does not yield similar benefits (Avg -0.94%, Row 11). This is because CE takes the global view into account, producing better node energy, which enables ERo to generate a more optimized readout summary. Therefore combining them together via Recurrent Update can bring more positive effects (Avg +1.33%, Row 12). 
+
+**Observation 1: combining DGI with classification does not work.** As shown in Tab. 4, although the Classifier-Energy variant shows 5.93% improvement of AUC on heterophilic graphs after adding DGI loss (GCL) into the classification task (Row 3), its performance on homophilic graphs dramatically decrease from 77.22% to 65.37%. This indicates that the integration of DGI algorithm and Classifier-Energy has an overall negative impact on its performance. 
+
+**Observation 2: naively training Energy Head via MLE does not work.** As shown in Tab. 4, when decoupling the model into two parts (a graph encoder and an energy head), if we train the energy head via MLE but only employ classification loss for training the graph encoder (Row 4), the model will show a worse performance compared to the Classifier-Energy variant (Row 1). 
+
+**Observation 3: combining DGI and MLE works well** As shown in Tab. 4, after adding DGI loss (GCL), the performance of MLE-Energy variant dramatically improves from 72.74% to 87.82% on average in terms of AUC, outperforming previous state-of-the-art method GNNSafe. 
+
+**Observation 4: combining other GCL and MLE not works well** We try to replace the DGI algorithm with other widely used GCL algorithms: GRACE (Zhu et al., 2020b) and SUGRL (Mo et al., 2022) (without MH, CE, and ERo). From Tab. 5, DGI consistently outperforms its counterparties. 
+
+9 
+
+Table 5: The performance of different GCL algorithms, measured by the average AUC _↑_ . 
+
+||**Cora**<br>**Twitch**|**Cham.**<br>**Cornell**|**Avg**|
+|---|---|---|---|
+|**GCN**<br>**GRACE**<br>**SUGRL**|68.25<br>53.94<br>83.01<br>65.78<br>82.41<br>72.15|74.65<br>75.75<br>87.99<br>80.76<br>82.71<br>63.67|68.15<br>79.38<br>75.24|
+|**DGI**|**88.87**<br>**84.77**|**90.63**<br>**87.00**|**87.82**|
+
+
+From the above observation, we can conclude that the key reason behind the success of proposed DeGEM is due to **the symbiosis between DGI and EBM** . We extensively evaluate the potential variants, however all variants show significantly worse performance. This also aligns with our theoretical analysis in Sec. 3.5, which said that the learning of DGI can be viewed as learning EBM via variational learning. The property enables us to use DGI for learning the graph encoder as part of the final constructed EBMs. 
+
+## 5 RELATED WORK 
+
+**EBMs on Graph.** Some previous works (Hataya et al., 2021; Liu et al., 2021) apply EBMs on graphs that are trained with MLE have been proposed for graph generation. However, their works are performed on small graphs, where the over-computational issue of the sampling adjacency matrix is neglected, making them non-scalable. In contrast, our proposed CLEBM focuses on OOD detection, decomposing the EBM networks into informative representation extraction and output energy score based on given latent. The design enables us to move MCMC to latent space, which does not suffer from sampling adjacency matrix and therefore has excellent scalability. 
+
+**Graph OOD Detection.** OOD detection for non-graph data by neural networks has garnered considerable attention in the literature (Hendrycks & Gimpel, 2016; Hendrycks et al., 2019; Bevandic´ et al., 2018; Liu et al., 2020; Mohseni et al., 2020; Ren et al., 2019). However, these methods typically assume that instances (such as images) are i.i.d., overlooking scenarios with inter-dependent data that are common in many real-world applications. In contrast, Graph OOD Detection that inherently includes inter-dependent structures has not been explored well. Recently, some works (Li et al., 2022b; Bazhenov et al., 2022) focus on Graph OOD Detection on _graph-level_ , i.e., detecting OOD graphs. These works treat each graph as an independent instance, while OOD detection on _node-level_ presents unique challenges given the non-negligible inter-dependence between instances. To this end, Bayesian GNN models have been proposed that can detect OOD nodes within a graph by incorporating the inherent uncertainty in such inter-dependent data (Zhao et al., 2020a; Stadler et al., 2021a). OODGAT (Song & Wang, 2022) emphasizes the importance of node connection patterns for outlier detection, explicitly modeling node interactions and separating inliers from outliers during feature propagation. Energy-based Detection on graphs has been explored in GNNSafe (Wu et al., 2023b), by directly combing GNNs and Energy-based Detection on Images (Liu et al., 2020). However, their energy score is directly construed by classification, which is less effective. Moreover, they use energy propagation to enhance performance, which highly relies on the homophily assumption. Additionally, some methods train the model with _OOD Exposure_ , i.e., training with both a known ID dataset and a known OOD dataset (Hendrycks et al., 2018; Liu et al., 2020; Wu et al., 2023b). In contrast, we decompose EBM learning into representation learning and energy learning, delivering better detection capability without OOD exposure (see Sec. 4.2). Additionally, benefits from powerful energy construction and effective graph encoder, we do not require energy propagation, thus keeping high performance across homophilic and heterophilic graphs. 
+
+## 6 CONCLUSION 
+
+We introduce a novel approach, **DeGEM** , for graph OOD node detection, overcoming the heterophily issue and the computational challenges associated with MCMC sampling in large graphs. By decoupling the learning process into a GNN-based graph encoder and an energy head, we managed to leverage the GCL algorithm and classification loss to learn robust node representations and perform efficient MCMC sampling in the latent space, circumventing the need to directly sample the adjacency matrix. The design of **DeGEM** , featuring a Multi-Hop Graph encoder and a Recurrent Update mechanism, facilitates the incorporation of topological information into node representations, which is crucial for OOD detection in graph-structured data. Extensive experimental evaluations have validated the effectiveness of **DeGEM** , which not only exhibits superior performance on both homophilic and heterophilic graphs compared to baselines with/without OOD exposure, but also outperforms methods trained with OOD exposure in a label-insufficient scenario. 
+
+10 
+
+## ACKNOWLEDGMENTS 
+
+Xiaochun Cao’s work is partially supported by the Shenzhen Science and Technology Program (No. KQTD20221101093559018) and by the National Natural Science Foundation of China (No. 62411540034). Pengwen Dai’s work is supported by the National Natural Science Foundation of China (No. 62302532). Jing Tang’s work is partially supported by National Key R&D Program of China under Grant No. 2023YFF0725100 and No. 2024YFA1012701, by the National Natural Science Foundation of China (NSFC) under Grant No. 62402410 and No. U22B2060, by Guangdong Provincial Project (No. 2023QN10X025), by Guangdong Basic and Applied Basic Research Foundation under Grant No. 2023A1515110131, by Guangzhou Municipal Science and Technology Bureau under Grant No. 2023A03J0667 and No. 2024A04J4454, by Guangzhou Municipal Education Bureau (No. 2024312263), and by Guangzhou Municipality Big Data Intelligence Key Lab (No. 2023A03J0012), Guangzhou Industrial Information and Intelligent Key Laboratory Project (No. 2024A03J0628) and Guangzhou Municipal Key Laboratory of Financial Technology Cutting-Edge Research (No. 2024A03J0630). 
+
+## REFERENCES 
+
+- Sami Abu-El-Haija, Bryan Perozzi, Amol Kapoor, Nazanin Alipourfard, Kristina Lerman, Hrayr Harutyunyan, Greg Ver Steeg, and Aram Galstyan. Mixhop: Higher-order graph convolutional architectures via sparsified neighborhood mixing. In _international conference on machine learning_ , pp. 21–29. PMLR, 2019. 
+
+- Takuya Akiba, Shotaro Sano, Toshihiko Yanase, Takeru Ohta, and Masanori Koyama. Optuna: A next-generation hyperparameter optimization framework. In _Proceedings of the 25th ACM SIGKDD international conference on knowledge discovery & data mining_ , pp. 2623–2631, 2019. 
+
+- Dario Amodei, Chris Olah, Jacob Steinhardt, Paul Christiano, John Schulman, and Dan Mane.´ Concrete problems in ai safety. _arXiv preprint arXiv:1606.06565_ , 2016. 
+
+- Jyoti Aneja, Alex Schwing, Jan Kautz, and Arash Vahdat. A contrastive learning approach for training variational autoencoder priors. In A. Beygelzimer, Y. Dauphin, P. Liang, and J. Wortman Vaughan (eds.), _Advances in Neural Information Processing Systems_ , 2021. URL https:// openreview.net/forum?id=LcSfRundgwI. 
+
+- Gleb Bazhenov, Sergei Ivanov, Maxim Panov, Alexey Zaytsev, and Evgeny Burnaev. Towards ood detection in graph classification from uncertainty estimation perspective. _arXiv preprint arXiv:2206.10691_ , 2022. 
+
+- Petra Bevandic,´ Ivan Kreso,ˇ Marin Orsiˇ c,´ and Sinisaˇ Segvi[ˇ] c.´ Discriminative out-of-distribution detection for semantic segmentation. _arXiv preprint arXiv:1808.07703_ , 2018. 
+
+- Deyu Bo, Xiao Wang, Chuan Shi, and Huawei Shen. Beyond low-frequency information in graph convolutional networks. In _AAAI_ . AAAI Press, 2021. 
+
+- Yuhan Chen, Yihong Luo, Jing Tang, Liang Yang, Siya Qiu, Chuan Wang, and Xiaochun Cao. Lsgnn: Towards general graph neural network in node classification by local similarity, 2023. URL https://arxiv.org/abs/2305.04225. 
+
+- Eli Chien, Jianhao Peng, Pan Li, and Olgica Milenkovic. Adaptive universal generalized pagerank graph neural network. In _ICLR_ , 2021. 
+
+- Dengxin Dai and Luc Van Gool. Dark model adaptation: Semantic image segmentation from daytime to nighttime. In _2018 21st International Conference on Intelligent Transportation Systems (ITSC)_ , pp. 3819–3824. IEEE, 2018. 
+
+- Xiangyu Dong, Xingyi Zhang, and Sibo Wang. Rayleigh quotient graph neural networks for graphlevel anomaly detection. In _The Twelfth International Conference on Learning Representations_ , 2024. 
+
+- Xiangyu Dong, Xingyi Zhang, Lei Chen, Mingxuan Yuan, and Sibo Wang. Spacegnn: Multispace graph neural network for node anomaly detection with extremely limited labels. _CoRR_ , abs/2502.03201, 2025a. 
+
+- Xiangyu Dong, Xingyi Zhang, Yanni Sun, Lei Chen, Mingxuan Yuan, and Sibo Wang. SmoothGNN: Smoothing-aware GNN for unsupervised node anomaly detection. In _THE WEB CONFERENCE 2025_ , 2025b. 
+
+- Yilun Du and Igor Mordatch. Implicit generation and modeling with energy based models. _Advances in Neural Information Processing Systems_ , 32, 2019. 
+
+- Zheng Gong, Guifeng Wang, Ying Sun, Qi Liu, Yuting Ning, Hui Xiong, and Jingyu Peng. Beyond homophily: Robust graph anomaly detection via neural sparsification. In _International Joint Conference on Artificial Intelligence_ , 2023. URL https://api.semanticscholar.org/ CorpusID:260852064. 
+
+- Michael Gutmann and Aapo Hyvarinen.¨ Noise-contrastive estimation: A new estimation principle for unnormalized statistical models. In Yee Whye Teh and Mike Titterington (eds.), _Proceedings of the Thirteenth International Conference on Artificial Intelligence and Statistics_ , volume 9 of _Proceedings of Machine Learning Research_ , pp. 297–304, Chia Laguna Resort, Sardinia, Italy, 13–15 May 2010. PMLR. URL https://proceedings.mlr.press/v9/gutmann10a. html. 
+
+- Kaveh Hassani and Amir Hosein Khasahmadi. Contrastive multi-view representation learning on graphs. In _Proceedings of International Conference on Machine Learning_ , pp. 3451–3461. 2020. 
+
+- Ryuichiro Hataya, Hideki Nakayama, and Kazuki Yoshizoe. Graph energy-based model for molecular graph generation. In _Energy Based Models Workshop-ICLR 2021_ , 2021. 
+
+- Dan Hendrycks and Kevin Gimpel. A baseline for detecting misclassified and out-of-distribution examples in neural networks. In _International Conference on Learning Representations_ , 2016. 
+
+- Dan Hendrycks, Mantas Mazeika, and Thomas Dietterich. Deep anomaly detection with outlier exposure. In _International Conference on Learning Representations_ , 2018. 
+
+- Dan Hendrycks, Steven Basart, Mantas Mazeika, Mohammadreza Mostajabi, Jacob Steinhardt, and Dawn Song. A benchmark for anomaly segmentation. 2019. 
+
+- Thomas N. Kipf and Max Welling. Semi-supervised classification with graph convolutional networks. _arXiv_ , abs/1609.02907, 2016. URL http://arxiv.org/abs/1609.02907. 
+
+- Matjaz Kukar.ˇ Transductive reliability estimation for medical diagnosis. _Artificial Intelligence in Medicine_ , 29(1-2):81–106, 2003. 
+
+- Kimin Lee, Kibok Lee, Honglak Lee, and Jinwoo Shin. A simple unified framework for detecting out-of-distribution samples and adversarial attacks. _Advances in neural information processing systems_ , 31, 2018. 
+
+- Xiang Li, Renyu Zhu, Yao Cheng, Caihua Shan, Siqiang Luo, Dongsheng Li, and Weining Qian. Finding global homophily in graph neural networks when meeting heterophily. In _International Conference on Machine Learning_ , pp. 13242–13256. PMLR, 2022a. 
+
+- Zenan Li, Qitian Wu, Fan Nie, and Junchi Yan. Graphde: A generative framework for debiased learning and out-of-distribution detection on graphs. In _Advances in Neural Information Processing Systems_ , 2022b. 
+
+- Shiyu Liang, Yixuan Li, and R Srikant. Enhancing the reliability of out-of-distribution image detection in neural networks. In _International Conference on Learning Representations_ , 2018. 
+
+- Meng Liu, Keqiang Yan, Bora Oztekin, and Shuiwang Ji. Graphebm: Molecular graph generation with energy-based models. In _Energy Based Models Workshop-ICLR 2021_ , 2021. 
+
+- Weitang Liu, Xiaoyun Wang, John Owens, and Yixuan Li. Energy-based out-of-distribution detection. _Advances in neural information processing systems_ , 33:21464–21475, 2020. 
+
+- Yihong Luo, Yuhan Chen, Siya Qiu, Yiwei Wang, Chen Zhang, Yan Zhou, Xiaochun Cao, and Jing Tang. Fast graph sharpness-aware minimization for enhancing and accelerating few-shot node classification, 2024a. URL https://arxiv.org/abs/2410.16845. 
+
+12 
+
+Yihong Luo, Siya Qiu, Xingjian Tao, Yujun Cai, and Jing Tang. Energy-calibrated vae with test time free lunch, 2024b. URL https://arxiv.org/abs/2311.04071. 
+
+Yujie Mo, Liang Peng, Jie Xu, Xiaoshuang Shi, and Xiaofeng Zhu. Simple unsupervised graph representation learning. In _Proceedings of the AAAI Conference on Artificial Intelligence_ , volume 36, pp. 7797–7805, 2022. 
+
+- Sina Mohseni, Mandar Pitale, JBS Yadawa, and Zhangyang Wang. Self-supervised learning for generalizable out-of-distribution detection. In _AAAI Conference on Artificial Intelligence_ , pp. 5216–5223, 2020. 
+
+- Hongbin Pei, Bingzhe Wei, Kevin Chen Chuan Chang, Yu Lei, and Bo Yang. Geom-gcn: Geometric graph convolutional networks. In _8th International Conference on Learning Representations, ICLR 2020_ , 2020. 
+
+- Zhen Peng, Wenbing Huang, Minnan Luo, Qinghua Zheng, Yu Rong, Tingyang Xu, and Junzhou Huang. Graph Representation Learning via Graphical Mutual Information Maximization. In _Proceedings of The Web Conference_ , 2020. doi: https://doi.org/10.1145/3366423.3380112. 
+
+- Jie Ren, Peter J Liu, Emily Fertig, Jasper Snoek, Ryan Poplin, Mark Depristo, Joshua Dillon, and Balaji Lakshminarayanan. Likelihood ratios for out-of-distribution detection. _Advances in neural information processing systems_ , 32, 2019. 
+
+- Benedek Rozemberczki, Carl Allen, and Rik Sarkar. Multi-scale attributed node embedding. _Journal of Complex Networks_ , 9(2):cnab014, 2021. 
+
+- Oleksandr Shchur, Maximilian Mumme, Aleksandar Bojchevski, and Stephan Gunnemann.¨ Pitfalls of graph neural network evaluation. _arXiv preprint arXiv:1811.05868_ , 2018. 
+
+- Yu Song and Donglin Wang. Learning on graphs with out-of-distribution nodes. In _Proceedings of the 28th ACM SIGKDD Conference on Knowledge Discovery and Data Mining_ , pp. 1635–1645, 2022. 
+
+- Maximilian Stadler, Bertrand Charpentier, Simon Geisler, Daniel Z¨ugner, and Stephan G¨unnemann. Graph posterior network: Bayesian predictive uncertainty for node classification. _Advances in Neural Information Processing Systems_ , 34:18033–18048, 2021a. 
+
+- Maximilian Stadler, Bertrand Charpentier, Simon Geisler, Daniel Z¨ugner, and Stephan G¨unnemann. Graph posterior network: Bayesian predictive uncertainty for node classification. _Advances in Neural Information Processing Systems_ , 34:18033–18048, 2021b. 
+
+- Petar Velickovic, Guillem Cucurull, Arantxa Casanova, Adriana Romero, Pietro Lio, and Yoshua` Bengio. Graph attention networks. In _International Conference on Learning Representations (ICLR)_ , 2018. 
+
+- Petar Velickoviˇ c,´ William Fedus, William L Hamilton, Pietro Lio,` Yoshua Bengio, and R Devon Hjelm. Deep graph infomax. _arXiv preprint arXiv:1809.10341_ , 2018. 
+
+- Kuansan Wang, Zhihong Shen, Chiyuan Huang, Chieh-Han Wu, Yuxiao Dong, and Anshul Kanakia. Microsoft academic graph: When experts are not enough. _Quantitative Science Studies_ , 1(1): 396–413, 2020. 
+
+- Qitian Wu, Hengrui Zhang, Junchi Yan, and David Wipf. Handling distribution shifts on graphs: An invariance perspective. In _International Conference on Learning Representations_ , 2021. 
+
+- Qitian Wu, Yiting Chen, Chenxiao Yang, and Junchi Yan. Energy-based out-of-distribution detection for graph neural networks. In _The Eleventh International Conference on Learning Representations_ , 2023a. URL https://openreview.net/forum?id=zoz7Ze4STUL. 
+
+- Qitian Wu, Yiting Chen, Chenxiao Yang, and Junchi Yan. Energy-based out-of-distribution detection for graph neural networks. In _International Conference on Learning Representations (ICLR)_ , 2023b. 
+
+13 
+
+Jianwen Xie, Yang Lu, Ruiqi Gao, and Ying Nian Wu. Cooperative learning of energy-based model and latent variable model via mcmc teaching. In _Proceedings of the AAAI Conference on Artificial Intelligence_ , volume 32, 2018. 
+
+- Jianwen Xie, Zilong Zheng, and Ping Li. Learning energy-based model with variational auto-encoder as amortized sampler. In _Proceedings of the AAAI Conference on Artificial Intelligence_ , volume 35, pp. 10441–10451, 2021. 
+
+- Zhilin Yang, William Cohen, and Ruslan Salakhudinov. Revisiting semi-supervised learning with graph embeddings. In _International conference on machine learning_ , pp. 40–48. PMLR, 2016. 
+
+- Lingxiao Zhao and Leman Akoglu. On using classification datasets to evaluate graph-level outlier detection: Peculiar observations and new insights, 2021. 
+
+- Xujiang Zhao, Feng Chen, Shu Hu, and Jin-Hee Cho. Uncertainty aware semi-supervised learning on graph data. _Advances in Neural Information Processing Systems_ , 33:12827–12836, 2020a. 
+
+- Xujiang Zhao, Feng Chen, Shu Hu, and Jin-Hee Cho. Uncertainty aware semi-supervised learning on graph data. _Advances in Neural Information Processing Systems_ , 33:12827–12836, 2020b. 
+
+- Jiong Zhu, Yujun Yan, Lingxiao Zhao, Mark Heimann, Leman Akoglu, and Danai Koutra. Beyond homophily in graph neural networks: current limitations and effective designs. In _Proceedings of the 34th International Conference on Neural Information Processing Systems_ , pp. 7793–7804, 2020a. 
+
+- Jiong Zhu, Ryan A Rossi, Anup Rao, Tung Mai, Nedim Lipka, Nesreen K Ahmed, and Danai Koutra. Graph neural networks with heterophily. In _Proceedings of the AAAI conference on artificial intelligence_ , volume 35, pp. 11168–11176, 2021. 
+
+- Yanqiao Zhu, Yichen Xu, Feng Yu, Qiang Liu, Shu Wu, and Liang Wang. Deep graph contrastive representation learning. _arXiv preprint arXiv:2006.04131_ , 2020b. 
+
+- Ev Zisselman and Aviv Tamar. Deep residual flow for out of distribution detection. In _Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition_ , pp. 13994–14003, 2020. 
+
+14 
+
+## A POTENTIAL BROADER IMPACT 
+
+This paper presents work whose goal is to advance the field of Machine Learning. There are many potential societal consequences of our work, none of which we feel must be specifically highlighted here. 
+
+## B LIMITATIONS 
+
+DeGEM has achieved excellent performance, but the results are nearly maxed out on some datasets. We need better and more challenging benchmarks to evaluate performance. Additionally, DeGEM shares the same drawback as EBMs trained with MLE: training requires MCMC sampling. However, it still shows superior performance. Besides, the cost of MCMC sampling can be reduced by cooperative learning (Xie et al., 2018; 2021; Luo et al., 2024b). 
+
+## C ADDITIONAL RELATED WORKS 
+
+**Graph Contrastive Learning.** Contrastive learning (CL) stands as a widely applied self-supervised learning method, aiming to derive informative sample representation solely from feature information. The main idea of CL is to align the representations of similar samples in close proximity while driving apart the representations of dissimilar samples. Witnessing the remarkable advancement of Graph Neural Networks (GNNs), a substantial amount of recent research has focused on Graph Contrastive Learning (GCL) (Velickoviˇ c´ et al., 2018; Peng et al., 2020; Hassani & Khasahmadi, 2020; Zhu et al., 2020b; Mo et al., 2022). DGI (Velickoviˇ c´ et al., 2018) learns by maximizing mutual information between node representations and corresponding high-level summaries of graphs. GRACE (Zhu et al., 2020b) maximizes the agreement of corresponding node representations in two augmented views for a graph. SUGRL (Mo et al., 2022) explores the complementary information from structural and neighbor information to maximize inter-class variation and minimize intraclass variation through triplet losses and an upper bound loss, while removing the need for data augmentation and discriminators. Our work builds upon the foundation of GCL, where we employ DGI as part of learning the graph encoder that extract graph topology information. We also establish the relationship between DGI and EBM: DGI can be understood as an EBM trained by noise contrastive estimation. To further enhance the capabilities of the proposed method, we design recurrent update to let the energy head and DGI promote each other in training (see Sec. 3.3), and experiments show that this to be greatly beneficial for OOD detection (see Sec. 4.4). 
+
+**Node Anomaly Detection (NAD).** NAD is a binary classification task, that directly categorizes nodes into two different categories: normal and anomalous. Some works (Dong et al., 2025a; 2024; 2025b; Zhao & Akoglu, 2021; Gong et al., 2023) have been proposed to handle this problem. In contrast, node OOD detection requires balancing the ability to classify in-distribution nodes and detect out-of-distribution nodes. 
+
+## D DERIVIATIONS 
+
+## D.1 TRAINING EBMS 
+
+Given a Boltzmann distribution _p_ _**θ**_ ( _**x**_ ) =[ex][p(] _[−] Z[E]_ _**θ[θ]**_[(] _**[x]**_[))] , its negative log-likelihood (NLL) _L_ _**θ**_ is: 
+
+**==> picture [126 x 19] intentionally omitted <==**
+
+15 
+
+To minimize _L_ _**θ**_ , we first need to calculate the gradient of log _p_ _**θ**_ ( _**x**_ ) w.r.t. _**θ**_ : 
+
+**==> picture [306 x 175] intentionally omitted <==**
+
+So, we have 
+
+**==> picture [376 x 32] intentionally omitted <==**
+
+**==> picture [336 x 31] intentionally omitted <==**
+
+Additionally, minimizing _L_ _**θ**_ is equivalent to minimizing the KL divergence KL _pd_ ( _**x**_ ) _∥p_ _**θ**_ ( _**x**_ ) : � � 
+
+**==> picture [322 x 89] intentionally omitted <==**
+
+## D.2 REGULARIZATION FOR EBM LOSS 
+
+Additionally, we follow (Du & Mordatch, 2019) to adopt the _L_ 2 regularization for energy magnitudes of both true data and sampled data when computing _L_ ebm during training, as otherwise while the difference between true data and sampled data was preserved, the actual values would fluctuate to numerically unstable values.˜ For an energy function _E_ _**θ**_ ( _·_ ), true data _**x** i ∼ pd_ ( _**x**_ ), and sampled data _**x** j ∼ p_ _**θ**_ (˜ _**x**_ ): 
+
+**==> picture [346 x 37] intentionally omitted <==**
+
+where _c_ is a coefficient, we set _c_ = 1 here. 
+
+D.3 SAMPLING FROM EBM 
+
+Given a Boltzmann distribution _p_ _**θ**_ ( _**x**_ ) =[ex][p(] _[−] Z[E]_ _**θ[θ]**_[(] _**[x]**_[))] , the gradient of log _p_ _**θ**_ ( _**x**_ ) w.r.t. _**x**_ is: 
+
+**==> picture [171 x 52] intentionally omitted <==**
+
+16 
+
+**Algorithm 1** Training algorithm of DeGEM. 
+
+**Require:** graph _G_ = ( **X** _,_ **A** ), learning rate _η_ , classification loss weight _ξ_ , MCMC step size _λ_ , MCMC noise variance _σ_[2] , MCMC steps _K_ , MCMC samples _M_ , epoch number _E_ . **Ensure:** optimized models _{g_ _**α**_ ˆ _, D_ _**ψ**_ ˆ _[, f]_ _**[ω]**_[ˆ] _[, I]_ _**ϕ**_[ ˆ] _[}]_[.] 1: Initialize weights _{_ _**α**_ 0 _,_ _**ψ**_ 0 _,_ _**ω**_ 0 _,_ _**ϕ**_ 0 _}_ ; 2: Initialize MCMC replay buffer _B ←_ ∅; 3: **for** _e ←_ 1 **to** _E_ **do** 4: Get node embeddings _{_ _**h** i}[N] i_ =1 _[←{][g]_ _**[α]** e−_ 1[(] _**[x]**[i][,][ N]_[(] _**[x]**[i]_[))] _[}][N] i_ =1[;] 5: 6: # MCMC sampling 7: **for** sample node _j_ = 1 **to** _M_ **do** 8: _**h**_ ˜[(0)] _j ∼B_ with 95% probability and _U_ otherwise; 9: **for** sample step _k_ = 1 **to** _K_ **do** ˜ 10: _**h**_[(] _j[k]_[)] = _**h**_[˜][(] _j[k][−]_[1)] _− λ∇_ _**h**_ ˜ _f_ _**ω** e−_ 1( _**h**_[˜][(] _j[k][−]_[1)] ) + _**ϵ**_[(] _[k]_[)] , _**ϵ**_[(] _[k]_[)] _∼N_ (0 _, σ_[2] ); 11:12: **end for** _**h**_ ˜ _j ←_ sg[˜ _**h**_[(] _j[K]_[)] ]; 13: _B ←B ∪{_ _**h**_[˜] _j}_ ; 14: **end for** 15: Sampled embeddings _{_ _**h**_[˜] _j}[M] j_ =1[;] 16: 17: # compute losses 18: Compute _L_ ebm, _L_ cl, and _L_ cls via recurrent update (Sec. 3.4); 19: 20: # update models 21: _**α** e ←_ _**α** e−_ 1 _− η∇_ _**α**_ ( _L_ cl + _ξL_ cls); 22: _**ψ** e ←_ _**ψ** e−_ 1 _− η∇_ _**ψ** L_ cl; 23: _**ω** e ←_ _**ω** e−_ 1 _− η∇_ _**ω** L_ ebm; 24: _**ϕ** e ←_ _**ϕ** e−_ 1 _− η∇_ _**ϕ**_ ( _ξL_ cls); 25: **end for** 26: _**α**_ ˆ _←_ _**α** E_ , _**ψ**_[ˆ] _←_ _**ψ** E_ , _**ω**_ ˆ _←_ _**ω** E_ , _**ϕ**_[ˆ] _←_ _**ϕ** E_ . 
+
+so we can first initialize a sample using uniform distribution _**x**_[(0)] _∼U_ , and utilize multi steps stochastic gradient to make the sample follow distribution _p_ _**θ**_ ( _**x**_ ): 
+
+**==> picture [181 x 30] intentionally omitted <==**
+
+where _**ϵ**_[(] _[k]_[)] _∼N_ (0 _, σ_[2] ). After _K_ steps, _x_ ˜[(] _[K]_[)] is the output of _K_ -step MCMC sampling. 
+
+## E IMPLEMENTATION DETAILS 
+
+E.1 TRAINING ALGORITHM 
+
+The detailed training algorithm is shown in Algorithm 1. We first obtain node embeddings (Line 4), and then sample nodes by a _K_ -step MCMC sampling (Line 7-15). Then the recurrent update is conducted for computing losses _L_ ebm, _L_ cl, and _L_ cls (Line 18). Finally, update the parameters (Line 21-24). 
+
+Furthermore, we follow (Du & Mordatch, 2019) to use sample **relay buffer** . The initialization of MCMC chain plays a crucial role in mixing time, but langevin dynamics does not place restrictions on sample initialization given sufficient sampling steps. Thus we use a sample replay buffer _B_ in which we preserve previously generated samples and use either these samples or uniform noise for initialization. 
+
+17 
+
+Table 6: Search space of hyper-parameters. 
+
+||**Search Space**|
+|---|---|
+|learning rate_η_|_{_0.05, 0.01, 0.001, 0.0005, 0.0001_}_|
+|weight decay|_{_0.0, 0.01, 0.001, 0.0005, 0.0001_}_|
+|dropout|_{_0.0, 0.1, 0.2, 0.3, 0.4, 0.5_}_|
+|_β_|_{_0, 0.1, 0.3, 0.5, 0.7, 0.9, 1_}_|
+|_ρ_|_{_0, 0.1, 0.3, 0.5, 0.7, 0.9, 1_}_|
+|_γ_|_{_0, 0.1, 0.3, 0.5, 0.7, 0.9, 1_}_|
+|_λ_|_{_1, 5, 10_}_|
+|_σ_2|_{_0.01, 0.005_}_|
+|_ξ_|_{_0.01, 0.05, 0.1, 0.3, 0.5, 1.0_}_|
+
+
+- E.2 DATASET AND SPLITS 
+
+For Twitch that has several subgraphs, we use DE as ID dataset and the other five subgraphs as OOD datasets. The subgraph ENGB is used as OOD exposure dataset for training the OOD Expo baselines. These subgraphs are different in size, edge densities, and degree distribution, thus can be regarded as samples from different distribution (Wu et al., 2021). 
+
+For Arxiv that is in a single graph, we divide the nodes into three parts: the papers published before 2015 are used as ID data, those after 2017 are used as OOD data, and those between are used as OOD exposure data for training the OOD Expo baselines. 
+
+For Cora, Amazon, Chameleon, Actor, and Cornell that have no clear domain information, we synthesize OOD data in three ways (Wu et al., 2023a). Structure manipulation (S): use the original graph as ID data and adopt a stochastic block model to randomly generate a OOD graph. Feature interpolation (F): use random interpolation to create node features for OOD data and the original graph as ID data. Label leave-out (L): use nodes with partial classes as ID and leave out others for OOD. 
+
+We split the ID dataset as 10%/10%/80% (train/valid/test), and use all the nodes in OOD dataset for evaluation. Additionally, an extra OOD dataset is also used in training for OOD exposure (OE, Energy-FT, and GNNSafe++). 
+
+## E.3 SEARCH SPACE FOR HYPER-PARAMETERS 
+
+The detailed search space of hyper-parameters is shown in Tab. 6. We use Optuna (Akiba et al., 2019) to conduct random search for hyper-parameters. 
+
+## F COMPLEXITY ANALYSIS 
+
+Compared to other baselines, our additional computational complexity comes from the introduced GCL and MCMC sampling. 
+
+Suppose that the GCN is used as the graph encoder in other baselines, with _m_ the edge numbers, _n_ the node numbers, _d_ 0 the initial node dimension, _d_ 1 the latent dimension of node representation, and _L_ the number of layers (propagation numbers). So other baselines have a complexity of _O_ ( _Lmd_ 0 _d_ 1). 
+
+In terms of our methods, the GCL processes both positive nodes and negative nodes, but the propagation for positive nodes is conducted in pre-process, with only the transformation remaining in training iterations. So the complexity for GCL is _O_ ( _Lnd_ 0 _d_ 1 + _Lmd_ 0 _d_ 1) _≈O_ ( _Lmd_ 0 _d_ 1), since normally _m >> n_ , where _n_ is the number of nodes. The MCMC sampling has a complexity of _O_ (( _nd_ 1 _d_ 2 + _nd_ 2) _K_ ) = _O_ ( _nd_ 1 _d_ 2 _K_ ), where _d_ 2 is the hidden dimension of Energy Function (2-layer MLP), and _K_ is the number of steps of MCMC sampling. 
+
+This actually suggests that our method has scalability comparable to GNNs, since the seemingly computationally intensive MCMC steps do not suffer from edges, with complexity only scaling linearly with the number of nodes. 
+
+18 
+
+Table 7: The average time consumption (s) of one-run DeGEM training, including the total time, the time consumption of GCL algorithm and MCMC sampling. 
+
+|**Total**<br>**GCL**<br>**MCMC**|**Cora**<br>**Amazon**<br>**Twitch**<br>**Arxiv**<br>**Chameleon**<br>**Actor**<br>**Cornell**<br>11.64<br>15.26<br>15.54<br>149.17<br>10.40<br>17.71<br>5.52<br>0.71<br>0.90<br>0.67<br>10.08<br>0.58<br>1.02<br>0.18<br>5.15<br>5.45<br>4.18<br>15.12<br>4.53<br>6.82<br>2.61|**Avg**<br>32.18<br>100%<br>2.02<br>6%<br>6.27<br>19%||
+|---|---|---|---|
+
+
+Table 8: The average training time consumption (s) (for one-run) comparison between baselines and DeGEM. 
+
+||**Cora**<br>**Amazon**<br>**Twitch**<br>**Arxiv**<br>**Chameleon**<br>**Actor**<br>**Cornell**|**Avg**|
+|---|---|---|
+|**MSP**<br>**ODIN**<br>**Mahalanobis**<br>**Energy**<br>**GKDE**<br>**GPN**<br>**OODGAT**<br>**GNNSafe**<br>**OE**<br>**Energy-FT**<br>**GNNSafe++**<br>**DeGEM**|3.95<br>17.98<br>24.45<br>104.16<br>5.87<br>6.35<br>3.16<br>6.43<br>31.65<br>42.72<br>225.78<br>10.23<br>10.68<br>5.38<br>28.77<br>96.66<br>187.42<br>4956.43<br>36.32<br>71.06<br>20.40<br>4.81<br>21.40<br>26.36<br>117.02<br>7.14<br>7.78<br>4.10<br>5.21<br>10.58<br>14.15<br>45.06<br>5.37<br>7.72<br>4.48<br>15.28<br>27.88<br>23.55<br>OOM<br>14.39<br>22.51<br>11.43<br>5.18<br>23.13<br>33.80<br>144.25<br>7.78<br>8.70<br>4.56<br>5.59<br>22.28<br>26.42<br>136.55<br>7.55<br>8.12<br>3.83<br>5.72<br>24.40<br>27.39<br>129.01<br>7.63<br>8.38<br>4.27<br>6.34<br>25.06<br>28.37<br>131.99<br>8.44<br>9.30<br>5.14<br>8.23<br>25.68<br>31.14<br>138.09<br>9.66<br>10.43<br>7.13<br>11.64<br>15.26<br>15.54<br>149.17<br>10.40<br>17.71<br>5.52|23.70<br>47.55<br>771.01<br>26.94<br>13.22<br>N/A<br>32.49<br>30.05<br>29.54<br>30.66<br>32.91<br>32.18|
+
+
+Table 9: Average OOD detection performance measured by AUC _↑_ on synthetic-Cora datasets with various homophily level. 
+
+|homo ratio|0.0<br>0.2<br>0.4<br>0.6<br>0.8<br>1.0|
+|---|---|
+|**GNNSafe**<br>**DeGEM**|69.02<br>70.65<br>72.73<br>73.72<br>79.08<br>79.12<br>99.66<br>96.56<br>98.39<br>99.11<br>99.86<br>99.96|
+
+
+## G TIME CONSUMPTION 
+
+The detailed time consumption of DeGEM training is shown in Tab. 7. In the GCL algorithm, message-passing for positive samples is handled during preprocessing, and the augmentation step only involves shuffling the rows of the node feature matrix. This makes the entire GCL learning process highly efficient. Furthermore, MCMC sampling is conducted in the latent space, which is low-dimensional and topology-free, resulting in an acceptable time consumption. Overall, GCL learning and MCMC sampling account for only 6% and 19% of the total training time, respectively. 
+
+Tab. 8 compares the training time consumption (s) of baseline models and our proposed DeGEM. Thanks to preprocessing node features and MCMC sampling in the latent space, DeGEM requires only slightly more time during the training phase compared to other baselines. Specifically, training DeGEM (32.18s) is just 7% slower than GNNSafe (30.66s), while delivering significant performance improvements, particularly on heterophilic graphs. 
+
+## H EVALUATION ON SYNTHETIC GRAPHS 
+
+We conduct additional experiments on varying the homophilic ratio using synthetic graphs (Zhu et al., 2021). We report the AUROC results on synthetic-Cora in Tab. 9, and we use the Feature OOD setting. 
+
+As the homophilic ratio decreases from 1.0 to 0.0, the performance of GNNSafe decreases significantly from 79.12 to 69.02. In contrast, DeGEM consistently maintains a high performance across homophilic ratios, achieving around 99 in most cases. This indicates that GNNSafe struggles to handle heterophily, whereas our proposed method demonstrates strong performance on both homophilic and heterophilic graphs. 
+
+19 
+
+Table 10: Detailed OOD detection performance measured by AUC _↑_ / AUPR _↑_ / FPR95 _↓_ / Acc _↑_ on **homophilic** datasets with three OOD types (Structure manipulation, Feature interpolation, Label leave-out). The cells filled in gray are methods tailored for graph-format inputs. 
+
+|**Methods**<br>**OOD**<br>**Expo**|**Structure**<br>AUC↑<br>AUPR↑<br>FPR95↓|Acc↑|**Feature**<br>AUC↑<br>AUPR↑<br>FPR95↓<br>Acc↑|**Label**<br>AUC↑<br>AUPR↑<br>FPR95↓|Acc↑|**Avg**<br>AUC↑<br>AUPR↑<br>FPR95↓<br>Acc↑|
+|---|---|---|---|---|---|---|
+||||**Cora**||||
+|MSP<br>**No**<br>ODIN<br>**No**<br>Mahalanobis<br>**No**<br>Energy<br>**No**<br>ResidualFlow<br>**No**|75.05<br>52.23<br>85.23<br>30.57<br>19.28<br>97.90<br>41.03<br>23.12<br>99.41<br>79.48<br>54.22<br>66.36<br>61.23<br>40.72<br>92.21|77.30<br>74.60<br>71.90<br>79.10<br>82.20|85.87<br>75.26<br>65.29<br>77.30<br>21.19<br>17.02<br>99.56<br>77.50<br>63.92<br>41.65<br>92.43<br>74.20<br>89.34<br>79.96<br>55.98<br>79.30<br>60.72<br>42.25<br>94.68<br>82.20|91.10<br>78.24<br>43.41<br>20.29<br>15.11<br>99.90<br>67.45<br>39.82<br>87.53<br>93.26<br>82.42<br>33.67<br>64.69<br>66.52<br>90.77|88.29<br>87.66<br>88.92<br>90.19<br>82.20|84.01<br>68.57<br>64.64<br>80.96<br>24.02<br>17.14<br>99.12<br>79.92<br>57.47<br>34.86<br>93.12<br>78.34<br>87.36<br>72.20<br>52.00<br>82.86<br>62.22<br>49.83<br>92.55<br>82.20|
+|GKDE<br>**No**|84.49<br>60.76<br>56.57|78.00|90.75<br>82.21<br>44.20<br>81.70|94.59<br>84.66<br>21.10|91.77|89.94<br>75.88<br>40.62<br>83.82|
+|GPN<br>**No**|82.21<br>57.01<br>56.50|81.00|88.06<br>73.28<br>43.61<br>78.80|91.74<br>85.71<br>51.62|91.77|87.34<br>72.00<br>50.58<br>83.86|
+|OODGAT<br>**No**|53.75<br>30.58<br>96.38|34.90|57.03<br>37.64<br>98.89<br>14.50|95.57<br>88.58<br>19.68|89.56|68.78<br>52.27<br>71.65<br>46.32|
+|GNNSafe<br>**No**|87.98<br>79.29<br>76.48|75.30|92.18<br>86.48<br>49.41<br>75.40|92.36<br>81.55<br>34.48|88.92|90.84<br>82.44<br>53.46<br>79.87|
+|OE<br>**Yes**<br>Energy-FT<br>**Yes**|74.42<br>53.05<br>83.20<br>82.34<br>57.36<br>62.67|71.60<br>79.20|86.58<br>77.23<br>66.03<br>74.10<br>91.13<br>81.01<br>40.10<br>78.60|89.06<br>76.45<br>52.33<br>93.68<br>85.94<br>31.44|88.61<br>91.14|83.35<br>68.91<br>67.19<br>78.10<br>89.05<br>74.77<br>44.74<br>82.98|
+|GNNSafe++<br>**Yes**|91.11<br>82.69<br>53.58|76.90|94.51<br>89.03<br>32.90<br>76.50|92.45<br>82.13<br>35.40|90.51|92.69<br>84.62<br>40.63<br>81.30|
+|**DeGEM (Ours)**<br>**No**|**99.93**<br>**99.81**<br>**0.33**|**84.20**|**99.84**<br>**99.50**<br>**0.66**<br>**84.30**|**97.58**<br>**93.61**<br>**12.27**|**93.04**|**99.12**<br>**97.64**<br>**4.42**<br>**87.18**|
+||||**Amazon-Photo**||||
+|MSP<br>**No**<br>ODIN<br>**No**<br>Mahalanobis<br>**No**<br>Energy<br>**No**<br>ResidualFlow<br>**No**|98.94<br>99.07<br>2.46<br>3.50<br>26.70<br>100.00<br>62.40<br>70.20<br>99.75<br>99.94<br>99.92<br>0.07<br>82.58<br>85.75<br>94.51|93.64<br>91.42<br>93.42<br>93.04<br>93.55|97.02<br>95.39<br>10.93<br>92.89<br>5.31<br>26.92<br>99.74<br>92.91<br>72.47<br>66.92<br>83.93<br>92.88<br>98.51<br>96.39<br>3.83<br>92.76<br>75.46<br>80.42<br>99.45<br>93.55|95.49<br>94.13<br>27.77<br>10.16<br>24.55<br>99.89<br>60.80<br>47.36<br>79.17<br>97.13<br>96.11<br>14.35<br>78.31<br>89.08<br>98.20|95.84<br>96.08<br>95.84<br>95.68<br>93.55|97.15<br>96.20<br>13.72<br>94.13<br>6.33<br>26.06<br>99.88<br>93.47<br>65.22<br>61.49<br>87.62<br>94.04<br>98.53<br>97.47<br>6.08<br>93.83<br>78.78<br>85.08<br>97.39<br>93.55|
+|GKDE<br>**No**|92.68<br>94.80<br>74.22|89.69|54.52<br>49.48<br>94.00<br>31.90|76.35<br>75.89<br>87.07|85.55|74.52<br>73.39<br>85.10<br>69.04|
+|GPN<br>**No**|90.35<br>90.53<br>57.53|82.63|86.47<br>85.47<br>82.60<br>63.38|89.90<br>84.64<br>37.93|89.30|88.90<br>86.88<br>59.35<br>78.44|
+|OODGAT<br>**No**|71.41<br>71.93<br>100.00|25.42|70.93<br>74.80<br>98.54<br>25.21|99.18<br>98.42<br>2.34|**96.16**|80.51<br>81.72<br>66.96<br>48.93|
+|GNNSafe<br>**No**|98.69<br>99.26<br>**0.00**|93.74|98.47<br>98.91<br>0.39<br>92.96|97.34<br>96.96<br>3.89|95.72|98.16<br>98.38<br>1.43<br>94.14|
+|OE<br>**Yes**<br>Energy-FT<br>**Yes**|99.84<br>99.82<br>0.09<br>99.97<br>99.97<br>**0.00**|92.89<br>93.63|98.60<br>96.51<br>3.46<br>92.84<br>98.88<br>96.98<br>2.72<br>90.26|96.58<br>95.39<br>16.63<br>98.37<br>97.23<br>6.56|95.96<br>87.44|98.34<br>97.24<br>6.73<br>93.90<br>99.07<br>98.06<br>3.09<br>90.44|
+|GNNSafe++<br>**Yes**|99.60<br>99.77<br>**0.00**|93.04|99.57<br>99.42<br>**0.17**<br>92.76|97.57<br>97.58<br>5.36|95.52|98.91<br>98.92<br>1.84<br>93.77|
+|**DeGEM (Ours)**<br>**No**|**100.00**<br>**100.00**<br>**0.00**|**94.49**|**99.91**<br>**99.86**<br>0.41<br>**93.97**|**99.28**<br>**98.62**<br>**1.82**|95.80|**99.73**<br>**99.49**<br>**0.74**<br>**94.76**|
+||||**Twitch**||||
+||**ES**<br>AUC↑<br>AUPR↑<br>FPR95↓||**FR**<br>AUC↑<br>AUPR↑<br>FPR95↓|**RU**<br>AUC↑<br>AUPR↑<br>FPR95↓||**Avg**<br>Acc↑<br>AUC↑<br>AUPR↑<br>FPR95↓|
+|MSP<br>**No**<br>ODIN<br>**No**<br>Mahalanobis<br>**No**<br>Energy<br>**No**<br>ResidualFlow<br>**No**|66.08<br>76.56<br>91.50<br>43.97<br>58.89<br>97.48<br>46.73<br>58.91<br>93.98<br>58.42<br>68.55<br>90.45<br>62.60<br>74.31<br>93.20||47.40<br>53.65<br>95.85<br>51.84<br>55.13<br>96.15<br>49.69<br>53.28<br>95.79<br>72.91<br>75.26<br>80.48<br>55.59<br>61.24<br>95.15|57.41<br>71.21<br>93.75<br>49.53<br>63.70<br>96.99<br>38.38<br>56.34<br>97.83<br>69.90<br>79.26<br>86.11<br>67.68<br>77.84<br>88.14||56.97<br>67.14<br>93.70<br>63.89<br>48.45<br>59.24<br>96.88<br>62.05<br>44.94<br>56.18<br>95.87<br>62.95<br>67.07<br>74.36<br>85.68<br>65.59<br>61.96<br>71.13<br>92.16<br>**66.37**|
+|GKDE<br>**No**|57.52<br>67.30<br>91.93||57.48<br>61.28<br>93.97|46.25<br>61.51<br>96.28||53.75<br>63.36<br>94.06<br>60.42|
+|GPN<br>**No**|84.07<br>91.92<br>83.99||76.32<br>84.37<br>93.97|78.36<br>88.86<br>89.33||79.59<br>88.38<br>89.10<br>60.29|
+|OODGAT<br>**No**|77.35<br>84.45<br>82.44||77.72<br>80.06<br>78.83|73.24<br>81.12<br>83.26||76.10<br>81.88<br>81.51<br>60.29|
+|GNNSafe<br>**No**|51.00<br>57.41<br>80.79||79.08<br>81.54<br>68.51|82.93<br>86.45<br>57.08||71.00<br>75.13<br>68.79<br>66.18|
+|OE<br>**Yes**<br>Energy-FT<br>**Yes**|64.52<br>77.11<br>88.47<br>93.55<br>96.62<br>42.86||52.99<br>62.00<br>92.81<br>70.89<br>75.99<br>87.47|69.64<br>81.48<br>84.01<br>97.71<br>98.69<br>10.58||62.38<br>73.53<br>88.43<br>64.71<br>87.38<br>90.43<br>46.97<br>63.82|
+|GNNSafe++<br>**Yes**|**97.75**<br>**98.93**<br>**9.70**||92.11<br>95.22<br>64.57|**99.87**<br>**99.94**<br>**0.00**||**96.58**<br>**98.03**<br>**24.76**<br>65.83|
+|**DeGEM (Ours)**<br>**No**|94.83<br>97.63<br>43.80||**97.36**<br>**98.58**<br>**2.53**|94.76<br>97.57<br>41.00||95.65<br>97.93<br>29.11<br>64.51|
+||||**Arxiv**||||
+||**2018**<br>AUC↑<br>AUPR↑<br>FPR95↓||**2019**<br>AUC↑<br>AUPR↑<br>FPR95↓|**2020**<br>AUC↑<br>AUPR↑<br>FPR95↓||**Avg**<br>Acc↑<br>AUC↑<br>AUPR↑<br>FPR95↓|
+|MSP<br>**No**<br>ODIN<br>**No**<br>Mahalanobis<br>**No**<br>Energy<br>**No**<br>ResidualFlow<br>**No**|61.76<br>70.21<br>89.09<br>44.01<br>55.17<br>97.85<br>57.08<br>65.09<br>93.69<br>64.61<br>72.30<br>88.40<br>62.38<br>71.02<br>91.09||63.52<br>65.89<br>87.96<br>42.63<br>47.18<br>98.28<br>56.76<br>57.85<br>94.01<br>65.90<br>67.80<br>87.44<br>63.82<br>67.23<br>91.26|67.06<br>90.63<br>85.74<br>38.96<br>78.45<br>99.37<br>56.92<br>85.95<br>95.01<br>70.37<br>91.85<br>85.35<br>62.21<br>89.22<br>92.74||64.11<br>75.58<br>87.60<br>53.87<br>41.87<br>60.27<br>98.50<br>49.29<br>56.92<br>69.63<br>94.24<br>51.59<br>66.96<br>77.32<br>87.06<br>53.92<br>62.81<br>75.83<br>91.70<br>54.84|
+|GKDE<br>**No**|69.44<br>76.46<br>86.37||71.32<br>73.79<br>86.82|71.73<br>92.23<br>86.50||70.83<br>80.83<br>86.56<br>21.15|
+|GPN<br>**No**|OOM<br>OOM<br>OOM||OOM<br>OOM<br>OOM|OOM<br>OOM<br>OOM||OOM<br>OOM<br>OOM<br>OOM|
+|OODGAT<br>**No**|72.35<br>75.38<br>77.05||73.97<br>72.32<br>77.89|72.30<br>91.22<br>79.16||72.87<br>79.64<br>78.03<br>54.69|
+|GNNSafe<br>**No**<br><br>|67.27<br>75.46<br>87.17<br><br><br>||69.20<br>72.41<br>85.99<br><br><br>|79.02<br>94.91<br>80.69<br><br><br>||71.83<br>80.93<br>84.62<br>54.26<br><br><br><br>|
+|OE<br>**Yes**<br>Energy-FT<br>**Yes**|70.51<br>77.38<br>81.45<br>78.93<br>**83.99**<br>68.81||71.75<br>73.47<br>80.19<br>79.13<br>80.19<br>68.71|75.12<br>93.24<br>77.06<br>82.08<br>95.44<br>66.21||72.46<br>81.37<br>79.56<br>53.17<br>80.04<br>**86.54**<br>67.91<br>39.26|
+|GNNSafe++<br>**Yes**|75.76<br>82.15<br>75.34||76.95<br>79.18<br>73.55|83.82<br>**96.05**<br>66.18||78.84<br>85.79<br>71.69<br>48.05|
+|**DeGEM (Ours)**<br>**No**|**81.30**<br>81.20<br>**42.03**||**86.00**<br>**80.50**<br>**31.41**|**86.01**<br>94.71<br>**31.28**||**84.44**<br>85.47<br>**34.91**<br>**58.20**|
+
+
+## I DETAILED EVALUATION RESULTS 
+
+The detailed results of OOD detection on homophilic and heterophilic graphs are shown in Tabs. 10 and 11, respectively. 
+
+The detailed results of OOD detection on varying the available label ratio are shown in Tab. 12. The full results of the ablation study regarding the different components are shown in Tab. 13. The detailed results of OOD detection performance of different GCL algorithms are shown in Tab. 14. 
+
+20 
+
+Table 11: Detailed OOD detection performance measured by AUC _↑_ / AUPR _↑_ / FPR95 _↓_ / Acc _↑_ on **heterophilic** datasets with three OOD types (Structure manipulation, Feature interpolation, Label leave-out). The cells filled in gray are methods tailored for graph-format inputs. 
+
+|**Methods**<br>**OOD**<br>**Expo**|AUC↑<br>|**Structure**<br>AUPR↑<br>FPR95↓<br>Acc↑|**Feature**<br>AUC↑<br>AUPR↑<br>FPR95↓<br>Acc↑|**Label**<br>AUC↑<br>AUPR↑<br>FPR95↓|Acc↑|**Avg**<br>AUC↑<br>AUPR↑<br>FPR95↓<br>Acc↑|
+|---|---|---|---|---|---|---|
+||||**Chameleon**||||
+|MSP<br>**No**<br>ODIN<br>**No**<br>Mahalanobis<br>**No**<br>Energy<br>**No**<br>ResidualFlow<br>**No**|99.28<br>60.09<br>99.59<br>91.94<br>48.24|99.33<br>1.41<br>33.41<br>70.22<br>100.00<br>28.80<br>99.57<br>0.92<br>29.90<br>95.28<br>100.00<br>37.14<br>42.46<br>99.39<br>34.50|70.92<br>71.75<br>86.39<br>32.42<br>53.20<br>49.82<br>91.13<br>33.24<br>58.93<br>55.55<br>97.80<br>33.41<br>67.75<br>66.73<br>84.15<br>37.58<br>53.82<br>53.61<br>99.91<br>34.50|53.32<br>71.78<br>91.67<br>68.07<br>81.48<br>74.78<br>42.42<br>67.25<br>82.46<br>59.92<br>75.25<br>70.18<br>56.16<br>84.94<br>99.34|43.89<br>37.01<br>44.54<br>41.69<br>34.50|74.51<br>80.95<br>59.82<br>36.57<br>60.45<br>67.17<br>88.64<br>33.02<br>66.98<br>74.13<br>60.39<br>35.95<br>73.20<br>79.09<br>84.77<br>38.80<br>52.74<br>60.34<br>99.55<br>34.50|
+|GKDE<br>**No**|96.06|96.66<br>18.45<br>30.12|67.33<br>70.27<br>91.26<br>34.94|60.22<br>77.42<br>74.78|40.40|74.54<br>81.45<br>61.50<br>35.15|
+|GPN<br>**No**|82.90|87.44<br>100.00<br>20.41|64.99<br>57.79<br>88.76<br>30.99|72.68<br>82.83<br>77.85|34.71|73.52<br>76.02<br>88.87<br>28.70|
+|OODGAT<br>**No**|54.89|52.07<br>97.45<br>26.06|53.86<br>49.47<br>97.28<br>29.73|65.33<br>74.23<br>78.29|40.68|58.03<br>58.59<br>91.01<br>32.16|
+|GNNSafe<br>**No**|34.36|56.86<br>100.00<br>35.33|57.46<br>58.24<br>95.83<br>38.07|52.18<br>73.72<br>85.09|43.43|48.00<br>62.94<br>93.64<br>38.94|
+|OE<br>**Yes**<br>Energy-FT<br>**Yes**|98.67<br>98.95|98.83<br>3.60<br>34.89<br>99.15<br>0.61<br>38.01|69.00<br>65.65<br>82.26<br>35.49<br>65.19<br>64.56<br>94.51<br>38.89|75.54<br>84.02<br>70.83<br>75.53<br>84.45<br>66.89|40.22<br>39.30|81.07<br>82.83<br>52.23<br>36.87<br>79.89<br>82.72<br>54.00<br>38.74|
+|GNNSafe++<br>**Yes**|36.23|58.23<br>100.00<br>36.59|57.80<br>58.51<br>93.94<br>37.41|50.65<br>73.38<br>87.06|42.33|48.23<br>63.37<br>93.67<br>38.78|
+|**DeGEM (Ours)**<br>**No**|**99.99**|**99.98**<br>**0.00**<br>**57.82**|**99.70**<br>**99.51**<br>**1.10**<br>**57.93**|**89.68**<br>**94.62**<br>**39.04**|**64.46**|**96.46**<br>**98.04**<br>**13.38**<br>**60.07**|
+||||**Actor**||||
+|MSP<br>**No**<br>ODIN<br>**No**<br>Mahalanobis<br>**No**<br>Energy<br>**No**<br>ResidualFlow<br>**No**|71.38<br>42.32<br>79.96<br>64.26<br>49.72|72.10<br>92.30<br>21.64<br>43.97<br>99.66<br>22.30<br>74.27<br>70.51<br>24.23<br>64.61<br>98.16<br>25.21<br>45.67<br>97.96<br>27.63|59.11<br>53.90<br>92.04<br>24.34<br>52.57<br>47.79<br>93.55<br>23.90<br>65.94<br>58.33<br>85.08<br>23.72<br>51.71<br>48.17<br>96.68<br>24.33<br>50.07<br>45.13<br>97.47<br>27.63|56.32<br>85.03<br>89.21<br>65.10<br>90.12<br>85.58<br>52.58<br>82.78<br>87.92<br>55.00<br>84.54<br>89.80<br>50.68<br>87.99<br>97.30|37.27<br>35.79<br>31.98<br>36.71<br>27.63|62.27<br>70.35<br>91.19<br>27.75<br>53.33<br>60.62<br>92.93<br>27.33<br>66.16<br>71.79<br>81.17<br>26.64<br>56.99<br>65.77<br>94.88<br>28.75<br>50.15<br>59.60<br>97.58<br>27.63|
+|GKDE<br>**No**|71.27|69.91<br>93.39<br>25.63|58.08<br>52.60<br>90.67<br>19.56|53.72<br>84.44<br>92.50|33.60|61.02<br>68.98<br>92.19<br>26.26|
+|GPN<br>**No**|78.58|79.13<br>62.50<br>18.67|62.13<br>56.27<br>93.42<br>20.21|75.04<br>93.13<br>75.73|**38.08**|71.92<br>76.18<br>77.22<br>25.65|
+|OODGAT<br>**No**|51.25|46.46<br>94.83<br>23.65|52.00<br>48.78<br>95.20<br>25.77|65.39<br>88.68<br>84.64|36.30|56.21<br>61.31<br>91.56<br>28.57|
+|GNNSafe<br>**No**|31.76|42.55<br>99.05<br>26.30|50.66<br>46.38<br>95.62<br>26.20|51.60<br>83.80<br>87.81|37.92|44.68<br>57.58<br>94.16<br>30.14|
+|OE<br>**Yes**<br>Energy-FT<br>**Yes**|68.52<br>74.36|67.55<br>94.59<br>21.61<br>74.16<br>89.74<br>24.67|61.52<br>56.27<br>94.84<br>24.64<br>61.43<br>54.84<br>90.87<br>25.39|60.54<br>86.41<br>83.00<br>58.75<br>85.85<br>88.04|37.11<br>37.34|63.53<br>70.07<br>90.81<br>27.79<br>64.85<br>71.62<br>89.55<br>29.13|
+|GNNSafe++<br>**Yes**|58.49|63.44<br>98.89<br>25.13|62.64<br>62.03<br>93.49<br>25.31|52.36<br>84.47<br>89.92|37.22|57.83<br>69.98<br>94.10<br>29.22|
+|**DeGEM (Ours)**<br>**No**|**99.76**|**99.65**<br>**0.84**<br>**31.97**|**99.98**<br>**99.98**<br>**0.08**<br>**33.87**|**100.00**<br>**100.00**<br>**0.00**|36.02|**99.92**<br>**99.88**<br>**0.31**<br>**33.95**|
+||||**Cornell**||||
+|MSP<br>**No**<br>ODIN<br>**No**<br>Mahalanobis<br>**No**<br>Energy<br>**No**<br>ResidualFlow<br>**No**|81.50<br>67.99<br>69.84<br>83.09<br>67.80|84.58<br>92.35<br>41.50<br>57.50<br>98.91<br>38.78<br>69.08<br>92.90<br>36.73<br>84.90<br>86.34<br>38.10<br>64.21<br>93.44<br>43.54|71.89<br>61.46<br>84.15<br>43.54<br>85.76<br>87.82<br>75.96<br>38.10<br>70.08<br>69.09<br>92.90<br>43.54<br>86.70<br>85.61<br>83.06<br>38.10<br>66.33<br>61.30<br>98.36<br>43.54|68.50<br>85.15<br>89.47<br>42.16<br>66.71<br>89.47<br>81.73<br>93.72<br>97.37<br>69.70<br>85.99<br>100.00<br>73.09<br>91.56<br>97.37|63.81<br>63.81<br>62.86<br>62.86<br>43.54|111.98<br>77.06<br>88.66<br>49.61<br>94.76<br>70.68<br>88.11<br>46.89<br>104.50<br>77.30<br>94.39<br>47.71<br>121.88<br>85.50<br>89.80<br>46.35<br>88.58<br>72.35<br>96.39<br>43.54|
+|GKDE<br>**No**|80.53|80.81<br>91.26<br>14.97|77.48<br>72.00<br>98.36<br>42.86|81.18<br>92.76<br>86.84|63.81|109.97<br>81.86<br>92.15<br>40.54|
+|GPN<br>**No**|89.68|90.86<br>61.20<br>43.54|83.36<br>75.12<br>37.70<br>42.86|82.93<br>92.79<br>60.53|63.81|168.50<br>86.26<br>53.14<br>50.07|
+|OODGAT<br>**No**|67.16|66.13<br>97.81<br>42.18|69.42<br>61.27<br>99.45<br>42.86|68.52<br>82.45<br>81.58|64.76|95.30<br>69.95<br>92.95<br>49.93|
+|GNNSafe<br>**No**|74.66|82.14<br>93.44<br>25.17|76.22<br>83.44<br>88.52<br>41.50|68.17<br>80.87<br>68.42|63.81|115.19<br>82.15<br>83.46<br>43.49|
+|OE<br>**Yes**<br>Energy-FT<br>**Yes**|82.05<br>80.42|79.76<br>74.32<br>26.53<br>83.71<br>92.90<br>43.54|77.29<br>62.74<br>55.74<br>37.41<br>90.19<br>90.55<br>71.58<br>39.46|55.79<br>74.93<br>92.11<br>65.81<br>83.53<br>89.47|57.14<br>62.86|110.50<br>72.47<br>74.05<br>40.36<br>128.71<br>85.93<br>84.65<br>48.62|
+|GNNSafe++<br>**Yes**|77.59|83.44<br>89.07<br>26.53|82.94<br>87.28<br>98.36<br>43.54|76.77<br>84.57<br>**60.53**|60.95|125.22<br>85.10<br>82.65<br>43.67|
+|**DeGEM (Ours)**<br>**No**|**97.97**|**96.11**<br>**5.46**<br>**48.30**|**100.00**<br>**100.00**<br>**0.00**<br>**65.31**|**90.90**<br>**96.74**<br>65.79|**77.14**|**233.73**<br>**97.61**<br>**23.75**<br>**63.58**|
+
+
+21 
+
+Table 12: Detailed OOD detection performance on varying the available label ratio, measured by AUC _↑ /_ AUPR _↑ /_ FPR95 _↓ /_ Acc _↑_ . 
+
+|**Cora**|**Cora**|**Cora**|**Cora**|**Cora**|
+|---|---|---|---|---|
+|**OOD**<br>**Expo**|**Structure**<br>AUC↑<br>AUPR↑<br>FPR95↓<br>Acc↑|**Feature**<br>AUC↑<br>AUPR↑<br>FPR95↓<br>Acc↑|**Label**<br>AUC↑<br>AUPR↑<br>FPR95↓<br>Acc↑|**Avg**<br>AUC↑<br>AUPR↑<br>FPR95↓<br>Acc↑|
+|Label Rate = 10%|||||
+|OE<br>**Yes**<br>Energy-FT<br>**Yes**<br>GNNSafe++<br>**Yes**|51.47<br>30.28<br>93.09<br>42.50<br>63.03<br>37.80<br>92.84<br>51.90<br>76.10<br>56.67<br>81.72<br>52.50|64.60<br>42.82<br>89.11<br>49.30<br>65.89<br>47.46<br>96.60<br>54.90<br>72.84<br>60.39<br>97.75<br>52.90|80.01<br>67.94<br>83.87<br>74.37<br>87.08<br>73.80<br>62.37<br>68.99<br>87.27<br>76.58<br>58.72<br>77.85|65.36<br>47.01<br>88.69<br>55.39<br>72.00<br>53.02<br>83.94<br>58.60<br>78.74<br>64.55<br>79.40<br>61.08|
+|**DeGEM**<br>**No**|**99.50**<br>**98.25**<br>**1.92**<br>**61.20**|**98.78**<br>**96.23**<br>**5.17**<br>**60.80**|**95.35**<br>**89.90**<br>**22.92**<br>**80.70**|**97.87**<br>**94.79**<br>**10.00**<br>**67.57**|
+|Label Rate = 50%|||||
+|OE<br>**Yes**<br>Energy-FT<br>**Yes**<br>GNNSafe++<br>**Yes**|67.64<br>45.88<br>86.96<br>68.30<br>67.91<br>42.20<br>79.99<br>70.00<br>82.22<br>67.91<br>74.19<br>70.60|82.14<br>67.48<br>66.06<br>71.60<br>77.13<br>59.17<br>71.16<br>70.80<br>87.76<br>76.69<br>60.97<br>71.90|86.12<br>68.08<br>59.74<br>87.66<br>87.69<br>68.26<br>45.54<br>89.24<br>89.43<br>73.81<br>37.02<br>88.61|78.63<br>60.48<br>70.92<br>75.85<br>77.58<br>56.54<br>65.56<br>76.68<br>86.47<br>72.80<br>57.39<br>77.04|
+|**DeGEM**<br>**No**|**98.46**<br>**95.88**<br>**6.76**<br>**79.90**|**98.72**<br>**97.08**<br>**4.95**<br>**78.40**|**95.40**<br>**82.90**<br>**14.91**<br>**91.14**|**97.53**<br>**91.95**<br>**8.87**<br>**83.15**|
+|Label Rate = 100%|||||
+|OE<br>**Yes**<br>Energy-FT<br>**Yes**<br>GNNSafe++<br>**Yes**|74.42<br>53.05<br>83.20<br>71.60<br>82.34<br>57.36<br>62.67<br>79.20<br>91.11<br>82.69<br>53.58<br>76.90|86.58<br>77.23<br>66.03<br>74.10<br>91.13<br>81.01<br>40.10<br>78.60<br>94.51<br>89.03<br>32.90<br>76.50|89.06<br>76.45<br>52.33<br>88.61<br>93.68<br>85.94<br>31.44<br>91.14<br>92.45<br>82.13<br>35.40<br>90.51|83.35<br>68.91<br>67.19<br>78.10<br>89.05<br>74.77<br>44.74<br>82.98<br>92.69<br>84.62<br>40.63<br>81.30|
+|**DeGEM**<br>**No**|**99.93**<br>**99.81**<br>**0.33**<br>**84.20**|**99.98**<br>**99.93**<br>**0.15**<br>**83.20**|**97.58**<br>**93.61**<br>**12.27**<br>**93.04**|**99.16**<br>**97.78**<br>**4.25**<br>**86.81**|
+|**Twitch**|||||
+|**OOD**<br>**Expo**|**ES**<br>AUC↑<br>AUPR↑<br>FPR95↓|**FR**<br>AUC↑<br>AUPR↑<br>FPR95↓|**RU**<br>AUC↑<br>AUPR↑<br>FPR95↓|**Avg**<br>Acc↑<br>AUC↑<br>AUPR↑<br>FPR95↓|
+|Label Rate = 10%|||||
+|OE<br>**Yes**<br>Energy-FT<br>**Yes**<br>GNNSafe++<br>**Yes**|67.85<br>76.78<br>90.12<br>85.09<br>90.89<br>**73.86**<br>75.41<br>82.92<br>84.90|61.77<br>66.67<br>92.78<br>85.98<br>89.06<br>76.28<br>76.58<br>82.00<br>87.79|60.45<br>72.32<br>92.70<br>87.36<br>91.66<br>**62.46**<br>81.24<br>90.11<br>80.23|63.36<br>71.92<br>91.87<br>62.55<br>86.14<br>90.54<br>70.87<br>**63.54**<br>77.75<br>85.01<br>84.30<br>63.04|
+|**DeGEM**<br>**No**|**93.63**<br>**97.09**<br>73.97|**96.21**<br>**97.93**<br>**17.69**|**94.15**<br>**97.39**<br>62.58|**94.67**<br>**97.47**<br>**51.41**<br>60.29|
+|Label Rate = 50%|||||
+|OE<br>**Yes**<br>Energy-FT<br>**Yes**<br>GNNSafe++<br>**Yes**|68.98<br>80.25<br>89.82<br>90.74<br>95.11<br>63.21<br>**94.93**<br>**97.52**<br>**40.90**|50.07<br>56.44<br>95.50<br>73.73<br>78.69<br>84.90<br>86.03<br>91.24<br>80.80|55.39<br>69.81<br>94.82<br>97.43<br>98.37<br>11.15<br>**99.30**<br>**99.65**<br>**1.62**|58.15<br>68.83<br>93.38<br>62.18<br>87.30<br>90.72<br>53.09<br>**64.43**<br>93.42<br>96.14<br>**41.11**<br>64.04|
+|**DeGEM**<br>**No**|93.66<br>97.07<br>65.77|**96.50**<br>**98.05**<br>**16.58**|92.46<br>96.51<br>66.18|**94.21**<br>**97.21**<br>49.51<br>61.84|
+|Label Rate = 100%|||||
+|OE<br>**Yes**<br>Energy-FT<br>**Yes**<br>GNNSafe++<br>**Yes**|64.52<br>77.11<br>88.47<br>93.55<br>96.62<br>42.86<br>**97.75**<br>**98.93**<br>**9.70**|52.99<br>62.00<br>92.81<br>70.89<br>75.99<br>87.47<br>92.11<br>95.22<br>64.57|69.64<br>81.48<br>84.01<br>97.71<br>98.69<br>10.58<br>**99.87**<br>**99.94**<br>**0.00**|62.38<br>73.53<br>88.43<br>64.71<br>87.38<br>90.43<br>46.97<br>63.82<br>**96.58**<br>**98.03**<br>**24.76**<br>**65.83**|
+|**DeGEM**<br>**No**|94.83<br>97.63<br>43.80|**97.36**<br>**98.58**<br>**2.53**|94.76<br>97.57<br>41.00|95.65<br>97.93<br>29.11<br>64.51|
+|**Chameleon**|||||
+|**OOD**<br>**Expo**|**Structure**<br>AUC↑<br>AUPR↑<br>FPR95↓<br>Acc↑|**Feature**<br>AUC↑<br>AUPR↑<br>FPR95↓<br>Acc↑|**Label**<br>AUC↑<br>AUPR↑<br>FPR95↓<br>Acc↑|**Avg**<br>AUC↑<br>AUPR↑<br>FPR95↓<br>Acc↑|
+|Label Rate = 10%|||||
+|OE<br>**Yes**<br>Energy-FT<br>**Yes**<br>GNNSafe++<br>**Yes**|75.16<br>82.02<br>100.00<br>25.23<br>55.58<br>67.05<br>100.00<br>24.96<br>24.66<br>47.47<br>100.00<br>30.83|65.42<br>64.01<br>85.77<br>24.79<br>45.36<br>43.21<br>97.80<br>30.01<br>50.77<br>48.11<br>95.83<br>28.25|61.29<br>77.96<br>81.58<br>31.77<br>67.84<br>78.06<br>59.21<br>39.12<br>50.39<br>69.30<br>86.62<br>41.05|67.29<br>74.66<br>89.12<br>62.55<br>56.26<br>62.77<br>85.67<br>**63.54**<br>41.94<br>54.96<br>94.15<br>63.04|
+|**DeGEM**<br>**No**|**99.78**<br>**99.82**<br>**0.13**<br>**43.12**|**99.75**<br>**99.63**<br>**1.27**<br>**40.59**|**90.38**<br>**95.35**<br>**41.01**<br>**48.30**|**96.64**<br>**98.27**<br>**14.14**<br>60.29|
+|Label Rate = 50%<br>OE<br>**Yes**<br>94.14<br>95.83<br>53.67<br>33.52<br>67.73<br>65.30<br>84.23<br>34.01<br>67.10<br>77.95<br>64.47<br>38.57<br>76.32<br>79.70<br>67.46<br>62.18<br>Energy-FT<br>**Yes**<br>76.88<br>83.39<br>100.00<br>29.95<br>55.29<br>55.24<br>95.39<br>31.54<br>73.62<br>83.80<br>70.39<br>39.94<br>68.60<br>74.14<br>88.59<br>**64.43**<br>GNNSafe++<br>**Yes**<br>31.95<br>54.80<br>100.00<br>36.86<br>55.79<br>51.99<br>94.20<br>34.12<br>50.47<br>72.90<br>83.99<br>38.48<br>46.07<br>59.89<br>92.73<br>64.04|||||
+|**DeGEM**<br>**No**<br>|**99.98**<br>**99.97**<br>**0.09**<br>**53.48**|**99.64**<br>**99.48**<br>**1.71**<br>**48.71**|**91.47**<br>**95.42**<br>**37.50**<br>**55.83**|**97.03**<br>**98.29**<br>**13.10**<br>61.84|
+|Label Rate = 100%|||||
+|OE<br>**Yes**<br>Energy-FT<br>**Yes**<br>GNNSafe++<br>**Yes**|98.67<br>98.83<br>3.60<br>34.89<br>98.95<br>99.15<br>0.61<br>38.01<br>36.23<br>58.23<br>100.00<br>36.59|69.00<br>65.65<br>82.26<br>35.49<br>65.19<br>64.56<br>94.51<br>38.89<br>57.80<br>58.51<br>93.94<br>37.41|75.54<br>84.02<br>70.83<br>40.22<br>75.53<br>84.45<br>66.89<br>39.30<br>50.65<br>73.38<br>87.06<br>42.33|81.07<br>82.83<br>52.23<br>64.71<br>79.89<br>82.72<br>54.00<br>63.82<br>48.23<br>63.37<br>93.67<br>**65.83**|
+|**DeGEM**<br>**No**|**99.99**<br>**99.98**<br>**0.00**<br>**57.82**|**99.70**<br>**99.51**<br>**1.10**<br>**57.93**|**89.68**<br>**94.62**<br>**39.04**<br>**64.46**|**96.46**<br>**98.04**<br>**13.38**<br>64.51|
+|**Cornell**|||||
+|**OOD**<br>**Expo**|**Structure**<br>AUC↑<br>AUPR↑<br>FPR95↓<br>Acc↑|**Feature**<br>AUC↑<br>AUPR↑<br>FPR95↓<br>Acc↑|**Label**<br>AUC↑<br>AUPR↑<br>FPR95↓<br>Acc↑|**Avg**<br>AUC↑<br>AUPR↑<br>FPR95↓<br>Acc↑|
+|Label Rate = 10%|||||
+|OE<br>**Yes**<br>Energy-FT<br>**Yes**<br>GNNSafe++<br>**Yes**|78.38<br>77.47<br>95.08<br>42.86<br>68.18<br>76.80<br>100.00<br>**43.54**<br>72.52<br>80.70<br>99.45<br>34.01|61.03<br>52.40<br>94.54<br>29.93<br>59.50<br>61.45<br>100.00<br>**43.54**<br>73.64<br>82.04<br>96.72<br>**43.54**|34.76<br>66.40<br>94.74<br>**65.71**<br>53.41<br>74.09<br>97.37<br>64.76<br>62.39<br>75.80<br>86.84<br>63.81|58.06<br>65.42<br>94.78<br>62.55<br>60.36<br>70.78<br>99.12<br>**63.54**<br>69.52<br>79.51<br>94.34<br>63.04|
+|**DeGEM**<br>**No**|**99.62**<br>**99.50**<br>**2.19**<br>14.97|**100.00**<br>**100.00**<br>**0.00**<br>17.01|**93.08**<br>**97.35**<br>**31.58**<br>63.81|**97.57**<br>**98.95**<br>**11.25**<br>60.29|
+|Label Rate = 50%|||||
+|OE<br>**Yes**<br>Energy-FT<br>**Yes**<br>GNNSafe++<br>**Yes**|84.13<br>83.96<br>89.07<br>**44.22**<br>67.17<br>67.68<br>98.91<br>41.50<br>77.86<br>84.38<br>91.80<br>37.41|80.47<br>77.97<br>84.15<br>36.05<br>78.34<br>82.89<br>100.00<br>42.86<br>76.49<br>83.70<br>95.63<br>40.82|57.22<br>76.85<br>97.37<br>60.95<br>58.22<br>75.16<br>84.21<br>62.86<br>65.01<br>77.94<br>68.42<br>62.86|73.94<br>79.59<br>90.20<br>62.18<br>67.91<br>75.24<br>94.37<br>**64.43**<br>73.12<br>82.01<br>85.28<br>64.04|
+|**DeGEM**<br>**No**|**97.84**<br>**92.02**<br>**3.28**<br>**44.22**|**99.88**<br>**99.85**<br>**1.09**<br>**55.78**|**91.23**<br>**96.73**<br>**44.74**<br>**73.33**|**96.32**<br>**96.20**<br>**16.37**<br>61.84|
+|Label Rate = 100%<br>OE<br>**Yes**<br>82.05<br>79.76<br>74.32<br>26.53<br>77.29<br>62.74<br>55.74<br>37.41<br>55.79<br>74.93<br>92.11<br>57.14<br>71.71<br>72.47<br>74.05<br>64.71<br>Energy-FT<br>**Yes**<br>80.42<br>83.71<br>92.90<br>43.54<br>90.19<br>90.55<br>71.58<br>39.46<br>65.81<br>83.53<br>89.47<br>62.86<br>78.81<br>85.93<br>84.65<br>63.82<br>GNNSafe++<br>**Yes**<br>77.59<br>83.44<br>89.07<br>26.53<br>82.94<br>87.28<br>98.36<br>43.54<br>76.77<br>84.57<br>**60.53**<br>60.95<br>79.10<br>85.10<br>82.65<br>**65.83**|||||
+|**DeGEM**<br>**No**|**97.97**<br>**96.11**<br>**5.46**<br>**48.30**|**100.00**<br>**100.00**<br>**0.00**<br>**65.31**|**90.90**<br>**96.74**<br>65.79<br>**77.14**|**96.29**<br>**97.61**<br>**23.75**<br>64.51|
+
+
+22 
+
+Table 13: Detailed ablation study results measured by AUC _↑_ / AUPR _↑_ / FPR95 _↓_ / Acc _↑_ . ‘Eprop’ stands for energy propagation. ‘MLE-Energy’ indicates whether the energy head is trained via maximum likelihood estimation, otherwise, the node energy is obtained by classification logits (Classify-Energy). ‘GCL’ indicates whether a graph contrastive learning algorithm is employed when training the graph encoder. 
+
+|trainingthegraph encoder.|trainingthegraph encoder.||||||
+|---|---|---|---|---|---|---|
+|||||**Cora**|||
+||**Eprop**<br>**Classify-**<br>**MLE-**<br>**GCL**<br>**MH**<br>**CE**<br>**ERo**<br>**Energy**<br>**Energy**|AUROC↑|**Structure**<br>AUPR↑<br>FPR95↓<br>Acc↑|**Feature**<br>AUROC↑<br>AUPR↑<br>FPR95↓<br>Acc↑|**Label**<br>AUROC↑<br>AUPR↑<br>FPR95↓<br>Acc↑|**Avg**<br>AUROC↑<br>AUPR↑<br>FPR95↓<br>Acc↑|
+|Energy|✓|79.48|54.22<br>66.36<br>79.10|89.34<br>79.96<br>55.98<br>79.30|93.26<br>82.42<br>33.67<br>90.19|87.36<br>72.20<br>52.00<br>82.86|
+|GNNSafe|✓<br>✓<br>✓<br>✓|87.98<br>8590|79.29<br>76.48<br>75.30<br>6126<br>3900<br>5560|92.18<br>86.48<br>49.41<br>75.40<br>9298<br>7466<br>2345<br>7350|92.36<br>81.55<br>34.48<br>88.92<br>7052<br>4103<br>8043<br>8671|90.84<br>82.44<br>53.46<br>79.87<br>8313<br>5898<br>4762<br>7194|
+||✓<br>✓<br>✓|.<br>59.46<br>8632|.<br>.<br>.<br>34.47<br>94.13<br>73.20<br>5953<br>4077<br>5810|.<br>.<br>.<br>.<br>67.92<br>44.80<br>86.60<br>73.30<br>8754<br>6955<br>4021<br>7470|.<br>.<br>.<br>.<br>79.94<br>60.09<br>77.38<br>85.44<br>9275<br>8001<br>3357<br>8956|.<br>.<br>.<br>.<br>69.11<br>46.45<br>86.04<br>77.31<br>8887<br>6970<br>3818<br>7412|
+||✓<br>✓<br>✓<br>✓<br>✓<br>✓|.<br>81.01<br>8652|.<br>.<br>.<br>52.82<br>58.46<br>73.90<br>6221<br>4361<br>7560|.<br>.<br>.<br>.<br>92.15<br>77.50<br>29.87<br>75.50<br>9643<br>8484<br>919<br>7840|.<br>.<br>.<br>.<br>93.31<br>83.26<br>36.00<br>85.76<br>9407<br>8454<br>2698<br>8797|.<br>.<br>.<br>.<br>88.82<br>71.19<br>41.44<br>78.39<br>9234<br>7720<br>2659<br>8066|
+||✓<br>✓<br>✓<br>✓<br>✓<br>✓<br>✓|.<br>87.89<br>98.73|.<br>.<br>.<br>63.84<br>41.77<br>76.70<br>96.62<br>5.95<br>82.10|.<br>.<br>.<br>.<br>96.43<br>84.84<br>9.19<br>78.40<br>97.94<br>92.64<br>6.79<br>80.80|.<br>.<br>.<br>.<br>94.07<br>84.54<br>26.98<br>87.97<br>95.75<br>90.06<br>22.01<br>92.09|.<br>.<br>.<br>.<br>92.80<br>77.74<br>25.98<br>81.02<br>97.47<br>93.11<br>11.58<br>85.00|
+||✓<br>✓<br>✓<br>✓<br><br><br><br>|98.12<br>|94.83<br>5.87<br>81.10<br><br><br>|99.06<br>96.62<br>2.73<br>82.70<br><br><br><br>|96.93<br>91.45<br>12.98<br>92.41<br><br><br><br>|98.03<br>94.30<br>7.20<br>85.40<br><br><br><br>|
+|**DeGEM**|✓<br>✓<br>✓<br>✓<br>✓<br>✓<br>✓<br>✓<br>✓|95.22<br>**99.93**|82.38<br>13.04<br>83.50<br>**99.81**<br>**0.33**<br>**84.20**|98.84<br>96.44<br>5.21<br>82.80<br>**99.84**<br>**99.50**<br>**0.66**<br>**84.30**|94.65<br>86.29<br>23.63<br>**93.04**<br>**97.58**<br>**93.61**<br>**12.27**<br>**93.04**|96.24<br>88.37<br>13.96<br>86.45<br>**99.12**<br>**97.64**<br>**4.42**<br>**87.18**|
+|||||**Twitch**|||
+||**Eprop**<br>**Classify-**<br>**MLE-**<br>**GCL**<br>**MH**<br>**CE**<br>**ERo**<br>**Energy**<br>**Energy**|AUROC↑|**ES**<br>AUPR↑<br>FPR95↓|**FR**<br>AUROC↑<br>AUPR↑<br>FPR95↓|**RU**<br>AUROC↑<br>AUPR↑<br>FPR95↓|**Avg**<br>Acc↑<br>AUROC↑<br>AUPR↑<br>FPR95↓|
+|Energy|✓|58.42|68.55<br>90.45|72.91<br>75.26<br>80.48|69.90<br>79.26<br>86.11|67.07<br>74.36<br>85.68<br>65.59|
+|GNNSafe|✓<br>✓<br>✓<br>✓|51.00<br>5212|57.41<br>80.79<br>6385<br>9258|79.08<br>81.54<br>68.51<br>4878<br>5740<br>9860|82.93<br>86.45<br>57.08<br>4194<br>5659<br>9507|71.00<br>75.13<br>68.79<br>**66.18**<br>4761<br>5928<br>9542<br>6387|
+||✓<br>✓<br>✓|.<br>74.52<br>8340|.<br>.<br>85.07<br>86.14<br>9059<br>8051|.<br>.<br>.<br>79.01<br>84.93<br>86.84<br>9079<br>9387<br>6636|.<br>.<br>.<br>69.76<br>80.70<br>85.45<br>8011<br>8821<br>7872|.<br>.<br>.<br>.<br>74.43<br>83.57<br>86.15<br>60.29<br>8477<br>9089<br>7520<br>6029|
+||✓<br>✓<br>✓<br>✓<br>✓<br>✓|.<br>67.06<br>8247|.<br>.<br>74.88<br>91.09<br>8859<br>7509|.<br>.<br>.<br>69.53<br>76.28<br>92.76<br>8716<br>9017<br>7242|.<br>.<br>.<br>72.85<br>81.23<br>84.08<br>7974<br>8674<br>7320|.<br>.<br>.<br>.<br>69.81<br>77.46<br>89.31<br>60.61<br>8312<br>8850<br>7357<br>6029|
+||✓<br>✓<br>✓<br>✓<br>✓<br>✓<br>✓|.<br>83.40<br>9113|.<br>.<br>90.59<br>80.51<br>9526<br>7029|.<br>.<br>.<br>90.79<br>93.87<br>66.36<br>9666<br>9804<br>1073|.<br>.<br>.<br>80.11<br>88.21<br>78.72<br>9302<br>9648<br>5377|.<br>.<br>.<br>.<br>84.77<br>90.89<br>75.20<br>60.29<br>9361<br>9660<br>4493<br>6029|
+||✓<br>✓<br>✓<br>✓<br><br><br><br>|.<br>92.14<br>|.<br>.<br>95.71<br>57.92<br><br>|.<br>.<br>.<br>**97.82**<br>**98.77**<br>**1.80**<br><br><br>|.<br>.<br>.<br>**94.92**<br>97.47<br>**28.83**<br><br><br>|.<br>.<br>.<br>.<br>94.96<br>97.32<br>29.51<br>60.29<br><br><br><br>|
+|**DeGEM**|✓<br>✓<br>✓<br>✓<br>✓<br>✓<br>✓<br>✓<br>✓|90.32<br>**94.83**|92.75<br>51.55<br>**97.63**<br>**43.80**|96.68<br>96.78<br>3.02<br>97.36<br>98.58<br>2.53|90.22<br>93.02<br>52.86<br>94.76<br>**97.57**<br>41.00|92.41<br>94.18<br>35.81<br>60.29<br>**95.65**<br>**97.93**<br>**29.11**<br>64.51|
+|||||**Chameleon**|||
+||**Eprop**<br>**Classify-**<br>**MLE-**<br>**GCL**<br>**MH**<br>**CE**<br>**ERo**<br>**Energy**<br>**Energy**|AUROC↑|**Structure**<br>AUPR↑<br>FPR95↓<br>Acc↑|**Feature**<br>AUROC↑<br>AUPR↑<br>FPR95↓<br>Acc↑|**Label**<br>AUROC↑<br>AUPR↑<br>FPR95↓<br>Acc↑|**Avg**<br>AUROC↑<br>AUPR↑<br>FPR95↓<br>Acc↑|
+|Energy|✓|91.94|95.28<br>100.00<br>37.14|67.75<br>66.73<br>84.15<br>37.58|59.92<br>75.25<br>70.18<br>41.69|73.20<br>79.09<br>84.77<br>65.75|
+|GNNSafe|✓<br>✓<br>✓<br>✓|34.36<br>8944|56.86<br>100.00<br>35.33<br>9115<br>8669<br>3352|57.46<br>58.24<br>95.83<br>38.07<br>8525<br>8333<br>6873<br>4279|52.18<br>73.72<br>85.09<br>43.43<br>7230<br>8317<br>7632<br>6015|48.00<br>62.94<br>93.64<br>**66.18**<br>8233<br>8588<br>7725<br>6387|
+||✓<br>✓<br>✓|.<br>76.55<br>9483|.<br>.<br>.<br>76.82<br>97.89<br>55.07<br>9517<br>2055<br>5293|.<br>.<br>.<br>.<br>75.38<br>70.45<br>92.62<br>55.73<br>9021<br>8754<br>8735<br>5699|.<br>.<br>.<br>.<br>80.59<br>88.87<br>73.68<br>62.63<br>8685<br>9305<br>5504<br>6318|.<br>.<br>.<br>.<br>77.51<br>78.71<br>88.07<br>60.29<br>9063<br>9192<br>5432<br>6029|
+||✓<br>✓<br>✓<br><br><br>|.<br>97.52<br>|.<br>.<br>.<br>96.00<br>4.61<br>51.45<br><br><br>|.<br>.<br>.<br>.<br>95.02<br>92.65<br>21.34<br>57.43<br><br><br><br>|.<br>.<br>.<br>.<br>85.17<br>92.17<br>52.19<br>63.54<br><br><br><br>|.<br>.<br>.<br>.<br>92.57<br>93.61<br>26.05<br>60.29<br><br><br><br>|
+||✓<br>✓<br>✓<br>✓<br>✓<br>✓<br>✓<br>✓<br>✓<br>✓|98.16<br>98.15<br>9916|97.74<br>8.30<br>55.13<br>97.19<br>6.94<br>56.34<br>9827<br>334<br>5546|95.69<br>94.68<br>19.41<br>56.56<br>97.61<br>94.34<br>5.27<br>56.61<br>9697<br>9583<br>1278<br>5584|86.86<br>93.37<br>52.41<br>62.72<br>87.63<br>93.93<br>48.03<br>64.37<br>8956<br>9463<br>4189<br>6208|93.57<br>95.26<br>26.71<br>60.29<br>94.46<br>95.15<br>20.08<br>60.29<br>9523<br>9624<br>1933<br>6029|
+||✓<br>✓<br>✓<br>✓<br><br><br><br>|.<br>99.94<br>|.<br>.<br>.<br>99.93<br>0.04<br>54.85<br><br><br>|.<br>.<br>.<br>.<br>98.99<br>98.68<br>3.78<br>55.46<br><br><br><br>|.<br>.<br>.<br>.<br>**89.79**<br>**94.99**<br>**38.60**<br>**64.65**<br><br><br><br>|.<br>.<br>.<br>.<br>96.24<br>97.87<br>14.14<br>60.29<br><br><br><br>|
+|**DeGEM**|✓<br>✓<br>✓<br>✓<br>✓<br>✓<br>✓<br>✓<br>✓|99.85<br>**99.99**|99.80<br>0.92<br>56.72<br>**99.98**<br>**0.00**<br>**57.82**|**99.99**<br>**99.99**<br>**0.00**<br>56.17<br>99.70<br>99.51<br>1.10<br>**57.93**|87.55<br>92.70<br>48.03<br>60.79<br>89.68<br>94.62<br>39.04<br>64.46|95.80<br>97.50<br>16.32<br>60.29<br>**96.46**<br>**98.04**<br>**13.38**<br>64.51|
+|||||**Cornell**|||
+||**Eprop**<br>**Classify-**<br>**MLE-**<br>**GCL**<br>**MH**<br>**CE**<br>**ERo**<br>**Energy**<br>**Energy**|AUROC↑|**Structure**<br>AUPR↑<br>FPR95↓<br>Acc↑|**Feature**<br>AUROC↑<br>AUPR↑<br>FPR95↓<br>Acc↑|**Label**<br>AUROC↑<br>AUPR↑<br>FPR95↓<br>Acc↑|**Avg**<br>AUROC↑<br>AUPR↑<br>FPR95↓<br>Acc↑|
+|Energy|✓|83.09|84.90<br>86.34<br>38.10|86.70<br>85.61<br>83.06<br>38.10|69.70<br>85.99<br>100.00<br>62.86|79.83<br>85.50<br>89.80<br>65.75|
+|GNNSafe|✓<br>✓<br>✓<br>✓|74.66<br>8524|82.14<br>93.44<br>25.17<br>7390<br>3279<br>4422|76.22<br>83.44<br>88.52<br>41.50<br>8595<br>8087<br>7049<br>5170|68.17<br>80.87<br>68.42<br>63.81<br>7644<br>8765<br>9474<br>6571|73.02<br>82.15<br>83.46<br>**66.18**<br>8254<br>8080<br>6601<br>6387|
+||✓<br>✓<br>✓|.<br>63.55<br>9364|.<br>.<br>.<br>65.61<br>92.90<br>42.86<br>9196<br>2022<br>4422|.<br>.<br>.<br>.<br>67.71<br>59.90<br>95.63<br>48.98<br>8950<br>8649<br>6011<br>4966|.<br>.<br>.<br>.<br>72.46<br>87.37<br>76.32<br>63.81<br>7787<br>9031<br>9737<br>6571|.<br>.<br>.<br>.<br>67.91<br>70.96<br>88.28<br>60.29<br>8700<br>8958<br>5923<br>6029|
+||✓<br>✓<br>✓<br><br><br>|.<br>91.06<br>|.<br>.<br>.<br>87.09<br>27.32<br>40.82<br><br><br>|.<br>.<br>.<br>.<br>88.47<br>86.19<br>36.07<br>51.02<br><br><br><br>|.<br>.<br>.<br>.<br>75.31<br>88.31<br>68.42<br>63.81<br><br><br><br>|.<br>.<br>.<br>.<br>84.95<br>87.20<br>43.94<br>60.29<br><br><br><br>|
+||✓<br>✓<br>✓<br>✓<br>✓<br>✓<br>✓<br>✓<br>✓<br>✓|89.81<br>87.37<br>**99.09**|86.46<br>30.60<br>44.22<br>84.68<br>51.37<br>45.58<br>97.14<br>3.83<br>43.54|91.66<br>85.79<br>24.04<br>51.02<br>93.88<br>90.46<br>27.32<br>50.34<br>97.50<br>96.09<br>13.11<br>62.59|77.44<br>89.40<br>76.32<br>65.71<br>74.81<br>89.05<br>97.37<br>67.62<br>**91.13**<br>96.67<br>57.89<br>71.43|86.31<br>87.22<br>43.65<br>60.29<br>85.35<br>88.06<br>58.69<br>60.29<br>95.90<br>96.63<br>24.94<br>60.29|
+||✓<br>✓<br>✓<br>✓<br><br><br><br>|98.54<br>|**97.96**<br>5.46<br>**48.30**<br><br><br>|99.56<br>99.36<br>2.19<br>61.90<br><br><br><br>|**88.37**<br>**95.62**<br>**52.63**<br>**68.57**<br><br><br><br>|95.49<br>**97.65**<br>**20.09**<br>60.29<br><br><br><br>|
+|**DeGEM**|✓<br>✓<br>✓<br>✓<br>✓<br>✓<br>✓<br>✓<br>✓|98.46<br>**97.97**|95.55<br>**2.73**<br>45.58<br>**96.11**<br>**5.46**<br>**48.30**|**99.51**<br>**99.28**<br>**1.64**<br>64.63<br>**100.00**<br>**100.00**<br>**0.00**<br>**65.31**|83.98<br>93.97<br>78.95<br>70.48<br>90.90<br>**96.74**<br>65.79<br>**77.14**|93.99<br>96.27<br>27.77<br>60.29<br>**96.29**<br>**97.61**<br>**23.75**<br>64.51|
+
+
+Table 14: The detailed OOD detection performance of different GCL algorithms, measured by AUC _↑ /_ AUPR _↑ /_ FPR95 _↓_ . 
+
+|_/_FPR|95_↓_.|95_↓_.|95_↓_.|95_↓_.|95_↓_.|95_↓_.|
+|---|---|---|---|---|---|---|
+||**Cora**||||||
+||**Structure**<br>AUC↑<br>AUPR↑<br>FPR95↓||**Feature**<br>AUC↑<br>AUPR↑<br>FPR95↓||**Label**<br>AUC↑<br>AUPR↑<br>FPR95↓|**Avg**<br>AUC↑<br>AUPR↑<br>FPR95↓|
+|GCN<br>GRACE<br>SUGRL|59.54<br>37.00<br>94.83<br>67.56<br>42.24<br>90.69<br>74.97<br>45.75<br>67.98||70.85<br>46.21<br>**89.71**<br>**78.84**<br>84.52<br>71.12|81.46<br>49.00<br>63.04|74.37<br>49.15<br>86.71<br>91.75<br>74.81<br>**32.56**<br>87.73<br>72.97<br>45.33|68.25<br>44.12<br>87.67<br>83.01<br>65.29<br>57.42<br>82.41<br>63.28<br>58.78|
+|**DGI**|**86.32**<br>**59.53**<br>**40.77**||87.54<br>69.55|**40.21**|**92.75**<br>**80.01**<br>33.57|**88.87**<br>**69.70**<br>**38.18**|
+|||||**Twitch**|||
+||**ES**<br>AUC↑<br>AUPR↑<br>FPR95↓||**FR**<br>AUC↑<br>AUPR↑<br>FPR95↓||**RU**<br>AUC↑<br>AUPR↑<br>FPR95↓|**Avg**<br>AUC↑<br>AUPR↑<br>FPR95↓|
+|GCN<br>GRACE<br>SUGRL|50.89<br>67.66<br>70.89|64.14<br>94.49<br>73.59<br>88.15<br>80.04<br>84.53|53.82<br>57.39<br>94.23<br>63.54<br>64.71<br>93.67<br>84.23<br>87.11<br>74.77||57.10<br>73.16<br>95.30<br>66.15<br>72.59<br>86.64<br>61.32<br>72.55<br>94.07|53.94<br>64.90<br>94.67<br>65.78<br>70.30<br>89.48<br>72.15<br>79.90<br>84.46|
+|**DGI**|**83.40**|**90.59**<br>**80.51**|**90.79**<br>**93.87**<br>**66.36**||**80.11**<br>**88.21**<br>**78.72**|**84.77**<br>**90.89**<br>**75.20**|
+|||**Chameleon**|||||
+||**Structure**<br>AUC↑<br>AUPR↑<br>FPR95↓||**Feature**<br>AUC↑<br>AUPR↑<br>FPR95↓||**Label**<br>AUC↑<br>AUPR↑<br>FPR95↓|**Avg**<br>AUC↑<br>AUPR↑<br>FPR95↓|
+|GCN<br>GRACE<br>SUGRL|68.19<br>73.99<br>99.78<br>89.95<br>90.68<br>60.52<br>85.91<br>84.02<br>62.71||84.64<br>79.36<br>**56.92**<br>87.63<br>**87.94**<br>88.45<br>78.67<br>71.97<br>66.45||71.13<br>82.73<br>93.86<br>86.38<br>92.23<br>60.09<br>83.56<br>90.11<br>61.84|74.65<br>78.69<br>83.52<br>87.99<br>90.28<br>69.69<br>82.71<br>82.03<br>63.67|
+|**DGI**|**94.83**<br>**95.17**<br>**20.55**||**90.21**<br>87.54<br>87.35||**86.85**<br>**93.05**<br>**55.04**|**90.63**<br>**91.92**<br>**54.32**|
+||**Cornell**||||||
+||**Structure**<br>AUC↑<br>AUPR↑<br>FPR95↓||**Feature**<br>AUC↑<br>AUPR↑<br>FPR95↓||**Label**<br>AUC↑<br>AUPR↑<br>FPR95↓|**Avg**<br>AUC↑<br>AUPR↑<br>FPR95↓|
+|GCN<br>GRACE<br>SUGRL|77.25<br>83.09<br>100.00<br>84.94<br>86.86<br>74.86<br>60.43<br>55.31<br>96.17||73.54<br>70.99<br>93.44<br>80.39<br>78.44<br>77.60<br>62.09<br>54.02<br>91.26||76.47<br>90.65<br>**86.84**<br>76.94<br>**91.05**<br>**86.84**<br>68.51<br>84.73<br>**86.84**|75.75<br>81.58<br>93.43<br>80.76<br>85.45<br>79.77<br>63.67<br>64.69<br>91.42|
+|**DGI**|**93.64**<br>**91.96**<br>**20.22**||**89.50**<br>**86.49**<br>**60.11**||**77.87**<br>90.31<br>97.37|**87.00**<br>**89.58**<br>**59.23**|
+
+
+23

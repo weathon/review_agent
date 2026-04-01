@@ -1,0 +1,776 @@
+- DATASET DISTILLATION VIA KNOWLEDGE DISTILLA - TION: TOWARDS EFFICIENT SELF-SUPERVISED PRE TRAINING OF DEEP NETWORKS 
+
+**Siddharth Joshi, Jiayi Ni, Baharan Mirzasoleiman** Department of Computer Science, University of California, Los Angeles sjoshi804@cs.ucla.edu, nijiayi1119626@g.ucla.edu, baharan@cs.ucla.edu 
+
+## ABSTRACT 
+
+Dataset distillation (DD) generates small synthetic datasets that can efficiently train deep networks with a limited amount of memory and compute. Despite the success of DD methods for supervised learning, DD for self-supervised pre-training of deep models has remained unaddressed. Pre-training on unlabeled data is crucial for efficiently generalizing to downstream tasks with limited labeled data. In this work, we propose the first effective DD method for SSL pre-training. First, we show, theoretically and empirically, that naïve application of supervised DD methods to SSL fails, due to the high variance of the SSL gradient. Then, we address this issue by relying on insights from knowledge distillation (KD) literature. Specifically, we train a small student model to match the representations of a larger teacher model trained with SSL. Then, we generate a small synthetic dataset by matching the training trajectories of the student models. As the KD objective has considerably lower variance than SSL, our approach can generate synthetic datasets that can successfully pre-train high-quality encoders. Through extensive experiments, we show that our distilled sets lead to up to 13% higher accuracy than prior work, on a variety of downstream tasks, in the presence of limited labeled data. Code at https://github.com/BigML-CS-UCLA/MKDT 
+
+## 1 INTRODUCTION 
+
+Dataset distillation (DD) aims to generate a very small set of synthetic images that can simulate training on a large image dataset, with extremely limited memory and compute (Wang et al., 2018). This facilitates training models on the edge, speeds up continual learning, and provides strong privacy guarantees (Kim et al., 2022; Cazenavette et al., 2022; Sajedi et al., 2023; Dong et al., 2022). As a result, there has been a surge of interest in developing better DD methods for training neural networks in a supervised manner. However, in many applications, very few labeled example are available. In this case, supervised models often fail to generalize well. Instead, models are pre-trained, using self-supervised learning (SSL), on a large amount of _unlabeled_ data and then adapted to the downstream task using the limited labeled data by training a linear classifier using the labeled examples of each downstream task (linear probe). Remarkably, Chen et al. (2020) showed that SSL pre-training, followed by linear probe, can outperform Supervised Learning (SL) by nearly 30% on ImageNet (Deng et al., 2009) when only 1% of labels are available. More impressively, by only training the linear layer (linear probe), SSL pretraining is able to generalize to a variety of downstream tasks nearly as effectively as full fine-tuning on the downstream task, for a fraction of the cost. Thus, SSL pre-training’s benefits are invaluable in today’s modern ML ecosystem, where unlabeled data is plentiful and it is essential to generalize to a plethora of downstream tasks, effectively and efficiently. With the datasets for SSL being far larger than those for SL, the computational and privacy benefits of dataset distillation for SSL are even more important than they are for SL. Nevertheless, DD for SSL pre-training has remained an open problem. 
+
+DD for SSL is, however, very challenging. One needs to ensure that pre-training on the synthetic dataset, distilled from unlabeled data, results in a encoder that yields high-quality representations for a variety of downstream tasks. Existing DD methods for SL generate synthetic data by matching gradients (Zhao et al., 2021; Zhao & Bilen, 2021; Lee et al., 2022) or trajectory (Cazenavette et al., 2022; Du et al., 2023; Cui et al., 2022) of training on distribution of real data (Zhao & Bilen, 2023; 
+
+1 
+
+Sajedi et al., 2023; Wang et al., 2022a), or meta-model matching by generating synthetic data such that training on it achieves low loss on real data (Wang et al., 2018; Nguyen et al., 2021; Loo et al., 2022; Zhou et al., 2022). Among them, gradient and distribution matching methods heavily rely on labels and will suffer from representation collapse otherwise. Hence, they are not applicable to SSL DD. Very recently, Lee et al. (2023) applied meta-model matching to generate synthetic examples for SSL pre-training, and evaluated its performance by fine-tuning the entire pre-trained model on the large labeled downstream datasets. However, we show that SSL pre-training on these distilled sets does not provide any advantage over SSL pre-training on random real examples. 
+
+In this work, we address distilling small synthetic datasets for SSL pre-training via trajectory matching. First, we show, theoretically and empirically, that naïve application of trajectory matching to SSL fails, due to the high variance of the gradient of the SSL loss. Then, we rely on insights from _knowledge distillation_ (KD) to considerably reduce the variance of SSL trajectories. KD trains a smaller student network to match the predictions of a larger teacher network trained with supervised learning (Hinton et al., 2015). In doing so, the student network can match the performance of the larger teacher model. 
+
+Here, we apply KD for SSL by training a student encoder to match the _representations_ of a larger teacher encoder trained with SSL. Then, we propose generating synthetic data for SSL by Matching Knowledge Distillation Trajectories (MKDT). Crucially, as the KD objective for training the student model has considerably lower variance, it enables generating higher-quality synthetic data by matching the lower-variance trajectories of the _student_ model. As a result, the encoder can learn high-quality representations from the synthetic data. We also provide theoretical and empirical evidence showing that KD trajectories are indeed lower variance than SSL trajectories and that this lower variance enables effective dataset distillation for SSL. 
+
+Finally, we conduct extensive experiments to validate the effectiveness of our proposal MKDT for SSL pre-training. In particular, we distill both low resolution (CIFAR10, CIFAR100) and larger, high resolution datasets (TinyImageNet) down to 2% and 5% of original dataset size and show that, across various downstream tasks, MKDT distilled sets outperform all baselines by up to 13% in the presence of limited labeled data. Moreover, we confirm that the datasets distilled with smaller ConvNets can transfer to architectures as large as ResNet-18. Finally, we demonstrate that MKDT is effective across SSL algorithms (BarlowTwins (Zbontar et al., 2021) and SimCLR (Chen et al., 2020)). 
+
+## 2 RELATED WORK 
+
+## 2.1 DATASET DISTILLATION 
+
+There has been a large body of recent work on dataset distillation for supervised learning. These techniques can be broadly characterized into meta-model matching, gradient matching, distribution matching and trajectory matching (Sachdeva & McAuley, 2023). 
+
+**Meta-model Matching** Meta-model matching generates synthetic data such that a model trained on the synthetic dataset achieves low training loss on the real dataset (Wang et al., 2018). The traditional meta-model matching approach is computation and memory inefficient as it requires solving a bi-level optimization problem. Thus, several methods (Nguyen et al., 2021; Loo et al., 2022; Zhou et al., 2022) have been proposed to solve the inner-optimization problem in closed form with kernel ridge regression. 
+
+**Gradient Matching** Gradient matching generates synthetic data by matching the gradient of a network trained on the original dataset with the gradient of the network trained on the synthetic dataset (Zhao et al., 2021; Zhao & Bilen, 2021; Lee et al., 2022). Gradient-matching is done for each class separately, otherwise optimizing the synthetic images to match gradients is not possible (Zhao et al., 2021). As a result, these methods require labels to be applicable. 
+
+**Matching Training Trajectories (MTT)** MTT, first proposed by Cazenavette et al. (2022), generates synthetic data by matching the training trajectories of models trained on the real dataset with that of the synthetic dataset. Cui et al. (2022) reduced the memory footprint of MTT and Du et al. (2023) minimized the accumulated error in matching trajectories by distilling flatter trajectories. 
+
+**Distribution Matching** Distribution matching generates synthetic data by directly matching the distribution of synthetic dataset and original dataset. One line of work does so by minimizing the 
+
+2 
+
+maximum mean discrepancy (MMD) between the representations of the synthetic and real data using a large pool of feature extractors (Zhao & Bilen, 2023; Sajedi et al., 2023; Wang et al., 2022b). For these methods, distilling examples **per class** is essential, as without labels, the models trained on the synthetic data suffer from representation collapse and cannot learn any discriminative features (Zhao & Bilen, 2023). More recently, (Yin et al., 2024; Zhou et al., 2024; Shao et al., 2024) apply ideas from _data-free knowledge distillation_ Lopes et al. (2017) to match the distributions of synthetic and real images using the batch norm statistics of models trained on the full data. While these methods do not distill per class, the distillation loss relies on the labels of the data and is essential to distill data preserving class-discriminative features. 
+
+**Dataset Distillation for SSL** Very recently, KRR-ST (Lee et al., 2023) applied the kernel-based meta-model matching to distillation for SSL. However, kernel ridge regression, with a relatively unchanging encoder as the kernel function, prevents distilling synthetic data that is useful for training the encoder effectively. We empirically confirm that the encoder learnt by pre-training on these generated examples cannot outperform encoder learnt directly using SSL pre-training on random real images. While KRR-ST also uses a MSE loss to representations instead of directly performing SSL, they claim to do so to mitigate the **bias** of bi-level optimization in meta-model based matching for SSL. In MKDT, we instead, use the knowledge distillation loss of MSE to representations of a larger teacher model to reduce the high **variance** of SSL gradients, and thus lower variance trajectories enable trajectory matching. 
+
+MTT is another dataset distillation method that is agnostic to the labels, and hence can be potentially applied to SSL. Nevertheless, application of MTT to SSL has not been explored before. In our work, we show that that naïve application of MTT to SSL yields poor performance. Then, we propose a method that leverages knowledge distillation to enable effective dataset distillation for SSL. 
+
+## 2.2 DATA-EFFICIENT LEARNING VIA SUBSET SELECTION 
+
+Another line of work that enables data-efficient learning is selecting subsets of training data that generalize on par with the full data. This has been extensively studied for supervised learning (Coleman et al., 2020; Toneva et al., 2019; Paul et al., 2021; Mirzasoleiman et al., 2020; Yang et al., 2023). At a high level, these works show that difficult-to-learn examples with a higher loss or gradient norm or uncertainty benefit SL the most. More recently, SAS (Joshi & Mirzasoleiman, 2023) has been proposed for selecting subsets of data for self-supervised contrastive learning (CL). Interestingly, the most beneficial subsets for SL are shown to be least beneficial for self-supervised CL. We use SAS as a baseline and show that the synthetic data distilled by our method can outperform training on these subsets. 
+
+## 2.3 KNOWLEDGE DISTILLATION 
+
+Knowledge distillation (KD) is a technique used to transfer knowledge from a large teacher model to a smaller student model, with the aim of retaining high performance with reduced complexity (Hinton et al., 2015). For supervised learning, some techniques align the student’s outputs with those of the teacher (Hinton et al., 2015), while others concentrate on matching intermediate features (Romero et al., 2015), attention maps (Zagoruyko & Komodakis, 2017) or pairwise distances between examples (Park et al., 2019). Recent works have adapted KD for SSL models (Passalis & Tefas, 2018; Chen et al., 2017; Koohpayegani et al., 2020; Yu et al., 2019). DarkRank (Chen et al., 2017) approaches KD for SSL as a rank matching problem between teacher and student encoders. PKT (Passalis & Tefas, 2018) and Compress (Koohpayegani et al., 2020) model the similarities in data samples within the representation space as a probability distribution, aiming to align these distributions between the teacher and student encoders. Yu et al. (2019) introduced the concept of minimizing the Mean Squared Error (MSE) between the representations of student and teacher encoders. In this work, we rely on KD to enable effective dataset distillation for SSL. 
+
+## 3 PROBLEM FORMULATION 
+
+Consider a dataset _D_ real = _{_ _**x** i}i∈_ [ _n_ ] of _n_ unlabeled training examples drawn i.i.d. from an unknown distribution. Contrastive SSL methods (Zbontar et al., 2021; Chen et al., 2020) learn an encoder _f_ that produces semantically meaningful representations by training on _D_ real. BarlowTwins, in particular, learns these representations using the cross-correlation matrix of the outputs of different augmented 
+
+3 
+
+views of a given batch of training data: 
+
+**==> picture [285 x 31] intentionally omitted <==**
+
+where _F_ is the cross-correlation of _outputs within in a batch B_ s.t. _Fij_ = E _x∈_ BE _x_ 1 _,x_ 2 _∈A_ ( _x_ )[ _fi_ ( _x_ 1) _fj_ ( _x_ 2)] with _A_ ( _x_ ) being the set of augmented views of _x_ , _d_ is the dimension of the encoder _f_ and _λ_ is a hyperparameter. After pre-training, a linear classifier is trained on representations and labels of downstream task(s). 
+
+Our goal is to generate a synthetic dataset _D_ syn from _D_ real, such that _|D_ syn _| ≪|D_ real _|_ and the representations of _D_ real using the encoder _fθ_ syn, trained on the the synthetic data _D_ syn, are similar to those obtained from encoder _fθ_ real, trained on the real data _D_ real. Formally, 
+
+**==> picture [292 x 19] intentionally omitted <==**
+
+where _D_ ( _·, ·_ ) is a distance function. 
+
+**Evaluation** To evaluate the encoder trained on the synthetic data, for every downstream task _Dd_ , we train a linear classifier _gDd_ on the representations of _fθ_ syn , and evaluate the generalization error of the linear classifier on _Dd_ : 
+
+**==> picture [299 x 13] intentionally omitted <==**
+
+An effective encoder achieves small Err[ _fθ_ syn( _Dd_ )] across all downstream tasks. 
+
+## 4 MATCHING TRAINING TRAJECTORIES FOR SSL 
+
+As discussed in Sec. 2, distribution matching and gradient matching methods cannot work without labels, and meta-model matching cannot effectively update the encoder. Therefore, in our work, we focus on application of MTT to SSL distillation. First, we discuss the challenges of applying MTT in the SSL setting and show that its naïve application does not work. Then, we present our method, MKDT, that relies on recent results in knowledge distillation (KD) to enable trajectory matching for SSL. 
+
+## 4.1 CHALLENGES OF MATCHING SSL TRAINING TRAJECTORIES 
+
+In this section, we first introduce trajectory matching (MTT) for supervised learning (SL). Then, we discuss why naively applying MTT to the SSL setting does not work. 
+
+**Matching Training Trajectories for SL** MTT Cazenavette et al. (2022) generates a synthetic dataset by matching the trajectory of parameters _θ_[ˆ] of a model trained on the synthetic data with trajectory of parameters _θ[∗]_ of the model trained on real data ( _expert trajectory_ ). This matching is guided by the following loss function: 
+
+**==> picture [266 x 28] intentionally omitted <==**
+
+In equation 4, _θt[∗]_[denotes the model parameters after training on real data up to step] _[ t]_[.][The term] _[θ]_[ˆ] _[t]_[+] _[N]_ represents the model parameters after training on the synthetic dataset for _N_ steps, starting from _θt[∗]_[.] Similarly, _θt[∗]_ + _M_[refers to the model parameters after] _[ M]_[steps of training on the real dataset.][The] primary goal of MTT is to ensure that the encoder’s weights after training on the synthetic dataset for _N_ steps closely match the encoder’s weights after training on real data for a significantly larger number of steps _M_ , usually with _N ≪ M_ . MTT is agnostic to the training algorithm and doesn’t rely on labels; thus, can be applied to dataset distillation for SSL. However, naïve application of MTT cannot effectively distill synthetic data for SSL pre-training, as we will discuss next. 
+
+**High Variance Gradients Prevent Effective Trajectory Matching for SSL** SSL losses rely on interaction between all examples in a batch and consequently have high variance over choices of random batches (c.f., the Barlow-Twins loss in equation 1). As a result, the contribution of examples to the loss and hence their gradients varies significantly based on the rest of examples in the batch Robinson et al. (2021), unlike SL where each example’s contribution to the loss is independent of 
+
+4 
+
+**==> picture [395 x 27] intentionally omitted <==**
+
+**----- Start of picture text -----**<br>
+(b) Distillation Loss (Error in (c) Average Absolute Change<br>(a) Variance in Weights at End of<br>Matching Trajectories) v/s in Pixel v/s # Distillation<br>Trajectory v/s Trajectory Length<br>Distillation Iterations Iterations<br>**----- End of picture text -----**<br>
+
+
+Figure 1: Challenges of MTT for SSL (Dataset: CIFAR100 (1%); Arch: 3-layer ConvNet) 
+
+other examples. The high variance in gradient over mini-batches in each iteration results in high variance of the trajectories of SSL. 
+
+**Theoretical Evidence for Higher Variance Gradients in SSL.** We now present, in Theorem 4.1, theoretical evidence, in a simplified setting, demonstrating that the variance of the gradient of SSL over mini-batches is indeed greater than that of SL, i.e., Var _∇W LSSL_ ( _B_ ) _>_ Var _∇W LSL_ ( _B_ ) . Proof appears in Appendix C. Appendix D presents a more general version of this analysis, when optimizing with synchronous parallel SGD. 
+
+**Theorem 4.1.** _Let D_ = _{_ ( _xi, yi_ ) _}[n] i_ =1 _[be a dataset with][ n][ examples, where][ x][i][is the][ i][-th input and] yi ∈{_ 0 _,_ 1 _} is its corresponding class label. Assume the data xi are generated using the sparse coding model Xue et al. (2023); Joshi et al. (2024): for class 0, xi_ = _e_ 0 + _ϵi, and for class 1, xi_ = _e_ 1 + _ϵi, where e_ 0 _and e_ 1 _are basis vectors and ϵi ∼N_ (0 _, σN I_ ) _is noise. Note that using mean class vectors e_ 0 _, e_ 1 _w.l.o.g. models the setting of arbitrary mean class vectors that are orthogonal to each other. Each class has[n]_ 2 _[examples.]_ 
+
+_Consider a linear model fθ_ ( _x_ ) = _Wx, with W initialized as I (the identity matrix). The supervised mean squared error (MSE) loss is given by:_ 
+
+**==> picture [150 x 26] intentionally omitted <==**
+
+_where eyi is the one-hot encoded vector for class yi, and B is a mini-batch._ 
+
+_The SSL Loss (spectral contrastive loss used here for simplicity of analysis) is given by:_ 
+
+**==> picture [302 x 22] intentionally omitted <==**
+
+_where A_ ( _xi_ ) = _xi_ + _ϵaug, with ϵaug ∼N_ (0 _, I_ ) _representing augmentation noise._ 
+
+_Under stochastic gradient descent (SGD) with a mini-batch size B of 2:_ 
+
+Var( _∇W LSL_ ( _B_ )) _<_ Var( _∇W LSSL_ ( _B_ )) _._ 
+
+_where for a matrix M,_ Var( _M_ ) := E[ _∥M −_ E[ _M_ ] _∥_[2] ] _as in Gower et al. (2020)._ 
+
+**Empirical Evidence for Challenges of Matching SSL Trajectories** Due to the high variance in the gradient of SSL objectives, the naive application of MTT to SSL does not succeed.¨ Firstly, the slower convergence caused by high variance gradients necessitates much longer trajectories for both training on real and synthetic data. Secondly, the higher variance of gradients results in greater variance in the weights at the end of trajectories starting from the same initialization (henceforth referred to as _variance of trajectories_ ), as illustrated theoretically in the simplified setting above. Attempting to match SSL’s longer, higher variance trajectories is extremely challenging, as matching such trajectories results in chaotic updates to the synthetic images. Thus, the synthetic images cannot move away from their initialization meaningfully. Fig. 1a shows empirically that the variance of SSL trajectories is larger than that of SL trajectories, across different trajectory lengths. Additionally, the 
+
+5 
+
+variance of trajectories grows faster, with length of trajectory, for SSL than for SL, exacerbating the problem for longer trajectory matching. Fig. 1b compares a simplified distillation using MTT with a single expert trajectory for SSL and SL. Despite extensive hyper-parameter tuning, matching even a single expert trajectory is challenging for SSL, confirmed by the slow decrease of distillation loss. This indicates that the training trajectory on the distilled set is unable to match the training trajectory on the real data for SSL. Fig. 1c shows that the difficulty in aligning trajectories is due to the chaotic updates of the synthetic image, as evidenced by the synthetic images being unable to move away from their initialization. To further confirm that the inability to distill effectively is indeed due to the variance of trajectories, we also include a comparison to MTT SSL with 4x larger batch size, which leads to slightly lower variance. Fig. 1a confirms that indeed the larger batch size reduces the variance of the trajectories slightly. However, Fig. 1b and 1c show that reducing the variance of SSL trajectories via larger batch size is insufficient to help distillation since an infeasibly large batch size will likely be required to achieve the necessary low variance trajectories. 
+
+Next, we will present our method, MKDT, designed to address the above challenges. 
+
+## 4.2 MATCHING KNOWLEDGE DISTILLATION TRAJECTORIES 
+
+To reduce the length and variance of SSL trajectories, our key idea is to leverage the recent results in knowledge distillation (KD) Kim et al. (2021). We first introduce KD, and then discuss our method, MKDT, Matching Knowledge Distillation Trajectories, that leverages KD to reduce the length and variance of SSL trajectories. 
+
+**Knowledge Distillation (KD)** KD refers to _distilling_ the _knowledge_ of a larger model (teacher) into a smaller model (student) to achieve similar generalization as the larger model, but with reduced complexity and faster inference times. Here, we rely on the knowledge distillation objective for SSL models, introduced in Yu et al. (2019): 
+
+**==> picture [279 x 13] intentionally omitted <==**
+
+where _fS_ and _fT_ represent the student and teacher encoders respectively. (Yu et al., 2019) trains student models with the aforementioned KD objective and the original SSL Loss. However, we only minimize the MSE between student and teacher representations to avoid the issues with matching SSL training trajectories (discussed in Sec. 4.1). 
+
+**Converting SSL to SL trajectories via KD** We use the objective presented in equation 5 i.e. minimizing the MSE between the _representations_ of a student and a teacher model trained with SSL. In doing so, we train the student model to match the performance of the teacher trained with SSL. Note that training the student model by minimizing the MSE loss in equation 5 is a _supervised_ objective. Therefore, while the trained student model will produce similar representations to that of the teacher, training with MSE loss is much faster than SSL, as its gradients have a much smaller variance ( _c.f._ Fig. 1a). Thus, we can get shorter and lower variance _expert_ trajectories from the _student_ models trained with KD using the MSE loss, instead of the teacher model trained with SSL. Then, we can generate synthetic examples by matching these shorter and lower variance trajectories, without relying on labels. 
+
+**Matching KD Trajectories (MKDT)** We now describe our method MKDT: Matching Knowledge Distillation Trajectories. MKDT has the following three steps: (1) training a teacher model with SSL, (2) getting expert trajectories by training student models to match representations of the teacher using KD objective, (3) generating synthetic examples by matching the expert trajectories. Below, we discuss each of these steps in more details. 
+
+**(1) Training the Teacher Model with SSL** First, we train the teacher encoder _fθT_ with _L_ SSL on _D_ real: 
+
+**==> picture [264 x 18] intentionally omitted <==**
+
+In our experiments, _L_ SSL is the BarlowTwins loss function shown in equation 1, but our method is agnostic to the choice of SSL algorithm. Since KD with larger models leads to better downstream performance (Huang et al., 2022), we use a teacher model that is much larger than the student encoder used for creating the expert trajectories for distillation. For example, in our experiments we use a ResNet-18 as the teacher encoder and a 3 or 4-layer ConvNet as the student encoder. 
+
+**(2) Getting Expert Trajectories with KD** For training the expert trajectories, we encode the full real data with the teacher model and train the student model to minimize the MSE between its 
+
+6 
+
+**Algorithm 1** MKDT: Matching Knowledge Distillation Trajectories 
+
+**Require:** _K_ : Number of expert trajectories **Require:** _S_ : Number of distillation steps **Require:** _M_ : # of updates between starting and target expert params. **Require:** _N_ : # of updates to student network per distillation step. **Require:** _T_[+] _< T_ : Maximum start epoch. 1: Train model _fθT_ using _L_ SSL on _D_ real using augmentations _A_ 2: _{τi[∗][} ←]_[Train] _[ K]_[expert trajectories to minimize] _[ L][KD]_[(] _[f][s] i[, f][θ] T_[)] 3: Initialize distilled data _D_ syn _, Z_ syn _∼D_ real _, Z_ real 4: Initialize trainable learning rate _α_ syn := _α_ 0 for _D_ syn 5: **for** _S_ steps **do** 6: _▷_ Sample expert trajectory: _τ[∗] ∼{τi[∗][}]_[ with] _[ τ][ ∗]_[=] _[ {][θ] t[∗][}][T]_ 0 7: _▷_ Choose random start epoch, _t ≤ T_[+] 8: _▷_ Initialize student network with expert params:ˆ 9: _θt_ := _θt[∗]_ 10: **for** _n_ = 0 _→ N −_ 1 **do** 11: _▷_ Sample a mini-batch of distilled images: 12: _bt_ + _n ∼D_ syn 13: _▷_ ˆ Update student network w.r.t.ˆ MSE loss to reference representations: 14: _θt_ + _n_ +1 = _θt_ + _n − α_ syn _∇L_ MSE ˆ _θt_ + _n_ ( _bt_ + _n, Z_ syn) 15: **end for** 16: _▷_ Compute loss between ending student and expert params: 17: _LDD_ ( _D_ syn) = _∥θ_[ˆ] _t_ + _N − θt[∗]_ + _M[∥]_ 2[2] _[/][ ∥][θ] t[∗][−][θ] t[∗]_ + _M[∥]_ 2[2] 18: _▷_ Update _D_ syn and _α_ syn with respect to _LDD_ ( _D_ syn) 19: **end for Ensure:** distilled data _D_ syn _, Z_ syn and learning rate _α_ syn 
+
+representations and that of the teacher model. We refer to the representations of the real data from the teacher model as _teacher representations_ denoted by _ZT_ = � _· · · fθT_ ( _xi_ ) _· · ·_ � _, ∀xi ∈D_ real. Formally, min (7) _θ[∗]_[E] _[x][i][∈D]_[real] _[L]_[MSE][(] _[f][θ][∗]_[(] _[x][i]_[)] _[,]_[ [] _[Z][T]_[ ]] _[i]_[)] _[.]_ 
+
+We train _K_ such student encoders and save the weights after each epoch of training to generate the _expert_ trajectories that we will match in the distillation phase. 
+
+**(3) Data Distillation by Matching KD Trajectories** We now optimize the synthetic data such that training on it results in trajectories that match the aforementioned expert trajectories. First, we initialize _D_ syn as a subset of _D_ real and _Z_ syn as the corresponding teacher representations from _ZT_ . Then, in every distillation iteration, we sample an expert trajectory starting at epoch _t_ , where _t ≤ T_[+] , of length _M_ . We then train on the synthetic data for _N_ steps by minimizing the MSE between representations of synthetic data from _fθ_ syn and _Z_ syn _fθT_ . Formally, _∀n ∈_ [ _N_ ], 
+
+**==> picture [299 x 16] intentionally omitted <==**
+
+Now, we compute our distillation loss _LDD_ ( _D_ syn) (shown in equation 4) using the parameters of the encoder trained on the synthetic data and the encoder trained on the full data, and update the synthetic data and learning rate, _D_ syn and _α_ syn, respectively, to minimize this. Note that _Z_ syn remains unchanged. We repeat this distillation for _S_ iterations. Pseudo-code of MKDT is provided in Alg. 1. 
+
+**Initializing Synthetic Data** Empirically, we find that initializing _D_ syn from the subset of examples from _D_ real that have _high loss_ across the expert trajectories, leads to better downstream performance than initializing with random subsets. In particular, for all expert trajectories, we use the encoders after 1 epoch of training and use it to compute the MSE loss for all examples _xi ∈D_ real i.e. _L_ MSE( _fθ_ 1 _[∗]_[(] _[x][i]_[)] _[,]_[ [] _[Z][T]_[ ]] _i_[)][.][We][then][average][the][loss][for][examples][across][encoders][from][all][expert] trajectories and choose the examples with highest loss to initialize our synthetic data. Sec. 5 compares initializing MKDT with random subsets and such _high loss_ subsets. 
+
+**Evaluating the Distilled Dataset** For evaluation, we first pre-train the encoder _fθ_ syn on the distilled data by minimizing the MSE between the representations of the synthetic data _D_ syn and _Z_ syn using the distilled learning rate _α_ syn. 
+
+**==> picture [316 x 17] intentionally omitted <==**
+
+7 
+
+Table 1: Pre-training on CIFAR10 (2% of Full Data) 
+
+|Size of Downstream<br>Labeled Data (%)|Method|Pre-Training<br>CIFAR10|Downstream<br>Tiny ImageNet<br>CIFAR100<br>Aircraft<br>CUB2011<br>Dogs<br>Flowers|
+|---|---|---|---|
+|1%|No Pre-Training<br>Random Subset<br>SAS Subset<br>KRR-ST<br>**MKDT**|35_._84_±_1_._39<br>36_._35_±_0_._67<br>36_._02_±_1_._52<br>37_._19_±_0_._49<br>**44.36**_±_1_._61|2_._52_±_0_._09<br>8_._01_±_0_._19<br>2_._43_±_0_._17<br>1_._27_±_0_._10<br>1_._92_±_0_._18<br>2_._02_±_0_._76<br>2_._41_±_0_._08<br>7_._42_±_0_._31<br>2_._41_±_0_._30<br>1_._16_±_0_._08<br>1_._90_±_0_._22<br>1_._99_±_0_._19<br>2_._69_±_0_._31<br>7_._77_±_0_._35<br>2_._29_±_0_._26<br>1_._14_±_0_._01<br>1_._78_±_0_._32<br>2_._22_±_0_._23<br>2_._84_±_0_._17<br>8_._67_±_0_._41<br>2_._53_±_0_._05<br>1_._25_±_0_._02<br>1_._88_±_0_._32<br>2_._42_±_0_._22<br>**3.58**_±_0_._09<br>**10.58**_±_0_._24<br>**2.58**_±_0_._18<br>**1.37**_±_0_._09<br>**2.11**_±_0_._28<br>**2.52**_±_0_._07<br>4_._94_±_0_._38<br>14_._53_±_0_._40<br>2_._92_±_0_._25<br>1_._69_±_0_._13<br>2_._40_±_0_._25<br>3_._23_±_0_._69|
+||Full Data|58_._21_±_0_._28||
+|5%|No Pre-Training<br>Random Subset<br>SAS Subset<br>KRR-ST<br>**MKDT**|46_._23_±_0_._07<br>46_._62_±_1_._02<br>46_._52_±_0_._61<br>46_._75_±_0_._45<br>**53.08**_±_0_._13|5_._37_±_0_._39<br>16_._12_±_0_._13<br>5_._61_±_0_._68<br>1_._97_±_0_._13<br>2_._90_±_0_._18<br>**5.22**_±_0_._52<br>5_._49_±_0_._12<br>15_._28_±_0_._66<br>5_._35_±_0_._96<br>1_._51_±_0_._08<br>2_._52_±_0_._22<br>3_._64_±_0_._46<br>5_._41_±_0_._42<br>15_._90_±_0_._28<br>5_._63_±_0_._76<br>1_._48_±_0_._16<br>2_._69_±_0_._21<br>3_._75_±_0_._10<br>6_._85_±_0_._20<br>16_._65_±_0_._31<br>5_._41_±_0_._45<br>1_._88_±_0_._10<br>2_._76_±_0_._40<br>4_._52_±_0_._14<br>**7.25**_±_0_._17<br>**19.57**_±_0_._29<br>**5.97**_±_0_._79<br>**2.06**_±_0_._10<br>**3.06**_±_0_._46<br>4_._97_±_0_._54<br>10_._85_±_0_._16<br>26_._38_±_0_._52<br>6_._92_±_0_._61<br>2_._51_±_0_._08<br>3_._88_±_0_._25<br>6_._37_±_0_._67|
+||Full Data|67_._16_±_0_._43||
+
+
+We then evaluate the encoder _fθ_ syn using Err _fθ_ syn ( _Dd_ ), defined in equation 3, i.e. the generalization error of linear classifier _gDd_ trained on the representations obtained from encoder _fθ_ syn and corresponding labels of downstream task _Dd_ . 
+
+## 5 EXPERIMENTS 
+
+Table 2: Pre-training on CIFAR100 (2% of Full Data) 
+
+|Size of Downstream<br>Labeled Data (%)|Method|Pre-Training<br>CIFAR100|Downstream<br>Tiny ImageNet<br>CIFAR10<br>Aircraft<br>CUB2011<br>Dogs<br>Flowers|
+|---|---|---|---|
+|1%|No Pre-Training<br>Random Subset<br>SAS Subset<br>High Loss Subset<br>KRR-ST<br>**MKDT (Rnd Sub)**<br>**MKDT**|8_._01_±_0_._19<br>9_._20_±_0_._15<br>9_._39_±_0_._18<br>10_._03_±_0_._12<br>8_._31_±_0_._30<br>11_._44_±_0_._36<br>**12.36**_±_0_._67|2_._52_±_0_._09<br>35_._84_±_1_._39<br>2_._43_±_0_._17<br>1_._27_±_0_._10<br>1_._92_±_0_._18<br>2_._02_±_0_._76<br>3_._16_±_0_._21<br>38_._03_±_1_._22<br>2_._41_±_0_._15<br>1_._43_±_0_._12<br>1_._99_±_0_._10<br>2_._81_±_0_._43<br>3_._23_±_0_._19<br>38_._73_±_1_._48<br>2_._53_±_0_._04<br>1_._42_±_0_._04<br>2_._07_±_0_._14<br>2_._95_±_0_._37<br>3_._33_±_0_._10<br>39_._78_±_1_._61<br>2_._47_±_0_._29<br>1_._56_±_0_._14<br>2_._13_±_0_._24<br>2_._63_±_0_._51<br>2_._73_±_0_._08<br>37_._19_±_0_._83<br>2_._56_±_0_._20<br>1_._29_±_0_._04<br>1_._92_±_0_._11<br>2_._58_±_0_._14<br>3_._90_±_0_._20<br>43_._35_±_1_._08<br>2_._53_±_0_._22<br>**1.66**_±_0_._13<br>**2.22**_±_0_._20<br>2_._63_±_1_._02<br>**4.13**_±_0_._29<br>**44.90**_±_1_._18<br>**2.74**_±_0_._30<br>1_._61_±_0_._14<br>2_._15_±_0_._39<br>**3.24**_±_0_._44<br>6_._80_±_0_._37<br>58_._21_±_0_._81<br>3_._20_±_0_._22<br>1_._79_±_0_._08<br>2_._50_±_0_._27<br>3_._09_±_1_._14|
+||Full Data|21_._44_±_0_._86||
+|5%|No Pre-Training<br>Random Subset<br>SAS Subset<br>High Loss Subset<br>KRR-ST<br>**MKDT (Rnd Sub)**<br>**MKDT**|16_._12_±_0_._13<br>17_._75_±_0_._42<br>17_._94_±_0_._54<br>18_._72_±_0_._21<br>16_._40_±_0_._63<br>21_._71_±_0_._28<br>**22.64**_±_0_._42|5_._37_±_0_._39<br>46_._23_±_0_._07<br>5_._61_±_0_._68<br>1_._97_±_0_._13<br>2_._90_±_0_._18<br>5_._22_±_0_._52<br>6_._79_±_0_._06<br>48_._59_±_0_._26<br>5_._66_±_0_._71<br>2_._12_±_0_._23<br>3_._02_±_0_._31<br>5_._44_±_0_._22<br>6_._71_±_0_._52<br>48_._69_±_0_._26<br>5_._95_±_0_._88<br>2_._15_±_0_._27<br>3_._22_±_0_._47<br>5_._56_±_0_._43<br>6_._94_±_0_._34<br>49_._59_±_0_._34<br>5_._63_±_0_._52<br>2_._58_±_0_._13<br>3_._18_±_0_._20<br>6_._14_±_0_._54<br>6_._16_±_0_._45<br>47_._96_±_0_._32<br>5_._54_±_0_._97<br>2_._00_±_0_._08<br>2_._95_±_0_._25<br>4_._69_±_0_._15<br>8_._01_±_0_._08<br>53_._08_±_0_._19<br>6_._24_±_0_._79<br>**2.53**_±_0_._03<br>**3.38**_±_0_._23<br>6_._26_±_0_._22<br>**8.07**_±_0_._16<br>**54.12**_±_0_._29<br>**6.68**_±_0_._83<br>2_._50_±_0_._16<br>3_._25_±_0_._36<br>**6.37**_±_0_._46<br>14_._11_±_0_._55<br>67_._25_±_0_._49<br>7_._46_±_0_._53<br>3_._00_±_0_._05<br>4_._23_±_0_._21<br>8_._41_±_0_._60|
+||Full Data|35_._78_±_0_._54||
+
+
+Table 3: Pre-training on TinyImageNet (2% of Full Data) 
+
+|Size of Downstream<br>Labeled Data (%)|Method|Pre-Training<br>Tiny ImageNet|Downstream<br>CIFAR10<br>CIFAR100<br>Aircraft<br>CUB2011<br>Dogs<br>Flowers|
+|---|---|---|---|
+|1%|No Pre-Training<br>Random Subset<br>KRR-ST<br>**MKDT**<br>Full Data|2_._63_±_0_._22<br>3_._03_±_0_._20<br>3_._32_±_0_._22<br>**3.87**_±_0_._05|30_._40_±_1_._02<br>7_._14_±_0_._35<br>2_._25_±_0_._11<br>1_._28_±_0_._16<br>1_._76_±_0_._13<br>2_._84_±_0_._20<br>34_._46_±_1_._13<br>7_._66_±_0_._67<br>2_._27_±_0_._22<br>1_._24_±_0_._05<br>1_._92_±_0_._26<br>2_._16_±_0_._47<br>34_._24_±_0_._94<br>7_._84_±_0_._98<br>2_._14_±_0_._30<br>1_._30_±_0_._08<br>1_._95_±_0_._22<br>2_._21_±_0_._33<br>**37.25**_±_0_._47<br>**8.95**_±_0_._34<br>**2.30**_±_0_._19<br>**1.36**_±_0_._22<br>**1.99**_±_0_._20<br>**2.86**_±_0_._25<br>50_._52_±_0_._87<br>15_._18_±_0_._37<br>2_._57_±_0_._29<br>1_._59_±_0_._31<br>2_._20_±_0_._37<br>3_._29_±_0_._28|
+|||9_._42_±_0_._36||
+|5%|No Pre-Training<br>Random Subset<br>KRR-ST<br>**MKDT**<br>Full Data|5_._69_±_0_._45<br>6_._76_±_0_._16<br>7_._13_±_0_._22<br>**7.99**_±_0_._32|39_._91_±_0_._36<br>13_._32_±_0_._30<br>4_._46_±_0_._81<br>1_._71_±_0_._06<br>2_._51_±_0_._18<br>4_._83_±_0_._32<br>43_._74_±_0_._82<br>13_._83_±_0_._13<br>4_._49_±_0_._91<br>1_._66_±_0_._14<br>2_._67_±_0_._31<br>4_._23_±_0_._70<br>42_._44_±_1_._85<br>13_._85_±_0_._72<br>3_._99_±_0_._57<br>1_._77_±_0_._07<br>2_._47_±_0_._21<br>4_._14_±_0_._71<br>**45.97**_±_0_._27<br>**16.50**_±_0_._35<br>**4.66**_±_0_._70<br>**2.07**_±_0_._11<br>**2.91**_±_0_._10<br>**5.49**_±_0_._51<br>58_._90_±_0_._43<br>26_._47_±_0_._78<br>5_._07_±_0_._71<br>2_._47_±_0_._06<br>3_._85_±_0_._19<br>7_._09_±_1_._01|
+|||18_._93_±_0_._34||
+
+
+In this section, we evaluate the downstream generalization of models trained using the synthetic sets distilled by MKDT that are 2% and 5% of the original dataset’s size for CIFAR10, CIFAR100 (Krizhevsky & Hinton, 2009), TinyImageNet (Le & Yang, 2015). We also conduct ablation studies over initialization of the distilled set and the SSL algorithm. Finally, we also consider the generalization of the distilled sets to larger architectures. 
+
+8 
+
+Table 4: Pre-training with Larger Distilled Set Size (5% of Full Data) 
+
+|Pre-Training<br>Dataset|Size of Downstream<br>Labeled Data (%)<br>Method|Downstream Task Accuracy<br>CIFAR10<br>CIFAR100<br>Tiny ImageNet<br>Aircraft<br>CUB2011<br>Dogs<br>Flowers|
+|---|---|---|
+|CIFAR10|1%<br>Random Subset<br>KRR-ST<br>**MKDT**|37_._63_±_2_._28<br>7_._63_±_0_._13<br>2_._63_±_0_._07<br>2_._28_±_0_._22<br>1_._13_±_0_._11<br>1_._81_±_0_._18<br>2_._05_±_0_._23<br>36_._69_±_0_._88<br>8_._69_±_0_._32<br>3_._20_±_0_._23<br>2_._26_±_0_._13<br>1_._33_±_0_._09<br>1_._91_±_0_._34<br>2_._39_±_0_._18<br>**50.23**_±_1_._48<br>**12.33**_±_0_._31<br>**4.27**_±_0_._36<br>**3.11**_±_0_._15<br>**1.59**_±_0_._07<br>**2.26**_±_0_._29<br>**2.42**_±_0_._62<br>48_._13_±_0_._35<br>16_._06_±_0_._15<br>5_._21_±_0_._56<br>5_._03_±_0_._88<br>1_._71_±_0_._12<br>2_._61_±_0_._20<br>3_._30_±_0_._10<br>47_._40_±_0_._34<br>16_._95_±_0_._53<br>7_._10_±_0_._27<br>5_._56_±_0_._77<br>1_._98_±_0_._07<br>2_._78_±_0_._16<br>4_._38_±_0_._04<br>**58.37**_±_0_._17<br>**23.15**_±_0_._71<br>**8.84**_±_0_._20<br>**6.79**_±_0_._88<br>**2.30**_±_0_._14<br>**3.34**_±_0_._35<br>**5.94**_±_0_._24|
+||5%<br>Random Subset<br>KRR-ST<br>**MKDT**||
+|CIFAR100|1%<br>Random Subset<br>KRR-ST<br>**MKDT**|42_._45_±_0_._76<br>11_._55_±_0_._37<br>4_._17_±_0_._15<br>2_._47_±_0_._17<br>1_._51_±_0_._12<br>2_._12_±_0_._18<br>2_._61_±_0_._61<br>37_._86_±_1_._14<br>9_._02_±_0_._24<br>2_._94_±_0_._13<br>2_._42_±_0_._35<br>1_._50_±_0_._07<br>1_._99_±_0_._19<br>**3.04**_±_0_._36<br>**47.77**_±_1_._12<br>**13.40**_±_0_._31<br>**4.45**_±_0_._33<br>**2.93**_±_0_._42<br>**1.61**_±_0_._02<br>**2.22**_±_0_._27<br>2_._59_±_1_._07<br>51_._92_±_0_._33<br>20_._34_±_0_._20<br>7_._83_±_0_._24<br>6_._06_±_0_._79<br>2_._27_±_0_._18<br>3_._22_±_0_._39<br>5_._78_±_0_._34<br>47_._53_±_0_._11<br>17_._24_±_0_._47<br>6_._60_±_0_._32<br>5_._37_±_0_._85<br>2_._31_±_0_._33<br>2_._87_±_0_._27<br>5_._23_±_0_._14<br>**56.61**_±_0_._58<br>**25.18**_±_0_._67<br>**9.12**_±_0_._40<br>**6.66**_±_0_._62<br>**2.66**_±_0_._23<br>**3.66**_±_0_._44<br>**6.93**_±_0_._60|
+||5%<br>Random Subset<br>KRR-ST<br>**MKDT**||
+|TinyImageNet|1%<br>Random Subset<br>KRR-ST<br>**MKDT**|40_._33_±_1_._16<br>9_._41_±_0_._29<br>4_._19_±_0_._19<br>**2.23**_±_0_._38<br>**1.44**_±_0_._10<br>**2.06**_±_0_._12<br>2_._77_±_0_._24<br>34_._27_±_1_._36<br>7_._54_±_0_._35<br>3_._19_±_0_._22<br>2_._11_±_0_._23<br>1_._30_±_0_._12<br>1_._68_±_0_._20<br>2_._65_±_0_._64<br>**41.44**_±_0_._85<br>**10.29**_±_0_._38<br>**5.09**_±_0_._45<br>2_._16_±_0_._28<br>1_._29_±_0_._06<br>2_._02_±_0_._28<br>**2.92**_±_0_._49<br>48_._46_±_0_._40<br>15_._63_±_0_._62<br>8_._99_±_0_._61<br>4_._55_±_0_._80<br>1_._98_±_0_._18<br>**2.91**_±_0_._47<br>5_._06_±_0_._84<br>42_._82_±_0_._46<br>13_._71_±_0_._30<br>6_._50_±_0_._23<br>4_._36_±_0_._49<br>1_._97_±_0_._06<br>2_._75_±_0_._37<br>3_._97_±_0_._14<br>**50.79**_±_0_._47<br>**19.25**_±_0_._23<br>**10.63**_±_0_._23<br>**4.88**_±_0_._65<br>**2.08**_±_0_._03<br>2_._89_±_0_._41<br>**5.58**_±_0_._43|
+||5%<br>Random Subset<br>KRR-ST<br>**MKDT**||
+
+
+Table 5: Transfer to Larger Architectures (Pre-Training on CIFAR100 5%, 5% Downsteam Labels) 
+
+|Method|Pre-Training<br>CIFAR100|Downstream<br>CIFAR10<br>TinyImageNet<br>Aircraft<br>CUB2011<br>Dogs<br>Flowers|
+|---|---|---|
+|ResNet-10<br>No Pre-Training<br>Random<br>KRR-ST<br>**MKDT**|1_._36_±_0_._31<br>18_._80_±_0_._58<br>13_._84_±_0_._78<br>**23.23**_±_0_._79|13_._18_±_1_._74<br>1_._03_±_0_._07<br>1_._00_±_0_._01<br>0_._43_±_0_._13<br>0_._60_±_0_._01<br>0_._75_±_0_._14<br>44_._24_±_0_._85<br>10_._33_±_0_._16<br>**2.15**_±_0_._34<br>**1.81**_±_0_._16<br>2_._52_±_0_._29<br>5_._41_±_0_._61<br>39_._21_±_0_._55<br>8_._04_±_0_._52<br>2_._12_±_0_._15<br>1_._16_±_0_._05<br>1_._77_±_0_._14<br>4_._56_±_0_._42<br>**49.13**_±_0_._69<br>**13.35**_±_0_._24<br>1_._68_±_0_._10<br>1_._67_±_0_._09<br>**2.64**_±_0_._16<br>**6.15**_±_0_._47|
+|ResNet-18<br>No Pre-Training<br>Random<br>KRR-ST<br>**MKDT**|1_._01_±_0_._01<br>16_._82_±_0_._69<br>12_._30_±_0_._83<br>**21.51**_±_0_._17|10_._00_±_0_._00<br>0_._91_±_0_._10<br>1_._01_±_0_._01<br>0_._56_±_0_._07<br>0_._67_±_0_._09<br>0_._93_±_0_._38<br>40_._11_±_1_._16<br>8_._95_±_0_._23<br>1_._84_±_0_._25<br>1_._62_±_0_._06<br>2_._40_±_0_._25<br>5_._16_±_0_._59<br>35_._73_±_1_._07<br>7_._21_±_0_._35<br>**2.32**_±_0_._39<br>1_._18_±_0_._16<br>1_._81_±_0_._14<br>2_._45_±_0_._12<br>**46.10**_±_0_._60<br>**11.57**_±_0_._17<br>2_._05_±_0_._43<br>**1.86**_±_0_._05<br>**2.36**_±_0_._29<br>**5.17**_±_0_._93|
+
+
+**Distillation Setup** We use ResNet-18 trained with Barlow Twins (Zbontar et al., 2021) as the teacher encoder and train _K_ = 100 student encoders (using ConvNets) to generate the expert trajectories. As in previous work (Cazenavette et al., 2022; Zhao & Bilen, 2021; Zhao et al., 2021; Chen et al., 2023; Du et al., 2023; Cui et al., 2022), we use a 3-layer ConvNet for the lower resolution CIFAR datasets and a 4-layer ConvNet for the higher resolution TinyImageNet. Exact hyperparamters in Appendix A. 
+
+**Evaluation Setup** To test generalization in presence of limited labeled data, we evaluate encoders pre-trained on the distilled data using linear probe on 1% and 5% of downstream labeled data. 
+
+**Baselines** We compare pre-training with MKDT distilled sets to pre-training with random subsets, SAS subsets (Joshi & Mirzasoleiman, 2023), KRR-ST distilled sets (Lee et al., 2023) as well as pre-training on the full data. For KRR-ST, we use the provided distilled sets for CIFAR100 and Tiny ImageNet, and distill using the provided code for CIFAR10. We omit SAS for TinyImageNet as this subset was not provided. For distilled sets of size 5%, we consider only Random and MKDT, since other baselines did not provide distilled sets. 
+
+**Downstream Generalization Performance** Table 1 demonstrates that pre-training on CIFAR10 using MKDT with a 2% distilled set improves performance by 8% on CIFAR10 and 5% on downstream tasks over the KRR-ST baseline. Gains on CIFAR10 are consistent across 1% and 5% labeled data, but improvements on downstream tasks are more pronounced with 5%, indicating MKDT scales well with more labeled data. On CIFAR100, MKDT 2% distilled set improves performance by 6% and 8% on CIFAR100 and downstream tasks, respectively. Additionally, MKDT shows up to 3% improvement on downstream tasks for larger, higher-resolution datasets like TinyImageNet (200K examples, 64x64 resolution), highlighting MKDT’s scalability. KRR-ST consistently fails to outperform SSL pre-training on random subsets across all settings. In Appendix B, we verify that this holds for fine-tuning experiments from KRR-ST (Lee et al., 2023), affirming MKDT as the only effective DD method for SSL pre-training. Table 4 shows that pre-training with larger distilled sets (5% of full data) further enhances performance by up to 13%, confirming MKDT scales effectively with distilled set size as well. Table 7 shows that MKDT outperforms the strongest baseline (random subsets) by 5% on pre-training and 7% on downstream tasks when using 10% and 50% labeled data. 
+
+9 
+
+Table 6: Ablation over SSL Algorithm (SimCLR), Distilled Set Size 2% 
+
+|Pre-Training<br>Dataset|Size of Downstream<br>Labeled Data (%)<br>Method|Downstream Task Accuracy<br>CIFAR10<br>CIFAR100<br>Tiny ImageNet<br>Aircraft<br>CUB2011<br>Dogs<br>Flowers|
+|---|---|---|
+|CIFAR10|1%<br>Random Subset<br>KRR-ST<br>**MKDT**<br>5%<br>Random Subset<br>KRR-ST<br>**MKDT**|35_._20_±_1_._12<br>7_._35_±_0_._28<br>2_._29_±_0_._14<br>2_._21_±_0_._09<br>1_._19_±_0_._06<br>1_._83_±_0_._16<br>1_._83_±_0_._24<br>36_._90_±_1_._30<br>8_._38_±_0_._17<br>2_._95_±_0_._12<br>2_._45_±_0_._13<br>1_._19_±_0_._09<br>1_._87_±_0_._18<br>**2.35**_±_0_._06<br>**40.77**_±_1_._05<br>**9.17**_±_0_._13<br>**3.06**_±_0_._16<br>**2.69**_±_0_._21<br>**1.35**_±_0_._06<br>**2.02**_±_0_._23<br>1_._88_±_0_._22<br>45_._69_±_0_._43<br>15_._09_±_0_._39<br>5_._71_±_0_._15<br>5_._21_±_1_._04<br>1_._52_±_0_._18<br>2_._48_±_0_._16<br>3_._36_±_0_._20<br>46_._87_±_0_._52<br>16_._29_±_0_._37<br>6_._31_±_0_._43<br>5_._31_±_0_._63<br>**1.89**_±_0_._14<br>2_._66_±_0_._18<br>**4.36**_±_0_._16<br>**51.77**_±_0_._25<br>**18.07**_±_0_._52<br>**6.55**_±_0_._23<br>**5.90**_±_0_._76<br>**1.89**_±_0_._15<br>**2.98**_±_0_._36<br>4_._09_±_0_._28|
+|CIFAR100|1%<br>Random Subset<br>KRR-ST<br>**MKDT**<br>5%<br>Random Subset<br>KRR-ST<br>**MKDT**|34_._67_±_0_._89<br>7_._35_±_0_._54<br>2_._29_±_0_._16<br>2_._23_±_0_._21<br>1_._10_±_0_._06<br>1_._78_±_0_._26<br>1_._77_±_0_._13<br>36_._57_±_1_._02<br>8_._38_±_0_._36<br>3_._01_±_0_._22<br>2_._41_±_0_._15<br>1_._28_±_0_._02<br>1_._71_±_0_._30<br>1_._98_±_0_._24<br>**39.59**_±_1_._19<br>**9.44**_±_0_._37<br>**3.07**_±_0_._08<br>**2.60**_±_0_._23<br>**1.33**_±_0_._11<br>**1.93**_±_0_._27<br>**2.49**_±_0_._06<br>45_._67_±_0_._69<br>15_._11_±_0_._44<br>5_._21_±_0_._29<br>5_._21_±_0_._67<br>1_._51_±_0_._14<br>2_._54_±_0_._19<br>3_._37_±_0_._47<br>46_._76_±_0_._50<br>15_._75_±_0_._46<br>6_._17_±_0_._20<br>5_._43_±_0_._65<br>**1.93**_±_0_._06<br>2_._61_±_0_._25<br>3_._55_±_0_._29<br>**49.87**_±_0_._75<br>**18.47**_±_0_._21<br>**6.65**_±_0_._21<br>**5.56**_±_0_._86<br>**1.93**_±_0_._13<br>**2.98**_±_0_._32<br>**4.83**_±_0_._27|
+
+
+Table 7: Larger Labeled Data Fractions (10%, 50%), Distilled Set Size 2% 
+
+|Pre-Training<br>Dataset|Size of Downstream<br>Labeled Data (%)<br>Method|Downstream Task Accuracy<br>CIFAR10<br>CIFAR100<br>Tiny ImageNet<br>Aircraft<br>CUB2011<br>Dogs<br>Flowers|
+|---|---|---|
+|CIFAR10|10%<br>Random Subset<br>KRR-ST<br>**MKDT**|51_._21_±_0_._38<br>19_._75_±_0_._36<br>8_._04_±_0_._45<br>7_._42_±_0_._43<br>2_._15_±_0_._16<br>3_._10_±_0_._30<br>5_._22_±_0_._96<br>51_._02_±_0_._53<br>21_._01_±_0_._14<br>8_._95_±_0_._26<br>7_._91_±_0_._76<br>2_._44_±_0_._12<br>3_._54_±_0_._29<br>6_._82_±_0_._64<br>**56.88**_±_0_._85<br>**24.61**_±_0_._42<br>**9.76**_±_0_._28<br>**8.96**_±_0_._71<br>**2.78**_±_0_._22<br>**4.37**_±_0_._37<br>**7.38**_±_1_._00<br>57_._18_±_0_._63<br>26_._86_±_0_._36<br>15_._16_±_0_._03<br>16_._11_±_0_._90<br>4_._18_±_0_._05<br>6_._17_±_0_._08<br>12_._98_±_0_._35<br>58_._09_±_0_._07<br>29_._01_±_0_._30<br>15_._94_±_0_._31<br>17_._60_±_1_._04<br>5_._01_±_0_._34<br>6_._81_±_0_._35<br>15_._92_±_0_._64<br>**63.63**_±_0_._17<br>**34.06**_±_0_._39<br>**17.57**_±_0_._37<br>**19.43**_±_0_._93<br>**5.43**_±_0_._22<br>**7.63**_±_0_._17<br>**16.89**_±_0_._37|
+||50%<br>Random Subset<br>KRR-ST<br>**MKDT**||
+|CIFAR100|10%<br>Random Subset<br>KRR-ST<br>**MKDT**|52_._23_±_0_._38<br>21_._56_±_0_._62<br>8_._57_±_0_._43<br>8_._01_±_0_._61<br>2_._73_±_0_._17<br>3_._94_±_0_._28<br>7_._50_±_1_._33<br>52_._40_±_0_._73<br>21_._39_±_0_._16<br>8_._21_±_0_._07<br>7_._64_±_0_._36<br>2_._34_±_0_._12<br>3_._76_±_0_._25<br>6_._52_±_1_._28<br>**57.67**_±_0_._33<br>**27.28**_±_0_._18<br>**11.05**_±_0_._50<br>**9.25**_±_0_._70<br>**3.42**_±_0_._16<br>**4.43**_±_0_._38<br>**9.35**_±_1_._28<br>60_._39_±_0_._17<br>31_._62_±_0_._32<br>16_._02_±_0_._14<br>18_._10_±_0_._12<br>5_._65_±_0_._18<br>7_._37_±_0_._23<br>16_._18_±_0_._31<br>58_._57_±_0_._78<br>29_._46_±_0_._81<br>15_._70_±_0_._07<br>15_._89_±_0_._54<br>4_._82_±_0_._41<br>7_._00_±_0_._18<br>15_._07_±_0_._46<br>**65.85**_±_0_._33<br>**38.09**_±_0_._35<br>**17.46**_±_0_._24<br>**20.73**_±_0_._24<br>**6.67**_±_0_._05<br>**8.48**_±_0_._21<br>**21.15**_±_0_._50|
+||50%<br>Random Subset<br>KRR-ST<br>**MKDT**||
+|TinyImageNet|10%<br>Random Subset<br>KRR-ST<br>**MKDT**|44_._08_±_1_._91<br>16_._43_±_0_._12<br>8_._84_±_0_._85<br>5_._57_±_0_._61<br>2_._12_±_0_._30<br>3_._07_±_0_._17<br>6_._51_±_1_._27<br>45_._48_±_0_._84<br>17_._02_±_0_._26<br>8_._88_±_0_._41<br>5_._29_±_0_._16<br>2_._08_±_0_._21<br>3_._21_±_0_._15<br>6_._10_±_1_._44<br>**49.33**_±_0_._49<br>**20.19**_±_0_._45<br>**10.89**_±_0_._63<br>**6.61**_±_0_._28<br>**2.47**_±_0_._18<br>**3.86**_±_0_._36<br>**7.33**_±_1_._34<br>47_._35_±_0_._92<br>19_._28_±_0_._61<br>14_._01_±_0_._38<br>8_._74_±_0_._78<br>3_._61_±_0_._31<br>5_._18_±_0_._29<br>13_._60_±_1_._13<br>48_._16_±_1_._18<br>20_._01_±_0_._40<br>13_._59_±_0_._47<br>8_._66_±_1_._29<br>3_._46_±_0_._22<br>4_._98_±_0_._31<br>15_._12_±_0_._37<br>**51.98**_±_0_._44<br>**24.41**_±_0_._39<br>**16.99**_±_0_._25<br>**10.84**_±_0_._25<br>**4.44**_±_0_._28<br>**6.22**_±_0_._15<br>**16.47**_±_0_._46|
+||50%<br>Random Subset<br>KRR-ST<br>**MKDT**||
+
+
+**Ablations** We perform ablations over two factors: 1) initialization and 2) SSL algorithm. Table 2 presents results for pre-training with MKDT using random subset initialization, as well as results for pre-training directly on the high-loss subset initialization used by MKDT. Interestingly, the KD objective for SSL pre-training benefits slightly more from the high-loss subset than from random subsets. Consequently, MKDT initialized from the high-loss subset performs better than when initialized from a random subset. Table 6 shows results for MKDT using a teacher model trained with SimCLR (Chen et al., 2020) instead of BarlowTwins. Specifically, we train a ResNet-18 for 400 epochs using SimCLR. Here too, MKDT achieves approximately 6% higher performance compared to random subsets across downstream datasets. This confirms that MKDT generalizes across different SSL training algorithms. 
+
+**Generalization to Larger Architectures** Table 5 compares CIFAR100 5% size MKDT distilled set to 5% size random subsets, using the larger ResNet-10 and ResNet-18 architectures. Across all downstream tasks, we confirm that MKDT distilled sets outperform baselines even when using larger architectures. Surprisingly, the larger ResNet-18 slightly under-performs the smaller ResNet-10. This trend is observed across all baselines, including no pre-training. We conjecture this is due to larger models requiring a lot more data to be able to use their extra capacity to surpass their smaller counterparts. 
+
+## 6 CONCLUSION 
+
+To conclude, we propose MKDT, the first effective approach for dataset distillation for SSL pretraining. We demonstrated the challenges of naïvely adapting previous supervised distillation method and showed how knowledge distillation with trajectory matching can remedy these problems. Empirically, we showed up to 13% improvement in downstream accuracy when pre-training with MKDT distilled sets over the next best baseline. Thus, we enable highly data-efficient SSL pre-training. 
+
+**Acknowledgments** This research was partially supported by the National Science Foundation CAREER Award 2146492, and an Amazon PhD fellowship. 
+
+10 
+
+## REFERENCES 
+
+- George Cazenavette, Tongzhou Wang, Antonio Torralba, Alexei A Efros, and Jun-Yan Zhu. Dataset distillation by matching training trajectories. In _Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition_ , pp. 4750–4759, 2022. 
+
+- Ting Chen, Simon Kornblith, Mohammad Norouzi, and Geoffrey Hinton. A simple framework for contrastive learning of visual representations, 2020. 
+
+- Xuxi Chen, Yu Yang, Zhangyang Wang, and Baharan Mirzasoleiman. Data distillation can be like vodka: Distilling more times for better quality. _International Conference on Representation Learning (ICLR)_ , 2023. 
+
+- Yuntao Chen, Naiyan Wang, and Zhaoxiang Zhang. Darkrank: Accelerating deep metric learning via cross sample similarities transfer, 2017. 
+
+- C Coleman, C Yeh, S Mussmann, B Mirzasoleiman, P Bailis, P Liang, J Leskovec, and M Zaharia. Selection via proxy: Efficient data selection for deep learning. In _International Conference on Learning Representations (ICLR)_ , 2020. 
+
+- Justin Cui, Ruochen Wang, Si Si, and Cho-Jui Hsieh. Scaling up dataset distillation to imagenet-1k with constant memory. _arXiv preprint arXiv:2211.10586_ , 2022. 
+
+- Jia Deng, Wei Dong, Richard Socher, Li-Jia Li, Kai Li, and Li Fei-Fei. Imagenet: A large-scale hierarchical image database. In _2009 IEEE Conference on Computer Vision and Pattern Recognition_ , pp. 248–255, 2009. doi: 10.1109/CVPR.2009.5206848. 
+
+- Tian Dong, Bo Zhao, and Lingjuan Lyu. Privacy for free: How does dataset condensation help privacy? In _International Conference on Machine Learning_ , pp. 5378–5396. PMLR, 2022. 
+
+- Jiawei Du, Yidi Jiang, Vincent Y. F. Tan, Joey Tianyi Zhou, and Haizhou Li. Minimizing the accumulated trajectory error to improve dataset distillation, 2023. 
+
+- Wele Gedara Chaminda Bandara, Celso M De Melo, and Vishal M Patel. Guarding barlow twins against overfitting with mixed samples. _arXiv e-prints_ , pp. arXiv–2312, 2023. 
+
+- Robert M. Gower, Mark Schmidt, Francis Bach, and Peter Richtarik. Variance-reduced methods for machine learning, 2020. URL https://arxiv.org/abs/2010.00892. 
+
+- Geoffrey Hinton, Oriol Vinyals, and Jeff Dean. Distilling the knowledge in a neural network, 2015. 
+
+- Tao Huang, Shan You, Fei Wang, Chen Qian, and Chang Xu. Knowledge distillation from a stronger teacher, 2022. 
+
+- Siddharth Joshi and Baharan Mirzasoleiman. Data-efficient contrastive self-supervised learning: Most beneficial examples for supervised learning contribute the least. In Andreas Krause, Emma Brunskill, Kyunghyun Cho, Barbara Engelhardt, Sivan Sabato, and Jonathan Scarlett (eds.), _Proceedings of the 40th International Conference on Machine Learning_ , volume 202 of _Proceedings of Machine Learning Research_ , pp. 15356–15370. PMLR, 23–29 Jul 2023. URL https://proceedings.mlr.press/v202/joshi23b.html. 
+
+- Siddharth Joshi, Arnav Jain, Ali Payani, and Baharan Mirzasoleiman. Data-efficient contrastive language-image pretraining: Prioritizing data quality over quantity. In Sanjoy Dasgupta, Stephan Mandt, and Yingzhen Li (eds.), _Proceedings of The 27th International Conference on Artificial Intelligence and Statistics_ , volume 238 of _Proceedings of Machine Learning Research_ , pp. 1000–1008. PMLR, 02–04 May 2024. URL https://proceedings.mlr.press/v238/ joshi24a.html. 
+
+- Jang-Hyun Kim, Jinuk Kim, Seong Joon Oh, Sangdoo Yun, Hwanjun Song, Joonhyun Jeong, JungWoo Ha, and Hyun Oh Song. Dataset condensation via efficient synthetic-data parameterization. In _Proceedings of the 39th International Conference on Machine Learning_ , 2022. 
+
+- Taehyeon Kim, Jaehoon Oh, NakYil Kim, Sangwook Cho, and Se-Young Yun. Comparing kullbackleibler divergence and mean squared error loss in knowledge distillation, 2021. 
+
+11 
+
+- Soroush Abbasi Koohpayegani, Ajinkya Tejankar, and Hamed Pirsiavash. Compress: Self-supervised learning by compressing representations, 2020. 
+
+- Alex Krizhevsky and Geoffrey Hinton. Learning multiple layers of features from tiny images. Technical Report 0, University of Toronto, Toronto, Ontario, 2009. 
+
+- Ya Le and Xuan S. Yang. Tiny imagenet visual recognition challenge. 2015. URL https: //api.semanticscholar.org/CorpusID:16664790. 
+
+- Dong Bok Lee, Seanie Lee, Joonho Ko, Kenji Kawaguchi, Juho Lee, and Sung Ju Hwang. Selfsupervised dataset distillation for transfer learning, 2023. 
+
+- Saehyung Lee, Sanghyuk Chun, Sangwon Jung, Sangdoo Yun, and Sungroh Yoon. Dataset condensation with contrastive signals. In _Proceedings of the 39th International Conference on Machine Learning_ , pp. 12352–12364, 2022. 
+
+- Noel Loo, Ramin Hasani, Alexander Amini, and Daniela Rus. Efficient dataset distillation using random feature approximation. In _Advances in Neural Information Processing Systems_ , 2022. 
+
+- Raphael Gontijo Lopes, Stefano Fenu, and Thad Starner. Data-free knowledge distillation for deep neural networks, 2017. URL https://arxiv.org/abs/1710.07535. 
+
+- Baharan Mirzasoleiman, Jeff Bilmes, and Jure Leskovec. Coresets for data-efficient training of machine learning models. In _International Conference on Machine Learning_ , pp. 6950–6960. PMLR, 2020. 
+
+- Timothy Nguyen, Zhourong Chen, and Jaehoon Lee. Dataset meta-learning from kernel ridgeregression. In _International Conference on Learning Representations_ , 2021. URL https: //openreview.net/forum?id=l-PrrQrK0QR. 
+
+Wonpyo Park, Dongju Kim, Yan Lu, and Minsu Cho. Relational knowledge distillation, 2019. 
+
+- Nikolaos Passalis and Anastasios Tefas. Learning deep representations with probabilistic knowledge transfer. In _Proceedings of the European Conference on Computer Vision (ECCV)_ , September 2018. 
+
+- Mansheej Paul, Surya Ganguli, and Gintare Karolina Dziugaite. Deep learning on a data diet: Finding important examples early in training. _Advances in Neural Information Processing Systems_ , 34: 20596–20607, 2021. 
+
+- Joshua Robinson, Ching-Yao Chuang, Suvrit Sra, and Stefanie Jegelka. Contrastive learning with hard negative samples, 2021. 
+
+- Adriana Romero, Nicolas Ballas, Samira Ebrahimi Kahou, Antoine Chassang, Carlo Gatta, and Yoshua Bengio. Fitnets: Hints for thin deep nets, 2015. 
+
+Noveen Sachdeva and Julian McAuley. Data distillation: A survey, 2023. 
+
+- Ahmad Sajedi, Samir Khaki, Ehsan Amjadian, Lucy Z Liu, Yuri A Lawryshyn, and Konstantinos N Plataniotis. Datadam: Efficient dataset distillation with attention matching. In _Proceedings of the IEEE/CVF International Conference on Computer Vision_ , pp. 17097–17107, 2023. 
+
+- Shitong Shao, Zeyuan Yin, Muxin Zhou, Xindong Zhang, and Zhiqiang Shen. Generalized largescale data condensation via various backbone and statistical matching, 2024. URL https: //arxiv.org/abs/2311.17950. 
+
+- Mariya Toneva, Alessandro Sordoni, Remi Tachet des Combes, Adam Trischler, Yoshua Bengio, and Geoffrey J. Gordon. An Empirical Study of Example Forgetting During Deep Neural Network Learning, November 2019. URL http://arxiv.org/abs/1812.05159. arXiv:1812.05159 [cs, stat]. 
+
+- Kai Wang, Bo Zhao, Xiangyu Peng, Zheng Zhu, Shuo Yang, Shuo Wang, Guan Huang, Hakan Bilen, Xinchao Wang, and Yang You. Cafe: Learning to condense dataset by aligning features. In _Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition_ , pp. 12196–12205, 2022a. 
+
+12 
+
+- Kai Wang, Bo Zhao, Xiangyu Peng, Zheng Zhu, Shuo Yang, Shuo Wang, Guan Huang, Hakan Bilen, Xinchao Wang, and Yang You. Cafe: Learning to condense dataset by aligning features, 2022b. 
+
+- Tongzhou Wang, Jun-Yan Zhu, Antonio Torralba, and Alexei A Efros. Dataset distillation. _arXiv preprint arXiv:1811.10959_ , 2018. 
+
+- Yihao Xue, Siddharth Joshi, Eric Gan, Pin-Yu Chen, and Baharan Mirzasoleiman. Which features are learnt by contrastive learning? on the role of simplicity bias in class collapse and feature suppression, 2023. 
+
+- Yu Yang, Hao Kang, and Baharan Mirzasoleiman. Towards sustainable learning: Coresets for data-efficient deep learning. _International Conference on Machine Learning (ICML)_ , 2023. 
+
+- Zeyuan Yin, Eric Xing, and Zhiqiang Shen. Squeeze, recover and relabel: Dataset condensation at imagenet scale from a new perspective. _Advances in Neural Information Processing Systems_ , 36, 2024. 
+
+- Lu Yu, Vacit Oguz Yazici, Xialei Liu, Joost van de Weijer, Yongmei Cheng, and Arnau Ramisa. Learning metrics from teachers: Compact networks for image embedding, 2019. 
+
+- Sergey Zagoruyko and Nikos Komodakis. Paying more attention to attention: Improving the performance of convolutional neural networks via attention transfer, 2017. 
+
+- Jure Zbontar, Li Jing, Ishan Misra, Yann LeCun, and Stéphane Deny. Barlow twins: Self-supervised learning via redundancy reduction, 2021. 
+
+- Bo Zhao and Hakan Bilen. Dataset condensation with differentiable siamese augmentation. In _International Conference on Machine Learning_ , pp. 12674–12685. PMLR, 2021. 
+
+- Bo Zhao and Hakan Bilen. Dataset condensation with distribution matching. In _Proceedings of the IEEE/CVF Winter Conference on Applications of Computer Vision (WACV)_ , 2023. 
+
+- Bo Zhao, Konda Reddy Mopuri, and Hakan Bilen. Dataset condensation with gradient matching. In _International Conference on Learning Representations_ , 2021. 
+
+- Muxin Zhou, Zeyuan Yin, Shitong Shao, and Zhiqiang Shen. Self-supervised dataset distillation: A good compression is all you need, 2024. 
+
+- Yongchao Zhou, Ehsan Nezhadarya, and Jimmy Ba. Dataset distillation using neural feature regression. In _Advances in Neural Information Processing Systems_ , 2022. 
+
+13 
+
+## A EXPERIMENT DETAILS 
+
+## A.1 ADDITIONAL DETAILS FOR EXPERIMENTS IN TABLES 1, 2, 3, 4, 5, 6, 7 
+
+**Training the Teacher Model Using SSL** We trained the teacher model using BarlowTwins (Zbontar et al., 2021) using the training setup ResNet18 specified in (Gedara Chaminda Bandara et al., 2023). We used the Adam optimizer with batch size 256, learning rate 0.01, cosine annealing learning rate schedule, and weight decay 10 _[−]_[6] . The feature dimension is 1024. Finally, we use the pre-projection head representation of the trained model for teacher representation, and its dimension is of size 512. 
+
+**Training** _**Expert**_ **Trajectories Using KD** We trained 100 expert trajectories for each dataset with random initialization of the network for 20 epochs, using Stochastic Gradient Descent with learning rate 0.1, momentum 0.9, and weight decay 1e-4. Similar to other DD works (Cazenavette et al., 2022; Lee et al., 2023), we used depth 4 ConvNet for Tiny ImageNet and depth 3 ConvNet for both CIFAR 10 and CIFAR 100. We did not apply any augmentation except normalization, and did not apply the ZCA-whitening. 
+
+**Distillation Hyperparameters** We distilled 2% of CIFAR 10, CIFAR 100, and Tiny ImageNet. We used SGD for optimizing the synthetic images with batch size 256, momentum 0.5. We distilled CIFAR 10 and CIFAR 100 with depth 3 ConvNet and Tiny ImageNet with depth 4 ConvNet. We initialize the synthetic learning rate as 0.1 and used SGD with learning rate 10 _[−]_[4] and momentum 0.5 to update it. We distilled the datasets for 5000 iterations and evaluated their performance for all the experiments except those in Table 5, where we use the distilled dataset after 1000 iterations. The other hyper-parameters are recorded in Table 8. 
+
+Table 8: MKDT Hyperparameters on 2% Distilled Set 
+
+||CIFAR10|CIFAR100|TinyImageNet|
+|---|---|---|---|
+|Percentage Distilled<br>Model<br>Synthetic Steps(_N_)<br>Expert Epochs(_M_)<br>Max Start Epoch(_T_ +)<br>Learning Rate (Pixels)|2%<br>ConvNetD3<br>40<br>2<br>5<br>103|2%<br>ConvNetD3<br>40<br>2<br>2<br>103|2%<br>ConvNetD4<br>10<br>2<br>2<br>105|
+
+
+**Pre-training on Synthetic Data** For the synthetic data, we pre-train them using the MSE loss with their learned representation for 20 epochs using SGD with batch size 256, their distilled learning rate, momentum 0.9, and weight decay 10 _[−]_[4] . We use a depth 3 ConvNet for CIFAR 10 and CIFAR 100, and a depth 4 ConvNet for Tiny ImageNet. For distilled datasets, we use the synthetic learning rate _α_ syn. For other datasets (e.g., random subset), we use the same setting except a learning rate of 0.1. 
+
+**Evaluation** We use the models’ penultimate layer’s representations (as is standard in contrastive learning (Zbontar et al., 2021; Chen et al., 2020)) of the downstream task’s training set and train a linear classifier, using LBFGS with 100 iterations and regularization weight 10 _[−]_[3] . We then use the pre-projection head representations of the test set of the downstream task and evaluate using the aforementioned linear classifer to report the downstream test accuracy. 
+
+**Using SimCLR for Obtaining Teacher Representation.** We conducted an ablation study using a teacher model trained with SimCLR (Chen et al., 2020) instead of Barlow Twins (Zbontar et al., 2021) for CIFAR 10 and CIFAR 100. The experiment steps are similar to the ones in A.1. During the "Training the Teacher Model Using SSL" step , we used the Adam optimizer with batch size 512, learning rate 0.001, and weight decay 10 _[−]_[6] to train a ResNet18 along with a 2-layer linear projection head for 400 epochs. The projection head included Batch Normalization and ReLU after the first layer, and Batch Normalization after the second layer, projecting to 128 dimensions. Then, we used the pre-projection head representation of the trained model for getting the teacher representation of size 512. The other steps are the same as the one in A.1. Table 6 shows that MKDT consistently outperforms the random subset across all downstream datasets and various sizes of labeled data, highlighting the method’s generalizability to other contrastive learning methods. 
+
+**Scaling the Method to Larger Distillation Sets.** In addition to distilling 2% subsets, we also conducted experiments distilling 5% subsets of CIFAR10, CIFAR100, and TinyImageNet to evaluate the generalizability of the method to larger distillation sets. Table 4 shows the scalability of the method to larger distilled set sizes. The experiments procedure are the same as the ones in A.1 except 
+
+14 
+
+Table 9: MKDT Hyperparameters on 5% Distilled Set 
+
+||CIFAR10|CIFAR100|TinyImageNet|
+|---|---|---|---|
+|Percentage Distilled<br>Model<br>Synthetic Steps(_N_)<br>Expert Epochs(_M_)<br>Max Start Epoch(_T_ +)<br>Learning Rate (Pixels)|5%<br>ConvNetD3<br>40<br>2<br>5<br>104|5%<br>ConvNetD3<br>40<br>2<br>5<br>104|5%<br>ConvNetD4<br>10<br>2<br>2<br>105|
+
+
+that we use different distillation hyperparameters for the 5% distilled set. The hyperparameters are summarized in Table 9. 
+
+**Scaling the Method to Larger Downstream Labeled Dataset Sizes.** We evaluated the performance for CIFAR 10, CIFAR 100, and TinyImageNet on larger downstream labeled data sizes, specifically 10% and 50% labeled data sizes, using the 2% distilled set obtained with the method illustrated in A.1. As shown in Table 7, MKDT continues to outperform random subset across all downstream datasets and data sizes, demonstrating its scalability with larger labeled data sizes. 
+
+**Details for KRR-ST Lee et al. (2023)** We use the code and hyper-parameters provided in (Lee et al., 2023). As the original paper did not provide the results and the hyperparameters for CIFAR 10, we use the same hyperparameters as CIFAR 100 to distill CIFAR 10. In particular, this invovles using BarlowTwins ResNet-18 as the teacher model as well. 
+
+## A.2 ADDITIONAL DETAILS ON EXPERIMENTS IN FIG. 1 
+
+For the experiment in Figure 1a, we train 5 trajectories of each of MTT SSL and MTT SL for CIFAR 100 using the same random initialization of the network, respectively. For MTT SSL, we train the models with the Adam optimizer with batch size 1024, learning rate 0.001, and weight decay 10 _[−]_[6] . For MTT SL, we train the model with SGD with batch size 256, learning rate 0.01, momentum 0, and no weight decay. 
+
+For both of the experiments in Figure 1b and 1c, we distill the dataset using MTT SL with image learning rate 1000, max start epoch 0, synthetic steps 20, and expert epochs 4. We distill using MTT SLL with image learning rate 1000, max start epoch 0, synthetic steps 10, and expert epochs 2. We distilled them for 100 iterations and record the change in the loss function and the average absolute change in pixels. 
+
+15 
+
+## B ADDITIONAL COMPARISON OF RANDOM SUBSET SSL PRE-TRAINING TO KRR-ST 
+
+This experiment is conducted in the setting of Lee et al. (2023) for pre-training on CIFAR100. This experiment pre-trains on a distilled set / subset of 2% the size of CIFAR100 and then evaluates on downstream tasks by finetuning the entire network with the entire labeled dataset for the downstream task. KRR-ST compares with the random subset baseline by pre-training using SL. However, we use SSL on the random subset as a baseline instead. Here, we show that, in fact, even in the finetuning setting reported by Lee et al. (2023), KRR-ST cannot outperform SSL pre-training on random real images. The baseline reported as ‘Random’ in Lee et al. (2023) refers to SL pre-training as opposed to SSL pre-training. 
+
+Table 10: Pre-training on CIFAR100 
+
+|Method|Pre-Training<br>CIFAR100|Downstream<br>CIFAR10<br>Aircraft<br>Cars<br>CUB2011<br>Dogs<br>Flowers|
+|---|---|---|
+|No pre-training (from Lee et al. (2023))<br>Random (Supervised Learning (from Lee et al. (2023))<br>KRR-ST (from Lee et al. (2023))<br>**Random (SSL Pre-training)**|64_._95_±_0_._21<br>65_._23_±_0_._12<br>66_._81_±_0_._11<br>66_._44_±_0_._14|87_._34_±_0_._13<br>34_._66_±_0_._39<br>19_._43_±_0_._14<br>18_._46_±_0_._11<br>22_._31_±_0_._22<br>58_._75_±_0_._41<br>87_._55_±_0_._19<br>33_._99_±_0_._45<br>19_._77_±_0_._21<br>18_._18_±_0_._21<br>21_._69_±_0_._18<br>59_._31_±_0_._27<br>88_._72_±_0_._11<br>41_._54_±_0_._37<br>28_._68_±_0_._32<br>25_._30_±_0_._37<br>26_._39_±_0_._08<br>67_._88_±_0_._18<br>88_._74_±_0_._20<br>42_._02_±_0_._06<br>28_._75_±_0_._23<br>25_._12_±_0_._19<br>26_._57_±_0_._22<br>68_._21_±_0_._40|
+
+
+16 
+
+## C PROOF FOR THEOREM 4.1 
+
+_Proof._ To analyze the variance of the gradient for both SL and SSL, we will conduct a case analysis. There are 3 possible unique cases for constructing the mini-batch. Assuming _n_ is extremely large s.t. _nn/_ 2 _≈[n][/]_[2] _n[−]_[1] , we have: 
+
+1. Both examples are from class 0 with probability =[1] 
+
+**==> picture [5 x 6] intentionally omitted <==**
+
+2. Both examples are from class 1 with probability =[1] 
+
+**==> picture [5 x 6] intentionally omitted <==**
+
+3. 1 example from each class with probability =[1] 
+
+**==> picture [5 x 6] intentionally omitted <==**
+
+Let _x_ 1 _, y_ 1 refer to example 1 and its corresponding label vector; similarly, let _x_ 2 _, y_ 2 refer to example 2 and its corresponding label vector. 
+
+To show the effect of each term, we refer to the class mean vectors for class 0 and class 1 as _µ_ 0 and _µ_ 1, respectively; and use _e_ 0 and _e_ 1, the basis vectors to represent the labels for class 0 and class 1. 
+
+## **Analyzing cases for SL** 
+
+**==> picture [317 x 46] intentionally omitted <==**
+
+_Case 1: Both examples from class 0_ 
+
+**==> picture [316 x 12] intentionally omitted <==**
+
+**==> picture [448 x 132] intentionally omitted <==**
+
+**==> picture [346 x 62] intentionally omitted <==**
+
+_Case 2: Both examples from class 1_ 
+
+By symmetry, we have: 
+
+**==> picture [277 x 13] intentionally omitted <==**
+
+17 
+
+and 
+
+**==> picture [339 x 30] intentionally omitted <==**
+
+_Case 3: 1 example from each class_ 
+
+**==> picture [305 x 12] intentionally omitted <==**
+
+and 
+
+**==> picture [342 x 44] intentionally omitted <==**
+
+_Putting it together_ 
+
+**==> picture [319 x 85] intentionally omitted <==**
+
+Finally, 
+
+**==> picture [359 x 85] intentionally omitted <==**
+
+_Simplifying term 1_ : E[( _∥∇W_ ( _LSL_ ( _B_ )) _−_ E[ _∇W_ ( _LSL_ ( _B_ ))] _∥_[2] ) _|_ case 1] 
+
+**==> picture [384 x 95] intentionally omitted <==**
+
+_By symmetry, term 2_ i.e. E[( _∥∇W_ ( _LSL_ ( _B_ )) _−_ E[ _∇W_ ( _LSL_ ( _B_ ))] _∥_[2] ) _|_ case 2] can be simplified as follows: 
+
+_∇W_ ( _LSL_ ( _B_ )) _−_ E[ _∇W_ ( _LSL_ ( _B_ ))] = _µ_ 1 _µ[⊤]_ 1[+] _[ ϵ][N]_ 1 _[µ]_ 1 _[⊤]_[+] _[ ϵ][N]_ 2 _[µ]_ 1 _[⊤][−][e]_[1] _[µ][⊤]_ 1[+] _[ µ]_[1] _[ϵ][⊤] N_ 1[+] _[ µ]_[1] _[ϵ] N[⊤]_ 2 
+
+18 
+
+**==> picture [228 x 29] intentionally omitted <==**
+
+_Simplifying term 3_ : 
+
+**==> picture [301 x 12] intentionally omitted <==**
+
+**==> picture [388 x 79] intentionally omitted <==**
+
+## **Analyzing cases for SSL** 
+
+We will now analyze the same for SSL and show by comparing each of the 3 terms, element-wise, above to their counterparts that _V ar_ ( _LSSL_ ( _B_ )) _> V ar_ ( _LSL_ ( _B_ )) 
+
+From Xue et al. (2023), we have that _LSSL_ can be re-written as 
+
+_∇W LSSL_ ( _W_ ) = _−_ Tr(2 _MWW_[˜] _[⊤]_ ) + Tr( _MW[⊤] WMW[⊤] W_ ) 
+
+where 
+
+**==> picture [80 x 30] intentionally omitted <==**
+
+with _m_ being the number of augmentations, and _M_ represents the covariance of the training data. The matrix _M_[˜] is defined as: 
+
+**==> picture [194 x 37] intentionally omitted <==**
+
+where _A_ ( _xi_ ) denotes the set of augmentations for the sample _xi_ . 
+
+As _m →∞_ , _M_ = _M_[˜] =[1] 2 � _x_ 1 _x[T]_ 1[+] _[ x]_[2] _[x][T]_ 2 �. Hence, _∇W_ ( _LSSL_ ( _B_ )) = _−_ 4 _WM_ + 4 _WMW[⊤] WM_ 
+
+Substituting _W_ = _I_ , we get _∇W_ ( _LSSL_ ( _B_ )) = _−_ 4 _M_ + 4 _M_[2] 
+
+_Case 1: Both examples from class 0_ 
+
+**==> picture [323 x 126] intentionally omitted <==**
+
+**==> picture [339 x 21] intentionally omitted <==**
+
+19 
+
+**==> picture [321 x 223] intentionally omitted <==**
+
+**==> picture [293 x 12] intentionally omitted <==**
+
+_Case 2: Both examples from class 1_ By symmetry, 
+
+**==> picture [288 x 38] intentionally omitted <==**
+
+**==> picture [293 x 12] intentionally omitted <==**
+
+_Case 3: 1 example from each class_ 
+
+**==> picture [323 x 86] intentionally omitted <==**
+
+**==> picture [345 x 12] intentionally omitted <==**
+
+_Putting it together_ 
+
+Hence. 
+
+**==> picture [212 x 45] intentionally omitted <==**
+
+20 
+
+**==> picture [286 x 37] intentionally omitted <==**
+
+## **Comparing each term, element-wise** 
+
+_Comparing Term 1_ 
+
+**==> picture [383 x 45] intentionally omitted <==**
+
+**==> picture [416 x 192] intentionally omitted <==**
+
+Recall that _µ_ 0 = _e_ 0. 
+
+Use _ϵ_ 1 and _ϵ_ 2 to denote the value of an abtrirary element of _ϵN_ 1 and _ϵN_ 2, respectively. 
+
+_Comparing the expectation of the square of element_ (0 _,_ 0) _of ∇W_ ( _L_ ( _B_ )) _−_ E[ _∇W_ ( _L_ ( _B_ ))] _:_ 
+
+For SL: E[(1 + _ϵ_ 1 + _ϵ_ 2 _−_ 1 + _ϵ_ 1 + _ϵ_ 2 + _ϵ_[2] 1[+] _[ ϵ]_[2] 2 _[−][ϵ]_[1] _[−][ϵ]_[2] _[−]_[1 + 1)][2][] =][ E][[(] _[ϵ]_[1][+] _[ ϵ]_[2][+] _[ ϵ]_[2] 1[+] _[ ϵ]_[2] 2[)] =] From Eq. 51, it is easy to see that the expectation of the square of element (0 _,_ 0) is far larger due to far more _ϵ_ 1, _ϵ_ 2, _ϵ_[2] 1[and] _[ ϵ]_[2] 2[terms.] 
+
+Similar argument holds for diagonal terms that are not (0 _,_ 0), due to the greater number of terms that only have _ϵ_[2] 1[and] _[ ϵ]_[2] 2[(all terms having only] _[ ϵ]_[1][and] _[ ϵ]_[2][are only present in element][ (0] _[,]_[ 0)][ since they are] always multiplied with _e_ 0). 
+
+An analogous argument holds for off-diagonal elements. Here, the contribution is only due to terms containing only _ϵN_ 1 and/or _ϵN_ 2. 
+
+_Comparing Term 2_ 
+
+By symmetry, it must be that the same holds for term 2. 
+
+_Comparing Term 3_ 
+
+**==> picture [353 x 30] intentionally omitted <==**
+
+**==> picture [326 x 14] intentionally omitted <==**
+
+21 
+
+**==> picture [198 x 48] intentionally omitted <==**
+
+Again, from analogous arugments from _Term 1_ , we can see that the expression for _LSSL_ has larger expected square element-wise than that of _LSL_ . 
+
+## **Conclusion** 
+
+Since, for each term (corresponding to the 3 cases of mini-batch), we have that 
+
+E[ _∥∇W_ ( _LSSL_ ( _B_ )) _−_ E[ _∇W_ ( _LSSL_ ( _B_ ))] _∥_[2] ] _>_ E[ _∥∇W_ ( _LSL_ ( _B_ )) _−_ E[ _∇W_ ( _LSL_ ( _B_ ))] _∥_[2] ] _,_ (54) Thus, we can conclude 
+
+Var( _∇W LSL_ ( _B_ )) _<_ Var( _∇W LSSL_ ( _B_ )) _._ 
+
+22 
+
+## D PROPOSITION D.1: GENERALIZED ANALYSIS OF VARIANCE OF TRAJECTORY UNDER SYNCHRONOUS PARALLEL SGD 
+
+**Proposition D.1.** _Let D_ = _{_ ( _xi, yi_ ) _}[N] i_ =1 _[be a dataset with][ N][examples, where][ x][i][is the][ i][-th input] and yi ∈{_ 1 _,_ 2 _, . . . , K} is its corresponding class label from K classes. We assume the data xi is generated from a distribution where each example from class k can be modeled as a d-dimensional (k ≪ d) 1-hot vector ek plus some noise ϵi, i.e. xi_ = _eyi_ + _ϵi, where µyi is the vector corresponding to class yi and ϵi ∼N_ (0 _, I_ ) _. Moreover, we consider a linear model fθ_ ( _x_ ) = _θx where θ ∈_ R _[K][×][d] . The supervised loss function LSL is defined as a loss function that depends solely on each individual example:_ 
+
+**==> picture [272 x 26] intentionally omitted <==**
+
+_where ℓSL is an arbitrary supervised loss function (e.g., MSE, Cross-Entropy, etc.) and B is a mini-batch of examples._ 
+
+_For SSL, we consider the spectral contrastive loss:_ 
+
+**==> picture [346 x 22] intentionally omitted <==**
+
+_where A denotes the augmentation that are modeled as: A_ ( _xi_ ) _∼ xi_ + _ϵaug, where ϵaug ∼N_ (0 _, I_ ) _._ 
+
+_We analyze this setting under synchronous parallel SGD, where the number of mini-batches equals the number of parallel threads. Let P represent a partition of the dataset D into a set of disjoint mini-batches, each of size |B|. The synchronous parallel SGD update for an arbitrary loss function L_ ( _B_ ) _on mini-batch B at time step t is θt_ +1 := _θt − α_[�] _B∈P[∇][θ] t[L]_[(] _[B]_[)] _[.]_ 
+
+_Let θ be the initial parameters and θSL, θSSL be the model parameters after a single epoch of training with synchronous parallel using the supervised loss LSL and the self-supervised loss LSSL, respectively, with a learning rate α. Then, for sufficiently large batch size |B|,_ 
+
+**==> picture [254 x 11] intentionally omitted <==**
+
+_where VarP represents the variance over different partitions P , and for a vector random variable X, we define the scalar variance as Var_ ( _X_ ) = E[ _∥X −_ E[ _X_ ] _∥_[2] ] 
+
+_Proof._ For synchronous parallel SGD, we have: 
+
+**==> picture [122 x 23] intentionally omitted <==**
+
+where _L_ is an arbitrary loss function. 
+
+## **Variance of Trajectory in Supervised Learning** 
+
+Consider two arbitrary partitions _P_ 1 and _P_ 2. Let _θ_ represent the initial parameters, and let _θSL_ 1 and _θSL_ 2 represent the parameters after a single epoch of synchronous parallel SGD for supervised learning using _LSL_ on the partitions _P_ 1 and _P_ 2, respectively. 
+
+We can express the updates as: 
+
+**==> picture [397 x 132] intentionally omitted <==**
+
+23 
+
+(62) 
+
+= _θSL_ 2 _._ 
+
+Since _θSL_ 1 = _θSL_ 2 for arbitrary partitions _P_ 1 and _P_ 2, we can conclude that: 
+
+Var _P_ ( _θSL_ ) = 0 _._ 
+
+## **Variance of Trajectory in Self-Supervised Learning** 
+
+Next, we need to show that Var _P_ ( _θSSL_ ) _>_ 0. Let _θ_ represent the initial parameters, and let _θSSL_ 1 and _θSSL_ 2 represent the parameters after a single epoch of synchronous parallel SGD using the self-supervised loss _LSSL_ with partitions _P_ 1 and _P_ 2, respectively. 
+
+To show Var _P_ ( _θSSL_ ) _>_ 0, it suffices to show that there exist partitions _P_ 1 and _P_ 2 such that _θSSL_ 1 = _θSSL_ 2. 
+
+Consider the following two partitions: 
+
+- Let _P_ 1 be a partition where each mini-batch is constructed by iterating over classes, until _|B|_ examples are selected, and picking a single example from the remaining examples in each class 
+
+- Let _P_ 2 be a partition where each mini-batch is constructed by picking examples from the remaining examples each class until _|B|_ examples 
+
+It is easy to see, from prior work in hard negative mining for contrastive SSL such as Robinson et al. (2021), that _P_ 2 will have a different gradient across all batches from _P_ 1 as _P_ 2 only contrasts examples within the same class, whereas _P_ 1 contrasts examples across different classes. Hence, _θSSL_ 1 = _θSSL_ 2. 
+
+We will now prove this for our setting, considering two random partitions _P_ 1 and _P_ 2. 
+
+Xue et al. (2023) shows the _LSSL_ can be rewritten as _LSSL_ = _−Tr_ (2 _Mθθ[T]_ ) + _Tr_ ( _M[′] θ[T] θM[′] θ[T] θ_ ) 
+
+where _M_ = _m|_ 1 _B|_ � _mi_ =1 _|B|[x][i][x] i[T]_[,] _[M][ ′]_[=] _|B_ 1 _|_ � _|iB_ =1 _|_ � _m_ 1 � _x∈A_ ( _xi_ ) _[x]_ �� _m_ 1 � _x∈A_ ( _xi_ ) _[x]_ � _T_ where _m_ is the number of augmentations sampled. 
+
+From Xue et al. (2023), we also have _∇θ_ ( _LSSL_ ) = _−_ 4 _θM_ + 4 _θM[′] θ[T] θM[′]_ 
+
+With _m_ i.e. number of augmentations large enough, _M_ = _M[′]_ . 
+
+We now refer to _M_ for _P_ 1 as _M_ 1 and _M_ for _P_ 2 as _M_ 2. 
+
+From the construction of _P_ 1, we have _M_ 1 = _I_ and from the construction of _P_ 2, we have [ _M_ 2] _i,j_ = _δi,kδj,k_ where _δi,j_ = **1** [ _i_ = _j_ ] for batch where examples from class _k_ are selected. 
+
+From this, we can see that, the _∇θ_ ( _LSSL_ ) is not equal for _P_ 1 and _P_ 2. 
+
+Hence, we can conclude that _θSSL_ 1 = _θSSL_ 2 
+
+24 
+
+## E EXAMPLES FROM MKDTAND KRR-ST (LEE ET AL., 2023) 
+
+Here, we show examples from CIFAR10, CIFAR100 and TinyImageNet for the data distilled using MKDTand KRR-ST (Lee et al., 2023). 
+
+**==> picture [239 x 9] intentionally omitted <==**
+
+**----- Start of picture text -----**<br>
+(a) MKDT (b) KRR-ST<br>**----- End of picture text -----**<br>
+
+
+Figure 2: Examples of Distilled Images for CIFAR10 
+
+**==> picture [239 x 9] intentionally omitted <==**
+
+**----- Start of picture text -----**<br>
+(a) MKDT (b) KRR-ST<br>**----- End of picture text -----**<br>
+
+
+Figure 3: Examples of Distilled Images for CIFAR100 
+
+**==> picture [239 x 9] intentionally omitted <==**
+
+**----- Start of picture text -----**<br>
+(a) MKDT (b) KRR-ST<br>**----- End of picture text -----**<br>
+
+
+Figure 4: Examples of Distilled Images for TinyImageNet 
+
+## F DM AND MTT-SSL EXPERIMENTS 
+
+We also compared our methods with two DD methods adapted to SSL. Specifically, we focused on distilling 5% of CIFAR 100. The results all show that those methods do not outperform MKDT. 
+
+To adapt DM for SSL, we used the same codebase and hyperparameters as DM (Zhao & Bilen, 2023). However, during distillation, instead of DM’s original approach of sampling random images from a specific class, we modified the process to sample random images from the entire dataset. This adjustment allows us to approximate the behavior of running DM in a label-free setting. The results are shown in 11. 
+
+To adapt MTT to SSL, we modified the supervised learning algorithm in getting the trajectory and training the network in the inner loop of the distillation to be the SimCLR SSL algorithm. Due to the 
+
+25 
+
+high variance of SSL as analyzed in 4.1, distillation fails to converge, and the poor results further shows that MTT with SSL does not work. The results are shown in 12. 
+
+|**Dataset**|**CIFAR100**|**CIFAR10**|**TinyImageNet**|**Aircraft**|**CUB2011**|**Dogs**|**Flowers**|
+|---|---|---|---|---|---|---|---|
+|CIFAR10 (1% Labels)|7_._09_±_0_._16|35_._98_±_0_._98|2_._43_±_0_._19|2_._15_±_0_._21|1_._19_±_0_._13|1_._71_±_0_._18|1_._60_±_0_._17|
+|CIFAR10 (5% Labels)|14_._77_±_0_._10|46_._41_±_0_._35|5_._11_±_0_._32|4_._94_±_0_._88|1_._57_±_0_._31|2_._53_±_0_._13|3_._10_±_0_._33|
+|CIFAR100 (1% Labels)|8_._74_±_0_._35|37_._75_±_0_._87|2_._75_±_0_._22|2_._51_±_0_._08|1_._20_±_0_._11|2_._07_±_0_._20|2_._53_±_0_._27|
+|CIFAR100 (5% Labels)|17_._01_±_0_._37|47_._32_±_0_._38|6_._40_±_0_._21|5_._08_±_0_._82|1_._99_±_0_._13|2_._77_±_0_._28|4_._62_±_0_._28|
+
+
+Table 11: Results for Distilling with DM with SSL. 
+
+|**Dataset**|**CIFAR100**|**CIFAR10**|**TinyImageNet**|**Aircraft**|**CUB2011**|**Dogs**|**Flowers**|
+|---|---|---|---|---|---|---|---|
+|CIFAR10 (1% Labels)|4_._63_±_0_._30|22_._06_±_1_._86|1_._11_±_0_._16|1_._92_±_0_._26|0_._77_±_0_._11|1_._38_±_0_._28|1_._26_±_0_._37|
+|CIFAR10 (5% Labels)|7_._10_±_0_._43|29_._04_±_0_._58|1_._90_±_0_._17|2_._81_±_0_._60|0_._88_±_0_._08|1_._82_±_0_._19|1_._42_±_0_._53|
+|CIFAR100 (1% Labels)|4_._26_±_0_._34|26_._06_±_1_._58|1_._20_±_0_._14|1_._49_±_0_._28|0_._87_±_0_._26|1_._24_±_0_._07|1_._41_±_0_._27|
+|CIFAR100 (5% Labels)|9_._66_±_0_._24|38_._16_±_0_._57|2_._11_±_0_._19|2_._83_±_0_._41|1_._06_±_0_._04|1_._74_±_0_._15|2_._38_±_0_._19|
+
+
+Table 12: Results for Distilling with MTT using High Variance SSL Trajectories. 
+
+26 
+
+## G SOCIETAL IMPACT 
+
+Our work democratizes the development of models trained with SSL pre-training, by reducing the volume of data needed to train such models, and thus the costs of training these models. However, the risk with dataset distillation is augmenting the biases of the original dataset. 
+
+27

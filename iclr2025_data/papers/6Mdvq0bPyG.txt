@@ -1,0 +1,623 @@
+## **000001** EFFICIENTQAT: EFFICIENT QUANTIZATION-AWARE TRAINING FOR LARGE LANGUAGE MODELS 
+
+## **004 005 Anonymous authors 006** Paper under double-blind review ABSTRACT Large language models (LLMs) are crucial in modern natural language processing and artificial intelligence. However, they face challenges in managing their signifi- cant memory requirements. Although quantization-aware training (QAT) offers a solution by reducing memory consumption through low-bit representations with minimal accuracy loss, it is impractical due to substantial training resources. To address this, we propose Efficient Quantization-Aware Training (EfficientQAT), a more feasible QAT algorithm. EfficientQAT involves two consecutive phases: Block-wise training of all parameters (Block-AP) and end-to-end training of quantization parameters (E2E-QP). To the best of our knowledge, Block-AP is the first method to enable direct training of all parameters in a block-wise manner, reducing accuracy loss in low-bit scenarios by enhancing the solution space during optimiza- tion. E2E-QP then trains only the quantization parameters (step sizes) end-to-end, further improving the performance of quantized models by considering interactions among all sub-modules. Extensive experiments demonstrate that EfficientQAT outperforms previous quantization methods across a range of models, including base LLMs, instruction-tuned LLMs, and multimodal LLMs, with scales from 7B to 70B parameters at various quantization bits. For instance, EfficientQAT obtains a 2-bit Llama-2-70B model on a single A100-80GB GPU in 41 hours, with less than 3 points accuracy degradation compared to the full precision (69.48 vs. 72.41). 1 INTRODUCTION Recent advancements in large language models (LLMs) (Touvron et al., 2023; Bubeck et al., 2023; Chiang et al., 2023; Xu et al., 2023a; Ying et al., 2024) have demonstrated impressive capabilities in diverse language tasks such as reasoning (Clark et al., 2018; 2019; Zellers et al., 2019), cognitive processing (Fu et al., 2023; Xu et al., 2023a), and agent-based applications (Qin et al., 2023a;b). However, these models are characterized by their extensive parameters, which pose significant challenges for memory footprint and bandwidth (Kim et al., 2023b; Xu et al., 2024a). Quantization-aware training (QAT) is a highly effective quantization technique that minimizes quantization errors by incorporating quantization constraints during training. For example, BitNet b1.58 (Ma et al., 2024) can achieve nearly lossless ternary quantization. The precision of QAT is due to two main factors: 1) Fully trainable parameters allow for enough optimized space for gradient descent optimization; 2) End-to-end training accounts for interactions among all sub-modules in the models. Despite its performance benefits, QAT demands significant training resources, such as time and GPUs, as well as extensive training data. For instance, BitNet b1.58 requires retraining LLMs from scratch using the entire pre-trained dataset. Therefore, this approach is impractical for extremely large models and has only been verified on 3B models with 100B training tokens. 
+
+In optimizing quantization for LLMs, current methods emphasize either fine-grained reconstruction or reducing trainable parameters. While these approaches improve efficiency, they significantly degrade accuracy in low-bit scenarios. Mainstream post-training quantization (PTQ) methods (Lin et al., 2023; Frantar et al., 2022; Shao et al., 2023; Cheng et al., 2023b) focus on block-wise reconstruction (Li et al., 2021). They also restrict the optimization space to alleviate overfitting risk by only training rounding parameters (Nagel et al., 2020; Cheng et al., 2023b), clipping thresholds (Shao et al., 2023), or step sizes (Esser et al., 2019; Ding et al., 2023). However, these methods not only limit optimizable parameters but also overlook cross-block interactions, leading to notable accuracy degeneration 
+
+1 
+
+**054055056057058** 7065605550 Vector QuantUniform Quant Baseline (FP16) ~~AQLM (2x8)~~ QuIP#AutoRound (g128)OmniQ (g128)EfficientQAT (g128)EfficientQAT (g64) 40.037.535.032.530.027.5 EfficientQAT (ours) ~~QA-LoRAIR-QLoRA~~ PEQAQLoRA w/ GPTQ 1000800600400200 900 h 300 hCan be trained on a single A100Cannot be trained on a single A100 ~~336 h~~ 7B Llama-213B 70B 4 # Bits3 2 0 LLM-QAT QuIP# AQLM Ours41 h (a) 2-bit quantization comparisons (b) Q-PEFT comparisons (c) training speed comparisons Figure 1: **(a)** EfficientQAT significantly surpasses existing uniform quantization methods, and is either superior to or comparable with vector quantization techniques. **(b)** EfficientQAT markedly outperforms existing Q-PEFT methods. **(c)** EfficientQAT can complete the QAT of 70B models on a single NVIDIA A100-80GB GPU with less time. in low-bit scenarios, as shown in Figure 1a. Conversely, quantized parameter-efficient fine-tuning (Q-PEFT) methods (Dettmers et al., 2023a; Xu et al., 2023b; Li et al., 2023c; Guo et al., 2023; Kim et al., 2023a) reduce training costs by freezing quantized parameters and only training a few continuous floats. For example, PEQA (Kim et al., 2023a) and QA-LoRA (Xu et al., 2023b) focus on training continuous quantization parameters. Despite this, their performance remains poor, as depicted in Figure 1b, because the severe performance loss in low-bit scenarios (2-bit and 3-bit) cannot be fully recovered with limited trainable parameters. To address these challenges, we introduce a novel quantization-aware training framework called EfficientQAT. This framework combines the advantages of fully trainable parameters and end-to- end training, similar to native QAT (Ma et al., 2024), while maintaining the training efficiency of PTQ (Cheng et al., 2023b; Shao et al., 2023) and Q-PEFT (Xu et al., 2023b). EfficientQAT introduces block-wise training of all parameters (Block-AP) to enhance the optimizable space and mitigate quantization accuracy loss. Block-AP sequentially trains all parameters, including original full- precision weights and quantization parameters (step sizes and zero points), within each transformer block. Several works have been developed based on block-wise reconstruction. However, previous approaches focus on designing additional trainable parameters, such as clipping thresholds for OmniQuant (Shao et al., 2023), weight rounding for AutoRound (Cheng et al., 2023b) and BRECQ (Li et al., 2021), or LoRA (Hu et al., 2021) parameters for CBQ (Ding et al., 2023). Our Block-AP is the first to directly train all parameters during block-wise reconstruction, achieving superior performance compared to previous methods (see Table 6). Block-AP successfully demonstrates that complex trainable parameter design is unnecessary for effective block-wise reconstruction in LLMs quantization. Furthermore, we introduce end-to-end training of quantization parameters (E2E-QP) to account for inter-block interactions. E2E-QP keeps the quantized weights fixed and trains only the quantization parameters (step sizes) end-to-end. Thanks to the integration of the proposed Block-AP and E2E-QP, EfficientQAT characterizes itself as a fast-converging, memory-efficient, and high-performing quantization technique. For instance, EfficientQAT can obtain a 2-bit Llama-2-70B model on a single A100-80GB GPU in just 41 hours, with less than 3 points accuracy degradation on 5 zero-shot common-sense tasks compared to its full-precision counterpart (69.48 vs. 72.41). We also evaluate EfficientQAT across scenarios involving model compression and instruction-tuning. In model compression, as illustrated in Figure 1a, EfficientQAT significantly outperforms existing uniform quantization methods by approximately 5 points on accuracy in the challenging 2-bit quantization setting. It also matches the performance of vector quantization methods (Egiazarian et al., 2024; Tseng et al., 2024) in this scenario. In terms of instruction tuning, as shown in Figure 1b, EfficientQAT consistently outperforms existing Q-PEFT methods, including QLoRA (Dettmers et al., 2023a), QA-LoRA (Xu et al., 2023b), and PEQA (Kim et al., 2023a). For instance, EfficientQAT surpasses PEQA (Kim et al., 2023a) with 4.5 points MMLU accuracy when fine-tuning with Alpaca dataset. 2 RELATED WORKS in low-bit scenarios, as shown in Figure 1a. Conversely, quantized parameter-efficient fine-tuning (Q-PEFT) methods (Dettmers et al., 2023a; Xu et al., 2023b; Li et al., 2023c; Guo et al., 2023; Kim et al., 2023a) reduce training costs by freezing quantized parameters and only training a few continuous floats. For example, PEQA (Kim et al., 2023a) and QA-LoRA (Xu et al., 2023b) focus on training continuous quantization parameters. Despite this, their performance remains poor, as depicted in Figure 1b, because the severe performance loss in low-bit scenarios (2-bit and 3-bit) cannot be fully recovered with limited trainable parameters. 
+
+To address these challenges, we introduce a novel quantization-aware training framework called EfficientQAT. This framework combines the advantages of fully trainable parameters and end-toend training, similar to native QAT (Ma et al., 2024), while maintaining the training efficiency of PTQ (Cheng et al., 2023b; Shao et al., 2023) and Q-PEFT (Xu et al., 2023b). EfficientQAT introduces block-wise training of all parameters (Block-AP) to enhance the optimizable space and mitigate quantization accuracy loss. Block-AP sequentially trains all parameters, including original fullprecision weights and quantization parameters (step sizes and zero points), within each transformer block. Several works have been developed based on block-wise reconstruction. However, previous approaches focus on designing additional trainable parameters, such as clipping thresholds for OmniQuant (Shao et al., 2023), weight rounding for AutoRound (Cheng et al., 2023b) and BRECQ (Li et al., 2021), or LoRA (Hu et al., 2021) parameters for CBQ (Ding et al., 2023). Our Block-AP is the first to directly train all parameters during block-wise reconstruction, achieving superior performance compared to previous methods (see Table 6). Block-AP successfully demonstrates that complex trainable parameter design is unnecessary for effective block-wise reconstruction in LLMs quantization. Furthermore, we introduce end-to-end training of quantization parameters (E2E-QP) to account for inter-block interactions. E2E-QP keeps the quantized weights fixed and trains only the quantization parameters (step sizes) end-to-end. 
+
+Thanks to the integration of the proposed Block-AP and E2E-QP, EfficientQAT characterizes itself as a fast-converging, memory-efficient, and high-performing quantization technique. For instance, EfficientQAT can obtain a 2-bit Llama-2-70B model on a single A100-80GB GPU in just 41 hours, with less than 3 points accuracy degradation on 5 zero-shot common-sense tasks compared to its full-precision counterpart (69.48 vs. 72.41). We also evaluate EfficientQAT across scenarios involving model compression and instruction-tuning. In model compression, as illustrated in Figure 1a, EfficientQAT significantly outperforms existing uniform quantization methods by approximately 5 points on accuracy in the challenging 2-bit quantization setting. It also matches the performance of vector quantization methods (Egiazarian et al., 2024; Tseng et al., 2024) in this scenario. In terms of instruction tuning, as shown in Figure 1b, EfficientQAT consistently outperforms existing Q-PEFT methods, including QLoRA (Dettmers et al., 2023a), QA-LoRA (Xu et al., 2023b), and PEQA (Kim et al., 2023a). For instance, EfficientQAT surpasses PEQA (Kim et al., 2023a) with 4.5 points MMLU accuracy when fine-tuning with Alpaca dataset. 
+
+**Post-Training Quantization of LLMs.** PTQ is a pivotal technique for accelerating and deploying LLMs. Quantization approaches generally fall into two categories: weight-only quantization (Frantar et al., 2022; Dettmers et al., 2023b; Lee et al., 2023a; Kim et al., 2023b; Li et al., 2023a; Cheng et al., 2023a) and weight-activation quantization (Xiao et al., 2023; Liu et al., 2023c; Wei et al., 2022; 
+
+2 
+
+2023; Yuan et al., 2023; Zhao et al., 2023; Ashkboos et al., 2023; Li et al., 2023b; Ashkboos et al., 2024). Weight-only quantization focuses on compressing weights into low-bit formats, reducing memory demands and enhancing the efficiency of memory-bounded computations in LLMs (Lin et al., 2024; Yuan et al., 2024). Conversely, weight-activation quantization compresses both weights and activations, thus further decreasing the overhead associated with matrix multiplications (Lin et al., 2024). Recent advancements in weight-only quantization include the introduction of vector quantization methods by QUIP#Tseng et al. (2024) and AQLMEgiazarian et al. (2024). These methods have shown promising performance but also introduce significant overhead (Gong et al., 2024). Our research continues to explore uniform quantization, which is preferred for its compatibility with hardware implementations. **118 Quantization-Aware Training of LLMs.** QAT can enhance the performance of quantized models beyond what PTQ offers. However, QAT has been less explored in LLMs due to the significant training costs involved. Studies such as LLM-QAT (Liu et al., 2023e) and BitDistiller (Du et al., 2024) investigate the application of knowledge distillation within QAT contexts. Techniques like BitNet b1.58 (Ma et al., 2024) and OneBit (Xu et al., 2024b) employ QAT to achieve extreme binary or ternary quantization levels. Although BitNet b1.58 demonstrates near-lossless performance on models up to 3 billion parameters and 100 billion training tokens with ternary quantization, its applicability to larger models or datasets remains uncertain due to prohibitive training expenses. **125 126 Quantized Parameter-Efficient Fine-Tuning of LLMs.** Techniques like QLoRA (Dettmers et al., 2023a), INT2.1 (Chai et al., 2023), LQ-LoRA (Guo et al., 2023), and LoftQ (Li et al., 2023c) quantize model parameters to low-bit representations followed by the addition of LoRA (Hu et al., 2021) modules for fine-tuning. However, these methods require merging the LoRA modules into quantized weights, resulting in the model reverting to the FP16 format. Addressing this issue, QA-LoRA (Xu et al., 2023b) redesigns the LoRA module to merge seamlessly into the zero points. The approach most similar to ours is PEQA (Kim et al., 2023a), which uses a round-to-nearest (RTN) method for low-bit quantization and fine-tunes step sizes for task adaptation. However, PEQA experiences significant performance degradation due to limited trainable parameters, which hinders recovery from quantization information loss. 
+
+3 EFFICIENTQAT 3.1 METHOD OVERVIEW In this section, we introduce **EfficientQAT** , a novel quantization-aware training framework for LLMs that enhances memory efficiency. As illustrated in Figure 2, traditional QAT approaches train the full-precision weights **W** and quantization parameters _s_ (step sizes) and _z_ (zero points) simultaneously in an end-to-end manner, which significantly increases the memory requirements due to the large number of parameters involved. To address this issue, EfficientQAT adopts a two-stage strategy: block-wise training of all parameters (Block-AP) and end-to-end training of quantization parameters (E2E-QP). In the Block-AP phase, model parameters and quantization parameters are trained block-by-block using reconstruction loss, which not only allows for precise calibration with full training but also reduces memory consumption (Li et al., 2021; Shao et al., 2023) by block-wise training. Following this, the E2E-QP phase fixes the quantized weights and trains the step sizes exclusively on target datasets, thus achieving inter-block interaction in a memory-efficient way. Details on Block-AP and E2E-QP are further described in Sections 3.2 and 3.3, respectively. 
+
+## 3.2 BLOCK-WISE TRAINING OF ALL PARAMETERS In this section, we introduce the Block-Wise Training of All Parameters (Block-AP) approach, designed to efficiently provide an effective initialization for following end-to-end training. 
+
+**157 Quantization and Dequantization.** Specifically, Block-AP begins with a standard uniform quantization method: **158 159 W** _int_ = clamp( _⌊_ **[W]** _[−]_[1)] _[,]_ (1) _s[⌉]_[+] _[ z,]_[ 0] _[,]_[ 2] _[N]_ 
+
+where _⌊·⌉_ represents the rounding operation. _N_ is the target bit number. **W** _int_ and **W** denote the quantized integer and full-precision weights, respectively. _s_ is the scaling factor and _z_ is the zero 
+
+3 
+
+**162 QAT EfficientQAT 163 164** 𝑠 z 𝑠 z 𝑠 z 𝑠 z 𝑠 z ෡ ෡ ෡ W quant W𝑖𝑛𝑡 dequant 𝑊 𝑊 quant W𝑖𝑛𝑡 dequant 𝑊 **+** W𝑖𝑛𝑡 dequant 𝑊 End-to-End Training Block-wise Training End-to-End Training Model Block 1 Block 2 **…** Block n Model Figure 2: **The overall pipeline of naive QAT and proposed EfficientQAT.** EfficientQAT introduces two novel processes: Block-wise Training of All Parameters (Block-AP) and End-to-End Training of Quantization Parameters (E2E-QP). point. In the forward propagation, the quantized weights are converted back to full precision as follows: � **178 W** = ( **Wint** _− z_ ) _· s._ (2) Here, **W**[�] refers to the dequantized weights used in the forward computation. The processes of quantization (Eq.(1)) and dequantization (Eq.(2)) are integrated within the computation graph and can be optimized through gradient descent in a quantization-aware manner. **182 Blcok-wise Quantization-aware Training.** Traditional QAT methods (Ma et al., 2024; Esser et al., 2019; Liu et al., 2023e) train the entire network using Eq.(1) and Eq.(2) in an end-to-end fashion, which typically requires substantial computational resources and extensive data to prevent overfitting. Here we aim to enhance the training efficiency of QAT. Previous studies, such as BRECQ (Li et al., 2021), have demonstrated that block-wise training achieves faster convergence and requires less training time, data, and memory than end-to-end training given a pre-trained model. Following the methodologies in BRECQ (Li et al., 2021) and OmniQuant (Shao et al., 2023), Block-AP sequentially conducts quantization-aware training within one transformer block before moving on to the next under a block-wise reconstruction framework. **191 Full Training of Model Weights and Quantization Parameters.** Unlike previous methods which optimize several quantization parameters such as rounding parameters (Nagel et al., 2020; Cheng et al., 2023b; Lee et al., 2023b), clipping parameters (Shao et al., 2023), and step sizes (Esser et al., 2019; Ding et al., 2023), Block-AP behaves like QAT, training all inherent parameters from Eq.(1) and Eq.(2), including scaling factor _s_ , zero point _z_ , and model weights **W** . 
+
+> In our Block-AP approach, a straightforward full-training regimen outperforms existing partial- 
+
+> training variants (Nagel et al., 2020; Li et al., 2021; Ding et al., 2023) with intricate designs. 
+
+> Traditional training methods involving rounding parameters (Nagel et al., 2020; Li et al., 2021; Ding 
+
+> et al., 2023) serve as regularization techniques, constraining the update range of integral weights to ( _−_ 1 _,_ +1) to mitigate overfitting. However, this approach limits the solution space, potentially hindering the final performance of quantized models. Our empirical findings demonstrate the superiority of full training within our Block-AP over existing partial-training variants (Nagel et al., 2020; Li et al., 2021; Ding et al., 2023), as shown in Table 6. 
+
+> Following block-wise training, we obtain the quantized model which includes quantized weights **W** _q_ , 
+
+> step sizes _s_ , and zero points _z_ for each quantization group. The weights **W** _q_ and zero points _z_ are stored in a low-bit format, while step sizes _s_ are stored in FP16. Note that _s_ and _z_ are shared within their respective quantization groups and constitute only a small fraction of the model’s parameters, approximately 1.6% for a group size of 64. Moreover, the model’s memory footprint is substantially reduced by transitioning from full-precision 16-bit weights to 2/3/4-bit quantized weights. 3.3 END-TO-END TRAINING OF QUANTIZATION PARAMETERS We further introduce the End-to-End Training of Quantization Parameters (E2E-QP), aimed at efficiently training the entire quantized model on target datasets. 
+
+**214 215 End-to-End Training of step sizes.** Unlike traditional Quantization-Aware Training (QAT) methods (Liu et al., 2023e; Ma et al., 2024) that train full-precision weights, E2E-QP begins with **W** _q_ 
+
+4 
+
+initialized via Block-AP and focuses solely on the training of quantization parameters ( _s_ and _z_ ). Our findings indicate that training _s_ , _z_ , or both yields similar performance (see Table 7 for details). However, since training _z_ involves converting it from a low-bits format to full-precision, we typically train only _s_ by default unless specified otherwise to avoid additional memory overhead. 
+
+Additionally, within E2E-QP, there is no quantization process as per Equation (1); only the dequanti- zation process occurs as described in Equation (2). Thus, the gradient of the trainable parameter _s_ is **222223** computed as _[∂] ∂sw_[�][=] _[ w][q][ −][z]_[.] Overall, the memory usage for training in E2E-QP is drastically reduced due to the reduced trainable parameter count. Detailed memory footprints for various model sizes and bits under E2E-QP are listed in Table 8. For instance, the Llama-2-70B model can complete 2-bit QAT through E2E-QP using only 34.2GB of memory. Equipped with E2E-QP, EfficientQAT is adaptable to different scenarios by simply changing the training datasets, which includes applications such as continual pre-training and instruction-tuning (Taori et al., 2023). Table 1: Llama 2 & 3 average zero-shot accuracy on 5 common-sense reasoning tasks ( _↑_ ). Detailed number of each task can be found at Table 15 (4-bit), Table 16 (3-bit), and Table 17 (2-bit). “Group” indicates group size for uniform quantization and codebook scheme for vector quantization. “ **bold** ” indicates best results for uniform quantization. Method Bits Type Group (code) 2-7 2-13 2-70 3-8 3-70 FP16 16 - 16 64.86 67.81 72.41 68.58 75.33 RTN 4 uniform 128 64.52 67.50 72.26 67.79 73.98 GPTQ 4 uniform 128 64.24 67.27 72.39 67.80 74.74 AWQ 4 uniform 128 **64.54 67.61** 72.44 68.24 **74.77** OmniQ 4 uniform 128 64.52 67.10 72.39 - - AutoRound 4 uniform 128 64.39 67.36 72.47 - - QuIP# 4 vector - 64.48 67.28 72.17 - - EfficientQAT 4 uniform 128 64.27 67.52 **72.62 68.43** 74.57 RTN 3 uniform 128 62.06 65.77 70.83 58.72 65.29 GPTQ 3 uniform 128 62.48 66.18 71.47 60.58 71.28 AWQ 3 uniform 128 62.82 66.14 71.41 64.82 73.65 OmniQ 3 uniform 128 62.42 66.18 71.07 - - AutoRound 3 uniform 128 63.72 66.68 71.24 - - QuIP# 3 vector - 63.52 66.26 72.13 - - EfficientQAT 3 uniform 128 **64.02 67.28 71.76 67.35 72.42 251** OmniQ 2 uniform 128 46.98 53.56 54.87 - - AutoRound 2 uniform 128 54.50 60.72 67.70 - - EfficientQAT 2 uniform 128 **59.50 63.88 68.93 59.37 67.57 254** AQLM 2 vector 2x8 57.61 62.22 69.85 - - AQLM 2 vector 1x16 61.85 64.95 70.84 64.10 70.10 QuIP# 2 vector - 60.61 64.44 70.91 - - EfficientQAT 2 uniform 64 **60.14 64.48 69.48 60.76 67.89 258** 4 EXPERIMENTS This section presents extensive experiments to verify our proposed EfficientQAT. Secition 4.1 and Sec 4.2 present the comparisons with quantization methods and Q-PEFT methods respectively. Section 4.4 details the training cost and inference speed-up of the proposed EfficientQAT. Section 4.3 presents the comprehensive ablation studies of the proposed EfficientQAT. 4.1 EFFICIENTQAT FOR LLMS QUANTIZATION **266 267 Training.** We conduct experiments on the Llama-2 and Llama-3 models. For Block-AP, we use 4096 samples from RedPajama (Computer, 2023) with a context length of 2048. We train each block with batch size as 2 and epochs as 2, setting the learning rate of quantization parameters as 1 1 _×_ 10 _[[−]]_[[4]] , and 
+
+**Training.** We conduct experiments on the Llama-2 and Llama-3 models. For Block-AP, we use 4096 samples from RedPajama (Computer, 2023) with a context length of 2048. We train each block with batch size as 2 and epochs as 2, setting the learning rate of quantization parameters as 1 1 _×_ 10 _[[−]]_[[4]] , and the learning rate of weights as 2 _×_ 10 _[−]_[5] for 2-bit and 1 _×_ 10 _[−]_[5] for 3/4-bits. For E2E-QP, we also 
+
+5 
+
+employ 4096 samples from RedPajama (Computer, 2023) but with a context length of 4096. We train the entire model with batch size as 32 and epoch as 1, and set the learning rate of step size as 2 _×_ 10 _[−]_[5] for 2-bit and 1 _×_ 10 _[−]_[5] for 3/4-bits. **273 Evaluation.** We assess the zero- shot accuracy of five common-sense Table 2: Comparison with QAT methods on Llama-2 & reasoning tasks using the v0.4.2 lm3 models. evaluation-harness[1] . The tasks in- **277278** clude2021), WinoGrandePIQA (Bisk et(Sakaguchial., 2020),et Hel-al., **Model Method Bits Group** PPL Average laSwag (Zellers et al., 2019), ArcWiki C4 Accuracy Easy (Clark et al., 2018), and Arc2-7B LLM-QAT 3 128 6.02 - - Challenge (Clark et al., 2018). We also 2-7B BitDistiller 3 128 5.97 - - measure the perplexity of Wikitext2 and 2-7B EfficientQAT 3 128 **5.81 7.34 64.02 283** C4 with a 2048 context length, as done in previous studies (Frantar et al., 2022; 2-7B PB-LLN 2 64 20.37 44.88 37.59 Shao et al., 2023). 2-7B DB-LLN 2 64 7.23 9.62 55.12 2-7B EfficientQAT 2 64 6.86 8.50 60.14 **286 PTQ Baseline.** We compare our results with PTQ methods from uniform quan2-7B LLM-QAT 2 128 9.30 - - 2-7B BitDistiller 2 128 8.08 - - tization such as GPTQ (Frantar et al., 2022), AWQ (Lin et al., 2023), Om2-7B EfficientQAT 2 128 **7.19 8.79 59.50 290** niQ (Shao et al., 2023), ApiQ (Liao & 3-8B PB-LLM 2 128 24.70 79.20 38.80 Monz, 2024) and AutoRound (Cheng 3-8B DB-LLM 2 128 13.60 19.20 51.80 et al., 2023b), and vector quantization in3-8B EfficientQAT 2 128 **9.80 13.22 59.37** cluding QuIP# (Tseng et al., 2024) and 3-70B PB-LLM 2 128 11.60 34.50 46.00 AQLM (Egiazarian et al., 2024). Note 3-70B EfficientQAT 2 128 **6.07 9.23 67.57** that if a result is the best of uniform quan- tization, we set it to **bold** . **296 297 PTQ Results.** The accuracy and perplexity results are presented in Table 1 and Table 3, respectively. It seems that minimal performance degradation with 4-bit group quantization, and even simple round-to-nearest (RTN) quantization _∼_ achieves respectable results. Therefore, EfficientQAT offers a slight perplexity improvement ( 0.02) in 4-bit uniform quantization and comparable zero-shot accuracy with existing methods. As the number of quantization bits decreases, EfficientQAT’s performance advantage increases. In 3-bit quantization, EfficientQAT surpasses the optimization-based method AutoRound by approximately 0.5% in zero-shot accuracy and outperforms OmniQuant by 0.14 to 0.43 in perplexity. Notably, in 2-bit quantization, EfficientQAT outperforms AutoRound (Cheng et al., 2023b) by 5% in zero-shot accuracy for Llama-2-7b. EfficientQAT also exceeds previous vector quantization methods like AQLM (Egiazarian et al., 2024) using a 2x8 codebook. While AQLM (Egiazarian et al., 2024) with a 1x16 codebook and QuIP# (Tseng et al., 2024) perform slightly better in 2-bit scenarios, they introduce notable computational overhead (Gong et al., 2024) and can even reduce inference speed. Thus, EfficientQAT successfully pushes the limits of uniform quantization in LLMs, making hardware-friendly uniform quantization competitive with more complex vector quantization methods. However, we can also find that Llama-3 models suffer more performance degeneration after quanti- zation (Huang et al., 2024), which may caused by the full training with 15T tokens other than 2T tokens. **313 314 QAT Baseline.** We also compare our results with existing QAT methods, including LLM-QAT (Liu et al., 2023e), BitDistiller (Du et al., 2024), PB-LLM (Shang et al., 2023) and DB-LLM (Chen et al., 2024). **316 317 QAT Results.** As demonstrated in Table 2, EfficientQAT markedly surpasses other QAT methods in performance. Specifically, EfficientQAT reduces perplexity by 0.89 compared to BitDistiller (Du et al., 2024) when applied to the Llama-2-7B model with w2g128 quantization. In the more challenging scenario of Llama-3 quantization (Huang et al., 2024), EfficientQAT exceeds the performance of DB-LLM (Chen et al., 2024) by 5.98 in C4 perplexity and by 8.57 points in average accuracy with the w2g128 quantization. > 1https://github.com/EleutherAI/lm-evaluation-harness 
+
+6 
+
+||Table 3: Llama 2 & 3 Wikitext2 and C4 perplexity (_↓_), context length 2048.|
+|---|---|
+|||
+||Wikitext 2<br>C4|
+||Method<br>Bits<br>Type<br>Group<br>2-7 2-13 2-70 3-8 3-70<br>2-7<br>2-13 2-70 3-8 3-70|
+|||
+||FP16<br>16<br>-<br>16<br>5.47 4.88 3.32 6.14 2.85<br>6.97 6.47 5.52 8.88 6.73|
+||GPTQ<br>4<br>uniform<br>128<br>5.61 4.98 3.42 6.53 3.38<br>7.13 6.56 5.58 9.35 7.02|
+||AWQ<br>4<br>uniform<br>128<br>5.62 4.97 3.41 6.55 3.26<br>7.13 6.56 5.58 9.41 6.98|
+||OmniQ<br>4<br>uniform<br>128<br>5.58 4.95 3.40<br>-<br>-<br>7.12 6.56 5.58<br>-<br>-|
+||QuIP#<br>4<br>vector<br>-<br>5.56 4.95 3.38<br>-<br>-<br>7.07 6.54 5.56<br>-<br>-|
+||EffcientQAT<br>4<br>uniform<br>128<br>**5.53**<br>**4.93**<br>**3.39**<br>**6.47**<br>**3.17**<br>**7.07**<br>**6.54**<br>**5.58**<br>**9.26**<br>**6.94**|
+||GPTQ<br>3<br>uniform<br>128<br>6.29 5.42 3.85 9.58 5.25<br>7.89 7.00 5.85 11.66 8.64|
+||AWQ<br>3<br>uniform<br>128<br>6.24 5.32 3.74 8.16 4.69<br>7.84 6.94 5.81 11.49 7.91|
+||OmniQ<br>3<br>uniform<br>128<br>6.03 5.28 3.78<br>-<br>-<br>7.75 6.98 5.85<br>-<br>-|
+||QuIP#<br>3<br>vector<br>-<br>5.79 5.10 3.56<br>-<br>-<br>7.32 6.72 5.67<br>-<br>-|
+||EffcientQAT<br>3<br>uniform<br>128<br>**5.81**<br>**5.12**<br>**3.61**<br>**7.09**<br>**4.19**<br>**7.34**<br>**6.73**<br>**5.71**<br>**10.06**<br>**7.43**|
+||OmniQ<br>2<br>uniform<br>128<br>11.06 8.26 6.55<br>-<br>-<br>15.02 11.05 8.52<br>-<br>-|
+||ApiQ<br>2<br>uniform<br>128<br>8.25 6.71<br>-<br>-<br>-<br>12.04 9.13<br>-<br>-<br>-|
+||EffcientQAT<br>2<br>uniform<br>128<br>**7.19**<br>**6.08**<br>**4.61**<br>**9.80**<br>**6.38**<br>**8.79**<br>**7.75**<br>**6.48**<br>**13.22**<br>**9.53**|
+||AQLM<br>2<br>vector<br>2x8<br>7.24 6.06 4.49<br>-<br>-<br>8.96 7.80 6.36<br>-<br>-|
+|<br><br><br>|AQLM<br>2<br>vector<br>1x16<br>6.34 5.59 4.06 7.76 5.10<br>8.06 7.27 6.04 10.89 8.31<br>QuIP#<br>2<br>vector<br>-<br>6.66 5.74 4.16<br>-<br>-<br>8.35 7.45 6.12<br>-<br>-<br>OmniQ<br>2<br>uniform<br>64<br>9.62 7.56 6.11<br>-<br>-<br>12.72 10.05 7.68<br>-<br>-<br>ApiQ<br>2<br>uniform<br>64<br>7.59 6.44<br>-<br>-<br>-<br>10.56 8.92<br>-<br>-<br>-<br>EffcientQAT<br>2<br>uniform<br>64<br>**6.86**<br>**5.96**<br>**4.52**<br>**9.41**<br>**6.07**<br>**8.50**<br>**7.59**<br>**6.38**<br>**12.77**<br>**9.23**|
+|||
+||4.2<br>EFFICIENTQAT FORINSTRUCTIONTUNING|
+|<br>|**Training and Evaluation.** Following existing works (Xu et al., 2023b; Qin et al., 2024), we train<br>Llama-1 models on the Alpaca dataset (Taori et al., 2023) and assess their performance by measuring|
+||average 5-shot MMLU (Hendrycks et al., 2020) accuracy works (Xu et al., 2023b; Qin et al., 2024).|
+||The training hyperparameters are identical to those described in Section 4.1, except we replace the|
+||RedPajama dataset (Computer, 2023) with Alpaca. In line with QLoRA’s methodology (Dettmers|
+||et al., 2023a), we adjust the source context length to 384 and the target context length to 128, training|
+||for 10,000 steps with a batch size of 16.|
+||**Baseline.** We benchmark EffcientQAT against several leading methods, including QLoRA (Dettmers|
+||et al., 2023a), QA-LoRA (Xu et al., 2023b), PEQA (Kim et al., 2023a), and IR-QLoRA (Qin et al.,|
+||2024), across quantization setting of 2, 3, and 4 bits. Consistent with QA-LoRA (Xu et al., 2023b),|
+||we also employ GPTQ (Frantar et al., 2022) to quantize the fne-tuned QLoRA models into a low-bit|
+||format without FP16 LoRA for equitable comparison.|
+|<br>|**Results.** Both Table 4 and Figure 1b indicate that EffcientQAT signifcantly outperforms existing<br>Q-PEFT methods. For instance, in channel-wise quantization (group size of -1), EffcientQAT|
+||achieves more than 3% higher accuracy than PEQA (Kim et al., 2023a). In the 2-bit quantization|
+||scenario, the superiority of EffcientQAT is even more pronounced, surpassing QA-LoRA (Xu et al.,|
+||2023b) by 5.1% and 4.0% in 7B and 13B models, respectively, and outperforming PEQA by 4.5%|
+||and 8.7% in the same models. Moreover, Table 4 also demonstrates that EffcientQAT outperforms|
+||both QA-LoRA and QLoRA with GPTQ in smaller model memory footprint (larger group size).|
+|||
+||4.3<br>ABLATIONANALYSIS|
+|||
+||The EffcientQAT algorithm is comprised of two main components: Block-AP and E2E-QP. This|
+||section evaluates the effectiveness, trainable parameters, and training sample requirements of each|
+|<br>|component. We present the average perplexity for WikiText2 and C4 datasets, and the average<br>accuracy for fve zero-shot reasoning tasks, similar to Table 1.|
+||**Effectiveness of each component.** As indicated in Table 5, both the Block-AP and E2E-QP|
+||components signifcantly enhance performance, with their combination yielding the best results.|
+||Notably, Block-AP outperforms E2E-QP, aligning with fndings from BRECQ (Li et al., 2021).|
+
+
+7 
+
+|<br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br>|Table 4: Llama-1 average MMLU accu-<br>racy (5-shot) about instruction-tuning on<br>Alpaca dataset.<br>**Method**<br>**Bits** Group<br>**7B**<br>**13B**<br>-<br>16<br>-<br>34.6 46.3<br>PEQA<br>4<br>-1<br>35.8 45.0<br>EffcientQAT<br>4<br>-1<br>**38.8**<br>**48.2**<br>QLoRA<br>4+16<br>-<br>38.4 48.4<br>QLoRA w/GPTQ<br>4<br>32<br>36.0 48.0<br>QA-LoRA<br>4<br>32<br>39.4 49.2<br>PEQA<br>4<br>64<br>39.4 47.4<br>IR-QLoRA<br>4<br>64<br>40.8 49.3<br>EffcientQAT<br>4<br>64<br>**41.2**<br>**49.5**<br>QLoRA w/ GPTQ<br>3<br>32<br>34.0 46.1<br>QA-LoRA<br>3<br>32<br>37.4 47.3<br>IR-QLoRA<br>3<br>64<br>38.4<br>-<br>PEQA<br>3<br>64<br>38.5 46.3<br>EffcientQAT<br>3<br>64<br>**40.0**<br>**48.2**<br>QLoRA w/ GPTQ<br>2<br>32<br>25.8 30.9<br>QA-LoRA<br>2<br>32<br>27.5 36.9<br>IR-QLoRA<br>2<br>64<br>27.8<br>-<br>PEQA<br>2<br>64<br>28.1 32.2<br>EffcientQAT<br>2<br>64<br>**32.6**<br>**40.9**<br>Table 5: Effectiveness of each component on Llama-2-<br>7B w2g64 quantization.<br>**Block-AP**<br>**E2E-QP**<br>**Avg. PPL**<br>**Avg. Accuracy**<br>�<br>�<br>453.49<br>40.69<br>✓<br>�<br>8.53<br>58.99<br>�<br>✓<br>9.33<br>55.71<br>✓<br>✓<br>7.68<br>60.14<br>Table 6: W2g64 Llama-2-7B performance with different<br>trainable parameters in the block-wise training (w/o<br>E2E-QP). “# Param.” indicates trainable parameters<br>count in a block.<br>**Param.**<br>**# Param. Memory Avg. PPL Avg. Accuracy**<br>clipping<br>6.3M<br>6.4GB<br>11.28<br>53.20<br>_s_,_z_<br>6.3M<br>6.4GB<br>10.26<br>55.20<br>round<br>202.4M<br>8.6GB<br>15.50<br>45.32<br>_s_,_z_,round<br>208.7M<br>9.3GB<br>9.17<br>57.14<br>_s_,_z_,**W**<br>208.7M<br>8.5GB<br>8.53<br>58.99<br>Table 7: Llama-2-7B w2g64 quantization with different<br>trainable parameters for E2E-QP (w/ Block-AP).<br>**Param.**<br>**Avg. Bits Avg. PPL Avg. Accuracy**<br>_s_<br>2.28<br>7.68<br>60.14<br>_z_<br>2.50<br>7.69<br>60.08<br>_s, z_<br>2.50<br>7.68<br>60.18<br>**Trainable parameters of Block-AP.**Block-AP trains all parameters, including original weights and<br>quantization parameters. Previous methods have introduced various training strategies to mitigate<br>overftting, such as trained rounding (Nagel et al., 2020; Cheng et al., 2023b), clipping thresh-<br>olds (Shao et al., 2023), and step sizes (Esser et al., 2019; Ding et al., 2023). We compare Block-AP<br>with these methods by modifying only the trainable parameters of Block-AP. As shown in Table 6,<br>Block-AP (training_s_,_z_,**W**) performs best with an acceptable training cost. Additionally, the memory<br>footprint of directly training**W**is even smaller than that of training the rounding operation, which<br>requires an additional copy of rounding parameters.<br>**Trainable parameters of E2E-QP.**We further examine the trainable parameters within E2E-QP.<br>Table 7 shows that training_s_,_z_, or both yields similar performance. However, given that converting_z_<br>from an original low-bit representation to a trainable FP16 format increases the average bit count, we<br>opt to train only_s_by default.<br>**Samples number of Block-AP.** We assess the number of training samples for Block-AP, noting<br>that E2E-QP trains all parameters, which may lead to overftting. To address this, we introduce an<br>additional 64 unseen samples from ReadPajama to evaluate the overftting issue. We adjust the training<br>epochs to ensure a similar total training time, allowing for fair comparisons across different sample<br>sizes. As illustrated in Figure 3, increasing the number of training samples signifcantly reduces the<br>gap between training loss and validation loss from 1.07 to 0.06. This reduction corresponds to an<br>increase in the average accuracy for zero-shot tasks from 57.14% to 58.99%. Consequently, we set<br>the default number of training samples for E2E-QP at 4096, as this maintains a minimal gap between<br>training and validation losses.<br>**Samples number of E2E-QP.**In the E2E-QP, we train the model for 1 epoch to avoid over-ftting.<br>Our examination of the training sample sizes for E2E-QP, detailed in Table 4, reveals that average<br>perplexity consistently improves as sample sizes increase from 128 to 32,674. However, there is no<br>signifcant improvement in average accuracy beyond 4096 samples. Therefore, we set the training<br>sample size for E2E-QP at 4096 by default to balance effciency and performance. Nonetheless, it is<br>possible to further enhance the performance of EffcientQAT by increasing the sample size.<br>4.4<br>EFFICIENCY OFEFFICIENTQAT|Table 5: Effectiveness of each component on Llama-2-<br>7B w2g64 quantization.<br>**Block-AP**<br>**E2E-QP**<br>**Avg. PPL**<br>**Avg. Accuracy**<br>�<br>�<br>453.49<br>40.69<br>✓<br>�<br>8.53<br>58.99<br>�<br>✓<br>9.33<br>55.71<br>✓<br>✓<br>7.68<br>60.14<br>Table 6: W2g64 Llama-2-7B performance with different<br>trainable parameters in the block-wise training (w/o<br>E2E-QP). “# Param.” indicates trainable parameters<br>count in a block.|Table 5: Effectiveness of each component on Llama-2-<br>7B w2g64 quantization.<br>**Block-AP**<br>**E2E-QP**<br>**Avg. PPL**<br>**Avg. Accuracy**<br>�<br>�<br>453.49<br>40.69<br>✓<br>�<br>8.53<br>58.99<br>�<br>✓<br>9.33<br>55.71<br>✓<br>✓<br>7.68<br>60.14<br>Table 6: W2g64 Llama-2-7B performance with different<br>trainable parameters in the block-wise training (w/o<br>E2E-QP). “# Param.” indicates trainable parameters<br>count in a block.|
+|---|---|---|---|
+|||**Param.**|**# Param. Memory Avg. PPL Avg. Accuracy**|
+|||clipping<br>_s_,_z_<br>round<br>_s_,_z_,round<br>_s_,_z_,**W**|6.3M<br>6.4GB<br>11.28<br>53.20<br>6.3M<br>6.4GB<br>10.26<br>55.20<br>202.4M<br>8.6GB<br>15.50<br>45.32<br>208.7M<br>9.3GB<br>9.17<br>57.14<br>208.7M<br>8.5GB<br>8.53<br>58.99|
+
+
+8 
+
+59.0 1.50 Training Loss Avg. Accuracy (%) Figure 4: Llama-2-7B w2g64 quantization Validation Loss 58.5 performance with different sample numbers 1.25 for E2E-QP (w/ Block-AP). 1.00 58.0 0.75 57.5 **# Samples Avg. PPL Avg. Accuracy 438** 128 8.09 59.03 0.50 128 256 512 1024 2048 4096 512 7.88 59.81 Number of Samples 2048 7.75 60.13 4096 7.68 60.14 Figure 3: Illustration of training loss, validation loss and 8192 7.63 60.19 average accuracy of w2g64 Llama-2-7b with different 32764 **7.50 60.31 443** training samples size for Block-AP (w/o E2E-QP). Table 8: The detailed training time and training memory of EfficientQAT across different model size and quantization bits on a single A100-80GB GPU. **447 448 Llama-2 Block-AP E2E-QP 449 Time Memory Time Memory (4-/3-/2-bits) Total Time 450** 7B 3.3h 8.5GB _∼_ 1.5h 7.0/6.4/5.6GB 4.8h 13B 5.6h 10.3GB _∼_ 2.9h 11.7/10.6/9.1GB 8.5h 70B 26.6h 29.9GB _∼_ 14.3h 48.4/42.0/34.2GB 40.9h **453 454 455 Training Efficiency** Table 8 illustrates the reTable 9: Comparisons of training time with exist- quired memory and time for training Lllama-2 ing methods in Llama-2-70B. models using EfficientQAT. The results indicate that the model completes training rapidly, taking Method One A100-80GB? GPU hours (h) 4.8 hours for the 7B model and 40.9 hours for the 70B model. we further compare the training LLM-QAT � 900 time with other QAT methods, including BitQuiP# � 300 TableDistiller, PB-LLM, and DN-LLM. As shown in1c, the training time of EfficientQAT is BitDistillerAQLM �✓ 33664 significantly lower than that of existing methods. For example, the tuning time of EfficientQAT PB-LLM � 90 is only 14% of AQLM and 50% of DB-LLM. DB-LLM � 82 Additionally, for quantizing a 70B model, the **EfficientQAT** ✓ **41 467** full process of EfficientQAT can be completed on a single A100-80GB GPU. However, other methods, except AQLM, require at least 4 A100-80GB GPUs to quantize a model of this size. Therefore, EfficientQAT is both a time-efficient and memory-efficient QAT method. **471 Inference Efficiency** Due to the leverage of standard uniform quantization, the quantized models of EfficientQAT can also achieve speedup through a lot of toolboxes, such as MLC-LLM (team, 2023), AWQ (Lin et al., 2023), and BitBLAS (Wang et al., 2024), T-MAC (Wei et al., 2024), Marlin (Frantar et al., 2024), _etc_ . For example, Table 10 shows that INT2 quantization of EfficientQAT can enhance the forward-pass speed by approximately 2.9x to 4.4x through BitBLAS (Wang et al., 2024). 5 CONCLUSION In this study, we introduce EfficientQAT, a novel method that completes QAT with improved efficiency in both memory usage and training time. Through comprehensive testing, EfficientQAT proves superior to existing PTQ, QAT, and Q-PEFT methods in terms of versatility and performance across various models and quantization levels. Additionally, EfficientQAT leverages a standard uniform quantization, which simplifies deployment using popular toolboxes. We anticipate that EfficientQAT will stimulate further research and improve the compression of Large Language Models (LLMs), making them more efficient and widely accessible. 
+
+9 
+
+- REFERENCES Saleh Ashkboos, Ilia Markov, Elias Frantar, Tingxuan Zhong, Xincheng Wang, Jie Ren, Torsten Hoefler, and Dan Alistarh. Towards end-to-end 4-bit inference on generative large language models. _arXiv preprint arXiv:2310.09259_ , 2023. 
+
+- Saleh Ashkboos, Amirkeivan Mohtashami, Maximilian L Croci, Bo Li, Martin Jaggi, Dan Alistarh, Torsten Hoefler, and James Hensman. Quarot: Outlier-free 4-bit inference in rotated llms. _arXiv_ _preprint arXiv:2404.00456_ , 2024. 
+
+- - Yoshua Bengio, Nicholas Leonard, and Aaron C. Courville.´ Estimating or propagating gradients through stochastic neurons for conditional computation. _ArXiv_ , abs/1308.3432, 2013. URL 
+
+- https://api.semanticscholar.org/CorpusID:18406556. 
+
+- Yash Bhalgat, Jinwon Lee, Markus Nagel, Tijmen Blankevoort, and Nojun Kwak. Lsq+: Improving low-bit quantization through learnable offsets and better initialization. _2020 IEEE/CVF Conference_ _on Computer Vision and Pattern Recognition Workshops (CVPRW)_ , pp. 2978–2985, 2020. URL https://api.semanticscholar.org/CorpusID:216036085. 
+
+- . Yonatan Bisk, Rowan Zellers, Jianfeng Gao, Yejin Choi, et al. Piqa: Reasoning about physical 
+
+- commonsense in natural language. In _Proceedings of the AAAI conference on artificial intelligence_ , pp. 7432–7439, 2020. Sebastien Bubeck, Varun Chandrasekaran, Ronen Eldan, Johannes Gehrke, Eric Horvitz, Ece Kamar,´ Peter Lee, Yin Tat Lee, Yuanzhi Li, Scott Lundberg, et al. Sparks of artificial general intelligence: Early experiments with gpt-4. _arXiv preprint arXiv:2303.12712_ , 2023. Yuji Chai, John Gkountouras, Glenn G Ko, David Brooks, and Gu-Yeon Wei. Int2. 1: Towards fine-tunable quantized large language models with error correction through low-rank adaptation. _arXiv preprint arXiv:2306.08162_ , 2023. Hong Chen, Chengtao Lv, Liang Ding, Haotong Qin, Xiabin Zhou, Yifu Ding, Xuebo Liu, Min 
+
+- Zhang, Jinyang Guo, Xianglong Liu, et al. Db-llm: Accurate dual-binarization for efficient llms. 
+
+- _arXiv preprint arXiv:2402.11960_ , 2024. 
+
+- Wenhua Cheng, Yiyang Cai, Kaokao Lv, and Haihao Shen. Teq: Trainable equivalent transformation for quantization of llms. _arXiv preprint arXiv:2310.10944_ , 2023a. Wenhua Cheng, Weiwei Zhang, Haihao Shen, Yiyang Cai, Xin He, and Kaokao Lv. Optimize weight 
+
+- rounding via signed gradient descent for the quantization of llms. _arXiv preprint arXiv:2309.05516_ , 
+
+- 2023b. Wei-Lin Chiang, Zhuohan Li, Zi Lin, Ying Sheng, Zhanghao Wu, Hao Zhang, Lianmin Zheng, Siyuan Zhuang, Yonghao Zhuang, Joseph E. Gonzalez, Ion Stoica, and Eric P. Xing. Vicuna: An open-source chatbot impressing gpt-4 with 90%* chatgpt quality, March 2023. URL https: //lmsys.org/blog/2023-03-30-vicuna/. 
+
+- - Christopher Clark, Kenton Lee, Ming-Wei Chang, Tom Kwiatkowski, Michael Collins, and Kristina Toutanova. Boolq: Exploring the surprising difficulty of natural yes/no questions. _arXiv preprint_ _arXiv:1905.10044_ , 2019. Peter Clark, Isaac Cowhey, Oren Etzioni, Tushar Khot, Ashish Sabharwal, Carissa Schoenick, and 
+
+- Oyvind Tafjord. Think you have solved question answering? try arc, the ai2 reasoning challenge. 
+
+- _arXiv preprint arXiv:1803.05457_ , 2018. 
+
+Together Computer. Redpajama: an open dataset for training large language models, 2023. URL https://github.com/togethercomputer/RedPajama-Data. 
+
+- Tim Dettmers, Artidoro Pagnoni, Ari Holtzman, and Luke Zettlemoyer. Qlora: Efficient finetuning 
+
+- of quantized llms. _arXiv preprint arXiv:2305.14314_ , 2023a. 
+
+- Tim Dettmers, Ruslan Svirschevski, Vage Egiazarian, Denis Kuznedelev, Elias Frantar, Saleh Ashk- boos, Alexander Borzunov, Torsten Hoefler, and Dan Alistarh. Spqr: A sparse-quantized representation for near-lossless llm weight compression. _arXiv preprint arXiv:2306.03078_ , 2023b. 
+
+10 
+
+- Xin Ding, Xiaoyu Liu, Yun Zhang, Zhijun Tu, Wei Li, Jie Hu, Hanting Chen, Yehui Tang, Zhiwei 
+
+- Xiong, Baoqun Yin, et al. Cbq: Cross-block quantization for large language models. _arXiv preprint_ _arXiv:2312.07950_ , 2023. Dayou Du, Yijia Zhang, Shijie Cao, Jiaqi Guo, Ting Cao, Xiaowen Chu, and Ningyi Xu. Bitdistiller: Unleashing the potential of sub-4-bit llms via self-distillation. _arXiv preprint arXiv:2402.10631_ , 2024. 
+
+- Vage Egiazarian, Andrei Panferov, Denis Kuznedelev, Elias Frantar, Artem Babenko, and Dan Alistarh. Extreme compression of large language models via additive quantization. _arXiv preprint_ _arXiv:2401.06118_ , 2024. Steven K Esser, Jeffrey L McKinstry, Deepika Bablani, Rathinakumar Appuswamy, and Dharmen- 
+
+- dra S Modha. Learned step size quantization. _arXiv preprint arXiv:1902.08153_ , 2019. 
+
+- Elias Frantar, Saleh Ashkboos, Torsten Hoefler, and Dan Alistarh. Gptq: Accurate post-training quantization for generative pre-trained transformers. _arXiv preprint arXiv:2210.17323_ , 2022. Elias Frantar, Roberto L Castro, Jiale Chen, Torsten Hoefler, and Dan Alistarh. Marlin: 
+
+- Mixed-precision auto-regressive parallel inference on large language models. _arXiv preprint_ 
+
+- _arXiv:2408.11743_ , 2024. 
+
+- Chaoyou Fu, Peixian Chen, Yunhang Shen, Yulei Qin, Mengdan Zhang, Xu Lin, Zhenyu Qiu, Wei Lin, Jinrui Yang, Xiawu Zheng, Ke Li, Xing Sun, and Rongrong Ji. Mme: A comprehensive evaluation benchmark for multimodal large language models. _ArXiv_ , abs/2306.13394, 2023. URL https://api.semanticscholar.org/CorpusID:259243928. Ruihao Gong, Yang Yong, Shiqiao Gu, Yushi Huang, Yunchen Zhang, Xianglong Liu, and Dacheng Tao. Llm-qbench: A benchmark towards the best practice for post-training quantization of large language models. _arXiv preprint arXiv:2405.06001_ , 2024. Han Guo, Philip Greengard, Eric P Xing, and Yoon Kim. Lq-lora: Low-rank plus quantized matrix decomposition for efficient language model finetuning. _arXiv preprint arXiv:2311.12023_ , 2023. 
+
+- Dan Hendrycks, Collin Burns, Steven Basart, Andy Zou, Mantas Mazeika, Dawn Song, and Jacob Steinhardt. Measuring massive multitask language understanding. _arXiv preprint_ _arXiv:2009.03300_ , 2020. J. Edward Hu, Yelong Shen, Phillip Wallis, Zeyuan Allen-Zhu, Yuanzhi Li, Shean Wang, and Weizhu 
+
+- Chen. Lora: Low-rank adaptation of large language models. _ArXiv_ , abs/2106.09685, 2021. URL 
+
+- https://api.semanticscholar.org/CorpusID:235458009. 
+
+- Wei Huang, Xudong Ma, Haotong Qin, Xingyu Zheng, Chengtao Lv, Hong Chen, Jie Luo, Xiaojuan Qi, Xianglong Liu, and Michele Magno. How good are low-bit quantized llama3 models? an empirical study. _arXiv preprint arXiv:2404.14047_ , 2024. Jeonghoon Kim, Jung Hyun Lee, Sungdong Kim, Joonsuk Park, Kang Min Yoo, Se Jung Kwon, and Dongsoo Lee. Memory-efficient fine-tuning of compressed large language models via sub-4-bit integer quantization. _arXiv preprint arXiv:2305.14152_ , 2023a. Sehoon Kim, Coleman Hooper, Amir Gholami, Zhen Dong, Xiuyu Li, Sheng Shen, Michael W Mahoney, and Kurt Keutzer. Squeezellm: Dense-and-sparse quantization. _arXiv preprint_ 
+
+- _arXiv:2306.07629_ , 2023b. 
+
+- Changhun Lee, Jungyu Jin, Taesu Kim, Hyungjun Kim, and Eunhyeok Park. Owq: Lessons learned from activation outliers for weight quantization in large language models. _arXiv preprint_ _arXiv:2306.02272_ , 2023a. Jung Hyun Lee, Jeonghoon Kim, Se Jung Kwon, and Dongsoo Lee. Flexround: Learnable rounding 
+
+- based on element-wise division for post-training quantization. In _International Conference on_ 
+
+- _Machine Learning_ , pp. 18913–18939. PMLR, 2023b. Liang Li, Qingyuan Li, Bo Zhang, and Xiangxiang Chu. Norm tweaking: High-performance low-bit quantization of large language models. _arXiv preprint arXiv:2309.02784_ , 2023a. 
+
+11 
+
+- Qingyuan Li, Ran Meng, Yiduo Li, Bo Zhang, Liang Li, Yifan Lu, Xiangxiang Chu, Yerui Sun, and 
+
+- Yuchen Xie. A speed odyssey for deployable quantization of llms. _arXiv preprint arXiv:2311.09550_ , 
+
+- 2023b. 
+
+- Yixiao Li, Yifan Yu, Chen Liang, Pengcheng He, Nikos Karampatziakis, Weizhu Chen, and Tuo Zhao. Loftq: Lora-fine-tuning-aware quantization for large language models. _arXiv preprint arXiv:2310.08659_ , 2023c. 
+
+- Yuhang Li, Ruihao Gong, Xu Tan, Yang Yang, Peng Hu, Qi Zhang, Fengwei Yu, Wei Wang, and Shi Gu. Brecq: Pushing the limit of post-training quantization by block reconstruction. _arXiv preprint_ _arXiv:2102.05426_ , 2021. 
+
+- Baohao Liao and Christof Monz. Apiq: Finetuning of 2-bit quantized large language model. _arXiv preprint arXiv:2402.05147_ , 2024. 
+
+- Ji Lin, Jiaming Tang, Haotian Tang, Shang Yang, Xingyu Dang, and Song Han. Awq: Activation- aware weight quantization for llm compression and acceleration. _arXiv preprint arXiv:2306.00978_ , 2023. Yujun Lin, Haotian Tang, Shang Yang, Zhekai Zhang, Guangxuan Xiao, Chuang Gan, and Song Han. Qserve: W4a8kv4 quantization and system co-design for efficient llm serving. _arXiv preprint_ 
+
+- _arXiv:2405.04532_ , 2024. 
+
+- Haotian Liu, Chunyuan Li, Yuheng Li, and Yong Jae Lee. Improved baselines with visual instruction tuning. _arXiv preprint arXiv:2310.03744_ , 2023a. Haotian Liu, Chunyuan Li, Qingyang Wu, and Yong Jae Lee. Visual instruction tuning. _arXiv preprint arXiv:2304.08485_ , 2023b. 
+
+- Jing Liu, Ruihao Gong, Xiuying Wei, Zhiwei Dong, Jianfei Cai, and Bohan Zhuang. Qllm: Accurate and efficient low-bitwidth quantization for large language models. _arXiv preprint_ _arXiv:2310.08041_ , 2023c. Yuanzhan Liu, Haodong Duan, Yuanhan Zhang, Bo Li, Songyang Zhang, Wangbo Zhao, Yike 
+
+- Yuan, Jiaqi Wang, Conghui He, Ziwei Liu, Kai Chen, and Dahua Lin. Mmbench: Is your multi- 
+
+- modal model an all-around player? _ArXiv_ , abs/2307.06281, 2023d. URL https://api. 
+
+- semanticscholar.org/CorpusID:259837088. 
+
+- Zechun Liu, Barlas Oguz, Changsheng Zhao, Ernie Chang, Pierre Stock, Yashar Mehdad, Yangyang Shi, Raghuraman Krishnamoorthi, and Vikas Chandra. Llm-qat: Data-free quantization aware training for large language models. _arXiv preprint arXiv:2305.17888_ , 2023e. Pan Lu, Swaroop Mishra, Tony Xia, Liang Qiu, Kai-Wei Chang, Song-Chun Zhu, Oyvind Tafjord, 
+
+- Peter Clark, and A. Kalyan. Learn to explain: Multimodal reasoning via thought chains for science question answering. _ArXiv_ , abs/2209.09513, 2022. URL https://api.semanticscholar. org/CorpusID:252383606. Shuming Ma, Hongyu Wang, Lingxiao Ma, Lei Wang, Wenhui Wang, Shaohan Huang, Li Dong, Ruiping Wang, Jilong Xue, and Furu Wei. The era of 1-bit llms: All large language models are in 1.58 bits. _arXiv preprint arXiv:2402.17764_ , 2024. 
+
+- Markus Nagel, Rana Ali Amjad, Mart Van Baalen, Christos Louizos, and Tijmen Blankevoort. Up or down? adaptive rounding for post-training quantization. In _International Conference on Machine_ _Learning_ , pp. 7197–7206. PMLR, 2020. Haotong Qin, Xudong Ma, Xingyu Zheng, Xiaoyang Li, Yang Zhang, Shouda Liu, Jie Luo, Xianglong 
+
+- Liu, and Michele Magno. Accurate lora-finetuning quantization of llms via information retention. 
+
+- _arXiv preprint arXiv:2402.05445_ , 2024. 
+
+- Yujia Qin, Shengding Hu, Yankai Lin, Weize Chen, Ning Ding, Ganqu Cui, Zheni Zeng, Yufei Huang, Chaojun Xiao, Chi Han, Yi Ren Fung, Yusheng Su, Huadong Wang, Cheng Qian, Runchu Tian, Kunlun Zhu, Shi Liang, Xingyu Shen, Bokai Xu, Zhen Zhang, Yining Ye, Bo Li, Ziwei Tang, Jing Yi, Yu Zhu, Zhenning Dai, Lan Yan, Xin Cong, Ya-Ting Lu, Weilin Zhao, Yuxiang Huang, 
+
+12 
+
+Jun-Han Yan, Xu Han, Xian Sun, Dahai Li, Jason Phang, Cheng Yang, Tongshuang Wu, Heng Ji, Zhiyuan Liu, and Maosong Sun. Tool learning with foundation models. _ArXiv_ , abs/2304.08354, 2023a. URL https://api.semanticscholar.org/CorpusID:258179336. Yujia Qin, Shi Liang, Yining Ye, Kunlun Zhu, Lan Yan, Ya-Ting Lu, Yankai Lin, Xin Cong, Xiangru Tang, Bill Qian, Sihan Zhao, Runchu Tian, Ruobing Xie, Jie Zhou, Marc H. Gerstein, Dahai Li, Zhiyuan Liu, and Maosong Sun. Toolllm: Facilitating large language models to master 16000+ real-world apis. _ArXiv_ , abs/2307.16789, 2023b. URL https://api.semanticscholar. org/CorpusID:260334759. 
+
+> Keisuke Sakaguchi, Ronan Le Bras, Chandra Bhagavatula, and Yejin Choi. Winogrande: An 
+
+> adversarial winograd schema challenge at scale. _Communications of the ACM_ , 64(9):99–106, 
+
+> 2021. - Yuzhang Shang, Zhihang Yuan, Qiang Wu, and Zhen Dong. Pb-llm: Partially binarized large language models. _arXiv preprint arXiv:2310.00034_ , 2023. Wenqi Shao, Mengzhao Chen, Zhaoyang Zhang, Peng Xu, Lirui Zhao, Zhiqian Li, Kaipeng Zhang, 
+
+- Peng Gao, Yu Qiao, and Ping Luo. Omniquant: Omnidirectionally calibrated quantization for large 
+
+- language models. _arXiv preprint arXiv:2308.13137_ , 2023. 
+
+- Rohan Taori, Ishaan Gulrajani, Tianyi Zhang, Yann Dubois, Xuechen Li, Carlos Guestrin, Percy Liang, and Tatsunori B. Hashimoto. Stanford alpaca: An instruction-following llama model. https://github.com/tatsu-lab/stanford_alpaca, 2023. MLC team. MLC-LLM, 2023. URL https://github.com/mlc-ai/mlc-llm. 
+
+- Hugo Touvron, Louis Martin, Kevin Stone, Peter Albert, Amjad Almahairi, Yasmine Babaei, Nikolay Bashlykov, Soumya Batra, Prajjwal Bhargava, Shruti Bhosale, et al. Llama 2: Open foundation and fine-tuned chat models. _arXiv preprint arXiv:2307.09288_ , 2023. Albert Tseng, Jerry Chee, Qingyao Sun, Volodymyr Kuleshov, and Christopher De Sa. Quip#: Even better llm quantization with hadamard incoherence and lattice codebooks. _arXiv preprint_ _arXiv:2402.04396_ , 2024. Lei Wang, Lingxiao Ma, Shijie Cao, Quanlu Zhang, Jilong Xue, Yining Shi, Ningxin Zheng, 
+
+- Ziming Miao, Fan Yang, Ting Cao, Yuqing Yang, and Mao Yang. Ladder: Enabling efficient 
+
+- low-precision deep learning computing through hardware-aware tensor transformation. In _18th_ _USENIX Symposium on Operating Systems Design and Implementation (OSDI 24)_ , pp. 307–323, Santa Clara, CA, July 2024. USENIX Association. ISBN 978-1-939133-40-3. URL https: //www.usenix.org/conference/osdi24/presentation/wang-lei. Jianyu Wei, Shijie Cao, Ting Cao, Lingxiao Ma, Lei Wang, Yanyong Zhang, and Mao Yang. T- mac: Cpu renaissance via table lookup for low-bit llm deployment on edge, 2024. URL https: //arxiv.org/abs/2407.00088. 
+
+- Xiuying Wei, Yunchen Zhang, Xiangguo Zhang, Ruihao Gong, Shanghang Zhang, Qi Zhang, Fengwei Yu, and Xianglong Liu. Outlier suppression: Pushing the limit of low-bit transformer language models. _Advances in Neural Information Processing Systems_ , 35:17402–17414, 2022. Xiuying Wei, Yunchen Zhang, Yuhang Li, Xiangguo Zhang, Ruihao Gong, Jinyang Guo, and Xianglong Liu. Outlier suppression+: Accurate quantization of large language models by equivalent and optimal shifting and scaling. _arXiv preprint arXiv:2304.09145_ , 2023. Guangxuan Xiao, Ji Lin, Mickael Seznec, Hao Wu, Julien Demouth, and Song Han. Smoothquant: 
+
+- Accurate and efficient post-training quantization for large language models. In _International_ _Conference on Machine Learning_ , pp. 38087–38099. PMLR, 2023. Peng Xu, Wenqi Shao, Kaipeng Zhang, Peng Gao, Shuo Liu, Meng Lei, Fanqing Meng, Siyuan Huang, Yu Qiao, and Ping Luo. Lvlm-ehub: A comprehensive evaluation benchmark for large vision-language models. _arXiv preprint arXiv:2306.09265_ , 2023a. 
+
+13 
+
+- Peng Xu, Wenqi Shao, Mengzhao Chen, Shitao Tang, Kaipeng Zhang, Peng Gao, Fengwei An, 
+
+- Yu Qiao, and Ping Luo. Besa: Pruning large language models with blockwise parameter-efficient sparsity allocation. _arXiv preprint arXiv:2402.16880_ , 2024a. 
+
+- Yuhui Xu, Lingxi Xie, Xiaotao Gu, Xin Chen, Heng Chang, Hengheng Zhang, Zhensu Chen, Xiaopeng Zhang, and Qi Tian. Qa-lora: Quantization-aware low-rank adaptation of large language models. _arXiv preprint arXiv:2309.14717_ , 2023b. 
+
+> Yuzhuang Xu, Xu Han, Zonghan Yang, Shuo Wang, Qingfu Zhu, Zhiyuan Liu, Weidong Liu, and 
+
+> Wanxiang Che. Onebit: Towards extremely low-bit large language models. _arXiv preprint_ 
+
+> _arXiv:2402.11295_ , 2024b. - Kaining Ying, Fanqing Meng, Jin Wang, Zhiqian Li, Han Lin, Yue Yang, Hao Zhang, Wenbo Zhang, Yuqi Lin, Shuo Liu, et al. Mmt-bench: A comprehensive multimodal benchmark for evaluating 
+
+- large vision-language models towards multitask agi. _arXiv preprint arXiv:2404.16006_ , 2024. 
+
+- - Weihao Yu, Zhengyuan Yang, Linjie Li, Jianfeng Wang, Kevin Lin, Zicheng Liu, Xinchao Wang, and Lijuan Wang. Mm-vet: Evaluating large multimodal models for integrated capabilities. _ArXiv_ , abs/2308.02490, 2023. URL https://api.semanticscholar.org/CorpusID: 260611572. Zhihang Yuan, Lin Niu, Jiawei Liu, Wenyu Liu, Xinggang Wang, Yuzhang Shang, Guangyu Sun, 
+
+- Qiang Wu, Jiaxiang Wu, and Bingzhe Wu. Rptq: Reorder-based post-training quantization for large language models. _arXiv preprint arXiv:2304.01089_ , 2023. Zhihang Yuan, Yuzhang Shang, Yang Zhou, Zhen Dong, Chenhao Xue, Bingzhe Wu, Zhikai Li, Qingyi Gu, Yong Jae Lee, Yan Yan, et al. Llm inference unveiled: Survey and roofline model insights. _arXiv preprint arXiv:2402.16363_ , 2024. Rowan Zellers, Ari Holtzman, Yonatan Bisk, Ali Farhadi, and Yejin Choi. Hellaswag: Can a machine really finish your sentence? _arXiv preprint arXiv:1905.07830_ , 2019. Yilong Zhao, Chien-Yu Lin, Kan Zhu, Zihao Ye, Lequn Chen, Size Zheng, Luis Ceze, Arvind Krishnamurthy, Tianqi Chen, and Baris Kasikci. Atom: Low-bit quantization for efficient and accurate llm serving. _arXiv preprint arXiv:2310.19102_ , 2023. 14 
+
+## OVERVIEW OF APPENDIX 
+
+This appendix includes the following sections: 
+
+- Sec A gives the reproducibility statement to summarize the information related to the 
+
+- reproduction of our method. 
+
+- Sec. B describes the gradient calculation in the Block-AP process. 
+
+- • Sec. C presents the speedup ratio of uniform quantization using BitBLAS (Wang et al., 2024). 
+
+- Sec. D details the sources of results for each comparison method to aid reproduction. 
+
+- Sec. E presents the sizes of quantized models. 
+
+- Sec. F provides additional ablation studies, including those on group size and training datasets. 
+
+- Sec. G applies the proposed EfficientQAT to Llava (Liu et al., 2023b) models. 
+
+• Sec. H presents the detailed accuracy for each zero-shot task. ## A REPRODUCIBILITY STATEMENT 
+
+In this section, we summarize the necessary information to reproduce our results. We provide the training and evaluation details at the beginning of each sub-section in Sec. 4. We also provide the source of detailed results for each compared method in Sec.D. B GRADIENT OF TRAINABLE PARAMETERS IN BLOCK-AP Block-AP, aligned with LSQ+(Bhalgat et al., 2020), uses a straight-through estimator (STE)(Bengio et al., 2013) to facilitate gradient computation through the rounding operation. The gradients of scaling factor _s_ are computed as follows: **787 788789** �  _⌊[w] s[⌉−][w] s[,]_[ 0] _[ ≤⌊][w] s[⌉]_[+] _[ z][≤]_[2] _[N][−]_[1] _[,]_ 
+
+**==> picture [287 x 63] intentionally omitted <==**
+
+and the gradient with respect to zero point _z_ is: 
+
+**794 795796** _∂w_ � 0 _,_ 0 _≤⌊[w] s[⌉]_[+] _[ z][≤]_[2] _[N][−]_[1] _[,]_ (4) _∂z_[=] � _−_ 1 _, otherwise,_ and the full-precision weight **W** can also be updated through its gradient[2] : _∂w_ � 1 _,_ 0 _≤⌊[w][≤]_[2] _[N][−]_[1] _[,] s[⌉]_[+] _[ z]_ (5) _∂w_[=] �0 _, otherwise,_ C SPEEDUP WITH BITBLAS According to Table 10, INT2 quantization enhances the forward-pass speed by approximately 2.9x to 4.4x. 
+
+**==> picture [269 x 32] intentionally omitted <==**
+
+**==> picture [269 x 33] intentionally omitted <==**
+
+> 2 � _w_ , _w_ is a element from � _W_ , **W** 
+
+15 
+
+> Table 10: Speed of the FP16 linear layer matrix-vector multiplication in PyTorch, and relative INT2 
+
+> speedups in BitBLAS Wang et al. (2024). Testing on A100-80GB GPU. > **813 Llama-2 7B** 13B 70B size (out ~~c~~ _×_ in ~~c~~ ) 4096x4096 11008x4096 5120x5120 13824x5120 8192x8192 28672x8192 FP16 25 us 61 us 38 us 90 us 91 us 286 us INT2 9 us 21 us 11 us 26 us 24 us 67 us > Speedup 3.1x 2.9x 3.6x 3.5x 3.9x 4.4x > D RESULTS SOURCE OF OTHER METHOD. > In this study, we present a thorough comparison of our method against existing PTQ techniques, including GPTQ (Frantar et al., 2022), AWQ (Lin et al., 2023), OmniQ (Shao et al., 2023), AutoRound (Cheng et al., 2023b), QuIP# (Tseng et al., 2024), and AQLM (Egiazarian et al., 2024). We also compare with existing QAT methods, including LLM-QAT (Liu et al., 2023e), BitDistiller (Du et al., 2024), PB-LLM (Shang et al., 2023) and DB-LLM (Chen et al., 2024). Additionally, we also evaluate quantized parameter-efficient fine-tuning methods such as PEQA (Kim et al., 2023a), QLoRA (Dettmers et al., 2023a), QA-LoRA (Xu et al., 2023b), and IR-QLoRA (Qin et al., 2024). The results we discuss originate from their respective official publications, and other scholarly articles, or are derived from our reproduction. We meticulously document the source of the results for each 
+
+> method as follows: > • GPTQ, AWQ, OmniQ, AutoRound: The zero-shot accuracy results for Llama-2 models using these methods are derived from the AutoRound GitHub repository[3] . The perplexity results for the Llama-2 models using GPTQ, AWQ, and OmniQ are taken from the OmniQ paper (Shao et al., 2023). The results for Llama-3 models using AWQ[4] and GPTQ[5] were obtained through their open-source implementations. 
+
+> • QuIP#, AQLM: We replicated the results using the official pre-trained models provided by QuIP#[6] and AQLM[7] . 
+
+> • LLM-QAT, BitDistiller: These results are cited from BitDistiller (Du et al., 2024) paper. • PB-LLM, DB-LLM: These results are cited from recent Llama-3 quantization empirical study (Huang et al., 2024). • ApiQ: These results are cited from IR-ApiQ (Liao & Monz, 2024) paper. • PEQA: The per-channel quantization results (g=-1) are cited from their publication (Kim et al., 2023a), and the results for a group size of 64 were produced using our codebase. 
+
+> • QA-LoRA, QLoRA, QLoRA w/ GPTQ: These results are cited from QA-LoRA (Xu et al., 
+
+> 2023b) paper. 
+
+> • IR-QLoRA: These results are cited from IR-QLoRA (Qin et al., 2024) paper. In this study, we present a thorough comparison of our method against existing PTQ techniques, including GPTQ (Frantar et al., 2022), AWQ (Lin et al., 2023), OmniQ (Shao et al., 2023), AutoRound (Cheng et al., 2023b), QuIP# (Tseng et al., 2024), and AQLM (Egiazarian et al., 2024). We also compare with existing QAT methods, including LLM-QAT (Liu et al., 2023e), BitDistiller (Du et al., 2024), PB-LLM (Shang et al., 2023) and DB-LLM (Chen et al., 2024). Additionally, we also evaluate quantized parameter-efficient fine-tuning methods such as PEQA (Kim et al., 2023a), QLoRA (Dettmers et al., 2023a), QA-LoRA (Xu et al., 2023b), and IR-QLoRA (Qin et al., 2024). The results we discuss originate from their respective official publications, and other scholarly articles, or are derived from our reproduction. We meticulously document the source of the results for each method as follows: 
+
+> E SIZE OF QUANTIZED MODELS > This section illustrates model size reduction achieved through quantization. Models quantized to 
+
+> low-bit representations are more compact. We implement N-bit quantization with a grouping size of _g_ , where each group of _g_ weights shares the same FP16 step size and an N-bit zero point. Consequently, the average number of bits per parameter 
+
+> **858859** is calculated as _N_ + _[N]_[+16] _g_ . It is important to note that only the linear layers within the transformer 3AutoRound: 
+
+- 3AutoRound: https://github.com/intel/auto-round/blob/main/docs/acc.md 
+
+4AWQ:https://github.com/mit-han-lab/llm-awq 
+
+- 5GPTQ:https://github.com/qwopqwop200/GPTQ-for-LLaMa 
+
+> 6https://github.com/Cornell-RelaxML/quip-sharp 
+
+> 7https://github.com/Vahe1994/AQLM 
+
+16 
+
+||Table 11: **Model size of quantized**|Table 11: **Model size of quantized**|Table 11: **Model size of quantized**|Table 11: **Model size of quantized**|Table 11: **Model size of quantized**|**models.**|**models.**|Compression ratio indicates the|Compression ratio indicates the|Compression ratio indicates the|Compression ratio indicates the|Compression ratio indicates the|Compression ratio indicates the|compression ratio of|
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+||quantized models compared with FP16 models.||||||||||||||
+||||||||||||||||
+||||||||||||||||
+||Model|# Bit|||Group size|||bits/param|||size (GiB)||Compression ratio (%)||
+||||16|||-|||16||12.55|||-|
+||||4<br>4|||32<br>64|||4.63<br>4.31||3.98<br>3.74|||68.33<br>70.20|
+||||4|||128|||4.16||3.62|||71.14|
+||LLaMA-2-7B||3|||32|||3.59||3.35|||73.28|
+||||3<br>3|||64<br>128|||3.30<br>3.15||3.13<br>3.01|||75.08<br>75.98|
+||||2|||32|||2.56||2.42|||80.71|
+||||2<br>2|||64<br>128|||2.28<br>2.14||2.21<br>2.10|||82.40<br>83.25|
+||||||||||||||||
+||||16<br>4|||-<br>32|||16<br>4.63||24.24<br>7.44|||-<br>69.30|
+||||4|||64|||4.31||6.98|||71.21|
+|<br>|LLaMA-2-13B||4<br>3<br>3|||128<br>32<br>64|||4.16<br>3.59<br>3.30||6.75<br>6.22<br>5.78|||72.16<br>74.33<br>76.16|
+||||3|||128|||3.15||5.56|||77.07|
+||||2<br>2|||32<br>64|||2.56<br>2.28||4.40<br>3.98|||81.87<br>83.58|
+||||2|||128|||2.14||3.77|||84.44|
+||||16|||-|||16||128.48|||-|
+||||4|||32|||4.63||37.83|||70.55|
+||||4<br>4|||64<br>128|||4.31<br>4.16||35.34<br>34.10|||72.49<br>73.46|
+|<br>|LLaMA-2-70B||3<br>3<br>3|||32<br>64<br>128|||3.59<br>3.30<br>3.15||31.26<br>28.87<br>27.67|||75.67<br>77.53<br>78.46|
+||||2|||32|||2.56||21.40|||83.34|
+||||2|||64|||2.28||19.16|||85.09|
+||||2|||128|||2.14||18.04|||85.96|
+||||||||||||||||
+||||||||||||||||
+||blocks are quantized; other layers, such as||||||normalization||||layers, embeddings,|||and the classifcation|
+|<br>|head, remain in FP16 format. <br>their compression ratios.|||Table||11 provides detailed|||||comparisons||of quantized model sizes and||
+||||||||||||||||
+||Table 12: Lllma-2-7B 2-bit quantization performance with different group sizes for proposed Eff-||||||||||||||
+||cientQAT.||||||||||||||
+||||||||||||||||
+|||**Group**|||**Avg. Bits**|||**Avg. PPL**|||**Avg. Accuracy**||||
+||||32|||2.56|||7.59||60.28||||
+||||64|||2.28|||7.68||60.14||||
+|||128||||2.10|||7.99||59.50||||
+|||256||||2.07|||8.18||58.67||||
+||||||||||||||||
+||||||||||||||||
+||Table 13: Block-AP (w/o|||E2E-QP) results of Llama-2-7B in different calibration datasets.|||||||||||
+||||||||||||||||
+|<br>||Bits||Dataset|||Wiki||PPL|C4 PPL||Avg. Accuracy|||
+|||w3g128|WikiText2|||||5.72|||7.52||63.24||
+|<br><br><br>||w3g128<br>w3g128<br>w2g64<br>w2g64<br>w2g64|C4<br>Redpajama<br>WikiText2<br>C4<br>Redpajama|||||5.92<br>5.91<br>6.73<br>7.87<br>7.70|||7.38<br>7.41<br>9.89<br>9.30<br>9.36||63.82<br>63.50<br>58.26<br>59.24<br>58.99||
+||||||||||||||||
+
+
+17 
+
+|<br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br>|F<br>ADDITIONALABLATIONANALYSIS<br>**Quantization Group Size.** The group size is a crucial hyperparameter in weight-only quantization.<br>A smaller group size offers more granular compression and reduces quantization loss but increases<br>the number of quantization parameters required. As indicated in Table 12, a group size of 64 strikes<br>an optimal balance for 2-bit quantization using EffcientQAT. It outperforms a group size of 128<br>by achieving a 0.31 lower perplexity and a 0.64% higher accuracy, yet it slightly underperforms<br>compared to a group size of 32, with a marginal difference of 0.09 in perplexity and 0.14% in<br>accuracy.<br>**Training Dataset.**<br>More trainable parameters can increase the risk of overftting.<br>Previous<br>works (Gong et al., 2024) show that a similar distribution between the calibration dataset and<br>the test dataset can improve test accuracy. RedPajama and C4 datasets are diverse, while WikiText2 is<br>simpler and sourced from Wikipedia. The close distribution of training and test datasets for WikiText2<br>results in signifcantly lower WikiText2 perplexity when using it as a calibration dataset. However,<br>the average accuracy of zero-shot tasks in Table R7 shows that Block-AP’s generation ability is<br>excellent, with only 0.26% and 1.28% accuracy declines when changing the calibration dataset from<br>RedPajama to WikiText2 for w3g128 and w2g64, respectively. Additionally, using C4 as a calibration<br>dataset can even increase the average accuracy by 0.2-0.3 points. Overall, we recommend using<br>Block-AP with more diverse calibration datasets like C4 or RedPajama.<br>Table 14: **Results about instruction tuning of large vision-language models.** We following the<br>overall training pipeling of LLaVA-1.5 Liu et al. (2023a) and just change the fne-tuning methods.<br>‘QLoRA + Block-AP’ indicates that we leverage proposed Block-AP to quantized the QLoRA models<br>into low-bits for fair comparisons. _†_ MME’s perception scores are normalized to 100 percent.|F<br>ADDITIONALABLATIONANALYSIS<br>**Quantization Group Size.** The group size is a crucial hyperparameter in weight-only quantization.<br>A smaller group size offers more granular compression and reduces quantization loss but increases<br>the number of quantization parameters required. As indicated in Table 12, a group size of 64 strikes<br>an optimal balance for 2-bit quantization using EffcientQAT. It outperforms a group size of 128<br>by achieving a 0.31 lower perplexity and a 0.64% higher accuracy, yet it slightly underperforms<br>compared to a group size of 32, with a marginal difference of 0.09 in perplexity and 0.14% in<br>accuracy.<br>**Training Dataset.**<br>More trainable parameters can increase the risk of overftting.<br>Previous<br>works (Gong et al., 2024) show that a similar distribution between the calibration dataset and<br>the test dataset can improve test accuracy. RedPajama and C4 datasets are diverse, while WikiText2 is<br>simpler and sourced from Wikipedia. The close distribution of training and test datasets for WikiText2<br>results in signifcantly lower WikiText2 perplexity when using it as a calibration dataset. However,<br>the average accuracy of zero-shot tasks in Table R7 shows that Block-AP’s generation ability is<br>excellent, with only 0.26% and 1.28% accuracy declines when changing the calibration dataset from<br>RedPajama to WikiText2 for w3g128 and w2g64, respectively. Additionally, using C4 as a calibration<br>dataset can even increase the average accuracy by 0.2-0.3 points. Overall, we recommend using<br>Block-AP with more diverse calibration datasets like C4 or RedPajama.<br>Table 14: **Results about instruction tuning of large vision-language models.** We following the<br>overall training pipeling of LLaVA-1.5 Liu et al. (2023a) and just change the fne-tuning methods.<br>‘QLoRA + Block-AP’ indicates that we leverage proposed Block-AP to quantized the QLoRA models<br>into low-bits for fair comparisons. _†_ MME’s perception scores are normalized to 100 percent.|
+|---|---|---|
+||Model<br>Method|#Bit<br>MMbench MME<br>_†_<br>MM-Vet ScienceQA Avg.<br>Training Inference|
+||LLaVA-1.5-7B<br>LoRA<br>QLoRA<br>QLoRA + Block-AP<br>EffcientQAT<br>QLoRA + Block-AP<br>EffcientQAT<br>QLoRA + Block-AP<br>EffcientQAT|16<br>16<br>66.1<br>73.8<br>30.2<br>68.4<br>59.6<br>4+16<br>16<br>64.1<br>72.8<br>30.3<br>68.0<br>58.8<br>4+16<br>4<br>63.6<br>72.0<br>29.8<br>67.7<br>58.3|
+|||4<br>4<br>64.4<br>73.2<br>30.3<br>68.1<br>**58.8**(+0.5)|
+|||4+16<br>3<br>62.9<br>71.8<br>29.7<br>66.4<br>57.7|
+|||3<br>3<br>63.2<br>71.4<br>30.9<br>67.3<br>**58.2**(+0.5)|
+|||4+16<br>2<br>53.7<br>64.3<br>28.9<br>60.7<br>51.9|
+|||2<br>2<br>62.3<br>68.0<br>27.8<br>63.4<br>**55.4**(+3.5)|
+||LLaVA-1.5-13B<br>LoRA<br>QLoRA<br>QLoRA + Block-AP<br>EffcientQAT<br>QLoRA + Block-AP<br>EffcientQAT<br>QLoRA + Block-AP<br>EffcientQAT|16<br>16<br>68.5<br>77.1<br>38.3<br>71.2<br>63.8<br>4+16<br>16<br>67.6<br>76.9<br>36.0<br>69.9<br>62.7<br>4+16<br>4<br>67.4<br>76.6<br>35.6<br>69.3<br>62.4|
+|||4<br>4<br>67.5<br>74.8<br>35.6<br>70.2<br>62.0(-0.4)|
+|||4+16<br>3<br>66.8<br>75.5<br>34.5<br>68.4<br>61.3|
+|||3<br>3<br>67.4<br>74.8<br>35.3<br>69.3<br>**61.7**(+0.4)|
+|||4+16<br>2<br>62.5<br>72.1<br>32.5<br>65.0<br>58.0|
+|||2<br>2<br>63.9<br>73.1<br>33.9<br>68.6<br>**59.9**(+1.9)|
+||G<br>INSTRUCTIONTUNING FORLVLMS.<br>Traditional Q-PEFT methods only do experiments on the language models. In this section, we further<br>extend proposed EffcientQAT into Large vision-Language models (LVLMs) such as LLaVA (Liu<br>et al., 2023b).<br>**Training and Evaluation.** For the fne-tuning of large vision-language models (LVLMs), we<br>largely align with LLaVA1.5 (Liu et al., 2023a), which encompass the training model, datasets, and<br>hyperparameters8. Unlike LLaVA1.5, which begins fne-tuning with full-precision Vicuna models<br>using either full fne-tuning or LoRA-based methods (Hu et al., 2021), EffcientQAT starts with<br>Vicuna models already quantized using our Block-AP method and continues with our E2E-QP fne-<br>tuning approachThe training process involves two steps:initially freezing the LLM and pre-training||
+
+
+**Training and Evaluation.** For the fine-tuning of large vision-language models (LVLMs), we largely align with LLaVA1.5 (Liu et al., 2023a), which encompass the training model, datasets, and hyperparameters[8] . Unlike LLaVA1.5, which begins fine-tuning with full-precision Vicuna models using either full fine-tuning or LoRA-based methods (Hu et al., 2021), EfficientQAT starts with Vicuna models already quantized using our Block-AP method and continues with our E2E-QP finetuning approach. The training process involves two steps: initially freezing the LLM and pre-training 
+
+> 8For comprehensive details, please consult the official repository at https://github.com/haotian-liu/LLaVA. 
+
+18 
+
+a projector to align features with a Vision Transformer (ViT), followed by end-to-end fine-tuning of both the LLM and the projector. For EfficientQAT, we modify the learning rates in the second step to 2 _×_ 10 _[−]_[5] for 4-bit and 3 _×_ 10 _[−]_[5] for 2-bit and 3-bit. 
+
+**976 Evaluation.** Evaluation of the fine-tuned LVLMs are conducted across four benchmarks: MME (Fu et al., 2023), MM-Vet (Yu et al., 2023), MMBench (Liu et al., 2023d), and ScienceQA (Lu et al., 2022). 
+
+**979 Baseline.** We compare our results with those of QLoRA (Dettmers et al., 2023a), applying our Block-AP method to quantize the QLoRA fine-tuned models to low bits for fair comparison. 
+
+> **981 Results.** As shown in Table 14, EfficientQAT outperforms QLoRA (Dettmers et al., 2023a) in 
+
+> low-bit settings for both LLaVA-1.5-7B and LLaVA-1.5-13B models, consistent with previous results 
+
+> in LMMs. Remarkably, the 2-bit LLaVA-1.5-13B model trained with EfficientQAT achieves an average score of 59.9, surpassing the 59.6 of the FP16 LLaVA-1.5-7B model trained with LoRA. However, there is a slight performance decrease observed in the 4-bit EfficientQAT and 16-bit QLoRA compared to the 16-bit LoRA, indicating that further research is needed to optimize Q-PEFT within LVLMs. 
+
+## H FULL RESULTS 
+
+> In Table 1, we present the average accuracy for five zero-shot tasks. This section offers a detailed 
+
+> breakdown of the task-specific accuracy numbers. Specifically, Tables 15, 16, and 17 detail the performance of 4-bit, 3-bit, and 2-bit quantization, respectively. 
+
+**1000** 
+
+**1001** 
+
+**1002 1003 1004 1005 1006 1007** 
+
+**1008** 
+
+**1009 1010 1011** 
+
+**1012** 
+
+**1013 1014 1015 1016 1017 1018 1019 1020 1021 1022 1023 1024** 
+
+**1025** 
+
+19 
+
+|**1026**|||||||||||||
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+|**1027**|||||||||||||
+|**1028**|||||||||||||
+|**1029**|||||||||||||
+|**1030**|||||||||||||
+|**1031**|||||||||||||
+|**1032**|||||||||||||
+|**1033**|||||||||||||
+|**1034**|Table 15:|4-bit Llama|2 &|3 zero-shot accuracy||by lm<br>~~e~~val|v0.4.2|( acc|is reported, not acc||~~n~~orm|)|
+|**1035**|||||||||||||
+|**1036**|**Model**|**Method**|**Bits**|Group|**WinoGrande **|**HellaSwag **|**ArcC **|**ArcE **|**PiQA **|**Average accuracy**_↑_|||
+|**1037**|||||||||||||
+|**1038**||-|-|16|69.22|57.16|43.52|76.26|78.07|64.85|||
+|**1039**<br>**1040**<br>**1041**<br>**1042**|2-7B|RTN<br>GPTQ<br>AWQ<br>OmniQ<br>AutoRound|4<br>4<br>4<br>4<br>4|128<br>128<br>128<br>128<br>128|68.35<br>69.06<br>68.98<br>68.98<br>68.67|56.91<br>56.36<br>56.40<br>56.59<br>56.79|43.52 <br>42.15 <br>43.86 <br>43.34 <br>42.58|76.26 <br> 75.63 <br> 76.14 <br> 75.76 <br> 75.76|77.58<br> 78.02<br> 77.31<br> 77.91<br> 78.13|64.52<br>64.24<br>64.54<br>64.52<br>64.39|||
+|**1043**||QuIP#|4|-|69.22|56.65|43.00|75.51|78.02|64.48|||
+|**1044**|EffcientQAT||4|128|69.22|57.00|42.32|75.13|77.69|64.27|||
+|**1045**|||||||||||||
+|**1046**||-|16|-|72.22|60.07|48.29|79.42|79.05|67.81|||
+|**1047**||RTN|4|128|72.14|59.77|47.95|79.00|78.62|67.50|||
+|**1048**||GPTQ|4|128|72.14|59.76|47.53|78.58|78.35|67.27|||
+|**1049**<br>**1050**|2-13B|AWQ<br>OmniQ<br>AutoRound|4<br>4<br>4|128<br>128<br>128|73.32<br>72.06<br>71.67|59.80<br>59.53<br>59.87|46.50 <br>47.18 <br>47.01|79.38 <br> 78.37 <br> 79.25|79.05<br> 78.35<br> 79.00|67.61<br>67.10<br>67.36|||
+|**1051**<br>**1052**<br>**1053**|QuIP#<br>EffcientQAT||4<br>4|-<br>128|72.69<br>71.98|59.49<br>59.87|46.59 <br>47.53|78.62 <br>79.34|79.00<br>78.89|67.28<br>67.52|||
+|**1054**||-|16|-|77.98|64.77|54.44|82.70|82.15|72.41|||
+|**1055**||RTN|4|128|78.14|63.93|54.78|82.79|81.66|72.26|||
+|**1056**||GPTQ|4|128|78.22|64.45|54.61|82.79|81.88|72.39|||
+|**1057**<br>**1058**|2-70B|AWQ<br>OmniQ|4<br>4|128<br>128|77.58<br>77.51|64.48<br>64.52|55.12 <br>55.12|82.70 <br> 82.91|82.32<br> 81.88|72.44<br>72.39|||
+|**1059**<br>**1060**<br>**1061**|AutoRound<br>QuIP#<br>EffcientQAT||4<br>4<br>4|128<br>-<br>128|78.30<br>77.82<br>78.45|64.60<br>64.51<br>64.57|54.52 <br>54.44 <br>55.12|82.87 <br> 82.37 <br>83.00|82.05<br> 81.72<br>81.94|72.47<br>72.17<br>72.62|||
+|**1062**||-|-|16|72.61|60.17|50.43|80.09|79.60|68.58|||
+|**1063**||RTN|4|128|73.16|59.04|48.38|79.25|79.11|67.79|||
+|**1064**|3-8B|GPTQ|4|128|73.72|59.17|47.78|79.38|78.94|67.80|||
+|**1065**||AWQ|4|128|73.01|59.43|50.00|79.55|79.22|68.24|||
+|**1066**|EffcientQAT||4|128|72.53|59.43|50.94|79.84|79.43|68.43|||
+|**1067**||-|16||80.51|66.36|60.41|86.99|82.37|75.33|||
+|**1068**||RTN|4|128|78.77|65.83|57.34|85.69|82.26|73.98|||
+|**1069**|3-70B|GPTQ|4|128|80.51|66.12|59.04|85.77|82.26|74.74|||
+|**1070**||AWQ|4|128|80.35|65.82|59.13|86.41|82.15|74.77|||
+|**1071**|EffcientQAT||4|128|79.24|66.27|59.13|85.86|82.37|74.57|||
+|**1072**|||||||||||||
+|**1073**|||||||||||||
+|**1074**|||||||||||||
+|**1075**|||||||||||||
+|**1076**|||||||||||||
+|**1077**|||||||||||||
+|**1078**|||||||||||||
+|**1079**|||||||||||||
+
+
+20 
+
+|**1080**|||||||||||||
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+|**1081**|||||||||||||
+|**1082**|||||||||||||
+|**1083**|||||||||||||
+|**1084**|||||||||||||
+|**1085**|||||||||||||
+|**1086**|||||||||||||
+|**1087**|||||||||||||
+|**1088**|Table 16:|3-bit Llama|2 &|3 zero-shot accuracy||by lm<br>~~e~~val|v0.4.2|( acc|is reported, not acc||~~n~~orm|)|
+|**1089**|||||||||||||
+|**1090**|**Model**|**Method**|**Bits**|Group|**WinoGrande **|**HellaSwag **|**ArcC **|**ArcE **|**PiQA **|**Average accuracy**_↑_|||
+|**1091**|||||||||||||
+|**1092**||-|-|16|69.22|57.16|43.52|76.26|78.07|64.85|||
+|**1093**<br>**1094**<br>**1095**<br>**1096**|2-7B|RTN<br>GPTQ<br>AWQ<br>OmniQ<br>AutoRound|3<br>3<br>3<br>3<br>3|128<br>128<br>128<br>128<br>128|67.56<br>68.59<br>67.40<br>66.69<br>68.27|54.90<br>53.66<br>54.98<br>54.42<br>55.33|38.57 <br>40.19 <br>41.64 <br>39.85 <br>42.92|72.98 <br> 73.74 <br> 74.07 <br> 74.37 <br> 75.25|76.28<br> 76.01<br> 76.01<br> 76.77<br> 76.82|62.06<br>62.44<br>62.82<br>62.42<br>63.72|||
+|**1097**||QuIP#|3|-|68.19|55.85|41.89|74.62|77.04|63.52|||
+|**1098**|EffcientQAT||3|128|69.14|55.90|42.83|74.66|77.58|64.02|||
+|**1099**|||||||||||||
+|**1100**||-|16|-|72.22|60.07|48.29|79.42|79.05|67.81|||
+|**1101**||RTN|3|128|70.72|57.74|44.62|77.69|78.07|65.77|||
+|**1102**||GPTQ|3|128|70.88|57.83|45.65|77.99|78.56|66.18|||
+|**1103**<br>**1104**|2-13B|AWQ<br>OmniQ<br>AutoRound|3<br>3<br>3|128<br>128<br>128|71.82<br>70.01<br>71.59|58.58<br>58.46<br>59.11|44.62 <br>46.16 <br>45.82|77.95 <br> 77.86 <br> 78.58|77.75<br> 78.40<br> 78.29|66.14<br>66.18<br>66.68|||
+|**1105**<br>**1106**<br>**1107**|QuIP#<br>EffcientQAT||-<br>3|3<br>128|72.45<br>72.06|58.26<br>59.01|44.62 <br>47.95|77.90 <br>79.00|78.07<br>78.40|66.26<br>67.28|||
+|**1108**||-|16|-|77.98|64.77|54.44|82.70|82.15|72.41|||
+|**1109**||RTN|3|128|77.90|61.98|52.39|81.10|80.79|70.83|||
+|**1110**||GPTQ|3|128|77.66|62.94|53.67|81.65|81.45|71.47|||
+|**1111**<br>**1112**|2-70B|AWQ<br>OmniQ|3<br>3|128<br>128|76.48<br>76.48|63.75<br>63.54|53.67 <br>52.82|81.40 <br> 81.02|81.77<br> 81.50|71.41<br>71.07|||
+|**1113**<br>**1114**<br>**1115**|AutoRound<br>QuIP#<br>EffcientQAT||3<br>3<br>3|128<br>-<br>128|76.56<br>76.24<br>77.27|63.83<br>64.22<br>64.20|52.56 <br>55.89 <br>53.75|81.73 <br> 82.11 <br>81.73|81.50<br> 82.21<br>81.83|71.24<br>72.13<br>71.76|||
+|**1116**||-|-|16|72.61|60.17|50.43|80.09|79.60|68.58|||
+|**1117**||RTN|3|128|66.54|50.87|36.69|65.36|74.16|58.72|||
+|**1118**|3-8B|GPTQ|3|128|70.88|55.13|37.80|65.24|73.83|60.58|||
+|**1119**||AWQ|3|128|70.96|55.43|44.20|75.84|77.69|64.82|||
+|**1120**|EffcientQAT||3|128|71.51|57.81|48.81|80.01|78.63|67.35|||
+|**1121**||-|16||80.51|66.36|60.41|86.99|82.37|75.33|||
+|**1122**||RTN|3|128|65.90|54.22|48.46|78.83|79.05|65.29|||
+|**1123**|3-70B|GPTQ|3|128|78.14|62.58|52.99|82.07|80.63|71.28|||
+|**1124**||AWQ|3|128|78.85|64.26|58.36|84.51|82.26|73.65|||
+|**1125**|EffcientQAT||3|128|77.82|65.53|55.12|83.12|80.52|72.42|||
+|**1126**|||||||||||||
+|**1127**|||||||||||||
+|**1128**|||||||||||||
+|**1129**|||||||||||||
+|**1130**|||||||||||||
+|**1131**|||||||||||||
+|**1132**|||||||||||||
+|**1133**|||||||||||||
+
+
+21 
+
+|**1134**|||||||||||||
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+|**1135**|||||||||||||
+|**1136**|||||||||||||
+|**1137**|||||||||||||
+|**1138**|||||||||||||
+|**1139**|||||||||||||
+|**1140**|||||||||||||
+|**1141**|||||||||||||
+|**1142**|Table 17:|2-bit Llama|2 &|3 zero-shot accuracy||by lm<br>~~e~~val|v0.4.2|( acc|is reported, not acc||~~n~~orm|)|
+|**1143**|||||||||||||
+|**1144**|**Model**|**Method**|**Bits**|Group|**WinoGrande **|**HellaSwag **|**ArcC **|**ArcE **|**PiQA **|**Average accuracy**_↑_|||
+|**1145**||-|-|16|69.22|57.16|43.52|76.26|78.07|64.85|||
+|**1146**||GPTQ|2|128|55.17|32.59|21.25|40.45|58.32|41.56|||
+|**1147**||OmniQ|2|128|55.88|40.28|23.46|50.13|65.13|46.98|||
+|**1148**||AutoRound|2|128|61.01|40.28|32.25|65.99|72.96|54.50|||
+|**1149**|2-7B|AQLM|2|2x8|65.27|49.96|32.85|66.92|73.07|57.61|||
+|**1150**||AQLM|2|1x16|65.19|53.42|39.68|74.07|76.88|61.85|||
+|**1151**||QuIP#|2|-|65.67|52.19|37.88|71.84|75.46|60.61|||
+|**1152**|EffcientQAT||2|128|66.22|50.84|36.52|69.78|74.16|59.50|||
+|**1153**|EffcientQAT||2|64|65.98|51.58|36.86|70.96|75.30|60.14|||
+|**1154**||-|16|-|72.22|60.07|48.29|79.42|79.05|67.81|||
+|**1155**||GPTQ|2|128|55.80|41.06|21.93|55.60|67.08|48.29|||
+|**1156**||OmniQ|2|128|57.93|46.23|30.29|63.22|70.13|53.56|||
+|**1157**||AutoRound|2|128|64.33|53.35|38.57|71.17|76.17|60.72|||
+|**1158**|2-13B|AQLM|2|2x8|66.22|54.62|40.10|73.06|77.09|62.22|||
+|**1159**||AQLM|2|1x16|70.09|57.62|43.52|75.25|78.29|64.95|||
+|**1160**||QuIP#|2|-|69.06|56.53|42.92|75.72|77.97|64.44|||
+|**1161**|EffcientQAT||2|128|68.90|55.66|42.83|75.04|76.99|63.88|||
+|**1162**|EffcientQAT||2|64|68.36|55.27|41.89|74.83|77.04|63.48|||
+|**1163**||-|16|-|77.98|64.77|54.44|82.70|82.15|72.41|||
+|**1164**||GPTQ|2|128|49.57|25.04|22.70|25.08|49.51|34.38|||
+|**1165**||OmniQ|2|128|64.33|35.45|33.28|67.21|74.10|54.87|||
+|**1166**||AutoRound|2|128|74.90|59.65|46.59|78.37|79.00|67.70|||
+|**1167**|2-70B|AQLM|2|2x8|75.61|61.94|51.45|79.76|80.47|69.85|||
+|**1168**||AQLM|2|1x16|76.01|62.78|52.99|81.36|81.07|70.84|||
+|**1169**||QuIP#|2|-|75.77|62.86|52.65|81.90|81.39|70.91|||
+|**1170**|EffcientQAT||2|128|73.64|61.58|49.23|80.01|80.20|68.93|||
+|**1171**|EffcientQAT||2|64|74.59|61.78|50.77|80.13|80.14|69.48|||
+|**1172**||-|-|16|72.61|60.17|50.43|80.09|79.60|68.58|||
+|**1173**|3-8B|AQLM|2|1x16|71.82|55.44|41.21|74.24|77.80|64.10|||
+|**1174**|EffcientQAT||2|128|65.67|50.74|36.01|69.15|75.30|59.37|||
+|**1175**|EffcientQAT||2|64|67.72|51.86|37.03|71.17|76.03|60.76|||
+|**1176**||-|16||80.51|66.36|60.41|86.99|82.37|75.33|||
+|**1177**<br>**1178**<br>**1179**<br>**1180**|3-70B<br>AQLM<br>EffcientQAT<br>EffcientQAT||2<br>2<br>2|1x16<br>128<br>64|78.22<br>69.46<br>74.03|63.47<br>60.75<br>61.60|50.34 <br>48.81<br>49.06|78.83 <br>79.25<br>77.40|79.65<br>79.60<br>77.37|70.10<br>67.57<br>67.89|||
+|**1181**|||||||||||||
+|**1182**|||||||||||||
+|**1183**|||||||||||||
+|**1184**|||||||||||||
+|**1185**|||||||||||||
+|**1186**|||||||||||||
+|**1187**|||||||||||||
+
+
+22

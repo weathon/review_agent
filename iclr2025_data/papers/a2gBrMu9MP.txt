@@ -1,0 +1,523 @@
+## FAIRLORA: TARGETED BIAS MITIGATION WITHOUT PERFORMANCE LOSS 
+
+## ## **Anonymous authors** 
+
+Paper under double-blind review 
+
+## ABSTRACT 
+
+Ensuring fairness in machine learning models is critical, but existing debiasing techniques often sacrifice model performance, struggle to adapt to emerging bi- ases, or require extensive sensitive attribute annotations. To address these chal- lenges, we propose FairLoRA, a novel low-rank adaptation method that mitigates bias while preserving model performance. FairLoRA incorporates parameter- efficient modular LoRA components, enabling iterative bias mitigation to ensure fairness across multiple sensitive attributes without interfering with previous ad- justments. Furthermore, it employs discriminators to identify biased classes with reduced reliance on sensitive information, significantly reducing the need for an- notated data. We theoretically derive conditions under which FairLoRA fine- tuning can effectively mitigate bias while maintaining the original model’s per- formance. We then empirically validate its effectiveness across diverse computer vision and natural language processing tasks. Our experimental results show that, even for models that have undergone prior bias mitigation training, the integration of FairLoRA fine-tuning can further enhance fairness, while maintaining or even slightly improving the original performance. 
+
+reduced reliance on sensitive information, significantly reducing the need for an- notated data. We theoretically derive conditions under which FairLoRA fine- tuning can effectively mitigate bias while maintaining the original model’s per- formance. We then empirically validate its effectiveness across diverse computer vision and natural language processing tasks. Our experimental results show that, even for models that have undergone prior bias mitigation training, the integration of FairLoRA fine-tuning can further enhance fairness, while maintaining or even slightly improving the original performance. 1 INTRODUCTION Machine learning (ML) models demonstrate immense power and achieve remarkable success in both computer vision (CV) and natural language processing (NLP) domains. As ML models have been widely applied to many critical fields in our society, fairness concerns have recently gained increasing attention in their research and applications (Liu et al., 2023). For example, Gong et al. (2021) observe that applying biased face recognition systems can cause potential risk in law enforce- ment. Lu et al. (2024) highlight that transformers-based models make biased predictions in CV and NLP fields. Therefore, algorithmic fairness is a burgeoning topic of broad interest, and addressing fairness issues in ML models is a significant but challenging task. The main cause of fairness issues is that ML methods have provided opportunity for negative so- cietal biases to affect the models through data. Traditional definitions of algorithmic fairness often focus on performance disparities among different demographic groups. The standard approach of empirical risk minimization (ERM) trains ML models to minimize average loss on a training set. However, ERM method can produce models that achieve high accuracy on average but still consis- tently fail on rare and atypical groups of examples (Song et al., 2024). These kinds of performance disparities across groups can be especially pronounced in the presence of data that encode negative societal biases (Ferrara, 2023) and other spurious correlations (Neuhaus et al., 2023): misleading heuristics that work for most training examples but do not always hold (Sagawa et al., 2020a). For example, in the task of toxic comment classification, the training data is often biased by correlat- ing toxicity with particular demographic identities (e.g., certain races or religions) (Mathew et al., 2021). Therefore, models that learn this spurious correlation will reflect the biases in these datasets, and cause fairness issues in many applications, such as language tasks (McCoy et al., 2019), facial recognition (Sagawa et al., 2020a), and medical imaging (Oakden-Rayner et al., 2020). Existing works that attempt to address fairness issues in ML can be broadly classified into two categories: model interventions and data interventions (Jain et al., 2024). Model interventions target either model weights (Santurkar et al., 2021; Shah et al., 2024) or the training procedure (Sagawa et al., 2020a; Kirichenko et al., 2023). However, most of previous works need to fine-tune all 
+
+1 
+
+the parameters in the bias-mitigation process, and can not maintain the model performance while improving the fairness of some demographic group. Therefore, it is rather hard to combine different debiasing methods together to fully utilize their advantages, and it is also difficult to mitigate bias of different sensitive attributes as improving the fairness of one demographic may affect another. Moreover, previous works still suffer from challenges in trade-off between accuracy and fairness, high-demand computational resources, and expensive annotations for sensitive information: (1) Most previous works struggle to enhance the fairness of ML models while maintaining perfor- mance, and often focus solely on a single sensitive attribute (Liu et al., 2023). Furthermore, many existing approaches lack theoretical guarantees for the trade-off between fairness and performance, leaving a significant gap in our understanding of these critical relationships. (2) When addressing fairness issues in large-scale pre-trained models, numerous existing methods necessitate fine-tuning all parameters to achieve a balance between fairness and accuracy. However, updating such a vast number of parameters can be prohibitively expensive (Petersen et al., 2021) and may lead to catastrophic forgetting, potentially diminishing the model’s efficacy in other tasks. (3) Traditionally, previous approaches have operated either in a full-information setting, where group labels are required for each training example, or in a no-information setting, where all group labels are unavailable (Liu et al., 2021). While full-information methods empirically demonstrate superior performance compared to no-information approaches, obtaining training group annotations is often costly and time-consuming. Consequently, there remains a crucial need for further exploration of partial-information settings which utilize only a small portion of group labels. To solve the above challenges, we propose **FairLoRA** , a novel fine-tuning method to enhance fair- ness of ML models without degrading model performance. By combining a group discriminator with a low-rank adaptation (LoRA) block trained on group-balanced subset of the data, the Fair- LoRA block can reduce the worst-group error (Sagawa et al., 2020a) and thus improve the fairness of ML models. The main contributions of our work are summarized as: (1) FairLoRA fine-tuning can enhance model fairness while maintaining its performance, supported by theoretical analysis that provides guarantees. FairLoRA module offers high flexibility, allow- ing it to be combined with other debiasing methods for further fairness improvements. Moreover, following an iterative residual learning paradigm, FairLoRA can address fairness concerns across multiple sensitive attributes. (2) FairLoRA leverages the representational power of the base model in the group discriminator and the efficiency of the LoRA method, resulting in significantly lower computational costs compared to full-parameter fine-tuning. The group discriminator functions as a gate unit, determining the activation of the LoRA block, which can effectively mitigate catastrophic forgetting issues. 
+
+(3) FairLoRA operates under a partial-information setting, where group labels are observed only for a subset of the training set. This approach substantially reduces annotation costs for sensitive attributes compared to full-information settings, making it more practical for real-world applications. 2 RELATED WORK We review fair machine learning work on the trade-off between fairness and performance, fairness- aware finetuning methods, and fairness with/without demographics information. 2.1 TRADE-OFF BETWEEN FAIRNESS AND PERFORMANCE Traditional bias mitigation techniques often involve data preprocessing methods such as re- sampling, re-weighting, or data augmentation to balance datasets across sensitive attributes (Calmon et al., 2017; Liu et al., 2023). While effective to some extent, these methods may not address bi- ases inherent in model architectures or training procedures. To mitigate model-level biases, fairness constraints and regularization terms have been integrated directly into training objectives. Agarwal et al. (2018) proposed a reduction approach transforming fairness-constrained classification into a sequence of cost-sensitive classification problems. Recent works have focused on improving group fairness via distributionally robust optimization. Sagawa et al. (2020a) presented GroupDRO, mini- 
+
+2 
+
+mizing the worst-case loss over predefined groups to enhance fairness. However, such methods can increase computational complexity and may negatively impact overall performance. Balancing fairness and performance remains a critical challenge. Enhancing fairness often results in decreased accuracy, particularly for the majority group (Song et al., 2024). Multi-objective optimization frameworks have been proposed to navigate this trade-off. Martinez et al. (2020) presented a minimax Pareto fairness approach to optimize for both fairness and accuracy. Cotter et al. (2019) developed methods for optimizing non-differentiable fairness metrics alongside standard loss func- tions. Adaptive methods that adjust training strategies based on subgroup performance have also been explored (Hashimoto et al., 2018). Donini et al. (2018) introduced a duality-based approach to enforce fairness constraints without significantly compromising performance. However, these meth- ods may increase computational complexity or require careful hyperparameter tuning. Therefore, it remains an open question to improve the model fairness while maintaining its performance, and theoretical guarantees for the trade-off between fairness and performance still need to be derived. > 2.2 FAIRNESS-AWARE FINE-TUNING METHODS AND CATASTROPHIC FORGETTING Fine-tuning pre-trained models is a common strategy for adapting models to specific tasks. However, standard fine-tuning may inadvertently introduce or amplify biases present in pre-trained models (Zhao et al., 2019). Parameter-efficient fine-tuning (PEFT) techniques can significantly reduce the number of trainable parameters. One of the most popular PEFT techniques is Low-Rank Adaptation (LoRA) (Hu et al., 2022), which reduces the training cost by injecting trainable low-rank matrices into each layer. While LoRA improves fine-tuning efficiency, its application to fairness enhancement has been limited. Das et al. (2024) found that directly using low-rank fine-tuning inadvertently preserves undesirable biases and toxic behaviors. Moreover, directly using LoRA fine-tuning may 
+
+> worsen fairness across subgroups and appear less fair via worst subgroup accuracy (Ding et al., 
+
+> 2024). Therefore, PEFT techniques for fairness still need further research. To deal with multiple sensitive attributes, continual learning framework can be adopted to improve fairness for different demographics step-by-step. Therefore, another challenge for fairness improv- ing method is catastrophic forgetting, the loss of previously learned knowledge during finetuning, which poses a challenge in bias mitigation and continual learning (Zhang et al., 2023). Finetuning for fairness may degrade original task performance, which is undesirable in practical applications. Continual learning techniques mitigate catastrophic forgetting by preserving important parameters. Kirkpatrick et al. (2017) introduced Elastic Weight Consolidation (EWC), adding regularization to prevent significant updates to critical weights. Sun et al. (2020) proposed LAMOL, a method for lan- guage modeling that mitigates forgetting through data replay. However, research that integrates such methods into fairness-aware fine-tuning scenarios remains limited and needs further exploration to improve fairness for different demographics. > 2.3 FAIRNESS AND DEMOGRAPHIC INFORMATION Most of existing bias mitigation methods leverage demographic information during training to deal with spurious correlations. For example, Sagawa et al. (2020b) reweight or subsample the major- ity and minority groups; Goel et al. (2021) synthetically expand the minority groups via generative modeling; Zhang et al. (2021) minimize the worst-group loss during training. Although these bias mitigation methods substantially reduce worst-group error, obtaining corresponding group annotations can be extremely expensive. Some previous works consider the no-information setting where all the group labels are unavailable (Liu et al., 2021). However, methods in no-information setting empirically can not perform as well as full-information setting. Instead, we focus on the partial- information setting, leveraging partial group information during training to achieve more consistent bias mitigation while reducing reliance on full group annotations. 
+
+3 METHODOLOGY 
+
+In this section, we introduce FairLoRA, a PEFT approach designed to enhance fairness in machine learning models without requiring comprehensive group annotations during training. As illustrated in Figure 1, FairLoRA harnesses the representational power of pre-trained models, integrating group 
+
+3 
+
+lee! Kes _ ) y Ev] 2 | | = Tt << nonnee susses pmtttccccccccce + + | 1 1 1 Discrimi[RG Lora eee Lora I Wy I nator | 1 1 im| PretrainedWeight = l DiscrimiBG Laay ii + | I4 DiscrimiBG Lora I I = nator m m m Re Figure 1: The architecture of FairLoRA, showcasing the integration of discriminators and LoRA blocks across multiple layers. The discriminator is trained beforehand plays a crucial role in deter- mining whether to activate the LoRA block. When the discriminator identifies a sample as belonging to an underrepresented group, the corresponding LoRA block is engaged. Otherwise, the data sam- ple is processed directly by the base model without LoRA intervention. discriminators and LoRAs to mitigate bias by selectively improving the performance of underrepre- sented groups. 3.1 SENSITIVE ATTRIBUTES AND FAIRNESS DEFINITION Let _s ∈{_ 0 _,_ 1 _}_ be the binary sensitive attribute, where _s_ = 0 represents the majority group and _s_ = 1 represents the minority group. The base model _fθ_ : _X →Y_ , parameterized by _θ_ , is trained using ERM, minimizing the overall loss _R_ ( _θ_ ) = E( _x,y_ ) _∼P_ [ _ℓ_ ( _fθ_ ( _x_ ) _, y_ )], where _ℓ_ ( _·_ ) denotes the loss function, and _P_ represents the data distribution. However, due to data imbalance, the base model tends to perform better on the majority group while underperforming on the minority group. When there are multiple sensitive attributes, we can simply generalize this fairness definition by considering each sensitive attribute in the similar manner. 3.2 FAIRLORA STRUCTURE To mitigate unfairness issues, we propose FairLoRA, a framework consisting of two key compo- nents: a group discriminator and a series of LoRA modules. The group discriminator is responsible for identifying whether the input exhibits biases and determining whether corresponding adjustments are necessary. The LoRA modules address the identified biases by making targeted modifications to the model’s representations in a low-rank space. The group discriminator, _Dϕ_ : _X →_ 0 _,_ 1, uses Attention Pooling to aggregate token-level hidden states _hθ_ ( _x_ ) _∈_ R _[T][ ×][d]_ from the base model, where _T_ is the sequence length and _d_ is the hidden state dimensionality. The attention pooling mechanism is formulated as _h_ pool( _x_ ) = _Tt_ =1 _[α][t][h][θ]_[(] _[x]_[)] _[t]_[,] where _αt_ = softmax( _w[⊤] hθ_ ( _x_ ) _t_ ) and _w ∈_ R _[d]_ is a learnable weight vector. This pooling results in a global representation _h_ pool( _x_ ), which is considered as a representation of the input sample and used as input to the group discriminator. 
+
+> LoRA is applied to improve performance for minority groups. We utilize a dataset balanced ac- 
+
+> cording to the predicted labels of sensitive attribute categories to train the LoRA modules. In cases where sensitive attribute labels are unavailable, pseudo-labels can be generated using the pre-trained group discriminator. Alternatively, we can also customize the dataset based on task requirements or use other fine-tuning methods to improve fairness. 
+
+4 
+
+During inference, the discriminator output _Dϕ_ ( _h_ pool( _x_ )) determines whether the LoRA block is activated. The final model’s weights are updated as follows: _W_ FairLoRA = _W_ frozen + I( _Dϕ_ ( _h_ pool( _x_ )) = 1) _·_ ( _BA_ ) (1) where _W_ frozen is the frozen pre-trained weight matrix of the base model, _B ∈_ R _[d][×][r]_ and _A ∈_ R _[r][×][k]_ are the low-rank matrices introduced by LoRA, with _r ≪_ min( _d, k_ ), and I( _·_ ) is the indicator function, which outputs 1 if _Dϕ_ ( _h_ pool( _x_ )) = 1 (minority group), and 0 otherwise. Thus, when _Dϕ_ ( _h_ pool( _x_ )) = 1, LoRA is activated to adjust the base model’s weights to mitigate bias. Otherwise, data samples are processed directly by the base model without LoRA intervention. 
+
+3.3 FAIRLORA FOR MULTIPLE SENSITIVE ATTRIBUTES 
+
+FairLoRA can be extended to handle multiple sensitive attributes _{s_ 1 _, s_ 2 _, . . . , sk}_ . As shown in Figure 1, for each sensitive attribute _si_ , a separate LoRA module is introduced. The overall model update after processing all sensitive attributes is formulated as: 
+
+_k_ _W_ FairLoRA = _W_ frozen + � I( _Dϕi_ ( _h_ pool( _x_ )) = 1) _·_ ( _BiAi_ ) (2) _i_ =1 where _Bi ∈_ R _[d][×][r]_ , _Ai ∈_ R _[r][×][k]_ are the low-rank matrices corresponding to the _i_ -th sensitive attribute, and _Dϕi_ is the discriminator for attribute _si_ . ## 3.4 OPTIMIZATION FRAMEWORK 
+
+The optimization process for FairLoRA involves the following steps: 
+
+1. **Group Discriminator Training** : Train the group discriminator to identify the sensitive attribute, using attention pooling to aggregate token-level hidden states for a more accurate representation of the input. 2. **LoRA Fine-Tuning** : Apply LoRA fine-tuning to a dataset balanced according to the pre- dicted labels of the sensitive attribute category to enhance the performance of underrepre- sented or biased categories, updating _B_ and _A_ . 3. **Extend the Chain** : For multiple sensitive attributes, iteratively apply FairLoRA for each attribute, forming a chain of low-rank adaptations. This approach enables iterative bias mitigation without compromising previous adjustments, ensur- ing fairness across multiple sensitive attributes while maintaining model performance. 4 THEORETICAL ANALYSIS > In this section, we present a theoretical analysis of FairLoRA, stating key theorems on fairness 
+
+> improvements and performance preservation, along with detailed proofs. 
+
+## 4.1 DEFINITIONS AND PERFORMANCE METRICS 
+
+We begin by defining the key variables and performance metrics used in the analysis. 
+
+## 4.1.1 GROUP SAMPLES AND MODEL PERFORMANCE 
+
+We define the key variables as follows: _N_ = _N_ 1 + _N_ 2, where _N_ 1 and _N_ 2 are the number of samples in the majority (G1) and minority (G2) groups, respectively. The proportion of minority group samples is _p_ = _[N] N_[2][.] 
+
+The model’s performance on G1 and G2 is _P_ ( _M,_ G1) and _P_ ( _M,_ G2). The overall performance is: _P_ ( _M_ ) = (1 _− p_ ) _· P_ ( _M,_ G1) + _p · P_ ( _M,_ G2) (3) Similarly, for the LoRA fine-tuned model: _P_ ( _M_ LoRA) = (1 _− p_ ) _· P_ ( _M_ LoRA _,_ G1) + _p · P_ ( _M_ LoRA _,_ G2) (4) 
+
+5 
+
+4.1.2 DISCRIMINATOR METRICS Define the True Positive (TP), False Positive (FP), True Negative (TN), and False Negative (FN) as follows: TP: Correctly classified G2 samples. FP: G1 samples incorrectly classified as G2. TN: Correctly classified G1 samples. FN: G2 samples incorrectly classified as G1. **275276** The True Positive Rate (TPR) and False Positive Rate (FPR) are: TPR = _N_[TP] 2 _[,]_[ FPR][ =] _N_[FP] 1 4.2 THEORETICAL PROPERTIES OF FAIRLORA The theoretical results of FairLoRA performance for the majority group and minority group are pro- vided in Lemmas 1 and 2, respectively. The performance preservation condition for the FairLoRA approach is provided in Theorem 1. **282 Lemma 1.** For the majority group (G1), the model performance after FairLoRA fine-tuning is: _P_ ( _M_ FairLoRA _,_ G1) = (1 _−_ FPR) _· P_ ( _M,_ G1) + FPR _· P_ ( _M_ LoRA _,_ G1) (5) **285 286 Lemma 2.** For the minority group (G2), the model performance after FairLoRA fine-tuning is: _P_ ( _M_ FairLoRA _,_ G2) = TPR _· P_ ( _M_ LoRA _,_ G2) + (1 _−_ TPR) _· P_ ( _M,_ G2) (6) **288 289 Theorem 1.** To ensure that FairLoRA maintains the overall performance of the model, the discrim- inator’s TPR to FPR ratio is required to meet the following condition: TPR _·[P]_[(] _[M][,]_[ G1][)] _[ −][P]_[(] _[M]_[LoRA] _[,]_[ G1][)] (7) FPR _[≥]_[(][1] _[ −] p[p]_[)] _P_ ( _M_ LoRA _,_ G2) _− P_ ( _M,_ G2) The proofs for Lemmas 1, 2, and Theorem 1 are provided in the Appendix A. In summary, our theoretical analysis demonstrates that FairLoRA fine-tuning can effectively miti- gate bias while preserving overall model performance by maintaining a suitable TPR-to-FPR ratio. This condition is often achievable in practice, as LoRA fine-tuning aims to improve minority group performance _P_ ( _M_ LoRA _, G_ 2) _− P_ ( _M, G_ 2) while minimally impacting majority group performance while minimally impacting majority group performance _P_ ( _M, G_ 1) _− P_ ( _M_ LoRA _, G_ 1).. As a result, the improvement for the minority group typically out- weighs the minor effect on the majority group, leading to a manageable threshold for the ratio, which can often be approximated as[[TPR]] FPR _[[≥]]_[[(][1]][[1]] _[[−]] p[[p]]_[[)]] . Adjusting classification thresholds can also help achieve a high TPR and low FPR, thereby meeting this condition. When the condition is met, FairLoRA ensures that gains for the sensitive group outweigh losses for the non-sensitive group, enhancing fairness without compromising overall performance. 5 EXPERIMENTS This section presents a comprehensive evaluation of our proposed method, FairLoRA, designed to mitigate biases in pre-trained models while maintaining or improving original performance. We conduct experiments on three widely-used fairness benchmark datasets: CelebA (Liu et al., 2015), MultiNLI (Williams et al., 2018), and HateXplain (Mathew et al., 2021), and evaluate three key sce- narios: (1) eliminating a single type of bias, (2) sequentially eliminating multiple types of biases, and (3) evaluating the impact of dataset proportions on FairLoRA. Comparisons with prevalent methods demonstrate that FairLoRA consistently improves fairness metrics without significant performance loss, and in some cases, even enhances overall accuracy. 5.1 EXPERIMENTAL SETUP We evaluate FairLoRA on three diverse datasets: CelebA, MultiNLI, and HateXplain, representing different modalities and bias types. For CelebA, we predict the “Male” attribute while accounting for “Blond Hair” as a sensitive attribute, revealing imbalances across male and female images with blond hair. In MultiNLI, we predict entailment relations with a focus on negation as a sensitive attribute, uncovering linguistic biases. HateXplain helps assess overlapping biases related to gender and race, focusing on hate speech prediction. 
+
+In summary, our theoretical analysis demonstrates that FairLoRA fine-tuning can effectively mitigate bias while preserving overall model performance by maintaining a suitable TPR-to-FPR ratio. This condition is often achievable in practice, as LoRA fine-tuning aims to improve minority group performance _P_ ( _M_ LoRA _, G_ 2) _− P_ ( _M, G_ 2) while minimally impacting majority group performance while minimally impacting majority group performance _P_ ( _M, G_ 1) _− P_ ( _M_ LoRA _, G_ 1).. As a result, the improvement for the minority group typically outweighs the minor effect on the majority group, leading to a manageable threshold for the ratio, which can often be approximated as[[TPR]] FPR _[[≥]]_[[(][1]][[1]] _[[−]] p[[p]]_[[)]] . Adjusting classification thresholds can also help achieve a high TPR and low FPR, thereby meeting this condition. 
+
+6 
+
+We compare FairLoRA with several widely-adopted baseline methods, including ERM, GroupDRO (Sagawa et al., 2020a), DFR (Kirichenko et al., 2023), and Lu et al. Lu et al. (2024), to demonstrate its effectiveness. FairLoRA is evaluated in two configurations: 
+
+- • **FairLoRA Min.** : FairLoRA fine-tuning on the minority group to enhance fairness towards underrepresented groups, while ensuring no degradation in the overall model performance. 
+
+||underrepresented groups, while ensuring no degradation in the overall model performance.|underrepresented groups, while ensuring no degradation in the overall model performance.|underrepresented groups, while ensuring no degradation in the overall model performance.|
+|---|---|---|---|
+|<br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br>|• **FairLoRA Maj.**: FairLoRA fne-tuning on the majority group to improve overall perfor-<br>mance, while ensuring that the fairness for minority groups is not compromised.<br>FairLoRA’s performance is evaluated using multiple metrics, including Accuracy (ACC), Balanced<br>Accuracy (BA), Worst-Group Accuracy (WGA), Equalized Odds Difference (EOD), Demographic<br>Parity (DP), Equal Opportunity (EOp), and Pearson Correlation Coeffcient (PCC). All models are<br>implemented using PyTorch, and we maintain consistent hyperparameter settings across experi-<br>ments. Detailed implementation choices and hyperparameters can be found in the Appendix B.<br>5.2<br>EXPERIMENT1: ELIMINATINGBIAS OF ASINGLETYPE<br>In our frst experiment, we assess the effectiveness of FairLoRA in mitigating a single type of bias<br>present in the CelebA and MultiNLI datasets. We used a 8-layer Vision Transformer (VIT) (Doso-<br>vitskiy, 2020) for the CelebA dataset and BERT-base (Devlin et al., 2019) for the MultiNLI dataset,<br>aligning with prior benchmarks. Table 1 presents the performance comparison across different meth-<br>ods on both datasets. The results demonstrate several key fndings:<br>Table 1: Performance comparison across different datasets and methods.|||
+||**Method**|**CelebA**<br>**ACC**_↑_**(%)**<br>**WGA**_↑_**(%)**<br>**EOD**_↓_**(%)**|**MultiNLI**<br>**ACC**_↑_**(%)**<br>**WGA**_↑_**(%)**<br>**EOD**_↓_**(%)**|
+||**ERM**<br>+ FL Min.<br>+ FL Maj.|95.8 ± 0.1<br>77.9 ± 2.6<br>10.0 ± 1.7<br>95.8 ± 0.2<br>**82.0 ± 2.2**<br>**8.5 ± 1.4**<br>**95.9 ± 0.1**<br>77.2 ± 2.8<br>10.0 ± 1.6|82.6 ± 0.3<br>67.3 ± 2.6<br>12.5 ± 1.5<br>82.7 ± 0.4<br>**71.0 ± 2.5**<br>**10.8 ± 1.4**<br>**82.8 ± 0.2**<br>66.8 ± 2.7<br>12.7 ± 1.5|
+||**GroupDRO**<br>+ FL Min.<br>+ FL Maj.|94.4 ± 0.5<br>87.4 ± 1.4<br>4.8 ± 0.6<br>94.4 ± 0.5<br>**88.8 ± 1.5**<br>**4.7 ± 0.5**<br>**94.7 ± 0.4**<br>84.4 ± 1.1<br>5.9 ± 0.4|80.8 ± 0.6<br>77.2 ± 1.2<br>5.9 ± 0.9<br>80.7 ± 0.8<br>**78.3 ± 1.4**<br>**5.5 ± 0.8**<br>**81.2 ± 0.5**<br>75.0 ± 2.9<br>6.0 ± 1.2|
+||**DFR**<br>+ FL Min.<br>+ FL Maj.|94.3 ± 1.4<br>86.0 ± 2.0<br>7.7 ± 0.8<br>94.5 ± 1.2<br>**87.8 ± 1.9**<br>**6.9 ± 0.8**<br>**95.6 ± 0.1**<br>83.3 ± 2.1<br>8.1 ± 1.3|81.9 ± 0.4<br>74.1 ± 1.0<br>6.7 ± 0.8<br>81.9 ± 0.3<br>**76.0 ± 1.0**<br>**6.3 ± 0.7**<br>**82.1 ± 0.7**<br>73.0 ± 2.1<br>6.8 ± 0.9|
+||**Lu et al.**<br>+ FL Min.<br>+ FL Maj.|95.4 ± 0.4<br>81.4 ± 4.8<br>8.3 ± 2.0<br>95.5 ± 0.4<br>**86.8 ± 2.2**<br>**6.2 ± 0.7**<br>**95.9 ± 0.3**<br>80.4 ± 4.3<br>8.6 ± 1.7|82.0 ± 0.2<br>72.8 ± 0.7<br>8.3 ± 0.6<br>82.0 ± 0.2<br>**75.0 ± 0.6**<br>**7.5 ± 0.6**<br>**82.5 ± 0.4**<br>71.8 ± 1.5<br>8.4 ± 1.0|
+||* Bold values indicate the best performance in each category. “FL” refers to FairLoRA.<br>**FairLoRA Minority Improves Fairness**: Across all baseline methods and both datasets, applying<br>FairLoRA Minority leads to signifcant improvements in fairness metrics, specifcally in WGA and<br>EOD. For instance, in the ERM framework on CelebA, WGA increases from 77.9% to 82.0%,<br>and EOD decreases from 10.0% to 8.5%. Similarly, on MultiNLI, WGA improves from 67.3%<br>to 71.0%, and EOD decreases from 12.5% to 10.8%. These improvements indicate that by fne-<br>tuning on minority group data, FairLoRA allows the model to better capture the characteristics of<br>underrepresented groups, leading to more equitable performance.<br>**FairLoRA Majority Enhances Overall Accuracy**: Applying FairLoRA Majority results in slight<br>improvements in overall accuracy across baseline methods. For example, in the ERM framework,<br>ACC increases from 95.8% to 95.9% on CelebA and from 82.6% to 82.8% on MultiNLI. While the<br>improvements in WGA and reductions in EOD are less pronounced compared to FairLoRA Minor-<br>ity, these results suggest that focusing on the majority group primarily enhances overall performance<br>without signifcantly affecting fairness metrics.|||
+
+
+7 
+
+**378 Synergy with Existing Debiasing Methods** : The combination of FairLoRA with other debiasing methods like GroupDRO and DFR further improves fairness metrics. For instance, GroupDRO + FairLoRA Minority on CelebA improves WGA from 87.4% to 88.8% and reduces EOD from 4.8% to 4.7%. This synergy illustrates that, even for models that have undergone prior bias mitigation, the incorporation of FairLoRA fine-tuning can further enhance fairness while preserving, or potentially slightly improving, the model’s original performance. 5.3 EXPERIMENT 2: ELIMINATING BIASES OF MULTIPLE TYPES In our second experiment, we evaluate the capability of FairLoRA to sequentially mitigate mul- tiple biases. We utilize two pre-trained language models: DistilBERT-base (Sanh et al., 2019) and BERT-base. The procedure involves initial training with ERM, followed by sequential application of FairLoRA to mitigate racial bias ( **FairLoRA African American** ) and then gender bias ( **FairLoRA Female** ). Table 2 presents the results of this process, revealing several key findings: Table 2: Performance and fairness comparison during progressive debiasing of sensitive attributes for DistilBERT-base and BERT-base. **395 DistilBERT-base BERT-base 396 Metric 397 ERM FLoRa Afr. FLoRa Fe. ERM FLoRa Afr. FLoRa Fe. 398** DP (R) _↓_ 38.2 ± 1.4 33.7 ± 1.4 32.8 ± 1.1 27.1 ± 0.9 14.0 ± 1.0 12.4 ± 0.7 EOp (R) _↓_ 14.9 ± 1.1 14.2 ± 1.0 13.1 ± 1.0 13.0 ± 0.8 8.4 ± 1.1 7.2 ± 1.0 **400 EOD(R)** _↓_ 26.5 ± 0.7 24.4 ± 0.6 **23.0 ± 0.6** 20.1 ± 0.4 11.2 ± 0.6 **9.8 ± 0.5 401** DP (G) _↓_ 7.4 ± 1.3 7.6 ± 1.1 12.9 ± 2.2 7.6 ± 1.5 8.5 ± 1.4 7.6 ± 1.0 EOp (G) _↓_ 13.0 ± 0.5 13.0 ± 0.5 2.0 ± 2.1 18.2 ± 0.8 16.7 ± 0.4 8.8 ± 1.4 **403 EOD(G)** _↓_ 11.3 ± 1.1 11.2 ± 0.7 **7.4 ± 0.6** 12.9 ± 1.1 12.6 ± 0.9 **8.2 ± 0.4 404 ACC** _↑_ 79.5 ± 0.2 79.6 ± 0.2 **79.7 ± 0.3 79.8 ± 0.3** 79.6 ± 0.5 79.7 ± 0.4 * Bold values indicate the best performance in each category, while underlined values represent the second-best results. “R” refers to Race, and “G” refers to Gender. **408 Effective Sequential Mitigation of Biases** : After applying FairLoRA Race, we observe a notable reduction in EOD (Race) for both models, with DistilBERT-base decreasing from 26.5% to 24.4%, and BERT-base from 20.1% to 11.2%. Notably, EOD (Gender) remains relatively stable in this phase, showing only slight changes (11.3% to 11.2% for DistilBERT-base and 12.9% to 12.6% for BERT-base). In the second stage, applying FairLoRA Female further reduces EOD (Gender), dropping from 11.2% to 7.4% for DistilBERT-base and from 12.6% to 8.2% for BERT-base. Impor- tantly, these reductions in EOD (Gender) are achieved while retaining or improving EOD (Race), with DistilBERT-base decreasing from 24.4% to 23.0% and BERT-base from 11.2% to 9.8%. **416 No Negative Interference** : The sequential application of FairLoRA demonstrates that mitigating a new bias does not negate the improvements achieved in earlier stages. This observation is crucial, as it suggests that FairLoRA effectively prevents catastrophic forgetting, a common issue when fine-tuning models on new tasks. We quantify this non-interference by calculating the correlation between performance changes across stages. Specifically, after mitigating gender bias, we compare the changes in metrics unrelated to gender before and after gender debiasing, relative to the original ERM model. For the DistilBERT and BERT models, the correlation coefficients are 0.97 and 0.99, respectively, indicating that addressing the new bias does not disrupt the gains made in previous bias mitigation stages. The corresponding calculation processes are provided in Appendix C.2. 5.4 EXPERIMENT 3: IMPACT OF DATASET PROPORTIONS ON FAIRLORA This experiment evaluates the effect of varying training data sizes on the discriminator performance of FairLoRA, using the CelebA dataset and a 8-layer ViT, as summarized in Table 3. The discrimi- nator was trained on data proportions ranging from 0.1% to 100%, with the findings as follows: **430 431 Increased Dataset Size Enhances Discriminator Performance** : As the training dataset size in- 
+
+**Increased Dataset Size Enhances Discriminator Performance** : As the training dataset size increases, the TPR/FPR ratio shows significant improvement. Notably, the TPR/FPR ratio rises from 
+
+8 
+
+|||
+|---|---|
+||Table 3: Impact of Different Training Data Sizes on FairLoRA’s Discriminator Performance|
+||Size<br>Num<br>TPR(%)<br>FPR(%)<br>TPR/FPR<br>ACC(%)<br>WGA(%)<br>EOD(%)|
+||ERM<br>-<br>-<br>-<br>-<br>95.8 ± 0.1<br>77.9 ± 2.6<br>10.0 ± 1.7|
+||0.1%<br>163<br>77.0 ± 1.5<br>7.03 ± 0.5<br>10.9 ± 0.8<br>95.7 ± 0.4<br>80.1 ± 1.2<br>9.11 ± 0.9|
+||0.5%<br>813<br>85.0 ± 1.2<br>7.63 ± 0.6<br>11.1 ± 0.7<br>95.7 ± 0.4<br>80.6 ± 1.8<br>8.90 ± 2.0|
+||1%<br>1,627<br>88.3 ± 1.3<br>8.34 ± 0.7<br>10.6 ± 0.9<br>95.7 ± 0.3<br>80.6 ± 1.6<br>8.86 ± 1.8|
+||5%<br>8,134<br>93.2 ± 1.0<br>8.09 ± 0.6<br>11.5 ± 0.6<br>95.8 ± 0.4<br>**82.2 ± 2.5**<br>**8.27 ± 2.3**|
+||10%<br>16,269<br>94.1 ± 0.8<br>7.11 ± 0.5<br>13.2 ± 0.7<br>95.8 ± 0.2<br>80.6 ± 1.8<br>8.88 ± 0.9|
+||50%<br>81,344<br>**94.9 ± 0.7**<br>4.52 ± 0.4<br>21.0 ± 1.1<br>95.8 ± 0.3<br>81.1 ± 2.0<br>8.75 ± 1.2|
+||100%<br>162,688<br>94.1 ± 0.6<br>**3.45 ± 0.3**<br>**27.2 ± 1.2**<br>**95.9 ± 0.1**<br>82.0 ± 2.2<br>8.50 ± 1.4|
+|||
+|||
+||10.9 for a 0.1% sample to 27.2 for a 100% sample, suggesting enhanced discriminatory power with|
+||increased data. The 100% training size yields the highest TPR/FPR ratio of 27.2, highlighting the|
+||discriminator’s ability to differentiate biased and non-biased instances effectively.|
+|<br><br><br>|**Condition for Maintaining Performance**: According to Theorem 1, the condition for maintaining<br>performance without degradation is given by (1_−p_)<br>_p_<br>_,_which represents the ratio of non-biased to bi-<br>ased classes. In this case, the ratio is 138_,_503<br>24_,_267 = **5.71**_._ A higher TPR/FPR ratio indicates stronger|
+||discriminatory capability, which helps in achieving fairness improvements without negatively im-|
+||pacting model accuracy, as evidenced by the trend of improved metrics with increased dataset size.|
+||**Effective Use of Limited Sensitive Attribute Labels**: FairLoRA performs well even with limited|
+||sensitive attribute labels. With just 0.1% of the labeled data, FairLoRA outperforms the baseline|
+||(ERM) in in terms of WRA and EOD metrics, showing its efficiency in enhancing fairness while|
+||requiring minimal data. As the training size increases, the model’s accuracy remains stable, while the|
+||fairness metrics continue to improve. This observation underscores FairLoRA’s ability to effectively|
+||mitigate biases without compromising overall performance, even in scenarios with limited access to|
+||sensitive attribute labels.|
+|||
+||5.5<br>ABLATIONSTUDY|
+|||
+||We conduct an ablation study to evaluate the impact of the group discriminator in FairLoRA using|
+||the HateXplain dataset. The study compares FairLoRA with LoRA (without the discriminator),|
+||focusing on changes in accuracy and fairness across training batches and thresholds.|
+|||
+|<br><br><br><br><br><br><br><br>|a<br>ee<br>0.80<br>|<br>0.78<br>a =<br>: — FLORA Score<br>|<br>[e)<br>NN<br>0.794} Base Model<br>i<br>0 0.76<br>Tseng<br>{ —-- LoRA Model<br><*<br>N<br>i<br>~-<br>i<br>==»<br>LORA Score<br>—— FLORAModel<br>Sy<br>0.79<br>;<br>0.74<br>--- LoRA Model<br>aan<br>i<br>Sas" | 97g}<br>peaaaaa ssn nwessere eessesessesssses}<br>=z<br>0.90<br>— FLORAModel<br>i FLORAScore<br>!<br>v<br>=. LORA Model<br>0.807<br>{++ Base Model<br>!<br>5% 0.85<br>} —- LRA Model<br>!<br>2<br>7TNS<br>0.78<br>f ==» LoRA Score<br>Q 0.80<br>ct<br>coat<br>one<br>j---------<br>--------------------4<br>fo)<br>wv,<br>soe<br>eseeee<br>0.76<br>{<br>I<br>wy<br>f~<br>a 0.75<br>i >~<br>0.74<br>:|
+|<br><br><br>|_<br>P.<br>} —— FLORA Score<br>|<br>© 0.90of<br>0.91<br>Ess BaseModel<br>!<br>s<br>ay<br>i —-+- LoRA Model<br>!<br>2<br>0.88<br>‘sen,<br>0.90<br>i ==» LoRAScore<br>!<br>a<br>}<br>I<br>0.85<br>\<br>i<br>id<br>— FLORA Model<br>\_--%<br>0.89<br>4 0.83<br>-—-—:<br>LOoRA Model<br>Woe cece NS<br>:<br>Seseoctt<br>0.884.<br>i------~-~-~-~-~~~~~~~~~~~~~~~~~~~~~~-~---4|
+||0.00<br>10.00<br>20.00<br>30.00<br>40.00<br>50.00<br>0.00<br>0.20<br>0.40<br>0.60<br>0.80<br>1.00|
+||Batch<br>Threshold|
+|||
+||Figure 2: Comparison of accuracy (ACC) and fairness (1-EOD) between FairLoRA and LoRA.|
+||**Left**: Trends of ACC and fairness over training batches. **Right**: Impact of varying discriminator|
+||thresholds on ACC and fairness.|
+
+
+**Condition for Maintaining Performance** : According to Theorem 1, the condition for maintaining performance without degradation is given by[(][1] _[−] p[p]_[)] _,_ which represents the ratio of non-biased to biased classes. In this case, the ratio is[138] 24 _,[,]_ 267[503][=] **[5.71]** _[.]_[A][higher][TPR/FPR][ratio][indicates][stronger] discriminatory capability, which helps in achieving fairness improvements without negatively impacting model accuracy, as evidenced by the trend of improved metrics with increased dataset size. 
+
+9 
+
+**486 Impact on Accuracy and Fairness Metrics:** Figure 2 (left) shows the accuracy (ACC) and fairness (1-EOD) trends across training batches. FairLoRA significantly improves debiasing for specific categories, such as African American-related comments, while maintaining model performance. Unlike LoRA, which shows a substantial decrease in accuracy from the early stages of training, FairLoRA exhibits minimal performance loss, maintaining stable accuracy even in later training stages. This demonstrates that FairLoRA can mitigate biases while preserving overall accuracy. Regarding fairness towards non-target attributes (e.g., gender), FairLoRA maintains stable fairness throughout the training process, avoiding negative impacts on these attributes. In contrast, LoRA exhibits a significant decline in fairness for non-target attributes, suggesting that it struggles to ensure fairness across multiple sensitive categories when sequentially mitigating multiple types of biases. FairLoRA’s ability to maintain relatively high 1 _−_ EOD (other) scores indicates its robustness in handling multiple biases without catastrophic forgetting. In target attribute fairness, FairLoRA consistently outperforms LoRA, with 1 _−_ EOD (target) improv- ing gradually and staying at a high level throughout the training, while LoRA remains relatively low. This result demonstrates FairLoRA’s superior capacity for enhancing fairness in bias mitigation. **501 502 Effect of Discriminator Threshold:** Figure 2 (right) analyzes the effect of varying the discriminator threshold. A threshold of 0 corresponds to the base model, while a threshold of 1 represents the fully fine-tuned LoRA model. Across all thresholds, FairLoRA consistently outperforms LoRA in terms of accuracy. And with the increase of the threshold, FairLoRA’s fairness in terms of EOD (target) continuously improves. Notably, when the threshold exceeds 0.4, FairLoRA achieves significantly better fairness for the target attribute (1 _−_ EOD (target)) than LoRA. Moreover, FairLoRA’s fairness in terms of 1 _−_ EOD (other) for non-target attributes also remains higher than that of LoRA, con- firming that improving fairness in one category does not negatively impact other categories. Details on the TPR-to-FPR ratio variation are provided in Appendix D. The ablation results confirm the crucial role of the group discriminator in FairLoRA, enabling su- perior fairness improvements while maintaining model performance. FairLoRA shows robustness across training iterations and threshold variations, significantly outperforming LoRA in both accu- racy and fairness, particularly when addressing multiple types of biases sequentially. 6 CONCLUSIONS In this article, we introduced FairLoRA, a bias mitigation method that employs discriminators with LoRA modules to enhance fairness while preserving model performance. Our experiments across various computer vision and natural language processing tasks demonstrate that FairLoRA can im- prove fairness metrics without compromising, and in some cases even enhancing, overall accuracy. FairLoRA showed consistent improvements in fairness across both single and multiple bias scenar- ios. It increased worst-group accuracy and reduced equalized odds difference in single bias settings, and effectively handled sequential debiasing of multiple biases (e.g., race and gender) without nega- tively impacting previous bias mitigation efforts. This highlights FairLoRA’s robustness in handling multiple biases iteratively. A key advantage of FairLoRA is its modular design, which enables targeted fine-tuning without the need for full-model training. This not only reduces computational costs but also minimizes the reliance on extensive sensitive attribute annotations, making FairLoRA highly adaptable to settings with partial information. Additionally, FairLoRA’s selective activation of LoRA modules ensures that bias correction does not degrade overall model performance. Beyond its applications in fairness, FairLoRA’s modular approach has potential in multilingual and multi-task model optimization. For instance, in multilingual tasks, FairLoRA can be applied to fine-tune specific language components (e.g., improving Chinese language understanding) without impacting performance on other languages (e.g., English). Similarly, in multi-task settings, LoRA modules can be independently fine-tuned for specialized tasks, such as code generation or mathemat- ical reasoning, without disrupting the model’s core capabilities across other tasks. This flexibility enables FairLoRA to support the growing demands for adaptable, task-specific model training in diverse and multilingual environments, providing a pathway for improving both fairness and task performance. 
+
+10 
+
+> REFERENCES Alekh Agarwal, Alina Beygelzimer, Miroslav Dud´ık, John Langford, and Hanna Wallach. A re- ductions approach to fair classification. In _International Conference on Machine Learning_ , pp. 60–69. PMLR, 2018. 
+
+- Flavio Calmon, Dennis Wei, Bhanukiran Vinzamuri, Karthikeyan Natesan Ramamurthy, and Kush R Varshney. Optimized pre-processing for discrimination prevention. _Advances in Neural Informa-_ _tion Processing Systems_ , 30, 2017. 
+
+- Andrew Cotter, Heinrich Jiang, and Karthik Sridharan. Two-player games for efficient non-convex constrained optimization. In _Algorithmic Learning Theory_ , pp. 300–332. PMLR, 2019. 
+
+Saswat Das, Marco Romanelli, Cuong Tran, Zarreen Reza, Bhavya Kailkhura, and Ferdinando Fioretto. Low-rank finetuning for llms: A fairness perspective. _arXiv preprint arXiv:2405.18572_ , 2024. - Jacob Devlin, Ming-Wei Chang, Kenton Lee, and Kristina Toutanova. Bert: Pre-training of deep bidirectional transformers for language understanding. In _Proceedings of the 2019 Conference of_ _the North American Chapter of the Association for Computational Linguistics: Human Language Technologies, Volume 1 (Long and Short Papers)_ , pp. 4171–4186, 2019. 
+
+- Zhoujie Ding, Ken Liu, Pura Peetathawatchai, Berivan Isik, and Sanmi Koyejo. On fairness of low-rank adaptation of large models. In _First Conference on Language Modeling_ , 2024. Michele Donini, Luca Oneto, Shai Ben-David, John S Shawe-Taylor, and Massimiliano Pontil. Em- pirical risk minimization under fairness constraints. _Advances in Neural Information Processing Systems_ , 31, 2018. 
+
+- Alexey Dosovitskiy. An image is worth 16x16 words: Transformers for image recognition at scale. _arXiv preprint arXiv:2010.11929_ , 2020. Emilio Ferrara. Fairness and bias in artificial intelligence: A brief survey of sources, impacts, and mitigation strategies. _Sci_ , 6(1):3, 2023. Karan Goel, Albert Gu, Yixuan Li, and Christopher Re. Model patching: Closing the subgroup per- formance gap with data augmentation. In _International Conference on Learning Representations_ , 2021. Sixue Gong, Xiaoming Liu, and Anil K Jain. Mitigating face recognition bias via group adaptive classifier. In _Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition_ , pp. 3414–3424, 2021. 
+
+- Tatsunori Hashimoto, Megha Srivastava, Hongseok Namkoong, and Percy Liang. Fairness without demographics in repeated loss minimization. In _International Conference on Machine Learning_ , pp. 1929–1938. PMLR, 2018. Edward J Hu, Yelong Shen, Phillip Wallis, Zeyuan Allen-Zhu, Yuanzhi Li, Shean Wang, Lu Wang, and Weizhu Chen. LoRA: Low-rank adaptation of large language models. In _International Con-_ 
+
+- _ference on Learning Representations_ , 2022. 
+
+- Saachi Jain, Kimia Hamidieh, Kristian Georgiev, Andrew Ilyas, Marzyeh Ghassemi, and Aleksander Madry. Data debiasing with datamodels (d3m): Improving subgroup robustness via data selection. _arXiv preprint arXiv:2406.16846_ , 2024. Polina Kirichenko, Pavel Izmailov, and Andrew Gordon Wilson. Last layer re-training is sufficient 
+
+- for robustness to spurious correlations. In _The Eleventh International Conference on Learning_ 
+
+- _Representations_ , 2023. 
+
+- James Kirkpatrick, Razvan Pascanu, Neil Rabinowitz, Joel Veness, Guillaume Desjardins, Andrei A Rusu, Kieran Milan, John Quan, Tiago Ramalho, Agnieszka Grabska-Barwinska, et al. Overcom- ing catastrophic forgetting in neural networks. _Proceedings of the National Academy of Sciences_ , 114(13):3521–3526, 2017. 
+
+11 
+
+- Evan Z Liu, Behzad Haghgoo, Annie S Chen, Aditi Raghunathan, Pang Wei Koh, Shiori Sagawa, 
+
+- Percy Liang, and Chelsea Finn. Just train twice: Improving group robustness without training group information. In _International Conference on Machine Learning_ , pp. 6781–6792. PMLR, 2021. Zeyuan Liu, Xin Zhang, and Benben Jiang. Active learning with fairness-aware clustering for fair classification considering multiple sensitive attributes. _Information Sciences_ , 647:119521, 2023. Ziwei Liu, Ping Luo, Xiaogang Wang, and Xiaoou Tang. Deep learning face attributes in the wild. In _Proceedings of the IEEE International Conference on Computer Vision_ , pp. 3730–3738, 2015. Shenyu Lu, Yipei Wang, and Xiaoqian Wang. Debiasing attention mechanism in transformer without demographics. In _The Twelfth International Conference on Learning Representations_ , 2024. Natalia Martinez, Martin Bertran, and Guillermo Sapiro. Minimax pareto fairness: A multi objective 
+
+- perspective. In _International Conference on Machine Learning_ , pp. 6755–6764. PMLR, 2020. 
+
+- Binny Mathew, Punyajoy Saha, Seid Muhie Yimam, Chris Biemann, Pawan Goyal, and Animesh Mukherjee. Hatexplain: A benchmark dataset for explainable hate speech detection. In _Proceed-_ _ings of the AAAI Conference on Artificial Intelligence_ , volume 35, pp. 14867–14875, 2021. Tom McCoy, Ellie Pavlick, and Tal Linzen. Right for the wrong reasons: Diagnosing syntactic 
+
+- heuristics in natural language inference. In _Proceedings of the 57th Annual Meeting of the Asso-_ 
+
+- _ciation for Computational Linguistics_ , pp. 3428–3448, 2019. Yannic Neuhaus, Maximilian Augustin, Valentyn Boreiko, and Matthias Hein. Spurious features everywhere-large-scale detection of harmful spurious features in imagenet. In _Proceedings of the_ _IEEE/CVF International Conference on Computer Vision_ , pp. 20235–20246, 2023. Luke Oakden-Rayner, Jared Dunnmon, Gustavo Carneiro, and Christopher R´e. Hidden stratification 
+
+- causes clinically meaningful failures in machine learning for medical imaging. In _Proceedings of_ _the ACM Conference on Health, Inference, and Learning_ , pp. 151–159, 2020. Felix Petersen, Debarghya Mukherjee, Yuekai Sun, and Mikhail Yurochkin. Post-processing for individual fairness. _Advances in Neural Information Processing Systems_ , 34:25944–25955, 2021. Shiori Sagawa, Pang Wei Koh, Tatsunori B. Hashimoto, and Percy Liang. Distributionally robust 
+
+- neural networks. In _International Conference on Learning Representations_ , 2020a. Shiori Sagawa, Aditi Raghunathan, Pang Wei Koh, and Percy Liang. An investigation of why overparameterization exacerbates spurious correlations. In _International Conference on Machine_ _Learning_ , pp. 8346–8356. PMLR, 2020b. Victor Sanh, Lysandre Debut, Julien Chaumond, and Thomas Wolf. Distilbert, a distilled version of 
+
+- bert: Smaller, faster, cheaper and lighter. _ArXiv_ , abs/1910.01108, 2019. Shibani Santurkar, Dimitris Tsipras, Mahalaxmi Elango, David Bau, Antonio Torralba, and Alek- sander Madry. Editing a classifier by rewriting its prediction rules. _Advances in Neural Informa-_ _tion Processing Systems_ , 34:23359–23373, 2021. Harshay Shah, Andrew Ilyas, and Aleksander Madry. Decomposing and editing predictions by mod- 
+
+- eling model computation. In _Forty-first International Conference on Machine Learning_ , 2024. Xiaobin Song, Zeyuan Liu, and Benben Jiang. Adaptive boosting with fairness-aware reweighting technique for fair classification. _Expert Systems with Applications_ , 250:123916, 2024. Fan-Keng Sun, Cheng-Hao Ho, and Hung-Yi Lee. Lamol: Language modeling for lifelong language 
+
+- learning. In _International Conference on Learning Representations (ICLR)_ , 2020. 
+
+- Adina Williams, Nikita Nangia, and Samuel R Bowman. A broad-coverage challenge corpus for sentence understanding through inference. In _Proceedings of the 2018 Conference of the North_ _American Chapter of the Association for Computational Linguistics: Human Language Technologies, Volume 1 (Long Papers)_ , pp. 1112–1122, 2018. 
+
+12 
+
+- Chen Zhang, Boyang Zhou, Zhiqiang He, Zeyuan Liu, Yanjiao Chen, Wenyuan Xu, and Baochun Li. 
+
+- Oblivion: Poisoning federated learning by inducing catastrophic forgetting. In _IEEE INFOCOM_ _2023 - IEEE Conference on Computer Communications_ , pp. 1–10, 2023. 
+
+## - Jingzhao Zhang, Aditya Krishna Menon, Andreas Veit, Srinadh Bhojanapalli, Sanjiv Kumar, and Suvrit Sra. Coping with label shift via distributionally robust optimisation. In _International Conference on Learning Representations_ , 2021. 
+
+- Jieyu Zhao, Tianlu Wang, Mark Yatskar, Ryan Cotterell, Vicente Ordonez, and Kai-Wei Chang. Gender bias in contextualized word embeddings. In _Proceedings of the 2019 Conference of the_ _North American Chapter of the Association for Computational Linguistics: Human Language_ _Technologies, Volume 1 (Long and Short Papers)_ , pp. 629–634, 2019. 
+
+- 13 
+
+## A THEOREM PROOF **704 Lemma 1.** For the majority group (G1), the performance of the model after FairLoRA fine-tuning is: 
+
+_P_ ( _M_ FairLoRA _,_ G1) = (1 _−_ FPR) _· P_ ( _M,_ G1) + FPR _· P_ ( _M_ LoRA _,_ G1) 
+
+_Proof._ _Definitions and Notations:_ 
+
+- _M_ : the original model. 
+
+- • _M_ LoRA: the model fine-tuned using LoRA. 
+
+- • _M_ FairLoRA: the final model after applying FairLoRA fine-tuning. 
+
+- • G1: the majority group. 
+
+- _P_ ( _M,_ G1): performance of model _M_ on group G1. 
+
+- • FPR: False Positive Rate when predicting G2 for samples from G1. 
+
+- In the context of FairLoRA fine-tuning, the performance of the model on G1 depends on how samples from G1 are classified: 
+
+> • _True Negatives (TN)_ : samples from G1 correctly classified as G1. • _False Positives (FP)_ : samples from G1 incorrectly classified as G2. _Calculating the Performance:_ Let _N_ 1 be the total number of samples in G1. • Number of True Negatives: TN = (1 _−_ FPR) _· N_ 1. • Number of False Positives: FP = FPR _· N_ 1. For G1, the FairLoRA model uses: • The original model _M_ for True Negatives. • The LoRA fine-tuned model _M_ LoRA for False Positives. Thus, the total performance on G1 is the weighted average: _P_ ( _M_ FairLoRA _,_ G1) =[Performance on TN][ +][ Performance on FP] 
+
+> _N_ 1 =[TN] _[ ·][ P]_[(] _[M][,]_[ G1][)][ +][ FP] _[ ·][ P]_[(] _[M]_[LoRA] _[,]_[ G1][)] 
+
+> _N_ 1 =[[(][1] _[ −]_[FPR][)] _[N]_[1] _[P]_[(] _[M][,]_[ G1][)][ +][ FPR] _[N]_[1] _[P]_[(] _[M]_[LoRA] _[,]_[ G1][)]] _N_ 1 = (1 _−_ FPR) _· P_ ( _M,_ G1) + FPR _· P_ ( _M_ LoRA _,_ G1) _._ Therefore, we have: _P_ ( _M_ FairLoRA _,_ G1) = (1 _−_ FPR) _· P_ ( _M,_ G1) + FPR _· P_ ( _M_ LoRA _,_ G1) _._ This completes the proof. □ > **751 Lemma 2.** For the minority group (G2), the performance of the model after FairLoRA fine-tuning 
+
+> is: 
+
+> _P_ ( _M_ FairLoRA _,_ G2) = TPR _· P_ ( _M_ LoRA _,_ G2) + (1 _−_ TPR) _· P_ ( _M,_ G2) 
+
+> _Proof._ _Definitions and Notations:_ 
+
+14 
+
+> • G2: the minority group. • _P_ ( _M,_ G2): performance of model _M_ on group G2. • TPR: True Positive Rate when correctly predicting G2 for samples from G2. For samples from G2, their classification can be: 
+
+- • _True Positives (TP)_ : samples from G2 correctly classified as G2. 
+
+> • _False Negatives (FN)_ : samples from G2 incorrectly classified as G1. > _Calculating the Performance:_ Let _N_ 2 be the total number of samples in G2. > • Number of True Positives: TP = TPR _· N_ 2. 
+
+> • Number of False Negatives: FN = (1 _−_ TPR) _· N_ 2. > For G2, the FairLoRA model uses: • The LoRA fine-tuned model _M_ LoRA for True Positives. 
+
+> • The original model _M_ for False Negatives. Thus, the total performance on G2 is: _P_ ( _M_ FairLoRA _,_ G2) =[Performance on TP][ +][ Performance on FN] 
+
+> _N_ 2 =[TP] _[ ·][ P]_[(] _[M]_[LoRA] _[,]_[ G2][)][ +][ FN] _[ ·][ P]_[(] _[M][,]_[ G2][)] 
+
+> _N_ 2 =[[][TPR] _[N]_[2] _[P]_[(] _[M]_[LoRA] _[,]_[ G2][)][ + ][(][1] _[ −]_[TPR][)] _[N]_[2] _[P]_[(] _[M][,]_[ G2][)]] _N_ 2 = TPR _· P_ ( _M_ LoRA _,_ G2) + (1 _−_ TPR) _· P_ ( _M,_ G2) _._ Therefore, we have: 
+
+> _P_ ( _M_ FairLoRA _,_ G2) = TPR _· P_ ( _M_ LoRA _,_ G2) + (1 _−_ TPR) _· P_ ( _M,_ G2) _._ 
+
+> This completes the proof. □ **788 789 Theorem 1.** To ensure that FairLoRA does not degrade the overall performance of the model, the ratio of the true positive rate (TPR) to the false positive rate (FPR) must satisfy: TPR 
+
+> _·[P]_[(] _[M][,]_[ G1][)] _[ −][P]_[(] _[M]_[LoRA] _[,]_[ G1][)] FPR _[≥]_[(][1] _[ −] p[p]_[)] _P_ ( _M_ LoRA _,_ G2) _− P_ ( _M,_ G2) _Proof._ _Definitions and Notations:_ > • _p_ = _N_ 1 _N_ +2 _N_ 2[:][proportion of samples from G2.] • (1 _− p_ ): proportion of samples from G1. • ∆ _P_ (G1): change in performance on G1. • ∆ _P_ (G2): change in performance on G2. 
+
+> • ∆ _P_ : overall change in performance. _Calculating the Change in Performance for G1:_ 
+
+> From Theorem 1, the performance change on G1 is: ∆ _P_ (G1) = _P_ ( _M_ FairLoRA _,_ G1) _− P_ ( _M,_ G1) = [(1 _−_ FPR) _P_ ( _M,_ G1) + FPR _P_ ( _M_ LoRA _,_ G1)] _− P_ ( _M,_ G1) = _−_ FPR _· P_ ( _M,_ G1) + FPR _· P_ ( _M_ LoRA _,_ G1) = FPR _·_ [ _P_ ( _M_ LoRA _,_ G1) _− P_ ( _M,_ G1)] _._ 
+
+15 
+
+_Calculating the Change in Performance for G2:_ From Theorem 2, the performance change on G2 is: ∆ _P_ (G2) = _P_ ( _M_ FairLoRA _,_ G2) _− P_ ( _M,_ G2) = [TPR _P_ ( _M_ LoRA _,_ G2) + (1 _−_ TPR) _P_ ( _M,_ G2)] _− P_ ( _M,_ G2) = _−_ TPR _· P_ ( _M,_ G2) + TPR _· P_ ( _M_ LoRA _,_ G2) = TPR _·_ [ _P_ ( _M_ LoRA _,_ G2) _− P_ ( _M,_ G2)] _._ _Calculating the Overall Change in Performance:_ The overall change is the weighted sum: ∆ _P_ = (1 _− p_ ) _·_ ∆ _P_ (G1) + _p ·_ ∆ _P_ (G2) _._ Substituting the expressions for ∆ _P_ (G1) and ∆ _P_ (G2): ∆ _P_ = (1 _− p_ ) _·_ FPR[ _P_ ( _M_ LoRA _,_ G1) _− P_ ( _M,_ G1)] + _p ·_ TPR[ _P_ ( _M_ LoRA _,_ G2) _− P_ ( _M,_ G2)] _._ _Setting the Condition for No Performance Degradation:_ To ensure the overall performance does not degrade (∆ _P ≥_ 0), we require: (1 _− p_ ) _·_ FPR[ _P_ ( _M_ LoRA _,_ G1) _− P_ ( _M,_ G1)] + _p ·_ TPR[ _P_ ( _M_ LoRA _,_ G2) _− P_ ( _M,_ G2)] _≥_ 0 _._ _Assuming Performance Changes:_ • Let ∆ _P_ G1 = _P_ ( _M_ LoRA _,_ G1) _− P_ ( _M,_ G1) (likely negative). • Let ∆ _P_ G2 = _P_ ( _M_ LoRA _,_ G2) _− P_ ( _M,_ G2) (positive). Rewriting the inequality: (1 _− p_ ) _·_ FPR _·_ ∆ _P_ G1 + _p ·_ TPR _·_ ∆ _P_ G2 _≥_ 0 _._ _Solving for FPR[TPR][:]_ 1. Isolate the positive term: _p ·_ TPR _·_ ∆ _P_ G2 _≥−_ (1 _− p_ ) _·_ FPR _·_ ∆ _P_ G1 _._ 2. Since ∆ _P_ G1 _<_ 0, _−_ ∆ _P_ G1 _>_ 0: _p ·_ TPR _·_ ∆ _P_ G2 _≥_ (1 _− p_ ) _·_ FPR _·_ ( _−_ ∆ _P_ G1) _._ 3. Divide both sides by _p ·_ ∆ _P_ G2 (which is positive): [(] _[−]_[∆] _[P]_[G1][)] TPR _≥_[(][1] _[ −][p]_[)] _·_[FPR] _[ ·] ._ _p_ ∆ _P_ G2 4. Divide both sides by FPR (assuming FPR _>_ 0): TPR **851852** FPR _[≥]_[(][1] _[ −] p[p]_[)] _·[−]_ ∆[∆] _P[P]_ G2[G1] _._ 5. Substitute back the definitions of ∆ _P_ G1 and ∆ _P_ G2: TPR _·[P]_[(] _[M][,]_[ G1][)] _[ −][P]_[(] _[M]_[LoRA] _[,]_[ G1][)] FPR _[≥]_[(][1] _[ −] p[p]_[)] _P_ ( _M_ LoRA _,_ G2) _− P_ ( _M,_ G2) _[.]_ Therefore, the ratio of the True Positive Rate to the False Positive Rate must satisfy: TPR _·[P]_[(] _[M][,]_[ G1][)] _[ −][P]_[(] _[M]_[LoRA] _[,]_[ G1][)] FPR _[≥]_[(][1] _[ −] p[p]_[)] _P_ ( _M_ LoRA _,_ G2) _− P_ ( _M,_ G2) _[.]_ This condition ensures that the positive impact on G2 outweighs the negative impact on G1, pre- venting overall performance degradation. This completes the proof. 
+
+□ 
+
+16 
+
+## B IMPLEMENTATION DETAILS OF FAIRLORA This section provides the implementation details for FairLoRA, focusing on the group discriminator training, fine-tuning dataset construction, and FairLoRA training configuration. Key components of the implementation are presented in pseudocode to facilitate understanding and reproducibility. 
+
+## **Group Discriminator Training** 
+
+> To effectively identify sensitive attributes, we trained a group discriminator _Dϕ_ that takes hidden 
+
+> layer representations from a pre-trained model as input and outputs the corresponding sensitive 
+
+> attribute labels. Specifically, we used the penultimate hidden states _hθ_ ( _x_ ) _∈_ R _[T][ ×][d]_ as input, where _T_ represents the sequence length and _d_ is the dimensionality of the hidden states. 
+
+To aggregate the sequence representation into a global vector, we employed attention pooling, which assigns importance weights to different time steps. This allows the model to focus on the most relevant parts of the sequence when predicting sensitive attributes. To mitigate bias in predicting sensitive attributes, we employed the worst-group cross-entropy loss: _L_ worst = max _g∈G_[E][(] _[x,s]_[)] _[∼][P][g]_[ [] _[ℓ]_[(] _[D][ϕ]_[(] _[h]_[pool][(] _[x]_[))] _[, s]_[)]] _[ ,]_ where _G_ represents the set of all groups, _Pg_ is the data distribution for group _g_ , _s_ is the sensitive attribute label, and _ℓ_ ( _·_ ) denotes the cross-entropy loss function. The combined pseudocode for the attention pooling mechanism and the group discriminator network is presented below. **887 888 889 Algorithm 1** Group Discriminator with Attention Pooling **890 Require:** Hidden states _h ∈_ R _[T][ ×][d]_ **891 Ensure:** Predicted sensitive attribute label ˆ _s_ 1: **Attention Pooling: 893** 2: Initialize learnable parameter vector _w ∈_ R _[d]_ 3: **for** _t_ = 1 **to** _T_ **do 894** 4: Compute attention score: _at ← w[⊤] ht ▷_ Scalar value 5: **end for 896** 6: Compute attention weights: _α ←_ softmax([ _a_ 1 _, a_ 2 _, . . . , aT_ ]) 7: Compute pooled representation: _h_ pool _←_[�] _[T] t_ =1 _[α][t][h][t]_ 8: **Group Discriminator Network: 900** 9: Compute hidden layer activation: _z ←_ ReLU( _W_ 1 _h_ pool + _b_ 1) _▷W_ 1 _∈_ R _[d]_[1] _[×][d]_ 10: Compute output logits: _o ← W_ 2 _z_ + _b_ 2 _▷W_ 2 _∈_ R[2] _[×][d]_[1] 11: Compute predicted probabilities: _p_ ˆ _←_ sigmoid( _o_ ) 12: Predict sensitive attribute: _s_ ˆ _←_ arg max ˆ _p_ In this algorithm: Attention Pooling (Lines 2–7): We compute attention scores for each time step using the learnable parameter vector _w_ . The attention weights _α_ are obtained by applying the softmax function to the attention scores. The pooled representation _h_ pool is then calculated as the weighted sum of the hidden states. 
+
+Group Discriminator Network (Lines 8–12): The pooled representation _h_ pool is fed into a fully **913914** connectedcomputes thelayerlogitswith _o_ , ReLUwhich activationare transformedto obtainintotheprobabilitieshidden activation _p_ ˆ using the _z_ . sigmoidA secondfunction.linear layerThe predicted sensitive attribute label ˆ _s_ is determined by taking the class with the highest probability. 
+
+By combining the attention pooling mechanism with the group discriminator network in a single algorithm, we provide a clear and concise representation of how the discriminator processes the input hidden states to predict sensitive attributes. 
+
+17 
+
+Using all available data in these experiments ensures that the discriminators achieve high accuracy, thereby improving the model’s capacity to debias effectively without compromising performance. For scenarios with limited sensitive attribute labels, results are presented separately in Table 3. **921 Partition of dataset 922 923** For CelebA and MultiNLI, we used the official splits provided in the respective documentation, following the standard training and test set divisions. For HateXplain, since the official split is not provided, we followed the approach of Lu et al.Lu et al. (2024), where 50% of the samples were used as the test set. 
+
+## **FairLoRA Fine-tuning Dataset Construction** 
+
+The fine-tuning dataset was constructed to ensure class balance through the following steps: 
+
+- • **Data with Sensitive Attribute Labels:** We selected samples with a sensitive attribute label of _s_ = 1 and performed undersampling to balance the classes. 
+
+> • **Data without Sensitive Attribute Labels:** A trained discriminator _Dϕ_ was used to as- sign pseudo-labels for sensitive attributes. Samples predicted as _s_ = 1 were selected, and undersampling was applied to balance the class distribution. > **938 FairLoRA Training Configuration 939** 
+
+We employed the AdamW optimizer for training, which effectively handles weight decay and im- proves generalization. The learning rate was set to 1 _×_ 10 _[−]_[5] to ensure stable convergence during fine-tuning. Training was conducted for 2 epochs, as this was sufficient for the model to converge without overfitting. To maintain consistency, _τ_ was fixed at 0.5 across all experiments. Addition- ally, we used five different random seeds (5, 15, 25, 35, 45) for each set of experiments to ensure robustness. A validation set can also be utilized to guide hyperparameter tuning if needed. **945 946 Pseudocode Implementation 947** During training, all LoRA adjustments are retained to allow the model to fully learn from the Fair- LoRA fine-tuning dataset. During inference, the discriminator’s output selectively activates the LoRA adjustments for samples predicted as belonging to sensitive groups. This design ensures that model adjustments are targeted to reduce bias where needed, while maintaining both efficiency and overall performance. 
+
+> FairLoRA can be extended to accommodate multiple sensitive attributes by introducing additional 
+
+> discriminators and LoRA modules. 
+
+**Algorithm 2** FairLoRA Forward Pass with Multiple Sensitive Attributes 
+
+**957 Require:** Input features _x_ , discriminator outputs dis1 _,_ dis2 _, . . . ,_ dis _k_ , training mode flag training 1: Compute base output: _y_ base _←_ LinearLayer( _x_ ) 
+
+2: **for** _i_ = 1 to _k_ **do 960 961** 3: Compute LoRA adjustment: _y_ lora _i ←_ LoRALayer _i_ ( _x_ ) 4: Determine if LoRA _i_ should be applied: apply ~~l~~ ora _i ←_ dis _i > τ_ 5: **if not** training **then 963** 6: _y_ lora _i_ [ _¬_ apply ~~l~~ ora _i_ ] _←_ 0 7: **end if 965** 8: **end for 966** 9: **return** _y ← y_ base +[�] _[k] i_ =1 _[y]_[lora] _i_ This approach enhances the fairness of the model without requiring full access to all sensitive at- tribute labels, ensuring fairer treatment of underrepresented groups while preserving overall performance. 
+
+18 
+
+> C COMPREHENSIVE COMPARISON OF EXPERIMENTAL DATA The evaluation metrics employed in the presented tables are critical for assessing both the perfor- mance and fairness of the models: > • **Accuracy (ACC)** : The overall proportion of correctly predicted instances among all sam- 
+
+> ples. 
+
+• **Balanced Accuracy (BA)** : Accounts for class imbalance by computing the average recall obtained on each class. It is calculated as: TP TN BA =[1] 2 � TP + FN[+] TN + FP � where TP, TN, FP, and FN denote true positives, true negatives, false positives, and false negatives, respectively. • **Worst Group Accuracy (WGA)** : The lowest accuracy observed among all evaluated groups (e.g., different genders, races), highlighting the model’s performance on the most disadvantaged group. • **Demographic Parity (DP)** : Measures the difference in positive prediction rates across dif- ferent groups. A lower DP indicates more equitable positive prediction distributions among groups. 
+
+> • **Equal Opportunity (EOp)** : Assesses the disparity in true positive rates (TPR) between 
+
+> groups. A smaller EOp suggests that the model provides similar chances of correct positive predictions across groups. 
+
+> • **Equalized Odds Difference (EOD)** : Considers both TPR and false positive rate (FPR) 
+
+> differences between groups. Lower EOD values indicate more balanced predictive perfor- 
+
+> mance across groups in terms of both positive and negative classes. • **Average Error Rate (AER)** : The mean error rate across different groups. A lower AER **1000** signifies an overall reduction in model errors. **1001** 
+
+**1002** C.1 COMPARATIVE ANALYSIS OF DEBIASING FOR SINGLE SENSITIVE ATTRIBUTE **1003** 
+
+**1004** The analysis of Table 4 involves evaluating the performance and fairness metrics of different models **1005** on the CelebA dataset. **1006** 
+
+**1007** 
+
+Table 4: Performance and Fairness Metrics of Models on the CelebA Dataset 
+
+|**1008**<br>**1009**<br>**1010**<br>**1011**<br>**1012**<br>**1013**<br>**1014**<br>**1015**<br>**1016**<br>**1017**<br>**1018**<br>**1019**<br>**1020**<br>**1021**<br>**1022**<br>**1023**<br>**1024**<br>**1025**||Table 4: Performance and Fairness Metrics of Models on the CelebA Dataset|
+|---|---|---|
+|||Model<br>ACC_↑_(%)<br>BA_↑_(%)<br>WGA_↑_(%)<br>DP_↓_(%)<br>EOp_↓_(%)<br>EOD_↓_(%)<br>AER_↑_(%)|
+|||**ERM**<br>95.8 ± 0.1<br>95.7 ± 0.0<br>77.9 ± 2.6<br>37.1 ± 0.6<br>17.5 ± 2.9<br>10.0 ± 1.7<br>69.7 ± 3.9<br>+ FL Min.<br>95.8 ± 0.2<br>**95.8 ± 0.1**<br>**82.0 ± 2.2**<br>37.3 ± 0.5<br>**14.2 ± 2.4**<br>**8.5 ± 1.4**<br>68.7 ± 2.9<br>+ FL Maj.<br>**95.9 ± 0.1**<br>95.6 ± 0.1<br>77.2 ± 2.8<br>**36.9 ± 0.6**<br>17.8 ± 3.0<br>10.0 ± 1.6<br>67.8 ± 3.0<br>+ FL All<br>**95.9 ± 0.1**<br>**95.8 ± 0.1**<br>81.3 ± 1.5<br>37.1 ± 0.3<br>14.6 ± 1.7<br>8.6 ± 1.0<br>**70.3 ± 4.1**<br>**GroupDRO**<br>94.4 ± 0.5<br>94.4 ± 0.4<br>87.4 ± 1.4<br>**35.1 ± 0.5**<br>7.5 ± 1.2<br>4.8 ± 0.6<br>81.8 ± 6.7<br>+ FL Min.<br>94.4 ± 0.5<br>94.6 ± 0.4<br>**88.8 ± 1.5**<br>35.4 ± 0.4<br>**6.8 ± 1.3**<br>**4.7 ± 0.5**<br>**83.3 ± 6.7**<br>+ FL Maj.<br>**94.7 ± 0.4**<br>94.6 ± 0.4<br>84.4 ± 1.1<br>35.4 ± 0.3<br>9.7 ± 0.9<br>5.9 ± 0.4<br>72.1 ± 3.6<br>+ FL All<br>**94.7 ± 0.3**<br>**94.7 ± 0.3**<br>85.9 ± 1.6<br>35.6 ± 0.2<br>9.0 ± 1.6<br>5.7 ± 0.8<br>75.1 ± 6.1<br>**DFR**<br>94.3 ± 1.4<br>94.8 ± 1.0<br>86.0 ± 2.0<br>37.5 ± 0.6<br>11.1 ± 1.6<br>7.7 ± 0.8<br>75.1 ± 4.4<br>+ FL Min.<br>94.5 ± 1.2<br>95.0 ± 0.9<br>**87.8 ± 1.9**<br>37.4 ± 0.8<br>**9.6 ± 1.3**<br>**6.9 ± 0.8**<br>**78.7 ± 8.4**<br>+ FL Maj.<br>**95.6 ± 0.1**<br>**95.7 ± 0.0**<br>83.3 ± 2.1<br>**37.2 ± 0.5**<br>13.1 ± 2.3<br>8.1 ± 1.3<br>72.3 ± 5.5<br>+ FL All<br>95.4 ± 0.1<br>**95.7 ± 0.1**<br>86.0 ± 1.1<br>37.3 ± 0.3<br>11.0 ± 1.2<br>7.1 ± 0.6<br>74.5 ± 6.1<br>**Lu et al. (2024)**<br>95.4 ± 0.4<br>95.6 ± 0.4<br>81.4 ± 4.8<br>36.8 ± 0.5<br>14.1 ± 4.1<br>8.3 ± 2.0<br>68.7 ± 5.3<br>+ FL Min.<br>95.5 ± 0.4<br>95.7 ± 0.3<br>**86.8 ± 2.2**<br>**36.7 ± 0.5**<br>**9.8 ± 1.6**<br>**6.2 ± 0.7**<br>**75.9 ± 8.2**<br>+ FL Maj.<br>**95.9 ± 0.3**<br>95.7 ± 0.3<br>80.4 ± 4.3<br>**36.7 ± 0.6**<br>14.8 ± 3.5<br>8.6 ± 1.7<br>67.3 ± 4.5<br>+ FL All<br>95.6 ± 0.3<br>**95.8 ± 0.2**<br>86.6 ± 2.1<br>**36.7 ± 0.7**<br>10.0 ± 1.4<br>6.3 ± 0.6<br>75.7 ± 9.0|
+||*||
+
+
+> * Bold values indicate the best performance in each category. 
+
+19 
+
+**1026** The **ERM model** achieves high overall accuracy (ACC) and balanced accuracy (BA), with scores **1027** of approximately 95.8% and 95.7%, respectively. However, the model presents fairness concerns **1028** as indicated by the worst-group accuracy (WGA), which is relatively low at 77.9%. This suggests **1029** suboptimal performance for the least advantaged group. Incorporating the **FL Min.** strategy in- **1030** creases the WGA to 82.0%, demonstrating improved performance on the worst-performing group. **1031** Additionally, there is a reduction in the Equal Opportunity (EOp) metric from 17.5% to 14.2% and **1032** in Equalized Odds Difference (EOD) from 10.0% to 8.5%, indicating a significant decrease in group **1033** disparities and an overall enhancement in fairness. 
+
+> **1034** The **GroupDRO model** initially performs well with a high WGA of 87.4%, reflecting strong base- 
+
+> **1035** line performance for the worst-performing group. When **FL Min.** is applied, the WGA further 
+
+> **1036** increases to 88.8%, enhancing the model’s robustness across groups. Moreover, there are decreases **1037** in EOp from 7.5% to 6.8% and in EOD from 4.8% to 4.7%, implying a reduction in group disparities **1038** and improved fairness metrics. 
+
+> **1039** The **DFR model** attains a WGA of 86.0%, suggesting favorable fairness performance at the baseline 
+
+> **1040** level. With the application of **FL Min.** , the WGA improves to 87.8%, indicating better performance 
+
+> **1041** on the worst-performing group. Concurrently, the EOp decreases from 11.1% to 9.6%, and the EOD 
+
+> **1042** reduces from 7.7% to 6.9%, which enhances fairness by mitigating disparities between different **1043** groups. **1044** The **Lu et al. (2024) model** starts with a WGA of 81.4%, highlighting room for improvement 
+
+> **1045** in addressing the worst-performing group. Upon incorporating **FL Min.** , the WGA significantly 
+
+> **1046** increases to 86.8%, indicating substantial improvement for disadvantaged groups. Additionally, 
+
+> **1047** notable reductions are observed in EOp from 14.1% to 9.8%, and in EOD from 8.3% to 6.2%, 
+
+> **1048** demonstrating enhanced fairness by reducing inter-group disparities. **1049 1050 1051 1052** Table 5: Performance comparison across different attributes of CelebA dataset. **1053 1054 Heavy Makeup Wearing Lipstick 1055 Method 1056 ACC** _↑_ **(%) WGA** _↑_ **(%) EOD** _↓_ **(%) ACC** _↑_ **(%) WGA** _↑_ **(%) EOD** _↓_ **(%)** 
+
+> **1057 ERM** 95.8 ± 0.1 45.4 ± 3.2 27.9 ± 1.9 95.8 ± 0.1 57.4 ± 3.5 29.3 ± 2.4 **1058** + FL Min. 95.8 ± 0.1 **54.5 ± 3.1 24.4 ± 1.7** 95.8 ± 0.2 **63.0 ± 2.7 25.1 ± 2.0** 
+
+> **1059 GroupDRO** 94.4 ± 0.5 65.4 ± 2.7 25.8 ± 1.6 94.4 ± 0.5 70.2 ± 2.5 25.9 ± 1.9 
+
+> **1060** + FL Min. 94.4 ± 0.4 **70.1 ± 2.5 22.7 ± 1.5 94.5 ± 0.4 74.3 ± 2.4 22.5 ± 1.9 1061 DFR** 94.3 ± 1.4 58.0 ± 2.2 27.0 ± 1.8 94.3 ± 1.4 68.1 ± 1.9 26.7 ± 1.8 **1062** + FL Min. **94.5 ± 1.5 63.8 ± 1.9 24.1 ± 2.0 94.4 ± 1.4 73.2 ± 2.0 22.3 ± 1.7 1063 1064 Lu et al.** 95.4 ± 0.4 61.4 ± 2.5 28.0 ± 2.2 95.4 ± 0.4 67.8 ± 2.1 27.5 ± 1.7 + FL Min. **95.6 ± 0.5 69.8 ± 2.9 23.2 ± 2.5** 95.4 ± 0.4 **74.1 ± 2.3 23.1 ± 1.5 1065 1066 1067 1068 1069** We also conducted experiments using other sensitive attributes, such as “Heavy Makeup” and “Wear- **1070** ing Lipstick”. The results, presented in Table 5, are consistent with those in Table 4, demonstrating the robustness of our proposed method. **1071 1072** The analysis of Table 6, which presents the performance and fairness metrics of models on the **1073** MultiNLI dataset, follows a similar structure to that of Table 1. The general observations about **1074** model performance and the impact of incorporating fairness learning strategies (such as FL Min., **1075** FL Maj., and FL All) are consistent with the results discussed for the CelebA dataset. 
+
+> **1076** In summary, incorporating the **FL Min.** strategy across all models for the MultiNLI dataset leads to 
+
+> **1077** similar as observed with the CelebA dataset. The WGA increases, and the fairness 
+
+In summary, incorporating the **FL Min.** strategy across all models for the MultiNLI dataset leads to similar improvements as observed with the CelebA dataset. The WGA increases, and the fairness disparities (as indicated by DP, EOp, and EOD) are reduced. These results emphasize that focusing on disadvantaged groups during model training enhances both the performance for those groups and overall fairness. 
+
+**1078 1079** 
+
+20 
+
+## **1080** 
+
+Table 6: Performance and Fairness Metrics of Models on the MultiNLI Dataset 
+
+|**1081**<br>**1082**<br>**1083**<br>**1084**<br>**1085**<br>**1086**<br>**1087**<br>**1088**<br>**1089**<br>**1090**<br>**1091**<br>**1092**<br>**1093**<br>**1094**<br>**1095**<br>**1096**<br>**1097**<br>**1098**<br>**1099**<br>**1100**<br>**1101**||Table 6: Performance and Fairness Metrics of Models on the MultiNLI Dataset|
+|---|---|---|
+|||Model<br>ACC_↑_(%)<br>BA_↑_(%)<br>WGA_↑_(%)<br>DP_↓_(%)<br>EOp_↓_(%)<br>EOD_↓_(%)<br>AER_↑_(%)|
+|||**ERM**<br>82.6 ± 0.3<br>82.6 ± 0.3<br>67.3 ± 2.6<br>47.6 ± 1.2<br>14.6 ± 1.1<br>12.5 ± 1.5<br>57.1 ± 4.0<br>+ FL Min.<br>82.7 ± 0.4<br>82.7 ± 0.4<br>**71.0 ± 1.5**<br>**45.5 ± 0.7**<br>**12.2 ± 1.0**<br>**10.8 ± 1.4**<br>**60.2 ± 3.8**<br>+ FL Maj.<br>**82.8 ± 0.2**<br>**82.8 ± 0.2**<br>66.8 ± 2.7<br>47.7 ± 1.4<br>14.7 ± 1.2<br>12.7 ± 1.5<br>55.6 ± 4.1<br>+ FL All<br>**82.8 ± 0.2**<br>**82.8 ± 0.2**<br>70.5 ± 2.2<br>45.8 ± 1.1<br>12.5 ± 1.1<br>11.0 ± 1.0<br>59.0 ± 4.0<br>**GroupDRO**<br>80.8 ± 0.6<br>80.8 ± 0.3<br>77.2 ± 1.2<br>40.7 ± 0.4<br>8.8 ± 0.7<br>5.9 ± 0.9<br>74.8 ± 6.5<br>+ FL Min.<br>80.7 ± 0.8<br>80.7 ± 0.8<br>**78.3 ± 1.4**<br>**39.6 ± 0.7**<br>**7.5 ± 0.6**<br>**5.5 ± 0.8**<br>**77.2 ± 7.1**<br>+ FL Maj.<br>**81.2 ± 0.5**<br>**81.2 ± 0.5**<br>75.0 ± 2.9<br>42.5 ± 0.6<br>9.1 ± 0.7<br>6.0 ± 1.2<br>72.5 ± 5.6<br>+ FL All<br>**81.2 ± 0.4**<br>**81.2 ± 0.4**<br>76.8 ± 1.0<br>41.6 ± 0.9<br>8.3 ± 0.8<br>5.7 ± 0.9<br>74.9 ± 6.7<br>**DFR**<br>81.9 ± 0.4<br>81.9 ± 0.4<br>74.1 ± 1.0<br>43.1 ± 0.5<br>9.1 ± 0.7<br>6.7 ± 0.8<br>65.1 ± 5.2<br>+ FL Min.<br>81.9 ± 0.3<br>81.9 ± 0.3<br>**76.0 ± 1.0**<br>**42.0 ± 0.4**<br>**8.0 ± 0.6**<br>**6.3 ± 0.7**<br>67.3 ± 5.4<br>+ FL Maj.<br>**82.1 ± 0.7**<br>**82.1 ± 0.7**<br>73.0 ± 2.1<br>43.9 ± 0.8<br>9.0 ± 1.0<br>6.8 ± 0.9<br>**63.4 ± 7.1**<br>+ FL All<br>**82.1 ± 0.5**<br>**82.1 ± 0.5**<br>74.7 ± 1.5<br>42.9 ± 0.5<br>8.5 ± 0.7<br>6.6 ± 0.7<br>66.0 ± 6.0<br>**Lu et al. (2024)**<br>82.0 ± 0.2<br>82.0 ± 0.2<br>72.8 ± 0.7<br>44.7 ± 0.9<br>10.1 ± 0.6<br>8.3 ± 0.6<br>64.7 ± 5.1<br>+ FL Min.<br>82.0 ± 0.2<br>82.0 ± 0.2<br>**75.0 ± 0.6**<br>**42.6 ± 0.8**<br>**9.0 ± 0.5**<br>**7.5 ± 0.6**<br>**66.9 ± 5.2**<br>+ FL Maj.<br>82.5 ± 0.4<br>82.5 ± 0.4<br>71.8 ± 1.5<br>44.8 ± 1.2<br>10.7 ± 1.2<br>8.4 ± 1.0<br>62.7 ± 6.7<br>+ FL All<br>**82.6 ± 0.1**<br>**82.6 ± 0.1**<br>74.7 ± 0.6<br>43.1 ± 0.9<br>9.1 ± 0.6<br>7.7 ± 0.6<br>66.3 ± 5.0|
+||C.2<br>CALCULATION OFCORRELATIONCOEFFICIENTS||
+
+
+> **1102** To verify that mitigating a new bias does not interfere with previously achieved fairness improve- 
+
+> **1103** ments, we calculated the Pearson correlation coefficients between performance changes across de- **1104** biasing stages. Specifically, we examined the changes in metrics unrelated to gender bias after **1105** mitigating gender bias, relative to the original ERM model. The following metrics were used for **1106** each model: **DP (R)** (racial fairness), **EOp (R)** , **EOD (R)** and **ACC** (accuracy). 
+
+> **1107 1. Extract Metrics and Compute Changes 1108** The metrics were extracted from Table 7. **1109** debiasing stage relative to the ERM baseline. **1110** 
+
+The metrics were extracted from Table 7. For each metric _M_ , we calculated the change ∆ _M_ at each debiasing stage relative to the ERM baseline. 
+
+For DistilBERT-base, the changes are: 
+
+**1111 1112** 
+
+- **1113** • **Changes at FLoRa Afr. stage** : ∆DP (R)Afr. = 33 _._ 7 _−_ 38 _._ 2 = _−_ 4 _._ 5, ∆EOp (R)Afr. = **1114** 14 _._ 2 _−_ 14 _._ 9 = _−_ 0 _._ 7, ∆EOD (R)Afr. = 24 _._ 4 _−_ 26 _._ 5 = _−_ 2 _._ 1, ∆ACCAfr. = 79 _._ 6 _−_ 79 _._ 5 = +0 _._ 1. 
+
+**1115** 
+
+- **1116** • **Changes at FLoRa Fe. stage** : ∆DP (R)Fe. = 32 _._ 8 _−_ 38 _._ 2 = _−_ 5 _._ 4, ∆EOp (R)Fe. = 13 _._ 1 _−_ **1117** 14 _._ 9 = _−_ 1 _._ 8, ∆EOD (R)Fe. = 23 _._ 0 _−_ 26 _._ 5 = _−_ 3 _._ 5, ∆ACCFe. = 79 _._ 7 _−_ 79 _._ 5 = +0 _._ 2. **1118** 
+
+## **2. Form Vectors of Changes** 
+
+**1119** 
+
+We form vectors of the changes for the two debiasing stages: **X** = [ _−_ 4 _._ 5 _, −_ 0 _._ 7 _, −_ 2 _._ 1 _,_ +0 _._ 1] (FLoRa Afr.), **Y** = [ _−_ 5 _._ 4 _, −_ 1 _._ 8 _, −_ 3 _._ 5 _,_ +0 _._ 2] (FLoRa Fe.). 
+
+**1120** 
+
+**1121** 
+
+**1122** 
+
+## **3. Compute Correlation Coefficient** 
+
+**1123** 
+
+**1124** The Pearson correlation coefficient _r_ between the vectors **X** and **Y** was calculated. For DistilBERT- **1125** base, the resulting correlation coefficient is: 
+
+**1126** 
+
+_r_ = 0 _._ 97 
+
+**1127** 
+
+> **1128 4. Results for BERT-base Model** 
+
+**1129** 
+
+Similarly, for the BERT-base model, we calculated: 
+
+**1130** 
+
+**1131** 
+
+- **Changes at FLoRa Afr. and FLoRa Fe. stages** : **X** = [ _−_ 13 _._ 1 _, −_ 4 _._ 6 _, −_ 8 _._ 9 _, −_ 0 _._ 2] (FLoRa 
+
+- **1132** Afr.), **Y** = [ _−_ 14 _._ 7 _, −_ 5 _._ 8 _, −_ 10 _._ 3 _, −_ 0 _._ 1] (FLoRa Fe.). 
+
+- **1133** 
+
+   - **Correlation Coefficient** : _r_ = 0 _._ 99. 
+
+21 
+
+## **1134** 
+
+|**1135**<br>**1136**<br>**1137**<br>**1138**<br>**1139**<br>**1140**<br>**1141**<br>**1142**<br>**1143**<br>**1144**<br>**1145**<br>**1146**<br>**1147**<br>**1148**<br>**1149**<br>**1150**<br>**1151**<br>**1152**<br>**1153**<br>**1154**<br>**1155**<br>**1156**<br>**1157**<br>**1158**<br>**1159**<br>**1160**<br>**1161**<br>**1162**<br>**1163**<br>**1164**<br>**1165**<br>**1166**<br>**1167**<br>**1168**<br>**1169**<br>**1170**<br>**1171**<br>**1172**<br>**1173**<br>**1174**<br>**1175**<br>**1176**<br>**1177**<br>**1178**<br>**1179**<br>**1180**<br>**1181**<br>**1182**<br>**1183**<br>**1184**<br>**1185**<br>**1186**<br>**1187**|Table 7: Performance and fairness comparison during progressive debiasing of sensitive attributes<br>for DistilBERT-base and BERT-base.|Table 7: Performance and fairness comparison during progressive debiasing of sensitive attributes<br>for DistilBERT-base and BERT-base.|Table 7: Performance and fairness comparison during progressive debiasing of sensitive attributes<br>for DistilBERT-base and BERT-base.|Table 7: Performance and fairness comparison during progressive debiasing of sensitive attributes<br>for DistilBERT-base and BERT-base.|Table 7: Performance and fairness comparison during progressive debiasing of sensitive attributes<br>for DistilBERT-base and BERT-base.|Table 7: Performance and fairness comparison during progressive debiasing of sensitive attributes<br>for DistilBERT-base and BERT-base.|
+|---|---|---|---|---|---|---|
+||**Metric**|**DistilBERT-base**||**BERT-base**|||
+|||**ERM**<br>**FLoRa Afr.**<br>**FLoRa Fe.**||**ERM**<br>**FLoRa Afr.**<br>**FLoRa Fe.**|||
+||||||||
+||Other TPR<br>Afr. TPR<br>Other FPR<br>Afr. FPR<br>DP (R)_↓_<br>EOp (R)_↓_<br>**EOD (R)**_↓_<br>Male TPR<br>Fe. TPR<br>Male FPR<br>Fe. FPR<br>DP (G)_↓_<br>EOp (G)_↓_<br>**EOD (G)**_↓_|75.2 ± 2.0<br>90.1 ± 1.7<br>18.9 ± 3.1<br>57.1 ± 2.7<br>38.2 ± 1.4<br>14.9 ± 1.1<br>26.5 ± 0.7<br>80.5 ± 2.1<br>67.5 ± 2.9<br>19.7 ± 2.1<br>28.6 ± 3.0<br>7.4 ± 1.3<br>13.0 ± 0.5<br>11.3 ± 1.1|75.1 ± 1.9<br>77.0 ± 1.7<br>90.1 ± 1.7<br>90.1 ± 1.5<br>18.7 ± 2.7<br>19.6 ± 2.5<br>52.4 ± 2.9<br>52.4 ± 2.0<br>33.7 ± 1.4<br>32.8 ± 1.1<br>14.2 ± 1.0<br>13.1 ± 1.0<br>24.4 ± 0.6<br>**23.0 ± 0.6**<br>80.5 ± 2.1<br>80.6 ± 2.0<br>67.5 ± 3.1<br>78.6 ± 2.8<br>19.3 ± 1.7<br>20.1 ± 2.1<br>28.6 ± 3.1<br>33.0 ± 2.9<br>7.6 ± 1.1<br>12.9 ± 2.2<br>13.0 ± 0.5<br>2.0 ± 2.1<br>11.2 ± 0.7<br>**7.4 ± 0.6**|77.1 ± 1.7<br>90.1 ± 1.1<br>20.5 ± 4.0<br>47.6 ± 4.4<br>27.1 ± 0.9<br>13.0 ± 0.8<br>20.1 ± 0.4<br>82.5 ± 2.1<br>64.3 ± 2.0<br>21.0 ± 3.8<br>28.6 ± 2.6<br>7.6 ± 1.5<br>18.2 ± 0.8<br>12.9 ± 1.1|77.0 ± 1.8<br>85.4 ± 2.0<br>19.3 ± 3.7<br>33.3 ± 3.6<br>14.0 ± 1.0<br>8.4 ± 1.1<br>11.2 ± 0.6<br>81.0 ± 1.8<br>64.3 ± 2.0<br>20.1 ± 3.6<br>28.6 ± 2.6<br>8.5 ± 1.4<br>16.7 ± 0.4<br>12.6 ± 0.9|78.2 ± 1.6<br>85.4 ± 2.2<br>20.9 ± 4.1<br>33.3 ± 2.9<br>12.4 ± 0.7<br>7.2 ± 1.0<br>**9.8 ± 0.5**<br>81.0 ± 1.7<br>74.2 ± 1.8<br>21.0 ± 3.7<br>28.6 ± 2.1<br>7.6 ± 1.0<br>8.8 ± 1.4<br>**8.2 ± 0.4**|
+||||||||
+||**ACC**_↑_|79.5 ± 0.2|79.6 ± 0.2<br>**79.7 ± 0.3**|**79.8 ± 0.3**|79.6 ± 0.5|79.7 ± 0.4|
+||* Bold values indicate the best performance in each category, while underlined values represent the<br>second-best results. “R” refers to Race, and “G” refers to Gender.<br>**5. Summary**<br>The high correlation coeffcients (0.97 for DistilBERT and 0.99 for BERT) indicate a strong positive<br>relationship between the changes in metrics across debiasing stages, demonstrating that mitigat-<br>ing a new bias does not adversely affect previously achieved improvements, effectively preventing<br>catastrophic forgetting.<br>C.3<br>EXPLORING THEIMPACT OFPROCESSINGORDER ONMULTI-SENSITIVEATTRIBUTES<br>Table 8: Performance and fairness comparison during progressive debiasing of sensitive attributes<br>for DistilBERT-base and BERT-base.||||||
+||**Metric**|**DistilBERT-base**||**BERT-base**|||
+|||**ERM**<br>**FLoRa Fe.**<br>**FLoRa Afr.**||**ERM**<br>**FLoRa Fe.**<br>**FLoRa Afr.**|||
+||||||||
+||DP (R)_↓_<br>EOp (R)_↓_<br>**EOD(R)**_↓_<br>DP (G)_↓_<br>EOp (G)_↓_<br>**EOD(G)**_↓_|38.2 ± 1.4<br> <br>14.9 ± 1.1<br> <br>26.5 ± 0.7<br> <br>7.4 ± 1.3<br> <br>13.0 ± 0.5<br>11.3 ± 1.1|37.8 ± 1.2<br>32.9 ± 1.2<br>14.7 ± 1.1<br>13.2 ± 1.1<br>26.0 ± 0.7<br>**23.1 ± 0.7**<br>13.0 ± 2.1<br>12.8 ± 2.2<br>5.0 ± 1.9<br>3.7 ± 1.7<br>7.3 ± 0.7<br>**7.2 ± 0.6**|27.1 ± 0.9<br>13.0 ± 0.8<br>20.1 ± 0.4<br>7.6 ± 1.5<br>18.2 ± 0.8<br>12.9 ± 1.1|26.7 ± 0.9<br>12.1 ± 1.0<br>12.4 ± 1.2<br>7.0 ± 1.1<br>19.7 ± 0.5<br>**9.6 ± 0.7**<br>8.0 ± 1.2<br>8.5 ± 1.0<br>8.9 ± 1.5<br>8.8 ± 1.2<br>8.4 ± 0.7<br>**8.3 ± 0.5**||
+||**ACC**_↑_|79.5 ± 0.2<br>|**79.6 ± 0.3**<br>**79.6 ± 0.2**|79.8 ± 0.3|79.8 ± 0.5<br>**79.9 ± 0.4**||
+||* Bold values indicate the best performance in each category, while underlined values represent the<br>second-best results. “R” refers to Race, and “G” refers to Gender.<br>We conducted additional experiments to investigate the impact of varying the sequence of debiasing<br>(FairLORA Race frst) and addressing multiple biases simultaneously. As shown in Table 8, the<br>results indicate that the order of debiasing has negligible impact on the fnal outcomes. This fnding<br>aligns with our theoretical explanation that FairLoRA exhibits a “forgetting-avoidance” property,<br>whereby corrections for distinct sensitive attributes are encapsulated in independent LoRA modules.||||||
+
+
+22 
+
+**1188** This design ensures that adjustments made for one attribute do not interfere with those made for **1189** others. **1190 1191** Moreover, as illustrated in Table 9, the results demonstrate that whether biases are mitigated sequen- **1192** tially or simultaneously, the overall outcomes remain largely consistent. This robustness arises from FairLoRA’s modular architecture, which stores adjustments for each sensitive attribute in separate **1193** LoRA modules, allowing independent corrections without cross-attribute interference. **1194 1195 1196** Table 9: Comparison of Progressive Debiasing and Simultaneous Debiasing Approaches. **1197 DistilBERT-base BERT-base 1198 Metric 1199 Afr.Fisrt Fe.Fisrt Together Afr.Fisrt Fe.Fisrt Together 1200** DP (R) _↓_ 32.8 ± 1.1 32.9 ± 1.2 33.2 ± 1.2 12.4 ± 0.7 12.1 ± 1.0 12.8 ± 1.1 **1201** EOp (R) _↓_ 13.1 ± 1.0 13.2 ± 1.1 13.3 ± 1.1 7.2 ± 1.0 7.0 ± 1.1 7.5 ± 1.2 **1202 EOD(R)** _↓_ **23.0 ± 0.6** 23.1 ± 0.7 23.3 ± 0.8 9.8 ± 0.5 **9.6 ± 0.7** 10.0 ± 0.7 **1203** DP (G) _↓_ 12.9 ± 2.2 12.8 ± 2.2 13.1 ± 2.3 7.6 ± 1.0 8.5 ± 1.0 8.0 ± 1.2 **1204** EOp (G) _↓_ 2.0 ± 2.1 3.7 ± 1.7 4.7 ± 2.2 8.8 ± 1.4 8.8 ± 1.2 9.0 ± 1.4 **1205 EOD(G)** _↓_ 7.4 ± 0.6 **7.2 ± 0.6** 7.4 ± 0.8 **8.2 ± 0.4** 8.3 ± 0.5 8.5 ± 0.7 **1206 ACC** _↑_ **79.7 ± 0.3** 79.6 ± 0.2 79.6 ± 0.3 79.7 ± 0.4 **79.9 ± 0.4** 79.7 ± 0.4 **1207 1208** * Afr.First refers to applying FairLoRA to address bias for African Americans first, while Fe.First **1209** refers to addressing bias for females first, and Together represents simultaneous bias mitigation for **1210** both groups. **1211** 
+
+**1212** D IMPACT OF THRESHOLD ON DISCRIMINATOR TPR AND FPR FOR **1213 1214** DEMOGRAPHIC GROUPS **1215** 
+
+**1216 1217 1218 1219 1220 1221 1222 1223 1224 1225 1226 1227 1228 1229 1230 1231 1232 1233 1234** 
+
+**1235 1236 1237 1238 1239 1240** 
+
+**African American Group Analysis (Left Pair of Plots in Figure 3)** The top-left plot illustrates the variation of True Positive Rate (TPR) and False Positive Rate (FPR) for the “African American” group as a function of the threshold. As the threshold increases, both TPR and FPR decrease. The reduction in TPR suggests that a higher threshold leads to stricter classification, reducing the number of true positives. Meanwhile, the rapid decrease in FPR indicates fewer false positives. 
+
+The bottom-left plot shows the TPR/FPR ratio across different thresholds. This ratio peaks at approximately 0.7-0.8, indicating an optimal balance between TPR and FPR. Beyond this peak, the ratio declines, suggesting diminishing benefits from further increasing the threshold due to a disproportionate reduction in TPR compared to the decline in FPR. Therefore, this peak threshold can be used to guide optimal threshold selection, ensuring fairness and maintaining model performance. 
+
+**Female Group Analysis (Right Pair of Plots in Figure 3)** The top-right plot shows the changes in TPR and FPR for the “Female” group, following a similar pattern to the “African American” group. As the threshold increases, both TPR and FPR decrease, with higher thresholds making the model stricter, leading to a reduction in both true positives and false positives. 
+
+The bottom-right plot depicts the TPR/FPR ratio, which also peaks around the 0.7-0.8 threshold range, indicating the threshold range that maximizes classification efficiency for the “Female” group. After this peak, the ratio starts to decline, suggesting that further increases in the threshold reduce classification effectiveness. Thus, selecting a threshold near this peak ensures optimal fairness while retaining classification accuracy. 
+
+**Summary** For both the “African American” and “Female” groups in the HateXplain dataset, the TPR/FPR ratio reaches its peak around a threshold of 0.7-0.8, indicating that this range provides the optimal balance between fairness and classification performance. For other datasets, a similar analysis can be conducted to determine the optimal threshold range that ensures FairLoRA effectively mitigates biases while maintaining overall model efficacy. 
+
+**1241** 
+
+23 
+
+**1242 1243 1244 1245 1246 1247 1248 1249 1250 1251 1252** 
+
+**1253** 
+
+**1254** 
+
+**1255 1256 1257 1258 1259 1260 1261 1262 1263 1264 1265 1266 1267 1268 1269 1270 1271 1272 1273 1274 1275 1276 1277 1278 1279 1280 1281** 
+
+**1282** Figure 3: TPR and FPR Analysis with TPR/FPR Ratio for African American and Female Groups **1283** across Different Thresholds. **1284** 
+
+**1285 1286 1287 1288 1289 1290 1291 1292 1293 1294** 
+
+**1295** 
+
+24

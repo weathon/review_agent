@@ -1,0 +1,780 @@
+## DISK: DIFFERENTIALLY PRIVATE OPTIMIZER WITH SIMPLIFIED KALMAN FILTER FOR NOISE REDUCTION 
+
+## **Xinwei Zhang** 
+
+University of Southern California xinweiz@usc.edu 
+
+## **Zhiqi Bu** 
+
+Amazon AI woodyx218@gmail.com 
+
+## **Borja Balle** 
+
+Google DeepMind bballe@google.com 
+
+## **Mingyi Hong** 
+
+University of Minnesota mhong@umn.edu 
+
+## **Meisam Razaviyayn** 
+
+University of Southern California razaviya@usc.edu 
+
+## **Vahab Mirrokni** 
+
+Google Research mirrokni@google.com 
+
+## ABSTRACT 
+
+Differential privacy (DP) offers a robust framework for safeguarding individual data privacy. To utilize DP in training modern machine learning models, differentially private optimizers have been widely used in recent years. A popular approach to privatize an optimizer is to clip the individual gradients and add sufficiently large noise to the clipped gradient. This approach led to the development of DP optimizers that have comparable performance with their non-private counterparts in fine-tuning tasks or in tasks with a small number of training parameters. However, a significant performance drop is observed when these optimizers are applied to large-scale training. This degradation stems from the substantial noise injection required to maintain DP, which disrupts the optimizer’s dynamics. This paper introduces DiSK, a novel framework designed to significantly enhance the performance of DP optimizers. DiSK employs Kalman filtering, a technique drawn from control and signal processing, to effectively denoise privatized gradients and generate progressively refined gradient estimations. To ensure practicality for large-scale training, we simplify the Kalman filtering process, minimizing its memory and computational demands. We establish theoretical privacyutility trade-off guarantees for DiSK, and demonstrating provable improvements over standard DP optimizers like DPSGD in terms of iteration complexity upperbound. Extensive experiments across diverse tasks, including vision tasks such as CIFAR-100 and ImageNet-1k and language fine-tuning tasks such as GLUE, E2E, and DART, validate the effectiveness of DiSK. The results showcase its ability to significantly improve the performance of DP optimizers, surpassing state-of-theart results under the same privacy constraints on several benchmarks. 
+
+## 1 INTRODUCTION 
+
+Data privacy has become one of the major concerns in modern machine learning systems. Differential Privacy (DP), with its rigorous mathematical foundation, offers a powerful solution. DP provides a framework for developing training algorithms that safeguard the privacy of individuals’ data used to train machine learning models. Among various algorithms, Differentially Private Stochastic Gradient Descent (DPSGD) (Abadi et al., 2016) and its variants (Li et al., 2021; Yu et al., 2021; Tang et al., 2024) have emerged as popular choices for training various models, including computer vision (De et al., 2022) and language models (Bu et al., 2023; 2024). These algorithms inject noise into the training process to guarantee privacy. However, this noise injection often comes at a significant cost to model performance, limiting the widespread adoption of DP optimizers (Jayaraman & Evans, 2019). For example, (McMahan et al., 2018; De et al., 2022) observed that DP training led to a 15% drop in model accuracy on the Reddit dataset and a 30% drop on CIFAR-10 compared to non-private training. This challenge has limited the application of DP optimizers primarily to small models or parameter-efficient fine-tuning, as highlighted by (Li et al., 2021). 
+
+Many recent works aim to improve differentially private (DP) training performance. These include applying low-pass filters to separate gradients from noise (Zhang et al., 2024a), injecting correlated 
+
+1 
+
+noise with algorithms like DP-FTLR (Koloskova et al., 2023; Choquette-Choo et al., 2024), using sharpness-aware minimization for flatter loss landscapes that are less sensitive to DP noise (Park et al., 2023), adaptive clipping (Andrew et al., 2021; Lin et al., 2022; Hu et al., 2021), and model structure optimization (Bu et al., 2024; Papernot et al., 2021; De et al., 2022). However, these methods often require extra memory, lack theoretical guarantees, or have limited applicability. Therefore, there is a strong demand to design a new approach that 1) is memory and computation efficient for implementation, 2) has a theoretical guarantee, and 3) is compatible with a wide range of existing DP optimization algorithms and models. To meet this demand, we leverage the Kalman filter, a tool from control theory, to improve gradient estimates in DP optimization. We further simplify our algorithm for memory and computational efficiency, while maintaining theoretical grounding and broad compatibility with existing DP algorithms and models. 
+
+The tools in signal processing and control theory have been leveraged to design novel optimization algorithms. In the context of DP optimization, the error-feedback approach has been adopted to reduce the bias caused by the clipping operation (Zhang et al., 2024b); the low-pass and high-pass filters have been used to separate the gradient from the DP noise (Zhang et al., 2024a; Koloskova et al., 2023; Choquette-Choo et al., 2024); the low-pass spatial filter, including Gaussian and Laplace filters have been used to smooth the privatized model or gradient across dimensions (Wang et al., 2020a; 2021; Liu et al., 2022). These methods effectively improve DP optimizers’ performance. 
+
+## 1.1 CONTRIBUTIONS 
+
+Our approach centers on constructing a dynamic system where the gradient serves as its state. We treat the privatized gradient as a noisy observation of the true gradient within this system. By applying a Kalman filter, we obtain a more accurate estimate of the true gradient by leveraging the gradient dynamics and past estimates, thereby enhancing the performance of DP optimizers. To address the inherent inefficiency of the Kalman filter, we introduce a series of simplifications that reduce memory and computational overhead. Our main contributions can be summarized as follows: 
+
+- **Algorithm Design:** We introduce a novel Kalman filter-based approach designed to mitigate DP noise and enhance the performance of various DP optimizers. 
+
+- **Algorithm Simplification:** We simplify the Kalman filtering process to significantly reduce memory and computational overhead. This simplified approach, DiSK, requires only one additional forward step and two extra optimizer states. 
+
+- **Theoretical Analysis:** We provide theoretical analyses of DiSK, demonstrating that the algorithm is convergent. Moreover, we showed that, compared to DPSGD, DiSK improves the iteration complexity upper-bound by a problem-dependent constant factor. 
+
+- **Numerical Results:** Extensive experiments across various models, datasets, and optimizers demonstrate that DiSK significantly boosts DP training performance. Specifically, under the same (or tighter) privacy budgets _ϵ_ = 8 _, δ_ = 1 _/N_[1] _[.]_[1] , DiSK exhibits substantial improvements in test accuracy for training-from-scratch scenarios: a notable increase from 33 _._ 56% to 36 _._ 89% on the ImageNet-1k dataset, a considerable rise from 63% to 75% on CIFAR-10, and a remarkable improvement from 21% to 42% on CIFAR-100. Furthermore, in fine-tuning tasks, DiSK demonstrates remarkable improvements: an increase from 85% to 89% on CIFAR-100 and an improvement from 81% to 86% on the GLUE dataset. _These results surpass state-of-the-art DP training performance under the same privacy guarantees_ . 
+
+## 2 PRELIMINARIES 
+
+## 2.1 PROBLEM DEFINITION & NOTATIONS 
+
+Typical training procedures require solving the empirical risk minimization (ERM) problem 
+
+**==> picture [268 x 37] intentionally omitted <==**
+
+where **x** _∈_ R _[d]_ is the optimization variable, _D_ = _{ξ_ 1 _, . . . , ξN }_ is the training dataset with _|D|_ = _N_ samples, and _f_ ( _·_ ) denotes the (possibly non-convex) loss function parameterized by **x** and evaluated on sample _ξ_ . For solving the above optimization problem, we rely on iterative procedures, such as 
+
+2 
+
+SGD, where the parameters are updated over the iterations _t_ = 1 _,_ 2 _, . . ._ . Throughout the paper, we use ( _·_ ) _t_ to denote the variables at iteration _t_ , and use **I** _d_ to denote the identity matrix of dimension _d_ . 
+
+## 2.2 DIFFERENTIALLY PRIVATE OPTIMIZATION 
+
+Let us start by recalling the definition of ( _ϵ, δ_ )-Differential Privacy: 
+
+**Definition 1 (** ( _ϵ, δ_ ) **-DP (Dwork & Roth, 2014))** _A randomized mechanism M is said to be_ ( _ϵ, δ_ ) _- differentially private if for any two neighboring datasets D, D[′] (D, D[′] differ only by one sample) and for any measurable output set S, it holds that_ Pr[ _M_ ( _D_ ) _∈S_ ] _≤_ e _[ϵ]_ Pr[ _M_ ( _D[′]_ ) _∈S_ ] + _δ._ 
+
+A widely used approach to achieving differential privacy (DP) when solving ERM problem (1) is to employ differentially private stochastic gradient descent (Abadi et al., 2016) and its variants, such as DP-Adam and DP-Lora (Yu et al., 2021). To ensure DP, DPSGD leverages the Gaussian mechanism (Dwork & Roth, 2014; Abadi et al., 2016), injecting carefully calibrated Gaussian noise into the gradients at each iteration of the optimization process. This noise injection effectively masks the contribution of individual data points, thereby providing the desired privacy guarantee. 
+
+**Definition 2 (Gaussian Mechanism (Dwork & Roth, 2014; Balle & Wang, 2018))** _Suppose an algorithm A_ : _D →_ R _[d] has ℓ_ 2 _sensitivity_ ∆ _A, i.e.,_ max _D,D′ ∥A_ ( _D_ ) _−A_ ( _D[′]_ ) _∥≤_ ∆ _A. Then, for any ϵ >_ 0 _and δ ∈_ [0 _,_ 1] _, by adding a carefully chosen random Gaussian noise to the output of the algorithm, we can make the algorithm_ ( _ϵ, δ_ ) _-DP. More specifically, the mechanism M_ ( _x_ ) = _A_ ( _x_ ) + **w** _,_ with **w** _∼ N_ (0 _, σ_ DP[2] _[I][d]_[)] _[and][σ][DP][satisfies]_ Φ � 2∆ _σADP[−][ϵσ]_ ∆ _A[DP]_ � _−_ e _[ϵ]_ Φ � _−_ 2[∆] _σ[A] DP[−][ϵσ]_ ∆ _A[DP]_ � _≤ δ is_ ( _ϵ, δ_ ) _-DP, where_ Φ( _t_ ) = P[ _N_ (0 _,_ 1) _≤ t_ ] _is the cumulative density function of normal distribution._ 
+
+The DPSGD algorithm, outlined in Algo- **Algorithm 1** DPSGD algorithm rithm 1, operates by first sampling a mini-batch _Bt_ of size _B_ and computing the per-sample gra- **Input: x** 0 _, D, C, η, σ_ DP dients at each iteration _t_ . To guarantee differen- **for** _t_ = 0 _, . . . , T −_ 1 **do** Uniformly draw minibatch _Bt_ from _D_ tial privacy, it then applies the Gaussian mechanism, which involves clipping each per-sample **g** _t_ = _B_[1] � _ξ∈Bt_[clip (] _[∇][f]_[(] **[x]** _[t]_[;] _[ ξ]_[)] _[, C]_[) +] **[ w]** _[t]_ gradient to bound its sensitivity to a maximum where **w** _t ∼N_ (0 _, σ_ DP[2] _[·]_ **[ I]** _[d]_[)] value _C_ and subsequently injecting Gaussian **x** _t_ +1 = **x** _t − ηt_ **g** _t_ , noise. The clipping operation clip ( _∇f, C_ ) = **end for** min �1 _, ∥∇Cf ∥_ � _· ∇f,_ often implemented by scaling the gradient when its norm exceeds _C_ , limits the influence of any single data point, while the added noise further masks individual contributions, ensuring the desired privacy level (Abadi et al., 2016). 
+
+**Theorem 1 (Privacy Guarantee (Abadi et al., 2016))** _Given the number of samples N , the batchsize B, total number of iterations T and clipping threshold C, there exist positive constants u, v, such that for any ϵ <[uB] N_[2][2] _[T] and_ 0 _< δ, by choosing σ_ DP[2] _[≥][v][ C]_[2] _N[T]_[2][ln] _ϵ_[2][(] _δ_[1][)] _, Algorithm 1 is_ ( _ϵ, δ_ ) _-DP._ 
+
+Theorem 1 implies that the variance of the DP noise injected into the gradients, E[ _∥_ **w** _t∥_[2] ] = _dσ_ DP[2][,] scales linearly with both the number of iterations _T_ and the number of parameters _d_ . This presents a significant challenge in modern deep learning, where models size _d_ is large (e.g., 22 _M_ -632 _M_ for ViT (Dosovitskiy et al., 2020), 137 _M_ -1 _._ 6 _B_ for GPT-2 (Radford et al., 2019)) and require extensive training (e.g., 300 _K_ for ViT (Dosovitskiy et al., 2020) and 250 _K_ for training Llama (Touvron et al., 2023)). Consequently, the magnitude of the injected DP noise can become substantial, leading to a considerable degradation in model performance. 
+
+## 2.3 KALMAN FILTER 
+
+The Kalman filter is a powerful algorithm that provides estimates of unknown variables by iteratively incorporating a series of measurements over time (Kalman, 1960; Welch et al., 1995). To illustrate its application, let us consider a linear dynamic system characterized by the _System update_ and _Observation_ equations: 
+
+**==> picture [286 x 25] intentionally omitted <==**
+
+3 
+
+where **A** _∈_ R _[d][θ][×][d][θ]_ , **C** _∈_ R _[d][ψ][×][d][θ]_ are the transition and observation matrices; _**θ** t ∈_ R _[d][θ]_ is the unknown variable to be tracked/estimated; _**ψ** t ∈_ R _[d][ψ]_ denotes the observation of the system; **u** _t ∈_ R _[d][θ]_ denotes the known input; and **v** _t ∈_ R _[d][θ] ,_ **w** _t ∈_ R _[d][ψ]_ are the process and observation noises that follow Gaussian distribution _N_ (0 _,_ Σ **v** ) _, N_ (0 _,_ Σ **w** ), respectively. Then, the Kalman filter uses the following updates to track _{_ _**θ** t}_ (Kalman, 1960; Welch et al., 1995): 
+
+**==> picture [234 x 13] intentionally omitted <==**
+
+**==> picture [318 x 62] intentionally omitted <==**
+
+The filter first _predicts_ the state _**θ**_[˜] _t|t−_ 1 by system dynamics, and compute the _filter gain_ **K** _t ∈_ R _[d][θ][×][d][ψ]_ based on the covariance matrix **P** _t ∈_ R _[d][θ][×][d][θ]_ , and _corrects_ the prediction with system observation _**ψ** t_ to obtain the estimate _**θ**_[˜] _t_ at time _t_ . The Kalman filter makes use of both the noisy observation and the prior knowledge of the system dynamics to obtain an accurate estimation of the state _**θ** t_ . 
+
+A key innovation of this work is to treat the privatized gradients in the DP optimization as noisy observations of the true underlying gradients. By constructing gradient dynamics using Taylor expansion, we establish a framework for applying the Kalman filter to refine these noisy observations and obtain more accurate gradient estimates. To ensure practical applicability for large-scale models, we simplify the Kalman filter, significantly reducing its memory and computational footprint. These improved gradient estimates ultimately lead to enhanced performance in differentially private optimizers. 
+
+## 2.4 RELATED WORKS 
+
+**Optimization with filters and controllers:** The use of filters and controllers in designing and analyzing optimization algorithms has a rich history. Researchers have leveraged high-pass and low-pass filters to enhance gradient estimation in zeroth-order optimization (Chen et al., 2022), employed PID controllers for both centralized and distributed optimization (Wang et al., 2020b), and analyzed optimizers through the lens of control theory, treating them as dynamic systems (Lessard et al., 2016; Hu & Lessard, 2017; Muehlebach & Jordan, 2019; Mohammadi et al., 2024; Badithela & Seiler, 2019; Cyrus et al., 2018; Scherer et al., 2023; Zhang et al., 2023). 
+
+**Kalman filter for optimization:** The Kalman filter has been utilized in convex optimization for reducing stochastic gradient noise (Bittner & Pronzato, 2004; Vuckovic, 2018). Vuckovic (2018) uses the dynamics of the optimization variable and the gradient to construct the Kalman filter to analyze and improve the performance of momentum methods. Bittner & Pronzato (2004) uses gradient and Hessian as its states to construct the dynamic system for SGD to construct a stopping rule. However, these approaches, with their direct application of the Kalman filter, incur prohibitively high computational and memory costs, ranging from _O_ ( _d_[3] ) to _O_ ( _d_[6] ), rendering them impractical for training large-scale machine learning models. 
+
+**Improving DP optimization:** Numerous techniques have been proposed to enhance DP optimization by mitigating the impact of DP noise. These include adaptive gradient clipping methods that dynamically adjust clipping thresholds (Andrew et al., 2021; Bu et al., 2024), parameter-efficient training strategies employing adapters, low-rank weights, or quantization (Yu et al., 2021; Luo et al., 2021; Yu et al., 2021), and the design of specialized model architectures less susceptible to noise perturbations (De et al., 2022; Papernot et al., 2021; Wang et al., 2020a). Furthermore, drawing inspiration from signal processing, researchers have explored the use of colored high-frequency DP noise to separate it from the gradient (Koloskova et al., 2023) and the application of low-pass filters to extract the gradient signal from noisy observations (Zhang et al., 2024a). 
+
+## 3 ALGORITHM DESIGN 
+
+This section introduces the general Noise Reduction for **Di** fferentially Private Optimizers with **S** implified **K** alman Filter (DiSK) framework. This approach leverages the inherent dynamics of the gradient and employs Kalman filtering to obtain denoised estimates of the true gradients from 
+
+4 
+
+their noisy, privatized counterparts. To enhance its practicality for modern deep learning, Section 3.2 details a simplified version of the Kalman filter updates, designed for memory and computational efficiency. 
+
+## 3.1 GRADIENT DYNAMIC AND KALMAN FILTER 
+
+To explain our idea of using the Kalman filter for denoising the gradient, let us start by first establishing a dynamic system for the gradients, comprising a “system update” equation and an “observation” equation: The **system update** of the gradient dynamics can be derived by the Taylor expansion and quantifying the change of the gradient at iteration _t_ : 
+
+_∇F_ ( **x** _t_ ) = _∇F_ ( **x** _t−_ 1) + **H** _t ·_ ( **x** _t −_ **x** _t−_ 1) + **v** _t,_ (4) where **H** _t_ := _∇_[2] _F_ ( **x** _t−_ 1) _∈_ R _[d][×][d]_ and **v** _t_ = 12 �01 _[∇]_[3] _[F]_[(] **[x]** _[t][−]_[1][)(] _[z]_ **[x]** _[t]_[+ (1] _[ −][z]_[)] **[x]** _[t][−]_[1][)] _[⊗]_[2][d] _[z]_[is][the] remainder and ( _·_ ) _[⊗]_ denotes the tensor vector product. The **observation** of the system is defined as the privatized gradient **g** _t_ , which is a stochastic mapping of the true gradient: 
+
+**==> picture [320 x 28] intentionally omitted <==**
+
+where **w** _t[′]_[is the observation noise containing the DP noise and sub-sampling noise;] **[ C]** _[t]_[is the obser-] vation matrix. If the clipping operation is inactive and _B_ = _D_ , i.e., the full batch gradient is used, then **C** _t_ = **I** _d_ . Otherwise, **C** _t_ depends on the clipping factor and the mini-batch _B_ . Combining the system update (4) and the observation (5), we can model the system dynamic of the gradient as: 
+
+**==> picture [341 x 26] intentionally omitted <==**
+
+Let us compare our dynamic system with the general one in (2): In our dynamic system, the gradient _∇F_ ( **x** _t_ ) plays the role of the state _**θ** t_ . Other parameters in (2) have the following correspondence to gradient dynamics: **A** = **I** _d,_ **C** = **C** _t_ , the input **u** _t_ = **H** _t_ ( **x** _t −_ **x** _t−_ 1), and the observation _**ψ** t_ = **g** _t_ . With the above mapping, we can apply the Kalman filter that combines the **system update** and the **observation** of the gradient to improve the overall estimation quality of the actual gradient beyond only using the observation **g** _t_ . However, there are two key challenges when applying Kalman filter to (6): 1) the input **H** _t_ ( **x** _t −_ **x** _t−_ 1) is hard to obtain as computing the Hessian matrix **H** _t_ is challenging for large models, and we can only approximate **H** _t_ ( **x** _t−_ **x** _t−_ 1), resulting in a noisy input; 2) the observation matrix **C** _t_ is an unknown time-varying random matrix, resulting a multiplicative observation noise. Due to these differences, the traditional Kalman filter (Kalman, 1960) cannot be directly applied. Instead, we apply the Kalman filter with noisy input and multiplicative observation noise proposed in Wu et al. (2016) to our system (6), leading to the update rules: 
+
+**==> picture [364 x 13] intentionally omitted <==**
+
+**==> picture [368 x 76] intentionally omitted <==**
+
+where **P** _t_ denotes the covariance matrix of **g** ˜ _t,_ Σ **H** _,_ Σ **w** _,_ Σ **C** _,_ Σ **v** denote the covariance matrices of the random variables **H** _t,_ **w** _t,_ **C** _t,_ **v** _t_ , respectively, and **H**[˜] _t_ is an instantiation/observation of the unknown Hessian matrix **H** _t_ . The difference between the above Kalman filter and the original Kalman filter (3) is highlighted in magenta color. The variance of the Hessian **H**[˜] _t_ plays a role in updating **P** _t|t−_ 1 _,_ **K** _t_ , and the expectation E[ **C** _t_ ] of the random observation matrix **C** _t_ is used for the updates and its variance Σ **C** also appears in the update of˜ **K** _t_ . Compared to the noisy gradient **g** _t_ , the output of the Kalman filter **g** _t_ has a smaller variance, resulting in improved performance when used in DP optimizers. 
+
+The resulting optimizer with the Kalman filter is given in Algorithm 2. The hyper-parameters of the Kalman filter are the expected observation matrix E[ **C** ] and the variances of the noises in the system, i.e., _σ_ **w**[2] _[,]_[ Σ] **[C]** _[,]_[ Σ] **[H]**[.][Here, we dropped subscript] _[ t]_[ for] **[ C]** _[t]_[for simplicity in our modeling.] 
+
+5 
+
+**Algorithm 2** Optimizer with Kalman Filter 
+
+1: **Input: x** 0 _, D_ ˜ _, η,_ E[ **C** ] _, σ_ **w**[2] _[,]_[ Σ] **[C]** _[,]_[ Σ] **[H]** 2: **Initialize: g** _−_ 1 = 0 _,_ **d** _−_ 1 = 0 _,_ **P** _−_ 1 = _σ_ **w**[2] **[I]** _[d]_ 3: **for** _t_ = 0 _, . . . , T −_ 1 **do** 4: Randomly draw minibatch _Bt_ from _D_ 5: Compute privatized gradient **g** _t_ = _B_[1] � _ξ∈Bt_[clip (] _[∇][f]_[(] **[x]** _[t]_[;] _[ ξ]_[)] _[, C]_[) +] **[ w]** _[t] # Gradient observation_ ˜ ˜ 6: **g** _t|t−_ 1 = **g** _t−_ 1 + **H** _t_ **d** _t−_ 1 _# Prediction_ 7: **P** _t|t−_ 1 = **P** _t−_ 1 + Σ **H** ˜ ˜ _−_ 1 8: **K** ˜ _t_ =˜ **P** _t|t−_ 1 E[ **C** ] _[⊤]_[�] E[ **C** ]( **P** _t|t−_ 1 + Σ **Cg** _t_ **g** _t[⊤]_[)][ E][[] **[C]**[]] _[⊤]_[+] _[ σ]_ **w**[2] **[I]** _[d][−]_[Σ] **[H]** � _# Compute gain_ 9: **g** _t_ = **g** _t|t−_ 1 + **K** _t_ ( **g** _t −_ E[ **C** ]˜ **g** _t|t−_ 1) _# Compute denoised private gradient_ 10: **x** _t_ +1 = OptimizerUpdate( **x** _t, η,_ ˜ **g** _t_ ) _# Parameter update_ 11: **d** _t_ = **x** _t_ +1 _−_ **x** _t # Record update direction_ 12: **P** _t_ = ( **I** _−_ **K** _t_ E[ **C** ]) **P** _t|t−_ 1 _# Update covariance matrix_ 13: **end for** 
+
+3.2 ALGORITHM SIMPLIFICATION 
+
+While Algorithm 2 provides a general framework for applying Kalman filtering to various optimizers, it faces significant challenges in terms of computational and memory demands. Specifically, accurately computing the Hessian matrix ( **H** ) for large models under DP constraints is infeasible, the matrix inversion step introduces a cubic computational complexity ( _O_ ( _d_[3] )), and storing the covariance matrix ( **P** _t_ ) at each iteration requires quadratic memory ( _O_ ( _d_[2] )). To address these limitations and arrive at a practical and memory-efficient algorithm, we propose the following simplifications: 
+
+**Constant C** _t_ **:** We simplify the random matrix **C** _t_ to an identity matrix **I** _d_ , and simply model the randomness in the observation as additive noise only. This simplification is achieved in two steps corresponding to the two sources of randomness in **C** _t_ . First, we remove the impact of clipping in **C** _t_ . This is justified when 1) the clipping threshold _C_ is large enough so that clipping is inactive; or when 2) the clipped gradient _∇FC_ ( **x** ) has zero curl, so that our method optimizes _FC_ ( **x** ), where 
+
+**==> picture [342 x 30] intentionally omitted <==**
+
+Under this assumption, the minibatch clipped gradient _B_[1] � _ξ∈B_[clip (] _[∇][f]_[(] **[x]** _[, ξ]_[)] _[, C]_[)][is][an][unbiased] estimation of _∇FC_ ( **x** ) _._ Thus, E[ **C** _t_ ] = **I** _d_ . Second, the randomness of sub-sampling in **C** _t_ is removed by assuming that the sub-sampled mini-batch gradient only causes additive noise, i.e., _B_ 1 � _ξ∈B_[clip (] _[∇][f]_[(] **[x]** _[, ξ]_[)] _[, C]_[) =] _[ ∇][F][C]_[(] **[x]**[) +] **[ w]**[SGD] _[,]_[ so that] **[ C]**[ =] **[ I]** _[d]_[ and][ Σ] **[C]**[= 0] _[.]_ 
+
+**Hessian estimation:** We apply the following “trick” to bypass the explicit computation of the Hessian matrix, **H** _t_ : we approximate the Hessian-vector product, **H** _t_ ( **d** _t−_ 1), using a finite difference method (Pearlmutter, 1994): 
+
+**==> picture [352 x 25] intentionally omitted <==**
+
+This estimation eliminates the need for expensive Hessian computations and significantly reduces both memory and computational complexity. 
+
+**Simplification of** Σ _H_ **:** A few matrix computation steps in Algorithm 2 are extremely timeconsuming and memory inefficient. Specifically, the matrix inversion in Line 8 of Algorithm 2 incurs a cubic computational cost ( _O_ ( _d_[3] )), which becomes prohibitive for large models with billions of parameters. Therefore, we simplify the algorithm by assuming that the covariance matrix in the Kalman filter is a time-invariant identity matrix scaled with a constant, i.e., Σ _H_ = _σH_[2] **[I]** _[d]_[.][Under] this assumption, the matrices **P** _t_ and **K** _t_ become _pt_ **I** _d, kt_ **I** _d_ , for some scalars _pt, kt_ . Thus, we reduce all matrix computations to efficient scalar-vector multiplications and the memory complexity storing these matrices to _O_ (1), making our algorithm a viable option for DP training of large-scale models. 
+
+**Filter gain simplification:** With the above simplification, the updates of _pt, kt_ simplify to _pt_ = ( _σ_ **w**[2] _[−][σ] ptH_[2] _−_[)(] 1+ _[p][t] σ[−]_ **v**[2][1][+][+] _[σ][σ]_ **w**[2] **v**[2][+] _[σ] H_[2][)] , _kt_ = _[p] p[t] t[−] −_[1] 1[+] + _[σ] σ_ **vv**[2][2][+][+] _[σ][σ] H_ **w**[2][2] _[.]_[ Therefore,] _[ k][t]_[converges to its stable value with a linear] rate, i.e., _∥kt − k∞∥_ = _O_ ( _c[t] k_[)] _[,]_[where] _[c][k]_[=] 22 _σσ_ **ww**[2][2][+3] +3 _[σ] σHH_[2][2][+][+] _[σ][σ]_ **vv**[2][2] _[−]_[+] ~~_[√]_~~ _[√]_ (( _σσ_ **vv**[2][2] ++ _σσHH_[2][2][)(4][)(4] _[σ][σ]_ **ww**[2][2][+][+] _[σ][σ]_ **vv**[2][2] _[−][−]_[3][3] _[σ][σ] HH_[2][2][)][)] _[∈]_[(0] _[,]_[ 1)][(see] 
+
+6 
+
+**Algorithm 3** DiSK: **Di** fferentially private optimizer with **S** implified **K** alman filter 
+
+1: **Input: x** 0 _, D, η, γ, κ, C, σ_ DP 
+
+˜ 2: **Initialize: g** _−_ 1 = **g** 0 _,_ **d** _−_ 1 = 0 
+
+3: **for** _t_ = 0 _, . . . , T −_ 1 **do** 4: Randomly draw minibatch _Bt_ from _D_ 5: **g** _t_ = _B_[1] � _ξ∈Bt_[clip] � 1 _κγ−κ[∇][f]_[(] **[x]** _[t]_[ +] _[ γ]_ **[d]** _[t][−]_[1][;] _[ ξ]_[) + (1] _[ −]_[1] _κγ[−][κ]_[)] _[∇][f]_[(] **[x]** _[t]_[;] _[ ξ]_[)] _[, C]_ � + **w** _t_ ˜ where **w** _t ∼N_ (0 _, σ_ DP[2] _[·]_ **[ I]** _[d]_[)] 6: **g** _t_ = (1 _− κ_ )˜ **g** _t−_ 1 + _κ_ **g** _t # Apply Kalman filter_ 7: **x** _t_ +1 = OptimizerUpdate( **x** _t, η,_ ˜ **g** _t_ ) _# Update model_ 8: **d** _t_ = **x** _t_ +1 _−_ **x** _t # Record update direction_ 9: **end for** 
+
+derivations in Appendix A.3). So we can use constant _kt_ = _κ, ∀ t_ to further simplify the algorithm and avoid iteratively updating _pt_ and recomputing _kt_ for each step. 
+
+With the above simplifications, the complex Algorithm 2 simplifies to DiSK in Algorithm 3. For a detailed walkthrough of this simplification process, please refer to Appendix A.3. This simplified algorithm computes and privatizes the linear combination of the gradient evaluated at two points, **x** ˜ _t,_ **x** _t_ + _γ_ **d** _t_ . Then, this privatized combination undergoes exponential weighted averaging to obtain **g** _t_ , which serves as the input to the base optimizer (Line 7 of Algorithm 3). 
+
+## 3.3 ADDITIONAL DISCUSSION 
+
+**Memory and computation cost:** Compared with the base DP optimizer, Algorithm 3 requires one additional forward step to compute _f_ ( **x** _t_ + _γ_ **d** _t−_ 1; _ξ_ ). This means that the algorithm has at most twice the computational cost of the baseline DP-SGD algorithm.requires two additional states to store: **g** ˜ _t_ and **d** _t_ . Compared to DPSGD, which requires storing theMoreover, Algorithm 3 only model and the gradient, DiSK has at most twice the memory cost; and compared to DPAdam, which requires storing the first- and second-order moments, the algorithm has at most 1 _._ 5 _×_ the memory cost. 
+
+**Connection to NAG and STORM:** Remarkably, Algorithm 3 has an implicit connection to the (unified) Nesterov accelerated gradient (NAG) method (Shen et al., 2023; Sutskever et al., 2013) and the Stochastic Recursive Momentum (STORM) algorithm (Cutkosky & Orabona, 2019). Specifically, by letting the OptimizerUpdate be SGD, assuming clipping is inactive, and setting **w** _t_ = 0 (i.e., without privatizing the gradient) in Algorithm 3, we can make a clear connection: On one hand, DiSK reduces to NAG by choosing _γ_ =[1] _[−] κ[κ][, η]_[=] _[κ,]_[ 1] _[ −][κ]_[=] _[µ]_[, and] _[ B]_[=] _[N]_[.][On the other hand,] the update of DiSK matches STORM by choosing _γ_ = _−_ 1 _, κ_ = _α_ , and _B_ = 1. A detailed derivation and discussion is provided in Appendix A.4. This observation reveals an intriguing connection between NAG (designed for acceleration) and STORM (focused on variance reduction), unifying them within the framework of DiSK, a Kalman filtering-based algorithm. 
+
+**Connection to DOPPLER:** DOPPLER (Zhang et al., 2024a) and DiSK both use a filter to separate the gradient signal from the DP noise. If **g** _t_ only evaluates the gradient at **x** _t_ instead of using the linear combination of gradients at two points, **x** _t,_ **x** _t_ + _γ_ **d** _t−_ 1 in Algorithm 3, Line 5, DiSK becomes DOPPLER with a first-order filter. The key difference is that DOPPLER assumes an underlying low-frequency dynamic of the gradient and applies a time-invariant low-pass filter. Designing the optimal low-pass filter relies on the prior knowledge of the gradient frequency spectrum, which is hard to obtain in practice, and implementing such a high-order low-pass filter results in a large memory overhead. While in DiSK, we do not assume the frequency property of the gradient signal. Instead, we incorporate the gradient dynamics into the filtering procedure and use the Kalman filter, a predictive filtering approach, to reduce the impact of DP noise. 
+
+## 4 THEORETICAL ANALYSIS 
+
+This section includes theoretical analyses of Algorithm 3. Our study establishes the convergence, provable noise reduction, and the privacy-utility trade-off of the algorithm. To facilitate our analysis, we make the following assumptions: 
+
+**A 1 (Smoothness)** _f_ ( _·, ξ_ ) _is L-smooth for any ξ, i.e., ∥∇f_ ( **x** ; _ξ_ ) _−∇f_ ( **y** ; _ξ_ ) _∥≤ L ∥_ **x** _−_ **y** _∥ , ∀ξ ∈ D, ∀_ **x** _,_ **y** _∈_ R _[d] ._ 
+
+7 
+
+**A 2 (Bounded Variance)** _The per-sample gradient has bounded variance with_ E _ξ∈D ∥∇f_ ( **x** ; _ξ_ ) _−∇F_ ( **x** ) _∥_[2] _≤ σSGD_[2] _[,] ∀_ **x** _∈_ R _[d] , where_ E _ξ∈D_ [ _·_ ] _denotes the expectation taken on the randomness over ξ that is uniformly sampled from dataset D._ 
+
+**A 3 (Bounded Gradient)** _Each per-sample gradient has a bounded norm, i.e., ∥∇f_ ( **x** ; _ξ_ ) _∥≤ G, ∀_ **x** _∈_ R _[d] , ∀ξ ∈D._ 
+
+Let us briefly comment on these assumptions: A1 and A2 are standard in non-convex optimization (Allen-Zhu & Hazan, 2016; Zaheer et al., 2018; Abadi et al., 2016); and A3 is commonly used in analyzing the convergence of DP algorithms (Abadi et al., 2016; Wang et al., 2020a; Andrew et al., 2021) to avoid introducing the clipping bias. Since the impact of clipping is not the major focus of this paper, we follow this tradition and use A3 to simplify our theoretical analysis. 
+
+4.1 CONVERGENCE ANALYSIS 
+
+We provide the following convergence results for Algorithm 3, assuming _σ_ DP being a constant. 
+
+**Theorem 2** _Assume A1-A3 hold. Fix σ_ DP[2] _[and choose][ C][≥]_[(1 +][2][(][1] _κ[−][κ]_[)] ) _G, κ, η satisfy_ 1 + _κ_ 1 
+
+**==> picture [398 x 119] intentionally omitted <==**
+
+The proof of Theorem 2 is relegated to Appendix B. Notice that when _κ_ = 1, we have _β_ = 0 _, M_ 1 = 2(1 _− ηL_ ) and the convergence result recovers that of DPSGD (Ghadimi & Lan, 2013; Zhang et al., 2017). With this theorem, we can choose specific parameters and obtain the following corollary: 
+
+**Corollary 1** _Under the conditions of Theorem 2, choose γ_ = _−_ 1 _,_ 
+
+**==> picture [352 x 136] intentionally omitted <==**
+
+_and sufficiently large T ≥_ 
+
+**Convergence improvement:** The above result implies that the _order_ of the number of iterations _T_ needed for convergence of Algorithm 3 is the same as of DPSGD (Ghadimi & Lan, 2013; Zhang et al., 2017). However, Algorithm 3 has a _constant factor_ improvement in the upper bound of its iteration complexity over DPSGD. This improvement results from the presence of _Mκ ≤_ 1 in the numerator in the RHS of (9). More specifically, if _Mκ <_ 1 _,_ i.e., _∥∇F_ ( **x** 0) _∥_[2] _<_ 2 _L_ ( _F_ ( **x** 0) _− F[⋆]_ ) _,_ then the convergence bound reduces by a factor of �1 _/Mκ,_ and DiSK has clear theoretical improvement over vanilla DPSGD. **Case I:** For ( _µ_ -strongly) convex problems, it is guaranteed that 2 _µ_ ( _F_ ( **x** 0) _−F[⋆]_ ) _≤∥∇F_ ( **x** 0) _∥_[2] _≤_ 2 _L_ ( _F_ ( **x** 0) _−F[⋆]_ ) _._ Therefore, the factor _Mκ ∈_ [ _µ/L,_ 1] _._ **Case II:** When training highly non-convex deep learning models, the Lipschitz constant _L_ can be large (Herrera et al., 2020), and 2 _L_ ( _F_ ( **x** 0) _− F[⋆]_ ) can be much larger than _∥∇F_ ( **x** 0) _∥_[2] , which results in a considerable algorithm performance improvement compared to vanilla DPSGD. 
+
+8 
+
+While the above corollary is for the case of _γ_ = _−_ 1, we can obtain performance improvement for _γ_ = _−_ 1 as well. The choice _γ_ = _−_ 1 is optimized for the _worst case_ (function satisfying our assumptions) based on our upper-bound in (8). However, it is possible that for functions satisfying additional assumptions, other choices of _γ_ lead to better convergence results. This fact is further explained after presenting the proof of the theorem in Appendix B.2. 
+
+As the last remark in this subsection, notice that our iteration complexity improvement does not require any additional assumption on the problem. In contrast, existing works with convergence improvement require additional assumptions, e.g., on the correlation between the gradients (Zhang et al., 2024a), or on the trace of Hessian (Choquette-Choo et al., 2024; Li et al., 2022). 
+
+## 4.2 PRIVACY-UTILITY TRADE-OFF 
+
+To provide DP, the Subsampled Gaussian mechanism is used in Lines 4 and 5 of Algorithm 3. Instead of _∇f_ ( **x** _t_ ; _ξ_ ), we treat[1] _κγ[−][κ][∇][f]_[(] **[x]** _[t][−][γ]_ **[d]** _[t][−]_[1][;] _[ ξ]_[) + (1] _[ −]_[1] _κγ[−][κ]_[)] _[∇][f]_[(] **[x]** _[t]_[;] _[ ξ]_[)][as][the][per-sample] gradient and apply the Subsampled Gaussian mechanism to privatize it. Therefore, Algorithm 3 and DPSGD share a similar privacy guarantee, as the privacy proof directly follows the Subsampled Gaussian mechanism and the composition of _T_ iterations in Theorem 1. Specifically, by combining Theorem 1 and Theorem 2, we obtain the following privacy-utility trade-off: 
+
+**==> picture [397 x 61] intentionally omitted <==**
+
+Similar to our convergence result, compared to vanilla DPSGD, the privacy-utility trade-off of Algorithm 3 reduces by a constant factor of �1 _/Mκ_ . To the best of our knowledge, this is the first theoretical result on the utility improvement of a DPSGD-type algorithm without any additional assumptions on the problem. 
+
+## 5 NUMERICAL EXPERIMENTS 
+
+We perform extensive pre-training and fine-tuning experiments on various image classification (CV) and natural language processing (NLP) tasks using different base algorithms, privacy budgets, and models. The implementation details of the experiments are given in Appendix C.1. An implementation of the algorithm is in https://github.com/pytorch/opacus/tree/main/ research/disk_optimizer. 
+
+## 5.1 EXPERIMENT SETTINGS 
+
+**Dataset:** We train the models on one synthetic dataset, four CV datasets, including MNIST (Deng, 2012), CIFAR-10/CIFAR-100 (Krizhevsky et al., 2009), and ImageNet-1k (Deng et al., 2009), and three NLP dataset, including GLUE (Wang et al., 2018), E2E (Novikova et al., 2017), and DART (Nan et al., 2021). 
+
+**Model:** For the CV tasks, we use three different models, including a 5-layer CNN, WideResNet (WRN) (De et al., 2022), and ViT (Dosovitskiy et al., 2020), representing three typical CV model structures. For the NLP task, we use the RoBERTa (Liu et al., 2019) and the GPT-2 (Radford et al., 2019) models. For pre-training, the models are initialized with random weights. In fine-tuning ViT, RoBERTa, and GPT-2, we directly use the checkpoints on HuggingFace (Wolf et al., 2020). 
+
+**Algorithm:** We use the DP version of SGD and Adam for CV tasks, and AdamW for NLP tasks as baselines. Then, we apply DiSK to compare their performance. Additional results on LoRA (Li et al., 2021) are given in Appendix C.4. In the results, we use **KF-** to denote the privatized version of the algorithms with DiSK. We use sample without replacement with fixed batch size. 
+
+**Hyper-parameter choices:** We tune the hyper-parameters using a grid search. Specifically, we conduct a grid search on the batch size _B_ , total epochs _E_ = _NT/B_ , and step size _η_ for each given privacy budget _ϵ_ . For all experiments, we fix the privacy parameter _δ_ = 1 _/N_[1] _[.]_[1] to obtain a reasonable privacy notion. Detailed hyper-parameter choices are discussed in Appendix C.2. 
+
+9 
+
+**==> picture [317 x 8] intentionally omitted <==**
+
+**----- Start of picture text -----**<br>
+(a) MNIST (b) CIFAR-10 (c) CIFAR-100<br>**----- End of picture text -----**<br>
+
+
+Figure 1: Test accuracy of training from scratch on MNIST, CIFAR-10, and CIFAR-100 datasets with and without DiSK for different privacy _ϵ_ . The green lines show the improvement of DiSK. 
+
+**==> picture [348 x 9] intentionally omitted <==**
+
+**----- Start of picture text -----**<br>
+(a) MNIST,  ϵ  = 0 . 5 (b) CIFAR-100,  ϵ  = 8 (c) ImageNet-1k,  ϵ  = 8<br>**----- End of picture text -----**<br>
+
+
+Figure 2: Test accuracy on MNIST, CIFAR-100, and validation accuracy on ImageNet-1k datasets training from scratch with and without DiSK for fixed privacy budgets. 
+
+Table 1: Test accuracy of fine-tuning result on the GLUE dataset. 
+
+|Task|(_ϵ_=_∞_)<br>Non-DP|DP|_ϵ_= 6<br>**KF-DP**|= 6_._7<br>**KF-DPLora**|DP|_ϵ_= 1<br>**KF-DP**|= 1<br>**KF-DPLora**|
+|---|---|---|---|---|---|---|---|
+|MNLI|87.6|83.2|84.8|85.9|80.7|82.0|84.7|
+|QNLI|92.8|87.5|88.9|90.5|86.0|88.7|90.3|
+|SST-2|94.8|91.5|92.8|93.1|91.4|91.5|92.9|
+|QQP|91.9|85.8|88.5|89.0|84.2|86.9|87.8|
+
+
+5.2 NUMERICAL RESULTS 
+
+**CV tasks:** We first train the CV models with randomly initialized weights on different image datasets. The results for 5-layer CNN on the MNIST dataset, 5-layer CNN on the CIFAR-10 dataset, and WRN-16-4 on the CIFAR-100 datasets with different privacy budgets are given in Figure 1. DiSK significantly outperforms the base algorithm across all used privacy budgets. 
+
+The test accuracy curves during the training for 5-layer CNN on the MNIST dataset, WRN-16-4 on the CIFAR-100 dataset, and ViT-small on the ImageNet-1k dataset are given in Figure 2. The optimizer with DiSK converges faster than the base algorithm on all tasks and reaches a higher final accuracy at a given privacy budget. The test accuracy of CIFAR-100 achieves 41 _._ 8%, and ImageNet1k achieves 36 _._ 89%, which outperforms the SOTA results that apply data augmentation under the same privacy budget (40 _._ 6% for CIFAR-100 (Bao et al., 2024) and 33 _._ 56% for ImageNet-1k (De et al., 2022)). Additional comparisons on different models, algorithms, and fine-tuning CIFAR-100 are given in Appendix C.3. 
+
+**NLP tasks:** We fine-tune a pre-trained RoBERTa-base model on the GLUE datasets. The final test accuracy for is given in Table 1. We follow the same training script and hyper-parameter choices in the experiments as Bu et al. (2024). Compared with the base algorithm (DPAdamW), DiSK improves the final accuracy on all tasks by at least 3 _._ 8% when _ϵ_ = 1 and 1 _._ 3% when _ϵ_ = 6 _._ 7. Additional results for text generation tasks on the E2E ad DART datasets are given in Appendix C.4. 
+
+**Ablation study:** We conduct ablation studies on the choice of the hyper-parameters of DiSK, specifically, how _κ, γ_ impact the algorithm performance. The results are presented in Appendix C.3. 
+
+**Improvements over the SOTA:** Table 6 in Appendix C.5 summarizes the improvements of DiSK over the SOTA on different tasks. 
+
+10 
+
+## ACKNOWLEDGEMENT 
+
+X. Zhang and M. Razaviyayn’s work is supported by a gift from Meta, a gift from Google, and a gift from Amazon. M. Hong acknowledges the Minnesota Supercomputing Institute (MSI) at the University of Minnesota for providing resources that contributed to the research results reported within this paper. URL: http://www.msi.umn.edu. M. Hong’s work is partially supported by NSF grants CIF-2414372, ECCS-2426064, and NSF EPCN-2311007. 
+
+## REPRODUCIBILITY STATEMENT 
+
+For the algorithm implementation, we provide a link to an anonymous downloadable source code in Section 5. We also discussed the data, model, and algorithms used in the experiment in Section 5 and in Appendix C. For our theoretical results provided in Section 4, we also include clear explanations of the assumptions in the section. The complete proof of the theorems can be found in Appendix B. 
+
+## BROADER IMPACT 
+
+This paper presents work that aims to advance the field of Machine Learning, combining optimization with signal processing and control societies. There are many potential societal consequences of our work, none of which we feel must be specifically highlighted here. 
+
+## REFERENCES 
+
+Martin Abadi, Andy Chu, Ian Goodfellow, H Brendan McMahan, Ilya Mironov, Kunal Talwar, and Li Zhang. Deep learning with differential privacy. In _Proceedings of the 2016 ACM SIGSAC conference on computer and communications security_ , pp. 308–318, 2016. 
+
+- Zeyuan Allen-Zhu and Elad Hazan. Variance reduction for faster non-convex optimization. In _International conference on machine learning_ , pp. 699–707. PMLR, 2016. 
+
+- Galen Andrew, Om Thakkar, Brendan McMahan, and Swaroop Ramaswamy. Differentially private learning with adaptive clipping. _Advances in Neural Information Processing Systems_ , 34:17455– 17466, 2021. 
+
+- Apurva Badithela and Peter Seiler. Analysis of the heavy-ball algorithm using integral quadratic constraints. In _2019 American control conference (ACC)_ , pp. 4081–4085. IEEE, 2019. 
+
+- Borja Balle and Yu-Xiang Wang. Improving the gaussian mechanism for differential privacy: Analytical calibration and optimal denoising. In _International Conference on Machine Learning_ , pp. 394–403. PMLR, 2018. 
+
+- Wenxuan Bao, Francesco Pittaluga, Vijay Kumar BG, and Vincent Bindschaedler. Dp-mix: mixupbased data augmentation for differentially private learning. _Advances in Neural Information Processing Systems_ , 36, 2024. 
+
+- Barbara Bittner and Luc Pronzato. Kalman filtering in stochastic gradient algorithms: construction of a stopping rule. In _2004 IEEE International Conference on Acoustics, Speech, and Signal Processing_ , volume 2, pp. ii–709. IEEE, 2004. 
+
+- Zhiqi Bu, Yu-Xiang Wang, Sheng Zha, and George Karypis. Differentially private optimization on large model at small cost. In _International Conference on Machine Learning_ , pp. 3192–3218. PMLR, 2023. 
+
+- Zhiqi Bu, Yu-Xiang Wang, Sheng Zha, and George Karypis. Automatic clipping: Differentially private deep learning made easier and stronger. _Advances in Neural Information Processing Systems_ , 36, 2024. 
+
+- Xin Chen, Yujie Tang, and Na Li. Improve single-point zeroth-order optimization using high-pass and low-pass filters. In _International Conference on Machine Learning_ , pp. 3603–3620. PMLR, 2022. 
+
+11 
+
+- Christopher A Choquette-Choo, Krishnamurthy Dj Dvijotham, Krishna Pillutla, Arun Ganesh, Thomas Steinke, and Abhradeep Guha Thakurta. Correlated noise provably beats independent noise for differentially private learning. In _The Twelfth International Conference on Learning Representations_ , 2024. 
+
+- Ashok Cutkosky and Francesco Orabona. Momentum-based variance reduction in non-convex sgd. _Advances in neural information processing systems_ , 32, 2019. 
+
+- Saman Cyrus, Bin Hu, Bryan Van Scoy, and Laurent Lessard. A robust accelerated optimization algorithm for strongly convex functions. In _2018 Annual American Control Conference (ACC)_ , pp. 1376–1381. IEEE, 2018. 
+
+- Soham De, Leonard Berrada, Jamie Hayes, Samuel L Smith, and Borja Balle. Unlocking high-accuracy differentially private image classification through scale. _arXiv preprint arXiv:2204.13650_ , 2022. 
+
+- Jia Deng, Wei Dong, Richard Socher, Li-Jia Li, Kai Li, and Li Fei-Fei. Imagenet: A large-scale hierarchical image database. In _2009 IEEE conference on computer vision and pattern recognition_ , pp. 248–255. Ieee, 2009. 
+
+- Li Deng. The mnist database of handwritten digit images for machine learning research [best of the web]. _IEEE signal processing magazine_ , 29(6):141–142, 2012. 
+
+- Alexey Dosovitskiy, Lucas Beyer, Alexander Kolesnikov, Dirk Weissenborn, Xiaohua Zhai, Thomas Unterthiner, Mostafa Dehghani, Matthias Minderer, Georg Heigold, Sylvain Gelly, et al. An image is worth 16x16 words: Transformers for image recognition at scale. In _International Conference on Learning Representations_ , 2020. 
+
+- Cynthia Dwork and Aaron Roth. The algorithmic foundations of differential privacy. _Theoretical Computer Science_ , 9(3-4):211–407, 2014. 
+
+- Saeed Ghadimi and Guanghui Lan. Stochastic first-and zeroth-order methods for nonconvex stochastic programming. _SIAM journal on optimization_ , 23(4):2341–2368, 2013. 
+
+- Calypso Herrera, Florian Krach, and Josef Teichmann. Estimating full lipschitz constants of deep neural networks. _arXiv preprint arXiv:2004.13135_ , 2020. 
+
+- Bin Hu and Laurent Lessard. Dissipativity theory for nesterov’s accelerated method. In _International Conference on Machine Learning_ , pp. 1549–1557. PMLR, 2017. 
+
+- Yuhang Hu, Zhou Tan, Xianxian Li, Jinyan Wang, et al. Adaptive clipping bound of deep learning with differential privacy. In _2021 IEEE 20th International Conference on Trust, Security and Privacy in Computing and Communications (TrustCom)_ , pp. 428–435. IEEE, 2021. 
+
+- Bargav Jayaraman and David Evans. Evaluating differentially private machine learning in practice. In _28th USENIX Security Symposium (USENIX Security 19)_ , pp. 1895–1912, 2019. 
+
+- Peter Kairouz, Brendan McMahan, Shuang Song, Om Thakkar, Abhradeep Thakurta, and Zheng Xu. Practical and private (deep) learning without sampling or shuffling. In _International Conference on Machine Learning_ , pp. 5213–5225. PMLR, 2021. 
+
+- R. E. Kalman. A New Approach to Linear Filtering and Prediction Problems. _Journal of Basic Engineering_ , 82(1):35–45, 03 1960. ISSN 0021-9223. doi: 10.1115/1.3662552. URL https: //doi.org/10.1115/1.3662552. 
+
+- Anastasiia Koloskova, Ryan McKenna, Zachary Charles, John Rush, and H Brendan McMahan. Gradient descent with linearly correlated noise: Theory and applications to differential privacy. _Advances in Neural Information Processing Systems_ , 36, 2023. 
+
+- Alex Krizhevsky, Geoffrey Hinton, et al. Learning multiple layers of features from tiny images. 2009. 
+
+- Laurent Lessard, Benjamin Recht, and Andrew Packard. Analysis and design of optimization algorithms via integral quadratic constraints. _SIAM Journal on Optimization_ , 26(1):57–95, 2016. 
+
+12 
+
+- Xuechen Li, Florian Tramer, Percy Liang, and Tatsunori Hashimoto. Large language models can be strong differentially private learners. In _International Conference on Learning Representations_ , 2021. 
+
+- Xuechen Li, Daogao Liu, Tatsunori B Hashimoto, Huseyin A Inan, Janardhan Kulkarni, Yin-Tat Lee, and Abhradeep Guha Thakurta. When does differentially private learning not suffer in high dimensions? _Advances in Neural Information Processing Systems_ , 35:28616–28630, 2022. 
+
+- Guanbiao Lin, Hongyang Yan, Guang Kou, Teng Huang, Shiyu Peng, Yingying Zhang, and Changyu Dong. Understanding adaptive gradient clipping in dp-sgd, empirically. _International Journal of Intelligent Systems_ , 37(11):9674–9700, 2022. 
+
+- Yinhan Liu, Myle Ott, Naman Goyal, Jingfei Du, Mandar Joshi, Danqi Chen, Omer Levy, Mike Lewis, Luke Zettlemoyer, and Veselin Stoyanov. Roberta: A robustly optimized bert pretraining approach. _arXiv preprint arXiv:1907.11692_ , 2019. 
+
+- Yuanyuan Liu, Jiacheng Geng, Fanhua Shang, Weixin An, Hongying Liu, Qi Zhu, and Wei Feng. Laplacian smoothing stochastic admms with differential privacy guarantees. _IEEE Transactions on Information Forensics and Security_ , 17:1814–1826, 2022. 
+
+- Ilya Loshchilov and Frank Hutter. Sgdr: Stochastic gradient descent with warm restarts. In _International Conference on Learning Representations_ , 2022. 
+
+- Zelun Luo, Daniel J Wu, Ehsan Adeli, and Li Fei-Fei. Scalable differential privacy with sparse network finetuning. In _Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition_ , pp. 5059–5068, 2021. 
+
+- H Brendan McMahan, Daniel Ramage, Kunal Talwar, and Li Zhang. Learning differentially private recurrent language models. In _International Conference on Learning Representations_ , 2018. 
+
+- Harsh Mehta, Abhradeep Guha Thakurta, Alexey Kurakin, and Ashok Cutkosky. Towards large scale transfer learning for differentially private image classification. _Transactions on Machine Learning Research_ , 2023. 
+
+- Hesameddin Mohammadi, Meisam Razaviyayn, and Mihailo R Jovanovi´c. Tradeoffs between convergence rate and noise amplification for momentum-based accelerated optimization algorithms. _IEEE Transactions on Automatic Control_ , 2024. 
+
+- Michael Muehlebach and Michael Jordan. A dynamical systems perspective on nesterov acceleration. In _International Conference on Machine Learning_ , pp. 4656–4662. PMLR, 2019. 
+
+- Linyong Nan, Dragomir Radev, Rui Zhang, Amrit Rau, Abhinand Sivaprasad, Chiachun Hsieh, Xiangru Tang, Aadit Vyas, Neha Verma, Pranav Krishna, Yangxiaokang Liu, Nadia Irwanto, Jessica Pan, Faiaz Rahman, Ahmad Zaidi, Mutethia Mutuma, Yasin Tarabar, Ankit Gupta, Tao Yu, Yi Chern Tan, Xi Victoria Lin, Caiming Xiong, Richard Socher, and Nazneen Fatema Rajani. DART: Open-domain structured data record to text generation. In _Proceedings of the 2021 Conference of the North American Chapter of the Association for Computational Linguistics: Human Language Technologies_ , pp. 432–447, Online, June 2021. Association for Computational Linguistics. doi: 10.18653/v1/2021.naacl-main.37. URL https://aclanthology.org/ 2021.naacl-main.37. 
+
+- Jekaterina Novikova, Ondrej Duˇsek, and Verena Rieser. The E2E dataset: New challenges for endto-end generation. In _Proceedings of the 18th Annual Meeting of the Special Interest Group on Discourse and Dialogue_ , Saarbr¨ucken, Germany, 2017. URL https://arxiv.org/abs/ 1706.09254. arXiv:1706.09254. 
+
+- Nicolas Papernot, Abhradeep Thakurta, Shuang Song, Steve Chien, and Ulfar[´] Erlingsson. Tempered sigmoid activations for deep learning with differential privacy. In _Proceedings of the AAAI Conference on Artificial Intelligence_ , volume 35, pp. 9312–9321, 2021. 
+
+- Jinseong Park, Hoki Kim, Yujin Choi, and Jaewook Lee. Differentially private sharpness-aware training. In _International Conference on Machine Learning_ , pp. 27204–27224. PMLR, 2023. 
+
+13 
+
+Barak A Pearlmutter. Fast exact multiplication by the hessian. _Neural computation_ , 6(1):147–160, 1994. 
+
+- Alec Radford, Jeff Wu, Rewon Child, David Luan, Dario Amodei, and Ilya Sutskever. Language models are unsupervised multitask learners. 2019. 
+
+- Maria Isabel Ribeiro. Kalman and extended kalman filters: Concept, derivation and properties. _Institute for Systems and Robotics_ , 43(46):3736–3741, 2004. 
+
+- Carsten W Scherer, Christian Ebenbauer, and Tobias Holicki. Optimization algorithm synthesis based on integral quadratic constraints: A tutorial. In _2023 62nd IEEE Conference on Decision and Control (CDC)_ , pp. 2995–3002. IEEE, 2023. 
+
+- Li Shen, Congliang Chen, Fangyu Zou, Zequn Jie, Ju Sun, and Wei Liu. A unified analysis of adagrad with weighted aggregation and momentum acceleration. _IEEE Transactions on Neural Networks and Learning Systems_ , 2023. 
+
+- Ilya Sutskever, James Martens, George Dahl, and Geoffrey Hinton. On the importance of initialization and momentum in deep learning. In _International conference on machine learning_ , pp. 1139–1147. PMLR, 2013. 
+
+- Qiaoyue Tang, Frederick Shpilevskiy, and Mathias L´ecuyer. Dp-adambc: Your dp-adam is actually dp-sgd (unless you apply bias correction). In _Proceedings of the AAAI Conference on Artificial Intelligence_ , volume 38, pp. 15276–15283, 2024. 
+
+- Hugo Touvron, Thibaut Lavril, Gautier Izacard, Xavier Martinet, Marie-Anne Lachaux, Timoth´ee Lacroix, Baptiste Rozi`ere, Naman Goyal, Eric Hambro, Faisal Azhar, et al. Llama: Open and efficient foundation language models. _arXiv preprint arXiv:2302.13971_ , 2023. 
+
+- Florian Tramer and Dan Boneh. Differentially private learning needs better features (or much more data). _arXiv preprint arXiv:2011.11660_ , 2020. 
+
+James Vuckovic. Kalman gradient descent: Adaptive variance reduction in stochastic optimization. _arXiv preprint arXiv:1810.12273_ , 2018. 
+
+- Eric A Wan and Rudolph Van Der Merwe. The unscented kalman filter. _Kalman filtering and neural networks_ , pp. 221–280, 2001. 
+
+- Alex Wang, Amanpreet Singh, Julian Michael, Felix Hill, Omer Levy, and Samuel Bowman. Glue: A multi-task benchmark and analysis platform for natural language understanding. In _Proceedings of the 2018 EMNLP Workshop BlackboxNLP: Analyzing and Interpreting Neural Networks for NLP_ , pp. 353–355, 2018. 
+
+- Bao Wang, Quanquan Gu, March Boedihardjo, Lingxiao Wang, Farzin Barekat, and Stanley J Osher. Dp-lssgd: A stochastic optimization method to lift the utility in privacy-preserving erm. In _Mathematical and Scientific Machine Learning_ , pp. 328–351. PMLR, 2020a. 
+
+- Haoqian Wang, Yi Luo, Wangpeng An, Qingyun Sun, Jun Xu, and Lei Zhang. Pid controllerbased stochastic optimization acceleration for deep neural networks. _IEEE transactions on neural networks and learning systems_ , 31(12):5079–5091, 2020b. 
+
+- Wenxiao Wang, Tianhao Wang, Lun Wang, Nanqing Luo, Pan Zhou, Dawn Song, and Ruoxi Jia. Dplis: Boosting utility of differentially private deep learning via randomized smoothing. _Proceedings on Privacy Enhancing Technologies_ , 4:163–183, 2021. 
+
+- Yu-Xiang Wang, Borja Balle, and Shiva Prasad Kasiviswanathan. Subsampled r´enyi differential privacy and analytical moments accountant. In _The 22nd international conference on artificial intelligence and statistics_ , pp. 1226–1235. PMLR, 2019. 
+
+Greg Welch, Gary Bishop, et al. _An introduction to the Kalman filter_ . Chapel Hill, NC, USA, 1995. 
+
+14 
+
+- Thomas Wolf, Lysandre Debut, Victor Sanh, Julien Chaumond, Clement Delangue, Anthony Moi, Pierric Cistac, Tim Rault, R´emi Louf, Morgan Funtowicz, Joe Davison, Sam Shleifer, Patrick von Platen, Clara Ma, Yacine Jernite, Julien Plu, Canwen Xu, Teven Le Scao, Sylvain Gugger, Mariama Drame, Quentin Lhoest, and Alexander M. Rush. Transformers: State-of-the-art natural language processing. In _Proceedings of the 2020 Conference on Empirical Methods in Natural Language Processing: System Demonstrations_ , pp. 38–45, Online, October 2020. Association for Computational Linguistics. URL https://www.aclweb.org/anthology/ 2020.emnlp-demos.6. 
+
+- Yilin Wu, Qian Zhang, and Zhiping Shen. Kalman filtering with multiplicative and additive noises. In _2016 12th World Congress on Intelligent Control and Automation (WCICA)_ , pp. 483–487. IEEE, 2016. 
+
+- Da Yu, Saurabh Naik, Arturs Backurs, Sivakanth Gopi, Huseyin A Inan, Gautam Kamath, Janardhan Kulkarni, Yin Tat Lee, Andre Manoel, Lukas Wutschitz, et al. Differentially private fine-tuning of language models. In _International Conference on Learning Representations_ , 2021. 
+
+Manzil Zaheer, Sashank Reddi, Devendra Sachan, Satyen Kale, and Sanjiv Kumar. Adaptive methods for nonconvex optimization. _Advances in neural information processing systems_ , 31, 2018. 
+
+- Jiaqi Zhang, Kai Zheng, Wenlong Mou, and Liwei Wang. Efficient private erm for smooth objectives. In _Proceedings of the 26th International Joint Conference on Artificial Intelligence_ , pp. 3922–3928, 2017. 
+
+- Xinwei Zhang, Mingyi Hong, and Nicola Elia. Understanding a class of decentralized and federated optimization algorithms: A multirate feedback control perspective. _SIAM Journal on Optimization_ , 33(2):652–683, 2023. 
+
+- Xinwei Zhang, Zhiqi Bu, Mingyi Hong, and Meisam Razaviyayn. Doppler: Differentially private optimizers with low-pass filter for privacy noise reduction. _arXiv preprint arXiv:2408.13460_ , 2024a. 
+
+- Xinwei Zhang, Zhiqi Bu, Steven Wu, and Mingyi Hong. Differentially private sgd without clipping bias: An error-feedback approach. In _The Twelfth International Conference on Learning Representations_ , 2024b. 
+
+## A ADDITIONAL DISCUSSION 
+
+A.1 BACKGROUND ON KALMAN FILTER 
+
+In this section, we provide an introduction and derivation of the Kalman filter. Kalman filter is introduced in (Kalman, 1960) and widely used for control systems in accurately estimating system states with noisy observation and known system dynamics. Kalman filter assumes the system is a linear (time-invariant) system: 
+
+**==> picture [242 x 24] intentionally omitted <==**
+
+where **A** _,_ **C** are known matrix, and **v** _t ∼N_ (0 _,_ Σ **v** ) _,_ **w** _t ∼N_ ( _,_ Σ **w** ) are independent white noise following Gaussian distributions with known covariance matrices Σ **v** _,_ Σ **w** , and **u** _t_ is known input signal. The goal of the Kalman filter is to estimate _**θ** t_ with the observation of _**ψ** t_ with the least mean-square error and serves as the Best Linear Unbiased Estimator (BLUE) (Welch et al., 1995). 
+
+**Derivation:** First, we denote the estimation of _**θ** t_ as _**θ**_[˜] _t_ , and the covariance of _**θ** t −_ _**θ**_[˜] _t_ as **P** _t_ = E[( _**θ** t −_ _**θ**_[˜] _t_ )( _**θ** t −_ _**θ**_[˜] _t_ ) _[⊤]_ ] _._ 
+
+**==> picture [396 x 24] intentionally omitted <==**
+
+and its covariance is **P** _t|t−_ 1 = E[( _**θ** t −_ _**θ**_[˜] _t|t−_ 1)( _**θ** t −_ _**θ**_[˜] _t|t−_ 1) _[⊤]_ ] = **AP** _t−_ 1 **A** _[⊤]_ + Σ **v** _._ (12) With _**θ**_[˜] _t|t−_ 1, we have an (unbiased) prediction of the observation _**ψ**_[˜] _t|t−_ 1 = **C** _**θ**_[˜] _t|t−_ 1 at time _t −_ 1. At time _t_ , by observing _**ψ** t_ , we have the prediction error ∆ _**ψ** t_ = _**ψ** t −_ _**ψ**_[˜] _t|t−_ 1 = _**ψ** t −_ **C** _**θ**_[˜] _t|t−_ 1 _._ 
+
+15 
+
+Since the system is linear, we would like to use the prediction error to correct the prediction:˜ ˜ _**θ** t_ = _**θ** t|t−_ 1 + **K** _t_ ∆ _**ψ** t_ = **K** _t_ _**ψ** t_ + ( **I** _−_ **K** _t_ **C** )˜ _**θ** t|t−_ 1 _._ (13) The goal of the Kalman filter is to minimize the mean-square error: min **K** E[ _**θ** t −_ _**θ**_ ˜ _t_ 2] _,_ which is ��� ��� equivalent to minimizing tr( **P** _t_ ) _._ From the definition of _**θ**_[˜] _t,_ we have: **P** _t_ = E[( _**θ** t −_ _**θ**_[˜] _t_ )( _**θ** t −_ _**θ**_[˜] _t_ ) _[⊤]_ ] 
+
+**==> picture [401 x 80] intentionally omitted <==**
+
+which gives 
+
+**==> picture [281 x 14] intentionally omitted <==**
+
+**==> picture [397 x 127] intentionally omitted <==**
+
+**Variants of Kalman filter:** Kalman filter is designed for estimating the states following linear dynamics and achieves optimal performance, i.e., gives the smallest mean square error of the estimation when the system is linear (Welch et al., 1995). Extended Kalman filter (EKF) and unscented Kalman filter (UKF) are developed to deal with non-linear systems. EKF linearizes the non-linear system at each step and performs the Kalman filter on the linearized system (Ribeiro, 2004), while UKF takes the effect of the system non-linearity to the noise distribution into consideration and applies the unscented transform on the noise distribution and applies the Kalman filter on the system and the noise distribution (Wan & Van Der Merwe, 2001). Other extensions of the Kalman filter have been developed for special cases, including multiplicative noise and noisy input **u** _t_ (Wu et al., 2016). 
+
+## A.2 OTHER SYSTEM DYNAMICS FOR DPSGD 
+
+In this section, we would like to discuss other possible formulations of the system dynamics for DPSGD to apply the Kalman filter. 
+
+**Optimization variable and gradient version 1:** Other than only using the gradients’ dynamics in the main paper, we can construct the dynamic system with both the optimization variable **x** and the gradient _∇F_ ( **x** ) as its states (Vuckovic, 2018): 
+
+**==> picture [240 x 39] intentionally omitted <==**
+
+However, this dynamic is inaccurate as the dynamics of the gradient are simplified to _∇F_ ( **x** _t_ +1) = _∇F_ ( **x** _t_ ). Although the update can further incorporate with the momentum methods, i.e., by adding a momentum **m** _t_ into the system, it fails to reveal the actual dynamic of the system. 
+
+**Optimization variable and gradient version 2:** Instead of treating the gradient as a constant, we can assume the Hessian **H** is a constant and utilize the Hessian to reveal the gradient dynamics: 
+
+**==> picture [298 x 33] intentionally omitted <==**
+
+16 
+
+**y** _t_ = **x** _t._ 
+
+This system is more accurate in evaluating the gradient at the cost of using an extra **x** _t−_ 1 state and a larger transition matrix. For non-linear problems _F_ ( **x** ), where **H** is not a constant, we can apply the extended Kalman filter and replace **H** with **H** _t_ that linearizes the problem at each step _t_ . 
+
+**Gradient and Hessian:** In work (Bittner & Pronzato, 2004), the dynamics of the gradient and Hessian have been used to construct the system: 
+
+**==> picture [194 x 39] intentionally omitted <==**
+
+where **h** _t_ = [ **H** 1 _,_ 1 _, . . . ,_ **H** _i,i_ + _j, . . . ,_ **H** _d,d_ ] _[⊤] ,_ with _j ∈_ [0 _, . . . , d − i_ ] represents the entries in the upper triangular part of the Hessian matrix. ∆ **X** _t_ is constructed such that ∆ **X** _t_ **h** _t_ = **H** _t_ ( **x** _t_ +1 _−_ **x** _t_ ) _._ The system treats the Hessian matrix as a constant matrix (i.e., **h** _t_ +1 = **h** _t_ ), and the transition matrix is of size ( _d_ + _d_ ( _d −_ 1) _/_ 2) _× d_ + _d_ ( _d −_ 1) _/_ 2 _._ 
+
+Although there are different ways to construct the Kamlan filter for gradient noise reduction, the above systems are not implementable in practical deep-learning applications. Because the transition matrices of these systems are non-diagonal, the Kalman filters have non-diagonal gain **K** _t_ and **P** _t_ . Therefore, the matrix inversion operation is unavoidable when Kalman filters are implemented based on these systems. The computation complexity for the matrix inversion can be _O_ ( _d_[3] ) to _O_ ( _d_[6] ) _,_ and the memory consumption is _O_ ( _d_[2] ) to _O_ ( _d_[4] ) for storing the matrices of the Kalman filter. 
+
+## A.3 ALGORITHM SIMPLIFICATION 
+
+In this section, we explain how the simplification proceeds from Algorithm 2 to Algorithm 3. Recall that updates of Algorithm 2 is 
+
+**==> picture [389 x 108] intentionally omitted <==**
+
+1. Replacing random **C** _t_ with constant **I** _d_ . 
+
+2. Use finite difference to estimate **H** _t_ **d** _t−_ 1. 
+
+**==> picture [362 x 217] intentionally omitted <==**
+
+17 
+
+**==> picture [329 x 85] intentionally omitted <==**
+
+**Step 4.** As discussed in the main paper, the update of _kt, pt_ becomes: 
+
+**==> picture [150 x 54] intentionally omitted <==**
+
+Therefore, solving the recurrence relation of the sequence _{pt}_ , we have _pt_ converges to _p∞_ = _√σH_[2][+] _[σ]_ **v**[2] _√_ 4 _σ_ **w**[2] _−_ 32 _σH_[2][+] _[σ]_ **v**[2] _[−]_[(] _[σ] H_[2][+] _[σ]_ **v**[2][)] , _kt_ converges to _k∞_ = _pp∞∞_ ++ _σσH_ **w**[2][2] +[+] _σ[σ]_ **vv**[2][2] _[,]_[with][rate] _[c][k]_[=] 2 _σ_ **w**[2][+3] _[σ] H_[2][+] _[σ]_ **v**[2] _[−][√]_ ( _σ_ **v**[2] + _σH_[2][)(4] _[σ]_ **w**[2][+] _[σ]_ **v**[2] _[−]_[3] _[σ] H_[2][)] 2 _σ_ **w**[2] +3 _σH_[2][+] _[σ]_ **v**[2][+] ~~_[√]_~~ ( _σ_ **v**[2] + _σH_[2][)(4] _[σ]_ **w**[2][+] _[σ]_ **v**[2] _[−]_[3] _[σ] H_[2][)] _[.]_ 
+
+Figure 3: Convergence of _kt, pt_ . 
+
+**==> picture [360 x 64] intentionally omitted <==**
+
+**==> picture [398 x 188] intentionally omitted <==**
+
+## A.4 CONNECTION BETWEEN DISK AND NAG AND STORM 
+
+Algorithm 3 has an implicit connection to the (unified) Nesterov Accelerated Gradient (NAG) method (Shen et al., 2023; Sutskever et al., 2013) and the Stochastic Recursive Momentum 
+
+18 
+
+(STORM) algorithm (Cutkosky & Orabona, 2019). The update of (half-shifted) NAG can be written as (Sutskever et al., 2013): 
+
+**==> picture [396 x 54] intentionally omitted <==**
+
+**x** _t_ +1 = **x** _t − η_ **m** _t,_ In comparison, in Algorithm 3, by letting the update of OptimizerUpdate be SGD, and assuming clipping is inactive, **w** _t_ = 0, i.e., without DP, _ϵ →∞_ , the DiSK becomes: 
+
+**==> picture [379 x 60] intentionally omitted <==**
+
+˜ **x** _t_ +1 = **x** _t − η_ **g** _t._ 
+
+Comparing the above updates, we observe that (16) and (17) are two special cases of (18) with specific choices of the parameters. Specifically, by letting _γ_ =[1] _[−] κ[κ] >_ 0 _, η_ = _κ,_ 1 _− κ_ = _µ_ , _B_ = _N_ , we have 1 _−_[1] _κγ[−][κ]_[= 0][, and the update of][ ˜] **[g]** _[t]_[becomes][ ˜] **[g]** _[t]_[=] _[ µ]_ **[g]**[˜] _[t][−]_[1][ +] _[ η][∇][F]_[(] **[x]** _[t][ −][µ] η_ **[g]**[˜] _[t][−]_[1][)][, and DiSK] becomes NAG; on the other hand, by letting _γ_ = _−_ 1 _, κ_ = _α_ , _B_ = 1, we have **x** _t_ + _γ_ **d** _t−_ 1 = **x** _t −_ ( **x** _t −_ **x** _t−_ 1) = **x** _t−_ 1, and the update of ˜ **g** _t_ becomes ˜ **g** _t_ = (1 _− α_ )˜ **g** _t−_ 1 + _α∇f_ ( **x** _t_ ; _ξt_ ) + (1 _− α_ ) ( _∇f_ ( **x** _t_ ; _ξ_ ) _−∇f_ ( **x** _t−_ 1; _ξ_ )), which matches the update of STORM. From this discussion, we see that NAG and STORM, two algorithms for accelerated gradient and variance reduction, respectively, can be unified by DiSK, an algorithm based on Kalman filtering. 
+
+With this discussion, we observe that the key difference between NAG and STORM is the choice of _γ_ . When _γ >_ 0 _,_ the algorithm is close to NAG, which focuses on “exploring” and “accelerating”. When _γ <_ 0, the algorithm is close to STORM, which focuses on “exploiting” and “reducing noise”. 
+
+## B PROOF FOR SECTION 4 
+
+In this section, we provide detailed proof for the results in Section 4. 
+
+We will use the following inequalities in our proofs: 
+
+**==> picture [291 x 37] intentionally omitted <==**
+
+In the following sections, we use E _t_ to denote the expectation conditioned on all the information before iteration˜ _t_ . To prove Theorem 2, we first provide the following lemma to bound the difference˜ between **g** _t_ defined in Line 6 of Algorithm 3, and _∇F_ ( **x** _t_ ). Let us define ∆ _t_ = _∇F_ ( **x** _t_ ) _−_ **g** _t_ . We have: 
+
+**==> picture [397 x 97] intentionally omitted <==**
+
+B.1 PROOF OF LEMMA 1 
+
+First notice that when choosing _C ≥_ �1 +[2][(][1] _κ[−][κ]_[)] � _G_ , the clipping operation is inactive. By the update of ˜ **g** _t_ in Line 6 of Algorithm 3, we have: E _t ∥_ ∆ _t∥_[2] 
+
+19 
+
+**==> picture [369 x 334] intentionally omitted <==**
+
+( _c_ ) = (1 _− κ_ )[2] E _t ∥D_ 1 _∥_[2] + (1 _− κ_ )[2] _∥_ ∆ _t−_ 1 _∥_[2] + _κ_[2] E _t_ [ _∥D_ 2 _∥_[2] ] + (1 _− κ_ )[2] E _t ∥D_ 3 _∥_[2] + _κ_[2] E[ _∥_ **w** _t∥_[2] ] + 2(1 _− κ_ )[2] _⟨_ E _t_ [ _D_ 1] _,_ ∆ _t−_ 1 _⟩_ + 2(1 _− κ_ ) _κ ⟨_ E _t_ [ _D_ 2] _,_ ∆ _t−_ 1 _⟩−_ 2(1 _− κ_ )[2] _⟨_ E _t_ [ _D_ 3] _,_ ∆ _t−_ 1 _⟩_ + 2 E _t_ [ _⟨_ (1 _− κ_ ) _D_ 1 _, κD_ 2 _⟩_ ] _−_ 2(1 _− κ_ )[2] E _t_ [ _⟨D_ 1 _, D_ 3 _⟩_ ] _−_ 2 E _t_ [ _⟨κD_ 2 _,_ (1 _− κ_ ) _D_ 3 _⟩_ ] _,_ 
+
+**==> picture [410 x 47] intentionally omitted <==**
+
+where ( _a_ ) we add and subtract (1 _− κ_ ) _∇F_ ( **x** _t−_ 1) and rearrange the terms; ( _b_ ) adds and subtracts[1] _[−] B[κ]_ � _ξ∈Bt_[(] _[∇][f]_[(] **[x]** _[t]_[;] _[ ξ]_[)] _[ −∇][f]_[(] **[x]** _[t][−]_[1][;] _[ ξ]_[))][;][ (] _[c]_[)][ directly expands the square and use the fact that] E _t_ [ **w** _t_ ] = 0 and **w** _t_ is independent of other terms; and in ( _d_ ), we notice that E _t_ [ _D_ 1] = 0 _,_ E _t_ [ _D_ 2] = 0, so the first two inner products are zero, and we apply (19) to the other four inner products, with _α_ = _κ |_ 1 + _γ| ,_ 1 _, |_ 1 + _γ|_ , respectively. Next, we bound each term separately. For E _t_ [ _∥D_ 1 _∥_[2] ], we have: 
+
+**==> picture [363 x 125] intentionally omitted <==**
+
+20 
+
+where ( _a_ ) uses the fact that E _∥X −_ E[ _X_ ] _∥_[2] _≤_ E _∥X∥_[2] , with _∇F_ ( **x** _t_ ) _−∇F_ ( **x** _t−_ 1) = E _t_ [ _B_[1] � _ξ∈Bt_[(] _[∇][f]_[(] **[x]** _[t]_[;] _[ ξ]_[)] _[ −∇][f]_[(] **[x]** _[t][−]_[1][;] _[ ξ]_[))]][;][(] _[b]_[)][applies][A1][and][(] _[c]_[)][adds][and][subtracts] _[∇][F]_[(] **[x]** _[t][−]_[1][)][,] and applies (20). For E _t_ [ _∥D_ 2 _∥_[2] ], we have: 
+
+**==> picture [397 x 316] intentionally omitted <==**
+
+where ( _a_ ) applies Jensens’ inequality to _∥·∥_[2] , and we˜ add and subtract _γ_[1] _[∇][f]_[(] **[x]** _[t][−]_[1][;] _[ ξ]_[)][;][(] _[b]_[)][apples] (20); ( _b_ ) uses the fact that **d** _t−_ 1 = **x** _t −_ **x** _t−_ 1 = _−η_ **g** _t−_ 1; and ( _c_ ) adds and subtracts _∇F_ ( **x** _t−_ 1), and applies (20). Plug in (23) – (25) to (22), we have: 
+
+**==> picture [397 x 123] intentionally omitted <==**
+
+## B.2 PROOF OF THEOREM 2 
+
+Now, we are ready to prove Theorem 2. By choosing _C ≥ G_ (1 +[2][(][1] _κγ[−][κ]_[)] ) _,_ the clipping is inactive. Recall that from the update rule, we have 
+
+**==> picture [397 x 37] intentionally omitted <==**
+
+**==> picture [196 x 21] intentionally omitted <==**
+
+21 
+
+Substitute **y** = **x** _t_ +1 _,_ **x** = **x** _t_ to the above relation and take expectation over the randomness in iteration _t_ , we have: 
+
+**==> picture [396 x 151] intentionally omitted <==**
+
+where ( _a_ ) substitute (27); ( _b_ ) we add and subtract _∇F_ ( **x** _t_ ) to the last term and ( _c_ ) applies (20) to the last term. 
+
+Define _Lt_ := _F_ ( **x** _t_ ) + _β ∥_ ∆ _t−_ 1 _∥_[2] , we have: E _t_ [ _Lt_ +1] _−Lt_ 
+
+**==> picture [383 x 192] intentionally omitted <==**
+
+where ( _a_ ) applies Lemma 1 and ( _b_ ) rearrange the terms. By choosing 1 1 
+
+**==> picture [392 x 56] intentionally omitted <==**
+
+we have: 
+
+**==> picture [397 x 134] intentionally omitted <==**
+
+22 
+
+where we define _M_ 1 := (1 + _κ −_ 2 _ηL_ ) _−_ 4( _β_ + _η_[2] _L_ )(1 _− κ_ )[2] _L_[2] _η_ (2 + _|_ 1 + _γ| Mγ_ ) _,_ and in the last inequality we notice that _LT_ +1 = _F_ ( **x** _T_ +1) + _β ∥_ ∆ _T ∥_[2] _≥ F[⋆] ,_ and _L_ 0 = _F_ ( **x** 0) + _β ∥∇F_ ( **x** 0) _∥_[2] _,_ as we initialize ˜ **g** 0 = 0 _._ This completes the proof of Theorem 2. 
+
+**On the choice of** _γ_ = _−_ 1 **.** From the above proof, we see that in Appendix B.1, (22) ( _c_ ), we directly apply (19) to upper bound the cross-product terms by positive terms for the worst case, which results in the optimal choice of _γ_ = _−_ 1. However, the inner products may be smaller than zero in some cases, making _γ_ = _−_ 1 sub-optimal in practice. 
+
+## C ADDITIONAL NUMERICAL RESULTS 
+
+## C.1 EXPERIMENT DETAILS 
+
+**Coding:** The code for the experiments will be provided online. We use PyTorch as the code base and the FastDP package (Bu et al., 2023) to privatize the optimizers. We use the Renyi differential privacy (RDP) accountant in the Opacus and FastDP packages to numerically calculate the required injected DP noise to the gradient for fixed ( _ϵ, δ_ )-DP budget. A detailed derivation of the RDP accountant can be found in Wang et al. (2019). The Algorithm 3 is implemented as a PyTorch optimizer, which can be easily combined with any training scripts based on PyTorch. The modification is minimum: 
+
+1 from KFOptimizer import wrap_optimizer 2 # define base optimizer 3 optimizer = wrap_optimizer(base_optimizer, kappa, gamma) 4 # ... 5 # in training loop: 6 def closure(): # warp up the loss and backward computation 7 loss = model(input) 8 loss.backward() 9 return loss 10 loss = optimizer.prestep(closure) 11 # ... 
+
+The link to the full code of the experiments can be found at https://anonymous.4open. science/r/KalmanDP-BEDB. Alternative implementation in Opacus can be found at https: //github.com/pytorch/opacus/tree/main/research/disk_optimizer. 
+
+**Hardware:** All the experiments except the ImageNet-1k dataset are running with one Nvidia A40 (48GB memory) or one Nvidia V100 (32GB memory). The experiment on the ImageNet-1k dataset is running on one Nvidia H100 (80GB memory) GPU. The training time varies for different tasks depending on the data size and model size. 
+
+**Training method:** We use gradient accumulation to deal with the large batch size and use learning rate warm-up for 1 _/_ 20 of the training steps when training from randomly initialized weights. We also use the Cosine Annealing learning rate scheduler (Loshchilov & Hutter, 2022), which gradually decreases the learning rate. 
+
+## C.2 CHOICE OF HYPER-PARAMETERS 
+
+The main hyper-parameters in the algorithms are: epoch _E_ , batch size _B_ , step size _η_ , clipping threshold _C_ , Kalman filter parameters _κ_ , and _γ_ . In all experiments, we fix the clipping method as _C_ automatic clipping used in Bu et al. (2024), i.e., clip ( _∇f_ ( **x** ; _ξ_ ) _, C_ ) = _∇f_ ( **x** ; _ξ_ ) _· ∥∇f_ ( **x** ; _ξ_ ) _∥[,]_[ and set] _C_ = 1 for all experiments. We fix _δ_ = 1 _/N_[1] _[.]_[1] for reasonable privacy notions. This choice matches or is tighter than the SOTA results using _δ_ = 1 _/_ 2 _N_ or 1 _/N_[1] _[.]_[1] (Li et al., 2021; Bu et al., 2024; Yu et al., 2021). We list the _δ_ ’s used in the experiments in Tab. 7. 
+
+For each set of experiments, we conduct a grid search on the hyper-parameters _E, B, η_ and choose the optimal ones for the DP optimizer without DiSK based on the test set. The search grids of each hyper-parameter are listed in Table 2; 
+
+Then, we fix _E, B.η_ and conduct the ablation study on _κ, γ_ as shown in Figure 8. 
+
+23 
+
+Table 2: Search grid of the CV pre-training experiments, the optimal hyper-parameters are in **bold** . 
+
+||MNIST|Searchgird<br>CIFAR|ImageNet|
+|---|---|---|---|
+|_E_<br>_B_<br>_η_|_{_1_,_**2**_,_3_} ×_20<br>_{_2_,_**5**_} ×_103<br>_{_3_,_**2**_._**5**_,_1_,_0_._3_,_0_._1_} ×_10_−_1|_{_1_,_**2**_,_3_,_4_} ×_40<br>_{_0_._5_,_1_,_2_,_**5**_} ×_103<br>_{_1_,_3_,_**5**_,_7_,_10_} ×_10_−_3|_{_3_,_**4**_} ×_40<br>_{_**5**_,_10_} ×_103<br>_{_10_,_3_,_1_,_**0**_._**3**_,_0_._1_} ×_10_−_3|
+|_κ_<br>_γ_|_{_**0**_._**7**_}_<br>_{_**0**_._**5**_}_|_{_9_._9_,_9_,_8_,_**7**_,_6_,_5_} ×_10_−_1<br>_{_0_._2_,_0_._3_,_**0**_._**5**_,_1_,_2_,_3_,_ 1_−κ_<br>_κ_ _}_|_{_**0**_._**7**_}_<br>_{_**0**_._**5**_}_|
+
+
+C.3 ADDITIONAL EXPERIMENTS ON CV TASKS 
+
+**Training different models from scratch:** We additionally train the WRN-16-4 and the ViT-small models on the CIFAR-10 with randomly initialized weights, and the test accuracies during the training are shown in Figure 4 for _ϵ_ = 4. From Figure 4, we can see that DiSK consistantly outperforms the base optimizer. 
+
+**==> picture [324 x 9] intentionally omitted <==**
+
+**----- Start of picture text -----**<br>
+(a) 5-layer CNN (b) WRN-16 (c) ViT-small<br>**----- End of picture text -----**<br>
+
+
+Figure 4: Test accuracy of pre-training 5-layer CNN, WRN-16, and ViT-small on CIFAR-10 dataset with and without DiSK for fixed privacy budget _ϵ_ = 4. 
+
+**Fine-tuning on CIFAR-100:** Besides training from scratch, we also compare the performance of fine-tuning a pre-trained ViT-small model on the CIFAR-100 dataset. The results for different _ϵ_ are shown in Figure 5. For fine-tuning on the complex CIFAR-100 dataset, DiSK still improves the performance compared with DPAdam, and has less performance drop under large DP noise. 
+
+**Comparison with existing methods and SOTA:** We conduct comparisons with existing approaches for improving DP training performance. In Figure 6a, we train a linear regression model with synthetic data and compared the performance of Noisy GD, Noisy GD with DOPPLER (NoisyLP), and with DiSK (NoisyKF). We inject Gaussian noise with different variances into the gradient and compare the final performance. We observe that DiSK has the lowest regression loss under all noise levels, indicating that the Kalman filter performs better in noise reduction than the Low-pass filter. In Figure 6b, we compare the test accuracy of different methods, including DOPPLER (Zhang et al., 2024a) and DP-FTRL (Kairouz et al., 2021; Choquette-Choo et al., 2024) on the CIFAR-10 dataset training the WRN from scratch. We observe that DiSK significantly outperforms the SOTA algorithms on all privacy budgets. As discussed Section 3, DOPPLER refers to the case that DiSK only 
+
+Figure 5: Fine-tuning ViT-small on CIFAR-100 with different _ϵ_ . The green line indicates the improvement of DiSK. 
+
+24 
+
+**==> picture [340 x 119] intentionally omitted <==**
+
+**----- Start of picture text -----**<br>
+0.12 80<br>NoisyGD<br>0.09 NoisyLP >70<br>[S}<br>NoisyKF s<br>0.06 3 60<br>< —KF-DPAdam w=<br>é —DPAdam<br>0.03 i= 50<br>eeeee PD RL<br>s — LP-DPAdam<br>0 40<br>0 0.01 0.02 0.03 0.5 1 2<br>oO €<br>(a) Synthetic data (b) CIFAR-10<br>Loss<br>**----- End of picture text -----**<br>
+
+
+Figure 6: Comparison with existing approaches. a) Kalman filter and low-pass filter; b) Kalman filter, DP-FTRL, and low-pass filter. 
+
+**==> picture [50 x 17] intentionally omitted <==**
+
+**----- Start of picture text -----**<br>
+KF‒(De et al. 2022)<br>(De et al. 2022)<br>**----- End of picture text -----**<br>
+
+
+Figure 7: Comparison with the SOTA approach in De et al. (2022) on the ImageNet-1k dataset. estimates gradient at one point **x** _t_ instead of performing a weighted average of gradient estimated at two points **x** _t,_ **x** _t_ + _γ_ **d** _t−_ 1 before clipping. The results in Figure 6a and Figure 6b indicate that the _weighted average before clipping_ may be more important (i.e., _γ_ = 0 is more important). 
+
+Comparison with SOTA on ImageNet: Additionally, we conduct experiments to compare the performance of DiSK with SOTA result training from scratch on the ImageNet-1k dataset in De et al. (2022). The result is shown in Figure 7. We note that the reported test accuracy in the De et al. (2022) is 32 _._ 4% for privacy level _ϵ_ = 8. However, we noticed that their accounting procedure has been improved in their GitHub repository and hence we re-ran their experiment using the new accountant to obtain our baseline. We kept all their options on, including group normalization, larger batch size, weight standardization, augmentation multiplicity, and model exponential moving average. In addition, we also follow their _normalized clipping_ strategy, i.e., 
+
+**==> picture [158 x 24] intentionally omitted <==**
+
+Their updated code results in 36 _._ 35% validation accuracy and the test accuracy of 33 _._ 56% (as the SOTA result). In comparison, adding DiSK on top of their method results in a validation accuracy of 40% (3 _._ 7% improvement) and a test accuracy of 36 _._ 89% (3 _._ 3% improvement). This sets a new SOTA result for differentially private training on the ImageNet-1k dataset. 
+
+**Ablation study:** We conduct ablation studies on the choice of the hyper-parameters of DiSK, specifically, how _κ, γ_ impact the algorithm performance. In Figure 8, we plot the accuracy on different combinations of ( _κ, γ_ ), and ( _κ, ϵ_ ). We observe a clear trend of performance change for different combinations of the parameters, and there is an optimal choice of _κ, γ_ for different _ϵ_ ’s. 
+
+C.4 ADDITIONAL EXPERIMENTS ON NLP TASKS 
+
+In this section, we provide additional results for NLP tasks. 
+
+25 
+
+**==> picture [397 x 149] intentionally omitted <==**
+
+**----- Start of picture text -----**<br>
+70<br>0.5 38.6 40.5 51.3 65.5 67.5 66.3 65.5 70 0.6 53.9 59.5 64.2 67.9 71<br>65<br>0.6 42.9 51 67.1 71 67 65.5 65.9 65<br>0.7 50.6 65.1 74.9 68.9 66.8 65.5 65.7 60 0.7 50.8 56.2 60.2 65.2 68.9 60<br>0.8 69.2 74 69.5 67.7 66.6 66.2 65.7 55 0.8 48.3 54.1 59.6 63.7 67.7 55<br>0.9 69.4 68.1 67 66.5 66.6 66.1 66 50<br>0.9 46.6 52.7 57.7 62.5 66.5 50<br>0.99 65.2 65.6 65.5 65.5 64.8 63.9 65.8 45<br>1 63 63 63 63 63 63 63 40 1 42.8 48.8 53.8 59.6 63 45<br>0.2 0.3 0.5 1 2 3 * 0.5 1 2 4 8<br>a9<br>(a) ( κ, γ ) , ϵ  = 8 (b) ( κ, ϵ ) , γ = 1<br>Figure 8: Test accuracy for different combinations of the hyper-parameters when training CNN on<br>the CIFAR-10 dataset.<br>**----- End of picture text -----**<br>
+
+
+**Parameter-efficient fine-tuning on GLUE.** We fine-tune a RoBERTa-base and a RoBERTa-large model from the Huggingface checkpoints[1] on the GLUE dataset. We follow the same training scripts in Bu et al. (2024) on the hyper-parameter choices of _η, B, E_ on the tasks and use rank _r_ = 16 for LoRA. We choose _κ_ = 0 _._ 7 _, γ_ = 0 _._ 5 for DiSK. The results are listed in Table 3. With privacy budget _ϵ_ = 1 _,_ 6 _._ 7, DPLoRA with DiSK significantly outperforms SOTA results with vanilla DPLoRA on all tasks. 
+
+Table 3: Test accuracy of fine-tuning result on the GLUE dataset. 
+
+|_ϵ_= 1<br>_ϵ_= 6_._7<br>Algorithm<br>MNLI<br>QNLI<br>SST2<br>QQP<br>MNLI<br>QNLI<br>SST2<br>QQP<br>~~—____}_____—~~|_ϵ_= 1<br>_ϵ_= 6_._7<br>Algorithm<br>MNLI<br>QNLI<br>SST2<br>QQP<br>MNLI<br>QNLI<br>SST2<br>QQP<br>~~—____}_____—~~|_ϵ_= 1<br>_ϵ_= 6_._7<br>Algorithm<br>MNLI<br>QNLI<br>SST2<br>QQP<br>MNLI<br>QNLI<br>SST2<br>QQP<br>~~—____}_____—~~|_ϵ_= 1<br>_ϵ_= 6_._7<br>Algorithm<br>MNLI<br>QNLI<br>SST2<br>QQP<br>MNLI<br>QNLI<br>SST2<br>QQP<br>~~—____}_____—~~|_ϵ_= 1<br>_ϵ_= 6_._7<br>Algorithm<br>MNLI<br>QNLI<br>SST2<br>QQP<br>MNLI<br>QNLI<br>SST2<br>QQP<br>~~—____}_____—~~|_ϵ_= 1<br>_ϵ_= 6_._7<br>Algorithm<br>MNLI<br>QNLI<br>SST2<br>QQP<br>MNLI<br>QNLI<br>SST2<br>QQP<br>~~—____}_____—~~|_ϵ_= 1<br>_ϵ_= 6_._7<br>Algorithm<br>MNLI<br>QNLI<br>SST2<br>QQP<br>MNLI<br>QNLI<br>SST2<br>QQP<br>~~—____}_____—~~|
+|---|---|---|---|---|---|---|
+|||RoBERTa-base|||||
+|AdamW (_ϵ_=_∞_)<br>Lora (_ϵ_=_∞_)<br>DPLora<br>**KF-DPLora**<br>~~ee~~|87.6<br>87.5<br>81.1<br>84.7|92.8<br>94.8<br>91.9<br>93.3<br>95.1<br>90.8<br>85.5<br>90.9<br>83.9<br>90.3<br>92.9<br>87.8<br>RoBERTa-large<br>~~ee~~|87.6<br>87.5<br>83.5<br>85.9|92.8<br>93.3<br>87.4<br>90.5|94.8<br>95.1<br>91.5<br>93.1|91.9<br>90.8<br>85.7<br>89.0|
+|AdamW (_ϵ_=_∞_)|90.3|94.7<br>96.4<br>92.2|90.3|94.7|96.4|92.2|
+|Lora (_ϵ_=_∞_)|90.6|94.9<br>96.2<br>91.6|90.6|94.9|96.2|91.6|
+|DPLora|85.6|89.5<br>90.9<br>85.1|87.8|90.8|94.3|87.4|
+|**KF-DPLora**|87.9|92.5<br>95.2<br>88.2|89.4|92.6|95.4|89.6|
+
+
+**Fine-tuning GPT-2 on text generation tasks.** We fine-tune a GPT-2-small model with 137 _M_ parameters from the Huggingface checkpoints[2] on two text generation datasets, E2E and DART. We follow the same training scripts in Li et al. (2021) on the hyper-parameter choices of _η, B, E_ on the tasks and choose _κ_ = 0 _._ 7 _, γ_ = 0 _._ 5 for DiSK. The results on different metrics for the E2E dataset are given in Table 4, and the results for the DART dataset are in Table 5. With privacy budget _ϵ_ = 3 _,_ 8, DPAdamW with DiSK significantly outperforms SOTA results with vanilla DPAdamW on all metrics. 
+
+Table 4: Performance of fine-tuning gpt-2 on the E2E dataset. (All metrics are higher the better) 
+
+|Algorithm|BLEU (%)<br>ROUGE-L (%)<br>METEOR<br>NIST<br>CIDEr|
+|---|---|
+|AdamW(_ϵ_=_∞_)|69.46<br>71.36<br>0.461<br>8.780<br>2.422|
+|DPAdamW (_ϵ_= 3)<br>**KF-DPAdamW** (_ϵ_= 3)|61.52<br>65.87<br>0.417<br>7.071<br>2.167<br>68.35<br>70.23<br>0.456<br>8.636<br>2.399|
+|DPAdamW (_ϵ_= 8)<br>**KF-DPAdamW**(_ϵ_= 8)<br>~~ee~~|64.99<br>67.34<br>0.425<br>8.387<br>2.192<br>68.73<br>70.58<br>0.460<br>8.697<br>2.463<br>~~ee~~|
+
+
+1 https://huggingface.co/FacebookAI/roberta-base,https://huggingface.co/ FacebookAI/roberta-large 
+
+> 2https://huggingface.co/openai-community/gpt2 
+
+26 
+
+Table 5: Performance of fine-tuning gpt-2 on the DART dataset. Val. Perp. stands for validation perplexity. (All metrics except Val. Perp. are higher the better) 
+
+|Algorithm|Val. Perp. _↓_<br>BLEU (%)<br>ROUGE-L (%)<br>METEOR<br>NIST<br>CIDEr|
+|---|---|
+|AdamW(_ϵ_=_∞_)|0.921<br>44.56<br>58.66<br>0.379<br>8.733<br>2.773|
+|DPAdamW (_ϵ_= 3)<br>**KF-DPAdamW** (_ϵ_= 3)|1.427<br>33.96<br>52.38<br>0.310<br>6.090<br>1.864<br>1.149<br>41.01<br>57.53<br>0.359<br>7.949<br>2.553|
+|DPAdamW (_ϵ_= 8)<br>**KF-DPAdamW**(_ϵ_= 8)|1.362<br>35.30<br>54.58<br>0.320<br>6.365<br>1.995<br>1.102<br>42.12<br>58.11<br>0.364<br>8.111<br>2.628|
+
+
+C.5 IMPROVEMENT OVER SOTA 
+
+In the following Table 6, we provide a list of the experiment settings where our algorithm outperforms SOTA results. The paper that provides the SOTA results is cited for each setting, or the same as the line above. We observe that DiSK provides new SOTA for CV datasets, including CIFAR-10, CIFAR-100, and ImageNet-1k, and NLP datasets, including GLUE (MNLI, QNLI, QQP, SST-2), DART, and E2E. 
+
+Table 6: Tasks DiSK improves SOTA, PT=pre-training, FT=fine-tuning. 
+
+|Dataset<br>TASK<br>Model<br>_ϵ_|Ours (%)<br>SOTA (%)|
+|---|---|
+|||
+|CIFAR-10<br>PT<br>CNN<br>0.5<br>CIFAR-10<br>PT<br>CNN<br>2<br>CIFAR-100<br>PT<br>WRN<br>0.5<br>CIFAR-100<br>PT<br>WRN<br>1<br>CIFAR-100<br>PT<br>WRN<br>2<br>CIFAR-100<br>PT<br>WRN<br>4<br>CIFAR-100<br>PT<br>WRN<br>8<br>CIFAR-100<br>FT<br>ViT<br>0.5<br>CIFAR-100<br>FT<br>ViT<br>1<br>CIFAR-100<br>FT<br>ViT<br>2<br>CIFAR-100<br>FT<br>ViT<br>4<br>CIFAR-100<br>FT<br>ViT<br>8<br>ImageNet-1k<br>PT<br>ResNet-50<br>8|59.7<br>N/A<br>68.8<br>67.2 (Tramer & Boneh, 2020)<br>14.7<br>N/A<br>22.7<br>14.1 (Bao et al., 2024)<br>30.0<br>21.5<br>37.1<br>33.3<br>42.0<br>40.6<br>83.49<br>78.3 (Mehta et al., 2023)<br>85.36<br>81.8 (Bao et al., 2024)<br>86.77<br>83.5<br>87.56<br>84.5<br>88.49<br>84.6<br>36.89<br>33.56(De et al.,2022)|
+|MNLI<br>FT<br>RoBERTa-base<br>1<br>QNLI<br>FT<br>RoBERTa-base<br>1<br>QQP<br>FT<br>RoBERTa-base<br>1<br>SST-2<br>FT<br>RoBERTa-base<br>1<br>MNLI<br>FT<br>RoBERTa-base<br>6.7<br>QNLI<br>FT<br>RoBERTa-base<br>6.7<br>QQP<br>FT<br>RoBERTa-base<br>6.7<br>SST-2<br>FT<br>RoBERTa-base<br>6.7<br>MNLI<br>FT<br>RoBERTa-large<br>1<br>QNLI<br>FT<br>RoBERTa-large<br>1<br>QQP<br>FT<br>RoBERTa-large<br>1<br>SST-2<br>FT<br>RoBERTa-large<br>1<br>MNLI<br>FT<br>RoBERTa-large<br>6.7<br>QNLI<br>FT<br>RoBERTa-large<br>6.7<br>QQP<br>FT<br>RoBERTa-large<br>6.7<br>SST-2<br>FT<br>RoBERTa-large<br>6.7|84.7<br>83.2 (_ϵ_= 3) (Bu et al., 2023)<br>90.3<br>87.4 (_ϵ_= 3)<br>87.8<br>85.8 (_ϵ_= 3)<br>92.9<br>92.3 (_ϵ_= 3)<br>85.9<br>83.8 (_ϵ_= 8) (Bu et al., 2023)<br>90.5<br>87.9 (_ϵ_= 8)<br>89.0<br>86.6 (_ϵ_= 8)<br>93.1<br>93.0 (_ϵ_= 8) (Li et al., 2021)<br>87.9<br>86.8 (Yu et al., 2021)<br>92.5<br>88.0<br>88.2<br>85.2<br>95.2<br>93.1<br>89.4<br>89.0 (Yu et al., 2021)<br>92.6<br>92.5<br>89.6<br>88.4<br>95.4<br>95.3|
+|E2E (BLEU)<br>FT<br>GPT-2<br>3<br>E2E (ROUGE-L)<br>FT<br>GPT-2<br>3<br>E2E (BLEU)<br>FT<br>GPT-2<br>8<br>E2E (ROUGE-L)<br>FT<br>GPT-2<br>8<br>DART (BLEU)<br>FT<br>GPT-2<br>3<br>DART (ROUGE-L)<br>FT<br>GPT-2<br>3<br>DART (BLEU)<br>FT<br>GPT-2<br>8<br>DART (ROUGE-L)<br>FT<br>GPT-2<br>8|68.35<br>61.52 (Li et al., 2021)<br>70.23<br>65.87 (Bu et al., 2024)<br>68.73<br>63.60 (Bu et al., 2024)<br>70.58<br>67.53 (Li et al., 2021)<br>41.01<br>32.33 (Li et al., 2021)<br>57.53<br>52.06<br>42.12<br>35.06<br>58.11<br>54.57|
+
+
+27 
+
+Table 7: The privacy parameter _δ_ ’s used in our experiments and in SOTA results. 
+
+|Dataset|Our_δ_<br>SOTA_δ_|
+|---|---|
+|MNIST<br>5_._5_×_10_−_6<br>10_−_5<br>CIFAR-10/100<br>6_._8_×_10_−_6<br>10_−_5<br>Imagenet-1k<br>1_._9_×_10_−_7<br>8_×_10_−_7<br>||
+|MNLI<br>QNLI<br>SST-2<br>QQP|6_._3_×_10_−_7<br>1_._1_×_10_−_6<br>4_._8_×_10_−_7<br>9_×_10_−_7<br>4_._9_×_10_−_6<br>7_._4_×_10_−_6<br>7_._6_×_10_−_7<br>1_._4_×_10_−_6|
+|E2E<br>DART|1_._2_×_10_−_5<br>1_._2_×_10_−_5<br>6_._1_×_10_−_6<br>6_._1_×_10_−_6|
+
+
+28

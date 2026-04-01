@@ -1,0 +1,781 @@
+## - PFDIFF: TRAINING-FREE ACCELERATION OF DIF FUSION MODELS COMBINING PAST AND FUTURE SCORES 
+
+## **Guangyi Wang**[1,2] **, Yuren Cai**[1] **, Lijiang Li**[1,2] **, Wei Peng**[3] **, Songzhi Su**[1,2] _[∗]_ 
+
+1School of Informatics, Xiamen University. 
+
+2Key Laboratory of Multimedia Trusted Perception and Efficient Computing, Ministry of Education of China, Xiamen University, 361005, P.R. China. 3Department of Psychiatry and Behavioral Sciences, Stanford University. _{_ wangguangyi,caiyuren,lilijiang _}_ @stu.xmu.edu.cn, wepeng@stanford.edu, ssz@xmu.edu.cn 
+
+## ABSTRACT 
+
+Diffusion Probabilistic Models (DPMs) have shown remarkable potential in image generation, but their sampling efficiency is hindered by the need for numerous denoising steps. Most existing solutions accelerate the sampling process by proposing fast ODE solvers. However, the inevitable discretization errors of the ODE solvers are significantly magnified when the number of function evaluations (NFE) is fewer. In this work, we propose _PFDiff_ , a novel _training-free_ and _orthogonal_ timestep-skipping strategy, which enables existing fast ODE solvers to operate with fewer NFE. Specifically, PFDiff initially utilizes score replacement from past time steps to predict a “ _springboard_ ”. Subsequently, it employs this “springboard” along with foresight updates inspired by Nesterov momentum to rapidly update current intermediate states. This approach effectively reduces unnecessary NFE while correcting for discretization errors inherent in first-order ODE solvers. Experimental results demonstrate that PFDiff exhibits flexible applicability across various pre-trained DPMs, particularly excelling in conditional DPMs and surpassing previous state-of-the-art training-free methods. For instance, using DDIM as a baseline, we achieved 16.46 FID (4 NFE) compared to 138.81 FID with DDIM on ImageNet 64x64 with classifier guidance, and 13.06 FID (10 NFE) on Stable Diffusion with 7.5 guidance scale. Code is available at https://github.com/onefly123/PFDiff. 
+
+## 1 INTRODUCTION 
+
+In recent years, Diffusion Probabilistic Models (DPMs) (Sohl-Dickstein et al., 2015; Ho et al., 2020; Song et al., 2020b) have demonstrated exceptional modeling capabilities across various domains including image generation (Dhariwal & Nichol, 2021; Peebles & Xie, 2023; Karras et al., 2024), video generation (Dehghani et al., 2023), text-to-image generation (Rombach et al., 2022; Betker et al., 2023), speech synthesis (Song et al., 2022), and text-to-3D generation (Poole et al., 2022; Lin et al., 2023). They have become a key driving force advancing deep generative models. DPMs initiate with a forward process that introduces noise onto images, followed by utilizing a neural network to learn a backward process that incrementally removes noise, thereby generating images (Ho et al., 2020; Song et al., 2020b). Compared to other generative methods such as Generative Adversarial Networks (GANs) (Goodfellow et al., 2014) and Variational Autoencoders (VAEs) (Kingma & Welling, 2013), DPMs not only possess a simpler optimization target but also are capable of producing higher quality samples (Dhariwal & Nichol, 2021). However, the generation of high-quality samples via DPMs requires hundreds or thousands of denoising steps, significantly lowering their sampling efficiency and becoming a major barrier to their widespread application. 
+
+> _∗_ Corresponding Author. 
+
+1 
+
+Existing techniques for rapid sampling in DPMs primarily fall into two categories. First, trainingbased methods (Salimans & Ho, 2022; Liu et al., 2022b; Song et al., 2023; Yin et al., 2024), which can significantly compress sampling steps, even achieving single-step sampling. However, this compression often comes with a considerable additional training cost, and these methods are challenging to apply to large pre-trained models. Second, training-free samplers (Song et al., 2020a; Lu et al., 2022a;b; Bao et al., 2022b;a; Liu et al., 2022a; Li et al., 2023; Zheng et al., 2023; Ma et al., 2024; Wimbauer et al., 2024; Zhao et al., 2023; Xue et al., 2023), which typically employ implicit or analytical solutions to Stochastic Differential Equations (SDE)/Ordinary Differential Equations (ODE) for lower-error sampling processes. For instance, Lu et al. (Lu et al., 2022a;b), by analyzing the semi-linear structure of the ODE solvers for DPMs, have sought to analytically derive optimally the solutions for DPMs’ ODE solvers. These training-free sampling strategies can often be used in a plug-and-play fashion, compatible with existing pre-trained DPMs. However, when the NFE is below 10, the discretization error of these training-free methods will be significantly amplified, leading to convergence issues (Lu et al., 2022a;b), which can still be time-consuming. 
+
+To further enhance the sampling speed of DPMs, we have analyzed the potential for improvement in existing training-free accelerated methods. Initially, we observed a high similarity in the model’s outputs for the existing ODE solvers when time step size ∆ _t_ is not extremely large, as illustrated in Fig. 1a. This observation led us to utilize the scores that have been computed from past time steps to approximate current scores, thereby predicting a “ _springboard_ ”. Furthermore, due to the similarities between the sampling process of DPMs and Stochastic Gradient Descent (SGD) (Robbins & Monro, 1951) as noted in Remark 1, we incorporated a _foresight_ update mechanism using Nesterov momentum (Nesterov, 1983), known for accelerating SGD training. Specifically, we first predict future scores using the “springboard” to reduce errors, as shown in Fig. 1b. Then, we further replace the current scores with the future scores to facilitate a larger update step size ∆ _t_ , as shown in Fig. 1c. 
+
+Motivated by these insights, we propose _PFDiff_ , a timestep-skipping sampling algorithm that rapidly updates the current intermediate state combining past and future scores. Notably, PFDiff is _trainingfree_ and _orthogonal_ to existing DPMs sampling algorithms, providing a new orthogonal axis for DPMs sampling. Furthermore, we prove that PFDiff, despite utilizing fewer NFE, corrects for errors in the sampling trajectories of first-order ODE solvers, as visualized in Fig. 1c. This ensures that improving sampling speed does not compromise sampling quality; it only reduces unnecessary NFE in existing ODE solvers. To validate the orthogonality and effectiveness of PFDiff, extensive experiments were conducted on both unconditional (Ho et al., 2020; Song et al., 2020b;a) and conditional (Dhariwal & Nichol, 2021; Rombach et al., 2022) pre-trained DPMs. The results of the visualization experiment are depicted in Appendix D.9. The results indicate that PFDiff significantly enhances the sampling performance of existing ODE solvers. Particularly in conditional DPMs, PFDiff, using only DDIM as the baseline, surpasses the previous state-of-the-art training-free sampling algorithms. 
+
+## 2 BACKGROUND 
+
+## 2.1 DIFFUSION SDES 
+
+Diffusion Probabilistic Models (DPMs) (Sohl-Dickstein et al., 2015; Ho et al., 2020; Song et al., 2020b) aim to generate _D_ -dimensional random variables _x_ 0 _∈_ R _[D]_ that follow a data distribution _q_ ( _x_ 0). Taking Denoising Diffusion Probabilistic Models (DDPM) (Ho et al., 2020) as an example, these models introduce noise to the data distribution through a forward process defined over discrete time steps, gradually transforming it into a standard Gaussian distribution _xT ∼N_ ( **0** _,_ _**I**_ ). The forward process’s latent variables _{xt}t∈_ [0 _,T_ ] are defined as follows: 
+
+**==> picture [266 x 12] intentionally omitted <==**
+
+where _αt_ is a scalar function related to the time step _t_ , with _αt_[2][+] _[σ] t_[2][= 1][. In the model’s reverse pro-] cess, DDPM utilizes a neural network model _pθ_ ( _xt−_ 1 _| xt_ ) to approximate the transition probability _q_ ( _xt−_ 1 _| xt, x_ 0), 
+
+**==> picture [291 x 12] intentionally omitted <==**
+
+2 
+
+**==> picture [396 x 130] intentionally omitted <==**
+
+**----- Start of picture text -----**<br>
+01111 ..... 7525007550 DDIMDPM-Solver-1DPM-Solver++-1DPM-Solver-2DPM-Solver-3DDPM(DDPM(DDPM( ηηη = 0= 0= 1 ... 250))) 00000 ..... 0605040302 NFE=10,NFE=8,NFE=8,NFE=10,NFE=6,NFE=20,NFE=6,NFE=20,NFE=50,NFE=50, xxxx ˜˜˜˜ xxxxxx ˜˜˜˜˜˜ ttttiiiitttttt +(+(+(+( iiiiii +(+(+(+(+(+( kkkk +1)+1)+1)+1) kkkkkk +1)+1)+1)+1)+1)+1) (from(from(from(from(from(from(from(from(from(fromSpringboard)Springboard)FutureFutureSpringboard)Springboard)Springboard)FutureFutureFutureScore)Score)Score)Score)Score) Noise PFDiff-1 Buffer ODE trajectories “Springboard” “Springboard” B ffer Data<br>0 . 50 First-ord<br>0 . 01<br>0 . 25<br>0 . 00 i= 0 200 : 400 600 ; 800 a 999 0 . 00 0 200 400 SS 600 800 1000 (xr)  ———— q(x) ———— (20)<br>∆ t Denoising timestep ti + h = Sampling trajectory wnt Forecasting sample > Gradients saving<br>(a) score Changes in SDE/ODE (b) Future score More Reliable (c) Comparison of Sampling<br>Solvers than “Springboard” Trajectories<br>2 ∥ ) + ∆ t<br>( , txǫθ +∆ tt NFE)1000<br>∆ T 1 t )( ∥− −, txǫθt − =0 t (RelativeMSEto<br>1 ∆ Tt −<br>**----- End of picture text -----**<br>
+
+
+Figurewhere _η_ 1:comes from(a) The trend _σ_ ¯ _t_ in Eq.of the MSE(6). Solid lines:of the noiseODE solvers, dashed lines:network output _ϵθ_ ( _xt, t_ ) overSDE solvers.time step (b) MSEsize ∆ _t_ , of the status separately updated using “springboard” _x_ ˜ _ti_ + _h_ and future score _ϵθ_ (˜ _xti_ + _h, ti_ + _h_ ), relative ˜ ˜ to the sampling process with 1000 NFE, is given by: _∥xti_ +( _k_ +1) _− x[gt] ti_ +( _k_ +1) _[∥]_[2][.][(c)][Comparison] of partial sampling trajectories between PFDiff-1 and a first-order ODE solver, where the update directions are guided by the tangent direction of the sampling trajectories. 
+
+where _σθ_[2][(] _[t]_[)][ is defined as a scalar function related to the time step] _[ t]_[.][By sampling from a standard] Gaussian distribution and utilizing the trained neural network, samples following the data distribution _pθ_ ( _x_ 0) = _Tt_ =1 _[p][θ]_[(] _[x][t][−]_[1] _[|][ x][t]_[)][ can be generated.] 
+
+Furthermore, Song et al. (2020b) introduced SDE to model DPMs over continuous time steps, where the forward process is defined as: 
+
+**==> picture [285 x 11] intentionally omitted <==**
+
+where _wt_ represents a standard Wiener process, and _f_ and _g_ are scalar functions of the time step _t_ . It’s noteworthy that the forward process in Eq. (1) is a discrete form of Eq. (3), where _f_ ( _t_ ) = d lodg _t αt_ and _g_[2] ( _t_ ) =[d] d _[σ] tt_[2] _[−]_[2][ d lo] d[g] _t[ α][t] σt_[2][.][Song et al. (2020b) further demonstrated that there exists an] equivalent reverse process from time step _T_ to 0 for the forward process in Eq. (3): 
+
+**==> picture [336 x 13] intentionally omitted <==**
+
+where _w_ ¯ denotes a standard Wiener process. In this reverse process, the only unknown is the _score function ∇x_ log _qt_ ( _xt_ ), which can be approximated through neural networks. 
+
+2.2 DIFFUSION ODES 
+
+In DPMs based on SDE, the discretization of the sampling process often requires a significant number of time steps to converge, such as the _T_ = 1000 time steps used in DDPM (Ho et al., 2020). This requirement primarily stems from the randomness introduced at each time step by the SDE. To achieve a more efficient sampling process, Song et al. (2020b) utilized the Fokker-Planck equation (Øksendal & Øksendal, 2003) to derive a _probability flow ODE_ related to the SDE, which possesses the same marginal distribution at any given time _t_ as the SDE. Specifically, the reverse process ODE derived from Eq. (3) can be expressed as: 
+
+**==> picture [318 x 21] intentionally omitted <==**
+
+Unlike SDE, ODE avoids the introduction of randomness, thereby allowing convergence to the data distribution in fewer time steps. Song et al. (2020b) employed a high-order RK45 ODE solver (Dormand & Prince, 1980), achieving sample quality comparable to SDE at 1000 NFE with only 60 NFE. Furthermore, research such as DDIM (Song et al., 2020a) and DPM-Solver (Lu et al., 2022a) explored discrete ODE forms capable of converging in fewer NFE. For DDIM, it breaks the Markov chain constraint on the basis of DDPM, deriving a new sampling formula expressed as follows: 
+
+**==> picture [358 x 25] intentionally omitted <==**
+
+3 
+
+where _σ_ ¯ _t_ = _η_ �(1 _− αt−_ 1) _/_ (1 _− αt_ ) ~~�~~ 1 _− αt/αt−_ 1, and _αt_ corresponds to _αt_[2][in Eq.][(1).][When] _η_ = 1, Eq. (6) becomes a form of DDPM; when _η_ = 0, it degenerates into an ODE, the form adopted by DDIM, which can obtain high-quality samples in fewer time steps. 
+
+**Remark 1.** _In this paper, we regard the score_ d¯ _xt, the noise network output ϵθ_ ( _xt, t_ ) _, and the score function ∇x_ log _qt_ ( _xt_ ) _as expressing equivalent concepts. This is because Song et al. (2020b) demonstrated that ϵθ_ ( _xt, t_ ) = _−σt∇x_ log _qt_ ( _xt_ ) _._ ¯ _Moreover, we have discovered that any first-order solver of DPMs can be parameterized as xt−_ 1 = _xt−γt_ d¯ _xt_ + _ξϵt. Taking DDIM (Song et al., 2020a) as an example, where x_ ¯ _t_ = � _ααt−t_ 1 _[x][t][,][γ][t]_[=] � _ααt−t_ 1 _− αt−_ 1 _−[√]_ 1 _− αt−_ 1 _,_ d¯ _xt_ = _ϵθ_ ( _xt, t_ ) _, and ξ_ = 0 _. This indicates the similarity between SGD and the sampling process of DPMs, a discovery also implicitly suggested in the research of Xue et al. (2023) and Wang et al. (2024)._ 
+
+## 3 METHOD 
+
+## 3.1 SOLVING FOR REVERSE PROCESS DIFFUSION ODES 
+
+By substituting _ϵθ_ ( _xt, t_ ) = _−σt∇x_ log _qt_ ( _xt_ ) (Song et al., 2020b), Eq. (5) can be rewritten as: 
+
+**==> picture [337 x 25] intentionally omitted <==**
+
+toGiven an initial value _tT_ = 0. Let _x_ ˜ _t_ 0 = _xxTT_ , we define the time stepsbe the initial value. Using _{ Tti}_ steps of iteration, we compute the sequence _[T] i_ =0[to progressively decrease from] _[ t]_[0][=] _[T] {x_ ˜ _ti}[T] i_ =0[to obtain the solution of this ODE. By integrating both sides of Eq.][(7), we can obtain the] exact solution of this sampling ODE: 
+
+**==> picture [280 x 27] intentionally omitted <==**
+
+For any _p_ -order ODE solver, Eq. (8) can be discretely represented as: 
+
+**==> picture [393 x 31] intentionally omitted <==**
+
+Here, _Q_ = �� _ϵθ_ (˜ _xt_ ˆ _n, t_[ˆ] _n_ )� _pn−_ =01 _[, t][i][−]_[1] _[, t][i]_ � stores the set of _p_ scores computed over the intervals _ti−_ 1 and _ti_ , where _t_[ˆ] 0 = _ti−_ 1, _t_[ˆ] _p_ = _ti_ , and ∆ _t_[ˆ] = _t_[ˆ] _n_ +1 _− t_[ˆ] _n_ denote the time step size. Particularly, when _p_ ˜ = 1, _Q_ = _ϵθ_ (˜ _xti−_ 1 _, ti−_ 1). The function _ϕ_ is any _p_ -order ODE solver that updates the current state _xti−_ 1 from time point _ti−_ 1 to _ti_ , using the scores stored in _Q_ . The function _h_ represents the way in which different _p_ -order ODE solvers handle the function _s_ , and its specific form depends on the solver’s design. For example, in the DPM-Solver (Lu et al., 2022a), an exponential integrator is used to transform _s_ into _h_ in order to eliminate linear terms. In the case of a first-order Euler-Maruyama solver (Kloeden et al., 1992), it serves as an identity mapping of _s_ . 
+
+When using the ODE solver defined in Eq. (9) for sampling, the choice of _T_ = 1000 leads to significant inefficiencies in DPMs. The study on DDIM (Song et al., 2020a) first revealed that by constructing a new forward sub-state sequence of length _M_ + 1 ( _M ≤ T_ ), _{x_ ˜ _ti}[M] i_ =0[,][from][a] subsequence of time steps [0 _, . . . , T_ ] and reversing this sub-state sequence, it is possible to converge to the data distribution in fewer time steps. However, as illustrated in Fig. 1a, for ODE solvers, as the time step size ∆ _t_ = _ti − ti−_ 1 increases, the score direction changes slowly initially, but undergoes abrupt changes as ∆ _t → T_ . This phenomenon indicates that under minimal NFE (i.e., maximal time step size ∆ _t_ ) conditions, the discretization error in Eq. (9) is significantly amplified. Consequently, existing ODE solvers, when sampling under minimal NFE, must sacrifice sampling quality to gain speed, making it an extremely challenging task to reduce NFE to below 10 (Lu et al., 2022a;b). Given this, we aim to develop an efficient timestep-skipping sampling algorithm, which reduces NFE while correcting discretization errors, thereby ensuring that sampling quality is not compromised, and may even be improved. 
+
+4 
+
+## 3.2 SAMPLING GUIDED BY PAST SCORES 
+
+As illustrated in Fig. 1a, when the time step size ∆ _t_ (i.e., _ti − ti−_ 1) is not excessively large, the MSE 1 _T −_ ∆ _t−_ 1 of the noise network, defined as _T −_ ∆ _t_ � _t_ =0 _∥ϵθ_ ( _xt, t_ ) _− ϵθ_ ( _xt_ +∆ _t, t_ + ∆ _t_ ) _∥_[2] , is remarkably similar. This phenomenon is especially pronounced in ODE-based sampling algorithms, such as DDIM (Song et al., 2020a) and DPM-Solver (Lu et al., 2022a). This observation suggests that there are many unnecessary time steps in ODE-based sampling methods during the complete sampling process (e.g., when _T_ = 1000), which is one of the reasons these methods can generate samples in fewer steps. Based on this, we propose replacing the noise network of the current timestep with the output from a previous timestep to reduce unnecessary NFE without compromising the quality of the final generated samples. Specifically, for any _p_ -order ODE solver _ϕ_ , the sampling process from _x_ ˜ _ti−_ 1 to _x_ ˜ _ti_ can be reformulated according to Eq. (9) as follows: 
+
+**==> picture [285 x 16] intentionally omitted <==**
+
+Then, we store the noise network output in a _buffer_ for use in the next timestep, as follows: 
+
+**==> picture [278 x 19] intentionally omitted <==**
+
+where _ti−_ 1 and _ti_ represent the intervals over which the set of _p_ scores are computed. For the sampling process from _x_ ˜ _ti_ to _x_ ˜ _ti_ +1, we directly use the noise network output saved in the buffer from the previous timestep to replace the current timestep’s noise network, thereby updating the intermediate states to the next timestep (i.e., the “springboard” _x_ ˜ _ti_ +1), as detailed below: 
+
+**==> picture [343 x 19] intentionally omitted <==**
+
+By using this approach, we can reduce unnecessary NFE, thereby accelerating the sampling process. 
+
+**Remark 2.** _Notably, when the time step size_ ∆ _t is very large (NFE<10), the similarity between pastTherefore, in Sec.and current scores3.3, we usedecreasesx_ ˜ _ti_ +1 _sharply,solely to predict a foresight update direction (i.e., future score)making “springboard” x_ ˜ _ti_ +1 _unreliable in Eq. (12). to reduce errors caused by the replacement, as shown in Fig. 1b and Fig. 1c. Both past and future scores are complementary and indispensable, as demonstrated by the ablation study in Sec. 4.3._ 
+
+## 3.3 SAMPLING GUIDED BY FUTURE SCORES 
+
+As stated in Remark 1, considering the similarities between the sampling process of DPMs and SGD, and inspired by Nesterov momentum (Nesterov, 1983), we introduce a _foresight_ update direction (i.e., future score) to assist the current intermediate state in achieving more efficient leapfrog updates. Notably, employing future scores is more reliable than directly using the “springboard”, as discussed in Remark 2. Specifically, during the sampling process from _x_ ˜ _ti_ to _x_ ˜ _ti_ +2, we consider using future scores (corresponding to time pointto _ti_ ). Continuing from Eq. (12), we estimate the _ti_ +1future) to replace the current scores (correspondingscore using the “springboard” _x_ ˜ _ti_ +1 and _update_ the _buffer_ as follows: 
+
+**==> picture [283 x 19] intentionally omitted <==**
+
+Subsequently, leveraging the concept of foresight updates, we predict a further future intermediate state ˜ _xti_ +2 using the current intermediate state ˜ _xti_ along with the future score corresponding to time point _ti_ +1, as shown below: 
+
+**==> picture [348 x 19] intentionally omitted <==**
+
+Furthermore, we analyze how to correct the errors of the first-order ODE solvers in the discretized Eq. (8) using future scores. Let _sθ_ ( _xt, t_ ) := _s_ ( _ϵθ_ ( _xt, t_ ) _, xt, t_ ), we further analyze the term from Eq. _ti_ (8) that may cause errors, � _ti−_ 1 _[s][θ]_[(] _[x][t][, t]_[)d] _[t]_[.][Assuming that] _[ s]_[(] _θ[n]_[)] ( _xr, r_ ), _r ∈_ [ _ti−_ 1 _, ti_ ] exists and is 
+
+5 
+
+**==> picture [375 x 114] intentionally omitted <==**
+
+**----- Start of picture text -----**<br>
+... ... ... ...<br>Select a “Springboard”<br>Future Score<br>1 2<br>Past Score 3 "Past" relative to next round<br>4<br>Buffer<br>Status update Temporary status update Scores propagation 1, 2, ... Buffer access order<br>**----- End of picture text -----**<br>
+
+
+Figure 2: Illustration of a single iteration update of PFDiff- _k_ ~~_h_~~ combined with any first-order ODE solver _ϕ_ . Given specific values of _k_ and _h_ ( _k ≤_ 3 ( _h ≤ k_ )), PFDiff first uses the past score _Q_ stored in the Buffer from the previous iteration to replace the current score, updating to the “springboard” _xti_ + _h_ ; then the future score is calculated using the “springboard”; finally, the future score is used to replace the current score, completing a full update iteration. The future score will also be passed to the next iteration as the “past” score for the next round of updates. 
+
+continuous, applying Taylor’s expansion at _t_ = _r_ , we derive: 
+
+**==> picture [388 x 146] intentionally omitted <==**
+
+**Proposition 3.1.** _For any given DPM first-order ODE solver, the absolute values of the coefficients for higher-order derivative terms in Eq. (15) are smaller when using the future time point r_ = _ε score compared to the current time point r_ = _ti−_ 1 _score, as follows (Proof in Appendix B.2):_ 
+
+**==> picture [351 x 26] intentionally omitted <==**
+
+Proposition 3.1 indicates that neglecting higher-order derivative terms has less impact when sampling with future scores, correcting for the discretization errors inherent in first-order ODE solvers. However, higher-order ODE solvers approximate higher-order derivative terms by estimating the noise network’s output multiple times (Lu et al., 2022a;b; Zheng et al., 2023). Future scores and higher-order ODE solvers reduce the discretization errors caused by neglecting higher-order derivative terms in two parallel manners, complicating the error analysis when both methods are used simultaneously. Therefore, when using higher-order ODE solvers as a baseline, the sampling process is accelerated by only using past scores. It is only necessary to modify Eq. (14) to _x_ ˜ _ti_ +2 _≈ ϕ_ ( _Q,_ ˜ _xti_ +1 _, ti_ +1 _, ti_ +2) while keeping _Q_ constant. 
+
+## 3.4 PFDIFF: SAMPLING GUIDED BY PAST AND FUTURE SCORES 
+
+Combining Sec. 3.2 and Sec. 3.3, the “springboard” _x_ ˜ _ti_ +1 obtained through Eq. (12) is used to update the buffer _Q_ in Eq. (13). In this way, we achieve our proposed efficient timestep-skipping algorithm, which we name PFDiff. Notably, during the iteration from intermediate state ˜ _xti_ to ˜ _xti_ +2, we only perform a single batch computation (NFE = _p_ ) of the noise network in Eq. (13). Furthermore, we propose that in a single iteration process, _x_ ˜ _ti_ +2 in Eq. (14) can be modified to _x_ ˜ _ti_ +( _k_ +1), 
+
+6 
+
+achieving a _k_ -step skip to sample more distant future intermediate states. Also, when _k_ = 1, the buffer _Q_ from Eq. (13) has various computational origins. This can be accomplished by modifying “springboard” _x_ ˜ _ti_ +1 in Eq. (12) to _x_ ˜ _ti_ + _h_ , which represents _h_ ( _h ≤ k_ ) different springboard selections. We collectively refer to this multi-step skipping and different “springboard” selection strategy as PFDiff- _k_ ~~_h_~~ ( _h ≤ k_ ). The algorithmic process is illustrated in Fig. 2 and Algorithm 1, with further details provided in Appendix C. Additionally, through the comparison of sampling trajectories between PFDiff-1 and a first-order ODE sampler, as shown in Fig. 1c, PFDiff-1 showcases its capability to correct the sampling trajectory of the first-order ODE sampler while reducing the NFE. Meanwhile, we observed that PFDiff completes two updates with just one score computation (1 NFE), which is equivalent to achieving an update process of a second-order ODE solver with 2 NFE. This effectiveness is derived from PFDiff’s _information-efficient_ update process, which utilizes both past and future scores that are complementary and indispensable. The convergence of PFDiff’s sampling outcomes to the data distribution consistent with solver _ϕ_ relies on the _Mean Value Theorem_ , as detailed in Appendix B.3. Finally, it is important to emphasize that although PFDiff is orthogonal to an arbitrary ODE solver, PFDiff can also be viewed as an independent ODE solver, depending on the perspective. 
+
+## 3.5 ANALYSIS OF EFFECTIVENESS BASED ON THE SHAPE OF THE TRAJECTORY 
+
+In Proposition 3.1, we theoretically analyze how PFDiff corrects the error of the first-order ODE solver to achieve efficient sampling. In this section, we explain the effectiveness of PFDiff from the perspective of the trajectory’s geometric shape. Previous studies have explored the sampling trajectories of diffusion models (Sabour et al., 2024; Zhou et al., 2024; Chen et al., 2024). Zhou et al. (2024) pointed out that the sampling trajectories of DPMs lie in a low-dimensional subspace embedded in a high-dimensional space, and the trajectory shapes closely resemble a straight line. This finding supports the strategy of using past scores to replace the current score in PFDiff as reliable. Moreover, Chen et al. (2024) further noted that the sampling trajectories exhibit a “boomerang” shape, meaning the curvature of the sampling trajectory starts small, then increases, and finally decreases. Based on this observation, we can analyze that the first-order ODE solver, which samples along the tangent direction, leads to larger discretization errors in regions of the trajectory with large curvature. On the other hand, PFDiff uses future scores to predict the future update direction, thereby correcting the discretization errors introduced by sampling along the tangent direction. In Fig. 1c, we vividly demonstrate the sampling correction process of PFDiff for first-order ODE solvers, thereby validating the effectiveness of PFDiff. 
+
+## **Algorithm 1** PFDiff-1 
+
+**Require:** initial value _xT_ , NFE _N_ , model _ϵθ_ , any _p_ -order solver _ϕ_ 1:2: Define time steps _x_ ˜ _t_ 0 _← xT {ti}[M] i_ =0[with] _[ M]_[= 2] _[N][−]_[1] _[p]_ 4:3: _Qx_ ˜ _t_ 1 _←−−−_ buffer= _ϕ_ ( _Q,_ �� ˜ _ϵxθt_ (˜0 _x, tt_ ˆ _n_ 0 _, t, t_[ˆ] 1 _n_ ))� _np−_ =01 _[, t]_[0] _[, t]_[1] � _▷_ Initialize buffer 5: **for** _i ←_ 1 to _[M] p[−]_[2] **[ do]** 6:7: **if** ( _ix_ ˜ _−ti_ +11) =mod _ϕ_ ( _Q,_ 2 = 0 ˜ _xti, t_ **then** _i, ti_ +1) _▷_ Updating guided by past scores 8: _Q ←−−−_ buffer �� _ϵθ_ (˜ _xt_ ˆ _n, t_[ˆ] _n_ )� _pn−_ =01 _[, t][i]_[+1] _[, t][i]_[+2] � _▷_ Update buffer (overwrite) 9: **if** _p_ = 1 **then** 10: _x_ ˜ _ti_ +2 = _ϕ_ ( _Q,_ ˜ _xti, ti, ti_ +2) _▷_ Anticipatory updating guided by future scores 11: **else if** _p >_ 1 **then** 12: _x_ ˜ _ti_ +2 = _ϕ_ ( _Q,_ ˜ _xti_ +1 _, ti_ +1 _, ti_ +2) _▷_ The higher-order solver uses only past scores 13: **end if** 14: **end if** 15: **end for** 16: **return** _x_ ˜ _tM_ 
+
+7 
+
+## 4 EXPERIMENTS 
+
+In this section, we validate the effectiveness of PFDiff as an _orthogonal_ and _training-free_ sampler through a series of extensive experiments ( **the results of the visualization experiment are shown in Figs. 7-13 of Appendix D.9** ). This sampler can be integrated with any order of ODE solvers, thereby significantly enhancing the sampling efficiency of various types of pre-trained DPMs. To systematically showcase the performance of PFDiff, we categorize the pre-trained DPMs into two main types: conditional and unconditional. Unconditional DPMs are further subdivided into discrete and continuous, while conditional DPMs are subdivided into classifier guidance and classifier-free guidance. In choosing ODE solvers, we utilized the widely recognized first-order DDIM (Song et al., 2020a), Analytic-DDIM (Bao et al., 2022b), and the higher-order DPM-Solver (Lu et al., 2022a) as baselines. For each experiment, we use the Fr´echet Inception Distance (FID _↓_ ) (Heusel et al., 2017) as the primary evaluation metric, and provide the experimental results of the Inception Score (IS _↑_ ) (Salimans et al., 2016) in the Appendix D.7 for reference. Lastly, apart from the ablation studies on parameters _k_ and _h_ discussed in Sec. 4.3, we showcase the optimal results of PFDiff- _k_ ~~_h_~~ (where _k_ = 1 _,_ 2 _,_ 3 and _h ≤ k_ ) across six configurations as a performance demonstration of PFDiff. As described in Appendix C, this does not increase the computational burden in practical applications. All experiments were conducted on an NVIDIA RTX 3090 GPU. 
+
+## 4.1 UNCONDITIONAL SAMPLING 
+
+For unconditional DPMs, we selected discrete DDPM (Ho et al., 2020) and DDIM (Song et al., 2020a), as well as pre-trained models from continuous ScoreSDE (Song et al., 2020b), to assess the effectiveness of PFDiff. For these pre-trained models, all experiments sampled 50k samples to compute evaluation metrics. 
+
+For unconditional discrete DPMs, we first select first-order ODE solvers DDIM (Song et al., 2020a) and Analytic-DDIM (Bao et al., 2022b) as baselines, while implementing SDE-based DDPM (Ho et al., 2020) and Analytic-DDPM (Bao et al., 2022b) methods for comparison, where _η_ = 1 _._ 0 is from _σ_ ¯ _t_ in Eq. (6). We conduct experiments on the CIFAR10 (Krizhevsky et al., 2009) and CelebA 64x64 (Liu et al., 2015) datasets using the quadratic time steps employed by DDIM. By varying the NFE from 6 to 20, the evaluation metric FID _↓_ is shown in Figs. 3a and 3b. Additionally, experiments with uniform time steps are conducted on the CelebA 64x64, LSUN-bedroom 256x256 (Yu et al., 2015), and LSUN-church 256x256 (Yu et al., 2015) datasets, with more results available in Appendix D.2. Our experimental results demonstrate that PFDiff, based on pre-trained models of discrete unconditional DPMs, significantly improves the sampling efficiency of DDIM and Analytic-DDIM samplers across multiple datasets. For instance, on the CIFAR10 dataset, PFDiff combined with DDIM achieves a FID of 4.10 with only 15 NFE, comparable to DDIM’s performance of 4.04 FID with 1000 NFE. This is something other time-step skipping algorithms (Bao et al., 2022b; Ma et al., 2024) that sacrifice sampling quality for speed cannot achieve. Furthermore, in Appendix D.2, by varying _η_ from 1.0 to 0.0 in Eq. (6) to control the scale of noise introduced by SDE, we observe that as _η_ decreases (reducing noise introduction), the performance of PFDiff gradually improves. This is consistent with the trend shown in Fig. 1a, where reducing noise introduction leads to an improvement in the similarity of the model’s outputs. 
+
+For unconditional continuous DPMs, we choose the DPM-Solver-1, -2 and -3 (Lu et al., 2022a) as the baseline to verify the effectiveness of PFDiff as an orthogonal timestep-skipping algorithm on the first and higher-order ODE solvers. We conducted experiments on the CIFAR10 (Krizhevsky et al., 2009) using quadratic time steps, varying the NFE. The experimental results using FID _↓_ as the evaluation metric are shown in Fig. 3c. More experimental details can be found in Appendix D.3. We observe that PFDiff consistently improves the sampling performance over the baseline with fewer NFE settings, particularly in cases where higher-order ODE solvers fail to converge with a small NFE (below 10) (Lu et al., 2022a). 
+
+## 4.2 CONDITIONAL SAMPLING 
+
+For conditional DPMs, we selected the pre-trained models of the widely recognized classifier guidance paradigm, ADM-G (Dhariwal & Nichol, 2021), and the classifier-free guidance paradigm, Stable-Diffusion (Rombach et al., 2022), to validate the effectiveness of PFDiff. We employed 
+
+8 
+
+**==> picture [393 x 299] intentionally omitted <==**
+
+**----- Start of picture text -----**<br>
+70 DDPM(η = 1.0) 45 DDPM(η = 1.0) DPM-Solver-1<br>60 Analytic-DDPM(DDIMAnalytic-DDIMDDIM+Ours η = 1.0) 4035 AnalDDIMAnalDDIM+Oursyytic-DDPMtic-DDIM (η = 1.0) 300 DPM-Solver-2DPM-Solver-3DPM-Solver-1+OursDPM-Solver-2+Ours<br>50 Analytic - DDIM+Ours 30 Analytic-DDIM+Ours DPM-Solver-3+Ours<br>40 25<br>30 20 50<br>20 15<br>10 20<br>10 10<br>5 5<br>6 8 10 12 15 20 6 8 10 12 15 20 6 8 9 10 12 15 16 20 21<br>NFE NFE NFE<br>(a) CIFAR10 (Discrete) (b) CelebA 64x64 (Discrete) (c) CIFAR10 (Continuous)<br>Figure 3: Unconditional sampling results. We report the FID ↓ for different methods by varying the<br>number of function evaluations (NFE), evaluated on 50k samples.<br>60 DDIM 70 DDIM 24 DDIM<br>50 DPM-Solver-2 DPM DPM-Solver++(2M)∗ AutoDiffusion- Solver - 3 60 DPM-Solver-2DPM-Solver-3 DPM DDIM+Ours- Solver++(2M) 22 DPM-Solver-2† † † DPM-Solver++(2M)DPM-Solver-v3(2M)UniPC<br>40 DDIM+Ours 50 20 DDIM+Ours<br>30<br>40 18<br>20<br>30 16<br>10<br>20 14<br>0 4 6 8 10 15 20 5 6 8 10 15 20 5 6 8 10 15 20<br>NFE NFE NFE<br>(a) ImageNet 64x64 (b) MS-COCO2014 (c) MS-COCO2014<br>(Guided-Diffusion) (Stable-Diffusion) (Stable-Diffusion)<br>(Classifier Guidance,  s =1.0) (Classifier-Free Guidance,  s =1.5) (Classifier-Free Guidance,  s =7.5)<br>FID FID FID<br>FID FID FID<br>**----- End of picture text -----**<br>
+
+
+Figure 3: Unconditional sampling results. We report the FID _↓_ for different methods by varying the number of function evaluations (NFE), evaluated on 50k samples. 
+
+Figure 4: Conditional sampling results. We report the FID _↓_ for different methods by varying the NFE. Evaluated: ImageNet 64x64 with 50k, others with 10k samples. _∗_ AutoDiffusion (Li et al., 2023) requires additional search costs. _[†]_ We borrow the results reported in DPM-Solver-v3 (Zheng et al., 2023) directly. 
+
+uniform time steps setting and the DDIM (Song et al., 2020a) ODE solver as a baseline across all datasets. Evaluation metrics were computed by sampling 50k samples on the ImageNet 64x64 (Deng et al., 2009) dataset for ADM-G and 10k samples on other datasets, including ImageNet 256x256 in ADM-G and MS-COCO2014 (Lin et al., 2014) in Stable-Diffusion. 
+
+For conditional DPMs employing the classifier guidance paradigm, we conducted experiments on the ImageNet 64x64 dataset with a guidance scale ( _s_ ) set to 1.0. For comparison, we implemented DPM-Solver-2 and -3 (Lu et al., 2022a), and DPM-Solver++(2M) (Lu et al., 2022b), which exhibit the best performance on conditional DPMs. Additionally, we introduced the AutoDiffusion method (Li et al., 2023) using DDIM as a baseline for comparison, noting that this method incurs additional search costs. We compared FID _↓_ scores by varying the NFE as depicted in Fig. 4a, with corresponding visual comparisons shown in Fig. 7b. We observed that PFDiff reduced the FID from 138.81 with 4 NFE in DDIM to 16.46, achieving an 88.14% improvement in quality. The visual results in Fig. 7b further demonstrate that, at the same NFE setting, PFDiff achieves higherquality sampling. Furthermore, we evaluated PFDiff’s sampling performance based on DDIM on the large-scale ImageNet 256x256 dataset. Detailed results are provided in Appendix D.4. 
+
+For conditional, classifier-free guidance paradigms of DPMs, we employed the sd-v1-4 checkpoint and computed the FID _↓_ scores on the validation set of MS-COCO2014 (Lin et al., 2014). We conducted experiments with a guidance scale ( _s_ ) set to 7.5 and 1.5. For comparison, we implemented DPM-Solver-2 and -3 (Lu et al., 2022a), and DPM-Solver++(2M) (Lu et al., 2022b) methods. At _s_ = 7 _._ 5, we introduced the state-of-the-art method reported in DPM-Solver-v3 (Zheng et al., 2023) for comparison, along with DPM-Solver++(2M) (Lu et al., 2022b), UniPC (Zhao et al., 2023), and DPM-Solver-v3(2M). The FID _↓_ metrics by varying the NFE are presented in Figs. 4b and 4c, with additional visual results illustrated in Fig. 7a. We observed that PFDiff, solely based on DDIM, achieved state-of-the-art results during the sampling process of Stable-Diffusion, thus demonstrat- 
+
+9 
+
+Table 1: Sample quality measured by FID _↓_ on the MS-COCO2014 dataset (Lin et al., 2014), using Stable-Diffusion (Rombach et al., 2022) pre-trained model with a guidance scale of 7.5, varying the number of function evaluations (NFE). Evaluated with 10k samples. 
+
+|Method|NFE|
+|---|---|
+||4<br>6<br>8<br>10<br>15<br>20|
+|DPM-Solver-1 (Lu et al., 2022a)<br>+ PFDiff|35.48<br>20.33<br>17.46<br>16.78<br>16.08<br>15.95<br>**29.02**<br>**15.47**<br>**13.26**<br>**13.06**<br>**13.57**<br>**13.97**|
+|DPM-Solver-2 (Lu et al., 2022a)<br>+ PFDiff|184.21<br>157.95<br>148.67<br>135.81<br>92.62<br>40.47<br>**147.20**<br>**106.24**<br>**57.07**<br>**31.66**<br>**17.87**<br>**14.13**|
+
+
+ing the efficacy of PFDiff. Further experimental details can be found in Appendix D.5. Additionally, to further validate the orthogonality of PFDiff, we conducted experiments on the original (singlestep) DPM-Solver-1 and -2, comparing the performance with and without the PFDiff, using the Stable-Diffusion pre-trained model, as shown in Tab. 1. The experimental results demonstrate that PFDiff effectively enhances the performance of DPM-Solver across different orders. 
+
+## 4.3 ABLATION STUDY 
+
+We conducted ablation experiments on the six different algorithm configurations of PFDiff mentioned in Appendix C, with _k_ = 1 _,_ 2 _,_ 3 ( _h ≤ k_ ). Specifically, we evaluated the FID _↓_ scores on the unconditional and conditional pre-trained DPMs (Ho et al., 2020; Dhariwal & Nichol, 2021). Detailed experimental setups and results can be found in Appendix D.6.1. The experimental results indicate that for various pre-trained DPMs, the choice of parameters _k_ and _h_ is not critical, as most combinations of _k_ and _h_ within PFDiff can enhance the sampling efficiency over the baseline. Moreover, with _k_ = 2 and _h_ = 1 fixed, PFDiff-2 ~~1~~ can always improve the baseline’s sampling _∼_ quality within the range of 4 20 NFE. For even better sampling quality, one can sample a small subset of examples (e.g., 5k) to compute evaluation metrics or directly conduct visual analysis, easily identifying the most effective _k_ and _h_ combinations. Furthermore, in Appendix D.6.1, we propose an automatic search strategy with almost no additional cost, which can more rapidly obtain more competitive combinations of _k_ and _h_ based on truncation error. 
+
+To validate the effectiveness of PFDiff, a key factor is its information-efficient update process, which uses both past and future scores that are complementary and indispensable in jointly guiding firstorder ODE solvers. We employ DDIM (Song et al., 2020a) as the baseline, removing past and future scores separately. Moreover, we introduce methods (Ma et al., 2024) that cache part of past scores for comparison. As shown in Appendix D.6.2, experimental results indicate that only past (including cache) or only future scores can slightly improve sampling performance, but their combination (i.e., the complete PFDiff) significantly enhances the performance of first-order ODE solvers, especially with very few NFE ( _<_ 10). Additionally, we provide experimental results on inference time in Appendix D.6.2, revealing that methods (Ma et al., 2024) that cache part of past scores not only incur additional inference costs but also exhibit relatively weak acceleration effects with few NFE ( _<_ 10). However, PFDiff and the used baseline have consistent inference times and exhibit significantly accelerated effects, further validating its effectiveness. 
+
+## 5 CONCLUSION 
+
+In this paper, based on the recognition that the ODE solvers of DPMs exhibit significant similarity in model outputs when the time step size is not excessively large, and with the aid of a foresight update mechanism, we propose PFDiff, a novel method that leverages past and future scores to rapidly update the current intermediate state. This approach effectively reduces the unnecessary number of function evaluations (NFE) in the ODE solvers and significantly corrects the errors of first-order ODE solvers during the sampling process. Extensive experiments demonstrate the orthogonality and effectiveness of PFDiff on both unconditional and conditional pre-trained DPMs, especially in conditional pre-trained DPMs where PFDiff outperforms previous state-of-the-art training-free sampling methods. 
+
+10 
+
+## ETHICS STATEMENT 
+
+DPMs, like GANs and VAEs, may be utilized as deep generative models for generating fake and malicious content. The proposed PFDiff can accelerate the generation of DPMs, which may facilitate the rapid creation of such content, thereby posing a potential negative impact on society. 
+
+## REPRODUCIBILITY STATEMENT 
+
+Our code is based on the official implementations of DDIM (Song et al., 2020a), DPM-Solver (Lu et al., 2022a), and Analytic-DPM (Bao et al., 2022b). We utilized unconditional checkpoints from DDPM (Ho et al., 2020), DDIM (Song et al., 2020a), and ScoreSDE (Song et al., 2020b), as well as conditional checkpoints from AMD-G (Dhariwal & Nichol, 2021) and Stable-Diffusion (Rombach et al., 2022). Detailed experimental settings and algorithm implementations are described in Appendices C and D. 
+
+## REFERENCES 
+
+Fan Bao, Chongxuan Li, Jiacheng Sun, Jun Zhu, and Bo Zhang. Estimating the optimal covariance with imperfect mean in diffusion probabilistic models. _arXiv preprint arXiv:2206.07309_ , 2022a. 
+
+- Fan Bao, Chongxuan Li, Jun Zhu, and Bo Zhang. Analytic-dpm: an analytic estimate of the optimal reverse variance in diffusion probabilistic models. _arXiv preprint arXiv:2201.06503_ , 2022b. 
+
+- James Betker, Gabriel Goh, Li Jing, Tim Brooks, Jianfeng Wang, Linjie Li, Long Ouyang, Juntang Zhuang, Joyce Lee, Yufei Guo, et al. Improving image generation with better captions. _Computer Science. https://cdn. openai. com/papers/dall-e-3. pdf_ , 2(3):8, 2023. 
+
+- Defang Chen, Zhenyu Zhou, Can Wang, Chunhua Shen, and Siwei Lyu. On the trajectory regularity of ode-based diffusion sampling. In _Forty-first International Conference on Machine Learning_ , 2024. 
+
+- Elliott Ward Cheney, EW Cheney, and W Cheney. _Analysis for applied mathematics_ , volume 1. Springer, 2001. 
+
+- Mostafa Dehghani, Basil Mustafa, Josip Djolonga, Jonathan Heek, Matthias Minderer, Mathilde Caron, Andreas Steiner, Joan Puigcerver, Robert Geirhos, Ibrahim Alabdulmohsin, et al. Patch n’pack: Navit, a vision transformer for any aspect ratio and resolution. In _Proceedings of the 37th International Conference on Neural Information Processing Systems_ , pp. 2252–2274, 2023. 
+
+- Jia Deng, Wei Dong, Richard Socher, Li-Jia Li, Kai Li, and Li Fei-Fei. Imagenet: A large-scale hierarchical image database. In _2009 IEEE conference on computer vision and pattern recognition_ , pp. 248–255. Ieee, 2009. 
+
+- Prafulla Dhariwal and Alexander Nichol. Diffusion models beat gans on image synthesis. _Advances in neural information processing systems_ , 34:8780–8794, 2021. 
+
+- John R Dormand and Peter J Prince. A family of embedded runge-kutta formulae. _Journal of computational and applied mathematics_ , 6(1):19–26, 1980. 
+
+- Ian Goodfellow, Jean Pouget-Abadie, Mehdi Mirza, Bing Xu, David Warde-Farley, Sherjil Ozair, Aaron Courville, and Yoshua Bengio. Generative adversarial nets. _Advances in neural information processing systems_ , 27, 2014. 
+
+- Martin Heusel, Hubert Ramsauer, Thomas Unterthiner, Bernhard Nessler, and Sepp Hochreiter. Gans trained by a two time-scale update rule converge to a local nash equilibrium. _Advances in neural information processing systems_ , 30, 2017. 
+
+- Jonathan Ho, Ajay Jain, and Pieter Abbeel. Denoising diffusion probabilistic models. _Advances in neural information processing systems_ , 33:6840–6851, 2020. 
+
+- Tero Karras, Miika Aittala, Timo Aila, and Samuli Laine. Elucidating the design space of diffusionbased generative models. _Advances in neural information processing systems_ , 35:26565–26577, 2022. 
+
+11 
+
+- Tero Karras, Miika Aittala, Jaakko Lehtinen, Janne Hellsten, Timo Aila, and Samuli Laine. Analyzing and improving the training dynamics of diffusion models. In _Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition_ , pp. 24174–24184, 2024. 
+
+Diederik P Kingma and Max Welling. Auto-encoding variational bayes. _arXiv preprint arXiv:1312.6114_ , 2013. 
+
+- Peter E Kloeden, Eckhard Platen, Peter E Kloeden, and Eckhard Platen. _Stochastic differential equations_ . Springer, 1992. 
+
+- Alex Krizhevsky, Geoffrey Hinton, et al. Learning multiple layers of features from tiny images. 2009. 
+
+- Lijiang Li, Huixia Li, Xiawu Zheng, Jie Wu, Xuefeng Xiao, Rui Wang, Min Zheng, Xin Pan, Fei Chao, and Rongrong Ji. Autodiffusion: Training-free optimization of time steps and architectures for automated diffusion model acceleration. In _Proceedings of the IEEE/CVF International Conference on Computer Vision_ , pp. 7105–7114, 2023. 
+
+- Chen-Hsuan Lin, Jun Gao, Luming Tang, Towaki Takikawa, Xiaohui Zeng, Xun Huang, Karsten Kreis, Sanja Fidler, Ming-Yu Liu, and Tsung-Yi Lin. Magic3d: High-resolution text-to-3d content creation. In _Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition_ , pp. 300–309, 2023. 
+
+- Tsung-Yi Lin, Michael Maire, Serge Belongie, James Hays, Pietro Perona, Deva Ramanan, Piotr Doll´ar, and C Lawrence Zitnick. Microsoft coco: Common objects in context. In _Computer Vision–ECCV 2014: 13th European Conference, Zurich, Switzerland, September 6-12, 2014, Proceedings, Part V 13_ , pp. 740–755. Springer, 2014. 
+
+- Luping Liu, Yi Ren, Zhijie Lin, and Zhou Zhao. Pseudo numerical methods for diffusion models on manifolds. _arXiv preprint arXiv:2202.09778_ , 2022a. 
+
+- Xingchao Liu, Chengyue Gong, and Qiang Liu. Flow straight and fast: Learning to generate and transfer data with rectified flow. _arXiv preprint arXiv:2209.03003_ , 2022b. 
+
+- Ziwei Liu, Ping Luo, Xiaogang Wang, and Xiaoou Tang. Deep learning face attributes in the wild. In _Proceedings of the IEEE international conference on computer vision_ , pp. 3730–3738, 2015. 
+
+- Cheng Lu, Yuhao Zhou, Fan Bao, Jianfei Chen, Chongxuan Li, and Jun Zhu. Dpm-solver: a fast ode solver for diffusion probabilistic model sampling in around 10 steps. In _Proceedings of the 36th International Conference on Neural Information Processing Systems_ , pp. 5775–5787, 2022a. 
+
+- Cheng Lu, Yuhao Zhou, Fan Bao, Jianfei Chen, Chongxuan Li, and Jun Zhu. Dpm-solver++: Fast solver for guided sampling of diffusion probabilistic models. _arXiv preprint arXiv:2211.01095_ , 2022b. 
+
+- Xinyin Ma, Gongfan Fang, and Xinchao Wang. Deepcache: Accelerating diffusion models for free. In _Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition_ , pp. 15762–15772, 2024. 
+
+- Yurii Nesterov. A method of solving a convex programming problem with convergence rate o (1/k** 2). _Doklady Akademii Nauk SSSR_ , 269(3):543, 1983. 
+
+Bernt Øksendal and Bernt Øksendal. _Stochastic differential equations_ . Springer, 2003. 
+
+- William Peebles and Saining Xie. Scalable diffusion models with transformers. In _Proceedings of the IEEE/CVF International Conference on Computer Vision_ , pp. 4195–4205, 2023. 
+
+- Ben Poole, Ajay Jain, Jonathan T Barron, and Ben Mildenhall. Dreamfusion: Text-to-3d using 2d diffusion. _arXiv preprint arXiv:2209.14988_ , 2022. 
+
+- Herbert Robbins and Sutton Monro. A stochastic approximation method. _The annals of mathematical statistics_ , pp. 400–407, 1951. 
+
+12 
+
+- Robin Rombach, Andreas Blattmann, Dominik Lorenz, Patrick Esser, and Bj¨orn Ommer. Highresolution image synthesis with latent diffusion models. In _Proceedings of the IEEE/CVF conference on computer vision and pattern recognition_ , pp. 10684–10695, 2022. 
+
+- Amirmojtaba Sabour, Sanja Fidler, and Karsten Kreis. Align your steps: Optimizing sampling schedules in diffusion models. _arXiv preprint arXiv:2404.14507_ , 2024. 
+
+- Tim Salimans and Jonathan Ho. Progressive distillation for fast sampling of diffusion models. _arXiv preprint arXiv:2202.00512_ , 2022. 
+
+- Tim Salimans, Ian Goodfellow, Wojciech Zaremba, Vicki Cheung, Alec Radford, and Xi Chen. Improved techniques for training gans. _Advances in neural information processing systems_ , 29, 2016. 
+
+- Jascha Sohl-Dickstein, Eric Weiss, Niru Maheswaranathan, and Surya Ganguli. Deep unsupervised learning using nonequilibrium thermodynamics. In _International conference on machine learning_ , pp. 2256–2265. PMLR, 2015. 
+
+- Jiaming Song, Chenlin Meng, and Stefano Ermon. Denoising diffusion implicit models. _arXiv preprint arXiv:2010.02502_ , 2020a. 
+
+- Kaitao Song, Yichong Leng, Xu Tan, Yicheng Zou, Tao Qin, and Dongsheng Li. Transcormer: Transformer for sentence scoring with sliding language modeling. _Advances in Neural Information Processing Systems_ , 35:11160–11174, 2022. 
+
+- Yang Song, Jascha Sohl-Dickstein, Diederik P Kingma, Abhishek Kumar, Stefano Ermon, and Ben Poole. Score-based generative modeling through stochastic differential equations. _arXiv preprint arXiv:2011.13456_ , 2020b. 
+
+- Yang Song, Prafulla Dhariwal, Mark Chen, and Ilya Sutskever. Consistency models. _arXiv preprint arXiv:2303.01469_ , 2023. 
+
+- Kai Wang, Zhaopan Xu, Yukun Zhou, Zelin Zang, Trevor Darrell, Zhuang Liu, and Yang You. Neural network diffusion. _arXiv preprint arXiv:2402.13144_ , 2024. 
+
+- Felix Wimbauer, Bichen Wu, Edgar Schoenfeld, Xiaoliang Dai, Ji Hou, Zijian He, Artsiom Sanakoyeu, Peizhao Zhang, Sam Tsai, Jonas Kohler, et al. Cache me if you can: Accelerating diffusion models through block caching. In _Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition_ , pp. 6211–6220, 2024. 
+
+- Shuchen Xue, Mingyang Yi, Weijian Luo, Shifeng Zhang, Jiacheng Sun, Zhenguo Li, and Zhi-Ming Ma. Sa-solver: stochastic adams solver for fast sampling of diffusion models. In _Proceedings of the 37th International Conference on Neural Information Processing Systems_ , pp. 77632–77674, 2023. 
+
+- Tianwei Yin, Micha¨el Gharbi, Richard Zhang, Eli Shechtman, Fredo Durand, William T Freeman, and Taesung Park. One-step diffusion with distribution matching distillation. In _Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition_ , pp. 6613–6623, 2024. 
+
+- Fisher Yu, Ari Seff, Yinda Zhang, Shuran Song, Thomas Funkhouser, and Jianxiong Xiao. Lsun: Construction of a large-scale image dataset using deep learning with humans in the loop. _arXiv preprint arXiv:1506.03365_ , 2015. 
+
+- Wenliang Zhao, Lujia Bai, Yongming Rao, Jie Zhou, and Jiwen Lu. Unipc: a unified predictorcorrector framework for fast sampling of diffusion models. In _Proceedings of the 37th International Conference on Neural Information Processing Systems_ , pp. 49842–49869, 2023. 
+
+- Kaiwen Zheng, Cheng Lu, Jianfei Chen, and Jun Zhu. Dpm-solver-v3: improved diffusion ode solver with empirical model statistics. In _Proceedings of the 37th International Conference on Neural Information Processing Systems_ , pp. 55502–55542, 2023. 
+
+- Zhenyu Zhou, Defang Chen, Can Wang, and Chun Chen. Fast ode-based sampling for diffusion models in around 5 steps. In _Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition_ , pp. 7777–7786, 2024. 
+
+13 
+
+## A RELATED WORK 
+
+While the solvers for Diffusion Probabilistic Models (DPMs) are categorized into two types, SDE and ODE, most current accelerated sampling techniques are based on ODE solvers due to the observation that the stochastic noise introduced by SDE solvers hampers rapid convergence. ODE-based solvers are further divided into training-based methods (Salimans & Ho, 2022; Liu et al., 2022b; Song et al., 2023; Yin et al., 2024) and training-free samplers (Song et al., 2020a; Lu et al., 2022a;b; Bao et al., 2022b;a; Liu et al., 2022a; Li et al., 2023; Zheng et al., 2023; Ma et al., 2024; Wimbauer et al., 2024; Zhao et al., 2023; Xue et al., 2023). Training-based methods can notably reduce the number of sampling steps required for DPMs. An example of such a method is the knowledge distillation algorithm proposed by Song et al. (2023), which achieves one-step sampling for DPMs. This sampling speed is comparable to that of GANs (Goodfellow et al., 2014) and VAEs (Kingma & Welling, 2013). However, these methods often entail significant additional costs for distillation training. This requirement poses a challenge when applying them to large pre-trained DPM models. Therefore, our work primarily focuses on training-free, ODE-based accelerated sampling strategies. 
+
+Training-free accelerated sampling techniques based on ODE can generally be applied in a plug-andplay manner, adapting to existing pre-trained DPMs. These methods can be categorized based on the order of the ODE solver—that is, the NFE required per sampling iteration—into first-order (Song et al., 2020a; Bao et al., 2022b;a; Liu et al., 2022a) and higher-order (Lu et al., 2022a;b; Zheng et al., 2023; Zhao et al., 2023; Dormand & Prince, 1980). Typically, higher-order ODE solvers tend to sample at a faster rate but may fail to converge when the NFE is low (below 10), sometimes performing even worse than first-order ODE solvers. In addition, there are orthogonal techniques for accelerated sampling. For instance, Li et al. (2023) build upon existing ODE solvers and use search algorithms to find optimal sampling sub-sequences and model structures to further speed up the sampling process; Ma et al. (2024) and Wimbauer et al. (2024) observe that the low-level features of noise networks at adjacent time steps exhibit similarities, and they use caching techniques to substitute some of the network’s low-level features, thereby further reducing the number of required time steps. 
+
+The algorithm we propose belongs to the class of training-free and orthogonal accelerated sampling techniques, capable of further accelerating the sampling process on the basis of existing first-order and higher-order ODE solvers. Compared to the aforementioned orthogonal sampling techniques, even though the skipping strategy proposed by Ma et al. (2024) and Wimbauer et al. (2024) effectively accelerates the sampling process, it may do so at the cost of reduced sampling quality, making it challenging to reduce the NFE below 50. Although Li et al. (2023) can identify more optimal subsampling sequences and model structures, this implies higher search costs. In contrast, our proposed orthogonal sampling algorithm is more efficient in skipping time steps. First, our skipping strategy does not require extensive search costs. Second, we can correct the sampling trajectory of first-order ODE solvers while reducing the number of sampling steps required by existing ODE solvers, achieving more efficient accelerated sampling. 
+
+## B PROOF OF CONVERGENCE AND ERROR CORRECTION FOR PFDIFF 
+
+In this section, we first prove that neglecting higher-order derivative terms has a smaller impact on the first-ODE solvers when using future scores (i.e., Proposition 3.1). Subsequently, we prove the convergence of PFDiff based on the _Mean Value Theorem_ for Integrals. 
+
+## B.1 ASSUMPTIONS 
+
+For PFDiff- _k_ ~~_h_~~ we make the following assumptions: 
+
+**Assumption B.1.** _The higher-order derivatives s_[(] _θ[n]_[)] ( _xr, r_ ) _(as a function of r), as defined in Eq. (15), where r ∈_ [ _ti−_ 1 _, ti_ ] _and n ≥_ 1 _, exist and are continuous._ 
+
+**Assumption B.2.** _When the time step size_ ∆ _t_ = _ti − ti−_ ( _k−h_ +1) _is not excessively large, the output estimates of the noise network based on the p-order ODE solver at different time steps are approximately the same, that is,_ �� _ϵθ_ (˜ _xt_ ˆ _n, t_[ˆ] _n_ )� _np−_ =01 _[, t][i][, t][i]_[+] _[h]_ � _≈_ �� _ϵθ_ (˜ _xt_ ˆ _n, t_[ˆ] _n_ )� _np−_ =01 _[, t][i][−]_[(] _[k][−][h]_[+1)] _[, t][i]_ � _._ 
+
+14 
+
+_ti_ +( _k_ +1) **Assumption B.3.** _For the integral from time step ti to ti_ +( _k_ +1) _,_ � _ti s_ ( _ϵθ_ ( _xt, t_ ) _, xt, t_ )d _t, there exist intermediate time steps ts_ ˜ _, ts ∈_ [ _ti, ti_ +( _k_ +1)] _such that_ � _ttii_ +( _k_ +1) _s_ ( _ϵθ_ ( _xt, t_ ) _, xt, t_ )d _t_ = _s_ ( _ϵθ_ ( _xts_ ˜ _, ts_ ˜) _, xts_ ˜ _, ts_ ˜) _·_ ( _ti_ +( _k_ +1) _− ti_ ) = _h_ ( _ϵθ_ ( _xts , ts_ ) _, xts , ts_ ) _·_ ( _ti_ +( _k_ +1) _− ti_ ) _holds, where the definition of the function h remains consistent with Sec. 3.1._ The first assumption ensures the application of Taylor expansion in Eq. (15). The second assumption is based on the observation in Fig. 1a that when ∆ _t_ is not excessively large, the MSE of the noise network remains almost unchanged across different time steps. The last one is based on the _Mean Value Theorem_ for Integrals, which states that if _f_ ( _x_ ) is a continuous real-valued function on a closed _b_ interval [ _a, b_ ], then there exists at least one point _c ∈_ [ _a, b_ ] such that � _a[f]_[(] _[x]_[)d] _[x]_[ =] _[ f]_[(] _[c]_[)(] _[b][−][a]_[)][ holds.] 
+
+**Remark 3.** _It is important to note that the Mean Value Theorem for Integrals originally applies to real-valued functions and does not directly apply to vector-valued functions (Cheney et al., 2001). However, the study by Zhou et al. (2024), which uses Principal Component Analysis (PCA) on the trajectories of the ODE solvers for DPMs, demonstrates that these trajectories almost lie in a twodimensional plane. The finding ensures the applicability of the Mean Value Theorem for Integrals in Assumption B.3._ 
+
+B.2 PROOF OF PROPOSITION 3.1 
+
+In this section, we prove that Eq. (16) holds, where _ε ∈_ ( _ti−_ 1 _, ti_ ) and _n ≥_ 2. First, given _ε ∈_ ( _ti−_ 1 _, ti_ ), we have: 
+
+_|ti − ε|_ + _|ti−_ 1 _− ε|_ = _|ti − ti−_ 1 _| ._ (B.1) 
+
+Next, we analyze the Eq. (16) based on the parity of _n_ . 
+
+**==> picture [398 x 94] intentionally omitted <==**
+
+“ ” Here, the second _<_ holds because: due to _ε ∈_ ( _ti−_ 1 _, ti_ ) and Eq. (B.1), we have _|ti − ε| < |ti − ti−_ 1 _|_ and _|ti−_ 1 _− ε| < |ti − ti−_ 1 _|_ , thus validating the second “ _<_ ”. 
+
+**When** _n_ **is odd (** _n ≥_ 3 **):** Since _ε ∈_ ( _ti−_ 1 _, ti_ ), if _ti − ε >_ 0, then _ti−_ 1 _− ε <_ 0; if _ti − ε <_ 0, then _ti−_ 1 _− ε >_ 0. Therefore, we obtain: 
+
+**==> picture [307 x 26] intentionally omitted <==**
+
+Let _a_ = _|ti − ε|_ , _b_ = _|ti−_ 1 _− ε|_ , and _c_ = _|ti − ti−_ 1 _|_ ; we have _a, b, c >_ 0 and _c > a, b_ . Next, using mathematical induction, we prove _a[n]_ + _b[n] < c[n]_ , where _n ≥_ 3 and _a_ + _b_ = _c_ (Eq. (B.1)). 
+
+- When _n_ = 3, we have: 
+
+**==> picture [286 x 12] intentionally omitted <==**
+
+which holds. 
+
+- When _n_ = _k_ ( _k ≥_ 3, _k ∈_ N), suppose _a ≤ b_ , then _a[k]_ + _b[k] < c[k]_ holds. 
+
+**==> picture [370 x 36] intentionally omitted <==**
+
+Thus, _a[n]_ + _b[n] < c[n]_ holds, where _n ≥_ 3 and _a_ + _b_ = _c_ . Furthermore, we obtain: 
+
+**==> picture [315 x 26] intentionally omitted <==**
+
+In conclusion, by combining Eq. (B.2), Eq. (B.3), and Eq. (B.6), we have proven Eq. (16). 
+
+15 
+
+## B.3 PROOF OF CONVERGENCE FOR PFDIFF 
+
+**Assumption B.2 ensures the convergence of PFDiff-** _k_ ~~_h_~~ **using past scores.** Starting from Eq. (8), we consider an iteration process of a _p_ -order ODE solver from _x_ ˜ _ti_ to _x_ ˜ _ti_ + _h_ , where _h_ is the “ _springboard_ ” choice determined by PFDiff- _k_ ~~_h_~~ . This iterative process can be expressed as: 
+
+**==> picture [283 x 26] intentionally omitted <==**
+
+Discretizing Eq. (B.7) yields: 
+
+**==> picture [323 x 65] intentionally omitted <==**
+
+where the function _h_ represents the different solution methodologies applied by various _p_ -order ODE solvers to the function _s_ , consistent with Sec. 3.1. To accelerate sampler convergence and reduce unnecessary NFE, we adopt Assumption B.2, namely guiding the sampling of the current intermediate state by utilizing past score information. Specifically, we approximate that �� _ϵθ_ (˜ _xt_ ˆ _n, t_[ˆ] _n_ )� _pn−_ =01 _[, t][i][, t][i]_[+] _[h]_ � _≈_ �� _ϵθ_ (˜ _xt_ ˆ _n, t_[ˆ] _n_ )� _np−_ =01 _[, t][i][−]_[(] _[k][−][h]_[+1)] _[, t][i]_ �, where _k_ represents the number of steps skipped in one iteration by PFDiff- _k_ ~~_h_~~ . Eq. (B.8) can be further rewritten as: 
+
+**==> picture [334 x 55] intentionally omitted <==**
+
+where _ϕ_ is any _p_ -order ODE solver. Eq. (B.9) demonstrates that under Assumption B.2, PFDiff- _k_ ~~_h_~~ utilizes past scores to replace current scores, converging to the same data distribution as that of any _p_ -order ODE solver _ϕ_ . However, as noted in Remark 2, the time step size ∆ _t_ is very large (NFE _<_ 10), making “springboard” _x_ ˜ _ti_ + _h_ unreliable in Eq. (B.9). Therefore, we only use _x_ ˜ _ti_ + _h_ to predict a _foresight_ update direction (i.e., the future score). The introduction of the future score can reduce the impact of neglecting higher-order derivative terms, thus correcting the discretization errors of the first-order ODE solvers. 
+
+**Convergence of PFDiff-** _k_ ~~_h_~~ **using future scores.** As described in Sec. 3.3, higher-order ODE solvers and future scores reduce the discretization error caused by neglecting higher-order derivative terms in two parallel manners. Therefore, PFDiff combines a higher-order ODE solver using only past scores, with convergence guarantees based on Assumption B.2. Next, we consider an iteration process of a first-order ODE solver from _x_ ˜ _ti_ to _x_ ˜ _ti_ +( _k_ +1), which can be expressed as: 
+
+**==> picture [311 x 57] intentionally omitted <==**
+
+where the second line is obtained by discretizing the first line with an existing first-order ODE solver, and the definitions of _ϕ_ and _h_ are consistent with Sec. 3.1. It is well known that the “ _≈_ ” in Eq. (B.10) introduces discretization errors. We have revised Eq. (B.10) based on Assumption B.3, as follows: 
+
+**==> picture [312 x 72] intentionally omitted <==**
+
+16 
+
+Eq. (B.11) indicates that there is an optimal time point _ts ∈_ [ _ti, ti_ +( _k_ +1)] corresponding to the optimal score _ϵθ_ (˜ _xts , ts_ ) that can correct the discretization error of Eq. (B.10). Furthermore, when the time step size ∆ _t_ = _ti_ +( _k_ +1) _− ti_ is very large (for example, NFE _<_ 10), using the score at the current time point _ti_ leads to non-convergence of the sampling process. This implies that the sampling trajectory of DPMs is not a straight line (if it were a straight line, a larger sampling step size could be used). Therefore, the optimal time point is not achieved at the endpoints, i.e., _ts_ = _ti_ and _ts_ = _ti_ +( _k_ +1), and we adjust that _ts_ falls within the interval ( _ti, ti_ +( _k_ +1)). Additionally, to approximate the optimal score, we introduce the _foresight_ update mechanism of the Nesterov momentum (Nesterov, 1983), and guide the current intermediate state sampling with future score information. In other words, we replace _ϵθ_ (˜ _xts , ts_ ) with _ϵθ_ (˜ _xti_ + _h, ti_ + _h_ ), as follows: 
+
+**==> picture [295 x 28] intentionally omitted <==**
+
+where _k_ and _h_ are determined by the selected PFDiff- _k_ ~~_h_~~ . According to the definition of PFDiff- _k_ ~~_h_~~ , _ti_ + _h_ also lies within the interval ( _ti, ti_ +( _k_ +1)). For six different versions of PFDiff- _k_ ~~_h_~~ defined in Appendix C, we believe the optimal _ts_ within the interval ( _ti, ti_ +( _k_ +1)) has been approximated, thereby completing the convergence proof of using future scores. Finally, we note that PFDiff using future scores to replace current scores is an approximation of the optimal score. Together with this section and Proposition 3.1 (future scores have less impact at neglecting higher-order derivative terms), we jointly verify that future scores can more effectively guide a first-order ODE solver in sampling. 
+
+## C ALGORITHMS OF PFDIFFS 
+
+As described in Sec. 3.4, during a single iteration, we can leverage the _foresight_ update mechanism to skip to a more distant future. Specifically, we modify Eq. (14) to _x_ ˜ _ti_ +( _k_ +1) _≈ ϕ_ ( _Q,_ ˜ _xti, ti, ti_ +( _k_ +1)) to achieve a _k_ -step skip. We refer to this method as PFDiff- _k_ . Additionally, when _k_ = 1, the computation of the buffer _Q_ , originating from Eq. (13), presents different selection choices. We modify Eq. (12) to ˜ _xti_ + _h ≈ ϕ_ ( _Q,_ ˜ _xti, ti, ti_ + _h_ ) _, h ≤ k_ to denote different “ _springboard_ ” 
+
+## **Algorithm 2** PFDiff-2 
+
+**Require:** initial value _xT_ , NFE _N_ , model _ϵθ_ , any _p_ -order solver _ϕ_ , skip type _h_ 2:1: _x_ Define time steps˜ _t_ 0 _← xT {ti}[M] i_ =0[with] _[ M]_[= 3] _[N][−]_[2] _[p]_ 4:3: _Qx_ ˜ _t_ 1 _←−−−_ buffer= _ϕ_ ( _Q,_ �� ˜ _ϵxθt_ (˜0 _x, tt_ ˆ _n_ 0 _, t, t_[ˆ] 1 _n_ ))� _np−_ =01 _[, t]_[0] _[, t]_[1] � _▷_ Initialize buffer 5: **for** _i ←_ 1 to _[M] p[−]_[3] **[ do]** 6: **if** ( _i −_ 1) mod 3 = 0 **then** 7: **if** _h_ = 1 **then** _▷_ PFDiff-2 ~~1~~ 8: _x_ ˜ _ti_ +1 = _ϕ_ ( _Q,_ ˜ _xti, ti, ti_ +1) _▷_ Updating guided by past scores 9: _Q ←−−−_ buffer �� _ϵθ_ (˜ _xt_ ˆ _n, t_[ˆ] _n_ )� _np−_ =01 _[, t][i]_[+1] _[, t][i]_[+3] � _▷_ Update buffer (overwrite) 10: **else if** _h_ = 2 **then** _▷_ PFDiff-2 ~~2~~ 11: _x_ ˜ _ti_ +2 = _ϕ_ ( _Q,_ ˜ _xti, ti, ti_ +2) _▷_ Updating guided by past scores 12: _Q ←−−−_ buffer �� _ϵθ_ (˜ _xt_ ˆ _n, t_[ˆ] _n_ )� _pn−_ =01 _[, t][i]_[+2] _[, t][i]_[+3] � _▷_ Update buffer (overwrite) 13: **end if** 14: **if** _p_ = 1 **then** 15: _x_ ˜ _ti_ +3 = _ϕ_ ( _Q,_ ˜ _xti, ti, ti_ +3) _▷_ Anticipatory updating guided by future scores 16: **else if** _p >_ 1 **then** 17: _x_ ˜ _ti_ +3 = _ϕ_ ( _Q,_ ˜ _xti_ + _h, ti_ + _h, ti_ +3) _▷_ The higher-order solver uses only past scores 18: **end if** 19: **end if** 20: **end for** 
+
+21: **return** _x_ ˜ _tM_ 
+
+17 
+
+**Algorithm 3** PFDiff-3 
+
+**Require:** initial value _xT_ , NFE _N_ , model _ϵθ_ , any _p_ -order solver _ϕ_ , skip type _h_ 2:1: _x_ Define time steps˜ _t_ 0 _← xT {ti}[M] i_ =0[with] _[ M]_[= 4] _[N][−]_[3] _[p]_ 4:3: _Qx_ ˜ _t_ 1 _←−−−_ buffer= _ϕ_ ( _Q,_ �� ˜ _ϵxθt_ (˜0 _x, tt_ ˆ _n_ 0 _, t, t_[ˆ] 1 _n_ ))� _np−_ =01 _[, t]_[0] _[, t]_[1] � _▷_ Initialize buffer 5: **for** _i ←_ 1 to _[M] p[−]_[4] **[ do]** 6:7: **if** ( _ix_ ˜ _−ti_ +41) =mod _ϕ_ ( _Q,_ 4 = 0 ˜ _xti, t_ **then** _i, ti_ + _h_ ) _▷_ Updating guided by past scores 8: _Q ←−−−_ buffer �� _ϵθ_ (˜ _xt_ ˆ _n, t_[ˆ] _n_ )� _pn−_ =01 _[, t][i]_[+] _[h][, t][i]_[+4] � _▷_ Update buffer (overwrite) 9: **if** _p_ = 1 **then** 10: _x_ ˜ _ti_ +4 = _ϕ_ ( _Q,_ ˜ _xti, ti, ti_ +4) _▷_ Anticipatory updating guided by future scores 11: **else if** _p >_ 1 **then** 12: _x_ ˜ _ti_ +4 = _ϕ_ ( _Q,_ ˜ _xti_ + _h, ti_ + _h, ti_ +4) _▷_ The higher-order solver uses only past scores 13: **end if** 14: **end if** 15: **end for** 16: **return** _x_ ˜ _tM_ 
+
+choices with the parameter _h_ . This strategy of multi-step skips and varying “springboard” choices is collectively termed as PFDiff- _k_ ~~_h_~~ ( _h ≤ k_ ). Consequently, based on modifications to parameters _k_ and _h_ in Eq. (12) and Eq. (14), Eq. (13) is updated to _Q ←−−−_ buffer �� _ϵθ_ (˜ _xt_ ˆ _n, t_[ˆ] _n_ )� _np−_ =01 _[, t][i]_[+] _[h][, t][i]_[+(] _[k]_[+1)] �, and Eq. (11) is updated to _Q ←−−−_ buffer �� _ϵθ_ (˜ _xt_ ˆ _n, t_[ˆ] _n_ )� _np−_ =01 _[, t][i][−]_[(] _[k][−][h]_[+1)] _[, t][i]_ �. 
+
+When _k_ = 1, since _h ≤ k_ , then _h_ = 1, and PFDiff- _k_ ~~_h_~~ is the same as PFDiff-1, as shown in Algorithm 1 in Sec. 3.4. When _k_ = 2, _h_ can be either 1 or 2, forming Algorithms PFDiff-2 ~~1~~ and PFDiff-2 2, as shown in Algorithm 2. Furthermore, when _k_ = 3, this forms three different versions of PFDiff-3, as shown in Algorithm 3. In this study, we utilize the optimal results from the six configurations of PFDiff- _k_ ~~_h_~~ ( _k_ = 1 _,_ 2 _,_ 3 ( _h ≤ k_ )) to demonstrate the performance of PFDiff. As described in Appendix B.3, this is essentially an approximation of the optimal time point _ts_ . Through these six different algorithm configurations, we approximately search for the optimal _ts_ . It is important to note that despite using six different algorithm configurations, this does not increase the computational burden in practical applications. This is because, by visual analysis of a small number of generated images or computing specific evaluation metrics, one can effectively select the algorithm configuration with the best performance. Moreover, even without any selection, with _k_ = 2 and _h_ = 1 fixed, PFDiff-2 ~~1~~ can always improve the baseline’s sampling quality within the range of 4 _∼_ 20 NFEs, as shown in the ablation study results in Sec. 4.3. 
+
+## D ADDITIONAL EXPERIMENT RESULTS 
+
+In this section, we provide further supplements to the experiments on both unconditional and conditional pre-trained Diffusion Probabilistic Models (DPMs) as mentioned in Sec. 4. Through these additional supplementary experiments, we more fully validate the effectiveness of PFDiff as an orthogonal and training-free sampler. Unless otherwise stated, the selection of pre-trained DPMs, choice of baselines, algorithm configurations, GPU utilization, and other related aspects in this section are consistent with those described in Sec. 4. 
+
+## D.1 LICENSE 
+
+In this section, we list the used datasets, codes, and their licenses in Table 2. 
+
+18 
+
+Table 2: The used datasets, codes, and their licenses. 
+
+|Name|URL|License|
+|---|---|---|
+|CIFAR10 (Krizhevsky et al., 2009)|cs.toronto.edu|_\_|
+|CelebA 64x64 (Liu et al., 2015)|mmlab.ie.cuhk.edu.hk|_\_|
+|LSUN-Bedroom (Yu et al., 2015)|yf.io|_\_|
+|LSUN-Church (Yu et al., 2015)|yf.io|_\_|
+|ImageNet (Deng et al., 2009)|image-net.org|_\_|
+|MS-COCO2014 (Lin et al., 2014)|cocodataset.org|CC BY 4.0|
+|ScoreSDE (Song et al., 2020b)|github.com/yang-song|Apache-2.0|
+|DDIM (Song et al., 2020a)|github.com/ermongroup|MIT|
+|Analytic-DPM (Bao et al., 2022b)|github.com/baofff|_\_|
+|DPM-Solver (Lu et al., 2022a)|github.com/LuChengTHU|MIT|
+|DPM-Solver++ (Lu et al., 2022b)|github.com/LuChengTHU|MIT|
+|Guided-Diffusion (Dhariwal & Nichol, 2021)|github.com/openai|MIT|
+|Stable-Diffusion (Rombach et al., 2022)|github.com/CompVis|CreativeML Open RAIL-M|
+
+
+Table 3: Sample quality measured by FID _↓_ on the CIFAR10 (Krizhevsky et al., 2009), CelebA 64x64 (Liu et al., 2015), LSUN-bedroom 256x256 (Yu et al., 2015), and LSUN-church 256x256 (Yu et al., 2015) datasets using unconditional discrete-time DPMs, varying the number of function evaluations (NFE). Evaluated on 50k samples. PFDiff uses DDIM (Song et al., 2020a) and AnalyticDDIM (Bao et al., 2022b) as baselines and introduces DDPM (Ho et al., 2020) and AnalyticDDPM (Bao et al., 2022b) with _η_ = 1 _._ 0 from Eq. (6) for comparison. 
+
+|+PFDiff Method|NFE|
+|---|---|
+||4<br>6<br>8<br>10<br>12<br>15<br>20|
+|CIFAR10 (discrete-time model (Ho et al., 2020), quadratic time steps)||
+|_×_<br>DDPM(_η_ = 1_._0) (Ho et al., 2020)<br>108.05<br>71.47<br>52.87<br>41.18<br>32.98<br>25.59<br>18.34<br>_×_<br>Analytic-DDPM (Bao et al., 2022b)<br>65.81<br>56.37<br>44.09<br>34.95<br>29.96<br>23.26<br>17.32<br>_×_<br>Analytic-DDIM (Bao et al., 2022b)<br>106.86<br>24.02<br>14.21<br>10.09<br>8.80<br>7.25<br>6.17<br>_×_<br>DDIM (Song et al., 2020a)<br>65.70<br>29.68<br>18.45<br>13.66<br>11.01<br>8.80<br>7.04||
+|✓<br>Analytic-DDIM<br>289.84<br>23.24<br>7.03<br>**4.51**<br>**3.91**<br>**3.75**<br>**3.65**<br>✓<br>DDIM<br>**22.38**<br>**9.84**<br>**5.64**<br>4.57<br>4.39<br>4.10<br>3.68||
+|CelebA 64x64 (discrete-time model (Song et al., 2020a), quadratic time steps)||
+|_×_<br>DDPM(_η_ = 1_._0) (Ho et al., 2020)<br>59.38<br>43.63<br>34.12<br>28.21<br>24.40<br>20.19<br>15.85<br>_×_<br>Analytic-DDPM (Bao et al., 2022b)<br>32.10<br>39.78<br>32.29<br>26.96<br>23.03<br>19.36<br>15.67<br>_×_<br>Analytic-DDIM (Bao et al., 2022b)<br>69.75<br>16.60<br>11.84<br>9.37<br>7.95<br>6.92<br>5.84<br>_×_<br>DDIM (Song et al., 2020a)<br>37.76<br>20.99<br>14.10<br>10.86<br>9.01<br>7.67<br>6.50||
+|✓<br>Analytic-DDIM<br>360.21<br>28.24<br>5.66<br>4.90<br>4.62<br>**4.55**<br>**4.55**<br>✓<br>DDIM<br>**13.29**<br>**7.53**<br>**5.06**<br>**4.71**<br>**4.60**<br>4.70<br>4.68||
+|CelebA 64x64 (discrete-time model (Song et al., 2020a), uniform time steps)||
+|_×_<br>DDPM(_η_ = 1_._0) (Ho et al., 2020)<br>65.39<br>49.52<br>41.65<br>36.68<br>33.45<br>30.27<br>26.76<br>_×_<br>Analytic-DDPM (Bao et al., 2022b) 102.45<br>42.43<br>34.36<br>33.85<br>30.38<br>28.90<br>25.89<br>_×_<br>Analytic-DDIM (Bao et al., 2022b)<br>90.44<br>24.85<br>16.45<br>16.67<br>15.11<br>15.00<br>13.40<br>_×_<br>DDIM (Song et al., 2020a)<br>**44.36**<br>29.12<br>23.19<br>20.50<br>18.43<br>16.71<br>14.76||
+|✓<br>Analytic-DDIM<br>308.58<br>56.04<br>14.07<br>10.98<br>8.97<br>**6.39**<br>**5.19**<br>✓<br>DDIM<br>51.87<br>**12.79**<br>**8.82**<br>**8.93**<br>**7.70**<br>6.44<br>5.66||
+|LSUN-bedroom 256x256 (discrete-time model (Ho et al., 2020), uniform time steps)||
+|_×_<br>DDIM (Song et al., 2020a)<br>**115.63**<br>47.40<br>26.73<br>19.26<br>15.23<br>11.68<br>9.26<br>✓<br>DDIM<br>140.40<br>**18.72**<br>**11.50**<br>**9.28**<br>**8.36**<br>**7.76**<br>**7.14**||
+|LSUN-church 256x256 (discrete-time model (Ho et al., 2020), uniform time steps)||
+|_×_<br>DDIM (Song et al., 2020a)<br>121.95<br>50.02<br>30.04<br>22.04<br>17.66<br>14.58<br>12.49<br>✓<br>DDIM<br>**72.86**<br>**18.30**<br>**14.34**<br>**13.27**<br>**12.05**<br>**11.77**<br>**11.12**||
+
+
+19 
+
+## D.2 ADDITIONAL RESULTS FOR UNCONDITIONAL DISCRETE-TIME SAMPLING 
+
+In this section, we report on experiments with unconditional, discrete DPMs on the CIFAR10 (Krizhevsky et al., 2009) and CelebA 64x64 (Liu et al., 2015) datasets using quadratic time steps. The FID _↓_ scores for the PFDiff algorithm are reported for changes in the number of function evaluations (NFE) from 4 to 20. Additionally, we present FID scores on the CelebA 64x64 (Liu et al., 2015), LSUN-bedroom 256x256 (Yu et al., 2015), and LSUN-church 256x256 (Yu et al., 2015) datasets, utilizing uniform time steps. The experimental results are summarized in Table 3. Results indicate that using DDIM (Song et al., 2020a) as the baseline, our method (PFDiff) nearly achieved significant performance improvements across all datasets and NFE settings. Notably, PFDiff facilitates rapid convergence of pre-trained DPMs to the data distribution with NFE settings below 10, validating its effectiveness on discrete pre-trained DPMs and the first-order ODE solver DDIM. It is important to note that on the CIFAR10 and CelebA 64x64 datasets, we have included the FID scores of Analytic-DDIM (Bao et al., 2022b), which serves as another baseline. Analytic-DDIM modifies the variance in DDIM and introduces some random noise. With NFE lower than 10, the presence of minimal random noise amplifies the error introduced by the score information approximation in PFDiff, reducing its error correction capability compared to the Analytic-DDIM sampler. Thus, in fewer-step sampling (NFE _<_ 10), using DDIM as the baseline is more effective than using AnalyticDDIM, which requires recalculating the optimal variance for different pre-trained DPMs, thereby introducing additional computational overhead. In other experiments with pre-trained DPMs, we validate the efficacy of the PFDiff algorithm by combining it with the overall superior performance of the DDIM solver. 
+
+Furthermore, to validate the motivation proposed in Sec. 3.2 based on Fig. 1a—that at not excessively large time step size ∆ _t_ , an ODE-based solver shows considerable similarity in the noise network outputs—we compare it with the SDE-based solver DDPM (Ho et al., 2020). Even at smaller ∆ _t_ , the mean squared error (MSE) of the noise outputs from DDPM remains high, suggesting that the effectiveness of PFDiff may be limited when based on SDE solvers. Further, we adjusted the _η_ parameter in Eq. (6) (which controls the amount of noise introduced in DDPM) from 1.0 to 0.0 (at 
+
+Table 4: Sample quality measured by FID _↓_ on the CIFAR10 (Krizhevsky et al., 2009) and CelebA 64x64 (Liu et al., 2015) using unconditional discrete-time DPMs with and without our method (PFDiff), varying the number of function evaluations (NFE) and _η_ from Eq. (6). Evaluated on 50k samples. 
+
+|Method|NFE|
+|---|---|
+||4<br>6<br>8<br>10<br>12<br>15<br>20|
+|CIFAR10 (discrete-time model (Ho et al., 2020), quadratic time steps)||
+|DDPM(_η_ = 1_._0) (Ho et al., 2020)<br>108.05<br>71.47<br>52.87<br>41.18<br>32.98<br>25.59<br>18.34<br>+PFDiff (Ours)<br>475.47<br>432.24<br>344.96<br>332.41<br>285.88<br>158.90<br>28.05||
+|DDPM(_η_ = 0_._5) (Song et al., 2020a)<br>71.08<br>34.32<br>22.37<br>16.63<br>13.37<br>10.75<br>8.38<br>+PFDiff (Ours)<br>432.50<br>349.09<br>311.62<br>167.65<br>59.93<br>23.17<br>10.61||
+|DDPM(_η_ = 0_._2) (Song et al., 2020a)<br>66.33<br>30.26<br>18.94<br>14.01<br>11.25<br>9.00<br>7.18<br>+PFDiff (Ours)<br>316.15<br>189.02<br>18.55<br>7.73<br>5.70<br>4.53<br>4.00||
+|DDIM(_η_ = 0_._0) (Song et al., 2020a)<br>65.70<br>29.68<br>18.45<br>13.66<br>11.01<br>8.80<br>7.04<br>+PFDiff (Ours)<br>**22.38**<br>**9.48**<br>**5.64**<br>**4.57**<br>**4.39**<br>**4.10**<br>**3.68**||
+|CelebA 64x64 (discrete-time model (Song et al., 2020a), quadratic time steps)||
+|DDPM(_η_ = 1_._0) (Ho et al., 2020)<br>59.38<br>43.63<br>34.12<br>28.21<br>24.40<br>20.19<br>15.85<br>+PFDiff (Ours)<br>433.25<br>439.19<br>415.41<br>317.43<br>324.58<br>326.50<br>171.41||
+|DDPM(_η_ = 0_._5) (Song et al., 2020a)<br>40.58<br>23.72<br>16.74<br>13.15<br>11.27<br>9.36<br>7.73<br>+PFDiff (Ours)<br>435.27<br>417.58<br>314.63<br>310.10<br>252.19<br>69.31<br>19.23||
+|DDPM(_η_ = 0_._2) (Song et al., 2020a)<br>38.20<br>21.35<br>14.55<br>11.22<br>9.47<br>7.99<br>6.71<br>+PFDiff (Ours)<br>394.03<br>319.02<br>45.15<br>12.71<br>7.85<br>5.10<br>4.96||
+|DDIM(_η_ = 0_._0) (Song et al., 2020a)<br>37.76<br>20.99<br>14.10<br>10.86<br>9.01<br>7.67<br>6.50<br>+PFDiff (Ours)<br>**13.29**<br>**7.53**<br>**5.06**<br>**4.71**<br>**4.60**<br>**4.70**<br>**4.68**||
+
+
+20 
+
+_η_ = 0 _._ 0, the SDE-based DDPM degenerates into the ODE-based DDIM (Song et al., 2020a)). As shown in Fig. 1a, as _η_ decreases, the MSE of the noise network outputs gradually decreases at the same time step size ∆ _t_ , indicating that reducing noise introduction can enhance the effectiveness of PFDiff. To verify this motivation, we utilized quadratic time steps on CIFAR10 and CelebA 64x64 datasets and controlled the amount of noise introduced by adjusting _η_ , to demonstrate that PFDiff can leverage the temporal redundancy present in ODE solvers to boost its performance. The experimental results, as shown in Table 4, illustrate that with the reduction of _η_ from 1.0 (SDE) to 0.0 (ODE), PFDiff’s sampling performance significantly improves at fewer time steps (NFE _≤_ 20). The experiment results regarding FID variations with NFE as presented in Table 4, align with the trends of MSE of noise network outputs with changes in time step size ∆ _t_ as depicted in Fig. 1a. This reaffirms the motivation we proposed in Sec. 3.2. 
+
+## D.3 ADDITIONAL RESULTS FOR UNCONDITIONAL CONTINUOUS-TIME SAMPLING 
+
+In this section, we supplement the specific FID _↓_ scores for the unconditional, continuous pre-trained DPMs models with first-order and higher-order ODE solvers, DPM-Solver-1, -2 and -3, (Lu et al., 2022a) as baselines, as shown in Table 5. For all experiments in this section, we conducted tests on the CIFAR10 dataset (Krizhevsky et al., 2009), using the checkpoint checkpoint_8.pth under the vp/cifar10_ddpmpp_deep_continuous configuration provided by ScoreSDE (Song et al., 2020b). For the hyperparameter method of DPM-Solver (Lu et al., 2022a), we adopted singlestep_fixed; to maintain consistency with the discrete-time model in Appendix D.2, the parameter skip was set to time_quadratic (i.e., quadratic time steps). Unless otherwise specified, we used the parameter settings recommended by DPM-Solver. The results in Table 5 show that by using the PFDiff method described in Sec. 3.4 and taking DPM-Solver as the baseline, we were able to further enhance sampling performance on the basis of first-order and higher-order ODE solvers. Particularly, in the 6 _∼_ 12 NFE range, PFDiff significantly improved the convergence issues of higher-order ODE solvers under fewer NFEs. For instance, at 9 NFE, PFDiff reduced the FID of DPM-Solver-3 from 233.56 to 5.67, improving the sampling quality by 97.57%. These results validate the effectiveness of using PFDiff with first-order or higher-order ODE solvers as the baseline. 
+
+Table 5: Sample quality measured by FID _↓_ of different orders of DPM-Solver (Lu et al., 2022a) on the CIFAR10 (Krizhevsky et al., 2009) using unconditional continuous-time DPMs with and without our method (PFDiff), varying the number of function evaluations (NFE). Evaluated on 50k samples. 
+
+|Method<br>order|NFE|
+|---|---|
+||4<br>6<br>8<br>10<br>12<br>16<br>20|
+|CIFAR10 (continuous-time model (Song et|al., 2020b), quadratic time steps)|
+|DPM-Solver-1 (Lu et al., 2022a)<br>1|**40.55**<br>23.86<br>15.57<br>11.64<br>9.64<br>7.23<br>6.06|
+|+PFDiff (Ours)<br>1|113.74<br>**11.41**<br>**5.90**<br>**4.23**<br>**3.92**<br>**3.73**<br>**3.75**|
+|DPM-Solver-2 (Lu et al., 2022a)<br>2|298.79<br>106.05<br>41.79<br>14.43<br>6.75<br>**4.24**<br>**3.91**|
+|+PFDiff (Ours)<br>2|**85.22**<br>**16.30**<br>**9.67**<br>**6.64**<br>**5.74**<br>5.12<br>4.78|
+||6<br>9<br>12<br>15<br>21|
+|DPM-Solver-3 (Lu et al., 2022a)<br>3|382.51<br>233.56<br>44.82<br>7.98<br>**3.63**|
+|+PFDiff (Ours)<br>3|**103.22**<br>**5.67**<br>**5.72**<br>**5.62**<br>5.24|
+
+
+## D.4 ADDITIONAL RESULTS FOR CLASSIFIER GUIDANCE 
+
+In this section, we provide the specific FID scores for pre-trained DPMs in the conditional, classifier guidance paradigm on the ImageNet 64x64 (Deng et al., 2009) and ImageNet 256x256 datasets (Deng et al., 2009), as shown in Table 6. We now describe the experimental setup in detail. For the pre-trained models, we used the ADM-G (Dhariwal & Nichol, 2021) provided 64x64_diffusion.pt and 64x64_classifier.pt for the ImageNet 64x64 dataset, and 256x256_diffusion.pt and 256x256_classifier.pt for the ImageNet 256x256 
+
+21 
+
+Table 6: Sample quality measured by FID _↓_ on the ImageNet 64x64 (Deng et al., 2009) and ImageNet 256x256 (Deng et al., 2009), using ADM-G (Dhariwal & Nichol, 2021) model with guidance scales ( _s_ ) of 1.0 and 2.0, varying the number of function evaluations (NFE). Evaluated: ImageNet 64x64 with 50k, ImageNet 256x256 with 10k samples. _∗_ We directly borrowed the results reported by AutoDiffusion (Li et al., 2023), and AutoDiffusion requires additional search costs. “ _\_ ” represents missing data in the original paper. 
+
+|Method<br>Step|NFE|
+|---|---|
+||4<br>6<br>8<br>10<br>15<br>20|
+|ImageNet 64x64 (pixel DPMs model (Dhariwal & Nichol, 2021), uniform time steps,_s_= 1_._0)||
+|DDIM (Song et al., 2020a)<br>S<br>138.81<br>23.58<br>12.54<br>8.93<br>5.52<br>4.45<br>DPM-Solver-2 (Lu et al., 2022a)<br>S<br>327.09<br>292.66<br>264.97<br>236.80<br>166.52<br>120.29<br>DPM-Solver-2 (Lu et al., 2022a)<br>M<br>48.64<br>21.08<br>12.45<br>8.86<br>5.57<br>4.46<br>DPM-Solver-3 (Lu et al., 2022a)<br>S<br>383.71<br>376.86<br>380.51<br>378.32<br>339.34<br>280.12<br>DPM-Solver-3 (Lu et al., 2022a)<br>M<br>54.01<br>24.76<br>13.17<br>8.85<br>5.48<br>4.41<br>DPM-Solver++(2M) (Lu et al., 2022b)<br>M<br>44.15<br>20.44<br>12.53<br>8.95<br>5.53<br>4.33<br>_∗_AutoDiffusion (Li et al., 2023)<br>S<br>17.86<br>11.17<br>_\_<br>6.24<br>4.92<br>3.93||
+|DDIM+PFDiff (Ours)<br>S<br>**16.46**<br>**8.20**<br>**6.22**<br>**5.19**<br>**4.20**<br>**3.83**||
+|ImageNet 256x256 (pixel DPMs model (Dhariwal & Nichol, 2021), uniform time steps,_s_= 2_._0)||
+|DDIM (Song et al., 2020a)<br>S<br>51.79<br>23.48<br>16.33<br>12.93<br>9.89<br>9.05<br>DDIM+PFDiff (Ours)<br>S<br>**37.81**<br>**18.15**<br>**12.22**<br>**10.33**<br>**8.59**<br>**8.08**||
+
+
+dataset. All experiments were conducted with uniform time steps and used DDIM as the baseline (Song et al., 2020a). We implemented the second-order and third-order methods from DPMSolver (Lu et al., 2022a) for comparison and explored the method hyperparameter provided by DPM-Solver for both singlestep (corresponding to “S” in Table 6) and multistep (corresponding to “M” in Table 6). Additionally, we implemented the best-performing method from DPM-Solver++ (Lu et al., 2022b), multi-step DPM-Solver++(2M), as a comparative measure. Furthermore, we also introduced the superior-performing AutoDiffusion (Li et al., 2023) method as a comparison. _[∗]_ We directly borrowed the results reported in the original paper, emphasizing that although AutoDiffusion does not require additional training, it incurs additional search costs. “ _\_ ” represents missing data in the original paper. The specific experimental results of the configurations mentioned are shown in Table 6. The results demonstrate that PFDiff, using DDIM as the baseline on the ImageNet 64x64 dataset, significantly enhances the sampling efficiency of DDIM and surpasses previous optimal training-free sampling methods. Particularly, in cases where NFE _≤_ 10, PFDiff improved the sampling quality of DDIM by 41.88% _∼_ 88.14%. Moreover, on the large ImageNet 256x256 dataset, PFDiff demonstrates a consistent performance improvement over the DDIM baseline, similar to the improvements observed on the ImageNet 64x64 dataset. 
+
+## D.5 ADDITIONAL RESULTS FOR CLASSIFIER-FREE GUIDANCE 
+
+In this section, we supplemented the specific FID _↓_ scores for the Stable-Diffusion (Rombach et al., 2022) (conditional, classifier-free guidance paradigm) setting with a guidance scale ( _s_ ) of 7.5 and 1.5. Specifically, for the pre-trained model, we conducted experiments using the sd-v1-4.ckpt checkpoint provided by Stable-Diffusion. All experiments used the MS-COCO2014 (Lin et al., 2014) validation set to calculate FID _↓_ scores, with uniform time steps. PFDiff employs the DDIM (Song et al., 2020a) method as the baseline. Initially, under the recommended _s_ = 7 _._ 5 configuration by Stable-Diffusion, we implemented DPM-Solver-2 and -3 as comparative methods, and set the method hyperparameters provided by DPM-Solver to multistep (corresponding to “M” in Table 7). Additionally, we introduced previous state-of-the-art training-free methods, including DPM-Solver++(2M) (Lu et al., 2022b), UniPC (Zhao et al., 2023), and DPM-Solverv3(2M) (Zheng et al., 2023) for comparison. The experimental results are shown in Table 7. _[†]_ We borrow the results reported in DPM-Solver-v3 (Zheng et al., 2023) directly. The results indicate that on Stable-Diffusion, PFDiff, using only DDIM as a baseline, surpasses the previous state-of-the-art training-free sampling methods in terms of sampling quality in fewer steps (NFE _<_ 20). Particularly, at NFE=10, PFDiff achieved a 13.06 FID, nearly converging to the data distribution, which is a 
+
+22 
+
+Table 7: Sample quality measured by FID _↓_ on the validation set of MS-COCO2014 (Lin et al., 2014) using Stable-Diffusion model (Rombach et al., 2022) with guidance scales ( _s_ ) of 7.5 and 1.5, varying the number of function evaluations (NFE). Evaluated on 10k samples. _[†]_ We borrow the results reported in DPM-Solver-v3 (Zheng et al., 2023) directly. 
+
+|Method<br>Step|NFE|
+|---|---|
+||5<br>6<br>8<br>10<br>15<br>20|
+|MS-COCO2014 (latent DPMs model (Rombach et al., 2022), uniform time steps,_s_= 7_._5)||
+|DDIM (Song et al., 2020a)<br>S<br>23.92<br>20.33<br>17.46<br>16.78<br>16.08<br>15.95<br>DPM-Solver-2 (Lu et al., 2022a)<br>M<br>18.97<br>17.37<br>16.29<br>15.99<br>14.32<br>14.38<br>DPM-Solver-3 (Lu et al., 2022a)<br>M<br>18.89<br>17.34<br>16.25<br>16.11<br>14.10<br>**13.44**<br>_†_DPM-Solver++(2M) (Lu et al., 2022b)<br>M<br>18.87<br>17.44<br>16.40<br>15.93<br>15.84<br>15.72<br>_†_UniPC (Zhao et al., 2023)<br>M<br>18.77<br>17.32<br>16.20<br>16.15<br>16.06<br>15.94<br>_†_DPM-Solver-v3(2M) (Zheng et al., 2023)<br>M<br>18.83<br>16.41<br>15.41<br>15.32<br>15.30<br>15.23||
+|DDIM+PFDiff (Ours)<br>S<br>**18.31**<br>**15.47**<br>**13.26**<br>**13.06**<br>**13.57**<br>13.97||
+|MS-COCO2014 (latent DPMs model (Rombach et al., 2022), uniform time steps,_s_= 1_._5)||
+|DDIM (Song et al., 2020a)<br>S<br>70.36<br>54.32<br>37.54<br>29.41<br>20.54<br>18.17<br>DPM-Solver-2 (Lu et al., 2022a)<br>M<br>37.47<br>27.79<br>19.65<br>18.39<br>17.27<br>16.85<br>DPM-Solver-3 (Lu et al., 2022a)<br>M<br>35.90<br>25.88<br>18.26<br>19.10<br>17.21<br>16.67<br>DPM-Solver++(2M) (Lu et al., 2022b)<br>M<br>36.58<br>26.78<br>18.92<br>20.26<br>18.61<br>17.78||
+|DDIM+PFDiff (Ours)<br>S<br>**24.31**<br>**20.99**<br>**18.09**<br>**17.00**<br>**16.03**<br>**15.57**||
+
+
+14.25% improvement over the previous state-of-the-art method DPM-Solver-v3 at 20 NFE, which had a 15.23 FID. Furthermore, to further validate the effectiveness of PFDiff on Stable-Diffusion, we conducted experiments using the _s_ = 1 _._ 5 setting with the same experimental configuration as _s_ = 7 _._ 5. For the comparative methods, we only experimented with the multi-step versions of DPMSolver-2 and -3 and DPM-Solver++(2M), which had faster convergence at fewer NFE under the _s_ = 7 _._ 5 setting. As for UniPC and DPM-Solver-v3(2M), since DPM-Solver-v3 did not provide corresponding experimental results at _s_ = 1 _._ 5, we did not list their comparative results. The experimental results show that PFDiff, using DDIM as the baseline under the _s_ = 1 _._ 5 setting, demonstrated consistent performance improvements as seen in the _s_ = 7 _._ 5 setting, as shown in Table 7. 
+
+## D.6 ADDITIONAL ABLATION STUDY RESULTS 
+
+## D.6.1 ADDITIONAL RESULTS FOR PFDIFF HYPERPARAMETERS STUDY 
+
+In this section, we extensively investigate the impact of the hyperparameters _k_ and _h_ on the performance of the PFDiff algorithm, supplementing with the results of ablation experiments and experimental setups. Specifically, for the unconditional DPMs, we conducted experiments on the CIFAR10 dataset (Krizhevsky et al., 2009) using quadratic time steps, based on pre-trained unconditional discrete DDPM (Ho et al., 2020). For the conditional DPMs, we used uniform time steps in classifier guidance ADM-G (Dhariwal & Nichol, 2021) pre-trained DPMs, setting the guidance scale ( _s_ ) to 1.0 for experiments on the ImageNet 64x64 dataset (Deng et al., 2009). All experiments were conducted using the DDIM (Song et al., 2020a) algorithm as a baseline, and PFDiff- _k_ ~~_h_~~ configurations ( _k_ = 1 _,_ 2 _,_ 3 ( _h ≤ k_ )) were tested in six different algorithm configurations. The FID _↓_ scores are presented in Table 8, by varying the number of function evaluations (NFE) and the sample number used to compute the evaluation metrics. 
+
+We first analyze the impact of the hyperparameters _k_ and _h_ using 50k samples to compute the FID scores, which is a common method for evaluating the performance of sampling algorithms. The experimental results demonstrate that, under various combinations of _k_ and _h_ , PFDiff is able to enhance the sampling performance of the DDIM baseline in most cases across different types of pre-trained DPMs. Particularly when setting _k_ = 2 and _h_ = 1, PFDiff-2 ~~1~~ can always improve the sampling performance of the DDIM baseline within the range of 4 _∼_ 20 NFE. Furthermore, we have an exciting discovery regarding the further optimization of algorithm performance: Searching with just 1/10 of the data provides consistent results compared to searches using the full 50k samples, 
+
+23 
+
+Table 8: Ablation study of the impact of _k_ and _h_ on PFDiff in CIFAR10 (Krizhevsky et al., 2009) and ImageNet 64x64 (Deng et al., 2009) datasets using DDPM (Ho et al., 2020) and ADM-G (Dhariwal & Nichol, 2021) models. We report the FID _↓_ and MSE _↓_ , varying the number of function evaluations (NFE) and the number of samples for evaluating algorithm performance. 
+
+|Samples<br>Method|NFE|
+|---|---|
+||4<br>6<br>8<br>10<br>12<br>15<br>20|
+|CIFAR10 (unconditional DPMs model (Ho et al., 2020), quadratic time steps)||
+|50k<br>(FID)<br>DDIM (Song et al., 2020a)<br>65.70<br>29.68<br>18.45<br>13.66<br>11.01<br>8.80<br>7.04<br>+PFDiff-1<br>124.73<br>19.45<br>5.78<br>4.95<br>4.63<br>4.25<br>4.14<br>+PFDiff-2<br>~~1~~<br>59.61<br>**9.84**<br>7.01<br>6.31<br>5.58<br>5.18<br>4.78<br>+PFDiff-2<br>~~2~~<br>167.12<br>53.22<br>8.43<br>4.95<br>4.41<br>**4.10**<br>3.78<br>+PFDiff-3<br>~~1~~<br>**22.38**<br>13.40<br>9.40<br>7.70<br>6.73<br>6.03<br>5.05<br>+PFDiff-3<br>~~2~~<br>129.18<br>19.35<br>**5.64**<br>**4.57**<br>**4.39**<br>4.19<br>4.08<br>+PFDiff-3<br>~~3~~<br>205.87<br>76.62<br>20.84<br>5.71<br>4.73<br>4.41<br>**3.68**||
+|5k<br>(FID)<br>DDIM (Song et al., 2020a)<br>69.79<br>34.20<br>22.84<br>17.39<br>15.56<br>12.87<br>11.62<br>+PFDiff-1<br>127.82<br>23.96<br>10.35<br>9.73<br>9.29<br>9.09<br>8.74<br>+PFDiff-2<br>~~1~~<br>63.59<br>**14.34**<br>11.40<br>11.08<br>9.23<br>10.03<br>9.38<br>+PFDiff-2<br>~~2~~<br>170.58<br>57.74<br>12.94<br>9.86<br>10.08<br>**9.02**<br>8.44<br>+PFDiff-3<br>~~1~~<br>**26.85**<br>17.93<br>13.95<br>12.37<br>9.59<br>10.89<br>9.65<br>+PFDiff-3<br>~~2~~<br>132.45<br>23.80<br>**10.11**<br>**9.58**<br>**9.16**<br>9.09<br>8.69<br>+PFDiff-3<br>~~3~~<br>208.80<br>80.13<br>24.84<br>10.73<br>11.16<br>9.14<br>**8.34**||
+|256<br>(MSE)<br>DDIM (Song et al., 2020a)<br>0.1009<br>0.0608<br>0.0414<br>0.0314<br>0.0255<br>0.0199<br>0.0152<br>+PFDiff-1<br>0.0542<br>0.0217<br>0.0131<br>**0.0100**<br>**0.0089**<br>**0.0082**<br>**0.0081**<br>+PFDiff-2<br>~~1~~<br>0.0277<br>**0.0137**<br>**0.0110**<br>0.0104<br>0.0098<br>0.0093<br>0.0088<br>+PFDiff-2<br>~~2~~<br>0.1001<br>0.0468<br>0.0277<br>0.0184<br>0.0145<br>0.0122<br>0.0105<br>+PFDiff-3<br>~~1~~<br>**0.0218**<br>0.0167<br>0.0146<br>0.0130<br>0.0120<br>0.0107<br>0.0098<br>+PFDiff-3<br>~~2~~<br>0.0614<br>0.0228<br>0.0133<br>0.0101<br>**0.0089**<br>0.0083<br>0.0082<br>+PFDiff-3<br>~~3~~<br>0.1790<br>0.0820<br>0.0444<br>0.0299<br>0.0224<br>0.0165<br>0.0126||
+|ImageNet 64x64 (conditional DPMs model (Dhariwal & Nichol, 2021), uniform time steps,_s_= 1_._0)||
+|50k<br>(FID)<br>DDIM (Song et al., 2020a)<br>138.81<br>23.58<br>12.54<br>8.93<br>6.74<br>5.52<br>4.45<br>+PFDiff-1<br>26.86<br>11.39<br>7.47<br>5.83<br>5.16<br>4.76<br>4.39<br>+PFDiff-2<br>~~1~~<br>17.14<br>8.94<br>6.38<br>5.46<br>5.46<br>4.30<br>**3.83**<br>+PFDiff-2<br>~~2~~<br>23.66<br>9.93<br>6.86<br>5.72<br>5.17<br>4.49<br>3.94<br>+PFDiff-3<br>~~1~~<br>16.74<br>9.43<br>7.19<br>5.86<br>5.07<br>4.69<br>4.44<br>+PFDiff-3<br>~~2~~<br>**16.46**<br>**8.20**<br>**6.22**<br>**5.19**<br>**4.62**<br>**4.20**<br>4.28<br>+PFDiff-3<br>~~3~~<br>23.06<br>9.73<br>6.92<br>5.55<br>5.21<br>4.47<br>4.49||
+|5k<br>(FID)<br>DDIM (Song et al., 2020a)<br>146.03<br>29.61<br>19.11<br>15.13<br>13.15<br>11.65<br>10.81<br>+PFDiff-1<br>32.82<br>17.80<br>13.61<br>12.16<br>11.20<br>10.99<br>10.82<br>+PFDiff-2<br>~~1~~<br>23.70<br>14.81<br>12.38<br>11.82<br>11.53<br>10.77<br>**10.24**<br>+PFDiff-2<br>~~2~~<br>30.10<br>16.35<br>13.09<br>11.80<br>11.68<br>10.67<br>10.56<br>+PFDiff-3<br>~~1~~<br>23.09<br>15.78<br>13.21<br>12.09<br>11.71<br>11.00<br>10.77<br>+PFDiff-3<br>~~2~~<br>**22.54**<br>**14.23**<br>**12.24**<br>**11.27**<br>**11.16**<br>**10.47**<br>10.48<br>+PFDiff-3<br>~~3~~<br>29.45<br>16.12<br>13.25<br>11.90<br>11.29<br>10.68<br>10.66||
+
+
+significantly reducing the cost of hyperparameter searching for _k_ and _h_ . Specifically, for the same NFE, the optimal combinations of _k_ and _h_ based on FID scores are consistent for both 5k and 50k samples. For instance, when NFE=6, the best FID values for both 5k and 50k samples are achieved with _k_ = 2 and _h_ = 1. For the six combinations used in this study with _k ≤_ 3( _h ≤ k_ ), only a total of 30k samples are required to search the optimal _k_ and _h_ combination for each NFE—this is even less than the cost of evaluating algorithm performance normally with 50k samples. Additionally, in practical applications where only a small number of samples are needed for visual analysis, we can minimize training resources and rapidly identify the optimal _k_ and _h_ combination. In summary, the hyperparameters _k_ and _h_ do not impede the practical application of PFDiff in accelerating the sampling of DPMs. 
+
+Furthermore, we propose an automatic search strategy with almost no additional cost based on truncation errors for selecting _k_ and _h_ . Specifically, in Sec. 3.5, we discuss how PFDiff can correct 
+
+24 
+
+**==> picture [396 x 128] intentionally omitted <==**
+
+**----- Start of picture text -----**<br>
+0 . 10 NFE=6 0 . 10 NFE=6 0 . 10 NFE=6<br>NFE=10 NFE=10 NFE=10<br>0 . 08 NFE=20 0 . 08 NFE=20 0 . 08 NFE=20<br>0 . 06 0 . 06 0 . 06<br>0 . 04 0 . 04 0 . 04<br>0 . 02 0 . 02 0 . 02<br>0 . 00 0 . 00 0 . 00<br>999 900 800 700 600 500 400 300 200 100 0 999 900 800 700 600 500 400 300 200 100 0 999 900 800 700 600 500 400 300 200 100 0<br>t t t<br>(a) DDIM (b) DDIM + PFDiff-1 (c) DDIM + PFDiff ( k ≤ 3)<br>error error error<br>Truncation Truncation Truncation<br>**----- End of picture text -----**<br>
+
+
+Figure 5: The trend (mean and standard deviation (std)) of accumulated truncation error over time step _t_ on the CIFAR10 (Krizhevsky et al., 2009) dataset, relative to DDIM (Song et al., 2020a) with 1000 NFE, varying the number of function evaluations (NFE) _∈{_ 6 _,_ 10 _,_ 20 _}_ . 
+
+the discretization error of the baseline solver in regions with large curvature along the sampling trajectory, which means that PFDiff accumulates less truncation error. To validate this conclusion, we conducted experiments on the CIFAR10 dataset, where we sampled 256 samples using DDIM, PFDiff-1, and PFDiff ( _k ≤_ 3) with varying NFE values. The truncation errors were calculated using MSE relative to DDIM with 1000 NFE, and the results are shown in Fig. 5. The results demonstrate that PFDiff significantly corrects DDIM’s truncation errors in regions with large curvature of the sampling trajectory (i.e., regions where truncation errors increase rapidly). Based on these findings, we propose an automatic search strategy: by varying the hyperparameters _k_ and _h_ , we _“warm up” with only 256 samples_ respectively, calculate the average truncation error using MSE, and use this value to guide the selection of _k_ and _h_ . On the CIFAR10 dataset, by varying NFE, _k_ , and _h_ , we sampled 256 samples and computed the average truncation errors relative to DDIM with 1000 NFE. The results are presented in Tab. 8. Based on Tab. 8, we select the values of _k_ and _h_ corresponding to the minimum truncation error, and further refer to the corresponding FID values found in Tab. 8, which are _{_ 22.38, 9.84, 7.01, 4.95, 4.63/4.39, 4.25, 4.14 _}_ for NFE _∈{_ 4, 6, 8, 10, 12, 15, 20 _}_ . This set of FID values is comparable to the optimal FID, indicating that determining _k_ and _h_ based on truncation error is reasonable. Notably, in Tab. 8, we “warmed up” only 256 samples to compute the truncation error, so the additional cost introduced by the automatic search strategy is negligible. The 256 samples are sufficient to capture the dataset’s statistical properties because the shapes of sampling trajectories are highly similar (Chen et al., 2024). 
+
+## D.6.2 ABLATION STUDY OF PAST AND FUTURE SCORES 
+
+To further investigate the impact of scores from the past or future on first-order ODE solvers on the rapid updating of current intermediate states, this section supplements related ablation study results and their settings. Specifically, we first use PFDiff with the first-order ODE solver DDIM as a baseline, removing past and future scores separately based on the discrete-time pre-trained models (Ho et al., 2020; Song et al., 2020a). On the CIFAR10 (Krizhevsky et al., 2009) and CelebA 64x64 (Liu et al., 2015) datasets, we alter the number of function evaluations (NFE) to compute the FID _↓_ metric. Additionally, we introduce a method from previous literature (Ma et al., 2024) that accelerates sampling by caching part of past scores for comparison. Specifically, we configure the hyperparameters based on the DeepCache (Ma et al., 2024) codebase, setting cache_interval to 2 and branch to 0, with all other settings remaining unchanged. As shown in Table 9, the experimental results indicate that using only past scores or only future scores can slightly improve the first-order ODE solvers sampling performance. However, their combined use (i.e., the complete PFDiff) significantly enhances first-order ODE solvers sampling performance, especially with very few steps (NFE _<_ 10), a phenomenon particularly evident. These results further validate the efficiency of the PFDiff algorithm when NFE _<_ 10, benefiting from its information-efficient update process, which utilizes past and future (complementing each other) scores to jointly guide the current intermediate state. 
+
+Furthermore, to verify whether the update process of the PFDiff algorithm increases additional inference time, we employed the same experimental settings as in Table 9 and provided a specific 
+
+25 
+
+Table 9: Ablation study of the impact of the past and future scores on PFDiff, using DDIM (Song et al., 2020a) as the baseline, in CIFAR10 (Krizhevsky et al., 2009) and CelebA 64x64 (Liu et al., 2015) datasets using discrete-time models (Ho et al., 2020; Song et al., 2020a). We report the FID _↓_ , varying the number of function evaluations (NFE). Evaluated on 50k samples. 
+
+|+PFDiff<br>Method|NFE|
+|---|---|
+||4<br>6<br>8<br>10<br>12<br>16<br>20|
+|CIFAR10 (discrete-time model (Ho et al., 2020), quadratic time steps)||
+|_×_<br>DDIM (Song et al., 2020a)<br>65.70<br>29.68<br>18.45<br>13.66<br>11.01<br>8.80<br>7.04||
+|_×_<br>+Cache (Ma et al., 2024)<br>49.02<br>24.04<br>15.23<br>11.31<br>9.40<br>7.25<br>6.25<br>_×_<br>+Past<br>52.81<br>27.47<br>17.87<br>13.64<br>10.79<br>8.20<br>7.02<br>_×_<br>+Future<br>66.06<br>25.39<br>11.93<br>8.06<br>6.04<br>4.17<br>4.07<br>✓<br>+Past & Future<br>**22.38**<br>**9.84**<br>**5.64**<br>**4.57**<br>**4.39**<br>**4.10**<br>**3.68**||
+|CelebA 64x64 (discrete-time model (Song et al., 2020a), uniform time steps)||
+|_×_<br>DDIM (Song et al., 2020a)<br>44.36<br>29.12<br>23.19<br>20.50<br>18.43<br>16.13<br>14.76||
+|_×_<br>+Cache (Ma et al., 2024)<br>33.86<br>25.95<br>22.29<br>19.83<br>18.28<br>16.05<br>14.45<br>_×_<br>+Past<br>**28.45**<br>21.56<br>18.65<br>17.03<br>15.89<br>14.05<br>12.73<br>_×_<br>+Future<br>39.85<br>16.30<br>14.40<br>12.79<br>12.13<br>9.73<br>8.13<br>✓<br>+Past & Future<br>51.87<br>**12.79**<br>**8.82**<br>**8.93**<br>**7.70**<br>**6.44**<br>**5.66**||
+
+
+inference time comparison under different NFE. The inference time _↓_ (second, mean _±_ std) required per 1k samples on a single NVIDIA 3090 GPU is shown in Table 10. The experimental results reveal that PFDiff+DDIM has consistent inference times with DDIM alone under the same NFE, indicating that the PFDiff algorithm does not add extra inference time. Additionally, methods (Ma et al., 2024) that cache part of past scores not only incur additional inference costs but also exhibit relatively weak acceleration effects with a small number of steps (NFE _<_ 10). These results collectively demonstrate that the PFDiff algorithm can significantly enhance sampling quality without any increase in inference time, further proving its effectiveness. 
+
+Table 10: Inference time _↓_ (second, mean _±_ std) required per 1k samples on a single NVIDIA 3090 GPU, varying the number of function evaluations (NFE). We additionally present the inference time with only past or only future scores, at the same NFE. Moreover, we introduce methods (Ma et al., 2024; Wimbauer et al., 2024) that cache part of past scores for comparison. 
+
+|+PFDiff<br>Method|NFE|
+|---|---|
+||4<br>10<br>16<br>20|
+|CIFAR10 (discrete-time model (Ho et al., 2020), quadratic time steps)||
+|_×_<br>DDIM (Song et al., 2020a)<br>6.14_±_0.010<br>9.81_±_0.022<br>13.58_±_0.090<br>15.90_±_0.081||
+|_×_<br>+Cache (Ma et al., 2024)<br>6.31_±_0.150<br>13.55_±_0.019<br>19.42_±_0.091<br>24.07_±_0.185<br>_×_<br>+Past<br>6.17_±_0.029<br>9.88_±_0.040<br>13.66_±_0.257<br>15.81_±_0.062<br>_×_<br>+Future<br>6.16_±_0.036<br>9.77_±_0.153<br>13.73_±_0.345<br>15.67_±_0.096<br>✓<br>+Past & Future<br>6.10_±_0.006<br>9.74_±_0.036<br>13.48_±_0.220<br>15.79_±_0.036||
+|CelebA 64x64 (discrete-time model (Song et al., 2020a), uniform time steps)||
+|_×_<br>DDIM (Song et al., 2020a)<br>13.65_±_0.116<br>27.29_±_0.543<br>40.55_±_0.618<br>49.43_±_0.497||
+|_×_<br>+Cache (Ma et al., 2024)<br>19.82_±_0.130<br>45.60_±_0.131<br>71.70_±_0.266<br>89.45_±_0.085<br>_×_<br>+Past<br>13.67_±_0.057<br>26.88_±_0.144<br>40.24_±_0.151<br>49.82_±_0.081<br>_×_<br>+Future<br>13.61_±_0.304<br>26.38_±_0.067<br>39.95_±_0.440<br>49.05_±_0.543<br>✓<br>+Past & Future<br>13.21_±_0.060<br>26.41_±_0.042<br>40.26_±_0.186<br>49.38_±_0.257||
+
+
+26 
+
+## D.7 INCEPTION SCORE EXPERIMENTAL RESULTS 
+
+To evaluate the effectiveness of the PFDiff algorithm and the widely used Fr´echet Inception Distance (FID _↓_ ) metric (Heusel et al., 2017) in the sampling process of Diffusion Probabilistic Models (DPMs), we have also incorporated the Inception Score (IS _↑_ ) metric (Salimans et al., 2016) for both unconditional and conditional pre-trained DPMs. Specifically, for the unconditional discrete-time pre-trained DPMs DDPM (Ho et al., 2020), we maintained the experimental configurations described in Table 3 of Appendix D.2, and added IS scores for the CIFAR10 dataset (Krizhevsky et al., 2009). For the unconditional continuous-time pre-trained DPMs ScoreSDE (Song et al., 2020b), the experimental configurations are consistent with Table 5 in Appendix D.3, and IS scores for the CIFAR10 dataset were also added. For the conditional classifier guidance paradigm of pre-trained DPMs ADM-G (Dhariwal & Nichol, 2021), the experimental setup aligned with Table 6 in Appendix D.4, including IS scores for the ImageNet 64x64 and ImageNet 256x256 datasets (Deng et al., 2009). Considering that the computation of IS scores relies on features extracted using InceptionV3 pre-trained on the ImageNet dataset, calculating IS scores for non-ImageNet datasets was not feasible, hence no IS scores were provided for the classifier-free guidance paradigm of StableDiffusion (Rombach et al., 2022). The experimental results are presented in Table 11. A comparison between the FID _↓_ metrics in Tables 3, 5, and 6 and the IS _↑_ metrics in Table 11 shows that both IS and FID metrics exhibit similar trends under the same experimental settings, i.e., as the number of function evaluations (NFE) changes, lower FID scores correspond to higher IS scores. Further, Figs. 7a and 7b, along with the visualization experiments in Appendix D.9, demonstrate that lower FID 
+
+Table 11: Sample quality measured by IS _↑_ on the CIFAR10 (Krizhevsky et al., 2009), ImageNet 64x64 (Deng et al., 2009) and ImageNet 256x256 (Deng et al., 2009) using DDPM (Ho et al., 2020), ScoreSDE (Song et al., 2020b) and ADM-G (Dhariwal & Nichol, 2021) models, varying the number of function evaluations (NFE). Evaluated: ImageNet 256x256 with 10k, others with 50k samples. _∗_ We directly borrowed the results reported by AutoDiffusion (Li et al., 2023), and AutoDiffusion requires additional search costs. “ _\_ ” represents missing data in the original paper and DPM-Solver-2 (Lu et al., 2022a) implementation. 
+
+|+PFDiff Method|NFE|
+|---|---|
+||4<br>6<br>8<br>10<br>15<br>20|
+|CIFAR10 (discrete-time model (Ho et al., 2020), quadratic time steps)||
+|_×_<br>DDPM(_η_ = 1_._0) (Ho et al., 2020)<br>4.32<br>5.66<br>6.55<br>7.08<br>7.91<br>8.25<br>_×_<br>Analytic-DDPM (Bao et al., 2022b)<br>5.76<br>6.29<br>6.93<br>7.42<br>8.07<br>8.33<br>_×_<br>Analytic-DDIM (Bao et al., 2022b)<br>4.46<br>7.47<br>8.11<br>8.43<br>8.72<br>8.89<br>_×_<br>DDIM (Song et al., 2020a)<br>5.68<br>7.21<br>7.92<br>8.26<br>8.62<br>8.81||
+|✓<br>Analytic-DDIM<br>1.62<br>8.78<br>9.43<br>**9.61**<br>**9.35**<br>**9.29**<br>✓<br>DDIM<br>**7.79**<br>**9.29**<br>**9.62**<br>9.43<br>9.29<br>**9.29**||
+|CIFAR10 (continuous-time model (Song et al., 2020b), quadratic time steps)||
+|_×_<br>DPM-Solver-1 (Lu et al., 2022a)<br>**7.20**<br>8.30<br>8.85<br>8.98<br>9.43<br>9.51<br>_×_<br>DPM-Solver-2 (Lu et al., 2022a)<br>1.70<br>5.29<br>7.94<br>9.09<br>_\_<br>9.74||
+|✓<br>DPM-Solver-1<br>4.29<br>**9.25**<br>**9.76**<br>**9.86**<br>**9.85**<br>**9.97**<br>✓<br>DPM-Solver-2<br>6.96<br>8.58<br>8.75<br>9.26<br>_\_<br>9.69||
+|ImageNet 64x64 (pixel DPMs model (Dhariwal & Nichol, 2021), uniform time steps,_s_= 1_._0)||
+|_×_<br>DDIM (Song et al., 2020a)<br>7.02<br>31.13<br>40.51<br>46.06<br>54.37<br>59.09<br>_×_<br>DPM-Solver-2(Multi) (Lu et al., 2022a) 19.03<br>33.75<br>44.65<br>51.79<br>62.18<br>67.69<br>_×_<br>DPM-Solver-3(Multi) (Lu et al., 2022a) 17.46<br>29.80<br>41.86<br>50.90<br>62.68<br>68.44<br>_×_<br>DPM-Solver++(2M) (Lu et al., 2022b)<br>20.72<br>34.22<br>43.62<br>50.02<br>60.00<br>65.66<br>_×_<br>_∗_AutoDiffusion (Li et al., 2023)<br>34.88<br>43.37<br>_\_<br>57.85<br>64.03<br>68.05||
+|✓<br>DDIM<br>**35.67**<br>**50.14**<br>**58.42**<br>**59.78**<br>**64.54**<br>**69.09**||
+|ImageNet 256x256 (pixel DPMs model (Dhariwal & Nichol, 2021), uniform time steps,_s_= 2_._0)||
+|_×_<br>DDIM (Song et al., 2020a)<br>37.72<br>95.90<br>122.13<br>144.13<br>165.91<br>179.27||
+|✓<br>DDIM<br>**55.90**<br>**122.56**<br>**158.57**<br>**169.72**<br>**183.07**<br>**192.70**||
+
+
+27 
+
+**==> picture [399 x 169] intentionally omitted <==**
+
+**----- Start of picture text -----**<br>
+0 . 35 DDIM 0 . 014 NFE=6, x ˜ ti + h<br>Heun’s 2nd NFE=6, ǫθ (˜ xti + h, ti + h )<br>0 . 30 DPM-Solver-1 0 . 012 NFE=8, x ˜ ti + h<br>DPM-Solver-2 NFE=8, ǫθ (˜ xti + h, ti + h )<br>0 . 25 DPM-Solver-3 0 . 010 NFE=10, x ˜ ti + h<br>NFE=10, ǫθ (˜ xti + h, ti + h )<br>0 . 20 NFE=20, x ˜ ti + h<br>0 . 008 NFE=20, ǫθ (˜ xti + h, ti + h )<br>0 . 15 0 . 006 NFE=50,NFE=50, xǫ ˜ θt (˜ i + xh ti + h, ti + h )<br>0 . 10 0 . 004<br>0 . 05 0 . 002<br>0 . 00 0 . 000<br>0 200 400 600 800 999 0 200 400 600 800 1000<br>∆ t Denoising timestep ti + h<br>(a) Score Changes in ODE Solvers Based on (b) Future Score More Reliable than<br>EDM “Springboard”<br>2 ∥ ) + ∆ t<br>, tt<br>∆ T 1 t 1� ∥ ()( −−, txxǫǫ +∆ θθtt − =0∆ tTt− NFE)(RelativeMSE1000to<br>**----- End of picture text -----**<br>
+
+
+Figure 6: (a) The trend of the MSE of the noise network output _ϵθ_ ( _xt, t_ ) over time step size ∆ _t_ in the EDM framework (Karras et al., 2022). (b) MSE relative to the sampling process with 1000 NFE: ˜ ˜ “Springboard”, _∥xti_ + _h − x[gt] ti_ + _h[∥]_[2][; Future score,] _[ ∥][ϵ][θ]_[(˜] _[x][t] i_ + _h[, t][i]_[+] _[h]_[)] _[ −][ϵ][θ]_[(˜] _[x] t[gt] i_ + _h[, t][i]_[+] _[h]_[)] _[∥]_[2][.] 
+
+scores and higher IS scores correlate with higher image quality and richer details generated by the PFDiff sampling algorithm. These results further confirm the effectiveness of the PFDiff algorithm and the FID metric in evaluating the performance of sampling algorithms. 
+
+## D.8 EXPERIMENTAL SETUP AND ADDITIONAL RESULTS CLARIFYING THE MOTIVATION 
+
+In this section, we provide a detailed explanation of the experimental in Fig. 1a and Fig. 1b. Additionally, we further extend the experiments from Fig. 1a and Fig. 1b, as shown in Fig. 6. 
+
+For Fig. 1a, we first store the noise network output at all time steps, with 1000 NFE: _{ϵθ_ ( _xti, ti_ ) _}_[999] _i_ =0[.][We][then][compute][the][mean][of][the][MSE][of][the][noise][network][output][over][the] time interval ∆ _t_ . For instance, when ∆ _t_ = 2, we compute the following mean: _∥ϵθ_ ( _xt_ 0 _, t_ 0) _− ϵθ_ ( _xt_ 2 _, t_ 2) _∥_[2] _, · · · , ∥ϵθ_ ( _xt_ 997 _, t_ 997) _− ϵθ_ ( _xt_ 999 _, t_ 999) _∥_[2] . By varying the value of ∆ _t_ from 0 to 999, we are able to compute the mean of the MSE of the noise network output, respectively, and ultimately obtain Fig. 1a. Notably, in Fig. 1a, the curves for DDPM (Ho et al., 2020) and DDIM (Song et al., 2020a) are derived from the pre-trained model of DDPM (Ho et al., 2020); the curves for DPM-Solver (Lu et al., 2022a) and DPM-Solver++ (Lu et al., 2022b) are obtained from the pretrained model of ScoreSDE (Song et al., 2020b). Additionally, in Fig. 6a, we present experimental results from a more advanced diffusion model framework — the EDM (Karras et al., 2022) pretrained model, including DDIM, DPM-Solver, and Heun’s 2nd (Karras et al., 2022) solvers. For the three different architecture pre-trained models, when the time step size ∆ _t_ is not excessively large, the noise network outputs exhibit remarkable similarity. This validates that the method we propose in Sec. 3.3, using past scores to guide sampling, is reliable. 
+
+For Fig. 1b, during the sampling process fromthe MSE of the statusthe “springboard” _x_ ˜ _ti_ + _x_ ˜ _ht_ , and then further obtain the future score _i_ +( _k_ +1), which is updated using the “springboard” and future score, respec- ˜ _xti_ to ˜ _xti_ +( _k_ +1), based on the PFDiff, we first compute _ϵθ_ (˜ _xti_ + _h, ti_ + _h_ ). Next, we compute tively. The MSE is calculated relative to the sampling process with 1000 NFE, resulting in Fig. 1b. Moreover, We also directly evaluate the MSE of the “springboard” and the future score at different _ti_ + _h_ moments, relative to the sampling with 1000 NFE, as shown in Fig. 6b. Notably, both Fig. 1b and Fig. 6b exhibit the same trend, demonstrating that the future gradient is more reliable than the “Springboard”. 
+
+## D.9 VISUALIZE STUDY RESULTS 
+
+To demonstrate the effectiveness of PFDiff, we present the visual sampling results on the CIFAR10 (Krizhevsky et al., 2009), CelebA 64x64 (Liu et al., 2015), LSUN-bedroom 256x256 (Yu et al., 2015), LSUN-church 256x256 (Yu et al., 2015), ImageNet 64x64 (Deng et al., 2009), Ima- 
+
+28 
+
+geNet 256x256 (Deng et al., 2009), and MS-COCO2014 (Lin et al., 2014) datasets in Figs. 7-13. These results illustrate that PFDiff, using different orders of ODE solvers as a baseline, is capable of generating samples of higher quality and richer detail on both unconditional and conditional pre-trained Diffusion Probabilistic Models (DPMs). 
+
+**==> picture [398 x 403] intentionally omitted <==**
+
+**----- Start of picture text -----**<br>
+Text Prompts: Winter night with snow -covered rooftops and soft yellow lights. (Left)<br>A Corgi running towards me in Times Square. (Right)<br>NFE = 6, FID = 20.33 NFE = 10, FID = 16.78 NFE = 250, FID = 15.86<br>: a. ‘ “7s eR! eae = | ~<br>“A a on “ ry be BO.La *<br>= cece ae S 5<br>NFE = 6, FID = 15.47 NFE = 10, FID = 13.06 NFE = 1000, FID = 15.82<br>h ine o>: Eee ¥ ae - : i \ ig =<br>i eeeoS 4 2 eeRS < a<br>. a Dae KC ess Te Jexba eS mea Seat q<br>I ee sa !<br>(a) Results from Stable-Diffusion on MS-COCO2014 (Classifier-Free Guidance,  s  = 7 . 5)<br>NFE=4 NFE=8 NFE=10 NFE=20 NFE=100<br>VR G; \ t ‘ ¢ “ee ie -<br>£ Bue ft ~ ~ ——<br>| ra Pag<br>PT NFE=4 NFE=8 ee NFE=10 eS NFE=20 meg NFE=250<br>1 \ 7 vl ¢ : wid cr wed ! %.v<br>.|<br>1_ |<br>I a > =— ee i ] ae = | . es aN 4<br>i : ‘ fe ie 1 oe<br>(b) Results from Guided-Diffusion on ImageNet 64x64 (Classifier Guidance,  s  = 1 . 0)<br>Figure 7: Sampling by conditional pre-trained DPMs (Rombach et al., 2022; Dhariwal & Nichol,<br>2021) using DDIM (Song et al., 2020a) and our method PFDiff (dashed box) with DDIM as a<br>baseline, varying the number of function evaluations (NFE).<br>Stable-Diffusion<br>Ours +<br>Stable-Diffusion<br>Guided-Diffusion<br>Ours +<br>Guided-Diffusion<br>**----- End of picture text -----**<br>
+
+
+29 
+
+**==> picture [378 x 270] intentionally omitted <==**
+
+**----- Start of picture text -----**<br>
+NFE = 4 NFE = 8 NFE = 10 NFE = 4 NFE = 8 NFE = 10<br>re. sre a ~ | ANA" * NA4 SE<br>AM Dg eco. =)<br>,] i = = i ‘ “F vy Kk (3 es {3’<br>~~ “ “~ = mee - ied ae)<br>FID = 65.70 FID = 18.45 FID = 13.66 FID = 37.76 FID = 14.10 FID = 10.86<br>(a) DDIM (Song et al., 2020a)<br>ss _ = : a > a |) = a<br>aa . ‘ —_ re r a ee 7m 4~ f be fy rt<br>3 ’ ; > i) 1s . ke<br>FID = 106.86 FID = 14.21 FID = 10.09 FID = 69.75 FID = 11.84 FID = 9.37<br>(b) Analytic-DDIM (Bao et al., 2022b)<br>o a]<br>. ; _ ; qq +. iA _~¥ | Vi<br>=” Wes heen.)pe~<a ¥j = we ' > : PiaSLe:Bel. my peal’ S) Seoy ¥ m<br>FID = 22.38 FID = 5.64 FID = 4.57 FID = 13.29 FID = 5.06 FID = 4.71<br>(c) DDIM+PFDiff (Ours)<br>**----- End of picture text -----**<br>
+
+
+Figure 8: Random samples by DDIM (Song et al., 2020a), Analytic-DDIM (Bao et al., 2022b), and PFDiff (baseline: DDIM) with 4, 8, and 10 number of function evaluations (NFE), using the same random seed, quadratic time steps, and pre-trained discrete-time DPMs (Ho et al., 2020; Song et al., 2020a) on CIFAR10 (Krizhevsky et al., 2009) (left) and CelebA 64x64 (Liu et al., 2015) (right). 
+
+**==> picture [348 x 240] intentionally omitted <==**
+
+**----- Start of picture text -----**<br>
+NFE = 5 NFE = 10 NFE = 5 NFE = 10<br>FID = 71.02 FID = 19.26 FID = 73.43 FID = 22.04<br>(a) DDIM (Song et al., 2020a)<br>ie 2 af wre eo<br>rN.a] eaehe 4 wati. pA B:<br>Tq] ey Ss A<br>Me] fa | é » j F Tr i, vs 4 be pea = ae<br>FID = 25.32 FID = 9.28 FID = 26.69 FID = 13.27<br>(b) DDIM+PFDiff (Ours)<br>**----- End of picture text -----**<br>
+
+
+Figure 9: Random samples by DDIM (Song et al., 2020a) and PFDiff (baseline: DDIM) with 5 and 10 number of function evaluations (NFE), using the same random seed, uniform time steps, and pre-trained discrete-time DPMs (Ho et al., 2020) on LSUN-bedroom 256x256 (Yu et al., 2015) (left) and LSUN-church 256x256 (Yu et al., 2015) (right). 
+
+30 
+
+**==> picture [341 x 541] intentionally omitted <==**
+
+**----- Start of picture text -----**<br>
+NFE = 6 NFE = 12<br>; : a \ | rales 7 , —™ —_ /<br>. wk tS he PoP -<br>" ~:<br>it<br>= Pree aT 2 | —_—!J \'h ~_ v _-<br>ma Fr Te 4 > oF ! Be 3 — a OE 6<br>FID = 23.86 FID = 9.64<br>(a) DPM-Solver-1 (Lu et al., 2022a)<br>. "»% Ee hs =3h : =me a : —uaez asg Pe ae" i}<br>FID = 11.41 FID = 3.92<br>(b) DPM-Solver-1+PFDiff (Ours)<br>2 of 7 a Fe , 4 iReon:‘ ~ a Rina 5 “ o 1s = 7 aa’.<br>sae Se<br>#) = = SS ee in he oy : ail on ee<br>FID = 106.05 FID = 6.75<br>(c) DPM-Solver-2 (Lu et al., 2022a)<br>sig wre, -_ . ‘ — . :<br>SS pa ae Bd » Vas * me r one<br>= i —-. *<br><. 4,1 ~ aoe ¥ . c ry a ip : " » OP<br>a +ton > we 0<br>FID = 16.30 FID = 5.74<br>(d) DPM-Solver-2+PFDiff (Ours)<br>ye ob SOE SeAaa Rt Panes a , ae g<br>oe errr te okay peal =e he<br>ie soe err ad i pall ees “at,<br>SCTSe a a ee<br>ae ROR es —pa a eeA<br>ES ye Oe rE RY pate PS > > oe Secale<br>FID = 382.51 FID = 44.82<br>(e) DPM-Solver-3 (Lu et al., 2022a)<br>AS eee or Se, Pe gar ors £<br>FID = 103.22 FID = 5.72<br>(f) DPM-Solver-3+PFDiff (Ours)<br>**----- End of picture text -----**<br>
+
+
+Figure 10: Random samples by DPM-Solver-1, -2, and -3 (Lu et al., 2022a) with and without our method (PFDiff) with 6 and 12 number of function evaluations (NFE), using the same random seed, quadratic time steps, and pre-trained continuous-time DPMs (Song et al., 2020b) on CIFAR10 (Krizhevsky et al., 2009). 
+
+31 
+
+**==> picture [251 x 259] intentionally omitted <==**
+
+**----- Start of picture text -----**<br>
+NFE = 4 NFE = 8<br>» ~<br>FID = 138.81 FID = 12.54<br>(a) DDIM (Song et al., 2020a)<br>, $24 gee m7<br>‘ ’ eeesy=o eee4 4Ge®7 Y ‘nt,<br>sien sie aa etal<br>FID = 48.64 FID = 12.45<br>(b) DPM-Solver-2 (Lu et al., 2022a)<br>ee se~ as eore- es asro)<br>. xae oka4 ret~ %<br>=. nei ; Y . a<br>FID = 44.15 FID = 12.53<br>(c) DPM-Solver++(2M) (Lu et al., 2022b)<br>a3<br>, G ~<br>“4 Mee D<br>FID = 16.46 FID = 6.22<br>(d) DDIM+PFDiff (Ours)<br>**----- End of picture text -----**<br>
+
+
+Figure 11: Random samples by DDIM (Song et al., 2020a), DPM-Solver-2 (Lu et al., 2022a), DPMSolver++(2M) (Lu et al., 2022b), and PFDiff (baseline: DDIM) with 4 and 8 number of function evaluations (NFE), using the same random seed, uniform time steps, and pre-trained GuidedDiffusion (Dhariwal & Nichol, 2021) on ImageNet 64x64 (Deng et al., 2009) with a guidance scale of 1.0. 
+
+**==> picture [250 x 248] intentionally omitted <==**
+
+**----- Start of picture text -----**<br>
+NFE = 4 NFE = 8<br>o<br>Pe we<br>..-<br>><br>FID = 51.79 FID = 16.33<br>(a) DDIM (Song et al., 2020a)<br>ii pF a>> J "<br>~/wv ome<br>inca BeeLA<br>FID = 37.81 FID = 12.22<br>(b) DDIM+PFDiff (Ours)<br>**----- End of picture text -----**<br>
+
+
+Figure 12: Random samples by DDIM (Song et al., 2020a) and PFDiff (baseline: DDIM) with 4 and 8 number of function evaluations (NFE), using the same random seed, uniform time steps, and pre-trained Guided-Diffusion (Dhariwal & Nichol, 2021) on ImageNet 256x256 (Deng et al., 2009) with a guidance scale of 2.0. 
+
+32 
+
+**==> picture [388 x 546] intentionally omitted <==**
+
+**----- Start of picture text -----**<br>
+Text Prompts (listed from left to right):<br>A large bird is standing in the water by some rocks.<br>A candy covered cup cake sitting on top of a white plate.<br>People at a wine tasting with a table of wine bottles and glasses of red wine.<br>A bathtub sits on a tiled floor near a sink that has ornate mirrors over it while greenery grows on the<br>other side of the tub.<br>A kitchen and dining area in a house with an open floor plan that looks out over the landscape from a<br>large set of windows.<br>=—=""" |<br>——— é ee) ee) Dott ot<br>== = ae Uh ated ey lad<br>SSS may Haft ai.<br>NFE = 5<br>—____.__ff_ < Pes Nh NI be de riod<br>y a CS eae ee ra eg<br>ae—ee eed) 2 eee<br>Peeters L \ AGRI a > Piel TC aa<br>ae, => TS — f = =, wv. = By<br>NFE = 10<br>DDIM<br>(FID = 23.92)<br>DPM-Solver++ (FID = 18.87)<br>DDIM+PFDiff (FID = 18.31)<br>DDIM<br>(FID = 16.78)<br>(FID = 15.93)<br>DPM-Solver++<br>DDIM+PFDiff (FID = 13.06)<br>**----- End of picture text -----**<br>
+
+
+Figure 13: Random samples by DDIM (Song et al., 2020a), DPM-Solver++(2M) (Lu et al., 2022b), and PFDiff (baseline: DDIM) with 5 and 10 number of function evaluations (NFE), using the same random seed, uniform time steps, and pre-trained Stable-Diffusion (Rombach et al., 2022) with a guidance scale of 7.5. Text prompts are a random sample from the MS-COCO2014 (Lin et al., 2014) validation set. 
+
+33

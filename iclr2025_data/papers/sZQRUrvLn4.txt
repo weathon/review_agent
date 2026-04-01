@@ -1,0 +1,749 @@
+## GRAPH NEURAL NETWORKS CAN (OFTEN) COUNT SUBSTRUCTURES 
+
+## **Paolo Pellizzoni, Till Hendrik Schulz, Karsten Borgwardt** 
+
+Max Planck Institute of Biochemistry, Martinsried, Germany _{_ pellizzoni, tschulz, borgwardt _}_ @biochem.mpg.de 
+
+## ABSTRACT 
+
+Message passing graph neural networks (GNNs) are known to have limited expressive power in their ability to distinguish some non-isomorphic graphs. Because of this, it is well known that they are unable to detect or count arbitrary graph substructures (i.e., solving the subgraph isomorphism problem), a task that is of great importance for several types of graph-structured data. However, we observe that GNNs are in fact able to count graph patterns quite accurately across several real-world graph datasets. Motivated by this observation, we provide an analysis of the subgraph-counting capabilities of GNNs beyond the worst case, deriving several sufficient conditions for GNNs to be able to count subgraphs and, more importantly, to be able to _sample-efficiently learn_ to count subgraphs. Moreover, we develop novel dynamic programming algorithms for solving the subgraph isomorphism problem on restricted classes of pattern and target graphs, and show that message-passing GNNs can efficiently simulate these dynamic programs. Finally, we empirically validate that our sufficient conditions for GNNs to count subgraphs hold on many real-world datasets, providing a theoretically-grounded explanation to our motivating observations. 
+
+## 1 INTRODUCTION 
+
+Graph neural networks (GNNs) have emerged as powerful tools for learning on graph-structured data, achieving significant empirical success across diverse domains including computational chemistry, bioinformatics, and social network analysis. However, the expressivity of these models in the context of graph classification, i.e., their ability to distinguish non-isomorphic graphs, is intrinsically limited by the capabilities of the Weisfeiler-Leman (1-WL) algorithm (Weisfeiler & Leman, 1968), a heuristic used for the graph isomorphism problem (Morris et al., 2019; Xu et al., 2018). 1-WL is known to fail to distinguish certain classes of graphs, such as regular graphs (Arvind et al., 2017). 
+
+As a consequence of this, in the seminal work _”Can Graph Neural Networks Count Substructures?”_ (Chen et al., 2020), it was shown that GNNs are unable to count arbitrary subgraphs, a capability that is crucial for many real-world applications. The ability to detect and count substructures in graphs is of particular importance in fields such as chemistry and biology, where specific molecular substructures often determine functional properties. 
+
+The limited expressivity of GNNs has motivated the development of more expressive architectures, including higher-order GNNs that operate on k-tuples of nodes (Morris et al., 2019; Maron et al., 2019), subgraph GNNs, which transform the original graph into a set of modified subgraphs before applying GNN models (Cotta et al., 2021; Bevilacqua et al., 
+
+Table 1: Test set results for _subgraph counting_ with a GNN on molecular graphs. Reported: AUROC for multi-class classification and normalized mean avg. error of the prediction (see Sect. D.1). 
+
+|Dataset<br>Metric|Pattern|
+|---|---|
+|Mutagenicity<br>nMAE<br>AUC|0.074<br>0.043<br>0.161<br>0.167<br>0.870<br>0.910<br>0.949<br>0.926|
+|MCF-7<br>nMAE<br>AUC|0.019<br>0.013<br>0.031<br>0.011<br>0.941<br>0.859<br>0.955<br>0.925|
+|ZINC<br>nMAE<br>AUC|0.029<br>0.009<br>0.025<br>0.009<br>0.957<br>0.963<br>1.000<br>0.995|
+|ogbg-molhiv<br>nMAE<br>AUC|0.001<br>0.004<br>0.011<br>0.002<br>0.923<br>0.915<br>0.917<br>0.972|
+|ogbg-molpcba<br>nMAE<br>AUC|0.000<br>0.000<br>0.000<br>0.000<br>0.945<br>0.944<br>0.952<br>0.962|
+|Peptides-func<br>nMAE<br>AUC|0.029<br>0.001<br>0.000<br>0.001<br>0.977<br>0.936<br>0.940<br>0.882|
+|PCQM-Contact<br>nMAE<br>AUC|0.006<br>0.000<br>0.002<br>0.001<br>0.948<br>0.987<br>0.986<br>0.999|
+
+
+1 
+
+2021; Chen et al., 2020; Papp & Wattenhofer, 2022), and models that incorporate unique node identifiers (Sato et al., 2021; Pellizzoni et al., 2024). However, these approaches often come at a significant computational cost, limiting their practical applicability, or can show poor generalizability. 
+
+Interestingly, despite these theoretical limitations, we observe that _standard_ GNNs are often able to count graph patterns with surprising accuracy across a variety of real-world datasets. For example, Table 1 reports the test set performance of a simple GNN model (Section A.1) for the subgraph counting task, for several patterns (Section D.1), across several widely used molecular datasets, using only atom types as node labels. This shows a surprisingly good performance for a task that is _in principle_ unsolvable. While these experimental findings are somewhat limited in scope, they suggest that GNNs possess the capacity to approximate subgraph counts, at least for certain patterns and certain classes of target graphs. This apparent contradiction between theory and practice motivates our work to better understand the subgraph-counting capabilities of GNNs beyond worst-case scenarios, via a more nuanced analysis. Our contributions are the following: 
+
+- (1) we provide conditions under which GNNs can efficiently realize functions on graphs that depend only on local substructures around the nodes (Theorem 2), including subgraph counting; 
+
+- (2) we propose novel dynamic programming algorithms for restricted variants of subtree isomorphism (Theorem 4), and show that GNNs can efficiently simulate them (Theorem 5); 
+
+- (3) we show that, in practice, many real-world graph datasets satisfy the sufficient conditions of point (1), and experimentally validate the claims of point (2) above. 
+
+Our work seeks to provide a theoretically-grounded explanation for the observed ability of GNNs in subgraph counting, bridging the gap between theoretical limitations and practical performance. 
+
+## 1.1 RELATED WORK 
+
+**Graph Neural Networks Expressivity** Following the influential papers Morris et al. (2019); Xu et al. (2018) that exposed the constraints of GNNs due to their expressiveness being limited by the 1-WL test (Weisfeiler & Leman, 1968), there has been a surge in research aimed at developing more capable GNNs. A notable strategy has been to create GNNs that simulate higher-order WL (Grohe, 2017) or Folklore-WL (Cai et al., 1992) tests, as demonstrated by k-GNNs (Morris et al., 2019) and k-FGNNsp (Maron et al., 2019). However, their computational and memory requirements are often impractical. Some of the subsequent approaches exploited graph locality and sparsity (Morris et al., 2022; Zhang et al., 2023; Frasca et al., 2022). An additional research direction involves subgraph GNNs (Cotta et al., 2021; Qian et al., 2022; Bevilacqua et al., 2021). Finally, individualization schemes (Pellizzoni et al., 2024; Bechler-Speicher et al., 2024) have been proposed by several works (Murphy et al., 2019; Dasoulas et al., 2020; Franks et al., 2021) to enhance the expressivity of GNNs and obtain universal function approximators (Abboud et al., 2021). Sato (2020); Morris et al. (2023b) offer a more comprehensive overview. Xu et al. (2020) demonstrated that GNNs can learn to mimic classical graph algorithms, and provided a framework for studying the complexity of simulating combinatorial algorithms with different architectures. For a comprehensive overview of GNNs’ capabilities in algorithmic tasks, readers are referred to Cappart et al. (2023). 
+
+**Combinatorial subgraph counting** Subgraph (both induced and not) isomorphism, and the related counting tasks, are NP-hard (Alon et al., 1995). Due to the practical relevance of the tasks, several efficient search algorithms have been developed (Carletti et al., 2017; McCreesh et al., 2020). Another line of research, called color-coding, uses a dynamic programming approach (Alon et al., 1995; 2008; Arvind & Raman, 2002). For the task of finding all frequent subgraphs in a dataset, there exist specialized algorithms (Nijssen & Kok, 2005; Kuramochi & Karypis, 2004). 
+
+**Subgraph counting and GNNs** Chen et al. (2020) showed that GNNs are unable to count arbitrary subgraphs, and Zhang et al. (2024) obtain a full characterization of the subgraphs that can be counted on arbitrary graphs, i.e., considering the worst-case scenario. The subgraph counting problem has also been addressed on arbitrary graphs with ad-hoc architectures (Chen et al., 2020; Tahmasebi et al., 2023; Huang et al., 2023b; Paolino et al., 2024), with positional encodings (Huang et al., 2023a) or with random node features (Kanatsoulis & Ribeiro, 2024). In this work, we instead focus on standard message-passing GNNs. Subgraphs have also been used to improve the expressivity of 
+
+2 
+
+GNNs by using subgraph counts as features (Bouritsas et al., 2022) or by extending message-passing to subgraphs (Wang et al., 2023). 
+
+## 2 PRELIMINARIES 
+
+In what follows, we define a graph as a tuple _G_ = ( _VG, EG, LG_ ), with _VG_ a finite set of nodes, and _EG ⊆{{u, v}_ : _u_ = _v ∈ VG}_ a set of undirected edges. We define the vertex-label function as _LG_ : _VG →_ Σ, with a finite set of labels Σ. For the sake of simplicity, we consider edges to be unlabeled. We define the neighborhood of a node as _N_ ( _v_ ) = _{w ∈ VG_ : _{v, w} ∈ EG}_ . We say that two graphs _G_ and _H_ are isomorphic, denoted as _G ≃ H_ , if there exists a bijective mapping _π_ : _VG → VH_ , called isomorphism, such that _LG_ ( _v_ ) = _LH_ ( _π_ ( _v_ )) _, ∀v ∈ VG_ and _{π_ ( _u_ ) _, π_ ( _v_ ) _} ∈ EH_ if and only if _{u, v} ∈ EG_ . The isomorphism relation induces equivalence classes, which we call, with abuse of notation, graphs. The group of isomorphisms from _G_ to itself is called the automorphism group Aut( _G_ ). A _subgraph isomorphism_ from _G_ into _H_ is an injective mapping _π_ : _VG → VH_ s.t. _{π_ ( _u_ ) _, π_ ( _v_ ) _} ∈ EH_ for every _{u, v} ∈ EG_ and _LG_ ( _v_ ) = _LH_ ( _π_ ( _v_ )) _, ∀v ∈ VG_ . We call it an induced subgraph isomorphism if furthermore for all pairs _u, v ∈ G_ , if _{π_ ( _u_ ) _, π_ ( _v_ ) _} ∈ EH_ then _{u, v} ∈ EG_ . With _counting_ , we denote the task of counting such maps from a pattern _P_ . 
+
+We denote sets of graphs by _G_ . Moreover, given a graph _G_ and nodes _u, v ∈ VG_ , we say that they belong to the same orbit if _∃π ∈_ Aut( _G_ ) such that _π_ ( _u_ ) = _v_ , and denote it with ( _G, u_ ) _≃_ ( _G, v_ ). We denote the set of orbits on a set of graphs _G_ with _VG_ = _{_ ( _G, u_ ) : _G ∈G, v ∈ VG}/≃_ . Given two nodes _u, v ∈ VG_ , we define with _dG_ ( _u, v_ ) their shortest-path distance in _G_ . A tree is a graph with no cycles. We denote with _Tr_ the tree rooted in _r ∈ VT_ , and define recursively children( _r_ ) = _N_ ( _r_ ) and if _q ∈_ children( _p_ ) then children( _q_ ) = _N_ ( _q_ ) _\ {p}_ . We define the height of the tree as max _p∈VT dT_ ( _r, p_ ) and the truncated tree _Tr[ℓ]_[as][the][subgraph][of] _[T][r]_[induced][by][the] nodes _p_ such that _dT_ ( _r, p_ ) _≤ ℓ_ . An egonet EGO _[k] u_[(] _[G]_[)][ of a node] _[ u][∈][V][G]_[is defined as the induced] subgraph of _G_ on _{v ∈ VG_ : _dG_ ( _u, v_ ) _≤ k}_ , with _u_ marked with a dedicated ”root” label. 
+
+**The Weisfeiler–Leman algorithm** The color refinement algorithm, also known as 1- Weisfeiler–Leman (denoted as WL), is a heuristic algorithm for the graph isomorphism problem. Let WL[0] ( _G, v_ ) = _LG_ ( _v_ ) _∈_ N be the initial color of node _v ∈ VG_ . Then the algorithm updates vertex colors as WL _[ℓ]_ ( _G, v_ ) = HASH WL _[ℓ][−]_[1] ( _G, v_ ) _, {{_ WL _[ℓ][−]_[1] ( _G, w_ ) : _w ∈N_ ( _v_ ) _}} ∈_ N _,_ with � � HASH an injective map, at iteration _ℓ>_ 0. Two graphs are deemed _ℓ_ -hop WL-isomorphic, denoted as _G ≃_ WL _ℓ H_ , if _{{_ WL _[ℓ]_ ( _G, v_ ) : _v ∈ VG}}_ = _{{_ WL _[ℓ]_ ( _H, v_ ) : _v ∈ VH }}_ , and WL-isomorphic if it holds for _ℓ_ = _|VG|_ , denoted as _G ≃_ WL _H_ . Note that _G ≃ H_ = _⇒ G ≃_ WL _H_ , but the converse is not true. We call a graph _G WL-amenable_ if _∀H_ such that _G ̸≃ H_ , _G ̸≃_ WL _H_ . **Coverings of graphs** For graphs _H_ and _G_ , the mapping _ϕ_ : _VH → VG_ is called a _homomorphism_ if it preserves all edges and labels, i.e., if _{ϕ_ ( _u_ ) _, ϕ_ ( _v_ ) _} ∈ EG_ for all _{u, v} ∈ EH_ and _L_ ( _v_ ) = _L_ ( _ϕ_ ( _v_ )) for all _v ∈ VH_ . A homomorphism _ϕ_ is called locally _locally injective_ or _bijective_ if for every node _v ∈ VH_ , the mapping _ϕv_ : _N_ ( _v_ ) _→N_ ( _ϕ_ ( _v_ )) is injective, respectively bijective. If there exists a locally bijective homomorphism from a graph _H_ to a graph _G_ , we say that _H covers G_ . The _universal cover_ (Angluin, 1980) of _G_ given a node _u ∈ VG_ is a (possibly infinite) tree, denoted _Uu_ ( _G_ ), that covers any graph which covers _G_ . It holds that _Uu[ℓ]_[(] _[G]_[)] _[ ≃][U] v[ ℓ]_[(] _[H]_[)][ if and only if] WL _[ℓ]_ ( _G, u_ ) = WL _[ℓ]_ ( _H, v_ ) (Krebs & Verbitsky, 2015). An illustration can be found in Figure 1. 
+
+**Graph neural networks** Message passing graph neural networks (GNNs), given a graph _G_ , iteratively produce for each node _v ∈ VG_ , at each level _ℓ_ = 1 _, . . . , L_ , the embeddings _h[ℓ] v[∈]_[R] _[d][ℓ]_[by] taking into account _messages_ coming from its neighbors _N_ ( _v_ ). More formally, the embedding of node _v_ is updated as _h[ℓ] v_[=] _[f]_[upd] � _h[ℓ] v[−]_[1] _, f_ agg � _{{h[ℓ] u[−]_[1] : _u ∈N_ ( _v_ ) _}}_ �� _,_ where _f_ agg and _f_ upd are the aggregate and the update operations, respectively. The first layer of the GNN is fed with the initial node embeddings _h_[0] _v_[, e.g.][one-hot encodings of the node labels.][Finally, one can get a graph-level] readout _h[L] G_[by][aggregating][the][output][node][embeddings][via][a][function] _[f]_[out][.][In][Xu][et][al.][(2018)][it] was shown that there exist injective functions _f_ agg, _f_ upd and _f_ out yielding GNNs that are provably as expressive as color refinement. We denote as GNN[node] _ℓ_ = _{_ ( _G, v_ ) _�→ h[ℓ] v[}]_[the][class][of][para-] metric node-level functions formed by such a model with _ℓ_ message passing layers. Moreover, let GNN _ℓ_ = _{G �→ h[ℓ] G[}]_[ be the class of parametric graph-level functions.] 
+
+3 
+
+**==> picture [276 x 51] intentionally omitted <==**
+
+**----- Start of picture text -----**<br>
+u u u<br>U.(G2) Uu(Gs)<br>r r r<br>**----- End of picture text -----**<br>
+
+
+Figure 1: Three graphs and their universal covers rooted in a node _u_ . Since _G_ 1 is a tree, its universal cover is _G_ 1 itself. The graphs _G_ 2 and _G_ 3 have isomorphic (infinite) universal covers. In fact, _G_ 3 is a covering of _G_ 2. 
+
+## 3 UNIVERSALITY ON WL-DISTINGUISHABLE GRAPHS 
+
+The classical negative result of Chen et al. (2020, Theorem 3.3) is based on pairs of WLindistinguishable graphs such that, for a pattern _P_ , one contains it as an induced subgraph while the other one does not. This result, however, requires that the set of graphs at hand features specific WL-indistinguishable graphs, a scenario that is unrealistic to happen in practice (e.g., see Table 2). 
+
+To overcome this limitation, we restrict to studying the ability of GNNs to solve the subgraph counting tasks (for a fixed pattern graph _P_ ) on specific sets of graphs _G_ , phrasing the task as a _promise problem_ (Even et al., 1984). In fact, if the graphs at hand can all be distinguished by WL, we have the following positive result, which follows directly from Morris et al. (2023a). 
+
+**Proposition 1.** _Let G be a set of graphs such that ∀G_ 1 _, G_ 2 _∈G, G_ 1 _̸≃_ WL _G_ 2 _and |VG| ≤ n, ∀G ∈ G. Let f_ : _G →_ R _be any function. Then, there exists a function class_ GNN _ℓ_ = _n realized by a GNN model such that f ∈_ GNN _ℓ_ = _n._ 
+
+In particular, if the function _f_ is the (possibly induced) subgraph counting function, GNNs can count subgraphs on _G_ . In fact, if the set _G_ is composed of WL-amenable graphs, the proposition always holds. Therefore, for several classes of graphs, such as trees and forests, which are known to be amenable (Arvind et al., 2017), as well as random graphs, which are known to be amenable with high probability (Babai et al., 1980), GNNs are indeed able to count subgraphs. This result, although it is the first step beyond the worst-case analysis of Chen et al. (2020), has several limitations. 
+
+First, the proof of universality of GNNs on WL-distinguishable graphs relies on a model with an impractical number of layers, that is able to distinguish all graphs and remember by heart the value of the function for each graph. Therefore, the size of the MLP after the graph-level pooling of the node embeddings must be (at least) linear in _|G|_ . In particular, _|G|_ can in general grow exponentially with the maximum graph size _n_ . Thus, the results hold only for sets of _bounded-size graphs_ . 
+
+Secondly, and relatedly to the first problem, the model used in the proof of the proposition has high sample complexity. Informally speaking, the sample complexity of a model class is the number of training samples needed for the model to generalize well to unseen data, and is usually proportional to the number of parameters in the model. For real-valued function classes, one can characterize their sample complexity via the pseudo-dimension (Anthony & Bartlett, 1999; Mohri et al., 2018), as lower pseudo-dimension implies lower sample complexity. See Section A.2 for formal definitions. Indeed, this model has pseudo-dimension Pdim(GNN _ℓ_ ) = _|G|_ (see Lemma 1, and Morris et al. (2023a)), implying that the model is in general incapable of generalizing to unseen data. 
+
+Therefore, while such a model can count subgraphs on the training set, it’s hard to argue that it is able to _learn_ to count subgraphs. In the next sections, we address this issue. 
+
+## 4 UNIVERSALITY FOR LOCAL FUNCTIONS 
+
+The loose results of the previous section are partly due to the fact that we treat subgraph counting as an arbitrarily complex function. In fact, we can exploit the fact that subgraph counting depends only on local substructures around each node. 
+
+4 
+
+**==> picture [391 x 85] intentionally omitted <==**
+
+**----- Start of picture text -----**<br>
+Figure 2: The set of graphs on the left is not (2 ,  1)-identifiable, while the one on the right is.<br>���������<br>��������<br>��������<br>**----- End of picture text -----**<br>
+
+
+**Definition 1.** _We define a function f_ : _G →_ R _to be node-decomposable into g if it can be written as f_ ( _G_ ) =[�] _u∈VG[g]_[(] _[G, u]_[)] _[,][for][some][function][g]_[:] _[V][G][→]_[R] _[.][Moreover,][g][is][said][to][be][k][-local][if] g_ ( _G_ 1 _, u_ ) = _g_ ( _G_ 2 _, v_ ) _implies_ EGO _[k] u_[(] _[G]_[1][)] _[̸≃]_[EGO] _[k] v_[(] _[G]_[2][)] _[.][With some abuse of notation, we say that] a function f that is node-decomposable into k-local functions is also k-local._ 
+
+Subgraph counting and induced subgraph counting, i.e., counting the number of (induced) subgraph isomorphisms _ϕ_ from _P_ to _G_ , are indeed node-decomposable into _rooted_ (induced) subgraph counting, which only counts, for a node _u ∈ VG_ , the number of (induced) subgraph isomorphisms such that _ϕ_ ( _p_ ) = _u_ for some fixed _p ∈ VP_ (Lemma 2). Moreover, if _P_ is the pattern at hand and there exists a node _p ∈ VP_ such that max _q∈VP dP_ ( _p, q_ ) _≤ k_ , i.e., the pattern has radius at most _k_ , then these functions are _k_ -local. Indeed, if _ϕ_ is a (induced) subgraph isomorphism from _P_ to a subgraph of _G_ such that _ϕ_ ( _p_ ) = _u_ , we have that _ϕ_ ( _q_ ) _∈ V_ EGO _ku_[(] _[G]_[)] _[,][∀][q][∈][V][P]_[ .] 
+
+This gives hope for a GNN model that relies only on local structures around nodes to correctly solve the subgraph counting tasks, thus having a number of parameters independent of _n_ , the maximum graph size. Nonetheless, the following impossibility result shows that message passing GNNs are not able to represent all functions on node orbits, even when the graphs of the domain of such functions are all distinguishable by WL. Indeed, if two non-isomorphic graphs have isomorphic universal covers, such as _G_ 2 and _G_ 3 in Figure 1, then there exist nodes that are not distinguishable by a GNN. In fact, GNNs are unable to perform rooted subgraph counting on these graphs. 
+
+**Theorem 1.** _There exists a set of graphs G such that ∀G_ 1 _, G_ 2 _∈G, G_ 1 _̸≃_ WL _G_ 2 _and a function f_ : _VG →_ R _for which there exists no function class_ GNN[node] _ℓ realized by a GNN model such that f ∈_ GNN[node] _ℓ , ∀ℓ._ 
+
+In fact, having no two graphs that have isomorphic universal covers is not only a necessary condition for GNNs to represent any function on node orbits, but also a sufficient one (Krebs & Verbitsky, 2015). Nonetheless, the model might require a number of parameters that is exponential in the maximum graph size _n_ to distinguish all node orbits. In the next section, we discuss a finer grained sufficient condition for node orbits to be distinguished by a GNN model with number of layers and number of parameters independent of _n_ , and show that it allows these models to learn sample efficiently the subgraph counting tasks. 
+
+## 4.1 FINE-GRAINED DISTINGUISHABILITY OF NODES 
+
+Since the subgraph counting tasks are _k_ -local, we do not need GNNs to be able to distinguish any two node orbits, but rather to distinguish ego-nets of radius _k_ . In general, one might need _ℓ ≥ k_ message passing layers to do so. Then, we can characterize the functions that can be realized by a GNN with _ℓ_ layers via the notion of ( _ℓ, k_ )-identifiability. 
+
+**Definition 2.** _Let G be a set of graphs. We say that VG is_ ( _ℓ, k_ ) _-identifiable if ∀_ ( _G_ 1 _, u_ ) _,_ ( _G_ 2 _, v_ ) _∈ VG, Uu[ℓ]_[(] _[G]_[1][)] _[ ≃][U] v[ ℓ]_[(] _[G]_[2][)] _[ implies that]_[ EGO] _[k] u_[(] _[G]_[1][)] _[ ≃]_[EGO] _[k] v_[(] _[G]_[2][)] _[.][If][ V][G][is]_[ (] _[ℓ, k]_[)] _[-identifiable, we also] say that G is_ ( _ℓ, k_ ) _-identifiable._ 
+
+Figure 2 gives a visual representation of a set of graphs that is not (2 _,_ 1)-identifiable, as two nonisomorphic ego-nets of radius 1 have the same truncated universal covers of depth 2, and thus the same WL color. It also depicts a set of graphs that is (2 _,_ 1)-identifiable. Interestingly, both sets are (3 _,_ 1)-identifiable. Indeed, as experimentally shown in Section 6, graph sets that are not ( _ℓ, k_ )- identifiable are rare in practice. We define _ηG,ℓ_ = _|{Uu[ℓ]_[(] _[G]_[)][:][(] _[u, G]_[)] _[∈V][G][}][/][≃|]_[,][the][number][of] truncated universal covers in _G_ . We then have the following results. 
+
+5 
+
+**Theorem 2.** _Let G be a_ ( _ℓ, k_ ) _-identifiable set of graphs. Consider any k-local function f_ : _VG →_ R _. Then, there exists a function class_ GNN[node] _ℓ realized by a GNN model with O_ ( _ηℓ,_[2] _G[·][ ℓ]_[)] _[ parameters] and ℓ layers such that f ∈_ GNN[node] _ℓ ._ **Corollary 1.** _Let G be a_ ( _ℓ, k_ ) _-identifiable set of graphs. Let_ GNN _ℓ be a function class realized by a GNN model with sum-aggregation f_ out( _{{h[ℓ] u_[:] _[ u][ ∈][V][G][}}]_[) =][ �] _u∈VG[h] u[ℓ][.][Then]_[ GNN] _[ℓ][can perform] both subgraph counting and induced subgraph counting of patterns of radius at most k._ 
+
+Notably, the GNN model that realizes Corollary 1 has number of parameters that is independent of the maximum graph size _n_ , depending only on _ℓ_ and _ηG,ℓ_ , and has a simple readout function. This allows not only to count arbitrary (small) subgraphs on sets of graphs with unrestricted maximum graph size, but also to learn such tasks sample efficiently, i.e., with fewer training samples. 
+
+**Theorem 3.** _The function class_ GNN _ℓ of Cor. 1 has pseudo-dimension_ Pdim(GNN _ℓ_ ) _≤ ηℓ,G_ + 1 _._ 
+
+As implied by the previous theorem, the sample complexity of the simple model that realizes Corollary 1 can be bounded based solely on the number of local structures around nodes, and independently on global properties of the graphs. 
+
+## 5 ALGORITHMICALLY-ALIGNED GNNS FOR TREE PATTERNS 
+
+The positive results in previous sections solve subgraph counting by recognizing entire graphs or ego-nets around nodes. This approach could solve tasks beyond subgraph counting, potentially producing unnecessarily large models. We now explore the ability of GNNs to simulate combinatorial algorithms for subgraph counting-related tasks, as it has been noted in the literature that GNNs align well with dynamic programming (DP) algorithms (Xu et al., 2020; Nerem et al., 2025). We develop novel algorithms solving the (non-induced) subgraph isomorphism problem on restricted pattern and target graph classes. We demonstrate GNNs can efficiently simulate these algorithms, situating the resulting models within the algorithmic alignment framework (Xu et al., 2020). 
+
+Our algorithms are inspired by the _color coding_ algorithm (Alon et al., 1995; 2008), which finds subgraph isomorphisms _ϕ_ from the pattern tree _T_ to the target graph _G_ such that _c_ ( _ϕ_ ( _p_ )) = _c_ ( _ϕ_ ( _q_ )) _, ∀p_ = _q ∈ VT_ , where _c_ ( _u_ ) represents a color assigned to node _u_ . Enforcing that the images of the pattern graph’s nodes have different colors ensures injectivity. In the original algorithm, this condition is enforced by assigning random colors to the nodes of _G_ , and repeating the procedure multiple times to boost the success probability. This assignment of random colors is however impossible to simulate with message passing. Therefore, we will color the target nodes based on WL colors, which can be obtained with message passing layers. This however requires to modify the color coding algorithm to relax the condition on the target graphs’ colors, as it is unrealistic to assume that any subgraph in _G_ matching the pattern has all nodes belonging to different WL classes. 
+
+## 5.1 A DYNAMIC PROGRAM FOR COLORFUL SUBTREE ISOMORPHISM 
+
+We tackle the _subgraph isomorphism_ problem from tree patterns. Say that the tree pattern at hand is _T_ , rooted in _r_ and with nodes endowed with labels _L_ : _VT →_ Σ. We denote with _Tp_ the subtree of _Tr_ rooted in _p ∈ VT_ , i.e. the subgraph induced by the descendants of _p_ . The nodes of the target graph _G_ are endowed with labels _L_ : _VG →_ Σ and colors _c_ : _VG →_ Ω such that _L_ ( _u_ ) _̸_ = _L_ ( _v_ ) = _⇒ c_ ( _u_ ) _̸_ = _c_ ( _v_ ). 
+
+**High-level description:** Our dynamic program TREE-COLSI determines if a subgraph isomorphism _ϕ_ from _Tp_ to _G_ exists, where _ϕ_ ( _p_ ) = _u_ , for nodes _p ∈ VT_ and _u ∈ VG_ . For a leaf _p_ , we check if _u_ has the same label. For internal _p_ with matching label to _u_ , we build _ϕ_ by mapping _p_ to _u_ and its children to distinct neighbors of _u_ , using inductively gathered information from _N_ ( _u_ ). Indeed, if there exist subgraph isomorphisms _ϕq_ from all the subtrees _Tq_ , for _q ∈_ children( _p_ ), mapping each _q_ to distinct neighbors of _u_ , one can create a homomorphism from _Tp_ to _G_ by mapping _p_ to _u_ and the nodes in the _Tq_ ’s to their images in _ϕq_ . 
+
+However, the resulting map could be not injective. Indeed, it could happen, e.g, that in the maps _ϕq_ 1 _, ϕq_ 2 a child of _q_ 1 and a child of _q_ 2 are mapped to the same target graph’s node. To avoid this, for each discovered map _ϕq_ from _Tq_ to _G_ with _ϕq_ ( _q_ ) = _v_ , we store a colorset _Cϕq_ with the colors of the images of the descendants of _q_ in a set _Cv,q_ . Then, when we create the map _ϕ_ such that _ϕ_ ( _p_ ) = _u_ by 
+
+6 
+
+Figure 3: A graph _G_ and a tree pattern _P_ . The copies of _G_ on the right have colors (right half of the nodes) obtained from one W ~~L ite~~ ration. The subgr ~~aph~~ isomorphism from _P_ to the red-highlighted subgraph of _G_ is not quite-colorfu ~~l, w~~ hile the one to the ~~gr~~ een-highlighted subgraph of _G_ is. 
+
+merging the maps _ϕq_ from all ~~the~~ nodes _q ∈_ childr ~~en(~~ _p_ ) to distinct neighbors of _u_ , we require that the images of any two pa ~~tter~~ n graph’s nodes th ~~at~~ could be mapped to the same target graph’s node have different colors. This will allow to obtain injectivity. 
+
+**Formal description:** Let _h_ be the height of the tree _Tr_ and _T[h]_ = _{r}_ . Let _T[ℓ][−]_[1] = _{q ∈_ children( _p_ ) : _p ∈ T[ℓ] }, ℓ_ = 1 _, . . . , h_ . Clearly, _T_[0] consists of only leaves of the tree. The dynamic program proceeds in layers, processing at the same time all the pattern graph’s nodes in _T[ℓ]_ . Therefore, the output of TREE-COLSI _c_ ( _u, ℓ_ ) will be a dictionary mapping nodes _p ∈ T[ℓ]_ to sets _Cu,p_ . In particular, for nodes _u ∈ VG_ , _p ∈ VT_ , _Cu,p_ is a set of _colorsets C ∈_ 2[Ω] . We have that if _Cϕ ∈Cu,p_ , then there exists a subgraph isomorphism _ϕ_ from _Tp_ to _G_ mapping _p_ to _u_ . 
+
+||**Algorithm 1:**TREE-COLSI_c_(_u, ℓ_)|**Algorithm 2:** MERGE((_C_1_, . . . , Cδ_))|
+|---|---|---|
+|**1**|let_Cu,ℓ_be an empty dictionary|**1** flag =(_c_(_u_)_̸∈Ci, ∀i_)|
+|**2 **|**if**_ℓ>_0|**2** flag = flagand (_c_(_vi_)_̸∈Cj, ∀i ̸_=_j_ )|
+|**3**|**for**_v ∈N_(_u_)**do**|**3** flag = flagand (_Ci ∩Cj_ ==_∅∀i ̸_=_j_)|
+|**4**|_Cv,ℓ−_1 = TREE-COLSI_c_(_v, ℓ−_1)|**4 if**flag == false: **return**_ϵ_|
+|**5**|_Cv,q_ =_Cv,ℓ−_1[_q_], _∀q ∈_children(_p_)_, ∀p ∈T ℓ_|**5** let ¯_Ci_ =_Ci ∪{c_(_vi_)_}, ∀i_|
+|**6 **|**for**_p ∈T ℓ_**do**|**6** let_C_ =<br>_i_ ¯_Ci_<br>||
+|**7**|**if**children(_p_) ==_∅_|**7 return**_C_|
+|**8**<br>**9**<br>**10**|**if**_L_(_u_)_̸_=_L_(_p_): _Cu,ℓ_[_p_] =_∅_<br>**else**: _Cu,ℓ_[_p_] =_{∅}_<br>**continue**|The dynamic program TREE-COLSI_c_, ap-<br>plied with colors _c_, is described in Algo-|
+|**11**|**if**_L_(_u_)_̸_=_L_(_p_): set_Cu,ℓ_[_p_] =_∅_and**continue**|rithm 1. It takes as input a target graph|
+|**12**|let_Cu,p_ =_∅_and(_q_1_, . . . , qδ_) = children(_p_)|node _u_ and a level _ℓ_. It returns a dictio-|
+|**13**|**for**seq. of distinct nodes(_v_1_, . . . , vδ_)from_N_(_u_)**do**|nary mapping from pattern graph nodes to|
+|**14**<br>**15**<br>**16**<br>**17**<br>**18**<br>**19**<br>**20**<br>**21 **|**if**_∃i_:_Cvi,qi_ ==_∅_: **continue**<br>let_{Cvi,j_ : _j_ = 1_, . . . , |Cvi,qi|}_=_Cvi,qi_<br>**for**seq. of colorsets(_Cv_1_,j_1_, . . . , Cvδ,jδ_)**do**<br>_C_ = MERGE( (_Cv_1_,j_1_, . . . , Cvδ,jδ_) )<br>**if**_C ̸_=_ϵ_<br>_Cu,p_ =_Cu,p ∪{C}_<br>_Cu,ℓ_[_p_] =_Cu,p_<br> **return**_Cu,ℓ_|sets of colorsets. Lines 2-5 gather infor-<br>mation from the neighbors of_u_by recur-<br>sively calling the procedure on the nodes<br>in _T ℓ−_1, if _ℓ>_ 0. The for-loop of line 6<br>iterates over the nodes_p_in_T ℓ_to compute<br>the sets _Cu,p_. Lines 7-10 handle the case<br>when_p_is a leaf. For an internal node_p_, if<br>_L_(_p_) =_L_(_u_), the for-loop on line 13 tries|
+
+
+all possible assignments of the nodes in children( _p_ ) to the nodes in _N_ ( _u_ ). The loop on line 16 tries, for each such assignment, all the combinations of colorsets belonging to the sets _Cv_ 1 _,q_ 1 _, . . . , Cvδ,qδ_ . For one such sequence _C_ 1 _, . . . , Cδ_ , the algorithm checks with MERGE if the recursively-obtained sub-maps can be merged to create a map mapping _p_ to _u_ , by checking injectivity via the colors of the image of the map. A dummy value _ϵ_ is used to signal that the map cannot be created. If the map can be created, the algorithm builds a colorset _C_ ( _v_ 1 _,...,vδ_ ) _,_ ( _j_ 1 _,...,jδ_ ) associated with the map, which is inserted in _Cu,p_ . One would call the algorithm with TREE-COLSI _c_ ( _u, h_ ), with _h_ the height of the tree pattern, and would obtain the dictionary _Cu,h_ . One can then access _Cu,r_ , with _r_ the root of the tree, as _Cu,h_ [ _r_ ]. An example of the execution of the algorithm can be found in Section A.4 
+
+Due to the ”non-allowed colors” strategy for enforcing injectivity, the dynamic program will not detect the subgraph isomorphisms from _T_ to _G_ where some specific pairs of pattern graph nodes are mapped to target graph nodes with the same color. We now formally characterize the family of maps that can be recognized. 
+
+7 
+
+**Definition 3.** _Let Tr be a tree, G be a graph whose nodes are endowed with colors c_ : _VG →_ Ω _, and ϕ_ : _VTr → VG a map. We say ϕ is quite-colorful (w.r.t. c) if (i) ∀p ∈ VTr , ∀q ∈_ children( _p_ ) _and ∀t ∈_ children( _q_ ) _it holds that c_ ( _ϕ_ ( _p_ )) = _c_ ( _ϕ_ ( _t_ )) _, and (ii) ∀p, q ∈ VTr such that dTr_ ( _p, q_ ) _≥_ 3 _it holds that c_ ( _ϕ_ ( _p_ )) _̸_ = _c_ ( _ϕ_ ( _q_ )) _._ 
+
+**Theorem 4.** _Let Tr be a tree of height h, G be a graph whose nodes are endowed with colors c_ : _VG →_ Ω _. Then,_ TREE-COLSI _c_ ( _u, h_ )[ _r_ ] = _∅ if and only if there is a quite-colorful subgraph isomorphism ϕ from Tr to G such that ϕ_ ( _r_ ) = _u._ 
+
+A visual representation for a subgraph isomorphism map that is not quite-colorful and for one that is quite-colorful can be found in Figure 3. A simple sufficient (but not necessary) condition to ensure that the algorithm solves subgraph isomorphism is that labels of the pattern graph itself respect the conditions for quite-colorfulness, i.e., _∀p ∈ VTr_ , _∀q ∈_ children( _p_ ) and _∀t ∈_ children( _q_ ) it holds that _L_ ( _ϕ_ ( _p_ )) _̸_ = _L_ ( _ϕ_ ( _t_ )), and _∀p, q ∈ VTr_ such that _dTr_ ( _p, q_ ) _≥_ 3 it holds that _L_ ( _ϕ_ ( _p_ )) _̸_ = _L_ ( _ϕ_ ( _q_ )), as the map will be guaranteed to be parent-colorful. We call these quite-colorful patterns. 
+
+The algorithm is designed, rather than to minimize the computational complexity (Section A.3), to align with message passing, as mapping _p_ to _u_ only requires information from _u_ ’s neighbors. This allows GNNs to simulate the algorithm, as we show in the next section. 
+
+## 5.2 GRAPH NEURAL NETWORKS CAN SIMULATE TREE-COLSI 
+
+We show that a GNN model can simulate the execution of TREE-COLSI _c_ , with the colors _c_ of the target nodes being WL colors, i.e., such that _c_ ( _u_ ) = _c_ ( _v_ ) iff _Uv[l]_[(] _[G]_[)] _[≃][U] u[ l]_[(] _[G]_[)][.][Note that such WL] colors can be obtained by message passing on both labeled and unlabeled graphs. 
+
+The structure of the dynamic program is, by design, aligned with the message passing framework used by GNNs. Indeed, in the dynamic program, the computation of a set _Cu,ℓ_ depends uniquely on the sets _Cv,ℓ−_ 1 for all _v ∈N_ ( _u_ ), as well as the colors _c_ ( _v_ ) for _v ∈N_ ( _u_ ) _∪{u}_ . Indeed, while also the labels _L_ ( _u_ ) are used, these are uniquely identified by the colors _c_ ( _u_ ) by construction. 
+
+Therefore, one can encode the information ( _Cv,ℓ−_ 1 _, c_ ( _v_ )) in the node embedding _hv[ℓ][−]_[1] and communicate this information to the neighbors of _v_ . Special care needs to be taken in order for _f_ agg � _{{h[ℓ] v[−]_[1] : _v ∈N_ ( _u_ ) _}}_ � to uniquely represent the multiset _{{_ ( _Cv,ℓ−_ 1 _, c_ ( _v_ )) : _v ∈N_ ( _u_ ) _}}_ . The function mapping ( _Cu,ℓ−_ 1 _, c_ ( _u_ )) _, {{_ ( _Cv,ℓ−_ 1 _, c_ ( _v_ )) : _v ∈N_ ( _u_ ) _}}_ to ( _Cu,ℓ, c_ ( _u_ )) can then be realized by a MLP in the _f_ upd function, which therefore only simulates lines 6-21 of the dynamic program. Because of this, the GNN algorithmically aligns (Xu et al., 2020, Definition 3.4) with the execution of the dynamic program, which can lead to better generalization (Xu et al., 2020, Theorem 3.6). Moreover, the MLP will have a number of parameters that depends on the maximum number of distinct elements ( _Cu,ℓ−_ 1 _, c_ ( _u_ )) _, {{_ ( _Cv,ℓ−_ 1 _, c_ ( _v_ )) : _v ∈N_ ( _u_ ) _}}_ over all _u ∈VG_ and _ℓ_ = 1 _, . . . , h_ , which we call _ζl,T,G_ . Then, we have that a GNN can efficiently simulate the DP, and therefore we can apply to GNNs the results of Theorem 4. 
+
+**Theorem 5.** _Let G be a set of graphs of bounded degree, Tr be a tree of height h. Let f_ ( _G_ ) = 1 _if ∃u ∈ VG_ : TREE-COLSI _c_ ( _u, h_ )[ _r_ ] = _∅ and_ 0 _otherwise. Then, there exists a function class_ GNN _l_ + _h realized by a GNN model with l_ + _h layers and O_ � _ηl,_[2] _G[·][ l]_[ +] _[ ζ][l,T] r[,][G][·][ h]_ � _parameters such that f ∈_ GNN _l_ + _h._ 
+
+We prove in Lemma 5 that the quantity _ζl,T,G_ , which plays a crucial role in the complexity of the model, can be upper bounded by _ηl_ + _h,G_ , recovering a dependency similar to the result of Theorem 2. We show there that the quantity can also be bounded based on the maximum degree of the graph ∆, the size of the pattern _κ_ and the number of used colors _ηG,l_ as _O_ � _ηG_[∆+1] _,l /_ ∆! _·_ 2[(∆+1)] _[η] G[κ] ,l[/]_[(] _[κ][−]_[1)!][�] . However, when in practice there are few distinct elements ( _Cu,ℓ−_ 1 _, c_ ( _u_ )) _, {{_ ( _Cv,ℓ−_ 1 _, c_ ( _v_ )) : _v ∈ N_ ( _u_ ) _}}_ , e.g. if the subtrees of _T_ appear rarely in the data or appear on target nodes with few distinct colors, we get better model size bounds, which then leads to better sample complexity. 
+
+**Comparison with previous work** The result of Theorem 4 yields a generalization of Chen et al. (2020, Theorem 3.5), as maps from stars are always quite-colorful. Moreover, Zhang et al. (2024, Theorem 4.5) proves that GNNs can count subgraphs (on general graphs) if and only if the _spasm_ of the pattern at hand is composed of only trees. Indeed, the spasm of a quite-colorful tree is composed of only trees. On the other hand, if a tree pattern has two nodes at distance at least 3 with the same 
+
+8 
+
+Table 2: Number _|G/≃W Lℓ |_ of WL isomorphism classes after _ℓ_ iterations and number _|G/≃|_ of actual isomorphism classes on common molecular datasets. Ratio between the two in brackets. 
+
+|Dataset|_|G/≃W Lℓ|_<br>_|G/≃|_<br>_ℓ_= 1<br>_ℓ_= 2<br>_ℓ_= 3<br>_ℓ_= 4<br>_ℓ_=_∞_|
+|---|---|
+|Mutagenicity (Kersting et al., 2016)<br>MCF-7 (Kersting et al., 2016)<br>ZINC (G´omez-Bombarelli et al., 2018)<br>ogbg-molhiv (Hu et al., 2021; Wu et al., 2018)<br>ogbg-molpcba (Hu et al., 2021; Wu et al., 2018)<br><br>Peptides-func (Dwivedi et al., 2022; Singh et al., 2015)<br>PCQM-Contact (Dwivedi et al., 2022)<br>|3634 (0_._839)<br>4274 (0_._985)<br>4333 (0_._999)<br>4337 (1_._000)<br>4337 (1_._000)<br>4337<br>26058 (0_._946)<br>27368 (0_._994)<br>27525 (0_._999)<br>27532 (1_._000)<br>27538 (1_._000)<br>27538<br>11988 (1_._000)<br>11994 (1_._000)<br>11994 (1_._000)<br>11994 (1_._000)<br>11994 (1_._000)<br>11994<br>38765 (0_._942)<br>40942 (0_._996)<br>41082 (0_._999)<br>41102 (1_._000)<br>41122 (1_._000)<br>41122<br>375291 (0_._873)<br>428220 (0_._996)<br>429584 (0_._999)<br>429730 (1_._000)<br>429802 (1_._000)<br>429802<br>14162 (0_._937)<br>14679 (0_._972)<br>14854 (0_._983)<br>15075 (0_._997)<br>15117 (1_._000)<br>15117<br>428356 (0_._819)<br>521598 (0_._998)<br>522786 (0_._999)<br>522836 (1_._000)<br>522837 (1_._000)<br>522837|
+
+
+color, and thus is not quite-colorful, it will have a cyclic graph in its spasm, and cannot therefore be counted by a GNN on general target graphs. Our Theorem 4 therefore helps understand the results of Zhang et al. (2024, Theorem 4.5), by providing upper bounds on the number of layers, the parameter count and the sample complexity of a GNN that is indeed able to count such substructures. 
+
+Our results however, go beyond this. Indeed, even when the pattern at hand is not quite-colorful (e.g., for an unlabeled pattern), the algorithm can exploit the colors of the target graph to elude the worstcase analysis of Zhang et al. (2024, Theorem 4.5). Indeed, given that the target graphs have enough asymmetries, the colors _c_ obtained by _l_ iterations of color refinement (or GNN message passing layers) are enough to make the subgraph isomorphism maps quite-colorful. This, as we observe in Section 6, indeed holds in practice on several real-world datasets. Note that, on adversarial examples like regular graphs, quite-colorfulness cannot be obtained for any value of _l_ . 
+
+## 5.3 EXTENSIONS 
+
+We obtained a message-passing-like dynamic program for _quite-colorful_ subgraph isomorphism from tree patterns. However, the quite-colorful condition can be too restrictive in some scenarios. A similar problem is the locally injective homomorphism problem from tree patterns. In this relaxation of the subgraph isomorphism problem, the map is required to be injective only on the neighborhood of each pattern graph’s node. In Section B.1 we propose TREE-COLLIH, a slightly modified algorithm that solves the locally injective homomorphism problem under a weaker condition with respect to quite-colorfulness. 
+
+The algorithms described in the previous sections, as the original algorithms (Alon et al., 1995), can only deal with tree patterns. This is necessary due to the fact that the maps built on different subtrees can be merged recursively without conflicts. In fact, in Section B.2 we discuss how to extend the approach, which can still be simulated by a GNN, to cyclic patterns. 
+
+Moreover, our algorithms are described in the decision problem variant. As argued in a follow-up to the original color-coding algorithm Alon et al. (2008), one can modify the dynamic program, and the associated GNNs, to count maps. We describe how to do so in Section B.3. 
+
+## 6 EXPERIMENTAL EVALUATION 
+
+## 6.1 THE CONDITIONS FOR SUBGRAPH COUNTING HOLD IN PRACTICE 
+
+We study whether the sufficient conditions for subgraph counting that we have identified hold in practice. As in Table 1, we focus on molecular graphs, where subgraph counting has been the focus of extensive research, due to the relevance of subgraphs corresponding to functional groups. Table 2 reports the number _|G/≃W Lℓ |_ of WL isomorphism classes after _ℓ_ = 1 _,_ 2 _,_ 3 _,_ 4 _, ∞_ iterations. If one compares this figure to the number _|G/≃|_ of actual isomorphism classes, it is immediate to see that the number of WL-indistinguishable graphs is negligible in practice, as observed in Zopf (2022). 
+
+Moreover, Table 3 reports the fraction of the nodes in the dataset that are ( _ℓ, k_ )-identifiable, namely such that their universal cover of depth _ℓ_ uniquely identifies their ego-net of radius _k_ . We also report the fraction of graphs for which all nodes are ( _ℓ, k_ )-identifiable. We can observe that already for _ℓ_ = _k_ + 2, more than 97% of the ego-nets centered around nodes can be identified by the WL color of the node after _ℓ_ iterations. This result justifies the real-world applicability of Theorem 2. 
+
+9 
+
+Table 3: Fraction of nodes in the dataset that are ( _ℓ, k_ )-identifiable. In brackets, fraction of graphs in the dataset for which all nodes are ( _ℓ, k_ )-identifiable. 
+
+|the dataset for which|all nodes are (_ℓ, k_)-identi|fable.||
+|---|---|---|---|
+|Dataset<br>Mutagenicity<br>MCF-7<br>ZINC<br>ogbg-molhiv<br>ogbg-molpcba<br>Peptides-func<br>PCQM-Contact|_k_ = 1<br>_ℓ_= 1<br>_ℓ_= 2<br>_ℓ_= 3<br>_ℓ_= 4|_k_ = 2<br>_ℓ_= 2<br>_ℓ_= 3<br>_ℓ_= 4<br>_ℓ_= 5|_k_ = 3<br>_ℓ_= 3<br>_ℓ_= 4<br>_ℓ_= 5<br>_ℓ_= 6|
+||0.880<br>0.978<br>0.997<br>0.999<br>(0_._265)<br>(0_._766)<br>(0_._973)<br>(0_._994)<br>0.389<br>0.951<br>0.996<br>0.999<br>(0_._002)<br>(0_._619)<br>(0_._960)<br>(0_._993)<br>0.844<br>0.982<br>0.996<br>1.000<br>(0_._116)<br>(0_._825)<br>(0_._934)<br>(0_._998)<br>0.734<br>0.961<br>0.998<br>1.000<br>(0_._073)<br>(0_._708)<br>(0_._979)<br>(0_._998)<br>0.780<br>0.959<br>0.992<br>0.999<br>(0_._036)<br>(0_._639)<br>(0_._905)<br>(0_._987)<br>0.825<br>1.000<br>1.000<br>1.000<br>(0_._000)<br>(1_._000)<br>(1_._000)<br>(1_._000)<br>0.699<br>0.942<br>0.991<br>0.997<br>(0_._001)<br>(0_._421)<br>(0_._870)<br>(0_._966)|0.647<br>0.945<br>0.992<br>0.997<br><br>(0_._071)<br>(0_._634)<br>(0_._932)<br>(0_._994)<br><br>0.323<br>0.913<br>0.995<br>0.999<br><br>(0_._004)<br>(0_._308)<br>(0_._937)<br>(0_._994)<br><br>0.548<br>0.952<br>0.995<br>1.000<br><br>(0_._003)<br>(0_._542)<br>(0_._934)<br>(0_._993)<br><br>0.477<br>0.952<br>0.996<br>0.999<br><br>(0_._013)<br>(0_._598)<br>(0_._945)<br>(0_._996)<br><br>0.504<br>0.933<br>0.989<br>0.998<br><br>(0_._002)<br>(0_._467)<br>(0_._861)<br>(0_._963)<br><br>0.825<br>0.999<br>1.000<br>1.000<br><br>(0_._001)<br>(0_._960)<br>(1_._000)<br>(1_._000)<br><br>0.351<br>0.854<br>0.973<br>0.995<br><br>(0_._001)<br>(0_._328)<br>(0_._805)<br>(0_._949)<br>|0.663<br>0.952<br>0.994<br>0.997<br>(0_._120)<br>(0_._673)<br>(0_._949)<br>(0_._993)<br>0.615<br>0.953<br>0.996<br>0.999<br>(0_._029)<br>(0_._502)<br>(0_._954)<br>(0_._995)<br>0.782<br>0.981<br>0.998<br>1.000<br>(0_._054)<br>(0_._781)<br>(0_._970)<br>(0_._998)<br>0.739<br>0.968<br>0.996<br>0.999<br>(0_._078)<br>(0_._669)<br>(0_._963)<br>(0_._995)<br>0.674<br>0.948<br>0.988<br>0.998<br>(0_._025)<br>(0_._556)<br>(0_._861)<br>(0_._959)<br>0.711<br>0.961<br>0.993<br>0.999<br>(0_._004)<br>(0_._143)<br>(0_._551)<br>(0_._907)<br>0.391<br>0.848<br>0.975<br>0.998<br>(0_._006)<br>(0_._373)<br>(0_._841)<br>(0_._973)|
+
+
+**==> picture [386 x 54] intentionally omitted <==**
+
+Figure 4: Ratio of the number _|Q|_ of subgraph isomorphisms that are quite-colorful to the total number _|S|_ of subgraph isomorphisms, reported for increasing numbers of WL iterations _l_ and for several (non quite-colorful) patterns. 
+
+Finally, Figure 4 reports the proportion of subgraph isomorphisms that are quite-colorful, for increasing numbers of WL iterations _l_ and for several (non quite-colorful) patterns. Full results are reported in Section D.3. The results show that for real-world datasets, such as MCF-7 and ZINC, nearly all subgraph isomorphisms are quite-colorful, already when target graphs are node-colored using only _l_ = 3 iterations of color refinement. In general, we notice that, for the vast majority of the patterns, most subgraph isomorphism maps are indeed quite-colorful already for _l_ = 2. There are specific patterns for which not all maps are quite-colorful, no matter the choice of _l_ . Understanding the mechanisms for which these patterns can be counted, at least approximately, remains an open question for future work. 
+
+## 6.2 ADDITIONAL EXPERIMENTAL RESULTS 
+
+In Section D we report additional experimental results. In particular, we report an extended version of Table 1 with several more tree and cyclic patterns, showing that indeed GNNs can count quite well several substructures. Moreover, we validate the ability of GNNs to count quite-colorful patterns on challenging synthetic datasets, further proving the results of Section 5. 
+
+## 7 DISCUSSION AND CONCLUSIONS 
+
+Our work provides a theoretically-grounded explanation for the observed effectiveness of message passing graph neural networks (GNNs) in subgraph counting tasks, bridging the gap between theoretical limitations and practical performance. Indeed, by moving beyond worst-case scenarios, we provide a more nuanced analysis of the subgraph-counting abilities of GNNs. 
+
+In particular, we derived sufficient conditions under which GNNs can efficiently realize functions on graphs that depend only on local substructures around nodes, such as subgraph counting, and we have shown that they often hold in practice. Moreover, we developed novel algorithms for subtree isomorphism and demonstrated that GNNs can efficiently simulate them, providing a new perspective on the computational capabilities of GNNs in relation to classical graph algorithms. 
+
+Finally, we show that, in practice, more expressivity in GNN architectures is almost never needed, as in many graph datasets there are no pairs of non-isomorphic graphs that cannot be distinguished by GNNs. Therefore, having ruled out expressivity, an interesting research avenue is to investigate the true reasons (e.g. lower sample complexity, or more ease in the optimization) why several GNN architectures designed to go beyond the limitations of the 1-WL test (Morris et al., 2019) often show better performance than their simpler counterparts in several prediction tasks. 
+
+10 
+
+## REFERENCES 
+
+- Ralph Abboud, Ismail[˙][˙] Ilkan Ceylan, Martin Grohe, and Thomas Lukasiewicz. The surprising power of graph neural networks with random node initialization. In _Proceedings of the Joint Conference on Artificial Intelligence (IJCAI)_ , 2021. 
+
+- Noga Alon, Raphael Yuster, and Uri Zwick. Color-coding. _J. ACM_ , 42(4):844–856, July 1995. ISSN 0004-5411. 
+
+- Noga Alon, Phuong Dao, Iman Hajirasouliha, Fereydoun Hormozdiari, and S Cenk Sahinalp. Biomolecular network motif counting and discovery by color coding. _Bioinformatics_ , 24(13): i241–9, July 2008. 
+
+- Dana Angluin. Local and global properties in networks of processors. In _Proceedings of the ACM Symposium on Theory of Computing (STOC)_ , STOC ’80, pp. 82–93, 1980. 
+
+- Martin Anthony and Peter Bartlett. _Neural network learning: Theoretical foundations_ . Cambridge University Press, 1999. 
+
+- Vikraman Arvind and Venkatesh Raman. Approximation algorithms for some parameterized counting problems. In _ISAAC_ , pp. 453–464. Springer, 2002. 
+
+- Vikraman Arvind, Johannes K¨obler, Gaurav Rattan, and Oleg Verbitsky. Graph isomorphism, color refinement, and compactness. _Computational Complexity_ , 26:627–685, 2017. 
+
+- L´aszl´o Babai, Paul Erdo˝s, and Stanley M. Selkow. Random graph isomorphism. _SIAM Journal on Computing_ , 9(3):628–635, 1980. 
+
+- Maya Bechler-Speicher, Moshe Eliasof, Carola-Bibiane Sch¨onlieb, Ran Gilad-Bachrach, and Amir Globerson. On the utilization of unique node identifiers in graph neural networks. _arXiv preprint arXiv:2411.02271_ , 2024. 
+
+- Beatrice Bevilacqua, Fabrizio Frasca, Derek Lim, Balasubramaniam Srinivasan, Chen Cai, Gopinath Balamurugan, Michael M Bronstein, and Haggai Maron. Equivariant subgraph aggregation networks. In _International Conference on Learning Representations (ICLR)_ , 2021. 
+
+- Giorgos Bouritsas, Fabrizio Frasca, Stefanos Zafeiriou, and Michael M Bronstein. Improving graph neural network expressivity via subgraph isomorphism counting. _IEEE Transactions on Pattern Analysis and Machine Intelligence_ , 45(1):657–668, 2022. 
+
+- Jin-Yi Cai, Martin F¨urer, and Neil Immerman. An optimal lower bound on the number of variables for graph identification. _Combinatorica_ , 12(4):389–410, 1992. 
+
+- Quentin Cappart, Didier Ch´etelat, Elias B Khalil, Andrea Lodi, Christopher Morris, and Petar Veliˇckovi´c. Combinatorial optimization and reasoning with graph neural networks. _Journal of Machine Learning Research (JMLR)_ , 24(130):1–61, 2023. 
+
+- Vincenzo Carletti, Pasquale Foggia, Alessia Saggese, and Mario Vento. Challenging the time complexity of exact subgraph isomorphism for huge and dense graphs with vf3. _IEEE transactions on pattern analysis and machine intelligence_ , 40(4):804–818, 2017. 
+
+- Zhengdao Chen, Lei Chen, Soledad Villar, and Joan Bruna. Can graph neural networks count substructures? In _Advances in Neural Information Processing Systems (NeurIPS)_ , volume 33, pp. 10383–10395, 2020. 
+
+- Leonardo Cotta, Christopher Morris, and Bruno Ribeiro. Reconstruction for powerful graph representations. In _Advances in Neural Information Processing Systems (NeurIPS)_ , 2021. 
+
+- George Dasoulas, Ludovic Dos Santos, Kevin Scaman, and Aladin Virmaux. Coloring graph neural networks for node disambiguation. In _Proceedings of the Joint Conference on Artificial Intelligence (IJCAI)_ , 2020. 
+
+- Vijay Prakash Dwivedi, Ladislav Ramp´aˇsek, Mikhail Galkin, Ali Parviz, Guy Wolf, Anh Tuan Luu, and Dominique Beaini. Long range graph benchmark. In _Thirty-sixth Conference on Neural Information Processing Systems Datasets and Benchmarks Track_ , 2022. 
+
+11 
+
+Shimon Even, Alan L. Selman, and Yacov Yacobi. The complexity of promise problems with applications to public-key cryptography. _Information and Control_ , 61(2):159–173, 1984. ISSN 0019-9958. 
+
+- Billy Joe Franks, Markus Anders, Marius Kloft, and Pascal Schweitzer. A systematic approach to random data augmentation on graph neural networks. _arXiv preprint arXiv:2112.04314_ , 2021. 
+
+- Fabrizio Frasca, Beatrice Bevilacqua, Michael Bronstein, and Haggai Maron. Understanding and extending subgraph gnns by rethinking their symmetries. In _Advances in Neural Information Processing Systems (NeurIPS)_ , 2022. 
+
+Martin Grohe. _Descriptive complexity, canonisation, and definable graph structure theory_ , volume 47. Cambridge University Press, 2017. 
+
+- Rafael G´omez-Bombarelli, Jennifer N. Wei, David Duvenaud, Jos´e Miguel Hern´andez-Lobato, Benjam´ın S´anchez-Lengeling, Dennis Sheberla, Jorge Aguilera-Iparraguirre, Timothy D. Hirzel, Ryan P. Adams, and Al´an Aspuru-Guzik. Automatic chemical design using a data-driven continuous representation of molecules. _ACS Central Science_ , 4(2):268–276, 2018. 
+
+- Weihua Hu, Matthias Fey, Marinka Zitnik, Yuxiao Dong, Hongyu Ren, Bowen Liu, Michele Catasta, and Jure Leskovec. Open graph benchmark: Datasets for machine learning on graphs, 2021. 
+
+- Yinan Huang, William Lu, Joshua Robinson, Yu Yang, Muhan Zhang, Stefanie Jegelka, and Pan Li. On the stability of expressive positional encodings for graph neural networks. _arXiv preprint arXiv:2310.02579_ , 2023a. 
+
+- Yinan Huang, Xingang Peng, Jianzhu Ma, and Muhan Zhang. Boosting the cycle counting power of graph neural networks with i2-GNNs. In _International Conference on Learning Representations (ICLR)_ , 2023b. 
+
+- Charilaos Kanatsoulis and Alejandro Ribeiro. Counting graph substructures with graph neural networks. In _International Conference on Learning Representations (ICLR)_ , 2024. 
+
+- Kristian Kersting, Nils M. Kriege, Christopher Morris, Petra Mutzel, and Marion Neumann. Benchmark data sets for graph kernels, 2016. http://graphkernels.cs.tu-dortmund.de. 
+
+- Andreas Krebs and Oleg Verbitsky. Universal covers, color refinement, and two-variable counting logic: Lower bounds for the depth. In _ACM/IEEE Symposium on Logic in Computer Science_ , pp. 689–700, 2015. 
+
+- Michihiro Kuramochi and George Karypis. An efficient algorithm for discovering frequent subgraphs. _IEEE transactions on Knowledge and Data Engineering_ , 16(9):1038–1051, 2004. 
+
+- Haggai Maron, Heli Ben-Hamu, Hadar Serviansky, and Yaron Lipman. Provably powerful graph networks. In _Advances in Neural Information Processing Systems (NeurIPS)_ , volume 32, 2019. 
+
+- Ciaran McCreesh, Patrick Prosser, and James Trimble. The glasgow subgraph solver: using constraint programming to tackle hard subgraph isomorphism problem variants. In _International Conference on Graph Transformation_ , pp. 316–324. Springer, 2020. 
+
+- Mehryar Mohri, Afshin Rostamizadeh, and Ameet Talwalkar. _Foundations of machine learning_ . MIT press, 2018. 
+
+- Christopher Morris, Martin Ritzert, Matthias Fey, William L Hamilton, Jan Eric Lenssen, Gaurav Rattan, and Martin Grohe. Weisfeiler and leman go neural: Higher-order graph neural networks. In _Proceedings of the AAAI Conference on Artificial Intelligence_ , 2019. 
+
+- Christopher Morris, Gaurav Rattan, Sandra Kiefer, and Siamak Ravanbakhsh. Speqnets: Sparsityaware permutation-equivariant graph networks. In _International Conference on Machine Learning (ICML)_ , 2022. 
+
+- Christopher Morris, Floris Geerts, Jan T¨onshoff, and Martin Grohe. WL meet VC. In _International Conference on Machine Learning (ICML)_ , 2023a. 
+
+12 
+
+- Christopher Morris, Yaron Lipman, Haggai Maron, Bastian Rieck, Nils M Kriege, Martin Grohe, Matthias Fey, and Karsten Borgwardt. Weisfeiler and leman go machine learning: The story so far. _The Journal of Machine Learning Research_ , 24(1):15865–15923, 2023b. 
+
+- Ryan Murphy, Balasubramaniam Srinivasan, Vinayak Rao, and Bruno Ribeiro. Relational pooling for graph representations. In _International Conference on Machine Learning (ICML)_ , pp. 4663– 4673. PMLR, 2019. 
+
+- Robert R. Nerem, Samantha Chen, Sanjoy Dasgupta, and Yusu Wang. Graph neural networks extrapolate out-of-distribution for shortest paths, 2025. 
+
+- Siegfried Nijssen and Joost N Kok. The gaston tool for frequent subgraph mining. _Electronic Notes in Theoretical Computer Science_ , 127(1):77–87, 2005. 
+
+- Raffaele Paolino, Sohir Maskey, Pascal Welke, and Gitta Kutyniok. Weisfeiler and leman go loopy: A new hierarchy for graph representational learning. In _Advances in Neural Information Processing Systems (NeurIPS)_ , 2024. 
+
+- P´al Andr´as Papp and Roger Wattenhofer. A theoretical comparison of graph neural network extensions. In _International Conference on Machine Learning (ICML)_ , 2022. 
+
+- Paolo Pellizzoni, Till Schulz, Dexiong Chen, and Karsten Borgwardt. On the expressivity and sample complexity of node-individualized graph neural networks. In _Advances in Neural Information Processing Systems (NeurIPS)_ , 2024. 
+
+- Chendi Qian, Gaurav Rattan, Floris Geerts, Mathias Niepert, and Christopher Morris. Ordered subgraph aggregation networks. In _Advances in Neural Information Processing Systems (NeurIPS)_ , 2022. 
+
+- Ryoma Sato. A survey on the expressive power of graph neural networks. _arXiv preprint arXiv:2003.04078_ , 2020. 
+
+- Ryoma Sato, Makoto Yamada, and Hisashi Kashima. Random features strengthen graph neural networks. In _Proceedings of the SIAM International Conference on Data Mining (SDM)_ , pp. 333–341. SIAM, 2021. 
+
+- Shai Shalev-Shwartz and Shai Ben-David. _Understanding Machine Learning: From Theory to Algorithms_ . Cambridge University Press, 2014. 
+
+- Sandeep Singh, Kumardeep Chaudhary, Sandeep Kumar Dhanda, Sherry Bhalla, Salman Sadullah Usmani, Ankur Gautam, Abhishek Tuknait, Piyush Agrawal, Deepika Mathur, and Gajendra P S Raghava. SATPdb: a database of structurally annotated therapeutic peptides. _Nucleic Acids Res_ , 44(D1):D1119–26, November 2015. 
+
+- Behrooz Tahmasebi, Derek Lim, and Stefanie Jegelka. The power of recursion in graph neural networks for counting substructures. In _International Conference on Artificial Intelligence and Statistics (AISTATS)_ , 2023. 
+
+- Qing Wang, Dillon Ze Chen, Asiri Wijesinghe, Shouheng Li, and Muhammad Farhan. N-WL: A new hierarchy of expressivity for graph neural networks. In _International Conference on Learning Representations (ICLR)_ , 2023. 
+
+- Boris Weisfeiler and Andrei Leman. The reduction of a graph to canonical form and the algebra which appears therein. _Nauchno-Technicheskaya Informatsia_ , 1968. 
+
+- Zhenqin Wu, Bharath Ramsundar, Evan N. Feinberg, Joseph Gomes, Caleb Geniesse, Aneesh S. Pappu, Karl Leswing, and Vijay Pande. Moleculenet: a benchmark for molecular machine learning. _Chem. Sci._ , 9:513–530, 2018. 
+
+- Keyulu Xu, Weihua Hu, Jure Leskovec, and Stefanie Jegelka. How powerful are graph neural networks? In _International Conference on Learning Representations (ICLR)_ , 2018. 
+
+- Keyulu Xu, Jingling Li, Mozhi Zhang, Simon S. Du, Ken ichi Kawarabayashi, and Stefanie Jegelka. What can neural networks reason about? In _International Conference on Learning Representations (ICLR)_ , 2020. 
+
+13 
+
+Bohang Zhang, Guhao Feng, Yiheng Du, Di He, and Liwei Wang. A complete expressiveness hierarchy for subgraph gnns via subgraph weisfeiler-lehman tests. In _International Conference on Machine Learning (ICML)_ , 2023. 
+
+Bohang Zhang, Jingchu Gai, Yiheng Du, Qiwei Ye, Di He, and Liwei Wang. Beyond weisfeilerlehman: A quantitative framework for gnn expressiveness. In _International Conference on Learning Representations (ICLR)_ , 2024. 
+
+Markus Zopf. 1-wl expressiveness is (almost) all you need. In _International Joint Conference on Neural Networks (IJCNN)_ , 2022. 
+
+14 
+
+## A ADDITIONAL DETAILS 
+
+## A.1 EXPRESSIVE GRAPH NEURAL NETWORKS 
+
+An example of functions _f_ agg, _f_ upd and _f_ out that leads to models that are provably as expressive as color refinement (Morris et al., 2019), denoting _∥_ as concatenation, is 
+
+**==> picture [288 x 27] intentionally omitted <==**
+
+## A.2 SAMPLE COMPLEXITY AND PSEUDO-DIMENSION 
+
+Let _ℓ_ ( _f_ ( _x_ ) _, y_ ) be a loss. Learning theory (Mohri et al., 2018; Shalev-Shwartz & Ben-David, 2014) is concerned with the task to bound the difference between the true riskˆ _R_ ( _f_ ) and the empirical risk _R_ ( _f_ ): 
+
+**==> picture [284 x 28] intentionally omitted <==**
+
+where _D_ = _{_ ( _xi, yi_ ) _}i ∼D[m]_ represents a training dataset of size _m_ sampled i.i.d. from the data generating distribution _D_ . 
+
+In particular, given a class of functions _F_ , we say that it has the _uniform convergence_ property (Shalev-Shwartz & Ben-David, 2014) if there exists a function _mF_ ( _ϵ, δ_ ) such that, for every _ϵ, δ ∈_ ]0 _,_ 1[ and every distribution _D_ , drawing a dataset _D_ of _m ≥ mF_ ( _ϵ, δ_ ) i.i.d. samples from _D_ yields that, with probability at least 1 _− δ_ over the choices of the samples, sup _f ∈F |R_[ˆ] _D,ℓ_ ( _f_ ) _− Rℓ_ ( _f_ ) _| ≤ ϵ_ . The function _mF_ ( _ϵ, δ_ ) is called the _sample complexity_ of the function class. 
+
+In general, a model class that has low sample complexity needs fewer training samples in order to generalize to unseen data. For models outputting real values, their sample complexity can be characterizes via the pseudo dimension (Anthony & Bartlett, 1999; Mohri et al., 2018). 
+
+**Definition 4.** _Let X be a set and F ⊆ f_ : _X →_ R _a class of real-valued functions. We say that F pseudo-shatters a set S_ = ( _x_ 1 _, . . . , x|S|_ ) _with witnesses_ ( _r_ 1 _, . . . , r|S|_ ) _∈_ R _[|][S][|] if |_ (sign( _f_ ( _x_ 1) _− r_ 1) _, . . . ,_ sign( _f_ ( _x|S|_ ) _− r|S|_ )) : _f ∈F|_ = 2 _[|][S][|] . Then, we define the pseudodimension of_ ( _X, F_ ) _, denoted_ Pdim( _X, F_ ) _, as the size of the largest set S that can be pseudoshattered by F. If sets of arbitrary size can be pseudo-shattered, we say_ Pdim( _X, F_ ) = + _∞._ Analogous to the VC dimension for binary classification, the pseudo-dimension provides upper bounds on the number of samples required to learn a function from the class _F_ with high probability and low error. _O_ �� _ϵ[−]_[2] (Pdim( _X,_ Specifically, for a given error _F_ ) + log[1] _δ_[)] � (Mohri et al., 2018, Theorem 19.2). _ϵ_ and confidence _δ_ , the sample complexity of for _F_ is 
+
+## A.3 COMPUTATIONAL COMPLEXITY 
+
+As discussed in Section 5.1, the algorithm TREE-COLSI is designed, rather than to minimize the computational complexity, to align with message passing and to allow to detect quite-colorful maps. 
+
+The algorithm, for a fixed node _u_ and level _ℓ_ , considers _|T[ℓ] |_ pattern graph’s nodes. For each of such nodes, it tries _O_ (∆[∆] _[T]_ ) sequences of nodes on line 13, where ∆ is an upper bound to the degree of any node in _G_ and ∆ _T_ is an upper bound to the number of children of any node in the pattern tree. A set _Cv,q_ can contain in the worst case _Q_ =[�] _[|] i[V]_ =0 _[T][ |]_ � _|_ Ω _i |_ � colorsets on _|_ Ω _|_ colors. Then, for each sequence of nodes ( _v_ 1 _, . . . , vδ_ ), the algorithm tries _O_ ( _Q_[∆] _[T]_ ) sequences of colorsets on line 14. Therefore, summing over all _u ∈ VG_ and _ℓ ∈_ 0 _, . . . , h_ , we obtain a total of _O_ �� _hℓ_ =0 _[|][T][ ℓ][||][V][G][|]_ �∆ _Q_ �∆ _T_[�] ∆ _T_[�] = _O_ � _|VG||VT | ·_ �∆ _Q_ � calls to MERGE. 
+
+In contrast, the original color coding algorithm (Alon et al., 2008), would have a complexity of _O_ ( _|EG||VT | · Q_ ) = _O_ ( _|VG||VT | ·_ ∆ _Q_ ). 
+
+15 
+
+**==> picture [373 x 182] intentionally omitted <==**
+
+**----- Start of picture text -----**<br>
+DP(      , 0) =        : { {    } } DP(      , 1) =        : { {       }, {       } }<br>DP(      , 0) = DP(      , 0) =        : { {    } }       : { {    } } DP(      , 0) =           : {  }<br>DP(      , 0) =        : { {    } } DP(      , 1) =        : { {       }, {       } }<br>DP(      , 0) = DP(      , 0) =        : { {    } }       : { {    } } DP(      , 0) =           : {  }<br>DP(      , 0) =        : {  } DP(      , 1) =        : {  }<br>DP(      , 0) = DP(      , 0) =        : {  }       : {  } DP(      , 0) =           : { {         }, {         }, {         } }<br>DP(      , 0) =        : {  } DP(      , 1) =        : {  }<br>DP(      , 0) = DP(      , 0) =        : {  }       : {  } DP(      , 0) =           : {  }<br>DP(      , 1) =        : {  }<br>DP(      , 0) =           : { {         }, {         }, {         } }<br>DP(      , 2) =                : {  }<br>DP(      , 2) =                :                                                                          {                                }{                  }, {                  }, {                  },{                  }, {                  }, {                  } →  {   }<br>DP(      , 2) =                :                                                                          {                                }{                  }, {                  }, {                  },{                  }, {                  }, {                  } →  {    }<br>**----- End of picture text -----**<br>
+
+
+Figure 5: A simplified example of the execution of TREE-COLSI for a pattern _P_ and graph _G_ . 
+
+## A.4 AN EXAMPLE OF THE EXECUTION OF TREE-COLSI 
+
+Figure 5 reports a (simplified) example of the execution of TREE-COLSI for a pattern _P_ and target graph _G_ . The nodes of _G_ are endowed with labels (depicted on the left half of the node) and colors (depicted on the right half of the node) obtained by one iteration of color refinement. The original graph can be seen in Figure 3. 
+
+At level 0, the algorithm returns for each node _u ∈ VG_ a dictionary from the three leaves of _P_ to sets of colorsets. We report as an example four such _u_ ’s. For nodes _u_ with black label, the algorithm keeps track of the colors of the images of the pattern graph’s nodes (in fact, in the algorithm, these colors are maintained implicitly). For nodes _u_ with other labels, the algorithm returns an empty set since the sub-patterns don’t match. 
+
+At level 1, the algorithm returns dictionaries from the two sub-patterns of height 1 of _P_ to sets of colorsets. For example, consider the first node _u_ 1 we report (i.e., with red label and white color). Here, the sub-pattern rooted at the red-labeled node matches the red label of _u_ 1, and the colorsets received from the two neighbors of _u_ 1 both allow for the construction of a subgraph isomorphism map. Then, the algorithm keeps track of the sets of colors of the images of the pattern graph’s nodes for the two maps. In particular, it keeps track of a set containing a white and pink color, and of a set containing a white and purple color. 
+
+Finally, at level 2, the algorithm returns dictionaries from the entire pattern _P_ to sets of colorsets. The first node _u_ 1 we report (black label and green color), receives from its black-labeled neighbor empty sets. Therefore, it also returns an empty set. The second node _u_ 2 we report (black label and purple color) receives from both its two neighbors some colorsets. Here, one such combination of colorsets is valid, which is then returned as a valid colorset. Since 2 is the height of the tree, it means that there exists a subgraph isomorphism from the tree pattern to _G_ rooted at _u_ 2. The third node _u_ 3 we report (black label and purple color) also receives from both its two neighbors some colorsets. However, in all such combinations of colorsets, some colors collide. Therefore, it returns an empty set. Indeed, even though there is a subgraph isomorphism rooted at _u_ 3, it is not quite-colorful. 
+
+## B EXTENSIONS TO THE DYNAMIC PROGRAMMING ALGORITHM 
+
+## B.1 A DYNAMIC PROGRAM FOR COLORFUL SUBTREE ISOMORPHISM 
+
+In Section 5.1, we obtained a message-passing-like dynamic program for _quite-colorful_ subgraph isomorphism from tree patterns. However, the quite-colorful condition can be too restrictive in some scenarios. In this section, we tackle the locally injective homomorphism problem from tree patterns. In this relaxation of the subgraph isomorphism problem, the map from the pattern to the 
+
+16 
+
+target is required to be injective only on the neighborhood of each pattern graph’s node. We then propose TREE-COLLIH, a slightly modified algorithm that solves the locally injective homomorphism problem under a weaker condition with respect to quite-colorfulness. 
+
+Inspired by the color coding technique, as **Algorithm 3:** PARENTMERGE(( _C_ 1 _, . . . , Cδ_ )) done in Section 5.1, we enforce _local_ injectivity by making sure that the colors **1 if** _∃i_ : _c_ ( _u_ ) _∈ Ci_ : **return** _ϵ_ of the images of specific pairs of pattern **2 return** _{c_ ( _vi_ ) _, i_ = 1 _, . . . , δ}_ nodes are distinct. In particular, we now 
+
+require only that for each node _p_ , the image of the parent of its parent has a different color from the image of _p_ . This condition is enforced by substituting the MERGE procedure of the dynamic program TREE-COLSI, reported in Algorithm 1 with PARENTMERGE. In particular, the dynamic program still returns, for nodes _u ∈ VG_ , _p ∈ VT_ , a set _Cu,p_ of colorsets _C ∈{_ 0 _,_ 1 _}[|]_[Ω] _[|]_ . If there is no locally injective homomorphism from _Tp_ to _G_ mapping _p_ to _u_ the set is empty. If _C ∈Cu,p_ , then there exists (at least) one associated map _ϕ_ from _Tp_ to _G_ . 
+
+We now formally characterize the family of maps that can be recognized by the dynamic program. **Definition 5.** _Let Tr be a tree, G be a graph whose nodes are endowed with colors c_ : _VG →_ Ω _, and ϕ_ : _VTr → VG a map. We say ϕ is parent-colorful (w.r.t. c) if ∀p ∈ VTr , ∀q ∈_ children( _p_ ) _and ∀t ∈_ children( _q_ ) _it holds that c_ ( _ϕ_ ( _p_ )) _̸_ = _c_ ( _ϕ_ ( _t_ )) _._ 
+
+**Theorem 6.** _Let Tr be a tree of height h, G be a graph whose nodes are endowed with colors c_ : _VG →_ Ω _. Then,_ TREE-COLLIH _c_ ( _u, h_ )[ _r_ ] = _∅ if and only if there is a parent-colorful locally injective homomorphism ϕ from Tr to G such that ϕ_ ( _r_ ) = _u._ 
+
+A simple sufficient (but not necessary) condition to ensure that the algorithm solves the locally injective homomorphism problem is that the parent of the parent of any pattern node must have a different label from the node itself, as the map will be parent-colorful. Moreover, if the discovered homomorphism is (globally) injective, the dynamic problem solves the subgraph isomorphism problem. A sufficient condition for this is that the cycles in the target graph are long enough. 
+
+**Corollary 2.** _Let Tr be a tree of height h, G be a graph whose nodes are endowed with colors c_ : _VG →_ Ω _. Let T be such that ∀p ∈ VT , ∀q ∈_ children( _p_ ) _and ∀t ∈_ children( _q_ ) _it holds that L_ ( _p_ ) = _L_ ( _t_ ) _. Let also G be such that the minimum cycle length is at least_ 2 _h_ + 1 _. Then,_ TREE-COLLIH _c_ ( _u, h_ )[ _r_ ] = _∅ if and only if there is a subgraph isomorphism ϕ from T to G such that ϕ_ ( _r_ ) = _u._ 
+
+In particular, if we restrict ourselves to tree patterns with no node such that the parent of its parent has its same label, the dynamic program solves the subgraph isomorphism problem if the target graphs are trees. Moreover, in many molecular graphs from organic chemistry, the minimum cycle length is 5. Therefore, on these graphs the dynamic program correctly solves the subgraph isomorphism problem for (parent-colorful) tree patterns of height at most 2. 
+
+## B.2 DEALING WITH CYCLIC PATTERNS 
+
+The algorithms described in the previous sections, as the original algorithms (Alon et al., 1995), can only deal with tree patterns. This is necessary due to the fact that the maps built on different subtrees can be merged recursively without conflicts. 
+
+One can deal with cyclic patterns, although with weaker guarantees, by using as a pattern the truncated universal cover of the pattern. Let _P_ be the pattern at hand and _u ∈ VP_ , then one would use _P[′]_ = _Uu[l]_[(] _[P]_[)][ as the new pattern, with] _[ l][≥]_[max] _[v][d][P]_[(] _[u, v]_[)][.][Then, using][T][REE][-][COL][LIH][one would] obtain a positive answer if _P_ is a subgraph of _G_ , as indeed there exists a locally injective homomorphism from _Uu[l]_[(] _[P]_[)][ to] _[ G]_[ for each] _[ l]_[.][However, there could be false positives.][For T][REE][-C][OL][SI, one] would need to enrich the colorsets to ensure that tree nodes _p, q ∈ VU lu_ ( _P_ ) that correspond to the same node in _P_ are enforced to have images with the same color, and that tree nodes that correspond to different nodes in _P_ are enforced to have different colors. 
+
+## B.3 FROM SUBGRAPH DETECTION TO COUNTING 
+
+As argued in a follow-up to the original color-coding algorithm Alon et al. (2008), modifying the dynamic program to count maps rather than solve the decision problem is relatively straightforward, 
+
+17 
+
+and can be applied to all the presented versions of the algorithm. Indeed, we endow colorsets with a counter cnt that keeps track of the number of maps associated with the colorset. Then, when building the set _Cu,p_ consider a choice of vertices _v_ 1 _, . . . , vδ_ and a sequence of colorsets _C_ 1 _, . . . , Cδ_ with associated counters cnt _i, . . . ,_ cnt _δ_ , which each representing the number of maps from _Tqi_ to _G_ mapping _qi_ to _vi_ . Let then the resulting merged colorset be _C_ = _ϵ_ . The number of maps from _Tp_ to _G_ mapping _p_ to _u_ is then cnt =[¯][�] _i_[cnt] _[i]_[.][If] _[ C]_[already belongs to] _[ C][u,p]_[ with associated counter][ cnt] _[C]_[,] we update the counter as cnt _C_ = cnt _C_ + cnt[¯] . Otherwise, we insert _C_ in _Cu,p_ with cnt _C_ = cnt[¯] . In this variant of the algorithm there would be an increase in the size of the MLP for a GNN, to store the counters, to be able to simulate the algorithm. 
+
+## C PROOFS 
+
+## C.1 SECTION 3 
+
+**Proposition 1.** _Let G be a set of graphs such that ∀G_ 1 _, G_ 2 _∈G, G_ 1 _̸≃_ WL _G_ 2 _and |VG| ≤ n, ∀G ∈ G. Let f_ : _G →_ R _be any function. Then, there exists a function class_ GNN _ℓ_ = _n realized by a GNN model such that f ∈_ GNN _ℓ_ = _n._ 
+
+_Proof._ Since _∀G_ 1 _, G_ 2 _∈G_ , _G_ 1 _̸≃_ WL _G_ 2, by Morris et al. (2023a, Proposition 9) the GNN model can realize a one-hot encoding _hG_ for each graph _G_ . Then, by appending a linear layer to the model such that _WhG_ = _f_ ( _G_ ), we can realize _f_ . 
+
+**Lemma 1.** _The function class_ GNN _ℓ of Prop. 1 has pseudo-dimension_ Pdim( _G,_ GNN _ℓ_ ) = _|G|._ 
+
+_Proof._ We have Pdim( _G,_ GNN _ℓ_ ) _≤|G|_ by definition. Moreover, by Morris et al. (2023a, Proposition 9) and the fact that no two graphs are WL-isomorphic, the GNN model can realize any binary function on _G_ . Then, taking as witnesses a vector of _−_[1] _/_ 2, we obtain the lower bound. 
+
+## C.2 SECTION 4 
+
+**Theorem 1.** _There exists a set of graphs G such that ∀G_ 1 _, G_ 2 _∈G, G_ 1 _̸≃_ WL _G_ 2 _and a function f_ : _VG →_ R _for which there exists no function class_ GNN[node] _ℓ realized by a GNN model such that f ∈_ GNN[node] _ℓ , ∀ℓ._ 
+
+_Proof._ The theorem is proven by the two graphs _G_ 2 _, G_ 3 in Figure 1, and _f_ ( _G, u_ ) the rooted subgraph isomorphism function, with as pattern the triangle _K_ 3 rooted in any of its nodes. Clearly _f_ ( _G_ 2 _, u_ ) = 1 and _f_ ( _G_ 3 _, u_ ) = 0. These two graphs have isomorphic universal covers. In particular, rooting the universal covers at _u ∈ VG_ 2 and _u ∈ VG_ 3 yields _Uu_ ( _G_ 2) _≃ Uu_ ( _G_ 3). We then have that WL _[ℓ]_ ( _G_ 2 _, u_ ) _≃_ WL _[ℓ]_ ( _G_ 3 _, u_ ), by (Krebs & Verbitsky, 2015). Then, the GNN cannot assign different outputs to ( _G_ 2 _, u_ ) and ( _G_ 3 _, u_ ) (Morris et al., 2019, Theorem 1). 
+
+**Lemma 2.** _Subgraph counting and induced subgraph counting are node-decomposable into rooted subgraph counting and rooted induced subgraph counting, respectively._ 
+
+_Proof._ Let _P_ be a graph and _p ∈ VP_ any node. The (induced) subgraph counting function _f_ ( _G_ ) maps a graph _G_ to _|_ Φ _G|_ , where Φ _G_ is the set of (induced) subgraph isomorphisms _ϕ_ from _P_ to _G_ . We let _g_ ( _G, u_ ) be the rooted subgraph counting function (resp. the rooted induced subgraph counting function), that is _g_ ( _G, u_ ) = _|_ Φ _G,u|_ with Φ _G,u_ the set of (induced) subgraph isomorphisms _ϕ_ from _P_ to _G_ such that _ϕ_ ( _p_ ) = _u_ . We show that _f_ ( _G_ ) =[�] _u∈VG[g]_[(] _[G, u]_[)][.] 
+
+We have that any _ϕ ∈_ Φ _G,u_ is a (induced) subgraph isomorphism, so _ϕ ∈_ Φ _G_ . Conversely, if _ϕ ∈_ Φ _G_ , then _ϕ ∈_ Φ _G,ϕ_ ( _p_ ) by definition. Therefore Φ _G_ =[�] _u∈VG_[Φ] _[G,u]_[.][It then suffices to show] that the sets Φ _G,u_ are disjoint. Indeed, let _ϕ ∈_ Φ _G,u_ , then _ϕ_ ( _p_ ) = _u_ . Therefore, _ϕ ̸∈_ Φ _G,v_ for any _v_ = _u_ , since _ϕ_ ( _p_ ) _̸_ = _v_ . 
+
+Note that an alternative and equally valid definition of the (induced) subgraph counting function counts the number of (induced) subgraph isomorphisms up to automorphisms of the pattern graph. In this case, the function _f[′]_ ( _G_ ) maps a graph to _|{V ⊆ VG_ : exists (induced) subgraph isomorphism 
+
+18 
+
+_ϕ_ from _P_ to _G_ such that _ϕ_ ( _VP_ ) = _V }|_ . Note that _f[′]_ ( _G_ ) = _f_ ( _G_ ) _/_ Aut( _P_ ). Also this function is node-decomposable, as _f[′]_ ( _G_ ) =[�] _u∈VG[g][′]_[(] _[G, u]_[)][ with] _[ g][′]_[(] _[G, u]_[) =] _[ g]_[(] _[G, u]_[)] _[/]_[Aut(] _[P]_[)][.] 
+
+**Theorem 2.** _Let G be a_ ( _ℓ, k_ ) _-identifiable set of graphs. Consider any k-local function f_ : _VG →_ R _. Then, there exists a function class_ GNN[node] _ℓ realized by a GNN model with O_ ( _ηℓ,_[2] _G[·][ ℓ]_[)] _[ parameters] and ℓ layers such that f ∈_ GNN[node] _ℓ ._ 
+
+_Proof._ Let _h_[0] _v_[be a one-hot encoding of node labels.][Then, we apply (Morris et al., 2019, Theorem] 2, Lemma 11) to a graph _G_ composed by the disjoint union of the graphs in _G_ . In particular, the GNN layers require the dimensionality of the node embeddings to be _ηℓ,G_ . Therefore, after _ℓ_ layers with _O_ ( _ηℓ,_[2] _G_[)][parameters][each,][we][have][that][the][embeddings] _[h]_[ˆ] _[ℓ] u_[outputted][by][the] _[ℓ]_[-th][layer][are] such that _h_[ˆ] _[ℓ] u_[=] _[h]_[ˆ] _[ℓ] v_[iff] _[U] v[ ℓ]_[(] _[G]_[)][=] _[U] u[ ℓ]_[(] _[G]_[)][.][Moreover,] _[h]_[ˆ] _[ℓ] u[∈{−]_[1] _[,]_[ 1] _[}][η][l,][G]_[.][Let] _[U]_[1] _[, . . . , U][η] l,G_[be][an] arbitrary enumeration of the truncated universal covers in _G_ , and _h_ 1 _, . . . , hηℓ,G_ the corresponding embeddings. 
+
+Let _W ∈_ R _[η][ℓ,][G][×][η][ℓ,][G]_ with _Wi,_ : = _h[⊤] i_[.] Let _b ∈_ R _[η][ℓ,][G]_ with _bi_ = _−ηl,G_ + 1. We let _h[ℓ] u_[=][ReLU(] _[W][h]_[ˆ] _[ℓ] u_[+] _[ b]_[)][,][then] _[h][ℓ] u[∈]_[R] _[η][ℓ,][G]_[is][a][one-hot][encoding][for] _[U] u[ ℓ]_[(] _[G]_[)][.][Therefore,][by][ap-] pending a linear layer we can assign any real value to _Uu[ℓ]_[(] _[G]_[)][.] 
+
+If, for any two ( _G_ 1 _, u_ ) _,_ ( _G_ 2 _, v_ ) _∈VG_ , it holds that EGO _[k] u_[(] _[G]_[1][)] _[̸≃]_[EGO] _[k] v_[(] _[G]_[2][)][,][then][we][have] that _Uu[ℓ]_[(] _[G]_[1][)] _[̸≃][U] v[ ℓ]_[(] _[G]_[2][)][ by][ (] _[ℓ, k]_[)][-identifiability, and therefore the GNN model can assign different] values to these two ego-nets. In particular, since _f_ is _k_ -local, we can realize _f_ . 
+
+Finally, the number of parameters of the model is _O_ ( _ηℓ,_[2] _G[·][ ℓ]_[)][.] 
+
+**Corollary 1.** _Let G be a_ ( _ℓ, k_ ) _-identifiable set of graphs. Let_ GNN _ℓ be a function class realized by a GNN model with sum-aggregation f_ out( _{{h[ℓ] u_[:] _[ u][ ∈][V][G][}}]_[) =][ �] _u∈VG[h] u[ℓ][.][Then]_[ GNN] _[ℓ][can perform] both subgraph counting and induced subgraph counting of patterns of radius at most k._ 
+
+_Proof._ Both the rooted subgraph counting and rooted induced subgraph counting of patterns of radius at most _k_ are _k_ -local functions, and we can apply Theorem 2. Then, the sum aggregation computes the subgraph counting and induced subgraph counting functions at the graph level. 
+
+**Theorem 3.** _The function class_ GNN _ℓ of Cor. 1 has pseudo-dimension_ Pdim(GNN _ℓ_ ) _≤ ηℓ,G_ + 1 _._ 
+
+_Proof._ Consider a function _f ∈_ GNN _ℓ_ , and the associated function _g ∈_ GNN[node] _ℓ_ that produces the node-level opuputs that are then aggregated via _f_ out to produce _f_ . We show _f_ ( _G_ ) can be written as _f_ ( _G_ ) = _w[⊤] xG_ , with _xG ∈_ R _[η][ℓ,][G]_ the multiplicity vector of the truncated universal covers of height _ℓ_ rooted at the nodes of _G_ . In particular, let _U_ 1 _, . . . , Uηℓ,G_ an enumeration of the truncated universal covers. Then, the _i_ -th entry of _xG_ will be _k_ iff there are _k_ nodes _u ∈ VG_ such that _Uu[ℓ]_[(] _[G]_[)] _[≃][U][i]_[.][Note] that _xG_ 1 = _xG_ 2 if and only if _G_ 1 _≃_ WL _ℓ G_ 2. Therefore, we can set the _i_ -th entry of the vector _w_ to the output of the model _g_ ( _G, u_ ) _∈_ GNN[node] _ℓ_ on a node _u_ that has rooted universal cover _Ui_ . Then, _f_ ( _G_ ) =[�] _u∈VG[g]_[(] _[G, u]_[) =] _[ w][⊤][x][G]_[.] 
+
+By Anthony & Bartlett (1999, Theorem 11.6), the pseudo-dimension of a linear function on R _[d]_ is _d_ + 1. Then, by Anthony & Bartlett (1999, Corollary 11.5), we have that Pdim(GNN _ℓ_ ) _≤ ηℓ,G_ + 1. 
+
+C.3 SECTION 5.1 
+
+**Lemma 3.** _Let G be a graph, Tr be a tree of height h. Let nodes VG be endowed with colors c. Let ϕ be a quite-colorful subgraph isomorphism from T to G. Then Cϕ_ ( _r_ ) _,r_ = _∅._ 
+
+_Proof._ Given a node _p ∈ VT_ , we call _Tp_ the subtree of _Tr_ rooted at _p_ . We show inductively that the colorset _{c_ ( _ϕ_ ( _q_ )) : _q ∈ VTp \ {p}}_ belongs to _Cϕ_ ( _p_ ) _,p_ . 
+
+We first address the base case of the dynamic program, _p_ is a leaf. For each leaf _p ∈ VT_ , we have that _Cϕ_ ( _p_ ) _,p_ = _{∅}_ , since _L_ ( _ϕ_ ( _p_ )) = _L_ ( _p_ ). 
+
+19 
+
+Let now _p_ be a non-leaf. Then, there exists a sequence _v_ 1 _, . . . , vδ_ of distinct neighbors of _ϕ_ ( _p_ ) such that _vi_ = _ϕ_ ( _qi_ ) _, qi ∈_ children( _p_ ) and, for each _q_ , _ϕ|VTq_ is a quite colorful subgraph isomorphism from _Tq_ to _G_ . We then have inductively that _Cq_ := _{c_ ( _ϕ_ ( _w_ )) : _w ∈ VTq \ {q}} ∈Cϕ_ ( _q_ ) _,q_ , _∀q ∈_ children( _p_ ). 
+
+Since _L_ ( _ϕ_ ( _p_ )) = _L_ ( _p_ ), the algorithm starts creating the set _Cϕ_ ( _p_ ) _,p_ in line 12. In particular, it will try on line 13 the correct sequence of nodes ( _v_ 1 _, . . . , vδ_ ) = ( _ϕ_ ( _q_ 1) _, . . . , ϕ_ ( _qδ_ )) and for that sequence the algorithm will try on line 16 the sequence of colorsets _Cq_ 1 _, . . . , Cqδ_ . For any two distinct _q_ 1 _, q_ 2, and _∀t_ 1 _∈ VTq_ 1 _\ {q_ 1 _}, t_ 2 _∈ VTq_ 2 _\ {q_ 2 _}_ , we have that _dT_ ( _t_ 1 _, t_ 2) _>_ 3. Since _ϕ_ is quite-colorful, the third flag condition is true. Moreover, _dT_ ( _q_ 1 _, t_ 2) _≥_ 3, and the second flag condition is true. Finally, either _dT_ ( _p, t_ 2) _≥_ 3 or _p_ = parent(parent( _t_ 2)), and the first flag condition is true. Therefore, all three conditions for flag are true and the algorithm inserts in _Cϕ_ ( _p_ ) _,p_ the colorset _C_ :=[�] _q∈_ children( _p_ )[(] _[C][q][ ∪][c]_[(] _[ϕ]_[(] _[q]_[))) =] _[ {][c]_[(] _[ϕ]_[(] _[q]_[)) :] _[q][∈][V][T] p[\ {][p][}}]_[.] 
+
+Then, we have inductively that _Cr ∈Cϕ_ ( _r_ ) _,r_ , and we have the claim. 
+
+**Lemma 4.** _Let G be a graph, Tr be a tree of height h. Let nodes VG be endowed with colors c. If Cu,r_ = _∅, then there exists a quite-colorful subgraph isomorphism ϕ from T to G such that ϕ_ ( _r_ ) = _u._ 
+
+_Proof._ Given a node _p ∈ VT_ , we call _Tp_ the subtree of _Tr_ rooted at _p_ . We show inductively that if _C ∈Cu,p_ , then there exists a quite-colorful subgraph isomorphism _ϕ_ from _Tp_ to _G_ such that _ϕ_ ( _p_ ) = _u_ and _{c_ ( _ϕ_ ( _q_ )) : _q ∈ VTp \ {p}}_ = _C_ . 
+
+We first address the base case of the dynamic program, _p_ is a leaf. For each leaf _p ∈ VT_ , we have that _Cu,p_ = _{∅} ̸_ = _∅_ iff _L_ ( _u_ ) = _L_ ( _p_ ), that is if _p �→ u_ is a (quite-colorful) subgraph isomorphism. 
+
+Let now _C ∈Cu,p_ for some non-leaf _p_ . Then, there exists a sequence of distinct nodes ( _v_ 1 _, . . . , vδ_ ) from _N_ ( _u_ ) such that _C_ was obtained by a sequence of color sets ( _C_ 1 _, . . . , Cδ_ ), with _Ci ∈Cvi,qi, ∀i_ = 1 _, . . . , δ_ , such that all three conditions for flag are true. 
+
+Then, we have inductively that there exists an isomorphism _ϕi_ from _Tqi_ to _G_ such that _ϕi_ : _qi �→ vi_ and _{c_ ( _ϕi_ ( _t_ ) : _t ∈ VTqi \ {qi}_ ) _}_ = _Ci_ , for each _qi ∈_ children( _p_ ). The domains of such isomorphisms are all distinct, since the sets _VTq_ : _q ∈_ children( _p_ ) are pairwise disjoint. We can therefore define a new map _ϕ_ : _VTp → VG_ as _ϕ|VTqi_ = _ϕi_ and _ϕ_ : _p �→ u_ . This map is a homomorphism. Indeed, each _ϕi_ is an homomorphism and therefore maps adjacent nodes in _VTqi_ to adjacent nodes in _VG_ . Moreover, each _qi ∈_ children( _p_ ) is mapped to a node _vi ∈N_ ( _u_ ). 
+
+To show that _ϕ_ is a subgraph isomorphism, we just need to show injectivity by showing that the co-domains _Hi_ = _{ϕ_ ( _w_ ) : _w ∈ VTqi }_ of the _ϕi_ and the set _{u}_ are all pairwise disjoint. We show first that _Hi ∩ Hj_ = _∅_ . In particular, by flag condition (3) we have that _Ci ∩ Cj_ = _∅_ , and therefore _z ̸∈{ϕ_ ( _w_ ) : _w ∈ VTqj \ {qj}}_ for each _z ∈{ϕ_ ( _w_ ) : _w ∈ VTqi \ {qi}}_ . Moreover, _c_ ( _vi_ ) _̸∈ Cj_ by flag condition (2), and therefore _ϕ_ ( _qi_ ) = _vi ̸∈{ϕ_ ( _w_ ) : _w ∈ VTqj \{qj}}_ . Also by flag condition (2), _c_ ( _vj_ ) _̸∈ Ci_ , so _ϕ_ ( _qj_ ) = _vj ̸∈{ϕ_ ( _w_ ) : _w ∈ VTqi \ {qi}}_ . Finally, _ϕ_ ( _qi_ ) = _vi_ = _vj_ = _ϕ_ ( _qj_ ). Thus, _Hi ∩ Hj_ = _∅_ . We now show that _u ̸∈ Hi, ∀i_ . First, we have by flag condition (1) that _c_ ( _u_ ) _̸∈ Ci, ∀i_ and therefore _u ̸∈{ϕ_ ( _w_ ) : _w ∈ VTqi \ {qi}}_ . Moreover, _u ̸_ = _vi_ = _ϕ_ ( _qi_ ). Therefore, _ϕ_ is injective and is a subgraph isomorphism. 
+
+Moreover, we have _{c_ ( _ϕ_ ( _q_ )) : _q ∈ VTp \ {p}}_ =[�] _q[{][c]_[(] _[ϕ][i]_[(] _[t]_[) :] _[ t][ ∈][V][T] q[\ {][q][}]_[)] _[} ∪{][c]_[(] _[ϕ]_[(] _[q]_[))] _[}]_[ =] _[ C]_[.] Finally, since the colors of the images of the nodes in _Tp_ respect the flag conditions, _ϕ_ is quitecolorful. 
+
+Then, we have inductively that if _C ∈Cu,r_ , there exist a quite-colorful subgraph isomorphism _ϕ_ from _T_ to _G_ such that _ϕ_ ( _r_ ) = _u_ , and we have the claim. 
+
+**Theorem 4.** _Let Tr be a tree of height h, G be a graph whose nodes are endowed with colors c_ : _VG →_ Ω _. Then,_ TREE-COLSI _c_ ( _u, h_ )[ _r_ ] = _∅ if and only if there is a quite-colorful subgraph isomorphism ϕ from Tr to G such that ϕ_ ( _r_ ) = _u._ 
+
+20 
+
+_Proof._ If there is a quite-colorful subgraph isomorphism _ϕ_ from _Tr_ to _G_ such that _ϕ_ ( _r_ ) = _u_ , then by Lemma 3 we have that _Cϕ_ ( _r_ ) _,r_ = _∅_ . Moreover, by Lemma 4, if _Cu,r_ = _∅_ , then there exists a quite-colorful subgraph isomorphism _ϕ_ from _Tr_ to _G_ such that _ϕ_ ( _r_ ) = _u_ . 
+
+## C.4 SECTION 5.2 
+
+**Theorem 5.** _Let G be a set of graphs of bounded degree, Tr be a tree of height h. Let f_ ( _G_ ) = 1 _if ∃u ∈ VG_ : TREE-COLSI _c_ ( _u, h_ )[ _r_ ] = _∅ and_ 0 _otherwise. Then, there exists a function class_ GNN _l_ + _h realized by a GNN model with l_ + _h layers and O_ � _ηl,_[2] _G[·][ l]_[ +] _[ ζ][l,T] r[,][G][·][ h]_ � _parameters such that f ∈_ GNN _l_ + _h._ 
+
+_Proof._ We simulate the DP algorithm with a GNN. We first use _l_ layers to obtain colors. Then, we use _h_ layers to simulate the _h_ recursive calls of the DP. Let the graphs be such that _∀u ∈ VG, |N_ ( _u_ ) _| <_ ∆. 
+
+**Color construction** We consider the GNNs of Section A.1. Let _h_[0] _v_[be a one-hot encoding of node] labels. Then, we use (Morris et al., 2019, Theorem 2, Lemma 11) applied to a graph _G_ composed by the disjoint union of the graphs in _G_ . In particular, the GNN layers require the dimensionality of the embeddings to be _ηl,G_ . Therefore, after _l_ layers with _O_ ( _ηl,_[2] _G_[)][ parameters each, we have that the] embeddings _hh_ ¯¯ _lu_ 1 _, . . . ,∈{−_ ¯ _h_ 1 _η,l,_ 1 _G}h_[¯] be an enumeration of them. _η[l] ul,G_ outputted by the. We take these embeddings as the colors _l_ -th layer are such that _h_[¯] _[l] u c_ = used by the dynamic program, and let _h_[¯] _[l] v_ iff _Uv[l]_[(] _[G]_[)][=] _[U] u[ l]_[(] _[G]_[)][.][Moreover,] 
+
+Let _C_ 1 _, . . . , CD_ be an enumeration of the possible elements ( _Cu,ℓ, c_ ( _u_ )), i.e., for each possible _u_ and _ℓ_ . We suppose, without loss of generality, that if node _u_ has color _c_ ( _u_ ) = _h_[¯] _i_ , then ( _Cu,ℓ_ =0 _, c_ ( _u_ )) = _Ci_ , for each _i_ = 1 _, . . . , ηl,G_ . This is valid since _Cu,ℓ_ =0 is uniquely determined by _c_ ( _u_ ). 
+
+Let _W_[(1)] _∈_ R _[η][l,][G][×][η][l,][G]_ with _Wi,_ : = _h_[¯] _[⊤] i_[.][Let] _[ b][ ∈]_[R] _[η][l,][G]_[with] _[ b][i]_[=] _[ −][η][l,][G]_[ +1][.][Then][ ReLU(] _[W]_[ (1)] _[h]_[¯] _[l] u_[+] _b_ ) is the one-hot encoding for the color of _u_ . We take _W_[(2)] _∈_ R[1] _[×][η][l,][G]_ , with _W_ 1[(2)] _,i_[= ∆] _[i][−]_[1][, and let] _h[l] u_[=] _[W]_[ (2)][ReLU(] _[W]_[ (1)] _[h]_[¯] _[l] u_[+] _[ b]_[)] _[∈]_[R][.][This is obtained by appending a two-layer MLP to the MLP] that outputs _h_[¯] _[l] u_ . We then have that _h[l] u_[= ∆] _[i][−]_[1][ if and only if][ (] _[C][u,ℓ]_[=0] _[, c]_[(] _[u]_[)) =] _[ C][i]_[.] 
+
+**Message aggregation** Then, the following _h_ GNN layers have to simulate the dynamic program. Suppose that _h[l] v_[+] _[ℓ][−]_[1] = ∆ _[i][−]_[1] if and only if ( _Cv,ℓ−_ 1 _, c_ ( _v_ )) = _Ci_ . This is true by construction for _ℓ_ = 1. Then we have that _h_[ˆ] _[l] u_[+] _[ℓ]_ = � _h[l] u_[+] _[ℓ][−]_[1] _,_[�] _v∈N_ ( _u_ ) _[h] v[l]_[+] _[ℓ][−]_[1] � _∈_ R[2] is a pair of integers, obtained via the sum-aggregation of the messages from _N_ ( _u_ ), that is a unique identifier for the element _E_ = (( _Cu,ℓ−_ 1 _, c_ ( _u_ )) _, {{_ ( _Cv,ℓ−_ 1 _, c_ ( _v_ )) : _v ∈N_ ( _u_ ) _}}_ ). Let _E_ 1 _, . . . , Eζl,Tr,G_ be an enumeration of the possible elements _E_ , and let _h_[ˆ] 1 _, . . . , h_[ˆ] _ζl,Tr,G ∈_ R[2] be the associated vectors. 
+
+**Mapping aggregated messages to DP states** Not that, in the dynamic program, the computation of a set _Cu,ℓ_ depends uniquely on the sets _Cv,ℓ−_ 1 for all _v ∈N_ ( _u_ ), as well as the colors _c_ ( _v_ ) for _v ∈N_ ( _u_ ) _∪{u}_ . Indeed, while also the labels _L_ ( _u_ ) are used, these are uniquely identified by the colors _c_ ( _u_ ) by construction. We then show that we can simulate the function mapping (( _Cu,ℓ−_ 1 _, c_ ( _u_ )) _, {{_ ( _Cv,ℓ−_ 1 _, c_ ( _v_ )) : _v ∈N_ ( _u_ ) _}}_ ) to ( _Cu,ℓ, c_ ( _v_ )) using a MLP. 
+
+Note that the map _h_[ˆ] _[l] u_[+] _[ℓ] �→_ [∆ _[ζ][l,Tr,][G] ,_ 1] _h_[ˆ] _[l] u_[+] _[ℓ] ∈_ R is injective. Let then _W_[(1)] _∈_ R _[ζ][l,Tr,][G][×]_[2] with _Wi,_[(1)] : = [∆ _[ζ][l,Tr,][G] ,_ 1] and _b ∈_ R _[ζ][l,Tr,][G]_ with _bi_ = _−_ [∆ _[ζ][l,Tr,][G] ,_ 1] _h_[ˆ] _i_ . Then tri( _W_[(1)] _h_[ˆ] _[l] u_[+] _[ℓ]_ + _b_ ) is a one-hot encoding for (( _Cu,ℓ−_ 1 _, c_ ( _u_ )) _, {{_ ( _Cv,ℓ−_ 1 _, c_ ( _v_ )) : _v ∈N_ ( _u_ ) _}}_ ). 
+
+Let then _W_[(2)] _∈_ R[1] _[×][ζ][l,Tr,][G]_ , with _W_ 1[(2)] _,i_[=][∆] _[j][−]_[1][such][that] _[C][j]_[is][the][output][of][one][iteration][of][the] dynamic program (i.e., lines 6 to 21) when it receives as input _Ei_ . Then _h[l] u_[+] _[ℓ]_ = _W_[(2)] tri( _W_[(1)] _h_[ˆ] _[l] u_[+] _[ℓ]_ + _b_ ) is equal to ∆ _[i][−]_[1] if and only if ( _Cu,ℓ, c_ ( _v_ )) = _Ci_ . Then, by induction on _ℓ_ , we have that _h[l] u_[+] _[h]_ is a unique identifier for ( _Cu,h, c_ ( _u_ )). 
+
+21 
+
+**Output layer** In fact, we modify the last layer MLP by choosing _W_[(2)] with _W_ 1[(2)] _,i_[= 1][ if the output] of one iteration of the dynamic program when it receives as input _Ei_ is an element ( _Cu,h, c_ ( _u_ )) with _Cu,h_ [ _r_ ] = _∅_ , and 0 otherwise. Then _h[l] u_[+] _[h]_ = 1 if and only if _Cu,h_ [ _r_ ] = _∅_ . Note that we obtained a valid simulation of the dynamic program by using _h_ GNN layers as defined in Section A.1, at the node level. Finally, if we take as _f_ out( _{{h[l] u_[+] _[h]_ : _u ∈ VG}}_ ) = lsig([�] _u∈VG[h] u[l]_[+] _[h]_ ), we have that the model realizes the function _f_ ( _G_ ) = 1 if _∃u ∈ VG_ : TREE-COLSI( _u, h_ )[ _r_ ] _̸_ = _∅_ and 0 otherwise. 
+
+We observe that the MLPs use either an triangle function tri or a linearized sigmoid lsig function. Both can be simulated using ReLU as follows. 
+
+Let _x ∈_ R. Then tri( _x_ ) = _W_[(2)] ReLU( _W_[(1)] _x_ + _b_ ) with _W_[(1)] = [1 _,_ 1 _,_ 1] _[⊤] ∈_ R[3] _[×]_[1] , _b_ = [1 _,_ 0 _, −_ 1] _[⊤] ∈_ R[3] and _W_[(1)] = [1 _, −_ 2 _,_ 1] _∈_ R[1] _[×]_[3] . 
+
+Let _x ∈_ R. Then lsig( _x_ ) = _W_[(2)] ReLU( _W_[(1)] _x_ + _b_ ) with _W_[(1)] = [1 _,_ 1] _[⊤] ∈_ R[2] _[×]_[1] , _b_ = [0 _, −_ 1] _[⊤] ∈_ R[2] and _W_[(1)] = [1 _, −_ 1] _∈_ R[1] _[×]_[2] . 
+
+Moreover, in the proof, some parameters require a non-constant number of bits. We argue that such parameters can be replaced by more parameters with constant number of bits. Indeed, it is enough to maintain the invariant that _h[l] v_[+] _[ℓ][−]_[1] _∈_ R _[ζ][l,Tr,][G]_ is an one-hot encoding for _Ci_ rather than ∆ _[i][−]_[1] . In this case, the number of parameters for each MLP grows from _O_ ( _ζl,Tr,G_ ) to _O_ ( _ζl,T_[2] _r,G_[)][.] 
+
+**Lemma 5.** _Let G be a set of graphs such that ∀u ∈ VG, |N_ ( _u_ ) _| <_ ∆ _. Let T be a tree with |VT |_ = _κ. The number ζl,T,G of distinct elements E_ = (( _Cu,ℓ−_ 1 _, c_ ( _u_ )) _, {{_ ( _Cv,ℓ−_ 1 _, c_ ( _v_ )) : _v ∈N_ ( _u_ ) _}}_ ) _satisfies_ 
+
+**==> picture [234 x 19] intentionally omitted <==**
+
+_Proof._ There are _κ_ nodes in the pattern, and _ηG,l_ distinct colors. Therefore, there are _Q ≤_ � _κi_ =0 � _ηGi,l_ � = _O_ ( _ηG[κ] ,l[/κ]_[!)][ possible colorsets] _[ C]_[.] 
+
+Then, we have at most 2 _[Q]_ sets of colorsets _Cu,p_ and 2 _[κQ]_ sets of colorsets _Cu,ℓ_ . In turn, there can be at most _D_ = _ηG,l ·_ 2 _[κQ]_ elements ( _Cu,ℓ, c_ ( _u_ )). Therefore, we have _D_ = _O_ � _ηG,l ·_ 2 _[κη] G[κ] ,l[/κ]_[!][�] . Then, there are at most _ζl,T,G_ = _O_ ( _D_[∆] _/_ ∆! _· D_ ) = _O_ � _ηG_[∆+1] ∆! _,l ·_ 2[(∆+1)] _[η] G[κ] ,l[/]_[(] _[κ][−]_[1)!][�] elements _E_ . Moreover, the element _E_ = (( _Cu,ℓ−_ 1 _, c_ ( _u_ )) _, {{_ ( _Cv,ℓ−_ 1 _, c_ ( _v_ )) : _v ∈N_ ( _u_ ) _}}_ ) is fully characterized by _Uu[l]_[+] _[h]_ ( _G_ ), for any _ℓ_ = 1 _, . . . , h_ , so we also have _ζl,T,G ≤ ηl_ + _h,G_ . 
+
+## C.5 SECTION B.1 
+
+**Lemma 6.** _Let G be a graph, Tr be a tree of height h. Let nodes VG be endowed with colors c. Let ϕ be a parent-colorful locally injective homomorphism from T to G. Then Cϕ_ ( _r_ ) _,r_ = _∅._ 
+
+_Proof._ Given a node _p ∈ VT_ , we call _Tp_ the subtree of _T_ rooted at _p_ . Let _ϕ_ be a parent-colorful locally injective homomorphism from _Tp_ to _G_ . We show inductively that _C ∈Cϕ_ ( _p_ ) _,p_ with _C_ = _{c_ ( _ϕ_ ( _q_ )) : _q ∈_ children( _p_ ) _}_ . 
+
+We first address the base case of the dynamic program, _p_ is a leaf. For each leaf _p ∈ VT_ , we have that _Cϕ_ ( _p_ ) _,p_ = _{∅}_ , since _L_ ( _ϕ_ ( _p_ )) = _L_ ( _p_ ). 
+
+Let now _p_ be a non-leaf. Then, there exists a sequence _v_ 1 _, . . . , vδ_ of distinct neighbors of _ϕ_ ( _p_ ) such that _ϕ_ ( _qi_ ) = _vi, qi ∈_ children( _p_ ) and, for each _q_ , _ϕ|VTq_ is still a parent-colorful locally injective homomorphism from _Tq_ to _G_ . We have inductively that _Cq ∈Cϕ_ ( _q_ ) _,q_ , with _Cq_ the colorset associated with _ϕ|VTq_ , i.e, _{c_ ( _ϕ_ ( _t_ )) : _t ∈_ children( _q_ ) _}_ . 
+
+Since _L_ ( _ϕ_ ( _p_ )) = _L_ ( _p_ ), the algorithm starts creating the set _Cϕ_ ( _p_ ) _,p_ in line 12. In particular, it will try on line 13 the correct sequence of nodes ( _v_ 1 _, . . . , vδ_ ) = ( _ϕ_ ( _q_ 1) _, . . . , ϕ_ ( _qδ_ )) and for that sequence the algorithm will try on line 16 the sequence of colorsets _Cq_ 1 _, . . . , Cqδ_ . Since _ϕ_ is parent-colorful, 
+
+22 
+
+for each _q_ and _t ∈_ children( _q_ ) we have that _c_ ( _ϕ_ ( _p_ )) = _c_ ( _ϕ_ ( _t_ )). Then, inductively, _c_ ( _ϕ_ ( _p_ )) _̸∈ Cq_ for each _q_ . Therefore, the set _Cp_ = _{c_ ( _q_ ) : _q ∈_ children( _p_ ) _}_ is inserted in _Cϕ_ ( _p_ ) _,p_ . 
+
+Then we have inductively that _Cr ∈Cϕ_ ( _r_ ) _,r_ , and we have the claim. 
+
+**Lemma 7.** _Let G be a graph, Tr be a tree of height h. Let nodes VG be endowed with colors c. If Cu,r_ = _∅, then there exists a parent-colorful locally injective homomorphism ϕ from T to G such that ϕ_ ( _r_ ) = _u._ 
+
+_Proof._ Given a node _p ∈ VT_ , we call _Tp_ the subtree of _T_ rooted at _p_ . We show inductively that if _C ∈Cu,p_ , then there exists a parent-colorful locally injective homomorphism _ϕ_ from _Tp_ to _G_ such that _ϕ_ ( _p_ ) = _u_ and _{c_ ( _ϕ_ ( _q_ )) : _q ∈_ children( _p_ ) _}_ = _C_ . 
+
+Let _p_ be a leaf. Then we have that _Cu,p_ = _{∅}_ iff _L_ ( _u_ ) = _L_ ( _v_ ), that is _p �→ u_ is a (parent-colorful) locally injective homomorphism. 
+
+Let now _C ∈Cu,p_ for some non-leaf _p_ . Then, there exists a sequence of distinct nodes ( _v_ 1 _, . . . , vδ_ ) from _N_ ( _u_ ) such that _C_ was obtained by a sequence of color sets ( _C_ 1 _, . . . , Cδ_ ), with _Ci ∈Cvi,qi_ , such that _c_ ( _u_ ) _̸∈ Ci, ∀i_ . 
+
+Then, we have inductively that, for each _qi ∈_ children( _p_ ), there exists a locally injective homomorphism _ϕi_ from _Tqi_ to _G_ such that _ϕi_ ( _qi_ ) = _vi_ and there is no node _t ∈_ children( _qi_ ) with _c_ ( _ϕ_ ( _t_ )) = _c_ ( _u_ ). 
+
+The domains of such maps are all distinct, since the sets _VTq_ : _q ∈_ children( _p_ ) are pairwise disjoint. We can therefore define a new map _ϕ_ : _VTp → VG_ as _ϕ|VTqi_ = _ϕi_ and _ϕ_ ( _p_ ) = _u_ . This is a homomorphism as children of _p_ are mapped to neighbors of _u_ . 
+
+We show that _ϕ_ is locally injective for each node _q ∈ VTp_ . Note that, for each _i_ , for nodes in _VTqi \ {qi}_ the connectivity is the same as the one given by _ϕi_ , and the claim therefore is true inductively. Moreover, since the nodes _v_ 1 _, . . . , vδ_ = _ϕ_ ( _q_ 1) _, . . . , ϕ_ ( _qδ_ ) are all distinct, _ϕ_ is locally injective on _p_ . 
+
+Moreover, for _qi, ∀i_ , we have that _N_ ( _qi_ ) = children( _qi_ ) _∪{p}_ . Clearly _ϕ_ ( _t_ 1) = _ϕ_ ( _t_ 2) _, ∀t_ 1 _, t_ 2 _∈_ children( _qi_ ) since _ϕ_ is locally injective on _VTqi_ . Finally, _ϕ_ ( _t_ ) = _ϕ_ ( _p_ ) = _u ∀t ∈_ children( _qi_ ) since there is no node _t ∈_ children( _qi_ ) with _c_ ( _ϕ_ ( _t_ )) = _c_ ( _u_ ). Because of this, the map _ϕ_ is parent-colorful. Moreover, we have that _{c_ ( _ϕ_ ( _q_ )) : _q ∈_ children( _p_ ) _}_ = _C_ . 
+
+**Theorem 6.** _Let G be a graph, Tr a tree of height h. Let nodes VG be endowed with colors c. Then,_ TREE-COLLIH _c_ ( _u, h_ )[ _r_ ] = _Cu,r_ = _∅ if and only if there is a parent-colorful locally injective homomorphism ϕ from Tr to G such that ϕ_ ( _r_ ) = _u._ 
+
+_Proof._ If there is a parent-colorful locally injective homomorphism _ϕ_ from _Tr_ to _G_ such that _ϕ_ ( _r_ ) = _u_ , then by Lemma 6 we have that _Cϕ_ ( _r_ ) _,r_ = _∅_ . Moreover, by Lemma 7, if _Cu,r_ = _∅_ , then there exists a locally injective homomorphism _ϕ_ from _Tr_ to _G_ such that _ϕ_ ( _r_ ) = _u_ . 
+
+**Corollary 2.** _Let Tr a tree of height h, G be a graph whose nodes are endowed with colors c. Let T be such that ∀p ∈ VT , ∀q ∈_ children( _p_ ) _and ∀t ∈_ children( _q_ ) _it holds that L_ ( _p_ ) = _L_ ( _t_ ) _. Let also G be such that the minimum cycle length is at least_ 2 _h_ + 1 _. Then,_ TREE-COLLIH _c_ ( _u, h_ )[ _r_ ] = _∅ if and only if there is a subgraph isomorphism ϕ from T to G such that ϕ_ ( _r_ ) = _u._ 
+
+_Proof._ Let the colors of nodes in _G_ be their labels. Then, any locally injective homomorphism _ϕ_ from _T_ to _G_ such that _ϕ_ ( _r_ ) = _u_ is parent-colorful since _∀p ∈ VT_ , _∀q ∈_ children( _p_ ) and _∀t ∈_ children( _q_ ) it holds that _L_ ( _p_ ) _̸_ = _L_ ( _t_ ) and therefore _c_ ( _ϕ_ ( _p_ )) _̸_ = _c_ ( _ϕ_ ( _t_ )). 
+
+We apply Theorem 6. We then obtain that _Cu,r_ = _∅_ if and only if there is a locally injective homomorphism _ϕ_ from _T_ to _G_ such that _ϕ_ ( _r_ ) = _u_ . We need to show injectivity. Suppose by contradiction that _ϕ_ ( _q_ 1) = _ϕ_ ( _q_ 2) for some _q_ 1 = _q_ 2 _∈ VT_ . Let _p_ be the lowest common ancestor of _q_ 1 and _q_ 2. Let ( _p, t_ 1 _, . . . , th_ 1 = _q_ 1) and ( _p, s_ 1 _, . . . , sh_ 2 = _q_ 2) be the paths connecting _p_ to respectively _q_ 1 and _q_ 2. Since _h_ 1 _, h_ 2 _≤ h_ , we have _h_ 1+ _h_ 2 _≤_ 2 _h_ , for any _q_ 1 _, q_ 2. Then, ( _ϕ_ ( _p_ ) _, ϕ_ ( _t_ 1) _, . . . , ϕ_ ( _th_ 1) = 
+
+23 
+
+_ϕ_ ( _sh_ 2) _, . . . , ϕ_ ( _s_ 1) _, ϕ_ ( _p_ )) is a cycle of length at most 2 _h_ . This is a contradiction as the minimum cycle length is at least 2 _h_ + 1. 
+
+## D ADDITIONAL EXPERIMENTAL RESULTS 
+
+In this section, we provide further experimental results and supplement the experimental section in the main paper. Our code and data are available at github.com/BorgwardtLab/ GNNsCanCountSubstructures. 
+
+## D.1 COUNTING IN REAL-WORLD DATASETS 
+
+In order to showcase the subgraph counting capabilities of GNNs, we selected a subset of molecular datasets. We focus on molecular benchmark datasets since subgraph mining and counting in molecular data have been the focus of extensive research, due to the relevance of subgraphs corresponding to functional groups. Such subgraphs play an essential role in generating molecular fingerprints. 
+
+Statistical properties of all considered datasets can be found in Table 5. We note that some datasets include node attribute vectors encoding subgraph information (e.g., the 6-cycle). To mitigate such biases, we retain only the atom type as node feature in the datasets ogbg-molhiv, ogbg-molpcba, Peptides-func, and PCQM-Contact, also ensuring consistency with other datasets. All experiments and statistics provided in this work are based on such reduced node features. 
+
+To identify a set of suitable pattern graphs, we used the subgraph miner FSG (Kuramochi & Karypis, 2004), to mine all patterns that occur with a frequency of at least 25% across all considered datasets. We include all such tree patterns of size 5 and 6 as well as cyclic patterns of size 6 and 7. The condition on the frequency was implemented to ensure that subgraph counts are non-zero in a substantial number of cases. To complement the set of patterns with an additional cyclic graph, we furthermore include the (non-frequent) 5-cycle, which is often of particular interest in molecular structures. Since node attributes vary between the considered datasets, in Table 4, we depict a pattern graph _H_ with node colors such that in each dataset the corresponding pattern is obtained by replacing the colors of _H_ with specific node attributes. 
+
+We use the GNN _K_ architecture as described in Section A.1, with _K_ = 4 MLP-layer-based message passing layers. As some datasets include edge attributes, we modified the model to aggregate and append edge attributes to the node features during the message passing process. The dimensionality of the GNN embeddings is fixed at 512. We used the Adam optimizer with a variable learning rate and a batch size of 128. The data is split into 80% for training and 20% for testing. Finally, we train for 300 epochs and report the mean as well as the standard deviations over at total of 5 such runs. 
+
+We framed the learning problem as a classification task, where the classes correspond to discrete count values ranging from zero to the maximum count observed in the training set. As evaluation 
+
+Table 4: Test set results for subgraph counting with a GNN on molecular graphs. Node colors visualize different atom types. Reported: Normalized Mean Absolute Error (nMAE, see Def. in Sect. D.1) and Area Under the Curve (AUC) for the multi-class classification problem. 
+
+**==> picture [394 x 25] intentionally omitted <==**
+
+**----- Start of picture text -----**<br>
+Pattern<br>Dataset Metric<br>**----- End of picture text -----**<br>
+
+
+|Dataset|Metric|||||||||||||||
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+|Mutagenicity|nMAE<br>AUC|0.071<br>_±_0_._018<br>0.887<br>_±_0_._039|0.046<br>_±_0_._008<br>0.936<br>_±_0_._018|0.074<br>_±_0_._009<br>0.870<br>_±_0_._022|0.048<br>_±_0_._009<br>0.928<br>_±_0_._022|0.077<br>_±_0_._012<br>0.912<br>_±_0_._014|0.066<br>_±_0_._013<br>0.910<br>_±_0_._028|0.057<br>_±_0_._010<br>0.943<br>_±_0_._011|0.072<br>_±_0_._011<br>0.898<br>_±_0_._010|0.043<br>_±_0_._010<br>0.910<br>_±_0_._031|0.071<br>_±_0_._020<br>0.935<br>_±_0_._022|0.007<br>_±_0_._002<br>0.889<br>_±_0_._099|0.161<br>_±_0_._044<br>0.949<br>_±_0_._015|0.167<br>_±_0_._024<br>0.926<br>_±_0_._028|0.102<br>_±_0_._016<br>0.796<br>_±_0_._029|
+|MCF-7|nMAE<br>AUC|0.008<br>_±_0_._001<br>0.920<br>_±_0_._022|0.010<br>_±_0_._000<br>0.943<br>_±_0_._044|0.019<br>_±_0_._001<br>0.941<br>_±_0_._026|0.012<br>_±_0_._001<br>0.937<br>_±_0_._010|0.017<br>_±_0_._001<br>0.959<br>_±_0_._016|0.017<br>_±_0_._002<br>0.913<br>_±_0_._018|0.014<br>_±_0_._003<br>0.919<br>_±_0_._028|0.017<br>_±_0_._002<br>0.897<br>_±_0_._032|0.013<br>_±_0_._002<br>0.859<br>_±_0_._030|0.011<br>_±_0_._003<br>0.910<br>_±_0_._030|0.015<br>_±_0_._001<br>0.918<br>_±_0_._045|0.031<br>_±_0_._005<br>0.955<br>_±_0_._027|0.011<br>_±_0_._001<br>0.925<br>_±_0_._042|0.019<br>_±_0_._001<br>0.904<br>_±_0_._042|
+|ZINC|nMAE<br>AUC|0.012<br>_±_0_._001<br>0.904<br>_±_0_._055|0.018<br>_±_0_._003<br>0.966<br>_±_0_._030|0.029<br>_±_0_._004<br>0.957<br>_±_0_._014|0.012<br>_±_0_._001<br>0.967<br>_±_0_._027|0.020<br>_±_0_._003<br>0.940<br>_±_0_._061|0.019<br>_±_0_._002<br>0.965<br>_±_0_._028|0.018<br>_±_0_._003<br>0.974<br>_±_0_._007|0.013<br>_±_0_._001<br>0.906<br>_±_0_._022|0.009<br>_±_0_._002<br>0.963<br>_±_0_._008|0.011<br>_±_0_._001<br>0.980<br>_±_0_._010|0.005<br>_±_0_._001<br>0.991<br>_±_0_._014|0.025<br>_±_0_._007<br>1.000<br>_±_0_._000|0.009<br>_±_0_._002<br>0.995<br>_±_0_._004|0.014<br>_±_0_._002<br>0.972<br>_±_0_._026|
+|ogbg-molhiv|nMAE<br>AUC|0.002<br>_±_0_._001<br>0.919<br>_±_0_._021|0.001<br>_±_0_._001<br>0.958<br>_±_0_._013|0.001<br>_±_0_._000<br>0.923<br>_±_0_._024|0.017<br>_±_0_._020<br>0.919<br>_±_0_._022|0.005<br>_±_0_._003<br>0.914<br>_±_0_._038|0.021<br>_±_0_._024<br>0.928<br>_±_0_._007|0.002<br>_±_0_._001<br>0.975<br>_±_0_._011|0.003<br>_±_0_._002<br>0.882<br>_±_0_._057|0.004<br>_±_0_._003<br>0.915<br>_±_0_._040|0.002<br>_±_0_._000<br>0.923<br>_±_0_._017|0.004<br>_±_0_._002<br>0.961<br>_±_0_._028|0.011<br>_±_0_._004<br>0.917<br>_±_0_._033|0.002<br>_±_0_._001<br>0.972<br>_±_0_._017|0.003<br>_±_0_._001<br>0.902<br>_±_0_._020|
+|ogbg-molpcba|nMAE<br>AUC|0.000<br>_±_0_._000<br>0.946<br>_±_0_._046|0.000<br>_±_0_._000<br>0.961<br>_±_0_._031|0.000<br>_±_0_._000<br>0.945<br>_±_0_._025|0.000<br>_±_0_._000<br>0.971<br>_±_0_._015|0.000<br>_±_0_._000<br>0.983<br>_±_0_._018|0.000<br>_±_0_._000<br>0.958<br>_±_0_._019|0.000<br>_±_0_._000<br>0.972<br>_±_0_._040|0.000<br>_±_0_._000<br>0.902<br>_±_0_._053|0.000<br>_±_0_._000<br>0.944<br>_±_0_._047|0.000<br>_±_0_._000<br>0.946<br>_±_0_._029|0.000<br>_±_0_._000<br>0.998<br>_±_0_._003|0.000<br>_±_0_._000<br>0.952<br>_±_0_._042|0.000<br>_±_0_._000<br>0.962<br>_±_0_._046|0.000<br>_±_0_._000<br>0.921<br>_±_0_._064|
+|Peptides-func|nMAE<br>AUC|0.001<br>_±_0_._000<br>0.949<br>_±_0_._004|0.016<br>_±_0_._006<br>0.987<br>_±_0_._007|0.029<br>_±_0_._010<br>0.977<br>_±_0_._014|0.017<br>_±_0_._015<br>0.930<br>_±_0_._020|0.008<br>_±_0_._003<br>0.970<br>_±_0_._011|0.001<br>_±_0_._001<br>0.941<br>_±_0_._068|0.001<br>_±_0_._000<br>0.897<br>_±_0_._093|0.001<br>_±_0_._000<br>0.952<br>_±_0_._060|0.001<br>_±_0_._001<br>0.936<br>_±_0_._061|0.003<br>_±_0_._000<br>0.980<br>_±_0_._021|0.002<br>_±_0_._001<br>0.929<br>_±_0_._035|0.000<br>_±_0_._000<br>0.940<br>_±_0_._058|0.001<br>_±_0_._001<br>0.882<br>_±_0_._081|0.001<br>_±_0_._001<br>0.964<br>_±_0_._018|
+|PCQM-Contact|nMAE<br>AUC|0.000<br>_±_0_._000<br>0.998<br>_±_0_._002|0.003<br>_±_0_._000<br>0.963<br>_±_0_._005|0.006<br>_±_0_._001<br>0.948<br>_±_0_._009|0.000<br>_±_0_._000<br>0.968<br>_±_0_._017|0.001<br>_±_0_._000<br>0.982<br>_±_0_._013|0.000<br>_±_0_._000<br>0.946<br>_±_0_._008|0.000<br>_±_0_._000<br>0.997<br>_±_0_._002|0.000<br>_±_0_._000<br>0.947<br>_±_0_._040|0.000<br>_±_0_._000<br>0.987<br>_±_0_._002|0.000<br>_±_0_._000<br>0.994<br>_±_0_._001|0.003<br>_±_0_._001<br>0.990<br>_±_0_._006|0.002<br>_±_0_._001<br>0.986<br>_±_0_._027|0.001<br>_±_0_._000<br>0.999<br>_±_0_._002|0.001<br>_±_0_._000<br>1.000<br>_±_0_._000|
+
+
+24 
+
+Table 5: Statistical properties of real-world molecular datasets. We report the number of graphs, as well as the average number of nodes and edges. All datasets are endowed with node and edge labels. 
+
+|Name|# Graphs|Avg. # nodes|Avg. # edges|
+|---|---|---|---|
+|Mutagenicity (Kersting et al., 2016)|4337|30.32|30.77|
+|MCF-7 (Kersting et al., 2016)|27770|26.40|28.53|
+|ZINC (G´omez-Bombarelli et al., 2018)|12000|23.16|24.92|
+|ogbg-molhiv (Hu et al., 2021; Wu et al., 2018)|41127|25.51|27.47|
+|ogbg-molpcba (Hu et al., 2021; Wu et al., 2018)|437929|25.97|28.11|
+|Peptides-func (Dwivedi et al., 2022; Singh et al., 2015)|15535|150.94|153.65|
+|PCQM-Contact (Dwivedi et al., 2022)|529434|30.14|30.54|
+
+
+metrics, we used Area Under the Curve (AUC) as well as normalized Mean Absolute Error (nMAE). For AUC, we employed the One-vs-One approach to evaluate the model’s performance across multiple classes. The nMAE is defined as the mean average error normalized by the true values.ˆ 1 _N |yi−_ More _y_ ˆ _i|_ formally, for true and predicted values _yi_ and _yi_ with _i ∈_ [ _N_ ], it is given by _N_ � _i_ =1 max(1 _,|yi|_ ) where the max function is used to avoid divisions by zero. 
+
+Table 4 presents the predictive performance across a wide range of dataset and pattern graph combinations. The results clearly demonstrate that subgraph counting on real-world molecular graphs can be done quite accurately. 
+
+## D.2 NUMBER OF TRUNCATED UNIVERSAL COVERS 
+
+In Table 6, we provide the numbers of distinct WL _[ℓ]_ node labels for _ℓ ∈_ [1 _,_ 6], or equivalently, the numbers of non-isomorphic truncated universal covers _ηℓ,G_ over a given dataset _G_ . We observe that, the Peptides-func dataset has low values of _ηℓ,G_ , wich suggests the applicability of the results of Section 4. 
+
+These values, as well as the values reported in Table 2 and Table 3, are obtained by taking into account edge label information. Moreover, as discussed in the previous section, we retain only the atom type as node features. 
+
+Table 6: Number of node and edge labels of common molecular datasets (where we restrict node labels to atom types only), and number _ηℓ,G_ of non-isomorphic truncated universal covers. 
+
+|Dataset<br>node<br>labels<br>edge<br>labels|_ηℓ,G_<br>_ℓ_= 1<br>_ℓ_= 2<br>_ℓ_= 3<br>_ℓ_= 4<br>_ℓ_= 5<br>_ℓ_= 6|
+|---|---|
+|Mutagenicity<br>14<br>3<br>MCF-7<br>46<br>3<br>ZINC<br>21<br>3<br>ogbg-molhiv<br>55<br>7<br>ogbg-molhiv<br>44<br>11<br>Peptides-func<br>6<br>5<br>PCQM-Contact<br>15<br>4|334<br>4997<br>21118<br>43750<br>63568<br>76920<br>668<br>18163<br>112803<br>229231<br>328616<br>409294<br>499<br>13006<br>70302<br>144592<br>198159<br>229065<br>1923<br>37286<br>169766<br>319986<br>446262<br>547678<br>1185<br>44190<br>314139<br>915519<br>1857547<br>3040681<br>76<br>411<br>1308<br>4704<br>18248<br>68392<br>1745<br>97914<br>913960<br>2812873<br>5249611<br>7492474|
+
+
+## D.3 QUITE-COLORFULNESS IN MOLECULAR DATASETS 
+
+We now experimentally evaluate the assessment made in Section 5.2 on the quite-colorfulness of subgraph isomorphisms in cases where the pattern at hand is not quite-colourful itself. Figure 6 reports the proportion of quite-colorful subgraph isomorphisms from non-quite-colorful tree patterns. Specifically, for a given dataset, we iterate over all subgraph isomorphisms from the pattern to the disjoint union of dataset graphs, and check each subgraph isomorphism for whether it is quite colourful. We report the ratio _|Q|/|S|_ of quite-colorful subgraph isomorphisms _|Q|_ to the total number of subgraph isomorphisms _|S|_ for increasing numbers of WL iterations _l_ . 
+
+25 
+
+**==> picture [396 x 314] intentionally omitted <==**
+
+Figure 6: Proportion of subgraph isomorphisms that are quite colourful, reported for colors _c_ obtained by increasing numbers of color refinement iterations _l_ . The proportion is given as _|Q|/|S|_ , where _|Q|_ is the number of quite colourful subgraph isomorphisms from the pattern to the dataset graphs, and _|S|_ is the total number of subgraph isomorphisms. 
+
+The results show that for several real-world datasets, such as MCF-7, Mutagenicity, and ZINC, nearly all subgraph isomorphisms are quite colourful when target graphs are node-colored using 4 iterations of color refinement. Naturally, as the patterns themselves are not quite-colorful, none of the subgraph isomorphisms are quite-colorful when target graphs are not node-colored with color refinement (case _l_ = 0). Notably, an interesting case arises in the Peptides-func dataset, where for one of the tree patterns none of the subgraph isomorphisms are quite colourful, regardless of the value of _k_ . 
+
+## D.4 RULING OUT STAR PATTERNS 
+
+We now empirically validate Corollary 2 and Theorem 5 on challenging synthetic datasets. More specifically, we demonstrate that (non-induced) subgraph counting can be done in practice for scenarios fulfilling parent-colorfulness (see Def. 5) and quite-colorfulness (see Def. 3). Recall that while Chen et al. (2020) show that subgraph counting cannot be done by GNNs in general, (noninduced) counting of star-shaped patterns nonetheless remains possible. To rule out the possibility that a model is leveraging this information in the following experiments, we specifically construct datasets where every graph has the _same multiset_ of star-shaped patterns. 
+
+In all experiments, we used a 4-layer GNN, as specified by the functions in Section A.1, with a hidden dimension of 512, a batch size of 128, and the Adam optimizer. The data was split into 80% for training and 20% for testing. We report the predictive performance after 1,000 epochs. 
+
+To verify the claim in Corollary 2, we randomly generated 2,000 graphs, each with 32 nodes and 39 edges, ensuring that the minimum cycle length was 5. Node labels were assigned based on node degree to guarantee that the mappings from the patterns are parent-colorful. More precisely, we first 
+
+26 
+
+generated trees of size 32 using a fixed node degree sequence, then added 8 edges while ensuring that the resulting graphs have the same node degree set and contained no cycles of length 4 or less. 
+
+Table 7 (left) shows the predictive performance for several pattern graphs. In accordance with Corollary 2, the results show a near perfect predictive performance on the test set on all pattern graphs. 
+
+We furthermore investigate the case where pattern mappings are quite-colorful. For this, we generated a more challenging dataset of 2,000 randomly generated graphs with 96 nodes and 120 edges each, with no constraints on the minimum cycle length. More precisely, we randomly generated the graphs using a fixed node degree sequence. Node labels were assigned based on node degree. We consider patterns that ensure mappings are quite-colorful. Table 7 (right) shows that the model learns to count very accurately. Note that the predictive performance increases for larger patterns, which might be due to the usually large and diverse subgraph counts of small patterns. 
+
+Table 7: Predictive performance for non-induced subgraph counting in scenarios where pattern matching is parent-colorful (left) and quite-colorful (right). 
+
+|Metric<br>MAE<br>0_._000<br>0_._020<br>0_._000<br>0_._090<br>0_._015<br>AUC<br>1_._000<br>0_._980<br>1_._000<br>0_._959<br>0_._968|Metric|
+|---|---|
+||MAE<br>0_._128<br>0_._138<br>0_._015<br>0_._000<br>0_._000<br>AUC<br>0_._966<br>0_._860<br>0_._986<br>1_._000<br>1_._000|
+
+
+27
