@@ -1,5 +1,5 @@
 """
-ICLR Benchmark Runner using the official OpenAI API.
+ICLR Benchmark Runner using OpenRouter chat completions.
 
 Usage:
   python run_iclr_bench.py                          # 10 papers, sequential
@@ -11,7 +11,6 @@ import asyncio
 import csv
 import json
 import random
-import re
 import sys
 import time
 from datetime import datetime
@@ -56,6 +55,7 @@ from paper_reviewer import (
     run_reviewer,
     run_score_predictor,
     sanitize_text,
+    score_to_decision,
 )
 
 # ── Paths (defaults to AI-Scientist, overridable with --data-dir) ─────
@@ -131,51 +131,6 @@ def _snap_score(raw: float) -> float:
     return min(VALID_SCORES, key=lambda v: abs(v - raw))
 
 
-def parse_score_and_decision(review_text: str) -> tuple[float | None, str | None]:
-    """Parse JSON output from merger. Falls back to regex if JSON fails."""
-    score = None
-    decision = None
-
-    # Try JSON parse first — extract from ```json block or raw JSON
-    json_match = re.search(r"```json\s*(\{[\s\S]*?\})\s*```", review_text)
-    if not json_match:
-        json_match = re.search(r"```\s*(\{[\s\S]*?\})\s*```", review_text)
-    if not json_match:
-        json_match = re.search(r"(\{[\s\S]*\})", review_text)
-    if json_match:
-        try:
-            data = json.loads(json_match.group(1))
-            raw_score = data.get("score")
-            if raw_score is not None:
-                score = round(float(raw_score), 1)
-            dec = data.get("decision", "")
-            if dec.lower() in ("accept", "reject"):
-                decision = dec.capitalize()
-            if decision is None and score is not None:
-                decision = "Accept" if score >= 5.5 else "Reject"
-            return score, decision
-        except (json.JSONDecodeError, ValueError, TypeError):
-            pass
-
-    # Regex fallback for non-JSON output
-    score_match = re.search(r"\*{0,2}(\d+(?:\.\d+)?)\*{0,2}\s*/\s*\*{0,2}10\*{0,2}", review_text)
-    if not score_match:
-        score_match = re.search(r"Final Score[:\s\n]*\*{0,2}(\d+(?:\.\d+)?)\*{0,2}", review_text, re.IGNORECASE)
-    if score_match:
-        score = round(float(score_match.group(1)), 1)
-
-    dec_match = re.search(r"###\s*Decision\s*\n+\s*\*{0,2}(Accept|Reject)\*{0,2}", review_text, re.IGNORECASE)
-    if not dec_match:
-        dec_match = re.search(r"Decision[:\s]*\*{0,2}(Accept|Reject)\*{0,2}", review_text, re.IGNORECASE)
-    if dec_match:
-        decision = dec_match.group(1).capitalize()
-
-    if decision is None and score is not None:
-        decision = "Accept" if score >= 5.5 else "Reject"
-
-    return score, decision
-
-
 async def review_single_paper(
     paper_id: str, paper_path: Path, parallel: bool = False, skip_related_work: bool = False, skip_spark: bool = False, calibration_context: str = "",
 ) -> dict:
@@ -241,23 +196,14 @@ async def review_single_paper(
 
     # Phase 3: Score predictor (with calibration)
     print("  Phase 3: Score predictor ...")
-    score_str = await run_score_predictor(
+    score = await run_score_predictor(
         client, harsh_review, neutral_review,
         spark_review, related_work, final_review,
         calibration_context=calibration_context,
     )
-    print(f"  [score_predictor] raw output: {score_str}")
-
-    # Parse score from the raw output (should be a single float)
-    score = None
-    decision = None
-    try:
-        score = round(float(str(score_str).strip()), 1)
-    except (ValueError, TypeError):
-        # Fallback: try to extract a number
-        score, decision = parse_score_and_decision(str(score_str))
-    if score is not None and decision is None:
-        decision = "Accept" if score >= 5.5 else "Reject"
+    score = round(float(score), 1)
+    decision = score_to_decision(score)
+    print(f"  [score_predictor] structured score: {score}")
 
     return {
         "final_review": final_review,
@@ -300,7 +246,7 @@ async def main(n_samples: int = 10, seed: int = 42, parallel: bool = False, skip
     print("=" * 72)
     print("ICLR Benchmark: Multi-Agent Paper Reviewer")
     print(f"  Data: {bench_dir}")
-    print("  Official OpenAI API for all agents")
+    print("  OpenRouter chat completions for all agents")
     print("=" * 72)
     print(f"Mode: {'parallel' if parallel else 'sequential'}")
     print(f"Sampling: {'balanced (stratified)' if balanced else 'random'}")
@@ -349,9 +295,9 @@ async def main(n_samples: int = 10, seed: int = 42, parallel: bool = False, skip
     with open(output_path, "w") as f:
         f.write(f"# ICLR Benchmark Results\n\n")
         f.write(f"Date: {datetime.now().strftime('%Y-%m-%d %H:%M')}\n")
-        f.write(f"Critic/Merger: {MODEL_HARSH} (OpenAI)\n")
+        f.write(f"Critic/Merger: {MODEL_HARSH} (OpenRouter)\n")
         f.write(f"Neutral: {MODEL_NEUTRAL}, ")
-        f.write(f"Related Work: {MODEL_RELATED_WORK} (OpenAI)\n\n")
+        f.write(f"Related Work: {MODEL_RELATED_WORK} (OpenRouter)\n\n")
     with open(csv_path, "w", newline="") as f:
         w = csv.writer(f)
         w.writerow(["paper_id", "pred_score", "pred_decision", "gt_avg_score", "gt_decision", "gt_binary", "match",

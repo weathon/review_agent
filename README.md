@@ -5,17 +5,17 @@ An automated academic paper review system that uses multiple LLM agents with dif
 ## Architecture
 
 ```
-Phase 1 (all parallel via OpenAI Responses API):
-  ├── Critical Reviewer ──── GPT-5-nano (reasoning: high)
-  ├── Neutral Reviewer ───── GPT-5-nano
-  ├── Spark Finder ───────── GPT-5-nano (reasoning: high)
-  └── Related Work Scout ─── GPT-5-nano + web_search → GPT-5-nano filter
+Phase 1 (all parallel via OpenRouter chat completions):
+  ├── Critical Reviewer ──── minimax/minimax-m2.7
+  ├── Neutral Reviewer ───── minimax/minimax-m2.7
+  ├── Spark Finder ───────── minimax/minimax-m2.7
+  └── Related Work Scout ─── minimax/minimax-m2.7:online → minimax/minimax-m2.7 filter
 
 Phase 2:
-  └── Merger ──────────────── GPT-5-nano (reasoning: high)
+  └── Merger ──────────────── minimax/minimax-m2.7
 
 Phase 3:
-  └── Score Predictor ─────── GPT-5-nano (reasoning: high)
+  └── Score Predictor ─────── minimax/minimax-m2.7
       (optionally calibrated with few-shot examples)
 ```
 
@@ -23,15 +23,15 @@ Phase 3:
 
 | Agent | Model | Role |
 |-------|-------|------|
-| Critical Reviewer | GPT-5-nano | Section-by-section rubric review — raises genuine concerns, not nitpicks |
-| Neutral Reviewer | GPT-5-nano | Balanced assessment with strengths, weaknesses, novelty |
-| Spark Finder | GPT-5-nano | Identifies missing experiments, deeper analysis, untapped applications |
-| Related Work Scout | GPT-5-nano + web search | Proposes potentially missed references using the Responses API web search tool |
-| Related Work Filter | GPT-5-nano | Removes already-cited and loosely related results |
-| Merger | GPT-5-nano | Synthesizes all inputs into a final JSON review |
-| Score Predictor | GPT-5-nano | Predicts a continuous score from the multi-agent reviews |
+| Critical Reviewer | `minimax/minimax-m2.7` | Section-by-section rubric review — raises genuine concerns, not nitpicks |
+| Neutral Reviewer | `minimax/minimax-m2.7` | Balanced assessment with strengths, weaknesses, novelty |
+| Spark Finder | `minimax/minimax-m2.7` | Identifies missing experiments, deeper analysis, untapped applications |
+| Related Work Scout | `minimax/minimax-m2.7:online` | Proposes potentially missed references using OpenRouter's online model variant |
+| Related Work Filter | `minimax/minimax-m2.7` | Removes already-cited and loosely related results |
+| Merger | `minimax/minimax-m2.7` | Synthesizes all inputs into a final structured review with subscores |
+| Score Predictor | `minimax/minimax-m2.7` | Predicts a continuous score from the multi-agent reviews |
 
-All calls go through the official OpenAI API using the Responses API. `reasoning={"effort": "high"}` is passed as a top-level parameter for reasoning-capable models where appropriate.
+All calls now go through OpenRouter using chat completions. Structured outputs for merger and score prediction are still enforced, and reasoning configuration is passed through `extra_body` where supported.
 
 ## Review And Scoring Design
 
@@ -70,10 +70,10 @@ git clone https://github.com/weathon/review_agent.git
 cd review_agent
 
 # Install dependencies
-pip install openai python-dotenv openreview-py pymupdf4llm
+pip install -r requirements.txt
 
-# Set your OpenAI API key
-echo 'OPENAI_API_KEY="sk-..."' > .env
+# Set your OpenRouter API key
+echo 'OPENROUTER_API_KEY="sk-or-..."' > .env
 
 # For fetching ICLR 2025 papers, also add OpenReview credentials:
 echo 'OPENREVIEW_USERNAME="your@email.com"' >> .env
@@ -88,6 +88,21 @@ echo 'OPENREVIEW_PASSWORD="yourpassword"' >> .env
 python paper_reviewer.py paper.txt --parallel --venue NeurIPS
 python paper_reviewer.py paper.txt --parallel --no-related-work --no-spark
 ```
+
+### Run the local Web UI
+
+```bash
+./run_webui.sh
+```
+
+Then open `http://127.0.0.1:7860`.
+
+The UI is intentionally simple:
+- no auth
+- BYOK via an OpenRouter API key field in the page
+- upload a `.pdf` / `.txt` / `.md` paper file, or paste paper text directly
+- PDF parsing reuses the dataset builder parser from `fetch_iclr2025.py`
+- toggles for parallel mode, related work, spark finder, and calibration
 
 ### Run everything (fetch → calibrate → benchmark)
 
@@ -250,4 +265,4 @@ Requires OPENREVIEW_USERNAME and OPENREVIEW_PASSWORD in .env
 
 ## Cost
 
-All API calls now go through the official OpenAI API using GPT-5-nano. Exact cost depends on current OpenAI pricing, paper length, output length, and web-search usage. Reusing a single model family across all stages simplifies deployment and removes provider-mixing effects during evaluation.
+All API calls now go through OpenRouter using `minimax/minimax-m2.7`, with `minimax/minimax-m2.7:online` used for the related-work search stage. Exact cost depends on current OpenRouter pricing, paper length, output length, and online-search usage. Reusing a single model family across all stages simplifies deployment and reduces score shifts caused by mixing providers.

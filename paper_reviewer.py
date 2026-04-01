@@ -1,5 +1,7 @@
+from __future__ import annotations
+
 """
-Multi-Agent Paper Reviewer using the official OpenAI API.
+Multi-Agent Paper Reviewer using OpenRouter chat completions.
 
 Usage:
   python paper_reviewer.py <paper.txt>                 # sequential (default)
@@ -16,24 +18,52 @@ from pathlib import Path
 
 
 from dotenv import load_dotenv
-from openai import AsyncOpenAI
+from openai import APITimeoutError, AsyncOpenAI
+from pydantic import BaseModel
 
 load_dotenv()  # loads .env from cwd or parent dirs
 
 # ── Config ────────────────────────────────────────────────────────────
 
-OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
+OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
+OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 
-# Per-stage model assignments — all via official OpenAI API
-MODEL_HARSH = "gpt-5.4-nano"
-MODEL_NEUTRAL = "gpt-5.4-nano"
-MODEL_SPARK = "gpt-5.4-nano"
-MODEL_RELATED_WORK = "gpt-5.4-nano"
-MODEL_FILTER = "gpt-5.4-nano"
-MODEL_MERGER = "gpt-5.4-nano"
+# Per-stage model assignments — all via OpenRouter
+MODEL_HARSH = "minimax/minimax-m2.7"
+MODEL_NEUTRAL = "minimax/minimax-m2.7"
+MODEL_SPARK = "minimax/minimax-m2.7"
+MODEL_RELATED_WORK = "minimax/minimax-m2.7:online"
+MODEL_FILTER = "minimax/minimax-m2.7"
+MODEL_MERGER = "minimax/minimax-m2.7"
 
 MAX_RETRIES = 3
 RETRY_DELAY = 10
+REQUEST_TIMEOUT = 120
+
+
+class FinalReviewSchema(BaseModel):
+    summary: str
+    strengths: list[str]
+    weaknesses: list[str]
+    nice_to_haves: list[str]
+    novel_insights: str
+    missed_related_work: list[str]
+    suggestions: list[str]
+    novelty: float
+    technical_soundness: float
+    empirical_support: float
+    significance: float
+    clarity: float
+
+
+class ScoreSchema(BaseModel):
+    score: float
+
+
+def score_to_decision(score: float | None) -> str | None:
+    if score is None:
+        return None
+    return "Accept" if score >= 5.5 else "Reject"
 
 # ── Agent system prompts ──────────────────────────────────────────────
 
@@ -256,18 +286,16 @@ Rules:
 - KEEP genuine strengths backed by evidence.
 - For potentially missed related work: present as suggestions, do not penalize.
 
-You MUST output your final review as a single JSON object (no markdown, no \
-extra text before or after). Use this exact schema:
+Return your final review using the provided structured response schema.
+Also provide calibrated subscores from 1.0 to 10.0 for:
+- novelty
+- technical_soundness
+- empirical_support
+- significance
+- clarity
 
-{
-  "summary": "2-3 sentence paper summary",
-  "strengths": ["strength 1 with evidence", "strength 2 with evidence"],
-  "weaknesses": ["REAL weakness 1 — affects the core contribution", "REAL weakness 2"],
-  "nice_to_haves": ["would improve but not required 1", "out-of-scope suggestion 2"],
-  "novel_insights": "synthesized from spark finder, grounded observations only",
-  "missed_related_work": ["paper 1 — why relevant", "paper 2 — why relevant"],
-  "suggestions": ["suggestion 1", "suggestion 2"],
-}
+These subscores should reflect the paper itself after filtering reviewer noise.
+Do NOT output an accept/reject decision.
 """
 
 
@@ -281,24 +309,19 @@ about the same paper:
 3. A **spark finder** report (focuses on insights, not flaws)
 4. A **potentially missed related work** report (these are SUGGESTIONS, not \
    definitive omissions — the authors may have good reasons for not citing them)
-5. A final consolidated review
+5. A final consolidated review with subscores
 
 
-CALIBRATION — you MUST be realistic, but also fair. Most papers submitted to \
-top venues are neither strong accepts nor terrible rejects. The score distribution at ICLR is roughly:
-- ~5% score 8+ (strong accept)
-- ~25% score 6 (borderline accept)
-- ~40% score 5 (borderline reject)
-- ~30% score 3 or below (clear reject)
-Do NOT inflate scores out of politeness, but do NOT depress scores for non-fatal issues, scope choices, or reviewer noise.
-A 5.0 is not a bad score — it means the paper has merit but also real issues.
-A 6.0 is not an inflated score — it means the paper is borderline but overall credible.
-A 7.0+ should be used when the contribution is genuinely solid, even if the paper is not perfect.
-Use the full range of scores to reflect the true quality of the paper.
-Make sure your scores are well-calibrated and reflect the actual quality of the paper, matching the calibration examples if provided.
-If calibration examples are provided, they are your PRIMARY anchor for scoring.
-When deciding between nearby scores such as 5 vs 6 or 6 vs 7, prefer the score that best matches the calibration examples rather than your abstract prior.
-Judge the current paper by analogy to the calibration examples: compare the strength of contribution, seriousness of weaknesses, credibility of evidence, and overall acceptability.
+Your task is to predict a calibrated overall score from 1.0 to 10.0.
+If calibration examples are provided, they are your PRIMARY anchor.
+Do not score from tone alone. Use the final review content and its subscores.
+Find the calibration example whose overall level is most similar to the current paper, then place the current score close to that example unless the current paper is clearly better or worse.
+Compare papers dimension by dimension:
+- novelty
+- technical_soundness
+- empirical_support
+- significance
+- clarity
 
 The "score" field is a CONTINUOUS value from 1.0 to 10.0 (e.g. 3.5, 4.7, 6.2, 8.1). \
 Use the full range — do NOT cluster around 5-6. Be DISCRIMINATIVE:
@@ -314,8 +337,6 @@ Scoring guide:
 - 5.5-6.9:  Borderline. Has merit but real weaknesses hold it back.
 - 3.5-5.4:  Reject. Significant issues with claims, method, or evaluation.
 - 1.0-3.4:  Strong reject. Fundamental flaws, unclear contribution, or wrong.
-
-The "decision" field MUST be exactly "Accept" or "Reject".
 
 SCOPE CHECK — for each weakness, ask: is this a real flaw in the paper's \
 claims, or just something extra that would be nice to have? \
@@ -333,13 +354,15 @@ FAIRNESS CHECK — before deciding on the final score, ask:
 If the review bundle contains some overly harsh or low-precision criticism, do not let that alone drag the score down.
 
 
-You will also be given a set of calibration examples (if available) — these are examples \
-with same structure as above, but with a list of actual human scores and decisions for each paper. \
-Use these to calibrate your scoring — they show what real scores look like for different quality levels.
-Do not merely use them as loose reference points; use them as the main scoring standard whenever they are available.
-If the current paper is similar in overall quality to a calibration example, its score should be close to that example.
+You will also be given a set of calibration examples (if available). Each example contains:
+- one final consolidated review
+- merger subscores
+- actual human reviewer scores and average score
 
-Output format: a single float only for the score. 
+Use these examples as the main scoring standard whenever they are available.
+If the current paper is closest in level to a calibration example, anchor the score near that example rather than reverting to a generic prior.
+
+Return the score using the provided structured response schema.
 """
 
 # ── Core logic ────────────────────────────────────────────────────────
@@ -349,20 +372,21 @@ def sanitize_text(text: str) -> str:
     return text.replace("\x00", "")
 
 
-def _get_client() -> AsyncOpenAI:
-    """Create an AsyncOpenAI client pointed at the official OpenAI API."""
-    if not OPENAI_API_KEY:
+def _get_client(api_key: str | None = None) -> AsyncOpenAI:
+    """Create an AsyncOpenAI client pointed at OpenRouter."""
+    resolved_api_key = api_key or OPENROUTER_API_KEY
+    if not resolved_api_key:
         raise ValueError(
-            "OPENAI_API_KEY environment variable not set.\n"
+            "OPENROUTER_API_KEY environment variable not set.\n"
             "Set it in .env or export it."
         )
-    return AsyncOpenAI(api_key=OPENAI_API_KEY)
+    return AsyncOpenAI(api_key=resolved_api_key, base_url=OPENROUTER_BASE_URL)
 
 
-# ── OpenAI call (all models) ───────────────────────────────────────────
+# ── OpenRouter calls ───────────────────────────────────────────────────
 
-# Models that support reasoning effort parameter
-REASONING_MODELS = {"gpt-5.4", "gpt-5.4-mini", "gpt-5.4-nano", "o3-mini", "o3", "o4-mini"}
+# Models that support OpenRouter reasoning config
+REASONING_MODELS = {"minimax/minimax-m2.7"}
 
 async def _call_openai(
     client: AsyncOpenAI,
@@ -372,48 +396,115 @@ async def _call_openai(
     model: str,
     tools: list[dict] | None = None,
 ) -> str:
-    """Call the official OpenAI API with retry logic for rate limits."""
+    """Call OpenRouter chat completions with retry logic for instability."""
     for attempt in range(1, MAX_RETRIES + 1):
         try:
             kwargs = dict(
                 model=model,
-                instructions=system_prompt,
-                input=user_prompt,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+                timeout=REQUEST_TIMEOUT,
             )
             if model in REASONING_MODELS:
-                kwargs["reasoning"] = {"effort": "high"}
-            if tools:
-                kwargs["tools"] = tools
-            response = await client.responses.create(**kwargs)
-            result = response.output_text or ""
+                kwargs["extra_body"] = {"reasoning": {"effort": "medium"}}
+            response = await client.chat.completions.create(**kwargs)
+            result = response.choices[0].message.content or ""
             usage = getattr(response, "usage", None)
-            input_tokens = getattr(usage, "input_tokens", None) if usage else None
-            output_tokens = getattr(usage, "output_tokens", None) if usage else None
+            input_tokens = getattr(usage, "prompt_tokens", None) if usage else None
+            output_tokens = getattr(usage, "completion_tokens", None) if usage else None
             if input_tokens is not None and output_tokens is not None:
                 tokens = f"{input_tokens}in/{output_tokens}out"
             else:
                 tokens = "n/a"
-            model_short = model
             if not result.strip():
                 if attempt < MAX_RETRIES:
                     print(f"  [{name}] empty response (attempt {attempt}/{MAX_RETRIES}), retrying ...")
                     await asyncio.sleep(RETRY_DELAY + _random.uniform(0, 5))
                     continue
                 print(f"  [{name}] empty response after {MAX_RETRIES} attempts")
-            print(f"  [{name}] done — {model_short} (OpenAI) — {tokens} tokens")
+            print(f"  [{name}] done — {model} (OpenRouter) — {tokens} tokens")
             return result
+        except APITimeoutError:
+            if attempt < MAX_RETRIES:
+                wait = RETRY_DELAY * attempt
+                print(f"  [{name}] timeout (attempt {attempt}/{MAX_RETRIES}), waiting {wait}s ...")
+                await asyncio.sleep(wait)
+                continue
+            raise
         except Exception as e:
             err_str = str(e).lower()
             is_retryable = any(
-                kw in err_str for kw in ["rate_limit", "overloaded", "429", "529", "timeout"]
+                kw in err_str for kw in ["rate_limit", "overloaded", "429", "529", "timeout", "gateway", "502", "503", "504"]
             )
             if is_retryable and attempt < MAX_RETRIES:
                 wait = RETRY_DELAY * attempt
-                print(f"  [{name}] rate limited (attempt {attempt}/{MAX_RETRIES}), waiting {wait}s ...")
+                print(f"  [{name}] transient error (attempt {attempt}/{MAX_RETRIES}), waiting {wait}s ...")
                 await asyncio.sleep(wait)
             else:
                 raise
     return ""
+
+
+async def _parse_openai(
+    client: AsyncOpenAI,
+    name: str,
+    system_prompt: str,
+    user_prompt: str,
+    model: str,
+    text_format: type[BaseModel],
+) -> BaseModel:
+    """Call OpenRouter chat completions with structured output parsing."""
+    for attempt in range(1, MAX_RETRIES + 1):
+        try:
+            kwargs = dict(
+                model=model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+                response_format=text_format,
+                timeout=REQUEST_TIMEOUT,
+            )
+            if model in REASONING_MODELS:
+                kwargs["extra_body"] = {"reasoning": {"effort": "medium"}}
+            response = await client.beta.chat.completions.parse(**kwargs)
+            parsed = response.choices[0].message.parsed
+            if parsed is None:
+                if attempt < MAX_RETRIES:
+                    print(f"  [{name}] empty structured response (attempt {attempt}/{MAX_RETRIES}), retrying ...")
+                    await asyncio.sleep(RETRY_DELAY + _random.uniform(0, 5))
+                    continue
+                raise ValueError(f"{name} returned no parsed output")
+            usage = getattr(response, "usage", None)
+            input_tokens = getattr(usage, "prompt_tokens", None) if usage else None
+            output_tokens = getattr(usage, "completion_tokens", None) if usage else None
+            if input_tokens is not None and output_tokens is not None:
+                tokens = f"{input_tokens}in/{output_tokens}out"
+            else:
+                tokens = "n/a"
+            print(f"  [{name}] done — {model} (OpenRouter structured) — {tokens} tokens")
+            return parsed
+        except APITimeoutError:
+            if attempt < MAX_RETRIES:
+                wait = RETRY_DELAY * attempt
+                print(f"  [{name}] timeout (attempt {attempt}/{MAX_RETRIES}), waiting {wait}s ...")
+                await asyncio.sleep(wait)
+                continue
+            raise
+        except Exception as e:
+            err_str = str(e).lower()
+            is_retryable = any(
+                kw in err_str for kw in ["rate_limit", "overloaded", "429", "529", "timeout", "gateway", "502", "503", "504"]
+            )
+            if is_retryable and attempt < MAX_RETRIES:
+                wait = RETRY_DELAY * attempt
+                print(f"  [{name}] transient error (attempt {attempt}/{MAX_RETRIES}), waiting {wait}s ...")
+                await asyncio.sleep(wait)
+            else:
+                raise
+    raise RuntimeError(f"{name} failed after {MAX_RETRIES} attempts")
 
 
 # ── Agent runners ─────────────────────────────────────────────────────
@@ -427,7 +518,7 @@ async def run_reviewer(
     model: str,
     venue: str = "",
 ) -> str:
-    """Run a reviewer via the official OpenAI API."""
+    """Run a reviewer via OpenRouter chat completions."""
     print(f"  [{name}] started ({model}) ...")
     venue_line = (
         f"This paper was submitted to **{venue}**. "
@@ -455,13 +546,13 @@ async def run_related_work_search(
     paper_content: str,
 ) -> str:
     """
-    Two-step related work pipeline (both via OpenAI):
-    1. GPT-5.4-nano proposes related papers
-    2. GPT-5.4-nano filters already-cited and loosely related ones
+    Two-step related work pipeline via OpenRouter:
+    1. :online model proposes related papers
+    2. base model filters already-cited and loosely related ones
     """
     abstract_section = paper_content[:3000]
 
-    print("  [related_work_search] started (OpenAI) ...")
+    print("  [related_work_search] started (OpenRouter online) ...")
     raw_results = await _call_openai(
         client,
         "related_work_search",
@@ -472,10 +563,9 @@ async def run_related_work_search(
             f"Search for real, published papers that are closely related."
         ),
         MODEL_RELATED_WORK,
-        tools=[{"type": "web_search"}],
     )
 
-    print("  [related_work_filter] started (OpenAI) ...")
+    print("  [related_work_filter] started (OpenRouter) ...")
     filtered = await _call_openai(
         client,
         "related_work_filter",
@@ -505,7 +595,7 @@ async def run_merger(
     paper_content: str,
     calibration_context: str = "",
 ) -> str:
-    """Run the merger via the official OpenAI API."""
+    """Run the merger via OpenRouter chat completions."""
     print(f"  [merger] started ({MODEL_MERGER}) ...")
 
     calibration_block = ""
@@ -541,7 +631,15 @@ async def run_merger(
         f"Remember: many of the harsh critic's points may be nonsensical or overly "
         f"picky — cross-check everything against the actual paper before including it."
     )
-    return await _call_openai(client, "merger", MERGER_PROMPT, user_prompt, MODEL_MERGER)
+    parsed = await _parse_openai(
+        client,
+        "merger",
+        MERGER_PROMPT,
+        user_prompt,
+        MODEL_MERGER,
+        FinalReviewSchema,
+    )
+    return parsed.model_dump_json(indent=2)
 
 
 
@@ -575,33 +673,15 @@ async def run_score_predictor(
         f"Related Work Review:\n{related_work}\n\n"
         f"Final Review:\n{final_review}\n\n"
     )
-    return await _call_openai(client, "score_predictor", SCORE_PROMPT, user_prompt, MODEL_MERGER)
-
-
-def parse_score_output(score_text: str) -> tuple[float | None, str | None]:
-    """Parse a score-predictor response into score and binary decision."""
-    score = None
-    try:
-        score = round(float(str(score_text).strip()), 1)
-    except (ValueError, TypeError):
-        json_match = re.search(r"```json\s*(\{[\s\S]*?\})\s*```", str(score_text))
-        if not json_match:
-            json_match = re.search(r"(\{[\s\S]*\})", str(score_text))
-        if json_match:
-            try:
-                data = json.loads(json_match.group(1))
-                raw_score = data.get("score")
-                if raw_score is not None:
-                    score = round(float(raw_score), 1)
-            except (json.JSONDecodeError, ValueError, TypeError):
-                pass
-        if score is None:
-            match = re.search(r"(\d+(?:\.\d+)?)", str(score_text))
-            if match:
-                score = round(float(match.group(1)), 1)
-
-    decision = "Accept" if score is not None and score >= 5.5 else "Reject" if score is not None else None
-    return score, decision
+    parsed = await _parse_openai(
+        client,
+        "score_predictor",
+        SCORE_PROMPT,
+        user_prompt,
+        MODEL_MERGER,
+        ScoreSchema,
+    )
+    return parsed.score
 
 
 # ── Main orchestration ────────────────────────────────────────────────
@@ -613,9 +693,10 @@ async def review_paper(
     skip_spark: bool = False,
     venue: str = "",
     calibration_context: str = "",
+    api_key: str | None = None,
 ) -> str:
     """
-    Main entry point. All agents via the official OpenAI API — can fully parallelize.
+    Main entry point. All agents via OpenRouter chat completions — can fully parallelize.
 
     Phase 1 (parallel if --parallel):
       Critic + Neutral + Spark + Related Work — all at once
@@ -644,7 +725,7 @@ async def review_paper(
         print(f"  Related Work:   {MODEL_RELATED_WORK}")
     print(f"  Merger:         {MODEL_MERGER}\n")
 
-    client = _get_client()
+    client = _get_client(api_key=api_key)
     pp = str(path)
 
     # ── Phase 1: All reviewers (parallel or sequential) ───────────
@@ -688,7 +769,7 @@ async def review_paper(
     )
 
 
-    final_score_raw = await run_score_predictor(
+    final_score = await run_score_predictor(
         client,
         harsh_review,
         neutral_review,
@@ -697,7 +778,8 @@ async def review_paper(
         final_review,
         calibration_context=calibration_context,
     )
-    final_score, final_decision = parse_score_output(str(final_score_raw))
+    final_score = round(float(final_score), 1)
+    final_decision = score_to_decision(final_score)
 
     # ── Output ────────────────────────────────────────────────────
     separator = "=" * 72
@@ -706,29 +788,29 @@ async def review_paper(
         f"INDIVIDUAL REVIEWS\n"
         f"{separator}\n\n"
         f"{'─' * 40}\n"
-        f"HARSH CRITIC ({MODEL_HARSH} via OpenAI)\n"
+        f"HARSH CRITIC ({MODEL_HARSH} via OpenRouter)\n"
         f"{'─' * 40}\n"
         f"{harsh_review}\n\n"
         f"{'─' * 40}\n"
-        f"NEUTRAL REVIEWER ({MODEL_NEUTRAL} via OpenAI)\n"
+        f"NEUTRAL REVIEWER ({MODEL_NEUTRAL} via OpenRouter)\n"
         f"{'─' * 40}\n"
         f"{neutral_review}\n\n"
         f"{'─' * 40}\n"
-        f"SPARK FINDER ({MODEL_SPARK} via OpenAI)\n"
+        f"SPARK FINDER ({MODEL_SPARK} via OpenRouter)\n"
         f"{'─' * 40}\n"
         f"{spark_review}\n\n"
         f"{'─' * 40}\n"
-        f"POTENTIALLY MISSED RELATED WORK ({MODEL_RELATED_WORK} via OpenAI)\n"
+        f"POTENTIALLY MISSED RELATED WORK ({MODEL_RELATED_WORK} via OpenRouter)\n"
         f"{'─' * 40}\n"
         f"{related_work}\n\n"
         f"{separator}\n"
-        f"FINAL CONSOLIDATED REVIEW ({MODEL_MERGER} via OpenAI)\n"
+        f"FINAL CONSOLIDATED REVIEW ({MODEL_MERGER} via OpenRouter)\n"
         f"{separator}\n\n"
         f"{final_review}\n\n"
         f"{separator}\n"
         f"PREDICTED SCORE\n"
         f"{separator}\n\n"
-        f"Score: {final_score if final_score is not None else final_score_raw}\n"
+        f"Score: {final_score}\n"
         f"Decision: {final_decision or 'N/A'}\n"
     )
 
@@ -737,6 +819,44 @@ async def review_paper(
     print(f"\nReview saved to: {output_path}")
 
     return full_output
+
+
+async def review_paper_text(
+    paper_text: str,
+    source_name: str = "paper.txt",
+    parallel: bool = False,
+    skip_related_work: bool = False,
+    skip_spark: bool = False,
+    venue: str = "",
+    calibration_context: str = "",
+    api_key: str | None = None,
+    output_dir: str | None = None,
+) -> tuple[str, str]:
+    """Review paper content provided directly as text."""
+    cleaned_text = sanitize_text(paper_text)
+    if not cleaned_text.strip():
+        raise ValueError("Paper content is empty.")
+
+    target_dir = Path(output_dir or "webui_runs").expanduser().resolve()
+    target_dir.mkdir(parents=True, exist_ok=True)
+
+    safe_name = Path(source_name).name or "paper.txt"
+    if not Path(safe_name).suffix:
+        safe_name = f"{safe_name}.txt"
+
+    input_path = target_dir / safe_name
+    input_path.write_text(cleaned_text, encoding="utf-8")
+
+    result = await review_paper(
+        str(input_path),
+        parallel=parallel,
+        skip_related_work=skip_related_work,
+        skip_spark=skip_spark,
+        venue=venue,
+        calibration_context=calibration_context,
+        api_key=api_key,
+    )
+    return result, str(input_path.with_name(f"{input_path.stem}_review.md"))
 
 
 # ── CLI ───────────────────────────────────────────────────────────────
@@ -752,14 +872,14 @@ if __name__ == "__main__":
         print("  --venue <name>      Set venue (e.g. ICLR, NeurIPS, ICML)")
         print()
         print("Environment variables (or set in .env):")
-        print("  OPENAI_API_KEY   (required) Your OpenAI API key")
+        print("  OPENROUTER_API_KEY   (required) Your OpenRouter API key")
         print()
         print("Models per stage:")
-        print(f"  Harsh Critic (OpenAI):      {MODEL_HARSH}")
-        print(f"  Neutral (OpenAI):           {MODEL_NEUTRAL}")
-        print(f"  Spark Finder (OpenAI):      {MODEL_SPARK}")
-        print(f"  Related Work (OpenAI):      {MODEL_RELATED_WORK}")
-        print(f"  Merger (OpenAI):            {MODEL_MERGER}")
+        print(f"  Harsh Critic (OpenRouter):      {MODEL_HARSH}")
+        print(f"  Neutral (OpenRouter):           {MODEL_NEUTRAL}")
+        print(f"  Spark Finder (OpenRouter):      {MODEL_SPARK}")
+        print(f"  Related Work (OpenRouter):      {MODEL_RELATED_WORK}")
+        print(f"  Merger (OpenRouter):            {MODEL_MERGER}")
         sys.exit(0 if "--help" in sys.argv else 1)
 
     parallel = "--parallel" in sys.argv

@@ -126,22 +126,44 @@ async def run_sub_agents_and_merger(
 
 
 def build_calibration_md(results: list[dict]) -> str:
-    """Build calibration markdown from sub-agent + merger outputs + human scores."""
+    """Build compact calibration markdown from final review + subscores + human scores."""
     parts = []
     for i, r in enumerate(results, 1):
+        merged = json.loads(r["merged_review"])
         parts.append(f"=== CALIBRATION EXAMPLE {i} ===\n")
-        parts.append(f"# Review 1: Harsh Critic\n{r['harsh_review']}\n")
-        parts.append(f"# Review 2: Neutral Reviewer\n{r['neutral_review']}\n")
-        if r["spark_review"]:
-            parts.append(f"# Review 3: Spark Finder\n{r['spark_review']}\n")
-        if r["related_work"]:
-            parts.append(f"# Report: Potentially Missed Related Work\n{r['related_work']}\n")
-        parts.append(f"# Final Consolidated Review (no score)\n{r['merged_review']}\n")
-        parts.append(f"# ACTUAL HUMAN SCORES AND DECISION")
+        parts.append("# Final Consolidated Review")
+        parts.append(f"Summary: {merged['summary']}")
+        parts.append("Strengths:")
+        for item in merged["strengths"]:
+            parts.append(f"- {item}")
+        parts.append("Weaknesses:")
+        for item in merged["weaknesses"]:
+            parts.append(f"- {item}")
+        parts.append("Nice-to-haves:")
+        for item in merged["nice_to_haves"]:
+            parts.append(f"- {item}")
+        parts.append(f"Novel insights: {merged['novel_insights']}")
+        parts.append("Potentially missed related work:")
+        if merged["missed_related_work"]:
+            for item in merged["missed_related_work"]:
+                parts.append(f"- {item}")
+        else:
+            parts.append("- None")
+        parts.append("Suggestions:")
+        for item in merged["suggestions"]:
+            parts.append(f"- {item}")
+        parts.append("")
+        parts.append("# Merger Subscores")
+        parts.append(f"Novelty: {merged['novelty']:.1f}")
+        parts.append(f"Technical soundness: {merged['technical_soundness']:.1f}")
+        parts.append(f"Empirical support: {merged['empirical_support']:.1f}")
+        parts.append(f"Significance: {merged['significance']:.1f}")
+        parts.append(f"Clarity: {merged['clarity']:.1f}")
+        parts.append("")
+        parts.append("# Actual Human Scores")
         parts.append(f"Individual reviewer scores: {r['scores']}")
         parts.append(f"Average score: {r['avg_score']:.1f}")
-        parts.append(f"Decision: {r['decision']}")
-        parts.append(f"Binary: {r['gt_binary']}\n")
+        parts.append(f"Binary outcome: {r['gt_binary']}\n")
     return "\n".join(parts)
 
 
@@ -164,7 +186,7 @@ async def main(
     samples = sample_one_per_bin(available, seed)
 
     results = []
-    CONCURRENCY = 5
+    CONCURRENCY = 10
 
     async def process_one(i, paper_info):
         pid = paper_info["paper_id"]
