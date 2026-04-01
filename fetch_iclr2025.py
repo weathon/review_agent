@@ -61,8 +61,8 @@ def parse_note(note) -> dict | None:
     venue = content.get("venue", {}).get("value", "")
     venueid = content.get("venueid", {}).get("value", "")
 
-    # Skip withdrawn/desk rejected
-    if "Withdrawn" in venue or "Desk" in venue:
+    # Skip desk rejected (no reviews), but keep withdrawn (may have reviews + low scores)
+    if "Desk" in venue:
         return None
 
     # Parse reviews from direct replies
@@ -96,7 +96,11 @@ def parse_note(note) -> dict | None:
             break
 
     avg_score = sum(scores) / len(scores)
-    if decision:
+    # Withdrawn papers are treated as Reject
+    if "Withdrawn" in venue:
+        gt_binary = "Reject"
+        decision = decision or "Withdrawn (treated as Reject)"
+    elif decision:
         gt_binary = "Accept" if "Accept" in decision else "Reject"
     else:
         gt_binary = "Accept" if avg_score >= 5.5 else "Reject"
