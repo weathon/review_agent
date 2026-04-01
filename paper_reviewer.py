@@ -37,12 +37,12 @@ OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
 
 # Per-stage model assignments — all via OpenRouter
-MODEL_HARSH = "openai/gpt-5.4"
-MODEL_NEUTRAL = "openai/gpt-5.4"
-MODEL_SPARK = "openai/gpt-5.4"
-MODEL_RELATED_WORK = "openai/gpt-5.4:online"
-MODEL_FILTER = "openai/gpt-5.4"
-MODEL_MERGER = "openai/gpt-5.4"
+MODEL_HARSH = "openai/gpt-5.4-nano"
+MODEL_NEUTRAL = "openai/gpt-5.4-nano"
+MODEL_SPARK = "openai/gpt-5.4-nano"
+MODEL_RELATED_WORK = "openai/gpt-5.4-nano:online"
+MODEL_FILTER = "openai/gpt-5.4-nano"
+MODEL_MERGER = "openai/gpt-5.4-nano"
 
 MAX_RETRIES = 3
 RETRY_DELAY = 10
@@ -296,22 +296,29 @@ about the same paper:
 5. A final consolidated review
 
 
-CALIBRATION — you MUST be realistic about quality. Most papers submitted to \
-top venues are NOT strong accepts. The score distribution at ICLR is roughly:
+CALIBRATION — you MUST be realistic, but also fair. Most papers submitted to \
+top venues are neither strong accepts nor terrible rejects. The score distribution at ICLR is roughly:
 - ~5% score 8+ (strong accept)
 - ~25% score 6 (borderline accept)
 - ~40% score 5 (borderline reject)
 - ~30% score 3 or below (clear reject)
-If a paper has weak experiments, unclear contributions, or incremental novelty, \
-give it a LOW score. Do NOT inflate scores out of politeness. A 5.0 is not a \
-bad score — it means the paper has some merit but real issues.
-
+Do NOT inflate scores out of politeness, but do NOT depress scores for non-fatal issues, scope choices, or reviewer noise.
+A 5.0 is not a bad score — it means the paper has merit but also real issues.
+A 6.0 is not an inflated score — it means the paper is borderline but overall credible.
+A 7.0+ should be used when the contribution is genuinely solid, even if the paper is not perfect.
+Use the full range of scores to reflect the true quality of the paper.
+Make sure your scores are well-calibrated and reflect the actual quality of the paper, matching the calibration examples if provided.
+If calibration examples are provided, they are your PRIMARY anchor for scoring.
+When deciding between nearby scores such as 5 vs 6 or 6 vs 7, prefer the score that best matches the calibration examples rather than your abstract prior.
+Judge the current paper by analogy to the calibration examples: compare the strength of contribution, seriousness of weaknesses, credibility of evidence, and overall acceptability.
 
 The "score" field is a CONTINUOUS value from 1.0 to 10.0 (e.g. 3.5, 4.7, 6.2, 8.1). \
 Use the full range — do NOT cluster around 5-6. Be DISCRIMINATIVE:
 - A truly bad paper deserves a 2.0, not a 4.5.
 - A truly great paper deserves a 9.0, not a 7.0.
 - Do NOT hedge toward the middle. Commit to your assessment.
+- However, do not over-penalize papers for a long list of minor points if the core contribution is sound.
+- A few serious flaws matter more than many small nitpicks.
 
 Scoring guide:
 - 9.0-10.0: Strong accept. Exceptional, field-advancing contribution.
@@ -329,10 +336,20 @@ Nice-to-haves go in "nice_to_haves" and it could affect the scores but not signi
 But be honest — missing baselines, unsupported claims, and flawed experiments \
 are real weaknesses, not nice-to-haves.
 
+FAIRNESS CHECK — before deciding on the final score, ask:
+- Are the main concerns actually central to the paper's claims?
+- Would these concerns realistically cause rejection at the target venue?
+- Is the paper still a meaningful contribution despite its weaknesses?
+- Are you reacting to true flaws, or to reviewer-style negativity in the input reviews?
+
+If the review bundle contains some overly harsh or low-precision criticism, do not let that alone drag the score down.
+
 
 You will also be given a set of calibration examples (if available) — these are examples \
 with same structure as above, but with a list of actual human scores and decisions for each paper. \
 Use these to calibrate your scoring — they show what real scores look like for different quality levels.
+Do not merely use them as loose reference points; use them as the main scoring standard whenever they are available.
+If the current paper is similar in overall quality to a calibration example, its score should be close to that example.
 
 Output format: a single float only for the score. 
 """

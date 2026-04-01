@@ -24,6 +24,7 @@ def analyze_and_plot(path):
     sp_rnd, sp_rnd_p = stats.spearmanr(pred_rounded, gt_avg)
     mae_raw = np.mean(np.abs(pred - gt_avg))
     mae_rounded = np.mean(np.abs(pred_rounded - gt_avg))
+    bias_raw = np.mean(pred - gt_avg)
 
     pred_dec = df["pred_decision"].str.strip().str.lower()
     gt_dec = df["gt_binary"].str.strip().str.lower()
@@ -47,6 +48,7 @@ def analyze_and_plot(path):
     print(f"  Pearson (raw):         {pe_raw:.4f}  (p={pe_raw_p:.4f})")
     print(f"  MAE (raw):             {mae_raw:.4f}")
     print(f"  MAE (rounded):         {mae_rounded:.4f}")
+    print(f"  Bias (pred-gt):        {bias_raw:+.4f}")
     print(f"  Decision accuracy:     {dec_match}/{len(df)} = {dec_match/len(df):.1%}")
     print(f"  Human match (rounded): {match_any}/{len(df)} = {match_any/len(df):.1%}")
 
@@ -108,7 +110,7 @@ def analyze_and_plot(path):
     ax.set_title("Raw Scores", fontsize=13)
     ax.set_xlim(mn, mx); ax.set_ylim(mn, mx); ax.set_aspect("equal")
     ax.grid(True, alpha=0.2)
-    ax.text(0.05, 0.95, f"Spearman: {sp_raw:.3f}\nPearson: {pe_raw:.3f}\nMAE: {mae_raw:.3f}\nn = {len(df)}",
+    ax.text(0.05, 0.95, f"Spearman: {sp_raw:.3f}\nPearson: {pe_raw:.3f}\nMAE: {mae_raw:.3f}\nBias: {bias_raw:+.3f}\nn = {len(df)}",
             transform=ax.transAxes, fontsize=10, va="top",
             bbox=dict(boxstyle="round,pad=0.4", facecolor="wheat", alpha=0.8))
     ax.legend(handles=legend_dots, fontsize=9, loc="lower right")

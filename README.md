@@ -52,7 +52,9 @@ Real weaknesses go in `"weaknesses"` and inform the final assessment. Nice-to-ha
 
 Prior academic review agents have several practical problems that this project tries to avoid.
 
-CSPaper Review (CSPR) appears to rely on a forced-score style of review generation. In practice, this design can encourage overly picky, internally inconsistent, or weakly grounded criticism, and may lead to contradictions across different parts of the review. Its related-work stage also appears to have relatively low precision, introducing a substantial amount of noisy or only weakly relevant feedback. Such noise can depress scores artificially and reduce the practical usability of the system for authors.
+CSPaper Review (CSPR) appears to rely on a forced-score style of review generation. It force the AI to generate a review for every single score in the score range (from 1-10) and then merge them. In practice, this design can encourage overly picky, internally inconsistent, or weakly grounded criticism, and may lead to contradictions across different parts of the review. Its related-work stage also appears to have relatively low precision, introducing a substantial amount of noisy or only weakly relevant feedback. Such noise can depress scores artificially and reduce the practical usability of the system for authors.
+
+> Review agents: For each valid rating/score level defined by the target conference (e.g., 1-strong reject to 5-strong accept), we force a dedicated agent to (concurrently) generate reviews that strictly justify the assigned score/rating. A review selector identifies three most realistic reviews: best justified, more optimistic, and more critical. They are synthesized into a coherent output primarily based on the best-justified review but selectively incorporating insights from the other two versions. Finally, a calibration step ensures coherence between overall and sub-dimensional scores (e.g., novelty, clarity), ensuring a well-aligned and balanced final review.
 
 CSPR's calibration approach also appears to depend heavily on semantic analysis of generated critiques. This is potentially problematic because the number of negative points raised in a review is not a reliable proxy for overall paper quality. A paper may elicit many minor comments without having serious flaws, while a substantially stronger paper may have only a few high-impact concerns. As a result, direct semantic aggregation of negative points can distort score calibration.
 
@@ -141,6 +143,12 @@ Papers are fetched from OpenReview via authenticated API (`fetch_iclr2025.py`):
 - Withdrawn papers are kept and treated as Reject (they often have low scores that improve distribution coverage)
 - Supports `--balanced` stratified sampling across score bins
 
+**Important leakage warning:** some source PDFs contain venue-status headers such as `Published as a conference paper at ICLR 2025`, which directly reveal acceptance status. The current pipeline removes both `Under review ...` and `Published as ...` status headers during text cleanup. For already-generated local datasets, run `python fix_paper_headers.py` before benchmarking.
+
+This leakage does not appear to fully explain the current system behavior, since the model still shows substantial under-scoring and relatively weak score calibration. In other words, the dominant error mode is still conservative scoring rather than obvious label copying. However, venue-status headers can still bias evaluation in subtle ways, especially for decision-related metrics, and should therefore be removed.
+
+More broadly, this is a general caution for any paper-review benchmark: metadata leakage can enter through parsed PDFs, repository mirrors, camera-ready headers, publication notices, or other artifacts that are not part of the original blind submission. Such leakage may not always produce obviously inflated accuracy, but it can still distort benchmarking results. Future benchmarks should explicitly audit and sanitize these signals before evaluation.
+
 Score distribution (ICLR 2025 reviewer ratings: 1, 3, 5, 6, 8, 10):
 
 | Bin | Accept | Reject | Total |
@@ -160,11 +168,14 @@ Score distribution (ICLR 2025 reviewer ratings: 1, 3, 5, 6, 8, 10):
 - **Spearman correlation** (raw and rounded to ICLR scale)
 - **Pearson correlation**
 - **MAE** (Mean Absolute Error)
+- **Bias** (`mean(predicted_score - human_avg_score)`) to measure systematic under-scoring or over-scoring
 - **Decision accuracy** (Accept/Reject match)
 - **AUROC** (predicted score as discriminator for Accept vs Reject)
 - **Optimal threshold** via Youden's J statistic
 - **Borderline performance** (papers with GT avg 4-6)
 - **Human match** (rounded prediction matches any individual reviewer)
+
+For this project, **Pearson, MAE, bias, and decision quality are more important than Spearman**. Rank correlation is reported as a secondary metric, but it is highly sensitive to small local perturbations, especially in the borderline region where both human scores and accept/reject outcomes are inherently noisy. Since the main goal is calibrated scoring rather than exact global ranking, Pearson and bias are more informative about whether the model is using the same score scale as human reviewers.
 
 Generates a 3-panel plot: raw scatter, rounded scatter, and ROC curve.
 

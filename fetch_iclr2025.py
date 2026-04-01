@@ -173,8 +173,9 @@ def pdf_to_markdown(pdf_path: Path) -> str:
 
     # Clean up line numbers (e.g. **000**, **001**, **012 013**)
     text = re.sub(r"\*\*\d{3}(?:\s+\d{3})*\*\*\s*", "", text)
-    # Remove "Under review as a conference paper at ICLR 20XX" header
+    # Remove status headers that leak review outcome
     text = re.sub(r"Under review as a conference paper at ICLR \d{4}\s*\n?", "", text)
+    text = re.sub(r"Published as a conference paper at ICLR \d{4}\s*\n?", "", text)
     # Collapse excessive blank lines
     text = re.sub(r"\n{4,}", "\n\n\n", text)
     return text.strip()
