@@ -13,7 +13,10 @@ Phase 1 (all parallel via OpenRouter):
 
 Phase 2:
   └── Merger ──────────────── GPT-5.4 (reasoning: high)
-      (with optional calibration few-shot examples)
+
+Phase 3:
+  └── Score Predictor ─────── GPT-5.4 (reasoning: high)
+      (optionally calibrated with few-shot examples)
 ```
 
 **Agents:**
@@ -25,11 +28,12 @@ Phase 2:
 | Spark Finder | GPT-5.4 | Identifies missing experiments, deeper analysis, untapped applications |
 | Related Work Scout | Perplexity sonar-pro | Web-grounded search for potentially missed references |
 | Related Work Filter | GLM-5 | Removes already-cited and loosely related results |
-| Merger | GPT-5.4 | Synthesizes all inputs into a final JSON review with score + decision |
+| Merger | GPT-5.4 | Synthesizes all inputs into a final JSON review |
+| Score Predictor | GPT-5.4 | Predicts a continuous score from the multi-agent reviews |
 
 All calls go through OpenRouter. GPT-5.4 uses `reasoning.effort = "high"` for deeper analysis.
 
-## Merger Design
+## Review And Scoring Design
 
 The merger acts as an area chair and applies several filters:
 
@@ -40,9 +44,9 @@ The merger acts as an area chair and applies several filters:
   2. Could this omission be *intentional* (scope decision, space constraint)?
   3. Is this within the paper's stated scope?
 - **Calibration**: Uses score distribution priors (~5% strong accept, ~40% borderline reject, ~30% clear reject) to prevent score inflation
-- **Few-shot calibration** (optional): Injects real examples of sub-agent reviews paired with human scores/decisions
+- **Few-shot calibration** (optional): Injects real examples of multi-agent review bundles paired with human scores/decisions into the score predictor
 
-Real weaknesses go in `"weaknesses"` and affect the score. Nice-to-haves go in `"nice_to_haves"` and do NOT affect the score. The merger outputs structured JSON with a **continuous score from 1.0 to 10.0**.
+Real weaknesses go in `"weaknesses"` and inform the final assessment. Nice-to-haves go in `"nice_to_haves"` and should not be treated like core flaws. The merger outputs structured JSON; the separate score predictor outputs a **continuous score from 1.0 to 10.0** using the review bundle, with optional calibration examples.
 
 ## Quick Start
 
@@ -79,7 +83,7 @@ python paper_reviewer.py paper.txt --parallel --no-related-work --no-spark
 
 This runs the full pipeline:
 1. Fetches 200 ICLR 2025 papers (balanced sampling, includes withdrawn)
-2. Builds calibration set (~10 papers, sub-agents only, paired with human scores)
+2. Builds calibration set (~10 papers, multi-agent review bundles paired with human scores)
 3. Runs always-predict-6 baseline
 4. Runs full reviewer benchmark with calibration (50 papers, 3 concurrent)
 5. Computes metrics + generates plots
@@ -90,11 +94,11 @@ This runs the full pipeline:
 # 1. Fetch ICLR 2025 papers with full text
 python fetch_iclr2025.py 200 42 --balanced
 
-# 2. Build calibration set (sub-agents only, no merger)
+# 2. Build calibration set
 python build_calibration.py --data-dir iclr2025_data --parallel
 
 # 3. Run baseline
-python run_baseline.py 50 4112 --balanced
+python run_baseline.py 50 4112 --balanced --data-dir iclr2025_data --calibration calibration.md
 
 # 4. Run benchmark with calibration
 python run_iclr_bench.py 50 4112 --parallel --balanced \
@@ -106,16 +110,16 @@ python metric.py bench_scores.csv
 
 ## Calibration
 
-The merger tends to overestimate scores. To fix this, we build a **calibration set**:
+The score predictor tends to overestimate scores. To fix this, we build a **calibration set**:
 
 1. **Sample** 1 paper per score bin (+ extra from borderline bins 5 and 6)
-2. **Run sub-agents** (critic, neutral, spark, related work) on each — NO merger
-3. **Pair** the sub-agent outputs with real human reviewer scores and decisions
-4. **Save** as `calibration.md` — injected into the merger's prompt as few-shot examples
+2. **Run the full review stack** (critic, neutral, spark, related work, merger) on each calibration paper
+3. **Pair** the resulting review bundle with real human reviewer scores and decisions
+4. **Save** as `calibration.md` — injected into the score predictor prompt as few-shot examples
 
-This shows the merger what "a paper that humans scored 3" vs "a paper that humans scored 8" looks like in terms of sub-agent reviews, without the merger ever seeing its own prior outputs.
+This shows the score predictor what "a paper that humans scored 3" vs "a paper that humans scored 8" looks like in terms of the assembled review bundle.
 
-Calibration papers are excluded from the benchmark set via `calibration_ids.json` to prevent data leakage.
+Calibration papers are excluded from both the benchmark and the baseline comparison set via `calibration_ids.json`.
 
 ## Dataset: ICLR 2025
 
@@ -161,7 +165,7 @@ Generates a 3-panel plot: raw scatter, rounded scatter, and ROC curve.
 | `bench_scores_scatter.png` | Scatter plot + ROC curve |
 | `bench_run.log` | Complete stdout/stderr log of the run |
 | `baseline_scores.csv` | Baseline results |
-| `calibration.md` | Few-shot calibration examples (sub-agent outputs + human scores) |
+| `calibration.md` | Few-shot calibration examples (review bundle + human scores) |
 | `calibration_ids.json` | Paper IDs excluded from benchmark |
 
 ## CLI Reference
@@ -184,8 +188,8 @@ python run_iclr_bench.py [n] [seed] [options]
 
   --parallel              Run reviewers concurrently (within each paper)
   --balanced              Stratified sampling across score bins
-  --data-dir <path>       Dataset directory (default: AI-Scientist)
-  --calibration <path>    Calibration file for few-shot merger
+  --data-dir <path>       Dataset directory (default: AI-Scientist/review_iclr_bench)
+  --calibration <path>    Calibration file for few-shot score prediction
   --no-related-work       Skip related work agents
   --no-spark              Skip spark finder
 ```
@@ -196,9 +200,19 @@ python run_iclr_bench.py [n] [seed] [options]
 python build_calibration.py [seed] [options]
 
   --data-dir <path>       Dataset directory
-  --parallel              Run sub-agents concurrently
+  --parallel              Run review agents concurrently
   --no-spark              Skip spark finder
   --no-related-work       Skip related work search
+```
+
+### `run_baseline.py`
+
+```
+python run_baseline.py [n] [seed] [options]
+
+  --balanced              Stratified sampling across score bins
+  --data-dir <path>       Dataset directory
+  --calibration <path>    Calibration file; excludes calibration IDs
 ```
 
 ### `fetch_iclr2025.py`

@@ -1,9 +1,9 @@
 """
-Build a calibration set for the merger agent.
+Build a calibration set for the score predictor.
 
-Samples 1 paper per score bin, runs sub-agents (critic, neutral, spark,
-related work) but NOT the merger, then pairs the outputs with real human
-scores and decisions. Saves as calibration.md for few-shot injection.
+Samples papers across score bins, runs the review stack, then pairs the
+outputs with real human scores and decisions. Saves as calibration.md for
+few-shot injection.
 
 Usage:
   python build_calibration.py --data-dir iclr2025_data --parallel
@@ -152,7 +152,7 @@ async def main(
     bench_dir = Path(data_dir) if data_dir else DEFAULT_BENCH_DIR
 
     print("=" * 72)
-    print("Building Calibration Set (sub-agents only, no merger)")
+    print("Building Calibration Set")
     print(f"Data: {bench_dir}")
     print("=" * 72)
 
@@ -164,7 +164,7 @@ async def main(
     samples = sample_one_per_bin(available, seed)
 
     results = []
-    CONCURRENCY = 3
+    CONCURRENCY = 5
 
     async def process_one(i, paper_info):
         pid = paper_info["paper_id"]
@@ -176,21 +176,34 @@ async def main(
         print(f"{'─' * 72}")
 
         start = time.time()
-        outputs = await run_sub_agents_and_merger(
-            paper_info, paper_path,
-            parallel=parallel, skip_spark=skip_spark, skip_related_work=skip_related_work,
-        )
-        elapsed = time.time() - start
-        print(f"  [{pid}] Done in {elapsed:.1f}s")
+        try:
+            outputs = await run_sub_agents_and_merger(
+                paper_info, paper_path,
+                parallel=parallel, skip_spark=skip_spark, skip_related_work=skip_related_work,
+            )
+            elapsed = time.time() - start
+            print(f"  [{pid}] Done in {elapsed:.1f}s")
 
-        return {
-            **outputs,
-            "paper_id": pid,
-            "scores": paper_info["scores"],
-            "avg_score": paper_info["avg_score"],
-            "decision": paper_info["decision"],
-            "gt_binary": paper_info["gt_binary"],
-        }
+            return {
+                **outputs,
+                "paper_id": pid,
+                "scores": paper_info["scores"],
+                "avg_score": paper_info["avg_score"],
+                "decision": paper_info["decision"],
+                "gt_binary": paper_info["gt_binary"],
+                "error": None,
+            }
+        except Exception as e:
+            elapsed = time.time() - start
+            print(f"  [{pid}] ERROR after {elapsed:.1f}s: {e}")
+            return {
+                "paper_id": pid,
+                "scores": paper_info["scores"],
+                "avg_score": paper_info["avg_score"],
+                "decision": paper_info["decision"],
+                "gt_binary": paper_info["gt_binary"],
+                "error": str(e),
+            }
 
     # Run calibration papers concurrently
     semaphore = asyncio.Semaphore(CONCURRENCY)
@@ -200,9 +213,19 @@ async def main(
             return await process_one(i, paper_info)
 
     print(f"Running {len(samples)} calibration papers (concurrency={CONCURRENCY}) ...")
-    results = await asyncio.gather(*(
+    all_results = await asyncio.gather(*(
         limited(i, p) for i, p in enumerate(samples, 1)
     ))
+
+    results = [r for r in all_results if not r.get("error")]
+    failures = [r for r in all_results if r.get("error")]
+
+    if failures:
+        print(f"\nSkipped {len(failures)} failed calibration papers:")
+        for r in failures:
+            print(f"  {r['paper_id']}: {r['error']}")
+    if not results:
+        raise RuntimeError("No calibration papers completed successfully.")
 
     # Save calibration.md
     cal_md = build_calibration_md(results)
@@ -221,6 +244,8 @@ async def main(
     print("Calibration set built:")
     for r in results:
         print(f"  {r['paper_id']}: avg={r['avg_score']:.1f} scores={r['scores']} dec={r['gt_binary']}")
+    if failures:
+        print(f"Failed: {len(failures)}")
     print(f"\nTo use in benchmark:")
     print(f"  python run_iclr_bench.py 10 42 --parallel --data-dir {data_dir or 'AI-Scientist/...'} --calibration calibration.md")
 

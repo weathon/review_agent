@@ -18,8 +18,10 @@ Usage:
 """
 
 import asyncio
+import json
 import os
 import random as _random
+import re
 import sys
 from pathlib import Path
 
@@ -36,10 +38,10 @@ OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
 
 # Per-stage model assignments — all via OpenRouter
 MODEL_HARSH = "openai/gpt-5.4"
-MODEL_NEUTRAL = "z-ai/glm-5"
+MODEL_NEUTRAL = "openai/gpt-5.4"
 MODEL_SPARK = "openai/gpt-5.4"
-MODEL_RELATED_WORK = "perplexity/sonar-pro"
-MODEL_FILTER = "z-ai/glm-5"
+MODEL_RELATED_WORK = "openai/gpt-5.4:online"
+MODEL_FILTER = "openai/gpt-5.4"
 MODEL_MERGER = "openai/gpt-5.4"
 
 MAX_RETRIES = 3
@@ -376,7 +378,6 @@ async def _call_openrouter(
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt},
                 ],
-                max_tokens=4096,
             )
             # Add reasoning effort for supported models
             if model in REASONING_MODELS:
@@ -546,28 +547,54 @@ async def run_score_predictor(
     calibration_context: str = "",
 ) -> float:
     """Run a score predictor (optional, can be used for calibration)."""
-    
-    calibration_block = ""
+
+    user_prompt = ""
     if calibration_context:
-        calibration_block = (
+        user_prompt = (
             f"Here are examples of reviews for other papers, paired with\n"
             f"the ACTUAL human reviewer scores and decisions. Use these to calibrate\n"
             f"your scoring — they show what real scores look like for different\n"
             f"quality levels:\n\n"
-            f"--- CALIBRATION EXAMPLES ---\n" 
+            f"--- CALIBRATION EXAMPLES ---\n"
             f"{calibration_context}\n"
             f"--- END CALIBRATION EXAMPLES ---\n\n"
-            f"Now review the current paper:\n\n"
-            f"Harsh Critic Review:\n{harsh_review}\n\n"
-            f"Neutral Review:\n{neutral_review}\n\n"
-            f"Spark Finder Review:\n{spark_review}\n\n"
-            f"Related Work Review:\n{related_work}\n\n"
-            f"Final Review:\n{final_review}\n\n"
         )
-    return await _call_openrouter(client, "score_predictor", SCORE_PROMPT, calibration_block, MODEL_MERGER)
-    
+    user_prompt += (
+        f"Score the current paper using only the reviews below.\n\n"
+        f"Harsh Critic Review:\n{harsh_review}\n\n"
+        f"Neutral Review:\n{neutral_review}\n\n"
+        f"Spark Finder Review:\n{spark_review}\n\n"
+        f"Related Work Review:\n{related_work}\n\n"
+        f"Final Review:\n{final_review}\n\n"
+    )
+    return await _call_openrouter(client, "score_predictor", SCORE_PROMPT, user_prompt, MODEL_MERGER)
 
-    
+
+def parse_score_output(score_text: str) -> tuple[float | None, str | None]:
+    """Parse a score-predictor response into score and binary decision."""
+    score = None
+    try:
+        score = round(float(str(score_text).strip()), 1)
+    except (ValueError, TypeError):
+        json_match = re.search(r"```json\s*(\{[\s\S]*?\})\s*```", str(score_text))
+        if not json_match:
+            json_match = re.search(r"(\{[\s\S]*\})", str(score_text))
+        if json_match:
+            try:
+                data = json.loads(json_match.group(1))
+                raw_score = data.get("score")
+                if raw_score is not None:
+                    score = round(float(raw_score), 1)
+            except (json.JSONDecodeError, ValueError, TypeError):
+                pass
+        if score is None:
+            match = re.search(r"(\d+(?:\.\d+)?)", str(score_text))
+            if match:
+                score = round(float(match.group(1)), 1)
+
+    decision = "Accept" if score is not None and score >= 5.5 else "Reject" if score is not None else None
+    return score, decision
+
 
 # ── Main orchestration ────────────────────────────────────────────────
 
@@ -653,8 +680,16 @@ async def review_paper(
     )
 
 
-    final_score = await run_score_predictor(client, harsh_review, neutral_review,
-        spark_review, related_work, final_review, calibration_context=calibration_context) 
+    final_score_raw = await run_score_predictor(
+        client,
+        harsh_review,
+        neutral_review,
+        spark_review,
+        related_work,
+        final_review,
+        calibration_context=calibration_context,
+    )
+    final_score, final_decision = parse_score_output(str(final_score_raw))
 
     # ── Output ────────────────────────────────────────────────────
     separator = "=" * 72
@@ -681,7 +716,12 @@ async def review_paper(
         f"{separator}\n"
         f"FINAL CONSOLIDATED REVIEW ({MODEL_MERGER} via Claude SDK)\n"
         f"{separator}\n\n"
-        f"{final_review}\n"
+        f"{final_review}\n\n"
+        f"{separator}\n"
+        f"PREDICTED SCORE\n"
+        f"{separator}\n\n"
+        f"Score: {final_score if final_score is not None else final_score_raw}\n"
+        f"Decision: {final_decision or 'N/A'}\n"
     )
 
     output_path = path.parent / f"{path.stem}_review.md"

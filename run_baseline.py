@@ -10,23 +10,50 @@ Usage:
 """
 
 import csv
+import json
 import random
 import sys
 from collections import Counter, defaultdict
 from pathlib import Path
 
-BENCH_DIR = Path(__file__).parent / "AI-Scientist" / "review_iclr_bench"
-RATINGS_FILE = BENCH_DIR / "ratings_subset.tsv"
-PAPERS_DIR = BENCH_DIR / "iclr_parsed"
+DEFAULT_BENCH_DIR = Path(__file__).parent / "AI-Scientist" / "review_iclr_bench"
 
 VALID_SCORES = [1.0, 3.0, 5.0, 6.0, 8.0, 10.0]
 BASELINE_SCORE = 6.0
 BASELINE_DECISION = "Accept"
 
 
-def load_ground_truth() -> list[dict]:
+def load_ground_truth(bench_dir: Path) -> tuple[list[dict], Path]:
+    csv_file = bench_dir / "ratings.csv"
+    tsv_file = bench_dir / "ratings_subset.tsv"
+
+    if csv_file.exists():
+        papers_dir = bench_dir / "papers"
+        rows = []
+        with open(csv_file, "r") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                scores = []
+                for i in range(6):
+                    val = row.get(f"score_{i}", "").strip()
+                    if val:
+                        scores.append(float(val))
+                decision = row.get("decision", "").strip()
+                gt_binary = row.get("gt_binary", "").strip()
+                if not gt_binary:
+                    gt_binary = "Accept" if "Accept" in decision else "Reject"
+                rows.append({
+                    "paper_id": row["paper_id"].strip(),
+                    "scores": scores,
+                    "avg_score": float(row.get("avg_score", 0)),
+                    "decision": decision,
+                    "gt_binary": gt_binary,
+                })
+        return rows, papers_dir
+
+    papers_dir = bench_dir / "iclr_parsed"
     rows = []
-    with open(RATINGS_FILE, "r") as f:
+    with open(tsv_file, "r") as f:
         reader = csv.DictReader(f, delimiter="\t")
         for row in reader:
             scores = []
@@ -43,7 +70,7 @@ def load_ground_truth() -> list[dict]:
                 "decision": decision,
                 "gt_binary": gt_binary,
             })
-    return rows
+    return rows, papers_dir
 
 
 def stratified_sample(papers, n, seed):
@@ -68,14 +95,32 @@ def stratified_sample(papers, n, seed):
     return samples
 
 
-def main(n_samples: int = 10, seed: int = 42, balanced: bool = False):
+def main(
+    n_samples: int = 10,
+    seed: int = 42,
+    balanced: bool = False,
+    data_dir: str | None = None,
+    calibration_path: str | None = None,
+):
+    bench_dir = Path(data_dir) if data_dir else DEFAULT_BENCH_DIR
+
     print("=" * 72)
     print(f"BASELINE: Always predict score=6, decision=Accept")
+    print(f"Data: {bench_dir}")
     print(f"Sampling: {'balanced' if balanced else 'random'}")
     print("=" * 72)
 
-    gt_data = load_ground_truth()
-    available = [r for r in gt_data if (PAPERS_DIR / f"{r['paper_id']}.txt").exists()]
+    calibration_ids = set()
+    if calibration_path:
+        ids_path = Path(calibration_path).parent / "calibration_ids.json"
+        if ids_path.exists():
+            calibration_ids = set(json.loads(ids_path.read_text()))
+            print(f"Excluding {len(calibration_ids)} calibration papers")
+
+    gt_data, papers_dir = load_ground_truth(bench_dir)
+    available = [r for r in gt_data if (papers_dir / f"{r['paper_id']}.txt").exists()]
+    if calibration_ids:
+        available = [r for r in available if r["paper_id"] not in calibration_ids]
     print(f"Loaded {len(gt_data)} papers, {len(available)} with parsed text.")
 
     if balanced:
@@ -171,8 +216,35 @@ def main(n_samples: int = 10, seed: int = 42, balanced: bool = False):
 
 
 if __name__ == "__main__":
+    if "--help" in sys.argv or "-h" in sys.argv:
+        print("Usage: python run_baseline.py [n] [seed] [options]")
+        print()
+        print("Options:")
+        print("  --balanced              Stratified sampling across score bins")
+        print("  --data-dir <path>       Dataset directory")
+        print("  --calibration <path>    Calibration file; excludes calibration_ids.json")
+        sys.exit(0)
+
     balanced = "--balanced" in sys.argv
-    args = [a for a in sys.argv[1:] if not a.startswith("--")]
+    data_dir = None
+    calibration_path = None
+    if "--data-dir" in sys.argv:
+        idx = sys.argv.index("--data-dir")
+        if idx + 1 < len(sys.argv):
+            data_dir = sys.argv[idx + 1]
+    if "--calibration" in sys.argv:
+        idx = sys.argv.index("--calibration")
+        if idx + 1 < len(sys.argv):
+            calibration_path = sys.argv[idx + 1]
+
+    flag_values = {data_dir, calibration_path} - {None}
+    args = [a for a in sys.argv[1:] if not a.startswith("--") and a not in flag_values]
     n = int(args[0]) if len(args) > 0 else 10
     seed = int(args[1]) if len(args) > 1 else 42
-    main(n_samples=n, seed=seed, balanced=balanced)
+    main(
+        n_samples=n,
+        seed=seed,
+        balanced=balanced,
+        data_dir=data_dir,
+        calibration_path=calibration_path,
+    )

@@ -5,12 +5,12 @@ echo "============================================"
 echo "Full Pipeline: Fetch → Calibrate → Benchmark"
 echo "============================================"
 
-# ── Step 1: Re-fetch dataset (with withdrawn papers included) ──
-echo ""
-echo ">>> Step 1: Fetching ICLR 2025 papers (200, balanced, includes withdrawn)"
-echo "    This re-uses cached API notes but re-samples and re-downloads PDFs."
-rm -f iclr2025_data/ratings.csv  # force re-sample
-python fetch_iclr2025.py 200 42 --balanced
+# # ── Step 1: Re-fetch dataset (with withdrawn papers included) ──
+# echo ""
+# echo ">>> Step 1: Fetching ICLR 2025 papers (200, balanced, includes withdrawn)"
+# echo "    This re-uses cached API notes but re-samples and re-downloads PDFs."
+# rm -f iclr2025_data/ratings.csv  # force re-sample
+# python fetch_iclr2025.py 200 42 --balanced
 
 # ── Step 2: Check dataset distribution ──
 echo ""
@@ -38,7 +38,7 @@ python build_calibration.py --data-dir iclr2025_data --parallel
 # ── Step 4: Run baseline ──
 echo ""
 echo ">>> Step 4: Running baseline (always predict 6)"
-python run_baseline.py 50 4112 --balanced
+python run_baseline.py 50 4112 --balanced --data-dir iclr2025_data --calibration calibration.md
 
 # ── Step 5: Run benchmark with calibration ──
 echo ""
