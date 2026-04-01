@@ -48,6 +48,18 @@ The merger acts as an area chair and applies several filters:
 
 Real weaknesses go in `"weaknesses"` and inform the final assessment. Nice-to-haves go in `"nice_to_haves"` and should not be treated like core flaws. The merger outputs structured JSON; the separate score predictor outputs a **continuous score from 1.0 to 10.0** using the review bundle, with optional calibration examples.
 
+## Motivation
+
+Prior academic review agents have several practical problems that this project tries to avoid.
+
+CSPaper Review (CSPR) appears to rely on a forced-score style of review generation. In practice, this design can encourage overly picky, internally inconsistent, or weakly grounded criticism, and may lead to contradictions across different parts of the review. Its related-work stage also appears to have relatively low precision, introducing a substantial amount of noisy or only weakly relevant feedback. Such noise can depress scores artificially and reduce the practical usability of the system for authors.
+
+CSPR's calibration approach also appears to depend heavily on semantic analysis of generated critiques. This is potentially problematic because the number of negative points raised in a review is not a reliable proxy for overall paper quality. A paper may elicit many minor comments without having serious flaws, while a substantially stronger paper may have only a few high-impact concerns. As a result, direct semantic aggregation of negative points can distort score calibration.
+
+A broader issue in this literature is evaluation methodology. Many systems emphasize MAE or exact agreement with a human score, but these metrics can be misleading on imbalanced datasets. For example, on a non-balanced conference sample, an always-predict-6 baseline can already achieve deceptively strong performance. Without careful stratification, such evaluation protocols can overstate model quality. CSPR also appears to exhibit selection bias in paper collection, which further limits confidence in the reported results.
+
+The Stanford review agent appears to encounter similar related-work precision issues. It also exhibits a failure mode in which the model may incorrectly treat papers, methods, or models outside its training timeline as fabricated and challenge the user on that basis. Its reported correlation results are also difficult to interpret, since the presentation partly relies on human-human agreement rather than a cleaner AI-to-human benchmark. More broadly, like CSPR, it is neither open source nor accompanied by a sufficiently detailed technical description, which makes the system difficult to inspect, explain, or validate.
+
 ## Quick Start
 
 ```bash
