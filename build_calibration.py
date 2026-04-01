@@ -29,8 +29,7 @@ from paper_reviewer import (
     SPARK_FINDER_PROMPT,
     _get_client,
     run_related_work_search,
-    run_reviewer_claude,
-    run_reviewer_openrouter,
+    run_reviewer,
     sanitize_text,
 )
 
@@ -78,33 +77,34 @@ async def run_sub_agents(
     client = _get_client()
     pp = str(paper_path)
 
-    # Stage 1: Critic (Claude) + Neutral + Related Work (OpenRouter)
+    # All reviewers (parallel or sequential) — all via OpenRouter
     if parallel:
         tasks = [
-            run_reviewer_claude("harsh_critic", HARSH_CRITIC_PROMPT, pp, paper_content, MODEL_HARSH, venue="ICLR"),
-            run_reviewer_openrouter(client, "neutral", NEUTRAL_REVIEWER_PROMPT, pp, paper_content, MODEL_NEUTRAL, venue="ICLR"),
+            run_reviewer(client, "harsh_critic", HARSH_CRITIC_PROMPT, pp, paper_content, MODEL_HARSH, venue="ICLR"),
+            run_reviewer(client, "neutral", NEUTRAL_REVIEWER_PROMPT, pp, paper_content, MODEL_NEUTRAL, venue="ICLR"),
         ]
+        if not skip_spark:
+            tasks.append(run_reviewer(client, "spark_finder", SPARK_FINDER_PROMPT, pp, paper_content, MODEL_SPARK, venue="ICLR"))
         if not skip_related_work:
             tasks.append(run_related_work_search(client, paper_content))
-            harsh_review, neutral_review, related_work = await asyncio.gather(*tasks)
-        else:
-            harsh_review, neutral_review = await asyncio.gather(*tasks)
-            related_work = ""
+
+        results_list = await asyncio.gather(*tasks)
+        idx = 0
+        harsh_review = results_list[idx]; idx += 1
+        neutral_review = results_list[idx]; idx += 1
+        spark_review = results_list[idx] if not skip_spark else ""; idx += (0 if skip_spark else 1)
+        related_work = results_list[idx] if not skip_related_work else ""
     else:
-        harsh_review = await run_reviewer_claude("harsh_critic", HARSH_CRITIC_PROMPT, pp, paper_content, MODEL_HARSH, venue="ICLR")
-        neutral_review = await run_reviewer_openrouter(client, "neutral", NEUTRAL_REVIEWER_PROMPT, pp, paper_content, MODEL_NEUTRAL, venue="ICLR")
+        harsh_review = await run_reviewer(client, "harsh_critic", HARSH_CRITIC_PROMPT, pp, paper_content, MODEL_HARSH, venue="ICLR")
+        neutral_review = await run_reviewer(client, "neutral", NEUTRAL_REVIEWER_PROMPT, pp, paper_content, MODEL_NEUTRAL, venue="ICLR")
+        if not skip_spark:
+            spark_review = await run_reviewer(client, "spark_finder", SPARK_FINDER_PROMPT, pp, paper_content, MODEL_SPARK, venue="ICLR")
+        else:
+            spark_review = ""
         if not skip_related_work:
             related_work = await run_related_work_search(client, paper_content)
         else:
             related_work = ""
-
-    # Stage 2: Spark (Claude) — sequential after stage 1
-    if not skip_spark:
-        spark_review = await run_reviewer_claude(
-            "spark_finder", SPARK_FINDER_PROMPT, pp, paper_content, MODEL_SPARK, venue="ICLR",
-        )
-    else:
-        spark_review = ""
 
     return {
         "harsh_review": harsh_review,

@@ -19,20 +19,13 @@ Usage:
 
 import asyncio
 import os
+import random as _random
 import sys
 from pathlib import Path
 
 
 from dotenv import load_dotenv
 from openai import AsyncOpenAI
-
-from claude_code_sdk import (
-    AssistantMessage,
-    ClaudeCodeOptions,
-    ClaudeSDKClient,
-    ResultMessage,
-    TextBlock,
-)
 
 load_dotenv()  # loads .env from cwd or parent dirs
 
@@ -41,14 +34,13 @@ load_dotenv()  # loads .env from cwd or parent dirs
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
 
-# Per-stage model assignments
-MODEL_HARSH = "claude-sonnet-4-6"           # via Claude Code SDK (free)
-# MODEL_SUPPORTIVE removed — was inflating scores
-MODEL_NEUTRAL = "z-ai/glm-5"              # via OpenRouter
-MODEL_SPARK = "claude-sonnet-4-6"                      # via Claude Code SDK (free)
-MODEL_RELATED_WORK = "perplexity/sonar-pro"          # via OpenRouter
-MODEL_FILTER = "z-ai/glm-5"               # via OpenRouter
-MODEL_MERGER = "claude-sonnet-4-6"           # via Claude Code SDK (free)
+# Per-stage model assignments — all via OpenRouter
+MODEL_HARSH = "openai/gpt-5.4"
+MODEL_NEUTRAL = "z-ai/glm-5"
+MODEL_SPARK = "openai/gpt-5.4"
+MODEL_RELATED_WORK = "perplexity/sonar-pro"
+MODEL_FILTER = "z-ai/glm-5"
+MODEL_MERGER = "openai/gpt-5.4"
 
 MAX_RETRIES = 3
 RETRY_DELAY = 10
@@ -370,67 +362,10 @@ def _get_client() -> AsyncOpenAI:
     )
 
 
-# ── Claude Code SDK call (free, using ClaudeSDKClient agent mode) ─────
+# ── OpenRouter call (all models) ──────────────────────────────────────
 
-async def _call_claude_sdk(
-    name: str,
-    system_prompt: str,
-    user_prompt: str,
-    model: str = MODEL_HARSH,
-) -> str:
-    """Call Claude via ClaudeSDKClient agent mode (no API cost).
-
-    Uses the interactive client with the Read tool so Claude can read
-    paper files directly — avoids stuffing huge content into CLI args.
-    """
-    for attempt in range(1, MAX_RETRIES + 1):
-        try:
-            options = ClaudeCodeOptions(
-                system_prompt=system_prompt,
-                model=model,
-                max_turns=10,
-                allowed_tools=["TodoRead", "TodoWrite", "WebSearch", "WebFetch"],
-                permission_mode="bypassPermissions",
-                env={"CLAUDECODE": ""},  # Fix #573: clear inherited env var
-                extra_args={"effort": "medium"},
-            )
-            chunks: list[str] = []
-            got_result = False
-            try:
-                async with ClaudeSDKClient(options=options) as client:
-                    await client.query(user_prompt)
-                    async for msg in client.receive_response():
-                        if isinstance(msg, AssistantMessage):
-                            for block in msg.content:
-                                if isinstance(block, TextBlock):
-                                    chunks.append(block.text)
-                        elif isinstance(msg, ResultMessage):
-                            got_result = True
-                            cost = f"${msg.total_cost_usd:.4f}" if msg.total_cost_usd else "free"
-                            print(f"  [{name}] done — {model} (SDK) — {msg.num_turns} turns, cost {cost}")
-            except Exception as e:
-                if got_result and chunks:
-                    print(f"  [{name}] ignoring post-result exit error: {e}")
-                else:
-                    raise
-            return "\n".join(chunks)
-        except Exception as e:
-            err_str = str(e).lower()
-            is_retryable = any(
-                kw in err_str
-                for kw in ["rate_limit", "overloaded", "429", "529", "exit code"]
-            )
-            if is_retryable and attempt < MAX_RETRIES:
-                wait = RETRY_DELAY * attempt
-                print(f"  [{name}] error (attempt {attempt}/{MAX_RETRIES}): {e}")
-                print(f"  [{name}] retrying in {wait}s ...")
-                await asyncio.sleep(wait)
-            else:
-                raise
-    return ""
-
-
-# ── OpenRouter call (for everything else) ─────────────────────────────
+# Models that support reasoning effort parameter
+REASONING_MODELS = {"openai/gpt-5.4", "openai/o3-mini", "openai/o3", "openai/o4-mini"}
 
 async def _call_openrouter(
     client: AsyncOpenAI,
@@ -442,7 +377,7 @@ async def _call_openrouter(
     """Call OpenRouter with retry logic for rate limits."""
     for attempt in range(1, MAX_RETRIES + 1):
         try:
-            response = await client.chat.completions.create(
+            kwargs = dict(
                 model=model,
                 messages=[
                     {"role": "system", "content": system_prompt},
@@ -450,6 +385,10 @@ async def _call_openrouter(
                 ],
                 max_tokens=4096,
             )
+            # Add reasoning effort for supported models
+            if model in REASONING_MODELS:
+                kwargs["extra_body"] = {"reasoning": {"effort": "high"}}
+            response = await client.chat.completions.create(**kwargs)
             result = response.choices[0].message.content or ""
             usage = response.usage
             tokens = f"{usage.prompt_tokens}in/{usage.completion_tokens}out" if usage else "n/a"
@@ -457,7 +396,7 @@ async def _call_openrouter(
             if not result.strip():
                 if attempt < MAX_RETRIES:
                     print(f"  [{name}] empty response (attempt {attempt}/{MAX_RETRIES}), retrying ...")
-                    await asyncio.sleep(RETRY_DELAY)
+                    await asyncio.sleep(RETRY_DELAY + _random.uniform(0, 5))
                     continue
                 print(f"  [{name}] empty response after {MAX_RETRIES} attempts")
             print(f"  [{name}] done — {model_short} (OpenRouter) — {tokens} tokens")
@@ -478,38 +417,7 @@ async def _call_openrouter(
 
 # ── Agent runners ─────────────────────────────────────────────────────
 
-async def run_reviewer_claude(
-    name: str,
-    system_prompt: str,
-    paper_path: str,
-    paper_content: str,
-    model: str,
-    venue: str = "",
-) -> str:
-    """Run a reviewer via Claude Code SDK."""
-    print(f"  [{name}] started (Claude SDK) ...")
-    venue_line = (
-        f"This paper was submitted to **{venue}**. "
-        f"You MUST evaluate it against {venue}'s specific standards, acceptance bar, "
-        f"and expectations. Consider what {venue} reviewers typically look for.\n\n"
-    ) if venue else ""
-    user_prompt = (
-        f"{venue_line}"
-        f"Review the following paper thoroughly.\n\n"
-        f"NOTE: This paper was extracted from PDF by an automated parser. "
-        f"There may be formatting artifacts such as broken equations, garbled "
-        f"tables, misplaced figure references, or OCR errors. These are parser "
-        f"issues, NOT problems with the paper itself. Do NOT treat formatting "
-        f"artifacts as weaknesses.\n\n"
-        f"Paper file: {paper_path}\n\n"
-        f"--- PAPER CONTENT START ---\n"
-        f"{paper_content}\n"
-        f"--- PAPER CONTENT END ---"
-    )
-    return await _call_claude_sdk(name, system_prompt, user_prompt, model)
-
-
-async def run_reviewer_openrouter(
+async def run_reviewer(
     client: AsyncOpenAI,
     name: str,
     system_prompt: str,
@@ -519,7 +427,7 @@ async def run_reviewer_openrouter(
     venue: str = "",
 ) -> str:
     """Run a reviewer via OpenRouter."""
-    print(f"  [{name}] started (OpenRouter) ...")
+    print(f"  [{name}] started ({model.split('/')[-1]}) ...")
     venue_line = (
         f"This paper was submitted to **{venue}**. "
         f"You MUST evaluate it against {venue}'s specific standards, acceptance bar, "
@@ -587,6 +495,7 @@ async def run_related_work_search(
 
 
 async def run_merger(
+    client: AsyncOpenAI,
     harsh_review: str,
     neutral_review: str,
     spark_review: str,
@@ -594,8 +503,8 @@ async def run_merger(
     paper_content: str,
     calibration_context: str = "",
 ) -> str:
-    """Run the merger via Claude Code SDK (free)."""
-    print("  [merger] started (Claude SDK) ...")
+    """Run the merger via OpenRouter."""
+    print(f"  [merger] started ({MODEL_MERGER.split('/')[-1]}) ...")
 
     calibration_block = ""
     if calibration_context:
@@ -630,7 +539,7 @@ async def run_merger(
         f"Remember: many of the harsh critic's points may be nonsensical or overly "
         f"picky — cross-check everything against the actual paper before including it."
     )
-    return await _call_claude_sdk("merger", MERGER_PROMPT, user_prompt, MODEL_MERGER)
+    return await _call_openrouter(client, "merger", MERGER_PROMPT, user_prompt, MODEL_MERGER)
 
 
 # ── Main orchestration ────────────────────────────────────────────────
@@ -644,19 +553,13 @@ async def review_paper(
     calibration_context: str = "",
 ) -> str:
     """
-    Main entry point.
+    Main entry point. All agents via OpenRouter — can fully parallelize.
 
-    3-stage pipeline (Claude SDK calls are never parallel with each other):
+    Phase 1 (parallel if --parallel):
+      Critic + Neutral + Spark + Related Work — all at once
 
-      Stage 1 (parallel if --parallel):
-        - Harsh Critic ──── Claude SDK (reads file via Read tool)
-        - Supportive ────── OpenRouter  ─┐
-        - Neutral ──────── OpenRouter    ├─ parallel with Critic
-        - Related Work ──── OpenRouter  ─┘  (skipped with --no-related-work)
-
-      Stage 2: Spark Finder ── Claude SDK (reads file via Read tool)
-
-      Stage 3: Merger ───────── Claude SDK (can Read file to cross-check)
+    Phase 2:
+      Merger — waits for all reviewers
     """
     path = Path(paper_path).expanduser().resolve()
     if not path.exists():
@@ -671,53 +574,53 @@ async def review_paper(
     if venue:
         print(f"Venue: {venue}")
     print(f"Models:")
-    print(f"  Harsh Critic (Claude SDK):   {MODEL_HARSH}")
-    print(f"  Neutral (OpenRouter):        {MODEL_NEUTRAL}")
+    print(f"  Harsh Critic:   {MODEL_HARSH}")
+    print(f"  Neutral:        {MODEL_NEUTRAL}")
     if not skip_spark:
-        print(f"  Spark Finder (Claude SDK):   {MODEL_SPARK}")
+        print(f"  Spark Finder:   {MODEL_SPARK}")
     if not skip_related_work:
-        print(f"  Related Work (OpenRouter):   {MODEL_RELATED_WORK}")
-    print(f"  Merger (Claude SDK):         {MODEL_MERGER}\n")
+        print(f"  Related Work:   {MODEL_RELATED_WORK}")
+    print(f"  Merger:         {MODEL_MERGER}\n")
 
     client = _get_client()
     pp = str(path)
 
-    # ── Stage 1: Critic (Claude) + Neutral/Related Work (OpenRouter) ──
+    # ── Phase 1: All reviewers (parallel or sequential) ───────────
     if parallel:
         tasks = [
-            run_reviewer_claude("harsh_critic", HARSH_CRITIC_PROMPT, pp, paper_content, MODEL_HARSH, venue=venue),
-            run_reviewer_openrouter(client, "neutral", NEUTRAL_REVIEWER_PROMPT, pp, paper_content, MODEL_NEUTRAL, venue=venue),
+            run_reviewer(client, "harsh_critic", HARSH_CRITIC_PROMPT, pp, paper_content, MODEL_HARSH, venue=venue),
+            run_reviewer(client, "neutral", NEUTRAL_REVIEWER_PROMPT, pp, paper_content, MODEL_NEUTRAL, venue=venue),
         ]
+        if not skip_spark:
+            tasks.append(run_reviewer(client, "spark_finder", SPARK_FINDER_PROMPT, pp, paper_content, MODEL_SPARK, venue=venue))
         if not skip_related_work:
-            print("Stage 1: Critic (Claude SDK) || Neutral + Related Work (OpenRouter) ...")
             tasks.append(run_related_work_search(client, paper_content))
-            harsh_review, neutral_review, related_work = await asyncio.gather(*tasks)
-        else:
-            print("Stage 1: Critic (Claude SDK) || Neutral (OpenRouter) ...")
-            harsh_review, neutral_review = await asyncio.gather(*tasks)
-            related_work = "Related work search was skipped."
+
+        print("Phase 1: All reviewers in parallel ...")
+        results_list = await asyncio.gather(*tasks)
+
+        idx = 0
+        harsh_review = results_list[idx]; idx += 1
+        neutral_review = results_list[idx]; idx += 1
+        spark_review = results_list[idx] if not skip_spark else "Spark finder was skipped."; idx += (0 if skip_spark else 1)
+        related_work = results_list[idx] if not skip_related_work else "Related work search was skipped."
     else:
-        print("Stage 1: Critic + Neutral (sequential) ...")
-        harsh_review = await run_reviewer_claude("harsh_critic", HARSH_CRITIC_PROMPT, pp, paper_content, MODEL_HARSH, venue=venue)
-        neutral_review = await run_reviewer_openrouter(client, "neutral", NEUTRAL_REVIEWER_PROMPT, pp, paper_content, MODEL_NEUTRAL, venue=venue)
+        print("Phase 1: Reviewers sequentially ...")
+        harsh_review = await run_reviewer(client, "harsh_critic", HARSH_CRITIC_PROMPT, pp, paper_content, MODEL_HARSH, venue=venue)
+        neutral_review = await run_reviewer(client, "neutral", NEUTRAL_REVIEWER_PROMPT, pp, paper_content, MODEL_NEUTRAL, venue=venue)
+        if not skip_spark:
+            spark_review = await run_reviewer(client, "spark_finder", SPARK_FINDER_PROMPT, pp, paper_content, MODEL_SPARK, venue=venue)
+        else:
+            spark_review = "Spark finder was skipped."
         if not skip_related_work:
             related_work = await run_related_work_search(client, paper_content)
         else:
             related_work = "Related work search was skipped."
 
-    # ── Stage 2: Spark Finder (Claude SDK — must wait for stage 1) ──
-    if not skip_spark:
-        print("\nStage 2: Spark Finder (Claude SDK) ...")
-        spark_review = await run_reviewer_claude(
-            "spark_finder", SPARK_FINDER_PROMPT, pp, paper_content, MODEL_SPARK, venue=venue,
-        )
-    else:
-        spark_review = "Spark finder was skipped."
-
-    # ── Stage 3: Merger (Claude SDK — must wait for everything) ──
-    print("\nStage 3: Merger (Claude SDK) ...")
+    # ── Phase 2: Merger (waits for all reviewers) ─────────────────
+    print("\nPhase 2: Merger ...")
     final_review = await run_merger(
-        harsh_review, neutral_review,
+        client, harsh_review, neutral_review,
         spark_review, related_work, paper_content,
         calibration_context=calibration_context,
     )

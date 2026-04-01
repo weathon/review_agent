@@ -56,8 +56,7 @@ from paper_reviewer import (
     _get_client,
     run_merger,
     run_related_work_search,
-    run_reviewer_claude,
-    run_reviewer_openrouter,
+    run_reviewer,
     sanitize_text,
 )
 
@@ -193,24 +192,33 @@ async def review_single_paper(
 
     sep = "~" * 60
 
-    # Stage 1: Critic (Claude SDK) || Neutral + Related Work (OpenRouter)
+    # Phase 1: All reviewers (parallel or sequential)
     if parallel:
         tasks = [
-            run_reviewer_claude("harsh_critic", HARSH_CRITIC_PROMPT, pp, paper_content, MODEL_HARSH, venue="ICLR"),
-            run_reviewer_openrouter(client, "neutral", NEUTRAL_REVIEWER_PROMPT, pp, paper_content, MODEL_NEUTRAL, venue="ICLR"),
+            run_reviewer(client, "harsh_critic", HARSH_CRITIC_PROMPT, pp, paper_content, MODEL_HARSH, venue="ICLR"),
+            run_reviewer(client, "neutral", NEUTRAL_REVIEWER_PROMPT, pp, paper_content, MODEL_NEUTRAL, venue="ICLR"),
         ]
+        if not skip_spark:
+            tasks.append(run_reviewer(client, "spark_finder", SPARK_FINDER_PROMPT, pp, paper_content, MODEL_SPARK, venue="ICLR"))
         if not skip_related_work:
-            print("  Stage 1: Critic (Claude) || Neutral + Related Work (OpenRouter) ...")
             tasks.append(run_related_work_search(client, paper_content))
-            harsh_review, neutral_review, related_work = await asyncio.gather(*tasks)
-        else:
-            print("  Stage 1: Critic (Claude) || Neutral (OpenRouter) ...")
-            harsh_review, neutral_review = await asyncio.gather(*tasks)
-            related_work = "Related work search was skipped."
+
+        print("  Phase 1: All reviewers in parallel ...")
+        results_list = await asyncio.gather(*tasks)
+
+        idx = 0
+        harsh_review = results_list[idx]; idx += 1
+        neutral_review = results_list[idx]; idx += 1
+        spark_review = results_list[idx] if not skip_spark else "Spark finder was skipped."; idx += (0 if skip_spark else 1)
+        related_work = results_list[idx] if not skip_related_work else "Related work search was skipped."
     else:
-        print("  Stage 1: Critic + Neutral (sequential) ...")
-        harsh_review = await run_reviewer_claude("harsh_critic", HARSH_CRITIC_PROMPT, pp, paper_content, MODEL_HARSH, venue="ICLR")
-        neutral_review = await run_reviewer_openrouter(client, "neutral", NEUTRAL_REVIEWER_PROMPT, pp, paper_content, MODEL_NEUTRAL, venue="ICLR")
+        print("  Phase 1: Reviewers sequentially ...")
+        harsh_review = await run_reviewer(client, "harsh_critic", HARSH_CRITIC_PROMPT, pp, paper_content, MODEL_HARSH, venue="ICLR")
+        neutral_review = await run_reviewer(client, "neutral", NEUTRAL_REVIEWER_PROMPT, pp, paper_content, MODEL_NEUTRAL, venue="ICLR")
+        if not skip_spark:
+            spark_review = await run_reviewer(client, "spark_finder", SPARK_FINDER_PROMPT, pp, paper_content, MODEL_SPARK, venue="ICLR")
+        else:
+            spark_review = "Spark finder was skipped."
         if not skip_related_work:
             related_work = await run_related_work_search(client, paper_content)
         else:
@@ -220,27 +228,19 @@ async def review_single_paper(
         print(f"\n  {sep}\n  [{label} output] ({len(text)} chars)\n  {sep}\n{text}\n")
         if not text.strip():
             print(f"  *** WARNING: {label} returned empty output ***")
+    if not skip_spark:
+        print(f"\n  {sep}\n  [spark_finder output] ({len(spark_review)} chars)\n  {sep}\n{spark_review}\n")
     if not skip_related_work:
         print(f"\n  {sep}\n  [related_work output] ({len(related_work)} chars)\n  {sep}\n{related_work}\n")
 
-    # Stage 2: Spark Finder (Claude SDK — waits for stage 1)
-    if not skip_spark:
-        print("  Stage 2: Spark Finder (Claude SDK) ...")
-        spark_review = await run_reviewer_claude(
-            "spark_finder", SPARK_FINDER_PROMPT, pp, paper_content, MODEL_SPARK, venue="ICLR",
-        )
-        print(f"\n  {sep}\n  [spark_finder output]\n  {sep}\n{spark_review}\n")
-    else:
-        spark_review = "Spark finder was skipped."
-
-    # Stage 3: Merger (Claude SDK — waits for everything)
-    print("  Stage 3: Merger (Claude SDK) ...")
+    # Phase 2: Merger (waits for all reviewers)
+    print("  Phase 2: Merger ...")
     final_review = await run_merger(
-        harsh_review, neutral_review,
+        client, harsh_review, neutral_review,
         spark_review, related_work, paper_content,
         calibration_context=calibration_context,
     )
-    print(f"\n  {sep}\n  [merger output]\n  {sep}\n{final_review}\n")
+    print(f"\n  {sep}\n  [merger output] ({len(final_review)} chars)\n  {sep}\n{final_review}\n")
 
     score, decision = parse_score_and_decision(final_review)
 
