@@ -61,35 +61,69 @@ from paper_reviewer import (
     sanitize_text,
 )
 
-# ── Paths ─────────────────────────────────────────────────────────────
+# ── Paths (defaults to AI-Scientist, overridable with --data-dir) ─────
 
-BENCH_DIR = Path(__file__).parent / "AI-Scientist" / "review_iclr_bench"
-RATINGS_FILE = BENCH_DIR / "ratings_subset.tsv"
-PAPERS_DIR = BENCH_DIR / "iclr_parsed"
+DEFAULT_BENCH_DIR = Path(__file__).parent / "AI-Scientist" / "review_iclr_bench"
 
 # ── Helpers ───────────────────────────────────────────────────────────
 
 
-def load_ground_truth() -> list[dict]:
-    rows = []
-    with open(RATINGS_FILE, "r") as f:
-        reader = csv.DictReader(f, delimiter="\t")
-        for row in reader:
-            scores = []
-            for i in range(7):
-                val = row.get(str(i), "").strip()
-                if val:
-                    scores.append(float(val))
-            decision = row["decision"].strip()
-            gt_binary = "Accept" if "Accept" in decision else "Reject"
-            rows.append({
-                "paper_id": row["paper_id"].strip(),
-                "scores": scores,
-                "avg_score": sum(scores) / len(scores) if scores else 0,
-                "decision": decision,
-                "gt_binary": gt_binary,
-            })
-    return rows
+def load_ground_truth(bench_dir: Path) -> tuple[list[dict], Path]:
+    """Load GT from either AI-Scientist TSV or iclr2025_data CSV format."""
+    # Try iclr2025_data format first (CSV with paper_id, title, decision, gt_binary, avg_score, score_0..5)
+    csv_file = bench_dir / "ratings.csv"
+    tsv_file = bench_dir / "ratings_subset.tsv"
+
+    if csv_file.exists():
+        papers_dir = bench_dir / "papers"
+        rows = []
+        with open(csv_file, "r") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                scores = []
+                for i in range(6):
+                    val = row.get(f"score_{i}", "").strip()
+                    if val:
+                        scores.append(float(val))
+                decision = row.get("decision", "").strip()
+                gt_binary = row.get("gt_binary", "").strip()
+                if not gt_binary:
+                    gt_binary = "Accept" if "Accept" in decision else "Reject"
+                rows.append({
+                    "paper_id": row["paper_id"].strip(),
+                    "title": row.get("title", "").strip(),
+                    "scores": scores,
+                    "avg_score": float(row.get("avg_score", 0)),
+                    "decision": decision,
+                    "gt_binary": gt_binary,
+                })
+        return rows, papers_dir
+
+    elif tsv_file.exists():
+        papers_dir = bench_dir / "iclr_parsed"
+        rows = []
+        with open(tsv_file, "r") as f:
+            reader = csv.DictReader(f, delimiter="\t")
+            for row in reader:
+                scores = []
+                for i in range(7):
+                    val = row.get(str(i), "").strip()
+                    if val:
+                        scores.append(float(val))
+                decision = row["decision"].strip()
+                gt_binary = "Accept" if "Accept" in decision else "Reject"
+                rows.append({
+                    "paper_id": row["paper_id"].strip(),
+                    "title": "",
+                    "scores": scores,
+                    "avg_score": sum(scores) / len(scores) if scores else 0,
+                    "decision": decision,
+                    "gt_binary": gt_binary,
+                })
+        return rows, papers_dir
+
+    else:
+        raise FileNotFoundError(f"No ratings file found in {bench_dir}")
 
 
 VALID_SCORES = [1.0, 3.0, 5.0, 6.0, 8.0, 10.0]
@@ -248,10 +282,13 @@ def stratified_sample(papers: list[dict], n: int, seed: int) -> list[dict]:
     return samples
 
 
-async def main(n_samples: int = 10, seed: int = 42, parallel: bool = False, skip_related_work: bool = False, skip_spark: bool = False, balanced: bool = False):
+async def main(n_samples: int = 10, seed: int = 42, parallel: bool = False, skip_related_work: bool = False, skip_spark: bool = False, balanced: bool = False, data_dir: str | None = None):
+    bench_dir = Path(data_dir) if data_dir else DEFAULT_BENCH_DIR
+
     print("=" * 72)
     print("ICLR Benchmark: Multi-Agent Paper Reviewer")
-    print("  Claude SDK (free): critic + merger")
+    print(f"  Data: {bench_dir}")
+    print("  Claude SDK (free): critic + spark + merger")
     print("  OpenRouter (paid): neutral + related work")
     print("=" * 72)
     print(f"Mode: {'parallel' if parallel else 'sequential'}")
@@ -261,10 +298,10 @@ async def main(n_samples: int = 10, seed: int = 42, parallel: bool = False, skip
     print(f"  Neutral (OpenRouter):            {MODEL_NEUTRAL}")
     print(f"  Related Work (OpenRouter):       {MODEL_RELATED_WORK}")
 
-    gt_data = load_ground_truth()
+    gt_data, papers_dir = load_ground_truth(bench_dir)
     print(f"\nLoaded {len(gt_data)} papers from ground truth.")
 
-    available = [r for r in gt_data if (PAPERS_DIR / f"{r['paper_id']}.txt").exists()]
+    available = [r for r in gt_data if (papers_dir / f"{r['paper_id']}.txt").exists()]
     print(f"Papers with parsed text: {len(available)}")
 
     if balanced:
@@ -293,7 +330,7 @@ async def main(n_samples: int = 10, seed: int = 42, parallel: bool = False, skip
 
     for i, paper_info in enumerate(samples, 1):
         pid = paper_info["paper_id"]
-        paper_path = PAPERS_DIR / f"{pid}.txt"
+        paper_path = papers_dir / f"{pid}.txt"
 
         print(f"\n{'─' * 72}")
         print(f"[{i}/{len(samples)}] Paper: {pid}")
@@ -422,7 +459,12 @@ if __name__ == "__main__":
     skip_related = "--no-related-work" in sys.argv
     skip_spark = "--no-spark" in sys.argv
     balanced = "--balanced" in sys.argv
-    args = [a for a in sys.argv[1:] if not a.startswith("--")]
+    data_dir = None
+    if "--data-dir" in sys.argv:
+        idx = sys.argv.index("--data-dir")
+        if idx + 1 < len(sys.argv):
+            data_dir = sys.argv[idx + 1]
+    args = [a for a in sys.argv[1:] if not a.startswith("--") and a != data_dir]
     n = int(args[0]) if len(args) > 0 else 10
     seed = int(args[1]) if len(args) > 1 else 42
-    asyncio.run(main(n_samples=n, seed=seed, parallel=parallel, skip_related_work=skip_related, skip_spark=skip_spark, balanced=balanced))
+    asyncio.run(main(n_samples=n, seed=seed, parallel=parallel, skip_related_work=skip_related, skip_spark=skip_spark, balanced=balanced, data_dir=data_dir))
