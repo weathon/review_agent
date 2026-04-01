@@ -150,10 +150,11 @@ def download_pdf(or_client, paper_id: str) -> Path | None:
 
 
 def pdf_to_markdown(pdf_path: Path) -> str:
-    """Convert PDF to markdown text."""
+    """Convert PDF to markdown text, cleaning up line numbers and artifacts."""
+    import re
     import pymupdf4llm
     try:
-        return pymupdf4llm.to_markdown(str(pdf_path))
+        text = pymupdf4llm.to_markdown(str(pdf_path))
     except Exception as e:
         print(f"    PDF conversion error: {e}")
         # Fallback to pymupdf
@@ -162,10 +163,17 @@ def pdf_to_markdown(pdf_path: Path) -> str:
             doc = pymupdf.open(str(pdf_path))
             text = "\n\n".join(page.get_text() for page in doc)
             doc.close()
-            return text
         except Exception as e2:
             print(f"    Fallback also failed: {e2}")
             return ""
+
+    # Clean up line numbers (e.g. **000**, **001**, **012 013**)
+    text = re.sub(r"\*\*\d{3}(?:\s+\d{3})*\*\*\s*", "", text)
+    # Remove "Under review as a conference paper at ICLR 20XX" header
+    text = re.sub(r"Under review as a conference paper at ICLR \d{4}\s*\n?", "", text)
+    # Collapse excessive blank lines
+    text = re.sub(r"\n{4,}", "\n\n\n", text)
+    return text.strip()
 
 
 def stratified_sample(papers, n, seed):

@@ -61,35 +61,62 @@ to be picky or find fault for its own sake. Instead, you engage seriously with \
 the paper and raise genuine questions, concerns, and insights that the authors \
 need to address.
 
-Your job:
-- Identify real concerns: Are the claims actually supported by the evidence? \
-  Are there logical gaps in the reasoning? Are key assumptions stated and justified?
-- Raise substantive questions: What would you need to see to be convinced? \
-  What experiments or analyses are missing that would materially change the \
-  conclusions?
-- Offer critical insights: Where does the paper's approach have fundamental \
-  limitations the authors may not have recognized? What failure modes exist?
-- Distinguish severity honestly: Not everything is critical. Be calibrated — \
-  a missing ablation is not the same as a flawed proof.
+You MUST evaluate EACH section of the paper individually using the rubric below. \
+Do not give vague general comments — cite specific sections, equations, figures, \
+tables, or claims when raising concerns.
 
 Do NOT nitpick formatting, style, or minor phrasing. Do NOT invent problems \
 that aren't there. Do NOT penalize intentional scope decisions. Focus on what \
 actually matters for the paper's contribution.
 
-Output format (strictly follow):
-## Critical Review
+Output format (strictly follow — evaluate EVERY section):
 
-### Substantive Concerns
-- ... (things that undermine the paper's claims if unaddressed)
+## Section-by-Section Critical Review
 
-### Open Questions
-- ... (things you'd want the authors to clarify or investigate)
+### Title & Abstract
+- Does the title accurately reflect the contribution?
+- Does the abstract clearly state the problem, method, and key results?
+- Are any claims in the abstract unsupported by the paper?
 
-### Limitations & Blind Spots
-- ... (fundamental limitations the authors may have missed)
+### Introduction & Motivation
+- Is the problem well-motivated? Is the gap in prior work clearly identified?
+- Are the contributions clearly stated and accurate?
+- Does the introduction over-claim or under-sell?
+
+### Related Work
+- Are the most relevant baselines and prior work cited?
+- Is the positioning against prior work fair and accurate?
+- Are there obvious missing references?
+
+### Method / Approach
+- Is the method clearly described and reproducible?
+- Are key assumptions stated and justified?
+- Are there logical gaps in the derivation or reasoning?
+- Are there edge cases or failure modes not discussed?
+- For theoretical claims: are proofs correct and complete?
+
+### Experiments & Results
+- Do the experiments actually test the paper's claims?
+- Are baselines appropriate and fairly compared?
+- Are there missing ablations that would materially change conclusions?
+- Are error bars / statistical significance reported?
+- Do the results support the claims made, or are they cherry-picked?
+- Are datasets and evaluation metrics appropriate?
+
+### Writing & Clarity
+- Are there sections that are confusing or poorly explained?
+- Are figures and tables clear and informative?
+(Do NOT nitpick grammar or formatting — only flag clarity issues that \
+impede understanding of the contribution.)
+
+### Limitations & Broader Impact
+- Do the authors acknowledge the key limitations?
+- Are there fundamental limitations they missed?
+- Are there failure modes or negative societal impacts not discussed?
 
 ### Overall Assessment
-One paragraph. Be honest and direct, but fair.
+One paragraph. Summarize the most important concerns and whether the \
+contribution stands despite them. Be honest, direct, and calibrated.
 """
 
 SUPPORTIVE_CHAMPION_PROMPT = """\
@@ -150,31 +177,44 @@ Output format (strictly follow):
 """
 
 SPARK_FINDER_PROMPT = """\
-You are NOT a traditional reviewer. You are an intellectual explorer looking \
-for hidden gems, unexpected connections, and creative sparks in this paper.
+You are a constructive research advisor, NOT a critic. Your job is to identify \
+what is MISSING or INCOMPLETE in this paper — not as weaknesses, but as \
+opportunities that would make the work significantly stronger.
+
+Think of yourself as a senior collaborator who has read the paper and is now \
+brainstorming with the authors about what to add next.
 
 Your job:
-- Identify the most exciting or novel ideas, even if under-developed.
-- Suggest surprising connections to other fields or problems.
-- Propose creative extensions or applications the authors may not have considered.
-- Highlight any unconventional methodology that could inspire new directions.
-- Ignore minor writing/formatting issues — focus on the IDEAS.
+- What experiments are missing that would strengthen the claims? Be specific \
+  about datasets, baselines, ablations, or analysis types.
+- What theoretical insights or analysis could deepen the contribution? \
+  (e.g., convergence guarantees, complexity analysis, connections to known results)
+- What additional applications or domains could this method be tested on?
+- What visualizations, case studies, or qualitative analysis would help the \
+  reader understand when/why the method works or fails?
+- What are natural next steps that build directly on this work?
+
+Frame everything POSITIVELY — "the paper would be stronger with X" not \
+"the paper is weak because it lacks X". These are suggestions to help \
+the authors, not ammunition for rejection.
 
 Output format (strictly follow):
-## Spark & Insight Report
+## Strengthening Opportunities
 
-### Most Exciting Ideas
-1. ...
+### Missing Experiments
+1. ... (be specific: what dataset, what baseline, what would it show)
 
-### Unexpected Connections
-1. ...
+### Deeper Analysis Needed
+1. ... (theoretical insights, ablations, or understanding that's absent)
 
-### Creative Extensions
-1. ...
+### Untapped Applications
+1. ... (domains or use cases the authors haven't explored)
 
-### Sleeper Potential
-What's the one thing in this paper that could become much bigger than the \
-authors realize? Explain why.
+### Visualizations & Case Studies
+1. ... (what would help the reader understand the method better)
+
+### Natural Next Steps
+1. ... (what should the authors work on next, building on this paper)
 """
 
 RELATED_WORK_PROMPT = """\
@@ -244,48 +284,36 @@ about the same paper:
 
 Your job is to synthesize these into ONE authoritative final review.
 
-IMPORTANT — many criticisms from the harsh reviewer may be NONSENSICAL, \
-OVERLY PICKY, or WRONG. LLM reviewers are notorious for inventing flaws \
-that don't exist, nitpicking irrelevant details, or misunderstanding the \
-paper. You MUST cross-check every criticism against the actual paper content \
-and the other reviews before including it.
+Cross-check every criticism against the actual paper content and the other \
+reviews. Remove criticisms that are factually wrong about the paper, that \
+misunderstand the contribution, or that are pure formatting/style nitpicks. \
+But do NOT excuse real problems — if the critic and neutral reviewer both \
+flag the same issue, it's real.
 
 Rules:
-- REMOVE nonsensical criticisms: if the harsh critic flags something that \
-  doesn't actually exist in the paper or misunderstands the contribution, \
-  drop it immediately.
-- REMOVE overly picky nitpicks: formatting, minor phrasing, stylistic \
-  preferences — these are NOT real weaknesses.
-- REMOVE false positives: if the harsh critic flags something that the neutral \
-  reviewer found acceptable and it's genuinely fine, drop it.
-- KEEP ONLY criticisms that are: (a) factually correct about the paper, \
-  (b) substantive enough to affect the contribution, AND (c) corroborated \
-  by at least one other reviewer or clearly evident in the paper.
-- KEEP genuine strengths that the neutral reviewer identifies with evidence.
-- KEEP creative insights from the spark finder that are grounded and actionable.
-- For the potentially missed related work: present them as SUGGESTIONS for the \
-  authors to consider, NOT as definitive gaps. Use language like "the authors \
-  may wish to consider" or "potentially relevant work includes". Do NOT penalize \
-  the paper's score for these — they are informational only.
-- When in doubt, FAVOR the paper — a real area chair gives authors the benefit \
-  of the doubt on borderline issues.
+- REMOVE criticisms that are factually wrong or misunderstand the paper.
+- REMOVE pure formatting/style nitpicks.
+- KEEP criticisms that are factually correct AND substantive, even if only \
+  one reviewer raised them — a single valid concern still counts.
+- KEEP genuine strengths backed by evidence.
+- For potentially missed related work: present as suggestions, do not penalize.
 
-SCOPE CHECK — for EVERY weakness, you MUST ask yourself:
-1. Is this a REAL weakness that undermines the paper's claims, or is it a \
-   "nice-to-have" that would improve the paper but is not necessary for the \
-   contribution to stand? Only real weaknesses go in "weaknesses". \
-   Nice-to-haves go in "nice_to_haves".
-2. Could this be INTENTIONAL? Papers have limited space and must make scope \
-   decisions. If the authors likely omitted something deliberately to stay \
-   focused (e.g., not testing on every dataset, not comparing every baseline, \
-   not including proofs for standard results), that is a scope decision, not \
-   a weakness. Think WITH the paper, not against it.
-3. Is this within the paper's stated scope? If the paper says "we focus on X" \
-   and the criticism is "they didn't do Y", that's out of scope — put it in \
-   nice_to_haves at best, or drop it entirely.
+CALIBRATION — you MUST be realistic about quality. Most papers submitted to \
+top venues are NOT strong accepts. The score distribution at ICLR is roughly:
+- ~5% score 8+ (strong accept)
+- ~25% score 6 (borderline accept)
+- ~40% score 5 (borderline reject)
+- ~30% score 3 or below (clear reject)
+If a paper has weak experiments, unclear contributions, or incremental novelty, \
+give it a LOW score. Do NOT inflate scores out of politeness. A 5.0 is not a \
+bad score — it means the paper has some merit but real issues.
 
-Only penalize the score for REAL weaknesses. Nice-to-haves and out-of-scope \
-items should NOT affect the score.
+SCOPE CHECK — for each weakness, ask: is this a real flaw in the paper's \
+claims, or just something extra that would be nice to have? \
+Real flaws go in "weaknesses" and hurt the score. \
+Nice-to-haves go in "nice_to_haves" and do NOT affect the score. \
+But be honest — missing baselines, unsupported claims, and flawed experiments \
+are real weaknesses, not nice-to-haves.
 
 You MUST output your final review as a single JSON object (no markdown, no \
 extra text before or after). Use this exact schema:
@@ -364,7 +392,7 @@ async def _call_claude_sdk(
                 allowed_tools=["TodoRead", "TodoWrite", "WebSearch", "WebFetch"],
                 permission_mode="bypassPermissions",
                 env={"CLAUDECODE": ""},  # Fix #573: clear inherited env var
-                extra_args={"effort": "high"},
+                extra_args={"effort": "medium"},
             )
             chunks: list[str] = []
             got_result = False
@@ -468,6 +496,11 @@ async def run_reviewer_claude(
     user_prompt = (
         f"{venue_line}"
         f"Review the following paper thoroughly.\n\n"
+        f"NOTE: This paper was extracted from PDF by an automated parser. "
+        f"There may be formatting artifacts such as broken equations, garbled "
+        f"tables, misplaced figure references, or OCR errors. These are parser "
+        f"issues, NOT problems with the paper itself. Do NOT treat formatting "
+        f"artifacts as weaknesses.\n\n"
         f"Paper file: {paper_path}\n\n"
         f"--- PAPER CONTENT START ---\n"
         f"{paper_content}\n"
@@ -495,6 +528,11 @@ async def run_reviewer_openrouter(
     user_prompt = (
         f"{venue_line}"
         f"Review the following paper thoroughly.\n\n"
+        f"NOTE: This paper was extracted from PDF by an automated parser. "
+        f"There may be formatting artifacts such as broken equations, garbled "
+        f"tables, misplaced figure references, or OCR errors. These are parser "
+        f"issues, NOT problems with the paper itself. Do NOT treat formatting "
+        f"artifacts as weaknesses.\n\n"
         f"Paper file: {paper_path}\n\n"
         f"--- PAPER CONTENT START ---\n"
         f"{paper_content}\n"
@@ -533,7 +571,8 @@ async def run_related_work_search(
         "related_work_filter",
         RELATED_WORK_FILTER_PROMPT,
         (
-            f"Here is the FULL PAPER (check references and citations carefully):\n\n"
+            f"Here is the FULL PAPER (extracted from PDF — ignore formatting artifacts). "
+            f"Check references and citations carefully:\n\n"
             f"--- PAPER CONTENT START ---\n"
             f"{paper_content}\n"
             f"--- PAPER CONTENT END ---\n\n"
@@ -557,7 +596,8 @@ async def run_merger(
     """Run the merger via Claude Code SDK (free)."""
     print("  [merger] started (Claude SDK) ...")
     user_prompt = (
-        f"Here is the paper being reviewed:\n\n"
+        f"Here is the paper being reviewed (extracted from PDF — formatting "
+        f"artifacts are parser issues, not paper problems):\n\n"
         f"--- PAPER CONTENT START ---\n"
         f"{paper_content}\n"
         f"--- PAPER CONTENT END ---\n\n"

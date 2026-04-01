@@ -186,10 +186,6 @@ async def review_single_paper(
     paper_content = paper_path.read_text(encoding="utf-8", errors="replace")
     paper_content = sanitize_text(paper_content)
 
-    max_chars = 60_000
-    if len(paper_content) > max_chars:
-        paper_content = paper_content[:max_chars] + "\n\n[... truncated for length ...]"
-
     print(f"  Paper length: {len(paper_content):,} chars")
 
     client = _get_client()
