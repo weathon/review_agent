@@ -111,32 +111,6 @@ One paragraph. Summarize the most important concerns and whether the \
 contribution stands despite them. Be honest, direct, and calibrated.
 """
 
-SUPPORTIVE_CHAMPION_PROMPT = """\
-You are a supportive, encouraging academic reviewer who champions good work. \
-You genuinely want papers to succeed and look for reasons to accept.
-
-Your job:
-- Identify and celebrate the paper's strengths generously.
-- Give the authors the benefit of the doubt on ambiguous points.
-- Reframe potential weaknesses as opportunities or future work.
-- Highlight what the paper does RIGHT and why it matters.
-- If you must mention a weakness, be constructive and kind about it.
-
-Output format (strictly follow):
-## Supportive Review
-
-### What This Paper Does Well
-1. ...
-
-### Why This Work Matters
-...
-
-### Areas for Growth (not criticism)
-1. ...
-
-### Encouraging Summary
-One paragraph. Be genuinely supportive but still grounded in evidence.
-"""
 
 NEUTRAL_REVIEWER_PROMPT = """\
 You are a fair, balanced academic reviewer. You give credit where due and \
@@ -264,8 +238,10 @@ If all works are already cited or not relevant, say:
 "No significant potentially missed related work identified."
 """
 
+
+
 MERGER_PROMPT = """\
-You are a senior meta-reviewer / area chair. You have received five inputs \
+You are a senior meta-reviewer / area chair. You have received four inputs \
 about the same paper:
 
 1. A **harsh critic** review (may be overly critical)
@@ -290,23 +266,6 @@ Rules:
 - KEEP genuine strengths backed by evidence.
 - For potentially missed related work: present as suggestions, do not penalize.
 
-CALIBRATION — you MUST be realistic about quality. Most papers submitted to \
-top venues are NOT strong accepts. The score distribution at ICLR is roughly:
-- ~5% score 8+ (strong accept)
-- ~25% score 6 (borderline accept)
-- ~40% score 5 (borderline reject)
-- ~30% score 3 or below (clear reject)
-If a paper has weak experiments, unclear contributions, or incremental novelty, \
-give it a LOW score. Do NOT inflate scores out of politeness. A 5.0 is not a \
-bad score — it means the paper has some merit but real issues.
-
-SCOPE CHECK — for each weakness, ask: is this a real flaw in the paper's \
-claims, or just something extra that would be nice to have? \
-Real flaws go in "weaknesses" and hurt the score. \
-Nice-to-haves go in "nice_to_haves" and do NOT affect the score. \
-But be honest — missing baselines, unsupported claims, and flawed experiments \
-are real weaknesses, not nice-to-haves.
-
 You MUST output your final review as a single JSON object (no markdown, no \
 extra text before or after). Use this exact schema:
 
@@ -318,10 +277,33 @@ extra text before or after). Use this exact schema:
   "novel_insights": "synthesized from spark finder, grounded observations only",
   "missed_related_work": ["paper 1 — why relevant", "paper 2 — why relevant"],
   "suggestions": ["suggestion 1", "suggestion 2"],
-  "score": <float>,
-  "score_justification": "one-line justification",
-  "decision": "<Accept or Reject>"
 }
+"""
+
+
+
+SCORE_PROMPT = """\
+You are a paper review agent. You have received four inputs \
+about the same paper:
+
+1. A **harsh critic** review (may be overly critical)
+2. A **neutral/balanced** review
+3. A **spark finder** report (focuses on insights, not flaws)
+4. A **potentially missed related work** report (these are SUGGESTIONS, not \
+   definitive omissions — the authors may have good reasons for not citing them)
+5. A final consolidated review
+
+
+CALIBRATION — you MUST be realistic about quality. Most papers submitted to \
+top venues are NOT strong accepts. The score distribution at ICLR is roughly:
+- ~5% score 8+ (strong accept)
+- ~25% score 6 (borderline accept)
+- ~40% score 5 (borderline reject)
+- ~30% score 3 or below (clear reject)
+If a paper has weak experiments, unclear contributions, or incremental novelty, \
+give it a LOW score. Do NOT inflate scores out of politeness. A 5.0 is not a \
+bad score — it means the paper has some merit but real issues.
+
 
 The "score" field is a CONTINUOUS value from 1.0 to 10.0 (e.g. 3.5, 4.7, 6.2, 8.1). \
 Use the full range — do NOT cluster around 5-6. Be DISCRIMINATIVE:
@@ -338,9 +320,20 @@ Scoring guide:
 
 The "decision" field MUST be exactly "Accept" or "Reject".
 
-Output ONLY the JSON object. No other text.
-"""
+SCOPE CHECK — for each weakness, ask: is this a real flaw in the paper's \
+claims, or just something extra that would be nice to have? \
+Real flaws go in "weaknesses" and hurt the score. \
+Nice-to-haves go in "nice_to_haves" and it could affect the scores but not significantly as weaknesses. \
+But be honest — missing baselines, unsupported claims, and flawed experiments \
+are real weaknesses, not nice-to-haves.
 
+
+You will also be given a set of calibration examples (if available) — these are examples \
+with same structure as above, but with a list of actual human scores and decisions for each paper. \
+Use these to calibrate your scoring — they show what real scores look like for different quality levels.
+
+Output format: a single float only for the score. 
+"""
 
 # ── Core logic ────────────────────────────────────────────────────────
 
@@ -507,20 +500,20 @@ async def run_merger(
     print(f"  [merger] started ({MODEL_MERGER.split('/')[-1]}) ...")
 
     calibration_block = ""
-    if calibration_context:
-        calibration_block = (
-            f"Here are examples of sub-agent reviews for other papers, paired with\n"
-            f"the ACTUAL human reviewer scores and decisions. Use these to calibrate\n"
-            f"your scoring — they show what real scores look like for different\n"
-            f"quality levels:\n\n"
-            f"--- CALIBRATION EXAMPLES ---\n"
-            f"{calibration_context}\n"
-            f"--- END CALIBRATION EXAMPLES ---\n\n"
-            f"Now review the current paper:\n\n"
-        )
+    # if calibration_context:
+    #     calibration_block = (
+    #         f"Here are examples of sub-agent reviews for other papers, paired with\n"
+    #         f"the ACTUAL human reviewer scores and decisions. Use these to calibrate\n"
+    #         f"your scoring — they show what real scores look like for different\n"
+    #         f"quality levels:\n\n"
+    #         f"--- CALIBRATION EXAMPLES ---\n"
+    #         f"{calibration_context}\n"
+    #         f"--- END CALIBRATION EXAMPLES ---\n\n"
+    #         f"Now review the current paper:\n\n"
+    #     )
 
     user_prompt = (
-        f"{calibration_block}"
+        # f"{calibration_block}"
         f"Here is the paper being reviewed (extracted from PDF — formatting "
         f"artifacts are parser issues, not paper problems):\n\n"
         f"--- PAPER CONTENT START ---\n"
@@ -533,7 +526,7 @@ async def run_merger(
         f"# Report 4: Potentially Missed Related Work\n"
         f"(NOTE: These are SUGGESTIONS only. The search agent may have found \n"
         f"works that are not truly missed or are only tangentially related. \n"
-        f"Do NOT penalize the paper's score for these.)\n"
+        # f"Do NOT penalize the paper's score for these.)\n"
         f"{related_work}\n\n"
         f"Now produce the final consolidated review following your instructions. "
         f"Remember: many of the harsh critic's points may be nonsensical or overly "
@@ -541,6 +534,40 @@ async def run_merger(
     )
     return await _call_openrouter(client, "merger", MERGER_PROMPT, user_prompt, MODEL_MERGER)
 
+
+
+async def run_score_predictor(
+    client: AsyncOpenAI,
+    harsh_review: str,
+    neutral_review: str,
+    spark_review: str,
+    related_work: str,
+    final_review: str,
+    calibration_context: str = "",
+) -> float:
+    """Run a score predictor (optional, can be used for calibration)."""
+    
+    calibration_block = ""
+    if calibration_context:
+        calibration_block = (
+            f"Here are examples of reviews for other papers, paired with\n"
+            f"the ACTUAL human reviewer scores and decisions. Use these to calibrate\n"
+            f"your scoring — they show what real scores look like for different\n"
+            f"quality levels:\n\n"
+            f"--- CALIBRATION EXAMPLES ---\n" 
+            f"{calibration_context}\n"
+            f"--- END CALIBRATION EXAMPLES ---\n\n"
+            f"Now review the current paper:\n\n"
+            f"Harsh Critic Review:\n{harsh_review}\n\n"
+            f"Neutral Review:\n{neutral_review}\n\n"
+            f"Spark Finder Review:\n{spark_review}\n\n"
+            f"Related Work Review:\n{related_work}\n\n"
+            f"Final Review:\n{final_review}\n\n"
+        )
+    return await _call_openrouter(client, "score_predictor", SCORE_PROMPT, calibration_block, MODEL_MERGER)
+    
+
+    
 
 # ── Main orchestration ────────────────────────────────────────────────
 
@@ -624,6 +651,10 @@ async def review_paper(
         spark_review, related_work, paper_content,
         calibration_context=calibration_context,
     )
+
+
+    final_score = await run_score_predictor(client, harsh_review, neutral_review,
+        spark_review, related_work, final_review, calibration_context=calibration_context) 
 
     # ── Output ────────────────────────────────────────────────────
     separator = "=" * 72

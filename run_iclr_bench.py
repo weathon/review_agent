@@ -57,6 +57,7 @@ from paper_reviewer import (
     run_merger,
     run_related_work_search,
     run_reviewer,
+    run_score_predictor,
     sanitize_text,
 )
 
@@ -233,16 +234,33 @@ async def review_single_paper(
     if not skip_related_work:
         print(f"\n  {sep}\n  [related_work output] ({len(related_work)} chars)\n  {sep}\n{related_work}\n")
 
-    # Phase 2: Merger (waits for all reviewers)
+    # Phase 2: Merger (review only, no score)
     print("  Phase 2: Merger ...")
     final_review = await run_merger(
         client, harsh_review, neutral_review,
         spark_review, related_work, paper_content,
-        calibration_context=calibration_context,
     )
     print(f"\n  {sep}\n  [merger output] ({len(final_review)} chars)\n  {sep}\n{final_review}\n")
 
-    score, decision = parse_score_and_decision(final_review)
+    # Phase 3: Score predictor (with calibration)
+    print("  Phase 3: Score predictor ...")
+    score_str = await run_score_predictor(
+        client, harsh_review, neutral_review,
+        spark_review, related_work, final_review,
+        calibration_context=calibration_context,
+    )
+    print(f"  [score_predictor] raw output: {score_str}")
+
+    # Parse score from the raw output (should be a single float)
+    score = None
+    decision = None
+    try:
+        score = round(float(str(score_str).strip()), 1)
+    except (ValueError, TypeError):
+        # Fallback: try to extract a number
+        score, decision = parse_score_and_decision(str(score_str))
+    if score is not None and decision is None:
+        decision = "Accept" if score >= 5.5 else "Reject"
 
     return {
         "final_review": final_review,

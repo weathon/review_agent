@@ -22,12 +22,15 @@ from pathlib import Path
 from paper_reviewer import (
     HARSH_CRITIC_PROMPT,
     MODEL_HARSH,
+    MODEL_MERGER,
     MODEL_NEUTRAL,
     MODEL_RELATED_WORK,
     MODEL_SPARK,
+    MERGER_PROMPT,
     NEUTRAL_REVIEWER_PROMPT,
     SPARK_FINDER_PROMPT,
     _get_client,
+    run_merger,
     run_related_work_search,
     run_reviewer,
     sanitize_text,
@@ -66,18 +69,18 @@ def sample_one_per_bin(papers: list[dict], seed: int) -> list[dict]:
     return samples
 
 
-async def run_sub_agents(
+async def run_sub_agents_and_merger(
     paper_info: dict, paper_path: Path,
     parallel: bool = False, skip_spark: bool = False, skip_related_work: bool = False,
 ) -> dict:
-    """Run sub-agents only (no merger). Return all outputs."""
+    """Run sub-agents + merger (no score). Return all outputs."""
     paper_content = paper_path.read_text(encoding="utf-8", errors="replace")
     paper_content = sanitize_text(paper_content)
 
     client = _get_client()
     pp = str(paper_path)
 
-    # All reviewers (parallel or sequential) — all via OpenRouter
+    # Phase 1: All reviewers (parallel or sequential) — all via OpenRouter
     if parallel:
         tasks = [
             run_reviewer(client, "harsh_critic", HARSH_CRITIC_PROMPT, pp, paper_content, MODEL_HARSH, venue="ICLR"),
@@ -106,16 +109,24 @@ async def run_sub_agents(
         else:
             related_work = ""
 
+    # Phase 2: Merger (review only, no score)
+    print("  Running merger (no score) ...")
+    merged_review = await run_merger(
+        client, harsh_review, neutral_review,
+        spark_review, related_work, paper_content,
+    )
+
     return {
         "harsh_review": harsh_review,
         "neutral_review": neutral_review,
         "spark_review": spark_review,
         "related_work": related_work,
+        "merged_review": merged_review,
     }
 
 
 def build_calibration_md(results: list[dict]) -> str:
-    """Build calibration markdown from sub-agent outputs + human scores."""
+    """Build calibration markdown from sub-agent + merger outputs + human scores."""
     parts = []
     for i, r in enumerate(results, 1):
         parts.append(f"=== CALIBRATION EXAMPLE {i} ===\n")
@@ -125,6 +136,7 @@ def build_calibration_md(results: list[dict]) -> str:
             parts.append(f"# Review 3: Spark Finder\n{r['spark_review']}\n")
         if r["related_work"]:
             parts.append(f"# Report: Potentially Missed Related Work\n{r['related_work']}\n")
+        parts.append(f"# Final Consolidated Review (no score)\n{r['merged_review']}\n")
         parts.append(f"# ACTUAL HUMAN SCORES AND DECISION")
         parts.append(f"Individual reviewer scores: {r['scores']}")
         parts.append(f"Average score: {r['avg_score']:.1f}")
@@ -164,7 +176,7 @@ async def main(
         print(f"{'─' * 72}")
 
         start = time.time()
-        outputs = await run_sub_agents(
+        outputs = await run_sub_agents_and_merger(
             paper_info, paper_path,
             parallel=parallel, skip_spark=skip_spark, skip_related_work=skip_related_work,
         )
