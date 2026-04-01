@@ -5,17 +5,17 @@ An automated academic paper review system that uses multiple LLM agents with dif
 ## Architecture
 
 ```
-Phase 1 (all parallel via OpenRouter):
-  ├── Critical Reviewer ──── GPT-5.4 (reasoning: high)
-  ├── Neutral Reviewer ───── GLM-5
-  ├── Spark Finder ────────── GPT-5.4 (reasoning: high)
-  └── Related Work Scout ─── Perplexity sonar-pro → GLM-5 filter
+Phase 1 (all parallel via OpenAI Responses API):
+  ├── Critical Reviewer ──── GPT-5-nano (reasoning: high)
+  ├── Neutral Reviewer ───── GPT-5-nano
+  ├── Spark Finder ───────── GPT-5-nano (reasoning: high)
+  └── Related Work Scout ─── GPT-5-nano + web_search → GPT-5-nano filter
 
 Phase 2:
-  └── Merger ──────────────── GPT-5.4 (reasoning: high)
+  └── Merger ──────────────── GPT-5-nano (reasoning: high)
 
 Phase 3:
-  └── Score Predictor ─────── GPT-5.4 (reasoning: high)
+  └── Score Predictor ─────── GPT-5-nano (reasoning: high)
       (optionally calibrated with few-shot examples)
 ```
 
@@ -23,15 +23,15 @@ Phase 3:
 
 | Agent | Model | Role |
 |-------|-------|------|
-| Critical Reviewer | GPT-5.4 | Section-by-section rubric review — raises genuine concerns, not nitpicks |
-| Neutral Reviewer | GLM-5 | Balanced assessment with strengths, weaknesses, novelty |
-| Spark Finder | GPT-5.4 | Identifies missing experiments, deeper analysis, untapped applications |
-| Related Work Scout | Perplexity sonar-pro | Web-grounded search for potentially missed references |
-| Related Work Filter | GLM-5 | Removes already-cited and loosely related results |
-| Merger | GPT-5.4 | Synthesizes all inputs into a final JSON review |
-| Score Predictor | GPT-5.4 | Predicts a continuous score from the multi-agent reviews |
+| Critical Reviewer | GPT-5-nano | Section-by-section rubric review — raises genuine concerns, not nitpicks |
+| Neutral Reviewer | GPT-5-nano | Balanced assessment with strengths, weaknesses, novelty |
+| Spark Finder | GPT-5-nano | Identifies missing experiments, deeper analysis, untapped applications |
+| Related Work Scout | GPT-5-nano + web search | Proposes potentially missed references using the Responses API web search tool |
+| Related Work Filter | GPT-5-nano | Removes already-cited and loosely related results |
+| Merger | GPT-5-nano | Synthesizes all inputs into a final JSON review |
+| Score Predictor | GPT-5-nano | Predicts a continuous score from the multi-agent reviews |
 
-All calls go through OpenRouter. GPT-5.4 uses `reasoning.effort = "high"` for deeper analysis.
+All calls go through the official OpenAI API using the Responses API. `reasoning={"effort": "high"}` is passed as a top-level parameter for reasoning-capable models where appropriate.
 
 ## Review And Scoring Design
 
@@ -72,8 +72,8 @@ cd review_agent
 # Install dependencies
 pip install openai python-dotenv openreview-py pymupdf4llm
 
-# Set your OpenRouter API key
-echo 'OPENROUTER_API_KEY="sk-or-v1-..."' > .env
+# Set your OpenAI API key
+echo 'OPENAI_API_KEY="sk-..."' > .env
 
 # For fetching ICLR 2025 papers, also add OpenReview credentials:
 echo 'OPENREVIEW_USERNAME="your@email.com"' >> .env
@@ -250,9 +250,4 @@ Requires OPENREVIEW_USERNAME and OPENREVIEW_PASSWORD in .env
 
 ## Cost
 
-All API calls go through OpenRouter. Estimated cost per paper:
-- GPT-5.4 (critic + spark + merger): ~$0.10-0.30 per paper (depends on paper length)
-- GLM-5 (neutral + filter): ~$0.01-0.05 per paper
-- Perplexity sonar-pro (related work): ~$0.01 per paper
-
-A full 50-paper benchmark run costs roughly $5-15.
+All API calls now go through the official OpenAI API using GPT-5-nano. Exact cost depends on current OpenAI pricing, paper length, output length, and web-search usage. Reusing a single model family across all stages simplifies deployment and removes provider-mixing effects during evaluation.

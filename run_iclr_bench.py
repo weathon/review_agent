@@ -1,13 +1,10 @@
 """
-ICLR Benchmark Runner — hybrid Claude Code SDK + OpenRouter.
-
-Claude calls (critic + merger) are free via Claude Code SDK.
-All other calls go through OpenRouter.
+ICLR Benchmark Runner using the official OpenAI API.
 
 Usage:
   python run_iclr_bench.py                          # 10 papers, sequential
   python run_iclr_bench.py 5                        # 5 papers
-  python run_iclr_bench.py 10 42 --parallel         # parallel OpenRouter agents
+  python run_iclr_bench.py 10 42 --parallel         # parallel agents
 """
 
 import asyncio
@@ -303,15 +300,14 @@ async def main(n_samples: int = 10, seed: int = 42, parallel: bool = False, skip
     print("=" * 72)
     print("ICLR Benchmark: Multi-Agent Paper Reviewer")
     print(f"  Data: {bench_dir}")
-    print("  Claude SDK (free): critic + spark + merger")
-    print("  OpenRouter (paid): neutral + related work")
+    print("  Official OpenAI API for all agents")
     print("=" * 72)
     print(f"Mode: {'parallel' if parallel else 'sequential'}")
     print(f"Sampling: {'balanced (stratified)' if balanced else 'random'}")
     print(f"Models:")
-    print(f"  Critic/Spark/Merger (Claude SDK): {MODEL_HARSH}")
-    print(f"  Neutral (OpenRouter):            {MODEL_NEUTRAL}")
-    print(f"  Related Work (OpenRouter):       {MODEL_RELATED_WORK}")
+    print(f"  Critic/Spark/Merger:             {MODEL_HARSH}")
+    print(f"  Neutral:                         {MODEL_NEUTRAL}")
+    print(f"  Related Work:                    {MODEL_RELATED_WORK}")
 
     # Load calibration if provided
     calibration_context = ""
@@ -353,16 +349,16 @@ async def main(n_samples: int = 10, seed: int = 42, parallel: bool = False, skip
     with open(output_path, "w") as f:
         f.write(f"# ICLR Benchmark Results\n\n")
         f.write(f"Date: {datetime.now().strftime('%Y-%m-%d %H:%M')}\n")
-        f.write(f"Critic/Merger: {MODEL_HARSH} (Claude SDK, free)\n")
+        f.write(f"Critic/Merger: {MODEL_HARSH} (OpenAI)\n")
         f.write(f"Neutral: {MODEL_NEUTRAL}, ")
-        f.write(f"Related Work: {MODEL_RELATED_WORK} (OpenRouter)\n\n")
+        f.write(f"Related Work: {MODEL_RELATED_WORK} (OpenAI)\n\n")
     with open(csv_path, "w", newline="") as f:
         w = csv.writer(f)
         w.writerow(["paper_id", "pred_score", "pred_decision", "gt_avg_score", "gt_decision", "gt_binary", "match",
                      "gt_score_0", "gt_score_1", "gt_score_2", "gt_score_3", "gt_score_4", "gt_score_5", "gt_score_6"])
 
     # Run papers concurrently (up to CONCURRENCY at a time)
-    CONCURRENCY = 3
+    CONCURRENCY = 10
     semaphore = asyncio.Semaphore(CONCURRENCY)
     file_lock = asyncio.Lock()
     completed = [0]  # mutable counter

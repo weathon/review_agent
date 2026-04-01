@@ -1,20 +1,9 @@
 """
-Multi-Agent Paper Reviewer — hybrid Claude Code SDK + OpenRouter.
-
-Pipeline (5 agents, each with its own model):
-  1. Harsh Critic (claude-opus-4.6 via Claude Code SDK — free)
-  2. Neutral Reviewer (glm-5 via OpenRouter)
-  3. Spark Finder (claude-opus-4.6 via Claude Code SDK — free)
-  4. Related Work Scout (perplexity/sonar-pro via OpenRouter)
-     → filtered by glm-5 to remove already-cited & loosely related work
-  5. Merger (claude-opus-4.6 via Claude Code SDK — free)
-
-Claude calls (critic + merger) go through Claude Code SDK (no API cost).
-All other calls go through OpenRouter.
+Multi-Agent Paper Reviewer using the official OpenAI API.
 
 Usage:
   python paper_reviewer.py <paper.txt>                 # sequential (default)
-  python paper_reviewer.py <paper.txt> --parallel      # parallel non-Claude agents
+  python paper_reviewer.py <paper.txt> --parallel      # parallel agents
 """
 
 import asyncio
@@ -33,16 +22,15 @@ load_dotenv()  # loads .env from cwd or parent dirs
 
 # ── Config ────────────────────────────────────────────────────────────
 
-OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
-OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
 
-# Per-stage model assignments — all via OpenRouter
-MODEL_HARSH = "openai/gpt-5.4-nano"
-MODEL_NEUTRAL = "openai/gpt-5.4-nano"
-MODEL_SPARK = "openai/gpt-5.4-nano"
-MODEL_RELATED_WORK = "openai/gpt-5.4-nano:online"
-MODEL_FILTER = "openai/gpt-5.4-nano"
-MODEL_MERGER = "openai/gpt-5.4-nano"
+# Per-stage model assignments — all via official OpenAI API
+MODEL_HARSH = "gpt-5.4-nano"
+MODEL_NEUTRAL = "gpt-5.4-nano"
+MODEL_SPARK = "gpt-5.4-nano"
+MODEL_RELATED_WORK = "gpt-5.4-nano"
+MODEL_FILTER = "gpt-5.4-nano"
+MODEL_MERGER = "gpt-5.4-nano"
 
 MAX_RETRIES = 3
 RETRY_DELAY = 10
@@ -362,55 +350,57 @@ def sanitize_text(text: str) -> str:
 
 
 def _get_client() -> AsyncOpenAI:
-    """Create an AsyncOpenAI client pointed at OpenRouter."""
-    if not OPENROUTER_API_KEY:
+    """Create an AsyncOpenAI client pointed at the official OpenAI API."""
+    if not OPENAI_API_KEY:
         raise ValueError(
-            "OPENROUTER_API_KEY environment variable not set.\n"
-            "Set it in .env or export it. Get one at https://openrouter.ai/keys"
+            "OPENAI_API_KEY environment variable not set.\n"
+            "Set it in .env or export it."
         )
-    return AsyncOpenAI(
-        base_url=OPENROUTER_BASE_URL,
-        api_key=OPENROUTER_API_KEY,
-    )
+    return AsyncOpenAI(api_key=OPENAI_API_KEY)
 
 
-# ── OpenRouter call (all models) ──────────────────────────────────────
+# ── OpenAI call (all models) ───────────────────────────────────────────
 
 # Models that support reasoning effort parameter
-REASONING_MODELS = {"openai/gpt-5.4", "openai/o3-mini", "openai/o3", "openai/o4-mini"}
+REASONING_MODELS = {"gpt-5.4", "gpt-5.4-mini", "gpt-5.4-nano", "o3-mini", "o3", "o4-mini"}
 
-async def _call_openrouter(
+async def _call_openai(
     client: AsyncOpenAI,
     name: str,
     system_prompt: str,
     user_prompt: str,
     model: str,
+    tools: list[dict] | None = None,
 ) -> str:
-    """Call OpenRouter with retry logic for rate limits."""
+    """Call the official OpenAI API with retry logic for rate limits."""
     for attempt in range(1, MAX_RETRIES + 1):
         try:
             kwargs = dict(
                 model=model,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt},
-                ],
+                instructions=system_prompt,
+                input=user_prompt,
             )
-            # Add reasoning effort for supported models
             if model in REASONING_MODELS:
-                kwargs["extra_body"] = {"reasoning": {"effort": "high"}}
-            response = await client.chat.completions.create(**kwargs)
-            result = response.choices[0].message.content or ""
-            usage = response.usage
-            tokens = f"{usage.prompt_tokens}in/{usage.completion_tokens}out" if usage else "n/a"
-            model_short = model.split("/")[-1]
+                kwargs["reasoning"] = {"effort": "high"}
+            if tools:
+                kwargs["tools"] = tools
+            response = await client.responses.create(**kwargs)
+            result = response.output_text or ""
+            usage = getattr(response, "usage", None)
+            input_tokens = getattr(usage, "input_tokens", None) if usage else None
+            output_tokens = getattr(usage, "output_tokens", None) if usage else None
+            if input_tokens is not None and output_tokens is not None:
+                tokens = f"{input_tokens}in/{output_tokens}out"
+            else:
+                tokens = "n/a"
+            model_short = model
             if not result.strip():
                 if attempt < MAX_RETRIES:
                     print(f"  [{name}] empty response (attempt {attempt}/{MAX_RETRIES}), retrying ...")
                     await asyncio.sleep(RETRY_DELAY + _random.uniform(0, 5))
                     continue
                 print(f"  [{name}] empty response after {MAX_RETRIES} attempts")
-            print(f"  [{name}] done — {model_short} (OpenRouter) — {tokens} tokens")
+            print(f"  [{name}] done — {model_short} (OpenAI) — {tokens} tokens")
             return result
         except Exception as e:
             err_str = str(e).lower()
@@ -437,8 +427,8 @@ async def run_reviewer(
     model: str,
     venue: str = "",
 ) -> str:
-    """Run a reviewer via OpenRouter."""
-    print(f"  [{name}] started ({model.split('/')[-1]}) ...")
+    """Run a reviewer via the official OpenAI API."""
+    print(f"  [{name}] started ({model}) ...")
     venue_line = (
         f"This paper was submitted to **{venue}**. "
         f"You MUST evaluate it against {venue}'s specific standards, acceptance bar, "
@@ -457,7 +447,7 @@ async def run_reviewer(
         f"{paper_content}\n"
         f"--- PAPER CONTENT END ---"
     )
-    return await _call_openrouter(client, name, system_prompt, user_prompt, model)
+    return await _call_openai(client, name, system_prompt, user_prompt, model)
 
 
 async def run_related_work_search(
@@ -465,14 +455,14 @@ async def run_related_work_search(
     paper_content: str,
 ) -> str:
     """
-    Two-step related work pipeline (both via OpenRouter):
-    1. Perplexity sonar-pro searches for related papers
-    2. kimi-k2.5 filters already-cited and loosely related ones
+    Two-step related work pipeline (both via OpenAI):
+    1. GPT-5.4-nano proposes related papers
+    2. GPT-5.4-nano filters already-cited and loosely related ones
     """
     abstract_section = paper_content[:3000]
 
-    print("  [related_work_search] started (OpenRouter) ...")
-    raw_results = await _call_openrouter(
+    print("  [related_work_search] started (OpenAI) ...")
+    raw_results = await _call_openai(
         client,
         "related_work_search",
         RELATED_WORK_PROMPT,
@@ -482,10 +472,11 @@ async def run_related_work_search(
             f"Search for real, published papers that are closely related."
         ),
         MODEL_RELATED_WORK,
+        tools=[{"type": "web_search"}],
     )
 
-    print("  [related_work_filter] started (OpenRouter) ...")
-    filtered = await _call_openrouter(
+    print("  [related_work_filter] started (OpenAI) ...")
+    filtered = await _call_openai(
         client,
         "related_work_filter",
         RELATED_WORK_FILTER_PROMPT,
@@ -514,8 +505,8 @@ async def run_merger(
     paper_content: str,
     calibration_context: str = "",
 ) -> str:
-    """Run the merger via OpenRouter."""
-    print(f"  [merger] started ({MODEL_MERGER.split('/')[-1]}) ...")
+    """Run the merger via the official OpenAI API."""
+    print(f"  [merger] started ({MODEL_MERGER}) ...")
 
     calibration_block = ""
     # if calibration_context:
@@ -550,7 +541,7 @@ async def run_merger(
         f"Remember: many of the harsh critic's points may be nonsensical or overly "
         f"picky — cross-check everything against the actual paper before including it."
     )
-    return await _call_openrouter(client, "merger", MERGER_PROMPT, user_prompt, MODEL_MERGER)
+    return await _call_openai(client, "merger", MERGER_PROMPT, user_prompt, MODEL_MERGER)
 
 
 
@@ -584,7 +575,7 @@ async def run_score_predictor(
         f"Related Work Review:\n{related_work}\n\n"
         f"Final Review:\n{final_review}\n\n"
     )
-    return await _call_openrouter(client, "score_predictor", SCORE_PROMPT, user_prompt, MODEL_MERGER)
+    return await _call_openai(client, "score_predictor", SCORE_PROMPT, user_prompt, MODEL_MERGER)
 
 
 def parse_score_output(score_text: str) -> tuple[float | None, str | None]:
@@ -624,7 +615,7 @@ async def review_paper(
     calibration_context: str = "",
 ) -> str:
     """
-    Main entry point. All agents via OpenRouter — can fully parallelize.
+    Main entry point. All agents via the official OpenAI API — can fully parallelize.
 
     Phase 1 (parallel if --parallel):
       Critic + Neutral + Spark + Related Work — all at once
@@ -715,23 +706,23 @@ async def review_paper(
         f"INDIVIDUAL REVIEWS\n"
         f"{separator}\n\n"
         f"{'─' * 40}\n"
-        f"HARSH CRITIC ({MODEL_HARSH} via Claude SDK)\n"
+        f"HARSH CRITIC ({MODEL_HARSH} via OpenAI)\n"
         f"{'─' * 40}\n"
         f"{harsh_review}\n\n"
         f"{'─' * 40}\n"
-        f"NEUTRAL REVIEWER ({MODEL_NEUTRAL} via OpenRouter)\n"
+        f"NEUTRAL REVIEWER ({MODEL_NEUTRAL} via OpenAI)\n"
         f"{'─' * 40}\n"
         f"{neutral_review}\n\n"
         f"{'─' * 40}\n"
-        f"SPARK FINDER ({MODEL_SPARK} via Claude SDK)\n"
+        f"SPARK FINDER ({MODEL_SPARK} via OpenAI)\n"
         f"{'─' * 40}\n"
         f"{spark_review}\n\n"
         f"{'─' * 40}\n"
-        f"POTENTIALLY MISSED RELATED WORK ({MODEL_RELATED_WORK} via OpenRouter)\n"
+        f"POTENTIALLY MISSED RELATED WORK ({MODEL_RELATED_WORK} via OpenAI)\n"
         f"{'─' * 40}\n"
         f"{related_work}\n\n"
         f"{separator}\n"
-        f"FINAL CONSOLIDATED REVIEW ({MODEL_MERGER} via Claude SDK)\n"
+        f"FINAL CONSOLIDATED REVIEW ({MODEL_MERGER} via OpenAI)\n"
         f"{separator}\n\n"
         f"{final_review}\n\n"
         f"{separator}\n"
@@ -755,20 +746,20 @@ if __name__ == "__main__":
         print("Usage: python paper_reviewer.py <paper.txt> [options]")
         print()
         print("Flags:")
-        print("  --parallel          Run OpenRouter agents in parallel")
+        print("  --parallel          Run agents in parallel")
         print("  --no-related-work   Skip related work search & filter")
         print("  --no-spark          Skip spark finder agent")
         print("  --venue <name>      Set venue (e.g. ICLR, NeurIPS, ICML)")
         print()
         print("Environment variables (or set in .env):")
-        print("  OPENROUTER_API_KEY   (required) Your OpenRouter API key")
+        print("  OPENAI_API_KEY   (required) Your OpenAI API key")
         print()
         print("Models per stage:")
-        print(f"  Harsh Critic (Claude SDK):  {MODEL_HARSH}")
-        print(f"  Neutral (OpenRouter):       {MODEL_NEUTRAL}")
-        print(f"  Spark Finder (Claude SDK):  {MODEL_SPARK}")
-        print(f"  Related Work (OpenRouter):  {MODEL_RELATED_WORK}")
-        print(f"  Merger (Claude SDK):        {MODEL_MERGER}")
+        print(f"  Harsh Critic (OpenAI):      {MODEL_HARSH}")
+        print(f"  Neutral (OpenAI):           {MODEL_NEUTRAL}")
+        print(f"  Spark Finder (OpenAI):      {MODEL_SPARK}")
+        print(f"  Related Work (OpenAI):      {MODEL_RELATED_WORK}")
+        print(f"  Merger (OpenAI):            {MODEL_MERGER}")
         sys.exit(0 if "--help" in sys.argv else 1)
 
     parallel = "--parallel" in sys.argv

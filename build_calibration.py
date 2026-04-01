@@ -80,7 +80,7 @@ async def run_sub_agents_and_merger(
     client = _get_client()
     pp = str(paper_path)
 
-    # Phase 1: All reviewers (parallel or sequential) — all via OpenRouter
+    # Phase 1: All reviewers (parallel or sequential) — all via OpenAI
     if parallel:
         tasks = [
             run_reviewer(client, "harsh_critic", HARSH_CRITIC_PROMPT, pp, paper_content, MODEL_HARSH, venue="ICLR"),
