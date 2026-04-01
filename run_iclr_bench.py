@@ -343,84 +343,101 @@ async def main(n_samples: int = 10, seed: int = 42, parallel: bool = False, skip
         w.writerow(["paper_id", "pred_score", "pred_decision", "gt_avg_score", "gt_decision", "gt_binary", "match",
                      "gt_score_0", "gt_score_1", "gt_score_2", "gt_score_3", "gt_score_4", "gt_score_5", "gt_score_6"])
 
-    for i, paper_info in enumerate(samples, 1):
+    # Run papers concurrently (up to CONCURRENCY at a time)
+    CONCURRENCY = 3
+    semaphore = asyncio.Semaphore(CONCURRENCY)
+    file_lock = asyncio.Lock()
+    completed = [0]  # mutable counter
+
+    async def process_paper(i: int, paper_info: dict):
         pid = paper_info["paper_id"]
         paper_path = papers_dir / f"{pid}.txt"
 
-        print(f"\n{'─' * 72}")
-        print(f"[{i}/{len(samples)}] Paper: {pid}")
-        print(f"  GT Decision: {paper_info['decision']}  |  GT Avg Score: {paper_info['avg_score']:.1f}")
-        print(f"  GT Reviewer Scores: {paper_info['scores']}")
-        print(f"{'─' * 72}")
+        async with semaphore:
+            print(f"\n{'─' * 72}")
+            print(f"[{i}/{len(samples)}] Paper: {pid}")
+            print(f"  GT Decision: {paper_info['decision']}  |  GT Avg Score: {paper_info['avg_score']:.1f}")
+            print(f"  GT Reviewer Scores: {paper_info['scores']}")
+            print(f"{'─' * 72}")
 
-        start = time.time()
-        try:
-            review_result = await review_single_paper(pid, paper_path, parallel=parallel, skip_related_work=skip_related_work, skip_spark=skip_spark, calibration_context=calibration_context)
-            elapsed = time.time() - start
+            start = time.time()
+            try:
+                review_result = await review_single_paper(pid, paper_path, parallel=parallel, skip_related_work=skip_related_work, skip_spark=skip_spark, calibration_context=calibration_context)
+                elapsed = time.time() - start
 
-            pred_score = review_result["predicted_score"]
-            pred_dec = review_result["predicted_decision"]
+                pred_score = review_result["predicted_score"]
+                pred_dec = review_result["predicted_decision"]
 
-            match = pred_dec == paper_info["gt_binary"] if pred_dec else None
-            marker = "MATCH" if match else ("MISMATCH" if match is not None else "PARSE_FAIL")
+                match = pred_dec == paper_info["gt_binary"] if pred_dec else None
+                marker = "MATCH" if match else ("MISMATCH" if match is not None else "PARSE_FAIL")
 
-            print(f"\n  Predicted Score: {pred_score}/10  |  Predicted Decision: {pred_dec}")
-            print(f"  GT Binary: {paper_info['gt_binary']}  |  Result: *** {marker} ***")
-            print(f"  Time: {elapsed:.1f}s")
+                print(f"\n  [{pid}] Predicted Score: {pred_score}/10  |  Predicted Decision: {pred_dec}")
+                print(f"  [{pid}] GT Binary: {paper_info['gt_binary']}  |  Result: *** {marker} ***")
+                print(f"  [{pid}] Time: {elapsed:.1f}s")
 
-            r = {
-                "paper_id": pid,
-                "gt_decision": paper_info["decision"],
-                "gt_binary": paper_info["gt_binary"],
-                "gt_avg_score": paper_info["avg_score"],
-                "gt_scores": paper_info["scores"],
-                "predicted_score": pred_score,
-                "predicted_decision": pred_dec,
-                "match": match,
-                "time_s": elapsed,
-                "final_review": review_result["final_review"],
-            }
-            results.append(r)
+                r = {
+                    "paper_id": pid,
+                    "gt_decision": paper_info["decision"],
+                    "gt_binary": paper_info["gt_binary"],
+                    "gt_avg_score": paper_info["avg_score"],
+                    "gt_scores": paper_info["scores"],
+                    "predicted_score": pred_score,
+                    "predicted_decision": pred_dec,
+                    "match": match,
+                    "time_s": elapsed,
+                    "final_review": review_result["final_review"],
+                }
 
-        except Exception as e:
-            elapsed = time.time() - start
-            print(f"\n  ERROR: {e}")
-            print(f"  Time: {elapsed:.1f}s")
-            r = {
-                "paper_id": pid,
-                "gt_decision": paper_info["decision"],
-                "gt_binary": paper_info["gt_binary"],
-                "gt_avg_score": paper_info["avg_score"],
-                "gt_scores": paper_info["scores"],
-                "predicted_score": None,
-                "predicted_decision": None,
-                "match": None,
-                "time_s": elapsed,
-                "final_review": f"ERROR: {e}",
-            }
-            results.append(r)
+            except Exception as e:
+                elapsed = time.time() - start
+                print(f"\n  [{pid}] ERROR: {e}")
+                print(f"  [{pid}] Time: {elapsed:.1f}s")
+                r = {
+                    "paper_id": pid,
+                    "gt_decision": paper_info["decision"],
+                    "gt_binary": paper_info["gt_binary"],
+                    "gt_avg_score": paper_info["avg_score"],
+                    "gt_scores": paper_info["scores"],
+                    "predicted_score": None,
+                    "predicted_decision": None,
+                    "match": None,
+                    "time_s": elapsed,
+                    "final_review": f"ERROR: {e}",
+                }
 
-        # Append this paper's result to files immediately
-        with open(output_path, "a") as f:
-            f.write(f"## {r['paper_id']}\n\n")
-            f.write(f"- GT: {r['gt_decision']} (avg {r['gt_avg_score']:.1f})\n")
-            f.write(f"- Predicted: {r['predicted_decision']} ({r['predicted_score']}/10)\n")
-            f.write(f"- Match: {'Yes' if r['match'] else ('No' if r['match'] is not None else 'Parse fail')}\n\n")
-            f.write(f"### Final Review\n\n{r['final_review']}\n\n---\n\n")
-        with open(csv_path, "a", newline="") as f:
-            w = csv.writer(f)
-            gt_scores_padded = r["gt_scores"] + [""] * (7 - len(r["gt_scores"]))
-            match_str = "YES" if r["match"] else ("NO" if r["match"] is not None else "PARSE_FAIL")
-            w.writerow([
-                r["paper_id"],
-                r["predicted_score"],
-                r["predicted_decision"],
-                f"{r['gt_avg_score']:.2f}",
-                r["gt_decision"],
-                r["gt_binary"],
-                match_str,
-                *gt_scores_padded,
-            ])
+            # Thread-safe file writes + results append
+            async with file_lock:
+                results.append(r)
+                completed[0] += 1
+                print(f"  [{pid}] *** Completed {completed[0]}/{len(samples)} ***")
+
+                with open(output_path, "a") as f:
+                    f.write(f"## {r['paper_id']}\n\n")
+                    f.write(f"- GT: {r['gt_decision']} (avg {r['gt_avg_score']:.1f})\n")
+                    f.write(f"- Predicted: {r['predicted_decision']} ({r['predicted_score']}/10)\n")
+                    f.write(f"- Match: {'Yes' if r['match'] else ('No' if r['match'] is not None else 'Parse fail')}\n\n")
+                    f.write(f"### Final Review\n\n{r['final_review']}\n\n---\n\n")
+                with open(csv_path, "a", newline="") as f:
+                    w = csv.writer(f)
+                    gt_scores_padded = r["gt_scores"] + [""] * (7 - len(r["gt_scores"]))
+                    match_str = "YES" if r["match"] else ("NO" if r["match"] is not None else "PARSE_FAIL")
+                    w.writerow([
+                        r["paper_id"],
+                        r["predicted_score"],
+                        r["predicted_decision"],
+                        f"{r['gt_avg_score']:.2f}",
+                        r["gt_decision"],
+                        r["gt_binary"],
+                        match_str,
+                        *gt_scores_padded,
+                    ])
+
+    # Launch all papers concurrently (semaphore limits to CONCURRENCY)
+    print(f"\nRunning {len(samples)} papers with concurrency={CONCURRENCY}...")
+    await asyncio.gather(*(
+        process_paper(i, paper_info)
+        for i, paper_info in enumerate(samples, 1)
+    ))
 
     total_elapsed = time.time() - total_start
 

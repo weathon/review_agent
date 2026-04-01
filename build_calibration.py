@@ -39,8 +39,12 @@ sys.path.insert(0, str(Path(__file__).parent))
 from run_iclr_bench import load_ground_truth, DEFAULT_BENCH_DIR
 
 
+BORDERLINE_BINS = {5, 6}  # bins where accept/reject is hardest to distinguish
+BORDERLINE_EXTRA = 2      # extra papers per borderline bin
+
+
 def sample_one_per_bin(papers: list[dict], seed: int) -> list[dict]:
-    """Sample exactly 1 paper per score bin (rounded to int)."""
+    """Sample 1 paper per score bin, with extra papers in borderline bins (5, 6)."""
     rng = random.Random(seed)
     bins = defaultdict(list)
     for p in papers:
@@ -50,10 +54,16 @@ def sample_one_per_bin(papers: list[dict], seed: int) -> list[dict]:
 
     samples = []
     for k in sorted(bins.keys()):
-        if bins[k]:
-            samples.append(bins[k][0])
-            print(f"  Bin ~{k}: picked {bins[k][0]['paper_id']} (avg={bins[k][0]['avg_score']:.1f}, {bins[k][0]['gt_binary']})")
-    print(f"  Total: {len(samples)} calibration papers\n")
+        if not bins[k]:
+            continue
+        # Take more from borderline bins
+        n_take = 1 + BORDERLINE_EXTRA if k in BORDERLINE_BINS else 1
+        n_take = min(n_take, len(bins[k]))
+        for j in range(n_take):
+            samples.append(bins[k][j])
+            tag = " (borderline)" if k in BORDERLINE_BINS else ""
+            print(f"  Bin ~{k}: picked {bins[k][j]['paper_id']} (avg={bins[k][j]['avg_score']:.1f}, {bins[k][j]['gt_binary']}){tag}")
+    print(f"  Total: {len(samples)} calibration papers ({sum(1 for s in samples if round(s['avg_score']) in BORDERLINE_BINS)} borderline)\n")
     return samples
 
 
