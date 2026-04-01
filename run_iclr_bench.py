@@ -304,7 +304,7 @@ async def main(n_samples: int = 10, seed: int = 42, parallel: bool = False, skip
                      "gt_score_0", "gt_score_1", "gt_score_2", "gt_score_3", "gt_score_4", "gt_score_5", "gt_score_6"])
 
     # Run papers concurrently (up to CONCURRENCY at a time)
-    CONCURRENCY = 10
+    CONCURRENCY = 5
     semaphore = asyncio.Semaphore(CONCURRENCY)
     file_lock = asyncio.Lock()
     completed = [0]  # mutable counter

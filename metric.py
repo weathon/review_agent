@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 from scipy import stats
-from sklearn.metrics import roc_auc_score, roc_curve
+from sklearn.metrics import roc_auc_score, roc_curve, precision_recall_curve, auc
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 import sys
@@ -64,10 +64,16 @@ def analyze_and_plot(path):
         best_idx = np.argmax(j_scores)
         best_thresh = thresholds[best_idx]
         print(f"  Optimal threshold:     {best_thresh:.2f} (TPR={tpr[best_idx]:.2f}, FPR={fpr[best_idx]:.2f})")
+        # AUPRC
+        precision, recall, _ = precision_recall_curve(gt_binary, pred)
+        auprc = auc(recall, precision)
+        baseline_rate = n_pos / len(gt_binary)
+        print(f"  AUPRC (score→A/R):     {auprc:.4f}  (baseline={baseline_rate:.4f})")
     else:
         auroc = None
+        auprc = None
         fpr, tpr = None, None
-        print(f"  AUROC: N/A (only one class present: {n_pos} Accept, {n_neg} Reject)")
+        print(f"  AUROC/AUPRC: N/A (only one class present: {n_pos} Accept, {n_neg} Reject)")
 
     if n_border > 0:
         b_dec_acc = (pred_dec[border_mask] == gt_dec[border_mask]).sum()
@@ -94,11 +100,11 @@ def analyze_and_plot(path):
         Line2D([0],[0], marker='o', color='w', markerfacecolor='#e74c3c', markersize=8, label='Reject'),
     ]
 
-    n_plots = 3 if auroc is not None else 2
-    fig, axes = plt.subplots(1, n_plots, figsize=(7 * n_plots, 6))
+    has_curves = auroc is not None
+    fig, axes = plt.subplots(2, 2, figsize=(14, 12))
 
-    # Left: raw
-    ax = axes[0]
+    # Top-left: raw
+    ax = axes[0, 0]
     ax.scatter(gt_avg, pred, c=colors, s=80, edgecolors="white", linewidth=0.8, zorder=3)
     mn, mx = min(min(pred), min(gt_avg)) - 0.5, max(max(pred), max(gt_avg)) + 0.5
     ax.plot([mn, mx], [mn, mx], "k--", alpha=0.3)
@@ -115,8 +121,8 @@ def analyze_and_plot(path):
             bbox=dict(boxstyle="round,pad=0.4", facecolor="wheat", alpha=0.8))
     ax.legend(handles=legend_dots, fontsize=9, loc="lower right")
 
-    # Right: rounded
-    ax2 = axes[1]
+    # Top-right: rounded
+    ax2 = axes[0, 1]
     rng = np.random.default_rng(42)
     jx, jy = rng.uniform(-0.15, 0.15, len(df)), rng.uniform(-0.15, 0.15, len(df))
     ax2.scatter(gt_avg + jx, pred_rounded + jy, c=colors, s=80, edgecolors="white", linewidth=0.8, zorder=3)
@@ -131,9 +137,9 @@ def analyze_and_plot(path):
              bbox=dict(boxstyle="round,pad=0.4", facecolor="wheat", alpha=0.8))
     ax2.legend(handles=legend_dots, fontsize=9, loc="lower right")
 
-    # Third: ROC curve
-    if auroc is not None:
-        ax3 = axes[2]
+    # Bottom-left: ROC curve
+    if has_curves:
+        ax3 = axes[1, 0]
         ax3.plot(fpr, tpr, color="#3498db", lw=2, label=f"Agent (AUROC={auroc:.3f})")
         ax3.plot([0, 1], [0, 1], "k--", alpha=0.3, label="Random (0.500)")
         ax3.scatter([fpr[best_idx]], [tpr[best_idx]], color="#e74c3c", s=100, zorder=5,
@@ -145,6 +151,21 @@ def analyze_and_plot(path):
         ax3.set_aspect("equal")
         ax3.grid(True, alpha=0.2)
         ax3.legend(fontsize=9, loc="lower right")
+
+        # Bottom-right: Precision-Recall curve
+        ax4 = axes[1, 1]
+        ax4.plot(recall, precision, color="#9b59b6", lw=2, label=f"Agent (AUPRC={auprc:.3f})")
+        ax4.axhline(y=baseline_rate, color="k", linestyle="--", alpha=0.3, label=f"Baseline ({baseline_rate:.3f})")
+        ax4.set_xlabel("Recall", fontsize=12)
+        ax4.set_ylabel("Precision", fontsize=12)
+        ax4.set_title("Precision-Recall Curve (Score → Accept/Reject)", fontsize=13)
+        ax4.set_xlim(-0.02, 1.02); ax4.set_ylim(-0.02, 1.02)
+        ax4.set_aspect("equal")
+        ax4.grid(True, alpha=0.2)
+        ax4.legend(fontsize=9, loc="lower left")
+    else:
+        axes[1, 0].axis("off")
+        axes[1, 1].axis("off")
 
     plt.tight_layout()
     out = path.replace(".csv", "_scatter.png")

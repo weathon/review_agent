@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """
 Fetch a sample of ICLR 2025 papers with full text and reviewer scores.
 

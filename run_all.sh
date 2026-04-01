@@ -33,17 +33,17 @@ for k in sorted(bins):
 # ── Step 3: Build calibration set ──
 echo ""
 echo ">>> Step 3: Building calibration set (sub-agents only, no merger)"
-python build_calibration.py --data-dir iclr2025_data --parallel
+python build_calibration.py --data-dir iclr2025_data --parallel --no-related-work
 
 # ── Step 4: Run baseline ──
 echo ""
 echo ">>> Step 4: Running baseline (always predict 6)"
-python run_baseline.py 50 4112 --balanced --data-dir iclr2025_data --calibration calibration.md
+python run_baseline.py 50 4112 --data-dir iclr2025_data --calibration calibration.md --no-related-work# --balanced 
 
 # ── Step 5: Run benchmark with calibration ──
 echo ""
 echo ">>> Step 5: Running benchmark (50 papers, balanced, with calibration)"
-python run_iclr_bench.py 50 4112 --parallel --balanced --data-dir iclr2025_data --calibration calibration.md
+python run_iclr_bench.py 50 4112 --parallel --data-dir iclr2025_data --calibration calibration.md --no-related-work#--balanced 
 
 # ── Step 6: Compute metrics ──
 echo ""

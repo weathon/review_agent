@@ -43,7 +43,7 @@ from run_iclr_bench import load_ground_truth, DEFAULT_BENCH_DIR
 
 BORDERLINE_BINS = {5, 6}  # bins where accept/reject is hardest to distinguish
 BORDERLINE_EXTRA = 2      # extra papers per borderline bin
-
+CONCURRENCY = 5
 
 def sample_one_per_bin(papers: list[dict], seed: int) -> list[dict]:
     """Sample 1 paper per score bin, with extra papers in borderline bins (5, 6)."""
@@ -186,7 +186,6 @@ async def main(
     samples = sample_one_per_bin(available, seed)
 
     results = []
-    CONCURRENCY = 10
 
     async def process_one(i, paper_info):
         pid = paper_info["paper_id"]
