@@ -15,6 +15,13 @@ def analyze_and_plot(path):
     df = pd.read_csv(path)
     gt_score_cols = [c for c in df.columns if c.startswith("gt_score_")]
 
+    # Filter out rows where pred_score is missing (ERROR / failed papers)
+    n_total = len(df)
+    df = df.dropna(subset=["pred_score"])
+    n_dropped = n_total - len(df)
+    if n_dropped > 0:
+        print(f"\n  WARNING: Dropped {n_dropped}/{n_total} papers with missing predictions (ERROR rows)")
+
     pred = df["pred_score"].values
     gt_avg = df["gt_avg_score"].values
     pred_rounded = np.array([round_to_scale(x) for x in pred])

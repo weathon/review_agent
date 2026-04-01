@@ -145,6 +145,7 @@ async def review_single_paper(
     sep = "~" * 60
 
     # Phase 1: All reviewers (parallel or sequential)
+    total_cost = 0.0
     if parallel:
         tasks = [
             run_reviewer(client, "harsh_critic", HARSH_CRITIC_PROMPT, pp, paper_content, MODEL_HARSH, venue="ICLR"),
@@ -159,20 +160,30 @@ async def review_single_paper(
         results_list = await asyncio.gather(*tasks)
 
         idx = 0
-        harsh_review = results_list[idx]; idx += 1
-        neutral_review = results_list[idx]; idx += 1
-        spark_review = results_list[idx] if not skip_spark else "Spark finder was skipped."; idx += (0 if skip_spark else 1)
-        related_work = results_list[idx] if not skip_related_work else "Related work search was skipped."
-    else:
-        print("  Phase 1: Reviewers sequentially ...")
-        harsh_review = await run_reviewer(client, "harsh_critic", HARSH_CRITIC_PROMPT, pp, paper_content, MODEL_HARSH, venue="ICLR")
-        neutral_review = await run_reviewer(client, "neutral", NEUTRAL_REVIEWER_PROMPT, pp, paper_content, MODEL_NEUTRAL, venue="ICLR")
+        harsh_review, c = results_list[idx]; total_cost += c; idx += 1
+        neutral_review, c = results_list[idx]; total_cost += c; idx += 1
         if not skip_spark:
-            spark_review = await run_reviewer(client, "spark_finder", SPARK_FINDER_PROMPT, pp, paper_content, MODEL_SPARK, venue="ICLR")
+            spark_review, c = results_list[idx]; total_cost += c; idx += 1
         else:
             spark_review = "Spark finder was skipped."
         if not skip_related_work:
-            related_work = await run_related_work_search(client, paper_content)
+            related_work, c = results_list[idx]; total_cost += c
+        else:
+            related_work = "Related work search was skipped."
+    else:
+        print("  Phase 1: Reviewers sequentially ...")
+        harsh_review, c = await run_reviewer(client, "harsh_critic", HARSH_CRITIC_PROMPT, pp, paper_content, MODEL_HARSH, venue="ICLR")
+        total_cost += c
+        neutral_review, c = await run_reviewer(client, "neutral", NEUTRAL_REVIEWER_PROMPT, pp, paper_content, MODEL_NEUTRAL, venue="ICLR")
+        total_cost += c
+        if not skip_spark:
+            spark_review, c = await run_reviewer(client, "spark_finder", SPARK_FINDER_PROMPT, pp, paper_content, MODEL_SPARK, venue="ICLR")
+            total_cost += c
+        else:
+            spark_review = "Spark finder was skipped."
+        if not skip_related_work:
+            related_work, c = await run_related_work_search(client, paper_content)
+            total_cost += c
         else:
             related_work = "Related work search was skipped."
 
@@ -187,20 +198,23 @@ async def review_single_paper(
 
     # Phase 2: Merger + Score (same conversation)
     print("  Phase 2: Merger ...")
-    final_review, score = await run_merger(
+    final_review, score, merger_cost = await run_merger(
         client, harsh_review, neutral_review,
         spark_review, related_work, paper_content,
         calibration_context=calibration_context,
     )
+    total_cost += merger_cost
     score = round(float(score), 1)
     decision = score_to_decision(score)
     print(f"\n  {sep}\n  [merger output] ({len(final_review)} chars)\n  {sep}\n{final_review}\n")
     print(f"  [merger_score] structured score: {score}")
+    print(f"  Total cost: ${total_cost:.4f}")
 
     return {
         "final_review": final_review,
         "predicted_score": score,
         "predicted_decision": decision,
+        "cost": total_cost,
     }
 
 
@@ -292,7 +306,7 @@ async def main(n_samples: int = 10, seed: int = 42, parallel: bool = False, skip
         f.write(f"Related Work: {MODEL_RELATED_WORK} (OpenRouter)\n\n")
     with open(csv_path, "w", newline="") as f:
         w = csv.writer(f)
-        w.writerow(["paper_id", "pred_score", "pred_decision", "gt_avg_score", "gt_decision", "gt_binary", "match",
+        w.writerow(["paper_id", "pred_score", "pred_decision", "gt_avg_score", "gt_decision", "gt_binary", "match", "cost",
                      "gt_score_0", "gt_score_1", "gt_score_2", "gt_score_3", "gt_score_4", "gt_score_5", "gt_score_6"])
 
     # Run papers concurrently (up to CONCURRENCY at a time)
@@ -312,50 +326,61 @@ async def main(n_samples: int = 10, seed: int = 42, parallel: bool = False, skip
             print(f"  GT Reviewer Scores: {paper_info['scores']}")
             print(f"{'─' * 72}")
 
-            start = time.time()
-            try:
-                review_result = await review_single_paper(pid, paper_path, parallel=parallel, skip_related_work=skip_related_work, skip_spark=skip_spark, calibration_context=calibration_context)
-                elapsed = time.time() - start
+            max_paper_retries = 3
+            for attempt in range(1, max_paper_retries + 1):
+                start = time.time()
+                try:
+                    review_result = await review_single_paper(pid, paper_path, parallel=parallel, skip_related_work=skip_related_work, skip_spark=skip_spark, calibration_context=calibration_context)
+                    elapsed = time.time() - start
 
-                pred_score = review_result["predicted_score"]
-                pred_dec = review_result["predicted_decision"]
+                    pred_score = review_result["predicted_score"]
+                    pred_dec = review_result["predicted_decision"]
 
-                match = pred_dec == paper_info["gt_binary"] if pred_dec else None
-                marker = "MATCH" if match else ("MISMATCH" if match is not None else "PARSE_FAIL")
+                    match = pred_dec == paper_info["gt_binary"] if pred_dec else None
+                    marker = "MATCH" if match else ("MISMATCH" if match is not None else "ERROR")
 
-                print(f"\n  [{pid}] Predicted Score: {pred_score}/10  |  Predicted Decision: {pred_dec}")
-                print(f"  [{pid}] GT Binary: {paper_info['gt_binary']}  |  Result: *** {marker} ***")
-                print(f"  [{pid}] Time: {elapsed:.1f}s")
+                    print(f"\n  [{pid}] Predicted Score: {pred_score}/10  |  Predicted Decision: {pred_dec}")
+                    print(f"  [{pid}] GT Binary: {paper_info['gt_binary']}  |  Result: *** {marker} ***")
+                    print(f"  [{pid}] Time: {elapsed:.1f}s")
 
-                r = {
-                    "paper_id": pid,
-                    "gt_decision": paper_info["decision"],
-                    "gt_binary": paper_info["gt_binary"],
-                    "gt_avg_score": paper_info["avg_score"],
-                    "gt_scores": paper_info["scores"],
-                    "predicted_score": pred_score,
-                    "predicted_decision": pred_dec,
-                    "match": match,
-                    "time_s": elapsed,
-                    "final_review": review_result["final_review"],
-                }
+                    r = {
+                        "paper_id": pid,
+                        "gt_decision": paper_info["decision"],
+                        "gt_binary": paper_info["gt_binary"],
+                        "gt_avg_score": paper_info["avg_score"],
+                        "gt_scores": paper_info["scores"],
+                        "predicted_score": pred_score,
+                        "predicted_decision": pred_dec,
+                        "match": match,
+                        "cost": review_result.get("cost", 0.0),
+                        "time_s": elapsed,
+                        "final_review": review_result["final_review"],
+                    }
+                    break  # success, exit retry loop
 
-            except Exception as e:
-                elapsed = time.time() - start
-                print(f"\n  [{pid}] ERROR: {e}")
-                print(f"  [{pid}] Time: {elapsed:.1f}s")
-                r = {
-                    "paper_id": pid,
-                    "gt_decision": paper_info["decision"],
-                    "gt_binary": paper_info["gt_binary"],
-                    "gt_avg_score": paper_info["avg_score"],
-                    "gt_scores": paper_info["scores"],
-                    "predicted_score": None,
-                    "predicted_decision": None,
-                    "match": None,
-                    "time_s": elapsed,
-                    "final_review": f"ERROR: {e}",
-                }
+                except Exception as e:
+                    elapsed = time.time() - start
+                    if attempt < max_paper_retries:
+                        wait = 15 * attempt
+                        print(f"\n  [{pid}] ERROR (attempt {attempt}/{max_paper_retries}): {e}")
+                        print(f"  [{pid}] Retrying in {wait}s ...")
+                        await asyncio.sleep(wait)
+                    else:
+                        print(f"\n  [{pid}] ERROR (attempt {attempt}/{max_paper_retries}, giving up): {e}")
+                        print(f"  [{pid}] Time: {elapsed:.1f}s")
+                        r = {
+                            "paper_id": pid,
+                            "gt_decision": paper_info["decision"],
+                            "gt_binary": paper_info["gt_binary"],
+                            "gt_avg_score": paper_info["avg_score"],
+                            "gt_scores": paper_info["scores"],
+                            "predicted_score": None,
+                            "predicted_decision": None,
+                            "match": None,
+                            "cost": 0.0,
+                            "time_s": elapsed,
+                            "final_review": f"ERROR: {e}",
+                        }
 
             # Thread-safe file writes + results append
             async with file_lock:
@@ -372,7 +397,7 @@ async def main(n_samples: int = 10, seed: int = 42, parallel: bool = False, skip
                 with open(csv_path, "a", newline="") as f:
                     w = csv.writer(f)
                     gt_scores_padded = r["gt_scores"] + [""] * (7 - len(r["gt_scores"]))
-                    match_str = "YES" if r["match"] else ("NO" if r["match"] is not None else "PARSE_FAIL")
+                    match_str = "YES" if r["match"] else ("NO" if r["match"] is not None else "ERROR")
                     w.writerow([
                         r["paper_id"],
                         r["predicted_score"],
@@ -381,6 +406,7 @@ async def main(n_samples: int = 10, seed: int = 42, parallel: bool = False, skip
                         r["gt_decision"],
                         r["gt_binary"],
                         match_str,
+                        f"{r['cost']:.4f}",
                         *gt_scores_padded,
                     ])
 
@@ -406,8 +432,11 @@ async def main(n_samples: int = 10, seed: int = 42, parallel: bool = False, skip
     print(f"Successful:       {len(valid)}")
     print(f"Correct:          {matches}/{len(valid)}")
     print(f"Accuracy:         {accuracy:.1%}")
+    total_cost = sum(r.get("cost", 0.0) for r in results)
     print(f"Total time:       {total_elapsed:.1f}s")
     print(f"Avg time/paper:   {total_elapsed / len(results):.1f}s")
+    print(f"Total cost:       ${total_cost:.4f}")
+    print(f"Avg cost/paper:   ${total_cost / max(len(results), 1):.4f}")
 
     print(f"\n{'Paper ID':<20} {'GT':>10} {'Predicted':>10} {'GT Score':>10} {'Pred Score':>11} {'Match':>7}")
     print("─" * 72)

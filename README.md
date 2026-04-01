@@ -58,6 +58,8 @@ A broader issue in this literature is evaluation methodology. Many systems empha
 
 The Stanford review agent appears to encounter similar related-work precision issues. It also exhibits a failure mode in which the model may incorrectly treat papers, methods, or models outside its training timeline as fabricated and challenge the user on that basis. Its reported correlation results are also difficult to interpret, since the presentation partly relies on human-human agreement rather than a cleaner AI-to-human benchmark. More broadly, like CSPR, it is neither open source nor accompanied by a sufficiently detailed technical description, which makes the system difficult to inspect, explain, or validate.
 
+The Stanford system also predicts sub-dimensional scores (novelty, soundness, clarity, etc.) and then uses linear regression to combine them into a final score. This design is fragile because LLMs tend to produce inflated, non-discriminative subscores due to sycophancy — without external anchor points or calibration, the subscores cluster in a narrow range (e.g., 6-8 out of 10) regardless of actual paper quality. When the input features to the regression are themselves uninformative, the final predicted score inherits that lack of discrimination. In contrast, our system avoids subscores entirely: the merger produces a qualitative review with no numerical ratings, and the final score is assigned in a separate step anchored by calibration examples with real human scores. This forces the scoring to be grounded in comparative quality rather than inflated self-assessments.
+
 ## Quick Start
 
 ```bash

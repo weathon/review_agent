@@ -10,10 +10,12 @@ Usage:
 
 import asyncio
 import json
+import logging
 import os
 import random as _random
 import re
 import sys
+import traceback
 from pathlib import Path
 
 
@@ -29,26 +31,26 @@ OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 
 # Per-stage model assignments — all via OpenRouter
-MODEL_HARSH = "z-ai/glm-5"
-MODEL_NEUTRAL = "z-ai/glm-5"
-MODEL_SPARK = "z-ai/glm-5"
-MODEL_RELATED_WORK = "z-ai/glm-5:online"
-MODEL_FILTER = "z-ai/glm-5"
+MODEL_HARSH = "minimax/minimax-m2.7"
+MODEL_NEUTRAL = "minimax/minimax-m2.7"
+MODEL_SPARK = "minimax/minimax-m2.7"
+MODEL_RELATED_WORK = "minimax/minimax-m2.7:online"
+MODEL_FILTER = "minimax/minimax-m2.7"
 MODEL_MERGER = "z-ai/glm-5"
+MODEL_PARSER = "openai/gpt-5.4-nano"
 
 MAX_RETRIES = 3
 RETRY_DELAY = 10
 REQUEST_TIMEOUT = 120
 
+# ── Error logging ────────────────────────────────────────────────────
+_error_log_path = Path(__file__).parent / "error.log"
+_error_logger = logging.getLogger("paper_reviewer.errors")
+_error_logger.setLevel(logging.ERROR)
+_error_handler = logging.FileHandler(_error_log_path, mode="a")
+_error_handler.setFormatter(logging.Formatter("%(asctime)s | %(message)s"))
+_error_logger.addHandler(_error_handler)
 
-class FinalReviewSchema(BaseModel):
-    summary: str
-    strengths: list[str]
-    weaknesses: list[str]
-    nice_to_haves: list[str]
-    novel_insights: str
-    missed_related_work: list[str]
-    suggestions: list[str]
 
 
 class ScoreSchema(BaseModel):
@@ -286,7 +288,30 @@ Rules:
   The supportive reviewer may overstate positives — cross-check each one.
 - For potentially missed related work: present as suggestions, do not penalize.
 
-Return your final review using the provided structured response schema.
+Output your final review in this markdown format:
+
+## Summary
+2-3 sentence summary of the paper's contribution.
+
+## Strengths
+- strength 1 with evidence
+- strength 2 with evidence
+
+## Weaknesses
+- weakness 1 — why it matters
+- weakness 2 — why it matters
+
+## Nice-to-Haves
+- suggestion that would improve but is not a core flaw
+
+## Novel Insights
+One paragraph synthesizing genuinely novel observations.
+
+## Potentially Missed Related Work
+- paper — why relevant (or "None identified")
+
+## Suggestions
+- specific actionable suggestion
 
 Do NOT output any numerical scores or subscores. Do NOT output an accept/reject \
 decision. Your job is ONLY to produce the qualitative review. Scoring will be \
@@ -401,7 +426,38 @@ def _get_client(api_key: str | None = None) -> AsyncOpenAI:
 # ── OpenRouter calls ───────────────────────────────────────────────────
 
 # Models that support OpenRouter reasoning config
-REASONING_MODELS = {"z-ai/glm-5"}
+REASONING_MODELS = {"z-ai/glm-5", "minimax/minimax-m2.7"}
+
+# Model → official provider mapping (for OpenRouter provider pinning)
+PROVIDER_MAP = {
+    "z-ai/glm-5": ["deepinfra/fp4"],
+    "z-ai/glm-5:online": ["deepinfra/fp4"],
+    "minimax/minimax-m2.7": ["minimax/fp8"],
+}
+
+
+def _build_extra_body(model: str, reasoning_effort: str = "medium") -> dict | None:
+    """Build extra_body with reasoning and/or provider config for OpenRouter."""
+    extra = {}
+    if model in REASONING_MODELS:
+        extra["reasoning"] = {"effort": reasoning_effort}
+    if model in PROVIDER_MAP:
+        extra["provider"] = {"only": PROVIDER_MAP[model]}
+    return extra or None
+
+
+def _extract_cost(response) -> float:
+    """Extract cost from OpenRouter response usage object."""
+    usage = getattr(response, "usage", None)
+    if usage is None:
+        return 0.0
+    cost = getattr(usage, "cost", None)
+    if cost is not None:
+        return float(cost)
+    if isinstance(usage, dict):
+        return float(usage.get("cost", 0.0))
+    return 0.0
+
 
 async def _call_openai(
     client: AsyncOpenAI,
@@ -410,8 +466,8 @@ async def _call_openai(
     user_prompt: str,
     model: str,
     tools: list[dict] | None = None,
-) -> str:
-    """Call OpenRouter chat completions with retry logic for instability."""
+) -> tuple[str, float]:
+    """Call OpenRouter chat completions with retry logic. Returns (result, cost)."""
     for attempt in range(1, MAX_RETRIES + 1):
         try:
             kwargs = dict(
@@ -422,10 +478,12 @@ async def _call_openai(
                 ],
                 timeout=REQUEST_TIMEOUT,
             )
-            if model in REASONING_MODELS:
-                kwargs["extra_body"] = {"reasoning": {"effort": "low"}} # "provider": {"only": ["baseten/fp4"]}
+            extra = _build_extra_body(model, reasoning_effort="low")
+            if extra:
+                kwargs["extra_body"] = extra
             response = await client.chat.completions.create(**kwargs)
             result = response.choices[0].message.content or ""
+            cost = _extract_cost(response)
             usage = getattr(response, "usage", None)
             input_tokens = getattr(usage, "prompt_tokens", None) if usage else None
             output_tokens = getattr(usage, "completion_tokens", None) if usage else None
@@ -435,13 +493,16 @@ async def _call_openai(
                 tokens = "n/a"
             if not result.strip():
                 if attempt < MAX_RETRIES:
+                    _error_logger.error(f"[{name}] empty response (attempt {attempt}/{MAX_RETRIES}), model={model}")
                     print(f"  [{name}] empty response (attempt {attempt}/{MAX_RETRIES}), retrying ...")
                     await asyncio.sleep(RETRY_DELAY + _random.uniform(0, 5))
                     continue
+                _error_logger.error(f"[{name}] empty response after {MAX_RETRIES} attempts, model={model}")
                 print(f"  [{name}] empty response after {MAX_RETRIES} attempts")
-            print(f"  [{name}] done — {model} (OpenRouter) — {tokens} tokens")
-            return result
-        except APITimeoutError:
+            print(f"  [{name}] done — {model} (OpenRouter) — {tokens} tokens — ${cost:.4f}")
+            return result, cost
+        except APITimeoutError as e:
+            _error_logger.error(f"[{name}] timeout (attempt {attempt}/{MAX_RETRIES}), model={model}\n{traceback.format_exc()}")
             if attempt < MAX_RETRIES:
                 wait = RETRY_DELAY * attempt
                 print(f"  [{name}] timeout (attempt {attempt}/{MAX_RETRIES}), waiting {wait}s ...")
@@ -449,6 +510,7 @@ async def _call_openai(
                 continue
             raise
         except Exception as e:
+            _error_logger.error(f"[{name}] error (attempt {attempt}/{MAX_RETRIES}), model={model}: {e}\n{traceback.format_exc()}")
             err_str = str(e).lower()
             is_retryable = any(
                 kw in err_str for kw in ["rate_limit", "overloaded", "429", "529", "timeout", "gateway", "502", "503", "504"]
@@ -459,67 +521,8 @@ async def _call_openai(
                 await asyncio.sleep(wait)
             else:
                 raise
-    return ""
+    return "", 0.0
 
-
-async def _parse_openai(
-    client: AsyncOpenAI,
-    name: str,
-    system_prompt: str,
-    user_prompt: str,
-    model: str,
-    text_format: type[BaseModel],
-) -> BaseModel:
-    """Call OpenRouter chat completions with structured output parsing."""
-    for attempt in range(1, MAX_RETRIES + 1):
-        try:
-            kwargs = dict(
-                model=model,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt},
-                ],
-                response_format=text_format,
-                timeout=REQUEST_TIMEOUT,
-            )
-            if model in REASONING_MODELS:
-                kwargs["extra_body"] = {"reasoning": {"effort": "medium"}}
-            response = await client.beta.chat.completions.parse(**kwargs)
-            parsed = response.choices[0].message.parsed
-            if parsed is None:
-                if attempt < MAX_RETRIES:
-                    print(f"  [{name}] empty structured response (attempt {attempt}/{MAX_RETRIES}), retrying ...")
-                    await asyncio.sleep(RETRY_DELAY + _random.uniform(0, 5))
-                    continue
-                raise ValueError(f"{name} returned no parsed output")
-            usage = getattr(response, "usage", None)
-            input_tokens = getattr(usage, "prompt_tokens", None) if usage else None
-            output_tokens = getattr(usage, "completion_tokens", None) if usage else None
-            if input_tokens is not None and output_tokens is not None:
-                tokens = f"{input_tokens}in/{output_tokens}out"
-            else:
-                tokens = "n/a"
-            print(f"  [{name}] done — {model} (OpenRouter structured) — {tokens} tokens")
-            return parsed
-        except APITimeoutError:
-            if attempt < MAX_RETRIES:
-                wait = RETRY_DELAY * attempt
-                print(f"  [{name}] timeout (attempt {attempt}/{MAX_RETRIES}), waiting {wait}s ...")
-                await asyncio.sleep(wait)
-                continue
-            raise
-        except Exception as e:
-            err_str = str(e).lower()
-            is_retryable = any(
-                kw in err_str for kw in ["rate_limit", "overloaded", "429", "529", "timeout", "gateway", "502", "503", "504"]
-            )
-            if is_retryable and attempt < MAX_RETRIES:
-                wait = RETRY_DELAY * attempt
-                print(f"  [{name}] transient error (attempt {attempt}/{MAX_RETRIES}), waiting {wait}s ...")
-                await asyncio.sleep(wait)
-            else:
-                raise
-    raise RuntimeError(f"{name} failed after {MAX_RETRIES} attempts")
 
 
 # ── Agent runners ─────────────────────────────────────────────────────
@@ -532,8 +535,8 @@ async def run_reviewer(
     paper_content: str,
     model: str,
     venue: str = "",
-) -> str:
-    """Run a reviewer via OpenRouter chat completions."""
+) -> tuple[str, float]:
+    """Run a reviewer via OpenRouter chat completions. Returns (review, cost)."""
     print(f"  [{name}] started ({model}) ...")
     venue_line = (
         f"This paper was submitted to **{venue}**. "
@@ -559,16 +562,14 @@ async def run_reviewer(
 async def run_related_work_search(
     client: AsyncOpenAI,
     paper_content: str,
-) -> str:
+) -> tuple[str, float]:
     """
-    Two-step related work pipeline via OpenRouter:
-    1. :online model proposes related papers
-    2. base model filters already-cited and loosely related ones
+    Two-step related work pipeline via OpenRouter. Returns (filtered_results, total_cost).
     """
     abstract_section = paper_content[:3000]
 
     print("  [related_work_search] started (OpenRouter online) ...")
-    raw_results = await _call_openai(
+    raw_results, cost1 = await _call_openai(
         client,
         "related_work_search",
         RELATED_WORK_PROMPT,
@@ -581,7 +582,7 @@ async def run_related_work_search(
     )
 
     print("  [related_work_filter] started (OpenRouter) ...")
-    filtered = await _call_openai(
+    filtered, cost2 = await _call_openai(
         client,
         "related_work_filter",
         RELATED_WORK_FILTER_PROMPT,
@@ -598,7 +599,30 @@ async def run_related_work_search(
         MODEL_FILTER,
     )
 
-    return filtered
+    return filtered, cost1 + cost2
+
+
+async def _parse_score(client: AsyncOpenAI, text: str) -> tuple[float, float]:
+    """Use GPT-5.4-nano with structured output to extract a score. Returns (score, cost)."""
+    response = await client.beta.chat.completions.parse(
+        model=MODEL_PARSER,
+        messages=[
+            {"role": "system", "content": "Extract the numerical score from the text."},
+            {"role": "user", "content": text},
+        ],
+        response_format=ScoreSchema,
+        timeout=30,
+    )
+    parsed = response.choices[0].message.parsed
+    cost = _extract_cost(response)
+    usage = getattr(response, "usage", None)
+    input_tokens = getattr(usage, "prompt_tokens", None) if usage else None
+    output_tokens = getattr(usage, "completion_tokens", None) if usage else None
+    tokens = f"{input_tokens}in/{output_tokens}out" if input_tokens and output_tokens else "n/a"
+    print(f"  [score_parser] done — {MODEL_PARSER} — {tokens} tokens — ${cost:.4f}")
+    if parsed is None:
+        raise ValueError("score_parser returned no parsed output")
+    return parsed.score, cost
 
 
 async def run_merger(
@@ -609,18 +633,18 @@ async def run_merger(
     related_work: str,
     paper_content: str,
     calibration_context: str = "",
-) -> tuple[str, float]:
+) -> tuple[str, float, float]:
     """
     Two-turn merger:
-      Turn 1 — produce the consolidated review (no scores).
-      Turn 2 — with calibration context appended, produce a score.
-    Same model, same conversation history.
+      Turn 1 — produce the consolidated review (markdown, no scores).
+      Turn 2 — score the paper with calibration context.
+      Then parse the score with a lightweight model.
 
-    Returns (review_json, score).
+    Returns (review_text, score, total_cost).
     """
     print(f"  [merger] started ({MODEL_MERGER}) ...")
 
-    # ── Turn 1: Review only ──────────────────────────────────────────
+    # ── Turn 1: Review only (free text) ──────────────────────────────
     user_prompt_review = (
         f"Here is the paper being reviewed (extracted from PDF — formatting "
         f"artifacts are parser issues, not paper problems):\n\n"
@@ -629,7 +653,7 @@ async def run_merger(
         f"--- PAPER CONTENT END ---\n\n"
         f"Here are the four inputs:\n\n"
         f"# Review 1: Harsh Critic\n{harsh_review}\n\n"
-        f"# Review 2: Neutral Reviewer\n{neutral_review}\n\n"
+        f"# Review 2: Positive-Leaning Reviewer\n{neutral_review}\n\n"
         f"# Review 3: Spark Finder\n{spark_review}\n\n"
         f"# Report 4: Potentially Missed Related Work\n"
         f"(NOTE: These are SUGGESTIONS only. The search agent may have found \n"
@@ -639,27 +663,13 @@ async def run_merger(
         f"Remember: many of the harsh critic's points may be nonsensical or overly "
         f"picky — cross-check everything against the actual paper before including it."
     )
-    parsed = await _parse_openai(
-        client,
-        "merger",
-        MERGER_PROMPT,
-        user_prompt_review,
-        MODEL_MERGER,
-        FinalReviewSchema,
+    review_text, cost_review = await _call_openai(
+        client, "merger", MERGER_PROMPT, user_prompt_review, MODEL_MERGER,
     )
-    review_json = parsed.model_dump_json(indent=2)
 
     # ── Turn 2: Score (same conversation, calibration injected) ──────
     print(f"  [merger_score] scoring with calibration ({MODEL_MERGER}) ...")
 
-    # Build the conversation history: system + turn1_user + turn1_assistant + turn2_user
-    messages = [
-        {"role": "system", "content": MERGER_PROMPT},
-        {"role": "user", "content": user_prompt_review},
-        {"role": "assistant", "content": review_json},
-    ]
-
-    # Turn 2 user message: calibration + scoring instruction
     score_user = ""
     if calibration_context:
         score_user += (
@@ -680,32 +690,47 @@ async def run_merger(
         "A strong paper with clear contributions deserves 7-9. "
         "Commit to your assessment — do not hedge toward the middle."
     )
-    messages.append({"role": "user", "content": score_user})
 
-    # Call with multi-turn messages for structured score
+    # Multi-turn: system + turn1 + assistant + turn2
+    messages = [
+        {"role": "system", "content": MERGER_PROMPT},
+        {"role": "user", "content": user_prompt_review},
+        {"role": "assistant", "content": review_text},
+        {"role": "user", "content": score_user},
+    ]
+
+    # Call for score (free text)
     for attempt in range(1, MAX_RETRIES + 1):
         try:
             kwargs = dict(
                 model=MODEL_MERGER,
                 messages=messages,
-                response_format=ScoreSchema,
                 timeout=REQUEST_TIMEOUT,
             )
-            response = await client.beta.chat.completions.parse(**kwargs)
-            score_parsed = response.choices[0].message.parsed
-            if score_parsed is None:
+            extra = _build_extra_body(MODEL_MERGER, reasoning_effort="medium")
+            if extra:
+                kwargs["extra_body"] = extra
+            response = await client.chat.completions.create(**kwargs)
+            score_text = response.choices[0].message.content or ""
+            cost_score = _extract_cost(response)
+            if not score_text.strip():
+                _error_logger.error(f"[merger_score] empty response (attempt {attempt}/{MAX_RETRIES}), model={MODEL_MERGER}")
                 if attempt < MAX_RETRIES:
                     print(f"  [merger_score] empty response (attempt {attempt}/{MAX_RETRIES}), retrying ...")
                     await asyncio.sleep(RETRY_DELAY + _random.uniform(0, 5))
                     continue
-                raise ValueError("merger_score returned no parsed output")
+                raise ValueError("merger_score returned empty response")
+            # Parse score using lightweight model
+            score, cost_parse = await _parse_score(client, score_text)
             usage = getattr(response, "usage", None)
             input_tokens = getattr(usage, "prompt_tokens", None) if usage else None
             output_tokens = getattr(usage, "completion_tokens", None) if usage else None
             tokens = f"{input_tokens}in/{output_tokens}out" if input_tokens and output_tokens else "n/a"
-            print(f"  [merger_score] done — {MODEL_MERGER} (OpenRouter structured) — {tokens} tokens")
-            return review_json, score_parsed.score
-        except APITimeoutError:
+            print(f"  [merger_score] done — {MODEL_MERGER} — {tokens} tokens — ${cost_score:.4f}")
+            print(f"  [score_parser] parsed score: {score} — ${cost_parse:.4f}")
+            return review_text, score, cost_review + cost_score + cost_parse
+        except APITimeoutError as e:
+            _error_logger.error(f"[merger_score] timeout (attempt {attempt}/{MAX_RETRIES}), model={MODEL_MERGER}\n{traceback.format_exc()}")
             if attempt < MAX_RETRIES:
                 wait = RETRY_DELAY * attempt
                 print(f"  [merger_score] timeout (attempt {attempt}/{MAX_RETRIES}), waiting {wait}s ...")
@@ -713,6 +738,7 @@ async def run_merger(
                 continue
             raise
         except Exception as e:
+            _error_logger.error(f"[merger_score] error (attempt {attempt}/{MAX_RETRIES}), model={MODEL_MERGER}: {e}\n{traceback.format_exc()}")
             err_str = str(e).lower()
             is_retryable = any(
                 kw in err_str for kw in ["rate_limit", "overloaded", "429", "529", "timeout", "gateway", "502", "503", "504"]
@@ -771,6 +797,7 @@ async def review_paper(
     pp = str(path)
 
     # ── Phase 1: All reviewers (parallel or sequential) ───────────
+    total_cost = 0.0
     if parallel:
         tasks = [
             run_reviewer(client, "harsh_critic", HARSH_CRITIC_PROMPT, pp, paper_content, MODEL_HARSH, venue=venue),
@@ -785,31 +812,43 @@ async def review_paper(
         results_list = await asyncio.gather(*tasks)
 
         idx = 0
-        harsh_review = results_list[idx]; idx += 1
-        neutral_review = results_list[idx]; idx += 1
-        spark_review = results_list[idx] if not skip_spark else "Spark finder was skipped."; idx += (0 if skip_spark else 1)
-        related_work = results_list[idx] if not skip_related_work else "Related work search was skipped."
-    else:
-        print("Phase 1: Reviewers sequentially ...")
-        harsh_review = await run_reviewer(client, "harsh_critic", HARSH_CRITIC_PROMPT, pp, paper_content, MODEL_HARSH, venue=venue)
-        neutral_review = await run_reviewer(client, "neutral", NEUTRAL_REVIEWER_PROMPT, pp, paper_content, MODEL_NEUTRAL, venue=venue)
+        harsh_review, c = results_list[idx]; total_cost += c; idx += 1
+        neutral_review, c = results_list[idx]; total_cost += c; idx += 1
         if not skip_spark:
-            spark_review = await run_reviewer(client, "spark_finder", SPARK_FINDER_PROMPT, pp, paper_content, MODEL_SPARK, venue=venue)
+            spark_review, c = results_list[idx]; total_cost += c; idx += 1
         else:
             spark_review = "Spark finder was skipped."
         if not skip_related_work:
-            related_work = await run_related_work_search(client, paper_content)
+            related_work, c = results_list[idx]; total_cost += c
+        else:
+            related_work = "Related work search was skipped."
+    else:
+        print("Phase 1: Reviewers sequentially ...")
+        harsh_review, c = await run_reviewer(client, "harsh_critic", HARSH_CRITIC_PROMPT, pp, paper_content, MODEL_HARSH, venue=venue)
+        total_cost += c
+        neutral_review, c = await run_reviewer(client, "neutral", NEUTRAL_REVIEWER_PROMPT, pp, paper_content, MODEL_NEUTRAL, venue=venue)
+        total_cost += c
+        if not skip_spark:
+            spark_review, c = await run_reviewer(client, "spark_finder", SPARK_FINDER_PROMPT, pp, paper_content, MODEL_SPARK, venue=venue)
+            total_cost += c
+        else:
+            spark_review = "Spark finder was skipped."
+        if not skip_related_work:
+            related_work, c = await run_related_work_search(client, paper_content)
+            total_cost += c
         else:
             related_work = "Related work search was skipped."
 
     # ── Phase 2: Merger + Score (same conversation) ───────────────
     print("\nPhase 2: Merger ...")
-    final_review, final_score = await run_merger(
+    final_review, final_score, merger_cost = await run_merger(
         client, harsh_review, neutral_review,
         spark_review, related_work, paper_content,
         calibration_context=calibration_context,
     )
+    total_cost += merger_cost
     final_score = round(float(final_score), 1)
+    print(f"Total cost for this paper: ${total_cost:.4f}")
     final_decision = score_to_decision(final_score)
 
     # ── Output ────────────────────────────────────────────────────
@@ -843,13 +882,14 @@ async def review_paper(
         f"{separator}\n\n"
         f"Score: {final_score}\n"
         f"Decision: {final_decision or 'N/A'}\n"
+        f"Total Cost: ${total_cost:.4f}\n"
     )
 
     output_path = path.parent / f"{path.stem}_review.md"
     output_path.write_text(full_output, encoding="utf-8")
     print(f"\nReview saved to: {output_path}")
 
-    return full_output
+    return full_output, total_cost
 
 
 async def review_paper_text(
@@ -878,7 +918,7 @@ async def review_paper_text(
     input_path = target_dir / safe_name
     input_path.write_text(cleaned_text, encoding="utf-8")
 
-    result = await review_paper(
+    result, total_cost = await review_paper(
         str(input_path),
         parallel=parallel,
         skip_related_work=skip_related_work,
@@ -922,5 +962,5 @@ if __name__ == "__main__":
         if idx + 1 < len(sys.argv):
             venue = sys.argv[idx + 1]
     paper_file = [a for a in sys.argv[1:] if not a.startswith("--") and a != venue][0]
-    result = asyncio.run(review_paper(paper_file, parallel=parallel, skip_related_work=skip_related, skip_spark=skip_spark, venue=venue))
+    result, total_cost = asyncio.run(review_paper(paper_file, parallel=parallel, skip_related_work=skip_related, skip_spark=skip_spark, venue=venue))
     print(result)

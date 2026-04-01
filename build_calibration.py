@@ -42,8 +42,8 @@ from run_iclr_bench import load_ground_truth, DEFAULT_BENCH_DIR
 
 
 BORDERLINE_BINS = {5, 6}  # bins where accept/reject is hardest to distinguish
-BORDERLINE_EXTRA = 2      # extra papers per borderline bin
-CONCURRENCY = 5
+BORDERLINE_EXTRA = 1      # extra papers per borderline bin
+CONCURRENCY = 14
 
 def sample_one_per_bin(papers: list[dict], seed: int) -> list[dict]:
     """Sample 1 paper per score bin, with extra papers in borderline bins (5, 6)."""
@@ -93,25 +93,31 @@ async def run_sub_agents_and_merger(
 
         results_list = await asyncio.gather(*tasks)
         idx = 0
-        harsh_review = results_list[idx]; idx += 1
-        neutral_review = results_list[idx]; idx += 1
-        spark_review = results_list[idx] if not skip_spark else ""; idx += (0 if skip_spark else 1)
-        related_work = results_list[idx] if not skip_related_work else ""
-    else:
-        harsh_review = await run_reviewer(client, "harsh_critic", HARSH_CRITIC_PROMPT, pp, paper_content, MODEL_HARSH, venue="ICLR")
-        neutral_review = await run_reviewer(client, "neutral", NEUTRAL_REVIEWER_PROMPT, pp, paper_content, MODEL_NEUTRAL, venue="ICLR")
+        harsh_review, _ = results_list[idx]; idx += 1
+        neutral_review, _ = results_list[idx]; idx += 1
         if not skip_spark:
-            spark_review = await run_reviewer(client, "spark_finder", SPARK_FINDER_PROMPT, pp, paper_content, MODEL_SPARK, venue="ICLR")
+            spark_review, _ = results_list[idx]; idx += 1
         else:
             spark_review = ""
         if not skip_related_work:
-            related_work = await run_related_work_search(client, paper_content)
+            related_work, _ = results_list[idx]
+        else:
+            related_work = ""
+    else:
+        harsh_review, _ = await run_reviewer(client, "harsh_critic", HARSH_CRITIC_PROMPT, pp, paper_content, MODEL_HARSH, venue="ICLR")
+        neutral_review, _ = await run_reviewer(client, "neutral", NEUTRAL_REVIEWER_PROMPT, pp, paper_content, MODEL_NEUTRAL, venue="ICLR")
+        if not skip_spark:
+            spark_review, _ = await run_reviewer(client, "spark_finder", SPARK_FINDER_PROMPT, pp, paper_content, MODEL_SPARK, venue="ICLR")
+        else:
+            spark_review = ""
+        if not skip_related_work:
+            related_work, _ = await run_related_work_search(client, paper_content)
         else:
             related_work = ""
 
     # Phase 2: Merger (review + score, but we only keep the review for calibration)
     print("  Running merger ...")
-    merged_review, _ = await run_merger(
+    merged_review, _, _ = await run_merger(
         client, harsh_review, neutral_review,
         spark_review, related_work, paper_content,
     )
@@ -129,29 +135,9 @@ def build_calibration_md(results: list[dict]) -> str:
     """Build compact calibration markdown from final review + human scores."""
     parts = []
     for i, r in enumerate(results, 1):
-        merged = json.loads(r["merged_review"])
         parts.append(f"=== CALIBRATION EXAMPLE {i} ===\n")
         parts.append("# Final Consolidated Review")
-        parts.append(f"Summary: {merged['summary']}")
-        parts.append("Strengths:")
-        for item in merged["strengths"]:
-            parts.append(f"- {item}")
-        parts.append("Weaknesses:")
-        for item in merged["weaknesses"]:
-            parts.append(f"- {item}")
-        parts.append("Nice-to-haves:")
-        for item in merged["nice_to_haves"]:
-            parts.append(f"- {item}")
-        parts.append(f"Novel insights: {merged['novel_insights']}")
-        parts.append("Potentially missed related work:")
-        if merged["missed_related_work"]:
-            for item in merged["missed_related_work"]:
-                parts.append(f"- {item}")
-        else:
-            parts.append("- None")
-        parts.append("Suggestions:")
-        for item in merged["suggestions"]:
-            parts.append(f"- {item}")
+        parts.append(r["merged_review"])
         parts.append("")
         parts.append("# Actual Human Scores")
         parts.append(f"Individual reviewer scores: {r['scores']}")
@@ -189,35 +175,33 @@ async def main(
         print(f"  GT: {paper_info['decision']} | Avg: {paper_info['avg_score']:.1f} | Scores: {paper_info['scores']}")
         print(f"{'─' * 72}")
 
-        start = time.time()
-        try:
-            outputs = await run_sub_agents_and_merger(
-                paper_info, paper_path,
-                parallel=parallel, skip_spark=skip_spark, skip_related_work=skip_related_work,
-            )
-            elapsed = time.time() - start
-            print(f"  [{pid}] Done in {elapsed:.1f}s")
+        attempt = 0
+        while True:
+            attempt += 1
+            start = time.time()
+            try:
+                outputs = await run_sub_agents_and_merger(
+                    paper_info, paper_path,
+                    parallel=parallel, skip_spark=skip_spark, skip_related_work=skip_related_work,
+                )
+                elapsed = time.time() - start
+                print(f"  [{pid}] Done in {elapsed:.1f}s (attempt {attempt})")
 
-            return {
-                **outputs,
-                "paper_id": pid,
-                "scores": paper_info["scores"],
-                "avg_score": paper_info["avg_score"],
-                "decision": paper_info["decision"],
-                "gt_binary": paper_info["gt_binary"],
-                "error": None,
-            }
-        except Exception as e:
-            elapsed = time.time() - start
-            print(f"  [{pid}] ERROR after {elapsed:.1f}s: {e}")
-            return {
-                "paper_id": pid,
-                "scores": paper_info["scores"],
-                "avg_score": paper_info["avg_score"],
-                "decision": paper_info["decision"],
-                "gt_binary": paper_info["gt_binary"],
-                "error": str(e),
-            }
+                return {
+                    **outputs,
+                    "paper_id": pid,
+                    "scores": paper_info["scores"],
+                    "avg_score": paper_info["avg_score"],
+                    "decision": paper_info["decision"],
+                    "gt_binary": paper_info["gt_binary"],
+                    "error": None,
+                }
+            except Exception as e:
+                elapsed = time.time() - start
+                wait = min(30 * attempt, 120)
+                print(f"  [{pid}] ERROR (attempt {attempt}) after {elapsed:.1f}s: {e}")
+                print(f"  [{pid}] Retrying in {wait}s ...")
+                await asyncio.sleep(wait)
 
     # Run calibration papers concurrently
     semaphore = asyncio.Semaphore(CONCURRENCY)

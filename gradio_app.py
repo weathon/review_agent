@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import re
 from pathlib import Path
 from typing import Generator
@@ -59,21 +58,17 @@ def _extract_section(text: str, start_marker: str, end_marker: str | None = None
 
 
 def _format_final_review(full_output: str) -> str:
+    # Extract the review markdown between the FINAL CONSOLIDATED REVIEW and PREDICTED SCORE headers
     match = re.search(
-        r"FINAL CONSOLIDATED REVIEW.*?\n=+\n\n(\{[\s\S]*?\})\n\n=+\nPREDICTED SCORE",
+        r"FINAL CONSOLIDATED REVIEW.*?\n=+\n\n([\s\S]*?)\n=+\nPREDICTED SCORE",
         full_output,
     )
-    final_review_raw = match.group(1).strip() if match else ""
-    if not final_review_raw:
+    review_text = match.group(1).strip() if match else ""
+    if not review_text:
         return "Could not extract the final review from the output."
 
     score_match = re.search(r"Score:\s*([0-9]+(?:\.[0-9]+)?)", full_output)
     decision_match = re.search(r"Decision:\s*(Accept|Reject|N/A)", full_output)
-
-    try:
-        data = json.loads(final_review_raw)
-    except json.JSONDecodeError:
-        return "Could not parse the final review JSON into a displayable format. Download the full output to inspect the raw result."
 
     parts = []
     if score_match or decision_match:
@@ -84,29 +79,7 @@ def _format_final_review(full_output: str) -> str:
             score_lines.append(f"- Decision: **{decision_match.group(1)}**")
         parts.append("\n".join(score_lines))
 
-    parts.append("## Summary\n")
-    parts.append(data.get("summary", ""))
-
-    def render_list(title: str, items: list[str]) -> str:
-        if not items:
-            return ""
-        body = "\n".join(f"- {item}" for item in items)
-        return f"## {title}\n\n{body}"
-
-    for title, key in [
-        ("Strengths", "strengths"),
-        ("Weaknesses", "weaknesses"),
-        ("Nice to Haves", "nice_to_haves"),
-        ("Missed Related Work", "missed_related_work"),
-        ("Suggestions", "suggestions"),
-    ]:
-        section = render_list(title, data.get(key, []))
-        if section:
-            parts.append(section)
-
-    novel_insights = data.get("novel_insights", "")
-    if novel_insights:
-        parts.append(f"## Novel Insights\n\n{novel_insights}")
+    parts.append(review_text)
 
     return "\n\n".join(part for part in parts if part.strip())
 
