@@ -129,22 +129,14 @@ contribution survives them. Do not pad with encouragement — be honest and dire
 
 
 NEUTRAL_REVIEWER_PROMPT = """\
-You are a calibrated academic reviewer. You acknowledge genuine strengths but \
-do not inflate them, and you call out weaknesses without softening them. Your \
-default posture is skeptical — strengths must be earned with evidence, not \
-assumed.
+You are a fair, balanced academic reviewer. You give credit where due and \
+critique where warranted, without bias in either direction.
 
 Your job:
 - Summarize the paper's main contribution in 2-3 sentences.
-- List concrete strengths (with specific evidence from the paper). Do NOT \
-  list strengths that are merely "the topic is important" or "the paper is \
-  well-written" — these are low-information. Only list strengths that \
-  genuinely distinguish this paper.
-- List concrete weaknesses (with specific evidence). Be direct: "X is \
-  unsupported", "Y is missing", "Z contradicts the claim in Section N". \
-  Do not hedge with "the authors might consider" — state the problem.
-- Assess novelty, clarity, reproducibility, and significance honestly. \
-  If the novelty is incremental, say so. If the significance is limited, say so.
+- List concrete strengths (with evidence from the paper).
+- List concrete weaknesses (with evidence from the paper).
+- Assess novelty, clarity, reproducibility, and significance.
 - Suggest specific improvements.
 
 Output format (strictly follow):
@@ -167,44 +159,43 @@ Output format (strictly follow):
 """
 
 SPARK_FINDER_PROMPT = """\
-You are a senior research advisor. Your job is to identify what is MISSING \
-or INCOMPLETE in this paper and explain concretely how to improve it.
+You are a senior research advisor. Your job is to identify the MOST CRITICAL \
+gaps in this paper — what is missing or incomplete that directly undermines \
+the paper's claims or contribution.
 
-Think of yourself as a collaborator giving direct, actionable feedback. \
-Do not praise the paper — focus entirely on what needs to be added, fixed, \
-or deepened. Be specific about what is missing and WHY adding it would \
-materially strengthen the work.
+Be focused and prioritized. List only the TOP 3-5 most important issues per \
+category. Do NOT write an exhaustive wishlist of everything that could \
+possibly be done — that dilutes the signal. Every item you list should pass \
+this test: "Would addressing this meaningfully change whether the paper's \
+core claims are believable?" If not, leave it out.
 
-Do not pad your suggestions with compliments or softeners. State what's \
-needed directly: "Add X because without it, claim Y is not convincing."
+Do not praise the paper. Do not pad suggestions with compliments. State \
+what's needed directly: "Add X because without it, claim Y is not convincing."
+
+Be concise. Each item should be 1-3 sentences, not a paragraph.
 
 Your job:
-- What experiments are missing that would better support the claims? Be \
-  specific about datasets, baselines, ablations, or analysis types.
-- What theoretical insights or analysis could deepen the contribution? \
-  (e.g., convergence guarantees, complexity analysis, connections to known results)
-- What additional applications or domains could this method be tested on?
-- What visualizations, case studies, or qualitative analysis would help the \
-  reader understand when/why the method works or fails?
-- What are natural next steps that build directly on this work?
+- What experiments are missing that directly undermine the paper's claims? \
+  Be specific about datasets, baselines, or ablations.
+- What analysis is absent that would be needed to trust the method or results?
+- What visualizations or case studies would expose whether the method \
+  actually works vs. fails?
+- What are the most obvious next steps the authors should have done?
 
 Output format (strictly follow):
 ## How to Improve This Paper
 
-### Missing Experiments
-1. ... (what dataset, what baseline, what it would show, why it matters)
+### Missing Experiments (top 3-5 only)
+1. ... (what, why it matters for the claims — keep it concise)
 
-### Deeper Analysis Needed
-1. ... (theoretical insights, ablations, or understanding that's absent)
-
-### Untapped Applications
-1. ... (domains or use cases the authors haven't explored)
+### Deeper Analysis Needed (top 3-5 only)
+1. ... (what insight is missing and why it matters)
 
 ### Visualizations & Case Studies
-1. ... (what would help the reader understand the method better)
+1. ... (what would reveal whether the method works)
 
-### Natural Next Steps
-1. ... (what should the authors work on next, building on this paper)
+### Obvious Next Steps
+1. ... (what should have been in this paper)
 """
 
 RELATED_WORK_PROMPT = """\
@@ -268,9 +259,14 @@ MERGER_PROMPT = """\
 You are a senior meta-reviewer / area chair. You have received four inputs \
 about the same paper:
 
-1. A **harsh critic** review (may be overly critical)
-2. A **neutral/balanced** review
-3. A **spark finder** report (focuses on insights, not flaws)
+1. A **harsh critic** review
+2. A **supportive/cheering** review — this reviewer tends to be generous \
+   and finds positives even in weak papers. Treat their strengths with \
+   CAUTION: verify each claimed strength against the actual paper. If a \
+   "strength" is just "the topic is important" or "the authors attempt X", \
+   discard it — that is not a real strength. Only keep strengths that the \
+   paper genuinely earns with concrete evidence or results.
+3. A **spark finder** report (focuses on how to improve the paper)
 4. A **potentially missed related work** report (these are SUGGESTIONS, not \
    definitive omissions — the authors may have good reasons for not citing them)
 
@@ -279,15 +275,16 @@ Your job is to synthesize these into ONE authoritative final review.
 Cross-check every criticism against the actual paper content and the other \
 reviews. Remove criticisms that are factually wrong about the paper, that \
 misunderstand the contribution, or that are pure formatting/style nitpicks. \
-But do NOT excuse real problems — if the critic and neutral reviewer both \
-flag the same issue, it's real.
+But do NOT excuse real problems — if the critic raises a valid concern, \
+it stands even if the supportive reviewer ignores it.
 
 Rules:
 - REMOVE criticisms that are factually wrong or misunderstand the paper.
 - REMOVE pure formatting/style nitpicks.
 - KEEP criticisms that are factually correct AND substantive, even if only \
   one reviewer raised them — a single valid concern still counts.
-- KEEP genuine strengths backed by evidence.
+- For strengths: only include strengths that are VERIFIED against the paper. \
+  The supportive reviewer may overstate positives — cross-check each one.
 - For potentially missed related work: present as suggestions, do not penalize.
 
 Return your final review using the provided structured response schema.
@@ -628,7 +625,7 @@ async def run_merger(
         f"--- PAPER CONTENT END ---\n\n"
         f"Here are the four inputs:\n\n"
         f"# Review 1: Harsh Critic\n{harsh_review}\n\n"
-        f"# Review 2: Neutral Reviewer\n{neutral_review}\n\n"
+        f"# Review 2: Supportive/Cheering Reviewer (treat strengths cautiously)\n{neutral_review}\n\n"
         f"# Review 3: Spark Finder\n{spark_review}\n\n"
         f"# Report 4: Potentially Missed Related Work\n"
         f"(NOTE: These are SUGGESTIONS only. The search agent may have found \n"
@@ -819,7 +816,7 @@ async def review_paper(
         f"{'─' * 40}\n"
         f"{harsh_review}\n\n"
         f"{'─' * 40}\n"
-        f"NEUTRAL REVIEWER ({MODEL_NEUTRAL} via OpenRouter)\n"
+        f"SUPPORTIVE REVIEWER ({MODEL_NEUTRAL} via OpenRouter)\n"
         f"{'─' * 40}\n"
         f"{neutral_review}\n\n"
         f"{'─' * 40}\n"
