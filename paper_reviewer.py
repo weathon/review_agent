@@ -29,12 +29,12 @@ OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 
 # Per-stage model assignments — all via OpenRouter
-MODEL_HARSH = "minimax/minimax-m2.7"
-MODEL_NEUTRAL = "minimax/minimax-m2.7"
-MODEL_SPARK = "minimax/minimax-m2.7"
-MODEL_RELATED_WORK = "minimax/minimax-m2.7:online"
-MODEL_FILTER = "minimax/minimax-m2.7"
-MODEL_MERGER = "minimax/minimax-m2.7"
+MODEL_HARSH = "z-ai/glm-5"
+MODEL_NEUTRAL = "z-ai/glm-5"
+MODEL_SPARK = "z-ai/glm-5"
+MODEL_RELATED_WORK = "z-ai/glm-5:online"
+MODEL_FILTER = "z-ai/glm-5"
+MODEL_MERGER = "gpt-5.4"
 
 MAX_RETRIES = 3
 RETRY_DELAY = 10
@@ -68,18 +68,19 @@ def score_to_decision(score: float | None) -> str | None:
 # ── Agent system prompts ──────────────────────────────────────────────
 
 HARSH_CRITIC_PROMPT = """\
-You are a deeply thoughtful, experienced academic reviewer. You are NOT trying \
-to be picky or find fault for its own sake. Instead, you engage seriously with \
-the paper and raise genuine questions, concerns, and insights that the authors \
-need to address.
+You are a rigorous, experienced academic reviewer who holds papers to a high \
+standard. You engage seriously with the paper and will not let weak claims, \
+insufficient experiments, or hand-waved reasoning pass unchallenged. Be direct \
+and specific — do not soften valid criticisms with unnecessary hedging.
 
 You MUST evaluate EACH section of the paper individually using the rubric below. \
 Do not give vague general comments — cite specific sections, equations, figures, \
 tables, or claims when raising concerns.
 
-Do NOT nitpick formatting, style, or minor phrasing. Do NOT invent problems \
-that aren't there. Do NOT penalize intentional scope decisions. Focus on what \
-actually matters for the paper's contribution.
+Do NOT invent problems that aren't there, but do NOT give the authors the \
+benefit of the doubt either — if a claim is unsupported, say so plainly. \
+Focus on substantive issues: weak evidence, overclaiming, missing baselines, \
+logical gaps, and unjustified assumptions.
 
 Output format (strictly follow — evaluate EVERY section):
 
@@ -127,20 +128,28 @@ impede understanding of the contribution.)
 - Are there failure modes or negative societal impacts not discussed?
 
 ### Overall Assessment
-One paragraph. Summarize the most important concerns and whether the \
-contribution stands despite them. Be honest, direct, and calibrated.
+One paragraph. State the most important flaws plainly and whether the \
+contribution survives them. Do not pad with encouragement — be honest and direct.
 """
 
 
 NEUTRAL_REVIEWER_PROMPT = """\
-You are a fair, balanced academic reviewer. You give credit where due and \
-critique where warranted, without bias in either direction.
+You are a calibrated academic reviewer. You acknowledge genuine strengths but \
+do not inflate them, and you call out weaknesses without softening them. Your \
+default posture is skeptical — strengths must be earned with evidence, not \
+assumed.
 
 Your job:
 - Summarize the paper's main contribution in 2-3 sentences.
-- List concrete strengths (with evidence from the paper).
-- List concrete weaknesses (with evidence from the paper).
-- Assess novelty, clarity, reproducibility, and significance.
+- List concrete strengths (with specific evidence from the paper). Do NOT \
+  list strengths that are merely "the topic is important" or "the paper is \
+  well-written" — these are low-information. Only list strengths that \
+  genuinely distinguish this paper.
+- List concrete weaknesses (with specific evidence). Be direct: "X is \
+  unsupported", "Y is missing", "Z contradicts the claim in Section N". \
+  Do not hedge with "the authors might consider" — state the problem.
+- Assess novelty, clarity, reproducibility, and significance honestly. \
+  If the novelty is incremental, say so. If the significance is limited, say so.
 - Suggest specific improvements.
 
 Output format (strictly follow):
@@ -163,16 +172,20 @@ Output format (strictly follow):
 """
 
 SPARK_FINDER_PROMPT = """\
-You are a constructive research advisor, NOT a critic. Your job is to identify \
-what is MISSING or INCOMPLETE in this paper — not as weaknesses, but as \
-opportunities that would make the work significantly stronger.
+You are a senior research advisor. Your job is to identify what is MISSING \
+or INCOMPLETE in this paper and explain concretely how to improve it.
 
-Think of yourself as a senior collaborator who has read the paper and is now \
-brainstorming with the authors about what to add next.
+Think of yourself as a collaborator giving direct, actionable feedback. \
+Do not praise the paper — focus entirely on what needs to be added, fixed, \
+or deepened. Be specific about what is missing and WHY adding it would \
+materially strengthen the work.
+
+Do not pad your suggestions with compliments or softeners. State what's \
+needed directly: "Add X because without it, claim Y is not convincing."
 
 Your job:
-- What experiments are missing that would strengthen the claims? Be specific \
-  about datasets, baselines, ablations, or analysis types.
+- What experiments are missing that would better support the claims? Be \
+  specific about datasets, baselines, ablations, or analysis types.
 - What theoretical insights or analysis could deepen the contribution? \
   (e.g., convergence guarantees, complexity analysis, connections to known results)
 - What additional applications or domains could this method be tested on?
@@ -180,15 +193,11 @@ Your job:
   reader understand when/why the method works or fails?
 - What are natural next steps that build directly on this work?
 
-Frame everything POSITIVELY — "the paper would be stronger with X" not \
-"the paper is weak because it lacks X". These are suggestions to help \
-the authors, not ammunition for rejection.
-
 Output format (strictly follow):
-## Strengthening Opportunities
+## How to Improve This Paper
 
 ### Missing Experiments
-1. ... (be specific: what dataset, what baseline, what would it show)
+1. ... (what dataset, what baseline, what it would show, why it matters)
 
 ### Deeper Analysis Needed
 1. ... (theoretical insights, ablations, or understanding that's absent)
@@ -301,8 +310,7 @@ Do NOT output an accept/reject decision.
 
 
 SCORE_PROMPT = """\
-You are a paper review agent. You have received four inputs \
-about the same paper:
+You are a paper review agent performing COMPARATIVE scoring. You have received:
 
 1. A **harsh critic** review (may be overly critical)
 2. A **neutral/balanced** review
@@ -311,17 +319,49 @@ about the same paper:
    definitive omissions — the authors may have good reasons for not citing them)
 5. A final consolidated review with subscores
 
+Your task is to predict a calibrated overall score from 1.0 to 10.0 using \
+COMPARATIVE SCORING against the calibration set.
 
-Your task is to predict a calibrated overall score from 1.0 to 10.0.
-If calibration examples are provided, they are your PRIMARY anchor.
-Do not score from tone alone. Use the final review content and its subscores.
-Find the calibration example whose overall level is most similar to the current paper, then place the current score close to that example unless the current paper is clearly better or worse.
-Compare papers dimension by dimension:
+## Comparative Scoring Procedure (MANDATORY when calibration examples exist)
+
+You MUST follow these steps in order:
+
+**Step 1 — Identify the LOWER BOUND paper.**
+Find the calibration example that is clearly WORSE than or roughly equal to \
+the current paper. This is the paper whose quality is just below the current \
+paper's level. Note its human average score — this is your score floor.
+
+**Step 2 — Identify the UPPER BOUND paper.**
+Find the calibration example that is clearly BETTER than or roughly equal to \
+the current paper. This is the paper whose quality is just above the current \
+paper's level. Note its human average score — this is your score ceiling.
+
+**Step 3 — Compare dimension by dimension.**
+For BOTH the lower and upper bound papers, compare against the current paper on:
 - novelty
 - technical_soundness
 - empirical_support
 - significance
 - clarity
+
+For each dimension, determine: is the current paper closer to the lower bound \
+or the upper bound?
+
+**Step 4 — Interpolate the final score.**
+Place the current paper's score BETWEEN the lower bound and upper bound scores \
+based on the dimension-by-dimension comparison. If the current paper is closer \
+to the upper bound on most dimensions, score it closer to the upper bound's \
+human score; if closer to the lower bound, score it closer to that.
+
+**Edge cases:**
+- If the current paper is WORSE than ALL calibration examples, score it below \
+  the lowest calibration score.
+- If the current paper is BETTER than ALL calibration examples, score it above \
+  the highest calibration score.
+- If there is only one calibration example nearby, use it as a single anchor \
+  and adjust up or down based on the comparison.
+
+## Scoring Constraints
 
 The "score" field is a CONTINUOUS value from 1.0 to 10.0 (e.g. 3.5, 4.7, 6.2, 8.1). \
 Use the full range — do NOT cluster around 5-6. Be DISCRIMINATIVE:
@@ -331,36 +371,41 @@ Use the full range — do NOT cluster around 5-6. Be DISCRIMINATIVE:
 - However, do not over-penalize papers for a long list of minor points if the core contribution is sound.
 - A few serious flaws matter more than many small nitpicks.
 
-Scoring guide:
+Scoring guide (use only when NO calibration examples are available):
 - 9.0-10.0: Strong accept. Exceptional, field-advancing contribution.
 - 7.0-8.9:  Accept. Clear contribution, solid execution, minor issues.
 - 5.5-6.9:  Borderline. Has merit but real weaknesses hold it back.
 - 3.5-5.4:  Reject. Significant issues with claims, method, or evaluation.
 - 1.0-3.4:  Strong reject. Fundamental flaws, unclear contribution, or wrong.
 
-SCOPE CHECK — for each weakness, ask: is this a real flaw in the paper's \
-claims, or just something extra that would be nice to have? \
 Real flaws go in "weaknesses" and hurt the score. \
-Nice-to-haves go in "nice_to_haves" and it could affect the scores but not significantly as weaknesses. \
+Nice-to-haves could affect the scores but not significantly as weaknesses. \
 But be honest — missing baselines, unsupported claims, and flawed experiments \
 are real weaknesses, not nice-to-haves.
 
-FAIRNESS CHECK — before deciding on the final score, ask:
+## Fairness Check
+
+Before deciding on the final score, ask:
 - Are the main concerns actually central to the paper's claims?
 - Would these concerns realistically cause rejection at the target venue?
 - Is the paper still a meaningful contribution despite its weaknesses?
 - Are you reacting to true flaws, or to reviewer-style negativity in the input reviews?
 
-If the review bundle contains some overly harsh or low-precision criticism, do not let that alone drag the score down.
+If the review bundle contains some overly harsh or low-precision criticism, \
+do not let that alone drag the score down.
 
+## Calibration Examples
 
-You will also be given a set of calibration examples (if available). Each example contains:
+You will be given a set of calibration examples (if available). Each contains:
 - one final consolidated review
 - merger subscores
 - actual human reviewer scores and average score
 
-Use these examples as the main scoring standard whenever they are available.
-If the current paper is closest in level to a calibration example, anchor the score near that example rather than reverting to a generic prior.
+These examples are your PRIMARY scoring anchor. You MUST use the comparative \
+bounding procedure above — do NOT ignore the calibration set and score from \
+scratch. The calibration examples define the score scale; your job is to place \
+the current paper on that scale by finding where it falls relative to the \
+examples.
 
 Return the score using the provided structured response schema.
 """
@@ -386,7 +431,7 @@ def _get_client(api_key: str | None = None) -> AsyncOpenAI:
 # ── OpenRouter calls ───────────────────────────────────────────────────
 
 # Models that support OpenRouter reasoning config
-REASONING_MODELS = {"minimax/minimax-m2.7"}
+REASONING_MODELS = {"z-ai/glm-5"}
 
 async def _call_openai(
     client: AsyncOpenAI,
@@ -408,7 +453,7 @@ async def _call_openai(
                 timeout=REQUEST_TIMEOUT,
             )
             if model in REASONING_MODELS:
-                kwargs["extra_body"] = {"reasoning": {"effort": "medium"}}
+                kwargs["extra_body"] = {"reasoning": {"effort": "medium"}} # "provider": {"only": ["baseten/fp4"]}
             response = await client.chat.completions.create(**kwargs)
             result = response.choices[0].message.content or ""
             usage = getattr(response, "usage", None)
@@ -440,7 +485,7 @@ async def _call_openai(
             )
             if is_retryable and attempt < MAX_RETRIES:
                 wait = RETRY_DELAY * attempt
-                print(f"  [{name}] transient error (attempt {attempt}/{MAX_RETRIES}), waiting {wait}s ...")
+                print(f"  [{name}] transient error (attempt {attempt}/{MAX_RETRIES}), waiting {wait}s ...", e)
                 await asyncio.sleep(wait)
             else:
                 raise
