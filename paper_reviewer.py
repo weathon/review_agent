@@ -592,10 +592,26 @@ async def run_merger(
     spark_review: str,
     related_work: str,
     paper_content: str,
+    calibration_context: str = "",
 ) -> str:
     """Run the merger via Claude Code SDK (free)."""
     print("  [merger] started (Claude SDK) ...")
+
+    calibration_block = ""
+    if calibration_context:
+        calibration_block = (
+            f"Here are examples of sub-agent reviews for other papers, paired with\n"
+            f"the ACTUAL human reviewer scores and decisions. Use these to calibrate\n"
+            f"your scoring — they show what real scores look like for different\n"
+            f"quality levels:\n\n"
+            f"--- CALIBRATION EXAMPLES ---\n"
+            f"{calibration_context}\n"
+            f"--- END CALIBRATION EXAMPLES ---\n\n"
+            f"Now review the current paper:\n\n"
+        )
+
     user_prompt = (
+        f"{calibration_block}"
         f"Here is the paper being reviewed (extracted from PDF — formatting "
         f"artifacts are parser issues, not paper problems):\n\n"
         f"--- PAPER CONTENT START ---\n"
@@ -625,6 +641,7 @@ async def review_paper(
     skip_related_work: bool = False,
     skip_spark: bool = False,
     venue: str = "",
+    calibration_context: str = "",
 ) -> str:
     """
     Main entry point.
@@ -702,6 +719,7 @@ async def review_paper(
     final_review = await run_merger(
         harsh_review, neutral_review,
         spark_review, related_work, paper_content,
+        calibration_context=calibration_context,
     )
 
     # ── Output ────────────────────────────────────────────────────

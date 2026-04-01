@@ -180,7 +180,7 @@ def parse_score_and_decision(review_text: str) -> tuple[float | None, str | None
 
 
 async def review_single_paper(
-    paper_id: str, paper_path: Path, parallel: bool = False, skip_related_work: bool = False, skip_spark: bool = False,
+    paper_id: str, paper_path: Path, parallel: bool = False, skip_related_work: bool = False, skip_spark: bool = False, calibration_context: str = "",
 ) -> dict:
     """Run the full pipeline on one paper."""
     paper_content = paper_path.read_text(encoding="utf-8", errors="replace")
@@ -238,6 +238,7 @@ async def review_single_paper(
     final_review = await run_merger(
         harsh_review, neutral_review,
         spark_review, related_work, paper_content,
+        calibration_context=calibration_context,
     )
     print(f"\n  {sep}\n  [merger output]\n  {sep}\n{final_review}\n")
 
@@ -278,7 +279,7 @@ def stratified_sample(papers: list[dict], n: int, seed: int) -> list[dict]:
     return samples
 
 
-async def main(n_samples: int = 10, seed: int = 42, parallel: bool = False, skip_related_work: bool = False, skip_spark: bool = False, balanced: bool = False, data_dir: str | None = None):
+async def main(n_samples: int = 10, seed: int = 42, parallel: bool = False, skip_related_work: bool = False, skip_spark: bool = False, balanced: bool = False, data_dir: str | None = None, calibration_path: str | None = None):
     bench_dir = Path(data_dir) if data_dir else DEFAULT_BENCH_DIR
 
     print("=" * 72)
@@ -294,11 +295,29 @@ async def main(n_samples: int = 10, seed: int = 42, parallel: bool = False, skip
     print(f"  Neutral (OpenRouter):            {MODEL_NEUTRAL}")
     print(f"  Related Work (OpenRouter):       {MODEL_RELATED_WORK}")
 
+    # Load calibration if provided
+    calibration_context = ""
+    calibration_ids = set()
+    if calibration_path:
+        cal_path = Path(calibration_path)
+        if cal_path.exists():
+            calibration_context = cal_path.read_text(encoding="utf-8")
+            print(f"\nLoaded calibration: {cal_path} ({len(calibration_context):,} chars)")
+            # Load excluded IDs
+            ids_path = cal_path.parent / "calibration_ids.json"
+            if ids_path.exists():
+                calibration_ids = set(json.load(open(ids_path)))
+                print(f"Excluding {len(calibration_ids)} calibration papers from sampling")
+        else:
+            print(f"\nWARNING: calibration file not found: {cal_path}")
+
     gt_data, papers_dir = load_ground_truth(bench_dir)
     print(f"\nLoaded {len(gt_data)} papers from ground truth.")
 
     available = [r for r in gt_data if (papers_dir / f"{r['paper_id']}.txt").exists()]
-    print(f"Papers with parsed text: {len(available)}")
+    if calibration_ids:
+        available = [r for r in available if r["paper_id"] not in calibration_ids]
+    print(f"Papers with parsed text (after exclusions): {len(available)}")
 
     if balanced:
         samples = stratified_sample(available, n_samples, seed)
@@ -336,7 +355,7 @@ async def main(n_samples: int = 10, seed: int = 42, parallel: bool = False, skip
 
         start = time.time()
         try:
-            review_result = await review_single_paper(pid, paper_path, parallel=parallel, skip_related_work=skip_related_work, skip_spark=skip_spark)
+            review_result = await review_single_paper(pid, paper_path, parallel=parallel, skip_related_work=skip_related_work, skip_spark=skip_spark, calibration_context=calibration_context)
             elapsed = time.time() - start
 
             pred_score = review_result["predicted_score"]
@@ -456,11 +475,17 @@ if __name__ == "__main__":
     skip_spark = "--no-spark" in sys.argv
     balanced = "--balanced" in sys.argv
     data_dir = None
+    calibration_path = None
     if "--data-dir" in sys.argv:
         idx = sys.argv.index("--data-dir")
         if idx + 1 < len(sys.argv):
             data_dir = sys.argv[idx + 1]
-    args = [a for a in sys.argv[1:] if not a.startswith("--") and a != data_dir]
+    if "--calibration" in sys.argv:
+        idx = sys.argv.index("--calibration")
+        if idx + 1 < len(sys.argv):
+            calibration_path = sys.argv[idx + 1]
+    flag_values = {data_dir, calibration_path} - {None}
+    args = [a for a in sys.argv[1:] if not a.startswith("--") and a not in flag_values]
     n = int(args[0]) if len(args) > 0 else 10
     seed = int(args[1]) if len(args) > 1 else 42
-    asyncio.run(main(n_samples=n, seed=seed, parallel=parallel, skip_related_work=skip_related, skip_spark=skip_spark, balanced=balanced, data_dir=data_dir))
+    asyncio.run(main(n_samples=n, seed=seed, parallel=parallel, skip_related_work=skip_related, skip_spark=skip_spark, balanced=balanced, data_dir=data_dir, calibration_path=calibration_path))
