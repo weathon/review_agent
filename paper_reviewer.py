@@ -37,7 +37,7 @@ MODEL_SPARK = "minimax/minimax-m2.7"
 MODEL_RELATED_WORK = "minimax/minimax-m2.7:online" 
 MODEL_FILTER = "minimax/minimax-m2.7"
 MODEL_MERGER = "minimax/minimax-m2.7"
-MODEL_SCORER = "gpt-5.4"
+MODEL_SCORER = "claude-sdk:claude-opus-4-6"
 MODEL_PARSER = "openai/gpt-5.4-nano"
 
 MAX_RETRIES = 3
@@ -374,13 +374,16 @@ Use the full range — do NOT cluster around 5-6. Be DISCRIMINATIVE:
 - Do NOT hedge toward the middle. Commit to your assessment.
 - However, do not over-penalize papers for a long list of minor points if the core contribution is sound.
 - A few serious flaws matter more than many small nitpicks.
+- NEVER give exactly 6.0. A score of 6 is a non-committal fence-sit. If the \
+  paper is even slightly positive, give 7. If it is even slightly negative, \
+  give 5. You must decide which side of the borderline the paper falls on.
 
 Scoring guide (use only when NO calibration examples are available):
 - 9.0-10.0: Strong accept. Exceptional, field-advancing contribution.
 - 7.0-8.9:  Accept. Clear contribution, solid execution, minor issues.
-- 5.5-6.9:  Borderline. Has merit but real weaknesses hold it back.
-- 3.5-5.4:  Reject. Significant issues with claims, method, or evaluation.
-- 1.0-3.4:  Strong reject. Fundamental flaws, unclear contribution, or wrong.
+- 5.0-5.9:  Borderline reject. Has some merit but weaknesses outweigh.
+- 3.0-4.9:  Reject. Significant issues with claims, method, or evaluation.
+- 1.0-2.9:  Strong reject. Fundamental flaws, unclear contribution, or wrong.
 
 Real flaws go in "weaknesses" and hurt the score. \
 Nice-to-haves could affect the scores but not significantly as weaknesses. \
@@ -616,6 +619,58 @@ async def _parse_score(client: AsyncOpenAI, text: str) -> tuple[float, float]:
     return parsed.score, cost
 
 
+async def _score_with_agent_sdk(
+    system_prompt: str,
+    user_prompt_review: str,
+    review_text: str,
+    score_user: str,
+    model: str = "claude-opus-4-6",
+) -> tuple[str, float]:
+    """Use Claude Agent SDK (agent loop, no tools, max_turns=1) to score a paper."""
+    from claude_agent_sdk import ClaudeSDKClient, ClaudeAgentOptions, AssistantMessage, ResultMessage, TextBlock
+
+    prompt = (
+        "You are continuing a conversation. Here is what happened so far:\n\n"
+        "--- USER'S ORIGINAL REQUEST ---\n"
+        f"{user_prompt_review}\n"
+        "--- END USER'S ORIGINAL REQUEST ---\n\n"
+        "--- YOUR REVIEW (which you already wrote) ---\n"
+        f"{review_text}\n"
+        "--- END YOUR REVIEW ---\n\n"
+        "--- NEW INSTRUCTION ---\n"
+        f"{score_user}\n"
+        "--- END NEW INSTRUCTION ---\n\n"
+        "Based on the review you wrote above, now provide your scoring response."
+    )
+
+    options = ClaudeAgentOptions(
+        model=model,
+        allowed_tools=[],
+        max_turns=1,
+        system_prompt=system_prompt,
+    )
+
+    score_text = ""
+    cost = 0.0
+
+    async with ClaudeSDKClient(options=options) as sdk_client:
+        await sdk_client.query(prompt)
+        async for message in sdk_client.receive_response():
+            if isinstance(message, AssistantMessage):
+                for block in message.content:
+                    if isinstance(block, TextBlock):
+                        score_text += block.text
+            if isinstance(message, ResultMessage):
+                if message.total_cost_usd is not None:
+                    cost = message.total_cost_usd
+
+    if not score_text.strip():
+        raise ValueError("Agent SDK scorer returned empty response")
+
+    print(f"  [merger_score] done — {model} (Agent SDK) — ${cost:.4f}")
+    return score_text, cost
+
+
 async def run_merger(
     client: AsyncOpenAI,
     harsh_review: str,
@@ -682,6 +737,18 @@ async def run_merger(
         "Commit to your assessment — do not hedge toward the middle."
     )
 
+    # ── Agent SDK scoring path (MODEL_SCORER = "claude-sdk:<model>") ──
+    if MODEL_SCORER.startswith("claude-sdk:"):
+        sdk_model = MODEL_SCORER.split(":", 1)[1]
+        print(f"  [merger_score] scoring with Agent SDK ({sdk_model}) ...")
+        score_text, cost_score = await _score_with_agent_sdk(
+            MERGER_PROMPT, user_prompt_review, review_text, score_user, sdk_model
+        )
+        score, cost_parse = await _parse_score(client, score_text)
+        print(f"  [score_parser] parsed score: {score} — ${cost_parse:.4f}")
+        return review_text, score, cost_review + cost_score + cost_parse
+
+    # ── OpenRouter scoring path ───────────────────────────────────
     # Multi-turn: system + turn1 + assistant + turn2
     messages = [
         {"role": "system", "content": MERGER_PROMPT},
@@ -936,6 +1003,7 @@ if __name__ == "__main__":
         print()
         print("Environment variables (or set in .env):")
         print("  OPENROUTER_API_KEY   (required) Your OpenRouter API key")
+        print("  ANTHROPIC_API_KEY    (required if MODEL_SCORER uses claude-sdk:)")
         print()
         print("Models per stage:")
         print(f"  Harsh Critic (OpenRouter):      {MODEL_HARSH}")
@@ -943,7 +1011,10 @@ if __name__ == "__main__":
         print(f"  Spark Finder (OpenRouter):      {MODEL_SPARK}")
         print(f"  Related Work (OpenRouter):      {MODEL_RELATED_WORK}")
         print(f"  Merger (OpenRouter):            {MODEL_MERGER}")
-        print(f"  Scorer (OpenRouter):            {MODEL_SCORER}")
+        print(f"  Scorer:                         {MODEL_SCORER}")
+        print()
+        print("To use Claude Agent SDK for scoring, set MODEL_SCORER to")
+        print("  claude-sdk:<model>  e.g. claude-sdk:claude-opus-4-6")
         sys.exit(0 if "--help" in sys.argv else 1)
 
     parallel = "--parallel" in sys.argv
