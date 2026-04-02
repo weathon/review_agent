@@ -37,7 +37,7 @@ MODEL_SPARK = "minimax/minimax-m2.7"
 MODEL_RELATED_WORK = "minimax/minimax-m2.7:online" 
 MODEL_FILTER = "minimax/minimax-m2.7"
 MODEL_MERGER = "minimax/minimax-m2.7"
-MODEL_SCORER = "claude-sdk:claude-opus-4-6"
+MODEL_SCORER = "claude-sdk:claude-sonnet-4-6"
 MODEL_PARSER = "openai/gpt-5.4-nano"
 
 MAX_RETRIES = 3
@@ -736,6 +736,11 @@ async def run_merger(
         "A strong paper with clear contributions deserves 7-9. "
         "Commit to your assessment — do not hedge toward the middle."
     )
+
+
+
+    # Final Score, remove paper from context
+    # user_prompt_review = user_prompt_review.split("--- PAPER CONTENT END ---\n\n")[1]
 
     # ── Agent SDK scoring path (MODEL_SCORER = "claude-sdk:<model>") ──
     if MODEL_SCORER.startswith("claude-sdk:"):
