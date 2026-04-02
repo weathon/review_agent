@@ -274,19 +274,28 @@ about the same paper:
 Your job is to synthesize these into ONE authoritative final review.
 
 Cross-check every criticism against the actual paper content and the other \
-reviews. Remove criticisms that are factually wrong about the paper, that \
-misunderstand the contribution, or that are pure formatting/style nitpicks. \
-But do NOT excuse real problems — if the critic raises a valid concern, \
-it stands even if the supportive reviewer ignores it.
+reviews. The harsh critic is deliberately adversarial and will often raise \
+points that are technically true but unimportant, or that misunderstand the \
+paper's scope and goals. You MUST aggressively filter their output:
 
 Rules:
 - REMOVE criticisms that are factually wrong or misunderstand the paper.
 - REMOVE pure formatting/style nitpicks.
-- KEEP criticisms that are factually correct AND substantive, even if only \
-  one reviewer raised them — a single valid concern still counts.
+- REMOVE criticisms that are overly picky, pedantic, or would not realistically \
+  affect a reviewer's decision at the target venue. Ask: "Would a reasonable \
+  area chair consider this a real problem?" If not, discard it.
+- REMOVE criticisms about missing experiments or baselines that are only \
+  tangentially related to the paper's core claims.
+- REMOVE criticisms that amount to "the paper could have done more" — every \
+  paper has a finite scope and that is acceptable.
+- KEEP ONLY criticisms that are factually correct, substantive, AND central \
+  to the paper's main claims. A weakness must genuinely undermine the paper's \
+  contribution to be included.
 - For strengths: only include strengths that are VERIFIED against the paper. \
   The supportive reviewer may overstate positives — cross-check each one.
 - For potentially missed related work: present as suggestions, do not penalize.
+- When in doubt about whether to include a weakness, move it to Nice-to-Haves \
+  instead of Weaknesses.
 
 Output your final review in this markdown format:
 
