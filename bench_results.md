@@ -1,146 +1,164 @@
 # ICLR Benchmark Results
 
-Date: 2026-04-01 22:28
-Critic/Merger: minimax/minimax-m2.7 (OpenRouter)
-Neutral: minimax/minimax-m2.7, Related Work: minimax/minimax-m2.7:online (OpenRouter)
+Date: 2026-04-02 00:28
+Critic/Merger: z-ai/glm-5 (OpenRouter)
+Neutral: z-ai/glm-5, Related Work: z-ai/glm-5:online (OpenRouter)
 
-## P7f55HQtV8
+## A1HhtITVEi
 
-- GT: Accept (Poster) (avg 6.5)
+- GT: Accept (Poster) (avg 6.0)
+- Predicted: Accept (6.5/10)
+- Match: Yes
+
+### Final Review
+
+## Summary
+
+CheapNet proposes a hierarchical approach for protein-ligand binding affinity prediction that uses differentiable pooling to cluster atom-level representations and applies cross-attention at the cluster level. The method addresses computational complexity and noise issues in atom-level approaches by learning soft cluster assignments and focusing attention on biologically relevant cluster interactions. Extensive experiments demonstrate state-of-the-art performance across multiple benchmarks with relatively few parameters (~1.33M).
+
+## Strengths
+
+- **Strong empirical performance**: CheapNet achieves SOTA results on PDBbind v2013/v2016 core sets and v2019 holdout set, outperforming baselines including large pre-trained models (BindNet >47M params) while using only ~1.33M parameters (Tables 1-3). The consistent improvements across LBA, LEP, and external validation datasets (CSAR NRC-HiQ, CASF-2016) demonstrate robust generalization.
+
+- **Memory efficiency**: Figure 3 clearly demonstrates significantly lower memory footprint compared to atom-level attention methods (GAABind, DEAttentionDTA), which run out-of-memory on larger complexes. This is a practical contribution for handling large protein-ligand complexes.
+
+- **Modular encoder-agnostic design**: Table 4 shows that the cluster-attention mechanism consistently improves performance across different base encoders (GCN: +1.9% RMSE improvement, EGNN: +11.8%, GIGN: +8.6%), demonstrating architectural flexibility.
+
+- **Comprehensive ablation studies**: Tables 4-5 and Tables A6-A11 systematically evaluate the contribution of hierarchical representations, cross-attention vs. self-attention, cluster numbers, auxiliary losses, and pooling methods. The comparison with TopKPooling, ASAPooling, and SAGPooling (Table A10) justifies the differentiable pooling choice.
+
+- **Interpretability through attention visualization**: Figure 4 and Appendix A.17 demonstrate that cross-attention maps highlight biologically meaningful interaction regions between protein and ligand, offering insights into binding mechanisms.
+
+## Weaknesses
+
+- **Fixed cluster numbers lack adaptivity**: The number of clusters (cl, cp) are hyperparameters set based on median values from training data (Appendix A.10), not learned adaptively. This design choice may not be optimal for proteins/ligands with varying sizes—a single fixed cluster count cannot capture the structural diversity across real applications. While Table A8 shows Q2 (median) performs well, no analysis demonstrates whether this scales appropriately.
+
+- **Missing wall-clock time analysis**: The paper claims "computational efficiency" but only reports memory footprint (Figure 3). Training and inference time comparisons against baselines are essential to validate efficiency claims comprehensively. This gap is notable given that computational efficiency is a key motivation.
+
+- **Limited interpretability validation**: Figure 4 shows one example (PDB ID: 4kz6), but no systematic analysis verifies that attention consistently highlights known binding residues across the test set. Without correlating cluster assignments with biochemical groups or validating attention overlap with ground-truth binding sites, the claim of "biologically meaningful clusters" remains unsubstantiated beyond the single visualization.
+
+- **Incomplete baseline comparisons**: Tables 1-2 show missing results (marked "-") for several attention-based baselines on v2019 holdout and "OOM" for cluster-level models (GemNet, Equiformer) on diverse protein evaluation. While understandable for OOM cases, this limits comparison comprehensiveness. Additionally, some baseline comparisons (CAPLA, GAABind, DEAttentionDTA) use different training data splits (PDBbind v2020 vs. v2016), which the paper acknowledges but limits fair comparison.
+
+## Nice-to-Haves
+
+- Adaptive cluster number selection mechanism that dynamically determines optimal clusters per complex based on structural characteristics, rather than fixed hyperparameters.
+- Systematic failure case analysis examining when cluster-level representations lose critical fine-grained atomic interaction information.
+
+## Novel Insights
+
+The cross-attention mechanism between protein and ligand clusters represents a meaningful architectural innovation. Unlike prior cluster-level approaches (GemNet, LEFTNet, GET) that rely on predefined clusters or geometric constraints, CheapNet learns soft cluster assignments end-to-end and applies cross-attention to filter noise while focusing on biologically relevant interactions. The bidirectional attention (L2P and P2L) captures mutual influence between protein pockets and ligand moieties. The permutation invariance proof (Appendix A.3) correctly distinguishes graph-level cluster ordering invariance from geometric SE(3) symmetries, which depend on the encoder—a nuanced clarification that prevents confusion about what symmetries the method actually enforces.
+
+## Potentially Missed Related Work
+
+- None identified through systematic search.
+
+## Suggestions
+
+1. **Add wall-clock time comparisons**: Report training time (epochs, total time) and inference time against key baselines (GIGN, GAABind, DEAttentionDTA) to complement memory analysis and substantiate efficiency claims.
+
+2. **Systematic interpretability validation**: Quantify attention overlap with known binding residues across multiple test complexes, not just the single example shown. Visualize learned cluster assignments for representative complexes to verify whether clusters correspond to meaningful molecular substructures (functional groups, binding motifs) versus arbitrary groupings.
+
+3. **Address cluster number adaptivity**: Either add experiments showing sensitivity across protein/ligand size distributions, or discuss alternative approaches (learned cluster numbers, size-adaptive clustering) in the limitations section as future work.
+
+---
+
+## rPup1cWk4d
+
+- GT: Reject (avg 3.0)
+- Predicted: Reject (4.0/10)
+- Match: Yes
+
+### Final Review
+
+## Summary
+The paper proposes a novel data augmentation method based on energy-based modeling and information geometry. The key innovation is the "backward projection" algorithm that reverses dimension reduction on a statistical manifold constructed via the log-linear model on posets. Instead of using black-box neural networks, the method embeds data as probability distributions, projects onto flat sub-manifolds for dimension reduction, and generates new samples by backward projecting from sampled latent representations. Experiments on MNIST and UCI datasets demonstrate competitive performance against autoencoders while offering interpretability.
+
+## Strengths
+- **Theoretically grounded framework**: The method builds on solid foundations from information geometry (dually-flat manifolds, Bregman divergences) and the log-linear model on posets, with theoretical guarantees including unique projections via m-projection and energy-minimizing properties.
+
+- **Novel backward projection algorithm**: Algorithm 4.1 provides a principled, geometrically intuitive approach to reversing dimension reduction by constructing local data sub-manifolds from k-nearest neighbors in the latent space.
+
+- **Interpretable latent space construction**: The many-body approximation (Section 4.4) provides principled control over the dimensionality-quality trade-off, allowing practitioners to understand what information is preserved at each level (ℓ-body interactions).
+
+- **Competitive empirical results on MNIST**: Table 1 shows the proposed method (75.37%) significantly outperforms the autoencoder baseline (68.12%) when training only on augmented data, and achieves comparable performance (83.40% vs 82.72%) when combining original and augmented data.
+
+- **Comprehensive ablation studies**: The paper includes sensitivity analysis for bandwidth (Figure 8), number of neighbors k (Figure 9), different base sub-manifold constructions (Figures 6-7, 12-17), and different poset structures, demonstrating robustness and providing insight into the method's behavior.
+
+## Weaknesses
+- **Limited baseline comparisons**: The paper compares only against a simple 2+2 layer autoencoder. No comparison with standard data augmentation techniques (geometric transforms, mixup, CutMix), VAEs, GANs, or diffusion models. This substantially limits claims of "competitive performance with black-box generative models."
+
+- **Narrow experimental scope**: MNIST with 1000 training samples and small UCI datasets are insufficient to substantiate practical utility. More challenging datasets (CIFAR-10, Fashion-MNIST) would better demonstrate scalability and real-world applicability.
+
+- **Catastrophic failure on Musk dataset**: Table 3 shows the method drops from 66.30% (Original) to 21.80% (Ours) on the Musk dataset—a severe degradation that warrants investigation. The paper reports this but does not analyze when or why the method fails.
+
+- **Restricted to positive data**: The method naturally handles positive tensors (Example 4.2). For general real-valued data, preprocessing (normalization) is required, which may lose information. This limitation is acknowledged but its practical implications are not analyzed.
+
+- **Computational complexity not discussed**: The paper lacks analysis of computational costs for projection operations, nearest neighbor searches, and scaling with data size and dimension. This is essential for understanding the interpretability-efficiency trade-off.
+
+- **No analysis of class mixing in nearest neighbors**: The backward projection algorithm (Algorithm 4.1) constructs local sub-manifolds from k-nearest neighbors, but does not address what happens when neighbors belong to different classes, potentially producing incoherent interpolations.
+
+## Nice-to-Haves
+- Include timing and memory comparisons between the proposed method and baseline autoencoder to complete the trade-off analysis between interpretability and computational cost.
+
+- Demonstrate a concrete use case where interpretability provides practical value—e.g., showing how manipulating specific parameters in the base sub-manifold controls generation in understandable ways.
+
+## Novel Insights
+The paper offers an interesting conceptual reframing: instead of treating the decoder as a learned neural network, it treats "decoding" as a geometric projection problem. The insight that nearest neighbors in the latent space can define a local sub-manifold for backward projection is elegant—the method essentially performs a local geometric interpolation rather than learning a global decoding function. The many-body approximation provides a principled hierarchy for latent space dimensionality, where each level ℓ captures mode interactions up to order ℓ, offering an interpretable alternative to arbitrary latent dimension selection in autoencoders.
+
+## Potentially Missed Related Work
+No specific missed related work was identified in the review process. However, the following areas would strengthen the paper's positioning:
+- Comparison with classical data augmentation methods (random crop/flip, mixup, CutMix)
+- Connection to manifold learning methods with out-of-sample extensions (e.g., kernel methods)
+
+## Suggestions
+- Add comparisons with at least one standard data augmentation method (e.g., mixup) and one stronger generative baseline (e.g., VAE) to properly contextualize performance claims.
+
+- Evaluate on at least one more challenging dataset (e.g., Fashion-MNIST or CIFAR-10) to demonstrate broader applicability beyond simple MNIST.
+
+- Analyze and explain the failure case on the Musk dataset—understanding when the method degrades performance is crucial for practitioners.
+
+- Include computational complexity analysis (time and memory) comparing the proposed method with baseline approaches.
+
+---
+
+## YkMg8sB8AH
+
+- GT: Reject (avg 4.2)
 - Predicted: Reject (5.0/10)
-- Match: No
-
-### Final Review
-
-## Summary
-QuaDiM introduces a novel non-autoregressive conditional diffusion model for quantum state property estimation (QPE), addressing the fundamental limitation that autoregressive models impose sequential ordering on qubits that lacks physical justification. The method iteratively denoises Gaussian noise conditioned on Hamiltonian parameters to generate quantum measurement samples, then uses classical shadow for post-processing. Evaluated on the 1D anti-ferromagnetic Heisenberg model with up to 100 qubits, QuaDiM demonstrates superior performance over autoregressive baselines (RNN, LLM4QPE) and classical methods (classical shadow, kernel methods) in predicting correlation and entanglement entropy, particularly under limited measurement data conditions.
-
-## Strengths
-- **Novel contribution**: First non-autoregressive conditional generative model for QPE using diffusion models; the core idea that treating qubits equally avoids sequential bias is physically motivated and technically sound
-- **Comprehensive evaluation**: Extensive experiments across system sizes (L ∈ {10, 40, 70, 100}), two tasks (correlation, entanglement entropy), multiple baselines, and thorough ablations (Tables 3-10 in appendices)
-- **Consistent empirical advantage**: QuaDiM outperforms all baselines across nearly all configurations, with improvements validated under different sample complexities, training data sizes, positional encoding schemes, and POVM choices
-- **Practical relevance**: Demonstrates superior sample efficiency under resource-constrained conditions (limited training measurements Min, reduced inference samples Mout), which is valuable for real quantum computing applications
-- **Scalability to 100 qubits**: Successfully handles large quantum systems with competitive performance, making it relevant for near-term quantum applications
-
-## Weaknesses
-- **Missing non-autoregressive baseline comparisons**: The paper claims superiority of non-autoregressive approaches but doesn't compare against VAEs, normalizing flows, or other non-autoregressive generative methods mentioned in related work. This limits the ability to assess whether the diffusion-based approach specifically provides advantages over other non-autoregressive alternatives
-- **Limited physical system diversity**: All experiments use 1D Heisenberg and XY models; no 2D lattice experiments or different Hamiltonian families (e.g., transverse-field Ising, Fermi-Hubbard) are shown. This undermines claims about scalability to "real-world quantum computations" like IBM's 2D qubit arrays
-- **Ground truth approximation unquantified for L > 10**: For large systems, ground truth labels are approximated via classical shadow with M=320,000 samples. The paper never quantifies the error in this approximation. If the "ground truth" itself contains non-trivial error, the reported RMSE improvements may be overstated
-- **OOD generalization gap**: Table 7 shows RMSE nearly 4x worse for OOD vs. in-distribution (e.g., 0.0117→0.0417 for L=70). The paper markets the method as generalizing to unseen systems, but substantial OOD degradation suggests potential overfitting to the training distribution
-- **Incomplete positional embedding discussion**: The paper claims "equal, unbiased treatment of all qubits" yet Appendix F.5 shows positional embeddings are necessary—removing them significantly degrades performance. The paper should clarify whether positional information reintroduces ordering bias and what "equal treatment" precisely means
-
-## Nice-to-Haves
-- **Statistical significance reporting**: Standard deviations are buried in supplementary tables; at minimum, prominent reporting of mean ± std for main results with experiments across multiple random seeds would strengthen confidence
-- **Memorization analysis**: With N_tr=100 training Hamiltonians and 1000 measurements each, experiments testing whether the model memorizes specific Hamiltonians vs. learning generalizable representations would be informative (e.g., testing with fewer training samples)
-- **Generated distribution visualization**: Show histograms or KL divergence between generated and true measurement statistics—not just downstream properties—to reveal whether the model learns correct distributions or matches only low-order statistics
-- **Failure mode analysis**: Understanding when QuaDiM fails would be more informative than cherry-picked successes
-
-## Novel Insights
-The paper's key insight—that autoregressive models impose physically unjustified sequential ordering on qubits, and that non-autoregressive diffusion models can treat qubits equally—is both novel and compelling for the quantum ML community. The empirical demonstration that this architectural choice leads to consistent improvements across system sizes and metrics suggests the sequential bias in autoregressive approaches is a genuine limitation rather than a minor detail. Additionally, the demonstration that diffusion models can bridge discrete quantum measurements to continuous representations while maintaining quantum physical properties opens a promising research direction for quantum machine learning.
-
-## Potentially Missed Related Work
-- Normalizing flows for quantum state representation/tomography (mentioned in related work discussion but not used as baselines)
-- VAE-based quantum state learning approaches (Rocchetto et al., 2018) as alternative non-autoregressive baselines
-- Consistency models or other diffusion acceleration techniques that could address the computational cost concern
-
-## Suggestions
-1. Add VAE and normalizing flow baselines to substantiate the claim that non-autoregressive approaches are superior, not just diffusion models specifically
-2. Quantify the error in classical shadow ground truth approximations (L > 10) to ensure RMSE comparisons are meaningful
-3. Clarify the positional embedding discussion—either provide theoretical justification for why positional information doesn't reintroduce ordering bias, or acknowledge this as a limitation
-4. Include statistical significance testing with multiple random seeds prominently reported in main results
-
----
-
-## gInIbukM0R
-
-- GT: Reject (avg 2.5)
-- Predicted: Reject (2.0/10)
 - Match: Yes
 
 ### Final Review
 
 ## Summary
-This paper proposes a quantitative framework to measure "Emergence" in neural networks, defined as the number of paths from inactive to active nodes, and studies how this measure correlates with training dynamics and pruning behavior. The authors claim higher Emergence correlates with improved final performance while higher "relative Emergence" (normalized by parameter count) explains faster convergence in pruned networks. The framework is evaluated on MNIST, Fashion-MNIST (MLP), and CIFAR-10 (VGG19) with magnitude-based pruning experiments.
+This paper introduces EquiGX, a method for explaining predictions from equivariant graph neural networks operating on 3D geometric graphs. The authors extend the Deep Taylor decomposition framework with layer-wise relevance propagation rules specifically derived for spherical equivariant GNNs, handling tensor product operations, linear layers, and norm-based non-linearities to attribute importance to nodes and geometric features (distances and directions) in the input space.
 
 ## Strengths
-- **Novel theoretical connection**: The paper attempts to formalize emergence in neural networks using a categorical/quiver representation framework, providing a mathematically grounded approach to quantifying a phenomenon often discussed only informally.
-- **Insightful observation on training dynamics**: The finding that Emergence systematically decreases during training as networks specialize (with zero Emergence coinciding with convergence) is an interesting empirical observation that could have practical value for monitoring training progress.
-- **Relative Emergence insight**: The distinction between absolute Emergence (scale-dependent) and relative Emergence (efficiency metric) provides a useful lens for understanding why pruned networks can converge faster despite having fewer parameters—a non-obvious insight.
+- **Clear problem identification and motivation**: The paper correctly identifies a significant gap—existing XAI methods focus on 2D graphs and struggle with the tensor product operations and geometric features central to 3D equivariant GNNs. This is important for scientific applications where interpretability is crucial.
+- **Principled technical derivation**: The relevance propagation rules for tensor products (Equations 3-7) correctly exploit the bilinearity of TP operations. The trilinear decomposition that separately attributes relevance to hidden features, distance embeddings, and directional features (via spherical harmonics) is a natural extension for geometric graphs.
+- **Comprehensive experimental evaluation**: The paper evaluates on synthetic datasets (Shapes, Spiral Noise) with controlled ground truth and real-world scientific datasets (SCOP, BioLiP, ActsTrack), using qualitative visualizations and quantitative metrics (AUROC, AP, Fidelity, Sparsity).
+- **Consistent empirical improvements**: Table 1 shows improvements across all four datasets. For example, on Shapes, AUROC improves from 82.83 (best baseline PG-Explainer) to 84.31; on SCOP, from 77.26 to 81.51. The visualizations (Figures 1-4) confirm EquiGX better identifies geometric motifs.
 
 ## Weaknesses
-- **Arbitrary threshold without justification**: Active nodes are defined by activation > 0.05 with no theoretical or empirical justification. No sensitivity analysis is provided, making it impossible to assess whether results are robust to threshold choice or if findings are artifacts of a particular threshold.
-- **Insufficient statistical rigor**: All experiments appear to be single runs with no error bars, variance metrics, or statistical tests. Performance differences are negligible (e.g., MNIST final accuracies: 95.7%, 95.7%, 95.6%, 95.1% across pruning levels). The claim that "higher Emergence correlates with improved training performance" is not supported by quantitative correlation analysis.
-- **Loss landscape claims unsupported**: The paper asserts that higher Emergence indicates "greater concentration of local minima and a more rugged loss landscape" but provides no empirical validation. Section 3.3.1 contains only a hand-wavy visualization (Figure 2) and qualitative speculation.
-- **Missing Lottery Ticket Hypothesis comparison**: The pruning discussion would benefit significantly from connecting to Frankle & Carbin (2019), which is the seminal work on pruning and its relationship to initialization and trainability. This omission weakens the paper's positioning in the pruning literature.
-- **Incomplete VGG19/CIFAR-10 results**: The CIFAR-10 experiments are described qualitatively ("validates our hypothesis") without quantitative results, tables, or figures showing actual numbers, despite claiming these experiments "further validate" the framework.
-- **Redundant content**: Key claims (e.g., "Emergence increases with scale" and "relative Emergence correlates with training performance") are repeated verbatim in Sections 1, 3.3, and 4, suggesting insufficient editing.
+- **Limited architectural evaluation**: The method is evaluated only on Tensor Field Networks (TFN), but the title claims applicability to "spherical equivariant GNNs" broadly. Modern architectures like Equiformer, MACE, and NequIP have additional components (attention mechanisms, higher-order interactions) that may require modified propagation rules. This limits confidence in generalizability.
+- **Key design choice lacks ablation**: Equation 7 assigns equal relevance to the three TP components (hidden features, distance, direction) following prior work on attention mechanisms. This is a consequential design choice that warrants empirical validation—alternative attribution schemes may be more appropriate for tensor products specifically.
+- **Equivariance of explanations not addressed**: For a method designed for equivariant GNNs, the paper does not discuss whether the generated explanations should themselves be equivariant. If the input graph is rotated, do the relevance scores transform appropriately? This is fundamental to the problem setting and warrants both theoretical discussion and empirical verification.
+- **High variance in some results**: On Spiral Noise (AUROC 83.57 ± 10.07) and Shapes (84.31 ± 8.89), the standard deviations are substantial. Statistical significance testing would strengthen claims of improvement over baselines.
+- **Conservation property not empirically verified**: The paper claims relevance conservation holds, but provides no numerical verification of whether this property is maintained through TP layers.
 
 ## Nice-to-Haves
-- Ablation study varying the activation threshold (0.01, 0.05, 0.1, 0.2) to validate robustness
-- Full quantitative results for CIFAR-10 experiments rather than qualitative descriptions
-- Comparison against existing complexity/trainability measures (e.g., sharpness, mutual information, PAC-Bayes bounds)
-- Experiments on larger-scale architectures (ResNet, transformers) to support general claims about "designing and optimizing architectures"
-- Concrete design guidelines or prescriptions derived from the Emergence framework
+- Visualization of edge-level importance scores (distance and direction relevance R(d_ij), R(r_ij)) which are explicitly computed but never shown; these could provide more granular geometric insights than node-only visualizations.
+- Layer-wise relevance visualizations showing how geometric information flows through the network.
 
 ## Novel Insights
-The paper offers a potentially valuable perspective by defining Emergence as structural nonlinearity measurable through path-counting between active and inactive nodes. The key insight—that relative Emergence (normalized by parameters) explains the pruning-convergence speedup—is genuinely interesting and non-obvious: pruned networks have fewer parameters but achieve higher relative Emergence, suggesting more efficient use of remaining capacity for emergent trait development. The observation that Emergence converges to zero as training completes could have practical value as a training progress indicator. However, these insights are diminished by weak empirical support and the lack of clear causal mechanisms explaining *why* path-counting should predict emergent behavior.
+The key technical insight is exploiting the bilinearity of tensor products to derive tractable relevance propagation rules. The trilinear decomposition—separately attributing relevance to hidden features, distance embeddings (via RBF), and directional features (via spherical harmonics)—is novel for geometric XAI. This separation enables fine-grained analysis of when geometry vs. features drive predictions, potentially offering scientific insights beyond what node-level attribution can provide.
 
 ## Potentially Missed Related Work
-- **Lottery Ticket Hypothesis (Frankle & Carbin, 2019)**: Directly relevant to the pruning-initializer interplay claims; the paper would benefit from discussing whether their Emergence framework provides a different lens on why certain subnetworks ("winning tickets") train better.
-- **Loss landscape visualization methods (Li et al., 2018)**: Referenced in the paper but not used for empirical validation of local minima claims.
+None identified.
 
 ## Suggestions
-The paper should provide explicit statistical analysis: compute Pearson/Spearman correlation coefficients between Emergence values and training accuracy at each epoch, with p-values. Run experiments with multiple random seeds and report means ± standard deviations. This would transform the qualitative observations into defensible quantitative claims.
-
----
-
-## CTC7CmirNr
-
-- GT: Accept (Poster) (avg 7.0)
-- Predicted: Accept (7.5/10)
-- Match: Yes
-
-### Final Review
-
-## Summary
-This paper reveals that masked diffusion models (MDMs) are theoretically equivalent to masked models (both in training and sampling) and identifies a critical numerical precision issue in prior evaluations. The authors propose a First-Hitting Sampler achieving up to 20× speedup through analytical sampling, while demonstrating that previous claims of MDM superiority over ARMs were artifacts of truncated Gumbel sampling in 32-bit precision, not genuine advantages.
-
-## Strengths
-- **Rigorous theoretical contribution**: The mathematical derivations connecting continuous-time ELBO to discrete masked-token formulation (Proposition 3.1), proving optimal MDMs are time-independent (Proposition 3.2), and deriving analytical first-hitting times (Proposition 4.1) are well-structured and provide genuine insight into the relationship between MDMs and masked models.
-
-- **Significant practical finding**: The identification of 32-bit floating-point truncation in Gumbel-based categorical sampling as a source of artificially low perplexity is an important reproducibility contribution. The closed-form analysis in Proposition 5.2 explaining the temperature-lowering effect and prioritized unmasking provides both theoretical understanding and empirical verification.
-
-- **Effective sampling optimization with theoretical guarantee**: The First-Hitting Sampler provides genuine efficiency gains while being theoretically equivalent to the original reverse Markov process, with practical extensions to parallel decoding and high-order variants.
-
-- **Clear organization and compelling narrative**: The paper effectively structures three major findings (training equivalence, sampling efficiency, numerical issue) with explicit contribution statements and appropriate citations to related work.
-
-## Weaknesses
-- **Context-dependent speedup claim**: The headline 20× speedup applies specifically to their text setting (L=1024, |V|=50,257, ~600M params). The paper itself acknowledges in Appendix J.3 that for DiffSound (|V|=256), the speedup drops to ~1.07×. This variability should be more prominently discussed rather than leading with the most favorable number.
-
-- **Limited experimental scale**: Evaluations use only 64 samples, a single dataset (OpenWebText), and relatively small models (~170M parameters). The claim that "MDMs lack a clear prospect" to replace ARMs is based on experiments far below LLM scale, where diffusion models have shown strong scaling behavior in other domains.
-
-- **Incomplete domain validation**: The paper focuses exclusively on text generation. MDMs and masked models are widely used for image generation (MaskGIT), where bidirectional attention provides clearer advantages and ARMs are not the dominant paradigm. Without validation in these domains, the general claim that "simpler masked models are sufficient" may not generalize.
-
-- **Missing MaskGIT-style baseline**: The paper argues MDMs are equivalent to masked models but doesn't directly compare against actual masked model implementations (e.g., MaskGIT, BERT-style) using identical architectures. The only comparison is against ARMs, which inherently favors ARMs on sequential text data.
-
-- **Theoretical gap in high-order variants**: The paper admits "higher-order methods tend to degrade performance" yet proposes both extrapolation and predictor-corrector variants without clear theoretical guidance on which to use under different conditions (N≤128 vs N≥256).
-
-## Nice-to-Haves
-- Experimental validation on image generation tasks where masked models excel, to support the general claim about masked model sufficiency
-- Quantified experimental comparison of KV caching incompatibility with concrete wall-clock inference benchmarks, rather than only theoretical discussion
-- Multi-seed experiments with confidence intervals for training comparisons, given the variance visible in training curves
-- Systematic temperature study across a wider range (e.g., 0.5-1.5) with human evaluation or metrics like MAUVE to better characterize the quality-diversity trade-off
-
-## Novel Insights
-The paper's most significant insight is the reformulation of continuous-time MDM training through the lens of masked token counts, revealing that the time variable is essentially a continuous relaxation of the masked ratio (Proposition 3.1), and that the optimal model is time-independent (Proposition 3.2). The discovery of numerical precision issues in Gumbel sampling represents a genuine contribution to reproducibility—it demonstrates that the apparent superiority of MDMs over ARMs (Gen PPL ~15 vs ~40) was an artifact of 32-bit truncation artificially lowering effective temperature, rather than genuine capability. The first-hitting sampler provides an elegant solution that simultaneously addresses sampling inefficiency and avoids the numerical issue by changing the sampling paradigm from simultaneous multi-position categorical sampling to sequential token-by-token decoding.
-
-## Potentially Missed Related Work
-- **InSERtive Diffusion** (Grave et al.) and related insertion-based non-autoregressive methods — for comparison on efficiency claims
-- **MaskGIT** (Chang et al., 2022) — could serve as a stronger baseline for the equivalence claim with identical architecture
-- **Ou et al. (2024)** — concurrent work also noting time-agnostic properties, which the paper acknowledges in passing but could be discussed more thoroughly regarding priority and complementary findings
-
-## Suggestions
-The paper should clarify the conditions under which the 20× speedup applies by providing a theoretical formula for expected speedup as a function of vocabulary size, sequence length, and model size, as this would help practitioners assess applicability to their settings. Additionally, the comparison section should include MaskGIT-style baselines at identical architecture to directly validate the claimed equivalence rather than relying solely on comparison to ARMs.
+1. **Expand architectural evaluation**: Test on at least one modern spherical equivariant GNN (e.g., MACE or Equiformer) to validate broader applicability.
+2. **Add ablation on relevance attribution**: Compare the equal 1/3 split against alternative schemes to justify the design choice in Equation 7.
+3. **Empirically verify explanation equivariance**: Rotate/translate input graphs and verify that explanations transform correspondingly—or discuss limitations if they do not.
+4. **Add statistical significance tests**: Report p-values or confidence intervals to support claims of improvement over baselines.
 
 ---
 
@@ -153,297 +171,252 @@ The paper should clarify the conditions under which the 20× speedup applies by 
 ### Final Review
 
 ## Summary
-This paper introduces MRDS-IR, a multi-region neural dynamics model combining nonlinear within-region dynamics (parameterized by deep neural networks) with linear communication channels between regions characterized by their impulse response. The key innovation is enabling interpretable characterization of inter-area communication while retaining expressive local dynamics. The authors develop a state-noise inversion-free variational filtering algorithm and demonstrate the approach on synthetic data, RNN-based computational tasks, and real V1/V2 neural recordings.
+The paper proposes MRDS-IR (Multi-Region Dynamical Systems with Impulse Response communication channels), a probabilistic generative model for analyzing neural population dynamics across multiple brain regions. The method combines region-specific nonlinear dynamics (parameterized by neural networks) with linear communication channels characterized by their impulse responses, enabling both expressive local dynamics and interpretable frequency-domain analysis of inter-areal communication. The authors develop a variational inference algorithm using state-noise inversion free filtering to handle the hybrid stochastic/deterministic transitions, and validate the approach on synthetic data, RNN-based task simulations, and real V1/V2 neural recordings.
 
 ## Strengths
-- **Strong theoretical foundation**: The paper elegantly connects linear systems theory (impulse response, transfer functions, realizations) to state-space models for neural data, providing principled interpretability for communication channels. This bridges a gap between circuit-level theories and statistical methods.
-- **Novel model combination**: The integration of nonlinear local dynamics with linear impulse-response communication channels fills a gap in existing methods (see Table S1), offering a better trade-off between expressiveness and interpretability than prior approaches.
-- **Technically elegant inference**: The state-noise inversion-free variational filtering algorithm handles hybrid stochastic/deterministic transitions in a principled way, and the block-structured updates enable computational efficiency.
-- **Comprehensive empirical validation**: Ground truth experiments (Sections 3.1-3.3) validate recovery of dynamics, channel structure, and pruning of inactive channels. Real V1/V2 data experiments (Section 3.4) show competitive or superior performance against established baselines (MRM-GP, DLAG, LN, NL).
-- **Demonstrated interpretability**: The approach successfully recovers frequency selectivity, delays, and gating structure in inter-area communication—features directly relevant to neuroscientific questions (e.g., feedforward vs. feedback timing in V1/V2).
+- **Novel methodological framework**: The impulse response parameterization of communication channels is a creative contribution that bridges linear systems theory with nonlinear dynamical systems, enabling both time-domain (impulse response) and frequency-domain (transfer function) interpretation of inter-areal communication.
+- **Strong theoretical grounding**: The connection between impulse responses, transfer functions, and finite-dimensional state-space realizations (Section 2.1) is well-motivated and provides principled interpretability that black-box approaches lack.
+- **Comprehensive experimental validation across multiple domains**: The paper includes four experiments—synthetic ground-truth recovery, reverse-engineering RNN computations (integration task), rhythmic timing tasks, and real V1/V2 neural recordings—demonstrating method versatility.
+- **Competitive empirical performance**: On held-out neuron prediction for V1/V2 data, MRDS-IR achieves lower MSE than DLAG, MRM-GP, LN, and NL baselines across all eight stimulus conditions (Figure 4E), and shows better long-horizon prediction than CURBD on RNN-based tasks (Figure 2E).
+- **Meaningful neuroscientific interpretability**: The method recovers expected patterns in V1/V2 data—feedforward signals peaking early after stimulus onset, feedback signals ramping up later—which aligns with known cortical processing and was not clearly recovered by DLAG (Figure S1).
+- **Technical contribution in inference algorithm**: The state-noise inversion free variational filtering algorithm (Appendix A) handles hybrid stochastic/deterministic transitions elegantly without requiring matrix inversions for degenerate noise covariances.
 
 ## Weaknesses
-- **Missing ablation for key innovation**: The paper never directly tests whether the impulse-response parameterization actually helps versus simpler instantaneous linear coupling. An ablation comparing MRDS-IR to an otherwise identical model with instantaneous connectivity (as in Glaser et al. 2020) would strengthen the paper by demonstrating the value of the core contribution.
-- **Limited real-data validation scope**: The V1/V2 validation uses only one session with simple orientation coding. Testing on datasets with more cognitively demanding tasks (decision-making, working memory) or demonstrating reproducibility across multiple sessions would better support claims about understanding distributed computation.
-- **Ad-hoc stimulus encoding**: The V1/V2 experiments use "amplitude proportional to stimulus ID" as input, acknowledged as "a first pass." The paper should discuss sensitivity to this choice or explore more principled stimulus conditioning, as this affects the interpretability of results.
-- **Hyperparameter selection lacks guidance**: Choices of latent dimensions (L_k) and filter order (M) are critical but not systematically analyzed for sensitivity or selection methodology. The paper does not provide guidance on how practitioners should make these choices.
-- **Identifiability not addressed**: The model has many degrees of freedom (channel filters, nonlinear dynamics, latent dimensions). The paper never discusses whether learned solutions are unique or how posterior uncertainty affects interpretation.
-- **Training stability underexplored**: The combination of nonlinear dynamics + linear channel parameters + variational inference could suffer from optimization challenges. The paper does not analyze failure modes, convergence reliability, or show ELBO trajectories across random seeds.
+- **No systematic ablation studies**: The paper uses different filter orders (M=1 for integration task, M=2 for rhythmic timing and V1/V2) and latent dimensionalities (L₁=3, L₂=2 for V1/V2) without systematic analysis of how these hyperparameters affect performance or interpretability. The contribution of nonlinear local dynamics versus impulse response channels is not isolated.
+- **No statistical significance testing or uncertainty quantification**: Figures 4E and 4F report MSE and R² values without error bars, confidence intervals, or significance tests across random seeds or cross-validation folds. Claims about "outperforming" baselines are not statistically supported.
+- **Computational complexity and scalability not discussed**: The extended state includes channel states, so dimensionality scales with K²×M×L (where K is regions, M is filter order, L is latent dimension). Training time, memory requirements, and scalability to many regions or larger neural populations are never discussed—essential for practical adoption.
+- **MR-SDS not empirically compared**: The paper explicitly identifies MR-SDS (Karniol-Tambour et al., 2022) as "the most complex multi-area model" in Table S1 but provides no empirical comparison, leaving unclear how MRDS-IR compares to the most relevant nonlinear alternative.
+- **Identifiability analysis missing**: The paper notes learned dynamics have "expected model invariances (axis rotation, and re-scaling)" but does not analyze whether impulse responses are uniquely identifiable, how sensitive channel estimates are to initialization, or what symmetries exist in the full model.
+- **Limited biological validation scope**: Only one V1/V2 session (106r001p26) is analyzed for MSE comparison, and another (107l003p143) for R² comparison. Broader validation across additional sessions, brain regions, or behavioral tasks would strengthen claims about real-world applicability.
 
 ## Nice-to-Haves
-- Quantitative channel recovery metrics (e.g., correlation or MSE between recovered and ground truth impulse responses) in Section 3.1, rather than purely qualitative assessment.
-- Single-trial V1/V2 trajectories showing oscillatory structure consistency across trials.
-- Computational complexity analysis (training time, scalability) for ICLR audience.
-- Systematic sensitivity analysis showing how results change across L_k and M choices.
-- More sessions/animals for V1/V2 validation (the paper mentions session 107l003p143 in some figures but doesn't fully leverage multiple sessions).
+- Analysis of failure modes: Under what conditions does MRDS-IR fail to recover correct dynamics or channel structure (e.g., insufficient data, high noise, nonlinear inter-areal coupling)?
 
 ## Novel Insights
-The paper's most valuable insight is that interpretable communication channels parameterized by their impulse response can be seamlessly integrated with expressive nonlinear within-region dynamics while maintaining tractable inference. The demonstration that learned channel frequency responses reveal passband structure aligned with task-relevant frequencies (Figure 3G) provides a concrete example of how the linear systems framework can yield neuroscientifically interpretable results. Similarly, the V1/V2 finding that feedforward (V1→V2) signals are prominent early while feedback (V2→V1) ramps up later aligns with known neuroscience principles, suggesting the model captures genuine physiological phenomena rather than artifacts.
+The paper makes a genuinely useful observation that communication between brain regions can be parameterized through impulse responses, providing a principled middle ground between fully interpretable linear models and black-box approaches. The finding that estimated feedforward (V1→V2) communication peaks early while feedback (V2→V1) ramps up over time (Figure 4D) aligns with known cortical processing hierarchies, demonstrating that the method extracts biologically meaningful structure. The state-noise inversion free filtering algorithm provides an elegant solution for handling deterministic channel dynamics within a variational framework, avoiding numerical issues with degenerate noise covariances.
 
 ## Potentially Missed Related Work
-- **Nonlinear state-space models with structured inference**: While the paper discusses linear LDS variants and switching nonlinear models (mr-srLDS), it could benefit from deeper engagement with the broader SSM literature on nonlinear dynamics estimation and amortized inference (e.g., Klushyn et al. 2021 on deep state-space models).
-- **Alternative stable parameterizations**: The paper mentions Orvieto et al. 2023 as an alternative for stability enforcement but does not compare approaches or discuss trade-offs.
+- None identified (related work search was not performed).
 
 ## Suggestions
-- Add an ablation comparing MRDS-IR to an otherwise identical model with instantaneous linear coupling to isolate the contribution of the impulse-response channels.
-- Include a sensitivity analysis for hyperparameter choices (L_k, M) and provide guidance on model selection using ELBO or held-out predictive likelihood.
-- Demonstrate reproducibility on V1/V2 across multiple sessions (at minimum, sessions 106r001p26 and 107l003p143) to strengthen the real-data validation claims.
-- Address training stability concerns by showing ELBO convergence curves across random seeds and discussing failure modes.
+1. Add systematic ablation experiments varying filter order M and latent dimensionality L to quantify their impact on model performance and interpretability.
+2. Include error bars across multiple random seeds and statistical significance tests (e.g., paired t-tests or bootstrap confidence intervals) for all quantitative comparisons against baselines.
+3. Add a computational complexity analysis discussing training time and memory scaling with number of regions K, latent dimensionality L, and filter order M.
+4. Compare empirically against MR-SDS or other nonlinear multi-region models to better position the contribution relative to the most comparable existing methods.
+5. Validate on additional neural recording sessions from V1/V2 or other brain regions to demonstrate robustness across datasets.
 
 ---
 
-## nwDRD4AMoN
+## c61unr33XA
 
-- GT: Accept (Oral) (avg 9.0)
-- Predicted: Accept (7.0/10)
-- Match: Yes
-
-### Final Review
-
-## Summary
-This paper introduces Artificial Kuramoto Oscillatory Neurons (AKOrN), a novel neural network architecture where neurons are represented as N-dimensional unit vectors on a hypersphere that evolve via generalized Kuramoto dynamics. The method demonstrates competitive performance on unsupervised object discovery (outperforming SSL baselines on PascalVOC), strong reasoning capability on Sudoku puzzles (89.5% OOD with energy-based voting), and notable adversarial robustness with well-calibrated uncertainty estimates on CIFAR10. The work is notable as the first synchrony-based model to scale competitively to natural images.
-
-## Strengths
-- **Innovative architectural design bridging dynamical systems and deep learning**: Successfully incorporates the Kuramoto model (from statistical physics) as a fundamental neural processing unit, providing a principled alternative to conventional residual updates. The finding that asymmetric (non-reciprocal) connections outperform symmetric alternatives is both biologically plausible and empirically important.
-
-- **Strong empirical contributions across diverse domains**: Demonstrates AKOrN's effectiveness on unsupervised object discovery (competitive with slot-based models on CLEVRTex, FG-ARI of 88.5%; outperforms DINO/MoCoV3/MAE on PascalVOC with MBO_i of 52.0), Sudoku solving (100% ID, 89.5% OOD), and adversarial robustness (58.91% against AutoAttack on CIFAR10 with ECE of 1.3). The ablation studies comprehensively validate each component's contribution.
-
-- **Comprehensive ablation and architectural analysis**: Thorough ablation studies examining the projection operator, Kuramoto vs. residual updates, number of rotating dimensions (N), and the roles of C and m terms. The analysis showing that N=2 underfits object discovery tasks while N=4 underperforms on robustness provides important guidance.
-
-- **Theoretical grounding with practical insights**: Includes Lyapunov stability proofs and connections to physics models (Heisenberg model, active matter). The appendix provides rigorous mathematical justification while acknowledging limitations of the asymmetric case.
-
-- **Reproducibility**: Code and project page provided; experimental settings are detailed in appendices.
-
-## Weaknesses
-
-- **Theoretical foundation undermined by empirical approach**: The paper proves in Appendix F that Eq. (3) is a Lyapunov function only under symmetric constraints (J_ij = J_ji, Ω_i = Ω, Ωc_i = 0), yet explicitly uses asymmetric connections because they "perform better across all tasks." The paper states "it is unclear whether the energy defined in Eq. (3) is proper" for attentive connectivity, yet relies on this energy for the energy-based voting mechanism. This disconnect between theory and practice should be more prominently acknowledged rather than buried in the appendix.
-
-- **N=2/N=4 trade-off creates confusion and undermines robustness claims**: Table 20 reveals that AKOrN_mix with N=4 achieves 93.51% clean accuracy but 0% adversarial accuracy, while N=2 achieves 58.91% adversarial accuracy but only 91.23% clean. The main text prominently showcases N=2 robustness results without adequately explaining that the robustness property disappears when N is increased to match object discovery performance. The paper does not provide guidance on when to use which variant, nor does it discuss why this trade-off exists.
-
-- **Energy-based voting scalability concern**: The 89.5% OOD Sudoku result requires T_eval=512 and K=1000 samples. This represents extensive test-time compute (essentially ensembling over 1000 initializations) that is not compared fairly against baselines using equivalent test-time compute. The paper should contextualize this as a computationally expensive approach.
-
-- **Adversarial robustness evaluation limited**: Only CIFAR10 is tested for robustness; no ImageNet-scale results are provided, limiting generalizability claims. Additionally, the AutoAttack evaluation uses ε=8/255, which is relatively mild compared to stronger attacks tested in the robustness literature.
-
-- **Up-tiling not systematically evaluated on baselines**: While Figure 21 shows up-tiling visually helps DINO features, full metrics with up-tiling applied to baseline models are not reported in the main tables, making it unclear whether the up-tiling contribution is unique to AKOrN.
-
-- **OOD results on COCO underemphasized**: While AKOrN outperforms SSL baselines on PascalVOC, it is outperformed by SPOT on COCO2017 (35.0 vs 31.3 MBO_i). The paper should acknowledge this limitation more explicitly rather than emphasizing the PascalVOC results.
-
-## Nice-to-Haves
-- **Analysis of energy-predictability relationship across tasks**: The paper shows energy correlates with Sudoku correctness but provides no analysis of whether energy tracks anything meaningful for object discovery or robustness. Investigating this would strengthen the "energy-based model" framing.
-
-- **Deeper analysis of N>4 performance degradation**: Figure 16-17 shows sharp performance drops when N exceeds 4-16 depending on task. The paper acknowledges "further experimental and mathematical analysis is needed" but this fundamental limitation directly impacts practical applicability.
-
-- **Ablation isolating sphere constraint**: The ablation comparing Kuramoto vs. residual updates (Table 6) also removes the sphere constraint entirely, confounding what drives the benefit. An ablation keeping unit-norm but using standard attention would isolate the Kuramoto dynamics' contribution.
-
-- **Failure case analysis on Sudoku OOD**: The 10.5% failure rate on OOD Sudoku deserves analysis—what types of puzzles does AKOrN systematically fail on?
-
-## Novel Insights
-This paper makes several genuinely novel observations beyond the architectural contribution. First, it demonstrates that asymmetric (non-reciprocal) connections—biologically more plausible than symmetric ones—actually improve performance over symmetric variants, overturning assumptions from the energy-based model literature (Energy Transformer). Second, it shows that the energy function arising from Kuramoto dynamics naturally serves as a solution quality indicator, enabling energy-based voting that substantially improves OOD generalization without task-specific heuristics. Third, it reveals that test-time extension of the iterative computation (more Kuramoto steps) improves accuracy on harder problems while hurting easier ones—an "adaptive computation time" property emerging from the dynamics themselves rather than being designed in. These observations suggest that the Kuramoto dynamics provide more than just a different architectural primitive; they induce qualitatively different learning and inference behaviors.
-
-## Potentially Missed Related Work
-- **Complex-valued neural networks with binding mechanisms** (Reichert & Serre, 2013; Lösche et al., 2022; Stanić et al., 2023): The paper discusses these but could more thoroughly compare against complex-valued approaches that also leverage phase for binding, particularly given the connection between the N-dimensional unit vectors and complex-valued representations.
-
-- **Neural Oscillators for Computation** (van Gerven & Jensen, 2024): Recent work on oscillatory neural networks for computation that appeared around the same time and addresses similar questions about dynamical representations.
-
-- **Traveling wave computations in biological networks** (Keller et al., 2024): The paper cites neuroscience evidence for traveling waves but could connect more explicitly to computational models of such waves.
-
-## Suggestions
-1. **Reconcile N=2 and N=4 variants**: Provide clear guidance on when to use each variant, or investigate hybrid approaches. The current presentation leaves readers uncertain about which variant to trust.
-
-2. **Contextualize adversarial robustness claims**: Discuss explicitly that robustness comes at a clean accuracy cost and that the N=2 variant sacrifices task performance for robustness. Consider whether the contribution is "robustness by design" or "robustness with accuracy trade-offs."
-
-3. **Compare fairly on test-time compute**: For Sudoku, compare against baselines (RRN, R-Transformer) using equivalent test-time ensembling to determine whether the improvement is from the method or from the ensemble.
-
-4. **Strengthen energy-based reasoning claims**: Investigate whether the energy-predictability relationship extends beyond Sudoku to other constraint satisfaction or reasoning tasks.
-
----
-
-## fBSc0c1IXJ
-
-- GT: Reject (avg 3.0)
-- Predicted: Accept (6.0/10)
-- Match: No
-
-### Final Review
-
-## Summary
-This paper introduces Remote Reinforcement Learning (RRL) with communication constraints, where a controller with reward access guides an actor (without reward access) through a rate-limited channel. The proposed GRASP method combines channel simulation (importance sampling) to efficiently communicate action samples, with behavioral cloning to establish a common reference distribution that minimizes communication cost. The empirical evaluation spans diverse environments and RL algorithms, demonstrating 12-13x average communication savings while maintaining equivalent policy performance.
-
-## Strengths
-- **Well-motivated practical problem**: The RRL setting models realistic scenarios like wireless control and edge computing where reward evaluation is expensive or centralized but action execution must happen remotely. The four limitations of direct reward transmission are clearly articulated.
-- **Solid information-theoretic grounding**: The method builds on established channel simulation literature (Cuff 2008, Li & El Gamal 2018), with proper discussion of bounds (Equations 1-2) showing why D_KL[P||Q] bits suffice versus H(P) + D_KL[P||Q] bits for naive transmission.
-- **Comprehensive empirical evaluation**: Experiments span diverse environments (CartPole, LunarLander, Breakout, BipedalWalker, HalfCheetah, multi-agent settings), multiple RL algorithms (PPO, DQN, SQ, DDPG), and 8-20 random seeds for statistical reliability.
-- **Algorithmic clarity and reproducibility**: Algorithms 1-3 provide clear pseudocode for both controller and actor components, with specific channel simulation implementation details.
-- **Meaningful communication savings**: 12-258x reduction in communication bits depending on environment, with substantial savings in continuous action spaces where naive approaches require 32-bit floats per dimension.
-
-## Weaknesses
-- **Reward transmission baseline not empirically evaluated**: The paper theoretically argues that GRASP achieves "41x less communication than sending the reward" (assuming 32 bits/step), but never runs these experiments. This is a central comparison point that would validate the practical claim. The paper states "sending the reward is functionally equivalent to action source coding" but this equivalence holds only for communication cost, not for the intelligence/computation tradeoff the paper claims to make.
-- **Continuous action space claim is imprecise**: The abstract states "50-fold reduction for environments with continuous action spaces" but experimental results show wide variance: from 10x (Pendulum-DDPG) to 258x (HalfCheetah-PPOcont). The 50-fold figure appears to be a representative rounded number not matching any specific statistic in the paper. This should be clarified or the claim revised.
-- **Minor numerical inconsistency**: Abstract claims "12-fold" average reduction while Tables 2 and 4 report "geometric average of 13 times reduction" (or "×258.20" in one case). While minor, this should be resolved for precision.
-- **Limited failure mode analysis**: The paper does not discuss conditions where behavioral cloning degrades (e.g., Breakout shows 15% return gap, the largest in experiments). The KL-divergence between policies could grow unbounded in some scenarios, and the paper lacks analysis of how communication efficiency degrades when the actor's learned policy diverges from the controller's.
-
-## Nice-to-Haves
-- **Ablation studies**: Systematically analyze the contribution of channel simulation versus behavioral cloning to communication savings. Currently, GRASP combines both, making it difficult to isolate each component's impact.
-- **Extension to noisy/delayed channels**: The motivating application mentions "delay constraints" for wireless channels, but all experiments assume perfect synchronous communication. Testing robustness to packet loss, delays, and bit errors would strengthen practical applicability.
-- **Theoretical analysis**: While not required, regret bounds or sample complexity results for GRASP in the RRL setting would strengthen the contribution beyond empirical validation.
-- **KL-divergence evolution plot**: Show how KL divergence between controller and actor policies evolves during training and correlates with communication rate.
-
-## Novel Insights
-The paper makes a valuable contribution by formalizing the RRL problem, which sits at the intersection of reinforcement learning and communication constraints—an underexplored setting where the agent taking actions lacks reward access. The insight that channel simulation (specifically, importance sampling over candidate samples) can reduce communication from H(P) + D_KL[P||Q] to approximately D_KL[P||Q] bits is both theoretically grounded and practically significant. The clever combination of channel simulation with behavioral cloning allows the actor to simultaneously learn a useful policy while serving as a shared reference distribution, creating a virtuous cycle where better actor policies enable more efficient communication. This framework is particularly well-suited for multi-agent and parallel settings, where a centralized controller coordinates distributed actors.
-
-## Potentially Missed Related Work
-- **Pujol Roig & Gündüz (2020)** "Remote Reinforcement Learning over a Noisy Channel" — Directly addresses RL with communication constraints over noisy channels; the paper mentions noisy channels in related work but does not compare with or build upon this specific approach.
-- **Pase et al. (2022)** "Rate-constrained remote contextual bandits" — The paper cites this work but a more detailed comparison of GRASP's approach versus their rate-constrained bandit formulation would strengthen positioning.
-- **Active RL literature** (Krueger et al., 2020; Eberhard et al., 2024) — The paper mentions active learning briefly but doesn't fully explore connections to cost-sensitive reward acquisition, where rewards are costly or delayed.
-
-## Suggestions
-- **Resolve numerical claim precision**: Clarify whether the "50-fold reduction for continuous action spaces" is a maximum, minimum, or average, and reconcile the 12-fold vs 13-fold discrepancy between abstract and body.
-- **Add empirical reward-transmission comparison**: Run at least one experiment with actual 32-bit reward transmission to validate the theoretical 41x savings claim.
-- **Characterize failure modes**: Analyze why Breakout shows the largest return gap (15%) and discuss conditions under which behavioral cloning fails to capture the controller's policy adequately.
-
----
-
-## rPup1cWk4d
-
-- GT: Reject (avg 3.0)
-- Predicted: Reject (3.5/10)
-- Match: Yes
-
-### Final Review
-
-## Summary
-This paper proposes a data augmentation framework that embeds structured data (e.g., tensors) into a statistical manifold via log-linear models on posets, then uses a novel "backward projection" algorithm to reverse dimension reduction and generate augmented samples. The method aims to provide interpretable, white-box data augmentation as an alternative to black-box generative models like autoencoders, leveraging information geometry concepts including dually-flat structures and Bregman divergences.
-
-## Strengths
-- **Novel backward projection algorithm**: Algorithm 4.1 presents a genuinely original approach to the inverse problem of dimension reduction using nearest neighbors and local sub-manifold construction, with theoretical grounding in divergence minimization. This concept may have applications beyond data augmentation.
-
-- **Strong theoretical foundation**: The paper correctly leverages established information geometry concepts—dually-flat manifolds, Bregman divergences, m-projections—applied in a novel "meta" perspective by treating multiple data points as probability distributions on a statistical manifold.
-
-- **Principled interpretability through many-body approximation**: The construction of sub-manifolds using ℓ-body approximations provides a semantically meaningful parameterization (capturing mode interactions at different orders), offering more principled control over dimensionality than black-box latent spaces where dimensions lack clear meaning.
-
-- **Clean algorithmic formulation**: Algorithm 4.2 presents a complete, well-structured three-phase pipeline (encoding, generating, decoding) with clear mathematical notation and theoretical guarantees.
-
-## Weaknesses
-- **Uncompetitive and poorly-documented autoencoder baseline**: The paper admits the autoencoder "appears to overfit" but provides zero details on architecture, training procedure, or hyperparameters beyond "2+2 layers with latent dimension 17." A simple architecture trained on 1000 samples without regularization is not a representative baseline for autoencoder-based augmentation. This undermines the paper's central comparative claim.
-
-- **"Ours" alone underperforms original data**: Table 1 shows "Ours" (75.37%) substantially underperforms "Original" (81.79%) as a training set. Only "Original + Ours" (83.40%) marginally beats "Original" (81.79%), and this improvement is within error bars (±3.22% vs ±4.57%). The "competitive performance" claim is weakened by this fact.
-
-- **No statistical significance testing**: All comparisons between methods use error bars ranging from ±3-15%, yet no statistical tests (e.g., paired t-tests, McNemar's) establish whether differences are meaningful. This is particularly problematic for UCI experiments where error bars are enormous relative to accuracy differences.
-
-- **Algorithm 4.1 lacks full specification**: The "Sub-Manifold" and "Projection" operations are black boxes. While Remark 4.1 provides one concrete example (fixing θ-coordinates), this is insufficient for reproducibility. The paper states "D is created by some linear constraints" without specifying what constraints or how they're chosen.
-
-- **Missing standard data augmentation baselines**: For image data augmentation at ICLR, comparison with classical methods (rotation, flipping, Mixup, CutMix) is standard. These baselines are entirely absent, making it impossible to assess whether the proposed approach adds value over simpler alternatives.
-
-- **Limited quantitative metrics for generated samples**: The paper relies solely on downstream classification accuracy and visual inspection. Standard generative model metrics (FID, Inception Score, precision/recall curves) are absent, leaving the quality of augmented samples inadequately assessed.
-
-## Nice-to-Haves
-- **Scale experiments to CIFAR-10 or ImageNet**: MNIST (1000 samples) is insufficient to demonstrate practical value. The method's scalability to realistic image datasets is unproven.
-
-- **Ablation studies**: Systematically ablate key components (poset structure choices, alternative sub-manifold construction methods, KDE vs. other generation methods) to isolate each contribution's impact.
-
-- **Concrete interpretability examples**: Demonstrate operational interpretability—what does a dimension in B represent? How can a practitioner control augmentation behavior? Currently, interpretability claims are asserted but not demonstrated.
-
-- **Runtime and memory analysis**: Report computational complexity and compare efficiency against baselines, as this matters for practical deployment.
-
-## Novel Insights
-The paper's most valuable contribution is the "backward projection" concept: given a point in the low-dimensional latent space, identify its k-nearest neighbors among projected original data, construct a local sub-manifold from their pre-images, and project backward onto it. This provides a geometrically intuitive, data-centric solution to the inverse problem of dimension reduction that avoids black-box decoders. The insight that the interplay between linearity (flat sub-manifolds with linear constraints) and non-linearity (curved statistical manifold) yields "pseudo-non-linear" transformations is conceptually interesting. The meta-perspective of treating datasets as probability distributions on a statistical manifold also offers a fresh viewpoint for information geometry applications.
-
-## Potentially Missed Related Work
-- **Out-of-sample extension methods**: Classical techniques like Nyström approximation (Williams & Seeger, 2000) and Geometric Harmonics (Coifman & Lafon, 2006) address similar inverse problems for kernel methods. The paper's relation to these established approaches is not discussed.
-
-- **Mixup and geometric data augmentation**: Related interpretable augmentation strategies (Zhang et al., 2018; Verma et al., 2022) that operate in latent/projection spaces are absent from the comparison.
-
-- **Energy-based models for augmentation**: While the paper claims an energy-based approach, connections to established EBM literature for data augmentation (e.g., Du & Mordatch, 2019) are not explored.
-
-## Suggestions
-**Strengthen the experimental methodology**: (1) Use a properly regularized autoencoder (VAE with KL divergence, or denoising AE with dropout) with documented hyperparameters and training procedures. (2) Include classical augmentation baselines (rotation, flipping, Mixup) as controls. (3) Add FID/Inception Score metrics for quantitative generative quality assessment. (4) Conduct statistical significance tests for all comparative claims. These changes would substantially strengthen the paper's central narrative about interpretability advantages without sacrificing theoretical rigor.
-
----
-
-## 5IkDAfabuo
-
-- GT: Accept (Oral) (avg 7.5)
+- GT: Accept (Poster) (avg 7.0)
 - Predicted: Accept (6.5/10)
 - Match: Yes
 
 ### Final Review
 
 ## Summary
-The paper proposes Prioritized Generative Replay (PGR), a framework that models an RL agent's replay buffer as a conditional diffusion model conditioned on "relevance functions" that guide synthetic data generation toward more learning-informative transitions. The key insight is that successful generative replay depends on generating the right *kinds* of transitions (not just high-quality ones), and the paper identifies curiosity (ICM-based prediction error) as an effective default relevance function that promotes diversity and reduces overfitting.
+This paper proposes MKDT (Matching Knowledge Distillation Trajectories), the first effective method for dataset distillation in self-supervised learning. The authors identify that naive trajectory matching fails for SSL due to high gradient variance, and address this by using knowledge distillation to create lower-variance student trajectories from a teacher encoder trained with SSL. Experiments on CIFAR-10/100 and TinyImageNet show up to 13% improvement over baselines in downstream linear probe accuracy.
 
 ## Strengths
-- **Strong empirical breadth**: Experiments span state-based DMC, pixel-based DMC, OpenAI Gym, and DMLab with diverse baselines including PER, exploration bonuses, model-based methods, and the close prior work SYNTHER. The evaluation protocol following Lu et al. (2024) enables direct comparison.
-- **Excellent mechanism analysis**: The paper convincingly demonstrates *why* PGR works through dormant ratio analysis (showing reduced overfitting), curiosity score distributions (showing shifted novelty toward higher-relevance regions), and controlled experiments showing generation quality is similar between PGR and SYNTHER, isolating that the *target* of conditioning (not quality) drives gains.
-- **Conceptually novel framing**: Connecting prioritized experience replay to conditional generation provides a fresh unifying perspective, and identifying curiosity as a principled default relevance function is a valuable contribution.
-- **Minimal overhead with clear benefits**: <5% additional training time with substantial and consistent gains across settings.
-- **Informative ablations**: Systematic comparisons to PER, exploration bonuses, different relevance functions, and scaling experiments demonstrate the framework's flexibility and the importance of conditioning.
+- **Novel problem formulation**: Addresses a genuinely open problem—dataset distillation for SSL pre-training—with a principled solution that leverages knowledge distillation to reduce trajectory variance.
+- **Theoretical grounding**: Theorem 4.1 provides formal analysis showing SSL gradients have higher variance than SL gradients in a simplified linear setting, giving mechanistic justification for why MTT fails for SSL.
+- **Comprehensive empirical validation**: Evaluates across CIFAR-10, CIFAR-100, and TinyImageNet with multiple downstream tasks (Aircraft, CUB2011, Dogs, Flowers), showing consistent 5-13% improvements over baselines.
+- **Evidence for core claims**: Figure 1 directly demonstrates that SSL trajectories have higher variance than SL trajectories, distillation loss decreases slowly for SSL, and synthetic images struggle to move from initialization.
+- **Method generalizability**: Demonstrated with both BarlowTwins and SimCLR, and transfer from ConvNet distillation to ResNet-10/18 architectures.
 
 ## Weaknesses
-- **Underspecified conditional generation methodology**: The "prompting strategy" from Peebles et al. (2022) referenced in Section 4.3 is not explained in sufficient detail for full reproducibility. How exactly are top-k F-values used as conditioning signals during diffusion sampling? The percentile-k sampling is described but the mechanism connecting F-values to CFG is opaque.
-- **tSNE analysis lacks quantification**: Section 4.1 claims PGR generates a "distinct sub-portion" of the data space with "red and blue dots largely separate" in panel B, but this is asserted without quantitative support (e.g., average minimum distance, KL divergence between distributions). This weakens the mechanistic argument.
-- **Reward-PGR underperformance underanalyzed**: The observation that conditioning on reward actually hurts performance compared to unconditional SYNTHER is a significant empirical finding that deserves deeper analysis. The paper attributes this to lack of "how to navigate to" information, but this post-hoc reasoning could be strengthened with additional analysis of what specifically fails in Reward-PGR.
-- **Limited environment diversity**: All main experiments are on continuous control locomotion tasks. Generalization to more complex domains (e.g., Atari, robotic manipulation, multi-task settings) is undemonstrated in the main paper.
-- **Guidance scale ω not systematically studied**: The CFG guidance scale is a critical hyperparameter but is neither ablated nor discussed in sensitivity across experiments.
+- **Theoretical gap from practice**: Theorem 4.1 assumes a linear model with spectral contrastive loss, while experiments use BarlowTwins/SimCLR with ResNet-18. The variance analysis doesn't directly apply to the empirical setting, weakening the theoretical contribution.
+- **No direct verification that KD trajectories have lower variance**: Figure 1a compares SSL vs SL trajectory variance, but never directly measures KD trajectory variance against SSL—the core mechanistic claim remains empirically unverified.
+- **Missing key baseline comparisons in main text**: The MTT-SSL and DM-SSL baselines (Tables 11-12) appear only in Appendix F, yet these directly test the paper's premise that naive trajectory matching fails for SSL.
+- **Limited experimental scale**: Experiments are limited to CIFAR-scale and TinyImageNet. SSL is most impactful for large-scale pre-training; validation on ImageNet-scale datasets is essential to assess practical relevance.
+- **No computational cost analysis**: The method requires training a ResNet-18 teacher on full data, then K=100 student trajectories—substantial overhead that isn't quantified relative to baselines or full SSL training.
+- **Missing critical ablations**: No ablation on the number of expert trajectories K=100, which directly affects both performance and computational cost.
 
 ## Nice-to-Haves
-- Systematic guidance scale sensitivity analysis to provide practical recommendations
-- Comparison to additional overfitting mitigation methods (e.g., Munchausen DQN, data augmentation techniques) to justify the added complexity of the generative model
-- Extended analysis of what makes a good relevance function F beyond the empirical comparison
-- Additional validation that dormant ratio correlates with overfitting in actor-critic (SAC/REDQ) settings, given it was introduced for value-based methods
+- Analysis of what semantic content is captured in distilled images (Appendix E shows examples but no quantitative analysis)
+- Investigation of teacher quality sensitivity—what happens if the teacher is under-trained?
+- Experiments on larger distillation budgets (beyond 5%) to understand scaling behavior
 
 ## Novel Insights
-The paper's central insight—that synthetic data quality (measured by dynamics MSE) is nearly identical between conditional and unconditional generation, yet conditional generation substantially outperforms—represents a genuinely novel contribution to understanding generative RL. The insight that the *target* of conditioning (relevance function choice) matters more than generation quality itself is both counterintuitive (reward-based conditioning fails) and well-supported by analysis of curiosity-PGR's effect on diversity and overfitting. The framing elegantly unifies experience replay prioritization and conditional generation, providing a new design space for generative RL research.
+The key insight—that SSL gradient variance fundamentally prevents effective trajectory matching, and that knowledge distillation converts SSL into a supervised-like objective with lower variance—is creative and empirically grounded. The paper correctly identifies that SSL losses depend on batch interactions (creating high variance) while KD's MSE loss is instance-wise (creating lower variance). This insight enables the first successful dataset distillation method for SSL, opening a new research direction.
 
 ## Potentially Missed Related Work
-- **DreamerV3 world models with planning**: While DREAMER-V3 is cited, a more detailed comparison discussing the distinction between PGR's weaker coupling to dynamics (generating transitions independently) versus world model approaches that plan through learned dynamics could strengthen positioning.
-- **Guided offline RL with diffusion**: Works like "Diffusion Model for RL: A Survey" (Zhu et al., 2023) and related guided-synthesis methods may provide additional context for the conditional generation framing.
+None identified (search was skipped for this paper).
 
 ## Suggestions
-- Add a supplementary experiment isolating the conditional generation benefit with a "conditional uniform random" baseline alongside the existing conditional VAE comparison to definitively show that *any* relevant conditioning helps, not just curiosity specifically.
-- Quantify the tSNE separation in Figure 2 (e.g., using earth mover's distance or average minimum cross-domain distance) to provide empirical backing for the mechanistic claims.
+- Directly measure and report trajectory variance for KD vs SSL to verify the core mechanism
+- Move the MTT-SSL and DM-SSL baseline comparisons (Tables 11-12) from Appendix F to the main experimental section
+- Include ImageNet-scale experiments (even a subset) to demonstrate scalability
+- Add computational cost comparison (FLOPs or wall-clock time) between MKDT, baselines, and full SSL training
+- Ablate the number of expert trajectories K (e.g., K ∈ {25, 50, 100}) to assess sensitivity and computational trade-offs
 
 ---
 
-## y2ch7iQSJu
+## UUwrBhhsxT
 
-- GT: Reject (avg 2.0)
+- GT: Reject (avg 5.2)
 - Predicted: Reject (4.0/10)
 - Match: Yes
 
 ### Final Review
 
 ## Summary
-This paper introduces **BBSurv**, the first method for budgeted active learning with censored survival data where queries provide only partial (incremental) information through an I-oracle. The authors adapt BatchBALD's mutual information framework to handle censored data, formulate batch selection as a maximum coverage problem, and provide a greedy algorithm. Empirical evaluation on three medical datasets (SUPPORT, MIMIC-IV, NACD) shows modest improvements over baselines in the MAE-PO metric.
+This paper proposes a Transformer-based scenario-oriented testing framework for fault detection in Unmanned aircraft Traffic Management (UTM) systems. The framework combines a Policy Model trained via offline reinforcement learning to generate targeted fault injection scenarios, with a rule-based Action Sampler that enforces safety constraints and incorporates human preference. The authors evaluate their approach on an industry-level simulator managing 400+ drones across 700+ hours of testing.
 
 ## Strengths
-- **Novel and important problem formulation**: This is the first work addressing budgeted learning with survival data where queries yield partial (not full) label information, directly modeling realistic clinical trial scenarios where follow-up may not fully uncensor patients.
-- **Sound theoretical foundation**: The authors rigorously connect batch selection to the well-studied maximum coverage and budgeted maximum coverage problems (Khuller et al., 1999), establishing NP-hardness and leveraging established approximation algorithms.
-- **Comprehensive experimental evaluation**: Experiments span three real-world medical datasets with varying sizes (2,402 to 38,520 patients), censorship rates (32% to 67%), and feature dimensions (42 to 93 features), testing both uniform and non-uniform cost settings.
-- **Practical I-oracle formulation**: The model of incremental information gain through an I-oracle (e.g., extending follow-up by I years) directly corresponds to real clinical workflows and provides a generalizable framework that includes traditional AL as the special case I=∞.
+- **Substantial empirical evaluation scale**: The paper demonstrates commitment to rigorous validation through 700+ hours of simulation across 30+ environments with 400+ drones, using an industry-level UTM simulator (Section 6, Table 8).
+- **Novel problem formulation**: Treating fault detection as a sequential decision problem over long-tail scenario distributions is well-motivated, and the offline RL formulation addresses the sample inefficiency of traditional random testing (Section 4).
+- **Clear performance improvements**: The PM-2B model achieves 50.5 SPM (high-risk scenarios per million flights) and 7.6 FPM (faults per million flights), identifying vulnerabilities that traditional methods missed entirely (Table 2).
+- **Scalability analysis**: The paper includes a systematic comparison across model scales (10M to 2B parameters), showing clear performance improvements with model size in both offline and online evaluation (Figure 5, Table 2).
+- **Practical architecture design**: The two-component framework (Policy Model + Action Sampler) appropriately separates learned scenario generation from rule-based safety enforcement, making the system interpretable for safety-critical contexts (Figure 2, Section 5).
 
 ## Weaknesses
-- **Theoretical guarantee attribution is misleading**: The paper claims a (1−1/e) approximation guarantee, but this guarantee applies to Khuller et al.'s Algorithm 2 (the full budgeted maximum coverage algorithm), not the simplified Algorithm 1 that is actually implemented. The authors acknowledge the simplifications "are not guaranteed or proven," but this disconnect between theory and implementation should be more prominently addressed with either a proof or explicit disclaimer that Algorithm 1 is a heuristic.
-- **Complexity claim is imprecise**: The paper states the approach "provides bounds and time complexity asymptotically equivalent to BatchBALD," but Algorithm 1 runs O(budget × n × k) iterations (where n is pool size and k is samples), which differs from BatchBALD's complexity for batch candidate evaluation.
-- **Modest and questionably significant improvements**: The MAE-PO improvements over baselines are typically 0.01–0.10 on values around 2–4.5 (approximately 1–2% improvement). The paper claims "significantly better" without performing formal statistical tests; many reported differences fall within overlapping error bounds.
-- **Missing ablation studies**: The paper doesn't isolate contributions of key components: the censored probability adjustment (pcens), the I-oracle handling (p_final), and the coverage-based greedy selection. Without ablation, it's unclear which innovation drives the gains.
-- **Limited model evaluation**: All experiments use Bayesian Linear MTLR exclusively. The generality of BBSurv to other Bayesian survival models is not demonstrated, limiting understanding of model-dependent performance.
+- **Potentially unfair baseline comparison**: The paper states that baseline FPM values are low (<1.0) because "the two baseline tests have already been thoroughly used to identify existing bugs and improve UTM in advance, while our method is focused on discovering new bugs" (Table 2 footnote). This creates an asymmetric comparison where baselines have already exhausted easy-to-find bugs. A fairer comparison would evaluate all methods on the same fresh system.
+- **No statistical significance reporting**: Despite 700+ hours of testing and ~100M records per region, the paper reports only point estimates for SPM, FPM, and other metrics without confidence intervals or standard deviations, making it difficult to assess reliability of the claimed improvements.
+- **Missing offline RL baseline comparisons**: The paper compares against expert-guided random-walk and smoke tests but not against other offline RL methods (e.g., Decision Transformer, Q-Transformer) or recent learning-based testing approaches like D2RL (Feng et al. 2023, cited in the paper). This makes it difficult to isolate the contribution of the Transformer architecture versus alternative offline RL approaches.
+- **Incomplete methodological specification**: Key details are underspecified—the return-to-go target during inference is not clearly explained (how is R̂ conditioned during deployment?), the reward function weights α_i are not defined, and the context set C's size and selection criteria are not specified (Section 4.2).
+- **No ablation studies**: The paper lacks ablations on key design choices such as context window size, number of in-context trajectories, and the contribution of the Action Sampler component relative to the Policy Model alone.
 
 ## Nice-to-Haves
-- Statistical significance testing (paired t-tests or Wilcoxon signed-rank tests) across multiple random seeds for all comparisons
-- Ablation isolating pcens normalization to show it's not the sole driver of improvement
-- Direct comparison to Hüttel et al. (2024), which extends BALD to censored data but uses a different (non-batch) approach
-- Investigation of why the simple "Mean Closest to Middle" (MCtH) heuristic occasionally ties with BBsurv—this unexplained phenomenon warrants analysis as it may undermine the justification for the method's complexity
-- Analysis of failure modes (e.g., when the oracle increment I is very small, or when censorship rates are extremely high)
+- **Concrete fault case studies**: The paper would benefit from specific examples of fault scenarios discovered by PM that baselines missed, including the sequence of events that triggered them—this would help practitioners assess real-world applicability.
+- **Inference latency analysis**: Given that this is a testing framework requiring reasonable timeframes, reporting inference efficiency would strengthen the practical deployment discussion.
 
 ## Novel Insights
-This paper's core insight is recognizing that survival analysis with censoring is a natural setting for budgeted learning because the "label" (time-to-event) may only be partially observable even after querying—an oracle can provide additional follow-up time but not necessarily complete uncensoring. The I-oracle formulation elegantly captures this: rather than the traditional AL assumption that querying reveals the true label, here querying extends observation by I units, which may or may not capture the event. This insight enables principled application of mutual information-based acquisition to survival data by appropriately adjusting probability distributions to only consider time bins within the oracle's increment and aggregating all bins beyond as a single "unknown after increment" class.
+The observation that offline RL can outperform expert demonstrations by acting as an "implicit filter of low-quality actions" (Section 6.2) is interesting but under-analyzed. The hazard action ratio per observation being similar across methods (~2%) while constant-pressure action ratio differs substantially suggests that PM's advantage lies not in finding more hazardous actions, but in sustaining pressure on the system over time—a finding that could inform future testing methodologies for safety-critical systems.
 
 ## Potentially Missed Related Work
-- **Hüttel et al. (2024)**: Extends the BALD framework to right-censored data. While cited, a direct experimental comparison would clarify whether the batch-based approach or the survival-specific acquisition function provides additional value over single-instance BALD.
+- None identified in the provided inputs.
 
 ## Suggestions
-- **Clarify theoretical claims**: Either prove that Algorithm 1 retains the (1−1/e) bound under stated assumptions, or explicitly reframe Algorithm 1 as a heuristic approximation with empirical validation and no formal guarantee beyond BatchBALD's submodular property.
-- **Add an ablation table** systematically comparing: (1) baseline AL + pcens normalization, (2) baseline AL + p_final, (3) BBsurv (full method). This isolates which component is responsible for observed gains.
+1. **Re-run baseline comparisons on the same system state** to enable fair comparison, or prominently acknowledge the asymmetric testing conditions as a limitation.
+2. **Add confidence intervals or standard deviations** for all reported metrics across the 700+ hours of testing.
+3. **Include at least one offline RL baseline** (e.g., Decision Transformer or Q-Transformer) to demonstrate the specific value of the proposed architectural modifications.
+4. **Provide ablation studies** isolating the contributions of: (a) the context-aware mechanism, (b) the Action Sampler, and (c) different model sizes.
+5. **Clarify the return-to-go specification during inference**—whether it is set to a fixed high value, searched over, or learned.
+
+---
+
+## 1aF2D2CPHi
+
+- GT: Accept (Oral) (avg 8.0)
+- Predicted: Reject (5.0/10)
+- Match: No
+
+### Final Review
+
+## Summary
+This paper addresses data-free knowledge distillation (DFKD) from CLIP for open-vocabulary customization. The authors identify that existing DFKD methods fail on CLIP because BatchNorm statistics encode facial features from web-scale pre-training rather than target class semantics, and propose an alternative approach using image-text matching with style dictionary diversification, class consistency maintaining, and meta knowledge distillation.
+
+## Strengths
+- **Clear empirical problem identification**: The paper convincingly demonstrates why existing DFKD methods fail on CLIP (Table 8 shows 7.13%-7.63% accuracies) by analyzing how BN statistics from web-crawled data encode facial features (Figures 2-3). This is a valuable insight that explains a real failure mode.
+- **Comprehensive experimental evaluation**: Experiments across 12 customized tasks (Caltech-101, 10 ImageNet splits) with consistent improvements. The method achieves 64.81% average accuracy compared to near-failure baselines, with clear ablation studies showing component contributions (Table 1).
+- **Practical significance for deployment**: The approach produces lightweight student models (11.68M params vs 151.28M for CLIP) suitable for edge devices (Table 3), addressing real privacy and copyright concerns in model customization.
+- **Supports multiple customization modes**: Both text-based and image-based customization are supported, with image-based customization addressing the text ambiguity limitation (Table 6 shows 58.89% improvement with image prompts on Flower-102).
+- **Theoretical grounding**: The paper provides generalization bounds relating δ-diversity to generalization error (Theorem 4.1) and gradient alignment analysis for meta-learning (Theorem 4.2), giving principled motivation for the design choices.
+
+## Weaknesses
+- **VQGAN dependency undermines "data-free" claim**: The method relies on VQGAN pre-trained on external datasets. Table 12 shows performance drops from 62.46% to 34.24% without VQGAN, indicating the external prior is essential. This should be more prominently discussed as a limitation of the "data-free" framing.
+- **No statistical significance testing**: All results report single-run numbers without error bars or standard deviations. Given the optimization-based image synthesis with inherent randomness, this omission makes it difficult to assess result reliability.
+- **Hand-crafted style dictionary lacks systematic justification**: The 16-style dictionary (Table 13) is manually designed with limited guidance on selection criteria for new domains. Table 14 shows some sensitivity analysis but doesn't explain why these specific styles work or how to adapt them.
+- **Ambiguity handling remains a significant limitation**: The Flower-102 experiment (Table 6) reveals only 15.83% accuracy with text prompts, showing the method struggles fundamentally with ambiguous class names—a limitation acknowledged but not fully addressed.
+- **Computational cost not comprehensively analyzed**: While 57 seconds is noted for SDD training, the full pipeline cost (400 iterations per image × 64 images × number of classes) is not quantified, making practical deployment assessment difficult.
+
+## Nice-to-Haves
+- Report FID or CLIP scores for synthetic images to quantitatively assess diversity and quality claims beyond visualizations in Figures 6-7.
+- Include a real-data upper bound for text-based customization to contextualize the performance gap between data-free and data-aware distillation.
+
+## Novel Insights
+The key insight that CLIP's BatchNorm statistics encode facial features from web-scale pre-training data—making them unusable for traditional DFKD—represents a meaningful empirical finding. The observation that VLMs trained on internet data absorb biases (e.g., human faces appearing in images regardless of text descriptions) has implications beyond DFKD for understanding what foundation models store in their normalization layers. The meta-learning approach to handle style-based distribution shifts provides a principled way to address the covariate shift inherent in synthetic data training.
+
+## Potentially Missed Related Work
+- None identified by the related work search agent.
+
+## Suggestions
+- Rename the method framing to "original-data-free" or explicitly discuss how VQGAN priors relate to the data-free definition in the literature, since relying on pre-trained generators partially undermines the data-free claim.
+- Add error bars from multiple runs (at least 3 seeds) to establish statistical reliability of reported results.
+- Provide systematic guidance on style dictionary selection, either through automated selection or clear criteria for adapting to new domains.
+
+---
+
+## EqCbc4wrzy
+
+- GT: Reject (avg 2.5)
+- Predicted: Reject (3.0/10)
+- Match: Yes
+
+### Final Review
+
+## Summary
+MDPE introduces a multimodal deception dataset comprising 104+ hours of video from 193 subjects, uniquely annotated with Big Five personality traits and emotional expression characteristics. The dataset addresses a documented gap in deception detection research—no prior dataset combines multimodal deception data with individual difference information—enabling new research on how personality and emotion affect deception behavior.
+
+## Strengths
+- **Substantial scale and novelty**: MDPE is the largest publicly available multimodal deception dataset (193 subjects, 6209 minutes), substantially exceeding prior datasets like DDPM (70 subjects) and Bag-of-Lies (35 subjects), with unique personality and emotional characteristic annotations not available elsewhere.
+- **Well-designed collection protocol**: The three-phase design (personality questionnaire → emotion induction → deception interview) follows established methodology, includes monetary incentives tied to deception success to motivate genuine effort, and was IRB-approved with informed consent for scientific publication.
+- **Comprehensive benchmarking**: The paper evaluates multiple feature extractors per modality (ViT, CLIP for visual; eGeMAPS, Wav2vec, HuBERT, WavLM for acoustic; BERT, ChatGLM, Baichuan for text) and systematically studies personality/emotion feature contributions, providing useful guidance for future work.
+- **Clear empirical findings**: The experiments demonstrate that personality features consistently improve deception detection (a novel finding), while emotional features show inconsistent benefits—both results that warrant further investigation.
+
+## Weaknesses
+- **Answer-level split creates potential subject-level leakage**: The paper splits at the answer level (5 of 24 answers per subject held out for validation), not the subject level. This means the same subject's data appears in both training and validation, risking that models learn subject-specific behavioral patterns rather than generalizable deception cues. Subject-independent evaluation (leave-one-subject-out) is essential for deception datasets.
+- **No held-out test set and no statistical significance testing**: Only training and validation sets are described, with no held-out test set. Tables report point estimates without standard deviations or confidence intervals, making it impossible to assess whether differences between methods (often 1-3%) are meaningful or noise.
+- **Ground truth deception validity is unverified**: The paper acknowledges "we do not know whether the subjects have actually deceived on the deception questions." Without independent verification, some "deceptive" responses may actually be truthful, introducing label noise that undermines model evaluation reliability.
+- **No cross-dataset evaluation or human baseline**: The paper provides no experiments showing how models trained on MDPE transfer to existing datasets, nor does it report human deception detection accuracy on MDPE, leaving dataset utility and progress claims unsubstantiated.
+
+## Nice-to-Haves
+- **Analysis of which personality dimensions matter**: The paper concatenates all Big Five scores but doesn't analyze which specific traits correlate with deception success or detection difficulty—such analysis would strengthen the scientific value claim.
+- **Deception quality analysis**: Interviewer judgment scores and subject confidence ratings were collected but not analyzed; understanding characteristics of "successful" vs. "failed" deceptions would enhance the dataset's utility.
+
+## Novel Insights
+The finding that personality features consistently improve deception detection while emotional features show unstable effects is intriguing and underexplored. The paper speculates that personality traits are directly usable (self-reported scores) while emotional features depend on emotion recognition model quality, but this hypothesis isn't tested. The superior performance of textual features (~62% accuracy) over visual and acoustic modalities aligns with human deception detection intuition—we judge truthfulness primarily from what people say rather than how they look or sound. The dataset enables investigation of whether certain personality types produce more detectable lies or whether emotional states modulate deception cues.
+
+## Potentially Missed Related Work
+None identified.
+
+## Suggestions
+- **Re-evaluate using leave-one-subject-out cross-validation**: This is the standard protocol for datasets involving individual subjects and is essential to claim the model learns generalizable deception cues rather than subject idiosyncrasies.
+- **Add statistical significance testing**: Report standard deviations across the 5 runs mentioned, and use appropriate significance tests when comparing conditions.
+- **Report human baseline accuracy**: Have independent annotators judge deception from videos to contextualize model performance (~64% accuracy).
+
+---
+
+## VpWki1v2P8
+
+- GT: Accept (Oral) (avg 8.7)
+- Predicted: Accept (7.0/10)
+- Match: Yes
+
+### Final Review
+
+## Summary
+The paper introduces LoRA-RITE, a novel optimizer for LoRA fine-tuning that achieves transformation invariance—a property lacking in standard optimizers like Adam. The key insight is that since LoRA's update Z = AB^T admits infinitely many equivalent factorizations, an optimizer should produce identical updates to Z regardless of parameterization. The authors prove that diagonal preconditioners cannot achieve transformation invariance and propose a matrix preconditioning approach on the low-rank side that maintains computational efficiency comparable to Adam while achieving consistent empirical improvements across multiple LLM benchmarks.
+
+## Strengths
+- **Principled problem formulation**: The paper identifies a fundamental theoretical issue—that equivalent LoRA parameterizations lead to different gradient updates under standard optimizers—and formalizes transformation invariance (Definition 1) and scalar scale invariance (Definition 2) mathematically.
+- **Solid theoretical foundation**: The paper provides rigorous proofs that diagonal preconditioners cannot achieve transformation invariance (Section 3.1), convergence analysis (Theorems 3 and 4), and shows that transformation-invariant optimizers guarantee efficient feature learning (Theorem 1).
+- **Strong empirical results**: LoRA-RITE consistently outperforms baselines across diverse benchmarks. On Gemma-2B, it achieves 4.6% improvement on Super-Natural Instructions and 3.5% average improvement across four LLM benchmarks compared to Adam (Tables 1, 2).
+- **Computational efficiency**: Despite using matrix preconditioning, the method maintains O(mr² + nr² + r³) time complexity with O(mr + nr) memory—only 8% slower than Adam on Gemma-2B and 5% on Gemma-7B (Table 4).
+- **Comprehensive evaluation scope**: Experiments cover multiple model sizes (2B, 7B), architectures (decoder-only Gemma, encoder-decoder mT5-XXL), and LoRA ranks (4, 16, 64), demonstrating generalizability across settings.
+
+## Weaknesses
+- **No statistical significance reporting**: All tables report single numbers without standard deviations, confidence intervals, or results across multiple random seeds. For improvements like 55.50% vs. 48.37% on GSM8K, readers cannot assess whether these differences are statistically meaningful or within noise margins. This is essential for rigorous empirical claims.
+- **Missing ablation of the escaped mass mechanism (ρ)**: The paper introduces a novel "escaped mass" correction mechanism to handle basis changes during training (Algorithm 1, lines 7 and 17), but provides no empirical validation that this component is necessary or contributes to performance improvements.
+- **Core property not empirically demonstrated**: The paper claims LoRA-RITE is transformation-invariant but never validates this empirically. A simple experiment—training with different initial LoRA factor scalings (s×A, B/s for various s)—would demonstrate whether the method achieves its stated goal while baselines vary.
+- **Assumption 1 lacks empirical verification**: The stronger convergence guarantee (Theorem 4) requires Assumption 1, which constrains how the polar decomposition factors change between steps. The paper provides no evidence this assumption holds during actual training, limiting the practical relevance of the stronger theoretical bound.
+
+## Nice-to-Haves
+- **Analysis of hyperparameter sensitivity**: The paper uses standard Adam β₁=0.9, β₂=0.999 values but does not analyze whether LoRA-RITE is sensitive to these choices or how the escaped mass ρ accumulates across different settings.
+- **Direct comparison with Riemannian gradient descent**: The paper identifies Riemannian GD as the only other transformation-invariant method but only compares against ScaledAdam (which loses invariance when combined with Adam). A comparison with pure Riemannian GD would isolate the benefit of invariance from the benefit of adaptivity.
+
+## Novel Insights
+The paper's key conceptual contribution is recognizing that the non-uniqueness of LoRA factorization creates an optimization inconsistency that standard adaptive methods cannot address. The proof that diagonal preconditioners are fundamentally insufficient for transformation invariance (because R^{-T}X_2^T X_2 R^T can be non-diagonal for arbitrary rotation R) is elegant and motivates the matrix preconditioning approach. The "unmagnified gradient" concept—separating A into basis U_A and magnitude R_A via polar decomposition—provides a clean mechanism for achieving invariance while preserving adaptive preconditioning benefits. The regret bound improvement from O(G(D_A² + D_B²)T^{-1/2}) to O(GD_A D_B T^{-1/2}) is mathematically meaningful precisely when LoRA factors have imbalanced norms, which Figure 1 shows occurs in practice.
+
+## Potentially Missed Related Work
+- None identified (related work search was not performed).
+
+## Suggestions
+- **Report results across multiple random seeds**: Run all experiments with at least 3-5 seeds and report mean ± standard deviation. This is standard practice and essential for trusting claimed improvements.
+- **Add an ablation study of the escaped mass correction**: Include a variant of LoRA-RITE without the ρ accumulation (setting ρ=0) to quantify whether this mechanism contributes meaningfully to performance.
+- **Empirically demonstrate transformation invariance**: Train models with different initial scalings of LoRA factors (e.g., s ∈ {0.1, 1, 10, 100}) and show that LoRA-RITE achieves consistent performance while baseline methods vary significantly. This would directly validate the core motivation.
 
 ---
 
@@ -456,42 +429,39 @@ This paper's core insight is recognizing that survival analysis with censoring i
 ### Final Review
 
 ## Summary
-This paper introduces FGL (Fast Gradient Leakage), a gradient inversion attack for federated learning that combines StyleGAN priors with a joint gradient matching loss (combining L₁, L₂, and cosine distance) to achieve faster and higher-quality image reconstruction from shared gradients. The authors claim their method enables attack on high-resolution (224×224) face images with batch sizes up to 60, representing an improvement in attack efficiency and scalability over prior gradient inversion work.
+This paper proposes Fast Gradient Leakage (FGL), a gradient inversion attack method for federated learning that leverages pretrained StyleGAN as an image prior and introduces a joint gradient matching loss combining L₂, cosine, and L₁ distances. The method achieves reconstruction of high-resolution face images (CelebA, 224×224, 1000 classes) with batch sizes up to 60 on CNN architectures, demonstrating improvements in both reconstruction quality and computational efficiency compared to prior gradient inversion attacks.
 
 ## Strengths
-- **Modular ablation design**: Table 1 presents a clear, progressive ablation study demonstrating incremental contributions from each proposed component (S_init, S_final, T_trans, M_grad, N_grad, M_seed), with quantitative evidence showing meaningful improvements at each step.
-- **Practical efficiency gains**: The reported time costs (2.58 minutes for batch=1 vs. 23-24 minutes for baseline methods) represent a substantial practical improvement in attack feasibility.
-- **Scalability demonstration**: Achieving gradient inversion attacks at batch size 60 on 224×224 CelebA images, compared to prior work's limitations with high-resolution data, addresses a meaningful capability gap.
-- **Multi-faceted optimization approach**: The combination of joint gradient matching loss, selection strategy, gradient normalization, and multi-seed optimization provides multiple complementary signals for improving attack quality.
+- **Addresses a genuinely challenging gap in prior work**: The paper convincingly demonstrates that prior GIAs (DLG, GI, Fishing, GIAS) fail on high-resolution face datasets—Table 2 shows all baselines achieving 0.0 Top-1 accuracy—while FGL achieves meaningful reconstruction.
+- **Clear methodological contributions with strong ablations**: Table 1 provides a systematic ablation showing how each component (selection strategy, transformations, joint loss, gradient normalization, multi-seed optimization) contributes to performance improvement, with Top-1 increasing from 0.0 to 0.88.
+- **Significant efficiency gains**: Figure 7 shows FGL completing batch-1 attacks in 2.58 minutes versus 23.99 minutes for GI and 23.17 for Fishing, with batch-60 attacks completing in 13.99 minutes—substantially faster than prior methods.
+- **Novel joint gradient matching loss formulation**: The combination of L₂ + cosine + L₁ losses with learned weights is a reasonable approach to avoiding local optima in the optimization landscape, motivated by the different geometric properties of each distance metric.
 
 ## Weaknesses
-- **Factual error regarding CelebA dataset**: The paper states CelebA has "1000 classes." This is incorrect—CelebA contains 202,599 face images with 40 binary attribute labels per image, not 1000 classes. This fundamental misunderstanding of the dataset undermines credibility.
-- **Inflated "first time" claim**: The paper claims the first optimization-based high-resolution CNN reconstruction, but Geiping et al. (2020) demonstrated gradient inversion on 128×128 ImageNet images with ResNet-152, and Yin et al. (2021) showed 224×224 reconstruction on ImageNet-scale data. The contribution is better framed as combining StyleGAN priors with GIAs for improved performance, not as enabling capability that was previously impossible.
-- **Unjustified evaluation metrics**: The paper dismisses standard metrics (SSIM, PSNR, MSE) claiming FGL aims for "images with akin features" rather than reconstruction. Yet Table 2 shows perfect Top-1=1.0 accuracy, which directly contradicts this framing—if reconstructions achieve 100% classifier accuracy, they are effectively indistinguishable from originals. The metric interpretation requires clarification or alternative metrics should be provided.
-- **Unfair baseline comparisons**: DLG is evaluated on CIFAR-10 (batch size 4) while all other baselines use CelebA (batch size 1). This methodological inconsistency undermines the comparative claims. All methods should be evaluated under identical conditions.
-- **Missing reproducibility details**: Critical hyperparameters α₁, α₂, α₃ for the joint loss function are not specified in the main text. The number of seeds in multi-seed optimization is also unspecified. Without these values, the method cannot be independently reproduced.
+- **No evaluation against defense mechanisms**: The paper explicitly claims FGL "can serve as a valuable tool to advance privacy defense techniques," yet provides zero experiments against any defense (gradient perturbation, differential privacy, compression, Secure Aggregation). This substantially limits the assessment of real-world privacy risk.
+
+- **Insufficient isolation of methodological contributions**: The ablation study adds components cumulatively but never isolates the contribution of the StyleGAN prior from the proposed joint loss. The improvement may derive primarily from the GAN prior borrowed from model inversion attack literature rather than the novel loss formulation—this distinction matters for understanding what advances the field.
+
+- **Limited dataset and architecture evaluation**: Despite claiming the method works "across various network models on complex datasets," all primary experiments use CelebA faces with ResNet-18. The paper does not demonstrate generalization to other domains (ImageNet objects, medical imaging) or systematically evaluate modern architectures like Vision Transformers.
+
+- **Hyperparameter details missing from main text**: The joint loss M_grad = α₁L₂ + α₂Cosine + α₃L₁ introduces three hyperparameters whose values are not specified in the main paper, and no sensitivity analysis is provided. This impairs reproducibility and makes it difficult to assess how carefully tuned the method is.
+
+- **Baseline comparison limited to batch size 1**: While FGL is evaluated at batch sizes up to 60, baseline methods are only run at batch size 1. The claim that prior methods cannot handle larger batch sizes needs empirical verification—showing baselines failing at batch size 5, 10, 20 would strengthen the comparison.
 
 ## Nice-to-Haves
-- **Defense evaluation**: The paper claims FGL can "advance the development of privacy defense techniques" but presents no experiments against gradient obfuscation defenses (compression, noise injection, differential privacy). Including such experiments would directly support this claimed contribution.
-- **Ablation isolating StyleGAN's contribution**: It remains unclear how much of the improvement comes from the StyleGAN prior (which dramatically constrains the optimization space) versus the proposed joint loss function. An ablation without StyleGAN would clarify this.
-- **Statistical rigor**: Reporting confidence intervals and standard deviations across multiple random seeds would strengthen the experimental claims, which currently report only single best-case results.
-- **Generalization beyond faces**: Experiments on non-face datasets (CIFAR-10/100, ImageNet subsets) would validate claims about attacking "complex datasets."
+- **Failure case analysis**: At batch size 60, Top-1 drops to 0.483. Understanding which images fail to reconstruct and why would provide valuable insight into the method's practical limitations and threat boundaries.
+- **Distribution prior mismatch analysis**: The StyleGAN is pretrained on FFHQ while attacks target CelebA. The paper acknowledges this mismatch but provides no analysis of how prior quality or domain alignment affects attack success.
 
 ## Novel Insights
-The paper's primary insight—adapting techniques from model inversion attacks (MIAs), specifically the use of pretrained GANs as image priors, into gradient inversion attacks—is sensible and timely. The joint gradient matching loss combining L₁, L₂, and cosine distance represents a reasonable engineering contribution, though the theoretical motivation for why multiple correlated losses avoid local optima better than a single loss remains underexplained. The gradient normalization technique and multi-seed selection strategy are practical refinements that appear to yield meaningful improvements in the ablation studies.
+The key insight of this paper—transferring GAN-based prior knowledge from model inversion attacks to gradient inversion attacks—is genuinely valuable. The joint loss formulation combining multiple gradient matching objectives addresses a real optimization challenge: gradient inversion landscapes are highly non-convex with many local minima, and different loss functions guide optimization along different trajectories. The observation that combining L₂ (absolute magnitude), cosine (directional alignment), and L₁ (robust element-wise matching) helps escape local optima is a solid contribution, though the theoretical justification remains limited. The empirical demonstration that high-resolution face images can be recovered from gradients at meaningful batch sizes advances our understanding of privacy risks in federated learning.
 
 ## Potentially Missed Related Work
-- **PPA (Plug & Play Attacks)** by Struppek et al. — referenced in related work as inspiration but not directly compared in experiments. PPA achieves large-batch, high-accuracy attacks on face datasets using a similar GAN-based approach.
-- **Inverting Gradients on Vision Transformers (GradViT)** by Hatamizadeh et al. — demonstrates GIAs on ViT architectures; experiments could be strengthened by including transformer-based target models.
-- **Auditing Privacy Defenses** by Huang et al. (2021) — identifies BatchNorm statistics as a strong assumption in GIAs. The paper does not address whether FGL relaxes this assumption, which would be important for practical threat assessment.
+- None identified (related work search was skipped). However, given the rapid pace of research in gradient inversion attacks, the authors should ensure comparison with the most recent GIA methods from 2023-2024, particularly any that incorporate generative priors.
 
 ## Suggestions
-1. **Correct the CelebA dataset characterization** and clarify whether experiments use class labels or identity labels.
-2. **Rephrase "first time" claims** to accurately position relative to prior work (Geiping et al., Yin et al.)—the contribution should be framed as combining StyleGAN priors with improved loss functions, not as enabling previously impossible attacks.
-3. **Provide standard reconstruction metrics (SSIM, PSNR/MSE)** alongside proposed metrics, or explicitly redefine metrics to measure "face recognition accuracy of reconstructions" rather than "reconstruction quality."
-4. **Evaluate all baselines under identical conditions** (same dataset, same batch sizes) for fair comparison.
-5. **Specify all hyperparameters** (α values, number of seeds, learning rates) to enable reproducibility.
-6. **Add defense experiments** against gradient compression, top-k sparsification, or differential privacy to support the paper's stated goal of advancing defense research.
+- **Add defense experiments**: Evaluate FGL against at least one gradient defense (e.g., gradient perturbation with varying noise levels, gradient compression, or differential privacy) to substantiate claims about advancing privacy defense research.
+- **Provide complete hyperparameter specifications**: Include all α values, learning rates, number of seeds, and optimization settings in the main text with sensitivity analysis.
+- **Run baselines at matched batch sizes**: Include baseline results at batch sizes ≥1 to demonstrate whether the performance gap persists as batch size increases.
 
 ---
 

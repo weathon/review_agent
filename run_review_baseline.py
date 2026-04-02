@@ -247,7 +247,8 @@ async def main(
     with open(csv_path, "w", newline="") as f:
         w = csv.writer(f)
         w.writerow(["paper_id", "pred_score", "pred_decision", "gt_avg_score",
-                     "gt_decision", "gt_binary", "match", "cost"])
+                     "gt_decision", "gt_binary", "match", "cost",
+                     "gt_score_0", "gt_score_1", "gt_score_2", "gt_score_3", "gt_score_4", "gt_score_5", "gt_score_6"])
 
     semaphore = asyncio.Semaphore(CONCURRENCY)
     file_lock = asyncio.Lock()
@@ -294,6 +295,7 @@ async def main(
                 with open(csv_path, "a", newline="") as f:
                     w = csv.writer(f)
                     match_str = "YES" if r["match"] else ("NO" if r["match"] is not None else "ERROR")
+                    gt_padded = r["gt_scores"] + [""] * (7 - len(r["gt_scores"]))
                     w.writerow([
                         r["paper_id"],
                         r["predicted_score"],
@@ -303,6 +305,7 @@ async def main(
                         r["gt_binary"],
                         match_str,
                         f"{r['cost']:.4f}",
+                        *gt_padded,
                     ])
 
     await asyncio.gather(*(

@@ -31,12 +31,12 @@ OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 
 # Per-stage model assignments — all via OpenRouter
-MODEL_HARSH = "minimax/minimax-m2.7"
-MODEL_NEUTRAL = "minimax/minimax-m2.7"
-MODEL_SPARK = "minimax/minimax-m2.7"
-MODEL_RELATED_WORK = "minimax/minimax-m2.7:online" 
-MODEL_FILTER = "minimax/minimax-m2.7"
-MODEL_MERGER = "minimax/minimax-m2.7"
+MODEL_HARSH = "z-ai/glm-5"
+MODEL_NEUTRAL = "z-ai/glm-5"
+MODEL_SPARK = "z-ai/glm-5"
+MODEL_RELATED_WORK = "z-ai/glm-5:online" 
+MODEL_FILTER = "z-ai/glm-5"
+MODEL_MERGER = "z-ai/glm-5"
 MODEL_SCORER = "claude-sdk:claude-sonnet-4-6"
 MODEL_PARSER = "openai/gpt-5.4-nano"
 
@@ -374,9 +374,9 @@ Use the full range — do NOT cluster around 5-6. Be DISCRIMINATIVE:
 - Do NOT hedge toward the middle. Commit to your assessment.
 - However, do not over-penalize papers for a long list of minor points if the core contribution is sound.
 - A few serious flaws matter more than many small nitpicks.
-- NEVER give exactly 6.0. A score of 6 is a non-committal fence-sit. If the \
+- NEVER give a 6.0 score, no matter what. A score of 6 is a non-committal fence-sit. If the \
   paper is even slightly positive, give 7. If it is even slightly negative, \
-  give 5. You must decide which side of the borderline the paper falls on.
+  give 5. You must decide which side of the borderline the paper falls on. 
 
 Scoring guide (use only when NO calibration examples are available):
 - 9.0-10.0: Strong accept. Exceptional, field-advancing contribution.
@@ -742,6 +742,13 @@ async def run_merger(
     # Final Score, remove paper from context
     # user_prompt_review = user_prompt_review.split("--- PAPER CONTENT END ---\n\n")[1]
 
+    NO_SIX_NUDGE = (
+        "You gave a score of exactly 6.0. A score of 6 is a non-committal fence-sit. "
+        "You MUST pick a side. If the paper is even slightly above average, give 6.5 or 7. "
+        "If it is even slightly below, give 5 or 5.5. Re-read your review and commit to "
+        "a non-6.0 score now."
+    )
+
     # ── Agent SDK scoring path (MODEL_SCORER = "claude-sdk:<model>") ──
     if MODEL_SCORER.startswith("claude-sdk:"):
         sdk_model = MODEL_SCORER.split(":", 1)[1]
@@ -750,8 +757,23 @@ async def run_merger(
             MERGER_PROMPT, user_prompt_review, review_text, score_user, sdk_model
         )
         score, cost_parse = await _parse_score(client, score_text)
+        total_cost = cost_review + cost_score + cost_parse
         print(f"  [score_parser] parsed score: {score} — ${cost_parse:.4f}")
-        return review_text, score, cost_review + cost_score + cost_parse
+
+        # Re-score if exactly 6.0
+        if abs(score - 6.0) < 0.01:
+            print(f"  [merger_score] score is 6.0, re-scoring with nudge ...")
+            rescore_prompt = (
+                f"Your previous scoring response was:\n{score_text}\n\n{NO_SIX_NUDGE}"
+            )
+            rescore_text, rescore_cost = await _score_with_agent_sdk(
+                MERGER_PROMPT, user_prompt_review, review_text, rescore_prompt, sdk_model
+            )
+            score, parse_cost2 = await _parse_score(client, rescore_text)
+            total_cost += rescore_cost + parse_cost2
+            print(f"  [score_parser] re-scored: {score} — ${parse_cost2:.4f}")
+
+        return review_text, score, total_cost
 
     # ── OpenRouter scoring path ───────────────────────────────────
     # Multi-turn: system + turn1 + assistant + turn2
@@ -791,6 +813,24 @@ async def run_merger(
             tokens = f"{input_tokens}in/{output_tokens}out" if input_tokens and output_tokens else "n/a"
             print(f"  [merger_score] done — {MODEL_SCORER} — {tokens} tokens — ${cost_score:.4f}")
             print(f"  [score_parser] parsed score: {score} — ${cost_parse:.4f}")
+
+            # Re-score if exactly 6.0
+            if abs(score - 6.0) < 0.01:
+                print(f"  [merger_score] score is 6.0, re-scoring with nudge ...")
+                messages.append({"role": "assistant", "content": score_text})
+                messages.append({"role": "user", "content": NO_SIX_NUDGE})
+                kwargs2 = dict(model=MODEL_SCORER, messages=messages, timeout=REQUEST_TIMEOUT)
+                extra2 = _build_extra_body(MODEL_SCORER, reasoning_effort="high")
+                if extra2:
+                    kwargs2["extra_body"] = extra2
+                response2 = await client.chat.completions.create(**kwargs2)
+                rescore_text = response2.choices[0].message.content or ""
+                cost_score += _extract_cost(response2)
+                if rescore_text.strip():
+                    score, cost_parse2 = await _parse_score(client, rescore_text)
+                    cost_parse += cost_parse2
+                    print(f"  [score_parser] re-scored: {score} — ${cost_parse2:.4f}")
+
             return review_text, score, cost_review + cost_score + cost_parse
         except APITimeoutError as e:
             _error_logger.error(f"[merger_score] timeout (attempt {attempt}/{MAX_RETRIES}), model={MODEL_SCORER}\n{traceback.format_exc()}")
