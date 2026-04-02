@@ -1,0 +1,350 @@
+"""
+Direct-scoring baseline: send the paper directly to MODEL_SCORER and ask it
+to score without any sub-agent reviews.
+
+This measures how well the scoring model performs when it reads the paper
+itself, vs. the full multi-agent pipeline where specialized reviewers feed
+into a merger+scorer.
+
+Usage:
+  python run_direct_baseline.py                     # 10 papers, seed=42
+  python run_direct_baseline.py 50 3112 --parallel
+  python run_direct_baseline.py 50 3112 --balanced --calibration calibration.md
+"""
+
+import asyncio
+import csv
+import json
+import random
+import sys
+import time
+from collections import Counter, defaultdict
+from pathlib import Path
+
+from paper_reviewer import (
+    MODEL_SCORER,
+    _get_client,
+    _parse_score,
+    _call_openai,
+    sanitize_text,
+    score_to_decision,
+)
+
+DEFAULT_BENCH_DIR = Path(__file__).parent / "iclr2025_data"
+VALID_SCORES = [1.0, 3.0, 5.0, 6.0, 8.0, 10.0]
+CONCURRENCY = 5
+
+
+def _snap_score(raw: float) -> float:
+    return min(VALID_SCORES, key=lambda v: abs(v - raw))
+
+
+def load_ground_truth(bench_dir: Path) -> tuple[list[dict], Path]:
+    csv_file = bench_dir / "ratings.csv"
+    if csv_file.exists():
+        papers_dir = bench_dir / "papers"
+        rows = []
+        with open(csv_file) as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                scores = []
+                for i in range(6):
+                    val = row.get(f"score_{i}", "").strip()
+                    if val:
+                        scores.append(float(val))
+                decision = row.get("decision", "").strip()
+                gt_binary = row.get("gt_binary", "").strip()
+                if not gt_binary:
+                    gt_binary = "Accept" if "Accept" in decision else "Reject"
+                rows.append({
+                    "paper_id": row["paper_id"].strip(),
+                    "scores": scores,
+                    "avg_score": float(row.get("avg_score", 0)),
+                    "decision": decision,
+                    "gt_binary": gt_binary,
+                })
+        return rows, papers_dir
+    raise FileNotFoundError(f"No ratings.csv in {bench_dir}")
+
+
+def stratified_sample(papers, n, seed):
+    rng = random.Random(seed)
+    bins = defaultdict(list)
+    for p in papers:
+        bins[round(p["avg_score"])].append(p)
+    for k in bins:
+        rng.shuffle(bins[k])
+    sorted_bins = sorted(bins.keys())
+    per_bin = n // len(sorted_bins)
+    remainder = n % len(sorted_bins)
+    samples = []
+    for i, k in enumerate(sorted_bins):
+        take = min(per_bin + (1 if i < remainder else 0), len(bins[k]))
+        samples.extend(bins[k][:take])
+    rng.shuffle(samples)
+    print(f"Stratified: {len(sorted_bins)} bins, {per_bin}/bin (+{remainder} extra), total={len(samples)}")
+    return samples
+
+
+DIRECT_SCORE_PROMPT = """\
+You are an experienced academic reviewer for a top ML venue (ICLR).
+
+You will be given a paper. Read it carefully, then provide:
+1. A brief assessment (2-3 paragraphs) covering strengths, weaknesses, and overall quality.
+2. A single numerical score from 1.0 to 10.0.
+
+Use the FULL scoring range — do NOT cluster around 5-6. Be discriminative:
+- 9.0-10.0: Strong accept. Exceptional, field-advancing contribution.
+- 7.0-8.9:  Accept. Clear contribution, solid execution, minor issues.
+- 5.0-5.9:  Borderline reject. Has some merit but weaknesses outweigh.
+- 3.0-4.9:  Reject. Significant issues with claims, method, or evaluation.
+- 1.0-2.9:  Strong reject. Fundamental flaws, unclear contribution, or wrong.
+
+NEVER give exactly 6.0. If slightly positive give 7, if slightly negative give 5.
+
+End your response with a line like: "Score: X.X"
+"""
+
+
+async def score_paper_directly(
+    client, paper_content: str, calibration_context: str = "",
+) -> tuple[float, float]:
+    """Send paper directly to MODEL_SCORER, parse score. Returns (score, cost)."""
+
+    user_prompt = (
+        f"Here is the paper to review and score:\n\n"
+        f"--- PAPER START ---\n{paper_content}\n--- PAPER END ---\n\n"
+    )
+    if calibration_context:
+        user_prompt += (
+            f"Here are calibration examples — reviews of other papers paired with "
+            f"ACTUAL human reviewer scores. Use these as your scoring anchor:\n\n"
+            f"--- CALIBRATION EXAMPLES ---\n{calibration_context}\n"
+            f"--- END CALIBRATION EXAMPLES ---\n\n"
+        )
+    user_prompt += "Now read the paper carefully, assess it, and provide your score."
+
+    # ── Agent SDK path ───────────────────────────────────────────
+    if MODEL_SCORER.startswith("claude-sdk:"):
+        sdk_model = MODEL_SCORER.split(":", 1)[1]
+        print(f"    [direct_score] scoring with Agent SDK ({sdk_model}) ...")
+        from claude_agent_sdk import ClaudeSDKClient, ClaudeAgentOptions, AssistantMessage, ResultMessage, TextBlock
+
+        options = ClaudeAgentOptions(
+            model=sdk_model,
+            allowed_tools=[],
+            max_turns=1,
+            system_prompt=DIRECT_SCORE_PROMPT,
+        )
+        score_text = ""
+        cost_score = 0.0
+        async with ClaudeSDKClient(options=options) as sdk_client:
+            await sdk_client.query(user_prompt)
+            async for message in sdk_client.receive_response():
+                if isinstance(message, AssistantMessage):
+                    for block in message.content:
+                        if isinstance(block, TextBlock):
+                            score_text += block.text
+                if isinstance(message, ResultMessage):
+                    if message.total_cost_usd is not None:
+                        cost_score = message.total_cost_usd
+
+        if not score_text.strip():
+            raise ValueError("Agent SDK direct scorer returned empty response")
+        print(f"    [direct_score] done — {sdk_model} (Agent SDK) — ${cost_score:.4f}")
+
+    # ── OpenRouter path ──────────────────────────────────────────
+    else:
+        score_text, cost_score = await _call_openai(
+            client, "direct_score", DIRECT_SCORE_PROMPT, user_prompt, MODEL_SCORER,
+        )
+
+    score, cost_parse = await _parse_score(client, score_text)
+    print(f"    [direct_score] parsed score: {score} — ${cost_parse:.4f}")
+    return score, cost_score + cost_parse
+
+
+async def main(
+    n_samples: int = 10,
+    seed: int = 42,
+    parallel: bool = False,
+    balanced: bool = False,
+    data_dir: str | None = None,
+    calibration_path: str | None = None,
+):
+    bench_dir = Path(data_dir) if data_dir else DEFAULT_BENCH_DIR
+
+    print("=" * 72)
+    print("DIRECT-SCORING BASELINE")
+    print(f"  Scorer: {MODEL_SCORER}")
+    print(f"  Data:   {bench_dir}")
+    print(f"  Mode:   {'balanced' if balanced else 'random'}")
+    print("=" * 72)
+
+    calibration_context = ""
+    calibration_ids = set()
+    if calibration_path:
+        cal_path = Path(calibration_path)
+        if cal_path.exists():
+            calibration_context = cal_path.read_text(encoding="utf-8")
+            print(f"Loaded calibration: {cal_path} ({len(calibration_context):,} chars)")
+            ids_path = cal_path.parent / "calibration_ids.json"
+            if ids_path.exists():
+                calibration_ids = set(json.load(open(ids_path)))
+                print(f"Excluding {len(calibration_ids)} calibration papers")
+
+    gt_data, papers_dir = load_ground_truth(bench_dir)
+    available = [r for r in gt_data if (papers_dir / f"{r['paper_id']}.txt").exists()]
+    if calibration_ids:
+        available = [r for r in available if r["paper_id"] not in calibration_ids]
+    print(f"Loaded {len(gt_data)} papers, {len(available)} available.\n")
+
+    if balanced:
+        samples = stratified_sample(available, n_samples, seed)
+    else:
+        random.seed(seed)
+        samples = random.sample(available, min(n_samples, len(available)))
+        print(f"Selected {len(samples)} papers (seed={seed}).\n")
+
+    client = _get_client()
+    results = []
+    csv_path = Path(__file__).parent / "direct_baseline_scores.csv"
+
+    with open(csv_path, "w", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(["paper_id", "pred_score", "pred_decision", "gt_avg_score",
+                     "gt_decision", "gt_binary", "match", "cost"])
+
+    semaphore = asyncio.Semaphore(CONCURRENCY)
+    file_lock = asyncio.Lock()
+    completed = [0]
+    total_start = time.time()
+
+    async def process_paper(i: int, paper_info: dict):
+        pid = paper_info["paper_id"]
+        paper_path = papers_dir / f"{pid}.txt"
+        paper_content = paper_path.read_text(encoding="utf-8", errors="replace")
+        paper_content = sanitize_text(paper_content)
+
+        async with semaphore:
+            print(f"  [{i}/{len(samples)}] {pid}  GT={paper_info['gt_binary']}({paper_info['avg_score']:.1f})")
+            start = time.time()
+            try:
+                score, cost = await score_paper_directly(client, paper_content, calibration_context)
+                score = round(float(score), 1)
+                decision = score_to_decision(score)
+                elapsed = time.time() - start
+                match = decision == paper_info["gt_binary"]
+                marker = "MATCH" if match else "MISMATCH"
+                print(f"    [{pid}] score={score} dec={decision} {marker} ({elapsed:.1f}s, ${cost:.4f})")
+            except Exception as e:
+                elapsed = time.time() - start
+                print(f"    [{pid}] ERROR: {e} ({elapsed:.1f}s)")
+                score, decision, match, cost = None, None, None, 0.0
+
+            r = {
+                "paper_id": pid,
+                "gt_decision": paper_info["decision"],
+                "gt_binary": paper_info["gt_binary"],
+                "gt_avg_score": paper_info["avg_score"],
+                "gt_scores": paper_info["scores"],
+                "predicted_score": score,
+                "predicted_decision": decision,
+                "match": match,
+                "cost": cost,
+            }
+
+            async with file_lock:
+                results.append(r)
+                completed[0] += 1
+                with open(csv_path, "a", newline="") as f:
+                    w = csv.writer(f)
+                    match_str = "YES" if r["match"] else ("NO" if r["match"] is not None else "ERROR")
+                    w.writerow([
+                        r["paper_id"],
+                        r["predicted_score"],
+                        r["predicted_decision"],
+                        f"{r['gt_avg_score']:.2f}",
+                        r["gt_decision"],
+                        r["gt_binary"],
+                        match_str,
+                        f"{r['cost']:.4f}",
+                    ])
+
+    await asyncio.gather(*(
+        process_paper(i, info) for i, info in enumerate(samples, 1)
+    ))
+
+    total_elapsed = time.time() - total_start
+
+    # ── Summary ──────────────────────────────────────────────────
+    print(f"\n{'=' * 72}")
+    print("DIRECT-SCORING BASELINE RESULTS")
+    print(f"{'=' * 72}")
+
+    valid = [r for r in results if r["match"] is not None]
+    matches = sum(1 for r in valid if r["match"])
+    accuracy = matches / len(valid) if valid else 0
+    total_cost = sum(r.get("cost", 0.0) for r in results)
+
+    print(f"Papers:    {len(results)}")
+    print(f"Valid:     {len(valid)}")
+    print(f"Correct:   {matches}/{len(valid)}")
+    print(f"Accuracy:  {accuracy:.1%}")
+    print(f"Time:      {total_elapsed:.1f}s")
+    print(f"Cost:      ${total_cost:.4f}")
+
+    paired = [(r["gt_avg_score"], r["predicted_score"]) for r in results if r["predicted_score"] is not None]
+    if paired:
+        mean_gt = sum(p[0] for p in paired) / len(paired)
+        mean_pred = sum(p[1] for p in paired) / len(paired)
+        mae = sum(abs(g - p) for g, p in paired) / len(paired)
+        print(f"\nMean GT:    {mean_gt:.2f}")
+        print(f"Mean Pred:  {mean_pred:.2f}")
+        print(f"MAE:        {mae:.2f}")
+
+    print(f"\n{'Paper ID':<20} {'GT':>10} {'Predicted':>10} {'GT Score':>10} {'Pred Score':>11} {'Match':>7}")
+    print("─" * 72)
+    for r in results:
+        pred = r["predicted_decision"] or "N/A"
+        pred_sc = f"{r['predicted_score']:.1f}" if r["predicted_score"] else "N/A"
+        match_str = "YES" if r["match"] else ("NO" if r["match"] is not None else "ERR")
+        print(f"{r['paper_id']:<20} {r['gt_binary']:>10} {pred:>10} {r['gt_avg_score']:>10.1f} {pred_sc:>11} {match_str:>7}")
+
+    # Per-bin accuracy
+    bin_c, bin_t = Counter(), Counter()
+    for r in valid:
+        b = round(r["gt_avg_score"])
+        bin_t[b] += 1
+        if r["match"]:
+            bin_c[b] += 1
+    if bin_t:
+        print("\nPer-bin accuracy:")
+        for b in sorted(bin_t):
+            print(f"  ~{b}: {bin_c[b]}/{bin_t[b]} ({bin_c[b]/bin_t[b]:.0%})")
+
+    print(f"\nCSV: {csv_path}")
+
+
+if __name__ == "__main__":
+    if "--help" in sys.argv or "-h" in sys.argv:
+        print(__doc__)
+        sys.exit(0)
+
+    balanced = "--balanced" in sys.argv
+    data_dir = None
+    calibration_path = None
+    if "--data-dir" in sys.argv:
+        idx = sys.argv.index("--data-dir")
+        if idx + 1 < len(sys.argv):
+            data_dir = sys.argv[idx + 1]
+    if "--calibration" in sys.argv:
+        idx = sys.argv.index("--calibration")
+        if idx + 1 < len(sys.argv):
+            calibration_path = sys.argv[idx + 1]
+
+    flag_values = {data_dir, calibration_path} - {None}
+    args = [a for a in sys.argv[1:] if not a.startswith("--") and a not in flag_values]
+    n = int(args[0]) if len(args) > 0 else 10
+    seed = int(args[1]) if len(args) > 1 else 42
+    asyncio.run(main(n_samples=n, seed=seed, balanced=balanced, data_dir=data_dir, calibration_path=calibration_path))
