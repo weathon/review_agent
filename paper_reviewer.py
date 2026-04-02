@@ -34,9 +34,10 @@ OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 MODEL_HARSH = "minimax/minimax-m2.7"
 MODEL_NEUTRAL = "minimax/minimax-m2.7"
 MODEL_SPARK = "minimax/minimax-m2.7"
-MODEL_RELATED_WORK = "minimax/minimax-m2.7:online"
+MODEL_RELATED_WORK = "minimax/minimax-m2.7:online" 
 MODEL_FILTER = "minimax/minimax-m2.7"
-MODEL_MERGER = "z-ai/glm-5"
+MODEL_MERGER = "minimax/minimax-m2.7"
+MODEL_SCORER = "gpt-5.4"
 MODEL_PARSER = "openai/gpt-5.4-nano"
 
 MAX_RETRIES = 3
@@ -91,11 +92,6 @@ Output format (strictly follow — evaluate EVERY section):
 - Is the problem well-motivated? Is the gap in prior work clearly identified?
 - Are the contributions clearly stated and accurate?
 - Does the introduction over-claim or under-sell?
-
-### Related Work
-- Are the most relevant baselines and prior work cited?
-- Is the positioning against prior work fair and accurate?
-- Are there obvious missing references?
 
 ### Method / Approach
 - Is the method clearly described and reproducible?
@@ -260,42 +256,27 @@ MERGER_PROMPT = """\
 You are a senior meta-reviewer / area chair. You have received four inputs \
 about the same paper:
 
-1. A **harsh critic** review
-2. A **supportive/cheering** review — this reviewer tends to be generous \
-   and finds positives even in weak papers. Treat their strengths with \
-   CAUTION: verify each claimed strength against the actual paper. If a \
-   "strength" is just "the topic is important" or "the authors attempt X", \
-   discard it — that is not a real strength. Only keep strengths that the \
-   paper genuinely earns with concrete evidence or results.
-3. A **spark finder** report (focuses on how to improve the paper)
+1. A **harsh critic** review (may be overly critical)
+2. A **neutral/balanced** review
+3. A **spark finder** report (focuses on insights, not flaws)
 4. A **potentially missed related work** report (these are SUGGESTIONS, not \
    definitive omissions — the authors may have good reasons for not citing them)
 
 Your job is to synthesize these into ONE authoritative final review.
 
 Cross-check every criticism against the actual paper content and the other \
-reviews. The harsh critic is deliberately adversarial and will often raise \
-points that are technically true but unimportant, or that misunderstand the \
-paper's scope and goals. You MUST aggressively filter their output:
+reviews. Remove criticisms that are factually wrong about the paper, that \
+misunderstand the contribution, or that are pure formatting/style nitpicks. \
+But do NOT excuse real problems — if the critic and neutral reviewer both \
+flag the same issue, it's real.
 
 Rules:
 - REMOVE criticisms that are factually wrong or misunderstand the paper.
 - REMOVE pure formatting/style nitpicks.
-- REMOVE criticisms that are overly picky, pedantic, or would not realistically \
-  affect a reviewer's decision at the target venue. Ask: "Would a reasonable \
-  area chair consider this a real problem?" If not, discard it.
-- REMOVE criticisms about missing experiments or baselines that are only \
-  tangentially related to the paper's core claims.
-- REMOVE criticisms that amount to "the paper could have done more" — every \
-  paper has a finite scope and that is acceptable.
-- KEEP ONLY criticisms that are factually correct, substantive, AND central \
-  to the paper's main claims. A weakness must genuinely undermine the paper's \
-  contribution to be included.
-- For strengths: only include strengths that are VERIFIED against the paper. \
-  The supportive reviewer may overstate positives — cross-check each one.
+- KEEP criticisms that are factually correct AND substantive, even if only \
+  one reviewer raised them — a single valid concern still counts.
+- KEEP genuine strengths backed by evidence.
 - For potentially missed related work: present as suggestions, do not penalize.
-- When in doubt about whether to include a weakness, move it to Nice-to-Haves \
-  instead of Weaknesses.
 
 Output your final review in this markdown format:
 
@@ -349,43 +330,57 @@ from scratch.
 
 You MUST follow these steps in order:
 
-**Step 1 — Find the MOST SIMILAR calibration paper.**
-Read through all calibration examples and find the one whose review describes \
-a paper most similar in overall quality to the current paper. Compare on:
+**Step 1 — Identify the LOWER BOUND paper.**
+Find the calibration example that is clearly WORSE than or roughly equal to \
+the current paper. This is the paper whose quality is just below the current \
+paper's level. Note its human average score — this is your score floor.
+
+**Step 2 — Identify the UPPER BOUND paper.**
+Find the calibration example that is clearly BETTER than or roughly equal to \
+the current paper. This is the paper whose quality is just above the current \
+paper's level. Note its human average score — this is your score ceiling.
+
+**Step 3 — Compare dimension by dimension.**
+For BOTH the lower and upper bound papers, compare against the current paper on:
 - novelty
 - technical soundness
 - empirical support
 - significance
 - clarity
 
-Pick the calibration example that is the closest match overall.
+For each dimension, determine: is the current paper closer to the lower bound \
+or the upper bound?
 
-**Step 2 — Use that paper's human score as your anchor.**
-Start from the human average score of the most similar calibration paper.
+**Step 4 — Interpolate the final score.**
+Place the current paper's score BETWEEN the lower bound and upper bound scores \
+based on the dimension-by-dimension comparison. If the current paper is closer \
+to the upper bound on most dimensions, score it closer to the upper bound's \
+human score; if closer to the lower bound, score it closer to that.
 
-**Step 3 — Adjust if needed.**
-If the current paper is slightly better than the closest match, nudge the \
-score up. If slightly worse, nudge it down. Keep adjustments small (0.5-1.0) \
-since you picked the closest match already.
+**Edge cases:**
+- If the current paper is WORSE than ALL calibration examples, score it below \
+  the lowest calibration score.
+- If the current paper is BETTER than ALL calibration examples, score it above \
+  the highest calibration score.
+- If there is only one calibration example nearby, use it as a single anchor \
+  and adjust up or down based on the comparison.
 
 ## Scoring Constraints
 
 The "score" field is a CONTINUOUS value from 1.0 to 10.0 (e.g. 3.5, 4.7, 6.2, 8.1). \
 Use the full range — do NOT cluster around 5-6. Be DISCRIMINATIVE:
 - A truly bad paper deserves a 2.0, not a 4.5.
-- A truly great paper deserves a 7.0, not a 6.0.
+- A truly great paper deserves a 9.0, not a 7.0.
 - Do NOT hedge toward the middle. Commit to your assessment.
 - However, do not over-penalize papers for a long list of minor points if the core contribution is sound.
 - A few serious flaws matter more than many small nitpicks.
 
 Scoring guide (use only when NO calibration examples are available):
-- 10: Strong Accept.
-- 8:  Accept.
-- 6:  Weak Accept.
-- 5:  Borderline.
-- 4: Weak Reject
-- 3-4: Reject 
-- 1:  Strong Reject. Fatal flaws or out-of-scope content.
+- 9.0-10.0: Strong accept. Exceptional, field-advancing contribution.
+- 7.0-8.9:  Accept. Clear contribution, solid execution, minor issues.
+- 5.5-6.9:  Borderline. Has merit but real weaknesses hold it back.
+- 3.5-5.4:  Reject. Significant issues with claims, method, or evaluation.
+- 1.0-3.4:  Strong reject. Fundamental flaws, unclear contribution, or wrong.
 
 Real flaws go in "weaknesses" and hurt the score. \
 Nice-to-haves could affect the scores but not significantly as weaknesses. \
@@ -401,7 +396,6 @@ Before deciding on the final score, ask:
 
 Return the score using the provided structured response schema.
 """
-
 # ── Core logic ────────────────────────────────────────────────────────
 
 def sanitize_text(text: str) -> str:
@@ -433,7 +427,7 @@ PROVIDER_MAP = {
 }
 
 
-def _build_extra_body(model: str, reasoning_effort: str = "medium") -> dict | None:
+def _build_extra_body(model: str, reasoning_effort: str = "high") -> dict | None:
     """Build extra_body with reasoning and/or provider config for OpenRouter."""
     extra = {}
     if model in REASONING_MODELS:
@@ -665,29 +659,34 @@ async def run_merger(
     )
 
     # ── Turn 2: Score (same conversation, calibration injected) ──────
-    print(f"  [merger_score] scoring with calibration ({MODEL_MERGER}) ...")
+    print(f"  [merger_score] scoring with calibration ({MODEL_SCORER}) ...")
 
-    score_user = f"Here is the consolidated review of the paper:\n\n{review_text}\n\n"
+    score_user = ""
     if calibration_context:
         score_user += (
-            f"Here are calibration examples — reviews of other papers paired with \n"
-            f"ACTUAL human reviewer scores. Use these as your primary scoring anchor:\n\n"
+            f"Now score this paper. Here are calibration examples — reviews of \n"
+            f"other papers paired with ACTUAL human reviewer scores. Use these as \n"
+            f"your primary scoring anchor:\n\n"
             f"--- CALIBRATION EXAMPLES ---\n"
             f"{calibration_context}\n"
             f"--- END CALIBRATION EXAMPLES ---\n\n"
         )
+    else:
+        score_user += "Now score this paper.\n\n"
 
     score_user += (
-        "Based on the review above, assign a single overall score.\n\n"
+        "Based on the review you just wrote, assign a single overall score.\n\n"
         "IMPORTANT — use the FULL range from 1.0 to 10.0. Do NOT compress "
         "scores into 4-6. A paper with fundamental flaws deserves 1-3. "
         "A strong paper with clear contributions deserves 7-9. "
         "Commit to your assessment — do not hedge toward the middle."
     )
 
-    # Fresh conversation: only calibration + consolidated review, no paper/sub-agent context
+    # Multi-turn: system + turn1 + assistant + turn2
     messages = [
-        {"role": "system", "content": SCORE_PROMPT},
+        {"role": "system", "content": MERGER_PROMPT},
+        {"role": "user", "content": user_prompt_review},
+        {"role": "assistant", "content": review_text},
         {"role": "user", "content": score_user},
     ]
 
@@ -695,18 +694,18 @@ async def run_merger(
     for attempt in range(1, MAX_RETRIES + 1):
         try:
             kwargs = dict(
-                model=MODEL_MERGER,
+                model=MODEL_SCORER,
                 messages=messages,
                 timeout=REQUEST_TIMEOUT,
             )
-            extra = _build_extra_body(MODEL_MERGER, reasoning_effort="medium")
+            extra = _build_extra_body(MODEL_SCORER, reasoning_effort="high")
             if extra:
                 kwargs["extra_body"] = extra
             response = await client.chat.completions.create(**kwargs)
             score_text = response.choices[0].message.content or ""
             cost_score = _extract_cost(response)
             if not score_text.strip():
-                _error_logger.error(f"[merger_score] empty response (attempt {attempt}/{MAX_RETRIES}), model={MODEL_MERGER}")
+                _error_logger.error(f"[merger_score] empty response (attempt {attempt}/{MAX_RETRIES}), model={MODEL_SCORER}")
                 if attempt < MAX_RETRIES:
                     print(f"  [merger_score] empty response (attempt {attempt}/{MAX_RETRIES}), retrying ...")
                     await asyncio.sleep(RETRY_DELAY + _random.uniform(0, 5))
@@ -718,11 +717,11 @@ async def run_merger(
             input_tokens = getattr(usage, "prompt_tokens", None) if usage else None
             output_tokens = getattr(usage, "completion_tokens", None) if usage else None
             tokens = f"{input_tokens}in/{output_tokens}out" if input_tokens and output_tokens else "n/a"
-            print(f"  [merger_score] done — {MODEL_MERGER} — {tokens} tokens — ${cost_score:.4f}")
+            print(f"  [merger_score] done — {MODEL_SCORER} — {tokens} tokens — ${cost_score:.4f}")
             print(f"  [score_parser] parsed score: {score} — ${cost_parse:.4f}")
             return review_text, score, cost_review + cost_score + cost_parse
         except APITimeoutError as e:
-            _error_logger.error(f"[merger_score] timeout (attempt {attempt}/{MAX_RETRIES}), model={MODEL_MERGER}\n{traceback.format_exc()}")
+            _error_logger.error(f"[merger_score] timeout (attempt {attempt}/{MAX_RETRIES}), model={MODEL_SCORER}\n{traceback.format_exc()}")
             if attempt < MAX_RETRIES:
                 wait = RETRY_DELAY * attempt
                 print(f"  [merger_score] timeout (attempt {attempt}/{MAX_RETRIES}), waiting {wait}s ...")
@@ -730,7 +729,7 @@ async def run_merger(
                 continue
             raise
         except Exception as e:
-            _error_logger.error(f"[merger_score] error (attempt {attempt}/{MAX_RETRIES}), model={MODEL_MERGER}: {e}\n{traceback.format_exc()}")
+            _error_logger.error(f"[merger_score] error (attempt {attempt}/{MAX_RETRIES}), model={MODEL_SCORER}: {e}\n{traceback.format_exc()}")
             err_str = str(e).lower()
             is_retryable = any(
                 kw in err_str for kw in ["rate_limit", "overloaded", "429", "529", "timeout", "gateway", "502", "503", "504"]
@@ -783,7 +782,8 @@ async def review_paper(
         print(f"  Spark Finder:   {MODEL_SPARK}")
     if not skip_related_work:
         print(f"  Related Work:   {MODEL_RELATED_WORK}")
-    print(f"  Merger:         {MODEL_MERGER}\n")
+    print(f"  Merger:         {MODEL_MERGER}")
+    print(f"  Scorer:         {MODEL_SCORER}\n")
 
     client = _get_client(api_key=api_key)
     pp = str(path)
@@ -943,6 +943,7 @@ if __name__ == "__main__":
         print(f"  Spark Finder (OpenRouter):      {MODEL_SPARK}")
         print(f"  Related Work (OpenRouter):      {MODEL_RELATED_WORK}")
         print(f"  Merger (OpenRouter):            {MODEL_MERGER}")
+        print(f"  Scorer (OpenRouter):            {MODEL_SCORER}")
         sys.exit(0 if "--help" in sys.argv else 1)
 
     parallel = "--parallel" in sys.argv
