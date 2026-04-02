@@ -42,7 +42,7 @@ from run_iclr_bench import load_ground_truth, DEFAULT_BENCH_DIR
 
 
 BORDERLINE_BINS = {5, 6}  # bins where accept/reject is hardest to distinguish
-BORDERLINE_EXTRA = 1      # extra papers per borderline bin
+BORDERLINE_EXTRA = 0      # extra papers per borderline bin
 CONCURRENCY = 14
 
 def sample_one_per_bin(papers: list[dict], seed: int) -> list[dict]:
@@ -59,7 +59,7 @@ def sample_one_per_bin(papers: list[dict], seed: int) -> list[dict]:
         if not bins[k]:
             continue
         # Take more from borderline bins
-        n_take = 1 + BORDERLINE_EXTRA if k in BORDERLINE_BINS else 1
+        n_take = 2 + BORDERLINE_EXTRA if k in BORDERLINE_BINS else 1
         n_take = min(n_take, len(bins[k]))
         for j in range(n_take):
             samples.append(bins[k][j])

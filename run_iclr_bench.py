@@ -295,19 +295,35 @@ async def main(n_samples: int = 10, seed: int = 42, parallel: bool = False, skip
     results = []
     total_start = time.time()
 
-    # Write results incrementally — header now, append after each paper
     output_path = Path(__file__).parent / "bench_results.md"
     csv_path = Path(__file__).parent / "bench_scores.csv"
-    with open(output_path, "w") as f:
-        f.write(f"# ICLR Benchmark Results\n\n")
-        f.write(f"Date: {datetime.now().strftime('%Y-%m-%d %H:%M')}\n")
-        f.write(f"Critic/Merger: {MODEL_HARSH} (OpenRouter)\n")
-        f.write(f"Neutral: {MODEL_NEUTRAL}, ")
-        f.write(f"Related Work: {MODEL_RELATED_WORK} (OpenRouter)\n\n")
-    with open(csv_path, "w", newline="") as f:
-        w = csv.writer(f)
-        w.writerow(["paper_id", "pred_score", "pred_decision", "gt_avg_score", "gt_decision", "gt_binary", "match", "cost",
-                     "gt_score_0", "gt_score_1", "gt_score_2", "gt_score_3", "gt_score_4", "gt_score_5", "gt_score_6"])
+
+    # Check for existing results and ask user whether to continue or overwrite
+    finished_ids: set[str] = set()
+    if csv_path.exists() and csv_path.stat().st_size > 0:
+        import pandas as pd
+        existing_df = pd.read_csv(csv_path)
+        existing_count = len(existing_df)
+        print(f"\nFound existing bench_scores.csv with {existing_count} results.")
+        choice = input("  [C]ontinue (skip finished papers) or [O]verwrite? [C/o]: ").strip().lower()
+        if choice in ("o", "overwrite"):
+            print("  Overwriting existing results.\n")
+        else:
+            finished_ids = set(existing_df["paper_id"].astype(str))
+            print(f"  Continuing — will skip {len(finished_ids)} already-finished papers.\n")
+
+    if not finished_ids:
+        # Fresh start — write headers
+        with open(output_path, "w") as f:
+            f.write(f"# ICLR Benchmark Results\n\n")
+            f.write(f"Date: {datetime.now().strftime('%Y-%m-%d %H:%M')}\n")
+            f.write(f"Critic/Merger: {MODEL_HARSH} (OpenRouter)\n")
+            f.write(f"Neutral: {MODEL_NEUTRAL}, ")
+            f.write(f"Related Work: {MODEL_RELATED_WORK} (OpenRouter)\n\n")
+        with open(csv_path, "w", newline="") as f:
+            w = csv.writer(f)
+            w.writerow(["paper_id", "pred_score", "pred_decision", "gt_avg_score", "gt_decision", "gt_binary", "match", "cost",
+                         "gt_score_0", "gt_score_1", "gt_score_2", "gt_score_3", "gt_score_4", "gt_score_5", "gt_score_6"])
 
     # Run papers concurrently (up to CONCURRENCY at a time)
     CONCURRENCY = 5
@@ -318,6 +334,10 @@ async def main(n_samples: int = 10, seed: int = 42, parallel: bool = False, skip
     async def process_paper(i: int, paper_info: dict):
         pid = paper_info["paper_id"]
         paper_path = papers_dir / f"{pid}.txt"
+
+        if pid in finished_ids:
+            print(f"  [{i}/{len(samples)}] Skipping {pid} (already finished)")
+            return
 
         async with semaphore:
             print(f"\n{'─' * 72}")
@@ -411,7 +431,8 @@ async def main(n_samples: int = 10, seed: int = 42, parallel: bool = False, skip
                     ])
 
     # Launch all papers concurrently (semaphore limits to CONCURRENCY)
-    print(f"\nRunning {len(samples)} papers with concurrency={CONCURRENCY}...")
+    to_run = len(samples) - len(finished_ids & {p["paper_id"] for p in samples})
+    print(f"\nRunning {to_run} papers ({len(finished_ids)} skipped) with concurrency={CONCURRENCY}...")
     await asyncio.gather(*(
         process_paper(i, paper_info)
         for i, paper_info in enumerate(samples, 1)
