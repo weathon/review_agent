@@ -34,9 +34,10 @@ OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 MODEL_HARSH = "minimax/minimax-m2.7"
 MODEL_NEUTRAL = "minimax/minimax-m2.7"
 MODEL_SPARK = "minimax/minimax-m2.7"
-MODEL_RELATED_WORK = "minimax/minimax-m2.7:online"
+MODEL_RELATED_WORK = "minimax/minimax-m2.7:online" 
 MODEL_FILTER = "minimax/minimax-m2.7"
-MODEL_MERGER = "z-ai/glm-5"
+MODEL_MERGER = "minimax/minimax-m2.7"
+MODEL_SCORER = "gpt-5.4"
 MODEL_PARSER = "openai/gpt-5.4-nano"
 
 MAX_RETRIES = 3
@@ -91,11 +92,6 @@ Output format (strictly follow — evaluate EVERY section):
 - Is the problem well-motivated? Is the gap in prior work clearly identified?
 - Are the contributions clearly stated and accurate?
 - Does the introduction over-claim or under-sell?
-
-### Related Work
-- Are the most relevant baselines and prior work cited?
-- Is the positioning against prior work fair and accurate?
-- Are there obvious missing references?
 
 ### Method / Approach
 - Is the method clearly described and reproducible?
@@ -260,14 +256,9 @@ MERGER_PROMPT = """\
 You are a senior meta-reviewer / area chair. You have received four inputs \
 about the same paper:
 
-1. A **harsh critic** review
-2. A **supportive/cheering** review — this reviewer tends to be generous \
-   and finds positives even in weak papers. Treat their strengths with \
-   CAUTION: verify each claimed strength against the actual paper. If a \
-   "strength" is just "the topic is important" or "the authors attempt X", \
-   discard it — that is not a real strength. Only keep strengths that the \
-   paper genuinely earns with concrete evidence or results.
-3. A **spark finder** report (focuses on how to improve the paper)
+1. A **harsh critic** review (may be overly critical)
+2. A **neutral/balanced** review
+3. A **spark finder** report (focuses on insights, not flaws)
 4. A **potentially missed related work** report (these are SUGGESTIONS, not \
    definitive omissions — the authors may have good reasons for not citing them)
 
@@ -276,16 +267,15 @@ Your job is to synthesize these into ONE authoritative final review.
 Cross-check every criticism against the actual paper content and the other \
 reviews. Remove criticisms that are factually wrong about the paper, that \
 misunderstand the contribution, or that are pure formatting/style nitpicks. \
-But do NOT excuse real problems — if the critic raises a valid concern, \
-it stands even if the supportive reviewer ignores it.
+But do NOT excuse real problems — if the critic and neutral reviewer both \
+flag the same issue, it's real.
 
 Rules:
 - REMOVE criticisms that are factually wrong or misunderstand the paper.
 - REMOVE pure formatting/style nitpicks.
 - KEEP criticisms that are factually correct AND substantive, even if only \
   one reviewer raised them — a single valid concern still counts.
-- For strengths: only include strengths that are VERIFIED against the paper. \
-  The supportive reviewer may overstate positives — cross-check each one.
+- KEEP genuine strengths backed by evidence.
 - For potentially missed related work: present as suggestions, do not penalize.
 
 Output your final review in this markdown format:
@@ -328,7 +318,9 @@ and your scores should reflect it.
 SCORE_PROMPT = """\
 You previously wrote a consolidated review of a paper. Now you must assign \
 a calibrated overall score from 1.0 to 10.0 using COMPARATIVE SCORING \
-against calibration examples.
+against calibration examples. Note that the review should be written to be very harsh, \
+but that doesn't mean the score should be low. Compare with similar level paper in the calibration \
+set to determine the score.
 
 Base your score on YOUR OWN review above — the strengths, weaknesses, \
 nice-to-haves, and suggestions you already identified. Do not re-evaluate \
@@ -404,7 +396,6 @@ Before deciding on the final score, ask:
 
 Return the score using the provided structured response schema.
 """
-
 # ── Core logic ────────────────────────────────────────────────────────
 
 def sanitize_text(text: str) -> str:
@@ -436,7 +427,7 @@ PROVIDER_MAP = {
 }
 
 
-def _build_extra_body(model: str, reasoning_effort: str = "medium") -> dict | None:
+def _build_extra_body(model: str, reasoning_effort: str = "high") -> dict | None:
     """Build extra_body with reasoning and/or provider config for OpenRouter."""
     extra = {}
     if model in REASONING_MODELS:
@@ -668,7 +659,7 @@ async def run_merger(
     )
 
     # ── Turn 2: Score (same conversation, calibration injected) ──────
-    print(f"  [merger_score] scoring with calibration ({MODEL_MERGER}) ...")
+    print(f"  [merger_score] scoring with calibration ({MODEL_SCORER}) ...")
 
     score_user = ""
     if calibration_context:
@@ -703,18 +694,18 @@ async def run_merger(
     for attempt in range(1, MAX_RETRIES + 1):
         try:
             kwargs = dict(
-                model=MODEL_MERGER,
+                model=MODEL_SCORER,
                 messages=messages,
                 timeout=REQUEST_TIMEOUT,
             )
-            extra = _build_extra_body(MODEL_MERGER, reasoning_effort="medium")
+            extra = _build_extra_body(MODEL_SCORER, reasoning_effort="high")
             if extra:
                 kwargs["extra_body"] = extra
             response = await client.chat.completions.create(**kwargs)
             score_text = response.choices[0].message.content or ""
             cost_score = _extract_cost(response)
             if not score_text.strip():
-                _error_logger.error(f"[merger_score] empty response (attempt {attempt}/{MAX_RETRIES}), model={MODEL_MERGER}")
+                _error_logger.error(f"[merger_score] empty response (attempt {attempt}/{MAX_RETRIES}), model={MODEL_SCORER}")
                 if attempt < MAX_RETRIES:
                     print(f"  [merger_score] empty response (attempt {attempt}/{MAX_RETRIES}), retrying ...")
                     await asyncio.sleep(RETRY_DELAY + _random.uniform(0, 5))
@@ -726,11 +717,11 @@ async def run_merger(
             input_tokens = getattr(usage, "prompt_tokens", None) if usage else None
             output_tokens = getattr(usage, "completion_tokens", None) if usage else None
             tokens = f"{input_tokens}in/{output_tokens}out" if input_tokens and output_tokens else "n/a"
-            print(f"  [merger_score] done — {MODEL_MERGER} — {tokens} tokens — ${cost_score:.4f}")
+            print(f"  [merger_score] done — {MODEL_SCORER} — {tokens} tokens — ${cost_score:.4f}")
             print(f"  [score_parser] parsed score: {score} — ${cost_parse:.4f}")
             return review_text, score, cost_review + cost_score + cost_parse
         except APITimeoutError as e:
-            _error_logger.error(f"[merger_score] timeout (attempt {attempt}/{MAX_RETRIES}), model={MODEL_MERGER}\n{traceback.format_exc()}")
+            _error_logger.error(f"[merger_score] timeout (attempt {attempt}/{MAX_RETRIES}), model={MODEL_SCORER}\n{traceback.format_exc()}")
             if attempt < MAX_RETRIES:
                 wait = RETRY_DELAY * attempt
                 print(f"  [merger_score] timeout (attempt {attempt}/{MAX_RETRIES}), waiting {wait}s ...")
@@ -738,7 +729,7 @@ async def run_merger(
                 continue
             raise
         except Exception as e:
-            _error_logger.error(f"[merger_score] error (attempt {attempt}/{MAX_RETRIES}), model={MODEL_MERGER}: {e}\n{traceback.format_exc()}")
+            _error_logger.error(f"[merger_score] error (attempt {attempt}/{MAX_RETRIES}), model={MODEL_SCORER}: {e}\n{traceback.format_exc()}")
             err_str = str(e).lower()
             is_retryable = any(
                 kw in err_str for kw in ["rate_limit", "overloaded", "429", "529", "timeout", "gateway", "502", "503", "504"]
@@ -791,7 +782,8 @@ async def review_paper(
         print(f"  Spark Finder:   {MODEL_SPARK}")
     if not skip_related_work:
         print(f"  Related Work:   {MODEL_RELATED_WORK}")
-    print(f"  Merger:         {MODEL_MERGER}\n")
+    print(f"  Merger:         {MODEL_MERGER}")
+    print(f"  Scorer:         {MODEL_SCORER}\n")
 
     client = _get_client(api_key=api_key)
     pp = str(path)
@@ -951,6 +943,7 @@ if __name__ == "__main__":
         print(f"  Spark Finder (OpenRouter):      {MODEL_SPARK}")
         print(f"  Related Work (OpenRouter):      {MODEL_RELATED_WORK}")
         print(f"  Merger (OpenRouter):            {MODEL_MERGER}")
+        print(f"  Scorer (OpenRouter):            {MODEL_SCORER}")
         sys.exit(0 if "--help" in sys.argv else 1)
 
     parallel = "--parallel" in sys.argv

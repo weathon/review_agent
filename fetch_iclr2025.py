@@ -254,20 +254,35 @@ def main(n_samples: int = 100, seed: int = 42, balanced: bool = False):
     print("Authenticating with OpenReview for PDF downloads...")
     or_client = get_or_client()
 
-    success = 0
-    with open(RATINGS_FILE, "w", newline="") as f:
-        w = csv.writer(f)
-        w.writerow(["paper_id", "title", "decision", "gt_binary", "avg_score",
-                     "score_0", "score_1", "score_2", "score_3", "score_4", "score_5"])
+    # Load existing ratings to skip already-finished papers
+    existing_ids: set[str] = set()
+    if RATINGS_FILE.exists() and RATINGS_FILE.stat().st_size > 0:
+        with open(RATINGS_FILE, newline="") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                existing_ids.add(row["paper_id"])
+        print(f"Found {len(existing_ids)} papers already in ratings.csv.")
+    else:
+        with open(RATINGS_FILE, "w", newline="") as f:
+            w = csv.writer(f)
+            w.writerow(["paper_id", "title", "decision", "gt_binary", "avg_score",
+                         "score_0", "score_1", "score_2", "score_3", "score_4", "score_5"])
 
+    success = 0
+    skipped = 0
     for i, paper in enumerate(samples, 1):
         pid = paper["paper_id"]
         title = paper["title"]
+
+        # Skip if already fully done (text exists AND in ratings)
+        md_path = PAPERS_DIR / f"{pid}.txt"
+        if pid in existing_ids and md_path.exists() and md_path.stat().st_size > 100:
+            skipped += 1
+            continue
+
         print(f"[{i}/{len(samples)}] {title[:60]}...")
         print(f"  Scores: {paper['scores']} avg={paper['avg_score']:.1f} dec={paper['gt_binary']}")
 
-        # Check if already converted
-        md_path = PAPERS_DIR / f"{pid}.txt"
         if md_path.exists() and md_path.stat().st_size > 100:
             print(f"  Already converted, skipping download.")
         else:
@@ -299,7 +314,7 @@ def main(n_samples: int = 100, seed: int = 42, balanced: bool = False):
         time.sleep(1)  # Be nice to OpenReview
 
     print(f"\n{'=' * 72}")
-    print(f"Done! {success}/{len(samples)} papers downloaded and converted.")
+    print(f"Done! {success} new, {skipped} skipped, {len(samples)} total.")
     print(f"Papers dir: {PAPERS_DIR}")
     print(f"Ratings:    {RATINGS_FILE}")
     print(f"\nTo run the benchmark:")

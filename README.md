@@ -190,7 +190,21 @@ Score distribution (ICLR 2025 reviewer ratings: 1, 3, 5, 6, 8, 10):
 
 For this project, **Pearson, MAE, bias, and decision quality are more important than Spearman**. Rank correlation is reported as a secondary metric, but it is highly sensitive to small local perturbations, especially in the borderline region where both human scores and accept/reject outcomes are inherently noisy. Since the main goal is calibrated scoring rather than exact global ranking, Pearson and bias are more informative about whether the model is using the same score scale as human reviewers.
 
-Generates a 3-panel plot: raw scatter, rounded scatter, and ROC curve.
+Generates a 4-panel plot: raw scatter, rounded scatter, ROC curve, and precision-recall curve.
+
+### Benchmark Results (44 papers, ICLR 2025)
+
+![Benchmark scatter plot](bench_scores_scatter.png)
+
+| Metric | Value |
+|--------|-------|
+| Spearman (raw) | 0.741 |
+| Pearson (raw) | 0.756 |
+| MAE (raw) | 1.12 |
+| Bias (pred - GT) | -0.11 |
+| Decision accuracy | 84.1% (37/44) |
+| AUROC | 0.910 |
+| Human match (rounded) | 75.0% |
 
 ## Output Files
 
