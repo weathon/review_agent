@@ -57,6 +57,39 @@ def _extract_section(text: str, start_marker: str, end_marker: str | None = None
     return tail.strip()
 
 
+# Empirical acceptance rates from benchmark (predicted score → % accepted in GT)
+# Based on ICLR 2025 benchmark with stratified sampling
+_ACCEPTANCE_RATES = {
+    1.0: (0, 1),
+    2.0: (0, 6),
+    3.0: (0, 7),
+    4.0: (0, 12),
+    5.0: (2, 5),
+    6.0: (9, 18),
+    7.0: (17, 20),
+    8.0: (4, 5),
+}
+
+
+def _acceptance_table(score: float) -> str:
+    """Build a markdown table showing acceptance likelihood at each score level."""
+    lines = [
+        "## Acceptance Likelihood (based on ICLR 2025 benchmark)",
+        "",
+        "| Predicted Score | Accepted / Total | Acceptance Rate |",
+        "|:-:|:-:|:-:|",
+    ]
+    rounded_score = round(score)
+    for s in sorted(_ACCEPTANCE_RATES):
+        accepted, total = _ACCEPTANCE_RATES[s]
+        rate = accepted / total if total > 0 else 0
+        marker = " **← your score**" if round(s) == rounded_score else ""
+        lines.append(f"| {s:.0f} | {accepted}/{total} | {rate:.0%}{marker} |")
+    lines.append("")
+    lines.append("*Rates are empirical from 73 benchmark papers with stratified sampling.*")
+    return "\n".join(lines)
+
+
 def _format_final_review(full_output: str) -> str:
     # Extract the review markdown between the FINAL CONSOLIDATED REVIEW and PREDICTED SCORE headers
     match = re.search(
@@ -78,6 +111,9 @@ def _format_final_review(full_output: str) -> str:
         if decision_match:
             score_lines.append(f"- Decision: **{decision_match.group(1)}**")
         parts.append("\n".join(score_lines))
+
+    if score_match:
+        parts.append(_acceptance_table(float(score_match.group(1))))
 
     parts.append(review_text)
 

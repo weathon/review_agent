@@ -2128,3 +2128,3008 @@ The paper's core insight is that stepwise reasoning in transformers emerges natu
 # Summary
 
 Papers: 44 | Accuracy: 84.1%
+## 5IkDAfabuo
+
+- GT: Accept (Oral) (avg 7.5)
+- Predicted: Accept (8.0/10)
+- Match: Yes
+
+### Final Review
+
+## Summary
+This paper proposes Prioritized Generative Replay (PGR), a framework that augments online RL replay buffers by conditioning a diffusion model on a "relevance function" F to guide synthetic data generation toward more learning-relevant transitions. The key empirical finding is that curiosity-based relevance functions outperform reward or TD-error-based conditioning, improving sample efficiency across state-based and pixel-based domains. The paper demonstrates that this guidance reduces Q-function overfitting and enables better scaling with synthetic-to-real data ratios.
+
+## Strengths
+- **Comprehensive empirical validation**: Experiments span DMC (state and pixel), OpenAI Gym, and DMLab environments with comparisons against model-free (SAC, REDQ, DRQ-V2), model-based (MBPO, DREAMER-V3), and generative baselines (SYNTHER), showing consistent improvements.
+
+- **Instructive mechanism analysis**: The paper effectively diagnoses why curiosity-PGR works through dormant ratio metrics (quantifying overfitting reduction) and curiosity score distribution evolution, showing guidance improves diversity in synthetic data.
+
+- **Informative ablation studies**: The comparison between PGR and PER (Section 5.1, Figure 3a) clearly demonstrates that generating new data (densification) complements prioritization—neither alone achieves PGR's performance.
+
+- **Practical scaling insights**: Analysis showing PGR can leverage larger networks and higher synthetic ratios (up to 0.75) while SYNTHER cannot provides valuable practical guidance for data-efficient training.
+
+- **Clear problem framing**: The "densification + guidance" conceptual framework elegantly unifies uniform replay and prioritized experience replay through the lens of conditional generation.
+
+## Weaknesses
+- **Missing guidance scale value**: The CFG guidance scale ω is treated as a hyperparameter but its value is never disclosed, limiting reproducibility. This is particularly critical since CFG directly controls how aggressively generation deviates from unconditional behavior.
+
+- **Incomplete hyperparameter ablations**: Key design choices—guidance scale ω, conditioning dropout probability (0.25), top-k selection ratio, and inner loop frequency—are not systematically ablated. Given these are central to the method, their absence weakens confidence in the claims.
+
+- **Limited failure mode analysis**: The paper shows reward-PGR underperforms unconditional generation but doesn't deeply analyze why. Understanding when guidance hurts (e.g., mode collapse, overly narrow coverage) would strengthen the contribution.
+
+- **Missing direct comparison**: The claim that PGR "goes beyond" PER is not fully validated. A baseline combining curiosity-based prioritization (PER) with unconditional generation would isolate whether benefits come from guidance or from simply generating more diverse data.
+
+- **No theoretical justification**: The paper lacks formal analysis connecting curiosity-based conditioning to overfitting reduction or improved coverage, relying solely on empirical evidence.
+
+## Nice-to-Haves
+- Ablation on what aspect of curiosity-based conditioning matters (state novelty vs. action novelty vs. full ICM dynamics error)
+- Evaluation on longer-horizon or procedurally generated tasks where unconditional generation more clearly fails
+- Concrete examples comparing generated transitions under different relevance functions
+- Formal connection to diversity-weighted sampling or PAC-style coverage guarantees
+
+## Novel Insights
+The paper's central insight—using curiosity-based relevance functions as conditioning signals for generative replay, rather than reward or TD-error—addresses a key limitation of both uniform and prioritized replay. By demonstrating that the dynamics prediction error from ICM provides a better conditioning signal than value estimates, the authors reveal that exploration-like signals can guide generative models toward more diverse, learning-relevant synthetic data. The dormant ratio analysis provides compelling evidence that this diversity specifically mitigates Q-function overfitting to synthetic transitions, offering a mechanistic explanation for why guidance matters beyond mere data quality improvements.
+
+## Potentially Missed Related Work
+- **GRAC** (Shan et al., 2021): Attention-based conditional generation for RL could provide an alternative conditioning mechanism worth comparing
+- **Model-based RL with learned constraints** (e.g., CONTRASTS, PILCO variants): These approaches use learned models with uncertainty for data generation but may not be directly applicable to the replay augmentation setting
+- None identified that substantially change the paper's positioning
+
+## Suggestions
+To strengthen the paper, the authors should report the guidance scale ω value and conduct at least a minimal sweep (e.g., ω ∈ {1.5, 3.0, 5.0}) to demonstrate robustness. Additionally, adding a PER + unconditional generation baseline would better isolate whether the benefit comes from guidance or from the generation component itself.
+
+---
+
+## rPup1cWk4d
+
+- GT: Reject (avg 3.0)
+- Predicted: Reject (3.0/10)
+- Match: Yes
+
+### Final Review
+
+## Summary
+This paper proposes a novel interpretable data augmentation method that combines energy-based modeling with information geometry, embedding structured data into a statistical manifold via the log-linear model on posets. The core contribution is the "backward projection" algorithm that reverses dimension reduction by projecting onto locally-constructed sub-manifolds using k-nearest neighbors. The method claims competitive performance with autoencoders while offering transparency and interpretability.
+
+## Strengths
+- **Novel algorithmic contribution**: The backward projection algorithm (Algorithm 4.1) provides a geometrically intuitive approach to inverting dimension reduction, which could have applications beyond this specific framework.
+- **Strong theoretical foundation**: The paper builds on established information geometry concepts (dually-flat manifolds, Bregman divergences, m/e-projections) and connects them to data augmentation in a principled way.
+- **Interpretability via explicit construction**: Unlike black-box neural network methods, the many-body approximation sub-manifolds (Equation 1) provide clear semantic meaning (ℓ-body captures ℓ-mode interactions), enabling principled choice of latent dimensionality.
+- **Thoughtful ablation studies**: The sensitivity analysis on bandwidth and nearest neighbor count, and the necessity of dimension reduction experiments provide useful insights into method behavior.
+
+## Weaknesses
+- **Broken autoencoder baselines severely undermine comparative claims**: Table 3 shows autoencoder achieving 20.80% accuracy on an 11-class problem (Musk) and 21.80% on a 2-class problem (Sonar)—both at or below random chance. These are not valid baselines. The paper's claim of "competitive performance" is meaningless when comparing against non-functional baselines. The autoencoder architecture (2+2 layers) appears underconfigured and/or improperly trained.
+
+- **Experimental scope is insufficient for ICLR standards**: The primary evaluation uses MNIST with only 1,000 training samples (200 per digit). Original accuracy of 68.12% for the autoencoder and 75.37% for the proposed method on 10-class classification is far below standard MNIST benchmarks. More diverse benchmarks (CIFAR-10, larger training sets) are needed to demonstrate real-world utility.
+
+- **Algorithm 4.1 lacks reproducibility**: While Remark 4.1 hints at construction via "fixing some indexes," the Sub-Manifold and Projection operations are described too abstractly for independent replication. Specific details on how D is constructed from nearest neighbors and what projection method is used are missing.
+
+- **Theoretical justification for backward projection is incomplete**: The paper claims divergence-minimizing guarantees for backward projection, but does not rigorously justify why projecting onto a locally-constructed manifold D (from k-nearest neighbors) approximately inverts the forward projection onto B. The mathematical connection between forward and backward projections lacks formal analysis.
+
+- **Normalization embedding loses information for images**: The embedding φ (normalizing pixels to probabilities) destroys absolute intensity information. The paper acknowledges this implicitly by noting "φ⁻¹ empirically reverses the average of original scaling," but this crude approximation is not analyzed for information loss.
+
+## Nice-to-Haves
+- Compare against standard data augmentation techniques (CutMix, MixUp, geometric transforms) rather than only autoencoders.
+- Add quantitative fidelity metrics (FID, Inception Score, precision-recall curves) beyond visual inspection.
+- Evaluate with neural network classifiers (CNNs, transformers) to show augmentation helps modern architectures.
+- Systematically ablate the tensor reshaping choice (28×28 → 7×2×2×7×2×2) and justify this design decision.
+- Provide convergence/optimality analysis for backward projection.
+
+## Novel Insights
+The paper's most valuable insight is treating datasets as probability distributions on a statistical manifold, providing a "meta-learning" perspective on data. The backward projection algorithm offers a novel geometric approach to inverting dimension reduction—finding approximate inverses by exploiting local manifold structure. The connection between many-body approximations and interpretable latent dimensions (where ℓ corresponds to ℓ-mode interactions) is principled and potentially valuable for applications requiring explainability. The observation that "pseudo-non-linear" behavior emerges from linear projections in curved statistical manifolds is interesting but incompletely characterized.
+
+## Potentially Missed Related Work
+- **Geometry-aware data augmentation**: Methods like Geometry-Aware Transform (GAT) or manifold-based augmentation techniques that interpolate in learned spaces
+- **Diffusion models for augmentation**: Recent work on using score-based models for data augmentation with theoretical guarantees
+- **Interpretable generative models**: Methods specifically designed for white-box data augmentation (beyond the autoencoder/GAN focus)
+
+## Suggestions
+**Fix the autoencoder baselines first**: Before claiming competitive performance, ensure the autoencoder achieves reasonable accuracy (at least above random chance for all classes). Use standard architectures with proper regularization and training procedures. If the autoencoder truly cannot perform on these datasets, this itself is an interesting finding that should be analyzed rather than hidden.
+
+**Expand empirical evaluation**: Include standard augmentation baselines and modern benchmarks to make the contribution meaningful to the community.
+
+---
+
+## LbgIZpSUCe
+
+- GT: Accept (Spotlight) (avg 7.3)
+- Predicted: Accept (7.0/10)
+- Match: Yes
+
+### Final Review
+
+## Summary
+This paper proposes MRDS-IR, a probabilistic generative model for multi-region neural dynamics that combines nonlinear within-region dynamics (parameterized by deep neural networks) with linear communication channels parameterized by their impulse response functions. The key methodological contribution is enabling interpretable characterization of inter-area communication through linear systems theory while retaining expressive nonlinear local dynamics, alongside a state-noise inversion-free variational filtering algorithm for efficient inference. The approach is validated through ground truth recovery experiments, reverse engineering of trained RNNs, rhythmic timing tasks, and real V1/V2 recordings.
+
+## Strengths
+- **Strong theoretical foundation**: The paper elegantly bridges expressive nonlinear dynamics with interpretable linear communication channels by leveraging established linear systems theory (impulse responses, transfer functions, state-space realizations). The mathematical derivation connecting impulse responses to LDS realizations (Section 2.1) is sound and well-presented.
+
+- **Technically novel inference algorithm**: The state-noise inversion-free variational filtering approach, derived through the Bayesian learning rule, provides a principled and computationally tractable method for hybrid stochastic/deterministic state-space models.
+
+- **Comprehensive experimental validation**: The paper tests the approach across diverse scenarios—matched ground truth recovery (Section 3.1), reverse engineering of trained RNNs for a distributed integration task (Section 3.2), rhythmic timing with output gating (Section 3.3), and real V1/V2 recordings (Section 3.4)—demonstrating consistent performance gains over multiple baselines.
+
+- **Meaningful interpretability**: The rhythmic timing task (Figure 3) demonstrates that learned channel frequency responses reveal passband structure matching the frequency range of the task, providing genuinely interpretable insights about inter-area communication that could inform neuroscientific hypotheses.
+
+- **Competitive real-world performance**: Quantitative comparisons on V1/V2 data (Figure 4E-F) show MRDS-IR consistently achieves lower MSE than MRM-GP, DLAG, and LN/NL baselines across stimuli conditions.
+
+## Weaknesses
+- **Incomplete ablation isolating model components**: The paper lacks experiments testing whether the *combination* of nonlinear local dynamics + temporal (non-instantaneous) channels outperforms simpler combinations. The NL baseline (nonlinear dynamics + instantaneous channels) and LN baseline (linear dynamics + temporal channels) are only compared in V1/V2 results (Figure 4E), not in the synthetic experiments where ground truth would enable precise attribution of gains.
+
+- **Missing comparison to MR-SDS**: Table S1 lists MR-SDS (Karniol-Tambour et al., 2022) as existing work but this is never used as a baseline. Given MR-SDS also handles nonlinear dynamics with multi-region communication, this is the most directly relevant comparison missing from the paper.
+
+- **V1/V2 validation lacks neuroscientific depth**: The V1/V2 analysis (Section 3.4) shows interpretable oscillatory structure consistent with drifting gratings and feedforward/feedback asymmetry, but does not connect findings to established neuroscience literature or validate interpretations against known anatomical properties. The supplementary DLAG comparison (Figure S1) is only qualitative. Without stronger validation against domain knowledge, claims about "meaningful features" remain suggestive rather than confirmed.
+
+- **Identifiability not addressed**: The model combines nonlinear dynamics f_k with linear channels H_{k,ℓ}—a highly non-identifiable combination where different parameterizations could theoretically produce identical observations. The paper does not discuss whether recovered parameters are unique or demonstrate that multiple random initializations converge to similar solutions.
+
+- **Hyperparameter selection not justified**: Latent dimensions (L_k) and filter order (M) are chosen without systematic ablation. Section 3.2 uses M=1 while Section 3.3 uses M=2, but sensitivity to these choices is not explored. The Spark Finder correctly notes that different hyperparameter settings could yield substantially different channel estimates.
+
+## Nice-to-Haves
+- **Initialization sensitivity analysis**: With deep neural networks for f_k and many channel parameters, solution quality may depend on initialization. Figure S3 shows 8 seeds with varying ELBO, but the paper does not quantify agreement between channel estimates across seeds or identify whether low-ELBO solutions have qualitatively different interpretations.
+
+- **Single-trial predictions for V1/V2**: Figure 4A shows trial-averaged trajectories, which can mask phase variability across trials. Showing single-trial predicted vs. actual neural activity would provide a clearer assessment of model quality.
+
+- **Pole-zero analysis for V1/V2 channels**: Figure 3G shows frequency responses for synthetic rhythmic data, but equivalent analysis for real V1/V2 channels is absent. This would strengthen interpretability claims.
+
+- **Practical guidance on hyperparameters**: The paper would benefit from recommendations on choosing L_k and M based on data characteristics, initialization strategies, and potential failure modes.
+
+## Novel Insights
+The paper's core insight—combining nonlinear within-region dynamics parameterized by neural networks with linear communication channels parameterized by their impulse responses—offers a principled middle ground in the expressivity-interpretability tradeoff space. By grounding channel communication in linear systems theory, the approach provides direct access to temporal properties (delays, frequency filtering) through impulse responses and pole-zero analysis, which could enable neuroscientists to formulate and test specific hypotheses about inter-area communication structure. The state-noise inversion-free filtering algorithm further provides a practical tool for tractable inference in these hybrid models.
+
+## Potentially Missed Related Work
+- **MR-SDS (Karniol-Tambour et al., 2022)**: Listed in Table S1 but never used as a comparison baseline; this is the most directly comparable existing method with nonlinear dynamics and multi-region communication.
+- **Nonlinear LDS variants**: Approaches like Hernandez et al. (2018) on nonlinear evolution via spatially-dependent linear dynamics may be relevant for related methodology.
+
+## Suggestions
+1. **Add ablation experiments** in synthetic tasks (integration, rhythmic timing) that isolate: (a) benefit of temporal vs. instantaneous channels, and (b) benefit of nonlinear vs. linear local dynamics, to attribute performance gains precisely.
+
+2. **Include MR-SDS as a baseline** in at least one synthetic experiment where ground truth enables fair comparison of interpretability.
+
+3. **Strengthen V1/V2 validation** by correlating inferred feedforward/feedback signals with known anatomical connectivity or predictions from established neuroscience literature.
+
+4. **Address identifiability** either through empirical validation (multiple random initializations showing convergence) or theoretical discussion of uniqueness conditions.
+
+---
+
+## CTC7CmirNr
+
+- GT: Accept (Poster) (avg 7.0)
+- Predicted: Accept (7.0/10)
+- Match: Yes
+
+### Final Review
+
+## Summary
+This paper reveals that masked diffusion models (MDMs) are theoretically equivalent to masked models by proving that the time variable is unnecessary for both training (via ELBO reformulation) and sampling (via the First-Hitting Sampler). The authors identify a critical numerical precision issue in 32-bit Gumbel-based categorical sampling that caused prior work to report inflated performance metrics for MDMs. After fixing this issue, the paper shows MDMs significantly lag behind auto-regressive models (ARMs) in generative perplexity.
+
+## Strengths
+- **Rigorous theoretical contribution**: All four propositions (3.1, 3.2, 4.1, 5.2) are mathematically sound, with complete proofs provided in the appendix. The ELBO reformulation by number of masked tokens and the characterization of the optimal time-agnostic model are well-established.
+- **Novel algorithmic innovation**: The First-Hitting Sampler (FHS) is a genuine advance that analytically samples transition times, achieving up to 20× wall-clock speedup under specific configurations while maintaining theoretical equivalence to the original reverse process.
+- **Important empirical finding**: Identifying the truncated Gumbel numerical precision issue (Section 5) is a significant contribution that exposes a flaw in previous benchmarking methodology. The closed-form analysis explaining how truncation reduces token diversity is theoretically elegant and practically important.
+- **Comprehensive experimental validation**: The paper provides extensive ablation studies comparing training variants, sampling strategies, and numerical precision effects. The design of the ablation experiments (including the "truncated 64-bit" control) convincingly isolates the precision issue.
+- **Honest limitation discussion**: The authors appropriately acknowledge that text's left-to-right structure favors ARMs, that KV caching incompatibility poses deployment challenges, and that MDMs may retain value for order-agnostic data.
+
+## Weaknesses
+- **Limited domain scope**: All experiments focus exclusively on text generation. The paper's negative conclusions about MDMs vs. ARMs, as well as the numerical precision findings, have not been validated for other discrete domains (images, code) where MDMs are also applied. This limits the generalizability of the findings.
+- **Configuration-dependent speedup**: The 20× speedup claim holds for the paper's specific setup (vocabulary size 50,526, sequence length 1024, ~600M parameters), but the paper's own analysis in Appendix J.3 shows this can drop to 5× or even 1.07× in other settings (e.g., DiffSound). This nuance deserves more prominent placement.
+- **Baseline comparison concerns**: The ARM baseline is trained for half the iterations of MDMs, which may partially explain the perplexity gap. Additionally, comparing encoder-only MDMs against causal ARMs introduces architectural confounding factors that are not fully addressed.
+- **Missing masked model comparisons**: The paper theoretically connects MDMs to masked models but does not empirically compare against approaches like MaskGIT or BERT-based generative models to validate the practical sufficiency of simpler masked models.
+- **KV caching impact not quantified**: The paper identifies bidirectional attention's incompatibility with KV caching as a fundamental deployment challenge but provides no quantitative analysis of how this affects inference cost at scale compared to ARMs with KV caching enabled.
+
+## Nice-to-Haves
+- **Image domain experiments**: Testing whether the numerical precision issue and equivalence claims extend to image generation (where MDMs like MaskGIT are widely used) would substantially strengthen generalizability claims.
+- **Scaling experiments**: All conclusions rest on a single 170M model. Evaluating at 1B+ scale would strengthen the claim that "MDMs cannot truly beat ARMs" before the community takes this conclusion seriously.
+- **Human evaluation**: The paper relies on Gen PPL and entropy as quality proxies. Human evaluation at matched perplexity levels would clarify whether the measured gaps are perceptible in practice.
+- **Retrospective baseline correction**: Applying the 64-bit precision fix to prior published MDM baselines (SEDD, MDLM) and reporting corrected Gen PPL numbers would more comprehensively establish the field's current state of knowledge.
+
+## Novel Insights
+This paper provides three genuinely novel observations that advance understanding of discrete generative models. First, the theoretical proof that MDMs reduce to masked models with the time variable replaced by masked ratio provides a unifying framework that clarifies the relationship between these previously distinct approaches—the Beta distribution insight showing time as a continuous relaxation of masked ratio is particularly elegant. Second, the identification that 32-bit Gumbel truncation creates a temperature-lowering effect that was previously misattributed to MDM superiority is a crucial correction to the literature that will impact how future discrete diffusion work is evaluated. Third, reframing the sampling process as a first-hitting time problem enables analytical solutions that avoid expensive categorical sampling across all positions simultaneously—a practical insight that connects theory to efficient implementation.
+
+## Potentially Missed Related Work
+- **MaskGIT (Chang et al., 2022)**: As a leading masked model for image generation, direct empirical comparison with MDMs under the corrected evaluation protocol would strengthen the claim that "simpler masked models are sufficient."
+
+## Suggestions
+- Move the configuration-dependence analysis of the 20× speedup from Appendix J.3 to the main paper body, as this is crucial context for interpreting the practical significance of the FHS contribution.
+- Retrain ARMs with identical training compute (not half iterations) for the comparison in Section 6 to ensure the perplexity gap is not partly attributable to training inequality.
+- Include a quantitative analysis of KV caching impact comparing ARMs with KV caching vs. MDMs with FHS on long-context tasks, as this is the paper's strongest argument for why masked models face fundamental deployment challenges.
+
+---
+
+## gInIbukM0R
+
+- GT: Reject (avg 2.5)
+- Predicted: Reject (2.0/10)
+- Match: Yes
+
+### Final Review
+
+## Summary
+
+This paper introduces a quantitative framework for measuring "Emergence" in neural networks by counting paths from inactive to active nodes, and proposes "relative Emergence" (normalized by parameter count) to explain training dynamics and pruning effects. The authors claim that tracking this metric during training can predict when networks are nearing convergence. The work builds on the categorical framework of Li et al. (2023a) and validates it on MLP/CNN experiments with MNIST, Fashion-MNIST, and CIFAR-10 datasets.
+
+## Strengths
+
+- **Novel conceptual framing**: The idea of quantifying emergence through network topology (specifically, path counts between active and inactive nodes) is conceptually interesting and addresses an underexplored area in understanding neural network training dynamics.
+- **Practical prediction insight**: The observation that Emergence approaching zero may signal when a network has reached its learning potential has practical value for early stopping decisions, even if preliminary.
+- **Theoretical ambition**: The paper attempts to connect categorical/quiver representation theory to practical network analysis, which is an interesting interdisciplinary direction.
+- **Multi-architecture validation**: Experiments cover MLPs and CNNs (VGG19) across three datasets, providing breadth in architectural validation.
+
+## Weaknesses
+
+- **Fundamental conceptual ambiguity**: The paper uses "Emergence" to mean at least three distinct things: (1) the mathematical path-counting metric, (2) network complexity/scale, and (3) trainability/efficiency. Section "Emergence Increases with Scale" discusses absolute Emergence (complexity), while "Relative Emergence Correlates with Training Performance" discusses a different concept (efficiency). This confusion undermines the paper's coherence and makes core claims difficult to evaluate.
+
+- **Arbitrary threshold without justification**: The active/inactive node threshold of 0.05 is never justified theoretically or empirically. No sensitivity analysis is provided to show how results change with different thresholds (0.01, 0.1, etc.). This is a critical hyperparameter that fundamentally determines the Emergence value but is treated as an unexamined constant.
+
+- **Disconnect between theory and practice**: The appendix develops a complex categorical framework using quiver representations and derived functors, but the main text applies a simple path-counting formula without explaining the connection. The theory appears to be inspiration rather than a genuine derivation of the proposed metric. No justification is given for why "paths from inactive to active nodes" specifically captures emergent behavior.
+
+- **Insufficient empirical rigor for key claims**: The paper makes strong claims about correlation between Emergence and performance, but:
+  - Only 5 epochs are used in the main pruning experiments—far short of convergence
+  - No statistical significance tests, confidence intervals, or error bars are reported anywhere
+  - Final accuracy differences are minimal (e.g., 95.7% vs 95.1% for MNIST non-pruned vs 70% pruned)
+  - No correlation coefficients or quantitative measures of relationship strength are provided
+
+- **Missing test set evaluation**: All reported metrics are training accuracy. Claims about "network performance" and "learning capability" are made without any held-out evaluation, making it impossible to assess generalization.
+
+- **Limited experimental scale**: The paper claims general implications for neural networks, but experiments are limited to simple tasks (MNIST, Fashion-MNIST) and modest architectures. The phenomena of interest in emergence (qualitatively new capabilities) are most relevant in large-scale models, yet no experiments test ResNets, Transformers, or other modern architectures where skip connections or attention would require modifications to the path-counting logic.
+
+- **Relative Emergence lacks theoretical grounding**: Defining relative Emergence as E/#parameters is presented as a key contribution, but this is simply a density normalization without justification for why this particular ratio captures "trainability" or why it should predict learning efficiency.
+
+## Nice-to-Haves
+
+- Ablation study on the active/inactive threshold (0.01, 0.05, 0.1, 0.5) to validate robustness
+- Comparison with simpler baselines (e.g., does parameter count alone predict final accuracy?)
+- Proper convergence studies extending training to completion rather than arbitrary epoch cutoffs
+- Statistical tests with multiple random seeds to validate claimed trends
+- Counterexample analysis showing when Emergence incorrectly predicts convergence
+
+## Novel Insights
+
+The paper's most genuinely useful insight is the observation that Emergence decreasing to zero appears to correlate with a network reaching its learning capacity—a potential early stopping signal. The distinction between absolute Emergence (capturing scale) and relative Emergence (capturing efficiency per parameter) also offers a useful lens for understanding the trade-off between network complexity and trainability in pruned models. However, these insights are presented with insufficient rigor to establish their validity.
+
+## Potentially Missed Related Work
+
+- **Neural tangent kernel (NTK) literature**: The connection between network initialization, path-counting (which resembles NTK analysis), and training dynamics could be explored more thoroughly.
+- **Lottery Ticket Hypothesis (Frankle & Carbin, 2019)**: The pruning experiments connect to this work but are not explicitly discussed or compared against.
+- **Sharpness-aware minimization and loss landscape geometry**: Li et al. (2018) is cited but the specific claims about local minima density and Emergence lack rigorous connection.
+- **Network architecture search / efficiency metrics**: The relative Emergence concept could be contextualized against existing efficiency measures like FLOPs or parameter efficiency ratios.
+
+## Suggestions
+
+1. **Conduct sensitivity analysis on the active/inactive threshold** and justify the chosen value theoretically or show robustness across choices.
+2. **Add proper test accuracy evaluation** throughout training to validate generalization claims.
+3. **Include statistical rigor**: Report means and standard deviations over multiple random seeds, perform significance tests, and include error bars in all figures.
+4. **Connect theory to practice**: Clarify how the categorical framework motivates the specific path-counting implementation, or consider presenting the empirical approach as independent inspiration rather than theoretical derivation.
+5. **Compare against simple baselines**: Does training loss at epoch 1 predict final accuracy better than Emergence? If so, the complex measure adds no practical value.
+6. **Run experiments to completion**: Extend training until clear convergence rather than stopping at 5-30 epochs, to properly validate the correlation claims.
+
+---
+
+## L9j8exYGUJ
+
+- GT: Reject (avg 5.0)
+- Predicted: Accept (6.0/10)
+- Match: No
+
+### Final Review
+
+## Summary
+This paper introduces "distributional reasoning" as a novel framework for understanding multi-hop reasoning in LLMs, proposing that middle network layers activate a distribution of potential intermediate answers, from which a simple linear transformation predicts final answers. The authors demonstrate this phenomenon across four LLMs (Llama-2-7B/13B, Llama-3-8B, Mistral-7B) using 6,547 prompts spanning 14 question types, and introduce a hallucination dataset with fictitious subjects to show the reasoning process generalizes beyond stored knowledge. The work connects neural network reasoning to cognitive psychology's dual-process theories (spread of activation vs. propositional reasoning).
+
+## Strengths
+- **Novel conceptual contribution**: The insight that middle layers represent *distributions* over possible intermediate answers rather than single values is genuinely novel and provides a fresh interpretability lens for understanding implicit multi-hop reasoning.
+- **Thorough empirical evaluation**: Testing across four models, 14 question types, and 6,547 prompts with consistent results demonstrates robustness of the phenomenon.
+- **Innovative hallucination experiments**: Using fictitious subjects/attributes to isolate reasoning processes from memorized knowledge is a clever methodological contribution that provides novel evaluation methodology for internal LLM processes.
+- **Interpretability value**: The method enables tracing reasoning failures to specific intermediate hops, offering practical diagnostic utility beyond theoretical insight.
+- **Cognitive modeling bridge**: Connecting associative and propositional reasoning paradigms provides meaningful contributions to cognitive science connections with AI.
+
+## Weaknesses
+- **No causal evidence established**: The paper relies entirely on correlational analysis (linear regression between A1 and A2 activations). The paper acknowledges this limitation but presents "distributional reasoning" as if describing an actual mechanism rather than an observed pattern. Alternative explanations—where A1 and A2 activations are independently triggered by the subject embedding—are not ruled out.
+- **R² > 0.5 threshold is modest**: The paper claims this "strong association" evidence, but R² > 0.5 means less than half the variance is explained. The remaining 50% unexplained variance is substantial and should be discussed more critically.
+- **Limited structural diversity in questions**: All experiments use similar question templates ("What is X of the birthplace of Y?"), limiting claims about general reasoning mechanisms. Different prompt structures might elicit different solving strategies as the paper's own Figure 1 acknowledges.
+- **Logit Lens dependency**: The entire analysis rests on Logit Lens interpretation, which the paper acknowledges "remains unclear why it works" and may have "undiscovered biases." This is a fragile foundation for strong claims.
+- **Layer selection bias**: R² values are cherry-picked at "two-thirds depth" as optimal. The paper does not show variance across layers or whether this specific depth generalizes across question types. A robust phenomenon should not depend this heavily on precise layer selection.
+
+## Nice-to-Haves
+- Compare linear regression predictions against trivial baselines (e.g., predicting A2 from subject embeddings, random A1 subsets, or shuffled values) to demonstrate specificity of the transformation.
+- Analyze what the learned Q2 matrices actually contain—do they have interpretable structure corresponding to actual transformations (e.g., letter-sound correspondences)?
+- Test whether distributional reasoning emerges in tasks requiring logical deduction where there are no natural intermediate answers to distribute over.
+- Add comparative case studies showing the same question answered via chain-of-thought vs. direct prediction to demonstrate distributional reasoning differs from explicit step-by-step reasoning.
+
+## Novel Insights
+The paper's most valuable contribution is demonstrating that multi-hop reasoning in LLMs operates through a distributional rather than deterministic mechanism in intermediate layers—multiple candidate answers are simultaneously activated in middle layers before a phase transition narrows to the final prediction. This provides a computational model connecting associative (spread of activation) and propositional (structured reasoning) cognitive paradigms within a single neural network. The observation that this process generalizes to fictitious subjects suggests it represents a learned reasoning strategy rather than memorized correlations, offering both theoretical insight into LLM reasoning and practical utility for error tracing.
+
+## Potentially Missed Related Work
+- **Elhage et al. (2021)** on transformer circuit analysis — directly relevant to understanding the mechanistic basis for the phase transition, particularly the role of feed-forward blocks
+- **Geva et al. (2022)** on transformer feed-forward layers building predictions — relevant to understanding how intermediate concepts emerge in vocabulary space
+- **Probe-based studies** examining whether linear representations of concepts exist in middle layers (not just Logit Lens)
+
+## Suggestions
+Perform direct causal intervention experiments (e.g., activation patching or ablation of specific A1 activations in middle layers) to establish whether the observed linear transformation from A1 to A2 is actually used by the model, rather than merely correlational. This would significantly strengthen the core claim of "distributional reasoning" as a mechanism.
+
+---
+
+## MFZjrTFE7h
+
+- GT: Accept (Spotlight) (avg 7.5)
+- Predicted: Accept (7.0/10)
+- Match: Yes
+
+### Final Review
+
+## Summary
+D-FINE introduces a real-time object detector that redefines bounding box regression in DETR models through two innovations: Fine-grained Distribution Refinement (FDR), which iteratively refines probability distributions for edges rather than predicting fixed coordinates, and Global Optimal Localization Self-Distillation (GO-LSD), which transfers localization knowledge from deeper to shallower decoder layers. The method achieves 54.0%/55.8% AP on COCO at 124/78 FPS on NVIDIA T4 GPU, and up to 59.3% AP with Objects365 pretraining, while also enhancing various existing DETR models by 2.0-5.3% AP with negligible overhead.
+
+## Strengths
+- **Strong empirical results**: State-of-the-art real-time detection performance on COCO, with D-FINE-L achieving 54.0% AP at 124 FPS and D-FINE-X reaching 55.8% AP at 78 FPS. The method also excels on CrowdHuman (55.5% AP for D-FINE-S) and Objects365.
+- **Efficient self-distillation**: GO-LSD achieves meaningful gains (+0.5% AP over FDR alone) with only 6% training time increase, avoiding the need to train or maintain a separate teacher model—a practical advantage for deployment.
+- **Demonstrated generalizability**: Consistent improvements (+2.0% to +5.3% AP) when applied to Deformable-DETR, DAB-DETR, DN-DETR, and DINO, validating that FDR and GO-LSD generalize across DETR variants.
+- **Well-structured ablation studies**: Table 4's stepwise progression from baseline to final model provides clear evidence for each architectural modification's contribution, and Table 5 compares distillation methods comprehensively.
+- **Elegant motivation**: The insight that treating bounding box edges as probability distributions rather than fixed values enables better modeling of localization uncertainty is well-grounded in prior work (GFocal/DFL) while addressing their key limitations.
+
+## Weaknesses
+- **Incomplete ablation of FDR vs. GO-LSD**: Table 4 shows "+FDR" and "+GO-LSD" as a combined step, not separate rows. This makes it impossible to determine each component's individual contribution and whether they work synergistically or redundantly. Reviewers cannot assess whether the +0.5% AP improvement in Table 5 (from 53.8% FDR alone to 54.5% FDR+GO-LSD) justifies GO-LSD's complexity.
+- **Incomplete comparison with RT-DETRv3**: Table 1 includes RT-DETRv3 models but with missing metrics ("-"). Since RT-DETRv3 is a direct architectural predecessor using similar components (same RT-DETR framework, training strategy), this is the most fair comparison. The paper cannot claim to surpass "all existing real-time detectors" without complete RT-DETRv3 numbers.
+- **Runtime overhead of FDR not isolated**: FDR predicts distributions over N=32 bins for 4 edges across all decoder layers. The paper shows the net effect of architectural savings + FDR/GO-LSD (+1.0% AP, reduced FLOPs/latency) but does not quantify FDR's computational cost in isolation. This prevents understanding whether FDR adds overhead that is masked by architectural simplifications.
+- **Limited scope beyond DETR**: While the paper claims FDR addresses anchor-dependency limitations of GFocal, the method is only demonstrated on DETR-based architectures. CNN-based anchor-free detectors (YOLOX, FCOS) are mentioned as incompatible, but no experiments attempt to adapt FDR for them. This limits the broader applicability claim.
+- **Objects365 pretraining comparison unfair**: Table 1 shows YOLOv10 pretrained on Objects365 for 300 epochs while D-FINE uses only 21 epochs. The paper acknowledges this but does not discuss whether D-FINE's superior results (57.1%/59.3% vs 56.1%/58.3% AP) might be partially attributed to more efficient pretraining rather than pure method superiority.
+
+## Nice-to-Haves
+- Ablation using earlier decoder layers as teachers for GO-LSD to justify why the final layer is "optimal"
+- Analysis of when the method saturates or fails (e.g., correlation between distribution entropy and localization quality)
+- Additional dataset evaluations beyond COCO, Objects365, and CrowdHuman (e.g., LVIS, domain-specific datasets) to assess robustness
+- Backbone ablation to verify FDR/GO-LSD are not dependent on HGNetv2 specifically
+
+## Novel Insights
+D-FINE presents a principled approach to bounding box regression that treats edges as iteratively-refined probability distributions rather than fixed coordinates. The key insight—using the non-uniform weighting function W(n) to enable finer adjustments near accurate predictions while allowing rapid corrections for inaccurate ones—is intuitive and well-motivated. GO-LSD's innovation of distilling from the final decoder layer's refined distributions to shallower layers, using a unified union set of Hungarian matches and decoupled weighting for matched/unmatched predictions, provides a practical self-distillation mechanism that avoids training a separate teacher model. The combination of these components with lightweight architectural optimizations results in meaningful accuracy improvements without sacrificing speed.
+
+## Potentially Missed Related Work
+- **Anchor-free distribution-based regression**: While the paper contrasts FDR with GFocal (anchor-based), related anchor-free distribution regression work such as FCOS/ATSS with uncertainty modeling could provide additional context for the localization uncertainty angle.
+- **Transformer-specific distillation**: KD-DETR (Wang et al., 2024b) and DetrDistill (Chang et al., 2023) address distillation for DETR families—comparing GO-LSD against these methods would strengthen the self-distillation claims.
+
+## Suggestions
+1. Add separate ablation rows for FDR alone and GO-LSD alone in Table 4 to quantify individual contributions.
+2. Complete the RT-DETRv3-L/X metrics in Table 1 for a fair architectural comparison.
+3. Isolate and report FDR's computational overhead separately from the architectural simplifications to show the net efficiency tradeoff.
+
+---
+
+## OXIIFZqiiN
+
+- GT: Reject (avg 1.5)
+- Predicted: Reject (2.0/10)
+- Match: Yes
+
+### Final Review
+
+## Summary
+This paper introduces IGCP (Image-Guided Code Patch Framework), a dual-modal approach for patch representation learning combining code patches with synthetic descriptions. The authors provide extensive mathematical scaffolding using measure theory, quantum information theory, and statistical physics, alongside empirical results on patch description generation benchmarks claiming state-of-the-art performance.
+
+## Strengths
+- The paper presents a principled multi-objective loss design (PDC, PDM, PDG components) with ablation studies demonstrating each component's contribution to overall performance
+- The empirical results show meaningful improvements over baselines (e.g., +4.51% ROUGE-L over CCPGen) on a standard patch description generation benchmark with established evaluation metrics
+- The phase transition analysis (Theorem 3.9) connecting learning dynamics to statistical physics offers an interesting theoretical perspective on sample complexity thresholds
+- The paper attempts to bridge diverse theoretical frameworks (measure theory, information geometry, stochastic optimization) within a unified treatment for patch representation learning
+
+## Weaknesses
+- **Terminology inconsistency undermines clarity**: The framework is called "Image-Guided Code Patch Framework" in the title/abstract but "Integrated Patch-Text Model Framework" in Section 2.3. More critically, despite the "image-guided" framing, the paper processes code patches and text descriptions—never actual images or visual prompts. This is misleading and contradicts the title's promise.
+- **Dual-modal claim is untested**: The abstract explicitly states IGCP "achieves state-of-the-art performance in patch description generation" and "exhibits remarkable domain generalization capabilities," yet only generative tasks are evaluated. No predictive task experiments (e.g., security patch classification) are provided, leaving the core dual-modal contribution incompletely validated.
+- **Figure 2 discrepancy raises verification concerns**: The text reports IGCP achieves ROUGE-L of 26.92% and BLEU of 22.49%, but the radar chart visualization appears to show substantially lower values for IGCP. This discrepancy undermines result verification.
+- **Theoretical framework lacks justification and empirical validation**: The quantum information bottleneck (Section 3.3.1) is presented without explaining why quantum formalism is necessary for classical code patches. The theorems (3.1-3.9) largely repackage standard results (RKHS theory, spectral theorem, representer theorem, SGLD convergence) without novel extensions specific to IGCP. The claimed phase transition (Theorem 3.9) and Łojasiewicz convergence (Theorem 3.7) are asserted but never demonstrated empirically.
+- **Missing reproducibility information**: Section 4 omits critical details: model architecture specifications, training hyperparameters (learning rate, batch size, epochs), optimization choices, and computational requirements. The baseline implementations are not described.
+
+## Nice-to-Haves
+- Rename the framework to accurately reflect its actual modality (code patches with text descriptions) rather than the misleading "Image-Guided" framing
+- Validate theoretical predictions empirically (e.g., measure the predicted phase transition by varying sample size)
+- Add cross-domain generalization experiments across programming languages to substantiate the claimed domain generalization capabilities
+- Include qualitative examples showing actual generated descriptions alongside baseline comparisons
+- Provide comprehensive hyperparameter settings and training curves for reproducibility
+
+## Novel Insights
+While the paper's theoretical formalism is extensive, the core contribution appears to be applying contrastive learning (CLIP-style) principles to the code patch domain with a multi-objective loss combining generative, matching, and contrastive objectives. The quantum information bottleneck and free probability analysis, while mathematically sophisticated, are presented as post-hoc formalizations rather than generating novel architectural innovations or predictions. The phase transition insight connecting learning dynamics to statistical physics represents the most genuinely novel theoretical contribution, though it remains unvalidated empirically.
+
+## Potentially Missed Related Work
+- CodeT5 (Wang et al., 2021) — recent strong baseline for code understanding and generation tasks that could provide a more competitive comparison
+- GraphCodeBERT (Guo et al., 2020) — for graph-based code representation approaches in baseline comparisons
+
+## Suggestions
+The authors should focus on validating their claims rather than expanding theoretical machinery: implement predictive task evaluation to support the dual-modal claim, fix the figure-text discrepancy, add statistical significance tests with confidence intervals, and provide complete architectural and training specifications for reproducibility. If the quantum/free probability formalism is retained, explicit connections to practical predictions must be established—otherwise, this content should be moved to supplementary material to maintain focus on verifiable contributions.
+
+---
+
+## y2ch7iQSJu
+
+- GT: Reject (avg 2.0)
+- Predicted: Reject (4.0/10)
+- Match: Yes
+
+### Final Review
+
+## Summary
+This paper introduces BBsurv, a novel budgeted active learning method for censored survival data where queries can only partially "decensor" data points (reveal information incrementally via an I-oracle). The approach extends BatchBALD's mutual information framework to survival settings and reduces batch selection to a maximum coverage problem, claiming (1-1/e) approximation guarantees for both uniform and non-uniform instance costs. Empirical evaluation on three medical survival datasets (MIMIC-IV, NACD, SUPPORT) demonstrates modest improvements over adapted baselines.
+
+## Strengths
+- **Addresses a genuine gap**: The problem of budgeted active learning with incrementally decensorable survival data is novel—no prior work handles this setting where querying reveals partial information rather than complete labels. This has clear practical relevance for clinical trials operating under budget constraints.
+
+- **Sound theoretical framing**: The reduction to maximum coverage and NP-hardness proof are well-motivated. The adaptation to non-uniform costs via budgeted maximum coverage (Section 4.2) extends the framework appropriately.
+
+- **Practical I-oracle formulation**: The mechanism for modeling partial information gain (where queries reveal only I additional years of information) is well-defined and closely mirrors real clinical trial follow-up constraints.
+
+- **Comprehensive experimental conditions**: Testing across three real-world datasets with both uniform and non-uniform cost settings demonstrates breadth of evaluation.
+
+## Weaknesses
+
+- **Theoretical guarantee is undermined**: Algorithm 1 (BBSurv) claims to be a "(1 - 1/e)-approximate algorithm" based on Khuller et al. (1999), but the paper explicitly admits to dropping two key components from Khuller's optimal Algorithm 2—the brute-force H_1 initialization and the O(n³) enumeration loop. The justification that "in deep learning models, often two or three points are not significant enough" and "instances are often very sparse" are intuitive but **unproven heuristics**. The paper cannot simultaneously claim the theoretical guarantee and admit to removing the components that provide it. This is a significant gap requiring either: (a) implementation of the full algorithm, (b) a formal proof that the simplification preserves the bound, or (c) explicit revision to state Algorithm 1 is a heuristic without the guarantee.
+
+- **Weak comparison baselines**: The "sanity check" methods (Closest to Half, Mean Closest to Middle, Clusters for Batch) have no principled connection to information gain or mutual information. BBSurv beating these is expected, not informative. Stronger baselines would include BatchBALD without survival-specific probability adjustments, entropy-based batch selection (which is included but not properly evaluated), or variants isolating each contribution.
+
+- **Marginal and unsubstantiated improvements**: Table 1 shows BBSurv improvements of only 0.01–0.05 MAE-PO over competitors (e.g., MIMIC +5y: 4.23 vs BatchBALD 4.28 = Δ0.05). The paper claims "significantly better" performance without statistical tests. These differences are comparable to reported standard errors (±0.01–0.02), making superiority claims unjustified without hypothesis testing.
+
+- **No ablation study**: It's unclear which component of BBSurv drives improvement—the censoring-aware probability adjustment (Section 5), the increment-aware binning, or the greedy selection. A comparison of (a) BatchBALD without adjustments, (b) with censoring adjustment only, and (c) full BBSurv would clarify contributions.
+
+- **MCtH consistently competitive**: The "Mean Closest to Middle" sanity check method ties or nearly ties BBSurv across nearly all settings in Table 1 and subsequent tables, yet the paper dismisses this finding without explanation. This requires analysis—either statistical evidence that BBSurv is superior, or acknowledgment that MCtH is a strong baseline in this domain.
+
+## Nice-to-Haves
+- **Statistical significance testing**: Paired t-tests or Wilcoxon tests across random seeds would properly evaluate whether observed differences are meaningful or within noise.
+
+- **Ablation on time discretization**: The method discretizes continuous time into bins for MTLR. No experiments vary bin count to show robustness—this directly affects mutual information structure.
+
+- **Vary initial training composition**: All experiments use exactly 100 uncensored + 900 censored. Ablation on this ratio would show robustness across different initial knowledge states.
+
+- **Characterize failure regimes**: Analysis of when BBSurv does NOT outperform alternatives (high censorship rates, specific budget-to-pool-size ratios) would guide practical deployment.
+
+## Novel Insights
+The I-oracle mechanism provides a clean formalization of partial information gain in survival analysis, modeling the realistic scenario where clinical follow-up reveals only additional years rather than complete event times. This generalizes standard active learning (equivalent to I=∞) and provides a principled framework for reasoning about budget-constrained survival data collection. The extension to non-uniform costs via budgeted maximum coverage is a useful generalization that maintains theoretical tractability, though the practical approximation quality without the full O(n³) enumeration remains empirically validated rather than proven.
+
+## Potentially Missed Related Work
+- **Hüttel et al. (2024)** on Bayesian active learning for censored regression is cited but could be more thoroughly compared—while their method uses BALD (individual selection) rather than BatchBALD (batch selection), direct comparisons on identical datasets would strengthen the contribution.
+
+## Suggestions
+1. **Clarify the theoretical claim**: Explicitly state whether Algorithm 1 is proposed as a proven (1-1/e)-approximation or as a heuristic approximation, and provide empirical validation across many random instances if claiming the latter.
+
+2. **Strengthen baselines**: Include BatchBALD adapted only for censoring (without increment-aware binning) and proper entropy-based batch selection as meaningful baselines, not just "sanity checks."
+
+3. **Add statistical tests**: Perform paired comparisons with proper significance testing across all random seeds to justify superiority claims.
+
+4. **Analyze MCtH's performance**: Investigate why "Mean Closest to Middle" performs competitively—this may reveal an insight about the problem structure worth discussing.
+
+---
+
+## fBSc0c1IXJ
+
+- GT: Reject (avg 3.0)
+- Predicted: Accept (6.0/10)
+- Match: No
+
+### Final Review
+
+## Summary
+This paper introduces Remote Reinforcement Learning (RRL) with communication constraints, where an actor executes actions without direct reward access—a remote controller observes rewards and must guide the actor over a rate-limited channel. The proposed GRASP method combines channel simulation (importance sampling) to efficiently transmit action samples with behavioral cloning at the actor to establish a shared reference distribution that further reduces communication overhead. The paper demonstrates 4-258× communication reductions across diverse environments while maintaining equivalent learning performance.
+
+## Strengths
+- **Well-motivated and novel problem formulation**: RRL with communication constraints models realistic scenarios like remote robot control over wireless channels, edge computing, or human-in-the-loop systems where reward evaluation is costly or centralized.
+- **Strong information-theoretic grounding**: Correctly identifies and applies channel simulation literature (Cuff 2008, Li & El Gamal 2018, Theis & Yosri 2022), showing communication cost scales with KL-divergence rather than action entropy.
+- **Comprehensive empirical evaluation**: Extensive experiments across 9+ environments with varied action spaces (discrete/continuous), observation types (image/proprioceptive), and agent configurations (single/multi-agent) using multiple RL algorithms (PPO, DQN, SQ, DDPG), with 20 independent runs.
+- **Practical communication savings**: The 4-258× communication reductions are substantial and meaningful for real-world deployment scenarios with bandwidth constraints.
+
+## Weaknesses
+- **Missing reward-transmission baseline experimental results**: The paper explicitly describes a baseline where "the controller conveys the reward signal to the actor" using 32 bits per timestep and claims "41 times less communication than sending the reward" (Section 8), yet no experimental results for this baseline appear anywhere in the paper. Table 1 and Table 2 only compare ASC (action source coding) against GRASP. This is a significant omission that undermines the central motivational claim—the paper argues GRASP is superior to transmitting rewards but never empirically validates this.
+- **Breakout performance gap unexplained**: In Table 1, Breakout shows the largest performance gap between controller and actor (48.8 return gap, 15.2% normalized for GRASP vs 41.4 and 12.3% for ASC). This contradicts the repeated claim that "GRASP does not negatively impact training." No analysis is provided for why image-based observations lead to worse behavioral cloning performance, which is critical for understanding when GRASP succeeds versus fails.
+- **No ablation studies**: The paper doesn't isolate the benefit of each component. Key questions remain unanswered: What is the单独 benefit of channel simulation versus source coding? What if the actor used a fixed random policy as Q instead of learning one? How does varying the actor's learning rate or network capacity affect the communication-accuracy trade-off?
+- **Actor policy never evaluated in execution mode**: The actor learns a policy via behavioral cloning but never executes it—the paper only evaluates it after training. The text mentions "after training, the controller might transmit its learned policy to the actor, or if the actor's policy is adequate, no further communication is necessary" but provides no empirical validation of this deployment scenario, which is arguably the most practical use case.
+
+## Nice-to-Haves
+- **Theoretical convergence analysis**: While information-theoretic bounds are cited, the paper provides no convergence guarantees or sample complexity bounds for GRASP in the RRL setting. Understanding when the controller's learned policy converges and how communication constraints affect this would strengthen the contribution.
+- **Noisy channel evaluation**: The method assumes perfect communication; practical wireless scenarios with packet loss or bit errors are not addressed despite the paper's motivation around wireless channels.
+- **Channel simulation parameter N analysis**: Algorithm 3 uses a parameter N (number of candidate samples) that critically affects communication cost and action fidelity, yet the paper never reports what N was used or how results vary with different values.
+- **KL-divergence growth analysis**: Figure 2 shows KL divergence between controller and actor policies grows during training in some environments, meaning communication cost increases over time. No analysis explains why this occurs or implications for long training runs.
+
+## Novel Insights
+The paper's core insight—applying channel simulation from information theory to the remote RL problem—is elegant and well-executed. By recognizing that communicating a *sample* from a distribution (via importance sampling) requires only D_KL[P||Q] bits rather than H(P) + D_KL[P||Q] bits for direct transmission, the authors unlock significant communication savings. The additional insight that the actor can learn a policy through behavioral cloning to serve as Q, thereby reducing communication to just the residual divergence, elegantly combines two established techniques for a novel application. The extension to multi-agent settings demonstrates scalability, though the practical deployment scenario (actor using learned policy independently) remains empirically unvalidated.
+
+## Potentially Missed Related Work
+- **Pase et al. (2022)** on rate-constrained remote contextual bandits is appropriately cited but the paper could more prominently contrast its approach (RL with sequential states and transitions) versus this prior work (independent contextual bandits), highlighting the additional challenges introduced by temporal dependencies.
+- **Pujol Roig & Gündüz (2020)** on remote reinforcement learning over noisy channels—directly relevant to the wireless communication motivation but only briefly mentioned.
+- **Federated RL literature** (Nadiger et al., 2019; Jin et al., 2022)—the paper mentions federated RL as related work but doesn't clearly distinguish RRL's fundamental difference: federated RL typically keeps data localized while learning a shared policy, whereas RRL has a single controller with reward access directing actors with no local RL capability.
+
+## Suggestions
+1. **Add the missing reward-transmission baseline results** to Table 1 and 2, or remove the specific quantitative claims (41×, 6.3-343×) if this comparison cannot be included.
+2. **Evaluate the actor's learned policy independently** after training in at least one environment to validate the practical deployment scenario.
+3. **Conduct ablation studies** varying: (a) fixed versus learned Q distributions, (b) actor network capacity, (c) behavioral cloning update frequency.
+4. **Analyze the Breakout gap** by investigating whether image-based observations make behavioral cloning harder, or acknowledge this as a limitation of behavioral cloning for high-dimensional policies.
+5. **Report the ordered random coding parameter N** and analyze sensitivity to this choice.
+
+---
+
+## FCBbh0HCrF
+
+- GT: Accept (Poster) (avg 7.0)
+- Predicted: Accept (6.0/10)
+- Match: Yes
+
+### Final Review
+
+## Summary
+This paper introduces an event-driven online Vertical Federated Learning framework that addresses the practical misalignment between existing online VFL research (which assumes synchronous data streams) and real-world scenarios where data arrives asynchronously due to events. The authors adapt dynamic local regret (DLR) from Aydore et al. (2019) to VFL with partial client activation, provide theoretical regret bounds under non-convex assumptions, and demonstrate improved stability under non-stationary conditions with reduced communication/computation costs.
+
+## Strengths
+- **Compelling problem identification**: The paper makes a valid and important practical observation that existing online VFL research unrealistically assumes synchronous data streams, whereas real-world scenarios (sensor networks responding to events, company transactions triggered by customer actions) generate data asynchronously. This gap is clearly articulated and well-motivated.
+- **Rigorous theoretical analysis**: Theorem 1 correctly characterizes how partial client activation affects the dynamic local regret bound, with appropriate modifications from Aydore et al. (2019). The additional term accounting for missing gradient elements from passive clients (2W·G) is correctly derived. Corollary 1 provides O(T^3/4) sublinear regret bound.
+- **Comprehensive experiments**: Extensive evaluation across three datasets (i-MNIST, SUSY, HIGGS) with both stationary and non-stationary data streams. The 9-baseline comparison (OGD/SLR/DLR × Full/Random/Event) is thorough and informative.
+- **Multi-faceted evaluation**: Beyond accuracy, the paper evaluates computation time and communication costs, providing a holistic view of trade-offs between performance and efficiency.
+- **Clear algorithmic presentation**: Algorithm 1 is well-structured with documented steps for server and client procedures.
+
+## Weaknesses
+- **Limited methodological novelty**: The core algorithmic contribution is adapting existing DLR techniques (Aydore et al., 2019) to the VFL setting. The main innovation lies in problem identification and formulation rather than methodological innovation. This should be more clearly scoped in the paper.
+- **Incomplete view problem remains unresolved**: The paper acknowledges but does not solve the fundamental limitation that passive clients must still send embeddings each round to avoid the "incomplete view" problem. This significantly limits the practical communication-computation savings, since the server must query all clients to obtain complete inputs for each event.
+- **Regret bound quality**: The achieved O(T^3/4) bound under non-convex assumptions is sublinear but weaker than O(√T) convex bounds. The additional error term involving p_max/p_min could become large with highly skewed activation probabilities across clients.
+- **Event activation mechanism lacks general principled design**: The "Event" activation using threshold on average feature values is designed specifically for experiments. The Random activation is more generally applicable, making the Event activation feel like a dataset-specific demonstration rather than a principled framework component.
+
+## Nice-to-Haves
+- Ablation studies on DLR parameters (l, α) were only conducted for Full activation; similar analysis for Random/Event activation would validate robustness of parameter choices under partial client participation.
+- Memory/storage overhead analysis for edge devices, given the paper claims suitability for sensor networks with limited resources.
+- Systematic study of how different activation patterns (correlated vs. independent across clients) affect performance.
+- Per-client embedding trajectories to show how client models evolve under partial vs. full activation.
+
+## Novel Insights
+The paper's primary novel insight is identifying that the synchronous data assumption in existing online VFL research is unrealistic for practical deployments where data is generated by events affecting only a subset of clients. This framing opens a new research direction for event-driven online VFL. Additionally, the analysis of how partial activation affects dynamic local regret bounds—specifically how missing gradient elements from passive clients contribute to the regret bound through the 2W·G term—provides a quantitative understanding of the trade-offs involved in event-driven participation.
+
+## Potentially Missed Related Work
+- Ganguly & Aggarwal (2023) on non-stationary detection and restart in online federated learning for concept drift handling
+- Chen et al. (2020) and Wang et al. (2024) on asynchronous VFL methods that could offer alternative approaches to handling asynchronous data arrival
+- Event-triggered control literature (Heemels et al., 2012; Trimpe & D'Andrea, 2014) with more principled theoretical foundations for event-triggering mechanisms
+
+## Suggestions
+- The paper should more explicitly scope the contribution as applying DLR to event-driven VFL rather than presenting it as a new framework, to set appropriate expectations about novelty.
+- Consider implementing and evaluating one of the suggested approaches (knowledge distillation, self-supervised learning) to address the incomplete view problem, even if partially, to strengthen practical impact.
+- Add experiments comparing DLR against adaptive OGD variants (Hazan et al., 2007) to better isolate the contribution of DLR over simpler adaptive methods.
+
+---
+
+## PigfMZMHq1
+
+- GT: Reject (avg 3.7)
+- Predicted: Reject (4.0/10)
+- Match: Yes
+
+### Final Review
+
+## Summary
+This paper introduces PointNet-KAN, the first integration of Kolmogorov-Arnold Networks (KANs) with Jacobi polynomial basis functions into point-cloud neural networks for 3D classification and segmentation. The authors preserve PointNet's core principles (shared layers, symmetric max-pooling for permutation invariance) while replacing MLPs with KANs. PointNet-KAN achieves competitive accuracy on ModelNet40 (90.5% with normals vs. PointNet's 89.2%) and ShapeNet Part (83.3% vs. 83.7% mean IoU) using a substantially simpler architecture (3 layers vs. 8 layers, ~1M vs. ~3.5M parameters), demonstrating that KANs can serve as viable alternatives to MLPs in point cloud processing.
+
+## Strengths
+- **First-of-its-kind exploration**: The paper pioneers the integration of KANs into point-cloud-based neural networks for unordered 3D point sets, opening a new research direction that the authors correctly identify as previously unexplored for this domain.
+- **Comprehensive ablation studies**: Tables 4-7 systematically evaluate polynomial degree (2-6) and polynomial type (Legendre, Chebyshev, Gegenbauer) across both classification and segmentation tasks, providing valuable guidance for future work on polynomial-based KANs.
+- **Architectural insight preservation**: The authors correctly maintain PointNet's key principles—shared KAN layers and symmetric max-pooling—to ensure permutation invariance, demonstrating principled integration rather than naive replacement.
+- **Robustness characterization**: Figures 3-4 provide useful analysis of PointNet-KAN's stability under random point dropout and Gaussian noise perturbation, showing competitive robustness compared to established methods.
+- **Reproducibility**: Code is provided; training details (optimizer settings, learning rates, batch sizes, GPU specifications) are clearly documented in Section A.1.
+
+## Weaknesses
+- **Confounded experimental comparison**: The primary comparison between PointNet-KAN (87.5% without normals, 90.5% with normals) and PointNet (89.2%) conflates two changes: (1) replacing MLPs with KANs and (2) using a simplified architecture without input/feature transforms. Table 1 shows PointNet without transforms achieves only 77.4%, illustrating how transformative these components are. A controlled experiment comparing PointNet-KAN against a PointNet variant also lacking transforms is needed to isolate the KAN effect.
+- **Deeper KAN architectures underperform without explanation**: Section 5.3 reveals that directly replacing all PointNet MLPs with KANs yields 88.9%—worse than both simplified PointNet-KAN (90.5%) and standard PointNet (89.2%). This critical finding is acknowledged but not analyzed. Understanding why deeper KAN networks fail is essential for guiding future architectural choices.
+- **No statistical rigor**: All reported metrics are single-run results with no error bars, standard deviations, or confidence intervals. Given that accuracy differences are marginal (≤2%), it is unclear whether observed improvements are meaningful or within noise. ICLR standards typically require ± std from multiple random seeds.
+- **Inconsistent hyperparameter justification**: The main experiments use polynomial degree n=4 for classification, yet ablation (Table 4) shows n=2 achieves nearly identical accuracy (89.9% vs. 90.5%) with fewer parameters. Similarly, segmentation uses n=2 with α=β=−0.5 while classification uses n=4 with α=β=1. The paper does not explain why different configurations are optimal for different tasks or justify the additional complexity of higher degrees.
+- **Limited real-world evaluation**: On ScanObjectNN (real-world data), PointNet-KAN (69.2%) substantially underperforms PointMLP (85.4%) and even PointNet++ (77.9%), suggesting limited practical utility for noisy real-world scenarios compared to more advanced architectures.
+
+## Nice-to-Haves
+- **Visualize learned activation functions**: KANs' core innovation is learning activation functions; showing what the trained Jacobi polynomials look like would validate that the mechanism is actually being leveraged, not just serving as a black-box replacement.
+- **Compare B-spline vs. Jacobi KANs**: The original KAN paper uses B-splines; comparing this Jacobi variant against the standard would clarify whether the polynomial basis choice matters for point cloud tasks.
+- **Extended PointKAN analysis**: The supplementary PointKAN (KAN-enhanced PointMLP) shows only +0.1% improvement over PointMLP on ModelNet40. More systematic ablations (varying depth, width, polynomial degree within PointKAN) would strengthen the claim that KANs benefit advanced architectures.
+- **Training dynamics analysis**: No loss curves or convergence plots are shown. Understanding KAN training stability and optimization behavior would be valuable for practitioners.
+
+## Novel Insights
+This work reveals several potentially important observations for the emerging KAN literature: (1) KANs can achieve competitive performance to MLPs on point cloud tasks with substantially fewer parameters and layers, suggesting potential efficiency benefits; (2) polynomial degree and type have minimal impact on performance across a wide range of Jacobi polynomial variants, implying the trainable weighted sum of basis functions may be the key factor rather than the specific polynomial family; (3) deeper KAN architectures (matching PointNet's layer count) actually perform worse than shallower versions, suggesting potential training instability or overfitting issues with complex KAN stacks that warrant further investigation.
+
+## Potentially Missed Related Work
+- **KAN-Node (Kashefi, 2024)**: The paper acknowledges this work integrates KANs into PointNet but for 2D CFD applications; clarifying how this differs from the 3D computer vision tasks here would strengthen the contribution claim.
+- **Chebyshev-based KANs (SS, 2024)**: This concurrent work also explores alternative polynomial bases for KANs in scientific computing contexts; comparison of findings regarding polynomial type sensitivity would be valuable.
+
+## Suggestions
+- **Add controlled baseline comparison**: Create a PointNet variant with the same simplified architecture (no transforms, 3 layers) as PointNet-KAN to directly isolate the effect of KANs vs. MLPs. This single experiment would substantially strengthen the paper's core claim.
+- **Report mean ± std across multiple seeds**: Run all experiments with 3-5 different random seeds and report standard deviations to enable meaningful comparison of methods with marginal differences.
+- **Investigate why deeper KANs fail**: Conduct gradient flow analysis or ablation on initialization schemes to understand the training dynamics of deeper KAN architectures, as this is critical for future work extending to PointNet++-style hierarchies.
+
+---
+
+## p1HeFnn2AA
+
+- GT: Reject (avg 7.3)
+- Predicted: Accept (6.0/10)
+- Match: No
+
+### Final Review
+
+## Summary
+This paper initiates the study of deep learning for automated design of two-sided matching mechanisms, focusing on the tradeoff between strategy-proofness (SP) and stability. The authors develop novel differentiable surrogates for quantifying ordinal SP and stability violations, use neural networks to represent matching mechanisms, and demonstrate empirically that learned mechanisms achieve better SP-stability tradeoffs than convex combinations of classical mechanisms (DA, TTC, RSD).
+
+## Strengths
+- **First deep learning approach to two-sided matching**: The paper opens a genuinely new research direction at the intersection of ML and mechanism design, addressing a fundamentally different problem from prior auction design work due to discrete ordinal preferences.
+- **Technically sound core framework**: The equivalence between ordinal SP and first-order stochastic dominance (FOSD) is properly established (Theorem 5, referencing Erdil 2014), and the differentiable surrogates are correctly derived (Theorems 6, 8).
+- **Innovative architecture design**: The CNN with 1×1 convolutions using row/column max-pooling preserves permutation equivariance (critical for matching markets) while keeping input channels fixed regardless of market size, enabling scalability.
+- **Comprehensive experiments**: Tests across multiple settings (correlated/uncorrelated preferences, markets up to 50×50) with substantial test sets (204,800 profiles).
+- **Economically significant finding**: The discovery that learned mechanisms can dominate convex combinations of classical mechanisms is a genuinely interesting result that could motivate new theoretical characterizations.
+
+## Weaknesses
+- **Theoretical contribution is thin**: Theorems 6 and 8 are essentially restatements of known equivalences (Erdil 2014). The paper correctly references the prior work but doesn't provide novel theoretical characterizations that would guide understanding of why or when learned mechanisms work.
+- **Welfare analysis is inconsistent with non-SP mechanisms**: Appendix F measures welfare assuming truthful reporting, but this assumption is precisely violated for mechanisms with non-zero SP violation. This creates an internally inconsistent evaluation—actual welfare under strategic play could differ substantially.
+- **No error bars or confidence intervals**: All figures show point estimates with no measure of variance. Given the stochasticity in training and test sampling, the claim that learned mechanisms are "substantially better" cannot be assessed for statistical significance.
+- **Missing comparison to sophisticated hybrids**: The paper compares only against convex combinations of DA/TTC/RSD, but Mennle & Seuken (2017) propose more general hybrid mechanisms. This comparison is necessary to validate the claimed frontier improvement over what theory already achieves.
+- **Limited interpretability**: The paper claims mechanisms "raise opportunities for future work in economic theory" but provides no analysis of what structural properties these mechanisms have or why they work better. Without understanding the mechanism, the contribution is incomplete for guiding theoretical work.
+- **Distribution-dependent results**: The entire efficient frontier is computed for specific synthetic distributions (uniform random with correlation). The paper doesn't analyze how the frontier changes with different preference environments, making it unclear when learned mechanisms would be practically useful.
+- **Scalability with unrestricted preferences**: The adversarial approach to finding defeating misreports requires enumerating all possible misreports, which grows exponentially. The paper handles this only via structured preference domains, limiting applicability to real large markets.
+
+## Nice-to-Haves
+- **Structural analysis of learned mechanisms**: Attempt to reverse-engineer or approximate learned mechanisms with known rules (e.g., is there a variant of DA with randomization?). Decision-tree approximations or feature importance analysis would provide interpretable insights.
+- **Verification on individual profiles**: Theorems 6 and 8 show surrogates are zero iff properties hold in the limit, but trained networks have non-zero surrogate values. Validation that output distributions satisfy FOSD/ex-ante stability on individual profiles would strengthen claims.
+- **Case studies on specific profiles**: Concrete examples showing what the learned mechanism outputs on particular preference profiles would make the contribution tangible.
+- **Real preference data**: Experiments on semi-realistic synthetic data mimicking real market structures (e.g., school quality hierarchies) or publicly available preference datasets from school choice applications.
+
+## Novel Insights
+The paper's most valuable contribution is demonstrating that deep learning can discover matching mechanisms with SP-stability tradeoffs that dominate simple convex combinations of classical mechanisms. This is a genuine proof-of-concept that ML pipelines can serve as a tool for economic discovery—not just optimization. The finding that near-DAs can be made substantially more strategy-proof (and near-RSDs more stable) opens new questions about the structure of the efficient frontier that pure theory has not characterized. However, this insight remains incomplete without understanding *why* these mechanisms work or *when* the improvements hold, limiting its immediate value for guiding mechanism design practice.
+
+## Potentially Missed Related Work
+- Mennle & Seuken (2017) "Hybrid mechanisms: Trading off strategy-proofness and efficiency of random assignment mechanisms" — directly relevant for establishing the comparison baseline of the efficient frontier.
+
+## Suggestions
+1. **Add welfare under strategic play**: Measure expected welfare when agents best-respond to learned mechanisms, not just assuming truthfulness. This is essential for evaluating practical usefulness of non-SP mechanisms.
+2. **Include statistical uncertainty**: Add error bars or confidence intervals to all figures to assess whether frontier improvements are statistically significant.
+3. **Strengthen interpretability analysis**: Provide at least one concrete attempt to characterize or approximate learned mechanisms with interpretable structure.
+4. **Compare against Mennle & Seuken's hybrid mechanisms**: This is necessary to establish that the learned frontier represents genuine improvement over existing theoretical characterizations.
+
+---
+
+## bEvI30Hb2W
+
+- GT: Reject (avg 3.0)
+- Predicted: Reject (4.0/10)
+- Match: Yes
+
+### Final Review
+
+## Summary
+LVM-Net proposes a memory-augmented approach for long-form video reasoning using a fixed-size memory populated by a differentiable neural sampler, enabling single-pass video processing. The method achieves 18x-75x inference speedup on the ReST-ADL dataset compared to Modified TubeDETR, but at the cost of substantially lower prediction accuracy across nearly all query types and durations.
+
+## Strengths
+- **Clear problem identification**: The paper correctly identifies key computational bottlenecks in long-form video understanding with transformers (quadratic attention costs, GPU memory limits) and motivates the need for fixed-memory approaches.
+- **Sound efficiency mechanism**: The single-pass memory population strategy with query-specific memory reuse directly addresses the stated problem. The architecture correctly avoids redundant video processing across queries.
+- **Solid ablation studies**: The paper provides meaningful ablations demonstrating that the neural sampler outperforms uniform random sampling (Table 3) and that continual learning improves over non-continual training (Table 4).
+- **Proper evaluation methodology**: Inference comparisons use identical A100 instances with batch sizes maximizing GPU memory utilization, making the speedup claims verifiable.
+- **Technical soundness of core components**: The Gumbel-Top-k relaxation with reparameterization trick is correctly applied for differentiable sampling.
+
+## Weaknesses
+- **Performance characterization is misleading**: The paper describes LVM-Net as achieving "competitive predictive performance," but Table 2 shows consistent and substantial underperformance compared to Modified TubeDETR (e.g., short activity: 45.3→32.4, a 29% drop; medium object: 25.4→11.9, a 53% drop). A method that is 11x faster but ~30% less accurate represents a significant trade-off that deserves honest acknowledgment, not euphemistic characterization.
+- **Single-dataset evaluation**: Only ReST-ADL (4 videos) is used, limiting confidence in generalization. ICLR typically expects evaluation on multiple benchmarks (ActivityNet-QA, Charades, etc.).
+- **Training efficiency not discussed**: The batch constraint (no two queries from the same video per batch to avoid race conditions) means maximum batch size becomes n/r. For distributed training, this severely limits training efficiency and is not prominently discussed as a limitation.
+- **Missing recent baselines**: MemViT (Wu et al., 2022) is discussed in related work but never compared experimentally. MovieChat, LongVLM, and VideoAgent—mentioned as related approaches for long-video understanding—are not included as baselines.
+- **Neural sampler independence claim unjustified**: The paper states "our proposed framework is independent of the choice of neural sampler" but only implements Xie et al., 2019 with no ablation comparing alternative sampling strategies.
+- **No memory scaling analysis**: The paper sets m=5880 tokens without ablation showing how performance varies with memory size, limiting practical guidance.
+
+## Nice-to-Haves
+- Visualizations showing which patches the neural sampler selects (currently the "discriminative tokens" claim is unsubstantiated)
+- Human performance or oracle upper bound on ReST to contextualize whether methods are near ceiling
+- FLOP counts and peak GPU memory measurements alongside runtime to make efficiency claims more comprehensive
+- Analysis of when the efficiency-accuracy trade-off is acceptable (e.g., minimum queries per video to justify memory population cost)
+- Sensitivity analysis on the continual learning hyperparameter p (set to 2 without justification)
+
+## Novel Insights
+LVM-Net presents a conceptually interesting approach of using a learned neural sampler to populate a fixed-size memory for long-video reasoning, inspired by human memory mechanisms. The key insight—storing discriminative patches and reusing them across multiple queries rather than reprocessing the video—is architecturally sound and addresses a real practical need. The online continual learning auxiliary loss to address sampler bias toward current query clips is a thoughtful contribution. However, the paper does not establish that this specific combination of components (fixed memory + Gumbel-Top-k sampler + continual learning) represents a clear advance over simpler alternatives (e.g., mean-pooled tokens or random sampling with more memory tokens) or over more recent approaches like MemViT.
+
+## Potentially Missed Related Work
+- **MemViT (Wu et al., 2022)**: Memory-augmented multiscale vision transformer; explicitly addresses long-term video recognition with external memory. This is directly relevant and should be compared, not just cited in related work.
+- **MovieChat (Song et al., 2024)**: Dense token to sparse memory for long video understanding; addresses the same long-video problem setting.
+- **LongVLM (Weng et al., 2024)**: Efficient long video understanding via LLMs; similar efficiency goals for long-form video.
+
+## Suggestions
+- **Honest trade-off characterization**: Clearly acknowledge the accuracy- efficiency trade-off and provide guidance on when LVM-Net's approach is appropriate (e.g., applications prioritizing speed over accuracy, or scenarios with many queries per video).
+- **Add MemViT as a baseline**: Since it's discussed in related work and addresses the same problem, a direct comparison is essential.
+- **Memory size ablation**: Vary m from small (e.g., 1000) to large (e.g., 10000) to understand the performance-memory trade-off curve.
+
+---
+
+## eBS3dQQ8GV
+
+- GT: Accept (Oral) (avg 7.8)
+- Predicted: Accept (7.0/10)
+- Match: Yes
+
+### Final Review
+
+## Summary
+This paper provides a rigorous mathematical analysis of meta-stable clustering phenomena in a mean-field model of Transformer dynamics, where tokens are modeled as interacting particles on the sphere evolving through layers. The authors prove that for large token counts N, the system exhibits a three-phase evolution (linear, quasi-linear, clustering phases) before converging to a single cluster, with the number of intermediate clusters explicitly determined by the inverse temperature parameter β through a maximizing index of rescaled Gegenbauer polynomials. The meta-stable phase is shown to persist over timescales of O(log N), and explicit quantitative estimates connect hyperparameters to representation "richness."
+
+## Strengths
+- **Technically rigorous framework**: The paper establishes a comprehensive mathematical connection between mean-field limits, propagation of chaos, and metastability analysis. Theorem 3.1 (mean-field limit) and Theorem 4.2-4.3 (linear and quasi-linear phases) provide concrete quantitative statements with clear assumptions and complete proofs in the appendices.
+- **Novel characterization of metastability**: The three-phase decomposition (linear, quasi-linear, clustering) with explicit O(log N) timescales provides a principled mathematical understanding of how structured representations emerge before complete collapse. The prediction that cluster count k_max depends on β through maximizing γ_k = k(k+d-2)Ŵ_k is both novel and meaningful.
+- **Appropriate technical machinery**: The use of Grenier's iterative scheme (Grenier, 2000) to handle nonlinear growth rates and the refined Dobrushin estimates in Lemma C.7 demonstrates sophisticated mathematical technique correctly applied to this problem.
+- **Strong numerical support**: Figures 2 and 4 provide compelling visual evidence matching theoretical predictions (β=5→3 clusters, β=7→4 clusters, 3-periodicity emergence from white noise). Figure 3 confirms the O(log N) scaling.
+
+## Weaknesses
+- **Assumption 3 is unproven and critical**: Theorem 4.5 (clustering phase) and Theorem C.23 entirely rest on Assumption 3, which states that solutions converge to a k_max-periodic superposition of delta masses. The paper provides only heuristic justification and numerical evidence in Figure 5. Without this assumption, the paper only characterizes the linear and quasi-linear phases—not the actual clustering behavior. This is acknowledged but represents a significant gap in the theoretical contribution's completeness.
+- **Condition 3C < Kγ_max in Lemma C.14 lacks explicit guidance**: The continuation argument requires K to be "sufficiently large," but no concrete bounds or constructive guidance on choosing K are provided. This makes the proof difficult to implement in practice.
+- **Limited experimental validation of higher-dimensional case**: All numerical experiments are on S^1 (d=2). Section 4.4 claims generalization to d≥3 using spherical harmonics, but no experiments verify this fundamentally different structure. This is a notable gap between theory and validation.
+- **Incomplete numerical documentation**: Figure 3 averages over 20 simulations without error bars or confidence intervals. The fixed threshold for simulation termination is not specified, reducing reproducibility.
+
+## Nice-to-Haves
+- Systematic ablation over β values testing k_max ≈ √β prediction (Remark 4.1) across β ∈ {1,2,...,15}
+- Experiments with d≥3 to validate spherical harmonics generalization
+- Explicit finite-N convergence rates in Theorem 3.1, not just asymptotic convergence
+- Discussion of finite depth (realistic L) relative to quasi-linear phase duration
+- More detail on Q^TK = λId extension mentioned in conclusions
+
+## Novel Insights
+This paper provides the first rigorous mathematical characterization of meta-stable phases in mean-field Transformer dynamics, addressing an open problem identified in (Geshkovski et al., 2023). The key insight is that the number of clusters k_max that form in the intermediate regime is determined by the spectral properties of the interaction kernel through maximizing γ_k = k(k+d-2)Ŵ_k—a result that connects the temperature parameter β, embedding dimension d, and representation richness in a mathematically precise way. The O(log N) persistence time of this meta-stable phase explains why finite-depth transformers can exploit rich intermediate representations before total collapse occurs. The use of Grenier's iterative scheme to bypass the limitation that nonlinear growth rates exceed twice the linear growth rate represents a clever application of classical PDE techniques to this modern architecture problem.
+
+## Potentially Missed Related Work
+- **Carrillo et al. (2020)**: Already cited but could be discussed more deeply regarding phase transition theory for McKean-Vlasov equations on the torus
+- **Han-Kwan & Nguyen (2016)**: Instabilities in mean-field limits—directly relevant to the meta-stability analysis but only briefly mentioned
+- **Cohn & Kumar (2007)**: Referenced in Section 4.4 regarding spherical designs, but the connection to the invariant manifold structure could be developed more thoroughly
+- **Zhang et al. recent works on neural network dynamics**: May provide alternative perspectives on finite-width effects
+
+## Suggestions
+1. **Resolve Assumption 3**: Either prove this assumption under reasonable conditions or provide extensive numerical simulations (larger N, diverse initial conditions, d≥3) to build confidence in its validity before the main clustering claims can be considered established.
+2. **Clarify the K condition**: Provide explicit bounds or a constructive method for choosing K sufficiently large in Lemma C.14.
+3. **Add error bars and thresholds**: Document Figure 3 with confidence intervals and specify the total variation threshold used for simulation termination.
+
+---
+
+## onvN3zsNMI
+
+- GT: Reject (avg 3.5)
+- Predicted: Reject (4.0/10)
+- Match: Yes
+
+### Final Review
+
+## Summary
+This paper proposes an "over-memorization" approach that protects training data privacy by redirecting the model's limited memorization capacity toward a constructed "dummy set" of redundant, non-sensitive instances rather than the actual training data. The method involves first optimizing the dummy set to be easily memorable (via a separate coordinate descent procedure), then jointly training the model with both the real and dummy data. Experiments on CIFAR-10/100 image classification and Wikitext-103 language modeling demonstrate reduced membership inference attack success (lower AUROC) with maintained utility, though privacy gains are modest for image classification (AUROC 0.637→0.600) and more substantial for language modeling (0.97→0.80).
+
+## Strengths
+- **Novel conceptual contribution**: The idea of embracing memorization rather than preventing it, and strategically redirecting memorization capacity toward innocuous data, is genuinely original and addresses a fundamental tension in ML privacy.
+- **Solid theoretical grounding**: The memorization reduction is formally derived using influence functions (Equation 3), providing principled conditions under which the dummy set reduces memorization scores rather than purely empirical observations.
+- **Broad empirical evaluation**: Testing on both image classification (CIFAR-10/100 with ResNet-18) and causal language modeling (Wikitext-103 with Pythia-70m) demonstrates task-agnostic applicability of the approach.
+- **Systematic ablation studies**: The paper examines dummy set size, sparsity, and partitioning variants, providing useful insights into what properties of the dummy set drive effectiveness (Tables 2, 4).
+- **Significant language modeling results**: The AUROC reduction from ~0.97 to ~0.80 on Wikitext-103 represents a substantial privacy improvement, suggesting the method may be particularly effective for LLM fine-tuning scenarios.
+
+## Weaknesses
+- **Missing comparison to established privacy defenses**: The paper never benchmarks against differential privacy (DP-SGD), which is the standard baseline for privacy-preserving ML. This omission makes it impossible to assess whether the method is competitive with or complementary to established techniques. For a privacy-focused paper at this venue, this is a significant gap.
+- **Limited attack evaluation**: Only the LiRA (reference-based) membership inference attack is evaluated. Stronger attacks such as training data extraction (Carlini et al., 2021), label-only membership inference (Choquette-Choo et al., 2021), or semantic membership inference are not tested. An AUROC of 0.60 still indicates substantial privacy vulnerability.
+- **Large statistical uncertainty**: In Table 1, memorization score reductions (0.454→0.441 for CIFAR-10, 1.740→1.684 for CIFAR-100) have very large standard deviations (±1.224, ±2.272), and proper statistical significance tests are not reported. The practical significance of these reductions is unclear.
+- **Computational overhead**: Training the dummy set requires a separate model and coordinate descent optimization (Algorithm 2), which is not negligible. The paper does not provide explicit time/memory comparisons or analyze the cost-benefit trade-off relative to simpler privacy methods.
+- **Security under adaptive adversaries**: The method assumes adversaries cannot distinguish dummy from real samples. If an attacker can identify dummy data (e.g., via distributional analysis), privacy benefits may vanish entirely. The paper does not address this attack vector.
+
+## Nice-to-Haves
+- **Dummy set transferability analysis**: Test whether a dummy set trained for one architecture/dataset transfers to others, which would significantly enhance practical utility.
+- **Per-sample memorization distribution**: Show how memorization score distributions change (not just means) to reveal whether the method uniformly reduces memorization or affects only specific samples (e.g., rare vs. common).
+- **Training data extraction evaluation**: Evaluate whether the method prevents extraction attacks (Carlini et al., 2021), which directly demonstrate memorization harm rather than just membership inference susceptibility.
+- **Privacy-utility Pareto frontier**: Plot AUROC vs. accuracy/perplexity for different dummy set configurations to provide practical guidance on choosing the dummy set size.
+
+## Novel Insights
+The paper's core insight—that memorization is a limited capacity that can be strategically occupied rather than suppressed—offers a fresh perspective on the privacy-generalization tradeoff. The formal connection between dummy set effectiveness and influence functions (Equation 3) provides a principled framework: the dummy set must simultaneously improve generalization (when the real sample is absent) and remain uncorrelated with real training data. The empirical finding that trained dummy sets outperform random noise (Table 1) confirms that not all "decoy" data is equally effective—the optimization procedure is essential for making dummy samples genuinely memorable. The language modeling results suggest the approach may be especially valuable for LLM fine-tuning, where membership inference is a known concern.
+
+## Potentially Missed Related Work
+- **Canary/guard training methods**: Work on training models to memorize specific "canary" tokens or using decoy data for intellectual property protection may be related, though the focus differs.
+- **DP-SGD with multiple rounds**: Methods that iteratively refine privacy guarantees might offer complementary perspectives.
+- **Machine unlearning methods**: Approaches to selectively forget memorized information (e.g., gradient-based unlearning) could be relevant comparison points.
+
+## Suggestions
+- **Add DP-SGD comparison**: Include at least one experiment comparing privacy-utility trade-offs against differential privacy (e.g., using Opacus or standard DP-SGD with ε=8 or ε=16) to contextualize the method's practical value. This is essential for a privacy paper at this venue.
+- **Evaluate robustness to stronger attacks**: Test against label-only membership inference attacks and, if computationally feasible, training data extraction attacks to verify comprehensive privacy improvement beyond LiRA.
+- **Report statistical significance**: Conduct proper hypothesis tests (e.g., paired t-tests or bootstrap confidence intervals) for memorization score changes to support claims of improvement.
+
+---
+
+## v4MTnPiYXY
+
+- GT: Accept (Poster) (avg 7.0)
+- Predicted: Accept (7.0/10)
+- Match: Yes
+
+### Final Review
+
+## Summary
+Q-SFT proposes a novel offline RL algorithm that reformulates Q-learning as a weighted cross-entropy problem, enabling direct fine-tuning of pretrained language models without architectural modifications. The key insight is that weighting the SFT objective with Bellman backup values causes the resulting probabilities to conservatively estimate Q-values while inheriting pretrained knowledge. The method is evaluated across diverse domains (language games, dialogue, vision-language navigation, robotics) and demonstrates strong empirical performance compared to both supervised and value-based RL baselines.
+
+## Strengths
+- **Novel algorithmic insight**: The core idea of casting Q-learning as weighted supervised fine-tuning is genuinely novel and directly addresses a practical barrier that has hindered value-based RL adoption for foundation models—specifically, the need to reinitialize weights or add value heads.
+- **Solid theoretical foundations**: Theorem 4.1 provides meaningful guarantees that learned probabilities conservatively bound true Q-values, establishing principled foundations. The proof in the appendix is complete and well-structured.
+- **Comprehensive empirical evaluation**: The paper evaluates across diverse domains—language games (Chess, Wordle, 20Q), WebShop, ALFWorld (VLM), and robotic manipulation—comparing against SFT, ILQL, CQL, and Q-Transformer baselines. This breadth strengthens confidence in generalizability.
+- **Addresses practical concerns**: The method elegantly solves the architectural mismatch problem, allowing direct use of pretrained logits without modification.
+- **Sample efficiency gains**: Figure 3 demonstrates meaningful advantages in low-data regimes compared to Q-transformer, which is practically important.
+
+## Weaknesses
+- **Missing critical ablations**: The paper cannot isolate the contribution of key design choices without ablating (1) the policy extraction formula π(a|s) ∝ πϕ(a|s) exp(β pθ(a|s)), (2) the dual-network training procedure (optimizing both πϕ and pθ separately), and (3) the effect of β. An ablation comparing Q-SFT without the behavior cloning pretraining phase would directly test the claim that leveraging pretraining is essential.
+- **Limited theoretical scope**: Theorem 4.1 only guarantees bounds for actions where Q*(s,a) ≥ |A|⁻¹. For language models with vocabulary sizes of 30,000+, this condition excludes the vast majority of tokens. The paper dismisses this ("actions with negligible Q-values will not be chosen anyway") but provides no quantification of what fraction of probability mass is covered, leaving uncertainty about practical applicability.
+- **No statistical rigor in experiments**: Tables 1-3 report point estimates with no error bars or statistical significance tests. For ALFWorld, where success rates range from 5-45%, this makes it difficult to assess whether differences between methods are meaningful or within noise.
+- **Limited scaling validation**: The claim that the method benefits more from pretraining than existing value-based RL is supported by only one experiment (Figure 4) on a single task (20Q) against a single baseline (ILQL). As this is a central empirical claim, testing across multiple tasks and baselines would strengthen confidence.
+- **No code release**: For an ICLR paper, open-sourcing the implementation is increasingly expected. The algorithm details in Appendix B are clear, but reproducibility would be greatly enhanced by code availability.
+
+## Nice-to-Haves
+- **Decision Transformer comparison**: The paper mentions Decision Transformer in related work but doesn't include it as a baseline in experiments. Given that DT is a strong supervised approach to offline RL for language models, this comparison would help contextualize where Q-SFT provides genuine advantage.
+- **Training curves for language tasks**: Only robotics learning curves are shown (Figure 3). Showing learning curves across all tasks would reveal whether Q-SFT consistently learns faster/slower than baselines throughout training.
+- **Online RL evaluation**: The paper motivates the method for multi-turn problems that may involve interaction, yet only evaluates in offline settings. Online experiments would broaden the practical impact narrative.
+- **Hyperparameter sensitivity analysis**: β varies from 1.0 to 8.0 across tasks (Table 4) with no guidance on selection. A sensitivity analysis would help practitioners apply the method.
+
+## Novel Insights
+The paper's core contribution—using weighted cross-entropy where weights are Bellman backup targets to learn Q-values directly from pretrained logits—is a genuinely novel framing that bridges the gap between supervised pretraining and value-based RL. The insight that "pθ(a|s) ≈ w(s,a)·πβ(a|s)" and that choosing w(s,a) = B* pθ(a|s) yields a conservative Q-function estimate is both theoretically sound and practically valuable. The observation that this avoids the unstable regression toward non-stationary Bellman targets (a known failure mode for scaling Q-learning to large models) is well-motivated by prior work. The policy extraction step at inference time (combining the learned behavior policy with the learned Q-likelihood) is elegant and avoids additional training costs.
+
+## Potentially Missed Related Work
+- **Decision Transformer (Chen et al., 2021)** — The paper discusses this in related work as similar in using a supervised objective but notes DT has theoretical limitations. However, empirical comparison is missing.
+- **IQL (Kostrikov et al., 2021)** — Mentioned as a baseline for robotics but not included in language experiments; could serve as an additional value-based baseline for comparison.
+
+## Suggestions
+- Add ablation studies specifically isolating the contribution of (1) the policy extraction formula versus using pθ directly, (2) the dual-network versus single-network training, and (3) the weighted cross-entropy weights versus uniform weights. This would directly validate which components drive the empirical gains.
+- Include error bars and statistical significance tests across all experiments to quantify the reliability of reported improvements.
+- Extend the scaling experiments to multiple tasks and baselines to substantiate the central claim about leveraging pretraining.
+- Consider releasing code alongside the paper to enhance reproducibility and community adoption.
+
+---
+
+## YkMg8sB8AH
+
+- GT: Reject (avg 4.2)
+- Predicted: Accept (6.0/10)
+- Match: No
+
+### Final Review
+
+## Summary
+This paper introduces EquiGX, a novel explainability method that extends Layer-wise Relevance Propagation (LRP) via Deep Taylor decomposition for spherical equivariant graph neural networks operating on 3D geometric graphs. The method derives specific propagation rules for tensor product operations, linear layers, and norm-based non-linearities, enabling backpropagation of relevance scores to input space to explain geometric features. Experiments on synthetic and real-world datasets demonstrate improved explanation quality over six baseline methods across multiple metrics.
+
+## Strengths
+- **Addresses a genuine and important gap**: The paper tackles explaining equivariant GNNs for 3D geometric data, where existing XAI methods are largely inapplicable due to their focus on 2D graphs and inability to handle positional/geometric features. This is a valuable contribution for AI-for-science applications where equivariant GNNs are widely deployed but largely opaque.
+- **Technically sound derivation**: The LRP extension for tensor product operations leverages the bilinearity property correctly, and the first-order Taylor expansion is exact when zero-order terms vanish (since TP is multilinear in its inputs). The propagation rules for linear layers (Section 3.3) correctly follow standard LRP-ε formulation.
+- **Comprehensive layer coverage**: The paper derives propagation rules for all key components of spherical equivariant GNNs—TP operations, linear layers, and norm-based non-linearities—enabling end-to-end relevance propagation from prediction to input space.
+- **Richer explanatory power**: Unlike prior methods that only explain node/edge importance, EquiGX separately attributes contributions to node features, edge distances, and edge directions, providing more mechanistic insights into how geometric and positional data influence predictions.
+- **Consistent quantitative improvements**: Table 1 demonstrates EquiGX outperforms all baselines across four datasets on both AUROC and AP metrics, with particularly notable gains on Spiral Noise (83.57% vs 79.69% AUROC for best baseline) and ActsTrack (76.96% vs 65.18% AUROC).
+
+## Weaknesses
+- **Limited architectural evaluation undermines generalizability claims**: The paper claims contributions for "spherical equivariant GNNs" broadly but only validates on Tensor Field Networks (TFN). Other prominent spherical equivariant architectures like NequIP, Allegro, Equiformer, or MACE are not tested. This significantly limits confidence in the method's broad applicability, particularly since different equivariant architectures use different non-linearities, aggregation schemes, and tensor product formulations.
+- **Equal relevance attribution assumption is unjustified**: Equation 7 divides relevance among three components (hidden features, directional part, distance part) equally based on Achtibat et al. (2024), which concerns attention mechanisms in transformers—not equivariant networks. This assumption is particularly problematic given that these components have distinct physical meanings in geometric learning (distances encode bond lengths, directions encode bond angles). The equal-splitting is a strong prior that should either be rigorously justified or explored empirically.
+- **No verification that explanations are equivariant**: While the underlying model is rotation-equivariant, the paper never verifies that the computed importance scores transform correctly under input rotations. This is a fundamental property one would expect an explainability method for equivariant models to guarantee or at least test.
+- **Missing ablation studies**: The method combines multiple components (TP decomposition, directional attribution, distance attribution, normalization for non-linearities), but no ablation isolates which components drive the improvement. This makes it unclear whether the complex derivation actually matters versus simpler alternatives.
+- **Perfect accuracy on synthetic datasets limits discriminative power**: TFN achieves 100% accuracy on both Shapes and Spiral Noise datasets. When models trivially solve tasks, explanations may reveal less about what features truly matter versus what the model happened to learn. This is acknowledged in the literature but worth explicit discussion.
+
+## Nice-to-Haves
+- **Statistical significance testing**: While error bars are provided in Table 1, formal significance tests comparing EquiGX to the second-best method (e.g., PG-Explainer on Shapes: 84.31 vs 82.83) would strengthen confidence in the reported improvements.
+- **Deeper analysis of BioLip fidelity results**: The paper reports Fidelity ≈ 0.02 when masking binding sites but doesn't discuss what this reveals about model validity. The finding that the model may not use scientifically meaningful binding site information deserves explicit analysis rather than being mentioned almost as an aside.
+- **Rotation consistency experiments**: Showing explanations for the same sample under different 3D rotations would validate that structurally equivalent features receive equivalent importance regardless of coordinate orientation.
+
+## Novel Insights
+The paper's core insight—that explaining equivariant GNNs requires deriving LRP rules specifically for tensor product operations in spherical harmonic space—is both novel and important. The observation that messages in spherical equivariant GNNs can be decomposed into contributions from (1) hidden features, (2) directional parts (via spherical harmonics), and (3) distance parts (via radial basis functions) provides a principled way to attribute importance to geometric primitives that have physical meaning in scientific applications. This contrasts with prior work that either ignores geometric features entirely or treats them as generic node/edge attributes.
+
+## Potentially Missed Related Work
+- **AttnLRP (Achtibat et al., 2024)**: While cited for the equal-splitting assumption, the paper could more thoroughly discuss differences between explaining attention mechanisms versus tensor product operations in equivariant networks.
+- **Frame averaging techniques (FAENet, Duval et al., 2023b)**: Discussed briefly in the appendix for categorization but could inform discussion of alternative approaches to ensuring explanation consistency.
+
+## Suggestions
+- **Validate on at least one additional spherical equivariant architecture**: Testing on SE(3)-Transformer or NequIP would substantially strengthen the generalizability claims without requiring full re-derivation (the core TP operations are similar across architectures).
+- **Add empirical comparison of equal vs. alternative attribution strategies**: An ablation or experiment varying the attribution weights among the three components would validate whether the equal-splitting assumption matters in practice.
+- **Include an equivariance verification experiment**: Show that rotating a 3D structure produces correspondingly rotated importance scores, providing empirical evidence that explanations respect model symmetries.
+
+---
+
+## EDJ7cPZk7V
+
+- GT: Reject (avg 6.4)
+- Predicted: Accept (7.0/10)
+- Match: No
+
+### Final Review
+
+## Summary
+This paper uncovers a strong empirical correlation between how quickly neural networks learn individual examples (learning speed) and their likelihood of being forgotten during continual learning—demonstrating a "last-in-first-out" forgetting pattern. Based on this insight, the authors propose Goldilocks, a replay buffer sampling method that filters out examples learned too quickly or too slowly, retaining only those learned at intermediate speeds. Goldilocks is shown to consistently improve multiple continual learning algorithms across various image classification benchmarks while requiring minimal computational overhead.
+
+## Strengths
+- **Compelling empirical finding**: The paper demonstrates a remarkably strong correlation (r=0.995, p≤10⁻¹⁰) between learning speed and forgetting susceptibility, visualized clearly through epoch-wise classification matrices. This data-centric perspective on catastrophic forgetting is genuinely insightful and under-explored in prior work.
+
+- **Thorough experimental validation**: The authors test their findings across diverse settings: multiple datasets (CIFAR-10, CIFAR-100, TinyImageNet), architectures (ResNet-18, VGG-16, smaller variants), both task-incremental and class-incremental settings, multiple continual learning backbones (DER, DER++, GEM, AGEM, RPC, X-DER, FDR), and various hyperparameter configurations. This extensive evaluation demonstrates robustness.
+
+- **Practical method with real value**: Goldilocks is computationally trivial (single float per example computed during forward pass), easy to implement, and orthogonal to existing continual learning methods since it only modifies buffer sampling. The consistent improvements (typically 1-3% accuracy gains) across methods represent meaningful practical benefit.
+
+- **Valuable insight for practitioners**: The finding that optimal buffer composition is largely independent of subsequent task identity simplifies hyperparameter selection and provides actionable guidance for deployment.
+
+## Weaknesses
+- **Limited theoretical grounding**: The paper provides extensive empirical support and intuitive connections to simplicity bias, but lacks formal analysis explaining *why* learning speed predicts forgettability or *why* mid-learned examples are optimal for rehearsal. This limits the contribution's depth and generalizability beyond empirical observation.
+
+- **Hyperparameter dependency underexplored**: While the paper claims robustness and demonstrates a "broad continuous range" of effective quick/slow values, it lacks systematic sensitivity analysis. The default 20%/20% is heuristic, and the optimal thresholds likely vary with buffer size, dataset, and task count in ways the paper doesn't fully characterize.
+
+- **Limited scope beyond replay-based methods**: The analysis and Goldilocks are designed specifically for replay-based continual learning. The paper does not explore whether the learning-speed-to-forgetting correlation holds or can be exploited for non-replay methods (regularization-based, architecture-based approaches).
+
+## Nice-to-Haves
+- **Streaming/single-epoch evaluation**: The paper acknowledges this limitation but provides no experiments. Exploring lightweight approximations (e.g., pre-trained model features as complexity proxies) would broaden applicability.
+- **Concrete examples of filtered samples**: Visualizing actual images removed vs. retained at different thresholds would make the "Goldilocks zone" more intuitive and expose edge cases.
+- **Statistical significance testing**: While standard errors are reported, formal hypothesis tests comparing Goldilocks to baselines would strengthen the empirical claims.
+
+## Novel Insights
+The paper's most valuable contribution is the empirical characterization of catastrophic forgetting from a data-centric perspective: examples learned faster (simpler) are forgotten less readily than those learned more slowly (complex). This "last-in-first-out" pattern—connecting learning speed, simplicity bias, and forgetting—provides both a diagnostic tool (predicting which examples are vulnerable) and a prescriptive one (guiding buffer composition). The finding that optimal buffer composition prioritizes neither the easiest nor hardest examples—those the model already masters or those it struggles to learn—offers a principled middle ground that explains and improves upon uniform sampling. While the connection to simplicity bias is intuitive rather than novel in spirit, the specific instantiation linking learning speed to buffer sampling decisions is a practically useful insight.
+
+## Potentially Missed Related Work
+- **Example forgetting metrics**: Toneva et al. (2019) and Maini et al. (2022) are cited, but the paper could more deeply contrast its learning-speed metric with "forgetting events" or "last-right" metrics, clarifying what additional predictive power learning speed provides.
+- **Rainbow Memory** (Bang et al., 2021): This concurrent work also focuses on diverse sample selection for rehearsal; a comparison would contextualize Goldilocks' approach.
+
+## Suggestions
+- **Systematic hyperparameter analysis**: Conduct a structured sensitivity study showing how optimal quick/slow thresholds vary with buffer size, dataset complexity, and number of tasks. This would provide practitioners clearer guidance than the current "broad range" claim.
+- **Theoretical motivation**: Even a sketch of formal analysis—connecting learning speed to PAC-Bayes bounds or optimization dynamics—would strengthen the contribution's theoretical standing.
+
+---
+
+## RdG7LVGnQi
+
+- GT: Reject (avg 4.5)
+- Predicted: Reject (5.0/10)
+- Match: Yes
+
+### Final Review
+
+## Summary
+This paper introduces LLM-QFA, the first work to apply once-for-all (OFA) training to quantized large language models, enabling a single supernet to generate optimal subnets for diverse deployment scenarios (e.g., edge devices vs. GPU clusters) with different bit-width constraints. The method decouples quantization configurations using separate Low-Rank adapters per (layer, bit-width) pair and introduces a resource-balanced sampling strategy to address training imbalance from uniform sampling. Experiments on LLaMA2-7B, LLaMA2-13B, and Mistral-7B demonstrate comparable or modestly improved performance over QA-LoRA with significant training time reduction (3× fewer GPU hours when deploying to multiple scenarios).
+
+## Strengths
+- **First OFA-QAT for LLMs**: This is a genuinely novel contribution that addresses a practical deployment challenge—repeated quantization-aware training per scenario is prohibitively expensive for LLMs. The paper identifies a real gap in the literature.
+- **Well-motivated ablation studies**: The Shared LoRA ablation (Figure 7) provides clear empirical evidence that decoupling adapters improves performance across all resource constraints. The uniform sampling ablation similarly validates the resource-balanced sampling contribution.
+- **Practical efficiency gains**: The 3× training time reduction (Figure 4) compared to QA-LoRA when deploying to N scenarios is meaningful and directly addresses the paper's stated motivation. This is the primary value proposition.
+- **Comprehensive model coverage**: Experiments span three model families (LLaMA2-7B, LLaMA2-13B, Mistral-7B) and two benchmark suites (MMLU, Common Sense QA), with consistent results across settings.
+- **Observant problem identification**: The observation that uniform sampling over independent layer-wise bit-widths produces a narrow-variance Gaussian distribution on average bit-width is insightful and non-obvious—it reveals a fundamental challenge in OFA for mixed-precision quantization.
+
+## Weaknesses
+- **Train-test leakage in search procedure**: The paper searches for optimal subnets on MMLU (for MMLU results) and ARC-C (for Common Sense QA results), then reports final results on the same benchmarks. This inflates reported numbers. A held-out calibration set should be used for search, with separate test sets for evaluation.
+- **Lack of statistical rigor**: Improvements are in the 0.3–3.5% range, but no error bars, confidence intervals, or multi-seed experiments are reported. It's unclear whether these gains are robust or within noise. At minimum, standard deviations across multiple runs should be provided.
+- **Vague search procedure**: Section 3.3 lacks sufficient detail for reproducibility. How is "correlation analysis" performed? What metric guides the search space shrinkage? For a search space of 3^32 configurations, the 150-sample budget (100 random + 50 narrowed) seems arbitrary and potentially insufficient.
+- **Scalability claims unsupported**: The paper claims the method "can be easily scaled up to even larger models" but provides no evidence beyond 13B. With 3L separate LoRA adapters (96 for 7B, 192 for 13B), scaling to 70B (210 adapters) introduces practical memory management challenges not discussed.
+- **Adapter overhead not quantified**: The paper claims decoupled adapters bring "negligible extra costs" but never reports total adapter parameter count or memory overhead. This should be explicitly quantified, especially since 3L adapters are required.
+- **Inference-time implications not discussed**: When deploying a specific subnet, how are the correct LoRA adapters selected and merged at runtime? Is there latency overhead compared to single-adapter approaches? The paper focuses on training efficiency but ignores inference considerations.
+
+## Nice-to-Haves
+- **Visualization of discovered architectures**: Show heatmaps of per-layer bit-width assignments for different resource constraints to demonstrate that the search finds meaningful patterns rather than random assignments.
+- **Comparison with weight-sharing OFA-QAT baseline**: The paper lacks a comparison with traditional OFA (weight-sharing) applied to quantization-aware training. Without this, the claimed advantage of decoupling is only validated through ablation (Shared LoRA), not against an actual competitor.
+- **Stronger NAS baselines**: Compare the heuristic search against established methods like NSGA-II or differentiable NAS (e.g., DARTS-style) to contextualize the search quality.
+- **Theoretical analysis**: Provide analysis or additional experiments showing *why* independent LoRA updates prevent interference (e.g., gradient similarity metrics, adapter representation analysis).
+
+## Novel Insights
+The paper's most valuable insight is identifying and addressing the training imbalance problem in once-for-all quantization-aware training: uniform sampling over independent layer-wise bit-widths naturally concentrates around the mean bit-width due to the Central Limit Theorem, leaving extreme configurations (very low or very high average bit-width) undertrained. The cyclic mixed-Gaussian scheduler provides a simple but effective remedy by sweeping the sampling distribution from high to low bit-widths. This observation applies beyond this specific paper and illuminates a fundamental challenge in OFA for mixed-precision scenarios.
+
+## Potentially Missed Related Work
+- **Weight-sharing OFA for quantization** (Tang et al., 2024; 2023): The paper briefly mentions interference in weight-sharing OFA but doesn't empirically compare against such approaches. Including this comparison would strengthen the paper's positioning.
+
+## Suggestions
+1. **Use held-out validation sets**: Split MMLU into val/test and ARC-C into calibration/evaluation sets. Search on calibration, report on held-out test to eliminate leakage.
+2. **Report statistical significance**: Run experiments with 3+ seeds and report means ± standard deviations. This is essential for the 1–3% improvement range.
+3. **Quantify adapter overhead**: Report total LoRA parameter count (should be approximately 3L × 2 × rank × hidden_dim) and memory footprint compared to base model.
+4. **Clarify search algorithm**: Specify the correlation metric (e.g., Pearson, Spearman), how sensitivity is computed, and the shrinkage criterion in Section 3.3.
+
+---
+
+## HSi4VetQLj
+
+- GT: Accept (Poster) (avg 6.0)
+- Predicted: Accept (6.0/10)
+- Match: Yes
+
+### Final Review
+
+## Summary
+This paper introduces Semantically Diverse Language Generation (SDLG), a method that improves uncertainty estimation in LLMs by using importance sampling with an NLI-informed proposal distribution to generate semantically diverse yet likely alternative outputs. SDLG identifies semantically critical tokens through gradient-based attribution and substitutes them with alternatives predicted to alter semantics, while correcting for biased sampling. Experiments on TruthfulQA, CoQA, and TriviaQA demonstrate consistent AUROC improvements over existing methods with claimed computational efficiency gains.
+
+## Strengths
+- **Theoretically grounded**: The paper properly derives semantic entropy from first principles and correctly identifies that prior work (Kuhn et al., 2023) used an improper estimator. The importance sampling correction (Eq. 7-8) is theoretically sound and represents a genuine contribution to the semantic entropy framework.
+- **Novel sampling strategy**: Using gradient-based attribution via an NLI model to identify semantically critical tokens for targeted substitution is a genuinely new approach. The three-score framework (attribution, substitution, importance) is well-conceived and the ablation (Figure 9) demonstrates each component contributes positively.
+- **Comprehensive empirical evaluation**: Experiments span three diverse QA datasets, four model sizes (2.7B–30B), and three correctness metrics, showing consistent improvements. The comparison separating the improper vs. proper semantic entropy estimator effectively isolates the contribution of SDLG's sampling strategy.
+- **Practical efficiency gains**: The 15–33% FLOP reduction is significant, and avoiding temperature tuning is a genuine practical advantage.
+- **Clear contribution to literature**: The paper addresses a real problem (sampling by chance in semantic uncertainty estimation) with a principled solution.
+
+## Weaknesses
+- **Strong theoretical assumption unvalidated**: The paper assumes "all probability mass in p(t|...) is at the actually observed t" (Section B), which is explicitly called a "strong assumption." This is central to the proposal distribution derivation and importance sampling correction, yet the paper provides no empirical validation of this assumption. This weakens the theoretical contribution claim and the justification for the importance sampling correction.
+- **Limited model diversity**: All experiments use OPT models only. The paper states "performance trends generalize across transformer-based model families" based on prior work, but this is an assumption not validated for SDLG. Given that SDLG's token scoring depends on specific model-NLI interactions, generalization is not guaranteed.
+- **No statistical significance testing**: AUROC differences are reported without confidence intervals. This is particularly concerning for CoQA where improvements are modest (0.4–0.7 percentage points) and may not be statistically significant. ICLR standards require demonstrating that observed differences are not due to random variation.
+- **Incomplete ablation of importance sampling correction**: The paper derives importance sampling weights but never validates empirically whether applying these weights improves results. A comparison with SDLG without the correction is essential to justify the added complexity.
+- **Token probability threshold and weighting not justified**: A threshold of 0.001 is used for token probabilities but never ablated. The equal weighting of three scores is used without exploration of alternatives.
+
+## Nice-to-Haves
+- **Extended model evaluation**: Test on at least one non-OPT architecture (e.g., LLaMA) to support generalization claims.
+- **Comparison with recent methods**: MARS (Bakman et al., 2024) and EigenScore (Chen et al., 2024) are mentioned as "complementary" but not empirically compared.
+- **Longer-output evaluation**: The paper claims SDLG advantages "emerge in scenarios with longer output sequences" but all datasets produce short answers; experiments on summarization or long-form generation would substantiate this claim.
+- **Failure case analysis**: Table 3 shows only success cases. Concrete examples of when SDLG fails (e.g., substituted token leads to incoherent completion, or model "corrects back" to original semantics) would strengthen the paper.
+
+## Novel Insights
+The core insight—that semantically diverse outputs should be *deliberately generated* rather than sampled by chance—is valuable and well-executed. The paper's decomposition of token importance into attribution, substitution, and importance scores provides a principled way to "stress-test" the language model's semantic certainty. The observation that correcting the improper semantic entropy estimator alone improves results is an important contribution that others in the field should attend to.
+
+## Potentially Missed Related Work
+- **MARS** (Bakman et al., 2024): Meaning-aware response scoring for uncertainty estimation; could serve as a complementary uncertainty measure or comparison baseline.
+- **EigenScore** (Chen et al., 2024): Uses internal LLM states for hallucination detection; alternative approach to uncertainty estimation that may benefit from SDLG's diverse samples.
+- **Contrastive decoding methods**: While contrastive decoding (Li et al., 2023) is mentioned, its specific application to uncertainty estimation scenarios is not explored.
+
+## Suggestions
+1. **Add ablation of the importance sampling correction**: Compare SDLG with and without the weighting term to validate that the correction provides measurable benefit beyond the proposal distribution itself.
+2. **Include statistical significance testing**: Report confidence intervals or p-values for AUROC comparisons, especially for CoQA where improvements are smaller.
+3. **Validate or relax the proposal distribution assumption**: Either provide empirical evidence that the "all mass at observed t" assumption holds in practice, or explore more robust weighting schemes that don't rely on it.
+4. **Test on non-OPT models**: Even a single experiment with LLaMA-2 would substantially strengthen generalization claims.
+
+---
+
+## LqB8cRuBua
+
+- GT: Reject (avg 2.0)
+- Predicted: Reject (3.0/10)
+- Match: Yes
+
+### Final Review
+
+## Summary
+This paper proposes Diffusion SigFormer, a two-stage method combining a diffusion-based denoising module (DSDM) with a transformer-based classifier (SigFormer) for electromagnetic signal recognition under interference conditions. The approach adds synthetic noise (Gaussian, Rayleigh, Periodic) to signals via a designed interference mechanism, denoises them using a fixed-timestep diffusion model, and then classifies using a hybrid convolution-Transformer architecture. Experiments on three datasets demonstrate that the diffusion denoising recovers recognition accuracy close to clean signal levels across various interference conditions.
+
+## Strengths
+- **Practical problem identification**: The paper correctly identifies a meaningful real-world challenge—electromagnetic signal recognition under interference—and provides a motivated two-stage solution (denoise then classify).
+- **Comprehensive experimental coverage**: Testing across three datasets (RML2016.10a, RML2016.10b, BT) with three noise types and ten interference rates provides substantial empirical evidence. The consistent ability to recover near-clean accuracy (e.g., ~85% denoised vs ~88% clean on RML2016.10a) demonstrates the approach's anti-interference capability.
+- **Architectural innovation**: Combining convolution with transformer attention in SigFormer Block (adding a 1D conv between Attention and MLP) is a reasonable design choice that addresses the known local feature extraction weakness of pure transformers for 1D signals.
+
+## Weaknesses
+- **Non-standard diffusion formulation with insufficient justification**: The paper fixes timestep t such that α_t = 0.5 during both training and inference, meaning the model operates at a single noise level. This fundamentally departs from standard DDPM theory, where models learn across the full noise schedule. The justification ("to satisfy the interference rate relationship") is ad hoc. No comparison with variable-t diffusion models is provided to validate this design choice.
+- **Critical missing ablation studies**: The paper claims contributions from both DSDM and SigFormer, but provides no ablation removing DSDM (keeping only SigFormer on noisy signals) or replacing SigFormer with a simpler classifier. This prevents verification of each component's individual contribution.
+- **Identical Gaussian and Rayleigh denoising results are unexplained**: Tables 2, 4, and 6 show nearly identical accuracy for Gaussian and Rayleigh noise across all SIR levels (e.g., both ~0.853 on RML2016.10a, both ~0.886 on RML2016.10b). This statistically implausible result suggests the denoising module may not actually be responding to interference level, and the paper offers no explanation.
+- **Training-testing mismatch with real-world conditions**: The paper trains at SNR=18dB only, then tests with synthetic localized interference. This does not demonstrate robustness to realistic channel conditions with varying SNR across the full -20dB to 18dB range, which is standard for modulation recognition evaluation.
+- **Incomplete SigFormer specification**: Key hyperparameters (patch size, embedding dimension, number of SigFormer Blocks, attention heads) are not reported, hindering reproducibility.
+
+## Nice-to-Haves
+- Compare DSDM against conventional denoising methods (wavelet denoising, spectral subtraction, bandpass filtering) to assess whether diffusion models add value over simpler approaches.
+- Evaluate across the full SNR range (-20dB to 18dB) using built-in channel noise to enable comparison with existing AMR literature.
+- Use per-device accuracy on BT dataset rather than aggregating to brand level, to better leverage the dataset's scale.
+- Report computational cost (training time, inference time, model parameters, FLOPs) to assess practical deployability.
+- Add confusion matrices under interference conditions to show where denoising provides the most benefit.
+
+## Novel Insights
+The paper's primary insight—applying diffusion models to denoise electromagnetic signals before classification—represents a reasonable transfer from the image domain to signal processing. The SigFormer Block design, while incremental, appropriately addresses the known limitation of pure transformers for local feature extraction in 1D signals. The most interesting observation is that the denoising module appears to generalize across noise types (Gaussian, Rayleigh, Periodic), maintaining near-clean accuracy regardless of interference type. However, the identical results for Gaussian and Rayleigh noise warrant investigation—this may indicate the denoising is learning a generic "noise removal" rather than noise-type-specific characteristics.
+
+## Potentially Missed Related Work
+- **ResSwinT-SwinT (Ren et al., 2023)**: A two-component radar signal recognition framework using Swin Transformer and denoising networks; directly relevant as both a transformer-based method and a denoising-then-classify approach.
+- **ICAN, MT-ResNet, ATR-CNN**: Modern AMR methods with established performance across full SNR ranges on RML datasets; missing from baselines.
+- **Signal denoising with diffusion in other domains** (Lan & Huang, 2024; Zhu et al., 2023; Deng et al., 2024): Seismic and DAS signal denoising with diffusion models; provides theoretical context for the diffusion-on-signals approach.
+
+## Suggestions
+The paper would benefit significantly from: (1) adding complete ablation experiments isolating each component's contribution, (2) comparing against standard variable-t diffusion to validate the fixed-t design choice, (3) evaluating across full SNR ranges to enable fair comparison with existing literature, and (4) investigating and explaining the suspicious identical results for Gaussian and Rayleigh denoising.
+
+---
+
+## gQlxd3Mtru
+
+- GT: Accept (Oral) (avg 8.7)
+- Predicted: Accept (7.0/10)
+- Match: Yes
+
+### Final Review
+
+## Summary
+This paper introduces DeepRUOT, a deep learning method for learning Regularized Unbalanced Optimal Transport (RUOT) and inferring continuous unbalanced stochastic dynamics from sparsely time-resolved snapshot data. The key theoretical contribution is a Fisher regularization reformulation (Theorem 4.1) that transforms the SDE-constrained optimization into a more computationally tractable ODE form, avoiding derivative computations in cross terms. The method is validated on synthetic gene regulatory networks, high-dimensional Gaussian mixtures (up to 100D), and real single-cell RNA-seq datasets, demonstrating accurate growth/transition identification and Waddington landscape construction.
+
+## Strengths
+- **Theoretically grounded contribution**: Theorem 4.1 provides a novel Fisher regularization reformulation of RUOT that improves computational tractability over prior work (Baradat & Lavenant, 2021) by avoiding explicit differentiation of log p in cross terms. The equivalence proof and connection to the probability flow ODE are solid.
+- **Comprehensive empirical validation**: The paper evaluates on diverse datasets including a synthetic gene regulatory network with ground truth, 10D-100D Gaussian mixtures, mouse hematopoiesis scRNA-seq data, and EMT scRNA-seq data. Thorough ablation studies in Table 4 demonstrate the necessity of each component (growth term, mass loss, Fokker-Planck constraint, pre-training).
+- **Addresses a genuine gap**: The method handles an important real-world challenge—learning dynamics from sparsely time-resolved snapshots where existing balanced Schrödinger bridge methods fail or require prior knowledge of growth/death processes.
+- **Practical utility for single-cell biology**: The ability to infer growth rates and construct Waddington landscapes from snapshot data without lineage information or prior knowledge of proliferation is valuable for trajectory inference applications.
+
+## Weaknesses
+- **Unfair experimental comparisons**: For gene regulatory data, DeepRUOT uses σ=0.05 while SF2M uses σ=0.25 due to "numerical instability" in SF2M—this makes the comparison uneven, as DeepRUOT operates in a regime where the baseline cannot stably run. For UDSB, only 3 time points are used vs. 5 for other methods. These methodological differences make it difficult to attribute performance gains solely to the method.
+- **Evaluation asymmetry**: DeepRUOT's predictions are evaluated using learned weights while other methods use uniform weights (Appendix C.1), which could systematically favor DeepRUOT in W_1/W_2 comparisons.
+- **Heavy hyperparameter burden**: The two-stage training with dataset-specific epoch scheduling (ranging from 20→10 to 35→120) and multiple hyperparameters (λ_m, λ_d, λ_r, λ_f, λ_w) across stages raises reproducibility concerns and limits practical out-of-the-box usability. Table 6 shows sensitivity to epoch scheduling, suggesting careful tuning is required.
+- **Missing quantitative false transition analysis**: The paper claims DeepRUOT "eliminates false transitions" but provides only visual evidence (Figure 2). A quantitative analysis comparing transition rates between methods would strengthen this claim.
+- **Limited real-data growth validation**: Growth rate accuracy is validated only on synthetic data with ground truth; for real scRNA-seq datasets, there is no ground truth comparison to validate whether inferred growth patterns align with biological priors (e.g., cell cycle markers).
+
+## Nice-to-Haves
+- **Explicit σ=0 ablation**: While Table 4 shows "DeepRUOT w/o growth" and mentions that "DeepRUOT without diffusion corresponds to Unbalanced OT," explicitly reporting σ=0 DeepRUOT results would clarify whether improvements come from stochastic modeling or unbalanced handling.
+- **Joint embedding learning**: The method requires pre-computed embeddings (PCA) as input, limiting end-to-end applicability. Jointly learning the embedding space with dynamics would increase practical utility.
+- **General case experimental validation**: The main paper focuses on a(x,t) = σ²(t)I with experiments; the general formulation in Appendix D.4 with state-dependent diffusion lacks experimental validation.
+
+## Novel Insights
+This paper makes a genuine contribution by bridging the gap between theoretically well-studied RUOT formulations and practical computational methods for high-dimensional stochastic dynamics. The Fisher regularization reformulation provides computational benefits by avoiding log-density derivatives in cross terms. More importantly, the work demonstrates that simultaneously accounting for stochasticity and unbalanced dynamics (growth/death) without prior knowledge is both feasible and beneficial—ablation studies confirm that omitting either component degrades performance. The application to Waddington landscape construction offers a principled framework for visualizing cell fate decisions based on inferred dynamics, which could be valuable for the single-cell biology community.
+
+## Potentially Missed Related Work
+- **Physics-based trajectory inference methods**: Methods like scVelo/Velocyto (stochastic velocity models) and CellRank (Markov chain-based trajectory inference) are standard in single-cell analysis for inferring differentiation dynamics. A comparison against these established baselines would strengthen the case for OT-based approaches in this domain.
+- **UNICORN and related single-cell optimal transport methods**: The paper cites TrajectoryNet and MIOFlow but does not compare against UNICORN or graph-based OT methods designed specifically for single-cell integration.
+- **Stochastic interpolation methods**: The conditional flow matching approach used for score learning has connections to recent work on Schrödinger bridge solvers that may provide alternative computational strategies.
+
+## Suggestions
+1. **Unify experimental conditions**: Use identical σ values across all methods or include σ sensitivity ablations to enable fair performance attribution.
+2. **Standardize evaluation**: Use uniform weights for all methods or report both weighted and unweighted metrics to avoid evaluation asymmetry.
+3. **Provide hyperparameter guidance**: Develop simpler tuning strategies or provide default settings that work across datasets, as the current dataset-specific tuning limits reproducibility.
+4. **Quantify transition accuracy**: Compute explicit false positive/negative transition rates to support the claim of eliminating false transitions.
+5. **Validate growth rates on real data**: Compare inferred growth patterns against biological markers (e.g., cell cycle genes) to demonstrate practical utility beyond synthetic experiments.
+
+---
+
+## jawV7vhGHw
+
+- GT: Reject (avg 4.2)
+- Predicted: Reject (4.0/10)
+- Match: Yes
+
+### Final Review
+
+## Summary
+PrAViC proposes a unified probabilistic framework for adapting offline 3D CNN video classification models to online settings with early-exit capability. The approach introduces a normalized expected exit time (NE) function incorporated into the training loss, along with architectural modifications to enable recursive frame-by-frame evaluation without recomputation. Experiments across five datasets (UCF101, EgoGesture, Jester, Kinetics-400, and a medical Ultrasound dataset) demonstrate that the framework can reduce decision time while maintaining or improving accuracy.
+
+## Strengths
+- **Well-motivated problem**: Real-time video classification with early-exit capability addresses genuine needs in medical diagnostics, autonomous driving, and safety monitoring, with clear practical applications.
+- **Theoretical framework for early exit**: The NE function (Eq. 4) provides a principled way to quantify and optimize decision timing, with the asymmetric loss (penalizing late decisions only for positive/class-1 examples) well-justified for emergency detection scenarios.
+- **Comprehensive experimental evaluation**: Testing across multiple datasets (UCF101, EgoGesture, Jester, Kinetics-400, Ultrasound) and diverse base architectures (R3D-18, S3D, X3D variants, MobileNetV2, ShuffleNet, SqueezeNet) demonstrates broad applicability.
+- **Practical architectural modifications**: The modifications to 3D convolutions (boundary replication), batch normalization (selective temporal statistics), and head design are clearly explained and enable efficient recursive evaluation as shown in Figure 5.
+- **Compelling medical application**: Application to Doppler ultrasound video classification for newborn heart defect detection demonstrates real-world relevance and recursive evaluation efficiency with batching (Figure 7).
+
+## Weaknesses
+- **Missing computational efficiency analysis**: For a paper claiming "real-time" classification, there are no FLOPs, latency, or throughput comparisons with baseline methods. Figure 7 shows scaling behavior but not absolute inference times needed to assess real-time feasibility. This is a significant omission given the paper's core claims about speed.
+- **Incomplete ablation study**: The paper proposes multiple components (modified convolutions, modified batch normalization, mean aggregation, NE loss) but does not isolate their individual contributions. The ablation study only compares PrAViC against CoX3D with frozen pretrained weights, without testing which specific modification drives the accuracy improvement.
+- **Notation inconsistency**: The text refers to "α" in one place ("As the value of α approaches 0") but λ in Equation 5, creating confusion about which parameter controls early exit behavior.
+- **Limited theoretical depth**: While a probabilistic framework is presented, no convergence guarantees, optimality bounds, or regret analysis for the early exit strategy are provided. The paper would benefit from formal analysis of the accuracy-efficiency tradeoff.
+
+## Nice-to-Haves
+- Report inference latency benchmarks (ms/frame) comparing PrAViC against established online methods (TSM, Köpüklü et al., Co3D) to substantiate real-time claims.
+- Include multiple random seeds with mean ± std for main results to assess variance.
+- Provide a confusion matrix or case study analysis for different λ values to understand when the model makes correct/incorrect early decisions.
+- Complete the GitHub repository URL for reproducibility.
+
+## Novel Insights
+The paper's key insight is framing early-exit decisions in video classification through a probabilistic lens, where the decision threshold is modeled as a random variable uniformly distributed over [0,1]. This enables deriving a principled expected exit time formula (NE function) that can be incorporated into training. The asymmetric formulation (only penalizing late decisions for positive-class examples) is particularly well-suited for safety-critical applications where early detection of emergencies (heart failure, accidents) is paramount. The architectural insight that existing 3D CNN weights can be preserved with boundary replication and selective batch normalization is practically valuable for leveraging pretrained models.
+
+## Potentially Missed Related Work
+- **CoX3D (Hedegaard & Iosifidis, 2022)**: Already cited as most closely related work. The paper could benefit from more detailed comparison, particularly testing whether CoX3D with early-exit thresholds achieves similar NET values.
+- **Temporal Shift Module (TSM, Xiao et al., 2023)**: A key online video classification approach mentioned in related work but not included in experimental comparisons. Adding TSM as a baseline would strengthen comparisons against online state-of-the-art.
+
+## Suggestions
+- **Add a comprehensive computational efficiency table** comparing FLOPs, latency (ms/frame), and throughput across all methods in Table 1. This is essential for validating real-time claims.
+- **Conduct component-wise ablation**: Test separately (a) architectural changes only, (b) with vs. without NE loss, and (c) different aggregation strategies to identify which innovation drives the most improvement.
+- **Clarify notation** throughout: use λ consistently and ensure all equations are self-contained with clear variable definitions.
+
+---
+
+## A1HhtITVEi
+
+- GT: Accept (Poster) (avg 6.0)
+- Predicted: Accept (7.0/10)
+- Match: Yes
+
+### Final Review
+
+## Summary
+CheapNet proposes a hierarchical interaction-based model for protein-ligand binding affinity prediction that combines atom-level graph encoding with cluster-level representations via differentiable pooling, followed by bidirectional cross-attention between protein and ligand clusters. The model achieves state-of-the-art performance across diverse benchmarks (LBA, LEP, CSAR NRC-HiQ, CASF-2016, DUD-E) with only 1.33M parameters, significantly outperforming pre-trained models like BindNet (47M+ parameters), while demonstrating superior memory efficiency compared to atom-level attention methods.
+
+## Strengths
+- **Strong empirical results with efficiency**: CheapNet consistently outperforms all baselines across multiple benchmark categories, including regression (LBA), classification (LEP), and virtual screening (DUD-E), while using dramatically fewer parameters than pre-trained competitors. Ablation studies demonstrate consistent 3-12% improvements when adding the cluster-attention mechanism to different base encoders (GCN, EGNN, GIGN).
+- **Modular architecture**: The design is encoder-agnostic, supporting different base GNNs (GCN, EGNN, GIGN), enabling practitioners to trade off between efficiency and performance based on their needs.
+- **Memory efficiency with scalability**: The cluster-level attention mechanism substantially reduces memory footprint compared to atom-level attention approaches (GAABind, DEAttentionDTA), enabling larger batch sizes without OOM issues as demonstrated in Figure 3.
+- **Comprehensive evaluation**: The paper evaluates across cross-dataset, diverse protein (LBA 30%/60%), LEP, and external benchmarks (CSAR, CASF-2016), with additional extension to protein-protein affinity prediction, demonstrating broad applicability.
+- **Interpretability**: Cross-attention visualizations provide biological insights into which protein-ligand cluster interactions drive predictions, useful for drug discovery applications.
+
+## Weaknesses
+- **Missing wall-clock time benchmarks**: While "CheapNet" implies computational efficiency and Figure 3 demonstrates memory advantages, no training/inference time or FLOP comparisons are provided to substantiate speed claims. The "cheap" naming is somewhat misleading without this analysis.
+- **LEFTNet and GET not evaluated on cross-dataset benchmarks**: Table 1 (cross-dataset evaluation) omits LEFTNet and GET, the most directly comparable cluster-level baselines. These methods are only compared in Table 2 (diverse protein evaluation). The SOTA claim over cluster-level methods on the primary benchmark is therefore incomplete.
+- **Permutation invariance claim is overstated**: Section 3.4 claims permutation invariance, but the proof in Appendix A.3 only establishes invariance for the sum pooling operation. The MLP with residual connection applied after attention (Section 3.3.2) operates on the final representation, and while this is unlikely to break practical invariance, the claim should be more carefully qualified.
+- **Limited biological validation of clusters**: The paper demonstrates that learned clusters produce good predictions but does not validate that clusters correspond to known pharmacophores, functional groups, or binding motifs. Without this validation, the biological interpretation of cross-attention maps remains suggestive rather than confirmed.
+- **Inconsistent cluster size selection**: Different cluster quantiles perform best on different datasets (Q2 for v2013/v2016, Q4 for v2019), suggesting the optimal cluster count may be task-dependent and warrants more principled selection beyond median-based heuristics.
+
+## Nice-to-Haves
+- Runtime benchmarks (wall-clock training/inference time) to fully validate the "Cheap" efficiency claims
+- Systematic analysis of what chemical/binding properties learned clusters capture, with comparison to domain-motivated clusters (e.g., pharmacophores, structural motifs)
+- Failure case analysis alongside success cases to understand limitations
+- Formal statistical comparisons using paired tests rather than Z-tests against reported baselines from different sources
+
+## Novel Insights
+CheapNet demonstrates that dynamically learned cluster-level representations with cross-attention can effectively bridge the gap between atom-level detail and higher-order molecular interactions, achieving superior performance to both atom-centric models and predefined cluster-based approaches. The key insight is that end-to-end learned soft clustering, rather than geometrically-defined clusters, better captures functionally relevant groupings for binding prediction. The consistent 3-12% performance gains from adding cluster-attention across different base encoders (GCN, EGNN, GIGN) suggests this hierarchical attention mechanism is a broadly applicable contribution. The extension to protein-protein affinity prediction further indicates the framework's generalizability beyond protein-ligand complexes.
+
+## Potentially Missed Related Work
+- **OnionNet-2** (Zheng et al., 2021): A multiple-layer convolutional neural network using element-specific and radial cutoff-based intermolecular contact features that achieves strong performance with different feature engineering approach
+- **Pafnucy** (Stepniewska-Dziubinska et al., 2018): A CNN-based approach using 3D structure representations that established baselines on PDBbind that are worth comparing against in more detail
+- **EquiDock** (Ganea et al., 2022): SE(3)-equivariant graph neural network for protein-protein docking that shares architectural similarities with CheapNet's approach to protein-protein interactions
+
+## Suggestions
+- Add wall-clock time or FLOP comparisons to substantiate computational efficiency claims, which would strengthen the "CheapNet" naming and differentiate from memory-only efficiency
+- Include LEFTNet and GET results on the cross-dataset evaluation (v2013/v2016/v2019 core sets) using the same protocol to complete the SOTA comparison against cluster-level methods
+- Qualify the permutation invariance claim by clarifying it applies to the attention pooling output specifically, not necessarily to the final MLP prediction
+- Evaluate the distance-driven cluster interaction weighting proposed in Appendix A.19 as an ablation to determine whether incorporating 3D proximity priors into cross-attention provides measurable benefits
+
+---
+
+## TwJrTz9cRS
+
+- GT: Accept (Oral) (avg 8.0)
+- Predicted: Accept (7.0/10)
+- Match: Yes
+
+### Final Review
+
+## Summary
+This paper proposes HiRA (Hadamard High-Rank Adaptation), a novel parameter-efficient fine-tuning method that achieves high-rank updates through Hadamard product with frozen pretrained weights (ΔW = W₀ ⊙ AB where A∈ℝ^{d×r}, B∈ℝ^{r×k}). The key insight is that unlike LoRA's matrix multiplication update (Rank ≤ r), the Hadamard product enables higher rank (upper bounded by Rank(W₀) × r), allowing greater expressiveness while maintaining the same number of trainable parameters and computational complexity. Experiments on commonsense reasoning, dialogue generation, and mathematical reasoning tasks demonstrate consistent improvements over LoRA, DoRA, and MoRA.
+
+## Strengths
+- **Novel methodological contribution**: First work to leverage the Hadamard product specifically for high-rank adaptation in PEFT. The approach provides a theoretically grounded solution to LoRA's rank limitation.
+- **Strong and consistent empirical results**: HiRA outperforms all baselines across three diverse task categories and two model sizes. For example, HiRA achieves 86.72% average accuracy vs DoRA's 85.20% (+1.52 points) on commonsense reasoning with Llama-3-8B, and 70.81% vs LoRA's 65.89% (+4.92 points) on GSM8K mathematical reasoning.
+- **Practical advantages over LoRA**: Same computational complexity but actually lower GPU memory consumption (61.49GB vs 65.48GB) and faster training (14h vs 15h on Llama-3-8B). Like LoRA, HiRA merges seamlessly into pretrained weights, avoiding inference overhead.
+- **Comprehensive ablation studies**: Thorough analysis of rank behavior (Figures 1, 7), singular value distributions (Figures 4, 5), impact of rank dimension r (Figure 6), transformer placement (Table 5), and combination with LoRA (Table 6). The HiLoRA variant achieving 87.48% demonstrates complementary benefits.
+- **Sound theoretical foundation**: Rank analysis correctly derives the upper bound Rank(W₀ ⊙ AB) ≤ Rank(W₀) × Rank(AB). Theorem 1 provides expressive power analysis showing HiRA's approximation error depends on σ_{r+1}(E ⊘ W₀) rather than σ_{r+1}(E).
+
+## Weaknesses
+- **No error bars reported**: The paper states "HiRA is evaluated over 5 runs with different random seeds" but provides no statistical measures (standard deviation, confidence intervals) in any table. The validation set contains only 120 samples, making variance assessment critical for interpreting marginal improvements.
+- **Limited model diversity**: All experiments use only Llama-family models (Llama-2-7B, Llama-3-8B). No evaluation on other architectures (Mistral, Qwen, encoder models like BERT) to support generalization claims. ICLR expects broader evaluation.
+- **Missing comparison with recent PEFT methods**: LoRA+ (Hayou et al., 2024), ReLoRA (Lialin et al., 2023), and other high-rank approaches are mentioned in related work but not included as baselines, limiting competitive context.
+- **No full fine-tuning baselines for all tasks**: While FFT singular values are analyzed in ablation (Figure 4, 5), downstream performance of full fine-tuning is reported only for commonsense reasoning. For CONVAI2 and math tasks, readers cannot assess whether HiRA's gains over LoRA are meaningful relative to full fine-tuning.
+- **Theorem 1 assumption underacknowledged**: The analysis assumes W₀ contains no zeros to avoid division by zero in E ⊘ W₀. While pretrained weights typically have near-zero rather than exact-zero values, this limitation is buried in Appendix B and not prominently discussed.
+
+## Nice-to-Haves
+- Evaluate on larger models (e.g., Llama-3-70B) to verify scaling behavior.
+- Test on additional math benchmarks (GSM8K-Hard, MATH) alongside GSM8K.
+- Compare HiRA against LoRA at comparable *effective* rank (e.g., HiRA r=16 vs LoRA r=128+) rather than only trainable parameters, to validate the "high-rank adaptation" claim directly.
+- Ablation on nonlinearities: compare W₀ ⊙ AB against element-wise scaling with learned masks to isolate whether the Hadamard product with W₀ specifically matters.
+- Analyze what singular directions HiRA captures that LoRA misses through error analysis on tasks where methods disagree.
+
+## Novel Insights
+The paper reveals that Hadamard product with frozen pretrained weights provides an elegant solution to LoRA's rank bottleneck. By expressing ΔW = W₀ ⊙ (AB) where W₀ is frozen and AB is low-rank, HiRA achieves effective rank ~2837 vs LoRA's ~32 with identical parameter count (Figure 1). The theoretical insight that Rank(P ⊙ Q) ≤ Rank(P) × Rank(Q) enables high-rank adaptation under PEFT constraints—addressing the fundamental limitation that LoRA's update ΔW = L₁L₂ has Rank ≤ r. The gradient analysis revealing that HiRA's gradients incorporate W₀ information (while LoRA's do not) explains why HiRA can better leverage pretrained knowledge. The HiLoRA combination further demonstrates that HiRA and LoRA capture complementary aspects, with the hybrid achieving the best overall performance.
+
+## Potentially Missed Related Work
+- LoRA+ (Hayou et al., 2024): Low-rank adaptation with differential learning rates, mentioned in related work but not compared in experiments.
+- ReLoRA (Lialin et al., 2023): High-rank training through low-rank updates, directly relevant to HiRA's goals but excluded from baselines.
+- AdaLoRA: Adaptive rank allocation for LoRA, a natural comparison point for parameter-efficient adaptation.
+
+## Suggestions
+The authors should add error bars from the 5 runs to main tables and consider evaluating on at least one non-Llama model architecture to strengthen generalization claims. Comparing HiRA against LoRA at matched effective rank (rather than just trainable dimension) would more directly validate the "high-rank adaptation" contribution.
+
+---
+
+## H25xduunIK
+
+- GT: Reject (avg 5.8)
+- Predicted: Accept (6.0/10)
+- Match: No
+
+### Final Review
+
+## Summary
+This paper introduces "Report Cards" — natural language summaries that describe LLM capabilities on specific skills or topics — as a complementary approach to quantitative benchmarks. The authors propose a three-dimensional evaluation framework (specificity via contrastive accuracy, faithfulness via Elo correlation, interpretability via human scoring) and develop PRESS, an iterative algorithm for generating Report Cards. Experiments across MMLU, Adv. AI Risk, and Chinese Grammar datasets demonstrate that Report Cards capture substantive model capabilities and outperform one-pass prompting baselines.
+
+## Strengths
+- **Well-motivated problem framing**: The paper clearly articulates limitations of quantitative benchmarks (Goodhart's law, overfitting, poor interpretability) and positions Report Cards as a principled bridge between raw outputs and summary statistics.
+- **Comprehensive evaluation framework**: The three-metric approach systematically addresses key desiderata. Contrastive accuracy measures discriminative power, Elo correlation validates faithfulness against ground truth, and human scoring directly assesses interpretability.
+- **Strong empirical validation**: Extensive ablation studies cover format choices, iterative refinement, guesser model capabilities, chain-of-thought effects, and de-stylization robustness — providing a thorough understanding of what drives Report Card effectiveness.
+- **Compelling de-stylization analysis**: The experiments demonstrating that Report Cards maintain accuracy on de-stylized completions while few-shot baselines degrade significantly provide convincing evidence that Report Cards capture substantive capabilities rather than surface stylistic artifacts.
+- **PRESS demonstrates genuine iterative improvement**: The ablation showing consistent gains from iteration 1 to iteration 5 across all topics validates the progressive refinement approach.
+
+## Weaknesses
+- **Circularity concern in faithfulness metric for open-ended tasks**: For CN Grammar and Adv. AI Risk, both Card Elo and Oracle Elo rely on the same LLM judge (gpt-4o-mini), meaning R² between them measures judge consistency rather than ground-truth accuracy. While MMLU uses ground truth for Oracle Elo, the open-ended task results should be framed as "judge-consistency" rather than true faithfulness.
+- **Limited human evaluation for interpretability**: With only 230 annotations from 18 volunteers, the interpretability claims rest on thin empirical ground. The weak LLM-human alignment (Spearman 0.27-0.40) further limits confidence in automated scoring.
+- **PRESS underperforms few-shot on safety/ethics domains**: On Adv. AI Risk (Corrigible-Less-HHH: 90% vs 74%), the paper attributes this to stylistic artifacts but doesn't provide a principled way to determine which method to use in practice. This represents a significant scope limitation.
+- **Specificity metric heavily dependent on guesser capability**: Table 7 shows contrastive accuracy varying by ~35 percentage points (e.g., HS Math: 49%→84%) depending on the guesser model. The metric conflates Report Card quality with guesser intelligence, making cross-method comparisons difficult.
+
+## Nice-to-Haves
+- **User studies with domain experts**: Testing whether experts (physics teachers, ethicists) make better predictions with Report Cards would directly validate the human utility claim.
+- **Failure case analysis**: Examples where the guesser incorrectly matches models despite having Report Cards would clarify whether specificity failures stem from Report Cards or guesser limitations.
+- **Cross-domain generalization tests**: Whether Report Cards for MMLU Physics predict behavior on related but unseen tasks (e.g., AP Physics) would demonstrate practical value beyond the training distribution.
+- **Report Card content analysis**: A breakdown of how often Report Cards mention actual capabilities vs. stylistic traits vs. generic statements would clarify what the summaries actually contain.
+
+## Novel Insights
+The paper's core insight — that iterative summarization by an LLM evaluator can capture nuanced model capabilities in human-readable form — is both intuitive and underexplored. The de-stylization experiments provide particularly valuable evidence: by paraphrasing model completions and showing that Report Cards remain accurate while few-shot baselines collapse, the paper convincingly demonstrates that the summaries capture substantive behaviors rather than surface artifacts. The PRESS algorithm's progressive refinement design, which synthesizes partial summaries through iterative progression and refinement steps, shows consistent improvement across iterations — validating the intuition that summarizing subsets of examples then merging captures more nuanced behavior than one-pass approaches.
+
+## Potentially Missed Related Work
+- **QualEval (Murahari et al., 2024)**: A framework improving traditional metrics with qualitative insights for model improvement — related but complementary, as this work focuses on generating reports for human interpretation rather than model improvement.
+- **Self-Challenge (Chen et al., 2024)**: A framework where LLMs identify their own limitations by generating challenging test cases — relevant for understanding systematic weaknesses.
+- **Model Cards for Language Models (Mitchell et al., 2019; Arnold et al., 2019)**: The paper discusses these but could more clearly differentiate Report Cards (context-specific, skill-based summaries) from Model Cards (intended use, broader documentation).
+
+## Suggestions
+- **Redesign faithfulness evaluation for open-ended tasks**: Rather than comparing Card Elo to Oracle Elo (both using LLM judges), directly validate by having humans assess whether Report Card-based model rankings match their own judgments from viewing raw completions. This would provide genuine ground-truth faithfulness validation.
+- **Expand human evaluation substantially**: Recruit domain experts (not just crowd workers) for technical topics and collect at least 5-10x more annotations to support interpretability claims robustly.
+
+---
+
+## lHuLMmz3PY
+
+- GT: Reject (avg 3.5)
+- Predicted: Reject (4.0/10)
+- Match: Yes
+
+### Final Review
+
+## Summary
+LLM-Exp proposes using large language models to dynamically adjust policy exploration in reinforcement learning by periodically analyzing action-reward trajectories and generating environment-specific probability distributions for exploration. The method is designed as a plug-in compatible with DQN and its variants, demonstrated on Atari games with an average 37.27% improvement in human-normalized scores.
+
+## Strengths
+- **Novel contribution**: Leveraging LLM reasoning capabilities for adaptive, environment-specific policy exploration is a genuinely new direction in RL research that addresses the rigidity of prefixed stochastic exploration methods.
+- **Comprehensive empirical evaluation**: The paper tests 15 Atari environments, compatibility with 6 DQN variants (DQN, PER-DQN, Dueling-DQN, Rainbow, CURL, Double-DQN), and 5 different LLMs, demonstrating broad applicability of the approach.
+- **Thoughtful design trade-off analysis**: Ablation studies on the two-stage prompting design, action sampling density (M), and exploration adjusting interval (K) provide valuable insights into performance versus computational cost trade-offs.
+- **Practical design considerations**: Text-only inputs reduce computational overhead and enable compatibility with both multimodal and text-only LLMs, making the approach accessible.
+- **Reproducibility**: Code is open-sourced with detailed hyperparameters, prompts, and task descriptions provided in appendices.
+
+## Weaknesses
+- **Short training horizon**: The paper uses 100k-500k training steps, approximately 100-1000x shorter than standard Atari benchmarks (typically 10-50M frames). This raises questions about whether improvements persist at scale and whether results are robust enough to validate the approach.
+- **Limited statistical rigor**: Results are averaged across only 3 random seeds without statistical significance tests or confidence intervals. With the high variance inherent in RL experiments, some reported improvements may not be statistically meaningful.
+- **Incomplete mechanism specification**: The paper does not clearly specify how the LLM-generated probability distribution integrates with the existing ε-greedy mechanism. The exact action selection policy π(a|s) is not formally defined, leaving ambiguity about whether the LLM distribution replaces, supplements, or competes with ε-greedy exploration.
+- **Unexplained failure cases**: Qbert (-2.80%) and Seaquest (-4.09%) show performance degradation. The paper does not analyze why the LLM-generated exploration strategy hurts in these environments, limiting understanding of the method's reliability and failure modes.
+- **Hand-crafted task descriptions**: The detailed prompts (e.g., specific reward values, game mechanics) require substantial manual engineering, which may limit practical deployability and raise questions about whether the LLM is reasoning from the data or simply following instructions.
+- **LLM output reliability**: With temperature=1.0, outputs are stochastic. The paper does not verify that outputs are valid probability distributions or discuss handling of malformed outputs, which could impact training stability.
+
+## Nice-to-Haves
+- Compare against more sophisticated exploration baselines such as Noisy-DQN, intrinsic curiosity modules, or count-based exploration methods to contextualize the method's contribution.
+- Analyze how the LLM-generated exploration distribution evolves over training to validate the core claim of adaptive exploration.
+- Test a simple rule-based baseline (e.g., "if reward decreases, increase exploration") to isolate whether the LLM's linguistic reasoning capability provides value over trivial statistical approaches.
+- Evaluate with finer granularity on K (update interval) to better understand the performance-cost trade-off curve.
+- Provide wall-clock time and monetary cost estimates for the LLM calls to assess practical deployability.
+
+## Novel Insights
+The paper presents the compelling idea that LLMs can serve as adaptive exploration strategy generators by analyzing action-reward trajectories and reasoning about the agent's learning status. The observation that purely textual prompts (without visual state information) can still guide effective exploration in pixel-based environments suggests that LLMs can extract meaningful strategic insights from behavioral data alone. The finding that GPT-4o mini outperforms GPT-4o (a larger model) is intriguing and hints that overly sophisticated models may over-fit to specific actions rather than providing appropriately diverse exploration distributions. This work opens a promising research direction at the intersection of LLM reasoning and RL exploration, though the practical viability remains uncertain given the computational overhead of per-episode LLM calls.
+
+## Potentially Missed Related Work
+- LLM-based reward shaping methods (Text2Reward, Wayve et al.) — while related work mentions reward function design, direct comparison with these methods could contextualize the exploration contribution.
+- Learned exploration strategies with intrinsic motivation (ICM, RND) — stronger baselines for adaptive exploration beyond prefixed stochastic processes.
+
+## Suggestions
+- Clarify the exact integration mechanism between the LLM-generated distribution and ε-greedy action selection with pseudocode or precise mathematical formulation.
+- Extend training to standard Atari lengths (at least 10M frames) for a subset of environments to validate that improvements are robust at scale.
+- Add a simple rule-based baseline to demonstrate that the LLM's reasoning capability is genuinely contributing value beyond simple heuristics.
+
+---
+
+## e1Z4NCQ146
+
+- GT: Reject (avg 5.2)
+- Predicted: Accept (7.0/10)
+- Match: No
+
+### Final Review
+
+## Summary
+ProTrain is a training system that automatically configures memory management policies (CPU offloading, gradient checkpointing, ZeRO techniques) for LLM training on memory-constrained hardware. It introduces a dual-chunk system for model states and an interleaved activation management strategy, combined with memory-aware profiling and cost models to search for optimal configurations. The system demonstrates 1.43× to 2.71× throughput improvements over DeepSpeed, Colossal-AI, and FSDP, enabling training of models up to 75B parameters on a single A100 GPU.
+
+## Strengths
+- **Well-motivated problem**: The paper clearly identifies a genuine pain point—manual tuning of memory management settings requiring substantial expertise—and demonstrates concrete impact with the example of GPT-10B on RTX 3090 using only 35.6% GPU memory with default settings.
+- **Clean system architecture**: The three-component design (Automatic Memory Management, Memory-Aware Runtime Profiler, High-Performance Training Engine) is well-structured with distinct responsibilities, and the running example in Section 3 effectively illustrates the memory management policy.
+- **Comprehensive evaluation**: Experiments span multiple model architectures (GPT-2, OPT, Mistral, LLaMA variants) across three hardware platforms (RTX 3090, A100, AMD MI300X), with thorough throughput, scalability, and ablation studies.
+- **Accurate cost models**: The paper provides mathematical formulations for runtime (within 4% error) and peak memory estimation (within 7% error), validated against actual measurements in Figure 5(b) and Appendix D.4.
+- **Ablation validation**: Component-wise ablation studies quantify the contribution of each technique (dual-chunk: 1.1× slowdown, interleaved: 1.04× slowdown, overlapped parameter update: 1.22× slowdown when disabled).
+
+## Weaknesses
+- **No convergence validation**: The paper claims "ProTrain does not compromise accuracy" but presents no experiments validating model quality—no training loss curves, perplexity comparisons, or downstream task performance. This is a critical omission that undermines the accuracy claim.
+- **Baseline comparison fairness**: FSDP's poor single-GPU results (only 1B model) suggest potential misconfiguration. The paper acknowledges DeepSpeed's configurations were "fine-tuned" but doesn't specify exact values, and explicitly notes FSDP uses "default Adam optimizer" which is less efficient than ProTrain's optimized variants. This raises questions about whether performance gains derive from the method or better hyperparameter selection.
+- **Limited multi-node evaluation**: ProTrain targets democratizing LLM access, yet evaluations cover only 1-4 GPUs with a single preliminary 2-node experiment. The paper acknowledges this limitation but doesn't quantify performance at larger scales where cross-GPU communication overhead becomes significant.
+- **No statistical rigor**: Throughput measurements are single-run values without variance or confidence intervals. The paper should explicitly state that results are stable across runs or include error bars.
+
+## Nice-to-Haves
+- **Configuration transferability analysis**: Show whether ProTrain's automatically found configurations for one model transfer to similar architectures, or quantify what profiling overhead is needed for new models.
+- **Memory timeline visualization**: Figure 2 shows conceptual layout but not actual measured memory usage over time for ProTrain vs. baselines during a training iteration.
+- **Failure case analysis**: Demonstrate robustness by showing scenarios where ProTrain underperforms or encounters OOM errors.
+
+## Novel Insights
+ProTrain's key insight is recognizing that the first few transformer layers and subsequent layers have fundamentally different optimal memory management strategies due to execution order: the first chunk executes first in forward pass (so offloading would block computation with no remaining backward pass to hide parameter update latency), while later chunks can overlap data transfers with computation. This dual-chunk intuition is both technically sound and non-obvious, leading to the persistent/non-persistent chunk abstraction. Similarly, the interleaved activation management (alternating swapping blocks with checkpointing blocks) provides a structured approach to balancing communication overlap against memory savings that is more practical than tensor-level optimization while being more efficient than uniform checkpointing.
+
+## Potentially Missed Related Work
+- **PackedLLM** (or similar recent works on memory-efficient LLM serving/training): The related work section covers major frameworks (DeepSpeed, Colossal-AI, FSDP, Megatron-LM) but may not cite recent auto-tuning approaches that also aim to automate memory management configuration.
+
+## Suggestions
+- Add end-to-end convergence experiments comparing perplexity or downstream task performance between ProTrain and baselines on at least one model (e.g., GPT-2) over a full training run to substantiate the "no accuracy compromise" claim.
+- Document exact baseline configurations in sufficient detail for reproducibility, or compare against AutoGPTQ/autotuning systems to demonstrate ProTrain's advantages more rigorously.
+- Include error bars or explicitly note single-run measurements to address statistical rigor concerns.
+
+---
+
+## CU8CNDw6Vv
+
+- GT: Reject (avg 5.2)
+- Predicted: Accept (7.0/10)
+- Match: No
+
+### Final Review
+
+## Summary
+This paper addresses a critical meta-scientific problem in ML: spurious correlations benchmarks (e.g., Waterbirds, CelebA, NICO++) disagree on which mitigation methods perform best, sometimes producing negatively correlated rankings. The authors introduce three desiderata (ERM Failure, Discriminative Power, Convergent Validity) to assess benchmark validity, propose a model-dependent statistic K measuring task difficulty due to spurious correlations, evaluate 8 benchmarks and 22 methods, and provide practical guidance for practitioners.
+
+## Strengths
+- **Important empirical finding**: The paper convincingly demonstrates that benchmark disagreement is substantial and consequential—Figure 1b shows the best method on Waterbirds is the second-worst on NICO++. This is a genuine practical barrier for researchers and practitioners.
+- **Principled framework**: The three desiderata provide a systematic, theoretically-grounded (drawing on Jacobs & Wallach, 2021) approach to evaluating benchmark validity that can guide future work.
+- **Methodological contribution**: The K statistic improves on mutual information by accounting for model learnability of both spurious and core features. Validation through synthetic experiments (varying confounder strength, noise levels) is thorough, and robustness to hyperparameters/reference method choice is demonstrated.
+- **Comprehensive evaluation**: Analysis spans 8 SubpopBench benchmarks, 22 mitigation methods, and two sanity-check benchmarks (Citybirds, AvP), with extensive appendices supporting the methodology.
+- **Actionable practical guidance**: Despite limited validation, the paper provides concrete recommendations (filter to valid benchmarks, use closest benchmark) that address a real practitioner need.
+
+## Weaknesses
+- **Limited validation of practical recommendations**: The core practical claims—that averaging over valid benchmarks (6/9 improvements) and using the closest benchmark (5/8 improvements) outperforms standard averaging—are based on small numbers without statistical significance tests. Dollar Street validation yields a marginal 0.6 percentage point improvement (58.65→59.25), which is likely within noise. Claims should be framed more cautiously or validated with larger experiments.
+- **Architecture dependence unexamined**: K and benchmark validity assessments are computed only with ResNet-50 (vision) and BERT (language). The paper acknowledges architecture dependence but does not explore whether conclusions transfer across architectures (e.g., ViT, CLIP). Given that benchmark validity is the paper's main contribution, demonstrating robustness across architectures is essential.
+- **Circularity in validity assessment**: Evaluating benchmarks against each other (Convergent Validity) creates subtle circularity—if all benchmarks are flawed, there is no ground truth anchor. The Citybirds/AvP sanity checks partially address this but do not fully resolve it.
+- **No comparison to baselines for closest-benchmark strategy**: The paper does not report what happens with naive alternatives (always picking a fixed benchmark, random selection). Without these baselines, the practical value of the approach is unclear.
+- **Convergent Validity assumption underexplained**: The paper assumes valid benchmarks should agree, but the theoretical justification for why this correlates with "true" construct validity is thin. Additional analysis (e.g., ruling out confounders like similar noise floors or class imbalance) would strengthen this claim.
+
+## Nice-to-Haves
+- Ablation analyzing which combinations of desiderata are necessary/sufficient for benchmark filtering
+- Formal statistical significance tests for the practical recommendation claims
+- Investigation of why text benchmarks (CivilComments, MultiNLI) fail to achieve Convergent Validity
+- Analysis of whether robust methods (CRT, ReWeight, ReSample, GroupDRO) share algorithmic properties, to help practitioners generalize to new methods
+
+## Novel Insights
+This paper's key insight is that benchmark disagreement in spurious correlations research is not merely a nuisance to be averaged over, but a symptom of invalid measurement tools. The three desiderata framework reframes benchmark evaluation from "which methods perform best" to "which benchmarks actually measure what we care about." The K statistic's ability to capture model-dependent task difficulty (rather than just data-level mutual information) is a useful conceptual contribution, revealing that low-K benchmarks like Dollar Street may have other failure modes beyond spurious correlations. The finding that only a handful of methods (CRT, ReWeight, ReSample, GroupDRO) show both high performance and low variability across benchmarks is practically valuable.
+
+## Potentially Missed Related Work
+- None identified—the paper adequately covers SubpopBench (Yang et al., 2023), WILDS (Koh et al., 2021), and related benchmark validity work (Jacobs & Wallach, 2021; Blodgett et al., 2021).
+
+## Suggestions
+1. **Strengthen practical recommendation evidence**: Conduct more experiments or reframe claims as exploratory/hypothesis-generating rather than recommendations, given the small margins and lack of statistical significance.
+2. **Add architecture ablation**: Test K and benchmark validity with at least one alternative architecture (e.g., ViT or CLIP for vision) to demonstrate transferability of conclusions.
+3. **Include baseline comparisons**: Report performance of naive strategies (fixed benchmark, random) for the closest-benchmark selection to contextualize the 5/8 improvement rate.
+
+---
+
+## R1hIXdST22
+
+- GT: Accept (Spotlight) (avg 7.5)
+- Predicted: Accept (8.0/10)
+- Match: Yes
+
+### Final Review
+
+## Summary
+MR.Q presents a general-purpose model-free deep RL algorithm that learns state-action embeddings through model-based objectives (predicting rewards, dynamics, and terminations), enabling approximately linear representations of the value function while using non-linear function approximation for value estimation. The method achieves competitive aggregate performance across 118 environments spanning 4 diverse benchmarks (Gym locomotion, DMC proprioceptive, DMC visual, Atari) with a single fixed set of hyperparameters, while being computationally more efficient than model-based alternatives.
+
+## Strengths
+- **Comprehensive empirical evaluation**: Testing across 4 benchmarks and 118 environments with rigorous bootstrap confidence intervals is exemplary for RL research, directly addressing the paper's "general-purpose" claim.
+- **Thorough design study**: The ablation experiments validate that each design choice contributes meaningfully—particularly the finding that "No MR" (removing model-based representations) causes catastrophic degradation (-0.07 to -0.78) across all benchmarks, confirming the core contribution.
+- **Theoretical grounding with practical relevance**: Connecting modern dynamics-based representation learning to classical linear MDP theory (Parr et al., 2008) provides principled justification, while the design study empirically validates the theoretical relaxations.
+- **Computational efficiency**: Figure 1 demonstrates MR.Q uses fewer parameters (4.1M vs 187.3M for DreamerV3) and achieves faster training (1.9k vs 236 FPS on DMC), making general-purpose RL more accessible.
+- **Valuable community insight**: The finding that "MSE reward loss" and "No unroll" improve Gym but degrade Atari performance highlights benchmark-specific overfitting in RL research, encouraging more rigorous multi-domain evaluation.
+
+## Weaknesses
+- **Substantial Atari performance gap**: MR.Q achieves 2.54 mean human-normalized score versus DreamerV3's 3.74 on Atari—a 32% gap. The paper acknowledges this but provides no analysis of which games drive this failure or why model-free approaches struggle relative to model-based ones on this specific benchmark.
+- **Theoretical assumptions significantly relaxed**: Theorem 1 shows equivalence under linear assumptions, but the practical algorithm relaxes this substantially (state-dependent dynamics target, target networks, non-linear value function). Theorem 3 requires exact MDP homomorphism (Equation 11), which cannot hold with neural networks. The paper does not quantify how close learned representations come to satisfying this condition, leaving a gap between theory and practice.
+- **Incomplete comparison with TD7**: TD7 (Fujimoto et al., 2024), from the same first author, is presented as a state-of-the-art Gym baseline but appears in DMC tables without discussion. Given TD7's strong performance (1.57 mean TD3-normalized vs MR.Q's 1.46), understanding this gap would strengthen claims about MR.Q's contribution.
+
+## Nice-to-Haves
+- **Compute-normalized comparison**: The paper claims MR.Q is "simpler and less expensive" but provides only FPS metrics. A wall-clock time comparison with matched compute budgets would strengthen efficiency claims.
+- **Scaling study**: The paper targets "general-purpose" learning but never shows how MR.Q scales with embedding dimension or data, leaving unclear whether the single hyperparameters are truly robust across scales.
+- **Per-environment analysis in main paper**: Aggregate results dominate the presentation; highlighting specific failure cases (e.g., MontezumaRevenge at ~50, Skiing at -30000) would help readers understand practical limitations.
+
+## Novel Insights
+The paper's central insight—that model-based representation learning objectives (predicting rewards, dynamics, and terminations) can enable general-purpose model-free RL with a single hyperparameter set—is both theoretically grounded and empirically validated. The design study reveals a crucial asymmetry: techniques that improve performance on one benchmark often hurt others (e.g., MSE reward loss helps Gym but devastates Atari performance with -0.79 degradation). This suggests that prior RL research may have been inadvertently overfitting hyperparameters to specific benchmarks, and that multi-domain evaluation is essential for understanding what truly generalizes. The finding that non-linear models do not improve over the linear MDP predictor further validates the theoretical claim that maintaining approximately linear representations is beneficial.
+
+## Potentially Missed Related Work
+None identified—the paper provides comprehensive coverage of dynamics-based representation learning, general-purpose RL, and state abstraction literature.
+
+## Suggestions
+The Atari performance gap warrants deeper investigation. Adding an analysis of which specific Atari games fail and why would either guide improvements to MR.Q or provide principled reasons why model-free methods cannot match model-based approaches on certain discrete-action pixel domains, strengthening the paper's contribution either way.
+
+---
+
+## VB8xHF1Rdl
+
+- GT: Reject (avg 3.5)
+- Predicted: Accept (6.0/10)
+- Match: No
+
+### Final Review
+
+## Summary
+This paper introduces an information-theoretic framework for quantifying representational structure in large language models, proposing three measures—regularity, variation, and disentanglement—derived from linguistic concepts. The core technical contribution is "soft entropy," a novel, differentiable, and memory-efficient method for entropy estimation in high-dimensional vector spaces via projection to the unit sphere with softmax normalization. The authors analyze training dynamics over 2M steps, scaling effects across models from 14M to 12B parameters, and demonstrate correlations between pre-training representational structure and post-fine-tuning GLUE benchmark performance.
+
+## Strengths
+- **Novel entropy estimation method**: The soft entropy approach (Section 4) provides a practical alternative to binning or clustering, being fully differentiable, memory-efficient, and parallelizable while performing comparably to existing methods on reference distributions. This enables analysis of large-scale models that would be computationally prohibitive with prior approaches.
+- **Comprehensive experimental scope**: The analysis spans training dynamics with 5 initializations over 2M steps, scaling effects across the Pythia suite (14M–12B), controlled comparisons of depth vs. dimensionality in BERT variants, and correlation analyses with GLUE tasks using 25 different initializations. This breadth of experimentation strengthens confidence in the framework's utility.
+- **Linguistic grounding and interpretability**: Connecting representational structure to linguistic concepts (regularity/disentanglement/variation) provides intuitive interpretation and situates the work within a broader scientific context, drawing parallels between language as a structured mapping system and learned representations.
+- **Subspace entropy for fair model comparison**: The multi-headed subspace entropy approach enables meaningful comparisons between models of different dimensionalities by computing entropy over equally-sized subspaces—a principled solution to a real methodological challenge in comparing models with different hidden sizes.
+
+## Weaknesses
+- **Overstated predictive claims**: The paper claims to "predict downstream task performance...before fine-tuning," but demonstrates only Spearman correlations (r ≈ 0.17–0.31 for QNLI). This is correlational analysis, not prediction—nor is it truly out-of-distribution given the in-domain Wikipedia data. The language should be toned down to reflect this, and the practical utility of correlations explaining ~2-10% of variance should be contextualized more clearly.
+- **Soft entropy hyperparameters lack principled justification**: The paper uses 50 bins and rescales distances to [-100, 100], acknowledging this is analogous to kernel bandwidth in KDE. However, no guidance is provided for choosing these values, and no robustness analysis demonstrates that conclusions hold across reasonable hyperparameter settings. This leaves uncertainty about reproducibility.
+- **No ablation of key design choices**: The paper does not systematically ablate the number of bins, the rescaling factor, or distance metrics (cosine vs. Euclidean), despite acknowledging sensitivity to these choices. This leaves uncertainty about which findings are robust to implementation details.
+- **Limited theoretical grounding for soft entropy**: While the paper draws connections to Jaynes' limiting density of discrete points and kernel density estimation, the mathematical relationship between soft entropy and true discrete entropy is not rigorously established. The claim that "cross-dimensional dependencies are relatively small" when using subspace decomposition is asserted rather than demonstrated with supporting analysis.
+
+## Nice-to-Haves
+- **Direct comparison with probing baselines**: The paper positions itself as a "non-parametric approach to probing" but provides minimal comparison with established probing methods (e.g., logistic regression probes, MDL probing) on the same downstream tasks. Such comparisons would strengthen the value proposition.
+- **Validation of linguistic interpretation**: The paper uses token/bigram/trigram labels as proxies for lexical and contextual information but does not validate that these measures correlate with independently-measured linguistic properties (e.g., syntactic structure, semantic similarity). The linguistic framing would benefit from empirical grounding.
+- **Convergence analysis**: Using 256K sentences (or 2.5M) without analyzing whether estimates converge with more data leaves questions about sampling sufficiency unaddressed.
+- **Visualizations of representation structure**: Concrete examples showing how representations for different labels are distributed in space (e.g., t-SNE/UMAP) would make the abstract measures tangible.
+
+## Novel Insights
+The paper's most compelling insight is the systematic characterization of training dynamics as a shift from token-level alignment to contextual representation—early training rapidly aligns with tokens, followed by contextualization where token disentanglement drops while bigram/trigram disentanglement increases. The finding that larger models proportionally compress representations in subspaces while expanding overall capacity is intriguing and connects meaningfully to Shannon's source coding intuition. The observation that representational structure at pre-training correlates with post-fine-tuning performance across multiple GLUE tasks—even when estimated on non-task data—is potentially valuable for understanding what structural properties support generalization.
+
+## Potentially Missed Related Work
+- Information bottleneck theory applications to transformers (Shwartz-Ziv & Tishby, 2017; Saxe et al., 2019) — while cited, a more direct comparison of methodology and findings would strengthen positioning
+- Recent work on anisotropy and representation geometry in LLMs that may provide additional validation or alternative interpretations of the entropy measures
+
+## Suggestions
+The paper should reframe "predicting downstream performance" as "correlating pre-training structure with downstream performance" and include ablation studies for key hyperparameters (bins, scaling factor) to demonstrate robustness. Adding a dedicated limitations section discussing the assumptions underlying soft entropy and subspace decomposition would strengthen the paper for ICLR review.
+
+---
+
+## EXnDAXyVxw
+
+- GT: Reject (avg 5.0)
+- Predicted: Accept (7.0/10)
+- Match: No
+
+### Final Review
+
+## Summary
+This paper introduces QT-DoG (Quantization-aware Training for Domain Generalization), demonstrating that weight quantization naturally serves as an implicit regularizer that promotes flatter minima in the loss landscape, thereby improving out-of-distribution generalization. The authors further propose EoQ (Ensemble of Quantization), which ensembles multiple quantized models to achieve state-of-the-art performance on the DomainBed benchmark (68.4% average) while being approximately 4× smaller than full-precision ensemble methods. The work represents the first explicit exploration connecting quantization techniques with domain generalization.
+
+## Strengths
+- **Novel intersection of fields**: First work to explicitly connect quantization (typically used for model compression) with domain generalization, providing a fresh perspective on both areas. This reframe of quantization as a training regularizer is genuinely insightful.
+- **Comprehensive empirical validation**: Extensive experiments across 5 DomainBed datasets (PACS, VLCS, OfficeHome, TerraIncognita, DomainNet), multiple architectures (ResNet-50, ResNeXt-50, DeiT-Small), and ablation studies covering quantization algorithms (LSQ, INQ, OBC), bit precision (5-8 bits), and combinations with other DG methods (CORAL, MixStyle).
+- **Resource efficiency with improved accuracy**: EoQ achieves SOTA 68.4% average accuracy while maintaining a memory footprint comparable to single-model methods (1.1×), substantially smaller than ensemble competitors like DiWA (60×) or EoA (6×).
+- **Training stability insight**: Figure 3 convincingly demonstrates that quantization stabilizes OOD performance during training—a valuable practical insight where vanilla ERM shows unstable OOD performance while quantized models remain stable.
+- **Flatness verification**: Figure 2 empirically validates that QT-DoG finds flatter minima than ERM, SAM, and SWA, achieving comparable flatness to SWAD despite being 75% smaller.
+
+## Weaknesses
+- **Non-monotonic bit-precision relationship unexplained**: Table 8 shows 7-bit > 8-bit > 6-bit > 5-bit performance, contradicting a straightforward "more noise = more regularization" narrative. The paper never explains why 7-bit is optimal rather than 8-bit (less noise) or 5-bit (more noise). This undermines the core theoretical story and suggests the mechanism is more complex than presented.
+- **Quantization timing (when to quantize) poorly motivated**: The paper quantizes at 2000 steps with Table 13 showing a U-shaped curve (2000 > 1000 > 3000 > 4000) that is never explained. This critical hyperparameter leaves the method partially unreproducible—practitioners have no principled guidance for selecting quantization timing on new datasets.
+- **Missing ablation separating quantization from ensemble effects**: EoQ combines both quantization and ensembling, but the paper does not isolate their individual contributions. Comparing EoQ against an ensemble of full-precision models (e.g., ERM Ens. or DiWA-style averaging) would clarify whether quantization specifically enables the improvement or if diversity from multiple initializations is sufficient. This is a significant gap for understanding the mechanism.
+
+## Nice-to-Haves
+- **Combine QT-DoG with SWAD**: SWAD is the strongest single-model baseline (66.9%). Combining flat-minima finding (SWAD) with quantization (QT-DoG) is the natural next step to validate mechanism complementarity.
+- **Compare against direct weight noise injection**: The paper argues quantization noise improves generalization, but never compares against adding Gaussian noise directly to weights. This comparison would establish what quantization specifically provides beyond generic noise regularization.
+- **Quantify GradCAM improvements**: Figure 5 shows cherry-picked examples where QT-DoG focuses on correct image regions, but without percentage statistics across the full dataset, this remains anecdotal.
+- **Explore mixed-precision quantization per layer**: The paper uses uniform 7-bit quantization and acknowledges mixed-precision could help but doesn't explore it despite this being an obvious improvement direction.
+
+## Novel Insights
+The paper's core insight—that quantization noise during training implicitly regularizes the model toward flatter minima, thereby improving domain generalization—is genuinely novel. This reframes quantization from a deployment-focused compression technique to a training regularizer with generalization benefits. The observation that EoQ (ensemble of quantized models) achieves SOTA with minimal memory overhead compared to full-precision ensembles is practically significant. The training stability plot (Figure 3) demonstrating that quantization makes OOD performance trackable via in-domain validation is a valuable practical insight for model selection in DG.
+
+## Potentially Missed Related Work
+- Weight noise injection regularization baselines (An, 1996; Murray & Edwards, 1992) — while cited for the theoretical intuition, direct experimental comparison with Gaussian weight noise is missing, which would help differentiate quantization-specific benefits from generic noise regularization.
+- HAWQ (Dong et al., 2019) and mixed-precision quantization work — the paper mentions mixed-precision as future work but doesn't compare against layer-wise or channel-wise mixed-precision approaches during training.
+
+## Suggestions
+1. **Add ablation comparing EoQ against full-precision ensemble**: Train 5 full-precision models with ERM and compare against EoQ to isolate quantization's contribution from ensemble diversity.
+2. **Explain the 7-bit optimality**: Investigate and report why 7-bit outperforms both 8-bit and 5-bit—perhaps through Hessian eigenvalue analysis or noise magnitude calibration.
+3. **Provide guidance for quantization timing**: Either derive a principled method for selecting when to quantize or demonstrate robustness to timing choices across datasets.
+
+---
+
+## XCugWIuHR8
+
+- GT: Reject (avg 3.0)
+- Predicted: Reject (5.0/10)
+- Match: Yes
+
+### Final Review
+
+## Summary
+This paper proposes "Convex Distillation," a knowledge distillation approach that compresses deep neural networks by replacing non-convex layers with convex-gated architectures in the student model. The method enables label-free compression by matching intermediate activations between teacher and student, eliminating the need for post-compression fine-tuning on labeled data. Experiments on CIFAR-10, SVHN, TinyImageNet, and Visual Wake Words demonstrate competitive performance compared to non-convex distillation, particularly in low-data and high-compression regimes.
+
+## Strengths
+- **Novel conceptual contribution**: Combining convex optimization with knowledge distillation addresses a genuine gap—leveraging the expressive power of non-convex teacher models while exploiting the favorable optimization landscape of convex student models is conceptually new.
+- **Theoretical grounding**: The paper builds on established convex reformulation results (Pilanci & Ergen, 2020; Sahiner et al., 2021; 2022a) and correctly identifies that convex student modules enable specialized solvers (e.g., R-FISTA) for faster convergence.
+- **Label-free capability**: The activation-matching approach (Equation 6) requires no labeled data, providing practical value in annotation-scarce scenarios.
+- **Comprehensive empirical evaluation**: Experiments span four datasets and compare against multiple baselines (fine-tuning, non-convex distillation, pruning), with results demonstrating advantages in low-data and high-compression regimes.
+
+## Weaknesses
+- **Incomplete ablation isolating convexity benefits**: The paper compares convex distillation against a non-convex version using different optimizers (R-FISTA vs. Adam). It remains unclear whether performance gains derive from convexity itself or superior solver characteristics. A controlled comparison using identical optimizers would strengthen the claims.
+- **Polishing step lacks rigorous justification**: The "polishing" technique (Section 4.3) using group elastic net regression on W2 is motivated heuristically. The paper does not clearly explain why information sharing across output dimensions improves results, and the empirical improvement in Figure 7 is marginal.
+- **CNN block derivation is loose**: The paper presents the convex CNN block (Equation 8) without rigorous derivation connecting it to the GReLU theorems. While the references (Sahiner et al., 2021; 2022a; Gupta et al., 2021) extend convex reformulations to convolutions, the specific architectural choices lack explicit justification.
+- **Conditional performance advantage understated**: The paper claims convex distillation "outperforms" non-convex methods, but Figure 6 shows non-convex methods catching up with relaxed resource constraints. The regime-dependent nature of this advantage is understated in the abstract and conclusions.
+
+## Nice-to-Haves
+- Include standard knowledge distillation baselines (Hinton et al. 2015, FitNets, attention transfer) for more comprehensive comparison beyond the bespoke non-convex version.
+- Validate on architectures beyond ResNet-18 and MobileNetV3 (e.g., Vision Transformers, EfficientNet variants) to support broader applicability claims.
+- Report error bars across figures (beyond Figure 5 which mentions 10-seed repetition) to quantify uncertainty in performance claims.
+- Measure actual inference latency, memory footprint, and throughput on real edge hardware to validate deployment claims beyond parameter count metrics.
+
+## Novel Insights
+The paper's key insight—bridging non-convex teacher representations with convex student architectures via activation matching—opens a promising research direction at the intersection of convex optimization and deep learning. The observation that convex student models can achieve comparable performance to non-convex counterparts when leveraging rich pre-trained features, particularly in low-data and high-compression regimes, suggests that implicit regularization benefits of convex optimization may be particularly valuable for transfer learning scenarios. This challenges the conventional wisdom that non-convexity is necessary for expressive deep learning.
+
+## Potentially Missed Related Work
+- **Contrastive Representation Distillation (CRD)** (Tian et al., 2019) — provides stronger distillation baselines for comparison
+- **DeepInversion** (Yin et al., 2020) — alternative data-free distillation method that could serve as comparison baseline
+- **WSLD** (Nayak et al., 2019) — addresses similar label-free distillation scenarios
+
+## Suggestions
+Conduct an ablation study that isolates the effect of convexity from optimization method by training both convex and non-convex students using the same optimizer (e.g., both with Adam), then separately comparing the effect of using specialized convex solvers vs. general-purpose optimizers. This would cleanly attribute performance differences to the appropriate factor.
+
+---
+
+## KgKN7F0PyQ
+
+- GT: Reject (avg 4.5)
+- Predicted: Accept (6.0/10)
+- Match: No
+
+### Final Review
+
+## Summary
+ReAcTree proposes a hierarchical task planning method that dynamically decomposes complex tasks into manageable subgoals using a tree structure composed of control flow nodes (inspired by behavior trees) and agent nodes (each an LLM-based planner). The method introduces an "expand" action enabling dynamic tree growth, along with episodic memory for retrieving goal-specific in-context examples and working memory for sharing observations across nodes. Experiments on WAH-NL and ALFRED datasets demonstrate consistent improvements over ReAct across multiple LLMs (e.g., 63% vs 24% GSR with Qwen2.5 72B on WAH-NL).
+
+## Strengths
+- **Well-motivated approach**: The paper clearly identifies two key limitations of flat LLM planning—single sequential decision-making and context dilution from long trajectories—and addresses both with a principled hierarchical decomposition.
+- **Comprehensive experiments**: The method is evaluated across 7+ LLMs (8B-72B parameter ranges) with consistent improvements, demonstrating robustness across model families.
+- **Thoughtful memory systems**: The episodic memory with agent-level retrieval and working memory for object location tracking are well-designed components with clear ablation evidence of their contribution.
+- **Extensive failure analysis**: Section E provides valuable categorization of failure types (Expand-level, Agent-level, Constraints, Instruction errors) with quantitative breakdowns, which is exemplary for reproducibility and future research.
+- **Code availability**: Anonymous code is provided, supporting reproducibility claims.
+
+## Weaknesses
+- **Incomplete baseline comparison**: The paper compares only against ReAct, despite discussing multiple directly related methods (DEPS, AdaPlanner, Tree-Planner, LLM-MCTS, ToT) in related work. ICLR expects comparison with the most relevant prior work, not just the oldest baseline. This makes it difficult to assess whether the tree structure itself provides value versus other design choices.
+
+- **Missing component ablation**: A ReAcTree variant without episodic memory (or without any memory system) is not compared against the full system. This ablation is essential to isolate the contribution of the tree decomposition mechanism from the memory systems. The paper shows agent-level vs. task-level retrieval but never quantifies what the memory systems add over the base tree structure.
+
+- **Limited episodic memory construction**: The episodic memory is built from only 5 human-annotated trajectories (one per task category) plus successfully completed training tasks. With such a small memory bank, it's unclear whether episodic retrieval actually occurs during testing or if performance is dominated by the tree structure alone. Analysis of retrieval hit rates would strengthen this claim.
+
+- **Incomplete specification of parallel node aggregation**: The paper states outcomes are "aggregated according to a predefined policy" but never specifies what this policy is. This is a missing detail needed for reproducibility.
+
+- **Partial observability comparison caveat**: The paper evaluates in a partially observable setting adapted from LoTa-Bench, but it's unclear whether ReAct's lower performance (e.g., 24% GSR) reflects algorithmic limitations or the difficulty of ReAct under partial observability. This makes the ReAcTree improvements appear more dramatic than they might be against a ReAct variant specifically optimized for partial observability.
+
+## Nice-to-Haves
+- Report confidence intervals or standard deviations across multiple runs to demonstrate statistical significance of improvements.
+- Analyze retrieval hit rates to verify episodic memory is actually being utilized.
+- Break down performance by task complexity (number of subgoals) to validate that hierarchical decomposition helps more for longer tasks.
+- Add visualization of tree depth distributions across successful vs. failed tasks.
+- Provide case studies analyzing why ReAcTree sometimes underperforms (e.g., Qwen2 7B on ALFRED).
+
+## Novel Insights
+ReAcTree's key insight is that LLM-based task planning can benefit from **dynamic hierarchical decomposition** where agents themselves decide when and how to break down goals, rather than relying on predefined two-level hierarchies. The combination of behavior tree-style control flow (sequence/fallback/parallel) with agent-level memory systems creates a principled framework for managing complexity. The finding that ReAcTree with smaller models (8B) can outperform ReAct with much larger models (70B) is particularly noteworthy, suggesting that decomposing tasks into simpler subproblems may be more effective than simply scaling model size.
+
+## Potentially Missed Related Work
+- **Tree-Planner (Hu et al., 2023)**: Constructs action trees and executes actions, similar hierarchical planning approach—direct comparison would contextualize ReAcTree's contribution.
+- **LLM-MCTS (Zhao et al., 2024)**: Tree search-based planning with Monte Carlo Tree Search—comparison would highlight differences between learned tree expansion vs. search-based approaches.
+- **MOSAIC (Wang et al., 2024a)**: Task planner with tree structure for LLM agents—the paper briefly mentions this but doesn't compare experimentally.
+
+## Suggestions
+1. **Add a "ReAcTree-NoMemory" baseline**: Strip both episodic and working memory to isolate the tree decomposition contribution from the memory systems. This minimal ablation is essential to support the paper's core claims.
+
+2. **Implement and compare against at least one tree-based baseline** (e.g., Tree-Planner or ToT) under the same experimental settings to properly contextualize the contribution.
+
+3. **Clarify the parallel node aggregation policy**: Specify the exact success/failure aggregation logic, as this affects how parallel tasks interact.
+
+4. **Expand episodic memory experiments**: Use more training tasks for memory construction and analyze retrieval statistics to verify the memory system is actually being utilized.
+
+---
+
+## 10kBEqYKKN
+
+- GT: Reject (avg 3.0)
+- Predicted: Reject (3.0/10)
+- Match: Yes
+
+### Final Review
+
+## Summary
+This paper investigates how different prompts influence latent representations in large language models under zero-shot settings, examining whether prompts modify intrinsic dimensionality (via IsoScore and PCA) and whether prompts can be grouped based on their geometric influence. The authors analyze four model families across three binary sentiment classification datasets and find that prompts significantly alter vector distributions, with impact being more model-dependent than prompt-dependent, and that clustering reveals counter-intuitive groupings where semantically similar prompts are not necessarily processed similarly.
+
+## Strengths
+- **Broad empirical coverage**: The study examines four major LLM families (Phi, Gemma, Zephyr, Bloomz) across three datasets (Rotten Tomatoes, IMDB, Yelp), providing systematic coverage of model families and scales under consistent experimental conditions.
+
+- **Methodological rigor in geometric analysis**: The use of IsoScore (a rotation-invariant, mean-agnostic metric) combined with PCA variance analysis and K-means clustering provides complementary perspectives on representation geometry that directly address the stated research questions.
+
+- **Valuable empirical finding about model-dependent processing**: The observation that models group prompts by geometric features rather than semantic similarity is an important and non-obvious finding that has implications for understanding how different architectures process inputs.
+
+- **Clear documentation of layer-wise evolution**: Tracking how isotropy evolves across layers reveals that smaller models consistently show higher isotropy, providing concrete evidence about how model scale affects representation utilization.
+
+## Weaknesses
+
+- **Exclusive focus on EOS token representations limits scope**: The analysis extracts only End-of-Sentence token representations, which captures the final output state but not how prompts influence intermediate processing. This severely limits what can be concluded about "how prompts influence representations" during the model's forward pass. The paper acknowledges this limitation but it remains a fundamental constraint on the contribution.
+
+- **Lack of statistical significance testing**: All findings are presented as qualitative observations without statistical tests. The IsoScore variations across prompts (with coefficients of variation ranging from 20% to 131%) are reported without significance tests, making it impossible to determine whether observed differences are reliable or within noise.
+
+- **No quantitative correlation between geometry and performance**: The paper states "bad performance seems to be correlated with extreme isotropy" but provides no quantitative correlation measure. This is a missed opportunity to directly connect geometric measures to task performance, which is central to the paper's motivation.
+
+- **Insufficient explanation of counter-intuitive clustering**: The finding that semantically similar prompts cluster together less often than expected is interesting but under-analyzed. The paper does not characterize what geometric features actually separate the clusters, leaving the finding descriptive rather than explanatory.
+
+## Nice-to-Haves
+- Expanding analysis to intermediate token representations (not just EOS) would reveal how prompts are processed throughout the model, not just at the output.
+- Adding TF-IDF or n-gram overlap baselines for clustering would establish whether geometric clusters reveal anything beyond lexical similarity.
+- Testing on non-sentiment tasks (e.g., question answering, natural language inference) would strengthen claims about generalizability beyond binary classification.
+- Releasing code and implementation details would improve reproducibility, which is currently limited by vague descriptions of prompt modifications and clustering methodology.
+
+## Novel Insights
+The most valuable contribution is the empirical demonstration that prompts with similar natural language semantics are processed differently by different model families. The clustering analysis reveals that geometric features used by K-means to group prompts do not align with intuitive semantic groupings—for example, "Movie Expressed Sentiment" and "Movie Expressed Sentiment 2" cluster together only 6.71% of the time, while "Movie Expressed Sentiment 2" clusters with "Text Expressed Sentiment" 20.81% of the time. This suggests that the pre-trained knowledge leveraged by models is highly sensitive to input form in ways that are not captured by surface-level semantic similarity, and that architectures, pre-training data, and training paradigms leave detectable traces in how models process their inputs.
+
+## Potentially Missed Related Work
+- **Compositionality in contextual embeddings** (Cai et al., 2021): Directly relevant as they study isotropy and cluster structure in contextual embedding spaces.
+- **Layer-wise similarity and fine-tuning** (Kornblith et al., 2019): Relevant for understanding how different models produce non-comparable representations.
+- **Structural constraints in pretrained representations** (Phang et al., 2021): Related work on clustering in transformer representations that the paper could connect to more explicitly.
+
+## Suggestions
+The paper would benefit most from: (1) adding statistical significance tests for isotropy comparisons across prompts and models, (2) computing and reporting quantitative correlations between geometric measures (IsoScore, PCA variance) and task accuracy, and (3) performing probing analysis to identify what linguistic features in the representations drive the observed clustering behavior, thereby explaining why certain prompts cluster together.
+
+---
+
+## gFUomIaycw
+
+- GT: Reject (avg 2.5)
+- Predicted: Reject (3.0/10)
+- Match: Yes
+
+### Final Review
+
+## Summary
+This paper proposes DR-MoE, a dynamic routing mixture-of-experts model for multi-label image classification that replaces HSQ's static gating with input-dependent gating networks. While the approach shows genuine improvements on PASCAL VOC 2007 (94.8% vs 93.7% mAP) and secondary metrics (OF1/CF1), it paradoxically regresses on MS-COCO mAP (85.9% vs 87.1%) compared to HSQ—the most widely-reported benchmark metric.
+
+## Strengths
+- Well-motivated problem: The paper correctly identifies static gating's inability to adapt to varying label dependencies as a genuine limitation in HSQ.
+- Clear architectural design: The four-component architecture (backbone, transformer query module, shared/task-specific experts, dynamic gating) is logically structured and reproducible.
+- Comprehensive ablation studies: Tables 4-5 provide useful analysis of hyperparameters (number of shared experts, gating network complexity), confirming 4 shared experts and 256-dim hidden layers as optimal.
+- Effective regularization: Entropy regularization on gating weights (Section 3.9) is a sensible technique to prevent collapse to sparse solutions.
+
+## Weaknesses
+- **Misleading performance claims**: The abstract and introduction claim "state-of-the-art" and "outperforming" HSQ, but Table 1 shows DR-MoE (85.9%) actually underperforms HSQ (87.1%) on MS-COCO mAP—the primary metric for MLC. This selective reporting of metrics where the model wins while omitting the primary metric regression is a credibility issue.
+- **No explanation for mAP/OF1-CF1 trade-off**: Table 3 shows switching from static to dynamic gating *decreases* mAP (87.1→85.9) while increasing OF1/CF1. The paper never explains why this trade-off occurs or which metric better reflects the actual improvement. Without this analysis, the results are difficult to interpret.
+- **Incremental novelty**: The main contribution is replacing HSQ's static gating with per-label MLPs. Dynamic gating in MoE is well-established (GShard, Hash Layer), and the Q2L-style transformer decoder is directly borrowed. This is a reasonable but incremental extension rather than a fundamental innovation.
+- **Computational overhead unquantified**: The paper acknowledges "additional computational overhead" but provides zero numbers (FLOPs, parameter counts, latency). With L task-specific gating networks plus shared expert gating, inference cost scales poorly with label count.
+- **Gating input limitation**: The gating network Gi takes hi (label-specific representation) as input, meaning the gating decision is based on what the transformer already learned about label i, not on broader image-level context that could inform cross-label dynamics.
+
+## Nice-to-Haves
+- Multi-run experiments with statistical significance testing (mean ± std over 3+ seeds) — single-run comparisons are insufficient at ICLR standards.
+- Per-class analysis on MS-COCO (only provided for PASCAL VOC) to verify claims about "high heterogeneity" labels benefiting from dynamic routing.
+- Aggregate statistics on gating weight distributions across the test set — the paper shows cherry-picked examples but no evidence on how often the model actually uses shared vs. task-specific pathways.
+- Exploration of stronger backbones (ConvNeXt, Swin Transformer) mentioned as options but never used.
+- Analysis of when and why dynamic routing fails, providing balanced evaluation alongside the claimed successes.
+
+## Novel Insights
+The paper's most interesting finding is the asymmetric effect of dynamic gating: it degrades mAP but improves OF1/CF1. This suggests dynamic gating may be better at optimizing for balanced class performance (where each class is weighted equally) rather than average precision (which weights positive examples more heavily). The entropy regularization combined with per-label specialization could be biasing the model toward better handling of rare/difficult labels at the cost of top-prediction accuracy. This trade-off is itself a meaningful contribution but is buried and unexplained in the current presentation.
+
+## Potentially Missed Related Work
+- Routing Transformers (Roussel et al., 2021) — dynamic token routing in transformers for efficient attention.
+- Hard Mixture of Experts for Large-Scale Multi-label Classification (Dai et al., 2022) — applies MoE specifically to multi-label classification with different routing strategies.
+- Sparse MoE foundations (Switch Transformer, ST-MoE) — may offer more efficient routing mechanisms suitable for the MLC setting.
+
+## Suggestions
+The paper must honestly acknowledge the MS-COCO mAP regression and provide a thorough analysis of *why* dynamic gating hurts mAP while helping OF1/CF1. Consider adding an auxiliary loss that preserves mAP, adjusting the entropy regularization strength, or investigating whether the label-specific gating input (hi) should be augmented with global image features to capture broader label correlations. Additionally, provide explicit computational comparisons (FLOPs, parameters, latency) to validate the efficiency claims and help readers weigh the trade-offs.
+
+---
+
+## xVw8YNEtH3
+
+- GT: Reject (avg 3.0)
+- Predicted: Reject (2.0/10)
+- Match: Yes
+
+### Final Review
+
+## Summary
+The paper proposes a "Reset method" that combines existing deep learning optimizers (SGD, Adam, AdamW) with manifold optimization theory, applying various Riemannian manifold structures as step-size correction mechanisms to improve convergence and stability in deep learning tasks. However, the core contribution is poorly defined—the exact mathematical form of the "Reset" mechanism is unclear, the theoretical results contain error bounds that grow with iteration count (contradicting convergence claims), and the experiments use non-standard metrics with results that are implausibly uniform across all manifold variants, raising concerns about validity.
+
+## Strengths
+- The paper attempts to bridge manifold optimization theory with practical deep learning training, addressing a potentially valuable research direction
+- The experimental evaluation covers diverse datasets (CIFAR-10/100, STL-10, SVHN, Market-1501, DukeMTMC-reID) and multiple architectures (DCGAN, StableGAN, Cluster Contrast), providing broad empirical coverage
+- The theoretical framework involving Riemannian retraction, vector transport, and Armijo line search on manifolds is technically grounded in established manifold optimization literature (Hu et al., 2020)
+
+## Weaknesses
+- **The Reset mechanism is mathematically undefined**: Equation (5) states $x_{i+1} = B_{x_i}(x_i)$ where $B_{x_i}$ is "selected from SGD, Adam, AdamW," but no actual update rule is provided. Without knowing what transformation $B_{x_i}$ applies, the method cannot be reproduced or theoretically analyzed. This is a fundamental flaw.
+- **Theorem 4.2 error bounds grow with iterations**: The bounds contain $(i+1)^2$ terms in the numerator, meaning the error $E[\text{grad}f(x_{i+1})] - E[\text{grad}f(x_i)]$ grows with iteration count. This directly contradicts the paper's claim of improved convergence and suggests the theorem does not demonstrate what the authors claim.
+- **Non-standard evaluation metric for image generation**: The paper reports "Average Precision (AP)" for GAN tasks, but standard metrics are Inception Score (IS) and Fréchet Inception Distance (FID). The reported values (~98-99%) are implausibly high for these tasks and inconsistent with known benchmarks, raising concerns about what is actually being measured.
+- **No comparison to Riemannian optimizers**: The paper claims to improve "manifold optimization" but only compares against Euclidean-space baselines (SGD, Adam, AdamW). No comparison to established Riemannian optimization methods (Riemannian SGD, RAdam on manifolds, methods from Absil et al., Huang et al.) is provided.
+- **Implausibly uniform results across manifold variants**: All 10+ manifold combinations yield nearly identical performance (~99.xx%), suggesting the manifold choice is irrelevant or results lack meaningful variation. No variance statistics or significance testing is provided.
+
+## Nice-to-Haves
+- Add convergence curves (loss/gradient norm vs. iteration) to empirically verify theoretical convergence claims
+- Include ablation studies isolating the Reset mechanism's effect from other factors
+- Provide code and full hyperparameters for reproducibility
+- Compare against Riemannian Adam or RiemSGD specifically designed for manifold optimization
+
+## Novel Insights
+The paper's observation that restart techniques from O'Donoghue & Candes (2015) could be adapted to Riemannian manifold optimization is potentially interesting, and the dynamical systems interpretation of the Reset as inducing "damped harmonic motion" toward saddle points is a reasonable intuition. However, these insights remain underdeveloped because the actual Reset mechanism is undefined and the theoretical results do not convincingly demonstrate improvement over existing methods.
+
+## Potentially Missed Related Work
+- Riemannian Adam (RAdam) variants for manifold optimization — directly relevant as a comparison baseline for claimed improvements over manifold optimization
+- Zhang et al. (2016) Riemannian SVRG — cited in related work but not compared experimentally despite being a Riemannian optimization method
+
+## Suggestions
+The paper should first provide a concrete mathematical definition of the Reset operator $B_{x_i}$ beyond "using SGD/Adam/AdamW." Without this, neither the theory nor the experiments are interpretable. Second, the error bound analysis in Theorem 4.2 must be reconsidered—either the bounds should demonstrate convergence (decreasing with iterations) or the paper should clearly state what they do prove. Third, experiments should use standard evaluation metrics (FID/IS for GANs) and include Riemannian optimizer baselines for meaningful comparison.
+
+---
+
+## BPgK5XW1Nb
+
+- GT: Accept (Oral) (avg 8.7)
+- Predicted: Accept (7.0/10)
+- Match: Yes
+
+### Final Review
+
+## Summary
+The paper proposes SPA (Spread Preference Annotation), a framework for efficiently aligning LLMs using only a small amount of seed preference data (3.3% of UltraFeedback). SPA iteratively expands preference data using the LLM's own logits for direct preference judgment and applies a noise-aware refinement mechanism with de-coupled noise detection. The method achieves 21.13% win rate on AlpacaEval 2.0 (vs 7.68% for standard DPO with same data), outperforming even Zephyr-7b-β trained on 100% of the data.
+
+## Strengths
+- **Compelling empirical results**: SPA achieves substantial improvements using minimal data (7.68% → 21.13% win rate with 3.3% of labels), and even exceeds Zephyr-7b-β trained on 30x more data (10.03% → 21.13%)
+- **Strong generalization**: Experiments across multiple model families (Phi-2, Mistral, LLaMA-3, Phi-3) spanning 2.7B to 14B parameters, with consistent improvements
+- **Thoughtful ablation**: Table 6 systematically isolates contributions of data expansion, self-refinement, and de-coupled noise detection, demonstrating that the noise-aware components provide meaningful gains
+- **Practical methodology**: The approach requires only minor code additions to standard DPO, runs efficiently (5-6 hours per iteration on 4 A6000 GPUs), and is compatible with existing length control techniques
+- **Comprehensive evaluation**: Uses both standard and length-controlled win rates on AlpacaEval 2.0, plus MT-Bench, to mitigate evaluation biases
+
+## Weaknesses
+- **Unfair comparison with PairRM**: PairRM was trained on ~500K samples while SPA uses 2K samples (Appendix B.2). The main text claims superiority over "external reward models" without adequately clarifying this data scale difference. The comparison demonstrates SPA works with less data, not that direct judgment is superior to a well-trained reward model with equivalent data
+- **Missing comparisons with concurrent self-training methods**: Self-Rewarding LM (Yuan et al., 2024), Direct Nash Optimization (Rosset et al., 2024), and SELF-PLAY (Wu et al., 2024) are mentioned in related work but not experimentally compared. These are the most directly relevant baselines for assessing incremental contribution
+- **Limited theoretical validation for de-coupled noise detection**: The method approximates a "strongly aligned model" via linear logit extrapolation (Eq. 12) based on Liu et al. (2024), but this geometric mixture assumption is neither validated empirically for DPO-trained models nor is the effectiveness of the approximation tested
+- **Marginal self-refinement contribution**: Table 6 shows SR alone provides only +0.29% LC win rate improvement (14.41% → 14.7%), suggesting most gains come from data expansion rather than the noise-aware mechanism. The paper does not adequately explain this limited contribution
+- **No sensitivity analysis for hyperparameters**: K=10% noise threshold and λ schedule (1/2, 1/4, 1/8) appear heuristic without ablation, raising questions about robustness
+- **Acknowledged length bias**: Response length increases to 2749 chars (Table 10). While length-controlled metrics address this, the tendency to generate verbose responses limits applicability where brevity is preferred
+
+## Nice-to-Haves
+- Validate the geometric mixture assumption empirically (e.g., compare preference predictions between approximated model and actual more-aligned model)
+- Compare against Self-Rewarding LM and other iterative preference learning methods
+- Ablate the K% threshold and λ hyperparameters to justify choices
+- Add human evaluation study to validate that improvements reflect genuine human preferences rather than GPT-4 biases
+- Test on domain-specific tasks (medical, legal, coding) beyond general instruction following
+
+## Novel Insights
+The paper introduces the insight that an LLM's intrinsic reward function (derived from log-ratios with a reference model) can be directly used for self-generated preference annotation, eliminating dependence on external reward models or large well-aligned LLMs for in-context judgment. The key observation is that as the model iteratively improves, external reward models suffer from distribution shift while the self-derived reward remains aligned with the training distribution. Additionally, the de-coupled noise detection via linear logit extrapolation (approximating a strongly aligned model without additional computation) provides a principled approach to filtering noisy self-generated labels, though its empirical contribution is modest compared to the base iterative DPO framework.
+
+## Potentially Missed Related Work
+- **Self-Rewarding Language Models (Yuan et al., 2024)**: Directly relevant concurrent work with nearly identical motivation—self-generating preference data for iterative LLM alignment
+- **Direct Nash Optimization (Rosset et al., 2024)**: Concurrent iterative alignment approach that could serve as an additional baseline
+- **SELF-PLAY Preference Optimization (Wu et al., 2024)**: Another recent self-training approach for preference alignment
+
+## Suggestions
+- **Reframe PairRM comparison**: Clearly state that PairRM was trained on 250x more data and add a comparison with PairRM on equivalent data scale to isolate method contributions
+- **Add Self-Rewarding LM baseline**: This is the most directly comparable prior work and would clarify the incremental contribution of direct logit-based judgment over LLM-as-judge style self-rewarding
+
+---
+
+## 2iPvFbjVc3
+
+- GT: Reject (avg 3.4)
+- Predicted: Accept (6.0/10)
+- Match: No
+
+### Final Review
+
+## Summary
+VisCE² proposes a reference-free image caption evaluation method that first extracts structured visual context (objects, attributes, relationships) from images using a VLM, then uses this context to evaluate candidate captions. The method achieves state-of-the-art correlation with human judgments among reference-free, tune-free metrics across four datasets, demonstrating that explicit visual context helps VLMs evaluate caption accuracy more effectively than vanilla prompting or embedding-based methods like CLIP-S.
+
+## Strengths
+- **Well-motivated and clearly articulated problem**: The paper correctly identifies that modern VLMs generate captions exceeding reference coverage, making reference-based and embedding-based metrics inadequate. The failure case analysis of CLIP-S (overestimating captions with salient objects regardless of accuracy) is compelling and well-supported by examples in Figure 4.
+- **Comprehensive experimental design**: Meta-evaluation across four diverse datasets (THumB, Flickr8k-Expert, Composite, Pascal-50S) using multiple correlation metrics (Pearson, Kendall, accuracy) against 10+ baselines provides strong empirical support.
+- **Thorough ablation studies**: Systematically validating each component (visual context vs. vanilla prompting, individual context components, backbone VLM selection, extraction vs. evaluation model pairing) demonstrates scientific rigor and provides actionable insights.
+- **Reproducibility**: Using LLaVA-v1.5-13B with default hyperparameters and providing full prompts in the appendix enables reproducibility, which is commendable.
+- **Informative qualitative analysis**: The heatmaps in Figure 3 revealing score distribution changes and the concrete failure case comparisons in Figure 4 effectively illustrate where VisCE² succeeds and where CLIP-S fails.
+
+## Weaknesses
+- **Near-zero recall correlation**: The method shows ρ=0.08 correlation with recall scores on THumB (essentially unchanged from vanilla prompting at 0.08), indicating it only evaluates caption precision, not coverage of salient image content. This fundamental limitation is acknowledged but inadequately addressed—modifications to weight saliency or expand coverage evaluation are absent.
+- **Single-run reporting without variance estimates**: Results are reported from "a single run" with no confidence intervals or standard deviations. Given VLM stochasticity, effect sizes like +0.10 on Pearson correlation (0.44→0.54) cannot be properly evaluated for statistical significance.
+- **Performance regression on certain categories**: On Pascal-50S, VisCE² shows no improvement over vanilla prompting (80.5→80.8) and underperforms in HM/MM categories compared to other metrics. On Composite, InfoMetIC outperforms VisCE², suggesting fine-tuned methods retain advantages in some scenarios.
+- **Compute cost not addressed**: The method requires two VLM inference passes per evaluation (context extraction + evaluation), significantly more expensive than CLIP-S. No cost analysis is provided, limiting practical adoption assessment.
+
+## Nice-to-Haves
+- **Statistical significance testing**: Run experiments with multiple seeds/temperature settings to establish variance and confidence intervals.
+- **Prompt sensitivity analysis**: The entire method is a prompting strategy—testing alternative prompt formulations for VLMExt and VLMEval would strengthen claims about visual context being essential versus any structured injection helping equally.
+- **Calibration analysis**: Are 0-100 scores calibrated to human ratings? Without this, absolute scores have unclear meaning.
+- **Fine-tuning comparison**: Testing whether fine-tuning VLMEval on caption evaluation data (as InfoMetIC does) would close the gap with that method would demonstrate true potential.
+
+## Novel Insights
+The paper's key insight—that extracting structured visual context (objects, attributes, relationships) as an intermediate representation bridges the image-text gap for caption evaluation—is both intuitive and empirically validated. The ablation showing that the same VLM for extraction and evaluation outperforms mixed-model setups suggests model-specific alignment in how visual contexts are framed. Furthermore, the observation that visual context shifts score distributions from bimodal (good/bad peaks) to trimodal (good/fair/bad) indicates more nuanced evaluation aligned with human judgment. The method's effectiveness with publicly available models (LLaVA) competing with proprietary LLM-based approaches (CLAIRClaude) is noteworthy for practical accessibility.
+
+## Potentially Missed Related Work
+- **LLM-as-judge baselines** (e.g., GPT-4V direct evaluation): The paper compares against CLIP-S, PAC-S, and ensemble LLM methods (CLAIR) but does not directly compare against zero-shot GPT-4V or Gemini evaluation using naive prompting. This is the most relevant comparison the community would expect for VLM-based caption evaluation.
+
+## Suggestions
+1. Address the recall limitation by adding a secondary pass or modifying prompts to explicitly weight content coverage alongside accuracy.
+2. Report variance across multiple runs to enable proper statistical evaluation of improvement significance.
+3. Conduct and report a cost-per-evaluation analysis comparing VisCE² against CLIP-S and InfoMetIC to inform practical deployment decisions.
+
+---
+
+## cLws58ZojF
+
+- GT: Reject (avg 3.0)
+- Predicted: Accept (6.0/10)
+- Match: No
+
+### Final Review
+
+## Summary
+This paper systematically explores the design space of Speech-Conditioned Large Language Models (SLMs) through rigorous experiments examining adaptor architectures, trainable modules, masking strategies, LLM choices, and training data. The authors identify a critical gap in existing SLMs—lack of spoken instruction following capability due to text-only instructions in training—and address it by creating a synthetic spoken instruction following dataset (50K samples). Their resulting model SiM significantly outperforms existing SLMs on spoken instruction following tasks while maintaining competitive ASR performance.
+
+## Strengths
+- **Systematic empirical methodology**: The paper conducts comprehensive experiments across multiple design dimensions under consistent settings, providing valuable actionable guidance for the community on adaptor choices (finding MLP adaptor outperforms complex architectures), LLM selection (instruction-tuned helps for SLMs contrary to VLM findings), and training data composition.
+- **Important discovery with clear evidence**: The finding that existing SLMs lack spoken instruction following capability—even for simple queries like "can I go to the moon?"—is a compelling and well-supported insight. The paper demonstrates this with concrete examples (Figure 4) showing existing models failing to process audio instructions.
+- **Comprehensive evaluation suite**: Evaluation across multiple datasets (Alpaca Audio, OpenHermes Audio, LLaMA Questions, LibriSpeech) using both automatic metrics and human preference studies provides strong evidence. SiM achieves 2.71 vs 1.14 for the best existing model on OpenHermes Audio, and 57.7% vs 40.7% accuracy on LLaMA Questions.
+- **Practical contribution**: The 50K synthetic spoken instruction dataset and the resulting SiM model provide a directly usable recipe for building SLMs capable of following spoken instructions.
+
+## Weaknesses
+- **Missing ablation for spoken instruction data**: The paper claims 50K synthetic spoken instruction samples are "crucial" but provides no ablation isolating their contribution. Performance differences could partially stem from data mixture variations or other training differences, not solely from spoken instruction data.
+- **ASR quality gap unexplained**: SiM achieves 3.1% WER while the underlying Whisper encoder achieves 1.3% WER—a 2.4× regression. The paper mentions this but never explains the mechanism or investigates whether this is an inherent cost of the architecture. This undermines the claim of "strong ASR performance."
+- **Missing Qwen2 Audio instruction-following scores**: Table 6 omits Qwen2 Audio from instruction-following comparisons despite including it in human preference evaluations (Figure 2) and ASR results (Table 8). Since Qwen2 achieves the best ASR WER (1.8%), its instruction-following capability is essential context for evaluating SiM's claimed superiority.
+- **Underspecified evaluation rigor**: Human preference evaluations in Figure 2 show percentages but lack confidence intervals, sample sizes, or statistical significance testing. A margin of 81% vs 84% "wins" could be within noise.
+- **Incomplete reproducibility details**: Training hyperparameters (learning rates, batch sizes, warmup schedules, training steps) are entirely absent from the paper. Section references like "Section TBD" in Table 5 indicate incomplete manuscript preparation.
+
+## Nice-to-Haves
+- Analyze why instruction-tuned LLMs help SLMs but not VLMs (per Karamcheti et al., 2024)—the discrepancy deserves explanation.
+- Study scaling dynamics with varying synthetic dataset sizes (5K, 10K, 25K, 100K) to understand data efficiency.
+- Evaluate on noisy speech, accented speech, or diverse recording conditions beyond LibriSpeech test-clean.
+- Include attention visualizations to validate that spoken instructions are actually being processed by the LLM.
+
+## Novel Insights
+This paper makes a valuable empirical contribution by systematically mapping the SLM design space under consistent settings, a task made difficult by heterogeneous experimental conditions across prior work. The finding that simple 2-layer MLP adaptors outperform complex architectures like Q-Former (which suffers >20% WER and training instability) is counterintuitive and provides practical guidance. The critical insight about the absence of spoken instructions in existing SLM training data explaining their poor instruction-following capability is well-motivated and demonstrated with concrete failures. The discovery that instruction-tuned LLMs help SLMs (contrary to VLM findings) suggests modality-specific dynamics worth investigating. The trade-off analysis between ASR quality (3.1% WER) and instruction-following capability (2.71 score) represents a practical design decision the community must consider.
+
+## Potentially Missed Related Work
+- Spectron (Nachmani et al., 2023) — appears in references and Table 7 comparison but could be discussed more prominently given its similar spoken instruction following approach.
+- WavLLM — included in some evaluations but its methodology for handling spoken instructions is not compared or contrasted.
+
+## Suggestions
+The paper should add a proper ablation study isolating the contribution of spoken instruction data versus other training differences, and provide at minimum learning rate and training step counts for reproducibility. The ASR quality regression versus Whisper deserves either explanation (e.g., through analysis of where errors occur) or explicit acknowledgment as a limitation of the approach.
+
+---
+
+## mb2ryuZ3wz
+
+- GT: Accept (Poster) (avg 5.8)
+- Predicted: Accept (6.0/10)
+- Match: Yes
+
+### Final Review
+
+## Summary
+ALIT (Adaptive Length Image Tokenizer) proposes a recurrent framework that distills 2D image tokens into variable-length 1D latent tokens through iterative rollouts with adaptive memory expansion. Each iteration refines existing tokens while adding new ones (32→256), enabling image-specific representational capacity allocation. The method demonstrates comparable reconstruction metrics to fixed-length baselines (VQGAN, Titok), reveals emergent token specialization for object/part discovery, and shows that required token count aligns with image complexity, OOD familiarity, and downstream task requirements.
+
+## Strengths
+- **Strong conceptual motivation**: The idea of variable-length representations tied to image complexity is well-grounded in information theory (Schmidhuber's Low-Complexity Art) and draws compelling analogies to human intelligence and LLM adaptive computation.
+- **Extensive and thorough experimentation**: The paper evaluates across multiple datasets (ImageNet-100/1K, COCO, Places, WIT) with diverse baselines (VQGAN, Titok, Matryoshka, FlexViT) across reconstruction FID/L1, linear probing, and task-dependent token analysis.
+- **Comprehensive ablation study**: Systematic ablation of model size, training duration, dataset scale, continuous vs discrete tokenization, dynamic halting, and codebook design provides thorough understanding of each component's contribution.
+- **Novel emergent property**: The emergent object/part discovery without explicit segmentation supervision (reaching 57.8 mIOU on ImageNet-S attention maps) distinguishes ALIT from patch-bound tokenizers and suggests meaningful semantic specialization.
+- **Valuable analytical insights**: The analysis connecting representation capacity to image entropy, OOD familiarity, and downstream task alignment provides practical guidance for adaptive computation in vision.
+
+## Weaknesses
+- **Performance gap at maximum token count**: The ~1 FID point gap between ALIT-S (8.02-8.25 at 256 tokens) and VQGAN (7.04) is non-trivial and should be discussed more candidly as a trade-off for flexibility.
+- **Not truly end-to-end**: The approach relies on a pre-trained frozen VQGAN for 2D tokenization, making it an additional processing layer rather than a native tokenizer. Joint end-to-end training is left as future work.
+- **Dynamic halting utility unclear**: Marked as optional and not used in main Stage 2 experiments, leaving its practical impact during training and potential test-time benefits undemonstrated.
+- **Limited downstream application demonstration**: Beyond reconstruction metrics and linear probing, concrete downstream applications (e.g., video tokenization, generative modeling speedup) are not thoroughly explored.
+
+## Nice-to-Haves
+- **ElasticTok comparison**: This concurrent work on "adaptive tokenization for images and video" is the most directly related approach and its absence leaves the contribution's distinctness partially unestablished.
+- **Single-pass recurrence ablation**: A proper comparison between recurrent processing (N/8 iterations with 32 tokens each) versus a single forward pass with N tokens at equivalent compute budget would isolate whether recurrence provides benefits beyond having more total tokens.
+- **Codebook utilization quantification**: While Figure 22 shows codebook sampling distributions, quantifying what fraction of codes are used infrequently (<100 times) would strengthen the OOD detection claims.
+- **Attention map comparison with non-recurrent model**: Side-by-side token attention visualization between ALIT and a Matryoshka-style single-pass model would directly test whether recurrence is necessary for the observed object binding.
+
+## Novel Insights
+The paper's core insight is that recurrent token refinement with adaptive memory expansion naturally leads to token specialization aligned with semantic content. Unlike Matryoshka-style approaches that learn fixed-length representations in one pass (where the first 32 tokens always remain the same regardless of token budget), ALIT allows existing tokens to progressively sharpen their attention and specialize as new tokens provide additional representational capacity. This is supported by the mIOU improvement across recurrent iterations (Table 6) and the qualitative emergence of object binding (Figures 7, 8, 15, 16). The analysis that ~60% of maximum dataset tokens suffice for near-optimal performance across multiple downstream tasks suggests reconstruction loss may serve as a practical self-supervised proxy for determining per-image token requirements.
+
+## Potentially Missed Related Work
+- **ElasticTok (Yan et al., 2024)**: Concurrent work on "Adaptive tokenization for image and video" is the most directly comparable approach—mentioned briefly but not included as a baseline comparison.
+
+## Suggestions
+- **Add ElasticTok to experiments**: This is the most directly comparable concurrent work and its absence is notable; even a qualitative comparison would strengthen the paper's distinctness claims.
+- **Include a single-pass baseline ablation**: Compare recurrent processing (8 iterations × 32 tokens) vs. a single forward pass with 256 tokens at matched compute to isolate the benefit of recurrence beyond additional capacity.
+- **Be more explicit about what "adaptive" means**: Clarify that adaptivity operates at two levels—(1) recurrent refinement allows tokens to specialize progressively, and (2) TSC enables flexible token selection at test time.
+
+---
+
+## koza5fePTs
+
+- GT: Reject (avg 2.0)
+- Predicted: Reject (4.0/10)
+- Match: Yes
+
+### Final Review
+
+## Summary
+This paper presents a comprehensive benchmark suite for evaluating large language models' planning capabilities, encompassing both classical PDDL domains (BlocksWorld, Logistics, Mini-Grid) and natural language tasks (Trip Planning, Calendar Scheduling). The authors systematically investigate three intervention strategies—many-shot in-context learning, supervised fine-tuning on optimal plans, and chain-of-thought reasoning methods (ToT, MCTS, Debate)—across multiple models and generalization scenarios. Key findings include that fine-tuning achieves near-perfect accuracy on in-distribution tasks, many-shot ICL benefits some models but not others, and search-based CoT methods allow smaller models to partially compete with larger ones.
+
+## Strengths
+- **Comprehensive benchmark design**: The paper provides a well-structured suite with both formal (PDDL) and natural language representations, including algorithmic generation of instances at configurable difficulty levels. The 28k BlocksWorld samples and scalable generation pipeline are valuable for rigorous evaluation.
+- **Systematic methodology**: The authors evaluate three distinct intervention strategies across multiple benchmarks and models, with both in-domain and out-of-domain generalization experiments. The categorization of failure modes (constraint violations, goal failures, out-of-vocabulary actions) provides actionable diagnostic insights.
+- **Significant empirical findings**: SFT dramatically outperforms ICL even with smaller models (Gemini 1.0 S achieving 96%+ vs. ~48% with 200-shot ICL). The observation that debate-as-reasoning performs comparably to explicit search methods (MCTS/ToT) is counterintuitive and insightful. The finding that many-shot ICL benefits some models (Gemini 1.5 Pro) but degrades others (GPT-4, Gemini 1.5 Flash) at higher shots is a valuable empirical observation.
+
+## Weaknesses
+- **SFT methodology underspecified**: The paper reports learning rate (0.0001), dropout (0.1), and steps (5k) but omits batch size, optimizer choice, weight decay, training batch details, and whether adapters/LoRA are used. This limits reproducibility.
+- **OOD generalization gap underexplored**: Table 2 shows training on 3-7 blocks and evaluating on 8-20 blocks yields only 34.2% accuracy—a fundamental limitation that should be more prominent. The paper's "near-perfect accuracy" claim (abstract) is misleading as it only holds for easier instances (67% on 8-20 blocks).
+- **CoT methods not evaluated on PDDL benchmarks**: Section 3.1.2 and Figure 4 only show ToT/MCTS/Debate results on Trip Planning and Calendar Scheduling. These methods are never tested on BlocksWorld, Logistics, or Mini-Grid despite PDDL being a core focus. This selective reporting leaves unclear whether search-based methods help for classical planning.
+- **Incomparable SFT vs. ICL comparison**: The paper claims SFT "outperforms many-shot ICL" but compares SFT on Gemini 1.0 S against ICL on Gemini 1.5 Pro and GPT-4. The 48-percentage-point gap is confounded by model differences. A fair comparison requires same-model ablation.
+- **Regex extraction for NL plan verification unvalidated**: The paper states they use "regular expressions to map the plan in Natural Language back to PDDL" but never reports extraction success rates. Errors in this pipeline directly contaminate accuracy measurements for natural language benchmarks.
+
+## Nice-to-Haves
+- Ablation studies for SFT components (optimal plans vs. any plans vs. number of instances) would clarify what drives success
+- Statistical significance testing with 95% confidence intervals instead of 70% CI
+- Systematic prompt sensitivity analysis beyond the anecdotal comparison in Section 3.4
+- Additional open-source models (Llama-3, Mistral) for broader comparison
+- Side-by-side concrete examples of successful vs. failed plans for the same problems
+
+## Novel Insights
+The paper surfaces several non-obvious empirical observations: the finding that many-shot ICL exhibits model-dependent scaling—with Gemini 1.5 Pro benefiting from additional shots while GPT-4 and Gemini 1.5 Flash degrade—suggests heterogeneous attention patterns or context length limits across model families. The competitive performance of debate-as-reasoning (not explicitly designed for planning) versus structured search methods (MCTS, ToT) indicates that for natural language planning, allowing models to construct and compare multiple solutions may matter more than the specific search strategy employed. The observation that failures concentrate at early plan steps in OOD settings, combined with the discovered correlation between step number and action choice, hints that models may learn positional biases rather than generalizable planning heuristics. The dramatic SFT superiority (96% vs. 48% for ICL) with a smaller model suggests that explicit training on optimal plans instills planning structure that in-context learning cannot replicate, even with extensive examples.
+
+## Potentially Missed Related Work
+- **Lehnert et al. (2024) "Beyond A*"** — Uses A* as search mechanism with transformer architecture for planning. The paper mentions this work but positions itself as teaching LLMs themselves rather than hybrid approaches; a brief comparison or ablation against such hybrid methods would strengthen the positioning.
+- **LLM-modulo frameworks (Kambhampati et al., 2024)** — The paper briefly mentions hybrid approaches but doesn't compare against them as baselines. A comparison showing whether fine-tuned LLMs can match or exceed LLM-plus-planner systems would contextualize the contribution.
+
+## Suggestions
+1. **Validate regex extraction pipeline**: Report extraction success rates for NL benchmarks to ensure accuracy measurements are reliable.
+2. **Test CoT methods on PDDL domains**: Evaluate ToT/MCTS/Debate on BlocksWorld, Logistics, and Mini-Grid to establish whether these methods help for classical planning or only for natural language tasks.
+3. **Same-model comparison**: Run SFT and ICL with identical models (e.g., Gemini 1.0 S for both) on the same test problems to support the claim that fine-tuning methodology is superior to in-context learning.
+4. **Prominently discuss OOD limitations**: The 34.2% accuracy on OOD instances is a fundamental constraint that should be central to the paper's narrative and limitations section, not relegated to a table.
+
+---
+
+## WCRQFlji2q
+
+- GT: Accept (Oral) (avg 9.0)
+- Predicted: Accept (7.0/10)
+- Match: Yes
+
+### Final Review
+
+## Summary
+This paper uses sparse autoencoders (SAEs) to discover linear directions in LLM representations that detect whether the model "knows" facts about specific entities. The authors demonstrate that these entity recognition directions fire selectively on known versus unknown entities across diverse entity types (movies, cities, players, songs), have causal effects on knowledge refusal behavior through steering experiments, and transfer from base models to chat models—suggesting instruction tuning repurposes existing mechanisms. They additionally identify "uncertainty directions" that can distinguish correct from incorrect model answers with moderate accuracy.
+
+## Strengths
+- **Strong empirical methodology with converging evidence**: The paper combines SAE-based feature discovery, activation patching, steering interventions, and weight orthogonalization baselines, providing multiple complementary approaches to support claims.
+- **Multi-model validation**: Findings are replicated across Gemma 2 2B, Gemma 2 9B, and Llama 3.1 8B with consistent patterns, substantially strengthening confidence in the results.
+- **Comprehensive control analyses**: The authors address the token likelihood hypothesis (Appendix S), showing correlations between latent activations and next-token prediction probability are negligible (r < 0.07), and validate on post-cutoff song data (Appendix R).
+- **Significant mechanistic insight**: The discovery that base model SAE directions causally affect chat model refusal behavior provides concrete evidence for the "mechanism repurposing" hypothesis during instruction tuning.
+- **Reproducibility**: Code is publicly available, entity datasets from Wikidata are described, and methodology is clearly specified.
+
+## Weaknesses
+- **Effect robustness varies across models**: The statistical significance tests in Appendix M show mixed results (Gemma 2 2B: 10/10 significant for known direction, 9/10 for unknown; Gemma 2 9B: 10/10 for known, only 1/10 for unknown). The paper acknowledges this but doesn't deeply analyze why the 9B model's unknown direction shows weaker effects, limiting the robustness claims.
+- **Large steering coefficients raise off-target effect concerns**: Steering coefficients α ∈ [400, 550] are applied to residual streams with norm ~200-400 (Appendix E), meaning steering adds a vector larger than the original representation. This raises concerns about representational degeneration or unintended behavioral changes beyond the targeted entity recognition effect.
+- **Incomplete mechanistic pathway**: While Section 6 shows entity recognition directions affect attention patterns to entity tokens, the paper does not fully trace the circuit from entity recognition to refusal generation. The causal chain from detection → attention modulation → refusal decision remains partially opaque.
+- **"Self-knowledge" framing may overclaim**: The paper states models "might have self-knowledge: internal representations about their own capabilities," but findings only demonstrate entity-level detection for factual recall, not broader metacognitive awareness. The terminology in title and abstract suggests broader claims than the data supports.
+- **Section 7 (Uncertainty directions) feels preliminary**: The 73.2% AUROC for distinguishing correct from incorrect answers is moderate, and the analysis is relatively brief compared to the main entity recognition findings, creating a disconnected subplot.
+
+## Nice-to-Haves
+- **Dose-response curves**: Test how refusal/hallucination rates change as a function of steering magnitude to verify effects are not thresholded or nonlinear.
+- **Failure mode analysis**: Show examples where steering does NOT produce expected behavior to clarify the boundaries of generalizability.
+- **Ablation study**: Remove the identified directions (not just orthogonalize) to verify the model's known/unknown discrimination ability degrades, strengthening causal claims.
+- **Prospective uncertainty prediction**: Test whether Section 7's "unknown" latent can predict hallucinations on held-out questions in new contexts, not just re-predict the test set.
+
+## Novel Insights
+The paper's most valuable insight is demonstrating that SAE-discovered directions from the base model causally influence knowledge refusal in the chat model—suggesting that instruction tuning repurposes pre-existing mechanisms rather than creating entirely new ones. This finding has implications for both understanding how RLHF/instruction tuning works mechanistically and for potential intervention strategies. The paper also provides evidence that "knowledge awareness" at the entity level is encoded as interpretable linear directions discoverable through SAEs, with the hierarchical organization showing more generalized features emerging in middle layers. The discovery of uncertainty directions that distinguish correct from incorrect answers, while preliminary, suggests a potential pathway for internal hallucination detection.
+
+## Potentially Missed Related Work
+- **Yona et al. (2024)** on LLM uncertainty expression is cited, but the paper could more deeply engage with work on probing for model uncertainty and truthfulness (e.g., "Can LLMs Express Their Uncertainty in Words?" for framing the model's difficulty in expressing when it doesn't know).
+- **Marks & Tegmark (2023)** on "summarization motif" is mentioned regarding end-of-instruction tokens, but the paper could more thoroughly connect to this work on how later tokens aggregate information from earlier context.
+
+## Suggestions
+- **Strengthen the known/unknown classification validation**: The current approach classifies entities based on whether the model gets attributes correct, which could conflate actual knowledge with lucky guesses. Consider using a second independent attribute set to verify the classification is stable rather than artifact-prone.
+- **Analyze why model size affects results**: Investigate whether the weaker effects in 9B models stem from different superposition patterns, more distributed representations, or different knowledge localization—this would deepen mechanistic understanding.
+- **Clarify steering coefficient selection**: The choice of α ∈ [400, 550] ("around two times the norm") warrants more justification. Show that smaller coefficients have no effect before claiming the directions are causally relevant at these magnitudes.
+
+---
+
+## e92KW6htFO
+
+- GT: Reject (avg 5.0)
+- Predicted: Reject (5.0/10)
+- Match: Yes
+
+### Final Review
+
+## Summary
+
+This paper proposes MICE (Memory-driven Intrinsic Cost Estimation) to address constraint violations in Constrained Reinforcement Learning caused by underestimation of cost value functions. The method stores unsafe trajectories in a "flashbulb memory" and generates intrinsic costs based on trajectory similarity to unsafe memories, augmenting the cost value function to correct underestimation bias. The paper provides theoretical bounds on constraint violation and convergence guarantees, with experiments on Safety Gym and Safety MuJoCo demonstrating reduced constraint violations.
+
+## Strengths
+
+- **Problem Identification**: The paper correctly identifies underestimation bias in cost value functions as a distinct issue from the well-known overestimation problem in RL, formalizing why minimizing noisy estimates leads to systematic underestimation. This is a valuable contribution to the CRL literature.
+
+- **Novel Cognitive-Inspired Mechanism**: The flashbulb memory analogy, while loosely connected to actual cognitive science, provides an intuitive framing for a memory-augmented approach. The trajectory similarity-based intrinsic cost offers a principled way to enhance cost estimates for states near known dangers.
+
+- **Theoretical Analysis**: The paper provides meaningful theoretical contributions including convergence guarantees for the extrinsic-intrinsic cost value function (Theorem 3) and a worst-case constraint violation bound (Theorem 2) that is tighter than CPO's bound by an intrinsic term I.
+
+- **Comprehensive Empirical Evaluation**: Extensive experiments across 7 environments with multiple baselines (CPO, PIDLag, Saute, SimmerPID, and additional comparisons in appendix including CUP, IPO, P3O, WCSAC) and thorough ablation studies demonstrating the method's effectiveness.
+
+## Weaknesses
+
+- **Incomplete Convergence Justification**: The convergence proof (Theorem 3) relies on the claim that intrinsic cost c^I "converges to 0 with probability 1" because it decays as γI^k. However, this argument ignores that the memory module is continuously updated with new trajectories as training progresses. The c^I at iteration k depends on memory at iteration k, which itself depends on the evolving policy—creating a moving target. The paper states this without rigorous justification.
+
+- **Theoretical-Practical Gap**: The convergence proof requires conditions (finite MDP, lookup table storage) that fundamentally do not hold in the experimental setup using neural network function approximation. This gap is mentioned but deserves more prominent acknowledgment.
+
+- **Underspecified Generator Architecture**: The intrinsic generator G_φ uses a "random projection layer" but architectural details are sparse. The loss function in Equation 5 regresses the generator toward the same c^I defined in Equation 3, making it unclear what the generator learns differently from directly computing the similarity-based cost. This raises reproducibility concerns.
+
+- **Missing Statistical Significance**: The paper reports mean ± std across 6 seeds but provides no statistical significance tests (confidence intervals, t-tests) to support claims of "substantial reduction" in constraint violations.
+
+## Nice-to-Haves
+
+- **Ablation on memory mechanism itself**: Compare random trajectory storage vs. unsafe-only storage, and memory capacity = 0 (no memory) to isolate contribution of the memory mechanism specifically.
+- **Runtime/computational overhead analysis**: The intrinsic generator and memory module add complexity; wall-clock time or FLOP comparison with baselines would help practical deployment assessment.
+- **Visualization of intrinsic costs**: Heatmaps of c^I values across state-space regions and how they evolve as memory populates would make the mechanism more tangible.
+- **TD3-style baseline for underestimation**: Comparing against using max instead of min for cost value updates would better isolate the contribution of the memory mechanism.
+
+## Novel Insights
+
+The paper offers a genuinely new perspective by identifying that underestimation bias in cost value functions (caused by minimizing noisy estimates) is a key driver of constraint violations in CRL, in direct analogy to how overestimation causes problems in standard RL. The memory-driven approach to enhancing cost estimates for unsafe trajectories, framed through the flashbulb memory metaphor, provides a practical mechanism for corrective signaling. The insight that intrinsic costs can correct underestimation by boosting estimates toward true values—where overestimation is preferable to underestimation in safety-critical applications—is both intuitive and well-motivated.
+
+## Potentially Missed Related Work
+
+- **TD3-based cost estimation**: The paper shows TD3 mitigates but cannot fully eliminate underestimation in Appendix C.2.4, but this work should be discussed in the main text as a natural baseline comparison.
+- **Episodic Reinforcement Learning with Associative Memory (Zhu et al., 2020)**: Directly cited but the paper doesn't clearly distinguish MICE's flashbulb memory from this prior episodic memory approach.
+- **Intrinsic Fear Model (Lipton et al., 2016)**: Directly cited; the paper claims MICE addresses catastrophic forgetting like this approach but the decay mechanism in MICE (γI^k) seems inconsistent with preventing late-training revisit of dangers.
+
+## Suggestions
+
+- Provide either a rigorous proof or explicit discussion of sufficient conditions for convergence of the joint (Q-value, memory, policy) system, not just assuming c^I → 0.
+- Add statistical significance tests to support quantitative claims about constraint violation reduction.
+- Include ablation removing the intrinsic generator entirely (computing similarity directly) to validate its necessity beyond computational efficiency.
+- More prominently acknowledge the gap between theoretical assumptions (finite MDP, lookup tables) and practical implementation (neural networks).
+
+---
+
+## WRKVA3TgSv
+
+- GT: Reject (avg 3.0)
+- Predicted: Accept (7.0/10)
+- Match: No
+
+### Final Review
+
+## Summary
+This paper introduces GraphModQA, a novel benchmark for evaluating LLMs on dynamic graph modification tasks, and demonstrates that while modern SOTA LLMs have largely solved static graph property tasks, their performance degrades significantly on sequential node/edge modifications—particularly with adjacency matrix encodings. The authors propose Modify-and-Print (MAP) prompting, which instructs models to output intermediate adjacency matrices at each step, yielding substantial performance improvements. The work reveals a critical gap in current LLM capabilities for dynamic graph reasoning.
+
+## Strengths
+- **Comprehensive benchmark design**: The 468,750-example GraphModQA dataset systematically varies across five dimensions (3 encodings, 5 modification types, 1-5 modifications, 5 question types, 5 prompting methods), enabling granular analysis of LLM capabilities across conditions.
+- **Thorough empirical evaluation**: Four SOTA LLMs (GPT-4o mini, Llama 3.1 405B, Claude 3.5 Sonnet, o1-mini) are evaluated with detailed error analysis categorizing failure modes (e.g., adjacent index confusion, dimension errors), providing actionable diagnostic insights.
+- **Introduction of adjacency matrix encoding**: While prior work focused on natural-language-like encodings, this paper demonstrates that the adjacency matrix—a fundamental computational representation—is substantially harder for LLMs, which is novel and practically important for real-world graph algorithm applications.
+- **Practical prompting contribution**: MAP prompting is a simple yet effective intervention that consistently improves performance, especially on edge modifications. The observation that MAP outperforms zero-shot even at k=1 (despite there being only one intermediate state) is a valuable empirical finding.
+- **Extensive ablation studies**: Analysis of graph type effects (star, path, complete, empty), edge density impacts, and graph size variations provides nuanced understanding of failure modes.
+
+## Weaknesses
+- **Limited graph diversity**: All experiments use Erdős–Rényi random graphs. Real-world graphs exhibit structure (power-law distributions, community structure) that could affect LLM performance differently. This limits the generalizability of claims about "critical gaps in LLM capabilities."
+- **Missing comparative baselines**: The paper does not compare LLMs against algorithmic baselines (e.g., simple Python code executing modifications) or specialized approaches. Without this, "LLMs struggle" is uninterpretable—are they worse than trivial code?
+- **MAP mechanism understanding is limited**: While the paper observes MAP improves performance, it does not deeply investigate *why* it works. The k=1 finding (where MAP should equal zero-shot but outperforms it) suggests an attention-rerouting effect that deserves analysis.
+- **Main text focuses almost exclusively on Print Graph**: Other final question types (Node Count, Edge Count, Connected Nodes after modifications) receive minimal analysis, making it unclear whether property-based questions after modifications are equally challenging.
+
+## Nice-to-Haves
+- Statistical significance testing for performance differences between prompting methods
+- Fine-tuning experiments on GraphModQA to separate capability limitations from prompting limitations
+- Extension to directed graphs and weighted graphs, which appear in real-world applications
+- Analysis of whether MAP helps on non-matrix representations (incident lists, edge lists)
+
+## Novel Insights
+The paper offers several genuinely novel observations beyond the expected contribution of a new benchmark. The discovery that modern SOTA LLMs have largely "solved" static graph property tasks—where PaLM 2 L achieved only 36.5% average accuracy on adjacency matrices while o1-mini achieves 92.6%—is a significant empirical finding that updates community assumptions about LLM graph reasoning. The finding that adjacency matrices are substantially harder than natural-language-like encodings (Incident, Coauthorship) for modification tasks, but comparable for static tasks, suggests a specific failure mode in how LLMs handle dense numerical representations with implicit numbering schemes. The o1-mini structure preservation bias—where the model systematically attempts to preserve graph structure when adding nodes rather than treating them as isolated—is a fascinating emergent behavior that warrants deeper investigation. The MAP prompting insight that explicitly requesting intermediate outputs improves performance even when it shouldn't theoretically matter (k=1 case) suggests that prompting for structural compliance positively influences model attention to the entire task.
+
+## Potentially Missed Related Work
+- Perozzi et al. (2024) on soft-prompt tuning for graph encoding (suggests fine-tuning could improve results beyond frozen model performance)
+- Zhang et al. (2023) on spatio-temporal graph property tasks with LLMs (related dynamic graph evaluation but different focus)
+- None identified that represent major omissions
+
+## Suggestions
+The ablation study in Appendix A.7 is limited to Claude 3.5 Sonnet only; extending error analysis to other models would strengthen understanding of model-specific versus task-specific failure modes. Additionally, the paper would benefit from a comparison against an algorithmic baseline (e.g., simple Python script executing modifications) to contextualize whether the observed limitations are specific to LLM architectures or inherent to the task complexity.
+
+---
+
+## mV6cO4mGjH
+
+- GT: Reject (avg 4.5)
+- Predicted: Accept (7.0/10)
+- Match: No
+
+### Final Review
+
+## Summary
+This paper presents the first large-scale systematic comparison of video understanding deep neural networks against human visual cortex fMRI recordings, encompassing over two million regression fits across 35+ models. The study systematically examines how different model families (image vs. video, convolutional vs. transformer, single vs. two-stream, supervised vs. self-supervised) predict visual cortex responses, and proposes a novel neural encoding scheme incorporating learned inter- and intra-region voxel connectivity priors. Key findings include video models outperforming image models for brain encoding, convolutional models exceeding transformers in early-mid visual regions, and the necessity of dynamics encoding for fully benefiting from connectivity priors.
+
+## Strengths
+- **Impressive empirical scale**: 35+ models and 2M+ regression fits across two datasets (Mini-Algonauts 2021 and BOLD Moments) provides statistical power uncommon in brain-ML comparison studies, substantially exceeding prior work like Lahner et al. (2024) which examined only three models.
+- **Methodologically rigorous design**: The layer-weighted ROI encoding approach (Equation 1) is well-motivated, combining hierarchical feature weighting with L1 sparsity; hyperparameter tuning via grid search and four-fold cross-validation follows established practices.
+- **Comprehensive ablation structure**: The connectivity experiments separating intra-only, inter-only, and combined conditions (Figure 5b) clearly demonstrate the complementary value of both connectivity types; comparison to random/identity connectivity baselines (Tables 10, 11) validates that learned connectivity provides genuine benefit beyond trivial baselines.
+- **Dual validation framework**: Combining biological target experiments (human visual cortex) with artificial target experiments (other DNN representations) strengthens confidence in findings and provides an upper bound assessment of system identification feasibility.
+- **Novel insight on multiscale transformers**: The observation that MViT's multiscale processing enables CNN-like behavior in early visual regions is genuinely interesting and potentially impactful for both ML and neuroscience communities.
+
+## Weaknesses
+- **Training-inference distribution mismatch in connectivity module**: The connectivity module is trained using ground-truth voxel activations as input but tested using predicted voxel activations (from the first-stage encoding). This distribution shift is neither acknowledged nor discussed as a limitation, yet it represents a fundamental methodological concern that could affect generalization.
+- **Limited self-supervised video model coverage**: The fully-supervised vs. self-supervised comparison for video models relies on only three models (OmniMAE Pre/Fine and TimeSformer), as acknowledged in the paper. The conclusion that "fully supervised models tend to align better with cortical responses" is therefore preliminary and would benefit from additional self-supervised video models (e.g., VideoMAE, stMAE variants trained on different datasets).
+- **Insufficient ablation of MViT's CNN-like behavior**: The paper claims MViT behaves similarly to convolutional models due to "multiscale processing" but does not perform a controlled ablation varying only the multiscale aspect. Without isolating whether the effect stems from multiscale architecture, the convolutional stem, or other factors, this mechanistic insight remains speculative.
+- **fMRI temporal resolution not adequately addressed**: The fundamental limitation of fMRI's ~1 second temporal resolution relative to the 3-second video stimuli and video models' millisecond-level temporal processing is not meaningfully discussed. This creates an inherent mismatch between what dynamics models capture and what fMRI can measure.
+- **Weak comparison to prior state-of-the-art**: The comparison to Zhou et al. (2022) in Appendix B.7 lacks methodological detail and statistical testing; different cross-validation schemes make the comparison difficult to interpret.
+
+## Nice-to-Haves
+- **Subject-level analysis**: All results show subject-averaged performance without examining inter-subject variability or identifying whether findings hold across all ten subjects. Reporting which subjects show the strongest/weaker effects would strengthen conclusions about population-level patterns.
+- **Anatomical connectivity validation**: Comparing learned connectivity weights against ground-truth anatomical connectivity from diffusion MRI would validate biological plausibility of the learned inter-region relationships.
+- **Controlled dynamics ablation**: Testing same architecture trained on single images vs. video (e.g., Slow branch vs. full SlowFast) would isolate whether video advantage stems from dynamics encoding versus other factors.
+- **Effect size quantification**: Beyond p-values, reporting confidence intervals and effect sizes would help readers assess practical significance of modest connectivity improvements (~0.01-0.03 correlation).
+
+## Novel Insights
+This work provides several noteworthy observations that bridge machine learning and neuroscience. First, it demonstrates that video understanding models systematically outperform image models in predicting visual cortex responses, providing empirical evidence that the brain encodes temporal dynamics from video stimuli—a finding that validates the importance of dynamics modeling for brain encoding. Second, it reveals that multiscale vision transformers (MViT) exhibit convolutional-like behavior in early-mid visual regions, suggesting that multiscale processing may capture orientation and frequency information similar to local convolutional operations. Third, the learned directional connectivity analysis reveals non-symmetric inter-region contributions, with late regions showing stronger influence on early regions than vice versa—an observation that aligns with feedback pathway hypotheses in visual neuroscience but remains inferential without direct validation. Finally, the work establishes that combining intra- and inter-region connectivity priors yields superior encoding to either alone, and that this benefit is reinforced by dynamics-based video encoding—suggesting an interplay between temporal information processing and cortical connectivity that warrants further investigation.
+
+## Potentially Missed Related Work
+- **Brain-Score framework** (Schrimpf et al., 2018): Although mentioned briefly, the paper does not submit models or compare against Brain-Score's established benchmarks and leaderboard, which would provide standardized contextualization for biological alignment claims.
+- **Controlled ablation studies for dynamics encoding**: Recent works on temporal dynamics in neural encoding (e.g., Huang et al., 2023 on spiking neural networks; Zhuang et al., 2021 on ventral stream models) provide complementary approaches to studying dynamics that could inform methodology.
+
+## Suggestions
+- Address the training-inference distribution mismatch by either training the connectivity module on predicted voxels (e.g., using a denoising or consistency loss) or conducting an ablation study demonstrating robustness to this shift.
+- Expand the self-supervised video model comparison with additional architectures (VideoMAE, additional OmniMAE/stMAE variants trained on different datasets) to strengthen supervision-type conclusions.
+- Add held-out subject validation for the connectivity module to test generalization, which is critical for practical applications in neural interfaces.
+
+---
+
+## UUwrBhhsxT
+
+- GT: Reject (avg 5.2)
+- Predicted: Reject (4.0/10)
+- Match: Yes
+
+### Final Review
+
+## Summary
+This paper proposes a Transformer-based scenario generation framework for accelerating fault detection in Unmanned Aircraft Traffic Management (UTM) systems. The approach combines a policy model that learns from offline trajectory data with a rule-based action sampler to generate adversarial test scenarios targeting long-tail vulnerabilities. The authors validate their method through 700 hours of industry-level simulation, demonstrating 8x improvement in vulnerability discovery over expert-guided baselines and showing scaling benefits from 10M to 2B parameters.
+
+## Strengths
+- **Substantial engineering evaluation**: 700 hours of simulation across 7 training regions and 2 held-out test regions, with 17B tokens of training data and model scaling from 10M to 2B parameters — this represents genuine investment in empirical validation.
+- **Well-motivated practical problem**: The paper correctly identifies that random testing struggles with long-tail fault distributions in mission-critical systems, and frames fault detection as an RL search problem with clear formalization of state, action, and reward spaces.
+- **Meaningful application contribution**: Applying Transformer-based sequence modeling (Decision Transformer-style) to automated testing of multi-agent UAV systems addresses a real need in aviation safety validation.
+- **Acknowledged limitations**: The paper transparently notes that "PM models fail to balance the distribution of different action types," indicating self-awareness of under-exploration risks.
+
+## Weaknesses
+
+1. **Incomplete reward specification**: The reward function is described as "a weighted combination" of collision avoidance, mission completion, and system stability components, but neither the specific reward definitions nor the weights α_i are provided. This makes the approach non-reproducible and leaves unclear exactly what the model optimizes for.
+
+2. **Weak baseline comparison**: The paper compares only against "Expert-Guided Exploitation" and "Smoke Test" — neither is a published or reproducible method. Methods mentioned in related work (D2RL, AFL-RL, LEADE) are never compared experimentally. This is insufficient for establishing methodological contribution.
+
+3. **Missing component ablations**: The paper never isolates the contribution of the Transformer architecture versus the Action Sampler. Without ablation showing PM-only vs. PM+AS performance, it's impossible to attribute gains to the claimed innovation.
+
+4. **Unclear 8x efficiency claim**: The abstract claims "over 8 times more vulnerability discovery efficiency" but Table 2 shows approximately 7.6x on TR1 (FPM 7.6 vs <1.0) and only ~2.2x on TR2. The claim is region-dependent and imprecise, with no statistical significance or confidence intervals reported across multiple runs.
+
+5. **Limited action space**: The three disturbance types (Wind, Obstacle, Network Jitter) are relatively simple perturbations. The paper acknowledges this limitation but does not analyze whether more complex action types would be needed for comprehensive fault coverage.
+
+6. **Overfitting not addressed**: Figure 5 shows all models peak in accuracy then decline with continued training (overfitting). The paper uses peak checkpoints but does not analyze whether early-stopped checkpoints perform differently online, potentially undermining scaling claims.
+
+## Nice-to-Haves
+- **Standard ML baselines**: Comparison with TD3, PPO, LSTM-based policies, or published fuzzing methods (D2RL, LEADE) would strengthen the contribution claims.
+- **Concrete fault examples**: Show specific critical scenarios discovered by PM-2B that expert-guided testing failed to find, including state trajectories and why these triggered failures.
+- **Sensitivity analysis**: The thresholds for HAR and CAR (0.4) appear arbitrary without justification or sensitivity evaluation.
+- **Threshold and metric definitions**: Define precisely what constitutes a "bug" in FPM and validate inter-rater reliability if human classification is involved.
+- **Code or pseudocode release**: The main paper lacks sufficient implementation details; even partial code would improve reproducibility.
+
+## Novel Insights
+The paper demonstrates that Decision Transformer-style sequence modeling can accelerate fault discovery in complex multi-agent systems by learning to predict high-value disturbance injections from offline trajectory data. The key insight is that return-to-go prediction enables the model to identify scenarios likely to lead to system failures, rather than relying on random exploration. The scaling analysis showing that 2B parameter models overfit later than smaller models suggests that larger Transformers may have practical advantages for capturing rare failure modes — though this claim requires ablation validation. The combination of offline RL-style training with online action filtering via the Action Sampler represents a reasonable engineering solution for ensuring safety constraints while maintaining exploration capability.
+
+## Potentially Missed Related Work
+- **SwarmFuzz (Yao et al., 2023)**: Specifically targets GPS spoofing vulnerabilities in drone swarms using fuzzing — directly relevant to the UTM fault detection application.
+- **D2RL (Feng et al., 2023)**: Formulates accident discovery as MDP and uses RL to manipulate trajectories — cited but not compared against in experiments.
+- **LEADE (Tian et al., 2024)**: Uses LLMs for autonomous driving scenario generation — relevant to the scenario-based testing contribution.
+
+## Suggestions
+1. **Run ablations** isolating each component (context augmentation, preference bias, action masking) to validate that the Transformer architecture specifically drives the improvement.
+2. **Define metrics precisely**: Clarify what "8x efficiency" means operationally, report variance across random seeds, and provide confidence intervals.
+3. **Include standard baselines**: Compare against random injection, AFL-style fuzzing, or published RL methods to make the contribution claims credible and reproducible.
+4. **Address overfitting**: Analyze whether early-stopped checkpoints affect online fault detection performance differently.
+
+---
+
+## adrPcTD2cz
+
+- GT: Reject (avg 3.0)
+- Predicted: Reject (4.0/10)
+- Match: Yes
+
+### Final Review
+
+## Summary
+This paper proposes Weighted-Rank CR, a contrastive regression loss that extends Rank-N-Contrast by weighting negative sample pairs according to their label distance from the anchor sample. Applied to Social Media Popularity Prediction, the method demonstrates modest but consistent improvements over vanilla L1 loss and Rank-N-Contrast across three input modalities on the SMPD dataset. The core idea—assigning stronger contrastive signals to more distant negative samples—is intuitive and well-motivated.
+
+## Strengths
+- **Clear problem identification**: The paper effectively frames data imbalance in regression as a critical challenge for SMPP, with good motivation from the long-tail nature of social media engagement distributions.
+- **Intuitive weighting mechanism**: The exponential weighting scheme (1+α)^d for negative samples is conceptually sound—samples further from the anchor in label space should provide stronger contrastive signals. Figure 2 illustrates this limitation of RNC effectively.
+- **Comprehensive ablation on weighting strategies**: Table 1 tests log, linear, quadratic, and exponential weighting, providing evidence that exponential weighting performs best and supporting the core hypothesis.
+- **Consistent multi-modal improvements**: Table 3 shows improvements across all three modalities (Tags, Image, Tags+Image) in both MAE and SRC, demonstrating versatility.
+- **Benefit for extreme labels**: Figures 5-9 effectively demonstrate that the method helps most at rare and extreme label bins where imbalance is most pronounced.
+
+## Weaknesses
+- **Insufficient baseline comparisons**: The paper compares only against vanilla L1 and Rank-N-Contrast. No comparisons with other DIR methods (FDS, RankSim) or standard SMPP approaches (Ding et al., 2019; Lai et al., 2020) are provided. The paper claims Rank-N-Contrast achieves state-of-the-art on the DIR benchmark but does not evaluate Weighted-Rank CR on this same benchmark, making it impossible to assess claims of superiority over "state-of-the-art."
+- **No statistical rigor**: Results are reported from a single random seed (3407) with no variance estimates, error bars, or statistical significance tests. This is insufficient for ICLR standards.
+- **Missing loss weighting ablation**: The multi-task loss combines Weighted-Rank CR and L1 with equal weighting (λ=0.5) without justification or ablation. This is a critical hyperparameter that could substantially affect results.
+- **α=0.4 not justified**: The hyperparameter controlling the exponential weighting is chosen without systematic analysis or clear rationale beyond being "within the range of label values."
+- **Limited generalization evidence**: The method is validated only on SMPD/Flickr. Without experiments on additional datasets or standard DIR benchmarks, the broader applicability remains unproven.
+
+## Nice-to-Haves
+- Ablation on loss weighting λ to establish whether the CR regularizer actually contributes or if L1 alone would suffice with better hyperparameter tuning.
+- Evaluation on standard DIR benchmarks (IMDB-WIKI, METABRIC) to properly position against other DIR methods.
+- Sensitivity analysis on α showing how performance varies with different values.
+- t-SNE/UMAP visualizations of learned feature spaces to verify the claim that distant negatives are mapped farther apart.
+- Learning curves showing convergence behavior with 10 epochs.
+
+## Novel Insights
+The paper's key insight is that in contrastive regression, treating all negative samples equally regardless of their label distance from the anchor undersamples the contrastive signal from highly informative distant negatives. By weighting negative pairs exponentially by their label distance, the method amplifies the gradient contributions from samples that are most informative for separating extreme or rare labels. This is a natural and sensible extension of Rank-N-Contrast, though the specific exponential form lacks strong theoretical justification beyond empirical validation.
+
+## Potentially Missed Related Work
+- **RankSim (Gong et al., 2022)**: Another ranking-based contrastive regression method cited in the paper but never compared against despite claims of superiority over state-of-the-art.
+- **FDS (Yang et al., 2021)**: The original Deep Imbalanced Regression method with feature distribution smoothing, which established the DIR benchmark used to evaluate Rank-N-Contrast.
+
+## Suggestions
+1. Evaluate on the established DIR benchmark datasets to properly position against Rank-N-Contrast, RankSim, and FDS as claimed.
+2. Report mean and standard deviation across at least 3-5 random seeds to ensure statistical reliability of improvements.
+3. Ablate the loss weighting λ to determine whether the CR regularizer meaningfully contributes beyond vanilla L1 loss.
+4. Add comparisons with FDS, RankSim, and standard re-weighting baselines to contextualize the contribution within the broader DIR literature.
+
+---
+
+## 5nldnvvHfw
+
+- GT: Reject (avg 2.5)
+- Predicted: Reject (2.0/10)
+- Match: Yes
+
+### Final Review
+
+## Summary
+This paper introduces AdamE, a variant of Adam that replaces fixed exponential decay rates (β₁=0.9, β₂=0.999) with dynamic, iteration-dependent rates. The authors provide theoretical convergence analysis for both convex and non-convex settings and validate the approach on a quadratic function and graph clustering tasks. The core idea is reasonable—exploring adaptive decay rates for optimizers—but the paper has significant gaps in both theoretical justification and experimental validation.
+
+## Strengths
+- **Simple, computationally lightweight modification**: The dynamic decay rate scheme adds minimal overhead to Adam and is easy to implement.
+- **Addresses a genuine practical concern**: The sensitivity of Adam to β hyperparameters is a real issue in deep learning optimization, making this a worthwhile research direction.
+- **Attempts comprehensive analysis**: The paper provides both convex and non-convex convergence guarantees (albeit with issues noted below).
+
+## Weaknesses
+- **Theoretical bound appears inferior to standard Adam**: The non-convex convergence bound shows O(log T / √T), which is mathematically worse than Adam's standard O(1/√T) bound. The paper claims "enhanced convergence behavior" but does not acknowledge this regression. This requires clarification or correction.
+- **No quantitative experimental results in main paper**: The primary DBLP graph clustering results are presented only as plots (Figures 5a-5d). No numerical values for ACC, NMI, ARI, or F1 are reported, making it impossible to verify performance claims or compare against baselines numerically.
+- **Algorithm notation is garbled and unclear**: Algorithm 1 contains significant formatting artifacts that make the update rules difficult to verify. Specifically, the reconstruction of α_q and β_q formulas from the text is ambiguous, and the claim that β = 1 - α (where α > 1) contradicts the standard interpretation of exponential decay rates as values in [0,1).
+- **Missing justification for bias correction removal**: AdamE explicitly removes bias correction, which is fundamental to Adam's stability, especially in early iterations. The paper states this is "without the need for bias correction" but provides no analysis, ablation, or justification for why this removal is safe or beneficial.
+- **Motivation rests on a single toy problem**: Section 2 explores different (β₁, β₂) pairs using only a quadratic function. While this illustrates sensitivity to hyperparameters, it does not justify why a *time-varying* schedule should outperform simply using the empirically optimal fixed values.
+- **Incomplete experimental scope**: The abstract claims experiments on "language modeling, node classification, and graph clustering," but only graph clustering results appear in the main paper. The other results are referenced as being in an appendix with broken figure references, limiting verification of the breadth of claims.
+
+## Nice-to-Haves
+- Add ablation study separating the effects of dynamic β values versus removal of bias correction.
+- Compare AdamE against Adam with optimally-tuned fixed (β₁, β₂) values to demonstrate the advantage of the dynamic approach.
+- Include standard vision benchmarks (CIFAR-10/100, ImageNet) alongside the graph tasks for more comprehensive evaluation.
+- Plot trajectories of the effective decay rates during training to make the adaptive mechanism interpretable.
+
+## Novel Insights
+The paper presents a reasonable intuition: fixed exponential decay rates in Adam may not be optimal across all training stages, and time-varying rates could improve convergence. However, the insight is not developed rigorously enough. The specific formula α_t = 1 + t^(-2) appears somewhat arbitrary without deeper theoretical motivation. The paper would benefit from explaining *why* this particular schedule was chosen and how it relates to the observed training dynamics.
+
+## Potentially Missed Related Work
+- Zhou et al. (2018) "On the Convergence of Adaptive Gradient Methods for Nonconvex Optimization" — already cited, but the paper could benefit from a more detailed comparison of convergence bounds with this work.
+- AMSGrad (Reddi et al., 2018) — addresses convergence issues in Adam; relevant to the theoretical discussion.
+
+## Suggestions
+**Most actionable**: The authors should either (a) provide a theoretical argument showing O(log T / √T) is actually comparable to or better than Adam's bound in some meaningful sense, or (b) revise the claim of "enhanced convergence behavior" to be more accurate. Additionally, report numerical results for the graph clustering experiments (at minimum, final ACC/NMI/ARI/F1 values in a table) so claims can be verified.
+
+---
+
+## aP3OBwf8dk
+
+- GT: Reject (avg 6.0)
+- Predicted: Accept (7.0/10)
+- Match: No
+
+### Final Review
+
+## Summary
+This paper addresses the practical problem of training small specialized language models under dual constraints: limited inference budget (requiring small models) and limited specialization data (1-64M tokens). The authors propose two solutions—cluster-based importance sampling for single-domain specialization and Projected Networks for multi-domain specialization with shared pretraining—and demonstrate their effectiveness across 9 domains with comprehensive training budget sweeps.
+
+## Strengths
+- **Well-motivated practical problem**: The paper clearly articulates the real-world scenario where practitioners need efficient inference but have limited in-domain data, providing actionable recommendations (Figure 1) that practitioners can use.
+- **Comprehensive empirical evaluation**: Experiments span 9 diverse domains from the Pile, 3 specialization set sizes (1M, 8M, 64M tokens), and training budgets up to 650 GPUh, with extensive ablation on cluster counts.
+- **Valuable empirical finding**: The paper demonstrates that distillation provides little improvement when accounting for total pretraining cost (Figure 5), challenging common practice and providing important guidance for practitioners.
+- **Novel architecture contribution**: Projected Networks represent a genuinely new approach to decoupling pretraining capacity from inference cost through linear projections, with closed-form expert instantiation.
+- **Theoretical grounding for importance sampling**: The cluster-based importance sampling method is well-grounded in statistical theory, with explicit derivation of importance weights from cluster frequency ratios.
+
+## Weaknesses
+- **No statistical significance testing**: Table 4 reports perplexity to one decimal place without any confidence intervals, and Figure 4 shows curves without error bands. For macro-averaged results across 9 domains, this makes it impossible to assess whether observed differences between methods are statistically reliable.
+- **Domain-specific failures not adequately addressed**: Figure 12 reveals that SLM-pn and SLM-mix do NOT outperform vanilla SLM on wikipedia and openwebtext2. The paper attributes this to high-entropy cluster distributions but does not explore mitigation strategies or robust solutions for this notable failure mode.
+- **Single model scale evaluated**: All experiments use one SLM size (~126M parameters) and one LLM size (~771M). The paper acknowledges this limitation, but results may not generalize to other model scales, which is critical since the core contribution concerns inference budget constraints.
+- **Limited evaluation scope**: The paper evaluates only language modeling perplexity without downstream task validation. While the paper acknowledges this, ICLR standards expect validation that perplexity improvements translate to practical utility on tasks like QA or classification.
+
+## Nice-to-Haves
+- Downstream task evaluation on at least 1-2 applications (e.g., classification, QA) to validate that perplexity improvements translate to task performance
+- Ablation on alternative document embeddings for clustering beyond Sentence-BERT
+- Analysis of why importance sampling outperforms larger models with only 1M tokens—the mechanism behind this striking result is not explained
+- Cost accounting for the clustering and importance sampling resampling overhead beyond the training GPUh calculations
+
+## Novel Insights
+The paper offers several genuinely novel empirical insights. First, it demonstrates that cluster-based importance sampling enables training a specialized SLM that outperforms a much larger pretrained model, but only for the single-domain case where training budget per domain is not shared. Second, the finding that distillation provides negligible benefit when accounting for total pretraining cost (teacher + student pretraining) challenges prevailing practice and suggests practitioners may be better served by alternative approaches. Third, the Projected Network architecture introduces a novel mechanism for decoupling pretraining capacity from inference constraints—unlike distillation, which transfers knowledge through soft labels, PN instantiates multiple small experts in closed-form through linear projections, enabling efficient specialization without distillation overhead.
+
+## Potentially Missed Related Work
+- **Domain-Adaptive PreTraining (DAPT)** (Gururangan et al., 2020): This is a standard, well-established baseline for domain adaptation that the paper does not compare against. DAPT involves continued pretraining on domain-specific data and represents the most direct prior work on adapting language models to specific domains.
+
+## Suggestions
+The paper should include DAPT as a baseline comparison, as this represents the de facto standard approach for domain adaptation that practitioners would consider. Additionally, the paper would benefit from presenting per-domain results in table form (which method wins per domain) to complement the macro-averaged figures and make the domain-dependent performance patterns more transparent. Finally, adding at least one downstream task evaluation would strengthen the practical relevance of the findings for ICLR's audience.
+
+---
+
+## 204sPiwBbB
+
+- GT: Reject (avg 5.2)
+- Predicted: Accept (8.0/10)
+- Match: No
+
+### Final Review
+
+## Summary
+This paper introduces Training with Annotations (TWA), a finetuning algorithm that directly utilizes span-level error annotations from MQM data to improve machine translation models. TWA applies a span-level unlikelihood loss to error spans while allowing the model to learn which specific tokens to penalize, uses cross-entropy on non-error tokens preceding errors, and ignores off-trajectory tokens (tokens following error spans). Experiments on English-German and Chinese-English translation show TWA significantly outperforms sequence-level baselines including SFT and DPO.
+
+## Strengths
+- **Clean, well-motivated algorithm**: The approach is principled and addresses a real gap—most learning-from-feedback methods use sequence-level annotations while span-level information remains underutilized. The off-trajectory concept is particularly insightful.
+- **Thorough experimental design**: Comprehensive baselines (SFT, DPO, Filter+SFT, TWA-seq), proper statistical significance testing with paired permutation tests and clustering, evaluation on two language pairs, and ablation studies isolating each component's contribution.
+- **Strong empirical results**: TWA significantly outperforms all baselines for En→De and is consistently in the rank-1 cluster for Zh→En. The ablation in Table 4 clearly demonstrates incremental value of each design choice.
+- **Effective differentiation from related work**: Clear distinction from FG-RLHF (requires online annotator), TNT (different objective), and FUDGE (decoding vs finetuning).
+
+## Weaknesses
+- **Weight modification lacks justification**: The paper assigns weight -5 to all major errors including non-translations, but MQM assigns -25 for non-translations. This inconsistency is acknowledged in footnote 1 but never justified or ablated. This could significantly affect how non-translation errors are penalized.
+- **No comparison with FG-RLHF**: The paper claims superiority over fine-grained RL methods but never validates this empirically against Wu et al. (2023). This is a key missing comparison given the paper explicitly positions against this approach.
+- **No human evaluation**: All claims rely on automated metrics (MetricX, COMET). While these are established proxies, ICLR typically expects human evaluation for quality claims, especially given MetricX was trained on the same MQM data distribution used for TWA training.
+- **Inconsistent off-trajectory effect unexplained**: Ignoring off-trajectory tokens yields substantial gains for En→De but negligible effect for Zh→En. The paper acknowledges this but provides no analysis of why, limiting confidence in the robustness of this design choice.
+- **Scope limited to MT**: The abstract claims applicability "for span-level annotations broadly" but experiments are only on two language pairs. Generalization to other tasks or domains is undemonstrated.
+
+## Nice-to-Haves
+- Ablate the severity weighting scheme (currently -0.1, -1, -5) versus simpler binary weighting
+- Test TWA on a non-MT task (e.g., summarization with factuality annotations) to support broad applicability claims
+- Add analysis of which error types TWA specifically helps correct
+- Investigate and explain DPO's anomalous performance (better on MetricX but worse on COMET for Zh→En)
+
+## Novel Insights
+The paper's core insight is that span-level annotations unlock learning signals that sequence-level methods miss—specifically, the ability to penalize specific error patterns within spans rather than entire sequences, and the importance of ignoring off-trajectory tokens that have error-containing prefixes. The visualization in Figure 2 demonstrating that TWA learns diverse penalization patterns within error spans is particularly valuable, showing flexibility that would be difficult to encode with manual heuristics. The finding that sequence-level baselines (DPO, TWA-seq) using the same MQM information underperform highlights how non-trivial it is to effectively utilize annotation data even when extra information is available.
+
+## Potentially Missed Related Work
+- **Fine-Grained RLHF (Wu et al., 2023)**: Discussed in related work but only theoretically compared; no empirical comparison on the same test set. This is the most direct comparison point for claims about superiority over fine-grained RL methods.
+- **RAFT (Dong et al., 2023)**: A ranking-based fine-tuning method that could provide another baseline for comparison.
+- **Targeted Negative Training (TNT)** (Zhang et al., 2024: Discussed briefly but could benefit from more extensive comparison given shared motivation around learning from negative examples.
+
+## Suggestions
+1. Justify or ablate the weight modification for non-translation errors (-25 → -5) or restore the original MQM weighting scheme.
+2. Add empirical comparison with FG-RLHF on the same test set, or at minimum include a discussion with representative results from their paper.
+3. Include human evaluation (MQM annotation) on a subset of test outputs to validate that automated metric improvements translate to perceived quality gains.
+4. Investigate the language pair discrepancy in off-trajectory handling—examine error type distributions or test adaptive strategies.
+
+---
+
+## LXftdR11io
+
+- GT: Accept (Spotlight) (avg 7.5)
+- Predicted: Accept (7.0/10)
+- Match: Yes
+
+### Final Review
+
+## Summary
+POTEC proposes a novel two-stage off-policy learning algorithm for contextual bandits with large action spaces, decomposing the overall policy into a first-stage cluster-selection policy (learned via a novel low-variance policy gradient estimator using cluster importance weighting) and a second-stage action-selection policy (derived from pairwise regression within each cluster). The key theoretical contribution demonstrates that the POTEC gradient estimator is unbiased under "local correctness"—a milder condition than full support that only requires preserving relative reward differences within clusters—and that POTEC strictly generalizes both policy-based and regression-based approaches.
+
+## Strengths
+- **Rigorous theoretical analysis**: Theorem 3.2 provides complete bias characterization showing the estimator's bias depends on how well the regression model preserves within-cluster relative value differences. Propositions 3.4-3.5 quantitatively demonstrate variance reduction through cluster importance weighting, showing the estimator variance depends only on cluster importance weights rather than full action-space weights.
+- **Unifying framework**: Figure 2 elegantly demonstrates that POTEC generalizes both policy-based and regression-based approaches as special cases (|C|=|A| and |C|=1 respectively), providing a unified theoretical view of off-policy learning methods and their associated assumptions.
+- **Comprehensive experimentation**: The paper tests POTEC across synthetic data with varying sample sizes, action counts, and cluster counts; real-world recommendation data (KuaiRec); and extreme classification datasets (EurLex-4K, Wiki10-31K with up to ~30K actions). Ablation studies comparing true vs. learned clusters and pairwise vs. absolute regression provide valuable insights.
+- **Addresses a genuine practical problem**: The sample efficiency advantage when per-action training data is small (n/|A| is small) is compelling and valuable for real-world applications where collecting data per action is expensive.
+
+## Weaknesses
+- **Underspecified training procedure**: The paper trains the 2nd-stage first (step 2 of Algorithm 1) and freezes it when training the 1st-stage (step 3), but Theorem 3.2 and the analysis in Appendix D.1 show the optimal cluster for the 1st-stage depends on the 2nd-stage policy (via q^{π_ψ^{2nd}}(x,c)). The algorithm description does not clarify whether this is a single-pass approximation or whether the procedure should be iterated. This coupling between stages is a meaningful gap in the algorithmic specification.
+- **Heuristic clustering without quality guarantees**: The clustering procedure relies on KMeans applied to averaged reward estimates—a pragmatic approach acknowledged as a limitation. No theoretical guidance links clustering quality to POTEC performance, and the paper does not test robustness to poor clustering (e.g., random clustering or clustering that groups high-reward with low-reward actions within the same cluster).
+- **Missing comparison with closely related recent work**: The paper claims to be the first OPL method for large action spaces but does not compare against policy convolution methods (Sachdeva et al., 2024), which also addresses OPL in large action spaces via action grouping. This is the most directly related recent baseline and its absence weakens the contribution's positioning.
+- **Local correctness not empirically validated**: Theorem 3.2 shows unbiasedness requires local correctness, but no experiments check or estimate how close the learned regression model is to satisfying this condition. The paper cannot claim unbiased learning in practice without addressing this gap.
+- **Hyperparameter tuning inconsistency**: The paper states baselines receive hyperparameter tuning while "we use a fixed set of hyperparameters for POTEC as shown in Table 3, giving an unfair advantage to the baselines." This wording is self-contradictory—using fixed hyperparameters for POTEC while tuning baselines' hyperparameters (including POTEC's key hyperparameter: number of clusters) actually disadvantages POTEC, not baselines. This should be corrected.
+
+## Nice-to-Haves
+- **Generalization bounds**: While gradient-level bias and variance are analyzed, finite-sample performance bounds on V(π) − V(π*) or regret guarantees are absent.
+- **Convergence analysis**: Characterize convergence properties of the two-stage optimization procedure.
+- **End-to-end learnable clustering**: Jointly learning clusters and policies rather than using heuristic KMeans would strengthen the contribution.
+- **Scale experiments beyond 30K actions**: Modern applications involve millions of items; testing scaling behavior beyond ~30K actions would better demonstrate practical applicability.
+- **Empirical variance validation**: Theoretical variance claims are not validated empirically through plots of gradient estimator variance across settings.
+
+## Novel Insights
+POTEC's key conceptual insight is that the bias-variance tradeoff in off-policy learning can be fundamentally addressed by decomposing the problem along a clustering structure in the action space. The observation that policy-based methods can operate effectively in the much smaller cluster space (reducing variance) while regression-based methods can operate within clusters (reducing bias requirements to local within-cluster correctness) provides a principled bridge between these traditionally separate approaches. The spectrum interpretation showing that local correctness interpolates between no condition (policy-based) and global correctness (regression-based) is a genuinely useful unifying perspective for understanding the space of off-policy learning methods.
+
+## Potentially Missed Related Work
+- **Sachdeva et al. (2024)** — "Off-policy evaluation for large action spaces via policy convolution" addresses the same problem setting (large action spaces in off-policy learning) via action grouping, making it the most directly comparable recent baseline that should be included.
+
+## Suggestions
+1. Clarify the training procedure: explicitly state whether the two-stage optimization is iterated or single-pass, and if iterated, specify the convergence criteria or number of iterations.
+2. Add comparison against policy convolution methods (Sachdeva et al., 2024) to validate claimed improvement over state-of-the-art.
+3. Correct the self-contradictory wording about hyperparameter tuning to accurately describe that baselines receive an advantage (tuned hyperparameters) while POTEC's key hyperparameter (number of clusters) is fixed.
+4. Add ablation experiments testing robustness to imperfect clustering to validate the method's practical utility when clusters don't perfectly capture reward structure.
+
+---
+
+## qJkCEcd50n
+
+- GT: Reject (avg 3.0)
+- Predicted: Accept (6.0/10)
+- Match: No
+
+### Final Review
+
+## Summary
+This paper investigates whether influence functions—a popular tool for attributing model predictions to training data—can be systematically manipulated by an adversary who trains a malicious model to achieve desired influence scores while maintaining test accuracy. The authors formalize targeted attacks for data valuation applications and untargeted scaling attacks for fairness applications, demonstrating success rates up to 94% on logistic regression models. Key contributions include an efficient backward-pass algorithm for influence-based objectives and an impossibility theorem showing some samples cannot be manipulated regardless of model choice.
+
+## Strengths
+- **Novel and important problem**: This is the first systematic study of manipulating influence-based data attributions, addressing a critical gap where feature attribution manipulation has been extensively studied but data attribution remains unexplored
+- **Strong theoretical contribution**: The impossibility theorem (Theorem 1) provides non-trivial insight that manipulation limits exist and are data-dependent, with a rigorous constructive proof
+- **Algorithmic innovation of independent interest**: The backward-friendly algorithm (Alg. 1) addresses a practical computational barrier (memory reduction from infeasible to 7GB for 206K parameters) and could enable other applications requiring gradients through influence functions
+- **Comprehensive experimental design**: Ablation study in Table 2 effectively isolates contribution of each design component; multiple datasets and configurations demonstrate robustness of findings
+- **Practical threat model**: Covers both targeted (data valuation) and untargeted (fairness) attacks with meaningful adversarial incentives
+
+## Weaknesses
+- **Scope limited to linear models**: All experiments use logistic regression on frozen ResNet features; the impossibility theorem is also proven only for logistic regression. While acknowledged, this significantly limits practical relevance since deep learning models are the primary deployment context for influence functions
+- **Transfer results are weak**: Success rates on unknown test sets drop substantially compared to the original test set (Figure 2), suggesting attacks may not generalize well in practice
+- **Untargeted scaling attack lacks theoretical justification**: While effective empirically, the paper does not explain why simple weight scaling affects influence-based reweighing fairness but preserves raw predictions
+- **No statistical significance reporting**: Fairness results (Figure 5) show single runs with non-monotonic trends and no error bars, making reproducibility and consistency unclear
+
+## Nice-to-Haves
+- Evaluate proposed defenses (ZK proofs, local minima checking) empirically rather than just mentioning them theoretically
+- Compare the scaling attack against a non-trivial baseline (e.g., random perturbation) to contextualize the 16% DP gap difference
+- Investigate whether attacks transfer under weaker (gray/black-box) assumptions about influence score access
+- Provide clearer characterization of which real-world samples are "hard to manipulate" beyond the synthetic impossibility construction
+
+## Novel Insights
+The paper's most valuable insight is demonstrating the **Rashomon effect as the source of vulnerability**: multiple models with nearly identical predictions can have substantially different influence rankings. This explains why an adversary can manipulate influence scores without affecting accuracy—the influence function is not a deterministic function of the model's predictions. Additionally, the observation that simple weight scaling (θ' = λ · θ*) suffices to manipulate fairness-related influence scores while preserving logistic regression predictions reveals a surprising fragility in influence-based reweighing pipelines that goes beyond the well-known fragility from approximation error.
+
+## Potentially Missed Related Work
+- **Afra et al. or similar work on influence function approximation error**: While the paper discusses Basu et al. (2020), Bae et al. (2022), and Epifano et al. (2023) as orthogonal work on fragility, a more detailed comparison of how approximation errors interact with manipulability would strengthen positioning
+- **Rashomon effect literature**: The paper invokes the Rashomon effect but does not cite foundational work (e.g., Rudin et al. 2024 appears in references but the concept isn't connected to existing quantitative analyses)
+
+## Suggestions
+**Priority recommendation**: Extend experiments to at least one non-linear model (e.g., small neural network with influence approximated via Taylor展开 or other scalable methods) or more prominently frame the paper's scope as "influence-based attribution manipulation for linear models" rather than implying broader neural network applicability. The gap between the paper's strong empirical results on linear models and the practical reality of deep learning deployment is the most significant barrier to impact.
+
+---
+
+## WFlLqUmb9v
+
+- GT: Reject (avg 2.5)
+- Predicted: Reject (5.0/10)
+- Match: Yes
+
+### Final Review
+
+## Summary
+The paper proposes FIA-Net, a time series forecasting model that applies STFT to partition sequences into windows, then uses novel MLP backbones (WM-MLP for adjacent window aggregation and HC-MLP using Octonion algebra for efficient all-window aggregation) to process frequency-domain representations. The authors claim average improvements of 5.4% MAE and 3.8% RMSE over state-of-the-art baselines on six real-world datasets.
+
+## Strengths
+- **Novel mathematical contribution**: Treating STFT windows as hyper-complex (Octonion) vectors and leveraging HC algebra for efficient window aggregation is genuinely novel and extends prior work on complex-valued MLPs (FreTS) to higher-dimensional algebras.
+- **Comprehensive experimental evaluation**: Extensive comparison against 8 baselines across 6 datasets (Weather, Exchange, Traffic, Electricity, ETTh1, ETTm1) with 4 prediction horizons each (96, 192, 336, 720), including recent strong baselines (PatchTST, FreTS, FEDformer).
+- **Solid theoretical foundation**: The paper builds on established mathematics (Cayley-Dickson construction) and provides rigorous definitions of both MLP variants with clear complexity analyses showing O(L log(L/p)) forward pass complexity.
+- **Thorough ablation studies**: Well-designed ablations exploring frequency compression (M parameter), lookback window size, real/imaginary component redundancy, and different HC bases (Quaternion, Octonion, Sedenion) in Appendix D.
+- **Reproducibility**: Code publicly available, complete hyperparameter settings provided in Table 7.
+
+## Weaknesses
+- **Unsubstantiated "20% improvement" claim**: The contributions list states "improves upon existing models' accuracy by up to 20%," but the paper only reports average improvements of 5.4% MAE and 3.8% RMSE in Section 5.2. The 20% figure is never clearly substantiated—it's likely comparing against the weakest baselines (Informer, Reformer), not the strongest competitors.
+- **Factual inaccuracy in parameter reduction claim**: The paper states HC-MLP uses "up to three times fewer parameters," but for p=4 (the experimental setting), WM-MLP requires 3p-2=10 weight matrices while HC-MLP uses 4, giving a 2.5x reduction. The 3x claim would only hold for an O(p²) generalization of WM-MLP, which is not the actual comparison.
+- **Unfair comparison in Table 1**: WM-MLP results use optimized p per dataset, while HC-MLP uses fixed p=4. The paper's own Table 2 shows that with matched p=4, HC-MLP achieves comparable accuracy. This makes HC-MLP appear weaker in the main comparison than it actually is.
+- **No actual efficiency measurements**: The paper provides only asymptotic complexity (Table 11) with no actual parameter counts, FLOPs, or wall-clock runtime comparisons on identical hardware. The efficiency claims cannot be verified without measured efficiency metrics.
+- **Incomplete guidance on HC-MLP vs WM-MLP choice**: The paper notes HC-MLP excels at shorter horizons while WM-MLP is better for longer horizons but provides only vague theoretical reasoning. No clear decision framework is provided for practitioners choosing between architectures.
+- **Neighbor aggregation results contradict motivation**: Appendix D.5 (Table 10) shows that extending WM-MLP to 2 or 3 neighbors degrades performance compared to 1 neighbor. This finding, which the paper acknowledges, undermines the paper's core motivation for HC-MLP—the claim that aggregating more windows should help.
+- **Lack of statistical significance testing**: Results are presented as point estimates without confidence intervals or significance tests. Given that many improvements are marginal (e.g., Traffic ties with FreTS/PatchTST), statistical validation is essential.
+
+## Nice-to-Haves
+- **Add modern baselines**: No comparison with DLinear, iTransformer, or recent state-space models (Mamba, S4). DLinear in particular is a commonly used strong baseline that should be included.
+- **Complete architecture specifications**: Figure 3 shows the full model with skip connections and decomposition MLP, but the paper doesn't specify the number of MLP layers, decomposition stage structure, or how many FIA-Net blocks are stacked.
+- **Cross-domain evaluation**: All experiments use standard TSF benchmarks. Testing on additional domains (healthcare, sensor data) would strengthen generalization claims.
+- **STFT window correlation analysis**: The paper's core assumption that adjacent windows are correlated could be validated with empirical correlation heatmaps on actual datasets.
+
+## Novel Insights
+The paper presents a genuinely novel approach by leveraging hyper-complex (Octonion) algebra to aggregate STFT windows in the frequency domain. The key insight—that treating STFT windows as components of a hyper-complex vector enables information sharing across all windows with fewer parameters—is mathematically sound and well-executed. The observation that M=4 (selecting only 4 frequency components) often outperforms using all components (Mmax) suggests that aggressive frequency selection acts as an implicit regularizer. The empirical finding that masking real or imaginary components individually has minimal impact on accuracy is intriguing, though the Kramers-Kronig explanation remains speculative and would benefit from rigorous derivation rather than conjecture.
+
+## Potentially Missed Related Work
+- **None identified** (related work search was skipped in the provided input)
+
+## Suggestions
+1. **Remove or substantiate the "20% improvement" claim**: Either present clear evidence for this figure or use the verified average improvement (5.4% MAE) consistently.
+2. **Correct the parameter reduction claim**: State "approximately 2.5x fewer parameters for p=4" or qualify that the 3x figure applies to an O(p²) generalization.
+3. **Provide matched comparisons**: Either show HC-MLP with optimized p alongside WM-MLP with optimized p, or clearly label Table 1 as showing HC-MLP with fixed p=4 for fair efficiency comparison.
+4. **Add measured efficiency metrics**: Report actual parameter counts, FLOPs, and wall-clock training/inference times on the RTX 3090 for both proposed methods and key baselines (FreTS, PatchTST).
+5. **Address the neighbor aggregation finding**: Either explain why extending WM-MLP neighbors hurts performance (contradicting the paper's stated motivation) or discuss this as a limitation of the approach.
+6. **Add confidence intervals**: Include error bars or statistical significance tests to validate that improvements are not due to random variation.
+
+---
+
+## NuVBI4wPMm
+
+- GT: Accept (Poster) (avg 6.5)
+- Predicted: Accept (7.0/10)
+- Match: Yes
+
+### Final Review
+
+## Summary
+This paper proposes DeGEM (Decoupled Graph Energy-based Model) for node-level out-of-distribution (OOD) detection on graphs, addressing the previously underexplored challenge of heterophilic graphs where connected nodes tend to have different labels. The key innovation is decoupling the EBM into a graph encoder (trained via DGI + classification) and an energy head (trained via MLE in latent space), which avoids both MCMC sampling on graph topology and energy propagation that degrades on heterophilic graphs. Extensive experiments on 7 datasets (4 homophilic, 3 heterophilic) demonstrate substantial improvements, achieving 97.08% average AUC on homophilic and 97.55% on heterophilic graphs without OOD exposure during training.
+
+## Strengths
+- **Novel problem framing**: The paper correctly identifies that heterophily is an underexplored issue in graph OOD detection, where existing methods like GNNSafe rely on homophily assumptions causing severe degradation (Table 2 shows GNNSafe drops to 34.36% AUC on Chameleon-Structure).
+- **Strong ablation study**: Table 4 systematically validates each component contribution, demonstrating the crucial finding that combining DGI and MLE (87.82% avg) dramatically outperforms each alone (MLE: 72.74%, DGI alone: 73.90%).
+- **Comprehensive evaluation**: Tests across 4 homophilic and 3 heterophilic datasets with 3 OOD generation strategies (structure manipulation, feature interpolation, label leave-out), plus varying label ratios demonstrating practical utility.
+- **Theoretical connection**: Section 3.5 provides interesting analysis connecting DGI training to EBM via noise contrastive estimation, partially justifying the design choice.
+- **Reproducibility**: Code publicly available, detailed hyperparameter search spaces provided in Appendix E, training time comparable to baselines (32.18s avg vs 30.66s for GNNSafe).
+
+## Weaknesses
+- **Incomplete performance reporting**: DeGEM does not consistently outperform all baselines—on Twitch-ES, GNNSafe++ achieves 97.75% while DeGEM achieves 94.83%. The paper emphasizes average improvements but doesn't discuss these underperforming cases, making evaluation appear more favorable than it is.
+- **Limited evaluation against heterophily-specific encoders**: While the paper addresses heterophily, it doesn't compare against specialized heterophily-aware graph encoders (e.g., H2GCN, GPR-GNN, FAGCN) that might further enhance performance on heterophilic graphs.
+- **Synthetic OOD scenarios may lack challenge**: Structure manipulation creates disconnected OOD graphs, which may be trivially distinguishable. Feature interpolation and label leave-out also represent relatively constrained distribution shifts compared to real-world scenarios.
+
+## Nice-to-Haves
+- Add FPR95 and AUPR metrics prominently in main tables (currently deferred to appendix), as FPR95 is critical for practical OOD detection evaluation.
+- Test on larger heterophilic graphs—current heterophily experiments use small datasets (Chameleon: ~2,277 nodes, Cornell: ~183 nodes), making scalability claims less convincing.
+- Provide MCMC convergence diagnostics (energy trace plots, autocorrelation) to validate sampling quality in latent space.
+- Include cross-domain OOD detection experiments where ID and OOD come from genuinely different graphs.
+
+## Novel Insights
+The paper's key insight—that performing MCMC sampling in the GNN's latent space rather than on the original graph topology—elegantly sidesteps both the computational challenge of sampling discrete adjacency matrices and the heterophily problem caused by energy propagation. The discovery that DGI and EBM training exhibit a "symbiotic" relationship, where each component's training objective reinforces the other (as demonstrated by the ablation showing neither alone achieves competitive results), represents a genuinely useful observation for the field. Furthermore, the finding that existing graph OOD methods perform *worse* than graph-agnostic methods on heterophilic graphs (Figure 1) highlights a critical gap that the paper addresses.
+
+## Potentially Missed Related Work
+- Graph anomaly detection methods that could be adapted for node OOD detection (e.g., GraphDE, SpaceGNN, SmoothGNN cited in Appendix C but not discussed in main related work)
+- Additional GCL algorithms (BGRL, CCA-SSG, PAIR) that might be tested alongside DGI
+
+## Suggestions
+1. Explicitly discuss cases where DeGEM underperforms (e.g., Twitch-ES compared to GNNSafe++) to provide a balanced evaluation.
+2. Add comparison with heterophily-specific encoders (H2GCN, GPR-GNN) as ablation to further validate the heterophily handling claim.
+3. Provide more challenging OOD scenarios, such as cross-graph OOD detection where ID and OOD come from different datasets.
+
+---
+
+## zfeso8ceqr
+
+- GT: Accept (Poster) (avg 6.0)
+- Predicted: Accept (7.0/10)
+- Match: Yes
+
+### Final Review
+
+## Summary
+This paper presents a comprehensive empirical comparison of five optimization algorithms (SGD, Adam, Adafactor, Lion, Signum) for training autoregressive language models across scales from 150M to 1.2B parameters. The main finding is that all non-SGD adaptive optimizers perform comparably in both optimal performance and hyperparameter stability, challenging the prevailing assumption that Adam is the optimal default. The paper further introduces Adalayer*, a per-layer variant of Adam, and uses it to demonstrate that adaptivity for the last layer and LayerNorm parameters is particularly crucial for achieving stable training.
+
+## Strengths
+- **Thorough empirical methodology**: The paper sweeps across four model scales, two architecture variants (with/without QK norm and z-loss), multiple hyperparameters (learning rate, momentum, weight decay, warmup, batch size, ε, β₂), and varying training durations. This comprehensive approach provides strong empirical grounding for the main claims.
+- **Valuable mechanistic insights**: The Adalayer* analysis provides actionable insights about why adaptive optimizers help—specifically identifying that adaptivity for the last layer and LayerNorm parameters is necessary for performance and learning rate stability. This finding could guide the design of more memory-efficient optimizers.
+- **Sound theoretical connection**: The paper correctly leverages Lemma 1 from Balles & Hennig (2018) to theoretically motivate why Adam and Signum behave similarly when β₁ ≈ β₂, providing a principled basis for the empirical observations.
+- **Honest limitations discussion**: The authors transparently acknowledge the 1D sweep limitation, single dataset scope, and fixed batch size, setting appropriate expectations for the findings.
+
+## Weaknesses
+- **No statistical validation**: Most experiments report single-run results without error bars or confidence intervals across random seeds. For claims about "stability" and "comparable performance," understanding variance across seeds is important. This is a notable gap in rigor for ICLR, particularly when comparing optimization algorithms where training noise can affect optimal hyperparameter selection.
+- **Limited dataset diversity**: All experiments use C4 with T5 tokenizer. The finding that optimizers are equivalent for autoregressive LM training may not generalize to other datasets or domains (e.g., The Pile, code data), limiting the practical scope of recommendations.
+- **Architecture narrowness**: Only decoder-only transformers with fixed width/depth ratios are tested. The findings may not transfer to encoder-decoder models (T5, BART) or architectures with substantially different characteristics (e.g., mixture-of-experts, state space models).
+- **1D hyperparameter sweeps miss interactions**: While the paper acknowledges this limitation, it remains significant. The stability claims could be affected by higher-order interactions between hyperparameters (e.g., learning rate × momentum), which are not explored.
+
+## Nice-to-Haves
+- **Downstream task evaluation**: While validation loss is appropriate for optimizer comparison, reporting performance on downstream benchmarks (e.g., a subset of BIG-Bench or common sense reasoning tasks) would strengthen the practical significance of the findings.
+- **Multi-seed experiments**: Running at least 2-3 seeds for key comparisons (e.g., the 150m standard model) would provide variance estimates and strengthen claims about optimizer equivalence.
+- **Weight decay comparison**: Setting weight decay=0 is atypical for LLM pretraining. Testing with standard regularization settings would make recommendations more applicable to real-world practice.
+- **Gradient statistics analysis**: Measuring gradient heterogeneity across layers (e.g., gradient variance ratios) would provide more mechanistic support for why last layer and LayerNorm parameters specifically benefit from adaptivity.
+
+## Novel Insights
+The paper's most valuable contribution is the systematic demonstration that for autoregressive language model pretraining, optimizer choice within the family of diagonal preconditioning methods is far less critical than commonly believed—Adam, Adafactor, Lion, and Signum all achieve comparable optimal performance and hyperparameter stability. This negative result has practical implications: practitioners can choose optimizers based on memory constraints and implementation ease rather than performance concerns. Furthermore, the Adalayer* analysis reveals a nuanced understanding of where adaptivity matters most: the last layer and LayerNorm parameters require per-parameter or per-block adaptivity for stable training, while other matrix layers can achieve near-optimal results with coarser preconditioning. This insight suggests promising directions for memory-efficient optimizer design that selectively applies fine-grained adaptivity where it matters most.
+
+## Potentially Missed Related Work
+- **Adam-mini (Zhang et al., 2024c)**: Concurrent work that closely tracks a modified version of Adalayer* and demonstrates comparable performance to AdamW with reduced memory overhead—the paper briefly mentions this in the related work but could engage more deeply with their complementary findings.
+- **Heavy-tailed gradient analysis (Kunstner et al., 2024)**: This work shows Adam is less sensitive than SGD to class-imbalance in language tasks; the paper provides supporting evidence but could more explicitly test whether heavy-tailed gradient statistics explain the optimizer equivalence observed.
+
+## Suggestions
+- Add multi-seed validation (even 3 seeds) for at least one model scale to establish variance estimates and strengthen claims about optimizer equivalence.
+- Consider reporting results on at least one additional dataset to validate generalization of the optimizer equivalence finding beyond C4.
+
+---
+
+## nibeaHUEJx
+
+- GT: Accept (Poster) (avg 7.0)
+- Predicted: Accept (8.0/10)
+- Match: Yes
+
+### Final Review
+
+## Summary
+This paper proposes a novel differentiable bijective transformation (diffeomorphism) that maps shifted time series samples to the same point on a data manifold, achieving complete shift-invariance in deep learning models. The key insight is using the phase angle of a specific harmonic (with period ≥ sample length) to uniquely represent each point in the shift space, based on the group-theoretic observation that time shifts form an Abelian group of phase angles in the frequency domain. The method achieves 100% shift consistency while improving performance by 3-15% across 9 datasets spanning 6 diverse time series tasks including heart rate estimation, ECG classification, activity recognition, and sleep stage classification.
+
+## Strengths
+- **Strong theoretical foundation**: The paper provides rigorous mathematical proofs establishing that the proposed transformation T(x, φ) is bijective (Theorem 2.2) and guarantees shift-invariance (Theorem 2.3). The group-theoretic analysis of phase angles is sound and well-presented in both the main text and appendix.
+- **Comprehensive empirical validation**: Experiments span 9 datasets across 6 time series tasks with 6+ baseline methods (LPF, APS, WaveletNet, Canonicalization, STN, TTN), demonstrating consistent improvements and 100% shift consistency where previous methods achieve as low as 32%.
+- **Genuine novelty**: The idea of uniquely representing shift positions using a specific harmonic's phase angle is conceptually new and achieves *complete* shift-invariance rather than the partial invariance of existing anti-aliasing approaches.
+- **Architectural flexibility**: The method can be combined with existing approaches (Ours+LPF, Ours+APS) and works with various network architectures (ResNet, FCN, Transformer, ModernTCN, T-WaveNet).
+- **Strong reproducibility**: Code is available on GitHub with detailed hyperparameters and architecture specifications in the appendix.
+
+## Weaknesses
+- **No image domain experiments despite paradigm-shift claims**: The title and abstract suggest broader impact, but all experiments are on time series. Section H mentions extending to images as "future work," but this leaves the paradigm-shift claim unsupported.
+- **Assumption of quasi-periodic signals**: The method relies on Fourier decomposition with a meaningful harmonic at ω₀ (period ≥ sample length). For signals without clear low-frequency structure (transient spikes, high-pass filtered data), the phase extraction may be noisy or unreliable. The paper does not explore this failure mode.
+- **Computational overhead unaddressed**: The diffeomorphism requires FFT → phase extraction → IFFT for each sample. The paper never reports inference/training time comparisons. For clinical deployment with long sequences, this could be a significant practical limitation.
+- **Guidance network complexity**: The best results require the guidance network with a custom loss term (variance reduction in batch), introducing hyperparameter sensitivity (appendix shows batch size affects results). The HHAR ablation shows a marginal performance decrease (+L̂_G), indicating the guidance network doesn't always help.
+- **Limited failure mode analysis**: The paper does not show cases where the method fails or degrades, nor does it analyze phase extraction reliability under noise.
+
+## Nice-to-Haves
+- **Phase extraction robustness analysis**: Quantify how noise affects phase estimation error and propagate this to downstream shift-consistency.
+- **Statistical significance testing**: Report p-values or confidence intervals for performance improvements across methods.
+- **Guidance network angle visualization**: Plot the distribution of learned angles per class to validate the claimed inter-class separation benefit.
+- **Real-time inference benchmarks**: Single-sample inference latency comparisons would strengthen practical significance claims for health monitoring applications.
+
+## Novel Insights
+The paper's core insight—that each shift variant can be uniquely represented by the phase angle of a single harmonic with period ≥ signal length—is both elegant and practically impactful. By reframing shift-invariance as a data-space transformation problem rather than a network architecture problem, the authors achieve complete invariance where previous approaches (LPF, APS) achieve only partial invariance. The observation that this transformation acts as an "adaptive linear constraint" reducing sample space variations, combined with the learned guidance network that maximizes inter-class separation in the transformed space, provides a new design principle for building robust time series classifiers. The finding that shift-invariance and performance improvements are complementary (not traded off) across diverse tasks suggests the method addresses a fundamental weakness of deep learning on temporal data.
+
+## Potentially Missed Related Work
+- **Time-frequency scattering networks**: While wavelet networks are compared, the scattering transform literature (Mallat 2012 is cited) could be more thoroughly connected to the proposed diffeomorphism approach.
+- **Phase-aware time series methods**: Work on phase reconstruction and alignment in EEG/MEG analysis (e.g., phase-locking value analysis) could provide additional validation domains.
+
+## Suggestions
+- Add at least one image experiment (e.g., MNIST shift invariance) to validate the claimed paradigm-shift potential beyond time series.
+- Include computational overhead (FLOPs, wall-clock time) comparisons in the main results table to address practical deployment concerns.
+- Conduct ablation experiments on signals with weak/absent low-frequency components to explicitly characterize the method's failure modes and limitations.
+
+---
+
+## a8wjeqTZ9C
+
+- GT: Reject (avg 3.8)
+- Predicted: Accept (6.0/10)
+- Match: No
+
+### Final Review
+
+## Summary
+This paper presents the first systematic study investigating how label noise affects Concept Bottleneck Models (CBMs), demonstrating that concept noise (rather than target noise) is the primary factor degrading both performance and interpretability. Through comprehensive experiments on CUB and AWA2 datasets, the authors show CBMs are highly vulnerable to label noise, with t-SNE visualizations revealing disrupted representation clustering. They propose applying Sharpness-Aware Minimization (SAM) as a mitigation strategy, achieving modest but consistent improvements in both concept and target accuracy across noise settings.
+
+## Strengths
+- **Well-identified research gap**: The paper correctly identifies that CBMs' annotation requirements make them particularly susceptible to label noise—a critical real-world concern previously overlooked in the literature. The empirical evidence supporting this claim is thorough.
+- **Comprehensive empirical analysis**: Extensive experimentation across two datasets (CUB, AWA2), three training strategies (Independent, Sequential, Joint), multiple noise types (symmetric, pairwise), and three backbone architectures (InceptionV3, ResNet-18, ViT-B/16) provides strong empirical support for the paper's claims.
+- **Insightful mechanistic analysis**: The t-SNE visualizations convincingly demonstrate how concept noise disrupts representation clustering, and the analysis of concept-target weight relationships (Figure 5) provides useful understanding of failure modes—showing how noise causes CBMs to build incorrect concept-to-target associations.
+- **Clear attribution of damage source**: The ablation separating concept noise from target noise clearly establishes that concept noise is the primary driver of CBM failures, a valuable finding for practitioners.
+- **Practical mitigation with SAM**: SAM provides a readily applicable solution without requiring architectural changes, showing consistent improvements across settings.
+
+## Weaknesses
+- **SAM's limited effectiveness in high-noise regimes**: Despite the positive framing, SAM gains are modest (0.6-0.9% concept accuracy, 2.4-3.2% target accuracy). Critically, at 40% noise, Ind/Seq models still collapse to near-random performance (4-10% target accuracy), raising questions about practical utility. The Joi model achieves reasonable target accuracy (~50-82%) but concept accuracy drops to ~50-58%, fundamentally undermining interpretability claims.
+- **No comparison to established noisy-label techniques**: The paper only compares SAM against vanilla SGD. Established techniques like co-teaching, mixup, GCE loss, forward/backward loss correction, or sample reweighting are not explored. This is a significant gap—the paper cannot claim SAM is a "promising solution" without showing it outperforms alternatives.
+- **Missing mechanistic validation for SAM**: The paper claims SAM "encourages the model to prioritize learning from clean data" but provides no experimental validation of this mechanism. A noise memorization study or clean-vs-noisy sample analysis would strengthen this claim.
+- **Interpretability quantification is absent**: Concept prediction accuracy ≠ interpretability. The paper never measures whether the *right* concepts drive predictions under noise. A Joi model with ~50% concept accuracy (near random for binary concepts) cannot meaningfully claim enhanced interpretability, yet this limitation is only buried in tables rather than prominently discussed.
+- **Limited dataset scope**: Only CUB (fine-grained birds) and AWA2 (animals) are tested. These share similar visual concept structures; evaluation on datasets with different concept characteristics (e.g., clinical, scene understanding) would strengthen generalizability claims.
+
+## Nice-to-Haves
+- Loss landscape visualization comparing SAM vs. SGD to empirically validate the "flatter minima" explanation
+- Systematic analysis across more classes (current t-SNE shows only 3 of 200+ classes)
+- Case studies showing "correct prediction, wrong concept reasons" examples under noise
+- Sensitivity analysis of SAM's sharpness parameter ρ for different CBM training strategies
+
+## Novel Insights
+The paper's most valuable contribution is the clear demonstration that **concept noise disproportionately damages CBMs compared to end-to-end models**, with the mechanism traced through representation clustering disruption (t-SNE analysis) and altered concept-target weight relationships. The finding that Joi training sacrifices interpretability for robustness under noise (and vice versa) provides a useful tradeoff insight for practitioners. Additionally, the observation that even small improvements in concept accuracy (0.4%) can yield substantial target accuracy gains (3.4%) highlights the amplified impact of concept quality in CBM pipelines.
+
+## Potentially Missed Related Work
+- **Label noise in multi-task learning**: While CBMs can be viewed as multi-task models, the paper doesn't connect to the literature on noisy labels in multi-task settings, which may offer additional mitigation strategies.
+- **Semi-supervised concept learning**: Recent work on learning concepts from weak supervision or without explicit annotations (e.g., CLIP-based approaches) could be relevant for reducing annotation errors in practice, though the paper's focus on supervised CBMs makes this less critical.
+
+## Suggestions
+1. **Add baseline comparisons**: Implement and compare at least 1-2 established noisy-label techniques (e.g., co-teaching, GCE loss) alongside SAM to demonstrate SAM's relative effectiveness.
+2. **Prominently discuss Joi's interpretability collapse**: At 40% noise, Joi's ~50% concept accuracy (near random) fundamentally invalidates interpretability claims—explicitly acknowledge this as a limitation rather than burying it in tables.
+3. **Add a validation experiment for SAM's mechanism**: Conduct a simple analysis (e.g., comparing loss on samples identified as clean vs. noisy) to empirically validate the "clean data prioritization" claim.
+
+---
+
+## KiDGtYCPcv
+
+- GT: Reject (avg 4.2)
+- Predicted: Reject (5.0/10)
+- Match: Yes
+
+### Final Review
+
+## Summary
+This paper proposes a Multi-Agent Inverse Reinforcement Learning (MAIRL) framework that combines value decomposition with recursive reasoning to infer latent value functions and cognitive hierarchy levels from observed multi-agent trajectories. The method is validated on simulated cooperative foraging, human hallway coordination data, and monkey non-cooperative behavior, demonstrating interpretable recovery of goal-related values and interaction structures that correspond to task demands.
+
+## Strengths
+- **Well-motivated interdisciplinary contribution**: The paper addresses a genuine need in cognitive science and neuroscience for inferring unobservable beliefs and value functions from observed social behavior, positioning MAIRL as an appropriate tool for this domain.
+- **Effective combination of established techniques**: Value decomposition, maximum entropy IRL, and cognitive hierarchy modeling are integrated coherently to address the exponential state-space growth problem in multi-agent IRL.
+- **Strong simulation validation**: Ground truth experiments (Figures 2-3) demonstrate successful recovery of value maps and correct model identification in controlled settings, providing confidence in the method's correctness.
+- **Interpretable real-world findings**: The human hallway task analysis reveals meaningful differences between expert and failed pairs (expert pairs value states where agents pass each other; failed pairs focus on collision-adjacent states), and monkey analysis shows mutual predictions correlate with social hierarchy—genuinely novel insights for cognitive science.
+- **Supplementary analysis provides mathematical rigor**: The overdetermined linear system analysis of reconstruction error (10^-3 to 10^-4 magnitude) across 2 and 3-agent scenarios provides credible evidence that value decomposition introduces negligible error.
+
+## Weaknesses
+- **Level-1 cognitive agents cannot be identified**: Figure 3B-C reveals that while egocentric (level-0) agents are identifiable, the method fails to distinguish level-1 agents from others. The abstract's claim of "effectively distinguished between level-0 and level-1 agents" is misleading and should be qualified.
+- **Single monkey pair analyzed**: The non-cooperative task validation uses data from only one monkey pair (trial number = 29,147), severely limiting generalizability. The interesting finding about social hierarchy correlation needs replication across multiple pairs.
+- **No comparison to existing baselines**: The paper cites Yu et al. (2019), Wu et al. (2023), Waugh et al. (2013), and Yoshida et al. (2008) but never compares against them. For an ICLR submission, demonstrating improvement over prior methods is essential.
+- **No systematic ablation studies**: The individual contributions of value decomposition versus recursive reasoning are not isolated. Figure 2G shows decomposition helps, but no experiment demonstrates what recursive reasoning provides over simpler alternatives.
+- **No held-out prediction accuracy evaluation**: Evaluation relies on model comparison (AIC) and qualitative interpretation of recovered value maps, not quantitative prediction of held-out behavior. This weakens the case for practical utility.
+- **Model comparison weakness**: Figure 3A shows chance prediction and optimal prediction models produce nearly indistinguishable AIC scores when fitting chance prediction data, limiting the method's discriminative power in the most informative regime.
+- **Interaction term selection is task-specific and unprincipled**: The paper tests multiple interaction terms (Euclidean distance, column distance, row distance) post-hoc without guidance on a priori selection, raising questions about applicability to novel tasks.
+
+## Nice-to-Haves
+- Add uncertainty quantification (posterior credible intervals or bootstrap) for recovered value maps, essential for scientific claims about latent beliefs.
+- Test generalization by predicting behavior in different task variants or grid sizes.
+- Analyze sensitivity to hyperparameter choices (λ₁, λ₂) rather than selecting by "training stability and map interpretability."
+- Report statistical tests with p-values and effect sizes for the monkey social hierarchy correlation.
+- Analyze performance under partial observability to validate claims about real-world applicability.
+
+## Novel Insights
+The paper's most valuable insight is demonstrating that MAIRL can recover interpretable, task-relevant value structures from social behavior without access to task rules. The finding that expert human pairs in the hallway task assign high value to states where agents pass each other (column distance = 0) while failed pairs assign high value to collision-adjacent states (column distance = 1) provides a meaningful qualitative difference that illuminates how coordination emerges with proficiency. Similarly, the monkey finding that mutual predictions correlate with social hierarchy demonstrates that the method captures ecologically valid individual differences in social cognition, not artifacts of the model fitting procedure.
+
+## Potentially Missed Related Work
+- **Yoshida et al. (2008)** — "Game theory of mind" in PLoS Computational Biology; directly addresses recursive Theory of Mind modeling with multi-agent MDPs, which the paper acknowledges but does not quantitatively compare against.
+- **Baker et al. (2017)** — "Rational quantitative attribution of beliefs, desires and percepts" in Nature Human Behaviour; provides a comprehensive POMDP framework for inferring mental states that serves as a natural baseline for the claimed contribution.
+- **Wu et al. (2023)** — "Multiagent inverse reinforcement learning via theory of mind reasoning"; appears to be concurrent work with similar goals but without comparative evaluation.
+- **Level-k reasoning and quantal response equilibrium models** — Standard cognitive science approaches to strategic reasoning that could serve as baselines for cognitive hierarchy inference.
+
+## Suggestions
+- Qualify the abstract claim about distinguishing level-0 and level-1 agents to clarify that only level-0 agents are reliably identifiable (Figure 3B-C).
+- Expand monkey analysis to multiple pairs or explicitly frame the single-pair finding as preliminary.
+- Add a baseline comparison section comparing against at least one existing method (e.g., Yoshida et al., 2008) to establish relative contribution.
+- Consider pre-registering the interaction term selection for the hallway task rather than performing post-hoc comparison.
+
+---
+
+## s3IBHTTDYl
+
+- GT: Accept (Poster) (avg 6.8)
+- Predicted: Accept (7.0/10)
+- Match: Yes
+
+### Final Review
+
+## Summary
+This paper investigates whether language models can learn to count inductively—generalizing from counting up to N to counting N+1 without explicit training examples. Through extensive experiments across Transformers (with 5 positional embedding strategies), RNNs, LSTMs, and modern state-space models (S4, Mamba, RWKV), the authors find that while traditional RNNs trivially achieve inductive counting, Transformers require specific positional embeddings and still exhibit fragile generalization. The work provides important empirical evidence that counting cannot be treated as a primitive operation in Transformers, contradicting its treatment in formal frameworks like RASP.
+
+## Strengths
+- **Careful experimental design**: The task formats (vanilla, shifted start, modular, selective counting) effectively isolate counting from other length generalization confounds. The use of shifted positional embeddings addresses OOD-position issues, and the distinction between "helper token" (trivializes generalization) versus "shifted start" (requires true induction) is well-motivated.
+- **Comprehensive architectural comparison**: Testing across 5 architecture families (Transformers with 5 PE variants, RNN, LSTM, S4, Mamba, RWKV) provides a broad picture. The finding that traditional RNNs trivially generalize while modern recurrent architectures (Mamba, RWKV) struggle due to compromised state transition expressivity is valuable.
+- **Mechanistic analysis**: Section 5's explanation of why different PEs succeed/fail is insightful. The analysis of RoPE's "recency bias" interfering with token-based attention, and APE/SinePE's ability to cluster by PID%10, provides principled understanding beyond empirical observation.
+- **Important negative result**: Demonstrating that counting is NOT a primitive function—even when treated as such in formal analyses like RASP—has significant implications for theoretical expressivity papers and practical applications.
+
+## Weaknesses
+- **High variance limits reliability**: Large gaps between best and median performance (Table A2, e.g., SinePE 4L Helper Token: best=100% vs median=59.9% OOD) indicate that "success" is often a lucky initialization, not reliable learning. This makes conclusions about architectural capabilities tentative.
+- **Limited to shallow from-scratch models**: Experiments use only 1-4 layer Transformers. It's unclear whether findings generalize to larger pretrained models, which are the primary use case for claims about Transformer expressivity. The paper acknowledges this but doesn't discuss implications.
+- **Fragile RoPE generalization**: Table A8 shows RoPE 4L's generalization deteriorates dramatically as the OOD/IND length ratio increases (100→22.1%→11.4%). The claim of "successful generalization" on shifted start is limited to ~2x extrapolation, raising questions about whether true inductive counting is achieved.
+- **Tokenization choice**: Whole-number tokenization differs from how real LLMs handle numbers (digit-level or subword), potentially limiting practical implications. The paper justifies this choice but doesn't test robustness.
+
+## Nice-to-Haves
+- **Pretrained model evaluation**: Testing GPT-2 or similar pretrained models on counting tasks would strengthen applicability claims. Pretrained models have different inductive biases from learned-from-scratch models.
+- **Mechanistic analysis for RNN success**: The paper notes RNNs "trivially achieve" counting but doesn't explain how. Probing hidden states or visualizing counter-like representations would strengthen the architectural comparison.
+- **Ablation on helper token bounds**: The helper token task achieves near-perfect OOD accuracy but doesn't require induction (vocabulary is simply extended). An ablation where helper token counts are also bounded would clarify what fraction of generalization comes from true inductive inference.
+- **Combination PE strategies**: The paper identifies complementary strengths of different PEs but doesn't implement combinations. This is suggested as future work but could be a main experiment.
+
+## Novel Insights
+The paper's core insight is that counting cannot be treated as a primitive operation in Transformers—it requires specific inductive biases via positional embeddings, and even then generalization is fragile. This challenges formal frameworks like RASP that build complex algorithms on counting primitives. The finding that different positional embeddings encode fundamentally different inductive biases (RoPE's recency bias interferes with certain tasks; APE/SinePE's absolute positions enable modular arithmetic) provides a principled lens for understanding PE tradeoffs. Additionally, the observation that modern recurrent architectures (Mamba, RWKV) sacrifice state transition expressivity for parallelization—manifesting in degraded counting performance—offers a new perspective on the tradeoff between training efficiency and computational expressivity in sequence models.
+
+## Potentially Missed Related Work
+- **Yang & Chiang (2024) "Counting like Transformers"**: Directly addresses compiling temporal counting logic into softmax Transformers, which is highly relevant to the paper's claims about counting limitations.
+- **Merrill et al. (2024) "The illusion of state in state-space models"**: Directly addresses whether SSMs truly maintain state, relevant to the paper's finding that S4/Mamba underperform traditional RNNs.
+
+## Suggestions
+- Address the high variance issue by investigating what initialization seeds or hyperparameters lead to generalization versus memorization. This would improve reproducibility and understanding of training dynamics.
+- The paper should more explicitly discuss limitations of the from-scratch training paradigm and how findings might differ for pretrained models, as this is the most common use case.
+
+---
+
+## tc90LV0yRL
+
+- GT: Accept (Oral) (avg 8.7)
+- Predicted: Accept (7.0/10)
+- Match: Yes
+
+### Final Review
+
+## Summary
+Cybench introduces an open-source framework for evaluating language model agents on 40 professional-level Capture the Flag (CTF) cybersecurity tasks, using First Solve Time (FST) as an objective difficulty metric and introducing subtask decomposition for granular evaluation. The benchmark spans 8 models with 4 agent scaffolds, finding that top models (Claude 3.5 Sonnet, GPT-4o, Claude 3 Opus, OpenAI o1-preview) can solve tasks with FST up to 11 minutes but fail entirely on tasks with higher FST (up to 24 hours 54 minutes), revealing substantial capability gaps in current LLM agents.
+
+## Strengths
+- **First open-source professional-level CTF benchmark**: Addresses a genuine gap where UK AISI and OpenAI evaluations remain proprietary, enabling broader community participation in evaluating cybersecurity risks
+- **Objective difficulty calibration via FST**: Using first solve time from actual competitions provides real-world grounding rather than subjective point systems; log-linear scaling (2 minutes to 24+ hours) demonstrates appropriate difficulty range
+- **Subtask innovation for granular evaluation**: Breaking complex tasks into intermediary steps provides more evaluation signal when overall success rates are low (best: 17.5% unguided); this addresses a real challenge in evaluating tasks beyond current capabilities
+- **Comprehensive engineering and verification**: Docker-based environment with task verification via continuous integration, automated probes for task server health, and systematic mitigation of environment vulnerabilities (Docker cache exploits, server isolation)
+- **Thoughtful ethical engagement**: Dual-use discussion is substantive rather than boilerplate, with reasoned arguments for code release considering benefits (automated penetration testing) and risks
+- **Extensive transparency**: Detailed run logs, solution scripts, task metadata, and scaffold analysis (Appendix P, Q) enable community validation and reproduction
+
+## Weaknesses
+- **Scaffolding experiments overstated**: The paper's contribution list claims "8 models and 4 agent scaffolds," but Table 3 shows only Claude 3.5 Sonnet and GPT-4o were tested with all 4 scaffolds. The other 6 models were evaluated with structured bash only, limiting the comprehensiveness claim
+- **Fundamental capability limitations unclear**: The paper states models "struggle to make insights that take experts time to figure out" but doesn't systematically categorize failure modes. Tables 28-67 collect token/time/iteration data but don't analyze whether failures result from reasoning limits, resource exhaustion (tokens/iterations), or stochastic issues—understanding this is critical for prioritizing improvements
+- **Performance ceiling limits benchmark utility**: Best unguided performance of 17.5% means the benchmark primarily differentiates among weak models rather than capable ones. The sharp 11-minute FST threshold with near-zero success beyond it suggests insufficient medium-difficulty tasks for better resolution
+- **No statistical uncertainty reporting**: Error bars and confidence intervals are absent across all tables. Given sparse results (mostly failures), this limits confidence in model comparisons and the validity of the apparent performance hierarchy
+
+## Nice-to-Haves
+- **Head-to-head comparison with prior CTF benchmarks**: The paper compares difficulty qualitatively in Appendix M but doesn't run any InterCode-CTF or NYU CTF Dataset tasks with the same agent, making "complementary" claims unsubstantiated
+- **Baseline comparison with non-LLM tools**: Comparison against Metasploit or automated vulnerability scanners could contextualize whether LLMs add capability beyond existing approaches
+- **Validation of FST-difficulty correlation**: The paper asserts FST predicts agent difficulty but doesn't validate this formally; identifying tasks where FST doesn't predict agent performance would strengthen the framework
+
+## Novel Insights
+The most valuable insight is the sharp capability threshold: current LLM agents successfully solve tasks with FST ≤11 minutes but show near-zero success on harder tasks, creating a 136x gap between solved and maximum task difficulty. This suggests current models lack the multi-step reasoning and insight generation that characterize expert-level cybersecurity work. The subtask mechanism provides a useful diagnostic: even with guidance on intermediary steps, models still fail on harder tasks (e.g., Robust CBC with 24h 54min FST), indicating the limitation is not execution ability but strategic reasoning. The model-dependent scaffolding effects are also informative—Claude 3.5 Sonnet benefits from pseudoterminal and web search while GPT-4o underperforms—suggesting scaffold design must be tailored to model capabilities.
+
+## Potentially Missed Related Work
+- **Anurin et al., 2024 (Catastrophic Cyber Capabilities Benchmark / 3CB)**: Concurrent work on evaluating LLM agent cyber offense capabilities, mentioned in the paper's references but not discussed in the Related Work section for direct comparison
+- **PentestGPT (Deng et al., 2023), HackingBuddyGPT (Happe & Cito, 2023)**: These are cited in related work but comparison is limited to overall approach; systematic performance comparison on overlapping task types would strengthen the paper
+
+## Suggestions
+- **Reconcile scaffolding claims with actual experiments**: The contribution list should accurately reflect that only 2 of 8 models were tested with all 4 scaffolds, or expand scaffolding experiments to all models
+- **Analyze failure modes from collected data**: Use the extensive token/time/iteration data to categorize failures systematically (reasoning errors vs. resource limits vs. stochastic failures), which would directly inform agent improvement priorities
+- **Expand medium-difficulty task coverage**: Add tasks with FST between 11 minutes and 2 hours to improve differentiation among top-performing models and reduce the sharp success/failure cliff
+
+---
+
+## RBp0x7rkMO
+
+- GT: Reject (avg 5.2)
+- Predicted: Accept (6.0/10)
+- Match: No
+
+### Final Review
+
+## Summary
+GRIMOIRE introduces a two-stage pipeline for SVG generation trained entirely on raster images: a Visual Shape Quantizer (VSQ) learns to encode patches into a discrete codebook and decode them into Bézier curves via differentiable rendering, while an Auto-Regressive Transformer (ART) learns the joint distribution over shape tokens, positions, and text descriptions. The key contribution is enabling text-conditioned vector graphics generation without requiring direct SVG supervision, which substantially expands available training data.
+
+## Strengths
+- **Novel supervision paradigm**: First text-conditioned SVG generative model trained purely on raster images, eliminating complex SVG preprocessing pipelines and opening vector generation to image-only datasets.
+- **Strong reconstruction performance**: VSQ consistently outperforms Im2Vec on MSE across all datasets (0.090 vs 0.140 on MNIST, 0.004 vs 0.330 on FIGR-8, 0.011 vs 0.050 on Fonts single-class).
+- **Superior CLIPScore**: GRIMOIRE achieves higher CLIPScore in most generation experiments (e.g., 32.24 vs 31.88 on FIGR-8 full), indicating better text-image alignment.
+- **Well-motivated architecture**: The two-stage VQ-VAE + Transformer decomposition with FSQ-based codebook is sensible and breaks down the complex SVG generation task effectively.
+- **Demonstrated extensibility**: Qualitative results show VSQ can learn additional attributes (color, stroke width) without architecture changes, supporting the paper's flexibility claims.
+- **Practical efficiency**: Generation is ~100× faster than SDS-based methods (2.34s vs 379.74s for VectorFusion).
+
+## Weaknesses
+- **Missing comparison with SVG-supervised methods**: The paper mentions Iconshop and StrokeNUWA as related work but provides zero quantitative comparison. The claim of surpassing "vector-supervised approaches in flexibility" is unsubstantiated. This is a significant gap that undermines the paper's positioning.
+- **Unfair Im2Vec baseline**: Im2Vec is trained on single classes while GRIMOIRE uses full datasets with conditioning, meaning GRIMOIRE has both more data and conditioning information. The comparison conflates model quality with conditioning benefits.
+- **Poor FID scores unexplained**: GRIMOIRE shows 3-5× worse FID than Im2Vec (e.g., 12.25 vs 2.22 on MNIST, 9.25 vs 1.20 on Fonts). The paper attributes this to "metric instability" and "lower resolution" without rigorous justification or analysis.
+- **Post-processing dependency**: Results heavily rely on Path Clipping/Interpolation post-processing (e.g., FID drops from 4.44 to 1.67 on Fonts). This heuristic fix is not adequately analyzed for when/why it's necessary or whether it indicates fundamental limitations.
+- **Dataset-specific preprocessing**: The patch extraction differs across datasets (grid tiling for MNIST, contour extraction for FIGR-8, direct vector manipulation for Fonts). The paper doesn't discuss scalability to arbitrary raster images without such structure.
+- **Codebook inefficiency**: 39.91% of the 4,375-code codebook remains unused after training on FIGR-8. This represents wasted capacity and suggests smaller codebooks may suffice—a missed optimization opportunity.
+- **No ablation on geometric constraint**: The novel L_geom is only tested with strokes; its necessity for closed shapes is unclear. The paper shows qualitative benefits but no quantitative ablation isolating its contribution.
+
+## Nice-to-Haves
+- Human evaluation or user studies for generative quality, which are standard expectations at top venues.
+- Analysis of whether generated SVGs are syntactically valid and actually editable (core value proposition of vector graphics).
+- Latent space interpolation experiments to validate meaningful codebook structure.
+- Exploration of smaller codebook sizes based on observed utilization rates.
+
+## Novel Insights
+The paper's core insight—training an SVG generative model entirely on raster images through a differentiable rasterizer—is genuinely novel and addresses a real limitation in existing approaches that require expensive SVG preprocessing. The decomposition into a local shape quantizer (VSQ) plus global autoregressive model (ART) with explicit position tokens is a clean solution to the challenging problem of generating connected vector graphics. The observation that raster supervision enables training on significantly more data (including image-only datasets like MNIST and potentially natural images) and naturally supports attribute extension (color, stroke width) without tokenization changes is valuable.
+
+## Potentially Missed Related Work
+- DeepSVG (Carlier et al., 2020): Hierarchical generative network for vector graphics; direct comparison would strengthen positioning.
+- SVG-VAE (Lopes et al., 2019): Learned representation for scalable vector graphics; relevant baseline not compared against.
+- Any work on SVG-specific quality metrics beyond CLIP/FID that could better measure vector graphic fidelity.
+
+## Suggestions
+- Add head-to-head quantitative comparison with Iconshop and/or StrokeNUWA on the same datasets to properly contextualize quality trade-offs of raster-only supervision.
+- Implement a class-conditioned version of Im2Vec for fair comparison, or train GRIMOIRE on single classes only.
+- Report results without post-processing in the main paper to establish baseline quality.
+- Conduct ablation study on the geometric constraint L_geom with quantitative metrics.
+
+---
+
+## o1efpbvR6v
+
+- GT: Reject (avg 2.3)
+- Predicted: Reject (4.0/10)
+- Match: Yes
+
+### Final Review
+
+## Summary
+This paper proposes "Metric Transform," a template-based one-step retrosynthesis model that combines Transformer attention mechanisms with Deep Metric Learning using Proxy Anchor Loss. The key innovation is a "subclass mapping" technique that clusters samples within major reaction classes to address the severe class imbalance in USPTO-FULL, remapping predictions back to original templates. The model achieves 53.4% top-1 accuracy on USPTO-FULL with significantly faster inference than prior art and demonstrates competitive multi-step retrosynthesis planning on ChEMBL and Bayer/PubChem molecules.
+
+## Strengths
+- **Well-identified problem**: The paper correctly identifies class imbalance in template-based retrosynthesis—with reaction templates ranging from 1 to ~8,000 samples—as a fundamental challenge that degrades model performance on rare templates.
+- **Innovative subclass mapping**: The concept of splitting major classes into clusters and remapping predictions is creative and directly addresses the observed limitation where major classes form only "localized clustering" in embedding space. This is the paper's most novel contribution.
+- **Strong practical improvements**: The 4-5 percentage point improvement over the AiZynthTrain base model on USPTO-FULL represents meaningful progress achieved with modest computational resources (RTX 3050 4GB), demonstrating efficiency.
+- **Comprehensive multi-task evaluation**: The authors evaluate on both one-step and multi-step retrosynthesis with diverse metrics (top-k accuracy, coverage, inference speed, solving rates), and appropriately emphasize inference speed as critical for multi-step planning—a gap often overlooked in the literature.
+- **Valuable search algorithm comparison**: The comparison between MCTS and NMCS on multi-step retrosynthesis provides useful insights, showing NMCS can solve some molecules MCTS cannot, albeit with increased time.
+
+## Weaknesses
+- **Critical: No ablation studies** — The paper claims attention, Proxy Anchor Loss, and subclass mapping all contribute to performance but never isolates their individual effects. This is a fundamental gap for ICLR acceptance. The reader cannot determine which component drives the improvement or whether they are complementary.
+- **Critical: Incomplete architectural specification** — Number of attention layers, embedding dimensions, number of attention heads, learning rate schedule, and batch size are absent from the main text. This makes independent reproduction impossible. The paper references "PatchEmbedding" for molecular fingerprints but never explains how fixed-length fingerprint vectors are "patchified."
+- **Major: Misleading "no prior chemical knowledge" claim** — The paper claims the approach "requires no prior chemical knowledge," yet relies entirely on molecular fingerprints, reaction templates (which encode chemical reaction rules), atom mapping, and ring-breaker models. These are substantial chemical domain knowledge encoded in the data preprocessing pipeline. This claim should be revised to accurately reflect that the model training doesn't require expert tuning, not that chemical knowledge is absent.
+- **Major: Flawed multi-step comparisons** — ASKCOS uses the Reaxys dataset (much larger than USPTO-FULL) with commercial stock (Sigma Aldrich, eMolecules); DFPN uses 8.6M molecules with 270K templates and internal stock. Comparing 63/100 solved by Metric Transform (USPTO-FULL + ZINC) against these systems is misleading without controlling for dataset and stock differences.
+- **Major: Unexplained USPTO-50k underperformance** — On USPTO-50k, the method achieves 46.4% top-1 versus O-GNN (54.1%), LocalRetro (53.4%), and GLN (52.5%). The paper attributes this to "larger datasets" but provides no mechanistic explanation for why the approach fails on smaller data. This undermines the generalizability claim.
+- **Moderate: No statistical rigor** — Results are reported from single training runs with no error bars, confidence intervals, or significance tests. For ICLR standards, mean ± std across 3+ independent runs should be reported.
+- **Moderate: Non-standard evaluation methodology** — The "rescaling" procedure that treats 11,567 samples as "failed predictions" (samples in the overlap between training and val/test due to different split ratios) is unusual and makes cross-method comparisons difficult to interpret.
+
+## Nice-to-Haves
+- **t-SNE/UMAP visualization** of the embedding space with/without subclass mapping would validate the claim that it improves class separation, particularly for major classes.
+- **Per-class accuracy analysis** showing breakdown by template frequency would demonstrate whether subclass mapping benefits rare templates as claimed.
+- **Template transformation/merging** is mentioned in future work but represents a standard technique (used by GLN, LocalRetro) that could substantially improve performance—this absence limits comparison to state-of-the-art.
+- **Attention weight visualization** would substantiate the claim that attention captures "local and global contexts" in chemically meaningful ways.
+
+## Novel Insights
+The paper's most valuable insight is that major reaction template classes in retrosynthesis datasets exhibit only "localized clustering" in learned embedding spaces, making them confusable with minority classes despite containing many samples. The subclass mapping technique addresses this by forcing finer-grained separation within major classes, reducing the effective imbalance ratio while preserving the semantic meaning of original templates through a remapping layer. The empirical finding that the approach performs better on larger datasets (USPTO-FULL) but worse on smaller ones (USPTO-50k) compared to competitors suggests the method requires sufficient data to learn meaningful embeddings—a hypothesis that deserves systematic investigation. Additionally, the observation that NMCS can solve molecules MCTS cannot, while requiring more time, offers a practical search strategy: use MCTS for initial exploration and NMCS for difficult cases.
+
+## Potentially Missed Related Work
+- **LocalRetro (Jin et al., 2020)** — Template-based method with coverage-aware evaluation; directly comparable and would contextualize performance differences.
+- **O-GNN (Zhu et al., 2023)** — Included in USPTO-50k comparisons but paper does not discuss ring-prior integration that may explain performance differences on USPTO-FULL.
+- **Seidl et al., 2022** — "Improving Few- and Zero-Shot Reaction Template Prediction Using Modern Hopfield Networks" addresses similar class imbalance challenges; methodology comparison would be valuable.
+- **RetroPrime/RetroXpert** — Single-step retrosynthesis methods that decompose the problem differently; would provide additional context for where template-based approaches excel.
+
+## Suggestions
+- **Add systematic ablation studies** isolating each component (attention, Proxy Anchor Loss, subclass mapping) on both USPTO-FULL and USPTO-50k with quantified results for each.
+- **Provide complete hyperparameter table** including all architectural details (layers, heads, dimensions) and training parameters (learning rate, batch size, optimizer, cluster range for k-means).
+- **Report mean ± std** across 3+ independent training runs for key metrics.
+- **Investigate and explain** the scale-dependent performance (better on large data, worse on small data) through controlled experiments varying dataset size.
+- **Scope claims appropriately**: If the method is designed for large-scale classification settings, explicitly state this rather than comparing against methods optimized for small-data regimes.
+
+---
+
+## jCNRcHrfLo
+
+- GT: Reject (avg 5.0)
+- Predicted: Accept (6.0/10)
+- Match: No
+
+### Final Review
+
+## Summary
+This paper proposes HiCA (Hierarchical prompts with Context-Aware calibration) for open-vocabulary object detection, which introduces two complementary mechanisms: hierarchical prompts that decompose region-to-category mapping through a coarse-grained superclass intermediate, and context-aware calibration that modulates classification scores based on visual context distributions. The approach achieves 57.2% mAP_B on OV-COCO (OADP baseline) and 59.8% mAP_B (BARON baseline), with improvements validated across OV-COCO and OV-LVIS benchmarks.
+
+## Strengths
+- **Well-motivated problem identification**: The paper correctly identifies that existing OVD methods learn direct region-to-category mappings that overfit to base classes, neglecting shared semantic knowledge between base and novel categories.
+- **Solid experimental validation**: Comprehensive experiments on two standard benchmarks (OV-COCO, OV-LVIS) with ablations demonstrating each component's contribution. Testing on both OADP and BARON backbones strengthens the generalizability claims.
+- **Intuitive visualizations**: The t-SNE projections showing how hierarchical prompts improve separation between superclasses (Figure 4) effectively illustrate the mechanism.
+- **Modular design**: The plug-and-play architecture for hierarchical prompts and context-aware calibration enhances practical applicability.
+
+## Weaknesses
+- **Unclear superclass definition**: The paper introduces superclasses C_S but never explains how they are constructed from the 65 COCO categories (48 base + 17 novel). This is critical for reproducibility—if superclasses are manually defined, this needs explicit disclosure; if derived algorithmically, the method should be specified.
+- **Baseline reliability concerns**: The reproduced OADP baseline achieves 27.8% AP versus the reported 28.7% (a 0.9% gap), and reproduced BARON achieves 54.6% versus reported 54.8%. While "†" notation indicates reproduced results, the consistent underperformance raises questions about fair comparison methodology.
+- **Novel class gains are modest**: The primary claimed benefit is "generalization to novel classes," but the ablation shows hierarchical prompts contribute only +0.1% novel mAP; context-aware calibration adds +1.2%, yielding a total +1.3% novel class improvement. The dominant effect is +5.5% base class improvement, which should be more prominently emphasized.
+- **Limited architectural validation**: Despite claiming "plug-and-play flexible" modules, HiCA is only evaluated on Faster R-CNN-based frameworks. Application to DETR-based detectors (e.g., CORA's D-DETR, which appears in Table 1) is necessary to substantiate the modularity claim.
+- **No OV-LVIS ablation study**: All ablation experiments are conducted on OV-COCO. Since OV-LVIS has fundamentally different characteristics (1,203 classes with long-tailed distribution), ablation verification on this dataset is needed to confirm the approach scales.
+
+## Nice-to-Haves
+- **Per-novel-class breakdown**: The paper lacks analysis of which novel classes benefit, which are unaffected, and which might be harmed by the calibration, limiting understanding of the generalization mechanism.
+- **Context cluster interpretation**: The K=8 context clusters are treated as black boxes. Visualizing what semantic categories these clusters correspond to (e.g., indoor vs. outdoor) would build confidence in the approach.
+- **Runtime/inference overhead**: No discussion of computational cost for context-aware calibration, limiting practical deployment assessment.
+
+## Novel Insights
+This paper's primary insight is that decomposing the region-to-category mapping through an intermediate coarse-grained superclass level provides a useful inductive bias for open-vocabulary detection. The observation that directly mapping regions to specific category names causes base class overfitting is valid, and using shared superclass knowledge (e.g., "animal," "vehicle") as an intermediary is a reasonable strategy. The secondary insight—using unsupervised visual context clustering to learn category-context co-occurrence distributions for calibration—is intuitive but relatively straightforward. The combination of linguistic hierarchy (superclass prompts) and visual context (context-aware calibration) represents a modest but meaningful advance in how high-level semantic knowledge is incorporated into OVD frameworks.
+
+## Potentially Missed Related Work
+- **SAMP (Zhao et al., 2024)**: Appears in the related work section but the paper could benefit from more detailed comparison, as SAMP also addresses scene-adaptive prompts for OVD.
+- **Hierarchical classification in zero-shot learning**: Literature on hierarchical softmax and coarse-to-fine classification in ZSL (e.g., works on using WordNet hierarchies) may provide additional validation for the superclass approach.
+
+## Suggestions
+- **Validate on DETR-based detectors**: Apply HiCA to a DETR-based OVD method (e.g., adapting the approach to CORA's framework) to substantiate the modularity claims.
+- **Clarify superclass construction**: Either disclose the manual superclass taxonomy used for experiments, or describe an algorithmic method for deriving superclasses from arbitrary category sets.
+- **Report multiple runs**: Add statistical validation (mean ± std across runs) to strengthen confidence in the reported numbers.
+
+---
+
