@@ -4266,3 +4266,870 @@ The ablation study in Appendix A.7 is limited to Claude 3.5 Sonnet only; extendi
 
 ---
 
+## mV6cO4mGjH
+
+- GT: Reject (avg 4.5)
+- Predicted: Accept (7.0/10)
+- Match: No
+
+### Final Review
+
+## Summary
+This paper presents the first large-scale systematic comparison of video understanding deep neural networks against human visual cortex fMRI recordings, encompassing over two million regression fits across 35+ models. The study systematically examines how different model families (image vs. video, convolutional vs. transformer, single vs. two-stream, supervised vs. self-supervised) predict visual cortex responses, and proposes a novel neural encoding scheme incorporating learned inter- and intra-region voxel connectivity priors. Key findings include video models outperforming image models for brain encoding, convolutional models exceeding transformers in early-mid visual regions, and the necessity of dynamics encoding for fully benefiting from connectivity priors.
+
+## Strengths
+- **Impressive empirical scale**: 35+ models and 2M+ regression fits across two datasets (Mini-Algonauts 2021 and BOLD Moments) provides statistical power uncommon in brain-ML comparison studies, substantially exceeding prior work like Lahner et al. (2024) which examined only three models.
+- **Methodologically rigorous design**: The layer-weighted ROI encoding approach (Equation 1) is well-motivated, combining hierarchical feature weighting with L1 sparsity; hyperparameter tuning via grid search and four-fold cross-validation follows established practices.
+- **Comprehensive ablation structure**: The connectivity experiments separating intra-only, inter-only, and combined conditions (Figure 5b) clearly demonstrate the complementary value of both connectivity types; comparison to random/identity connectivity baselines (Tables 10, 11) validates that learned connectivity provides genuine benefit beyond trivial baselines.
+- **Dual validation framework**: Combining biological target experiments (human visual cortex) with artificial target experiments (other DNN representations) strengthens confidence in findings and provides an upper bound assessment of system identification feasibility.
+- **Novel insight on multiscale transformers**: The observation that MViT's multiscale processing enables CNN-like behavior in early visual regions is genuinely interesting and potentially impactful for both ML and neuroscience communities.
+
+## Weaknesses
+- **Training-inference distribution mismatch in connectivity module**: The connectivity module is trained using ground-truth voxel activations as input but tested using predicted voxel activations (from the first-stage encoding). This distribution shift is neither acknowledged nor discussed as a limitation, yet it represents a fundamental methodological concern that could affect generalization.
+- **Limited self-supervised video model coverage**: The fully-supervised vs. self-supervised comparison for video models relies on only three models (OmniMAE Pre/Fine and TimeSformer), as acknowledged in the paper. The conclusion that "fully supervised models tend to align better with cortical responses" is therefore preliminary and would benefit from additional self-supervised video models (e.g., VideoMAE, stMAE variants trained on different datasets).
+- **Insufficient ablation of MViT's CNN-like behavior**: The paper claims MViT behaves similarly to convolutional models due to "multiscale processing" but does not perform a controlled ablation varying only the multiscale aspect. Without isolating whether the effect stems from multiscale architecture, the convolutional stem, or other factors, this mechanistic insight remains speculative.
+- **fMRI temporal resolution not adequately addressed**: The fundamental limitation of fMRI's ~1 second temporal resolution relative to the 3-second video stimuli and video models' millisecond-level temporal processing is not meaningfully discussed. This creates an inherent mismatch between what dynamics models capture and what fMRI can measure.
+- **Weak comparison to prior state-of-the-art**: The comparison to Zhou et al. (2022) in Appendix B.7 lacks methodological detail and statistical testing; different cross-validation schemes make the comparison difficult to interpret.
+
+## Nice-to-Haves
+- **Subject-level analysis**: All results show subject-averaged performance without examining inter-subject variability or identifying whether findings hold across all ten subjects. Reporting which subjects show the strongest/weaker effects would strengthen conclusions about population-level patterns.
+- **Anatomical connectivity validation**: Comparing learned connectivity weights against ground-truth anatomical connectivity from diffusion MRI would validate biological plausibility of the learned inter-region relationships.
+- **Controlled dynamics ablation**: Testing same architecture trained on single images vs. video (e.g., Slow branch vs. full SlowFast) would isolate whether video advantage stems from dynamics encoding versus other factors.
+- **Effect size quantification**: Beyond p-values, reporting confidence intervals and effect sizes would help readers assess practical significance of modest connectivity improvements (~0.01-0.03 correlation).
+
+## Novel Insights
+This work provides several noteworthy observations that bridge machine learning and neuroscience. First, it demonstrates that video understanding models systematically outperform image models in predicting visual cortex responses, providing empirical evidence that the brain encodes temporal dynamics from video stimuli—a finding that validates the importance of dynamics modeling for brain encoding. Second, it reveals that multiscale vision transformers (MViT) exhibit convolutional-like behavior in early-mid visual regions, suggesting that multiscale processing may capture orientation and frequency information similar to local convolutional operations. Third, the learned directional connectivity analysis reveals non-symmetric inter-region contributions, with late regions showing stronger influence on early regions than vice versa—an observation that aligns with feedback pathway hypotheses in visual neuroscience but remains inferential without direct validation. Finally, the work establishes that combining intra- and inter-region connectivity priors yields superior encoding to either alone, and that this benefit is reinforced by dynamics-based video encoding—suggesting an interplay between temporal information processing and cortical connectivity that warrants further investigation.
+
+## Potentially Missed Related Work
+- **Brain-Score framework** (Schrimpf et al., 2018): Although mentioned briefly, the paper does not submit models or compare against Brain-Score's established benchmarks and leaderboard, which would provide standardized contextualization for biological alignment claims.
+- **Controlled ablation studies for dynamics encoding**: Recent works on temporal dynamics in neural encoding (e.g., Huang et al., 2023 on spiking neural networks; Zhuang et al., 2021 on ventral stream models) provide complementary approaches to studying dynamics that could inform methodology.
+
+## Suggestions
+- Address the training-inference distribution mismatch by either training the connectivity module on predicted voxels (e.g., using a denoising or consistency loss) or conducting an ablation study demonstrating robustness to this shift.
+- Expand the self-supervised video model comparison with additional architectures (VideoMAE, additional OmniMAE/stMAE variants trained on different datasets) to strengthen supervision-type conclusions.
+- Add held-out subject validation for the connectivity module to test generalization, which is critical for practical applications in neural interfaces.
+
+---
+
+## UUwrBhhsxT
+
+- GT: Reject (avg 5.2)
+- Predicted: Reject (4.0/10)
+- Match: Yes
+
+### Final Review
+
+## Summary
+This paper proposes a Transformer-based scenario generation framework for accelerating fault detection in Unmanned Aircraft Traffic Management (UTM) systems. The approach combines a policy model that learns from offline trajectory data with a rule-based action sampler to generate adversarial test scenarios targeting long-tail vulnerabilities. The authors validate their method through 700 hours of industry-level simulation, demonstrating 8x improvement in vulnerability discovery over expert-guided baselines and showing scaling benefits from 10M to 2B parameters.
+
+## Strengths
+- **Substantial engineering evaluation**: 700 hours of simulation across 7 training regions and 2 held-out test regions, with 17B tokens of training data and model scaling from 10M to 2B parameters — this represents genuine investment in empirical validation.
+- **Well-motivated practical problem**: The paper correctly identifies that random testing struggles with long-tail fault distributions in mission-critical systems, and frames fault detection as an RL search problem with clear formalization of state, action, and reward spaces.
+- **Meaningful application contribution**: Applying Transformer-based sequence modeling (Decision Transformer-style) to automated testing of multi-agent UAV systems addresses a real need in aviation safety validation.
+- **Acknowledged limitations**: The paper transparently notes that "PM models fail to balance the distribution of different action types," indicating self-awareness of under-exploration risks.
+
+## Weaknesses
+
+1. **Incomplete reward specification**: The reward function is described as "a weighted combination" of collision avoidance, mission completion, and system stability components, but neither the specific reward definitions nor the weights α_i are provided. This makes the approach non-reproducible and leaves unclear exactly what the model optimizes for.
+
+2. **Weak baseline comparison**: The paper compares only against "Expert-Guided Exploitation" and "Smoke Test" — neither is a published or reproducible method. Methods mentioned in related work (D2RL, AFL-RL, LEADE) are never compared experimentally. This is insufficient for establishing methodological contribution.
+
+3. **Missing component ablations**: The paper never isolates the contribution of the Transformer architecture versus the Action Sampler. Without ablation showing PM-only vs. PM+AS performance, it's impossible to attribute gains to the claimed innovation.
+
+4. **Unclear 8x efficiency claim**: The abstract claims "over 8 times more vulnerability discovery efficiency" but Table 2 shows approximately 7.6x on TR1 (FPM 7.6 vs <1.0) and only ~2.2x on TR2. The claim is region-dependent and imprecise, with no statistical significance or confidence intervals reported across multiple runs.
+
+5. **Limited action space**: The three disturbance types (Wind, Obstacle, Network Jitter) are relatively simple perturbations. The paper acknowledges this limitation but does not analyze whether more complex action types would be needed for comprehensive fault coverage.
+
+6. **Overfitting not addressed**: Figure 5 shows all models peak in accuracy then decline with continued training (overfitting). The paper uses peak checkpoints but does not analyze whether early-stopped checkpoints perform differently online, potentially undermining scaling claims.
+
+## Nice-to-Haves
+- **Standard ML baselines**: Comparison with TD3, PPO, LSTM-based policies, or published fuzzing methods (D2RL, LEADE) would strengthen the contribution claims.
+- **Concrete fault examples**: Show specific critical scenarios discovered by PM-2B that expert-guided testing failed to find, including state trajectories and why these triggered failures.
+- **Sensitivity analysis**: The thresholds for HAR and CAR (0.4) appear arbitrary without justification or sensitivity evaluation.
+- **Threshold and metric definitions**: Define precisely what constitutes a "bug" in FPM and validate inter-rater reliability if human classification is involved.
+- **Code or pseudocode release**: The main paper lacks sufficient implementation details; even partial code would improve reproducibility.
+
+## Novel Insights
+The paper demonstrates that Decision Transformer-style sequence modeling can accelerate fault discovery in complex multi-agent systems by learning to predict high-value disturbance injections from offline trajectory data. The key insight is that return-to-go prediction enables the model to identify scenarios likely to lead to system failures, rather than relying on random exploration. The scaling analysis showing that 2B parameter models overfit later than smaller models suggests that larger Transformers may have practical advantages for capturing rare failure modes — though this claim requires ablation validation. The combination of offline RL-style training with online action filtering via the Action Sampler represents a reasonable engineering solution for ensuring safety constraints while maintaining exploration capability.
+
+## Potentially Missed Related Work
+- **SwarmFuzz (Yao et al., 2023)**: Specifically targets GPS spoofing vulnerabilities in drone swarms using fuzzing — directly relevant to the UTM fault detection application.
+- **D2RL (Feng et al., 2023)**: Formulates accident discovery as MDP and uses RL to manipulate trajectories — cited but not compared against in experiments.
+- **LEADE (Tian et al., 2024)**: Uses LLMs for autonomous driving scenario generation — relevant to the scenario-based testing contribution.
+
+## Suggestions
+1. **Run ablations** isolating each component (context augmentation, preference bias, action masking) to validate that the Transformer architecture specifically drives the improvement.
+2. **Define metrics precisely**: Clarify what "8x efficiency" means operationally, report variance across random seeds, and provide confidence intervals.
+3. **Include standard baselines**: Compare against random injection, AFL-style fuzzing, or published RL methods to make the contribution claims credible and reproducible.
+4. **Address overfitting**: Analyze whether early-stopped checkpoints affect online fault detection performance differently.
+
+---
+
+## adrPcTD2cz
+
+- GT: Reject (avg 3.0)
+- Predicted: Reject (4.0/10)
+- Match: Yes
+
+### Final Review
+
+## Summary
+This paper proposes Weighted-Rank CR, a contrastive regression loss that extends Rank-N-Contrast by weighting negative sample pairs according to their label distance from the anchor sample. Applied to Social Media Popularity Prediction, the method demonstrates modest but consistent improvements over vanilla L1 loss and Rank-N-Contrast across three input modalities on the SMPD dataset. The core idea—assigning stronger contrastive signals to more distant negative samples—is intuitive and well-motivated.
+
+## Strengths
+- **Clear problem identification**: The paper effectively frames data imbalance in regression as a critical challenge for SMPP, with good motivation from the long-tail nature of social media engagement distributions.
+- **Intuitive weighting mechanism**: The exponential weighting scheme (1+α)^d for negative samples is conceptually sound—samples further from the anchor in label space should provide stronger contrastive signals. Figure 2 illustrates this limitation of RNC effectively.
+- **Comprehensive ablation on weighting strategies**: Table 1 tests log, linear, quadratic, and exponential weighting, providing evidence that exponential weighting performs best and supporting the core hypothesis.
+- **Consistent multi-modal improvements**: Table 3 shows improvements across all three modalities (Tags, Image, Tags+Image) in both MAE and SRC, demonstrating versatility.
+- **Benefit for extreme labels**: Figures 5-9 effectively demonstrate that the method helps most at rare and extreme label bins where imbalance is most pronounced.
+
+## Weaknesses
+- **Insufficient baseline comparisons**: The paper compares only against vanilla L1 and Rank-N-Contrast. No comparisons with other DIR methods (FDS, RankSim) or standard SMPP approaches (Ding et al., 2019; Lai et al., 2020) are provided. The paper claims Rank-N-Contrast achieves state-of-the-art on the DIR benchmark but does not evaluate Weighted-Rank CR on this same benchmark, making it impossible to assess claims of superiority over "state-of-the-art."
+- **No statistical rigor**: Results are reported from a single random seed (3407) with no variance estimates, error bars, or statistical significance tests. This is insufficient for ICLR standards.
+- **Missing loss weighting ablation**: The multi-task loss combines Weighted-Rank CR and L1 with equal weighting (λ=0.5) without justification or ablation. This is a critical hyperparameter that could substantially affect results.
+- **α=0.4 not justified**: The hyperparameter controlling the exponential weighting is chosen without systematic analysis or clear rationale beyond being "within the range of label values."
+- **Limited generalization evidence**: The method is validated only on SMPD/Flickr. Without experiments on additional datasets or standard DIR benchmarks, the broader applicability remains unproven.
+
+## Nice-to-Haves
+- Ablation on loss weighting λ to establish whether the CR regularizer actually contributes or if L1 alone would suffice with better hyperparameter tuning.
+- Evaluation on standard DIR benchmarks (IMDB-WIKI, METABRIC) to properly position against other DIR methods.
+- Sensitivity analysis on α showing how performance varies with different values.
+- t-SNE/UMAP visualizations of learned feature spaces to verify the claim that distant negatives are mapped farther apart.
+- Learning curves showing convergence behavior with 10 epochs.
+
+## Novel Insights
+The paper's key insight is that in contrastive regression, treating all negative samples equally regardless of their label distance from the anchor undersamples the contrastive signal from highly informative distant negatives. By weighting negative pairs exponentially by their label distance, the method amplifies the gradient contributions from samples that are most informative for separating extreme or rare labels. This is a natural and sensible extension of Rank-N-Contrast, though the specific exponential form lacks strong theoretical justification beyond empirical validation.
+
+## Potentially Missed Related Work
+- **RankSim (Gong et al., 2022)**: Another ranking-based contrastive regression method cited in the paper but never compared against despite claims of superiority over state-of-the-art.
+- **FDS (Yang et al., 2021)**: The original Deep Imbalanced Regression method with feature distribution smoothing, which established the DIR benchmark used to evaluate Rank-N-Contrast.
+
+## Suggestions
+1. Evaluate on the established DIR benchmark datasets to properly position against Rank-N-Contrast, RankSim, and FDS as claimed.
+2. Report mean and standard deviation across at least 3-5 random seeds to ensure statistical reliability of improvements.
+3. Ablate the loss weighting λ to determine whether the CR regularizer meaningfully contributes beyond vanilla L1 loss.
+4. Add comparisons with FDS, RankSim, and standard re-weighting baselines to contextualize the contribution within the broader DIR literature.
+
+---
+
+## 5nldnvvHfw
+
+- GT: Reject (avg 2.5)
+- Predicted: Reject (2.0/10)
+- Match: Yes
+
+### Final Review
+
+## Summary
+This paper introduces AdamE, a variant of Adam that replaces fixed exponential decay rates (β₁=0.9, β₂=0.999) with dynamic, iteration-dependent rates. The authors provide theoretical convergence analysis for both convex and non-convex settings and validate the approach on a quadratic function and graph clustering tasks. The core idea is reasonable—exploring adaptive decay rates for optimizers—but the paper has significant gaps in both theoretical justification and experimental validation.
+
+## Strengths
+- **Simple, computationally lightweight modification**: The dynamic decay rate scheme adds minimal overhead to Adam and is easy to implement.
+- **Addresses a genuine practical concern**: The sensitivity of Adam to β hyperparameters is a real issue in deep learning optimization, making this a worthwhile research direction.
+- **Attempts comprehensive analysis**: The paper provides both convex and non-convex convergence guarantees (albeit with issues noted below).
+
+## Weaknesses
+- **Theoretical bound appears inferior to standard Adam**: The non-convex convergence bound shows O(log T / √T), which is mathematically worse than Adam's standard O(1/√T) bound. The paper claims "enhanced convergence behavior" but does not acknowledge this regression. This requires clarification or correction.
+- **No quantitative experimental results in main paper**: The primary DBLP graph clustering results are presented only as plots (Figures 5a-5d). No numerical values for ACC, NMI, ARI, or F1 are reported, making it impossible to verify performance claims or compare against baselines numerically.
+- **Algorithm notation is garbled and unclear**: Algorithm 1 contains significant formatting artifacts that make the update rules difficult to verify. Specifically, the reconstruction of α_q and β_q formulas from the text is ambiguous, and the claim that β = 1 - α (where α > 1) contradicts the standard interpretation of exponential decay rates as values in [0,1).
+- **Missing justification for bias correction removal**: AdamE explicitly removes bias correction, which is fundamental to Adam's stability, especially in early iterations. The paper states this is "without the need for bias correction" but provides no analysis, ablation, or justification for why this removal is safe or beneficial.
+- **Motivation rests on a single toy problem**: Section 2 explores different (β₁, β₂) pairs using only a quadratic function. While this illustrates sensitivity to hyperparameters, it does not justify why a *time-varying* schedule should outperform simply using the empirically optimal fixed values.
+- **Incomplete experimental scope**: The abstract claims experiments on "language modeling, node classification, and graph clustering," but only graph clustering results appear in the main paper. The other results are referenced as being in an appendix with broken figure references, limiting verification of the breadth of claims.
+
+## Nice-to-Haves
+- Add ablation study separating the effects of dynamic β values versus removal of bias correction.
+- Compare AdamE against Adam with optimally-tuned fixed (β₁, β₂) values to demonstrate the advantage of the dynamic approach.
+- Include standard vision benchmarks (CIFAR-10/100, ImageNet) alongside the graph tasks for more comprehensive evaluation.
+- Plot trajectories of the effective decay rates during training to make the adaptive mechanism interpretable.
+
+## Novel Insights
+The paper presents a reasonable intuition: fixed exponential decay rates in Adam may not be optimal across all training stages, and time-varying rates could improve convergence. However, the insight is not developed rigorously enough. The specific formula α_t = 1 + t^(-2) appears somewhat arbitrary without deeper theoretical motivation. The paper would benefit from explaining *why* this particular schedule was chosen and how it relates to the observed training dynamics.
+
+## Potentially Missed Related Work
+- Zhou et al. (2018) "On the Convergence of Adaptive Gradient Methods for Nonconvex Optimization" — already cited, but the paper could benefit from a more detailed comparison of convergence bounds with this work.
+- AMSGrad (Reddi et al., 2018) — addresses convergence issues in Adam; relevant to the theoretical discussion.
+
+## Suggestions
+**Most actionable**: The authors should either (a) provide a theoretical argument showing O(log T / √T) is actually comparable to or better than Adam's bound in some meaningful sense, or (b) revise the claim of "enhanced convergence behavior" to be more accurate. Additionally, report numerical results for the graph clustering experiments (at minimum, final ACC/NMI/ARI/F1 values in a table) so claims can be verified.
+
+---
+
+## aP3OBwf8dk
+
+- GT: Reject (avg 6.0)
+- Predicted: Accept (7.0/10)
+- Match: No
+
+### Final Review
+
+## Summary
+This paper addresses the practical problem of training small specialized language models under dual constraints: limited inference budget (requiring small models) and limited specialization data (1-64M tokens). The authors propose two solutions—cluster-based importance sampling for single-domain specialization and Projected Networks for multi-domain specialization with shared pretraining—and demonstrate their effectiveness across 9 domains with comprehensive training budget sweeps.
+
+## Strengths
+- **Well-motivated practical problem**: The paper clearly articulates the real-world scenario where practitioners need efficient inference but have limited in-domain data, providing actionable recommendations (Figure 1) that practitioners can use.
+- **Comprehensive empirical evaluation**: Experiments span 9 diverse domains from the Pile, 3 specialization set sizes (1M, 8M, 64M tokens), and training budgets up to 650 GPUh, with extensive ablation on cluster counts.
+- **Valuable empirical finding**: The paper demonstrates that distillation provides little improvement when accounting for total pretraining cost (Figure 5), challenging common practice and providing important guidance for practitioners.
+- **Novel architecture contribution**: Projected Networks represent a genuinely new approach to decoupling pretraining capacity from inference cost through linear projections, with closed-form expert instantiation.
+- **Theoretical grounding for importance sampling**: The cluster-based importance sampling method is well-grounded in statistical theory, with explicit derivation of importance weights from cluster frequency ratios.
+
+## Weaknesses
+- **No statistical significance testing**: Table 4 reports perplexity to one decimal place without any confidence intervals, and Figure 4 shows curves without error bands. For macro-averaged results across 9 domains, this makes it impossible to assess whether observed differences between methods are statistically reliable.
+- **Domain-specific failures not adequately addressed**: Figure 12 reveals that SLM-pn and SLM-mix do NOT outperform vanilla SLM on wikipedia and openwebtext2. The paper attributes this to high-entropy cluster distributions but does not explore mitigation strategies or robust solutions for this notable failure mode.
+- **Single model scale evaluated**: All experiments use one SLM size (~126M parameters) and one LLM size (~771M). The paper acknowledges this limitation, but results may not generalize to other model scales, which is critical since the core contribution concerns inference budget constraints.
+- **Limited evaluation scope**: The paper evaluates only language modeling perplexity without downstream task validation. While the paper acknowledges this, ICLR standards expect validation that perplexity improvements translate to practical utility on tasks like QA or classification.
+
+## Nice-to-Haves
+- Downstream task evaluation on at least 1-2 applications (e.g., classification, QA) to validate that perplexity improvements translate to task performance
+- Ablation on alternative document embeddings for clustering beyond Sentence-BERT
+- Analysis of why importance sampling outperforms larger models with only 1M tokens—the mechanism behind this striking result is not explained
+- Cost accounting for the clustering and importance sampling resampling overhead beyond the training GPUh calculations
+
+## Novel Insights
+The paper offers several genuinely novel empirical insights. First, it demonstrates that cluster-based importance sampling enables training a specialized SLM that outperforms a much larger pretrained model, but only for the single-domain case where training budget per domain is not shared. Second, the finding that distillation provides negligible benefit when accounting for total pretraining cost (teacher + student pretraining) challenges prevailing practice and suggests practitioners may be better served by alternative approaches. Third, the Projected Network architecture introduces a novel mechanism for decoupling pretraining capacity from inference constraints—unlike distillation, which transfers knowledge through soft labels, PN instantiates multiple small experts in closed-form through linear projections, enabling efficient specialization without distillation overhead.
+
+## Potentially Missed Related Work
+- **Domain-Adaptive PreTraining (DAPT)** (Gururangan et al., 2020): This is a standard, well-established baseline for domain adaptation that the paper does not compare against. DAPT involves continued pretraining on domain-specific data and represents the most direct prior work on adapting language models to specific domains.
+
+## Suggestions
+The paper should include DAPT as a baseline comparison, as this represents the de facto standard approach for domain adaptation that practitioners would consider. Additionally, the paper would benefit from presenting per-domain results in table form (which method wins per domain) to complement the macro-averaged figures and make the domain-dependent performance patterns more transparent. Finally, adding at least one downstream task evaluation would strengthen the practical relevance of the findings for ICLR's audience.
+
+---
+
+## 204sPiwBbB
+
+- GT: Reject (avg 5.2)
+- Predicted: Accept (8.0/10)
+- Match: No
+
+### Final Review
+
+## Summary
+This paper introduces Training with Annotations (TWA), a finetuning algorithm that directly utilizes span-level error annotations from MQM data to improve machine translation models. TWA applies a span-level unlikelihood loss to error spans while allowing the model to learn which specific tokens to penalize, uses cross-entropy on non-error tokens preceding errors, and ignores off-trajectory tokens (tokens following error spans). Experiments on English-German and Chinese-English translation show TWA significantly outperforms sequence-level baselines including SFT and DPO.
+
+## Strengths
+- **Clean, well-motivated algorithm**: The approach is principled and addresses a real gap—most learning-from-feedback methods use sequence-level annotations while span-level information remains underutilized. The off-trajectory concept is particularly insightful.
+- **Thorough experimental design**: Comprehensive baselines (SFT, DPO, Filter+SFT, TWA-seq), proper statistical significance testing with paired permutation tests and clustering, evaluation on two language pairs, and ablation studies isolating each component's contribution.
+- **Strong empirical results**: TWA significantly outperforms all baselines for En→De and is consistently in the rank-1 cluster for Zh→En. The ablation in Table 4 clearly demonstrates incremental value of each design choice.
+- **Effective differentiation from related work**: Clear distinction from FG-RLHF (requires online annotator), TNT (different objective), and FUDGE (decoding vs finetuning).
+
+## Weaknesses
+- **Weight modification lacks justification**: The paper assigns weight -5 to all major errors including non-translations, but MQM assigns -25 for non-translations. This inconsistency is acknowledged in footnote 1 but never justified or ablated. This could significantly affect how non-translation errors are penalized.
+- **No comparison with FG-RLHF**: The paper claims superiority over fine-grained RL methods but never validates this empirically against Wu et al. (2023). This is a key missing comparison given the paper explicitly positions against this approach.
+- **No human evaluation**: All claims rely on automated metrics (MetricX, COMET). While these are established proxies, ICLR typically expects human evaluation for quality claims, especially given MetricX was trained on the same MQM data distribution used for TWA training.
+- **Inconsistent off-trajectory effect unexplained**: Ignoring off-trajectory tokens yields substantial gains for En→De but negligible effect for Zh→En. The paper acknowledges this but provides no analysis of why, limiting confidence in the robustness of this design choice.
+- **Scope limited to MT**: The abstract claims applicability "for span-level annotations broadly" but experiments are only on two language pairs. Generalization to other tasks or domains is undemonstrated.
+
+## Nice-to-Haves
+- Ablate the severity weighting scheme (currently -0.1, -1, -5) versus simpler binary weighting
+- Test TWA on a non-MT task (e.g., summarization with factuality annotations) to support broad applicability claims
+- Add analysis of which error types TWA specifically helps correct
+- Investigate and explain DPO's anomalous performance (better on MetricX but worse on COMET for Zh→En)
+
+## Novel Insights
+The paper's core insight is that span-level annotations unlock learning signals that sequence-level methods miss—specifically, the ability to penalize specific error patterns within spans rather than entire sequences, and the importance of ignoring off-trajectory tokens that have error-containing prefixes. The visualization in Figure 2 demonstrating that TWA learns diverse penalization patterns within error spans is particularly valuable, showing flexibility that would be difficult to encode with manual heuristics. The finding that sequence-level baselines (DPO, TWA-seq) using the same MQM information underperform highlights how non-trivial it is to effectively utilize annotation data even when extra information is available.
+
+## Potentially Missed Related Work
+- **Fine-Grained RLHF (Wu et al., 2023)**: Discussed in related work but only theoretically compared; no empirical comparison on the same test set. This is the most direct comparison point for claims about superiority over fine-grained RL methods.
+- **RAFT (Dong et al., 2023)**: A ranking-based fine-tuning method that could provide another baseline for comparison.
+- **Targeted Negative Training (TNT)** (Zhang et al., 2024: Discussed briefly but could benefit from more extensive comparison given shared motivation around learning from negative examples.
+
+## Suggestions
+1. Justify or ablate the weight modification for non-translation errors (-25 → -5) or restore the original MQM weighting scheme.
+2. Add empirical comparison with FG-RLHF on the same test set, or at minimum include a discussion with representative results from their paper.
+3. Include human evaluation (MQM annotation) on a subset of test outputs to validate that automated metric improvements translate to perceived quality gains.
+4. Investigate the language pair discrepancy in off-trajectory handling—examine error type distributions or test adaptive strategies.
+
+---
+
+## LXftdR11io
+
+- GT: Accept (Spotlight) (avg 7.5)
+- Predicted: Accept (7.0/10)
+- Match: Yes
+
+### Final Review
+
+## Summary
+POTEC proposes a novel two-stage off-policy learning algorithm for contextual bandits with large action spaces, decomposing the overall policy into a first-stage cluster-selection policy (learned via a novel low-variance policy gradient estimator using cluster importance weighting) and a second-stage action-selection policy (derived from pairwise regression within each cluster). The key theoretical contribution demonstrates that the POTEC gradient estimator is unbiased under "local correctness"—a milder condition than full support that only requires preserving relative reward differences within clusters—and that POTEC strictly generalizes both policy-based and regression-based approaches.
+
+## Strengths
+- **Rigorous theoretical analysis**: Theorem 3.2 provides complete bias characterization showing the estimator's bias depends on how well the regression model preserves within-cluster relative value differences. Propositions 3.4-3.5 quantitatively demonstrate variance reduction through cluster importance weighting, showing the estimator variance depends only on cluster importance weights rather than full action-space weights.
+- **Unifying framework**: Figure 2 elegantly demonstrates that POTEC generalizes both policy-based and regression-based approaches as special cases (|C|=|A| and |C|=1 respectively), providing a unified theoretical view of off-policy learning methods and their associated assumptions.
+- **Comprehensive experimentation**: The paper tests POTEC across synthetic data with varying sample sizes, action counts, and cluster counts; real-world recommendation data (KuaiRec); and extreme classification datasets (EurLex-4K, Wiki10-31K with up to ~30K actions). Ablation studies comparing true vs. learned clusters and pairwise vs. absolute regression provide valuable insights.
+- **Addresses a genuine practical problem**: The sample efficiency advantage when per-action training data is small (n/|A| is small) is compelling and valuable for real-world applications where collecting data per action is expensive.
+
+## Weaknesses
+- **Underspecified training procedure**: The paper trains the 2nd-stage first (step 2 of Algorithm 1) and freezes it when training the 1st-stage (step 3), but Theorem 3.2 and the analysis in Appendix D.1 show the optimal cluster for the 1st-stage depends on the 2nd-stage policy (via q^{π_ψ^{2nd}}(x,c)). The algorithm description does not clarify whether this is a single-pass approximation or whether the procedure should be iterated. This coupling between stages is a meaningful gap in the algorithmic specification.
+- **Heuristic clustering without quality guarantees**: The clustering procedure relies on KMeans applied to averaged reward estimates—a pragmatic approach acknowledged as a limitation. No theoretical guidance links clustering quality to POTEC performance, and the paper does not test robustness to poor clustering (e.g., random clustering or clustering that groups high-reward with low-reward actions within the same cluster).
+- **Missing comparison with closely related recent work**: The paper claims to be the first OPL method for large action spaces but does not compare against policy convolution methods (Sachdeva et al., 2024), which also addresses OPL in large action spaces via action grouping. This is the most directly related recent baseline and its absence weakens the contribution's positioning.
+- **Local correctness not empirically validated**: Theorem 3.2 shows unbiasedness requires local correctness, but no experiments check or estimate how close the learned regression model is to satisfying this condition. The paper cannot claim unbiased learning in practice without addressing this gap.
+- **Hyperparameter tuning inconsistency**: The paper states baselines receive hyperparameter tuning while "we use a fixed set of hyperparameters for POTEC as shown in Table 3, giving an unfair advantage to the baselines." This wording is self-contradictory—using fixed hyperparameters for POTEC while tuning baselines' hyperparameters (including POTEC's key hyperparameter: number of clusters) actually disadvantages POTEC, not baselines. This should be corrected.
+
+## Nice-to-Haves
+- **Generalization bounds**: While gradient-level bias and variance are analyzed, finite-sample performance bounds on V(π) − V(π*) or regret guarantees are absent.
+- **Convergence analysis**: Characterize convergence properties of the two-stage optimization procedure.
+- **End-to-end learnable clustering**: Jointly learning clusters and policies rather than using heuristic KMeans would strengthen the contribution.
+- **Scale experiments beyond 30K actions**: Modern applications involve millions of items; testing scaling behavior beyond ~30K actions would better demonstrate practical applicability.
+- **Empirical variance validation**: Theoretical variance claims are not validated empirically through plots of gradient estimator variance across settings.
+
+## Novel Insights
+POTEC's key conceptual insight is that the bias-variance tradeoff in off-policy learning can be fundamentally addressed by decomposing the problem along a clustering structure in the action space. The observation that policy-based methods can operate effectively in the much smaller cluster space (reducing variance) while regression-based methods can operate within clusters (reducing bias requirements to local within-cluster correctness) provides a principled bridge between these traditionally separate approaches. The spectrum interpretation showing that local correctness interpolates between no condition (policy-based) and global correctness (regression-based) is a genuinely useful unifying perspective for understanding the space of off-policy learning methods.
+
+## Potentially Missed Related Work
+- **Sachdeva et al. (2024)** — "Off-policy evaluation for large action spaces via policy convolution" addresses the same problem setting (large action spaces in off-policy learning) via action grouping, making it the most directly comparable recent baseline that should be included.
+
+## Suggestions
+1. Clarify the training procedure: explicitly state whether the two-stage optimization is iterated or single-pass, and if iterated, specify the convergence criteria or number of iterations.
+2. Add comparison against policy convolution methods (Sachdeva et al., 2024) to validate claimed improvement over state-of-the-art.
+3. Correct the self-contradictory wording about hyperparameter tuning to accurately describe that baselines receive an advantage (tuned hyperparameters) while POTEC's key hyperparameter (number of clusters) is fixed.
+4. Add ablation experiments testing robustness to imperfect clustering to validate the method's practical utility when clusters don't perfectly capture reward structure.
+
+---
+
+## qJkCEcd50n
+
+- GT: Reject (avg 3.0)
+- Predicted: Accept (6.0/10)
+- Match: No
+
+### Final Review
+
+## Summary
+This paper investigates whether influence functions—a popular tool for attributing model predictions to training data—can be systematically manipulated by an adversary who trains a malicious model to achieve desired influence scores while maintaining test accuracy. The authors formalize targeted attacks for data valuation applications and untargeted scaling attacks for fairness applications, demonstrating success rates up to 94% on logistic regression models. Key contributions include an efficient backward-pass algorithm for influence-based objectives and an impossibility theorem showing some samples cannot be manipulated regardless of model choice.
+
+## Strengths
+- **Novel and important problem**: This is the first systematic study of manipulating influence-based data attributions, addressing a critical gap where feature attribution manipulation has been extensively studied but data attribution remains unexplored
+- **Strong theoretical contribution**: The impossibility theorem (Theorem 1) provides non-trivial insight that manipulation limits exist and are data-dependent, with a rigorous constructive proof
+- **Algorithmic innovation of independent interest**: The backward-friendly algorithm (Alg. 1) addresses a practical computational barrier (memory reduction from infeasible to 7GB for 206K parameters) and could enable other applications requiring gradients through influence functions
+- **Comprehensive experimental design**: Ablation study in Table 2 effectively isolates contribution of each design component; multiple datasets and configurations demonstrate robustness of findings
+- **Practical threat model**: Covers both targeted (data valuation) and untargeted (fairness) attacks with meaningful adversarial incentives
+
+## Weaknesses
+- **Scope limited to linear models**: All experiments use logistic regression on frozen ResNet features; the impossibility theorem is also proven only for logistic regression. While acknowledged, this significantly limits practical relevance since deep learning models are the primary deployment context for influence functions
+- **Transfer results are weak**: Success rates on unknown test sets drop substantially compared to the original test set (Figure 2), suggesting attacks may not generalize well in practice
+- **Untargeted scaling attack lacks theoretical justification**: While effective empirically, the paper does not explain why simple weight scaling affects influence-based reweighing fairness but preserves raw predictions
+- **No statistical significance reporting**: Fairness results (Figure 5) show single runs with non-monotonic trends and no error bars, making reproducibility and consistency unclear
+
+## Nice-to-Haves
+- Evaluate proposed defenses (ZK proofs, local minima checking) empirically rather than just mentioning them theoretically
+- Compare the scaling attack against a non-trivial baseline (e.g., random perturbation) to contextualize the 16% DP gap difference
+- Investigate whether attacks transfer under weaker (gray/black-box) assumptions about influence score access
+- Provide clearer characterization of which real-world samples are "hard to manipulate" beyond the synthetic impossibility construction
+
+## Novel Insights
+The paper's most valuable insight is demonstrating the **Rashomon effect as the source of vulnerability**: multiple models with nearly identical predictions can have substantially different influence rankings. This explains why an adversary can manipulate influence scores without affecting accuracy—the influence function is not a deterministic function of the model's predictions. Additionally, the observation that simple weight scaling (θ' = λ · θ*) suffices to manipulate fairness-related influence scores while preserving logistic regression predictions reveals a surprising fragility in influence-based reweighing pipelines that goes beyond the well-known fragility from approximation error.
+
+## Potentially Missed Related Work
+- **Afra et al. or similar work on influence function approximation error**: While the paper discusses Basu et al. (2020), Bae et al. (2022), and Epifano et al. (2023) as orthogonal work on fragility, a more detailed comparison of how approximation errors interact with manipulability would strengthen positioning
+- **Rashomon effect literature**: The paper invokes the Rashomon effect but does not cite foundational work (e.g., Rudin et al. 2024 appears in references but the concept isn't connected to existing quantitative analyses)
+
+## Suggestions
+**Priority recommendation**: Extend experiments to at least one non-linear model (e.g., small neural network with influence approximated via Taylor展开 or other scalable methods) or more prominently frame the paper's scope as "influence-based attribution manipulation for linear models" rather than implying broader neural network applicability. The gap between the paper's strong empirical results on linear models and the practical reality of deep learning deployment is the most significant barrier to impact.
+
+---
+
+## WFlLqUmb9v
+
+- GT: Reject (avg 2.5)
+- Predicted: Reject (5.0/10)
+- Match: Yes
+
+### Final Review
+
+## Summary
+The paper proposes FIA-Net, a time series forecasting model that applies STFT to partition sequences into windows, then uses novel MLP backbones (WM-MLP for adjacent window aggregation and HC-MLP using Octonion algebra for efficient all-window aggregation) to process frequency-domain representations. The authors claim average improvements of 5.4% MAE and 3.8% RMSE over state-of-the-art baselines on six real-world datasets.
+
+## Strengths
+- **Novel mathematical contribution**: Treating STFT windows as hyper-complex (Octonion) vectors and leveraging HC algebra for efficient window aggregation is genuinely novel and extends prior work on complex-valued MLPs (FreTS) to higher-dimensional algebras.
+- **Comprehensive experimental evaluation**: Extensive comparison against 8 baselines across 6 datasets (Weather, Exchange, Traffic, Electricity, ETTh1, ETTm1) with 4 prediction horizons each (96, 192, 336, 720), including recent strong baselines (PatchTST, FreTS, FEDformer).
+- **Solid theoretical foundation**: The paper builds on established mathematics (Cayley-Dickson construction) and provides rigorous definitions of both MLP variants with clear complexity analyses showing O(L log(L/p)) forward pass complexity.
+- **Thorough ablation studies**: Well-designed ablations exploring frequency compression (M parameter), lookback window size, real/imaginary component redundancy, and different HC bases (Quaternion, Octonion, Sedenion) in Appendix D.
+- **Reproducibility**: Code publicly available, complete hyperparameter settings provided in Table 7.
+
+## Weaknesses
+- **Unsubstantiated "20% improvement" claim**: The contributions list states "improves upon existing models' accuracy by up to 20%," but the paper only reports average improvements of 5.4% MAE and 3.8% RMSE in Section 5.2. The 20% figure is never clearly substantiated—it's likely comparing against the weakest baselines (Informer, Reformer), not the strongest competitors.
+- **Factual inaccuracy in parameter reduction claim**: The paper states HC-MLP uses "up to three times fewer parameters," but for p=4 (the experimental setting), WM-MLP requires 3p-2=10 weight matrices while HC-MLP uses 4, giving a 2.5x reduction. The 3x claim would only hold for an O(p²) generalization of WM-MLP, which is not the actual comparison.
+- **Unfair comparison in Table 1**: WM-MLP results use optimized p per dataset, while HC-MLP uses fixed p=4. The paper's own Table 2 shows that with matched p=4, HC-MLP achieves comparable accuracy. This makes HC-MLP appear weaker in the main comparison than it actually is.
+- **No actual efficiency measurements**: The paper provides only asymptotic complexity (Table 11) with no actual parameter counts, FLOPs, or wall-clock runtime comparisons on identical hardware. The efficiency claims cannot be verified without measured efficiency metrics.
+- **Incomplete guidance on HC-MLP vs WM-MLP choice**: The paper notes HC-MLP excels at shorter horizons while WM-MLP is better for longer horizons but provides only vague theoretical reasoning. No clear decision framework is provided for practitioners choosing between architectures.
+- **Neighbor aggregation results contradict motivation**: Appendix D.5 (Table 10) shows that extending WM-MLP to 2 or 3 neighbors degrades performance compared to 1 neighbor. This finding, which the paper acknowledges, undermines the paper's core motivation for HC-MLP—the claim that aggregating more windows should help.
+- **Lack of statistical significance testing**: Results are presented as point estimates without confidence intervals or significance tests. Given that many improvements are marginal (e.g., Traffic ties with FreTS/PatchTST), statistical validation is essential.
+
+## Nice-to-Haves
+- **Add modern baselines**: No comparison with DLinear, iTransformer, or recent state-space models (Mamba, S4). DLinear in particular is a commonly used strong baseline that should be included.
+- **Complete architecture specifications**: Figure 3 shows the full model with skip connections and decomposition MLP, but the paper doesn't specify the number of MLP layers, decomposition stage structure, or how many FIA-Net blocks are stacked.
+- **Cross-domain evaluation**: All experiments use standard TSF benchmarks. Testing on additional domains (healthcare, sensor data) would strengthen generalization claims.
+- **STFT window correlation analysis**: The paper's core assumption that adjacent windows are correlated could be validated with empirical correlation heatmaps on actual datasets.
+
+## Novel Insights
+The paper presents a genuinely novel approach by leveraging hyper-complex (Octonion) algebra to aggregate STFT windows in the frequency domain. The key insight—that treating STFT windows as components of a hyper-complex vector enables information sharing across all windows with fewer parameters—is mathematically sound and well-executed. The observation that M=4 (selecting only 4 frequency components) often outperforms using all components (Mmax) suggests that aggressive frequency selection acts as an implicit regularizer. The empirical finding that masking real or imaginary components individually has minimal impact on accuracy is intriguing, though the Kramers-Kronig explanation remains speculative and would benefit from rigorous derivation rather than conjecture.
+
+## Potentially Missed Related Work
+- **None identified** (related work search was skipped in the provided input)
+
+## Suggestions
+1. **Remove or substantiate the "20% improvement" claim**: Either present clear evidence for this figure or use the verified average improvement (5.4% MAE) consistently.
+2. **Correct the parameter reduction claim**: State "approximately 2.5x fewer parameters for p=4" or qualify that the 3x figure applies to an O(p²) generalization.
+3. **Provide matched comparisons**: Either show HC-MLP with optimized p alongside WM-MLP with optimized p, or clearly label Table 1 as showing HC-MLP with fixed p=4 for fair efficiency comparison.
+4. **Add measured efficiency metrics**: Report actual parameter counts, FLOPs, and wall-clock training/inference times on the RTX 3090 for both proposed methods and key baselines (FreTS, PatchTST).
+5. **Address the neighbor aggregation finding**: Either explain why extending WM-MLP neighbors hurts performance (contradicting the paper's stated motivation) or discuss this as a limitation of the approach.
+6. **Add confidence intervals**: Include error bars or statistical significance tests to validate that improvements are not due to random variation.
+
+---
+
+## NuVBI4wPMm
+
+- GT: Accept (Poster) (avg 6.5)
+- Predicted: Accept (7.0/10)
+- Match: Yes
+
+### Final Review
+
+## Summary
+This paper proposes DeGEM (Decoupled Graph Energy-based Model) for node-level out-of-distribution (OOD) detection on graphs, addressing the previously underexplored challenge of heterophilic graphs where connected nodes tend to have different labels. The key innovation is decoupling the EBM into a graph encoder (trained via DGI + classification) and an energy head (trained via MLE in latent space), which avoids both MCMC sampling on graph topology and energy propagation that degrades on heterophilic graphs. Extensive experiments on 7 datasets (4 homophilic, 3 heterophilic) demonstrate substantial improvements, achieving 97.08% average AUC on homophilic and 97.55% on heterophilic graphs without OOD exposure during training.
+
+## Strengths
+- **Novel problem framing**: The paper correctly identifies that heterophily is an underexplored issue in graph OOD detection, where existing methods like GNNSafe rely on homophily assumptions causing severe degradation (Table 2 shows GNNSafe drops to 34.36% AUC on Chameleon-Structure).
+- **Strong ablation study**: Table 4 systematically validates each component contribution, demonstrating the crucial finding that combining DGI and MLE (87.82% avg) dramatically outperforms each alone (MLE: 72.74%, DGI alone: 73.90%).
+- **Comprehensive evaluation**: Tests across 4 homophilic and 3 heterophilic datasets with 3 OOD generation strategies (structure manipulation, feature interpolation, label leave-out), plus varying label ratios demonstrating practical utility.
+- **Theoretical connection**: Section 3.5 provides interesting analysis connecting DGI training to EBM via noise contrastive estimation, partially justifying the design choice.
+- **Reproducibility**: Code publicly available, detailed hyperparameter search spaces provided in Appendix E, training time comparable to baselines (32.18s avg vs 30.66s for GNNSafe).
+
+## Weaknesses
+- **Incomplete performance reporting**: DeGEM does not consistently outperform all baselines—on Twitch-ES, GNNSafe++ achieves 97.75% while DeGEM achieves 94.83%. The paper emphasizes average improvements but doesn't discuss these underperforming cases, making evaluation appear more favorable than it is.
+- **Limited evaluation against heterophily-specific encoders**: While the paper addresses heterophily, it doesn't compare against specialized heterophily-aware graph encoders (e.g., H2GCN, GPR-GNN, FAGCN) that might further enhance performance on heterophilic graphs.
+- **Synthetic OOD scenarios may lack challenge**: Structure manipulation creates disconnected OOD graphs, which may be trivially distinguishable. Feature interpolation and label leave-out also represent relatively constrained distribution shifts compared to real-world scenarios.
+
+## Nice-to-Haves
+- Add FPR95 and AUPR metrics prominently in main tables (currently deferred to appendix), as FPR95 is critical for practical OOD detection evaluation.
+- Test on larger heterophilic graphs—current heterophily experiments use small datasets (Chameleon: ~2,277 nodes, Cornell: ~183 nodes), making scalability claims less convincing.
+- Provide MCMC convergence diagnostics (energy trace plots, autocorrelation) to validate sampling quality in latent space.
+- Include cross-domain OOD detection experiments where ID and OOD come from genuinely different graphs.
+
+## Novel Insights
+The paper's key insight—that performing MCMC sampling in the GNN's latent space rather than on the original graph topology—elegantly sidesteps both the computational challenge of sampling discrete adjacency matrices and the heterophily problem caused by energy propagation. The discovery that DGI and EBM training exhibit a "symbiotic" relationship, where each component's training objective reinforces the other (as demonstrated by the ablation showing neither alone achieves competitive results), represents a genuinely useful observation for the field. Furthermore, the finding that existing graph OOD methods perform *worse* than graph-agnostic methods on heterophilic graphs (Figure 1) highlights a critical gap that the paper addresses.
+
+## Potentially Missed Related Work
+- Graph anomaly detection methods that could be adapted for node OOD detection (e.g., GraphDE, SpaceGNN, SmoothGNN cited in Appendix C but not discussed in main related work)
+- Additional GCL algorithms (BGRL, CCA-SSG, PAIR) that might be tested alongside DGI
+
+## Suggestions
+1. Explicitly discuss cases where DeGEM underperforms (e.g., Twitch-ES compared to GNNSafe++) to provide a balanced evaluation.
+2. Add comparison with heterophily-specific encoders (H2GCN, GPR-GNN) as ablation to further validate the heterophily handling claim.
+3. Provide more challenging OOD scenarios, such as cross-graph OOD detection where ID and OOD come from different datasets.
+
+---
+
+## zfeso8ceqr
+
+- GT: Accept (Poster) (avg 6.0)
+- Predicted: Accept (7.0/10)
+- Match: Yes
+
+### Final Review
+
+## Summary
+This paper presents a comprehensive empirical comparison of five optimization algorithms (SGD, Adam, Adafactor, Lion, Signum) for training autoregressive language models across scales from 150M to 1.2B parameters. The main finding is that all non-SGD adaptive optimizers perform comparably in both optimal performance and hyperparameter stability, challenging the prevailing assumption that Adam is the optimal default. The paper further introduces Adalayer*, a per-layer variant of Adam, and uses it to demonstrate that adaptivity for the last layer and LayerNorm parameters is particularly crucial for achieving stable training.
+
+## Strengths
+- **Thorough empirical methodology**: The paper sweeps across four model scales, two architecture variants (with/without QK norm and z-loss), multiple hyperparameters (learning rate, momentum, weight decay, warmup, batch size, ε, β₂), and varying training durations. This comprehensive approach provides strong empirical grounding for the main claims.
+- **Valuable mechanistic insights**: The Adalayer* analysis provides actionable insights about why adaptive optimizers help—specifically identifying that adaptivity for the last layer and LayerNorm parameters is necessary for performance and learning rate stability. This finding could guide the design of more memory-efficient optimizers.
+- **Sound theoretical connection**: The paper correctly leverages Lemma 1 from Balles & Hennig (2018) to theoretically motivate why Adam and Signum behave similarly when β₁ ≈ β₂, providing a principled basis for the empirical observations.
+- **Honest limitations discussion**: The authors transparently acknowledge the 1D sweep limitation, single dataset scope, and fixed batch size, setting appropriate expectations for the findings.
+
+## Weaknesses
+- **No statistical validation**: Most experiments report single-run results without error bars or confidence intervals across random seeds. For claims about "stability" and "comparable performance," understanding variance across seeds is important. This is a notable gap in rigor for ICLR, particularly when comparing optimization algorithms where training noise can affect optimal hyperparameter selection.
+- **Limited dataset diversity**: All experiments use C4 with T5 tokenizer. The finding that optimizers are equivalent for autoregressive LM training may not generalize to other datasets or domains (e.g., The Pile, code data), limiting the practical scope of recommendations.
+- **Architecture narrowness**: Only decoder-only transformers with fixed width/depth ratios are tested. The findings may not transfer to encoder-decoder models (T5, BART) or architectures with substantially different characteristics (e.g., mixture-of-experts, state space models).
+- **1D hyperparameter sweeps miss interactions**: While the paper acknowledges this limitation, it remains significant. The stability claims could be affected by higher-order interactions between hyperparameters (e.g., learning rate × momentum), which are not explored.
+
+## Nice-to-Haves
+- **Downstream task evaluation**: While validation loss is appropriate for optimizer comparison, reporting performance on downstream benchmarks (e.g., a subset of BIG-Bench or common sense reasoning tasks) would strengthen the practical significance of the findings.
+- **Multi-seed experiments**: Running at least 2-3 seeds for key comparisons (e.g., the 150m standard model) would provide variance estimates and strengthen claims about optimizer equivalence.
+- **Weight decay comparison**: Setting weight decay=0 is atypical for LLM pretraining. Testing with standard regularization settings would make recommendations more applicable to real-world practice.
+- **Gradient statistics analysis**: Measuring gradient heterogeneity across layers (e.g., gradient variance ratios) would provide more mechanistic support for why last layer and LayerNorm parameters specifically benefit from adaptivity.
+
+## Novel Insights
+The paper's most valuable contribution is the systematic demonstration that for autoregressive language model pretraining, optimizer choice within the family of diagonal preconditioning methods is far less critical than commonly believed—Adam, Adafactor, Lion, and Signum all achieve comparable optimal performance and hyperparameter stability. This negative result has practical implications: practitioners can choose optimizers based on memory constraints and implementation ease rather than performance concerns. Furthermore, the Adalayer* analysis reveals a nuanced understanding of where adaptivity matters most: the last layer and LayerNorm parameters require per-parameter or per-block adaptivity for stable training, while other matrix layers can achieve near-optimal results with coarser preconditioning. This insight suggests promising directions for memory-efficient optimizer design that selectively applies fine-grained adaptivity where it matters most.
+
+## Potentially Missed Related Work
+- **Adam-mini (Zhang et al., 2024c)**: Concurrent work that closely tracks a modified version of Adalayer* and demonstrates comparable performance to AdamW with reduced memory overhead—the paper briefly mentions this in the related work but could engage more deeply with their complementary findings.
+- **Heavy-tailed gradient analysis (Kunstner et al., 2024)**: This work shows Adam is less sensitive than SGD to class-imbalance in language tasks; the paper provides supporting evidence but could more explicitly test whether heavy-tailed gradient statistics explain the optimizer equivalence observed.
+
+## Suggestions
+- Add multi-seed validation (even 3 seeds) for at least one model scale to establish variance estimates and strengthen claims about optimizer equivalence.
+- Consider reporting results on at least one additional dataset to validate generalization of the optimizer equivalence finding beyond C4.
+
+---
+
+## nibeaHUEJx
+
+- GT: Accept (Poster) (avg 7.0)
+- Predicted: Accept (8.0/10)
+- Match: Yes
+
+### Final Review
+
+## Summary
+This paper proposes a novel differentiable bijective transformation (diffeomorphism) that maps shifted time series samples to the same point on a data manifold, achieving complete shift-invariance in deep learning models. The key insight is using the phase angle of a specific harmonic (with period ≥ sample length) to uniquely represent each point in the shift space, based on the group-theoretic observation that time shifts form an Abelian group of phase angles in the frequency domain. The method achieves 100% shift consistency while improving performance by 3-15% across 9 datasets spanning 6 diverse time series tasks including heart rate estimation, ECG classification, activity recognition, and sleep stage classification.
+
+## Strengths
+- **Strong theoretical foundation**: The paper provides rigorous mathematical proofs establishing that the proposed transformation T(x, φ) is bijective (Theorem 2.2) and guarantees shift-invariance (Theorem 2.3). The group-theoretic analysis of phase angles is sound and well-presented in both the main text and appendix.
+- **Comprehensive empirical validation**: Experiments span 9 datasets across 6 time series tasks with 6+ baseline methods (LPF, APS, WaveletNet, Canonicalization, STN, TTN), demonstrating consistent improvements and 100% shift consistency where previous methods achieve as low as 32%.
+- **Genuine novelty**: The idea of uniquely representing shift positions using a specific harmonic's phase angle is conceptually new and achieves *complete* shift-invariance rather than the partial invariance of existing anti-aliasing approaches.
+- **Architectural flexibility**: The method can be combined with existing approaches (Ours+LPF, Ours+APS) and works with various network architectures (ResNet, FCN, Transformer, ModernTCN, T-WaveNet).
+- **Strong reproducibility**: Code is available on GitHub with detailed hyperparameters and architecture specifications in the appendix.
+
+## Weaknesses
+- **No image domain experiments despite paradigm-shift claims**: The title and abstract suggest broader impact, but all experiments are on time series. Section H mentions extending to images as "future work," but this leaves the paradigm-shift claim unsupported.
+- **Assumption of quasi-periodic signals**: The method relies on Fourier decomposition with a meaningful harmonic at ω₀ (period ≥ sample length). For signals without clear low-frequency structure (transient spikes, high-pass filtered data), the phase extraction may be noisy or unreliable. The paper does not explore this failure mode.
+- **Computational overhead unaddressed**: The diffeomorphism requires FFT → phase extraction → IFFT for each sample. The paper never reports inference/training time comparisons. For clinical deployment with long sequences, this could be a significant practical limitation.
+- **Guidance network complexity**: The best results require the guidance network with a custom loss term (variance reduction in batch), introducing hyperparameter sensitivity (appendix shows batch size affects results). The HHAR ablation shows a marginal performance decrease (+L̂_G), indicating the guidance network doesn't always help.
+- **Limited failure mode analysis**: The paper does not show cases where the method fails or degrades, nor does it analyze phase extraction reliability under noise.
+
+## Nice-to-Haves
+- **Phase extraction robustness analysis**: Quantify how noise affects phase estimation error and propagate this to downstream shift-consistency.
+- **Statistical significance testing**: Report p-values or confidence intervals for performance improvements across methods.
+- **Guidance network angle visualization**: Plot the distribution of learned angles per class to validate the claimed inter-class separation benefit.
+- **Real-time inference benchmarks**: Single-sample inference latency comparisons would strengthen practical significance claims for health monitoring applications.
+
+## Novel Insights
+The paper's core insight—that each shift variant can be uniquely represented by the phase angle of a single harmonic with period ≥ signal length—is both elegant and practically impactful. By reframing shift-invariance as a data-space transformation problem rather than a network architecture problem, the authors achieve complete invariance where previous approaches (LPF, APS) achieve only partial invariance. The observation that this transformation acts as an "adaptive linear constraint" reducing sample space variations, combined with the learned guidance network that maximizes inter-class separation in the transformed space, provides a new design principle for building robust time series classifiers. The finding that shift-invariance and performance improvements are complementary (not traded off) across diverse tasks suggests the method addresses a fundamental weakness of deep learning on temporal data.
+
+## Potentially Missed Related Work
+- **Time-frequency scattering networks**: While wavelet networks are compared, the scattering transform literature (Mallat 2012 is cited) could be more thoroughly connected to the proposed diffeomorphism approach.
+- **Phase-aware time series methods**: Work on phase reconstruction and alignment in EEG/MEG analysis (e.g., phase-locking value analysis) could provide additional validation domains.
+
+## Suggestions
+- Add at least one image experiment (e.g., MNIST shift invariance) to validate the claimed paradigm-shift potential beyond time series.
+- Include computational overhead (FLOPs, wall-clock time) comparisons in the main results table to address practical deployment concerns.
+- Conduct ablation experiments on signals with weak/absent low-frequency components to explicitly characterize the method's failure modes and limitations.
+
+---
+
+## a8wjeqTZ9C
+
+- GT: Reject (avg 3.8)
+- Predicted: Accept (6.0/10)
+- Match: No
+
+### Final Review
+
+## Summary
+This paper presents the first systematic study investigating how label noise affects Concept Bottleneck Models (CBMs), demonstrating that concept noise (rather than target noise) is the primary factor degrading both performance and interpretability. Through comprehensive experiments on CUB and AWA2 datasets, the authors show CBMs are highly vulnerable to label noise, with t-SNE visualizations revealing disrupted representation clustering. They propose applying Sharpness-Aware Minimization (SAM) as a mitigation strategy, achieving modest but consistent improvements in both concept and target accuracy across noise settings.
+
+## Strengths
+- **Well-identified research gap**: The paper correctly identifies that CBMs' annotation requirements make them particularly susceptible to label noise—a critical real-world concern previously overlooked in the literature. The empirical evidence supporting this claim is thorough.
+- **Comprehensive empirical analysis**: Extensive experimentation across two datasets (CUB, AWA2), three training strategies (Independent, Sequential, Joint), multiple noise types (symmetric, pairwise), and three backbone architectures (InceptionV3, ResNet-18, ViT-B/16) provides strong empirical support for the paper's claims.
+- **Insightful mechanistic analysis**: The t-SNE visualizations convincingly demonstrate how concept noise disrupts representation clustering, and the analysis of concept-target weight relationships (Figure 5) provides useful understanding of failure modes—showing how noise causes CBMs to build incorrect concept-to-target associations.
+- **Clear attribution of damage source**: The ablation separating concept noise from target noise clearly establishes that concept noise is the primary driver of CBM failures, a valuable finding for practitioners.
+- **Practical mitigation with SAM**: SAM provides a readily applicable solution without requiring architectural changes, showing consistent improvements across settings.
+
+## Weaknesses
+- **SAM's limited effectiveness in high-noise regimes**: Despite the positive framing, SAM gains are modest (0.6-0.9% concept accuracy, 2.4-3.2% target accuracy). Critically, at 40% noise, Ind/Seq models still collapse to near-random performance (4-10% target accuracy), raising questions about practical utility. The Joi model achieves reasonable target accuracy (~50-82%) but concept accuracy drops to ~50-58%, fundamentally undermining interpretability claims.
+- **No comparison to established noisy-label techniques**: The paper only compares SAM against vanilla SGD. Established techniques like co-teaching, mixup, GCE loss, forward/backward loss correction, or sample reweighting are not explored. This is a significant gap—the paper cannot claim SAM is a "promising solution" without showing it outperforms alternatives.
+- **Missing mechanistic validation for SAM**: The paper claims SAM "encourages the model to prioritize learning from clean data" but provides no experimental validation of this mechanism. A noise memorization study or clean-vs-noisy sample analysis would strengthen this claim.
+- **Interpretability quantification is absent**: Concept prediction accuracy ≠ interpretability. The paper never measures whether the *right* concepts drive predictions under noise. A Joi model with ~50% concept accuracy (near random for binary concepts) cannot meaningfully claim enhanced interpretability, yet this limitation is only buried in tables rather than prominently discussed.
+- **Limited dataset scope**: Only CUB (fine-grained birds) and AWA2 (animals) are tested. These share similar visual concept structures; evaluation on datasets with different concept characteristics (e.g., clinical, scene understanding) would strengthen generalizability claims.
+
+## Nice-to-Haves
+- Loss landscape visualization comparing SAM vs. SGD to empirically validate the "flatter minima" explanation
+- Systematic analysis across more classes (current t-SNE shows only 3 of 200+ classes)
+- Case studies showing "correct prediction, wrong concept reasons" examples under noise
+- Sensitivity analysis of SAM's sharpness parameter ρ for different CBM training strategies
+
+## Novel Insights
+The paper's most valuable contribution is the clear demonstration that **concept noise disproportionately damages CBMs compared to end-to-end models**, with the mechanism traced through representation clustering disruption (t-SNE analysis) and altered concept-target weight relationships. The finding that Joi training sacrifices interpretability for robustness under noise (and vice versa) provides a useful tradeoff insight for practitioners. Additionally, the observation that even small improvements in concept accuracy (0.4%) can yield substantial target accuracy gains (3.4%) highlights the amplified impact of concept quality in CBM pipelines.
+
+## Potentially Missed Related Work
+- **Label noise in multi-task learning**: While CBMs can be viewed as multi-task models, the paper doesn't connect to the literature on noisy labels in multi-task settings, which may offer additional mitigation strategies.
+- **Semi-supervised concept learning**: Recent work on learning concepts from weak supervision or without explicit annotations (e.g., CLIP-based approaches) could be relevant for reducing annotation errors in practice, though the paper's focus on supervised CBMs makes this less critical.
+
+## Suggestions
+1. **Add baseline comparisons**: Implement and compare at least 1-2 established noisy-label techniques (e.g., co-teaching, GCE loss) alongside SAM to demonstrate SAM's relative effectiveness.
+2. **Prominently discuss Joi's interpretability collapse**: At 40% noise, Joi's ~50% concept accuracy (near random) fundamentally invalidates interpretability claims—explicitly acknowledge this as a limitation rather than burying it in tables.
+3. **Add a validation experiment for SAM's mechanism**: Conduct a simple analysis (e.g., comparing loss on samples identified as clean vs. noisy) to empirically validate the "clean data prioritization" claim.
+
+---
+
+## KiDGtYCPcv
+
+- GT: Reject (avg 4.2)
+- Predicted: Reject (5.0/10)
+- Match: Yes
+
+### Final Review
+
+## Summary
+This paper proposes a Multi-Agent Inverse Reinforcement Learning (MAIRL) framework that combines value decomposition with recursive reasoning to infer latent value functions and cognitive hierarchy levels from observed multi-agent trajectories. The method is validated on simulated cooperative foraging, human hallway coordination data, and monkey non-cooperative behavior, demonstrating interpretable recovery of goal-related values and interaction structures that correspond to task demands.
+
+## Strengths
+- **Well-motivated interdisciplinary contribution**: The paper addresses a genuine need in cognitive science and neuroscience for inferring unobservable beliefs and value functions from observed social behavior, positioning MAIRL as an appropriate tool for this domain.
+- **Effective combination of established techniques**: Value decomposition, maximum entropy IRL, and cognitive hierarchy modeling are integrated coherently to address the exponential state-space growth problem in multi-agent IRL.
+- **Strong simulation validation**: Ground truth experiments (Figures 2-3) demonstrate successful recovery of value maps and correct model identification in controlled settings, providing confidence in the method's correctness.
+- **Interpretable real-world findings**: The human hallway task analysis reveals meaningful differences between expert and failed pairs (expert pairs value states where agents pass each other; failed pairs focus on collision-adjacent states), and monkey analysis shows mutual predictions correlate with social hierarchy—genuinely novel insights for cognitive science.
+- **Supplementary analysis provides mathematical rigor**: The overdetermined linear system analysis of reconstruction error (10^-3 to 10^-4 magnitude) across 2 and 3-agent scenarios provides credible evidence that value decomposition introduces negligible error.
+
+## Weaknesses
+- **Level-1 cognitive agents cannot be identified**: Figure 3B-C reveals that while egocentric (level-0) agents are identifiable, the method fails to distinguish level-1 agents from others. The abstract's claim of "effectively distinguished between level-0 and level-1 agents" is misleading and should be qualified.
+- **Single monkey pair analyzed**: The non-cooperative task validation uses data from only one monkey pair (trial number = 29,147), severely limiting generalizability. The interesting finding about social hierarchy correlation needs replication across multiple pairs.
+- **No comparison to existing baselines**: The paper cites Yu et al. (2019), Wu et al. (2023), Waugh et al. (2013), and Yoshida et al. (2008) but never compares against them. For an ICLR submission, demonstrating improvement over prior methods is essential.
+- **No systematic ablation studies**: The individual contributions of value decomposition versus recursive reasoning are not isolated. Figure 2G shows decomposition helps, but no experiment demonstrates what recursive reasoning provides over simpler alternatives.
+- **No held-out prediction accuracy evaluation**: Evaluation relies on model comparison (AIC) and qualitative interpretation of recovered value maps, not quantitative prediction of held-out behavior. This weakens the case for practical utility.
+- **Model comparison weakness**: Figure 3A shows chance prediction and optimal prediction models produce nearly indistinguishable AIC scores when fitting chance prediction data, limiting the method's discriminative power in the most informative regime.
+- **Interaction term selection is task-specific and unprincipled**: The paper tests multiple interaction terms (Euclidean distance, column distance, row distance) post-hoc without guidance on a priori selection, raising questions about applicability to novel tasks.
+
+## Nice-to-Haves
+- Add uncertainty quantification (posterior credible intervals or bootstrap) for recovered value maps, essential for scientific claims about latent beliefs.
+- Test generalization by predicting behavior in different task variants or grid sizes.
+- Analyze sensitivity to hyperparameter choices (λ₁, λ₂) rather than selecting by "training stability and map interpretability."
+- Report statistical tests with p-values and effect sizes for the monkey social hierarchy correlation.
+- Analyze performance under partial observability to validate claims about real-world applicability.
+
+## Novel Insights
+The paper's most valuable insight is demonstrating that MAIRL can recover interpretable, task-relevant value structures from social behavior without access to task rules. The finding that expert human pairs in the hallway task assign high value to states where agents pass each other (column distance = 0) while failed pairs assign high value to collision-adjacent states (column distance = 1) provides a meaningful qualitative difference that illuminates how coordination emerges with proficiency. Similarly, the monkey finding that mutual predictions correlate with social hierarchy demonstrates that the method captures ecologically valid individual differences in social cognition, not artifacts of the model fitting procedure.
+
+## Potentially Missed Related Work
+- **Yoshida et al. (2008)** — "Game theory of mind" in PLoS Computational Biology; directly addresses recursive Theory of Mind modeling with multi-agent MDPs, which the paper acknowledges but does not quantitatively compare against.
+- **Baker et al. (2017)** — "Rational quantitative attribution of beliefs, desires and percepts" in Nature Human Behaviour; provides a comprehensive POMDP framework for inferring mental states that serves as a natural baseline for the claimed contribution.
+- **Wu et al. (2023)** — "Multiagent inverse reinforcement learning via theory of mind reasoning"; appears to be concurrent work with similar goals but without comparative evaluation.
+- **Level-k reasoning and quantal response equilibrium models** — Standard cognitive science approaches to strategic reasoning that could serve as baselines for cognitive hierarchy inference.
+
+## Suggestions
+- Qualify the abstract claim about distinguishing level-0 and level-1 agents to clarify that only level-0 agents are reliably identifiable (Figure 3B-C).
+- Expand monkey analysis to multiple pairs or explicitly frame the single-pair finding as preliminary.
+- Add a baseline comparison section comparing against at least one existing method (e.g., Yoshida et al., 2008) to establish relative contribution.
+- Consider pre-registering the interaction term selection for the hallway task rather than performing post-hoc comparison.
+
+---
+
+## s3IBHTTDYl
+
+- GT: Accept (Poster) (avg 6.8)
+- Predicted: Accept (7.0/10)
+- Match: Yes
+
+### Final Review
+
+## Summary
+This paper investigates whether language models can learn to count inductively—generalizing from counting up to N to counting N+1 without explicit training examples. Through extensive experiments across Transformers (with 5 positional embedding strategies), RNNs, LSTMs, and modern state-space models (S4, Mamba, RWKV), the authors find that while traditional RNNs trivially achieve inductive counting, Transformers require specific positional embeddings and still exhibit fragile generalization. The work provides important empirical evidence that counting cannot be treated as a primitive operation in Transformers, contradicting its treatment in formal frameworks like RASP.
+
+## Strengths
+- **Careful experimental design**: The task formats (vanilla, shifted start, modular, selective counting) effectively isolate counting from other length generalization confounds. The use of shifted positional embeddings addresses OOD-position issues, and the distinction between "helper token" (trivializes generalization) versus "shifted start" (requires true induction) is well-motivated.
+- **Comprehensive architectural comparison**: Testing across 5 architecture families (Transformers with 5 PE variants, RNN, LSTM, S4, Mamba, RWKV) provides a broad picture. The finding that traditional RNNs trivially generalize while modern recurrent architectures (Mamba, RWKV) struggle due to compromised state transition expressivity is valuable.
+- **Mechanistic analysis**: Section 5's explanation of why different PEs succeed/fail is insightful. The analysis of RoPE's "recency bias" interfering with token-based attention, and APE/SinePE's ability to cluster by PID%10, provides principled understanding beyond empirical observation.
+- **Important negative result**: Demonstrating that counting is NOT a primitive function—even when treated as such in formal analyses like RASP—has significant implications for theoretical expressivity papers and practical applications.
+
+## Weaknesses
+- **High variance limits reliability**: Large gaps between best and median performance (Table A2, e.g., SinePE 4L Helper Token: best=100% vs median=59.9% OOD) indicate that "success" is often a lucky initialization, not reliable learning. This makes conclusions about architectural capabilities tentative.
+- **Limited to shallow from-scratch models**: Experiments use only 1-4 layer Transformers. It's unclear whether findings generalize to larger pretrained models, which are the primary use case for claims about Transformer expressivity. The paper acknowledges this but doesn't discuss implications.
+- **Fragile RoPE generalization**: Table A8 shows RoPE 4L's generalization deteriorates dramatically as the OOD/IND length ratio increases (100→22.1%→11.4%). The claim of "successful generalization" on shifted start is limited to ~2x extrapolation, raising questions about whether true inductive counting is achieved.
+- **Tokenization choice**: Whole-number tokenization differs from how real LLMs handle numbers (digit-level or subword), potentially limiting practical implications. The paper justifies this choice but doesn't test robustness.
+
+## Nice-to-Haves
+- **Pretrained model evaluation**: Testing GPT-2 or similar pretrained models on counting tasks would strengthen applicability claims. Pretrained models have different inductive biases from learned-from-scratch models.
+- **Mechanistic analysis for RNN success**: The paper notes RNNs "trivially achieve" counting but doesn't explain how. Probing hidden states or visualizing counter-like representations would strengthen the architectural comparison.
+- **Ablation on helper token bounds**: The helper token task achieves near-perfect OOD accuracy but doesn't require induction (vocabulary is simply extended). An ablation where helper token counts are also bounded would clarify what fraction of generalization comes from true inductive inference.
+- **Combination PE strategies**: The paper identifies complementary strengths of different PEs but doesn't implement combinations. This is suggested as future work but could be a main experiment.
+
+## Novel Insights
+The paper's core insight is that counting cannot be treated as a primitive operation in Transformers—it requires specific inductive biases via positional embeddings, and even then generalization is fragile. This challenges formal frameworks like RASP that build complex algorithms on counting primitives. The finding that different positional embeddings encode fundamentally different inductive biases (RoPE's recency bias interferes with certain tasks; APE/SinePE's absolute positions enable modular arithmetic) provides a principled lens for understanding PE tradeoffs. Additionally, the observation that modern recurrent architectures (Mamba, RWKV) sacrifice state transition expressivity for parallelization—manifesting in degraded counting performance—offers a new perspective on the tradeoff between training efficiency and computational expressivity in sequence models.
+
+## Potentially Missed Related Work
+- **Yang & Chiang (2024) "Counting like Transformers"**: Directly addresses compiling temporal counting logic into softmax Transformers, which is highly relevant to the paper's claims about counting limitations.
+- **Merrill et al. (2024) "The illusion of state in state-space models"**: Directly addresses whether SSMs truly maintain state, relevant to the paper's finding that S4/Mamba underperform traditional RNNs.
+
+## Suggestions
+- Address the high variance issue by investigating what initialization seeds or hyperparameters lead to generalization versus memorization. This would improve reproducibility and understanding of training dynamics.
+- The paper should more explicitly discuss limitations of the from-scratch training paradigm and how findings might differ for pretrained models, as this is the most common use case.
+
+---
+
+## tc90LV0yRL
+
+- GT: Accept (Oral) (avg 8.7)
+- Predicted: Accept (7.0/10)
+- Match: Yes
+
+### Final Review
+
+## Summary
+Cybench introduces an open-source framework for evaluating language model agents on 40 professional-level Capture the Flag (CTF) cybersecurity tasks, using First Solve Time (FST) as an objective difficulty metric and introducing subtask decomposition for granular evaluation. The benchmark spans 8 models with 4 agent scaffolds, finding that top models (Claude 3.5 Sonnet, GPT-4o, Claude 3 Opus, OpenAI o1-preview) can solve tasks with FST up to 11 minutes but fail entirely on tasks with higher FST (up to 24 hours 54 minutes), revealing substantial capability gaps in current LLM agents.
+
+## Strengths
+- **First open-source professional-level CTF benchmark**: Addresses a genuine gap where UK AISI and OpenAI evaluations remain proprietary, enabling broader community participation in evaluating cybersecurity risks
+- **Objective difficulty calibration via FST**: Using first solve time from actual competitions provides real-world grounding rather than subjective point systems; log-linear scaling (2 minutes to 24+ hours) demonstrates appropriate difficulty range
+- **Subtask innovation for granular evaluation**: Breaking complex tasks into intermediary steps provides more evaluation signal when overall success rates are low (best: 17.5% unguided); this addresses a real challenge in evaluating tasks beyond current capabilities
+- **Comprehensive engineering and verification**: Docker-based environment with task verification via continuous integration, automated probes for task server health, and systematic mitigation of environment vulnerabilities (Docker cache exploits, server isolation)
+- **Thoughtful ethical engagement**: Dual-use discussion is substantive rather than boilerplate, with reasoned arguments for code release considering benefits (automated penetration testing) and risks
+- **Extensive transparency**: Detailed run logs, solution scripts, task metadata, and scaffold analysis (Appendix P, Q) enable community validation and reproduction
+
+## Weaknesses
+- **Scaffolding experiments overstated**: The paper's contribution list claims "8 models and 4 agent scaffolds," but Table 3 shows only Claude 3.5 Sonnet and GPT-4o were tested with all 4 scaffolds. The other 6 models were evaluated with structured bash only, limiting the comprehensiveness claim
+- **Fundamental capability limitations unclear**: The paper states models "struggle to make insights that take experts time to figure out" but doesn't systematically categorize failure modes. Tables 28-67 collect token/time/iteration data but don't analyze whether failures result from reasoning limits, resource exhaustion (tokens/iterations), or stochastic issues—understanding this is critical for prioritizing improvements
+- **Performance ceiling limits benchmark utility**: Best unguided performance of 17.5% means the benchmark primarily differentiates among weak models rather than capable ones. The sharp 11-minute FST threshold with near-zero success beyond it suggests insufficient medium-difficulty tasks for better resolution
+- **No statistical uncertainty reporting**: Error bars and confidence intervals are absent across all tables. Given sparse results (mostly failures), this limits confidence in model comparisons and the validity of the apparent performance hierarchy
+
+## Nice-to-Haves
+- **Head-to-head comparison with prior CTF benchmarks**: The paper compares difficulty qualitatively in Appendix M but doesn't run any InterCode-CTF or NYU CTF Dataset tasks with the same agent, making "complementary" claims unsubstantiated
+- **Baseline comparison with non-LLM tools**: Comparison against Metasploit or automated vulnerability scanners could contextualize whether LLMs add capability beyond existing approaches
+- **Validation of FST-difficulty correlation**: The paper asserts FST predicts agent difficulty but doesn't validate this formally; identifying tasks where FST doesn't predict agent performance would strengthen the framework
+
+## Novel Insights
+The most valuable insight is the sharp capability threshold: current LLM agents successfully solve tasks with FST ≤11 minutes but show near-zero success on harder tasks, creating a 136x gap between solved and maximum task difficulty. This suggests current models lack the multi-step reasoning and insight generation that characterize expert-level cybersecurity work. The subtask mechanism provides a useful diagnostic: even with guidance on intermediary steps, models still fail on harder tasks (e.g., Robust CBC with 24h 54min FST), indicating the limitation is not execution ability but strategic reasoning. The model-dependent scaffolding effects are also informative—Claude 3.5 Sonnet benefits from pseudoterminal and web search while GPT-4o underperforms—suggesting scaffold design must be tailored to model capabilities.
+
+## Potentially Missed Related Work
+- **Anurin et al., 2024 (Catastrophic Cyber Capabilities Benchmark / 3CB)**: Concurrent work on evaluating LLM agent cyber offense capabilities, mentioned in the paper's references but not discussed in the Related Work section for direct comparison
+- **PentestGPT (Deng et al., 2023), HackingBuddyGPT (Happe & Cito, 2023)**: These are cited in related work but comparison is limited to overall approach; systematic performance comparison on overlapping task types would strengthen the paper
+
+## Suggestions
+- **Reconcile scaffolding claims with actual experiments**: The contribution list should accurately reflect that only 2 of 8 models were tested with all 4 scaffolds, or expand scaffolding experiments to all models
+- **Analyze failure modes from collected data**: Use the extensive token/time/iteration data to categorize failures systematically (reasoning errors vs. resource limits vs. stochastic failures), which would directly inform agent improvement priorities
+- **Expand medium-difficulty task coverage**: Add tasks with FST between 11 minutes and 2 hours to improve differentiation among top-performing models and reduce the sharp success/failure cliff
+
+---
+
+## RBp0x7rkMO
+
+- GT: Reject (avg 5.2)
+- Predicted: Accept (6.0/10)
+- Match: No
+
+### Final Review
+
+## Summary
+GRIMOIRE introduces a two-stage pipeline for SVG generation trained entirely on raster images: a Visual Shape Quantizer (VSQ) learns to encode patches into a discrete codebook and decode them into Bézier curves via differentiable rendering, while an Auto-Regressive Transformer (ART) learns the joint distribution over shape tokens, positions, and text descriptions. The key contribution is enabling text-conditioned vector graphics generation without requiring direct SVG supervision, which substantially expands available training data.
+
+## Strengths
+- **Novel supervision paradigm**: First text-conditioned SVG generative model trained purely on raster images, eliminating complex SVG preprocessing pipelines and opening vector generation to image-only datasets.
+- **Strong reconstruction performance**: VSQ consistently outperforms Im2Vec on MSE across all datasets (0.090 vs 0.140 on MNIST, 0.004 vs 0.330 on FIGR-8, 0.011 vs 0.050 on Fonts single-class).
+- **Superior CLIPScore**: GRIMOIRE achieves higher CLIPScore in most generation experiments (e.g., 32.24 vs 31.88 on FIGR-8 full), indicating better text-image alignment.
+- **Well-motivated architecture**: The two-stage VQ-VAE + Transformer decomposition with FSQ-based codebook is sensible and breaks down the complex SVG generation task effectively.
+- **Demonstrated extensibility**: Qualitative results show VSQ can learn additional attributes (color, stroke width) without architecture changes, supporting the paper's flexibility claims.
+- **Practical efficiency**: Generation is ~100× faster than SDS-based methods (2.34s vs 379.74s for VectorFusion).
+
+## Weaknesses
+- **Missing comparison with SVG-supervised methods**: The paper mentions Iconshop and StrokeNUWA as related work but provides zero quantitative comparison. The claim of surpassing "vector-supervised approaches in flexibility" is unsubstantiated. This is a significant gap that undermines the paper's positioning.
+- **Unfair Im2Vec baseline**: Im2Vec is trained on single classes while GRIMOIRE uses full datasets with conditioning, meaning GRIMOIRE has both more data and conditioning information. The comparison conflates model quality with conditioning benefits.
+- **Poor FID scores unexplained**: GRIMOIRE shows 3-5× worse FID than Im2Vec (e.g., 12.25 vs 2.22 on MNIST, 9.25 vs 1.20 on Fonts). The paper attributes this to "metric instability" and "lower resolution" without rigorous justification or analysis.
+- **Post-processing dependency**: Results heavily rely on Path Clipping/Interpolation post-processing (e.g., FID drops from 4.44 to 1.67 on Fonts). This heuristic fix is not adequately analyzed for when/why it's necessary or whether it indicates fundamental limitations.
+- **Dataset-specific preprocessing**: The patch extraction differs across datasets (grid tiling for MNIST, contour extraction for FIGR-8, direct vector manipulation for Fonts). The paper doesn't discuss scalability to arbitrary raster images without such structure.
+- **Codebook inefficiency**: 39.91% of the 4,375-code codebook remains unused after training on FIGR-8. This represents wasted capacity and suggests smaller codebooks may suffice—a missed optimization opportunity.
+- **No ablation on geometric constraint**: The novel L_geom is only tested with strokes; its necessity for closed shapes is unclear. The paper shows qualitative benefits but no quantitative ablation isolating its contribution.
+
+## Nice-to-Haves
+- Human evaluation or user studies for generative quality, which are standard expectations at top venues.
+- Analysis of whether generated SVGs are syntactically valid and actually editable (core value proposition of vector graphics).
+- Latent space interpolation experiments to validate meaningful codebook structure.
+- Exploration of smaller codebook sizes based on observed utilization rates.
+
+## Novel Insights
+The paper's core insight—training an SVG generative model entirely on raster images through a differentiable rasterizer—is genuinely novel and addresses a real limitation in existing approaches that require expensive SVG preprocessing. The decomposition into a local shape quantizer (VSQ) plus global autoregressive model (ART) with explicit position tokens is a clean solution to the challenging problem of generating connected vector graphics. The observation that raster supervision enables training on significantly more data (including image-only datasets like MNIST and potentially natural images) and naturally supports attribute extension (color, stroke width) without tokenization changes is valuable.
+
+## Potentially Missed Related Work
+- DeepSVG (Carlier et al., 2020): Hierarchical generative network for vector graphics; direct comparison would strengthen positioning.
+- SVG-VAE (Lopes et al., 2019): Learned representation for scalable vector graphics; relevant baseline not compared against.
+- Any work on SVG-specific quality metrics beyond CLIP/FID that could better measure vector graphic fidelity.
+
+## Suggestions
+- Add head-to-head quantitative comparison with Iconshop and/or StrokeNUWA on the same datasets to properly contextualize quality trade-offs of raster-only supervision.
+- Implement a class-conditioned version of Im2Vec for fair comparison, or train GRIMOIRE on single classes only.
+- Report results without post-processing in the main paper to establish baseline quality.
+- Conduct ablation study on the geometric constraint L_geom with quantitative metrics.
+
+---
+
+## o1efpbvR6v
+
+- GT: Reject (avg 2.3)
+- Predicted: Reject (4.0/10)
+- Match: Yes
+
+### Final Review
+
+## Summary
+This paper proposes "Metric Transform," a template-based one-step retrosynthesis model that combines Transformer attention mechanisms with Deep Metric Learning using Proxy Anchor Loss. The key innovation is a "subclass mapping" technique that clusters samples within major reaction classes to address the severe class imbalance in USPTO-FULL, remapping predictions back to original templates. The model achieves 53.4% top-1 accuracy on USPTO-FULL with significantly faster inference than prior art and demonstrates competitive multi-step retrosynthesis planning on ChEMBL and Bayer/PubChem molecules.
+
+## Strengths
+- **Well-identified problem**: The paper correctly identifies class imbalance in template-based retrosynthesis—with reaction templates ranging from 1 to ~8,000 samples—as a fundamental challenge that degrades model performance on rare templates.
+- **Innovative subclass mapping**: The concept of splitting major classes into clusters and remapping predictions is creative and directly addresses the observed limitation where major classes form only "localized clustering" in embedding space. This is the paper's most novel contribution.
+- **Strong practical improvements**: The 4-5 percentage point improvement over the AiZynthTrain base model on USPTO-FULL represents meaningful progress achieved with modest computational resources (RTX 3050 4GB), demonstrating efficiency.
+- **Comprehensive multi-task evaluation**: The authors evaluate on both one-step and multi-step retrosynthesis with diverse metrics (top-k accuracy, coverage, inference speed, solving rates), and appropriately emphasize inference speed as critical for multi-step planning—a gap often overlooked in the literature.
+- **Valuable search algorithm comparison**: The comparison between MCTS and NMCS on multi-step retrosynthesis provides useful insights, showing NMCS can solve some molecules MCTS cannot, albeit with increased time.
+
+## Weaknesses
+- **Critical: No ablation studies** — The paper claims attention, Proxy Anchor Loss, and subclass mapping all contribute to performance but never isolates their individual effects. This is a fundamental gap for ICLR acceptance. The reader cannot determine which component drives the improvement or whether they are complementary.
+- **Critical: Incomplete architectural specification** — Number of attention layers, embedding dimensions, number of attention heads, learning rate schedule, and batch size are absent from the main text. This makes independent reproduction impossible. The paper references "PatchEmbedding" for molecular fingerprints but never explains how fixed-length fingerprint vectors are "patchified."
+- **Major: Misleading "no prior chemical knowledge" claim** — The paper claims the approach "requires no prior chemical knowledge," yet relies entirely on molecular fingerprints, reaction templates (which encode chemical reaction rules), atom mapping, and ring-breaker models. These are substantial chemical domain knowledge encoded in the data preprocessing pipeline. This claim should be revised to accurately reflect that the model training doesn't require expert tuning, not that chemical knowledge is absent.
+- **Major: Flawed multi-step comparisons** — ASKCOS uses the Reaxys dataset (much larger than USPTO-FULL) with commercial stock (Sigma Aldrich, eMolecules); DFPN uses 8.6M molecules with 270K templates and internal stock. Comparing 63/100 solved by Metric Transform (USPTO-FULL + ZINC) against these systems is misleading without controlling for dataset and stock differences.
+- **Major: Unexplained USPTO-50k underperformance** — On USPTO-50k, the method achieves 46.4% top-1 versus O-GNN (54.1%), LocalRetro (53.4%), and GLN (52.5%). The paper attributes this to "larger datasets" but provides no mechanistic explanation for why the approach fails on smaller data. This undermines the generalizability claim.
+- **Moderate: No statistical rigor** — Results are reported from single training runs with no error bars, confidence intervals, or significance tests. For ICLR standards, mean ± std across 3+ independent runs should be reported.
+- **Moderate: Non-standard evaluation methodology** — The "rescaling" procedure that treats 11,567 samples as "failed predictions" (samples in the overlap between training and val/test due to different split ratios) is unusual and makes cross-method comparisons difficult to interpret.
+
+## Nice-to-Haves
+- **t-SNE/UMAP visualization** of the embedding space with/without subclass mapping would validate the claim that it improves class separation, particularly for major classes.
+- **Per-class accuracy analysis** showing breakdown by template frequency would demonstrate whether subclass mapping benefits rare templates as claimed.
+- **Template transformation/merging** is mentioned in future work but represents a standard technique (used by GLN, LocalRetro) that could substantially improve performance—this absence limits comparison to state-of-the-art.
+- **Attention weight visualization** would substantiate the claim that attention captures "local and global contexts" in chemically meaningful ways.
+
+## Novel Insights
+The paper's most valuable insight is that major reaction template classes in retrosynthesis datasets exhibit only "localized clustering" in learned embedding spaces, making them confusable with minority classes despite containing many samples. The subclass mapping technique addresses this by forcing finer-grained separation within major classes, reducing the effective imbalance ratio while preserving the semantic meaning of original templates through a remapping layer. The empirical finding that the approach performs better on larger datasets (USPTO-FULL) but worse on smaller ones (USPTO-50k) compared to competitors suggests the method requires sufficient data to learn meaningful embeddings—a hypothesis that deserves systematic investigation. Additionally, the observation that NMCS can solve molecules MCTS cannot, while requiring more time, offers a practical search strategy: use MCTS for initial exploration and NMCS for difficult cases.
+
+## Potentially Missed Related Work
+- **LocalRetro (Jin et al., 2020)** — Template-based method with coverage-aware evaluation; directly comparable and would contextualize performance differences.
+- **O-GNN (Zhu et al., 2023)** — Included in USPTO-50k comparisons but paper does not discuss ring-prior integration that may explain performance differences on USPTO-FULL.
+- **Seidl et al., 2022** — "Improving Few- and Zero-Shot Reaction Template Prediction Using Modern Hopfield Networks" addresses similar class imbalance challenges; methodology comparison would be valuable.
+- **RetroPrime/RetroXpert** — Single-step retrosynthesis methods that decompose the problem differently; would provide additional context for where template-based approaches excel.
+
+## Suggestions
+- **Add systematic ablation studies** isolating each component (attention, Proxy Anchor Loss, subclass mapping) on both USPTO-FULL and USPTO-50k with quantified results for each.
+- **Provide complete hyperparameter table** including all architectural details (layers, heads, dimensions) and training parameters (learning rate, batch size, optimizer, cluster range for k-means).
+- **Report mean ± std** across 3+ independent training runs for key metrics.
+- **Investigate and explain** the scale-dependent performance (better on large data, worse on small data) through controlled experiments varying dataset size.
+- **Scope claims appropriately**: If the method is designed for large-scale classification settings, explicitly state this rather than comparing against methods optimized for small-data regimes.
+
+---
+
+## jCNRcHrfLo
+
+- GT: Reject (avg 5.0)
+- Predicted: Accept (6.0/10)
+- Match: No
+
+### Final Review
+
+## Summary
+This paper proposes HiCA (Hierarchical prompts with Context-Aware calibration) for open-vocabulary object detection, which introduces two complementary mechanisms: hierarchical prompts that decompose region-to-category mapping through a coarse-grained superclass intermediate, and context-aware calibration that modulates classification scores based on visual context distributions. The approach achieves 57.2% mAP_B on OV-COCO (OADP baseline) and 59.8% mAP_B (BARON baseline), with improvements validated across OV-COCO and OV-LVIS benchmarks.
+
+## Strengths
+- **Well-motivated problem identification**: The paper correctly identifies that existing OVD methods learn direct region-to-category mappings that overfit to base classes, neglecting shared semantic knowledge between base and novel categories.
+- **Solid experimental validation**: Comprehensive experiments on two standard benchmarks (OV-COCO, OV-LVIS) with ablations demonstrating each component's contribution. Testing on both OADP and BARON backbones strengthens the generalizability claims.
+- **Intuitive visualizations**: The t-SNE projections showing how hierarchical prompts improve separation between superclasses (Figure 4) effectively illustrate the mechanism.
+- **Modular design**: The plug-and-play architecture for hierarchical prompts and context-aware calibration enhances practical applicability.
+
+## Weaknesses
+- **Unclear superclass definition**: The paper introduces superclasses C_S but never explains how they are constructed from the 65 COCO categories (48 base + 17 novel). This is critical for reproducibility—if superclasses are manually defined, this needs explicit disclosure; if derived algorithmically, the method should be specified.
+- **Baseline reliability concerns**: The reproduced OADP baseline achieves 27.8% AP versus the reported 28.7% (a 0.9% gap), and reproduced BARON achieves 54.6% versus reported 54.8%. While "†" notation indicates reproduced results, the consistent underperformance raises questions about fair comparison methodology.
+- **Novel class gains are modest**: The primary claimed benefit is "generalization to novel classes," but the ablation shows hierarchical prompts contribute only +0.1% novel mAP; context-aware calibration adds +1.2%, yielding a total +1.3% novel class improvement. The dominant effect is +5.5% base class improvement, which should be more prominently emphasized.
+- **Limited architectural validation**: Despite claiming "plug-and-play flexible" modules, HiCA is only evaluated on Faster R-CNN-based frameworks. Application to DETR-based detectors (e.g., CORA's D-DETR, which appears in Table 1) is necessary to substantiate the modularity claim.
+- **No OV-LVIS ablation study**: All ablation experiments are conducted on OV-COCO. Since OV-LVIS has fundamentally different characteristics (1,203 classes with long-tailed distribution), ablation verification on this dataset is needed to confirm the approach scales.
+
+## Nice-to-Haves
+- **Per-novel-class breakdown**: The paper lacks analysis of which novel classes benefit, which are unaffected, and which might be harmed by the calibration, limiting understanding of the generalization mechanism.
+- **Context cluster interpretation**: The K=8 context clusters are treated as black boxes. Visualizing what semantic categories these clusters correspond to (e.g., indoor vs. outdoor) would build confidence in the approach.
+- **Runtime/inference overhead**: No discussion of computational cost for context-aware calibration, limiting practical deployment assessment.
+
+## Novel Insights
+This paper's primary insight is that decomposing the region-to-category mapping through an intermediate coarse-grained superclass level provides a useful inductive bias for open-vocabulary detection. The observation that directly mapping regions to specific category names causes base class overfitting is valid, and using shared superclass knowledge (e.g., "animal," "vehicle") as an intermediary is a reasonable strategy. The secondary insight—using unsupervised visual context clustering to learn category-context co-occurrence distributions for calibration—is intuitive but relatively straightforward. The combination of linguistic hierarchy (superclass prompts) and visual context (context-aware calibration) represents a modest but meaningful advance in how high-level semantic knowledge is incorporated into OVD frameworks.
+
+## Potentially Missed Related Work
+- **SAMP (Zhao et al., 2024)**: Appears in the related work section but the paper could benefit from more detailed comparison, as SAMP also addresses scene-adaptive prompts for OVD.
+- **Hierarchical classification in zero-shot learning**: Literature on hierarchical softmax and coarse-to-fine classification in ZSL (e.g., works on using WordNet hierarchies) may provide additional validation for the superclass approach.
+
+## Suggestions
+- **Validate on DETR-based detectors**: Apply HiCA to a DETR-based OVD method (e.g., adapting the approach to CORA's framework) to substantiate the modularity claims.
+- **Clarify superclass construction**: Either disclose the manual superclass taxonomy used for experiments, or describe an algorithmic method for deriving superclasses from arbitrary category sets.
+- **Report multiple runs**: Add statistical validation (mean ± std across runs) to strengthen confidence in the reported numbers.
+
+---
+
