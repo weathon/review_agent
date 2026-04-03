@@ -37,7 +37,7 @@ MODEL_SPARK = "z-ai/glm-5"
 MODEL_RELATED_WORK = "z-ai/glm-5:online" 
 MODEL_FILTER = "z-ai/glm-5"
 MODEL_MERGER = "z-ai/glm-5"
-MODEL_SCORER = "claude-sdk:claude-sonnet-4-6"
+MODEL_SCORER = "z-ai/glm-5"
 MODEL_PARSER = "openai/gpt-5.4-nano"
 
 MAX_RETRIES = 3
@@ -59,9 +59,19 @@ class ScoreSchema(BaseModel):
 
 
 def score_to_decision(score: float | None) -> str | None:
-    if score is None:
+    return "N/A"
+
+
+def decision_match(predicted: str | None, gt_binary: str) -> bool | None:
+    if predicted in (None, "", "N/A"):
         return None
-    return "Accept" if score >= 5.5 else "Reject"
+    return predicted == gt_binary
+
+
+def match_label(match: bool | None) -> str:
+    if match is None:
+        return "N/A"
+    return "YES" if match else "NO"
 
 # ── Agent system prompts ──────────────────────────────────────────────
 
@@ -619,51 +629,6 @@ async def _parse_score(client: AsyncOpenAI, text: str) -> tuple[float, float]:
     return parsed.score, cost
 
 
-async def _score_with_agent_sdk(
-    system_prompt: str,
-    review_text: str,
-    score_user: str,
-    model: str = "claude-opus-4-6",
-) -> tuple[str, float]:
-    """Use Claude Agent SDK (agent loop, no tools, max_turns=1) to score a paper."""
-    from claude_agent_sdk import ClaudeSDKClient, ClaudeAgentOptions, AssistantMessage, ResultMessage, TextBlock
-
-    prompt = (
-        "Here is a consolidated review of a paper (you do NOT have the full paper):\n\n"
-        "--- CONSOLIDATED REVIEW ---\n"
-        f"{review_text}\n"
-        "--- END CONSOLIDATED REVIEW ---\n\n"
-        f"{score_user}"
-    )
-
-    options = ClaudeAgentOptions(
-        model=model,
-        allowed_tools=[],
-        max_turns=1,
-        system_prompt=system_prompt,
-    )
-
-    score_text = ""
-    cost = 0.0
-
-    async with ClaudeSDKClient(options=options) as sdk_client:
-        await sdk_client.query(prompt)
-        async for message in sdk_client.receive_response():
-            if isinstance(message, AssistantMessage):
-                for block in message.content:
-                    if isinstance(block, TextBlock):
-                        score_text += block.text
-            if isinstance(message, ResultMessage):
-                if message.total_cost_usd is not None:
-                    cost = message.total_cost_usd
-
-    if not score_text.strip():
-        raise ValueError("Agent SDK scorer returned empty response")
-
-    print(f"  [merger_score] done — {model} (Agent SDK) — ${cost:.4f}")
-    return score_text, cost
-
-
 async def run_merger(
     client: AsyncOpenAI,
     harsh_review: str,
@@ -745,31 +710,10 @@ async def run_merger(
         "a non-6.0 score now."
     )
 
-    # ── Agent SDK scoring path (MODEL_SCORER = "claude-sdk:<model>") ──
     if MODEL_SCORER.startswith("claude-sdk:"):
-        sdk_model = MODEL_SCORER.split(":", 1)[1]
-        print(f"  [merger_score] scoring with Agent SDK ({sdk_model}) ...")
-        score_text, cost_score = await _score_with_agent_sdk(
-            MERGER_PROMPT, review_text, score_user, sdk_model
+        raise ValueError(
+            f"MODEL_SCORER must be an OpenRouter model ID, got {MODEL_SCORER!r}"
         )
-        score, cost_parse = await _parse_score(client, score_text)
-        total_cost = cost_review + cost_score + cost_parse
-        print(f"  [score_parser] parsed score: {score} — ${cost_parse:.4f}")
-
-        # Re-score if exactly 6.0
-        if abs(score - 6.0) < 0.01:
-            print(f"  [merger_score] score is 6.0, re-scoring with nudge ...")
-            rescore_prompt = (
-                f"Your previous scoring response was:\n{score_text}\n\n{NO_SIX_NUDGE}"
-            )
-            rescore_text, rescore_cost = await _score_with_agent_sdk(
-                MERGER_PROMPT, review_text, rescore_prompt, sdk_model
-            )
-            score, parse_cost2 = await _parse_score(client, rescore_text)
-            total_cost += rescore_cost + parse_cost2
-            print(f"  [score_parser] re-scored: {score} — ${parse_cost2:.4f}")
-
-        return review_text, score, total_cost
 
     # ── OpenRouter scoring path ───────────────────────────────────
     # Multi-turn: system + turn1 + assistant + turn2
@@ -1044,7 +988,6 @@ if __name__ == "__main__":
         print()
         print("Environment variables (or set in .env):")
         print("  OPENROUTER_API_KEY   (required) Your OpenRouter API key")
-        print("  ANTHROPIC_API_KEY    (required if MODEL_SCORER uses claude-sdk:)")
         print()
         print("Models per stage:")
         print(f"  Harsh Critic (OpenRouter):      {MODEL_HARSH}")
@@ -1053,9 +996,6 @@ if __name__ == "__main__":
         print(f"  Related Work (OpenRouter):      {MODEL_RELATED_WORK}")
         print(f"  Merger (OpenRouter):            {MODEL_MERGER}")
         print(f"  Scorer:                         {MODEL_SCORER}")
-        print()
-        print("To use Claude Agent SDK for scoring, set MODEL_SCORER to")
-        print("  claude-sdk:<model>  e.g. claude-sdk:claude-opus-4-6")
         sys.exit(0 if "--help" in sys.argv else 1)
 
     parallel = "--parallel" in sys.argv

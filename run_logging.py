@@ -37,9 +37,10 @@ def analyze_and_plot(path):
     mae_rounded = np.mean(np.abs(pred_rounded - gt_avg))
     bias_raw = np.mean(pred - gt_avg)
 
-    pred_dec = df["pred_decision"].str.strip().str.lower()
+    pred_dec = df["pred_decision"].fillna("N/A").str.strip().str.lower()
     gt_dec = df["gt_binary"].str.strip().str.lower()
-    dec_match = (pred_dec == gt_dec).sum()
+    valid_dec_mask = ~pred_dec.isin(["n/a", ""])
+    dec_match = ((pred_dec == gt_dec) & valid_dec_mask).sum()
 
     match_any = 0
     for _, row in df.iterrows():
@@ -60,7 +61,11 @@ def analyze_and_plot(path):
     print(f"  MAE (raw):             {mae_raw:.4f}")
     print(f"  MAE (rounded):         {mae_rounded:.4f}")
     print(f"  Bias (pred-gt):        {bias_raw:+.4f}")
-    print(f"  Decision accuracy:     {dec_match}/{len(df)} = {dec_match/len(df):.1%}")
+    if valid_dec_mask.any():
+        valid_decisions = int(valid_dec_mask.sum())
+        print(f"  Decision accuracy:     {dec_match}/{valid_decisions} = {dec_match/valid_decisions:.1%}")
+    else:
+        print("  Decision accuracy:     N/A (decision labels disabled)")
     print(f"  Human match (rounded): {match_any}/{len(df)} = {match_any/len(df):.1%}")
 
     # AUROC: use predicted score to discriminate Accept vs Reject
@@ -87,11 +92,16 @@ def analyze_and_plot(path):
         print(f"  AUROC/AUPRC: N/A (only one class present: {n_pos} Accept, {n_neg} Reject)")
 
     if n_border > 0:
-        b_dec_acc = (pred_dec[border_mask] == gt_dec[border_mask]).sum()
         b_mae = np.mean(np.abs(pred[border_mask] - gt_avg[border_mask]))
         print(f"  {'─'*45}")
         print(f"  Borderline (gt 4-6):   {n_border} papers")
-        print(f"    Decision accuracy:   {b_dec_acc}/{n_border} = {b_dec_acc/n_border:.1%}")
+        border_valid = valid_dec_mask[border_mask]
+        if border_valid.any():
+            b_dec_acc = ((pred_dec[border_mask] == gt_dec[border_mask]) & border_valid).sum()
+            valid_border = int(border_valid.sum())
+            print(f"    Decision accuracy:   {b_dec_acc}/{valid_border} = {b_dec_acc/valid_border:.1%}")
+        else:
+            print("    Decision accuracy:   N/A (decision labels disabled)")
         print(f"    MAE:                 {b_mae:.4f}")
 
     print(f"\n  {'─'*45}")
