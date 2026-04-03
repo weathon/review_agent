@@ -1,6 +1,6 @@
 # Multi-Agent Paper Reviewer
 
-An automated academic paper review system that uses multiple LLM agents with different roles to produce a consolidated review with a score and accept/reject decision. Benchmarked against ICLR 2025 ground truth reviews.
+An automated academic paper review system that uses multiple LLM agents with different roles to produce a consolidated review and score. Benchmarked against ICLR 2025 ground truth reviews.
 
 ## Architecture
 
@@ -13,7 +13,7 @@ Phase 1 (all parallel via OpenRouter chat completions):
 
 Phase 2 (two-turn, separate models):
   ├── Turn 1: Merger ─────── z-ai/glm-5 via OpenRouter (consolidated review, no scores)
-  └── Turn 2: Scorer ─────── claude-sonnet-4-6 via Agent SDK (calibrated score, review-only context)
+  └── Turn 2: Scorer ─────── z-ai/glm-5 via OpenRouter (calibrated score, review-only context)
 ```
 
 **Agents:**
@@ -26,9 +26,9 @@ Phase 2 (two-turn, separate models):
 | Related Work Scout | `z-ai/glm-5:online` | Proposes potentially missed references using OpenRouter's online model variant |
 | Related Work Filter | `z-ai/glm-5` | Removes already-cited and loosely related results |
 | Merger | `z-ai/glm-5` | Synthesizes all inputs into a final structured review (no scores) |
-| Scorer | `claude-sonnet-4-6` (Agent SDK) | Scores the paper using the review + calibration examples (paper content stripped — only sees the review) |
+| Scorer | `z-ai/glm-5` | Scores the paper using the review + calibration examples (paper content stripped — only sees the review) |
 
-Sub-agent and merger calls go through OpenRouter. The scorer uses the Claude Agent SDK (`ClaudeSDKClient`, no tools, `max_turns=1`). To switch the scorer model, set `MODEL_SCORER` in `paper_reviewer.py` — use the `claude-sdk:<model>` prefix for Agent SDK models or a plain OpenRouter model ID.
+All stages go through OpenRouter. To switch the scorer model, set `MODEL_SCORER` in `paper_reviewer.py` to another OpenRouter model ID.
 
 ## Review And Scoring Design
 
@@ -414,4 +414,4 @@ We are looking for participants to help evaluate our review quality. If you are 
 
 ## Cost
 
-Sub-agents and merger use `z-ai/glm-5` via OpenRouter. The scorer uses `claude-sonnet-4-6` via the Claude Agent SDK (requires `ANTHROPIC_API_KEY`). Score parsing uses `gpt-5.4-nano` via OpenRouter. Exact cost depends on current pricing, paper length, and output length.
+Sub-agents, merger, and scorer use `z-ai/glm-5` via OpenRouter. Score parsing uses `gpt-5.4-nano` via OpenRouter. Exact cost depends on current pricing, paper length, and output length.

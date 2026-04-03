@@ -49,7 +49,9 @@ from paper_reviewer import (
     MODEL_SPARK,
     NEUTRAL_REVIEWER_PROMPT,
     SPARK_FINDER_PROMPT,
+    decision_match,
     _get_client,
+    match_label,
     run_merger,
     run_related_work_search,
     run_reviewer,
@@ -356,8 +358,8 @@ async def main(n_samples: int = 10, seed: int = 42, parallel: bool = False, skip
                     pred_score = review_result["predicted_score"]
                     pred_dec = review_result["predicted_decision"]
 
-                    match = pred_dec == paper_info["gt_binary"] if pred_dec else None
-                    marker = "MATCH" if match else ("MISMATCH" if match is not None else "ERROR")
+                    match = decision_match(pred_dec, paper_info["gt_binary"])
+                    marker = "MATCH" if match is True else ("MISMATCH" if match is False else "N/A")
 
                     print(f"\n  [{pid}] Predicted Score: {pred_score}/10  |  Predicted Decision: {pred_dec}")
                     print(f"  [{pid}] GT Binary: {paper_info['gt_binary']}  |  Result: *** {marker} ***")
@@ -395,7 +397,7 @@ async def main(n_samples: int = 10, seed: int = 42, parallel: bool = False, skip
                             "gt_avg_score": paper_info["avg_score"],
                             "gt_scores": paper_info["scores"],
                             "predicted_score": None,
-                            "predicted_decision": None,
+                            "predicted_decision": "N/A",
                             "match": None,
                             "cost": 0.0,
                             "time_s": elapsed,
@@ -412,12 +414,12 @@ async def main(n_samples: int = 10, seed: int = 42, parallel: bool = False, skip
                     f.write(f"## {r['paper_id']}\n\n")
                     f.write(f"- GT: {r['gt_decision']} (avg {r['gt_avg_score']:.1f})\n")
                     f.write(f"- Predicted: {r['predicted_decision']} ({r['predicted_score']}/10)\n")
-                    f.write(f"- Match: {'Yes' if r['match'] else ('No' if r['match'] is not None else 'Parse fail')}\n\n")
+                    f.write(f"- Match: {match_label(r['match'])}\n\n")
                     f.write(f"### Final Review\n\n{r['final_review']}\n\n---\n\n")
                 with open(csv_path, "a", newline="") as f:
                     w = csv.writer(f)
                     gt_scores_padded = r["gt_scores"] + [""] * (7 - len(r["gt_scores"]))
-                    match_str = "YES" if r["match"] else ("NO" if r["match"] is not None else "ERROR")
+                    match_str = match_label(r["match"])
                     w.writerow([
                         r["paper_id"],
                         r["predicted_score"],
@@ -445,14 +447,20 @@ async def main(n_samples: int = 10, seed: int = 42, parallel: bool = False, skip
     print("BENCHMARK RESULTS SUMMARY")
     print("=" * 72)
 
+    successful = [r for r in results if r["predicted_score"] is not None]
     valid = [r for r in results if r["match"] is not None]
     matches = sum(1 for r in valid if r["match"])
     accuracy = matches / len(valid) if valid else 0
 
     print(f"\nPapers reviewed:  {len(results)}")
-    print(f"Successful:       {len(valid)}")
-    print(f"Correct:          {matches}/{len(valid)}")
-    print(f"Accuracy:         {accuracy:.1%}")
+    print(f"Successful:       {len(successful)}")
+    print(f"Decision eval:    {len(valid)}")
+    if valid:
+        print(f"Correct:          {matches}/{len(valid)}")
+        print(f"Accuracy:         {accuracy:.1%}")
+    else:
+        print("Correct:          N/A")
+        print("Accuracy:         N/A (decision labels disabled)")
     total_cost = sum(r.get("cost", 0.0) for r in results)
     print(f"Total time:       {total_elapsed:.1f}s")
     print(f"Avg time/paper:   {total_elapsed / len(results):.1f}s")
@@ -466,7 +474,7 @@ async def main(n_samples: int = 10, seed: int = 42, parallel: bool = False, skip
         pred = r["predicted_decision"] or "N/A"
         gt_sc = f"{r['gt_avg_score']:.1f}"
         pred_sc = f"{r['predicted_score']:.1f}" if r["predicted_score"] else "N/A"
-        match_str = "YES" if r["match"] else ("NO" if r["match"] is not None else "ERR")
+        match_str = match_label(r["match"])
         print(f"{r['paper_id']:<20} {gt:>10} {pred:>10} {gt_sc:>10} {pred_sc:>11} {match_str:>7}")
 
     paired = [(r["gt_avg_score"], r["predicted_score"]) for r in results if r["predicted_score"] is not None]
@@ -481,7 +489,8 @@ async def main(n_samples: int = 10, seed: int = 42, parallel: bool = False, skip
 
     # Append summary to the file
     with open(output_path, "a") as f:
-        f.write(f"\n# Summary\n\nPapers: {len(results)} | Accuracy: {accuracy:.1%}\n")
+        accuracy_str = f"{accuracy:.1%}" if valid else "N/A"
+        f.write(f"\n# Summary\n\nPapers: {len(results)} | Accuracy: {accuracy_str}\n")
 
     print(f"\nDetailed results saved to: {output_path}")
 

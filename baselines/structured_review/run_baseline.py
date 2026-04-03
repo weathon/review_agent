@@ -33,9 +33,11 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 from paper_reviewer import (
+    decision_match,
     _get_client,
     _parse_score,
     _call_openai,
+    match_label,
     sanitize_text,
     score_to_decision,
 )
@@ -365,13 +367,13 @@ async def main(
                 score = round(float(score), 1)
                 decision = score_to_decision(score)
                 elapsed = time.time() - start
-                match = decision == paper_info["gt_binary"]
-                marker = "MATCH" if match else "MISMATCH"
+                match = decision_match(decision, paper_info["gt_binary"])
+                marker = "MATCH" if match is True else ("MISMATCH" if match is False else "N/A")
                 print(f"    [{pid}] score={score} dec={decision} {marker} ({elapsed:.1f}s, ${cost:.4f})")
             except Exception as e:
                 elapsed = time.time() - start
                 print(f"    [{pid}] ERROR: {e} ({elapsed:.1f}s)")
-                score, decision, match, cost = None, None, None, 0.0
+                score, decision, match, cost = None, "N/A", None, 0.0
 
             r = {
                 "paper_id": pid,
@@ -390,7 +392,7 @@ async def main(
                 completed[0] += 1
                 with open(csv_path, "a", newline="") as f:
                     w = csv.writer(f)
-                    match_str = "YES" if r["match"] else ("NO" if r["match"] is not None else "ERROR")
+                    match_str = match_label(r["match"])
                     gt_padded = r["gt_scores"] + [""] * (7 - len(r["gt_scores"]))
                     w.writerow([
                         r["paper_id"],
@@ -415,15 +417,21 @@ async def main(
     print("STRUCTURED-REVIEW BASELINE RESULTS")
     print(f"{'=' * 72}")
 
+    successful = [r for r in results if r["predicted_score"] is not None]
     valid = [r for r in results if r["match"] is not None]
     matches = sum(1 for r in valid if r["match"])
     accuracy = matches / len(valid) if valid else 0
     total_cost = sum(r.get("cost", 0.0) for r in results)
 
     print(f"Papers:    {len(results)}")
-    print(f"Valid:     {len(valid)}")
-    print(f"Correct:   {matches}/{len(valid)}")
-    print(f"Accuracy:  {accuracy:.1%}")
+    print(f"Successful: {len(successful)}")
+    print(f"Decision eval: {len(valid)}")
+    if valid:
+        print(f"Correct:   {matches}/{len(valid)}")
+        print(f"Accuracy:  {accuracy:.1%}")
+    else:
+        print("Correct:   N/A")
+        print("Accuracy:  N/A (decision labels disabled)")
     print(f"Time:      {total_elapsed:.1f}s")
     print(f"Cost:      ${total_cost:.4f}")
 
@@ -441,7 +449,7 @@ async def main(
     for r in results:
         pred = r["predicted_decision"] or "N/A"
         pred_sc = f"{r['predicted_score']:.1f}" if r["predicted_score"] else "N/A"
-        match_str = "YES" if r["match"] else ("NO" if r["match"] is not None else "ERR")
+        match_str = match_label(r["match"])
         print(f"{r['paper_id']:<20} {r['gt_binary']:>10} {pred:>10} {r['gt_avg_score']:>10.1f} {pred_sc:>11} {match_str:>7}")
 
     bin_c, bin_t = Counter(), Counter()
