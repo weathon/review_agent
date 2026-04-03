@@ -408,6 +408,10 @@ python fetch_iclr2025.py [n] [seed] [options]
 Requires OPENREVIEW_USERNAME and OPENREVIEW_PASSWORD in .env
 ```
 
+## Participate in Our Evaluation
+
+We are looking for participants to help evaluate our review quality. If you are interested, please contact us at wg25r@student.ubc.ca.
+
 ## Cost
 
 Sub-agents and merger use `z-ai/glm-5` via OpenRouter. The scorer uses `claude-sonnet-4-6` via the Claude Agent SDK (requires `ANTHROPIC_API_KEY`). Score parsing uses `gpt-5.4-nano` via OpenRouter. Exact cost depends on current pricing, paper length, and output length.
