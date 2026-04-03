@@ -375,8 +375,8 @@ Use the full range — do NOT cluster around 5-6. Be DISCRIMINATIVE:
 - However, do not over-penalize papers for a long list of minor points if the core contribution is sound.
 - A few serious flaws matter more than many small nitpicks.
 - NEVER give a 6.0 score, no matter what. A score of 6 is a non-committal fence-sit. If the \
-  paper is even slightly positive, give 7. If it is even slightly negative, \
-  give 5. You must decide which side of the borderline the paper falls on. 
+  paper is even slightly positive, give 6.5 or 7. If it is even slightly negative, \
+  give 5.5 or 5. You must decide which side of the borderline the paper falls on. 
 
 Scoring guide (use only when NO calibration examples are available):
 - 9.0-10.0: Strong accept. Exceptional, field-advancing contribution.
@@ -621,7 +621,6 @@ async def _parse_score(client: AsyncOpenAI, text: str) -> tuple[float, float]:
 
 async def _score_with_agent_sdk(
     system_prompt: str,
-    user_prompt_review: str,
     review_text: str,
     score_user: str,
     model: str = "claude-opus-4-6",
@@ -630,17 +629,11 @@ async def _score_with_agent_sdk(
     from claude_agent_sdk import ClaudeSDKClient, ClaudeAgentOptions, AssistantMessage, ResultMessage, TextBlock
 
     prompt = (
-        "You are continuing a conversation. Here is what happened so far:\n\n"
-        "--- USER'S ORIGINAL REQUEST ---\n"
-        f"{user_prompt_review}\n"
-        "--- END USER'S ORIGINAL REQUEST ---\n\n"
-        "--- YOUR REVIEW (which you already wrote) ---\n"
+        "Here is a consolidated review of a paper (you do NOT have the full paper):\n\n"
+        "--- CONSOLIDATED REVIEW ---\n"
         f"{review_text}\n"
-        "--- END YOUR REVIEW ---\n\n"
-        "--- NEW INSTRUCTION ---\n"
-        f"{score_user}\n"
-        "--- END NEW INSTRUCTION ---\n\n"
-        "Based on the review you wrote above, now provide your scoring response."
+        "--- END CONSOLIDATED REVIEW ---\n\n"
+        f"{score_user}"
     )
 
     options = ClaudeAgentOptions(
@@ -730,7 +723,8 @@ async def run_merger(
         score_user += "Now score this paper.\n\n"
 
     score_user += (
-        "Based on the review you just wrote, assign a single overall score.\n\n"
+        "Based on the consolidated review above (you do NOT have the full paper, "
+        "only the review), assign a single overall score.\n\n"
         "IMPORTANT — use the FULL range from 1.0 to 10.0. Do NOT compress "
         "scores into 4-6. A paper with fundamental flaws deserves 1-3. "
         "A strong paper with clear contributions deserves 7-9. "
@@ -739,8 +733,10 @@ async def run_merger(
 
 
 
-    # Final Score, remove paper from context
-    # user_prompt_review = user_prompt_review.split("--- PAPER CONTENT END ---\n\n")[1]
+    # Strip full paper from scoring context — the review already covers it
+    # and sending it wastes tokens / distracts the scorer.
+    if "--- PAPER CONTENT END ---" in user_prompt_review:
+        user_prompt_review = user_prompt_review.split("--- PAPER CONTENT END ---\n\n", 1)[1]
 
     NO_SIX_NUDGE = (
         "You gave a score of exactly 6.0. A score of 6 is a non-committal fence-sit. "
@@ -754,7 +750,7 @@ async def run_merger(
         sdk_model = MODEL_SCORER.split(":", 1)[1]
         print(f"  [merger_score] scoring with Agent SDK ({sdk_model}) ...")
         score_text, cost_score = await _score_with_agent_sdk(
-            MERGER_PROMPT, user_prompt_review, review_text, score_user, sdk_model
+            MERGER_PROMPT, review_text, score_user, sdk_model
         )
         score, cost_parse = await _parse_score(client, score_text)
         total_cost = cost_review + cost_score + cost_parse
@@ -767,7 +763,7 @@ async def run_merger(
                 f"Your previous scoring response was:\n{score_text}\n\n{NO_SIX_NUDGE}"
             )
             rescore_text, rescore_cost = await _score_with_agent_sdk(
-                MERGER_PROMPT, user_prompt_review, review_text, rescore_prompt, sdk_model
+                MERGER_PROMPT, review_text, rescore_prompt, sdk_model
             )
             score, parse_cost2 = await _parse_score(client, rescore_text)
             total_cost += rescore_cost + parse_cost2

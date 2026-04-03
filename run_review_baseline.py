@@ -26,13 +26,15 @@ from collections import Counter, defaultdict
 from pathlib import Path
 
 from paper_reviewer import (
-    MODEL_SCORER,
     _get_client,
     _parse_score,
     _call_openai,
     sanitize_text,
     score_to_decision,
 )
+
+# Baseline uses its own model — not the pipeline's MODEL_SCORER
+BASELINE_MODEL = "z-ai/glm-5"
 
 DEFAULT_BENCH_DIR = Path(__file__).parent / "iclr2025_data"
 CONCURRENCY = 5
@@ -112,33 +114,6 @@ def stratified_sample(papers, n, seed):
     return samples
 
 
-async def _sdk_call(system_prompt: str, user_prompt: str, model: str) -> tuple[str, float]:
-    """Single-turn Agent SDK call."""
-    from claude_agent_sdk import ClaudeSDKClient, ClaudeAgentOptions, AssistantMessage, ResultMessage, TextBlock
-
-    options = ClaudeAgentOptions(
-        model=model,
-        allowed_tools=[],
-        max_turns=1,
-        system_prompt=system_prompt,
-    )
-    text = ""
-    cost = 0.0
-    async with ClaudeSDKClient(options=options) as sdk_client:
-        await sdk_client.query(user_prompt)
-        async for message in sdk_client.receive_response():
-            if isinstance(message, AssistantMessage):
-                for block in message.content:
-                    if isinstance(block, TextBlock):
-                        text += block.text
-            if isinstance(message, ResultMessage):
-                if message.total_cost_usd is not None:
-                    cost = message.total_cost_usd
-    if not text.strip():
-        raise ValueError("Agent SDK returned empty response")
-    return text, cost
-
-
 async def review_then_score(
     client, paper_content: str, calibration_context: str = "",
 ) -> tuple[str, float, float]:
@@ -146,9 +121,6 @@ async def review_then_score(
     Turn 1: generate review. Turn 2: score with calibration.
     Returns (review_text, score, total_cost).
     """
-    is_sdk = MODEL_SCORER.startswith("claude-sdk:")
-    sdk_model = MODEL_SCORER.split(":", 1)[1] if is_sdk else None
-
     # ── Turn 1: Review ───────────────────────────────────────────
     review_user = (
         f"Here is the paper to review:\n\n"
@@ -156,14 +128,10 @@ async def review_then_score(
         f"Write your detailed review now."
     )
 
-    if is_sdk:
-        print(f"    [turn1_review] generating review ({sdk_model}) ...")
-        review_text, cost_review = await _sdk_call(REVIEW_PROMPT, review_user, sdk_model)
-    else:
-        print(f"    [turn1_review] generating review ({MODEL_SCORER}) ...")
-        review_text, cost_review = await _call_openai(
-            client, "review_baseline_t1", REVIEW_PROMPT, review_user, MODEL_SCORER,
-        )
+    print(f"    [turn1_review] generating review ({BASELINE_MODEL}) ...")
+    review_text, cost_review = await _call_openai(
+        client, "review_baseline_t1", REVIEW_PROMPT, review_user, BASELINE_MODEL,
+    )
     print(f"    [turn1_review] done ({len(review_text)} chars, ${cost_review:.4f})")
 
     # ── Turn 2: Score ────────────────────────────────────────────
@@ -183,14 +151,10 @@ async def review_then_score(
         "Use the FULL range. Commit to your assessment."
     )
 
-    if is_sdk:
-        print(f"    [turn2_score] scoring ({sdk_model}) ...")
-        score_text, cost_score = await _sdk_call(SCORE_PROMPT, score_user, sdk_model)
-    else:
-        print(f"    [turn2_score] scoring ({MODEL_SCORER}) ...")
-        score_text, cost_score = await _call_openai(
-            client, "review_baseline_t2", SCORE_PROMPT, score_user, MODEL_SCORER,
-        )
+    print(f"    [turn2_score] scoring ({BASELINE_MODEL}) ...")
+    score_text, cost_score = await _call_openai(
+        client, "review_baseline_t2", SCORE_PROMPT, score_user, BASELINE_MODEL,
+    )
     print(f"    [turn2_score] done (${cost_score:.4f})")
 
     score, cost_parse = await _parse_score(client, score_text)
@@ -210,7 +174,7 @@ async def main(
 
     print("=" * 72)
     print("REVIEW-THEN-SCORE BASELINE")
-    print(f"  Model: {MODEL_SCORER}")
+    print(f"  Model: {BASELINE_MODEL}")
     print(f"  Data:  {bench_dir}")
     print(f"  Mode:  {'balanced' if balanced else 'random'}")
     print("=" * 72)

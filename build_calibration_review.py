@@ -19,11 +19,13 @@ from collections import defaultdict
 from pathlib import Path
 
 from paper_reviewer import (
-    MODEL_SCORER,
     _get_client,
     _call_openai,
     sanitize_text,
 )
+
+# Baseline uses its own model — not the pipeline's MODEL_SCORER
+BASELINE_MODEL = "z-ai/glm-5"
 from run_iclr_bench import load_ground_truth, DEFAULT_BENCH_DIR
 
 BORDERLINE_BINS = {5, 6}
@@ -65,53 +67,17 @@ def sample_one_per_bin(papers: list[dict], seed: int) -> list[dict]:
     return samples
 
 
-async def generate_review_sdk(paper_content: str, model: str) -> tuple[str, float]:
-    """Generate a review using Claude Agent SDK."""
-    from claude_agent_sdk import ClaudeSDKClient, ClaudeAgentOptions, AssistantMessage, ResultMessage, TextBlock
-
-    user_prompt = (
-        f"Here is the paper to review:\n\n"
-        f"--- PAPER START ---\n{paper_content}\n--- PAPER END ---\n\n"
-        f"Write your detailed review now."
-    )
-    options = ClaudeAgentOptions(
-        model=model,
-        allowed_tools=[],
-        max_turns=1,
-        system_prompt=REVIEW_PROMPT,
-    )
-    review_text = ""
-    cost = 0.0
-    async with ClaudeSDKClient(options=options) as sdk_client:
-        await sdk_client.query(user_prompt)
-        async for message in sdk_client.receive_response():
-            if isinstance(message, AssistantMessage):
-                for block in message.content:
-                    if isinstance(block, TextBlock):
-                        review_text += block.text
-            if isinstance(message, ResultMessage):
-                if message.total_cost_usd is not None:
-                    cost = message.total_cost_usd
-    if not review_text.strip():
-        raise ValueError("Agent SDK returned empty review")
-    return review_text, cost
-
-
 async def generate_review(client, paper_content: str) -> tuple[str, float]:
-    """Generate a review for the paper using MODEL_SCORER."""
+    """Generate a review for the paper using BASELINE_MODEL."""
     user_prompt = (
         f"Here is the paper to review:\n\n"
         f"--- PAPER START ---\n{paper_content}\n--- PAPER END ---\n\n"
         f"Write your detailed review now."
     )
 
-    if MODEL_SCORER.startswith("claude-sdk:"):
-        sdk_model = MODEL_SCORER.split(":", 1)[1]
-        return await generate_review_sdk(paper_content, sdk_model)
-    else:
-        return await _call_openai(
-            client, "calibration_review", REVIEW_PROMPT, user_prompt, MODEL_SCORER,
-        )
+    return await _call_openai(
+        client, "calibration_review", REVIEW_PROMPT, user_prompt, BASELINE_MODEL,
+    )
 
 
 def build_calibration_md(results: list[dict]) -> str:
@@ -133,7 +99,7 @@ async def main(data_dir: str | None = None, seed: int = 42):
 
     print("=" * 72)
     print("Building Calibration Set (review-then-score baseline)")
-    print(f"  Scorer/Reviewer: {MODEL_SCORER}")
+    print(f"  Scorer/Reviewer: {BASELINE_MODEL}")
     print(f"  Data: {bench_dir}")
     print("=" * 72)
 
