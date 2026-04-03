@@ -138,7 +138,17 @@ python metric.py bench_scores.csv
 
 ## Baselines
 
-Three baselines are provided for comparison against the full multi-agent pipeline.
+Four baselines are provided for comparison against the full multi-agent pipeline. Single-model baselines live under `baselines/`.
+
+```
+baselines/
+├── review_baseline/          # simple review-then-score (Summary, Strengths, Weaknesses, Questions)
+│   ├── run_baseline.py
+│   └── build_calibration.py
+└── structured_review/        # structured review matching merger sections
+    ├── run_baseline.py
+    └── build_calibration.py
+```
 
 ### Always-predict-6 baseline (`run_baseline.py`)
 
@@ -158,32 +168,53 @@ Sends the paper directly to `MODEL_SCORER` and asks it to review and score in a 
 python run_direct_baseline.py 50 3112 --balanced --data-dir iclr2025_data
 ```
 
-### Review-then-score baseline (`run_review_baseline.py`)
+### Review-then-score baseline (`baselines/review_baseline/`)
 
-Two-turn single-model baseline using `MODEL_SCORER` for both turns:
+Two-turn single-model baseline:
 
-1. **Turn 1**: Model reads the paper and writes a detailed review (no score)
+1. **Turn 1**: Model reads the paper and writes a simple review (Summary, Strengths, Weaknesses, Questions — no score)
 2. **Turn 2**: Model reads its own review + calibration examples and produces a score
 
-This has its own calibration set built by `build_calibration_review.py`, which generates reviews (not multi-agent review bundles) paired with real human scores.
+Uses a basic scoring guide (not comparative scoring). Has its own calibration set.
 
 ```bash
-# Build calibration (MODEL_SCORER generates reviews, paired with human scores)
-python build_calibration_review.py --data-dir iclr2025_data
+# Build calibration
+python baselines/review_baseline/build_calibration.py --data-dir iclr2025_data
 
 # Run benchmark
-python run_review_baseline.py 50 3112 --balanced \
-  --data-dir iclr2025_data --calibration calibration_review.md
+python baselines/review_baseline/run_baseline.py 50 3112 --balanced \
+  --data-dir iclr2025_data --calibration baselines/review_baseline/calibration.md
+```
+
+### Structured-review baseline (`baselines/structured_review/`)
+
+A stronger single-model baseline that outputs the **exact same sections as the multi-agent merger** (Summary, Strengths, Weaknesses, Nice-to-Haves, Novel Insights, Potentially Missed Related Work, Suggestions) but without the agentic pipeline — no harsh/neutral/spark/related-work sub-agents, no merger synthesis.
+
+This isolates the value of the multi-agent pipeline itself: if the full system outperforms this baseline, the improvement comes from multi-perspective synthesis rather than just the review format or scoring prompt.
+
+Key differences from the simple review baseline:
+- **Review format**: matches the merger output (7 structured sections vs 4 simple sections)
+- **Scoring prompt**: uses the same comparative scoring procedure as the main pipeline (lower/upper bound identification, dimension-by-dimension comparison, interpolation)
+- **Calibration format**: uses `# Final Consolidated Review` headers matching the main pipeline's calibration
+
+```bash
+# Build calibration
+python baselines/structured_review/build_calibration.py --data-dir iclr2025_data
+
+# Run benchmark
+python baselines/structured_review/run_baseline.py 50 3112 --balanced \
+  --data-dir iclr2025_data --calibration baselines/structured_review/calibration.md
 ```
 
 ### Comparison
 
-| Method | Sub-agents | Calibration | Scoring context |
-|--------|-----------|-------------|-----------------|
-| Always-predict-6 | None | None | N/A |
-| Direct scoring | None | None | Full paper |
-| Review-then-score | None (single model reviews) | Own calibration (`calibration_review.md`) | Own review + calibration |
-| Full pipeline | 4 specialized agents | Multi-agent calibration (`calibration.md`) | Consolidated review + calibration |
+| Method | Sub-agents | Review sections | Scoring method | Calibration |
+|--------|-----------|-----------------|----------------|-------------|
+| Always-predict-6 | None | N/A | Hardcoded 6 | None |
+| Direct scoring | None | Brief assessment | Single-turn scoring guide | None |
+| Review-then-score | None | Summary, Strengths, Weaknesses, Questions | Basic scoring guide | Own (`baselines/review_baseline/calibration.md`) |
+| Structured review | None | Same 7 sections as merger | Comparative scoring (same as pipeline) | Own (`baselines/structured_review/calibration.md`) |
+| Full pipeline | 4 specialized agents | Same 7 sections (via merger) | Comparative scoring | Multi-agent (`calibration.md`) |
 
 ## Calibration
 
@@ -266,11 +297,14 @@ Generates a 4-panel plot: raw scatter, rounded scatter, ROC curve, and precision
 | `bench_run.log` | Complete stdout/stderr log of the run |
 | `baseline_scores.csv` | Always-predict-6 baseline results |
 | `direct_baseline_scores.csv` | Direct-scoring baseline results |
-| `review_baseline_scores.csv` | Review-then-score baseline results |
 | `calibration.md` | Few-shot calibration examples (multi-agent review bundle + human scores) |
 | `calibration_ids.json` | Paper IDs excluded from benchmark |
-| `calibration_review.md` | Calibration for review-then-score baseline (single-model reviews + human scores) |
-| `calibration_review_ids.json` | Paper IDs excluded from review baseline |
+| `baselines/review_baseline/scores.csv` | Review-then-score baseline results |
+| `baselines/review_baseline/calibration.md` | Calibration for simple review baseline |
+| `baselines/review_baseline/calibration_ids.json` | Paper IDs excluded from simple review baseline |
+| `baselines/structured_review/scores.csv` | Structured-review baseline results |
+| `baselines/structured_review/calibration.md` | Calibration for structured review baseline |
+| `baselines/structured_review/calibration_ids.json` | Paper IDs excluded from structured review baseline |
 
 ## CLI Reference
 
@@ -328,20 +362,38 @@ python run_direct_baseline.py [n] [seed] [options]
   --data-dir <path>       Dataset directory
 ```
 
-### `run_review_baseline.py`
+### `baselines/review_baseline/run_baseline.py`
 
 ```
-python run_review_baseline.py [n] [seed] [options]
+python baselines/review_baseline/run_baseline.py [n] [seed] [options]
 
   --balanced              Stratified sampling across score bins
   --data-dir <path>       Dataset directory
-  --calibration <path>    Calibration file (calibration_review.md)
+  --calibration <path>    Calibration file (baselines/review_baseline/calibration.md)
 ```
 
-### `build_calibration_review.py`
+### `baselines/review_baseline/build_calibration.py`
 
 ```
-python build_calibration_review.py [seed] [options]
+python baselines/review_baseline/build_calibration.py [seed] [options]
+
+  --data-dir <path>       Dataset directory
+```
+
+### `baselines/structured_review/run_baseline.py`
+
+```
+python baselines/structured_review/run_baseline.py [n] [seed] [options]
+
+  --balanced              Stratified sampling across score bins
+  --data-dir <path>       Dataset directory
+  --calibration <path>    Calibration file (baselines/structured_review/calibration.md)
+```
+
+### `baselines/structured_review/build_calibration.py`
+
+```
+python baselines/structured_review/build_calibration.py [seed] [options]
 
   --data-dir <path>       Dataset directory
 ```
