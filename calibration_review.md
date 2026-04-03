@@ -1,101 +1,35 @@
 === CALIBRATION EXAMPLE 1 ===
 
 # Review
-# Review of "Systematic Review of Large Language Models: Applications, Limitations, Practical Usages and Future Directions"
+## Review of "Systematic Review of Large Language Models: Applications, Limitations, Practical Usages and Future Directions"
 
-## Summary
+### 1. Summary
+This paper presents a survey of Large Language Models (LLMs), aiming to provide a comprehensive overview of their types, applications, limitations, and future directions. The authors categorize LLMs into generative, masked, sequence-to-sequence, and hybrid models, and provide a literature review covering deep learning techniques, core architectures (Transformer, BERT, GPT), and training methodologies. The paper further discusses limitations such as bias, resource intensity, and interpretability, alongside ethical considerations and adversarial robustness. Finally, it outlines evaluation metrics and benchmarks before concluding with future research directions.
 
-This paper presents itself as a systematic review of Large Language Models (LLMs), covering their types (generative, masked, seq2seq, and hybrid models), technical architectures, applications (translation, summarization, text generation), limitations (bias, resource intensity, interpretability), ethical considerations, evaluation metrics, and future directions. The paper attempts to provide a comparative analysis of major LLMs including BERT, GPT-3, and T5 through a summary table. While the paper has reasonable breadth, it lacks depth, systematic methodology, and any novel contribution to the field.
+### 2. Strengths
+- **Broad Coverage:** The paper attempts to cover a wide spectrum of topics relevant to LLMs, ranging from the fundamental Transformer architecture to ethical considerations and future directions. This makes it a potential entry point for readers new to the field.
+- **Structure:** The manuscript is organized logically, moving from types of models to literature, limitations, and finally future outlooks. The separation of model types (Generative vs. Masked vs. Seq2Seq) follows standard pedagogical approaches in NLP.
+- **Relevant Topics:** The inclusion of sections on "Adversarial Robustness" and "Hallucination" highlights awareness of current critical issues in LLM deployment beyond just raw performance metrics.
 
-## Strengths
+### 3. Weaknesses
+- **Lack of Novelty and Differentiation:** There are already numerous high-quality, comprehensive surveys on LLMs (e.g., Zhao et al. 2023, cited in the paper; Bommasani et al. 2021). This submission does not offer a distinct new perspective, a novel taxonomy, or a significantly deeper analysis than existing works. It largely summarizes established knowledge without providing the critical synthesis expected of a top-tier venue review.
+- **Missing Critical Modern Developments:** The content feels dated for a paper submitted to a modern ML venue. While it covers BERT and GPT-3 extensively, it lacks substantial discussion on the paradigm shifts defining the current state-of-the-art, specifically:
+    - **Instruction Tuning and Alignment:** There is almost no discussion on instruction tuning, RLHF (Reinforcement Learning from Human Feedback), or the shift from raw autoregressive models to helpful/aligned assistants (ChatGPT era).
+    - **Efficient LLMs:** While "resource intensity" is mentioned as a limitation, there is no detailed discussion on recent architectural innovations aimed at solving this, such as Mixture-of-Experts (MoE), FlashAttention, or quantization techniques, which are crucial for modern LLM research.
+    - **Emergent Abilities:** The concept of emergent abilities in scaling laws is missing.
+- **Methodological Concerns regarding "Systematic Review":** The title claims this is a "Systematic Review," but the methodology section is missing. A systematic review typically requires a defined protocol (search terms, databases, inclusion/exclusion criteria, PRISMA flow diagram). Without this, the paper is merely a narrative review, and the title is misleading.
+- **Repetitive and Poorly Edited Content:**
+    - There is significant duplication between the Introduction and Section 3.2. For instance, the description of the Transformer architecture replacing RNNs/LSTMs and the introduction of BERT appears verbatim or near-verbatim in both sections.
+    - There is a missing citation placeholder in the text (`**?**` on page 1), which indicates a lack of proofreading.
+    - Formatting artifacts (e.g., `> - SYSTEMATIC REVIEW...`, `005 006`) suggest the manuscript was not properly polished before submission.
+- **Superficial Comparative Analysis:** Table 1 and the surrounding analysis are quite shallow. Listing "Large model size" and "inference cost" as "Cons" for BERT without contextualizing these against modern standards or parameter-efficient fine-tuning (PEFT) methods reduces the utility of the comparison. Furthermore, comparing BERT (encoder-only) directly against GPT-3 (decoder-only) and T5 without nuanced discussion of their specific use-cases (understanding vs. generation) is too simplistic.
 
-1. **Broad Coverage**: The paper covers a wide range of LLM topics, from foundational architectures to ethical considerations, making it a reasonable starting point for newcomers to the field.
-
-2. **Clear Structure**: The paper is organized into logical sections (Types, Literature Review, Limitations, Ethics, etc.) that provide a navigable overview of the LLM landscape.
-
-3. **Inclusion of Figures**: The paper includes diagrams illustrating BERT input representations and Transformer architecture, which can be helpful for educational purposes.
-
-4. **Comparative Table**: Table 1 attempts to compare different LLMs across dimensions (pros, cons, datasets, metrics), which is useful for high-level understanding.
-
-5. **Inclusion of Recent Topics**: The paper touches on relatively recent topics such as hallucination, adversarial robustness, and multimodal applications (CLIP).
-
-## Weaknesses
-
-### Critical Methodological Issues
-
-1. **No Systematic Review Methodology**: The paper claims to be a "systematic review" but lacks any of the standard protocols: no search strategy is described, no inclusion/exclusion criteria are provided, no PRISMA guidelines are followed, and no protocol was registered. This is a fundamental misrepresentation.
-
-2. **No Novel Contribution**: The paper does not present any new analysis, methodology, experiments, or insights. It is purely a descriptive summary of existing literature without any critical synthesis or original contribution.
-
-### Major Content and Organization Problems
-
-3. **Severe Duplicate Content**: Sections 3.1 and 3.3 contain identical text for "Denoising Autoencoders" and "Masked Language Modeling." Section 3.3 is malformed—it begins discussing BERT's contributions but then abruptly switches to duplicated content from Section 3.1, followed by a partial figure caption that cuts off mid-sentence. This suggests either extreme carelessness or automated text generation without proper editing.
-
-4. **Incomplete/Missing Citations**: Multiple placeholders remain in the text, including "**?**" and "?**" in Sections 1 and 2. These should have been replaced with proper citations before submission.
-
-5. **Figure 2 is Illegible**: The caption and content for Figure 2 ("Transformer architecture and training objectives") contain garbled text ("Textime 7 Text Task Classification..." and "200 201 202203 Multiple..."), making it completely unusable.
-
-6. **Figure 1 Plagiarism Concerns**: Figure 1 (BERT input representation) appears to be reproduced directly from the original BERT paper (Devlin et al., 2018) without any transformation or proper attribution beyond a general citation.
-
-### Missing Coverage of Important Topics
-
-7. **No Discussion of Instruction Tuning**: The paper completely omits discussion of instruction tuning, RLHF (Reinforcement Learning from Human Feedback), DPO (Direct Preference Optimization), or similar techniques that are fundamental to modern LLM development (e.g., InstructGPT, ChatGPT, GPT-4).
-
-8. **No Coverage of Open-Source Models**: Models like LLaMA, LLaMA-2, Mistral, Falcon, and their derivatives—which have been transformative for the field—are entirely absent.
-
-9. **Missing Chain-of-Thought and Reasoning**: The paper does not discuss chain-of-thought prompting, reasoning capabilities, or mathematical problem-solving in LLMs.
-
-10. **No Discussion of Tool Use and Agents**: Modern LLM applications involving tool use, function calling, and autonomous agents are not covered.
-
-11. **Missing Major Benchmarks**: Important benchmarks such as MMLU, HumanEval, BIG-Bench, GSM8K, and HELM are only briefly mentioned without meaningful discussion. The LMSYS Chatbot Arena is mentioned but not critically evaluated.
-
-12. **No Coverage of Fine-Tuning Advances**: Beyond the brief mention of adapters, the paper does not cover LoRA, QLoRA, or other parameter-efficient fine-tuning methods that have democratized LLM customization.
-
-### Technical Depth Issues
-
-13. **Surface-Level Treatment**: The paper describes concepts at a superficial level without deep technical analysis. For example, the section on "Adversarial Robustness" is only four sentences long and lacks any technical substance.
-
-14. **No Critical Analysis**: The paper presents information without critically evaluating findings or synthesizing conflicting results across studies.
-
-15. **Missing Quantitative Synthesis**: A systematic review should ideally include meta-analysis or at least quantitative summaries of findings; this paper has neither.
-
-### Formatting and Presentation Issues
-
-16. **Inconsistent Citation Style**: Some citations are formatted inconsistently (e.g., "Vaswani (2017)" vs. "Vaswani (2017)" without proper author names in references).
-
-17. **Table 1 Issues**: The table compares LLMs but includes only three models (BERT, GPT-3, T5) and omits many others. The columns are unbalanced, and BART (discussed extensively in the text) is missing from the comparison table.
-
-18. **Repetitive Text**: Sections 9 and 10 (Future Directions and Conclusion) contain significant overlap in phrasing and content.
-
-## Questions for Authors
-
-1. What was the systematic review protocol used for this paper? Please provide the search strategy, databases searched, inclusion/exclusion criteria, and PRISMA flow diagram.
-
-2. Why does Section 3.3 contain duplicate content from Section 3.1? This appears to be a significant editing error.
-
-3. The paper contains placeholder citations marked with "?". Could you clarify which papers these should reference?
-
-4. Figure 2 contains garbled text. Please provide the correct version of this figure.
-
-5. Why are instruction tuning methods (RLHF, DPO) and their importance for modern LLMs completely absent from this review?
-
-6. Why are open-source models (LLaMA, Mistral, Falcon) not included despite their significant impact on the field?
-
-7. What is the target audience for this paper? Given its surface-level treatment, it does not appear suitable for researchers or practitioners familiar with LLMs.
-
-## Recommendation
-
-This paper requires substantial revision before it could be considered for publication. The most critical issues are:
-
-1. The paper must either follow proper systematic review methodology or rename itself as a "survey" or "overview" paper.
-
-2. All duplicate content, placeholder citations, and corrupted figures must be corrected.
-
-3. The paper must include coverage of modern developments including instruction tuning, open-source models, and current state-of-the-art benchmarks.
-
-4. The authors should provide original analysis and synthesis rather than merely summarizing existing literature.
-
-Without addressing these fundamental issues, this paper does not meet the standards expected for a top ML venue.
+### 4. Questions
+1.  **Novelty:** How does this survey improve upon or differentiate itself from existing comprehensive surveys like "A Survey of Large Language Models" (Zhao et al., 2023)? What new taxonomy or synthesis does it offer?
+2.  **Methodology:** Can the authors clarify the methodology used to select papers for this "systematic" review? What databases were searched, and what were the inclusion criteria?
+3.  **Modern Context:** Why are critical modern topics such as RLHF, Instruction Tuning, and Chain-of-Thought prompting largely omitted from the discussion? Are the authors planning to expand the scope to include the "ChatGPT era" innovations in detail?
+4.  **Editing:** There are duplicate paragraphs between the Introduction and Section 3.2/3.3. Is this intentional, or is it an editing error that needs to be cleaned up to improve conciseness?
+5.  **Evaluation:** The paper mentions benchmarks like HELM. Could the authors provide a more critical analysis of how well these benchmarks capture the *reasoning* capabilities of modern LLMs, rather than just listing them?
 
 # Actual Human Scores
 Individual reviewer scores: [1.0, 1.0, 1.0, 1.0]
@@ -105,67 +39,84 @@ Binary outcome: Reject
 === CALIBRATION EXAMPLE 2 ===
 
 # Review
-## Review: Differentiation of Multi Objective Data Driven Decision Pipeline
+# Review: Differentiation of Multi-Objective Data-Driven Decision Pipeline
 
-### 1. Summary
+## Summary
 
-This paper proposes **Multi-Objective Decision-Focused Learning (MoDFL)**, a framework that extends decision-focused learning (DFL) from single-objective to multi-objective optimization problems (MOPs). The key contribution is a set of three novel loss functions designed for MOPs:
+This paper proposes Multi-Objective Decision-Focused Learning (MoDFL), extending the decision-focused learning paradigm from single-objective to multi-objective optimization problems. The key insight is that traditional two-stage methods (predict then optimize) can lead to suboptimal decisions due to misalignment between prediction and optimization objectives, and this problem is compounded in multi-objective settings where solutions form Pareto fronts rather than unique optima.
 
-1. **Landscape loss** (based on sample rank-based Maximum Mean Discrepancy/sRMMD): Measures discrepancy between objective spaces
-2. **Pareto set loss**: Measures distance between Pareto sets in solution space using minimum distance approximation
-3. **Decision loss**: Uses weighted sum transformation to obtain a representative solution and measures its quality
+The authors contribute three novel loss functions tailored for MOP:
+1. **Landscape loss**: Uses sample rank maximum mean discrepancy (sRMMD) to measure discrepancy in objective space between predicted and true problems
+2. **Pareto set loss**: Measures distance between Pareto sets in solution space using inverted generational distance concept
+3. **Decision loss**: Transforms the MOP into a single-objective problem via weighted sum and measures decision quality
 
-The authors combine these losses (weighted by hyperparameters λₗ, λ_d, λ_ps) and use Differentiation of Smooth Linear Programming (DSLP) to enable end-to-end training through the optimization layer. Experiments on web advertisement allocation and bipartite matching benchmarks demonstrate improved performance over two-stage methods and existing DFL baselines.
+The method is validated on two benchmark problems: web advertisement allocation and bipartite matching among scientific papers.
 
-### 2. Strengths
+---
 
-- **Addresses an important gap**: The paper tackles the under-explored problem of extending DFL to multi-objective settings, which is relevant for many real-world applications with conflicting objectives.
-- **Thoughtful loss design**: The three-pronged approach (landscape, Pareto set, and decision loss) captures different aspects of multi-objective quality: objective space distribution, solution set coverage, and representative decision quality.
-- **Solid theoretical grounding**: Uses principled techniques—entropy-regularized optimal transport (sRMMD), KKT conditions (DSLP), and reparameterization—for gradient computation.
-- **Comprehensive evaluation**: Multiple benchmarks (web ad allocation, bipartite matching with 2 and 3 objectives), comparison against 7 baseline methods, and ablation studies validating each component's contribution.
-- **Ablation analysis**: Demonstrates that each loss component contributes positively, with decision loss having the largest impact.
+## Strengths
 
-### 3. Weaknesses
+**1. Novel Problem Extension**: Extending decision-focused learning to multi-objective optimization is a meaningful contribution. The paper correctly identifies that existing DFL methods focus predominantly on single-objective problems, leaving a gap for the numerous real-world multi-objective scenarios.
 
-**Methodological concerns:**
+**2. Thoughtful Loss Design**: The three-component loss structure (landscape, Pareto set, decision) captures different aspects of multi-objective solution quality—objective space distance, solution space distance, and representative decision quality. This is more comprehensive than naively applying single-objective losses.
 
-1. **Weighted sum limitation**: The paper uses weighted sum transformation for decision loss, which is known to fail for non-convex Pareto fronts (cannot represent all Pareto-optimal solutions). The paper does not discuss or evaluate this limitation.
+**3. Technical Innovation**: The use of sRMMD for landscape loss is creative, treating the objective space as a manifold and leveraging optimal transport concepts to measure distributional discrepancies.
 
-2. **Pareto set loss approximation**: Equation 8 approximates Pareto set distance as the minimum over individual solution pairs. This is a crude approximation that may not capture true set-to-set distance, and its effectiveness depends heavily on Pareto set discretization quality.
+**4. Empirical Validation**: The paper compares against seven baseline methods across multiple metrics (GD, MPFE, HAR, regret) and includes ablation studies demonstrating the contribution of each loss component.
 
-3. **Limited problem scope**: Experiments are restricted to linear programming problems. The applicability to nonlinear, combinatorial, or integer MOPs is unclear.
+---
 
-4. **Gradient computation concerns**: The reliance on DSLP requires specific regularity conditions (Hessian full-rank, etc.). The paper does not discuss when these conditions might fail or the robustness of gradients near non-differentiable points.
+## Weaknesses
 
-**Evaluation concerns:**
+**1. Writing and Presentation Quality**: The paper suffers from significant formatting and clarity issues:
+- Duplicate text in the introduction (entire paragraphs repeated verbatim)
+- Garbled/placeholder text in equations (e.g., "[The problem under study can be formulated as follows:]")
+- Inconsistent notation and unclear mathematical definitions
+- Reference numbering appears corrupted (e.g., "141142", "225226")
+- Missing figure descriptions
 
-5. **Table 1 and Table 2 appear identical**: Both tables show identical numerical results with all seven methods having the same GD, MPFE, HAR, r1, r2, r values across all rows. This suggests either an error in the paper or that the tables are meant to represent different experimental settings but were not properly updated. Clarification is essential.
+**2. Methodological Concerns with Decision Loss**: The weighted sum transformation for decision loss is problematic:
+- A single weighted solution cannot represent the full Pareto front quality
+- The choice of weights (uniform weights mentioned) is arbitrary and not justified
+- Weighted sum methods have well-known limitations—they cannot find solutions on non-convex portions of Pareto fronts
 
-6. **Marginal improvements**: The performance gains are relatively modest (e.g., GD improves from 12.29 to 11.85, ~3.6% improvement). Without standard deviation or statistical significance testing across the 5 runs, it's difficult to assess whether improvements are reliable.
+**3. Limited Baseline Comparison**: The baseline methods (SPO, BB, NCE, etc.) are all single-objective DFL methods adapted by summing weighted losses. This is a naive adaptation that doesn't account for multi-objective structure. A more principled multi-objective baseline comparison is needed.
 
-7. **Metric ambiguity**: The paper mentions "average percentage regret" as a key metric but uses notation "r" without clear formulation in the main text. The relationship between different metrics (GD, MPFE, HAR, r) needs more explicit explanation.
+**4. Experimental Limitations**:
+- Only two benchmark problems, one described opaquely as "Anonymous App"
+- Both problems are LP-based; no evaluation on other problem classes (MIP, convex, non-convex)
+- Limited discussion of computational cost; sRMMD computation scales quadratically with sample size
+- No scalability analysis with respect to number of objectives or problem size
 
-8. **Hyperparameter sensitivity**: Loss weights (λₗ=1, λ_d=2, λ_ps=5) are set without justification or sensitivity analysis. Different weight configurations might yield substantially different results.
+**5. Hyperparameter Sensitivity**: The method introduces multiple hyperparameters (λl, λd, λps, kernel bandwidths σ, τ, ε) with limited discussion of sensitivity or principled selection methods.
 
-**Presentation concerns:**
+**6. Incomplete Pareto Set Computation**: The paper does not adequately explain how Pareto sets are obtained during training for computing Pareto set loss. Computing true Pareto sets for each problem instance during training would be computationally prohibitive.
 
-9. **Missing baseline**: A natural baseline would be applying existing multi-objective evolutionary algorithms (MOEAs) with learned coefficients, but none are included.
+---
 
-10. **Limited discussion of computational overhead**: The landscape loss via sRMMD involves iterative Sinkhorn computations. The paper doesn't discuss training time comparison with baselines.
+## Questions
 
-### 4. Questions for Authors
+1. **Pareto Set Computation**: How exactly are the Pareto sets P_{y*} computed during training? Are these approximated, and if so, how does approximation quality affect the method?
 
-1. **Tables 1 and 2**: Please confirm whether these tables contain identical data or if there was an error in the manuscript. If they are different experiments, please correct the values.
+2. **Scalability**: How does computational cost scale with (a) number of objectives, (b) problem size, and (c) number of samples for sRMMD? What are practical limits?
 
-2. **Pareto set loss implementation**: How exactly is the Pareto set PS_yi* computed in practice? What multi-objective solver is used? How many solutions are retained?
+3. **Weighted Sum Limitations**: The decision loss uses weighted sum aggregation. How does the method handle non-convex Pareto fronts where weighted sum methods fail to capture all optimal solutions?
 
-3. **Handling non-convex Pareto fronts**: The weighted sum transformation cannot represent all Pareto-optimal solutions for non-convex fronts. How does your method handle such cases?
+4. **Baseline Fairness**: Is comparing against single-objective DFL methods with summed losses a fair comparison? Have the authors considered comparing against multi-objective optimization-specific approaches?
 
-4. **Statistical significance**: Could you report mean ± standard deviation for key metrics across the 5 runs? Are the improvements statistically significant?
+5. **Hyperparameter Selection**: What guidance exists for selecting λl, λd, λps? The ablation shows all components help, but is there a principled way to balance them?
 
-5. **Why does landscape loss help?** The ablation shows it helps, but could you provide more intuition about why measuring objective space discrepancy improves decision quality?
+6. **Number of Objectives**: Experiments only test bi-objective and tri-objective cases (with the third being a weighted combination of the first two). How does performance degrade with more objectives?
 
-6. **Extension to non-linear/non-convex problems**: DSLP relies on linear programming. How would the method extend to nonlinear MOPs or mixed-integer MOPs?
+7. **Anonymous App Details**: Can the authors provide more details about the web advertisement allocation problem? The current description is vague about the specific optimization formulation.
+
+8. **Reproducibility**: Will code be released? The mathematical notation inconsistencies make implementation challenging without reference code.
+
+---
+
+## Additional Comments
+
+The paper addresses an important problem but needs substantial revision before publication. The core ideas are sound, but the execution—in terms of writing quality, experimental rigor, and methodological completeness—needs improvement. The authors should particularly address the limitation of weighted sum for representing multi-objective quality and provide clearer problem formulations.
 
 # Actual Human Scores
 Individual reviewer scores: [3.0, 1.0, 3.0]
@@ -175,80 +126,65 @@ Binary outcome: Reject
 === CALIBRATION EXAMPLE 3 ===
 
 # Review
-# Detailed Review: MQFL-FHE: Multimodal Quantum Federated Learning Framework with Fully Homomorphic Encryption
+# Review of MQFL-FHE: Multimodal Quantum Federated Learning Framework with Fully Homomorphic Encryption
 
-## Summary
+## 1. Summary
 
-This paper proposes a novel framework combining multimodal quantum federated learning with fully homomorphic encryption (FHE) to address the trade-off between privacy preservation and model performance in federated learning systems. The authors introduce three main contributions: (1) QFL-FHE, integrating quantum computing with FHE in federated learning; (2) MQFL-FHE, extending this to multimodal data handling; and (3) MQMoE-FL-FHE, a mixture-of-experts architecture leveraging quantum layers for enhanced representation learning. Experiments are conducted on CIFAR-10, DNA sequences, MRI scans, and PCOS datasets across centralized and federated settings with various configurations (Classical FL, QFL, FL+FHE, QFL+FHE). The authors claim that quantum enhancements mitigate FHE-induced performance degradation and improve classification accuracy.
+This paper proposes MQFL-FHE, a novel framework that integrates quantum computing (QC) with fully homomorphic encryption (FHE) in federated learning (FL) settings. The central thesis is that while FHE provides strong privacy guarantees in FL by enabling computations on encrypted model updates, it introduces noise and quantization errors that degrade model accuracy during aggregation. The authors propose using quantum neural network layers to counteract this performance degradation.
 
-## Strengths
+The paper makes three main contributions: (1) a QFL-FHE framework that integrates FHE with quantum federated learning, (2) a multimodal quantum federated learning (MQFL) extension for handling heterogeneous data modalities, and (3) a Multimodal Quantum Mixture of Experts (MQMoE) architecture that uses quantum layers within an expert routing mechanism. The authors validate their approach on CIFAR-10, DNA sequences, MRI scans, PCOS datasets, and a combined DNA+MRI multimodal dataset, reporting improved accuracy when quantum enhancements are applied to FHE-based FL.
 
-1. **Novel Integration**: The combination of quantum computing, federated learning, and fully homomorphic encryption addresses an important research gap. While each component exists independently, their unified treatment is relatively underexplored.
+## 2. Strengths
 
-2. **Multimodal Handling**: The extension to multimodal data (DNA + MRI) with a mixture-of-experts architecture is a reasonable approach for handling heterogeneous data types across clients.
+**Novelty of Integration:** The paper presents an ambitious integration of three emerging technologies—quantum computing, federated learning, and fully homomorphic encryption. The combination of QC with FHE to address performance degradation is a genuinely novel direction that could open new research avenues in privacy-preserving machine learning.
 
-3. **Comprehensive Experimental Suite**: The paper tests multiple configurations (centralized vs. federated, with/without quantum, with/without FHE) across diverse datasets, providing a broad empirical evaluation.
+**Comprehensive Experimental Setup:** The authors conduct experiments across multiple datasets (CIFAR-10, DNA Sequence, MRI Scan, PCOS, and DNA+MRI combined) with various configurations (classical centralized, quantum centralized, classical FL, QFL, FL+FHE, QFL+FHE). This thoroughness allows for meaningful comparisons across different settings.
 
-4. **Ablation Analysis**: The ablation study systematically examines the contribution of each component (QC and FHE), offering insights into their individual and combined effects.
+**Real-World Application Focus:** The choice to validate the approach on healthcare-related datasets (genomics and brain MRI) demonstrates attention to practical applications where both privacy and accuracy are critical. This domain relevance strengthens the paper's potential impact.
 
-5. **Medical/Biological Focus**: Applying the framework to medical domains (genomics, brain MRI) is timely and addresses high-stakes applications where privacy is critical.
+**Detailed Ablation Analysis:** The paper includes ROC curves and confusion matrices that help visualize where quantum enhancements provide the most benefit (particularly for underrepresented classes in DNA sequences and challenging MRI categories like glioma).
 
-## Weaknesses
+**Mathematical Appendix:** The inclusion of Appendix 7.1 on error propagation analysis, which discusses how quantum unitary constraints (SU(2)) might bound noise propagation, provides theoretical grounding for the empirical claims.
 
-1. **Lack of Actual Quantum Hardware**: The paper uses PennyLane for quantum simulations on classical hardware. There is no evidence of execution on actual quantum processors. Simulated quantum circuits do not capture real quantum noise, decoherence effects, or hardware limitations. This fundamentally limits the paper's claim of "quantum-enhanced" performance, as the simulations cannot provide genuine quantum advantages.
+## 3. Weaknesses
 
-2. **Questionable Mechanism for FHE Noise Mitigation**: The paper claims quantum computations "counteract" FHE-induced performance degradation, but the mechanism is unconvincing. The appendix discusses SU(2) constraints on Bloch sphere rotations and periodic error oscillation, but this theoretical justification does not clearly connect to how quantum layers actually reduce FHE noise in practice. The argument appears post-hoc rather than rigorously derived.
+**Unclear Causal Mechanism:** The central claim that quantum computing "counteracts" or "mitigates" FHE-induced performance degradation lacks rigorous theoretical justification. The paper states that quantum operations "bound error propagation" through unitary constraints, but this argument is not convincingly developed. How exactly do quantum rotations prevent or reduce CKKS noise accumulation? The mathematical appendix discusses quantum state norm preservation, but the connection to FHE noise cancellation remains speculative and is not empirically validated through controlled experiments.
 
-3. **Unclear FHE Implementation**: The mathematical formulations contain significant issues:
-   - Equations appear duplicated and corrupted throughout the paper (e.g., lines 160-165, 260-265 are repeated)
-   - The CKKS encryption and aggregation equations lack clarity
-   - The description of how quantum model updates are encrypted ("hybrid lattice-based encryption") is vague
-   - No formal security analysis or threat model is provided
+**Unfair Baseline Comparisons:** The paper compares classical and quantum models but does not clearly establish whether the model architectures are equivalent in terms of parameter count and capacity. Tables 3 and 4 show quantum models sometimes outperforming classical ones (e.g., CIFAR-10: 74.33% vs 76.59% in centralized; 72.16% vs 71.03% in FL), but it is unclear whether this is due to quantum advantage or simply a more expressive architecture. The parameterized quantum circuits described in Section 4.1 use rotation gates and CNOTs, but classical baseline architecture details are sparse.
 
-4. **Limited Baseline Comparisons**: The paper compares only against itself (FL vs. FL+FHE vs. QFL vs. QFL+FHE). There are no comparisons with:
-   - Other privacy-preserving FL methods (differential privacy, secure aggregation)
-   - State-of-the-art multimodal FL frameworks mentioned in related work (CreamFL, Gong et al.)
-   - Classical multimodal mixture-of-experts approaches without quantum components
+**Simulation vs. Real Quantum Hardware:** All quantum experiments are conducted using PennyLane simulators on classical hardware (NVIDIA A100 GPUs). The paper makes claims about quantum advantages but does not validate these on actual quantum devices or discuss the implications of simulation. This raises questions about whether the reported "quantum" benefits would transfer to real quantum systems where noise and decoherence are significant factors.
 
-5. **Poor Dataset Justification**: 
-   - CIFAR-10 is a toy image dataset that seems mismatched with the paper's focus on medical/biological applications
-   - PCOS is a medical condition affecting women, making the framing of "underrepresented categories" in Section 1 misleading
-   - The RAVDESS dataset appears only in the appendix table but is not used in experiments
+**Computational Overhead Not Adequately Addressed:** Table 4 shows dramatic increases in computation time: classical FL on CIFAR-10 takes ~3405 seconds while QFL+FHE takes ~9747 seconds—nearly 3x slower. While the paper acknowledges this overhead, it does not provide a cost-benefit analysis. Is a 1-2% accuracy improvement worth a 3x computational cost increase? This trade-off should be explicitly discussed.
 
-6. **Performance Gains Are Marginal**: The quantum improvements over FL+FHE are modest (e.g., DNA: 93.75% → 95.31%, MRI: 83.33% → 87.26%). Meanwhile, computation times increase dramatically (QFL+FHE takes ~3× longer than FL+FHE). The trade-off between marginal accuracy gains and substantial computational overhead is not convincingly justified.
+**Inconsistent Performance Claims:** The results show mixed patterns. For instance, in centralized settings (Table 3), classical models outperform quantum ones on CIFAR-10 (76.59% vs 74.33%) and DNA Sequence (94.50% vs 92.63%), while in FL settings, quantum sometimes wins. The paper claims QC "mitigates FHE degradation" but the evidence is inconsistent across datasets and settings. A more nuanced discussion of when and why quantum helps versus hurts is needed.
 
-7. **MQMoE Novelty Is Limited**: The MQMoE architecture is essentially a standard mixture-of-experts with quantum layers replacing some classical layers. The gating mechanism uses standard multi-head attention. The paper does not clearly articulate what is novel about the quantum gating or why quantum layers provide benefits beyond classical alternatives.
+**Limited Baselines for FHE Comparison:** The paper compares FL+FHE vs QFL+FHE but does not include important baselines such as: (a) FL with differential privacy, (b) FL with secure aggregation (without FHE), or (c) other privacy-preserving techniques. Without these comparisons, it is difficult to assess whether the proposed approach is the best way to achieve privacy in FL.
 
-8. **Encryption Formalism Issues**: The paper states encryption parameters (polynomial degree 8192, bit sizes [60,40,40,60], 128-bit security) but:
-   - Does not justify these specific choices
-   - Does not discuss the impact of these parameters on the reported results
-   - Does not address ciphertext depth limitations for multiple FL rounds
+**MQMoE Architecture Details Insufficient:** The MQMoE description in Section 4.3 is too brief. How many experts are used? What are the classical preprocessing layers for each modality? How is the gating network trained? Figure 3 provides a high-level view but lacks architectural details such as layer dimensions, activation functions, and quantum circuit depths for each expert.
 
-9. **Missing Technical Details**:
-   - Specific PQC architectures are not detailed (number of qubits, gate types, entanglement patterns)
-   - Quantum layer initialization is not specified
-   - Training hyperparameters for quantum layers (learning rates, optimizers) are not discussed separately
-   - How gradient updates work through quantum layers is not explained
+**No Statistical Significance Testing:** The results report single accuracy values with time standard deviations, but no confidence intervals or statistical significance tests for accuracy comparisons. Given that some improvements are small (e.g., 0.9% for DNA in QFL+FHE vs FL+FHE), significance testing is essential to determine if differences are meaningful.
 
-10. **Writing Quality**: The manuscript contains numerous typographical errors, duplicated text blocks, and corrupted equations, suggesting rushed preparation. This undermines confidence in the technical rigor of the work.
+## 4. Questions
 
-## Questions for Authors
+1. **Mechanism Clarification:** Could the authors provide a more precise mathematical explanation of how quantum operations specifically mitigate CKKS-related noise? The current explanation about unitary constraints and bounded error propagation is high-level. Is there experimental evidence showing reduced FHE noise variance when quantum layers are present?
 
-1. **Quantum Hardware**: Were any experiments conducted on actual quantum hardware? If not, what is the justification for claiming "quantum-enhanced" performance when only classical simulations are performed?
+2. **Architecture Equivalence:** What are the exact parameter counts for classical vs. quantum model architectures? Are they designed to be comparable, or do quantum models have more expressivity by design? Please provide layer-by-layer details for fair comparison.
 
-2. **FHE Noise Mitigation Mechanism**: Please provide a clear, formal explanation of HOW quantum operations reduce FHE noise accumulation. The SU(2) argument in the appendix does not convincingly connect to FHE error propagation. What is the specific mechanism?
+3. **Quantum Circuit Specifics:** The PQC definition in Section 4.1 mentions L layers with RX gates and CNOTs. What value of L was used for each dataset? How many qubits? What encoding method was used for classical data?
 
-3. **Security Model**: What is the precise threat model? Does the CKKS encryption protect against membership inference attacks, gradient leakage, or only communication channel eavesdropping? Please provide a security analysis.
+4. **FHE Parameter Sensitivity:** Table 5 in Appendix 7.2 shows FHE parameter trade-offs, but the main experiments use fixed parameters. How sensitive are the claimed benefits to FHE parameters like polynomial modulus degree and coefficient modulus size? Does the "quantum advantage" vary with encryption depth?
 
-4. **Baseline Comparisons**: Why were other multimodal FL frameworks (e.g., CreamFL) not compared? How does the proposed method compare to simpler approaches like differential privacy with FL?
+5. **Real-World Feasibility:** Given that current quantum computers have limited qubits and high error rates, what are the practical implications of this work? Would the proposed approach work on near-term NISQ devices, or is this a long-term vision?
 
-5. **Scalability**: The computation times are already high (~10,000 seconds for QFL+FHE on CIFAR-10). How does the method scale to larger models, more clients, and more communication rounds? What are the FHE ciphertext depth limitations?
+6. **Baselines Missing:** Why were differential privacy and secure aggregation baselines not included? These are standard privacy-preserving FL techniques that should be compared against.
 
-6. **MQMoE Design Choices**: What motivated the specific expert architecture? Why use separate quantum layers for each modality rather than shared quantum layers? How are the gating weights learned and aggregated in the federated setting?
+7. **Noise Propagation Experiments:** The appendix discusses theoretical error propagation, but are there empirical experiments showing that FHE noise behaves differently in quantum vs. classical networks? For example, measuring model parameter distributions after multiple encrypted aggregation rounds.
 
-7. **Why CIFAR-10?**: Given the paper's emphasis on medical applications and privacy-sensitive data, why include CIFAR-10 (a toy image dataset) rather than additional medical datasets?
+8. **Scalability:** How does the approach scale with more clients, more modalities, or larger models? The experiments use 10 clients—what happens with 100 or 1000 clients?
 
-8. **Error Analysis**: The reported standard deviations are very small (±0.02-±0.13), but the paper does not clearly state how these were computed or over how many random seeds. Please clarify the experimental reproducibility protocol.
+9. **MQMoE Gating Mechanism:** How exactly does the quantum layer contribute to the gating mechanism in MQMoE? Is the quantum layer part of the gating network, or only within the experts? The description is ambiguous.
+
+10. **Ablation on Quantum Contribution:** Is there an experiment that isolates the quantum contribution? For instance, comparing: (a) classical FL+FHE, (b) classical FL+FHE with an expanded architecture (same parameter count as quantum), and (c) QFL+FHE. This would help distinguish architectural improvements from quantum-specific benefits.
 
 # Actual Human Scores
 Individual reviewer scores: [3.0, 5.0, 3.0, 3.0, 3.0]
@@ -258,67 +194,65 @@ Binary outcome: Reject
 === CALIBRATION EXAMPLE 4 ===
 
 # Review
-## Review: FedQLoRA: Federated Quantization-Aware LoRA for Large Language Models
+# Review of "FedQLoRA: Federated Quantization-Aware LoRA for Large Language Models"
 
-### 1. Summary
+## Summary
 
-This paper proposes **FedQLoRA**, a novel federated learning framework designed to address the **quantization bias** problem that arises when clients use LLMs with heterogeneous quantization levels (e.g., some clients use 2-bit quantization, others use 4-bit). The core insight is that when adapters trained on differently quantized models are aggregated, the quantization error creates an adverse bias that degrades overall performance.
+This paper addresses an important but previously overlooked problem in federated learning (FL) with large language models: **quantization bias** that arises when clients use LLMs quantized to different precision levels. The authors first demonstrate that naively aggregating LoRA adapters from clients with heterogeneous quantization (e.g., mixed 2-bit and 4-bit models) leads to worse performance than using uniformly lower-precision models. To address this, they propose **FedQLoRA**, which introduces a **quantization-aware adapter** to estimate and separate quantization error from the learned task knowledge. The quantization-aware adapter remains personalized (not aggregated), while the LoRA adapter is shared across clients. They further propose an **iterative version (iFedQLoRA)** that alternates between updating the quantization-aware adapter using global knowledge and training the LoRA adapter on local data, addressing data heterogeneity bias in non-IID settings. Experiments on text classification tasks demonstrate improved performance over baselines.
 
-The proposed method introduces a **quantization-aware adapter** that estimates and separates quantization error from the task-specific information learned by the LoRA adapter. Additionally, the paper presents an **iterative version (iFedQLoRA)** that alternates between improving the quantization-aware adapter and refining the LoRA adapter using global aggregated information, thereby also addressing heterogeneity bias in non-IID settings.
+---
 
-### 2. Strengths
+## Strengths
 
-1. **Novel Problem Identification**: The paper is the first to identify and formalize the "quantization bias" problem in federated learning with heterogeneous quantized LLMs. This is a genuine and important contribution to the field.
+1. **Novel problem identification.** The paper identifies and clearly articulates the quantization bias problem in federated LoRA. The motivating experiment (Figure 1) effectively demonstrates that mixing quantization levels leads to unexpected performance degradation—worse than using all low-precision models. This is a real and practical concern given the trend toward deploying quantized LLMs on heterogeneous edge devices.
 
-2. **Clear Theoretical Analysis**: The mathematical formulation of quantization bias (equations 7-9) is well-structured. The decomposition of the aggregated adapter difference into quantization error and quantization bias components provides clear insight into why mixed quantization settings perform poorly.
+2. **Principled problem formulation.** The derivation of quantization bias in Equations 7-9 provides clear theoretical grounding, decomposing the aggregation error into quantization error and quantization bias components. The insight that quantization error is endogenous (determined by the original model and quantization method) motivates the separation strategy.
 
-3. **Theoretical Justification**: Proposition 1 establishes a sound theoretical connection between LoRA-aware quantization and the optimal quantization-aware adapter, providing mathematical grounding for the approach.
+3. **Well-motivated solution.** The proposed quantization-aware adapter is a sensible approach to isolate quantization-specific corrections from task-specific knowledge. The connection to LoRA-aware quantization (LoftQ) through Proposition 1 is elegant and provides theoretical justification.
 
-4. **Comprehensive Experimental Evaluation**: 
-   - Experiments across two datasets (XGLUE NC, 20 Newsgroups)
-   - Multiple client configurations (3, 5, 10 clients)
-   - Both IID and non-IID data partitions
-   - Ablation studies analyzing model heterogeneity and data heterogeneity separately
+4. **Comprehensive experimental design.** The authors evaluate across multiple dimensions: IID vs. non-IID settings, varying numbers of clients, different proportions of quantization levels, and convergence analysis. The ablation on model heterogeneity (Figure 3) and data heterogeneity (Figure 4) provides useful insights.
 
-5. **Practical Solution**: By separating quantization error from local data learning, the method effectively mitigates the performance degradation in mixed quantization scenarios while maintaining the communication efficiency benefits of adapter-sharing approaches.
+5. **Good convergence properties.** The iterative version shows faster convergence than H-LoRA (Figure 5), which is valuable in FL settings where communication rounds are costly.
 
-### 3. Weaknesses
+---
 
-1. **Scale of Experiments**: The paper claims to address LLMs with "billions of parameters," yet experiments use only **DistilBERT** (66M parameters). There is no validation on actual large-scale LLMs (e.g., LLaMA, GPT models). This significantly weakens the practical relevance of the claims.
+## Weaknesses
 
-2. **Limited Baseline Comparison**: The baselines compare only against other LoRA-based FL methods (LoRA, FFA-LoRA, H-LoRA, H-LoRA-T). The paper would benefit from comparisons with:
-   - Vanilla federated QLoRA without the proposed bias correction
-   - Other FL aggregation methods (e.g., FedProx, SCAFFOLD adapted to LoRA)
-   - Methods that align quantization levels before aggregation
+1. **Limited model scale.** The experiments use DistilBERT, a relatively small model (~66M parameters). While this facilitates experimentation, the core premise of the paper is about *large* language models with "billions of parameters." It is unclear whether the findings generalize to truly large-scale models (7B+ parameters) where quantization is most impactful and where quantization error characteristics may differ significantly.
 
-3. **Insufficient Algorithmic Details**: The practical implementation of quantization-aware learning is unclear. Specifically:
-   - How is the rank *m* of the quantization error matrix determined?
-   - What SVD implementation is used given that the quantization error matrix is not directly observable?
-   - The optimization in Eq. 15 requires knowledge of the quantization method *Q*, which may not be available in practice.
+2. **Strong assumptions about quantization method.** The proposed method assumes that the quantization method Q is known and identical across clients (e.g., deriving Equation 15 from 14). However, in realistic heterogeneous deployments, different clients may use different quantization algorithms (uniform vs. non-uniform, different calibration datasets, etc.). The paper does not discuss this scenario or analyze sensitivity to this assumption.
 
-4. **Communication Overhead**: While the paper emphasizes reduced communication costs by sharing only adapters, it does not quantify the overhead of the additional quantization-aware adapter parameters. This is important for a fair comparison with other methods.
+3. **Missing relevant baselines.** The paper compares against FFA-LoRA, H-LoRA, and H-LoRA-T, but does not compare with other personalized FL approaches that could potentially handle heterogeneity, such as FedPer, FedRep, or recent personalized FL methods designed for LLMs. Additionally, a simple baseline of personalized LoRA (no aggregation) should be included to isolate the benefits of federation.
 
-5. **Missing Convergence Analysis**: Section 4.3 shows convergence curves but provides no theoretical convergence guarantees for iFedQLoRA. The iterative optimization involves alternating between two non-convex objectives (Eq. 19 and Eq. 20), and the paper does not discuss whether convergence is guaranteed or under what conditions.
+4. **Incomplete analysis of FFA-LoRA results.** FFA-LoRA performs poorly in the experiments (sometimes near random), which the authors attribute to hyperparameter sensitivity. This warrants deeper investigation—is the failure fundamental to the method under mixed quantization, or is it a tuning issue? The comparison may not be fair.
 
-6. **Moderate Performance Improvements**: The performance gains of iFedQLoRA over baselines are modest—typically 1-3% in accuracy/F1. Given the added complexity of the iterative framework, the practical significance of these improvements warrants further discussion.
+5. **Memory and computational overhead not analyzed.** The quantization-aware adapter adds additional parameters that must be stored locally. The paper does not quantify the memory overhead, which is critical for resource-constrained edge devices. Similarly, the iterative version requires alternating optimization—what is the computational cost compared to the non-iterative version?
 
-7. **Notation and Presentation Issues**: The paper contains several instances of duplicated, overlapping, or corrupted text (particularly in equations and Figure 2), making some mathematical formulations difficult to follow. This suggests the paper may need additional proofreading and formatting attention.
+6. **SVD approximation is heuristic.** The use of SVD to obtain the quantization-aware adapter (Equation 12) assumes the quantization error matrix is low-rank. No justification or empirical validation of this assumption is provided. The rank m is a hyperparameter whose impact is not analyzed.
 
-8. **Scope of Quantization Methods**: The experiments focus on 2-bit and 4-bit quantization with specific quantization methods (quantile quantization and LoRA-aware quantization). The generalizability to other quantization schemes (e.g., GPTQ, AWQ) is not discussed.
+7. **Limited quantization settings.** Only 2-bit and 4-bit quantization levels are tested. Real-world deployments may involve more varied precision levels (e.g., 3-bit, 8-bit, mixed-precision). The performance with a wider range of quantization combinations remains unexplored.
 
-### 4. Questions for Authors
+8. **Ablation on the rank of adapters missing.** The paper does not study how the rank of the LoRA adapter and quantization-aware adapter affect performance. Since both adapters use low-rank decomposition, understanding their interplay is important.
 
-1. **Scale of Experiments**: Why were experiments conducted only on DistilBERT (66M parameters) rather than actual LLMs? How do the authors expect the quantization bias problem and the proposed solution to behave with models in the billions of parameters range?
+---
 
-2. **Algorithmic Implementation**: Can you provide more details on how the quantization-aware adapter is implemented in practice? Specifically, how is the SVD applied when the quantization error matrix *E* is not directly observable, and how is the rank *m* determined?
+## Questions
 
-3. **Privacy and Quantization Knowledge**: Equation 15 assumes the quantization method *Q* is known. In practice, if different clients use proprietary quantization schemes, how would this assumption hold? Does this limit the applicability of the method?
+1. **Scalability to larger models:** Have the authors tested or do they have plans to validate FedQLoRA on larger language models (e.g., LLaMA-7B or larger)? The characteristics of quantization error may change significantly with model scale, and the computational feasibility of the iterative version needs to be demonstrated.
 
-4. **Communication Overhead**: What is the total number of parameters communicated per round? How does the quantization-aware adapter size compare to the LoRA adapter size, and does this affect the overall communication efficiency?
+2. **Handling different quantization methods:** How would FedQLoRA handle the case where clients use fundamentally different quantization algorithms (not just different bit-widths)? Does the method require knowledge of the exact Q function, or is an approximation sufficient?
 
-5. **Convergence Guarantees**: The iterative optimization alternates between two non-convex objectives. Can the authors provide any theoretical convergence guarantees or discuss the conditions under which convergence is ensured?
+3. **Hyperparameter sensitivity:** What are the ranks (r for LoRA, m for quantization-aware adapter) used in the experiments? How sensitive are the results to these choices? Are they tuned separately for each client or shared?
 
-6. **Comparison with Simple Truncation**: H-LoRA-T achieves reasonable performance by simply truncating all models to the lowest precision level. Can the authors provide a more detailed cost-benefit analysis of why FedQLoRA is preferable despite the added complexity?
+4. **Memory requirements:** What is the total parameter overhead of the quantization-aware adapter compared to standard LoRA? For edge deployment, this is a critical consideration.
+
+5. **Personalized LoRA baseline:** What is the performance of training LoRA locally without any federation (i.e., purely personalized, no aggregation)? This would help quantify the trade-off between personalization and collaborative learning.
+
+6. **Performance gap explanation:** Could the authors explain why FFA-LoRA performs so poorly in Table 1 and 2? Is there a fundamental incompatibility with mixed quantization, or is it a tuning issue?
+
+7. **Convergence of iterative version:** Does iFedQLoRA always converge? The optimization alternates between two objectives—are there any theoretical guarantees or conditions for convergence?
+
+8. **Inference-time overhead:** During inference, both adapters must be applied. What is the latency overhead compared to standard LoRA, particularly for batched inference?
 
 # Actual Human Scores
 Individual reviewer scores: [3.0, 5.0, 5.0, 3.0]
@@ -328,86 +262,65 @@ Binary outcome: Reject
 === CALIBRATION EXAMPLE 5 ===
 
 # Review
-# Review: ADAFM: Adaptive Variance-Reduced Algorithm for Stochastic Minimax Optimization
+# Review of "ADAFM: Adaptive Variance-Reduced Algorithm for Stochastic Minimax Optimization"
 
-## 1. Summary
+## Summary
 
-This paper introduces AdaFM (Adaptive Filtered Momentum), a novel adaptive variance-reduced algorithm for stochastic minimax optimization problems. The key contribution is developing an algorithm that automatically adjusts its hyperparameters (momentum parameters and learning rates) based solely on historical estimator information, eliminating the need for manual tuning of problem-dependent parameters.
+This paper introduces AdaFM (Adaptive Filtered Momentum), an adaptive variance-reduced algorithm for stochastic minimax optimization. The key contribution is designing a method that automatically adjusts hyperparameters based on historical estimator information, eliminating the need for problem-dependent parameter tuning that plagues existing VR-based algorithms in minimax settings.
 
-The algorithm is inspired by STORM (Cutkosky & Orabona, 2019) and incorporates variance reduction with momentum correction. AdaFM uses a simplified momentum parameter schedule β_{t+1} = 1/t^{2/3} for both primal (x) and dual (y) variables, making it tuning-free. Learning rates are adapted based on cumulative estimator values divided by momentum parameters, with a mechanism ensuring x's learning rate accounts for y's learning rate to maintain proper step size ratios.
+The algorithm builds on STORM-style momentum-based variance reduction but makes two key adaptations: (1) momentum parameters β_t are simplified to 1/t^{2/3} for both primal and dual variables, and (2) learning rates η_t^x and η_t^y are computed adaptively using cumulative gradient estimator norms, with a max operation ensuring proper interaction between the two variables' learning rates.
 
-Theoretical results demonstrate that AdaFM achieves near-optimal sample complexity of O(ε^{-3}) for finding ε-stationary points in both Non-Convex-Strongly-Concave (NC-SC) and Non-Convex-Polyak-Łojasiewicz (NC-PL) settings. Experiments on test functions, deep AUC maximization, and WGAN-GP validate the algorithm's effectiveness and robustness compared to RSGDA, VRAdaGDA, and TiAda.
+The authors provide theoretical analysis showing that AdaFM achieves O(ε^{-3}) sample complexity for finding ε-stationary points in both Non-Convex-Strongly-Concave (NC-SC) and Non-Convex-PL (NC-PL) settings, matching the optimal rate of parameter-dependent algorithms. The paper includes experiments on synthetic test functions, deep AUC maximization, and WGAN-GP training, comparing against RSGDA, VRAdaGDA, and TiAda.
 
-## 2. Strengths
+## Strengths
 
-**Novelty and Contribution:**
-- First adaptive variance-reduced algorithm for stochastic minimax optimization, addressing a significant practical gap between theory and implementation
-- Elegant simplification of momentum parameters (β_{t+1} = 1/t^{2/3}) that eliminates the need for separate β^x_t and β^y_t tuning required by prior VR-based methods
-- Theoretically principled approach that maintains optimal convergence rates while being parameter-free
+1. **Addresses a practical problem**: The paper correctly identifies that existing VR methods for minimax optimization require careful tuning of many problem-dependent hyperparameters (learning rate ratios, momentum parameters, etc.), making them impractical for real-world use. This is a genuine and important problem.
 
-**Theoretical Depth:**
-- Comprehensive analysis covering both NC-SC and NC-PL settings
-- Detailed error dynamics analysis showing how the momentum and learning rate choices control estimation errors
-- Four-case analysis strategy in the NC-SC setting based on cumulative error and gradient magnitudes is thorough
-- Comparison with existing methods (TiAda achieves O(ε^{-4}), VRAdaGDA requires tuning) clearly positions the contribution
+2. **Novel algorithmic design**: The approach of using cumulative gradient norms with momentum-weighted denominator to automatically adjust learning rates, combined with the max operation to couple the two learning rates, is a clever adaptation of AdaGrad-style ideas to the minimax setting. The theoretical justification via error dynamics analysis is sound.
 
-**Practical Impact:**
-- Addresses a real problem: VR-based minimax algorithms are notoriously sensitive to hyperparameter choices (demonstrated in Figure 1 showing RSGDA's sensitivity)
-- Claims γ = λ = 1 works in theory and the remaining hyperparameter δ can be set to small values (0.001), making the algorithm truly easy to use
-- The hyperparameter grid search comparison (Figure 5 vs Figure 1) effectively demonstrates robustness
+3. **Solid theoretical results**: The paper provides convergence guarantees for both NC-SC and NC-PL settings with rigorous proofs. The O(ε^{-3}) sample complexity is indeed optimal for the non-convex minimax setting, and achieving this without knowledge of problem parameters is a meaningful theoretical advance.
 
-**Experiments:**
-- Diverse evaluation across synthetic (test functions), NC-SC (deep AUC), and NC-PL (WGAN-GP) settings
-- Ablation study on δ provides useful practical guidance
-- Comparison with multiple baselines including the only existing parameter-free method (TiAda) strengthens the contribution
+4. **Comprehensive experimental evaluation**: The experiments cover diverse settings (synthetic functions, deep AUC on imbalanced data, GAN training) and multiple datasets (CIFAR-10, CIFAR-100). The hyperparameter sensitivity analysis for RSGDA in Figure 1 effectively motivates the need for adaptive methods.
 
-## 3. Weaknesses
+5. **Clear algorithmic contribution over TiAda**: The comparison with TiAda shows that AdaFM converges faster while maintaining adaptivity. The test function experiments demonstrate that AdaFM adjusts stepsize ratios more quickly than TiAda.
 
-**Theoretical Concerns:**
+## Weaknesses
 
-1. **Incomplete δ = 0 Analysis**: The paper states that δ can be "arbitrarily close to 0" but the ablation study (Figure 9) shows that δ = 0 causes the algorithm to fail to converge. This contradiction needs clarification—does "arbitrarily close to 0" mean strictly positive, and what is the practical minimum δ value for guaranteed convergence?
+1. **Overstated "parameter-free" claim**: The algorithm still requires three hyperparameters: γ, λ, and δ. While the paper argues these can be set to default values, the ablation study (Figure 9) shows that δ=0 causes divergence. This contradicts the claim that "any arbitrarily small δ" works. The statement "adjusting these three parameters presents no difficulty" needs stronger empirical support.
 
-2. **κ^5 vs κ^4.5 Gap in PL Setting**: Theorem 2 shows a degradation from O(κ^4.5) in NC-SC to O(κ^5) in NC-PL. The paper attributes this to using the PL condition indirectly through the quadratic growth condition, but this degradation is significant for ill-conditioned problems (large κ). The paper doesn't explore whether this gap can be closed.
+2. **Missing baselines and comparisons**: The paper only compares against RSGDA, VRAdaGDA, and TiAda. Recent adaptive minimax methods like NeAda (NeAda for nested optimization) and PES (cited in related work) are not included as baselines. Additionally, comparing against simpler adaptive methods like Adam-SGDA would strengthen the practical evaluation.
 
-3. **Sample Complexity Interpretation**: The paper claims O(ε^{-3}) sample complexity, but this is per variable (x and y each require samples). For a fair comparison with single-variable optimization, the total sample count should be considered. The statement "AdaFM only needs two samples, i.e., O(1), to compute estimators" requires clarification—does this mean each iteration requires 2 stochastic gradient evaluations?
+3. **Ablation study reveals concerning behavior**: Figure 9a shows that AdaFM diverges when δ=0, which raises questions about the robustness of the algorithm. The paper should explain why this happens and whether there are safer alternatives.
 
-4. **Missing Comparison with Modern Adaptive Methods**: The paper compares with TiAda (parameter-free but O(ε^{-4})), RSGDA, and VRAdaGDA, but doesn't compare with other adaptive methods like AdaGDA (Huang et al., 2023) which also has adaptive learning rates but with different adaptivity mechanisms.
+4. **Gap between theory and practice**: The theory assumes bounded gradients (Assumption 2), but in deep learning applications, gradients can grow unbounded. The experiments use neural networks but don't discuss this discrepancy. Gradient clipping might be needed in practice.
 
-**Experimental Concerns:**
+5. **Incomplete analysis of the δ parameter**: The ablation study on δ is limited. The paper claims δ can be "arbitrarily small," but then Figure 10 suggests smaller δ leads to better performance on WGAN-GP. More systematic analysis of δ's effect across different tasks would be valuable.
 
-1. **Limited Deep Learning Scale**: Experiments are conducted on CIFAR10/CIFAR100 with relatively small models (ResNet20, 4-layer CNNs). The practical benefits of AdaFM's adaptivity may become more or less apparent at larger scales (e.g., ImageNet, large language models).
+6. **Computational overhead not discussed**: Computing cumulative sums of gradient norms adds memory and computation costs. The paper should quantify this overhead, especially for large-scale problems.
 
-2. **δ Sensitivity Not Fully Explored**: While ablation studies are provided, the paper doesn't give clear guidance on selecting δ for different problem types. The finding that smaller δ works better for WGAN-GP contradicts the intuition that larger δ helps adjust learning rate ratios faster.
+7. **Narrow theoretical improvement over TiAda**: The paper claims TiAda achieves O(ε^{-4}) complexity, but this comparison may not be entirely fair. TiAda is designed for a more general setting and doesn't assume bounded gradients. The comparison should clarify whether the complexity improvement comes from assumptions or algorithmic innovation.
 
-3. **Inception Score Metric**: For WGAN-GP experiments, the paper uses Inception Score, which is known to have limitations and can be insensitive to mode collapse. Frechet Inception Distance (FID) would provide a more complete picture of generation quality.
+## Questions
 
-4. **Missing Baselines**: The deep AUC experiments don't include standard minimax optimization methods like SGDA or basic Adam variants, making it difficult to assess the practical overhead of AdaFM versus simpler approaches.
+1. **On the δ parameter**: The ablation study shows failure when δ=0, but the theory suggests any small δ suffices. Can you explain this discrepancy? What is the minimum δ that guarantees convergence in practice, and how should users select it?
 
-**Presentation Issues:**
+2. **On hyperparameter defaults**: The experiments use different values of δ across tasks (δ=0.1 for test functions, δ=0.001 for deep AUC and WGAN-GP). How should practitioners choose δ, γ, and λ? Is there a principled approach beyond tuning?
 
-1. **Algorithm Description Gaps**: Equations 2 and 3 (the estimator update rules) appear as omitted pictures, making it difficult to fully understand the algorithm. These are central to the contribution and should be clearly stated.
+3. **On comparison with other adaptive methods**: Why weren't recent adaptive minimax methods like NeAda included in the experiments? How would AdaFM compare against Adam-SGDA or other simpler adaptive schemes?
 
-2. **Notation Inconsistencies**: The paper uses both κ and L/μ notation for the condition number. Consistency would improve readability.
+4. **On practical implementation**: The algorithm requires maintaining cumulative sums of gradient norms divided by β_i. For very long training runs, these sums can grow large. Are there practical numerical stability concerns, and how do you handle them?
 
-3. **Missing Pseudocode Formatting**: Algorithm 1 is presented as a numbered list rather than proper pseudocode, reducing clarity.
+5. **On the learning rate max operation**: The use of max{α_t^x, α_t^y} for η_t^x is motivated by ensuring x updates more conservatively when y optimization is incomplete. Could you provide intuition for why this particular formulation works better than other coupling mechanisms?
 
-## 4. Questions for Authors
+6. **On convergence verification**: The theory guarantees convergence to stationary points. How does this translate to practical metrics like AUC score or inception score in the experiments? Are there gaps between theoretical convergence and practical performance?
 
-1. **On δ Selection**: Your ablation study shows that δ = 0 causes non-convergence (Figure 9a), yet the theoretical results claim δ can be "arbitrarily close to 0." What is the minimum practical δ value for guaranteed convergence? Is there a theoretical lower bound on δ?
+## Additional Comments
 
-2. **Sample Complexity Clarification**: Each iteration requires computing vt and wt using stochastic gradients. Please clarify the exact number of stochastic gradient oracle calls per iteration and confirm that the total sample complexity is indeed O(ε^{-3}) rather than O(2ε^{-3}) or similar.
+The writing is generally clear, though there are some minor issues:
+- The notation δ_x = 1/3 + δ and δ_y = 1/3 - δ could be confusing; consider using different symbols.
+- Some equations in the appendix are hard to parse due to formatting.
 
-3. **PL Setting Gap**: The NC-PL setting shows O(κ^5) complexity versus O(κ^4.5) for NC-SC. Can this gap be closed, or is it fundamental to parameter-free algorithms under PL conditions? Is there a lower bound showing this degradation is necessary for parameter-free methods?
-
-4. **Comparison with AdaGDA**: Huang et al. (2023) propose AdaGDA with adaptive learning rates. How does AdaFM differ from AdaGDA, and why is AdaGDA not included as a baseline in experiments?
-
-5. **Robustness to Initial Learning Rates**: While γ and λ can be set to 1, the experiments use different learning rate search ranges for AdaFM versus other methods. Is there any guidance on appropriate initial learning rate ranges for different problem types (NC-SC vs NC-PL)?
-
-6. **Computational Overhead**: AdaFM requires maintaining cumulative sums of estimator norms (α_t^x, α_t^y) across all iterations. What is the memory and computational overhead, and how does this scale compared to VRAdaGDA?
-
-7. **Theoretical Tightness**: The bound in Theorem 1 contains multiple O(·) terms with different κ dependencies. Is this bound tight, or can the constants and κ-exponents be improved?
-
-8. **Practical Implementation**: The paper claims γ = λ = 1 works in theory, but practical implementations (Figure 3) use different search ranges. What are the recommended default values for γ and λ in practice?
+Overall, this is a solid contribution to adaptive optimization for minimax problems. The paper makes meaningful progress on an important practical challenge, though the claims about being fully parameter-free are somewhat overstated. Addressing the weaknesses, particularly the δ parameter behavior and missing baselines, would significantly strengthen the work.
 
 # Actual Human Scores
 Individual reviewer scores: [3.0, 3.0, 8.0, 6.0]
@@ -417,59 +330,75 @@ Binary outcome: Reject
 === CALIBRATION EXAMPLE 6 ===
 
 # Review
-# Review: Swift-FedGNN: Federated Graph Learning with Low Communication and Sample Complexities
+# Review of "Swift-FedGNN: Federated Graph Learning with Low Communication and Sample Complexities"
 
-## 1. Summary
+## Summary
 
-This paper proposes Swift-FedGNN, a novel federated graph neural network (GNN) framework designed to train GNNs on geo-distributed graph data while preserving data privacy. The key insight is to reduce the heavy communication overhead of cross-client neighbor sampling by having most clients perform efficient local training in parallel, with only a small, randomly sampled subset of clients periodically conducting the more expensive cross-client training. The paper provides rigorous theoretical convergence analysis showing that Swift-FedGNN achieves O(1/√T) convergence rate, matching state-of-the-art sampling-based GNN methods, despite operating in the more challenging federated setting. Extensive experiments on real-world datasets (ogbn-products and Reddit) demonstrate significant improvements in convergence speed and communication efficiency compared to existing federated GNN approaches.
+This paper proposes Swift-FedGNN, a federated learning framework for training Graph Neural Networks (GNNs) on geo-distributed graph data. The key challenge addressed is the high communication and sampling costs incurred by cross-client neighbors in federated GNN training. The proposed solution has clients perform local training using only local graph data in most iterations, while periodically allowing a subset of clients to conduct cross-client training that incorporates neighbor information from other clients. To further reduce communication overhead, neighbor embeddings are aggregated twice before transmission: first at remote clients and then at the server. The authors provide theoretical convergence analysis showing an O(1/√T) rate, matching state-of-the-art sampling-based GNN methods, and validate the approach on ogbn-products and Reddit datasets.
 
-## 2. Strengths
+---
 
-**Novel Algorithmic Contribution:** The paper makes a genuine algorithmic contribution by introducing a hybrid local/cross-client training strategy that strategically schedules expensive cross-client operations. This is a principled approach that addresses a real bottleneck in federated GNN training.
+## Strengths
 
-**Theoretical Rigor:** The paper provides a non-trivial convergence analysis that handles the key challenge of biased stochastic gradients in GNNs. Notably, the analysis does not rely on unrealistic assumptions (like unbiased gradient estimators) that are commonly used in prior work. The derivation of gradient error bounds that scale with the number of layers L is a valuable theoretical insight.
+**1. Clear Problem Formulation:** The paper identifies an important practical challenge in federated GNN learning—the prohibitive communication costs from cross-client neighbor sampling. The motivation is well-grounded, with a realistic healthcare scenario example and empirical evidence (Figure 2) demonstrating that cross-client operations dominate training time.
 
-**Privacy Preservation:** The two-stage aggregation design (remote clients → server → training client) provides architectural privacy benefits by preventing direct feature sharing between clients. This is a meaningful practical contribution.
+**2. Solid Theoretical Contributions:** The convergence analysis is a notable strength. Unlike prior work that relies on strong assumptions (unbiased or consistent stochastic gradients), this paper explicitly bounds the stochastic gradient approximation errors caused by neighbor sampling and missing cross-client neighbors. The connection between gradient bias and GNN depth (number of layers) is an interesting insight unique to federated GNN training.
 
-**Comprehensive Experiments:** The paper evaluates on two large-scale real-world datasets with distinct characteristics (large/sparse vs. dense). The comparison against multiple baselines (LLCG, FedGNN-PNS, FedGNN-G) is thorough, and the communication overhead analysis in Table 2 is particularly compelling.
+**3. Principled Algorithm Design:** The approach of periodic cross-client training with a subset of clients is intuitive yet effective. The double-aggregation mechanism (at remote clients and server) serves dual purposes: reducing communication and providing a degree of privacy protection by hiding individual node embeddings.
 
-**Clear Problem Formulation:** The paper clearly motivates the problem of cross-client neighbor sampling overhead and establishes the trade-off between information loss and communication cost through the hyperparameters I (correction frequency) and K (number of cross-client clients).
+**4. Comprehensive Experimental Evaluation:** The experiments on ogbn-products (large-scale) and Reddit (dense) datasets provide good coverage of different graph characteristics. The comparison with LLCG, FedGNN-PNS, and FedGNN-G is appropriate, and the analysis of computation vs. communication time ratios is informative.
 
-## 3. Weaknesses
+**5. Complexity Analysis:** The communication overhead per iteration (Table 2) clearly demonstrates the efficiency gains, with Swift-FedGNN achieving 4-20× reduction compared to baselines.
 
-**Experiment-Theory Mismatch on Architecture:** The theoretical analysis is conducted for GCN, but the experiments use GraphSAGE. While both are sampling-based GNNs, the architectural differences (GraphSAGE uses concatenation and different aggregation functions) could affect the analysis. The paper should clarify whether the convergence guarantees extend to GraphSAGE or if additional analysis is needed.
+---
 
-**Hyperparameter Sensitivity:** While Figure 6 shows sensitivity analysis for I, K, and sampling fanouts, the paper does not provide clear guidance on how to set these critical hyperparameters in practice. The trade-off between I, K, and convergence quality is not quantified, making it difficult for practitioners to apply the method.
+## Weaknesses
 
-**Scalability Concerns:** The experiments use only 10-20 clients. Real-world federated learning scenarios may involve hundreds or thousands of clients. The paper does not discuss how the approach scales, particularly regarding the server-side aggregation overhead when many clients are involved.
+**1. Limited Baseline Comparison:** The paper misses several relevant federated GNN methods. Notably, FedGraphNN (He et al., 2021), SpreadGNN (He et al., 2021), and FedGCN (Yao et al., 2023a) with its one-time communication strategy deserve comparison. The latter is mentioned in Related Work but not included in experiments, which is concerning since it addresses similar issues.
 
-**Limited GNN Architecture Support:** The paper explicitly notes (footnote 2) that operation offloading only supports element-wise operations (GCN, SGC). Supporting non-element-wise operations like GAT would require transferring raw features, negating some privacy benefits. This is a significant practical limitation not sufficiently discussed.
+**2. Privacy Analysis is Superficial:** While the paper claims privacy benefits from double aggregation, no formal privacy guarantees (e.g., differential privacy) or empirical privacy analysis are provided. The claim that "information of each node is not leaked" is misleading—aggregated embeddings can still leak information. This is a significant gap given the paper's focus on privacy-preserving learning.
 
-**Privacy Guarantees Are Architectural, Not Formal:** While the two-stage aggregation design helps preserve privacy, the paper does not provide formal privacy guarantees (e.g., differential privacy analysis). For privacy-critical applications (healthcare, as motivating example), formal guarantees would strengthen the contribution.
+**3. Limited Task Scope:** The evaluation is restricted to node classification. GNNs are widely used for link prediction and graph classification tasks. The algorithm's applicability to these tasks, particularly link prediction where edge information across clients is critical, should be discussed or evaluated.
 
-**Handling of Cross-Client Edges:** The paper assumes nodes are disjointly partitioned across clients, but does not discuss how edges between clients are handled in practice. Are these edges discovered during sampling, and if so, how is this communicated efficiently?
+**4. Architectural Limitations:** As noted in footnote 2, the approach only supports element-wise aggregation operations (mean, sum, max). This excludes important GNN architectures like GAT (Graph Attention Networks) that use attention mechanisms. The practical implications of this limitation should be more prominently discussed.
 
-## 4. Questions for Authors
+**5. Unrealistic Simulation Environment:** The experiments simulate federated learning on a single machine with shared memory and synthetic network bandwidth constraints. Real-world deployments involve network latency, asynchronous communication, and system heterogeneity, which could significantly impact the results.
 
-1. **Architecture mismatch:** The theory is for GCN but experiments use GraphSAGE. Can you clarify whether the convergence analysis applies to GraphSAGE, and if not, what modifications would be needed?
+**6. Missing Non-IID Analysis:** Federated learning research typically addresses non-IID data distributions across clients. The paper uses METIS partitioning, which creates structured splits but doesn't explore heterogeneity scenarios (e.g., different degree distributions or class distributions per client).
 
-2. **Hyperparameter guidance:** The correction frequency I and number of cross-client clients K are critical parameters. Is there a principled way to set these based on the dataset characteristics (e.g., cross-client edge density)? The paper mentions a trade-off but does not provide concrete guidance.
+**7. Hyperparameter Sensitivity Gaps:** The analysis of correction frequency I and number of cross-client training clients K is limited to communication ratios. How do these parameters affect final model accuracy and convergence? What are good default values?
 
-3. **Scalability:** How does the approach scale with the number of clients? The server aggregates from all clients (line in Algorithm 1), and this could become a bottleneck with many clients. Have the authors tested with larger client numbers?
+**8. Server Bottleneck Concern:** During cross-client training, the server aggregates embeddings from multiple remote clients for each training node. This could create a computational bottleneck on the server, but this aspect is not analyzed.
 
-4. **Edge discovery:** How are cross-client edges discovered? In the healthcare example, patients at different hospitals have interactions—but how does the system know which clients contain a node's neighbors without excessive communication?
+**9. Convergence Rate Interpretation:** The O(1/√T) rate matches sampling-based GNN methods, but the residual error term in Theorem 5.6 grows with I and decreases with K. A more detailed discussion of how to set I and K to balance efficiency and accuracy would strengthen the practical applicability.
 
-5. **GAT compatibility:** You mention GAT requires raw feature transfer. For privacy-critical applications, what is the practical impact of this limitation? Are there alternatives (e.g., privacy-preserving aggregation) you considered?
+---
 
-6. **Convergence to suboptimal solution:** Theorem 5.6 shows convergence to a neighborhood of the optimal solution. The residual error depends on B_Δ terms. Can you provide more intuition or quantitative bounds on how large this neighborhood could be in practice?
+## Questions
 
-7. **Client heterogeneity:** The paper assumes i.i.d. or balanced data distribution implicitly through METIS partitioning. How would the approach perform under non-IID data distributions across clients, which is the typical FL scenario?
+1. **Privacy Guarantees:** Can the authors provide any formal or empirical analysis of the privacy protection offered by the double aggregation mechanism? Would adding differential privacy noise be necessary for strong privacy guarantees?
 
-## 5. Minor Issues
+2. **Comparison with FedGCN:** Why was FedGCN (Yao et al., 2023a) not included in the experimental comparison despite being discussed in Related Work? Its one-time full cross-client neighbor communication strategy seems like an important baseline.
 
-- Figure 2 shows per-iteration time breakdown but the text mentions Figure 2 multiple times with references to captions that don't fully match.
-- The notation in some places is confusing (e.g., double subscripting like Bv[m] could be clearer as B_v^{(m)}).
-- Some equations in the appendix appear truncated or improperly formatted, making verification difficult.
+3. **Scalability with Number of Clients:** How does Swift-FedGNN scale with a large number of clients? The current experiments use only 10-20 clients. Does the server bottleneck become problematic when hundreds of clients participate?
+
+4. **Non-IID Data Scenarios:** How does Swift-FedGNN perform when client data distributions are heterogeneous (e.g., varying class distributions or graph structural properties)? This is crucial for real-world federated learning applications.
+
+5. **Link Prediction Task:** Is Swift-FedGNN applicable to link prediction tasks where predicting edges across clients may require cross-client information? How would the algorithm handle this scenario?
+
+6. **GAT and Non-element-wise Operations:** Can the authors elaborate on potential modifications to support attention-based GNN architectures like GAT? What would the communication overhead look like in that case?
+
+7. **Asynchronous Setting:** The current design assumes synchronous training. How would Swift-FedGNN perform in asynchronous federated settings where clients may have different update frequencies?
+
+8. **Real-world Network Latency:** Have the authors considered testing in a more realistic distributed environment with actual network latency? The shared memory simulation may not capture realistic communication patterns.
+
+---
+
+## Minor Comments
+
+- The notation is generally clear but could benefit from a more compact representation in some sections.
+- The related work section on federated GNNs could be more comprehensive, particularly regarding recent developments in this rapidly evolving area.
+- Figure quality is good, but some figures (e.g., Figure 4) would benefit from confidence intervals or error bars across multiple runs.
 
 # Actual Human Scores
 Individual reviewer scores: [3.0, 6.0, 5.0, 5.0]
@@ -479,72 +408,34 @@ Binary outcome: Reject
 === CALIBRATION EXAMPLE 7 ===
 
 # Review
-# Detailed Review: Hierarchical Prompts with Context-Aware Calibration for Open-Vocabulary Object Detection
+# Review of "Hierarchical Prompts with Context-Aware Calibration for Open-Vocabulary Object Detection"
 
 ## Summary
+The paper proposes **HiCA**, a method for Open-Vocabulary Object Detection (OVD) designed to improve generalization to novel classes while maintaining strong performance on base classes. The authors identify two main limitations in existing knowledge distillation-based OVD methods: (1) the direct mapping of regions to class prompts ignores shared semantic knowledge (superclass information), leading to overfitting on base classes, and (2) visual context is often ignored or treated purely as negative background, failing to capture scene-object correlations.
 
-This paper proposes HiCA (Hierarchical prompts with Context-Aware calibration) for Open-Vocabulary Object Detection (OVD). The method addresses the limitation that existing OVD approaches primarily learn direct mappings between visual regions and category names, ignoring shared knowledge between base and novel classes as well as visual context information. 
+To address these, HiCA introduces two components:
+1.  **Hierarchical Prompts**: This module decomposes the standard region-category alignment into a two-step process: region-to-superclass (coarse-grained) and superclass-to-category. It utilizes learnable prompts for both levels and fuses them during inference to share semantic knowledge across classes.
+2.  **Context-Aware Calibration**: This module leverages unsupervised clustering of global image features to define visual contexts. It trains a Distribution Generation (DG) Layer to predict the probability distribution of superclasses within a given context, using ground-truth annotations as supervision. During inference, this predicted distribution calibrates the classification logits via an element-wise product.
 
-The main contributions are:
-1. **Hierarchical prompts**: Decompose region-category mapping into coarse-grained (region-to-superclass) and fine-grained (superclass-to-category) steps, where superclass prompts capture shared semantic knowledge across both base and novel classes.
-2. **Context-aware calibration**: Use unsupervised clustering on visual context features to build a context-superclass distribution matrix, which calibrates detection results based on environmental context.
-3. **Multi-modal prompts**: Combine learnable text and visual prompts for improved knowledge distillation.
-
-Experiments on OV-COCO and OV-LVIS show competitive results, achieving 57.2% mAP_B on OV-COCO and 32.4% AP on OV-LVIS.
+Experiments are conducted on OV-COCO and OV-LVIS benchmarks. The method demonstrates consistent improvements over baselines like OADP and BARON, particularly boosting base class performance.
 
 ## Strengths
-
-1. **Well-motivated problem**: The paper correctly identifies that existing OVD methods overfit to base classes during training, leading to poor generalization to novel classes. The hierarchical approach to incorporate coarse-grained knowledge is conceptually sound.
-
-2. **Comprehensive experiments**: Extensive ablation studies demonstrate the contribution of each component. The balance parameter analysis (Figure 3) effectively shows how coarse/fine-grained knowledge affects performance.
-
-3. **Visualization and analysis**: The paper provides good qualitative analysis through similarity matrices (Figure 6) and prompt projection visualizations (Figure 4), helping understand why hierarchical prompts work.
-
-4. **Plug-and-play design**: The hierarchical prompts and context-aware calibration are designed as modular components independent of the knowledge distillation framework, making them potentially applicable to other OVD methods.
-
-5. **Improved novel class generalization**: The method achieves better balance between base and novel class performance compared to methods like CORA that sacrifice base class performance for novel class gains.
+1.  **Motivation and Insight**: The paper correctly identifies a significant issue in current OVD methods: the overfitting to base classes due to fine-grained prompt learning. Introducing hierarchical semantic structures (superclasses) is a logical and effective strategy to regularize the feature space and share knowledge between base and novel classes.
+2.  **Novelty in Context Modeling**: The context-aware calibration module offers a sensible way to utilize global image information. Instead of merely treating context as background, modeling the conditional probability of object occurrence based on scene features is a sound approach for disambiguating objects and suppressing false positives.
+3.  **Plug-and-Play Design**: The proposed modules are largely independent of the specific detector architecture. The demonstration that HiCA can be applied to both OADP and BARON baselines effectively shows its versatility and potential for broader application.
+4.  **Strong Empirical Results**: The method achieves state-of-the-art results on OV-COCO (50.4 mAP50) and competitive results on OV-LVIS. The ablation studies clearly isolate the contributions of the hierarchical prompts and the context-aware calibration, validating the design choices.
 
 ## Weaknesses
+1.  **Reliance on Superclass Definitions**: The proposed hierarchical prompt mechanism fundamentally relies on a predefined taxonomy where classes are grouped into superclasses (e.g., "dog" $\in$ "animal"). The paper does not clearly explain the source of this hierarchy. Is it derived from the COCO/LVIS category definitions, WordNet, or manually constructed? This dependency limits the method's applicability to scenarios where such hierarchies are unavailable or where novel classes do not fit cleanly into existing superclasses. The assumption that the superclass hierarchy for *novel* classes is known during inference needs explicit clarification.
+2.  **Heuristic Nature of Calibration**: The context-aware calibration relies on a Hadamard product (element-wise multiplication) between the region-class similarity scores and the predicted context-class distribution (Eq. 7). While intuitive (acting as a gating mechanism), this interaction is heuristic. A justification for why a multiplicative operation is preferred over an additive bias (log-odds adjustment) or a softmax fusion is lacking. Additionally, the "Distribution Generation Layer" predicting context-superclass probabilities requires supervision from ground-truth co-occurrence statistics, adding an extra preprocessing step that is not thoroughly discussed.
+3.  **Modest Novel Class Gains**: While the overall performance is strong, the improvement on novel classes (mAP_N) is relatively modest compared to the gains on base classes (mAP_B). For instance, on OV-COCO with OADP, the method improves mAP_N by 1.3% but mAP_B by 5.5%. This suggests the method primarily stabilizes base-class learning rather than dramatically improving zero-shot transfer, which somewhat contradicts the primary motivation of enhancing generalization to novel classes.
+4.  **Implementation Complexity**: The training pipeline appears complex, involving multiple loss terms (hierarchical alignment, distillation, context prediction) and unsupervised clustering updates. The paper mentions updating visual context embeddings "in a fixed number of rounds divisible by one thousand," but the sensitivity of the method to this update frequency or the number of clusters $K$ (only briefly mentioned in the appendix) could be a concern for reproducibility.
 
-1. **Unclear superclass definition**: The paper does not clearly explain how superclasses are defined. It appears to be manually constructed (Figure 2 shows "animal", "vehicle" as superclasses). For different datasets or deployment scenarios, how should users determine appropriate superclasses? This limits the method's generalizability.
-
-2. **Simplistic subordinate matrix**: The matrix A with binary 0/1 assignment (category belongs to superclass or not) seems overly simplistic. Many objects could reasonably belong to multiple superclasses. The paper does not explore more nuanced assignment strategies.
-
-3. **Balance parameter λ is dataset-dependent**: The ablation study shows λ affects performance differently, but the paper does not provide guidance on selecting λ for new datasets. This hyperparameter requires tuning on validation data, which may not be available for novel classes.
-
-4. **Context clustering K requires tuning**: Table 5 shows performance varies significantly with K (number of context clusters). The paper does not explain how to determine optimal K, and the performance gap (27.6% to 31.2% mAP_N) is substantial.
-
-5. **Limited novelty**: The overall framework combines existing techniques (knowledge distillation, learnable prompts, visual prompts from prior work). The hierarchical prompt concept, while reasonable, is a straightforward extension of CoOp's learnable prompts.
-
-6. **Missing baselines**: Some recent strong baselines (e.g., BARON+HiCA achieves 59.8% mAP_B but only 36.0% mAP_N) are compared but the paper does not discuss whether the improvement on novel classes is statistically significant across runs.
-
-7. **Context-aware calibration complexity**: The method introduces several new components (DG Layer, context clustering, distribution generation) with limited ablation showing modest gains (1.2% improvement on mAP_N from context-aware calibration alone).
-
-## Questions for Authors
-
-1. **Superclass construction**: How exactly are superclasses determined for a given dataset? Is it purely based on common semantic groupings (animals, vehicles, etc.)? What happens if appropriate superclasses don't exist or overlap significantly?
-
-2. **Generalization to different superclass granularities**: Have the authors experimented with different levels of superclass granularity (e.g., "living things" vs. "animals" vs. "mammals")? How sensitive is the method to superclass choice?
-
-3. **Novel class prompts**: During inference, how are prompts for novel classes generated? Are they learned from base classes or constructed from class names? The paper mentions "we can only get the name of the novel classes" but doesn't detail prompt construction.
-
-4. **Context clustering stability**: The context clustering is performed via K-means on global image features. How stable is this across different initializations? Does it need to be re-run for each dataset?
-
-5. **Why does context-aware calibration hurt base class performance?**: The ablation shows base class mAP drops from 57.5% to 57.2% with context calibration. The paper explains this is expected but doesn't explore how to mitigate this trade-off.
-
-6. **Comparison with other hierarchical/structured classification methods**: How does this approach compare with methods that explicitly model class hierarchies (e.g., hierarchical softmax, taxonomy-based classification) in the OVD setting?
-
-7. **Training efficiency**: The method adds visual prompts and context-aware calibration. What is the additional computational overhead compared to baseline methods like OADP?
-
-## Minor Issues
-
-- Some formatting issues in equations (e.g., lines 231-232, 294-295 appear corrupted)
-- Figure 2's description is quite long and overlaps with the main text
-- The paper claims SOTA on OV-COCO but BARON+HiCA's novel class performance (36.0%) is still below CORA's (35.1% on their reproduced baseline, though CORA's reported is 35.1%)
-
-## Conclusion
-
-This is a solid contribution to the OVD literature that addresses an important problem (base class overfitting). The hierarchical prompts provide a principled way to incorporate coarse-grained semantic knowledge, and the ablation studies are thorough. However, the reliance on manually-defined superclasses and the number of new hyperparameters (λ, K, DG layer depth) may limit practical applicability. The paper would benefit from clearer guidelines on hyperparameter selection and analysis of robustness to superclass definitions.
+## Questions
+1.  **Superclass Derivation**: How exactly are the superclasses defined for the base and novel classes? If the novel classes are truly unseen during training, how is their superclass mapping determined during inference? Is a fixed taxonomy assumed, or does the model infer the superclass?
+2.  **Context Calibration Mechanism**: In Equation 7, you use a Hadamard product to calibrate the logits. What is the theoretical or empirical justification for this specific operation? Have you experimented with additive bias or attention-based mechanisms?
+3.  **Comparison with Hierarchical Zero-Shot Methods**: How does this work differ from or improve upon standard hierarchical zero-shot learning techniques that have used similar superclass-subclass decompositions? A brief discussion on the novelty relative to prior hierarchical embedding works would be helpful.
+4.  **Novel Class Supervision in Context**: The context-aware matrix $M_{dst}$ is supervised by ground-truth annotations. Since novel classes are absent during training, how does the model learn to associate context features with novel class concepts? Does the superclass association serve as the sole bridge for this transfer?
 
 # Actual Human Scores
 Individual reviewer scores: [5.0, 5.0, 5.0, 5.0]
@@ -554,64 +445,57 @@ Binary outcome: Reject
 === CALIBRATION EXAMPLE 8 ===
 
 # Review
-# Review: Can We Ignore Labels in Out-of-Distribution Detection?
+# Review: "Can We Ignore Labels in Out-of-Distribution Detection?"
 
 ## Summary
 
-This paper addresses a fundamental question in out-of-distribution (OOD) detection: whether labels are necessary for effective OOD detection. The authors make three main contributions: (1) a theoretical "Label Blindness Theorem" proving that SSL/unsupervised methods will fail when the learning objective is independent of in-distribution labels, (2) a new "Adjacent OOD Detection" benchmark that tests OOD detection when there is significant overlap between ID and OOD data, and (3) experiments demonstrating that existing unlabeled OOD methods fail under label blindness conditions. The paper concludes that labels cannot be safely ignored for OOD detection.
+This paper investigates a fundamental question in OOD detection: whether self-supervised and unsupervised learning methods can replace supervised approaches for detecting out-of-distribution samples. The authors provide a theoretical analysis showing that such methods are guaranteed to fail when there exists zero mutual information between the learning objective and the task-relevant labels—a phenomenon they term "label blindness."
+
+The main contributions are threefold: (1) the Label Blindness Theorem, proving that SSL/unsupervised OOD detection fails when the surrogate task is independent of label information; (2) the introduction of "Adjacent OOD detection," a new benchmark that tests OOD detection when ID and OOD data have significant overlap in the input space but differ in labels; and (3) empirical validation showing that existing SSL and unsupervised OOD methods perform poorly on this benchmark, contrasting with their strong performance on conventional far/near OOD benchmarks.
 
 ## Strengths
 
-1. **Theoretically motivated contribution**: The information-theoretic framing of the Label Blindness Theorem provides a principled understanding of why unlabeled OOD detection can fail. The derivation from information bottleneck principles to guarantee failure is well-structured.
+1. **Novel theoretical contribution.** The formalization of "label blindness" using information-theoretic arguments is a valuable addition to the OOD detection literature. The proofs connecting information bottleneck principles to OOD detection failure are rigorous and provide concrete conditions for when failures are guaranteed.
 
-2. **Addresses an important gap**: The question of whether labels are necessary for OOD detection is crucial for safety-critical applications. The paper correctly identifies that existing benchmarks (far/near OOD) may inadvertently hide label blindness failure due to low feature overlap between ID and OOD.
+2. **Practical motivation.** The Adjacent OOD benchmark addresses a real safety gap that conventional OOD benchmarks overlook. The argument that real-world systems may encounter OOD samples with substantial feature overlap with ID data (e.g., new disease variants, novel objects from existing categories) is compelling and practically relevant.
 
-3. **Novel benchmark**: The Adjacent OOD Detection task is a valuable contribution. By bootstrapping class splits from the same dataset, it creates a maximally challenging scenario that existing benchmarks do not capture.
+3. **Theorem 4.1 provides theoretical grounding.** The proof that overlapping OOD data is unavoidable in finite training sets strengthens the argument for why this benchmark matters in practice.
 
-4. **Comprehensive theoretical analysis**: The paper connects its work to existing theorems (No Free Generalization, Fano's Inequality) and provides rigorous proofs for all main claims in the appendix.
+4. **Comprehensive empirical evaluation.** The authors evaluate multiple SSL methods (SimCLR, Rotation Loss), unsupervised methods (Diffusion inpainting), and zero-shot methods (CLIPN) across three datasets (Faces, Cars, Food-101) with consistent methodology.
 
-5. **Practical implications discussed**: The paper appropriately acknowledges scenarios where unlabeled OOD methods may still be acceptable (e.g., when adjacent OOD risk is low, or when consequences of failure are tolerable).
+5. **Clear exposition of limitations.** The paper honestly discusses when unlabeled OOD methods may still be useful and provides guidance for future research directions.
 
 ## Weaknesses
 
-1. **Limited empirical breadth**: The experiments on Adjacent OOD focus primarily on three datasets (Faces, Cars, Food) where the problem appears nearly unsolvable (all FPR95 values ~88-96%). The paper would benefit from additional datasets where SSL methods exhibit varying degrees of label blindness.
+1. **Strong theoretical assumptions.** The theoretical results rely on the assumption that features \(x_1\) (relevant to the surrogate task) and \(x_2\) (relevant to labels) are independent. This strict independence is rarely satisfied in real-world data. While the authors acknowledge "approximate label blindness," the connection between theoretical guarantees under strict independence and empirical behavior under approximate independence remains unclear. The paper would benefit from quantifying how sensitive the results are to violations of this independence assumption.
 
-2. **Missing recent baselines**: Several recent unlabeled OOD detection methods are mentioned in the related work but not evaluated (e.g., CSI by Tack et al., 2020; CADET by Guille-Escuret et al., 2024). This creates an incomplete picture of the current state of unlabeled OOD detection.
+2. **Baseline performance is also poor.** The supervised MSP baseline achieves only ~70% AUROC on the Adjacent OOD benchmark, which is not particularly strong. This suggests the Adjacent OOD task is inherently difficult, but it also raises the question of whether the gap between supervised and unsupervised methods is as dramatic as claimed. The paper should discuss what performance levels are achievable on this benchmark with stronger supervised methods.
 
-3. **Theoretical assumptions may be strong**: The strict independence assumption (x₁ ⊥ x₂) and the information bottleneck framework may not perfectly characterize how neural networks actually learn. The extension to "approximate label blindness" via Fano's inequality is weaker and less rigorous than the strict case.
+3. **Inconsistency with CIFAR10/100 results.** The appendix shows that SSL methods perform substantially better on CIFAR10/100 adjacent OOD tasks compared to Faces/Cars/Food. The AUROC values for SimCLR KNN on CIFAR10 adjacent OOD (73.0%) are much closer to supervised MSP (85.3%) than the gaps observed in other datasets. The authors briefly attribute this to "more visually dissimilar" classes, but this deserves deeper analysis. Does this contradict the theoretical predictions?
 
-4. **Limited guidance on solutions**: While the paper argues labels cannot be ignored, it provides minimal concrete guidance on how many labels are sufficient or what form of label supervision helps. The mention of "few-shot methods" lacks specifics or experiments.
+4. **Limited analysis of GradCAM visualization.** Figure 1 provides a qualitative example showing that SSL features may not attend to label-relevant regions. However, this is presented as anecdotal evidence without systematic evaluation. Quantifying the attention discrepancy between SSL and supervised representations across multiple examples would strengthen this argument.
 
-5. **CLIPN evaluation complexity**: The analysis of CLIPN's performance relies on observing alignment between pretraining captions and ID labels, which is post-hoc and qualitative. A more systematic evaluation would strengthen the claims.
+5. **Zero-shot method analysis is incomplete.** The paper includes CLIPN as a zero-shot baseline but attributes its varying performance to pretraining data alignment without thoroughly investigating this hypothesis. The analysis in Appendix G showing CC3M examples is useful but remains qualitative.
 
-6. **Adjacent OOD may conflate with fine-grained classification**: On datasets like Stanford Cars (196 fine-grained classes), Adjacent OOD may be measuring the ability to distinguish visually similar classes rather than true OOD detection capability.
+6. **Missing discussion of mitigation strategies.** While the paper establishes that pure SSL/unsupervised methods can fail, it provides limited guidance on practical solutions. The discussion mentions "few or one shot methods" but does not explore how much label information is needed or how to combine SSL with limited supervision effectively.
 
-7. **CIFAR results present a nuanced picture**: The paper shows SSL methods perform substantially better on CIFAR adjacent OOD (Table 2), but this nuance is not fully explored. The reason for this difference should be explained more carefully.
+## Questions
 
-## Key Clarifications Needed from Authors
+1. **Independence assumption in practice:** Can the authors provide empirical estimates of the mutual information between features relevant to SSL objectives (e.g., rotation prediction, contrastive similarity) and features relevant to semantic labels for the datasets studied? This would help readers understand whether the theoretical assumptions are approximately satisfied.
 
-1. **Minimal label requirements**: The paper states labels are necessary but does not specify how many labels would suffice to overcome label blindness. Is one labeled example per class sufficient? What is the theoretical minimum?
+2. **Dataset-specific differences:** Why does SimCLR perform relatively well on CIFAR10/100 adjacent OOD compared to Faces/Cars/Food? Is it because SimCLR's learning objective inadvertently captures label-relevant features in these datasets, or is there another explanation?
 
-2. **Why CIFAR adjacent OOD works better**: The paper shows SimCLR achieves 77.6 AUROC on CIFAR10 adjacent OOD but only 52% on Faces/Cars. What explains this discrepancy? Is it the visual similarity of classes or something about the learned representations?
+3. **Quantifying overlap:** How exactly is "overlap" defined and measured in the Adjacent OOD benchmark? The paper describes the construction method but does not provide a quantitative measure of overlap between ID and OOD distributions.
 
-3. **Scope of theory for generative models**: The theory focuses on representation learning via information bottleneck. How does it extend to generative methods like diffusion models (Liu et al., 2023) or VAEs (Xiao et al., 2020)?
+4. **Label efficiency:** The paper suggests incorporating limited label information as a solution. Have the authors conducted preliminary experiments on how many labeled samples are needed to achieve acceptable performance? Even qualitative observations would be valuable.
 
-4. **Role of multi-view/supervised contrastive learning**: The paper mentions supervised contrastive learning (Khosla et al., 2020) as a way to improve OOD detection. Does the Label Blindness Theorem suggest this would help, or is this still limited?
+5. **Comparison with stronger supervised baselines:** Would methods like ODIN, Mahalanobis distance-based detection, or energy-based detection (which are standard supervised OOD methods) substantially outperform MSP on the Adjacent OOD benchmark? This would help contextualize the performance gap.
 
-5. **Practical recommendations**: For practitioners, what concrete guidance do the authors offer? Should they always use supervised methods? When is unlabeled acceptable? The discussion section touches on this but lacks specifics.
+6. **Extension to other SSL methods:** The experiments focus on SimCLR and Rotation Loss. How would masked autoencoders (MAE) or other reconstruction-based SSL methods perform on Adjacent OOD? These methods may learn different features than contrastive approaches.
 
-6. **Relation to recent concurrent work**: The paper cites Du et al. (2024a,b) as supporting the importance of labels. How does the theoretical framework here compare or extend theirs?
+---
 
-## Minor Concerns
-
-- Some notation in proofs is difficult to parse (e.g., inconsistent formatting of mutual information terms)
-- The gradient visualization in Figure 1 is illustrative but qualitative; more rigorous feature analysis would strengthen the empirical case
-- Section 4.3's distinction between far/near/adjacent OOD could be more clearly defined
-- The paper's conclusion that "the answer is no" to ignoring labels is strong; a more nuanced discussion of trade-offs would be appropriate
-
-## Summary Assessment
-
-This is a valuable paper that makes a solid theoretical contribution to understanding the limitations of unlabeled OOD detection. The Label Blindness Theorem is well-motivated and rigorously derived. The Adjacent OOD benchmark fills an important gap in evaluation methodology. However, the empirical evaluation would benefit from broader coverage of methods and datasets, and the paper could provide more practical guidance for practitioners. The core message—that labels cannot be safely ignored for OOD detection in safety-critical applications—is important and well-supported by theory, though the conditions under which unlabeled methods might still be useful could be explored more thoroughly.
+**Overall assessment:** This paper makes a valuable theoretical contribution by identifying conditions under which SSL-based OOD detection is guaranteed to fail. The Adjacent OOD benchmark is a meaningful addition that exposes weaknesses in current methods. However, the assumptions underlying the theory are strong, and the empirical results show some inconsistency across datasets. Addressing the questions above would significantly strengthen the paper's impact.
 
 # Actual Human Scores
 Individual reviewer scores: [6.0, 5.0, 8.0]
@@ -621,79 +505,59 @@ Binary outcome: Accept
 === CALIBRATION EXAMPLE 9 ===
 
 # Review
-## Review: LOCOVR: Multiuser Indoor Locomotion Dataset in Virtual Reality
+# Review of LocoVR: Multiuser Indoor Locomotion Dataset in Virtual Reality
 
----
+## Summary
 
-### Summary
+This paper presents LocoVR, a large-scale dataset of two-person indoor locomotion trajectories captured in virtual reality. The dataset contains over 7,000 trajectories across 131 diverse indoor home environments, capturing social navigation dynamics such as proxemics-based behaviors, collision avoidance, and path negotiation. The authors develop a VR-based data collection system where two participants simultaneously navigate shared virtual spaces toward assigned goals. They demonstrate the utility of LocoVR through three downstream tasks: global path prediction, trajectory prediction, and goal area prediction. The results show that models trained on LocoVR outperform those trained on existing datasets (GIMO, THOR-MAGNI) when evaluated on a separate real-world test dataset (LocoReal), suggesting that VR-collected data can effectively transfer to real-world scenarios.
 
-This paper introduces LocoVR, a novel dataset of 7000+ two-person trajectories captured in virtual reality across 131 diverse indoor home environments. The authors argue that existing indoor trajectory datasets lack sufficient scale, scene variation, and social navigation dynamics (proxemics). LocoVR addresses these limitations by leveraging VR technology for efficient data collection of geometrically and socially-aware human motion. The paper demonstrates the dataset's utility through three indoor tasks: global path prediction, trajectory prediction, and goal prediction, showing that models trained on LocoVR outperform those trained on existing datasets (GIMO, THOR-MAGNI) when evaluated on both synthetic and real-world test data.
+## Strengths
 
----
+**Novel and Timely Dataset.** The paper addresses a clear gap in existing human motion datasets. While outdoor pedestrian datasets are abundant, large-scale indoor datasets with multi-person interactions are scarce. LocoVR's scale (131 scenes, 7,000+ trajectories) significantly exceeds comparable indoor datasets like GIMO (19 scenes, 187 trajectories) and THOR-MAGNI (4 scenes).
 
-### Strengths
+**Social Motion Behaviors.** The focus on two-person social dynamics is valuable for practical applications in home robotics and AI agents. The dataset captures proxemics-driven behaviors (yielding, maintaining social distance, negotiating narrow passages) that are often missing from single-person motion datasets.
 
-1. **Novel dataset scale and diversity**: 7000+ trajectories across 131 indoor scenes represents a significant advancement over existing indoor trajectory datasets (e.g., GIMO with 19 scenes, THOR-MAGNI with 4 scenes). This scale is crucial for generalization to unseen environments.
+**Rigorous Experimental Design.** The evaluation includes three distinct tasks with multiple baselines, an ablation study analyzing dataset scale, multi-person data, and heading information contributions, and cross-dataset generalization experiments (training on different datasets, testing on LocoReal and GIMO).
 
-2. **VR-based collection methodology**: The paper effectively argues for VR's advantages in data collection—fast scene variation, accurate spatial data, natural locomotion, and controlled social scenarios. The alignment between virtual and physical space (10m × 10m) enables realistic walking behavior.
+**Real-World Validation.** The authors created LocoReal, a small real-world test dataset, to demonstrate that models trained on VR data can transfer to physical environments. This addresses a common concern about VR-to-real transfer.
 
-3. **Social proxemics capture**: The dataset explicitly captures two-person interactions including yielding behaviors in narrow spaces, distance maintenance, and path negotiation. The analysis of minimum distance distributions (~70% within 2m) demonstrates meaningful social interactions.
+**Comprehensive Dataset Analysis.** The appendix provides detailed statistics on trajectory distances, durations, speeds, and inter-personal distances. The analysis showing ~70% of trajectories involve participants within 2m of each other quantifies the social interaction content.
 
-4. **Comprehensive evaluation design**: Three distinct tasks with multiple baselines provide thorough validation. The ablation studies effectively demonstrate the contribution of dataset scale, multi-person data, and heading direction information.
+## Weaknesses
 
-5. **Real-world validation**: The LocoReal dataset collected in physical space addresses the VR-to-real transfer concern and shows meaningful performance gains, supporting the paper's claim about VR data utility.
+**Model Architecture Limitations.** The baseline models (U-Net and Y-Net) are relatively simple compared to recent advances in trajectory prediction. The paper would benefit from comparisons with modern approaches such as transformer-based models (e.g., Trajectron++, AgentFormer) or graph neural networks that are specifically designed to capture social interactions. Without these comparisons, it is unclear whether the improvements are due to the dataset quality or the chosen architecture's suitability for the task.
 
-6. **Detailed ablation study**: The analysis of data-size-G/T variants isolates the impact of scale versus scene diversity, providing valuable insights into dataset composition effects.
+**VR-to-Real Domain Gap Underexplored.** While the authors acknowledge this limitation, deeper analysis is needed. The paper mentions differences in walking speed and non-verbal communication but does not quantify these gaps. Key questions remain: How does the distribution of LocoVR trajectories compare to real-world indoor motion patterns? Are social distances maintained similarly in VR versus physical spaces?
 
----
+**Limited Participant Diversity.** With only 32 participants (21 male, 11 female, ages 18-42), the dataset may not capture the full spectrum of human locomotion patterns. Cultural backgrounds, age-related mobility differences, and physical abilities could significantly affect social navigation behaviors. The paper briefly mentions this in Appendix A but does not quantify potential biases.
 
-### Weaknesses
+**Task Design Constraints.** The goal-reaching task, while controlled, may not capture the diversity of natural indoor behaviors. Real home navigation involves searching for objects, multitasking, interruptions, and varied emotional states. The "at least 2m" goal placement constraint and random goal assignment may produce trajectories that differ from purposeful daily activities.
 
-1. **Limited participant diversity**: Only 32 participants (21 male, 11 female, ages 18-42), all able-bodied adults. This significantly limits the dataset's representativeness for home environments, which often include children, elderly, and people with mobility impairments.
+**Missing Analysis of Social Behavior Types.** The paper claims LocoVR captures socially-motivated movements but lacks quantitative analysis of what types of social behaviors are present and in what proportions. Are there specific annotation labels for "yielding," "passing," or "following"? Without this, researchers cannot selectively train on specific social interaction types.
 
-2. **VR-real gap remains a concern**: While the paper addresses this with LocoReal, the test dataset is small (450 trajectories, 4 layouts). More extensive validation would strengthen confidence in transferability. The psychological differences between navigating real versus virtual spaces are not fully explored.
+**Limited Baselines for Some Tasks.** The goal prediction task only compares against U-Net with simple random and nearest baselines. More sophisticated goal prediction methods should be included to better establish the benchmark.
 
-3. **Task methodology concerns**: The U-Net model representing trajectories as image-based probability distributions is unconventional for trajectory prediction. Standard approaches (LSTM/Transformer-based sequence models, graph neural networks) would be more typical and may better capture temporal dependencies.
+## Questions
 
-4. **Insufficient social behavior analysis**: Despite emphasizing social proxemics as a key contribution, the paper lacks quantitative analysis of social behavior occurrences. How often do yielding, distance maintenance, or path negotiation behaviors occur? Without this, it's difficult to assess whether social dynamics are well-represented.
+1. **Social Behavior Annotation:** Does LocoVR include explicit annotations of social behavior types (e.g., yielding, collision avoidance, following)? If not, are there plans to add such labels, and how can users identify specific social interaction patterns in the data?
 
-5. **Data augmentation methodology**: The 8× augmentation (horizontal flip + rotations) may create unrealistic scenarios—rotating trajectories 180° in asymmetric scenes could produce physically implausible navigation patterns.
+2. **Trajectory Prediction Baselines:** Why were more recent trajectory prediction models (e.g., Social-STGCNN, Trajectron++, AgentFormer) not included as baselines? Would these architectures show similar improvements when trained on LocoVR?
 
-6. **Limited baseline diversity**: The compared datasets (GIMO, THOR-MAGNI) are not ideal controls—they have different characteristics (single vs. multi-person, scene count). A synthetic dataset baseline or randomly initialized model would better isolate dataset quality effects.
+3. **VR Behavior Validation:** Have the authors compared VR-collected trajectories against real-world indoor trajectories to quantify the domain gap? Even a small comparison study would strengthen the claim that VR behaviors transfer to real settings.
 
-7. **Task design limitations**: The goal-conditioned proxy task may not reflect natural indoor locomotion patterns. Daily home movements often involve less purposeful goal-seeking and more exploratory behavior.
+4. **Scale Ablation:** The ablation study shows performance drops with smaller datasets, but is there a saturation point where additional scenes/trajectories provide diminishing returns? This would help practitioners decide how much data is sufficient for different applications.
 
-8. **Missing comparison**: The paper does not compare against GTA-IM or HUMANISE, which also use synthetic data and include multiple scenes, despite these appearing in the related work table.
+5. **Participant Pairing Effects:** Given that some pairs were friends and others were strangers, did the authors observe differences in social navigation behaviors? Is this information encoded in the dataset for analysis?
 
----
+6. **Multi-Person Scalability:** The paper focuses on two-person interactions. What modifications would be needed to extend this framework to multi-person scenarios (3+ people), and are there plans for such extensions?
 
-### Questions for Authors
+7. **Scene Semantic Information:** The paper mentions semantic maps are available. How do semantic scene features (furniture types, room functions) correlate with navigation patterns? This could provide valuable insights for future work.
 
-1. **Dataset novelty claim**: The paper states LocoVR is the "first large-scale indoor trajectory dataset featuring two-person motions." How does this differ from THOR-MAGNI, which also contains multi-person indoor trajectories? Please clarify the distinguishing characteristics.
+8. **Training Details:** What is the training time comparison between models trained on LocoVR versus smaller datasets? Is there a trade-off between dataset scale and computational requirements?
 
-2. **Social behavior quantification**: What percentage of trajectories exhibit clear social navigation behaviors (e.g., detouring to avoid other person, yielding in narrow spaces)? How were these behaviors identified and labeled?
+## Summary
 
-3. **Trajectory encoding rationale**: Why choose image-based U-Net representation over sequence models (LSTM/Transformer) for trajectory prediction? What motivated this architectural decision?
-
-4. **Augmentation realism**: How do 180° and 270° rotations affect model learning? These rotations may create physically implausible scenarios in asymmetric scenes. Were these tested for negative impact?
-
-5. **Participant instructions**: Were participants given any instructions about social behavior, or were all proxemic interactions naturally emergent? This affects the ecological validity of social motion data.
-
-6. **Dataset accessibility**: What are the licensing terms and access procedures for LocoVR? Is the dataset fully available or subject to restrictions?
-
-7. **Generalization boundaries**: Beyond indoor home environments, how well would models trained on LocoVR transfer to other indoor settings (offices, hospitals, retail)? Are there domain-specific features that would limit transfer?
-
-8. **Statistical significance**: Are the performance improvements between training datasets statistically significant? The paper reports standard deviations but doesn't provide p-values or confidence intervals.
-
-9. **Avatar influence**: How might the virtual avatars (SMPL meshes) affect participant behavior compared to bare VR controllers? Did you conduct any validation on avatar realism's impact on behavior?
-
-10. **Path efficiency discrepancy**: Path efficiency (0.81) is comparable to THOR-MAGNI despite LocoVR being collected in "natural" (uncontrolled) settings. Why might this similarity exist, and what does it imply about the data quality?
-
----
-
-### Additional Notes
-
-The paper's treatment of two-person interactions as the primary social unit is reasonable given home environment statistics (60% single or two-person households), but limits applicability to crowded scenarios. The ethical implications section appropriately acknowledges demographic limitations, though more aggressive data collection strategies to diversify participants would strengthen the contribution.
+LocoVR is a valuable contribution to the field of human trajectory prediction and social navigation. The dataset's scale and focus on indoor multi-person interactions fill an important gap. However, the evaluation would be strengthened by including more modern baseline architectures and deeper analysis of the VR-to-real transfer. The paper opens promising directions for future work in socially-aware AI systems for indoor environments.
 
 # Actual Human Scores
 Individual reviewer scores: [6.0, 6.0, 8.0, 6.0, 3.0]
@@ -703,57 +567,67 @@ Binary outcome: Accept
 === CALIBRATION EXAMPLE 10 ===
 
 # Review
-# Review of "Fine Tuning Can Help Detect Pretraining Data from Large Language Models"
+# Review: Fine-tuning Can Help Detect Pretraining Data from Large Language Models
 
 ## Summary
 
-This paper introduces **Fine-tuned Score Deviation (FSD)**, a novel method for detecting whether text was part of an LLM's pretraining data. The key insight is that after fine-tuning an LLM on a small set of previously unseen (non-member) data from a specific domain, the perplexity scores decrease significantly more for other non-members compared to actual members. FSD exploits this differential by measuring the score deviation between the pretrained and fine-tuned models as a membership signal. The method is designed to be compatible with existing scoring functions (Perplexity, Min-k%, Zlib, Lowercase) and consistently improves their detection performance. Extensive experiments across multiple benchmarks (WikiMIA, ArXivTection, BookMIA, BookTection, Pile) and models (LLaMA, GPT-J, OPT, Pythia, NeoX) demonstrate substantial AUC improvements (e.g., from 0.62 to 0.91 on WikiMIA with OPT-6.7B).
+This paper proposes Fine-tuned Score Deviation (FSD), a novel method for detecting pretraining data in large language models. The key insight is that fine-tuning a model on a small set of non-member data (data known not to be in the pretraining corpus) creates asymmetric changes in model scores: non-members experience larger perplexity decreases than members. The method computes the deviation between scores from the original and fine-tuned models as a membership signal.
+
+The approach consists of three steps: (1) collect non-member data from the same domain as the target text (e.g., Wikipedia articles published after model release), (2) fine-tune the model using LoRA on this auxiliary data, and (3) use the score deviation between original and fine-tuned models as the membership metric. FSD can be applied on top of existing scoring functions like Perplexity, Min-k%, Zlib, and Lowercase.
+
+The authors evaluate FSD on multiple benchmarks (WikiMIA, ArXivTection, BookMIA, BookTection, Pile) across various open-source LLMs (LLaMA, GPT-J, OPT, Pythia, NeoX), demonstrating substantial AUC improvements over baselines.
+
+---
 
 ## Strengths
 
-1. **Novel and well-motivated insight**: The observation that fine-tuning on unseen data causes differential perplexity shifts between members and non-members is insightful and represents a new direction in membership inference for LLMs.
+**Novelty and Insight.** The core observation—that fine-tuning on non-members creates differential perplexity shifts—is intuitive yet underexplored in the literature. The method cleverly leverages temporal information (data timestamps vs. model release dates) to construct reliable non-member sets, which is a practical assumption for many real-world scenarios.
 
-2. **Strong empirical results**: The paper demonstrates significant and consistent improvements across diverse datasets, models, and scoring functions. The improvements are substantial (AUC gains of 0.15-0.40+ in many cases) and the method scales across model sizes (7B to 30B).
+**Strong Empirical Results.** The improvements are substantial across datasets and models. For instance, AUC increases from 0.62 to 0.91 on WikiMIA with OPT-6.7B, and TPR@5%FPR improves from 0.10 to 0.81 on ArXivTection with LLaMA-7B. These are not marginal gains but significant performance jumps.
 
-3. **General framework**: FSD is presented as a general methodology that can enhance any scoring function, which is valuable for practical deployment and future extensions.
+**Comprehensive Evaluation.** The paper evaluates on multiple datasets (WikiMIA, ArXivTection, BookMIA, BookTection, Pile with 20 subsets), multiple models (5 different architectures), and multiple scoring functions. The ablation studies (fine-tuning data size, different fine-tuning methods, member vs. non-member fine-tuning) are thorough.
 
-4. **Data efficiency**: The method achieves good results with relatively small fine-tuning datasets (100-300 non-members), demonstrating practical applicability.
+**Practical Applicability.** The method is data-efficient—achieving strong results with as few as 30-100 fine-tuning examples—and compatible with any existing scoring function. The assumption that one can collect post-release domain data is realistic for many applications like detecting benchmark contamination or copyrighted books.
 
-5. **Comprehensive ablation studies**: The paper thoroughly investigates the impact of fine-tuning data size, different fine-tuning methods (LoRA, AdaLoRA, IA3), model sizes, cross-domain generalization, and temporal shift mitigation.
+**Addressing Temporal Shift.** The authors acknowledge and empirically address the temporal distribution shift issue in WikiMIA by conducting experiments with timestamp removal and replacement. This is a notable strength as recent work has highlighted this confound in existing benchmarks.
 
-6. **Real-world relevance**: The method addresses important concerns about data contamination and copyright infringement in LLM training.
+---
 
 ## Weaknesses
 
-1. **Domain-matching assumption**: The method critically depends on obtaining non-member data from the *same domain* as the test data. This is a significant practical limitation. The paper acknowledges it but doesn't adequately address scenarios where domain-matched unseen data is unavailable. The cross-domain experiments (Table 16) show complete failure when training on WikiMIA and testing on ArXivTection.
+**Assumption on Non-Member Availability.** The method requires collecting non-member data from the *same domain* as the target text. While this works for Wikipedia events and arXiv papers (where publication dates provide clear temporal boundaries), it is less clear how well it generalizes to domains where such boundaries are ambiguous or unavailable. The paper could more explicitly discuss failure modes when domain-specific non-member data is scarce.
 
-2. **Temporal shift confounding**: The paper acknowledges temporal differences between members and non-members in WikiMIA (e.g., 2014 events vs. 2023 events). While experiments with timestamp manipulation (Deletion/Replacement) show reduced but still positive performance, it's unclear what fraction of the improvement stems from detecting true membership versus temporal artifacts. This is a fundamental validity concern.
+**Computational Overhead.** Fine-tuning—even with LoRA—adds computational cost compared to standard scoring methods. The paper does not provide timing or resource comparisons. For practitioners deciding between methods, understanding this trade-off is important.
 
-3. **Missing stronger baselines**: The paper compares against Perplexity, Min-k%, Zlib, and Lowercase, but doesn't compare against more recent methods like Min-k%++ (Zhang et al., 2024), which could serve as stronger baselines.
+**Limited Analysis on False Positives.** While AUC and TPR@5%FPR are reported, the paper lacks analysis on *why* certain members and non-members are misclassified. Understanding failure cases would strengthen the paper.
 
-4. **Limited discussion of why the mechanism works**: The paper provides empirical observation but lacks theoretical justification for why fine-tuning affects member and non-member scores differently. This limits understanding of when and why the method might fail.
+**Baselines Are Sometimes Near Random.** On the Pile dataset (Table 2), baseline methods achieve AUC ~0.50, suggesting near-random performance. This raises questions about the baseline implementations or the inherent difficulty of the dataset. The authors should comment on why baselines perform so poorly and whether FSD's gains are more about fixing baseline failures than a fundamental improvement.
 
-5. **Black-box limitation**: The method assumes access to model weights and the ability to fine-tune, which limits applicability to commercial APIs that don't expose these capabilities, despite the paper's claims about commercial API compatibility.
+**Dependence on Fine-Tuning Quality.** The ablation on fine-tuning parameters (Table 17) shows sensitivity to learning rate. More discussion on robustness to hyperparameter choices and potential for overfitting to the fine-tuning set would be valuable.
 
-6. **Validation set dependency**: The threshold ε is determined using a validation set. In real-world detection scenarios, this labeled validation set may not be available.
+---
 
-7. **Potential overfitting concern**: Fine-tuning on a small, specific set of non-members could lead to overfitting to that particular data distribution rather than learning generalizable membership signals.
+## Questions
 
-## Questions for Authors
+1. **Domain Mismatch Robustness.** In Table 16, the method fails when fine-tuning on WikiMIA and evaluating on ArXivTection. Could the authors quantify how much domain overlap is necessary for FSD to be effective? Is there a principled way to estimate domain similarity?
 
-1. **Domain generalization**: The cross-domain experiment shows complete failure (Table 16, ArXiv/Wiki row). Can you elaborate on the failure mode and whether this is a fundamental limitation of the approach?
+2. **Hyperparameter Sensitivity.** The results in Table 17 show learning rate sensitivity. Could the authors provide guidance on learning rate selection without access to ground-truth validation labels? In realistic deployment, how would one tune these hyperparameters?
 
-2. **Temporal shift quantification**: What percentage of the AUC improvement on WikiMIA can be attributed to detecting temporal differences versus actual membership? Have you conducted experiments with datasets where temporal confounds are controlled?
+3. **Threshold Selection.** The paper mentions determining the threshold ϵ by maximizing accuracy on a validation set. How sensitive is performance to this threshold? How many labeled examples are needed for threshold calibration?
 
-3. **Baseline comparisons**: Why wasn't Min-k%++ (Zhang et al., 2024) included as a baseline? This seems like a significant omission given it's a stronger recent baseline.
+4. **Comparison to Reference-Based Methods.** Recent work on reference-based MIAs (e.g., using smaller reference models) also aims to improve membership inference. Could the authors compare FSD to these approaches or discuss complementarity?
 
-4. **Mechanism explanation**: The observation that fine-tuning "memorizes" non-members more than members is interesting but not fully explained. Is this due to overfitting dynamics, loss landscape differences, or something else?
+5. **Non-Member Contamination.** What happens if some collected "non-member" data inadvertently contains members (e.g., due to incomplete temporal information)? How robust is FSD to noise in the fine-tuning set?
 
-5. **Practical deployment**: For a practitioner who wants to detect contamination in a new domain, what is the recommended strategy if domain-matched non-members are not available?
+6. **Computational Cost.** Could the authors provide wall-clock time comparisons between FSD and baseline methods? This would help readers understand the practical cost-benefit trade-off.
 
-6. **Computational cost**: What are the GPU hours required for fine-tuning across different model sizes, and how does this compare to just computing baseline scoring functions?
+7. **Effect of Fine-Tuning Duration.** The paper uses 3 epochs. Would fewer epochs (less overfitting to non-members) or more epochs change the relative score deviation in predictable ways?
 
-7. **Threshold selection**: How robust is the method to threshold choice, and what strategies would you recommend when a validation set is unavailable?
+---
+
+## Overall Assessment
+
+This paper presents a clever and well-motivated approach to pretraining data detection with strong empirical results. The core insight—that fine-tuning on non-members reveals membership information—is intuitive and effectively leveraged. The method is simple, data-efficient, and broadly applicable. However, the practical limitations around domain-specific non-member availability and the computational overhead merit clearer discussion. The paper would benefit from additional analysis of failure cases and hyperparameter robustness.
 
 # Actual Human Scores
 Individual reviewer scores: [6.0, 8.0, 6.0, 5.0]
@@ -767,57 +641,75 @@ Binary outcome: Accept
 
 ## Summary
 
-This paper introduces **Process Advantage Verifiers (PAVs)** — a novel approach to automated process reward models for improving LLM math reasoning. The core contribution is the insight that process rewards should measure "progress" — specifically, the change in likelihood of producing a correct answer before and after taking a step, as computed under a *prover* policy distinct from the base policy. The paper provides:
+This paper introduces **Process Advantage Verifiers (PAVs)**, a novel approach to designing process rewards for improving LLM reasoning via test-time search and online reinforcement learning. The key insight is that effective process rewards should measure **progress**—the change in likelihood of producing a correct response before and after taking a reasoning step—computed under a **prover policy** distinct from the base policy being optimized.
 
-1. Theoretical analysis characterizing "good" prover policies as those that can distinguish steps taken by the base policy (high variance in advantages) while remaining aligned with the base policy's assessments
-2. A training procedure for PAVs using rollouts from the prover policy
-3. Empirical validation on Gemma 2B/9B/27B models showing PAVs improve test-time search by 8% accuracy and 1.5–5× compute efficiency, and online RL by 6× sample efficiency with +7% accuracy gains
+The authors argue that conventional process reward models (PRMs) based on Q-values have fundamental limitations: Q-values conflate the "promise" of previous states with the value of the current action, making it difficult to distinguish good steps from promising prefixes. Instead, using **advantages** (the difference between Q-values of consecutive states) provides a cleaner measure of step-level progress.
+
+A central theoretical contribution is the characterization of **complementary provers**: policies that can distinguish steps taken by the base policy (high variance in advantage values) while remaining reasonably aligned with the base policy's preferences. Theorem 3.1 provides a lower bound on policy improvement, showing improvement scales with prover distinguishability and alignment. Notably, the analysis reveals that weaker provers can sometimes improve stronger base policies—a counter-intuitive finding with practical implications.
+
+Empirically, the paper demonstrates:
+- **Test-time search**: PAVs achieve >8% higher accuracy and 1.5-5× better compute efficiency compared to ORM-based best-of-N re-ranking across Gemma 2B/9B/27B models
+- **Online RL**: Dense rewards from PAVs yield 6× better sample efficiency and +7% accuracy improvement over outcome-only rewards
 
 ## Strengths
 
-**Conceptual novelty**: The key insight that process rewards should capture *progress* (advantages) rather than absolute Q-values or step correctness is original and well-motivated. The paper makes a compelling case that Q-values conflate state evaluation with action evaluation, leading to poor exploration in beam search.
+**1. Conceptual Clarity and Novel Framework.** The paper provides a principled theoretical framework for understanding why advantages (progress) rather than Q-values should be used as process rewards. The distinction between "exploiting" high-value states versus "exploring" steps that make progress is clearly articulated and motivated through both intuitive examples (Figure 2) and formal analysis.
 
-**Theoretical contribution**: Theorem 3.1 provides a formal lower bound on policy improvement that depends on two key quantities: (i) the variance of prover advantages (distinguishability) and (ii) alignment between prover and base policy advantages. This characterization is meaningful and guides practical prover selection.
+**2. Theoretical Grounding.** Theorem 3.1 and the subsequent analysis provide formal justification for the design choices. The characterization of complementary provers through distinguishability and alignment terms offers concrete guidance for prover selection. The observation that Best-of-K policies provide a natural prover class with theoretical guarantees (Remark 3.1) is practically useful.
 
-**Comprehensive evaluation**: The experiments are thorough:
-- Multiple model sizes (2B, 9B, 27B)
-- Both test-time search and online RL settings
-- Meaningful baselines including ORM, PRM-Q (Snell et al.), PAV-as-ORM, and AlphaLLM
-- Clear quantitative improvements with confidence intervals
+**3. Counter-Intuitive Empirical Findings.** The result that weaker provers (e.g., 2B for a 9B base) can outperform stronger provers is intriguing and well-supported by both theory and experiments. This challenges the natural assumption that stronger verifiers always help more.
 
-**Practical insights**: The empirical finding that Best-of-K policies with K=4 serve as good provers is actionable. The surprising result that a *weaker* 9B prover outperforms a stronger 27B prover for the 27B base policy nicely validates the theoretical claim about complementary provers.
+**4. Comprehensive Evaluation.** The paper evaluates both test-time search and online RL applications, showing consistent benefits. The comparison with prior PRM approaches (Math-Shepherd, etc.) and the ablation over prover strengths adds depth.
 
-**First significant RL results**: The paper correctly claims this is "one of the first results" showing substantial gains from PRMs in online RL (6× sample efficiency), addressing a key gap in prior work where PRMs only improved 1–2%.
+**5. Practical Workflow.** Appendix D provides a clear recipe for collecting training data and training PAVs, including guidance on the n_mc/n_cov ratio and the "first pit" sampling strategy.
+
+**6. Connection to Reward Shaping.** Appendix I correctly identifies that PAV advantages satisfy the potential-based reward shaping condition, ensuring policy invariance—a theoretically sound property.
+
+**7. Didactic Analysis.** The planted sub-sequence experiment in Section 3.3 provides clean empirical validation of theoretical claims in a controlled setting.
 
 ## Weaknesses
 
-**Hyperparameter sensitivity**: The choice of α requires tuning (α=0.5 for test-time search, α=3–5 for RL), and the paper lacks guidance on transferring this to new settings. The robustness claims ("any α in range X works") need more systematic evaluation.
+**1. Limited Evaluation Scope.** All experiments are conducted on the MATH dataset. While math reasoning is an important benchmark, the paper would benefit from evaluation on additional reasoning domains (e.g., code generation, logical reasoning, or multi-step tasks like GSM8K, AIME problems) to assess generalizability.
 
-**Prover selection is still somewhat heuristic**: While Theorem 3.1 characterizes good provers theoretically, the paper does not provide a practical algorithm for automatically selecting provers. The BoK(π) recommendation with K=4 is empirically validated but lacks principled automated selection.
+**2. Model Scale Limitations.** The largest model tested is Gemma 27B. Given current frontier model capabilities, it remains unclear whether PAVs would provide similar benefits for models in the 70B-500B parameter range, or for proprietary models like GPT-4/Claude where the prover-base policy relationship may differ.
 
-**Dataset limitation**: All experiments are on the MATH dataset. Generalization to other reasoning domains (coding, logical reasoning, multi-step QA) is unclear and potentially non-trivial.
+**3. Hyperparameter Sensitivity.** The paper acknowledges tuning α (the weighting between Q-values and advantages) for each base policy, but provides limited guidance on how to set it for new domains or models. The "robust range" claimed is still quite wide (0.1-0.7 for search, 1.5-5.5 for RL), and practitioners need validation sets for tuning.
 
-**Training overhead**: The paper acknowledges PAVs require ~10× more training data than ORMs. The discussion of computational cost (Appendix H) shows favorable amortized cost but the absolute training cost may be prohibitive for some applications.
+**4. Prover Selection Remains Open.** While BoK policies with K>1 are identified as reasonable provers, the paper does not provide a principled method for selecting the optimal K. Figure 5(b) shows K=4 is best for one setting, but this requires empirical tuning. The question of whether prover policies should evolve alongside the base policy during RL is not addressed.
 
-**Limited comparison with related work**: The paper could better situate PAVs against other recent automated PRM approaches (e.g., Math-Shepherd, ARM). The comparison in Figure 12 is helpful but could be expanded.
+**5. Computational Overhead Under-Reported.** Appendix H discusses training costs but presents the comparison somewhat favorably. PAV training requires ~10× more data than ORM training (due to per-step annotations), and scoring requires processing all prefixes rather than just the final output. While amortized costs are claimed to be favorable, practitioners should be aware of upfront costs.
 
-**Theoretical gaps**: The tabular analysis assumes oracle access to advantages and Q-values. The extension to learned verifiers in practice involves approximation errors that are not formally analyzed.
+**6. Simplified Theoretical Setting.** Theorem 3.1 is proven in the tabular setting with oracle access to Q-values and advantages. The gap between this idealized analysis and the practical setting where verifiers are learned (with potential approximation errors) is not formally addressed.
 
-## Questions for Authors
+**7. Limited Discussion of Failure Modes.** The paper focuses on positive results but provides minimal discussion of when PAVs might fail. For instance, Appendix G shows that using Q[μ] instead of A[μ] leads to degenerate "REPHRASE THE PROBLEM" behaviors, but more analysis of failure modes would be valuable.
 
-1. **Prover selection across settings**: The paper recommends Bo4(π) as a prover, but this choice seems to vary (9B prover best for 27B base). How should practitioners automatically determine the optimal prover for their setting?
+**8. Missing Comparisons.** The paper compares against PRM baselines but does not compare against other exploration strategies for LLMs, such as intrinsic motivation methods, curiosity-driven exploration, or recent tree search methods beyond beam search.
 
-2. **Generalization to other tasks**: Are the PAV gains specific to mathematical reasoning, or do the authors expect similar benefits for code generation, logical reasoning, or other multi-step tasks?
+**9. Discount Factor Experiment Under-Explained.** The experiment in Appendix E on discounted strong provers is interesting but the negative result is not thoroughly analyzed. Why exactly does discounting not help strong provers distinguish steps?
 
-3. **Training efficiency**: Can the 10× training data requirement for PAVs be reduced through curriculum learning, better data collection strategies, or architectural improvements?
+**10. Data Collection Complexity.** The "first pit" strategy requires substantial engineering and hyperparameter decisions (thresholds for "high value" states, etc.). The paper could benefit from more ablations on these design choices.
 
-4. **Alpha transfer**: The paper shows α needs tuning across search vs RL. How robust is α to changes in base policy strength, model size, or task difficulty?
+## Questions
 
-5. **Failure modes**: Are there cases where PAVs actually hurt performance or are comparable to ORMs? What determines when PAVs are worthwhile?
+**1. Prover Evolution During RL.** As the base policy improves during online RL, the optimal prover may change. The paper uses fixed PAVs during RL training. Have the authors experimented with periodically updating the prover as the base policy improves? Would this provide additional gains?
 
-6. **Alternative prover policies**: Beyond BoK, could learned verifier ensembles or mixture-of-experts provers serve as better complementary provers?
+**2. Scaling to Frontier Models.** Given the theoretical requirement that provers be "complementary" to base policies, how would the authors recommend applying PAVs when the base policy is already near frontier-level? Would using a stronger model (e.g., GPT-4) as prover for a weaker base model still satisfy complementarity, or would the alignment term suffer?
 
-7. **RL training details**: The claim of 6× sample efficiency is impressive. Could the authors clarify whether this accounts for the additional compute per iteration when scoring multiple steps with PAVs vs. a single score with ORMs?
+**3. Sensitivity to K in BoK Provers.** Remark 3.1 suggests K>1 is beneficial, but empirical results show an optimal K around 4. Is there a theoretical or practical guidance for selecting K that generalizes across model families and scales?
+
+**4. Computational Cost for Large-Scale Deployment.** For practitioners considering PAVs, what is the rough breakdown of computational costs: (a) training data collection (rollouts), (b) PAV training, (c) test-time inference? How do these compare to ORM-based approaches end-to-end?
+
+**5. Handling Multi-Step Reasoning with Variable Step Counts.** The current formulation assumes a fixed maximum number of steps H. How does the approach handle problems where optimal reasoning requires highly variable step counts?
+
+**6. Robustness to Distribution Shift.** PAVs are trained on a specific distribution of problems. How robust are they to out-of-distribution test problems? Have the authors evaluated on held-out mathematical domains or different reasoning tasks?
+
+**7. Relationship to Other RL Techniques.** The advantages A[μ] resemble baseline subtraction in actor-critic methods. How does PAV training compare to using learned value functions as baselines in standard policy gradient methods for LLMs?
+
+**8. Explainability of Prover Selection.** Figure 5(c) shows that 9B policy benefits from 2B prover, and 27B benefits from 9B prover. Is there a pattern (e.g., optimal prover is ~3× smaller than base) that generalizes? What about the case where base and prover have similar scales?
+
+**9. Comparison with AlphaLLM Exploration.** Appendix K shows PAVs outperform AlphaLLM's uncertainty-based exploration. However, the comparison uses the authors' implementation of AlphaLLM. Would it be possible to compare against the original AlphaLLM implementation or other recent exploration methods?
+
+**10. Reproducibility of α Tuning.** The paper describes a two-layer search procedure for α. Could the authors provide more details on how many validation examples and compute were required for this tuning? Is there potential to develop a theoretical guidance for α based on policy/prover properties?
 
 # Actual Human Scores
 Individual reviewer scores: [8.0, 8.0, 6.0, 8.0, 8.0, 6.0]
@@ -827,83 +719,61 @@ Binary outcome: Accept
 === CALIBRATION EXAMPLE 12 ===
 
 # Review
-# Review: ADIFF: Explaining Audio Difference Using Natural Language
+# Review of "ADIFF: Explaining Audio Difference Using Natural Language"
 
 ## 1. Summary
 
-This paper introduces the novel task of **audio difference explanation** — generating natural language descriptions that explain the differences between two audio recordings. The authors make three main contributions: (1) a new task definition with three tiers of explanation complexity (concise, brief, and detailed), (2) two new datasets (ACD and CLD) derived from AudioCaps and Clotho using LLM-generated explanations with human verification on test sets, and (3) ADIFF, a prefix-tuning-based model with a cross-projection layer and three-stage training process. The model combines HTSAT audio encoder with GPT2 language model and incorporates position captioning for improved audio grounding. Extensive experiments with both objective metrics (BLEU, METEOR, SPIDEr) and human evaluation demonstrate improvements over naive baselines and Qwen-Audio (a state-of-the-art audio-language model).
+This paper introduces a new task—audio difference explanation—which aims to generate natural language descriptions comparing two audio files. The authors make several contributions: (1) They create two new datasets (ACD and CLD) derived from AudioCaps and Clotho, using LLMs to generate three tiers of explanations ranging from concise event descriptions to comprehensive analyses including semantics and listener emotions. (2) They propose ADIFF, a prefix-tuning based model that incorporates a cross-projection module with separator tokens, position captioning for better audio grounding, and a three-stage training process. (3) They conduct extensive ablations studying cross-projection effects, language model scaling, and training stages. The model is evaluated using both standard captioning metrics and human evaluation, showing improvements over a naive baseline and the Qwen-Audio model.
 
 ## 2. Strengths
 
-**Novelty and Task Definition:**
-- The task of audio difference explanation is genuinely novel and fills a gap in the audio-language literature
-- The three-tier hierarchy (concise → brief → detailed) provides a principled way to evaluate models at different granularity levels
-- The task has practical applications in audio forensics, quality assessment, and audio generation
+- **Novel task formulation**: The paper identifies an important and previously unexplored problem—generating natural language explanations of audio differences. This has practical applications in forensics, quality assessment, and generative audio evaluation.
 
-**Comprehensive Analysis:**
-- Extensive ablation studies covering: baseline architecture, cross-projection effects, language model scaling, position captioning, and stage-3 finetuning
-- Language-only ablation (random encoder weights) to isolate linguistic learning from true audio understanding
-- Analysis of entropy and information density across tiers validates the tiered design
+- **Comprehensive dataset creation**: The authors create two datasets with three tiers of explanations of increasing complexity, providing a benchmark for future work. The human verification of test sets adds reliability.
 
-**Practical Contributions:**
-- The hallucination detection mechanism using frozen HTSAT predictions is practical and well-motivated
-- Position captioning (training on "caption audio 1" vs "caption audio 2") addresses a real problem of distinguishing between similar audio inputs
-- Code and datasets will be publicly released
+- **Thoughtful model design**: The cross-projection layer with separator tokens is a sensible approach to help the model distinguish between two audio inputs. The analysis showing that this layer stores difference attributes in the text prefix is insightful.
 
-**Evaluation Rigor:**
-- Both objective metrics and human evaluation with clear rubrics (correctness, granularity, readability)
-- Evaluation across multiple audio domains (studio recordings, FSD50K, GTZAN genres)
+- **Thorough ablation studies**: The paper systematically investigates multiple architectural choices (cross-projection, LM scaling, position captioning, fine-tuning stages), providing useful insights for future audio-language model development.
+
+- **Interesting finding on LM scaling**: The observation that smaller LMs (128M, 256M) perform better than larger ones (774M, 1.5B) under limited compute is counter-intuitive and valuable for practitioners with resource constraints.
+
+- **Multiple evaluation methods**: Combining objective metrics with human evaluation across multiple dimensions (correctness, granularity, readability) provides a more complete picture than metrics alone.
 
 ## 3. Weaknesses
 
-**Architectural Innovation:**
-- The core architectural contribution (cross-projection layer with separator token) is relatively straightforward — essentially applying transformer layers to concatenated audio prefixes
-- Heavy reliance on existing pretrained components (HTSAT, GPT2) with standard prefix-tuning
-- The interpretation of cross-projection outputs (Table 11, Appendix J) is qualitative and uses approximate nearest-neighbor matching in embedding space
+- **Dataset quality concerns**: The training data is entirely LLM-generated from existing captions, not human-annotated for this specific task. While test sets are human-verified, the quality of training data—and potential propagation of LLM hallucinations into the training set—is not analyzed. The authors should report what percentage of generated explanations required modification during verification.
 
-**Dataset Quality Concerns:**
-- Training data relies entirely on LLM-generated explanations without human verification; only test set explanations are verified
-- Limited details on prompting (exact prompts for tier generation not shown in main text, relegated to appendix)
-- Table 23 shows LLM-based density scoring rather than human evaluation for dataset quality validation
+- **Limited baselines**: Qwen-Audio is the only compared Audio-Language Model, selected primarily because it supports dual audio inputs. The paper would benefit from implementing additional baselines, such as concatenating audio embeddings and feeding them to other ALMs, or using a single ALM to independently caption both audios and then using an LLM to compare them.
 
-**Comparative Baselines:**
-- Only one comparison model (Qwen-Audio) — this is understandable since most ALMs don't support two audio inputs, but limits the competitive landscape
-- Qwen-Audio uses 7B parameters vs ADIFF's 128M parameters — the comparison is somewhat unfair, though authors acknowledge this
-- No comparison with recent image difference captioning methods adapted to audio
+- **Unfair comparison with Qwen-Audio**: The paper compares ADIFF (trained on ACD/CLD) against Qwen-Audio zero-shot. While the fine-tuned Qwen-Audio variants are included, it's unclear whether the comparison is fair given Qwen-Audio's 7B parameters versus ADIFF's 128M LLM. The human evaluation shows Qwen-Audio (F) outperforming ADIFF in some metrics (readability, granularity on FSD50K), suggesting the larger model may have advantages the paper downplays.
 
-**Performance Limitations:**
-- Human evaluation scores average ~3.5/5 even for the best model, indicating significant room for improvement
-- Tier 3 explanations consistently underperform Tier 2 (Table 2), suggesting the model struggles with detailed semantic/emotional descriptions
-- Cross-projection ablation (Table 14, Appendix O) shows diminishing advantage when LLM is finetuned
+- **Tier 3 performance**: The model struggles significantly with detailed (Tier 3) explanations, achieving notably lower SPIDEr scores compared to Tiers 1 and 2. This limits practical utility for applications requiring comprehensive audio analysis.
 
-**Evaluation Methodology:**
-- The paper uses audio captioning metrics (BLEU, SPICE, CIDEr) for evaluation, which may not be ideal for comparative reasoning tasks
-- SPIDEr as the "primary metric" is not well-justified for difference explanation
+- **Hallucination not quantified**: The paper mentions hallucination detection using audio event probabilities from HTSAT, but provides no quantitative analysis of hallucination rates or comparison between models.
+
+- **Human evaluation methodology unclear**: The paper mentions five professionals for human evaluation but provides no information on inter-annotator agreement, which is critical for subjective evaluations.
+
+- **Position captioning results mixed**: While position captioning improves ACD results, it yields mixed results on CLD. The explanation that AudioCaps contains more speech is reasonable, but this suggests the approach may not generalize well to diverse audio types.
+
+- **Missing analysis on similar audio pairs**: A key challenge mentioned is distinguishing perceptually similar sounds, but there's no dedicated analysis on how well the model handles audio pairs that are genuinely similar versus obviously different.
 
 ## 4. Questions
 
-1. **Dataset Generation Protocol:** How exactly are audio pairs selected for prompting? The paper mentions excluding i to i+4th audio — what is the rationale for this exclusion, and does it introduce any selection bias in the dataset?
+1. **Training data quality**: What percentage of LLM-generated explanations required modification during human verification? Were there systematic issues in the generated explanations?
 
-2. **Tier Difficulty Analysis:** The paper attributes Tier 2's higher scores to linguistic simplicity. Could an alternative explanation be that the model overfits to Tier 2's linguistic patterns without genuine audio understanding? Have the authors analyzed error patterns across tiers?
+2. **Human evaluation details**: What was the inter-annotator agreement (e.g., Krippendorff's alpha) across the three dimensions? How were disagreements resolved?
 
-3. **Cross-Projection Mechanism:** The interpretation in Appendix J shows the text prefix storing attributes, but the analysis is qualitative. Is there quantitative evidence (e.g., attention visualization, probing classifiers) that the cross-projection layer learns meaningful difference representations?
+3. **Dataset pair selection**: How were audio pairs selected for the datasets? Were they random pairs, or were they curated to include challenging comparisons (similar sounds, same audio events)?
 
-4. **Generalization:** All evaluation is on AudioCaps/Clotho-derived datasets. How does the model perform on audio difference pairs from completely different domains (e.g., comparing environmental recordings vs. musical performances)?
+4. **Hallucination analysis**: Can you provide quantitative analysis of hallucination rates across models? Does cross-projection reduce hallucinations?
 
-5. **Hallucination Analysis:** The hallucination detection relies on frozen HTSAT predictions. What is the detection accuracy, and how often do the model's errors not align with HTSAT prediction errors?
+5. **Computational cost**: What are the training and inference costs of ADIFF compared to Qwen-Audio fine-tuning?
 
-6. **Tier-3 Performance Gap:** What specific aspects of Tier 3 explanations does the model struggle with most? Is it the emotional/psychological components, fine-grained acoustic descriptions, or comparative reasoning structure?
+6. **Error analysis**: Beyond qualitative examples, can you provide systematic error analysis? What types of audio pairs or difference types does the model consistently fail on?
 
-7. **Training Efficiency:** Figure 4 shows larger LMs need more epochs. Was any attempt made to scale training tokens alongside model size (as in Chinchilla scaling laws), or is the compute scaling analysis incomplete?
+7. **Tier 2 anomaly**: Why does Tier 2 consistently achieve higher scores than Tiers 1 and 3? The explanation about linguistic structure is plausible, but shouldn't the ground truth quality affect this?
 
-8. **WavCaps Degradation:** Appendix P shows performance degradation when adding WavCaps data. This is attributed to distribution shift, but could this also indicate that the model learns to rely on linguistic patterns from the diverse WavCaps captions rather than true audio differences?
-
-## Minor Concerns
-
-- The Boston Marathon anecdote in the introduction is compelling but lacks a direct connection to the paper's methodology
-- Several equations in Section 3.2 appear to have formatting issues (missing content)
-- Table numbering inconsistency: Table 3 header spans multiple columns that should be clearly delineated
-- The paper would benefit from more diverse qualitative examples showing failure cases
+8. **Position captioning**: Does the model trained with position captioning actually learn to distinguish "audio 1" from "audio 2," or does it still make attribution errors?
 
 # Actual Human Scores
 Individual reviewer scores: [6.0, 8.0, 8.0, 8.0]
@@ -913,68 +783,91 @@ Binary outcome: Accept
 === CALIBRATION EXAMPLE 13 ===
 
 # Review
-# Review: SAM 2: Segment Anything in Images and Videos
+# Review of "SAM 2: Segment Anything in Images and Videos"
 
 ## Summary
 
-This paper presents Segment Anything Model 2 (SAM 2), a foundation model that extends the original SAM architecture to handle video segmentation in addition to image segmentation. The authors introduce a streaming memory architecture that allows the model to maintain object context across video frames, enabling interactive segmentation and tracking. A key contribution is the SA-V dataset—the largest video segmentation dataset to date with 35.5M masks across 50.9K videos—collected through a multi-phase data engine. SAM 2 demonstrates strong zero-shot transfer capabilities across 17 video and 37 image benchmarks, achieving 3× fewer interactions needed compared to prior approaches while maintaining real-time processing speeds (43.8 FPS with Hiera-B+).
+This paper presents SAM 2, a foundation model for promptable visual segmentation in both images and videos. The work extends the original Segment Anything Model (SAM) from static images to the video domain through three main contributions:
+
+1. **Task Definition**: The Promptable Visual Segmentation (PVS) task, which generalizes image segmentation to video by allowing prompts (clicks, boxes, masks) on any frame to define objects that are tracked throughout the entire video.
+
+2. **Model Architecture**: A unified transformer architecture with streaming memory that processes video frames sequentially. Key components include a Hiera image encoder, memory attention modules for conditioning on past frames, a memory bank (storing spatial features and object pointers), and a mask decoder. The model handles occlusion prediction and multi-mask ambiguity resolution.
+
+3. **Data Engine and Dataset**: An iterative data collection pipeline using model-in-the-loop annotation across three phases, producing the SA-V dataset containing 50.9K videos with 642.6K masklets (35.5M masks total)—significantly larger than existing video segmentation datasets.
+
+The experiments demonstrate that SAM 2 achieves state-of-the-art performance on video object segmentation benchmarks (DAVIS, MOSE, LVOS), interactive video segmentation tasks, and also improves upon SAM for image segmentation while being 6× faster. The model shows strong zero-shot transfer capabilities across 17 video and 37 image datasets.
 
 ## Strengths
 
-**Novel Architecture and Task Formulation:**
-The Promptable Visual Segmentation (PVS) task provides an elegant unification of image segmentation, semi-supervised VOS, and interactive VOS under a single framework. The streaming architecture with memory attention, memory encoder, and object pointers is well-designed for the video domain. The occlusion prediction head is a thoughtful addition that addresses the challenge of objects disappearing and reappearing in videos.
+**Novelty and Contributions:**
+- The PVS task formulation elegantly unifies interactive image segmentation and semi-supervised video object segmentation, providing a coherent framework for both domains.
+- The streaming memory architecture is a thoughtful generalization of SAM to video, enabling real-time processing of arbitrarily long videos while maintaining temporal consistency.
+- The introduction of object pointers as lightweight semantic representations, combined with spatial memory features, provides an effective mechanism for maintaining object identity across frames.
 
-**Dataset Scale and Quality:**
-The SA-V dataset represents a substantial contribution with 53× more masks than existing video segmentation datasets. The three-phase data engine demonstrates a principled approach to data collection, achieving 8.4× speedup in annotation time while maintaining quality. The combination of manual and automatic annotations, along with quality verification, addresses both scale and reliability concerns.
+**Dataset and Data Engine:**
+- The SA-V dataset represents a substantial contribution—at 53× larger than previous VOS datasets in terms of mask count, it significantly advances resources available for video segmentation research.
+- The focus on object parts (not just whole objects) and the inclusion of challenging scenarios (occlusions, disappearances) makes the dataset particularly valuable for developing general segmentation capabilities.
+- The three-phase data engine demonstrates practical efficiency gains (8.4× faster annotation than per-frame SAM).
 
-**Comprehensive Evaluation:**
-The paper presents extensive experiments across diverse benchmarks. Zero-shot evaluations on 17 video datasets and 37 image datasets demonstrate strong generalization. The comparison against SAM+XMem++ and SAM+Cutie baselines under both offline and online evaluation settings provides meaningful insights into the interactive segmentation experience.
+**Experimental Rigor:**
+- Comprehensive evaluation across 54 datasets (17 video + 37 image) provides convincing evidence of generalization.
+- The offline and online interactive evaluation protocols fairly simulate real-world annotation scenarios.
+- Ablation studies systematically justify architectural choices (memory size, positional encoding, object pointers).
+- Fairness evaluation across demographic groups is a welcome addition often missing from segmentation papers.
 
-**Technical Details:**
-Ablation studies on data mixtures, model architecture (resolution, memory size, encoder capacity), and training strategies (16-frame fine-tuning) are thorough. The power-law relationship between training data quantity and accuracy (Figure 6) provides useful insights for future data collection efforts.
+**Reproducibility and Impact:**
+- Open-source release of models, dataset, and code under permissive licenses.
+- Detailed model, dataset, and annotation cards following established documentation standards.
 
 ## Weaknesses
 
-**Baseline Comparisons:**
-The primary baselines (SAM+XMem++ and SAM+Cutie) combine SAM with existing video trackers rather than comparing against end-to-end video segmentation models. While this is reasonable given SAM 2's design philosophy, a comparison against state-of-the-art specialized VOS models (e.g., AOT, DEVA) in their native settings would strengthen the paper.
+**Methodological Concerns:**
 
-**Memory Mechanism Complexity:**
-The memory architecture, while effective, relies on FIFO queues of recent frames without more sophisticated temporal modeling. The paper notes that GRU-based recurrent memory did not improve results (Table 11), but other temporal modeling approaches (e.g., learned temporal aggregation, motion cues) are not explored. The ablation shows object pointers help SA-V but not average zero-shot performance, suggesting potential brittleness.
+1. **Baseline Comparison Strategy**: The paper constructs baselines by combining SAM with XMem++/Cutie, which while reasonable, may not represent optimal integration. For instance, the baseline appears to restart tracking from scratch when corrections are needed, whereas SAM 2's memory allows incremental refinement. This design choice favors SAM 2's architecture but doesn't necessarily reflect what a purpose-built interactive VOS system could achieve.
 
-**Occlusion Handling:**
-The paper acknowledges limitations with long occlusions, but the specific behavior of the occlusion prediction head deserves more analysis. How reliable is occlusion detection? Does the model struggle with partial occlusions versus complete occlusions?
+2. **Training Sequence Length**: The model is trained on 8-frame sequences (with 16-frame fine-tuning), yet evaluated on much longer videos. While the streaming architecture theoretically handles arbitrary lengths, the short training sequences may not fully prepare the model for long-range temporal dependencies, particularly for re-identification after extended occlusions.
 
-**Fairness Evaluation Scope:**
-The fairness analysis is limited to the Ego-Exo4D dataset focusing on gender and age groups. While the results show minimal discrepancy, this evaluation covers only people segmentation and one dataset. A broader fairness assessment across different object categories and more diverse scenarios would strengthen the paper's responsible AI considerations.
+3. **Auto Masklets**: A significant portion of the training data (451.7K/642.6K masklets) comes from automatic generation using earlier versions of SAM 2. While verified by annotators, this bootstrapping approach could propagate model biases and create a confirmation loop where the model learns to reproduce its own failure modes in less challenging cases.
 
-**Generalization to Extreme Scenarios:**
-The paper shows strong results on standard benchmarks, but generalization to edge cases like very long videos (hours-long), rapid camera motion, severe compression artifacts, or domain shift to significantly different video styles is not thoroughly explored.
+4. **Object-Level Independence**: SAM 2 processes each object independently, missing opportunities for inter-object reasoning that could help in disambiguating similar objects or handling crowded scenes—limitations acknowledged in Appendix C but not extensively analyzed.
 
-## Questions for Authors
+**Evaluation Concerns:**
 
-1. **Multi-object handling:** The paper mentions processing each object independently with shared image embeddings. How does SAM 2 handle cases where two objects of the same class overlap or merge? Is there any mechanism for inter-object communication during segmentation?
+5. **Internal Dataset**: Training includes an "Internal" dataset (62.9K videos) unavailable to the community. This makes full reproducibility impossible and raises questions about what unique characteristics this data provides. The paper should clarify what performance gap would result from training only on publicly available data.
 
-2. **Memory footprint:** For extremely long videos (thousands of frames), how does the memory bank scale? Is there any mechanism to summarize or compress memories beyond the fixed FIFO queue?
+6. **Limited Baseline Comparison for Image Tasks**: For the Segment Anything image task, comparisons focus on SAM and HQ-SAM. Given the substantial literature on promptable segmentation, including additional recent methods would strengthen the evaluation.
 
-3. **Shot changes:** The paper mentions SAM 2 may fail across shot changes. How many frames of context are typically needed to recover after a cut? Does the model provide any mechanism to detect shot boundaries automatically?
+7. **Click Sampling Protocol**: The interactive evaluation uses an Oracle protocol where clicks are placed optimally based on ground-truth error regions. While this provides a consistent evaluation framework, it may overestimate practical usability where users must identify errors visually.
 
-4. **Training data efficiency:** Figure 6 shows a power-law relationship, but what is the saturation point? Would additional data continue to improve performance, or are there diminishing returns?
+**Missing Analyses:**
 
-5. **Object parts vs. whole objects:** The SA-V dataset includes both whole objects and parts. How does the model decide whether to segment a part or whole object when a user clicks? Is there ambiguity resolution during inference?
+8. **Memory Scalability**: The paper lacks analysis of how memory requirements scale with video length and number of tracked objects. The FIFO queue with N=6 recent frames may be insufficient for very long videos or multi-object scenarios.
 
-6. **Automatic annotation quality:** The automatic masklet generation uses SAM 2 in the loop. What is the estimated quality of these automatic annotations compared to manual ones? Are there systematic failure modes in the automatic generation?
+9. **Real-world Deployment Considerations**: The paper claims "real-time" processing (43.8 FPS for Hiera-B+), but this is measured on A100 GPUs. Discussion of CPU/GPU performance for deployment scenarios (mobile, edge devices) is absent.
 
-7. **Encoder backbone:** The paper uses Hiera instead of ViT (used in SAM). What motivated this architectural choice, and would a larger ViT backbone provide similar benefits?
+10. **Comparison with Prompt-Based Tracking**: Recent works on promptable video tracking (e.g., point tracking methods) share conceptual similarities with PVS. The paper would benefit from discussing relationships to this broader literature.
 
-## Minor Comments
+## Questions
 
-- Section D.2.1 mentions 7 correction clicks during training but the text says 8 in SAM. The paper should clarify this discrepancy.
-- The annotation time estimates in the interactive evaluation (Section F.1.2) rely on assumptions from prior work. A user study validating these timing estimates would strengthen the claims about interaction efficiency.
-- Table 1's "Mask Alignment Score" definition could be clarified—it measures the percentage of masks with IoU > 0.75 compared to Phase 1, but it's unclear if this is frame-wise or masklet-wise comparison.
+1. **Memory Bank Design**: The memory bank maintains N=6 recent frames and M prompted frames. What happens when M exceeds the design limit in very long interactive sessions? Is there a mechanism for intelligent memory pruning or prioritization?
 
-## Conclusion
+2. **Training on Auto-Generated Masklets**: Can the authors provide statistics on the quality difference between manually annotated and auto-generated masklets? How sensitive is model performance to the proportion of auto-generated data?
 
-SAM 2 represents a significant contribution to the field of visual segmentation, successfully extending the foundation model paradigm to video. The combination of a well-designed architecture, massive-scale dataset, and comprehensive evaluation establishes a strong baseline for "segment anything in videos." The main areas for potential improvement are the baseline comparisons (which could include more specialized VOS models), the fairness evaluation scope, and deeper analysis of failure modes. Overall, this is a strong paper that will likely have substantial impact on video segmentation and related research areas.
+3. **Internal Dataset Impact**: What performance degradation would occur if training excluded the internal dataset? This is critical for reproducibility claims.
+
+4. **Multi-Object Efficiency**: For scenes with many objects, processing each independently with separate memory banks seems inefficient. Have the authors explored sharing computations across objects, and what trade-offs exist?
+
+5. **Long-Range Dependencies**: The 16-frame fine-tuning addresses longer sequences partially, but videos can be hundreds of frames. How does performance degrade with video length, and is there a critical length beyond which the model's streaming approach shows limitations?
+
+6. **Occlusion Handling**: The occlusion prediction head is mentioned but not extensively analyzed. What is the accuracy of occlusion detection, and how do occlusion prediction errors propagate through the memory bank?
+
+7. **Temporal Coherence Without Explicit Motion Modeling**: The paper mentions that incorporating explicit motion modeling could help with similar-looking objects. Have the authors experimented with optical flow integration, and what were the results?
+
+8. **Dataset Splits and Potential Contamination**: The SA-V val/test sets are annotated using Phase 1 (per-frame SAM), while training uses Phase 3 (full SAM 2). While this mitigates some bias, could there be systematic differences in object types or video characteristics between splits?
+
+---
+
+**Overall Assessment**: This paper makes significant contributions to video segmentation through a unified architecture and a large-scale dataset. The methodology is generally sound, and the empirical results are impressive. However, the concerns above—particularly regarding baseline comparison, data provenance (internal dataset), and certain practical considerations—should be addressed to strengthen the work. The release of models and data will undoubtedly catalyze further research in this area.
 
 # Actual Human Scores
 Individual reviewer scores: [10.0, 8.0, 8.0, 10.0]
@@ -984,66 +877,44 @@ Binary outcome: Accept
 === CALIBRATION EXAMPLE 14 ===
 
 # Review
-# Review: Safety Alignment Should Be Made More Than Just A Few Tokens Deep
-
 ## Summary
 
-This paper identifies and characterizes a fundamental vulnerability in current LLM safety alignment: the alignment effect is concentrated almost exclusively on the first few output tokens, which the authors term "shallow safety alignment." Through systematic experiments on Llama-2-7B and Gemma-7B models, they demonstrate that this shallowness explains the effectiveness of multiple attack vectors (prefilling attacks, GCG adversarial suffix attacks, decoding parameter exploits, and fine-tuning attacks). The paper makes three main contributions: (1) a unified analysis of how shallow safety alignment underlies various vulnerabilities, (2) a data augmentation approach using "safety recovery examples" to create deeper alignment, and (3) a token-wise constrained fine-tuning objective that protects early token distributions during downstream customization. Both proposed methods show meaningful improvements in robustness while preserving utility.
+This paper investigates the robustness of safety alignment in Large Language Models (LLMs) and identifies a unified root cause for various vulnerabilities: **shallow safety alignment**. The authors argue that current alignment methods primarily shift the model's distribution over the first few output tokens to produce refusal prefixes, while leaving the harmful content distribution for subsequent tokens largely unmodified. This "shortcut" explains why models are susceptible to prefilling attacks, adversarial suffixes (GCG), decoding parameter manipulation, and fine-tuning attacks.
+
+The paper makes three main contributions:
+1.  **Characterization:** It empirically demonstrates that aligned models differ from base models primarily in the KL divergence of the first few tokens, and that unaligned models become "safe" simply by forcing refusal prefixes. It analyzes fine-tuning dynamics to show that gradients are largest for initial tokens.
+2.  **Deep Alignment Method:** It proposes a data augmentation strategy ("safety recovery examples") where models are trained to refuse after starting with harmful prefixes. This "deepens" the alignment and empirically improves robustness against inference-time attacks.
+3.  **Constrained Fine-tuning Defense:** It introduces a token-wise constrained loss function to preserve safety during downstream fine-tuning by constraining the distribution shift of the first few tokens. This effectively mitigates harmful fine-tuning attacks while preserving utility on benign tasks.
 
 ## Strengths
 
-1. **Valuable Unifying Concept**: The notion of "shallow safety alignment" provides a genuinely useful unifying framework that connects previously disparate attack vectors. Rather than treating each vulnerability in isolation, the paper identifies a root cause that explains multiple phenomena, which is a significant contribution to the field.
+**Conceptual Unification:** The paper provides a compelling and intuitive unifying explanation ("shallow alignment") for a wide array of disparate vulnerabilities. Connecting prefilling attacks, GCG attacks, and fine-tuning attacks through a single mechanism (the distribution of initial tokens) is a significant insight that advances the understanding of LLM safety failure modes.
 
-2. **Systematic Empirical Analysis**: The paper presents thorough empirical evidence for shallow alignment, including:
-   - KL divergence analysis showing concentration on early tokens
-   - Per-token gradient dynamics during fine-tuning attacks
-   - Systematic testing across multiple attack types and models
+**Strong Empirical Diagnosis:** The analysis is grounded in strong empirical observations. Figure 1 (KL divergence concentrated on early tokens) and Table 1 (unaligned models appearing safe with forced refusal prefixes) are simple yet powerful experiments that effectively validate the core hypothesis. The analysis of per-token gradient norms during fine-tuning (Figure 3) further strengthens the argument.
 
-3. **Practical Mitigation Strategies**: Both proposed solutions are practical and implementable:
-   - The data augmentation approach requires minimal changes to training pipelines
-   - The constrained fine-tuning objective can be applied by API providers without requiring users to change their fine-tuning data
+**Practical Mitigations:** The proposed solutions are well-motivated by the diagnosis. The constrained fine-tuning objective is particularly novel and practically relevant for platforms offering fine-tuning APIs. The theoretical derivation of the loss function (limiting behaviors) is rigorous and adds depth to the methodology section.
 
-4. **Strong Theoretical Foundation for Constrained Fine-tuning**: Section 4 includes rigorous theoretical analysis with theorems characterizing the limiting behaviors of the loss function (small/large βt regimes), gradient analysis, and connections to KL-regularized RL. The interpretation from an RL perspective is particularly illuminating.
-
-5. **Comprehensive Ablation Studies**: The appendix contains extensive ablation studies on hyperparameters (C, p for augmentation; βt configurations for constrained fine-tuning), warmup effects, and comparisons with related work (Vaccine), which strengthen confidence in the results.
-
-6. **Responsible Disclosure**: The paper appropriately discusses the dual-use nature of the work and justifies publication on grounds of improving model safety rather than enabling attacks.
+**Comprehensive Evaluation:** The authors evaluate their proposed defenses against a variety of threats (GCG, prefilling, decoding exploits, harmful fine-tuning, identity shifting, backdoors). The preservation of utility on standard benchmarks (MMLU, GSM8K, etc.) is also thoroughly checked.
 
 ## Weaknesses
 
-1. **Limited Model Scope**: Experiments are confined to 7B parameter models (Llama-2-7B-Chat, Gemma-1.1-7B-IT). It remains an open question whether similar shallow alignment dynamics exist in larger models (70B+), though the authors' reasoning suggests the phenomenon likely generalizes.
+**Incompleteness of the Defense:** While the proposed "deep alignment" improves robustness against GCG attacks, the Attack Success Rate (ASR) remains notable (e.g., ~18-20% on AdvBench in Table 3). This suggests that while deepening alignment is necessary, it may not be sufficient for robust defense against stronger adaptive attacks.
 
-2. **Suboptimal Augmentation Implementation**: Due to lack of access to the original alignment data and pipeline, the authors perform augmentation by fine-tuning an already-aligned model rather than training from scratch. This limits the maximum achievable depth of alignment since the model has already converged to the shallow optimum. A more thorough evaluation of deep alignment would require aligning from the base model.
+**Limited Evaluation of Stronger Attacks:** The paper focuses on GCG and prefilling for inference attacks. It does not evaluate against more complex, recent jailbreaks like TAP (Tree of Attacks with Pruning), AutoDAN, or multi-modal attacks. A more comprehensive robustness evaluation would strengthen the claims about the efficacy of deep alignment.
 
-3. **Coherence of Augmented Data**: The safety recovery examples are explicitly acknowledged to be "not coherent in natural language" - the paper shows examples like "Step 1: Gather phosphorus **I cannot fulfill your request." This raises questions about whether this is truly the right approach or merely a workaround. Future work should explore more principled ways to generate such data.
+**Potential Utility Trade-offs:** The paper claims utility preservation, but the results in Table 4 show a noticeable drop in accuracy for GSM8K (41.7% $\to$ 37.4%) when using the constrained loss. This suggests a tension between preserving the initial token distribution and learning complex reasoning tasks. The authors should discuss this trade-off more explicitly.
 
-4. **Evaluation via GPT-4 Judge**: The paper relies on GPT-4 as an automatic judge for safety evaluation. While this is common practice, GPT-4 itself may have biases and inconsistencies in safety assessment, particularly for edge cases. Some human evaluation or multiple automated judges would strengthen the evaluation.
+**Heuristic Nature of Data Augmentation:** The data augmentation strategy relies on synthetic "safety recovery" examples. The quality of these examples depends on the specific harmful prefixes used. The paper uses prefixes from a specific dataset; it is unclear how sensitive the method is to the diversity or quality of these prefixes. Additionally, training on incoherent text (harmful prefix followed by refusal) might have unintended effects on model coherence in other contexts.
 
-5. **Limited Exploration of Attack Adaptations**: The paper demonstrates improved robustness against the attacks considered, but adaptive attackers who know about deep alignment may develop new strategies. The paper acknowledges this limitation but doesn't explore it.
+**Evaluation of Adaptive Attacks for Constrained Fine-tuning:** The constrained loss assumes the defender controls the training process. However, if the attacker knows the defense, could they not fine-tune on data that specifically targets later tokens or uses a different "harmful" prefix structure to bypass the constraint? The robustness against an adaptive attacker aware of the defense mechanism is not discussed.
 
-6. **Constrained Fine-tuning Requires Reference Model Access**: The proposed constrained fine-tuning objective requires access to π_aligned to compute the regularization term. For fully open-source models this is fine, but it may not be applicable in all deployment scenarios.
+## Questions
 
-## Questions for Authors
-
-1. **Generalization to Larger Models**: Do you have any evidence (even preliminary) that the shallow safety alignment phenomenon extends to larger models (e.g., Llama-2-70B, GPT-4 class models)? The gradient dynamics and KL divergence patterns might differ at scale.
-
-2. **Why Does KL Divergence Concentrate on Early Tokens?**: Your analysis attributes this to optimization dynamics (no incentive during RLHF to address deeper tokens), but is there any evidence from mechanistic interpretation about whether early tokens are fundamentally easier to modify, or is it purely an optimization artifact?
-
-3. **Data Augmentation from Scratch**: You mention the limitation that your augmentation is applied post-hoc to an already-aligned model. Would the augmentation approach be equally effective if integrated into the initial alignment process? What challenges would arise?
-
-4. **Trade-offs with Legitimate Refusals**: The deep alignment approach trains the model to "recover" from non-refusal prefixes. Could this inadvertently cause the model to backtrack on legitimate refusals that happened to start with unusual phrasing? Have you observed any such behavior?
-
-5. **Connection to Representation Engineering**: Your paper mentions the concurrent work on "short-circuiting" (Zou et al., 2024) as sharing conceptual foundations. Could you elaborate more on how deep safety alignment differs from or complements representation-level interventions?
-
-6. **Scaling the Augmentation**: For production deployment, what would be the recommended scale of safety recovery examples? Is there a risk of overfitting to specific harmful patterns, or does the approach generalize broadly?
-
-7. **Constrained Fine-tuning Overhead**: While you show the computational overhead is marginal (~5% in Table 12), have you evaluated the memory overhead for very large datasets or models where storing π_aligned probabilities might become significant?
-
-8. **Relationship to Benign Fine-tuning Safety Regression**: Your analysis in Appendix C suggests that benign fine-tuning causes safety regression partly due to the same gradient dynamics. Does deep alignment also help preserve safety during benign fine-tuning, and if so, how?
-
-## Conclusion
-
-This is a strong paper that makes a significant contribution by identifying and characterizing the shallow safety alignment problem and providing practical mitigation strategies. The unifying conceptual framework and comprehensive empirical analysis are the paper's main strengths. The proposed solutions show meaningful improvements and the theoretical analysis of the constrained fine-tuning objective is rigorous. The main limitations relate to the scope of experiments and the implementation constraints due to lack of access to alignment pipelines. Overall, this work provides valuable insights for the community and should stimulate important follow-up research on deeper safety alignment approaches.
+1.  **Generalization of Data Augmentation:** How does the "deep alignment" model generalize to harmful prompts or attack types not seen during the augmentation? Does the model learn a general "refusal after harm" behavior, or does it overfit to the specific recovery examples?
+2.  **Adaptive Attacks on Constrained Loss:** If an attacker is aware of the constrained loss defense, could they construct a fine-tuning dataset where the harmful content is delayed (e.g., "Sure, [filler text], here is the bomb...") or structure the attack to optimize later tokens? How would the constrained loss perform in such a scenario?
+3.  **Utility Trade-off Details:** You report a drop in GSM8K accuracy. Do you observe similar drops in tasks that require specific output formatting (e.g., code generation or translation) where the initial tokens might carry significant semantic weight?
+4.  **Comparison with Other Defenses:** How does your constrained fine-tuning approach compare to parameter-efficient fine-tuning methods (e.g., LoRA) or other defense mechanisms specifically designed for fine-tuning (e.g., SafeLoRA) in terms of safety-utility trade-offs?
+5.  **Scalability of KL Measurement:** You use KL divergence to measure alignment depth. Is this metric robust across different model architectures or tokenizers? For example, does a single token in Llama-2 carry the same semantic weight as in Gemma?
 
 # Actual Human Scores
 Individual reviewer scores: [10.0, 8.0, 10.0, 10.0]
