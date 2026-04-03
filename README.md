@@ -1,3 +1,9 @@
+
+
+## Participate in Our Evaluation
+
+We are looking for participants to help evaluate our review quality. If you are interested, please contact us at wg25r@student.ubc.ca.
+
 # Multi-Agent Paper Reviewer
 
 An automated academic paper review system that uses multiple LLM agents with different roles to produce a consolidated review and score. Benchmarked against ICLR 2025 ground truth reviews.
@@ -407,10 +413,6 @@ python fetch_iclr2025.py [n] [seed] [options]
 
 Requires OPENREVIEW_USERNAME and OPENREVIEW_PASSWORD in .env
 ```
-
-## Participate in Our Evaluation
-
-We are looking for participants to help evaluate our review quality. If you are interested, please contact us at wg25r@student.ubc.ca.
 
 ## Cost
 
