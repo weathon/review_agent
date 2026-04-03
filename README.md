@@ -11,9 +11,9 @@ Phase 1 (all parallel via OpenRouter chat completions):
   ├── Spark Finder ───────── z-ai/glm-5
   └── Related Work Scout ─── z-ai/glm-5:online → z-ai/glm-5 filter
 
-Phase 2 (two-turn conversation with the same model):
-  ├── Turn 1: Merger ─────── gpt-5.4  (consolidated review, no scores)
-  └── Turn 2: Scorer ─────── gpt-5.4  (calibrated score from the same conversation)
+Phase 2 (two-turn, separate models):
+  ├── Turn 1: Merger ─────── z-ai/glm-5 via OpenRouter (consolidated review, no scores)
+  └── Turn 2: Scorer ─────── claude-sonnet-4-6 via Agent SDK (calibrated score, review-only context)
 ```
 
 **Agents:**
@@ -25,9 +25,10 @@ Phase 2 (two-turn conversation with the same model):
 | Spark Finder | `z-ai/glm-5` | Identifies top 3-5 missing experiments, deeper analysis, obvious next steps |
 | Related Work Scout | `z-ai/glm-5:online` | Proposes potentially missed references using OpenRouter's online model variant |
 | Related Work Filter | `z-ai/glm-5` | Removes already-cited and loosely related results |
-| Merger + Scorer | `gpt-5.4` | Turn 1: synthesizes all inputs into a final structured review (no scores). Turn 2: scores the paper using calibration examples injected into the same conversation |
+| Merger | `z-ai/glm-5` | Synthesizes all inputs into a final structured review (no scores) |
+| Scorer | `claude-sonnet-4-6` (Agent SDK) | Scores the paper using the review + calibration examples (paper content stripped — only sees the review) |
 
-All calls go through OpenRouter using chat completions. Structured outputs for merger and scoring are enforced via Pydantic schemas, and reasoning configuration is passed through `extra_body` where supported.
+Sub-agent and merger calls go through OpenRouter. The scorer uses the Claude Agent SDK (`ClaudeSDKClient`, no tools, `max_turns=1`). To switch the scorer model, set `MODEL_SCORER` in `paper_reviewer.py` — use the `claude-sdk:<model>` prefix for Agent SDK models or a plain OpenRouter model ID.
 
 ## Review And Scoring Design
 
@@ -135,6 +136,55 @@ python run_iclr_bench.py 50 4112 --parallel --balanced \
 python metric.py bench_scores.csv
 ```
 
+## Baselines
+
+Three baselines are provided for comparison against the full multi-agent pipeline.
+
+### Always-predict-6 baseline (`run_baseline.py`)
+
+Predicts score=6 and decision=Accept for every paper. No model calls, no calibration. This is the trivial baseline — any useful system must beat it.
+
+```bash
+python run_baseline.py 50 3112 --balanced --data-dir iclr2025_data --calibration calibration.md
+```
+
+The `--calibration` flag only excludes calibration paper IDs from sampling — no calibration context is used.
+
+### Direct-scoring baseline (`run_direct_baseline.py`)
+
+Sends the paper directly to `MODEL_SCORER` and asks it to review and score in a single turn. No sub-agent reviews, no merger, no calibration. This measures what the scoring model can do on its own without any pipeline support.
+
+```bash
+python run_direct_baseline.py 50 3112 --balanced --data-dir iclr2025_data
+```
+
+### Review-then-score baseline (`run_review_baseline.py`)
+
+Two-turn single-model baseline using `MODEL_SCORER` for both turns:
+
+1. **Turn 1**: Model reads the paper and writes a detailed review (no score)
+2. **Turn 2**: Model reads its own review + calibration examples and produces a score
+
+This has its own calibration set built by `build_calibration_review.py`, which generates reviews (not multi-agent review bundles) paired with real human scores.
+
+```bash
+# Build calibration (MODEL_SCORER generates reviews, paired with human scores)
+python build_calibration_review.py --data-dir iclr2025_data
+
+# Run benchmark
+python run_review_baseline.py 50 3112 --balanced \
+  --data-dir iclr2025_data --calibration calibration_review.md
+```
+
+### Comparison
+
+| Method | Sub-agents | Calibration | Scoring context |
+|--------|-----------|-------------|-----------------|
+| Always-predict-6 | None | None | N/A |
+| Direct scoring | None | None | Full paper |
+| Review-then-score | None (single model reviews) | Own calibration (`calibration_review.md`) | Own review + calibration |
+| Full pipeline | 4 specialized agents | Multi-agent calibration (`calibration.md`) | Consolidated review + calibration |
+
 ## Calibration
 
 The score predictor tends to overestimate scores. To fix this, we build a **calibration set**:
@@ -214,9 +264,13 @@ Generates a 4-panel plot: raw scatter, rounded scatter, ROC curve, and precision
 | `bench_scores.csv` | Per-paper: predicted score, GT avg score, all GT reviewer scores, match |
 | `bench_scores_scatter.png` | Scatter plot + ROC curve |
 | `bench_run.log` | Complete stdout/stderr log of the run |
-| `baseline_scores.csv` | Baseline results |
-| `calibration.md` | Few-shot calibration examples (review bundle + human scores) |
+| `baseline_scores.csv` | Always-predict-6 baseline results |
+| `direct_baseline_scores.csv` | Direct-scoring baseline results |
+| `review_baseline_scores.csv` | Review-then-score baseline results |
+| `calibration.md` | Few-shot calibration examples (multi-agent review bundle + human scores) |
 | `calibration_ids.json` | Paper IDs excluded from benchmark |
+| `calibration_review.md` | Calibration for review-then-score baseline (single-model reviews + human scores) |
+| `calibration_review_ids.json` | Paper IDs excluded from review baseline |
 
 ## CLI Reference
 
@@ -265,6 +319,33 @@ python run_baseline.py [n] [seed] [options]
   --calibration <path>    Calibration file; excludes calibration IDs
 ```
 
+### `run_direct_baseline.py`
+
+```
+python run_direct_baseline.py [n] [seed] [options]
+
+  --balanced              Stratified sampling across score bins
+  --data-dir <path>       Dataset directory
+```
+
+### `run_review_baseline.py`
+
+```
+python run_review_baseline.py [n] [seed] [options]
+
+  --balanced              Stratified sampling across score bins
+  --data-dir <path>       Dataset directory
+  --calibration <path>    Calibration file (calibration_review.md)
+```
+
+### `build_calibration_review.py`
+
+```
+python build_calibration_review.py [seed] [options]
+
+  --data-dir <path>       Dataset directory
+```
+
 ### `fetch_iclr2025.py`
 
 ```
@@ -277,4 +358,4 @@ Requires OPENREVIEW_USERNAME and OPENREVIEW_PASSWORD in .env
 
 ## Cost
 
-All API calls go through OpenRouter. Sub-agents (critic, supportive, spark, related work) use `z-ai/glm-5`; the merger/scorer uses `gpt-5.4`. Exact cost depends on current OpenRouter pricing, paper length, output length, and online-search usage.
+Sub-agents and merger use `z-ai/glm-5` via OpenRouter. The scorer uses `claude-sonnet-4-6` via the Claude Agent SDK (requires `ANTHROPIC_API_KEY`). Score parsing uses `gpt-5.4-nano` via OpenRouter. Exact cost depends on current pricing, paper length, and output length.

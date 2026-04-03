@@ -22,13 +22,15 @@ from collections import Counter, defaultdict
 from pathlib import Path
 
 from paper_reviewer import (
-    MODEL_SCORER,
     _get_client,
     _parse_score,
     _call_openai,
     sanitize_text,
     score_to_decision,
 )
+
+# Baseline uses its own model — not the pipeline's MODEL_SCORER
+BASELINE_MODEL = "z-ai/glm-5"
 
 DEFAULT_BENCH_DIR = Path(__file__).parent / "iclr2025_data"
 VALID_SCORES = [1.0, 3.0, 5.0, 6.0, 8.0, 10.0]
@@ -109,7 +111,7 @@ End your response with a line like: "Score: X.X"
 async def score_paper_directly(
     client, paper_content: str, calibration_context: str = "",
 ) -> tuple[float, float]:
-    """Send paper directly to MODEL_SCORER, parse score. Returns (score, cost)."""
+    """Send paper directly to BASELINE_MODEL, parse score. Returns (score, cost)."""
 
     user_prompt = (
         f"Here is the paper to review and score:\n\n"
@@ -124,40 +126,9 @@ async def score_paper_directly(
         )
     user_prompt += "Now read the paper carefully, assess it, and provide your score."
 
-    # ── Agent SDK path ───────────────────────────────────────────
-    if MODEL_SCORER.startswith("claude-sdk:"):
-        sdk_model = MODEL_SCORER.split(":", 1)[1]
-        print(f"    [direct_score] scoring with Agent SDK ({sdk_model}) ...")
-        from claude_agent_sdk import ClaudeSDKClient, ClaudeAgentOptions, AssistantMessage, ResultMessage, TextBlock
-
-        options = ClaudeAgentOptions(
-            model=sdk_model,
-            allowed_tools=[],
-            max_turns=1,
-            system_prompt=DIRECT_SCORE_PROMPT,
-        )
-        score_text = ""
-        cost_score = 0.0
-        async with ClaudeSDKClient(options=options) as sdk_client:
-            await sdk_client.query(user_prompt)
-            async for message in sdk_client.receive_response():
-                if isinstance(message, AssistantMessage):
-                    for block in message.content:
-                        if isinstance(block, TextBlock):
-                            score_text += block.text
-                if isinstance(message, ResultMessage):
-                    if message.total_cost_usd is not None:
-                        cost_score = message.total_cost_usd
-
-        if not score_text.strip():
-            raise ValueError("Agent SDK direct scorer returned empty response")
-        print(f"    [direct_score] done — {sdk_model} (Agent SDK) — ${cost_score:.4f}")
-
-    # ── OpenRouter path ──────────────────────────────────────────
-    else:
-        score_text, cost_score = await _call_openai(
-            client, "direct_score", DIRECT_SCORE_PROMPT, user_prompt, MODEL_SCORER,
-        )
+    score_text, cost_score = await _call_openai(
+        client, "direct_score", DIRECT_SCORE_PROMPT, user_prompt, BASELINE_MODEL,
+    )
 
     score, cost_parse = await _parse_score(client, score_text)
     print(f"    [direct_score] parsed score: {score} — ${cost_parse:.4f}")
@@ -176,7 +147,7 @@ async def main(
 
     print("=" * 72)
     print("DIRECT-SCORING BASELINE")
-    print(f"  Scorer: {MODEL_SCORER}")
+    print(f"  Scorer: {BASELINE_MODEL}")
     print(f"  Data:   {bench_dir}")
     print(f"  Mode:   {'balanced' if balanced else 'random'}")
     print("=" * 72)
