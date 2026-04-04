@@ -315,8 +315,8 @@ One paragraph synthesizing genuinely novel observations.
 ## Suggestions
 - specific actionable suggestion
 
-Do NOT output any numerical scores or subscores. Do NOT output an accept/reject \
-decision. Your job is ONLY to produce the qualitative review. Scoring will be \
+You may include an overall assessment or value judgement (e.g. "this paper makes \
+a strong/weak contribution") but do NOT output numerical scores. Scoring will be \
 done separately.
 
 When you are later asked to score: be DISCRIMINATIVE. A weak paper is weak — \
@@ -700,10 +700,6 @@ async def run_merger(
 
 
 
-    # Strip full paper from scoring context — the review already covers it
-    # and sending it wastes tokens / distracts the scorer.
-    if "--- PAPER CONTENT END ---" in user_prompt_review:
-        user_prompt_review = user_prompt_review.split("--- PAPER CONTENT END ---\n\n", 1)[1]
 
     NO_SIX_NUDGE = (
         "You gave a score of exactly 6.0. A score of 6 is a non-committal fence-sit. "

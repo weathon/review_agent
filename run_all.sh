@@ -38,7 +38,7 @@ python build_calibration.py --data-dir iclr2026_balanced --parallel --no-related
 # ── Step 4: Run baseline ──
 # echo ""
 # echo ">>> Step 4: Running baseline (always predict 6)"
-# python run_baseline.py 50 4112 --data-dir iclr2026_balanced --calibration calibration.md --no-related-work # --balanced 
+# python baselines/always_predict_6/run_baseline.py 50 4112 --data-dir iclr2026_balanced --calibration calibration.md --no-related-work # --balanced
 
 # ── Step 5: Run benchmark with calibration ──
 echo ""

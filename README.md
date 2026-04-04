@@ -1,4 +1,10 @@
-# :pineapple: Multi-Agent Paper Reviewer
+
+
+## Participate in Our Evaluation
+
+We are looking for participants to help evaluate our review quality. If you are interested, please contact us at wg25r@student.ubc.ca.
+
+# :pineapple:  Multi-Agent Paper Reviewer
 
 An automated academic paper review system that uses multiple LLM agents with different roles to produce a consolidated review and score. Benchmarked against ICLR 2026 ground truth reviews.
 
@@ -356,10 +362,6 @@ python fetch_iclr2026.py [n] [seed] [options]
 
 Requires OPENREVIEW_USERNAME and OPENREVIEW_PASSWORD in .env
 ```
-
-## Participate in Our Evaluation
-
-We are looking for participants to help evaluate our review quality. If you are interested, please contact us at wg25r@student.ubc.ca.
 
 ## Cost
 

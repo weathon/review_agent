@@ -4,9 +4,9 @@ Baseline: always predict score=6, decision=Accept.
 Uses the same sampling as run_iclr_bench.py for fair comparison.
 
 Usage:
-  python run_baseline.py             # 10 papers, seed=42
-  python run_baseline.py 100 4112
-  python run_baseline.py 100 4112 --balanced
+  python baselines/always_predict_6/run_baseline.py             # 10 papers, seed=42
+  python baselines/always_predict_6/run_baseline.py 100 4112
+  python baselines/always_predict_6/run_baseline.py 100 4112 --balanced
 """
 
 import csv
@@ -217,7 +217,7 @@ def main(
 
 if __name__ == "__main__":
     if "--help" in sys.argv or "-h" in sys.argv:
-        print("Usage: python run_baseline.py [n] [seed] [options]")
+        print("Usage: python baselines/always_predict_6/run_baseline.py [n] [seed] [options]")
         print()
         print("Options:")
         print("  --balanced              Stratified sampling across score bins")
