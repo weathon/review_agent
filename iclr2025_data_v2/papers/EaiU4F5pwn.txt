@@ -1,0 +1,2966 @@
+# PHYSICS-INFORMED SELF-GUIDED DIFFUSION MODEL FOR HIGH-FIDELITY SIMULATIONS
+
+
+**Anonymous authors**
+Paper under double-blind review
+
+
+ABSTRACT
+
+
+Machine learning (ML) models are increasingly explored in fluid dynamics as a
+promising way to generate high-fidelity computational fluid dynamics data more
+efficiently. A common strategy is to use low-fidelity data as computationalefficient inputs, and employ ML techniques to reconstruct high-fidelity flow
+fields. However, existing work typically assumes that low-fidelity data is artificially downsampled from high-fidelity sources, which limits model performance.
+In real-world applications, low-fidelity data is generated directly by numerical
+solvers with a lower initial state resolution, resulting in large deviations from
+high-fidelity data. To address this gap, we propose _PG-Diff_, a novel diffusion
+model for reconstructing high-fidelity flow fields, where both low- and highfidelity data are generated from numerical solvers. Our experiments reveal that
+state-of-the-art models struggle to recover fine-grained high-fidelity details when
+using solver-generated low-fidelity inputs, due to distribution shift. To overcome
+this challenge, we introduce an _Importance_ _Weight_ strategy during training as
+self-guidance and a training-free _Residual_ _Correction_ method during inference
+as physical inductive bias, guiding the diffusion model toward higher-quality reconstructions. Experiments on four 2D turbulent flow datasets demonstrate the
+effectiveness of our proposed method. [Code and further details are available here.](https://anonymous.4open.science/r/FluidSuperResolution-25F2)
+
+
+1 INTRODUCTION
+
+
+High-fidelity simulations of computational fluid dynamics (CFD) are crucial for understanding fluid
+interactions in engineering systems, greatly impacting design and application outcomes (Wang et al.,
+2024; McGreivy & Hakim, 2024). Traditional approaches such as Direct Numerical Simulation
+(DNS) (Orszag, 1970) offer high-resolution solutions. However, they are computationally expensive, especially for complex dynamics such as turbulence with high Reynolds numbers (Zhang et al.,
+2023). Therefore, learning neural-based simulators from data become attractive alternatives, balancing between efficiency and simulation fidelity (Huang et al., 2023).
+
+
+One popular strategy is to reconstruct high-fidelity data from low-fidelity inputs, which usually
+reduces the discretization grid size in the spatial domain to improve computational efficiency (Shu
+et al., 2023; Pradhan & Duraisamy, 2021). Various machine learning models, including those based
+on Convolutional Neural Networks (CNNs) (Fukami et al., 2019), Generative Adversarial Networks
+(GANs) (Li & McComb, 2022), and Diffusion Models (Shu et al., 2023), have been developed to
+reconstruct high-fidelity CFD data from low-fidelity inputs. Majority of them are categorized as
+direct mapping models, which require both low- and high-fidelity data for training and can only
+capture the relationship between particular low-fidelity and high-fidelity pairs. In contrast, diffusion
+models only require high-fidelity data during training and can reconstruct from out-of-distribution
+low-fidelity data during inference, by treating them as intermediate samples in the denoising stage.
+
+
+**Motivation** : one fundamental drawback in existing studies is that they assume low-fidelity data is artificially downsampled from high-fidelity data at the same timestamp. Such data inherently has more
+information compared to solver-generated low-fidelity data in reality, where coarser discretization
+grids are used in numerical solvers for saving computational resources. As illustrated in Figure 1,
+the former follows “integrate then downsample”, which starts from the high-fidelity initial states to
+rollout trajectories, and then downsample at each timestamp. The latter follows “downsample then
+integrate”, which downsamples the high-fidelity initial state to obtain coarser discretization grids
+
+
+1
+
+
+as starting points and rollout trajectories through numerical solvers. Therefore, models trained in
+the downsampled settings can lead to inferior performance during inference when given the solvergenerated data in reality, as solver-generated low-fidelity data has large deviations/distribution shifts
+from high-fidelity data. This is illustrated by the visualization of low-fidelity data generated from
+the two: the downsampled one contains more fine-grained details than the solver-based one.
+
+
+To address this, we study reconstructing high
+|the|Col2|la|
+|---|---|---|
+|<br>his <br>|<br>his <br>|<br> c<br>|
+|<br>_ e_|mo<br>_ We_|mo<br>_ We_|
+
+
+tions. Specifically, the _Importance Weight_ mod
+|gh-fidelity itial State (t0) High-fidelity at t （Ground Truth）|Low-fidelity at t|Col3|Col4|
+|---|---|---|---|
+|<br>Solver-generated<br>Low-fidelity at t<br> <br>Solver<br>Integate<br>Downsample<br>Downsample<br>Solver<br>Integrate||||
+|<br>Solver-generated<br>Low-fidelity at t<br> <br>Solver<br>Integate<br>Downsample<br>Downsample<br>Solver<br>Integrate||||
+|<br>Solver-generated<br>Low-fidelity at t<br> <br>Solver<br>Integate<br>Downsample<br>Downsample<br>Solver<br>Integrate||||
+
+
+|mpa|Col2|r|
+|---|---|---|
+|<br>-|sol<br>gen|sol<br>gen|
+
+
+|we|Col2|en|
+|---|---|---|
+|a<br>o|ted <br>-f|ted <br>-f|
+
+
+|Col1|Col2|
+|---|---|
+|||
+|||
+
+
+|amp|Col2|l|
+|---|---|---|
+|e)<br>at|f<br>a r|f<br>a r|
+
+ule assigns importance scores to different components in the flow field through Discrete Wavelet
+Transformation (DWT) (Daubechies, 1992a), which are integrated into the loss function for guiding
+the diffusion model to better reconstruct detailed and accurate structures. The _Residual Correction_
+module projects the reconstructed samples onto the solution subspace of the data governing equations, ensuring that the generated outputs also adhere to physical constraints such as Navier-Stokes
+Equations (Navier, 1823). We achieve this by applying gradient descent of the residuals of the governing equations at certain diffusion steps, to refine the generated high-fidelity data. We also explore
+different scheduling strategies on which diffusion steps to apply such correction. Our findings suggest that applying residual corrections at both the beginning and the end of diffusion steps strikes
+the ideal balance between reconstruction L2 error and the physical coherence measured by PDE
+residual.
+
+
+Our key contributions are summarized as follows:
+
+
+    - We study a novel problem on reconstructing high-fidelity flow fields with solver-generated
+low-fidelity data, benefiting real-world applications. Our experiments reveal that stateof-the-art reconstruction models fail to generate high-quality outputs due to loss of finegrained detail in low-fidelity data.
+
+
+    - We propose PG-Diff, a novel diffusion model for reconstructing high-quality outputs
+through the guidance of an _Importance Weight_ strategy during training as self-guidance and
+a training-free _Residual Correction_ method during inference as physical inductive bias.
+
+
+    - We present empirical evidence of PG-Diff’s state-of-the-art performance in a variety of 2D
+turbulent flow over 4 datasets. It yields a significant improvement in terms of predictive
+accuracy physical consistency, and perceptual quality.
+
+
+2 PRELIMINARIES AND RELATED WORK
+
+
+We consider a machine learning model _fθ_ : with parameters _θ_, which transforms a data
+_X_ _→Y_
+sample from low-fidelity domain _x ∈X_ _∈_ R _[m][×][m]_ to high-fidelity domain _y_ _∈Y_ _∈_ R _[n][×][n]_ ( _m < n_ ).
+The distributions of the training and test sets for low-fidelity data are denoted by _p_ [train] and _p_ [test][,]
+_X_ _X_
+respectively, and for high-fidelity data as _p_ [train] and _p_ [test][.] [The] [training] [and] [testing] [distribution] [for]
+_Y_ _Y_
+low and high-fidelity data are not necessarily identical. The objective is to develop _fθ_ such that
+
+
+2
+
+
+Downsampled
+
+
+it can effectively map samples from _X_ [test] to their corresponding high-fidelity counterparts _Y_ [test1] .
+As diffusion model operates on the same input and output grid, we upsample the low-fidelity data
+uniformly to the same resolution as the target.
+
+
+2.1 AI FOR COMPUTATIONAL FLUID DYNAMICS (CFD)
+
+
+Recent advances in machine learning have led to various learning-based surrogate models for accelerating scientific discoveries (Sanchez-Gonzalez et al., 2020; Li et al., 2020; 2021). In the field of
+high-fidelity CFD reconstruction, researchers have developed powerful models rooted from image
+super-resolution domain in computer vision. Specifically, GANs (Ledig et al., 2016; Wang et al.,
+2019) and normalizing flows (Lugmayr et al., 2020) have achieved impressive results for image reconstruction. Later on, diffusion models (Saharia et al., 2021) have challenged the long-standing
+dominance of GANs. Various physical inductive biases (Raissi et al., 2019; Bai et al., 2020; Chen
+et al., 2021) have been injected into these methods for CFD reconstructions, which enhances the
+robustness and accuracy of the reconstruction task. For example, (Erichson et al., 2020; Pradhan
+& Duraisamy, 2021) developed super-resolution models based on Multi-Layer Perceptrons (MLPs).
+Fukami et al. (2019) introduced a CNN-based hybrid Downsampled Skip-Connection Multi-Scale
+(DSC/MS) model, while Fukami et al. (2021) adapted existing CNN models for use with moving
+sensors. Li & McComb (2022) further advanced the field by proposing physics-informed GANs
+for super-resolving multiphase fluid simulations. Additionally, Fu et al. (2023) proposed a porposal
+and refinement network to address the issue with limited high-fidelity data. Ren et al. (2023); Jiang
+et al. (2020) also leveraged CNN for spatial-temporal super resolution. These models rely on lowand high-fidelity data pairs during training and can only capture specific relationships between these
+pairs. As a result, when the test data deviates significantly from the training data, their performance
+degrades. To overcome this limitation, Gao et al. (2021) utilizes physical properties of the fluid
+such as conservation laws and boundary conditions for super resolution. Shu et al. (2023) leveraged diffusion model, which is trained exclusively on high-fidelity data and enables reconstruction
+from any type of low-fidelity input. However, these methods assume the low-fidelity data is artificially downsampled from high-fidelity sources, which limits their performance during inference
+when reconstructing from solver-generated low-fidelity data in reality.
+
+
+2.2 DENOISING DIFFUSION PROBABILISTIC MODEL
+
+
+Diffusion models have become a prominent class of deep generative models, demonstrating stateof-the-art performance across various domains such as image generation (Meng et al., 2022; Saharia
+et al., 2021; Ho et al., 2020), video synthesis (Yang & Hong, 2022; Yu et al., 2022), 3D shape
+creation (Zhou et al., 2021; Zeng et al., 2022), and applications in scientific fields (Shu et al., 2023;
+Yang & Sommer, 2023; Qiu et al., 2024). Denoising Diffusion Probabilistic Models (DDPMs) are
+grounded in a stochastic diffusion process, akin to those found in thermodynamics. It contains a
+forward and reverse process, where a data sample is gradually corrupted with noise via a Markov
+chain, and a neural network is trained to reverse this, progressively removing the noise. To generate
+new samples, a fully noisy input is denoised by the model step by step.
+
+
+Formally, in the forward diffusion process, the input data _x_ 0 is gradually corrupted with Gaussian
+noises as _q_ ( _xt|xt−_ 1) = _N_ ( _xt_ ; _[√]_ 1 _−_ _βtxt−_ 1 _, βt_ _**I**_ )( _t_ = 1 _,_ 2 _, · · · T_ ) _,_ where _β_ 1 _, . . ., βT_ are fixed
+variance schedule that control the amount of noise introduced at each step, _T_ is the number of
+total diffusion steps and _q_ ( _xt|xt−_ 1) is the Markov transition probability. Let _α_ ¯ _t_ := [�] _[t]_ _s_ =1 [1] _[ −]_ _[β][s]_ [,]
+we have _xt_ = ~~_α_~~ _tx_ 0 + 1 ~~_α_~~ _tϵt_, which describes how to generate noisy states _xt_ from input
+
+_[√]_ _[√]_ _−_
+_x_ 0. The reverse process is defined as _pθ_ ( _xt−_ 1 _|xt_ ) = _N_ ( _xt−_ 1; _µθ_ ( _xt, t_ ) _,_ Σ _θ_ ( _xt, t_ )) _,_ where _µθ_ and
+Σ _θ_ are learned by neural networks parameterized by _θ_, and _pθ_ ( _xt−_ 1 _|xt_ ) is the denoising transition
+probability, undoing the transformation in the forward process.
+
+
+Training DDPM involves minimizing a variational bound on the negative log-likelihood of _q_ ( _x_ 0).
+Ho et al. (2020) showed that it can be simplified as predicting the noise at each step:
+
+
+1For direct mapping models, the training takes low- and high-fidelity pairs as inputs. For diffusion models,
+the training only requires high-fidelity data, and low-fidelity data is used as input during testing.
+
+
+3
+
+
+_L_ [simple] = E _t,x_ 0 _,ϵ_ - _∥ϵt −_ _ϵθ_ ( _[√]_ _α_ ¯ _tx_ 0 + _√_
+
+
+1 _α_ ¯ _tϵt, t_ ) _,_ (1)
+_−_ _∥_ [2][�]
+
+
+Under review as a conference paper at ICL ~~R 2~~ 025
+
+
+where _ϵθ_ ( ) is ~~th~~ e predicted noise from DDPM’s denoiser neural network. The denoiser takes noised
+
+_·_
+sample _xt_ = _α_ ¯ _tx_ 0 + 1 _α_ ¯ _tϵt_ and diffusion timestamp _t_ as input to predict noise at each times
+_[√]_ _[√]_ _−_
+tamp. _ϵt_ ( **0** _,_ **I** ) is the standard Gaussian noise sampled at time _t_ . In this paper, we implement the
+_∼N_
+backbone diffusion model proposed by Ho et al. ~~(2020~~ ) and apply accelerated sampling techniques
+introduced by Song et al. (2020).
+
+
+**Model Training**
+
+
+|LL|HL|
+|---|---|
+|LH|HH|
+
+
+_xt_ = ~~_α_~~ _tx_ 0 + _√_
+
+_[√]_
+
+
+1 ~~_α_~~ _tϵt_ = ~~_α_~~ _ty_ + _√_
+_−_ _[√]_
+
+
+High-Fidelity
+
+Sample
+
+
+Random
+
+Noise
+
+
+DWT
+
+
+Figure 2: Training and inference pipeline of PG-Diff. Training with high-fidelity data only, guided
+by importance weight strategy to locate fine-grained high-fidelity details. During inference, lowfidelity data is used for reconstruction, and residual correction is applied at intermediate diffusion
+steps to improve physical coherence. We follow Ho et al. (2020) and use U-net as our denoiser.
+
+
+3 METHOD:PG-DIFF
+
+
+We present a novel diffusion framework PG-Diff for reconstructing high-fidelity CFD from solvergenerated low-fidelity input, which has larger distribution shifts and more information loss compared
+to artificially downsampled low-fidelity inputs. PG-Diff features an _Importance Weight_ strategy that
+scores different components in the flow fields through the loss function as self-guidance, forcing
+the model to recover more fine-grained high-fidelity details during training. In addition, a trainingfree _Residual_ _Correction_ module applies physics-informed correction during inference, ensuring
+physical coherence in reconstructed samples. The two moduli jointly guide the model towards highquality reconstruction from wide-range of low-fidelity inputs. The overall framework is depicted in
+Figure 2. We now introduce each component in detail.
+
+
+**Model Setup.** PG-Diff follows the guided data synthesis setting for CFD reconstruction as in (Shu
+et al., 2023): we train the model via recovering high-fidelity sources only, and condition on lowfidelity inputs as intermediate diffusion step during inference. This allows the model to 1.) exert
+control over the data generation process (reverse diffusion) during inference. Instead of starting from
+random noises, starting from low-fidelity inputs as intermediate diffusion steps; and 2.) reconstruct
+from any form of low-fidelity data, as the training does not depend on low- and high-fidelity pairs.
+
+
+Formally, during the training forward process, we obtain intermediate diffusion states via the following, where _y_ _∼_ _p_ [train] _Y_ := _x_ 0 is the high-fidelity CFD that we want to recover. Here _ϵt_ is sampled
+from a standard Gaussian distribution. _α_ ¯ _t_ := [�] _[t]_ _s_ =1 [1] _[ −]_ _[β][s]_ [as introduced in Sec 2.2.]
+
+
+1 ~~_α_~~ _tϵt,_ _t_ = 1 _,_ 2 _,_ _T._ (2)
+_−_ _· · ·_
+
+
+4
+
+
+During the inference stage, we first obtain the intermediate diffusion state _xt_ guide(0 _< t_ guide _< T_ ) by
+sequentially adding noises to the conditioned low-fidelity data _x_ _p_ [test] [as]
+_∼_ _X_
+
+_xt_ guide = [�] ~~_α_~~ _t_ guide _x_ + [�] 1 ~~_α_~~ _t_ guide _ϵt_ guide _._ (3)
+_−_
+
+We then use _xt_ guide as the starting point for the reverse process to reconstruct the high-fidelity sources.
+Equivalently, this means the reverse diffusion starts from _t_ guide instead of _T_ . The reverse diffusion
+process progressively produces a refined high-fidelity reconstruction that aligns with the low-fidelity
+conditioning data, using the following DDIM (Song et al., 2020) sampling formula for acceleration.
+
+       _xt_ 1 = _α_ ¯ _t_ 1 _x_ _[t]_ 0 [+] 1 _α_ ¯ _t_ 1 _σt_ [2] _[ϵ][θ]_ [(] _[x][t][, t]_ [) +] _[ σ]_ _t_ [2] _[ϵ][t][,]_ 0 _< t < t_ guide (4)
+
+_−_ _[√]_ _−_ _−_ _−_ _−_
+
+where _x_ _[t]_ 0 [=] _[x][t][−]_ ~~_[√]_~~ [1] _[−]_ ~~_√_~~ _[α]_ [¯] _α_ ¯ _[t]_ _t_ _[ϵ][θ]_ [(] _[x][t][,t]_ [)] is the predicted reconstruction at each reverse diffusion step _t_ . We
+use U-net as in Ho et al. (2020) to serve as our denosier, detailed in Appendix C.2.
+
+
+3.1 IMPORTANCE WEIGHT DURING TRAINING
+
+
+where _ϵθ_ represents the predicted noise by the denoiser, _ϵt_ is the ground truth noise at time _t_, and _⊙_
+denotes element-wise multiplication.
+
+
+**Importance** **Weight** **Design** **Choice.** Our _importance_ _weight_ strategy is incorporated exclusively
+during training, ensuring that the model focuses on regions with high-frequency details. The DWTbased calculation avoids the large computational complexity often associated with attention mechanisms. It efficiently emphasizes important features by leveraging the intrinsic properties of the
+wavelet transform, resulting in a more targeted learning process.
+
+
+3.2 RESIDUAL CORRECTION DURING INFERENCE
+
+
+In addition, we introduce a physics-informed residual correction module to enhance the physical
+coherence of the reconstructed data during inference. In the reverse diffusion process, we apply such
+correction to refine the reconstructed high-fidelity data at certain diffusion steps _t_ determined by a
+scheduling policy. Since we use DDIM (Song et al., 2020) for acceleration, we represent the sampled
+
+
+5
+
+
+Existing diffusion models can fail to capture high-fidelity fine-grained details when conditioned on
+solver-generated low-fidelity data. We therefore introduce an importance weighting mechanism during training as self-guidance to address this limitation. Specifically, we transform the high-fidelity
+data into the wavelet domain using the DWT and assign importance scores to different components
+of fluid fields within the diffusion loss function. DWT has great abilities to locate information
+both in spatial and frequency domains (Daubechies, 1992b; Akansu & Haddad, 1992), thus allowing the model to capture fine-grained structures more effectively. Formally, we decompose fluid
+fields _y_ _∈R_ _[n][×][n]_ into frequency subdomains, and compute the sum of squares of the high-frequency
+modes - namely HL (high-low), LH (low-high) and HH (high-high) subdomains as below, where
+_HL, LH, HH, F_ _∈_ R _n_ 2 _[×]_ _[n]_ 2 . HL captures horizontal high-frequency signals, while LH captures ver
+tical high-frequency signals. HH captures high-frequency signals in both directions, corresponding
+to diagonal details such as intersections. Details about DWT are described in Appendix C.1.
+
+_F_ = _HL_ [2] + _LH_ [2] + _HH_ [2] _._ (5)
+
+_F_ Toˆ _i,j_ computeto an importance weightimportance scores, _ai,j_ weas below, wherethen uniformly _α, β_ upsampleare the minimum and maximum importance _F_ to _F_ [ˆ] _∈_ R _[n][×][n]_ and linearly map
+weight value respectively, _Qθ_ ( _F_ [ˆ] ) _∈_ R is the _θ_ quantile of all _F_ [ˆ] values.
+
+
+_ai,j_ =
+
+
+_F_ ˆ _i,j_ _Qθ_ ( _F_ [ˆ] )
+_α_ + ( _β_ _α_ ) _−_ if _F_ [ˆ] _i,j_ _> Qθ_ ( _F_ [ˆ] )
+_−_ max _F_ [ˆ] _−Qθ_ ( _F_ [ˆ] )
+
+
+max _F −Qθ_ _F_ ) (6)
+
+1 otherwise
+
+
+If _F_ [ˆ] _i,j_ exceeds the _θ_ quantile of all _F_ [ˆ] values, the corresponding component is considered highfrequency, and will be assigned with weight greater than 1. Finally, the diffusion loss function in
+Eqn 1 is updated to incorporate the importance weighting as follows:
+
+
+_L_ [IW] = E _t,y,ϵ_ - _a ⊙_ �� _ϵt −_ _ϵθ_ - _√α_ ¯ _t y_ + _√_
+
+
+1 _−_ _α_ ¯ _t ϵt,_ _t_ ���2 [�] _,_ (7)
+
+
+diffusion states as _x_ _[τ]_, and its corresponding reconstruction as _x_ _[τ]_ 0 [(] _[τ]_ _[< t]_ [guide][)][ in the following.] [Note]
+that we do not apply correction on the noisy state _x_ _[τ]_ ( _τ_ _<_ _t_ guide) directly. The correction is to
+perform gradient descent based on the residuals of the governing PDEs, detailed in Appendix D.1.
+The key parameters in this process are the residual correction schedule policy (the specific diffusion
+steps at which the correction is applied), the number of gradient descent steps _N_, and the step size
+_η_, which we study their impacts in Exp 4.5. Our findings suggest that applying residual corrections
+at both the beginning and the end of diffusion steps strikes the ideal balance between reconstruction
+L2 error and the physical coherence. We utilize the Adam algorithm Kingma & Ba (2015) for the
+gradient descent and summarize the physics-guided inference procedure using DDIM (Song et al.,
+2020) in Algorithm 1.
+
+
+One existing work proposes a conditional diffusion model (Shu et al., 2023), where residual at every
+training diffusion step is concatenated with the current state to generate the diffusion state at next
+timestamp, serving as the condition. One key advantage of PG-Diff is that it is training-free, allowing the correction process to be applied without additional learning to the original diffusion model.
+Also, our approach offers the flexibility to adjust the residual correction schedule dynamically. This
+adaptability enables an optimal balance between predictive accuracy and physical consistency of
+the reconstructed sample. We empirically show our method achieves better performance in Sec 4.3.
+Additionally, diffusion model guided generation has been widely studied in Chung et al. (2023);
+Huang et al. (2024); Zhu et al. (2023); Shysheya et al. (2024), our Residual Correction differs by applying guidance to denoised samples instead of noisy samples. Our physical guidance also involves
+multiple steps of Adam gradient descent at selected backward diffusion steps, in contrast to a single
+step of gradient descent applied at every backward diffusion step in other works.
+
+
+**Algorithm 1** Physics-informed Training-free Correction with DDIM during Inference.
+**Require:** _x_ [test] (guide), _t_ guide ( _t_ guide _<_ _T_ ), _τ_ = _τ_ 0 _, τ_ 1 _, ..., τK_ (sampled diffusion times_∈X_ _{_ _}_
+tamp sequence, where _τ_ 0 = 0 _,_ _τK_ = _t_ guide. _ϵθ_ (a trained DDPM model), ( ) (residual of the
+_· · ·_ _R_ _·_
+governing PDE), _N_ (number of gradient descent steps), _η_ (step size).
+
+
+5: **if** correction is performed at time _τi−_ 1 **then**
+6: # Residual-Based Correction
+7: **repeat**
+8:9: **until** _x N_ _[τ]_ 0 _[i]_ [=] times _[ x]_ 0 _[τ][i]_ _[−]_ _[η][ ·]_ [ Adam][(] _[∇R]_ [(] _[x]_ 0 _[τ][i]_ [))]
+10: **end if** 11: _xτi−_ 1 = _α_ ¯ _τi−_ 1 _x_ _[τ]_ 0 _[i]_ [+] 1 _α_ ¯ _τi−_ 1 _στ_ [2] _iϵθ_ ( _xτi, τi_ ) + _στ_ [2] _i_ _[ϵ][τ]_ _i_ [.] # _xτi−_ 1 _pθ_ ( _xτi−_ 1 _xτi_ )
+
+_[√]_ _−_ _−_ _∼_ _|_
+12: **end for**
+13: **return** _y_ = _x_ 0
+
+
+4 EXPERIMENTS
+
+
+4.1 DATASET
+
+
+We generated four 2D turbulent flow datasets with different characteristics: 1.) _Taylor Green Vortex_,
+featuring how vortices diminish in turbulent flows, where large-scale vortices gradually break down
+into smaller turbulent structures; 2.) _Decaying Turbulence_, describing turbulence that evolves naturally without external forces. As time progresses, the turbulence weakens due to viscous effects; 3.)
+_Kolmogorov_ _Flow_, which portrays turbulence influenced by a sinusoidal external force combined
+with a drag component; 4.) _McWilliams_ _Flow_ (Mcwilliams, 1984), which describes the behavior
+of isolated vortices in turbulent conditions. It is the most challenging one, demanding accurate
+modeling of inverse energy transfer and multi-scale vortex interactions.
+
+
+6
+
+
+1: _ϵτK_ (0 _, I_ ) # _τK_ = _t_ guide
+_∼N_
+2: _xτK_ = _α_ ¯ _τK_ _x_ + 1 _α_ ¯ _τK_ _ϵτK_ # Adding noises to low-fidelity input via forward diffusion
+
+_[√]_ _[√]_ _−_
+3: **for** _i_ = _K, K_ 1 _, . . .,_ 1 _,_ 0 **do** # Reverse diffusion from _τK_ ( _τK_ = _t_ guide)
+_−_
+
+
+_xτi_
+4: _x_ _[τ]_ 0 _[i]_ [=] _−_ _[√]_
+
+
+1 _α_ ¯ _τi_ _ϵθ_ ( _xτi_ _,τi_ )
+
+_−_
+~~_√_~~ _α_ ¯ _τi_
+
+
+_i_ _i_ # Predicted reconstruction ( _x_ 0) at _τi_
+
+_α_ ¯ _τi_
+
+
+The four datasets are generated by the incompressible Navier-Stokes equations following (Li et al.,
+2021; Kochkov et al., 2021)
+
+
+_**u**_ ( _**x**_ _, t_ ) = 0 _,_ _ω_ ( _**x**_ _,_ 0) = _ω_ 0( _**x**_ ) _,_
+_∇·_
+
+where _ω_ represents the vorticity, _**u**_ denotes the velocity field, _Re_ is the Reynolds number, and
+_f_ ( _**x**_ ) is an external forcing term. _ω_ 0 represents the initial vorticity distribution. The PDE is numerically solved by pseudo-spectral solver (Orszag, 1972) on equispaced discretization grids. The
+high-fidelity data are generated with 2048 _×_ 2048 discretization grid and then uniformly downsampled to 256 _×_ 256, while those on the lower-resolution grids are considered low-fidelity. For each
+dataset, we use 80% of the trajectories for training. 10% for validation, and 10% for testing. More
+details can be found in Appendix D. Note that PG-Diff also utilizes the PDE for residual correction
+discussed in Sec 3.2.
+
+
+4.2 EXPERIMENT SETTINGS
+
+
+**Task Setup and Baselines.** We evaluate two reconstruction settings with different low-fidelity resolutions: 64 _×_ 64 _→_ 256 _×_ 256 (4 _×_ upsampling) and 32 _×_ 32 _→_ 256 _×_ 256 (8 _×_ upsampling).
+To benchmark our approach, we compared against both direct mapping models and diffusion models: bicubic interpolation (Gonzalez & Woods, 2007), a CNN-based model (Fukami et al., 2019),
+a GAN-based model (Li & McComb, 2022), the vanilla diffusion model (Diff) and its conditional
+variant (Cond Diff) from Shu et al. (2023). In addition, we perform two ablation studies, namely PGDiff w/o IW and PG-Diff w/o Cor, where we remove _Importance Weight_ and _Residual Correction_
+respectively. More implementation details are provided in Appendix C.2.
+
+
+**Evaluation** **Metrics.** We assess the reconstructed flow fields using three key metrics. We first
+use two standard metrics suggested by Shu et al. (2023): L2 norm for measuring the pointwise
+error between prediction and ground truth; unnormalized residuals of the governing equation (Res.)
+for assessing adherence to the underlying physics. In addition, we conduct a novel multi-scale
+evaluation using DWT: we transform the predicted and ground truth flow fields into wavelet space
+and decompose them into four subdomains: LL (low-low), LH (low-high), HL (high-low), and HH
+(high-high). The LL subdomain captures large-scale, low-frequency information, while LH, HL,
+and HH encompass higher-frequency details like turbulent structures. By calculating the L2 norm
+in each subdomain, we gain a comprehensive understanding of the model’s performance across
+different scales, ensuring accurate reconstruction of both global flow features and fine-scale details.
+
+
+4.3 RECONSTRUCTION RESULTS
+
+
+Table 1 reports the mean and standard deviation of L2 and PDE residual across datasets and models.
+For both upsampling scales (32 _×_ 32 _→_ 256 _×_ 256 and 64 _×_ 64 _→_ 256 _×_ 256), PG-Diff consistently
+outperforms baselines, showing its effectiveness. Notably, it achieves 3 _._ 5% to 7 _._ 7% performance
+gain against baselines in the 4 _×_ upsampling setting. The lower L2 achieved by PG-Diff indicates
+that PG-Diffeffectively captures the essential features and dynamics of the turbulent flows, while
+the significantly reduced PDE residuals demonstrate that PG-Diff’s predictions adhere more closely
+to the underlying physical laws governing fluid dynamics. Reconstructions from direct mapping
+models (GAN, CNN) exhibit significant deviations in physical coherence. For complex datasets
+dominated by fine-grained details, such as _Kolmogorov Flow_ and _McWilliams Flow_, PG-Diff consistently outperforms baselines by a big margin, showing better reconstruction accuracy and physical
+coherence. Through ablation studies, we demonstrate that both _Importance_ _Weight_ and _Residual_
+_Correction_ contribute significantly in improving model’s performance, underscoring the effectiveness of our design choices in capturing the complex behaviors of turbulent flows.
+
+
+**Multi-Scale Evaluation.** In addition, we assess the model’s ability to capture flow structures at different scales using DWT. As shown in Figure 12, PG-Diff demonstrates superior performance in the
+LL, LH, and HL subdomains, achieving the best or near-best results among all methods. Excelling
+in the LL subdomain indicates a strong capability in capturing large-scale, low-frequency components of the turbulent flows. The superior performance in the LH and HL subdomains suggests the
+effectiveness of PG-Diff in capturing small-scale vortices and transitions between scales. While
+
+
+7
+
+
+_∂ω_ ( _**x**_ _, t_ )
+
+
+_Re_ _[∇]_ [2] _[ω]_ [(] _**[x]**_ _[, t]_ [) +] _[ f]_ [(] _**[x]**_ [)] _[,]_
+
+
+( _**x**_ _, t_ )
+
++ _**u**_ ( _**x**_ _, t_ ) _ω_ ( _**x**_ _, t_ ) = [1]
+_∂t_ _· ∇_
+
+
+Bicubic _[∗]_ CNN GAN Diff Cond PG-Diff PG-Diff PG-Diff w/o
+Diff w/o Cor IW
+
+
+L2 3.04 2.99 _±_ 0.06 2.83 _±_ 0.3 1.68 _±_ 2e-3 3.57 _±_ 0.02 **1.55** _±_ **9e-3** 1.57 _±_ 0.02 1.59 _±_ 6e-3
+Res. 1.05e4 1.37e5 _±_ 3.6e4 4.18e4 _±_ 1.1e4 3.06e4 _±_ 4.3e3 1.47e5 _±_ 1.9e4 **4.39e3** _±_ **3** 6.67e4 _±_ 8.4e3 6.09e3 _±_ 9
+
+
+L2 1.74 1.66 _±_ 0.1 2.06 _±_ 0.05 0.85 _±_ 6e-4 1.34 _±_ 7e-4 **0.82** _±_ **1e-3** 0.83 _±_ 6e-3 0.83 _±_ 4e-3
+Res. 1.31e3 3.16e3 _±_ 781 6.65e2 _±_ 59 4.33e3 _±_ 164 1.52e4 _±_ 161 **85** _±_ **0.9** 2.76e3 _±_ 1.5e3 1.87e2 _±_ 37
+
+
+L2 3.22 2.22 _±_ 0.01 3.02 _±_ 0.04 1.79 _±_ 1e-3 1.79 _±_ 1e-3 **1.66** _±_ **4e-3** 1.69 _±_ 8e-4 1.73 _±_ 1e-3
+Res. 1.86e4 7.30e2 _±_ 49 3.03e2 _±_ 92 3.09e2 _±_ 29 1.65e2 _±_ 7 **39** _±_ **0.06** 9.27e2 _±_ 1 3.33e2 _±_ 145
+
+
+L2 2.17 1.75 _±_ 0.1 1.96 _±_ 0.08 1.29 _±_ 3e-4 1.30 _±_ 4e-4 **1.24** _±_ **9e-5** 1.27 _±_ 1e-4 1.30 _±_ 2e-4
+Res. 2.17e2 3.64e2 _±_ 127 2.42e2 _±_ 35 21 _±_ 4 31 _±_ 4 **6.36** _±_ **2e-3** 88 _±_ 0.7 12 _±_ 0.06
+
+
+Table 1: Quantitative performance comparison over four datasets on L2 and Res. Results are repeated three times. Metrics are reported for both 32×32 → 256×256 ( grey ) and 64×64 → 256×256
+tasks. **Bold** values indicate the best performance and underlined values represent the second-best.
+_∗_ Bicubic interpolation is a deterministic algorithm, which has zero standard deviation.
+
+
+direct mapping models (CNN, GAN) exhibit better performance in the HH subdomain, PG-Diff’s
+results are close to those best-performing methods. The balanced performance across all subdomains demonstrates that PG-Diff can reconstruct both large-scale structures and fine-grained details
+essential for turbulent flows. Additional details on other datasets are presented in the Appendix E.2.
+
+
+**Runtime** **Comparison.** We report the runtime comparison of different methods in Appendix E.8.
+PG-Diff only increases small inference time while achieving superior performance improvement
+against baselines. The total runtime of using the numerical solvers to generate low-fidelity data, and
+then reconstructing with PG-Diff is considerably faster than the time required to produce samples
+with similar error, demonstrating the effectiveness of PG-Diff.
+
+
+**Sensitivity** **Analysis.** We study the effects of three key hyperparameters in calculating the importance weight in Sec 3.1: the maximum importance weight _β_, minimum importance weight _α_, and
+the threshold parameter _θ_ . The results in Appendix E.5 show that increasing _β_ reduces both L2 and
+PDE residuals, indicating a broader range of importance weights is beneficial. Smaller _α_ values
+improve performance, while setting _α_ to 1 is suboptimal. This can be understood as it decreases the
+difference between high-frequency and low-frequency regions, as the weight for the latter one is set
+to 1. Additionally, a larger _θ_ (0.7 or 0.8) helps the model focus on important details.
+
+
+4.4 VISUALIZATIONS
+
+
+We visualize the reconstructed high-fidelity data conditioned on low-fidelity inputs in Figure 3. PGDiff consistently captures more fine-grained details, resulting in a closer resemblance to the highfidelity ground truth compared to other methods. This is particularly evident in regions with complex
+vortical structures and turbulent features, where competing models often smooth out finer details. An
+example is the reconstructions from CNN and GAN on the _McWilliams FLow_ dataset. While direct
+mapping methods can achieve a low L2 norm, their reconstructed samples often merge small finegrained regions into one large blurred region, leading to information loss and significant divergence
+from the original high-fidelity data. By comparison, PG-Diff is able to recover the sharp edges,
+turbulence, and subtle variations in the flow field. We additionally show the strong reconstruction
+ability of our model variants compared to baselines in Appendix E.3. We also use the Learned
+Perceptual Image Patch Similarity (LPIPS) score (Zhang et al., 2018) to measure the perceptual
+quality of reconstructed samples in Appendix E.4.
+
+
+8
+
+
+diffusion process; 3.) _Start_ _N,_ _Space_ _S_ : End 4 Space 2 2.7932 **17.55** 1.6747 **20.96**
+Placing N correction steps at the start with End 4 Space 3 2.7924 **19.26** 1.6730 **23.57**
+a spacing of S; 4.) _End N, Space S_ : Placing
+N correction steps at the end with a spac- Table 2: Scheduling policy comparison on _Kolmogorov_
+ing of S. Results in Table 2 suggest that _Flow_ . We emphasize that applying residual correction
+applying correction steps at the beginning at the end leads to a reduced PDE residual, while placachieves the lowest L2, while applying at ing it at the beginning achieves a lower L2 loss.
+the end has the lowest PDE residuals. To
+balance between L2 and PDE residual, we
+adopt the _Start_ _N_ _End_ _N_ schedule, which places _N_ correction steps at both the beginning and the
+end of the diffusion process. We next study the optimal number of _N_ .
+
+
+**Number** **of** **Correction** **Steps.** We vary the number of _N_ in the _Start_ _N,_ _End_ _N_ policy as shown
+in Figure 4. We observe that increasing _N_ leads to enhanced physical coherence measured by PDE
+residuals. However, L2 does not continuously decrease with larger _N_ . It reaches a minimum when
+_N_ = 2. This suggests that while more correction steps improve models’ adherence to physical laws,
+an excessive number may interfere with the model’s ability to accurately capture the intricate details
+of the turbulent flow. Therefore, we use _Start 2, End 2_ as the optimal balance in our method.
+
+
+4.6 MODEL GENERALIZATION
+
+
+We observe that PG-Diff generalizes well even beyond its training distributions. Specifically, we
+conduct evaluations over three generalization settings: time discretization in numerical solver, spatial domain size, and Reynolds number as shown in Table 3. We train PG-Diff on the original
+_Kolmogorov Flow_ dataset configurations, which has solver integration timestep as _dt_ = 1 _/_ 32, spa
+
+9
+
+
+End 4 Space 2 2.7932 **17.55** 1.6747 **20.96**
+End 4 Space 3 2.7924 **19.26** 1.6730 **23.57**
+
+
+Table 2: Scheduling policy comparison on _Kolmogorov_
+_Flow_ . We emphasize that applying residual correction
+at the end leads to a reduced PDE residual, while placing it at the beginning achieves a lower L2 loss.
+
+
+Figure 4: Varying number of _N_ using the _Start_ _N,_ _End_ _N_ correction schedule on the _Kolmogorov_
+_Flow_ dataset. Showing both L2 and Residual across upsampling settings.
+
+
+tial domain size ranging from 2 _π ×_ 2 _π_, and Reynolds number as _Re_ = 1000. We then directly test
+these new configurations on the trained model, without any additional retraining or fine-tuning. We
+compare the performance against models directly trained one each new configuration.
+
+
+The results reveal that the pertained PG-Diff performs comparably
+to trained ones directly on each new
+configuration. This underscores our
+model’s strong generalization capabilities across different flow conditions. Such generalization ability can
+due to the fact that both our _impor-_
+_tance_ _weight_ mechanism and _resid-_
+_ual_ _correction_ modules are trainingfree. They enable our model to locate fine-grained high-fidelity details
+and adhere to physical laws independent of training data, showing their
+strong superiority. A similar trend is
+also observed in 4 _×_ upsampling experiments, shown in Appendix E.7.
+
+
+5 CONCLUSION
+
+
+Table 3: Generalization results on _Kolmogorov Flow_ dataset
+with 32 _×_ 32 _→_ 256 _×_ 256 setting.
+
+
+**Variation** **Model** **L2** **Res.**
+
+
+**Time Discretization Variations**
+
+
+_dt_ = 1 _/_ 40 Trained on Original Data 2.8144 34.29
+Trained on _dt_ = 1 _/_ 40 Data 2.8136 34.52
+
+
+_dt_ = 1 _/_ 50 Trained on Original Data 2.7761 37.11
+Trained on _dt_ = 1 _/_ 50 Data 2.7795 30.60
+
+
+**Spatial Domain Size Variations**
+
+
+1 _π ×_ 1 _π_ Trained on Original Data 1.9045 262.42
+Trained on 1 _π ×_ 1 _π_ Data 1.7672 190.99
+
+
+1 _._ 5 _π ×_ 1 _._ 5 _π_ Trained on Original Data 2.3573 80.66
+Trained on 1 _._ 5 _π ×_ 1 _._ 5 _π_ Data 2.3028 88.88
+
+
+**Reynolds Number Variations**
+
+
+_Re_ = 500 Trained on Original Data 2.3694 24.11
+Trained on _Re_ = 500 Data 2.3542 26.96
+
+
+_Re_ = 2000 Trained on Original Data 3.2739 21.21
+Trained on _Re_ = 2000 Data 3.2914 22.48
+
+
+We study a novel problem of reconstructing high-fidelity CFD from
+solver-generated low-fidelity inputs
+in a practical setting across scientific
+domains. We present a novel diffusion model PG-Diff, which achieves high-quality reconstruction guided by the proposed _Importance_
+_Weight_ and _Residual_ _Correction_ modulus jointly, yielding state-of-the-art performance across four
+2D turbulent flow datasets.
+
+
+10
+
+
+REFERENCES
+
+
+Ali N. Akansu and Richard A. Haddad. _Multiresolution_ _Signal_ _Decomposition:_ _Transforms,_ _Sub-_
+_bands, and Wavelets_ . Academic Press, San Diego, CA, 1992.
+
+
+Xd. Bai, Y. Wang, and W. Zhang. Applying physics informed neural network for flow data assimilation. _Journal of Hydrodynamics_, 32:1050–1058, 2020. doi: 10.1007/s42241-020-0077-2.
+
+
+Z. Chen, Y. Liu, and H. Sun. Physics-informed learning of governing equations from scarce data.
+_Nature Communications_, 12:6136, 2021. doi: 10.1038/s41467-021-26434-1.
+
+
+Hyungjin Chung, Jeongsol Kim, Michael Thompson Mccann, Marc Louis Klasky, and Jong Chul
+Ye. Diffusion posterior sampling for general noisy inverse problems. In _The_ _Eleventh_ _Interna-_
+_tional_ _Conference_ _on_ _Learning_ _Representations_, 2023. URL [https://openreview.net/](https://openreview.net/forum?id=OnD9zGAGT0k)
+[forum?id=OnD9zGAGT0k.](https://openreview.net/forum?id=OnD9zGAGT0k)
+
+
+Ingrid Daubechies. _Ten_ _Lectures_ _on_ _Wavelets_ . Society for Industrial and Applied Mathematics,
+[1992a. doi: 10.1137/1.9781611970104. URL https://epubs.siam.org/doi/abs/10.](https://epubs.siam.org/doi/abs/10.1137/1.9781611970104)
+[1137/1.9781611970104.](https://epubs.siam.org/doi/abs/10.1137/1.9781611970104)
+
+
+Ingrid Daubechies. _Ten Lectures on Wavelets_ . SIAM, Philadelphia, PA, 1992b.
+
+
+N. Benjamin Erichson, Lionel Mathelin, Zhewei Yao, Steven L. Brunton, MichaelW. Mahoney, and
+J. Nathan Kutz. Shallow neural networks for fluid flow reconstruction with limited sensors. _Pro-_
+_ceedings:_ _Mathematical,_ _Physical_ _and_ _Engineering_ _Sciences_, 476(2238):pp. 1–25, 2020. ISSN
+13645021, 14712946. [URL https://www.jstor.org/stable/27097181.](https://www.jstor.org/stable/27097181)
+
+
+Cong Fu, Jacob Helwig, and Shuiwang Ji. Semi-supervised learning for high-fidelity fluid flow
+reconstruction. In _The_ _Second_ _Learning_ _on_ _Graphs_ _Conference_, 2023. URL [https://](https://openreview.net/forum?id=695IYJh1Ba)
+[openreview.net/forum?id=695IYJh1Ba.](https://openreview.net/forum?id=695IYJh1Ba)
+
+
+Kai Fukami, Koji Fukagata, and Kunihiko Taira. Super-resolution reconstruction of turbulent flows
+with machine learning. _Journal of Fluid Mechanics_, 870:106–120, 2019. doi: 10.1017/jfm.2019.
+238.
+
+
+Kai Fukami, Romit Maulik, Nesar Ramachandra, Koji Fukagata, and Kunihiko Taira. Global
+field reconstruction from sparse sensors with voronoi tessellation-assisted deep learning. _Na-_
+_ture_ _Machine_ _Intelligence_, 3(11):945–951, November 2021. ISSN 2522-5839. doi: 10.1038/
+s42256-021-00402-2. Publisher Copyright: © 2021, The Author(s), under exclusive licence to
+Springer Nature Limited.
+
+
+Han Gao, Luning Sun, and Jian-Xun Wang. Super-resolution and denoising of fluid flow using
+physics-informed convolutional neural networks without high-resolution labels. _Physics of Fluids_,
+33(7):073603, 2021. doi: https://doi.org/10.1063/5.0054312.
+
+
+Rafael C. Gonzalez and Richard E. Woods. _Digital Image Processing_ . Prentice Hall, Upper Saddle
+River, NJ, USA, 3rd edition, 2007.
+
+
+Jonathan Ho, Ajay Jain, and Pieter Abbeel. Denoising diffusion probabilistic models. _arXiv preprint_
+_arxiv:2006.11239_, 2020.
+
+
+Jiahe Huang, Guandao Yang, Zichen Wang, and Jeong Joon Park. Diffusionpde: Generative pdesolving under partial observation, 2024. [URL https://arxiv.org/abs/2406.17763.](https://arxiv.org/abs/2406.17763)
+
+
+Zijie Huang, Yizhou Sun, and Wei Wang. Generalizing graph ode for learning complex system dynamics across environments. In _Proceedings of the 29th ACM SIGKDD Conference on Knowledge_
+_Discovery and Data Mining_, pp. 798–809, 2023.
+
+
+Chiyu Max Jiang, Soheil Esmaeilzadeh, Kamyar Azizzadenesheli, Karthik Kashinath, Mustafa A.
+Mustafa, Hamdi A. Tchelepi, Philip S. Marcus, Prabhat, and Anima Anandkumar. Meshfreeflownet: A physics-constrained deep continuous space-time super-resolution framework.
+_SC20:_ _International_ _Conference_ _for_ _High_ _Performance_ _Computing,_ _Networking,_ _Storage_ _and_
+_Analysis_, pp. 1–15, 2020. URL [https://api.semanticscholar.org/CorpusID:](https://api.semanticscholar.org/CorpusID:218487006)
+[218487006.](https://api.semanticscholar.org/CorpusID:218487006)
+
+
+11
+
+
+Diederik P. Kingma and Jimmy Ba. Adam: A method for stochastic optimization. _International_
+_Conference_ _on_ _Learning_ _Representations_ _(ICLR)_, 2015. URL [https://arxiv.org/abs/](https://arxiv.org/abs/1412.6980)
+[1412.6980.](https://arxiv.org/abs/1412.6980)
+
+
+Dmitrii Kochkov, Jesse A. Smith, Alina Alieva, Qian Wang, Michael P. Brenner, and Stephan
+Hoyer. Machine learning–accelerated computational fluid dynamics. _Proceedings of the National_
+_Academy of Sciences_, 118(21):e2101784118, 2021. doi: 10.1073/pnas.2101784118.
+
+
+Christian Ledig, Lucas Theis, Ferenc Husz´ar, Jose Caballero, Andrew P. Aitken, Alykhan Tejani,
+Johannes Totz, Zehan Wang, and Wenzhe Shi. Photo-realistic single image super-resolution using a generative adversarial network. _2017_ _IEEE_ _Conference_ _on_ _Computer_ _Vision_ _and_ _Pattern_
+_Recognition_ _(CVPR)_, pp. 105–114, 2016. URL [https://api.semanticscholar.org/](https://api.semanticscholar.org/CorpusID:211227)
+[CorpusID:211227.](https://api.semanticscholar.org/CorpusID:211227)
+
+
+Matthew Li and Christopher McComb. Using Physics-Informed Generative Adversarial Networks to
+Perform Super-Resolution for Multiphase Fluid Simulations. _Journal of Computing and Informa-_
+_tion Science in Engineering_, 22(4):044501, 02 2022. ISSN 1530-9827. doi: 10.1115/1.4053671.
+[URL https://doi.org/10.1115/1.4053671.](https://doi.org/10.1115/1.4053671)
+
+
+Zong-Yi Li, Nikola B. Kovachki, Kamyar Azizzadenesheli, Burigede Liu, Kaushik Bhattacharya,
+Andrew M. Stuart, and Anima Anandkumar. Fourier neural operator for parametric partial differential equations. _ArXiv_, abs/2010.08895, 2020. [URL https://api.semanticscholar.](https://api.semanticscholar.org/CorpusID:224705257)
+[org/CorpusID:224705257.](https://api.semanticscholar.org/CorpusID:224705257)
+
+
+Zong-Yi Li, Hongkai Zheng, Nikola B. Kovachki, David Jin, Haoxuan Chen, Burigede Liu, Kamyar Azizzadenesheli, and Anima Anandkumar. Physics-informed neural operator for learning partial differential equations. _ArXiv_, abs/2111.03794, 2021. URL [https://api.](https://api.semanticscholar.org/CorpusID:243847513)
+[semanticscholar.org/CorpusID:243847513.](https://api.semanticscholar.org/CorpusID:243847513)
+
+
+Andreas Lugmayr, Martin Danelljan, Luc Van Gool, and Radu Timofte. Srflow: Learning the superresolution space with normalizing flow. In _ECCV_, 2020.
+
+
+Nick McGreivy and Ammar Hakim. Weak baselines and reporting biases lead to overoptimism in
+machine learning for fluid-related partial differential equations. _Nature Machine Intelligence_, pp.
+1–14, 2024.
+
+
+James C. Mcwilliams. The emergence of isolated coherent vortices in turbulent flow. _Journal_ _of_
+_Fluid Mechanics_, 146:21–43, 1984. doi: 10.1017/S0022112084001750.
+
+
+Chenlin Meng, Yutong He, Yang Song, Jiaming Song, Jiajun Wu, Jun-Yan Zhu, and Stefano Ermon.
+SDEdit: Guided image synthesis and editing with stochastic differential equations. In _Interna-_
+_tional Conference on Learning Representations_, 2022.
+
+
+C. L. M. H. Navier. M´emoire sur les lois du mouvement des fluides. _M´emoires_ _de_ _l’Acad´emie_
+_Royale des Sciences de l’Institut de France_, 6:389–440, 1823.
+
+
+Francis Ogoke, Quanliang Liu, Olabode Ajenifujah, Alexander Myers, Guadalupe Quirarte,
+Jonathan Malen, Jack Beuth, and Amir Barati Farimani. Inexpensive high fidelity melt pool models in additive manufacturing using generative deep diffusion. _Materials_ _Design_, 245:113181,
+2024. ISSN 0264-1275. doi: https://doi.org/10.1016/j.matdes.2024.113181. URL [https:](https://www.sciencedirect.com/science/article/pii/S0264127524005562)
+[//www.sciencedirect.com/science/article/pii/S0264127524005562.](https://www.sciencedirect.com/science/article/pii/S0264127524005562)
+
+
+Steven A Orszag. Analytical theories of turbulence. _Journal_ _of_ _Fluid_ _Mechanics_, 41(2):363–386,
+1970.
+
+
+Steven A. Orszag. Comparison of pseudospectral and spectral approximation. _Studies_ _in_ _Applied_
+_Mathematics_, 51(3):253–259, September 1972. doi: 10.1002/sapm1972513253.
+
+
+Aniruddhe Pradhan and Karthik Duraisamy. Variational multi-scale super-resolution : A data-driven
+approach for reconstruction and predictive modeling of unresolved physics, 2021. [URL https:](https://arxiv.org/abs/2101.09839)
+[//arxiv.org/abs/2101.09839.](https://arxiv.org/abs/2101.09839)
+
+
+12
+
+
+Jing Qiu, Jiancheng Huang, Xiangdong Zhang, Zeng Lin, Minglei Pan, Zengding Liu, and Fen
+Miao. Pi-fusion: Physics-informed diffusion model for learning fluid dynamics, 2024. URL
+[https://arxiv.org/abs/2406.03711.](https://arxiv.org/abs/2406.03711)
+
+
+M. Raissi, P. Perdikaris, and G.E. Karniadakis. Physics-informed neural networks: A deep learning
+framework for solving forward and inverse problems involving nonlinear partial differential equations. _Journal of Computational Physics_, 378:686–707, 2019. ISSN 0021-9991. doi: https://doi.
+org/10.1016/j.jcp.2018.10.045. URL [https://www.sciencedirect.com/science/](https://www.sciencedirect.com/science/article/pii/S0021999118307125)
+[article/pii/S0021999118307125.](https://www.sciencedirect.com/science/article/pii/S0021999118307125)
+
+
+Pu Ren, Chengping Rao, Yang Liu, Zihan Ma, Qi Wang, Jian-Xun Wang, and Hao Sun.
+Physr: Physics-informed deep super-resolution for spatiotemporal data. _Journal_ _of_ _Compu-_
+_tational_ _Physics_, 492:112438, 2023. ISSN 0021-9991. doi: https://doi.org/10.1016/j.jcp.
+2023.112438. URL [https://www.sciencedirect.com/science/article/pii/](https://www.sciencedirect.com/science/article/pii/S0021999123005338)
+[S0021999123005338.](https://www.sciencedirect.com/science/article/pii/S0021999123005338)
+
+
+Chitwan Saharia, Jonathan Ho, William Chan, Tim Salimans, David J Fleet, and Mohammad
+Norouzi. Image super-resolution via iterative refinement. _arXiv:2104.07636_, 2021.
+
+
+Alvaro Sanchez-Gonzalez, Jonathan Godwin, Tobias Pfaff, Rex Ying, Jure Leskovec, and Peter
+Battaglia. Learning to simulate complex physics with graph networks. In Hal Daum´e III and Aarti
+Singh (eds.), _Proceedings of the 37th International Conference on Machine Learning_, volume 119
+of _Proceedings_ _of_ _Machine_ _Learning_ _Research_, pp. 8459–8468. PMLR, 13–18 Jul 2020. URL
+[https://proceedings.mlr.press/v119/sanchez-gonzalez20a.html.](https://proceedings.mlr.press/v119/sanchez-gonzalez20a.html)
+
+
+Rajat Kumar Sarkar, Ritam Majumdar, Vishal Jadhav, Sagar Srinivas Sakhinana, and Venkataramana
+Runkana. Redefining super-resolution: Fine-mesh pde predictions without classical simulations,
+2023. [URL https://arxiv.org/abs/2311.09740.](https://arxiv.org/abs/2311.09740)
+
+
+Dule Shu, Zijie Li, and Amir Barati Farimani. A physics-informed diffusion model for high-fidelity
+flow field reconstruction. _Journal of Computational Physics_, pp. 111972, 2023.
+
+
+Aliaksandra Shysheya, Cristiana Diaconu, Federico Bergamin, Paris Perdikaris, Jos´e Miguel
+Hern´andez-Lobato, Richard E. Turner, and Emile Mathieu. On conditional diffusion models
+for pde simulations. In _The Thirty-eighth Annual Conference on Neural Information Processing_
+_Systems_, 2024. [URL https://openreview.net/forum?id=nQl8EjyMzh.](https://openreview.net/forum?id=nQl8EjyMzh)
+
+
+Jiaming Song, Chenlin Meng, and Stefano Ermon. Denoising diffusion implicit models.
+_arXiv:2010.02502_, October 2020. [URL https://arxiv.org/abs/2010.02502.](https://arxiv.org/abs/2010.02502)
+
+
+Haixin Wang, Yadi Cao, Zijie Huang, Yuxuan Liu, Peiyan Hu, Xiao Luo, Zezheng Song, Wanjia
+Zhao, Jilin Liu, Jinan Sun, et al. Recent advances on machine learning for computational fluid
+dynamics: A survey. _arXiv preprint arXiv:2408.12171_, 2024.
+
+
+Xintao Wang, Ke Yu, Shixiang Wu, Jinjin Gu, Yihao Liu, Chao Dong, Yu Qiao, and Chen Change
+Loy. Esrgan: Enhanced super-resolution generative adversarial networks. In Laura Leal-Taix´e and
+Stefan Roth (eds.), _Computer Vision – ECCV 2018 Workshops_, pp. 63–79, Cham, 2019. Springer
+International Publishing. ISBN 978-3-030-11021-5.
+
+
+Gefan Yang and Stefan Sommer. A denoising diffusion model for fluid field prediction, 2023. URL
+[https://arxiv.org/abs/2301.11661.](https://arxiv.org/abs/2301.11661)
+
+
+Ling Yang and Shenda Hong. Unsupervised time-series representation learning with iterative bilinear temporal-spectral fusion. 07 2022.
+
+
+Sihyun Yu, Jihoon Tack, Sangwoo Mo, Hyunsu Kim, Junho Kim, Jung-Woo Ha, and Jinwoo Shin.
+Generating videos with dynamics-aware implicit generative adversarial networks. In _International_
+_Conference on Learning Representations_, 2022.
+
+
+Xiaohui Zeng, Arash Vahdat, Francis Williams, Zan Gojcic, Or Litany, Sanja Fidler, and Karsten
+Kreis. Lion: Latent point diffusion models for 3d shape generation. In _Advances_ _in_ _Neural_
+_Information Processing Systems (NeurIPS)_, 2022.
+
+
+13
+
+
+Richard Zhang, Phillip Isola, Alexei A. Efros, Eli Shechtman, and Oliver Wang. The unreasonable
+effectiveness of deep features as a perceptual metric. In _Proceedings of the IEEE Conference on_
+_Computer Vision and Pattern Recognition (CVPR)_, pp. 586–595, 2018.
+
+
+Yi Zhang, Dapeng Zhang, and Haoyu Jiang. Review of challenges and opportunities in turbulence
+modeling: A comparative analysis of data-driven machine learning approaches. _Journal of Marine_
+_Science and Engineering_, 11(7):1440, 2023.
+
+
+Linqi Zhou, Yilun Du, and Jiajun Wu. 3d shape generation and completion through point-voxel
+diffusion. In _Proceedings of the IEEE/CVF International Conference on Computer Vision (ICCV)_,
+pp. 5826–5835, October 2021.
+
+
+Yuanzhi Zhu, Kai Zhang, Jingyun Liang, Jiezhang Cao, Bihan Wen, Radu Timofte, and Luc Van
+Gool. Denoising diffusion models for plug-and-play image restoration. In _IEEE Conference on_
+_Computer Vision and Pattern Recognition Workshops (NTIRE)_, 2023.
+
+
+14
+
+
+CONTENTS
+
+
+**A** **Limitations** **15**
+
+
+**B** **Broader Impacts** **15**
+
+
+**C** **Model Details** **16**
+
+
+C.1 Discrete Wavelet Transformation . . . . . . . . . . . . . . . . . . . . . . . . . . . 16
+
+
+C.2 Implementation Details . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 16
+
+
+**D** **Dataset** **17**
+
+
+D.1 Residual Calculation . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 19
+
+
+**E** **Additional Experimental Results** **21**
+
+
+E.1 DWT visualization . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 21
+
+
+E.2 Multi-Scale Evaluation . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 21
+
+
+E.3 Reconstruction Visualization . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 22
+
+
+E.4 LPIPS Scores . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 24
+
+
+E.5 Importance Weight Sensitivity Analysis . . . . . . . . . . . . . . . . . . . . . . . 24
+
+
+E.6 Comparison of Residual Correction and Post Processing . . . . . . . . . . . . . . 25
+
+
+E.7 Generalization . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 27
+
+
+E.8 Runtime Comparison . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 27
+
+
+E.9 Embedding Super Resolution Within Solver . . . . . . . . . . . . . . . . . . . . . 28
+
+
+E.10 PSNR and SSIM Results . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 28
+
+
+A LIMITATIONS
+
+
+Our current research on super-resolution in computational fluid dynamics (CFD) focuses exclusively
+on vorticity data. However, future work can broaden its scope to include the reconstruction of highfidelity velocity and pressure fields. These additional physical quantities are critical for capturing a
+more comprehensive representation of fluid dynamics.
+
+
+B BROADER IMPACTS
+
+
+By enhancing the accuracy of CFD simulations, this approach can significantly reduce the computational costs associated with high-resolution simulations, which are often prohibitively expensive
+in terms of both time and resources. This has implications for a wide range of industries, including aerospace, automotive design, and environmental engineering, where high-fidelity simulations
+are essential for optimizing performance, safety, and sustainability. Additionally, by improving the
+quality of low-resolution CFD data, our work could enable more accessible, efficient research and
+development processes, allowing smaller organizations and research teams to leverage advanced
+simulation capabilities.
+
+
+15
+
+
+C MODEL DETAILS
+
+
+C.1 DISCRETE WAVELET TRANSFORMATION
+
+
+    - _LL_ : This sub-band captures the approximation or low-frequency content of the image
+in both the horizontal and vertical directions. It retains most of the important structural
+information of the image.
+
+    - _LH_ : This sub-band captures the vertical high-frequency components (edges and fine details) of the image. It primarily highlights vertical details like vertical edges.
+
+    - _HL_ : This sub-band captures the horizontal high-frequency components of the image. It
+emphasizes horizontal edges or features.
+
+    - _HH_ : This sub-band captures the high-frequency content in both horizontal and vertical
+directions, corresponding to diagonal details such as corners, intersections, and textures.
+
+
+These sub-bands collectively represent the image in both spatial and frequency domains. higher
+values in the _LH_, _HL_, and _HH_ sub-bands correspond to regions with higher frequency variations
+(such as edges or fine details) in the respective subdomains. Higher values in the _LL_ sub-band
+correspond to regions with higher intensity or brightness in the original image but represent lowfrequency content.
+
+
+C.2 IMPLEMENTATION DETAILS
+
+
+We implement all models in PyTorch and show their implementation details below.
+
+
+**Bicubic** Bicubic interpolation is a widely used image scaling technique that enhances the resolution
+of low-resolution images by using a weighted average of pixels in a 4x4 neighborhood around each
+pixel. Bicubic interpolation uses 16 neighboring pixels to produce smoother and more accurate
+results. This method is deterministic and does not involve any machine learning or training.
+
+
+**CNN** We modify the hybrid Downsampled Skip-Connection Multi-Scale (DSC/MS) architecture
+proposed by Fukami et al. (2019). In the original implementation of the DSC/MS model, the model
+operates on a single frame of velocity field. We modify the model to work in our settings, where
+the input consists of three consecutive frames of low-fidelity vorticity data, upsampled to 256 _×_
+256. The DSC component starts by compressing the input through a series of convolutional layers,
+effectively capturing multi-scale features. Skip connections are then introduced at various stages to
+preserve spatial information, ensuring that the network retains fine details from earlier layers. The
+MS component consists of three parallel convolutional paths that capture features at different scales
+and combine them to produce the high-resolution output of three consecutive frames of 256 _×_ 256
+vorticity data. The training process uses the L2 loss function, running for 300 epochs with a learning
+rate of 1 _e −_ 5.
+
+**GAN** We modify the physics-informed GAN proposed by Li & McComb (2022). In the original implementation of the physics-informed GAN, the input was low-resolution phase fraction data from a
+multiphase fluid simulation, and the output was a high-resolution phase fraction representation. Our
+
+
+16
+
+
+The Discrete Wavelet Transform (DWT) decomposes an image _I_ _∈_ R _[n][×][n]_ into different frequency
+components by successively applying low-pass and high-pass filters. Given an image _I_, the DWT
+firstbands:applies _I_ low[ _i, j_ a low-pass] = [�] _[I]_ filter [[] _[i, k]_ []] _g_ _[ g]_ [ _n_ [[2] ] _[j]_ and _[k]_ a []][ and] high-pass _[ I]_ [high][[] _[i, j]_ filter [] =][ �] _h_ [ _n_ ] _[I]_ along [[] _[i, k]_ []] each _[ h]_ [[2] _[j]_ row, _[k]_ []][, each downsampled] producing two sub
+
+
+_k_ _[I]_ [[] _[i, k]_ []] _[ ·][ g]_ [[2] _[j][ −]_ _[k]_ []][ and] _[ I]_ [high][[] _[i, j]_ [] =][ �]
+
+
+2 [.]
+
+
+bands: _I_ low[ _i, j_ ] = _k_ _[I]_ [[] _[i, k]_ []] _[ ·][ g]_ [[2] _[j][ −]_ _[k]_ []][ and] _[ I]_ [high][[] _[i, j]_ [] =] _k_ _[I]_ [[] _[i, k]_ []] _[ ·][ h]_ [[2] _[j][ −]_ _[k]_ []][, each downsampled]
+
+by a factor of 2 along the columns, resulting in matrices of shape _n ×_ _[n]_ 2 [.]
+
+
+Next, the same filters are applied to each column of _I_ low and _I_ high, generating four sub-bands:
+
+
+      _I_ low[ _k, j_ ] _g_ [2 _i_ _k_ ] _,_ _LH_ [ _i, j_ ] =
+_·_ _−_
+_k_ _k_
+
+      _I_ high[ _k, j_ ] _g_ [2 _i_ _k_ ] _,_ _HH_ [ _i, j_ ] =
+_·_ _−_
+_k_ _k_
+
+
+  _LL_ [ _i, j_ ] =
+
+
+_I_ low[ _k, j_ ] _h_ [2 _i_ _k_ ] _,_
+_·_ _−_
+_k_
+
+
+  _HL_ [ _i, j_ ] =
+
+
+_I_ high[ _k, j_ ] _h_ [2 _i_ _k_ ] _._
+_·_ _−_
+_k_
+
+
+The resulting sub-bands _LL_, _LH_, _HL_, and _HH_ each have dimensions _[n]_
+
+
+_[n]_ _[n]_
+
+2 2
+
+_[×]_
+
+
+The resulting sub-bandslow-high, high-low, and high-high frequency components, respectively, of the original image. _LL_, _LH_, _HL_, and _HH_ each have dimensions 2 _[×]_ 2 [, capturing the low-low,]
+
+
+adaptation uses low-fidelity vorticity data upsampled to 256 _×_ 256 as input and high-fidelity vorticity data as output. The generator consisted of multiple convolutional layers and residual blocks,
+while the discriminator had a series of convolutional layers followed by dense layers. The physicsinformed loss function combined a mean squared error (MSE) term with an additional term designed
+to enforce conservation of mass, ensuring the generated data remained consistent with fluid dynamics principles. The model was trained for 300 epochs with a learning rate of 1 _e −_ 5.
+
+**Diffusion** The unconditional diffusion model in Shu et al. (2023) is trained only on high-fidelity
+CFD data without requiring low-fidelity data during training. The model uses a U-Net architecture
+with hierarchical convolutional blocks, multi-level skip connections, and a self-attention mechanism
+in the bottleneck layer to capture complex features of the high-fidelity data. The training process
+spans 300 epochs, where the model learns to predict and remove noise added during the forward
+diffusion process. During inference, the model starts with a guided reverse diffusion process from
+an intermediate timestep _t < T_ instead of starting with complete random Gaussian noise. The lowfidelity input data is first upsampled to the target resolution and then combined with Gaussian noise
+to form the initial input for the reverse diffusion process. This noisy data serves as guidance for
+generating the high-fidelity output.
+
+
+**Conditional Diffusion** The conditional diffusion model proposed in Shu et al. (2023) incorporates
+physics-informed guidance during both training and inference by utilizing the gradient of the PDE
+residual with respect to the noised sample. During training, at each step of the forward diffusion
+process, the residual of the governing PDE is computed based on the current noised sample. The
+gradient of this residual is calculated and concatenated with the noised sample as input to the U-Net.
+During inference, the same process is applied: the model computes the gradient of the PDE residual
+at each reverse diffusion step and concatenates it with the noised sample.
+
+
+**PG-Diff** Starting with _xt_, which represents an intermediate denoised state at time-step _t_, the denoising process utilizes a U-Net model to estimate _ϵθ_ . The UNet architecture starts with an initial 3x3
+convolution that maps the in ~~c~~ hannels:3 to ch:128. The encoder progressively downsamples
+at each level, using a channel multiplier ch ~~m~~ ult:[1, 1, 1, 2], which means the channels
+stay at 128 for three levels and then double to 256. Attention blocks are applied at resolutions to
+capture long-range dependencies. The decoder mirrors the encoder, using upsampling layers to restore spatial resolution and skip connections to preserve details. The output is transformed back to
+the original out ~~c~~ h:3 channels through a final 3x3 convolution. The estimated _ϵθ_ is then integrated into a sampling process, outlined in detail by Steps 5 of Algorithm 1, to iteratively generate
+_xt−_ 1. In this approach, the inference phase is governed by several critical hyperparameters: _t_, which
+defines where the partial backward diffusion sampling begins; _K_, the total number of DDIM backward diffusion steps performed; and the set _{βt}t_ _[T]_ =1 [, which dictates the scaling factors controlling]
+noise variance throughout the forward diffusion stages. We adopt the same hyperparameters used
+in Shu et al. (2023). The training algorithm for our PG-Diff is presented in Algorithm 2. The PGDiff training procedure involves iteratively updating the denoiser _ϵθ_ using high-fidelity training data
+_Y_ [train] . In each training iteration, a sample _y_ is drawn from the high-fidelity training dataset, and
+a time-step _t_ is randomly selected from a uniform distribution over 1 _, . . ., T_ . Gaussian noise _ϵt_
+_{_ _}_
+is then sampled from _N_ (0 _, I_ ). The high-fidelity data _y_ is transformed into the wavelet domain to
+compute an importance weight _a_ . The model’s parameters _θ_ are updated through a gradient descent
+step using the gradient _θa_ _ϵt_ _ϵθ_ ( _[√]_ _α_ ¯ _ty_ + _[√]_ 1 _α_ ¯ _tϵt, t_ ) . This process repeats until the model
+_∇_ _⊙∥_ _−_ _−_ _∥_ [2]
+converges, enabling the denoiser to learn to reconstruct fine-grained details in the high-fidelity data
+effectively.
+
+
+D DATASET
+
+
+All datasets are generated using pseudo-spectral solver implemented by Li et al. (2020). Our dataset
+will be released upon publication of our paper and be free to use.
+
+
+The time-stepping method employed is a combination of the Crank-Nicholson scheme and Heun’s
+method. The Crank-Nicholson scheme is an implicit, second-order accurate method, and it is applied
+to the viscous term. This allows the solver to be stable even for relatively large time steps when
+handling viscous diffusion. Heun’s method, a second-order Runge-Kutta technique, is used to handle
+the non-linear advection term. The combination of these two methods provides an efficient and
+
+
+17
+
+
+7: **until** converged
+
+
+accurate way to evolve the vorticity field over time, with the implicit Crank-Nicholson step ensuring
+stability for stiff viscous terms, and Heun’s method capturing the non-linearity of the advection.
+
+
+For numerical stability, the solver uses an adaptive time-stepping approach governed by the CourantFriedrichs-Lewy (CFL) condition. The CFL condition ensures that the time step remains sufficiently
+small relative to the velocity field and the external forcing, preventing instabilities that can arise from
+rapid changes in the solution. Additionally, the dealiasing procedure, using the 2/3 rule, removes
+high-frequency components from the Fourier spectrum, ensuring that non-physical aliasing effects
+are avoided.
+
+
+**Algorithm 3** Pseudo-spectral Navier-Stokes Solver
+
+
+1: **Input:** Initial vorticity _ω_ 0, forcing _f_, Reynolds number _Re_, total time _T_, timestep ∆ _t_, domain
+size _L_ 1, _L_ 2, grid size _s_ 1, _s_ 2, adaptivity flag
+2: **Output:** Vorticity _ω_ at time _T_
+3: **Initialize:** Compute wavenumbers, Laplacian, and dealiasing mask
+4:
+5: **while** _t < T_ **do**
+6: **if** adaptive **then**
+7: Compute velocity field _**u**_ = _∇_ _[⊥]_ _ψ_
+8: Update timestep ∆ _t_ based on CFL
+9: **end if**
+10: Compute non-linear term in Fourier space
+11: Predictor and corrector steps using Crank-Nicholson + Heun
+12: Apply dealiasing mask
+13: Update time _t_ = _t_ + ∆ _t_
+14: **end while**
+15: **return** Vorticity _ω_
+
+
+**Taylor Green Vortex** The initial vorticity field is based on the analytical solution of the TGV, and to
+generate different trajectories, we added random perturbations from a Gaussian random field. These
+perturbations introduce variability to the initial conditions while maintaining the overall vortex structure. No external forcing was applied during the simulation, and the spatial domain is [0 _,_ [3] 2 _[π]_ []][2][with a]
+
+fixed Reynolds number of 1000. The simulation used a time step _dt_ = 321 [, and][ 100][ trajectories were]
+generated each with a total duration of _T_ = 6 seconds. The initial vorticity field is based on the
+analytical solution for the two-dimensional periodic domain. The vorticity field _ω_ is initialized as
+_ω_ = 2 _U_ 0 _k_ sin( _kx_ ) sin( _ky_ ), where _U_ 0 is the initial velocity amplitude, and _k_ is the wave number
+
+_−_
+that determines the size of the vortices. To introduce variability and generate different trajectories,
+a Gaussian Random Field is added as a perturbation to the initial vorticity.
+
+
+**Decaying Turbulence** The spatial domain is [0 _,_ 1] [2], with periodic boundary conditions and a fixed
+Reynolds number of 450. The simulation used a time step _dt_ = 321 [,] [and] [400] [trajectories] [were]
+generated, each with a total duration of _T_ = 2 seconds. The initial conditions for the decaying
+turbulence dataset are generated by superimposing randomly positioned vortices of varying intensity
+and size. Each vortex is characterized by a randomly selected core size and maximum rotational
+velocity, allowing for a diverse range of initial flow structures. The vortices are distributed randomly
+
+
+18
+
+
+**Algorithm 2** PG-Diff Model Training.
+**Require:** _Y_ [train] _∼_ _p_ [train] _Y_ (High-fidelity data used for training), _ϵθ_ (Denoiser to be trained)
+1: **repeat**
+2: _y_ _∈Y_ [train]
+
+
+3: _t ∼_ Uniform( _{_ 1 _, . . ., T_ _}_ )
+4: _ϵt_ (0 _, I_ )
+_∼N_
+5: Transform _y_ into the wavelet domain and compute the importance weight _a_
+6: Take a step of gradient descent on _θ_ with the following gradient:
+
+
+_θa_ _ϵt_ _ϵθ_ ( _[√]_ _α_ ¯ _ty_ + _√_
+_∇_ _⊙∥_ _−_
+
+
+1 _α_ ¯ _tϵt, t_ )
+_−_ _∥_ [2]
+
+
+**1000**
+
+**1001**
+
+**1002**
+
+
+**1003**
+
+**1004**
+
+**1005**
+
+**1006**
+
+**1007**
+
+**1008**
+
+
+**1009**
+
+**1010**
+
+**1011**
+
+**1012**
+
+**1013**
+
+
+**1014**
+
+**1015**
+
+**1016**
+
+**1017**
+
+**1018**
+
+**1019**
+
+
+**1020**
+
+**1021**
+
+**1022**
+
+**1023**
+
+**1024**
+
+**1025**
+
+
+throughout the domain, and their periodic images are added to ensure the proper enforcement of
+periodic boundary conditions.
+
+
+**Kolmogorov** **Flow** The initial vorticity field is generated using a Gaussian random field, and the
+system is subjected to a forcing term of the form _f_ ( _**x**_ ) = 4 cos(4 _x_ 2) 0 _._ 1 _ω_ ( _**x**_ _, t_ ). This forcing
+
+_−_ _−_
+drives the flow in the y-direction while introducing a drag force that dissipates energy. The spatial
+domain is [0 _,_ 2 _π_ ] [2], with a fixed Reynolds number of 1000. The simulation used a time step _dt_ = 321 [,]
+and 50 trajectories were generated, each with a total duration of _T_ = 10 seconds. The initial vorticity
+field is produced by sampling from a Gaussian Random Field. As the external forcing continually
+adds energy to the system, the initially simple vorticity evolves into intricate and turbulent structures.
+The vorticity is allowed to evolve over a 5-second period, and the final state at the end of this interval
+is used as the initial condition for our dataset.
+
+
+**McWilliams** **Flow** The phenomenon illustrates the emergence of order from initially disordered
+turbulent motion, driven by viscous dissipation and the self-organization of the flow. No external
+forcing is applied during the simulation, allowing for a natural decay and evolution of the turbulence.
+The spatial domain is [0 _,_ 2 _π_ ] [2], with periodic boundary conditions and a Reynolds number of 2000,
+providing a high degree of turbulence. The simulation used a time step _dt_ = 321 [, and 50 trajectories]
+were generated, each with a total duration of _T_ = 10 seconds. The initial vorticity field for the
+_McWilliams Flow_ is generated following the method described by Mcwilliams (1984). The process
+begins by constructing a Fourier mesh over the spatial domain, where the wavenumbers _kx_ and _ky_
+are calculated. A scalar wavenumber function is prescribed, and the ensemble variance is determined
+to ensure that the energy distribution in Fourier space follows the desired spectral shape. Random
+Gaussian perturbations are applied to each Fourier component of the stream function, producing a
+random realization of the vorticity field. To ensure the stream function has a zero mean, a spectral
+filter is applied, and the field is normalized based on the kinetic energy. Finally, the vorticity field is
+computed in physical space by taking the inverse Laplacian of the stream function in Fourier space,
+resulting in a turbulent flow field that evolves naturally without external forcing.
+
+
+and 32 _×_ 32 discretization grids, respectively. For visualization, we upsample the low–fidelity data
+to 256 _×_ 256 discretization grid.
+
+
+D.1 RESIDUAL CALCULATION
+
+
+( _ω_ ) = [1]
+_R_ _N_
+
+
+The PDE residual of the governing equation _R_ ( _ω_ ) is defined as
+
+
+[LHS( _ω_ ) _i,j_ RHS( _ω_ ) _i,j_ ] [2]
+
+_−_
+_i,j_
+
+
+19
+
+
+**1026**
+
+**1027**
+
+
+**1028**
+
+**1029**
+
+**1030**
+
+**1031**
+
+**1032**
+
+**1033**
+
+
+**1034**
+
+**1035**
+
+**1036**
+
+**1037**
+
+**1038**
+
+**1039**
+
+
+**1040**
+
+**1041**
+
+**1042**
+
+**1043**
+
+**1044**
+
+
+**1045**
+
+**1046**
+
+**1047**
+
+**1048**
+
+**1049**
+
+**1050**
+
+
+**1051**
+
+**1052**
+
+**1053**
+
+**1054**
+
+**1055**
+
+**1056**
+
+
+**1057**
+
+**1058**
+
+**1059**
+
+**1060**
+
+**1061**
+
+**1062**
+
+
+**1063**
+
+**1064**
+
+**1065**
+
+**1066**
+
+**1067**
+
+
+**1068**
+
+**1069**
+
+**1070**
+
+**1071**
+
+**1072**
+
+**1073**
+
+
+**1074**
+
+**1075**
+
+**1076**
+
+**1077**
+
+**1078**
+
+**1079**
+
+
+and 32 _×_ 32 discretization grids, respectively. For visualization, we upsample the low–fidelity data
+to 256 _×_ 256 discretization grid.
+
+
+and 32 _×_ 32 discretization grids, respectively. For visualization, we upsample the low–fidelity data
+to 256 _×_ 256 discretization grid.
+
+
+20
+
+
+**1080**
+
+**1081**
+
+
+**1082**
+
+**1083**
+
+**1084**
+
+**1085**
+
+**1086**
+
+**1087**
+
+
+**1088**
+
+**1089**
+
+**1090**
+
+**1091**
+
+**1092**
+
+**1093**
+
+
+**1094**
+
+**1095**
+
+**1096**
+
+**1097**
+
+**1098**
+
+
+**1099**
+
+**1100**
+
+**1101**
+
+**1102**
+
+**1103**
+
+**1104**
+
+
+**1105**
+
+**1106**
+
+**1107**
+
+**1108**
+
+**1109**
+
+**1110**
+
+
+**1111**
+
+**1112**
+
+**1113**
+
+**1114**
+
+**1115**
+
+**1116**
+
+
+and 32 _×_ 32 discretization grids, respectively. For visualization, we upsample the low–fidelity data
+to 256 _×_ 256 discretization grid.
+
+
+where LHS( _ω_ ) and RHS( _ω_ ) represent the left-hand side and right-hand side expressions of the
+PDE, respectively. _ω_ represents the vorticity. _N_ represents the number of grid points. For the
+incompressible navier stokes equation tested in this paper, the residual is defined as
+
+
+- �2
+_∂ω_ ( _**x**_ _, t_ )
++ _**u**_ ( _**x**_ _, t_ ) _ω_ ( _**x**_ _, t_ )
+_∂t_ _· ∇_ _−_ _Re_ [1] _[∇]_ [2] _[ω]_ [(] _**[x]**_ _[, t]_ [)] _[ −]_ _[f]_ [(] _**[x]**_ [)]
+
+
+( _ω_ ) = [1]
+_R_ _N_
+
+
+_i,j_
+
+
+E ADDITIONAL EXPERIMENTAL RESULTS
+
+
+E.1 DWT VISUALIZATION
+
+
+Figure 9 presents sample importance masks identified as high-frequency features using the DWT.
+These masks highlight the regions where our model focuses to capture intricate details. The samples
+clearly demonstrate that our method effectively captures the fine-grained structures in the turbulent
+flow, validating its ability to reconstruct small-scale vortices and turbulence that are often missed by
+conventional approaches.
+
+
+**1134**
+
+**1135**
+
+
+**1136**
+
+**1137**
+
+**1138**
+
+**1139**
+
+**1140**
+
+**1141**
+
+
+**1142**
+
+**1143**
+
+**1144**
+
+**1145**
+
+**1146**
+
+**1147**
+
+
+**1148**
+
+**1149**
+
+**1150**
+
+**1151**
+
+**1152**
+
+
+**1153**
+
+**1154**
+
+**1155**
+
+**1156**
+
+**1157**
+
+**1158**
+
+
+**1159**
+
+**1160**
+
+**1161**
+
+**1162**
+
+**1163**
+
+**1164**
+
+
+**1165**
+
+**1166**
+
+**1167**
+
+**1168**
+
+**1169**
+
+**1170**
+
+
+**1171**
+
+**1172**
+
+**1173**
+
+**1174**
+
+**1175**
+
+
+**1176**
+
+**1177**
+
+**1178**
+
+**1179**
+
+**1180**
+
+**1181**
+
+
+**1182**
+
+**1183**
+
+**1184**
+
+**1185**
+
+**1186**
+
+**1187**
+
+
+LH (low-high), HL (high-low), and HH (high-high). The LL subdomain represents broad, lowfrequency components, while the LH, HL, and HH subdomains capture increasingly finer, highfrequency features, including turbulent structures. We then assessed the L2 norm across these subdomains to gain deeper insights into the model’s effectiveness in reconstructing both large-scale
+patterns and fine-grained details.
+
+
+(a) HH Subdomaim (b) HL Subdomaim (c) LH Subdomaim (d) LL Subdomaim
+
+
+Figure 10: Wavelet subdomain L2 for the _Taylor Green Vortex_ dataset.
+
+
+(a) HH Subdomaim (b) HL Subdomaim (c) LH Subdomaim (d) LL Subdomaim
+
+
+Figure 11: Wavelet subdomain L2 for the _Decaying Turbulence_ dataset.
+
+
+E.3 RECONSTRUCTION VISUALIZATION
+
+
+We present visualizations of the reconstructed high-fidelity data using PG-DIFF w/o Cor across
+different methods and datasets. As shown in Figure 14 and Figure 15, PG-Diff consistently produces
+impressive qualitative results.
+
+
+22
+
+
+**1188**
+
+**1189**
+
+
+**1190**
+
+**1191**
+
+**1192**
+
+**1193**
+
+**1194**
+
+**1195**
+
+
+**1196**
+
+**1197**
+
+**1198**
+
+**1199**
+
+**1200**
+
+**1201**
+
+
+**1202**
+
+**1203**
+
+**1204**
+
+**1205**
+
+**1206**
+
+
+**1207**
+
+**1208**
+
+**1209**
+
+**1210**
+
+**1211**
+
+**1212**
+
+
+**1213**
+
+**1214**
+
+**1215**
+
+**1216**
+
+**1217**
+
+**1218**
+
+
+**1219**
+
+**1220**
+
+**1221**
+
+**1222**
+
+**1223**
+
+**1224**
+
+
+**1225**
+
+**1226**
+
+**1227**
+
+**1228**
+
+**1229**
+
+
+**1230**
+
+**1231**
+
+**1232**
+
+**1233**
+
+**1234**
+
+**1235**
+
+
+**1236**
+
+**1237**
+
+**1238**
+
+**1239**
+
+**1240**
+
+**1241**
+
+
+(a) HH Subdomaim (b) HL Subdomaim (c) LH Subdomaim (d) LL Subdomaim
+
+
+Figure 12: Wavelet subdomain L2 norm for the _Kolmogorov Flow_ dataset.
+
+
+(a) HH Subdomaim (b) HL Subdomaim (c) LH Subdomaim (d) LL Subdomaim
+
+
+Figure 13: Wavelet subdomain L2 for the _McWilliams Flow_ dataset.
+
+
+23
+
+
+**1242**
+
+**1243**
+
+
+**1244**
+
+**1245**
+
+**1246**
+
+**1247**
+
+**1248**
+
+**1249**
+
+
+**1250**
+
+**1251**
+
+**1252**
+
+**1253**
+
+**1254**
+
+**1255**
+
+
+**1256**
+
+**1257**
+
+**1258**
+
+**1259**
+
+**1260**
+
+
+**1261**
+
+**1262**
+
+**1263**
+
+**1264**
+
+**1265**
+
+**1266**
+
+
+**1267**
+
+**1268**
+
+**1269**
+
+**1270**
+
+**1271**
+
+**1272**
+
+
+**1273**
+
+**1274**
+
+**1275**
+
+**1276**
+
+**1277**
+
+**1278**
+
+
+**1279**
+
+**1280**
+
+**1281**
+
+**1282**
+
+**1283**
+
+
+**1284**
+
+**1285**
+
+**1286**
+
+**1287**
+
+**1288**
+
+**1289**
+
+
+**1290**
+
+**1291**
+
+**1292**
+
+**1293**
+
+**1294**
+
+**1295**
+
+
+Figure 14: Visualization comparison of reconstruction on the _Kolmogorov Flow_ from PG-Diff w/o
+Cor. The first column displays the low-fidelity input data upscaled to a resolution of 256 _×_ 256,
+while the last column shows the high-fidelity ground truth.
+
+
+E.4 LPIPS SCORES
+
+
+Direct mapping models are effective at minimizing L2 loss. However, these models tend to produce
+samples that appear smooth and blurry, often missing the intricate details. This is because the
+L2 loss emphasizes pixel-wise accuracy, which can lead to averaging effects and the loss of finegrained details. To address this issue, we use the LPIPS (Learned Perceptual Image Patch Similarity)
+metric, which focuses on perceptual differences and provides a more qualitative assessment of the
+reconstructed flow fields, capturing the texture and small-scale structures. The results are presented
+in Table 4
+
+
+Although LPIPS is trained on the ImageNet dataset, which consists of natural images, it remains a
+valuable metric for evaluating perceptual quality in CFD applications. This is because LPIPS leverages features from deep neural networks that are effective at capturing multi-scale patterns, textures,
+and perceptual similarities, regardless of the specific domain. Fluid dynamics data often have complex structures and turbulent patterns that share characteristics with textures found in natural images,
+making LPIPS suitable for assessing the fidelity of reconstructed flow fields. Thus, despite being
+trained on ImageNet, LPIPS can still effectively quantify how well the reconstructed samples retain important perceptual details, making it a robust metric for evaluating the visual quality of CFD
+reconstructions.
+
+
+E.5 IMPORTANCE WEIGHT SENSITIVITY ANALYSIS
+
+
+We present a sensitivity analysis to explore how different hyperparameter settings affect the performance of the Importance Weight Strategy. The importance weight strategy is governed by three
+main parameters: _β_ (the maximum importance weight), _α_ (the minimum importance weight), and _θ_
+(the importance threshold). We adjust these parameters sequentially. The results are summarized in
+Figure 16.
+
+
+24
+
+
+Cond.
+Input Bicubic CNN GAN Diff.
+
+
+Cond. PG-Diff
+
+GAN Diff.
+
+
+Ground
+
+
+Diff.
+
+
+**1336**
+
+**1337**
+
+
+**1338**
+
+**1339**
+
+**1340**
+
+**1341**
+
+**1342**
+
+**1343**
+
+
+**1344**
+
+**1345**
+
+**1346**
+
+**1347**
+
+**1348**
+
+**1349**
+
+
+Table 4: LPIPS scores for each dataset. Metrics are reported for both 32×32 → 256×256 ( grey )
+and 64×64 → 256×256 tasks.
+
+
+E.6 COMPARISON OF RESIDUAL CORRECTION AND POST PROCESSING
+
+
+We compared the performance of residual correction and post-processing technique in Table 5. The
+post-processing applies a single residual correction to the reconstructed high-fidelity samples in the
+end. The results indicate that while post-processing achieves very low PDE residuals, it significantly
+increases the L2 loss. In contrast, our Residual Correction method strikes a better balance between
+L2 loss and PDE residual.
+
+
+25
+
+
+**1350**
+
+**1351**
+
+
+**1352**
+
+**1353**
+
+**1354**
+
+**1355**
+
+**1356**
+
+**1357**
+
+
+**1358**
+
+**1359**
+
+**1360**
+
+**1361**
+
+**1362**
+
+**1363**
+
+
+**1364**
+
+**1365**
+
+**1366**
+
+**1367**
+
+**1368**
+
+
+**1369**
+
+**1370**
+
+**1371**
+
+**1372**
+
+**1373**
+
+**1374**
+
+
+**1375**
+
+**1376**
+
+**1377**
+
+**1378**
+
+**1379**
+
+**1380**
+
+
+**1381**
+
+**1382**
+
+**1383**
+
+**1384**
+
+**1385**
+
+**1386**
+
+
+**1387**
+
+**1388**
+
+**1389**
+
+**1390**
+
+**1391**
+
+
+**1392**
+
+**1393**
+
+**1394**
+
+**1395**
+
+**1396**
+
+**1397**
+
+
+**1398**
+
+**1399**
+
+**1400**
+
+**1401**
+
+**1402**
+
+**1403**
+
+
+Figure 16: Sensitivity analysis of key parameters for the _Importance Weight_ . Experiments are conducted on the _Kolmogorov_ _Flow_ . The top row presents the results for the maximum importance
+weight, _β_ . The middle row displays the results for the minimum importance weight, _α_, and the
+bottom row shows the results for the importance threshold, _θ_ . These three hyperparameters were
+tuned in sequence, and the optimal combination ( _β_ = 6, _α_ = 1 _._ 25, and _θ_ = 0 _._ 8) is selected.
+
+
+26
+
+
+**1404**
+
+**1405**
+
+
+**1406**
+
+**1407**
+
+**1408**
+
+**1409**
+
+**1410**
+
+**1411**
+
+
+**1412**
+
+**1413**
+
+**1414**
+
+**1415**
+
+**1416**
+
+**1417**
+
+
+**1418**
+
+**1419**
+
+**1420**
+
+**1421**
+
+**1422**
+
+
+**1423**
+
+**1424**
+
+**1425**
+
+**1426**
+
+**1427**
+
+**1428**
+
+
+**1429**
+
+**1430**
+
+**1431**
+
+**1432**
+
+**1433**
+
+**1434**
+
+
+**1435**
+
+**1436**
+
+**1437**
+
+**1438**
+
+**1439**
+
+**1440**
+
+
+**1441**
+
+**1442**
+
+**1443**
+
+**1444**
+
+**1445**
+
+
+**1446**
+
+**1447**
+
+**1448**
+
+**1449**
+
+**1450**
+
+**1451**
+
+
+**1452**
+
+**1453**
+
+**1454**
+
+**1455**
+
+**1456**
+
+**1457**
+
+
+|Col1|32×32 →256×256|Col3|64×64 →256×256|Col5|
+|---|---|---|---|---|
+||<br>L2|PDE Residual|<br>L2|<br>PDE Residual|
+|Residual Correction|2.7897|40.12|1.6609|39.97|
+|Post Processing|3.0019|5.42|1.7737|7.16|
+
+
+Table 5: Comparison between our proposed Residual Correction and Post Processing methods. Experiments are conducted on the _Kolmogorov Flow_ .
+
+
+E.7 GENERALIZATION
+
+
+We show the generalization ability of our model across various settings. The original _Kolmogorov_
+_Flow_ dataset is generated using timestep _dt_ = 1 _/_ 32, spatial domain size 2 _π_ _×_ 2 _π_, and Reynolds
+number _Re_ = 1000.
+
+
+Table 6: Generalization results on _Kolmogorov Flow_ dataset with 64 _×_ 64 _→_ 256 _×_ 256 setting.
+
+
+**Variation** **Model** **L2** **PDE Residual**
+
+
+**Time Discretization Variations**
+
+
+_dt_ = 1 _/_ 40 Trained on Original Data 1.6782 31.49
+Trained on _dt_ = 1 _/_ 40 Data 1.6723 30.91
+
+
+_dt_ = 1 _/_ 50 Trained on Original Data 1.6484 33.49
+Trained on _dt_ = 1 _/_ 50 Data 1.6489 26.66
+
+
+**Spatial Domain Size Variations**
+
+
+_Re_ = 500 Trained on Original Data 1.3112 21.57
+Trained on _Re_ = 500 Data 1.2998 22.96
+
+
+_Re_ = 2000 Trained on Original Data 1.9647 24.07
+Trained on _Re_ = 2000 Data 1.9694 24.22
+
+
+E.8 RUNTIME COMPARISON
+
+
+Table 9 presents the time required for the numerical solver to generate a single frame of low- and
+high-fidelity samples for each dataset. The results indicate that generating even 64 _×_ 64 low-fidelity
+data is significantly faster than producing high-fidelity data, emphasizing the value of using ML
+approach for accelerating high-fidelity simulations.
+
+|Dataset|256 × 256|64 × 64|32 × 32|
+|---|---|---|---|
+|_Kolmogorov Flow_|<br>138.49|<br>0.44|<br>0.04|
+|_McWilliams Flow_|98.99|1.23|0.12|
+|_Decaying Turbulence_|93.82|1.01|0.06|
+|_Taylor Green Vortex_|139.35|1.49|0.22|
+
+
+Table 7: Run time of numerical solver to generate one frame for each dataset across different grid
+resolutions with a batch size of 10. All times are measured in seconds.
+
+
+Table 8 shows the time comparison across ML models for reconstructing high-fidelity data from
+low-fidelity inputs.
+
+
+27
+
+
+Domain Size 1 _π ×_ 1 _π_ Trained on Original Data 1.0255 263.23
+Trained on 1 _π ×_ 1 _π_ Data 0.9443 207.03
+
+Domain Size 1 _._ 5 _π ×_ 1 _._ 5 _π_ Trained on Original Data 1.3212 84.24
+Trained on 1 _._ 5 _π ×_ 1 _._ 5 _π_ Data 1.2918 94.87
+
+**Reynolds Number Variations**
+
+
+**1458**
+
+**1459**
+
+
+**1460**
+
+**1461**
+
+**1462**
+
+**1463**
+
+**1464**
+
+**1465**
+
+
+**1466**
+
+**1467**
+
+**1468**
+
+**1469**
+
+**1470**
+
+**1471**
+
+
+**1472**
+
+**1473**
+
+**1474**
+
+**1475**
+
+**1476**
+
+
+**1477**
+
+**1478**
+
+**1479**
+
+**1480**
+
+**1481**
+
+**1482**
+
+
+**1483**
+
+**1484**
+
+**1485**
+
+**1486**
+
+**1487**
+
+**1488**
+
+
+**1489**
+
+**1490**
+
+**1491**
+
+**1492**
+
+**1493**
+
+**1494**
+
+
+**1495**
+
+**1496**
+
+**1497**
+
+**1498**
+
+**1499**
+
+
+**1500**
+
+**1501**
+
+**1502**
+
+**1503**
+
+**1504**
+
+**1505**
+
+
+**1506**
+
+**1507**
+
+**1508**
+
+**1509**
+
+**1510**
+
+**1511**
+
+
+Method 32 _×_ 32 → 256 _×_ 256 64 _×_ 64 → 256 _×_ 256
+
+Bicubic 1.43e-5 1.4e-5
+CNN 0.005 0.005
+GAN 0.008 0.008
+Diff 6.10 3.06
+Cond Diff 6.20 3.38
+PG-Diff 6.37 3.27
+
+
+PG-Diff w/o Cor 6.10 3.06
+PG-Diff w/o IW 6.37 3.27
+
+
+Table 8: Runtime comparison of various methods across different resolution levels using a batch
+size of 10, with all times measured in seconds. These results are based on the _McWilliams_ _Flow_
+dataset.
+
+|Dataset|Same error with 64 × 64|Same error with 32 × 32|
+|---|---|---|
+|_Kolmogorov Flow_|<br>35.36|<br>15.15|
+|_McWilliams Flow_|39.08|17.81|
+|_Decaying Turbulence_|21.51|17.41|
+|_Taylor Green Vortex_|33.23|15.49|
+
+
+Table 9: Run time of numerical solver to generate one frame for each dataset with approximately
+same error compared to PG-Diff with a batch size of 10. All times are measured in seconds.
+
+
+E.9 EMBEDDING SUPER RESOLUTION WITHIN SOLVER
+
+
+For longer rollouts on coarser grids, low-fidelity data becomes qualitatively different from highfidelity data, making simple postprocessing with super-resolution models insufficient to recover the
+trajectory. However, we demonstrate that when integrated into the solver, PG-Diffenhances numerical simulations on coarse grids. Our approach follows the pipeline: ”solver → super resolution →
+downsample → solver.” Specifically, we begin with a numerical solver to perform one-step predictions on a coarse grid. Next, we apply PG-Diff for super-resolution, downsample the output back
+to the coarse grid, and use it as input for the next simulation step. We present the visual results in
+Figure 17.
+
+
+E.10 PSNR AND SSIM RESULTS
+
+
+Table 10: Kolmogorov Flow
+
+
+**Model** **4x Upsampling** **8x Upsampling**
+
+
+**PSNR** **SSIM** **PSNR** **SSIM**
+
+
+Bicubic 21.1257 0.4769 18.3063 0.2479
+CNN 24.8310 0.5190 22.9806 0.3712
+GAN 20.6210 0.4160 20.2323 0.3695
+Diffusion 25.4049 0.6487 21.5818 0.4072
+Conditional Diffusion 25.2389 0.6456 20.2067 0.3425
+PG-Diff **26.1733** **0.6781** **24.0754** **0.4409**
+
+
+28
+
+
+**1512**
+
+**1513**
+
+
+**1514**
+
+**1515**
+
+**1516**
+
+**1517**
+
+**1518**
+
+**1519**
+
+
+**1520**
+
+**1521**
+
+**1522**
+
+**1523**
+
+**1524**
+
+**1525**
+
+
+**1526**
+
+**1527**
+
+**1528**
+
+**1529**
+
+**1530**
+
+
+**1531**
+
+**1532**
+
+**1533**
+
+**1534**
+
+**1535**
+
+**1536**
+
+
+**1537**
+
+**1538**
+
+**1539**
+
+**1540**
+
+**1541**
+
+**1542**
+
+
+**1543**
+
+**1544**
+
+**1545**
+
+**1546**
+
+**1547**
+
+**1548**
+
+
+**1549**
+
+**1550**
+
+**1551**
+
+**1552**
+
+**1553**
+
+
+**1554**
+
+**1555**
+
+**1556**
+
+**1557**
+
+**1558**
+
+**1559**
+
+
+**1560**
+
+**1561**
+
+**1562**
+
+**1563**
+
+**1564**
+
+**1565**
+
+
+## High-Fidelity PG-Diff Low-Fidelity
+
+
+Figure 17: Visualization of reconstructed high-fidelity data when PG-Diffis integrated within the
+numerical solver.
+
+
+Table 11: McWilliams Flow
+
+
+**Model** **4x Upsampling** **8x Upsampling**
+
+
+**PSNR** **SSIM** **PSNR** **SSIM**
+
+
+Bicubic 25.1992 0.4834 21.9313 0.2519
+CNN 28.6248 0.5897 27.4487 **0.5164**
+GAN 28.6720 0.4621 27.7062 0.4477
+Diffusion 29.71018 0.6686 25.2200 0.3884
+Conditional Diffusion 29.6757 0.6665 25.1475 0.3823
+PG-Diff **30.0540** **0.6722** **28.1972** 0.4643
+
+
+Table 12: Taylor Green Vortex
+
+
+**Model** **4x Upsampling** **8x Upsampling**
+
+
+**PSNR** **SSIM** **PSNR** **SSIM**
+
+
+Bicubic 25.4811 0.7211 19.4033 0.5041
+CNN 26.6066 0.7657 26.3448 0.7422
+GAN 28.1370 0.7597 25.0551 **0.7633**
+Diffusion 30.7706 0.8438 24.8698 0.6678
+Conditional Diffusion 23.2154 0.6767 21.3979 0.5959
+PG-Diff **31.5277** **0.8713** **26.7503** 0.7562
+
+
+29
+
+
+**1566**
+
+**1567**
+
+
+**1568**
+
+**1569**
+
+**1570**
+
+**1571**
+
+**1572**
+
+**1573**
+
+
+**1574**
+
+**1575**
+
+**1576**
+
+**1577**
+
+**1578**
+
+**1579**
+
+
+**1580**
+
+**1581**
+
+**1582**
+
+**1583**
+
+**1584**
+
+
+**1585**
+
+**1586**
+
+**1587**
+
+**1588**
+
+**1589**
+
+**1590**
+
+
+**1591**
+
+**1592**
+
+**1593**
+
+**1594**
+
+**1595**
+
+**1596**
+
+
+**1597**
+
+**1598**
+
+**1599**
+
+**1600**
+
+**1601**
+
+**1602**
+
+
+**1603**
+
+**1604**
+
+**1605**
+
+**1606**
+
+**1607**
+
+
+**1608**
+
+**1609**
+
+**1610**
+
+**1611**
+
+**1612**
+
+**1613**
+
+
+**1614**
+
+**1615**
+
+**1616**
+
+**1617**
+
+**1618**
+
+**1619**
+
+
+Table 13: Decaying Turbulence
+
+
+**Model** **4x Upsampling** **8x Upsampling**
+
+
+**PSNR** **SSIM** **PSNR** **SSIM**
+
+
+Bicubic 41.7820 0.8888 35.1032 0.7098
+CNN 41.0336 0.8849 42.1580 0.9200
+GAN 39.2718 0.9055 38.9931 0.8863
+Diffusion 47.2289 0.9571 40.8901 0.8622
+Conditional Diffusion 46.0675 0.9138 40.1089 0.8456
+PG-Diff **48.0321** **0.9601** **43.0276** **0.9295**
+
+
+30

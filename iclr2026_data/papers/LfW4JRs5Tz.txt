@@ -1,0 +1,412 @@
+# RESOURCE-EFFICIENT MODEL-FREE REINFORCEMENT LEARNING FOR BOARD GAMES
+
+Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+Board games have long served as complex decision-making benchmarks in artificial intelligence. In this field, search-based reinforcement learning methods such as AlphaZero have achieved remarkable success. However, their significant computational demands have been pointed out as barriers to their reproducibility. In this study, we propose a model-free reinforcement learning algorithm designed for board games to achieve more efficient learning. To validate the efficiency of the proposed method, we conducted comprehensive experiments on five board games: Animal Shogi, Gardner Chess, Go, Hex, and Othello. The results demonstrate that the proposed method achieves more efficient learning than existing methods across these environments. In addition, our extensive ablation study shows the importance of core techniques used in the proposed method. We believe that our efficient algorithm shows the potential of model-free reinforcement learning in domains traditionally dominated by search-based methods.
+
+## 1 INTRODUCTION
+
+Board games are highly complex decision-making tasks as even human experts may spend minutes to hours deliberating on a single action. Due to this complexity, they have served as a canonical benchmark for artificial intelligence for several decades (Samuel, 1959; Tesauro et al., 1995; Campbell et al., 2002; Silver et al., 2016).
+
+In this field, search-based methods such as AlphaZero (Silver et al., 2018) have achieved a milestone by learning to play Chess, Shogi, and Go by a single reinforcement learning (RL) algorithm. Due to its generality and independence from game-specific knowledge, it has also been applied to various fields beyond board games (Schrittwieser et al., 2020; Hubert et al., 2021; Fawzi et al., 2022; Mankowitz et al., 2023).
+
+While the success of search-based methods in the board game domain is remarkable, their substantial computational demands are often cited as a barrier to their reproducibility (Zhao et al., 2022). Indeed, it has been reported that the training process of AlphaZero requires more than 10 GPU-years (Silver et al., 2018; Tian et al., 2019). To address this issue, recent studies have proposed modified search-based algorithms that reduce the depth and rollout count of the search tree (Hessel et al., 2021; Danihelka et al., 2022), based on the observation that most of the computational cost is incurred during sample collection with Monte-Carlo tree search (MCTS). Although these methods lessen the reliance on look-ahead search during training, it remains an open question whether that reliance can be entirely eliminated.
+
+![Figure 1: Average Performance Across the five board games. A line graph showing Average Win Rate (%) across 5 environments (Y-axis, 0 to 100) versus Simulator Evaluations (million) (X-axis, 0 to 400). The proposed method, KLENT (Ours) (red solid line), achieves the highest win rate, reaching approximately 85% by 400 million evaluations. Other methods shown include AlphaZero (blue dashed line), TRPO AlphaZero (blue dashed line), Gumbel AlphaZero (green dashed line), DQN (yellow dashed line), and PPO (purple dashed line). KLENT (Ours) starts at ~20% and rises sharply to ~80% by 200 million evaluations, then stabilizes around 85%. AlphaZero and TRPO AlphaZero reach ~40% and ~45% respectively. Gumbel AlphaZero reaches ~55%. DQN and PPO reach ~20% and ~15% respectively.](59c76d920f3faf3933d80a47647d42a9_img.jpg)
+
+Figure 1: Average Performance Across the five board games. A line graph showing Average Win Rate (%) across 5 environments (Y-axis, 0 to 100) versus Simulator Evaluations (million) (X-axis, 0 to 400). The proposed method, KLENT (Ours) (red solid line), achieves the highest win rate, reaching approximately 85% by 400 million evaluations. Other methods shown include AlphaZero (blue dashed line), TRPO AlphaZero (blue dashed line), Gumbel AlphaZero (green dashed line), DQN (yellow dashed line), and PPO (purple dashed line). KLENT (Ours) starts at ~20% and rises sharply to ~80% by 200 million evaluations, then stabilizes around 85%. AlphaZero and TRPO AlphaZero reach ~40% and ~45% respectively. Gumbel AlphaZero reaches ~55%. DQN and PPO reach ~20% and ~15% respectively.
+
+Figure 1: Average performance across the five board games. The proposed method (KLENT) achieves efficient learning compared to existing approaches.
+
+In other fields of RL such as robotics, model-free methods tend to be preferred due to their implementation simplicity and computational efficiency (Kroemer et al., 2021; Tang et al., 2025). Nonetheless, the effectiveness of model-free RL in the board game domain has not been thoroughly investigated.
+
+These situations raise the following question: *Can we design a model-free RL algorithm for board games that can learn a competitive policy with fewer training resources?* In this paper, we propose a model-free reinforcement learning algorithm that completely eliminates look-ahead search during training. The proposed method is based on a policy optimization approach which we refer to as Kullback-Leibler and Entropy Regularized Policy Optimization (KLENT). To validate the efficiency of the proposed method, we have conducted comprehensive experiments on five board games, namely Animal Shogi, Gardner Chess, Go, Hex, and Othello. As shown in Figure 1, our method achieves efficient learning compared to existing methods.
+
+The proposed method KLENT incorporates three techniques from the field of RL: Kullback-Leibler (KL) regularization for gradual policy updates, entropy regularization for encouraging exploration, and  $\lambda$ -returns for efficient value function learning. Through an extensive ablation study, we empirically demonstrate that the combination of these three techniques is essential for efficient learning.
+
+The main contributions of this work are summarized as follows:
+
+1. We propose a model-free reinforcement learning algorithm designed for board games, which we refer to as KLENT.
+2. Through comprehensive experiments, we demonstrate that KLENT achieves more efficient learning than existing methods.
+3. We conduct an extensive ablation study, which validates that three components of KLENT, namely KL regularization, entropy regularization, and  $\lambda$ -returns, are essential for its efficiency.
+
+We have demonstrated that properly revisiting existing techniques can achieve efficient learning in the board game domain, and also shown that the proper combination is important to achieve high performance. We consider the novelty of this study lies in our empirical result, as search-based methods such as AlphaZero have been believed to be state-of-the-art in this domain.
+
+In this study, we focus on "board games", but as we define in Section 2.2, we only assumed that the environment is an MDP with a finite action space. This class of problems covers several real-world applications such as discrete optimization, algorithmic discovery, and mathematical proving (Fawzi et al., 2022; Mankowitz et al., 2023; Hubert et al., 2025) and search-based methods such as AlphaZero are widely used in this domain. Our efficient algorithm may also achieve efficient learning in these practical domains, accelerating research on such real-world problems.
+
+## 2 PROBLEM SETTING
+
+### 2.1 REINFORCEMENT LEARNING
+
+In this study, we formulate board games as reinforcement learning problems. Reinforcement learning (RL) (Sutton et al., 1998) is a framework in which an agent learns a policy  $\pi$  through interactions with an environment to maximize an expected return. This framework can be formalized as a Markov Decision Process (MDP) (Bellman, 1957), consisting of a state space  $\mathcal{S}$ , an action space  $\mathcal{A}$ , a transition probability function  $P(s'|s, a)$ , a reward function  $r(s, a)$ , and a discount factor  $\gamma \in [0, 1]$ . At each time step  $t$ , the agent selects an action  $A_t \in \mathcal{A}$  based on its policy  $\pi(A_t|S_t)$  and the current state  $S_t \in \mathcal{S}$ . In response, the environment transitions to the next state  $S_{t+1} \in \mathcal{S}$  according to the transition probability  $P(S_{t+1}|S_t, A_t)$  and provides a reward  $R_t = r(S_t, A_t)$ . The objective of the agent is to maximize the expected return  $\mathbb{E}_{(S_t, A_t, R_t) \sim (P, \pi)} \left[ \sum_{t=0}^T \gamma^t R_t \right]$ . Here,  $T$  represents the terminal timestep of an episode. The state-value function  $V^\pi(s) = \mathbb{E}_{(P, \pi)} \left[ \sum_{t=0}^T \gamma^t R_t | S_0 = s \right]$  and the action-value function  $Q^\pi(s, a) = \mathbb{E}_{(P, \pi)} \left[ \sum_{t=0}^T \gamma^t R_t | S_0 = s, A_0 = a \right]$  can be used to evaluate and improve the policy  $\pi$ .
+
+### 2.2 BOARD GAMES
+
+Board games have long been used as important benchmarks for artificial intelligence (Samuel, 1959; Tesaruro et al., 1995; Campbell et al., 2002; Silver et al., 2016; Yannakakis & Togelius, 2018). In this study, the term “board games” is used specifically to indicate perfect-information games with a finite action space, such as the game of Go. This kind of games can be formulated as an MDP, with the reward assigning  $R_T = +1$  for a win,  $R_T = -1$  for a loss, and  $R_T = 0$  for a draw, while rewards are zero at all other timesteps  $t \in \{0, 1, \dots, T-1\}$ . By setting the discount factor  $\gamma$  to 1, we ensure that the final outcome of the game is directly reflected in the expected return.
+
+## 3 RELATED WORK
+
+### 3.1 MODEL-FREE APPROACHES
+
+Classical RL algorithms include TD-learning (Sutton, 1988b) and Q-learning (Watkins & Dayan, 1992). DQN (Mnih et al., 2015) combined deep learning and Q-learning and succeeded in Atari domain. Several RL algorithms have been proposed based on the paradigm of regularized policy optimization, which can generally be formulated as follows:
+
+$$\underset{\pi'}{\text{maximize}} \mathbb{E}_{A \sim \pi'(\cdot|s)}[Q^\pi(s, A)] - \mathcal{R}(\pi'). \quad (1)$$
+
+Here,  $\pi'$  is the optimized policy,  $\pi$  is the prior policy, and  $\mathcal{R}(\pi')$  is the regularization term. For example, if we define the regularization term as  $\mathcal{R}(\pi') = -\alpha H(\pi')$ , where  $H(\pi')$  is the entropy of the optimized policy  $\pi'$ , the optimal solution corresponds to a softmax policy  $\pi(a|s) \propto \exp(Q^\pi(s, a)/\alpha)$ . This policy has long been adopted in prior studies, including classical approaches such as REINFORCE (Williams, 1992) and SARSA (Rummery & Niranjan, 1994; Van Seijen et al., 2009). In addition, Soft Q-Learning (Haarnoja et al., 2017) and SAC (Haarnoja et al., 2018) are methods that treat the entropy term as additional rewards.
+
+Alternatively, if we define the regularization term as the difference between prior policy  $\pi$  and optimized policy  $\pi'$ , we can make the policy updates gradual. For example, TRPO (Schulman et al., 2015) and one variant of PPO (Schulman et al., 2017) use the forward KL divergence  $\mathcal{R}(\pi') = \beta D_{\text{KL}}(\pi \parallel \pi')$  and MPO (Abdolmaleki et al., 2018) use the reverse KL divergence  $\mathcal{R}(\pi') = \beta D_{\text{KL}}(\pi' \parallel \pi)$ . Entropy regularization can also be combined to enhance exploration for these methods. Interestingly, Grill et al. (2020) have pointed out that AlphaZero (Silver et al., 2018) is also approximately solving a policy optimization problem with KL regularization.
+
+For the methods that leverage both reverse KL regularization and entropy regularization, Vieillard et al. (2020), Sokota et al. (2022), and Zhan et al. (2023) provided the theoretical properties of this combination. In this study, we aim to empirically show that this combination is effective for achieving efficient learning in the board game domain.
+
+Some of the model-free approaches are tested in the board game domain. For example, Schraudolph et al. (1993), Thrun (1994), and Tesaruro et al. (1995) have tried TD-learning in Go, Chess, and Backgammon, respectively, and Van Der Ree & Wiering (2013) have tested TD-learning, Q-learning, and SARSA in Othello. However, search-based approaches are considered to be stronger in this domain nowadays, which we explain in the next section.
+
+### 3.2 SEARCH-BASED APPROACHES
+
+Search-based approaches have demonstrated strong performance in board games. Classical approaches include TD-leaf $\lambda$  (Baxter et al., 1998), which combines TD-learning with look-ahead search. One of the most well-known algorithms is AlphaGo (Silver et al., 2016). It combined supervised pre-training with human expert game records and fine-tuning by RL with MCTS, defeating a human world champion in the game of Go. AlphaGo Zero (Silver et al., 2017) eliminated the need for supervised pre-training, and AlphaZero (Silver et al., 2018) extended it to general perfect-information finite-action games. Its generality has enabled applications in other fields, including mathematical and algorithmic discovery (Fawzi et al., 2022; Mankowitz et al., 2023). Subsequent studies of AlphaZero (Schrittwieser et al., 2020; Hubert et al., 2021; Ozair et al., 2021; Schrittwieser et al., 2021) have extended its applicability to a wider range of RL settings, such as continuous action spaces and partial observations.
+
+While these search-based approaches are powerful, their significant computational demand has been pointed out as limitations (Zhao et al., 2022). To address this issue, recent studies have proposed more lightweight and efficient search-based algorithms. For example, Hessel et al. (2021) proposed a method that reduces the depth of the search tree and performs a one-step search instead of a deep MCTS. Furthermore, Danihelka et al. (2022) proposed Gumbel AlphaZero, which reduces the rollout count of tree search, achieving efficient learning in the board game domain. Our work shares the goal of achieving efficient learning with these prior studies, but takes a more drastic approach. While previous methods reduce the amount of look-ahead search during training, we aim to completely eliminate it. In this sense, our method can be regarded as the zero-search limit of this line of research.
+
+### 3.3 GAME-SPECIALIZED APPROACHES
+
+Another line of research aims to enhance game-playing agents by incorporating game-specific knowledge. This approach has been adopted in both perfect-information games (Romstad et al., 2016; Delorme, 2017; Wu et al., 2020) and imperfect-information games (Moravčík et al., 2017; Li et al., 2020; Perolat et al., 2022; Bakhtin et al., 2023), leading to strong performance. However, our aim is to design a game-agnostic pure reinforcement learning method for board games, which distinguishes our work from these prior studies.
+
+## 4 KLENT: KL AND ENTROPY REGULARIZED POLICY OPTIMIZATION
+
+In this study, we propose Kullback-Leibler and Entropy Regularized Policy Optimization (KLENT). KLENT is an on-policy model-free RL algorithm, which is designed to achieve efficient learning in the board game domain. In Section 4.1, we describe our policy update rule, detailing our policy optimization problem and the solution to it. In Section 4.2, we explain value function learning methodology, utilizing  $\lambda$ -returns to stabilize the learning process. Section 4.3 presents the overall algorithm of KLENT with a pseudo code.
+
+### 4.1 POLICY UPDATE RULE
+
+To design the policy update rule, we employ the paradigm of regularized policy optimization. To avoid abrupt policy changes and achieve gradual policy updates, we utilize reverse KL regularization. In addition, to maintain sufficient exploration to ensure sample diversity and prepare for unknown opponents, we also incorporate entropy regularization. Using these two regularizers, we consider the following regularized policy optimization problem.
+
+$$\underset{\pi}{\text{maximize}} \quad \mathbb{E}_{A \sim \pi'(\cdot|s)} [Q^\pi(s, A)] - \beta D_{\text{KL}}(\pi'(\cdot|s) \| \pi(\cdot|s)) + \alpha H(\pi'(\cdot|s)). \quad (2)$$
+
+Here,  $D_{\text{KL}}(\pi' \| \pi)$  is the reverse KL divergence between the new policy  $\pi'$  and the current policy  $\pi$ , and  $H(\pi')$  is the entropy of  $\pi'$ . The coefficients  $\alpha$  and  $\beta$  are the non-negative scalar hyperparameters which control the strength of the regularization terms. Leveraging the fact that the action space  $\mathcal{A}$  of board games is finite, the optimal solution  $\pi'$  can be analytically derived in the following closed-form expression:
+
+$$\pi'(a|s) = \frac{1}{Z(s)} \exp \left( \frac{Q^\pi(s, a) + \beta \log \pi(a|s)}{\alpha + \beta} \right), \quad (3)$$
+
+where  $Z(s) = \sum_{a \in \mathcal{A}} \exp \left( \frac{Q^\pi(s, a) + \beta \log \pi(a|s)}{\alpha + \beta} \right)$  is a normalization term to ensure that  $\pi'(\cdot|s)$  is a probability distribution. Appendix A provides the detailed derivation of this optimal solution. In KLENT, this analytically obtained policy  $\pi'$  is used for action selection during the training.
+
+We model the policy as  $\pi_\theta(a|s)$  with a neural network. When updating the parameter  $\theta$ , the analytically obtained optimal policy  $\pi'(\cdot|s)$  is used as the learning target, and fitting of  $\theta$  is conducted to minimize the cross-entropy  $-\sum_{a \in \mathcal{A}} \pi'(a|s) \log \pi_\theta(a|s)$ .
+
+**Algorithmic differences from prior studies** The idea of KL and entropy regularization is shared with Sokota et al. (2022) and Perolat et al. (2021). The main difference of KLENT from them lies in the use of Equation 3. KLENT uses the analytically obtained solution for the learning target,
+
+![Figure 2: Conceptual comparison between AlphaZero and the proposed method KLENT. AlphaZero's approach uses a neural network to estimate a policy vector and a scalar state value, which are then combined with tree search. Our approach (KLENT) uses a neural network to estimate a policy vector and a vector action value, without tree search.](690fce4fb5c9cbb8beb560cb2a3fcbeb_img.jpg)
+
+The diagram is split into two columns. The left column, titled 'AlphaZero's Approach', shows a 'State' (blue circle) pointing to a 'Neural Network' box. Below the box are two outputs: 'Policy (Vector)' represented by a row of five orange squares, and 'State Value (Scalar)' represented by a single red square. To the right of the neural network is a '+' sign followed by a search tree diagram with blue and white nodes, labeled 'with Tree Search'. The right column, titled 'Our Approach (KLENT)', shows a 'State' (blue circle) pointing to a 'Neural Network' box. Below this box are two outputs: 'Policy (Vector)' represented by a row of five orange squares, and 'Action Value (Vector)' represented by a row of five green squares. To the right of the neural network is a search tree diagram with grey nodes, labeled 'No Tree Search'.
+
+Figure 2: Conceptual comparison between AlphaZero and the proposed method KLENT. AlphaZero's approach uses a neural network to estimate a policy vector and a scalar state value, which are then combined with tree search. Our approach (KLENT) uses a neural network to estimate a policy vector and a vector action value, without tree search.
+
+Figure 2: Conceptual comparison between AlphaZero and the proposed method KLENT. Search-based methods such as AlphaZero model the policy and the value-function  $V(s)$ , and use tree search to estimate the Q-function  $Q(s, a)$ . KLENT, by contrast, directly models both the policy and the Q-function using neural networks, eliminating the need for search.
+
+while prior studies used PPO-style policy update and replicator dynamics, respectively. The idea of entropy regularization is also shared with SAC (Haarnoja et al., 2018). The main differences between SAC and KLENT lie in action spaces, value learning, and on-policy-ness. SAC focuses on continuous action spaces, soft Q-function, and off-policy settings. In contrast, KLENT focuses on finite action spaces, ordinary Q-function, and on-policy settings. The main difference between Grill et al. (2020) and KLENT is that while the prior study uses MCTS for action-value estimation and uses forward KL regularization, KLENT eliminates MCTS and uses reverse KL regularization.
+
+### 4.2 LEARNING ACTION-VALUE FUNCTION
+
+To compute the optimized policy  $\pi'(a|s)$  in Equation 3, the probability given by the prior policy  $\pi(a|s)$  and the estimate of the action value  $Q^\pi(s, a)$  are required for all actions  $a \in \mathcal{A}$ . In search-based methods such as AlphaZero, the state-value function  $V^\pi(s)$  is modeled, and the action value is estimated from backup values obtained through tree search. By contrast, because our goal is to develop a model-free approach without look-ahead search, such backup values are unavailable. To bridge this gap, we directly model the action-value function as  $Q_\theta(s, a)$ , instead of the state-value function. This conceptual difference is illustrated in Figure 2.
+
+This choice of directly modeling the action-value function can make value-function learning more challenging, because learning the action-value function is often harder than learning the state-value function because of the following reasons. First, while the state-value function is a mapping  $V^\pi : \mathcal{S} \rightarrow \mathbb{R}$ , the action-value function  $Q^\pi : \mathcal{S} \times \mathcal{A} \rightarrow \mathbb{R}$  must capture action-conditional variation at every state. As  $|\mathcal{A}|$  grows, the resulting function class expands substantially, making the action-value function harder to learn.
+
+In addition, learning the action-value function often requires reasoning over more complex spatial features. For example, Figure 3 illustrates a position in which Black places a stone at the location marked with a green triangle, capturing 16 white stones indicated by red crosses. In such positions, recognizing that this move has high action value depends on interpreting intricate spatial configuration of surrounding stones, whereas the state value is often estimable from simpler features such as stone counts. Within these difficulties, learning the action-value function require additional care.
+
+To achieve stable and efficient action-value learning, we consider the use of  $\lambda$ -returns (Sutton, 1988a) is an effective approach. For  $\lambda \in [0, 1]$ ,  $n$ -step return  $G_t^{(n)}$  and  $\lambda$ -return  $G_t^\lambda$  are defined as follows:
+
+$$G_t^{(n)} = \sum_{k=0}^{n-1} \gamma^k R_{t+k} + \gamma^n \hat{v}_{t+n}, \quad G_t^\lambda = (1 - \lambda) \sum_{n=1}^{T-t-1} \lambda^{n-1} G_t^{(n)} + \lambda^{T-t-1} G_t^{(T-t)}. \quad (4)$$
+
+Here,  $\hat{v}_{t+n}$  denotes a bootstrap estimate of the state value  $V^\pi(S_{t+n})$ . In general, the benefit of  $\lambda$ -returns can be explained in terms of the bias-variance trade-off. The bias-variance decomposition is given by the following formula:
+
+$$\underbrace{\mathbb{E}[(\hat{X} - x)^2]}_{\text{Mean Squared Error}} = \underbrace{(\mathbb{E}[\hat{X}] - x)^2}_{\text{Squared Bias}} + \underbrace{\text{Var}(\hat{X})}_{\text{Variance}}. \quad (5)$$
+
+270  
+271  
+272  
+273  
+274  
+275  
+276  
+277  
+278  
+279
+
+![Figure 3: Illustration of difficulty in learning action-value in 9x9 Go. The figure shows two 9x9 Go boards. The left board shows a state with stones. The right board shows the same state with several stones marked with red 'X's, indicating the difficulty in learning action-values for those specific stones.](8e592c58b5074d79831ff650c2c636df_img.jpg)
+
+Figure 3: Illustration of difficulty in learning action-value in 9x9 Go. The figure shows two 9x9 Go boards. The left board shows a state with stones. The right board shows the same state with several stones marked with red 'X's, indicating the difficulty in learning action-values for those specific stones.
+
+280  
+281  
+282  
+283  
+284  
+285
+
+Figure 3: Illustration of difficulty in learning action-value in 9x9 Go. Learning the action-value function is generally more difficult than learning the state-value function, as it often requires handling more complex spatial features.
+
+286  
+287  
+288  
+289  
+290  
+291
+
+where the estimand is the true action value,  $x = Q^\pi(S_t, A_t)$ , and the estimator is the  $\lambda$ -return,  $\hat{X} = G_t^\lambda$  in our case. We empirically validated this bias-variance trade-off through a preliminary experiment. We measured the squared bias, the variance, and their sum of the  $\lambda$ -return using a pretrained model provided by Koyamada et al. (2023) in 9x9 Go environment. The results in Figure 4 suggest that, in board games as well, increasing  $\lambda$  reduces bias while increasing variance, with an intermediate value minimizing their sum.
+
+292  
+293  
+294
+
+Motivated by these observations, we employ the  $\lambda$ -return  $G_t^\lambda$  as the learning target for the action-value  $Q_\theta(S_t, A_t)$ . We obtain the state-value estimate  $\hat{v}_{t+n}$  by explicitly computing the expectation as follows.
+
+295  
+296
+
+$$\hat{v}_{t+n} = \mathbb{E}_{A \sim \pi'(\cdot|S_{t+n})} [Q_\theta(S_{t+n}, A)] = \sum_{a \in \mathcal{A}} \pi'(a|S_{t+n}) Q_\theta(S_{t+n}, a). \quad (6)$$
+
+297  
+298  
+299  
+300  
+301  
+302
+
+We also empirically demonstrate through ablation experiments in which  $\lambda$  is set to 0 or 1, corresponding to the 1-step return and the Monte Carlo return respectively, that an intermediate value of  $\lambda$  contributes to learning efficiency. KLENT utilizes  $\lambda$ -returns, which are designed for on-policy settings. For extending KLENT to off-policy settings, it can be realized by replacing  $\lambda$ -returns off-policy counterparts, such as Retrace( $\lambda$ ) (Munos et al., 2016).
+
+303  
+304
+
+### 4.3 OVERALL ALGORITHM
+
+305  
+306  
+307  
+308  
+309  
+310  
+311  
+312
+
+The overall procedure of the proposed algorithm KLENT is illustrated in Algorithm 1. Starting from randomly initialized networks, the proposed algorithm updates the policy  $\pi_\theta$  and the action-value function  $Q_\theta$  alternating a self-play phase for data collection and a fitting phase for network updates.
+
+313  
+314  
+315  
+316  
+317  
+318  
+319  
+320  
+321  
+322  
+323
+
+In the self-play phase, the goal is to populate the on-policy sample buffer  $\mathcal{D}$ . During the episode, the actions are sampled from the policy  $\pi'$  using the current networks  $\pi_\theta$  and  $Q_\theta$ . After the episode terminates, the  $\lambda$ -return  $G_t^\lambda$  is computed for all timesteps  $t$  by Equation 4. Samples are collected by repeatedly running episodes until the number of samples in the buffer reaches a predefined capacity.
+
+![Figure 4: Bias-Variance tradeoff in 9x9 Go. The graph shows the squared bias (blue line), variance (orange line), and their sum (green line) as a function of the parameter lambda. The x-axis represents lambda from 0.0 to 1.0. The y-axis represents the value from 0.0 to 0.5. The squared bias decreases as lambda increases, while the variance increases. The sum of squared bias and variance reaches a minimum at an intermediate value of lambda (around 0.6).](cca618c1ee620e865e566356b9fc9fb8_img.jpg)
+
+Figure 4: Bias-Variance tradeoff in 9x9 Go. The graph shows the squared bias (blue line), variance (orange line), and their sum (green line) as a function of the parameter lambda. The x-axis represents lambda from 0.0 to 1.0. The y-axis represents the value from 0.0 to 0.5. The squared bias decreases as lambda increases, while the variance increases. The sum of squared bias and variance reaches a minimum at an intermediate value of lambda (around 0.6).
+
+Figure 4: Bias-Variance tradeoff in 9x9 Go. Intermediate  $\lambda$  minimizes the sum of squared bias and variance.
+
+#### Algorithm 1 KLENT Algorithm
+
+- 1: Initialize the policy network  $\pi_\theta(a|s)$ .
+- 2: Initialize the action-value network  $Q_\theta(s, a)$ .
+- 3: **repeat**
+- 4:    $\mathcal{D} \leftarrow \{\}$  ▷ on-policy sample buffer
+- 5:   **repeat**
+- 6:     Initialize the state  $S_0$ .
+- 7:     **for**  $t = 0, \dots, T$  **do**
+- 8:        $\pi'(a|S_t) \propto \exp\left(\frac{Q_\theta(S_t, a) + \beta \log \pi_\theta(a|S_t)}{\alpha + \beta}\right)$
+- 9:        $\hat{v}_t \leftarrow \mathbb{E}_{A \sim \pi'(\cdot|S_t)} [Q_\theta(S_t, A)]$
+- 10:       Sample  $A_t \sim \pi'(\cdot|S_t)$ .
+- 11:       Execute  $A_t$  and observe  $(S_{t+1}, R_t)$ .
+- 12:     **end for**
+- 13:     Compute  $\lambda$ -returns  $\{G_t^\lambda\}_{t=0}^T$  using equation 4.
+- 14:      $\mathcal{D} \leftarrow \mathcal{D} \cup \{(S_t, A_t, (\pi'(a|S_t))_{a \in \mathcal{A}}, G_t^\lambda)\}_{t=0}^T$
+- 15:   **until**  $\mathcal{D}$  reaches a predefined capacity.
+- 16:   Update  $\theta$  by minimizing  $L(\theta)$  in equation 7.
+- 17: **until** convergence.
+
+In the fitting phase, the data accumulated in the buffer  $\mathcal{D}$  is used to update the network parameter  $\theta$ . The loss function  $L(\theta)$  is defined as follows:
+
+$$L(\theta) = \mathbb{E}_{\mathcal{D}} \left[ - \sum_{a \in \mathcal{A}} \pi^r(a|S) \log \pi_{\theta}(a|S) + (Q_{\theta}(S, A) - G^{\lambda})^2 \right]. \quad (7)$$
+
+Here,  $\mathbb{E}_{\mathcal{D}}[\cdot]$  indicates that  $(S, A, (\pi^r(a|S))_{a \in \mathcal{A}}, G^{\lambda})$  are sampled from the buffer  $\mathcal{D}$ . This loss function is designed to simultaneously optimize the policy and action-value networks, with the analytically obtained policy  $\pi^r(\cdot|S)$  and  $\lambda$ -return  $G^{\lambda}$  serving as targets for learning. By iterating these self-play and fitting phases, the policy  $\pi_{\theta}$  and the action-value function  $Q_{\theta}$  are progressively refined and eventually become strong.
+
+## 5 EXPERIMENTS
+
+In this section, we present our experimental results on board games. Specifically, Section 5.1 provides the results of performance comparison on five board games, demonstrating the efficiency of the proposed method KLENT compared to existing methods. Subsequently, we present the results of our ablation study in Section 5.2, demonstrating the importance of the key techniques in KLENT, namely KL regularization, entropy regularization, and  $\lambda$ -returns. Lastly, we provide the experimental results on large-scale 19x19 Go in Section 5.3. Our empirical analysis on the convergence limit of KLENT is also provided in Appendix L.
+
+### 5.1 PERFORMANCE COMPARISON
+
+We conducted experiments to compare the performance and the learning efficiency of KLENT and existing approaches. We employed five medium-scale board games, namely, Animal Shogi, Gardner Chess, 9x9 Go, Hex, and Othello as benchmark environments. The observation shape and action space size for each game are summarized in Table 1.
+
+To assess the playing strength of each agent, we used pretrained checkpoints from the Pgx library (Koyamada et al., 2023) for anchored opponents and measured the win rates against them. To evaluate the learning efficiency, we employed the number of simulator evaluations on the horizontal axis, which corresponds to the number of neural network queries during self-play. This metric serves as an indicator of the computational demand of training processes and has also been adopted in the literature, particularly when training efficiency is of the primary interest (Wu et al., 2020). For search-based methods, the number of data collected is the number of simulator evaluations divided by the number of MCTS simulations. For model-free methods, the number of data collected is equal to the number of simulator evaluations.
+
+As baselines for performance comparison, we used AlphaZero (Silver et al., 2018), TRPO AlphaZero (Grill et al., 2020), and Gumbel AlphaZero (Danihelka et al., 2022) as search-based approaches, and DQN (Mnih et al., 2015) and PPO (Schulman et al., 2017) as model-free approaches. The network architecture was unified across all experiments. Specifically, a ResNet (He et al., 2016) with 6 residual blocks was used for feature extraction. Depending on the method, additional heads such as a policy head, an action-value head, and a state-value head were added. These heads were designed as multilayer perceptrons. Further details of the experimental setup and implementation are provided in Appendix B and Appendix C, respectively.
+
+Table 1: Five board game environments used for the experiments.
+
+| Game Name         | Animal Shogi                                                                                                       | Gardner Chess                                                                                                       | 9x9 Go                                                                                                       | Hex                                                                                                       | Othello                                                                                                       |
+|-------------------|--------------------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------|
+| Initial State     | <img alt="Animal Shogi board state" data-bbox="369 1145 437 1215" src="47c7951cd96141ae01e5475558c14827_img.jpg"/> | <img alt="Gardner Chess board state" data-bbox="489 1145 558 1215" src="e8d99966e31b2b3964926154202432b3_img.jpg"/> | <img alt="9x9 Go board state" data-bbox="601 1145 667 1215" src="ca02949021cd9730cfc57ff4e157bd23_img.jpg"/> | <img alt="Hex board state" data-bbox="699 1145 776 1215" src="e226327fefbbee2857cd285f55933caf_img.jpg"/> | <img alt="Othello board state" data-bbox="809 1145 882 1215" src="f71db634ede24177fc13a9e0fad96e34_img.jpg"/> |
+| Observation Shape | (4, 3, 194)                                                                                                        | (5, 5, 115)                                                                                                         | (9, 9, 17)                                                                                                   | (11, 11, 4)                                                                                               | (8, 8, 2)                                                                                                     |
+| Action Space Size | 132                                                                                                                | 1225                                                                                                                | 82                                                                                                           | 122                                                                                                       | 65                                                                                                            |
+
+![Figure 5: Performance comparison between the proposed method KLENT and existing methods across five environments: Animal Shogi, Gardner Chess, 9x9 Go, Hex, and Othello. Each plot shows Win Rate (%) vs. Baseline Opponent on the y-axis and Simulator Evaluations [million] on the x-axis. KLENT (red solid line) consistently achieves higher win rates than other methods like AlphaZero, TRPO AlphaZero, Gumbel AlphaZero, DQN, and PPO. In Animal Shogi and Gardner Chess, KLENT reaches high win rates quickly. In 9x9 Go, Hex, and Othello, KLENT shows significantly higher efficiency, reaching competitive or higher win rates with fewer evaluations compared to search-based approaches like Gumbel AlphaZero.](3121afa7ca030b22ee0345864ca6f38b_img.jpg)
+
+Figure 5: Performance comparison between the proposed method KLENT and existing methods across five environments: Animal Shogi, Gardner Chess, 9x9 Go, Hex, and Othello. Each plot shows Win Rate (%) vs. Baseline Opponent on the y-axis and Simulator Evaluations [million] on the x-axis. KLENT (red solid line) consistently achieves higher win rates than other methods like AlphaZero, TRPO AlphaZero, Gumbel AlphaZero, DQN, and PPO. In Animal Shogi and Gardner Chess, KLENT reaches high win rates quickly. In 9x9 Go, Hex, and Othello, KLENT shows significantly higher efficiency, reaching competitive or higher win rates with fewer evaluations compared to search-based approaches like Gumbel AlphaZero.
+
+Figure 5: Performance comparison between the proposed method KLENT and existing methods. KLENT achieves competitive or higher efficiency compared to existing methods.
+
+In the evaluation, we have used a reactive policy in our main experiments and provided results with test-time search in Appendix H. We have compared performances by fixing the test-time simulation count for each method. As we use the same ResNet architecture for each method, this is also equivalent to fixing the wall-clock search time in the evaluation.
+
+The hyperparameters of the proposed method, KLENT, were unified across all five environments. Specifically, the regularization coefficients were set to  $(\alpha, \beta) = (0.03, 0.1)$ . The hyperparameter for  $\lambda$ -return was set to  $\lambda = e^{-1/8} \approx 0.88$ . This configuration corresponds to a time constant of 8 for the exponential decay in  $\lambda$ -return, indicating that returns around 8 steps ahead were considered on average. The sensitivity analysis of these hyperparameters are provided in Appendix D.
+
+The average performances across the five environments are presented in Figure 1. The results show that the proposed method KLENT achieves the most efficient learning on average. In particular, the results indicate several-fold efficiency gains. For example, Gumbel AlphaZero required 300 million simulator evaluations to reach an average win rate of 50%, whereas KLENT required only 75 million, representing a fourfold efficiency gain.
+
+The detailed performances in each environment are also presented in Figure 5. In Animal Shogi and Gardner Chess, where search-based approaches demonstrate high performance with moderate number of simulator evaluations, KLENT achieves competitive efficiency. In 9x9 Go, Hex, and Othello, where search-based approaches require substantial training resources, KLENT demonstrates significantly higher efficiency. In Appendix H, even in the comparison with an equal amount of test-time search, KLENT also shows a higher win rate compared to state-of-the-art Gumbel AlphaZero. In summary, our experimental results show that KLENT achieves higher win rates than search-based approaches under the same test-time computational budget, for both policies with and without test-time search.
+
+### 5.2 ABLATION STUDY
+
+We also conducted an ablation study to validate the importance of the three key techniques in KLENT: KL regularization, entropy regularization, and the use of  $\lambda$ -returns. We compared KLENT with the following four variants to evaluate the contribution of each technique. **KL Only:** Entropy regularization is removed by setting  $\alpha = 0$ . **ENT Only:** KL regularization is removed by setting  $\beta = 0$ . **1-Step KLENT:**  $\lambda$ -returns are replaced with 1-step backups by setting  $\lambda = 0$ . **Monte Carlo**
+
+![Figure 6: Five line graphs showing Win Rate (%) vs. Simulator Evaluations (million) for Animal Shogi, Gardner Chess, 9x9 Go, Hex, and Othello. Each graph compares five methods: KLENT (red solid), KL Only (blue dashed), ENT Only (green dash-dot), 1-Step KLENT (yellow dotted), and Monte Carlo KLENT (purple dash-dot-dot). In all environments, KLENT consistently achieves the highest win rate, while KL Only and ENT Only show significantly lower performance.](b93cbfb52e37619e688175a6aad9edd9_img.jpg)
+
+Figure 6: Five line graphs showing Win Rate (%) vs. Simulator Evaluations (million) for Animal Shogi, Gardner Chess, 9x9 Go, Hex, and Othello. Each graph compares five methods: KLENT (red solid), KL Only (blue dashed), ENT Only (green dash-dot), 1-Step KLENT (yellow dotted), and Monte Carlo KLENT (purple dash-dot-dot). In all environments, KLENT consistently achieves the highest win rate, while KL Only and ENT Only show significantly lower performance.
+
+Figure 6: The results of the ablation study. They highlight the importance of all three techniques for consistently achieving high efficiency in the five environments.
+
+**KLENT:**  $\lambda$ -returns are replaced with Monte Carlo returns by setting  $\lambda = 1$ . The hyper-parameter configurations of each variant are summarized in Table 2.
+
+The results of our ablation study are shown in Figure 6. The results demonstrate the importance of all three techniques for consistently achieving high efficiency in the five environments. We discuss the effect of each technique below.
+
+**The effect of entropy regularization** can be analyzed by comparing KLENT and KL Only. In KL Only, where the entropy regularization is removed, performance degrades significantly across all the five games. Specifically, in Animal Shogi, the win rate initially rises to 75% but subsequently declines, suggesting unstable learning. Figure 7 shows the evolution of the average entropy of the policy  $\pi'$  in Animal Shogi. While KLENT maintains the entropy, it rapidly decreases and becomes nearly zero in KL Only, indicating that the policy becomes excessively deterministic. These results suggest that encouraging sufficient exploration is crucial for stable learning process.
+
+**The effect of KL regularization** can be observed by comparing the results of KLENT and ENT Only. In ENT Only, KL regularization is removed so that the policy  $\pi'$  is represented by the following equation:  $\pi'(a|s) = \frac{1}{Z(s)} \exp(Q_\theta(s, a)/\alpha)$ . In other words, the output of the policy network is completely ignored, and actions are selected according to a softmax policy based solely on the action-value function. According to the results, ENT Only exhibits degraded performance compared to the original KLENT across the environments. The results suggest that it is also important to gradually update the policy for stabilizing the learning process.
+
+**The effect of  $\lambda$ -returns** can be observed by comparing the results of KLENT, 1-Step KLENT, and Monte Carlo KLENT. Replacing  $\lambda$ -returns with 1-step returns or Monte Carlo returns results in a performance drop especially in 9x9 Go and Hex. As discussed in Section 4.2, the results suggest the importance of balancing bias-variance trade-off through the use of an intermediate  $\lambda$ .
+
+Table 2: Hyper-parameter configurations for the ablation study.
+
+|                   | $\alpha$ | $\beta$ | $\lambda$  |
+|-------------------|----------|---------|------------|
+| KLENT             | 0.03     | 0.1     | $e^{-1/8}$ |
+| KL Only           | 0        | 0.1     | $e^{-1/8}$ |
+| ENT Only          | 0.03     | 0       | $e^{-1/8}$ |
+| 1-Step KLENT      | 0.03     | 0.1     | 0          |
+| Monte Carlo KLENT | 0.03     | 0.1     | 1          |
+
+![Figure 7: A line graph showing the entropy evolution of the policy π' in Animal Shogi. The x-axis is 'Simulator Evaluations [million]' from 0 to 400. The y-axis is 'Entropy' from 0.0 to 2.0. Two lines are plotted: KLENT (red solid line) and KL Only (blue dashed line). KLENT starts at an entropy of ~1.8, drops to ~0.5 by 100 evaluations, and then fluctuates between 0.5 and 0.8. KL Only starts at ~1.8, drops sharply to ~0.1 by 100 evaluations, and remains near zero.](4e0ade2f41b66d5602160da5cc978274_img.jpg)
+
+Figure 7: A line graph showing the entropy evolution of the policy π' in Animal Shogi. The x-axis is 'Simulator Evaluations [million]' from 0 to 400. The y-axis is 'Entropy' from 0.0 to 2.0. Two lines are plotted: KLENT (red solid line) and KL Only (blue dashed line). KLENT starts at an entropy of ~1.8, drops to ~0.5 by 100 evaluations, and then fluctuates between 0.5 and 0.8. KL Only starts at ~1.8, drops sharply to ~0.1 by 100 evaluations, and remains near zero.
+
+Figure 7: Entropy evolution of the policy  $\pi'$  in Animal Shogi. While KLENT maintains the entropy, it becomes nearly zero in KL Only.
+
+![Figure 8: A line graph titled '19x19 Go' showing win rate against a baseline opponent. The x-axis is 'Simulator Evaluations [million]' from 0 to 800. The y-axis is 'Win Rate [%] vs. Baseline Opponent' from 0 to 60. Two lines are plotted: KLENT (red solid line) and AlphaZero (blue dashed line). Both lines start at 0% and rise to about 50% by 200 evaluations, then plateau. KLENT slightly outperforms AlphaZero, reaching ~55% while AlphaZero reaches ~50%.](f519a5be118c846f631c992412353fb9_img.jpg)
+
+Figure 8: A line graph titled '19x19 Go' showing win rate against a baseline opponent. The x-axis is 'Simulator Evaluations [million]' from 0 to 800. The y-axis is 'Win Rate [%] vs. Baseline Opponent' from 0 to 60. Two lines are plotted: KLENT (red solid line) and AlphaZero (blue dashed line). Both lines start at 0% and rise to about 50% by 200 evaluations, then plateau. KLENT slightly outperforms AlphaZero, reaching ~55% while AlphaZero reaches ~50%.
+
+Figure 8: The results of experiments in 19x19 Go. Even in the large-scale environment, KLENT achieves competitive learning efficiency compared to AlphaZero.
+
+### 5.3 SCALABILITY TO A LARGE-SCALE GAME
+
+To assess the scalability of KLENT to a large-scale game, we further conducted experiments in 19x19 Go, comparing it with AlphaZero. As Pgx (Koyamada et al., 2023) does not provide the pretrained checkpoint for 19x19 Go, we instead used the checkpoint released by ElfOpen Go (Tian et al., 2019) for the anchored opponent. For the network architecture, we used 20-block ResNet (He et al., 2016) instead of 6-block one to capture features in the larger board. Also in this experiment, KLENT used the consistent hyperparameters, namely,  $(\alpha, \beta, \lambda) = (0.03, 0.1, e^{-1/8})$ .
+
+We present the results in Figure 8. We can observe that even in 19x19 Go, KLENT achieves competitive learning compared to AlphaZero. Overall, our experimental results demonstrate that the proposed method achieves high learning efficiency in medium-scale environments, while also maintaining competitive learning in the large-scale environment.
+
+## 6 CONCLUSIONS
+
+In this study, we have proposed KLENT, a model-free reinforcement learning algorithm designed for board games. The key techniques used in KLENT are KL regularization for gradual policy updates, entropy regularization for exploration, and  $\lambda$ -returns for efficient and stable value function learning. Our experimental results have demonstrated learning efficiency of KLENT compared to existing methods. Through our ablation study, we also validated the importance of these three key techniques.
+
+A limitation of this study is that our goal is focused to improve the efficiency. While we have shown that KLENT can achieve efficient learning, this does not necessarily mean that it achieves superior asymptotic performance when unlimited computational resources are given. Although we consider our efficient approach to be valuable for most practitioners and researchers in the community, our results do not preclude the effectiveness of search-based approaches including AlphaZero, particularly when massive computational resources such as thousands of GPUs are available.
+
+Our results have shown that even in board games, a domain long dominated by search-based methods, carefully designed model-free approaches can achieve more efficient learning. We hope this perspective will inspire future research to extend model-free approaches to other domains where search-based methods prevail, thereby opening promising directions for resource-efficient reinforcement learning.
+
+## REPRODUCIBILITY STATEMENT
+
+To facilitate reproducibility, Appendix A presents the theoretical proofs, Appendix B details the experimental setup, and Appendix C details the implementation. Our Supplementary Material includes the code necessary to reproduce our experiments.
+
+## REFERENCES
+
+- Abbas Abdolmaleki, Jost Tobias Springenberg, Yuval Tassa, Remi Munos, Nicolas Heess, and Martin Riedmiller. Maximum a posteriori policy optimisation. In *International Conference on Learning Representations*, 2018.
+- Anton Bakhtin, David J Wu, Adam Lerer, Jonathan Gray, Athul Paul Jacob, Gabriele Farina, Alexander H Miller, and Noam Brown. Mastering the game of no-press diplomacy via human-regularized reinforcement learning and planning. In *International Conference on Learning Representations*, 2023.
+- David Balduzzi, Karl Tuyls, Julien Perolat, and Thore Graepel. Re-evaluating evaluation. In *The Thirty-Second International Conference on Neural Information Processing Systems*, 2018.
+- Petr Baudiš and Jean-loup Gailly. Pachi: State of the art open source go program. *Advances in computer games*, pp. 24–38, 2011.
+- Petr Baudiš and Jean-loup Gailly. Pachi: A fairly strong go/baduk/weiqi playing program. <https://github.com/pasky/pachi>, 2018. Retrieved September 1st, 2025.
+- Jonathan Baxter, Andrew Tridgell, and Lex Weaver. Tdleaf(lambda): Combining temporal difference learning with game-tree search. In *Proceedings of the Ninth Australian Conference on Neural Networks*. Department of Computer Science and Electrical Engineering, University of Queensland, 1998.
+- Richard Bellman. A markovian decision process. *Journal of mathematics and mechanics*, pp. 679–684, 1957.
+- Daniel Bump, Gunnar Farnebäck, and Arend Bayer. Gnugo. <http://www.gnu.org/software/gnugo/gnugo.html>, 2005. Retrieved September 1st, 2025.
+- Murray Campbell, A. Joseph Hoane, and Feng hsiung Hsu. Deep blue. *Artif. Intell.*, 134:57–83, 2002.
+- Ivo Danihelka, Arthur Guez, Julian Schrittwieser, and David Silver. Policy improvement by planning with gumbel. In *International Conference on Learning Representations*, 2022.
+- Richard Delorme. edax-reversi. <https://github.com/abulmo/edax-reversi>, 2017. Version 4.4, Retrieved September 1st, 2025.
+- Alhussein Fawzi, Matej Balog, Aja Huang, Thomas Hubert, Bernardino Romera-Paredes, Mohammadamin Barekatain, Alexander Novikov, Francisco J. R. Ruiz, Julian Schrittwieser, Grzegorz Swirszcz, David Silver, Demis Hassabis, and Pushmeet Kohli. Discovering faster matrix multiplication algorithms with reinforcement learning. *Nature*, 610(7930):47–53, 2022.
+- Jean-Bastien Grill, Florent Altché, Yunhao Tang, Thomas Hubert, Michal Valko, Ioannis Antonoglou, and Rémi Munos. Monte-carlo tree search as regularized policy optimization. In *International Conference on Machine Learning*, pp. 3769–3778. PMLR, 2020.
+- Tuomas Haarnoja, Haoran Tang, Pieter Abbeel, and Sergey Levine. Reinforcement learning with deep energy-based policies. In *International conference on machine learning*, pp. 1352–1361. PMLR, 2017.
+- Tuomas Haarnoja, Aurick Zhou, Pieter Abbeel, and Sergey Levine. Soft actor-critic: Off-policy maximum entropy deep reinforcement learning with a stochastic actor. In *International conference on machine learning*, pp. 1861–1870. PMLR, 2018.
+- Kaiming He, Xiangyu Zhang, Shaoqing Ren, and Jian Sun. Identity mappings in deep residual networks. In *Computer Vision–ECCV 2016: 14th European Conference, Amsterdam, The Netherlands, October 11–14, 2016, Proceedings, Part IV 14*, pp. 630–645. Springer, 2016.
+
+- 594 Matteo Hessel, Ivo Danihelka, Fabio Viola, Arthur Guez, Simon Schmitt, Laurent Sifre, Theophrane  
+595 Weber, David Silver, and Hado Van Hasselt. Muesli: Combining improvements in policy opti-  
+596 mization. In Marina Meila and Tong Zhang (eds.), *Proceedings of the 38th International Con-*  
+597 *ference on Machine Learning*, volume 139 of *Proceedings of Machine Learning Research*, pp.  
+598 4214–4226. PMLR, 18–24 Jul 2021.
+- 599  
+600 Thomas Hubert, Julian Schrittwieser, Ioannis Antonoglou, Mohammadamin Barekatain, Simon  
+601 Schmitt, and David Silver. Learning and planning in complex action spaces. In Marina Meila  
+602 and Tong Zhang (eds.), *Proceedings of the 38th International Conference on Machine Learning*,  
+603 volume 139 of *Proceedings of Machine Learning Research*, pp. 4476–4486. PMLR, 18–24 Jul  
+604 2021.
+- 605 Thomas Hubert, Rishi Mehta, Laurent Sartran, Miklós Z Horváth, Goran Žužić, Eric Wieser, Aja  
+606 Huang, Julian Schrittwieser, Yannick Schroecker, Hussain Masoom, et al. Olympiad-level formal  
+607 mathematical reasoning with reinforcement learning. *Nature*, pp. 1–3, 2025.
+- 608  
+609 Diederik P. Kingma and Jimmy Ba. Adam: A method for stochastic optimization. In *3rd Inter-*  
+610 *national Conference on Learning Representations, ICLR 2015, San Diego, CA, USA, May 7-9,*  
+611 *2015, Conference Track Proceedings*, 2015.
+- 612 Sotetsu Koyamada, Shinri Okano, Soichiro Nishimori, Yu Murata, Keigo Habara, Haruka Kita, and  
+613 Shin Ishii. Pgx: Hardware-accelerated parallel game simulators for reinforcement learning. In  
+614 *Thirty-seventh Conference on Neural Information Processing Systems Datasets and Benchmarks*  
+615 *Track*, 2023.
+- 616  
+617 Oliver Kroemer, Scott Niekum, and George Konidaris. A review of robot learning for manipulation:  
+618 challenges, representations, and algorithms. *Journal of Machine Learning Research*, 22(1):30:1–  
+619 30:82, 2021.
+- 620  
+621 Marc Lanctot, Kate Larson, Yoram Bachrach, Luke Marris, Zun Li, Avishkar Bhoopchand, Thomas  
+622 Anthony, Brian Tanner, and Anna Koop. Evaluating agents using social choice theory, 2025.
+- 623  
+624 Junjie Li, Sotetsu Koyamada, Qiwei Ye, Guoqing Liu, Chao Wang, Ruihan Yang, Li Zhao, Tao  
+625 Qin, Tie-Yan Liu, and Hsiao-Wuen Hon. Suphx: Mastering mahjong with deep reinforcement  
+626 learning. *arXiv preprint arXiv:2003.13590*, 2020.
+- 627  
+628 Siqi Liu, Ian Gemp, Luke Marris, Georgios Piliouras, Nicolas Heess, and Marc Lanctot. Re-  
+629 evaluating open-ended evaluation of large language models. In *The Thirteenth International*  
+630 *Conference on Learning Representations*, 2025.
+- 631  
+632 Daniel J. Mankowitz, Andrea Michi, Anton Zhernov, Marco Gelmi, Marco Selvi, Cosmin Padu-  
+633 raru, Edouard Leurent, Shariq Iqbal, Jean-Baptiste Lespiau, Alex Ahern, Thomas Köppe, Kevin  
+634 Millikin, Stephen Gaffney, Sophie Elster, Jackson Broshear, Chris Gamble, Kieran Milan, Robert  
+635 Tung, Minjeong Hwang, Taylan Cemgil, Mohammadamin Barekatain, Yujia Li, Amol Mandhane,  
+636 Thomas Hubert, Julian Schrittwieser, Demis Hassabis, Pushmeet Kohli, Martin Riedmiller, Oriol  
+637 Vinyals, and David Silver. Faster sorting algorithms discovered using deep reinforcement learn-  
+638 ing. *Nature*, 618(7964):257–263, 2023.
+- 639  
+640 Richard D McKelvey and Thomas R Palfrey. Quantal response equilibria for normal form games.  
+641 *Games and economic behavior*, 10(1):6–38, 1995.
+- 642  
+643 Volodymyr Mnih, Koray Kavukcuoglu, David Silver, Andrei A Rusu, Joel Veness, Marc G Belle-  
+644 mare, Alex Graves, Martin Riedmiller, Andreas K Fidjeland, Georg Ostrovski, et al. Human-level  
+645 control through deep reinforcement learning. *nature*, 518(7540):529–533, 2015.
+- 646  
+647 Matej Moravčík, Martin Schmid, Neil Burch, Viliam Lisý, Dustin Morrill, Nolan Bard, Trevor  
+648 Davis, Kevin Waugh, Michael Johanson, and Michael Bowling. Deepstack: Expert-level artificial  
+649 intelligence in heads-up no-limit poker. *Science*, 356(6337):508–513, 2017.
+- 650  
+651 Remi Munos, Tom Stepleton, Anna Harutyunyan, and Marc Bellemare. Safe and efficient off-policy  
+652 reinforcement learning. In D. Lee, M. Sugiyama, U. Luxburg, I. Guyon, and R. Garnett (eds.),  
+653 *Advances in Neural Information Processing Systems*, volume 29. Curran Associates, Inc., 2016.
+
+[Appendix and supplementary materials beyond page 12 have been removed.]

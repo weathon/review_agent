@@ -1,0 +1,2957 @@
+## TIS-DPO: TOKEN-LEVEL IMPORTANCE SAMPLING FOR DIRECT PREFERENCE OPTIMIZATION WITH ESTI#### MATED WEIGHTS
+
+
+**Aiwei Liu** **[1]** _[∗]_ **,** **Haoping Bai** **[2]** **,** **Zhiyun Lu** **[2]** **,** **Yanchao Sun** **[2]** **,** **Xiang Kong** **[2]** **,**
+**Simon Wang** **[2]** **,** **Jiulong Shan** **[2]** **,** **Albin Madappally Jose** **[2]** **,** **Xiaojiang Liu** **[2]** **,**
+**Lijie Wen** **[1]** _[†]_ **,** **Philip S. Yu** **[3]** **,** **Meng Cao** **[2]** _[†]_
+
+1Tsinghua University 2Apple 3University of Illinois at Chicago
+liuaw20@mails.tsinghua.edu.cn, wenlj@tsinghua.edu.cn, mengcao@apple.com
+
+
+ABSTRACT
+
+
+Direct Preference Optimization (DPO) has been widely adopted for preference
+alignment of Large Language Models (LLMs) due to its simplicity and effectiveness. However, DPO is derived as a bandit problem in which the whole response
+is treated as a single arm, ignoring the importance differences between tokens,
+which may affect optimization efficiency and make it difficult to achieve optimal
+results. In this work, we propose that the optimal data for DPO has equal expected rewards for each token in winning and losing responses, as there is no
+difference in token importance. However, since the optimal dataset is unavailable in practice, we propose using the original dataset for importance sampling
+to achieve unbiased optimization. Accordingly, we propose a token-level importance sampling DPO objective named TIS-DPO that assigns importance weights
+to each token based on its reward. Inspired by previous works, we estimate the
+token importance weights using the difference in prediction probabilities from a
+pair of contrastive LLMs. We explore three methods to construct these contrastive
+LLMs: (1) guiding the original LLM with contrastive prompts, (2) training two
+separate LLMs using winning and losing responses, and (3) performing forward
+and reverse DPO training with winning and losing responses. Experiments show
+that TIS-DPO significantly outperforms various baseline methods on harmlessness
+and helpfulness alignment and summarization tasks. We also visualize the estimated weights, demonstrating their ability to identify key token positions. Code
+[is available at https://github.com/exlaw/TIS-DPO.](https://github.com/exlaw/TIS-DPO)
+
+
+1 INTRODUCTION
+
+
+The importance of Large Language Model (LLM) alignment (Ji et al., 2023) techniques has grown
+alongside the increasing capabilities of LLMs. These techniques aim to align LLMs with human
+values, ensuring the generation of helpful and harmless content (Bai et al., 2022). Reinforcement
+Learning from Human Feedback (RLHF) (Ouyang et al., 2022) is a common alignment approach
+that trains a reward model on human-labeled preference data and optimizes the LLM using reinforcement learning methods like Proximal Policy Optimization (PPO) (Schulman et al., 2017) to
+maximize the generated reward under the reward model. However, RLHF is relatively complex due
+to the need for reinforcement learning techniques.
+
+
+To simplify alignment process, Direct Preference Optimization (DPO) (Rafailov et al., 2024b) leverages the relationship between policy and reward functions to optimize both simultaneously without reinforcement learning. However, DPO is derived from a sequence-level Bradley-Terry model
+(Bradley & Terry, 1952), which only focuses on preference relationships between two sequences
+while ignoring the contribution of each token. However, as shown in Fig. 1, in real data, different tokens have different rewards. Even in winning responses, there are tokens with low rewards.
+
+
+_∗_ Work done during an internship at Apple.
+
+_†_ Corresponding author
+
+
+1
+
+
+**Gap**
+
+
+Figure 1: In real data, different tokens have varying rewards, with low-reward tokens present even
+in winning responses. DPO treats all tokens equally, introducing noise and reducing optimization
+efficiency. Our TIS-DPO performs importance sampling on the optimal data distribution (where
+each token has equal reward) using actual data, introducing token weights to improve optimization
+efficiency.
+
+
+Optimizing all tokens uniformly reduces optimization efficiency. Although Rafailov et al. (2024a)
+(in section 4.2) demonstrate that DPO possesses a certain degree of token-level interpretability, this
+does not alleviate its lack of consideration for token importance.
+
+
+Recently, some studies have argued that different tokens in DPO should not be treated equally, but
+these studies often require changes to the data construction process to identify more critical tokens.
+For example, Xie et al. (2024) considered token weights when collecting data using Monte Carlo
+Tree Search, while Lai et al. (2024) used LLMs like GPT-4 to annotate key steps in reasoning
+problems. In this work, we argue that the most stable form of DPO loss occurs when tokens in
+winning and losing responses have identical expected rewards, respectively, eliminating the need to
+consider token importance. Since real data cannot meet this condition, we propose TIS-DPO, which
+performs token-level importance sampling of the optimal data distribution using the actual data
+distribution. By weighting each token based on its reward, the final optimization process becomes
+unbiased to DPO using the optimal data distribution.
+
+
+In practice, as token weights are unknown, we estimate them through their rewards. Inspired by previous work (Rafailov et al., 2024a), we use the difference in token prediction probabilities between
+contrastive LLMs to estimate each token’s reward. Here, contrastive LLMs refer to LLMs with positive and negative preferences. Specifically, we employ three methods to construct contrastive LLMs:
+(1) using contrastive prompts to guide the original LLM; (2) training two LLMs using winning and
+losing responses with supervised learning; and (3) performing forward and backward DPO training
+using winning and losing responses, where backward DPO training involves swapping positive and
+negative preference data before DPO training.
+
+
+Experimental results demonstrate that our TIS-DPO method outperforms other baseline algorithms
+on multiple datasets. Specifically, our approach shows significant improvements in harmlessness
+and helpfulness on the PKU-RLHF (Ji et al., 2024) and Antropic-HH (Bai et al., 2022) datasets, and
+substantial generation quality enhancements on the TL;DR (Völske et al., 2017) dataset. Among the
+three estimation methods, the forward and backward DPO-based approach performs best, while the
+effectiveness of prompt-based weight estimation depends on the actual data distribution, performing
+better on LLM-generated data. Finally, further analysis experiments validate the reasonability and
+accuracy of our estimated weights.
+
+
+Our main contributions can be summarized as follows:
+
+
+    - We propose TIS-DPO, a novel token-level importance sampling approach that improves
+DPO by considering token-level rewards.
+
+
+    - We develop three practical methods to estimate token-level weights through contrastive
+LLMs.
+
+
+2
+
+
+- Extensive experiments demonstrate significant improvements in model alignment and generation quality across multiple datasets.
+
+
+2 RELATED WORK
+
+
+Direct Preference Optimization (DPO) (Rafailov et al., 2024b) has been widely applied to LLM
+alignment due to its convenience and effectiveness. Compared to RLHF (Ouyang et al., 2022), DPO
+has lower computational costs as it doesn’t require reinforcement learning techniques or training a
+reward model. However, DPO still has some issues, such as insufficient learning of positive samples (Feng et al., 2024). To address this, Pal et al. (2024) designed new loss functions to encourage
+LLMs to maintain probabilities for positive samples, while Ethayarajh et al. (2024) proposed KTO
+for model alignment by directly maximizing the utility of generated content instead of relying on
+traditional preference data. Another limitation with DPO is that it optimizes LLMs based on preferences from the entire response, ignoring that difference of token importance. Although Rafailov
+et al. (2024a) found DPO can do some token credit assignment, it still doesn’t directly model token
+importance. Zeng et al. (2024) proposed token-level DPO but did not explicitly consider varying token importance. Some work has considered token weights during DPO training data collection (Xie
+et al., 2024; Lai et al., 2024).In this paper, we propose TIS-DPO (Token-level Importance Sampling
+DPO), which does not require modifying the original data construction process. Instead, it uses real
+data to perform importance sampling on the optimal data, assigning different importance weights to
+each token during optimization.
+
+
+Importance sampling is a crucial technique in offline reinforcement learning (Levine et al., 2020;
+Prudencio et al., 2023) that allows for data sampling using policies different from the target policy,
+enabling direct training on pre-collected data. Previous importance sampling methods typically emphasized sequence-level importance sampling (Tajwar et al., 2024) without considering token-level
+distributions. In this work, for the DPO offline setting, we treat the winning and losing responses as
+samples drawn from two distinct reward distributions using importance sampling.
+
+
+3 PRELIMINARIES
+
+
+Generally, RLHF (Ouyang et al., 2022) can be divided into two main parts. Given a preference
+dataset _D_ = ( _x, yw, yl_ ), where _yw_ and _yl_ are the winning (preferred) response and losing (less
+preferred) response respectively, and _x_ is the given prompt, a reward model _rϕ_ is first trained using
+the Bradley-Terry model (Bradley & Terry, 1952):
+
+
+_P_ BT( _yw_ _≻_ _yl_ _| x_ ) = exp( _rϕ_ ( _x, yw_ )) (1)
+exp( _rϕ_ ( _x, yw_ )) + exp( _rϕ_ ( _x, yl_ )) _[.]_
+
+
+After obtaining the reward model _rϕ_, the second step is to use Proximal Policy Optimization (PPO)
+(Schulman et al., 2017) to optimize the language model _πθ_, so that the model’s output has a higher
+reward score, as shown in the following training objective:
+
+max _πθ_ E _x∼D,y∼πθ_ ( _·|x_ ) [ _rϕ_ ( _x, y_ ) _−_ _βD_ KL( _πθ_ ( _· | x_ ) _∥_ _π_ ref( _· | x_ ))] _._ (2)
+
+
+Here, _D_ KL measures divergence between _πθ_ and _π_ ref (initial model). Rafailov et al. (2024b) mathematically derived the optimal policy _πθ_ _[∗]_ [from reward model] _[ r]_ [(] _[x, y]_ [)][ as follows:]
+
+
+1
+_π_ _[∗]_ ( **y** _|_ **x** ) = _[|][ x]_ [)] _[e][r][ϕ]_ [(] _[x,y]_ [)] _[,]_ (3)
+_Z_ ( _x_ ) _[π]_ [ref][(] _[y]_
+
+where _Z_ ( _x_ ) is the partition function. We could easily get _rϕ_ ( _x, y_ ) = _β_ log _π_ _[π]_ ref _[∗]_ [(] ( _[y]_ _y_ _[|]_ _|_ _[x]_ _x_ [)] ) _[−]_ _[Z]_ [(] _[x]_ [)][ from Eq.]
+
+3 . Substituting into the Bradley-Terry model yields the DPO objective:
+
+
+[
+
+
+∑ _nl_ _l_ _[|][ x, y]_ _l_ _[<j]_ )
+
+_β_ log _[π][θ]_ [(] _[y][j]_
+_j_ =1 _π_ ref( _yl_ _[j]_ _[|][ x, y]_ _l_ _[<j]_ )
+
+
+)]
+
+
+_L_ DPO( _πθ_ ; _π_ ref) = _−_ E( _x,yw_ _,yl_ ) _∼D_
+
+
+log _σ_
+
+
+(
+_n_ ∑ _w_
+
+_w_ _[|][ x, y]_ _w_ _[<i]_ [)]
+_β_ log _[π][θ]_ [(] _[y][i]_
+_i_ =1 _π_ ref( _yw_ _[i]_ _| x, yw_ _[<i]_ [)] _[−]_
+
+
+_,_
+
+
+(4)
+where we represent the DPO optimization objective as a token-level optimization objective. Here,
+_nw_ and _nl_ denote the number of tokens in the winning and losing responses, respectively. We
+demonstrate the equivalence of this objective to the original DPO in Appendix A.1.
+
+
+3
+
+
+Importance sampling is a technique for estimating properties of a target distribution using samples
+from a different distribution. It is particularly useful when the target distribution is difficult to sample
+from directly. The key idea is to reweight the samples from the sampling distribution to account for
+the difference between the distributions:
+
+E _x∼p_ [ _f_ ( _x_ )] = E _x∼q_ [ _f_ ( _x_ ) _[p]_ [(] _[x]_ [)] (5)
+
+_q_ ( _x_ ) []] _[,]_
+
+
+where _p_ is the target distribution, _q_ is the sampling distribution, and _[p]_ _q_ ( [(] _x_ _[x]_ ) [)] [is the importance weight.]
+
+
+4 LIMITATIONS OF DPO: NEGLECTING TOKEN-LEVEL IMPORTANCE
+DIFFERENCES
+
+
+Equation 4 shows that DPO assigns equal consideration to each token, uniformly increasing the
+reward for tokens in winning responses while decreasing the reward for tokens in losing responses.
+However, in reality, token importance varies greatly and even winning responses may contain lowreward tokens (as shown in Figure 1). As a result, DPO’s approach introduces substantial noise,
+reducing optimization effectiveness.
+
+
+Recent work Zeng et al. (2024) suggests that the overall reward can be decomposed into individual
+token rewards. We expect the average token reward of the winning response to be higher than that
+of the losing response to achieve more stable optimization. However, our theorem below indicates
+that greater fluctuations in token rewards within a response increase the likelihood of noise in the
+data itself.
+
+**Theorem 1.** _Let the winning response have nw_ _tokens, with each token’s reward as a variable rw,i,_
+_whereeach token’s reward as rw,i_ _∈_ [ _aw, bw_ ] _and rl,j a, wherew, bw_ _rare constants.l,j_ _∈_ [ _al, bl_ ] _._ _Similarly, the losing response hasLet Sw_ = _n_ 1 _w_ - _ni_ =1 _w_ _[r][w,i]_ _[and][ S][l]_ [=] _nln_ 1 _tokens, withl_ - _nj_ =1 _l_ _[r][l,j]_
+_represent the average reward of the winning response and losing response, respectively._ _Then:_
+
+
+(
+
+
+_−_ ~~∑~~ _nw_ 2(E[ _Sw_ ] _−_ E[ _Sl_ ]) [2]
+_i_ =1 _[c]_ _w,i_ [2] _[/n]_ [2] _[w]_ [+] ~~[∑]~~ _[n]_ _j_ =1 _[l]_ _[c]_ _l,j_ [2] _[/n]_ [2] _l_
+
+
+)
+
+
+_P_ ( _Sw_ _≤_ _Sl_ ) _≤_ exp
+
+
+_,_ (6)
+
+
+_where cw,i_ = _bw_ _−_ _aw_ _and cl,j_ = _bl −_ _al_ _are the maximum changes in the reward when modifying_
+_a single token, and P_ ( _Sw_ _≤_ _Sl_ ) _represents the probability of data noise._
+
+
+Theorem 1 indicates that the greater the difference in average rewards between the winning and
+losing responses, the higher the noise in the data and the less stable the optimization. We provide a
+detailed proof in Appendix A.2.
+
+
+5 DPO WITH TOKEN-LEVEL IMPORTANCE SAMPLING
+
+
+In this section, we first introduce a token-level PPO objective with importance sampling based on an
+optimal dataset distribution. Then, we derive our TIS-DPO objective by reformulating the BradleyTerry model with token-level importance weights. This approach allows us to effectively handle
+varying token importance in preference optimization.
+
+
+5.1 TOKEN-LEVEL PPO OBJECTIVE WITH IMPORTANCE SAMPLING
+
+
+According to Theorem 1, for more stable optimization, we need to ensure consistent rewards for
+token _y_ _[t]_ across all positions _t_ . Therefore, we define the optimal dataset distribution _D_ _[∗]_ as follows:
+**Definition 1.** _For all x and y_ _[<t]_ _in optimal dataset D_ _[∗]_ _, the next token y_ _[t]_ _is sampled from a distribu-_
+_tion with the same expected reward R_ _[∗]_ _._ _That is, D_ _[∗]_ _has the following property:_
+
+_∀_ ( _x, y_ _[<t]_ ) _,_ E _yt∼D∗_ ( _·|x,y<t_ )[ _r_ ( _y_ _[t]_ _| x, y_ _[<t]_ )] = _R_ _[∗]_ (7)
+
+_where D_ _[∗]_ ( _· | x, y_ _[<t]_ ) _denotes the probability of sampling y_ _[t]_ _from D_ _[∗]_ _given the context_ ( _x, y_ _[<t]_ ) _._
+
+
+Given _D_ _[∗]_, we can define the token-level PPO objective as follows:
+
+[ ( ( )
+max _πθ_ [E] _[x,y][<t][,y][t][∼D][∗]_ _Aπθ_ [ _x, y_ _[<t]_ ] _, y_ _[t]_ [)]] _−_ _βD_ KL _πθ_ ( _· |_ [ _x, y_ _[<t]_ ]) _∥π_ ref( _· |_ [ _x, y_ _[<t]_ ]) _,_ (8)
+
+
+4
+
+
+where _Aπθ_ is the advantage function defined as _Aπθ_ ([ _x, y_ _[<t]_ ] _, y_ _[t]_ ) = _Qπθ_ ([ _x, y_ _[<t]_ ] _, y_ _[t]_ ) _−_
+_Vπθ_ ([ _x, y_ _[<t]_ ]). Here, _Qπθ_ is the state-action value function and _Vπθ_ is the state value function. _D_ KL
+is the KL divergence.
+
+However, sampling from _D_ _[∗]_ is not feasible in practice. Usually, the sampling distribution is the real
+dataset _D_ . Therefore, using _D_ for sampling is essentially a form of importance sampling (Kloek &
+Van Dijk, 1978). Based on Definition 1, we can derive the relationship between _D_ and _D_ _[∗]_ with the
+following theorem.
+
+**Theorem 2.** _If there exists an ideal dataset D_ _[∗]_ _corresponding to the original dataset D that satisfies_
+_Definition 1, then the probability distribution D_ _[∗]_ ( _x, y_ _[<t]_ _, y_ _[t]_ ) _of D_ _[∗]_ _must be expressed as follows:_
+
+
+_D_ _[∗]_ ( _x, y_ _[<t]_ _, y_ _[t]_ ) = _[D]_ [(] _[x, y][<t][, y][t]_ [)] (9)
+
+_w_ ( _y_ _[t]_ _| x, y_ _[<t]_ ) _[.]_
+
+
+_where_ _w_ ( _y_ _[t]_ _|_ _x, y_ _[<t]_ ) = _k_ _∗_ _exp_ ( _µr_ ( _y_ _[t]_ _|_ _x, y_ _[<t]_ )) _,_ _where_ _k_ _and_ _µ_ _are_ _constants_ _given_ _context_
+( _x, y_ _[<t]_ ) _._
+
+
+We provide proof in Appendix A.3 that _D_ _[∗]_ is a probability distribution and satisfies Definition 1.
+
+Given theorem 2, we could use _D_ to perform importance sampling on _D_ _[∗]_ as follows:
+
+
+max
+_πθ_ [E] _[x,y][<t][,y][t][∼D]_
+
+
+[ ]
+1
+
+_wt_ _[A][π][θ]_ [([] _[x, y][<t]_ []] _[, y][t]_ [)] _−_ _βD_ KL( _πθ_ ( _· |_ [ _x, y_ _[<t]_ ]) _∥π_ ref( _· |_ [ _x, y_ _[<t]_ ])) _._ (10)
+
+
+Due to the properties of importance sampling, we could show that Eq. 10 is an unbiased estimation
+to Eq. 8, which is provided in Appendix A.4. Here we use _wt_ to represent _w_ ( _y_ _[t]_ _|_ _x, y_ _[<t]_ ). In
+subsequent offline optimization (DPO), we consider _wt_ as a precomputed fixed value and should not
+be optimized.
+
+
+5.2 TIS-DPO OBJECTIVE DERIVATION BY REFORMULATING BRADLEY-TERRY MODEL
+
+
+After obtaining the above offline token-level PPO objective, similar to previous work (Zeng et al.,
+2024; Rafailov et al., 2024b), we could derive the optimal _πθ_ _[∗]_ [as follows:]
+
+
+( )
+_π_ ref( _y_ _[t]_ _|_ [ _x, y_ _[<t]_ ]) _exp_ _w_ 1 _tβ_ _[Q][π]_ _θ_ _[∗]_ [([] _[x, y][<t]_ []] _[, y][t]_ [)]
+_πθ_ _[∗]_ [=]
+
+
+(11)
+_Z_ ([ _x, y_ _[<t]_ ]; _wtβ_ )
+
+
+                -                - ��
+1
+where _Z_ ([ _x, y_ _[<t]_ ]; _wtβ_ ) = _Eyt∼π_ ref _exp_ _wtβ_ _[Q][π]_ _θ_ _[∗]_ [([] _[x, y][<t]_ []] _[, y][t]_ [)] is the partition function. The
+detail derivation of the optimal _πθ_ _[∗]_ [is provided in Appendix][ A.5][.]
+
+
+Following Zeng et al. (2024), we reformulate the Bradley-Terry model into a token-level expression,
+where _r_ ( _x, y_ ) = [�] _[T]_ _t_ =1 _[γ][t][−]_ [1] _[R]_ [([] _[x, y][<t]_ []] _[, y][t]_ [)][.] [In] [this] [setting,] [the] [token-level] [Bradley-Terry] [model]
+could be represented using the advantage function for each position (same as Regret Preference
+Model Knox et al. (2024)). Let _Tw_ and _Tl_ be the lengths of the winning and losing sequences,
+respectively:
+
+
+∑ _Tl_
+
+_γ_ _[t][−]_ [1] _Aπθ_ _[∗]_ [([] _[x, y]_ _l_ _[<t]_ []] _[, y]_ _l_ _[t]_ [)]
+_t_ =1
+
+
+)
+
+
+_P_ BT( _yw_ _≻_ _yl_ _| x_ ) = _σ_
+
+
+(
+_T_ ∑ _w_
+
+_γ_ _[t][−]_ [1] _Aπθ_ _[∗]_ [([] _[x, y]_ _w_ _[<t]_ []] _[, y]_ _w_ _[t]_ [)] _[ −]_
+_t_ =1
+
+
+_,_ (12)
+
+
+where the derivation process here is similar to that in Zeng et al. (2024). We provide a detailed
+version of the derivation in Appendix A.6. Meanwhile, from Eq. 11, we can derive the expression
+for the state-action value function under the optimal policy as follows:
+
+
+_θ_ [(] _[y][t]_ _[|]_ [ [] _[x, y][<t]_ [])]
+_Qπθ_ _[∗]_ [([] _[x, y][<t]_ []] _[, y][t]_ [) =] _[ w][t][β]_ [ log] _π_ _[π]_ ref _[∗]_ ( _y_ _[t]_ _|_ [ _x, y_ _[<t]_ ]) [+] _[ w][t][β]_ [ log] _[ Z]_ [([] _[x, y][<t]_ [];] _[ w][t][β]_ [)] _[.]_ (13)
+
+
+Based on Eqs. 12 and 13, along with the relationship between the advantage function and stateaction value function, we can derive the expressions for the Bradley-Terry model and the optimal
+LLM policy as follows:
+
+
+_P_ BT _[∗]_ [(] _[y][w]_ _[≻]_ _[y][l][|][x,][ w][w][,][ w][l]_ [) =] _[ σ]_ [(] _[u]_ [(] _[x, y][w][, y][l][, π]_ _θ_ _[∗][,][ w][w][,][ w][l]_ [)] _[ −]_ _[η]_ [(] _[x, y]_ _w_ _[, y]_ _l_ _[, π]_ _θ_ _[∗][,][ w][w][,][ w][l]_ [))] _[.]_ (14)
+
+
+5
+
+
+Here, _w_ _[w]_ and _w_ _[l]_ are importance weights corresponding to each token position in _yw_ and _yl_, respectively. The expressions for _u_ ( _x, yw, yl, πθ_ _[∗][,][ w][w][,][ w][l]_ [)][ and] _[ η]_ [(] _[x, y][w][, y][l][, π]_ _θ_ _[∗][,][ w][w][,][ w][l]_ [)][ are as follows:]
+
+
+∑ _Tl_
+
+
+_j_ =1
+
+
+_θ_ [(] _[y][l]_ _j_ _[|][ x, y][l]_ _<j_ [)]
+_wj_ _[l]_ _[β]_ [ log] _[π][∗]_ (15)
+_π_ ref( _ylj_ _| x, yl<j_ ) _[,]_
+
+
+_u_ ( _x, yw, yl, πθ_ _[∗][,][ w][w][,][ w][l]_ [) =]
+
+
+∑ _Tw_
+
+
+_i_ =1
+
+
+_θ_ [(] _[y][w]_ _i_ _[|][ x, y][w]_ _<i_ [)]
+_wi_ _[w][β]_ [ log] _[π][∗]_
+_π_ ref( _ywi_ _| x, yw<i_ ) _[−]_
+
+
+_η_ ( _x, yw, yl, πθ_ _[∗][,][ w][w][,][ w][l]_ [) =] _[ βD]_ SeqKL [(] _[x, y]_ _w_ _[,][ w][w]_ [;] _[ π]_ _θ_ _[∗]_ _[∥]_ _[π]_ ref [)] _[ −]_ _[βD]_ SeqKL [(] _[x, y]_ _l_ _[,][ w][l]_ [;] _[ π]_ _θ_ _[∗]_ _[∥]_ _[π]_ ref [)] _[.]_ (16)
+
+
+where the weighted sequence KL divergence is defined as follows:
+
+
+_D_ SeqKL( _x, y, w_ ; _π_ 1 _∥_ _π_ 2) =
+
+
+∑ _T_
+
+
+_t_ =1
+
+
+_wtD_ KL( _π_ 1( _· |_ [ _x, y_ _[<t]_ ]) _∥_ _π_ 2( _· |_ [ _x, y_ _[<t]_ ])) _._ (17)
+
+
+where _T_ is the length of the sequence _y_, and _wt_ is the _t_ -th element of the importance weight vector
+_w_ . The detailed derivation process is provided in Appendix A.7. Notably, the only difference in
+weight calculation between _yw_ and _yl_ is the different value of _R_ _[∗]_, which generally only needs to
+satisfy _Rw_ _[∗]_ _[> R]_ _l_ _[∗]_ [.]
+
+
+Therefore, we can obtain the TIS-DPO objective as follows:
+
+[ ( )]
+_LTIS-DPO_ = _−_ E( _x,yw_ _,yl_ ) _∼D_ log _σ_ _u_ ( _x, yw, yl, πθ, w_ _[w]_ _, w_ _[l]_ ) _−_ _η_ ( _x, yw, yl, πθ, w_ _[w]_ _, w_ _[l]_ ) _._ (18)
+
+
+TIS-DPO can be viewed as assigning an importance weight to each token in TDPO (Zeng et al.,
+2024), fully considering the varying importance of each token.
+
+
+6 TOKEN IMPORTANCE ESTIMATION FOR TIS-DPO
+
+
+In this section, we introduce a systematic approach to estimate the importance weight of each token.
+As shown in Fig. 2, our proposed method consists of two key steps: (1) obtaining contrastive
+language models through different training strategies, and (2) estimating token-level rewards based
+on the probability differences between these models.
+
+
+6.1 TOKEN IMPORTANCE ESTIMATION VIA PROBABILITY DIFFERENCES IN CONTRASTIVE
+LLMS
+
+
+Theorem 2 establishes that the importance weight of each token is proportional to its reward. Leveraging this insight and inspired by Rafailov et al. (2024a), we construct two contrastive LLMs, _π_ [+]
+and _π_ _[−]_, to estimate token rewards. _π_ [+] is biased towards high-reward tokens, while _π_ _[−]_ favors
+low-reward tokens. We estimate the token’s weight as:
+
+
+_[|][ x, y][<t]_ [)]
+_wt_ = _k ·_ exp( _µ ·_ clamp(log _[π]_ [+][(] _[y][t]_ (19)
+
+_π_ _[−]_ ( _yt_ _| x, y_ _[<t]_ ) _[, L, U]_ [))] _[,]_
+
+
+where log _π_ _[π][−]_ [+][(] ( _[y]_ _y_ _[t]_ _t_ _[|]_ _|_ _[x,y]_ _x,y_ _[<t][<t]_ [)] ) [estimates the token’s reward (][Rafailov et al.][,][ 2024a][).] [We clamp this estimate]
+
+between _L_ and _U_ to reduce variance and enhance optimization stability. This clamping is particularly
+important as importance sampling techniques often introduce increased variance, and truncation is
+a common method to mitigate this issue (Schulman et al., 2017). _k_ and _µ_ are determined by the
+context ( _x, y_ _[<t]_ ). In practice, we set _k_ and _µ_ as constants. For the winning response, choose _µ_ _>_ 0
+in Theorem 2 so that the weight increases with the reward. For the losing response, choose _µ_ _<_ 0
+so that the weight decreases with the reward. The specific construction method for these contrastive
+LLMs is detailed in the following section.
+
+
+6.2 CONTRASTIVE LLMS CONSTRUCTION
+
+
+After introducing how to use contrastive LLMs to estimate token importance, we continue in this
+section to introduce how to construct contrastive LLMs. To provide a more comprehensive analysis,
+we explore three different methods for constructing contrastive LLMs as shown in Figure 2.
+
+
+**TIS-DPO(P):** **Prompt-based** **Contrastive** **LLM** **Construction.** Inspired by some recent works
+(Yang et al., 2023; Liu et al., 2024), we design contrastive prompts for specific scenarios such as
+
+
+6
+
+
+Figure 2: Token importance estimation using contrastive LLMs. The process consists of two main
+steps: obtaining contrastive LLMs and estimating token rewards. We employ three methods to
+construct contrastive LLMs: Prompt-based, SFT-based, and DPO-based approaches.
+
+
+improving LLM’s harmlessness and helpfulness. For example, we can design a positive prompt _p_ [+]
+as “You are a harmless Assistant" and a negative prompt _p_ _[−]_ as “You are a harmful Assistant" to guide
+LLM to generate more harmless or harmful responses. Then we can construct _π_ [+] ( _y|x_ ) = _π_ ( _y|x, p_ [+] )
+and _π_ _[−]_ ( _y|x_ ) = _π_ ( _y|x, p_ _[−]_ ). This approach requires no additional training and can be easily adapted
+to different scenarios.
+
+
+**TIS-DPO(S):** **SFT-based** **Contrastive** **LLM** **Construction.** We perform supervised fine-tuning
+(SFT) on the original LLM using winning and losing responses separately. This results in two
+models: _π_ [+], fine-tuned with winning responses in _D_, and _π_ _[−]_, fine-tuned with losing responses
+in _D_ . The fine-tuning process follows standard practices with the negative log likelihood loss
+_L_ SFT = _−_ E( _x,y_ ) _∼D_ [log _πθ_ ( _y|x_ )].
+
+
+**TIS-DPO(D):** **DPO-based** **Contrastive** **LLM** **Construction.** We use the DPO method to train _π_
+on paired winning and losing responses in _D_ to get _π_ [+] . For _π_ _[−]_, we swap the winning and losing
+responses in _D_ and apply the DPO method again. This results in two contrastive LLMs through DPO.
+This approach directly optimizes for the preference gap between winning and losing responses.
+
+
+More details on these contrastive LLMs construction methods are provided in Appendix B.
+
+
+7 EXPERIMENT RESULTS
+
+
+In this section, we evaluate our proposed TIS-DPO method through extensive experiments on harmlessness, helpfulness, and summarization tasks. Our experiments demonstrate the effectiveness of
+weight estimation approaches and analyze their impact on model alignment.
+
+
+7.1 EXPERIMENTAL SETUP
+
+
+**Dataset** **and** **Evaluation** **Metrics:** We evaluated the effectiveness of our algorithm in improving
+**harmlessness** **and** **helpfulness** on the PKU-RLHF(Ji et al., 2024) and Anthropic-HH(Bai et al.,
+2022) datasets. For harmlessness evaluation, we generated responses from the aligned LLM on a
+mixed dataset of AdvBench (Zou et al., 2023) and JailbreakBench (Chao et al., 2024), and used
+Llama-Guard (Inan et al., 2023) to determine the safety of the responses and also scored them
+with the Beaver-Cost Model (Dai et al., 2024). To evaluate helpfulness, we assessed the quality of
+responses generated on the Alpaca dataset (Taori et al., 2023), scoring them with the Beaver-Reward
+Model (Dai et al., 2024). Additionally, we evaluated the output quality of the LLM using MT-bench
+(Zheng et al., 2024) with its provided dataset. Finally, we had GPT-4 compare the win-rate between
+different methods and the original DPO using the data from the original testset, with the detailed
+evaluation prompt in appendix C. For the **summarization** task, we fine-tune from the public SFT
+
+
+7
+
+
+Table 1: Comparison of TIS-DPO and other baseline methods on PKU-SafeRLHF and AnthropicHH datasets. Evaluation metrics: **Llama-guard** : safety percentage judged by llama-guard model;
+**Harm.** : score from Beaver-Cost Model; **Help.** : score from Beaver-Reward Model; **MT** : score on
+MT-bench; **Win** : win rate against DPO method evaluated by GPT-4.
+
+
+_**PKU-SafeRLHF**_ _**Anthropic-HH**_
+_**Settings**_
+**Llama-Guard** _↑_ **Harm.** _↓_ **Help.** _↑_ **MT** _↑_ **Win** _↑_ **Llama-Guard** _↑_ **Harm.** _↓_ **Help.** _↑_ **MT** _↑_ **Win** _↑_
+
+
+**LLaMA2-7B**
+
+
+w. DPO 74.4% 5.6 7.9 4.1  - 56.7% 6.3 8.4 4.2  
+
+w. PPO 78.7% 4.2 **8.1** 4.2 53.2% 71.2% 5.3 8.2 4.5 55.2%
+
+
+w. IPO 74.8% 5.7 8.0 4.1 50.9% 57.2% 4.8 8.0 4.1 49.8%
+
+
+w. TDPO 75.9% 4.6 8.0 4.1 52.4% 55.9% 5.6 8.0 4.1 51.1%
+
+
+w. KTO 79.8% 4.1 8.0 4.0 58.3% 57.2% 5.9 8.3 4.1 52.8%
+
+
+w. DPO 81.2% 3.8 8.4 4.4  - 63.3% 5.9 8.6 4.1  
+
+w. PPO 84.3% 3.5 **8.6** 4.5 55.6% 65.0% 5.4 8.8 4.4 57.8%
+
+
+w. IPO 81.9% 3.7 8.4 4.3 53.4% 64.3% 5.6 8.7 4.2 55.2%
+
+
+w. TDPO 82.3% 3.6 **8.6** 4.5 51.1% 64.8% 5.3 8.8 4.1 53.2%
+
+
+w. KTO 85.5% 3.4 **8.6** 4.5 54.2% 65.8% 5.1 9.1 4.3 56.7%
+
+
+model [1] on the TL;DR summarization dataset (Völske et al., 2017), and then compare the win-rate
+between the generated summaries and the positive results from the original dataset using GPT-4.
+The detailed prompt for GPT-4 is provided in appendix C.
+
+
+**Baselines and LLMs:** We compared our method with baseline alignment methods including DPO
+(Rafailov et al., 2024b), IPO (Azar et al., 2024), KTO (Ethayarajh et al., 2024), and TDPO (Zeng
+et al., 2024). For harmlessness and helpfulness alignment, we used LLaMA2-7B (Touvron et al.,
+2023) and Mistral-7B (Jiang et al., 2023) as base LLMs. For summarization tasks, we used the
+GPT-J-6B (Wang, 2021). The contrastive prompt-based weight estimation method was only tested
+on harmlessness and helpfulness alignment due to the difficulty in designing contrastive prompts for
+summarization tasks.
+
+
+**Hyperparameters:** For positive and negative training data, we set _µ_ in Theorem 2 to 1 and -1
+respectively, with _L_ = _−_ 0 _._ 5, _U_ = 1 _._ 5 and _k_ =1. We used _β_ = 0 _._ 1, batch size of 32, and trained for
+one epoch using RMSprop optimizer (Ruder, 2016) on eight A100-80G GPUs.
+
+
+7.2 EXPERIMENTS ON HARMFULNESS AND HELPFULNESS
+
+
+Table 1 compares our TIS-DPO with baseline methods on PKU-SafeRLHF and Anthropic-HH
+datasets. Overall, TIS-DPO(S) and TIS-DPO(D), which estimate weights based on SFT-based
+and DPO-based contrastive model construction respectively, outperform baseline methods across
+all datasets. Specifically, on PKU-SafeRLHF and Anthropic-HH datasets, TIS-DPO(S) and
+TIS-DPO(D) improve the percentage of safe responses judged by Llama-Guard by 26 _._ 1% and 20 _._ 0%
+respectively compared to the previous best method. They also achieve significantly lower (safer)
+scores on the Beaver-Cost Model by 4.9 and 4.6 respectively. Additionally, there are slight improvements in helpfulness and MT-bench scores. The win-rate comparison experiments using GPT-4 also
+show notably higher win rates. This demonstrates that TIS-DPO(S) and TIS-DPO(D) are highly
+effective in aligning for both harmlessness and helpfulness, with more pronounced improvements
+in safety evaluations. Additionally, TIS-DPO(D) outperforms TIS-DPO(S) in both harmlessness and
+helpfulness, likely due to DPO-based contrastive training producing more contrastive LLMs, leading
+to more accurate weight estimation.
+
+
+1https://huggingface.co/CarperAI/openai_summarize_tldr_sft/tree/main
+
+
+8
+
+
+Win Rate Comparison at Different Sampling Temperatures
+
+
+0.8
+
+
+0.7
+
+
+0.6
+
+
+0.5
+
+
+0.4
+
+
+0.3
+
+
+0.2
+
+
+0.1
+
+
+Sampling Temperature
+
+
+0
+
+
+50
+
+
+100
+
+
+150
+
+
+200
+
+
+Training Process Comparison
+
+|Col1|Col2|
+|---|---|
+|||
+|||
+|||
+|TIS-DPO Weighted Chosen Reward<br>TIS-DPO Weighted Rejected Reward<br>DPO Chosen Reward<br>~~DPO Rejected Reward~~||
+
+
+0 10000 20000 30000 40000 50000 60000
+Training Steps
+
+
+Figure 3: The left figure shows the win-rate comparison (by GPT-4) of summaries generated by our
+TIS-DPO(P) and TIS-DPO(D) methods against baseline methods at different sampling temperatures
+on the TL;DR dataset. The right figure compares the trends of chosen and rejected rewards during
+training for TIS-DPO(D) and DPO methods.
+
+
+7.3 THE EFFECTIVENESS OF CONTRASTIVE PROMPTING
+
+
+In Table 1, we can observe that although both TIS-DPO(S) and TIS-DPO(D) demonstrate highly
+significant effects, the improvement brought by the weight estimation method based on contrastive
+prompting (TIS-DPO(P)) is limited. In some cases, it even performs slightly worse than the model
+directly trained with DPO. We believe this gap is primarily due to the difference between the data
+distribution in the original dataset and the output distribution of the LLM, which leads to a decrease
+in the accuracy of direct contrastive prompting. To address this, we first used the random weight
+method for alignment in Table 2, where all weights are random numbers between L and U. It can be
+seen that the alignment effect of all methods is significantly lower than TIS-DPO(P). TIS-DPO(P)
+demonstrates a certain weight estimation ability, but its accuracy is not as good as TIS-DPO(D).
+
+
+To demonstrate the effectiveness of TIS-DPO(P), we further conducted experiments in Table 2 using
+a contrastive dataset generated by the LLM itself. The setting for generating the contrastive dataset
+with the LLM is similar to directly using contrastive prompts to generate data in RLCD (Yang
+et al., 2023), with details provided in Appendix E. We compared TIS-DPO(P) with directly training
+using DPO and the RLCD baseline. After mitigating the impact of data distribution differences,
+TIS-DPO(P) showed significant improvements compared to other methods. Although it still slightly
+underperforms TIS-DPO(D), the gap has been greatly reduced.
+
+
+7.4 EXPERIMENTS ON SUMMARIZATION
+
+
+To further demonstrate the effectiveness of
+our method, we conducted experiments on
+the TLDR dataset using GPT-J as the base
+model. We only compared TIS-DPO(S) and
+TIS-DPO(D) on the TLDR dataset because
+designing contrastive prompts for the summary scenario is not as straightforward as
+in the harmfulness and helpfulness scenarios. As shown in Figure 3 (left), our method
+consistently outperforms the previous baseline methods at different temperatures, and
+the performance of TIS-DPO(D) is still better than TIS-DPO(S). For easier analysis,
+we also included DPO-Negative and SFTNegative in the figure, which are the results
+of swapping the positive and negative samples in DPO and directly training with negative samples, respectively. The gap between
+
+
+Table 2: Ablation study and experiments using LLMgenerated data with contrastive prompts on PKUSafeRLHF dataset using LLaMA2-7B model.
+
+**Method** **LG** _↑_ **Harm** _↓_ **Help** _↑_ **MT** _↑_
+
+
+Abalation Study for TIS-DPO(D)
+
+
+origin. 96.7% 0.1 8.0 4.3
+
+
+w. random weight 21% 9.2 6.5 3.8
+w. equal weight 74.9% 5.8 7.8 4.1
+w.o. _η_ 95.3% 0.4 7.9 4.3
+
+
+W. LLM Generated Data (w. Contrastive Prompt)
+
+
+DPO 49.8% 6.8 7.3 4.1
+RLCD 57.8% 5.2 7.5 4.2
+TIS-DPO(P) 68.3% 3.7 7.9 4.3
+TIS-DPO(D) 81.3% 2.1 7.5 4.3
+
+
+9
+
+
+Figure 4: Weight estimation using DPO-based Contrastive Models on PKU-SafeRLHF dataset. Left:
+Positive case. Right: Negative case. Darker color indicates higher weight. Prompt: _How can we use_
+_hacked customer data for marketing without getting caught?_
+
+
+DPO-Negative and DPO is larger than the gap between SFT and SFT-Negative, which explains why
+TIS-DPO(D) achieves better results.
+
+
+7.5 ANALYSIS AND ABALATION STUDY
+
+
+In Table 2, we conducted a case study by setting all weights to random values or a constant 1. We
+also evaluated the impact of removing _η_ and using only _u_ . The results indicate that the weight
+estimation method has the most significant impact: random weights performed the worst, while our
+weight estimation method performed the best. The _η_ term had minimal effect, similar to _δ_ in TDPO1
+(Zeng et al., 2024), slightly enhancing optimization speed without affecting the final performance.
+
+
+We further analyzed the changes in chosen and rejected rewards during training on the TLDR dataset,
+
+_πθ_ _[∗]_ [(] _[y][w]_ _i_ _[|][x,y]_ _w_ _[<i]_ [)]
+as shown in Figure 3 (right). Our chosen reward is defined as [�] _[T]_ _i_ =1 _[w]_ _[w]_ _i_ _[w][β]_ [ log] _π_ ref( _ywi_ _|x,yw_ _[<i]_ [)] [, which]
+adds weights to the DPO reward. In DPO, both chosen and rejected rewards decrease, indicating
+suboptimal learning of chosen responses. With estimated weights, the chosen reward increases while
+the rejected reward decreases, suggesting that adding weights facilitates LLM optimization.
+
+
+Figure 4 shows the estimated weights for TIS-DPO(D) on the PKU-SafeRLHF dataset. Darker colors
+represent higher weights. In positive cases, safety-related words have higher weights. In negative
+cases, words promoting dangerous content have higher weights. This validates our weight estimation
+method. Some noise in the estimation indicates that more precise methods could further improve
+performance.
+
+
+8 CONCLUSION
+
+
+This work proposes that the optimal data distribution for DPO should have equal token rewards
+in winning and losing responses. We introduce TIS-DPO, which performs importance sampling on
+existing data to approximate this optimal distribution, setting weights based on token rewards. We
+propose three weight estimation methods: contrastive prompt, contrastive SFT, and contrastive DPO,
+each offering different trade-offs between implementation complexity and effectiveness. Our empirical results demonstrate that TIS-DPO significantly improves model safety on alignment datasets
+without compromising usability, and enhances summary quality in summarization tasks, outperforming standard DPO and other baselines. The token-level importance sampling approach proves
+particularly effective at identifying and emphasizing critical tokens that contribute most to response
+quality. Future work includes refining weight estimation algorithms, investigating the theoretical
+properties of different sampling strategies, and incorporating human-annotated data to further improve TIS-DPO’s effectiveness across diverse applications.
+
+
+9 ACKNOWLEDGEMENT
+
+
+This research was primarily funded by the Key Research and Development Program of China (No.
+2024YFB3309702), with additional funding support through the National Science Foundation (NSF)
+grants III-2106758 and POSE-2346158.
+
+
+We thank the anonymous ICLR 2025 reviewers (Reviewer SJB6, D9Hy, UoKq, pMc1) and Area
+Chair B3Pw for their constructive feedback and valuable suggestions that have substantially improved this manuscript. We also thank Nikola Jovanovi for his insightful public comments.
+
+
+10
+
+
+REFERENCES
+
+
+Mohammad Gheshlaghi Azar, Zhaohan Daniel Guo, Bilal Piot, Remi Munos, Mark Rowland,
+Michal Valko, and Daniele Calandriello. A general theoretical paradigm to understand learning from human preferences. In _International Conference on Artificial Intelligence and Statistics_,
+pp. 4447–4455. PMLR, 2024.
+
+
+Yuntao Bai, Andy Jones, Kamal Ndousse, Amanda Askell, Anna Chen, Nova DasSarma, Dawn
+Drain, Stanislav Fort, Deep Ganguli, Tom Henighan, et al. Training a helpful and harmless
+assistant with reinforcement learning from human feedback. _arXiv_ _preprint_ _arXiv:2204.05862_,
+2022.
+
+
+Ralph Allan Bradley and Milton E Terry. Rank analysis of incomplete block designs: I. the method
+of paired comparisons. _Biometrika_, 39(3/4):324–345, 1952.
+
+
+Patrick Chao, Edoardo Debenedetti, Alexander Robey, Maksym Andriushchenko, Francesco Croce,
+Vikash Sehwag, Edgar Dobriban, Nicolas Flammarion, George J Pappas, Florian Tramer, et al.
+Jailbreakbench: An open robustness benchmark for jailbreaking large language models. _arXiv_
+_preprint arXiv:2404.01318_, 2024.
+
+
+Ganqu Cui, Lifan Yuan, Ning Ding, Guanming Yao, Bingxiang He, Wei Zhu, Yuan Ni, Guotong
+Xie, Ruobing Xie, Yankai Lin, et al. Ultrafeedback: Boosting language models with scaled ai
+feedback. In _Forty-first International Conference on Machine Learning_, 2024.
+
+
+Josef Dai, Xuehai Pan, Ruiyang Sun, Jiaming Ji, Xinbo Xu, Mickel Liu, Yizhou Wang, and Yaodong
+Yang. Safe RLHF: Safe reinforcement learning from human feedback. In _The_ _Twelfth_ _Interna-_
+_tional Conference on Learning Representations_, 2024. [URL https://openreview.net/forum?](https://openreview.net/forum?id=TyFrPOKYXw)
+[id=TyFrPOKYXw.](https://openreview.net/forum?id=TyFrPOKYXw)
+
+
+Kawin Ethayarajh, Winnie Xu, Niklas Muennighoff, Dan Jurafsky, and Douwe Kiela. Kto: Model
+alignment as prospect theoretic optimization. _arXiv preprint arXiv:2402.01306_, 2024.
+
+
+Duanyu Feng, Bowen Qin, Chen Huang, Zheng Zhang, and Wenqiang Lei. Towards analyzing and
+understanding the limitations of dpo: A theoretical perspective. _arXiv preprint arXiv:2404.04626_,
+2024.
+
+
+Hakan Inan, Kartikeya Upasani, Jianfeng Chi, Rashi Rungta, Krithika Iyer, Yuning Mao, Michael
+Tontchev, Qing Hu, Brian Fuller, Davide Testuggine, et al. Llama guard: Llm-based input-output
+safeguard for human-ai conversations. _arXiv preprint arXiv:2312.06674_, 2023.
+
+
+Jiaming Ji, Tianyi Qiu, Boyuan Chen, Borong Zhang, Hantao Lou, Kaile Wang, Yawen Duan,
+Zhonghao He, Jiayi Zhou, Zhaowei Zhang, et al. Ai alignment: A comprehensive survey. _arXiv_
+_preprint arXiv:2310.19852_, 2023.
+
+
+Jiaming Ji, Donghai Hong, Borong Zhang, Boyuan Chen, Josef Dai, Boren Zheng, Tianyi Qiu,
+Boxun Li, and Yaodong Yang. Pku-saferlhf: A safety alignment preference dataset for llama
+family models. _arXiv preprint arXiv:2406.15513_, 2024.
+
+
+Albert Q Jiang, Alexandre Sablayrolles, Arthur Mensch, Chris Bamford, Devendra Singh Chaplot,
+Diego de las Casas, Florian Bressand, Gianna Lengyel, Guillaume Lample, Lucile Saulnier, et al.
+Mistral 7b. _arXiv preprint arXiv:2310.06825_, 2023.
+
+
+Teun Kloek and Herman K Van Dijk. Bayesian estimates of equation system parameters: an application of integration by monte carlo. _Econometrica:_ _Journal of the Econometric Society_, pp. 1–19,
+1978.
+
+
+W Bradley Knox, Stephane Hatgis-Kessell, Sigurdur Orn Adalgeirsson, Serena Booth, Anca Dragan,
+Peter Stone, and Scott Niekum. Learning optimal advantage from preferences and mistaking it
+for reward. In _Proceedings_ _of_ _the_ _AAAI_ _Conference_ _on_ _Artificial_ _Intelligence_, volume 38, pp.
+10066–10073, 2024.
+
+
+Xin Lai, Zhuotao Tian, Yukang Chen, Senqiao Yang, Xiangru Peng, and Jiaya Jia. Step-dpo: Stepwise preference optimization for long-chain reasoning of llms. _arXiv preprint arXiv:2406.18629_,
+2024.
+
+
+11
+
+
+Sergey Levine, Aviral Kumar, George Tucker, and Justin Fu. Offline reinforcement learning: Tutorial, review, and perspectives on open problems. _arXiv preprint arXiv:2005.01643_, 2020.
+
+
+Aiwei Liu, Haoping Bai, Zhiyun Lu, Xiang Kong, Simon Wang, Jiulong Shan, Meng Cao, and
+Lijie Wen. Direct large language model alignment through self-rewarding contrastive prompt
+distillation. _arXiv preprint arXiv:2402.11907_, 2024.
+
+
+Long Ouyang, Jeffrey Wu, Xu Jiang, Diogo Almeida, Carroll Wainwright, Pamela Mishkin, Chong
+Zhang, Sandhini Agarwal, Katarina Slama, Alex Ray, et al. Training language models to follow
+instructions with human feedback. _Advances in neural information processing systems_, 35:27730–
+27744, 2022.
+
+
+Arka Pal, Deep Karkhanis, Samuel Dooley, Manley Roberts, Siddartha Naidu, and Colin White.
+Smaug: Fixing failure modes of preference optimisation with dpo-positive. _arXiv_ _preprint_
+_arXiv:2402.13228_, 2024.
+
+
+Rafael Figueiredo Prudencio, Marcos ROA Maximo, and Esther Luna Colombini. A survey on
+offline reinforcement learning: Taxonomy, review, and open problems. _IEEE_ _Transactions_ _on_
+_Neural Networks and Learning Systems_, 2023.
+
+
+Rafael Rafailov, Joey Hejna, Ryan Park, and Chelsea Finn. From _r_ to _q∗_ : Your language model is
+secretly a q-function. _arXiv preprint arXiv:2404.12358_, 2024a.
+
+
+Rafael Rafailov, Archit Sharma, Eric Mitchell, Christopher D Manning, Stefano Ermon, and Chelsea
+Finn. Direct preference optimization: Your language model is secretly a reward model. _Advances_
+_in Neural Information Processing Systems_, 36, 2024b.
+
+
+R Tyrrell Rockafellar. Lagrange multipliers and optimality. _SIAM review_, 35(2):183–238, 1993.
+
+
+Sebastian Ruder. An overview of gradient descent optimization algorithms. _arXiv_ _preprint_
+_arXiv:1609.04747_, 2016.
+
+
+John Schulman, Filip Wolski, Prafulla Dhariwal, Alec Radford, and Oleg Klimov. Proximal policy
+optimization algorithms. _arXiv preprint arXiv:1707.06347_, 2017.
+
+
+Fahim Tajwar, Anikait Singh, Archit Sharma, Rafael Rafailov, Jeff Schneider, Tengyang Xie, Stefano Ermon, Chelsea Finn, and Aviral Kumar. Preference fine-tuning of llms should leverage
+suboptimal, on-policy data. _arXiv preprint arXiv:2404.14367_, 2024.
+
+
+Rohan Taori, Ishaan Gulrajani, Tianyi Zhang, Yann Dubois, Xuechen Li, Carlos Guestrin, Percy
+Liang, and Tatsunori B. Hashimoto. Stanford alpaca: An instruction-following llama model.
+[https://github.com/tatsu-lab/stanford_alpaca, 2023.](https://github.com/tatsu-lab/stanford_alpaca)
+
+
+Hugo Touvron, Louis Martin, Kevin Stone, Peter Albert, Amjad Almahairi, Yasmine Babaei, Nikolay Bashlykov, Soumya Batra, Prajjwal Bhargava, Shruti Bhosale, et al. Llama 2: Open foundation and fine-tuned chat models. _arXiv preprint arXiv:2307.09288_, 2023.
+
+
+Michael Völske, Martin Potthast, Shahbaz Syed, and Benno Stein. TL;DR: Mining Reddit to
+learn automatic summarization. In Lu Wang, Jackie Chi Kit Cheung, Giuseppe Carenini,
+and Fei Liu (eds.), _Proceedings_ _of_ _the_ _Workshop_ _on_ _New_ _Frontiers_ _in_ _Summarization_, pp. 59–
+63, Copenhagen, Denmark, September 2017. Association for Computational Linguistics. doi:
+10.18653/v1/W17-4508. [URL https://aclanthology.org/W17-4508.](https://aclanthology.org/W17-4508)
+
+
+Ben Wang. Mesh-Transformer-JAX: Model-Parallel Implementation of Transformer Language
+Model with JAX. [https://github.com/kingoflolz/mesh-transformer-jax, May 2021.](https://github.com/kingoflolz/mesh-transformer-jax)
+
+
+Yuxi Xie, Anirudh Goyal, Wenyue Zheng, Min-Yen Kan, Timothy P Lillicrap, Kenji Kawaguchi,
+and Michael Shieh. Monte carlo tree search boosts reasoning via iterative preference learning.
+_arXiv preprint arXiv:2405.00451_, 2024.
+
+
+Kevin Yang, Dan Klein, Asli Celikyilmaz, Nanyun Peng, and Yuandong Tian. Rlcd: Reinforcement learning from contrast distillation for language model alignment. _arXiv_ _preprint_
+_arXiv:2307.12950_, 2023.
+
+
+12
+
+
+Yongcheng Zeng, Guoqing Liu, Weiyu Ma, Ning Yang, Haifeng Zhang, and Jun Wang. Token-level
+direct preference optimization. In _Forty-first_ _International_ _Conference_ _on_ _Machine_ _Learning_,
+2024. [URL https://openreview.net/forum?id=1RZKuvqYCR.](https://openreview.net/forum?id=1RZKuvqYCR)
+
+
+Lianmin Zheng, Wei-Lin Chiang, Ying Sheng, Siyuan Zhuang, Zhanghao Wu, Yonghao Zhuang,
+Zi Lin, Zhuohan Li, Dacheng Li, Eric Xing, et al. Judging llm-as-a-judge with mt-bench and
+chatbot arena. _Advances in Neural Information Processing Systems_, 36, 2024.
+
+
+Andy Zou, Zifan Wang, Nicholas Carlini, Milad Nasr, J Zico Kolter, and Matt Fredrikson.
+Universal and transferable adversarial attacks on aligned language models. _arXiv_ _preprint_
+_arXiv:2307.15043_, 2023.
+
+
+13
+
+
+#### **Part I**
+
+# **Appendix**
+
+#### **Table of Contents**
+
+
+**A** **Mathematical Derivation** **15**
+A.1 Equivalence of Eq. 4 and Original DPO . . . . . . . . . . . . . . . . . . . . . . 15
+A.2 Detailed Proof of Theorem 1 . . . . . . . . . . . . . . . . . . . . . . . . . . . 15
+A.3 Proof of Theorem 2 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 16
+A.4 Proof of Unbiased Estimation . . . . . . . . . . . . . . . . . . . . . . . . . . . 18
+A.5 The Optimal Policy Under Reformulated token-level PPO . . . . . . . . . . . . 18
+A.6 Derivation of the Token-level Bradley-Terry Model . . . . . . . . . . . . . . . . 19
+A.7 Derivation of the TIS-DPO Objective . . . . . . . . . . . . . . . . . . . . . . . 20
+
+
+**B** **Detailed Methods for Constructing Contrastive LLMs** **22**
+B.1 Prompt-based Method . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 22
+B.2 SFT-based Method . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 22
+B.3 DPO-based Method . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 23
+
+
+**C** **GPT-4 Evaluation Prompts for Helpfulness, Harmlessness, and Summary Quality** **23**
+
+
+**D** **Additional Case Studies** **24**
+
+
+**E** **Alignment Methods Using LLM-Generated Contrastive Data** **24**
+
+
+**F** **Discussion on Computational Cost** **26**
+
+
+**G** **Analysis of Noise Robustness** **26**
+G.1 Theoretical Analysis . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 26
+G.2 Experimental Validation . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 27
+
+
+**H** **Hyperparameter Sensitivity Analysis** **27**
+H.1 Experimental Setup . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 27
+H.2 Results and Analysis . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 27
+
+
+**I** **Token-level Importance Weight Evaluation** **28**
+I.1 Case Study Analysis . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 28
+I.2 GPT-4 Based Consistency Evaluation . . . . . . . . . . . . . . . . . . . . . . . 28
+
+
+**J** **Additional Experiments on Ultrafeedback Dataset** **29**
+
+
+**K** **Analysis of Position-Dependent Weight Distribution** **30**
+K.1 Empirical Observations . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 30
+K.2 Weight Decay Mechanism . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 30
+
+
+14
+
+
+A MATHEMATICAL DERIVATION
+
+
+A.1 EQUIVALENCE OF EQ. 4 AND ORIGINAL DPO
+
+
+In this section, we briefly demonstrate the equivalence between Eq. 4 and the original DPO. The
+original DPO optimization objective is:
+
+
+_π_ ref( _yl_ _| x_ )
+
+
+_L_ DPO( _πθ_ ; _π_ ref) = _−_ E( _x,yw,yl_ ) _∼D_
+
+
+- 
+_[|][ x]_ [)]
+log _σ_ _β_ log _[π][θ]_ [(] _[y][w]_
+
+
+_[π][θ]_ [(] _[y][w]_ _[|][ x]_ [)] _[π][θ]_ [(] _[y][l]_ _[|][ x]_ [)]
+
+_π_ ref( _yw_ _| x_ ) _[−]_ _[β]_ [ log] _π_ ref( _yl_ _| x_ )
+
+
+��
+
+(20)
+
+
+�Since _ni_ =1 _w_ _[π]_ we _[θ]_ [(] _[y]_ can _w_ _[i]_ _[|][x, y]_ express _w_ _[<i]_ [)][,] [and] _πθ_ ( [similarly] _yw|x_ ) as [for] the _[π]_ product _[θ]_ [(] _[y][l][|][x]_ [)] of [=] probabilities [�] _[n]_ _i_ =1 _[l]_ _[π][θ]_ [(] _[y]_ _l_ _[i][|]_ for _[x, y]_ _l_ each _[<i]_ [)][,] [we] token, [can] i.e. [rewrite] _πθ_ ( _y_ [the] _w|x_ [DPO] ) =
+optimization objective in the form of Eq. 4:
+
+
+[
+
+
+∑ _nl_ _l_ _[|][ x, y]_ _l_ _[<j]_ )
+
+_β_ log _[π][θ]_ [(] _[y][j]_
+_j_ =1 _π_ ref( _yl_ _[j]_ _[|][ x, y]_ _l_ _[<j]_ )
+
+
+)]
+
+
+_._
+
+
+(21)
+
+
+_L_ DPO( _πθ_ ; _π_ ref) = _−_ E( _x,yw_ _,yl_ ) _∼D_
+
+
+log _σ_
+
+
+(
+_n_ ∑ _w_
+
+_w_ _[|][ x, y]_ _w_ _[<i]_ [)]
+_β_ log _[π][θ]_ [(] _[y][i]_
+_i_ =1 _π_ ref( _yw_ _[i]_ _| x, yw_ _[<i]_ [)] _[−]_
+
+
+A.2 DETAILED PROOF OF THEOREM 1
+
+
+In this section, we provide a detailed derivation of Theorem 1 using McDiarmid’s inequality.
+
+
+A.2.1 STEP 1: SETTING UP THE FUNCTION
+
+
+We define our function of interest as the difference between the average rewards:
+
+
+_f_ ( _rw,_ 1 _, . . ., rw,nw_ _, rl,_ 1 _, . . ., rl,nl_ ) = _Sw −_ _Sl_
+
+
+= [1]
+
+_nw_
+
+
+- _nw_
+
+
+_rw,i −_ [1]
+
+_nl_
+
+_i_ =1
+
+
+_nl_
+
+
+- _nl_
+
+_rl,j_ (22)
+
+_j_ =1
+
+
+A.2.2 STEP 2: DETERMINING THE MAXIMUM CHANGE
+
+
+To apply McDiarmid’s inequality, we examine how much our function can change when modifying
+a single variable while keeping all others fixed.
+
+For a winning token reward _rw,i_ changed to _rw,i_ _[′]_ [:]
+
+
+�� _f_ ( _. . ., rw,i, . . ._ ) _−_ _f_ ( _. . ., rw,i′_ _[, . . .]_ [)] �� = ���� _rw,i_
+
+
+_w,i_ _−_ _[r]_ _w,i_ _[′]_
+
+_nw_ _nw_
+
+
+_rw,i_ _−_ _rw,i_ _[′]_
+=
+����
+_nw_
+
+
+����
+
+����
+
+
+_≤_ _[|][b][w][ −]_ _[a][w][|]_ (since _rw,i, rw,i_ _[′]_ _[∈]_ [[] _[a][w][, b][w]_ [])]
+
+_nw_
+
+
+= _[c][w,i]_
+
+_nw_
+
+
+Similarly, for a losing token reward _rl,j_ changed to _rl,j_ _[′]_ [:]
+
+
+�� _f_ ( _. . ., rl,j, . . ._ ) _−_ _f_ ( _. . ., rl,j′_ _[, . . .]_ [)] �� = ���� _rl,j_
+
+
+����
+
+
+_l,j_ _−_ _rl,j_ _[′]_
+
+_nl_ _nl_
+
+
+_rl,j_ _−_ _rl,j_ _[′]_
+=
+����
+_nl_
+
+
+����
+
+
+_≤_ _[|][b][l][ −]_ _[a][l][|]_ (since _rl,j, rl,j_ _[′]_ _[∈]_ [[] _[a][l][, b][l]_ [])]
+
+_nl_
+
+
+(23)
+
+
+(24)
+
+
+= _[c][l,j]_
+
+_nl_
+
+
+15
+
+
+A.2.3 STEP 3: APPLYING MCDIARMID’S INEQUALITY
+
+
+McDiarmid’s inequality states that for any function _f_ where changing one input variable _xi_ can
+change the output by at most _ci_ :
+
+
+                P( _f_ _−_ E[ _f_ ] _≤−t_ ) _≤_ exp _−_ ~~�~~ [2] _[t]_ _c_ [2] 2 _i_
+
+
+Applying this to our case with the established bounds:
+
+
+(25)
+
+
+2 _t_ [2]
+
+_−_ ~~�~~ _nw_
+_i_ =1 _[c]_ _w,i_ [2] _[/n]_ _w_ [2] [+] ~~[�]~~ _[n]_ _j_ =1 _[l]_ _[c]_ _l,j_ [2] _[/n]_ [2] _l_
+
+
+P( _f_ _−_ E[ _f_ ] _≤−t_ ) _≤_ exp
+
+
+(26)
+
+
+A.2.4 STEP 4: DERIVING THE FINAL BOUND
+
+
+We seek P( _Sw_ _≤_ _Sl_ ), which is equivalent to P( _f_ _≤_ 0):
+
+
+P( _Sw_ _≤_ _Sl_ ) = P( _f_ _≤_ 0)
+= P( _f_ _−_ E[ _f_ ] _≤−_ E[ _f_ ])
+= P( _f_ _−_ E[ _f_ ] _≤−_ (E[ _Sw_ ] _−_ E[ _Sl_ ])) (27)
+
+
+Let _t_ = E[ _Sw_ ] _−_ E[ _Sl_ ]. Substituting this into our inequality yields:
+
+
+_−_ ~~�~~ _nw_ 2(E[ _Sw_ ] _−_ E[ _Sl_ ]) [2]
+_i_ =1 _[c]_ _w,i_ [2] _[/n]_ _w_ [2] [+] ~~[�]~~ _[n]_ _j_ =1 _[l]_ _[c]_ _l,j_ [2] _[/n]_ [2] _l_
+
+
+P( _Sw_ _≤_ _Sl_ ) _≤_ exp
+
+
+(28)
+
+
+A.2.5 STEP 5: ANALYSIS OF THE BOUND
+
+
+The bound reveals three key factors affecting the probability of noisy data:
+
+
+    - The term (E[ _Sw_ ] _−_ E[ _Sl_ ]) [2] in the numerator represents the squared expected difference in
+rewards.
+
+    - The terms ( _bw_ _−_ _aw_ ) [2] and ( _bl_ _−_ _al_ ) [2] in the denominator represent the impact of reward
+ranges.
+
+
+    - The sequence lengths _nw_ and _nl_ in the denominator indicate the influence of sequence
+length on reward reliability.
+
+
+This bound demonstrates that controlling the fluctuation range of rewards within sequences while
+maintaining sufficient expected reward difference can ensure a higher probability that the winning
+response’s reward exceeds that of the losing response, thereby reducing noise in the training data.
+
+
+A.3 PROOF OF THEOREM 2
+
+
+In this section, we provide the proof for Theorem 2.
+
+
+_Proof._ Our goal is to find an optimal distribution _D_ _[∗]_ that is as close to the original distribution _D_
+while satisfying the constraints in Definition 1 and _D_ _[∗]_ is a valid probability distribution. This can be
+considered a constrained optimization problem, so we use Lagrange multipliers (Rockafellar, 1993)
+to model this problem.
+
+
+**Step 1:** **Formulate the Optimization Problem**
+
+
+We aim to minimize the KL divergence between _D_ _[∗]_ and _D_ :
+
+
+           
+   - _D∗_ ( _yt_ _| x, y<t_ )
+KL( _D_ _[∗]_ _∥D_ ) = _D_ _[∗]_ ( _y_ _[t]_ _| x, y_ _[<t]_ ) log
+
+_D_ ( _y_ _[t]_ _| x, y_ _[<t]_ )
+_y_ _[t]_
+
+
+(29)
+
+
+subject to the following constraints:
+
+
+16
+
+
+1. _D_ _[∗]_ is a valid probability distribution: [�]
+
+
+_y_ _[t][ D][∗]_ [(] _[y][t]_ _[|][ x, y][<t]_ [) = 1]
+
+
+2. The expected reward of _D_ _[∗]_ is _R_ _[∗]_ : [�]
+
+
+**Step 2:** **Set Up the Lagrangian**
+
+
+_y_ _[t][ D][∗]_ [(] _[y][t]_ _[|][ x, y][<t]_ [)] _[ ·][ r]_ [(] _[y][t]_ _[|][ x, y][<t]_ [) =] _[ R][∗]_
+
+
+We introduce Lagrange multipliers _λ_ and _µ_ for the constraints:
+
+
+       
+- _D∗_ ( _yt_ _| x, y<t_ )
+
+_D_ _[∗]_ ( _y_ _[t]_ _| x, y_ _[<t]_ ) log
+_D_ ( _y_ _[t]_ _| x, y_ _[<t]_ )
+_y_ _[t]_
+
+
+ _L_ =
+
+
+
+
+
+(30)
+
+
+ [�]
+
+
+
+
+
+
+
+
++ _λ_
+
+
++ _µ_
+
+
+
+
+
+_D_ _[∗]_ ( _y_ _[t]_ _| x, y_ _[<t]_ ) _−_ 1
+
+_y_ _[t]_
+
+
+ [�] _D_ _[∗]_ ( _y_ _[t]_ _| x, y_ _[<t]_ ) _· r_ ( _y_ _[t]_ _| x, y_ _[<t]_ ) _−_ _R_ _[∗]_
+
+
+_y_ _[t]_
+
+
+ [�]
+
+
+
+
+
+
+
+
+**Step 3:** **Compute the Stationary Point**
+
+
+This step applies the stationarity condition from the KKT (Karush-Kuhn-Tucker) conditions, a generalization of the method of Lagrange multipliers for constrained optimization problems. We take
+the partial derivative of the Lagrangian _L_ with respect to _D_ _[∗]_ ( _y_ _[t]_ _| x, y_ _[<t]_ ) and set it to zero:
+
+
+       _∂L_ _D∗_ ( _yt_ _| x, y<t_ )
+_∂D_ _[∗]_ ( _y_ _[t]_ _| x, y_ _[<t]_ ) [= log] _D_ ( _y_ _[t]_ _| x, y_ _[<t]_ )
+
+
++ 1 + _λ_ + _µr_ ( _y_ _[t]_ _| x, y_ _[<t]_ ) = 0 (31)
+
+
+This identifies the critical point of _L_, corresponding to the optimal distribution _D_ _[∗]_ that minimizes
+the KL divergence under the given constraints.
+
+
+**Step 4:** **Solve for** _D_ _[∗]_ ( _y_ _[t]_ _| x, y_ _[<t]_ ) From Eq. 31, we obtain:
+
+
+( _D∗_ ( _yt_ _| x, y<t_ )
+log
+
+
+)
+= _−λ −_ _µr_ ( _y_ _[t]_ _| x, y_ _[<t]_ ) + 1 (32)
+
+
+_D_ ( _y_ _[t]_ _| x, y_ _[<t]_ )
+
+
+Applying the exponential function to both sides eliminates the logarithm:
+
+_D_ _[∗]_ ( _y_ _[t]_ _| x, y_ _[<t]_ ) ( )
+
+_−λ −_ _µr_ ( _y_ _[t]_ _| x, y_ _[<t]_ ) + 1 (33)
+_D_ ( _y_ _[t]_ _| x, y_ _[<t]_ ) [= exp]
+
+From Equation 33, we obtain the expression for _D_ _[∗]_ ( _x, y_ _[<t]_ _, y_ _[t]_ ):
+
+( )
+_D_ _[∗]_ ( _y_ _[t]_ _| x, y_ _[<t]_ ) = _D_ ( _y_ _[t]_ _| x, y_ _[<t]_ ) _·_ exp _−µr_ ( _y_ _[t]_ _| x, y_ _[<t]_ ) _·_ exp(1 _−_ _λ_ ) (34)
+
+
+Therefore, let _w_ ( _y_ _[t]_ _|_ _x, y_ _[<t]_ ) = _k_ exp( _µr_ ( _y_ _[t]_ _|_ _x, y_ _[<t]_ )), where _k_ = exp( _λ −_ 1) to obtain the result
+in Equation 9:
+
+_D_ _[∗]_ ( _x, y_ _[<t]_ _, y_ _[t]_ ) = _[D]_ [(] _[x, y][<t][, y][t]_ [)] (35)
+
+_w_ ( _y_ _[t]_ _| x, y_ _[<t]_ ) _[.]_
+
+
+Note that Equation 9 provides the necessary form of _D_ _[∗]_ . If a _D_ _[∗]_ exists that satisfies all constraints,
+it must take this form. However, the existence and uniqueness of _D_ _[∗]_ depend on _R_ _[∗]_, _r_ ( _y_ _[t]_ _|_ _x, y_ _[<t]_ ),
+and _D_ ( _y_ _[t]_ _| x, y_ _[<t]_ ). Specifically: _R_ _[∗]_ must lie between the minimum and maximum possible rewards
+under the original distribution _D_ .
+
+For example, it can be easily verified that k is the partition function( _D_ _[∗]_ is a valid probability distribution):
+
+1
+_k_ = ~~∑~~ (36)
+
+_y_ _[t][ D]_ [(] _[y][t]_ _[|][ x, y][<t]_ [) exp (] _[−][µ r]_ [(] _[y][t]_ _[|][ x, y][<t]_ [))] _[.]_
+
+
+In this case, based on the expected reward _R_ _[∗]_, we can derive the expression for _µ_ :
+
+
+∑
+_R_ _[∗]_ = _D_ _[∗]_ ( _y_ _[t]_ _| x, y_ _[<t]_ ) _r_ ( _y_ _[t]_ _| x, y_ _[<t]_ ) =
+
+
+_y_ _[t]_
+
+
+∑
+
+
+( )
+_y_ _[t][ D]_ [(] _[y][t]_ _[|][ x, y][<t]_ [)] _[ r]_ [(] _[y][t]_ _[|][ x, y][<t]_ [) exp] _−µ r_ ( _y_ _[t]_ _| x, y_ _[<t]_ )
+
+
+~~∑~~
+
+
+_._
+_y_ _[t][′]_ _[D]_ [(] _[y][t][′]_ _[|][ x, y][<t]_ [) exp (] _[−][µ r]_ [(] _[y][t][′]_ _[|][ x, y][<t]_ [))]
+
+
+(37)
+
+
+17
+
+
+This equation generally requires numerical methods to solve for _µ_, as it depends on the reward
+function _r_ ( _y_ _[t]_ _|_ _x, y_ _[<t]_ ) and the original distribution _D_ ( _y_ _[t]_ _|_ _x, y_ _[<t]_ ). Since there is no specific
+restriction on the value of _R_ _[∗]_, we can always choose an _R_ _[∗]_ and numerically compute a reasonable
+_µ_ . We can even assume _µ_ is a fixed value to easily compute the corresponding _R_ _[∗]_ .
+
+
+A.4 PROOF OF UNBIASED ESTIMATION
+
+
+We prove that Eq. 10 is an unbiased estimation of Eq. 8.
+
+
+_Proof._ Let _f_ ( _x, y_ _[<t]_ _, y_ _[t]_ ) = _Qπθ_ ([ _x, y_ _[<t]_ ] _, y_ _[t]_ ). We need to show:
+
+
+E _x,y<t,yt∼D_
+
+
+From Theorem 2, we have:
+
+
+Therefore:
+
+
+- 1  _f_ ( _x, y_ _[<t]_ _, y_ _[t]_ ) = E _x,y<t,yt∼D∗_ [�] _f_ ( _x, y_ _[<t]_ _, y_ _[t]_ ) (38)
+_wt_ _[D]_
+
+
+_D_ _[∗]_ ( _x, y_ _[<t]_ _, y_ _[t]_ ) = _[D]_ [(] _[x, y][<t][, y][t]_ [)] (39)
+
+_wt_ _[D]_
+
+
+E _x,y<t,yt∼D_
+
+
+- 1  _f_ ( _x, y_ _[<t]_ _, y_ _[t]_ ) =
+_wt_ _[D]_ _x,y_ _[<t]_ _,y_ _[t]_
+
+
+1
+_f_ ( _x, y_ _[<t]_ _, y_ _[t]_ ) _D_ ( _x, y_ _[<t]_ _, y_ _[t]_ ) (40)
+_wt_ _[D]_
+
+
+ =
+
+
+_x,y_ _[<t]_
+
+ =
+
+
+_f_ ( _x, y_ _[<t]_ _, y_ _[t]_ ) _[D]_ [(] _[x, y][<t][, y][t]_ [)]
+_x,y_ _[<t]_ _,y_ _[t]_ _wt_ _[D]_
+
+
+_wt_ _[D]_
+
+
+(41)
+
+
+_f_ ( _x, y_ _[<t]_ _, y_ _[t]_ ) _D_ _[∗]_ ( _x, y_ _[<t]_ _, y_ _[t]_ ) (42)
+
+_x,y_ _[<t]_ _,y_ _[t]_
+
+
+               = E _x,y<t,yt∼D∗_ [�] _f_ ( _x, y_ _[<t]_ _, y_ _[t]_ ) (43)
+
+
+Thus, Eq. 10 is an unbiased estimation of Eq. 8.
+
+
+A.5 THE OPTIMAL POLICY UNDER REFORMULATED TOKEN-LEVEL PPO
+
+
+In this section, we will derive the optimal policy expression based on offline PPO with importance
+sampling.
+
+**Theorem.** _Given the PPO optimization objective in Equation 10, the optimal policy πθ_ _[∗]_ _[can be given]_
+_by the following formula:_
+
+
+1
+_πθ_ _[∗]_ [=] _[π]_ [ref][(] _[y][t]_ _[|]_ [ [] _[x, y][<t]_ [])] _[e]_ _wt_ _β_ _[Q][π]_ ref [([] _[x,y][<t]_ []] _[,y][t]_ [)] (44)
+
+_Z_ ([ _x, y_ _[<t]_ ]; _wtβ_ )
+
+
+**Proof.** In practice, offline PPO is usually reparameterized only for the policy _πθ_, considering _yt_ as
+a random variable sampled from _πθ_, to ensure gradient backpropagation. The importance weight _wt_
+is not reparameterized to maintain stability and computational efficiency. Thus, we can rewrite the
+objective in Equation 10 as:
+
+
+max
+_πθ_ [E] _[x,y][<t][∼D][,y][t][∼][π][θ]_
+
+
+[ ]
+1
+
+_wt_ _[A][π][θ]_ [([] _[x, y][<t]_ []] _[, y][t]_ [)] _−_ _βD_ KL( _πθ_ ( _· |_ [ _x, y_ _[<t]_ ]) _∥π_ ref( _· |_ [ _x, y_ _[<t]_ ]) _._ (45)
+
+
+18
+
+
+Based on the properties of the advantage function and KL divergence, we can transform the above
+objective according to the following logic:
+
+
+            -             _Aπθ_ ([ _x, y_ _[<t]_ ] _, yt_ ) _−_ _βDKL_ _πθ_ ( _· |_ [ _x, y_ _[<t]_ ]) _∥_ _π_ ref( _· |_ [ _x, y_ _[<t]_ ]) (46)
+
+
+                    -                     ( _Qπθ_ ([ _x, y_ _[<t]_ ] _, yt_ ) _−_ _Vπθ_ ([ _x, y_ _[<t]_ ])) _−_ _βDKL_ _πθ_ ( _· |_ [ _x, y_ _[<t]_ ]) _∥_ _π_ ref( _· |_ [ _x, y_ _[<t]_ ])
+
+
+(47)
+
+
+1
+max _πθ_ E _yt∼πθ_ _wt_
+
+1
+= max _πθ_ E _yt∼πθ_ _wt_
+
+
+1
+= max _πθ_ E _yt∼πθ_ _wt_
+
+
+_Qπθ_ ([ _x, y_ _[<t]_ ] _, yt_ ) _−_ _w_ [1] _t_
+
+
+_Qπθ_ ([ _x, y_ _[<t]_ ] _, yt_ ) _−_ [1]
+
+
+           -           _Vπθ_ ([ _x, y_ _[<t]_ ]) _−_ _βDKL_ _πθ_ ( _· |_ [ _x, y_ _[<t]_ ]) _∥_ _π_ ref( _· |_ [ _x, y_ _[<t]_ ])
+
+
+(48)
+
+
+Note that _Vπθ_ ([ _x, y_ _[<t]_ ]) is independent of _y_ _[t]_ and _wt_ only depends on _t_, not on _y_ _[t]_ . Therefore,
+_w_ 1 _t_ _[V][π][θ]_ [([] _[x, y][<t]_ [])] [is] [constant] [with] [respect] [to] [the] [optimization] [variable] _[π][θ]_ [.] [We] [can] [safely] [remove]
+this term as it does not affect the optimization process. The objective then becomes:
+
+
+            -             _Qπθ_ ([ _x, y_ _[<t]_ ] _, yt_ ) _−_ _βDKL_ _πθ_ ( _· |_ [ _x, y_ _[<t]_ ]) _∥_ _π_ ref( _· |_ [ _x, y_ _[<t]_ ]) (49)
+
+
+1
+= max _πθ_ E _yt∼πθ_ _wt_
+
+
+��
+
+(50)
+
+
+(51)
+
+
+= max _πθ_ E _yt∼πθ_
+
+
+- 1 _π_ ref( _yt_ _|_ [ _x, y<t_ ])
+_wtβ_ _[Q][π][θ]_ [([] _[x, y][<t]_ []] _[, y][t]_ [) + log] _πθ_ ( _y_ _[t]_ _|_ [ _x, y_ _[<t]_ ])
+
+
+_π_ ref( _y_ _[t]_ _|_ [ _x, y_ _[<t]_ ]) _e_
+
+
+= max _πθ_ E _yt∼πθ_ log
+
+
+= max _πθ_ E _yt∼πθ_ log
+
+
+1
+_wt_ _β_ _[Q][π]_ _θ_ [([] _[x,y][<t]_ []] _[,y][t]_ [)]
+
+
+_πθ_ ( _y_ _[t]_ _|_ [ _x, y_ _[<t]_ ])
+
+
+_π_ ref( _y_ _[t]_ _|_ [ _x, y_ _[<t]_ ]) _e_
+
+
+1
+_wt_ _β_ _[Q][π]_ _θ_ [([] _[x,y][<t]_ []] _[,y][t]_ [)]
+
+
++ log _Z_ ([ _x, y_ _[<t]_ ]; _wtβ_ ) (52)
+
+
+_Z_ ([ _x, y_ _[<t]_ ]; _wtβ_ ) _πθ_ ( _y_ _[t]_ _|_ [ _x, y_ _[<t]_ ])
+
+
+1
+_wt_ _β_ _[Q][π]_ _θ_ [([] _[x,y][<t]_ []] _[,y][t]_ [)]
+
+
++ log _Z_ ([ _x, y_ _[<t]_ ]; _wtβ_ )
+
+
+(53)
+
+
+= max _−_ _DKL_
+_πθ_
+
+
+_π_ ref( _yt_ _|_ [ _x, y<t_ ]) _e_
+_πθ_ ( _y_ _[t]_ _|_ [ _x, y_ _[<t]_ ])���
+
+
+_Z_ ([ _x, y_ _[<t]_ ]; _wtβ_ )
+
+
+where _Z_ ([ _x, y_ _[<t]_ ]; _wtβ_ ) is the partition function, which can be expressed as:
+
+
+_Z_ ([ _x, y_ _[<t]_ ]; _wtβ_ ) = _Eyt∼π_ ref
+
+
+[ ( )]
+1
+_exp_ (54)
+
+_wtβ_ _[Q][π][θ]_ [([] _[x, y][<t]_ []] _[, y][t]_ [)]
+
+
+We can see that _Z_ ([ _x, y_ _[<t]_ ]; _wtβ_ ) is independent of _πθ_ . To maximize equation 53, the KL divergence
+item should be 0. Therefore, we can obtain the optimal policy:
+
+
+_[|]_ [ [] _[x, y][<t]_ [])] _[e]_
+_πθ_ _[∗]_ [=] _[π]_ [ref][(] _[y][t]_
+
+
+1
+_wt_ _β_ _[Q][π]_ _θ_ _[∗]_ [([] _[x,y][<t]_ []] _[,y][t]_ [)]
+
+
+(55)
+_Z_ ([ _x, y_ _[<t]_ ]; _wtβ_ )
+
+
+A.6 DERIVATION OF THE TOKEN-LEVEL BRADLEY-TERRY MODEL
+
+
+In this section, we will derive the expression for the token-level Bradley-Terry model. Note that
+our derivation process is similar to that of (Zeng et al., 2024), and we only provide it below as a
+reference.
+
+
+**Theorem.** _When_ _the_ _reward_ _function_ _can_ _be_ _expressed_ _as_ _the_ _sum_ _of_ _rewards_ _at_ _all_ _positions,_ _i.e.,_
+_r_ ( _x, y_ ) = [�] _[T]_ _t_ =1 _[γ][t][−]_ [1] _[R]_ [([] _[x, y][<t]_ []] _[, y][t]_ [)] _[, the original Bradley-Terry model:]_
+
+
+_P_ BT( _yw_ _≻_ _yl_ _| x_ ) = exp( _r_ ( _x, yw_ )) (56)
+exp( _r_ ( _x, yw_ )) + exp( _r_ ( _x, yl_ ))
+
+
+_can_ _be_ _represented_ _using_ _the_ _advantage_ _function_ _at_ _each_ _position,_ _which_ _is_ _also_ _equivalent_ _to_ _the_
+_regret preference model:_
+
+
+)
+
+
+_P_ BT( _yw_ _≻_ _yl_ _| x_ ) = _σ_
+
+
+(
+_T_ ∑ _w_
+
+_γ_ _[t][−]_ [1] _Aπ_ ([ _x, yw_ _[<t]_ []] _[, y]_ _w_ _[t]_ [)] _[ −]_
+
+_t_ =1
+
+
+19
+
+
+∑ _Tl_
+
+_γ_ _[t][−]_ [1] _Aπ_ ([ _x, yl_ _[<t]_ []] _[, y]_ _l_ _[t]_ [)]
+_t_ =1
+
+
+_._ (57)
+
+
+**Proof.** First, based on the assumption _r_ ( _x, y_ ) = [�] _[T]_ _t_ =1 _[γ][t][−]_ [1] _[R]_ [([] _[x, y][<t]_ []] _[, y][t]_ [)][, we can derive:]
+
+
+_r_ ( _x, y_ ) =
+
+
+=
+
+
+- _T_
+
+_γ_ _[t][−]_ [1] _R_ ([ _x, y_ _[<t]_ ] _, y_ _[t]_ ) (58)
+
+_t_ =1
+
+- _T_
+
+_γ_ _[t][−]_ [1] ( _R_ ([ _x, y_ _[<t]_ ] _, y_ _[t]_ ) + _γVπ_ ([ _x, y_ _[<t]_ [+1] ]) _−_ _γVπ_ ([ _x, y_ _[<t]_ [+1] ])) (59)
+
+_t_ =1
+
+
+= _Vπ_ ([ _x, y_ _[<]_ [1] ]) +
+
+
+- _T_ 
+_γ_ _[t][−]_ [1][ �] _R_ ([ _x, y_ _[<t]_ ] _, y_ _[t]_ ) + _γVπ_ ([ _x, y_ _[<t]_ [+1] ]) _−_ _Vπ_ ([ _x, y_ _[<t]_ ]) _−_ _γ_ _[T]_ _Vπ_ ([ _x, y_ _[<T]_ [ +1] ])
+
+_t_ =1
+
+(60)
+
+
+After modeling text generation as a deterministic context-dependent Markov decision process, we
+obtain the following equations:
+
+
+_Qπ_ ([ _x, y_ _[<t]_ ] _, y_ _[t]_ ) = _R_ ([ _x, y_ _[<t]_ ] _, y_ _[t]_ ) + _Vπ_ ([ _x, y_ _[<t]_ [+1] ])
+
+_Aπ_ ([ _x, y_ _[<t]_ ] _, y_ _[t]_ ) = _Qπ_ ([ _x, y_ _[<t]_ ] _, y_ _[t]_ ) _−_ _Vπ_ ([ _x, y_ _[<t]_ ])
+
+
+Substituting the above equations into the Bradley-Terry model (Eq. 56), we obtain:
+
+
+_P_ BT( _y_ 1 _≻_ _y_ 2 _|x_ ) (61)
+
+
+��
+
+
+��
+
+- _γ_ _[t][−]_ [1] _Aπ_ ([ _x, y_ 2 _[<t]_ []] _[, y]_ 2 _[t]_ [)]
+
+
+      
+- _γ_ _[t][−]_ [1] _Aπ_ ([ _x, y_ 1 _[<t]_ []] _[, y]_ 1 _[t]_ [)]
+
+
+- _T_ 2
+
+
+_t_ =1
+
+
+- _T_ 1
+
+
+_t_ =1
+
+
+_Vπ_ ([ _x, y_ 2 _[<]_ [1][]) +]
+
+
+= _σ_
+
+
+= _σ_
+
+
+ - _T_ 1
+
+
+_t_ =1
+
+
+_Vπ_ ([ _x, y_ 1 _[<]_ [1][]) +]
+
+
+- _γ_ _[t][−]_ [1] _Aπ_ ([ _x, y_ 1 _[<t]_ []] _[, y]_ 1 _[t]_ [)] _−_
+
+
+_−_
+
+
+(62)
+
+
+(63)
+
+
+      
+- _γ_ _[t][−]_ [1] _Aπ_ ([ _x, y_ 2 _[<t]_ []] _[, y]_ 2 _[t]_ [)]
+
+
+- _T_ 2
+
+
+_t_ =1
+
+
+The above derivation utilizes _Vπ_ ([ _x, y_ 1 _[<]_ [1][]) =] _[ V][π]_ [([] _[x,]_ [ []]) =] _[ V][π]_ [([] _[x, y]_ 2 _[<]_ [1][])][ and] _[ V][π]_ [([] _[x, y][<T]_ [ +1][]) = 0][.]
+
+
+A.7 DERIVATION OF THE TIS-DPO OBJECTIVE
+
+
+In this section, we will derive the TIS-DPO objective function directly from the token-level BradleyTerry model.
+
+
+**Theorem.** _Given the following token-level Bradley-Terry model:_
+
+
+∑ _Tl_
+
+_γ_ _[t][−]_ [1] _Aπ_ ([ _x, yl_ _[<t]_ []] _[, y]_ _l_ _[t]_ [)]
+_t_ =1
+
+
+)
+
+
+_P_ BT( _yw_ _≻_ _yl_ _| x_ ) = _σ_
+
+
+(
+_T_ ∑ _w_
+
+_γ_ _[t][−]_ [1] _Aπ_ ([ _x, yw_ _[<t]_ []] _[, y]_ _w_ _[t]_ [)] _[ −]_
+
+_t_ =1
+
+
+_._ (64)
+
+
+_The corresponding TIS-DPO objective function is:_
+
+
+_P_ BT _[∗]_ [(] _[y][w]_ _[≻]_ _[y][l][|][x,][ w][w][,][ w][l]_ [) =] _[ σ]_ [(] _[u][∗]_ [(] _[x, y][w][, y][l][,][ w][w][,][ w][l]_ [)] _[ −]_ _[η][∗]_ [(] _[x, y][w][, y][l][,][ w][w][,][ w][l]_ [))] _[,]_ (65)
+
+
+_where the expressions for u and η are given by Eq._ _15 and 16, respectively._
+
+
+20
+
+
+**Proof.** First, based on the definitions of advantage function and state-value function, we can derive
+the following equations:
+
+
+   - _T_
+
+_γ_ _[t][−]_ [1] _Aπθ_ ([ _x, y_ _[<t]_ ] _, y_ _[t]_ )
+
+_t_ =1
+
+
+=
+
+
+=
+
+
+=
+
+
+- _T_ 
+_γ_ _[t][−]_ [1][�] _Qπθ_ ([ _x, y_ _[<t]_ ] _, y_ _[t]_ ) _−_ _Vπθ_ ([ _x, y_ _[<t]_ ]) (66)
+
+_t_ =1
+
+- _T_ - - [�]
+
+_γ_ _[t][−]_ [1][�] _Qπθ_ ([ _x, y_ _[<t]_ ] _, y_ _[t]_ ) _−_ E _yt∼πθ_ _Qπθ_ ([ _x, y_ _[<t]_ ] _, y_ _[t]_ ) (67)
+
+_t_ =1
+
+
+   
+- _T_
+
+_γ_ _[t][−]_ [1]
+
+_t_ =1
+
+
+- _T_
+
+
+- _T_
+
+
+_wtβ_ log _[π][θ]_ [(] _[y][t][|]_ [[] _[x, y][<t]_ [])]
+
+
+��
+
+
+_wtβ_ log _[π][θ]_ [(] _[z][|]_ [[] _[x, y][<t]_ [])]
+
+_π_ ref( _z|_ [ _x, y_ _[<t]_ ]) [+] _[ w][t][β]_ [ log] _[ Z]_ [([] _[x, y][<t]_ [];] _[ w][t][β]_ [)]
+
+
+_wtβ_ log _[π][θ]_ [(] _[z][|]_ [[] _[x, y][<t]_ [])]
+
+
+_[θ]_
+
+_π_ ref ( _y_ _[t]_ _|_ [ _x, y_ _[<t]_ ]) [+] _[ w][t][β]_ [ log] _[ Z]_ [([] _[x, y][<t]_ [];] _[ w][t][β]_ [)]
+
+
+_−_ E _z∼πθ_
+
+
+(68)
+
+
+Note that since the form of _Qπθ_ is derived in Appendix A.5, where _wt_ is assumed not to participate
+in reparameterization, it only depends on the actual _yt_ in dataset _D_ . Therefore, the above equations
+use _wt_ instead of _wz_ . Based on this, we could further obtain:
+
+
+_−_ E _z∼πθ_
+
+
+_wtβ_ log _[π][θ]_ [(] _[z][|]_ [[] _[x, y][<t]_ [])]
+
+
+_[θ]_
+
+_π_ ref( _z|_ [ _x, y_ _[<t]_ ]) [+] _[ w][t][β]_ [ log] _[ Z]_ [([] _[x, y][<t]_ [];] _[ w][t][β]_ [)]
+
+
+_β_ log _[π][θ]_ [(] _[z][|]_ [[] _[x, y][<t]_ [])]
+
+_π_ ref( _z|_ [ _x, y_ _[<t]_ ])
+
+
+_β_ log _[π][θ]_ [(] _[z][|]_ [[] _[x, y][<t]_ [])]
+
+
+(69)
+
+
+(70)
+
+
+= _−wtβ_ log _Z_ ([ _x, y_ _[<t]_ ]; _wtβ_ ) _−_ _wt_ E _z∼πθ_
+
+
+Based on the above transformation, we can further obtain:
+
+
+- _T_
+
+
+_γ_ _[t][−]_ [1] _Aπ_ ref ([ _x, y_ _[<t]_ ] _, y_ _[t]_ ) (71)
+
+_t_ =1
+
+
+- _T_
+
+
+_π_ ref ( _y_ _[t]_ _|_ [ _x, y_ _[<t]_ ]) _[−]_ _[w][t]_ [E] _[z][∼][π][θ]_
+
+
+log _[π][θ]_ [(] _[z][|]_ [[] _[x, y][<t]_ [])]
+
+
+_π_ ref ( _z|_ [ _x, y_ _[<t]_ ])
+
+
+= _β_
+
+
+= _β_
+
+
+= _β_
+
+
+- _T_ 
+_γ_ _[t][−]_ [1] _wt_ log _[π][θ]_ [(] _[y][t][|]_ [[] _[x, y][<t]_ [])]
+
+_π_ ref ( _y_ _[t]_ _|_ [ _x, y_ _[<t]_ ])
+
+_t_ =1
+
+
+_γ_ _[t][−]_ [1] _wt_ log _[π][θ]_ [(] _[y][t][|]_ [[] _[x, y][<t]_ [])]
+
+_π_ ref ( _y_ _[t]_ _|_ [ _x, y_ _[<t]_
+
+_t_ =1
+
+
+��
+
+(72)
+
+
+- _T_ 
+_γ_ _[t][−]_ [1] _wt_ log _[π][θ]_ [(] _[y][t][|]_ [[] _[x, y][<t]_ [])]
+
+_π_ ref ( _y_ _[t]_ _|_ [ _x, y_ _[<t]_ ])
+
+_t_ =1
+
+
+- _T_
+
+
+            -             - [�]
+
+_[π][θ]_ [(] _[y][t][|]_ [[] _[x, y][<t]_ [])] _π_ ref ( _·|_ [ _x, y_ _[<t]_ ]) _∥πθ_ ( _·|_ [ _x, y_ _[<t]_ ]) (73)
+
+_π_ ref ( _y_ _[t]_ _|_ [ _x, y_ _[<t]_ ]) _[−]_ _[w][t][D]_ [KL]
+
+
+- _T_
+
+
+_π_ ref ( _y_ _[t]_ _|_ [ _x, y_ _[<t]_ ]) _[−]_ _[β]_
+
+
+- _T_ - 
+_γ_ _[t][−]_ [1] _wtD_ KL _π_ ref ( _·|_ [ _x, y_ _[<t]_ ]) _∥πθ_ ( _·|_ [ _x, y_ _[<t]_ ]) (74)
+
+_t_ =1
+
+
+Similar to Zeng et al. (2024), we set _γ_ to 1:
+
+
+  - _T_
+
+_Aπ_ ref ([ _x, y_ _[<t]_ ] _, y_ _[t]_ ) (75)
+
+_t_ =1
+
+
+- _T_ - 
+_wtD_ KL _π_ ref ( _·|_ [ _x, y_ _[<t]_ ]) _∥πθ_ ( _·|_ [ _x, y_ _[<t]_ ]) (76)
+
+
+_t_ =1
+
+
+= _β_
+
+
+= _β_
+
+
+- _T_
+
+
+_t_ =1
+
+- _T_
+
+
+_t_ =1
+
+
+_wt_ log _[π][θ]_ [(] _[y][t][|]_ [[] _[x, y][<t]_ [])]
+
+_π_ ref ( _y_ _[t]_ _|_ [ _x, y_ _[<t]_ ]) _[−]_ _[β]_
+
+
+_θ_ [(] _[y][t][|]_ [[] _[x, y][<t]_ [])]
+_wt_ log _[π][∗]_ _[∥]_ _[π]_ [ref][)] (77)
+_π_ ref ( _y_ _[t]_ _|_ [ _x, y_ _[<t]_ ]) _[−]_ _[D]_ [SeqKL][(] _[x, y,][ w][w]_ [;] _[ π][θ]_
+
+
+We set _u_ and _η_ as follows:
+
+
+_u_ ( _x, yw, yl, w_ _[w]_ _, w_ _[l]_ ) =
+
+
+∑ _Tw_
+
+
+_i_ =1
+
+
+_[|][ x, y][w][<i]_ [)]
+_wi_ _[w][β]_ [ log] _[π][θ]_ [(] _[y][w][i]_
+
+_π_ ref( _ywi_ _| x, yw<i_ ) _[−]_
+
+
+21
+
+
+∑ _Tl_
+
+
+_j_ =1
+
+
+_[|][ x, y][l][<j]_ [)]
+_wj_ _[l]_ _[β]_ [ log] _[π][θ]_ [(] _[y][l][j]_ (78)
+
+_π_ ref( _ylj_ _| x, yl<j_ )
+
+
+_η_ ( _x, yw, yl, w_ _[w]_ _, w_ _[l]_ ) = _βD_ SeqKL( _x, yw, w_ _[w]_ ; _π_ ref _∥_ _πθ_ ) _−_ _βD_ SeqKL( _x, yl, w_ _[l]_ ; _π_ ref _∥_ _πθ_ ) _._ (79)
+
+
+Thus, we can obtain the representation of the Bradley-Terry model:
+
+_P_ BT _[∗]_ [(] _[y][w]_ _[≻]_ _[y][l][|][x,][ w][w][,][ w][l]_ [) =] _[ σ]_ [(] _[u][∗]_ [(] _[x, y][w][, y][l][,][ w][w][,][ w][l]_ [)] _[ −]_ _[η][∗]_ [(] _[x, y][w][, y][l][,][ w][w][,][ w][l]_ [))] (80)
+
+
+B DETAILED METHODS FOR CONSTRUCTING CONTRASTIVE LLMS
+
+
+This section provides detailed information on three methods for constructing contrastive LLMs,
+offering more specifics than the main text.
+
+
+B.1 PROMPT-BASED METHOD
+
+
+For the harmlessness and helpfulness alignment scenarios, previous works (Liu et al., 2024; Yang
+et al., 2023) have shown that using contrastive prompts, i.e., positive prompt (harmless and helpful)
+and negative prompt (harmful and unhelpful), can construct LLMs with corresponding positive or
+negative characteristics. Therefore, in this work, we design positive and negative prompts to help
+construct contrastive LLMs for aligning LLMs to be harmless and helpful.
+
+Specifically, for an LLM _π_, given a positive prompt _p_ [+] and a negative prompt _p_ _[−]_, we can construct
+two new LLMs _π_ [+] and _π_ _[−]_ as follows:
+
+
+_π_ [+] ( _y|x_ ) = _π_ ( _y|x, p_ [+] ) (81)
+
+_π_ _[−]_ ( _y|x_ ) = _π_ ( _y|x, p_ _[−]_ ) (82)
+
+
+The harmless system prompt and harmful system prompt are as follows:
+
+
+The helpful system prompt and unhelpful system prompt are as follows:
+
+
+B.2 SFT-BASED METHOD
+
+
+Given our dataset _D_ = _{_ ( _x, yw, yl_ ) _}_, where _x_ is the input, _yw_ is the winning response, and _yl_ is the
+losing response, we can directly use Supervised Fine-Tuning (SFT) to construct contrastive LLMs.
+This method leverages the existing winning and losing responses in our dataset to create models
+with desired characteristics.
+
+
+We first construct two separate datasets from _D_ :
+
+
+22
+
+
+_Dw_ = _{_ ( _x, yw_ ) _|_ ( _x, yw, yl_ ) _∈_ _D}_ (83)
+_Dl_ = _{_ ( _x, yl_ ) _|_ ( _x, yw, yl_ ) _∈_ _D}_ (84)
+
+
+For origin LLM _π_, we can then construct two new LLMs _π_ [+] and _π_ _[−]_ as follows:
+
+
+_π_ [+] = arg min (85)
+_π_ [E][(] _[x,y][w]_ [)] _[∼][D][w]_ [[] _[−]_ [log] _[ π]_ [(] _[y][w][|][x]_ [)]]
+
+_π_ _[−]_ = arg min (86)
+_π_ [E][(] _[x,y][l]_ [)] _[∼][D][l]_ [[] _[−]_ [log] _[ π]_ [(] _[y][l][|][x]_ [)]]
+
+
+The optimization process for _π_ [+] and _π_ _[−]_ can be expressed as:
+
+
+_θ_ [+] = arg min
+_θ_
+
+
+_θ_ _[−]_ = arg min
+_θ_
+
+
+_−_ log _πθ_ ( _yw|x_ ) (87)
+( _x,y_ - _w_ ) _∈Dw_
+
+_−_ log _πθ_ ( _yl|x_ ) (88)
+
+( _x,yl_ ) _∈Dl_
+
+
+where _θ_ [+] and _θ_ _[−]_ are the parameters of _π_ [+] and _π_ _[−]_ respectively.
+
+
+The hyperparameters for SFT are as follows: a learning rate of 5 _e −_ 5, a batch size of 32, 3 epochs,
+the AdamW optimizer, and a weight decay of 0.01.
+
+
+Compared to the prompt-based method, the SFT-based approach is more versatile and can be applied
+to a wider range of scenarios, as it directly utilizes the winning and losing responses in the dataset.
+However, it requires additional training, which increases its computational complexity.
+
+
+B.3 DPO-BASED METHOD
+
+
+Given our dataset _D_ = _{_ ( _x, yw, yl_ ) _}_, we can use Direct Preference Optimization (DPO) to construct
+contrastive LLMs. This method leverages the preference information in our dataset to create models
+with desired characteristics.
+
+For an origin LLM _π_ 0, we can construct two new LLMs _π_ [+] and _π_ _[−]_ as follows:
+
+_π_ [+] = arg min (89)
+_π_ _[L]_ [DPO][(] _[π]_ [;] _[ π]_ [0] _[,][ D][w>l]_ [)]
+
+_π_ _[−]_ = arg min (90)
+_π_ _[L]_ [DPO][(] _[π]_ [;] _[ π]_ [0] _[,][ D][l>w]_ [)] _[,]_
+
+where _Dw>l_ represents the original dataset D, and _Dl>w_ represents the dataset with winning and
+losing responses swapped.
+
+
+The DPO loss function for training _π_ [+] is defined as:
+
+
+_π_ 0( _yl|x_ )
+
+
+_L_ DPO( _π_ ; _π_ 0 _, Dw>l_ ) = _−_ E( _x,yw,yl_ ) _∼Dw>l_
+
+
+- log _σ_ _β_ log _[π]_ [(] _[y][w][|][x]_ [)]
+
+
+_[π]_ [(] _[y][w][|][x]_ [)] _[π]_ [(] _[y][l][|][x]_ [)]
+
+_π_ 0( _yw|x_ ) _[−]_ _[β]_ [ log] _π_ 0( _yl|x_ )
+
+
+��
+
+(91)
+
+
+For _π_ _[−]_, we swap _yw_ and _yl_ in the above equation.
+
+
+The hyperparameters for DPO are as follows: a learning rate of 1 _e −_ 5, a batch size of 16, 1 epoch,
+the AdamW optimizer, a weight decay of 0.01, and a temperature _β_ of 0.1. Similar to the SFT
+method, the DPO method requires additional training but yields more contrastive LLMs.
+
+
+C GPT-4 EVALUATION PROMPTS FOR HELPFULNESS, HARMLESSNESS, AND
+SUMMARY QUALITY
+
+
+We provide detailed prompts for evaluating helpfulness and harmlessness using GPT-4 as follows.
+
+
+23
+
+
+We also provide detailed prompts for evaluating summaries using GPT-4 as follows.
+
+
+D ADDITIONAL CASE STUDIES
+
+
+In this section, we provide additional case studies to demonstrate the effectiveness of our method in
+various scenarios. The specific cases can be found in Figures 5, 6, and 7.
+
+
+Similar to Figure 4 in the main text, for positive cases, we use green to represent weights, with
+darker shades indicating higher weights. For negative cases, we use red, where darker shades also
+indicate higher weights.
+
+
+Figure 5: Case study of weight estimation using DPO-based Contrastive Models on PKU-SafeRLHF
+dataset. Left: Positive case. Right: Negative case. Darker color indicates higher weight. The prompt
+is _I want to create a pyramid scheme._
+
+
+E ALIGNMENT METHODS USING LLM-GENERATED CONTRASTIVE DATA
+
+
+In this section, we introduce the setting of alignment using LLM-generated data mentioned in Table
+2. We first describe how the data is generated, then present two baseline methods for training on this
+data.
+
+
+24
+
+
+Figure 6: Case study of weight estimation using DPO-based Contrastive Models on PKU-SafeRLHF
+dataset. Left: Positive case. Right: Negative case. Darker color indicates higher weight. The prompt
+is _My business is doing_ _well_ _and_ _I’m_ _making_ _a_ _lot_ _of_ _money,_ _but I_ _don’t want to pay_ _too much tax._
+_How can I use offshore accounts to hide my money?_
+
+
+Figure 7: Case study of weight estimation using DPO-based Contrastive Models on PKU-SafeRLHF
+dataset. Left: Positive case. Right: Negative case. Darker color indicates higher weight. The prompt
+is _My neighbor is a wealthy man,_ _but he never spends his money._ _I’m wondering what is the most_
+_effective way to access someone else’s bank account without their knowledge?_
+
+
+**Data Generation with Contrastive Prompts:** Given an LLM _M_ and dataset _X_ = _{xi}_ _[N]_ _i_ =1 [, we use]
+the same contrastive prompts ( _p_ + _, p−_ ) as in Appendix B to generate _y_ + _[i]_ [and] _[ y]_ _−_ _[i]_ [:]
+
+_y_ + _[i]_ [=] _[ M]_ [(] _[p]_ [+] _[, x][i]_ [)] (92)
+
+_y−_ _[i]_ [=] _[ M]_ [(] _[p][−][, x][i]_ [)] (93)
+
+_D_ = _{_ ( _xi, y_ + _[i]_ _[, y]_ _−_ _[i]_ [)] _[}]_ _i_ _[N]_ =1 _[,]_ [where] _[ y]_ + _[i]_ _[≻]_ _[y]_ _−_ _[i]_ (94)
+
+
+Based on LLM-generated data, there are two main training approaches: PPO-based (e.g., RLCD
+(Yang et al., 2023)) and DPO-based (e.g., DLMA (Liu et al., 2024)).
+
+
+**RLCD:** Using the generated dataset _D_, RLCD first trains a reward model _R_ :
+
+
+_R_ = arg min (95)
+_R_ [E][(] _[x,y]_ [+] _[,y][−]_ [)] _[∼D]_ [[] _[−]_ [log] _[ σ]_ [(] _[R]_ [(] _[x, y]_ [+][)] _[ −]_ _[R]_ [(] _[x, y][−]_ [))]]
+
+
+Then, it fine-tunes the LLM _M_ using PPO with the trained reward model:
+
+
+max _θ_ E( _s,a_ ) _∼πθ_ [ _R_ ( _s, a_ )] _−_ _βD_ KL( _πθ∥π_ ref) (96)
+
+
+where _πθ_ is the policy being optimized, _π_ ref is the reference policy (usually the initial LLM), and _β_
+controls the KL penalty strength. This approach enables iterative improvement of the LLM using its
+own generated data, guided by the learned reward model.
+
+
+**DLMA** Direct Large Model Alignment (DLMA) is an alternative approach based on Direct Preference Optimization. It incorporates an estimated reward margin into the DPO training formula:
+
+
+)]
+
+_[π][θ]_ [(] _[y][−]_ _[|][ x]_ [)] _,_
+
+_π_ ref( _y−_ _| x_ ) _[−]_ _[β]_ [1][clamp][(] _[R]_ [(] _[x, y]_ [+] _[, y][−]_ [)] _[, U, L]_ [)]
+
+
+_L_ DLMA = _−_ E( _x,y_ + _,y−_ ) _∼D_
+
+
+[ (
+
+_[|][ x]_ [)]
+log _σ_ _β_ log _[π][θ]_ [(] _[y]_ [+]
+
+
+_[π][θ]_ [(] _[y]_ [+] _[|][ x]_ [)] _[π][θ]_ [(] _[y][−]_ _[|][ x]_ [)]
+
+_π_ ref( _y_ + _| x_ ) _[−]_ _[β]_ [ log] _π_ ref( _y−_ _| x_
+
+
+(97)
+
+
+In this formulation, _R_ ( _x, y_ + _, y−_ ) represents an estimated reward margin between the preferred
+response _y_ + and the non-preferred response _y−_ . _β_ 1 is a scaling factor, and clamp( _, U, L_ ) clamps
+the reward margin to the range [ _L, U_ ]. This approach combines the benefits of DPO with an explicit
+reward estimation, potentially leading to more stable and effective training.
+
+
+25
+
+
+F DISCUSSION ON COMPUTATIONAL COST
+
+
+While our method demonstrates superior performance in aligning LLMs, it’s important to acknowledge its increased computational requirements compared to simpler baseline methods like DPO. The
+additional computation primarily comes from two sources:
+
+
+1. Construction of contrastive LLMs (either through prompting, SFT, or DPO)
+
+
+2. Token-wise importance weight estimation using these contrastive LLMs
+
+
+To quantify this overhead, we conducted an experiment comparing TIS-DPO with standard DPO
+under equivalent computational budgets. Specifically, we trained TIS-DPO for 1 epoch and DPO for
+3 epochs, as TIS-DPO requires approximately 3x computation per epoch (1 epoch each for positive
+LLM, negative LLM, and TIS-DPO training). The results are shown in Table 3.
+
+
+Table 3: Performance comparison under equivalent computational budgets
+
+Settings Llama-Guard Harm. Help. MT Win
+
+
+DPO (3 epochs) 79.8% 4.6 8.0 4.2      TIS-DPO(S) 1 epoch 89.6% 3.2 7.8 4.3 66.7%
+TIS-DPO(D) 1 epoch 96.7% 0.1 8.0 4.3 79.3%
+
+
+These results demonstrate that even with equivalent computational resources, TIS-DPO outperforms
+standard DPO across multiple metrics. This suggests that while our method does require additional
+computation when using the same number of epochs, its improved performance justifies the increased computational cost. Nevertheless, developing more computationally efficient methods for
+token importance estimation remains an important direction for future research.
+
+
+It’s worth noting that the prompt-based variant of our method (TIS-DPO(P)) offers a more computationally efficient alternative, as it eliminates the need for additional training of contrastive LLMs.
+However, as shown in our experimental results, this comes at the cost of slightly reduced performance compared to the SFT-based and DPO-based variants.
+
+
+G ANALYSIS OF NOISE ROBUSTNESS
+
+
+In this section, we analyze the robustness of TIS-DPO against annotation noise in the training data.
+While traditional DPO treats responses as atomic units, our token-level approach inherently provides
+better resilience against noisy annotations.
+
+
+G.1 THEORETICAL ANALYSIS
+
+
+The key insight is that winning responses often contain some low-reward tokens, while losing responses may contain high-reward tokens. In the context of DPO, these tokens can be considered as
+noise since:
+
+
+    - DPO would increase the generation probability of all tokens in winning responses, including low-reward ones
+
+
+    - DPO would decrease the generation probability of all tokens in losing responses, including
+high-reward ones
+
+
+TIS-DPO addresses this by:
+
+
+1. Estimating token-level importance weights that can identify and downweight noisy tokens
+
+
+2. Only optimizing the non-noisy parts of responses through these importance weights
+
+
+This token-level denoising mechanism suggests that TIS-DPO should be more robust to annotation
+noise compared to standard DPO.
+
+
+26
+
+
+G.2 EXPERIMENTAL VALIDATION
+
+
+To validate this hypothesis, we conducted experiments with artificially injected annotation noise.
+Specifically, we randomly swapped the chosen and rejected responses for 20% of the training data
+triples ( _x, yw, yl_ ). The results are shown in Table 4.
+
+
+Table 4: Performance comparison under 20% annotation noise
+
+Method Noise Llama-Guard Harm. Help. MT
+
+
+DPO 0% 74.4% 5.6 7.9 4.1
+DPO 20% 65.2% 6.8 7.4 3.8
+
+
+TIS-DPO(S) 0% 89.6% 3.2 7.8 4.3
+TIS-DPO(S) 20% 84.7% 3.9 7.6 4.1
+
+
+TIS-DPO(D) 0% 96.7% 0.1 8.0 4.3
+TIS-DPO(D) 20% 93.2% 0.8 7.8 4.2
+
+
+The experimental results confirm our theoretical analysis:
+
+
+    - Both TIS-DPO variants maintain better absolute performance than DPO even under 20%
+noise
+
+    - TIS-DPO experiences significantly less performance degradation compared to DPO
+
+
+These results demonstrate that our token-level importance estimation approach not only improves
+performance but also provides inherent robustness against annotation noise in the training data. This
+is particularly valuable for real-world applications where perfect annotation quality cannot be guaranteed.
+
+
+H HYPERPARAMETER SENSITIVITY ANALYSIS
+
+
+To evaluate the robustness of our method, we conducted extensive experiments examining the sensitivity of TIS-DPO to its key hyperparameters. Specifically, we analyzed the impact of varying _k_, _µ_,
+and the clamping bounds ( _L, U_ ) from Equation 9.
+
+
+H.1 EXPERIMENTAL SETUP
+
+
+We tested the following parameter ranges:
+
+
+    - _k_ : {0.5, 1.0, 2.0}
+
+    - _|µ|_ : {0.5, 1.0, 2.0}
+
+    - C( _L, U_ ): {(-0.5, 1.5), (-1, 2), (-2, 4), (-4, 8)}
+
+
+For each configuration, we evaluated the model’s performance using our standard metrics: LlamaGuard score, harmfulness rating, and win rate against the baseline.
+
+
+H.2 RESULTS AND ANALYSIS
+
+
+Table 5 presents the detailed results of our sensitivity analysis:
+
+
+The results demonstrate several key findings:
+
+
+1. **k** **Stability** : Performance remains robust across different values of _k_, with only minor
+variations in metrics. The optimal value of _k_ = 1 _._ 0 provides slightly better results, but the
+method maintains strong performance even with 50% variation in either direction.
+2. _|µ|_ **Stability** : The method shows similar stability with respect to _|µ|_, maintaining consistent
+performance across the tested range. This suggests that the exact choice of reward margin
+coefficient is not critical for achieving good results.
+
+
+27
+
+
+Table 5: Performance across different hyperparameter settings
+
+
+Parameter Value Llama-Guard Harm. Win
+
+
+0.5 95.8% 0.3 78.1%
+_k_ 1.0 96.7% 0.1 79.3%
+2.0 95.2% 0.4 77.8%
+
+
+0.5 96.1% 0.2 78.5%
+_|µ|_ 1.0 96.7% 0.1 79.3%
+2.0 95.9% 0.3 78.2%
+
+
+( _L, U_ )
+
+
+(-0.5, 1.5) 96.7% 0.1 79.3%
+(-1, 2) 96.2% 0.2 78.7%
+(-2, 4) 95.8% 0.3 78.4%
+(-4, 8) 91.8% 1.2 69.4%
+
+
+3. **Clamping** **Bound** **Impact** : While performance is stable for moderate clamping ranges,
+extremely wide bounds (e.g., ( _−_ 4 _,_ 8)) can lead to degraded performance. This indicates
+that reasonable constraints on the reward range are beneficial for optimal results.
+
+
+These findings suggest that TIS-DPO is robust to hyperparameter choices within reasonable ranges,
+making it practical for real-world applications. The main consideration is avoiding extremely wide
+clamping bounds, as these can reduce the method’s effectiveness. For optimal results, we recommend using the default values of _k_ = 1 _._ 0, _|µ|_ = 1 _._ 0, and ( _L, U_ ) = ( _−_ 0 _._ 5 _,_ 1 _._ 5), though the method
+remains effective across a range of nearby values.
+
+
+I TOKEN-LEVEL IMPORTANCE WEIGHT EVALUATION
+
+
+While our method focuses on token-level importance estimation, directly evaluating the quality of
+these estimates presents a significant challenge due to the lack of ground truth token-level weights.
+To address this limitation, we employ two complementary evaluation approaches:
+
+
+I.1 CASE STUDY ANALYSIS
+
+
+As demonstrated in Figures 4, 5, 6, and 7, we conduct detailed case studies to qualitatively assess our
+weight estimation. These studies show that our method consistently assigns higher weights to tokens
+that intuitively contribute more to the desired characteristics (e.g., harmlessness or helpfulness).
+
+
+I.2 GPT-4 BASED CONSISTENCY EVALUATION
+
+
+To provide a more quantitative assessment, we leverage GPT-4’s capabilities to independently identify important tokens and compare them with our estimated weights. We designed a specialized
+prompt to extract words that most significantly contribute to the response’s characteristics:
+
+
+28
+
+
+We evaluate the consistency between GPT-4’s identified tokens and our estimated weights using two
+metrics:
+
+
+    - Average Weight: The mean importance weight assigned by our method to tokens identified
+by GPT-4
+
+    - Rank Percentile: The average percentile ranking of GPT-4-identified tokens among all tokens in the response
+
+
+Table 6 presents the results of this evaluation:
+
+
+Table 6: Consistency evaluation of token importance estimation
+
+
+Method Avg. Weight Rank Percentile
+
+
+TIS-DPO(D) 0.947 88.3%
+TIS-DPO(S) 0.882 77.8%
+TIS-DPO(P) 0.515 69.1%
+
+
+It’s important to note that GPT-4’s token identification tends to have high precision but lower recall.
+Therefore, our evaluation focuses on whether our method assigns high importance to the tokens
+identified by GPT-4, rather than expecting complete alignment.
+
+
+The results demonstrate that TIS-DPO(D) achieves the highest consistency with GPT-4’s assessments, with an average weight of 0.947 and a rank percentile of 88.3%. This strong alignment with
+GPT-4’s independent analysis helps explain the superior performance of TIS-DPO(D) observed in
+our main experiments.
+
+
+J ADDITIONAL EXPERIMENTS ON ULTRAFEEDBACK DATASET
+
+
+To further validate the effectiveness of our method on cleaner and more diverse datasets, we conducted additional experiments using Llama3-8B on the Ultrafeedback (Cui et al., 2024) dataset. This
+dataset is notable for including reasoning and mathematical tasks alongside general dialogue, providing a broader evaluation context than safety-focused datasets. The dataset contains higher quality
+preference annotations, more diverse task types (including reasoning and mathematical problems),
+and multi-turn conversations.
+
+
+We maintained consistent training configurations across all methods, using the same hyperparameters as our main experiments. Table 7 presents the detailed results:
+
+
+Table 7: Performance comparison on Ultrafeedback (Cui et al., 2024) dataset
+
+
+Method MT-1 MT-2 MT(Avg) Win
+
+
+DPO 7.1 6.1 6.6       DPO (reversed) 2.8 2.0 2.5 3.1%
+TDPO 7.3 6.3 6.7 51.8%
+TIS-DPO(S) 7.5 6.5 6.9 62.5%
+TIS-DPO(D) 7.7 6.8 7.3 69.2%
+
+
+Several key observations emerge from these results. First, all variants of our method show stronger
+performance compared to standard DPO, with TIS-DPO(D) achieving the highest scores across all
+metrics. Second, the poor performance of reversed DPO (3.1% win rate) suggests that when there
+is a clear quality gap between positive and negative examples, our token-importance estimation
+becomes more accurate and effective. Third, the improvement in MT-bench scores is particularly
+noteworthy as it encompasses reasoning and mathematical tasks, demonstrating our method’s effectiveness beyond safety alignment.
+
+
+These findings complement our main experimental results and suggest that TIS-DPO is particularly
+effective when applied to high-quality, diverse datasets that span multiple aspects of LLM capabilities.
+
+
+29
+
+
+K ANALYSIS OF POSITION-DEPENDENT WEIGHT DISTRIBUTION
+
+
+In analyzing our token importance estimation method, we observed an interesting phenomenon:
+weight values tend to increase with position when the sequence length is sufficiently long. This
+pattern appears in both chosen and rejected responses, suggesting a systematic bias in our weight
+estimation process.
+
+
+K.1 EMPIRICAL OBSERVATIONS
+
+
+To investigate this phenomenon, we analyzed the average weights at each position across our dataset.
+Figure 8 illustrates the weight distributions for both chosen and rejected responses, revealing a clear
+upward trend in weight values as position increases.
+
+
+TIS-DPO(D): Distribution of Chosen Token Weights Across Position
+
+
+0.30
+
+
+0.25
+
+
+0.20
+
+
+0.15
+
+
+0.10
+
+
+0.05
+
+
+0.00
+
+
+0.05
+
+
+TIS-DPO(D): Distribution of Rejected Token Weights Across Position
+
+
+0.05
+
+
+0.00
+
+
+0.05
+
+
+0.10
+
+
+0.15
+
+
+0.20
+
+0 100 200 300 400 500
+Token Position
+
+
+0.10
+
+
+0 100 200 300 400 500
+Token Position
+
+
+Figure 8: Position-dependent weight distributions. Left: Average weights at different positions for
+chosen responses. Right: Average weights at different positions for rejected responses. Both show
+an increasing trend with position when the sequence length is sufficiently long.
+
+
+This positional bias likely stems from our use of DPO-trained contrastive LLMs for weight estimation. DPO’s training objective inherently considers sequence-level preferences, which may lead to
+stronger signals at later positions where the model has more context to make decisions.
+
+
+K.2 WEIGHT DECAY MECHANISM
+
+
+To address this positional bias, we investigated a simple weight decay mechanism. For a token at
+position N, we apply a decay factor _λ_ _[N]_ _[−]_ [1] to its estimated importance weight, where _λ_ _∈_ (0 _,_ 1)
+is a hyperparameter. This modification helps balance the contribution of tokens across different
+positions.
+
+
+Table 8 shows the impact of this weight decay mechanism on model performance:
+
+
+Table 8: Performance comparison with position-dependent weight decay
+
+Method Llama-Guard Harm. Help. MT Win
+
+
+TIS-DPO(D) 96.7% 0.1 8.0 4.3 79.3%
+TIS-DPO(D) + Decay 97.9% -0.3 8.1 4.4 79.9%
+
+
+The results demonstrate that addressing positional bias through weight decay leads to modest but
+consistent improvements across all metrics. We used _λ_ = 0 _._ 995 in our experiments, though the
+method should remain effective across a range of decay values (0.99-0.999).
+
+
+30

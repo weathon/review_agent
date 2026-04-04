@@ -1,0 +1,1887 @@
+# RAR: RETRIEVING AND RANKING AUGMENTED MLLMS FOR VISUAL RECOGNITION
+
+
+**Anonymous authors**
+Paper under double-blind review
+
+
+ABSTRACT
+
+
+CLIP (Contrastive Language–Image Pre-training) uses contrastive learning from
+noise image-text pairs to excel at recognizing a wide array of candidates, yet its
+focus on broad associations hinders the precision in distinguishing subtle differences among fine-grained items. Conversely, Multimodal Large Language Models
+(MLLMs) excel at classifying fine-grained categories, thanks to their substantial
+knowledge from pre-training on web-level corpora. However, the performance of
+MLLMs declines with an increase in category numbers, primarily due to growing complexity and constraints of limited context window size. To synergize the
+strengths of both approaches and enhance the few-shot/zero-shot recognition abilities for datasets characterized by extensive and fine-grained vocabularies, this paper introduces RAR, a Retrieving And Ranking augmented method for MLLMs.
+We initially establish a multi-modal retriever based on CLIP to create and store
+explicit memory for different categories beyond the immediate context window.
+During inference, RAR retrieves the top- _k_ similar results from the memory and
+uses MLLMs to rank and make the final predictions. Our proposed approach not
+only addresses the inherent limitations in fine-grained recognition but also preserves the model’s comprehensive knowledge base, significantly boosting accuracy across a range of vision-language recognition tasks. Notably, our approach
+demonstrates a significant improvement in performance on 5 fine-grained visual
+recognition benchmarks, 11 few-shot image recognition datasets, and the 2 object
+detection datasets under the zero-shot recognition setting.
+
+
+1 INTRODUCTION
+
+
+The new material added for the rebuttal discussion is in red.
+
+
+The CLIP (Contrastive Language–Image Pre-training) (Radford et al., 2021) model and its diverse
+variants (Sun et al., 2023a; Dong et al., 2023; Li et al., 2023b) provide flexible and robust performance across a wide array of visual-language understanding tasks. Despite its successes, we observe
+that CLIP’s performance begins to wane when faced with datasets characterized by vast vocabularies
+or fine-grained categories. As shown in the upper left of Fig. 1, the decline is largely attributable to
+the inherent ambiguity of language descriptions and the challenges posed by synonyms, which can
+confound the model’s ability to distinguish between closely related but distinct classes.
+
+
+Parallel to these developments, Multi-modal Large Language Models (MLLMs) have emerged as
+a powerful class of generative models, exemplified by the likes of GPT-4V (OpenAI, 2023) and
+analogous advancements (Zhu et al., 2023; Liu et al., 2024a; Dai et al., 2023; Peng et al., 2023; Ye
+et al., 2023; Awadalla et al., 2023; Zhang et al., 2023; Bai et al., 2023; Wang et al., 2023b; Chen
+et al., 2023). MLLMs, pre-trained on extensive corpora with substantial knowledge, demonstrate
+remarkable proficiency in identifying fine-grained categories when the total number of candidates
+remains manageable. Nevertheless, MLLMs’ efficacy is similarly compromised in scenarios involving extensive vocabularies and fine-grained categorizations (upper left of Fig. 1).
+
+
+To address these challenges, we propose augmenting standard MLLMs with our RAR, a retrievingand-ranking augmented technique. Our RAR enables models to dynamically incorporate external
+knowledge into the processing and generation workflows. By augmenting MLLMs with external
+knowledge sources, we address challenges related to language ambiguity, synonym handling, and the
+limitations imposed by limited context windows when dealing with vast vocabularies. Our method
+
+
+1
+
+
+Figure 1: **Upper left** : our motivation about the drawbacks of CLIP and MLLM. Our RAR can seamlessly integrate into MLLMs to improve the few-shot/zero-shot abilities on classification ( **upper**
+**right** ) and detection ( **bottom** ) datasets.
+
+
+uses the inherent strength of MLLMs in generalizing from existing knowledge while addressing their
+limitations in visual recognition. We first construct a multi-modal retriever that creates and stores
+multimodal embeddings for visual images and text descriptions. As shown in Fig.1, upon receiving
+an input image at the inference stage, our approach retrieves the top- _k_ class names most similar to
+the image. Subsequently, the MLLMs rank these retrieved candidate results as the final prediction results. To bolster the MLLMs’ ranking performance, we explore fine-tuning with ranking format data
+or in-context learning examples without training. By integrating our retrieval-augmented design, our
+approach seeks to bridge the gap between the broad generalization capabilities of MLLMs and the
+need for precise, fine-grained categorization, offering a path forward that preserves the model’s
+extensive knowledge base while significantly boosting its performance on downstream tasks.
+
+
+To evaluate our method’s efficacy, we conducted benchmarks in three areas: (1) fine-grained visual
+recognition across 5 benchmarks, (2) few-shot image recognition across 11 datasets, and (3) zeroshot object recognition on 2 object detection datasets with vast vocabularies ( _e.g._, 13204 classes of
+V3Det (Wang et al., 2023a)). As presented in the right part of Fig. 1, our findings reveal that our
+approach notably enhances few-shot learning abilities, yielding an average improvement of 6 _._ 2%
+over 11 image classification datasets under the 4-shot setting. Furthermore, our method achieves a
+6 _._ 4% improvement on the LVIS dataset and a 1 _._ 5% gain on the V3Det dataset in zero-shot object
+recognition performance.
+
+
+In summary, our key contributions are outlined as follows: (1) We conduct an in-depth analysis
+of the strengths and weaknesses of VLMs and MLLMs in processing fine-grained datasets. (2) To
+enhance the fine-grained few-shot and zero-shot perception capabilities of MLLMs, we introduce
+RAR with a multi-modal retriever and the inference pipeline based on retrieving and ranking. (3)
+Our RAR can be seamlessly integrated into various MLLMs in a plug-and-play manner. (4) Through
+rigorous testing across 11 classification datasets and 2 object detection datasets, we demonstrate that
+our method outperforms baselines on a variety of visual recognition tasks.
+
+
+2 RELATED WORK
+
+
+**Contrastive Language-Image Pre-training (CLIP)** (Radford et al., 2021) understands images and
+texts by contrastive learning from a vast amount of visual data paired with natural language descriptions. CLIP has robust capabilities in downstream tasks including image-text retrieval (Yasunaga
+et al., 2023; Yu et al., 2024; Glass et al., 2022), zero-shot classification (Zhou et al., 2022a; Gao et al.,
+
+
+2
+
+
+2023), and open-vocabulary perception (Gu et al., 2022; Zang et al., 2022; Zhou et al., 2022b). Following CLIP, many subsequent vision-language models (Jia et al., 2021; Li et al., 2022a;b; Zhong
+et al., 2022; Fang et al., 2023; Dong et al., 2023; Li et al., 2023b; Sun et al., 2023b; Yang et al.,
+2023b; L¨uddecke & Ecker, 2022) are proposed to further improve the vision-language understanding abilities. There are also works done to improve CLIP in zero-shot perception tasks (Subramanian
+et al., 2022; Shtedritski et al., 2023; Liang et al., 2023; Xu et al., 2023; Yang et al., 2023a). However,
+simple dot-product between two unimodality features can lead to sub-optimal results for fine-grained
+classification. In this paper, we demonstrate that CLIP faces challenges in making accurate zeroshot predictions for fine-grained classes, and how our proposed method can effectively re-rank these
+predictions to improve the accuracy.
+
+
+**Multimodal Large Language Models** (MLLMs) such as GPT4V (OpenAI, 2023), represent a significant evolution in the landscape of Large Language Models (LLMs) by integrating visual images
+as input tokens alongside textual information. The integration is facilitated through the use of an
+additional vision encoder (Radford et al., 2021) and a bridging mechanism (Zhu et al., 2023; Liu
+et al., 2024a; Dai et al., 2023; Peng et al., 2023; Ye et al., 2023; Awadalla et al., 2023; Zhang et al.,
+2023; Bai et al., 2023; Wang et al., 2023b; Chen et al., 2023). MLLMs significantly enhance the
+interaction between humans and AI in more natural and intuitive ways and demonstrate remarkable capabilities in understanding and generating multi-modal content. Despite their prowess, our
+research uncovers a nuanced limitation: MLLMs tend to underperform in tasks requiring vast vocabularies, where distinguishing subtle differences among different categories is crucial. However, we
+prove that MLLMs exhibit a strong ability to excel in the re-ranking of top results obtained through
+vision-language models such as CLIP. Fine-R (Liu et al., 2024b) first delves into leveraging MLLMs
+for fine-grained perception tasks by prompt design for better descriptions and attributes. We find a
+new way to prompt it with possible candidates to help screening and achieve better performance.
+
+
+3 METHODOLOGY
+
+
+We first provide the background information on CLIP, MLLMs, and retrieval-augmentation in LLMs
+(Sec. 3.1). Then we present the multi-modal retriever (Sec. 3.2) module of RAR and how to apply
+RAR on downstream tasks via retrieving and ranking (Sec. 3.3).
+
+
+3.1 PRELIMINARIES
+
+
+**CLIP** is a model combining an image encoder Φimg and a text encoder Φtxt that uses contrastive
+learning to understand and align images and text by training on a vast dataset gathered from the
+web. The core mechanism of CLIP involves mapping an input image _I_ to its most semantically
+similar category _c ∈C_ :
+
+_\_ p _ro_ **b** \ brk *{ [}] [=][ \a][r] _[g]_ [ \][ m] (1)
+_y_ [=c | ][\xb][f]
+
+
+where _y_ represents the predicted category, _C_ refers to the whole categories list and cos( _·, ·_ ) denotes
+to the cosine similarity.
+
+
+**Multimodal** **Large** **Language** **Models** such as GPT4V (OpenAI, 2023) learning to generate predictions over sequences of tokens that span both image and text modalities. The MLLM model
+_f_, parameterized by weights _θ_, conditioned on the input sequences **x** = ( _x_ 1 _, . . ., xLin_ ) of length
+_Lin_, which consist of both text tokens **x** txt and visual tokens **x** img. The **x** img are extracted from the
+input image _I_ via the image encoder Φimg. MLLM model forecast a sequence of output tokens
+**y** = ( _y_ 1 _, . . ., yLout_ ) of length _Lout_ as follows:
+
+\ **p** _r_ **o** b _ _\t_ a _the_ _[\][b]_ [r] _[k]_ _[*]_ **[{]** **[\]** _[y][b][f]_ [| ] \ _x}_ = _bf_ [ \prod \] _[n]_ [o] **[l]** _[i]_ **[ m]** _[i][t][s]_ [_] _[ {]_ [l ] _[=]_ [1] (2)
+
+where **y** _≤l−_ 1 := ( _y_ 1 _, . . ., yl−_ 1) refers to the mechanism that predicts the distribution of the next
+token considering all previously generated tokens.
+
+
+**Retrieval-Augmentation** **in** **Large** **Language** **Models** introduces a retrieval module _R_ with the
+LLM parameterized by _θ_ for generation. The retrieval module _R_ is designed to process an input
+sequence **x** against an external memory of documents _M_, efficiently selecting a subset of documents
+_M_ _⊆M_ . The subset _M_ is then fed along with the original input sequence **x** into the LLM _θ_, which
+uses both the input and the context provided by retrieved results to generate the target output **y** :
+
+
+\ **p** _r_ **o** _b_ _ \ t _heta_ _[*][{][\]_ **[y]** _[b f ]_ **[|]** _[\][x]_ [b][f] (3)
+
+\b _[r][k]_
+
+
+3
+
+
+\ **p** _r_ **o** b _ _\the_
+
+
+_\the_ _[*]_ **[{]** **[\]** _[y][b][f]_ [| ] \ _xbf_
+
+_t_ a _[\][b]_ [r] _[k]_ _}_ =
+
+
+The multimodal retriever is essentially responsible for querying a large multi-modal external memory or database to find information relevant to the input query or context. In the process of multimodal retriever, the main challenge lies in efficiently encoding and storing a large volume of images/text embeddings for quick, accurate retrieval. Recognizing the main challenge, as shown in
+Fig. 2, we have developed a multi-modal retriever that creates and stores multimodal embeddings,
+with a focus on optimizing retrieval speed through index construction techniques.
+
+
+**Extracting the Multi-modal Embeddings.** We use the CLIP model discussed in Sec. 3.1 to extract
+the multi-modal embeddings. Given a data sample ( _xi, ci_ ) from the dataset _D_ containing the image
+_xi_ and class name _ci_, we use the CLIP image encoder Φimg to extract the image embedding _e_ img _∈_ R _[d]_
+
+and the CLIP text encoder Φtext to extract the text embedding _e_ text _∈_ R _[d]_ . The symbol _d_ refers to the
+feature dimension ( _e.g._, _d_ = 512 for CLIP ViT-B/16). The image and text embeddings are stored
+in the memory _M_ for retrieval (will discuss in Sec. 3.3). In some zero-shot settings, the image
+embedding is not available and we merely store the text embedding into the memory.
+
+
+**Fast Retrieval Optimization.** The brute force search is the common method for designing the retriever, which requires iteration over all vectors in the memory _M_ to compute similarity scores ( _e.g._,
+cosine similarity) and subsequently identify the top- _k_ results. Although the brute force method is
+inherently straightforward, its efficiency markedly diminishes as the dataset escalates to the magnitude of millions of embeddings. To enhance the speed of retrieval, we implement an index system
+that uses the HNSW(Hierarchical Navigable Small World) algorithm (Malkov & Yashunin, 2018).
+The adoption of the HNSW methodology facilitates a significant dimensionality reduction, thereby
+enabling the construction of a more condensed index. Specifically, vectors in a R _[d]_ space of dimension _d_ are transformed into a reduced _[d]_ 9 [dimensional space.] [This reduction in dimensionality plays]
+
+a pivotal role in enhancing the speed of the retrieval process.
+
+
+**Pre-processing for Detection Datasets.** In object detection datasets, our methodology for extracting image embeddings _e_ img is slightly different from the approach discussed previously. As presented in Fig. 3, we apply two additional pre-processing steps: cropping and blurring. Some previous works have proposed similar methods in CLIP like (Yang et al., 2023b; L¨uddecke & Ecker,
+2022). In the object detection dataset, an image typically contains multiple objects of varying sizes.
+Some objects may dominate a large portion of the image, whereas others occupy minimal space.
+Accordingly, our object detection procedure begins with **cropping** the image regions based on proposal bounding box coordinates, subsequently **resizing** the cropped region to a fixed proportion.
+
+
+4
+
+
+Figure 3: Extending our multimodal retriever to **zero-shot recognition** on object detection datasets
+such as LVIS (Gupta et al., 2019) and V3Det (Wang et al., 2023a). Compared to the classification
+datasets, we apply the additional pre-processing techniques such as **cropping** and **resizing** to extract
+the image embeddings.
+
+
+Moreover, unlike image classification tasks the objects of interest generally appear large and centrally positioned, the objects within object detection datasets are smaller and their positions more
+varied. To help the MLLMs understand the objects to be detected, we employ a **blurring** technique
+on the non-target areas surrounding the objects of interest. The blurring strategy is designed to direct the MLLMs’ focus toward the relevant objects, thereby facilitating their identification in object
+detection tasks.
+
+
+3.3 INFERENCE WITH RETRIEVING AND RANKING
+
+
+After successfully constructing memory _M_ by using our multimodal retriever, our next step is to
+integrate the memory with the retrieval process and use MLLMs to rank the retrieval results and
+enhance the performance in few-shot/zero-shot perception tasks.
+
+
+For example, in the inference stage of the few-shot image classification task, we first use the visual
+encoder Φimg to process the input image and obtain the corresponding image embedding _e_ ˆ. The
+visual encoder is identical to the encoder used in our multi-modal retriever. The image embedding
+_e_ ˆ is then navigated through the previously constructed memory index and ranked by similarity to
+identify the top- _k_ related images. Consequently, memory _M_ yields the names of the retrieved top- _k_
+categories, denoted as _{c_ 1 _, c_ 2 _, c_ 3 _, ..., ck}_ . The top-k retrieved results serve as a preliminary filter,
+narrowing down the vast possibilities to those most likely relevant, based on historical data and the
+semantic closeness of stored labels to the image content.
+
+
+Since these cropped sub-images are usually small, CLIP’s ability to extract features from these lowresolution images is limited. Therefore, in the object detection task, we do not perform image-toimage retrieval but use CLIP’s inherent image-text interaction capabilities to conduct image-to-text
+retrieval. Finally, we also obtain the top- _k_ category information with the highest similarity.
+
+
+Following the retrieval phase, the retrieved category labels alongside image embedding _e_ ˆ are integrated and sent to the MLLMs through our ranking prompt. The MLLMs, combining the internal
+knowledge and the retrieved information, make the final prediction of the image category. Our
+proposed inference process, using both the retrieval results from our memory bank and subsequent
+ranking by the MLLM, ensures a more accurate and contextually aware classification prediction.
+Our design represents a significant advancement in few-shot image classification, enabling our system to handle a wide variety of images and categories with high precision and flexibility.
+
+
+**Ranking** **Prompt** **Format.** Fig. 4 presents our ranking prompt format. The process begins with the prompt ‘Sort the optional categories: [class a, class b,
+class c, class d, class e]’, which is dynamically generated to include the top-k class
+names retrieved from our multimodal retriever. Our method uses the MLLM’s ability to rank these
+retrieved class names. Unlike traditional approaches that might rely solely on the initial retrieval
+order, our MLLM employs advanced linguistic and semantic analysis to assess the contextual appropriateness of each class name with the input image.
+
+
+**Fine-tuning for Ranking.** When directly applying MLLMs to ranking the retrieved results, MLLMs
+may predict some errors such as beyond the given list or occasional misalignment. To fully exploit
+
+
+5
+
+
+Figure 4: **Ranking** **Prompt** **examples** for few-shot image classification. The fine-grained image
+examples are from Stanford Cars (Krause et al., 2013). We incorporate the initial top- _k_ retrieved
+results ( _e.g._, _k_ = 5) into our ranking prompts and use the MLLMs to rank the retrieved results and
+make the final prediction.
+
+
+the ranking potential of MLLMs for downstream tasks, while avoiding the consumption of extensive
+computational resources for training MLLMs, we selected a small-scale classification dataset to finetune the MLLMs. The primary goal of fine-tuning was to enable MLLMs to improve their ranking
+ability such as following the format of prompts and returning results as required.
+
+
+To create our fine-tuning data, we use the CLIP image encoder Φimg to extract the embeddings of
+two disjoint subsets of images _Da_ and _Db_, both drawn from the FGVC-Aircraft dataset. We provide
+the ablation studies in Sec. 4.5 about using different datasets to construct the fine-tuning data. Our
+observation reveals that the MLLM demonstrates robustness to the choice of fine-tuning datasets,
+with only marginal differences in performance outcomes.
+
+
+For each image in _Db_, we apply the _k_ -NN clustering algorithm to find the top 20 most similar
+images in _Da_ including their categories. Afterward, we select 16 sets from these 20 images, each
+set comprising _k_ images, and retain those groups that contain images of the same category as _Db_ .
+We then shuffled the category labels for these sets. Using the prompts shown in Fig. 4, we create a
+dataset comprising roughly 30,000 entries, with the original sequence of categories serving as the
+ground-truth label. In summary, we build the fine-tuning data aiming to bolster the MLLM’s ranking
+performance.
+
+
+**In-Context Learning for Ranking.** In-context learning presents a valuable alternative to fine-tuning
+with ranking examples, particularly due to its flexibility and lower requirement for specialized data
+preparation. While fine-tuning with ranking examples has proven to be highly effective, it necessitates a substantial amount of curated data and computational resources for training. In contrast,
+in-context learning uses the model’s existing knowledge by providing it with specific examples directly within the input prompt, guiding the model to understand and execute the task of ranking
+without the need for explicit re-training. Here we elaborate on the application of in-context learning
+with MLLMs to rank the retrieved results. To effectively guide the MLLMs in comprehending the
+ranking task, we use the prompt format similar to Fig. 4 and integrate a specific ranking example
+into the prompts. Please refer to the Sec. B for our structured in-context learning prompt. Please
+refer to Sec. 4.5 for the ablation studies of discussing the difference between using fine-tuning or
+in-context learning for ranking.
+
+
+4 EXPERIMENTS
+
+
+In this section, we present our experiment step (Sec. 4.1) and conduct experiments on different tasks
+such as fine-grained visual recognition (Sec. 4.2), few-shot image recognition (Sec. 4.3) and zeroshot object recognition (Sec. 4.4). We also provide the ablation studies about our design choices
+(Sec. 4.5).
+
+
+4.1 EXPERIMENTAL SETUP
+
+
+**Datasets and Evaluation Metrics.** We follow previous work (Liu et al., 2024b) to choose 5 datasets
+for **fine-grained** **visual** **recognition** (Bird-200 (Wah et al., 2011), Cars-196 (Krause et al., 2013),
+Dog-120 (Khosla et al., 2011), Flower-102 (Nilsback & Zisserman, 2008), and Pet-37 (Parkhi et al.,
+
+
+6
+
+
+Table 1: Fine-grained visual recognition across 5 datasets. We follow (Liu et al., 2024b) to report
+the averaged clustering accuracy (cACC, %) and semantic similarity accuracy (sACC, %) results
+
+
+2012)) and report the clustering accuracy (cACC) and semantic similarity accuracy (sACC) as evaluation metrics.
+
+
+For **few-shot image recognition**, we select 11 datasets including general objects (ImageNet (Deng
+et al., 2009), Caltech101 (Fei-Fei et al., 2004)), textual (DTD (Cimpoi et al., 2014)), scene objects
+(SUN397 (Xiao et al., 2010)), satellite images (EuroSAT (Helber et al., 2019)), facial expressions
+(RAF-DB (Li et al., 2017)), car types (Stanford Cars (Krause et al., 2013)) and fine-grained datasets
+(FGVC-Aircraft (Maji et al., 2013), Oxford Flowers (Nilsback & Zisserman, 2008), Food101 (Nilsback & Zisserman, 2008) and Oxford Pets (Parkhi et al., 2012)). We report the top-1 accuracy (%)
+for all these classification datasets.
+
+
+Additionally, we also select two benchmarks for our **zero-shot object recognition** setting: (1) The
+LVIS(Gupta et al., 2019) dataset that encompasses over 164,000 images and 1,203 categories. We
+report the APr, APc, APf, and APall metrics for rare, common, frequent, and all categories. (2)
+V3Det (Wang et al., 2023a) dataset encompasses an immense number of 13204 categories of realworld images. For V3Det, we report the standard mAP metric of the object detection task.
+
+
+**Implementation Details.** We employ a frozen CLIP ViT B/16 model as the visual encoder Φimg to
+encode the input images and extract the corresponding image embeddings. For the retrieval process,
+we search the stored embeddings in memory _M_ using the HNSW algorithm (Malkov & Yashunin,
+2018). We use _k_ = 5 for the top- _k_ results, with a solo exception _k_ = 4 in the 4-shot few-shot setting.
+To improve the ranking ability of MLLMs, we prepare 30k fine-tuning data from the FGVC-Aircraft
+dataset. In the fine-tuning process, we train the model with one epoch with a learning rate of 1 _e_ _[−]_ [5]
+on our fine-tuning data and subsequently evaluate the performance across additional datasets. We
+present the ablation studies about the hyper-parameters such as the value of _k_ and the fine-tuning
+data source in the Sec. 4.5.
+
+
+4.2 FINE-GRAINED VISUAL RECOGNITION
+
+
+We first evaluate our RAR on the _fine-grained_ _visual_ _recognition_ setting defined in previous work
+(Liu et al., 2024b). We use only 3 unlabelled images per category to build our memory _M_ for
+retrieving. Please refer to Sec. C for more implementation details.
+
+
+**Baselines.** We follow (Liu et al., 2024b) to select four representative methods as our baselines to
+compare with: WordNet (Miller, 1995)+CLIP, BLIP-2 (Li et al., 2023a), CaSED (Conti et al., 2024),
+and FineR (Liu et al., 2024b).
+
+
+**Averaged Results over 5 Datasets.** Tab. 1 summarizes the results and our RAR achieves the top performance on both the cACC (58.5%) and sACC (65.3%) metrics. The WordNet+CLIP and CaSED
+baselines rely solely on CLIP for class name retrieval, yet often yield inaccurate predictions. In contrast, our method adds the additional ranking process with MLLMs, which increases the likelihood
+of correctly predicting those accurate yet initially lower-ranked candidates and thereby boosts performance. Besides, FineR uses MLLM ( _e.g._, BLIP-2) for fine-grained recognition via multi-round
+questioning-answering processes, which may demand more computational resources and struggle to
+scale efficiently with large vocabulary datasets. Conversely, our approach first retrieves candidates
+and then lets MLLMs make predictions on the candidates, optimizing both accuracy and efficiency.
+
+
+We can observe that RAR did not achieve SOTA results on Dog-120 and Flower-102. This is because
+some baselines use exhaustive knowledge bases on specialized datasets: WordNet covers all groundtruth Dog-120 categories, and CaSED includes 101 of 102 ground-truth Flower-102 categories. As
+
+
+7
+
+
+Table 2: Few-shot image classification across 11 datasets. We report the top-1 accuracy (%) under the 4-shot
+and 8-shot settings. Here our RAR uses the LLaVA1.5 (Liu et al., 2023) as the MLLM to rank the retrieved
+results. The symbol ‘-’ denotes to the LLaVA model fails to make the predictions due to the limited window
+size.
+
+
+discussed in FineR (Liu et al., 2024b), this leads to biased high performance. Moreover, BLIP-2 uses
+a more powerful 11B Flan-T5xxl encoder. RAR does not use these exhaustive knowledge bases but
+still achieves the best results on majority fine-grained datasets (average +16.7%/+11.3%/+14.8%
+gains over WordNet/BLIP-2/CaSED), which demonstrate RAR is effective and general.
+
+
+4.3 FEW-SHOT IMAGE RECOGNITION
+
+
+The few-shot setting aims to enable a model to recognize new objects with only a few examples
+for each new category. Few-shot learning faces substantial challenges when applied to fine-grained
+datasets, which consist of numerous highly similar classes yet are accompanied by only a minimal
+amount of training data.
+
+
+**Baselines.** For _few-shot image recognition_, we introduce two baselines including CLIP and MLLMs.
+The first is the CLIP (Radford et al., 2021) model combined with _k_ -NN to retrieve predictions based
+on few-shot examples. The second is the LLaVA model directly fine-tuning with LoRA (Hu et al.,
+2021) on few-shot examples.
+
+
+**Averaged Results on 11 Datasets.** Tab. 2 summarizes the few-shot results on 11 datasets, including
+4 fine-grained datasets. Compared to the CLIP initial retrieval results (top row), our RAR (third
+row) with ranking facilitates a notable increase in classification accuracy. On average, our approach
+boosts the top-1 accuracy from 57.0 to 63.2 (%) on the 4-shot setting, and from 63.0 to 69.8 (%) on
+the 8-shot setting. Such improvements illustrate the ranking process of MLLMs effectively uses a
+nuanced understanding of context and detail to better align predictions with ground truth. Additionally, we observe that LLaVA1.5 + fine-tuning (second row) baseline underperforms in datasets with
+large vocabularies such as ImageNet due to the constraint of LLMs’ context window. Thanks to the
+retrieved candidates, our RAR works for datasets with a vast of categories and is a potent tool in
+refining classification decisions, proving particularly useful in handling the diverse and challenging
+landscape of image classification tasks.
+
+
+4.4 ZERO-SHOT OBJECT RECOGNITION
+
+
+Given the pre-existing object proposals such as ground-truth box annotations, the zero-shot object
+recognition task measures the model’s capability of aligning regions with textual class descriptions.
+
+
+**Baselines.** We select two representative papers CLIP (Radford et al., 2021) and RegionCLIP (Zhong
+et al., 2022) and report their performances as the baseline results. Besides, we apply our method on a
+range of cutting-edge open-source MLLMs, including LLaVA1.5 (Liu et al., 2023), QWen-VL (Bai
+et al., 2023) and InternLM-XC2 (Dong et al., 2024).
+
+
+**Main Results on LVIS.** Tab. 3 presents the results that reveal notable metrics improvements when
+applying our RAR. Specifically, when combing with the recent InternLM-XC2 (Dong et al., 2024)
+model, our approach yielded an 8.4 (%) point increase over the CLIP baseline and a 6.4 (%) enhance
+
+8
+
+
+Table 3: Zero-shot object recognition on LVIS (Gupta
+
+
+|al., 2019) v1.0 validation set.|Col2|
+|---|---|
+|APr<br>APc<br>APf<br>APall<br>CLIP w/ box<br>40.6<br>53.1<br>59.2<br>48.7<br>CLIP w/ mask<br>40.8<br>53.5<br>**59.6**<br>49.2<br>RegionCLIP<br>50.1<br>50.1<br>51.7<br>50.7<br>RAR (LLaVA1.5)<br>58.7<br>57.9<br>54.4<br>56.2<br>∆<br>**+8.6**<br>**+7.8**<br>**+2.7**<br>**+5.5**<br>RAR (Qwen-VL)<br>59.6<br>57.5<br>53.7<br>56.4<br>∆<br>**+9.5**<br>**+7.4**<br>**+2.0**<br>**+5.7**<br>RAR (InternLM-XC2)<br>**60.2**<br>**58.0**<br>54.3<br>**57.1**<br>∆<br>**+10.1**<br>**+7.9**<br>**+2.6**<br>**+6.4**|APr<br>APc<br>APf<br>APall<br>CLIP w/ box<br>40.6<br>53.1<br>59.2<br>48.7<br>CLIP w/ mask<br>40.8<br>53.5<br>**59.6**<br>49.2<br>RegionCLIP<br>50.1<br>50.1<br>51.7<br>50.7<br>RAR (LLaVA1.5)<br>58.7<br>57.9<br>54.4<br>56.2<br>∆<br>**+8.6**<br>**+7.8**<br>**+2.7**<br>**+5.5**<br>RAR (Qwen-VL)<br>59.6<br>57.5<br>53.7<br>56.4<br>∆<br>**+9.5**<br>**+7.4**<br>**+2.0**<br>**+5.7**<br>RAR (InternLM-XC2)<br>**60.2**<br>**58.0**<br>54.3<br>**57.1**<br>∆<br>**+10.1**<br>**+7.9**<br>**+2.6**<br>**+6.4**|
+|APr<br>APc<br>APf<br>APall<br>CLIP w/ box<br>40.6<br>53.1<br>59.2<br>48.7<br>CLIP w/ mask<br>40.8<br>53.5<br>**59.6**<br>49.2<br>RegionCLIP<br>50.1<br>50.1<br>51.7<br>50.7<br>RAR (LLaVA1.5)<br>58.7<br>57.9<br>54.4<br>56.2<br>∆<br>**+8.6**<br>**+7.8**<br>**+2.7**<br>**+5.5**<br>RAR (Qwen-VL)<br>59.6<br>57.5<br>53.7<br>56.4<br>∆<br>**+9.5**<br>**+7.4**<br>**+2.0**<br>**+5.7**<br>RAR (InternLM-XC2)<br>**60.2**<br>**58.0**<br>54.3<br>**57.1**<br>∆<br>**+10.1**<br>**+7.9**<br>**+2.6**<br>**+6.4**|P w/ box<br>40.6<br>53.1<br>59.2<br>48.7<br>P w/ mask<br>40.8<br>53.5<br>**59.6**<br>49.2<br>onCLIP<br>50.1<br>50.1<br>51.7<br>50.7<br> (LLaVA1.5)<br>58.7<br>57.9<br>54.4<br>56.2<br>**+8.6**<br>**+7.8**<br>**+2.7**<br>**+5.5**<br> (Qwen-VL)<br>59.6<br>57.5<br>53.7<br>56.4<br>**+9.5**<br>**+7.4**<br>**+2.0**<br>**+5.7**<br> (InternLM-XC2)<br>**60.2**<br>**58.0**<br>54.3<br>**57.1**<br>**+10.1**<br>**+7.9**<br>**+2.6**<br>**+6.4**|
+|RAR<br>∆|RAR<br>∆|
+|RAR<br>∆|RAR<br>∆|
+|RAR<br>∆|RAR<br>∆|
+
+
+external memory, providing the MLLMs with a richer context for rare class identification. Moreover,
+the ranking capability of MLLMs ensures that even the lesser-represented classes receive adequate
+attention during the classification process. Our RAR achieves a robust enhancement in the model’s
+ability to discern and accurately classify objects that are infrequently encountered, addressing one
+of the significant challenges in long-tailed distribution datasets.
+
+
+**Main** **Results** **on** **V3Det.** To further test the effectiveness of using MLLMs for ranking in scenarios with an extremely large number of fine-grained categories, we conducted additional experiments on V3Det (Wang et al., 2023b). The experimental results in Tab. 4 reveal that our RAR
+has achieved a commendable improvement in performance, surpassing the CLIP baseline by 1.5
+percentage points in overall average precision ( _APall_ ) with InternLM-XC2. Such an improvement
+is particularly significant given the complexity of the V3Det dataset, which presents challenging
+13,204 distinct classes. The MLLMs, with the aid of our retrieving and ranking mechanisms, have
+once again demonstrated their robust performance in the domain of object detection datasets. Using our retrieval-augmented approach allows MLLMs to navigate the extensive and fine-grained
+category landscape of V3Det effectively.
+
+
+**Qualitative** **Results.** Fig. 5 presents the visualization results about ranking examples of our approach on LVIS _validation_ set. The CLIP& _K_ -NN approach provides an extensive list of object
+predictions, albeit with the caveat that the most accurate label might not always emerge as the top-1
+choice. The incorporation of MLLMs in our RAR significantly streamlines the prediction process,
+
+
+9
+
+
+Table 4: Zero-shot object recognition on
+V3Det (Wang et al., 2023a) _validation_ set with
+13,204 categories.
+
+
+Table 5: **Ablation studies** about (1) using different datasets for fine-tuning and (2) fine-tuning _vs_ in-context
+
+|rning. The symbols ‘F’ and ‘S’ stand for fine-tuning on the FGVC-Aircraft or Stanford-Cars datasets.|Col2|
+|---|---|
+|Method<br>Strategy<br>Common<br>Fine-Grained<br>Fine-tune In-Context<br>ImageNet<br>Caltech101<br>RAF-DB<br>SUN397<br>EuroSAT<br>DTD<br>UCF101<br>Flower102<br>Food101<br>OxfordPets<br>**Average**<br>RAR<br>F<br>✗<br>**75.8**<br>**95.5**<br>**66.0**<br>72.7<br>**90.7**<br>**72.5**<br>**81.4**<br>**97.5**<br>88.1<br>**87.2**<br>**82.7**<br>S<br>✗<br>75.3<br>94.9<br>65.1<br>**73.1**<br>88.1<br>71.0<br>81.1<br>95.8<br>**88.3**<br>87.0<br>82.0<br>(QWen-VL)<br>✗<br>✓<br>72.0<br>93.4<br>63.6<br>65.6<br>86.2<br>66.8<br>76.5<br>95.6<br>84.7<br>82.3<br>78.7<br>RAR<br>F<br>✗<br>**71.5**<br>94.4<br>**72.7**<br>**69.7**<br>91.7<br>**69.9**<br>**77.6**<br>93.2<br>83.9<br>79.3<br>**80.4**<br>S<br>✗<br>**71.5**<br>**94.7**<br>71.2<br>**69.7**<br>90.3<br>**69.9**<br>77.5<br>92.0<br>83.6<br>**79.7**<br>80.0<br>(InternLM-XC2) ✗<br>✓<br>69.2<br>94.1<br>66.0<br>**69.7**<br>**91.8**<br>68.9<br>66.1<br>**95.7**<br>**85.7**<br>79.2<br>78.6|Method<br>Strategy<br>Common<br>Fine-Grained<br>Fine-tune In-Context<br>ImageNet<br>Caltech101<br>RAF-DB<br>SUN397<br>EuroSAT<br>DTD<br>UCF101<br>Flower102<br>Food101<br>OxfordPets<br>**Average**<br>RAR<br>F<br>✗<br>**75.8**<br>**95.5**<br>**66.0**<br>72.7<br>**90.7**<br>**72.5**<br>**81.4**<br>**97.5**<br>88.1<br>**87.2**<br>**82.7**<br>S<br>✗<br>75.3<br>94.9<br>65.1<br>**73.1**<br>88.1<br>71.0<br>81.1<br>95.8<br>**88.3**<br>87.0<br>82.0<br>(QWen-VL)<br>✗<br>✓<br>72.0<br>93.4<br>63.6<br>65.6<br>86.2<br>66.8<br>76.5<br>95.6<br>84.7<br>82.3<br>78.7<br>RAR<br>F<br>✗<br>**71.5**<br>94.4<br>**72.7**<br>**69.7**<br>91.7<br>**69.9**<br>**77.6**<br>93.2<br>83.9<br>79.3<br>**80.4**<br>S<br>✗<br>**71.5**<br>**94.7**<br>71.2<br>**69.7**<br>90.3<br>**69.9**<br>77.5<br>92.0<br>83.6<br>**79.7**<br>80.0<br>(InternLM-XC2) ✗<br>✓<br>69.2<br>94.1<br>66.0<br>**69.7**<br>**91.8**<br>68.9<br>66.1<br>**95.7**<br>**85.7**<br>79.2<br>78.6|
+|||
+
+
+yielding more precise and relevant object labels. The visualization results demonstrate that our RAR
+meets the need for fine-grained and large vocabulary recognition.
+
+
+4.5 ABLATION EXPERIMENTS
+
+
+**Different** **Fine-tuning** **data.** We study the importance of using different fine-tuning datasets for
+ranking. We select two representative datasets: FGVC-Aircraft and Stanford-Cars as the data
+sources for constructing the fine-tuning data. Our selection is motivated by their diverse characteristics and relevance in visual recognition tasks, providing a comprehensive basis for fine-tuning.
+Subsequently, we fine-tune the RAR with different MLLMs (QWen-VL and InternLM-XC2) on
+these two datasets, aiming to investigate how different data sources influence performance. To thoroughly assess the impact of using different fine-tuning datasets, we evaluate the fine-tuned RAR
+across a diverse set of 10 additional datasets.
+
+
+Tab. 5 presents the results. We observe that RAR is not sensitive to changes in the fine-tuning
+dataset for ranking, thereby confirming its viability as a generalizable and reliable method for enhancing the performance of MLLMs. The consistency in results, irrespective of the fine-tuning data
+source, underlines the robustness of our fine-tuning strategy. Despite these minor variations, the
+overall performance of using FGVC-Aircrafts (82.7%, top row) is higher than using StanfordCars
+(82.0%, second row) for QWen-VL, and we observe the same trend for InternLM-XC2. Based on
+our findings, we adopt the FGVC-Aircraft dataset as our preferred choice for fine-tuning.
+
+
+**Fine-tuning** _vs_ **In-Context** **Learning.** We validate the effectiveness of fine-tuning the MLLM or
+just in-context learning (training-free) for ranking. The results are illustrated in Tab. 5. We select two
+distinct groups for comparison. The first group (top and fourth rows) involves models that are finetuned using the FGVC-Aircraft dataset, while the second group (third and bottom rows) consists of
+models with in-context learning prompts for ranking. The results show a consistent improvement in
+accuracy for the fine-tuned model across almost all datasets for both QWen-VL and InternLM-XC2.
+The notable enhancement in performance across a diverse range of datasets highlights the efficacy
+of our fine-tuning strategy. The results substantiate that fine-tuning the MLLM with target datasets
+like FGVC-Aircraft significantly bolsters the model’s ranking capabilities.
+
+
+5 CONCLUSION
+
+
+In this paper, we highlight the potential of combining retrieving and ranking with multi-modal large
+language models to revolutionize perception tasks such as fine-grained recognition, zero-shot image recognition, and few-shot object recognition. Motivated by the limited zero-shot/few-shot of
+CLIP and MLLMs on fine-grained datasets, our RAR designs the pipeline that uses MLLM to rank
+the retrieved results. Our proposed approach can be seamlessly integrated into various MLLMs
+for real-world applications where the variety and volume of categories continuously expand. Our
+method opens up new avenues for research in augmenting the MLLM’s abilities with the retrievingaugmented solution and could be beneficial for other tasks such as reasoning and generation in future
+works.
+
+
+10
+
+
+REFERENCES
+
+
+Anas Awadalla, Irena Gao, Josh Gardner, Jack Hessel, Yusuf Hanafy, Wanrong Zhu, Kalyani
+Marathe, Yonatan Bitton, Samir Gadre, Shiori Sagawa, Jenia Jitsev, Simon Kornblith, Pang Wei
+Koh, Gabriel Ilharco, Mitchell Wortsman, and Ludwig Schmidt. Openflamingo: An open-source
+framework for training large autoregressive vision-language models. _arXiv_, 2023.
+
+
+Jinze Bai, Shuai Bai, Shusheng Yang, Shijie Wang, Sinan Tan, Peng Wang, Junyang Lin, Chang
+Zhou, and Jingren Zhou. Qwen-VL: A frontier large vision-language model with versatile abilities. _arXiv_, 2023.
+
+
+Lin Chen, Jisong Li, Xiaoyi Dong, Pan Zhang, Conghui He, Jiaqi Wang, Feng Zhao, and Dahua
+Lin. Sharegpt4v: Improving large multi-modal models with better captions. _arXiv_ _preprint_
+_arXiv:2311.12793_, 2023.
+
+
+Mircea Cimpoi, Subhransu Maji, Iasonas Kokkinos, Sammy Mohamed, and Andrea Vedaldi. Describing textures in the wild. In _CVPR_, 2014.
+
+
+Alessandro Conti, Enrico Fini, Massimiliano Mancini, Paolo Rota, Yiming Wang, and Elisa Ricci.
+Vocabulary-free image classification. In _NeurIPS_, 2024.
+
+
+Wenliang Dai, Junnan Li, Dongxu Li, Anthony Meng Huat Tiong, Junqi Zhao, Weisheng Wang,
+Boyang Li, Pascale Fung, and Steven Hoi. Instructblip: Towards general-purpose vision-language
+models with instruction tuning, 2023.
+
+
+Jia Deng, Wei Dong, Richard Socher, Li-Jia Li, Kai Li, and Li Fei-Fei. ImageNet: A large-scale
+hierarchical image database. In _CVPR_, 2009.
+
+
+Xiaoyi Dong, Jianmin Bao, Yinglin Zheng, Ting Zhang, Dongdong Chen, Hao Yang, Ming Zeng,
+Weiming Zhang, Lu Yuan, Dong Chen, Fang Wen, and Nenghai Yu. Maskclip: Masked selfdistillation advances contrastive language-image pretraining. In _Proceedings_ _of_ _the_ _IEEE/CVF_
+_Conference on Computer Vision and Pattern Recognition (CVPR)_, pp. 10995–11005, June 2023.
+
+
+Xiaoyi Dong, Pan Zhang, Yuhang Zang, Yuhang Cao, Bin Wang, Linke Ouyang, Xilin Wei,
+Songyang Zhang, Haodong Duan, Maosong Cao, et al. InternLM-XComposer2: Mastering freeform text-image composition and comprehension in vision-language large model. _arXiv preprint_
+_arXiv:2401.16420_, 2024.
+
+
+Yuxin Fang, Wen Wang, Binhui Xie, Quan Sun, Ledell Wu, Xinggang Wang, Tiejun Huang, Xinlong
+Wang, and Yue Cao. EVA: Exploring the limits of masked visual representation learning at scale.
+In _CVPR_, 2023.
+
+
+Li Fei-Fei, Rob Fergus, and Pietro Perona. Learning generative visual models from few training
+examples: An incremental bayesian approach tested on 101 object categories. In _CVPR workshop_,
+2004.
+
+
+Peng Gao, Shijie Geng, Renrui Zhang, Teli Ma, Rongyao Fang, Yongfeng Zhang, Hongsheng Li,
+and Yu Qiao. Clip-Adapter: Better vision-language models with feature adapters. _IJCV_, 2023.
+
+
+Michael Glass, Gaetano Rossiello, Md Faisal Mahbub Chowdhury, Ankita Rajaram Naik, Pengshan
+Cai, and Alfio Gliozzo. Re2g: Retrieve, rerank, generate. _arXiv preprint arXiv:2207.06300_, 2022.
+
+
+Xiuye Gu, Tsung-Yi Lin, Weicheng Kuo, and Yin Cui. Open-vocabulary object detection via vision
+and language knowledge distillation. In _ICLR_, 2022.
+
+
+Agrim Gupta, Piotr Dollar, and Ross Girshick. LVIS: A dataset for large vocabulary instance segmentation. In _CVPR_, 2019.
+
+
+Patrick Helber, Benjamin Bischke, Andreas Dengel, and Damian Borth. Eurosat: A novel dataset
+and deep learning benchmark for land use and land cover classification. _IEEE J. Sel. Top. Appl._
+_Earth Obs. Remote Sens._, 2019.
+
+
+Edward J Hu, Yelong Shen, Phillip Wallis, Zeyuan Allen-Zhu, Yuanzhi Li, Shean Wang, Lu Wang,
+and Weizhu Chen. LoRA: Low-rank adaptation of large language models. _arXiv_ _preprint_
+_arXiv:2106.09685_, 2021.
+
+
+11
+
+
+Chao Jia, Yinfei Yang, Ye Xia, Yi-Ting Chen, Zarana Parekh, Hieu Pham, Quoc Le, Yun-Hsuan
+Sung, Zhen Li, and Tom Duerig. Scaling up visual and vision-language representation learning
+with noisy text supervision. In _ICML_, 2021.
+
+
+Aditya Khosla, Nityananda Jayadevaprakash, Bangpeng Yao, and Fei-Fei Li. Novel dataset for
+fine-grained image categorization: Stanford dogs. In _CVPR workshop_, 2011.
+
+
+Jonathan Krause, Michael Stark, Jia Deng, and Li Fei-Fei. 3d object representations for fine-grained
+categorization. In _ICCV workshops_, 2013.
+
+
+Junnan Li, Dongxu Li, Caiming Xiong, and Steven Hoi. BLIP: Bootstrapping language-image pretraining for unified vision-language understanding and generation. In _ICML_, 2022a.
+
+
+Junnan Li, Dongxu Li, Silvio Savarese, and Steven Hoi. BLIP-2: Bootstrapping language-image
+pre-training with frozen image encoders and large language models. In _ICML_, 2023a.
+
+
+Liunian Harold Li, Pengchuan Zhang, Haotian Zhang, Jianwei Yang, Chunyuan Li, Yiwu Zhong,
+Lijuan Wang, Lu Yuan, Lei Zhang, Jenq-Neng Hwang, et al. Grounded language-image pretraining. In _CVPR_, 2022b.
+
+
+Shan Li, Weihong Deng, and JunPing Du. Reliable crowdsourcing and deep locality-preserving
+learning for expression recognition in the wild. In _CVPR_, 2017.
+
+
+Yanghao Li, Haoqi Fan, Ronghang Hu, Christoph Feichtenhofer, and Kaiming He. Scaling
+language-image pre-training via masking. In _Proceedings of the IEEE/CVF Conference on Com-_
+_puter Vision and Pattern Recognition (CVPR)_, pp. 23390–23400, June 2023b.
+
+
+Feng Liang, Bichen Wu, Xiaoliang Dai, Kunpeng Li, Yinan Zhao, Hang Zhang, Peizhao Zhang,
+Peter Vajda, and Diana Marculescu. Open-vocabulary semantic segmentation with mask-adapted
+clip. In _CVPR_, 2023.
+
+
+Haotian Liu, Chunyuan Li, Yuheng Li, and Yong Jae Lee. Improved baselines with visual instruction
+tuning. _arXiv preprint arXiv:2310.03744_, 2023.
+
+
+Haotian Liu, Chunyuan Li, Qingyang Wu, and Yong Jae Lee. Visual instruction tuning. In _NeurIPS_,
+2024a.
+
+
+Mingxuan Liu, Subhankar Roy, Wenjing Li, Zhun Zhong, Nicu Sebe, and Elisa Ricci. Democratizing fine-grained visual recognition with large language models. In _ICLR_, 2024b.
+
+
+Timo L¨uddecke and Alexander Ecker. Image segmentation using text and image prompts. In _Pro-_
+_ceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)_, pp.
+7086–7096, June 2022.
+
+
+Subhransu Maji, Esa Rahtu, Juho Kannala, Matthew Blaschko, and Andrea Vedaldi. Fine-grained
+visual classification of aircraft. _arXiv preprint arXiv:1306.5151_, 2013.
+
+
+Yu A Malkov and Dmitry A Yashunin. Efficient and robust approximate nearest neighbor search
+using hierarchical navigable small world graphs. _TPAMI_, 2018.
+
+
+George A Miller. WordNet: a lexical database for english. _Communications of the ACM_, 1995.
+
+
+Maria-Elena Nilsback and Andrew Zisserman. Automated flower classification over a large number
+of classes. In _ICVGIP_, 2008.
+
+
+OpenAI. GPT-4V(ision) system card, 2023. URL [https://openai.com/research/](https://openai.com/research/gpt-4v-system-card)
+[gpt-4v-system-card.](https://openai.com/research/gpt-4v-system-card)
+
+
+Omkar M Parkhi, Andrea Vedaldi, Andrew Zisserman, and CV Jawahar. Cats and dogs. In _CVPR_,
+2012.
+
+
+Zhiliang Peng, Wenhui Wang, Li Dong, Yaru Hao, Shaohan Huang, Shuming Ma, and Furu Wei.
+Kosmos-2: Grounding multimodal large language models to the world. _arXiv_, 2023.
+
+
+12
+
+
+Alec Radford, Jong Wook Kim, Chris Hallacy, Aditya Ramesh, Gabriel Goh, Sandhini Agarwal,
+Girish Sastry, Amanda Askell, Pamela Mishkin, Jack Clark, et al. Learning transferable visual
+models from natural language supervision. In _ICML_, 2021.
+
+
+Aleksandar Shtedritski, Christian Rupprecht, and Andrea Vedaldi. What does clip know about a red
+circle? visual prompt engineering for vlms. _arXiv preprint arXiv:2304.06712_, 2023.
+
+
+Khurram Soomro, Amir Roshan Zamir, and Mubarak Shah. UCF101: A dataset of 101 human
+actions classes from videos in the wild. _arXiv preprint arXiv:1212.0402_, 2012.
+
+
+Sanjay Subramanian, William Merrill, Trevor Darrell, Matt Gardner, Sameer Singh, and Anna
+Rohrbach. Reclip: A strong zero-shot baseline for referring expression comprehension. In _Pro-_
+_ceedings of the 60th Annual Meeting of the Association for Computational Linguistics (Volume 1:_
+_Long Papers)_, pp. 5198–5215, 2022.
+
+
+Quan Sun, Yuxin Fang, Ledell Wu, Xinlong Wang, and Yue Cao. Eva-clip: Improved training
+techniques for clip at scale. _arXiv preprint arXiv:2303.15389_, 2023a.
+
+
+Zeyi Sun, Ye Fang, Tong Wu, Pan Zhang, Yuhang Zang, Shu Kong, Yuanjun Xiong, Dahua Lin,
+and Jiaqi Wang. Alpha-CLIP: A clip model focusing on wherever you want. _arXiv_ _preprint_
+_arXiv:2312.03818_, 2023b.
+
+
+C. Wah, S. Branson, P. Welinder, P. Perona, and S. Belongie. Caltech-ucsd birds-200-2011. 2011.
+
+
+Jiaqi Wang, Pan Zhang, Tao Chu, Yuhang Cao, Yujie Zhou, Tong Wu, Bin Wang, Conghui He, and
+Dahua Lin. V3Det: Vast vocabulary visual detection dataset. In _ICCV_, 2023a.
+
+
+Weihan Wang, Qingsong Lv, Wenmeng Yu, Wenyi Hong, Ji Qi, Yan Wang, Junhui Ji, Zhuoyi Yang,
+Lei Zhao, Xixuan Song, Jiazheng Xu, Bin Xu, Juanzi Li, Yuxiao Dong, Ming Ding, and Jie Tang.
+Cogvlm: Visual expert for pretrained language models, 2023b.
+
+
+Wenhao Wu, Huanjin Yao, Mengxi Zhang, Yuxin Song, Wanli Ouyang, and Jingdong Wang.
+GPT4Vis: What can gpt-4 do for zero-shot visual recognition? _arXiv preprint arXiv:2311.15732_,
+2023.
+
+
+Jianxiong Xiao, James Hays, Krista A Ehinger, Aude Oliva, and Antonio Torralba. SUN database:
+Large-scale scene recognition from abbey to zoo. In _CVPR_, 2010.
+
+
+Xin Xu, Tianyi Xiong, Zheng Ding, and Zhuowen Tu. Masqclip for open-vocabulary universal
+image segmentation. In _Proceedings_ _of_ _the_ _IEEE/CVF_ _International_ _Conference_ _on_ _Computer_
+_Vision_, pp. 887–898, 2023.
+
+
+Haosen Yang, Chuofan Ma, Bin Wen, Yi Jiang, Zehuan Yuan, and Xiatian Zhu. Recognize any
+regions. _arXiv preprint arXiv:2311.01373_, 2023a.
+
+
+Lingfeng Yang, Yueze Wang, Xiang Li, Xinlong Wang, and Jian Yang. Fine-grained visual prompting, 2023b.
+
+
+Michihiro Yasunaga, Armen Aghajanyan, Weijia Shi, Rich James, Jure Leskovec, Percy Liang, Mike
+Lewis, Luke Zettlemoyer, and Wen-tau Yih. Retrieval-augmented multimodal language modeling.
+In _ICML_, 2023.
+
+
+Qinghao Ye, Haiyang Xu, Guohai Xu, Jiabo Ye, Ming Yan, Yiyang Zhou, Junyang Wang, Anwen
+Hu, Pengcheng Shi, Yaya Shi, et al. mplug-owl: Modularization empowers large language models
+with multimodality. _arXiv_, 2023.
+
+
+Yue Yu, Wei Ping, Zihan Liu, Boxin Wang, Jiaxuan You, Chao Zhang, Mohammad Shoeybi, and
+Bryan Catanzaro. Rankrag: Unifying context ranking with retrieval-augmented generation in
+llms. _ArXiv_, 2024.
+
+
+Yuhang Zang, Wei Li, Kaiyang Zhou, Chen Huang, and Chen Change Loy. Open-vocabulary detr
+with conditional matching. In _ECCV_, 2022.
+
+
+13
+
+
+Pan Zhang, Xiaoyi Dong Bin Wang, Yuhang Cao, Chao Xu, Linke Ouyang, Zhiyuan Zhao, Shuangrui Ding, Songyang Zhang, Haodong Duan, Hang Yan, et al. Internlm-Xcomposer: A visionlanguage large model for advanced text-image comprehension and composition. _arXiv_ _preprint_
+_arXiv:2309.15112_, 2023.
+
+
+Yiwu Zhong, Jianwei Yang, Pengchuan Zhang, Chunyuan Li, Noel Codella, Liunian Harold Li,
+Luowei Zhou, Xiyang Dai, Lu Yuan, Yin Li, et al. RegionCLIP: Region-based language-image
+pretraining. In _CVPR_, 2022.
+
+
+Kaiyang Zhou, Jingkang Yang, Chen Change Loy, and Ziwei Liu. Learning to prompt for visionlanguage models. _IJCV_, 2022a.
+
+
+Xingyi Zhou, Rohit Girdhar, Armand Joulin, Philipp Kr¨ahenb¨uhl, and Ishan Misra. Detecting
+twenty-thousand classes using image-level supervision. In _ECCV_, 2022b.
+
+
+Deyao Zhu, Jun Chen, Xiaoqian Shen, Xiang Li, and Mohamed Elhoseiny. MiniGPT-4: Enhancing vision-language understanding with advanced large language models. _arXiv_ _preprint_
+_arXiv:2304.10592_, 2023.
+
+
+14
+
+
+## **Appendix**
+
+
+In this appendix, we provide a series of detailed supporting materials to aid in a deeper understanding
+of our work. Firstly, in Sec. A, we introduce the fourteen image classification datasets involved in
+our experiments, including seven common datasets and seven fine-grained datasets, as well as two
+large-scale vocabulary detection datasets. Following that, in Sec. B, we provide detailed information
+on the prompts used in our RAR, as well as the prompts used in corresponding ablation studies.
+In Sec. C, we supplement details on the structure and experimental aspects of RAR, dividing the
+content into three sections: Fine-Grained Visual Recognition, Few-Shot Image Classification, and
+Zero-Shot Region Recognition.
+
+
+A DATASET STATISTICS
+
+
+In this section, we delve deeper into the specifics of the fourteen classification and two detection
+datasets employed in our research. The classification datasets encompass a wide range, from general
+categories that cover a broad spectrum of common objects to fine-grained types that focus on more
+specific, detailed distinctions within a particular category. The detection datasets, on the other hand,
+are extensive, encompassing tens of thousands of object categories. These datasets are designed to
+challenge the model’s ability to identify and categorize objects from a vast array of possible classes.
+The long-tail nature of these datasets poses a significant challenge for our RAR model.
+
+
+A.1 CLASSIFICATION DATASETS
+
+
+In the experimental part, we use a total of fourteen image classification datasets, including seven
+fine-grained classification datasets and seven common classification datasets. Fine-grained image
+classification datasets include: Bird-200 (Wah et al., 2011), Stanford Cars (Krause et al., 2013),
+Dog-120 (Khosla et al., 2011), Oxford Flowers (Nilsback & Zisserman, 2008), Oxford Pets (Parkhi
+et al., 2012), FGVC-Aircraft (Maji et al., 2013), and Food101 (Nilsback & Zisserman, 2008).
+Common image classification datasets include: ImageNet (Deng et al., 2009), Caltech101 (Fei-Fei
+et al., 2004), RAF-DB (Li et al., 2017), Sun397 (Xiao et al., 2010), Eurosat (Helber et al., 2019),
+DTD (Cimpoi et al., 2014), and UCF-101 (Soomro et al., 2012). We present all the utilized datasets
+in Fig. 6. And in Tab. 6, we list the statistics and sources of these datasets in detail.
+
+
+In our fine-grained visual recognition experiments, we employed the following datasets: Bird-200,
+Stanford Cars, Dog-120, Flowers-102, and Oxford pets. In each dataset, we selected 3 images from
+the training set to construct our memory and conducted tests on the corresponding validation sets.
+In our few-shot image classification experiments, we used the FGVC-Aircraft dataset to build finetune data and tested our RAR model across eleven classification datasets: Stanford Cars, Flower102, Oxford Pets, Food101, ImageNet, Caltech101, RAF-DB, Sun397, Eurosat, DTD, and UCF101. We selected either 4 or 8 images from the training set of each dataset to place into memory,
+corresponding to 4-shot and 8-shot settings, respectively, and conducted tests across all validation
+sets.
+
+
+A.2 DETECTION DATASETS
+
+
+In our Zero-Shot Region Recognition experiments, we utilized two large-scale vocabulary detection
+datasets, namely LVIS and V3Det. The LVIS dataset, developed by Facebook AI researchers, stands
+out with its extensive coverage, including 164,000 images and about 2,000,000 high-quality instance
+segmentation annotations that span over 1,000 object classes. This dataset is particularly notable for
+its long-tail distribution, which means it includes a large number of infrequent or rare object classes
+in addition to the common ones. This diversity challenges our model to recognize and differentiate
+between a wide array of objects, including those that are less common and hence more challenging
+to identify accurately.
+
+
+The V3Det dataset complements LVIS by offering an even broader scope. With its 245,000 images
+distributed across an impressive 13,204 categories, V3Det brings an unprecedented level of diversity to the table. The dataset includes 1,753,000 meticulously annotated bounding boxes, making it
+an invaluable resource for developing and testing detection algorithms capable of handling a wide
+
+
+15
+
+
+RAF-DB 7 Accuracy [RAF-DB website](http://www.whdeng.cn/raf/model1.html)
+Eurosat 10 Accuracy [Tensorflow](https://www.tensorflow.org/datasets/catalog/eurosat)
+DTD 47 Accuracy [Tensorflow](https://www.tensorflow.org/datasets/catalog/dtd)
+
+Few-Shot Im- FGVC Aircraft 100 Accuracy [FGVC website](https://www.robots.ox.ac.uk/~vgg/data/fgvc-aircraft/)
+age Recog. Caltech101 101 Accuracy [Tensorflow](https://www.tensorflow.org/datasets/catalog/caltech101)
+
+Food101 101 Accuracy [Tensorflow](https://www.tensorflow.org/datasets/catalog/food101)
+UCF-101 101 Accuracy [Tensorflow](https://www.tensorflow.org/datasets/catalog/ucf101)
+SUN397 397 Accuracy [Tensorflow](https://www.tensorflow.org/datasets/catalog/sun397)
+ImageNet 1000 Accuracy [Tensorfow](https://www.tensorflow.org/datasets/catalog/imagenet2012)
+
+Zero-Shot LVIS 1203 mAP [LVIS website](https://www.lvisdataset.org/)
+Region Recog. V3Det 13204 mAP [Github](https://github.com/V3Det)
+
+
+variety of object types. Its large number of categories ensures that the dataset has a comprehensive representation of the visual world, making it an ideal testing ground for our Zero-Shot Region
+Recognition experiments.
+
+
+B PROMPT FORMATS
+
+
+In this section, we delve into the detailed design of our prompts. We have crafted distinct prompts for
+various tasks to test the capabilities of the baseline model and our RAR model in visual recognition.
+
+
+In our RAR pipeline, the prompt primarily serves to merge the input image with the category information retrieved from memory. It guides MLLMs to rank the retrieved candidate object categories
+based on similarity. Our prompt format is as follows:
+
+
+Please play the role of a classification expert, and sort the provided
+categories from high to low according to the _{_ top-k _}_ similarity with the
+input image.Here are the optional categories: _{_ categories _}_ .
+
+
+Here, ‘ _{_ top-k _}_ ’ is replaced with the number of categories input. And ‘ _{_ categories _}_ ’ is replaced with
+the top-k categories retrieved from memory.
+
+
+Additionally, to assess the visual recognition and ranking capabilities of MLLMs themselves, we
+have prepared a prompt with examples to serve as input for the model. Our structured in-context
+learning prompt is as follows:
+
+
+16
+
+
+Figure 6: **Datsets** used in our experiments. We select 14 classification datasets (7 fine-grained and
+7 common) and 2 object detection datasets as our benchmarks.
+
+
+Table 6: Statistics for the classification and detection datasets used in our three settings: fine-grained
+visual recognition, few-shot image recognition, and zero-shot region recognition.
+
+
+Settings Dataset Categories Evaluation Metrics Source link
+
+
+Fine-Grained
+Visual Recog.
+
+
+Bird-200 200 cACC, sACC [Bird website](https://data.caltech.edu/records/65de6-vp158)
+Car-196 196 cACC, sACC [Kaggle](https://www.kaggle.com/datasets/jessicali9530/stanford-cars-dataset)
+Dog-120 120 cACC, sACC [Tensorflow](https://www.tensorflow.org/datasets/catalog/stanford_dogs)
+Flower-102 102 cACC, sACC [Tensorflow](https://www.tensorflow.org/datasets/catalog/oxford_flowers102)
+Pet-37 37 cACC, sACC [Tensorfow](https://www.tensorflow.org/datasets/catalog/oxford_iiit_pet)
+
+
+Figure 7: **GPT4V Example** for Stanford Cars and FGVC Aircraft. **Green** for ground truth, **blue** for
+characteristics analyzed by GPT-4V.
+
+
+Please play the role of a classification expert, and sort the provided
+categories from high to low according to the top 5 similarity with the
+input image.Here are the optional categories: _{_ categories _}_ .Your answer
+should follow the following format, like:[‘category A’, ‘category B’,
+‘category C’, ‘category D’, ‘category E’]. Only choose five categories,
+and no further information.
+
+
+When testing the RAR pipeline with MLLMs, ‘ _{_ categories _}_ ’ is replaced with all the category names
+of each dataset.
+
+
+C MORE IMPLEMENTED DETAILS AND EXPERIMENTS
+
+
+C.1 FINE-GRAINED VISUAL RECOGNITION
+
+
+In the fine-grained visual recognition section, we first evaluate our RAR on the setting defined in
+previous work (Liu et al., 2024b). For each category in the five datasets, we select three unlabeled
+images to form a 3-shot setting. Then, we extract embeddings using the CLIP B/16 model and store
+them in memory. The labels for each image correspond to the predictions in [31]. We then test the
+validation set using the RAR pipeline and measure the results with Clustering Accuracy (cACC) and
+Semantic Similarity (sACC).
+
+
+**Evaluation** **Metrics.** In the fine-grained visual recognition section, we use two synergistic metrics: Clustering Accuracy (cACC) and Semantic Similarity (sACC) to evaluate our method, following (Liu et al., 2024b). Clustering Accuracy (cACC) mainly assesses the accuracy of clustering
+images within the same category, without considering the semantic relatedness of category labels.
+Complementing this, Semantic Similarity (sACC) measures the similarity between the names of
+categories in the clusters and the ground truth.
+
+
+17
+
+
+18
+
+
+**1000**
+
+**1001**
+
+**1002**
+
+
+**1003**
+
+**1004**
+
+**1005**
+
+**1006**
+
+**1007**
+
+**1008**
+
+
+**1009**
+
+**1010**
+
+**1011**
+
+**1012**
+
+**1013**
+
+
+**1014**
+
+**1015**
+
+**1016**
+
+**1017**
+
+**1018**
+
+**1019**
+
+
+**1020**
+
+**1021**
+
+**1022**
+
+**1023**
+
+**1024**
+
+**1025**
+
+
+sification tests from 1-shot to 16-shot, tests for top-5 accuracy, and we have further expanded our
+memory to explore the potential capabilities of RAR.
+
+
+**More** **Discussion** **about** **Motivation.** In the field of image classification, especially when facing
+the challenges of fine-grained image categorization, can MLLMs prove competent and effective?
+To further explore the potential of MLLMs in image classification tasks, we employed the GPT-4V
+
+
+19
+
+
+**1026**
+
+**1027**
+
+
+**1028**
+
+**1029**
+
+**1030**
+
+**1031**
+
+**1032**
+
+**1033**
+
+
+**1034**
+
+**1035**
+
+**1036**
+
+**1037**
+
+**1038**
+
+**1039**
+
+
+**1040**
+
+**1041**
+
+**1042**
+
+**1043**
+
+**1044**
+
+
+**1045**
+
+**1046**
+
+**1047**
+
+**1048**
+
+**1049**
+
+**1050**
+
+
+**1051**
+
+**1052**
+
+**1053**
+
+**1054**
+
+**1055**
+
+**1056**
+
+
+**1057**
+
+**1058**
+
+**1059**
+
+**1060**
+
+**1061**
+
+**1062**
+
+
+**1063**
+
+**1064**
+
+**1065**
+
+**1066**
+
+**1067**
+
+
+**1068**
+
+**1069**
+
+**1070**
+
+**1071**
+
+**1072**
+
+**1073**
+
+
+**1074**
+
+**1075**
+
+**1076**
+
+**1077**
+
+**1078**
+
+**1079**
+
+
+Table 8: Evaluation on 11 datasets, reporting the top-5 accuracy. We use the 4-shot setting.
+
+Method Common Fine-Grained
+
+
+Table 9: Evaluation on 11 datasets, reporting the top-1 accuracy. The GPT4V (OpenAI, 2023) results are
+copied from (Wu et al., 2023).
+
+
+Method Common Fine-Grained
+
+
+model to test selected images from our fine-grained datasets. Initially, we used the CLIP+KNN
+method to select 5 candidate images and their categories for a single image, ensuring that these
+candidates are at the top-5 in similarity among all images in memory, thus guaranteeing minimal
+differences between the chosen categories. Additionally, we intentionally selected examples that
+CLIP failed to classify correctly, increasing the complexity of the task. Subsequently, we presented
+these images and categories to GPT-4V, utilizing the prompt described in Sec. B, prompting GPT-4V
+to rank all categories by similarity. During this process, we also requested GPT-4V to provide the
+rationale for its classifications, allowing us to analyze the specific role of MLLMs in classification
+tasks based on the reasons provided by GPT-4V. Fig. 13 and Fig. 8 presents several examples of five
+fine-grained classification datasets.
+
+
+From the examples in Fig. 13 and Fig. 8, it is evident that GPT-4V is capable of effectively analyzing
+the main feature information of objects in images during fine-grained image classification tasks.
+For instance, it identifies key characteristics such as “ **coupe** ” (a two-door car), “ **long** **fuselage** ”
+(long body of an aircraft), and “ **prominent ears** ” (noticeably protruding ears), which are crucial for
+distinguishing between similar categories. Sometimes, these detailed aspects may be overlooked by
+the CLIP model, leading to classification errors. Therefore, adopting a method of initial retrieval
+followed by deeper analysis, firstly filtering through the numerous fine-grained categories and then
+using MLLMs for further examination to select the most accurate answer, proves to be an effective
+approach for fine-grained image classification tasks.
+
+
+Simultaneously, we assessed CLIP’s accuracy in handling a variety of classification datasets. We
+selected six datasets: Caltech101, Flower102, RAF-DB, Pets37, DTD, and UCF101, and tested the
+CLIP+KNN method for top 1, 5, 10, 15, and 20 accuracy, with results presented in Fig. 9. We
+observed that as the top-k value increased, the classification accuracy improved rapidly, reaching
+over 90% in four of the six datasets when top-k reached 10. This indicates that CLIP shows significant advantages as the number of predicted categories increases, complementing MLLMs’ ability to
+discern among similar categories.
+
+
+20
+
+
+**1080**
+
+**1081**
+
+
+**1082**
+
+**1083**
+
+**1084**
+
+**1085**
+
+**1086**
+
+**1087**
+
+
+**1088**
+
+**1089**
+
+**1090**
+
+**1091**
+
+**1092**
+
+**1093**
+
+
+**1094**
+
+**1095**
+
+**1096**
+
+**1097**
+
+**1098**
+
+
+**1099**
+
+**1100**
+
+**1101**
+
+**1102**
+
+**1103**
+
+**1104**
+
+
+**1105**
+
+**1106**
+
+**1107**
+
+**1108**
+
+**1109**
+
+**1110**
+
+
+**1111**
+
+**1112**
+
+**1113**
+
+**1114**
+
+**1115**
+
+**1116**
+
+
+**1117**
+
+**1118**
+
+**1119**
+
+**1120**
+
+**1121**
+
+
+**1122**
+
+**1123**
+
+**1124**
+
+**1125**
+
+**1126**
+
+**1127**
+
+
+**1128**
+
+**1129**
+
+**1130**
+
+**1131**
+
+**1132**
+
+**1133**
+
+
+Table 10: Evaluation on 11 datasets, reporting the top-1 accuracy. We use the CLIP ViT-L/14@336 as feature
+extractor and RAR is based on LLaVA 1.5.
+
+Method Common Fine-Grained
+
+
+Following the experimental design in Fig. 9, we used MLLMs to rank categories when expanding
+the number of categories. We chose two datasets, Caltech101 and Flowers102, and used 10, 15, 20,
+25, 30 categories as input to MLLMs, ensuring these included the correct category. As shown in
+Fig. 10, the distinction ability of MLLMs gradually decreased as the number of categories input into
+MLLMs increased.
+
+
+Hence, we found that MLLMs and CLIP have complementary advantages in classification tasks.
+CLIP initially narrows down the correct answer to a smaller set through preliminary screening,
+while MLLMs can finely select the correct answer from this set. Our RAR combines the strengths
+of both CLIP and MLLMs, first finding likely correct candidates through CLIP and retrieval, and
+then accurately selecting the correct answer through MLLMs’ ranking, thus achieving outstanding
+results across multiple classification datasets.
+
+
+**More** **Evaluation** **Results.** In our few-shot image classification experiments, we employed the
+CLIP B/16 model to extract embeddings from n images in each category, which were then stored in
+memory for testing the accuracy of n-shot experiments. To accelerate retrieval speed, we initially
+use the HNSW algorithm to transform the original 576-dimensional vectors into 64-dimensional
+indices before storing the image embeddings in memory. HNSW is a commonly used Approximate
+Nearest Neighbor (ANN) algorithm, primarily aimed at quickly finding the k nearest elements to
+a query in a large set of candidates. To demonstrate the effectiveness of our method, we included
+results from 1-shot, 2-shot, and 16-shot experiments in the supplementary materials, alongside the
+results of 4-shot and 8-shot experiments, all of which are presented in Tab. 7.
+
+
+From the 1-shot to 16-shot experiments, RAR’s results showed an improvement over the
+CLIP+KNN method by **7.4%**, **6.8%**, **6.2%**, **6.8%**, and **6.3%** respectively, averaging a **6.7%** percentage point increase, and significantly outperforming the performance of the LLaVa model itself. This outcome demonstrates the excellence of RAR in image classification tasks (including
+fine-grained image classification), achieved by integrating the strengths of MLLMs and retrieval
+techniques.
+
+
+**Top-5 Accuracy Results.** Moreover, in the experiments conducted for our paper, we selected the top
+5 retrieved results for ranking. To test the scalability of this method, we conducted a new experiment
+using the top 10 retrieved results, ranking these ten categories and then assessing the accuracy of the
+top 5. In this experiment, we utilized a 4-shot setting, the result is shown in Tab. 8.
+
+
+21
+
+
+Table 11: **Ablation studies** about the selection of the hyper-parameter _k_ .
+
+
+**1134**
+
+**1135**
+
+
+**1136**
+
+**1137**
+
+**1138**
+
+**1139**
+
+**1140**
+
+**1141**
+
+
+**1142**
+
+**1143**
+
+**1144**
+
+**1145**
+
+**1146**
+
+**1147**
+
+
+**1172**
+
+**1173**
+
+**1174**
+
+**1175**
+
+
+**1176**
+
+**1177**
+
+**1178**
+
+**1179**
+
+**1180**
+
+**1181**
+
+
+**1182**
+
+**1183**
+
+**1184**
+
+**1185**
+
+**1186**
+
+**1187**
+
+
+Table 12: **Cropping ablation of CLIP (Radford et al., 2021) zero-shot classification** on LVIS (Gupta et al.,
+2019) with ground truth proposals. Different behaviors can be seen before and after blurring with respect to
+
+|different object scales.|Col2|
+|---|---|
+|Crop scale<br>Blurring|1.0<br>1.2<br>1.4<br>1.6<br>1.8<br>2.0<br>2.2<br>2.4<br>2.6<br>2.8<br>3.0|
+|AP<br>✗<br>46.7<br>**47.0**<br>46.6<br>46.4<br>43.4<br>43.0<br>40.9<br>40.7<br>37.7<br>37.1<br>36.2<br>✓<br>47.9<br>51.3<br>52.2<br>**53.9**<br>53.3<br>52.9<br>52.6<br>51.8<br>51.2<br>50.3<br>49.8|46.7<br>**47.0**<br>46.6<br>46.4<br>43.4<br>43.0<br>40.9<br>40.7<br>37.7<br>37.1<br>36.2|
+|AP<br>✗<br>46.7<br>**47.0**<br>46.6<br>46.4<br>43.4<br>43.0<br>40.9<br>40.7<br>37.7<br>37.1<br>36.2<br>✓<br>47.9<br>51.3<br>52.2<br>**53.9**<br>53.3<br>52.9<br>52.6<br>51.8<br>51.2<br>50.3<br>49.8|47.9<br>51.3<br>52.2<br>**53.9**<br>53.3<br>52.9<br>52.6<br>51.8<br>51.2<br>50.3<br>49.8|
+|APs<br>✗<br>39.5<br>40.9<br>44.6<br>**44.8**<br>44.4<br>44.2<br>42.9<br>43.3<br>41.2<br>40.5<br>39.8<br>✓<br>33.6<br>35.2<br>41.4<br>43.2<br>45.6<br>46.3<br>46.7<br>46.9<br>**47.4**<br>47.4<br>47.3|39.5<br>40.9<br>44.6<br>**44.8**<br>44.4<br>44.2<br>42.9<br>43.3<br>41.2<br>40.5<br>39.8|
+|APs<br>✗<br>39.5<br>40.9<br>44.6<br>**44.8**<br>44.4<br>44.2<br>42.9<br>43.3<br>41.2<br>40.5<br>39.8<br>✓<br>33.6<br>35.2<br>41.4<br>43.2<br>45.6<br>46.3<br>46.7<br>46.9<br>**47.4**<br>47.4<br>47.3|33.6<br>35.2<br>41.4<br>43.2<br>45.6<br>46.3<br>46.7<br>46.9<br>**47.4**<br>47.4<br>47.3|
+|APm<br>✗<br>**61.5**<br>61.3<br>56.4<br>55.2<br>49.5<br>48.6<br>44.4<br>43.7<br>39.9<br>39.0<br>38.5<br>✓<br>63.5<br>64.2<br>66.1<br>**68.3**<br>65.2<br>64.2<br>63.4<br>62.2<br>61.0<br>59.2<br>58.6|**61.5**<br>61.3<br>56.4<br>55.2<br>49.5<br>48.6<br>44.4<br>43.7<br>39.9<br>39.0<br>38.5|
+|APm<br>✗<br>**61.5**<br>61.3<br>56.4<br>55.2<br>49.5<br>48.6<br>44.4<br>43.7<br>39.9<br>39.0<br>38.5<br>✓<br>63.5<br>64.2<br>66.1<br>**68.3**<br>65.2<br>64.2<br>63.4<br>62.2<br>61.0<br>59.2<br>58.6|63.5<br>64.2<br>66.1<br>**68.3**<br>65.2<br>64.2<br>63.4<br>62.2<br>61.0<br>59.2<br>58.6|
+|APl<br>✗<br>**59.1**<br>57.2<br>51.1<br>50.1<br>45.6<br>44.4<br>41.4<br>40.9<br>38.0<br>37.8<br>37.2<br>✓<br>**72.4**<br>71.3<br>69.5<br>69.6<br>67.0<br>65.2<br>62.9<br>60.7<br>59.6<br>57.4<br>55.2|**59.1**<br>57.2<br>51.1<br>50.1<br>45.6<br>44.4<br>41.4<br>40.9<br>38.0<br>37.8<br>37.2|
+|APl<br>✗<br>**59.1**<br>57.2<br>51.1<br>50.1<br>45.6<br>44.4<br>41.4<br>40.9<br>38.0<br>37.8<br>37.2<br>✓<br>**72.4**<br>71.3<br>69.5<br>69.6<br>67.0<br>65.2<br>62.9<br>60.7<br>59.6<br>57.4<br>55.2|**72.4**<br>71.3<br>69.5<br>69.6<br>67.0<br>65.2<br>62.9<br>60.7<br>59.6<br>57.4<br>55.2|
+
+
+Figure 11: **Metric curve visualization of CLIP (Radford et al., 2021) zero-shot classification** on
+LVIS (Gupta et al., 2019) with ground truth proposals. Different behaviors can be seen before and
+after blurring with respect to different object’s scales.
+
+
+The final results demonstrate that although the top 5 accuracy achieved by CLIP+KNN was already
+high, our RAR method still managed to make comprehensive improvements on this basis. The
+average top 5 accuracy across eleven datasets increased by **1.3** %.
+
+
+**Extension** **to** **the** **whole** **Training** **Set.** To further explore the potential of RAR, we expanded the
+memory size to include all images from the training set stored in memory. We then compared the
+performance of RAR under this setup with that of GPT-4V across multiple image classification
+datasets. The results are presented in Tab. 9.
+
+
+The results in Tab. 9 show that, regardless of whether the base model is LLaVa, Intern-IXC2, or
+Qwen-VL, RAR significantly outperforms GPT-4V in terms of accuracy. Across eleven datasets,
+the average precision of RAR exceeds that of GPT-4V by 12.5 percentage points. It is observed that
+even 7B MLLMs, when integrated into the RAR pipeline, far surpass the classification capabilities
+of GPT-4V across multiple image classification datasets.
+
+
+22
+
+
+**1188**
+
+**1189**
+
+
+**1190**
+
+**1191**
+
+**1192**
+
+**1193**
+
+**1194**
+
+**1195**
+
+
+**1196**
+
+**1197**
+
+**1198**
+
+**1199**
+
+**1200**
+
+**1201**
+
+
+**1202**
+
+**1203**
+
+**1204**
+
+**1205**
+
+**1206**
+
+
+**1207**
+
+**1208**
+
+**1209**
+
+**1210**
+
+**1211**
+
+**1212**
+
+
+**1213**
+
+**1214**
+
+**1215**
+
+**1216**
+
+**1217**
+
+**1218**
+
+
+**1219**
+
+**1220**
+
+**1221**
+
+**1222**
+
+**1223**
+
+**1224**
+
+
+**1225**
+
+**1226**
+
+**1227**
+
+**1228**
+
+**1229**
+
+
+**1230**
+
+**1231**
+
+**1232**
+
+**1233**
+
+**1234**
+
+**1235**
+
+
+**1236**
+
+**1237**
+
+**1238**
+
+**1239**
+
+**1240**
+
+**1241**
+
+
+767-400 747-400 767-400 757-300 A319
+
+
+**Answer:** ['757-300', '767-400', '747-400', '767-400', 'A319']
+
+
+**Question：** The above is an example of a ranking. _**Please explain the reason for your ranking results(Answer).**_
+
+
+**Answer:** In the given image, there is a large commercial airplane parked on the runway. The image is described as a
+Delta airplane, which is a specific type of aircraft. The categories provided are related to different types of
+airplanes, including the Delta airplane.
+
+
+To sort the categories from high to low according to the top 5 similarity with the input image, we need to consider
+the visual features of the airplane and the categories. In this case, the Delta airplane is a large commercial airplane,
+which is a specific type of aircraft. The categories related to other types of airplanes, such as the 767-400, 747400, 757-300, and A319, are not as similar to the Delta airplane as the categories related to other Delta airplanes,
+such as the 767-400 and 757-300. Therefore, the categories related to other types of airplanes should be ranked
+lower than the categories related to the Delta airplane.
+
+
+The sorted categories are: ['757-300', '767-400', '747-400', '767-400', 'A319'], which reflects the similarity
+between the input image and the categories related to the Delta airplane.
+
+
+Figure 12: **Interpretability.** Our model provides interpretability for the ranking process.
+
+
+**More** **Feature** **Extractor** **results.** In the few-shot image classification experiment, we primarily
+used the CLIP-B/16. To verify the generalization capability of the method, we conducted experiments using the more powerful CLIP ViT-L/14@336 as the feature extractor. The results, as shown
+in Tab. 10, demonstrate that RAR still consistently outperforms the baseline.
+
+
+**Ablation Study on Effects of the Parameter** _k_ **.** We delve into the impact of the hyper-parameter _k_
+on few-shot image recognition setting, as detailed in Tab. 13. We report the results of RAR with the
+LLaVA1.5 as the MLLM. Our findings reveal that our RAR demonstrates a remarkable robustness
+to variations in _k_, with only minor differences observed across a broad spectrum of values from
+3 to 7. Such a consistency suggests that RAR’s ability to generalize from a few examples is not
+significantly influenced by the choice of _k_ . Consequently, based on the averaged results, we select
+_k_ = 5 as the default choice.
+
+
+C.3 ZERO-SHOT REGION RECOGNITION
+
+
+We carefully study how to adapt CLIP and MLLMs pretrained on full images to region-level recognition tasks. Zero-shot LVIS (Gupta et al., 2019) AP metric under different crop scales and object
+scales are reported in Fig. 11 and Tab. 12. Based on this experiment, we conclude with two major
+observations: Firstly, a proper amount of blurring can significantly improve classification accuracy.
+This trick can help leave enough context information while keeping the foreground object prominent. Secondly, for objects with different scales, different crop scales should be adapted to maximize
+classification accuracy. As shown in Fig. 11, after blurring, Different object scale AP curves behave
+differently with respect to crop scale. We contribute this phenomenon to the resolution shift of CLIP
+input images. Therefore, we make two adaptations for CLIP and MLLMs for region-level recognition: Gaussian blurring and adaptive crop scale. We adopt the hyperparameters of these two tricks
+on the LVIS training set and find these adaptions not only fit for the LVIS validation set but also
+other detection datasets like V3Det (Wang et al., 2023a).
+
+
+23
+
+
+Input Category：757-300
+
+
+**Question：** Please play the role of a classification expert, suppose you are given a
+picture and 5 categories, then you need to sort the provided 5 categories from
+high to low according to the top 5 similarity with the input image.
+For example, you are given a picture of a chair, and the provided categories are
+
+['armchair', 'recliner', 'chair', 'rocking_chair', 'loveseat'], the sorted categories
+should be like: "['chair', 'armchair', 'rocking_chair', 'recliner', 'loveseat']", and
+your answer is: "['chair', 'armchair', 'rocking_chair', 'recliner', 'loveseat']", no
+more information.
+Now, according to the input pictures, sort the provided categories: ['767-400',
+'747-400', '767-400', '757-300', 'A319'].
+
+
+**1242**
+
+**1243**
+
+
+**1244**
+
+**1245**
+
+**1246**
+
+**1247**
+
+**1248**
+
+**1249**
+
+
+**1250**
+
+**1251**
+
+**1252**
+
+**1253**
+
+**1254**
+
+**1255**
+
+
+**1256**
+
+**1257**
+
+**1258**
+
+**1259**
+
+**1260**
+
+
+**1261**
+
+**1262**
+
+**1263**
+
+**1264**
+
+**1265**
+
+**1266**
+
+
+**1267**
+
+**1268**
+
+**1269**
+
+**1270**
+
+**1271**
+
+**1272**
+
+
+**1273**
+
+**1274**
+
+**1275**
+
+**1276**
+
+**1277**
+
+**1278**
+
+
+**1279**
+
+**1280**
+
+**1281**
+
+**1282**
+
+**1283**
+
+
+**1284**
+
+**1285**
+
+**1286**
+
+**1287**
+
+**1288**
+
+**1289**
+
+
+**1290**
+
+**1291**
+
+**1292**
+
+**1293**
+
+**1294**
+
+**1295**
+
+
+|DTD Flowers102 Oxford-pets Eurosat Average<br>LLaVa baseline 46.6 13.2 28.9 48.2 34.2<br>CLIP+KNN baseline 68.4 95.5 75.6 90.5 82.5<br>RAR (k = 3) 70.3 96.2 80.2 92.4 84.8<br>RAR (k = 4) 71.3 95.6 80.4 92.5 85.0<br>RAR (k = 5) 71.9 95.6 79.9 93.3 85.2<br>RAR (k = 6) 71.9 95.7 79.7 92.5 85.0<br>RAR (k = 7) 72.0 95.6 79.4 92.6 84.9<br>Upper bound 89.0 99.2 97.0 98.3 95.8|DTD Flowers102 Oxford-pets Eurosat|Average|
+|---|---|---|
+|DTD<br>Flowers102<br>Oxford-pets<br>Eurosat<br>Average<br>LLaVa baseline<br>46.6<br>13.2<br>28.9<br>48.2<br>34.2<br>CLIP+KNN baseline<br>68.4<br>95.5<br>75.6<br>90.5<br>82.5<br>RAR (_k_ = 3)<br>70.3<br>96.2<br>80.2<br>92.4<br>84.8<br>RAR (_k_ = 4)<br>71.3<br>95.6<br>**80.4**<br>92.5<br>85.0<br>RAR (_k_ = 5)<br>71.9<br>95.6<br>79.9<br>**93.3**<br>**85.2**<br>RAR (_k_ = 6)<br>71.9<br>**95.7**<br>79.7<br>92.5<br>85.0<br>RAR (_k_ = 7)<br>**72.0**<br>95.6<br>79.4<br>92.6<br>84.9<br>Upper bound<br>89.0<br>99.2<br>97.0<br>98.3<br>95.8|46.6<br>13.2<br>28.9<br>48.2<br>68.4<br>95.5<br>75.6<br>90.5|34.2<br>82.5|
+|DTD<br>Flowers102<br>Oxford-pets<br>Eurosat<br>Average<br>LLaVa baseline<br>46.6<br>13.2<br>28.9<br>48.2<br>34.2<br>CLIP+KNN baseline<br>68.4<br>95.5<br>75.6<br>90.5<br>82.5<br>RAR (_k_ = 3)<br>70.3<br>96.2<br>80.2<br>92.4<br>84.8<br>RAR (_k_ = 4)<br>71.3<br>95.6<br>**80.4**<br>92.5<br>85.0<br>RAR (_k_ = 5)<br>71.9<br>95.6<br>79.9<br>**93.3**<br>**85.2**<br>RAR (_k_ = 6)<br>71.9<br>**95.7**<br>79.7<br>92.5<br>85.0<br>RAR (_k_ = 7)<br>**72.0**<br>95.6<br>79.4<br>92.6<br>84.9<br>Upper bound<br>89.0<br>99.2<br>97.0<br>98.3<br>95.8|70.3<br>96.2<br>80.2<br>92.4<br>71.3<br>95.6<br>**80.4**<br>92.5<br>71.9<br>95.6<br>79.9<br>**93.3**<br>71.9<br>**95.7**<br>79.7<br>92.5<br>**72.0**<br>95.6<br>79.4<br>92.6|84.8<br>85.0<br>**85.2**<br>85.0<br>84.9|
+|DTD<br>Flowers102<br>Oxford-pets<br>Eurosat<br>Average<br>LLaVa baseline<br>46.6<br>13.2<br>28.9<br>48.2<br>34.2<br>CLIP+KNN baseline<br>68.4<br>95.5<br>75.6<br>90.5<br>82.5<br>RAR (_k_ = 3)<br>70.3<br>96.2<br>80.2<br>92.4<br>84.8<br>RAR (_k_ = 4)<br>71.3<br>95.6<br>**80.4**<br>92.5<br>85.0<br>RAR (_k_ = 5)<br>71.9<br>95.6<br>79.9<br>**93.3**<br>**85.2**<br>RAR (_k_ = 6)<br>71.9<br>**95.7**<br>79.7<br>92.5<br>85.0<br>RAR (_k_ = 7)<br>**72.0**<br>95.6<br>79.4<br>92.6<br>84.9<br>Upper bound<br>89.0<br>99.2<br>97.0<br>98.3<br>95.8|89.0<br>99.2<br>97.0<br>98.3|95.8|
+
+
+EMB-120 DHC-8-300 Embraer Legacy 600 DHC-8-100 Cessna 525
+
+
+**Answer：** [‘DHC-8-300’, ’DHC-8-100’, ’EMB-120’, ’Embraer Legacy 600’, ’Cessna 525’]
+
+MLLM tends to make errors when encountering categories beyond its knowledge scope.
+
+
+Figure 13: **Error Analysis.** RAR is prone to errors in the following two scenarios: 1. The differences in fine-grained categories are so subtle that even the results retrieved by CLIP are all incorrect.
+2. MLLM tends to make errors when encountering categories beyond its knowledge scope.
+
+
+24
+
+
+Table 13: **Limitation Study.** We present
+the baselines of LLaVa and CLIP, as
+well as the upper limit of the model and
+RAR’s results under different k values.
+
+
+Input Category：CRJ-700
+
+Retrieved Category:
+
+
+**Question：** Please play the role of a classification expert, suppose you are given a
+picture and 5 categories, then you need to sort the provided 5 categories from
+high to low according to the top 5 similarity with the input image.
+For example, you are given a picture of a chair, and the provided categories are
+
+['armchair', 'recliner', 'chair', 'rocking_chair', 'loveseat'], the sorted categories
+should be like: "['chair', 'armchair', 'rocking_chair', 'recliner', 'loveseat']", and
+your answer is: "['chair', 'armchair', 'rocking_chair', 'recliner', 'loveseat']", no
+more information.
+Now, according to the input pictures, sort the provided categories: ['Global
+Express', 'ERJ 145', 'ERJ 135', 'Global Express', 'Falcon 2000'].
+
+
+Global Express ERJ 145 ERJ 135 Global Express Falcon 2000
+
+The differences in fine-grained categories are so subtle that even the results retrieved by CLIP are all incorrect.
+
+
+Input Category：DHC-8-100
+
+
+Retrieved Category:
+
+
+**Question：** Please play the role of a classification expert, suppose you are given a
+picture and 5 categories, then you need to sort the provided 5 categories from
+high to low according to the top 5 similarity with the input image.
+For example, you are given a picture of a chair, and the provided categories are
+
+['armchair', 'recliner', 'chair', 'rocking_chair', 'loveseat'], the sorted categories
+should be like: "['chair', 'armchair', 'rocking_chair', 'recliner', 'loveseat']", and
+your answer is: "['chair', 'armchair', 'rocking_chair', 'recliner', 'loveseat']", no
+more information.
+Now, according to the input pictures, sort the provided categories: ['EMB-120',
+'DHC-8-300', 'Embraer Legacy 600', 'DHC-8-100', 'Cessna 525'].

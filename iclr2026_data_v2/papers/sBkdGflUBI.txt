@@ -1,0 +1,1159 @@
+# TEMPORAL REASONING WITH LARGE LANGUAGE MODELS AUGMENTED BY EVOLVING KNOWLEDGE GRAPHS
+
+
+**Anonymous authors**
+Paper under double-blind review
+
+
+ABSTRACT
+
+
+Large language models (LLMs) demonstrate impressive capability in natural language understanding, yet they remain limited when reasoning over knowledge that
+evolves. A common remedy is to augment LLMs with knowledge graphs (KGs),
+which provide structured access to factual information. However, most existing
+approaches rely on a static snapshot of the KG and fail to account for temporal
+evolution and conflicting updates that naturally arise in real-world knowledge. To
+address these challenges, we present **EVOREASONER**, a temporal-aware multihop reasoning algorithm that integrates global-local entity grounding, multi-route
+decomposition, and time-sensitive scoring to support robust inference. Complementing this, we introduce **EVOKG**, a noise-resilient graph evolution module that
+continuously updates the KG from unstructured documents using confidence-aware
+contradiction handling and temporal trend tracking. We evaluate our framework on
+temporal QA benchmarks and a new end-to-end setting where the KG is dynamically updated from raw text. Our method consistently surpasses prompting-only
+and static/dynamic KG-augmented baselines, and notably enables an 8B-parameter
+model to achieve accuracy on par with a 671B model trained seven months later.
+These findings underscore the necessity of unifying temporal reasoning with KG
+evolution to ensure LLMs remain accurate and up-to-date. Our code and data are
+[released at anonymous.4open.science/r/TREK-434C.](https://anonymous.4open.science/r/TREK-434C)
+
+
+1 INTRODUCTION
+
+
+Recent years have seen growing interest in combining large language models (LLMs) with knowledge
+graphs (KGs) to improve factual reasoning and knowledge coverage (Pan et al., 2024; Kau et al.,
+2024). Generally, this line of research aims to address a core limitation of LLMs: they are trained on
+static corpora and struggle to adapt to emerging knowledge efficiently. By interacting with structured
+KGs and utilizing their knowledge, LLMs can better handle complex reasoning tasks and answer
+queries involving up-to-date or structured knowledge (Wang et al., 2024; Ji et al., 2023).
+
+
+Despite these advances, many existing KG-augmented approaches (Sun et al., 2024; Chen et al., 2024; LUO et al., 2024;
+Wang et al., 2025) rely on a _static_ _snapshot_ _of_ _the_ _KG_ (e.g.,
+a downloaded dump of Freebase (Bollacker et al., 2008) and
+Wikidata (Vrandeˇci´c & Krötzsch, 2014)), overlooking the _tem-_
+_poral_ _dynamics_ of evolving knowledge and factual noise inherent in real-world knowledge. Temporal metadata is often
+treated as auxiliary information rather than a core signal for
+inference (Chen et al., 2022; Yang et al., 2024b). To highlight
+these limitations in scenarios involving temporally evolving or
+
+Figure 1: Question answering per
+shifting information, we analyze a question answering (QA)
+
+formance grouped by the required
+
+benchmark (Yang et al., 2024c) in which queries require rea
+knowledge types.
+
+soning over either slowly or rapidly changing facts (Figure 1).
+The results show the following. (1) For questions involving **slow-changing facts**, prompting-based
+method (e.g., IO Prompt (Brown et al., 2020)) performs well, as internal model knowledge is often
+sufficient; in contrast, static-graph reasoning methods like Plan-on-Graph (PoG) (Chen et al., 2024)
+
+
+1
+
+
+can be hindered by noisy or contradictory facts from the evolving KG. (2) For questions involving
+**fast-changing facts**, LLMs struggle due to outdated internal knowledge, and while PoG benefits
+from explicit KG updates, its lack of temporal awareness yields only limited improvements. This
+underscores the need for a framework such as our EVOREASONER, which is explicitly designed to
+reason over evolving knowledge.
+
+
+These limitations stem from two challenges underlying knowledge evolution. First, KG facts subject
+to _exclusivity_ constraints (e.g., birth date, primary affiliation) can be contradicted by newly added or
+conflicting information during updates. This necessitates _robust contradiction resolution_ strategies
+that account for context, source reliability, and temporal cues, rather than treating all assertions as
+equally valid. Second, _non-exclusive_ facts (e.g, jobs, events) naturally evolve over time, yet existing
+methods frequently overlook temporal ordering, limiting their effectiveness on time-sensitive queries.
+
+
+Nevertheless, addressing these challenges demands more than improved reasoning: it requires
+a unified solution that _jointly_ performs temporal reasoning and maintains a consistent, evolving
+knowledge graph. We propose a unified framework that integrates a multi-hop temporal reasoning
+algorithm with a temporal-aware, noise-tolerant KG evolution mechanism (illustrated in Figure 2).
+Unlike prior works that treat KG retrieval as a static augmentation layer, our approach tightly couples
+temporal reasoning with dynamic KG construction and updates. It consists of two key components: (i)
+**EVOREASONER**, a temporal multi-hop reasoning algorithm that performs multi-route decomposition,
+global-local entity grounding, and temporal-aware scoring; and (ii) **EVOKG**, a noise-resilient KG
+evolution method that constructs and updates the graph from unstructured documents. EVOKG
+applies confidence-based contradiction resolution and temporal trend tracking to maintain robustness
+and consistency over time.
+
+
+We experimentally evaluate EVOREASONER on temporal question answering (QA) benchmarks
+and a novel end-to-end setting where EVOKG dynamically updates the KG from raw documents.
+By integrating missing or updated facts, our framework significantly enhances LLM reasoning,
+outperforming state-of-the-art static/dynamic KG and LLM-only methods with accuracy gains of up
+to **14.0%** in temporal reasoning and **8%** in evolving KG tasks. Notably, our approach **closes the**
+**gap between small and large models** . For example, a compact LLaMA 3.1–8B (Grattafiori et al.,
+2024) model, trained in December 2023 and run on a single consumer GPU, improves accuracy from
+**18.6** to **37.0%** after KG updates, comparable to directly prompting a much larger 671B DeepSeekV3 (Liu et al., 2024) model (38.3% accuracy) trained seven months later. This further highlights the
+effectiveness of our proposed EVOKG framework in improving the reasoning accuracy of LLMs.
+
+
+Our contributions can be summarized as follows:
+
+
+ - **Temporal reasoning method.** We introduce EVOREASONER, the first method that combines
+multi-route decomposition, context-informed global initalization, and temporal-aware local
+exploration to enhance LLM reasoning over evolving knowledge graphs. Unlike prior work,
+EVOREASONER enables precise temporal grounding and robust multi-hop inference under
+ambiguous or time-sensitive conditions, leading to significantly improved reasoning accuracy.
+
+ - **Temporal KG evolution method.** We propose EVOKG, a KG construction and update method
+that resolves factual contradictions and models the temporal progression of non-static facts. This
+enables the KG to remain accurate and consistent over time, supporting reliable reasoning in
+dynamic real-world scenarios.
+
+ - **Evaluation** **across** **static** **and** **temporal** **dimensions.** We evaluate our method on temporal
+QA benchmarks and a novel end-to-end setting where KGs are updated from raw documents,
+allowing us to assess the reasoning capability in a temporal setting and how knowledge evolution
+contributes to downstream QA performance. Our method consistently outperforms both LLMonly and KG-based reasoning baselines across all settings.
+
+
+2 PRELIMINARIES
+
+
+**Definition 1 (Attributed Knowledge Graph)** _An attributed knowledge graph is a directed graph_
+_G_ = ( _V, E, A, R, P_ ) _, where each node v_ _∈V and each edge e ∈E_ _has a type given by τ_ ( _v_ ) : _V_ _→A_
+_and ϕ_ ( _e_ ) : _E_ _→R, respectively._ _In addition, each node and edge is associated with a property map_
+_π_ : _V ∪E_ _→P, where P_ _denotes the space of key-value pairs._ _These property maps allow nodes and_
+_edges to store arbitrary attributes in the form of a hashmap._
+
+
+2
+
+
+Figure 2: The overall framework, consisting of two components: EVOREASONER for multi-hop
+temporal reasoning and EVOKG for document-driven KG evolution. The top pipeline shows how
+a query is decomposed, grounded to temporal entities, explored locally, and synthesized into an
+answer. The bottom pipeline illustrates how external documents update the KG via entity and relation
+contextualization with confidence-aware resolution and temporal evolution.
+
+
+**Problem** **Formulation.** Let _Gt_ = ( _Vt, Et, πt_ ) denote the KG at time _t_, where _πt_ stores attribute
+metadata for nodes and edges, including temporal information. Each edge _e ∈Et_ may be associated
+with a temporal validity interval [ _τ_ start( _e_ ) _, τ_ end( _e_ )] _⊆_ R _∪{⊥}_, where _⊥_ denotes an unknown or openended temporal boundary, indicating when the associated fact holds true. These start and end times
+are stored in the property map: _τ_ start( _e_ ) = _πt_ ( _e_ )[valid from] _, τ_ end( _e_ ) = _πt_ ( _e_ )[valid until].
+
+
+Given a natural language question _x_, potentially with an explicit or implicit temporal scope (e.g., an
+explicit temporal question could be “Who was the president of the U.S. in 2008?”, while an implicit
+temporal question could be “Who was the president when the financial crisis happened?”), the goal is
+to identify a set of entities _A ⊆Vt_ by reasoning over the temporally relevant subgraph of _Gt_ . These
+entities are then used by the LLM to formulate the final response to the user query.
+
+
+3 MULTI-HOP TEMPORAL REASONING OVER EVOLVING KGS
+
+
+We introduce a novel three-stage inference framework, EVOREASONER, as illustrated in Figure 2:
+(1) **multi-route** **decomposition** for diverse and robust exploration; (2) **global** **initialization** for
+temporal-aware query grounding; and (3) **local exploration** with temporal information. These stages
+yield multiple reasoning paths, which are aggregated to produce the final answer.
+
+
+3.1 MULTI-ROUTE DECOMPOSITION
+
+
+We first decompose the original query _x_ into multiple semantic reasoning routes (e.g., Route A and
+B in Figure 2), each representing a distinct interpretation or plan for answering the question. This
+decomposition improves both robustness and recall by accounting for the structural diversity and
+noise often present in evolving KGs. The resulting routes serve two purposes: (1) they provide _**soft**_
+_**reasoning guidance**_ to direct graph traversal, and (2) offer a _**self-validation**_ mechanism—if multiple
+routes converge to the same answer, the result is more likely to be reliable. As different routes vary in
+reasoning efficiency (e.g., number of hops or breadth of search), we prioritize concise and targeted
+ones, starting from the most efficient and expanding only when necessary to establish consensus.
+
+
+Let _R_ = _{r_ 1 _, . . ., rJ_ _}_ denote the set of candidate decomposition routes, where each route _rj_ consists
+of a sequence of subgoals _rj_ = _{x_ [(] 1 _[j]_ [)] _[, x]_ [(] 2 _[j]_ [)] _[, . . ., x]_ [(] _T_ _[j]_ _j_ [)] _[}]_ [, where] _[ T][j]_ [is the length of route] _[ r][j]_ [.] [We define a]
+route planning function _P_ (see Appendix E for prompt) that maps the query to these candidate plans
+_P_
+_x_ _−→R_ . To evaluate the cost of each route, we propose a multi-objective cost function:
+
+
+3
+
+
+_ψ_ ( _xt_ [(] _[j]_ [)][)][ reflects traversal complexity of subgoal] _[ x]_ [(] _t_ _[j]_ [)][, based on:] _[b][t]_ [, the number of candidate relation]
+types from the current entity (branching factor); _nt_, the number of entities reachable through those
+relations; and _ht_, the estimated number of hops required to complete the subgoal.
+
+
+This formulation encourages the selection of reasoning plans that are narrower and shorter, reducing
+the chance of semantic drift during exploration. To balance efficiency and diversity, we retain the
+top- _N_ lowest-cost and semantically distinct plans: _R_ _[∗]_ = TopK _N_ ( _{rj_ _∈R_ : _−_ Cost( _rj_ ) _}_ ). These
+selected routes are used to guide the traversal process, offering complementary reasoning strategies
+that can be aggregated for answer synthesis and justification.
+
+
+3.2 TEMPORAL CONTEXTUALIZED GLOBAL INITIALIZATION
+
+
+Given the decomposed routes, our method begins by identifying topic entities in _Gt_ that are semantically and temporally aligned with the query _x_ and its subgoals _{x_ [(] _t_ _[j]_ [)] _[}]_ [.] [Prior] [works] [(e.g.,] [Yang]
+et al. (2024c); Sun et al. (2024)) typically extract topic entities directly using simple string matching,
+without verifying their presence in the KG or accounting for the temporal context. While this may
+suffice in static and clean KGs, it fails in evolving and noisy KGs. For example, a query mentioning
+“Pixar Company” cannot be grounded if the KG only contains the entity “Pixar Animation Studio.”
+Similarly, “Oscar Awards” lacks temporal specificity unless linked to one of its 100 historical variants.
+
+
+To address these challenges, we propose a _context-aware global initialization_ strategy that leverages
+both semantic similarity and temporal signal. This ensures robust grounding to valid entities, even in
+cases of naming ambiguity or temporally-indexed duplicates, and avoids the common failure case
+where reasoning begins from non-existent or irrelevant nodes. Let _F_ represent a query analysis
+function that produces two aligned outputs, where _M_ is a disjoint set of entity mentions in the query
+and _T_ is the corresponding set of temporal contexts (e.g., “between 2001 and 2008” in Figure 2):
+
+
+_F_ ( _x_ ) _→_ ( _M, T_ ) _,_ _M_ = _⟨m_ 1 _, . . ., mn⟩,_ _T_ = _⟨τ_ 1 _, . . ., τn⟩._
+
+Each pair ( _mi, τi_ ) is jointly embedded into a context-aware vector representation: _**v**_ _m_ _[τ]_ _i_ [=][ Enc][(] _[m][i][, τ][i]_ [)][,]
+where Enc( _·, ·_ ) is a pre-trained transformer encoder that incorporates both textual and temporal
+inputs (e.g., sentence-transformers with timestamp-augmented prompts; see Appendix E). This
+embedding is then matched against all KG entity embeddings _{_ _**v**_ _e_ _| e ∈Vt}_ . To retrieve grounding
+candidates from the KG, we use cosine similarity to select the top- _k_ most similar nodes: _Ci_ =
+TopK _k_ �� _e ∈Vt_ : sim( _**v**_ _m_ _[τ]_ _i_ _[,]_ _**[ v]**_ _[e]_ [)] ��, where TopK _k_ ( _·_ ) returns the _k_ highest-scoring entities under
+cosine similarity sim( _·, ·_ ), and _k_ is a predefined hyperparameter (e.g., _k_ = 5).
+
+
+Each retrieved candidate _ej_ _∈Ci_ is further verified using a relevance scoring function (see Appendix E
+for the prompt template), _s_ init( _ej_ _| x, τi_ ) _∈_ [0 _,_ 1], which estimates the likelihood that a KG entity _ej_
+is the correct grounding for _mi_, conditioned on the full question _x_ and its associated temporal context
+_τi_ . This allows for disambiguation among semantically similar or temporally conflicting entities. Let
+_w_, the reasoning width, be the number of final candidates retained per entity mentions in the query.
+The final set of anchor entities is selected as
+
+_V_ 0 =         - TopK _w_ ( _{ej_ _∈Ci_ : _s_ init( _ej_ _| x, τi_ ) _}_ ) _._
+
+_i_
+
+
+3.3 TEMPORAL-AWARE LOCAL EXPLORATION
+
+
+After global initialization, our approach performs beam search-based local exploration to traverse
+the KG. At each step, neighboring relations and entities are scored for relevance to the query. Prior
+methods often overlook the temporal context, which is critical in domains like sports or politics where
+entities are linked to numerous time-stamped events. Ignoring temporal signals can lead to irrelevant
+exploration or reliance on random sampling (Sun et al., 2024), missing key evidence.
+
+
+We address this by introducing a temporal-aware strategy that reranks neighbors based on both
+semantic and temporal alignment with the current subgoal. This enables more focused and accurate
+multi-hop traversal through time-relevant paths. In particular, at step _i_ of a reasoning route _rj_, given
+a current entity _vt_ _∈Vi_, we iteratively perform the following three actions:
+
+
+4
+
+
+Cost( _rj_ ) =
+
+
+_Tj_
+
+- _ψ_ ( _x_ [(] _t_ _[j]_ [)][)] _[,]_ [where] _[ ψ]_ [(] _[x]_ [(] _t_ _[j]_ [)][) = (] _[b][t]_ _[·][ n][t]_ [)] _[h][t][.]_
+
+_t_ =1
+
+
+**1.** **Relation** **Selection:** We retrieve all outgoing relations _r_ _∈Ri_ ( _vt_ ) and the relevance scoring
+function _s_ rel( _r_ _|_ _x, {x_ [(] _t_ _[k]_ [)] _}_ _[T]_ _t_ =1 _[k]_ [)] [scores] [them] [for] [relevance] [to] [the] [current] [query] [and] [subgoals.] [The]
+
+�� ��
+top-ranked relations are selected as follows: _R_ [sel] _i_ = TopK _w_ _r_ _∈Ri_ ( _vi_ ) : _s_ rel( _r_ _| x, {x_ [(] _t_ _[k]_ [)] _}_ ),
+where _w_ is the reasoning width.
+
+**2.** **Entity** **Expansion:** For each relation _r_ _∈R_ [sel] _i_ [,] [we] [retrieve] [connected] [triplets] [of] [the] [form]
+( _vi, r, v_ _[′]_ ) _∈Ei_, forming a set of candidate triplets: _Ti_ = _{_ ( _vi, r, v_ _[′]_ ) _∈Ei_ : _r_ _∈R_ [sel] _i_ _[}][.]_
+
+
+**3.** **Temporal-Aware Reranking:** We perform semantic reranking of triplets using temporal and
+contextual signals. Each triplet ( _vi, r, v_ _[′]_ ) _∈Ti_ is first verbalized into a natural language string (e.g.,
+“Team A played against Team B in 2020”) incorporating both its semantic content and temporal
+validity interval [ _τ_ start _, τ_ end] _⊆_ R _∪{⊥}_, where _⊥_ denotes an unknown time. Then, the temporal-aware
+similarity score is computed as _s_ triplet( _x,_ ( _vi, r, v_ _[′]_ )) = sim ( _x,_ ( _vi, r, v_ _[′]_ )), i.e., the similarity between
+embeddings of _x_ and the verbalized triplet. We select the top-ranked triplets as follows:
+
+_Ti_ [sel] = TopK _w_ ( _{t ∈Ti_ : _s_ triplet( _x,_ ( _vt, r, v_ _[′]_ )) _}_ ) _,_ _Vi_ +1 = _{v_ _[′]_ _|_ ( _vi, r, v_ _[′]_ ) _∈Ti_ [sel] _[}][.]_
+
+The destination entities in _Vi_ +1 from the selected triplets define the next search frontier. The reasoning
+proceeds until either (1) a stopping criterion is met (i.e., the answer is found or the maximum depth is
+reached), or (2) no high-confidence edges are available for expansion.
+
+
+3.4 ANSWER SYNTHESIS AND JUSTIFICATION
+
+
+Once valid paths are collected, we synthesize a final answer by aggregating high-confidence paths.
+Each path _P_ = _{_ ( _r_ 1 _, v_ 1) _, . . .,_ ( _rL, vL_ ) _}_, starting from anchor _v_ 0, is assigned a confidence score:
+
+
+where _s_ init( _v_ 0) is the global initialization score from Section 3.2, _s_ rel( _ri_ ) scores relation relevance
+at step _i_, and _s_ triplet captures the temporal and semantic alignment of the traversed edge. For
+interpretability, we optionally visualize these reasoning paths as annotated subgraphs.
+
+
+**Majority Voting Across Reasoning Routes.** Let _R_ _[∗]_ = _{r_ 1 _, . . ., rN_ _}_ denote the top-ranked reasoning routes, each yielding a predicted answer _ai_ _∈Vt_ with confidence score Conf( _Pi_ ). The final
+answer is selected via weighted voting: _a_ _[∗]_ = arg max _a∈A_ - _i_ : _ai_ = _a_ [Conf][(] _[P][i]_ [)][.] [With] [confidence]
+
+scores, we improve robustness by consolidating predictions from multiple plausible reasoning paths,
+reducing the impact of individual errors or noisy subgoals.
+
+
+4 NOISE-RESILIENT KNOWLEDGE GRAPH EVOLUTION
+
+
+We present EVOKG, a temporal-aware framework for constructing and updating knowledge graphs
+from unstructured text. Our proposed approach aims to resolve the following two challenges:
+
+
+**1.** **Contradiction and Noise in Static Knowledge.** Certain relations (e.g., birth date and primary
+affiliation) are _exclusive_ : only one value should hold at a time. Let _R_ excl _⊂R_ denote the set of such
+relations. Updates to these facts can introduce contradictions, especially when sources are noisy or
+inconsistent. We model exclusive relations as entity-level properties via the map _π_ : _V_ _→P_, where
+each relation _r_ _∈R_ excl is associated with a set of candidate values
+
+_π_ ( _v_ )[ _r_ ] = _{_ ( _o_ 1 _, C_ ( _o_ 1) _,_ ctx1) _, . . .,_ ( _ok, C_ ( _ok_ ) _,_ ctx _k_ ) _},_
+
+where _oi_ is a candidate value, _C_ ( _oi_ ) _∈_ [0 _,_ 1] reflects confidence (based on frequency and recency),
+and ctx _i_ _∈C_ captures the extraction context. Unlike prior approaches (Lu et al., 2025) that overwrite
+conflicting values, EVOKG retains multiple candidates with associated confidence, enabling contextsensitive reasoning and improving robustness to noise.
+
+
+**2.** **Evolving Trends in Temporal Knowledge.** Non-exclusive relations (e.g., "works as" and "acted
+in") naturally change over time. Let _R_ non-excl = _R \ R_ excl denote this set of temporally evolving
+relations. For _r_ _∈R_ non-excl, we model temporal dynamics via edges _e_ = ( _vs, r, vt,_ [ _t_ from _, t_ to]) _∈E_,
+where _t_ from _, t_ to _∈_ R _∪{⊥}_ represent the validity interval. The interval is stored in the property map:
+
+_ϕ_ ( _e_ ) _∈R_ non-excl _,_ _π_ ( _e_ )[valid from] = _τ_ start _,_ _π_ ( _e_ )[valid until] = _τ_ end _._
+
+
+5
+
+
+Conf( _P_ ) = _s_ init( _v_ 0) _·_
+
+
+_L_
+
+- _s_ rel( _ri_ ) _· s_ triplet( _x,_ ( _vi−_ 1 _, ri, vi_ )) _,_
+
+
+_i_ =1
+
+
+This temporal representation allows EVOKG to preserve the full evolution of entity relations, rather
+than collapsing them into static facts. For instance, the entity Obama may simultaneously hold
+(Obama, works as, Senator, [2004, 2009]) and (Obama, works as, President, [2009, 2017]).
+
+
+To address these two challenges, we develop a two-stage evolution framework: (1) **entity contextual-**
+**ization** to address static contradiction and ambiguity in extracted nodes; and (2) **relation evolution**
+to model time-sensitive relational changes.
+
+
+As shown in Figure 2, given an input document corpus _D_ = _{d_ 1 _, . . ., dN_ _}_, we preprocess it into text
+chunks _di_ and apply a KG extraction function _f_ extract to produce a partial KG. The resulting triples
+are then aligned and merged with the current KG, _Gt_ = ( _Vt, Et, πt_ ), via a merge function _f_ merge
+consisting of the entity contextualization and relation evolution, and produces
+
+_di_ _−−−→f_ extract _G_ [ˆ] _i_ = ( _V_ [ˆ] _i,_ _E_ [ˆ] _i_ ) _−−−→f_ merge (∆ _Vi,_ ∆ _Ei_ ) _−−−→G_ insert _t_ +1 _,_
+where ∆ _Vi_ and ∆ _Ei_ are the sets of new or updated nodes and edges, respectively. This process may
+be repeated across document batches for comprehensive coverage.
+
+
+4.1 ENTITY CONTEXTUALIZATION
+
+
+Document-extracted entities often exhibit lexical ambiguity (e.g., “Pixar Company” vs. “Pixar
+Animation Studio”) or naming collisions (e.g., movies with the same title across years). To maintain
+KG quality and ensure effective downstream reasoning, we perform a two-stage process:
+
+
+**1.** **Contextual Alignment:** Given extracted entities _V_ [ˆ] = _{v_ ˆ1 _, . . .,_ ˆ _vn}_, each with a name, description,
+and property map _π_ (ˆ _vi_ ), we aim to align ˆ _vi_ to a node _v_ _∈V_ or insert it as a new node. Each candidate
+is jointly encoded over its type, name, and description, and matched against existing KG nodes:
+_**v**_ _i_ = Enc( _τ_ (ˆ _vi_ ) _,_ name(ˆ _vi_ ) _,_ desc(ˆ _vi_ )) _,_ _Ai_ = TopK _k_ ( _{v_ _∈V_ _|_ sim( _**v**_ _i,_ _**v**_ ) _}_ ) _._
+Each _v_ _[′]_ _∈Ai_ is then reranked by a contextual scoring function _s_ (ˆ _vi, v_ _[′]_ ) _∈_ [0 _,_ 1], and the best match
+is selected: _v_ _[∗]_ = arg max _v′∈A_ (ˆ _v_ ) _s_ (ˆ _vi, v_ _[′]_ ). If _s_ (ˆ _vi, v_ _[∗]_ ) _< θ_, then ˆ _vi_ is inserted as a new node.
+
+**2.** **Contextual Merging:** Suppose _v_ _[∗]_ is the aligned node and _p_ ˆ = ( _r, o,_ ctx) is a candidate property
+to be merged. For exclusive relations _r_ _∈R_ excl, the updated property set is
+
+_δ · f_ ( _o_ )
+_π_ ( _v_ _[∗]_ )[ _r_ ] _←_ _π_ ( _v_ _[∗]_ )[ _r_ ] _∪{_ ( _o, C_ ( _o_ ) _,_ ctx) _},_ _C_ ( _o_ ) = 1 + _e_ _[−][γ][·]_ [∆] _[t]_ [(] _[o]_ [)] _[,]_
+
+where _C_ ( _o_ ) _∈_ [0 _,_ 1] is the confidence score, with _f_ ( _o_ ) as the normalized frequency of the value _o_
+among prior extractions, ∆ _t_ ( _o_ ) as the time elapsed since _o_ was last observed (temporal decay), and _γ_
+and _δ_ as hyperparameters. Each value _o_ is associated with a context ctx _∈C_, e.g., document span,
+region, or temporal window. These values are preserved in the KG and may later be aggregated
+or filtered via _context-aware_ _property_ _grouping_ : in the example of the person “Jordan Kessler”
+(Figure 2), if the correct birthday 1974 is seen in 7 sources and an incorrect value of 1976 is seen
+three times, the former achieves a higher frequency and confidence score, ensuring robustness to
+noise.
+
+
+4.2 RELATION EVOLUTION
+
+
+Given a set of extracted candidate relations _E_ [ˆ] = _{_ (ˆ _vs,_ ˆ _r,_ ˆ _vt_ ) _}_, the goal is to align or insert each
+relation into the KG, based on the relation schema _{_ ( _τ_ (ˆ _vs_ ) _, ϕ_ (ˆ _r_ ) _, τ_ (ˆ _vt_ )) _}_ and semantics. To perform
+relation evolution, we propose a two-stage process:
+
+
+**1.** **Synonym** **Matching:** We first normalize relation types by matching relation schemas. Each
+candidate relation schema _s_ ˆ = ( _τ_ (ˆ _vs_ ) _, ϕ_ (ˆ _r_ ) _, τ_ (ˆ _vt_ )) is embedded as _**s**_ ˆ = Enc(ˆ _s_ ). We compare it
+against KG schema embeddings _{_ _**s**_ _r}r∈R_ and select the best match: _r_ _[∗]_ = arg max _r′∈R_ sim(ˆ _**s**_ _,_ _**s**_ _r′_ ).
+We treat _ϕ_ (ˆ _r_ ) _≡_ _ϕ_ ( _r_ _[∗]_ ) as a synonym match when max _s_ (ˆ **s** _,_ **s** _r∗_ ) _> θ_, where _θ_ is a preset threshold.
+
+
+**2.** **Contextual Alignment and Temporal Merging:** Assuming the entity alignments ˆ _vs_ _→_ _vs_ and
+_v_ ˆ _t_ _→_ _vt_ (from Section 4.1) are complete, we form the candidate edge: _e_ = ( _vs, r_ _[∗]_ _, vt,_ [ _τ_ start _, τ_ end]),
+where the temporal range is derived from the context of extraction.
+
+
+For non-exclusive relations _r_ _[∗]_ _∈R_ non-excl, we insert the edge directly, preserving all temporally
+distinct facts. For exclusive relations _r_ _[∗]_ _∈R_ excl, we apply the same confidence-based contradiction
+handling as in entity merging (see Section 4.1).
+
+
+6
+
+
+4.3 EFFICIENCY ANALYSIS
+
+
+Let _n_ and _m_ be the number of extracted entities and relations, respectively, and _N_ and _M_ be the
+number of nodes and edges in the KG, respectively. KG extraction requires one LLM call with cost
+_O_ ( _n_ + _m_ ); entity and relation alignment use HNSW-based similarity search (Malkov & Yashunin,
+2018) with sublinear complexity _O_ ( _n_ log _N_ + _m_ log _M_ ); merging performs lightweight attribute
+aggregation with cost _O_ ( _n_ + _m_ ); and insertion also costs _O_ ( _n_ + _m_ ). The total complexity is
+_O_ ( _n_ log _N_ + _m_ log _M_ ). In addition, the evolution uses a constant number of LLM calls per corpus
+(five in our setup: one for extraction, two for alignment, two for merging), making the pipeline
+lightweight and practical for continuous large-scale KG updates.
+
+
+5 EXPERIMENTS
+
+
+We evaluate TREK on temporal QA benchmarks and a novel end-to-end setting where the KG is
+dynamically updated from raw documents by EVOKG. Our experiments are designed to answer two
+key questions: **Q1** : _Can_ EVOREASONER _perform accurate and robust multi-hop reasoning over a_
+_temporal knowledge graph?_ and **Q2** : _Can_ EVOKG _improve question answering accuracy by evolving_
+_an incomplete or outdated KG with new information from raw documents?_
+
+
+**Datasets.** (1) **KGQA.** To assess multi-hop temporal-reasoning performance, we use two KGQA
+benchmarks: (a) TimeQuestions (Jia et al., 2021), a multi-hop factoid QA dataset over Wikidata
+requiring answers grounded in specific time periods; and (b) MultiTQ (Chen et al., 2023), a large
+temporal KGQA dataset consisting of 500K unique question-answer pairs, requiring reasoning over
+multi-hop temporal facts, with varying temporal granularities (day, month, and year), and often
+involves multiple constraints in the question. 5,000 samples are randomly selected from it and
+divided into 5 test splits. (2) **End-to-End QA with KG Evolution.** We use two domains from the
+CRAG benchmark (Yang et al., 2024c): (a) Movie, based on IMDB, with questions about films,
+actors, and awards; and (b) Sports, covering basketball and soccer matches across major leagues.
+Each CRAG question is paired with ground-truth answers, a web document corpus, and a mock
+domain-specific KG. To simulate real-world KG incompleteness, we downsample key entity types
+(e.g., only 60% of Movie and Person nodes are retained in the Movie dataset), requiring recovery
+through document-driven KG updates.
+
+
+**Baselines.** We use five state-of-the-art LLMs. We compare our approach against nine baselines
+grouped into three categories: (1) **LLM-only** **methods**, including IO Prompt (IO) (Brown et al.,
+2020), Chain-of-Thought (CoT) (Wei et al., 2022), Self-Consistency (SC) (Wang et al., 2023), and
+Retrieval-Augmented Generation (RAG) (Lewis et al., 2020); (2) **KG-enhanced methods**, including
+1-hop KG (Yang et al., 2024c) (augmenting the LLM with facts from 1-hop KG neighbors of the
+topic entities) and RAG + 1-hop KG (Yang et al., 2024c); and (3) **Multi-hop** **graph** **reasoning**
+**methods**, including state-of-the-art approaches on static KG, Think-on-Graph (Sun et al., 2024),
+Plan-on-Graph (Chen et al., 2024), and on dynamic KGs, TimeR [4] (Qian et al., 2024). We report the
+average and standard deviation over 5 runs for all models.
+
+
+5.1 EXPERIMENTAL RESULTS
+
+
+**A1: Comparative Results on Temporal Reasoning.** Table 1 summarizes our results on temporal QA
+benchmarks. Across all datasets and model scales, EVOREASONER consistently outperforms strong
+baselines. It achieves up to **14.0%** and **4.6%** absolute accuracy improvement over the best baseline in
+TimeQuestions and MultiTQ, respectively. Moreover, the performance improves further with
+larger LLMs, indicating that more capable models better follow EVOREASONER’s decomposition
+strategy, rank relevant relations, and explore local graph neighborhoods. Interestingly, although
+Qwen 2.5 and LLaMA 3.3 are similar in size, the accuracy of their LLM-only methods diverges,
+potentially due to differences in the pretraining of these models. However, once grounded in the KG
+through EVOREASONER, their performance converges. This suggests that EVOREASONER mitigates
+discrepancies in internal knowledge by anchoring inference in external, structured signals.
+
+On TimeQuestions, EVOREASONER improves absolute accuracy by 15–23% compared to the
+best LLM-only baseline, and by 7–14% over the best KG-enhanced and graph reasoning baselines.
+For example, on Qwen 2.5–72B, our method improves accuracy from 44.84% (best LLM-only)
+to 67.76% (+22.9%) and from 56.71% (best KG-based method) to 67.76% (+11.1%). Similarly,
+
+
+7
+
+
+Table 1: Temporal KGQA results (accuracy, %). RAG is not applicable since the datasets do not
+contain documents.
+
+
+Datasets _→_ **TimeQuestions** **MultiTQ**
+
+
+Methods _↓_ Deep-Seek V3 Qwen 2.5 LLaMA 3.3 GPT-4o LLaMA 3.1 Deep-Seek V3 Qwen 2.5 LLaMA 3.3 GPT-4o LLaMA 3.1
+671B 72B 70B mini 8B 671B 72B 70B mini 8B
+
+
+IO 54.36 _±_ 0.57 36.31 _±_ 0.16 48.56 _±_ 0.37 35.73 _±_ 0.28 28.04 _±_ 0.26 5.20 _±_ 0.90 0.50 _±_ 0.17 4.20 _±_ 0.46 1.37 _±_ 0.45 2.92 _±_ 0.48
+CoT 50.55 _±_ 0.54 44.84 _±_ 0.27 53.41 _±_ 0.08 41.99 _±_ 0.11 38.68 _±_ 0.21 2.83 _±_ 0.40 0.94 _±_ 0.42 4.22 _±_ 0.71 5.10 _±_ 0.20 6.42 _±_ 0.56
+SC 49.49 _±_ 2.23 44.30 _±_ 0.15 53.80 _±_ 0.20 42.16 _±_ 0.30 39.98 _±_ 0.33 2.43 _±_ 0.71 0.76 _±_ 0.29 4.34 _±_ 0.40 5.03 _±_ 0.40 6.12 _±_ 0.90
+
+
+1-hop KG 37.25 _±_ 1.05 26.97 _±_ .31 42.27 _±_ 0.09 31.55 _±_ 0.16 33.75 _±_ 0.27 7.57 _±_ 0.95 7.14 _±_ 1.22 8.28 _±_ 0.99 5.87 _±_ 1.16 5.06 _±_ 0.35
+Think-on-Graph 32.83 _±_ 2.24 33.07 _±_ 0.23 48.89 _±_ 0.27 32.19 _±_ 0.59 16.50 _±_ 0.52 28.90 _±_ 3.66 23.35 _±_ 1.76 25.86 _±_ 0.75 19.57 _±_ 2.80 3.90 _±_ 0.41
+Plan-on-Graph 35.16 _±_ 0.91 32.28 _±_ 0.11 48.58 _±_ 0.16 32.27 _±_ 0.26 27.58 _±_ 0.15 29.90 _±_ 2.81 25.16 _±_ 0.80 28.08 _±_ 1.04 19.77 _±_ 3.69 11.04 _±_ 0.58
+TimeR [4] 60.19 _±_ 0.33 56.71 _±_ 0.25 56.66 _±_ 0.17 56.82 _±_ 0.11 42.15 _±_ 2.60 37.13 _±_ 0.48 35.55 _±_ 0.10 33.57 _±_ 0.09 32.47 _±_ 0.49 24.54 _±_ 0.12
+EVOREASONER **67.25** _±_ **1.90** **67.76** _±_ **0.28** **68.63** _±_ **0.27** **65.42** _±_ **0.20** **56.13** _±_ **0.12** **39.07** _±_ **2.26** **39.45** _±_ **0.38** **35.30** _±_ **1.18** **34.03** _±_ **2.27** **29.15** _±_ **2.15**
+
+Table 2: End-to-end experiment results (accuracy, %) across LLMs of different scales.
+
+
+Datasets _→_ **Movie** **Sports**
+
+
+Methods _↓_ Deep-Seek V3 Qwen 2.5 LLaMA 3.3 GPT-4o LLaMA 3.1 Deep-Seek V3 Qwen 2.5 LLaMA 3.3 GPT-4o LLaMA 3.1
+671B 72B 70B mini 8B 671B 72B 70B mini 8B
+
+
+IO 56.22 _±_ 0.10 34.27 _±_ 0.32 51.75 _±_ 0.30 38.76 _±_ 0.31 34.16 _±_ 0.31 38.25 _±_ 0.36 23.78 _±_ 0.20 28.55 _±_ 0.56 26.64 _±_ 0.23 18.60 _±_ 0.27
+CoT 56.52 _±_ 0.37 37.27 _±_ 0.43 59.75 _±_ 0.52 45.37 _±_ 0.20 40.46 _±_ 0.59 44.63 _±_ 0.62 29.30 _±_ 0.13 32.15 _±_ 0.61 32.01 _±_ 0.23 26.96 _±_ 0.79
+SC 57.05 _±_ 0.37 37.52 _±_ 0.63 59.15 _±_ 0.54 45.49 _±_ 0.47 43.61 _±_ 1.99 45.48 _±_ 0.94 29.44 _±_ 0.44 33.27 _±_ 0.51 32.09 _±_ 0.36 26.49 _±_ 0.79
+RAG 32.39 _±_ 0.61 29.13 _±_ 0.27 30.94 _±_ 0.44 27.55 _±_ 0.20 27.04 _±_ 0.38 39.02 _±_ 0.62 34.53 _±_ 0.38 34.91 _±_ 0.27 33.02 _±_ 0.14 29.35 _±_ 0.31
+
+
+1-hop KG 25.13 _±_ 0.35 15.75 _±_ 0.13 16.35 _±_ 0.10 18.29 _±_ 0.20 17.59 _±_ 0.20 32.71 _±_ 1.24 12.24 _±_ 0.13 16.21 _±_ 0.59 15.65 _±_ 0.40 10.49 _±_ 0.12
+RAG + 1-hop KG 33.10 _±_ 1.06 31.86 _±_ 0.13 31.08 _±_ 0.65 28.50 _±_ 0.31 27.54 _±_ 0.30 36.92 _±_ 1.21 33.78 _±_ 0.21 32.99 _±_ 0.51 30.37 _±_ 0.23 28.46 _±_ 0.35
+Think-on-Graph 23.42 _±_ 0.51 20.53 _±_ 1.02 33.98 _±_ 0.99 20.83 _±_ 0.37 15.36 _±_ 0.93 9.89 _±_ 0.36 8.69 _±_ 0.51 11.73 _±_ 1.16 9.42 _±_ 0.67 2.20 _±_ 0.27
+Plan-on-Graph 21.83 _±_ 0.45 15.19 _±_ 0.49 32.71 _±_ 0.63 12.86 _±_ 0.27 17.88 _±_ 0.48 15.26 _±_ 0.94 8.27 _±_ 0.46 15.65 _±_ 0.87 12.38 _±_ 0.47 4.63 _±_ 0.35
+EVOREASONER 61.77 _±_ 1.45 50.55 _±_ 0.51 58.90 _±_ 1.90 52.45 _±_ 1.44 45.80 _±_ 0.29 53.79 _±_ 0.59 40.14 _±_ 0.63 42.48 _±_ 0.98 44.39 _±_ 0.84 33.36 _±_ 1.08
+
+
+1-hop KG 21.47 _±_ 1.27 20.18 _±_ 0.12 23.36 _±_ 0.22 20.18 _±_ 0.18 22.51 _±_ 0.26 13.40 _±_ 3.00 5.75 _±_ 0.13 7.66 _±_ 0.20 8.96 _±_ 0.27 4.86 _±_ 0.26
+RAG + 1-hop KG 34.28 _±_ 0.51 33.91 _±_ 0.20 34.97 _±_ 0.27 28.97 _±_ 0.20 30.80 _±_ 0.18 31.62 _±_ 1.10 29.63 _±_ 0.10 32.80 _±_ 0.27 28.50 _±_ 0.40 26.45 _±_ 0.30
+Think-on-Graph 25.09 _±_ 1.17 31.82 _±_ 0.34 40.21 _±_ 0.51 24.60 _±_ 0.18 23.65 _±_ 1.37 24.92 _±_ 2.86 23.55 _±_ 0.56 22.29 _±_ 0.27 15.81 _±_ 1.41 10.28 _±_ 1.10
+Plan-on-Graph 23.78 _±_ 0.45 31.19 _±_ 0.40 41.17 _±_ 0.46 24.54 _±_ 0.54 24.71 _±_ 0.87 28.04 _±_ 1.98 23.46 _±_ 0.51 28.08 _±_ 0.85 16.04 _±_ 1.05 13.46 _±_ 0.97
+EVOREASONER **63.13** _±_ **0.10** **57.84** _±_ **0.70** **64.85** _±_ **0.71** **57.52** _±_ **0.53** **51.11** _±_ **0.79** **55.61** _±_ **0.33** **47.90** _±_ **0.23** **51.17** _±_ **0.62** **51.64** _±_ **1.98** **37.06** _±_ **1.58**
+
+
+on LLaMA 3.1-8B, EVOREASONER improves accuracy from 39.98% (LLM-only) and 42.15%
+(KG-based) to 56.13%, yielding relative gains of +16.2% and +14.0%, respectively.
+
+
+On the more challenging MultiTQ dataset, EVOREASONER maintains its lead despite lower overall
+accuracy due to higher temporal ambiguity. It improves accuracy by 23–38% compared to the best
+LLM-only baseline, and outperforms the best KG-enhanced and reasoning baselines by 2–5%.
+
+
+**A2:** **EVOKG** **Boosts** **Reasoning** **Performance.** Table 2 presents QA accuracy before and after
+applying EVOKG. Due to space constraints, we also present separate KG evolution effectiveness
+experiment results in Appendix D.2. All multi-hop graph reasoning models, including EVOREASONER, PoG, and ToG, benefit from KG updates, with accuracy gains of 2–8%. In contrast, 1-hop
+KG and RAG+1-hop KG baselines show limited or even negative gains, especially on Sports. This
+is due to their reliance on indiscriminate context concatenation: 1-hop KG retrieves all neighboring
+facts until the context window is full. In domains like sports, where a single team can accumulate
+hundreds of historical matches over multiple seasons, this dense retrieval overwhelms the model and
+introduces irrelevant information, ultimately degrading performance.
+
+
+EVOREASONER not only outperforms all baselines on the original KG—as shown in the temporal QA
+task—but also benefits significantly from KG updates. In both domains, its performance increases
+by 2–8% after applying EVOKG, validating the quality of the constructed facts. For example, in
+the Movie dataset with GPT-4o-mini, EVOREASONER improves accuracy from 52.45% (original
+KG) to 57.52% (updated KG), a +5% boost. Moreover, with the help of EVOKG, a small LLaMA
+3.1–8B model trained in December 2023 achieves an 18.6 → 37.0% (+18.4%) accuracy gain, which
+is comparable to directly prompting a 671B DeepSeek-V3 model (38.3%) trained in July 2024.
+This demonstrates that our framework enables strong QA performance even for smaller models by
+evolving and grounding the KG appropriately, and closes the gap between the small and large models.
+
+
+5.2 ABLATION STUDIES ON EVOREASONER
+
+
+We conduct studies on TimeQuestions and Sports, containing knowledge up to Mar. 2024, to
+assess the contribution of components in EVOREASONER. All results are reported using LLaMA
+
+
+8
+
+
+3.3 (70B) and LLaMA 3.1 (8B), both with a knowledge cutoff of Dec. 2023, to isolate the effect
+of reasoning over knowledge in KGs (additional results using different LLMs are available in the
+Appendix).
+
+
+**Diverse** **Routes** **Improve** **Accuracy.** Figure 3 reports route-wise QA performance in Sports on the
+LLaMA 3.1-8B model. Accuracy improves steadily
+with more routes, validating that route diversity en
+Figure 3: Route-wise performance.
+
+hances KG coverage and reasoning robustness. These
+results underscore the value of both flexible multi-path reasoning and temporal grounding in achieving
+strong QA performance.
+
+
+6 RELATED WORK
+
+
+**KG Reasoning.** Reasoning over knowledge graphs (KGs) involves drawing structured inferences
+to support tasks like question answering and decision-making (Pan et al., 2024). Existing methods
+typically fall into two categories: (1) embedding-based approaches and (2) LLM-driven approaches.
+Embedding-based methods encode entities and relations into dense vectors to retrieve relevant
+subgraphs. Recent work such as SR (Zhang et al., 2022), UniKGQA (Jiang et al., 2023c), and
+ReasoningLM (Jiang et al., 2023b) adopt this strategy, but may struggle with noise and limited interpretability. LLM-driven approaches leverage large language models to guide or perform reasoning.
+StructGPT (Jiang et al., 2023a) generates structured queries, ToG (Sun et al., 2024) identifies salient
+subgraphs, and PoG (Chen et al., 2024) decomposes queries into multi-step plans. KG-Agent (Jiang
+et al., 2024) extends this with tool-augmented traversal. However, most approaches assume a static
+KG and treat temporal attributes as metadata, limiting their ability to handle evolving knowledge.
+
+
+**KG Extraction.** Traditional KG construction techniques often rely on rule-based extraction from
+curated resources (e.g., YAGO (Suchanek et al., 2007)), but these approaches are brittle and hard
+to scale. More recent efforts turn to LLMs for end-to-end KG extraction from raw text. Techniques
+such as JointIE (Qiao et al., 2022), EXTRACT (Zhang & Soh, 2024), and UP-KG (Hatem et al.,
+2024) formulate KG extraction as a text-to-graph generation task. These techniques demonstrate
+promising performance but often overwrite existing knowledge without accounting for temporal drift
+or contradictions. Our work builds on this line of work but introduces a temporal-aware, contradictiontolerant evolution process, allowing the KG to store multiple values, track confidence, and maintain
+historical facts over time.
+
+
+7 CONCLUSION
+
+
+We present a unified framework for temporal reasoning over evolving knowledge graphs, that combines a multi-hop reasoning module (EVOREASONER) with a temporal-aware KG evolution method
+(EVOKG). By jointly addressing contradiction resolution and temporal trend modeling, our method
+enables accurate and robust reasoning in dynamic knowledge environments. Comprehensive experiments on temporal QA and end-to-end KG update benchmarks show substantial improvements over
+LLM-only and KG-enhanced baselines. Although our framework demonstrates strong performance,
+it assumes access to clean temporal cues and may face scalability challenges on very large corpora.
+Addressing these limitations is an interesting direction for future work.
+
+
+9
+
+
+**Impact** **of** **Sub-components.** Table 3 shows that
+removing any sub-component leads to significant accuracy drops: (1) removing multi-route decomposition causes the largest degradation (up to 12%),
+confirming the importance of soft reasoning guidance
+for reasoning over KGs; (2) without global initialization, performance drops by 4–9%, showing the
+need for accurate entity grounding; and (3) removing
+the temporal-aware reranking component consistently
+leads to about a 1% drop in accuracy.
+
+
+Table 3: Ablation studies on EVOREASONER
+(accuracy, %).
+
+
+Datasets _→_ TimeQuestions Sports
+
+
+Methods _↓_ LLaMa 3.370B LLaMA 3.18B LLaMa 3.370B LLaMA 3.18B
+
+
+EVOREASONER **68.63** _±_ **0.27** **56.13** _±_ **0.12** **51.17** _±_ **0.62** **37.06** _±_ **1.58**
+w/o Route Decomposition 67.60 _±_ 0.55 43.98 _±_ 0.61 47.90 _±_ 0.76 26.52 _±_ 1.27
+w/o Global Initialization 64.12 _±_ 0.30 52.35 _±_ 0.79 42.46 _±_ 0.84 32.67 _±_ 1.62
+w/o Time-Aware Local Rerank 67.58 _±_ 0.29 54.57 _±_ 0.65 50.79 _±_ 1.05 35.78 _±_ 1.16
+
+
+REPRODUCIBILITY STATEMENT
+
+
+We have taken several steps to ensure the reproducibility of our work. The formal definitions
+of temporal reasoning and KG evolution are presented in Section 2, with complete algorithmic
+descriptions of EVOREASONER and EVOKG in Sections 3 and 4. Detailed experimental settings,
+evaluation protocols, and ablation studies are provided in Section 5 and the Appendix, covering all
+temporal QA and end-to-end KG evolution benchmarks. Full datasets, preprocessing steps, and
+evaluation splits (TimeQuestions, MultiTQ, and CRAG) are publicly released by their original authors
+and are properly documented in the supplementary material. We provide an anonymized codebase
+and implementation scripts, including prompts, training/evaluation pipelines, and KG update utilities
+needed to reproduce all tables and figures in the main text. These resources collectively ensure that
+our theoretical formulations and empirical results can be independently validated by the community.
+
+
+ETHICS STATEMENT
+
+
+This work builds exclusively on publicly-available datasets and open-source large language models,
+without involving human subjects, private information, or sensitive data. Our focus is on temporal
+reasoning and evolving knowledge graphs for factual QA, which has potential applications in domains
+such as scientific discovery and legal/financial analysis. While our framework aims to improve the
+reliability and timeliness of knowledge-grounded reasoning, it does not guarantee factual correctness
+and should not be misused in high-stakes decision-making without appropriate human oversight. As
+with any system that updates knowledge from external text, there remains a risk of propagating biased
+or adversarial content if data sources are not carefully curated. We encourage responsible use of our
+methods with attention to source verification, transparency, and fairness. Large language models
+were also used to assist in refining the writing of this paper, but all scientific ideas, methodology,
+experiments, and conclusions were developed by the authors.
+
+
+REFERENCES
+
+
+Kurt Bollacker, Colin Evans, Praveen Paritosh, Tim Sturge, and Jamie Taylor. Freebase: a collaboratively created
+graph database for structuring human knowledge. In _Proceedings of the 2008 ACM SIGMOD international_
+_conference on Management of data_, pp. 1247–1250, 2008.
+
+
+Tom Brown, Benjamin Mann, Nick Ryder, Melanie Subbiah, Jared D Kaplan, Prafulla Dhariwal, Arvind
+Neelakantan, Pranav Shyam, Girish Sastry, Amanda Askell, et al. Language models are few-shot learners.
+_Advances in Neural Information Processing Systems (NeurIPS)_, 33:1877–1901, 2020.
+
+
+Kai Chen, Ye Wang, Yitong Li, and Aiping Li. Rotateqvs: Representing temporal information as rotations
+in quaternion vector space for temporal knowledge graph completion. In _Proceedings of the 60th Annual_
+_Meeting of the Association for Computational Linguistics (Volume 1:_ _Long Papers)_, pp. 5843–5857, 2022.
+
+
+Liyi Chen, Panrong Tong, Zhongming Jin, Ying Sun, Jieping Ye, and Hui Xiong. Plan-on-graph: Self-correcting
+adaptive planning of large language model on knowledge graphs. In _Advances in neural information processing_
+_systems (NeurIPS)_, 2024.
+
+
+Ziyang Chen, Jinzhi Liao, and Xiang Zhao. Multi-granularity temporal question answering over knowledge
+graphs. In _Proceedings of the 61st Annual Meeting of the Association for Computational Linguistics (Volume_
+_1:_ _Long Papers)_, pp. 11378–11392, 2023.
+
+
+Aaron Grattafiori, Abhimanyu Dubey, Abhinav Jauhri, Abhinav Pandey, Abhishek Kadian, Ahmad Al-Dahle,
+Aiesha Letman, Akhil Mathur, Alan Schelten, Alex Vaughan, et al. The llama 3 herd of models. _arXiv_
+_preprint arXiv:2407.21783_, 2024.
+
+
+Shahenda Hatem, Ghada Khoriba, Mohamed H Gad-Elrab, and Mohamed ElHelw. Up to date: Automatic
+updating knowledge graphs using llms. _Procedia Computer Science_, 244:327–334, 2024.
+
+
+IBM. slate-125m-english-rtrvr model card, November 2024. URL [https:](https://dataplatform.cloud.ibm.com/docs/content/wsj/analyze-data/fm-slate-125m-english-rtrvr-v2-model-card.html?context=wx)
+[//dataplatform.cloud.ibm.com/docs/content/wsj/analyze-data/](https://dataplatform.cloud.ibm.com/docs/content/wsj/analyze-data/fm-slate-125m-english-rtrvr-v2-model-card.html?context=wx)
+[fm-slate-125m-english-rtrvr-v2-model-card.html?context=wx.](https://dataplatform.cloud.ibm.com/docs/content/wsj/analyze-data/fm-slate-125m-english-rtrvr-v2-model-card.html?context=wx) Accessed: 2025-0513.
+
+
+Ziwei Ji, Nayeon Lee, Rita Frieske, Tiezheng Yu, Dan Su, Yan Xu, Etsuko Ishii, Ye Jin Bang, Andrea Madotto,
+and Pascale Fung. Survey of hallucination in natural language generation. _ACM computing surveys_, 55(12):
+1–38, 2023.
+
+
+10
+
+
+Zhen Jia, Soumajit Pramanik, Rishiraj Saha Roy, and Gerhard Weikum. Complex temporal question answering
+on knowledge graphs. In _Proceedings of the 30th ACM international conference on information & knowledge_
+_management_, pp. 792–802, 2021.
+
+
+Jinhao Jiang, Kun Zhou, Zican Dong, Keming Ye, Wayne Xin Zhao, and Ji-Rong Wen. StructGPT: A general
+framework for large language model to reason over structured data. In _Conference on Empirical Methods in_
+_Natural Language Processing_, pp. 9237–9251, 2023a.
+
+
+Jinhao Jiang, Kun Zhou, Wayne Xin Zhao, Yaliang Li, and Ji-Rong Wen. ReasoningLM: Enabling structural
+subgraph reasoning in pre-trained language models for question answering over knowledge graph. In
+_Conference on Empirical Methods in Natural Language Processing_, pp. 3721–3735, 2023b.
+
+
+Jinhao Jiang, Kun Zhou, Xin Zhao, and Ji-Rong Wen. UniKGQA: Unified retrieval and reasoning for solving
+multi-hop question answering over knowledge graph. In _The Eleventh International Conference on Learning_
+_Representations_, 2023c.
+
+
+Jinhao Jiang, Kun Zhou, Wayne Xin Zhao, Yang Song, Chen Zhu, Hengshu Zhu, and Ji-Rong Wen. KG-Agent:
+An efficient autonomous agent framework for complex reasoning over knowledge graph. _arXiv preprint_
+_arXiv:2402.11163_, 2024.
+
+
+Amanda Kau, Xuzeng He, Aishwarya Nambissan, Aland Astudillo, Hui Yin, and Amir Aryani. Combining
+knowledge graphs and large language models. _arXiv preprint arXiv:2407.06564_, 2024.
+
+
+Patrick Lewis, Ethan Perez, Aleksandra Piktus, Fabio Petroni, Vladimir Karpukhin, Naman Goyal, Heinrich
+Küttler, Mike Lewis, Wen-tau Yih, Tim Rocktäschel, et al. Retrieval-augmented generation for knowledgeintensive nlp tasks. _Advances in neural information processing systems_, 33:9459–9474, 2020.
+
+
+Aixin Liu, Bei Feng, Bing Xue, Bingxuan Wang, Bochao Wu, Chengda Lu, Chenggang Zhao, Chengqi Deng,
+Chenyu Zhang, Chong Ruan, et al. Deepseek-v3 technical report. _arXiv preprint arXiv:2412.19437_, 2024.
+
+
+Yifan Lu, Yigeng Zhou, Jing Li, Yequan Wang, Xuebo Liu, Daojing He, Fangming Liu, and Min Zhang.
+Knowledge editing with dynamic knowledge graphs for multi-hop question answering. In _Proceedings of the_
+_AAAI Conference on Artificial Intelligence_, volume 39, pp. 24741–24749, 2025.
+
+
+LINHAO LUO, Yuan-Fang Li, Reza Haf, and Shirui Pan. Reasoning on graphs: Faithful and interpretable large
+language model reasoning. In _International Conference on Learning Representations (ICLR)_, 2024.
+
+
+Yu A Malkov and Dmitry A Yashunin. Efficient and robust approximate nearest neighbor search using
+hierarchical navigable small world graphs. _IEEE transactions on pattern analysis and machine intelligence_,
+42(4):824–836, 2018.
+
+
+Belinda Mo, Kyssen Yu, Joshua Kazdan, Proud Mpala, Lisa Yu, Chris Cundy, Charilaos Kanatsoulis, and
+Sanmi Koyejo. Kggen: Extracting knowledge graphs from plain text with language models. _arXiv preprint_
+_arXiv:2502.09956_, 2025.
+
+
+OpenAI. Gpt-4o mini: advancing cost-efficient intelligence, July 2024. URL [https://openai.com/](https://openai.com/index/gpt-4o-mini-advancing-cost-efficient-intelligence/)
+[index/gpt-4o-mini-advancing-cost-efficient-intelligence/.](https://openai.com/index/gpt-4o-mini-advancing-cost-efficient-intelligence/) Accessed: 2025-0513.
+
+
+Shirui Pan, Linhao Luo, Yufei Wang, Chen Chen, Jiapu Wang, and Xindong Wu. Unifying large language
+models and knowledge graphs: A roadmap. _IEEE Transactions on Knowledge and Data Engineering_, 36(7):
+3580–3599, 2024.
+
+
+Xinying Qian, Ying Zhang, Yu Zhao, Baohang Zhou, Xuhui Sui, Li Zhang, and Kehui Song. Timer4: Time-aware
+retrieval-augmented large language models for temporal knowledge graph question answering. In _Proceedings_
+_of the 2024 Conference on Empirical Methods in Natural Language Processing_, pp. 6942–6952, 2024.
+
+
+Bo Qiao, Zhuoyang Zou, Yu Huang, Kui Fang, Xinghui Zhu, and Yiming Chen. A joint model for entity and
+relation extraction based on bert. _Neural Computing and Applications_, pp. 1–11, 2022.
+
+
+Fabian M Suchanek, Gjergji Kasneci, and Gerhard Weikum. Yago: a core of semantic knowledge. In _Proceedings_
+_of the 16th international conference on World Wide Web_, pp. 697–706, 2007.
+
+
+Jiashuo Sun, Chengjin Xu, Lumingyuan Tang, Saizhuo Wang, Chen Lin, Yeyun Gong, Lionel Ni, Heung-Yeung
+Shum, and Jian Guo. Think-on-graph: Deep and responsible reasoning of large language model on knowledge
+graph. In _International Conference on Learning Representations (ICLR)_, 2024.
+
+
+Denny Vrandeˇci´c and Markus Krötzsch. Wikidata: a free collaborative knowledgebase. _Communications of the_
+_ACM_, 57(10):78–85, 2014.
+
+
+11
+
+
+Song Wang, Yaochen Zhu, Haochen Liu, Zaiyi Zheng, Chen Chen, and Jundong Li. Knowledge editing for large
+language models: A survey. _ACM Computing Surveys_, 57(3):1–37, 2024.
+
+
+Song Wang, Junhong Lin, Xiaojie Guo, Julian Shun, Jundong Li, and Yada Zhu. Reasoning of large language
+models over knowledge graphs with super-relations. _arXiv preprint arXiv:2503.22166_, 2025.
+
+
+Xuezhi Wang, Jason Wei, Dale Schuurmans, Quoc V Le, Ed H Chi, Sharan Narang, Aakanksha Chowdhery, and
+Denny Zhou. Self-consistency improves chain of thought reasoning in language models. In _International_
+_Conference on Learning Representations (ICLR)_, 2023.
+
+
+Jason Wei, Xuezhi Wang, Dale Schuurmans, Maarten Bosma, Fei Xia, Ed Chi, Quoc V Le, Denny Zhou, et al.
+Chain-of-thought prompting elicits reasoning in large language models. _Advances in neural information_
+_processing systems (NeurIPS)_, 35:24824–24837, 2022.
+
+
+An Yang, Baosong Yang, Beichen Zhang, Binyuan Hui, Bo Zheng, Bowen Yu, Chengyuan Li, Dayiheng Liu,
+Fei Huang, Haoran Wei, Huan Lin, Jian Yang, Jianhong Tu, Jianwei Zhang, Jianxin Yang, Jiaxi Yang, Jingren
+Zhou, Junyang Lin, Kai Dang, Keming Lu, Keqin Bao, Kexin Yang, Le Yu, Mei Li, Mingfeng Xue, Pei
+Zhang, Qin Zhu, Rui Men, Runji Lin, Tianhao Li, Tingyu Xia, Xingzhang Ren, Xuancheng Ren, Yang Fan,
+Yang Su, Yichang Zhang, Yu Wan, Yuqiong Liu, Zeyu Cui, Zhenru Zhang, and Zihan Qiu. Qwen2.5 technical
+report. _arXiv preprint arXiv:2412.15115_, 2024a.
+
+
+Jinfa Yang, Xianghua Ying, Yongjie Shi, and Bowei Xing. Tensor decompositions for temporal knowledge
+graph completion with time perspective. _Expert Systems with Applications_, 237:121267, 2024b.
+
+
+Xiao Yang, Kai Sun, Hao Xin, Yushi Sun, Nikita Bhalla, Xiangsen Chen, Sajal Choudhary, Rongze Gui, Ziran
+Jiang, Ziyu Jiang, et al. Crag-comprehensive rag benchmark. _Advances in Neural Information Processing_
+_Systems (NeurIPS)_, 37:10470–10490, 2024c.
+
+
+Bowen Zhang and Harold Soh. Extract, define, canonicalize: An llm-based framework for knowledge graph
+construction. _arXiv preprint arXiv:2404.03868_, 2024.
+
+
+Jing Zhang, Xiaokang Zhang, Jifan Yu, Jian Tang, Jie Tang, Cuiping Li, and Hong Chen. Subgraph retrieval
+enhanced model for multi-hop knowledge base question answering. In _Proceedings_ _of_ _the_ _60th_ _Annual_
+_Meeting of the Association for Computational Linguistics (Volume 1:_ _Long Papers)_, pp. 5773–5784, 2022.
+
+
+A LLM USAGE
+
+
+Large language models (LLMs) were employed in a limited and transparent manner during the
+preparation of this manuscript. Specifically, LLMs were used to assist with linguistic refinement,
+style adjustments, and minor text editing to improve clarity and readability. They were not involved
+in formulating the research questions, designing the theoretical framework, conducting experiments,
+or interpreting results. All scientific contributions—including conceptual development, methodology,
+analyses, and conclusions—are the sole responsibility of the authors.
+
+
+B BROADER IMPACTS
+
+
+This work contributes to advancing temporal reasoning over evolving knowledge graphs, with
+potential positive applications in areas such as personal assistants, scientific discovery, legal research,
+and financial intelligence. By enabling more accurate and context-aware information retrieval, our
+framework could improve decision-making in dynamic, real-world environments.
+
+
+However, several risks must also be considered. First, if the KG update mechanism integrates
+adversarial or biased sources, the system could amplify misinformation. Second, overreliance
+on automatically updated knowledge bases could reduce human oversight in high-stakes domains.
+Finally, evolving KGs might be misused for surveillance or automated profiling if applied to personal
+or sensitive data without consent. Mitigating these risks will require careful data curation, source
+verification, and transparency in how facts are scored, selected, and surfaced to end users.
+
+
+C ADDITIONAL EXPERIMENT DETAILS
+
+
+**Datasets.** We summarize the statistics of all datasets used in Table 5.
+
+
+12
+
+
+Table 4: Statistics of datasets.
+
+
+Dataset # Entities # Relations # Entity Types # Relation Types QA Pairs Corpus
+
+
+Movie (Original KG) 265,201 461,772 5 7 565 2,825
+Movie (Evolved KG) 345,539 566,328 454 7,590 565 2,825
+Sports (Original KG) 72,442 279,720 5 6 428 2,140
+Sports (Evolved KG) 131,468 401,662 443 9,151 428 2,140
+TimeQuestions 113,716 229,767 3 884 3,237     MultiTQ 10,742 166,760 3 251 5,000      
+
+**Models.** We evaluate our methods using five state-of-the-art LLMs, ordered by parameter size:
+DeepSeek V3 (671B) (Liu et al., 2024), Qwen 2.5 (72B) (Yang et al., 2024a), LLaMA 3.3 (70B)
+(Grattafiori et al., 2024), GPT-4o-mini (OpenAI, 2024), and LLaMA 3.1 (8B) (Grattafiori et al.,
+2024). All models follow the same QA protocol for fair comparison. We use a standard lightweight
+sentence-transformers model (IBM/slate-125m-english-rtrvr-v2 (IBM, 2024)) to generate semantic
+embeddings. We performed the KG updating using the LLaMA 3.3 (70B) model. All the models are
+accessible through online API providers, such as OpenAI, DeepSeek, and OpenRouter.
+
+
+D ADDITIONAL EXPERIMENT RESULTS
+
+
+D.1 PARAMETER SENSITIVITY
+
+
+We perform ablation by varying the search width and analyze its impact in the following Table 1.
+
+
+Table 5: Ablation of reasoning search depth ( _d_ ) vs. width ( _w_ ) on the evolved Sports KG.
+
+
+_d_ = 1 _d_ = 2 _d_ = 3
+
+
+_w_ = 1 42.99 _±_ 0.40 44.55 _±_ 0.36 44.78 _±_ 0.82
+_w_ = 5 43.38 _±_ 11.07 49.84 _±_ 2.01 47.43 _±_ 4.25
+_w_ = 10 43.81 _±_ 10.68 49.69 _±_ 0.94 50.16 _±_ 3.84
+_w_ = 20 46.82 _±_ 1.21 51.34 _±_ 0.62 51.25 _±_ 0.71
+_w_ = 30 50.70 _±_ 0.62 51.99 _±_ 0.13 51.64 _±_ 0.79
+
+
+From the results, we observe that increasing the search width for the Relation Selection and Entity Expansion component significantly boosts performance—yielding up to 8% improvement—highlighting
+the importance of wider exploration in local reasoning.
+
+
+D.2 KG CONSTRUCTION EFFECTIVENESS
+
+
+To evaluate our framework’s ability to reconstruct the KG after downsampling, we measure the
+fraction of verifiable facts recovered from the corpus, defined as:
+
+Recovery Rate = [Number of facts recovered from corpus]
+
+Number of verifiable facts in corpus _[.]_
+
+
+We conducted this evaluation on the most recent MINE benchmark (Mo et al., 2025), which
+provides 106 document corpora, each associated with 15 manually verified facts. A fact
+is considered successfully recovered if it can be matched to triplets in the constructed KG.
+
+
+From the results, we observe that EVOKG recovers a higher proportion of verifiable facts than all
+baselines, outperforming the prior state-of-the-art KGGen by approximately 5%, highlighting the
+effectiveness of our KG reconstruction pipeline.
+
+
+13
+
+
+As shown in Table 6, our framework
+achieves a 3% higher recovery rate
+compared to the state-of-the-art KG
+construction method KGGen, demonstrating that our document-driven KG
+update process is effective in recovering missing facts.
+
+
+Table 6: KG reconstruction ablation study.
+
+
+Methods OpenIE GraphRAG KGGen EVOKG (Ours)
+
+
+Facts Captured
+29.36% 47.08% 66.46% **71.36%**
+(Average on the 106 corpus)
+
+
+D.3 ABLATION STUDIES ON MORE LLMS
+
+
+We additionally tested the effectiveness of components in EVOREASONER using Qwen 2.5–70B, a
+LLM from another family, and observed consistent trends: removing key components still caused
+significant performance drops, confirming the robustness of our method across LLM families.
+
+
+Table 7: Ablation studies on EVOREASONER.
+
+
+Sports Sports
+Datasets TimeQuestions
+(Original KG) (Evolved KG)
+
+
+EVOREASONER **67.76** _±_ **0.28** **40.14** _±_ **0.63** **47.90** _±_ **0.23**
+w/o Route Decomposition 56.04 _±_ 1.50 18.81 _±_ 0.98 35.95 _±_ 0.60
+w/o Global Initialization 60.46 _±_ 0.35 38.63 _±_ 0.96 41.12 _±_ 1.01
+w/o Time-Aware Local Rerank 67.05 _±_ 0.04 39.43 _±_ 1.01 46.78 _±_ 0.32
+
+
+D.4 EMPIRICAL EFFICIENCY AND SCALABILITY ANALYSIS
+
+
+This appendix complements the theoretical complexity analysis in Section 4 by providing empirical
+measurements of runtime, memory usage, token cost, and scaling behavior for both the KG-evolution
+stage (EvoKG) and the KG-reasoning stage (EvoReasoner). All experiments were conducted using
+identical hardware and decoding settings across baselines to ensure fair comparison. Specifically,
+evaluations were performed on a cloud server equipped with a single NVIDIA H100 GPU and running
+the LLaMA-3.1-8B model.
+
+
+D.4.1 KG EVOLUTION EFFICIENCY
+
+
+**Per-Document Extraction Latency.** To assess the efficiency of KG evolution, we measure the
+per-document extraction time across all corpora. Figure 4 plots the KG-update latency as a function
+of document length (in characters). The results exhibit a clear positive trend: longer documents incur
+proportional increases in processing time. This is expected, as extraction latency is dominated by the
+LLM forward pass, whose computational cost grows with input token count. We observe no evidence
+of superlinear blow-up. Instead, the empirical trend aligns with the theoretical _O_ ( _n_ log _n_ + _m_ log _m_ )
+complexity of EvoKG’s alignment and merge operations. Variance in the vertical direction is
+attributable to LLM-provider latency: extraction is executed via the OpenRouter API, whose backend
+routing introduces heterogeneity in response times that is unrelated to algorithmic complexity.
+
+
+Figure 4: Per-document KG evolution latency as a function of corpus length (in characters). Longer
+documents incur proportionally higher extraction time, and the trend follows the expected near-linear
+scaling dominated by LLM token processing.
+
+
+14
+
+
+Figure 5: Token usage during KG extraction plotted against corpus length. Token cost grows
+approximately linearly with input size due to proportional input tokens and a fixed number of
+extraction calls per document. The smooth scaling pattern confirms that EvoKG’s update cost remains
+predictable and stable across document sizes.
+
+
+To clarify practical deployment: although Figure 4 reports per-document latency, EvoKG supports
+data-parallel extraction. When run in parallel, the effective end-to-end KG-update time is substantially
+lower than the sum of individual extraction times.
+
+
+**Token Cost Scaling.** Figure 5 presents token usage versus document length. Token consumption
+grows approximately linearly with the size of the input, reflecting two factors: (1) input tokens are
+proportional to corpus length; and (2) output tokens consist of extracted triples and temporal metadata.
+Because EvoKG performs a fixed number of LLM calls per document, token usage is predictable and
+stable.
+
+
+Together, Figure 4 and 5 empirically validate the scalability of EvoKG and demonstrate that both
+latency and token cost grow smoothly and predictably with corpus size.
+
+
+D.5 LICENSES FOR EXISTING ASSETS
+
+
+We use the following models and assets in this work, all of which are properly cited and used under
+their respective licenses:
+
+
+    - **DeepSeek V3 (671B)** : Accessed via DeepSeek API, under the DeepSeek open-source model
+license available at [https://github.com/deepseek-ai/DeepSeek-LLM/](https://github.com/deepseek-ai/DeepSeek-LLM/blob/main/LICENSE-MODEL)
+[blob/main/LICENSE-MODEL.](https://github.com/deepseek-ai/DeepSeek-LLM/blob/main/LICENSE-MODEL)
+
+
+    - **Qwen** **2.5** **(72B)** : Accessed via OpenRouter, based on Qwen model family released by
+Alibaba under a commercial-use friendly license.
+
+
+    - **LLaMA 3.3 & 3.1 (70B, 8B)** : Accessed via OpenRouter API, follows Meta’s LLaMA 3
+[license available at https://ai.meta.com/llama/license/.](https://ai.meta.com/llama/license/)
+
+
+    - **GPT-4o-mini** : Accessed through OpenAI API, used in accordance with the terms of service
+[and usage policies listed at https://openai.com/policies/terms-of-use.](https://openai.com/policies/terms-of-use)
+
+
+    - **IBM** **Slate-125M-english-rtrvr-v2:** Released by IBM under Apache
+2.0 License via [https://huggingface.co/ibm-granite/](https://huggingface.co/ibm-granite/granite-embedding-125m-english)
+[granite-embedding-125m-english.](https://huggingface.co/ibm-granite/granite-embedding-125m-english)
+
+
+All datasets used in the paper (TimeQuestions, MultiTQ, CRAG benchmark) are publicly released by
+their authors for research purposes and properly cited in the paper.
+
+
+15
+
+
+**Compute Resources.** All experiments involving large language models were conducted via public
+API providers. Specifically, we accessed models through the OpenAI and OpenRouter platforms,
+which internally manage GPU compute infrastructure. As such, we do not control the underlying
+hardware but follow their standard rate limits and access conditions.
+
+
+All preprocessing, knowledge graph construction, and hosting were performed on a cloud server
+equipped with an Intel Xeon E5-2698 CPU (40 cores, 2.2 GHz) and 500GB of main memory. Each
+full run of a QA benchmark (including reasoning) takes less than 2–3 hours, depending on model size
+and API latency. The KG update takes longer, which requires processing more than 3,400 corpora
+with an average length of 10,000 words, and usually can be accomplished within 24 hours. No
+dedicated GPU resources were used beyond the API endpoints.
+
+
+E PROMPT TEMPLATES
+
+
+E.1
+
+
+16
+
+
+17
+
+
+18

@@ -18,7 +18,7 @@ def clean_text(text: str) -> tuple[str, int]:
     return cleaned, replacements
 
 
-def main(target_dir: str = "iclr2025_data/papers") -> None:
+def main(target_dir: str = "iclr2026_data/papers") -> None:
     papers_dir = Path(target_dir)
     if not papers_dir.exists():
         raise FileNotFoundError(f"Directory not found: {papers_dir}")
@@ -39,5 +39,5 @@ def main(target_dir: str = "iclr2025_data/papers") -> None:
 
 
 if __name__ == "__main__":
-    target = sys.argv[1] if len(sys.argv) > 1 else "iclr2025_data/papers"
+    target = sys.argv[1] if len(sys.argv) > 1 else "iclr2026_data/papers"
     main(target)

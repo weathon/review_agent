@@ -12,7 +12,7 @@ both reviewing and scoring, without the multi-agent sub-reviews.
 Calibration: use build_calibration_review.py to build calibration_review.md
 
 Usage:
-  python run_review_baseline.py 50 3112 --data-dir iclr2025_data --calibration calibration_review.md
+  python run_review_baseline.py 50 3112 --data-dir iclr2026_data --calibration calibration_review.md
   python run_review_baseline.py 50 3112 --balanced --calibration calibration_review.md
 """
 
@@ -38,7 +38,7 @@ from paper_reviewer import (
 # Baseline uses its own model — not the pipeline's MODEL_SCORER
 BASELINE_MODEL = "z-ai/glm-5"
 
-DEFAULT_BENCH_DIR = Path(__file__).parent / "iclr2025_data"
+DEFAULT_BENCH_DIR = Path(__file__).parent / "iclr2026_data"
 CONCURRENCY = 5
 
 REVIEW_PROMPT = """\

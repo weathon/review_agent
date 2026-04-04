@@ -1,0 +1,3352 @@
+# i ed uto uning ocal omputation with nexact F DR: A -T L C I ouglas achford plitting in ederated earning D -R S F L
+
+
+**Anonymous authors**
+Paper under double-blind review
+
+
+Abstract
+
+
+Federated learning usually requires specifying the amount of local computation
+needed a priori. In this work, we instead propose a systematic scheme to automatically adjust and potentially reduce the local computations while preserving
+convergence guarantees. We focus on proximal-based methods, where we demonstrate that the proximal operator can be evaluated inexactly up to a relative error,
+rather than relying on a predefined sequence of vanishing errors. Our proposed
+method, iFedDR, is based on a novel error-corrected version of inexact DouglasRachford splitting. It mitigates the need for hyperparameter tuning the number
+of client steps, by triggering refinement on-demand. We derive iFedDR as an instance of a much more general construction, which allows us to handle minimax
+problem, and which is interesting in its own right. Several numerical experiments
+are carried out demonstrating the favorable convergence properties of iFedDR.
+
+
+1 Introduction
+
+
+Federated learning (FL) has emerged as a promising approach to distributed machine learning that
+allows multiple clients to collaboratively train a model. In an attempt to keep communication costs
+low, the clients repeatedly apply their update rule τ times before centrally aggregating the model and
+proceeding to the next round.
+
+
+A popular instance of this general idea is FedAvg (McMahan et al., 2017) which locally takes τ
+gradient descent steps. Unfortunately, FedAvg requires a very small client stepsize in data heterogeneous settings to avoid the so called client-drift. This requirement appears theoretically as a horizon
+dependent O(1/τ) client stepsize, which intuitively is used to prevent the τ steps to move beyond a
+single (large) step of gradient descent (see e.g. Karimireddy et al. (2020, Thm. I)). Because of the
+small stepsize the benefit of multiple local updates is unclear under data heterogeneous.
+
+
+A more principled approach is arguably to instead use the local computation to approximate a wellunderstood update rule such as the proximal operator, which is known to be more stable and usually
+allows for larger stepsizes. FedProx (Li et al., 2020) was the first to use proximal operators for FL
+and did so by directly averaging the client updates. This straightforward application of the prox turns
+out to not necessarily converge to a solution when using fixed stepsize (Pathak & Wainwright, 2020,
+Prop. 2) and proper convergence relies on behaving like FedAvg with τ = 1 by letting the proximal
+stepsize γ go to zero (Malekmohammadi et al., 2022, Thm. 1). In other words, it might be argued
+that one should simply use FedAvg with τ = 1 instead.
+
+
+Fortunately there is a “correct” way to employ the proximal operator such that we can benefit from
+its strong properties mentioned previously. By leveraging the operator splitting literature, FedSplit
+(Pathak & Wainwright, 2020), FedDR (Tran Dinh et al., 2021) and FedPi (Malekmohammadi et al.,
+2022) fixes the update rule of FedProx. However, all of these prox-based method still need the approximation errors of the proximal operator to be absolutely summable in the sense that the positive
+approximation error sequence (ε _k_ ) _k_ ∈� satisfies [�] _k_ [∞] =1 [ε] _[k]_ [<] [∞][, but no further guidance is provided as]
+how to select them. This translates into requiring an increasing number of local updates that problematically needs to be specified preemptively.
+
+
+This paper specifically looks at the approximation quality of the clients proximal update and ask:
+
+
+_Can we automate the number of local updates needed?_
+
+
+1
+
+
+10 [0]
+
+
+10 _[−]_ [2]
+
+
+10 _[−]_ [4]
+
+
+10 _[−]_ [6]
+
+
+10 _[−]_ [8]
+
+
+10 [0]
+
+
+10 _[−]_ [2]
+
+
+Figure 1: Logistic regression on the heterogeneous vehicle dataset. (left) Similar to FedAvg and FedProx, FedDR does not necessarily converge if the proximal approximation is not accurate enough,
+whereas iFedDR can converge by automatically adjusting the approximation quality to a sufficient
+level. (right) The proximal stepsize γ can be taken large to speed up convergence and iFedDR will
+automatically increase the number of local steps accordingly (cf. Remark 3.2 regarding the tradeoff).
+
+
+We answer this in the affirmative by making the following contributions:
+
+
+   - We introduce the error-corrected algorithm, iFedDR, which automatically checks if refining the approximate evaluation of the proximal mapping is necessary through a computationally negligible error condition. This automatic adjustment mitigates the need for predetermining an appropriate number of client iterations, while allowing for large stepsizes
+(see Figure 1). The construction is made possible by introducing a _relative_ error condition,
+which enables the error condition at each communication round to be treated separately.
+
+
+   - Our analysis for iFedDR extends to monotone inclusion problems and consequently enjoys
+provable guarantees not only for (constrained) convex minimization but also for the important case of (constrained) minimax problems, and more generally _m_ -player games. We
+obtain iFedDR through a novel inexact preconditioned proximal point algorithm (iPPPA)
+involving a semidefinite preconditioner and a correction step mitigating the effect of the
+inexactness, which might be of independent interest.
+
+
+   - We demonstrate the favorable properties of iFedDR under heterogeneous data distributions.
+A simple rule is proposed for minimizing the number of refinement calls. We observe that
+iFedDR either match or improve the performance of the baselines without needing tuning.
+
+
+1.1 Comparison with existing methods for federated learning
+
+
+The issue of client drift for FedAvg is made precise in the (tight) lower bound Ω( _H_ [2][/][3] / _m_ [2][/][3] ) for
+convex and smooth functions in Glasgow et al. (2022, Thm. 3.3), where _m_ is the number of outer
+iterations and _H_ is the heterogeneity constant in ∥∇ _fi_ ( _x_ )∥ [2] ≤ _H_ [2] + 2 _LB_ [2] ( _f_ ( _x_ ) − _f_ [⋆] ). The bound says
+that FedAvg _cannot_ avoid depending on the level of heterogeneity _H_ and that the error decreases
+relatively slowly as 1/ _m_ [2][/][3] .
+
+
+To remove the dependency on the heterogeneity constant _H_ and eventually obtain a O(1/ _m_ ) rate,
+FedDR (Tran Dinh et al., 2021) uses the local computation to instead approximate a proximal operator on the clients, which are then integrated based on Douglas-Rachford splitting. The proposed
+iFedDR method is an extension, that incorporates an adaptive stepsize and an extragradient correction step, to allow for the relaxed condition of relative inexactness. The relative error condition
+mitigates the need for hyperparameter tuning of the number of client iterations. The iFedDR scheme
+additionally enjoys provable guarantees for minimax problems. In contrast, the analysis technique
+used in (Tran Dinh et al., 2021) relies on the Douglas-Rachford envelope (Themelis & Patrinos,
+2020) and as such cannot be extended to the minimax setting. The (only) point of contact between
+iFedDR and FedDR is for minimization problems, when the proximal operators can be computed
+exactly, which is very rarely the case. See Appendix E for further details on comparison with FedDR.
+
+
+FedDR itself can be seen as a relaxed version of FedSplit (Pathak & Wainwright, 2020) (FedSplit can
+be recovered from FedDR by taking λ _k_ = 2). We note that without the relaxation it is not possible to
+
+
+2
+
+
+10 _[−]_ [4]
+
+
+10 _[−]_ [6]
+
+
+10 _[−]_ [8]
+
+
+0 500 1000 1500 2000
+Number of communication rounds _k_
+
+
+0 500 1000 1500 2000
+Number of communication rounds _k_
+
+
+Table 1: Comparison of iFedDR with existing algorithms under convexity and _Li_ -smoothness of the
+client objectives after _m_ global iterations using τ local steps. The parameter _H_ is the heterogeneity
+constant. Due to the error-correction step, the proposed iFedDR method achieves a O( γ [3][1] _m_ [)] [com-]
+
+munication rate, while automatically setting the number of inner steps. The stepsize γ can be taken
+large at the expense of a harder client subproblem. We use O [�] to hide logarithmic factors.
+
+
+|Method|Minimax Adaptive τ Comm. rate Local cond. number Proximal stepsize γ Reference|
+|---|---|
+|GD<br>FedAvg<br>Scafold|✗<br>✗<br>O( _L_<br>_m_)<br>-<br>-<br>(Nesterov et al., 2018)<br>✗<br>✗<br>Ω( _L_<br>τ_m_ + _L_1/3_H_2/3<br>_m_2/3 )2<br>-<br>-<br>(McMahan et al., 2017)<br>✗<br>✗<br>eO( _L_<br>_m_)<br>-<br>-<br>(Karimireddy et al., 2020, Thm. 3)|
+|FedProx<br>FedDR<br>iFedDR<br>|✗<br>✗1<br>O( 1<br>~~√~~_m_)3<br>κ_i_ = 1 + γ_Li_<br>γ →0<br>(Li et al., 2020)<br>✗<br>✗1<br>O( 1<br>_m_γ3 )<br>κ_i_ = 1 + γ_Li_<br>γ ∈(0, 1/_L_)<br>(Tran Dinh et al., 2021, Thm. 3.1)4<br>✓<br>✓<br>O( 1<br>_m_γ3 )<br>κ_i_ = 1 + γ_Li_<br>γ > 0<br>Theorem 3.1<br>|
+
+
+1 FedProx/FedDR requires a predefined summable error sequence regarding the client proximal updates.
+2 The lowerbound for FedAvg is due to Glasgow et al. (2022, Thm. 3.3).
+3 Convergence of FedProx requires decreasing stepsize sequence γ _k_ (Malekmohammadi et al., 2022, Thm. 1).
+4 FedDR is analysed under nonconvex and Lipschitz continuous client objectives.
+
+
+show convergence for convex problems without modifying the objective. For a detailed comparison
+see Ryu & Yin (2022, Sec. 2.7.1) and Malekmohammadi et al. (2022, Sec. 3.3-3.4).
+
+
+Another approach to removing the dependency on the heterogeneity constant _H_, is the Scaffold
+algorithm, which uses the variance reduction technique SAGA to eventually obtain a rate of O [�] (1/ _m_ )
+in Karimireddy et al. (2020, Thm. III). The iFedDR algorithm uses the same level of communication
+per iteration as Scaffold while saving on the memory usage on the server. In contrast with Scaffold,
+iFedDR also extends to minimax problems and constrained problems with provable guarantees.
+
+
+In the special case of strongly convex and smooth objectives, an acceleration of the communication
+complexity was shown through ProxSkip (Mishchenko et al., 2022) by taking an (expected) number
+of client steps with dependency on the conditioning number. The dependency was later improved in
+followup works (Maranjyan et al., 2022; Sadiev et al., 2022). In contrast with these works, iFedDR
+applies to general convex problems and as a byproduct does not require knowledge of the strong
+convexity modulus. Our work takes an orthogonal direction to reducing the overall computation by
+avoiding hyperparameter tuning of the client steps. Note that the prox referred to in ProxSkip is used
+to capture the consensus constraint and is thus distinct from the one which is computed inexactly in
+iFedDR.
+
+
+An overview of the comparison is provided in Table 1 of Appendix A.
+
+
+2 Problem setup & preliminaries
+
+
+In order to capture both minimization problems and minimax problems we will be interesting in the
+following finite sum inclusion problem, which seeks to find _x_ ∈ - _[n]_ such that
+
+0 ∈ _N_ [1]                  - _iN_ =1 _[F][i]_ [(] _[x]_ [)][ +] _[ G]_ [(] _[x]_ [)][,] (2.1)
+
+where each _i_ ∈ [ _N_ ] should be understood as a separate client, each only having access to their
+associated operator _Fi_ : � _[n]_ → - _[n]_, while the server has access to the possible set-valued mapping _G_ :
+
+- _[n]_ ⇒ - _[n]_ . We will make the following assumptions (see Appendix B for any missing definitions).
+
+
+**Assumption I** (Requirements for problem (2.1)) **.**
+
+
+_(i) The operators Fi_ : � _[n]_ →  - _[n]_ _for all i_ ∈ [ _N_ ] _and G_ : � _[n]_ ⇒  - _[n]_ _are maximally monotone._
+
+
+_(ii)_ _The operator Fi is Li-Lipschitz continuous for all i_ ∈ [ _N_ ] _, i.e._
+
+∥ _Fi_ ( _x_ ) − _Fi_ ( _x_ [′] )∥≤ _Li_ ∥ _x_                - _x_ [′] ∥ ∀ _x_, _x_ [′] ∈                - _[n]_ .
+
+
+Maximal monotonicity allows us to capture a large range of problems including (possibly constrained) convex minimization problems, convex-concave minimax problems and more generally
+convex _m_ -player games. We provide two prominent examples that can be cast as the inclusion (2.1)
+below.
+
+
+3
+
+
+with a stepsize γ - 0. The iterates ( _**u**_ _[k]_ ) _k_ ∈� and ( _**v**_ _[k]_ ) _k_ ∈� are guaranteed to converge to a solution of
+the primal problem (2.4a), while ( _**y**_ _[k]_ ) _k_ ∈� = (γ [−][1] ( _**u**_ _[k]_ - _**s**_ _[k]_ )) _k_ ∈� converges to a solution of the dual
+problem (2.5), when _A_, _B_ are maximally monotone and a primal solution exists (Eckstein & Bertsekas, 1992). An alternative to (DRS) for solving (2.4a) is the forward-backward splitting (FBS),
+(id + γ _B_ ) [−][1] (id − γ _A_ ). However, FBS may not converge when the operator _A_ is merely monotone and
+the condition on the stepsize γ is more stringent. In the next section we present iFedDR which we
+obtain as an instance of an inexact and relaxed variant of DRS, that incorporates an error-correction
+step enabling a relative error condition.
+
+
+3 The iFedDR algorithm
+
+
+We solve the primal dual problem (2.6) (and thus the original finite sum problem (2.1) through
+the consensus reformulation (2.4)) with an error-corrected version of an inexact Douglas-Rachford
+splitting (DRS) scheme that we refer to as iFedDR (Algorithm I). The update may appear difficult
+to arrive at directly, and we indeed find it by casting DRS as a _preconditioned_ proximal update
+
+
+4
+
+
+**Example 2.1** (Minimization) **.** Consider the following convex optimization problem
+minimize _x_ ∈� _[n]_ _N_ 1               - _iN_ =1 _[f][i]_ [(] _[x]_ [)][ +] _[ g]_ [(] _[x]_ [)] (2.2)
+The first order stationary condition may be written in the form of the inclusion (2.1) by setting
+_Fi_ = ∇ _fi_ and _G_ = ∂ _g_ . Maximally monotonicity of the operators are satisfied when _g_ is proper lsc
+convex and ( _fi_ ) _i_ ∈[ _N_ ] are convex and smooth (cf. Appendix D.3 for details).
+**Example 2.2** (Minimax) **.** Consider the following optimization problem
+minimize _u_ ∈� _[m]_ maximize _v_ ∈� _[r]_ _g_ ( _u_ ) + _N_ [1]          - _iN_ =1 _[f][i]_ [(] _[u]_ [,] _[ v]_ [)][ −] _[h]_ [(] _[v]_ [)] (2.3)
+
+Denoting _x_ = ( _u_, _v_ ) ∈ - _[n]_ where _n_ = _m_ + _r_, the first order stationary condition may be written in the
+form of the inclusion (2.1) with _G_ ( _x_ ) = (∂ _g_ ( _u_ ), ∂ _h_ ( _v_ )), _Fi_ ( _x_ ) := (∇ _u fi_ ( _u_, _v_ ), −∇ _v fi_ ( _u_, _v_ )). Maximally
+monotonicity of the operators are satisfied when _g_, _h_ are proper lsc convex and ( _fi_ ) _i_ ∈[ _N_ ] are convexconcave and Lipschitz continuous (cf. Appendix D.4 for details).
+
+
+As the operators _Fi_ are not accessible centrally, let _**x**_ - ( _x_ 1, ..., _xN_ ) ∈ - _[Nn]_ and consider an equivalent
+but lifted consensus formulation of (2.1) that we shall refer to as the _primal_ inclusion in the lifted
+space
+0 ∈ _T_ P( _**x**_ ) � _A_ ( _**x**_ ) + _B_ ( _**x**_ ) (2.4a)
+
+with
+_A_ ( _**x**_ ) � _N_ [1]     - _F_ 1( _x_ 1), . . ., _FN_ ( _xN_ )�, _B_ ( _**x**_ ) � _N_ C( _**x**_ ) + _N_ [1]     - _G_ ( _x_ 1), . . ., _G_ ( _xN_ )� (2.4b)
+
+where C - { _**x**_ ∈ - _[Nn]_ | _x_ 1 = _x_ 2 = . . . = _xN_ } is the consensus set, and _N_ C = ∂δC denotes the normal
+cone operator of the set C, while δC is the indicator function defined as δC( _**x**_ ) = 0 if _**x**_ ∈C and
++∞ otherwise. Maximal monotonicity of the operators _A_, _B_ follows from that of _Fi_, _G_, and _N_ C, and
+since maximal monotonicity is closed under addition (Bauschke & Combettes, 2017, Prop. 20.23,
+Ex. 20.26, Cor. 25.5). The dual problem associated with (2.4) consists of finding _**y**_ ∈ - _[Nn]_ such that
+0 ∈ _T_ D( _**y**_ ) �                - _A_ [−][1] (− _**y**_ ) + _B_ [−][1] ( _**y**_ ). (2.5)
+The primal dual problem then consists of finding _**z**_ = ( _**x**_, _**y**_ ) ∈ - [2] _[Nn]_ such that
+
+
+_N_ [1] - _F_ 1( _x_ 1), . . ., _FN_ ( _xN_ )�, _B_ ( _**x**_ ) � _N_ C( _**x**_ ) + _N_ [1]
+
+
+_N_ [1] - _G_ ( _x_ 1), . . ., _G_ ( _xN_ )� (2.4b)
+
+
+        - _A_ ( _**x**_ )
+0 ∈ _T_ PD( _**z**_ ) � _B_ [−][1] ( _**y**_ )
+
+
+- - _**y**_ + . (2.6)
+
+  - _**x**_
+
+
+The operator _T_ PD is maximally monotone owing to the fact that skew symmetric linear operators
+are maximally monotone, and since maximal monotonicity is closed under the inverse and addition
+operators (Bauschke & Combettes, 2017, Prop. 20.22, 20.23, Cor. 25.5). A point _**z**_ [⋆] = ( _**x**_ [⋆], _**y**_ [⋆] )
+solves the primal dual problem if and only if _**x**_ [⋆] is a solution to the primal problem (2.4) and _**y**_ [⋆]
+solves the dual problem (2.5).
+
+
+When the resolvents of the operators _A_ and _B_ are available, a classical approach to solving both the
+primal problem (2.4a) and the dual problem (2.5) is the Douglas-Rachford splitting (DRS) algorithm
+(Douglas & Rachford, 1956):
+_**u**_ _[k]_ = (id + γ _A_ ) [−][1] ( _**s**_ _[k]_ )
+
+
+_**v**_ _[k]_ = (id + γ _B_ ) [−][1] (2 _**u**_ _[k]_  - _**s**_ _[k]_ )
+
+_**s**_ _[k]_ [+][1] = _**s**_ _[k]_ + ( _**v**_ _[k]_ - _**u**_ _[k]_ )
+
+
+(DRS)
+
+
+**Algorithm I** The inexact federated Douglas-Rachford algorithm for problem 2.1 (iFedDR)
+
+Require starting point _s_ [−] _i_ [1] ∈ - _[n]_, α−1 = 0 ∈ �, stepsize γ ∈ (0, ∞), λ ∈ (0, 2), and σ ∈ (0, 1)
+Repeat for _k_ = 0, 1, . . . until convergence
+
+**I** .1: Each client _i_ ∈ [ _N_ ] � {1, . . ., _N_ } computes
+
+_s_ _[k]_ _i_ [=] _[s][k]_ _i_ [−][1]                    - λα _k_ −1(¯ _xi_ _[k]_ [−][1]                    - _p_ ˆ _[k]_ [−][1] )
+and approximately compute the resolvent
+
+
+_where_ τ = [(2][−][λ] (1 [)][λγ] −σ [(1] ) [2][+][γ][2][)] _and m is the total number of communication rounds._
+
+
+5
+
+
+_x_ ¯ _i_ _[k]_ [≃] [(id][ +][ γ] _[F][i]_ [)][−][1][(] _[s]_ _i_ _[k]_ [)] (3.3)
+and sends to the server
+
+                       - _x_ ¯ _ik_ [,] _[ F][i]_ [(¯] _[x]_ _i_ _[k]_ [)][,] _[ s]_ _i_ _[k]_ �.
+
+The server computes the error-corrected average _p_ ˆ _[k]_ = (id + γ _G_ ) [−][1][�] _N_ [1] - _iN_ =1 [(¯] _[x]_ _i_ _[k]_ [−] [γ] _[F][i]_ [(¯] _[x]_ _i_ _[k]_ [))][�] [and]
+
+the scalar quantities
+ξ _k_ = [�] _i_ _[N]_ =1 [∥] _[x]_ [¯] _i_ _[k]_ [−] _[p]_ [ˆ] _[k]_ [∥][2][,] [ζ] _[k]_ [=] γ [1][2] - _iN_ =1 [∥][γ] _[F][i]_ [(¯] _[x]_ _i_ _[k]_ [)][−] _[s]_ _i_ _[k]_ [+][ ˆ] _[p][k]_ [∥][2][,] [and][ µ] _[k]_ [=][ �] _i_ _[N]_ =1 [⟨] _[x]_ [¯] _i_ _[k]_ [−] _[p]_ [ˆ] _[k]_ [,] _[ s]_ _i_ _[k]_ [−][γ] _[F][i]_ [(¯] _[x]_ _i_ _[k]_ [)][−] _[p]_ [ˆ] _[k]_ [⟩][.]
+
+
+**I** .2: The server computes the error-corrected average _p_ ˆ _[k]_ = (id + γ _G_ ) [−][1][�] [1]
+
+
+ξ _k_ = [�] _i_ _[N]_ =1 [∥] _[x]_ [¯] _i_ _[k]_ [−] _[p]_ [ˆ] _[k]_ [∥][2][,] [ζ] _[k]_ [=] γ [1][2] - _iN_ =1 [∥][γ] _[F][i]_ [(¯] _[x]_ _i_ _[k]_ [)][−] _[s]_ _i_ _[k]_ [+][ ˆ] _[p][k]_ [∥][2][,] [and][ µ] _[k]_ [=][ �] _i_ _[N]_ =1 [⟨] _[x]_ [¯] _i_ _[k]_ [−] _[p]_ [ˆ] _[k]_ [,] _[ s]_ _i_ _[k]_ [−][γ] _[F][i]_ [(¯] _[x]_ _i_ _[k]_ [)][−] _[p]_ [ˆ] _[k]_ [⟩][.]
+
+(3.4)
+See Remark D.3 for how to carry out the computation memory-efficiently.
+
+
+**I** .3: if [�] _i_ _[N]_ =1 [∥] _[s][k]_ _i_ [−] [γ] _[F][i]_ [(¯] _[x]_ _i_ _[k]_ [)][ −] _[x]_ [¯] _i_ _[k]_ [∥][2] [≤] [σ][2][ max][{][ξ] _[k]_ [, ζ] _[k]_ [}][ then]
+the server sends back
+( ˆ _p_ _[k]_, α _k_ ) where α _k_ = [µ] _[k]_ /ξ _k_ .
+
+
+**I** .4: else
+
+
+request the clients to refine the approximation in (3.3) to higher accuracy.
+
+
+Return _p_ ˆ _[k]_
+
+
+and instead working on this simpler abstraction level as detailed in Sections 4 and 5. The algorithm
+includes an adaptive stepsize α _k_, an extragradient error-correction step, and a relative error condition
+which can be efficiently computed on the server as commented on in Remark D.3.
+
+
+**Client subproblem** Approximately computing the resolvent in (3.3) on the client amount to finding an approximate zero to the following strongly monotone operator under Assumption I _(i)_
+
+_Fi_ [γ][(] _[x]_ [) :][=] _[F][i]_ [(] _[x]_ [)][ +] γ [1] [(] _[x]_ [ −] _[s]_ _i_ _[k]_ [)][,] (3.1)
+
+with the stepsize parameter γ - 0 (see Appendix D.3 for the special case of minimization). Due to
+having an explicit optimization problem on the client, the approach becomes modular: The subproblem may be solved in a variety of ways, e.g. with first-order methods such as the gradient method or
+the extragradient method (Korpelevich, 1976). For minimization problem, where _Fi_ = ∇ _fi_ reduces
+to a gradient of some cost function _fi_, one may employ gradient descent, or its accelerated variants;
+in case of additional structure such as scenarios where the client objectives _fi_ itself is a finite sum,
+variance reduction techniques may be employed.
+
+
+**Progress** **measure** As a measure of progress we track the _natural_ _residual_ in the lifted space
+defined as follows
+Gγ( _**x**_ ) := γ [1] [(] _**[x]**_ [ −] [(id][ +][ γ] _[B]_ [)][−][1][(] _**[x]**_ [ −] [γ] _[A]_ _**[x]**_ [))] (3.2)
+
+It is immediate that Gγ( _**x**_ ) = 0 if and only if _**x**_ = ( _x_, _x_, . . ., _x_ ) ∈ - _[Nn]_ and _**x**_ is a solution to the primal
+problem (2.4), i.e., that _x_ is a solution to the original problem (2.1).
+**Theorem 3.1.** _Suppose the operators in_ (2.4) _satisfy Assumption I and_ zer( _A_ + _B_ ) - ∅ _. Let_ (¯ _**x**_ _[k]_ :=
+_N_ 1 [(¯] _[x]_ 1 _[k]_ [, ...,] _[x]_ [¯] _[k]_ _N_ [))] _k_ ∈� _[be generated by][ iFedDR][ (][Algorithm I][) and]_ _**[s]**_ [0] [=] _N_ [1] [(] _[s]_ 1 [0][, ...,] _[ s]_ [0] _N_ [)] _[. Then,]_
+
+
+_(i) The iterates_ (¯ _**x**_ _[k]_ ) _k_ ∈� _converges to some_ _**x**_ [⋆] ∈ zer( _A_ + _B_ ) _._
+
+_(ii)_ _For all_ _**s**_ [⋆] = _**x**_ [⋆] + γ _A_ _**x**_ [⋆] _where_ _**x**_ [⋆] ∈ zer( _A_ + _B_ ) _, we have that_
+
+min [≤∥] _**[s]**_ [0] [−] _**[s]**_ [⋆][∥][2]
+_k_ =0,1,..., _m_ [∥G][γ][(¯] _**[x]**_ _[k]_ [)][∥][2] τ( _m_ + 1)
+
+
+**Remark 3.2.** Theorem 3.1 is obtained as a corollary of the more general Theorem 5.1 concerning
+iPPPA, which is covered in Sections 4 and 5 (see Appendices D.1 and D.2 for the reduction). Some
+remarks are in place. _(i)_ _Communication_ _complexity:_ Theorem 3.1 implies, that to guarantee an ϵaccurate solution, iFedDR only needs _m_ = O( γ(1+1γ [2] )ϵ [)] [communication] [rounds.] _[(ii)]_ _[Heterogeneity]_
+_agnostic:_ The theorem requires no heterogeneity assumption, i.e. the client operators _Fi_ : - _[n]_ →
+
+- _[n]_ can be arbitrarily different. _(iii)_ _Linear_ _speedup_ _in_ _the_ _number_ _of_ _clients:_ A centralized variant
+would naively need access to [�] _i_ _[N]_ =1 _[F][i]_ [(] _[z]_ [),] [whereas] [this] [computation] [can] [be] [parallelized] [amongst] _[N]_
+clients with iFedDR, while still maintaining a O(1/ _m_ ) rate. _(iv)_ _Accuracy-agnostic_ _local_ _solvers:_
+The errors from the proximal client solvers do not propagate to the rate in Theorem 3.1 due to the
+error-correction step in iFedDR. Thus, the number of client updates does not have to be specified
+preemptively based on the desired accuracy of the solution. _(v) A natural tradeo_ ff _:_ A larger proximal
+stepsize γ leads to a lower communication complexity through the factor γ(1+1 γ [2] ) [. The price to pay is]
+a more expensive proximal subproblem on the clients, since the conditioning number of the strongly
+monotone and Lipschitz continuous subproblem, κ _i_ = 1 + _Li_ γ, becomes larger with increasing γ (cf.
+Figure 1).
+
+
+**Linear** **convergence** When dealing with minimization problems, linear convergence rate can be
+established for the class of _piecewise linear-quadratic_ (PLQ) functions (Rockafellar & Wets, 2011).
+
+
+**Definition** **3.3** (Piecewise linear-quadratic) **.** _A_ _function_ φ : - _[n]_ → - _is_ _called_ _piecewise_ _linear-_
+_quadratic (PLQ) if its domain can be represented as the union of finitely many polyhedral sets, and_
+_in each such set it is given by an expression of the form_ [1] 2 [⟨] _[x]_ [,] _[ Hx]_ [⟩] [+] [⟨] _[d]_ [,] _[ x]_ [⟩] [+] _[c, for some c]_ [ ∈] [�] _[, d]_ [∈] [�] _[n][,]_
+
+_and symmetric matrix H_ ∈ - _[n]_ [×] _[n]_ _._
+
+
+Piecewise linear-quadratic functions are widespread in application and include affine functions,
+quadratic forms, indicators of polyhedral sets, polyhedral norms such as the ℓ1-norm, regularizers
+such as elastic net, hinge loss, and many more, see (Aravkin et al., 2013).
+
+
+We proceed to establish linear convergence for iFedDR when taking _Fi_ = ∇ _fi_ and _G_ = ∂ _g_ in (2.1)
+with _fi_ and _g_ being PLQ. Notice that this assumption does not imply that the set of solutions is a singleton. Its proof is similar to (Latafat et al., 2019, Lem. IV), and relies on the fact that subdifferential
+of _fi_ and _g_ as well as the normal cone of the consensus set are polyhedral sets implying that the operator _T_ defined in (4.2) is metrically subregular at all points in its graph. Consequently, the following
+corollary of Theorem 5.4 shows that iFedDR achieves linear rate for such problem classes.
+
+**Corollary 3.4** (Piecewise linear-quadratic functions) **.** _Suppose that the functions_ _fi and g are piece-_
+_wise linear-quadratic. Let_ _Fi_ = ∇ _fi_ _and G_ = ∂ _g in_ (2.1) _. Then, the sequences_ ( _s_ _[k]_ _i_ [)] _k_ ∈� _[generated by]_
+_iFedDR (Algorithm I) converge R-linearly to zero._
+
+
+4 DRS through inexact proximal point algorithm
+
+
+To arrive at iFedDR (Algorithm I) we will start by considering a general inclusion problem, which
+seeks a _z_ ∈ - _[d]_ such that
+0 ∈ _Tz_ . (4.1)
+
+More compactly we will write the requirement as _z_ ∈ zer _T_ . The preconditioned proximal point
+algorithm (PPPA) is given by
+_z_ ¯ _[k]_ = ( _P_ + _T_ ) [−][1] _Pz_ _[k]_
+
+(PPPA)
+_z_ _[k]_ [+][1] = _z_ _[k]_ + λ _k_ (¯ _z_ _[k]_                     - _z_ _[k]_ )
+
+where _T_ : � _[d]_ ⇒ - _[d]_ is a set-valued operator and _P_ ∈ - _[d]_ [×] _[d]_ is the preconditioning matrix.
+
+
+The PPPA has been employed as an abstract framework to establish the convergence of numerical
+methods such as augmented Lagrangian method (ALM), progressive hedging, Douglas-Rachford
+splitting (DRS), various primal-dual methods, and many more (Rockafellar, 1976; Eckstein, 1988;
+Rockafellar & Sun, 2019; Eckstein & Bertsekas, 1992).
+
+
+While convergence of DRS (upon which iFedDR and FedDR relies) is typically studied through
+nonexpansiveness properties of the resolvent (Bauschke & Combettes, 2017, Thm. 26.11), to allow
+for _relative_ inexact analysis we shall cast it as an instance of PPPA with a _semidefinite_ preconditioning. It is of immediate verification that DRS is nothing more than PPPA with the primal dual
+
+
+6
+
+
+operator _T_ = _T_ PD as defined in (2.6) and the following preconditioning:
+
+
+_(i) The operator T_ : � _[d]_ ⇒  - _[d]_ _is maximally monotone, and the set of its zeros,_ zer _T, is nonempty._
+
+
+_(ii)_ _The preconditioning matrix P_ ∈  - _[d]_ [×] _[d]_ _is positive_ semi _definite._
+
+
+We obtain the error-corrected algorithms, iFedDR and iDRS, as instances of iPPPA through the
+choice in (4.2). We remark that the requirement ¯ _v_ _[k]_ ∈ range _P_ is a technical condition that is crucial in
+the positive semidefinite setting studied here. Nevertheless, this condition is satisfied by construction
+in iDRS and iFedDR and thus does not need to be verified. For detailed derivations see Appendix D.
+We emphasize that in the convergence analysis in the next section, _T_ and _P_ are not restricted to the
+particular choice made in (2.6) and (4.2) respectively, and are only required to satisfy Assumption II.
+
+
+5 Convergence analysis
+
+
+The convergence analysis of iPPPA hinges upon an indirect analysis by studying the properties of the
+shadow sequences ( _w_ _[k]_ ) _k_ ∈� = ( _Qz_ _[k]_ ) _k_ ∈�, and ( ¯ _w_ _[k]_ ) _k_ ∈� = ( _Qz_ ¯ _[k]_ ) _k_ ∈� in place of the original sequences.
+Having computed the points ¯ _z_ _[k]_ and ¯ _v_ _[k]_ by solving the approximate resolvent in the first step of iPPPA,
+the update for evaluating _w_ _[k]_ [+][1] = _Qz_ _[k]_ [+][1] can be viewed (refer to the proof of Theorem 5.1 for details)
+
+
+7
+
+
+�γ [−][1] _I_   - _I_
+_P_ =
+
+  - _I_ γ _I_
+
+
+. (4.2)
+
+
+Unlike the standard analysis of PPPA (Rockafellar, 1976) which assumes a positive definite preconditioning, here the preconditioner _P_ is only positive semidefinite. In recent years, PPPA with
+semidefinite preconditioner has been studied in (Latafat & Patrinos, 2017, Thm. 3.4), (Bredies et al.,
+2022, Sect. 2.1), (Evens et al., 2023, Thm. 2.4) and in the setting of DRS in (Condat, 2013, Thm.
+3.3). However, existing results have been restricted to exact computations. Motivated by the above
+reformulation of DRS as PPPA, we develop an _inexactness_ variant of PPPA with mild conditions on
+the inexactness suitable for federated learning applications. Our work is largely inspired by Solodov
+& Svaiter (1999) which proposed relative inexactness as an alternative to the standard _absolute_
+_summable_ error criteria. In particular, we consider replacing (preconditioned) proximal updates by
+the following
+_z_ ¯ = ( _P_ + _T_ ) [−][1] ( _Pz_           - ε) ⇐⇒ _Pz_           - _Pz_ ¯ = _v_ ¯ + ε with _v_ ¯ ∈ _T_ ¯ _z_,
+
+
+where error ε ∈ - _[d]_ would only be required to satisfy a relative condition waiving the summability
+assumption. Although Solodov & Svaiter (1999) studies the classical proximal point method with
+_P_ = I, their analysis carries over to the case where _P_ is positive definite. We here further generalize
+their analysis and study PPPA under mere positive _semidefiniteness_ of the preconditioner. To this
+end we construct the positive definite matrix
+_R_ = I − _Q_ + _P_ ≻ 0, where _Q_ = Πrange( _P_ ),
+
+where ΠC( _w_ ) := arg min _u_ ∈C ∥ _u_ - _w_ ∥ [2] denotes the projection. While directly establishing convergence
+of the sequence ( _z_ _[k]_ ) _k_ ∈� through the machinery of Fejér monotonicity is no longer possible (due to
+lack of positive definiteness of _P_ ), we shall do so for the _shadow_ sequence (Πrange( _P_ )( _z_ _[k]_ )) _k_ ∈� in the
+space equipped with ⟨·, ·⟩ _R_ .
+
+
+The proposed abstract inexact scheme corrects for the inaccuracy, ε, through an extragradient step
+that we will synonymously refer to as the _error-correction_ step. The scheme is defined by the following iterates given _z_ _[k]_ ∈ - _[d]_ and the error tolerance σ ∈ (0, 1):
+
+
+find _z_ ¯ _[k]_ ∈        - _[d]_ and the associated _v_ ¯ _[k]_ ∈ _T_ ¯ _z_ _[k]_ ∩ range _P_
+
+
+s.t. _Pz_ _[k]_           - _Pz_ ¯ _[k]_ = _v_ ¯ _[k]_ + ε _[k]_, ∥ε _[k]_ ∥ _R_ −1 ≤ σ max [�] ∥ _v_ ¯ _[k]_ ∥ _R_ −1, ∥ _Pz_ ¯ _[k]_           - _Pz_ _[k]_ ∥ _R_ −1 [�]
+
+[−] _[P][z]_ [¯] _[k]_ [⟩] _[R]_ [−][1]
+compute _z_ _[k]_ [+][1] = _z_ _[k]_    - λ _k_ α _kPv_ ¯ _[k]_ where α _k_ = [⟨] _[v]_ [¯] _[k]_ [,] _[ Pz][k]_
+
+∥ _Pv_ ¯ _[k]_ ∥ [2]
+_R_ [−][1]
+
+
+We will study iPPPA under the following assumptions.
+
+
+**Assumption II** (Requirements for abstract iPPPA) **.**
+
+
+(iPPPA)
+
+
+as relaxed projections of _w_ _[k]_ onto the following halfspaces
+
+
+                       -                        D _k_ = _u_ | ⟨ _v_ ¯ _[k]_, _Pw_ ¯ _[k]_        - _Pu_ ⟩ _R_ −1 ≥ 0 . (5.1)
+
+
+The projection onto D _k_ is given by the simple update
+
+
+It is essential to ensure that the set _Q_ zer _T_ is contained within D _k_ . To see this note that since for any
+_w_ [⋆] ∈ _Q_ zer _T_ there exists _z_ [⋆] ∈ zer _T_ such that
+
+
+(C.4)
+⟨ _v_ ¯ _[k]_, _Pw_ ¯ _[k]_         - _Pw_ [⋆] ⟩ _R_ −1 = ⟨ _v_ ¯ _[k]_, _PQ_ ¯ _w_ _[k]_         - _PQw_ [⋆] ⟩ _R_ −1 = ⟨ _v_ ¯ _[k]_, _RQ_ ¯ _w_ _[k]_         - _RQw_ [⋆] ⟩ _R_ −1
+
+= ⟨ _v_ ¯ _[k]_, _Qz_ ¯ _[k]_                 - _Qz_ [⋆] ⟩ = ⟨ _v_ ¯ _[k]_, ¯ _z_ _[k]_                 - _z_ [⋆] ⟩≥ 0,
+
+
+where the last equality follows from _v_ ¯ _[k]_ ∈ range _P_, and the inequality follows from monotonicity of
+_T_ . Thus ensuring that _Q_ zer _T_ ⊆D _k_ .
+
+
+To ensure progress at every iteration (and thus to establish convergence), the crucial component in
+our analysis is to argue that ⟨ _v_ ¯ _[k]_, _Pw_ _[k]_ - _Pw_ ¯ _[k]_ ⟩ _R_ −1 remains strictly positive (when _w_ _[k]_ - D _k_ ) even with a
+semidefinite preconditioner _P_ as long as certain conditions holds for the inaccuracy ε _[k]_ . The precise
+requirement can be found in the update specified in iPPPA. The reader is referred to the proof of
+Theorem 5.1 for further details.
+
+
+**Theorem 5.1** (Convergence and convergence rate analysis) **.** _Suppose that Assumption II holds and_
+_that_ lim inf _k_ →∞(2 − λ _k_ )λ _k_ - 0 _. If for some k_ ≥ 0 _,_ ¯ _z_ _[k]_ - zer _T_ _then_ α _k_ - 0 _is finite and_ ∥ _Pz_ _[k]_ - _Pz_ ¯ _[k]_ ∥ - 0 _._
+_Moreover,_ _either_ _the_ _algorithm_ _terminates_ _in_ _finite_ _number_ _of_ _iterations_ _with_ _z_ ¯ _[k]_ [¯] ∈ zer _T_ _for_ _some_
+_k_ ¯ ≥ 0 _, or it generates an infinite sequence_ ( _z_ _[k]_ ) _k_ ∈� _for which the following hold_
+
+
+_(i)_ (∥ _Pz_ ¯ _[k]_  - _Pz_ _[k]_ ∥) _k_ ∈� _converges to zero._
+
+_(ii)_ (¯ _z_ _[k]_ ) _k_ ∈� _converges to some z_ [⋆] ∈ zer _T._
+
+_(iii) For all z_ [⋆] ∈ zer _T, the sequence_ (¯ _z_ _[k]_ ) _k_ ∈� _satisfies_
+
+∥ _Qz_ [0]                             - _Qz_ [⋆] ∥ [2]
+_R_ [−][1]
+_k_ =min0,1,..., _m_ [dist] _R_ [2] [−][1] [(0][,] _[ T]_ [ ¯] _[z][k]_ [)][ ≤] τ( _m_ + 1)
+
+_where_ τ = lim inf _k_ →∞(2 − λ _k_ )λ _k_ ∥ _R_ ∥(11−σ) [2] _[.]_
+
+
+**Remark 5.2.** Both iDRS and iFedDR are special cases of iPPPA so convergence of both schemes
+immediately follows from Theorem 5.1 (see Appendix D.1 and Appendix D.2 respectively). In particular, Theorem 3.1 follows as a corollary.
+
+
+**Linear** **convergence** We additionally study local linear properties of iPPPA under _metric_ _sub-_
+_regularity_ (Dontchev & Rockafellar, 2009, Sect. 3) assumption of the operator _T_ . This assumption
+amounts to requiring the distance from the set of solutions to be upper bounded by a multiple of the
+norm of _Tz_ for all points _z_ close to _z_ [⋆] . This local property is a very mild assumption, and in particular does not imply uniqueness of the solution. Let us recall the notion of metric subregularity
+(Dontchev & Rockafellar, 2009, Sect. 3):
+
+
+**Definition 5.3** (Metric subregularity) **.** _A set-valued mapping M_ : � _[n]_ ⇒ - _[d]_ _is_ metrically subregular
+_at_ _x_ ¯ _for_ _y_ ¯ _if_ (¯ _x_, ¯ _y_ ) ∈ gph _M_ _and_ _there_ _exists_ _a_ _positive_ _constant_ η _together_ _with_ _a_ neighborhood of
+subregularity U _of_ _x such that_ ¯
+dist( _x_, _M_ [−][1] _y_ ¯) ≤ η dist(¯ _y_, _Mx_ ) ∀ _x_ ∈U.
+
+
+Metric subregularity has been used extensively in the optimization literature for establishing linear
+convergence for splitting techniques, see (Tseng, 2000; Drusvyatskiy & Lewis, 2018; Rockafellar,
+2023).
+
+
+**Theorem 5.4** (Linear convergence under metric subregularity) **.** _Suppose that in addition to assump-_
+_tions_ _of_ _Theorem_ _5.1,_ _the_ _operator_ _T_ _is_ _metrically_ _subregular_ _at_ _all_ _z_ [⋆] ∈ zer _T_ _for_ 0 _._ _Then,_ _the_
+_sequence_ (Πrange _P z_ _[k]_ ) _k_ ∈� _generated by iPPPA converges R-linearly._
+
+
+8
+
+
+Π _[R]_ D [−] _k_ [1] [(] _[w]_ [)][ �] [arg min] ∥ _u_ - _w_ ∥ [2] _R_ [−][1] [=]
+_u_ ∈D _k_
+
+
+_w_ - ⟨ _v_ ¯ _[k]_, _Pw_ ∥ _Pv_ ¯− _[k]_ _P_ ∥ [2] _Rw_ ¯ [−] _[k]_ [1] ⟩ _R_ −1 _Pv_ ¯ _[k]_ if _w_ - D _k_ (5.2)
+ _w_ _w_ ∈D _k_ .
+
+
+Vehicle
+
+
+10 _[−]_ [1]
+
+
+10 _[−]_ [3]
+
+
+10 _[−]_ [5]
+
+
+10 _[−]_ [7]
+
+
+10 _[−]_ [9]
+
+
+10 _[−]_ [11]
+
+
+10 [2] 10 [3] 10 [4]
+
+Number of communication rounds _k_
+
+
+Vehicle
+
+
+Figure 2: Logistic regression on a heterogeneous data split. We find that iFedDR can converge fast
+without requiring tuning due to the error-correction step and automatic refinement. In contrast,
+FedDR only converges when the number of inner iterations τ is set sufficiently high. Even without any tuning iFedDR is competitive with all the baselines for which both client stepsize and client
+steps are tuned.
+
+
+6 Experiments
+
+
+In this section we demonstrate iFedDR on a range of numerical problems.
+
+
+**Binary** **logistic** **regression** We consider the vehicle dataset (Duarte & Hu, 2004) with the heterogenous split proposed for FL benchmarking in Wu et al. (2022) and a heterogenous split of the
+`w8a` dataset (Chang & Lin, 2011) as used in Mishchenko et al. (2022). The settings uses 23 clients
+and 10 clients respectively. We compare iFedDR against FedAvg, FedProx, FedDR and Scaffold
+(see Appendix E for exact definitions). The baselines are given an unfair advantage by gridsearching
+over the client stepsize and the number of inner iterations. In contrast, we run only a single configuration of iFedDR. See Table 2 in Appendix F for details on the hyperparameters. We compare both
+the total number of inner iterations and server iterations in Figure 2 (see Figure 5 for similar results
+on `w8a` ). If we tune the stepsizes λ and γ in iFedDR, we can improve the convergence speed further
+as illustrated in Figure 8 of Appendix F and Figure 1.
+
+
+**Linear probing** A common practice is to take off-the-shelf pre-trained models and specialize them
+to a downstream task. Linear probing, in particular, freezes the feature mapping of a pre-trained
+model and trains a linear classifier on top. We follow the setup in (Nguyen et al., 2022), which uses
+a ResNet18 (He et al., 2016) pre-trained on ImageNet and for the downstream task considers a heterogeneous datasplit of CIFAR10 (Krizhevsky) across 20 clients with Dirichlet distribution with
+parameter 0.1. All methods except for iFedDR are tuned (cf. Table 3 in Appendix F for hyperparameters). The results can be found in Figure 3 where iFedDR either matches or surpasses the tuned
+baselines. We additionally train on Fashion-MNIST from scratch where we observe similar behavior
+(cf. Appendix F).
+
+
+We observe that the number of refinements is monotonically increasing in the number of server
+steps. This observation motivates a very simple heuristic to almost entirely avoid the communication
+overhead caused by refinement. We simply increase the number of initially used inner iterations at
+the next server iteration _k_ to be τ _k_ = τ × #(total refinements). The rule still enjoys the convergence
+guarantees of Theorem 3.1, and, as long as the number of refinements are monotonically increasing,
+it does not increase the total number of client steps. As illustrated in Figure 3 on CIFAR10, iFedDR
+only needs 10 additional communication rounds _in total_ using this simple rule. This can be further
+decreased if a doubling strategy is employed, which is especially useful in ill-conditioned problems.
+
+
+9
+
+
+10 [2] 10 [3] 10 [4] 10 [5]
+
+Total number of local iterations
+
+
+10
+
+
+8
+
+
+6
+
+
+4
+
+
+2
+
+
+CIFAR10
+
+
+0 _._ 65
+
+
+0 _._ 60
+
+
+We have developed a variant of FedDR, which automatically adjust the number of client iterations
+and consequently mitigate the need for hyperparameter selection. The scheme enjoys guarantees
+even for minimax problems (and more generally _m_ -player games) and permits large proximal stepsizes. Convergence is proven for a much more general method, namely an error-corrected proximal
+point algorithm with a (general) semidefinite preconditioner, which might be interesting in its own
+right. We demonstrate the favorable properties of the algorithm on a range of numerical experiments.
+For future work it is interesting to extend the idea to partial participation and nonconvex problems.
+
+
+References
+
+
+Aleksandr Y Aravkin, James V Burke, and Gianluigi Pillonetto. Sparse/robust estimation and
+Kalman smoothing with nonsmooth log-concave densities: Modeling, computation, and theory.
+_Journal_ _of_ _Machine_ _Learning_ _Research_, 14(82):2689–2728, 2013. URL `[http://jmlr.org/](http://jmlr.org/papers/v14/aravkin13a.html)`
+`[papers/v14/aravkin13a.html](http://jmlr.org/papers/v14/aravkin13a.html)` .
+
+
+Sean Augenstein, H Brendan McMahan, Daniel Ramage, Swaroop Ramaswamy, Peter Kairouz,
+Mingqing Chen, Rajiv Mathews, et al. Generative models for effective ML on private, decentralized datasets. _arXiv preprint arXiv:1911.06679_, 2019.
+
+
+Heinz H. Bauschke and Patrick L. Combettes. _Convex_ _analysis_ _and_ _monotone_ _operator_ _theory_ _in_
+_Hilbert spaces_ . CMS Books in Mathematics. Springer, 2017. ISBN 978-3-319-48310-8.
+
+
+Kristian Bredies, Enis Chenchene, Dirk A Lorenz, and Emanuele Naldi. Degenerate preconditioned
+proximal point algorithms. _SIAM Journal on Optimization_, 32(3):2376–2401, 2022.
+
+
+10
+
+
+CIFAR10
+
+
+0 _._ 55
+
+
+0 _._ 50
+
+
+0 _._ 45
+
+
+0 _._ 40
+
+
+0 _._ 35
+
+
+0 _._ 30
+
+
+0 100 200 300 400 500
+Number of communication rounds _k_
+
+
+Figure 3: (left) Linear probing on CIFAR10 under heterogeneous data split. The iFedDR algorithm
+matches the test accuracy of a properly tuned FedDR algorithm. (right) By monotonically increasing
+the subsequent inner iteration when a refinement is triggered, iFedDR only uses 10 more communication rounds over the cause of the _entire_ training run.
+
+
+Fair CIFAR10
+
+
+**Fair** **classification** To demonstrate the applicability
+to minimax problems, we consider the following formulation of fair classification (Sharma et al., 2022;
+Nouiehed et al., 2019):
+minimize _u_ ∈� _[m]_ maximize _v_ ∈∆ _r_ _N_ 1  - _iN_ =1 _[v][i]_ [ℓ] _[i]_ [(] _[u]_ [)][ −] 2 [δ] [∥] _[v]_ [∥][2] (6.1)
+
+where ∆ _r_ is the _r_ -dimensional simplex and ℓ _i_ : - _[m]_ →
+
+- is the cross entropy loss over the client dataset. We
+compare against baselines supporting projection. We
+use the same dataset split of CIFAR10 and model configuration as in Section 6 but report the test accuracy
+on the _worst_ _class_ in Figure 4 (see Table 4 for hyperparameters).
+
+
+7 Conclusion
+
+
+1 - _N_
+_N_ _i_ =1 _[v][i]_ [ℓ] _[i]_ [(] _[u]_ [)][ −] 2 [δ]
+
+
+2 [δ] [∥] _[v]_ [∥][2] (6.1)
+
+
+0 _._ 4
+
+
+0 _._ 2
+
+
+0 _._ 0
+
+
+0 100 200 300 400 500
+Number of communication rounds _k_
+
+
+Figure 4: iFedDR on fair classification.
+iFedDR matches FedDR without sweeping
+over the number of inner steps.
+
+
+Chih-Chung Chang and Chih-Jen Lin. LIBSVM: A library for support vector machines. _ACM_
+_Transactions_ _on_ _Intelligent_ _Systems_ _and_ _Technology_, 2:27:1–27:27, 2011. Software available at
+`[http://www.csie.ntu.edu.tw/~cjlin/libsvm](http://www.csie.ntu.edu.tw/~cjlin/libsvm)` .
+
+
+Patrick L Combettes. Convex set theoretic image recovery by extrapolated iterations of parallel
+subgradient projections. _IEEE Transactions on Image Processing_, 6(4):493–506, 1997.
+
+
+Laurent Condat. A primal-dual splitting method for convex optimization involving Lipschitzian,
+proximable and linear composite terms. _Journal_ _of_ _Optimization_ _Theory_ _and_ _Applications_, 158
+(2):460–479, 2013.
+
+
+A. L. Dontchev and R. T. Rockafellar. Implicit functions and solution mappings. _Springer Mono-_
+_graphs in Mathematics. Springer_, 208, 2009.
+
+
+Jim Douglas and Henry H Rachford. On the numerical solution of heat conduction problems in two
+and three space variables. _Transactions_ _of_ _the_ _American_ _mathematical_ _Society_, 82(2):421–439,
+1956.
+
+
+Dmitriy Drusvyatskiy and Adrian S. Lewis. Error bounds, quadratic growth, and linear convergence
+of proximal methods. _Mathematics of Operations Research_, 43(3):919–948, 2018.
+
+
+Marco F Duarte and Yu Hen Hu. Vehicle classification in distributed sensor networks. _Journal of_
+_Parallel and Distributed Computing_, 64(7):826–838, 2004.
+
+
+Jonathan Eckstein. The Lions–Mercier splitting algorithm and the alternating direction method are
+instances of the proximal point algorithm, 1988.
+
+
+Jonathan Eckstein and Dimitri P. Bertsekas. On the Douglas–Rachford splitting method and the
+proximal point algorithm for maximal monotone operators. _Mathematical_ _Programming_, 55:
+293–318, 1992.
+
+
+Brecht Evens, Pieter Pas, Puya Latafat, and Panagiotis Patrinos. Convergence of the preconditioned
+proximal point method and douglas-rachford splitting in the absence of monotonicity. _arXiv_
+_preprint arXiv:2305.03605_, 2023.
+
+
+Pontus Giselsson. Nonlinear forward-backward splitting with projection correction. _SIAM Journal_
+_on Optimization_, 31(3):2199–2226, 2021.
+
+
+Margalit R Glasgow, Honglin Yuan, and Tengyu Ma. Sharp bounds for federated averaging (Local
+SGD) and continuous perspective. In _International_ _Conference_ _on_ _Artificial_ _Intelligence_ _and_
+_Statistics_, pp. 9050–9090. PMLR, 2022.
+
+
+Kaiming He, Xiangyu Zhang, Shaoqing Ren, and Jian Sun. Deep residual learning for image recognition. In _Proceedings_ _of_ _the_ _IEEE_ _conference_ _on_ _computer_ _vision_ _and_ _pattern_ _recognition_, pp.
+770–778, 2016.
+
+
+Divyansh Jhunjhunwala, Shiqiang Wang, and Gauri Joshi. FedExP: Speeding up federated averaging
+via extrapolation. _arXiv preprint arXiv:2301.09604_, 2023.
+
+
+Sai Praneeth Karimireddy, Satyen Kale, Mehryar Mohri, Sashank Reddi, Sebastian Stich, and
+Ananda Theertha Suresh. Scaffold: Stochastic controlled averaging for federated learning. In
+_International Conference on Machine Learning_, pp. 5132–5143. PMLR, 2020.
+
+
+Galina M Korpelevich. The extragradient method for finding saddle points and other problems.
+_Matecon_, 12:747–756, 1976.
+
+
+A. Krizhevsky. Learning multiple layers of features from tiny images. Technical report, University
+of Toronto, 2009.
+
+
+Puya Latafat and Panagiotis Patrinos. Asymmetric forward–backward–adjoint splitting for solving
+monotone inclusions involving three operators. _Computational_ _Optimization_ _and_ _Applications_,
+68(1):57–93, sep 2017.
+
+
+11
+
+
+Puya Latafat, Nikolaos M. Freris, and Panagiotis Patrinos. A new randomized block-coordinate
+primal-dual proximal algorithm for distributed optimization. _IEEE_ _Transactions_ _on_ _Automatic_
+_Control_, 64(10):4050–4065, oct 2019. ISSN 0018-9286.
+
+
+Puya Latafat, Andreas Themelis, and Panagiotis Patrinos. Block-coordinate and incremental aggregated proximal gradient methods for nonsmooth nonconvex problems. _Mathematical_ _Program-_
+_ming_, jan 2021.
+
+
+Tian Li, Anit Kumar Sahu, Manzil Zaheer, Maziar Sanjabi, Ameet Talwalkar, and Virginia Smith.
+Federated optimization in heterogeneous networks. _Proceedings_ _of_ _Machine_ _learning_ _and_ _sys-_
+_tems_, 2:429–450, 2020.
+
+
+Saber Malekmohammadi, Kiarash Shaloudegi, Zeou Hu, and Yaoliang Yu. Splitting algorithms for
+federated learning. In _Machine_ _Learning_ _and_ _Principles_ _and_ _Practice_ _of_ _Knowledge_ _Discovery_
+_in Databases: International Workshops of ECML PKDD 2021, Virtual Event, September 13-17,_
+_2021, Proceedings, Part I_, pp. 159–176. Springer, 2022.
+
+
+Grigory Malinovskiy, Dmitry Kovalev, Elnur Gasanov, Laurent Condat, and Peter Richtarik. From
+local SGD to local fixed-point methods for federated learning. In _International_ _Conference_ _on_
+_Machine Learning_, pp. 6692–6701. PMLR, 2020.
+
+
+Artavazd Maranjyan, Mher Safaryan, and Peter Richtárik. Gradskip: Communication-accelerated
+local gradient methods with better computational complexity. _arXiv preprint arXiv:2210.16402_,
+2022.
+
+
+Brendan McMahan, Eider Moore, Daniel Ramage, Seth Hampson, and Blaise Aguera y Arcas.
+Communication-efficient learning of deep networks from decentralized data. In _Artificial intelli-_
+_gence and statistics_, pp. 1273–1282. PMLR, 2017.
+
+
+Konstantin Mishchenko, Grigory Malinovsky, Sebastian Stich, and Peter Richtárik. Proxskip: Yes!
+local gradient steps provably lead to communication acceleration! finally! In _International Con-_
+_ference on Machine Learning_, pp. 15750–15769. PMLR, 2022.
+
+
+Yurii Nesterov et al. _Lectures on convex optimization_, volume 137. Springer, 2018.
+
+
+John Nguyen, Kshitiz Malik, Maziar Sanjabi, and Michael Rabbat. Where to begin? exploring the
+impact of pre-training and initialization in federated learning. _arXiv preprint arXiv:2206.15387_,
+2022.
+
+
+Maher Nouiehed, Maziar Sanjabi, Tianjian Huang, Jason D Lee, and Meisam Razaviyayn. Solving
+a class of non-convex min-max games using iterative first order methods. _Advances_ _in_ _Neural_
+_Information Processing Systems_, 32, 2019.
+
+
+Reese Pathak and Martin J Wainwright. Fedsplit: An algorithmic framework for fast federated
+optimization. _Advances in neural information processing systems_, 33:7057–7066, 2020.
+
+
+Thomas Pethick, Puya Latafat, Panagiotis Patrinos, Olivier Fercoq, and Volkan Cevher. Escaping limit cycles: Global convergence for constrained nonconvex-nonconcave minimax problems.
+_arXiv preprint arXiv:2302.09831_, 2023.
+
+
+Ali Ramezani-Kebrya, Kimon Antonakopoulos, Igor Krawczuk, Justin Deschenaux, and Volkan
+Cevher. Distributed extra-gradient with optimal complexity and communication guarantees. In
+_11th International Conference on Learning Representations (ICLR)_, 2023.
+
+
+R. Tyrrell Rockafellar. Augmented Lagrangians and applications of the proximal point algorithm in
+convex programming. _Mathematics of Operations Research_, 1(2):97–116, 1976.
+
+
+R Tyrrell Rockafellar. Generic linear convergence through metric subregularity in a variable-metric
+extension of the proximal point algorithm. _Computational_ _Optimization_ _and_ _Applications_, pp.
+1–20, 2023.
+
+
+R. Tyrrell Rockafellar and Jie Sun. Solving monotone stochastic variational inequalities and complementarity problems by progressive hedging. _Mathematical Programming_, 174(1-2):453–471,
+2019.
+
+
+12
+
+
+R. Tyrrell Rockafellar and Roger J.B. Wets. _Variational analysis_, volume 317. Springer, 2011.
+
+
+Ralph T. Rockafellar. _Convex analysis_ . Princeton University Press, 1970.
+
+
+Ernest K Ryu and Wotao Yin. _Large-Scale Convex Optimization: Algorithms_ & _Analyses via Mono-_
+_tone Operators_ . Cambridge University Press, 2022.
+
+
+Abdurakhmon Sadiev, Dmitry Kovalev, and Peter Richtárik. Communication acceleration of local
+gradient methods via an accelerated primal-dual algorithm with an inexact prox. _Advances_ _in_
+_Neural Information Processing Systems_, 35:21777–21791, 2022.
+
+
+Pranay Sharma, Rohan Panda, Gauri Joshi, and Pramod Varshney. Federated minimax optimization: Improved convergence analyses and algorithms. In _International_ _Conference_ _on_ _Machine_
+_Learning_, pp. 19683–19730. PMLR, 2022.
+
+
+M.V. Solodov and B.F. Svaiter. A hybrid projection-proximal point algorithm. _Journal of Convex_
+_Analysis_, 6(1):59–70, 1999.
+
+
+Andreas Themelis and Panagiotis Patrinos. Douglas–Rachford splitting and admm for nonconvex
+optimization: Tight convergence results. _SIAM_ _Journal_ _on_ _Optimization_, 30(1):149–181, 2020.
+doi: 10.1137/18M1163993.
+
+
+Quoc Tran Dinh, Nhan H Pham, Dzung Phan, and Lam Nguyen. FedDR–randomized DouglasRachford splitting algorithms for nonconvex federated composite optimization. _Advances in Neu-_
+_ral Information Processing Systems_, 34:30326–30338, 2021.
+
+
+Paul Tseng. A modified forward-backward splitting method for maximal monotone mappings. _SIAM_
+_Journal on Control and Optimization_, 38(2):431–446, 2000.
+
+
+Shanshan Wu, Tian Li, Zachary Charles, Yu Xiao, Ziyu Liu, Zheng Xu, and Virginia Smith.
+Motley: Benchmarking heterogeneity and personalization in federated learning. _arXiv_ _preprint_
+_arXiv:2206.09262_, 2022.
+
+
+Han Xiao, Kashif Rasul, and Roland Vollgraf. Fashion-mnist: a novel image dataset for benchmarking machine learning algorithms. _arXiv preprint arXiv:1708.07747_, 2017.
+
+
+13
+
+
+## **Appendix**
+
+
+Table of Contents
+
+
+**A** **Related works** **15**
+
+
+**B** **Preliminaries** **15**
+
+
+**C** **The inexact preconditioned proximal point algorithm (iPPPA)** **15**
+
+
+Proof of Theorem 5.1 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 15
+
+
+Proof of Theorem 5.4 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 17
+
+
+**D** **Special cases of iPPPA** **18**
+
+
+D.1 Inexact Douglas-Rachford splitting . . . . . . . . . . . . . . . . . . . . . . . . . . 18
+
+
+D.2 The inexact federated Douglas-Rachford algorithm . . . . . . . . . . . . . . . . . 21
+
+
+Proof of Theorem 3.1 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 22
+
+
+D.3 Application of iFedDR to minimization problems . . . . . . . . . . . . . . . . . . 22
+
+
+D.4 Application of iFedDR to minimax problems . . . . . . . . . . . . . . . . . . . . 23
+
+
+**E** **Baseline methods** **24**
+
+
+**F** **Experiments** **24**
+
+
+14
+
+
+A Related works
+
+
+Federated learning (FL) has seen considerable attention since it was first coined in (McMahan et al.,
+2017). To treat heterogeneous data, (Li et al., 2020) proposed the prox-based method FedProx.
+Prox-based FL methods have since been developed by building on operator splitting techniques as in
+FedSplit (Pathak & Wainwright, 2020) and FedDR/FedPi (Tran Dinh et al., 2021; Malekmohammadi
+et al., 2022). See Pathak & Wainwright (2020) for a detailed discussion on the convergence-failure
+of pre-existing methods and Ryu & Yin (2022); Malekmohammadi et al. (2022) for an overview of
+splitting algorithms. The FL setting has since its conception been extended to fixed point problems
+(Malinovskiy et al., 2020) and minimax problem (Augenstein et al., 2019; Sharma et al., 2022;
+Ramezani-Kebrya et al., 2023).
+
+
+The idea of using a hyperplane projection as a correction step was first introduced in Solodov &
+Svaiter (1999) for the proximal point method. It was later extended in Giselsson (2021) to treat
+a large family of operator splitting approaches in a unified fashion and have been used for proving
+convergence in nonmonotone problems (Pethick et al., 2023). A hyperplane projection argument was
+also used in the adaptive stepsize for finding the intersection of convex sets analyzed in Combettes
+(1997), which was recently applied to the FL setting in Jhunjhunwala et al. (2023).
+
+
+B Preliminaries
+
+
+We recall some standard definitions and refer to Bauschke & Combettes (2017); Rockafellar
+(1970) for further details. We will the denote the distance to a set Z under the positive definite matrix _D_ as dist _D_ ( _z_, Z) := min _z_ [′] ∈Z ∥ _z_ - _z_ [′] ∥ _D_ and the normal cone to _z_ ∈Z as _N_ Z( _z_ ) =
+{ _v_ ∈ - _[n]_ | ⟨ _v_, _z_ [′] - _z_ ⟩≤ 0 ∀ _z_ [′] ∈Z}. A sequence ( _z_ _[k]_ ) _k_ ∈N is said to be Fejér monotone with respect to
+a set S ⊆ - _[n]_ if ∥ _z_ _[k]_ [+][1] - _z_ ∥≤∥ _z_ _[k]_ - _z_ ∥ for all _z_ ∈S, _k_ ∈ N.
+
+
+An operator or set-valued mapping _A_ : � _[n]_ ⇒ - _[d]_ maps each point _x_ ∈ - _[n]_ to a subset _Ax_ of � _[d]_ . We
+will use the notation _A_ ( _x_ ) and _Ax_ interchangably. We denote the domain of _A_ by
+dom _A_             - { _x_ ∈             - _[n]_ | _Ax_             - ∅},
+
+its graph by
+gph _A_             - {( _x_, _y_ ) ∈             - _[n]_ × � _[d]_ | _y_ ∈ _Ax_ },
+
+
+and the set of its zeros by
+zer _A_                   - { _x_ ∈                   - _[n]_ | 0 ∈ _Ax_ }.
+
+The inverse of _A_ is defined through its graph: gph _A_ [−][1] - {( _y_, _x_ ) | ( _x_, _y_ ) ∈ gph _A_ }. The _resolvent_ of _A_
+is defined by _JA_ - (id + _A_ ) [−][1], where id denotes the identity operator. When _A_ is a subdifferential ∂ _g_
+of a closed, convex, and proper function _g_ : � _[n]_ → �, the resolvent reduces to the proximal operator,
+i.e. (id + γ _A_ ) [−][1] ( _x_ ) = proxγ _g_ ( _x_ ) := arg min _y_ ∈� _n g_ ( _y_ ) + 2 [1] γ [∥] _[y]_ [ −] _[x]_ [∥][2][ for][ γ >][ 0.]
+
+**Definition** **B.1** (monotonicity) **.** _An_ _operator_ _A_ : - _[n]_ ⇒ - _[n]_ _is_ _said_ _to_ _be_ _monotone,_ _if_ _for_ _all_
+( _x_, _y_ ), ( _x_ [′], _y_ [′] ) ∈ gph _A_
+⟨ _x_                       - _x_ [′], _y_                       - _y_ [′] ⟩≥ 0.
+
+
+_The operator_ _A is said to be maximally monotone if its graph is not strictly contained in the graph_
+_of another monotone operator._
+
+
+C The inexact preconditioned proximal point algorithm (iPPPA)
+
+
+_**Proof of Theorem 5.1**_ _(Convergence and convergence rate analysis)._ Suppose that _Pz_ _[k]_ - _Pz_ ¯ _[k]_ - 0,
+since otherwise 0 = _v_ ¯ _[k]_ +ε _[k]_ which combined with ∥ε _[k]_ ∥ _R_ −1 ≤ σ max{∥ _v_ ¯ _[k]_ ∥ _R_ −1, ∥ _Pz_ _[k]_ - _Pz_ ¯ _[k]_ ∥ _R_ −1 } = σ∥ _v_ ¯ _[k]_ ∥ _R_ −1
+and σ ∈ (0, 1), implies _v_ ¯ _[k]_ = 0, i.e., that ¯ _z_ _[k]_ ∈ zer _T_ .
+
+
+That α _k_ is finite follows from the fact that ∥ _v_ ¯ _[k]_ ∥ = 0 iff ¯ _z_ _[k]_ ∈ zer _T_ .
+
+
+We begin to derive a few basic relations that will be used in the sequel.
+
+
+                                             -                                             ∥ _v_ ¯ _[k]_ ∥ _R_ −1 = ∥ _P_ ( _z_ _[k]_ - _z_ ¯ _[k]_ )−ε _[k]_ ∥ _R_ −1 ≥∥ _P_ ( _z_ _[k]_ - _z_ ¯ _[k]_ )∥ _R_ −1 −∥ε _[k]_ ∥ _R_ −1 ≥∥ _P_ ( _z_ _[k]_ - _z_ ¯ _[k]_ )∥ _R_ −1 −σ max ∥ _v_ ¯ _[k]_ ∥ _R_ −1, ∥ _Pz_ ¯ _[k]_ - _Pz_ _[k]_ ∥ _R_ −1 .
+(C.1)
+
+
+15
+
+
+Using the triangle inequality again
+
+
+                                      -                                       ∥ _v_ ¯ _[k]_ ∥ _R_ −1 ≤∥ _Pz_ _[k]_   - _Pz_ ¯ _[k]_ ∥ _R_ −1 + ∥ε _[k]_ ∥ _R_ −1 ≤∥ _Pz_ _[k]_   - _Pz_ ¯ _[k]_ ∥ _R_ −1 + σ max ∥ _v_ ¯ _[k]_ ∥ _R_ −1, ∥ _Pz_ ¯ _[k]_   - _Pz_ _[k]_ ∥ _R_ −1 (C.2)
+
+
+It follows from the last two inequalities that
+
+1ξ [∥] _[v]_ [¯] _[k]_ [∥] _[R]_ [−][1] [≤∥] _[Pz][k]_ [ −] _[P][z]_ [¯] _[k]_ [∥] _[R]_ [−][1] [≤] [ξ][∥] _[v]_ [¯] _[k]_ [∥] _[R]_ [−][1] [,] (C.3)
+
+where ξ = max �1 + σ, 1−1σ - = 1−1σ [since][ σ <][ 0.]
+
+
+From the construction of _R_ it follows that
+_P_ = _R_            - _Q_ = _P_            - _Q_ = _Q_            - _P_ . (C.4)
+
+We have the following identity
+∥ _Pv_ ¯ _[k]_ ∥ [2] _R_ [−][1] [=][ ⟨] _[P][v]_ [¯] _[k]_ [,] _[ P][v]_ [¯] _[k]_ [⟩] _[R]_ [−][1] [=][ ⟨] _[PQ][v]_ [¯] _[k]_ [,] _[ PQ][v]_ [¯] _[k]_ [⟩] _[R]_ [−][1] [=][ ⟨] _[v]_ [¯] _[k]_ [,] _[ R][v]_ [¯] _[k]_ [⟩] [=][ ∥] _[v]_ [¯] _[k]_ [∥][2] _R_ [,] (C.5)
+
+where _v_ ¯ _[k]_ ∈ range _P_ was used in the third equality.
+
+
+We start by introducing a shadow sequences _w_ _[k]_ = _Qz_ _[k]_, _w_ ¯ _[k]_ = _Qz_ ¯ _[k]_ and defining the halfspace
+
+
+                       -                        D _k_ = _u_ | ⟨ _v_ ¯ _[k]_, _Pw_ ¯ _[k]_        - _Pu_ ⟩ _R_ −1 ≥ 0 . (C.6)
+
+We have that _Q_ zer _T_ ⊆D _k_ since for any _w_ [⋆] ∈ _Q_ zer _T_ there exists _z_ [⋆] ∈ zer _T_ such that
+⟨ _v_ ¯ _[k]_, _Pw_ ¯ _[k]_                - _Pw_ [⋆] ⟩ _R_ −1 = ⟨ _v_ ¯ _[k]_, _PQ_ ¯ _w_ _[k]_                - _PQw_ [⋆] ⟩ _R_ −1
+
+(C.4) = ⟨ _v_ ¯ _[k]_, _RQ_ ¯ _w_ _[k]_                       - _RQw_ [⋆] ⟩ _R_ −1
+
+= ⟨ _v_ ¯ _[k]_, _Qz_ ¯ _[k]_                       - _Qz_ [⋆] ⟩
+
+= ⟨ _v_ ¯ _[k]_, ¯ _z_ _[k]_                       - _z_ [⋆] ⟩≥ 0,
+
+where the last equality follows from _v_ ¯ _[k]_ ∈ range _P_, and the inequality follows from monotonicity of
+_T_ .
+
+
+Suppose that _w_ _[k]_ - D _k_ for the moment. The alternative will be dealt with later. Then, it follows from
+Fact C.1 that
+
+
+= ∥ _w_ _[k]_                  - _w_ [⋆] ∥ [2] _R_ [−][1] [−] [(2][ −] [λ] _[k]_ [)][λ] _[k]_ [α][2] _k_ [∥] _[P][v]_ [¯] _[k]_ [∥][2] _R_ [−][1] (C.7)
+We proceed to consider two cases.
+
+
+♠ Case 1: max{∥ _v_ ¯ _[k]_ ∥ _R_ −1, ∥ _Pz_ _[k]_ - _Pz_ ¯ _[k]_ ∥ _R_ −1 } = ∥ _v_ ¯ _[k]_ ∥ _R_ −1 .
+
+
+We have
+⟨ _v_ ¯ _[k]_, _Pz_ _[k]_        - _Pz_ ¯ _[k]_ ⟩ _R_ −1 = ⟨ _v_ ¯ _[k]_, ¯ _v_ _[k]_ + ε _[k]_ ⟩ _R_ −1
+
+
+                                      -                                       ≥∥ _v_ ¯ _[k]_ ∥ [2] _R_ [−][1] [−∥] _[v]_ [¯] _[k]_ [∥] _[R]_ [−][1] [∥][ε] _[k]_ [∥] _[R]_ [−][1] [=][ ∥] _[v]_ [¯] _[k]_ [∥] _[R]_ [−][1] ∥ _v_ ¯ _[k]_ ∥ _R_ −1 −∥ε _[k]_ ∥ _R_ −1
+
+≥ (1 − σ)∥ _v_ ¯ _[k]_ ∥ [2] _R_ [−][1] (C.8)
+
+≥ [(1][−] ξ [σ][)] ∥ _P_ ( _z_ _[k]_           - _z_ ¯ _[k]_ )∥ _R_ −1 ∥ _v_ ¯ _[k]_ ∥ _R_ −1 (C.9)
+
+where (C.3) was used in the last inequality.
+
+
+♠ Case 2: max{∥ _v_ ¯ _[k]_ ∥ _R_ −1, ∥ _Pz_ _[k]_ - _Pz_ ¯ _[k]_ ∥ _R_ −1 } = ∥ _Pz_ _[k]_ - _Pz_ ¯ _[k]_ ∥ _R_ −1 .
+
+
+Similarly, we have
+⟨ _v_ ¯ _[k]_, _Pz_ _[k]_            - _Pz_ ¯ _[k]_ ⟩ _R_ −1 = ∥ _Pz_ _[k]_            - _Pz_ ¯ _[k]_ ∥ [2] _R_ [−][1] [−⟨][ε] _[k]_ [,] _[ Pz][k]_ [ −] _[P][z]_ [¯] _[k]_ [⟩] _[R]_ [−][1]
+
+≥∥ _Pz_ _[k]_            - _Pz_ ¯ _[k]_ ∥ [2] _R_ [−][1] [−∥] _[Pz][k]_ [ −] _[P][z]_ [¯] _[k]_ [∥] _[R]_ [−][1] [∥][ε] _[k]_ [∥] _[R]_ [−][1]
+
+
+16
+
+
+Π _[R]_ D [−] _k_ [1] [(] _[w][k]_ [)][ =] _[ w][k]_ [ −⟨] _[v]_ [¯] _[k]_ [,] _[ Pw][k]_ [−] _[P][w]_ [ ¯] _[k]_ [⟩] _[R]_ [−][1]
+
+_[k]_ [2]
+
+
+_[R]_ _Pv_ ¯ _[k]_ .
+
+∥ _Pv_ ¯ _[k]_ ∥ [2]
+_R_ [−][1]
+
+
+Note that
+_w_ _[k]_ [+][1] = _Qz_ _[k]_ [+][1] = _Qz_ _[k]_    - λ _k_ α _kQPv_ ¯ _[k]_ = _w_ _[k]_    - λ _k_ α _kPv_ ¯ _[k]_ = (1 − λ _k_ ) _w_ _[k]_ + λ _k_ Π _[R]_ D [−] _k_ [1] [(] _[w][k]_ [)][.]
+
+Recall that the mapping (1−λ _k_ )id+λ _k_ Π _[R]_ D [−] _k_ [1] [is] [λ] _[k]_ [/][2][-averaged in the space equiped with][ ⟨·][,][ ·⟩] _[R]_ [−][1][. Hence,]
+the sequence ( _w_ _[k]_ ) _k_ ∈� is Fejér monotone relative to _Q_ zer _T_, i.e.,
+
+
+1− [λ] _[k]_
+∥ _w_ _[k]_ [+][1] - _w_ [⋆] ∥ [2] _R_ [−][1] [≤∥] _[w][k]_ [ −] _[w]_ [⋆][∥][2] _R_ [−][1] [−] λ _k_ 2
+
+
+λ _k_ 2 ∥ _w_ _[k]_ [+][1] - _w_ _[k]_ ∥ [2]
+
+2
+
+
+2
+λ _k_
+
+
+≥ [(1][−] ξ [σ][)] ∥ _P_ ( _z_ _[k]_             - _z_ ¯ _[k]_ )∥ _R_ −1 ∥ _v_ ¯ _[k]_ ∥ _R_ −1, (C.10)
+
+where (C.3) was used in the last inequality.
+
+
+In either case, we have
+⟨ _v_ ¯ _[k]_, _Pz_ _[k]_               - _Pz_ ¯ _[k]_ ⟩ _R_ −1 ≥ [(1][−] ξ [σ][)] ∥ _P_ ( _z_ _[k]_               - _z_ ¯ _[k]_ )∥ _R_ −1 ∥ _v_ ¯ _[k]_ ∥ _R_ −1 . (C.11)
+
+If _w_ _[k]_ ∈D _k_, then
+0 ≥⟨ _v_ ¯ _[k]_, _Pw_ _[k]_      - _Pw_ ¯ _[k]_ ⟩ _R_ −1 = ⟨ _v_ ¯ _[k]_, _Pz_ _[k]_      - _Pz_ ¯ _[k]_ ⟩ _R_ −1 ≥ [(1][−] ξ [σ][)] ∥ _P_ ( _z_ _[k]_      - _z_ ¯ _[k]_ )∥ _R_ −1 ∥ _v_ ¯ _[k]_ ∥ _R_ −1
+
+which implies ¯ _z_ _[k]_ ∈ zer _T_ since it must be that ∥ _v_ ¯ _[k]_ ∥ _R_ −1 = 0.
+
+Suppose that _w_ _[k]_ - D _k_ . Then,
+
+[−] _[P][z]_ [¯] _[k]_ [⟩] _[R]_ [−][1]
+α _k_ ∥ _Pv_ ¯ _[k]_ ∥ _R_ −1 = [⟨] _[v]_ [¯] _[k]_ [,] _[ Pz][k]_ ∥ _Pv_ ¯ _[k]_ ∥ _R_ −1
+
+∥ _Pv_ ¯ _[k]_ ∥ [2]
+_R_ [−][1]
+
+
+∥ _v_ ¯ _[k]_ ∥ [2]
+_R_ [−][1]
+for _c_ 2 = [1] / ~~[√]~~ ∥ _R_ ∥ - 0, where we have used that the Rayleigh quotient, ∥ _v_ ¯ _[k]_ ∥ [2] [, can be lower bounded by]
+λmin( _R_ [−][1] ) = [1] /∥ _R_ ∥ where λmin( _R_ [−][1] ) denotes the minimum eigenvalue of _R_ [−][1] .
+
+
+We showed that if _w_ _[k]_ ∈D _k_, the algorithm has terminated. Otherwise, if _w_ _[k]_ - D _k_, using (C.12) in
+(C.7) yields
+
+_c_ [2] 2 [(1][−][σ][)][2]
+∥ _w_ _[k]_ [+][1]         - _w_ [⋆] ∥ [2] _R_ [−][1] [≤∥] _[w][k]_ [ −] _[w]_ [⋆][∥][2] _R_ [−][1] [−] [(2][ −] [λ] _[k]_ [)][λ] _[k]_ ξ [2] ∥ _Pz_ ¯ _[k]_         - _Pz_ _[k]_ ∥ [2] _R_ [−][1] (C.13)
+
+_c_ [2] 2 [(1][−][σ][)][2]
+≤∥ _w_ _[k]_           - _w_ [⋆] ∥ [2] _R_ [−][1] [−] [(2][ −] [λ] _[k]_ [)][λ] _[k]_ ξ [4] ∥ _v_ ¯ _[k]_ ∥ [2] _R_ [−][1] [.] (C.14)
+
+It follows that ( _w_ _[k]_ ) _k_ ∈� is bounded. In turn, implying boundedness of (¯ _z_ _[k]_ ) _k_ ∈� after observing that
+
+_z_ ¯ _[k]_ = ( _P_ + _T_ ) [−][1] _Pz_ _[k]_ = ( _P_ + _T_ ) [−][1] _Pw_ _[k]_, (C.15)
+
+and that the preconditioned resolvent is locally bounded. Moreover, using a telescoping argument
+we have that (∥ _v_ ¯ _[k]_ ∥) _k_ ∈� converges to zero, implying that the limit points of _z_ ¯ _[k]_ belong to zer _T_ as
+claimed. Hence, the limit points of ( ¯ _w_ _[k]_ ) _k_ ∈� = ( _Qz_ ¯ _[k]_ ) _k_ ∈� belong to _Q_ zer _T_ . As another consequence
+of (C.13), we have
+�∞ _k_ =0 [∥] _[w]_ [¯] _[k]_ [ −] _[w][k]_ [∥][2] _R_ [=] [�] _k_ [∞] =0 [∥] _[P][z]_ [¯] _[k]_ [ −] _[Pz][k]_ [∥][2] _R_ [−][1] [<][ ∞][,] (C.16)
+
+which implies that the limit points of ( _w_ _[k]_ ) _k_ ∈� belong to _Q_ zer _T_ as well. The convergence of ( _w_ _[k]_ ) _k_ ∈�
+then follows by (Bauschke & Combettes, 2017, Thm. 5.5). In turn by continuity of the preconditioned resolvent and (C.15) the convergence of (¯ _z_ _[k]_ ) _k_ ∈� follows.
+
+
+The rate follows by telescoping (C.14) to obtain
+
+∥ _w_ [0]                                        - _w_ [⋆] ∥ [2]
+_m_ 1+1               - _mk_ =0 [∥] _[v]_ [¯] _[k]_ [∥][2] _R_ [−][1] [≤] τ( _m_ +1) _R_ [−][1] (C.17)
+
+with τ = lim inf _k_ →∞(2 − λ _k_ )λ _k_ _[c]_ 2 [2][(1][−][σ][)][2] /ξ [4] . Observing that dist _R_ [−][1] (0, _T_ ¯ _z_ _[k]_ ) := min _u_ ¯ _[k]_ ∈ _T_ ¯ _z_ _[k]_ ∥ _u_ ¯ _[k]_ ∥ _R_ [−][1] ≤∥ _v_ ¯ _[k]_ ∥ _R_ [−][1]
+completes the proof.
+
+
+**Fact C.1.** _Given a point r_ - D _k, the projection onto_ D _k_ _is given by_
+
+Π _[R]_ D [−] _k_ [1] [(] _[r]_ [)][ =] _[ r]_ [ −⟨] _[v]_ [¯] _[k]_ [,] _[ Pr]_ [ −] _[P]_ [ ¯] _[w][k]_ [⟩] _[R]_ [−][1] _Pv_ ¯ _[k]_ .
+
+∥ _Pv_ ¯ _[k]_ ∥ [2]
+_R_ [−][1]
+
+
+_**Proof of Theorem 5.4**_ _(Linear convergence under metric subregularity)._ The proof relies on establishing a contraction by exploiting metric subregularity assumption and builds upon the analysis
+of (Latafat & Patrinos, 2017, Thm. 3.3) extending it to the inexact preconditioned proximal point
+setting with positive semidefinite preconditioning.
+
+
+Recal that _Q_ = range _P_ and note that
+_P_ = _R_            - _Q_ = _P_            - _Q_ = _Q_            - _P_ . (C.18)
+
+
+17
+
+
+[−][σ][)]
+
+ξ ∥ _P_ ( _z_ _[k]_ - _z_ ¯ _[k]_ )∥ _R_ −1 [∥] _[v]_ [¯] _[k][k]_ [∥] _[R]_ [−][1]
+
+
+(C.11) ≥ [(1][−][σ][)]
+
+
+∥ _Pv_ ¯ _[k]_ ∥ _R_ −1
+
+
+[−][σ][)]
+
+ξ ∥ _P_ ( _z_ _[k]_ - _z_ ¯ _[k]_ )∥ _R_ −1 [∥] _[v]_ [¯] _[k][k]_ [∥] _[R]_ [−][1]
+
+
+σ)
+
+ξ ∥ _P_ ( _z_ _[k]_ - _z_ ¯ _[k]_ )∥ _R_ −1 (C.12)
+
+
+(C.5) = [(1][−][σ][)]
+
+
+∥ _v_ ¯ _[k]_ ∥ _[R]_ _R_ [−][1] ≥ _c_ 2 (1−ξσ)
+
+
+Recall that by the descent inequality for the shadow sequence (C.13):
+
+dist [2] _R_ [−][1] [(] _[w][k]_ [+][1][,] _[ Q]_ [ zer] _[ T]_ [)][ ≤∥] _[w][k]_ [+][1][ −] [Π] _[R]_ _Q_ [−] zer [1] _T_ [(] _[w][k]_ [)][∥][2] _R_ [−][1]
+
+_c_ [2] 2 [(1][−][σ][)][2]
+≤∥ _w_ _[k]_          - Π _[R]_ _Q_ [−] zer [1] _T_ [(] _[w][k]_ [)][∥][2] _R_ [−][1] [−] [(2][ −] [λ] _[k]_ [)][λ] _[k]_ ξ [2] ∥ _Pz_ ¯ _[k]_          - _Pz_ _[k]_ ∥ [2] _R_ [−][1]
+
+_c_ [2] 2 [(1][−][σ][)][2]
+= dist [2] _R_ [−][1] [(] _[w][k]_ [,] _[ Q]_ [ zer] _[ T]_ [)][ −] [(2][ −] [λ] _[k]_ [)][λ] _[k]_ ξ [2] ∥ _Pz_ ¯ _[k]_          - _Pz_ _[k]_ ∥ [2] _R_ [−][1] (C.19)
+
+
+where in the last equality (C.18) was used, while attainment of the projection is obtained by convexity of zer _T_ .
+
+
+We proceed to establish a contraction in terms of the above distance sequence by lower bounding
+the last term. By Theorem 5.1 the sequence _z_ ¯ _[k]_ converges to some _z_ [⋆] ∈ zer _T_ . Therefore, up to
+discarding initial iterates, the whole sequence lies within the neighborhood of metric subregularity.
+Since _v_ ¯ _[k]_ ∈ _T_ ¯ _z_ _[k]_, it follows from the subregularity assumption that there exists some η > 0 such that
+
+dist(¯ _z_ _[k]_, zer _T_ ) ≤ η∥ _v_ ¯ _[k]_ ∥. (C.20)
+
+On the other hand, for the shadow sequence
+
+dist _R_ −1 ( ¯ _w_ _[k]_, _Q_ zer _T_ ) = inf [=] inf
+_v_ ∈zer _T_ [∥] _[Qv]_ [ −] _[w]_ [¯] _[k]_ [∥] _[R]_ [−][1] _v_ ∈zer _T_ [∥] _[Qv]_ [ −] _[Q][z]_ [¯] _[k]_ [∥] _[R]_ [−][1]
+
+≤ inf [=] [dist] _[R]_ [−][1] [(¯] _[z][k]_ [,][ zer] _[ T]_ [)]
+_v_ ∈zer _T_ [∥] _[v]_ [ −] _[z]_ [¯] _[k]_ [∥] _[R]_ [−][1]
+
+≤∥ _R_ [−][1] ∥ [1][/][2] dist(¯ _z_ _[k]_, zer _T_ )
+
+≤ η∥ _R_ [−][1] ∥ [1][/][2] ∥ _v_ ¯ _[k]_ ∥
+
+≤ η∥ _R_ [−][1] ∥ [1][/][2] ∥ _R_ ∥ [1][/][2] ∥ _v_ ¯ _[k]_ ∥ _R_ −1 (C.21)
+where (C.20) was used in the second last inequality while ∥ _Q_ ∥ = 1 was used in the first one.
+
+dist _R_ −1 ( _w_ _[k]_, _Q_ zer _T_ ) ≤∥ _w_ _[k]_     - Π _Q_ zer _T_ ( ¯ _w_ _[k]_ )∥ _R_ −1 ≤∥ _w_ ¯ _[k]_     - Π _Q_ zer _T_ ( ¯ _w_ _[k]_ )∥ _R_ −1 + ∥ _w_ ¯ _[k]_     - _w_ _[k]_ ∥ _R_ −1
+
+= dist _R_ −1 ( ¯ _w_ _[k]_, _Q_ zer _T_ ) + ∥ _w_ ¯ _[k]_          - _w_ _[k]_ ∥ _R_ −1
+
+(C.21)
+≤ η∥ _R_ [−][1] ∥ [1][/][2] ∥ _R_ ∥ [1][/][2] ∥ _v_ ¯ _[k]_ ∥ _R_ −1 + ∥ _w_ ¯ _[k]_          - _w_ _[k]_ ∥ _R_ −1
+
+(C.18)
+≤ η∥ _R_ [−][1] ∥ [1][/][2] ∥ _R_ ∥ [1][/][2] ∥ _v_ ¯ _[k]_ ∥ _R_ −1 + ∥ _R_ [−][1] ∥∥ _Pz_ ¯ _[k]_          - _Pz_ _[k]_ ∥ _R_ −1
+
+(C.3)
+≤∥ _R_ [−][1] ∥ [1][/][2] (ηξ∥ _R_ ∥ [1][/][2] + ∥ _R_ [−][1] ∥ [1][/][2] )∥ _Pz_ ¯ _[k]_         - _Pz_ _[k]_ ∥ _R_ −1 .
+Combined with (C.19), _Q_ -linear convergence of dist _R_ −1 ( _w_ _[k]_, _Q_ zer _T_ ) follows. In turn, by rearranging
+(C.19), _R_ -linear convergence of (∥ _Pz_ _[k]_ - _Pz_ ¯ _[k]_ ∥ [2] _R_ [−][1] [)] _k_ ∈� [and consequently that of (][∥] _[v]_ [¯] _[k]_ [∥][2] _R_ [−][1] [)] _k_ ∈� [follows by]
+(C.3). In light of finite α _k_ - 0 (due to Theorem 5.1) and since ∥ _w_ _[k]_ [+][1] - _w_ _[k]_ ∥ _R_ −1 = λ _k_ α _k_ ∥ _Pv_ ¯ _[k]_ ∥ _R_ −1 and
+(C.12), the claimed rate for (∥ _w_ _[k]_ [+][1] - _w_ _[k]_ ∥ [2] _R_ [−][1] [)] _k_ ∈� [and the shadow sequence (] _[w][k]_ [)] _k_ ∈� [follows.]
+
+
+D Special cases of iPPPA
+
+
+D.1 Inexact Douglas-Rachford splitting
+
+
+Consider the following inclusion problem which seeks _x_ ∈ - _[d]_ [/][2] such that
+0 ∈ ( _A_ + _B_ ) _x_ (D.1)
+where _A_ : � _[d]_ [/][2] ⇒ - _[d]_ [/][2] and _B_ : � _[d]_ [/][2] ⇒ - _[d]_ [/][2] are maximally monotone. As noted in Section 4, DRS
+applied to problem (D.1) can be written as an instance of PPPA.
+
+
+We instead consider an inexact version of PPPA with correction, which we recall for convenience
+while dropping the iteration counter _k_ . Given _z_ ∈ - _[d]_, one iteration of the scheme proceeds as
+follows:
+
+
+find _z_ ¯ ∈   - _[d]_ and the associated _v_ ¯ ∈ _T_ ¯ _z_ ∩ range _P_
+s.t. _Pz_     - _Pz_ ¯ = _v_ ¯ + ε, ∥ε∥ _R_ −1 ≤ σ max [�] ∥ _v_ ¯∥ _R_ −1, ∥ _Pz_ ¯ − _Pz_ ∥ _R_ −1 [�]
+
+compute _z_ [+] = _z_ - λα _Pv_ ¯ where α = [⟨] _[v]_ [¯][,] _[ Pz]_ [ −] _[P][z]_ [¯][⟩] _[R]_ [−][1]
+
+∥ _Pv_ ¯∥ [2]
+_R_ [−][1]
+
+
+18
+
+
+(iPPPA)
+
+
+**1000**
+
+**1001**
+
+**1002**
+
+
+**1003**
+
+**1004**
+
+**1005**
+
+**1006**
+
+**1007**
+
+**1008**
+
+
+**1009**
+
+**1010**
+
+**1011**
+
+**1012**
+
+**1013**
+
+
+**1014**
+
+**1015**
+
+**1016**
+
+**1017**
+
+**1018**
+
+**1019**
+
+
+**1020**
+
+**1021**
+
+**1022**
+
+**1023**
+
+**1024**
+
+**1025**
+
+
+To derive the iDRS algorithm we apply iPPPA to the primal dual problem (2.6) by taking the operator
+_T_ = _T_ PD and choose the preconditioner _P_ as defined in (4.2). Note that the following derivation
+works for any maximally monotone operators _A_, _B_, and the operators do not necessarily have to
+be chosen as in (2.4b). We will later in Appendix D.2 specialize to (2.4b) involving the consensus
+constraint to derive the iFedDR algorithm. The iPPPA reduces to
+_z_ ¯ = ( _P_ + _T_ ) [−][1] ( _Pz_       - ε) ⇔ _Pz_       - _Pz_ ¯ ∈ _T_ ¯ _z_ + ε
+
+
+We can now define the inexact DRS algorithm (iDRS) specified in Algorithm II by specializing iPPPA. We absorb the γ-dependent factor into the adaptive stepsize parameter by setting
+α _k_ = α [(1][+] γ [γ][2][)][2], since the constants turns out to cancel out.
+
+
+To provide convergence guarantees for the iDRS algorithm, we will generalize the _natural residual_
+defined in (3.2) to allow for the operator _A_ to be possibly set-valued:
+Gγ(¯ _x_ _[k]_ ) := γ [1] [(¯] _[x][k]_ [ −] [(id][ +][ γ] _[B]_ [)][−][1][(¯] _[x][k]_ [ −] [γ] _[u]_ [¯] _[k]_ [))] (D.8)
+
+
+To provide convergence guarantees for the iDRS algorithm, we will generalize the _natural residual_
+defined in (3.2) to allow for the operator _A_ to be possibly set-valued:
+Gγ(¯ _x_ _[k]_ ) := [1] [(¯] _[x][k]_ [ −] [(id][ +][ γ] _[B]_ [)][−][1][(¯] _[x][k]_ [ −] [γ] _[u]_ [¯] _[k]_ [))] (D.8)
+
+
+- + �ε1�
+ε2
+
+
+�γ [−][1] _x_   - _y_
+⇔
+γ _y_    - _x_
+
+
+- �γ [−][1] _x_ ¯ − _y_ ¯� - _Ax_ ¯ + ¯ _y_
+
+ - ∈
+γ _y_ ¯ − _x_ ¯ _B_ [−][1] _y_ ¯ − _x_ ¯
+
+
+with ε = (ε1, ε2) and ¯ _z_ = (¯ _x_, ¯ _y_ ). By picking _s_ = _x_ - γ _y_ the update for _x_ ¯ reduces to
+_x_ ¯ = (id + γ _A_ ) [−][1] ( _s_        - γε1) ⇔ _x_ ¯ = _s_        - γ(¯ _u_ + ε1) with _u_ ¯ ∈ _Ax_ ¯. (D.2)
+With _s_ ¯ := _x_ ¯ − γ _y_ ¯ and _v_ ¯ = (¯ _v_ 1, ¯ _v_ 2), we further have
+
+
+   - _Ax_ ¯ + ¯ _y_
+_T_ ¯ _z_ =
+_B_ [−][1] _y_ ¯ − _x_ ¯
+
+
+- ∋ - _v_ ¯1
+_v_ ¯2
+
+
+- = �γ [−][1] ( _s_ - _s_ ¯) − ε1
+_s_ ¯ − _s_     - ε2
+
+
+- �γ [−][1] ( _s_ - _s_ ¯)�
+and _Pz_  - _Pz_ ¯ = . (D.3)
+_s_ ¯ − _s_
+
+
+The range of _P_ consists of vectors of the form ( _a_, −γ _a_ ) for some _a_ ∈ R _[d]_ [/][2] . The requirement _v_ ¯ ∈
+range _P_ implies that _v_ ¯ must have the structure _v_ ¯2 = −γ _v_ ¯1. Thus, it follows from the inclusion in
+(D.3) that the update for _y_ ¯ reduces to
+_y_ ¯ = (id + _B_ [−][1] ) [−][1] (γ [−][1] _s_ ) = γ [−][1] _s_            - γ [−][1] (id + γ _B_ ) [−][1] _s_ (D.4)
+where the last equality uses the resolvent identity (Rockafellar & Wets, 2011, Lm. 12.14),
+β(id + β [−][1] _M_ ) [−][1] _x_ + (id + β _M_ [−][1] ) [−][1] (β _x_ ) = β _x_ . (D.5)
+which holds when the operator _M_ : � _[d]_ [/][2] ⇒ - _[d]_ [/][2] is maximally monotone and β > 0.
+
+
+The requirement _v_ ¯ ∈ range _P_ puts a restriction on ε, which can be characterized by developing the
+inclusion in (D.3)
+�−γ _Ax_ ¯ − γ _y_ ¯� ∋      - _s_ ¯ − _s_ + γε1� ⇔ γ [−][1] ( _s_      - (γε1 + ε2)) ∈ _y_ ¯ + γ [−][1] _B_ [−][1] _y_ ¯
+_B_ [−][1] _y_ ¯ − _x_ ¯ _s_ ¯ − _s_      - ε2
+
+
+- ∋ - _s_ ¯ − _s_ + γε1
+_s_ ¯ − _s_   - ε2
+
+
+⇔ γ [−][1] ( _s_  - (γε1 + ε2)) ∈ _y_ ¯ + γ [−][1] _B_ [−][1] _y_ ¯
+
+
+⇔ _y_ ¯ = (id + _B_ [−][1] ) [−][1] (γ [−][1] ( _s_          - (γε1 + ε2)))
+This together with (D.4) in turn implies that ε2 = −γε1.
+
+
+Note that
+_v_ ¯2 = −γ _v_ ¯1 = −γ(¯ _u_ + ¯ _y_ ).
+We are now ready to compute the following quantities appearing in iPPPA
+
+
+∥ _Pz_                   - _Pz_ ¯∥ _R_ −1 = ~~√~~ 1γ ∥ _s_ ¯ − _s_ ∥
+
+∥ε∥ _R_ −1 = [√] γ∥ε1∥
+∥ _v_ ¯∥ _R_ −1 = [√] γ∥ _u_ ¯ + ¯ _y_ ∥
+
+∥ _Pv_ ¯∥ _R_ −1 = [1][+] ~~√~~ [γ] γ [2] ∥ _u_ ¯ + ¯ _y_ ∥
+
+⟨ _v_ ¯, _Pz_                    - _Pz_ ¯⟩ _R_ −1 = ⟨ _u_ ¯ + ¯ _y_, _s_                    - _s_ ¯⟩
+
+
+All that remains is to write down the update rule for the next iterate _s_ [+],
+
+
+_s_ [+] = _x_ [+] - γ _y_ [+] = _x_ - λα _v_ ¯1 − γ _y_ + γλα _v_ ¯2 = _s_ - λα [(1][+] γ [γ][2][)][2]
+
+
+_s_ = _x_          - γ _y_ = _x_          - λα _v_ ¯1 − γ _y_ + γλα _v_ ¯2 = _s_          - λα γ (¯ _u_ + ¯ _y_ ),
+
+where we have used that
+
+               - _x_ [+]                - =                - _x_                -                - λα _Pv_ ¯ =                - _x_                - λα( γ1 [+][ γ][)(¯] _[u]_ [ +][ ¯] _[y]_ [)] �.
+_y_ [+] _y_ _y_ + λα(1 + γ [2] )(¯ _u_ + ¯ _y_ )
+
+
+- - _x_
+=
+_y_
+
+
+- - λα _Pv_ ¯ = - _x_ - λα( γ1 [+][ γ][)(¯] _[u]_ [ +][ ¯] _[y]_ [)]
+_y_ + λα(1 + γ [2] )(¯ _u_ + ¯ _y_ )
+
+
+.
+
+
+We can now define the inexact DRS algorithm (iDRS) specified in Algorithm II by specializing iPPPA. We absorb the γ-dependent factor into the adaptive stepsize parameter by setting
+α _k_ = α [(1][+] γ [γ][2][)][2], since the constants turns out to cancel out.
+
+
+19
+
+
+**1026**
+
+**1027**
+
+
+**1028**
+
+**1029**
+
+**1030**
+
+**1031**
+
+**1032**
+
+**1033**
+
+
+**1034**
+
+**1035**
+
+**1036**
+
+**1037**
+
+**1038**
+
+**1039**
+
+
+**1040**
+
+**1041**
+
+**1042**
+
+**1043**
+
+**1044**
+
+
+**1045**
+
+**1046**
+
+**1047**
+
+**1048**
+
+**1049**
+
+**1050**
+
+
+**1051**
+
+**1052**
+
+**1053**
+
+**1054**
+
+**1055**
+
+**1056**
+
+
+**1057**
+
+**1058**
+
+**1059**
+
+**1060**
+
+**1061**
+
+**1062**
+
+
+**1063**
+
+**1064**
+
+**1065**
+
+**1066**
+
+**1067**
+
+
+**1068**
+
+**1069**
+
+**1070**
+
+**1071**
+
+**1072**
+
+**1073**
+
+
+**1074**
+
+**1075**
+
+**1076**
+
+**1077**
+
+**1078**
+
+**1079**
+
+
+**Algorithm II** Inexact DRS (iDRS)
+
+Require _s_ [0] ∈ - _[d]_ [/][2] λ ∈ (0, 2), γ ∈ (0, ∞), σ ∈ (0, 1)
+Repeat for _k_ = 0, 1, . . . until convergence
+
+**II** .1: Find
+_x_ ¯ _[k]_ = _s_ _[k]_             - γ(¯ _u_ _[k]_ + ε _[k]_ 1 [)] and the associated _u_ ¯ _[k]_ ∈ _Ax_ ¯ _[k]_ (D.6)
+
+_y_ ¯ _[k]_ = γ [−][1] (¯ _x_ _[k]_             - γ _u_ ¯ _[k]_ ) − γ [−][1] (id + γ _B_ ) [−][1] (¯ _x_ _[k]_             - γ _u_ ¯ _[k]_ ) (D.7)
+
+_s_ ¯ _[k]_ = _x_ ¯ _[k]_               - γ _y_ ¯ _[k]_
+
+
+such that
+∥ε _[k]_ 1 [∥≤] [σ][ max][ �][∥] _[u]_ [¯] _[k]_ [ +][ ¯] _[y][k]_ [∥][,] γ [1] [∥] _[s]_ [¯] _[k]_ [ −] _[s][k]_ [∥][�]
+
+
+_Q_ ( _z_ ) := Πrange( _P_ )( _z_ ) = 1+1γ [2]
+
+
+20
+
+
+**II** .2:
+
+
+Return _s_ _[k]_ [+][1]
+
+
+[−] _[s]_ [¯] _[k]_ [⟩]
+_s_ _[k]_ [+][1] = _s_ _[k]_ - λα _k_ (¯ _u_ _[k]_ + ¯ _y_ _[k]_ ) with α _k_ = [⟨] _[u]_ [¯] _[k]_ [ +][ ¯] _[y][k]_ [,] _[ s][k]_
+
+∥ _u_ ¯ _[k]_ + ¯ _y_ _[k]_ ∥ [2]
+
+
+where _u_ ¯ _[k]_ is the point in the set _Ax_ ¯ _[k]_ as defined in (D.6). It is of immediate verification that the natural
+residual Gγ(¯ _x_ _[k]_ ) vanishes if and only if _x_ ¯ ∈ zer( _A_ + _B_ ).
+
+
+The iDRS algorithm enjoys the following convergence guarantee.
+
+**Theorem D.1.** _Suppose that_ _A_ : - _[d]_ [/][2] ⇒ - _[d]_ [/][2] _and_ _B_ : - _[d]_ [/][2] ⇒ - _[d]_ [/][2] _are maximally monotone and_
+_that_ zer( _A_ + _B_ ) � ∅ _. Let T_ PD : � _[d]_ ⇒ - _[d]_ _as in_ (2.6) _and let_ (¯ _x_ _[k]_ ) _k_ ∈� _and_ (¯ _y_ _[k]_ ) _k_ ∈� _be generated by iDRS_
+_(Algorithm II). Then,_
+
+
+_(i) The iterates_ (¯ _x_ _[k]_, ¯ _y_ _[k]_ ) _k_ ∈� _converges to some_ ( _x_ [⋆], _y_ [⋆] ) ∈ zer _T_ PD _._
+
+_(ii)_ _For all_ _s_ [⋆] = _x_ [⋆]  - γ _y_ [⋆] _where_ ( _x_ [⋆], _y_ [⋆] ) ∈ zer _T_ PD _, we have that_
+
+min [≤∥] _[s]_ [0] [−] _[s]_ [⋆][∥][2] (D.9)
+_k_ =0,1,..., _m_ [∥G][γ][(¯] _[x][k]_ [)][∥][2] τ( _m_ + 1)
+
+
+_where_ τ = [(2][−][λ] (1 [)][λγ] −σ [(1] ) [2][+][γ][2][)] _._
+
+
+_Proof._ The claim is obtain as a special case of Theorem 5.1 _(iii)_ where maximal monotonicity of _T_ =
+_T_ PD (Assumption II _(i)_ ) in Theorem 5.1 is implied by that of the operators _A_ and _B_ . Assumption II _(ii)_
+is satisfied by the choice of the preconditioner _P_ in (4.2). Theorem D.1 _(i)_ follows directly from
+Theorem 5.1 _(ii)_ with _T_ = _T_ PD.
+
+To establish the convergence rate in terms of variables of iDRS we will specialize the ∥ _v_ ¯ _[k]_ ∥ [2] _R_ [−][1] [ap-]
+pearing in the rate (C.17):
+
+∥ _v_ ¯ _[k]_ ∥ [2] = ∥ _v_ ¯ _[k]_ 1 [∥][2][ +][ ∥] _[v]_ [¯] _[k]_ 2 [∥][2] [=][ (1][ +][ γ][2][)][∥G][γ][(¯] _[x][k]_ [)][∥][2] (D.10)
+
+
+where we have used that
+_v_ ¯ _[k]_ 2 [=][ −][γ] _[v]_ [¯] 1 _[k]_ [=][ −][γ][(¯] _[u][k]_ [ +][ ¯] _[y][k]_ [)][ =][ γ][G][γ][(¯] _[x][k]_ [)]
+
+
+where the last equality follows from (D.7) by recognizing the definition of the natural residual (D.8).
+Furthermore, we have
+∥ _v_ ¯ _[k]_ ∥ [2] _R_ [−][1] [≥] ∥ _R_ 1∥ [∥] _[v]_ [¯] _[k]_ [∥][2] [=] 1+γγ [2] [∥] _[v]_ [¯] _[k]_ [∥][2] (D.11)
+
+
+where the last equality follows from the particular choice of the preconditioner _P_ in (4.2).
+
+
+Combining (D.10) and (D.11) we get
+
+γ
+γ∥Gγ(¯ _x_ _[k]_ )∥ [2] ≤ 1+γ [2] [∥] _[v]_ [¯] _[k]_ [∥][2] [≤∥] _[v]_ [¯] _[k]_ [∥][2] _R_ [−][1] (D.12)
+
+
+What remains is to specialize the initial distance ∥ _Qz_ [0] - _Qz_ [⋆] ∥ [2]
+_R_ [−][1] [. From the particular choice of the]
+preconditioner _P_, we have that
+
+
+- _s_
+−γ _s_
+
+
+**1080**
+
+**1081**
+
+
+**1082**
+
+**1083**
+
+**1084**
+
+**1085**
+
+**1086**
+
+**1087**
+
+
+**1088**
+
+**1089**
+
+**1090**
+
+**1091**
+
+**1092**
+
+**1093**
+
+
+**1094**
+
+**1095**
+
+**1096**
+
+**1097**
+
+**1098**
+
+
+**1099**
+
+**1100**
+
+**1101**
+
+**1102**
+
+**1103**
+
+**1104**
+
+
+**1105**
+
+**1106**
+
+**1107**
+
+**1108**
+
+**1109**
+
+**1110**
+
+
+**1111**
+
+**1112**
+
+**1113**
+
+**1114**
+
+**1115**
+
+**1116**
+
+
+**1117**
+
+**1118**
+
+**1119**
+
+**1120**
+
+**1121**
+
+
+**1122**
+
+**1123**
+
+**1124**
+
+**1125**
+
+**1126**
+
+**1127**
+
+
+**1128**
+
+**1129**
+
+**1130**
+
+**1131**
+
+**1132**
+
+**1133**
+
+
+with _z_ = ( _x_, _y_ ) and _s_ = _x_ - γ _y_ . It follows that
+
+∥ _Qz_ [0]            - _Qz_ [⋆] ∥ [2] _R_ [−][1] [≤∥] _[R]_ [−][1][∥∥] _[Qz]_ [0][ −] _[Qz]_ [⋆][∥][2] [=] [∥] 1 _[R]_ + [−] γ [1][2][∥] [∥] _[s]_ [0][ −] _[s]_ [⋆][∥][2] (D.13)
+
+where _s_ [⋆] = _x_ [⋆] - γ _y_ [⋆] with ( _x_ [⋆], _y_ [⋆] ) ∈ zer _T_ PD. By substituting the computed quantities (D.12) and
+(D.13) into the rate (C.17) and choosing constant λ _k_ = λ for simplicity, we obtain
+
+min [≤∥] _[R]_ [∥∥] _[R]_ [∥][−][1][(1][ −] [σ][)][2][∥] _[s]_ [0] [−] _[s]_ [⋆][∥][2]
+_k_ =0,1,..., _m_ [γ][∥G][γ][(¯] _[x][k]_ [)][∥][2] (2 − λ)λ(1 + γ [2] )( _m_ + 1)
+
+Rearranging and noting that ∥ _R_ ∥∥ _R_ [−][1] ∥ = 1 completes the proof.
+
+
+D.2 The inexact federated Douglas-Rachford algorithm
+
+
+The iDRS algorithm developed in Appendix D.1 can further be specified to the federated learning
+setting by making the particular choice of the operators _A_, _B_ provided in (2.4b). Note that the resulting inclusion problem (2.4) is an equivalent reformulation of the original federated learning problem
+(2.1) as covered by Section 2. The reformulation introduces a lifted space whose variable will be
+indicated by bold font, e.g. _**x**_ ∈ - _[Nn]_ .
+
+
+The iDRS algorithm requires computing the resolvent (id − γ _B_ ) [−][1] which acts in the lifted space.
+The computation simplifies under the particular choice of the operator _B_ in (2.4b) involving the
+consensus constraint by reducing to computing the resolvent of _G_ on an average as made precise
+in Lemma D.2. See e.g. Latafat et al. (2021, Lm. 3.1) for a similar result in the specific case of
+minimization.
+
+**Lemma D.2.** _Let_ _B_ : - _[Nn]_ ⇒ - _[Nn]_ _be defined as in_ (2.4b) _and_ γ - 0 _. Then, given_ _**x**_ = ( _x_ 1, ..., _xN_ ) ∈
+
+- _[Nn]_ _, the resolvent of B can be computed as follows_
+
+
+The resulting (implicit) algorithm is specified in Algorithm III. We have used the following equivalences
+_u_ ¯ _[k]_ _i_ [+][ ¯] _[y]_ _i_ _[k]_ [=][ γ][−][1][(¯] _[x]_ _i_ _[k]_ [−] _[p]_ [ˆ] _[k]_ [)]
+
+(D.15)
+_s_ ¯ _[k]_ _i_ [−] _[s]_ _i_ _[k]_ [=][ γ] _[u]_ [¯] _i_ _[k]_ [+] _[p]_ [ˆ] _[k]_ [ −] _[s][k]_ _i_
+
+since _**v**_ ¯ _[k]_ 1 [=] _**[u]**_ [¯] _[k]_ [ +] _**[y]**_ [¯] _[k]_ [and] _**[v]**_ [¯] _[k]_ 2 [=] _**[p]**_ [ˆ] _[k]_ [ −] _**[x]**_ [¯] _[k]_ [.]
+
+
+21
+
+
+(id + γ _B_ ) [−][1] ( _**x**_ ) = �(¯ _z_, ..., ¯ _z_ ) | _z_ ¯ ∈ (id + [γ]
+
+
+_N_ [1] - _iN_ =1 _[x][i]_ [)] �.
+
+
+[1]
+_N_ _[G]_ [)][−][1][(] _N_
+
+
+_Proof._ Let _**z**_ ∈ (id + γ _B_ ) [−][1] ( _**x**_ ). Due to the consensus constraint we have that _**z**_ = (¯ _z_, ..., ¯ _z_ ) from which
+the following equivalences follows:
+_**z**_ ∈ (id + γ _B_ ) [−][1] ( _**x**_ )
+⇐⇒ _**x**_ ∈ _**z**_ + γ _B_ _**z**_
+
+⇐⇒ _xi_ ∈ _z_ ¯ + _N_ [γ] _[G][z]_ [¯] ∀ _i_ ∈ [ _N_ ]
+
+⇐⇒ _N_ 1        - _iN_ =1 _[x][i]_ [∈] _[z]_ [¯][ +] _N_ [γ] _[G][z]_ [¯]
+
+
+⇐⇒ _z_ ¯ ∈ (id + [γ]
+
+
+⇐⇒ _z_ ¯ ∈ (id + _N_ _[G]_ [)][−][1][(] _N_ [1]        - _iN_ =1 _[x][i]_ [)]
+
+This completes the proof.
+
+
+[1]
+_N_ _[G]_ [)][−][1][(] _N_
+
+
+With the particular choice of the operators _A_, _B_ in (2.4b), the coordinates of iDRS reduces into
+blocks. In what follows, we will refer to the variables in iDRS using bold font to make it apparent
+that iDRS acts on the lifted space. For convenience we will rescale the variables in iDRS by _N_ such
+that
+_**x**_ ¯ _[k]_ = [1] [(¯] _[x][k]_ [, ...,] _[x]_ [¯] _[k]_ [)][,] _**u**_ ¯ _[k]_ = [1] [(¯] _[u][k]_ [, ...,][ ¯] _[u][k]_ [)][,] _**y**_ ¯ _[k]_ = [1] [(¯] _[y][k]_ [, ...,][ ¯] _[y][k]_ [)]
+
+
+_N_ [1] [(¯] _[x]_ 1 _[k]_ [, ...,] _[x]_ [¯] _[k]_ _N_ [)][,] _**u**_ ¯ _[k]_ = _N_ [1]
+
+_N_ [1] [(¯] _[s]_ 1 _[k]_ [, ...,][ ¯] _[s][k]_ _N_ [)][,] _**s**_ _[k]_ = _N_ [1]
+
+
+(D.14)
+_N_ [1] [(][ε] 1 _[k]_ [, ..., ε] _[k]_ _N_ [)]
+
+
+_**s**_ ¯ _[k]_ = [1]
+
+
+_N_ [1] [(¯] _[u]_ 1 _[k]_ [, ...,][ ¯] _[u][k]_ _N_ [)][,] _**y**_ ¯ _[k]_ = _N_ [1]
+
+
+_N_ [1] [(] _[s]_ 1 _[k]_ [, ...,] _[ s][k]_ _N_ [)][,] ε _[k]_ 1 [=] _N_ [1]
+
+
+_N_ [1] [(¯] _[y]_ 1 _[k]_ [, ...,][ ¯] _[y][k]_ _N_ [)]
+
+
+which implies that _u_ ¯ _[k]_ _i_ [∈] _[F][i]_ [(¯] _[x]_ _i_ _[k]_ [) for all] _[ i]_ [ ∈] [[] _[N]_ []. Similarly for] _**[p]**_ [ˆ] _[k]_ [:][=][ (id][ +][ γ] _[B]_ [)][−][1][(¯] _**[x]**_ _[k]_ [ −] [γ] _**[u]**_ [¯] _[k]_ [) from (][D.7][),]
+it follows from Lemma D.2 that we can instead compute
+
+_p_ ˆ _[k]_ := (id + γ _G_ ) [−][1][�] _N_ [1]              - _iN_ =1 _[x]_ [¯] _i_ _[k]_ [−] [γ] _[u]_ [¯] _i_ _[k]_              
+
+
+for which _**p**_ ˆ _[k]_ = _N_ [1] [( ˆ] _[p][k]_ [, ...,] _[p]_ [ˆ] _[k]_ [).]
+
+
+**1134**
+
+**1135**
+
+
+**1136**
+
+**1137**
+
+**1138**
+
+**1139**
+
+**1140**
+
+**1141**
+
+
+**1142**
+
+**1143**
+
+**1144**
+
+**1145**
+
+**1146**
+
+**1147**
+
+
+**1148**
+
+**1149**
+
+**1150**
+
+**1151**
+
+**1152**
+
+
+**1153**
+
+**1154**
+
+**1155**
+
+**1156**
+
+**1157**
+
+**1158**
+
+
+**1159**
+
+**1160**
+
+**1161**
+
+**1162**
+
+**1163**
+
+**1164**
+
+
+**1165**
+
+**1166**
+
+**1167**
+
+**1168**
+
+**1169**
+
+**1170**
+
+
+**1171**
+
+**1172**
+
+**1173**
+
+**1174**
+
+**1175**
+
+
+**1176**
+
+**1177**
+
+**1178**
+
+**1179**
+
+**1180**
+
+**1181**
+
+
+**1182**
+
+**1183**
+
+**1184**
+
+**1185**
+
+**1186**
+
+**1187**
+
+
+The algorithmic description in Algorithm III can explicitly be divided into an update rule for the
+clients and the server as described in iFedDR (Algorithm I). The adaptive stepsize α _k_ in iFedDR can
+be implemented in a computationally and storage efficient manner as commented on in Remark D.3.
+
+
+**Remark** **D.3.** Evaluation of ξ _k_, ζ _k_ and µ _k_ in (3.4) can be performed in place without the need for
+memory allocation of order _Nn_ as follows:
+ξ _k_ = [�] _i_ _[N]_ =1 [∥] _[x]_ [¯] _i_ _[k]_ [−] _[p]_ [ˆ] _[k]_ [∥][2] [=] [�] _i_ _[N]_ =1 [∥] _[x]_ [¯] _i_ _[k]_ [∥][2][ −] [2][⟨][�] _i_ _[N]_ =1 _[x]_ [¯] _i_ _[k]_ [,] _[p]_ [ˆ] _[k]_ [⟩] [+] _[ N]_ [∥] _[p]_ [ˆ] _[k]_ [∥][2][,]
+
+µ _k_ = [�] _i_ _[N]_ =1 [⟨] _[x]_ [¯] _i_ _[k]_ [−] _[p]_ [ˆ] _[k]_ [,] _[ v]_ _i_ _[k]_ [−] _[p]_ [ˆ] _[k]_ [⟩]
+
+
+Return _**s**_ _[k]_ [+][1]
+
+
+_**Proof of Theorem 3.1**_ _._ The proof follows directly from Theorem D.1 with the particular choice of
+_A_, _B_ in (2.4b). Maximally monotonicity of _A_, _B_ follows from that of _Fi_ for all _i_ ∈ [ _N_ ] and _G_ . Singlevaluedness of _A_ follows from Lipschitz continuity of _Fi_ for all _i_ ∈ [ _N_ ].
+
+The condition ( _**x**_ [⋆], _**y**_ [⋆] ) ∈ zer _T_ PD is equivalent to requiring that _**x**_ [⋆] is a solution to the primal problem
+(2.4) and _**y**_ [⋆] = _A_ _**x**_ [⋆] due to (2.6) and _A_ being singlevalued. This completes the proof.
+
+
+D.3 Application of iFedDR to minimization problems
+
+
+Assumption I for the inclusion (2.1) are satisfied under the following assumption on problem (2.2)
+where _Fi_ = ∇ _fi_ and _G_ = ∂ _g_ .
+
+
+**Assumption III** (Requirements for problem (2.1)) **.**
+
+
+_(i) The function_ _fi_ : � _[n]_ →  - _is convex for all i_ ∈ [ _N_ ] _._
+
+
+_(ii)_ _The gradient of_ _fi is Li-Lipschitz continuous for all i_ ∈ [ _N_ ] _, i.e._
+∥∇ _fi_ ( _x_ ) −∇ _fi_ ( _x_ [′] )∥≤ _Li_ ∥ _x_            - _x_ [′] ∥ ∀ _x_, _x_ [′] ∈            - _[n]_ .
+
+
+_(iii) g_ : � _[n]_ → - _is proper lsc convex._
+
+
+For convenience, Algorithm IV specializes iFedDR (Algorithm I) to the case of minimization where
+the operator _Fi_ = ∇ _fi_ and _G_ = ∂ _g_ .
+
+
+22
+
+
+= _N_ ∥ _p_ ˆ _[k]_ ∥ [2] −⟨ _p_ ˆ _[k]_, [�] _i_ _[N]_ =1 _[v]_ _i_ _[k]_ [⟩−⟨][�] _i_ _[N]_ =1 _[x]_ [¯] _i_ _[k]_ [,] _[p]_ [ˆ] _[k]_ [⟩] [+] [�] _i_ _[N]_ =1 [⟨] _[x]_ [¯] _i_ _[k]_ [,] _[ v]_ _i_ _[k]_ [⟩][,]
+
+
+γ [1][2] - _iN_ =1 [∥] _[s]_ [¯] _[k]_ _i_ [−] _[s]_ _i_ _[k]_ [∥][2] [=] γ [1]
+
+
+ζ _k_ = [1]
+
+
+γ [1][2] - _iN_ =1 [∥] _[p]_ [ˆ] _[k]_ [ −] _[v][k]_ _i_ [∥][2]
+
+
+= γ [1][2] �� _iN_ =1 [∥] _[v][k]_ _i_ [∥][2][ −] [2][⟨][�] _i_ _[N]_ =1 _[v]_ _i_ _[k]_ [,] _[p]_ [ˆ] _[k]_ [⟩] [+] _[ N]_ [∥] _[p]_ [ˆ] _[k]_ [∥][2][�][,]
+
+
+with _v_ _[k]_ _i_ [=] _[s][k]_ _i_ [−] [γ] _[F][i]_ [(¯] _[x]_ _i_ _[k]_ [). Note that the computation of][ ζ] _[k]_ [can be ignored entirely if the error conditi][on]
+in Step I.3 is relaxed slightly by only involving ξ _k_ .
+
+
+**Algorithm III** Inexact FedDR (implicit)
+
+
+Require _**s**_ [0] ∈ - _[Nn]_ λ ∈ (0, 2), γ ∈ (0, ∞), σ ∈ (0, 1)
+Repeat for _k_ = 0, 1, . . . until convergence
+**III** .1: Find
+_x_ ¯ _i_ _[k]_ [=] _[s][k]_ _i_ [−] [γ][(¯] _[u]_ _i_ _[k]_ [+][ ε] _i_ _[k]_ [)] with _u_ ¯ _[k]_ _i_ [∈] _[F][i]_ [(¯] _[x]_ _i_ _[k]_ [)]
+
+_y_ ¯ _[k]_ _i_ [=][ γ][−][1][(¯] _[x]_ _i_ _[k]_ [−] [γ] _[u]_ [¯] _i_ _[k]_ [)][ −] [γ][−][1][(id][ +][ γ] _[G]_ [)][−][1][�] _N_ [1]            - _iN_ =1 _[x]_ [¯] _i_ _[k]_ [−] [γ] _[u]_ [¯] _i_ _[k]_            
+
+
+**III** .2:
+
+
+_s_ ¯ _[k]_ _i_ [=] _[x]_ [¯] _i_ _[k]_ [−] [γ] _[y]_ [¯] _i_ _[k]_
+such that
+
+     - _iN_ =1 [∥][ε] _[k]_ _i_ [∥][2] [≤] [σ][2][ max][ ��] _i_ _[N]_ =1 [∥] _[u]_ [¯] _[k]_ _i_ [+][ ¯] _[y]_ _i_ _[k]_ [∥][2][,] γ [1][2]     - _iN_ =1 [∥] _[s]_ [¯] _[k]_ _i_ [−] _[s]_ _i_ _[k]_ [∥][2][�]
+
+
+              - _N_
+_i_ =1 [⟨] _[u]_ [¯] _[k]_ _i_ [+][ ¯] _[y]_ _i_ _[k]_ [,] _[ s]_ _i_ _[k]_ [−] _[s]_ [¯] _i_ _[k]_ [⟩]
+_s_ _[k]_ _i_ [+][1] = _s_ _[k]_ _i_ [−] [λα] _[k]_ [(¯] _[u]_ _i_ _[k]_ [+][ ¯] _[y]_ _i_ _[k]_ [)] with α _k_ =         - _N_
+_i_ =1 [∥] _[u]_ [¯] _[k]_ _i_ [+][ ¯] _[y]_ _i_ _[k]_ [∥][2]
+
+
+**1188**
+
+**1189**
+
+
+**1190**
+
+**1191**
+
+**1192**
+
+**1193**
+
+**1194**
+
+**1195**
+
+
+**1196**
+
+**1197**
+
+**1198**
+
+**1199**
+
+**1200**
+
+**1201**
+
+
+**1202**
+
+**1203**
+
+**1204**
+
+**1205**
+
+**1206**
+
+
+**1207**
+
+**1208**
+
+**1209**
+
+**1210**
+
+**1211**
+
+**1212**
+
+
+**1213**
+
+**1214**
+
+**1215**
+
+**1216**
+
+**1217**
+
+**1218**
+
+
+**1219**
+
+**1220**
+
+**1221**
+
+**1222**
+
+**1223**
+
+**1224**
+
+
+**1225**
+
+**1226**
+
+**1227**
+
+**1228**
+
+**1229**
+
+
+**1230**
+
+**1231**
+
+**1232**
+
+**1233**
+
+**1234**
+
+**1235**
+
+
+**1236**
+
+**1237**
+
+**1238**
+
+**1239**
+
+**1240**
+
+**1241**
+
+
+**Algorithm IV** The inexact federated Douglas-Rachford algorithm (iFedDR) for minimization
+
+Require starting point _s_ [−] _i_ [1] ∈ - _[n]_, α−1 = 0 ∈ �, stepsize γ ∈ (0, ∞), λ ∈ (0, 2), and σ ∈ (0, 1)
+Repeat for _k_ = 0, 1, . . . until convergence
+
+**IV** .1: Each client _i_ ∈ [ _N_ ] � {1, . . ., _N_ } computes
+
+_s_ _[k]_ _i_ [=] _[s][k]_ _i_ [−][1] + λα _k_ −1(¯ _xi_ _[k]_ [−][1]                    - _p_ ˆ _[k]_ [−][1] )
+and approximately solves
+
+_x_ ¯ _i_ _[k]_ [≃] [prox] γ _fi_ [(] _[s]_ _i_ _[k]_ [) :][=][ arg min] _fi_ ( _x_ ) + 2 [1] γ [∥] _[x]_ [ −] _[s]_ _i_ _[k]_ [∥][2] (D.17)
+_x_ ∈� _[n]_
+
+and sends to the server
+
+                          - _x_ ¯ _ik_ [,][ ∇] _[f][i]_ [(¯] _[x]_ _i_ _[k]_ [)][,] _[ s]_ _i_ _[k]_ �.
+
+**IV** .2: The server computes the average _p_ ˆ _[k]_ - proxγ _g_ - _N_ 1 - _iN_ =1 [(¯] _[x]_ _i_ _[k]_ [−] [γ][∇] _[f][i]_ [(¯] _[x]_ _i_ _[k]_ [))] - and the scalar quantities
+
+ξ _k_ = [�] _i_ _[N]_ =1 [∥] _[x]_ [¯] _i_ _[k]_ [−] _[p]_ [ˆ] _[k]_ [∥][2][,] [ζ] _[k]_ [=] γ [1][2]   - _iN_ =1 [∥][γ][∇] _[f][i]_ [(¯] _[x]_ _i_ _[k]_ [)][−] _[s]_ _i_ _[k]_ [+][ ˆ] _[p][k]_ [∥][2][,] [and][ µ] _[k]_ [=][ �] _i_ _[N]_ =1 [⟨] _[x]_ [¯] _i_ _[k]_ [−] _[p]_ [ˆ] _[k]_ [, γ][∇] _[f][i]_ [(¯] _[x]_ _i_ _[k]_ [)][−] _[s]_ _i_ _[k]_ [+][ ˆ] _[p][k]_ [⟩][.]
+
+(D.18)
+See Remark D.3 for how to carry out the computation memory-efficiently.
+
+**IV** .3: if [�] _i_ _[N]_ =1 [∥] _[s][k]_ _i_ [−] [γ][∇] _[f][i]_ [(¯] _[x]_ _i_ _[k]_ [)][ −] _[x]_ [¯] _i_ _[k]_ [∥][2] [≤] [σ][2][ max][{][ξ] _[k]_ [, ζ] _[k]_ [}][ then]
+the server sends back
+( ˆ _p_ _[k]_, α¯ _k_ ) where α _k_ = [µ] _[k]_ /ξ _k_ .
+
+
+**IV** .4: else
+
+
+request the clients to refine the approximation in (D.17) to higher accuracy.
+
+
+Return _p_ ˆ _[k]_
+
+
+The resolvent of the operator _Fi_ = ∇ _fi_ in (3.3) reduces to finding an approximate solution to the
+strongly convex problem
+
+minimize _x_ ∈� _[n]_ _fi_ [γ][(] _[x]_ [) :][=] _[f][i]_ [(] _[x]_ [)][ +] 2 [1] γ [∥] _[x]_ [ −] _[s]_ _i_ _[k]_ [∥][2][.] (D.16)
+
+
+which can be solved first order iterative methods such as gradient descent on the following gradient
+∇ _fi_ [γ][(] _[x]_ [)][ =][ ∇] _[f][i]_ [(] _[x]_ [)][ +] γ [1] [(] _[x]_ [ −] _[s]_ _i_ _[k]_ [)][.]
+
+
+D.4 Application of iFedDR to minimax problems
+
+
+We will consider the following _N_ client minimax problem
+
+
+_u_ min∈� _[m]_ [ max] _v_ ∈� _[r]_ _[f]_ [ γ] _i_ [(] _[u]_ [,] _[ v]_ [) :][=] _[f][i]_ [(] _[u]_ [,] _[ v]_ [)][ +] 2 [1]
+
+
+2 [1] γ [∥] _[u]_ [ −] _[s]_ _i_ _[k]_, _u_ [∥][2][ −] 2 [1]
+
+
+2 [1] γ [∥] _[v]_ [ −] _[s]_ _i_ _[k]_, _v_ [∥][2] (D.20)
+
+
+minimize maximize _g_ ( _u_ ) + [1]
+_u_ ∈� _[m]_ _v_ ∈� _[r]_ _N_
+
+
+_N_
+
+
+_fi_ ( _u_, _v_ ) − _h_ ( _v_ ) (D.19)
+_i_ =1
+
+
+Let _n_ = _m_ + _r_, _x_ = ( _u_, _v_ ) and choose _G_ ( _x_ ) := (∂ _g_ ( _u_ ), ∂ _h_ ( _v_ )), _Fi_ ( _x_ ) := (∇ _u fi_ ( _u_, _v_ ), −∇ _v fi_ ( _u_, _v_ )) in
+iFedDR.
+
+
+Assumption I used in Theorem 3.1 are satisfied under the following conditions.
+
+
+**Assumption IV.** _Problem_ (D.19) _satisfies_
+
+
+_(i) For_ _all_ _i_ ∈ [ _N_ ] _,_ _the_ _function_ _fi_ :  - _[m]_ [+] _[r]_ →  - _is_ _convex-concave,_ _i.e._ _fi_ (·, _v_ ) _is_ _convex_ _for_ _all_
+_v_ ∈   - _[r]_ _and_ _fi_ ( _u_, ·) _is concave for all u_ ∈   - _[m]_ _._
+
+
+_(ii)_ _The operator Fi_ : � _[m]_ [+] _[r]_ →  - _[m]_ [+] _[r]_ _is Li-Lipschitz continuous for all i_ ∈ [ _N_ ] _, i.e._
+
+∥ _Fi_ ( _x_ ) − _Fi_ ( _x_ [′] )∥≤ _Li_ ∥ _x_                - _x_ [′] ∥ ∀ _x_, _x_ [′] ∈                - _[m]_ [+] _[r]_ .
+
+
+_(iii) g_ : � _[m]_ → - _and h_ : � _[r]_ → - _is proper lsc convex._
+
+
+The resolvent of the operator _Fi_ in (3.3) reduces to solving
+
+
+23
+
+
+**1242**
+
+**1243**
+
+
+**1244**
+
+**1245**
+
+**1246**
+
+**1247**
+
+**1248**
+
+**1249**
+
+
+**1250**
+
+**1251**
+
+**1252**
+
+**1253**
+
+**1254**
+
+**1255**
+
+
+**1256**
+
+**1257**
+
+**1258**
+
+**1259**
+
+**1260**
+
+
+**1261**
+
+**1262**
+
+**1263**
+
+**1264**
+
+**1265**
+
+**1266**
+
+
+**1267**
+
+**1268**
+
+**1269**
+
+**1270**
+
+**1271**
+
+**1272**
+
+
+**1273**
+
+**1274**
+
+**1275**
+
+**1276**
+
+**1277**
+
+**1278**
+
+
+**1279**
+
+**1280**
+
+**1281**
+
+**1282**
+
+**1283**
+
+
+**1284**
+
+**1285**
+
+**1286**
+
+**1287**
+
+**1288**
+
+**1289**
+
+
+**1290**
+
+**1291**
+
+**1292**
+
+**1293**
+
+**1294**
+
+**1295**
+
+
+where _s_ _[k]_ _i_ [=] [(] _[s][k]_ _i_, _u_ [,] _[ s][k]_ _i_, _v_ [). The subproblem (][D.20][) can be approximated by a first-order iterative solver]
+with access to the operator
+∇ _Fi_ [γ][(] _[x]_ [)][ =] _[F][i]_ [(] _[x]_ [)][ +] γ [1] [(] _[x]_ [ −] _[s]_ _i_ _[k]_ [)][.]
+
+Note that, when _Fi_ is monotone the operator _Fi_ [γ] [is strongly monotone.]
+
+
+E Baseline methods
+
+
+Given a client update rule _Vi_ : � _[n]_ → - _[n]_, defines the following compositions
+
+_Vi_ _[k]_ [=] _[ V]_ ��������������� _[i]_ [ ◦] _[V][i]_ [ ◦· · · ◦] ���������������� _[V]_                    - _[i]_ . (E.1)
+τ times
+
+Let the server update be given as
+
+
+To recover FedAvg take _Vi_ ( _x_ ) := _x_ - η∇ _fi_ ( _x_ ) for some η - 0. Instead, to recover FedProx take
+_Vi_ ( _x_ ) := _x_ - η∇ _fi_ [γ][(] _[x]_ [) as defined in (][3.1][). It is useful to note that the Lipschitz constant for][ ∇] _[f]_ [ γ] _i_ [is]
+
+_Li_ [γ] [:][=] γ [1] [+] _[ L][i]_ [.] (E.3)
+
+
+**FedDR** For convenience we also include the algorithmic description of FedDR (Tran Dinh et al.,
+2021) in our notation in Algorithm I. To compare against our proposed iFedDR method, consider the
+specialized case of minimization where iFedDR (Algorithm I) reduces to Algorithm IV. Originating
+from the extragradient error-correction step in iPPPA, our method averages _x_ ¯ _i_ _[k]_ [−] [γ][∇] _[f][i]_ [(¯] _[x]_ _i_ _[k]_ [) instead of]
+2¯ _xi_ _[k]_ [−] _[s]_ _i_ _[k]_ [in] [the] [computation] [of] [the] [server] [average] _[p]_ [ˆ] _[k]_ [.] [This] [modification] [is] [crucial] [for] [allowing] [the]
+relative stopping criterion for the client proximal computation also appearing in our method. Lastly,
+iFedDR comes with an adaptive stepsize in place of λ _k_ in Algorithm I, which is also a result of
+the error-correction step. Only in the special case of minimization when the proximal operator can
+additionally be computed exactly, do the two methods coincide.
+
+
+**Algorithm I** FedDR
+
+Require starting point _s_ [−] _i_ [1] ∈ - _[n]_, _x_ ¯ _i_ [−][1] = _p_ ˆ [−][1] ∈ - _[n]_, stepsize γ ∈ (0, ∞), and λ _k_ ∈ (0, 2)
+Repeat for _k_ = 0, 1, . . . until convergence
+
+**I** .1: Each client _i_ ∈ [ _N_ ] � {1, . . ., _N_ } computes
+
+_s_ _[k]_ _i_ [=] _[s][k]_ _i_ [−][1]                    - λ _k_ −1(¯ _xi_ _[k]_ [−][1]                    - _p_ ˆ _[k]_ [−][1] )
+and approximately solves
+_x_ ¯ _i_ _[k]_ [≃] [prox] γ _fi_ [(] _[s]_ _i_ _[k]_ [)] (E.4)
+
+and sends to the server
+_p_ _[k]_ _i_ [:][=][ 2¯] _[x]_ _i_ _[k]_ [−] _[s]_ _i_ _[k]_
+
+**I** .2: The server computes and sends back the average _p_ ˆ _[k]_  - proxγ _g_  - _N_ 1  - _iN_ =1 _[p]_ _i_ _[k]_  
+Return _p_ ˆ _[k]_
+
+
+F Experiments
+
+
+The gradient method, _x_ �→ _x_ - η _Fi_ [γ][(] _[x]_ [)] [with] [η] [>] [0,] [is] [used] [as] [the] [local] [solver] [for] [sake] [of] [simplic-]
+ity and consistent comparison between methods (see (3.1) concerning the objective for prox-based
+methods). See Appendix D.3 and Appendix D.4 for details regarding the minimization case and
+minimax case respectively. Not surprisingly, due to the deterministic nature of the update, we do not
+observe significant variation in the experiments, and thus refrain from reporting standard deviations.
+Experiments are carried out on a cluster of Intel(R) Xeon(R) CPU E5-2680 v3 2.50GHz, each execution using 4 cores and a maximum of 8192Mb. We provide a reference implementation of iFedDR
+in both Jax and PyTorch.
+
+
+24
+
+
+_x_ _[k]_ [+][1] = (1 − λ) _x_ _[k]_ + [λ]
+
+_N_
+
+
+_N_
+
+
+_Vi_ [τ][(] _[x][k]_ [)][.] (E.2)
+_i_ =1
+
+
+**1296**
+
+**1297**
+
+
+**1298**
+
+**1299**
+
+**1300**
+
+**1301**
+
+**1302**
+
+**1303**
+
+
+**1304**
+
+**1305**
+
+**1306**
+
+**1307**
+
+**1308**
+
+**1309**
+
+
+**1310**
+
+**1311**
+
+**1312**
+
+**1313**
+
+**1314**
+
+
+**1315**
+
+**1316**
+
+**1317**
+
+**1318**
+
+**1319**
+
+**1320**
+
+
+**1321**
+
+**1322**
+
+**1323**
+
+**1324**
+
+**1325**
+
+**1326**
+
+
+**1327**
+
+**1328**
+
+**1329**
+
+**1330**
+
+**1331**
+
+**1332**
+
+
+**1333**
+
+**1334**
+
+**1335**
+
+**1336**
+
+**1337**
+
+
+**1338**
+
+**1339**
+
+**1340**
+
+**1341**
+
+**1342**
+
+**1343**
+
+
+**1344**
+
+**1345**
+
+**1346**
+
+**1347**
+
+**1348**
+
+**1349**
+
+
+Figure 1 uses the same hyperparameters as Figure 2, which are specified in Table 2. The indicated
+number of `inner` steps refers to the number of client steps used per client on average across all _m_
+server iterations. The iFedDR method uses the uninformed safe default of γ = 1.0, λ = 1.0, and
+σ [2] = 0.99 throughout if not otherwise specified. More fine-grained recommendations are provided
+in Figure 8.
+
+
+**Fashion-MNIST** We additionally conduct experiments on Fashion-MNIST (Xiao et al., 2017)
+under extreme label shift where client _i_ only has class _i_ for all _i_ ∈ _N_ . We fix the server steps
+to _K_ = 500 and optimize over the client learning rate. The prox-parameter γ in iFedDR is not
+optimized, but picked to be a reasonable default of γ = 1.0. See Table 5 for a summary of the
+hyperparameters and Figure 7 for the experimental results.
+
+
+Table 2: Hyperparameters for experiments on the vehicle/ `w8a` dataset.
+
+
+|Hyperparameter|FedAvg|Scafof ld|FedProx|FedDR|iFedDR|
+|---|---|---|---|---|---|
+|ℓ2-regularization<br>Server steps_ K_<br>Server stepsize λ|0.00001<br>2000<br>1<br>|0.00001<br>2000<br>1<br>|0.00001<br>2000<br>1<br>|0.00001<br>2000<br>1<br>|0.00001<br>2000<br>1<br>|
+|Client learning rate η|n 1<br>_Li_,<br>1<br>10_Li_,<br>1<br>100_Li_<br>o|n 1<br>_Li_,<br>1<br>10_Li_,<br>1<br>100_Li_<br>o|<br>1<br>_L_~~γ~~<br>_i_,<br>1<br>10_L_~~γ~~<br>_i_,<br>1<br>100_L_~~γ~~<br>_i_<br><br>1|1<br>_L_~~γ~~<br>_i_<br>1|1<br>_L_~~γ~~<br>_i_<br>1|
+|Client steps τ<br>|{10, 100}|{10, 100}|<br> <br><br>{10, 100}|{10, 100}|102|
+|Prox-parameter γ|-|-|1.0|1.0|1.0|
+|Error tolerance σ2|-<br>|-<br>|-<br>|-|0.99|
+
+
+|Pooling.|Col2|ff|Col4|Col5|Col6|
+|---|---|---|---|---|---|
+|Hyperparameter|FedAvg|Scafold|FedProx|FedDR|iFedDR|
+|ℓ2-regularization<br>Server steps_ K_<br>Server stepsize λ|0.00001<br>500<br>1<br>|0.00001<br>500<br>1<br>|0.00001<br>500<br>1<br>|0.00001<br>500<br>1<br>|0.00001<br>500<br>1<br>|
+|Client learning rate η|n 1<br>_Li_,<br>1<br>10_Li_,<br>1<br>100_Li_<br>o|n 1<br>_Li_,<br>1<br>10_Li_,<br>1<br>100_Li_<br>o|<br>1<br>_L_~~γ~~<br>_i_,<br>1<br>10_L_~~γ~~<br>_i_,<br>1<br>100_L_~~γ~~<br>_i_<br><br>1|1<br>_L_~~γ~~<br>_i_<br>1|1<br>_L_~~γ~~<br>_i_<br>1|
+|Client steps τ<br>|{10, 100}|{10, 100}|<br> <br><br>{10, 100}|{10, 100}|102|
+|Prox-parameter γ|-|-|1.0|1.0|1.0|
+|Error tolerance σ2|-<br>|-<br>|-<br>|-|0.99|
+
+
+1 Defined in (E.3). 2 Before refinement.
+
+
+Table 4: Hyperparameters for fair classification experiments. A gridsearch was necessary for establishing convergence of FedProx and FedDR. In particular FedDR needed 1000 client iterations.
+
+|Hyperparameter|FedProx|FedDR|iFedDR|
+|---|---|---|---|
+|ℓ2-regularization<br>Server steps_ K_<br>Server stepsize λ<br>Max regularization δ<br>Client learning rate η|0.00001<br>500<br>1<br>0.1<br>{0.0001, 0.001, 0.01, 0.1}|0.00001<br>500<br>1<br>0.1<br>{0.0001, 0.001, 0.01, 0.1}|0.00001<br>500<br>1<br>0.1<br>{0.0001, 0.001, 0.01, 0.1}|
+|Client steps τ<br>|{10, 100}|{10, 100, 1000}|102|
+|Prox-parameter γ|1.0|1.0|1.0|
+|Error tolerance σ2<br>|-<br>|-<br>|0.99|
+
+
+1 Defined in (E.3). 2 Before refinement.
+
+
+25
+
+
+1 Defined in (E.3). 2 Before refinement.
+
+
+Table 3: Hyperparameters for experiments on CIFAR10 with linear probing across 20 clients.
+Rescaling the input image to match the pre-training sample size is avoided by relying on Adap
+
+
+**1350**
+
+**1351**
+
+
+**1352**
+
+**1353**
+
+**1354**
+
+**1355**
+
+**1356**
+
+**1357**
+
+
+**1358**
+
+**1359**
+
+**1360**
+
+**1361**
+
+**1362**
+
+**1363**
+
+
+**1364**
+
+**1365**
+
+**1366**
+
+**1367**
+
+**1368**
+
+
+**1369**
+
+**1370**
+
+**1371**
+
+**1372**
+
+**1373**
+
+**1374**
+
+
+**1375**
+
+**1376**
+
+**1377**
+
+**1378**
+
+**1379**
+
+**1380**
+
+
+**1381**
+
+**1382**
+
+**1383**
+
+**1384**
+
+**1385**
+
+**1386**
+
+
+**1387**
+
+**1388**
+
+**1389**
+
+**1390**
+
+**1391**
+
+
+**1392**
+
+**1393**
+
+**1394**
+
+**1395**
+
+**1396**
+
+**1397**
+
+
+**1398**
+
+**1399**
+
+**1400**
+
+**1401**
+
+**1402**
+
+**1403**
+
+
+Table 5: Hyperparameters for Fashion-MNIST experiments in Figure 7. We use the cross entropy
+loss on a linear model with softmax and full-batch gradient descent for the client update.
+
+|Hyperparameter|FedAvg|FedProx|FedDR|iFedDR|
+|---|---|---|---|---|
+|ℓ2-regularization<br>Server steps_ K_<br>Server stepsize λ<br> <br>|0.00001<br>500<br>1<br><br><br><br>|0.00001<br>500<br>1<br><br><br><br>|0.00001<br>500<br>1<br><br><br><br>|0.00001<br>500<br>1<br><br><br><br>|
+|Client learning rate η<br>|{0.5, 0.1, 0.0|1}<br>{0.5, 0.1, 0.|01}<br>{0.5, 0.1, 0.|01}<br>{0.5, 0.1, 0.01}|
+|Client steps τ<br>|{50, 100, 20|0}<br>{50, 100, 20|0}<br>{50, 100, 2|00}<br>501|
+|Prox-parameter γ|-|1.0|1.0|1.0|
+|Error tolerance σ2|-<br>|-<br>|-<br>|0.99|
+
+
+1 Before refinement.
+
+
+Figure 6: CIFAR10 training accuracy and optimality gap.
+
+
+Figure 7: Fashion-MNIST under data heteogenity.
+
+
+26
+
+
+w8a
+
+
+10 [2] 10 [3] 10 [4] 10 [5]
+
+Total number of local iterations
+
+
+w8a
+
+
+10 _[−]_ [1]
+
+
+10 _[−]_ [3]
+
+
+10 _[−]_ [5]
+
+
+10 _[−]_ [7]
+
+
+10 _[−]_ [9]
+
+
+10 [2] 10 [3] 10 [4]
+
+Number of communication rounds _k_
+
+
+Figure 5: Logistic regression on a heterogeneous data split of `w8a` .
+
+
+CIFAR10
+
+
+0 _._ 7
+
+
+0 _._ 6
+
+
+0 _._ 5
+
+
+0 _._ 4
+
+
+0 _._ 3
+
+
+CIFAR10
+
+
+0 100 200 300 400 500
+Number of communication rounds _k_
+
+
+10 [0]
+
+
+10 _[−]_ [1]
+
+
+**1404**
+
+**1405**
+
+
+**1406**
+
+**1407**
+
+**1408**
+
+**1409**
+
+**1410**
+
+**1411**
+
+
+**1412**
+
+**1413**
+
+**1414**
+
+**1415**
+
+**1416**
+
+**1417**
+
+
+**1418**
+
+**1419**
+
+**1420**
+
+**1421**
+
+**1422**
+
+
+**1423**
+
+**1424**
+
+**1425**
+
+**1426**
+
+**1427**
+
+**1428**
+
+
+**1429**
+
+**1430**
+
+**1431**
+
+**1432**
+
+**1433**
+
+**1434**
+
+
+**1435**
+
+**1436**
+
+**1437**
+
+**1438**
+
+**1439**
+
+**1440**
+
+
+**1441**
+
+**1442**
+
+**1443**
+
+**1444**
+
+**1445**
+
+
+**1446**
+
+**1447**
+
+**1448**
+
+**1449**
+
+**1450**
+
+**1451**
+
+
+**1452**
+
+**1453**
+
+**1454**
+
+**1455**
+
+**1456**
+
+**1457**
+
+
+|σ|Average #(client steps)|
+|---|---|
+|0.5<br>0.95<br>0.99|60<br>47<br>46|
+
+
+0 500 1000 1500 2000
+Number of communication rounds _k_
+
+
+Figure 8: Hyperparameter ablation of iFedDR (default parameters are described in Table 2). (top)
+The theoretically optimal choice of the stepsize parameter λ ∈ (0, 2) is λ = 1 for monotone problems,
+but especially for strongly monotone problem it is recommended to set it closer to 2 (cf. Section 1.1
+regarding connection to FedSplit). (bottom) The error tolerance σ ∈ (0, 1) does not have a noticeable
+effect on the convergence, but it changes how many client iterations are needed. It is recommended
+to set σ close to 1 to minimize the number of client steps. Finally, the proximal stepsize parameter
+γ can be picked arbitrarily large, but leads to a computationally harder proximal subproblem. The
+tradeoff is explored in Figure 1 and discussed in Remark 3.2.
+
+
+27
+
+
+10 [0]
+
+
+10 _[−]_ [2]
+
+
+10 _[−]_ [4]
+
+
+10 _[−]_ [6]
+
+
+10 _[−]_ [8]
+
+
+10 [0]
+
+
+10 _[−]_ [2]
+
+
+10 _[−]_ [4]
+
+
+10 _[−]_ [6]
+
+
+10 _[−]_ [8]
+
+
+Vehicle
+
+
+Vehicle
+
+
+10 [0]
+
+
+10 _[−]_ [2]
+
+
+10 _[−]_ [4]
+
+
+10 _[−]_ [6]
+
+
+10 _[−]_ [8]
+
+
+0 500 1000 1500 2000
+Number of communication rounds _k_
+
+
+Vehicle
+
+
+0 20000 40000 60000 80000 100000 120000
+Total number of local iterations

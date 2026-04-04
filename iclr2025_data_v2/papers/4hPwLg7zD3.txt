@@ -1,0 +1,2937 @@
+## FOURIER HEAD: HELPING LARGE LANGUAGE MODELS LEARN COMPLEX PROBABILITY DISTRIBUTIONS
+
+
+**Nate Gillman** **[*,1]** **, Daksh Aggarwal** **[*,1]** **, Michael Freeman** **[1]** **, Saurabh Singh** **[2]** **, Chen Sun** **[1,2]**
+
+1Brown University, 2Google DeepMind
+
+
+ABSTRACT
+
+
+As the quality of large language models has improved, there has been increased
+interest in using them to model non-linguistic tokens. For example, the Decision
+Transformer recasts agentic decision making as a sequence modeling problem,
+using a decoder-only LLM to model the distribution over the discrete action space
+for an Atari agent. However, when adapting LLMs to non-linguistic domains, it
+remains unclear if softmax over discrete bins captures the continuous structure of
+the tokens and the potentially complex distributions needed for high quality token
+generation. We introduce a neural network layer, constructed using Fourier series,
+which we can easily substitute for any linear layer if we want the outputs to have a
+more continuous structure. We perform extensive analysis on synthetic datasets, as
+well as on large-scale decision making and time series forecasting tasks. We also
+provide theoretical evidence that this layer can better learn signal from data while
+ignoring high-frequency noise. All of our results support the effectiveness of our
+proposed Fourier head in scenarios where the underlying data distribution has a
+natural continuous structure. For example, the Fourier head improves a Decision
+Transformer agent’s returns across four benchmark Atari games by as much as
+377%, and increases a state-of-the-art times series foundation model’s forecasting
+performance by 3.5% across 20 benchmarks unseen during training. We release
+[our implementation at https://nategillman.com/fourier-head.](https://nategillman.com/fourier-head)
+
+
+Fourier Head Learns Higher Quality Densities
+
+
+Figure 1: We task an MLP with learning to approximate a continuous bimodal density using a
+categorical distribution and a cross-entropy objective. We observe that a standard linear head fails
+to distinguish between the two modes, and overfits to high-frequency noise in the training set. In
+contrast, our proposed Fourier head learns a smoother, more accurate categorical distribution.
+
+
+1 INTRODUCTION
+
+
+Human language can be viewed as a discretization for a _continuous_, often _probabilistic_ representation of the world that is construed in our mind (Spivey, 2008). The continuous structure can be
+partially captured by language models with their token embeddings, where “nearby” tokens are embedded to have latent representations with high cosine similarities. The embeddings themselves are
+acquired as a result of the data-driven learning process. Can we, based on rich prior knowledge
+
+
+_∗_ Equal contribution. Correspondence to: nate ~~g~~ [illman@brown.edu, chensun@brown.edu.](mailto:nate_gillman@brown.edu)
+
+
+1
+
+
+about the continuous world, inform the language model about the underlying continuity of its inputs, like the fact that the word “emerald” is more similar to “shamrock” than “pine” when they are
+used to describe different shades of green? As large language models (LLMs) have evolved into
+“foundation models” that are adapted to a diverse range of tasks, tokens that are _a priori_ continuous
+are more essential than ever, for example for arithmetic computations (Liu et al., 2023), decision
+making with continuous or discrete actions (Chen et al., 2021), future anticipation and time-series
+forecasting (Ansari et al., 2024), or simply drawing random numbers given a probability distribution (Hopkins et al., 2023).
+
+
+We view the problem of informing LLMs to utilize the continuity prior from the perspective of probability density estimation. For simplicity, we adopt the standard next token prediction framework
+whose training objective is softmax cross-entropy. Assuming non-overlapping vocabulary, continuous values can be discretized via binning (Ansari et al., 2024). On one hand, the linear head adopted
+by LLMs independently projects each token into probabilities, and has the expressive power to flexibly approximate arbitrary probability density functions subject to the “quantization” errors. The
+linear head however does not consider any continuous structure that resides among the tokens (i.e.
+a random re-shuffle of the tokens in the vocabulary would not change the predictions). On the other
+hand, a head based on a parameterized distribution (e.g. Gaussian or Gaussian Mixtures) naturally
+incorporates the continuous structure, but is often too simple (and overly “smooth”) to account for
+multi-modal distributions for future prediction or decision making. Can we design a head that is
+both expressive and incorporates continuous structures?
+
+
+We introduce the Fourier head, motivated by Fourier series as universal function approximators.
+**The Fourier head learns a** _**continuous**_ **probability density function, and returns a** _**discrete**_ **ap-**
+**proximation of it.** Intuitively, returning a discretization of a continuous density in this way allows
+the classification head to better model the low-frequency signals from the training data, because the
+Fourier head is forced to approximate the categorical distributions using a finite number of frequencies. At a high level, the Fourier head inputs _x_ _∈_ R _[n]_, uses a linear layer to learn the coefficients
+for a Fourier series with _N_ frequencies over [ _−_ 1 _,_ 1], and quantizes the interval [ _−_ 1 _,_ 1] into _m_ equal
+bins. Then, the Fourier head evaluates the learned Fourier PDF at those _m_ bin center points, and
+returns those _m_ likelihoods as a categorical distribution. The Fourier head builds upon the Fourier
+Basis Density Model (De la Fuente et al., 2024).
+
+
+_Our main contributions are as follows._
+
+
+**Contribution** **#1** : We reveal the underlying principle on the trade-off between the Fourier head’s
+expressive power and the “smoothness” of the predicted distributions. We prove a theorem which
+demonstrates a scaling law for the Fourier head. Namely, as we increase the quantity of Fourier
+coefficients learned by the Fourier head, the layer can model increasingly complicated distributions;
+however, the Fourier head will necessarily fit to more high-frequency noise, thereby outputting categorical distributions which are less smooth.
+
+
+**Contribution #2** : We propose a practical implementation of the Fourier head capable of sequential
+prediction tasks by modeling complex multi-modal distributions. Additionally, we propose strategies to improve the layer’s performance, including Fourier coefficient norm regularization, weight
+initialization, and the choice of how many Fourier frequencies to use.
+
+
+**Contribution** **#3** : We demonstrate the effectiveness of the Fourier head on two large scale tasks,
+where intuitively a continuity inductive bias over the output dimensions ought to help the model’s
+generation performance. In the first task, an offline RL agent which uses a decoder-only transformer
+to model the next-action distribution for an Atari agent, we improve returns across four benchmark
+games by as much as 377%. In the second, we outperform a state-of-the-art time series foundation
+model on zero-shot forecasting by 3.5% across a benchmark of 20 datasets unseen during training.
+
+
+2 FOURIER HEAD
+
+
+2.1 FOURIER HEAD: MOTIVATION
+
+
+When practitioners apply LLMs to model complex probability distributions over non-linguistic tokens, a standard technique is to quantize the latent space into _m_ tokens and learn a conditional
+categorical distribution over those tokens. We share two examples here:
+
+
+2
+
+
+**Example 1:** The Decision Transformer (Chen et al., 2021) models an Atari agent’s behavior in the
+Seaquest game by learning a categorical distribution over the 18 possible actions (move left, move
+right, shoot left, etc.). They use an decoder-only transformer architecture.
+
+
+**Example 2:** The Chronos time series foundation model (Ansari et al., 2024) models the distribution
+of next numerical values by quantizing the closed interval [ _−_ 15 _,_ 15] into 4096 bins, and learning a
+categorical distribution over those bins. They use an encoder-decoder transformer.
+
+
+In a pure language modeling task, token ID 1000 and token ID 1001 likely represent unrelated
+words. However, in a task where the token IDs represent numerical values, the token ID 1000 and
+1001 would represent numbers that are close together.
+
+
+The final layers of an LLM for such a task are generally a linear layer, followed by softmax, followed by cross-entropy loss. We hypothesize that in scenarios where nearby token IDs encode
+similar items, an inductive bias that encourages them to have similar probabilities will improve performance. A generic linear layer learns an unstructured categorical distribution and thereby allows
+more arbitrary probabilities. **In this work, we propose to give the model this inductive bias by let-**
+**ting the classification head learn a categorical distribution as the discretization of a continuous**
+**learned** **function** **from** **a** **suitably** **flexible** **class.** We consider the very flexible class of truncated
+Fourier series with _N_ frequencies. These are functions of the form
+
+
+_f_ ( _x_ ) = _a_ 0 +
+
+
+_N_
+
+
+_k_ =1
+
+
+- _ak_ cos( _kπx_ ) + _bk_ sin( _kπx_ )� _._ (2.1)
+
+
+Fourier series are a classical tool for solving quantitative problems (Stein & Shakarchi, 2003) because functions like Equation 2.1 are universal function approximators, with the approximation
+improving as _N_ increases.
+
+
+2.2 FOURIER HEAD: DEFINITION
+
+
+We now propose a replacement for the generic linear layer token classification head, built using
+Fourier series. We call our replacement the **Fourier** **Series** **Classification** **Head**, or the **Fourier**
+**head** for short. The Fourier head inputs any vector _x_ _∈_ R _[n]_, and outputs a categorical distribution
+in R _[m]_ . For a high level summary of how it works– _the Fourier head inputs x_ _∈_ R _[m]_ _,_ _uses a linear_
+_layer to extract the coefficients for a Fourier series over_ [ _−_ 1 _,_ 1] _, quantizes the interval_ [ _−_ 1 _,_ 1] _into_
+_m_ _equal_ _bins,_ _evaluates_ _the_ _learned_ _Fourier_ _PDF_ _at_ _those_ _m_ _bin_ _centerpoints,_ _and_ _returns_ _those_
+_m_ _likelihoods_ _as_ _a_ _categorical_ _distribution._ We formally define this layer in Algorithm 1. The
+Fourier head is constructed using the Fourier Basis Density Model from (De la Fuente et al., 2024).
+For more details on the original method (e.g. justification for how learning the autocorrelation
+coefficients guarantees that the Fourier series has integral 1, and justification for normalizing the
+Fourier coefficients by _ℜ_ ( _c_ 0)) we refer the author to (De la Fuente et al., 2024). We direct the
+curious reader to Appendix C.1 for a low-dimensional demonstration of the Fourier head in action.
+
+
+2.3 FOURIER HEAD: CONSIDERATIONS FOR TRAINING
+
+
+We highlight the main design choices of the Fourier head so that users may apply it most effectively.
+
+
+**Training objective:** The Fourier head inputs a signal _x ∈_ R _[n]_ and extracts from that signal an intermediate representation of a probability distribution _px_ ( _z_ ) defined over _z_ _∈_ [ _−_ 1 _,_ 1]. This probability
+distribution has a closed formula equal to a Fourier series. In our experiments, we optimize the parameters of the Fourier PDF by discretizing it over the latent space and training using cross-entropy
+loss. However, we should note that the Fourier layer allows MLE training directly on continuous
+values, by evaluating the Fourier PDF directly on the ground truth value in the latent space. But for
+consistency of comparison, and to demonstrate how easy it is to swap the Fourier head with a linear
+layer, we use softmax cross-entropy loss as the objective.
+
+
+**Choice of hyperparameter** _N_ **:** The Fourier head has one crucial hyperparameter–namely, the number of frequencies. How should one choose this in practice? We offer Theorem 3.3 as guiding
+principle beyond simple trial and error. This result provides a scaling law which formalizes the
+smoothness-expressive power trade-off in choosing the number of frequencies. In general, using
+more frequencies leads to more expressive power, and generally better success metrics, but at the
+cost of a learning less smooth densities, as well as more model parameters.
+
+
+3
+
+
+**Algorithm 1** Fourier head
+**Hyperparameters:** the input dimension _n_, output dimension _m_, number of frequencies _N_
+
+**Initialization:** define a linear layer _A_ : R _[n]_ _→_ R [2(] _[N]_ [+1)] // maps input to autocorrelation coefficients
+
+
+INPUT _x_ = ( _x_ 1 _, . . ., xn_ ) _∈_ R _[n]_
+
+( _α_ 0 _, β_ 0 _, . . ., αN_ _, βN_ ) _←_ _Ax_
+_ak_ _←_ _αk_ + _iβk_ _∈_ C, for every _k_ = 0 _, . . ., N_ // compute autocorrelation coefficients
+
+_ck_ _←_ [�] _[N]_ _ℓ_ =0 _[−][k]_ _[a][ℓ][a]_ _ℓ_ _[∗]_ + _k_ _[∈]_ [C][, for every] _[ k]_ [= 0] _[, . . ., N]_ // compute Fourier coefficients
+
+_p_ ( _z_ ) = 2 [1] [+] _[ ℜ]_ �� _Nk_ =1 _ℜc_ ( _ck_ 0) [exp(] _[ikπz]_ [)]  - // define Fourier PDF over [ _−_ 1 _,_ 1]
+
+_bk_ _←−_ 1 + [1+2] _m_ _[k]_ [, for every] _[ k]_ [= 0] _[, . . ., m][ −]_ [1] // define _m_ bin centerpoints
+
+_yk_ _←_  - _mp−_ ( _b_ 1 _k_ ) [= 0] _[, . . ., m][ −]_ [1] // evaluate PDF at _m_ bin centerpoints
+_j_ =0 _[p]_ [(] _[b][j]_ [)] [, for every] _[ k]_
+
+OUTPUT ( _y_ 1 _, . . . ym_ ) _∈_ R _[m]_ // by design, [�] _k_ _[m]_ =1 _[y][k]_ [= 1][ and each] _[ y][k]_ _[≥]_ [0]
+
+
+**Fourier regularization:** For a given number of frequencies _N_, there could be many learned Fourier
+models that fit the given data equally well. To encourage a smoother learned model and penalize
+unnecessary high frequency content, we follow (De la Fuente et al., 2024) and add a regularization
+term that measures the total squared variation for the Fourier model, to prevent higher order Fourier
+coefficients from growing too large during training. This helps ensure that the learned Fourier PDF
+doesn’t overfit to noise in the data, and therefore has a bias towards learning smoother densities. In
+the notation from Algorithm 1, this means adding a regularization term of _γ ·_ [2] _m_ _[π]_ [2] - _mk_ =1 _[k]_ [2] _[|][c][k][|]_ [2] [to]
+
+the loss function, where _γ_ is a hyperparameter. When picking regularization strength, we find that
+in the low-frequency domain (e.g. frequencies in the single digits) using _γ_ = 0 works best, and in
+the high-frequency domain (e.g. greater than 10 frequencies), using _γ_ = 10 _[−]_ [6] works best.
+
+
+**Binning strategy:** The choice of data binning can impact performance. As discussed, the Fourier
+head should only be applied when nearby bins are ‘similar’ in some sense, requiring a semantically
+meaningful bin ordering. When bins represent quantized numerical values over a continuous latent space, a ‘mixed-precision’ binning strategy can improve performance. For example, to model
+values in [ _−_ 15 _,_ 15] with most data in [ _−_ 1 _,_ 10], allocating more bins to the dense interval improves
+performance. Given _m_ total bins, a hyperparameter _d_ _∈_ [0 _,_ 1) controls allocation, with _⌊d · m⌋_
+bins for the sparse interval and the rest for the dense range (estimated from training data). Fourier
+theory supports this approach, as increasing precision in dense regions de-localizes the quantized
+data distribution, localizing the Fourier spectrum. This accelerates higher frequency decay, enabling
+effective learning with lower-frequency Fourier heads. Separately, we note that (De la Fuente et al.,
+2024) suggests re-parameterizing the periodic domain to the real line, though we do not use this in
+our work.
+
+
+**Weight** **initialization:** The learned parameters for the Fourier head consist of the learned linear
+layer which extracts autocorrelation parameters _ak_ . In PyTorch, linear layers use He initialization
+(He et al., 2015) by default, which ensures that the linear layer outputs values close to zero in
+expectation. Similarly, initializing the Fourier densities to be uniform _p_ ( _z_ ) _≈_ 1 _/_ 2 improves learning
+dynamics. We accomplish this by dividing the weights and biases by a large number, such as 1000,
+after He initialization; this guarantees that the linear layer outputs very small values, so that Fourier
+coefficients output from the autocorrelation step are very small as well.
+
+
+3 THEORETICAL ANALYSIS OF FOURIER HEAD
+
+
+3.1 “SMOOTHNESS”: A METRIC FOR HIGH FREQUENCY CONTENT
+
+
+In this subsection we propose a smoothness metric which inputs a categorical distribution _y_ =
+( _y_ 1 _, . . ., ym_ ) _∈_ R _[m]_, and assigns a numerical value depending on how smooth it is. The score will
+output 0 if _y_ is the smoothest possible categorical distribution, and larger values if _y_ is less smooth.
+We will first specify what we mean by “smooth”:
+
+
+4
+
+
+**Heuristic 3.1.** _We say a function is_ _**smooth**_ _if it contains_ _**very little high-frequency information**_ _._
+
+
+For example, the uniform categorical distribution contains no high-frequency information, so it is
+the smoothest possible function, and should get a smoothness score of 0. In contrast, a categorical
+distribution containing samples from sin(100 _πx_ ) contains lots of high frequency information, so it
+should get a smoothness score greater than 0. We seek to define a metric which measures smoothness
+according to Heuristic 3.1.
+
+
+We will first develop a smoothness metric in the general case of a function _f_ : [ _a, b_ ] _→_ R, then
+specialize to case of the discrete categorical distribution that we consider in the paper. If we let
+_ασ_ _∈_ R be weights satisfying �0 _∞_ _ασdσ_ = 1, and _D_ be some measure of discrepancy such as _L_ [2],
+and let _gσ_ ( _x_ ) _∗_ _f_ ( _x_ ) denote the convolution of _f_ ( _x_ ) with a Gaussian kernel of standard deviation _σ_,
+then it is reasonable to define the smoothness of _f_ to be the quantity
+
+
+   - _∞_
+_s_ ( _f_ ) :=
+
+0
+
+
+- _b_
+
+_ασD_ [ _f_ ( _x_ ) _, gσ_ ( _x_ ) _∗_ _f_ ( _x_ )] _dxdσ._ (3.1)
+_a_
+
+
+In this expression, the discrepancy _D_ [ _f_ ( _x_ ) _, gσ_ ( _x_ ) _∗_ _f_ ( _x_ )] measures how different _f_ ( _x_ ) is from a
+Gaussian-smoothed version of itself. Because the Gaussian is a low-pass filter, we can interpret
+Equation 3.1 as saying, at a high level, that a function is “smooth” if it doesn’t change that much
+when you remove high frequency content from it.
+
+
+In our experiments, we consider discrete categorical distributions, and wish to tractably quantify
+their smoothness. Accordingly, we define a specific case of this as follows.
+**Definition 3.2** (Smoothness metric for categorical distributions) **.** _Suppose y_ = ( _y_ 1 _, . . ., ym_ ) _∈_ R _[m]_
+_is a categorical distribution, so every yk_ _≥_ 0 _and_ [�] _k_ _[m]_ =1 _[y][k]_ [= 1] _[. Denote by][ g][σ]_ _[∈]_ [R][2] _[m][−]_ [1] _[ the discrete]_
+_Gaussian kernel of standard deviation σ and radius m −_ 1 _._ _Define the weights ασ_ = 6 _/π_ [2] _σ_ [2] _._ _Then_
+_we define the_ _**smoothness**_ _of y to be the constant_
+
+
+_s_ ( _y_ ) :=
+
+
+_∞_
+
+- _ασ∥y −_ _gσ ∗_ _y∥_ 2 _._ (3.2)
+
+
+_σ_ =1
+
+
+We direct the curious reader to Appendix B, where we conduct additional experiments to justify this
+choice of smoothness metric for our experiments.
+
+
+3.2 A SCALING LAW FOR THE FOURIER HEAD, IN FREQUENCY-ASPECT
+
+
+In this subsection, we share a theorem that analyzes the quality of the Fourier head as the quantity of
+frequencies changes. We refer to this as the **Fourier head scaling law** as it quantifies the trade-off
+between modeling capacity and smoothness as the number of frequencies increases. On one hand, it
+is a celebrated result from Fourier analysis that a Fourier series with a greater number of frequencies
+models a larger class of functions; but on the other hand, we show that increasing frequencies also
+incurs loss in smoothness. This is to be expected, as we designed our smoothness metric with the
+intention of identifying a distribution as less smooth if it contains more high-frequency information.
+
+**Theorem 3.3.** _(Fourier head scaling law.)_ _Consider a Fourier head with input dimension n, output_
+_dimension m, and N_ _frequencies._ _Suppose that_ 1 _≪_ _N_ _<_ _[m]_ 2 _[.]_ _[Then the following are true:]_
+
+
+_1._ _(_ _**Increasing**_ _N_ _**improves**_ _**modeling**_ _**power**_ _.)_ _As_ _N_ _increases,_ _the_ _Fourier_ _head_ _is_ _capable_ _of_
+_learning a larger class of densities._
+
+
+_2._ _(_ _**Increasing**_ _N_ _**degrades**_ _**smoothness**_ _.)_ _Consider_ _an_ _input_ _to_ _the_ _Fourier_ _head_ _x_ _∈_ R _[n]_ _,_ _and_
+_denote by fx_ : [ _−_ 1 _,_ 1] _→_ R _the optimal conditional distribution that we would like the Fourier_
+_head to approximate for this input._ _Suppose that there exists some t_ _≥_ 2 _such that the Fourier_
+_coefficients_ _of_ _fx_ _decay_ _on_ _the_ _order_ _of_ 1 _/k_ _[t]_ _._ _Denote_ _by_ _fx,N_ _the_ _truncation_ _of_ _fx_ _to_ _its_ _first_
+_N_ _frequencies,_ _denote_ _by_ _[⃗]_ _b_ _∈_ R _[m]_ _the_ _m_ _bin_ _centerpoints_ _in_ [ _−_ 1 _,_ 1] _,_ _and_ _denote_ _by_ _y_ [(] _[N]_ [)] =
+_fx,N_ ( _[⃗]_ _b_ ) _/_ ( _fx,N_ ( _b_ 0) + _· · ·_ + _fx,N_ ( _bm−_ 1)) _∈_ R _[m]_ _the discretization of fx,N_ _into m bins._ _Then,_
+_there exist constants C_ 1 _, C_ 2 _>_ 0 _such that_
+
+
+_C_ 2
+_s_ ( _y_ [(] _[N]_ [)] ) = _C_ 1 _−_ _N_ [2] _[t][−]_ [1] [+] _[ O]_ [(1] _[/N]_ [ 2] _[t]_ [)] _[.]_ (3.3)
+
+
+5
+
+
+Toy Example: Learned Conditional Distribution vs True Conditional Distribution
+
+
+Figure 2: Comparison between the PMFs learned by the linear head, GMM head, and the Fourier
+head, for two of the datasets in the toy example–Gaussian and Beta. (The GMM dataset is in
+Figure 1.) We observe that the Fourier head learns a smoother categorical distribution than the
+linear head over its predicted values. Furthermore, the Fourier head better fits the true conditional
+PDF; this is reflected in the KL divergence and smoothness metrics.
+
+
+Note that the smoothness scaling law asymptotic in Equation 3.3 shows that as _N_ increases, so does
+_s_ ( _y_ [(] _[N]_ [)] ). Further, note that if the Fourier spectrum of the underlying distribution decays quicker
+(controlled by _t_ ) then the rate at which smoothness degrades is slower; this is because if what we
+are learning has little high frequency content, then increasing the frequencies shouldn’t affect the
+smoothness of the learned distribution very much. In part (2), our assumption that the Fourier coefficients decay at least quadratically is reasonable since if _fx_ is at least twice continuously differentiable, we already know its Fourier coefficients corresponding to the _k_ -th frequency are in _O_ (1 _/k_ [2] )
+(Stein & Shakarchi, 2003, Ch.2, Cor. 2.4). Our Fourier weight decay regularization helps toward
+ensuring that this condition is met in practice as well. We include a full proof in Appendix A.
+
+
+4 TOY EXAMPLES
+
+
+4.1 LEARNING A CONTINUOUS CONDITIONAL DISTRIBUTION
+
+
+We demonstrate the advantage of using the Fourier head to learn a probability distribution for a
+simple task: learning the conditional distribution of the third number in the sequence given the first
+two. Here we will use _q_ ( _z_ ) to denote the quantization of _z_ .
+
+
+**Dataset** : We create 3 synthetic datasets, which we name **Gaussian**, **GMM-2**, and **Beta** . Each
+dataset consists of 5000 quantized triples _{_ ( _q_ ( _x_ ) _, q_ ( _y_ ) _, q_ ( _z_ )) _}_ _⊆_ [ _−_ 1 _,_ 1] [3] . Crucially, _z_ is sampled
+from a distribution which is conditioned on _x_ and _y_, and we have an explicit closed formula for this
+distribution. By design, the Gaussian dataset is unimodal in _z_, whereas the more challenging GMM2 and Beta datasets are not unimodal. Full details about the datasets can be found in Appendix C.2.
+
+
+**Task** : Predict the conditional distribution of _q_ ( _z_ ) given the quantized tuple ( _q_ ( _x_ ) _, q_ ( _y_ )).
+
+
+**Model** **architecture** : Our model is an MLP with ReLU activations and one hidden layer, which
+maps R [2] _→_ R [64] _→_ R [32] _→_ R [50] . The output of the model has dimension 50 because we quantize
+the interval [ _−_ 1 _,_ 1] into 50 bins. We consider two baselines alongside the Fourier model. For the
+first baseline, the classification head is a linear layer; for the second baseline, the classification head
+is a Gaussian model mixture classification layer with two Gaussians, where the means and standard
+deviations are learned; for the Fourier model, the classification head is the Fourier head. We sweep
+over frequencies _N_ = 2 _,_ 4 _, . . .,_ 20, and consider regularization _γ_ _∈{_ 0 _,_ 10 _[−]_ [6] _}_ . We train those
+models via cross-entropy loss. [1] We also consider a regression-based model, trained using MSE.
+
+
+**Model** **evaluation** : We use three metrics for evaluation. Our first metric is the average KL divergence _D_ KL( _q_ ( _P_ ( _x, y_ )) _||M_ ( _q_ ( _x_ ) _, q_ ( _y_ ))), where _P_ ( _x, y_ ) is the fixed conditional distribution of _z_
+given ( _x, y_ ); _q_ ( _P_ ( _x, y_ )) is the quantized approximation of _P_ ( _x, y_ ), obtained by evaluating the den
+
+1Note that we also demonstrate the possibility of training a _continuous_ version of the Fourier head, using
+a maximum-likelihood based objective. Accordingly, we carry out experiments in the continuous domain
+analogous to those we did in the quantized domain; for more details, see Appendix C.3.
+
+
+6
+
+
+|Col1|KL Divergence (↓)|Col3|Smoothness (↓)|Col5|
+|---|---|---|---|---|
+|Dataset|Linear|Fourier|Linear|Fourier|
+|Gaussian<br>GMM-2<br>Beta|0.170_ ±_ 0.052<br>0.238_ ±_ 0.032<br>0.234_ ±_ 0.032|**0.116**_ ±_ 0.043<br>**0.146**_ ±_ 0.033<br>**0.191**_ ±_ 0.016|0.116_ ±_ 0.049<br>0.068_ ±_ 0.022<br>0.127_ ±_ 0.044|**0.057**_ ±_ 0.011<br>**0.038**_ ±_ 0.007<br>**0.076**_ ±_ 0.021|
+
+
+Table 1: We compare metrics between the linear head, and the Fourier head with 12 frequencies and
+no regularization, for every dataset in our toy example. We observe that the Fourier head outperforms
+the linear head across all metrics. Notably, using Fourier head improves the KL divergence (the
+primary success metric) on average by approximately 40%. We aggregate metrics over 4 different
+seeds and report the standard deviation.
+
+
+Using Llama-3.1-8B-Instruct to Simulate Gaussian Sampling
+
+
+Figure 3: We demonstrate that the baseline Llama model does a poor job simulating Gaussian sampling, as measured by the Total Variation Distance between the ground truth quantized Gaussian
+histogram, and the empirical histogram of samples. We find that LoRA fine-tuning improves the
+results by a factor of _≈_ 2 _._ 07, and that using the Fourier head improves the output distribution by a
+factor of _≈_ 4 _._ 86.
+
+
+sity function of _P_ ( _x, y_ ) at the bin centers, multiplying by the bin width, and finally scaling by the
+sum of the likelihoods; and _M_ ( _q_ ( _x_ ) _, q_ ( _y_ )) denotes the predicted categorical conditional distribution
+of _q_ ( _z_ ). Our second metric is smoothness. And our third metric is MSE, where we consider the
+expected value of _q_ ( _z_ ) under the learned categorical distribution as a prediction for _q_ ( _z_ ).
+
+
+**Results:** The metrics for the best performing model on each dataset are reported in Table 1. Figure
+2 presents sample visualizations of the learned conditional distributions alongside the true densities.
+And in Appendix C.2, we present the results of a study on the impact of number of frequencies
+and Fourier regularization. Notably, this study provides empirical evidence for the Fourier head
+scaling law in Theorem 3.3, as it demonstrates that for all datasets, as frequency increases, the
+smoothness degrades, and model performance improves until it reaches a saturation point. Crucially,
+we observe that the Fourier head flexibly learns all three distributions better than the linear baseline
+does. We note that the Fourier head outperforms the linear head on MSE as well; we include a
+complete comparison with both Linear and GMM head baselines in Appendix C.2. Additionally,
+in Figure 10 (Appendix), we demonstrate that the regression model simply regresses to the mean
+of the conditional distribution. Accordingly, the regression model performs well for the unimodal
+Gaussian dataset, and it performs poorly for the bimodal datasets GMM-2 and Beta.
+
+
+4.2 ARE LLMS RANDOM NUMBER GENERATORS?
+
+
+Suppose that we query an LLM with the following prompt, repeatedly: _“The following is a list of_
+_normally_ _distributed_ _random_ _numbers_ _in_ _the_ _interval_ _[-1,_ _1]_ _with_ _mean_ _0.55_ _and_ _std_ _0.10:_ _0.57,_
+_0.36, ”_ . Would the model outputs be approximately Gaussian? In this empirical study, we simulate
+Gaussian sampling using the Llama-3.1-8B-Instruct model (Dubey et al., 2024). We demonstrate
+that this language model struggles to generate high quality numerical Gaussian samples. We consider two possible interventions: LoRA fine-tuning the base Llama model, and LoRA fine-tuning
+the base model while also replacing the linear classification head with a Fourier head. We find that
+LoRA fine-tuning improves the learned distribution significantly, and replacing the linear head with
+the Fourier head improves the distributions even further. We present an illustrative example of this
+phenomenon in Figure 3. See Appendix C.4 for experiment details and some related works.
+
+
+7
+
+
+5 LARGE-SCALE STUDY: OFFLINE REINFORCEMENT LEARNING
+
+
+The Decision Transformer (Chen et al., 2021) reframes reinforcement learning as sequentially modeling rewards, states, and actions. We evaluate its performance on the Seaquest game from the Atari
+(Bellemare et al., 2013) benchmark. The Seaquest game contains 18 actions, with two groups of
+eight actions that have a natural “closeness” metric defined on them: move left, up left, up, up right,
+right, down right, down, down left; as well as shooting in those eight directions. The original architecture uses a decoder-only language model (Radford et al., 2018) to encode context and map
+it through a linear layer, producing a categorical distribution over actions. At test time, the agent
+samples from this distribution to select its next action. We replace the linear classification head with
+a Fourier head, introducing a prior that semantically similar actions (e.g., ‘move left’ and ‘move
+up left’) should have similar likelihoods. Our results show the Fourier head improves returns by as
+much as 46% in the reward-conditioned setting, using identical training hyperparameters.
+
+
+**Task** : In the Seaquest game, the agent moves a submarine to avoid enemies, shoot at enemies, and
+rescue divers. We consider this task in the Offline RL setting. The agent observes the past states,
+actions, and rewards, as well as the return-to-go, and attempts to predict the action that matches
+what an agent operating like the dataset would likely do. We also consider three other Atari games
+with the same action space: BankHeist, DoubleDunk, and Gravitar.
+
+
+**Dataset** : We use the same dataset from the original Decision Transformer implementation (Chen
+et al., 2021). This dataset consists of 500k transitions experienced by an online deep Q-network
+agent (Mnih et al., 2015) during training on the Seaquest game.
+
+
+**Model architecture** : (Chen et al., 2021) used the GPT-1 model (Radford et al., 2018) to autoregressively encode the context, which is then fed through a linear layer of dimension 18, and the model
+ultimately optimizes the cross-entropy loss between the action logits and the ground truth action
+from the dataset. We refer to this model as the linear baseline. To create our Fourier- _N_ version, we
+simply replace the linear head with a Fourier head with _N_ frequencies and Fourier regularization
+_γ_ = 10 _[−]_ [6] . In our experiments we consider frequencies _N_ _∈{_ 2 _,_ 4 _,_ 6 _,_ 8 _, . . .,_ 30 _,_ 32 _}_ .
+
+
+Normalized Returns for Decision Transformer Agent
+
+|Col1|Atari Game|Col3|Col4|Col5|
+|---|---|---|---|---|
+|Classifcation Head|BankHeist|DoubleDunk|Gravitar|Seaquest|
+|Linear head|_−_0_._09_ ±_ 0_._05|_−_72_._72_ ±_ 33_._08|1_._32_ ±_ 0_._17|2_._53_ ±_ 0_._63|
+|Fourier head|**0**_._**92**_ ±_** 0**_._**33**|**45**_._**45**_ ±_** 36**_._**36**|**4**_._**98**_ ±_** 0**_._**93**|**3**_._**70**_ ±_** 0**_._**47**|
+
+
+Table 2: We present returns obtained by the Decision Transformer agent using the linear baseline,
+and the Fourier head, across the four Atari games. We compute the returns (mean and standard
+deviation) by averaging over four seeds. Across all these games, the Fourier head significantly
+improves the normalized returns obtained by the agent.
+
+
+Figure 4: We present empirical results for how the quantity of Fourier frequencies impacts returns
+and smoothness for the imitation learning task. For normalized returns, higher is better; for smoothness, lower is better. We can see that the Fourier agent achieves higher normalized returns than
+the linear baseline agent when sufficiently many Fourier frequencies are used, while still learning
+smoother next-action distributions.
+
+
+8
+
+
+**Model** **Evaluation** : We present results for the linear baseline and Fourier- _N_ head ( _N_ _∈_
+2 _,_ 4 _,_ 6 _,_ 8 _, . . .,_ 30 _,_ 32) across four Atari games, showing mean reward totals for rollouts at the best
+epoch across four seeds. Table 2 demonstrates significant return gains with the Fourier head. For example, Seaquest returns increase by up to 46 _._ 2%, while Gravitar sees as much as a 377% boost. Figure 4 shows improved Seaquest performance as the number of frequencies grows, with learned PMFs
+becoming less smooth, aligning with Theorem 3.3. Qualitative results in Figure 13 (Appendix) highlight the smoother PMFs produced by the Fourier head. Additional results for BankHeist, DoubleDunk, and Gravitar in Figure 16 (Appendix) confirm that the Fourier agent consistently outperforms
+the linear baseline while maintaining smoother next-action distributions.
+
+
+**Ablations** : We analyze whether model size has any effect on the relative performance of the Linear
+head and the Fourier head. The results in Figure 14 (Appendix) demonstrate that, across model
+sizes, the Decision Transformer with a Fourier head is better at learning high-quality next action
+distributions than the Decision Transformer with a Linear head. We also analyze whether dataset
+size has any effect on the relative performance of the Linear head and the Fourier head, and obtain a
+similar result. In Figure 15 (Appendix) we show that, across dataset sizes, the Decision Transformer
+agent with the Fourier head achieves larger returns than the agent with a linear head.
+
+
+6 LARGE-SCALE STUDY: PROBABILISTIC TIME SERIES FORECASTING
+
+
+The Chronos time series foundation models (Ansari et al., 2024) “learn the language of time series”. They do this by approaching time series forecasting as language modeling, by tokenizing the
+quantized number line, learning token embeddings for each of those quantized values, and finally
+learning a categorical distribution to decide what the next value ought to be. This model is built
+on top of the encoder-decoder T5 model (Raffel et al., 2020). In particular, this model normalizes
+time series values to the range [ _−_ 15 _,_ 15] and quantizes this interval into 4096 tokens. As usual for
+language modeling, the final layer is a linear map which learns a categorical distribution over next
+tokens. In particular, we observe that token _i_ represents a number very close to tokens _i −_ 1 and
+_i_ + 1. However, we note that there is no inductive bias in the T5 architecture which pushes their
+likelihoods to be similar. This is not a hypothetical problem; in Figure 17 (Appendix), we can see
+that the linear next-token prediction PMFs fit to the noise, and appear very jagged.
+
+
+**The** **motivation** **for** **replacing** **the** **linear** **head** **with** **the** **Fourier** **head** **is** **to** **“smooth”** **out** **the**
+**distribution in the left side of Figure 17, to help the forecasting model better learn the signal,**
+**and ignore the noise.** In this figure, we can see that the Fourier head accomplishes this successfully.
+
+
+In this section, we study how the performance of the Chronos time series foundation model changes
+when we pre-train using the Fourier head, instead of the linear head. For all of the frequencies that
+we consider, the Fourier head outperforms the Chronos linear baseline on the MASE metric, while
+learning next token multinomials which are at least 8x smoother, with fewer parameters than the
+baseline.
+
+
+**Dataset** : We use the same training dataset for large-scale pretraining that Ansari et al. (2024) used.
+We gather an evaluation benchmark of 20 time series datasets which were not seen during training. These 20 come from the zero-shot eval from (Ansari et al., 2024). The reader can check
+Appendix D.2 for details on the training and evaluation datasets we used.
+
+
+**Model** **architecture** : We use the Chronos model, which is built using the T5 architecture (Raffel
+et al., 2020). The original model has a linear classification head. For our study, we will replace
+this with a Fourier head with frequencies _N_ = 64 _,_ 128 _,_ 256 _,_ 550. We use mixed precision binning;
+this is informed by an analysis of the Fourier spectrum of the next-token distribution, as described in
+Section 2.3. We also use Fourier weight decay regularization with _γ_ = 10 _[−]_ [6] . For the task, the model
+
+|Chronos Time Series Model|MASE (↓)|WQL (↓)|Smoothness (↓)|
+|---|---|---|---|
+|Linear|0.883|0.750|0.1689_ ±_ 0.1087|
+|**Fourier-550**|**0.852**|**0.749**|**0.0283**_ ±_** 0.0224**|
+
+
+Table 3: We present large-scale experiments on Chronos time series forecasting. The bestperforming Fourier model outperforms the linear baseline both terms of the continuity of the learned
+probability mass functions (smoothness) for the quality of the forecasts (MASE, WQL).
+
+
+9
+
+
+learns to input time series context of length 512, and output a probabilistic forecast of length 64. At
+test time, the model chooses the next numerical token by sampling from the next-token distribution
+
+
+**Model** **evaluation** : We have two sets of metrics: model performance from (Ansari et al., 2024)
+(MASE measures the accuracy of median forecast, and WQL measures the quality of the probabilistic forecast), as well as our smoothness metric. Our Fourier metrics in Table 3 demonstrate that
+every Fourier model outperforms the linear baseline for MASE and smoothness. Furthermore, for
+the largest Fourier model that we consider, Fourier outperforms linear on WQL as well.
+
+
+**Ablations:** The results in Table 8 (Appendix) show that mixed precision binning and regularization
+improve the MASE and smoothness for the Fourier head, and that using more Fourier frequencies
+improves MASE and WQL. Additionally, we show that the Fourier head yields more accurate forecasts than the linear head across dataset sizes and model sizes (Figures 18 and 19, Appendix).
+
+
+7 RELATED WORK
+
+
+**LLMs outside of natural language domains:** LLMs are often adapted to domains beyond natural
+language, as general purpose sequence models. For example, they have been used in protein synthesis (Madani et al., 2023), time series forecasting (Ansari et al., 2024; Das et al., 2024; Jin et al.,
+2024; Nate Gruver & Wilson, 2023; Requeima et al., 2024; Jia et al., 2024; Zhou et al., 2023; Wang
+et al., 2024), music generation (Dhariwal et al., 2020; Agostinelli et al., 2023; Copet et al., 2023;
+Yuan et al., 2024), and as well as in decision making (Li et al., 2022; Chen et al., 2021).
+
+
+We consider three categories to adapt LLMs to non-language domains: when the output of a
+language-trained LLM is used as a feature for some out-of-domain task; when a language-pretrained
+LLM is fine-tuned on a domain-specific task; and when an LLM architecture is trained on a domainspecific dataset from scratch. Our work directly considers the latter method of LLM adaptation,
+particularly in settings where the outputs approximate continuous values. We note that using LLMs
+to model numerical functions has seen success in continuing sequences (Mirchandani et al., 2023)
+but has been challenging for modeling samplers for probability distributions (Hopkins et al., 2023).
+In a related direction, Razeghi et al. (2022) found that model performance on numerical reasoning tasks is correlated with the frequency of specific numbers in its corpus. Further, some have
+re-framed continuous regression as a descretized classification problem to leverage LLMs in numerical modeling contexts (Song et al., 2024) or RL contexts (Farebrother et al., 2024). While even
+frozen LLMs with no further training show interesting empirical results as regressors (Vacareanu
+et al., 2024), there is a conceptual mismatch between the downstream task and model construction because tokenized numerical values trained using cross-entropy loss does not explicitly enforce
+numerical relationships between the tokens.
+
+
+**Fourier** **series** **in** **neural** **networks:** Many works leverage the Fourier transform as a data preprocessing step or a deterministic transformation within the network, or use Fourier analysis to
+motivate design choices. It is far less common to learn the Fourier series directly. De la Fuente
+et al. (2024) learned marginal univariate densities parameterized using a Fourier basis; our work
+extends their Fourier Basis Density model to multivariate settings with an autoregressive scheme.
+Our method learns conditional univariate densities using a Fourier basis, where the coefficients of the
+Fourier density model are input dependent. Sitzmann et al. (2020) proposed sinusoidal activation
+functions, which can be seen as learning the _frequencies_ of a Fourier series; in contrast, we fix
+the frequencies to the canonoical choice _{_ 1 _,_ 2 _, . . ., N_ _}_, and learn the _amplitudes_ . This allows the
+Fourier head to more directly benefit from approximation results from Fourier analysis.
+
+
+8 CONCLUSION
+
+
+We propose the Fourier head and demonstrate its positive impact on performance on several tasks.
+We prove a scaling law that characterizes the trade-off between the model’s expressivity and the
+smoothness of its output distribution. The Fourier head is a modular architecture that can be easily
+added to existing models that would benefit from the continuity inductive bias that the head imparts.
+The Fourier head extends the already extensive reach of LLMs into more diverse, numerical, and
+probabilistic domains. Future work includes exploring alternative training objectives that do not
+depend on discretizing probability density functions, and incorporating the Fourier head in generalpurpose LLM training, where the head can be adaptively employed when needed.
+
+
+10
+
+
+9 REPRODUCIBILITY STATEMENT
+
+
+We have made efforts to ensure reproducibility. In Algorithm 1 we provide all the mathematical
+details that one needs to reproduce the Fourier head. In Appendix D.2 we prove our scaling law,
+Theorem 3.3, in full detail, and we list all assumptions in the statement of the theorem. Additionally,
+we have released the research code on GitHub: [https://github.com/nate-gillman/](https://github.com/nate-gillman/fourier-head)
+[fourier-head.](https://github.com/nate-gillman/fourier-head)
+
+
+ACKNOWLEDGMENTS
+
+
+We would like to thank Jona Balle, Alfredo De la Fuente, Calvin Luo, Singh Saluja, Matthew
+Schoenbauer, and Megan Wei for the useful discussions. This work is supported by the Samsung
+Advanced Institute of Technology, NASA, and a Richard B. Salomon Award for Chen Sun. Our
+research was conducted using computational resources at the Center for Computation and Visualization at Brown University. Chen would like to thank Mia for inspiration.
+
+
+REFERENCES
+
+
+Andrea Agostinelli, Timo I Denk, Zal´an Borsos, Jesse Engel, Mauro Verzetti, Antoine Caillon,
+Qingqing Huang, Aren Jansen, Adam Roberts, Marco Tagliasacchi, et al. Musiclm: Generating
+music from text. _arXiv preprint arXiv:2301.11325_, 2023.
+
+
+Abdul Fatir Ansari, Lorenzo Stella, Caner Turkmen, Xiyuan Zhang, Pedro Mercado, Huibin Shen,
+Oleksandr Shchur, Syama Syndar Rangapuram, Sebastian Pineda Arango, Shubham Kapoor,
+Jasper Zschiegner, Danielle C. Maddix, Michael W. Mahoney, Kari Torkkola, Andrew Gordon Wilson, Michael Bohlke-Schneider, and Yuyang Wang. Chronos: Learning the language
+of time series. _Transactions_ _on_ _Machine_ _Learning_ _Research_, 2024. ISSN 2835-8856. URL
+[https://openreview.net/forum?id=gerNCVqqtR.](https://openreview.net/forum?id=gerNCVqqtR)
+
+
+Marc G Bellemare, Yavar Naddaf, Joel Veness, and Michael Bowling. The arcade learning environment: An evaluation platform for general agents. _Journal of Artificial Intelligence Research_, 47:
+253–279, 2013.
+
+
+Peter J Brockwell and Richard A Davis. _Time_ _series:_ _theory_ _and_ _methods_ . Springer science &
+business media, 1991.
+
+
+Lili Chen, Kevin Lu, Aravind Rajeswaran, Kimin Lee, Aditya Grover, Michael Laskin, Pieter
+Abbeel, Aravind Srinivas, and Igor Mordatch. Decision transformer: Reinforcement learning
+via sequence modeling. _arXiv preprint arXiv:2106.01345_, 2021.
+
+
+Jade Copet, Felix Kreuk, Itai Gat, Tal Remez, David Kant, Gabriel Synnaeve, Yossi Adi, and Alexandre D´efossez. Simple and controllable music generation. In _Thirty-seventh Conference on Neural_
+_Information Processing Systems_, 2023.
+
+
+Abhimanyu Das, Weihao Kong, Rajat Sen, and Yichen Zhou. A decoder-only foundation model for
+time-series forecasting. In _International Conference on Machine Learning_, 2024.
+
+
+Alfredo De la Fuente, Saurabh Singh, and Johannes Ball´e. Fourier basis density model. _arXiv_
+_preprint arXiv:2402.15345_, 2024.
+
+
+Prafulla Dhariwal, Heewoo Jun, Christine Payne, Jong Wook Kim, Alec Radford, and Ilya Sutskever.
+Jukebox: A generative model for music. _arXiv preprint arXiv:2005.00341_, 2020.
+
+
+Abhimanyu Dubey, Abhinav Jauhri, Abhinav Pandey, Abhishek Kadian, Ahmad Al-Dahle, Aiesha
+Letman, Akhil Mathur, Alan Schelten, Amy Yang, Angela Fan, et al. The llama 3 herd of models.
+_arXiv preprint arXiv:2407.21783_, 2024.
+
+
+Jesse Farebrother, Jordi Orbay, Quan Vuong, Adrien Ali Ta¨ıga, Yevgen Chebotar, Ted Xiao, Alex
+Irpan, Sergey Levine, Pablo Samuel Castro, Aleksandra Faust, et al. Stop regressing: Training
+value functions via classification for scalable deep rl. _arXiv preprint arXiv:2403.03950_, 2024.
+
+
+11
+
+
+Jort F. Gemmeke, Daniel P. W. Ellis, Dylan Freedman, Aren Jansen, Wade Lawrence, R. Channing
+Moore, Manoj Plakal, and Marvin Ritter. Audio set: An ontology and human-labeled dataset for
+audio events. In _Proc. IEEE ICASSP 2017_, New Orleans, LA, 2017.
+
+
+Yuan Gong, Yu-An Chung, and James Glass. Psla: Improving audio tagging with pretraining,
+sampling, labeling, and aggregation. _IEEE/ACM Transactions on Audio, Speech, and Language_
+_Processing_, 2021. doi: 10.1109/TASLP.2021.3120633.
+
+
+Jia Gu, Liang Pang, Huawei Shen, and Xueqi Cheng. Do llms play dice? exploring probability distribution sampling in large language models for behavioral simulation. _arXiv_ _preprint_
+_arXiv:2404.09043_, 2024.
+
+
+Kaiming He, Xiangyu Zhang, Shaoqing Ren, and Jian Sun. Delving deep into rectifiers: Surpassing
+human-level performance on imagenet classification. In _Proceedings_ _of_ _the_ _IEEE_ _international_
+_conference on computer vision_, pp. 1026–1034, 2015.
+
+
+Aspen K Hopkins, Alex Renda, and Michael Carbin. Can llms generate random numbers? evaluating llm sampling in controlled domains. In _ICML 2023 Workshop:_ _Sampling and Optimization in_
+_Discrete Space_, 2023.
+
+
+Tsuyoshi Inouye, Kazuhiro Shinosaki, H. Sakamoto, Seigo Toi, Satoshi Ukai, Akinori Iyama,
+Y Katsuda, and Makiko Hirano. Quantification of eeg irregularity by use of the entropy of
+the power spectrum. _Electroencephalography_ _and_ _Clinical_ _Neurophysiology_, 79(3):204–210,
+1991. ISSN 0013-4694. doi: https://doi.org/10.1016/0013-4694(91)90138-T. URL [https:](https://www.sciencedirect.com/science/article/pii/001346949190138T)
+[//www.sciencedirect.com/science/article/pii/001346949190138T.](https://www.sciencedirect.com/science/article/pii/001346949190138T)
+
+
+Furong Jia, Kevin Wang, Yixiang Zheng, Defu Cao, and Yan Liu. Gpt4mts: Prompt-based large
+language model for multimodal time-series forecasting. _Proceedings of the AAAI Conference on_
+_Artificial_ _Intelligence_, 38(21):23343–23351, Mar. 2024. doi: 10.1609/aaai.v38i21.30383. URL
+[https://ojs.aaai.org/index.php/AAAI/article/view/30383.](https://ojs.aaai.org/index.php/AAAI/article/view/30383)
+
+
+Ming Jin, Shiyu Wang, Lintao Ma, Zhixuan Chu, James Y Zhang, Xiaoming Shi, Pin-Yu Chen, Yuxuan Liang, Yuan-Fang Li, Shirui Pan, and Qingsong Wen. Time-LLM: Time series forecasting by
+reprogramming large language models. In _International Conference on Learning Representations_
+_(ICLR)_, 2024.
+
+
+Jared Kaplan, Sam McCandlish, Tom Henighan, Tom B Brown, Benjamin Chess, Rewon Child,
+Scott Gray, Alec Radford, Jeffrey Wu, and Dario Amodei. Scaling laws for neural language
+models. _arXiv preprint arXiv:2001.08361_, 2020.
+
+
+Shuang Li, Xavier Puig, Chris Paxton, Yilun Du, Clinton Wang, Linxi Fan, Tao Chen, De-An Huang,
+Ekin Aky¨urek, Anima Anandkumar, et al. Pre-trained language models for interactive decisionmaking. _Advances in Neural Information Processing Systems_, 35:31199–31212, 2022.
+
+
+Yixin Liu, Avi Singh, C Daniel Freeman, John D Co-Reyes, and Peter J Liu. Improving large
+language model fine-tuning for solving math problems. _arXiv preprint arXiv:2310.10047_, 2023.
+
+
+Madani, Krause, and et al. Greene. Large language models generate functional protein sequences across diverse families. _Nature_ _Biotechnology_, 41:1099–1106, 2023. doi: 10.1038/
+s41587-022-01618-2.
+
+
+Suvir Mirchandani, Fei Xia, Pete Florence, Brian Ichter, Danny Driess, Montserrat Gonzalez Arenas, Kanishka Rao, Dorsa Sadigh, and Andy Zeng. Large language models as general pattern
+machines. In _Proceedings of the 7th Conference on Robot Learning (CoRL)_, 2023.
+
+
+Volodymyr Mnih, Koray Kavukcuoglu, David Silver, Andrei A Rusu, Joel Veness, Marc G Bellemare, Alex Graves, Martin Riedmiller, Andreas K Fidjeland, Georg Ostrovski, et al. Human-level
+control through deep reinforcement learning. _nature_, 518(7540):529–533, 2015.
+
+
+Shikai Qiu Nate Gruver, Marc Finzi and Andrew Gordon Wilson. Large Language Models Are Zero
+Shot Time Series Forecasters. In _Advances in Neural Information Processing Systems_, 2023.
+
+
+12
+
+
+Akshay Paruchuri, Jake Garrison, Shun Liao, John Hernandez, Jacob Sunshine, Tim Althoff, Xin
+Liu, and Daniel McDuff. What are the odds? language models are capable of probabilistic
+reasoning. _arXiv preprint arXiv:2406.12830_, 2024.
+
+
+Alec Radford, Karthik Narasimhan, Tim Salimans, and Ilya Sutskever. Improving language understanding by generative pre-training. _OpenAI website_, 2018.
+
+
+Colin Raffel, Noam Shazeer, Adam Roberts, Katherine Lee, Sharan Narang, Michael Matena, Yanqi
+Zhou, Wei Li, and Peter J Liu. Exploring the limits of transfer learning with a unified text-to-text
+transformer. _Journal of machine learning research_, 21(140):1–67, 2020.
+
+
+Yasaman Razeghi, Robert L Logan IV, Matt Gardner, and Sameer Singh. Impact of pretraining
+term frequencies on few-shot numerical reasoning. In Yoav Goldberg, Zornitsa Kozareva, and
+Yue Zhang (eds.), _Findings of the Association for Computational Linguistics:_ _EMNLP 2022_, pp.
+840–854, Abu Dhabi, United Arab Emirates, December 2022. Association for Computational
+Linguistics. doi: 10.18653/v1/2022.findings-emnlp.59.
+
+
+James Requeima, John Bronskill, Dami Choi, Richard E Turner, and David Duvenaud. Llm
+processes: Numerical predictive distributions conditioned on natural language. _arXiv_ _preprint_
+_arXiv:2405.12856_, 2024.
+
+
+Vincent Sitzmann, Julien Martel, Alexander Bergman, David Lindell, and Gordon Wetzstein. Implicit neural representations with periodic activation functions. _Advances_ _in_ _neural_ _information_
+_processing systems_, 33:7462–7473, 2020.
+
+
+Xingyou Song, Oscar Li, Chansoo Lee, Bangding Yang, Daiyi Peng, Sagi Perel, and Yutian Chen.
+Omnipred: Language models as universal regressors. _CoRR_, abs/2402.14547, 2024. doi: 10.
+48550/ARXIV.2402.14547. [URL https://doi.org/10.48550/arXiv.2402.14547.](https://doi.org/10.48550/arXiv.2402.14547)
+
+
+Michael Spivey. _The continuity of mind_ . Oxford University Press, 2008.
+
+
+Elias M Stein and Rami Shakarchi. _Fourier analysis:_ _an introduction_, volume 1. Princeton University Press, 2003.
+
+
+Elias M Stein and Rami Shakarchi. _Real Analysis: Measure Theory, Integration, and Hilbert Spaces_,
+volume 3. Princeton University Press, 2005.
+
+
+Terry Tao, Dec 2014. URL [https://terrytao.wordpress.com/2014/12/09/](https://terrytao.wordpress.com/2014/12/09/254a-notes-2-complex-analytic-multiplicative-number-theory/#nxx)
+[254a-notes-2-complex-analytic-multiplicative-number-theory/#nxx.](https://terrytao.wordpress.com/2014/12/09/254a-notes-2-complex-analytic-multiplicative-number-theory/#nxx)
+
+
+Robert Vacareanu, Vlad Andrei Negru, Vasile Suciu, and Mihai Surdeanu. From words to numbers:
+Your large language model is secretly a capable regressor when given in-context examples. In
+_First Conference on Language Modeling_ [, 2024. URL https://openreview.net/forum?](https://openreview.net/forum?id=LzpaUxcNFK)
+[id=LzpaUxcNFK.](https://openreview.net/forum?id=LzpaUxcNFK)
+
+
+Shiyu Wang, Haixu Wu, Xiaoming Shi, Tengge Hu, Huakun Luo, Lintao Ma, James Y Zhang,
+and JUN ZHOU. Timemixer: Decomposable multiscale mixing for time series forecasting. In
+_International Conference on Learning Representations (ICLR)_, 2024.
+
+
+Megan Wei, Michael Freeman, Chris Donahue, and Chen Sun. Do music generation models encode
+music theory? In _International Society for Music Information Retrieval_, 2024.
+
+
+[Eric W. Weisstein. Square wave. From MathWorld–A Wolfram Web Resource, 2024. URL https:](https://mathworld.wolfram.com/SquareWave.html)
+[//mathworld.wolfram.com/SquareWave.html.](https://mathworld.wolfram.com/SquareWave.html) Accessed: September 16, 2024.
+
+
+Ruibin Yuan, Hanfeng Lin, Yi Wang, Zeyue Tian, Shangda Wu, Tianhao Shen, Ge Zhang, Yuhang
+Wu, Cong Liu, Ziya Zhou, Ziyang Ma, Liumeng Xue, Ziyu Wang, Qin Liu, Tianyu Zheng, Yizhi
+Li, Yinghao Ma, Yiming Liang, Xiaowei Chi, Ruibo Liu, Zili Wang, Pengfei Li, Jingcheng Wu,
+Chenghua Lin, Qifeng Liu, Tao Jiang, Wenhao Huang, Wenhu Chen, Emmanouil Benetos, Jie Fu,
+Gus Xia, Roger Dannenberg, Wei Xue, Shiyin Kang, and Yike Guo. Chatmusician: Understanding and generating music intrinsically with llm. _arXiv preprint arXiv:2307.07443_, 2024.
+
+
+Tian Zhou, Peisong Niu, Xue Wang, Liang Sun, and Rong Jin. One Fits All: Power general time
+series analysis by pretrained lm. In _NeurIPS_, 2023.
+
+
+13
+
+
+# **Appendix**
+
+### **Table of Contents**
+
+
+**A** **Proof of Fourier Head Scaling Law, Theorem 3.3** **14**
+A.1 Definitions . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 14
+A.2 Overview of Proof . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 15
+A.3 Proving Theorem 3.3 Using the Lemmata . . . . . . . . . . . . . . . . . . . . . 16
+A.4 Proving the Lemmata . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 17
+
+
+**B** **Smoothness Metric** **22**
+
+
+**C** **Additional Experiment Details, Toy Examples** **25**
+C.1 Motivating Example: Audio Spectrogram Transformer . . . . . . . . . . . . . . 25
+C.2 Learning a Continuous Density . . . . . . . . . . . . . . . . . . . . . . . . . . 25
+C.3 MLE-based Fourier Head . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 26
+C.4 Are LLMs Random Number Generators? . . . . . . . . . . . . . . . . . . . . . 28
+
+
+**D** **Additional Experiment Details, Large-Scale Examples** **30**
+D.1 Decision Transformer . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 30
+D.2 Chronos . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 30
+
+
+A PROOF OF FOURIER HEAD SCALING LAW, THEOREM 3.3
+
+
+In this section we prove Theorem 3.3, the Fourier head scaling law. To do this, we must first discuss
+the Nyquist-Shannon Sampling Theorem. This result states that in order to avoid distortion of a
+signal (such as aliasing) the sampling rate must be at least twice the bandwidth of the signal. In the
+setting of the Fourier head, our sampling rate is _m/_ 2 because we have _m_ bins uniformly spaced in
+( _−_ 1 _,_ 1), and the bandwidth is _N/_ 2 because the frequency of sin( _πNx_ ) is _N/_ 2. Thus the Nyquist
+Theorem requires us to have
+_m/_ 2 _≥_ 2 _·_ ( _N/_ 2) = _N_
+
+in order for the higher order frequency content learned by our model to not be fallacious when we are
+learning from only _m_ bins. This justifies why we only theoretically study the case 1 _≪_ _N_ _<_ _m/_ 2
+in the scaling law.
+
+
+A.1 DEFINITIONS
+
+
+Consider an input _x_ _∈_ R _[n]_ to the Fourier head, and denote by _fx_ : [ _−_ 1 _,_ 1] _→_ R the optimal
+conditional distribution that we would like the Fourier head to approximate for this input. We will
+assume that _fx_ is periodic, since the Fourier head learns a 2-periodic Fourier density. We denote
+by _fx,N_ the truncation of the Fourier series of _fx_ to its first _N_ frequencies. Note that _fx,N_ also
+integrates to 1 over [ _−_ 1 _,_ 1] since its first Fourier coefficient is the same as that of _fx_ . Further, _fx,N_ is
+non-negative on [ _−_ 1 _,_ 1] since its Fourier coefficients, being a subsequence of the coefficients of _fx_,
+are non-negative definite; a periodic function with non-negative definite Fourier coefficients is nonnegative by Herglotz’s Theorem (Brockwell & Davis, 1991, Corollary 4.3.2). For completeness, we
+will recall the convolution formulas, specialized to the cases we consider in our argument.
+
+
+**Definition** **A.1** (Discrete convolution) **.** _Let_ _bj_ := _−_ 1 + [2] _[j]_ [+1]
+
+
+_m_ _[,]_ [ 0] _[≤]_ _[j]_ _[<]_ _[m]_ _[be]_ _[the]_ _[center]_ _[points]_ _[of]_
+
+
+_the_ _m_ _bins_ _in_ ( _−_ 1 _,_ 1) _,_ _and_ _let_ _us_ _denote_ _[⃗]_ _b_ := ( _b_ 0 _, . . ., bm−_ 1) _._ _Denote_ _by_ _Gσ_ ( _z_ ) := _[e][−]_ ~~_√_~~ _[z]_ [2] _[/]_ [2] _[σ]_ [2]
+
+
+_the_ _m_ _bins_ _in_ ( _−_ 1 _,_ 1) _,_ _and_ _let_ _us_ _denote_ _b_ := ( _b_ 0 _, . . ., bm−_ 1) _._ _Denote_ _by_ _Gσ_ ( _z_ ) := ~~_√_~~ _the_
+
+2 _πσ_
+_Gaussian_ _PDF_ _with_ _standard_ _deviation_ _σ._ _Then_ _the_ _discrete_ _Gaussian_ _convolution_ _filter_ _of_ _radius_
+_m −_ 1 _is_
+
+
+~~_√_~~
+
+
+_gσ_ := _[G][σ]_ [([1] _[ −]_ _[m,]_ [ 2] _[ −]_ _[m,]_ [ 3] _[ −]_ _[m, . . ., m][ −]_ [1])]
+
+
+_∈_ R [2] _[m][−]_ [1] _,_ (A.1)
+_S_ ( _m, σ_ )
+
+
+14
+
+
+_where the normalization constant is_
+
+
+_S_ ( _m, σ_ ) :=
+
+
+_m−_ 1
+
+- _Gσ_ ( _k_ ) _._ (A.2)
+
+
+_k_ =1 _−m_
+
+
+_The_ _discrete_ _convolution_ _of_ _gσ_ _∈_ R [2] _[m][−]_ [1] _and_ _fx,N_ ( _[⃗]_ _b_ ) _∈_ R _[m]_ _is_ _the_ _vector_ ( _gσ_ _∗_ _fx,N_ )( _[⃗]_ _b_ ) _∈_ R _[m]_
+_whose j’th coordinate is given by_
+
+
+1
+( _gσ ∗_ _fx,N_ )( _bj_ ) =
+_S_ ( _m, σ_ )
+
+
+_m−_ 1
+
+- _Gσ_ ( _k_ ) _· fx,N_ ( _bj−k_ ) _._ (A.3)
+
+
+_k_ =1 _−m_
+
+
+**Definition** **A.2** (Continuous convolution) **.** _The_ _continuous_ _Gaussian_ _convolution_ _filter_ _g_ ˜ _σ_ : [ _−_
+2 _,_ 2] _→_ R _>_ 0 _is_
+
+
+_σ_
+
+_m_ [(] _[z]_ [)]
+
+
+_._ (A.4)
+
+
+_G_ 2 _σ_
+_g_ ˜ _σ_ ( _z_ ) = _m_
+
+
+2 _mσ_ _m_  - _mz_
+
+_S_ ( _m, σ_ ) [=] 2 _S_ ( _m, σ_ ) _[G][σ]_ 2
+
+
+_This function_ ˜ _gσ_ ( _z_ ) _is a normalized truncation of a Gaussian PDF with mean_ 0 _and standard devia-_
+_tion_ 2 _σ/m. The continuous convolution of_ ˜ _gσ_ : [ _−_ 2 _,_ 2] _and the periodic function fx,N_ : [ _−_ 1 _,_ 1] _→_ R
+_is_
+
+                - 2
+_g_ ˜ _σ ∗_ _fx,N_ ( _z_ ) := _g_ ˜ _σ_ ( _u_ ) _fx,N_ ( _z −_ _u_ ) _du._ (A.5)
+
+_−_ 2
+
+
+A.2 OVERVIEW OF PROOF
+
+
+In this subsection, we provide an overview of the proof of Theorem 3.3 by presenting the statements
+of the lemmata that we will need, and connecting each one to the overall argument. In the next
+subsection, we rigorously prove the scaling law by careful applications of these lemmata. And in
+the following subsection, we will rigorously prove each of the lemmata.
+
+
+This first lemma allows us to replace the discrete Gaussian convolution in the definition with a
+continuous Gaussian convolution.
+**Lemma** **A.3.** (Discrete convolution is close to continuous convolution) _If_ _we_ _define_ _the_ _constant_
+_B_ 1( _m, σ_ ) := 1 + _S_ _[G]_ ( _[σ]_ _m,σ_ [(] _[m]_ [)] ) _[, then we have that]_
+
+_∥fx,N_ ( _[⃗]_ _b_ ) _−_ _gσ ∗_ _fx,N_ ( _[⃗]_ _b_ ) _∥_ 2 = _∥B_ 1( _m, σ_ ) _fx,N_ ( _[⃗]_ _b_ ) _−_ _g_ ˜ _σ ∗_ _fx,N_ ( _[⃗]_ _b_ ) _∥_ 2 + _[√]_ _mO_ (1 _/N_ [2] _[t]_ [+1] ) _._ (A.6)
+_Furthermore, B_ 1( _m, σ_ ) _satisfies the following bound, uniformly in σ,_
+
+1
+_B_ 1( _m, σ_ ) _≤_ 1 + (A.7)
+2 _m −_ 1 _[.]_
+
+
+This next lemma, a standard result from analytic number theory allows us to upper bound the sums
+of the norms of the Fourier series coefficients. This is proved in various places, see e.g. (Tao, 2014,
+Equation 21).
+**Lemma A.4** (Asymptotic expansion of Riemann zeta function) **.** _Consider the Riemann zeta function_
+_ζ_ ( _t_ ) := [�] _k_ _[∞]_ =1 _k_ 1 _[t]_ _[.]_ _[If][ t][ ≥]_ [2] _[, then]_
+
+
+_N_
+
+
+_k_ =1
+
+
+1 1 1
+_k_ _[t]_ [=] _[ ζ]_ [(] _[t]_ [)] _[ −]_ _t −_ 1 _N_ _[t][−]_ [1] [+] _[ O]_ [(1] _[/N][ t]_ [)] _[.]_ (A.8)
+
+
+This next lemma allows us to extract the main asymptotic behavior in the scaling law.
+**Lemma** **A.5.** (Main term asymptotic) _Denote_ _by_ _a_ 0( _x_ ) _the_ _constant_ _coefficient_ _of_ _fx,N_ _._ _Let_ _us_
+_suppose that the Fourier coefficients of fx,N_ _decay like B_ 3( _x_ ) _/k_ _[t]_ _, and define the constant_
+
+_B_ 2( _σ, m, x_ ) := ~~�~~ _a_ 0( _x_ ) [2] _B_ 1( _m, σ_ ) [2] + 2 _B_ 1( _m, σ_ ) [2] _B_ 3( _x_ ) [2] _ζ_ (2 _t_ ) _._ (A.9)
+
+_Then we know that_
+_∥B_ 1( _m, σ_ ) _fx,N_ ( _[⃗]_ _b_ ) _−_ _g_ ˜ _σ ∗_ _fx,N_ ( _[⃗]_ _b_ ) _∥_ 2 (A.10)
+
+       - 1        = _[√]_ _m_ _B_ 2( _σ, m, x_ ) _−_ _[B]_ [1][(] _[m, σ]_ [)][2] _[B]_ [3][(] _[x]_ [)][2] _·_ _._ (A.11)
+
+2 _t −_ 1 _N_ [2] _[t][−]_ [1] [+] _[ O]_ [(1] _[/N]_ [ 2] _[t]_ [)]
+
+
+_Furthermore, B_ 2( _σ, m, x_ ) _is bounded from above and below as a function of σ and m._
+
+
+15
+
+
+This final lemma allows us to relate the continuous case, where our analysis works out easier, to the
+discrete case, where our smoothness metric is actually defined.
+
+**Lemma A.6.** (The average value of the truncated Fourier PDF is 1 _/_ 2) _If N_ _< m/_ 2 _, then_
+
+
+_m−_ 1
+
+
+(A.12)
+2 _[.]_
+
+
+- _fx,N_ ( _bj_ ) = _[m]_
+
+2
+
+_j_ =0
+
+
+A.3 PROVING THEOREM 3.3 USING THE LEMMATA
+
+
+We now prove the theorem that provides a scaling law for the Fourier head. This result quantifies
+the trade-off between modeling capacity and smoothness as the number of frequencies increases.
+In order to prove this, we must assume that _fx_, the conditional distribution being learned by the
+Fourier head, is sufficiently smooth. For example, if _fx_ is twice continuously differentiable, then the
+Fourier coefficients corresponding to the _k_ -th frequency of _fx_ are in _O_ (1 _/k_ [2] ) (Stein & Shakarchi,
+2003, Ch.2, Cor. 2.4). Thus, our assumption that the Fourier coefficients decay quadratically is
+reasonable, and our Fourier weight decay regularization helps ensure that this condition is met in
+practice as well. In our theorem, we generalize this hypothesis to the cases where the Fourier
+coefficients corresponding to the _k_ -th frequency of _fx_ are in _O_ (1 _/k_ _[t]_ ).
+**Theorem 3.3.** _(Fourier head scaling law.)_ _Consider a Fourier head with input dimension n, output_
+_dimension m, and N_ _frequencies._ _Suppose that_ 1 _≪_ _N_ _<_ _[m]_ 2 _[.]_ _[Then the following are true:]_
+
+
+_1._ _(_ _**Increasing**_ _N_ _**improves**_ _**modeling**_ _**power**_ _.)_ _As_ _N_ _increases,_ _the_ _Fourier_ _head_ _is_ _capable_ _of_
+_learning a larger class of densities._
+
+
+_2._ _(_ _**Increasing**_ _N_ _**degrades**_ _**smoothness**_ _.)_ _Consider_ _an_ _input_ _to_ _the_ _Fourier_ _head_ _x_ _∈_ R _[n]_ _,_ _and_
+_denote by fx_ : [ _−_ 1 _,_ 1] _→_ R _the optimal conditional distribution that we would like the Fourier_
+_head to approximate for this input._ _Suppose that there exists some t_ _≥_ 2 _such that the Fourier_
+_coefficients_ _of_ _fx_ _decay_ _on_ _the_ _order_ _of_ 1 _/k_ _[t]_ _._ _Denote_ _by_ _fx,N_ _the_ _truncation_ _of_ _fx_ _to_ _its_ _first_
+_N_ _frequencies,_ _denote_ _by_ _[⃗]_ _b_ _∈_ R _[m]_ _the_ _m_ _bin_ _centerpoints_ _in_ [ _−_ 1 _,_ 1] _,_ _and_ _denote_ _by_ _y_ [(] _[N]_ [)] =
+_fx,N_ ( _[⃗]_ _b_ ) _/_ ( _fx,N_ ( _b_ 0) + _· · ·_ + _fx,N_ ( _bm−_ 1)) _∈_ R _[m]_ _the discretization of fx,N_ _into m bins._ _Then,_
+_there exist constants C_ 1 _, C_ 2 _>_ 0 _such that_
+
+
+_C_ 2
+_s_ ( _y_ [(] _[N]_ [)] ) = _C_ 1 _−_ _N_ [2] _[t][−]_ [1] [+] _[ O]_ [(1] _[/N]_ [ 2] _[t]_ [)] _[.]_ (3.3)
+
+
+_Proof of Claim 2 of Theorem 3.3._ We can estimate that
+
+
+1
+_s_ ( _y_ [(] _[N]_ [)] ) = - _m−_ 1
+_j_ =0 _[f][x,N]_ [(] _[b][j]_ [)]
+
+
+1
+=   - _m−_ 1
+_j_ =0 _[f][x,N]_ [(] _[b][j]_ [)]
+
+
+_√_
+_m_
+=   - _m−_ 1
+_j_ =0 _[f][x,N]_ [(] _[b][j]_ [)]
+
+
+_∞_
+
+- _ασ∥fx,N_ ( _[⃗]_ _b_ ) _−_ _gσ ∗_ _fx,N_ ( _[⃗]_ _b_ ) _∥_ 2 (Definition 3.2)
+
+
+_σ_ =1
+
+_∞_
+
+- _ασ_ - _∥B_ 1( _m, σ_ ) _fx,N_ ( _[⃗]_ _b_ ) _−_ (˜ _gσ ∗_ _fx,N_ )( _[⃗]_ _b_ ) _∥_ 2 (Lemma A.3)
+
+
+_σ_ =1
+
++ _[√]_ _mO_ (1 _/N_ [2] _[t]_ [+1] )�
+
+
+_∞_
+
+
+(Lemma A.5)
+(2 _t −_ 1) _N_ [2] _[t][−]_ [1]
+
+
+- _ασ_ - _B_ 2( _σ, m, x_ ) _−_ _[B]_ (2 [1][(] _t_ _[m, σ]_ _−_ 1) [)][2] _N_ _[B]_ [2][3] _[t]_ [(] _[−][x]_ [1][)][2]
+
+_σ_ =1
+
+
++ _O_ (1 _/N_ [2] _[t]_ ) + _O_ (1 _/N_ [2] _[t]_ [+1] )�
+
+= ~~_√_~~ 2 _m_ _·_   - _C_ 3 _−_ _NC_ [2] _[t]_ 4 _[−]_ [1] [+] _[ O]_ [(1] _[/N]_ [ 2] _[t]_ [)]   - _._ (Lemmata A.5, A.6)
+
+
+In the last step we used the convergence of the respective series (which follows from boundedness
+of _B_ 2( _σ, m, x_ ) and _B_ 1( _m, σ_ ) in _σ_ ) and we assigned _C_ 3 and _C_ 4 to be those sums. This completes
+the proof.
+
+
+_Proof of Claim 1 of Theorem 3.3._ The proof of this claim is more straightforward. For any function
+_f_ on [ _−_ 1 _,_ 1] that is at least twice continuously differentiable, we know that the Fourier series of _f_
+
+
+16
+
+
+converges uniformly and absolutely to _f_ (Stein & Shakarchi, 2003, Ch. 2, Cor. 2.4). In other words,
+the function _fN_ being learnt by the Fourier head converges uniformly and absolutely to _f_ .
+
+
+A.4 PROVING THE LEMMATA
+
+
+In this subsection, we will restate and prove Lemmata A.3, A.5, and A.6.
+
+
+**Lemma** **A.3.** (Discrete convolution is close to continuous convolution) _If_ _we_ _define_ _the_ _constant_
+_B_ 1( _m, σ_ ) := 1 + _S_ _[G]_ ( _[σ]_ _m,σ_ [(] _[m]_ [)] ) _[, then we have that]_
+
+_∥fx,N_ ( _[⃗]_ _b_ ) _−_ _gσ ∗_ _fx,N_ ( _[⃗]_ _b_ ) _∥_ 2 = _∥B_ 1( _m, σ_ ) _fx,N_ ( _[⃗]_ _b_ ) _−_ _g_ ˜ _σ ∗_ _fx,N_ ( _[⃗]_ _b_ ) _∥_ 2 + _[√]_ _mO_ (1 _/N_ [2] _[t]_ [+1] ) _._ (A.6)
+
+
+_Furthermore, B_ 1( _m, σ_ ) _satisfies the following bound, uniformly in σ,_
+
+
+1
+_B_ 1( _m, σ_ ) _≤_ 1 + (A.7)
+2 _m −_ 1 _[.]_
+
+
+_Proof of Lemma A.3._ Extending _fx,N_ periodically to [ _−_ 2 _,_ 2], we can compute that the continuous
+convolution ˜ _gσ ∗_ _fx,N_ ( _z_ ) is
+
+
+              - 2
+(˜ _gσ ∗_ _fx,N_ )( _z_ ) = _g_ ˜ _σ_ ( _u_ ) _fx,N_ ( _z −_ _u_ ) _du_ (A.13)
+
+_−_ 2
+
+
+_m_
+=
+2 _S_ ( _m, σ_ )
+
+
+- 2 - _mu_
+
+_Gσ_
+
+_−_ 2 2
+
+
+_fx,N_ ( _z −_ _u_ ) _du_ (A.14)
+
+
+1
+=
+_S_ ( _m, σ_ )
+
+
+- _m_
+
+_Gσ_ ( _s_ ) _fx,N_
+_−m_
+
+
+- _z −_ [2] _[s]_ _ds,_ (A.15)
+
+_m_
+
+
+where in the third step we applied the change of variables _s_ = _[mu]_ 2 [.] [We claim that this is precisely]
+
+a continuous approximation of the discrete convolution in Definition 3.2. To see this, we will apply
+the Euler-Maclaurin formula. This formula says that the integral in Equation A.15 is a Riemann
+sum over rectangles of width 1 evaluated at the right endpoints of each interval, minus an error term
+_E_ ( _m, σ_ ), as follows:
+
+
+_bj_ _−_ [2] _[k]_
+
+_m_
+
+
+_bj_ _−_ [2] _[k]_
+
+
+(A.16)
+
+
+1
+(˜ _gσ ∗_ _fx,N_ )( _bj_ ) + _E_ ( _m, σ_ ) =
+_S_ ( _m, σ_ )
+
+
+1
+=
+_S_ ( _m, σ_ )
+
+
+1
+=
+_S_ ( _m, σ_ )
+
+
+1
+=
+_S_ ( _m, σ_ )
+
+
+_m_
+
+- _Gσ_ ( _k_ ) _· fx,N_
+
+
+_k_ =1 _−m_
+
+
+_m_
+
+- _Gσ_ ( _k_ ) _· fx,N_
+
+
+_k_ =1 _−m_
+
+
+_m_
+
+- _Gσ_ ( _k_ ) _· fx,N_
+
+
+_k_ =1 _−m_
+
+
+_m_
+
+
+_Gσ_ ( _k_ ) _· fx,N_ ( _bj−k_ ) + _Gσ_ ( _m_ ) _fx,N_ ( _bj−m_ )
+
+_k_ =1 _−m_
+
+
+_m_
+
+
+_−_ 1 + [2] _[j]_ [ + 1]
+
+
+[ + 1]
+
+_−_ [2] _[k]_
+_m_ _m_
+
+
+_m_
+
+
+(A.17)
+
+
+(A.18)
+
+
+   
+
+
+_m_
+
+
+_−_ 1 + [2(] _[j][ −]_ _[k]_ [) + 1]
+
+_m_
+
+
+- _m−_ 1
+
+ 
+
+
+(A.19)
+
+
+1
+= (A.20)
+_S_ ( _m, σ_ ) [(] _[S]_ [(] _[m, σ]_ [)] _[ ·]_ [ (] _[g][σ][ ∗]_ _[f][x,N]_ [)(] _[b][j]_ [) +] _[ G][σ]_ [(] _[m]_ [)] _[f][x,N]_ [(] _[b][j]_ [))]
+
+1
+= ( _gσ ∗_ _fx,N_ )( _bj_ ) + (A.21)
+_S_ ( _m, σ_ ) _[G][σ]_ [(] _[m]_ [)] _[f][x,N]_ [(] _[b][j]_ [)] _[,]_
+
+
+where the error term is defined as
+
+
+_d_ - _Gσ_ ( _s_ ) _fx,N_ - _z −_ [2] _[s]_
+
+
+1
+_E_ ( _m, σ_ ) :=
+_S_ ( _m, σ_ )
+
+
+- _m_
+
+
+_−m_
+
+
+_P_ 1( _s_ ) _ds_ (A.22)
+_ds_
+
+
+[2] _m_ _[s]_ ��
+
+
+1
++ (A.23)
+2 _S_ ( _m, σ_ ) [(] _[G][σ]_ [(] _[m]_ [)] _[f][x,N]_ [(] _[z][ −]_ [2)] _[ −]_ _[G][σ]_ [(] _[−][m]_ [)] _[f][x,N]_ [(] _[z]_ [ + 2))] _[,]_
+
+
+17
+
+
+where _P_ 1( _s_ ) := _s −⌊s⌋−_ 1 _/_ 2 is the periodized Bernoulli polynomial. We will now estimate this
+error term. Note that since _Gσ_ is an even function and _fx,N_ is periodic with period 2, the difference
+in A.23 is 0. Therefore, we can compute that
+
+
+1
+_E_ ( _m, σ_ ) =
+_S_ ( _m, σ_ )
+
+
+- _m_
+
+_G_ _[′]_ _σ_ [(] _[s]_ [)] _[P]_ [1][(] _[s]_ [)] _[f][x,N]_
+_−m_
+
+
+_z −_ [2] _[s]_
+
+_m_
+
+
+_z −_ [2] _[s]_
+
+
+_ds_ (A.24)
+
+
+_ds._ (A.25)
+
+
+2
+
+_−_
+_mS_ ( _m, σ_ )
+
+
+- _m_
+
+_Gσ_ ( _s_ ) _P_ 1( _s_ ) _fx,N_ _[′]_
+_−m_
+
+
+_z −_ [2] _[s]_
+
+_m_
+
+
+Using the triangle inequality, we can bound _E_ ( _m, σ_ ) in terms of convolutions with ˜ _gσ_ :
+
+
+- _m_
+
+_G_ _[′]_ _σ_ [(] _[s]_ [)] _[P]_ [1][(] _[s]_ [)] _[f][x,N]_
+_−m_
+
+
+_ds_ (A.26)
+����
+
+
+1
+_|E_ ( _m, σ_ ) _| ≤_
+_S_ ( _m, σ_ )
+
+
+����
+
+
+_z −_ [2] _[s]_
+
+_m_
+
+
+_z −_ [2] _[s]_
+
+
+- _m_
+
+_Gσ_ ( _s_ ) _P_ 1( _s_ ) _fx,N_ _[′]_
+_−m_
+
+
+- _−_ 2
+(A.27)
+_m_ _[ds]_ ����
+
+
+1
++
+_S_ ( _m, σ_ )
+
+
+����
+
+
+_z −_ [2] _[s]_
+
+_m_
+
+
+_z −_ [2] _[s]_
+
+
+   
+1 _m_
+_≤_
+_S_ ( _m, σ_ ) 2 _σ_ [2]
+
+
+- _m_
+
+_Gσ_ ( _s_ ) _fx,N_
+_−m_
+
+
+_z −_ [2] _[s]_
+
+_m_
+
+
+_z −_ [2] _[s]_
+
+
+_ds_ + (A.28)
+
+
+  
+_ds_
+�����
+
+
++ [1]
+
+_m_
+
+
+- _m_
+
+_Gσ_ ( _s_ ) _fx,N ′_
+_−m_ ����
+
+
+_z −_ [2] _[s]_
+
+_m_
+
+
+(A.29)
+
+
+= _[m]_
+
+
+_m_ [(˜] _[g][σ][ ∗]_ �� _fx,N ′_ ��)( _z_ ) _,_ (A.30)
+
+
+_[m]_ [1]
+
+2 _σ_ [2] [(˜] _[g][σ][ ∗]_ _[f][x,N]_ [)(] _[z]_ [) +]
+
+
+where in Equation A.29 we used that _|P_ 1( _s_ ) _|_ _≤_ 1 _/_ 2 and that _|G_ _[′]_ _σ_ [(] _[s]_ [)] _[|]_ [=] _[|][s][|][ G][σ]_ [(] _[s]_ [)] _[/σ]_ [2] _[≤]_
+_mGσ_ ( _s_ ) _/σ_ [2] for _s ∈_ [ _−m, m_ ].
+
+
+Note that since _g_ ˜ _σ_ is a truncated Gaussian on [ _−_ 2 _,_ 2], it is infinitely differentiable on the open set
+( _−_ 2 _,_ 2), however, it is not differentiable at the endpoints _−_ 2 and 2 when treated as a 4-periodic
+function. This technical difficulty can be resolved using mollifiers: we can replace ˜ _gσ_ with ˜ _gσ ∗_ _φϵ_,
+where _{φϵ}_ is a family of mollifiers indexed by _ϵ_ _>_ 0. The key properties of a mollifier are that
+_g_ ˜ _σ_ _∗_ _φϵ_ is infinitely differentiable as a 4-periodic function for all _ϵ_ _>_ 0 and lim _ϵ→_ 0 ˜ _gσ_ _∗_ _φϵ_ = _g_ ˜ _σ_
+(Stein & Shakarchi, 2005, Ch. 3). We are ultimately interested in only bounds on absolute values
+of _g_ ˜ _σ_ convolved with various functions, and since absolute values are continuous and inequalities
+are preserved under taking limits, all our bounds are still true. In particular, this shows that the _k_ ’th
+Fourier coefficients of _g_ ˜ _σ_ decay faster than any polynomial. And on the other hand, by assumption
+we know that the Fourier coefficients of _fx,N_ decay on the order of 1 _/k_ _[t]_ ; and we know that _|fx,N_ _[′]_ _[|]_ [ is]
+continuous and 2 _π_ periodic, so its Fourier coefficients converge. So by the convolution theorem, we
+can deduce that the Fourier coefficients of ˜ _g ∗_ _fx,N_ and ˜ _gσ ∗|fx,N_ _[′]_ _[|]_ [ decay faster than any polynomial.]
+Summed over the _N_ frequencies, this shows that _|g_ ˜ _σ_ _∗_ _fx,N_ ( _x_ ) _|_ and _|g_ ˜ _σ_ _∗_ �� _fx,N ′_ �� ( _z_ ) _|_ decay faster
+than any polynomial as well. Since _m_ is fixed and _σ_ _≥_ 1, this implies that
+
+
+_|E_ ( _m, σ_ ) _|_ = _O_ (1 _/N_ [2] _[t]_ [+1] ) _._ (A.31)
+
+
+Using Definition A.1 and Equation A.16, we have that
+
+
+- 1
+
+_−_ (A.32)
+_S_ ( _m, σ_ ) _[G][σ]_ [(] _[m]_ [)] _[f][x,N]_ [(] _[b][j]_ [)]
+
+
+1
+_gσ ∗_ _fx,N_ ( _bj_ ) =
+_S_ ( _m, σ_ )
+
+
+_m_
+
+- _Gσ_ ( _k_ ) _· fx,N_
+
+
+_k_ =1 _−m_
+
+
+_bj_ _−_ [2] _[k]_
+
+_m_
+
+
+1
+= (˜ _gσ ∗_ _fx,N_ )( _bj_ ) + _E_ ( _m, σ_ ) _−_ (A.33)
+_S_ ( _m, σ_ ) _[G][σ]_ [(] _[m]_ [)] _[f][x,N]_ [(] _[b][j]_ [)] _[.]_
+
+
+If we define _C_ 1( _m, σ_ ) := _S_ _[G]_ ( _[σ]_ _m,σ_ [(] _[m]_ [)] ) [, then Equation A.33 combined with A.31 together imply that]
+
+
+_gσ ∗_ _fx,N_ ( _bj_ ) _−_ _g_ ˜ _σ ∗_ _fx,N_ ( _bj_ ) + _C_ 1( _σ, m_ ) _fx,N_ ( _bj_ ) = _O_ (1 _/N_ 2 _t_ +1) _._ (A.34)
+��� ���
+
+
+18
+
+
+Finally, we can estimate that
+
+
+_∥fx,N_ ( _[⃗]_ _b_ ) _−_ _gσ ∗_ _fx,N_ ( _[⃗]_ _b_ ) _∥_ 2 (A.35)
+
+= _∥fx,N_ ( _[⃗]_ _b_ ) _−_ _g_ ˜ _σ ∗_ _fx,N_ ( _[⃗]_ _b_ ) + _C_ 1( _σ, m_ ) _fx,N_ ( _[⃗]_ _b_ ) _∥_ 2 (A.36)
+
+
++ _∥gσ ∗_ _fx,N_ ( _[⃗]_ _b_ ) _−_ _g_ ˜ _σ ∗_ _fx,N_ ( _[⃗]_ _b_ ) + _C_ 1( _m, σ_ ) _fx,N_ ( _[⃗]_ _b_ ) _∥_ (A.37)
+
+= _∥fx,N_ ( _[⃗]_ _b_ ) _−_ _g_ ˜ _σ ∗_ _fx,N_ ( _[⃗]_ _b_ ) + _C_ 1( _m, σ_ ) _fx,N_ ( _[⃗]_ _b_ ) _∥_ 2 + _[√]_ _m∥O_ (1 _/N_ [2] _[t]_ [+1] ) _∥_ 2 (A.38)
+
+= _∥_ (1 + _C_ 1( _m, σ_ )) _fx,N_ ( _[⃗]_ _b_ ) _−_ _g_ ˜ _σ ∗_ _fx,N_ ( _[⃗]_ _b_ ) _∥_ 2 + _[√]_ _mO_ (1 _/N_ [2] _[t]_ [+1] ) _._ (A.39)
+
+
+This completes the first part of the proof. For the second part of the proof, since _S_ ( _m, σ_ ) _≥_ (2 _m −_
+1) _Gσ_ ( _m −_ 1), we can estimate that
+
+
+_Gσ_ ( _m_ ) 1 1
+_B_ 1( _m, σ_ ) _≤_ 1 + _[≤]_ [1 +] (A.40)
+(2 _m −_ 1) _Gσ_ ( _m −_ 1) _[≤]_ [1 +] 2 _m −_ 1 _[e][−]_ [(2] _[m][−]_ [1)] _[/]_ [2] _[σ]_ [2] 2 _m −_ 1 _[.]_
+
+
+This completes the proof.
+
+
+**Lemma** **A.5.** (Main term asymptotic) _Denote_ _by_ _a_ 0( _x_ ) _the_ _constant_ _coefficient_ _of_ _fx,N_ _._ _Let_ _us_
+_suppose that the Fourier coefficients of fx,N_ _decay like B_ 3( _x_ ) _/k_ _[t]_ _, and define the constant_
+
+
+_B_ 2( _σ, m, x_ ) := ~~�~~ _a_ 0( _x_ ) [2] _B_ 1( _m, σ_ ) [2] + 2 _B_ 1( _m, σ_ ) [2] _B_ 3( _x_ ) [2] _ζ_ (2 _t_ ) _._ (A.9)
+
+
+_Then we know that_
+
+
+_∥B_ 1( _m, σ_ ) _fx,N_ ( _[⃗]_ _b_ ) _−_ _g_ ˜ _σ ∗_ _fx,N_ ( _[⃗]_ _b_ ) _∥_ 2 (A.10)
+
+       - 1        = _[√]_ _m_ _B_ 2( _σ, m, x_ ) _−_ _[B]_ [1][(] _[m, σ]_ [)][2] _[B]_ [3][(] _[x]_ [)][2] _·_ _._ (A.11)
+
+2 _t −_ 1 _N_ [2] _[t][−]_ [1] [+] _[ O]_ [(1] _[/N]_ [ 2] _[t]_ [)]
+
+
+_Furthermore, B_ 2( _σ, m, x_ ) _is bounded from above and below as a function of σ and m._
+
+
+_Proof of Lemma A.5._ We will first argue that _B_ 2( _σ, m, x_ ), as a function of _σ_ and _m_, is bounded from
+above and below. Indeed, from its definition, _B_ 2( _σ, m, x_ ) _≥_ ~~�~~ _a_ 0( _x_ ) [2] _B_ 1( _m, σ_ ) [2] _≥|a_ 0( _x_ ) _|._ But
+the Fourier PDF has integral 1 over [ _−_ 1 _,_ 1], so its constant term is _a_ 0( _x_ ) = 1 _/_ 2. This implies that
+_B_ 2( _σ, m, x_ ) _≥_ 1 _/_ 2. To see _B_ 2( _σ, m, x_ ) is bounded from above, we simply recall that in Lemma A.3
+we showed that _|B_ 1( _m, σ_ ) _|_ _≤_ 2, which implies that _|B_ 2( _σ, m, x_ ) _|_ _≤_ �4 _a_ 0( _x_ ) [2] + 8 _B_ 3( _x_ ) [2] _ζ_ (2 _t_ ).
+This shows that _B_ 2( _σ, m, x_ ) is bounded above and below as a function of _m_ and _σ_, as claimed.
+
+Now, let ( _d_ 0( _x_ ) _, . . ., dm−_ 1( _x_ )) _∈_ R _[m]_ be the discrete Fourier transform of ( _B_ 1( _m, σ_ ) _fx,N_ _−_ _g_ ˜ _σ_ _∗_
+_fx,N_ )( _[⃗]_ _b_ ) _∈_ R _[m]_ . For notational simplicity, we will write _B_ 1 = _B_ 1( _m, σ_ ) as long as _σ_ is fixed. By
+Plancherel’s Theorem, we have
+
+
+_m−_ 1
+
+
+- _|_ ( _B_ 1 _fx,N_ _−_ _g_ ˜ _σ ∗_ _fx,N_ )( _bj_ ) _|_ [2] = [1]
+
+_m_
+
+_j_ =0
+
+
+_m_
+
+
+_m−_ 1
+
+- _|dk_ ( _x_ ) _|_ [2] _._ (A.41)
+
+
+_k_ =0
+
+
+Let _hσ,j_ be the Fourier coefficients of _g_ ˜ _σ_, treated as a periodic function with period 4, and defined
+over [ _−_ 2 _,_ 2]:
+
+
+_g_ ˜ _σ_ ( _z_ ) =
+
+
+_∞_
+
+- _hσ,je_ _[πijz/]_ [2] _._ (A.42)
+
+
+_j_ = _−∞_
+
+
+Since _fx,N_ is defined over [ _−_ 1 _,_ 1] and is periodic with period 2, we can likewise treat it as a function
+over [ _−_ 2 _,_ 2] with period 4, in which case we can rewrite its Fourier series as
+
+
+_fx,N_ ( _z_ ) =
+
+
+2 _N_
+
+- _a_ ˜ _j_ ( _x_ ) _e_ _[πijz/]_ [2] _,_ (A.43)
+
+
+_j_ = _−_ 2 _N_
+
+
+where
+
+
+_a_ ˜ _j_ ( _x_ ) = - _aj/_ 2( _x_ ) if _j_ _≡_ 0 (mod 2) (A.44)
+0 else.
+
+
+19
+
+
+Then, by the Convolution Theorem, we have
+
+
+( _B_ 1 _fx,N_ _−_ _g_ ˜ _σ ∗_ _fx,N_ )( _bl_ ) =
+
+
+=
+
+
+=
+
+
+2 _N_
+
+- _a_ ˜ _j_ ( _x_ )( _B_ 1 _−_ _hσ,j_ ) _· e_ _[πijb][l][/]_ [2] (A.45)
+
+_j_ = _−_ 2 _N_
+
+
+_N_
+
+- _a_ ˜2 _k_ ( _x_ )( _B_ 1 _−_ _hσ,_ 2 _k_ ) _· e_ _[πikb][l]_ (A.46)
+
+
+_k_ = _−N_
+
+
+_N_
+
+- _ak_ ( _x_ )( _B_ 1 _−_ _hσ,_ 2 _k_ ) _· e_ _[πikb][l]_ _,_ (A.47)
+
+
+_k_ = _−N_
+
+
+2 _N_
+
+
+_N_
+
+
+_N_
+
+
+where in the second equality we used the fact that ˜ _aj_ is 0 for odd _j_ and therefore re-indexed using
+_k_ = _j/_ 2. Thus, using the definition of DFT along with Equation A.47, we get
+
+
+_dk_ ( _x_ ) =
+
+
+=
+
+
+=
+
+
+=
+
+
+_m−_ 1
+
+- ( _B_ 1 _fx,N_ _−_ _g_ ˜ _σ ∗_ _fx,N_ )( _bl_ ) _· e_ _[−]_ [2] _[πikl/m]_ (A.48)
+
+
+_l_ =0
+
+
+_N_ _m−_ 1
+
+- _aj_ ( _x_ )( _B_ 1 _−_ _hσ,_ 2 _j_ ) _· e_ _[πij]_ [(] _[−]_ [1+1] _[/m]_ [)] 
+_j_ = _−N_ _l_ =0
+
+
+_m−_ 1
+
+
+_l_ =0
+
+
+_N_
+
+- _aj_ ( _x_ )( _B_ 1 _−_ _hσ,_ 2 _j_ ) _e_ _[πijb][l]_ _· e_ _[−]_ [2] _[πikl/m]_ (A.49)
+
+_j_ = _−N_
+
+
+[+1]
+
+_m_ [)] _· e_ _[−]_ [2] _[πikl/m]_ (A.50)
+
+
+_N_
+
+- _aj_ ( _x_ )( _B_ 1 _−_ _hσ,_ 2 _j_ )
+
+_j_ = _−N_
+
+
+_m−_ 1
+
+
+- _e_ _[πij]_ [(] _[−]_ [1+] [2] _[l]_ _m_ [+1]
+
+
+_l_ =0
+
+
+_N_
+
+
+- _e_ [2] _[πi]_ [(] _[j][−][k]_ [)] _[l/m]_ _._ (A.51)
+
+
+_l_ =0
+
+
+First, we claim that at most a single summand (in _j_ ) is represented. Towards this, we note that
+
+
+_m_        - _−_ 1 _e_ [2] _[πi]_ [(] _[j][−][k]_ [)] _[l/m]_ = �0 _j_ _̸≡_ _k_ (mod _m_ ) (A.52)
+
+_m_ _j_ _≡_ _k_ (mod _m_ ) _._
+_l_ =0
+
+
+Then, we note that since 0 _< N_ _< m/_ 2, for each 0 _≤_ _k_ _< m_, there is at most one _j_ _∈{−N, −N_ +
+1 _, . . ., N_ _}_, such that _j_ _≡_ _k_ (mod _m_ ). This shows that there is at most a single summand. We will
+now find the exact formula for each summand. We consider three cases.
+
+
+    - Case 1: 0 _≤_ _k_ _≤_ _N_ . In this case, _j_ = _k_ satisfies _j_ _≡_ _k_ (mod _m_ ), so this index gives the
+exponential sum of _m_ .
+
+
+    - Case 2: _N_ _<_ _k_ _<_ _m −_ _N_ . In this case, _k_ is too large to be an index in the sum, so we
+can’t choose _j_ = _k_ ; the next smallest equivalent value is _j_ = _k −_ _m_, which satisfies _j_ _≡_ _k_
+(mod _m_ ). But _N_ _−_ _m < j_ _< −N_ in this case, so _k_ is too small to be an index in the sum;
+therefore, every exponential sum is zero in this range.
+
+
+    - Case 3: _m −_ _N_ _≤_ _k_ _≤_ _m −_ 1. In this case, _j_ = _k −_ _m_ satisfies _j_ _≡_ _k_ (mod _m_ ). We have
+_−N_ _≤_ _j_ _≤_ 1, so this is a valid index in the sum.
+
+
+This gives the following closed formula:
+
+
+_dk_ ( _x_ ) =
+
+
+
+
+
+
+_m · ak_ ( _x_ )( _B_ 1 _−_ _hσ,_ 2 _k_ ) _e_ _[πik]_ [(] _[−]_ [1+1] _[/m]_ [)] 0 _≤_ _k_ _≤_ _N_
+0 _N_ _< k_ _< m −_ _N_ (A.53)
+_m · ak−m_ ( _B_ 1 _−_ _hσ,_ 2( _k−m_ )) _e_ _[πi]_ [(] _[k][−][m]_ [)(] _[−]_ [1+1] _[/m]_ [)] _m −_ _N_ _≤_ _k_ _≤_ _m −_ 1 _._
+
+
+
+
+
+20
+
+
+Using this closed formula in A.41, we obtain
+
+
+_m−_ 1
+
+ - _|_ ( _B_ 1 _fx,N_ _−_ _g_ ˜ _σ ∗_ _fx,N_ )( _bj_ ) _|_ [2] (A.54)
+
+
+_j_ =0
+
+
+= [1]
+
+_m_
+
+
+_N_
+
+
+_k_ =0
+
+
+2
+_m · ak_ ( _x_ )( _B_ 1 _−_ _hσ,_ 2 _k_ ) _eπik_ ( _−_ 1+1 _/m_ ) (A.55)
+��� ���
+
+
++ [1]
+
+_m_
+
+
+_m−_ 1
+
+ 
+
+_k_ = _m−N_
+
+
+2
+_m · ak−m_ ( _B_ 1 _−_ _hσ,_ 2( _k−m_ )) _eπi_ ( _k−m_ )( _−_ 1+1 _/m_ ) (A.56)
+��� ���
+
+
+_N_
+
+- _|ak_ ( _x_ )( _B_ 1 _−_ _hσ,_ 2 _k_ ) _|_ [2] + _m_
+
+
+_k_ =0
+
+
+_N_
+
+
+_m−_ 1
+
+ 
+
+_k_ = _m−N_
+
+
+2
+�� _ak−m_ ( _B_ 1 _−_ _hσ,_ 2( _k−m_ ))�� _,_ (A.57)
+
+
+= _m_
+
+
+where in the last step we used that �� _eπik_ (1 _−_ 1 _/m_ )�� = 1 = �� _eπi_ ( _k−m_ )(1 _−_ 1 _/m_ )�� since they are both
+complex exponentials. Now, since _g_ ˜ _σ_ is a real and even function, we know that its Fourier coefficients _hσ,k_ are real. Further, since ˜ _gσ_ is infinitely differentiable, we also know that _hσ,k_ = _O_ (1 _/k_ _[t]_ )
+(in fact they decay faster than 1 _/k_ _[p]_ for any _p_ _≥_ 1). Thus, using that _|ak_ ( _x_ ) _|_ decays like _B_ 3( _x_ ) _/k_ _[t]_,
+we see
+
+_|ak_ ( _x_ )( _B_ 1 _−_ _hσ,_ 2 _k_ ) _|_ [2] = _|ak_ ( _x_ ) _|_ [2] ( _B_ 1 [2] _[−]_ [2] _[h][σ,]_ [2] _[k]_ [(] _[x]_ [) +] _[ h]_ _σ,_ [2] 2 _k_ [)] (A.58)
+
+
+= _[B]_ 3 [2] _[B]_ 1 [2] + _O_ - 1
+_k_ [2] _[t]_ _k_ [2] _[t]_ (2 _k_ ) _[t]_
+
+
+- - 1
++ _O_
+_k_ [2] _[t]_ (2 _k_ ) [2] _[t]_
+
+
+_._ (A.59)
+
+
+From A.59, it is clear that since we are interested in only the dominant asymptotic, we can safely
+ignore the higher order terms coming from the _hσ,k_ . As a result, we can estimate that
+
+
+_B_ 3 [2] _[B]_ 1 [2]
+( _k −_ _m_ ) [2] _[t]_
+
+
+(A.60)
+
+
+_m−_ 1
+
+- _|_ ( _B_ 1 _fx,N_ _−_ _g_ ˜ _σ ∗_ _fx,N_ )( _bj_ ) _|_ [2] _≈_ _mB_ 1 [2] _[a]_ [0][(] _[x]_ [)][2][ +] _[ m]_
+
+
+_j_ =0
+
+
+= _ma_ 0( _x_ ) [2] _B_ 1 [2] [+] _[ m]_
+
+
+= _ma_ 0( _x_ ) [2] _B_ 1 [2] [+] _[ m]_
+
+
+_N_
+
+
+_k_ =1
+
+
+_N_
+
+
+_k_ =1
+
+
+_N_
+
+
+_k_ =1
+
+
+_B_ 3 [2] _[B]_ 1 [2] + _m_
+_k_ [2] _[t]_
+
+
+_B_ 3 [2] _[B]_ 1 [2] + _m_
+_k_ [2] _[t]_
+
+
+_B_ 3 [2] _[B]_ 1 [2] + _m_
+_k_ [2] _[t]_
+
+
+_m−_ 1
+
+ 
+
+_k_ = _m−N_
+
+
+_N_
+
+
+_k_ =1
+
+
+_B_ 3 [2] _[B]_ 1 [2] (A.62)
+_k_ [2] _[t]_
+
+
+_−_ 1
+
+
+_k_ = _−N_
+
+
+_B_ 3 [2] _[B]_ 1 [2] (A.61)
+_k_ [2] _[t]_
+
+
+= _ma_ 0( _x_ ) [2] _B_ 1 [2] [+ 2] _[m]_
+
+
+_N_
+
+
+_k_ =1
+
+
+_Bk_ 3 [2][2] _[B][t]_ 1 [2] _[.]_ (A.63)
+
+
+Next, we note that our asymptotic in Lemma A.4, applied at 2 _t_, yields
+
+
+_N_
+
+
+_k_ =1
+
+
+1 1 1
+_k_ [2] _[t]_ [=] _[ ζ]_ [(2] _[t]_ [)] _[ −]_ 2 _t −_ 1 _N_ [2] _[t][−]_ [1] [+] _[ O]_ [(1] _[/N]_ [ 2] _[t]_ [)] _[.]_ (A.64)
+
+
+Substituting this into A.63, we obtain
+
+
+_m−_ 1
+
+  - _|_ ( _B_ 1 _fx,N_ _−_ _g_ ˜ _σ ∗_ _fx,N_ )( _bj_ ) _|_ [2] (A.65)
+
+
+_j_ =0
+
+
+= _ma_ 0( _x_ ) [2] _B_ 1 [2] [+ 2] _[mB]_ 1 [2] _[B]_ 3 [2]
+
+
+- 1 1 _ζ_ (2 _t_ ) _−_ 2 _t −_ 1 _N_ [2] _[t][−]_ [1] [+] _[ O]_ [(1] _[/N]_ [ 2] _[t]_ [)] (A.66)
+
+
+= _m_ - _B_ 2 [2] _[−]_ [2] 2 _[B]_ _t −_ 1 [2] _[B]_ 13 [2] _N_ [2] 1 _[t][−]_ [1] [+] _[ B]_ 1 [2] _[B]_ 3 [2] _[O]_ [(1] _[/N]_ [ 2] _[t]_ [)] - (A.67)
+
+= _m_ - _B_ 2 [2] _[−]_ [2] 2 _[B]_ _t −_ 1 [2] _[B]_ 13 [2] _N_ [2] 1 _[t][−]_ [1] [+] _[ O]_ [(1] _[/N]_ [ 2] _[t]_ [)] - _,_ (A.68)
+
+
+21
+
+
+where we defined _B_ 2 = _B_ 2( _σ, m, x_ ) := ~~�~~ _a_ 0( _x_ ) [2] _B_ 1 [2] [+ 2] _[B]_ 1 [2] _[B]_ 3 [2] _[ζ]_ [(2] _[t]_ [)] [as] [in] [the] [statement] [of] [the]
+Lemma, and in the third line we applied Lemma A.3 to estimate that _B_ 1 _≤_ 2, and we used that
+_B_ 3 = _B_ 3( _x_ ) only depends on _x_ . Then, using the Taylor expansion (1 + _x_ ) [1] _[/]_ [2] = 1 + _[x]_ [+] _[ O]_ [(] _[x]_ [2][)]
+
+
+_B_ 3 = _B_ 3( _x_ ) only depends on _x_ . Then, using the Taylor expansion (1 + _x_ ) [1] _[/]_ [2] = 1 + _[x]_ 2 [+] _[ O]_ [(] _[x]_ [2][)]
+
+about 0, we can estimate that
+
+ 1 _/_ 2
+
+
+_m−_ 1
+
+ 
+
+
+
+
+
+
+
+
+1 _/_ 2
+
+
+- _|_ ( _B_ 1 _fx,N_ _−_ _g_ ˜ _σ ∗_ _fx,N_ )( _bj_ ) _|_ [2]
+
+
+_j_ =0
+
+
+(A.69)
+
+
+ - 1 _[B]_ 3 [2] 1 �1 _/_ 2
+= _mB_ 2 [2] _[−]_ _[m]_ 2 [2] _t_ _[B]_ _−_ [2] 1 _N_ [2] _[t][−]_ [1] [+] _[ mO]_ [(1] _[/N]_ [ 2] _[t]_ [)] (A.70)
+
+
+�1 _−_ 2 _B_ 1 [2] _[B]_ 3 [2]
+(2 _t −_ 1) _B_ 2 [2]
+
+
+1 �1 _/_ 2
+_N_ [2] _[t][−]_ [1] [+] _B_ [1] 2 [2] _O_ (1 _/N_ [2] _[t]_ ) (A.71)
+
+
+= _[√]_ _mB_ 2
+
+
+= _[√]_ _mB_ 2
+
+
+2 _B_ 1 [2] _[B]_ 3 [2]
+
+[1]
+
+2 _[·]_ (2 _t −_ 1) _B_ 2 [2]
+
+
+1  _N_ [2] _[t][−]_ [1] [+] _[ O]_ [(1] _[/N]_ [ 2] _[t]_ [)] (A.72)
+
+
+�1 _−_ [1] 2 _B_ 1 [2] _[B]_ 3 [2]
+
+2 _[·]_ (2 _t −_ 1) _B_ 2 [2]
+
+
+= _[√]_ _m_       - _B_ 2 _−_ 2 _[B]_ _t_ 1 [2] _−_ _[B]_ 31 [2] _[·]_ _N_ [2] 1 _[t][−]_ [1] [+] _[ O]_ [(1] _[/N]_ [ 2] _[t]_ [)]       - _._ (A.73)
+
+
+To justify our application of the Taylor expansion, we note that _N_ _≫_ 1, and _B_ 2 = _B_ 2( _σ, m, x_ ) is
+bounded below as a function of _σ_ and _m_ . This completes the proof.
+
+
+**Lemma A.6.** (The average value of the truncated Fourier PDF is 1 _/_ 2) _If N_ _< m/_ 2 _, then_
+
+
+_m−_ 1
+
+
+(A.12)
+2 _[.]_
+
+
+- _fx,N_ ( _bj_ ) = _[m]_
+
+2
+
+_j_ =0
+
+
+_Proof of Lemma A.6._ Denote by _ak_ the Fourier coefficients of _fx,N_ . We can compute that
+
+
+_m−_ 1
+
+- _fx,N_ ( _bj_ ) =
+
+
+_j_ =0
+
+
+=
+
+
+_m−_ 1
+
+
+_j_ =0
+
+
+- _ake_ _[−][iπk]_ _e_ _iπkm_
+
+
+_k_ = _−N_
+
+
+_N_
+
+
+[+1]
+
+_m_ [)] (A.74)
+
+
+- _ake_ _[iπk]_ [(] _[−]_ [1+] [2] _[j]_ _m_ [+1]
+
+
+_k_ = _−N_
+
+
+_m_ _._ (A.75)
+
+
+_N_
+
+
+_m_
+
+
+_m−_ 1
+
+
+- _e_ 2 _πijkm_
+
+
+_j_ =0
+
+
+Note that by hypothesis, _N_ _<_ _m/_ 2, which implies that _|k|_ _<_ _m_ for every outer sum index _k_ . We
+2 _πijk_
+consider two cases; if _k_ = 0, then the innermost summand is _e_ _m_ = 1; and if _k_ = 0, then the
+
+2 _πik_
+innermost sum is a truncated geometric series with first term 1, common ratio _e_ _m_, and _m_ terms.
+
+In summary, the innermost summand is
+
+
+_m−_ 1
+
+
+_πijk_ - _m_ _k_ = 0
+
+_m_ = (A.76)
+0 _k_ = 0 _,_
+
+
+- _e_ 2 _πijkm_
+
+
+_j_ =0
+
+
+which implies that [�] _j_ _[m]_ =0 _[−]_ [1] _[f][x,N]_ [(] _[b][j]_ [)] [=] _[ma]_ [0][.] [But] _[a]_ [0] [=] [1] _[/]_ [2] [because] _[f][x,N]_ [is] [a] [PDF] [implies] [it] [has]
+average value 1 _/_ 2 over [ _−_ 1 _,_ 1]. This completes the proof.
+
+
+B SMOOTHNESS METRIC
+
+
+We will examine how the proposed smoothness metric Equation 3.1 behaves in a toy example setting
+to gain intuition for its behavior. Consider a square wave, which can be expressed as an infinite sum
+of odd integer harmonics that decay in amplitude proportional to their frequency:
+
+
+_f_ ( _x_ ) = [4]
+
+_π_
+
+
+_∞_
+
+ 
+
+_n_ =1 _,_ 3 _,_ 5 _,..._
+
+
+1 - _nπx_
+_n_ [sin] _L_
+
+
+_._ (B.1)
+
+
+Here, the wavelength is 2 _L_ (Weisstein, 2024).
+
+
+22
+
+
+We construct a truncated version of the square wave with a finite and fixed number of frequencies.
+The waveform will slowly approach its jagged, square shape as more sine waves are added. We
+frame these increasingly jagged waves as discretized multinomial densities to simulate the output of
+the Fourier head. To do this, we simply set the height to zero when the wave crest becomes negative
+and normalize the sum to 1. The output of this transformation for a few representative waveforms is
+pictured in Figure 5.
+
+
+Figure 5: Truncated square waves framed as densities and their smoothness.
+
+
+Intuitively, the truncated square wave with a single sine wave ought to be the smoothest. Thus our
+metric in this context should be smallest at that point, and increase monotonically as we add more
+sine waves. The plot in 6 demonstrates that this is indeed the case.
+
+
+**Choice of L2 Distance over L1 Distance:** The proposed smoothness metric Equation 3.1 permits
+a general measure of discrepancy _D_, and we’ve chosen _D_ to be _L_ [2] distance as indicated in 3.2. We
+empirically observe that _L_ [2] distance better preserves monotonicity than the _L_ [1] for higher frequency
+content, thus motivating this choice. With a sample rate of 2048Hz, the _L_ [1] distance exhibits some
+undesirable warping when our square-wave multinomial uses over 80 sine waves (see Figure 6). A
+Fourier head in a practical setting may possess several more than 80 frequencies; accordingly, we
+favor the _L_ [2] distance as our discrepancy measure.
+
+
+**Alternative Notions of Smoothness:** In validating our choice of smoothness metric, we compare it
+to the _spectral entropy_ (Inouye et al., 1991), which has a similar purpose in quantifying the “smoothness” of the frequency content of a signal. Spectral entropy is defined as the Shannon entropy of the
+_power spectral density_ of a sampled signal _f_, which is defined as follows:
+
+
+= _−_ 
+
+_n∈N_
+
+
+_Sn_
+_Stotal_ log2
+
+
+(B.2)
+
+
+- _Sn_
+_Stotal_
+
+
+_H_ ( _f_ ; _N_ ) = - _p_ ( _n_ ) log2
+
+_n∈N_
+
+
+- 1
+
+_p_ ( _n_ )
+
+
+Here, _N_ is the number of Fourier frequencies and _S_ is the power of a frequency _n_ _∈_ _N_ ; _Sn_ is the
+power spectrum of the _n_ th frequency, and _Stotal_ is the power of the signal using all _N_ frequencies.
+For some frequency at index _n_, _Sn/Stotal_ is called its relative power and [�] _n∈N_ _StotalSn_ [= 1][ enables]
+
+us to consider each frequency’s power as a probability.
+
+
+In the discrete case, the maximum entropy distribution is the uniform distribution. Thus, white
+noise will have the highest spectral entropy. This has the consequence that power spectral densities
+have more high frequency information will have lower entropy than that of white noise, provided
+that there is a relationship between amplitude and frequency. More concretely, blue noise, which is
+
+
+23
+
+
+Figure 6: Values of the smoothness metric 3.2 on our square-wave-like multinomials as we increase
+the number of sine waves. We desire the value of this metric to be close to zero when there are few
+sine waves, and be monotonically increasing with each additional wave, indicating that adding more
+high frequency content results in a less smooth distribution. On the right, we can see that _L_ [1] as a
+discrepancy measure leads to non-monotonicity, motivating our choice of _L_ [2] distance in measuring
+our results.
+
+
+defined by the amplitude increasing proportionally to the frequency, will have lower spectral entropy
+than white noise. We sought a metric that always quantified ‘sharper’ signals like blue noise as less
+smooth. In Table 4, we frame sampled noises of different types as multinomial distributions to
+match our model setting by normalizing their amplitudes to be in [0 _,_ 1] and normalizing their sum to
+1. Our noise types are defined before normalization, in order of smoothest to sharpest:
+
+
+    - Brown: _S_ _∝_ _F_ 1 [2]
+
+    - Pink: _S_ _∝_ _F_ [1]
+
+    - White: _S_ _∼N_ (0 _,_ 1)
+
+
+    - Blue: _S_ _∝_ _F_
+
+
+where _S_ is the power density and _F_ is the frequency. To obtain samples of each type, we first
+generate white noise. We do this by sampling a Gaussian with mean 0 and standard deviation 1
+to obtain amplitudes for _t_ samples. We then apply the Fourier transform, and multiply (or divide)
+the amplitudes of each component by their frequency, and apply the inverse Fourier transform to
+recover the waveform. Finally we adjust the range of amplitudes of the signal to be within [0 _,_ 1] and
+normalize the sum to 1.
+
+|Discrepancy|Noise|Mean ± Std. Deviation|Diff|Delta|Desired Delta|
+|---|---|---|---|---|---|
+|L2|Brown|0.0003_ ±_ 0.0001|n/a|n/a|n/a|
+|L2|Pink|0.0017_ ±_ 0.0002|0.0014|+|+|
+|L2|White|0.0034_ ±_ 0.0003|0.0016|+|+|
+|L2|Blue|0.0038_ ±_ 0.0003|0.0005|+|+|
+|Spectral Entropy|Brown|0.4516_ ±_ 0.0894|n/a|n/a|n/a|
+|Spectral Entropy|Pink|0.3878_ ±_ 0.0603|-0.0638|**-**|+|
+|Spectral Entropy|White|0.4266_ ±_ 0.0614|0.0388|+|+|
+|Spectral Entropy|Blue|0.4191_ ±_ 0.0583|-0.0076|**-**|+|
+
+
+Table 4: Smoothness measurements for four types of noise bootstrap aggregated over 1,000 trials.
+The color red emphasizes how the value of Spectral Entropy is undesirably not monotonic increasing
+for what we consider increasingly “sharp” noise types.
+
+
+24
+
+
+C ADDITIONAL EXPERIMENT DETAILS, TOY EXAMPLES
+
+
+C.1 MOTIVATING EXAMPLE: AUDIO SPECTROGRAM TRANSFORMER
+
+
+To illustrate a simple problem setting where the design of the Fourier head is appropriate, we use
+it as a drop-in replacement for a linear classification head in the Audio Spectrogram Transformer
+(Gong et al., 2021). We consider the task of beats per minute (BPM) classification for metronomelike audio samples (Wei et al., 2024) within the tempo range _{_ 50 _,_ 51 _, . . .,_ 210 _}_ . While this task is
+not difficult, we use this audio classification task to illustrate some of the design choices one can
+make when using the Fourier head. In this case, it is natural to group the BPMs into contiguous bins
+_{_ [50 _,_ 54] _,_ [55 _,_ 59] _, . . . }_ and use the Fourier head to classify them. These bins have a natural continuous structure, which is where the Fourier head performs well. We also expect that the categorical
+distribution over possible BPMs for a given audio clip ought to be unimodal and therefore require
+few frequencies to approximate. In fact, our best performing model for this example uses only one
+frequency.
+
+
+We initialize the Audio Spectrogram Transformer with pretrained weights from AudioSet (Gemmeke et al., 2017), and we train two different models–one with a standard linear classification head,
+and one with the Fourier head. The Fourier head outperforms the linear classification head by an
+F1 score improvement of +118%. We attribute this success to the inductive bias of continuity that
+the Fourier head imparts. In Figure 7 we present the learned probability masses of both heads on
+the same input sample. This graph illustrates that the Fourier head learns smoother PMFs than the
+linear head, a concept which we will later formalize and explore.
+
+
+Audio Classification Task: Learned Linear vs. Fourier PMFs
+
+
+Figure 7: Comparison between the PMF learned by the linear head, and the Fourier head with
+2 frequencies, for the toy BPM classification task, on a single audio example. We observe that
+the Fourier head learns a smoother categorical distribution over its predicted values, and is better
+centered around the ground truth label. We also note the small mini-sine wave artifacting on the left
+side of the Fourier model, which tends to occur when using few frequencies.
+
+
+C.2 LEARNING A CONTINUOUS DENSITY
+
+
+Here we provide full details of the datasets used in our toy example of learning a known conditional
+distribution.
+
+
+**Dataset** : We create a synthetic dataset _D_ = _{_ ( _q_ ( _x_ ) _, q_ ( _y_ ) _, q_ ( _z_ )) _} ⊂_ R [3] as follows. Fix a probability
+distribution _P_ 1 = _P_ 1( _x_ ) that is parameterized by one variable and a second distribution _P_ 2 =
+_P_ 2( _x, y_ ) parameterized by two variables. Fix an interval _I_ _⊂_ R. Sample _x_ uniformly from _I_,
+sample _y_ _∼P_ 1( _x_ ), and finally sample _z_ _∼P_ 2( _x, y_ ). We can repeat this sampling procedure _N_
+times to obtain a set of _N_ triples for which we know the conditional distribution of _z_ given _x_ and
+_y_ . Finally, we quantize this set to a fixed number of uniformly spaced bins in the range [ _−_ 1 _,_ 1] to
+obtain the dataset _DP_ 1 _,P_ 2. We will denote the quantization of _z_ by _q_ ( _z_ ). We quantize into 50 bins
+and our dataset has size 5000, with a 80-20 split between the train and test set. We describe three
+choices for the distributions we used to create our datasets. We fix _I_ = [ _−_ 0 _._ 8 _,_ 0 _._ 8] and _σ_ [2] = 0 _._ 01
+in all of them.
+
+
+1. _Gaussian dataset:_ _P_ 1( _x_ ) = _N_ ( _x, σ_ [2] ) _,_ and _P_ 2( _x, y_ ) = _N_ ( _y, σ_ [2] ).
+2. _GMM-2_ _dataset:_ _P_ 1 = Uniform( _I_ ), and _P_ 2( _x, y_ ) is a GMM centered at _x_ and _y_ with
+variance _σ_ [2] .
+
+
+25
+
+
+3. _Beta_ _dataset:_ _P_ 1( _x_ ) = _N_ ( _x, σ_ [2] ), and _P_ 2( _x, y_ ) _∼_ _U_ ( _{±_ 1 _}_ ) _×_ Beta(100 _|x|,_ 100 _|y|_ ),
+where _U_ ( _{±_ 1 _}_ ) denotes the Rademacher distribution supported on _{±_ 1 _}_ with probability
+1 _/_ 2 each.
+
+
+**Additional results:** In Figure 8, we present results from training over a range of frequencies, and for
+each frequency we ran experiments with and without Fourier regularization. In Table 6 we present
+results on the MSE metric, that show that the Fourier head outperforms the linear classification head.
+
+
+Figure 8: We study how the quantity of Fourier frequencies impacts KL divergence and smoothness
+for the toy example on each dataset. For both KL divergence and smoothness, lower is better. We
+observe that the Fourier models with and without regularization performed similarly to each other,
+and outperformed the linear baseline. We also note that the 50% error bars are larger for the linear
+baseline model; this indicates that the Fourier models (both with and without regularization) are in
+general more stable. This is in contrast to our large scale time series forecasting experiments, where
+we find that regularization helps; this is likely because those experiments use an order of magnitude
+more frequencies, and their conditional distributions are more complicated. While the GMM head
+has better KL divergence on the Gaussian and GMM-2 datasets, which is to be expected, the Fourier
+model (both with and without regularization) eventually has the best KL divergence on the Beta
+dataset, since it is non-Gaussian Notice also how on each of the datasets, the smoothness degrades
+as frequency increases, in a fashion that follows the asymptotic from our Theorem 3.3.
+
+
+C.3 MLE-BASED FOURIER HEAD
+
+
+We carry out experiments in the continuous domain analogous to those we did in the quantized
+domain from the toy example.
+
+
+**Dataset** : We use the same synthetic datasets–Gaussian, GMM-2, and Beta–as in the previous subsection, except we do not quantize the data into bins.
+
+
+**Task** : Predict the conditional distribution of _z_ given ( _x, y_ ).
+
+
+**Model** **architecture** : Our model is an MLP with one hidden layer and the final layer is an MLEbased Fourier head which returns the 2 _N_ +1 learned real coefficients of the Fourier series, mapping
+R [2] _→_ R [64] _→_ R [32] _→_ R [2] _[N]_ [+1] . Alongside the Fourier-MLE model, we consider a baseline where
+the final layer is a Gaussian model mixture whose means and standard deviations are learned using
+an MLE objective. For the MLE-Fourier model, we sweep over frequencies _N_ = 2 _,_ 4 _, . . .,_ 20 and
+regularization _γ_ _∈{_ 0 _,_ 10 _[−]_ [6] _}._
+
+
+26
+
+
+Figure 9: We study how the quantity of Fourier frequencies impacts KL divergence and perplexity for the toy example on each dataset for the MLE experiments. For both KL divergence and
+perplexity, lower is better. We observe that the Fourier models with and without regularization performed similarly to each other. While the GMM head has better KL divergence on the Gaussian and
+GMM-2 datasets, which is to be expected, the Fourier model (both with and without regularization)
+has the best KL divergence on the Beta dataset for sufficiently large Fourier frequencies, since it is
+non-Gaussian.
+
+|Col1|KL Divergence (↓)|Col3|Col4|
+|---|---|---|---|
+|Dataset|Linear|GMM|Fourier|
+|Gaussian<br>GMM-2<br>Beta|0.170_ ±_ 0.052<br>0.238_ ±_ 0.032<br>0.234_ ±_ 0.032|**0.026**_ ±_ 0.011<br>**0.030**_ ±_ 0.006<br>0.407_ ±_ 0.012|0.116_ ±_ 0.043<br>0.146_ ±_ 0.033<br>**0.191**_ ±_ 0.016|
+
+
+|Beta|0.234 ± 0.032 0.407 ± 0.012 0.191 ± 0.016|Col3|Col4|
+|---|---|---|---|
+||Smoothness (_↓_)|Smoothness (_↓_)|Smoothness (_↓_)|
+|Dataset|Linear|GMM|Fourier|
+|Gaussian<br>GMM-2<br>Beta|0.116_ ±_ 0.049<br>0.068_ ±_ 0.022<br>0.127_ ±_ 0.044|0.068_ ±_ 0.012<br>0.043_ ±_ 0.009<br>**0.061**_ ±_ 0.003|**0.057**_ ±_ 0.011<br>**0.038**_ ±_ 0.007<br>0.076_ ±_ 0.021|
+
+
+Table 5: KL divergence and Smoothness for the three classification heads (Linear, GMM, and
+Fourier) on each of the three synthetic datasets (Gaussian, GMM-2, Beta). As expected, the GMM
+head achieves the best KL divergence on the Gaussian and GMM-2 datasets, as their conditional distributions are Gaussian. However, the Fourier head has the best KL divergence on the Beta dataset.
+This demonstrates the flexibility of the Fourier head in modeling non-Gaussian distributions as well.
+
+
+**Model evaluation** : We use two metrics for evaluation. The first metric is the average KL divergence
+_D_ KL( _P_ ( _x, y_ ) _∥M_ ( _x, y_ )), where _P_ ( _x, y_ ) is the fixed conditional distribution of _z_ given ( _x, y_ ) and
+_M_ ( _x, y_ ) denotes the predicted probability density function of _z_ . Our second metric is perplexity,
+which is the exponential of the average negative log likelihood of the test set.
+
+
+**Results** : The metrics for the best performing model on each dataset are reported in Table 7. Figure
+11 presents sample visualizations of the learned conditional distributions alongside the true densities.
+While, as expected, the GMM-MLE head outperforms the Fourier-MLE head on the Gaussian and
+GMM-2 datasets due to the Gaussian nature of the datasets, the Fourier-MLE head outperforms
+
+
+27
+
+
+Toy Example: MSE ( _↓_ )
+
+|Col1|Col2|Classification Head|Col4|Col5|
+|---|---|---|---|---|
+|Dataset|Pointwise Regression|Linear|GMM|Fourier|
+|Gaussian<br>GMM-2<br>Beta|0.010_ ±_ 0.001<br>0.121_ ±_ 0.004<br>0.275_ ±_ 0.009|0.013_ ±_ 0.001<br>0.126_ ±_ 0.004<br>0.276_ ±_ 0.008|0.010_ ±_ 0.001<br>0.120_ ±_ 0.004<br>0.273_ ±_ 0.009|0.012_ ±_ 0.001<br>0.123_ ±_ 0.005<br>0.275_ ±_ 0.008|
+
+
+Table 6: We compare the MSE between the linear head, GMM head, and the Fourier head with 12
+frequencies and no regularization, for every dataset in the toy example. We also include a Pointwise
+Regression model baseline, whose base architecture is same as the classification heads, except the
+last classification layer is replaced with a dense layer having output dimension 1. We train the
+Pointwise Regression model using MSE. For a given dataset, the MSE values across all of the
+models is roughly similar. This is because the pointwise regression model tends to regress to the
+mean, as does the expected value of each of the classification heads.
+
+
+Toy Example: Ground Truth Conditional Distribution vs. Pointwise Regression Output
+
+
+Figure 10: We present some examples of the ground truth conditional distribution versus the point
+predicted by the Pointwise Regression model. The regression model simply regresses to the mean
+of the conditional distribution. Accordingly, the regression model performs extremely well for the
+unimodal Gaussian dataset, and it performs poorly for the bimodal datasets GMM-2 and Beta.
+
+
+the GMM-MLE head on the Beta dataset, highlighting the flexibility of the Fourier-MLE head in
+learning a large variety of probability distributions. In Appendix C.2, we present the results of a
+study on the impact of number of frequencies and Fourier regularization in the MLE setting.
+
+|Col1|KL Divergence (↓)|Col3|Perplexity (↓)|Col5|
+|---|---|---|---|---|
+|Dataset|GMM-MLE|Fourier-MLE|GMM-MLE|Fourier-MLE|
+|Gaussian<br>GMM-2<br>Beta|**0.012**_ ±_ 0.002<br>**0.018**_ ±_ 0.001<br>0.257_ ±_ 0.03|0.034_ ±_ 0.003<br>0.072_ ±_ 0.005<br>**0.130**_ ±_ 0.005|**0.410**_ ±_ 0.014<br>**0.702**_ ±_ 0.015<br>0.623_ ±_ 0.035|0.422_ ±_ 0.019<br>0.740_ ±_ 0.014<br>**0.542**_ ±_ 0.017|
+
+
+Table 7: We compare metrics between the GMM-MLE head, and the Fourier-MLE head with 12
+frequencies and no regularization, for every dataset in our toy example. We aggregate metrics over
+4 different seeds and report the standard deviation.
+
+
+C.4 ARE LLMS RANDOM NUMBER GENERATORS?
+
+
+**Dataset:** We create a training dataset using the prompt template: _“The following is a list of normally_
+_distributed random numbers in the interval [-1,_ _1] with mean µ and std σ:_ _x_ 1 _, x_ 2 _, ”_ and response
+template: “ _x_ 3”, where ( _µ, σ_ ) _∈{_ ( _−_ 0 _._ 55 _,_ 0 _._ 10) _,_ ( _−_ 0 _._ 03 _,_ 0 _._ 24) _,_ (0 _._ 42 _,_ 0 _._ 16) _,_ (0 _._ 55 _,_ 0 _._ 10) _}_, and each
+
+
+28
+
+
+Figure 11: Comparison between the PDFs learned by the GMM-MLE head and the Fourier-MLE
+head for each of the datasets in the toy example. While GMM-MLE outperforms Fourier-MLE on
+the Gaussian and GMM-2 datasets, Fourier-MLE performs better on the Beta dataset.
+
+
+_xi_ _∼N_ ( _µ, σ_ ). We write each number using two decimal places. Our training dataset consists of
+256 such (prompt, response) pairs, divided evenly among the four distributions.
+
+
+**Model Architecture:** We consider three different models: the original Llama-3.1-8B-Instruct model
+Dubey et al. (2024), the original model after LoRA fine-tuning, and the original model where we
+replace the linear classification head with the Fourier head and perform LoRA fine-tuning. For the
+Fourier head, we use an output dimension of 200 and the original latent space [ _−_ 1 _,_ 1] because of
+our chosen decimal precision. We conduct LoRA fine-tuning for 16 epochs with a learning rate of
+3 _∗_ 10 _[−]_ [4] and a linear decay schedule, and a batch size of 64. We release all of our training code on
+our project page.
+
+
+**Model** **Evaluation:** We compute two metrics: the first is Total Variation Distance; we define this
+to be one half of the _L_ _[∞]_ distance between the ground truth quantized Gaussian histogram, and the
+empirical histogram of samples, quantized into 20 bins. Our second metric is the Quantity of Unique
+Samples. In Figure 3 we present example histograms for each of the three models that we consider
+for the median TVD in each class. Those results demonstrate that the Fourier head learns a more
+accurate PMF. And in Figure 12 we demonstrate that the Fourier head model consistently obtains
+a lower TVD and a greater diversity of samples. We hypothesize that the LoRA-finetuned baseline
+model has fewer diverse samples because it memorizes training data instead of learning the actual
+distribution. In contrast, the Fourier head is forced to learn a continuous distribution, and samples
+directly from that distribution.
+
+
+**Related works which consider LLMs as random number generators:** Gu et al. (2024) explores
+probability distribution sampling in LLMs in the context of behavioral simulation, which demonstrates an application of using LLMs as random number generators. And Paruchuri et al. (2024)
+explores the tasks of using LLMs for estimating percentiles, drawing samples, and calculating probabilities. Lastly, Hopkins et al. (2023) explores sampling from numerical probability distributions
+using LLMs, but they only consider a single non-uniform density, namely the normal distribution
+_N_ (0 _._ 5 _,_ 0 _._ 2887). They find that LLMs don’t perform well at this task, but they don’t thoroughly
+investigate model-based interventions. In contrast, we thoroughly investigate the impact of finetuning, and replacing the token classification head one with a better inductive bias for modeling
+complex probability distributions.
+
+
+29
+
+
+Figure 12: We demonstrate that the Fourier head model consistently obtains a lower total variation
+distance, as well as a greater diversity of samples. For TVD (top), lower is better, because lower
+values indicate that the learned distribution is closer to the ground truth distribution. And for quantity
+of samples (bottom), higher is better, because lower values indicate that the LM has just memorizes
+specific numbers instead of performing sampling. We present here the mean values across the four
+distributions, for all ten seeds. We can see that the Fourier head obtains more diverse samples, and
+learns a distribution closer to the ground truth.
+
+
+D ADDITIONAL EXPERIMENT DETAILS, LARGE-SCALE EXAMPLES
+
+
+D.1 DECISION TRANSFORMER
+
+
+Following the original Decision Transformer implementation, we trained on 500k transitions observed by a DQN agent during training, for 5 epochs. We trained on the same model size as the
+original implementation (a GPT-1 model with approximately 2.012M parameters) which takes about
+4 hours on a single GPU. We can see that in Figure 13 that the PMFs learned by the Fourier head
+are smoother. In Figure 16 we present results for more Atari games. In Figure 14, we present results
+from an ablation study of the model size. The results demonstrate that, across model sizes, the Decision Transformer with a Fourier head is better at learning high-quality next action distributions than
+the Decision Transformer with a linear head. And in Figure 15, we present results from an ablation
+study of the dataset size, which show that the Fourier head obtains larger returns than the Linear
+classification head across dataset sizes.
+
+
+D.2 CHRONOS
+
+
+In Figure 17 we present a learned next-token PMF from a linear Chronos model, and a next-token
+PMF from a Chronos model which uses the linear head. The Fourier head is about 4x smoother. In
+Table 8 we present results from an ablation study on the quantity of Fourier frequencies, choice of
+regularization, and binning strategy. We followed the original Chronos implementation, keeping all
+hyperparameters the same. In particular, we trained for 200k steps, on the same model size as the
+original implementation (the T5 model with approximately 20M parameters) and this takes about 48
+hours on 8 GPUs. See Table 9 for the datasets we used to train and evaluate Chronos.
+
+
+30
+
+
+Figure 13: We present example next action distributions for a single step in the Decision Transformer
+test split. The Fourier agent with 8 frequencies produces a “clump” of actions that is semantically
+meaningful. Namely, this agent almost certainly wants to shoot in the down right or right direction,
+presumably because there is a submarine in that direction. In contrast, the linear agent’s next-action
+distribution doesn’t clearly depict a strategy, and incorrectly assigns higher likelihoods to incorrect
+actions. Because the Fourier head outputs a smoother PMF, it learns to concentrate more probability
+mass near the correct action.
+
+
+Figure 14: We present an ablation study on the effect of the model size on the relative performance of
+the Fourier head and the Linear head. The results demonstrate that, across model sizes, the Decision
+Transformer with a Fourier head is better at learning high-quality next action distributions than the
+Decision Transformer with a linear head.
+
+
+31
+
+
+Fourier Head Ablation Study: Dataset Size
+
+
+Figure 15: In this ablation study, we analyze whether dataset size has any effect on the relative
+performance of the Linear head and the Fourier head. Our results show that, across dataset sizes, the
+Decision Transformer agent with a Fourier head achieves larger returns than the linear head on the
+Seaquest game.
+
+|Chronos Time Series Model|MASE (↓)|WQL (↓)|Smoothness (↓)|
+|---|---|---|---|
+|Linear|0.883|0.750|0.1689_ ±_ 0.1087|
+|Fourier-64|0.875|0.798|**0.0032**_ ±_** 0.0012**|
+|Fourier-128|0.872|0.767|0.0068_ ±_ 0.0035|
+|Fourier-256|0.859|0.755|0.0139_ ±_ 0.0087|
+|**Fourier-550**|**0.852**|**0.749**|0.0283_ ±_ 0.0224|
+|Fourier-550 (no regularization)|0.861|0.753|0.0286_ ±_ 0.0219|
+|Fourier-550 (uniform precision binning)|0.873|0.747|0.0395_ ±_ 0.0252|
+
+
+Table 8: We present large-scale experiments on Chronos time series forecasting. Notably, every
+Fourier model outperforms the linear baseline on MASE and smoothness metrics. We can see that
+within the Fourier model class, decreasing the number of frequencies lets you trade off the continuity
+of the learned probability mass functions (smoothness) for the quality of the forecasts (MASE,
+WQL). In the bottom two rows, we present an ablation for our large-scale experiments on Chronos
+time series forecasting. The best overall performing Fourier-550 model uses Fourier regularization
+and mixed precision binning, which are both techniques informed by Fourier analysis. We observe
+that both of these interventions improve the MASE, but have minimal effect on the WQL. Note that
+the choice of binning strategy doesn’t affect the performance of the linear baseline.
+
+
+32
+
+
+Figure 16: We present empirical results for how the quantity of Fourier frequencies impacts returns
+and smoothness for additional imitation learning games. For normalized returns, higher is better; for
+smoothness, lower is better. We can see that for the BankHeist, DoubleDunk, and Gravitar games,
+the Fourier agent consistently achieves higher normalized returns than the linear baseline agent,
+while still learning smoother next-action distributions.
+
+
+Figure 17: We present the next token value distribution for a single forecasted timestep on the
+Tourism Monthly dataset. We observe that the Fourier head’s learned conditional distribution is
+smoother, fitting signal more robustly, whereas the linear head overfits to the noise, and is therefore
+more jagged. We note that the _x_ -axis represents the bins in the latent space [ _−_ 1 _,_ 1]; the _x_ -axis values
+for the Fourier head are lower because the linear head uses uniform binning, and the Fourier head
+uses mixed precision binning.
+
+
+33
+
+
+Fourier Head Ablation Study: Chronos Dataset Size
+
+
+Figure 18: In this ablation study, we analyze whether dataset size has any effect on the relative
+performance of the linear head and the Fourier head for the probabilistic time series task. Our results
+show that, across dataset sizes, the Fourier head yields more accurate forecasts than the linear head.
+For the dataset sizes 1 _._ 1 _×_ 10 [5] _,_ 1 _._ 1 _×_ 10 [6], and 1 _._ 1 _×_ 10 [7], we report the average MASE across
+four seeds; for the dataset size 1 _._ 1 _×_ 10 [8] we report the MASE from Table 3. We generate the plot
+following (Kaplan et al., 2020) and observe a similar power-law scaling behavior for both methods,
+with the Fourier head consistently outperforming the linear head.
+
+
+Fourier Head Ablation Study: Chronos Model Size
+
+
+Figure 19: In this ablation study, we analyze whether model size has any effect on the relative
+performance of the linear head and the Fourier head for the probabilistic time series forecasting
+task. Our results show that, across model sizes, the Fourier head yields more accurate forecasts than
+the linear head. For the model sizes 1 _._ 25M, 2 _._ 5M, 5M, and 10M, we report the average MASE
+across three seeds; for the model size 20M we report the MASE from Table 3. We generate the plot
+following (Kaplan et al., 2020) and observe a similar power-law scaling behavior for both methods,
+with the Fourier head consistently outperforming the linear head.
+
+
+34
+
+
+Table 9: All datasets that are used for our time series forecasting experiments. We built our time
+series forecasting experiments on top of Chronos (Ansari et al., 2024), and this table is mostly
+copied from their paper. The datasets are partitioned according to how they are used for training and
+evaluation of models: _pretraining-only_ data is only used for training; _evaluation_ data is _not_ used in
+training models, but only for evaluation (final _H_ observations). All of our evaluation datasets came
+from the zero-shot evaluation set from Chronos.
+
+**Series Length** **Prediction**
+**Dataset** **Domain** **Freq.** **# Series**
+
+**min** **avg** **max** **Length (** _H_ **)**
+
+
+**Pretraining**
+
+
+[Brazilian Cities Temperature](https://www.kaggle.com/datasets/volpatto/temperature-timeseries-for-some-brazilian-cities) nature M 12 492 757 1320  [Mexico City Bikes](https://ecobici.cdmx.gob.mx/en/open-data/) transport 1H 494 780 78313 104449  [Solar (5 Min.)](https://www.nrel.gov/grid/solar-power-data.html) energy 5min 5166 105120 105120 105120  [Solar (Hourly)](https://www.nrel.gov/grid/solar-power-data.html) energy 1H 5166 8760 8760 8760  [Spanish Energy and Weather](https://www.kaggle.com/datasets/nicholasjhana/energy-consumption-generation-prices-and-weather) energy 1H 66 35064 35064 35064  [Taxi (Hourly)](https://github.com/mbohlkeschneider/gluon-ts/tree/mv_release/datasets) transport 1H 2428 734 739 744  [USHCN](https://cdiac.ess-dive.lbl.gov/ftp/ushcn_daily/) nature 1D 6090 5906 38653 59283 [Weatherbench (Daily)](https://github.com/pangeo-data/WeatherBench) nature 1D 225280 14609 14609 14610  [Weatherbench (Hourly)](https://github.com/pangeo-data/WeatherBench) nature 1H 225280 350633 350639 350640  [Weatherbench (Weekly)](https://github.com/pangeo-data/WeatherBench) nature 1W 225280 2087 2087 2087  [Wiki Daily (100k)](https://wikimedia.org/api/rest_v1/) web 1D 100000 2741 2741 2741  [Wind Farms (Daily)](https://zenodo.org/record/4654909) energy 1D 337 71 354 366  [Wind Farms (Hourly)](https://zenodo.org/record/4654909) energy 1H 337 1715 8514 8784  
+
+**Evaluation**
+
+
+[Australian Electricity](https://zenodo.org/record/4659727) energy 30min 5 230736 231052 232272 48
+[CIF 2016](https://zenodo.org/records/4656042) banking 1M 72 28 98 120 12
+[Car Parts](https://zenodo.org/record/4656022) retail 1M 2674 51 51 51 12
+[Hospital](https://zenodo.org/record/4656014) healthcare 1M 767 84 84 84 12
+[M1 (Monthly)](https://zenodo.org/records/4656159) various 1M 617 48 90 150 18
+[M1 (Quarterly)](https://zenodo.org/records/4656154) various 3M 203 18 48 114 8
+[M1 (Yearly)](https://zenodo.org/records/4656193) various 1Y 181 15 24 58 6
+[M3 (Monthly)](https://zenodo.org/records/4656298) various 1M 1428 66 117 144 18
+[M3 (Quarterly)](https://zenodo.org/records/4656262) various 3M 756 24 48 72 8
+[M3 (Yearly)](https://zenodo.org/records/4656222) various 1Y 645 20 28 47 6
+[M4 (Quarterly)](https://github.com/Mcompetitions/M4-methods) various 3M 24000 24 100 874 8
+[M4 (Yearly)](https://github.com/Mcompetitions/M4-methods) various 1Y 23000 19 37 841 6
+[M5](https://github.com/Nixtla/datasetsforecast/blob/main/datasetsforecast/m5.py) retail 1D 30490 124 1562 1969 28
+[NN5 (Daily)](http://www.neural-forecasting-competition.com/downloads/NN5/datasets/) finance 1D 111 791 791 791 56
+[NN5 (Weekly)](https://zenodo.org/records/4656125) finance 1W 111 113 113 113 8
+[Tourism (Monthly)](https://zenodo.org/record/4656096) various 1M 366 91 298 333 24
+[Tourism (Quarterly)](https://zenodo.org/record/4656093) various 1Q 427 30 99 130 8
+[Tourism (Yearly)](https://zenodo.org/record/4656103) various 1Y 518 11 24 47 4
+[Traffic](https://zenodo.org/record/4656132) transport 1H 862 17544 17544 17544 24
+[Weather](https://zenodo.org/record/4654822) nature 1D 3010 1332 14296 65981 30
+
+
+35

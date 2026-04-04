@@ -1,0 +1,378 @@
+# RISK-AWARE DISTRIBUTIONAL INTERVENTION POLICIES FOR LANGUAGE MODELS
+
+Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+Language models are prone to occasionally undesirable generations, such as harmful or toxic content, despite their impressive capability to produce texts that appear accurate and coherent. In this paper, we present a new two-stage approach to detect and mitigate undesirable content generations by rectifying activations. First, we train an ensemble of layer-wise classifiers to detect undesirable content using activations by minimizing a smooth surrogate of the risk-aware score. Then, for contents that are detected as undesirable, we propose layer-wise distributional intervention policies that perturb the attention heads minimally while guaranteeing probabilistically the effectiveness of the intervention. Benchmarks on several language models and datasets show that our method outperforms baselines in reducing the generation of undesirable output. Our code is available at <https://anonymous.4open.science/r/OT-Intervention-52E7>
+
+## 1 INTRODUCTION
+
+Language models (LMs) have demonstrated remarkable ability in understanding and generating human-like documents (Radford et al., 2019; Brown et al., 2020; Touvron et al., 2023a;b; Jiang et al., 2023; Dubey et al., 2024). However, inspecting their outputs can often reveal undesirable content, such as inaccurate or toxic generated texts (Ji et al., 2023; Rawte et al., 2023; Xu et al., 2024). Meanwhile, devising good strategies to control the LMs’ generation process remains challenging (Tonmoy et al., 2024).
+
+Numerous methods have been proposed for controllable text generation in language models; see, for example, Zhang et al. (2023) and Li et al. (2024a). These approaches include model editing and supervised fine-tuning. However, both approaches require altering model weights using a subset of text samples, which can result in unstable representations for other text instances (Hase et al., 2024). In addition, these methods typically require substantial computational resources.
+
+To resolve these issues, one possible alternative for controllable text generation is *activation intervention* (Subramani et al., 2022; Hernandez et al., 2023; Li et al., 2024b), where one alters the model activations responsible for the undesirable output during inference. Previous work highlighted the presence of interpretable directions within the activation space of language models. These directions have been shown to play a causal role during inference. For instance, Burns et al. (2022) and Moschella et al. (2023) suggest that these directions could be manipulated to adjust model behavior in a controlled manner. This line of work indicates that the internal representations of language models are structured in ways that can be leveraged for fine-grained control over generated text. Taking inspiration from these previous works, activation intervention frameworks argued that the information needed to steer the model to generate a target sentence is *already encoded within the model*. The hidden information is extracted in the form of latent vectors, which are then used to guide the generation to have desirable effects. The preliminary success of these activation intervention methods motivates our approach to improve the desirable generation of LMs.
+
+**Problem Statement.** We consider a language model consisting of  $L$  layers, each layer has  $H$  head, each head has dimension  $d$ . For example, for the Llama-2, we have  $L = 32$ ,  $H = 32$  and  $d = 128$ . The training dataset is denoted by  $\mathcal{D} = (x_i, y_i^*)_{i=1, \dots, N}$ , the  $i$ -th text is denoted by  $x_i$ , and its ground truth label is  $y_i^* \in \{0, 1\}$ , where the label 1 (positive) represents the *undesirable* text, and the label 0 (negative) represents the *desirable* text. Our goal is two-fold: (i) detect an undesirable text, and (ii) modify an undesirable text into a desirable text.
+
+The activations for a text  $x_i$  at layer  $\ell \in \{1, \dots, L\}$  is denoted by  $a_{\ell,i}$ . The activation at layer  $\ell + 1$  is the output of the operation:
+
+$$a_{\ell+1,i} = a_{\ell,i}^{\text{mid}} + \text{FFN}(a_{\ell,i}^{\text{mid}}), \quad a_{\ell,i}^{\text{mid}} = a_{\ell,i} + \sum_{h=1}^H Q_{\ell,h} \text{Att}(P_{\ell,h} a_{\ell,i}). \quad (1)$$
+
+Here,  $P_{\ell,h} \in \mathbb{R}^{d \times dH}$  is the projection matrix that maps each layer output into the  $d$ -dimensional head space,  $\text{Att}$  is the attention operator (Vaswani et al., 2017),  $Q_{\ell,h} \in \mathbb{R}^{dH \times d}$  is the pull back matrix, and  $\text{FFN}$  is Feed-Forward layer. Each  $a_{\ell,i}$  is a concatenation of headwise activations  $a_{\ell,h,i}$  for  $h = 1, \dots, H$ . Inspired by Li et al. (2024b), we aim to perform intervention at *some selected*  $a_{\ell,h,i}$ , the activations for head  $h$  of layer  $\ell$ , if we detect that the activation is from an undesirable content.
+
+**Contributions.** We contribute a novel activation intervention method to detect and rectify undesirable generation of LMs. We call our method RADIANT (Risk-Aware Distributional Intervention Policies for Language Models’ Activations). Overall, RADIANT comprises two components:
+
+1. A layerwise probe: at each layer, we train a classifier to detect undesirable content from the layer’s activations. We train a risk-aware logistic classifier for each head that balances the false positive and false negative rate, and then aggregate these headwise classifiers’ predictions using a voting mechanism to form a layerwise classifier. We then identify one layer where the probe delivers the most reasonable predictive performance. This optimal classifier serves as the detector of undesirable content.
+2. A collection of headwise interventions: given the optimal layer for the layerwise probe found previously, we find for each head in that layer an optimal headwise intervention policy. We choose a simple linear map for this intervention policy that minimizes the magnitude of editing while delivering sufficient distributional guarantees that the undesirable-predicted activations will be edited into desirable-predicted activations. We show that this linear map can be computed efficiently using semidefinite programming.
+
+### 1.1 RELATED WORKS
+
+**Controllable generation.** Controllable text generation methods aim to alter the outputs of large language models in a desired way. One possible approach is model editing (Wang et al., 2023; Zhang et al., 2024), which involves modifying a model’s parameters to steer its outputs. For example, Meng et al. (2022) involves identifying specific middle-layer feed-forward modules that correspond to factual knowledge and then altering these weights to correct or update the information encoded by the model. Other notable methods include fine-tuning techniques such as Supervised Fine-Tuning (SFT, Peng et al. 2023; Gunel et al. 2020) and Reinforcement Learning from Human Feedback (RLHF, Ouyang et al. 2022; Griffith et al. 2013).
+
+**Probing.** Probing is a well-established framework for assessing the interpretability of neural networks (Alain & Bengio, 2016; Belinkov, 2022). Probing techniques have been applied to understand the internal representations of transformer architectures in language models, such as BERT and GPT. For instance, Burns et al. (2022) proposed an unsupervised probing method that optimizes the consistency between the positive and negative samples. Marks & Tegmark (2023) computes the mean difference between true and false statements and skews the decision boundary by the inverse of the covariance matrix of the activations.
+
+**Activation interventions.** Activation intervention at inference time is an emerging technique for controllable generation (Turner et al., 2023; Li et al., 2024b; Singh et al., 2024; Yin et al., 2024). Unlike model editing or fine-tuning techniques, the inference-time intervention does not require altering the model parameters. Li et al. (2024b) proposed a headwise intervention method for eliciting truthful generated answers of a language model. They first train linear probes on each head of the language model, then shift the activations with the probe weight direction or mean difference direction.
+
+There is a clear distinction between our method and ITI in choosing the location of the classifiers and, hence, the location of the interventions. The ITI method builds different headwise classifiers scattered at *different* layers, and it may suffer from distribution shifts: if an activation is intervened,
+
+this leads to shifts in the activation values at all subsequent layers in the network. Thus, the classifiers trained at subsequent layers may degrade performance, and the interventions at subsequent layers may also degrade. On the contrary, we build a layerwise classifier focusing on all heads in the *same* layer and does not suffer from the distributional shifts of the activations.
+
+Closely related to our work is the recent paper by [Singh et al. \(2024\)](#). The authors propose a heuristic intervention rule; then, using empirical estimations of the means and covariances of activations data’s distributions of desirable and undesirable text, they calculate a closed-form optimal transport plan between these two empirical distributions, assuming they are standard normal. However, this framework does not take into account the semantics of sentences. Another recent method, called LoFit (Localized Fine-Tuning on LLM Representations, [Yin et al. 2024](#)), also identifies a specific subset of attention heads that are crucial for learning a particular task but then performs fine-tuning on the intervention vectors at those chosen heads to enhance the model’s hidden representations. This results in an additional training overhead.
+
+## 2 LAYERWISE RISK-AWARE PROBES
+
+In the first step, we aim to find a classifier  $C_{\ell h} : \mathbb{R}^d \rightarrow \{0, 1\}$  for each head  $h = 1, \dots, H$  at each layer  $\ell = 1, \dots, L$  to classify the activation value  $a_{\ell h}$  of desirable and undesirable texts. We propose to use a linear logistic classifier, parametrized by a slope parameter  $\theta_{\ell h} \in \mathbb{R}^d$  and a bias parameter  $\vartheta_{\ell h} \in \mathbb{R}$ . The headwise classification rule is thus
+
+$$C_{\ell h}(a_{\ell h}) = \begin{cases} 1 & \text{if } \text{sigmoid}(\vartheta_{\ell h} + \theta_{\ell h}^\top a_{\ell h}) \geq 0.5, \\ 0 & \text{otherwise,} \end{cases} = \begin{cases} 1 & \text{if } \vartheta_{\ell h} + \theta_{\ell h}^\top a_{\ell h} \geq 0, \\ 0 & \text{if } \vartheta_{\ell h} + \theta_{\ell h}^\top a_{\ell h} < 0. \end{cases}$$
+
+The training process of  $C_{\ell h}$  must take into account two types of risk: (i) false-negative risk when an undesirable text is not detected, (ii) false-positive risk when a desirable text is classified as undesirable, and is subsequently edited and loses its original semantics. A natural candidate for the loss function, therefore, is a combination of the False Positive Rate (FPR) and the False Negative Rate (FNR). However, neither FPR nor FNR have smooth functions in optimizing variables. We, hence, resort to smooth surrogates of these two metrics that use the predicted probability of the classifier, similarly to [Bénédicet et al. \(2022\)](#). In detail, we use
+
+$$\text{FPR}(\theta_{\ell h}, \vartheta_{\ell h}) = \frac{1}{N_0} \sum_{i=1}^{N_0} \text{sigmoid}(\vartheta_{\ell h} + \theta_{\ell h}^\top a_{\ell h,i}) \times (1 - y_i^*),$$
+
+$$\text{FNR}(\theta_{\ell h}, \vartheta_{\ell h}) = \frac{1}{N_1} \sum_{i=1}^{N_1} (1 - \text{sigmoid}(\vartheta_{\ell h} + \theta_{\ell h}^\top a_{\ell h,i})) \times y_i^*.$$
+
+The linear probe training loss is thus
+
+$$\min_{\theta_{\ell h} \in \mathbb{R}^d, \vartheta_{\ell h} \in \mathbb{R}} \text{FPR}(\theta_{\ell h}, \vartheta_{\ell h}) + \alpha \text{FNR}(\theta_{\ell h}, \vartheta_{\ell h}), \quad (2)$$
+
+for some positive weight parameters  $\alpha$ . A higher value of  $\alpha$  will emphasize more on achieving a lower false negative rate, which is critical for the task of detecting undesirable inputs. Problem (2) has a smoothed surrogate loss that is differentiable and can be solved using a gradient descent algorithm. Finally, we aggregate  $\{C_{\ell h}\}_{h=1,\dots,H}$  into a single classifier  $C_\ell$  for layer  $\ell$  by a simple voting rule
+
+$$C_\ell(a_\ell) = \begin{cases} 1 & \text{if } \sum_{h=1}^H C_{\ell h}(a_{\ell h}) \geq \tau, \\ 0 & \text{otherwise,} \end{cases}$$
+
+where  $\tau \in [0, H]$  is a tunable threshold. When  $\tau = \lfloor H/2 \rfloor$ , then  $C_\ell$  becomes the majority voting results of the individual (weak) classifiers  $C_{\ell h}$ . We optimize the hyperparameter  $\tau$  to reduce the False Negative Rate (FNR), with a secondary focus on the False Positive Rate (FPR) in cases of equal FNR rates. The reason for this choice is that we believe undesirable contents, which are labeled as desirable contents, are more problematic than other instances.
+
+To conclude this step, we can compute the classifier  $C_\ell$  for each layer  $\ell = 1, \dots, L$  by tuning the parameters  $(\alpha)$ . The layer whose classifier  $C_\ell$  delivers the highest quality (accuracy or any risk-aware metric) will be the optimal layer to construct the probe. This optimal layer, along with the collection of headwise classifiers, is the final output of this step.
+
+![Figure 1: Two line plots showing risk-aware metrics across layers of Llama-7B. Plot (a) shows False Negative Rate (FNR) and False Positive Rate (FPR) across layers 0 to 30 for an intervention threshold tau = 11. FNR is blue and FPR is orange. Plot (b) shows FNR across layers 0 to 30 for different values of the regularization parameter alpha (0.6, 0.8, 1.0, 1.2, 1.4, 2.0).](e94f3bbb6f7501b9a1344dd0210e5dd8_img.jpg)
+
+Figure 1: Two line plots showing risk-aware metrics across layers of Llama-7B. Plot (a) shows False Negative Rate (FNR) and False Positive Rate (FPR) across layers 0 to 30 for an intervention threshold tau = 11. FNR is blue and FPR is orange. Plot (b) shows FNR across layers 0 to 30 for different values of the regularization parameter alpha (0.6, 0.8, 1.0, 1.2, 1.4, 2.0).
+
+(a) False Negative Rate (FNR) and False Positive Rate (FPR) across layers for intervention threshold  $\tau = 11$ . (b) FNR across layers for different value of regularization parameter  $\alpha$  of the risk-aware loss Eq (2).
+
+Figure 1: Plot of different risk-aware metrics (FNR and FPR) with different values of hyperparameters  $\alpha$  across layers of Llama-7B.
+
+Figure 1 presents the FNR and FPR results for the layerwise probes on Llama-7B on the TruthfulQA dataset. From Figure 1a, one observes that the optimal layer tends to be a mid-layer ( $\ell$  between 11 and 14) with smaller FNR and FPR values. Figure 1b shows that increasing  $\alpha$  will dampen the FNR rate across layers.
+
+## 3 HEADWISE INTERVENTIONS WITH PROBABILISTIC GUARANTEES
+
+We propose a distributional intervention to the activations of the samples predicted undesirable by the layerwise classifier. In this section, we will focus on constructing a single headwise intervention, and in the next section, we will combine multiple headwise interventions into a layerwise intervention. A headwise intervention is a map  $\Delta_{\ell h} : a_{\ell h} \mapsto \hat{a}_{\ell h}$ , that needs to balance multiple criteria: (i) it should be easy to compute and deploy, (ii) it should be effective in converting the undesirable activations to the desirable regions, (iii) it should minimize the magnitude of the intervention to sustain the context of the input. Intuitively, we will propose to solve an optimization problem that has the loss and constraints that fit all the criteria listed. The details are as follows.
+
+To promote (i), we employ a simple linear map  $\Delta_{\ell h}(a_{\ell h}) = G_{\ell h}a_{\ell h} + g_{\ell h}$  parametrized by a matrix  $G_{\ell h} \in \mathbb{R}^{d \times d}$  and a vector  $g_{\ell h} \in \mathbb{R}^d$ . This linear map can also be regarded as a pushforward map that transforms the *undesirable*-predicted activations to become *desirable*-predicted activations. Let us now represent the *undesirable*-predicted activations as a  $d$ -dimensional random vector  $\hat{a}_{\ell h}$ . Its distribution can be estimated using the training data after identifying the subset  $\hat{\mathcal{D}}_{\ell h}^+$  of training samples that are *predicted undesirable* by  $\mathcal{C}_{\ell h}$ , that is,  $\hat{\mathcal{D}}_{\ell h}^+ \triangleq \{i : \mathcal{C}_{\ell h}(a_{\ell h,i}) = 1\}$ . The activations of samples in  $\hat{\mathcal{D}}_{\ell h}^+$  leads to an empirical distribution  $\hat{\mathbb{P}}_{\ell h}$ . The linear map  $\Delta_{\ell h}$  will pushforward the distribution  $\hat{\mathbb{P}}_{\ell h}$  to the new distribution  $\mathcal{Q}_{\ell h} = \Delta_{\ell h}\#\hat{\mathbb{P}}_{\ell h}$ .
+
+Using the pushforward distribution  $\mathcal{Q}_{\ell h}$ , we can impose criteria (ii) and (iii) above in an intuitive method. To promote (ii), we require that the activations distributed under  $\mathcal{Q}_{\ell h}$  should be classified as *desirable* by  $\mathcal{C}_{\ell h}$  with high probability. Finally, to promote (iii), we require that the distribution  $\mathcal{Q}_{\ell h}$  and  $\hat{\mathbb{P}}_{\ell h}$  are not too far from each other. Let  $\gamma \in (0, 0.5)$  be a small tolerance parameter, and let  $\varphi$  be a measure of dissimilarity between probability distributions, we propose to find  $\Delta_{\ell h}$  by solving the following stochastic program
+
+$$\begin{aligned} & \min \quad \varphi(\hat{\mathbb{P}}_{\ell h}, \mathcal{Q}_{\ell h}) \\ & \text{s.t.} \quad \mathcal{Q}_{\ell h}(\hat{a} \text{ is classified by } \mathcal{C}_{\ell h} \text{ as } 0) \geq 1 - \gamma, \quad \mathcal{Q}_{\ell h} = \Delta_{\ell h}\#\hat{\mathbb{P}}_{\ell h}. \end{aligned} \quad (3)$$
+
+Problem (3) is easier to solve under specific circumstances. For example, when we impose that both  $\hat{\mathbb{P}}_{\ell h}$  and  $\mathcal{Q}_{\ell h}$  are Gaussian and when we choose  $\varphi$  as a moment-based divergence, then  $\Delta_{\ell h}$  can be obtained by solving a convex optimization problem. In the next result, we use  $\|\cdot\|_F$  as the Frobenius norm of a matrix, and  $\Phi$  as the cumulative distribution function of a standard Gaussian distribution.
+
+**Theorem 1** (Optimal headwise intervention). Suppose that  $\hat{\mathbb{P}}_{\ell h} \sim \mathcal{N}(\hat{\mu}, \hat{\Sigma})$  and  $\mathbb{Q}_{\ell h} \sim \mathcal{N}(\mu, \Sigma)$  and  $\varphi$  admits the form
+
+$$\varphi(\hat{\mathbb{P}}_{\ell h}, \mathbb{Q}_{\ell h}) = \|\mu - \hat{\mu}\|_2^2 + \|\Sigma^{\frac{1}{2}} - \hat{\Sigma}^{\frac{1}{2}}\|_F^2.$$
+
+Let  $(\mu^*, S^*, t^*)$  be the solution of the following semidefinite program
+
+$$\begin{aligned} \min \quad & \|\mu - \hat{\mu}\|_2^2 + \|S - \hat{\Sigma}^{\frac{1}{2}}\|_F^2 \\ \text{s.t.} \quad & \vartheta_{\ell h} + \theta_{\ell h}^\top \mu + \Phi^{-1}(1 - \gamma)t \leq 0 \\ & \|S\theta_{\ell h}\|_2 \leq t \\ & \mu \in \mathbb{R}^d, S \in \mathbb{S}_+^d, t \in \mathbb{R}_+. \end{aligned} \quad (4)$$
+
+Then, by defining  $G_{\ell h}^* = \hat{\Sigma}^{-\frac{1}{2}}(\hat{\Sigma}^{\frac{1}{2}}(S^*)^2\hat{\Sigma}^{\frac{1}{2}})^{\frac{1}{2}}\hat{\Sigma}^{-\frac{1}{2}}$  and  $g_{\ell h}^* = \mu^* - G_{\ell h}^*\hat{\mu}$ , a linear map  $\Delta_{\ell h}$  that solves (3) is
+
+$$\Delta_{\ell h}(a_{\ell h}) = G_{\ell h}^* a_{\ell h} + g_{\ell h}^*.$$
+
+*Proof of Theorem 1.* The logistic classifier  $\mathcal{C}_{\ell h}$  output a prediction 0 if  $\vartheta_{\ell h} + \theta_{\ell h}^\top a_{\ell h} < 0$ . If  $\mathbb{Q}_{\ell h}$  is Gaussian  $\mathcal{N}(\mu, \Sigma)$ , then by Prékopa (1995, Theorem 10.4.1), the probability constraint of (3) can be written as
+
+$$\vartheta_{\ell h} + \theta_{\ell h}^\top \mu + \Phi^{-1}(1 - \gamma)\sqrt{\theta_{\ell h}^\top \Sigma \theta_{\ell h}} \leq 0.$$
+
+Next, we add an auxiliary variable  $t \in \mathbb{R}_+$  with an epigraph constraint  $\sqrt{\theta_{\ell h}^\top \Sigma \theta_{\ell h}} \leq t$ . Because  $\Phi^{-1}(1 - \gamma) > 0$  for  $\gamma \in (0, 0.5)$ , problem (3) is equivalent to
+
+$$\begin{aligned} \min \quad & \|\mu - \hat{\mu}\|_2^2 + \|\Sigma^{\frac{1}{2}} - \hat{\Sigma}^{\frac{1}{2}}\|_F^2 \\ \text{s.t.} \quad & \vartheta_{\ell h} + \theta_{\ell h}^\top \mu + \Phi^{-1}(1 - \gamma)t \leq 0, \quad \sqrt{\theta_{\ell h}^\top \Sigma \theta_{\ell h}} \leq t \\ & \mu \in \mathbb{R}^d, \Sigma \in \mathbb{S}_+^d, t \in \mathbb{R}_+. \end{aligned}$$
+
+Let  $S \leftarrow \Sigma^{\frac{1}{2}} \in \mathbb{S}_+^d$ , the constraint  $\sqrt{\theta_{\ell h}^\top \Sigma \theta_{\ell h}} \leq t$  is equivalent to  $\|S\theta_{\ell h}\|_2 \leq t$ , which leads to (4). Thus, the optimal pushforward  $\Delta_{\ell h}$  should push  $\hat{\mathbb{P}}_{\ell h} \sim \mathcal{N}(\hat{\mu}, \hat{\Sigma})$  to  $\mathbb{Q}_{\ell h} \sim \mathcal{N}(\mu^*, (S^*)^2)$ . One can verify through simple linear algebraic calculations that the mapping  $\Delta_{\ell h}(a_{\ell h}) = G_{\ell h}^* a_{\ell h} + g_{\ell h}^*$  defined in the theorem statement is the desired mapping. This completes the proof.  $\square$
+
+The effect of the headwise intervention  $\Delta_{\ell h}$  is illustrated in Figure 2. The headwise classifier  $\mathcal{C}_{\ell h}$  is represented by the red linear hyperplane  $\vartheta_{\ell h} + \theta_{\ell h}^\top a = 0$  on the activation space; the undesirable-predicted (label 1) region is towards the top left corner, while the desirable-predicted (label 0) region is towards the bottom right corner. The activations of the undesirable-predicted samples are represented as a Gaussian distribution with mean  $(\hat{\mu}, \hat{\Sigma})$ , drawn as the red ellipsoid. The edit map  $\Delta_{\ell h}$  pushes this distribution to another Gaussian distribution  $\mathbb{Q}_{\ell h}$  drawn as the green ellipsoid. The distribution  $\mathbb{Q}_{\ell h}$  has a coverage guarantee on the desirable-predicted region with probability at least  $1 - \gamma$ . One can also verify that  $\mathbb{Q}_{\ell h}$  has mean  $\mu^*$  and covariance matrix  $(S^*)^2$ . Problem (4) can be solved by semidefinite programming solvers such as COPT or Mosek.
+
+![Figure 2: Headwise intervention diagram. A red line represents the decision boundary $\vartheta_{\ell h} + \theta_{\ell h}^\top a = 0$. The region above and to the left of the line is labeled 'undesirable', containing a red ellipsoid centered at $(\hat{\mu}, \hat{\Sigma})$ with a red triangle marker. The region below and to the right is labeled 'desirable', containing a green ellipsoid centered at $(\mu^*, (S^*)^2)$ with a green triangle marker. A black arrow labeled $\Delta_{\ell h}(a_{\ell h})$ points from the red ellipsoid to the green ellipsoid. A point $a_{\ell h}$ is marked on the red ellipsoid, and a point $(G_{\ell h}^*, g_{\ell h}^*)$ is marked on the black arrow.](d6226b6d22b1babc1eeeb93e07cc9cc4_img.jpg)
+
+Figure 2: Headwise intervention diagram. A red line represents the decision boundary \$\vartheta\_{\ell h} + \theta\_{\ell h}^\top a = 0\$. The region above and to the left of the line is labeled 'undesirable', containing a red ellipsoid centered at \$(\hat{\mu}, \hat{\Sigma})\$ with a red triangle marker. The region below and to the right is labeled 'desirable', containing a green ellipsoid centered at \$(\mu^\*, (S^\*)^2)\$ with a green triangle marker. A black arrow labeled \$\Delta\_{\ell h}(a\_{\ell h})\$ points from the red ellipsoid to the green ellipsoid. A point \$a\_{\ell h}\$ is marked on the red ellipsoid, and a point \$(G\_{\ell h}^\*, g\_{\ell h}^\*)\$ is marked on the black arrow.
+
+Figure 2: Headwise intervention: at head  $h$  of layer  $\ell$ , we learn a linear mapping  $\Delta_{\ell h}$  that transforms the undesirable-predicted activations to desirable-predicted activations.
+
+The moments information  $\hat{\mu}$  and  $\hat{\Sigma}$  can be estimated from the subset  $\hat{\mathcal{D}}_{\ell h}^+$ . One can intuitively expect a trade-off between the tolerance level  $\gamma$  and the magnitude of the headwise mapping. If  $\gamma$  is lower, the activations will be edited at a bigger magnitude so that the edited activations will likely end up in the desirable-predicted region of the classifier  $\mathcal{C}_{\ell h}$ . On the contrary, if  $\gamma$  is higher, the
+
+activations will be edited with a smaller magnitude due to the lower stringent constraint to swap the predicted label.
+
+One can view the distribution  $\mathbb{Q}_{\ell h} \sim (\mu^*, (S^*)^2)$  as the counterfactual distribution of the undesirable-predicted activations with *minimal* perturbation. This distribution  $\mathbb{Q}_{\ell h}$  is found by optimization, which is in stark contrast with the design of the counterfactual distribution in MiMic (Singh et al., 2024), in which the intervention is computed based on the activations of the desirable-predicted activations. As a comparison to ITI (Li et al., 2024b), we note that the headwise intervention of ITI does *not* depend on the value of the activations: ITI shifts the activations along the truthful directions for a stepsize multiplied by the standard deviation of activations along the intervention (truthful) direction. In contrast, our headwise intervention depends on the value  $a_{\ell h}$ , and one can verify that the magnitude of the proposed shift amounts to  $\|(G_{\ell h}^* - I)a_{\ell h} + g_{\ell h}^*\|_2$ . Moreover, ITI does not provide any (probabilistic) guarantee for the intervention, while the probabilistic guarantee is internalized in our method through the design of the map in equation (3).
+
+**Remark 1.** *We observe that the two following tricks boost the empirical performance of our intervention framework. First, to avoid the collapse of  $\mathbb{Q}_{\ell h}$  into a Dirac distribution and to ensure the similarity between the real and the constructed covariance matrix of desirable content, we can add the constraint  $S \geq \hat{\Sigma}_0^{\frac{3}{2}}$  to the optimization problem (4), where  $\hat{\Sigma}_0$  is the empirical covariance matrix of the desirable activations  $\{i : y_i^* = 0\}$ . Second, to avoid taking the inverse cdf of the standard normal distribution, we use  $\Gamma \leftarrow \Phi^{-1}(1 - \gamma)$  and finetune  $\Gamma$  instead of  $\gamma$ .*
+
+Finally, given input with activation  $a_\ell$  at layer  $\ell$ , suppose that  $a_\ell$  is predicted undesirable by  $C_\ell$ , we propose to edit the activations of *only* the heads that are predicted undesirable by the headwise classifier  $C_{\ell h}$ . More specifically, we edit the headwise activations  $a_{\ell h}$  to a new headwise activations  $\tilde{a}_{\ell h}$  through the relationship
+
+$$\tilde{a}_{\ell h} = \mathbb{1}_{C_{\ell h}(a_{\ell h})=1 \text{ and } C_\ell(a_\ell)=1} \Delta_{\ell h}(a_{\ell h}) \quad \forall h = 1, \dots, H, \quad (5)$$
+
+where  $\Delta_{\ell h}(a_{\ell h}) = G_{\ell h}^* a_{\ell h} + g_{\ell h}^*$ . In other words, each new headwise activation  $\tilde{a}_{\ell h}$  is computed based on three terms: the original headwise activations  $a_{\ell h}$ , the headwise intervention  $\Delta_h(a_{\ell h})$ , and the indicator value identifying if head  $h$  and layer  $\ell$  is predicted desirable or undesirable.
+
+## 4 EXPERIMENTS
+
+In this section, we present empirical evidences for the effectiveness of our method RADIANT. We evaluate RADIANT on the TruthfulQA benchmark (Lin et al., 2021), consisting of two tasks: the main task is the generation, and the secondary task is multiple choice. The generation task requires the model to generate an entire answer for each question using greedy autoregressive decoding. The accuracy and helpfulness of the answer are best assessed by humans. However, in almost all recent works in the field, including Li et al. (2024b) and Yin et al. (2024), this criterion is measured by an alternative large language model finetuned on the target dataset. The multiple-choice task contains candidate answers to each question, requiring the model to give probabilities for each. Higher probabilities for truthful answers yield higher scores.
+
+### 4.1 EXPERIMENTAL SETTINGS
+
+**Datasets.** We evaluate and compare our method with other baselines using the TruthfulQA benchmark (Lin et al., 2021). The TruthfulQA dataset is a Question-Answer dataset containing 817 questions that likely elicit false answers from humans due to common misconceptions. We follow the same data-processing used in Li et al. (2024b) and Yin et al. (2024) that splits the dataset into train/validation/test with the rate of 326/82/407 questions and utilize two-fold cross-validation. Each question has an average length of nine words and has two sets of desirable and undesirable answers. Following Li et al. (2024b), we separate the original dataset into 5918 question-answer pairs; each has a binary label, indicating desirability. Only pairs associated with questions in the training dataset are used to create our intervention policy, while those in the validation test are set aside for parameter tuning.
+
+In addition, we also show the generalization of our method by conducting a transferability experiment on two other out-of-distribution datasets, including NQOpen (Kwiatkowski et al., 2019a) and TriviaQA (Joshi et al., 2017). Due to space constraints, the results are relegated to Appendix A.2.
+
+**Models.** We implement our methods on various open-source pretrained Llama base models: Llama-7B (Touvron et al., 2023a), Llama2-chat-13B (Touvron et al., 2023b), and Llama3-8B (Dubey et al., 2024). Our method could be integrated with other methods as a tail component to efficiently elicit truthful answers from LMs. Therefore, we also used models fine-tuned for specific tasks to show the effectiveness of our approach.
+
+**Hyperparameter** There are two pivotal hyperparameters in RADIANT framework, namely  $\alpha$  in the probe loss (2), and  $\Gamma = \Phi^{-1}(1 - \gamma)$  in the computation of the intervention map (4). The discussion about their impact on RADIANT and how to select them is in Appendix A.1.
+
+**Baselines.** We include baselines relevant to increasing truthfulness, listed as follows.
+
+- Inference-time Intervention (ITI, Li et al. 2024b), the state-of-the-art method for finetuning-free intervention. The hyperparameters of the baseline follow their original paper Li et al. (2024b) and their GitHub repository.<sup>1</sup>
+- Few-shot prompting (FSP) introduced in Bai et al. (2022) showcases the effectiveness of 50-shot prompting in benchmark TruthfulQA.
+- Instruction Fine-Tuning (IFT) (Wang et al., 2022; Chung et al., 2024) is a popular fine-tuning approach to boost the truthfulness of language models. Two notable pretrained models in this direction, namely Alpaca-7B (Taori et al., 2023) and Vicuna-7B (Chiang et al., 2023), are adopted for comparison.
+- Representation Intervention Fine-tuning (RIFT) methods aim to adjust language model activations for improved truthfulness. However, they add extra parameters and require extensive computational resources for fine-tuning. We consider LOFIT (Yin et al., 2024) for comparison.
+- Non-Linear Inference Time Intervention (NL-ITI) (Hoscilowicz et al., 2024) extends ITI by introducing a non-linear multi-token probing and multi-token intervention method.
+- Learnable Intervention for Truthfulness Optimization (LITO) (Bayat et al., 2024) explores a sequence of model generations based on increasing levels of intervention magnitude then selects the most accurate response.
+
+**Metrics.** Following the standard benchmark in TruthfulQA (Lin et al., 2021; Li et al., 2024b), we compare our method to baselines using the metrics described below.
+
+- Two metrics for the multiple-choice task introduced in Lin et al. (2021), namely MC1 and MC2. Given a question and some choices, select the only correct answer. The selection of the model is the answer choice to which it assigns the highest log probability of completion following the question, independent of the other answer choices. The accuracy across all questions is denoted as MC1. Similarly, given a question and multiple true/false reference answers, the MC2 is the normalized total probability assigned to the set of true answers.
+- For the generation task, we use two fine-tuned GPT-3.5-instruct models to classify whether an answer is true or false and informative or not. We report two metrics from Li et al. (2024b): truthful score True (%) and True\*Info (%), a product of scalar truthful and informative score. We note that there are discrepancies between the results of ITI reproduced in our work and the original results reported in Li et al. (2024b), as the original paper used GPT-3 based models to score these two metrics; however, at the time this paper is written, GPT-3 is no longer available on the OpenAI platform.
+- We report two additional metrics, Kullback-Leibler divergence (KL) of the model’s next-token prediction distribution post-versus-pre-intervention, and Cross-Entropy Loss (CE). These two metrics measure how much the generation distribution shifts after the intervention. Lower values are preferred since the intervention does not change the behavior of the original model dramatically and is unlikely to cause abnormal characters or non-natural sentences. The calculation of these metrics is elaborated in Li et al. (2024b).
+
+**Computing resources.** We run all experiments on 4 NVIDIA RTX A5000 GPUs, an i9 14900K CPU, and 128GB RAM. The semidefinite programs (4) are solved using Mosek 10.1, with the average solving time for each instance being around 50 seconds.
+
+<sup>1</sup>[https://github.com/likenneth/honest\\_llama/tree/master](https://github.com/likenneth/honest_llama/tree/master)
+
+**Reproducibility.** The anonymized repository is <https://anonymous4open.science/r/OT-Intervention-52E7>.
+
+### 4.2 NUMERICAL RESULTS
+
+#### 4.2.1 COMPARISON BETWEEN FINETUNING-FREE TECHNIQUES
+
+We benchmark two fine-tuning-free baselines (ITI and FSP) along with our framework RADIANT on Llama-7B, Llama3-8B, and Llama2-chat-13B with the TruthfulQA dataset. The results are presented in Table 1. Across the three models, the combined method of FSP + RADIANT consistently achieved the highest scores in metrics such as True \* Info and True, with 49% for Llama-7B, 44% for Llama3-8B, and 65% for Llama2-chat-13B. When running alone, our method, RADIANT, also demonstrated significant improvements, particularly in Llama2-chat-13B, where it achieved a True \* Info score of 64% and a Truthful score of 74%. This suggests the efficiency of our framework compared with other baselines, including the current state-of-the-art ITI.
+
+#### 4.2.2 COMPARISON BETWEEN ITI, RADIANT, AND INSTRUCTION FINETUNING METHODS.
+
+In this benchmark, we investigate whether implementing RADIANT on Alpaca and Vicuna, two instruction fine-tuning models from Llama-7B, can further enhance their performances. Results in Table 2 indicate that applying RADIANT significantly enhances both the baseline models, with Alpaca + RADIANT improved to 44.5% in True\*Info score and 46% in Truthful score. Similarly, Vicuna + RADIANT achieved the highest scores of 55% in True\*Info score and 63% in Truthful score, showcasing a marked increase compared to its baseline performance of 38% and 42.1%, respectively. In both cases, RADIANT outperformed ITI, demonstrating its effectiveness in enhancing the models' accuracy and truthfulness.
+
+### 4.3 COMPARISON BETWEEN ITI, RADIANT, AND REPRESENTATION INTERVENTION FINETUNING METHODS.
+
+In this experiment, we apply RADIANT and ITI on Llama-7B, Llama3-8B, and Llama2-chat-13B models, which were previously fine-tuned by LOFIT, a representation intervention finetuning method. The experimental results in Table 3 show that RADIANT is better than ITI in improving both correctness and informativeness across different Llama models. While ITI offers modest improvements in some instances, it generally lags behind RADIANT, especially in larger models. The KL divergence values suggest that RADIANT maintains a close distribution to the base model (LOFIT) while delivering substantial performance improvements.
+
+#### 4.3.1 ABLATION STUDY
+
+We perform two ablation studies to demonstrate the effectiveness of our framework. In the first scenario, we select intervened heads using ITI, then compare our intervention approach vs ITI. In the second ablation study, the probing loss function is substituted by the widespread classification loss: the binary cross-entropy loss. Table 4 below reports the performance of the Llama-7B + TruthfulQA dataset. In the first scenario, switching the selection of heads between RADIANT and ITI improved performance when RADIANT intervention was applied, reaching 37% in True \* Info score. The second scenario, which tested the impact of replacing the risk-aware loss function with cross-entropy loss, resulted in moderate improvements but still fell short compared to RADIANT's risk-aware loss in Section 2 (30.36% vs 40.36% in True\*Info). Overall, these findings highlight the effectiveness of our framework and suggest that both the choice of intervention and the loss function play crucial roles.
+
+## 5 CONCLUSION
+
+In this paper, we introduced RADIANT, a novel intervention framework for model editing consisting of two components: (i) a layerwise probe to detect undesirable content and (ii) headwise interventions to rectify the head activations upon undesirable-predicted outcome. Contrary to existing intervention methods, where the interventions can be scattered across different layers, our
+
+Table 1: Quantitative results of different intervention methods on TruthfulQA dataset, across different Language Models. Parameters of RADIANT:  $\alpha = 2.5$ ,  $\Gamma = 15$ .
+
+| Methods              | True * Info (%) ↑ | True (%) ↑   | MC1 ↑        | MC2 ↑        | CE ↓ | KL ↓ |
+|----------------------|-------------------|--------------|--------------|--------------|------|------|
+| Unintervened         | 21.15             | 22.16        | 25.58        | 40.54        | 2.13 | 0.00 |
+| ITI                  | 26.52             | 28.03        | 27.78        | 43.59        | 2.20 | 0.07 |
+| FSP                  | 36.13             | 39.78        | <b>34.03</b> | <b>50.34</b> | 2.13 | 0.00 |
+| NL-ITI               | 29.06             | 38.04        | 32.97        | 45.69        | 2.19 | 0.07 |
+| LITO                 | 39.08             | 41.22        | 29.22        | 47.64        | 2.19 | 0.07 |
+| RADIANT (ours)       | <b>40.36</b>      | <b>44.48</b> | 30.91        | 46.13        | 2.19 | 0.07 |
+| FSP + ITI            | 40.63             | 45.16        | 35.50        | 52.48        | 2.20 | 0.07 |
+| FSP + NL-ITI         | 45.97             | 47.31        | <b>38.37</b> | 53.61        | 2.20 | 0.07 |
+| FSP + LITO           | 49.05             | 55.68        | 36.23        | 54.92        | 2.20 | 0.07 |
+| FSP + RADIANT (ours) | <b>49.31</b>      | <b>57.43</b> | 37.97        | <b>55.31</b> | 2.20 | 0.08 |
+
+(a) Llama-7B
+
+| Methods              | True * Info (%) ↑ | True (%) ↑   | MC1 ↑        | MC2 ↑        | CE ↓ | KL ↓ |
+|----------------------|-------------------|--------------|--------------|--------------|------|------|
+| Unintervened         | 32.88             | 44.18        | 30.36        | 48.98        | 2.38 | 0.00 |
+| ITI                  | 35.92             | 46.88        | 32.07        | 49.84        | 2.50 | 0.13 |
+| FSP                  | 36.32             | 39.78        | <b>35.74</b> | 52.93        | 2.38 | 0.00 |
+| NL-ITI               | 35.98             | 45.72        | 33.02        | 51.37        | 2.50 | 0.13 |
+| LITO                 | 37.53             | 48.20        | 34.96        | 52.54        | 2.48 | 0.11 |
+| RADIANT (ours)       | <b>37.78</b>      | <b>50.82</b> | 33.82        | <b>52.98</b> | 2.48 | 0.08 |
+| FSP + ITI            | 40.63             | 45.16        | 35.50        | 52.98        | 2.48 | 0.14 |
+| FSP + NL-ITI         | 40.70             | 46.03        | 34.15        | 53.35        | 2.49 | 0.14 |
+| FSP + LITO           | 43.95             | 49.82        | <b>38.41</b> | <b>55.31</b> | 2.54 | 0.17 |
+| FSP + RADIANT (ours) | <b>44.09</b>      | <b>52.02</b> | 37.98        | 54.61        | 2.52 | 0.15 |
+
+(b) Llama3-8B
+
+| Methods              | True * Info (%) ↑ | True (%) ↑   | MC1 ↑        | MC2 ↑        | CE ↓ | KL ↓ |
+|----------------------|-------------------|--------------|--------------|--------------|------|------|
+| Unintervened         | 51.87             | 59.86        | 35.38        | 53.32        | 2.31 | 0.00 |
+| ITI                  | 57.02             | 63.04        | 37.46        | 55.59        | 2.32 | 0.17 |
+| FSP                  | 55.97             | 58.63        | <b>40.76</b> | 57.84        | 2.31 | 0.00 |
+| NL-ITI               | 57.13             | 60.82        | 39.01        | 57.24        | 2.33 | 0.17 |
+| LITO                 | 58.12             | 61.36        | 38.25        | 57.21        | 2.34 | 0.18 |
+| RADIANT (ours)       | <b>63.68</b>      | <b>74.20</b> | 39.95        | <b>58.18</b> | 2.35 | 0.18 |
+| FSP + ITI            | 56.78             | 59.24        | 41.50        | 59.01        | 2.33 | 0.13 |
+| FSP + NL-ITI         | 59.62             | 61.77        | 42.15        | 57.87        | 2.34 | 0.15 |
+| FSP + LITO           | 60.74             | 63.21        | 41.28        | 58.46        | 2.36 | 0.17 |
+| FSP + RADIANT (ours) | <b>64.68</b>      | <b>67.75</b> | <b>42.52</b> | <b>59.99</b> | 2.38 | 0.18 |
+
+(c) Llama2-chat-13B
+
+intervention is focused on a single layer of the network. This focus helps alleviate the distributional shifts of the activations in subsequent layers, which could reduce the performance of the detections and interventions therein. Moreover, our headwise intervention aims to minimize the perturbations to the activations while keeping a reasonable guarantee of the effectiveness of the intervention. This is further demonstrated in empirical results, where our method outperforms the state-of-the-art intervention method ITI (Li et al., 2024b) on various LMs.
+
+**Social Impact.** Our paper focuses on improving the truthfulness of LMs, and the results aim to improve trustworthy artificial intelligence. Apart from language generation, our paper can also be implemented in other domains for activation editing. Nevertheless, it is important to acknowledge the potential misuse of our method: there exists a risk that adversarial actors could exploit our approach to transform truthful outputs into misleading or false information. This dual-use nature
+
+underscores the importance of ethical guidelines and safeguards in AI development. By promoting transparency and accountability in using our framework, we want to raise awareness of the risks while maximizing the benefits of improved truthfulness in language generation.
+
+Table 2: Quantitative results of intervention methods on instruction-finetuned models Alpaca and Vicuna.
+
+| Methods                 | True*Info (%) ↑ | True (%) ↑   | MC1 ↑        | MC2 ↑        | CE ↓ | KL ↓ |
+|-------------------------|-----------------|--------------|--------------|--------------|------|------|
+| Alpaca                  | 30.39           | 30.85        | 26.56        | 41.63        | 2.81 | 0.00 |
+| Alpaca + ITI            | 37.67           | 38.19        | 28.89        | 45.19        | 2.88 | 0.14 |
+| Alpaca + RADIANT (ours) | <b>44.51</b>    | <b>45.94</b> | <b>30.79</b> | <b>47.83</b> | 2.81 | 0.13 |
+| Vicuna                  | 38.24           | 42.10        | 31.83        | 48.48        | 2.67 | 0.00 |
+| Vicuna + ITI            | 49.27           | 53.25        | 33.42        | 51.80        | 2.77 | 0.26 |
+| Vicuna + RADIANT (ours) | <b>54.87</b>    | <b>62.81</b> | <b>35.76</b> | <b>55.14</b> | 2.73 | 0.27 |
+
+Table 3: Quantitative results of different intervention methods on TruthfulQA dataset, across different Language Models. We considered LOFIT as the base model for this experiment, so the KL of LOFIT is 0.
+
+| Methods                | True * Info (%) ↑ | True (%) ↑   | MC1 ↑        | MC2 ↑        | CE ↓ | KL ↓ |
+|------------------------|-------------------|--------------|--------------|--------------|------|------|
+| LOFIT                  | 59.48             | 69.03        | 51.04        | 70.78        | 2.35 | 0.00 |
+| LOFIT + ITI            | 60.84             | <b>72.29</b> | 51.41        | 70.84        | 2.55 | 0.14 |
+| LOFIT + RADIANT (ours) | <b>61.50</b>      | 72.08        | <b>51.80</b> | <b>71.29</b> | 2.56 | 0.13 |
+
+(a) Llama-7B
+
+| Methods                | True * Info (%) ↑ | True (%) ↑   | MC1 ↑        | MC2 ↑        | CE ↓ | KL ↓ |
+|------------------------|-------------------|--------------|--------------|--------------|------|------|
+| LOFIT                  | 68.80             | 90.08        | 59.00        | <b>77.93</b> | 3.27 | 0.00 |
+| LOFIT + ITI            | 67.57             | 79.31        | 55.33        | 75.85        | 3.33 | 0.08 |
+| LOFIT + RADIANT (ours) | <b>71.47</b>      | <b>90.19</b> | <b>59.30</b> | 76.56        | 3.38 | 0.11 |
+
+(b) Llama3-8B
+
+| Methods                | True * Info (%) ↑ | True (%) ↑   | MC1 ↑        | MC2 ↑        | CE ↓ | KL ↓ |
+|------------------------|-------------------|--------------|--------------|--------------|------|------|
+| LOFIT                  | 66.35             | 81.89        | 57.04        | <b>76.17</b> | 2.52 | 0.00 |
+| LOFIT + ITI            | 66.00             | 78.09        | 55.08        | 75.25        | 2.73 | 0.21 |
+| LOFIT + RADIANT (ours) | <b>69.63</b>      | <b>83.86</b> | <b>57.45</b> | 75.47        | 2.73 | 0.20 |
+
+(c) Llama2-chat-13B
+
+Table 4: Ablation study: in the first scenario, we swap heads selected by RADIANT with ITI intervention, and vice versa; in the second scenario, we replace our risk-aware loss function with cross-entropy loss in training linear probe. Performed on TruthfulQA with Llama-7B.
+
+| Methods                                           | True * Info (%) ↑ | True (%) ↑   | MC1 ↑        | MC2 ↑        | CE ↓ | KL ↓ |
+|---------------------------------------------------|-------------------|--------------|--------------|--------------|------|------|
+| Unintervened                                      | 21.15             | 22.16        | 25.58        | 40.54        | 2.13 | 0.00 |
+| ITI                                               | 26.52             | 28.03        | 27.78        | 43.59        | 2.20 | 0.07 |
+| 1st scenario: Our linear probe + ITI intervention | 26.88             | 28.00        | 29.00        | 44.00        | 2.17 | 0.04 |
+| 1st scenario: ITI linear probe + our intervention | 36.66             | 39.00        | 28.00        | 43.00        | 2.32 | 0.12 |
+| 2nd scenario: Cross entropy loss                  | 30.36             | 33.00        | 29.00        | 43.00        | 2.22 | 0.06 |
+| RADIANT                                           | <b>40.36</b>      | <b>44.48</b> | <b>30.91</b> | <b>46.13</b> | 2.19 | 0.07 |
+
+## REFERENCES
+
+- Guillaume Alain and Yoshua Bengio. Understanding intermediate layers using linear classifier probes. *arXiv preprint arXiv:1610.01644*, 2016.
+- Yuntao Bai, Andy Jones, Kamal Ndousse, Amanda Askell, Anna Chen, Nova DasSarma, Dawn Drain, Stanislav Fort, Deep Ganguli, Tom Henighan, et al. Training a helpful and harmless assistant with reinforcement learning from human feedback. *arXiv preprint arXiv:2204.05862*, 2022.
+- Farima Fatahi Bayat, Xin Liu, H Jagadish, and Lu Wang. Enhanced language model truthfulness with learnable intervention and uncertainty expression. In *Findings of the Association for Computational Linguistics ACL 2024*, pp. 12388–12400, 2024.
+- Yonatan Belinkov. Probing classifiers: Promises, shortcomings, and advances. *Computational Linguistics*, 48(1):207–219, 2022.
+- Gabriel Bénédicet, Hendrik Vincent Koops, Daan Odijk, and Maarten de Rijke. sigmoidF1: A smooth F1 score surrogate loss for multilabel classification. *Transactions on Machine Learning Research*, 2022.
+- Tom Brown, Benjamin Mann, Nick Ryder, Melanie Subbiah, Jared D Kaplan, Prafulla Dhariwal, Arvind Neelakantan, Pranav Shyam, Girish Sastry, Amanda Askell, et al. Language models are few-shot learners. *Advances in neural information processing systems*, 33:1877–1901, 2020.
+- Collin Burns, Haotian Ye, Dan Klein, and Jacob Steinhardt. Discovering latent knowledge in language models without supervision. *arXiv preprint arXiv:2212.03827*, 2022.
+- Wei-Lin Chiang, Zhuohan Li, Zi Lin, Ying Sheng, Zhanghao Wu, Hao Zhang, Lianmin Zheng, Siyuan Zhuang, Yonghao Zhuang, Joseph E Gonzalez, et al. Vicuna: An open-source chatbot impressing GPT-4 with 90% ChatGPT quality. 2(3):6, 2023. URL <https://vicuna.lmsys.org>.
+- Hyung Won Chung, Le Hou, Shayne Longpre, Barret Zoph, Yi Tay, William Fedus, Yunxuan Li, Xuezhi Wang, Mostafa Dehghani, Siddhartha Brahma, et al. Scaling instruction-finetuned language models. *Journal of Machine Learning Research*, 25(70):1–53, 2024.
+- Sumanth Dathathri, Andrea Madotto, Janice Lan, Jane Hung, Eric Frank, Piero Molino, Jason Yosinski, and Rosanne Liu. Plug and play language models: A simple approach to controlled text generation. *arXiv preprint arXiv:1912.02164*, 2019.
+- Abhimanyu Dubey et al. The Llama 3 herd of models. *arXiv preprint arXiv:2407.21783*, 2024.
+- Samuel Gehman, Suchin Gururangan, Maarten Sap, Yejin Choi, and Noah A Smith. Real-toxicityprompts: Evaluating neural toxic degeneration in language models. *arXiv preprint arXiv:2009.11462*, 2020.
+- Shane Griffith, Kaushik Subramanian, Jonathan Scholz, Charles L Isbell, and Andrea L Thomaz. Policy shaping: Integrating human feedback with reinforcement learning. *Advances in neural information processing systems*, 26, 2013.
+- Beliz Gunel, Jingfei Du, Alexis Conneau, and Ves Stoyanov. Supervised contrastive learning for pre-trained language model fine-tuning. *arXiv preprint arXiv:2011.01403*, 2020.
+- Suchin Gururangan, Ana Marasović, Swabha Swayamdipta, Kyle Lo, Iz Beltagy, Doug Downey, and Noah A Smith. Don’t stop pretraining: Adapt language models to domains and tasks. *arXiv preprint arXiv:2004.10964*, 2020.
+- Peter Hase, Mohit Bansal, Been Kim, and Asma Ghandeharioun. Does localization inform editing? surprising differences in causality-based localization vs. knowledge editing in language models. *Advances in Neural Information Processing Systems*, 36, 2024.
+- Evan Hernandez, Belinda Z Li, and Jacob Andreas. Measuring and manipulating knowledge representations in language models. *arXiv preprint arXiv:2304.00740*, 2023.
+
+- 594 Jakub Hosciłowicz, Adam Wiacek, Jan Chojnacki, Adam Cieslak, Leszek Michon, and Artur Jan-  
+595 icki. Non-linear inference time intervention: Improving llm truthfulness. In *Proc. Interspeech*  
+596 *2024*, pp. 4094–4098, 2024.
+- 597  
+598 Ziwei Ji, Nayeon Lee, Rita Frieske, Tiezheng Yu, Dan Su, Yan Xu, Etsuko Ishii, Ye Jin Bang,  
+599 Andrea Madotto, and Pascale Fung. Survey of hallucination in natural language generation. *ACM*  
+600 *Computing Surveys*, 55(12):1–38, 2023.
+- 601 Albert Q Jiang, Alexandre Sablayrolles, Arthur Mensch, Chris Bamford, Devendra Singh Chaplot,  
+602 Diego de las Casas, Florian Bressand, Gianna Lengyel, Guillaume Lample, Lucile Saulnier, et al.  
+603 Mistral 7b. *arXiv preprint arXiv:2310.06825*, 2023.
+- 604  
+605 Mandar Joshi, Eunsol Choi, Daniel S Weld, and Luke Zettlemoyer. TriviaQA: A large scale distantly  
+606 supervised challenge dataset for reading comprehension. *arXiv preprint arXiv:1705.03551*, 2017.
+- 607  
+608 Tom Kwiatkowski, Jennimaria Palomaki, Olivia Redfield, Michael Collins, Ankur Parikh, Chris  
+609 Alberti, Danielle Epstein, Illia Polosukhin, Jacob Devlin, Kenton Lee, et al. Natural questions: A  
+610 benchmark for question answering research. *Transactions of the Association for Computational*  
+611 *Linguistics*, 7:453–466, 2019a.
+- 612  
+613 Tom Kwiatkowski, Jennimaria Palomaki, Olivia Redfield, Michael Collins, Ankur Parikh, Chris  
+614 Alberti, Danielle Epstein, Illia Polosukhin, Jacob Devlin, Kenton Lee, et al. Natural questions: a  
+615 benchmark for question answering research. *Transactions of the Association for Computational*  
+616 *Linguistics*, 7:453–466, 2019b.
+- 617  
+618 Junyi Li, Tianyi Tang, Wayne Xin Zhao, Jian-Yun Nie, and Ji-Rong Wen. Pre-trained language  
+619 models for text generation: A survey. *ACM Computing Surveys*, 56(9):1–39, 2024a.
+- 620  
+621 Kenneth Li, Oam Patel, Fernanda Viégas, Hanspeter Pfister, and Martin Wattenberg. Inference-time  
+622 intervention: Eliciting truthful answers from a language model. *Advances in Neural Information*  
+623 *Processing Systems*, 36, 2024b.
+- 624  
+625 Stephanie Lin, Jacob Hilton, and Owain Evans. TruthfulQA: Measuring how models mimic human  
+626 falsehoods. *arXiv preprint arXiv:2109.07958*, 2021.
+- 627  
+628 Alisa Liu, Maarten Sap, Ximing Lu, Swabha Swayamdipta, Chandra Bhagavatula, Noah A Smith,  
+629 and Yejin Choi. Dexpers: Decoding-time controlled text generation with experts and anti-experts.  
+630 *arXiv preprint arXiv:2105.03023*, 2021.
+- 631  
+632 Samuel Marks and Max Tegmark. The geometry of truth: Emergent linear structure in large language  
+633 model representations of true/false datasets. *arXiv preprint arXiv:2310.06824*, 2023.
+- 634  
+635 Kevin Meng, David Bau, Alex Andonian, and Yonatan Belinkov. Locating and editing factual  
+636 associations in GPT. *Advances in Neural Information Processing Systems*, 35:17359–17372,  
+637 2022.
+- 638  
+639 Luca Moschella, Valentino Maiorca, Marco Fumero, Antonio Norelli, Francesco Locatello, and  
+640 Emanuele Rodolà. Relative representations enable zero-shot latent space communication. 2023.
+- 641  
+642 Long Ouyang, Jeffrey Wu, Xu Jiang, Diogo Almeida, Carroll Wainwright, Pamela Mishkin, Chong  
+643 Zhang, Sandhini Agarwal, Katarina Slama, Alex Ray, et al. Training language models to follow  
+644 instructions with human feedback. *Advances in Neural Information Processing Systems*, 35:  
+645 27730–27744, 2022.
+- 646  
+647 Baolin Peng, Chunyuan Li, Pengcheng He, Michel Galley, and Jianfeng Gao. Instruction tuning  
+648 with GPT-4. *arXiv preprint arXiv:2304.03277*, 2023.
+- 649  
+650 Luiza Pozzobon, Beyza Ermis, Patrick Lewis, and Sara Hooker. Goodtriever: Adaptive toxicity  
+651 mitigation with retrieval-augmented models. *arXiv preprint arXiv:2310.07589*, 2023.
+- 652  
+653 András Prékopa. *Stochastic Programming*. Springer Science & Business Media, 1995.
+- 654  
+655 Alec Radford, Jeffrey Wu, Rewon Child, David Luan, Dario Amodei, Ilya Sutskever, et al. Language  
+656 models are unsupervised multitask learners. *OpenAI Blog*, 1(8):9, 2019.
+
+[Appendix and supplementary materials beyond page 12 have been removed.]

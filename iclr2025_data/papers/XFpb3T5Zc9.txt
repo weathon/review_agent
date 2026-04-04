@@ -1,0 +1,461 @@
+# iFEDDR: AUTO-TUNING LOCAL COMPUTATION WITH INEXACT DOUGLAS-RACHFORD SPLITTING IN FEDERATED LEARNING
+
+Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+Federated learning usually requires specifying the amount of local computation needed a priori. In this work, we instead propose a systematic scheme to automatically adjust and potentially reduce the local computations while preserving convergence guarantees. We focus on proximal-based methods, where we demonstrate that the proximal operator can be evaluated inexactly up to a relative error, rather than relying on a predefined sequence of vanishing errors. Our proposed method, iFEDDR, is based on a novel error-corrected version of inexact Douglas-Rachford splitting. It mitigates the need for hyperparameter tuning the number of client steps, by triggering refinement on-demand. We derive iFEDDR as an instance of a much more general construction, which allows us to handle minimax problem, and which is interesting in its own right. Several numerical experiments are carried out demonstrating the favorable convergence properties of iFEDDR.
+
+## 1 INTRODUCTION
+
+Federated learning (FL) has emerged as a promising approach to distributed machine learning that allows multiple clients to collaboratively train a model. In an attempt to keep communication costs low, the clients repeatedly apply their update rule  $\tau$  times before centrally aggregating the model and proceeding to the next round.
+
+A popular instance of this general idea is FedAvg (McMahan et al., 2017) which locally takes  $\tau$  gradient descent steps. Unfortunately, FedAvg requires a very small client stepsize in data heterogeneous settings to avoid the so called client-drift. This requirement appears theoretically as a horizon dependent  $O(1/\tau)$  client stepsize, which intuitively is used to prevent the  $\tau$  steps to move beyond a single (large) step of gradient descent (see e.g. Karimireddy et al. (2020, Thm. 1)). Because of the small stepsize the benefit of multiple local updates is unclear under data heterogeneous.
+
+A more principled approach is arguably to instead use the local computation to approximate a well-understood update rule such as the proximal operator, which is known to be more stable and usually allows for larger stepsizes. FedProx (Li et al., 2020) was the first to use proximal operators for FL and did so by directly averaging the client updates. This straightforward application of the prox turns out to not necessarily converge to a solution when using fixed stepsize (Pathak & Wainwright, 2020, Prop. 2) and proper convergence relies on behaving like FedAvg with  $\tau = 1$  by letting the proximal stepsize  $\gamma$  go to zero (Malekmohammadi et al., 2022, Thm. 1). In other words, it might be argued that one should simply use FedAvg with  $\tau = 1$  instead.
+
+Fortunately there is a “correct” way to employ the proximal operator such that we can benefit from its strong properties mentioned previously. By leveraging the operator splitting literature, FedSplit (Pathak & Wainwright, 2020), FedDR (Tran Dinh et al., 2021) and FedPi (Malekmohammadi et al., 2022) fixes the update rule of FedProx. However, all of these prox-based method still need the approximation errors of the proximal operator to be absolutely summable in the sense that the positive approximation error sequence  $(\varepsilon_k)_{k \in \mathbb{N}}$  satisfies  $\sum_{k=1}^{\infty} \varepsilon_k < \infty$ , but no further guidance is provided as how to select them. This translates into requiring an increasing number of local updates that problematically needs to be specified preemptively.
+
+This paper specifically looks at the approximation quality of the clients proximal update and ask:
+
+*Can we automate the number of local updates needed?*
+
+![Figure 1: Two line plots showing the convergence of f(\bar{\phi}^k) - f^* versus the number of communication rounds k for logistic regression on the heterogeneous vehicle dataset. The left plot compares FedAvg (red solid), FedProx (orange dashed), FedDR (green dash-dot), and iFedDR (blue solid). FedAvg and FedProx plateau around 10^-2, while FedDR plateaus around 10^-4 and iFedDR continues to decrease towards 10^-8. The right plot shows iFedDR with different proximal stepsizes \gamma: 1.0 (blue solid, 100 local steps), 2.0 (blue dashed, 189 local steps), 5.0 (blue dash-dot, 452 local steps), and 10.0 (blue dotted, 951 local steps). As \gamma increases, the number of local steps increases and the convergence rate of iFedDR improves, reaching 10^-8 faster.](49ad3a646d84bcfeac02bdf2b3792a3e_img.jpg)
+
+Figure 1: Two line plots showing the convergence of f(\bar{\phi}^k) - f^\* versus the number of communication rounds k for logistic regression on the heterogeneous vehicle dataset. The left plot compares FedAvg (red solid), FedProx (orange dashed), FedDR (green dash-dot), and iFedDR (blue solid). FedAvg and FedProx plateau around 10^-2, while FedDR plateaus around 10^-4 and iFedDR continues to decrease towards 10^-8. The right plot shows iFedDR with different proximal stepsizes \gamma: 1.0 (blue solid, 100 local steps), 2.0 (blue dashed, 189 local steps), 5.0 (blue dash-dot, 452 local steps), and 10.0 (blue dotted, 951 local steps). As \gamma increases, the number of local steps increases and the convergence rate of iFedDR improves, reaching 10^-8 faster.
+
+Figure 1: Logistic regression on the heterogeneous vehicle dataset. (left) Similar to FedAvg and FedProx, FedDR does not necessarily converge if the proximal approximation is not accurate enough, whereas iFedDR can converge by automatically adjusting the approximation quality to a sufficient level. (right) The proximal stepsize  $\gamma$  can be taken large to speed up convergence and iFedDR will automatically increase the number of local steps accordingly (cf. Remark 3.2 regarding the tradeoff).
+
+We answer this in the affirmative by making the following contributions:
+
+- We introduce the error-corrected algorithm, iFedDR, which automatically checks if refining the approximate evaluation of the proximal mapping is necessary through a computationally negligible error condition. This automatic adjustment mitigates the need for pre-determining an appropriate number of client iterations, while allowing for large stepsizes (see Figure 1). The construction is made possible by introducing a *relative* error condition, which enables the error condition at each communication round to be treated separately.
+- Our analysis for iFedDR extends to monotone inclusion problems and consequently enjoys provable guarantees not only for (constrained) convex minimization but also for the important case of (constrained) minimax problems, and more generally  $m$ -player games. We obtain iFedDR through a novel inexact preconditioned proximal point algorithm (iPPPA) involving a semidefinite preconditioner and a correction step mitigating the effect of the inexactness, which might be of independent interest.
+- We demonstrate the favorable properties of iFedDR under heterogeneous data distributions. A simple rule is proposed for minimizing the number of refinement calls. We observe that iFedDR either match or improve the performance of the baselines without needing tuning.
+
+### 1.1 COMPARISON WITH EXISTING METHODS FOR FEDERATED LEARNING
+
+The issue of client drift for FedAvg is made precise in the (tight) lower bound  $\Omega(H^{2/3}/m^{2/3})$  for convex and smooth functions in Glasgow et al. (2022, Thm. 3.3), where  $m$  is the number of outer iterations and  $H$  is the heterogeneity constant in  $\|\nabla f_i(x)\|^2 \leq H^2 + 2LB^2(f(x) - f^*)$ . The bound says that FedAvg cannot avoid depending on the level of heterogeneity  $H$  and that the error decreases relatively slowly as  $1/m^{2/3}$ .
+
+To remove the dependency on the heterogeneity constant  $H$  and eventually obtain a  $O(1/m)$  rate, FedDR (Tran Dinh et al., 2021) uses the local computation to instead approximate a proximal operator on the clients, which are then integrated based on Douglas-Rachford splitting. The proposed iFedDR method is an extension, that incorporates an adaptive stepsize and an extragradient correction step, to allow for the relaxed condition of relative inexactness. The relative error condition mitigates the need for hyperparameter tuning of the number of client iterations. The iFedDR scheme additionally enjoys provable guarantees for minimax problems. In contrast, the analysis technique used in (Tran Dinh et al., 2021) relies on the Douglas-Rachford envelope (Themelis & Patrinos, 2020) and as such cannot be extended to the minimax setting. The (only) point of contact between iFedDR and FedDR is for minimization problems, when the proximal operators can be computed exactly, which is very rarely the case. See Appendix E for further details on comparison with FedDR.
+
+FedDR itself can be seen as a relaxed version of FedSplit (Pathak & Wainwright, 2020) (FedSplit can be recovered from FedDR by taking  $\lambda_k = 2$ ). We note that without the relaxation it is not possible to
+
+Table 1: Comparison of iFedDR with existing algorithms under convexity and  $L_i$ -smoothness of the client objectives after  $m$  global iterations using  $\tau$  local steps. The parameter  $H$  is the heterogeneity constant. Due to the error-correction step, the proposed iFedDR method achieves a  $O(\frac{1}{\gamma^2 m})$  communication rate, while automatically setting the number of inner steps. The stepsize  $\gamma$  can be taken large at the expense of a harder client subproblem. We use  $\tilde{O}$  to hide logarithmic factors.
+
+| Method   | Minimax      | Adaptive $\tau$ | Comm. rate                                                    | Local cond. number          | Proximal stepsize $\gamma$    | Reference                                       |
+|----------|--------------|-----------------|---------------------------------------------------------------|-----------------------------|-------------------------------|-------------------------------------------------|
+| GD       | $\times$     | $\times$        | $\tilde{O}(\frac{L}{\epsilon})$                               | -                           | -                             | (Nesterov et al., 2018)                         |
+| FedAvg   | $\times$     | $\times$        | $\Omega(\frac{L}{\epsilon} + \frac{H^2 B^2 m}{\epsilon^2})^2$ | -                           | -                             | (McMahan et al., 2017)                          |
+| Scaffold | $\times$     | $\times$        | $\tilde{O}(\frac{L}{\epsilon})$                               | -                           | -                             | (Karimireddy et al., 2020, Thm. 3)              |
+| FedProx  | $\times$     | $\times^1$      | $\tilde{O}(\frac{1}{\epsilon})^3$                             | $\kappa_i = 1 + \gamma L_i$ | $\gamma \rightarrow 0$        | (Li et al., 2020)                               |
+| FedDR    | $\times$     | $\times^1$      | $\tilde{O}(\frac{1}{\epsilon^2})$                             | $\kappa_i = 1 + \gamma L_i$ | $\gamma \in (0, \frac{1}{L})$ | (Tran Dinh et al., 2021, Thm. 3.1) <sup>4</sup> |
+| iFedDR   | $\checkmark$ | $\checkmark$    | $\tilde{O}(\frac{1}{\epsilon^2})$                             | $\kappa_i = 1 + \gamma L_i$ | $\gamma > 0$                  | Theorem 3.1                                     |
+
+<sup>1</sup> FedProx/FedDR requires a predefined summable error sequence regarding the client proximal updates.
+
+<sup>2</sup> The lowerbound for FedAvg is due to Glasgow et al. (2022, Thm. 3.3).
+
+<sup>3</sup> Convergence of FedProx requires decreasing stepsize sequence  $\gamma_k$  (Malekmohammadi et al., 2022, Thm. 1).
+
+<sup>4</sup> FedDR is analysed under nonconvex and Lipschitz continuous client objectives.
+
+show convergence for convex problems without modifying the objective. For a detailed comparison see Ryu & Yin (2022, Sec. 2.7.1) and Malekmohammadi et al. (2022, Sec. 3.3-3.4).
+
+Another approach to removing the dependency on the heterogeneity constant  $H$ , is the Scaffold algorithm, which uses the variance reduction technique SAGA to eventually obtain a rate of  $\tilde{O}(1/m)$  in Karimireddy et al. (2020, Thm. III). The iFedDR algorithm uses the same level of communication per iteration as Scaffold while saving on the memory usage on the server. In contrast with Scaffold, iFedDR also extends to minimax problems and constrained problems with provable guarantees.
+
+In the special case of strongly convex and smooth objectives, an acceleration of the communication complexity was shown through ProxSkip (Mishchenko et al., 2022) by taking an (expected) number of client steps with dependency on the conditioning number. The dependency was later improved in followup works (Maranjan et al., 2022; Sadiev et al., 2022). In contrast with these works, iFedDR applies to general convex problems and as a byproduct does not require knowledge of the strong convexity modulus. Our work takes an orthogonal direction to reducing the overall computation by avoiding hyperparameter tuning of the client steps. Note that the prox referred to in ProxSkip is used to capture the consensus constraint and is thus distinct from the one which is computed inexacty in iFedDR.
+
+An overview of the comparison is provided in Table 1 of Appendix A.
+
+## 2 PROBLEM SETUP & PRELIMINARIES
+
+In order to capture both minimization problems and minimax problems we will be interesting in the following finite sum inclusion problem, which seeks to find  $x \in \mathbb{R}^n$  such that
+
+$$0 \in \frac{1}{N} \sum_{i=1}^N F_i(x) + G(x), \quad (2.1)$$
+
+where each  $i \in [N]$  should be understood as a separate client, each only having access to their associated operator  $F_i : \mathbb{R}^n \rightarrow \mathbb{R}^n$ , while the server has access to the possible set-valued mapping  $G : \mathbb{R}^n \rightrightarrows \mathbb{R}^n$ . We will make the following assumptions (see Appendix B for any missing definitions).
+
+**Assumption I** (Requirements for problem (2.1)).
+
+(i) The operators  $F_i : \mathbb{R}^n \rightarrow \mathbb{R}^n$  for all  $i \in [N]$  and  $G : \mathbb{R}^n \rightrightarrows \mathbb{R}^n$  are maximally monotone.
+
+(ii) The operator  $F_i$  is  $L_i$ -Lipschitz continuous for all  $i \in [N]$ , i.e.
+
+$$\|F_i(x) - F_i(x')\| \leq L_i \|x - x'\| \quad \forall x, x' \in \mathbb{R}^n.$$
+
+Maximal monotonicity allows us to capture a large range of problems including (possibly constrained) convex minimization problems, convex-concave minimax problems and more generally convex  $m$ -player games. We provide two prominent examples that can be cast as the inclusion (2.1) below.
+
+**Example 2.1** (Minimization). Consider the following convex optimization problem
+
+$$\text{minimize}_{x \in \mathbb{R}^n} \quad \frac{1}{N} \sum_{i=1}^N f_i(x) + g(x) \quad (2.2)$$
+
+The first order stationary condition may be written in the form of the inclusion (2.1) by setting  $F_i = \nabla f_i$  and  $G = \partial g$ . Maximally monotonicity of the operators are satisfied when  $g$  is proper lsc convex and  $(f_i)_{i \in [N]}$  are convex and smooth (cf. [Appendix D.3](#) for details).  $\square$
+
+**Example 2.2** (Minimax). Consider the following optimization problem
+
+$$\text{minimize}_{x \in \mathbb{R}^n} \quad \text{maximize}_{v \in \mathbb{R}^r} \quad g(u) + \frac{1}{N} \sum_{i=1}^N f_i(u, v) - h(v) \quad (2.3)$$
+
+Denoting  $x = (u, v) \in \mathbb{R}^n$  where  $n = m + r$ , the first order stationary condition may be written in the form of the inclusion (2.1) with  $G(x) = (\partial \delta(u), \partial h(v))$ ,  $F_i(x) := (\nabla_u f_i(u, v), -\nabla_v f_i(u, v))$ . Maximally monotonicity of the operators are satisfied when  $g, h$  are proper lsc convex and  $(f_i)_{i \in [N]}$  are convex-concave and Lipschitz continuous (cf. [Appendix D.4](#) for details).  $\square$
+
+As the operators  $F_i$  are not accessible centrally, let  $x := (x_1, \dots, x_N) \in \mathbb{R}^{Nn}$  and consider an equivalent but lifted consensus formulation of (2.1) that we shall refer to as the *primal* inclusion in the lifted space
+
+$$0 \in T_P(x) := A(x) + B(x) \quad (2.4a)$$
+
+with
+
+$$A(x) := \frac{1}{N}(F_1(x_1), \dots, F_N(x_N)), \quad B(x) := N_C(x) + \frac{1}{N}(G(x_1), \dots, G(x_N)) \quad (2.4b)$$
+
+where  $C := \{x \in \mathbb{R}^{Nn} \mid x_1 = x_2 = \dots = x_N\}$  is the consensus set, and  $N_C = \partial \delta_C$  denotes the normal cone operator of the set  $C$ , while  $\delta_C$  is the indicator function defined as  $\delta_C(x) = 0$  if  $x \in C$  and  $+\infty$  otherwise. Maximal monotonicity of the operators  $A, B$  follows from that of  $F_i, G$ , and  $N_C$ , and since maximal monotonicity is closed under addition ([Bauschke & Combettes, 2017, Prop. 20.23, Ex. 20.26, Cor. 25.5](#)). The dual problem associated with (2.4) consists of finding  $y \in \mathbb{R}^{Nn}$  such that
+
+$$0 \in T_D(y) := -A^{-1}(-y) + B^{-1}(y). \quad (2.5)$$
+
+The primal dual problem then consists of finding  $z = (x, y) \in \mathbb{R}^{2Nn}$  such that
+
+$$0 \in T_{PD}(z) := \begin{bmatrix} A(x) \\ B^{-1}(y) \end{bmatrix} + \begin{bmatrix} y \\ -x \end{bmatrix}. \quad (2.6)$$
+
+The operator  $T_{PD}$  is maximally monotone owing to the fact that skew symmetric linear operators are maximally monotone, and since maximal monotonicity is closed under the inverse and addition operators ([Bauschke & Combettes, 2017, Prop. 20.22, 20.23, Cor. 25.5](#)). A point  $z^* = (x^*, y^*)$  solves the primal dual problem if and only if  $x^*$  is a solution to the primal problem (2.4) and  $y^*$  solves the dual problem (2.5).
+
+When the resolvents of the operators  $A$  and  $B$  are available, a classical approach to solving both the primal problem (2.4a) and the dual problem (2.5) is the Douglas-Rachford splitting (DRS) algorithm ([Douglas & Rachford, 1956](#)):
+
+$$\begin{aligned} u^k &= (\text{id} + \gamma A)^{-1}(s^k) \\ y^k &= (\text{id} + \gamma B)^{-1}(2u^k - s^k) \\ s^{k+1} &= s^k + (y^k - u^k) \end{aligned} \quad (\text{DRS})$$
+
+with a stepsize  $\gamma > 0$ . The iterates  $(u^k)_{k \in \mathbb{N}}$  and  $(y^k)_{k \in \mathbb{N}}$  are guaranteed to converge to a solution of the primal problem (2.4a), while  $(y^k)_{k \in \mathbb{N}} = (\gamma^{-1}(u^k - s^k))_{k \in \mathbb{N}}$  converges to a solution of the dual problem (2.5), when  $A, B$  are maximally monotone and a primal solution exists ([Eckstein & Bertsekas, 1992](#)). An alternative to (DRS) for solving (2.4a) is the forward-backward splitting (FBS),  $(\text{id} + \gamma B)^{-1}(\text{id} - \gamma A)$ . However, FBS may not converge when the operator  $A$  is merely monotone and the condition on the stepsize  $\gamma$  is more stringent. In the next section we present iFedDR which we obtain as an instance of an inexact and relaxed variant of DRS, that incorporates an error-correction step enabling a relative error condition.
+
+## 3 THE iFedDR ALGORITHM
+
+We solve the primal dual problem (2.6) (and thus the original finite sum problem (2.1) through the consensus reformulation (2.4)) with an error-corrected version of an inexact Douglas-Rachford splitting (DRS) scheme that we refer to as iFedDR ([Algorithm I](#)). The update may appear difficult to arrive at directly, and we indeed find it by casting DRS as a *preconditioned* proximal update
+
+### **Algorithm 1** The inexact federated Douglas-Rachford algorithm for problem 2.1 (iFedDR)
+
+REQUIRE starting point  $s_1^{-1} \in \mathbb{R}^n$ ,  $\alpha_{-1} = 0 \in \mathbb{R}$ , stepsize  $\gamma \in (0, \infty)$ ,  $\lambda \in (0, 2)$ , and  $\sigma \in (0, 1)$ REPEAT FOR  $k = 0, 1, \dots$  until convergenceI.1: Each client  $i \in [N] := \{1, \dots, N\}$  computes
+
+$$s_i^k = s_i^{k-1} - \lambda \alpha_{k-1} (\bar{x}_i^{k-1} - \hat{p}^{k-1})$$
+
+and approximately compute the resolvent
+
+$$\bar{x}_i^k \approx (\text{id} + \gamma F_i)^{-1}(s_i^k) \quad (3.3)$$
+
+and sends to the server
+
+$$(\bar{x}_i^k, F_i(\bar{x}_i^k), s_i^k).$$
+
+I.2: The server computes the error-corrected average  $\hat{p}^k = (\text{id} + \gamma G)^{-1}(\frac{1}{N} \sum_{i=1}^N (\bar{x}_i^k - \gamma F_i(\bar{x}_i^k)))$  and the scalar quantities
+
+$$\xi_k = \sum_{i=1}^N \|\bar{x}_i^k - \hat{p}^k\|^2, \quad \zeta_k = \frac{1}{\gamma^2} \sum_{i=1}^N \|\gamma F_i(\bar{x}_i^k) - s_i^k + \hat{p}^k\|^2, \quad \text{and } \mu_k = \sum_{i=1}^N (\bar{x}_i^k - \hat{p}^k, s_i^k - \gamma F_i(\bar{x}_i^k) - \hat{p}^k). \quad (3.4)$$
+
+See Remark D.3 for how to carry out the computation memory-efficiently.
+
+I.3: IF  $\sum_{i=1}^N \|s_i^k - \gamma F_i(\bar{x}_i^k) - \bar{x}_i^k\|^2 \leq \sigma^2 \max\{\xi_k, \zeta_k\}$  THEN  
+the server sends back
+
+$$(\hat{p}^k, \alpha_k) \quad \text{where } \alpha_k = \mu_k / \xi_k.$$
+
+I.4: ELSE
+
+request the clients to refine the approximation in (3.3) to higher accuracy.
+
+RETURN  $\hat{p}^k$ 
+
+and instead working on this simpler abstraction level as detailed in Sections 4 and 5. The algorithm includes an adaptive stepsize  $\alpha_k$ , an extragradient error-correction step, and a relative error condition which can be efficiently computed on the server as commented on in Remark D.3.
+
+**Client subproblem** Approximately computing the resolvent in (3.3) on the client amount to finding an approximate zero to the following strongly monotone operator under Assumption I(i)
+
+$$F_i^\gamma(x) := F_i(x) + \frac{1}{\gamma}(x - s_i^k), \quad (3.1)$$
+
+with the stepsize parameter  $\gamma > 0$  (see Appendix D.3 for the special case of minimization). Due to having an explicit optimization problem on the client, the approach becomes modular: The subproblem may be solved in a variety of ways, e.g. with first-order methods such as the gradient method or the extragradient method (Korpelevich, 1976). For minimization problem, where  $F_i = \nabla f_i$  reduces to a gradient of some cost function  $f_i$ , one may employ gradient descent, or its accelerated variants; in case of additional structure such as scenarios where the client objectives  $f_i$  itself is a finite sum, variance reduction techniques may be employed.
+
+**Progress measure** As a measure of progress we track the *natural residual* in the lifted space defined as follows
+
+$$\mathcal{G}_\gamma(x) := \frac{1}{\gamma}(x - (\text{id} + \gamma B)^{-1}(x - \gamma Ax)) \quad (3.2)$$
+
+It is immediate that  $\mathcal{G}_\gamma(x) = 0$  if and only if  $x = (x, x, \dots, x) \in \mathbb{R}^{Nn}$  and  $x$  is a solution to the primal problem (2.4), i.e., that  $x$  is a solution to the original problem (2.1).
+
+**Theorem 3.1.** Suppose the operators in (2.4) satisfy Assumption 1 and  $\text{zer}(A + B) \neq \emptyset$ . Let  $(\bar{x}^k := \frac{1}{N}(\bar{x}_1^k, \dots, \bar{x}_N^k))_{k \in \mathbb{N}}$  be generated by iFedDR (Algorithm 1) and  $s^0 = \frac{1}{N}(s_1^0, \dots, s_N^0)$ . Then,
+
+- (i) The iterates  $(\bar{x}^k)_{k \in \mathbb{N}}$  converges to some  $x^* \in \text{zer}(A + B)$ .
+- (ii) For all  $s^* = x^* + \gamma Ax^*$  where  $x^* \in \text{zer}(A + B)$ , we have that
+
+$$\min_{k=0,1,\dots,m} \|\mathcal{G}_\gamma(\bar{x}^k)\|^2 \leq \frac{\|s^0 - s^*\|^2}{\tau(m+1)}$$
+
+where  $\tau = \frac{(2-\lambda)\lambda\gamma(1+\gamma^2)}{(1-\sigma)^2}$  and  $m$  is the total number of communication rounds.
+
+**Remark 3.2.** Theorem 3.1 is obtained as a corollary of the more general Theorem 5.1 concerning iPPPA, which is covered in Sections 4 and 5 (see Appendices D.1 and D.2 for the reduction). Some remarks are in place. (i) *Communication complexity*: Theorem 3.1 implies, that to guarantee an  $\epsilon$ -accurate solution, iFedDR only needs  $m = O(\frac{1}{\gamma(1+\gamma^2)})$  communication rounds. (ii) *Heterogeneity agnostic*: The theorem requires no heterogeneity assumption, i.e. the client operators  $F_i : \mathbb{R}^n \rightarrow \mathbb{R}^n$  can be arbitrarily different. (iii) *Linear speedup in the number of clients*: A centralized variant would naively need access to  $\sum_{i=1}^N F_i(z)$ , whereas this computation can be parallelized amongst  $N$  clients with iFedDR, while still maintaining a  $O(1/m)$  rate. (iv) *Accuracy-agnostic local solvers*: The errors from the proximal client solvers do not propagate to the rate in Theorem 3.1 due to the error-correction step in iFedDR. Thus, the number of client updates does not have to be specified preemptively based on the desired accuracy of the solution. (v) *A natural tradeoff*: A larger proximal stepsize  $\gamma$  leads to a lower communication complexity through the factor  $\frac{1}{\gamma(1+\gamma^2)}$ . The price to pay is a more expensive proximal subproblem on the clients, since the conditioning number of the strongly monotone and Lipschitz continuous subproblem,  $\kappa_i = 1 + L_i\gamma$ , becomes larger with increasing  $\gamma$  (cf. Figure 1).  $\square$
+
+**Linear convergence** When dealing with minimization problems, linear convergence rate can be established for the class of *piecewise linear-quadratic* (PLQ) functions (Rockafellar & Wets, 2011).
+
+**Definition 3.3** (Piecewise linear-quadratic). *A function  $\varphi : \mathbb{R}^n \rightarrow \overline{\mathbb{R}}$  is called piecewise linear-quadratic (PLQ) if its domain can be represented as the union of finitely many polyhedral sets, and in each such set it is given by an expression of the form  $\frac{1}{2}\langle x, Hx \rangle + \langle d, x \rangle + c$ , for some  $c \in \mathbb{R}$ ,  $d \in \mathbb{R}^n$ , and symmetric matrix  $H \in \mathbb{R}^{n \times n}$ .*
+
+Piecewise linear-quadratic functions are widespread in application and include affine functions, quadratic forms, indicators of polyhedral sets, polyhedral norms such as the  $\ell_1$ -norm, regularizers such as elastic net, hinge loss, and many more, see (Aravkin et al., 2013).
+
+We proceed to establish linear convergence for iFedDR when taking  $F_i = \nabla f_i$  and  $G = \partial g$  in (2.1) with  $f_i$  and  $g$  being PLQ. Notice that this assumption does not imply that the set of solutions is a singleton. Its proof is similar to (Latat et al., 2019, Lem. IV), and relies on the fact that subdifferential of  $f_i$  and  $g$  as well as the normal cone of the consensus set are polyhedral sets implying that the operator  $T$  defined in (4.2) is metrically subregular at all points in its graph. Consequently, the following corollary of Theorem 5.4 shows that iFedDR achieves linear rate for such problem classes.
+
+**Corollary 3.4** (Piecewise linear-quadratic functions). *Suppose that the functions  $f_i$  and  $g$  are piecewise linear-quadratic. Let  $F_i = \nabla f_i$  and  $G = \partial g$  in (2.1). Then, the sequences  $(s_i^k)_{k \in \mathbb{N}}$  generated by iFedDR (Algorithm 1) converge  $R$ -linearly to zero.*
+
+## 4 DRS THROUGH INEXACT PROXIMAL POINT ALGORITHM
+
+To arrive at iFedDR (Algorithm 1) we will start by considering a general inclusion problem, which seeks a  $z \in \mathbb{R}^d$  such that
+
+$$0 \in Tz. \quad (4.1)$$
+
+More compactly we will write the requirement as  $z \in \text{zer } T$ . The preconditioned proximal point algorithm (PPPA) is given by
+
+$$\begin{aligned} \bar{z}^k &= (P + T)^{-1} P z^k \\ z^{k+1} &= z^k + \lambda_k (\bar{z}^k - z^k) \end{aligned} \quad (\text{PPPA})$$
+
+where  $T : \mathbb{R}^d \rightrightarrows \mathbb{R}^d$  is a set-valued operator and  $P \in \mathbb{R}^{d \times d}$  is the preconditioning matrix.
+
+The PPPA has been employed as an abstract framework to establish the convergence of numerical methods such as augmented Lagrangian method (ALM), progressive hedging, Douglas-Rachford splitting (DRS), various primal-dual methods, and many more (Rockafellar, 1976; Eckstein, 1988; Rockafellar & Sun, 2019; Eckstein & Bertsekas, 1992).
+
+While convergence of DRS (upon which iFedDR and FedDR relies) is typically studied through nonexpansiveness properties of the resolvent (Bauschke & Combettes, 2017, Thm. 26.11), to allow for *relative* inexact analysis we shall cast it as an instance of PPPA with a *semidefinite* preconditioning. It is of immediate verification that DRS is nothing more than PPPA with the primal dual
+
+operator  $T = T_{\text{PD}}$  as defined in (2.6) and the following preconditioning:
+
+$$P = \begin{bmatrix} \gamma^{-1}I & -I \\ -I & \gamma I \end{bmatrix}. \quad (4.2)$$
+
+Unlike the standard analysis of PPPA (Rockafellar, 1976) which assumes a positive definite preconditioning, here the preconditioner  $P$  is only positive semidefinite. In recent years, PPPA with semidefinite preconditioner has been studied in (Latafat & Patrinos, 2017, Thm. 3.4), (Bredies et al., 2022, Sect. 2.1), (Evans et al., 2023, Thm. 2.4) and in the setting of DRS in (Condat, 2013, Thm. 3.3). However, existing results have been restricted to exact computations. Motivated by the above reformulation of DRS as PPPA, we develop an *inexactness* variant of PPPA with mild conditions on the inexactness suitable for federated learning applications. Our work is largely inspired by Solodov & Svaiter (1999) which proposed relative inexactness as an alternative to the standard *absolute summable* error criteria. In particular, we consider replacing (preconditioned) proximal updates by the following
+
+$$\bar{z} = (P + T)^{-1}(Pz - \varepsilon) \iff Pz - P\bar{z} = \bar{v} + \varepsilon \text{ with } \bar{v} \in T\bar{z},$$
+
+where error  $\varepsilon \in \mathbb{R}^d$  would only be required to satisfy a relative condition waiving the summability assumption. Although Solodov & Svaiter (1999) studies the classical proximal point method with  $P = I$ , their analysis carries over to the case where  $P$  is positive definite. We here further generalize their analysis and study PPPA under mere positive *semidefiniteness* of the preconditioner. To this end we construct the positive definite matrix
+
+$$R = I - Q + P > 0, \quad \text{where } Q = \Pi_{\text{range}(P)},$$
+
+where  $\Pi_C(w) := \arg \min_{u \in C} \|u - w\|^2$  denotes the projection. While directly establishing convergence of the sequence  $(z^k)_{k \in \mathbb{N}}$  through the machinery of Fejér monotonicity is no longer possible (due to lack of positive definiteness of  $P$ ), we shall do so for the *shadow* sequence  $(\Pi_{\text{range}(P)}(z^k))_{k \in \mathbb{N}}$  in the space equipped with  $\langle \cdot, \cdot \rangle_R$ .
+
+The proposed abstract inexact scheme corrects for the inaccuracy,  $\varepsilon$ , through an extragradient step that we will synonymously refer to as the *error-correction* step. The scheme is defined by the following iterates given  $z^k \in \mathbb{R}^d$  and the error tolerance  $\sigma \in (0, 1)$ :
+
+|                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| $\begin{aligned} & \text{find } \bar{z}^k \in \mathbb{R}^d \quad \text{and the associated } \bar{v}^k \in T\bar{z}^k \cap \text{range } P \\ & \text{s.t. } Pz^k - P\bar{z}^k = \bar{v}^k + \varepsilon^k, \quad \ \varepsilon^k\ _{R^{-1}} \leq \sigma \max \{ \ \bar{v}^k\ _{R^{-1}}, \ Pz^k - P\bar{z}^k\ _{R^{-1}} \} \\ & \text{compute } z^{k+1} = z^k - \lambda_k \alpha_k P\bar{v}^k \quad \text{where } \alpha_k = \frac{\langle \bar{v}^k, Pz^k - P\bar{z}^k \rangle_{R^{-1}}}{\ P\bar{v}^k\ _{R^{-1}}^2} \end{aligned} \quad (\text{iPPPA})$ |
+|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+
+We will study iPPPA under the following assumptions.
+
+**Assumption II** (Requirements for abstract iPPPA).
+
+(i) *The operator  $T : \mathbb{R}^d \rightrightarrows \mathbb{R}^d$  is maximally monotone, and the set of its zeros,  $\text{zer } T$ , is nonempty.*
+
+(ii) *The preconditioning matrix  $P \in \mathbb{R}^{d \times d}$  is positive semidefinite.*
+
+We obtain the error-corrected algorithms, iFedDDR and iDRS, as instances of iPPPA through the choice in (4.2). We remark that the requirement  $\bar{v}^k \in \text{range } P$  is a technical condition that is crucial in the positive semidefinite setting studied here. Nevertheless, this condition is satisfied by construction in iDRS and iFedDDR and thus does not need to be verified. For detailed derivations see Appendix D. We emphasize that in the convergence analysis in the next section,  $T$  and  $P$  are not restricted to the particular choice made in (2.6) and (4.2) respectively, and are only required to satisfy Assumption II.
+
+## 5 CONVERGENCE ANALYSIS
+
+The convergence analysis of iPPPA hinges upon an indirect analysis by studying the properties of the shadow sequences  $(w^k)_{k \in \mathbb{N}} = (Qz^k)_{k \in \mathbb{N}}$ , and  $(\bar{w}^k)_{k \in \mathbb{N}} = (Q\bar{z}^k)_{k \in \mathbb{N}}$  in place of the original sequences. Having computed the points  $\bar{z}^k$  and  $\bar{v}^k$  by solving the approximate resolvent in the first step of iPPPA, the update for evaluating  $w^{k+1} = Qz^{k+1}$  can be viewed (refer to the proof of Theorem 5.1 for details)
+
+as relaxed projections of  $w^k$  onto the following halfspaces
+
+$$\mathcal{D}_k = \{u \mid \langle \bar{v}^k, P\bar{w}^k - Pu \rangle_{R^{-1}} \geq 0\}. \quad (5.1)$$
+
+The projection onto  $\mathcal{D}_k$  is given by the simple update
+
+$$\Pi_{\mathcal{D}_k}^{R^{-1}}(w) := \arg \min_{u \in \mathcal{D}_k} \|u - w\|_{R^{-1}}^2 = \begin{cases} w - \frac{\langle \bar{v}^k, Pw - P\bar{w}^k \rangle_{R^{-1}}}{\|P\bar{v}^k\|_{R^{-1}}^2} P\bar{v}^k & \text{if } w \notin \mathcal{D}_k \\ w & w \in \mathcal{D}_k. \end{cases} \quad (5.2)$$
+
+It is essential to ensure that the set  $Q \text{ zer } T$  is contained within  $\mathcal{D}_k$ . To see this note that since for any  $w^* \in Q \text{ zer } T$  there exists  $z^* \in \text{zer } T$  such that
+
+$$\begin{aligned} \langle \bar{v}^k, P\bar{w}^k - Pw^* \rangle_{R^{-1}} &= \langle \bar{v}^k, PQ\bar{w}^k - PQw^* \rangle_{R^{-1}} \stackrel{(C.4)}{=} \langle \bar{v}^k, RQ\bar{w}^k - RQw^* \rangle_{R^{-1}} \\ &= \langle \bar{v}^k, Q\bar{z}^k - Qz^* \rangle = \langle \bar{v}^k, \bar{z}^k - z^* \rangle \geq 0, \end{aligned}$$
+
+where the last equality follows from  $\bar{v}^k \in \text{range } P$ , and the inequality follows from monotonicity of  $T$ . Thus ensuring that  $Q \text{ zer } T \subseteq \mathcal{D}_k$ .
+
+To ensure progress at every iteration (and thus to establish convergence), the crucial component in our analysis is to argue that  $\langle \bar{v}^k, Pw^k - P\bar{w}^k \rangle_{R^{-1}}$  remains strictly positive (when  $w^k \notin \mathcal{D}_k$ ) even with a semidefinite preconditioner  $P$  as long as certain conditions holds for the inaccuracy  $\varepsilon^k$ . The precise requirement can be found in the update specified in iPPPA. The reader is referred to the proof of Theorem 5.1 for further details.
+
+**Theorem 5.1** (Convergence and convergence rate analysis). *Suppose that Assumption II holds and that  $\liminf_{k \rightarrow \infty} (2 - \lambda_k)\lambda_k > 0$ . If for some  $k \geq 0$ ,  $\bar{z}^k \notin \text{zer } T$  then  $\alpha_k > 0$  is finite and  $\|P\bar{z}^k - Pz^k\| \neq 0$ . Moreover, either the algorithm terminates in finite number of iterations with  $\bar{z}^k \in \text{zer } T$  for some  $k \geq 0$ , or it generates an infinite sequence  $(z^k)_{k \in \mathbb{N}}$  for which the following hold*
+
+- (i)  $(\|P\bar{z}^k - Pz^k\|)_{k \in \mathbb{N}}$  converges to zero.
+- (ii)  $(\bar{z}^k)_{k \in \mathbb{N}}$  converges to some  $z^* \in \text{zer } T$ .
+- (iii) For all  $z^* \in \text{zer } T$ , the sequence  $(\bar{z}^k)_{k \in \mathbb{N}}$  satisfies
+
+$$\min_{k=0,1,\dots,m} \text{dist}_{R^{-1}}^2(0, T\bar{z}^k) \leq \frac{\|Q\bar{z}^0 - Qz^*\|_{R^{-1}}^2}{\tau(m+1)}$$
+
+$$\text{where } \tau = \liminf_{k \rightarrow \infty} (2 - \lambda_k)\lambda_k \frac{1}{\|R\|(1-\sigma)^2}.$$
+
+**Remark 5.2.** Both iDRS and iFedDR are special cases of iPPPA so convergence of both schemes immediately follows from Theorem 5.1 (see Appendix D.1 and Appendix D.2 respectively). In particular, Theorem 3.1 follows as a corollary.  $\square$
+
+**Linear convergence** We additionally study local linear properties of iPPPA under *metric subregularity* (Dontchev & Rockafellar, 2009, Sect. 3) assumption of the operator  $T$ . This assumption amounts to requiring the distance from the set of solutions to be upper bounded by a multiple of the norm of  $Tz$  for all points  $z$  close to  $z^*$ . This local property is a very mild assumption, and in particular does not imply uniqueness of the solution. Let us recall the notion of metric subregularity (Dontchev & Rockafellar, 2009, Sect. 3):
+
+**Definition 5.3** (Metric subregularity). *A set-valued mapping  $M : \mathbb{R}^n \rightrightarrows \mathbb{R}^d$  is metrically subregular at  $\bar{x}$  for  $\bar{y}$  if  $(\bar{x}, \bar{y}) \in \text{gph } M$  and there exists a positive constant  $\eta$  together with a neighborhood of subregularity  $\mathcal{U}$  of  $\bar{x}$  such that*
+
+$$\text{dist}(x, M^{-1}\bar{y}) \leq \eta \text{dist}(\bar{y}, Mx) \quad \forall x \in \mathcal{U}.$$
+
+Metric subregularity has been used extensively in the optimization literature for establishing linear convergence for splitting techniques, see (Tseng, 2000; Drusvyatskiy & Lewis, 2018; Rockafellar, 2023).
+
+**Theorem 5.4** (Linear convergence under metric subregularity). *Suppose that in addition to assumptions of Theorem 5.1, the operator  $T$  is metrically subregular at all  $z^* \in \text{zer } T$  for 0. Then, the sequence  $(\Pi_{\text{range } P} \bar{z}^k)_{k \in \mathbb{N}}$  generated by iPPPA converges  $R$ -linearly.*
+
+![Figure 2: Two line plots titled 'Vehicle' showing convergence metrics for logistic regression. The left plot shows loss f(w^k) - f* vs total number of local iterations (log scale, 10^2 to 10^6). The right plot shows loss f(w^k) - f* vs number of communication rounds k (log scale, 10^2 to 10^4). Both plots compare FedAvg (red solid), FedProx (orange dashed), Scaffold (inner=10) (green dash-dot), Scaffold (inner=100) (purple dotted), FedDR (inner=10) (blue dashed), FedDR (inner=100) (green dashed), and iFedDR (blue solid). iFedDR converges significantly faster than all other methods in both metrics.](b93cbfb52e37619e688175a6aad9edd9_img.jpg)
+
+Figure 2: Two line plots titled 'Vehicle' showing convergence metrics for logistic regression. The left plot shows loss f(w^k) - f\* vs total number of local iterations (log scale, 10^2 to 10^6). The right plot shows loss f(w^k) - f\* vs number of communication rounds k (log scale, 10^2 to 10^4). Both plots compare FedAvg (red solid), FedProx (orange dashed), Scaffold (inner=10) (green dash-dot), Scaffold (inner=100) (purple dotted), FedDR (inner=10) (blue dashed), FedDR (inner=100) (green dashed), and iFedDR (blue solid). iFedDR converges significantly faster than all other methods in both metrics.
+
+Figure 2: Logistic regression on a heterogeneous data split. We find that iFedDR can converge fast without requiring tuning due to the error-correction step and automatic refinement. In contrast, FedDR only converges when the number of inner iterations  $\tau$  is set sufficiently high. Even without any tuning iFedDR is competitive with all the baselines for which both client stepsize and client steps are tuned.
+
+## 6 EXPERIMENTS
+
+In this section we demonstrate iFedDR on a range of numerical problems.
+
+**Binary logistic regression** We consider the vehicle dataset (Duarte & Hu, 2004) with the heterogeneous split proposed for FL benchmarking in Wu et al. (2022) and a heterogeneous split of the w8a dataset (Chang & Lin, 2011) as used in Mishchenko et al. (2022). The settings uses 23 clients and 10 clients respectively. We compare iFedDR against FedAvg, FedProx, FedDR and Scaffold (see Appendix E for exact definitions). The baselines are given an unfair advantage by gridsearching over the client stepsize and the number of inner iterations. In contrast, we run only a single configuration of iFedDR. See Table 2 in Appendix F for details on the hyperparameters. We compare both the total number of inner iterations and server iterations in Figure 2 (see Figure 5 for similar results on w8a). If we tune the stepsizes  $\lambda$  and  $\gamma$  in iFedDR, we can improve the convergence speed further as illustrated in Figure 8 of Appendix F and Figure 1.
+
+**Linear probing** A common practice is to take off-the-shelf pre-trained models and specialize them to a downstream task. Linear probing, in particular, freezes the feature mapping of a pre-trained model and trains a linear classifier on top. We follow the setup in (Nguyen et al., 2022), which uses a ResNet18 (He et al., 2016) pre-trained on ImageNet and for the downstream task considers a heterogeneous datasplit of CIFAR10 (Krizhevsky) across 20 clients with Dirichlet distribution with parameter 0.1. All methods except for iFedDR are tuned (cf. Table 3 in Appendix F for hyperparameters). The results can be found in Figure 3 where iFedDR either matches or surpasses the tuned baselines. We additionally train on Fashion-MNIST from scratch where we observe similar behavior (cf. Appendix F).
+
+We observe that the number of refinements is monotonically increasing in the number of server steps. This observation motivates a very simple heuristic to almost entirely avoid the communication overhead caused by refinement. We simply increase the number of initially used inner iterations at the next server iteration  $k$  to  $\tau_k = \tau \times \#(\text{total refinements})$ . The rule still enjoys the convergence guarantees of Theorem 3.1, and, as long as the number of refinements are monotonically increasing, it does not increase the total number of client steps. As illustrated in Figure 3 on CIFAR10, iFedDR only needs 10 additional communication rounds *in total* using this simple rule. This can be further decreased if a doubling strategy is employed, which is especially useful in ill-conditioned problems.
+
+![Figure 3: Two plots related to CIFAR10. The left plot shows 'Test accuracy' vs 'Number of communication rounds k' (0 to 500). The right plot shows 'Total number of inner steps' vs 'Number of communication rounds k' (0 to 500).](4e0ade2f41b66d5602160da5cc978274_img.jpg)
+
+The figure contains two plots. The left plot, titled 'CIFAR10', shows 'Test accuracy' on the y-axis (ranging from 0.30 to 0.65) against the 'Number of communication rounds k' on the x-axis (ranging from 0 to 500). It compares several algorithms: FedAvg (red dashed line), FedProx (yellow dotted line), Scaffold (local = 10) (purple dash-dot line), Scaffold (local = 100) (green dashed line), FedDR (local = 10) (blue dash-dot line), FedDR (local = 100) (green dashed line), and iFedDR (solid blue line). iFedDR achieves the highest accuracy, reaching approximately 0.65. The right plot, also titled 'CIFAR10', shows the 'Total number of inner steps' on the y-axis (ranging from 0 to 10) against the 'Number of communication rounds k' on the x-axis (ranging from 0 to 500). It features a single blue step-like line for iFedDR, which starts at 0, increases in steps to 2, 4, 6, 8, and finally 10 at round 100, remaining constant thereafter.
+
+Figure 3: Two plots related to CIFAR10. The left plot shows 'Test accuracy' vs 'Number of communication rounds k' (0 to 500). The right plot shows 'Total number of inner steps' vs 'Number of communication rounds k' (0 to 500).
+
+Figure 3: (left) Linear probing on CIFAR10 under heterogeneous data split. The iFedDR algorithm matches the test accuracy of a properly tuned FedDR algorithm. (right) By monotonically increasing the subsequent inner iteration when a refinement is triggered, iFedDR only uses 10 more communication rounds over the cause of the *entire* training run.
+
+**Fair classification** To demonstrate the applicability to minimax problems, we consider the following formulation of fair classification (Sharma et al., 2022; Nouiehed et al., 2019):
+
+$$\underset{u \in \mathbb{R}^m}{\text{minimize}} \underset{v \in \Delta_r}{\text{maximize}} \frac{1}{N} \sum_{i=1}^N v_i \ell_i(u) - \frac{\delta}{2} \|v\|^2 \quad (6.1)$$
+
+where  $\Delta_r$  is the  $r$ -dimensional simplex and  $\ell_i : \mathbb{R}^m \rightarrow \mathbb{R}$  is the cross entropy loss over the client dataset. We compare against baselines supporting projection. We use the same dataset split of CIFAR10 and model configuration as in Section 6 but report the test accuracy on the *worst class* in Figure 4 (see Table 4 for hyperparameters).
+
+![Figure 4: A plot titled 'Fair CIFAR10' showing 'Worst class accuracy' vs 'Number of communication rounds k' (0 to 500).](33228b4227fa57e1477b27b9e07483e6_img.jpg)
+
+The figure is a plot titled 'Fair CIFAR10' showing 'Worst class accuracy' on the y-axis (ranging from 0.0 to 0.4) against the 'Number of communication rounds k' on the x-axis (ranging from 0 to 500). It compares four algorithms: FedProx (yellow dotted line), FedDR (local = 100) (green dashed line), FedDR (local = 1000) (green dashed line), and iFedDR (solid blue line). iFedDR and FedDR (local = 1000) achieve the highest accuracy, reaching approximately 0.45. FedProx and FedDR (local = 100) achieve lower accuracy, reaching approximately 0.40 and 0.35 respectively.
+
+Figure 4: A plot titled 'Fair CIFAR10' showing 'Worst class accuracy' vs 'Number of communication rounds k' (0 to 500).
+
+Figure 4: iFedDR on fair classification. iFedDR matches FedDR without sweeping over the number of inner steps.
+
+## 7 CONCLUSION
+
+We have developed a variant of FedDR, which automatically adjust the number of client iterations and consequently mitigate the need for hyperparameter selection. The scheme enjoys guarantees even for minimax problems (and more generally  $m$ -player games) and permits large proximal step-sizes. Convergence is proven for a much more general method, namely an error-corrected proximal point algorithm with a (general) semidefinite preconditioner, which might be interesting in its own right. We demonstrate the favorable properties of the algorithm on a range of numerical experiments. For future work it is interesting to extend the idea to partial participation and nonconvex problems.
+
+## REFERENCES
+
+- Aleksandr Y Aravkin, James V Burke, and Gianluigi Pillonetto. Sparse/robust estimation and Kalman smoothing with nonsmooth log-concave densities: Modeling, computation, and theory. *Journal of Machine Learning Research*, 14(82):2689–2728, 2013. URL <http://jmlr.org/papers/v14/aravkin13a.html>.
+- Sean Augenstein, H Brendan McMahan, Daniel Ramage, Swaroop Ramaswamy, Peter Kairouz, Mingqing Chen, Rajiv Mathews, et al. Generative models for effective ML on private, decentralized datasets. *arXiv preprint arXiv:1911.06679*, 2019.
+- Heinz H. Bauschke and Patrick L. Combettes. *Convex analysis and monotone operator theory in Hilbert spaces*. CMS Books in Mathematics. Springer, 2017. ISBN 978-3-319-48310-8.
+- Kristian Bredies, Enis Chenchene, Dirk A Lorenz, and Emanuele Naldi. Degenerate preconditioned proximal point algorithms. *SIAM Journal on Optimization*, 32(3):2376–2401, 2022.
+
+- 540 Chih-Chung Chang and Chih-Jen Lin. LIBSVM: A library for support vector machines. *ACM*  
+541 *Transactions on Intelligent Systems and Technology*, 2:27:1–27:27, 2011. Software available at  
+542 <http://www.csie.ntu.edu.tw/~cjlin/libsvm>.  
+543  
+544 Patrick L Combettes. Convex set theoretic image recovery by extrapolated iterations of parallel  
+545 subgradient projections. *IEEE Transactions on Image Processing*, 6(4):493–506, 1997.  
+546  
+547 Laurent Condat. A primal-dual splitting method for convex optimization involving Lipschitzian,  
+548 proximal and linear composite terms. *Journal of Optimization Theory and Applications*, 158  
+549 (2):460–479, 2013.  
+550  
+551 A. L. Dontchev and R. T. Rockafellar. Implicit functions and solution mappings. *Springer Mono-*  
+552 *graphs in Mathematics*. Springer, 2008.  
+553  
+554 Jim Douglas and Henry H Rachford. On the numerical solution of heat conduction problems in two  
+555 and three space variables. *Transactions of the American mathematical Society*, 82(2):421–439,  
+556 1956.  
+557  
+558 Dmitriy Drusvyatskiy and Adrian S. Lewis. Error bounds, quadratic growth, and linear convergence  
+559 of proximal methods. *Mathematics of Operations Research*, 43(3):919–948, 2018.  
+560  
+561 Marco F Duarte and Yu Hen Hu. Vehicle classification in distributed sensor networks. *Journal of*  
+562 *Parallel and Distributed Computing*, 64(7):826–838, 2004.  
+563  
+564 Jonathan Eckstein. The Lions–Mercier splitting algorithm and the alternating direction method are  
+565 instances of the proximal point algorithm, 1988.  
+566  
+567 Jonathan Eckstein and Dimitri P. Bertsekas. On the Douglas–Rachford splitting method and the  
+568 proximal point algorithm for maximal monotone operators. *Mathematical Programming*, 55:  
+569 293–318, 1992.  
+570  
+571 Brecht Evens, Pieter Pas, Puya Latafat, and Panagiotis Patrinos. Convergence of the preconditioned  
+572 proximal point method and douglas-rachford splitting in the absence of monotonicity. *arXiv*  
+573 *preprint arXiv:2305.03605*, 2023.  
+574  
+575 Pontus Giselsson. Nonlinear forward-backward splitting with projection correction. *SIAM Journal*  
+576 *on Optimization*, 31(3):2199–2226, 2021.  
+577  
+578 Margalit R Glasgow, Honglin Yuan, and Tengyu Ma. Sharp bounds for federated averaging (Local  
+579 SGD) and continuous perspective. In *International Conference on Artificial Intelligence and*  
+580 *Statistics*, pp. 9050–9090. PMLR, 2022.  
+581  
+582 Kaiming He, Xiangyu Zhang, Shaoqing Ren, and Jian Sun. Deep residual learning for image recog-  
+583 nition. In *Proceedings of the IEEE conference on computer vision and pattern recognition*, pp.  
+584 770–778, 2016.  
+585  
+586 Divyansh Jhunjhunwala, Shiqiang Wang, and Gauri Joshi. FedExP: Speeding up federated averaging  
+587 via extrapolation. *arXiv preprint arXiv:2301.09604*, 2023.  
+588  
+589 Sai Praneeth Karimireddy, Satyen Kale, Mehryar Mohri, Sashank Reddi, Sebastian Stich, and  
+590 Ananda Theertha Suresh. Scaffold: Stochastic controlled averaging for federated learning. In  
+591 *International Conference on Machine Learning*, pp. 5132–5143. PMLR, 2020.  
+592  
+593 Galina M Korpelevich. The extragradient method for finding saddle points and other problems.  
+594 *Matecon*, 12:747–756, 1976.  
+595  
+596 A. Krizhevsky. Learning multiple layers of features from tiny images. Technical report, University  
+597 of Toronto, 2009.  
+598  
+599 Puya Latafat and Panagiotis Patrinos. Asymmetric forward–backward–adjoint splitting for solving  
+600 monotone inclusions involving three operators. *Computational Optimization and Applications*,  
+601 68(1):57–93, sep 2017.
+
+- 594 Puya Latafat, Nikolaos M. Freris, and Panagiotis Patrinos. A new randomized block-coordinate  
+595 primal-dual proximal algorithm for distributed optimization. *IEEE Transactions on Automatic*  
+596 *Control*, 64(10):4050–4065, oct 2019. ISSN 0018-9286.
+- 597  
+598 Puya Latafat, Andreas Themelis, and Panagiotis Patrinos. Block-coordinate and incremental aggre-  
+599 gated proximal gradient methods for nonsmooth nonconvex problems. *Mathematical Program-*  
+600 *ming*, jan 2021.
+- 601 Tian Li, Anit Kumar Sahu, Manzil Zaheer, Maziar Sanjabi, Ameet Talwalkar, and Virginia Smith.  
+602 Federated optimization in heterogeneous networks. *Proceedings of Machine learning and sys-*  
+603 *tems*, 2:429–450, 2020.
+- 604  
+605 Saber Malekmohammadi, Kiarash Shaloudegi, Zeou Hu, and Yaoliang Yu. Splitting algorithms for  
+606 federated learning. In *Machine Learning and Principles and Practice of Knowledge Discovery*  
+607 *in Databases: International Workshops of ECML PKDD 2021, Virtual Event, September 13-17,*  
+608 *2021, Proceedings, Part I*, pp. 159–176. Springer, 2022.
+- 609  
+610 Grigory Malinovskiy, Dmitry Kovalev, Elnur Gasanov, Laurent Condat, and Peter Richtárik. From  
+611 local SGD to local fixed-point methods for federated learning. In *International Conference on*  
+612 *Machine Learning*, pp. 6692–6701. PMLR, 2020.
+- 613  
+614 Artavazd Maranjyan, Mher Safaryan, and Peter Richtárik. Gradskip: Communication-accelerated  
+615 local gradient methods with better computational complexity. *arXiv preprint arXiv:2210.16402*,  
+616 2022.
+- 617  
+618 Brendan McMahan, Eider Moore, Daniel Ramage, Seth Hampson, and Blaise Aguera y Arcas.  
+619 Communication-efficient learning of deep networks from decentralized data. In *Artificial intelli-*  
+620 *gence and statistics*, pp. 1273–1282. PMLR, 2017.
+- 621  
+622 Konstantin Mishchenko, Grigory Malinovsky, Sebastian Stich, and Peter Richtárik. Proxskip: Yes!  
+623 local gradient steps provably lead to communication acceleration! finally! In *International Con-*  
+624 *ference on Machine Learning*, pp. 15750–15769. PMLR, 2022.
+- 625  
+626 Yurii Nesterov et al. *Lectures on convex optimization*, volume 137. Springer, 2018.
+- 627  
+628 John Nguyen, Kshitiz Malik, Maziar Sanjabi, and Michael Rabbat. Where to begin? exploring the  
+629 impact of pre-training and initialization in federated learning. *arXiv preprint arXiv:2206.15387*,  
+630 2022.
+- 631  
+632 Maher Nouiehed, Maziar Sanjabi, Tianjian Huang, Jason D Lee, and Meisam Razaviayn. Solving  
+633 a class of non-convex min-max games using iterative first order methods. *Advances in Neural*  
+634 *Information Processing Systems*, 32, 2019.
+- 635  
+636 Reese Pathak and Martin J Wainwright. Fedsplit: An algorithmic framework for fast federated  
+637 optimization. *Advances in neural information processing systems*, 33:7057–7066, 2020.
+- 638  
+639 Thomas Pethick, Puya Latafat, Panagiotis Patrinos, Olivier Fercoq, and Volkan Cevher. Escap-  
+640 ing limit cycles: Global convergence for constrained nonconvex-nonconcave minimax problems.  
+641 *arXiv preprint arXiv:2302.09831*, 2023.
+- 642  
+643 Ali Ramezani-Kebrya, Kimon Antonakopoulos, Igor Krawczuk, Justin Deschenaux, and Volkan  
+644 Cevher. Distributed extra-gradient with optimal complexity and communication guarantees. In  
+645 *11th International Conference on Learning Representations (ICLR)*, 2023.
+- 646  
+647 R. Tyrrell Rockafellar. Augmented Lagrangians and applications of the proximal point algorithm in  
+648 convex programming. *Mathematics of Operations Research*, 1(2):97–116, 1976.
+- 649  
+650 R Tyrrell Rockafellar. Generic linear convergence through metric subregularity in a variable-metric  
+651 extension of the proximal point algorithm. *Computational Optimization and Applications*, pp.  
+652 1–20, 2023.
+- 653  
+654 R. Tyrrell Rockafellar and Jie Sun. Solving monotone stochastic variational inequalities and com-  
+655 plementarity problems by progressive hedging. *Mathematical Programming*, 174(1-2):453–471,  
+656 2019.
+
+[Appendix and supplementary materials beyond page 12 have been removed.]

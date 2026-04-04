@@ -1,0 +1,454 @@
+# MMUDA: TOWARDS ROBUST SLEEP STAGING WITH MULTI-SOURCE MULTI-CHANNEL UNSUPERVISED DOMAIN ADAPTATION
+
+Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+The generalization of deep learning models for sleep staging across different datasets is severely hindered by domain shift, a critical obstacle for their clinical adoption. We introduce MMUDA, a novel framework that tackles the complex, real-world challenge of Multi-source Multi-channel Unsupervised Domain Adaptation. Our approach learns domain-invariant features from multiple labeled source domains and an unlabeled target domain through a carefully designed architecture. We employ dedicated encoders with channel attention to capture rich temporal context and enhance inter-channel feature fusion. To bridge the domain gap, MMUDA uniquely combines two complementary alignment strategies: Maximum Mean Discrepancy (MMD) explicitly minimizes the distribution discrepancy between domain pairs, while cross-domain contrastive learning (CL) ensures that the aligned features remain class-discriminative. This dual-alignment process is stabilized by a variational autoencoder (VAE) that encourages a more compact latent feature space. Comprehensive evaluations on several public sleep datasets show that MMUDA sets a new state-of-the-art in cross-domain sleep staging without requiring any target domain labels. Furthermore, we confirm its robustness and practical utility in locally collected hospital data. Our code will be released upon acceptance.
+
+## 1 INTRODUCTION
+
+Sleep staging, the process of classifying sleep into distinct phases, is fundamental to diagnosing and understanding sleep disorders that affect millions worldwide Itani et al. (2017); Finan et al. (2016). The clinical gold standard relies on expert manual scoring of polysomnography (PSG) recordings Basha et al. (2020), which capture a rich array of physiological signals, including electroencephalogram (EEG), electrooculogram (EOG), and electromyogram (EMG). This manual process, however, is exceptionally labor-intensive, time-consuming, and prone to inter-rater variability, creating a significant bottleneck for large-scale clinical application and research Danker-Hopfe et al. (2009).
+
+The advent of deep learning has ushered in a new era of automated sleep staging, with models demonstrating impressive, even human-level, performance in intra-dataset evaluations Loh et al. (2020). However, a critical barrier impedes their translation to real-world clinical practice: the problem of **domain shift** Pooch et al. (2020). When a model trained on data from one source (e.g., a specific hospital or device) is deployed on data from another, its performance often degrades catastrophically Fan et al. (2022). This brittleness stems from inevitable variations in data acquisition protocols, hardware, and patient populations, rendering most existing models unreliable for widespread clinical use Attia et al. (2024).
+
+![Figure 1: A scatter plot comparing various sleep staging models based on their year of publication (x-axis, 2018 to 2024) and accuracy (y-axis, 10% to 20%). MMUDA (2024) achieves the highest accuracy at 77.49%. Other models shown include DNN (2018, 16.24%), Densenet (2019, 61.17%), TNet (2019, 61.10%), ResNet (2019, 71.14%), CCA (2020, 68.99%), MUDA (2020, 71.93%), SincNet (2020, 71.03%), PSNet (2020, 71.03%), and ASAT (2023, 59.31%). A legend indicates that MMUDA is a 'Multi-source multi-channel' method, while others are 'Non-adaptation method', 'Single-source domain', or 'Multi-source single-channel'.](1066b22ea190b81c91c3441ea7618236_img.jpg)
+
+Figure 1: A scatter plot comparing various sleep staging models based on their year of publication (x-axis, 2018 to 2024) and accuracy (y-axis, 10% to 20%). MMUDA (2024) achieves the highest accuracy at 77.49%. Other models shown include DNN (2018, 16.24%), Densenet (2019, 61.17%), TNet (2019, 61.10%), ResNet (2019, 71.14%), CCA (2020, 68.99%), MUDA (2020, 71.93%), SincNet (2020, 71.03%), PSNet (2020, 71.03%), and ASAT (2023, 59.31%). A legend indicates that MMUDA is a 'Multi-source multi-channel' method, while others are 'Non-adaptation method', 'Single-source domain', or 'Multi-source single-channel'.
+
+Figure 1: Comparison with baseline models. Our method achieves the highest ACC (77.49%), surpassing all baselines.
+
+To mitigate this challenge, researchers have turned to Unsupervised Domain Adaptation (UDA) Liu et al. (2022), which aims to adapt models to unlabeled target domains. Yet, current UDA methodologies for sleep staging suffer from two critical limitations that overlook the complexities of clinical data. First, they predominantly operate under a simplified single-source Shi et al. (2024), single-target assumption, failing to address the reality that clinical data is often aggregated from **multiple, heterogeneous sources**. Applying single-source techniques in such scenarios can be ineffective or even detrimental due to conflicting domain characteristics. Second, many approaches do not adequately model the synergistic and complementary information inherent in **multi-channel PSG signals**. For instance, the interplay between EEG (reflecting cortical activity) and EOG (capturing rapid eye movements) is crucial for accurately distinguishing sleep stages like REM, a nuance often lost in channel-agnostic models Martin et al. (1972).
+
+To bridge this critical gap, we propose the first Multi Channel, Multi Source Unsupervised Domain Adaptation framework specifically designed for robust sleep staging. Our framework is engineered to simultaneously tackle the challenges of heterogeneous data sources and complex inter signal dependencies. At its core, we introduce a context aware encoder structure, enhanced by a novel Multi Scale Feature Collaboration Pauly et al. (2003) and Squeeze and Excitation (MSFC+SE) module Hu et al. (2018), to dynamically model inter channel relationships. By jointly optimizing for representation learning and domain alignment across multiple sources, our model learns features that are both discriminative and invariant to domain specific shifts. Extensive experiments on challenging cross dataset benchmarks demonstrate that our method achieves a state of the art accuracy of 77.49%, significantly outperforming existing baselines and validating its potential for robust clinical deployment. As summarized in Fig. 1, our multi source multi channel approach sits at the top of the historical landscape, outperforming non adaptation, single source, and multi source single channel methods.
+
+The main contributions of our proposed MMUDA can be summarized as follows:
+
+1. We pioneer a novel framework that, for the first time, addresses the combined challenges of multi-channel signal fusion and multi-source domain adaptation for automated sleep staging.
+2. We design a new context-aware encoder with an MSFC+SE module to explicitly capture complementary information across physiological signals and effectively align feature representations from disparate domains.
+3. We establish a new state-of-the-art on multiple public sleep datasets, demonstrating through extensive experimentation that our method offers superior generalization and robustness in realistic cross-domain scenarios.
+
+## 2 METHOD
+
+### 2.1 OVERVIEW
+
+We propose a novel multi-channel, multi-source unsupervised domain adaptation framework (Fig. 2) designed to learn domain-invariant and class-discriminative representations from multiple labeled source domains and transfer the learned knowledge to an unlabeled target domain. The framework consists of four core components: the Multi-scale Temporal Feature Encoder (Sec. 2.2), Reconstructive Feature Learning (Sec. 2.3), Cross-domain Category Structure Learning (Sec. 2.4), and Multi-source Domain Alignment (Sec. 2.5). All components are jointly optimized in an end-to-end fashion. The overall training objective is summarized in Sec. 2.6. In the following derivative of MMUDA, let  $\mathcal{D} = \{S_1, \dots, S_N, T\}$  denote the domains with  $D = |\mathcal{D}| = N+1$ ; unless otherwise stated, pairwise alignment terms such as  $L_{\text{mmd}}$  average over all unordered pairs  $(i, j)$  with  $X^{(i)}, X^{(j)} \in \mathcal{D}$  (including target  $T$ ).
+
+### 2.2 MULTI-SCALE TEMPORAL FEATURE ENCODER
+
+The Multi scale Temporal Feature Encoder is designed to extract both localized and contextual temporal information from EEG signals. It integrates two key components: the Multi scale Feature Extraction CNN (MSFC) and the Temporal Context Encoder (TCE). The MSFC comprises two parallel
+
+![Figure 2: Overall framework of the proposed multi-source multi-channel unsupervised domain adaptation model for sleep staging. The diagram shows source domains (SD 1 to SD i) and a target domain (TD) being processed through feature encoders (MSFC and TCE). Source domains are processed by a 'Small kernel' path (Conv + SE + Conv + SE) and a 'Large kernel' path (Conv + SE + Conv + SE). The source features are then passed to a 'Reconstructive Feature Learning' module (Decoder) and a 'Cross-domain Category Structure Learning' module. The target domain features are processed by a 'Target Feature Encoder' (MSFC and TCE) and then passed to a 'Pairwise MMD' module. The output of the Pairwise MMD module is passed to a 'Classifier' to produce the final output y-hat. The diagram also shows various loss functions: L_vae, L_ce, L_cl, and L_mmd.](1b7d539e02a202c2cf2d97698b911447_img.jpg)
+
+The diagram illustrates the overall framework of the proposed multi-source multi-channel unsupervised domain adaptation model for sleep staging. It consists of several main components:
+
+- Source Feature Encoder:** Multiple source domains (SD 1, SD 2, ..., SD i) are processed. Each source domain's input (e.g., \$X\_1^1\$ from EEG and EOG) is passed through a Multi-Scale Feature Convolution (MSFC) block and a Temporal Context Encoder (TCE) block. The output is then processed by a 'Small kernel' path (Conv + SE + Conv + SE) and a 'Large kernel' path (Conv + SE + Conv + SE). The outputs from these paths are concatenated and passed to a 'Reconstructive Feature Learning' module.
+- Reconstructive Feature Learning:** This module includes a 'Decoder' that takes the source features \$Z\_i^j(\mu\_i, \sigma\_i^2)\$ and reconstructs the input \$\hat{X}\_i^j(\mu\_i, \sigma\_i^2)\$. It also includes a 'Cross-domain Category Structure Learning' module that uses a circular diagram to represent category structures.
+- Target Feature Encoder:** The target domain (TD) input \$X^t\$ is processed by a 'Target Feature Encoder' consisting of MSFC and TCE blocks, resulting in \$Z^t(\mu, \sigma^2)\$. A Z-score is also calculated for the target domain.
+- Domain Invariant Features:** The source features \$Z\_i^j\$ and the target features \$Z^t\$ are processed by a 'Pairwise MMD' module, which calculates the Mean MMD. The output is then passed to a 'Classifier' to produce the final output \$\hat{y}^t\$.
+- Loss Functions:** The model is trained using several loss functions: \$\mathcal{L}\_{vae}\$ (reconstruction loss), \$\mathcal{L}\_{ce}\$ (cross-entropy loss), \$\mathcal{L}\_{cl}\$ (category structure learning loss), and \$\mathcal{L}\_{mmd}\$ (MMD loss).
+
+Figure 2: Overall framework of the proposed multi-source multi-channel unsupervised domain adaptation model for sleep staging. The diagram shows source domains (SD 1 to SD i) and a target domain (TD) being processed through feature encoders (MSFC and TCE). Source domains are processed by a 'Small kernel' path (Conv + SE + Conv + SE) and a 'Large kernel' path (Conv + SE + Conv + SE). The source features are then passed to a 'Reconstructive Feature Learning' module (Decoder) and a 'Cross-domain Category Structure Learning' module. The target domain features are processed by a 'Target Feature Encoder' (MSFC and TCE) and then passed to a 'Pairwise MMD' module. The output of the Pairwise MMD module is passed to a 'Classifier' to produce the final output y-hat. The diagram also shows various loss functions: L\_vae, L\_ce, L\_cl, and L\_mmd.
+
+Figure 2: Overall framework of the proposed multi-source multi-channel unsupervised domain adaptation model for sleep staging.
+
+convolutional pathways with distinct kernel sizes, enabling the capture of diverse temporal dependencies ranging from short term local patterns to long range signal dynamics. Each convolutional path is enhanced with a Squeeze and Excitation (SE) block, which applies modality aware channel wise attention to selectively emphasize discriminative features across both EEG and EOG channels. By adaptively recalibrating channel responses based on their global importance, the SE blocks facilitate effective fusion of complementary modalities. The detailed architecture and hyperparameters of the Multi scale Temporal Feature Encoder are summarized in Tab. 5. Following this, the TCE utilizes a bidirectional LSTM to encode temporal context from the concatenated multi scale features, effectively modeling sequential dependencies in both forward and backward directions. This hierarchical design facilitates the learning of robust, temporally aware feature representations essential for downstream classification and domain adaptation.
+
+### 2.3 RECONSTRUCTIVE FEATURE LEARNING
+
+To enable the model to capture comprehensive and informative latent representations from the source domains, we incorporate a Reconstructive Feature Learning Module based on the Variational Autoencoder framework. This module serves as an unsupervised regularizer that encourages the encoder to preserve essential input information while mapping it to a continuous latent space. By reconstructing the original input from the latent representation, the model is guided to retain semantic content and avoid collapsing to trivial or domain-specific features. Given an input sample  $x$ , an encoder network  $\text{Enc}(\cdot)$  outputs the mean and log-variance of the latent distribution:
+
+$$\mu, \log \sigma^2 = \text{Enc}(x) \quad (1)$$
+
+The latent vector  $z$  is sampled using the reparameterization trick:
+
+$$z = \mu + \sigma \cdot \epsilon, \quad \epsilon \sim \mathcal{N}(0, I) \quad (2)$$
+
+The sampled latent representation  $z$  is then fed into two branches: (1) a decoder  $\text{Dec}(z)$  for reconstructing the input, and (2) a classifier for source domain label prediction.
+
+The VAE loss combines reconstruction loss and Kullback-Leibler divergence with diagonal Gaussian posterior:
+
+$$\mathcal{L}_{vae} = \|x - \hat{x}\|_2^2 + \text{KL}(\mathcal{N}(\mu, \text{diag}(\sigma^2)) \| \mathcal{N}(0, I)) \quad (3)$$
+
+This module enforces a continuous latent space, which is beneficial for both representation learning and domain alignment.
+
+### 2.4 CROSS-DOMAIN CATEGORY STRUCTURE LEARNING
+
+Different sleep stages exhibit distinct physiological patterns, which should be consistently captured across domains to enable effective knowledge transfer. However, due to domain shifts caused by differences in recording conditions, devices, or populations, the same class (e.g., N2) might appear differently in different domains. To address this challenge, we propose a Cross-domain Category Structure Learning module that aims to preserve class-wise semantic consistency across domains by encouraging domain-invariant and discriminative feature representations.
+
+Specifically, we adopt a supervised contrastive learning strategy that brings together samples of the same class while pushing apart those from different classes. Given a mini-batch of normalized feature vectors, we compute their pairwise cosine similarity matrix and apply a temperature-scaled softmax to obtain the contrastive logits. Positive pairs are defined as instances sharing the same class label. In addition, to enhance cross-domain generalization, we optionally restrict positive pairs to come from different domains only, thereby focusing on aligning the intra-class structure across domains.
+
+Formally, given a batch of feature embeddings  $\{z_i\}_{i=1}^N$ , their corresponding labels  $\{y_i\}_{i=1}^N$  and optional domain IDs  $\{d_i\}_{i=1}^N$ , the loss is computed as:
+
+$$\mathcal{L}_{\text{cl}} = -\frac{1}{|\mathcal{V}|} \sum_{i \in \mathcal{V}} \frac{1}{|\mathcal{P}(i)|} \sum_{j \in \mathcal{P}(i)} \log \frac{\exp(\mathbf{z}_i^\top \mathbf{z}_j / \tau)}{\sum_{k \in \mathcal{A}(i)} \exp(\mathbf{z}_i^\top \mathbf{z}_k / \tau)}, \quad (4)$$
+
+where  $\tau$  is the temperature parameter,  $\mathcal{P}(i)$  denotes the set of positive indices for anchor  $i$ ,  $\mathcal{A}(i)$  is the set of all indices excluding  $i$ , and  $\mathcal{V}$  is the set of anchors with at least one positive. When the `cross_domain_only` option is enabled,  $\mathcal{P}(i)$  is restricted to samples of the same class from a different domain than  $i$ . We use the  $\ell_2$ -normalized embedding  $z = f_\theta(x) / \|f_\theta(x)\|_2$  in the contrastive loss, and the sets  $\mathcal{P}(i)$ ,  $\mathcal{A}(i)$ , and  $\mathcal{V}$  follow the construction described above.
+
+### 2.5 MULTI-SOURCE DOMAIN ALIGNMENT
+
+Addressing distributional discrepancies among multiple labeled source domains and the unlabeled target domain necessitates precise alignment of their underlying feature distributions. We propose a **Multi-source Domain Alignment** module that explicitly performs *pairwise distribution alignment* across all domains. Unlike methods that align source domains collectively or focus solely on source-target adaptation, our approach systematically computes the alignment loss between every domain pair, ensuring fine-grained and symmetric adaptation across the entire domain set.
+
+The alignment mechanism leverages the MMD Gretton et al. (2012), a kernel-based, non-parametric statistical measure that captures distributional divergence in reproducing kernel Hilbert space (RKHS). Given two sets of features  $\mathcal{X} = \{x_i\}_{i=1}^n$  and  $\mathcal{Y} = \{y_j\}_{j=1}^m$  from two different domains, the empirical MMD is computed as:
+
+$$\text{MMD}^2(\mathcal{X}, \mathcal{Y}) = \frac{1}{n^2} \sum_{i=1}^n \sum_{j=1}^n k(x_i, x_j) + \frac{1}{m^2} \sum_{i=1}^m \sum_{j=1}^m k(y_i, y_j) - \frac{2}{nm} \sum_{i=1}^n \sum_{j=1}^m k(x_i, y_j), \quad (5)$$
+
+where we adopt a multi-kernel RBF,  $k(x, y) = \sum_{q=1}^Q \exp(-\|x - y\|_2^2 / (2\sigma_q^2))$ , with  $\{\sigma_q\}_{q=1}^Q$  fixed on a log-spaced grid. For  $D$  total domains, the overall loss is computed by averaging the MMD values over all  $\binom{D}{2}$  domain pairs:
+
+$$\mathcal{L}_{\text{mmd}} = \frac{2}{D(D-1)} \sum_{1 \leq i < j \leq D} \text{MMD}^2(\mathcal{X}^{(i)}, \mathcal{X}^{(j)}), \quad (\mathcal{X}^{(i)}, \mathcal{X}^{(j)}) \in \mathcal{D}. \quad (6)$$
+
+Through this pairwise alignment strategy, the model is explicitly encouraged to reduce inter-domain variation, thereby promoting consistent and semantically meaningful feature representations that are robust to domain shifts.
+
+### 2.6 OVERALL OBJECTIVE
+
+As summarized in Section 2.4, the training process integrates multiple components, including multi-scale temporal encoding, reconstructive feature learning, cross-domain category structure learning, and multi-source domain alignment. The overall loss function is a weighted combination of these objectives:
+
+$$\mathcal{L}_{\text{total}} = \mathcal{L}_{\text{ce}} + \lambda_{\text{vae}} \mathcal{L}_{\text{vae}} + \lambda_{\text{cl}} \mathcal{L}_{\text{cl}} + \lambda_{\text{mmd}} \mathcal{L}_{\text{mmd}} \quad (7)$$
+
+Here,  $\mathcal{L}_{\text{ce}}$  denotes the cross-entropy loss computed on the labeled source domain, and  $\lambda_{\text{vae}}, \lambda_{\text{cl}}, \lambda_{\text{mmd}}$  are hyperparameters that balance the contribution of each module.
+
+## 3 EXPERIMENTS
+
+### 3.1 DATASET AND DATA PROCESSING
+
+We used five public datasets to evaluate the proposed MMUDA model. The SleepEDF dataset Kemp et al. (2000) contains 100 PSG recordings from healthy subjects, with EEG sampled at 100 Hz; we used the Fpz Cz EEG and horizontal EOG channels in our experiments. The DCSM dataset Persley et al. (2021) consists of 103 PSG recordings sampled at 256 Hz, where the F4-M1 EEG and E1-M2 EOG channels were used for evaluation. The ISRUC dataset Khalighi et al. (2016) provides 100 annotated PSG recordings at 200 Hz; we employed the C4-M1 EEG and E1-M2 EOG channels, using the annotations from expert 1. The HMC dataset Alvarez-Estevez & Rijsman (2021) includes 100 PSG recordings sampled at 256 Hz, and we used the F4-M1 EEG and E1-M2 EOG channels for our evaluation. Finally, the P2018 dataset Ghassemi et al. (2018) comprises 100 PSG recordings with a 200 Hz sampling rate, where we selected the C3-M2 EEG and E1-M2 EOG channels for model training and testing. A detailed summary of the datasets, including subject counts, sampling rates, and recording channels, is presented in Tab. 1, while the distribution of sleep stages across these datasets is reported in Tab. 6. In this study, all EEG signals were uniformly resampled to 100 Hz. Prior to model training, the sleep recordings underwent band pass filtering between 0.3 Hz and 35 Hz to remove high frequency noise and baseline drift, while preserving the physiological frequency bands relevant for sleep staging. Subsequently, Z score normalization was applied on a per recording basis to reduce inter subject variability and improve model generalization. Finally, sleep stage labels were standardized according to the AASM guidelines to maintain consistency across datasets. The distribution of sleep stages across the datasets is further detailed in Appendix D.
+
+| Dataset  | Subjects | Sampling Rate | Total Samples | EEG Channel | EOG Channel |
+|----------|----------|---------------|---------------|-------------|-------------|
+| SleepEDF | 100      | 100           | 115,480       | Fpz-Cz      | Horizontal  |
+| DCSM     | 103      | 256           | 101,480       | F4-M1       | E1-M2       |
+| ISRUC    | 100      | 200           | 89,240        | C4-M1       | E1-M2       |
+| HMC      | 100      | 256           | 90,280        | F4-M1       | E1-M2       |
+| P2018    | 100      | 200           | 88,880        | C3-M2       | E1-M2       |
+
+Table 1: Overview of the processed datasets.
+
+| Method                      | Metrics | SleepEDF          | DCSM              | ISRUC             | HMC               | P2018             | AVG               |
+|-----------------------------|---------|-------------------|-------------------|-------------------|-------------------|-------------------|-------------------|
+| <i>Single-Source Domain</i> |         |                   |                   |                   |                   |                   |                   |
+| ADAST                       | ACC     | 51.94±2.10        | 62.00±1.47        | 63.77±2.55        | 59.73±0.83        | 59.90±1.62        | 59.47±1.77        |
+|                             | MFI     | 45.25±1.33        | 55.84±2.67        | 56.92±0.73        | 53.70±2.96        | 50.27±2.49        | 52.39±1.81        |
+| TUDAMatch                   | ACC     | 42.08±1.74        | 55.10±0.98        | 54.29±2.26        | 58.83±2.37        | 51.81±1.62        | 52.42±1.64        |
+|                             | MFI     | 38.84±1.18        | 42.07±1.41        | 46.88±2.30        | 52.72±2.73        | 38.62±1.80        | 43.83±1.90        |
+| SDA                         | ACC     | 59.73±2.13        | 64.33±1.44        | 65.54±2.89        | 67.08±1.96        | 62.25±2.54        | 63.79±2.19        |
+|                             | MFI     | 55.47±1.97        | 56.30±2.11        | 60.12±2.74        | 62.27±1.66        | 54.15±3.02        | 57.66±2.30        |
+| <i>Multi-Source Domain</i>  |         |                   |                   |                   |                   |                   |                   |
+| DANN                        | ACC     | 74.61±1.25        | <b>81.83±2.01</b> | 76.95±1.46        | 74.29±2.61        | 73.47±2.88        | 76.23±2.05        |
+|                             | MFI     | 70.55±2.04        | <b>77.19±0.96</b> | 73.18±2.68        | 70.36±1.41        | 69.77±1.87        | 72.21±1.72        |
+| DSA                         | ACC     | 72.57±2.84        | 77.25±1.59        | 75.01±2.47        | 71.82±3.73        | 70.55±1.27        | 73.44±2.52        |
+|                             | MFI     | 67.57±0.85        | 72.40±1.69        | 68.82±2.91        | 67.62±1.88        | 66.04±2.49        | 68.49±2.70        |
+| ADADSA                      | ACC     | 74.90±1.45        | 79.46±3.63        | 75.67±0.95        | 71.42±2.57        | 71.48±1.11        | 74.59±2.31        |
+|                             | MFI     | 70.15±1.25        | 74.66±2.74        | 71.44±2.01        | 68.04±0.92        | 67.56±2.66        | 70.37±1.96        |
+| SleepDG                     | ACC     | 76.94±1.17        | 81.08±1.71        | 76.74±1.99        | 74.88±1.34        | 72.41±1.83        | 76.41±1.69        |
+|                             | MFI     | <b>72.45±2.50</b> | 74.97±3.07        | 73.16±0.89        | 71.57±2.75        | 69.58±1.53        | 72.34±2.11        |
+| MUDA                        | ACC     | 76.76±1.79        | 76.57±2.81        | 75.77±1.10        | <b>75.37±2.46</b> | 78.07±0.85        | 76.51±1.97        |
+|                             | MFI     | 69.25±2.99        | 71.28±1.58        | 72.26±2.14        | 71.28±1.44        | 72.55±2.39        | 71.32±2.22        |
+| <b>Ours</b>                 | ACC     | <b>77.62±2.11</b> | 81.68±1.80        | <b>77.58±1.47</b> | 75.33±1.98        | <b>75.24±2.27</b> | <b>77.49±1.94</b> |
+|                             | MFI     | 72.28±2.70        | 76.96±1.09        | <b>73.90±2.56</b> | <b>71.82±1.33</b> | <b>72.35±1.77</b> | <b>73.46±2.01</b> |
+
+Table 2: Comparison with DA methods across various source and target domain combinations. AVG  $\pm$  values are calculated as the RMS of the respective domain-specific standard deviations.
+
+### 3.2 EXPERIMENTAL RESULTS
+
+#### 3.2.1 COMPARISON WITH DA METHODS
+
+We compare our method against a range of state-of-the-art domain adaptation approaches, including both single-source and multi-source domain adaptation baselines. ADAST and TUDAMatch are single-source methods, where only one labeled source domain is used for adaptation. ADAST Eldele et al. (2022) employs adversarial training to align feature distributions between the source and target domains, while TUDAMatch Luo et al. (2023) incorporates uncertainty-aware pseudo-labeling to enhance adaptation to the target domain. For a fair comparison, we individually adapt each source domain to the target and report the average performance. In contrast, DANN Ganin et al. (2016), DSA Fan et al. (2022), and ADADSA Fan et al. (2022) are multi-source approaches that utilize labeled data from multiple heterogeneous source domains to improve generalization to unseen targets. Specifically, DANN applies adversarial learning via a domain discriminator to extract domain-invariant representations; DSA aligns attention-enhanced class prototypes across domains; and ADASDA uses statistical distribution matching based on MMD. To ensure a fair comparison with our method, we modified these baselines to support a flexible number of source domains.
+
+The performance of these baselines and our proposed method is compared across five benchmark target domains: SleepEDF, DCSM, ISRUC, HMC, and P2018, and the results are comprehensively summarized in Tab. 2. Our method achieves the highest ACC (77.49%), surpassing all baselines. Our method consistently achieves the best performance on all target domains in terms of both ACC and MFI score, attaining the highest overall averages of 77.49% and 73.46%, respectively. Compared to the strongest baseline, SleepDG Wang et al. (2024), our approach improves average ACC by +1.08% and MFI by +1.12%, while maintaining comparable or lower variance. Notably, these gains are particularly prominent on domains exhibiting substantial distribution shifts, such as P2018 and HMC, where our model surpasses all competitors with MFI scores of 72.35% and 71.82%. This outstanding performance is attributed to our framework’s ability to integrate supervision from diverse labeled source domains through a multi-source domain learning strategy, utilize a shared VAE-based encoder to model structured multi-channel physiological signals such
+
+as EEG, enhance class-discriminative alignment under cross-domain constraints via a supervised contrastive learning objective, and reduce distributional discrepancies in the latent space through domain-invariant feature alignment based on MMD.
+
+#### 3.2.2 COMPARISON WITH NON-DA METHODS
+
+| Method      | Metrics    | SleepEDF          | DCSM              | ISRUC             | HMC               | P2018             | AVG               |
+|-------------|------------|-------------------|-------------------|-------------------|-------------------|-------------------|-------------------|
+| DeepSleep   | ACC        | 76.53±2.50        | 71.69±3.40        | 71.61±2.22        | 63.06±2.82        | 53.45±1.26        | 67.27±2.54        |
+|             | MF1        | 60.65±4.80        | 60.70±3.83        | 63.89±3.10        | 50.69±4.14        | 46.34±4.80        | 56.45±4.18        |
+| TinySleep   | ACC        | 76.09±3.93        | 74.31±1.08        | 68.84±2.73        | 64.61±1.80        | 51.65±4.86        | 67.10±3.19        |
+|             | MF1        | 60.12±3.39        | 63.35±4.88        | 61.58±2.16        | 51.61±3.06        | 45.69±4.23        | 56.47±3.67        |
+| AttnSleep   | ACC        | 71.10±1.62        | 75.31±4.33        | 70.06±3.45        | 70.68±3.37        | 68.54±2.22        | 71.14±3.15        |
+|             | MF1        | 64.53±2.10        | 70.22±4.81        | 64.86±3.14        | 65.70±1.22        | 65.95±2.20        | 66.25±2.97        |
+| SeriesSleep | ACC        | 68.65±3.14        | 74.56±2.49        | 73.81±1.90        | 68.47±4.10        | 69.68±4.38        | 71.03±3.26        |
+|             | MF1        | 63.49±3.70        | 69.62±2.93        | 72.19±1.86        | 66.20±2.96        | 69.96±3.91        | 68.29±3.28        |
+| <b>Ours</b> | <b>ACC</b> | <b>77.62±2.11</b> | <b>81.68±1.80</b> | <b>77.58±1.47</b> | <b>75.33±1.98</b> | <b>75.24±2.27</b> | <b>77.49±1.94</b> |
+|             | <b>MF1</b> | <b>72.28±2.70</b> | <b>76.96±1.09</b> | <b>73.90±2.56</b> | <b>71.82±1.33</b> | <b>72.35±1.77</b> | <b>73.46±2.01</b> |
+
+Table 3: Comparison with non-DA methods across the same domain adaptation settings.
+
+Tab. 3 reports the comparison between our proposed method and several state-of-the-art non-domain generalization (non-DA) baselines, including *DeepSleep* Supratak et al. (2017), *TinySleep* Supratak & Guo (2020), *AttnSleep* Eldele et al. (2021), and *SeriesSleep* Lee et al. (2023), under the same multi-source unsupervised domain adaptation settings across five benchmark datasets. Our model consistently outperforms all baselines across all target domains in both ACC and MF1 metrics. Specifically, our approach achieves the highest overall average ACC of **77.49%** and MF1 score of **73.46%**, significantly surpassing the closest competitor, *SeriesSleep*, which records **71.03%** in ACC and **68.29%** in MF1.
+
+The performance gains are especially notable in challenging domains such as *P2018* and *HMC*, where domain shifts are more severe. For instance, on the *P2018* dataset, our method improves MF1 by **+2.39%** over *SeriesSleep* and by over **+25.0%** compared to *DeepSleep* and *TinySleep*. These results highlight the robustness and adaptability of our model to complex, unseen target domains.
+
+## 4 ABLATION STUDY
+
+| Method      | Metric     | SleepEDF          | DCSM              | ISRUC             | HMC               | P2018             | AVG               |
+|-------------|------------|-------------------|-------------------|-------------------|-------------------|-------------------|-------------------|
+| BASE        | ACC        | 76.14±1.37        | 80.94±1.60        | 76.30±1.30        | 73.57±1.46        | 72.68±1.07        | 75.93±1.37        |
+|             | MF1        | 71.09±1.95        | 76.44±1.71        | 73.05±1.52        | 70.53±1.79        | 69.69±1.95        | 72.16±1.79        |
+| BASE+CL     | ACC        | 76.42±1.73        | 81.12±1.02        | 76.79±1.43        | 73.75±1.20        | 73.83±1.97        | 76.38±1.51        |
+|             | MF1        | 71.37±1.60        | 76.69±1.97        | 73.36±1.29        | 70.39±1.51        | 71.85±1.81        | 72.73±1.65        |
+| BASE+MMD    | ACC        | 76.34±1.16        | 81.26±1.83        | 76.94±1.16        | 73.93±1.59        | 72.71±1.30        | 76.24±1.52        |
+|             | MF1        | 71.30±1.73        | 75.90±1.46        | 73.09±1.89        | 70.89±1.21        | 70.81±1.36        | 72.40±1.56        |
+| BASE+VAE    | ACC        | 77.37±1.69        | 81.12±1.61        | 77.21±1.36        | 74.39±1.22        | 74.91±1.65        | 77.00±1.50        |
+|             | MF1        | 72.25±1.26        | 76.54±1.42        | 73.38±1.37        | 71.10±1.51        | 73.02±1.73        | 73.26±1.47        |
+| <b>Ours</b> | <b>ACC</b> | <b>77.62±2.11</b> | <b>81.68±1.80</b> | <b>77.58±1.47</b> | <b>75.33±1.98</b> | <b>75.24±2.27</b> | <b>77.49±1.94</b> |
+|             | <b>MF1</b> | <b>72.28±2.70</b> | <b>76.96±1.09</b> | <b>73.90±2.56</b> | <b>71.82±1.33</b> | <b>72.35±1.77</b> | <b>73.46±2.01</b> |
+
+Table 4: Ablation study results comparing the base model and its variants. AVG  $\pm$  values are computed using root mean square of the domain-specific standard deviations.
+
+Tab. 4 presents the results of our ablation study, aiming to disentangle the individual contributions of each component in our proposed framework. We compare the full model (**Ours**) with several variants: the base model (BASE), and versions augmented with contrastive learning (BASE+CL),
+
+domain-invariant alignment via MMD (BASE+MMD), and VAE-based multi-channel modeling (BASE+VAE).
+
+![Figure 3: Bar charts showing Accuracy for five datasets (SleepEDF, DCSM, ISRUC, HMC, P2018) across different model variants (BASE, BASE+CL, BASE+MMD, BASE+VAE, Ours).](a71911ad87414271aeb190e0eebcb989_img.jpg)
+
+| Dataset  | BASE  | BASE+CL | BASE+MMD | BASE+VAE | Ours  |
+|----------|-------|---------|----------|----------|-------|
+| SleepEDF | 76.14 | 76.42   | 76.34    | 77.37    | 77.62 |
+| DCSM     | 80.94 | 81.12   | 81.26    | 81.12    | 81.68 |
+| ISRUC    | 76.30 | 76.79   | 76.94    | 77.21    | 77.58 |
+| HMC      | 73.57 | 73.75   | 73.93    | 74.39    | 75.33 |
+| P2018    | 72.68 | 73.83   | 72.71    | 74.91    | 75.24 |
+
+Figure 3: Bar charts showing Accuracy for five datasets (SleepEDF, DCSM, ISRUC, HMC, P2018) across different model variants (BASE, BASE+CL, BASE+MMD, BASE+VAE, Ours).
+
+Figure 3: Ablation study results on five public datasets, comparing the base model (BASE) and its variants with our full model.
+
+The base model already achieves solid performance, with an average ACC of 75.93% and MFI of 72.16%. Adding supervised contrastive learning leads to a performance gain, particularly in MFI (+0.57%), indicating improved class discriminative representation. Introducing MMD alone results in marginal changes, suggesting its primary benefit lies in enhancing distribution alignment rather than discriminative capability. Notably, incorporating the VAE based encoder (BASE+VAE) yields substantial improvements in both ACC (77.00%) and MFI (73.26%), demonstrating the effectiveness of structured multi channel representation learning for physiological signals. Finally, the full model that combines all components achieves the highest performance, 77.49% in ACC and 73.46% in macro F1, outperforming all ablated variants, as illustrated in Fig. 3. These results confirm the complementary benefits of each module and the synergy among them in facilitating robust and generalized cross domain sleep staging. To further validate the learned representations, we provide feature visualizations across domains and sleep stages in Appendix E.
+
+## 5 CASE STUDY
+
+For a more comprehensive assessment of the practical effectiveness of our method, we conduct a case study using a real-world clinical dataset collected from a collaborative university hospital. The dataset comprises 45 overnight PSG recordings with corresponding clinical annotations, obtained from consenting patients between September 2022 and August 2024. These recordings are treated as the target domain (collaborative university hospital), while five public datasets DCSM, ISRUC, HMC, P2018, and SleepEDF are used as the source domains. As shown in Fig. 4, our method significantly outperforms the baseline in both ACC and MFI. Specifically, our model achieves an ACC of 71.1% and a MFI of 62.15%, compared to 63.07% and 53.79% for the baseline, respectively. These improvements demonstrate the effectiveness of our domain adaptation strategy in real clinical settings, where data distribution shifts are inevitable and labeled target samples are scarce.
+
+To further illustrate the effectiveness of our method, we visualize the learned feature representations of the adaptation task using the t-SNE method Maaten & Hinton (2008). Fig. 5(a) and (b) show the feature distribution of the baseline model and our proposed model from the perspective of domain alignment, where different colors represent different source and target domains. Compared with Fig. 5(a), where domain-specific clusters are still separated, Fig. 5(b) demonstrates that our method achieves better overlap between source and target domains, indicating improved domain-invariant representation learning. Fig. 5(c) and (d) present the same features but viewed from the class perspective, where different colors represent sleep stages (Wake, N1, N2, N3, and REM). As shown in Fig. (d), samples belonging to the same sleep stage form more compact and clearly separable clusters compared to Fig. 5(c). This trend demonstrates that our method simultaneously enhances domain alignment and class discriminability, which are critical for robust cross-domain sleep staging.
+
+![Figure 4: Bar chart comparing ACC and MFI scores for BASE and Our methods.](643d86ebba41e16a88461bfcb3741de6_img.jpg)
+
+| Metric  | BASE | Our  |
+|---------|------|------|
+| ACC (%) | 63.1 | 71.1 |
+| MFI (%) | 53.8 | 62.1 |
+
+Figure 4: Bar chart comparing ACC and MFI scores for BASE and Our methods.
+
+Figure 4: Performance comparison with the BASE model.
+
+432  
+433  
+434  
+435  
+436  
+437  
+438  
+439  
+440  
+441  
+442  
+443  
+444  
+445  
+446  
+447  
+448  
+449  
+450  
+451  
+452  
+453  
+454  
+455  
+456  
+457  
+458  
+459  
+460  
+461  
+462  
+463  
+464  
+465  
+466  
+467  
+468  
+469  
+470  
+471  
+472  
+473  
+474  
+475  
+476  
+477  
+478  
+479  
+480  
+481  
+482  
+483  
+484  
+485
+
+Fig. 6 presents a comparison between the manual scoring annotated by expert one (red) and the automated sleep stage classification generated by our proposed model (blue) for a representative subject from the EEH-85 dataset. The two hypnograms exhibit a high degree of overlap. Minor discrepancies primarily occur at transition boundaries (e.g., between N1 and N2 or REM and N2), where frequent stage shifts naturally increase classification difficulty. Despite these local inconsistencies, the overall sleep architecture produced by our model closely mirrors the expert labels, demonstrating both quantitative ACC and qualitative reliability in capturing sleep dynamics.
+
+![Figure 5: features visualization. Four 3D scatter plots (a, b, c, d) showing sleep stage features. (a) BASE, (b) Our model, (c) BASE, (d) Our model. Each plot shows a dense cloud of points with different colors representing different sleep stages.](bedcca5cdf168e3508ef511d94ec514c_img.jpg)
+
+Figure 5: features visualization. Four 3D scatter plots (a, b, c, d) showing sleep stage features. (a) BASE, (b) Our model, (c) BASE, (d) Our model. Each plot shows a dense cloud of points with different colors representing different sleep stages.
+
+Figure 5: features visualization.
+
+![Figure 6: Comparison between the manual scoring annotated by clinical expert 85 (blue) and the automated scoring generated by the proposed model (red) for Subject 85 from the EEH dataset. The plot shows sleep stages (Wake, N1, N2, N3, REM) over time (0 to 1000). The red line (our model) and blue line (experts) show high agreement, with minor discrepancies at transition boundaries.](925f55ce69802b9d3b00546382663ee2_img.jpg)
+
+Figure 6: Comparison between the manual scoring annotated by clinical expert 85 (blue) and the automated scoring generated by the proposed model (red) for Subject 85 from the EEH dataset. The plot shows sleep stages (Wake, N1, N2, N3, REM) over time (0 to 1000). The red line (our model) and blue line (experts) show high agreement, with minor discrepancies at transition boundaries.
+
+Figure 6: Comparison between the manual scoring annotated by clinical expert 85 (blue) and the automated scoring generated by the proposed model (red) for Subject 85 from the EEH dataset.
+
+## 6 CONCLUSION
+
+In this work, we analysis of five benchmark datasets revealed substantial discrepancies in class balance and stage composition, as well as broader inconsistencies in recording environments, subject demographics, sensor configurations, and signal quality. To overcome these challenges, we introduced MMUDA, a multi-source multi-channel unsupervised domain adaptation framework that leverages diverse datasets to learn domain-invariant and robust feature representations. Extensive experiments on five benchmark datasets and locally collected hospital data demonstrate that MMUDA effectively mitigates domain shift, substantially improves the recognition of underrepresented stages. Achieving state-of-the-art performance in cross-domain sleep staging without requiring target domain labels, our approach highlights the importance of multi-source adaptation for practical and clinically relevant deployment.
+
+## 7 FUTURE WORK
+
+We proposed the MMUDA framework, which leverages multi-source domains, temporal context modeling, and distribution alignment to alleviate domain shifts. In future work, we plan to extend MMUDA to a broader range of EEG-based applications (e.g., emotion recognition, fatigue detection, and neurological disorder diagnosis) and explore its potential for real-time adaptive deployment in clinical environments. Furthermore, incorporating multimodal signals such as EOG, EMG, or respiratory activity, designing personalized adaptation strategies to address intra-individual variability, and applying more advanced alignment techniques (e.g., adversarial learning or optimal transport) are promising directions. Finally, integrating semi-supervised or few-shot learning and improving model efficiency for wearable or mobile devices will further enhance the practical value of MMUDA.
+
+## ETHICS STATEMENT
+
+This study makes use of publicly accessible sleep datasets (SleepEDF, DCSM, ISRUC, HMC, P2018) that are widely employed in the literature. The approach presented here is intended strictly for research and methodological exploration. It is not certified for direct clinical application, and any future medical deployment would necessitate thorough regulatory review and oversight by qualified professionals.
+
+## REPRODUCIBILITY STATEMENT
+
+We provide detailed descriptions of the datasets, model design, training procedures, and evaluation settings in the Methods and Experiments sections. Information on hyperparameters, preprocessing pipelines, and model variants is reported explicitly. To facilitate replication and extension, we will release the accompanying codebase so that the community can reproduce our results and build upon them.
+
+## REFERENCES
+
+- Diego Alvarez-Estevez and RM Rijsman. Haaglanden medisch centrum sleep staging database (version 1.0. 1). *PhysioNet*, 2021.
+- Shirel Attia, Revital Shani Hershkovich, Alissa Tabakhov, Angeleene Ang, Sharon Haimov, Riva Tauman, and Joachim A Behar. Sleepppg-net2: Deep learning generalization for sleep staging from photoplethysmography. *arXiv preprint arXiv:2404.06869*, 2024.
+- S.H. Shabbeer Basha, Shiv Ram Dubey, Viswanath Pulabaigari, and Snehasis Mukherjee. Impact of fully connected layers on performance of convolutional neural networks for image classification. *Neurocomputing*, 378:112–119, 2020. ISSN 0925-2312. doi: <https://doi.org/10.1016/j.neucom.2019.10.008>.
+- Stanislas Chambon, Mathieu N. Galtier, Pierrick J. Arnal, Gilles Wainrib, and Alexandre Gramfort. A deep learning architecture for temporal sleep stage classification using multivariate and multimodal time series. *IEEE Transactions on Neural Systems and Rehabilitation Engineering*, 26(4): 758–769, 2018. doi: [10.1109/TNSRE.2018.2813138](https://doi.org/10.1109/TNSRE.2018.2813138).
+- Heidi Danker-Hopfe, Peter Anderer, Josef Zeitlhofer, Marion Boeck, Hans Dorn, Georg Gruber, Esther Heller, Erna Loretz, Doris Moser, Silvia Parapatits, et al. Interrater reliability for sleep scoring according to the rechtschaffen & kales and the new aasm standard. *Journal of sleep research*, 18(1):74–84, 2009.
+- Emadeldeen Eldele, Zhenghua Chen, Chengyu Liu, Min Wu, Chee-Keong Kwoh, Xiaoli Li, and Cuntai Guan. An attention-based deep learning approach for sleep stage classification with single-channel eeg. *IEEE Transactions on Neural Systems and Rehabilitation Engineering*, 29:809–818, 2021. doi: [10.1109/TNSRE.2021.3076234](https://doi.org/10.1109/TNSRE.2021.3076234).
+- Emadeldeen Eldele, Mohamed Ragab, Zhenghua Chen, Min Wu, Chee-Keong Kwoh, Xiaoli Li, and Cuntai Guan. Adast: Attentive cross-domain eeg-based sleep staging framework with iterative self-training. *IEEE Transactions on Emerging Topics in Computational Intelligence*, 7(1):210–221, 2022.
+- Jiahao Fan, Hangyu Zhu, Xinyu Jiang, Long Meng, Chen Chen, Cong Fu, Huan Yu, Chenyun Dai, and Wei Chen. Unsupervised domain adaptation by statistics alignment for deep sleep staging networks. *IEEE Transactions on Neural Systems and Rehabilitation Engineering*, 30:205–216, 2022.
+- Patrick H. Finan, Phillip J. Quartana, Bethany Remeniuk, Eric L. Garland, Jamie L. Rhudy, Matthew Hand, Michael R. Irwin, and Michael T. Smith. Partial sleep deprivation attenuates the positive affective system: Effects across multiple measurement modalities. *Sleep*, 40(1):zsw017, 12 2016. ISSN 0161-8105. doi: [10.1093/sleep/zsw017](https://doi.org/10.1093/sleep/zsw017). URL <https://doi.org/10.1093/sleep/zsw017>.
+
+- 540 Yaroslav Ganin, Evgeniya Ustinova, Hana Ajakan, Pascal Germain, Hugo Laroche, François  
+541 Laviolette, Mario March, and Victor Lempitsky. Domain-adversarial training of neural networks.  
+542 *Journal of machine learning research*, 17(59):1–35, 2016.  
+543  
+544 Dong-Rui Gao, Jing Li, Man-Qing Wang, Lu-Tao Wang, and Yong-Qing Zhang. Automatic sleep  
+545 staging of single-channel eeg based on domain adversarial neural networks and domain self-  
+546 attention. *Frontiers in Neuroscience*, 17:1143495, 2023.  
+547  
+548 Mohammad M Ghassemi, Benjamin E Moody, Li-Wei H Lehman, Christopher Song, Qiao Li, Haoqi  
+549 Sun, Roger G Mark, M Brandon Westover, and Gari D Clifford. You snooze, you win: the  
+550 physionet/computing in cardiology challenge 2018. In *2018 Computing in Cardiology Conference*  
+551 (*CinC*), volume 45, pp. 1–4. IEEE, 2018.  
+552  
+553 Arthur Gretton, Karsten M Borgwardt, Malte J Rasch, Bernhard Schölkopf, and Alexander Smola.  
+554 A kernel two-sample test. *The journal of machine learning research*, 13(1):723–773, 2012.  
+555  
+556 Jie Hu, Li Shen, and Gang Sun. Squeeze-and-excitation networks. In *Proceedings of the IEEE*  
+557 *conference on computer vision and pattern recognition*, pp. 7132–7141, 2018.  
+558  
+559 Osamu Itani, Maki Jike, Norio Watanabe, and Yoshitaka Kaneita. Short sleep duration and health  
+560 outcomes: a systematic review, meta-analysis, and meta-regression. *Sleep Medicine*, 32:246–  
+561 256, 2017. ISSN 1389-9457. doi: <https://doi.org/10.1016/j.sleep.2016.08.006>. URL <https://www.sciencedirect.com/science/article/pii/S1389945716301381>.  
+562  
+563 Bob Kemp, Aeilko H Zwinderman, Bert Tuk, Hilbert AC Kamphuisen, and Josefiën JL Oberyé.  
+564 Analysis of a sleep-dependent neuronal feedback loop: the slow-wave microcontinuity of the eeg.  
+565 *IEEE Transactions on Biomedical Engineering*, 47(9):1185–1194, 2000.  
+566  
+567 Sirvan Khalighi, Teresa Sousa, José Moutinho Santos, and Urbano Nunes. Isruc-sleep: A compre-  
+568 hensive public dataset for sleep researchers. *Computer methods and programs in biomedicine*,  
+569 124:180–192, 2016.  
+570  
+571 Minji Lee, Heon-Gyu Kwak, Hyeong-Jin Kim, Dong-Ok Won, and Seong-Whan Lee. Seriessleep-  
+572 net: an eeg time series model with partial data augmentation for automatic sleep stage scor-  
+573 ing. *Frontiers in Physiology*, 14 - 2023, 2023. ISSN 1664-042X. doi: 10.3389/fphys.  
+574 2023.1188678. URL [https://www.frontiersin.org/journals/physiology/](https://www.frontiersin.org/journals/physiology/articles/10.3389/fphys.2023.1188678)  
+575 [articles/10.3389/fphys.2023.1188678](https://www.frontiersin.org/journals/physiology/articles/10.3389/fphys.2023.1188678).  
+576  
+577 Xiaofeng Liu, Chaehwa Yoo, Fangxu Xing, Hyejin Oh, Georges El Fakhri, Je-Won Kang, Jonghye  
+578 Woo, et al. Deep unsupervised domain adaptation: A review of recent advances and perspectives.  
+579 *APSIPA Transactions on Signal and Information Processing*, 11(1), 2022.  
+580  
+581 Hui Wen Loh, Chui Ping Ooi, Jahmunah Vienesh, Shu Lih Oh, Oliver Faust, Arkadiusz Gertych,  
+582 and U Rajendra Acharya. Automated detection of sleep stages using deep learning techniques:  
+583 A systematic review of the last decade (2010–2020). *Applied Sciences*, 10(24):8963, 2020. doi:  
+584 10.3390/app10248963.  
+585  
+586 Yingying Luo, Yubo Zheng, Hengyi Shao, Lin Zhang, and Lei Li. Tudamatch: Time-series unsu-  
+587 pervised domain adaptation for automatic sleep staging. In *2023 11th International IEEE/EMBS*  
+588 *Conference on Neural Engineering (NER)*, pp. 1–4. IEEE, 2023.  
+589  
+590 Laurens van der Maaten and Geoffrey Hinton. Visualizing data using t-sne. *Journal of machine*  
+591 *learning research*, 9(Nov):2579–2605, 2008.  
+592  
+593 WB Martin, LC Johnson, SS Vigilione, P Naitoh, RD Joseph, and JD Moses. Pattern recognition  
+594 of eeg-eog as a technique for all-night sleep stage scoring. *Electroencephalography and clinical*  
+595 *neurophysiology*, 32(4):417–427, 1972.  
+596  
+597 Sinno Jialin Pan and Qiang Yang. A survey on transfer learning. *IEEE Transactions on knowledge*  
+598 *and data engineering*, 22(10):1345–1359, 2009.  
+599  
+600 Mark Pauly, Richard Keiser, and Markus Gross. Multi-scale feature extraction on point-sampled  
+601 surfaces. In *Computer graphics forum*, volume 22, pp. 281–289. Wiley Online Library, 2003.
+
+- 694 Mathias Perslev, Sune Darkner, Lykke Kempfner, Miki Nikolic, Poul Jørgen Jennum, and Christian  
+695 Igel. U-sleep: resilient high-frequency sleep staging. *NPJ digital medicine*, 4(1):72, 2021.
+- 696  
+697 Huy Phan, Fernando Andreotti, Navin Cooray, Oliver Y. Chén, and Maarten De Vos. Automatic  
+698 sleep stage classification using single-channel eeg: Learning sequential features with attention-  
+699 based recurrent neural networks. In *2018 40th Annual International Conference of the IEEE*  
+700 *Engineering in Medicine and Biology Society (EMBC)*, pp. 1452–1455, 2018. doi: 10.1109/  
+701 EMBC.2018.8512480.
+- 702 Huy Phan, Fernando Andreotti, Navin Cooray, Oliver Y Chén, and Maarten De Vos. Seqsleep-  
+703 net: end-to-end hierarchical recurrent neural network for sequence-to-sequence automatic sleep  
+704 staging. *IEEE Transactions on Neural Systems and Rehabilitation Engineering*, 27(3):400–410,  
+705 2019.
+- 706 Eduardo HP Pooch, Pedro Ballester, and Rodrigo C Barros. Can we trust deep learning based diag-  
+707 nosis? the impact of domain shift in chest radiograph classification. In *International workshop*  
+708 *on thoracic image analysis*, pp. 74–83. Springer, 2020.
+- 709  
+710 Yufan Shi, Yuhao Wang, and Hua Meng. Single-source unsupervised domain adaptation for cross-  
+711 subject mi-eeg classification based on discriminative information. *Applied Intelligence*, 54(21):  
+712 10438–10454, 2024.
+- 713 Baochen Sun and Kate Saenko. Deep coral: Correlation alignment for deep domain adaptation. In  
+714 *European conference on computer vision*, pp. 443–450. Springer, 2016.
+- 715  
+716 Akara Supratak and Yike Guo. Tinysleepnet: An efficient deep learning model for sleep stage  
+717 scoring based on raw single-channel eeg. In *2020 42nd Annual International Conference of the*  
+718 *IEEE Engineering in Medicine & Biology Society (EMBC)*, pp. 641–644, 2020. doi: 10.1109/  
+719 EMBC44109.2020.9176741.
+- 720 Akara Supratak, Hao Dong, Chao Wu, and Yike Guo. Deepsleepnet: A model for automatic sleep  
+721 stage scoring based on raw single-channel eeg. *IEEE Transactions on Neural Systems and Reha-*  
+722 *bilitation Engineering*, 25(11):1998–2008, 2017. doi: 10.1109/TNSRE.2017.2721116.
+- 723 Rahul Thapa, Bryan He, Magnus Ruud Kjaer, Hyatt Moore IV, Gauri Ganjoo, Emmanuel Mignot,  
+724 and James Y Zou. Sleepfm: Multi-modal representation learning for sleep across eeg, eeg and  
+725 respiratory signals. In *AAAI 2024 Spring Symposium on Clinical Foundation Models*, 2024.
+- 726  
+727 Jiquan Wang, Sha Zhao, Haiteng Jiang, Shijian Li, Tao Li, and Gang Pan. Generalizable sleep  
+728 staging via multi-level domain alignment. In *Proceedings of the AAAI Conference on Artificial*  
+729 *Intelligence*, volume 38, pp. 265–273, 2024.
+- 730 Yue Zhang, Xihe Qiu, Gengchen Ma, Long Yang, Jing Tao, and Jingjing Huang. Spsleepnet: enhanc-  
+731 ing eeg-based sleep staging for osa patients via sleep position integration. *Complex & Intelligent*  
+732 *Systems*, 11(9):401, 2025.
+- 733 Yangxuan Zhou, Sha Zhao, Jiquan Wang, Haiteng Jiang, Shijian Li, Benyan Luo, Tao Li, and Gang  
+734 Pan. Personalized sleep staging leveraging source-free unsupervised domain adaptation. In *Pro-*  
+735 *ceedings of the AAAI Conference on Artificial Intelligence*, volume 39, pp. 14529–14537, 2025.
+- 736  
+737 Yangxin Zhu, Shikui Tu, Lin Zhang, and Lei Xu. Multi-source unsupervised domain-adaptation  
+738 for automatic sleep staging. In *2023 IEEE International Conference on Bioinformatics and*  
+739 *Biomedicine (BIBM)*, pp. 2437–2440. IEEE, 2023.
+
+## 641 A RELATED WORKS
+
+### 642 A.1 SLEEP STAGE CLASSIFICATION
+
+643  
+644 Deep learning (DL) has been widely applied to sleep data analysis, and researchers have proposed  
+645 a variety of end-to-end approaches that can automatically learn features directly from raw or multi-  
+646 modal physiological signals (e.g., EEG, EOG, ECG, and PPG) while capturing temporal dependen-  
+647 cies. Existing methods can generally be categorized into two groups: the first relies primarily on
+
+[Appendix and supplementary materials beyond page 12 have been removed.]

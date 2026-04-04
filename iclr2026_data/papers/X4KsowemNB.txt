@@ -1,0 +1,564 @@
+# SF-MAMBA: RETHINKING STATE SPACE MODEL FOR VISION
+
+Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+The realm of Mamba for vision has been advanced in recent years to strike for the alternatives of Vision Transformers (ViTs) that suffer from the quadratic complexity. While the recurrent scanning mechanism of Mamba offers computational efficiency, it inherently limits non-causal interactions between image patches. Prior works have attempted to address this limitation through various multi-scan strategies; however, these approaches suffer from inefficiencies due to suboptimal scan designs and frequent data rearrangement. Moreover, Mamba exhibits relatively slow computational speed under short token lengths, commonly used in visual tasks. In pursuit of a truly efficient vision encoder, we rethink the scan operation for vision and the computational efficiency of Mamba. To this end, we propose SF-Mamba, a novel visual Mamba with two key proposals: auxiliary patch swapping for encoding bidirectional information flow under an unidirectional scan and batch folding with periodic state reset for advanced GPU parallelism. Extensive experiments on image classification, object detection, and instance and semantic segmentation consistently demonstrate that our proposed SF-Mamba significantly outperforms state-of-the-art baselines while improving throughput across different model sizes. We will release the source code after publication.
+
+## 1 INTRODUCTION
+
+The field of deep learning for vision has undergone several architectural shifts, driving progress across a wide range of applications including classification, segmentation, and detection (Deng et al., 2009; Krizhevsky et al., 2012; He et al., 2016; Simonyan & Zisserman, 2014; Ravi et al., 2025; Siméoni et al., 2025; Bolya et al., 2025). More recently, Vision Transformers (ViTs) (Dosovitskiy et al., 2020) have emerged as the dominant paradigm and offer strong flexibility and generalizability compared to convolution-based models by tokenizing images into patches and applying the self-attention mechanism (Vaswani et al., 2017). ViT-based vision models have been widely used for multimodal learning tasks (Khan et al., 2022; Elharrouss et al., 2025); however, one of the main limitations of ViTs is the quadratic complexity for computing attention in terms of sequence length, which hinders the scalability to high-resolution inputs and large datasets with limited computational resources.
+
+Mamba (Gu & Dao, 2023) introduces a selective state-space model (SSM), which enables data-dependent flexible token scanning in a left-to-right order, thereby achieving powerful but efficient processing with linear-time complexity. Building on its success, Mamba has been extended to the vision domain, achieving higher accuracy while being efficient in terms of memory cost, FLOPs,
+
+![Figure 1: A scatter plot showing Top-1 Accuracy (%) on the y-axis (ranging from 79 to 85) versus Throughput (img/s) on the x-axis (ranging from 1000 to 8000). The plot compares various vision models. SF-Mamba (red line with circles) starts at approximately 84.5% accuracy at 1500 img/s and maintains a high accuracy of about 82.5% at 7500 img/s. Other models include CwMNeXt (pink diamonds), MamboOut (purple crosses), Buff (blue circles), Swin (green squares), Twins (orange triangles), EfficientFormer (yellow pluses), MobileNetV4-H (light blue diamonds), EfficientViT (dark blue diamonds), SHiVT (grey squares), FasterViT (light blue squares), Vim (pink diamonds), VMamba (green squares), Spatial-Mamba (light green squares), and MambaVision (orange triangles). Most models show a decrease in accuracy as throughput increases, but SF-Mamba maintains superior performance.](1066b22ea190b81c91c3441ea7618236_img.jpg)
+
+Figure 1: A scatter plot showing Top-1 Accuracy (%) on the y-axis (ranging from 79 to 85) versus Throughput (img/s) on the x-axis (ranging from 1000 to 8000). The plot compares various vision models. SF-Mamba (red line with circles) starts at approximately 84.5% accuracy at 1500 img/s and maintains a high accuracy of about 82.5% at 7500 img/s. Other models include CwMNeXt (pink diamonds), MamboOut (purple crosses), Buff (blue circles), Swin (green squares), Twins (orange triangles), EfficientFormer (yellow pluses), MobileNetV4-H (light blue diamonds), EfficientViT (dark blue diamonds), SHiVT (grey squares), FasterViT (light blue squares), Vim (pink diamonds), VMamba (green squares), Spatial-Mamba (light green squares), and MambaVision (orange triangles). Most models show a decrease in accuracy as throughput increases, but SF-Mamba maintains superior performance.
+
+Figure 1: Top-1 accuracy and throughput on ImageNet-1K classification. SF-Mamba offers superior accuracy-throughput trade-offs compared to state-of-the-art architectures.
+
+and the number of parameters (Zhu et al., 2024; Liu et al., 2024; Pei et al., 2025). In addition, recent studies suggest that visual Mamba has good transfer learning capabilities comparable to or even surpassing those of ViTs (Yoshimura et al., 2025; Galim et al., 2025), and it has the potential to replace the ViT-based foundation model ecosystem. However, many visual Mamba models suffer from slow processing speeds, especially on low-resolution images, which makes them not truly efficient. One reason is that Mamba adopts a recurrent left-to-right scanning mechanism, which prevents earlier patches from accessing information in future patches. As a result, many visual Mamba methods employ a multi-directional scan strategy, where the input sequence is rearranged and processed from multiple directions (e.g., from top-left to bottom-right, bottom-right to top-left). This allows models to compensate for the inability of standard Mamba to reference future patches and yields strong performance on vision tasks. However, such a rearrangement incurs substantial overhead during both training and inference. In fact, MambaVision (Hatamizadeh & Kautz, 2025) achieves a fast inference by avoiding costly multi-scan and instead rely on attention layers appended after the unidirectional scan. These attention layers enable information to flow backward, allowing earlier tokens to indirectly benefit from later tokens while retaining the efficiency of unidirectional Mamba. Yet, relying solely on attention for backward information flow poses a limitation: backward context can only be injected in deeper layers, leaving shallower layers deprived of future information and potentially restricting the expressiveness of the representation. Another reason why visual Mamba is slow lies in Mamba itself. As reported in the Mamba paper, unless the token length exceeds around 1000–2000, it is slower than Attention. Unless the task involves high-resolution images, the token length of the vision patches typically remains below 1000.
+
+In this paper, we rethink visual Mamba from two perspectives in pursuit of a truly efficient image encoder. The first is the data flow. Instead of using the slower multi-directional scan, we adopt a unidirectional scan. However, this approach lacks future-to-past information flow, which is crucial to generate high-quality features. To address this, we propose an auxiliary patch swapping that enables future-to-past information flow within a unidirectional scan (Sec. 3.2). It introduces two additional tokens mixing the corresponding directional flow, which does not require significant burden compared with existing multi-scan approaches. The second perspective addresses the inefficiency of Mamba when processing short sequences. We attribute this limitation to suboptimal GPU parallelization, and to mitigate it, we introduce batch folding with periodic state reset (Sec. 3.3). This method reshapes batched inputs to maximize GPU thread utilization while preserving independence across sequences, thereby enhancing parallel efficiency. To this end, we propose **SF-Mamba**, which is equipped with the two key innovations of swapping and folding. Extensive experiments on image classification (Fig. 1), object detection, and semantic/instance segmentation demonstrate that SF-Mamba consistently outperforms state-of-the-art baselines while achieving faster inference, paving a new path toward efficient and effective Mamba architectures for vision.
+
+In summary, our main contributions of SF-Mamba are three-fold:
+
+- **Efficient uni-scan for non-causal ordering.** We propose a lightweight mechanism, auxiliary patch swapping, that introduces two learnable auxiliary tokens and a parameter-free swap operation, enabling bidirectional information flow across layers with negligible overhead compared to existing multi-scan approaches.
+- **Efficient GPU parallelism for vision tasks.** To address inefficiency in low-resolution vision tasks, we design a batch folding strategy that merges the batch and sequence dimensions, maximizing GPU utilization while preserving the independence of hidden states across sequences. This method can speed up any Mamba-based method especially with short sequence processing.
+- **Empirical validation across various tasks.** Experiments on classification, detection, and segmentation show that SF-Mamba outperforms state-of-the-art CNN-, Transformer-, hybrid CNN-Transformer-, and Mamba-based baselines.
+
+## 2 RELATED WORK
+
+**CNNs and Vision Transformers.** Convolutional Neural Networks (CNNs) first led to breakthroughs in large-scale image classification (Deng et al., 2009; Krizhevsky et al., 2012), with deeper networks such as VGG (Simonyan & Zisserman, 2014) and ResNet (He et al., 2016) extending success to segmentation (Long et al., 2015) and detection (Ren et al., 2015). Vision Transformers (ViTs) (Dosovitskiy et al., 2020), inspired by self-attention (Vaswani et al., 2017), have since be-
+
+108 come the dominant paradigm by effectively modeling long-range dependencies. Follow-up works  
+109 such as DeiT (d’Ascoli et al., 2021), and Swin Transformer (Liu et al., 2021) improved efficiency  
+110 and scalability. Models trained on large-scale data are used as a foundation for a variety of tasks  
+111 (Oquab et al., 2024; Siméoni et al., 2025; Tschannen et al., 2025).
+
+112 **Visual State Space Models.** To address the quadratic cost of attention, state-space models (SSMs)  
+113 have emerged as efficient alternatives. Mamba (Gu & Dao, 2023) introduced selective state spaces,  
+114 enabling linear-time complexity with strong long-range modeling. Inspired by this success, many  
+115 visual Mamba variants (Zhu et al., 2024; Liu et al., 2024) extended SSMs to visual data.
+
+116 **Hybrid Architectures in Vision.** Beyond single-paradigm designs, recent studies have demon-  
+117 strated that hybrid architecture can lead to more efficient encoding. The CNN-Transformer hybrids  
+118 (Hatamizadeh et al., 2024; Li et al., 2022; Zheng, 2025) leveraged the local feature extraction and  
+119 inductive biases of CNNs alongside the global context modeling of Transformers. More recently,  
+120 Mamba-Transformer hybrids (Hatamizadeh & Kautz, 2025) have emerged, combining Mamba’s  
+121 computational efficiency with Transformers’ receptive field. The hybrid architecture achieves super-  
+122 ior efficiency-performance trade-offs and establishes state-of-the-art vision backbones.
+
+123 **Causality Constraint of Visual SSMs.** From another perspective, visual SSMs face an inherent  
+124 challenge: the *causality constraint*, which is also observed in vision-language models (Wang et al.,  
+125 2025c). Since state-space models process inputs sequentially, each hidden state only depends on the  
+126 past, preventing access to the global spatial context. Many visual Mamba methods address causality  
+127 constraints via multi-directional scans. Some approaches like Vim (Zhu et al., 2024) and Mamba-R  
+128 (Wang et al., 2025a) adopt bi-directional scans, while recent models are based on cross-scan (Liu  
+129 et al., 2024), which performs bi-directional scan along both horizontal and vertical axes, totaling four  
+130 directions to better capture image structure. Variants such as GroupMamba (Shaker et al., 2025),  
+131 MSVMamba (Shi et al., 2024), EfficientVMamba (Shaker et al., 2025), and DefMamba (Liu et al.,  
+132 2025) enhance cross-scan through zigzag patterns, multi-resolution scan, atrous sampling, or de-  
+133 formable directions. Despite being parameter-efficient, multi-directional scans are slow. Cross-scan  
+134 based methods are particularly suffer from slow speed due to increased FLOPs from four parallel  
+135 scans and costly data rearrangement between 2D formats (for 2D convolution) and 1D formats (for  
+136 scanning). Rearranging tokens for four directions adds further overhead, especially in vertical scans,  
+137 which involve scattered memory access. While bi-directional scan avoids 2D/1D format switching,  
+138 it still requires rearranging data for the backward scan and maintaining two parallel paths.
+
+139 A recent study, Adventurer (Wang et al., 2025b), tackles the causality constraint of Mamba2 (Dao  
+140 & Gu, 2024) using series bi-directional scans, which alternate scan directions between layers. It  
+141 also inserts a globally averaged token in every layer to facilitate limited context exchange of series  
+142 bi-directional scan. While this mechanism only requires single scan in each block, it requires ex-  
+143 plicit flipping operations with  $O(n)$  permutation cost and an additional averaging cost, resulting in  
+144 reduced throughput.
+
+145 Several methods are starting to achieve high accuracy with unidirectional scan. Spatial-Mamba  
+146 (Xiao et al., 2025) uses 2D atrous convolution with a wide receptive field to access future patches,  
+147 although the 2D/1D format switching degrades the speed. MambaVision (Hatamizadeh & Kautz,  
+148 2025) incorporates Attention in later layers to capture global context. However, relying solely on  
+149 attention for future-to-past information flow might not be optimal.
+
+150 Furthermore, although previous methods adopt Mamba due to its parameter efficiency and superior  
+151 accuracy, it remains slower than Attention for token lengths below 1000 to 2000 (Gu & Dao, 2023).  
+152 These limitations motivate the development of a truly efficient visual Mamba.
+
+## 154 3 METHOD
+
+###### 156 3.1 PRELIMINARIES
+
+158 **Mamba State Space Model.** Mamba (Gu & Dao, 2023) is a selective state space model (SSM)  
+159 that processes a sequence  $X = (x_1, \dots, x_T)$  by recurrently updating a hidden state  $h_t$ :
+
+$$160 \quad h_t = A_t h_{t-1} + B_t x_t, \quad y_t = C_t h_t, \quad (1)$$
+
+161 where  $h_t$  is the hidden state,  $y_t$  the output, and  $A_t, B_t, C_t$  are input-dependent matrices.
+
+![Figure 2: Future-to-Past Information Routing via Auxiliary Token Swapping. The diagram is split into two parts. The left part, labeled 'Bi-directional Scan', shows an image of a cat being processed through two parallel scan paths. The top path is a standard causal scan (downward arrows), and the bottom path is a reverse causal scan (upward arrows). Both paths lead to an 'SSM' block. Below this, it notes a time complexity of T - 2 token length and an O(n) permutation cost. The right part, labeled 'Auxiliary Token Swap(ours)', shows the same image being processed through a 'MambaBlock'. This block takes an input X and produces two auxiliary tokens, x_head^aux and x_tail^aux, which are then used to produce a sequence Y. A 'Swap' operation is shown between the auxiliary tokens and the sequence Y, resulting in a new sequence X-tilde. Below this, it notes a time complexity of T + 2 token length and an O(1) permutation cost.](2fa4a1bf91d0f34e87c689fbc1211fe3_img.jpg)
+
+Figure 2: Future-to-Past Information Routing via Auxiliary Token Swapping. The diagram is split into two parts. The left part, labeled 'Bi-directional Scan', shows an image of a cat being processed through two parallel scan paths. The top path is a standard causal scan (downward arrows), and the bottom path is a reverse causal scan (upward arrows). Both paths lead to an 'SSM' block. Below this, it notes a time complexity of T - 2 token length and an O(n) permutation cost. The right part, labeled 'Auxiliary Token Swap(ours)', shows the same image being processed through a 'MambaBlock'. This block takes an input X and produces two auxiliary tokens, x\_head^aux and x\_tail^aux, which are then used to produce a sequence Y. A 'Swap' operation is shown between the auxiliary tokens and the sequence Y, resulting in a new sequence X-tilde. Below this, it notes a time complexity of T + 2 token length and an O(1) permutation cost.
+
+Figure 2: **Future-to-Past Information Routing via Auxiliary Token Swapping.** The left figure illustrates why the commonly used multi-directional scan in visual Mamba fails to achieve high speed, while the right figure presents our proposed solution. We prepend/append learnable auxiliary tokens to the patch sequence  $x_{\text{head}}^{\text{aux}}$  and  $x_{\text{tail}}^{\text{aux}}$ . Within each MambaVision block, the causal selective scan aggregates sequence-wide context into the tail token  $y_{\text{tail}}^{\text{aux}}$ . A lightweight, parameter-free Swap operation then moves this global summary to the sequence head, yielding  $\tilde{X}$  for the next layer such that all patch states are conditioned on global context. It incurs negligible computational overhead while enabling effective global-context propagation across layers.
+
+In the vision setting, an image is divided into  $T$  patches, each embedded as  $x_t \in \mathbb{R}^D$ , forming a sequence  $X = (x_1, \dots, x_T)$ . A batch of such sequences is denoted as  $X_{\text{in}} \in \mathbb{R}^{B \times T \times D}$ , where  $B$  is the batch size,  $T$  the number of patches (sequence length), and  $D$  the embedding dimension. In this case, Mamba can be viewed as a mapping  $f_\theta : \mathbb{R}^{T \times D} \rightarrow \mathbb{R}^{T \times D}$  that applies the recurrence in eq. (1) to patch sequences.
+
+Using a *parallel scan* algorithm, this recursive operation is efficiently computed. Specifically, Mamba uses a warp scan function (NVIDIA, 2025a) implemented in the CUDA backend, which enables high-speed parallel scan by allowing multiple threads to share data through the fast SRAM memory of the GPU. Since this warp scan function operates in groups of 32 threads, each sequence must be processed using at least 32 threads.
+
+**Mamba-Transformer Hybrid Architecture.** We employ a Mamba-Transformer hybrid architecture, because previous studies indicate that the hybrid architecture achieves promising efficiency. In other words, we employ MambaVision (Hatamizadeh & Kautz, 2025) architecture as a macro level. It uses a four-stage hierarchical design. The first two stages are CNN-based and serve as a kind of deep patch embedding. The latter two stages consist of several Mamba blocks followed by several Attention Blocks. MambaVision accelerates processing by adopting a simple unidirectional scan. However, due to the *causality constraint*, it cannot reference future patches from past ones, so future-to-past information flow relies on subsequent Attention blocks. Detailed structure and formulation of the MambaVision-based blocks are provided in Appendix C.1.
+
+### 3.2 RETHINKING VISUAL SSM FROM DATA FLOW PERSPECTIVE
+
+**Future-to-Past Information Routing via Auxiliary Token Swapping.** Since image patches do not exhibit a strict causal ordering, restricting Mamba blocks to a unidirectional scan can be limiting: tokens in earlier regions (e.g., the top-left) cannot directly access information from later regions (e.g., the bottom-right), which hinders representation learning. While multi-scan approaches such as bidirectional or cross-scan alleviate this issue, they require repeated reordering of the data, which introduces substantial computational overhead and complicates implementation. Hence, we propose a future-to-past information flow with minimal additional cost by introducing two *auxiliary tokens*.
+
+At the first Mamba block in each stage, the two auxiliary tokens,  $x_{\text{head}}^{\text{aux},1}$  and  $x_{\text{tail}}^{\text{aux},1}$ , are initialized as data-dependent values (i.e.,  $x_{\text{head}}^{\text{aux},1} = x_{\text{tail}}^{\text{aux},1} = \text{avg}(X)$ , where  $\text{avg}()$  averages the sequential
+
+![Figure 3: Batch folding with periodic state reset. (Left) An input tensor of shape [B, D, T] is reshaped into [B1, D, (B2 * T)], concatenating B2 short sequences into a longer one. (Right) To avoid information leakage, we reset the recurrence every T steps. Since h_t <- A_t h_{t-1} + B_t x_t, setting A_t = 0 at boundaries is equivalent to re-initializing the hidden state. In contrast, B_t (input projection) and C_t (output projection) operate locally and therefore remain unchanged.](690fce4fb5c9cbb8beb560cb2a3fcbeb_img.jpg)
+
+216
+
+217
+
+218
+
+219
+
+220
+
+221
+
+222
+
+223
+
+The diagram illustrates the batch folding and periodic state reset process. On the left, an input tensor of shape  $[B, D, T]$  is shown as a purple 3D block. It is reshaped into a tensor of shape  $[B_1, D, (B_2 \cdot T)]$ , shown as a green 3D block. The reshaping operation concatenates  $B_2$  short sequences into a longer one. The right part of the diagram shows the periodic state reset process. The hidden state  $h_t$  is reset to zero at the boundaries of the  $T$  steps. The input projection  $B_t$  and output projection  $C_t$  operate locally and remain unchanged.
+
+**Periodic State Reset Trick**
+
+|                                                  |
+|--------------------------------------------------|
+| 1: <b>for</b> $t = 1$ to $B_2 \cdot T$ <b>do</b> |
+| 2: <b>if</b> $t \bmod T = 0$ <b>then</b>         |
+| 3: $A_t \leftarrow 0$                            |
+| 4: $h_t \leftarrow A_t h_{t-1} + B_t x_t$        |
+| 5: $y_t \leftarrow C_t h_t$                      |
+
+Figure 3: Batch folding with periodic state reset. (Left) An input tensor of shape [B, D, T] is reshaped into [B1, D, (B2 \* T)], concatenating B2 short sequences into a longer one. (Right) To avoid information leakage, we reset the recurrence every T steps. Since h\_t <- A\_t h\_{t-1} + B\_t x\_t, setting A\_t = 0 at boundaries is equivalent to re-initializing the hidden state. In contrast, B\_t (input projection) and C\_t (output projection) operate locally and therefore remain unchanged.
+
+224
+
+225
+
+226
+
+227
+
+228
+
+229
+
+Figure 3: **Batch folding with periodic state reset.** (Left) An input tensor of shape  $[B, D, T]$  is reshaped into  $[B_1, D, (B_2 \cdot T)]$ , concatenating  $B_2$  short sequences into a longer one. This reshaping mixes hidden states across batches. (Right) To avoid information leakage, we reset the recurrence every  $T$  steps. Since  $h_t \leftarrow A_t h_{t-1} + B_t x_t$ , setting  $A_t = 0$  at boundaries is equivalent to re-initializing the hidden state. In contrast,  $B_t$  (input projection) and  $C_t$  (output projection) operate locally and therefore remain unchanged.
+
+230
+
+231
+
+232
+
+dimension). The tokens are then concatenated at both ends of the input  $X$  for the first Mamba block:
+
+233
+
+234
+
+$$X' = (x_{\text{head}}^{\text{aux},1}, x_1, \dots, x_T, x_{\text{tail}}^{\text{aux},1}). \quad (2)$$
+
+235
+
+236
+
+237
+
+After processed by the  $i$ -th Mamba block, we swap the two tokens for the input of the next Mamba block (see Fig. 2):
+
+$$x_{\text{head}}^{\text{aux},i+1} = y_{\text{tail}}^{\text{aux},i}, \quad x_{\text{tail}}^{\text{aux},i+1} = y_{\text{head}}^{\text{aux},i}, \quad (3)$$
+
+238
+
+239
+
+240
+
+241
+
+242
+
+243
+
+244
+
+245
+
+246
+
+247
+
+where  $y_{\text{head}}^{\text{aux},i}$  and  $y_{\text{tail}}^{\text{aux},i}$  are the output tokens with respect to  $x_{\text{head}}^{\text{aux},i}$  and  $x_{\text{tail}}^{\text{aux},i}$ . By training this architecture, we expect that  $y_{\text{head}}^{\text{aux},i}$  extracts the necessary information from all tokens in the  $i$ -th layer, and  $y_{\text{head}}^{\text{aux},i}$  serves as a feature that determines how  $y_{\text{tail}}^{\text{aux},i+1}$  should be extracted in the next layer. Then, by swapping as shown in Eq. 3, the patch tokens of the next layer ( $x_1, x_2, \dots, x_T$ ) can refer to  $x_{\text{head}}^{\text{aux},i+1}$ , which contains features from all positions, allowing future-to-past information routing. This intended operation is natural for the selective scan SSM and does not disrupt the original mechanism, which selectively extracts the necessary information as  $y_t$  from hidden states that span from  $t = 0$  to  $t = t$ . Similarly, we expect it selectively extracts the necessary information as  $y_{\text{tail}}^{\text{aux},i}$  from hidden states that span from  $t = 0$  to  $t = T$ .
+
+248
+
+249
+
+250
+
+In contrast to multi-scan strategies, our approach does not rely on multiple parallel paths or global token rearrangements. Instead, it swaps only two tokens within the sequence, introducing negligible computational overhead.
+
+### 3.3 RETHINKING VISUAL SSM FROM COMPUTATIONAL PERSPECTIVE
+
+251
+
+252
+
+253
+
+254
+
+255
+
+256
+
+257
+
+258
+
+259
+
+260
+
+261
+
+**Batch Folding with Periodic State Reset.** We identify that Mamba’s inefficiency in low-resolution vision tasks arises from the warp-scan implementation, which achieves high throughput by utilizing 32 GPU threads per sequence (Sec. 3.1). In vision models, however, the number of patches (i.e., sequence length) is relatively small (e.g., 196 and 49 for MambaVision Stage 3 and 4), making the allocation of 32 threads per sequence highly underutilized and inefficient. To address this, we propose a batch folding strategy that reshapes the input by merging the batch dimension into the sequence dimension (Fig. 3, left). This improves parallel efficiency in scenarios with many short sequences while preserving the correctness of the computation. Let  $Z \in \mathbb{R}^{B \times D \times T}$  denote the batched tokens before entering the SSM. We reshape  $Z$  into
+
+262
+
+263
+
+$$Z' \in \mathbb{R}^{B_1 \times D \times (B_2 \cdot T)}, \quad B = B_1 \cdot B_2, \quad (4)$$
+
+264
+
+265
+
+266
+
+267
+
+which concatenates  $B_2$  short sequences into one longer sequence. This operation is a bijective permutation of indices, so the original tensor can be exactly recovered. Intuitively, this extends the effective sequence length in a pseudo manner, allowing the parallel scan to operate more efficiently by reducing kernel launch overhead and reducing inefficient use of memory bandwidth.
+
+268
+
+269
+
+However, this reshaping mixes hidden states across different sequences. To preserve independence, we effectively use and improve a computational trick implemented in vLLM software (Kwon et al., 2023), which was originally devised for Mamba inference in LLMs to handle multiple sequences
+
+of varying lengths without padding. Our trick for preserving the dependence of the folded data named *periodic state reset trick* is as follows (Fig. 3, right). In every  $T$  step, we set  $A_t = 0$ , which removes dependence on  $h_{t-1}$  and resets the hidden state. Then, all the hidden states become identical to those without batch folding. By unfolding the output, the output becomes equivalent to that obtained without applying batch folding. Note that  $B_1$  and  $C_t$  act only on the current input and hidden state, respectively, and thus do not require resetting. Since it only resets  $A$ , there is only a minimal increase in processing time.
+
+**Adaptive  $B_1$ .** In batch folding, it is not optimal to increase the virtual sequence size indefinitely. The ideal ratio between  $B_1$  and  $B_2$  is determined in a complex manner based on factors such as batch size  $B$ , number of input tokens  $T$ , model dimension  $D$ , state dimension  $S$ , and the number of threads used when invoking CUDA. Therefore, we precompute and store combinations of  $(B, D, L, S)$ , along with the optimal  $B_1/B$  ratio, in a coarse-grained 4-dimensional lookup table (*LUT*). At runtime, we retrieve the optimal  $B_1$  value from this *LUT* as follows:
+
+$$B_1 = f(B, B \cdot \text{LUT}(B, D, S, L)), \quad (5)$$
+
+where  $f(a, b)$  is a function that returns a divisor of  $a$ , which is closest to  $b$ .
+
+**1-D Depthwise Convolution for Batch Folded Data.** Although batch folding improves the speed of the SSM component, the reshaping operation in Eq. 4 introduces a slowdown. To mitigate this, we apply the transformation in Eq. 4 only at the initial Mamba block of each stage, and then continue computation using the batch-folded tensor shape. Since the Linear and LayerNorm layers operate per token, they do not pose any issues. However, the 1D depthwise convolution in the Mamba block presents a challenge. To address this, we implement a convolution that supports batch-folded data, ensuring that no convolution occurs across the boundaries between  $T$  sequences. In other words, our convolution CUDA kernel performs implicit padding at the boundary of each  $T$  sequence.
+
+## 4 EXPERIMENTS
+
+We conduct comprehensive experiments to evaluate SF-Mamba across three fundamental computer vision tasks: image classification, semantic segmentation, object detection with instance segmentation (Appendix D.3). Our experimental setup follows the protocols established by previous works (Liu et al., 2024; Xiao et al., 2025; Hatamizadeh & Kautz, 2025) to ensure fair comparisons. We evaluate three model variants (T/S/B) with different scales to analyze the accuracy-throughput trade-offs. For all downstream tasks, we use models pre-trained on ImageNet-1K as backbones. Detailed training configurations and hyperparameters are provided in Appendix B.
+
+### 4.1 IMAGE CLASSIFICATION
+
+**Experimental Setup.** We first evaluate our models on image classification task using ImageNet-1K (Deng et al., 2009), which contains 1.28M training images and 50K validation images across 1,000 categories. Models are trained from scratch for 300 epochs following prior works (Hatamizadeh & Kautz, 2025; Liu et al., 2024). Throughput is measured on a single NVIDIA A100 GPU with a batch size of 128 (see Appendix B.4 for details).
+
+**Results.** As shown in Fig. 1, SF-Mamba achieves superior efficiency-accuracy trade-offs with consistent improvements across all model scales (T/S/B variants) compared to existing architectures including CNN-based models (ConvNeXt (Liu et al., 2022), MambaOut (Yu & Wang, 2025)), Transformer-based models (DeiT (Touvron et al., 2021), Swin (Liu et al., 2021), Twins (Chu et al., 2021)), hybrid CNN-Transformer ar-
+
+![Figure 4: A line graph showing Speedup (%) on the y-axis (ranging from 100 to 180) versus B1/B ratio on the x-axis (logarithmic scale from 2^-7 to 1). Four data series are plotted: [128, 320, 8, 196] (blue circles), [128, 512, 8, 196] (green triangles), [128, 640, 8, 49] (red squares), and [128, 1024, 8, 49] (red diamonds). The red series show higher speedups, peaking around 180% at B1/B = 2^-5, while the blue and green series remain relatively flat around 110%.](2c51e13558d27d3452dfec3fb73aaed1_img.jpg)
+
+| $B_1/B$  | [128, 320, 8, 196] (%) | [128, 512, 8, 196] (%) | [128, 640, 8, 49] (%) | [128, 1024, 8, 49] (%) |
+|----------|------------------------|------------------------|-----------------------|------------------------|
+| $2^{-7}$ | 115                    | 108                    | 175                   | 175                    |
+| $2^{-6}$ | 110                    | 108                    | 178                   | 178                    |
+| $2^{-5}$ | 110                    | 108                    | 180                   | 180                    |
+| $2^{-4}$ | 110                    | 108                    | 175                   | 175                    |
+| $2^{-3}$ | 110                    | 108                    | 165                   | 165                    |
+| $2^{-2}$ | 108                    | 105                    | 170                   | 170                    |
+| $2^{-1}$ | 100                    | 100                    | 160                   | 160                    |
+| 1        | 100                    | 100                    | 100                   | 100                    |
+
+Figure 4: A line graph showing Speedup (%) on the y-axis (ranging from 100 to 180) versus B1/B ratio on the x-axis (logarithmic scale from 2^-7 to 1). Four data series are plotted: [128, 320, 8, 196] (blue circles), [128, 512, 8, 196] (green triangles), [128, 640, 8, 49] (red squares), and [128, 1024, 8, 49] (red diamonds). The red series show higher speedups, peaking around 180% at B1/B = 2^-5, while the blue and green series remain relatively flat around 110%.
+
+Figure 4: How much we can speedup the SSM calculation by changing  $B_1$ . The four configurations of [batch size, dimension, state dimension, sequence length] are exact settings for ours-T stage 3, ours-T stage 4, ours-B stage 3, ours-B stage 4.
+
+chitectures (EfficientFormer (Li et al., 2022), EfficientViT (Cai et al., 2023), MobileNetV4-H-M (Qin et al., 2024), SHViT (Yun & Ro, 2024), FasterViT (Hatamizadeh et al., 2024)), and recent Mamba-based models (Vim (Zhu et al., 2024), VMamba (Liu et al., 2024), Spatial-Mamba (Xiao et al., 2025), MambaVision (Hatamizadeh & Kautz, 2025)). Note that some models in Fig. 1 have non-224×224 input resolution (see Appendix B. Tab. 4 provides a detailed comparison of models evaluated at the standard 224×224 resolution.
+
+**Analysis.** To analyze the effect of *batch folding with periodic state reset*, the speed of the SSM kernel part is measured, as shown in Fig. 4. A clear speedup of 110% to 180% is observed when the batch dimension is virtually shifted into the sequential dimension. This improvement is especially significant when the sequential length is short. The reason lies in the CUDA parallel scan algorithm, which plays a crucial role in Mamba’s speedup. This algorithm requires at least 32 threads per sequence, and when the sequence is short, the overhead of allocating 32 threads becomes substantial. By virtually extending the sequence length, we can utilize the allocated threads more efficiently, leading to a significant performance boost.
+
+Table 1: The computational speedup achieved by our method
+
+| impl. opt. | BFold | $B_1$    | conv | img/s       |
+|------------|-------|----------|------|-------------|
+|            |       |          |      | 6662        |
+| ✓          |       |          |      | 6989        |
+| ✓          | ✓     | 1        | ✓    | 7601        |
+| ✓          | ✓     | 4        | ✓    | 7641        |
+| ✓          | ✓     | adaptive |      | 7279        |
+| ✓          | ✓     | adaptive | ✓    | <b>7685</b> |
+
+Next, we evaluate how much our proposed method can improve the overall model speed, as shown in Tab. 1. Our baseline is MambaVision-T, and we measure the degree of speed improvement from it. First, we improve the implementation and observe a speedup, which we denote as *impl. opt.* This improvement primarily stems from the SSM CUDA kernel, which we rewrote based on the Mamba SSM CUDA kernel to suit our method. Building upon this, our *batch folding with periodic state reset (BFold)* technique achieves a significant speedup. Furthermore, our *adaptive  $B_1$*  approach, which adaptively adjusts  $B_1$  according to input and weight sizes, enables further improvements in inference speed. Since MambaVision is a hybrid model that combines Attention and Mamba, it goes without saying that it does not achieve the same level of speed improvement as described in Fig. 4. However, it still delivers significant performance gains compared to the baseline.
+
+Table 2: The effectiveness of auxiliary token swapping and its ablation results.
+
+| swap | auxiliary token | discard timing | IN1K acc.   | ADE20K IoU  | img/s |
+|------|-----------------|----------------|-------------|-------------|-------|
+|      |                 |                | 82.2        | 46.0        | 7645  |
+|      | learnable       | before attn    | 82.1        | 46.2        | 7613  |
+| ✓    | learnable       | before attn    | 82.3        | 46.5        | 7585  |
+| ✓    | data-dependent  | before attn    | 82.4        | 46.8        | 7602  |
+| ✓    | data-dependent  | after 1st attn | <b>82.5</b> | <b>47.2</b> | 7600  |
+| ✓    | data-dependent  | after attn     | 82.4        | 46.6        | 7597  |
+
+Tab. 2 presents an ablation study on *auxiliary token swapping*. The swapping improves performance with only a minimal impact on inference speed. Simply adding learnable tokens without performing swapping degrades performance, indicating that the improvement does not come from the increased flexibility provided by the additional tokens, but rather from the bidirectional information flow enabled by swapping. Looking at Fig. 7 in the Appendix, we can clearly see that it indeed achieves substantial bi-directional information propagation. Initializing auxiliary tokens as globally averaged data-dependent values proves more effective than employing a learnable token, which is commonly used as a class (Dosovitskiy et al., 2020; Zhu et al., 2024). In addition, Initializing this token with global features may allow subsequent layers to effectively acquire the global information needed for the next layer. As for where to discard this token, the most efficient approach is to remove it after the first attention layer.
+
+Table 3: Comparison of effective scan designs. The “series bi-scan + gap token” follows Adventurer (Wang et al., 2025b), where a global token obtained via global average pooling is used. In parallel bi-scan, “cat” splits the input along channels, applies bi-scan, and concatenates the results, while “add” duplicates the input, applies bi-scan, and sums the outputs.
+
+| macro-arch.<br>scan                   | MambaVision-T |      |             |             | MambaVision-T w/o Attention |      |             |             |
+|---------------------------------------|---------------|------|-------------|-------------|-----------------------------|------|-------------|-------------|
+|                                       | Params        | MACs | img/s       | acc.        | Params                      | MACs | img/s       | acc.        |
+| uni-scan                              | 31.8M         | 4.4G | 6979        | 82.2        | 29.4M                       | 4.2G | 6238        | 80.2        |
+| series bi-scan                        | 31.8M         | 4.4G | 6911        | 82.3        | 29.4M                       | 4.2G | 6113        | 80.4        |
+| series bi-scan+gap token (Adventurer) | 31.8M         | 4.5G | 6856        | 82.3        | 29.4M                       | 4.3G | 6027        | 80.7        |
+| parallel bi-scan (cat)                | 31.8M         | 4.4G | 6834        | 82.2        | 29.4M                       | 4.2G | 5987        | 80.8        |
+| parallel bi-scan (add)                | 31.9M         | 4.5G | 6235        | 82.3        | 29.7M                       | 4.3G | 5138        | 81.1        |
+| parallel bi-scan (add) (Vim block)    | 33.5M         | 4.6G | 4612        | 82.4        | 32.8M                       | 4.6G | 3256        | <b>81.7</b> |
+| uni-scan + swap (ours)                | 31.8M         | 4.5G | <b>6926</b> | <b>82.5</b> | 29.4M                       | 4.3G | <b>6171</b> | 81.0        |
+| uni-scan + swap (ours) + Bfold        | 31.8M         | 4.5G | 7600        | 82.5        | 29.4M                       | 4.3G | 7306        | 81.0        |
+
+Table 4: Detailed comparison of image classification performance on ImageNet-1K. All models in this table are evaluated with 224×224 input resolution.
+
+| Model              | Token Mixer       | Params | MACs  | Throughput (img/s) | Top-1 Acc (%) |
+|--------------------|-------------------|--------|-------|--------------------|---------------|
+| ConvNeXt-T         | Conv              | 29M    | 4.5G  | 3990               | 82.1          |
+| MambaOut-T         | Conv              | 27M    | 4.5G  | 3031               | 82.7          |
+| Swin-T             | Attn              | 29M    | 4.5G  | 2863               | 81.3          |
+| Twins-S            | Attn              | 24M    | 2.9G  | 2669               | 81.7          |
+| EfficientFormer-L3 | Pool + Attn       | 31M    | 3.9G  | 3246               | 82.4          |
+| FasterViT-0        | Conv + Attn       | 31M    | 3.3G  | 5651               | 82.1          |
+| Vim-S              | Conv + SSM        | 26M    | 5.3G  | 1079               | 80.1          |
+| VMamba-T           | Conv + SSM        | 30M    | 4.9G  | 1684               | 82.6          |
+| Spatial-Mamba-T    | Conv + SSM        | 27M    | 4.5G  | 1430               | 83.5          |
+| MambaVision-T      | Conv + SSM + Attn | 32M    | 4.4G  | 6662               | 82.3          |
+| <b>SF-Mamba-T</b>  | Conv + SSM + Attn | 32M    | 4.5G  | <b>7600</b>        | 82.5          |
+| ConvNeXt-S         | Conv              | 50M    | 8.7G  | 2552               | 83.1          |
+| MambaOut-S         | Conv              | 49M    | 9.0G  | 1948               | 84.1          |
+| Swin-S             | Attn              | 50M    | 8.7G  | 1805               | 83.0          |
+| Twins-B            | Attn              | 56M    | 8.6G  | 1409               | 83.2          |
+| FasterViT-1        | Conv + Attn       | 53M    | 5.3G  | 4402               | 83.2          |
+| EfficientViT-B3    | Conv + Attn       | 49M    | 4.0G  | 2315               | 83.5          |
+| VMamba-S           | Conv + SSM        | 50M    | 8.7G  | 879                | 83.6          |
+| Spatial-Mamba-S    | Conv + SSM        | 43M    | 7.1G  | 990                | 84.6          |
+| MambaVision-S      | Conv + SSM + Attn | 50M    | 7.5G  | 4933               | 83.3          |
+| <b>SF-Mamba-S</b>  | Conv + SSM + Attn | 50M    | 7.6G  | <b>5639</b>        | 83.5          |
+| ConvNeXt-B         | Conv              | 89M    | 15.4G | 1943               | 83.8          |
+| MambaOut-B         | Conv              | 85M    | 15.9G | 1195               | 84.2          |
+| Swin-B             | Attn              | 88M    | 15.4G | 1377               | 83.5          |
+| Twins-L            | Attn              | 99M    | 15.1G | 1059               | 83.7          |
+| EfficientFormer-L7 | Pool + Attn       | 82M    | 10.2G | 1573               | 83.3          |
+| FasterViT-2        | Conv + Attn       | 76M    | 8.7G  | 3392               | 84.2          |
+| VMamba-B           | Conv + SSM        | 89M    | 15.4G | 640                | 83.9          |
+| Spatial-Mamba-B    | Conv + SSM        | 96M    | 15.8G | 670                | 85.3          |
+| MambaVision-B      | Conv + SSM + Attn | 98M    | 15.0G | 2974               | 84.2          |
+| <b>SF-Mamba-B</b>  | Conv + SSM + Attn | 98M    | 15.1G | <b>3534</b>        | 84.4          |
+
+Tab. 3 demonstrates which scan method is most efficient. Here, we evaluate with two macro-architectures. One is MambaVision-T, and the other is an architecture in which all attention blocks in MambaVision-T are replaced into Mamba blocks. The parallel bidirectional scan (bi-scan) requires twice the SSM computation cost due to its parallel nature, resulting in inefficient computation. Even in parallel bi-scan (cat), which halves the channel dimension to align MACs, the speed is slow due to the tensor rearrangement cost.
+
+In contrast, the series bidirectional scan flips the token sequence at each layer, with odd-numbered blocks scanning in the forward direction and even-numbered blocks scanning in the reverse direction. This design allows for the creation of global features without increasing the number of FLOPs. However, the accuracy improvement is not as significant as expected. We hypothesize that DropOut (Huang et al., 2016), which is effective in preventing overfitting and gradient vanishing, may not be compatible with the series bidirectional scan architecture, which has an asymmetric structure across layers. To this end, Adventurer (Wang et al., 2025b) style model does not achieve high accuracy, although the introduced global averaged token actually improves from the normal series bi-scan setting. Also, the flipping operation needed for the bi-scan the block incurs the speed with an  $O(n)$  permutation cost.
+
+On the other hand, our *auxiliary token swapping* only swaps two tokens, minimizing the slowdown while achieving comparable or superior accuracy. The fact that the swapping improves a lot from unidirectional scan with the Mamba only architecture indicates that it allows future-to-past token information flow with the swapping, thereby facilitating the creation of better features (See Fig. 7).
+
+### 4.2 SEMANTIC SEGMENTATION
+
+Table 5: Semantic segmentation performance on ADE20K dataset using UperNet. We compare with Swin Transformer (Liu et al., 2021), Focal Transformer (Yang et al., 2021), and MambaVision (Hatamizadeh & Kautz, 2025). All models are trained at a resolution of  $512 \times 512$  while FLOPs are calculated with an input size of  $2048 \times 512$ . Frames per second (FPS) are measured with a batch size of 1. SF-Mamba♣ uses a windowed attention to save computational cost.
+
+| Backbone         | Tiny-size |       |             |             | Small-size |       |             |             | Base-size |       |             |             |
+|------------------|-----------|-------|-------------|-------------|------------|-------|-------------|-------------|-----------|-------|-------------|-------------|
+|                  | Para      | FLOPs | mIoU        | fps         | Para       | FLOPs | mIoU        | fps         | Para      | FLOPs | mIoU        | fps         |
+| Swin             | 60M       | 945G  | 44.5        | 40.0        | 81M        | 1038G | 47.6        | 25.7        | 121M      | 1188G | 48.1        | 25.4        |
+| Focal            | 62M       | 998G  | 45.8        | 38.9        | 85M        | 1130G | 48.0        | 24.0        | 126M      | 1354G | 49.0        | 23.4        |
+| MambaVision      | 62M       | 1085G | 46.0        | 45.0        | 81M        | 1166G | 48.2        | 40.9        | 130M      | 1520G | 49.1        | 37.3        |
+| <b>SF-Mamba</b>  | 62M       | 1085G | <b>47.2</b> | 47.9        | 81M        | 1166G | <b>48.5</b> | 45.4        | 130M      | 1520G | <b>50.1</b> | 42.6        |
+| <b>SF-Mamba♣</b> | 62M       | 950G  | 46.5        | <b>48.7</b> | 81M        | 1014G | 48.1        | <b>47.3</b> | 130M      | 1180G | 49.1        | <b>42.7</b> |
+
+**Experimental Setup.** We evaluate on ADE20K (Zhou et al., 2017) using UperNet (Xiao et al., 2018) as the segmentation framework. This task requires assigning a semantic class label to each pixel in the image across 150 categories. Models are trained with  $512 \times 512$  crop resolution following standard protocols (Liu et al., 2024; Xiao et al., 2025). Performance is measured by mean Intersection over Union (mIoU) (Csurka et al., 2013).
+
+**Results.** Tab. 5 summarizes the semantic segmentation performance on ADE20K. Segmentation, unlike image classification, requires both fine-grained pixel-level boundary detection and global structural understanding to accurately identify object classes. Therefore, enabling the Mamba block to incorporate future patch information through state swapping significantly improves the accuracy compared to the baseline MambaVision. During inference, the model processes images at a resolution of  $512 \times 2048$ , which differs from the training resolution. To accommodate this discrepancy, both Mamba and Attention are implemented to process per windowed region, where the window size matches the training image dimensions (see Appendix C.3 for details). Therefore, although the inference speed is measured with a batch size of 1, the model still benefits from batch folding based
+
+![Figure 5: Throughput-accuracy trade-off on ADE20K. A scatter plot showing mIoU (%) on the y-axis (ranging from 45 to 50) versus fps on the x-axis (ranging from 25 to 45). Four data series are plotted: Swin (blue circles), Focal (purple crosses), MambaVision (orange triangles), and SF-Mamba (red squares). SF-Mamba variants (solid and dashed lines) are positioned at the top right, indicating high accuracy and high throughput. Swin, Focal, and MambaVision are lower and to the left, indicating lower accuracy and/or lower throughput.](0d5fdb87a392819c7d2e3b6230912a0b_img.jpg)
+
+| Model              | fps | mIoU (%) |
+|--------------------|-----|----------|
+| Swin               | 25  | 48.1     |
+| Swin               | 40  | 44.5     |
+| Focal              | 25  | 49.0     |
+| Focal              | 38  | 45.8     |
+| MambaVision        | 38  | 49.1     |
+| MambaVision        | 42  | 48.2     |
+| SF-Mamba (solid)   | 42  | 50.1     |
+| SF-Mamba (dashed)  | 45  | 49.1     |
+| SF-Mamba♣ (solid)  | 45  | 48.1     |
+| SF-Mamba♣ (dashed) | 47  | 46.5     |
+
+Figure 5: Throughput-accuracy trade-off on ADE20K. A scatter plot showing mIoU (%) on the y-axis (ranging from 45 to 50) versus fps on the x-axis (ranging from 25 to 45). Four data series are plotted: Swin (blue circles), Focal (purple crosses), MambaVision (orange triangles), and SF-Mamba (red squares). SF-Mamba variants (solid and dashed lines) are positioned at the top right, indicating high accuracy and high throughput. Swin, Focal, and MambaVision are lower and to the left, indicating lower accuracy and/or lower throughput.
+
+Figure 5: **Throughput-accuracy trade-off on ADE20K.** The x-axis denotes frames per second with batch size 1 setting (higher is better), and the y-axis shows mIoU (higher is better). SF-Mamba variants lie on the Pareto front.
+
+on the number of windows, resulting in an improved speed. Our base size model is faster compared to the Tiny versions of Swin and Focal Transformer, while achieving over 4 points higher mIoU. This fact can be clearly understood if we visualize the accuracy-speed trade-off as shown in Fig. 5. The best trade-off among recent visual backbones indicates that the proposed auxiliary patch swapping improves both efficiency and generalization capability, offering superior accuracy per unit of computational cost.
+
+The SF-Mamba♣ configuration in Table 5 adopts more granular window attention to reduce the quadratic computational cost of Attention by dividing the image into smaller windows. Meanwhile, Mamba is not affected by long tokens. So, we do not use a window size smaller than the training image size for the Mamba blocks to capture global context, resulting in better efficiency in terms of FLOPs. More details can be found in Appendix D.4. Moreover, Table 12 in Appendix indicates that much larger input images benefit a large speed gain in SF-Mamba♣ configuration.
+
+## 5 CONCLUSION
+
+In this paper, we rethink the recently effective visual Mamba approach from two perspectives. The first is an efficient scanning method for vision tasks. Previous studies have addressed the causality constraint of SSM by introducing multiple scan directions, but this comes with a significant drop in inference speed. To overcome this, we propose auxiliary token swapping, which enables future-to-past information flow without sacrificing inference speed, thereby achieving efficient scanning. The second perspective investigates why Mamba tends to be slow in image processing. We identified the bottleneck and proposed batch folding, a method that virtually extends the sequence length while keeping the identical SSM output, resulting in faster processing without accuracy drop. SF-Mamba, a novel Mamba-based framework with these proposals, achieves a superior accuracy-speed trade-off compared to existing methods. Although the latter technique may not provide benefits during inference with batch size = 1, training typically uses batch size > 1, so the speed-up advantage is expected in most training scenarios. Moreover, even with a batch size of 1, Mamba-based approaches—such as those employing local windows as in our segmentation experiments or multi-directional scan—result in an effective batch size larger than 1 for the SSM, thereby allowing for performance acceleration. We believe that this work will advance the development of efficient and effective image recognition models.
+
+## REFERENCES
+
+- Daniel Bolya, Po-Yao Huang, Peize Sun, Jang Hyun Cho, Andrea Madotto, Chen Wei, Tengyu Ma, Jiale Zhi, Jathushan Rajasegaran, Hanooma Rasheed, Junke Wang, Marco Monteiro, Hu Xu, Shiyu Dong, Nikhila Ravi, Daniel Li, Piotr Dollár, and Christoph Feichtenhofer. Perception encoder: The best visual embeddings are not at the output of the network. *CoRR*, abs/2504.13181, 2025.
+- Han Cai, Junyan Li, Muyan Hu, Chuang Gan, and Song Han. Efficientvit: Lightweight multi-scale attention for high-resolution dense prediction. In *2023 IEEE/CVF International Conference on Computer Vision (ICCV)*, pp. 17256–17267, 2023.
+- Zhaowei Cai and Nuno Vasconcelos. Cascade r-cnn: High quality object detection and instance segmentation. *IEEE Transactions on Pattern Analysis and Machine Intelligence*, pp. 1–1, 2019a. ISSN 1939-3539. doi: 10.1109/tpami.2019.2956516. URL <http://dx.doi.org/10.1109/tpami.2019.2956516>.
+- Zhaowei Cai and Nuno Vasconcelos. Cascade r-cnn: High quality object detection and instance segmentation. *IEEE transactions on pattern analysis and machine intelligence*, 43(5):1483–1498, 2019b.
+- Kai Chen, Jiaqi Wang, Jiangmiao Pang, Yuhang Cao, Yu Xiong, Xiaoxiao Li, Shuyang Sun, Wansen Feng, Ziwei Liu, Jiarui Xu, et al. Mmdetection: Open mmlab detection toolbox and benchmark. *arXiv preprint arXiv:1906.07155*, 2019.
+- Xiangxiang Chu, Zhi Tian, Yuqing Wang, Bo Zhang, Haibing Ren, Xiaolin Wei, Huaxia Xia, and Chunhua Shen. Twins: Revisiting the design of spatial attention in vision transformers. In *Advances in Neural Information Processing Systems*, volume 34, pp. 9355–9366, 2021.
+
+- 540 MMSegmentation Contributors. MMSegmentation: Openmmlab semantic segmentation toolbox  
+541 and benchmark. <https://github.com/open-mmlab/mmsegmentation>, 2020.
+- 542  
+543 Gabriela Csurka, Diane Larlus, Florent Perronnin, and François Meylan. What is a good evaluation  
+544 measure for semantic segmentation? *Proceedings of the British Machine Vision Conference*, pp.  
+545 32.1–32.11, 2013.
+- 546 Ekin D Cubuk, Barret Zoph, Jonathon Shlens, and Quoc V Le. Randaugment: Practical automated  
+547 data augmentation with a reduced search space. In *Proceedings of the IEEE/CVF conference on*  
+548 *computer vision and pattern recognition workshops*, pp. 702–703, 2020.
+- 549  
+550 Tri Dao and Albert Gu. Transformers are ssms: generalized models and efficient algorithms through  
+551 structured state space duality. In *Proceedings of the 41st International Conference on Machine*  
+552 *Learning*, ICML’24. JMLR.org, 2024.
+- 553 Jia Deng, Wei Dong, Richard Socher, Li-Jia Li, Kai Li, and Li Fei-Fei. Imagenet: A large-scale hi-  
+554 erarchical image database. In *2009 IEEE conference on computer vision and pattern recognition*,  
+555 pp. 248–255. Ieee, 2009.
+- 556  
+557 Xiaohan Ding, Xiangyu Zhang, Jungong Han, and Guiguang Ding. Scaling up your kernels to  
+558 31x31: Revisiting large kernel design in cnns. In *Proceedings of the IEEE/CVF Conference on*  
+559 *Computer Vision and Pattern Recognition (CVPR)*, pp. 11963–11975, June 2022.
+- 560 Alexey Dosovitskiy, Lucas Beyer, Alexander Kolesnikov, Dirk Weissenborn, Xiaohua Zhai, Thomas  
+561 Unterthiner, Mostafa Dehghani, Matthias Minderer, Georg Heigold, Sylvain Gelly, et al. An  
+562 image is worth 16x16 words: Transformers for image recognition at scale. *arXiv preprint*  
+563 *arXiv:2010.11929*, 2020.
+- 564 Stéphane d’Ascoli, Hugo Touvron, Matthew L Leavitt, Ari S Morcos, Giulio Biroli, and Levent  
+565 Sagun. Convit: Improving vision transformers with soft convolutional inductive biases. In *Inter-*  
+566 *national conference on machine learning*, pp. 2286–2296. PMLR, 2021.
+- 567  
+568 Stefan Elfwing, Eiji Uchibe, and Kenji Doya. Sigmoid-weighted linear units for neural network  
+569 function approximation in reinforcement learning. *Neural networks*, 107:3–11, 2018.
+- 570  
+571 Omar Elharrouss, Yassine Himeur, Yasir Mahmood, Saed Alrabee, Abdelmalik Ouamane, Faycal  
+572 Bensali, Yassine Bechqito, and Ammar Chouchane. Vits as backbones: Leveraging vision  
+573 transformers for feature extraction. *Inf. Fusion*, 118:102951, 2025.
+- 574 Kevin Galim, Wonjun Kang, Yuchen Zeng, Hyung Il Koo, and Kangwook Lee. Parameter-efficient  
+575 fine-tuning of state space models. In *Forty-second International Conference on Machine Learn-*  
+576 *ing*, 2025.
+- 577  
+578 Albert Gu and Tri Dao. Mamba: Linear-time sequence modeling with selective state spaces. *arXiv*  
+579 *preprint arXiv:2312.00752*, 2023.
+- 580  
+581 Ali Hatamizadeh and Jan Kautz. Mambavision: A hybrid mamba-transformer vision backbone. In  
+582 *Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)*,  
+583 pp. 25261–25270, 2025.
+- 584  
+585 Ali Hatamizadeh, Greg Heinrich, Hongxu Yin, Andrew Tao, Jose M. Alvarez, Jan Kautz, and Pavlo  
+586 Molchanov. Fastervit: Fast vision transformers with hierarchical attention. In *International Con-*  
+587 *ference on Learning Representations (ICLR)*, 2024.
+- 588  
+589 Kaiming He, Xiangyu Zhang, Shaoqing Ren, and Jian Sun. Deep residual learning for image recog-  
+590 nition. In *Proceedings of the IEEE conference on computer vision and pattern recognition*, pp.  
+591 770–778, 2016.
+- 592  
+593 Kaiming He, Georgia Gkioxari, Piotr Dollár, and Ross Girshick. Mask r-cnn. In *Proceedings of the*  
+594 *IEEE international conference on computer vision*, pp. 2961–2969, 2017.
+- 595  
+596 Gao Huang, Yu Sun, Zhuang Liu, Daniel Sedra, and Kilian Q Weinberger. Deep networks with  
+597 stochastic depth. In *European conference on computer vision*, pp. 646–661. Springer, 2016.
+
+- 594        Salman H. Khan, Muzammal Naseer, Munawar Hayat, Syed Waqas Zamir, Fahad Shahbaz Khan,  
+595        and Mubarak Shah. Transformers in vision: A survey. *ACM Comput. Surv.*, 54(10s):200:1–  
+596        200:41, 2022.
+- 597  
+598        Alex Krizhevsky, Ilya Sutskever, and Geoffrey E Hinton. Imagenet classification with deep convo-  
+599        lutional neural networks. *Advances in neural information processing systems*, 25, 2012.
+- 600  
+601        Woosuk Kwon, Zhuohan Li, Siyuan Zhuang, Ying Sheng, Liannin Zheng, Cody Hao Yu, Joseph E.  
+602        Gonzalez, Hao Zhang, and Ion Stoica. Efficient memory management for large language model  
+603        serving with pagedattention. In *Proceedings of the ACM SIGOPS 29th Symposium on Operating  
+604        Systems Principles*, 2023.
+- 605  
+606        Yanyu Li, Geng Yuan, Yang Wen, Ju Hu, Georgios Evangelidis, Sergey Tulyakov, Yanzhi Wang,  
+607        and Jian Ren. Efficientformer: Vision transformers at mobilenet speed. In *Advances in Neural  
+608        Information Processing Systems*, volume 35, pp. 12934–12949, 2022.
+- 609  
+610        Tsung-Yi Lin, Michael Maire, Serge Belongie, James Hays, Pietro Perona, Deva Ramanan, Piotr  
+611        Dollár, and C Lawrence Zitnick. Microsoft coco: Common objects in context. In *European  
+612        conference on computer vision*, pp. 740–755. Springer, 2014.
+- 613  
+614        Leiyu Liu, Miao Zhang, Jihao Yin, Tingwei Liu, Wei Ji, Yongri Piao, and Huchuan Lu. Defmamba:  
+615        Deformable visual state space model. In *Proceedings of the Computer Vision and Pattern Recog-  
+616        nition Conference*, pp. 8838–8847, 2025.
+- 617  
+618        Yue Liu, Yunjie Tian, Yuzhong Zhao, Hongtian Yu, Lingxi Xie, Yaowei Wang, Qixiang Ye, Jianbin  
+619        Jiao, and Yunfan Liu. Vmamba: Visual state space model. In *NeurIPS*, 2024.
+- 620  
+621        Ze Liu, Yutong Lin, Yue Cao, Han Hu, Yixuan Wei, Zheng Zhang, Stephen Lin, and Baining Guo.  
+622        Swin transformer: Hierarchical vision transformer using shifted windows. In *Proceedings of the  
+623        IEEE/CVF International Conference on Computer Vision*, pp. 10012–10022, 2021.
+- 624  
+625        Zhuang Liu, Hanzi Mao, Chao-Yuan Wu, Christoph Feichtenhofer, Trevor Darrell, and Saining Xie.  
+626        A convnet for the 2020s. In *Proceedings of the IEEE/CVF Conference on Computer Vision and  
+627        Pattern Recognition*, pp. 11976–11986, 2022.
+- 628  
+629        Jonathan Long, Evan Shelhamer, and Trevor Darrell. Fully convolutional networks for semantic  
+630        segmentation. In *Proceedings of the IEEE conference on computer vision and pattern recognition*,  
+631        pp. 3431–3440, 2015.
+- 632  
+633        Wenjie Luo, Yujia Li, Raquel Urtasun, and Richard Zemel. Understanding the effective receptive  
+634        field in deep convolutional neural networks. *Advances in neural information processing systems*,  
+635        29, 2016.
+- 636  
+637        NVIDIA. cub::warpscan — cub 2.5 documentation. [https://wmaxey.github.io/cccl/](https://wmaxey.github.io/cccl/cub/api/classcub_1_1WarpScan.html)  
+638        [cub/api/classcub\\_1\\_1WarpScan.html](https://wmaxey.github.io/cccl/cub/api/classcub_1_1WarpScan.html), 2025a. Accessed: 2025-09-15.
+- 639  
+640        NVIDIA. Tensorrt llm. <https://github.com/NVIDIA/TensorRT-LLM>, 2025b. Accessed:  
+641        2025-11-27.
+- 642  
+643        Maxime Oquab, Timothée Darcet, Théo Moutakanni, Huy Vo, Marc Szafraniec, Vasil Khalidov,  
+644        Pierre Fernandez, Daniel Haziza, Francisco Massa, Alaaeldin El-Nouby, et al. Dinov2: Learning  
+645        robust visual features without supervision. *Transactions on Machine Learning Research Journal*,  
+646        2024.
+- 647  
+648        Xiaohuan Pei, Tao Huang, and Chang Xu. Efficientvmamba: Atrous selective scan for light weight  
+649        visual mamba. In *AAAI*, pp. 6443–6451. AAAI Press, 2025.
+- 650  
+651        Danfeng Qin, Chas Leichner, Manolis Delakis, Marco Fornoni, Shixin Luo, Fan Yang, Weijun  
+652        Wang, Colby R. Banbury, Chengxi Ye, Berkin Akin, Vaibhav Aggarwal, Tenghui Zhu, Daniele  
+653        Moro, and Andrew G. Howard. Mobilenetv4: Universal models for the mobile ecosystem. In  
+654        *Computer Vision - ECCV 2024 - 18th European Conference, Milan, Italy, September 29-October  
+655        4, 2024, Proceedings, Part XL*. Springer, 2024.
+
+[Appendix and supplementary materials beyond page 12 have been removed.]

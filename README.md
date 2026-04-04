@@ -243,17 +243,6 @@ This leakage does not appear to fully explain the current system behavior, since
 
 More broadly, this is a general caution for any paper-review benchmark: metadata leakage can enter through parsed PDFs, repository mirrors, camera-ready headers, publication notices, or other artifacts that are not part of the original blind submission. Such leakage may not always produce obviously inflated accuracy, but it can still distort benchmarking results. Future benchmarks should explicitly audit and sanitize these signals before evaluation.
 
-Score distribution (ICLR 2025 reviewer ratings: 1, 3, 5, 6, 8, 10):
-
-| Bin | Accept | Reject | Total |
-|-----|--------|--------|-------|
-| ~3  | 0      | 3      | 3     |
-| ~4  | 0      | 9      | 9     |
-| ~5  | 3      | 21     | 24    |
-| ~6  | 24     | 21     | 45    |
-| ~7  | 13     | 0      | 13    |
-| ~8  | 6      | 0      | 6     |
-
 **You MUST use `--balanced` for evaluation.** Without it, random sampling heavily oversamples bin 6 (45% of data), which compresses the score range of test papers and dramatically reduces measured correlation (Pearson, Spearman). A model that is actually discriminative will appear to have collapsed variance simply because the test set lacks spread. The `--balanced` flag stratifies across score bins so there are enough low-scoring and high-scoring papers to measure correlation properly. This single flag can make the difference between a Pearson of ~0.3 and ~0.6+.
 
 ## Metrics

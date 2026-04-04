@@ -1,0 +1,973 @@
+## SCALABLE AND CERTIFIABLE GRAPH UNLEARNING: OVERCOMING THE APPROXIMATION ERROR BARRIER 
+
+## **Lu Yi & Zhewei Wei** _[∗]_ 
+
+Renmin University of China 
+
+_{_ yilu, zhewei _}_ @ruc.edu.cn 
+
+## ABSTRACT 
+
+Graph unlearning has emerged as a pivotal research area for ensuring privacy protection, given the widespread adoption of Graph Neural Networks (GNNs) in applications involving sensitive user data. Among existing studies, certified graph unlearning is distinguished by providing robust privacy guarantees. However, current certified graph unlearning methods are impractical for large-scale graphs because they necessitate the costly re-computation of graph propagation for each unlearning request. Although numerous scalable techniques have been developed to accelerate graph propagation for GNNs, their integration into certified graph unlearning remains uncertain as these scalable approaches introduce approximation errors into node embeddings. In contrast, certified graph unlearning demands bounded model error on exact node embeddings to maintain its certified guarantee. 
+
+To address this challenge, we present ScaleGUN, the first approach to scale certified graph unlearning to billion-edge graphs. ScaleGUN integrates the approximate graph propagation technique into certified graph unlearning, offering certified guarantees for three unlearning scenarios: node feature, edge, and node unlearning. Extensive experiments on real-world datasets demonstrate the efficiency and unlearning efficacy of ScaleGUN. Remarkably, ScaleGUN accomplishes ( _ϵ, δ_ ) = (1 _,_ 10 _[−]_[4] ) certified unlearning on the billion-edge graph ogbnpapers100M in 20 seconds for a 5,000 random edge removal request – of which only 5 seconds are required for updating the node embeddings – compared to 1.91 hours for retraining and 1.89 hours for re-propagation. Our code is available at https://github.com/luyi256/ScaleGUN. 
+
+## 1 INTRODUCTION 
+
+Graph Neural Networks (GNNs) have been widely adopted in various applications that involve sensitive user data, such as recommender systems (He et al., 2020), online social networks (Qiu et al., 2018), and financial networks (Weber et al., 2019). With the increasing demands for privacy protection, recent regulations have been established to ensure “the right to be forgotten” of users (Dang, 2021). Advances in privacy protection have led to the emergence of _graph unlearning_ (Said et al., 2023), which aims to remove certain user data from trained GNNs. A straightforward approach is to retrain the model from scratch without the data to remove. However, retraining incurs substantial computation costs, rendering it impractical for frequent removal requests. Consequently, various graph unlearning methods attempt to enhance efficiency while maintaining performance and privacy protection comparable to retraining. Among them, _certified graph unlearning_ (Chien et al., 2022a) has garnered increasing attention due to its solid theoretical guarantees for privacy protection. 
+
+To achieve certified graph unlearning, an unlearning mechanism must be proved to ensure that the unlearned model is _approximately_ equivalent to the retrained model with respect to their probability distributions. Specifically, certified unlearning is guaranteed if the gradient residual norm of the loss function, _∥L_ ( **w** _[−] , D[′]_ ) _∥_ , is bounded for the unlearned model **w** _[−]_ and the updated dataset _D[′]_ postunlearning (Guo et al., 2019). This can be accomplished by introducing noise perturbation into the loss function, thereby rendering the unlearned and retrained models approximately indistinguishable in their probability distributions. Intuitively, the gradient residual norm measures the _model error_ 
+
+> _∗_ Zhewei Wei is the corresponding author. 
+
+1 
+
+of the unlearned model, representing the discrepancy between the unlearned and retrained model. When the model error is limited in a certain bound relative to the noise level, the noise can effectively _mask_ the error, thereby ensuring certified guarantees. Thus, previous studies attempt to achieve certified graph unlearning by perturbing the loss and subsequently deriving the gradient residual norm bound by non-trivial theoretical analysis. CGU (Chien et al., 2022a) takes the first step to achieve certified graph unlearning on the SGC (Wu et al., 2019) model and CEU Wu et al. (2023b) further extends this work to batch edge unlearning. To satisfy the requirements of certified unlearning, the aforementioned studies typically re-compute graph propagation, such as ( **D** _[−]_ 2[1] **AD** _[−]_ 2[1] )[2] **X** in a 2-hop SGC, and subsequently perform a single Newton update step on the model parameters. This approach demonstrates substantial efficiency gains compared to retraining on small graphs. 
+
+**Motivations.** However, we observe that the existing certified graph unlearning methods struggle to scale to large graphs by conducting evaluations on ogbn-papers100M dataset (Hu et al., 2020), which comprises 111M nodes and 1.6B edges. Figure 1 (a) shows the costs of existing unlearning methods when removing 5,000 random edges with a ( _ϵ, δ_ ) = (1 _,_ 10 _[−]_[4] ) certified guarantee. Re-computing graph propagation for a 2-hop SGC model requires over 6,000 seconds while retraining the SGC model after graph propagation takes less than 80 seconds. Furthermore, by excluding the propagation cost, unlearning can be finished in under 20 seconds via a single update step of model parameters. Since existing methods require re-propagationfor each unlearning request, addressing one such 10[[4]] Existing Unlearning Methods 10[[4]] ScaleGUN request demands requires about 6,000 seconds, 10[[3]] 10[[3]] whose cost is expensive and almost comparable 10[[2]] 10[[2]] to retraining. The high cost of existing solutions contradicts the objective of unlearning, implying 10[[1]] 10[[1]] that reducing propagation costs is imperative to 10[[0]] 10[[0]] scale certified graph unlearning to large graphs. 
+
+**==> picture [182 x 86] intentionally omitted <==**
+
+**----- Start of picture text -----**<br>
+10 [[4]] Existing Unlearning Methods 10 [[4]] ScaleGUN<br>10 [[3]] 10 [[3]]<br>10 [[2]] 10 [[2]]<br>10 [[1]] 10 [[1]]<br>10 [[0]] 10 [[0]]<br>(a) (b)<br>Propagation Retrain Unlearning Propagation Unlearning<br>Time (s) Time (s)<br>**----- End of picture text -----**<br>
+
+
+Intuitively, scalable techniques developed for graph learning (Chiang et al., 2019; Zeng et al., 2019) can be utilized to accelerate the propagation process in certified graph unlearning. However, the existing scalable approaches introduce 
+
+Figure 1: Time costs per 5,000-random-edge batch removal for existing unlearning methods v.s. ScaleGUN on ogbn-papers100M (2-hop SGC model). 
+
+approximation error into the node embeddings, i.e., leverage an _approximate_ dataset _D_[ˆ] _[′]_ rather than the _exact D[′]_ . Conversely, deriving a certified guarantee for unlearning requires bounding the model error, the gradient residual norm of the loss function _∥L_ ( **w** _[−] , D[′]_ ) _∥_ on the _exact D[′]_ . _This discrepancy leaves the impact of approximation error on the model error of unlearning unclear, making it uncertain whether existing scalable approaches can be directly integrated into certified graph unlearning._ 
+
+**Contributions.** In this study, we address the research question: _How can we integrate existing scalable techniques into certified graph unlearning to improve scalability while maintaining certified guarantees?_ We verify the feasibility of this integration and propose ScaleGUN, the first approach for Scalable and certifiable Graph UNlearning, ensuring both efficiency and privacy guarantees for billion-edge graphs. Our main contributions are as follows. 
+
+- Uncovering the impact of approximation error on certified guarantees. We integrate the approximate propagation technique from decoupled models (Zhang et al., 2016; Zheng et al., 2022) into certified graph unlearning and derive theoretical guarantees for three graph unlearning scenarios: node feature, edge, and node unlearning. By non-trivial theoretical analysis, we reveal that the approximation error only marginally increases the model error of unlearning, while still ensuring that the total model error remains bounded. Therefore, the total model error can also be masked by noise perturbation, ensuring the certified unlearning guarantee. 
+
+- Lazy local propagation framework for Generalized PageRank. Existing approximate propagation techniques for dynamic Personalized PageRank cannot be applied to commonly used models in certified graph unlearning, such as SGC. To address the gap, we extend these techniques to Generalized PageRank, facilitating efficient propagation for layered propagation schemes. 
+
+- Empirical studies. Extensive experiments demonstrate that ScaleGUN achieves superior performance, effciency, and privacy protection trade-offs on large graphs. Specifically, ScaleGUN takes only 5 seconds to update embeddings and 20 seconds in total to execute the aforementioned 
+
+2 
+
+unlearning request on ogbn-papers100M, as shown in Figure 1. Additionally, we study the impact of approximation error on certified unlearning by analyzing the approximate propagation parameter _r_ max. The results reveal that the approximation error can be controlled by _r_ max to simultaneously achieve impressive model performance and unlearning efficiency. 
+
+## 2 PRELIMINARIES 
+
+**Notation.** We consider an undirected graph _G_ = ( _V, E_ ) with node set _V_ of size _n_ and edge set _E_ of size _m_ . We denote the size of the training set as _nt_ . Each node is associated with an _F_ -dimensional feature vector **x** , and the feature matrix is denoted by **X** _∈_ R _[n][×][F]_ . **A** and **D** are the adjacency matrix and the diagonal degree matrix of _G_ with self-loops, respectively. _N_ ( _u_ ) represents the neighbors of node _u_ . Let _A_ be a (randomized) learning algorithm that trains on graph-structured data _D_ = ( **X** _,_ **Y** _,_ **A** ) _∈X_ , where **Y** are the labels of the training nodes and _X_ represents the space of possible datasets. _A_ outputs a model _h ∈H_ , where _H_ is the hypothesis set, that is, _A_ : _{D} →H_ . Suppose that _D[′]_ is the new graph dataset resulting from a desired removal. An unlearning method _M_ applied to _A_ ( _D_ ) will output a new model _h ∈H_ according to the unlearning request, that is _M_ ( _A_ ( _D_ ) _, D, D[′]_ ) _→H_ . We add a hat to a variable to denote the approximate version of it, e.g., **Z[ˆ]** is the approximation of the embedding matrix **Z** . For simplicity, we denote the data as _D_[ˆ] to indicate that **Z[ˆ]** takes the place of **Z** during the learning and unlearning process. We add a prime to a variable to denote the variable after the removal, e.g., _D[′]_ is the new dataset post-unlearning. 
+
+**Certified removal.** Guo et al. (2019) define _certified removal_ for unstructured data as follows. Given _ϵ, δ >_ 0, the original dataset _D_ , a removal request resulting in _D[′]_ , a removal mechanism _M_ guarantees ( _ϵ, δ_ )-certified removal for a learning algorithm _A_ if _∀T ⊆H, D ⊆X_ , 
+
+**==> picture [228 x 22] intentionally omitted <==**
+
+This definition states the likelihood ratio between the retrained model on _D[′]_ and the unlearned model via _M_ is _approximately_ equivalent in terms of their probability distributions. Guo et al. (2019) also introduced a certified unlearning mechanism for linear models trained on unstructured data. Consider _A_ trained on _D_ = _{_ ( **x** 1 _, y_ 1) _, · · · ,_ ( **x** _n, yn_ ) _}_ aiming to minimize the empirical risk _L_ ( **w** ; _D_ ) =[�] _[n] i_ =1 _[l]_ � **w** _[⊤]_ **x** _i, yi_ � + _[λn]_ 2 _[∥]_ **[w]** _[∥]_ 2[2][, where] _[ l]_[ is a convex loss function that is differentiable] everywhere. Let **w** _[⋆]_ = _A_ ( _D_ ) be the unique optimum such that _∇L_ ( **w** _[⋆] , D_ ) = 0. Guo et al. propose the _Newton udpate removal mechanism_ : **w** _[−]_ = **w** _[⋆]_ + **H** _[−]_ **w**[1] _[⋆]_[∆][, where][ ∆=] _[λ]_ **[w]** _[⋆]_[+] _[ ∇][l]_[((] **[w]** _[⋆]_[)] _[⊤]_ **[x]** _[, y]_[)] when ( **x** _, y_ ) is removed, and **Hw** _⋆_ is the Hessian matrix of _L_ ( _·, D[′]_ ) at **w** _[⋆]_ . Furthermore, to mask the direction of the gradient residual _∇L_ ( **w** _[−] , D[′]_ ), they introduce a perturbation in the empirical risk: _L_ **b** ( **w** _, D_ ) = _L_ ( **w** _, D_ ) + **b** _[⊤]_ **w** , where **b** _∈_ R _[F]_ is a random vector sampled from a specific distribution. Then, one can secure a certified guarantee by using the following theorem: 
+
+**Theorem 2.1** (Theorem 3 in (Guo et al., 2019)) **.** _Let A be the learning algorithm that returns the unique optimum of the loss L_ **b** ( **w** ; _D_ ) _. Suppose that a removal mechanism M returns_ **w** _[−] with ∥∇L_ ( **w** _[−]_ ; _D[′]_ ) _∥_ 2 _≤ ϵ[′] for some computable bound ϵ[′] >_ 0 _. If_ **b** _∼N_ (0 _, cϵ[′] /ϵ_ ) _[d] with c >_ 0 _, then M guarantees_ ( _ϵ, δ_ ) _-certified removal for A with δ_ = 1 _._ 5 _· e[−][c]_[2] _[/]_[2] _._ 
+
+**Certified graph unlearning.** CGU (Chien et al., 2022a) generalizes the certified removal mechanism to graph-structured data on SGC and the Generalized PageRank extensions. The empirical risk is modified to _L_ ( **w** ; _D_ ) =[�] _[n] i_ =1 _[t][l]_ � **e** _[⊤] i_ **[Zw]** _[,]_ **[ e]** _[⊤] i_ **[Y]** � + _[λn]_ 2 _[t][∥]_ **[w]** _[∥]_ 2[2][, where] **[ e]** _[⊤] i_ **[Z]**[ =] **[ e]** _[⊤] i_[(] **[D]** _[−]_[1] **[A]**[)] _[k]_ **[X]** _[,]_ **[ e]** _[⊤] i_ **[Y]**[ is] the embedding vector and the label of node _i_ , respectively, and _nt_ denotes the number of training nodes. Removing a node alters its neighbors’ embeddings, consequently affecting their loss values. Therefore, CGU generalizes the mechanism in (Guo et al., 2019) by revising ∆ as _∇L_ ( **w** _[⋆] , D_ ) _−∇L_ ( **w** _[⋆] , D[′]_ ). If no graph structure is present, implying **Z** is independent of the graph structure, CGU aligns with that of (Guo et al., 2019). Based on the modifications, CGU derives the certified unlearning guarantee for three types of removal requests: node feature, edge, and node unlearning. 
+
+**Approximate dynamic PPR propagation techniques via Forward Push.** Forward Push (Andersen et al., 2006; Yang et al., 2024) is a canonical technique designed to accelerate graph propagation computations for decoupled models (Wang et al., 2021; Chen et al., 2020). The technique is a localized version of cumulative power iteration, performing one _push_ operation for a single node 
+
+3 
+
+at a time. Take Forward Push for **z** = **P** _[ℓ]_ **x** and **P** = **AD** _[−]_[1] as an example, where **x** is the graph signal vector and _ℓ_ is the number of propagation steps. Forward Push maintains a reserve vector _**q**_[(] _[ℓ]_[)] and a residue vector _**r**_[(] _[ℓ]_[)] for each level _ℓ_ . For any node _u ∈V_ , _**q**_[(] _[ℓ]_[)] ( _u_ ) represents the current estimation of ( **P** _[ℓ]_ **x** )( _u_ ), and _**r**_[(] _[ℓ]_[)] ( _u_ ) holds the residual mass to be distributed to subsequent levels. When _**r**_[(] _[ℓ]_[)] ( _u_ ) exceeds a predefined threshold _r_ max, it is added to _**q**_[(] _[ℓ]_[)] ( _u_ ) and distributed to the residues of _u_ ’s neighbors in the next level, i.e., _**r**_[(] _[ℓ]_[+1)] ( _v_ ) is increased by _**r**_[(] _[ℓ]_[)] ( _u_ ) _/d_ ( _u_ ) for _v ∈N_ ( _u_ ). After that, _**r**_[(] _[ℓ]_[)] ( _u_ ) is set to 0. Ignoring small residues that contribute little to the estimate, Forward Push achieve a balance between estimation error and efficiency. Several dynamic PPR algorithms have been proposed to solve PPR-based propagation in evolving graphs (Zhang et al., 2016; Guo et al., 2021). We focus on InstantGNN (Zheng et al., 2022) as the lazy local propagation framework in our ScaleGUN draws inspiration from it. Specifically, InstantGNN observed that the invariant ˆ ˆ property _**π**_ + _α_ _**r**_ = _α_ **x** + (1 _− α_ ) **P** _**π**_ holds during the propagation process for the propagation scheme _**π**_ =[�] _[∞] ℓ_ =0 _[α]_[(1] _[ −][α]_[)] _[ℓ]_ **[P]** _[ℓ]_ **[x]**[.][Upon an edge arrival or removal, this invariant is disrupted due] to the revised **P** or **x** . InstantGNN updates the residue vector _**r**_ for affected nodes to maintain the invariant, then applies Forward Push to meet the error requirement. Since only a few nodes are affected by one edge change, the updates are local and efficient. 
+
+## 3 LAZY LOCAL PROPAGATION 
+
+This section introduces our lazy local propagation framework that generates approximate embeddings with a bounded _L_ 2-error. To effectively capture the propagation scheme prevalent in current GNN models and align with the existing graph unlearning methods, we adopt the Generalized PageRank _ℓ_ (GPR) approach (Li et al., 2019) as the propagation scheme, **Z** =[�] _[L] ℓ_ =0 _[w][ℓ]_ **D** _[−]_ 2[1] **AD** _[−]_ 2[1] **X** , � � where _wℓ_ is the weight of the _ℓ_ -th order propagation matrix and[�] _[L] ℓ_ =0 _[|][w][ℓ][|][≤]_[1][.][Note][that][this] propagation scheme differs from that of CGU (Chien et al., 2022a), which uses an asymmetric normalized matrix **P** = **D** _[−]_[1] **A** and fixes _wℓ_ = 1 _/L_ . We introduce the initial propagation method for a signal vector **x** and the corresponding update method. The approximate embedding matrix **Z[ˆ]** can be obtained by parallel adopting the method for each signal vector and putting the results together. Details and pseudo-codes of our propagation framework are provided in Appendix D. 
+
+_Remark._ The lazy local propagation framework draws inspiration from the dynamic PPR method of InstantGNN (Zheng et al., 2022) and extends it to the GPR propagation scheme. To the best of our knowledge, our framework is the first to achieve efficient embeddings update for the layered propagation scheme in evolving graphs, making it readily applicable to various models, such as SGC, GBP (Chen et al., 2020), and GDC (Gasteiger et al., 2019). Utilizing the GPR scheme also enhances the generalizability of ScaleGUN, allowing one to replace our propagation framework with dynamic PPR methods to achieve certified unlearning for PPR-based GNNs. Note that InstantGNN cannot be directly applied to certified unlearning because the impact of approximation on the certified unlearning guarantees has not been well studied. This paper’s main contribution is addressing this gap. We establish certified guarantee for GNNs that use approximate embeddings, as detailed in Section 4. The differences between our propagation framework and existing propagation methods are further detailed in Appendix D.1. 
+
+For the initial propagation, we adopt Forward Push with **P** = **AD** _[−]_[1] , drawing from the observation 1 1 that ( **D** _[−]_ 2[1] **AD** _[−]_ 2[1] ) _[ℓ]_ = **D** _[−]_ 2[1] ( **AD** _[−]_[1] ) _[ℓ]_ **D** 2 . Initially, we normalize **x** to ensure **D** 2 **x** ��� ���1 _[≤]_[1][, and] 1 set the residue vector _**r**_[(0)] = **D** 2 **x** . Applying Forward Push, we derive **ˆz** =[�] _[L] ℓ_ =0 _[w][ℓ]_ **[D]** _[−]_[1] 2 _**q**_[(] _[ℓ]_[)] as _ℓ_ the approximation of **z** =[�] _[L] ℓ_ =0 _[w][ℓ]_ **D** _[−]_ 2[1] **AD** _[−]_ 2[1] **x** . Any non-zero _**r**_[(] _[ℓ]_[)] holds the weight mass � � not yet passed on to subsequent levels, leading to the approximation error between **ˆz** and **z** . During the propagation process, it holds that 
+
+**==> picture [297 x 31] intentionally omitted <==**
+
+By examining[�] _[L] ℓ_ =0 _[w][ℓ]_ **[D]** _[−]_[1] 2[�] _[ℓ] t_ =0[(] **[AD]** _[−]_[1][)] _[ℓ][−][t]_ _**[r]**_[(] _[t]_[)][, we establish the error bound of] **[ ˆz]**[ as follows.] **Lemma 3.1.** _Given graph G with n nodes and the threshold r_ max _, the approximate embedding_ **ˆz** _for signal vector_ **x** _satisfies that ∥_ **ˆz** _−_ **z** _∥_ 2 _≤[√] nLr_ max _._ 
+
+4 
+
+Inspired by the update method for the PPR-based propagation methods on dynamic graphs (Zheng et al., 2022), we identify the invariant property for the GPR scheme as follows. 
+
+**Lemma 3.2.** _For each signal vector_ **x** _, the reserve vectors {_ _**q**_[(] _[ℓ]_[)] _} and the residue vectors {_ _**r**_[(] _[ℓ]_[)] _} satisfy the following invariant property for all u ∈V during the propagation process:_ 
+
+**==> picture [308 x 49] intentionally omitted <==**
+
+Upon a removal request, we adjust _{_ _**r**_[(] _[ℓ]_[)] _}_ locally for the affected nodes to maintain the invariant property. Consider an edge removal scenario, for example, where edge ( _u, v_ ) is targeted for removal. Only node _u_ , node _v_ , and their neighbors fail to meet Equation (2) due to the altered degrees of _u_ and _v_ . Take the modification for node _u_ as an example. For level 0, we update _**r**_[(0)] ( _u_ ) reflecting changes 1 in **D** 2 **x** . For subsequent levels, _**r**_[(] _[ℓ]_[)] ( _u_ ) is updated to reflect that the right side of _u_ ’s equations exclude _**[q]**_[(] _[ℓ] d[−]_ ([1)] _v_ )[(] _[v]_[)] . For _u_ ’s neighbors, their residues are updated accordingly, since one term on the right, _**[q]**_[(] _[ℓ] d[−]_ ([1)] _u_ )[(] _[u]_[)] , shifts to _**[q]** d_[(] _[ℓ]_ ( _[−] u_[1)] ) _−_[(] 1 _[u]_[)][.][Post-adjustment, the invariant property is preserved across all] nodes. Then we invoke Forward Push to secure the error bound and acquire the updated **ˆz** . Removing a node can be treated as multiple edge removals by eliminating all edges connected to the node. Moreover, feature removal for node _u_ can be efficiently executed by setting _**r**_[(0)] ( _u_ ) as _−_ _**q**_[(0)] ( _u_ ). The following theorem illustrates the average cost for each removal request. **Theorem 3.3** (Average Cost) **.** _For a sequence of m removal requests that remove all edges of the graph, the amortized cost per edge removal is O_ � _L_[2] _d_ � _. For a sequence of K random edge removals, the expected cost per edge removal is O_ � _L_[2] _d_ � _._ 
+
+Note that the propagation step _L_ and the average degree _d_ are both typically a small constant in practice. _L_ is commonly set to 2 in GCN (Kipf & Welling, 2016), SGC, GAT (Velickovic et al., 2017). Many real-world networks are reported to be scale-free, characterized by a small average degree (Barabasi, 2013).´ For instance, the citation network ogbn-arxiv and ogbn-papers100M exhibit average degrees of 6 and 14, respectively. Consequently, this setup generally allows for constant time complexity for each removal request. 
+
+## 4 SCALABLE AND CERTIFIABLE UNLEARNING MECHANISM 
+
+This section presents the certified graph unlearning mechanism of ScaleGUN based on the approximate embeddings derived from our lazy local propagation framework. Following existing works, we first study linear models with a strongly convex loss function and focus on binary node classifica- 
+
+tion problems. We define the empirical risk as _L_ ( **w** _, D_ ) =[�] _i∈_ [ _nt_ ] � _l_ ( **e** _[⊤] i_ **[ˆZw]** _[,]_ **[ e]** _[⊤] i_ **[Y]**[) +] _[λ]_ 2 _[∥]_ **[w]** _[∥]_[2][�] _,_ where _l_ is a convex loss that is differentiable everywhere, **e** _[⊤] i_ **[ˆZ]**[ and] **[ e]** _[⊤] i_ **[Y]**[ represents the approximate] embedding vector and the label of node _i_ , respectively. Without loss of generality, we assume that the training set contains the first _nt_ nodes. Suppose that **w** _[∗]_ is the unique optimum of the original graph and an unlearning request results in a new graph _D[′]_ . Our unlearning approach produces aˆnew model **w** _[−]_ as follows: **w** _[−]_ ˆ= **w** _[⋆]_ + **H**[ˆ] _[−]_ **w**[1] _[⋆]_[∆] _[,]_[where][∆=] _[∇L]_[(] **[w]** _[⋆][,][D]_[ˆ][)] _[ −∇L]_[(] **[w]** _[⋆][,][D]_[ˆ] _[′]_[)][and] **Hw** _⋆_ is the Hessian matrix of _L_ ( _·, D[′]_ ) at **w** _[⋆]_ . We also introduce a perturbation in the loss function following (Guo et al., 2019) to hide information: _L_ **b** ( **w** _, D_ ) = _L_ ( **w** _, D_ ) + **b** _[⊤]_ **w** _,_ where **b** _∈_ R _[F]_ is a noise vector sampled from a specific distribution. 
+
+Compared to the unlearning mechanism, **w** _[−]_ = **w** _[⋆]_ + **H** _[−]_ **w**[1] _[⋆]_[(] _[∇L]_[(] **[w]** _[⋆][,][ D]_[)] _[ −∇L]_[(] **[w]** _[⋆][,][ D][′]_[))][, proposed] by Chien et al. (2022a), our primary distinction lies in the approximation of embeddings. This also poses the main theoretical challenges in proving certified guarantee. According to Theorem 2.1, an unlearning mechanism can ensure ( _ϵ, δ_ )-certified graph unlearning if _∥∇L_ ( **w** _[−] , D[′]_ ) _∥_ is bounded. Bounding _∥∇L_ ( **w** _[−] , D[′]_ ) _∥_ is the main challenge to develop a certified unlearning mechanism. One of the leading contributions of (Guo et al., 2019; Chien et al., 2022b) is to establish the bounds for their proposed mechanisms. In the following, we elaborate on the bounds of _∥∇L_ ( **w** _[−] , D[′]_ ) _∥_ of ScaleGUN under three graph unlearning scenarios: node feature, edge, and node unlearning. Before that, we make the following assumptions. 
+
+5 
+
+**Assumption 4.1.** For any dataset _D ∈X , i ∈_ [ _n_ ] and **w** _∈_ R _[F]_ : (1) �� _∇l_ ( **e** _⊤i_ **[Zw]** _[,]_ **[ e]** _[⊤] i_ **[Y]**[)] �� _≤ c_ ; (2) _l′_ is _c_ 1-bounded; (3) _l[′]_ is _γ_ 1-Lipschitz; (4) _l[′′]_ is _γ_ 2-Lipschitz; (5) �� **e** _⊤i_ **[X]** �� _≤_ 1. 
+
+Note that these assumptions are also needed for (Chien et al., 2022a). Assumptions (1)(3)(5) can be avoided when working with the data-dependent bound in Theorem 4.5. We first focus on a single instance unlearning and extend to multiple unlearning requests in Section 4.3. 
+
+## 4.1 NODE FEATURE UNLEARNING 
+
+We follow the definitions of all three graph unlearning scenarios in (Chien et al., 2022a). In the node feature unlearning case, the feature and label of a node are removed, resulting in _D[′]_ = ( **X** _[′] ,_ **Y** _[′] ,_ **A** ), where **X** _[′]_ and **Y** _[′]_ is identical to **X** and **Y** except the row of the removed node is zero. Without loss of generality, we assume that the removed node is node _u_ in the training set. Our conclusion remains valid even when the removed node is not included in the training set. 
+
+**==> picture [398 x 59] intentionally omitted <==**
+
+The feature dimension _F_ affects the outcome as the analysis is conducted on one dimension of the embedding **Z** _j_ rather than on **e** _[⊤] i_ **[Z]**[.][In][real-world][datasets,] _[F]_[is][typically][a][small][constant.] Note that _ϵ_ 1 is exactly _[√] nLr_ max according to Lemma 3.1. To ensure that the norm will not escalate with the training set size _nt_ , we typically set _ϵ_ 1 = _O_ ( ~~_√_~~ 1 _nt_[)][,][which][implies][that] _[r]_[max][=] _O_ (1 _/[√] ntn_ ). The bound can be viewed as comprising two components: the component resulting from approximation, � _cλγ_ 1 _[F]_[+] _[ c]_[1] � _F_ ( _nt −_ 1)� _ϵ_ 1, and the component resulting from unlearning, � _cλγ_ 1 _[F]_[+] _[ c]_[1] � _F_ ( _nt −_ 1)� _λ_ (8 _nγt_ 1 _−F_ 1) _[·]_ ~~�~~ _d_ ( _u_ ). In the second component, the norm increases if the unlearned node possesses a high degree, as removing a large-degree node’s feature impacts the embeddings of many other nodes. This component is not affected by _L_ , the propagation step, due to 1 the facts that ( **D** _[−]_[1] 2 **AD** _[−]_ 2[1] ) _[ℓ]_ = **D** _[−]_ 2[1] ( **AD** _[−]_[1] ) _[ℓ]_ **D** 2 and that **AD** _[−]_[1] is left stochastic. 
+
+**Analytical challenges.** It is observed that _∥∇L_ ( **w** _[−] , D[′]_ ) _∥_ originates from the exact embeddings of _D[′]_ , whereas **w** _[−]_ is derived from approximate embeddings in ScaleGUN. Thus, the first challenge is to establish the connection between _D[′]_ and _D_[ˆ] _[′]_ in _∥∇L_ ( **w** _[−] , D[′]_ ) _∥_ . To address this issue, we employ the Minkowski inequality to adjust the norm: _∥∇L_ ( **w** _[−] , D[′]_ ) _∥≤ ∇L_ ( **w** _−, D′_ ) _−∇L_ ( **w** _−, D_ ˆ _′_ ) + ��� ��� _∇L_ ( **w** _−, D_ ˆ _′_ ) _._ The first norm depicts the difference between the gradient of **w** _−_ on the exact and ��� ��� approximate embeddings, which is manageable through the approximation error. The second norm, _∇L_ ( **w** _−, D_ ˆ _′_ ) , signifies the error of **w** _−_ as the minimizer of _L_ ( _·, D_ ˆ _′_ ), given as ��� ��� 
+
+**==> picture [184 x 19] intentionally omitted <==**
+
+where **H**[ˆ] **w** _η_ is the Hessian of _L_ ( _·, D_[ˆ] _[′]_ ) at **w** _η_ = **w** _[⋆]_ + _η_ **H**[ˆ] _[−]_ **w**[1] _[⋆]_[∆][for some] _[ η][∈]_[[0] _[,]_[ 1]][.][This introduces] the second challenge: bounding _∥_ ∆ _∥_ . Bounding _∥_ ∆ _∥_ is intricate, especially for graph unlearning scenarios. Here, ∆ represents the difference between the gradient of **w** _[∗]_ on pre- and post-removal datasets, i.e., **Z[ˆ]** and **Z[ˆ]** _[′]_ . Therefore, establishing the mathematical relationship between **Z** and **Z** _[′]_ is _⊤_ the crucial point. Although prior studies have explored the bound of �� **e** _i_[(] **[Z]** _[ −]_ **[Z]** _[′]_[)] ��, their interest primarily lies in **P** = **D** _[−]_[1] **A** (Chien et al., 2022a) or 1-hop feature propagation (Wu et al., 2023b), which cannot be generalized to our GPR propagation scheme with **P** = **D** _[−]_ 2[1] **AD** _[−]_ 2[1] . We address this challenge innovatively by taking advantage of our lazy local propagation framework as follows. 
+
+**bounding** _∥_ ∆ _∥_ **via the propagation framework.** Assuming node _u_ is the _nt_ -th node in the training set, for the case of feature unlearning, we have 
+
+**==> picture [290 x 26] intentionally omitted <==**
+
+6 
+
+where _l_ ( **Z[ˆ]** _,_ **w** _[⋆] , i_ ) is short for _l_ ( **e** _[⊤] i_ **[ˆZw]** _[⋆][,]_ **[ e]** _[⊤] i_ **[Y]**[)][.][Creatively, we bound] _[ ∥]_ **[Ze]** _[j][−]_ **[Z]** _[′]_ **[e]** _[j][∥]_[for all] _[ j][∈]_[[] _[F]_[]] via the lazy local propagation framework. Let **z** = **Ze** _j_ and **z** _[′]_ = **Z** _[′]_ **e** _j_ for brevity. In our propagation framework, right after adjusting the residues upon a removal, _{_ _**q**_[(] _[ℓ]_[)] _}_ remains unchanged. Moreover, Equation (1) holds during the propagation process. Thus, we have 
+
+**==> picture [218 x 30] intentionally omitted <==**
+
+To derive _**r**_[(] _[t]_[)] _−_ _**r**[′]_[(] _[t]_[)] , notice that Equation (1) is applicable across all _r_ max configurations. Setting _r_ max = 0 to eliminate error results in _**r**_[(] _[t]_[)] becoming a zero vector. Thus, for the feature unlearning scenario, _**r**_[(0)] _−_ _**r**[′]_[(0)] is precisely _−_ _**q**_[(0)] ( _u_ ) **e** _u_ , as only node _u_ ’s residue is modified. For _t >_ 0, _**r**_[(] _[t]_[)] _−_ _**r**[′]_[(] _[t]_[)] are all zero vectors since these residues are not updated. This solves the second challenge. The bounds for edge and node unlearning scenarios can be similarly derived via the lazy local framework, significantly streamlining the proof process compared to direct analysis of **Ze** _j −_ **Z** _[′]_ **e** _j_ . 
+
+## 4.2 EDGE UNLEARNING AND NODE UNLEARNING 
+
+In the edge unlearning case, we remove an edge ( _u, v_ ), resulting in _D[′]_ = ( **X** _,_ **Y** _,_ **A** _[′]_ ), where **A** _[′]_ is identical to **A** except that the entries for ( _u, v_ ) and ( _v, u_ ) are set to zero. The node feature and labels remain unchanged. The conclusion remains valid regardless of whether _u, v_ are in the training set. 
+
+**==> picture [398 x 63] intentionally omitted <==**
+
+We observe that the worst-case bound diminishes when the two terminal nodes of the removed edge have a large degree. This reduction occurs because the impact of removing a single edge from a node with many edges is relatively minor. 
+
+In the node unlearning case, removing a node _u_ results in _D[′]_ = ( **X** _[′] ,_ **Y** _[′] ,_ **A** _[′]_ ), where the entries regarding the removed node in all three matrices are set to zero. The bound can be directly inferred from Theorem 4.3 since unlearning node _u_ equates to eliminating all edges connected to node _u_ . This upper bound indicates that the norm is related to the degree of node _u_ and that of its neighbors. 
+
+**Theorem 4.4** (Worst-case bound of node unlearning) **.** _Suppose that Assumption 4.1 holds and node u is removed. If ∀j ∈_ [ _F_ ] _,_ **Ze** ˆ _j −_ **Ze** _j ≤ ϵ_ 1 _, we can bound ∥∇L_ ( **w** _−, D′_ ) _∥ by_ ��� ��� 
+
+**==> picture [395 x 37] intentionally omitted <==**
+
+## 4.3 UNLEARNING ALGORITHM 
+
+In this subsection, we introduce the unlearning procedure of ScaleGUN. More practical considerations are deferred to Appendix B.1, including feasible loss functions and batch unlearning. 
+
+**Data-dependent bound.** The worst-case bounds may be loose in practice. Following the existing certified unlearning studies (Guo et al., 2019; Chien et al., 2022a), we examined the data-dependent norm as follows. Similar to the worst-case bounds, the data-dependent bound can also be understood as two components: the first term 2 _c_ 1 �� **1** _⊤_ _**R**_ �� incurred by the approximation error and the second term _γ_ 2 **ˆZ** _′_ **H** ˆ _−_ **w** 1 _[⋆]_[∆] **ˆZ** _′_ ˆ **H** _−_ **w** 1 _[⋆]_[∆] incurred by unlearning. The second term is similar to that of ��� ��� ��� ��� ��� ��� the existing works, except that it is derived from the approximate embeddings. **Theorem 4.5** (Data-dependent bound) **.** _Let_ _**R**_[(] _[t]_[)] _∈_ R _[n][×][F] denote the residue matrix at level t, where the j-th column_ _**R**_[(] _[t]_[)] **e** _j represents the residue at level t for the j-th signal vector. Let_ _**R** be defined as the sum_[�] _[L] t_ =0 _**[R]**_[(] _[t]_[)] _[.][We can establish the following data-dependent bound:]_ �� _∇L_ ( **w** _−, D′_ )�� _≤_ 2 _c_ 1 �� **1** _⊤_ _**R**_ �� + _γ_ 2 ��� **ˆZ** _′_ ��� ��� **H** ˆ _−_ **w** 1 _[⋆]_[∆] ��� ��� **ˆZ** _′_ ˆ **H** _−_ **w** 1 _[⋆]_[∆] ��� _._ 
+
+7 
+
+**==> picture [362 x 92] intentionally omitted <==**
+
+**----- Start of picture text -----**<br>
+Cora - Node feature unlearning Cora - Edge unlearning Cora - Node unlearning<br>10 [10] 10 [10] 10 [10]<br>10 [8] 10 [8] 10 [8]<br>1010 [6][4] Worst-case norm 1010 [6][4] Worst-case normData-dependent normTrue norm 1010 [6][4] Worst-case normData-dependent normTrue norm<br>Data-dependent norm<br>10 [2] True norm 10 [2] 10 [2]<br>10 [0] 10 [0] 10 [0]<br>10 [−2] 10 [−2] 10 [−2]<br>10 [−4] 10 [−4] 10 [−4]<br>0 100 200 300 400 500 600 700 800 0 100 200 300 400 500 0 100 200 300 400 500 600 700 800<br>Number of removals Number of removals Number of removals<br>Gradient residual norm Gradient residual norm Gradient residual norm<br>**----- End of picture text -----**<br>
+
+
+Figure 2: Comparison of the bounds of the gradient residual: Worst-case bound (Theorem 4.2, 4.3, 4.4 for node feature, edge, node unlearning, respectively), data-dependent bound (Theorem 4.5) and the true value on Cora dataset. 
+
+**Sequential unlearning algorithm.** Multiple unlearning requests can be executed sequentially. The unlearning process is similar to the existing works (Chien et al., 2022a; Wu et al., 2023b), except that we employ the lazy local propagation framework for the initial training and each removal. Specifically, we select the noise standard deviation _α_ and privacy parameter _ϵ, δ_ , and compute the “privacy budget”. Once the accumulated data-dependent norm exceeds the budget, we retrain the model and reset the accumulated norm. Notably, only the component attributable to unlearning, i.e., the second term in Theorem 4.5, needs to be accumulated. This is because the first term represents the error caused by the current approximation error and does not depend on the previous results. We provide the pseudo-code and illustrate more details in Appendix B.2. 
+
+## 5 EXPERIMENTS 
+
+In this section, we evaluate the performance of ScaleGUN on real-world datasets, including three small graph datasets: Cora (Sen et al., 2008), Citeseer (Yang et al., 2016), and Photo (McAuley et al., 2015); as well as three large graph datasets: ogbn-arxiv, ogbn-products, and ogbn-papers100M (Hu et al., 2020). Consistent with prior certified unlearning research, we employ LBFGS as the optimizer for linear models. The public splittings are used for all datasets. Unless otherwise stated, we set _L_ = 2 _, ϵ_ = 1 for all experiments, averaging results across 5 trials with random seeds. By default, we set _δ_ as #edges1[for edge unlearning and] #nodes1[for node/feature unlearning in the linear model utility] experiments to meet the typical privacy requirements (Chien et al., 2024; Sajadmanesh et al., 2023). Following (Chien et al., 2022a), _wℓ_ is set to 1 for _ℓ_ = 2 and 0 for other values. The propagation matrix is set to **P** = **D** _[−]_ 2[1] **AD** _[−]_ 2[1] across all the methods for fair comparison. Our benchmarks include CGU (Chien et al., 2022a), CEU (Chen et al., 2022), and the standard retrained method. The experimental results under this setting, additional experiments and detailed configurations are available in Appendix C. 
+
+**Evaluations.** We evaluate the performance of ScaleGUN in terms of efficiency, model utility (performance), and unlearning efficacy. The efficiency is measured by the average total cost per removal and the average propagation cost per removal. The model utility is evaluated by the accuracy of node classification. Given the lack of standardized methods for evaluating unlearning efficacy in graphs, we utilize two attack methods to assess this efficacy. For edge unlearning, we apply the task of forgetting adversarial data as described by (Wu et al., 2023a). For node unlearning, we employ the Deleted Data Replay Test (DDRT) as outlined in (Cong & Mahdavi). 
+
+**Bounds on the gradient residual norm.** Figure 2 validates the bounds on the gradient residual norm: the worst-case bounds, the data-dependent bounds, and the true value for all three unlearning scenarios on the Cora dataset. For simplicity, the standard deviation _α_ is set to 0 for the noise **b** . The results demonstrate that both the worst-case bounds and the data-dependent bounds validly upper bound the true value, and the worst-case bounds are looser than the data-dependent bounds. 
+
+**Efficiency and model utility on linear models.** We examine the unlearning performance of ScaleGUN on large graph datasets here and provide the results on small graphs in Appendix C. For large datasets, randomly selecting edges to remove is insufficient to affect model accuracy significantly. We propose a novel approach to select a set of _vulnerable edges_ for removal. Inspired by Theorem 4.3, we find that edges linked to nodes with small degrees are more likely to yield larger gradient residual norms, thus severely impacting performance. Consequently, we 
+
+8 
+
+Table 1: Test accuracy (%), total unlearning cost (s) and propagation cost (s) per batch edge removal for **linear** models (large graphs). 
+
+|ogbn-arxiv|ogbn-arxiv|ogbn-arxiv||ogbn-products|ogbn-products|ogbn-products|ogbn-papers100M<br>GUN<br>_N_(_×_103)<br>Retrain<br>ScaleGUN<br>.04<br>0<br>59.99<br>59.82<br>.03<br>2<br>59.71<br>59.71<br>.02<br>4<br>59.55<br>59.90<br>.15<br>6<br>59.89<br>59.32<br>.24<br>8<br>59.46<br>59.59<br>.17<br>10<br>59.26<br>59.15<br>**.69**<br>Total<br>6764.31<br>**54.79**<br>**.81**<br>Prop<br>6703.44<br>**9.02**|ogbn-papers100M<br>GUN<br>_N_(_×_103)<br>Retrain<br>ScaleGUN<br>.04<br>0<br>59.99<br>59.82<br>.03<br>2<br>59.71<br>59.71<br>.02<br>4<br>59.55<br>59.90<br>.15<br>6<br>59.89<br>59.32<br>.24<br>8<br>59.46<br>59.59<br>.17<br>10<br>59.26<br>59.15<br>**.69**<br>Total<br>6764.31<br>**54.79**<br>**.81**<br>Prop<br>6703.44<br>**9.02**|ogbn-papers100M<br>GUN<br>_N_(_×_103)<br>Retrain<br>ScaleGUN<br>.04<br>0<br>59.99<br>59.82<br>.03<br>2<br>59.71<br>59.71<br>.02<br>4<br>59.55<br>59.90<br>.15<br>6<br>59.89<br>59.32<br>.24<br>8<br>59.46<br>59.59<br>.17<br>10<br>59.26<br>59.15<br>**.69**<br>Total<br>6764.31<br>**54.79**<br>**.81**<br>Prop<br>6703.44<br>**9.02**|
+|---|---|---|---|---|---|---|---|---|---|
+|_N_<br>Retrain<br>CGU<br>CEU<br>Sca<br>0<br>57.83<br>57.84<br>57.84<br>5<br>25<br>57.83<br>57.84<br>57.84<br>5<br>50<br>57.82<br>57.83<br>57.83<br>5<br>75<br>57.82<br>57.82<br>57.82<br>5<br>100<br>57.81<br>57.81<br>57.81<br>5<br>125<br>57.81<br>57.81<br>57.81<br>5|||leGUN<br>7.84<br>7.84<br>7.83<br>7.82<br>7.81<br>7.81|_N_(_×_103)<br>Retrain<br>CGU<br>0<br>56.24<br>56.17<br>1<br>56.23<br>56.16<br>2<br>56.22<br>56.15<br>3<br>56.21<br>56.15<br>4<br>56.20<br>56.14<br>5<br>56.19<br>56.13||CEU<br>Scale<br>56.17<br>56<br>56.16<br>56<br>56.15<br>56<br>56.15<br>56<br>56.14<br>56<br>56.13<br>56||||
+|Total<br>2.66<br>3.36<br>3.42<br>**1**<br>Prop<br>1.73<br>2.78<br>2.91<br>**0**|||**.08**<br>**.85**|Total<br>101.90<br>87.79<br>Prop<br>98.48<br>86.81||88.90<br>**11**<br>87.95<br>**10**||||
+|||||||||||
+|0.79<br>0.80<br>0.81<br>0.82<br>0.83<br>0.84<br>0.85<br>Accuracy (%)|Cora|||ogbn-arxiv<br>059||ogbn-products|||0<br>1000<br>2000<br>3000<br>4000<br>5000<br># removed adversarial edges<br>ogbn-papers100M<br>Retrain<br>ScaleGUN|
+||Retrain<br>CGU<br>CEU<br>ScaleGUN|0.495<br>0.500<br>0.505<br>0.510<br>0.515<br>0.520<br>0.525<br>0.530<br>Accuracy (%)|Re<br>CG<br>CE<br>Sc|trai<br>U<br>U<br>aleG|0.54<br>0.55<br>0.56<br>0.57<br>0.58<br>.<br>Accuracy (%)<br>R<br>C<br>C<br>S|etrain<br>GU<br>EU<br>caleGUN||0.570<br>0.575<br>0.580<br>0.585<br>0.590<br>0.595<br>Accuracy (%)|Retrain<br>ScaleGUN|
+||0<br>100<br>200<br>300<br>400<br>500<br># removed adversarial edges||0<br>200<br># remo|0<br>4000<br>6000<br>8000<br>10000<br>ved adversarial edges<br>0<br>20<br># rem||00<br>4000<br>6000<br>8<br>oved adversaria|000<br>10000<br>l edges|||
+
+
+Figure 3: Comparison of unlearning efficacy for **linear** models: Model accuracy v.s. the number of removed adversarial edges. 
+
+randomly choose a set of low-degree nodes from the test set and then select edges that connect these nodes to other low-degree nodes bearing identical labels. Table 1 presents the test accuracy, average total unlearning cost, and average propagation cost for batch edge unlearning in linear models applied to large graph datasets. The results highlight ScaleGUN’s impressive performance, with its advantages becoming more pronounced as the graph size increases. Furthermore, Table 2 shows the node and feature Table 2: Test accuracy (%), total unlearning cost unlearning results on ogbn-papers100M, where 2000 nodes are removed at a time. The results (s) and propagation cost (s) per node feature/node removal for **linear** models on ogbn-papers100M. demonstrate that ScaleGUN achieves competitive accuracy compared to the retrained model Feature Unlearning Node Unlearning while significantly reducing the total unlearning _N_ ( _×_ 10[3] ) Retrain ScaleGUN _N_ ( _×_ 10[3] ) Retrain ScaleGUN and propagation costs under the node feature 02 59.9959.99 59.7259.72 02 59.9959.99 59.7259.75 and node unlearning scenarios. Notably, on the 4 59.99 59.65 4 59.99 59.58 ogbn-papers100M dataset, ScaleGUN demon68 59.9959.99 59.4759.54 68 59.9959.99 59.8059.56 strates a speed advantage of 1000 _×_ over retrain10 59.99 59.45 10 60.00 59.63 ing in terms of propagation cost under both edge TotalProp 5352.845400.45 **45.296.89** TotalProp 5139.095201.88 **60.0821.61** and feature unlearning scenarios. 
+
+**Efficiency and model utility on deep models.** ScaleGUN can also achieve superior unlearning performance on deep models, such as decoupled models and spectral GNNs (Chien et al., 2020; He et al., 2022), despite lacking certified guarantees. Table 3 presents ScaleGUN’s performance on decoupled models, utilizing a structure where two-hop propagations are followed by a two-layer Multi-Layer Perceptron (MLP). The formulation is expressed as **Y**[ˆ] = LogSoftmax( _σ_ ( **P**[2] **XW** ) **W** ). We introduce perturbation **B** _[⊤]_ **W** to each learnable parameter **W** , utilizing Adam as the optimizer. The propagation cost is excluded as its pattern Table 3: Test accuracy (%), total unlearning cost is consistent with that in Table 1. This suggests ( _s_ ) per batch edge removal for **decoupled** models. that ScaleGUN can be employed in shallow networks to achieve higher model accuracy when ogbn-products ogbn-papers100M certified guarantee are not required. Further- _N_ ( _×_ 010[3] ) Retrain74.16 ScaleGUN74.25 _N_ ( _×_ 010[3] ) Retrain63.39 ScaleGUN63.13 more, spectral GNNs are a significant subset of 1 74.15 74.25 2 63.21 63.05 GNNs rooted in spectral graph theory, known 23 74.1674.12 74.2474.24 46 63.1363.05 62.9762.89 for their superior expressive power. We also ap4 74.18 74.23 8 62.95 62.80 5 74.10 74.22 10 62.85 62.72 ply ScaleGUN on the spectral GNN model to demonstrate its versatility in Appendix C. Total 174.23 **14.19** Total 7958.83 **10.49** 
+
+**Edge unlearning efficacy.** We adopt the task of forgetting adversarial data to evaluate ScaleGUN’s edge unlearning efficacy. First, we introduce the measurement for edge unlearning efficacy. Specifically, we introduce adversarial edges into the graph, ensuring the terminal nodes bear different labels. 
+
+9 
+
+Table 4: Deleted Data Replay Test: The ratio of incorrectly labeled nodes, _rd, ra_ , after unlearning. 
+
+||_rd_ =|_|{i∈Vd|_ˆ_yi_=_c}|_<br>_|Vd|_<br>(%,_↓_)|_ra_ =|_|{i∈V|_ˆ_yi_=_c}|_<br>_|V|_<br>(%,_↓_)|
+|---|---|---|---|---|
+|Model|Cora<br>ogbn-arxiv<br>ogbn-products||Cora<br>ogbn-arxiv<br>ogbn-products||
+|Origin<br>Retrain<br>CGU<br>ScaleGUN|100<br>90.72<br>100<br>0<br>0<br>0<br>0<br>0<br>0<br>0<br>0<br>0||52.13<br>1.01<br>45.59<br>0<br>0<br>0<br>0.09<br>0<br>0<br>0.08<br>0<br>0||
+
+
+These adversarial edges are used to deceive the model into making incorrect predictions, diminishing its performance. The objective of unlearning is to delete these adversarial edges and recuperate the model’s performance. With the removal of more adversarial edges, the accuracy of unlearning methods is expected to rise, following the trend of retraining. For Cora, we randomly selected 500 edges connecting two distinct labeled terminal nodes to serve as adversarial edges. However, this straightforward method proves inadequate in affecting model accuracy for large graphs. Consequently, we adopt a more refined approach tailored for large graphs, which is detailed in Appendix C. Figure 3 illustrates how the model accuracy varies as the number of removed adversarial edges increases. The results affirm that CGU, CEU, and ScaleGUN exhibit effectiveness in edge unlearning. 
+
+**Node unlearning efficacy.** To measure the node unlearning efficacy, we conduct Deleted Data Replay Test on Cora, ogbn-arxiv, and ogbn-products for linear models in Table 4. First, we choose a set of nodes _Vd_ to be unlearned from the training set and add 100-dimensional binary features to the original node features. For nodes in _Vd_ , these additional features are set to 1; for other nodes, they are set to 0. The labels of nodes in _Vd_ are assigned to a new class _c_ . An effective unlearning method is expected ˆ not to predict the unlearned nodes as class _c_ after unlearning _Vd_ , meaning that _yi_ = _c_ for _i ∈Vd_ . We report the ratio of incorrectly labeled nodes _rd_ = _[|{][i][∈V] |V[d][|] d[y]_[ˆ] _|[i]_[=] _[c][}|]_ in the original model (which does not unlearn any nodes) and target models after unlearning. We set _|Vd|_ = 100 _,_ 125 _,_ 50000 for Cora, ogbn-arxiv, and ogbn-products, respectively. We also report _ra_ = _[|{][i][∈V][|][y]_[ˆ] _[i]_[=] _[c][}|]_ to assess whether _|V|_ the impact of the unlearned nodes is completely removed from the graph. The results show that ScaleGUN successfully removes the impact of the unlearned nodes, with only a slight discrepancy compared to retraining. Moreover, we also evaluate unlearning efficacy by Membership Inference Attack (MIA), however, as argued in (Chien et al., 2022a), MIA is not suitable to evaluate graph unlearning efficacy. We defer the MIA results to Appendix C. 
+
+**Effects of** _r_ max **.** ScaleGUN introduces the parameter _r_ max to manage the approximation error. To investigate the impact of _r_ max, we conduct experiments on the ogbn-arxiv dataset, removing 100 random edges, one at a time. Table 5 displays the initial model accuracy before any removal, total unlearning cost, propagation cost per edge removal, and average number of retraining throughout the unlearning process. Decreasing _r_ max improves model accuracy and reduces the approximation error, leading to fewer retraining times and lower unlearning costs. Beyond a certain threshold, the model accuracy Table 5: Initial test accuracy, total unlearning cost stabilizes, and the unlearning cost is minimized. and propagation cost per edge removal by varying Further reduction in _r_ max is unnecessary as it _r_ max on ogbn-arxiv with linear model. would increase the initial computational cost. Notably, the propagation cost remains stable, consistent with Theorem 3.3, which indicates _r_ max 1e-5 1e-7 1e-9 5e-10 1e-10 1e-15 that the average propagation cost is indepenAcc (%) 55.23 57.84 57.84 57.84 57.84 57.84 Total (s) 3.30 3.60 3.31 1.81 0.92 0.93 dent of _r_ max. Table 5 suggests that selecting an Prop (s) 0.72 0.76 0.75 0.71 0.77 0.77 appropriate _r_ max can achieve both high model #Retrain 100 100 85.33 56.67 0 0 utility and efficient unlearning. 
+
+## 6 CONCLUSION 
+
+This paper introduces ScaleGUN, the first certified graph unlearning mechanism that scales to billion-edge graphs. We introduce the approximate propagation technique from decoupled models into certified unlearning and reveal the impact of approximation error on the certified unlearning guarantees by non-trivial theoretical analysis. Certified guarantees are established for all three graph unlearning scenarios: node feature, edge, and node unlearning. Empirical studies of ScaleGUN on real-world datasets showcase its efficiency, model utility, and unlearning efficacy in graph unlearning. 
+
+10 
+
+## ACKNOWLEDGEMENTS 
+
+The work was partially done at Gaoling School of Artificial Intelligence, Beijing Key Laboratory of Big Data Management and Analysis Methods, MOE Key Lab of Data Engineering and Knowledge Engineering, and Pazhou Laboratory (Huangpu), Guangzhou, Guangdong 510555, China. This research was supported in part by National Science and Technology Major Project (2022ZD0114802), by National Natural Science Foundation of China (No. 92470128, No. U2241212), by Beijing Outstanding Young Scientist Program No.BJJWZYJH012019100020098, by Huawei-Renmin University joint program on Information Retrieval. We also wish to acknowledge the support provided by the fund for building world-class universities (disciplines) of Renmin University of China, by Engineering Research Center of Next-Generation Intelligent Search and Recommendation, Ministry of Education, by Intelligent Social Governance Interdisciplinary Platform, Major Innovation & Planning Interdisciplinary Platform for the “Double-First Class” Initiative, Public Policy and Decision-making Research Lab, and Public Computing Cloud, Renmin University of China. 
+
+## REFERENCES 
+
+Martin Abadi, Andy Chu, Ian Goodfellow, H Brendan McMahan, Ilya Mironov, Kunal Talwar, and Li Zhang. Deep learning with differential privacy. In _Proceedings of the 2016 ACM SIGSAC conference on computer and communications security_ , pp. 308–318, 2016. 
+
+- Reid Andersen, Fan Chung, and Kevin Lang. Local graph partitioning using pagerank vectors. In _2006 47th Annual IEEE Symposium on Foundations of Computer Science (FOCS’06)_ , pp. 475–486. IEEE, 2006. 
+
+- Albert-Laszl´ o´ Barabasi.´ Network science. _Philosophical Transactions of the Royal Society A: Mathematical, Physical and Engineering Sciences_ , 371(1987):20120375, 2013. 
+
+- Lucas Bourtoule, Varun Chandrasekaran, Christopher A Choquette-Choo, Hengrui Jia, Adelin Travers, Baiwu Zhang, David Lie, and Nicolas Papernot. Machine unlearning. In _2021 IEEE Symposium on Security and Privacy (SP)_ , pp. 141–159. IEEE, 2021. 
+
+- Yinzhi Cao and Junfeng Yang. Towards making systems forget with machine unlearning. In _2015 IEEE symposium on security and privacy_ , pp. 463–480. IEEE, 2015. 
+
+- Kamalika Chaudhuri, Claire Monteleoni, and Anand D Sarwate. Differentially private empirical risk minimization. _Journal of Machine Learning Research_ , 12(3), 2011. 
+
+- Min Chen, Zhikun Zhang, Tianhao Wang, Michael Backes, Mathias Humbert, and Yang Zhang. Graph unlearning. In _Proceedings of the 2022 ACM SIGSAC Conference on Computer and Communications Security_ , pp. 499–513, 2022. 
+
+- Ming Chen, Zhewei Wei, Bolin Ding, Yaliang Li, Ye Yuan, Xiaoyong Du, and Ji-Rong Wen. Scalable graph neural networks via bidirectional propagation. _Advances in neural information processing systems_ , 33:14556–14566, 2020. 
+
+- Jiali Cheng, George Dasoulas, Huan He, Chirag Agarwal, and Marinka Zitnik. Gnndelete: A general strategy for unlearning in graph neural networks. _arXiv preprint arXiv:2302.13406_ , 2023. 
+
+- Wei-Lin Chiang, Xuanqing Liu, Si Si, Yang Li, Samy Bengio, and Cho-Jui Hsieh. Cluster-gcn: An efficient algorithm for training deep and large graph convolutional networks. In _Proceedings of the 25th ACM SIGKDD international conference on knowledge discovery & data mining_ , pp. 257–266, 2019. 
+
+- Eli Chien, Jianhao Peng, Pan Li, and Olgica Milenkovic. Adaptive universal generalized pagerank graph neural network. _arXiv preprint arXiv:2006.07988_ , 2020. 
+
+- Eli Chien, Chao Pan, and Olgica Milenkovic. Certified graph unlearning. _arXiv preprint arXiv:2206.09140_ , 2022a. 
+
+- Eli Chien, Chao Pan, and Olgica Milenkovic. Efficient model updates for approximate unlearning of graph-structured data. In _The Eleventh International Conference on Learning Representations_ , 2022b. 
+
+11 
+
+- Eli Chien, Wei-Ning Chen, Chao Pan, Pan Li, Ayfer Ozgur, and Olgica Milenkovic. Differentially private decoupled graph convolutions for multigranular topology protection. _Advances in Neural Information Processing Systems_ , 36, 2024. 
+
+- Weilin Cong and Mehrdad Mahdavi. Grapheditor: An efficient graph representation learning and unlearning approach. 
+
+- Weilin Cong and Mehrdad Mahdavi. Efficiently forgetting what you have learned in graph representation learning via projection. In _International Conference on Artificial Intelligence and Statistics_ , pp. 6674–6703. PMLR, 2023. 
+
+- Quang-Vinh Dang. Right to be forgotten in the age of machine learning. In _Advances in Digital Science: ICADS 2021_ , pp. 403–411. Springer, 2021. 
+
+- Johannes Gasteiger, Stefan Weißenberger, and Stephan Gunnemann.¨ Diffusion improves graph learning. _Advances in neural information processing systems_ , 32, 2019. 
+
+- Antonio Ginart, Melody Guan, Gregory Valiant, and James Y Zou. Making ai forget you: Data deletion in machine learning. _Advances in neural information processing systems_ , 32, 2019. 
+
+- Aditya Golatkar, Alessandro Achille, and Stefano Soatto. Eternal sunshine of the spotless net: Selective forgetting in deep networks. In _Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition_ , pp. 9304–9312, 2020. 
+
+- Chuan Guo, Tom Goldstein, Awni Hannun, and Laurens Van Der Maaten. Certified data removal from machine learning models. _arXiv preprint arXiv:1911.03030_ , 2019. 
+
+- Xingzhi Guo, Baojian Zhou, and Steven Skiena. Subset node representation learning over large dynamic graphs. In _Proceedings of the 27th ACM SIGKDD Conference on Knowledge Discovery & Data Mining_ , pp. 516–526, 2021. 
+
+- Mingguo He, Zhewei Wei, and Ji-Rong Wen. Convolutional neural networks on graphs with chebyshev approximation, revisited. _Advances in neural information processing systems_ , 35: 7264–7276, 2022. 
+
+- Xiangnan He, Kuan Deng, Xiang Wang, Yan Li, Yongdong Zhang, and Meng Wang. Lightgcn: Simplifying and powering graph convolution network for recommendation. In _Proceedings of the 43rd International ACM SIGIR conference on research and development in Information Retrieval_ , pp. 639–648, 2020. 
+
+- Weihua Hu, Matthias Fey, Marinka Zitnik, Yuxiao Dong, Hongyu Ren, Bowen Liu, Michele Catasta, and Jure Leskovec. Open graph benchmark: Datasets for machine learning on graphs. _Advances in neural information processing systems_ , 33:22118–22133, 2020. 
+
+- Masayuki Karasuyama and Ichiro Takeuchi. Multiple incremental decremental learning of support vector machines. _IEEE Transactions on Neural Networks_ , 21(7):1048–1059, 2010. 
+
+- Thomas N Kipf and Max Welling. Semi-supervised classification with graph convolutional networks. _arXiv preprint arXiv:1609.02907_ , 2016. 
+
+- Pang Wei Koh and Percy Liang. Understanding black-box predictions via influence functions. In _International conference on machine learning_ , pp. 1885–1894. PMLR, 2017. 
+
+- Pan Li, I Chien, and Olgica Milenkovic. Optimizing generalized pagerank methods for seed-expansion community detection. _Advances in Neural Information Processing Systems_ , 32, 2019. 
+
+- Xunkai Li, Yulin Zhao, Zhengyu Wu, Wentao Zhang, Rong-Hua Li, and Guoren Wang. Towards effective and general graph unlearning via mutual evolution. _arXiv preprint arXiv:2401.11760_ , 2024. 
+
+- Julian McAuley, Christopher Targett, Qinfeng Shi, and Anton Van Den Hengel. Image-based recommendations on styles and substitutes. In _Proceedings of the 38th international ACM SIGIR conference on research and development in information retrieval_ , pp. 43–52, 2015. 
+
+12 
+
+Iyiola E Olatunji, Wolfgang Nejdl, and Megha Khosla. Membership inference attack on graph neural networks. In _2021 Third IEEE International Conference on Trust, Privacy and Security in Intelligent Systems and Applications (TPS-ISA)_ , pp. 11–20. IEEE, 2021. 
+
+- Chao Pan, Eli Chien, and Olgica Milenkovic. Unlearning graph classifiers with limited data resources. In _Proceedings of the ACM Web Conference 2023_ , pp. 716–726, 2023. 
+
+- Jiezhong Qiu, Jian Tang, Hao Ma, Yuxiao Dong, Kuansan Wang, and Jie Tang. Deepinf: Social influence prediction with deep learning. In _Proceedings of the 24th ACM SIGKDD international conference on knowledge discovery & data mining_ , pp. 2110–2119, 2018. 
+
+- Anwar Said, Tyler Derr, Mudassir Shabbir, Waseem Abbas, and Xenofon Koutsoukos. A survey of graph unlearning. _arXiv preprint arXiv:2310.02164_ , 2023. 
+
+- Sina Sajadmanesh, Ali Shahin Shamsabadi, Aurelien´ Bellet, and Daniel Gatica-Perez. _{_ GAP _}_ : Differentially private graph neural networks with aggregation perturbation. In _32nd USENIX Security Symposium (USENIX Security 23)_ , pp. 3223–3240, 2023. 
+
+- Prithviraj Sen, Galileo Namata, Mustafa Bilgic, Lise Getoor, Brian Galligher, and Tina Eliassi-Rad. Collective classification in network data. _AI magazine_ , 29(3):93–93, 2008. 
+
+- Petar Velickovic, Guillem Cucurull, Arantxa Casanova, Adriana Romero, Pietro Lio, and Yoshua Bengio. Graph attention networks. _arXiv preprint arXiv:1710.10903_ , 2017. 
+
+- Cheng-Long Wang, Mengdi Huai, and Di Wang. Inductive graph unlearning. _arXiv preprint arXiv:2304.03093_ , 2023. 
+
+- Hanzhi Wang, Mingguo He, Zhewei Wei, Sibo Wang, Ye Yuan, Xiaoyong Du, and Ji-Rong Wen. Approximate graph propagation. In _Proceedings of the 27th ACM SIGKDD Conference on Knowledge Discovery & Data Mining_ , pp. 1686–1696, 2021. 
+
+- Yifei Wang and Mert Pilanci. Polynomial-time solutions for relu network training: A complexity classification via max-cut and zonotopes. _CoRR_ , abs/2311.10972, 2023. doi: 10.48550/ARXIV. 2311.10972. URL https://doi.org/10.48550/arXiv.2311.10972. 
+
+- Mark Weber, Giacomo Domeniconi, Jie Chen, Daniel Karl I Weidele, Claudio Bellei, Tom Robinson, and Charles E Leiserson. Anti-money laundering in bitcoin: Experimenting with graph convolutional networks for financial forensics. _arXiv preprint arXiv:1908.02591_ , 2019. 
+
+- Felix Wu, Amauri H. Souza Jr., Tianyi Zhang, Christopher Fifty, Tao Yu, and Kilian Q. Weinberger. Simplifying graph convolutional networks. In Kamalika Chaudhuri and Ruslan Salakhutdinov (eds.), _Proceedings of the 36th International Conference on Machine Learning, ICML 2019, 9- 15 June 2019, Long Beach, California, USA_ , volume 97 of _Proceedings of Machine Learning Research_ , pp. 6861–6871. PMLR, 2019. 
+
+- Jiancan Wu, Yi Yang, Yuchun Qian, Yongduo Sui, Xiang Wang, and Xiangnan He. Gif: A general graph unlearning strategy via influence function. In _Proceedings of the ACM Web Conference 2023_ , pp. 651–661, 2023a. 
+
+- Kun Wu, Jie Shen, Yue Ning, Ting Wang, and Wendy Hui Wang. Certified edge unlearning for graph neural networks. In _Proceedings of the 29th ACM SIGKDD Conference on Knowledge Discovery and Data Mining_ , pp. 2606–2617, 2023b. 
+
+- Keyulu Xu, Chengtao Li, Yonglong Tian, Tomohiro Sonobe, Ken-ichi Kawarabayashi, and Stefanie Jegelka. Representation learning on graphs with jumping knowledge networks. In _International conference on machine learning_ , pp. 5453–5462. PMLR, 2018. 
+
+- Mingji Yang, Hanzhi Wang, Zhewei Wei, Sibo Wang, and Ji-Rong Wen. Efficient algorithms for personalized pagerank computation: A survey. _IEEE Transactions on Knowledge and Data Engineering_ , 2024. 
+
+- Zhilin Yang, William Cohen, and Ruslan Salakhudinov. Revisiting semi-supervised learning with graph embeddings. In _International conference on machine learning_ , pp. 40–48. PMLR, 2016. 
+
+13 
+
+Hanqing Zeng, Hongkuan Zhou, Ajitesh Srivastava, Rajgopal Kannan, and Viktor Prasanna. Graphsaint: Graph sampling based inductive learning method. _arXiv preprint arXiv:1907.04931_ , 2019. 
+
+- Hongyang Zhang, Peter Lofgren, and Ashish Goel. Approximate personalized pagerank on dynamic graphs. In _Proceedings of the 22nd ACM SIGKDD international conference on knowledge discovery and data mining_ , pp. 1315–1324, 2016. 
+
+- Yanping Zheng, Hanzhi Wang, Zhewei Wei, Jiajun Liu, and Sibo Wang. Instant graph neural networks for dynamic graphs. In _Proceedings of the 28th ACM SIGKDD Conference on Knowledge Discovery and Data Mining_ , pp. 2605–2615, 2022. 
+
+## A OTHER RELATED WORKS 
+
+Machine unlearning, first introduced by Cao & Yang (2015), aims to eliminate the impact of selected training data from trained models to enhance privacy protection. 
+
+**Exact unlearning.** Exact unlearning seeks to generate a model that mirrors the performance of a model retrained from scratch. The straightforward method is to retrain the model upon a data removal request, which is often deemed impractical due to high computational and temporal costs. To bypass the burdensome retraining process, several innovative solutions have been proposed. Ginart et al. (2019) focused on _k_ -means clustering unlearning, while Karasuyama & Takeuchi (2010) addressed the unlearning problem for support vector machines. Bourtoule et al. (2021) proposed the SISA (sharded, isolated, sliced, and aggregated) method, which partitions the training data into shards and trains on each shard separately. Upon a removal request, only the affected shards need to be retrained, thus enhancing the performance significantly. GraphEraser (Chen et al., 2022) extended the SISA approach to graph-structured data. Projector and GraphEditor (Cong & Mahdavi; 2023) address exact unlearning for linear GNNs with Ridge regression as their objective. 
+
+**Approximate unlearning.** Approximate unlearning, on the other hand, introduces probabilistic or heuristic methods to reduce unlearning costs further. Within this realm, certified unlearning, the primary subject of this study, stands as a subclass of approximate methods distinguished by its probabilistic assurances. Besides the certified unlearning works previously mentioned, Pan et al. (2023) extended the certified unlearning to graph scattering transform. GIF (Wu et al., 2023a) developed graph influence function based on influence function for unstructured data (Koh & Liang, 2017). Golatkar et al. (2020) proposed heuristic-based selective forgetting in deep networks. GNNDelete (Cheng et al., 2023) introduced a novel layer-wise operator for optimizing deleted edge consistency and neighborhood influence in graph unlearning. Concurrently, Li et al. (2024) achieved effective and general graph unlearning through a mutual evolution design, and Wang et al. (2023) proposed the first general framework for addressing the inductive graph unlearning problem. **Differentially Privacy v.s. Certified unlearning.** Differentially Privacy (DP) aims to ensure that an adversary cannot infer whether the model was trained on the original dataset or the dataset with any **single data** sample removed, based on the model’s output. Certified unlearning aims to remove the impact of the **specific** data sample(s) so that the model behaves as if the sample was never included. Thus, a DP model inherently provides certified unlearning for any single data sample. However, most DP models suffer from performance degradation even for loose privacy constraints (Abadi et al., 2016; Chaudhuri et al., 2011). Certified unlearning can balance model utility and computational cost, presenting an alternative to retraining and DP (Chien et al., 2022b). This also explains the growing interest in certified unlearning as privacy protection demands rise. Additionally, there are some nuances between DP and certified unlearning. For example, DP does not obscure the total dataset size and the number of deletions any given model instance has processed, but this should not be leaked in certified unlearning (Ginart et al., 2019). 
+
+## B DETAILS OF CERTIFIABLE UNLEARNING MECHANISM 
+
+## B.1 PRACTICAL ASPECTS 
+
+**Least-squares and logistic regression on graphs.** Similar to (Chien et al., 2022a), our unlearning mechanism can achieve certifiable unlearning with least-squares and binary logistic 
+
+14 
+
+regression. ScaleGUN performs exact unlearning for least-squares since the Hessian of loss function is independent of **w** . For binary logistic regression, we define the empirical risk as _l_ ( **e** _[⊤] i_ **[ˆZw]** _[,]_ **[ e]** _[⊤] i_ **[Y]** _[i]_[)][=] _[−]_[log(] _[σ]_[(] **[e]** _[⊤] i_ **[Y]** _[i]_ **[e]** _[⊤] i_ **[ˆZw]**[))][,][where] _[σ]_[denotes][the][sigmoid][function.][As][shown] in (Guo et al., 2019; Chien et al., 2022a), Assumption 4.1 holds with _c_ = 1 _, γ_ 1 = _γ_ 2 = 1 _/_ 4 _, c_ 1 = 1 for logistic regression. Following (Chien et al., 2022a), ScaleGUN can adapt the “one-versus-all other classes” strategy for multiclass logistic regression. 
+
+**Batch unlearning.** In the batch unlearning scenario, multiple instances may be removed at a time. In the worst-case bounds of the gradient residual norm, the component attributable to approximation error remains unchanged across three kinds of unlearning requests and for any number of unlearning instances. This stability is due to our lazy local propagation framework, which ensures the approximation error _ϵ_ 1 does not vary with the number of removed instances. Regarding the component related to unlearning, which is mainly determined by _∥_ **Ze** _j −_ **Z** _[′]_ **e** _j∥_ , we can establish the corresponding bounds by aggregating the bounds for each unlearning instance, utilizing the Minkowski inequality. The data-dependent bound remains unchanged and can be computed directly. 
+
+**Limitations of existing certified unlearning mechanisms.** The existing certified unlearning studies, including ScaleGUN, are limited to linear models with a strongly convex loss function. Achieving certified graph unlearning in nonlinear models is a significant yet challenging objective. Existing approximate unlearning methods on deep models are heuristics without theoretical guarantees (Golatkar et al., 2020; McAuley et al., 2015). On the one hand, the theoretical foundation of existing certified unlearning mechanisms is the Newton update. However, the thorough examination of the Newton update in deep networks remains an unresolved issue (Xu et al., 2018). Koh & Liang (2017) demonstrates that the Newton update performs well in non-convex shallow CNN networks. However, performance may decline in deeper architectures as the convexity of the loss function is significantly compromised (Wu et al., 2023a). On the other hand, note that a certified unlearning model is approximately equivalent to retraining in terms of their probability distributions. This indicates that the unlearning model must be able to approximate the new optimal point of empirical risk within a certain margin of error after data removal. However, existing studies (Wang & Pilanci, 2023) have proven that even approximating the optimal value of a 2-layer ReLU neural network is NP-hard in the worst cases. Therefore, the path to certified unlearning in nonlinear models remains elusive, even for unstructured data. While ScaleGUN cannot achieve certified unlearning for deep models, our empirical results demonstrate that ScaleGUN can achieve competitive model utility using deep models as backbones when certified guarantees are not required, as shown in Table 3 and Table 13. In summary, ScaleGUN can perform certified unlearning for linear GNNs and serves as an effective heuristic unlearning method for deep models. 
+
+**Potential improvements and future directions.** As suggested in (Guo et al., 2019; Chien et al., 2022a), pretraining a nonlinear feature extractor on public datasets can significantly improve overall model performance. If no public datasets are available, a feature extractor with differential privacy (DP) guarantees can be designed. DP-based methods provide privacy guarantees for nonlinear models, indicating the potential to leverage DP concepts to facilitate certified unlearning in deep models. We also observe that ScaleGUN is capable of data removal from deep models to a certain extent (see Figure 7 in Appendix C), even without theoretical guarantees. This observation suggests the possibility of formulating more flexible certification criteria to assess the efficacy of current heuristic approaches. 
+
+## B.2 DETAILS OF SEQUENTIAL UNLEARNING ALGORITHM 
+
+According to the privacy requirement and Theorem 2.1, we select the noise standard deviation _α_ , privacy parameters _ϵ, δ_ and compute the “privacy budget” _αϵ/_ �2 log(1 _._ 5 _/δ_ ). Initially, compute the approximate embeddings by the lazy local propagation framework and train the model from scratch. For each unlearning request, update the embeddings and then employ our unlearning mechanism. Specifically, compute the first component of the data-dependent bound, i.e., 2 _c_ 1 �� **1** _⊤_ _**R**_ �� in Theorem 4.5 and accumulate the second component _γ_ 2 **ˆZ** _′_ **H** ˆ _−_ **w** 1 _[⋆]_[∆] **ˆZ** _′_ ˆ **H** _−_ **w** 1 _[⋆]_[∆] for each ��� ��� ��� ��� ��� ��� unlearning request. Once the budget is exhausted, retrain the model from scratch. Note that we do not need to re-propagate even when retraining the model. Algorithm 1 provides the pseudo-code of ScaleGUN, where the removal request _Ri_ can be one instance or a batch of instances. 
+
+15 
+
+## **Algorithm 1:** ScaleGUN 
+
+**Input:** Graph data _D_ = ( **X** _,_ **Y** _,_ **A** ), sequence of removal requests _R_ = _{R_ 1 _, · · · , Rk}_ , loss function _l_ , parameters _L, {wℓ}, r_ max _, α, γ_ 2 _, ϵ, δ_ **1** Compute the embedding matrix **Z[ˆ]** by Algorithm 2 with initialized _{_ _**q**_[(] _[ℓ]_[)] _}_ and _{_ _**r**_[(] _[ℓ]_[)] _}_ ; **2 w** _←_ the model trained on the training set of _D_[ˆ] with the approximate embeddings **Z[ˆ]** ; **3** Accumulated unlearning error _β ←_ 0; 
+
+**4 for** _Ri ∈ R_ **do 5 ˆZ** _[′] ,_ _**R** ←_ the embedding matrix updated by the lazy local propagation framework and the corresponding residue matrix according to the removal request _Ri_ ; **6** _D_ ˆ _[′] ←_ the updated dataset according to _Ri_ ; **7** ∆ _←∇L_ ( **w** _, D_[ˆ] ) _−L_ ( **w** _, D_[ˆ] _[′]_ ); **8 H** ˆ **w** _←∇_[2] _L_ ( **w** _, D_ ˆ _[′]_ ); **9** _β ← β_ + _γ_ 2 **ˆZ** _′_ **H** ˆ _−_ **w** 1 _[⋆]_[∆] �� �� **ˆZ** _′_ ˆ **H** _−_ **w** 1 _[⋆]_[∆] ��; ��� ��� ��� � � � _⊤_ **10 if** _β_ + 2 _c_ 1 �� **1** _**R**_ �� _> αϵ/_ �2 log(1 _._ 5 _/δ_ ) **then 11 w** _←_ the model retrained on the training set of _D_[ˆ] _[′]_ ; **12** _β ←_ 0; **13 else 14 w** = **w** + **H**[ˆ] _[−]_ **w**[1][∆][;] 
+
+Table 6: Statistics of datasets. 
+
+|Dataset|_n_|_m_|_|C|_|_F_|train/val/test|
+|---|---|---|---|---|---|
+|Cora|2708|5278|7|1433|1208/500/1000|
+|Citeseer|3327|4552|6|3703|1827/500/1000|
+|Photo|7650|119081|8|745|6150/500/1000|
+|ogbn-arxiv|169,343|1,166,243|40|128|90941/29799/48603|
+|ogbn-products|2,449,029|61,859,140|47|128|196615/39323/2213091|
+|ogbn-papers100M|111,059,956|1,615,685,872|172|128|1,207,179/125,265/125,265|
+
+
+## C DETAILS OF EXPERIMENTS AND ADDITIONAL EXPERIMENTS 
+
+## C.1 EXPERIMENTS SETTINGS 
+
+We use cumulative power iteration to compute exact embeddings for the retrain method, CGU, and CEU. Each dimension of the embedding matrix is computed in parallel with a total of 40 threads. We adopt the “one-versus-all” strategy to perform multi-class node classification following (Chien et al., 2022a). We conduct all experiments on a machine with an Intel(R) Xeon(R) Silver 4114 CPU @ 2.20GHz CPU, 1007GB memory, and Quadro RTX 8000 GPU in Linux OS. The statistics of the datasets are summarized in Table 6. Table 7 and Table 8 summarize the parameters used in the linear and deep experiments, respectively. The parameters are consistently utilized across all methods. 
+
+**Adversarial edges selection.** In Figure 3, we show the model accuracy as the number of removed adversarial edges increases. We add 500 adversarial edges to Cora, with 5 random edges being removed in each removal request. For ogbn-arxiv, ogbn-products, and ogbn-papers100M, we add 10[4] adversarial edges, with batch-unlearning size as 100, 200, and 2000, respectively. The details of selecting adversarial edges are as follows. For the Cora dataset, we randomly select edges connecting two distinct labeled terminal nodes and report the accuracy on the whole test set. For large datasets, randomly selecting adversarial edges proves insufficient to impact model accuracy. Hence, we initially identify a small set of nodes from the test set, then add adversarial edges by linking these nodes to other nodes with different labels. Specifically, we first randomly select 2000 nodes from the original test set to create a new test set _Vt_ . We then repeat the following procedure until we collect enough 
+
+16 
+
+Table 7: Parameters used in the linear model experiments. 
+
+|Dataset|_r_max|_λ_|_α_|
+|---|---|---|---|
+|Cora|1e-7|1e-2|0.1|
+|Citeseer|1e-8|1e-2|0.1|
+|Photo|1e-8|1e-4|3.0|
+|ogbn-arxiv|1e-8|1e-4|0.1|
+|ogbn-products|1e-8|1e-4|0.1|
+|ogbn-papers100M|1e-9|1e-8|15.0|
+
+
+Table 8: Parameters used in the deep model experiments. 
+
+|Dataset|_λ_|_α_|learning rate|hidden size|batch size|
+|---|---|---|---|---|---|
+|ogbn-arxiv|5e-4|0.1|1e-3|1024|1024|
+|ogbn-products|1e-4|0.01|1e-4|1024|512|
+|ogbn-papers100M|1e-8|5.0|1e-4|256|8192|
+
+
+edges: randomly select a node _u_ from _Vt_ , randomly select a node _v_ from the entire node set _V_ , and if _u_ and _v_ have different labels, we add the adversarial edge ( _u, v_ ) to the original graph. 
+
+**Vulnerable edges selection.** In Table 1, we show the unlearning results in large graph datasets. For these datasets, we selected _vulnerable edges_ connected to low-degree nodes in order to observe changes in test accuracy after unlearning. The details of selecting vulnerable edges are as follows. We first determine all nodes with a degree below a specified threshold in the test set. Specifically, the threshold is set to 10 for the ogbn-arxiv and ogbn-products datasets, and 6 for the ogbn-papers100M dataset. We then shuffle the set of these low-degree nodes and iterate over each node _v_ : For each node _v_ , if any of its neighbors share the same label as _v_ , the corresponding edge is included in the unlearned edge set. The iteration ends until we collect enough edges. 
+
+## C.2 ADDITIONAL EXPERIMENTS ON NODE FEATURE, EDGE AND NODE UNLEARNING. 
+
+**Node feature and node unlearning experiments.** We conduct experiments on node feature and node unlearning for linear models and choose Cora, ogbn-arixv, and ogbn-papers100M as the representative datasets. Following the setting in (Chien et al., 2022b), we set _δ_ = 1 _e −_ 4. Table 9 shows the model accuracy, average total cost, and average propagation cost per removal on Cora and ogbn-arxiv. For Cora, we remove the feature of one node at a time for node feature unlearning tasks. While for ogbn-arxiv, we remove the feature of 25 nodes. The node unlearning task is set in the same way. The results demonstrate that ScaleGUN achieves comparable model utility with retraining while significantly reduce the unlearning costs in node feature and node unlearning tasks. 
+
+**Edge unlearning results on small graphs.** Table 10 presents test accuracy, average total unlearning cost, and average propagation cost for edge unlearning in linear models applied to small graph datasets. For each dataset, 2000 edges are removed, with one edge removed at a time. The table reports the initial and intermediate accuracy after every 500-edge removal. In this experiment, we also set _δ_ = 1 _e −_ 4, following the setting in (Chien et al., 2022b). ScaleGUN is observed to maintain competitive accuracy when compared to CGU and CEU while notably reducing both the total and _−_ propagation costs. It is important to note that the difference in unlearning cost (Total Prop) among the three methods is relatively minor. However, CGU and CEU incur the same propagation cost as retraining, which is 10 _× ∼_ 30 _×_ higher than that of ScaleGUN. 
+
+**Model utility when removing more than 50% training nodes.** To validate the model utility when the unlearning ratio reaches 50%, we remove 5 _×_ 10[4] and 10[5] training nodes/features from ogbn-arxiv and ogbn-products in Figure 4. The batch-unlearning sizes are set to 25 and 10[3] nodes/features, respectively. We set _δ_ = 1 _e −_ 4 in the experiment, following the setting in (Chien et al., 2022b). The results show that ScaleGUN closely matches the retrained model’s utility even when half of the training nodes/features are removed. 
+
+17 
+
+Table 9: Test accuracy (%), total unlearning cost (s) and propagation cost (s) per node feature/feature removal for **linear** models on Cora and ogbn-arxiv. 
+
+|Feature Unlearning|Feature Unlearning|Node Unlearning|Node Unlearning|
+|---|---|---|---|
+|Cora|ogbn-arxiv|Cora|ogbn-arxiv|
+|_N_<br>Retrain<br>CGU<br>ScaleGUN|_N_<br>Retrain<br>CGU<br>ScaleGUN|_N_<br>Retrain<br>CGU<br>ScaleGUN|_N_<br>Retrain<br>CGU<br>ScaleGUN|
+|0<br>84_._9<br>84_._9<br>84_._9<br>200<br>84_._17<br>83_._4<br>83_._4<br>400<br>84_._4<br>82_._43<br>82_._43<br>600<br>83_._03<br>81_._73<br>81_._73<br>800<br>81_._9<br>77_._83<br>77_._83|0<br>57_._84<br>57_._84<br>57_._84<br>25<br>57_._83<br>57_._84<br>57_._84<br>50<br>57_._83<br>57_._83<br>57_._83<br>75<br>57_._84<br>57_._84<br>57_._84<br>100<br>57_._83<br>57_._85<br>57_._84|0<br>84_._9<br>84_._9<br>84_._9<br>200<br>83_._5<br>82_._97<br>82_._97<br>400<br>82_._43<br>81_._53<br>81_._53<br>600<br>81_._87<br>80_._7<br>80_._7<br>800<br>80_._1<br>76_._7<br>76_._7|0<br>57_._84<br>57_._84<br>57_._84<br>25<br>57_._83<br>57_._83<br>57_._84<br>50<br>57_._83<br>57_._83<br>57_._83<br>75<br>57_._84<br>57_._84<br>57_._84<br>100<br>57_._83<br>57_._84<br>57_._84|
+|_T_1<br>0_._44<br>0_._20<br>0_._10<br>_T_2<br>0_._11<br>0_._10<br>0_._01|_T_1<br>2_._59<br>2_._33<br>1_._49<br>_T_2<br>1_._55<br>1_._56<br>0_._77|_T_1<br>0_._44<br>0_._20<br>0_._11<br>_T_2<br>0_._10<br>0_._10<br>0_._01|_T_1<br>2_._66<br>2_._04<br>1_._38<br>_T_2<br>1_._66<br>1_._43<br>0_._81|
+
+
+Table 10: Test accuracy (%), total unlearning cost (s), and propagation cost (s) per one-edge removal for **linear** models (small graphs). 
+
+|Cora|Citeseer|Photo|
+|---|---|---|
+|_N_(_×_500)<br>Retrain<br>CGU<br>CEU<br>ScaleGUN<br>0<br>85.30<br>84.10<br>84.10<br>84.10<br>1<br>85.20<br>83.30<br>83.30<br>83.30<br>2<br>84.10<br>82.30<br>82.30<br>82.30<br>3<br>83.00<br>81.80<br>81.80<br>81.80<br>4<br>82.40<br>81.40<br>81.40<br>81.40|_N_(_×_500)<br>Retrain<br>CGU<br>CEU<br>ScaleGUN<br>0<br>79.30<br>78.80<br>78.80<br>78.80<br>1<br>78.60<br>78.37<br>78.37<br>78.37<br>2<br>78.30<br>78.00<br>78.00<br>78.00<br>3<br>77.93<br>77.43<br>77.43<br>77.43<br>4<br>77.60<br>77.10<br>77.10<br>77.10|_N_(_×_500)<br>Retrain<br>CGU<br>CEU<br>ScaleGUN<br>0<br>91.67<br>89.93<br>89.93<br>89.93<br>1<br>91.60<br>89.90<br>89.90<br>89.90<br>2<br>91.60<br>89.90<br>89.90<br>89.90<br>3<br>91.57<br>89.67<br>89.67<br>89.67<br>4<br>91.63<br>89.67<br>89.67<br>89.67|
+|Total<br>0.74<br>0.28<br>0.32<br>**0.12**<br>Prop<br>0.15<br>0.15<br>0.17<br>**0.01**|Total<br>0.99<br>0.81<br>0.76<br>**0.55**<br>Prop<br>0.34<br>0.29<br>0.27<br>**0.03**|Total<br>3.08<br>0.35<br>0.40<br>**0.07**<br>Prop<br>0.31<br>0.26<br>0.29<br>**0.01**|
+
+
+## C.3 PARAMETER STUDIES. 
+
+**Trade-off between privacy, model utility, and unlearning efficiency.** According to Theorem 2.1 and our sequential unlearning algorithm, there is a trade-off amongst privacy, model utility, and unlearning efficiency. Specifically, _ϵ_ and _δ_ controls the privacy requirement. To achieve ( _ϵ, δ_ )-certified unlearning, we can adjust the standard deviation _α_ of the noise **b** . An overly large _α_ introduces too much noise and may degrade the model utility. However, a smaller _α_ may lead to frequent retraining and increase the unlearning cost due to the privacy budget constraint. We empirically analyze the trade-off between privacy and model utility, by removing 800 nodes from Cora, one at a time. To control the frequency of retraining, we fix _αϵ_ = 0 _._ 1 and vary the standard derivation _α_ of Cora - Node unlearning- Node unlearning Node unlearning the noise **b** . The results are shown in Figure 5. Here, we set _δ_ = 1 _/_ #nodes and _r_ max = 10 _[−]_[10] . 0.8 We observe that the model accuracy decreases 0.7 _α_ =0.01 as _α_ increases (i.e., _ϵ_ decreases), which agrees 0.6 _ααα_ =0.1=0.2=0.2 with our intuition. 0.5 _α_ =0.5 
+
+**==> picture [145 x 114] intentionally omitted <==**
+
+**----- Start of picture text -----**<br>
+Cora - Node unlearning- Node unlearning Node unlearning<br>0.8<br>0.7<br>α =0.01<br>0.6 ααα =0.1=0.2=0.2<br>0.5 α =0.5<br>α =1.0<br>0.4 α =5.0<br>0.3 α =10.0<br>0.2<br>0.1<br>0 100 200 300 400 500 600<br>Number of removals<br>Test Accuracy (%)<br>**----- End of picture text -----**<br>
+
+
+**Varying batch-unlearning size.** To validate the model efficiency and model utility under varying batch-unlearning sizes, we vary the batchunlearning size in _{_ 1 _×_ 10[3] _,_ 3 _×_ 10[3] _,_ 5 _×_ 10[3] _,_ 10 _×_ 10[3] _}_ for ogbn-products and _{_ 2 _×_ 10[3] _,_ 10 _×_ 10[3] _,_ 50 _×_ 10[3] _}_ for ogbn-papers100M in Table 11. Following the setting in (Chien et al., 2022b), we set _δ_ = 1 _e −_ 4. The average total cost and 
+
+Figure 5: Varying _α_ ( _αϵ_ = 0 _._ 1 fixed): Test accuracy v.s. the number of removed nodes on Cora. 
+
+propagation cost for five batches and the accuracy after unlearning five batches are reported. For comparison, the corresponding retraining results are provided, where 1 _×_ 10[3] and 2 _×_ 10[3] nodes are removed per batch for ogbn-products and ogbn-papers100M, respectively. ScaleGUN maintains superior efficiency over retraining, even when the batch-unlearning size becomes 4%-5% of the training set in large graphs (e.g., 50 _×_ 10[3] nodes in a batch out of 1 _._ 2 _×_ 10[6] total training nodes of ogbn-papers100M). The test accuracy demonstrates that ScaleGUN preserves model utility under varying batch-unlearning sizes. 
+
+18 
+
+**==> picture [398 x 81] intentionally omitted <==**
+
+**----- Start of picture text -----**<br>
+60 ogbn-arxiv 60 ogbn-arxiv 60 ogbn-products 60 ogbn-products<br>Retrain Retrain Retrain Retrain<br>59 ScaleGUN 59 ScaleGUN 59 ScaleGUN 59 ScaleGUN<br>58 58 58 58<br>57 57 57 57<br>56 56 56 56<br>55 0 1 × 10 [4] 2 × 10 [4] 3 × 10 [4] 4 × 10 [4] 5 × 10 [4] 55 0 1 × 10 [4] 2 × 10 [4] 3 × 10 [4] 4 × 10 [4] 5 × 10 [4] 55 0 2 × 10 [4] 4 × 10 [4] 6 × 10 [4] 8 × 10 [4] 1 × 10 [5] 55 0 2 × 10 [4] 4 × 10 [4] 6 × 10 [4] 8 × 10 [4] 1 × 10 [5]<br># removed features # removed nodes # removed features # removed nodes<br>Accuracy (%) Accuracy (%) Accuracy (%) Accuracy (%)<br>**----- End of picture text -----**<br>
+
+
+Figure 4: Unlearning more than 50% of training nodes/features: Test accuracy on ogbn-arxiv and ogbn-products. 
+
+**==> picture [328 x 107] intentionally omitted <==**
+
+**----- Start of picture text -----**<br>
+ScaleGUN: Worst-case norm CGU: Worst-case norm CEU: Worst-case norm<br>ScaleGUN: Data-dependent norm CGU: Data-dependent norm CEU: Data-dependent norm<br>ScaleGUN: True norm CGU: True norm CEU: True norm<br>10 [9] 10 [9] 10 [9]<br>10 [6] 10 [6] 10 [6]<br>10 [3] 10 [3] 10 [3]<br>10 [0] 10 [0] 10 [0]<br>10 [−3] 10 [−3] 10 [−3]<br>0 200 400 600 800 0 100 200 300 400 500 0 200 400 600 800<br>Node feature unlearning Edge unlearning Node unlearning<br>Gradient residual norm<br>**----- End of picture text -----**<br>
+
+
+Figure 6: Comparison of the bounds of the gradient residual: Worst-case bound, data-dependent bound and the true value on Cora dataset for ScaleGUN, CGU and CEU. C.4 CGU, CEU AND SCALEGUN’S BOUNDS OF THE GRADIENT RESIDUAL. 
+
+Figure 6 shows the worst-case bound, data-dependent bound, and the true value of the gradient residual for ScaleGUN, CGU, and CEU on the Cora dataset. For ScaleGUN, CGU and CEU, the worst-case bounds and the data-dependent bounds validly upper bound the true value, and the worstcase bounds are looser than the data-dependent bounds. This confirms the correctness of the bounds for all methods. The worst-case bound of ScaleGUN is larger than that of CGU and slightly larger than that of CEU. This difference arises because ScaleGUN introduces approximation error, which is not present in CGU and CEU. However, note that this large worst-case bound does not impact the update efficiency of ScaleGUN, as decisions on retraining during sequential unlearning rely on data-dependent bounds rather than worst-case bounds. In edge and node unlearning scenarios, the data-dependent bound of ScaleGUN is slightly larger than that of CGU in the early stages of sequential unlearning. This occurs because the approximation error introduced by ScaleGUN dominates the model error when only a small amount of data has been unlearned. As the number of unlearning requests increases, the unlearning error accumulates, eventually dominating the model error, while the approximation error does not accumulate since we meet the approximation error bound in each unlearning step. Consequently, the data-dependent bound of ScaleGUN becomes comparable to that of CGU over time. In the edge unlearning scenario, the data-dependent bound of CEU is larger than that of both ScaleGUN and CGU, primarily due to CEU employing a different unlearning mechanism. The true norm of ScaleGUN is slightly larger than that of CGU in edge and node unlearning scenarios, again due to the introduction of approximation error by ScaleGUN. 
+
+## C.5 ADDITIONAL VALIDATION OF UNLEARNING EFFICACY. 
+
+**Unlearning efficacy on deep models.** We also evaluate the unlearning efficacy for deep models. Figure 7 illustrates how the model accuracy changes as the number of removed adversarial edges increases. The adversarial edges are the same as those used for linear models, selected according to the method detailed in Appendix C.1. The deep models employed are consistent with those in Table 3, defined as **Y**[ˆ] = LogSoftmax( _σ_ ( **P**[2] **XW** ) **W** ). The results indicate that ScaleGUN’s performance improves with the removal of more adversarial edges, behaving similarly to retraining. This highlights ScaleGUN’s ability to effectively unlearn adversarial edges, even in shallow non-linear networks. 
+
+**Membership Inference Attack (MIA).** As noted in (Chien et al., 2022b), MIA has distinct design goals from unlearning. Even after unlearning a training node, the attack model may still recognize the unlearned node in the training set if there are other similar training nodes. 
+
+19 
+
+Table 11: Varying batch-unlearning size: Test accuracy (%), average total cost ( _s_ ), and average propagation cost ( _s_ ) per batch node removal. 
+
+|Metric|ogbn-products|ogbn-products|ogbn-papers100M<br>train<br>ScaleGUN|ogbn-papers100M<br>train<br>ScaleGUN|ogbn-papers100M<br>train<br>ScaleGUN|Retrain|
+|---|---|---|---|---|---|---|
+||ScaleGUN<br>Re||||||
+|1_×_103|3_×_103<br>5_×_103<br>10_×_103<br>1||_×_103<br>2_×_103<br>10_×_103<br>50_×_103|||2_×_103|
+|Acc<br>56.25<br>Total<br>24.00<br>Prop<br>21.97|56.25<br>56.07<br>56.14<br>5<br>39.07<br>45.58<br>56.14<br>9<br>37.25<br>43.91<br>54.72<br>9||6.24<br>59.49<br>59.71<br>58.76<br>2.44<br>54.85<br>352.35<br>657.99<br>1.54<br>15.49<br>313.11<br>621.62|||59.45<br>5201.88<br>5139.09|
+||-arxiv<br>ogbn-p||||||
+|0<br>2000<br>4000<br># removed ad<br>0.50<br>0.52<br>0.54<br>0.56<br>0.58<br>0.60<br>Accuracy (%)<br>ogbn<br>Retrain<br>ScaleGUN|||roducts||||
+|||0.70<br>0.71<br>0.72<br>0.73<br>0.74<br>0.75<br>0.76<br>Accuracy (%)<br>Retrain<br>ScaleGUN||0.59<br>0.60<br>0.61<br>0.62<br>0.63<br>Accuracy (%)|Retrain<br>ScaleGUN||
+||6000<br>8000<br>10000<br>versarial edges<br>0<br>2000<br>4000<br># removed ad||6000<br>8000<br>10000<br>versarial edges<br>||||
+
+
+Figure 7: Comparison of unlearning efficacy for **deep** model: Model accuracy v.s. the number of removed adversarial edges. 
+
+Nonetheless, we follow (Chien et al., 2022b; Cheng et al., 2023) to conduct MIA (Olatunji et al., 2021) on Cora and ogbn-arxiv in Table 12. The core idea is that if the target model effectively unlearns a training node, the MI attacker will determine that the node is not present in the training set, i.e., the presence probability of the unlearned nodes decreases. We remove 100 training nodes from Cora and Table 12: MIA: The ratio of the presence proba125 from ogbn-arxiv. We then report the ratio bility of the unlearned nodes between the original of the presence probability of these unlearned model and target models after unlearning. nodes between the original model (which does not unlearn any nodes) and target models after unlearning. A reported ratio greater than 1 _._ 0 Target model Cora ( _↑_ ) ogbn-arxiv ( _↑_ ) indicates that the target model has successfully Retrain 1.698 _±_ 0.21 1.232 _±_ 0.388 removed some information about the unlearned CGU 1.526 _±_ 0.120 1.231 _±_ 0.388 nodes, with higher values indicating better perScaleGUN 1.524 _±_ 0.130 1.232 _±_ 0.388 formance. Table 12 indicates that ScaleGUN offers privacy-preserving performance comparable to retraining in the context of MIA. 
+
+## C.6 APPLY SCALEGUN TO SPECTRAL GNNS. 
+
+Besides decoupled GNNs that incorporate MLPs, ScaleGUN can also be applied to spectral GNNs (Chien et al., 2020; He et al., 2022), which are a significant subset of existing GNN models and have shown superior performance in many popular benchmarks. Forcan� _Kk_ =0example,be _[w][k]_ expressed _[T][k]_[(ˆ] _[L]_[)] ChebNetII _[X]_[ when applied to large graphs,] as _Y_ (He= et _fθ_ (al., _Z_ ) _, Z_ 2022)= (s),Table 13:moval usingand propagationTest accuracy (%), total unlearning cost **ChebNetII** cost as the backbone on ogbn-(s) per batch edge rewhere _Tk_ are the Chebyshev polynomials, _fθ_ is a arxiv. MLP and _wk_ are learnable parameters. We can Retrain ScaleGUN maintain _Tk_ ( _L_[ˆ] ) _X_ using the lazy local frame0 71.99 71.99 work and perform unlearning on _fθ_ and _wk_ , sim25 72.08 71.98 ilar to that of Table 3. Table 13 demonstrated 50 72.01 71.98 75 71.8 71.96 the unlearning results using ChebNetII as the 100 72.3 71.94 backbone on ogbn-arxiv, mirroring the unlearn125 71.79 71.93 ing settings with Table 1. This suggests that Prop 14.96 3.13 ScaleGUN can achieve competitive performance Total 58.51 5.84 when no certified guarantees are required. 
+
+20 
+
+**Licenses of the datasets.** Ogbn-arxiv and ogbn-papers100M are both under the ODC-BY license. Cora, Citeseer, Photo, and ogbn-products are under the CC0 1.0 license, Creative Commons license, Open Data Commons Attribution License, and Amazon license, respectively. 
+
+## D DETAILS OF LAZY LOCAL PROPAGATION FRAMEWORK 
+
+## D.1 DIFFERENCES BETWEEN SCALEGUN AND EXISTING DYNAMIC PROPAGATION METHODS 
+
+Existing dynamic propagation methods focus on the PPR-based propagation scheme, while ScaleGUN adopts the GPR-based one. Note that these dynamic propagation methods based on PPR cannot be straightforwardly transformed to accommodate GPR. Specifically, PPR-based methods can simply maintain a reserve vector _**q**_ and a residue vector _**r**_ . In contrast, GPR-based propagation requires _**q**_[(] _[ℓ]_[)] and _**r**_[(] _[ℓ]_[)] for each level _ℓ_ . This difference also impacts the theoretical analysis of correctness and time complexity. Therefore, we have developed tailored algorithms and conducted a comprehensive theoretical analysis of the GPR-based scheme. 
+
+Choosing GPR enhances the generalizability of our framework. Specifically, our framework computes the embedding **Z** =[�] _[L] ℓ_ =0 _[w][ℓ]_ **[P]** _[ℓ]_ **[X]**[, wherein PPR, the weights] _[ w][ℓ]_[are defined as] _[ α]_[(1] _[ −][α]_[)] _[ℓ]_[with] _[ α]_ being the decay factor and _L_ tending towards infinity. Such a formulation allows the theoretical underpinnings of ScaleGUN to be directly applicable to PPR-based models, illustrating the broader applicability of our approach. One could replace the propagation part in ScaleGUN with the existing dynamic PPR approaches and obtain a certifiable unlearning method for PPR-based models. Conversely, confining our analysis to PPR would notably limit the expansiveness of our results. 
+
+**Limitations of InstantGNN to achieve certified unlearning.** InstantGNN (Zheng et al., 2022) provides an incremental computation method for the graph embeddings of dynamic graphs, accommodating insertions/deletions of nodes/edges and modifications of node features. However, simply applying InstantGNN for unlearning does not lead to certified unlearning, as this requires a thorough analysis of the impact of approximation error on the certified unlearning guarantee. Certified unlearning mandates that the gradient residual norm on exact embeddings, i.e., _||∇L_ ( _w[−] , D[′]_ ) _||_ , remains within the privacy limit, as detailed in Theorem 2.1. InstantGNN, which relies on approximate embeddings for training, lacks a theoretical analysis of _||∇L_ ( _w[−] , D[′]_ ) _||_ . Whether InstantGNN retrains the model for each removal or employs an adaptive training strategy for better performance, it lacks solid theoretical backing. Thus, InstantGNN is considered a heuristic method without theoretical support. 
+
+## D.2 ALGORITHMS OF LAZY LOCAL PROPAGATION FRAMEWORK 
+
+**Initial propagation.** Algorithm 2 illustrates the pseudo-code of Forward Push on a graph _G_ with 1 **P** = **AD** _[−]_[1] and _L_ propagation steps. Initially, we normalize **x** to ensure **D** 2 **x**[and let] ��� ���1 _[≤]_[1][,] 1 _**q**_[(] _[ℓ]_[)] = _**r**_[(] _[ℓ]_[)] = **0** for 0 _≤ ℓ ≤ L_ , except for _**r**_[(0)] = **D** 2 **x** when _ℓ_ = 0. After employing Algorithm 2, we obtain **ˆz** =[�] _[L] ℓ_ =0 _[w][ℓ]_ **[D]** _[−]_[1] 2 _**q**_[(] _[ℓ]_[)] as the approximation of **z** . 
+
+**Algorithm 2:** BasicProp 
+
+**Input:** Graph _G_ , level _L_ , threshold _r_ max, and initialized _{_ _**q**_[(] _[ℓ]_[)] _,_ _**r**_[(] _[ℓ]_[)] _},_ 0 _≤ ℓ ≤ L_ **Output:** New estimated vectors _{_ _**q**_[(] _[ℓ]_[)] _,_ _**r**_[(] _[ℓ]_[)] _}_ **1 for** _ℓ from 0 to L −_ 1 **do 2 for** _u ∈ V with |_ _**r**_[(] _[ℓ]_[)] ( _u_ ) _| > r_ max **do 3 for** _each v ∈N_ ( _u_ ) **do 4** _**r**_[(] _[ℓ]_[+1)] ( _v_ )+ = _**[r]**_[(] _d[ℓ]_ ([)] _u_[(] _[u]_ )[)][;] **5** _**q**_[(] _[ℓ]_[)] ( _u_ )+ = _**r**_[(] _[ℓ]_[)] ( _u_ ) and _**r**_[(] _[ℓ]_[)] ( _u_ ) _←_ 0 ; **6** _**q**_[(] _[L]_[)] _←_ _**q**_[(] _[L]_[)] + _**r**_[(] _[L]_[)] and _**r**_[(] _[L]_[)] _←_ **0** _[n][×][F]_ ; **7 return** _{_ _**q**_[(] _[ℓ]_[)] _,_ _**r**_[(] _[ℓ]_[)] _},_ 0 _≤ ℓ ≤ L_ 
+
+21 
+
+## **Algorithm 3:** UpdateEmbeddingMatrix(EdgeRemoval) 
+
+**Input:** Graph _G_ , level _L_ , edge _e_ = ( _u, v_ ) to be removed, threshold _r_ max, _{wℓ}_ and _{_ _**q**_[(] _[ℓ]_[)] _,_ _**r**_[(] _[ℓ]_[)] _}_ , 0 _≤ ℓ ≤ L_ **Output: Z[ˆ]** _∈_ R _[n]_ **1** _G[′] ←_ delete ( _u, v_ ) from _G_ ; 1 1 **2** _**r**_[(0)] ( _u_ ) _←_ _**r**_[(0)] ( _u_ ) + ( _d_ ( _u_ ) 2 _−_ ( _d_ ( _u_ ) + 1) 2 ) **x** ( _u_ ); 1 1 **3** _**r**_[(0)] ( _v_ ) _←_ _**r**_[(0)] ( _v_ ) + ( _d_ ( _v_ ) 2 _−_ ( _d_ ( _v_ ) + 1) 2 ) **x** ( _v_ ); **4 for** _ℓ from_ 1 _to L_ **do 5** _**r**_[(] _[ℓ]_[)] ( _u_ ) _←_ _**r**_[(] _[ℓ]_[)] ( _u_ ) _−_ _**[q]** d_[(] _[ℓ]_ ( _[−] v_ )+1[1)][(] _[v]_[)][;] **6 for** _w ∈N_ ( _u_ ) **do** _**q**_[(] _[ℓ][−]_[1)] ( _u_ ) **7** _**r**_[(] _[ℓ]_[)] ( _w_ ) _←_ _**r**_[(] _[ℓ]_[)] ( _w_ ) + _d_ ( _u_ )( _d_ ( _u_ )+1)[;] **8** _**r**_[(] _[ℓ]_[)] ( _v_ ) _←_ _**r**_[(] _[ℓ]_[)] ( _v_ ) _−_ _**[q]** d_[(] _[ℓ]_ ( _[−] u_[1)] )+1[(] _[u]_[)][;] **9 for** _w ∈N_ ( _v_ ) **do** _**q**_[(] _[ℓ][−]_[1)] ( _v_ ) **10** _**r**_[(] _[ℓ]_[)] ( _w_ ) _←_ _**r**_[(] _[ℓ]_[)] ( _w_ ) + _d_ ( _v_ )( _d_ ( _v_ )+1)[;] **11** _{_ _**q**_[(] _[ℓ]_[)] _,_ _**r**_[(] _[ℓ]_[)] _} ←_ BasicProp( _G[′] , L, r_ max _, {_ _**q**_[(] _[ℓ]_[)] _,_ _**r**_[(] _[ℓ]_[)] _}_ ); **12 return**[�] _[L] ℓ_ =0 _[w][ℓ]_ **[D]** _[−]_[1] 2 _**q**_[(] _[ℓ]_[)] 
+
+**Efficient Removal.** Algorithm 3 details the update process for edge removal. Upon a removal request, we first adjust _{_ _**r**_[(] _[ℓ]_[)] _}_ locally for the affected nodes to maintain the invariant property. Post-adjustment, the invariant property is preserved across all nodes. Then, Algorithm 2 is invoked to reduce the error further and returns the updated **ˆz** . Note that the degree of node _u_ and node _v_ is revised in Line 1. 
+
+**Batch update.** Inspired by (Zheng et al., 2022), we introduce a parallel removal algorithm upon receiving a batch of removal requests. Specifically, we initially update the graph structure to reflect all removal requests and then compute the final adjustments for each affected node. Notably, the computation is conducted only once, thus significantly enhancing efficiency. We extend Algorithm 3 to accommodate batch-edge removal, simultaneously enabling parallel processing for multiple edges. The core concept involves adjusting both the reserves and residues for nodes impacted by the removal, deviating from Algorithm 3 where only the residues are modified. The benefit of altering the reserves is that only the reserves and residues for nodes _u_ and _v_ need updates when removing the edge ( _u, v_ ). Consequently, this allows the removal operations for all edges to be executed in parallel. Algorithm 4 details the batch update process for edge removal. Batch-node removal and batch-feature removal can be similarly implemented. 
+
+## D.3 THEORETICAL ANALYSIS OF LAZY LOCAL PROPAGATION FRAMEWORK 
+
+Denote _{_ ∆ _**r**_[(] _[ℓ]_[)] _}_ as the adjustments to residues before invoking Forward Push (Algorithm 2) for further reducing the error. For instance, we have ∆ _**r**_[(] _[ℓ]_[)] ( _u_ ) = _**[q]** d_[(] _[ℓ]_ ( _[−] v_ )+1[1)][(] _[v]_[)] for _ℓ>_ 0. Let _d_ be the average degree of the graph. We introduce the following theorems regarding the time complexity of our lazy local propagation framework. **Theorem D.1** (Initialization Cost, Update Cost, and Total Cost) **.** _Let_ **ˆz** 0 _be the initial embedding vector generated from scratch._ **ˆz** _i and {_ _**r** i_[(] _[ℓ]_[)] _[}][ represents the approximate embedding vector and the] residues after the i-th removal, respectively. Each embedding vector_ **ˆz** _i satisfies Lemma 3.1. Given the threshold r_ max _, the cost of generating_ **ˆz** 0 _from scratch is O_ �� _L −_[�] _[L] ℓ_ =0 _[−]_[1][(] _[L][ −][ℓ]_[)] ��� _**r**_ 0( _ℓ_ )���1� _· r_ max _d_ � _. The cost for updating_ **ˆz** _i−_ 1 _and {_ _**r** i_[(] _−[ℓ]_[)] 1 _[}][ to generate]_ **[ ˆz]** _[i][is]_ 
+
+**==> picture [266 x 31] intentionally omitted <==**
+
+22 
+
+## **Algorithm 4:** BatchUpdate(EdgeRemoval) 
+
+**Input:** Graph _G_ , level _L_ , edges to be unlearned _S_ = _{e_ 1 _, · · · , ek}_ , weight coefficients _wℓ_ , threshold _r_ max, ( _**q**_[(] _[ℓ]_[)] _,_ _**r**_[(] _[ℓ]_[)] ), 0 _≤ ℓ ≤ L_ **Output: Z[ˆ]** _∈_ R _[n]_ **1** Update _G_ according to _S_ , and let ∆ _u_ be the number of removed neighbors of node _u_ ; **2** _Va ←{u |_ the degree of node _u_ has changed _}_ ; **3 parallel for** _u ∈ Va_ **do** _d_ ( _u_ ) **4** _**q**_[(0)] ( _u_ ) _← d_ ( _u_ )+∆( _u_ ) _**[q]**_[(0)][(] _[u]_[)][;] 1 **5** _**r**_[(0)] ( _u_ ) _← d_ ( _u_ ) 2 **x** ( _u_ ) _−_ _**q**_[(0)] ( _u_ ); **6 for** _ℓ from_ 1 _to L_ **do 7 parallel for** _u ∈ Va_ **do** _d_ ( _u_ ) **8** _**q**_[(] _[ℓ]_[)] ( _u_ ) _← d_ ( _u_ )+∆( _u_ ) _**[q]**_[(] _[ℓ]_[)][(] _[u]_[)][;] **9** _**r**_[(] _[ℓ]_[)] ( _u_ ) _←_ _**r**_[(] _[ℓ]_[)] ( _u_ ) +[∆] _d_ ([(] _u[u]_ )[)] _**[q]**_[(] _[ℓ]_[)][(] _[u]_[)][;] **10 for** _each v ∈{removed neighbors of node u}_ **do 11** _**r**_[(] _[ℓ]_[)] ( _u_ ) _←_ _**r**_[(] _[ℓ]_[)] ( _u_ ) _−_ _**[q]**_[(] _[ℓ] d[−]_ ([1)] _v_ )[(] _[v]_[)] ; **12** _{_ _**q**_[(] _[ℓ]_[)] _,_ _**r**_[(] _[ℓ]_[)] _} ←_ BasicProp( _G[′] , L, r_ max _, {wℓ}, {_ _**q**_[(] _[ℓ]_[)] _,_ _**r**_[(] _[ℓ]_[)] _}_ ); **13 return**[�] _[L] ℓ_ =0 _[w][ℓ]_ **[D]** _[−]_[1] 2 _**q**_[(] _[ℓ]_[)] 
+
+_where {_ ∆ _**r** i_[(] _[ℓ]_[)] _[}][represent][the][adjustments][of][residues][for][the][i][-th][removal.][For][a][sequence][of][K] removal requests, the total cost of initialization and K removals is_ 
+
+**==> picture [188 x 31] intentionally omitted <==**
+
+E PROOFS OF THEORETICAL RESULTS 
+
+**Notations for proofs.** For the sake of readability, we use _l_ ( **Z** _,_ **w** _, i_ ) to denote _l_ ( **e** _[⊤] i_ **[Zw]** _[,]_ **[ e]** _[⊤] i[Y]_[ )][.] **[Z]** _[i]_ represents the embedding column vector of node _i_ . When referring to the embedding row vector of **Z** , we use **e** _[⊤] i_ **[Z]**[.] **[Z]** _[ij]_[denotes the term at the] _[ i]_[-th row and the] _[ j]_[-th column of] **[ Z]**[.] _[|]_ **[v]** _[|]_[ represents the] vector with the absolute value of each element in vector **v** . 
+
+E.1 PROOF OF EQUATION (1) AND LEMMA 3.2 
+
+Equation (1) is presented as follows: 
+
+**==> picture [196 x 31] intentionally omitted <==**
+
+**Lemma.** _For each feature vector_ **x** _, the reserve vectors {_ _**q**_[(] _[ℓ]_[)] _} and the residue vectors {_ _**r**_[(] _[ℓ]_[)] _} satisfy the following invariant property during the propagation process:_ 
+
+**==> picture [217 x 49] intentionally omitted <==**
+
+For simplicity, we reformulate the invariant into the vector form: 
+
+**==> picture [301 x 31] intentionally omitted <==**
+
+23 
+
+We prove that Equation (1) and Lemma 3.2 hold during the propagation process by induction. At 1 the beginning of the propagation, we initialize _**q**_[(] _[ℓ]_[)] = **0** for all _ℓ_ , _**r**_[(0)] = **D** 2 **x** and _**r**_[(] _[ℓ]_[)] = **0** for all _ℓ>_ 1. Therefore, Equation (3) and Equation (1) hold at the initial state. Consider the situation of level 0. Since we set _**r**_[(0)] ( _u_ ) = 0 and _**q**_[(0)] ( _u_ ) = _**r**_[(0)] ( _u_ ) once we push the residue _**r**_[(] _[ℓ]_[)] ( _u_ ). The sum of _**r**_[(0)] ( _u_ ) and _**q**_[(0)] ( _u_ ) for any node _u_ remains unchanged during the propagation. Thus, Equation (3) holds for level 0. Consider the situation of level _ℓ>_ 0. Assuming that Equation (3) and Equation (1) holds after a specific push operation. Consider a push operation on node _u_ from level _k_ to level _k_ + 1, 0 _≤ k < L_ . Let _y_ = _**r**_[(] _[k]_[)] ( _u_ ), **e** _u_ is the one-hot vector with only 1 at the node _u_ and 0 elsewhere. According to Line 3 to 5 in Algorithm 2, the push operation can be described as follows: 
+
+**==> picture [266 x 46] intentionally omitted <==**
+
+Therefore, we have 
+
+**==> picture [214 x 29] intentionally omitted <==**
+
+Note that _**q**_[(] _[k]_[+1)] + _**r**_[(] _[k]_[+1)] = **AD** _[−]_[1] _**q**_[(] _[k]_[)] is satistied before this push operation. Thus, _**q**[′]_[(] _[k]_[+1)] + _**r**[′]_[(] _[k]_[+1)] = **AD** _[−]_[1] _**q**[′]_[(] _[k]_[)] , and thus Equation (3) holds after this push operation. For Equation (1), the right side of the equation is updated to: 
+
+**==> picture [182 x 31] intentionally omitted <==**
+
+Plugging the updated _**q**[′]_[(] _[k]_[)] _,_ _**r**[′]_[(] _[k]_[)] _,_ _**r**[′]_[(] _[k]_[+1)] into the equation, we derive that Equation (1) holds after this push operation. This completes the proof of Equation (1) and Lemma 3.2. 
+
+E.2 PROOF OF LEMMA 3.1 
+
+## **Lemma.** _Given the threshold r_ max _, the L_ 2 _-error between_ **z** _and_ **ˆz** _is bounded by_ 
+
+**==> picture [246 x 12] intentionally omitted <==**
+
+_Proof._ As stated in Equation (1), we have 
+
+**==> picture [168 x 30] intentionally omitted <==**
+
+Since the largest eigenvalue of **AD** _[−]_[1] is no greater than 1, we have ��( **AD** _−_ 1) _ℓ_ ��2 _[≤]_[1][ for] _[ ℓ][≥]_[0][.] **[D]** is a diagonal matrix, and _d_ ( _u_ ) _−_ 21 is no greater than 1 for all _u_ . Thus, **D** _−_ 12[Therefore, we] ��� ���2 _[≤]_[1][.] have 
+
+**==> picture [212 x 102] intentionally omitted <==**
+
+The norm of _**r**_[(] _[t]_[)] can be derived as _[√] nr_ max since each item of _**r**_[(] _[t]_[)] is no greater than _r_ max. Given that[�] _[L] ℓ_ =0 _[|][w][ℓ][| ≤]_[1][, we conclude that] _[ ∥]_ **[ˆz]** _[ −]_ **[z]** _[∥]_ 2 _[≤√] nLr_ max. 
+
+24 
+
+## E.3 PROOF OF THEOREM D.1 
+
+1 _Proof._ First, consider the initialization cost for generating **ˆz** 0. Recall that we have _**r**_[(0)] = **D** 2 **x** before we invoke Algorithm 2. In Algorithm 2, we push the residue _**r**_[(] _[ℓ]_[)] ( _u_ ) of node _u_ to its neighbors whenever _**r**_[(] _[ℓ]_[)] ( _u_ ) _> r_ max. Each node is pushed at most once at each level. Thus, for level 0, there 1 are at most **D** 2 **x** _−_ _**r**_ 0[(0)] 0 is the residues ��� ���1 _[/r]_[max][ nodes with residues greater than] _[ r]_[max][, where] _**[ r]**_[(0)] of level 0 after the generation. The average cost for one push operation is _O_ ( _d_ ), the average degree 1 of the graph. Therefore, it costs at most _T_[(0)] = **D** 2 **x** _−_ _**r**_ 0[(0)][time][to][finish][the][push] ��� ���1 _[d/r]_[max] operations for level 0. In Algorithm 2, a total of _**r**_[(] _[ℓ]_[)] ( _u_ ) will be added to the residues at the next level once we perform _push_ on node _u_ . Therefore, after the push operations for level 0, �� _**r**_ (1)��1[is no] 1 greater than **D** 2 **x** _−_ _**r**_ 0[(0)][Thus, the cost of the push operations at level][ 1][ satisfies that] ��� ���1[.] 
+
+**==> picture [181 x 49] intentionally omitted <==**
+
+**==> picture [399 x 39] intentionally omitted <==**
+
+Second, consider the update cost for a single removal. For ease of analysis, we design the following update procedure: First, we update the residues of the nodes whose degrees have changed at all levels, corresponding to Algorithm 3 Line 1-11. We denote the residues as _{r±_[(] _[ℓ] i_[)] _[}]_[ after the first step.][Then,] we push the non-negative residues for all levels. We denote the residues as _{r−_[(] _[ℓ] i_[)] _[}]_[ after pushing the] non-negative residues. Finally, we push the negative residues at all levels, resulting in the approximate embedding vector **ˆz** _i_ and its residues _{ri_[(] _[ℓ]_[)] _[}]_[.][The cost of the first step is] _[ O]_[(] _[d]_[(] _[u]_[) +] _[ d]_[(] _[v]_[))][=] _[O]_[(] _[d]_[)][.] Denote the cost of the push operations at level _ℓ_ as _T_[(] _[ℓ]_[)] , which contains the cost of pushing nonnegative residues _T_ +[(] _[ℓ]_[)][and the cost of pushing negative residues] _[ T]_[ (] _−[ℓ]_[)][.] 
+
+Consider the cost of pushing non-negative residues. For level 0, we have 
+
+**==> picture [252 x 23] intentionally omitted <==**
+
+Note that the residues at level 1 will be modified since the non-negative residues at level 0 are pushed. Specifically, let the modification be _r_ ˜[(1)] , that is, the residues of level 1 of this time is _r±_[(1)] _i_[+ ˜] _[r]_[(1)][.] Thus, the cost of pushing non-negative residues at level 1 is 
+
+**==> picture [222 x 49] intentionally omitted <==**
+
+Note that _r_ ˜(1) �� ��1[is exactly the sum of the pushed residues from level][ 0][, which is no greater than] (0) (0) _r±i r−i_[Thus, we have] ��� ���1 _[−]_ ��� ���1[.] 
+
+**==> picture [319 x 110] intentionally omitted <==**
+
+Similarly, we have 
+
+Therefore, we derive that 
+
+25 
+
+The cost of pushing negative residues is similar. We have 
+
+**==> picture [325 x 135] intentionally omitted <==**
+
+Thus _T−_ can be derived as 
+
+Summing up Equation (6) and Equation (7), the _i_ -th update costs can be derived as 
+
+**==> picture [397 x 54] intentionally omitted <==**
+
+Finally, consider the total cost for _K_ removals. The total cost is the sum of the initial and update costs for _K_ updates. 
+
+**==> picture [346 x 224] intentionally omitted <==**
+
+E.4 PROOF OF THEOREM 3.3 
+
+**Theorem.** _For a sequence of m removal requests that remove all edges of the graph, the amortized cost per edge removal is O_ ( _L_[2] _d_ ) _. For a sequence of K random edge removals, the expected cost per edge removal is O_ ( _L_[2] _d_ ) _._ 
+
+With the help of Theorem D.1, we derive the proof of Theorem 3.3 as follows. 
+
+_m Proof._ Consider the amortized cost for _m_ removal requests. First, we observe that _i_ =1[∆] _**[r]** i_[(0)] S| | 1[=] 1 **D** 02 **[x]** 1[, where we denote the degree matrix of the initial graph as] **[ D]**[0][.][To explain,] ∆ _**r**_[(0)] 1[=] (( ~~ee~~ _d_ ( _u_ ) + 1) 12 _− d_ ( _u_ ) 12 ) _|_ **x** ( _u_ ) _|_ + (( _d_ ( _v_ ) + 1) 12 ~~a~~ _− d_ ( _v_ ) 12 ) _|_ **x** ( _v_ ) _|_ if we remove edge ( _u, v_ I ), where | _d_ ( _u_ ) is the new degree of node _u_ . All nodes have no edges at the end of the _m_ removals. Thus, 
+
+26 
+
+1 the sum of ���∆ _**r** m_ (0)���1[for][the] _[m]_[removals][is] ��� **D** 02 **[x]** ���1[.][And][we][observe][that] ��∆ _**r**_ ( _ℓ_ )��1[for] _[ℓ>]_[0] is _O_ ���∆ _**r**_ (0)��1� for each removal. First, we have ��∆ _**r**_ ( _ℓ_ )��1[=] 2 _|_ _**q** d_[(] ( _[ℓ] u[−]_ )+1[1)] ( _u_ ) _|_ + 2 _|_ _**q** d_[(] ( _[ℓ] v[−]_ )+1[1)] ( _v_ ) _| ._ Note that[�] _[L] t_ =1 �� _**q**_ ( _t−_ 1)( _u_ )�� _≤_ 1 and _|_ **x** ( _u_ ) _| ≤_ 1 since **x** is normalized such that ��� **D** 12 **x** ���1 _[≤]_[1][.][Thus,] ��∆ _**r**_ ( _ℓ_ )��1 _[≤] d_ ( _u_ 2)+1[+] _d_ ( _v_ 2)+1[.][On the other hand, since][ (] _[d]_[(] _[u]_[) + 1)] 12 _− d_ ( _u_ ) 12 _≤_ 2 ~~_[√]_~~ 1 _d_ ( _u_ )[, we have] ∆ _**r**_ (0) 1 1 ∆ _**r**_ ( _ℓ_ ) ∆ _**r**_ (0) �� ��1 _[≤]_ 2 ~~_[√]_~~ _d_ ( _u_ )[+] 2 ~~_[√]_~~ _d_ ( _v_ )[due to] _[ |]_ **[x]**[(] _[u]_[)] _[| ≤]_[1][ for any node] _[ u]_[. Therefore,] �� ��1 _[≤]_[4] �� ��1 for any removal and any _ℓ>_ 0. Thus, the sum[�] _[L] ℓ_ =0 _[−]_[1] ��∆ _**r**_ ( _ℓ_ )��1[=] _[ O]_ � _L_ ��∆ _**r**_ (0)��1�. Plugging the result into the total cost in Theorem D.1, the total cost for _m_ removals is 
+
+**==> picture [234 x 93] intentionally omitted <==**
+
+We set _r_ max = 1 _/[√] ntn_ by the certified unlearning requirement, where _nt_ represents the size of the training set. Thus, _r_ max _≥_ 1 _/n_ . The amortized cost per edge removal is 
+
+**==> picture [133 x 25] intentionally omitted <==**
+
+1 Since we have _m ≥ n_ and **D** 2 **x** ��� ���1 _[≤]_[1][, we conclude that the amortized cost is] _[ O]_[(] _[L]_[2] _[d]_[)][.] Consider the expected cost for _K_ random edge removals. Each node has the same probability of being the endpoint of a removed edge. When removing _e_ = ( _u, v_ ), the part induced by node _u_ in � _Lℓ_ =0 _−_ 1 ��∆ _**r**_ ( _ℓ_ )��1[can be expressed as] 
+
+**==> picture [210 x 55] intentionally omitted <==**
+
+1 1 The first term ( _d_ ( _u_ ) + 1) 2 _− d_ ( _u_ ) 2 _|_ **x** ( _u_ ) _|_ is less than _|_ **x** ( _u_ ) _|_ and the second term equals � � 2 _|_ _**q**_[(] _[t][−]_[1)] ( _u_ ) _| d_ ( _u_ )+1 . Therefore, the expected value of _Su_ is 
+
+**==> picture [252 x 30] intentionally omitted <==**
+
+The first term is _O_ ( _n_[1][)][ and][ �] _u∈V_ �� _**q**_ ( _t−_ 1)( _u_ )�� in second term is less than 1 for all level _t_ both due to 1 � the fact that **D** 2 **x**[Thus, the second term is less than][2] _n[L]_[.][The expected value of] _[ S][u]_[is] _[ O]_[(] _n_[1][)][.] ��� ��1 _[≤]_[1][.] Therefore, for one edge removal, the expected value of[�] _[L] ℓ_ =0 _[−]_[1] ��∆ _**r**_ ( _ℓ_ )��1[is] _[ O]_[(] _n_[1][)][.][Note that we set] _r_ max = _O_ (1 _/[√] ntn_ ) _≥_ 1 _/n_ . Plugging the result into the total cost in Theorem D.1, the expected cost per edge removal is _O_ � _L_[2] _d_ �. 
+
+E.5 PROOF OF THEOREM 4.2 
+
+**Theorem.** _Suppose that Assumption 4.1 holds and the feature of node u is to be unlearned. If ∀j ∈_ [ _F_ ] _,_ **Ze** ˆ _j −_ **Ze** _j ≤ ϵ_ 1 _, we have ∥∇L_ ( **w** _−, D′_ ) _∥ is less than_ ��� ��� 
+
+**==> picture [230 x 25] intentionally omitted <==**
+
+27 
+
+For the sake of simplicity, the upper bound of _∥_ **Ze** _j −_ **Z** _[′]_ **e** _j∥_ for all _j ∈_ [ _F_ ] is denoted as _ϵ_ 2 in the following analysis. At the end of the proof, we will plug the bound in Lemma E.1 into the result. We also assume that node _u_ is the _nt_ -th node in the training. We state the following lemmas to support the proof. 
+
+**==> picture [397 x 136] intentionally omitted <==**
+
+_Proof._ We note that _∥∇L_ ( **w** _[−] , D[′]_ ) _∥_ can be written as 
+
+**==> picture [195 x 13] intentionally omitted <==**
+
+which is less than _∇L_ ( **w** _[−] , D[′]_ ) _−∇L_ ( **w** _[−] , D_[ˆ] _[′]_ ) + _∇L_ ( **w** _[−] , D_[ˆ] _[′]_ ) due to the Minkowski inequal|||| ity. 
+
+We start with the term _∇L_ ( **w** _[−] , D[′]_ ) _−∇L_ ( **w** _[−] , D_[ˆ] _[′]_ ) . Observe that || _∇L_ ( **w** _[−] , D[′]_ ) _−∇L_ ( **w** _[−] , D_[ˆ] _[′]_ ) 
+
+**==> picture [312 x 141] intentionally omitted <==**
+
+where the inequality (c) is due to the Minkowski inequality. Consider Term (8), we have 
+
+**==> picture [380 x 160] intentionally omitted <==**
+
+28 
+
+where ( _a_ ) is due to the Cauchy-Schwarz inequality. Recalling that _l[′]_ is _γ_ 1-Lipschitz as stated in the Assumption 4.1, we derive that 
+
+**==> picture [284 x 145] intentionally omitted <==**
+
+For inequality ( _a_ ), note that 
+
+**==> picture [467 x 165] intentionally omitted <==**
+
+**==> picture [307 x 203] intentionally omitted <==**
+
+Next, considering Term (9), we have 
+
+where Inequality ( _a_ ) is due to the assumption that _ℓ[′] ≤ c_ 1 and ( _b_ ) follows from Lemma E.2 by substituting _D_ with _D[′]_ . Therefore, we have 
+
+**==> picture [295 x 42] intentionally omitted <==**
+
+29 
+
+Next, our focus shifts to analyzing _∇L_ ( **w** _−, D_ ˆ _′_ ) . While our approach draws partial inspiration ��� ��� from the proof of Theorem 1 in (Chien et al., 2022a), it significantly diverges due to the approximation involved in the embedding matrix. This necessitates a distinct analytical framework. Let _G_[ˆ] ( **w** ) = _∇L_ ( **w** _, D_[ˆ] _[′]_ ). Note that _G_[ˆ] : R _[d] →_ R _[d]_ is a vector-valued function. By Taylor’s Theorem, there exists some _η ∈_ [0 _,_ 1] such that: 
+
+**==> picture [348 x 90] intentionally omitted <==**
+
+Here, we denote **H**[ˆ] **w** _η_ = _∇G_[ˆ] � **w** _[⋆]_ + _η_ **H**[ˆ] _[−]_ **w**[1] _[⋆]_[∆] � with **w** _η_ = **w** _[⋆]_ + _η_ **H**[ˆ] _[−]_ **w**[1] _[⋆]_[∆][.][Equality (a) is due to] ∆= _∇L_ ( **w** _[⋆] , D_[ˆ] ) _−∇L_ ( **w** _[⋆] , D_[ˆ] _[′]_ ) and **w** _[⋆]_ is the unique minimizer of _L_ ( _·, D_[ˆ] ). This gives: 
+
+**==> picture [290 x 19] intentionally omitted <==**
+
+First, we consider the term ( ˆ **Hw** _η −_ **H** ˆ **w** _⋆_ ) . Let **Z** ˜ consist of the first _nt −_ 1 rows of **ˆZ** _′_ , **D** 1 = ��� ��� diag( _l[′′]_ ( **Z[ˆ]** _[′] ,_ **w** _η,_ 1) _, · · · , l[′′]_ ( **Z[ˆ]** _[′] ,_ **w** _η, nt −_ 1)) and **D** 2 = diag( _l[′′]_ ( **Z[ˆ]** _[′] ,_ **w** _[⋆] ,_ 1) _, · · · , l[′′]_ ( **Z[ˆ]** _[′] ,_ **w** _[⋆] , nt −_ 1)) _._ By the definition, we have 
+
+**==> picture [144 x 85] intentionally omitted <==**
+
+Note that **Z** ˜ _⊤_ **Z** ˜ = **Z** ˜ _⊤_ **Z** ˜ , and the trace of **Z** ˜ _⊤_ **Z** ˜ has the following upper bound: ��� ��� ��� ��� ��� ��� 
+
+**==> picture [312 x 29] intentionally omitted <==**
+
+Thus, we have **Z** ˜ _⊤_ **Z** ˜ _≤ F_ (1 + _ϵ_ 1)2. Since **D** 1 _−_ **D** 2 is a diagonal matrix, its norm equals the ��� ��� maximum absolute value of its diagonal elements. Due to the assumption that _l[′]_ is _γ_ 1-Lipschitz, we have _l[′′]_ ( **Z** _,_ **w** _, i_ ) _≤ γ_ 1 for any **Z** _,_ **w** _, i_ . Thus, _∥_ **D** 1 _−_ **D** 2 _∥_ is upper bounded by _γ_ 1. Therefore, we have 
+
+**==> picture [267 x 20] intentionally omitted <==**
+
+Since _L_ ( _·, D_[ˆ] _[′]_ ) is _λ_ ( _nt −_ 1)-strongly convex, we have ��� **H** ˆ **w** _⋆_ ��� _≥ λ_ ( _nt −_ 1), hence ��� **H** ˆ _−_ **w** 1 _[⋆]_ ��� _≤ λ_ ( _n_ 1 _t−_ 1)[.] Next, we focus on bounding ∆= _∇L_ ( **w** _[⋆] , D_[ˆ] ) _−∇L_ ( **w** _[⋆] , D_[ˆ] _[′]_ ). In the feature unlearning scenario, we have 
+
+**==> picture [290 x 26] intentionally omitted <==**
+
+30 
+
+By assumption that _∥∇l_ ( **Z** _,_ **w** _, i_ ) _∥ ≤ c_ and the fact that _∥_ **w** _[⋆] ∥ ≤ λc_[,] we have _λ_ **w** _[⋆]_ + _∇l_ ( **Z[ˆ]** _,_ **w** _[⋆] , nt_ ) _≤_ 2 _c_ . For the last term, we derive that 
+
+**==> picture [318 x 554] intentionally omitted <==**
+
+For Term (17), it can be bounded by 
+
+For the first term, similar to Term (8), we have 
+
+and 
+
+**==> picture [330 x 51] intentionally omitted <==**
+
+31 
+
+> which implies that ~~a>~~ _j∈_ [ _F_ ] _i∈_ [ _nt−_ 1] **[ˆZ]**[2] _ij[≤] √_ ~~-~~ _F_ (1 + _ϵ_ 1). Thus, we have the first term bounded as _l[′]_ ( **Z[ˆ]** _,_ **w** _[⋆] , i_ ) _− l[′]_ ( **Z** _,_ **w** _[⋆] , i_ ) **ˆZ** _i ≤[c] λ[γ]_[1] _[Fϵ]_[1][(1 +] _[ ϵ]_[1][)] _[.]_ ~~ec~~ _i∈_ [ _nt−_ 1] 
+
+The third term is the same as the first term, except that the embedding matrix is replaced by the updated one. Thus, we have 
+
+**==> picture [259 x 37] intentionally omitted <==**
+
+The second term can be derived similarly, 
+
+**==> picture [206 x 108] intentionally omitted <==**
+
+According to Lemma E.3, we derive that 
+
+Therefore, the second term can be bounded as 
+
+**==> picture [253 x 115] intentionally omitted <==**
+
+Plugging the above results into Term (17), we have 
+
+For Term (18), we have 
+
+**==> picture [397 x 244] intentionally omitted <==**
+
+32 
+
+Now we are ready to bound ∆ for feature unlearning scenarios as follows: 
+
+**==> picture [272 x 19] intentionally omitted <==**
+
+Consequently, combining the results in Inequality (14) and Inequality (16), we have 
+
+**==> picture [302 x 90] intentionally omitted <==**
+
+Here, we omit the small term (1+ _ϵ_ 1) for simplicity. Then ( _a_ ) follows from _γ_ 1 _ϵ_ 1 _F ≤ γ_ 1 _F_ . Similarly, ∆ can be derived as 
+
+**==> picture [200 x 19] intentionally omitted <==**
+
+Thus, we have 
+
+**==> picture [298 x 95] intentionally omitted <==**
+
+Plugging Lemma E.5 into the above inequality, we have 
+
+**==> picture [318 x 41] intentionally omitted <==**
+
+Note that _c_ 1� _F_ ( _nt −_ 1) _·_ ~~�~~ _d_ ( _u_ ) is much larger than 2 _c_ , and thus _λ_ 4( _cnγt_ 1 _−F_ 1)[is much smaller than] _c_ 1 ~~�~~ _F_ ( _nt −_ 1) _· λ_ (2 _nγt_ 1 _−F_ 1) _[·]_ � _d_ ( _u_ ), which is include in the second term. Therefore, we omit _λ_ 4( _cnγt_ 1 _−F_ 1) and adjust by enlarging _λ_ (2 _nγt_ 1 _−F_ 1)[to] _λ_ (4 _nγt_ 1 _−F_ 1)[for simplicity.][Similarly, we omit the][ 2] _[epsilon]_[1][ term and] enlarge � _d_ ( _u_ ) to 2 ~~�~~ _d_ ( _u_ ). Finally, we have the upper bound of _∥∇L_ ( **w** _[−] , D[′]_ ) _∥_ as 
+
+**==> picture [230 x 25] intentionally omitted <==**
+
+E.6 PROOF OF THEOREM 4.3 
+
+**Theorem.** _Suppose that Assumption 4.1 holds, and the edge_ ( _u, v_ ) _is to be unlearned. If ∀j ∈_ [ _F_ ] _,_ **Ze** ˆ _j −_ **Ze** _j ≤ ϵ_ 1 _, we can bound ∥∇L_ ( **w** _−, D′_ ) _∥ by_ ��� ��� 
+
+**==> picture [295 x 30] intentionally omitted <==**
+
+In the proof of Theorem 4.3, we also denote the upper bound of _∥_ **Ze** _j −_ **Z** _[′]_ **e** _j∥_ for all _j ∈_ [ _F_ ] as _ϵ_ 2 before the conclusion is derived. 
+
+**Lemma E.5.** _Suppose that edge e_ = ( _u, v_ ) _is to be removed. Then, we have ∥_ **Ze** _j −_ **Z** _[′]_ **e** _j∥≤_ 4 4 _[∈]_[[] _[F]_[]] _[.]_ ~~_√_~~ _d_ ( _u_ )[+] ~~_√_~~ _d_ ( _v_ ) _[for all][ j]_ 
+
+33 
+
+_Proof._ We can derive that ���� _i∈_ [ _nt_ ] � **ˆZ** _i −_ **Z** _i_ ���� _≤√Fntϵ_ 1 and ���� _i∈_ [ _nt_ ][(] **[Z]** _i[′][−]_ **[Z]** _[i]_[)] ��� _≤√Fntϵ_ 2 by substituting _nt −_ 1 by _nt_ in the proofs of Lemma E.2 and Lemma E.3. Thus, by plugging the above results into the proof of Theorem 4.2, we derive that _∥∇L_ ( **w** _[−] , D[′]_ ) _∥_ is less than 
+
+**==> picture [252 x 26] intentionally omitted <==**
+
+In the edge unlearning scenario, we have 
+
+**==> picture [180 x 27] intentionally omitted <==**
+
+Similar to the analysis of the third term of ∆ in the proof of Theorem 4.2, we have 
+
+**==> picture [224 x 19] intentionally omitted <==**
+
+Plugging Lemma E.5, we derive the upper bound of _∥∇L_ ( **w** _[−] , D[′]_ ) _∥_ as 
+
+**==> picture [299 x 31] intentionally omitted <==**
+
+E.7 PROOF OF THEOREM 4.4 
+
+**Theorem.** _Suppose that Assumption 4.1 holds and the feature of node u is to be unlearned. If ∀j ∈_ [ _F_ ] _,_ **Ze** ˆ _j −_ **Ze** _j ≤ ϵ_ 1 _, we can bound ∥∇L_ ( **w** _−, D′_ ) _∥ by_ ��� ��� 
+
+**==> picture [395 x 37] intentionally omitted <==**
+
+**Lemma E.6.** _Suppose that node u is to be removed. Then, for all j ∈_ [ _F_ ] _, it holds that:_ 
+
+**==> picture [181 x 29] intentionally omitted <==**
+
+_Proof._ The node unlearning scenario is identical to the node feature unlearning scenario except for _∥_ **Ze** _j −_ **Z** _[′]_ **e** _j∥_ . According to the proof of Theorem 4.2, we have 
+
+**==> picture [388 x 25] intentionally omitted <==**
+
+Plugging Lemma E.6 into the above inequality, we derive the conclusion that _∥_ **Ze** _j −_ **Z** _[′]_ **e** _j∥_ is bounded by 
+
+**==> picture [389 x 37] intentionally omitted <==**
+
+E.8 PROOF OF LEMMA E.1 **Lemma.** _Suppose that the feature of node u is to be removed. Then, we have ∥_ **Ze** _j −_ **Z** _[′]_ **e** _j∥≤_ � _d_ ( _u_ ) _for all j ∈_ [ _F_ ] _._ 
+
+_Proof._ Let **z** and **z** _[′]_ be the _j_ -th column of **Z** and **Z** _[′]_ , respectively. Correspondingly, let _{_ _**r**_[(] _[ℓ]_[)] _}_ , 0 _≤ t ≤ L_ are the residues of **z** . And _{_ _**r**[′]_[(] _[ℓ]_[)] _}_ denotes the residues after the update operation for 
+
+34 
+
+residues but before invoking Algorithm 2 to reduce the error further. Thus, **z** and **z** _[′]_ shares the same _{_ _**q**_[(] _[ℓ]_[)] _}_ . First, we consider the difference between **z** and **z** _[′]_ . We have 
+
+**==> picture [218 x 30] intentionally omitted <==**
+
+Let ∆ _**r**_ is the difference between _**r**_ and _**r**[′]_ , that is, ∆ _**r**_[(] _[ℓ]_[)] = _**r**[′]_[(] _[ℓ]_[)] _−_ _**r**_[(] _[ℓ]_[)] . Note that the node feature unlearning scenario does not revise the graph structure. Thus, the residues of the neighbors of _u_ and their neighbors are not updated. Since only _**r**_[(0)] ( _u_ ) is updated, we have 
+
+**==> picture [210 x 30] intentionally omitted <==**
+
+Since **AD** _[−]_[1] is a left stochastic matrix and **D** _[−]_ 2[1] will not increase the result, we derive that 
+
+**==> picture [114 x 30] intentionally omitted <==**
+
+Due to the fact that[�] _[L] ℓ_ =0 _[|][w][ℓ][|][≤]_[1][,][it][can][be][further][bounded][by] ��∆ _**r**_ (0)( _u_ )��. As illustrated in Section 3, _**r**[′]_[(0)] is modified to _−_ _**q**_[(0)] ( _u_ ). Note that Equation (1) holds for all settings of _r_ max. When 1 _r_ max = 0, _**r**_[(0)] is a zero vector. Combining Lemma 3.2, we have _**q**_[(0)] ( _u_ ) = _d_ ( _u_ ) 2 **x** ( _u_ ). Therefore, ��∆ _**r**_ (0)�� = _d_ ( _u_ ) 21 _|_ **x** ( _u_ ) _| ≤ d_ ( _u_ ) 12 due to the fact that **x** is normalized such that ��� **D** 12 **x** ���1 _[≤]_[1][.] 1 Consequently, we have _∥_ **z** _−_ **z** _[′] ∥_ 1 _≤ d_ ( _u_ ) 2 . Thus, the _L_ 2-norm, which is always less than _L_ 1-norm, 1 is bounded by _d_ ( _u_ ) 2 , too. This holds for all _j ∈_ [ _F_ ], which completes the proof. 
+
+E.9 PROOF OF LEMMA E.5 
+
+**Lemma.** _Suppose that edge e_ = ( _u, v_ ) _is to be removed. Then, we have ∥_ **Ze** _j −_ **Z** _[′]_ **e** _j∥≤_ ~~_√_~~ _d_ 4( _u_ )[+] 4 _[∈]_[[] _[F]_[]] _[.]_ ~~_√_~~ _d_ ( _v_ ) _[for all][ j]_ 
+
+_Proof._ Similar to the proof of Lemma E.1, we have 
+
+**==> picture [236 x 67] intentionally omitted <==**
+
+where **A** _[′]_ and **D** _[′]_ are the adjacency matrix and the degree matrix of the graph after the edge removal, respectively. Let ∆ _**r**_ is the difference between _**r**_ and _**r**[′]_ , that is, ∆ _**r**_[(] _[t]_[)] = _**r**[′]_[(] _[t]_[)] _−_ _**r**_[(] _[t]_[)] . Then, we have **z** _−_ **z** _[′]_ 
+
+**==> picture [302 x 65] intentionally omitted <==**
+
+Note that the above equation holds under all settings of _r_ max. Thus, we simply set _r_ max = 0 and then _{_ _**r**_[(] _[t]_[)] _}_ are a zero vector for 0 _≤ t ≤ L_ . Therefore, it can be simplified as 
+
+**==> picture [191 x 65] intentionally omitted <==**
+
+35 
+
+Consider the _L_ 1-norm of **z** _−_ **z** _[′]_ . Note that the _L_ 1-norm of the first term is upper bounded by 
+
+**==> picture [220 x 32] intentionally omitted <==**
+
+where ��∆ _**r**_ ( _t_ )�� represents the vector with the absolute value of each element in ∆ _**r**_ ( _t_ ). Since **A** _′_ **D** _′−_ 1 is a left stochastic matrix and **D** _[′−]_[1] 2 will not increase the result, we derive that 
+
+**==> picture [142 x 32] intentionally omitted <==**
+
+Due to the fact that[�] _[L] ℓ_ =0 _[|][w][ℓ][| ≤]_[1][, it can be further bounded by][ �] _[L] t_ =0 � _i∈_ [ _nt_ ] **[e]** _i[⊤]_ ��∆ _**r**_ ( _t_ )��, that is, the sum of the absolute value of _**r**_[(] _[t]_[)] for 0 _≤ t ≤ L_ . According to Algorithm 3, only the residues of node _u_ , node _v_ , and their neighbors will be updated. The sum induced by node _u_ can be written as 
+
+**==> picture [210 x 55] intentionally omitted <==**
+
+where the first term is the decreasement of _**r**_[(0)] ( _u_ ), the second term is the decreasement of the residues _|_ **x** ( _u_ ) _|_ of _v_ , and the third term is the increase of the residues of the neighbors of _u_ . Note that _Su ≤_ 2 ~~_[√]_~~ _d_ ( _u_ )[+] _d_ ( _u_ 2)+1 � _Lt_ =1 �� _**q**_ ( _t−_ 1)( _u_ )�� due to the fact that �( _d_ ( _u_ ) + 1) 12 _− d_ ( _u_ ) 21 � = ~~_√_~~ _d_ ( _u_ )+1 ~~_[√]_~~ _d_ ( _u_ )+1 _[≤]_ 2 ~~_[√]_~~ 1 _d_ ( _u_ ) and the new degree of _u_ is _d_ ( _u_ ). Note that[�] _[L] t_ =1 �� _**q**_ ( _t−_ 1)( _u_ )�� _≤_ 1 and _|_ **x** ( _u_ ) _| ≤_ 1 since **x** is normalized such that ��� **D** 12 **x** ���1 _[≤]_[1][.][Thus, we have] _[ S][u][≤]_ 2 ~~_[√]_~~ 1 _d_ ( _u_ )[+] _d_ ( _u_ 2)+1 _[≤]_ ~~_√_~~ _d_ 3( _u_ )[.][Similarly, the] 1 2 3 sum induced by node _v_ can be bounded by 2 ~~_[√]_~~ _d_ ( _v_ )[+] _d_ ( _v_ )+1 _[≤]_ ~~_√_~~ _d_ ( _v_ )[.] 
+
+Consider the second term. Only the degree of node _u_ and node _v_ is modified. Thus, we have 
+
+**==> picture [206 x 101] intentionally omitted <==**
+
+The term _d_ ( _u_ ) _[−]_[1] 2 _−_ ( _d_ ( _u_ ) + 1) _[−]_ 2[1] is less than 1 _/d_ ( _u_ ). Thus, the second term is upper bounded � � by _d_ (1 _u_ )[+] _d_ (1 _v_ )[.][Sum up the two terms, we have] _[ ∥]_ **[z]** _[ −]_ **[z]** _[′][∥]_ 1 _[≤]_ ~~_√_~~ _d_ 4( _u_ )[+] ~~_√_~~ _d_ 4( _v_ )[.][Thus, the] _[ L]_[2][-norm,] which is always less than _L_ 1-norm, is bounded by ~~_√_~~ _d_ 4( _u_ )[+] ~~_√_~~ _d_ 4( _v_ )[, too.][The lemma follows.] 
+
+E.10 PROOF OF LEMMA E.6 
+
+**Lemma.** _Suppose that node u is to be removed. Then, for all j ∈_ [ _F_ ] _, it holds that:_ 
+
+**==> picture [181 x 28] intentionally omitted <==**
+
+_Proof._ Removing a node is equivalent to removing all edges connected to the node. Thus, _∥_ **Ze** _j −_ **Z** _[′]_ **e** _j∥_ can be bounded by the sum of the bounds of removing all edges from node _u_ . Drawing the result from Lemma E.5, the bound induced by removing one single edge can be bounded by ~~_√_~~ _d_ 4( _u_ )[+] ~~_√_~~ _d_ 4( _w_ )[.][Thus,][the total sum][is less than][4] ~~�~~ _d_ ( _u_ ) +[�] _w∈N_ ( _u_ ) ~~_√_~~ _d_ 4( _w_ )[by the][triangle] inequality. The lemma follows. 
+
+36 
+
+## E.11 PROOF OF THEOREM 4.5 
+
+**Theorem.** _Let_ _**R**_[(] _[t]_[)] _∈_ R _[n][×][F] denote the residue matrix at level t, where the j-th column_ _**R**_[(] _[t]_[)] **e** _j represents the residue at level t for the j-th feature vector. Let_ _**R** be defined as the sum_[�] _[L] t_ =0 _**[R]**_[(] _[t]_[)] _[.] Consequently, we can establish the following data-dependent bound:_ 
+
+**==> picture [264 x 20] intentionally omitted <==**
+
+_Proof._ As demonstrated in the proof of Theorem 4.2, it is established that 
+
+**==> picture [290 x 19] intentionally omitted <==**
+
+Initially, the data-dependent bound of the second term _∇L_ ( **w** _−, D_ ˆ _′_ ) can be inferred directly from ��� ��� Corollary 1 in (Guo et al., 2019), by substituting _D[′]_ with _D_[ˆ] _[′]_ . This leads to the conclusion that _∇L_ ( **w** _−, D_ ˆ _′_ ) _≤ γ_ 2 **ˆZ** _′_ **H** ˆ _−_ **w** 1 _[⋆]_[∆] **ˆZ** _′_ ˆ **H** _−_ **w** 1 _[⋆]_[∆] . ��� ��� ��� ��� ��� ��� ��� ��� Focusing now on the first term. 
+
+**==> picture [196 x 49] intentionally omitted <==**
+
+Since _l[′]_ is bounded by _c_ 1, we have 
+
+**==> picture [295 x 104] intentionally omitted <==**
+
+Let **z** _[′]_ = **Z** _[′]_ **e** _j_ and **ˆz** _[′]_ = **Z[ˆ]** _[′]_ **e** _j_ . According to Equation (1), we have 
+
+**==> picture [176 x 31] intentionally omitted <==**
+
+Given that **AD** _[−]_[1] forms a left stochastic matrix, the sum of the entries in _**r**_[(] _[t]_[)] is equivalent to the sum of entries in ( **AD** _[−]_[1] ) _[ℓ][−][t]_ _**r**_[(] _[t]_[)] . And **D** _[−]_[1] 2 will not increase the result. Thus, we have 
+
+**==> picture [198 x 33] intentionally omitted <==**
+
+due to the fact that[�] _[L] ℓ_ =0 _[|][w][ℓ][|][≤]_[1][.][Therefore,][Term][(19)][can][be][bounded][by][2] _[c]_[1] �� **1** _⊤_ _**R**_ ��. This completes the proof. 
+
+## E.12 PROOF OF LEMMA E.2 AND LEMMA E.3 
+
+We prove these two lemmas directly by the Cauchy-Schwarz inequality. The followings show the proof of Lemma E.2 and the other can be derived similarly. 
+
+37 
+
+## _Proof._ Note that 
+
+**==> picture [237 x 39] intentionally omitted <==**
+
+With the Cauchy-Schwarz inequality, we derive that 
+
+**==> picture [346 x 110] intentionally omitted <==**
+
+38

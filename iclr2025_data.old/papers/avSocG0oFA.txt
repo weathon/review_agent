@@ -1,0 +1,869 @@
+## DARE THE EXTREME �: REVISITING DELTA-PARAMETER PRUNING FOR FINE-TUNED MODELS 
+
+**Wenlong Deng**[1] _[,]_[2] **, Yize Zhao**[1] **, Vala Vakilian**[1] **, Minghui Chen**[1] _[,]_[2] **, Xiaoxiao Li**[1] _[,]_[2] **, Christos Thrampoulidis**[1] 
+
+1The University of British Columbia 2Vector Institute https://github.com/vengdeng/DAREx.git 
+
+## ABSTRACT 
+
+Storing open-source fine-tuned models separately introduces redundancy and increases response times in applications utilizing multiple models. Delta-parameter pruning (DPP), particularly the random drop and rescale (DARE) method proposed by Yu et al., addresses this by pruning the majority of delta parameters—the differences between fine-tuned and pre-trained model weights—while typically maintaining minimal performance loss. However, DARE fails when either the pruning rate or the magnitude of the delta parameters is large. We highlight two key reasons for this failure: (1) an excessively large rescaling factor as pruning rates increase, and (2) high mean and variance in the delta parameters. To push DARE’s limits, we introduce DAREx (DARE the eXtreme), which features two algorithmic improvements: (1) DAREx-q, a rescaling factor modification that significantly boosts performance at high pruning rates (e.g., _>_ 30% on COLA and SST2 for encoder models, with even greater gains in decoder models), and (2) DAREx- _L_ 2, which combines DARE with AdamR, an in-training method that applies appropriate delta regularization before DPP. We also demonstrate that DAREx-q can be seamlessly combined with vanilla parameter-efficient fine-tuning techniques like LoRA and can facilitate structural DPP. Additionally, we revisit the application of importance-based pruning techniques within DPP, demonstrating that they outperform random-based methods when delta parameters are large. Through this comprehensive study, we develop a pipeline for selecting the most appropriate DPP method under various practical scenarios. 
+
+## 1 INTRODUCTION 
+
+Large Language Models (LLMs) like BERT (Devlin et al., 2018), GPT (Floridi & Chiriatti, 2020), and Llama (Touvron et al., 2023) excel in various language-modeling tasks. Finetuning these for specific downstream tasks enhances personalized experiences (Sanh et al., 2021; Labrak et al., 2024) and has become a standard practice in natural language processing (Dodge et al., 2020; Zhao et al., 2023). Indeed, most entries on the OpenLLM Leaderboard involve full-parameter finetunes or their combinations (Liu et al., 2024), underscoring the widespread adoption and availability of fine-tuned models online. Decomposing fine-tuned model weights into the original parameters of the pre-trained model yields _delta parameters_ (DP) (Yu et al., 2023a; Liu et al., 2024; Yao & Klimovic, 2023). Reducing the size of DPs, which are as large as the base model and can number in the hundreds of millions of parameters for LLMs, could significantly enhance communication efficiency in federated learning, minimize task conflicts in model merging, accelerate multi-task serving, and decrease storage needs for new fine-tuned models (see _Related Work_ ). Delta-parameter pruning (DPP) drops a fraction _p_ of the DPs towards realizing these benefits. Naturally, DPP can be seen as an instance of generic model-parameter pruning, which compresses neural networks by eliminating weights that contribute minimally, resulting in sparse architectures (LeCun et al., 1989; Han 
+
+1 
+
+et al., 2015b). Traditional pruning methods typically remove weights post-training based on _importance criteria_ like weight magnitude or activation levels. While these techniques could naturally extend to DPP, their integration into this context remains largely unexplored. 
+
+Random-based pruning strategies, which provide more flexibility and efficiency in implementation, also offer a competitive alternative. For instance, Random Drop and Rescale (DARE) (Yu et al., 2023a), a recently introduced randomized DPP method, reduces DP size through random pruning followed by rescaling. DARE has been quickly adopted across various applications, including model merging libraries (Goddard et al., 2024), state-of-the-art medical LLMs (Labrak et al., 2024), and Japanese LLMs (Akiba et al., 2024). However, as we demonstrate in this paper, DARE struggles when the pruning rate is high or when DPs are large. This observation prompts several key questions: 
+
+_What are the key factors contributing to DARE’s failure modes? Can these issues be addressed to push the limits of effective random-based DPP? Additionally, can importance-based model pruning techniques be applied to DPP in ways that compete with random-based methods?_ 
+
+1.1 CONTRIBUTIONS We address these questions through principled analysis and extensive experimentation on large-scale language models and datasets. Our contributions are summarized as follows: 
+
+_•_ **Analysis of DARE:** By examining the _absolute change in intermediate output model representations_ resulting from the application of DARE to the DPs, we identify two primary factors that influence this change: **(a)** a large pruning rate ( _p_ ), which results in an excessively high rescaling factor of 1 _/_ (1 _− p_ ), and **(b)** a high mean and variance of the DPs relative to input activations. Through experiments on both controlled setups and LLMs, we show that the absolute change in intermediate representations is a reliable proxy for 
+
+|PruningRate|_p_= 0|_p_= 0_._99|
+|---|---|---|
+|Delta Size|417.7MB|**11.4MB**|
+|Method|COLA|SST2|
+|(_p_= 0_._99)|Test Performance(%)|Test Performance(%)|
+|No Pruning<br>DARE (Yu et al., 2023a)<br>_L_1+MP (Han et al., 2015a) (ours)<br>DAREx-_L_2(ours)<br>DAREx-q (1_/qv_) (ours)<br>DAREx-q (1_/qe_) (ours)|56.24<br>4.25<br>12.30 (+8.05)<br>57.24 (+52.99)<br>48.96 (+44.71)<br>45.20(+41.05)|90.25<br>51.00<br>83.14 (+32.14)<br>88.17 (+37.00)<br>85.64 (+34.64)<br>85.81(+34.81)|
+
+
+Table 1: _Impact of our key contributions on BERT and two datasets COLA and SST2_ : ‘DAREx- _L_ 2 ’ applies DARE after AdamR- _L_ 2 finetuning, ‘ _L_ 1+MP’ applies magnitude pruning after AdamR- _L_ 1, the factors _qv_ and _qe_ adjust DARE’s rescaling using a validation set and unlabeled data, respectively. **All four proposed methods significantly outperform vanilla DARE (Yu et al., 2023a), demonstrating that (randomized) DPP can still be highly effective, even at extreme pruning rates of 99% parameter reduction, when incorporating our modifications.** Notably, our new post-hoc rescaling achieves a 40-fold model size reduction with minimal impact on performance compared to the unpruned model. See Tables 2,3 for more details. 
+
+test performance (see Fig. 1). Thus, these two factors emerge as the main contributors to DARE’s failure modes. This analysis inspires two new algorithms that significantly improve DARE’s performance, as follows. 
+
+_•_ **Drop and rescale with** 1 _/q_ **(DAREx-q):** To ensure efficiency at high pruning-rates (e.g., _p >_ 0 _._ 9), where DPP offers significant savings, our first algorithm DAREx-q modifies DARE’s rescaling factor from 1 _/_ (1 _− p_ ) to 1 _/q_ , where _q >_ 1 _− p_ . While (Yu et al., 2023a) recommended using the factor 1 _/_ (1 _− p_ ) to maintain zero-expectation changes in intermediate representations (accounting for DARE’s randomness), they neglected the importance of controlling the _absolute_ changes and the impact of randomness, particularly since the pruning is applied only once.A large rescaling factor can inflate the variance of these changes; therefore, by tuning the rescaling factor 1 _/q_ , we can effectively balance the mean and variance, thereby minimizing performance degradation. We develop and evaluate four variants of DAREx-q (detailed in Sec. 4.1) to suit different scenarios along two orthogonal axes: (a) whether a _labeled_ validation set is available and (b) whether to tune a global 1 _/q_ across all layers or a per-layer 1 _/q_ . All four methods provide rescaling factors that 
+
+2 
+
+**==> picture [336 x 9] intentionally omitted <==**
+
+**----- Start of picture text -----**<br>
+(a) Last-layer output changes on a batch of training data. (b) Test performance.<br>**----- End of picture text -----**<br>
+
+
+Figure 1: Our DAREx-q improves on DARE’s performance by tuning the rescaling factor 1 _/q_ . Experiments with BERT at a pruning rate of _p_ = 0 _._ 99. _Right:_ The optimal rescaling factor (asterisk), which maximizes test performance, differs from the standard 1 _/_ (1 _− p_ ) across all four datasets and yields up to _>_ 10-fold gains. _Left:_ **The rescaling factor that minimizes the last-layer output change, averaged over last-layer neurons, serves as an excellent proxy for the optimal factor maximizing performance and can be determined by inference on a single training batch.** 
+
+significantly improve upon vanilla DARE while preserving its purely post-training nature, demonstrating that effective DPP remains possible even at high pruning rates. 
+
+_•_ **AdamR fine-tuning:** Our second algorithm controls the mean and variance of DPs (averaged over input features at each intermediate layer) prior to applying DARE. Specifically, our AdamR, a modified Adam optimizer, applies _L_ 2 regularization directly to the DPs during fine-tuning. Combining AdamR with DARE (DAREx- _L_ 2) yields highly competitive performance (see Table 1). While this requires in-training modification, it significantly broadens the scenarios where randomized DPP can be effectively applied. 
+
+_•_ **Extensive experiments:** We conduct extensive experiments on both encoder-decoder and decoder-only models across a range of downstream tasks. The results demonstrate the effectiveness of both DAREx-q and DAREx- _L_ 2 algorithms. As summarized in Table 1, applying these techniques to a fine-tuned BERT model on the CoLA and SST-2 datasets leads to substantial performance improvements, consistently exceeding 35%. Additional results are presented in Tables 2,3,5,7 and Figures 2,3. 
+
+_•_ **Importance-based DPP:** We incorporate importance-based methods such as magnitude-pruning and WANDA into DPP. Our analysis reveals that while random-based DPP generally outperforms important-based DPP, especially under higher pruning rates, combining the latter with AdamR- _L_ 1 regularization (as opposed to _L_ 2) forms a competitive alternative (see Tables 1 and 7). Moreover, importance-based DPP can outperform random-based DPP when DPs are large and customized fine-tuning is not an option. 
+
+## 2 RELATED WORK 
+
+**Delta-parameter pruning.** DPs represent the parameter changes induced by fine-tuning and are critical to various operations. In Federated and Distributed Learning, DPs are continuously exchanged between a central server and distributed clients during training (Li et al., 2021; 2020; Khirirat et al., 2018; Chen et al., 2021). In model merging, the goal is to merge multiple task-specific models, fine-tuned from the same pretrained backbone, by combining their DPs into a single model with diverse capabilities (Wortsman et al., 2022; Ilharco et al., 2022). Similarly, in multi-task serving, DPs are processed separately while the base model weights are computed once during the forward pass (Yao & Klimovic, 2023; Liu et al., 2024). (Yu et al., 2023a; Liu et al., 2024; Yao & Klimovic, 2023) focus on reducing the size of DPs, and recently(Yu et al., 2023a) has popularized DARE as a powerful random-based DPP method. However, DARE fails with large 
+
+3 
+
+DPs or high pruning rates. We propose techniques that, applied during both fine-tuning and post-hoc stages, restore performance and significantly improve upon vanilla DARE. Our results demonstrate, for the first time, that DPP remains effective even at extreme pruning rates, reducing up to 99% of the model parameters. Thanks to our modification, we also show that random-based DPP can be combined with LoRA and can be used for structured pruning. 
+
+**Model parameter pruning.** There are two primary approaches to model parameter pruning: regularizationbased and importance-based methods; however, an exhaustive review is beyond the scope of this paper. Among importance-based methods, early works (LeCun et al., 1989; Hassibi & Stork, 1992) introduced importance scores based on second-order information from the loss function. In deep neural networks (DNNs), methods such as (Han et al., 2015a; Li et al., 2018; Han et al., 2015b) utilize magnitude pruning to eliminate weights based on their magnitude. More recently, (Sun et al., 2023) developed an importance score called WANDA, which is proportional to the product of weight magnitude and the norm of the input feature, specifically targeting LLMs. However, the application of these techniques to DPP remains poorly understood. We address this gap by studying both the classical magnitude pruning method and the recently proposed LLM-targeted approach, WANDA, within the context of DPP. 
+
+## 3 DELTA PARAMETER PRUNING 
+
+DPP aims to efficiently store a fine-tuned model _**θ** F_ initialized from a pre-trained base model _**θ** P_ by pruning the difference known as the ”delta parameter” (DP), defined as **∆** _**θ**_ = _**θ** F −_ _**θ** P_ between the fine-tuned and the base model. Successful DP pruning (DPP) removes parameters from **∆** _**θ**_ resulting in reduced storage requirements while minimally compromising performance. Sec. 3.1 presents the theoretical model used to analyze various DPP methods. Sec. 3.2 and Appendix A provide a theoretical analysis of randomized and importance-based DPP methods, respectively. These theoretical insights are tested through a detailed controlled experimental analysis using a two-layer neural network in App. B, and, more importantly, applied in Sec. 4 to guide the design of new algorithms that significantly improve LLM performance in Sec. 5. 
+
+## 3.1 FORMULATION 
+
+To gain analytical insights, we consider the application of DPP to perceptron operations in a neural network. This focus is partly motivated by the observation that multi-layer perceptron (MLP) operations, both in the projection layers of attention mechanisms and in feed-forward networks, constitute the majority of operations in LLMs. Consider a perceptron layer, where _**x** ∈_ R _[n]_ is the input activation vector connecting to _m_ output neurons, _**W** ∈_ R _[m][×][n]_ is the hidden-layer weight matrix, and _σ_ is a Lipschitz activation non-linearity (e.g., ReLU, sigmoid).[1] Let **∆** _**W** ∈_ R _[m][×][n]_ denote the delta parameters of the weight matrix. A pruning mapping _P_ : R _[m][×][n] →_ R _[m][×][n]_ aims to reduce the parameters in **∆** _**W**_ , leading to a sparsified _P_ ( **∆** _**W**_ ). The desired sparsity level, _k ∈_ [ _m_ ], is a critical design specification for DPP, often dictated by factors such as storage constraints relative to the number of fine-tuned models. For randomized DPP, elements of **∆** _**W**_ are dropped with a probability _p ∈_ [0 _,_ 1], resulting in an average sparsity level of _k_ = (1 _− p_ ) _mn_ . The objective is to prune the delta parameters to a sparsity level _k_ (or 1 _− p_ for randomized DPP) while maintaining the performance of the pruned model, represented by _**W** P_ + _P_ ( **∆** _**W**_ ), close to that of the original model _**W** P_ . To quantify the impact of pruning, we define the difference vector _**h**_[diff] , which measures the change in intermediate output model representations between the pruned and original models: 
+
+**==> picture [275 x 13] intentionally omitted <==**
+
+We require that output after pruning _σ_ (( _**W** P_ + _P_ ( **∆** _**W**_ )) _**x**_ ) does _not_ differ much from the output before pruning _σ_ (( _**W** P_ + **∆** _**W**_ ) _**x**_ ). By Lipschitzness of the activation, this translates to each entry _h_[diff] _i_ of the difference vector _**h**_[diff] being small in absolute value. Thus, we study how _P_ affects _|h_[diff] _i |, i ∈_ [ _m_ ]. 
+
+> 1Bias terms can be included by augmenting the input and DPs to _**x** ′_ = [ _**x** ,_ 1] and **∆** _′_ _**W**_[= [] **[∆]** _**[W]**[,]_ **[ ∆]** _**[b]**_[]][, respectively,] but recent LLM architectures often omit bias terms for training stability (Touvron et al., 2023; Chowdhery et al., 2023) 
+
+4 
+
+3.2 RANDOMIZED DPP: RANDOM DROP AND RESCALE (DARE) DARE randomly sets each element of [ _P_ ( **∆** _**W**_ )] _ij_ to zero (dropped) with probability _p_ , and _rescales_ non-zero elements to [ _P_ ( **∆** _**W**_ )] _ij_ = [ **∆** _**W**_ ] _ij/_ (1 _− p_ )(Yu et al., 2023a). While DARE has been tested on a wide range of fine-tuned models across various tasks, it exhibits performance degradation under high pruning rates, as shown in Table 7 and Table 8. We seek the underlying causes of these limitations and explore potential improvements. Our approach involves quantifying the difference vector _**h**_[diff] in relation to key variables: the dropout rate, the DPs, and the input data. As per Eq. 1, the effect of DARE on the output becomes 
+
+**==> picture [326 x 23] intentionally omitted <==**
+
+where _p_ is the _drop rate_ , _{δij}i∈_ [ _m_ ] _,j∈_ [ _n_ ] are iid Bernoulli(1 _−_ p) random variables, and 1 _/_ (1 _− p_ ) is the _rescaling factor_ . We denote ∆ _Wij_ the ( _i, j_ ) entry of **∆** _**W** ∈_ R _[m][×][n]_ . It is easy to see that E[ _h_[diff] _i_ ] = 0 (expectation over _δij_ ), and Yu et al. (2023a) use this as justification for DARE’s effective performance. However, this alone overlooks the sources of DARE’s failure modes, which we reveal by instead establishing bounds on the _absolute_ output changes _|h_[diff] _i |_ . The following theorem addresses this by providing a high-probability bound on these changes, with respect to DARE’s randomness, which arises from the Bernoulli variables. See App. E.1 for the proof. 
+
+**Theorem 3.1.** _Denote h_[diff] _i as the i-th component of_ _**h**_[diff] _in Eq._ (2) _. For i ∈_ [ _m_ ] _, j ∈_ [ _n_ ] _, let cij_ = ∆ _Wijxj represent the change in influence of the j-th feature on the i-th output neuron after fine-tuning. Define_[2] _the mean_ ¯ _ci and variance σi_[2] _[of these as:][c]_[¯] _[i]_[= (1] _[/n]_[)][ �] _j∈_ [ _n_ ] _[c][ij][and][ σ] i_[2][= (1] _[/n]_[)][ �] _j∈_ [ _n_ ][(] _[c][ij][−][c]_[¯] _[i]_[)][2] _[.][ Then, for] any i ∈_ [ _m_ ] _and γ ∈_ (0 _,_ 1) _, it holds with probability at least_ 1 _− γ that_ 
+
+**==> picture [210 x 19] intentionally omitted <==**
+
+**==> picture [340 x 12] intentionally omitted <==**
+
+Thus, the key factors influencing the magnitude of _|h_[diff] _i |_ are: (i) the rescaling factor 1 _/_ (1 _− p_ ) and (ii) the mean and variance (averages are over input dimension _j ∈_ [ _n_ ]) of the influence parameters _{cij}_ . Specifically, increasing the rescaling factor (eqv. increase drop-rate _p_ ) increases _|h_[diff] _i |_ at most a rate of _O_ ((1 _− p_ ) _[−]_[1] 2 ), which can be large in demanding pruning scenarios when _p_ is large. Also DARE yields smaller _|h_[diff] _i |_ values when _cij_ = ∆ _Wijxj_ exhibit low first (mean) and second order (variance) averages. We validate these conclusions through elaborate experiments on a controlled setup in Appendix B. More importantly, our algorithms in Sec. 5, further tested on LLMs, are also built upon the insights from this theorem and its observations. 
+
+3.3 IMPORTANCE-BASED DPP 
+
+Using the same analytical framework, we extend the application of importance-based pruning methods, specifically magnitude pruning and WANDA, to the DPP setting. Due to space constraints, we provide a detailed discussion in App. A. In brief, importance-based DPP can achieve strong performance when the distribution of the coefficients _cij_ exhibits light tails and sharp-peakedness. We provide empirical validation of these findings in Sec. C.5 and Appendix B. 
+
+## 4 ALGORITHMS 
+
+To extend the applicability of DPP at high pruning rates and in cases where DPs of fine-tuned models exhibit undesirable statistics, we propose here two strategies based on the theoretical insights discussed in Sec. 3. 
+
+> 2 We call ‘mean’/‘variance’ here the first/second -order summary statistics of _{cij}j∈_ [ _n_ ] over the input dimension. On the other hand, the theorem’s ‘high-probability’ statement is w.r.t. the randomness of random variables _{δij}j∈_ [ _n_ ] 
+
+5 
+
+## 4.1 ADJUSTING THE RESCALING FACTOR 
+
+**Motivation.** Recall from Thm. 3.1 as _p_ increases, the absolute difference in outputs _|h_[diff] _i |_ grows at at most[3] a rate of _O_ ((1 _− p_ ) _[−]_[1] 2 ). Setting the rescaling factor to _q_ = 1 _− p_ eliminates the mean of _h_[diff] _i_ , but does not minimize its magnitude. Through empirical analysis, we demonstrate in Fig. 1 how various values of _q_ influence model outputs in terms of both mean output change (i.e., the average of _|h_[diff] _i |_ across all last-layer neurons) in Fig. 1a, and, test performance in Fig. 1b across different datasets. For 99% pruning rate (1 _− p_ = 0 _._ 01) we observe these quantities over a range of _q_ values from 0 _._ 005 to 0 _._ 04. The results depicted in Fig. 1a for mean output change, indicate a convex-like trend, with minimum points (marked with asterisks) achieved at _q_ values higher than the vanilla 1 _− p_ . E.g., the optimal _q_ for COLA and SST2 is _≈_ 0 _._ 018 and 0 _._ 033, respectively. Recall now that in our analysis, the amount of change in output activations is used as a proxy for test performance: smaller mean output change corresponds to better performance. Fig. 1b validates this: the test-performance curves show a concave-like shape, with the peak performance also occurring at _q >_ 1 _− p_ and numerically consistent with the values of that minimize the mean absolute output change. 
+
+**Drop and rescale with** 1 _/q_ **(DAREx-q).** Motivated by these observations, we propose two variants of DAREx-q: tuning based on (1) maximizing performance on a labeled validation set, and (2) minimizing mean output change over unlabeled data. 
+
+_• DAREx-q with labeled validation data_ (1 _/qv_ ): We use a validation dataset _{xv, yv} ∈V_ to determine the best rescaling factor 1 _/qv_ that maximizes test performance (eqv. minimizes test error) on the validation set. Specifically, we select _qv_ = arg min _q_ P _V_ ( _fq_ ( _xv_ ) _̸_ = _yv_ ), where _fq_ represents the pruned model rescaled by 1 _/q_ . We then randomly drop a faction _p_ of the model DPs and rescale those that are not dropped with 1 _/qv_ . Further details can be found in Algorithm 2 (1) in the Appendix. 
+
+_• DAREx-q with unlabeled data_ (1 _/qe_ ): This method selects _q_ by optimizing an unsupervised objective measuring the mean output difference _|h_[diff] _i |_ across all last-layer neurons of the model. This approach is based on the observation in Fig. 1 that mean output difference is as an effective unsupervised proxy for test performance. The key advantage of this method over _qv_ is that it does _not_ require labeled data. Specifically, in our implementations, selecting _qe_ involves running inference on a single fixed batch of data (with texts from either the training data or any other natural dataset) using both the pruned and original models. Refer to Algorithm 2 in the Appendix for further details. 
+
+**DAREx-q with per-layer tuning.** The implementations of DAREx-q described above select a single, global rescaling factor (1 _/qv_ or 1 _/qe_ ) that is then applied to all surviving DPs across all layers of the network. However, since the DPs in intermediate layers each have their own mean output change over their respective output layers, a natural question arises: Can we select a different rescaling factor for each layer _ℓ ∈_ [ _L_ ]? Moreover, can this be done efficiently without requiring _L_ hyperparameter searches (one for each layer), which would be computationally prohibitive? In Appendix C.9, we demonstrate that the answer to both of these questions is affirmative. To circumvent the computational challenge of _L_ searches, we leverage theoretical insights by extending Thm. 3.1 to provide a high-probability bound for arbitrary _q_ and then optimizing over it. Like Thm. 3.1, the new bound still depends on the first- and second-order statistics of the coefficients _c[ℓ] ij_[,] which means the optimal _q[ℓ]_ can vary per layer _ℓ_ based on these statistics. We denote this vector of per-layer rescaling factors as 1 _/_ **q** _v_ = [1 _/qv_[1] _[, . . . ,]_[ 1] _[/q] v[L]_[]][ and][ 1] _[/]_ **[q]** _[e]_[, respectively, for two implementations depending on] whether the performance on validation set or mean output change is optimized. Please refer to App. C.9 for details. In Sec. 5.1, we show that this approach performs very well on encoder models and is comparable to the global 1 _/q_ approach for decoder models. 
+
+## 4.2 ADAMR FINETUNING 
+
+**Motivation.** While DAREx-q addresses the issue of large rescaling factors at high pruning rates, we’ve seen that for absolute output changes _|h_[diff] _i |_ to remain small, the first- and second-order averages of the influence 
+
+3 The rate of growth with _p_ in the high-probability upper bound of Thm. 3.1 is tight and thus predictive of the output change taking larger values as _p_ increases; see App. E.1. 
+
+6 
+
+Table 2: **DAREx-q consistently outperforms DARE across four datasets and two encoder models.** The pruning rate is set to _p_ = 0 _._ 99. **Bold** indicates the best performance, while underline marks the second-best. 
+
+|Dataset|SST2|COLA|MRPC|STS-B|
+|---|---|---|---|---|
+|Models|BERT<br>RoBERTa|BERT<br>RoBERTa|BERT<br>RoBERTa|BERT<br>RoBERTa|
+|No Pruning|90.25(_−_)<br>92.09(_−_)<br> <br>|56.24(_−_)<br>62.10(_−_)<br> <br>|85.01(_−_)<br>90.05(_−_)<br> <br>|88.51(_−_)<br>90.57(_−_)<br> <br>|
+|DARE|51.00(0.64)<br>51.81(1.00)|4.25(2.83)<br>7.65(3.63)|79.96(6.07)<br>87.32(0.69)|82.56(1.13)<br>81.59(1.44)|
+|DAREx-q (1_/qv_)<br>DAREx-q (1_/_**q**_v_)<br>DAREx-q (1_/qe_)<br>DAREx-q (1_/_**q**_e_)|85.64 (3.07)<br>86.56 (4.59)<br>**89.60**(**0.67**)<br>**90.40**(**1.36**)<br>85.81 (2.72)<br>81.05 (4.96)<br>87.39<br>(0.86<br>)<br>89.62<br>(1.35<br>)|48.96 (4.13)<br>53.58 (1.97)<br>**53.12**(**2.01**)<br>**58.38**(**2.05**)<br>45.20 (2.04)<br>52.10 (5.01)<br>51.70<br>(2.57<br>)<br>54.43<br>(2.49<br>)|**83.92 (0.62)**<br>87.30 (0.58)<br>83.86<br>(0.66<br>)<br>**89.80**(**0.60**)<br>83.12 (1.11)<br>88.85 (0.26)<br>83.25(0.94)<br>89.59<br>(0.42<br>)|86.60 (1.61)<br>88.07<br>(0.70)<br>87.55<br>(0.12<br>)<br>**89.10**(**0.32**)<br>87.03 (0.12)<br>87.29 (0.57)<br>**87.59(0.19)**<br>87.60(0.49)|
+
+
+Table 3: Similar to Table 2, **DAREx-q yields significant gains for decoder models** . 
+
+|Dataset|GSM8K|GSM8K|GSM8K|GSM8K|GSM8K|GSM8K|GSM8K|GSM8K|GSM8K|GSM8K|GSM8K|GSM8K|GSM8K|GSM8K|GSM8K|
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+|Methods|Abel-7B||||MetaMath-7B||||WizardMath-7B|||MetaMath-Qwen2-0.5B||||
+||_p_= 0_._95||_p_= 0_._99||_p_= 0_._95||_p_= 0_._99||_p_= 0_._95||_p_= 0_._99|_p_= 0_._95||_p_= 0_._99||
+|No Pruning||58.32||||65.50||||54.90|||42.00|||
+|DARE||37.30||0.00||58.22||0.00||47.10|0.00||0.00||0.00|
+|DAREx-q (1_/qv_)<br>DAREx-q (1_/_**q**_v_)<br>DAREx-q (1_/qe_)<br>DAREx-q (1_/_**q**_e_)||**47.20**<br>44.50<br>42.99<br>42.84||20.20<br>20.00<br>**21.30**<br>19.63||59.05<br>59.28<br>**60.34**<br>59.28||**34.87**<br>32.06<br>32.60<br>28.05||49.81<br>**50.64**<br>49.05<br>**50.64**|**35.63**<br>34.34<br>33.97<br>33.58||**30.70**<br>29.56<br>30.32<br>28.80||**19.17**<br>18.65<br>18.95<br>17.66|
+
+
+factors _{cij}j∈_ [ _n_ ] must also be small. These factors directly depend on the magnitude of the DPs ∆ _Wij_ , which are determined during fine-tuning. We propose an in-training method that fine-tunes the model to keep these statistics small, thereby guaranteeing that the post-hoc application of DARE maintains performance. 
+
+**AdamR-** _L_ 2 **.** Our approach is to fine-tune the model with _L_ 2 regularization on the DPs **∆** _**θ**_ = _**θ** F −_ _**θ** P_ . As mentioned, the motivation behind this is penalizing _∥_ **∆** _**θ** ∥_ 2 directly translates to smaller total secondorder averages[�] _j∈_ [ _n_ ] _[c]_[2] _ij_[,][which,][as][previously][noted,][capture][the][extent][of][change][in][the][output][layer] post-finetuning and factor into the bound in Thm. 3.1. To implement this, we replace the weight decay of AdamW—the standard choice for training LLMs—with our custom regularization. Specifically, we adjust the regularization strength based on the gradient norm, as Xie et al. (2024) recently found that weight decay can cause large gradient norms during the final phase of training. Our modified decay step of AdamW is: 
+
+**==> picture [321 x 21] intentionally omitted <==**
+
+where _**θ** t_ represents model parameters at iteration _t_ , _**m**_ ˆ _t_ and _**v**_ ˆ _t_ are the first and second moments of gradients, and ¯ _vt_ is the mean of the second moment used to adjust regularization. See also Algorithm 1 in Appendix. 
+
+**AdamR-** _L_ 1 **.** We extend our approach to fine-tune the model in preparation for importance-based pruning, rather than random-based pruning, post-training. In this case, we regularize using the _L_ 1 norm of the DPs. This is again motivated by the analysis in Sec. 3.3. The detailed algorithm, referred to as AdamR- _L_ 1, is provided in Algorithm 1 in the Appendix. 
+
+## 5 EXPERIMENTS 
+
+We validate the effectiveness of our analysis and proposed algorithms through comprehensive experiments. **Datasets and models for Encoder-based and Decoder-based LMs.** For Encoder-based LMs, we utilize four datasets—sentence acceptability dataset CoLA (Warstadt et al., 2019), sentiment detection dataset SST2 (Socher et al., 2013), paraphrase dataset MRPC (Dolan & Brockett, 2005), and sentence similarity dataset STS-B (Cer et al., 2017). For the selection of pretrained backbones, we choose BERT-base-uncased (Devlin et al., 2018) and RoBERTa-base (Liu et al., 2019), fine-tuning them on these task-specific datasets to obtain supervised finetuned models. For Decoder-based LMs, we focus on mathematical reasoning tasks. Due to 
+
+7 
+
+**==> picture [270 x 8] intentionally omitted <==**
+
+**----- Start of picture text -----**<br>
+(a) Encoder models (b) Decoder model<br>**----- End of picture text -----**<br>
+
+
+Figure 2: **Across pruning rates** _p_ **, DAREx-q performs at least as well as vanilla DARE and significantly outperforms it at higher pruning rates.** 
+
+constraints on resources for fine-tuning, we opted to fine-tune a smaller Qwen2-0.5B (Yang et al., 2024) model on the MetaMath dataset (Yu et al., 2023b). Additionally, we utilize publicly available mathematical reasoning models, including the MetaMath-llema-7B (Yu et al., 2023b), MetaMath-7B (Yu et al., 2023b), WizardMath7B (Luo et al., 2023) and Abel-7B (Chern et al., 2023), all based on the Llama2-7B architecture (Touvron et al., 2023). We then use the GSM8K (Cobbe et al., 2021) to test these models. 
+
+**Evaluation metrics.** Following (Yu et al., 2023a), we evaluate performance using various metrics: the Matthews correlation coefficient for CoLA, accuracy for SST-2, a combined score of accuracy and F1 for MRPC, the mean of Pearson and Spearman correlations for STS-B, and zero-shot accuracy for GSM8K. 
+
+## 5.1 RESCALING-PARAMETER MODIFICATION 
+
+We evaluate our DARq algorithm, as discussed in Section 4.1. Recall the four proposed variations for choosing the rescaling factor, categorized by two distinct factors: (a) the use of labeled validation data or not (1 _/qv_ or 1 _/qe_ , respectively); and (b) global tuning versus per-layer tuning (1 _/q_ versus 1 _/_ **q** ). **Encoder models.** Table 2 compares DAREx-q (all four variants) with vanilla DARE (with rescaling factor 1 _/_ (1 _− p_ )). We report average performance and standard deviation on the test set over four independent runs. For reference, we also report performance of the finetuned model before pruning. We find that: (1) _All_ DAREx-q variants outperform vanilla DARE in _all_ cases and by a large margin (e.g., _>_ 40% on COLA). (2) 1 _/qe_ and 1 _/_ **q** _e_ deliver competitive performance compared to 1 _/qv_ and 1 _/_ **q** _v_ , making it an alternative when a labeled validation set is unavailable. (3) Per-layer rescaling (1 _/_ **q** _v_ and 1 _/_ **q** _e_ ) outperforms global rescaling. **Decoder models.** Table 3 evaluates DAREx-q on decoder models. We find that: (1) DAREx-q consistently boosts performance over vanilla DARE across _all_ models and both pruning rates _p_ = 0 _._ 95 _,_ 0 _._ 99. (2) Higher pruning rates yield striking improvements: vanilla rescaling fails completely, while DAREx-q yields non-trivial performance; (3) Global rescaling (1 _/q_ ) provides performance comparable to that of per-layer rescaling (1 _/_ **q** ), making it a more efficient recommendation for decoder models. 
+
+**Performance across different pruning rates.** Fig. 2 compares performance of DAREx-q to vanilla DARE for varying values of pruning rates _p_ for both encoder and decoder models. For _all_ examined values of _p_ , DAREx-q is at least as good as vanilla DARE. More importantly, we confirm that DAREx-q significantly outperforms vanilla DARE at higher pruning rates. 
+
+Table 4: **DAREx-q is orthogonal to and can be combined with LoRA** , leading to significant improvements over vanilla DARE. 
+
+|Datasets(_p_= 0_._9)|STS-B|COLA|SST2|MRPC|
+|---|---|---|---|---|
+|No Pruning<br>DARE (Yu et al., 2023a)<br>DAREx-q (1_/qv_) (ours)<br>DAREx-q (1_/qe_) (ours)|90.07<br>81.49<br>**85.06**<br>85.00|59.56<br>50.96<br>**56.73**<br>**56.73**|94.27<br>48.05<br>**90.25**<br>90.02|87.09<br>80.03<br>**82.53**<br>**82.53**|
+
+
+8 
+
+Table 5: **DARE with AdamR-** _L_ 2 **finetuning (DAREx-** _L_ 2 **) significantly improves performance on encoder models compared to DARE without it.** 
+
+|Dataset|p|BERT|BERT|BERT|RoBERTa|RoBERTa|RoBERTa|
+|---|---|---|---|---|---|---|---|
+|||original|_L_2|difference|original|_L_2|difference|
+|MRPC|No Pruning<br>0.99|85.01 (-)<br>79.96(6.07)|84.31 (-)<br>**84.30(0.48)**|-0.70<br>**+4.34**|90.05 (-)<br>87.32(0.69)|**90.69**(-)<br>**90.02(0.41)**|+0.64<br>**+2.70**|
+|STS-B|No Pruning<br>0.99|88.51 (-)<br>82.56(1.13)|87.99 (-)<br>**87.62(0.27)**|-0.52<br>**+5.06**|90.57 (-)<br>81.59(1.44)|90.25 (-)<br>**89.88(0.29)**|-0.32<br>**+8.29**|
+|SST2|No Pruning<br>0.99|90.25 (-)<br>51.00(0.64)|89.91 (-)<br>**88.17(0.44)**|-0.34<br>**+37.17**|92.09 (-)<br>51.81(1.00)|92.89 (-)<br>**91.95(0.24)**|+0.80<br>**+40.14**|
+|COLA|No Pruning<br>0.99|56.24 (-)<br>4.25(2.83)|**59.27**(-)<br>**57.24(0.62)**|+3.03<br>**+52.99**|62.10 (-)<br>7.65(3.63)|59.27 (-)<br>**59.01(1.26)**|-2.83<br>**+51.36**|
+
+
+**LoRA+DAREx-q:** As a post-training DPP, DAREx-q is orthogonal to and can be combined with parameterefficient tuning approaches like LoRA (Hu et al., 2021). To demonstrate this, we fine-tune the BERT-Base model by training only the LoRA module, then prune the parameters of LoRA at rate _p_ = 0 _._ 9. The results, shown in Table 4, reveal that applying vanilla DARE does _not_ yield good performance. In contrast, our DAREx-q significantly improves the results. In addition to these, we demonstrate in Appendix Sec. C.11 that DAREx-q is even comparable to sparse fine-tuning, despite being a purely post-training method. **Structural DPP with DAREx-q.** Our random-based DAREx-q can also be utilized for structural DPP for enhanced hardware efficiency (Shen et al., 2022; Yao & Klimovic, 2023). In this setup, we randomly select _a_ % of the input dimensions of a MLP layer and randomly retain _b_ % of the DPs within the selected dimensions, achieving a total structured DP pruning rate of _p_ = _a · b_ %. Table 9 in the Appendix, uses _a_ = 5 _, b_ = 20 for an equivalent _p_ = 0 _._ 99, to show that DAREx-q outperforms DARE with a 40% improvement. 
+
+## 5.2 ADAMR- _L_ 2 FINETUNING 
+
+We now show that our proposed in-training method of Sec. 4.2 successfully achieves highly prunable DPs. **Encoder models.** Table 5 compares the performance of DARE apAdamR-L2 on Qwen-05B GSM8K) plied to the original finetuned model against its performance when Oe, applied to models finetuned with AdamR- _L_ 2 across two encoder 0.4 | e@ ==O~9------=e models and four datasets.for reference, also report the performance of the finetuned modelsWe set the pruning rate at _p_ = 0 _._ 99 and, 0.3 aaa a a\\\\. ial \el[N] \ \. eal. tata without pruning, both with and without AdamR-with(DAREx-the insights _L_ 2) outperforms vanilla DARE without regularization.of Sec. 4.2, applying DARE after _L_ 2. AdamR-Consistent _L_ 2 feyfc<=25802 \\\\1 \‘ \ \,x Additionally, the performance is only marginally lower than that \\\ \ N\ of the original finetuned model. Figure 7 in the Appendix further 0.1 eS te % \ shows that increasing the regularization strength allows pruning -@--@- weight:0weight:1e-06 Msn, Tran,\\ up to 99.9% of parameters with only a minor performance drop. 0.0 | -@- weight:0.0001 ~~ See Appendix C.4 for further ablations on regularization weight. 0.0 Log0.2Scaled Pruning0.4 Rate0.6(-log10(1-p)/2)08 1.0 Finally, Table 9 in the Appendix demonstrates that DAREx- _L_ 2 unlocks the potential of random-based DPP for structural pruning, Figure 3: Applying DARE on deimproving DARE without _L_ 2 finetuning by over 40%. We also coder models finetuned with AdamR- _L_ 2 conduct training analysis of DAREx- _L_ 2 in Appendix F. (DAREx- _L_ 2) at varying regularization **Decoder models.** To demonstrate the effectiveness of DARExstrengths demonstrates significant per- _L_ 2 on decoder-based LMs, we finetune Qwen-0.5B using the formance improvements for _p ≥_ 0 _._ 9. MetaMath dataset (Yu et al., 2023b). Figure 3 shows the _L_ 2 fine-tuned Qwen-0.5B model with different regularization weights on the MetaMath datasets. We used pruning rates _p ∈_ [0 _,_ 0 _._ 5 _,_ 0 _._ 7 _,_ 0 _._ 9 _,_ 0 _._ 99] to prune the DPs. For visualization, the x-axis uses a log-scaled pruning value of _−_ log(1 _−p_ ) _/_ 2 = [0 _,_ 0 _._ 15 _,_ 0 _._ 26 _,_ 0 _._ 5 _,_ 1 _._ 0]. When AdamR- _L_ 2 is not applied (regularization weight = 0), performance on GSM8K drops significantly at 
+
+9 
+
+_p_ = 0 _._ 9. By increasing the regularization weight, higher pruning rates can be achieved. With a regularization weight of 1 _e[−]_[4] (green line), we can reach a 99% pruning rate while maintaining performance. 5.3 HOW TO APPLY IMPORTANCE-BASED DPP AND WHEN IS IT COMPETITIVE? We have seen, both theoretically and empirically, that DARE is effective at pruning DPs when their first and second order statistics (e.g. as summarized by ¯ _ci_ and _σi_[2][in Thm.][3.1) are small.][While most fine-tuned] LLMs typically introduce small DPs Yao & Klimovic (2023); Lee et al. (2019), exceptions exist. For instance, Table 8 in the App. shows that the MetaMath-LLaMA-7B model, fine-tuned on large datasets (MetaMathQA Yu et al. (2023b) and Proof-Pile-2 Azerbayev et al. (2023)), has a mean delta parameter magnitude of 0.017, notably larger than that of Abel-7B and MetaMath-7B. In such cases, as demonstrated in Table 6, DARE experiences a substantial performance drop when the pruning rate exceeds 0 _._ 1. Can importance-based DPP methods Table 6: Peformance of pruning methods on MetaMath-llema. serve as alternatives? Yes, as shown in Table 6. Importance-based methMethods GSM8K ods like MP and WANDA can main(MetaMath-llema-7B) _p_ = 0 _._ 0 _p_ = 0 _._ 1 _p_ = 0 _._ 3 _p_ = 0 _._ 5 _p_ = 0 _._ 6 tain pruning rates of up to 0.5 with MP **63.00** 61.00 47.50 32.00 WANDA **63.00 62.50 54.50 32.50** only minimal performance degradaDARE 64.50 51.00 0.00 0.00 0.00 tion. Thus, these methods are effective Random Drop 52.50 6.50 0.00 0.00 alternatives to DARE when DPs are 
+
+large and fine-tuning with customized methods like AdamR- _L_ 2 is not feasible. 
+
+**Improvements with AdamR-** _L_ 1 **.** For completeness of our study, we also demonstrate that finetuning with AdamR- _L_ 1 can boost performance of importance-based DPP as suggested in Sec. 4.2. Specifically, in Table 7 in App. C.5, we show elaborate experiments comparing the performance of MP and WANDA (applied to DPs) when used on a model finetuned with/without AdamR- _L_ 1 for varying values of pruning rates and two encoder models across four datasets. In summary, we find: (1) AdamR- _L_ 1 consistently increases performance of MP. (2) While AdamR- _L_ 1 improves WANDA’s performance for most datasets, this is not always the case. We attribute this to WANDA’s importance score being impacted not only by DPs ∆ _Wij_ but also by input magnitude _|xj|_ and important DPs not always being aligned with outlier activations (see App. D). 
+
+## 6 CONCLUSIONS AND LIMITATIONS 
+
+Our study of DPP methods, provides theoretical insights, ex'' i)i) tensive experiments in controlled environments, and demon'' Start “allow Fine N° Are DPs \_YeS_| WANDAi) I Tuning? Large? DP strates practical applications on large-scale models and datasets. Starting with an in-depth analysis of random-based '1 Yes No i)! DPP methods, we identify key factors that degrade their per; ! formance. Based on these insights, we propose: (i) DAREx-q, ' cannes DAREx-q { a post-training rescaling modification strategy that signifi1 T i)' cantly outperforms the state-of-the-art at high pruning rates ' No DAREx-q 1 oa Validation = 1 and performs at least as well across other rates; and (ii) Data? (1/4e) 1 AdamR finetuning to enhance existing models that struggle '' Yes i)1 ' i) with DPP, ensuring the production of highly prunable DPs. ' i) | Flowchart for DPP DAREx-q ! Our results, including dramatic gains over baseline methods | Methods Selection (1/40) ! shown in Table 1, suggest that these strategies warrant further investigation across different tasks and modalities. AddiFigure 4: Flowchart for selecting appropriate tionally, preliminary results suggest that DAREx-q can be DPP methods based on different scenarios. effectively combined with parameter-efficient methods like LoRA and utilized for structural DPP, both of which highlight the potential for further study. Finally, while finetuning LLMs typically results in small DPs favoring random-based DPP, we demonstrate that importance-based DPP methods can serve as robust alternatives for larger DPs. This highlights the need for further exploration of alternatives. In conclusion, our comprehensive study of DPP methods provides a framework for selecting appropriate DPP methods under different scenarios, which we summarize in Fig. 4 (details in App. C.3). Broader impact see App. C.13. 
+
+10 
+
+**Acknowledgments:** This work was partially funded by an Alliance Mission Grant, the NSERC Discovery Grant No. 2021-03677, the Alliance Grant ALLRP 581098-22, NFRFE-2023-00936, Natural Sciences and Engineering Research Council of Canada (NSERC), Canada CIFAR AI Chairs program, Canada Research Chair program, MITACS-CIFAR Catalyst Grant Program, the Digital Research Alliance of Canada, Institute of Information & communications Technology Planning & Evaluation (IITP) grant funded by the Korea government (MSIT). 
+
+## REFERENCES 
+
+Takuya Akiba, Makoto Shing, Yujin Tang, Qi Sun, and David Ha. Evolutionary optimization of model merging recipes. _arXiv preprint arXiv:2403.13187_ , 2024. 
+
+- Zhangir Azerbayev, Hailey Schoelkopf, Keiran Paster, Marco Dos Santos, Stephen McAleer, Albert Q Jiang, Jia Deng, Stella Biderman, and Sean Welleck. Llemma: An open language model for mathematics. _arXiv preprint arXiv:2310.10631_ , 2023. 
+
+- Daniel Berend and Aryeh Kontorovich. On the concentration of the missing mass. _Electronic Communications in Probability_ , 18(3):1–7, 2013. 
+
+- Daniel Cer, Mona Diab, Eneko Agirre, Inigo Lopez-Gazpio, and Lucia Specia. Semeval-2017 task 1: Semantic textual similarity-multilingual and cross-lingual focused evaluation. _arXiv preprint arXiv:1708.00055_ , 2017. 
+
+- Guanzheng Chen, Fangyu Liu, Zaiqiao Meng, and Shangsong Liang. Revisiting parameter-efficient tuning: Are we really there yet? _arXiv preprint arXiv:2202.07962_ , 2022. 
+
+- Mingzhe Chen, Deniz Gund¨ uz, Kaibin Huang, Walid Saad, Mehdi Bennis, Aneta Vulgarakis Feljan, and¨ H Vincent Poor. Distributed learning in wireless networks: Recent progress and future challenges. _IEEE Journal on Selected Areas in Communications_ , 39(12):3579–3605, 2021. 
+
+Ethan Chern, Haoyang Zou, Xuefeng Li, Jiewen Hu, Kehua Feng, Junlong Li, and Pengfei Liu. Generative ai for math: Abel. https://github.com/GAIR-NLP/abel, 2023. 
+
+- Aakanksha Chowdhery, Sharan Narang, Jacob Devlin, Maarten Bosma, Gaurav Mishra, Adam Roberts, Paul Barham, Hyung Won Chung, Charles Sutton, Sebastian Gehrmann, et al. Palm: Scaling language modeling with pathways. _Journal of Machine Learning Research_ , 24(240):1–113, 2023. 
+
+- Karl Cobbe, Vineet Kosaraju, Mohammad Bavarian, Mark Chen, Heewoo Jun, Lukasz Kaiser, Matthias Plappert, Jerry Tworek, Jacob Hilton, Reiichiro Nakano, et al. Training verifiers to solve math word problems. _arXiv preprint arXiv:2110.14168_ , 2021. 
+
+- Wenlong Deng, Christos Thrampoulidis, and Xiaoxiao Li. Unlocking the potential of prompt-tuning in bridging generalized and personalized federated learning. In _Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition_ , pp. 6087–6097, 2024. 
+
+- Tim Dettmers, Mike Lewis, Younes Belkada, and Luke Zettlemoyer. Gpt3. int8 (): 8-bit matrix multiplication for transformers at scale. _Advances in Neural Information Processing Systems_ , 35:30318–30332, 2022. 
+
+- Jacob Devlin, Ming-Wei Chang, Kenton Lee, and Kristina Toutanova. Bert: Pre-training of deep bidirectional transformers for language understanding. _arXiv preprint arXiv:1810.04805_ , 2018. 
+
+- Ning Ding, Yujia Qin, Guang Yang, Fuchao Wei, Zonghan Yang, Yusheng Su, Shengding Hu, Yulin Chen, Chi-Min Chan, Weize Chen, et al. Parameter-efficient fine-tuning of large-scale pre-trained language models. _Nature Machine Intelligence_ , 5(3):220–235, 2023. 
+
+11 
+
+- Jesse Dodge, Gabriel Ilharco, Roy Schwartz, Ali Farhadi, Hannaneh Hajishirzi, and Noah Smith. Finetuning pretrained language models: Weight initializations, data orders, and early stopping. _arXiv preprint arXiv:2002.06305_ , 2020. 
+
+- Bill Dolan and Chris Brockett. Automatically constructing a corpus of sentential paraphrases. In _Third international workshop on paraphrasing (IWP2005)_ , 2005. 
+
+- Alexey Dosovitskiy. An image is worth 16x16 words: Transformers for image recognition at scale. _arXiv preprint arXiv:2010.11929_ , 2020. 
+
+- Luciano Floridi and Massimo Chiriatti. Gpt-3: Its nature, scope, limits, and consequences. _Minds and Machines_ , 30:681–694, 2020. 
+
+- Zihao Fu, Haoran Yang, Anthony Man-Cho So, Wai Lam, Lidong Bing, and Nigel Collier. On the effectiveness of parameter-efficient fine-tuning. In _Proceedings of the AAAI conference on artificial intelligence_ , volume 37, pp. 12799–12807, 2023. 
+
+- Charles Goddard, Shamane Siriwardhana, Malikeh Ehghaghi, Luke Meyers, Vlad Karpukhin, Brian Benedict, Mark McQuade, and Jacob Solawetz. Arcee’s mergekit: A toolkit for merging large language models. _arXiv preprint arXiv:2403.13257_ , 2024. 
+
+- Demi Guo, Alexander M Rush, and Yoon Kim. Parameter-efficient transfer learning with diff pruning. _arXiv preprint arXiv:2012.07463_ , 2020. 
+
+- Song Han, Huizi Mao, and William J Dally. Deep compression: Compressing deep neural networks with pruning, trained quantization and huffman coding. _arXiv preprint arXiv:1510.00149_ , 2015a. 
+
+- Song Han, Jeff Pool, John Tran, and William Dally. Learning both weights and connections for efficient neural network. _Advances in neural information processing systems_ , 28, 2015b. 
+
+- Babak Hassibi and David Stork. Second order derivatives for network pruning: Optimal brain surgeon. _Advances in neural information processing systems_ , 5, 1992. 
+
+- Edward J Hu, Yelong Shen, Phillip Wallis, Zeyuan Allen-Zhu, Yuanzhi Li, Shean Wang, Lu Wang, and Weizhu Chen. Lora: Low-rank adaptation of large language models. _arXiv preprint arXiv:2106.09685_ , 2021. 
+
+- Gabriel Ilharco, Marco Tulio Ribeiro, Mitchell Wortsman, Suchin Gururangan, Ludwig Schmidt, Hannaneh Hajishirzi, and Ali Farhadi. Editing models with task arithmetic. _arXiv preprint arXiv:2212.04089_ , 2022. 
+
+- Michael Kearns and Lawrence Saul. Large deviation methods for approximate probabilistic inference. _arXiv preprint arXiv:1301.7392_ , 2013. 
+
+- Sarit Khirirat, Hamid Reza Feyzmahdavian, and Mikael Johansson. Distributed learning with compressed gradients. _arXiv preprint arXiv:1806.06573_ , 2018. 
+
+- Seungone Kim, Juyoung Suk, Shayne Longpre, Bill Yuchen Lin, Jamin Shin, Sean Welleck, Graham Neubig, Moontae Lee, Kyungjae Lee, and Minjoon Seo. Prometheus 2: An open source language model specialized in evaluating other language models. _arXiv preprint arXiv:2405.01535_ , 2024. 
+
+- Yanis Labrak, Adrien Bazoge, Emmanuel Morin, Pierre-Antoine Gourraud, Mickael Rouvier, and Richard Dufour. Biomistral: A collection of open-source pretrained large language models for medical domains. _arXiv preprint arXiv:2402.10373_ , 2024. 
+
+- Yann LeCun, John Denker, and Sara Solla. Optimal brain damage. _Advances in neural information processing systems_ , 2, 1989. 
+
+12 
+
+- Jaehoon Lee, Lechao Xiao, Samuel Schoenholz, Yasaman Bahri, Roman Novak, Jascha Sohl-Dickstein, and Jeffrey Pennington. Wide neural networks of any depth evolve as linear models under gradient descent. _Advances in neural information processing systems_ , 32, 2019. 
+
+- Guiying Li, Chao Qian, Chunhui Jiang, Xiaofen Lu, and Ke Tang. Optimization based layer-wise magnitudebased pruning for dnn compression. In _IJCAI_ , volume 330, pp. 2383–2389, 2018. 
+
+- Li Li, Yuxi Fan, Mike Tse, and Kuo-Yi Lin. A review of applications in federated learning. _Computers & Industrial Engineering_ , 149:106854, 2020. 
+
+- Xiang Lisa Li and Percy Liang. Prefix-tuning: Optimizing continuous prompts for generation. _arXiv preprint arXiv:2101.00190_ , 2021. 
+
+- Xiaoxiao Li, Meirui Jiang, Xiaofei Zhang, Michael Kamp, and Qi Dou. Fedbn: Federated learning on non-iid features via local batch normalization. _arXiv preprint arXiv:2102.07623_ , 2021. 
+
+- Baohao Liao, Yan Meng, and Christof Monz. Parameter-efficient fine-tuning without introducing new latency. _arXiv preprint arXiv:2305.16742_ , 2023. 
+
+- James Liu, Guangxuan Xiao, Kai Li, Jason D Lee, Song Han, Tri Dao, and Tianle Cai. Bitdelta: Your fine-tune may only be worth one bit. _arXiv preprint arXiv:2402.10193_ , 2024. 
+
+- Yinhan Liu, Myle Ott, Naman Goyal, Jingfei Du, Mandar Joshi, Danqi Chen, Omer Levy, Mike Lewis, Luke Zettlemoyer, and Veselin Stoyanov. Roberta: A robustly optimized bert pretraining approach. _arXiv preprint arXiv:1907.11692_ , 2019. 
+
+- Yadong Lu, Chunyuan Li, Haotian Liu, Jianwei Yang, Jianfeng Gao, and Yelong Shen. An empirical study of scaling instruct-tuned large multimodal models. _arXiv preprint arXiv:2309.09958_ , 2023. 
+
+- Haipeng Luo, Qingfeng Sun, Can Xu, Pu Zhao, Jianguang Lou, Chongyang Tao, Xiubo Geng, Qingwei Lin, Shifeng Chen, and Dongmei Zhang. Wizardmath: Empowering mathematical reasoning for large language models via reinforced evol-instruct. _arXiv preprint arXiv:2308.09583_ , 2023. 
+
+- Tal Ridnik, Emanuel Ben-Baruch, Asaf Noy, and Lihi Zelnik-Manor. Imagenet-21k pretraining for the masses. _arXiv preprint arXiv:2104.10972_ , 2021. 
+
+- Victor Sanh, Albert Webson, Colin Raffel, Stephen H Bach, Lintang Sutawika, Zaid Alyafeai, Antoine Chaffin, Arnaud Stiegler, Teven Le Scao, Arun Raja, et al. Multitask prompted training enables zero-shot task generalization. _arXiv preprint arXiv:2110.08207_ , 2021. 
+
+- Pierre Sermanet, Soumith Chintala, and Yann LeCun. Convolutional neural networks applied to house numbers digit classification. In _Proceedings of the 21st international conference on pattern recognition (ICPR2012)_ , pp. 3288–3291. IEEE, 2012. 
+
+- Maying Shen, Hongxu Yin, Pavlo Molchanov, Lei Mao, Jianna Liu, and Jose M Alvarez. Structural pruning via latency-saliency knapsack. _Advances in Neural Information Processing Systems_ , 35:12894–12908, 2022. 
+
+- Richard Socher, Alex Perelygin, Jean Wu, Jason Chuang, Christopher D Manning, Andrew Y Ng, and Christopher Potts. Recursive deep models for semantic compositionality over a sentiment treebank. In _Proceedings of the 2013 conference on empirical methods in natural language processing_ , pp. 1631–1642, 2013. 
+
+- Mingjie Sun, Zhuang Liu, Anna Bair, and J Zico Kolter. A simple and effective pruning approach for large language models. _arXiv preprint arXiv:2306.11695_ , 2023. 
+
+13 
+
+- Mingjie Sun, Xinlei Chen, J Zico Kolter, and Zhuang Liu. Massive activations in large language models. _arXiv preprint arXiv:2402.17762_ , 2024. 
+
+- Hugo Touvron, Louis Martin, Kevin Stone, Peter Albert, Amjad Almahairi, Yasmine Babaei, Nikolay Bashlykov, Soumya Batra, Prajjwal Bhargava, Shruti Bhosale, et al. Llama 2: Open foundation and fine-tuned chat models. _arXiv preprint arXiv:2307.09288_ , 2023. 
+
+- Roman Vershynin. High-dimensional probability. _University of California, Irvine_ , 10:11, 2020. 
+
+- Alex Warstadt, Amanpreet Singh, and Samuel R Bowman. Neural network acceptability judgments. _Transactions of the Association for Computational Linguistics_ , 7:625–641, 2019. 
+
+- Xiuying Wei, Yunchen Zhang, Xiangguo Zhang, Ruihao Gong, Shanghang Zhang, Qi Zhang, Fengwei Yu, and Xianglong Liu. Outlier suppression: Pushing the limit of low-bit transformer language models. _Advances in Neural Information Processing Systems_ , 35:17402–17414, 2022. 
+
+- Mitchell Wortsman, Gabriel Ilharco, Samir Ya Gadre, Rebecca Roelofs, Raphael Gontijo-Lopes, Ari S Morcos, Hongseok Namkoong, Ali Farhadi, Yair Carmon, Simon Kornblith, et al. Model soups: averaging weights of multiple fine-tuned models improves accuracy without increasing inference time. In _International conference on machine learning_ , pp. 23965–23998. PMLR, 2022. 
+
+- Zeke Xie, Zhiqiang Xu, Jingzhao Zhang, Issei Sato, and Masashi Sugiyama. On the overlooked pitfalls of weight decay and how to mitigate them: A gradient-norm perspective. _Advances in Neural Information Processing Systems_ , 36, 2024. 
+
+- Jingjing Xu, Xu Sun, Zhiyuan Zhang, Guangxiang Zhao, and Junyang Lin. Understanding and improving layer normalization. _Advances in neural information processing systems_ , 32, 2019. 
+
+- An Yang, Baosong Yang, Binyuan Hui, Bo Zheng, Bowen Yu, Chang Zhou, Chengpeng Li, Chengyuan Li, Dayiheng Liu, Fei Huang, et al. Qwen2 technical report. _arXiv preprint arXiv:2407.10671_ , 2024. 
+
+- Xiaozhe Yao and Ana Klimovic. Deltazip: Multi-tenant language model serving via delta compression. _arXiv preprint arXiv:2312.05215_ , 2023. 
+
+- Le Yu, Bowen Yu, Haiyang Yu, Fei Huang, and Yongbin Li. Language models are super mario: Absorbing abilities from homologous models as a free lunch. _arXiv preprint arXiv:2311.03099_ , 2023a. 
+
+- Longhui Yu, Weisen Jiang, Han Shi, Jincheng Yu, Zhengying Liu, Yu Zhang, James T Kwok, Zhenguo Li, Adrian Weller, and Weiyang Liu. Metamath: Bootstrap your own mathematical questions for large language models. _arXiv preprint arXiv:2309.12284_ , 2023b. 
+
+- Biao Zhang and Rico Sennrich. Root mean square layer normalization. _Advances in Neural Information Processing Systems_ , 32, 2019. 
+
+- Wayne Xin Zhao, Kun Zhou, Junyi Li, Tianyi Tang, Xiaolei Wang, Yupeng Hou, Yingqian Min, Beichen Zhang, Junjie Zhang, Zican Dong, et al. A survey of large language models. _arXiv preprint arXiv:2303.18223_ , 2023. 
+
+14 
+
+## **Contents** 
+
+|**1**|**Introduction**|**Introduction**||**1**|
+|---|---|---|---|---|
+||1.1|Contributions . . . . . . . . . . .|. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .|2|
+|**2**|**Related work**|||**3**|
+|**3**|**Delta parameter pruning**|||**4**|
+||3.1|Formulation . . . . . . . . . . . .|. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .|4|
+||3.2|Randomized DPP: Random Drop and Rescale (DARE) . . . . . . . . . . . . . . . . . . . .||5|
+||3.3|Importance-based DPP . . . . . .|. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .|5|
+|**4**|**Algorithms**|||**5**|
+||4.1|Adjusting the rescaling factor . . .|. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .|6|
+||4.2|AdamR fnetuning . . . . . . . . .|. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .|6|
+|**5**|**Experiments**|||**7**|
+||5.1|Rescaling-parameter modifcation|. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .|8|
+||5.2|AdamR-_L_2fnetuning . . . . . . .|. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .|9|
+||5.3|How to apply importance-based DPP and when is it competitive? . . . . . . . . . . . . . . .||10|
+|**6**|**Conclusions and limitations**|||**10**|
+|**Appendix**||||**15**|
+|**A **|**Importance-based DPP**|||**17**|
+|**B **|**Analysis on two-layer neural-network**|||**17**|
+|**C **|**Additional details**|||**18**|
+||C.1|Additional related Work . . . . . .|. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .|18|
+||C.2|Implementation details . . . . . .|. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .|19|
+||C.3|Proposed framework for DPP method selection. . . . . . . . . . . . . . . . . . . . . . . . .||19|
+||C.4|Controlling pruning with regularizaiton<br>. . . . . . . . . . . . . . . . . . . . . . . . . . . .||19|
+||C.5|AdamR-_L_1fnetuning . . . . . . .|. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .|20|
+||C.6|Scale of delta parameters . . . . .|. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .|21|
+||C.7|AdamR algorithm . . . . . . . . .|. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .|21|
+||C.8|DAREx-q algorithm . . . . . . . .|. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .|23|
+||C.9|Analytical Per-layer1_/_**q**<br>. . . . .|. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .|24|
+||C.10|Structural pruning . . . . . . . . .|. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .|25|
+||C.11|Comparison to sparse fnetuning .|. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .|25|
+||C.12|Random-based methods generally outperforms importance-based DPP . . . . . . . . . . . .||26|
+||C.13|Broader impact . . . . . . . . . .|. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .|26|
+|**D **|**Massive activation and outlier features**|||**27**|
+||D.1|Outlier feature (activation) . . . .|. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .|27|
+||D.2|Massive activation . . . . . . . . .|. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .|27|
+|**E**|**Proofs**|||**28**|
+||E.1|Proof of Theorem 3.1 . . . . . . .|. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .|28|
+|||E.1.1<br>Lower bound . . . . . . .|. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .|31|
+
+
+15 
+
+||E.2|Finding a rescaling factor balancing mean and variance . . . . . . . . . . . . . . . . . . . .|31|
+|---|---|---|---|
+|**F**|**DAREx-**_L_2**Training Analysis**||**33**|
+|**G **|**Additional Experiments on Scalability and Applicability**||**33**|
+||G.1|Performance on computer vision task . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .|34|
+||G.2|Performance on larger models<br>. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .|34|
+||G.3|LoRA with AdamR-_L_2 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .|35|
+
+
+16 
+
+## A IMPORTANCE-BASED DPP 
+
+In this section, we adapt importance-based pruning, which is traditionally popular for model parameter pruning, e.g. Han et al. (2015b); Li et al. (2018); Sun et al. (2023), into DPP. 
+
+**Magnitude pruning (MP).** Magnitude pruning Li et al. (2018) drops model weights according to their magnitudes: less “important” weights with smaller magnitudes are dropped. To extend its application to pruning delta parameters we evaluate importance in terms of the magnitudes of delta parameters, represented as ∆ _Sij_ := _|_ ∆ _Wij|_ . 
+
+**Pruning based on both weights and activations (WANDA).** Recently, WANDA was introduced by Sun et al. (2023) and was empirically found to achieve state-of-the-art pruning performance for LLMs. It evaluates the importance of each model weight using a score metric that scales the magnitude of the weight by the Euclidean norm of the input feature, thus accounting for the input activations. We extend WANDA to encompass delta parameters by adjusting the importance score to ∆ _Sij_ = _|_ ∆ _Wij| · ∥_ _**x** j∥_ 2. 
+
+For their respective scores, MP and WANDA (and any other importance-sampling method adapted to DPP) maintain the top- _k_ parameters in **∆** _**W**_ with the highest scores. Let _Sk ⊂_ [ _m_ ] _×_ [ _n_ ] be the set of indices ( _i, j_ ) that correspond to weights with the top- _k_ scores ∆ _Sij_ . Moreover, let _k_ := (1 _− p_ ) _mn_ so that the method retains the same number of delta parameters as DARE does in expectation. Accordingly, denote the set of selected weights with respect to _p_ as _Sp_ := _Sk_ . Then, putting in Eq. (1), the change for each output activation _i ∈_ [ _m_ ] can be expressed as: 
+
+**==> picture [281 x 18] intentionally omitted <==**
+
+where the summation extends over all input dimensions _j_ for which the ( _i, j_ ) entry of **∆** _**W**_ is dropped due to a low score. An importance sampling method can perform effectively even for large _p ≈_ 1 if the cumulative contributions from the summation are approximately zero out. This is guaranteed when the distribution of the entries [∆ _Wijxi_ ] _j∈_ [ _n_ ] has a light tail and high peakedness. We validate this in Secs. C.5 and B and accordingly propose AdamR- _L_ 1 fine-tuning to enhance their pruning performance (algorithm detailed in in Sec. C.7) 
+
+## B ANALYSIS ON TWO-LAYER NEURAL-NETWORK 
+
+Having gained analytical insights into the key factors that influence the performance of DPP methods in Sec. 3.2 and Sec. A, we now explore in detail how these factors influence DPP in a two-layer neural network. Concretely, for an input _**x** ∈_ R _[n]_ , the model output is _f_ ( _**x**_ ) = _**W** o_ N( _ϕ_ ( _**W**_ 1 N( _**x**_ ) + _**b**_ 1)) + _**b** o_ . Here, N denotes layer normalization (RMSnorm Zhang & Sennrich (2019) in our case), _ϕ_ is the ReLU activation function, _**W** o_ / _**b** o_ and _**W**_ 1 / _**b**_ 1 are the weights / biases of the output and the hidden layer respectively, and are all trainable (during both pre-training and fine-tuning). In our experiments, we pre-train the model on the CIFAR-10 dataset and use the SVNH dataset Sermanet et al. (2012) for the supervised fine-tuning task. 
+
+**Influence of variance and mean statistics on DARE (Fig. 5a):** Thm. 3.1 establishes how DARE’s performance, approximated by the magnitude of _h_[diff] _i_ , is influenced by the mean and variance statistics of _{cij}_ . Specifically, smaller values are favorable for performance. To verify this, we compare performance of DARE when the model is fine-tuned using _L_ 1/ _L_ 2 regularization with respect to the pre-trained parameters. Formally, recalling that **∆** _**θ**_ = _**θ** F −_ _**θ** P_ denotes the delta parameter of all trainable weights, we use regularization that penalizes the following: _∥_ **∆** _**θ** ∥r, r ∈{_ 1 _,_ 2 _}_ . _L_ 2 regularization directly corresponds to a smaller total energy ([�] _ij[c]_[2] _ij_[) of the] _[ {][c][ij][}]_[ parameters, which recall capture the degree of change in the] output layer after fine-tuning. This enters the bound in Thm. 3.1 and suggests that _L_ 2 regularization improves DARE’s performance. On the other hand, _L_ 1 regularization favors sparse **∆** _**θ**_ , thus also _{cij}_ . Intuitively, 
+
+17 
+
+Figure 5: Controlled experiments of DPP performance on two-layer neural net. (a) Influence of variance and mean statistics on DARE. (b) Influence of normalization layer. (c) _L_ 1 regularization for importance based pruning. (d) Methods with best-fitting regularization. 
+
+this increases the variance, thus we expect from Thm. 3.1 that _L_ 1 regularization might hurt performance. Fig. 5 (a) shows the test accuracy of DARE for varying values of pruning rate _p_ for three finetuning settings: no regularization (blue), _L_ 2 regularization (orange), and _L_ 1 regularization. The results confirm the insights above and thus support Thm. 3.1. 
+
+**Influence of normalization layer (Fig. 5b):** Normalization layers have become standard practice in deep learning due to their role in stabilizing training by normalizing the variance of activations, as established in Xu et al. (2019). In this study, we explore the impact of these layers on the performance of DARE. According to Thm. 3.1, reduced variance in activations (denoted as _xj_ s in our theorem setup) leads to decreased variance in the _{cij}_ coefficients, which in turn is predicted to enhance DARE’s effectiveness. This hypothesis is confirmed in Fig. 5 (b), where the absence of a normalization layer is shown to expedite the performance decline of DARE as pruning rates increase. Conversely, importance-based methods discussed in Sec. A demonstrate a higher tolerance to increased pruning rates without normalization. These observations are consistent with the discussions in Sec. A. 
+
+_L_ 1 **regularization for importance based pruning (Figure 5c):** In Sec. A, we discussed how importancebased DPP methods are favored. Here, we demonstrate this is indeed the case by using _L_ 1 regularization during finetuning to induce sparse delta parameters, which increases the variance. Concretely, as illustrated in Fig. 5c, introducing _L_ 1 regularization improves the performance of importance-based methods. Note also that, in this scenario, magnitude pruning outperforms WANDA due to the absence of outlier features Wei et al. (2022); Sun et al. (2023). 
+
+**Methods with best-fitting regularization(Fig. 5d):** In Fig 5d, we compare three methods with their corresponding best-fit regularization. As discussed above, DARE benefits from _L_ 2 regularization, while importance-based methods benefit from _L_ 1 regularization. We find that that DARE with _L_ 2 regularization is more robust with respect to the increase in pruning rate. On the other hand, importance based methods with _L_ 1 regularization perform the best for medium-range pruning rates. 
+
+## C ADDITIONAL DETAILS 
+
+## C.1 ADDITIONAL RELATED WORK 
+
+**Supervised fine-tuning of language models.** Supervised fine-tuning (SFT) of pre-trained LLMs is designed to enhance their capabilities by training on task-specific data, establishing a standard in natural language processing Dodge et al. (2020); Zhao et al. (2023). SFT can be categorized into full fine-tuning Devlin et al. (2018); Liu et al. (2019) and parameter-efficient fine-tuning (PEFT) Ding et al. (2023); Li & Liang (2021); Hu et al. (2021); Deng et al. (2024). However, recent studiesChen et al. (2022); Lu et al. (2023); 
+
+18 
+
+Yao & Klimovic (2023) suggest that PEFT methods may not yet achieve the model quality of full parameter fine-tuning, particularly in high-resource tasks Chen et al. (2022). Additionally, Liu et al. (2024) indicates that most models on the Open LLM Leaderboard are derived from full parameter fine-tunes or their merges. Consequently, this paper focuses on full model fine-tuning. 
+
+**Sparse finetuning.** An orthogonal approach to DPP is sparse fine-tuning, which reduces the size of delta parameters by modifying the fine-tuning process itself. This is achieved through techniques such as iterative masking and fine-tuning to create sparse DP (Guo et al., 2020; Liao et al., 2023; Fu et al., 2023). In contrast, DPP methods like DARE Yu et al. (2023a) are primarily post-hoc procedures that focus on pruning the delta weights of models that have already been fine-tuned, making DPP particularly valuable for the many fine-tuned models available on platforms like Hugging Face. 
+
+**Follow-up work on DARE.** The recent development of the DARE (Drops delta parameters And REscales) technique has significantly advanced the efficiency of finetuned-model pruning. This method sets most delta parameters to zero, maintaining the efficacy of Supervised Fine-Tuning without loss of performance. Highlighted in Goddard et al. (2024) within Arcee’s MergeKit, a toolkit for merging large LMs, DARE has shown great potential enhancing model merging processes and has various practical applications. It has been successfully implemented in projects such as Prometheus Kim et al. (2024), an open-source LM for evaluating other LMs, and in medical LMs like Biomistral Labrak et al. (2024), which develops LMs for medical applications. The technique also supports specialized domains, as seen in Akiba et al. (2024), which focuses on a Japanese LLM with advanced reasoning capabilities. These implementations highlight the broad applicability and effectiveness of DARE in enhancing model merging strategies, thus making our improvements particularly relevant and practical. 
+
+## C.2 IMPLEMENTATION DETAILS 
+
+For decoder LLMs, following Yu et al. (2023a), we set the temperature to 0.0 for greedy decoding and limit the maximum number of generated tokens to 1,024 on GSM8K. For encoder-based LMs, we fine-tune BERT-base-uncased and RoBERTa-base for 10 epochs using a warmup strategy and a learning rate of 1e-4. Experiments are conducted on NVIDIA A100 GPUs. 
+
+## C.3 PROPOSED FRAMEWORK FOR DPP METHOD SELECTION. 
+
+We outline the procedure for selecting appropriate DPP methods in practice. As illustrated in Fig 4, if fine-tuning is not permitted and the data points (DPs) have large statistics, we recommend using WANDA for DPP (see Sections 5.3). If the DPs are not large, DAREx-q with 1 _/qv_ should be applied when a validation set is available, otherwise, DAREx-q with 1 _/qe_ is recommended (see Sec. 4.1). If the existing DPs are insufficient and fine-tuning is allowed, we suggest using AdamR- _L_ 2 or _L_ 1 with appropriate regularization weights to generate highly prunable DPs for DAREx-q and MP, respectively (see Sec. C.7). Among the two, AdamR- _L_ 2+DAREx-q (DAREx- _L_ 2-q) should be prefered due to flexibility and better performance as shown in Table 9 and Table 5. 
+
+## C.4 CONTROLLING PRUNING WITH REGULARIZAITON 
+
+In this section, we demonstrate the magnitude of regularization weight can control the degree of pruning that is required. 
+
+Fig 6 (a-d) illustrates the AdamR- _L_ 2 fintuned RoBERTa model with different regularization weights on SST2, MRPC, COLA and STS-B datasets respectively and we use pruning rate _p ∈_ [0 _,_ 0 _._ 9 _,_ 0 _._ 99 _,_ 0 _._ 999] to prune the delta parameters. To separate different pruning rates in the figure, we set log scaled pruning _−log_ (1 _− p_ ) _/_ 3 = [0 _,_ 0 _._ 33 _,_ 0 _._ 67 _,_ 1 _._ 00] in x axis. With moderate regularization the model has a close 
+
+19 
+
+Figure 6: Control DARE pruning performance with _L_ 2 regularizaiton on RoBERTa.(a-d) demonstrate results on SST2, MRPC, COLA, and STS-B, respectively. Aligning the degree of regularization proportionally to the pruning rate can lead to optimal performance. 
+
+performance to models without regularizaiton (weight 0) (even better _i_ . _e_ .weight 0 _._ 01 in Fig 6 (a)). This indicate adding moderate regularization won’t hurt the model performance. To achieve moderate pruning performance _p_ = 0 _._ 99, we can choose moderate regularization. For example, in fig 6 (c), choose weight 0 _._ 05 achieves the best performance when pruning rate _p_ = 0 _._ 99 and outperforms the no regularization by more than 40% . When there is a need for extreme delta parameters pruning, it is recommended to increase the regularization weight. As shown in Figure 6 (d), weight 0 _._ 1 achieves the best performance when pruning rate _p_ = 0 _._ 999 and outperforms no regualrizaiton by 80 %. It is notable with _L_ 2 regualrization, all dataset can achieve 99 _._ 9% delta parameter pruning with minor performance drop. Finally, as shown in Fig 6 (d), a strong regularization weight 0 _._ 5 although face original performance drop, but demonstrate robustness (minor performance drop) to different level of pruning rate. 
+
+Fig 7 (a-d) depicts _L_ 2 fine-tuned BERT models with varied regularization weights on SST2, MRPC, COLA, and STS-B datasets, respectively. Pruning rates _p ∈_ [0 _,_ 0 _._ 9 _,_ 0 _._ 99 _,_ 0 _._ 999] are used. Log-scaled pruning _−log_ (1 _−p_ ) _/_ 3 = [0 _,_ 0 _._ 33 _,_ 0 _._ 67 _,_ 1 _._ 00] are plot to separate different rates on the x-axis. Moderate regularization yields performance close to models without regularization (weight 0), sometimes even better (e.g., weight 0 _._ 05 in Fig 7 (a)), suggesting it won’t hurt model performance. For moderate pruning ( _p_ = 0 _._ 99), moderate regularization suffices. For instance, in Fig 7 (a), weight 0 _._ 05 achieves optimal performance, outperforming no regularization by about 40%. For extreme pruning needs, increase the regularization weight. As in Fig 7 (b), weight 0 _._ 1 achieves peak performance at _p_ = 0 _._ 999, surpassing no regularization by 60%. Notably, with AdamR- _L_ 2, all datasets can achieve 99.9% DPP with minimal performance drop. Lastly, Fig 7 (c) shows that a strong weight of 0 _._ 1, despite an initial performance drop, exhibits robustness (minor drop) across different pruning rates. 
+
+## C.5 ADAMR- _L_ 1 FINETUNING 
+
+In this section, we focus on MP (Han et al., 2015a) and WANDA (Sun et al., 2023), utilizing AdamR- _L_ 1 to enhance pruning performance for importance-based methods. 
+
+**MP:** We demonstrate AdamR- _L_ 1 results in Table 7: the pruning rate consistently increased on datasets when applying magnitude pruning on _L_ 1 fintuned models. This indicates AdamR- _L_ 1 is an effective strategy in producing highly prunbale DPs for MP. 
+
+**WANDA:** As shown in Table 7, AdamR- _L_ 1 improved WANDA’s performance in most datasets. However, in the SST2 and STS-B datasets (Table 7), adding AdamR- _L_ 1 negatively impacted pruning performance, as indicated by the numbers in red. This is because WANDA considers outlier activations Dettmers et al. (2022) in LLMs and uses ∆ _Sij_ = _|_ ∆ _Wij| · |xj|_ as its metric. Thus, some important DPs may be pruned 
+
+20 
+
+Figure 7: Control DARE pruning performance with _L_ 2 regularization on BERT. (a-d) demonstrate results on SST2, MRPC, COLA, and STS-B, respectively. Aligning the degree of regularization proportionally to the pruning rate can lead to optimal performance. 
+
+Table 7: MP and WANDA with AdamR- _L_ 1 on BERT and RoBERTa across various datasets 
+
+|Models|SST2|SST2|SST2|SST2|SST2|SST2|SST2|SST2|COLA|COLA|COLA|COLA|COLA|COLA|COLA|COLA|
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+||p=0.0<br>p=0.90<br>p=0.95||||||p=0.99||p=0.0<br>p=0.90<br>p=0.95<br>p=0.99||||||||
+||original|_L_1|original|_L_1|original|_L_1|original|_L_1|original|_L_1|original|_L_1|original|_L_1|original|_L_1|
+|BERT-MP<br>BERT-WANDA|90.25|89.91|91.40<br>90.51|89.68<br>88.53|84.29<br>86.93|**89.22**<br>79.93|51.15<br>52.64|**83.14**<br>**63.19**|56.24|56.52|37.47<br>37.34|**47.49**<br>**45.29**|21.58<br>19.24|**44.59**<br>**46.09**|8.49<br>8.37|**12.30**<br>**10.85**|
+|RoBERTa-MP<br>RoBERTa-WANDA|92.09|92.55|90.27<br>92.12|**92.78**<br>91.74|84.86<br>92.35|**92.78**<br>89.45|68.00<br>76.15|**91.86**<br>72.82|62.10|60.16|24.88<br>34.64|**50.78**<br>**42.54**|6.56<br>0.07|**43.81**<br>**36.55**|0.00<br>0.00|**32.81**<br>**29.80**|
+|Models|MRPC||||||||STS-B||||||||
+||p=0.0<br>p=0.90<br>p=0.95||||||p=0.99||p=0.0<br>p=0.90<br>p=0.95<br>p=0.99||||||||
+||original|_L_1|original|_L_1|original|_L_1|original|_L_1|original|_L_1|original|_L_1|original|_L_1|original|_L_1|
+|BERT-MP<br>BERT-WANDA|85.01|84.35|66.14<br>72.85|**67.22**<br>64.22|15.81<br>22.75|**26.52**<br>**23.49**|15.81<br>15.81|15.81<br>15.81|88.51|85.12|82.79<br>80.71|**84.98**<br>76.11|42.31<br>50.70|**84.42**<br>**70.80**|55.80<br>40.92|**75.71**<br>**54.21**|
+|RoBERTa-MP<br>RoBERTa-WANDA|90.05|90.07|76.39<br>82.21|**85.17**<br>**84.68**|75.17<br>76.24|**78.93**<br>**78.86**|74.80<br>74.80|74.80<br>74.80|90.57|89.87|82.70<br>84.56|**87.43**<br>78.13|74.58<br>76.17|**86.25**<br>65.42|21.26<br>20.91|**58.53**<br>**25.87**|
+
+
+when AdamR- _L_ 1 is applied due to their small _|xj|_ . This suggests that important DPs are not always aligned with outlier activations, and that AdamR- _L_ 1 may not be the optimal strategy for improving WANDA. For further analysis of outlier activations, see Appendix D. 
+
+## C.6 SCALE OF DELTA PARAMETERS 
+
+As demonstrated in Theorem 3.1, DARE is effective at pruning DPs when the mean and variance of _cij_ are small, and it generally outperforms importance-based methods in such conditions, as shown in Table 12. While most fine-tuned LLMs typically introduce small DPs Yao & Klimovic (2023); Lee et al. (2019), and _x_ is small, as indicated in Table 8, where _|_ ∆ _Wijxj| ≪|_ ∆ _Wij|_ , there are still instances where delta parameters are large. Specifically, Table 8 reports the magnitudes of ∆ _W_ and _cij_ across various LLMs. For instance, the MetaMath-LLaMA-7B Yu et al. (2023b), which fine-tunes LLaMA2-7B using two large datasets—MetaMathQA Yu et al. (2023b) and Proof-Pile-2 Azerbayev et al. (2023)—yields a mean delta parameter magnitude of 0.017, significantly larger than that of Abel-7B and MetaMath-7B. As illustrated in Table 6, DARE experiences a substantial performance drop when the pruning rate exceeds 0.1. 
+
+## C.7 ADAMR ALGORITHM 
+
+With a simple model, Sec. B demonstrated how _L_ 1 and _L_ 2 regularization can enhance DPP. We now show that when modifications to model finetuning are allowed, our approach can scale up to LLMs. In order to implement our regularization strategy, we propose replacing the weight decay of AdamW—the standard choice for training LLMs—with our custom regularization, as described in Sec. 5.2 and Sec. C.5. However, we do this carefully since Xie et al. (2024) found recently that weight decay can lead to large gradient norms 
+
+21 
+
+Table 8: Magnitude Statistics of ∆ _Wij_ and ∆ _Wijxj_ of Llama2-7B fintuned LLMs on all dimensions and layers. 
+
+|Models|Magnitude|Magnitude|
+|---|---|---|
+||mean(_|_∆Wij_|_)|mean(_|_∆Wijxj_|_)|
+|Abel-7B<br>MetaMath-7B<br>Wizardmath-7B<br>MetaMath-llema-7B|7.3e-4 (4.3e-7)<br>7.2e-4 (3.3e-7)<br>4.0e-4 (1.0e-7)<br>0.017(1.9e-4)|2.89e-5 (5.41e-9)<br>2.85e-5 (6.02e-9)<br>1.56e-5 (1.67e-9)<br>7.0e-4(3.02 e-6)|
+
+
+in the final training phase, deteriorating convergence. To address this issue, following Xie et al. (2024) we adjust our regularization strength based on the gradient norm. We call our new optimizer as AdamR. Note regularization here is based on the DP rather than simply on the weights of the finetuned model. The detailed algorithm, which we call AdamR, is presented in Algorithm 1. 
+
+## **Algorithm 1** AdamR 
+
+**Input:** Pre-trained model _**θ** p_ , 1: _**g** t_ = _∇L_ ( _**θ** t−_ 1) 2: _**m** t_ = _β_ 1 _**m** t−_ 1 + (1 _− β_ 1) _**g** t_ 4:3:5:6: _**mvv** v_ ¯ˆˆ _ttt t_ ==== mean _β_ 1 _−_ 21 _**vm** −_ _**v** tβt_ 2 _β[t] t−_ 1(ˆ _[t]_ _**v**_ 1 + (1 _t_ ) _− β_ 2) _**g** t_[2] 7: _**θ** t_ = _**θ** t−_ 1 _−_ ~~_√_~~ _**v**_ ˆ _ηt_ + _ϵ_ _**[m]**_[ˆ] _[t][ −]_ ~~_√_~~ _v_ ¯ _ηt_ + _ϵ[λ]_[(] _**[θ]**[t][−]_[1] _[ −]_ _**[θ]**[p]_[)] _▷L_ 2 regularization 8: _**θ** t_ = _**θ** t−_ 1 _−_ ~~_√_~~ _**v**_ ˆ _ηt_ + _ϵ_ _**[m]**_[ˆ] _[t][ −]_ ~~_√_~~ _v_ ¯ _ηt_ + _ϵ[λ]_[sign(] _**[θ]**_[t] _[−]_[1] _[ −]_ _**[θ]**_[p][)] _▷L_ 1 regularization 
+
+Recall from Sec. B that _L_ 2 regularization promotes a small mean and variance of delta parameters, while _L_ 1 regularization encourages sparse updates on important parameters, leading to larger variance. We also emphasize that our regularization here is based on the DP rather than simply on the weights of the finetuned model. 
+
+22 
+
+## C.8 DAREX-Q ALGORITHM 
+
+**Algorithm 2** Empirically find _q_ 
+
+**Input:** Delta Weight **∆** _θ_ , Input Dataset _DI_ , Pre-trained Model _θP_ , Pruning Rate _p_ , Step Size ∆ _q_ (∆ _η_ ), Rounds _N_ . 1: **initialization:** error _min_ = inf 2: **for** _t ←_ 1 _→ N_ **do** 3: **if** Find global _q_ **then** 4: _qt_ = 1 _− p_ + _t ×_ ∆ _q ▷q ≥_ 1 _− p ′_ 5: **∆** _θ_ = _P_ ( **∆** _θ, qt_ ) _▷_ Prune and rescale by _qt_ 6: **else** 7: _ηt_ = _t ×_ ∆ _η_ 8: **q** _t_ = Algorithm 3( _ηt_ ) _▷_ Resolve per-layer rescaling factor. _′_ 9: **∆** _θ_ = _P_ ( **∆** _θ,_ **q** _t_ ) _▷_ Prune and rescale by **q** _t_ 10: **end if** _′_ 11: _θ[′]_ = _θP_ + **∆** _θ ▷_ Add pruned delta parameters to _θP_ 12: **if** _DI_ is Validation Dataset **then** 13: error = E( _x,y_ ) _∈DI_ 1 ( _f_ ( _θ[′] , x_ ) _̸_ = _y_ ) _▷_ (1) Validation _qv_ 14: **else** 15: error = E _x∈DI_ abs( _f_ ( _θ[′] , x_ ) _[L] − f_ ( _θP_ + **∆** _θ, x_ ) _[L]_ ) _▷_ (2) Last Layer’s change _qe_ 16: **end if** 17: **if** error _≤_ error _min_ **then** 18: error _min_ = error and _qbest_ = _qt_ ( **q** _best_ = **q** _t_ ) 19: **end if** 20: **end for** 21: Return _qbest_ ( **q** _best_ ) 
+
+**Algorithm 3** Analytically calculate _q_ 
+
+**Input:** Delta Weight **∆** _θ_ , Input _x_ , Pre-trained Model _θP_ , Pruning Rate _p_ , Step Size ∆ _q_ , Rounds _N ≤_ 1 _/_ ∆ _q_ , Empty _q_ List **q** = [ ], Probability _γ_ , Constant _η_ : 
+
+1: **initialization:** _x[′]_ = _x ▷_ Initialize layer input 2: **for ∆W** _,_ **W** _P ∈_ **∆** _θ, θP_ **do** _▷_ Loop each MLP layer 3: **initialization:** error _min_ = inf 4: **for** _t ←_ 1 _→ N_ **do** 5: _qt_ = 1 _− p_ + _t ×_ ∆ _q ▷q ≥_ 1 _− p_ 6: error = _Eq_ (5)( **∆W** _, qt, γ, x[′] , η_ ) _▷_ Evaluate the objective in Eq (5) for the given _q_ = _qt_ 7: **if** error _≤_ error _min_ and _t ̸_ = _N_ **then** 8: error _min_ = error and _qbest_ = _qt_ 9: **end if** 10: **end for** 11: **q** _.append_ ( _qbest_ ) _▷_ Add best _q_ for current layer 12: _x[′]_ = _f_ ( **∆W** + **W** _P , x_ ) _▷_ Calculate the output of the current layer of the fine-tuned model. 13: **end for** 14: Return **q** 
+
+In this section, we propose and describe three strategies to determine the global rescaling factor. The per-layer rescaling factor follows a similar approach to the global one, with slight adjustments in determining the _η_ and 
+
+23 
+
+resolving 1 _/_ **q** (see details in Algorithm 2 step 6.) **Empirically finding** 1 _/qv_ **using validation data:** In this approach, we use a validation dataset _{xv, yv} ∈ V_ to empirically determine the best rescaling factor _q_ . The goal is to solve the optimization problem arg min _q_ E _V_ ( _fq_ ( _xv_ ) = _yv_ ), where _fq_ represents the pruned model rescaled by 1 _/q_ . The process is as follows: 
+
+- _Optimization Process:_ We iterate over a range of _q_ values, adjusting the pruned model by rescaling with 1 _/q_ . For each _q_ , we measure the model’s performance on the validation set by comparing the model’s predictions _fq_ ( _xv_ ) to the true labels _yv_ . 
+
+- _Outcome:_ The _q_ value that results in the best performance on the validation set is selected as 1 _/qv_ . This 1 _/qv_ is expected to provide the best overall performance across all layers when evaluated against the validation set. 
+
+- _Algorithm Details:_ This process is detailed in Algorithm 2 with objective (1), which outlines the specific steps taken to find 1 _/qv_ . 
+
+**Empirically finding** 1 _/qe_ **using output change:** This method builds on the core idea from Thm 3.1, aiming to empirically determine a global rescaling factor _qe_ that balances the mean and variance in output embedding differences. Unlike the validation-based approach, this method does not rely on labeled data. Instead, it uses an unsupervised objective function based on the difference in the last layer’s output embedding before and after pruning and rescaling. _Procedure:_ 
+
+- _Data Usage:_ We select a single fixed batch of data, which could be drawn from the training set or any natural dataset. 
+
+- _Inference:_ The selected batch is passed through both the pruned and original models, and the output embeddings are compared. 
+
+- _Optimization:_ The goal is to find the rescaling factor _qe_ that minimizes the difference between these embeddings, ensuring that the rescaled pruned model closely approximates the original model’s output. 
+
+_Efficiency:_ This method is highly efficient as it only requires inference on a single batch of data, avoiding the need for a full validation set. _Algorithm Details:_ The specific steps for this method are outlined in Algorithm 2 with objective (2), which provides a detailed procedure for determining 1 _/qe_ . 
+
+## C.9 ANALYTICAL PER-LAYER 1 _/_ **q** 
+
+The challenge in naively implementing a per-layer tuning of the rescaling factor is that if _q[ℓ]_ were selected to optimize, say, the mean output change _|h_[diff] _i |_ averaged over all neurons in the _ℓ_ -th layer, this would require _L_ searches, which is computationally intractable. Instead, we turn to theory for a more efficient solution. 
+
+Our approach extends Thm.3.1 , which bounds _|h_[diff] _i |_ for _q_ = 1 _− p_ , to obtain a high-probability bound for arbitrary _q_ . This involves bounding both the mean (which is now non-zero) and the variance, then optimizing this bound over _q_ for each layer. In view of Thm. 3.1, it is unsurprising that the bound depends on the firstand second-order statistics of the coefficients _cij_ . Consequently, the optimal _q_ can indeed vary per layer, depending on these statistics. 
+
+We need a high-probability bound that holds for all values of _q_ , even as _q_ becomes small (on the order of, but still larger than, 1 _− p_ ). In more detail, following the machinery of Thm. 3.1 to bound _|h_[diff] _i |_ , we apply Markov’s inequality to the Laplace transform E[ _e[η][|][h] i_[diff] _|_ ], _η >_ 0. After some careful calculations (see App. E.2), for each fixed _η_ , we can define _q[ℓ]_ ( _η_ ) by solving a one-dimensional minimization problem involving _η_ , _p_ , and the statistics of _c[ℓ] ij_[of the respective] _[ ℓ]_[-th layer (which are measurable).][Specifically, this is given as] 
+
+24 
+
+follows, for some probability of failure _γ ∈_ (0 _,_ 1): 
+
+**==> picture [360 x 31] intentionally omitted <==**
+
+In typical concentration bounds, one selects the optimal _η_ by minimizing the upper bound obtained via Markov’s inequality. However, this optimal _η_ is inversely proportional to _q_[2] . For the small _q_ values we are interested in here (on the order of 1 _− p_ ), this makes Markov’s inequality loose. Instead, we propose selecting _η_ by a grid search over the mean output change of the last layer after rescaling with _q[L]_ ( _η_ ). This yields a value of _η_ = _ηe_ . 
+
+To give flexibility to the rescaling factors of other layers, allowing them to adjust based on the individual statistics of _cij_ , while avoiding grid searches for all layers, we use the same value of _η_ = _ηe_ and rescale each layer with _q[ℓ]_ ( _ηe_ ). We denote the vector of selected per-layer rescaling factors as 1 _/_ **q** _e_ = [1 _/q_[1] ( _ηe_ ) _, . . . ,_ 1 _/q[L]_ ( _ηe_ )]. Additionally, by selecting _η_ by optimizing the performance on validation set rather than the mean output change (denote this _ηv_ ), we can arrive at an alternative implementation, 1 _/_ **q** _v_ = [1 _/q_[1] ( _ηv_ ) _, . . . ,_ 1 _/q[L]_ ( _ηv_ )], when labeled validation data are available. 
+
+## C.10 STRUCTURAL PRUNING 
+
+Our random-based DAREx-q can also be utilized for structural DPP for enhanced hardware efficiency (Shen et al., 2022; Yao & Klimovic, 2023). In this setup, we randomly select _a_ % of the input dimensions of a MLP layer and randomly retain _b_ % of the DPs within the selected dimensions, achieving a total structured DP pruning rate of 
+
+Table 9: Structural Pruning on BERT. 
+
+|Dataset(_p_= 0_._99)|SST2|COLA|
+|---|---|---|
+|DARE<br>Struct-DAREx-q (1_/qv_)<br>Struct-DAREx-_L_2-q (1_/qv_)|51.00 (0.23)<br>83.40 (1.92)<br>**87.64(0.47)**|6.25 (1.41)<br>39.09 (1.50)<br>**53.71(1.74)**|
+
+
+_p_ = _a · b_ %. In Table 9 we use _a_ = 5 _, b_ = 20, resulting in an equivalent pruning ratio _p_ = 0 _._ 99. Our results show that DAREx-q significantly outperforms DARE, achieving over a 30% improvement. AdamR- _L_ 2 unlocks the potential of random-based DPP for structural pruning, improving DARE without _L_ 2 finetuning by over 40%. 
+
+## C.11 COMPARISON TO SPARSE FINETUNING 
+
+Sparse Finetuning (SFT) selects key weights by directly altering the fine-tuning process, using methods like iterative masking and fine-tuning to achieve sparse parameterization. In contrast, our DAREx-q are primarily post-hoc techniques that prune the weights of models after they have been fine-tuned. 
+
+We compare DPP with sparse fine-tuning Guo et al. (2020), evaluating both on the BERT-Large model. Consistent with Guo et al. (2020), we assess the performance of vanilla DARE and our DAREx-q with a rescaling factor of 1 _/qv_ , using a pruning rate of _p_ = 0 _._ 995 (retaining only 0.5% of weights). As shown in Table 10, for MRPC and SST2, vanilla DARE performs slightly below the Diff-struct method, while DAREx-q remains competitive with Diff-struct and surpasses Diff. For STS-B and COLA, vanilla DARE underperforms, but our DAREx-q restores performance, making it competitive with Diff-struct and superior to Diff. Moreover, a key advantage of our DAREx-q is that it is a post-hoc method, allowing for easy application to pre-fine-tuned models, and is simpler to implement. 
+
+Next, we conduct an additional experiment to examine how our proposed method—combining the post-hoc DARE with AdamR- _L_ 2 (DAREx- _L_ 2)—compares to sparse fine-tuning. As shown in Table 11, for a pruning rate of _p_ = 0 _._ 999, DAREx- _L_ 2 outperforms the baseline across both datasets. It’s important to note that, similar to sparse fine-tuning, AdamR- _L_ 2 modifies the fine-tuning process. However, AdamR- _L_ 2 only replaces 
+
+25 
+
+Table 10: Comparison DAREx-q with SFT 
+
+Table 11: Comparison DAREx- _L_ 2 with SFT 
+
+|_p_= 0_._995|MRPC|STS-B|COLA|SST2||_p_= 0_._999|MRPC|STS-B|
+|---|---|---|---|---|---|---|---|---|
+|Full-tune<br>Diff<br>Diff-struct<br>DARE<br>DAREx-q (1_/qv_)|91.0<br>87.0<br>89.7<br>89.6<br>**89.9**|86.9<br>83.5<br>**86.0**<br>0.00<br>84.2|61.2<br>60.5<br>**61.1**<br>53.2<br>60.1|93.2<br>92.5<br>**93.1**<br>90.1<br>92.2||Full-tune<br>Diff<br>Diff-struct<br>DARE<br>DAREx-_L_2(ours)|91.0<br>86.2<br>88.2<br>70.2<br>**88.5**|86.9<br>82.9<br>85.2<br>0.00<br>**86.3**|
+
+
+Table 12: Similar to Table 2, **DAREx-q consistently provides significant gains for decoder models** . 
+
+|Dataset|GSM8K|GSM8K|GSM8K|GSM8K|GSM8K|GSM8K|GSM8K|GSM8K|GSM8K|GSM8K|GSM8K|GSM8K|GSM8K|GSM8K|
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+|Methods|Abel-7B||||MetaMath-7B||||WizardMath-7B|||MetaMath-Qwen2-0.5B|||
+||_p_= 0_._95||_p_= 0_._99||_p_= 0_._95||_p_= 0_._99||_p_= 0_._95||_p_= 0_._99|_p_= 0_._95|_p_= 0_._99||
+|No Pruning||58.32||||65.50||||54.90||42.00|||
+|WANDA<br>MP<br>DARE||18.20<br>15.16<br>37.30||0.00<br>0.00<br>0.00||23.58<br>22.82<br>58.22||0.00<br>0.00<br>0.00||21.50<br>12.00<br>47.10|0.00<br>14.50<br>0.00|0.00<br>0.00<br>0.00||0.00<br>0.00<br>0.00|
+|DAREx-q (1_/qv_)<br>DAREx-q (1_/_**q**_v_)<br>DAREx-q (1_/qe_)<br>DAREx-q (1_/_**q**_e_)||**47.20**<br>44.50<br>42.99<br>42.84||20.20<br>20.00<br>**21.30**<br>19.63||59.05<br>59.28<br>**60.34**<br>59.28||**34.87**<br>32.06<br>32.60<br>28.05||49.81<br>**50.64**<br>49.05<br>**50.64**|**35.63**<br>34.34<br>33.97<br>33.58|**30.70**<br>29.56<br>30.32<br>28.80||**19.17**<br>18.65<br>18.95<br>17.66|
+
+
+the original AdamW optimizer while keeping the same task loss objective, making it a simpler implementation compared to methods like Diff, which require additional modifications. 
+
+## C.12 RANDOM-BASED METHODS GENERALLY OUTPERFORMS IMPORTANCE-BASED DPP 
+
+When DPs are not large, we show that random-based methods consistently outperform importance-based methods across all cases on decoder models, as presented in Table 12, with our DAREx-q achieving more than a 30% improvement. 
+
+## C.13 BROADER IMPACT 
+
+As discussed in Section 1 and demonstrated in prior work, DPP offers potential advantages for online serving, gradient communication in Federated Learning, and storage efficiency. Our systematic study of DPP methods and the proposed strategies that improve performance of existing methods can thus positively impact the usage of LLMs. We analyzed the impact of our approach on the efficiency of the machine learning system. 
+
+As stated in the introduction, a high pruning rate can benefit online serving, gradient communication in Federated Learning, and storage saving. To showcase this effectiveness, we compare the delta parameter loading time, the number of communication parameters, and the storage size at various pruning rates, as detailed in Table 13. Firstly, we found that the time to load the sparse compressed model decreases significantly as the pruning rate increases. In Federated Learning, only _p_ % of the parameters need to be communicated, greatly enhancing communication efficiency. Additionally, when applied to storage saving, we further reduce memory usage by converting sparse tensors to CSR format, resulting in only 1.7 MB and 7.5 MB of storage with a 99.9% pruning rate for BERT and RoBERTa respectively. Consequently, pruning delta parameters can effectively enhance the efficiency of machine learning systems. 
+
+26 
+
+Table 13: Loading, Communication, Storage Efficiency with different pruning rate 
+
+|Models|LoadingTime(s)|LoadingTime(s)|LoadingTime(s)|LoadingTime(s)|Communication Size(#parameters)|Communication Size(#parameters)|Communication Size(#parameters)|Communication Size(#parameters)|CSR Storage Size(MB)|CSR Storage Size(MB)|CSR Storage Size(MB)|CSR Storage Size(MB)|
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+||pruningrate _p_||||pruningrate _p_||||pruningrate _p_||||
+||No Pruning|0_._9|0_._99|0_._999|No Pruning|0_._9|0_._99|0_._999|No Pruning|0_._9|0_._99|0_._999|
+|BERT|0.143|0.120|0.035|0.023|_≈_110 M|_≈_11 M|_≈_1.1 M|_≈_0.11 M|417.7|108.7|11.4|1.7|
+|RoBERTa|0.165|0.125|0.038|0.026|_≈_125M|_≈_12.5M|_≈_1.25M|_≈_0.125M|475.6|102.3|16.2|7.5|
+
+
+Figure 8: Analysis Outlier Features and the ∆ _Wx_ with SST2 fintuned RoBERTa. Mean (green line) means average of all feature dimensions. The ∆ _Wx_ is extremely small on average. 
+
+## D MASSIVE ACTIVATION AND OUTLIER FEATURES 
+
+Since Transformer-based models contain significantly large outliers that tend to concentrate in a few embedding dimensions Wei et al. (2022), and LLMs exhibit massive activations with high magnitude values on unique dimensions for specific tokens Sun et al. (2024), we analyze the influence of these large magnitude values in our study. 
+
+## D.1 OUTLIER FEATURE (ACTIVATION) 
+
+In this section, we empirically show the influence of outlier features. As shown in Table 7, WANDA outperforms MP on SST2, MRPC in original fintuned model, which indicates the validity of considering outlier features in DPP. Although outlier features will introduce larger activation inputs than normal features (Fig 8 (a)), with small delta parameter change, the mean and variance of ∆ _Wijxij_ is still small (Fig 8 (b-c)) thus making DARE works well in delta parameter pruning. As a result, DARE results (Table 5 and Fig 7) outperforms that of WANDA and MP. 
+
+## D.2 MASSIVE ACTIVATION 
+
+The decoder based large language models (larger than 7-B) have massive activation Sun et al. (2024) that embrace large value on unique dimension on unique tokens ( _i_ . _e_ .first token of a input). We leverage MetaMathllema-7B Yu et al. (2023b) which finetune Llama2-7B with math datasets. We analyze each attention layer’s input activations and identified the 2533-th,1415-th and 1512-th dimension as the massive activations, and shown in Fig 9 (a). It is notable 2533-th and 1415-th dimension is aligned with the pretrain model Llama2-7B’s massive activation dimension Sun et al. (2024), but we have one new 1512-th dimension in MetaMath-llema-7B. When then studied the impact of layer normalization and found the massive activations is heavily downscaled by the layer normalizaiton’s scale multiplier, which may fail to being considered as important by Wanda. We furtherly study the influence on removing the delta parameters that correspond to the those large manitude features by evaluating the results on GSM8K dataset. As shown in Table 14, 
+
+27 
+
+Figure 9: Analysis on Massive Activation and Outlier Features on MetaMath-llema-7B 
+
+removing the 1512-th massive activation features will bring significant performance drop. As a result, we suggest to maintain the delta parameters related to new massive activation features. 
+
+Table 14: Influnece of the delta parameters that correspond to large manitude features. Evaluation accuracy on GSM8K dataset. 
+
+|ID|Prune Status|Accuracy|
+|---|---|---|
+|None|No Pruning|64.50|
+|2533|Massive Activations|62.50|
+|1512|Massive Activations|48.00|
+|1415|Massive Activations|65.50|
+|3431|Outlier Feature|61.00|
+|2158|Outlier Feature|64.50|
+|2350|Outlier Feature|62.50|
+
+
+## E PROOFS 
+
+## E.1 PROOF OF THEOREM 3.1 
+
+The proof employs Hoeffding’s inequality for subgaussian random variables. However, a straightforward application results in suboptimal dependence of the bound on the drop-rate _p_ . Instead, we utilize a refinement of Hoeffding’s bound tailored for (generalized) Bernoulli random variables, as developed by Kearns and Saul Kearns & Saul (2013). For large values of _p_ , we adopt the improved bound proposed by Berend and Kontorovich Berend & Kontorovich (2013). These adaptations are detailed below. 
+
+28 
+
+Recall from Eq. (2) that the entries of _**h**_[diff] are given as 
+
+**==> picture [311 x 29] intentionally omitted <==**
+
+where _δij_ are iid Bernoulli(1 _−_ p) random variables. Fix any _i ∈_ [ _m_ ]. Note _h_[diff] _i_ is weighted sum of _n_ iid random variables 
+
+**==> picture [96 x 23] intentionally omitted <==**
+
+We make the following observations about these random variables. First, a simple calculation gives that they are zero-mean, i.e. E[ _Aij_ ] = 0 for all _j ∈_ [ _n_ ]. Second, the random variables are bounded satisfying _−_ 1 _−p p[≤][A][ij][≤]_[1][.][Third, a simple calculations yields their variance][ V][(] _[A][ij]_[) =] _[ p/]_[(1] _[ −][p]_[)][.] 
+
+Based on these, perhaps a first attempt in bounding _|h_[diff] _i |_ is applying Chebychev’s inequality: For any _t >_ 0, Pr( _|h_[diff] _i −_ E( _h_[diff] _i_ ) _| ≥ t_ ) _≤_[V][(] _[h] t_[2] _i_[diff] ) _._ 
+
+Using the mean and variance calculations above, this yields with probability at least 1 _− γ_ : 
+
+**==> picture [154 x 37] intentionally omitted <==**
+
+The drawback is of course that this scales poorly with _γ_ . 
+
+The natural way to improve the dependence of the bound on _γ_ is to use stronger concentration as materialized by a Chernoff bound. Since _Aij_ s are bounded, we can immediately apply Hoeffdings inequality for bounded random variables (Vershynin, 2020, Thm. 2.2.6) to find that for any _t >_ 0: 
+
+**==> picture [248 x 31] intentionally omitted <==**
+
+Therefore, for any _γ ∈_ (0 _,_ 1) the following holds with probability at least 1 _− γ_ : 
+
+**==> picture [180 x 35] intentionally omitted <==**
+
+Note the significant improvement over Chebychev’s bound with respect to the scaling factor _γ_ . However, the bound remains relatively loose in terms of _p_ for values of _p_ near the extremes of its range. To see this note that as _p ≈_ 0, for which _Aij ≈_ 0 and V( _Aij_ ) = _p/_ (1 _− p_ ) _≈_ 0. Conversely, Hoeffding’s bound, which scales as 1 _/_ (1 _− p_ ), does not decrease as _p_ gets smaller. To get an improved bound, we can apply the Kearns-Saul ineqaulity (Kearns & Saul, 2013, Theorem 2), which is better suited for managing the characteristics of the distribution as _p_ approaches extremal values. 
+
+**Theorem E.1** (Kearns & Saul (2013)) **.** _Let Rj ∈{_ 0 _,_ 1 _} be iid_ Bernoulli(1 _−_ pj) _for j ∈_ [ _n_ ] _. Let also constants αj, j ∈_ [ _n_ ] _. Then, for all t >_ 0 
+
+**==> picture [330 x 37] intentionally omitted <==**
+
+_where χ_[2] :=[�] _j∈_ [ _n_ ] _[α] j_[2][Φ(] _[p][j]_[)] _[, and]_ 
+
+**==> picture [256 x 25] intentionally omitted <==**
+
+29 
+
+**==> picture [258 x 193] intentionally omitted <==**
+
+**----- Start of picture text -----**<br>
+10 Hoeffding<br>Kearns-Saul<br>Berend-Kontorovich<br>8<br>6<br>4<br>2<br>0<br>0.0 0.2 0.4 0.6 0.8 1.0<br>p<br>**----- End of picture text -----**<br>
+
+
+Figure 10: Visualization of the Hoeffding, Kearns-Saul and Berend-Kontorovich bounds. Note that the last is significantly improved over the vanilla Hoeffding bound for small/large values of _p_ . Large values of _p_ corresponding to large drop-rates are particularly interesting in the DPP setting. Note also that all three bounds diverge as _p →_ 1. This is because of the rescaling factor 1 _/_ (1 _− p_ ). However, note that the Berend-Kontorovich bound diverges significantly slower. This further signifies the importance of using this versus the vanilla Hoeffding bound to provide an explanation on why DARE performs well even for large values of _p_ . See proof of Thm. 3.1 for details. 
+
+Applied to our setting, let _Rj ← δij_ and _αj ←_ 1 _−_ 1 _p[c][ij]_[.][Then,][the][sum][on][the][LHS][of][(6)][is][equal][to] _−_[�] _j∈_ [ _n_ ] _[A][ij]_[and] _[ χ]_[2][=] (1Φ _−_ ( _pp_ ))[2] � _j∈_ [ _n_ ] _[c]_[2] _ij_[.][Put together, this gives for any] _[ t >]_[ 0][:] 
+
+**==> picture [222 x 31] intentionally omitted <==**
+
+where Φ( _p_ ) := log((11 _−−_ 2 _pp_ ) _/p_ )[.][Thus, for any] _[ γ][∈]_[(0] _[,]_[ 1)][ the following holds with probability at least][ 1] _[ −][γ]_[:] 
+
+**==> picture [305 x 36] intentionally omitted <==**
+
+To see why this improves upon Hoeffding’s bound, note that the following hold for Φ( _p_ ): 
+
+1. Φ( _p_ ) _≤_ 1 _/_ 2 for all _p ∈_ [0 _,_ 1] 
+
+2. Φ(0) _→_ 0 as _p →_ 0 or _p →_ 1. 
+
+The first property shows that the bound is strictly better than Hoeffding’s for all values of _p_ . The second property shows that the bound approaches 0 as _p ≈_ 0, which is intuitive since in that case _Aij ≈_ 0 and V( _Aij_ ) _≈_ 0. On the other hand, for _p →_ 1, it is easy to show that �Φ( _p_ ) _/_ (1 _− p_ ) _→_ + _∞_ . Hence, both Hoeffding and this improved bound predict that _|h_[diff] _i |_ can be large as _p →_ 1. It turns out that the Kearns-Saul bound can be further improved for _p ≥_ 1 _/_ 2. Such an improvement is 
+
+30 
+
+important in our setting, since large drop-rates _p ≫_ 1 _/_ 2 are of particular interest in DPP. The improved inequality is due to (Berend & Kontorovich, 2013, Lemma 5). When applied to our setting, it improves the 2 _p_ first term in to � _p−_ 1[.] 
+
+To arrive now at the advertised statement of the theorem simply rewrite[�] _j∈_ [ _n_ ] _[c]_[2] _ij_[in terms of the mean and] variance of the influence statistics 
+
+**==> picture [159 x 29] intentionally omitted <==**
+
+This completes the proof of the theorem. 
+
+For completeness, we visualize the three bounds that we discussed above in Figure 10. The lower the better, thus note how the Kearns-Saul bound improves over naive Hoeffding and the Berend-Kontorovich bound improves over both for _p >_ 1 _/_ 2. In fact, this bound is tight as it can be seen from the central limit theorem as follows: From Eq. (2), the output change can be expressed as (dropping the subscript _i_ for convenience): _h_ =[�] _j∈_ [ _n_ ] _[c][j]_[(1] _[ −]_[1] _[/]_[(1] _[ −][p]_[)] _[δ][j]_[)][ where] _[ δ][j]_[are iid][ Bernoulli][(1] _[ −][p]_[)][ RVs, we have dropped the subscript] _[ i]_ from Eq. (2) for simplicity and we have denoted _cj_ = ∆ _Wjxj_ . Our goal is to quantify the growth of the absolute output change _|h|_ . Note that the random variables _Yj_ = 1 _−_ 1 _/_ (1 _− p_ ) _δj_ have _E_ [ _Yj_ ] = 0 and _V ar_ [ _Yj_ ] = _c_[2] _i[p/]_[(1] _[ −][p]_[)][.][Thus, by the central limit theorem, in the limit of large] _[ n]_[, the (normalized) output] change (1 _/[√] n_ ) _|h|_ is distributed as � _p/_ (1 _− p_ ) ~~�~~ � _i[c] i_[2] _[|][G][|]_[ where] _[ G]_[ is a standard normal.][Note the scaling] � _p/_ (1 _− p_ )[�] _i[c] i_[2][precisely matches the bound of Thm 3.1 for] _[ p >]_[ 1] _[/]_[2][, demonstrating that it captures the] true behavior of the output change with respect to _p_ . The exponential high-probability bound of Thm 3.1 follows by a Hoeffding-type bound, but as demonstrated in Fig 10, to achieve this optimal p-scaling, we use a bound by Berend and Kontorovich that improves upon Hoeffding’s bound on the moment generating function for generalized Bernoulli RVs. 
+
+## E.1.1 LOWER BOUND 
+
+## E.2 FINDING A RESCALING FACTOR BALANCING MEAN AND VARIANCE 
+
+This section complements Sec. C.9 that describes the per-layer version of DAREx-q. Specifically, we show how to derive Eq. (5). 
+
+We study a more general version of DARE that rescales with a parameter _q_ that is not necessarily set to 1 _/_ (1 _− p_ ). In this case, we have _Aij_ = �1 _−_[1] _q[δ][ij]_ � _cij,_ which we can rewrite as follows: 
+
+**==> picture [210 x 40] intentionally omitted <==**
+
+Following Kearns & Saul (2013), for any random variable _X_ , it holds that Pr( _X >_ 0) =[1] 2[E] �1 + _|XX|_ �. Observe that[1] _X_[for any positive number] _[ η][>]_[ 0] _[, whereη]_[ is a small positive number to ensure] 2[(1 +] _|X|_[)] _[ ≤][e][ηX]_ tightness of Eq. (9). Then, we obtain (alternatively, but equivalently, we can apply Markov’s inequality to the 
+
+31 
+
+## Laplace transform): 
+
+**==> picture [423 x 117] intentionally omitted <==**
+
+_c_[2] _ij −_ 2(� _j[µ][ij][−][ϵ]_[)] Since _q_[2][Φ(] _[p]_[)] _[ ≥]_[0][, choosing the optimal] _[ η]_[=] Φ _q_ ([2] _p_ ) � _j[c]_[2] _ij_ minimizes Eq. (10). However, this may result in a large _η_ especially for small _q_ that is of interest to us. When _η_ = _−_ 2Φ _q_ (([2] � _p_ ) _j_ � _[µ] j[ij][c][−]_[2] _ij[ϵ]_[)][, for all] _[ ϵ >]_[ 0][, we have:] 
+
+**==> picture [295 x 36] intentionally omitted <==**
+
+**==> picture [403 x 65] intentionally omitted <==**
+
+Since _η ≥_ 0, the second condition is always satisfied. Therefore, 
+
+**==> picture [365 x 56] intentionally omitted <==**
+
+**==> picture [278 x 70] intentionally omitted <==**
+
+Then the min value can be obtained by taking 
+
+**==> picture [141 x 34] intentionally omitted <==**
+
+32 
+
+Figure 11: The training loss curves for delta decay and weight decay on the MRPC, COLA, and STSB datasets using BERT are compared. Both delta decay and weight decay exhibit similar training loss dynamics. 
+
+**==> picture [430 x 14] intentionally omitted <==**
+
+increasing _q_ towards infinity is favorable. However, given _η_ = _−_ 2( _j cqj_[2] _i_[2] _j[µ]_[Φ(] _[ij][−][p]_[)] _[ϵ]_[)] , _η_ also tends to infinity, causing 
+
+the loosening of Eq. (9). Thus, we propose selecting a fixed _η⋆_ to ensure the overall consistency of the inequalities in Eq. (9) and Eq. (10). Specifically, in our implementation of DAREx-q with per-layer tuning, _η∗_ is computed via grid search (see Sec. C.9). Substituting _η_ = _η⋆_ into Eq. (10), we obtain: 
+
+**==> picture [334 x 27] intentionally omitted <==**
+
+Given _η⋆_ , we can find the optimal _q_ to minimize _|ϵ|_ in Eq. (12), which arrives at Eq. (5). 
+
+## F DAREX- _L_ 2 TRAINING ANALYSIS 
+
+In this section, we analyze the training dynamics of AdamR, with a focus on DAREx- _L_ 2. To align with the weight decay terminology and for simplicity, we refer to our DAREx- _L_ 2 as “delta decay” in this section. 
+
+Concretely, we empirically inspect the training loss curve of delta decay and compare it with the (vanilla) weight decay. To be specific, we finetune a pretrained BERT-base model on MRPC, COLA and STSB datasets by using weight decay and delta decay respectively, then we plot the training loss curves for three fine-tuning tasks under different regularization strengths. 
+
+**Similar training dynamic to weight decay.** When using a reasonable regularization strength, as shown in Fig. 11, delta decay maintains stability and convergence on par with standard weight decay. This supports that delta decay having similar convergence and training dynamics. 
+
+**Large regularization.** We further increasing the regularization weight to 1 _e[−]_[2] and demonstrate the results in Fig 12. The results show that delta decay maintains stable training under a large regularization strength, whereas standard weight decay struggles and fails to converge. 
+
+## G ADDITIONAL EXPERIMENTS ON SCALABILITY AND APPLICABILITY 
+
+In this section, we conducted extra experiments to show our method’s strong scalability and applicability. 
+
+33 
+
+Figure 12: The training loss curves for delta decay and weight decay on the MRPC, COLA, and STSB datasets using BERT are analyzed under higher regularization strength. Delta decay is able to adapt to a larger regularization weight, whereas weight decay fails. 
+
+Table 15: Performance on CIFAR-100-ViT and Meta-Math-13B models. 
+
+|Dataset|CIFAR-100<br>GSM8K|CIFAR-100<br>GSM8K|CIFAR-100<br>GSM8K|CIFAR-100<br>GSM8K|
+|---|---|---|---|---|
+|Methods|CIFAR-100-ViT||MetaMath-13B||
+||_p_= 0_._9|_p_= 0_._99|_p_= 0_._9|_p_= 0_._99|
+|No Pruning<br>DARE<br>DAREx-q (1_/qv_)<br>DAREx-_L_2|91.98<br>90.53<br>32.74<br>**91.68**<br>**84.11**<br>91.01<br>83.84||72.32<br>67.09<br>0.00<br>**68.84**<br>**44.73**<br>-<br>-||
+
+
+## G.1 PERFORMANCE ON COMPUTER VISION TASK 
+
+We evaluated our method on computer vision tasks using a Vision Transformer (ViT) Dosovitskiy (2020) model pretrained on ImageNet-21k Ridnik et al. (2021) and fine-tuned on the CIFAR-100 dataset. As shown in Table 15, our approach consistently outperforms DARE across all scenarios, demonstrating substantial performance gains. Most notably, it achieves an improvement of over 50% at a pruning rate of 0.99 compared to baseline methods. These findings highlight the versatility of our method, showcasing its effectiveness not only in NLP tasks but also in the domain of computer vision. 
+
+## G.2 PERFORMANCE ON LARGER MODELS 
+
+We extended our method to the larger Llama2-13B model, fine-tuned on the MetaMath dataset Yu et al. (2023b), and assessed its performance on GSM8K. Despite computational constraints that limited us from fine-tuning the 13B model, DARq consistently outperformed other methods at both pruning rates (0.9 and 0.99), as detailed in Table 15. Notably, at a pruning rate of 0.99, DARq achieved an impressive performance improvement of over 44%. These results, alongside the consistent gains observed across different tasks ( _e_ . _g_ ., computer vision and NLP) and model scales ( _e_ . _g_ ., 0.5B, 7B and 13B), highlight the scalability and versatility of our method and demonstrate its potential for even larger models. 
+
+34 
+
+Table 16: Performance of AdamR-L2 on LoRA. 
+
+|_p_= 0_._99|SST2|COLA|MRPC|STSB|
+|---|---|---|---|---|
+|DARE<br>AdamR-L2+DARE|50.57<br>**87.73**|3.62<br>**42.21**|49.77<br>**77.82**|5.23<br>**85.93**|
+
+
+## G.3 LORA WITH ADAMR- _L_ 2 
+
+This section presents the results of DARE on LoRA tuning and AdamR-L2 regularized LoRA tuning for SST2, COLA, MRPC, and STSB at a pruning rate of _p_ = 0 _._ 99. As shown in Table 16, AdamR-L2 significantly improves DARE’s performance across all tasks, achieving over a 30% improvement on each task and an impressive 80% gain on STSB. 
+
+35

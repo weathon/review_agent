@@ -1,0 +1,308 @@
+# MLLM AS RETRIEVER: INTERACTIVELY LEARNING MULTIMODAL RETRIEVAL FOR EMBODIED AGENTS
+
+Junpeng Yue<sup>1\*</sup>, Xinrun Xu<sup>2</sup>, Börje F. Karlsson<sup>3</sup>, and Zongqing Lu<sup>1†</sup>
+
+<sup>1</sup>School of Computer Science, Peking University
+
+<sup>2</sup>Institute of Software, Chinese Academy of Sciences
+
+<sup>3</sup>Beijing Academy of Artificial Intelligence
+
+## ABSTRACT
+
+MLLM agents demonstrate potential for complex embodied tasks by retrieving multimodal task-relevant trajectory data. However, current retrieval methods primarily focus on surface-level similarities of textual or visual cues in trajectories, neglecting their effectiveness for the specific task at hand. To address this issue, we propose a novel method, **MLLM As ReTriever (MART)**, which enhances the performance of embodied agents by utilizing interaction data to fine-tune an MLLM retriever based on preference learning, such that the retriever fully considers the effectiveness of trajectories and prioritize them for unseen tasks. We also introduce **Trajectory Abstraction**, a mechanism that leverages MLLMs' summarization capabilities to represent trajectories with fewer tokens while preserving key information, enabling agents to better comprehend milestones in the trajectory. Experimental results across various environments demonstrate our method significantly improves task success rates in unseen scenes compared to baseline methods. This work presents a new paradigm for multimodal retrieval in embodied agents, by fine-tuning a general-purpose MLLM as the retriever to assess trajectory effectiveness. All the code for benchmark tasks, simulator modifications and the MLLM retriever is available at <https://github.com/PKU-RL/MART>.
+
+![Figure 1: Comparison of Similarity-Based Retriever and MLLM As Retriever (MART).](768b8ab0d55761b205087c079df1e6e6_img.jpg)
+
+The diagram illustrates two retrieval paradigms for embodied agents.   
+**(1) Similarity-Based Retriever:** A current task  $o_1^c$  is processed by a CLIP encoder to produce visual embeddings  $o_1^e, o_2^e, \dots, o_H^e$ . These are compared with expert trajectory visual embeddings  $l^e$  (also from CLIP) using a 'Sentence Transformer'. The result is a 'Max Similarity' score. This score is combined with a 'Similarity' score (derived from text embeddings  $l^c$  via a Sentence Transformer) to produce the final 'Trajectory Embedding Similarity'.   
+**(2) MLLM As Retriever (MART):** The current task  $o_1^c$  and expert trajectory visual embeddings  $l^e$  are fed into an 'MLLM As ReTriever (MART)' model. This model outputs a 'Trajectory Effectiveness Score'. A legend indicates that green boxes represent the 'Current Task' and blue boxes represent 'Expert Trajectory'.
+
+Figure 1: Comparison of Similarity-Based Retriever and MLLM As Retriever (MART).
+
+Figure 1: Similarity-Based Retriever vs. **MART**. Traditional multimodal retrieval methods (1) depend on calculating weighted sums of image and text embedding similarities, while our approach (2) introduces interactive learning to assess the relevance between the current and expert trajectories.
+
+## 1 INTRODUCTION
+
+Embodied agents interacting with complex environments require understanding both the current context and task-specific domain knowledge to perform effectively (Wang et al., 2023c; Lifshitz et al., 2023). Recently, Multimodal Large Language Models (MLLMs), which are capable of processing both textual and visual data, have shown promise in various embodied tasks – e.g., table manipulation (Handa et al., 2023; Chen et al., 2022a), robot navigation (Zhang et al., 2024b; Shah et al., 2022), and 3D games (Wang et al., 2024a; Tan et al., 2024; Jiang et al., 2024). However, such
+
+\*Junpeng Yue and Xinrun Xu work as interns at BAII.
+
+†Correspondence to Zongqing Lu <zongqing.lu@pku.edu.cn>.
+
+models typically lack effective grounding in the embodied environments in which agents operate, greatly limiting their performance in embodied tasks (Long et al., 2024; Wang et al., 2024c).
+
+To mitigate this limitation, providing additional task-relevant grounding information is essential to better leverage the general capabilities of MLLMs. Trajectory data, consisting of sequences of actions and observations, can be easily available and provide valuable insights into task execution (Zheng et al., 2024; Zhao et al., 2024), therefore serving as a good information source for grounding. By using trajectory data in prompting an MLLM, the embodied agent can readily leverage previous experiences to better guide agents through similar tasks in new situations or environments (Zhang et al., 2024a; Lee et al., 2024). However, retrieving the most effective trajectories — those that can significantly enhance task performance — remains a challenge, particularly when multiple trajectories appear similar in both textual and visual modalities (Jeurissen et al., 2024).
+
+Existing retrieval methods mainly focus on surface-level textual or visual similarities of trajectories, often neglecting key aspects critical for task effectiveness, *e.g.*, a trajectory with a similar task instruction but in a different scene, or one in the same scene but with a different layout. In such cases, these trajectories fail to provide useful information for the current task and can mislead the agent. As shown in Figure 2, relying solely on similarity is not effective in retrieving useful trajectories, as similarity does not directly correlate with success rate. To better support agents in embodied tasks, a trajectory retriever model needs to consider the effectiveness of trajectories for a given task.
+
+![Figure 2: Scatter plots illustrating the relationship between success rate and embedding similarity (left) or effectiveness score (right) in two environments. (a) AI2-THOR: The left plot shows Success Rate vs. Embedding Similarity (0.6 to 1.0) with a slightly downward-sloping red line. The right plot shows Success Rate vs. Effectiveness Score (-20 to 5) with a steep upward-sloping red line. (b) LEGENT: The left plot shows Success Rate vs. Embedding Similarity (0.6 to 1.0) with a nearly horizontal red line. The right plot shows Success Rate vs. Effectiveness Score (-4 to 2) with a steep upward-sloping red line. Both plots show horizontal blue bars representing individual trajectory samples.](8d2f4e036a5e0205a1ea3f0b3378f584_img.jpg)
+
+Figure 2: Scatter plots illustrating the relationship between success rate and embedding similarity (left) or effectiveness score (right) in two environments. (a) AI2-THOR: The left plot shows Success Rate vs. Embedding Similarity (0.6 to 1.0) with a slightly downward-sloping red line. The right plot shows Success Rate vs. Effectiveness Score (-20 to 5) with a steep upward-sloping red line. (b) LEGENT: The left plot shows Success Rate vs. Embedding Similarity (0.6 to 1.0) with a nearly horizontal red line. The right plot shows Success Rate vs. Effectiveness Score (-4 to 2) with a steep upward-sloping red line. Both plots show horizontal blue bars representing individual trajectory samples.
+
+Figure 2: Scatter plots illustrating the relationship between success rate and embedding similarity (left) or effectiveness score (right) in two environments. The red line indicates a linear fit to the data.
+
+To achieve a better retriever, we propose a new paradigm that integrates interactive learning with the retriever. Firstly, we consider expert trajectories of training scenarios as prompt for an MLLM agent, and let the agent interact with the environment to collect different success rates for different such reference trajectories. This interactive feedback data is then organized into preference pairs, which are used to fine-tune an MLLM – LLaVA (Liu et al., 2023) in our case – with a Bradley-Terry model (Bradley & Terry, 1952), such that the fine-tuned retriever model is capable of prioritizing more effective trajectories for unseen tasks. Combining this functionality with the inherent general capabilities of MLLM allows embodied agents to operate more effectively in unseen environments by leveraging their most useful past experiences.
+
+We also introduce a new Trajectory Abstraction mechanism, which uses MLLMs’ summarization capabilities to represent trajectories in a reduced number of tokens, while preserving key information and enabling agents to better understand such information in the trajectory (*e.g.*, key relevant overarching actions). This mechanism is especially important in long-horizon tasks, both reducing the required context window length and removing distracting information from trajectory samples.
+
+Combining the aforementioned components, we present our approach – **MART** (MLLM As ReTriever) – which adapts embodied agents in unseen scenarios by fine-tuning MLLM through preference data. To assess the benefits of our method, we conduct empirical experiments across diverse environments. The experimental results show that **MART** achieves significantly higher task success rates compared to baselines, demonstrating its effectiveness. With this approach, we present a new paradigm for multimodal retrieval in embodied agents, fine-tuning a general-purpose MLLM as a retriever capable of considering trajectory effectiveness. Our contributions can be summarized as follows:
+
+- To the best of our knowledge, **MART** is the first approach that integrates interactive learning with a retriever and uses interactive feedback to fine-tune an MLLM retriever in eval-
+
+uating trajectory effectiveness, combining its inherent general capabilities with the ability to assess the task-guiding effectiveness of trajectories.
+
+- We introduce Trajectory Abstraction, a new mechanism that utilizes MLLM capabilities to significantly condense trajectories. This method reduces the token number while retaining essential information, allowing agents to effectively use this condensed knowledge in novel situations and provide guidance for long-horizon tasks.
+- The effectiveness of **MART** is empirically validated through comprehensive experiments in various environments, demonstrating significant performance improvements on unseen tasks. **MART** consistently surpasses baselines by over 10% across different environments.
+
+## 2 RELATED WORK
+
+### 2.1 EMBODIED AGENTS BASED ON LARGE MODELS
+
+Recently, there have been several attempts to utilize the general-purpose capabilities of large models for complex embodied tasks. These efforts can be broadly categorized into two types: VLA models and LLM/MLLM-based agents. **1) VLA models**, including PaLM-E (Driess et al., 2023), RT-2 (Brohan et al., 2023), Gato (Reed et al., 2022), VIMA (Jiang et al., 2022), and MOO (Stone et al., 2023), rely on trajectory data to train a Transformer-based VLM for action planning, without explicitly constructing a memory. However, their generalization capabilities are limited due to the inherent issue of catastrophic forgetting in neural networks. **2) LLM/MLLM-based agents**, like Voyager (Wang et al., 2024a) and DEPS (Wang et al., 2023b) for Minecraft, Cradle (Tan et al., 2024) for RDR2, LLM-Planner (Song et al., 2023) for ALFRed, and Code-as-Policies (Liang et al., 2023) for real-world embodied control, do not involve directly training new models. Instead, they leverage the general-purpose capabilities of LLM/MLLM primarily through prompt engineering. Most of these agents build and maintain comprehensive memory systems to assist in task completion. However, memory retrieval mostly focuses on surface-level similarity, overlooking actual effectiveness in completing complex tasks.
+
+### 2.2 MEMORY RETRIEVAL IN AGENTS
+
+Agents can continuously learn and improve by recalling task-related experiences (Zhang et al., 2024c; Xi et al., 2023). During interactions with the environment, two main types of information are stored in memory. **1) Semantic information:** Early LLM agents faced limitations due to input token constraints, leading to reliance on short-term memory and greedy strategies (Chen et al., 2024; Zhang et al., 2023; Abdelnabi & et al, 2023; Wang et al., 2023a). However, summarizing memory over short periods risked information loss (Light et al., 2023; Kaiya & et al, 2023). While storing comprehensive memory (semantic, episodic, procedural) can provide great value, its effective utilization for decision-making remains challenging (Sumers et al., 2024). More recent approaches try to prioritize relevant memories based on embedding similarity or LLM-based relevance identification (e.g., (Park & et al., 2023), (Hong & et al., 2023), (Lin et al., 2023a), (Wang et al., 2024b), and (Xu et al., 2023)). **2) Image information:** Recent advances in MLLM agents have greatly enhanced their grounding abilities by allowing image memory retrieval during actions. As illustrated in Figure 1, Similarity-Based Retrievers for agents, e.g., (Zhou et al., 2024; Wang et al., 2023c; Li et al., 2024), leverage image embedding, while Groot (Cai et al., 2023) encodes visual and temporal information from video frames for guiding actions. But neither considers direct task effectiveness.
+
+## 3 INTERACTIVELY LEARNING MULTIMODAL RETRIEVAL
+
+### 3.1 PROBLEM FORMULATION
+
+In this study, we investigate interactions of a retrieval-augmented MLLM agent with an environment to complete embodied tasks drawn from a specific distribution. Figure 3 provides an overview of our **MLLM As ReTrievers** approach – **MART**. The agent is assigned a task instruction  $\ell^e$  sampled from the task instruction distribution  $p(\ell)$ , and operates over a finite horizon  $H$ . At each timestep  $t \in 1, 2, \dots, H$ , the agent selects an action  $a_t$  from the action space  $A$  based on the current observation  $o_t^e$  from the observation space  $O$  and a reference trajectory  $\tau^e$  retrieved from the expert trajectory
+
+![Figure 3: Overview of MART. The diagram illustrates the interactive learning process. On the left, a vertical flow shows 'Observation' (All images), 'Task Instruction' (Navigate to the cup, pick up the cup), 'Trajectory Abstraction' (Identify significant milestones), 'Self-Reflection' (Analyze if the last action was successful), and 'Action Planning' (Analyze the current situation to determine the next action). In the center, 'Expert Trajectories' are shown, leading to 'An Expert Trajectory' (Instruction: Navigate to and pick up a kettle. Feedback: Here you do ..., you see ... Action: LookDown, ..., Rotate ..., Open ...), 'An Abstract Trajectory' (Instruction: Abstract Feedback), and 'Success Detection' (Determine if the task is successful). On the right, 'One-Shot Retrieval' leads to the 'MLLM Main Component' which includes 'Vision Encoder', 'Vision Projector', 'LLM', 'Text Tokenizer', and 'Bradley-Terry Reward Head'. Below this, '(Pos., Neg.) Pairs' are generated, leading to a 'Batch' of images with green checkmarks and red crosses.](2fa4a1bf91d0f34e87c689fbc1211fe3_img.jpg)
+
+Figure 3: Overview of MART. The diagram illustrates the interactive learning process. On the left, a vertical flow shows 'Observation' (All images), 'Task Instruction' (Navigate to the cup, pick up the cup), 'Trajectory Abstraction' (Identify significant milestones), 'Self-Reflection' (Analyze if the last action was successful), and 'Action Planning' (Analyze the current situation to determine the next action). In the center, 'Expert Trajectories' are shown, leading to 'An Expert Trajectory' (Instruction: Navigate to and pick up a kettle. Feedback: Here you do ..., you see ... Action: LookDown, ..., Rotate ..., Open ...), 'An Abstract Trajectory' (Instruction: Abstract Feedback), and 'Success Detection' (Determine if the task is successful). On the right, 'One-Shot Retrieval' leads to the 'MLLM Main Component' which includes 'Vision Encoder', 'Vision Projector', 'LLM', 'Text Tokenizer', and 'Bradley-Terry Reward Head'. Below this, '(Pos., Neg.) Pairs' are generated, leading to a 'Batch' of images with green checkmarks and red crosses.
+
+Figure 3: Overview of **MART**. Our approach interactively learns a multimodal retriever to score expert trajectories and retrieve most effective trajectory to guide an agent in novel situations. By considering trajectories with higher success rates as positive samples and those with lower success rates as negative trajectories, we obtain the preference pairs, which are used to fine-tune an MLLM retriever to score trajectory effectiveness for a specific task.
+
+memory  $\mathcal{M}$ . The memory contains a set of multimodal expert trajectories  $\mathcal{M} = \{\tau_1^\ell, \tau_2^\ell, \dots, \tau_n^\ell\}$ , where each trajectory  $\tau_i^\ell$  includes task instructions  $\ell_i^\ell$  sampled from the same task instruction distribution  $p(\ell)$ . The trajectory  $\tau_i^\ell$  also contains observation sequences  $o_i^\ell = \{o_{i_1}^\ell, o_{i_2}^\ell, \dots, o_{i_H}^\ell\}$ , and action sequences  $a_i^\ell = \{a_{i_1}^\ell, a_{i_2}^\ell, \dots, a_{i_H}^\ell\}$ .
+
+The agent follows a frozen policy  $\pi(a|\ell^c, \tau^c, o^c)$ , implemented as a Multimodal Large Language Model (MLLM), and the reference trajectory  $\tau$  plays a significant role in grounding the agent within the embodied environment, supporting task accomplishment. This reference trajectory is retrieved through an MLLM retriever  $q_\theta$ .
+
+We fine-tune our MLLM retriever on training task distribution  $p_{\text{train}}(\ell)$  and evaluate its performance on test task distribution  $p_{\text{test}}(\ell)$ , which has no overlap with training tasks. This retriever aims to identify and retrieve a trajectory  $\tau^e$  from the expert memory pool that is most effective for the current task  $\ell^c$ , i.e., which can help ground the MLLM agent with a specific embodied task and enable its effective completion. It is worth noting that we have different memories  $\mathcal{M}^{\text{train}}$  and  $\mathcal{M}^{\text{test}}$ , which corresponds to training tasks and test tasks, respectively.
+
+### 3.2 MEMORY
+
+To enable trajectory retrieval for task execution and fine-tuning our MLLM retriever, we first construct memory databases containing expert trajectories from previous successful executions for tasks both from  $p_{\text{train}}(\ell)$  and  $p_{\text{test}}(\ell)$ . For each trajectory,  $\tau_i^\ell = \{\ell_i^\ell, o_i^\ell, a_i^\ell\}$ , represents a task  $\ell_i^\ell$  completed in  $H_i$  steps and comprises the sequence of observations  $o_i^\ell$ , and corresponding actions  $a_i^\ell$ .
+
+In multi-modal environments, such as AI2-THOR (Kolve et al., 2017) and LEGENT (Cheng et al., 2024), each timestep observation  $o_i$  includes an egocentric image. Moreover, in the AI2-THOR environment, we assign numerical IDs (e.g. Cup 1) to all objects in the current visible field of view to identify target objects for interaction. These IDs appear in the environment feedback output in natural language, which is also part of the observation.
+
+Expert trajectories are collected via a planner-based method (Hoffmann & Nebel, 2001). Storing these trajectories allows the agent to later leverage past experience when facing new task instances. Trajectory data is collected independently for the training and test sets. For each task, we initialized a task instance and used a planner-based method to collect expert trajectory data. It is worth mentioning that the initialization position and orientation in each task is randomly chosen.
+
+Since each task directly corresponds to one unique task in the task set, the size of our memory used for experiments is relatively small. For example, in the experiments performed in the LEGENT environment, the memory pool consisted of 40 trajectories for training, and distinct 32 trajectories during testing. More details are available in the experimental settings (Section 4.1).
+
+### 3.3 MULTIMODAL RETRIEVER
+
+The core of **MART** is the innovative use of interactive learning to train the trajectory retriever. For an embodied task, different trajectories stored in memory can be provided as references to the MLLM agent, leading to varying effects on the completion of the current task, depending on the degree of grounding with the environment they provide. Even if a trajectory has text instruction similar to the current task or an image sequence similar to the initial egocentric observation of the task, it does not guarantee that this trajectory can provide effective grounding. This is due to plain similarity alone not being able to reflect the effectiveness of the trajectory for the embodied task. For instance, a failed trajectory for a related task could have high textual and visual similarity to the target task.
+
+In order to retrieve the trajectory that can provide the most benefit (*i.e.*, effective grounding) for the current task from the trajectory memory, we propose an interactive learning method for the MLLM retriever. Specifically, for each task in training set, we sample  $K$  trajectories from the training memory  $\mathcal{M}^{\text{train}}$ , and feed them as prompt for MLLM agent to execute the embodied task respectively. After that, based on the induced success rates of task execution, we can get the effectiveness of each trajectory for the embodied task. We can then obtain a partial order list based on success rate comparisons, producing  $\binom{K}{2}$  pairs through pairwise comparison, where the trajectory with a higher success rate is treated as the positive item, and the one with a lower success rate as the negative item. In this way, these preference pairs from interactive feedback are arranged as a positive-negative pair dataset  $D$ , which we use to fine-tune the MLLM according to the Bradley-Terry (Bradley & Terry, 1952) Reward Modeling loss to enhance its critiquing ability, as in Equation 1:
+
+$$\mathcal{L}(\theta) = -\mathbb{E}_{(\ell_i^c, o_1^c, \mathcal{A}(\tau_w^c), \mathcal{A}(\tau_l^c)) \sim D} [\log (\sigma (q_\theta(\ell^c, o_1^c, \mathcal{A}(\tau_w^c)) - q_\theta(\ell^c, o_1^c, \mathcal{A}(\tau_l^c))))]. \quad (1)$$
+
+In particular, we use LLaVA-7B (Liu et al., 2023) as base MLLM and add a Bradley-Terry score head based on hidden states of base model output. The score head is a one-layer MLP that takes as input the last token in the hidden state and outputs a scalar score. The input to the MLLM retriever includes the trajectory abstraction result of expert trajectory  $\tau_i^c$ ,  $\mathcal{A}(\tau_i^c)$ , current observation  $o_1^c$ , current task instruction  $\ell^c$ , and a prompt for it to judge the effectiveness of this trajectory for the current task and state. Upon inference, the MLLM outputs the score of the trajectory, which indicates its effectiveness for the current task. We select the trajectory with the highest score as the reference for the embodied agent to complete the current task.
+
+### 3.4 TRAJECTORY ABSTRACTION
+
+A complete multimodal trajectory often has dozens of timesteps, which correspond to dozens of observations, actions, and feedback, including redundant or irrelevant information. Furthermore, inputting all trajectory tokens, especially image tokens, to the MLLM retriever and agent will likely lead to confusing the models/agent or even exceeding their context windows.
+
+We thus use another MLLM (in our experiments, GPT-4o) to automatically create an abstract trajectory in zero-shot manner. The initial input to the MLLM is the trajectory  $\tau^c$  (consisting of task instruction  $\ell^c$ , observation sequence  $\vec{o}^c$ , and action sequence  $\vec{a}^c$ ) as well as the current task instruction  $\ell^c$ , and we let the MLLM find whether each observation contained in the trajectory  $\tau^c$  is helpful for the current task  $\ell^c$ . If it is considered to be useful, we will keep the observation into the resulting trajectory abstraction  $\mathcal{A}(\tau^c)$ .
+
+To be more specific, we let the MLLM comprehend the tasks accomplished in the given trajectory  $\tau^c$ , and then identify important observations in the trajectory as milestones and preserve them into the resulting trajectory abstraction. These milestones are steps that are essential for accomplishing the trajectory task of  $\ell^c$ , such as steps where important decisions are made, goals are achieved, or notable changes in the environment or state occur. Also if the target object of current task instruction  $\ell^c$  appears in the trajectory feedback, then the step where it appears is also considered to be a significant milestone as it is strongly related to current task  $\ell^c$ . The milestone output format consists
+
+of: 1) a description of the milestone; 2) the corresponding image ( $\{image\ x\}$ ); 3) the corresponding feedback ( $\{feedback\ x\}$ ); and 4) the overarching actions taken between this milestone and the next one.
+
+The summarized trajectory manages to remove redundant information without affecting relevance for the current task  $\ell^c$ , so that the agent can better receive grounding information contained in the trajectory. Quantitatively, for the tasks in the test set, the input trajectories of trajectory abstraction have an average of 11.51 steps, while the output milestones have an average count of 3.13.
+
+## 4 EXPERIMENTS
+
+### 4.1 EXPERIMENTAL SETUP
+
+![Figure 4: Environment comparison. (a) AI2-THOR shows two indoor scenes: a kitchen with a stove, sink, and refrigerator, and a living room with a couch and a table. (b) LEGENT shows two similar indoor scenes: a kitchen with a stove, sink, and refrigerator, and a living room with a couch and a table. The images are slightly blurred compared to the AI2-THOR ones.](38b977dc8ba47e36367f97933421e3ae_img.jpg)
+
+Figure 4: Environment comparison. (a) AI2-THOR shows two indoor scenes: a kitchen with a stove, sink, and refrigerator, and a living room with a couch and a table. (b) LEGENT shows two similar indoor scenes: a kitchen with a stove, sink, and refrigerator, and a living room with a couch and a table. The images are slightly blurred compared to the AI2-THOR ones.
+
+Figure 4: Environment comparison.
+
+Table 1: Environment complexity comparison. AI2-THOR contains more than four times the number of interactive objects per scene, and more complex object hierarchy, compared to LEGENT. E.g., AI2-THOR supports relationships such as “inside” (e.g., inside a microwave (Figure 10a)), or inside an open container, like a sink (Figure 10c)).
+
+|                    | AI2-THOR        | LEGENT |
+|--------------------|-----------------|--------|
+| Avg. Objects/Scene | 47.30           | 11.13  |
+| Object Hierarchy   | Inside, On      | On     |
+| Layout Complexity  | High            | Low    |
+| Task decomposition | Yes             | No     |
+| Observation        | Image, Feedback | Image  |
+
+#### 4.1.1 ENVIRONMENTS
+
+To validate the effectiveness of our method in various environments, we perform evaluations on multiple scenarios in two environments, AI2-THOR (Kolve et al., 2017) and LEGENT (Cheng et al., 2024). Unlike LLM agents, which use only text as input and simplify the action space by employing teleportation actions (e.g., “move directly to target”), we believe that MLLM agents should undertake more challenging tasks as they have access to visual input and are no longer limited to a ‘blind’ mode of operation. Therefore, both target environments are multimodal, whose observations are egocentric images, and both make use of fine-grained control actions.
+
+**AI2-THOR** simulates embodied household tasks supporting natural language instructions and egocentric visual observations, where agents must navigate and interact with various household items within realistic 3D environments, including kitchens, living rooms, and other indoor spaces. It allows agents to perform fine-grained navigation actions including ‘move ahead’, ‘turn left/right x degrees’, ‘look up/down’, and interactive atomic action including ‘pick up object A’, ‘put object A on/in object B’, ‘open/close object A’, ‘toggle on/off object A’.
+
+**LEGENT** is designed to imitate human activities and tasks in home environments, including cross-room navigation. The action space is similar to AI2-THOR’s, including fine-grained movement actions. It also includes a ‘speak’ action, which sends a message to the user.
+
+Table 1 and Figure 4 show a comparison between the two environments. Besides having many more objects in its scenes, AI2-THOR supports more complex object hierarchy relationships, such as “inside” (e.g., “inside a cabinet”, which require open/close interaction to complete a task, or “a cup inside a sink”, i.e., an open container), not supported in LEGENT<sup>1</sup>.
+
+#### 4.1.2 TASK SETTINGS
+
+Notably, in all tasks, the initial position and orientation of the agent is chosen randomly. Each task is tested 5 times to reduce the impact of random errors.
+
+<sup>1</sup>Although there are cabinets in LEGENT, they do not need to be opened/closed to complete tasks.
+
+**AI2-THOR.** To better assess the fine-grained control ability of MLLM agents to complete real-world embodied tasks, we integrate characteristics of two AI2-THOR-based benchmarks – ALF-World (Shridhar et al., 2021) and ALFRed (Shridhar et al., 2020) – and built an environment setting that is more suitable for the MLLM agent. Since tasks are long-horizon, we follow the method in ALFRed and apply task decomposition to divide them into sub-tasks before execution. Each sub-task is then provided to the agent, and it determines sub-task success based on environmental feedback by itself (details in Appendix F.2 and F.3). Once a sub-task is successfully completed, the agent proceeds to the next sub-task. Task types include `pick_and_place`, `pick_clean_then_place`, `pick_cool_then_place`, and `pick_heat_then_place`. Completing these tasks requires dozens of steps of navigation, as well as interaction with objects. There are 45 tasks comprising a total of 260 sub-tasks in training set, and 28 tasks including 158 sub-tasks in testing set.
+
+**LEGENT.** Tasks for the MLLM agent are categorized into two types: ‘Come Here’ and ‘Where Is’. Each task is further divided into ‘One-room’ and ‘Two-room’ types, based on whether it requires traversing between rooms. In LEGENT, task decomposition is not performed as task instructions are simpler and do not contain combinations of sub-tasks; *i.e.*, the granularity of tasks is similar to that of sub-tasks in AI2-THOR. To train the retriever, we use 40 tasks (10 tasks for each task type) and we use 32 tasks, also covering all task types, as test set.
+
+#### 4.1.3 MEMORY CONSTRUCTION
+
+Memory initialization follows the procedure described in Section 3.2; with randomized starting positions.
+
+**AI2-THOR.** Once trajectories are collected, we decompose them into sub-task trajectories (following the task decomposition procedure in ALFRed) and treat each sub-task level trajectory as an expert trajectory into memory. Similar redundant trajectories are then filtered out, accounting for about one-third of total, resulting in a collection of 170 memory trajectories for the training memory and 118 trajectories for the testing memory.
+
+**LEGENT.** As decomposition is not necessary due to the simpler tasks in this environment, the training memory is initialized with 40 trajectories, and the test memory with distinct 32 trajectories; one trajectory per task.
+
+#### 4.1.4 TASK EVALUATION
+
+To evaluate the effectiveness of the retrieval-augmented embodied agents, we assess their performance using two metrics: Success Rate (**SR**) and Average Steps (**AS**).
+
+Success Rate denotes the percentage of tasks attempts successfully completed by the agent. In AI2-THOR it indicates the percentage of completed full tasks, and we additionally use **SR-Sub** to represent the percentage of completed sub-tasks.
+
+Average Steps represents the average number of steps the agent takes to complete a task. In AI2-THOR it indicates the number of steps to complete a full task, and **AS-Sub** represents the step average to complete a sub-task. Notably, for failed cases, their steps are counted as the step limit.
+
+#### 4.1.5 BASELINES
+
+It is worth noting that **MART** is the first work to retrieve multimodal trajectories as references for embodied MLLM agents and let the agent directly output fine-grained control actions. We compare **MART** against three baseline methods to explore the performance of our approach:
+
+**Plain-Agent (PA)** is an embodied MLLM agent without making use of reference trajectories, *i.e.*, without any memory. In our experiments, we use GPT-4o (2024-05-13 version).
+
+**LLaVA-Plain (LP)** is a pre-trained LLaVA with no modified head and no finetuning. We use the probability of special token generation to represent the score. Its input is the same as **MART**, and it is prompted to output only Yes/No tokens, and the final score is calculated based on the probability of token generation (more details and limitations in Appendix E.3).
+
+Table 2: Performance comparison of different methods in AI2-THOR.
+
+|                     | PA     | LP     | SL     | RAP    | MART          |
+|---------------------|--------|--------|--------|--------|---------------|
+| SR $\uparrow$       | 0.18   | 0.26   | 0.24   | 0.22   | <b>0.40</b>   |
+| SR-Sub $\uparrow$   | 0.63   | 0.69   | 0.68   | 0.67   | <b>0.75</b>   |
+| AS $\downarrow$     | 159.66 | 144.18 | 147.48 | 147.03 | <b>123.19</b> |
+| AS-Sub $\downarrow$ | 44.65  | 39.88  | 40.79  | 40.67  | <b>34.07</b>  |
+
+Table 3: Performance comparison of different methods in LEGENT.
+
+|                 | PA    | LP    | SL    | RAP   | MART         |
+|-----------------|-------|-------|-------|-------|--------------|
+| SR $\uparrow$   | 0.70  | 0.69  | 0.75  | 0.75  | <b>0.87</b>  |
+| AS $\downarrow$ | 23.62 | 25.01 | 20.92 | 20.62 | <b>13.81</b> |
+
+Table 4: Ablation studies of **MART** in the AI2-THOR and LEGENT environments.
+
+| Environment     | Metric              | w/o Abstraction | Sim.+FTM | MART          |
+|-----------------|---------------------|-----------------|----------|---------------|
+| <b>AI2-THOR</b> | SR $\uparrow$       | 0.31            | 0.34     | <b>0.40</b>   |
+|                 | SR-Sub $\uparrow$   | 0.73            | 0.74     | <b>0.75</b>   |
+|                 | AS $\downarrow$     | 130.26          | 125.20   | <b>123.19</b> |
+|                 | AS-Sub $\downarrow$ | 36.03           | 34.63    | <b>34.07</b>  |
+| <b>LEGENT</b>   | SR $\uparrow$       | 0.77            | 0.77     | <b>0.87</b>   |
+|                 | AS $\downarrow$     | 18.48           | 18.83    | <b>13.81</b>  |
+
+**Similarity+LLaVA (SL)** is a reasonable retrieval+ranking approach. Such approach is common in the text retrieval field – *e.g.*, Sun et al. (2023b;a); Dong et al. (2024) – and it can take into account both similarity and effectiveness. We use similarity to choose the top-K candidate trajectories, and then choose the most likely effective one using a plain LLaVA model (*i.e.*, same as **LP**).
+
+**RAP** (Kagaya et al., 2024) performs retrieval based on plain similarity per modality and is the most similar setting in literature. It mainly targets text modality experiments in the ALFWorld (Shridhar et al., 2021) and WebShop (Yao et al., 2022) (treated as text-only) environments, and simple tasks in the multimodal environments Franka-Kitchen (Gupta et al., 2019) and Meta-World (Yu et al., 2019).
+
+### 4.2 AI2-THOR
+
+We firstly demonstrate the effectiveness of **MART** over test tasks in the AI2-THOR environment. The experimental results demonstrate the effectiveness of our approach compared to the baselines. As shown in Table 2, **MART** surpasses all baselines over 10% in Success Rate, and reaches best performance across all metrics.
+
+### 4.3 LEGENT
+
+We then conduct experiments in the LEGENT environment. This environment includes tasks involving crossing between rooms, thereby enriching the experimental space and demonstrating the effectiveness of our method. The experimental results, shown in Table 3, demonstrate **MART** greatly surpasses all baselines in all four task types.
+
+### 4.4 ABLATIONS
+
+In this section, we use a set of ablation studies to examine the contribution of key components in **MART**. More specifically, we aim to answer the following questions.
+
+#### Q1. Does Trajectory Abstraction indeed improve embodied agent performance?
+
+We compare the full **MART** approach and the ablation of removing its Trajectory Abstraction module (**w/o Abstraction**). As shown in Table 4, **MART** consistently reaches the best results across settings. Even if in AI2-THOR sub-tasks the average success rate is comparable, the improvement margin leads to a 9 percentage points improvement in full task success rate.
+
+![Figure 5: Comparison between similarity-based retriever and MART. The figure shows five rows of task trajectories. Row 1: 'Current Task' - 'Navigate to the Plate, and pick up the Plate.' with one image. Row 2: 'Similarity-based Retrieval' - 'Navigate to the Kettle, and pick up the Kettle' with five images. Row 3: 'Experimental Result' for Similarity-based Retrieval - 'Navigate to the Plate, and pick up the Plate.' with 10 images and a sad face icon. Row 4: 'MART Retrieval + Abstraction' - 'Navigate to DishSponge, put it in the Plate, and then put the Plate on the Cabinet.' with five images. Row 5: 'Experimental Result' for MART - 'Navigate to the Plate, and pick up the Plate.' with four images and a happy face icon.](d4e9f8f6bf5d7853ecae9c9633900af1_img.jpg)
+
+Figure 5: Comparison between similarity-based retriever and MART. The figure shows five rows of task trajectories. Row 1: 'Current Task' - 'Navigate to the Plate, and pick up the Plate.' with one image. Row 2: 'Similarity-based Retrieval' - 'Navigate to the Kettle, and pick up the Kettle' with five images. Row 3: 'Experimental Result' for Similarity-based Retrieval - 'Navigate to the Plate, and pick up the Plate.' with 10 images and a sad face icon. Row 4: 'MART Retrieval + Abstraction' - 'Navigate to DishSponge, put it in the Plate, and then put the Plate on the Cabinet.' with five images. Row 5: 'Experimental Result' for MART - 'Navigate to the Plate, and pick up the Plate.' with four images and a happy face icon.
+
+Figure 5: Comparison between similarity-based retriever and **MART**.
+
+**Q2.** How does the **MART** approach compare against a typical retrieve and rank approach, even if it uses a fine-tuned ranking model for trajectory usefulness?
+
+Table 4 shows decomposing the unified **MART** approach into separate retrieval and ranking steps (*i.e.*, similarity-based retrieval and **MART**’s MLLM as ranker – **Sim.+FTM**) decreases success rates across settings. It is also interesting to note that **Sim.+FTM** outperforms both **SL** and **RAP** (Tables 2 and 3), further illustrating **MART**’s trajectory utility scoring.
+
+### 4.5 CASE STUDY
+
+We present two case studies for more in-depth discussion of **MART**’s capabilities handling challenges of the MLLM agent setting. The first case (Figure 5) demonstrates the effective handling of a very long-horizon trajectory. Given a 73-step task trajectory – “navigate to DishSponge, put it in the Plate, and place the Plate on the Cabinet” – Trajectory Abstraction identifies 5 key milestones. **MART** achieves an 80% success rate with an average of 28 steps, while both the similarity-based method and the agent without memory reach only 40% success rate, averaging 69.6 and 74.6 steps, respectively. We provide more detailed and balanced case studies in Appendix D.
+
+The second case (Figure 6) shows how **MART** extracts implicit rules for long sequence tasks. For the task “put the Potato into the microwave, heat it, and pick it up”, Trajectory Abstraction analyzes the agent’s actions (including exploration, attempts, and success) and generates an abstract set of inferred rules, pruning non-contributory and redundant actions, reducing 13 transitions to just 6. **MART** achieves an 80% success rate with an average of 30.2 steps, while other methods have a 0% success rate.
+
+## 5 CONCLUSION
+
+We propose **MART**, a new paradigm for trajectory retrieval incorporating interactive learning, to enhance embodied agents’ performance by providing them with task-relevant trajectory data. Our approach utilizes interaction-based feedback to identify the most effective trajectories, and constructs preference pairs based on the comparisons between trajectories. An MLLM retriever is fine-tuned through these preference pairs, effectively prioritizing the trajectories that improve task performance. We also introduce Trajectory Abstraction in **MART**, a novel mechanism that leverages
+
+![Figure 6: Showcase of the significance of the Trajectory Abstraction mechanism. The diagram illustrates five horizontal tracks of task execution. 1. Current Task: A single sequence of 8 images showing a mug being heated in a microwave. 2. MART Retrieval: Two sequences. The first (dog icon) shows a potato being heated; the second (person icon) shows a mug being heated. 3. Experimental Result: A single sequence of 8 images showing a mug being heated, ending with a sad face icon. 4. Trajectory Abstraction: Two sequences. The first (dog icon) shows a potato being heated; the second (person icon) shows a mug being heated. 5. Experimental Result: A single sequence of 8 images showing a mug being heated, ending with a happy face icon. Each track is enclosed in a dashed box with a label and icon on the left. The Trajectory Abstraction track shows a significant improvement in the final result compared to the standard Experimental Result track.](f4fdd410cdb84df81274da55721e56fb_img.jpg)
+
+Figure 6: Showcase of the significance of the Trajectory Abstraction mechanism. The diagram illustrates five horizontal tracks of task execution. 1. Current Task: A single sequence of 8 images showing a mug being heated in a microwave. 2. MART Retrieval: Two sequences. The first (dog icon) shows a potato being heated; the second (person icon) shows a mug being heated. 3. Experimental Result: A single sequence of 8 images showing a mug being heated, ending with a sad face icon. 4. Trajectory Abstraction: Two sequences. The first (dog icon) shows a potato being heated; the second (person icon) shows a mug being heated. 5. Experimental Result: A single sequence of 8 images showing a mug being heated, ending with a happy face icon. Each track is enclosed in a dashed box with a label and icon on the left. The Trajectory Abstraction track shows a significant improvement in the final result compared to the standard Experimental Result track.
+
+Figure 6: Showcase of the significance of the Trajectory Abstraction mechanism.
+
+MLLMs’ summarization capabilities, to abstract trajectories, *i.e.*, reduce the required number of tokens to represent them, while preserving key information and enabling agents to better understand relevant information. Experimental results in different environments demonstrate that our method significantly enhances task success rates in unseen tasks, compared to multiple baselines. This work helps bridge the gap between general-purpose MLLMs and the specific requirements of embodied agents, offering a new paradigm for multimodal trajectory retrieval for embodied agents.
+
+## 6 DISCUSSIONS AND FUTURE WORKS
+
+Our study has a few limitations. First, the MLLM’s restricted context window limits its ability to process multiple images simultaneously, restricting us to one-shot learning with single trajectory inputs. Future work will explore few-shot learning to combine skills from multiple trajectories for enhanced performance in complex tasks.
+
+Second, the lack of a detailed ablation study will be addressed by evaluating each component’s contribution, including self-reflection mechanisms, prompt designs tailored to specific functions in action planning, and retrievers based on diverse base models.
+
+Third, to ensure fair comparisons, we will construct large-scale, high-quality datasets specific to the household domain and fine-tune general feature extractors on these datasets to provide a more fair and direct comparison with similarity retrieval methods.
+
+Fourth, model transfer stability across environments within the same domain needs validation. There are significant differences when comparing the household domain with the open-ended sandbox game domain and the web domain, including variations in task nature, operational frequency, object morphology, and textual input complexity. Therefore, we will train retrievers for the web, open-ended sandbox game, and household domains, respectively, to evaluate their generalization capability in novel environments and scenarios within each domain.
+
+Lastly, the experimental scenarios in this study are somewhat limited, as we have only conducted experiments in the household domain. In future work, we plan to extend our approach to the web and open-ended sandbox game domains by collecting preference data through interactions and training retrievers for each domain. Subsequently, we will evaluate the generalization capabilities within the same domain, but in unseen environments and scenarios.
+
+## ACKNOWLEDGMENTS
+
+This work was supported by NSFC under Grant 62450001 and 62476008. The authors would like to thank the anonymous reviewers for their valuable comments and advice.
+
+## REFERENCES
+
+- Sahar Abdelnabi and Amr Gomaa et al. Cooperation, Competition, and Maliciousness: LLM- Stakeholders Interactive Negotiation. *arXiv:2309.17234*, 2023.
+- Constructions Aeronautiques, Adele Howe, Craig Knoblock, ISI Drew McDermott, Ashwin Ram, Manuela Veloso, Daniel Weld, David Wilkins Sri, Anthony Barrett, Dave Christianson, et al. Pddl— the planning domain definition language. *Technical Report, Tech. Rep.*, 1998.
+- Akari Asai, Zeqiu Wu, Yizhong Wang, Avirup Sil, and Hannaneh Hajishirzi. Self-rag: Learning to retrieve, generate, and critique through self-reflection. In *The Twelfth International Conference on Learning Representations (ICLR)*, 2024.
+- Ralph Allan Bradley and Milton E Terry. Rank analysis of incomplete block designs: I. the method of paired comparisons. *Biometrika*, 39(3/4):324–345, 1952.
+- Anthony Brohan, Noah Brown, Justice Carbajal, Yevgen Chebotar, Xi Chen, Krzysztof Choromanski, Tianli Ding, Danny Driess, Avinava Dubey, Chelsea Finn, et al. Rt-2: Vision-language-action models transfer web knowledge to robotic control. *arXiv preprint arXiv:2307.15818*, 2023.
+- Shaofei Cai, Bowei Zhang, and et al. Groot: Learning to follow instructions by watching gameplay videos. *arXiv:2310.08235*, 2023.
+- Soravit Changpinyo, Jordi Pont-Tuset, Vittorio Ferrari, and Radu Soricut. Telling the what while pointing to the where: Multimodal queries for image retrieval. In *Proceedings of the IEEE/CVF International Conference on Computer Vision (ICCV)*, pp. 12136–12146, 2021.
+- Jiaqi Chen, Yuxian Jiang, Jiachen Lu, and Li Zhang. S-agents: self-organizing agents in open-ended environment. *arXiv:2402.04578*, 2024.
+- Tao Chen, Jie Xu, and Pulkit Agrawal. A system for general in-hand object re-orientation. In *Conference on Robot Learning*, pp. 297–307. PMLR, 2022a.
+- Wenhui Chen, Hexiang Hu, Xi Chen, Pat Verga, and William W. Cohen. Murag: Multimodal retrieval-augmented generator for open question answering over images and text. *Conference on Empirical Methods in Natural Language Processing, EMNLP*, 2022b.
+- Zhili Cheng, Zhitong Wang, Jinyi Hu, Shengding Hu, An Liu, Yuge Tu, Pengkai Li, Lei Shi, Zhiyuan Liu, and Maosong Sun. LEGENT: Open platform for embodied agents. In Yixin Cao, Yang Feng, and Deyi Xiong (eds.), *Proceedings of the 62nd Annual Meeting of the Association for Computational Linguistics (Volume 3: System Demonstrations)*, 2024.
+- Hanze Dong, Wei Xiong, Bo Pang, Haoxiang Wang, Han Zhao, Yingbo Zhou, Nan Jiang, Doyen Sahoo, Caiming Xiong, and Tong Zhang. Rlhf workflow: From reward modeling to online rlhf. *arXiv preprint arXiv:2405.07863*, 2024.
+- Danny Driess, Fei Xia, Mehdi SM Sajjadi, Corey Lynch, Aakanksha Chowdhery, Brian Ichter, Ayzaan Wahid, Jonathan Tompson, Quan Vuong, Tianhe Yu, et al. Palm-e: An embodied multimodal language model. *arXiv preprint arXiv:2303.03378*, 2023.
+- Rohit Girdhar, Alaaeldin El-Nouby, Zhuang Liu, Mannat Singh, Kalyan Vasudev Alwala, Armand Joulin, and Ishan Misra. Imagebind: One embedding space to bind them all. In *Proceedings of the IEEE/CVF conference on computer vision and pattern recognition (CVPR)*, pp. 15180–15190, 2023.
+- Abhishek Gupta, Vikash Kumar, Corey Lynch, Sergey Levine, and Karol Hausman. Relay policy learning: Solving long-horizon tasks via imitation and reinforcement learning. In Leslie Pack Kaelbling, Danica Kragic, and Komei Sugiura (eds.), *3rd Annual Conference on Robot Learning, CoRL 2019*, volume 100 of *Proceedings of Machine Learning Research*, pp. 1025–1037. PMLR, 2019.
+
+- Tuomas Haarnoja, Aurick Zhou, Pieter Abbeel, and Sergey Levine. Soft actor-critic: Off-policy maximum entropy deep reinforcement learning with a stochastic actor. In *International conference on machine learning*, pp. 1861–1870. PMLR, 2018.
+- Ankur Handa, Arthur Allshire, Viktor Makoviychuk, Aleksei Petrenko, Ritvik Singh, Jingzhou Liu, Denys Makoviichuk, Karl Van Wyk, Alexander Zhurkevich, Balakumar Sundaralingam, et al. Dextreme: Transfer of agile in-hand manipulation from simulation to reality. In *2023 IEEE International Conference on Robotics and Automation (ICRA)*, pp. 5977–5984. IEEE, 2023.
+- Jörg Hoffmann and Bernhard Nebel. The ff planning system: Fast plan generation through heuristic search. *Journal of Artificial Intelligence Research*, 14:253–302, 2001.
+- Sirui Hong and Mingchen Zhuge et al. MetaGPT: Meta programming for a multi-agent collaborative framework. *arXiv:2308.00352*, 2023.
+- Aashi Jain, Mandy Guo, Krishna Srinivasan, Ting Chen, Sneha Kudugunta, Chao Jia, Yinfei Yang, and Jason Baldridge. MURAL: Multimodal, multitask representations across languages. In *Findings of the Association for Computational Linguistics: EMNLP*, Punta Cana, Dominican Republic, 2021.
+- Dominik Jeurissen, Diego Perez-Liebana, Jeremy Gow, Duygu Cakmak, and James Kwan. Playing nethack with llms: Potential & limitations as zero-shot agents. *arXiv:2403.00690*, 2024.
+- Haobin Jiang, Junpeng Yue, Hao Luo, Ziluo Ding, and Zongqing Lu. Reinforcement learning friendly vision-language model for minecraft. *European Conference on Computer Vision (ECCV)*, 2024.
+- Yunfan Jiang, Agrim Gupta, Zichen Zhang, GuanZhi Wang, Yongqiang Dou, Yanjun Chen, Li Fei-Fei, Anima Anandkumar, Yuke Zhu, and Linxi Fan. Vima: General robot manipulation with multimodal prompts. *arXiv preprint arXiv:2210.03094*, 2022.
+- Tomoyuki Kagaya, Thong Jing Yuan, Yuxuan Lou, Jayashree Karlekar, Sugiri Pranata, Akira Kinose, Koki Oguri, Felix Wick, and Yang You. Rap: Retrieval-augmented planning with contextual memory for multimodal llm agents. *arXiv preprint arXiv:2402.03610*, 2024.
+- Zhao Kaiya and Michelangelo Naim et al. Lyfe agents: Generative agents for low-cost real-time social interactions. *arXiv:2310.02172*, 2023.
+- Sahar Kazemzadeh, Vicente Ordonez, Mark Matten, and Tamara Berg. Referitgame: Referring to objects in photographs of natural scenes. In *Proceedings of the 2014 conference on empirical methods in natural language processing (EMNLP)*, pp. 787–798, 2014.
+- Taewoong Kim, Cheolhong Min, Byeongwhi Kim, Jinyeon Kim, Wonje Jeung, and Jonghyun Choi. Realfred: An embodied instruction following benchmark in photo-realistic environments. In *European Conference on Computer Vision*, pp. 346–364. Springer, 2025.
+- Wonjae Kim, Bokyoung Son, and Ildoo Kim. Vilt: Vision-and-language transformer without convolution or region supervision. In *International conference on machine learning*, pp. 5583–5594. PMLR, 2021.
+- Eric Kolve, Roozbeh Mottaghi, Winson Han, Eli VanderBilt, Luca Weihs, Alvaro Herrasti, Matt Deitke, Kiana Ehsani, Daniel Gordon, Yuke Zhu, et al. Ai2-thor: An interactive 3d environment for visual ai. *arXiv preprint arXiv:1712.05474*, 2017.
+- Xin Lai, Zhuotao Tian, Yukang Chen, Yanwei Li, Yuhui Yuan, Shu Liu, and Jiaya Jia. Lisa: Reasoning segmentation via large language model. In *Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)*, pp. 9579–9589, June 2024.
+- Sunjae Lee, Junyoung Choi, Jungjae Lee, Munim Hasan Wasi, Hojun Choi, Steven Y. Ko, Sangeun Oh, and Insik Shin. Explore, select, derive, and recall: Augmenting llm with human-like memory for mobile task automation, 2024.
+
+[Appendix and supplementary materials beyond page 12 have been removed.]

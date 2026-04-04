@@ -1,0 +1,2336 @@
+# AN ENSEMBLE FRAMEWORK FOR UNBIASED LAN## GUAGE MODEL WATERMARKING
+
+
+**Yihan Wu** _[∗]_ **,** **Ruibo Chen** _[∗]_ **, Georgios Milis,** **Heng Huang** _[†]_
+Department of Computer Science
+University of Maryland, College Park
+_{_ ywu42, rbchen, milis, heng _}_ @umd.edu
+
+
+ABSTRACT
+
+
+As large language models (LLMs) become increasingly capable and widely deployed, verifying the provenance of machine-generated content is critical to ensuring trust, safety, and accountability. Watermarking techniques have emerged
+as a promising solution by embedding imperceptible statistical signals into the
+generation process. Among them, unbiased watermarking is particularly attractive
+due to its theoretical guarantee of preserving the language model’s output distribution, thereby avoiding degradation in fluency or detectability through distributional
+shifts. However, existing unbiased watermarking schemes often suffer from weak
+detection power and limited robustness, especially under short text lengths or distributional perturbations. In this work, we propose ENS, a novel ensemble framework
+that enhances the detectability and robustness of logits-based unbiased watermarks
+while strictly preserving their unbiasedness. ENS sequentially composes multiple
+independent watermark instances, each governed by a distinct key, to amplify the
+watermark signal. We theoretically prove that the ensemble construction remains
+unbiased in expectation and demonstrate how it improves the signal-to-noise ratio
+for statistical detectors. Empirical evaluations on multiple LLM families show that
+ENS substantially reduces the number of tokens needed for reliable detection and
+increases resistance to smoothing and paraphrasing attacks without compromising
+generation quality.
+
+
+1 INTRODUCTION
+
+
+The rapid progress of LLMs has enabled them to generate human-level text at scale, raising urgent
+questions about provenance, accountability, and misuse of AI-generated content. A leading line
+of defence is _watermarking_, which embeds hidden statistical signals into the generation process
+so that downstream detectors can later verify authorship with high confidence (Aaronson, 2022;
+Kirchenbauer et al., 2023; Christ et al., 2023; Kuditipudi et al., 2023; Hu et al., 2023; Wu et al., 2023;
+Chen et al., 2024a;b; Liu & Bu, 2024; Chen et al., 2025; Mao et al., 2024; Dathathri et al., 2024).
+Ideally, a watermark should satisfy three properties: _(i) imperceptibility_ : it should leave fluency and
+semantics intact; _(ii) detectability_ : it should be reliably identified from a moderate amount of text;
+and _(iii) robustness_ : it should withstand natural corruptions and adversarial removal attempts.
+
+
+Among these methods, a particularly important subclass is _unbiased_ (a.k.a. distortion-free) watermarking (Aaronson, 2022; Christ et al., 2023; Kuditipudi et al., 2023; Hu et al., 2023; Wu et al.,
+2023; Chen et al., 2025; Mao et al., 2024; Dathathri et al., 2024), which modifies the generation
+distribution in a way that preserves its expectation. In other words, the average output distribution of
+a watermarked model remains indistinguishable from the original model, ensuring that watermarking
+does not degrade text quality or introduce detectable artifacts. This property makes unbiased watermarking especially attractive for real-world deployment, where imperceptibility and content fidelity
+are critical.
+
+
+_∗_ Equal contributions
+
+_†_ This work was partially supported by NSF IIS 2347592, 2348169, DBI 2405416, CCF 2348306, CNS
+2347617, RISE 2536663.
+
+
+1
+
+
+However, unbiased watermarking faces key limitations in practice. Because the expected distribution
+is unchanged, the statistical signal available to the detector is inherently weak. This often requires
+longer token sequences for detection and leaves the watermark more vulnerable to attacks such as
+sampling smoothing, truncation, or paraphrasing. To address these challenges, we propose ENS,
+an _ensemble_ framework that composes multiple unbiased watermark instances with independent
+keys to amplify the detection signal while provably preserving the LM distribution. Intuitively, each
+watermark layer makes a tiny, unbiased perturbation; stacking _n_ such layers aggregates the bias under
+the detector’s statistic, boosting signal-to-noise ratio roughly by _[√]_ _n_ while keeping generation quality
+intact.
+
+
+Our main contributions are summarized as follows:
+
+
+    - We introduce ENS, a general ensemble framework for unbiased watermarking. Our method
+sequentially applies multiple independent unbiased reweighting functions, using distinct
+keys, to enhance the detection signal without altering the expected distribution.
+
+
+    - We prove that ENS remains unbiased in expectation under independent keys, and we analyze
+how the ensemble size affects the watermark’s detectability and robustness.
+
+
+    - We empirically demonstrate that ENS significantly improves detection performance and
+robustness to common perturbations across multiple model families and watermarking
+baselines, while preserving generation quality.
+
+
+2 RELATED WORK
+
+
+Kirchenbauer et al. (2023) refined the statistical watermarking framework initially introduced by
+Aaronson (2022). They divided the language model tokens into red and green lists and favored
+the green list tokens by adjusting their logits with a fixed increment _δ_ . However, the proposed
+approach can inevitably decrease the generation quality of the text. To maintain the original output
+distribution in watermarked content, researchers have investigated novel approaches for token distribution modification. There are generally two types of unbiased watermark: sampling based unbiased
+watermark and logits based unbiased watermark. For sampling based unbiased watermark, we use
+the pseudo-random token sampler to sample the next token. For logits based unbiased watermark, we
+adapt pseudo-random adjuster to modify the LM token logits, then sampling the next token based on
+the modified LM logits.
+
+
+**Sampling based unbiased watermarks.** Aaronson (2022) pioneered an unbiased watermarking
+method using Gumbel-max to pseudo-randomly sample the next token with prefix n-grams as
+watermark keys. Christ et al. (2023) used inverse sampling as the watermark sampler on a binary
+language model with watermark keys based on token positioning. ITS-edit and EXP-edit Kuditipudi
+et al. (2023) refined the inverse-sampling and Gumbel-max strategies with a predetermined watermark
+key list. Hu et al. (2023) used inverse-sampling and design a model-based LLR score for detection.
+STA-1 Mao et al. (2024) adapted rejected-sampling strategy to improve the quality of the watermarked
+text under the low-entropy scenarios. Dathathri et al. (2024) proposed SynthID, which used multilayer tournament sampling to achieved better detectability.
+
+
+**Logits based unbiased watermarks.** Hu et al. (2023) introduced the first logits based unbiased
+watermark, _γ_ -reweight, for watermarking, though their detection method is not model-agnostic.
+DiPmark Wu et al. (2023) enhanced the _γ_ -reweight technique and introduced a model-agnostic
+detector. Chen et al. (2025) presented MCmark, which significantly improved the detectability of the
+unbiased watermark.
+
+
+3 PRELIMINARIES
+
+
+**Notation.** We follow the notation conventions from prior work (Hu et al., 2023; Wu et al., 2023;
+Mao et al., 2024; Chen et al., 2025) to describe the language model generation process. Let _V_ denote
+the vocabulary set with cardinality _N_ = _|V |_ . Define _V_ as the set of all possible token sequences of any
+length (including the empty sequence). Given a prompt, the LM generates tokens autoregressively.
+The probability of generating the next token _xt_ +1 _∈_ _V_, conditioned on the preceding sequence
+_x_ 1 _, . . ., xt_, is denoted by _PM_ ( _xt_ +1 _|_ _**x**_ 1: _t_ ) _∈P_, where _P_ represents the space of token distributions.
+
+
+2
+
+
+**Watermark Generator.** To embed watermarks, the service provider modifies the original LM distribution _PM_ using either sampling-based or logits-based watermarking methods. The watermarking
+process involves reweighting _PM_ ( _·_ _|_ _**x**_ 1: _t_ ) to a watermarked distribution _PM,w_ ( _·_ _|_ _**x**_ 1: _t, k_ ), where
+_k_ _∈K_ is a private key sampled from a known key space distribution _PK_ ( _k_ ). In practice, this key is
+typically derived from a hash function _h_ applied to a _secret key_ sk and a context identifier (e.g., an
+_n_ -gram (Aaronson, 2022) or token position (Christ et al., 2023)).
+
+
+**Logits-Based** **Reweighting.** In logits-based watermarking, the watermark generator applies a
+reweighting strategy _F_ _∈F_ : _P×K →P_, which transforms the original LM distribution _PM_ ( _· | x_ 1: _t_ )
+into a watermarked distribution _F_ ( _PM_ ( _·_ _|_ _x_ 1: _t_ ) _, k_ ). Following (Hu et al., 2023), a reweighting
+function _F_ is said to be _unbiased_ if it preserves the original distribution in expectation over the key
+space. Specifically, for any _PM_ _∈P_ and _xt_ +1 _∈_ _V_,
+
+
+E _k∼PK_ [ _F_ ( _PM_ ( _xt_ +1 _|_ _**x**_ 1: _t_ ) _, k_ )] = _PM_ ( _xt_ +1 _|_ _**x**_ 1: _t_ ) _._ (1)
+
+
+**Watermark Detector.** At inference time, the _detector_ receives: (i) the generated text sequence
+_**x**_ 1: _T_, (ii) the watermark keys (or a means to regenerate them), and (iii) the public description of
+_F_ . Detection is framed as a binary hypothesis testing problem: _H_ 0: The sequence was generated
+without a watermark; _H_ 1: The sequence was generated with a watermark. The detector constructs a
+statistical score function based on _k_ and _F_, which exhibits different distributions under _H_ 0 and _H_ 1.
+Under _H_ 1, the statistic is stochastically larger (or smaller) than under _H_ 0, enabling detection with
+controlled type-I error. This allows for distinguishing between watermarked and non-watermarked
+content using standard hypothesis testing techniques.
+
+
+4 METHODOLOGY
+
+
+In this section, we introduce an ensemble framework for logits-based unbiased watermarks, aiming
+to improve both detection reliability and robustness without sacrificing unbiasedness. We propose
+an _ensemble_ construction that composes any base logits-based unbiased watermarking rule _F_ with
+multiple independently drawn watermark keys. Intuitively, each application of _F_ injects an (unbiased)
+weak statistical signal aligned with its key; composing _n_ such transforms stacks _n_ weak signals.
+Because unbiasedness is defined in expectation over the key distribution, sequential composition
+preserves marginal unbiasedness to the underlying LM distribution when keys are independent. At
+detection time, we exploit the availability of all _n_ watermark keys to aggregate evidence across
+them, yielding improved statistical power at the same (or controlled) false positive rate (FPR). This
+section formalizes the construction, proves unbiasedness, develops score aggregation and significance
+testing procedures, and discusses practical design choices (key scheduling, context partitioning,
+computational cost, and robustness considerations).
+
+
+**Definition 4.1** (Watermark ensemble) **.** _Given an original LM distribution PM_ ( _·|_ _**x**_ 1: _t_ ) _∈P, a logits-_
+_based reweight strategy F_ _∈F, and n watermark keys_ _**k**_ 1: _n, we define the n-fold ensemble transform_
+ENS : N _× P_ _× F_ _× K_ _[n]_ _→P_ _recursively,_
+
+
+          - _F_ (ENS( _n −_ 1 _, F, PM_ ( _·|_ _**x**_ 1: _t_ ) _,_ _**k**_ 1: _n−_ 1) _, kn_ ) _,_ _n >_ 1;
+ENS( _n, F, PM_ ( _·|_ _**x**_ 1: _t_ ) _,_ _**k**_ 1: _n_ ) = (2)
+_F_ ( _PM_ ( _·|_ _**x**_ 1: _t_ ) _, k_ 1) _,_ _n_ = 1 _._
+
+
+_For brevity we suppress the conditioning context_ _**x**_ 1: _t when unambiguous and write_ ENS _n_ ( _PM_ ) _._
+
+
+The ensemble mechanism can be viewed as a multi-layer reweighting pipeline, where each layer
+applies a subtle perturbation governed by its corresponding key. The resulting distribution remains
+close to _PM_ in total variation, but the watermark signal accumulates across layers, enhancing the
+detectability of the watermark. The detailed watermarking algorithm can be found in Algs. 1 and 2.
+
+
+**Sequential vs.** **parallel views.** The recursive definition is _sequential_ : each new key reweights the
+distribution output by the previous step. An equivalent _parallel_ interpretation, which is useful for
+certain implementations, treats the final logits as a sum of per-key adjustments applied to the original
+logits before reweighting. Sequential and parallel forms are algebraically equivalent for common
+families of _F_ (e.g., additive logit shifts, multiplicative temperature scaling within greenlists).
+
+
+3
+
+
+4.1 UNBIASEDNESS OF THE ENSEMBLE
+
+
+A crucial property of unbiased watermarking is the preservation of the original distribution’s expectation over random keys. We show that this property holds under our ensemble construction:
+**Theorem 4.2** (Unbiasedness) **.** _If F_ _is an unbiased logits-based reweight strategy, and the watermark_
+_keys_ _**k**_ 1: _n_ _are i.i.d._ _from PK, then the n-ensemble of F_ _is also an unbiased logits-based reweight_
+_strategy, i.e.,_
+E _**k**_ 1: _n∼PK_ _[n]_ [[][ENS] _[n]_ [(] _[P][M]_ [(] _[·|]_ _**[x]**_ [1:] _[t]_ [))] =] _[ P][M]_ [(] _[· |]_ _**[ x]**_ [1:] _[t]_ [)] (3)
+_holds for arbitrary PM_ ( _·|_ _**x**_ 1: _t_ ) _∈P,_
+
+
+_Proof sketch._ We argue by induction on _n_ . The base case ( _n_ =1) reduces to Eq. 1. Suppose Eq. 3
+holds for _n−_ 1. For _n_, condition on the first _n−_ 1 keys and apply the law of iterated expectation:
+
+
+                     -                     E _**k**_ 1: _n_ [ENS _n_ ( _PM_ ( _·|_ _**x**_ 1: _t_ ))( _v_ )] = E _**k**_ 1: _n−_ 1 E _kn_ [ _F_ (ENS _n−_ 1( _PM_ ( _·|_ _**x**_ 1: _t_ )) _| kn_ )( _v_ )] (4)
+
+
+( _a_ ) ( _b_ )
+= E _**k**_ 1: _n−_ 1[ENS _n−_ 1( _PM_ ( _·|_ _**x**_ 1: _t_ ))( _v_ )] = _PM_ ( _v|_ _**x**_ 1: _t_ ) _,_ (5)
+where _v_ is an arbitrary token in _V_, (a) applies Eq. 1 with _P_ = ENS _n−_ 1( _P_ ) (valid because _F_ is
+unbiased _for any input distribution_ ), and (b) uses the induction hypothesis.
+
+
+**Remarks.** (i) Independence is sufficient but not necessary: certain correlated key schedules also
+preserve unbiasedness if the marginal over the final key _kn_ is uniform and _F_ obeys a linearity
+property. (ii) If _F_ ’s unbiasedness holds only approximately (e.g., due to numerical truncation or
+top- _K_ filtering), ensemble bias accumulates at most linearly in _n_ .
+
+
+**Watermark** **key** **design.** The unbiasedness of ENS _n_ requires that the watermark keys be independent during _a_ _single_ _generation_ _step_ . Recall that a watermark key _k_ is typically derived as
+_h_ (sk _,_ n-gram), where _h_ is a hash function ensuring independence across different (sk _,_ n-gram)
+pairs. Following this principle, there are two ways to generate independent keys for ensemble watermarking: a) Use _n_ distinct hash functions _h_ 1 _, . . ., hn_, so that in each generation step,
+_h_ 1(sk _,_ n-gram) _, . . ., hn_ (sk _,_ n-gram) are independent. b) Use _n_ distinct secret keys sk1 _, . . .,_ sk _n_, so
+that _h_ (sk1 _,_ n-gram) _, . . ., h_ (sk _n,_ n-gram) remain independent. In our implementation, we use b) to
+ensure the independence of the watermark keys during generation.
+
+
+4.2 DETECTION EFFICIENCY
+
+
+The detection of the ensemble watermark is straightforward. If the ensemble is built upon a logitbased strategy _F_, we can simply apply the detection algorithm of _F_ _n_ times using the secret keys
+(sk1 _, . . .,_ sk _n_ ), and then aggregate the resulting detection scores.
+
+
+**Detection** **with** **Ensemble** **Watermarks.** Given a generated sequence _**x**_ 1: _T_, a detector score
+function _S_, and secret keys (sk1 _, ...,_ sk _n_ ), the detector computes per-key scores _{S_ ( _**x**_ 1: _T,_ sk _i_ ) _}_ _[n]_ _i_ =1
+and aggregates them, e.g. _S_ ENS( _**x**_ 1: _T_ ) = [�] _i_ _[n]_ =1 _[S]_ [(] _**[x]**_ [1:] _[T][,]_ [ sk] _[i]_ [)] _[.]_ [ Because the watermark bias adds]
+_coherently_ across independent keys, _S_ ENS enjoys a higher signal-to-noise ratio, enabling stronger
+hypothesis testing between _H_ 0 (unwatermarked) and _H_ 1 (watermarked).
+
+
+**Signal and Variance Behavior.** Unbiasedness ensures that, a downstream observer without keys
+cannot distinguish ENS _n_ ( _P_ ) from _P_ . Detection instead leverages _conditional_ shifts introduced
+by each key. Let _S_ ( _xt,_ sk _i_ ) denote the per-token score computed by the detector when evaluated
+with secret key sk _i_ . Under the alternative hypothesis _H_ 1 (watermarked with the same keys), the
+statistic _S_ ( _xt,_ sk _i_ ) has a mean shifted by a positive amount _µi_ _>_ 0 relative to its mean under the null
+hypothesis _H_ 0 (no watermark). The ensemble detector aggregates the shift across keys by combining
+either (a) raw per-key log-likelihood ratios, (b) standardized _z_ -scores, or (c) non-parametric ranks.
+
+
+Because generation uses _all n_ keys, the expected per-token shift in _S_ ( _xt,_ sk _i_ ) generally increases
+with _n_, but its variance also grows due to interactions among keys. For many logit-based reweighting
+_F_ of interest (greenlist reweighting (Kirchenbauer et al., 2023); DiP-style permute-reweight (Wu
+et al., 2023)), the per-key signals add approximately linearly at small _n_, yielding a signal-to-noise
+ratio (SNR) that scales roughly as _[√]_ _n_ for the aggregated statistic. We formalize one such regime
+below.
+
+
+4
+
+
+**Proposition** **4.3** (Approximate SNR scaling) **.** _Assume_ _(i)_ _conditional_ _independence_ _of_ _per-key_
+_centered_ _scores_ _given_ _the_ _underlying_ _token,_ _(ii)_ _common_ _per-key_ _variance_ _σ_ [2] _,_ _and_ _(iii)_ _common_
+_mean shift µ under H_ 1 _._ _Then the sum statistic S_ ENS( _**x**_ 1: _T_ ) = [�] _i_ _[n]_ =1 _[S]_ [(] _**[x]**_ [1:] _[T][,]_ [ sk] _[i]_ [)] _[ has mean][ nµ][ and]_
+_variance nσ_ [2] _under H_ 1 _, yielding_ SNR( _S_ ENS) = _µ_ _[√]_ _n/σ._ _Under H_ 0 _, T_ _has mean_ 0 _and variance_
+_nσ_ 0 [2] _[.]_ _[Hence, for fixed FPR calibrated under][ H]_ [0] _[, power increases with][ n][.]_
+
+
+**Example (DiPmark detector).** We illustrate the improved detecting strength of ensemble watermarking using the DiPmark detector. In the DiPmark detector, the red–green lists for generating each
+token are reconstructed using the secret key and the corresponding n-gram. The detector then counts
+the total number of green tokens in the sequence and applies a statistical test to determine watermark
+presence.
+
+
+For a given key sk _i_, let _VG_ ( _**x**_ 1: _T_ ; sk _i_ ) denote the number of tokens in the sequence _**x**_ 1: _T_ that fall
+into the _green_ set induced by sk _i_ . The DiPmark score is
+
+_S_ DiP( _**x**_ 1: _T,_ sk _i_ ) = _[V][G]_ [(] _**[x]**_ [1:] _[T]_ [ ;][ sk] _[i]_ [)] _−_ 0 _._ 5 _._
+
+_T_
+
+
+Under the _H_ 0 (unwatermarked text), the green indicators are i.i.d. Bernoulli(1 _/_ 2), so by Hoeffding’s
+inequality the (one-sided) _p_ -value is bounded by _p_ single _≤_ exp� _−_ 2 _T_ _S_ DiP( _**x**_ 1: _T,_ sk _i_ ) [2][�] _._
+
+
+Ensembling _n_ DiPmark detectors: Given keys sk1 _, . . .,_ sk _n_, define the ensemble score
+
+
+[(] _**[x]**_ [1:] _[T]_ [ ;][ sk] _[i]_ [)]
+
+_−_ _[n]_
+_T_ 2
+
+
+2 _[.]_
+
+
+_S_ ENS( _**x**_ 1: _T_ ) =
+
+
+_n_
+
+
+_n_ - _n_
+
+- _i_ =1 _[V][G]_ [(] _**[x]**_ [1:] _[T]_ [ ;][ sk] _[i]_ [)]
+
+_S_ DiP( _**x**_ 1: _T,_ sk _i_ ) =
+
+_T_
+
+_i_ =1
+
+
+Equivalently, writing _Zt,i_ _∈{_ 0 _,_ 1 _}_ for the green indicator of token _t_ under key sk _i_, we have
+
+_S_ ENS( _**x**_ 1: _T_ ) = _n_ - _nT_ 1 - _ni_ =1 - _Tt_ =1 _[Z][t,i][ −]_ 2 [1] �. Assuming independence across _t_ and _i_ under the
+
+null, Hoeffding’s inequality applied to the average over _nT_ bounded variables yields
+
+
+         _p_ ENS = Pr� _S_ ENS _≥_ _s_ - _≤_ exp _−_ [2] _[T]_
+
+
+_[T]_ - 
+= _⇒_ _p_ ENS _≤_ exp _−_ [2] _[T]_
+_n_ _[s]_ [2] _n_
+
+
+_[T]_ 
+_._
+_n_ _[S]_ [ENS][(] _**[x]**_ [1:] _[T]_ [ )][2]
+
+
+In the special case where all single-key scores are equal, _S_ DiP( _**x**_ 1: _T,_ sk1) = _· · ·_ =
+_S_ DiP( _**x**_ 1: _T,_ sk _n_ ) = _s_ 0, we have _S_ ENS = _ns_ 0 and hence
+
+              -               -               -               -               - [�] _[n]_               -               - _n_
+_p_ ENS _≤_ exp _−_ 2 _Tn s_ [2] 0 = exp _−_ 2 _T_ _s_ [2] 0 _≈_ _p_ single _._
+
+
+Thus, ensembling _n_ independent DiPmark detectors improves the exponent linearly in _n_, i.e., the
+_p_ -value decays exponentially with _n_ . In practice, the ensemble _p_ -value need not decay exponentially
+in _n_, because the per-key DiPmark detectors can become less informative when used jointly (e.g.,
+due to the attenuation of individual scores). Nevertheless, ensembling typically improves overall
+detection power (efficiency) and yields a smaller _p_ -value than any single detector.
+
+
+**Dealing with Key Dependence.** In practice keys may not be statistically independent across tokens
+because the keying function _h_ (sk _, c_ ) often reuses a fixed secret sk with context _c_ derived from
+overlapping _n_ -grams or positions. Overlapping contexts induce correlations in the green/boosted sets
+across ensemble members, which in turn correlate the per-key scores. To address repeated contexts
+_c_, we follow (Hu et al., 2023) and maintain a history of previously seen contexts during watermark
+generation; if the current _c_ already appears in the history, we bypass watermarking and sample from
+the original (unwatermarked) distribution.
+
+
+4.3 EFFECT OF THE ENSEMBLE SIZE _n_ ON DETECTABILITY.
+
+
+Increasing the ensemble size _n_ can strengthen detection by aggregating signal across keys, yielding
+(under standard independence assumptions) an exponentially decaying _p_ -value in _n_ . Denoted by _γ_
+the portion of tokens promoted by the reweight algorithm, and _ϵ_ the strength of promotion added
+on the logit. For logit–reweighting schemes that promote a per-key _green_ subset of size _γ|V |_, the
+intersection of promoted sets shrinks as _γ_ _[n]_ _|V |_, reducing the chance that any promoted token lies
+in the model’s high-probability region, which makes the per-key effect attenuates and detectability
+saturates or even degrades.
+
+
+5
+
+
+Table 1: Detectability comparison of different watermarking methods under 250- and 500-token
+settings. We report True Positive Rates (TPR) at fixed False Positive Rates (FPR) of 0.1%, 0.01%,
+
+
+|and 0.001%, along with the median p-values (lower is better).|Col2|Col3|
+|---|---|---|
+|Watermarking<br>Methods<br>250 tokens<br>500 tokens<br>TPR@FPR<br>Median<br>p-value_↓_<br>TPR@FPR<br>Median<br>p-value_↓_<br>0.1%_↑_<br>0.01%_↑_<br>0.001%_↑_<br>0.1%_↑_<br>0.01%_↑_<br>0.001%_↑_|Watermarking<br>Methods<br>250 tokens<br>500 tokens<br>TPR@FPR<br>Median<br>p-value_↓_<br>TPR@FPR<br>Median<br>p-value_↓_<br>0.1%_↑_<br>0.01%_↑_<br>0.001%_↑_<br>0.1%_↑_<br>0.01%_↑_<br>0.001%_↑_|500 tokens|
+|DiPmark(_α_=0.3)<br>ENS-DiPmark(_α_=0.3,_ n_=5)<br>ENS-DiPmark(_α_=0.3,_ n_=10)|41.48%<br>32.22%<br>23.28%<br>4.48e-3<br>75.05%<br>66.77%<br>58.79%<br>9.77e-7<br>74.49%<br>63.21%<br>55.18%<br>2.49e-6|71.84%<br>61.68%<br>50.50%<br>8.60e-6<br>96.30%<br>91.51%<br>86.62%<br>3.28e-14<br>93.33%<br>87.51%<br>82.56%<br>3.75e-14|
+|DiPmark(_α_=0.4)<br>ENS-DiPmark(_α_=0.4,_ n_=5)<br>ENS-DiPmark(_α_=0.4,_ n_=10)|49.90%<br>39.18%<br>31.86%<br>1.20e-3<br>74.74%<br>67.15%<br>58.52%<br>5.36e-7<br>70.58%<br>58.74%<br>51.23%<br>8.19e-6|80.48%<br>70.94%<br>62.17%<br>1.27e-7<br>94.18%<br>90.23%<br>85.29%<br>9.19e-15<br>91.75%<br>85.99%<br>79.59%<br>1.19e-12|
+|_γ_-reweight<br>ENS-_γ_-reweight(_n_=5)<br>ENS-_γ_-reweight(_n_=10)|52.00%<br>42.02%<br>33.99%<br>7.47e-4<br>73.98%<br>64.14%<br>54.92%<br>2.04e-6<br>65.81%<br>55.54%<br>48.56%<br>1.75e-5|81.26%<br>72.45%<br>65.16%<br>4.58e-8<br>94.12%<br>88.58%<br>83.59%<br>4.81e-15<br>88.97%<br>83.35%<br>76.97%<br>2.07e-11|
+|SynthID(_m_=20)<br>SynthID(_m_=30)<br>SynthID(_m_=40)|93.92%<br>88.55%<br>81.97%<br>6.04e-12<br>93.83%<br>88.36%<br>83.50%<br>1.91e-12<br>92.12%<br>87.58%<br>82.42%<br>4.79e-12|99.68%<br>98.60%<br>97.64%<br>2.83e-26<br>99.24%<br>98.37%<br>97.50%<br>4.07e-28<br>99.24%<br>97.84%<br>96.11%<br>7.70e-28|
+|MCMark(_l_=20)<br>ENS-MCMark(_l_=20,_ n_=3)<br>ENS-MCMark(_l_=20,_ n_=5)|94.36%<br>90.37%<br>86.07%<br>4.18e-13<br>**95.70%**<br>**91.71%**<br>**87.93%**<br>**1.43e-14**<br>95.15%<br>91.44%<br>85.88%<br>4.27e-14|99.34%<br>98.45%<br>97.01%<br>8.30e-26<br>**99.89%**<br>**99.57%**<br>**98.59%**<br>2.58e-31<br>99.12%<br>98.90%<br>98.02%<br>**1.27e-35**|
+
+
+Let _|V |_ be the vocabulary size. For secret key sk _i_, let _Gi_ _⊂_ [ _|V |_ ] be the green set with _|Gi|_ =
+_γ|V |_ (0 _<_ _γ_ _<_ 1). Under an _intersection-at-generation_ scheme, promotions apply to _G_ [(] _[∩]_ [)] =
+
+- _ni_ =1 _[G][i][,]_ [so][ E] - _|G_ [(] _[∩]_ [)] _|_ - _≈_ _γ_ _[n]_ _|V |._ Let _p_ ( _·_ ) denote the pre-boost next-token distribution at a step, and
+define the _promoted mass Mn_ := [�] _v∈G_ [(] _[∩]_ [)] _[ p]_ [(] _[v]_ [)] _[.]_
+
+Since [�] _v_ _[p]_ [(] _[v]_ [)] [=] [1] [and] [each] [token] [lies] [in] _[G]_ [(] _[∩]_ [)] [with] [probability] _[γ][n]_ [,] [we] [have] [E][[] _[M][n]_ []] [=] _[γ][n][.]_ [If]
+
+a logit boost of size _ε_ _≤_ 1 _/γ_ (if _ε_ _>_ 1 _/γ_, then the sum of the boosted probability will be greater
+than 1) is applied to each promoted token during each logit-based reweighting, the per-step shift in a
+DiPmark-style score satisfies _µ_ ( _n_ ) _≈_ _ε_ _[n]_ E[ _Mn_ ] = ( _εγ_ ) _[n]_ _._
+
+
+**Aggregation** **gain** **vs.** **sparsity** **loss.** Let _Si_ be the per-key detector score and _S_ ENS = [�] _i_ _[n]_ =1 _[S][i]_ [.]
+Under standard independence assumptions and boundedness of scores, a Hoeffding/Chernoff bound
+
+         -          yields _p_ ENS( _**x**_ 1: _n_ ) ≲ exp _−_ _CTnµ_ ( _n_ ) [2][�] = exp _−_ _CTn_ ( _εγ_ ) [2] _[n]_ [�] _,_ for some constant _C_ _>_ 0
+and sequence length _T_ . This expression makes the trade-off explicit:
+
+
+_n_ vs. ( _εγ_ ) [2] _[n]_
+aggregation gain���� promotion sparsity����
+
+
+_._
+
+
+Define _g_ ( _n_ ) := _n_ ( _εγ_ ) [2] _[n]_ . Then _g_ ( _n_ ) increases only up to _n_ _[⋆]_ _≈_ 2 log(11 _/εγ_ ) _[,]_ [ and decreases thereafter.]
+Consequently, _p_ ENS typically _decreases_ with _n_ for _n_ ≲ _n_ _[⋆]_ (improving detectability), but _stalls_ and
+can effectively _worsen_ for _n ≫_ _n_ _[⋆]_ as the promoted mass E[ _Mn_ ] = _γ_ _[n]_ becomes vanishingly small
+(in the extreme, _γ_ _[n]_ _|V |_ ≲ 1 so no token is promoted at many steps).
+
+
+**Design implication.** In practice, choose a _moderate_ ensemble size _n_ so that _n ≈_ _n_ _[⋆]_ . For instance,
+if _γ_ = 0 _._ 5 _, ε_ = 1 _._ 8, then _n_ _[⋆]_ _≈_ 1 _/_ (2 log(1 _/_ 0 _._ 9)) _≈_ 4 _._ 75, suggesting _n_ _∈{_ 4 _,_ 5 _}_ is near optimal
+under strict intersection. Larger _n_ can be viable only if the ensemble design avoids strict intersection
+(e.g., by aggregating per-key logits or statistics) so that the per-key effect size _µ_ does not collapse
+with _n_ .
+
+
+5 EXPERIMENTS
+
+
+Our experiments comprise three main parts. First, we evaluate the detectability gains of our ensemble
+watermark by comparing it with other unbiased watermarking methods on a text generation task.
+Second, we assess robustness under random token modifications, DIPPER paraphrasing attacks (Krishna et al., 2023), GPT paraphrasing attacks and GPT back translation attacks. Finally, we verify
+
+
+6
+
+
+|Table 2: Robustness comparison under paraphrasing attacks using GPT-4o-mini and DIPPER.|Col2|Col3|
+|---|---|---|
+|Watermarking<br>Methods<br>GPT-4o-mini paraphrase<br>DIPPER<br>TPR@FPR<br>Median<br>p-value_↓_<br>TPR@FPR<br>Median<br>p-value_↓_<br>0.1%_↑_<br>0.01%_↑_<br>0.001%_↑_<br>0.1%_↑_<br>0.01%_↑_<br>0.001%_↑_|Watermarking<br>Methods<br>GPT-4o-mini paraphrase<br>DIPPER<br>TPR@FPR<br>Median<br>p-value_↓_<br>TPR@FPR<br>Median<br>p-value_↓_<br>0.1%_↑_<br>0.01%_↑_<br>0.001%_↑_<br>0.1%_↑_<br>0.01%_↑_<br>0.001%_↑_|Watermarking<br>Methods<br>GPT-4o-mini paraphrase<br>DIPPER<br>TPR@FPR<br>Median<br>p-value_↓_<br>TPR@FPR<br>Median<br>p-value_↓_<br>0.1%_↑_<br>0.01%_↑_<br>0.001%_↑_<br>0.1%_↑_<br>0.01%_↑_<br>0.001%_↑_|
+|ENS-DiPmark(_α_=0.3,_ n_=5)<br>ENS-DiPmark(_α_=0.4,_ n_=5)<br>ENS-_γ_-reweight(_n_=5)<br>SynthID(_m_=30)<br>ENS-MCMark(_l_=20,_ n_=3)|8.41%<br>5.14%<br>2.80%<br>3.15e-1<br>7.11%<br>3.56%<br>3.56%<br>2.13e-1<br>6.73%<br>3.59%<br>3.14%<br>2.78e-1<br>25.39%<br>13.47%<br>6.74%<br>1.72e-2<br>**40.00%**<br>**29.44%**<br>**20.56%**<br>**3.69e-3**|3.26%<br>1.09%<br>0.00%<br>2.61e-1<br>4.38%<br>1.03%<br>0.77%<br>3.55e-1<br>3.05%<br>1.39%<br>0.83%<br>3.97e-1<br>21.58%<br>11.05%<br>7.11%<br>2.06e-2<br>**40.35%**<br>**30.70%**<br>**22.22%**<br>**5.09e-3**|
+
+
+Table 3: Robustness comparison under GPT-4o-mini back translation (English–French) attacks using
+
+
+|GPT-4o-mini and 10% random token replacement.|Col2|Col3|
+|---|---|---|
+|Watermarking<br>Methods<br>Back translation (En–Fr)<br>10% Random token replacement<br>TPR@FPR<br>Median<br>p-value_↓_<br>TPR@FPR<br>Median<br>p-value_↓_<br>0.1%_↑_<br>0.01%_↑_<br>0.001%_↑_<br>0.1%_↑_<br>0.01%_↑_<br>0.001%_↑_|Watermarking<br>Methods<br>Back translation (En–Fr)<br>10% Random token replacement<br>TPR@FPR<br>Median<br>p-value_↓_<br>TPR@FPR<br>Median<br>p-value_↓_<br>0.1%_↑_<br>0.01%_↑_<br>0.001%_↑_<br>0.1%_↑_<br>0.01%_↑_<br>0.001%_↑_|Watermarking<br>Methods<br>Back translation (En–Fr)<br>10% Random token replacement<br>TPR@FPR<br>Median<br>p-value_↓_<br>TPR@FPR<br>Median<br>p-value_↓_<br>0.1%_↑_<br>0.01%_↑_<br>0.001%_↑_<br>0.1%_↑_<br>0.01%_↑_<br>0.001%_↑_|
+|ENS-DiPmark(_α_=0.3,_ n_=5)<br>ENS-DiPmark(_α_=0.4,_ n_=5)<br>ENS-_γ_-reweight(_n_=5)<br>SynthID(_m_=30)<br>ENS-MCMark(_l_=20,_ n_=3)|38.74%<br>26.31%<br>18.74%<br>4.61e-3<br>44.38%<br>29.83%<br>20.99%<br>2.35e-3<br>41.71%<br>28.86%<br>21.42%<br>3.53e-3<br>75.69%<br>64.53%<br>55.58%<br>3.16e-6<br>**84.17%**<br>**76.43%**<br>**68.53%**<br>**1.94e-8**|38.74%<br>26.31%<br>18.74%<br>4.61e-3<br>44.38%<br>29.83%<br>20.99%<br>2.35e-3<br>41.71%<br>28.86%<br>21.42%<br>3.53e-3<br>75.69%<br>64.53%<br>55.58%<br>3.16e-6<br>**84.17%**<br>**76.43%**<br>**68.53%**<br>**1.94e-8**|
+
+
+the unbiasedness of our method by showing that its output quality on machine translation and text
+summarization tasks closely matches that of the unwatermarked baseline. All experiments are conducted on NVIDIA A6000 GPUs. All watermarking algorithms introduced negligible computation
+cost during LLM generation process. Detailed experimental settings are provided in Appendix D.
+
+
+**Baselines.** We evaluate our method against several baselines, including three logit-based unbiased watermarking algorithms: _γ_ -reweight (Hu et al., 2023), DiPmark (Wu et al., 2023), and MCmark (Chen et al., 2025), as well as one sampling-based unbiased watermarking algorithm (Dathathri
+et al., 2024). While other sampling-based unbiased methods such as ITS-edit (Kuditipudi et al., 2023)
+and STA-1 (Mao et al., 2024) exist, prior work (Chen et al., 2025) has shown that they perform worse
+than MCmark, and therefore we omit them from our experiments.
+
+
+**Models and Datasets.** We employ Llama-3.2-3B-Instruct (Dubey et al., 2024), Mistral-7B-Instructv0.3 (Jiang et al., 2023), and Phi-3.5-mini-instruct (Abdin et al., 2024) for text generation tasks to
+assess the effectiveness of our proposed ENS. Following prior work (Kirchenbauer et al., 2023; Hu
+et al., 2023), we conduct experiments on a subset of the C4 dataset (Raffel et al., 2020). In addition,
+we include evaluations on three MMW datasets (Piet et al., 2023), Dolly CW (Conover et al., 2023),
+and two tasks from WaterBench (Tu et al., 2023).
+
+
+For unbiasedness validation, we adopt the settings from Hu et al. (2023); Wu et al. (2023), using
+MBart (Liu, 2020) for machine translation and BART (Lewis, 2019) for text summarization. In the
+machine translation experiments, we use the WMT16 ro-en dataset (Bojar et al., 2016). For text
+summarization, we use the CNN/DailyMail dataset (See et al., 2017).
+
+
+**Watermarking parameters.** We evaluate the detectability of ENS on the text generation task with
+different language models. We generate 1,000 examples for each task. We use the prefix 2-gram
+together with a secret key as the watermark keys. We select _α ∈{_ 0 _._ 3 _,_ 0 _._ 4 _}_ for DiPmark (Wu et al.,
+2023), tournament sampling layers _m_ _∈{_ 20 _,_ 30 _,_ 40 _}_ for SynthID (Dathathri et al., 2024), _l_ = 20
+for MCmark (Chen et al., 2025). For _γ_ -reweight (Hu et al., 2023), we follow the settings in the
+original papers. For watermark ensemble we select _n ∈{_ 1 _,_ 5 _,_ 10 _}_ for DiPmark and _γ_ reweight and
+_n ∈{_ 1 _,_ 3 _,_ 5 _}_ for MCmark. We report true positive rate under x% theoretical guaranteed false positive
+rate (TPR@FPR) and the Median p-value.
+
+
+5.1 DETECTABILITY
+
+
+The results in Table 1 clearly demonstrate that our ensemble strategy consistently enhances the detectability of logit-based watermarking methods. For DiPmark and _γ_ -reweight, applying the ensemble
+
+
+7
+
+
+Table 4: Unbiasedness comparison of different watermarking methods on text summarization and
+
+
+|machine translation tasks.|Col2|Col3|
+|---|---|---|
+|<br>Watermarking<br>Methods<br>Text Summarization<br>Machine Translation<br>ROUGE-1<br>ROUGE-2<br>ROUGE-L<br>BERTScore<br>BLEU<br>BERTScore|<br>Watermarking<br>Methods<br>Text Summarization<br>Machine Translation<br>ROUGE-1<br>ROUGE-2<br>ROUGE-L<br>BERTScore<br>BLEU<br>BERTScore|Machine Translation|
+|<br>Watermarking<br>Methods<br>Text Summarization<br>Machine Translation<br>ROUGE-1<br>ROUGE-2<br>ROUGE-L<br>BERTScore<br>BLEU<br>BERTScore|<br>Watermarking<br>Methods<br>Text Summarization<br>Machine Translation<br>ROUGE-1<br>ROUGE-2<br>ROUGE-L<br>BERTScore<br>BLEU<br>BERTScore|BLEU<br>BERTScore|
+|No Watermark|0.3768<br>0.1327<br>0.2379<br>0.3175|20.35<br>0.5576|
+|DiPmark(_α_=0.3)<br>ENS-DiPmark(_α_=0.3,_ n_=5)<br>ENS-DiPmark(_α_=0.3,_ n_=10)|0.3767<br>0.1325<br>0.2384<br>0.3170<br>0.3760<br>0.1317<br>0.2375<br>0.3163<br>0.3768<br>0.1328<br>0.2383<br>0.3167|20.44<br>0.5583<br>20.24<br>0.5555<br>20.21<br>0.5588|
+|DiPmark(_α_=0.4)<br>ENS-DiPmark(_α_=0.4,_ n_=5)<br>ENS-DiPmark(_α_=0.4,_ n_=10)|0.3768<br>0.1330<br>0.2385<br>0.3178<br>0.3768<br>0.1326<br>0.2380<br>0.3166<br>0.3756<br>0.1322<br>0.2379<br>0.3163|20.35<br>0.5559<br>20.36<br>0.5585<br>20.38<br>0.5590|
+|_γ_-reweight<br>ENS-_γ_-reweight(_n_=3)<br>ENS-_γ_-reweight(_n_=5)|0.3767<br>0.1320<br>0.2376<br>0.3165<br>0.3769<br>0.1331<br>0.2385<br>0.3169<br>0.3759<br>0.1321<br>0.2378<br>0.3157|20.54<br>0.5588<br>20.23<br>0.5577<br>20.45<br>0.5579|
+|SynthID(_m_=20)<br>SynthID(_m_=30)<br>SynthID(_m_=40)|0.3761<br>0.1323<br>0.2380<br>0.3169<br>0.3776<br>0.1331<br>0.2387<br>0.3175<br>0.3774<br>0.1336<br>0.2382<br>0.3173|19.82<br>0.5559<br>20.15<br>0.5582<br>20.28<br>0.5566|
+|ENS-MCMark(_l_=20,_ n_=1)<br>ENS-MCMark(_l_=20,_ n_=3)<br>ENS-MCMark(_l_=20,_ n_=5)|0.3769<br>0.1329<br>0.2386<br>0.3176<br>0.3767<br>0.1325<br>0.2380<br>0.3170<br>0.3769<br>0.1333<br>0.2388<br>0.3177|19.83<br>0.5543<br>20.43<br>0.5589<br>20.19<br>0.5631|
+
+
+scheme substantially boosts TPR across all false positive rate thresholds and reduces median _p_ -values,
+confirming that aggregation over multiple keys strengthens statistical power. More importantly, when
+comparing against strong baselines such as SynthID and MCMark, our ensemble framework achieves
+state-of-the-art performance. In particular, ENS-MCMark reaches the highest TPRs and the lowest
+_p_ -values under both 250- and 500-token settings, surpassing all competing methods and establishing
+our ensemble method as the most effective approach for watermark detectability
+
+
+5.2 ROBUSTNESS
+
+
+To comprehensively evaluate robustness, we conduct experiments under 4 challenging text corruption
+attacks: GPT-4o-mini paraphrasing, DIPPER paraphrasing, GPT-4o-mini English–French back
+translation, and 10% random token replacement. These transformations substantially alter surface
+forms while preserving semantics, providing a rigorous stress test for watermark detectability. As
+shown in Tables 2 and 3, all watermarking methods experience degraded performance under these
+attacks. Nevertheless, our ensemble framework consistently yields significant improvements, with
+ENS-MCMark achieving the highest TPR across all FPR thresholds and the lowest _p_ -values in
+every attack scenario. These results highlight that, even under strong paraphrasing and token-level
+perturbations, our ensemble method maintains state-of-the-art detectability, clearly outperforming
+existing baselines.
+
+
+5.3 UNBIASEDNESS
+
+
+To assess the unbiasedness of watermarking, we evaluate generation quality across two representative tasks: text summarization and machine translation, using multiple standard metrics. For
+summarization, we report ROUGE-1/2/L and BERTScore, while for translation we adopt BLEU and
+BERTScore. See Appendix D for a detailed introduction of the metrics. As shown in Table 4, all
+watermarking methods, including our ensemble variants, achieve scores that are nearly identical to
+the no-watermark baseline. This indicates that, similar to other unbiased watermarking approaches,
+our ensemble framework does not degrade generation quality. The consistency across diverse metrics
+and tasks confirms that the improved detectability of our ensemble method comes without sacrificing
+semantic fidelity or fluency of the generated outputs.
+
+
+5.4 ABLATION STUDY
+
+
+In this section, we study the effect of generation length and ensemble size on detectability. All
+experiments are conducted on Llama-3.2-3B-Instruct using the C4 subset, and we report TPR@0.01%
+FPR together with the median _p_ -value.
+
+
+8
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+|Col1|Col2|Col3|Col4|Col5|
+|---|---|---|---|---|
+||||||
+||||||
+||||||
+||||SynthID(<br>~~ENS- -re~~|=30)<br>~~eight(n=5)~~|
+||||<br>ENS-DiPm<br>ENS-DiPm<br>~~ENS_MCM~~|ark( =0.4,n=5)<br>ark( =0.3,n=5)<br>~~rk(l=20,n=1)~~|
+||||ENS_MCM<br>ENS_MCM|ark(l=20,n=3)<br>ark(l=20,n=5)|
+
+
+Length of the text
+
+
+|SynthID(m=30)<br>ENS- -reweight<br>ENS-DiPmark(|(n=5)<br>=0.4,n=5)|Col3|Col4|Col5|
+|---|---|---|---|---|
+|~~ENS-DiPmark( ~~<br>ENS_MCMark(l=<br>ENS_MCMark(l=<br>ENS_MCMark(l=|~~0.3,n=5~~<br>20,n=1)<br>20,n=3)<br>20,n=5)||||
+||||||
+||||||
+
+
+Length of the text
+
+
+30
+
+
+20
+
+
+10
+
+
+0
+
+
+Figure 1: Effect of the generation length on the detectability. Left: TPR@0.01%FPR vs. generation
+length. Right: median _p_ -value vs. generation length.
+
+
+10 4
+
+
+10 7
+
+
+10 10
+
+
+10 13
+
+
+10 16
+
+
+1.0
+
+
+0.9
+
+
+0.8
+
+
+0.7
+
+
+0.6
+
+
+0.6
+
+0.5
+
+0.4
+
+0.3
+
+0.2
+
+
+10 2
+
+
+10 3
+
+
+10 4
+
+
+10 5
+
+
+Number of Ensembles
+
+
+Number of Ensembles
+
+
+Number of Ensembles
+
+
+Number of Ensembles
+
+
+Figure 2: Effect of the number of ensembles on detectability. We compare _γ_ -reweight and DiPmark
+( _α_ = 0 _._ 3 _,_ 0 _._ 4) under generation lengths 250 and 500. Left two plots: length=500; right two plots:
+length=250.
+
+
+**Detectability** **vs.** **generation** **length.** As shown in Figure 1, increasing the generation length
+consistently improves detectability for all watermarking methods. Longer sequences provide more
+statistical evidence, thereby reducing the variance of detection scores and leading to both higher
+TPR and lower median _p_ -values. Among the baselines, we observe that ENS-MCmark with _n_ = 3
+achieves the best overall detectability across lengths. Compared to the original MCmark baseline
+( _ENS-MCmark_ ( _ℓ_ = 20 _, n_ = 1)), our ensemble framework significantly boosts detection power while
+maintaining robustness. These results highlight the importance of sequence length in watermark
+detection and further confirm the benefit of ensemble-based designs.
+
+
+**Detectability vs.** **number of ensembles.** We further analyze the effect of ensemble size using
+DiPmark and _γ_ -reweight with _n_ = 1 _,_ 2 _, . . .,_ 10 under generation lengths of 250 and 500 (Figure 2).
+Interestingly, detectability does not grow monotonically with _n_ : we observe that detection power
+initially improves as ensembles aggregate complementary evidence, but then gradually declines
+when _n_ becomes large. This non-monotonic trend is consistent with our theoretical analysis in
+Sec. 4.3, where excessive ensemble averaging introduces redundancy and dilutes the effective signal.
+In particular, moderate ensemble sizes (e.g., _n_ = 3–5) provide the best trade-off, achieving the lowest
+_p_ -values and the highest TPR across both generation lengths.
+
+
+6 CONCLUSION
+
+
+In this work, we introduced ENS, a principled ensemble framework for unbiased watermarking that
+amplifies detection signals while rigorously preserving the underlying language model distribution.
+By composing multiple independent unbiased watermarks, ENS achieves a provable _[√]_ _n_ gain in
+signal-to-noise ratio without sacrificing imperceptibility. Our theoretical analysis confirms that the
+unbiasedness property holds under independent keys, and our experiments demonstrate consistent
+improvements in detection accuracy and robustness to text modification attacks across diverse model
+families and baseline methods. These results suggest that ENS offers a practical and scalable path
+toward stronger, more reliable watermarking for real-world deployment, helping ensure provenance
+and accountability in the era of large-scale AI text generation.
+
+
+9
+
+
+REFERENCES
+
+
+Scott Aaronson. My AI safety lecture for UT effective altruism,. 2022. URL [https://](https://scottaaronson.blog/?p=6823)
+[scottaaronson.blog/?p=6823.](https://scottaaronson.blog/?p=6823)
+
+
+Marah Abdin, Jyoti Aneja, Hany Awadalla, Ahmed Awadallah, Ammar Ahmad Awan, Nguyen Bach,
+Amit Bahree, Arash Bakhtiari, Jianmin Bao, Harkirat Behl, et al. Phi-3 technical report: A highly
+capable language model locally on your phone. _arXiv preprint arXiv:2404.14219_, 2024.
+
+
+Ond rej Bojar, Rajen Chatterjee, Christian Federmann, Yvette Graham, Barry Haddow, Matthias
+Huck, Antonio Jimeno Yepes, Philipp Koehn, Varvara Logacheva, Christof Monz, Matteo Negri,
+Aurelie Neveol, Mariana Neves, Martin Popel, Matt Post, Raphael Rubino, Carolina Scarton, Lucia
+Specia, Marco Turchi, Karin Verspoor, and Marcos Zampieri. Findings of the 2016 conference
+on machine translation. In _Proceedings_ _of_ _the_ _First_ _Conference_ _on_ _Machine_ _Translation_, pp.
+131–198, Berlin, Germany, August 2016. Association for Computational Linguistics. URL
+[http://www.aclweb.org/anthology/W/W16/W16-2301.](http://www.aclweb.org/anthology/W/W16/W16-2301)
+
+
+Ruibo Chen, Yihan Wu, Junfeng Guo, and Heng Huang. De-mark: Watermark removal in large
+language models. _arXiv preprint arXiv:2410.13808_, 2024a.
+
+
+Ruibo Chen, Yihan Wu, Junfeng Guo, and Heng Huang. Improved unbiased watermark for large
+language models. _arXiv preprint arXiv:2502.11268_, 2025.
+
+
+Yanshuo Chen, Zhengmian Hu, Yihan Wu, Ruibo Chen, Yongrui Jin, Wei Chen, and Heng Huang.
+Enhancing biosecurity with watermarked protein design. _bioRxiv_, pp. 2024–05, 2024b.
+
+
+Miranda Christ, Sam Gunn, and Or Zamir. Undetectable watermarks for language models. _arXiv_
+_preprint arXiv:2306.09194_, 2023.
+
+
+Mike Conover, Matt Hayes, Ankit Mathur, Jianwei Xie, Jun Wan, Sam Shah, Ali Ghodsi, Patrick
+Wendell, Matei Zaharia, and Reynold Xin. Free dolly: Introducing the world’s first truly open
+instruction-tuned llm, 2023. URL [https://www.databricks.com/blog/2023/04/](https://www.databricks.com/blog/2023/04/12/dolly-first-open-commercially-viable-instruction-tuned-llm)
+[12/dolly-first-open-commercially-viable-instruction-tuned-llm.](https://www.databricks.com/blog/2023/04/12/dolly-first-open-commercially-viable-instruction-tuned-llm)
+
+
+Sumanth Dathathri, Abigail See, Sumedh Ghaisas, Po-Sen Huang, Rob McAdam, Johannes Welbl,
+Vandana Bachani, Alex Kaskasoli, Robert Stanforth, Tatiana Matejovicova, et al. Scalable watermarking for identifying large language model outputs. _Nature_, 634(8035):818–823, 2024.
+
+
+Abhimanyu Dubey, Abhinav Jauhri, Abhinav Pandey, Abhishek Kadian, Ahmad Al-Dahle, Aiesha
+Letman, Akhil Mathur, Alan Schelten, Amy Yang, Angela Fan, et al. The llama 3 herd of models.
+_arXiv preprint arXiv:2407.21783_, 2024.
+
+
+Karl Moritz Hermann, Tomas Kocisky, Edward Grefenstette, Lasse Espeholt, Will Kay, Mustafa
+Suleyman, and Phil Blunsom. Teaching machines to read and comprehend. _Advances in neural_
+_information processing systems_, 28, 2015.
+
+
+Zhengmian Hu, Lichang Chen, Xidong Wu, Yihan Wu, Hongyang Zhang, and Heng Huang. Unbiased
+watermark for large language models. _arXiv preprint arXiv:2310.10669_, 2023.
+
+
+Albert Q Jiang, Alexandre Sablayrolles, Arthur Mensch, Chris Bamford, Devendra Singh Chaplot,
+Diego de las Casas, Florian Bressand, Gianna Lengyel, Guillaume Lample, Lucile Saulnier, et al.
+Mistral 7b. _arXiv preprint arXiv:2310.06825_, 2023.
+
+
+John Kirchenbauer, Jonas Geiping, Yuxin Wen, Jonathan Katz, Ian Miers, and Tom Goldstein. A
+watermark for large language models. _arXiv preprint arXiv:2301.10226_, 2023.
+
+
+Kalpesh Krishna, Yixiao Song, Marzena Karpinska, John Wieting, and Mohit Iyyer. Paraphrasing
+evades detectors of ai-generated text, but retrieval is an effective defense. _Advances in Neural_
+_Information Processing Systems_, 36:27469–27500, 2023.
+
+
+Rohith Kuditipudi, John Thickstun, Tatsunori Hashimoto, and Percy Liang. Robust distortion-free
+watermarks for language models. _arXiv preprint arXiv:2307.15593_, 2023.
+
+
+10
+
+
+Mike Lewis. Bart: Denoising sequence-to-sequence pre-training for natural language generation,
+translation, and comprehension. _arXiv preprint arXiv:1910.13461_, 2019.
+
+
+Chin-Yew Lin. Rouge: A package for automatic evaluation of summaries. In _Text summarization_
+_branches out_, pp. 74–81, 2004.
+
+
+Y Liu. Multilingual denoising pre-training for neural machine translation. _arXiv_ _preprint_
+_arXiv:2001.08210_, 2020.
+
+
+Yepeng Liu and Yuheng Bu. Adaptive text watermark for large language models. _arXiv preprint_
+_arXiv:2401.13927_, 2024.
+
+
+Minjia Mao, Dongjun Wei, Zeyu Chen, Xiao Fang, and Michael Chau. A watermark for low-entropy
+and unbiased generation in large language models. _arXiv preprint arXiv:2405.14604_, 2024.
+
+
+Kishore Papineni, Salim Roukos, Todd Ward, and Wei-Jing Zhu. Bleu: a method for automatic
+evaluation of machine translation. In _Proceedings of the 40th annual meeting of the Association_
+_for Computational Linguistics_, pp. 311–318, 2002.
+
+
+Julien Piet, Chawin Sitawarin, Vivian Fang, Norman Mu, and David Wagner. Mark my words:
+Analyzing and evaluating language model watermarks. _arXiv preprint arXiv:2312.00273_, 2023.
+
+
+Colin Raffel, Noam Shazeer, Adam Roberts, Katherine Lee, Sharan Narang, Michael Matena, Yanqi
+Zhou, Wei Li, and Peter J Liu. Exploring the limits of transfer learning with a unified text-to-text
+transformer. _Journal of machine learning research_, 21(140):1–67, 2020.
+
+
+Abigail See, Peter J. Liu, and Christopher D. Manning. Get to the point: Summarization with
+pointer-generator networks. In _Proceedings of the 55th Annual Meeting of the Association for_
+_Computational Linguistics (Volume 1:_ _Long Papers)_, pp. 1073–1083, Vancouver, Canada, July
+2017. Association for Computational Linguistics. doi: 10.18653/v1/P17-1099. URL [https:](https://www.aclweb.org/anthology/P17-1099)
+[//www.aclweb.org/anthology/P17-1099.](https://www.aclweb.org/anthology/P17-1099)
+
+
+Shangqing Tu, Yuliang Sun, Yushi Bai, Jifan Yu, Lei Hou, and Juanzi Li. Waterbench: Towards
+holistic evaluation of watermarks for large language models. _arXiv preprint arXiv:2311.07138_,
+2023.
+
+
+Thomas Wolf, Lysandre Debut, Victor Sanh, Julien Chaumond, Clement Delangue, Anthony Moi,
+Pierric Cistac, Tim Rault, Remi´ Louf, Morgan Funtowicz, et al. Huggingface’s transformers:
+State-of-the-art natural language processing. _arXiv preprint arXiv:1910.03771_, 2019.
+
+
+Yihan Wu, Zhengmian Hu, Hongyang Zhang, and Heng Huang. Dipmark: A stealthy, efficient and
+resilient watermark for large language models. _arXiv preprint arXiv:2310.07710_, 2023.
+
+
+Tianyi Zhang, Varsha Kishore, Felix Wu, Kilian Q Weinberger, and Yoav Artzi. Bertscore: Evaluating
+text generation with bert. _arXiv preprint arXiv:1904.09675_, 2019.
+
+
+11
+
+
+A LLM USAGE
+
+
+We ONLY used ChatGPT-4o and ChatGPT-5 to refine the content.
+
+
+B WATERMARKING ALGORITHMS
+
+
+**Algorithm 1** ENS generator.
+
+1: **Input:** pretrained LM _PM_, secret keys sk1 _, · · ·_ _,_ sk _n_, prompt _**x**_ _−m_ :0, generate length _T_ _∈_ N,
+n-gram window length _a_, logits reweight strategy _F_, hash function _h_, n-gram history _hist_ .
+2: **for** _t_ = 1 _, . . ., T_ **do**
+3: Initialize _PM,w_ [(0)] [=] _[ P][M]_
+4: **if** _**x**_ _t−a,t−_ 1 _∈_ _hist_ **then**
+5: Sampling from the original distribution _PM_ ( _·|_ _**x**_ _−m_ : _t−_ 1).
+6: **else**
+7: Update _hist_ with _**x**_ _t−a,t−_ 1.
+8: **for** _i_ = 1 _, . . ., n_ **do**
+9: Generate watermark key _ki_ = _h_ (sk _i,_ _**x**_ _t−a,t−_ 1).
+
+10: _PM,w_ [(] _[i]_ [)] [(] _[·|]_ _**[x]**_ _[−][m]_ [:] _[t][−]_ [1][) :=] _[ F]_ [(] _[P]_ [ (] _M,w_ _[i][−]_ [1)][(] _[·|]_ _**[x]**_ _[−][m]_ [:] _[t][−]_ [1][)] _[|][k][i]_ [)][.]
+
+11: Sample the next token _xt_ from _PM,w_ [(] _[n]_ [)] [(] _[·|]_ _**[x]**_ _[−][m]_ [:] _[t][−]_ [1][)][.]
+
+12: **return** _**x**_ 1: _T_ .
+
+
+**Algorithm 2** ENS detector.
+
+1: **Input:** pretrained LM _PM_, secret keys sk1 _, · · ·_ _,_ sk _n_, generated tokens _**x**_ 1: _T_, threshold Φ0, score
+function _s_, logits reweight strategy _F_, hash function _h_ .
+2: Initialize Φ = 0
+3: **for** _t_ = 1 _, . . ., T_ **do**
+4: **for** _i_ = 1 _, . . ., n_ **do**
+5: Recover the watermark key _ki_ = _h_ (sk _i,_ _**x**_ _t−a,t−_ 1).
+6: Φ = Φ + _s_ ( _xt|F, ki_ ).
+
+7: **if** Φ _≥_ Φ0 **then**
+8: **return** _**x**_ 1: _T_ is watermarked.
+9: **else**
+10: **return** _**x**_ 1: _T_ is not watermarked.
+
+
+C MISSING PROOFS
+
+
+**Theorem C.1** (Unbiasedness) **.** _If F_ _is an unbiased logits-based reweight strategy, and the watermark_
+_keys_ _**k**_ 1: _n_ _are i.i.d._ _from PK, then the n-ensemble of F_ _is also an unbiased logits-based reweight_
+_strategy, i.e.,_
+
+
+E _**k**_ 1: _n∼PK_ _[n]_ [[][ENS][(] _[n, F, P][M]_ [(] _[x][t]_ [+1] _[|]_ _**[x]**_ [1:] _[t]_ [)] _[,]_ _**[ k]**_ [1:] _[n]_ [)] =] _[ P][M]_ [(] _[x][t]_ [+1] _[|]_ _**[ x]**_ [1:] _[t]_ [)] (6)
+
+
+_holds for arbitrary PM_ ( _·|_ _**x**_ 1: _t_ ) _∈P_ _and xt_ +1 _∈_ _V,_
+
+
+_Proof._ We prove it by induction, when _n_ = 1, since _F_ is an unbiased logit-based reweight strategy,
+we have
+
+E _k∼PK_ [ENS(1 _, F, PM_ ( _xt_ +1 _|_ _**x**_ 1: _t_ ) _, k_ )] = E _k∼PK_ [ _F_ ( _PM_ ( _xt_ +1 _|_ _**x**_ 1: _t|k_ ))] (7)
+= _PM_ ( _xt_ +1 _|_ _**x**_ 1: _t_ ) _._
+
+
+When _m >_ 1, assuming
+
+
+E _**k**_ 1: _n∼PK_ _[n]_ [[][ENS][(] _[n, F, P][M]_ [(] _[x][t]_ [+1] _[|]_ _**[x]**_ [1:] _[t]_ [)] _[,]_ _**[ k]**_ [1:] _[n]_ [)] =] _[ P][M]_ [(] _[x][t]_ [+1] _[|]_ _**[ x]**_ [1:] _[t]_ [)]
+
+
+12
+
+
+holds for _n_ = _m −_ 1, when _n_ = _m_, since _km_ is independent of _**k**_ 1: _m−_ 1,
+
+
+E _**k**_ 1: _m∼PK_ _[m]_ [[][ENS][(] _[m, F, P][M]_ [(] _[x][t]_ [+1] _[|]_ _**[x]**_ [1:] _[t]_ [)] _[,]_ _**[ k]**_ [1:] _[m]_ [)]]
+
+=E _km∼PK,_ _**k**_ 1: _m−_ 1 _∼P mK_ _−_ 1[ _F_ (ENS( _m −_ 1 _, F, PM_ ( _·|_ _**x**_ 1: _t_ ) _,_ _**k**_ 1: _m−_ 1) _|km_ )] _,_ (8)
+
+=E _**k**_ 1: _m−_ 1 _∼P mK_ _−_ 1[E _km∼PK_ [ _F_ (ENS( _m −_ 1 _, F, PM_ ( _·|_ _**x**_ 1: _t_ ) _,_ _**k**_ 1: _m−_ 1) _|km_ )]]
+
+
+Since _F_ is an unbiased logits-based reweight strategy, we have
+
+
+E _km∼PK_ [ _F_ (ENS( _m −_ 1 _, F, PM_ ( _·|_ _**x**_ 1: _t_ ) _,_ _**k**_ 1: _m−_ 1) _|km_ )] = ENS( _m −_ 1 _, F, PM_ ( _·|_ _**x**_ 1: _t_ ) _,_ _**k**_ 1: _m−_ 1) _._
+
+
+Together with Eq. 8,
+
+
+E _**k**_ 1: _m∼PK_ _[m]_ [[][ENS][(] _[m, F, P][M]_ [(] _[x][t]_ [+1] _[|]_ _**[x]**_ [1:] _[t]_ [)] _[,]_ _**[ k]**_ [1:] _[m]_ [)]]
+
+
+=E _**k**_ 1: _m−_ 1 _∼P mK_ _−_ 1[ENS( _m −_ 1 _, F, PM_ ( _·|_ _**x**_ 1: _t_ ) _,_ _**k**_ 1: _m−_ 1)] _,_
+
+
+(*)
+= _PM_ ( _xt_ +1 _|_ _**x**_ 1: _t_ ) _._
+
+
+(9)
+
+
+(*) refers by induction assumption. Thus, the _n_ -ensemble of _F_ is also an unbiased logits-based
+reweight strategy.
+
+
+D EXPERIMENT SETUP
+
+
+We assess the unbiasedness properties of various watermarking models across two seq2seq tasks: text
+summarization and machine translation. The experiments are implemented using the Huggingface
+library (Wolf et al., 2019), a widely adopted framework in the NLP community for model training
+and sharing. All evaluations are performed on 8 NVIDIA A6000 GPUs, each equipped with 48GB of
+memory.
+
+
+**Machine Translation.** For this task, we use the WMT’14 English (En) to Romanian (Ro) dataset,
+which includes 1,999 test examples. The Multilingual BART (MBart) model (Liu, 2020) is adopted,
+along with its official tokenizer.
+
+
+**Text Summarization.** For summarization, we utilize the CNN-DM test set (Hermann et al., 2015),
+consisting of 11,490 examples. We evaluate with the BART-large model (400M parameters) and the
+LLaMA-2 model with 7B parameters.
+
+
+**Evaluation Metrics for Text Quality.** To quantify generation quality, we adopt the following metrics:
+
+
+    - **ROUGE Score.** Applied to summarization, ROUGE (Lin, 2004) measures n-gram overlap
+between generated summaries and reference texts, reflecting content preservation.
+
+
+    - **BLEU Score.** For translation, BLEU (Papineni et al., 2002) evaluates lexical similarity
+between system outputs and human references.
+
+
+    - **BERTScore.** BERTScore (Zhang et al., 2019) computes semantic similarity via token
+embedding cosine similarity. We report BERTScore-F1, -Precision, and -Recall for both
+summarization and translation.
+
+
+    - **Perplexity.** Derived from information theory, perplexity measures how well a probability
+model predicts text. Lower values indicate stronger predictive capacity. We use it to assess
+both summarization and text generation.
+
+
+E ADDITIONAL RESULTS
+
+
+In this section, we provide all the experimental results on three LMs: Llama-3.2-3B-Instruct (Dubey
+et al., 2024), Mistral-7B-Instruct-v0.3 (Jiang et al., 2023), and Phi-3.5-mini-instruct (Abdin et al.,
+2024); and 7 datasets: C4 subset (Raffel et al., 2020), three MMW datasets (Piet et al., 2023), Dolly
+CW (Conover et al., 2023), and two datasets from WaterBench (Tu et al., 2023).
+
+
+13
+
+
+Median P-Values vs Length (Llama_3.2_3B_Instruct, c4_subset)
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+|Col1|Col2|Col3|Col4|
+|---|---|---|---|
+|||||
+|||||
+|||Sy<br>~~EN~~||
+|||Sy<br>~~EN~~|nthID(m=30)<br>~~- -reweight(n=5)~~|
+|||EN<br>EN<br>~~EN~~|<br>S-DiPmark( =0.4,n=5)<br>S-DiPmark( =0.3,n=5)<br>~~_MCMark(l=20,n=1)~~|
+|||EN<br>EN|S_MCMark(l=20,n=3)<br>S_MCMark(l=20,n=5)|
+
+
+Length of the text
+
+
+30
+
+
+20
+
+
+10
+
+
+0
+
+|SynthID<br>ENS- -re<br>ENS-DiP|(m=30)<br>weight(n=5)<br>mark( =0.4,n=5)|Col3|Col4|Col5|
+|---|---|---|---|---|
+|~~ENS-DiP~~<br>ENS_MC<br>ENS_MC<br>ENS_MC|~~mark( =0.3,n=5)~~<br>Mark(l=20,n=1)<br>Mark(l=20,n=3)<br>Mark(l=20,n=5)||||
+||||||
+||||||
+
+
+Length of the text
+
+
+Detection Accuracy vs Length (Llama_3.2_3B_Instruct, dolly_cw)
+
+
+15.0
+
+
+12.5
+
+
+10.0
+
+
+Median P-Values vs Length (Llama_3.2_3B_Instruct, dolly_cw)
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+|SynthID(|m=30)|Col3|Col4|
+|---|---|---|---|
+|~~ENS- -re~~<br>ENS-DiP<br>ENS-DiP<br>|~~weight(n=5)~~<br>mark( =0.3,n=5)<br>mark( =0.4,n=5)<br>|||
+|~~ENS_MC~~<br>ENS_MC<br>ENS_MC|~~ark(l=20,n=1)~~<br>Mark(l=20,n=3)<br>Mark(l=20,n=5)|||
+|||||
+|||||
+|||||
+
+
+Length of the text
+
+
+|Synth<br>ENS-<br>ENS-D|ID(m=30)<br>-reweight(n=5)<br>iPmark( =0.3,n=5|)|Col4|Col5|
+|---|---|---|---|---|
+|ENS-D<br>ENS_M<br>|<br>iPmark( =0.4,n=5<br>CMark(l=20,n=1)<br>|)|||
+|~~ENS_~~<br>ENS_M|~~CMark(l=20,n=3)~~<br>CMark(l=20,n=5)||||
+|~~ENS_~~<br>ENS_M|||||
+||||||
+||||||
+||||||
+
+
+7.5
+
+
+5.0
+
+
+2.5
+
+
+0.0
+
+Length of the text
+
+
+Median P-Values vs Length (Llama_3.2_3B_Instruct, finance_qa)
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+|Col1|Col2|Col3|Col4|
+|---|---|---|---|
+|||||
+|||||
+|||Syn<br>~~EN~~||
+|||Syn<br>~~EN~~|thID(m=30)<br>~~-DiPmark( =0.3,n=5)~~|
+|||ENS<br>ENS<br>~~EN~~|<br>- -reweight(n=5)<br>-DiPmark( =0.4,n=5)<br>~~_MCMark(l=20,n=1)~~|
+|||ENS<br>ENS|_MCMark(l=20,n=3)<br>_MCMark(l=20,n=5)|
+
+
+Length of the text
+
+
+300
+
+250
+
+200
+
+150
+
+100
+
+
+|SynthI|D(m=30)|Col3|Col4|Col5|
+|---|---|---|---|---|
+|~~ENS-Di~~<br>ENS- -<br>~~ENS-Di~~|~~Pmark( =0.3,n=5)~~<br>reweight(n=5)<br>~~Pmark( =0.4,n=5)~~||||
+|ENS_M<br>ENS_M<br>|<br>CMark(l=20,n=1)<br>CMark(l=20,n=3)<br>||||
+|~~ENS_M~~|~~CMark(l=20,n=5)~~||||
+||||||
+||||||
+||||||
+||||||
+
+
+50
+
+0
+
+Length of the text
+
+
+Median P-Values vs Length (Llama_3.2_3B_Instruct, longform_qa)
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+|Col1|Col2|Col3|Col4|
+|---|---|---|---|
+|||||
+|||||
+|||Synt<br>~~ENS~~||
+|||Synt<br>~~ENS~~|hID(m=30)<br>~~DiPmark( =0.3,n=5)~~|
+|||ENS<br>ENS<br>~~ENS~~|<br>- -reweight(n=5)<br>-DiPmark( =0.4,n=5)<br>~~MCMark(l=20,n=1)~~|
+|||ENS<br>ENS|_MCMark(l=20,n=3)<br>_MCMark(l=20,n=5)|
+
+
+Length of the text
+
+
+300
+
+250
+
+200
+
+150
+
+100
+
+
+50
+
+0
+
+|SynthID|(m=30)|Col3|Col4|Col5|
+|---|---|---|---|---|
+|~~ENS-Di~~<br>ENS- -r<br>~~ENS-Di~~|~~mark( =0.3,n=5)~~<br>eweight(n=5)<br>~~mark( =0.4,n=5)~~||||
+|ENS_M<br>ENS_M<br>|<br>CMark(l=20,n=1)<br>CMark(l=20,n=3)<br>||||
+|~~ENS_M~~|~~Mark(l=20,n=5)~~||||
+||||||
+||||||
+||||||
+||||||
+
+
+Length of the text
+
+
+14
+
+
+Detection Accuracy vs Length (Llama_3.2_3B_Instruct, mmw_book_report)
+
+
+25
+
+
+20
+
+
+15
+
+
+10
+
+
+Median P-Values vs Length (Llama_3.2_3B_Instruct, mmw_book_report)
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+|Col1|Col2|Col3|Col4|Col5|Col6|
+|---|---|---|---|---|---|
+|||||||
+|||||||
+|||||||
+|||||SynthI<br>|(m=30)<br>|
+|||||~~ENS-Di~~<br>ENS-Di<br>ENS- -r<br>|~~mark( =0.4,n=5)~~<br>Pmark( =0.3,n=5)<br>eweight(n=5)<br>|
+|||||~~ENS_M~~<br>ENS_M<br>ENS_M|~~Mark(l=20,n=1)~~<br>CMark(l=20,n=3)<br>CMark(l=20,n=5)|
+
+
+|SynthI<br>ENS-D<br>ENS-D<br>ENS- -|D(m=30)<br>iPmark( =0.4,n<br>iPmark( =0.3,n<br>reweight(n=5)|=5)<br>=5)|Col4|Col5|
+|---|---|---|---|---|
+|ENS_M<br>ENS_M<br>ENS_M|CMark(l=20,n=<br>CMark(l=20,n=<br>CMark(l=20,n=|1)<br>3)<br>5)|||
+||||||
+||||||
+||||||
+
+
+0 100 200 300 400 500
+Length of the text
+
+
+5
+
+
+0
+
+0 100 200 300 400 500
+Length of the text
+
+
+Median P-Values vs Length (Llama_3.2_3B_Instruct, mmw_fake_news)
+
+
+60
+
+50
+
+40
+
+30
+
+20
+
+10
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+|Col1|Col2|Col3|Col4|Col5|
+|---|---|---|---|---|
+||||||
+||||||
+||||||
+||||SynthI<br>~~ENS-D~~|D(m=30)<br>~~Pmark( =0.3,n=5)~~|
+||||ENS- -<br>ENS-D<br>~~ENS_~~|<br>reweight(n=5)<br>iPmark( =0.4,n=5)<br>~~CMark(l=20,n=1)~~|
+||||ENS_M<br>ENS_M|CMark(l=20,n=3)<br>CMark(l=20,n=5)|
+
+
+Length of the text
+
+
+|SynthI|ID(m=30)|Col3|Col4|Col5|
+|---|---|---|---|---|
+|~~Synth~~<br>ENS-D<br>ENS- <br>|~~D(m=30)~~<br>iPmark( =0.3,n<br>-reweight(n=5)<br>|=5)<br>|||
+|~~ENS-D~~<br>ENS_M<br>ENS_|~~iPmark( =0.4,n~~<br>CMark(l=20,n=<br>CMark(l=20,n=|~~=5)~~<br>1)<br>3)|||
+|ENS_M|CMark(l=20,n=|5)|||
+||||||
+||||||
+||||||
+||||||
+
+
+0
+
+Length of the text
+
+
+Median P-Values vs Length (Llama_3.2_3B_Instruct, mmw_story)
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+40
+
+
+30
+
+
+20
+
+
+10
+
+
+|Col1|Col2|Col3|Col4|Col5|
+|---|---|---|---|---|
+||||||
+||||||
+||||||
+||||SynthID(<br>~~ENS-DiP~~|=30)<br>~~ark( =0.4,n=5)~~|
+||||ENS-DiPm<br>ENS- -rew<br>~~ENS_MC~~|<br>ark( =0.3,n=5)<br>eight(n=5)<br>~~ark(l=20,n=1)~~|
+||||ENS_MCM<br>ENS_MCM|ark(l=20,n=3)<br>ark(l=20,n=5)|
+
+
+Length of the text
+
+
+|Synth<br>ENS-|ID(m=30)<br>DiPmark( =0.4,|n=5)|Col4|Col5|Col6|
+|---|---|---|---|---|---|
+|~~ENS-~~<br>ENS- <br>ENS_<br>|<br>~~DiPmark( =0.3,~~<br> -reweight(n=5<br>MCMark(l=20,n<br>|~~n=5)~~<br>)<br>=1)<br>||||
+|ENS_<br>ENS_|MCMark(l=20,n<br>MCMark(l=20,n|=3)<br>=5)||||
+|||||||
+|||||||
+|||||||
+
+
+Detection Accuracy vs Length (Mistral_7B_Instruct_v0.3, c4_subset)
+
+
+0
+
+Length of the text
+
+
+Median P-Values vs Length (Mistral_7B_Instruct_v0.3, c4_subset)
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+|SynthID(m=30)<br>ENS-DiPmark( =0.|3,n=5)|Col3|Col4|Col5|
+|---|---|---|---|---|
+|<br>ENS-DiPmark( =0.<br>ENS- -reweight(n=<br>|4,n=5)<br>5)<br>||||
+|~~ENS_MCMark(l=20~~<br>ENS_MCMark(l=20<br>~~ENS_MCMark(l=20~~|~~n=1)~~<br>,n=3)<br>~~n=5)~~||||
+||||||
+||||||
+||||||
+||||||
+
+
+Length of the text
+
+
+|Col1|Col2|Col3|Col4|Col5|Col6|
+|---|---|---|---|---|---|
+|||||||
+|||||||
+|||||||
+||||SynthID(<br>~~ENS-DiP~~|SynthID(<br>~~ENS-DiP~~|=30)<br>~~ark( =0.3,n=5)~~|
+||||ENS-DiPm<br>ENS- -rew<br>~~ENS_MC~~|ENS-DiPm<br>ENS- -rew<br>~~ENS_MC~~|<br>ark( =0.4,n=5)<br>eight(n=5)<br>~~ark(l=20,n=1)~~|
+||||ENS_MCM<br>ENS_MCM|ENS_MCM<br>ENS_MCM|ark(l=20,n=3)<br>ark(l=20,n=5)|
+
+
+Length of the text
+
+
+15
+
+
+Detection Accuracy vs Length (Mistral_7B_Instruct_v0.3, dolly_cw)
+
+
+Median P-Values vs Length (Mistral_7B_Instruct_v0.3, dolly_cw)
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+15.0
+
+12.5
+
+10.0
+
+
+|SynthID(<br>ENS-DiP|m=30)<br>mark( =0.4,n=5)|Col3|Col4|
+|---|---|---|---|
+|ENS-DiP<br>ENS- -re<br>|<br>mark( =0.3,n=5)<br>weight(n=5)<br>|||
+|~~ENS_MC~~<br>ENS_MC<br>ENS_MC|~~Mark(l=20,n=1)~~<br>Mark(l=20,n=3)<br>Mark(l=20,n=5)|||
+|||||
+|||||
+|||||
+
+
+Length of the text
+
+
+|SynthID(m<br>ENS-DiPm|=30)<br>ark( =0.4,n|=5)|Col4|
+|---|---|---|---|
+|ENS-DiPm<br>ENS- -rew<br>|<br>ark( =0.3,n<br>eight(n=5)<br>|=5)<br>||
+|~~ENS_MCMa~~<br>ENS_MCMa<br>~~ENS_MCM~~|~~rk(l=20,n=~~<br>rk(l=20,n=<br>~~rk(l=20,n=~~|~~1)~~<br>3)<br>~~)~~||
+|||||
+|||||
+|||||
+|||||
+|||||
+
+
+Detection Accuracy vs Length (Mistral_7B_Instruct_v0.3, finance_qa)
+
+
+7.5
+
+5.0
+
+2.5
+
+0.0
+
+Length of the text
+
+
+Median P-Values vs Length (Mistral_7B_Instruct_v0.3, finance_qa)
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+12.5
+
+
+10.0
+
+
+|SynthID(<br>ENS-DiP|m=30)<br>mark( =0.4,n=5)|Col3|Col4|
+|---|---|---|---|
+|ENS- -re<br>ENS-DiP<br>|<br>weight(n=5)<br>mark( =0.3,n=5)<br>|||
+|~~ENS_MC~~<br>ENS_MC<br>ENS_MC|~~ark(l=20,n=1)~~<br>Mark(l=20,n=3)<br>Mark(l=20,n=5)|||
+|||||
+|||||
+|||||
+
+
+Length of the text
+
+
+7.5
+
+
+5.0
+
+
+2.5
+
+
+0.0
+
+
+|SynthID(m<br>ENS-DiPma|=30)<br>rk( =0.4,n=|5)|Col4|
+|---|---|---|---|
+|ENS- -rewe<br>ENS-DiPma<br>|<br>ight(n=5)<br>rk( =0.3,n=<br>|5)<br>||
+|~~ENS_MCMa~~<br>ENS_MCMa<br>ENS_MCMa|~~rk(l=20,n=~~<br>rk(l=20,n=3<br>rk(l=20,n=5|~~)~~<br>)<br>)||
+|||||
+|||||
+|||||
+
+
+Length of the text
+
+
+Median P-Values vs Length (Mistral_7B_Instruct_v0.3, longform_qa)
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+15
+
+
+10
+
+
+|Col1|Col2|Col3|Col4|
+|---|---|---|---|
+|||||
+|||||
+|||||
+||||SynthID(m=<br>~~ENS-DiPmar~~|
+||||ENS- -rewei<br>ENS-DiPmark<br>~~ENS_MCMar~~|
+||||ENS_MCMark<br>ENS_MCMark|
+
+
+Length of the text
+
+
+5
+
+
+0
+
+|SynthID(<br>ENS-DiP<br>ENS- -re|m=30)<br>mark( =0.4,n=5)<br>weight(n=5)|Col3|Col4|
+|---|---|---|---|
+|<br>ENS-DiP<br>ENS_MC<br>ENS_MC<br>ENS_MC|mark( =0.3,n=5)<br>Mark(l=20,n=1)<br>Mark(l=20,n=3)<br>Mark(l=20,n=5)|||
+|||||
+|||||
+
+
+Length of the text
+
+
+Median P-Values vs Length (Mistral_7B_Instruct_v0.3, mmw_book_report)
+
+
+25
+
+
+20
+
+
+15
+
+
+10
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+|Col1|Col2|Col3|Col4|
+|---|---|---|---|
+|||||
+|||||
+|||||
+||||SynthID(m=30)<br>~~ENS- -reweight~~|
+||||<br>ENS-DiPmark( <br>ENS-DiPmark( <br>|
+||||~~ENS_MCMark(l=~~<br>ENS_MCMark(l=<br>ENS_MCMark(l=|
+
+
+|SynthID(<br>ENS- -re|m=30)<br>weight(n=5)|Col3|Col4|
+|---|---|---|---|
+|ENS-DiPm<br>ENS-DiPm<br>ENS_MCM<br>ENS_MCM<br>|ark( =0.3,n=5)<br>ark( =0.4,n=5)<br>ark(l=20,n=1)<br>ark(l=20,n=3)<br>|||
+|~~ENS_MC~~|~~ark(l=20,n=5)~~|||
+|||||
+|||||
+|||||
+
+
+0 100 200 300 400 500
+Length of the text
+
+
+5
+
+
+0
+
+Length of the text
+
+
+16
+
+
+Median P-Values vs Length (Mistral_7B_Instruct_v0.3, mmw_fake_news)
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+20
+
+
+15
+
+
+10
+
+
+|Col1|Col2|Col3|Col4|
+|---|---|---|---|
+|||||
+|||||
+|||SynthID(<br>~~ENS-DiP~~||
+|||SynthID(<br>~~ENS-DiP~~|=30)<br>~~ark( =0.4,n=5)~~|
+|||ENS-DiPm<br>ENS- -re<br>~~ENS_MC~~|<br>ark( =0.3,n=5)<br>weight(n=5)<br>~~ark(l=20,n=1)~~|
+|||ENS_MCM<br>ENS_MCM|ark(l=20,n=3)<br>ark(l=20,n=5)|
+
+
+Length of the text
+
+
+5
+
+
+0
+
+|SynthID(m=30)<br>ENS-DiPmark( =|0.4,n=5)|Col3|
+|---|---|---|
+|<br>~~ENS-DiPmark( =~~<br>ENS- -reweight(<br>ENS_MCMark(l=<br>~~ENS_MCMark(l=~~|~~0.3,n=5)~~<br>n=5)<br>20,n=1)<br>~~0,n=3)~~||
+|ENS_MCMark(l=|20,n=5)||
+||||
+||||
+||||
+
+
+Length of the text
+
+
+Median P-Values vs Length (Mistral_7B_Instruct_v0.3, mmw_story)
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+30
+
+
+20
+
+
+10
+
+
+|Col1|Col2|Col3|Col4|
+|---|---|---|---|
+|||||
+|||||
+|||SynthI<br>~~ENS-D~~|D(m=30)<br>~~Pmark( =0.3,n=5)~~|
+|||ENS-D<br>ENS- -<br>~~ENS_~~|<br>iPmark( =0.4,n=5)<br>reweight(n=5)<br>~~CMark(l=20,n=1)~~|
+|||ENS_M<br>ENS_M|CMark(l=20,n=3)<br>CMark(l=20,n=5)|
+
+
+Length of the text
+
+
+|SynthID(m=30)<br>ENS-DiPmark(|=0.3,n=5)|Col3|Col4|Col5|
+|---|---|---|---|---|
+|<br>ENS-DiPmark( <br>ENS- -reweight<br>ENS_MCMark(l=<br>ENS_MCMark(l=<br>ENS_MCMark(l=|=0.4,n=5)<br>(n=5)<br>20,n=1)<br>20,n=3)<br>20,n=5)||||
+||||||
+||||||
+
+
+0
+
+Length of the text
+
+
+Median P-Values vs Length (Phi_3.5_mini_instruct, c4_subset)
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+60
+
+
+40
+
+
+20
+
+
+|Col1|Col2|Col3|Col4|
+|---|---|---|---|
+|||||
+|||||
+|||SynthID(m<br>~~ENS- -re~~||
+|||SynthID(m<br>~~ENS- -re~~|=30)<br>~~eight(n=5)~~|
+|||<br>ENS-DiPm<br>ENS-DiPm<br>~~ENS_MCM~~|ark( =0.3,n=5)<br>ark( =0.4,n=5)<br>~~rk(l=20,n=1)~~|
+|||ENS_MCM<br>ENS_MCM|ark(l=20,n=3)<br>ark(l=20,n=5)|
+
+
+Length of the text
+
+
+|SynthID(m=30<br>ENS- -reweigh<br>ENS-DiPmark(|)<br>t(n=5)<br>=0.3,n=5)|Col3|Col4|Col5|
+|---|---|---|---|---|
+|~~ENS-DiPmark( ~~<br>ENS_MCMark(l<br>ENS_MCMark(l<br>ENS_MCMark(l|~~=0.4,n=5)~~<br>=20,n=1)<br>=20,n=3)<br>=20,n=5)||||
+||||||
+||||||
+
+
+0
+
+Length of the text
+
+
+Median P-Values vs Length (Phi_3.5_mini_instruct, dolly_cw)
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+30
+
+
+20
+
+
+10
+
+
+|Col1|Col2|Col3|Col4|
+|---|---|---|---|
+|||||
+|||||
+|||SynthID(<br>~~ENS- -re~~||
+|||SynthID(<br>~~ENS- -re~~|m=30)<br>~~eight(n=5)~~|
+|||<br>ENS-DiPm<br>ENS-DiPm<br>~~ENS_MC~~|ark( =0.4,n=5<br>ark( =0.3,n=5<br>~~ark(l=20,n=1)~~|
+|||ENS_MCM<br>ENS_MCM|ark(l=20,n=3)<br>ark(l=20,n=5)|
+
+
+Length of the text
+
+
+0
+
+|SynthID(m=30<br>ENS- -reweigh|)<br>t(n=5)|Col3|Col4|Col5|
+|---|---|---|---|---|
+|<br>ENS-DiPmark( <br>~~ENS-DiPmark( ~~<br>ENS_MCMark(l<br>ENS_MCMark(l<br>ENS_MCMark(l|=0.4,n=5)<br> ~~=0.3,n=5)~~<br>=20,n=1)<br>=20,n=3)<br>=20,n=5)||||
+||||||
+||||||
+
+
+Length of the text
+
+
+17
+
+
+Median P-Values vs Length (Phi_3.5_mini_instruct, finance_qa)
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+30
+
+
+20
+
+
+10
+
+
+|Col1|Col2|Col3|Col4|Col5|
+|---|---|---|---|---|
+||||||
+||||||
+||||SynthID(m<br>~~ENS-DiPm~~||
+||||SynthID(m<br>~~ENS-DiPm~~|=30)<br>~~ark( =0.4,n=~~|
+||||ENS-DiPm<br>ENS- -rew<br>~~ENS_MCM~~|<br>ark( =0.3,n=<br>eight(n=5)<br>~~rk(l=20,n=1)~~|
+||||ENS_MCM<br>ENS_MCM|ark(l=20,n=3)<br>ark(l=20,n=5)|
+
+
+Length of the text
+
+
+0
+
+|SynthID(<br>ENS-DiP|m=30)<br>mark( =0.4|,n=5)|Col4|Col5|
+|---|---|---|---|---|
+|ENS-DiP<br>ENS- -re<br>ENS_MC<br>ENS_MC<br>ENS_MC|<br>mark( =0.3<br>weight(n=5<br>Mark(l=20,n<br>Mark(l=20,n<br>Mark(l=20,n|,n=5)<br>)<br>=1)<br>=3)<br>=5)|||
+||||||
+||||||
+
+
+Length of the text
+
+
+50
+
+
+40
+
+
+30
+
+
+20
+
+
+10
+
+
+Median P-Values vs Length (Phi_3.5_mini_instruct, longform_qa)
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+|Col1|Col2|Col3|Col4|Col5|
+|---|---|---|---|---|
+||||||
+||||||
+||||SynthID(m<br>~~ENS-DiPm~~||
+||||SynthID(m<br>~~ENS-DiPm~~|=30)<br>~~rk( =0.3,n=5~~|
+||||ENS- -rew<br>ENS-DiPma<br>|<br>eight(n=5)<br>rk( =0.4,n=5<br>|
+||||~~ENS_MCMa~~<br>ENS_MCMa<br>ENS_MCMa|~~rk(l=20,n=1)~~<br>rk(l=20,n=3)<br>rk(l=20,n=5)|
+
+
+Length of the text
+
+
+0
+
+|SynthID(<br>ENS-DiP<br>ENS- -re|m=30)<br>mark( =0.3,<br>weight(n=5|n=5)<br>)|Col4|Col5|
+|---|---|---|---|---|
+|~~ENS-DiP~~<br>ENS_MC<br>ENS_MC<br>~~ENS_MC~~|~~ark( =0.4~~<br>Mark(l=20,n<br>Mark(l=20,n<br>~~ark(l=20,n~~|~~n=5)~~<br>=1)<br>=3)<br>~~=5)~~|||
+||||||
+||||||
+||||||
+||||||
+
+
+Length of the text
+
+
+Median P-Values vs Length (Phi_3.5_mini_instruct, mmw_book_report)
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+50
+
+
+40
+
+
+30
+
+
+20
+
+
+10
+
+
+|Col1|Col2|Col3|Col4|Col5|
+|---|---|---|---|---|
+||||||
+||||||
+|||||D(m=30)<br>~~mark( =0.4,n=5)~~|
+||||SynthI<br>~~ENS-Di~~|SynthI<br>~~ENS-Di~~|
+||||ENS- -r<br>ENS-Di<br>|<br>eweight(n=5)<br>Pmark( =0.3,n=5)<br>|
+||||~~ENS_M~~<br>ENS_M<br>ENS_M|~~Mark(l=20,n=1)~~<br>CMark(l=20,n=3)<br>CMark(l=20,n=5)|
+
+
+Length of the text
+
+
+0
+
+|SynthID(m<br>ENS-DiPm|=30)<br>ark( =0.4,n|=5)|Col4|Col5|
+|---|---|---|---|---|
+|ENS- -rew<br>ENS-DiPm<br>~~ENS_MCM~~|<br>eight(n=5)<br>ark( =0.3,n<br>~~ark(l=20,n=~~|=5)<br>~~1)~~|||
+|ENS_MCM<br>ENS_MCM|ark(l=20,n=<br>ark(l=20,n=|3)<br>5)|||
+||||||
+||||||
+||||||
+
+
+Length of the text
+
+
+Median P-Values vs Length (Phi_3.5_mini_instruct, mmw_fake_news)
+
+
+60
+
+
+50
+
+
+40
+
+
+30
+
+
+20
+
+
+10
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+|Col1|Col2|Col3|Col4|Col5|
+|---|---|---|---|---|
+||||||
+||||||
+|||||D(m=30)<br>~~reweight(n=5)~~|
+||||SynthI<br>~~ENS- ~~|SynthI<br>~~ENS- ~~|
+||||<br>ENS-D<br>ENS-D<br>~~ENS_~~|iPmark( =0.4,n=5)<br>iPmark( =0.3,n=5)<br>~~CMark(l=20,n=1)~~|
+||||ENS_M<br>ENS_M|CMark(l=20,n=3)<br>CMark(l=20,n=5)|
+
+
+Length of the text
+
+
+0
+
+|SynthID(<br>ENS- -re<br>ENS-DiPm|m=30)<br>weight(n=5)<br>ark( =0.4,n|=5)|Col4|Col5|
+|---|---|---|---|---|
+|ENS-DiPm<br>ENS_MCM<br>|<br>ark( =0.3,n<br>ark(l=20,n=<br>|=5)<br>1)<br>|||
+|~~ENS_MC~~<br>ENS_MCM|~~ark(l=20,n~~<br>ark(l=20,n=|~~3)~~<br>5)|||
+||||||
+||||||
+||||||
+
+
+Length of the text
+
+
+18
+
+
+Median P-Values vs Length (Phi_3.5_mini_instruct, mmw_story)
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+|Col1|Col2|Col3|Col4|Col5|
+|---|---|---|---|---|
+||||||
+||||||
+||||||
+||||SynthID(<br>~~ENS-DiP~~|=30)<br>~~ark( =0.3,n=5)~~|
+||||ENS-DiPm<br>ENS- -rew<br>~~ENS_MC~~|<br>ark( =0.4,n=5)<br>eight(n=5)<br>~~ark(l=20,n=1)~~|
+||||ENS_MCM<br>ENS_MCM|ark(l=20,n=3)<br>ark(l=20,n=5)|
+
+
+|SynthID(<br>ENS-DiPm|m=30)<br>ark( =0.3,n=5)|Col3|Col4|Col5|Col6|
+|---|---|---|---|---|---|
+|~~ENS-DiPm~~<br>ENS- -re<br>ENS_MCM<br>ENS_MC|<br>~~ark( =0.4,n=5)~~<br>weight(n=5)<br>ark(l=20,n=1)<br>ark(l=20,n=3)|||||
+|ENS_MCM|ark(l=20,n=5)|||||
+|||||||
+|||||||
+|||||||
+
+
+0 100 200 300 400 500
+Length of the text
+
+
+Length of the text
+
+
+80
+
+
+60
+
+
+40
+
+
+20
+
+
+0
+
+
+19

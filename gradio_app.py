@@ -7,7 +7,7 @@ from typing import Generator
 
 import gradio as gr
 
-from fetch_iclr2025 import pdf_to_markdown
+from fetch_iclr2026 import create_pdf_converter, pdf_to_markdown
 from paper_reviewer import review_paper_text
 
 
@@ -37,7 +37,7 @@ def _load_paper_input(path: str) -> tuple[str, str]:
     input_path = Path(path)
     suffix = input_path.suffix.lower()
     if suffix == ".pdf":
-        text = pdf_to_markdown(input_path)
+        text = pdf_to_markdown(input_path, create_pdf_converter())
         if not text.strip():
             raise gr.Error("PDF parsing failed. No usable text was extracted.")
         return text, input_path.with_suffix(".txt").name

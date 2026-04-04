@@ -1,0 +1,608 @@
+# --- MEASURING DISTRIBUTION SHIFTS IN INVERSE PROBLEMS WITHOUT CLEAN DATA
+
+Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+Diffusion models are widely used as priors in imaging inverse problems. However, their performance often degrades under distribution shifts between the training and test-time images. Existing methods for identifying and quantifying distribution shifts typically require access to clean test images, which are never available at test time when solving inverse problems. We propose a flexible framework for measuring distribution shift using *only* corrupted test measurements and candidate diffusion model scores. Our framework enables three complementary capabilities. First, in the general case with only a pool of diffusion models, it supports a principled model selection by identifying the model whose prior best matches the test data. Second, when an in-distribution model is available, our metric provides a theoretically guaranteed estimator of KL divergence that closely matches the image-domain KL. Third, the metric serves as a tool for adaptation guidance: aligning score functions with corrupted measurements reduces the estimated shift and improves reconstruction quality. Experiments on inpainting and MRI confirm that our method (i) achieves robust model selection, (ii) reliable estimates KL divergence in the presence of an in-distribution model, and (iii) enables effective adaptation to mitigate distribution shift.
+
+## 1 INTRODUCTION
+
+Standard *deep learning* models typically assume that training and test data are drawn from the same distribution. However, this assumption often fails (Zhang et al., 2023), with out-of-distribution (OOD) test inputs causing significant performance degradation—specially in domains like healthcare and robotics (Yang et al., 2024). Detecting and quantifying distribution shifts is thus essential for building robust models. Recent works have focused on characterizing distribution shifts (Wiles et al., 2022; Koh & et. al, 2021; Chen et al., 2021) and detecting OOD samples (Yang et al., 2022) (see also reviews in (Salehi et al., 2022; Yang et al., 2024)). A widely used strategy for OOD detection is based on model confidence, where softmax-based indicators—such as low maximum probability or high entropy—serve as simple yet effective proxies for detecting distribution shifts, especially in classification tasks (Hendrycks & Gimpel, 2017; Liang et al., 2018).
+
+Diffusion models (DMs) (Ho et al., 2020; Song et al., 2020) have been shown to achieve state-of-the-art performance across a wide range of tasks, including high-quality image generation (Vahdat et al., 2021; Dhariwal & Nichol, 2021; Rombach et al., 2022; Karras et al., 2022; Kim et al., 2023), imaging inverse problems (Chung et al., 2023a; 2024), and medical imaging (Chung et al., 2023b; Chung & Ye, 2022; Xie & Li, 2022; Li et al., 2024; Adib et al., 2023) (see also recent reviews (Daras et al., 2024; Kazerouni et al., 2023; Croitoru et al., 2023; Li et al., 2023)). These models approximate the score function of the data distribution and enable principled sampling via stochastic differential equations (Song et al., 2020), allowing data generation from pure noise. Since diffusion models approximate the full data distribution through learned score functions, they are inherently sensitive to distribution shifts and require efficient methods for OOD detection and shift quantification. Recent work has explored this by analyzing various diffusion model-based approaches, including score consistency, sample likelihood, reconstruction error, and properties of the diffusion trajectory (Heng et al., 2024; Graham et al., 2023b; Liu et al., 2023; Livernoche et al., 2023).
+
+Existing methods for detecting and quantifying distribution shifts in inverse problems often assume access to clean test images, making them impractical when only corrupted measurements are observed
+
+at test time. To overcome these limitations, we propose the first *unsupervised* framework that operates under two complementary settings: (i) when *only* corrupted measurements and candidate models are available, our method identifies the model best suited for the given test measurements; and (ii) when both in-distribution (InD) and OOD models are available, our framework estimates the KL divergence between the underlying image distributions.
+
+Domain adaptation methods aim to mitigate distribution shifts between training and test data (Farahani et al., 2021) and are well-studied in the broader machine learning literature (Zhang & Gao, 2022; Csurka, 2017). In inverse problems, however, adaptation is particularly challenging due to the unavailability of clean test-time data. Recent *self-supervised* approaches have explored adapting deep learning models using only measurement-domain signals (Chung & Ye, 2024; Barbano et al., 2025; Darestani et al., 2022), but these methods are largely heuristic and lack a theoretical justification for their effectiveness. Our metric provides a principled framework that formally connects distribution shifts to the discrepancy between score functions, evaluated directly on corrupted measurements. This perspective not only enables model selection and KL estimation under our two settings, but also explains why aligning score functions through lightweight adaptation should reduce distribution shift. Empirically, we confirm that such adaptation lowers the estimated KL divergence and improves reconstruction quality across multiple inverse problems.
+
+**Our contributions are:** (1) We introduce the first *unsupervised* framework for quantifying distribution shift in inverse problems using only corrupted measurements. This framework operates under two complementary settings: (i) the practical case where only a pool of diffusion models is available, enabling principled model selection for test-time data, and (ii) the special case where both InD and OOD models are available, where our metric provides a reliable estimator of the KL divergence directly from measurements. (2) We establish theoretical guarantees showing that, under mild assumptions on the measurement operator, the proposed measurement-domain KL divergence closely tracks the KL divergence computed from clean images. (3) We demonstrate that the proposed KL estimator is not only an evaluation metric but also a training objective: by aligning measurement-domain scores, it enables simple and effective adaptation of pretrained diffusion priors. Our adapted model reduce measurement-domain KL and improve reconstruction quality compared to the unadapted OOD model across inpainting and MRI tasks.
+
+## 2 BACKGROUND
+
+### 2.1 DENOISING DIFFUSION PROBABILISTIC MODELS
+
+Diffusion models (Ho et al., 2020; Song et al., 2020; Karras et al., 2022) are trained to estimate the *score function* of the data distribution—that is the gradient of the log-density. During training, a forward process progressively adds Gaussian noise to clean data samples  $\mathbf{x} \sim p(\mathbf{x})$  over multiple steps, while the model learns to reverse this process by denoising the corrupted samples at each step. This forward process is typically modeled as a Markov chain,  $\mathbf{x}_{\sigma_0} \rightarrow \mathbf{x}_{\sigma_1} \rightarrow \dots \rightarrow \mathbf{x}_{\sigma_\infty}$ , where  $\mathbf{x}_{\sigma_0} = \mathbf{x}$  is the clean image and noise levels  $\sigma_0 < \sigma_1 < \dots < \sigma_\infty$  increase at each step. We denote the full set of noise levels by  $\sigma := [\sigma_0, \dots, \sigma_\infty]$ , which corresponds to a time-dependent diffusion process.
+
+The intermediate noisy variable  $\mathbf{x}_\sigma$  is defined using a Gaussian kernel:
+
+$$p(\mathbf{x}_\sigma | \mathbf{x}) = \mathcal{N}(\mathbf{x}, \sigma^2 \mathbf{I}),$$
+
+which enables direct sampling via  $\mathbf{x}_\sigma = \mathbf{x} + \mathbf{n}$ , where  $\mathbf{n} \sim \mathcal{N}(0, \sigma^2 \mathbf{I})$ . The marginal distribution of the noisy images, denoted  $p(\mathbf{x}_\sigma)$ , is given by:
+
+$$p(\mathbf{x}_\sigma) = \int p(\mathbf{x}_\sigma | \mathbf{x}) p(\mathbf{x}) d\mathbf{x} = \int G_\sigma(\mathbf{x}_\sigma - \mathbf{x}) p(\mathbf{x}) d\mathbf{x}, \quad (1)$$
+
+where  $G_\sigma$  denotes the Gaussian density function with standard deviation  $\sigma \geq 0$ .
+
+Tweedie’s formula establishes a link between Gaussian denoising and score estimation (Robbins, 1956; Miyasawa, 1961) by expressing the posterior mean in terms of the score of the noise-corrupted density:
+
+$$D_\sigma(\mathbf{x}_\sigma) = \mathbb{E}[\mathbf{x} | \mathbf{x}_\sigma] = \mathbf{x}_\sigma + \sigma^2 \nabla \log p(\mathbf{x}_\sigma). \quad (2)$$
+
+This result implies that learning the Gaussian denoiser  $D_\sigma$  is equivalent to learning the score  $\nabla \log p(\mathbf{x}_\sigma)$  of the noisy distribution, for all noise levels  $\sigma \geq 0$ . In practice, the denoiser  $D_\sigma$  is trained to minimize the mean squared error (MSE) between the clean and denoised signals:
+
+$$\text{MSE}(D_\sigma) = \mathbb{E}_{\mathbf{x}, \mathbf{x}_\sigma} [\|\mathbf{x} - D_\sigma(\mathbf{x}_\sigma)\|_2^2]. \quad (3)$$
+
+A diffusion model consists of a collection of MMSE denoisers across all noise levels,  $\{D_\sigma : \sigma \in \sigma\}$ , which implicitly provide access to the score functions  $\nabla \log p(\mathbf{x}_\sigma)$  of the noise-corrupted densities. These learned score functions enable sampling from the underlying clean image distribution  $p(\mathbf{x})$  via the reverse diffusion process (Vincent, 2011; Raphan & Simoncelli, 2011).
+
+### 2.2 MEASURING DISTRIBUTION SHIFTS WITH CLEAN IMAGES USING SCORE FUNCTIONS
+
+We extend the framework introduced in (Song et al., 2021; Kadkhodaie et al., 2024) to derive an expression for the KL divergence between the InD  $p(\mathbf{x})$  and OOD  $q(\mathbf{x})$  densities. In particular, the KL divergence can be expressed in terms of the score functions of the corresponding noise-corrupted distributions as
+
+$$D_{\text{KL}}(p(\mathbf{x}) \parallel q(\mathbf{x})) = \int_0^\infty \mathbb{E}_{\mathbf{x} \sim p(\mathbf{x})} [\|\nabla_{\mathbf{x}_\sigma} \log p(\mathbf{x}_\sigma) - \nabla_{\mathbf{x}_\sigma} \log q(\mathbf{x}_\sigma)\|_2^2] \sigma d\sigma. \quad (4)$$
+
+Here,  $p(\mathbf{x}_\sigma)$  and  $q(\mathbf{x}_\sigma)$  denote the noise-corrupted distributions of  $p(\mathbf{x})$  and  $q(\mathbf{x})$ , respectively, at noise level  $\sigma$ . The score function  $\nabla_{\mathbf{x}_\sigma} \log p(\mathbf{x}_\sigma)$  can be estimated using the Tweedie’s formula, which relates it to the posterior mean  $\mathbb{E}[\mathbf{x}|\mathbf{x}_\sigma]$  according to Eq. (2). This posterior mean, in turn, can be approximated by training MMSE denoisers via the loss in Eq. (3).
+
+In practice, diffusion models are trained as denoisers across a range of noise levels to approximate the score functions of the corresponding noise-corrupted data distributions. Thus, the KL divergence in Eq. (4) can be estimated when two diffusion models are available: one trained on InD samples from  $p(\mathbf{x})$ , and another on OOD samples from  $q(\mathbf{x})$ .
+
+When using diffusion models to estimate KL divergence, it is assumed that both the InD and OOD models have accurately learned the score functions of their respective data distributions. The discrepancy between their learned Gaussian denoisers at each noise level reflects the extent of the distribution shift. Leveraging the connection between the conditional mean estimator provided by the deep MMSE denoiser and the score function from Eq. (2), we obtain a tractable metric for measuring distribution shift in image domain (see Appendix A for the proof, as well as (Song et al., 2021; Kadkhodaie et al., 2024) for additional discussion). Notably, the resulting metric corresponds to the integrated denoising gap between the InD and OOD diffusion models across all noise levels.
+
+The KL divergence formulation in Eq. (4) quantifies the shift between the InD density  $p(\mathbf{x})$  and the OOD density  $q(\mathbf{x})$  only when clean InD images are available. To cover the more realistic setting in which we possess only corrupted measurements, we introduce an *unsupervised* metric that estimates the same distribution shift directly from those measurements.
+
+## 3 DISTRIBUTION SHIFT IN MEASUREMENT DOMAIN
+
+Clean images required for the KL divergence in Eq. (4) are unavailable in many inverse problems. We therefore derive a measurement-domain KL estimator that quantifies distribution shift directly from the observed measurements and pretrained diffusion models.
+
+### 3.1 PROBLEM FORMULATION
+
+We consider a set of measurement operators randomly drawn from the distribution  $p(\mathbf{H})$ . For a given  $\mathbf{H} \in \mathbb{R}^{m \times n}$ , the measurement vector  $\mathbf{y} \in \mathbb{R}^m$  is related to the underlying signal  $\mathbf{x} \in \mathbb{R}^n$  via
+
+$$\mathbf{y} = \mathbf{H}\mathbf{x} + \mathbf{z}, \quad (5)$$
+
+where  $\mathbf{z} \sim \mathcal{N}(0, \sigma_z^2 \mathbf{I})$  denotes the measurement noise. We assume that  $\mathbf{x}$ ,  $\mathbf{z}$ , and  $\mathbf{H}$  are independently drawn from their respective distributions for each instance of the problem.
+
+To simplify our analysis, we consider the singular value decomposition (SVD) to the measurement operator  $\mathbf{H}$  (Kawar et al., 2022; 2023). This decomposition facilitates a transformation that decouples
+
+the measurement process and allows the KL divergence—originally defined in the image domain—to be re-expressed in the measurement domain. We write the SVD of  $\mathbf{H}$  as
+
+$$\mathbf{H} = \mathbf{U}\Sigma\mathbf{V}^\top, \quad (6)$$
+
+where  $\mathbf{U} \in \mathbb{R}^{m \times m}$  and  $\mathbf{V} \in \mathbb{R}^{n \times n}$  are orthogonal matrices, and  $\Sigma \in \mathbb{R}^{m \times n}$  is a matrix of singular values. We define three transformed variables:  $\bar{\mathbf{x}} = \mathbf{V}^\top \mathbf{x}$ ,  $\bar{\mathbf{y}} = \Sigma^\dagger \mathbf{U}^\top \mathbf{y}$ , and  $\bar{\mathbf{z}} = \Sigma^\dagger \mathbf{U}^\top \mathbf{z}$ . Substitution of these variables into the original measurement model in Eq. (5), leads to relationship
+
+$$\bar{\mathbf{y}} = \mathbf{P}\bar{\mathbf{x}} + \bar{\mathbf{z}}, \quad (7)$$
+
+where  $\mathbf{P} = \Sigma^\dagger \Sigma$  is a diagonal projection matrix with entries in  $\{0, 1\}$ , and  $\bar{\mathbf{z}} \sim \mathcal{N}(0, \sigma_\Sigma^2 \Sigma^\dagger \Sigma^\dagger^\top)$  represents anisotropic uncorrelated Gaussian noise.
+
+In the noiseless setting, we can rewrite Eq. (7) as  $\bar{\mathbf{y}} = \mathbf{P}\bar{\mathbf{x}}$ . For every noise level  $\sigma$  in the noise schedule vector  $\sigma$ , we consider a noisy version of the SVD observations
+
+$$\bar{\mathbf{y}}_\sigma = \mathbf{P}\bar{\mathbf{x}}_\sigma = \mathbf{P}\bar{\mathbf{x}} + \bar{\mathbf{n}} = \bar{\mathbf{y}} + \bar{\mathbf{n}}, \quad \text{where } \bar{\mathbf{n}} = \mathbf{P}\mathbf{n} \sim \mathcal{N}(0, \sigma^2 \mathbf{P}), \quad (8)$$
+
+where  $\mathbf{n} \sim \mathcal{N}(0, \sigma^2 \mathbf{I})$  and  $\mathbf{P}$  is an orthogonal projection. Note that  $\mathbf{z}$  refers to measurement noise in inverse problems, while  $\mathbf{n}$  denotes noise added in the diffusion process.
+
+### 3.2 THEORETICAL RESULTS
+
+We now present our main theoretical result for measuring the distribution shift between the InD prior  $p(\mathbf{x})$  and OOD prior  $q(\mathbf{x})$ . We require the following assumptions to establish our theoretical results.
+
+**Assumption 1.** The range of the measurement operators  $\mathbf{H} \sim p(\mathbf{H})$ , used across experiments collectively spans the signal space  $\mathbb{R}^n$ .
+
+The assumption enforces that, on average, the measurement operators collectively observe every signal direction—formally  $\mathbb{E}[\mathbf{P}]$  is full-rank on the relevant subspace. This assumption is commonly adopted in self-supervised inverse problems (Kawar et al., 2023; Aggarwal et al., 2022).
+
+**Assumption 2.** Let  $\mathbf{H} \sim p(\mathbf{H})$  be a random measurement operator drawn from the family  $\mathbf{H}$ , and define  $\mathbf{\Pi} := \mathbf{H}^\top \mathbf{H}$ . For each diffusion noise level  $\sigma$ , the denoiser residuals  $\mathbf{D}(\mathbf{V}\bar{\mathbf{y}}_\sigma) - \mathbf{V}\bar{\mathbf{y}}_\sigma$  and  $\hat{\mathbf{D}}(\mathbf{V}\bar{\mathbf{y}}_\sigma) - \mathbf{V}\bar{\mathbf{y}}_\sigma$  are statistically independent of  $\mathbf{H}$  and hence of  $\mathbf{\Pi}$ , where  $\mathbf{D}$  and  $\hat{\mathbf{D}}$  denote InD and OOD models, respectively.
+
+This assumption is standard in self-supervised settings, where masks or operators are randomized independently of the denoiser so that residual energy factorizes, yielding unbiased measurement-only objectives. It also appears in frameworks such as ENSURE and GSURE (Kawar et al., 2023; Aggarwal et al., 2022), and has been corroborated empirically in prior work.
+
+**Theorem 1.** Let  $\bar{\mathbf{y}}_\sigma = \mathbf{P}\bar{\mathbf{x}} + \bar{\mathbf{n}}$  denote the noisy projected measurements at noise level  $\sigma$  according to Eq. (8). Then, the KL divergence between the InD density  $p(\mathbf{x})$  and the OOD density  $q(\mathbf{x})$  can be expressed as
+
+$$\begin{aligned} \text{D}_{\text{KL}}(p(\mathbf{x}) \parallel q(\mathbf{x})) &= \int_0^\infty \mathbb{E}[\|\mathbf{W}(\hat{\mathbf{D}}_\sigma(\mathbf{V}\bar{\mathbf{y}}_\sigma) - \mathbf{V}\bar{\mathbf{y}}_\sigma)\|_2^2] \sigma^{-3} d\sigma \\ &\quad - \int_0^\infty \mathbb{E}[\|\mathbf{W}(\mathbf{D}_\sigma(\mathbf{V}\bar{\mathbf{y}}_\sigma) - \mathbf{V}\bar{\mathbf{y}}_\sigma)\|_2^2] \sigma^{-3} d\sigma, \end{aligned} \quad (9)$$
+
+where  $\mathbf{D}_\sigma(\mathbf{x}_\sigma) = \mathbb{E}_p[\mathbf{x}|\mathbf{x}_\sigma]$  is the InD model,  $\hat{\mathbf{D}}_\sigma(\sigma) = \mathbb{E}_q[\mathbf{x}|\mathbf{x}_\sigma]$  is the OOD model,  $\mathbf{W}^2 = \mathbb{E}[\mathbf{H}^\top \mathbf{H}]$  is a scaling matrix,  $\mathbf{V}$  is the right singular vector from SVD of  $\mathbf{H}$ , and expectation is taken over  $\mathbf{H}$  and  $\bar{\mathbf{y}} \sim p(\bar{\mathbf{y}}|\mathbf{H})$ .
+
+Theorem 1 shows that KL divergence can be computed entirely in the measurement domain, without access to clean images. The integrand depends only on discrepancies between InD and OOD denoisers evaluated at noisy projected measurements  $\mathbf{V}\bar{\mathbf{y}}_\sigma$ . This allows us to quantify distribution shift using only the observed measurements, the known forward operator, and pretrained score functions—*without access to clean images*. The proof of Theorem 1 is provided in Appendix B.
+
+When no InD model is available, the KL in Theorem 1 cannot be computed; however, the metric can still be used for model selection. By Theorem 1, for any candidate OOD model in a pool, the KL
+
+![Figure 1: KL divergence plotted against the noise level sigma for InD and OOD Gaussian mixture models (GMMs). The figure consists of four line plots and a 2D scatter plot. The line plots show KL divergence (D_KL(p_theta || p_phi)) on the y-axis (0 to 60) against noise level sigma on the x-axis (0 to 1). Each plot corresponds to a different sample size N and corruption probability p: (1) p=0.9, N=20; (2) p=0.9, N=100; (3) p=0.7, N=100; (4) p=0.7, N=1000. In each plot, a blue curve (In-distribution) and a red curve (Out-of-distribution) are shown. The red curve closely tracks the blue curve. The 2D scatter plot on the right shows 10D GMMs (2D PCA) with blue points for In-distribution and red points for Out-of-distribution.](de6e8b740c69dac308cce9edfec3eff4_img.jpg)
+
+Figure 1: KL divergence plotted against the noise level sigma for InD and OOD Gaussian mixture models (GMMs). The figure consists of four line plots and a 2D scatter plot. The line plots show KL divergence (D\_KL(p\_theta || p\_phi)) on the y-axis (0 to 60) against noise level sigma on the x-axis (0 to 1). Each plot corresponds to a different sample size N and corruption probability p: (1) p=0.9, N=20; (2) p=0.9, N=100; (3) p=0.7, N=100; (4) p=0.7, N=1000. In each plot, a blue curve (In-distribution) and a red curve (Out-of-distribution) are shown. The red curve closely tracks the blue curve. The 2D scatter plot on the right shows 10D GMMs (2D PCA) with blue points for In-distribution and red points for Out-of-distribution.
+
+Figure 1: KL divergence plotted against the noise level  $\sigma$  for InD and OOD Gaussian mixture models (GMMs). KL divergence computed in the image domain (blue) and measurement domain (red) under inpainting corruption with probability  $p$ , using  $N$  InD data example. The measurement-domain KL divergence closely tracks its image-domain counterpart, and the approximation improves with increasing  $N$  and  $p$ .
+
+decomposes into the difference of two “compound MSE” terms aggregated over noise levels: (i) the compound MSE computed with the candidate OOD model, and (ii) the same quantity computed with the (fixed) InD model. The second term is the same for all candidates because it depends only on the true InD distribution. Therefore, minimizing the OOD compound MSE over the pool is equivalent to minimizing the KL up to an additive constant. We exploit this equivalence to pick the OOD prior that is closest to the InD distribution for a given measurement set.
+
+The weighting matrix  $\mathbf{W}$  is introduced to compensate for the effect of the measurement matrix  $\mathbf{H}$ , ensuring that all components contribute proportionally—particularly when the likelihood of different  $\mathbf{H}$  realizations is imbalanced. The accuracy of the KL approximation is directly tied to the quality of the expectation estimates, which depends on the number of example measurements  $N$  used in the computation. As  $N$  increases, the empirical estimate of the expectation becomes more reliable, leading to a tighter approximation of the KL divergence. Figure 1 illustrates this relationship using a toy example with Gaussian mixture models (GMMs), where the KL divergence between InD and OOD distributions is plotted as a function of the diffusion noise level  $\sigma$ . The blue curve represents the KL divergence computed in the image domain, while the red curve shows the corresponding approximation in the measurement domain under inpainting corruption with probability  $p$ . As shown, the measurement-domain KL closely tracks its image-domain counterpart, validating the effectiveness of our proposed metric under varying levels of measurement corruption.
+
+## 4 EXPERIMENTS
+
+We evaluate our framework on two representative inverse problems: MRI reconstruction and image inpainting. The experiments cover three aspects of our method: model selection, estimation of KL divergence, and adaptation to reduce distribution shifts. To further test robustness, we also study JPEG compression, a setting that violates our theoretical assumptions. Across all tasks, the proposed metric consistently identifies the most suitable model, provides reliable KL divergence estimates without requiring clean images, and supports effective adaptation. Even under JPEG compression, the metric remains practical and reliable, demonstrating robustness beyond the idealized conditions of our theory.
+
+**Inpainting.** For the inpainting experiments, we use FFHQ (Karras et al., 2019) as the InD dataset, with a diffusion model trained to approximate its score function. OOD models are trained separately on AFHQ (Choi et al., 2020), MetFaces (Karras et al., 2020), and Microscopy (CHAMMM) (Chen et al., 2023). Following the protocol of Kawar et al. (2023), images are resized to  $64 \times 64$ , divided into non-overlapping  $4 \times 4$  patches, and each patch is randomly erased with probability  $p$ . All diffusion models are trained with the framework of Karras et al. (2022). We also use the same model for JPEG compression with quality factors  $QF \in \{10, 30, 50, 80\}$ .
+
+**MRI.** For MRI experiments, we use the fastMRI dataset (Knoll et al. et al., 2020; Zbontar et al. et al., 2019). Brain MRI scans are treated as InD data, and a diffusion model is trained on center-cropped  $320 \times 320$  slices to approximate their score function. OOD models are trained on knee and prostate MRI slices from the same dataset. To simulate accelerated MRI, we follow established protocols in Kawar et al. (2023); Jalali et al. (2021), applying Cartesian undersampling masks with acceleration factors  $R \in \{4, 6, 8\}$ , where high-frequency components are sampled randomly.
+
+![Figure 2: Comparison of distribution shift and proposed measurement-domain KL metric. The figure consists of three line plots for p = 0.8, p = 0.5, and p = 0.2. Each plot shows D_KL(p_sigma || q_sigma) on the y-axis (ranging from 0 to 3) against sigma (noise level) on the x-axis (ranging from 0 to 80). Dashed lines represent the image domain distribution shift, and solid lines represent the proposed measurement-domain KL metric. The solid lines closely track the dashed lines. The legend indicates 'Image domain' (dashed) and 'Meas. domain' (solid). To the right of the plots are sample images: 'InD samples from FFHQ', 'OOD samples from MetFaces', 'OOD samples from AFHQ', and 'OOD samples from Microscopy'.](431b8889a0e7f676f0eef40859590349_img.jpg)
+
+Figure 2: Comparison of distribution shift and proposed measurement-domain KL metric. The figure consists of three line plots for p = 0.8, p = 0.5, and p = 0.2. Each plot shows D\_KL(p\_sigma || q\_sigma) on the y-axis (ranging from 0 to 3) against sigma (noise level) on the x-axis (ranging from 0 to 80). Dashed lines represent the image domain distribution shift, and solid lines represent the proposed measurement-domain KL metric. The solid lines closely track the dashed lines. The legend indicates 'Image domain' (dashed) and 'Meas. domain' (solid). To the right of the plots are sample images: 'InD samples from FFHQ', 'OOD samples from MetFaces', 'OOD samples from AFHQ', and 'OOD samples from Microscopy'.
+
+Figure 2: Comparison of the distribution shift (dashed lines), computed using clean images, and our proposed measurement-domain KL metric (solid lines) between an InD model trained on FFHQ and OOD models trained on MetFaces, AFHQ, and Microscopy. Results are shown under inpainting masks with  $p \in \{0.2, 0.5, 0.8\}$ . The vertical axis shows  $D_{KL}$ , evaluated as the integrand in Eq. (9) and Eq. (4) up to diffusion noise level  $\sigma$ . Right: Samples from InD and OOD datasets. Note how the proposed metric accurately tracks the KL divergence, even under high-levels of corruption (smaller values of  $p$ ).
+
+### 4.1 MODEL SELECTION
+
+We first evaluate our metric in the setting of unsupervised model selection, where only corrupted measurements and a pool of pretrained diffusion models are available. For each candidate model, we compute the compound MSE residual  $\int_0^1 \mathbb{E}[\|W(\bar{D}_\sigma(V\tilde{y}_\sigma) - V\tilde{y}_\sigma)\|_2^2] \sigma^{-3} d\sigma$ , which measures how well the model’s score function aligns with the observed measurements. Because the InD contribution is constant across all candidates, minimizing this residual is equivalent to minimizing the KL divergence. Thus, the model with the smallest residual is the one whose prior distribution is closest to the test data. This provides a simple and effective procedure for selecting among pretrained diffusion models directly from corrupted measurements, without requiring clean images.
+
+Table 1 reports the model selection metric under both inpainting masks and JPEG compression. In all settings, the InD (FFHQ) achieves the lowest residual, while OOD models yield higher values. Among the OOD candidates, MetFaces is consistently ranked closest to FFHQ, reflecting its greater visual similarity to the InD data. These results confirm that the compound MSE residual is a reliable model selection metric when only corrupted measurements are available. Notably, the robustness extends to JPEG compression, where despite structured artifacts violating the assumptions of Theorem 1, the metric produces meaningful rankings.
+
+### 4.2 COMPUTING DISTRIBUTION SHIFT
+
+We next evaluate how well the proposed metric estimates KL divergence directly from corrupted measurements. Using Theorem 1, we compute the measurement-domain KL and compare it with reference values obtained in the image domain Eq. (4). When the diffusion models accurately capture the underlying score functions, the image-domain KL provides a ground-truth baseline. This comparison allows us to assess how closely the measurement-domain estimator tracks the true distributional shift.
+
+Figure 2 and Figure 4 compare measurement-domain and image-domain KL divergence for inpainting and MRI tasks. In both cases, the measurement-domain KL closely tracks its image-domain counterpart, confirming that the proposed estimator provides an accurate proxy for distributional shift without requiring clean images. For inpainting, the relative ordering of models is preserved across all mask rates, with MetFaces consistently closest to the InD model (FFHQ), demonstrating the least amount of KL divergence. For MRI, brain scans serve as the InD data, and the estimator reliably distinguishes them from knee and prostate scans under accelerated subsampling, mirroring the image-domain KL. Additional results under JPEG compression are provided in the supplement Figure 10, where despite structured quantization artifacts violating the assumptions of Theorem 1, the estimator continues to produce meaningful distribution shift. This demonstrates the robustness of the proposed metric beyond the idealized conditions of the theory.
+
+324  
+325  
+326  
+327  
+328  
+329  
+330  
+331  
+332  
+333  
+334  
+335  
+336  
+337  
+338  
+339  
+340  
+341  
+342  
+343  
+344  
+345  
+346  
+347  
+348  
+349  
+350  
+351  
+352  
+353  
+354  
+355  
+356  
+357  
+358  
+359  
+360  
+361  
+362  
+363  
+364  
+365  
+366  
+367  
+368  
+369  
+370  
+371  
+372  
+373  
+374  
+375  
+376  
+377
+
+Table 1: *Compound MSE for JPEG compression (left) and inpainting settings (right). In both cases, the InD model FFHQ achieves the lowest MSE, while MetFaces consistently ranks closest among OOD models.*
+
+| InD |       | OOD models |       |            | InD |       | OOD models |       |            |
+|-----|-------|------------|-------|------------|-----|-------|------------|-------|------------|
+| QF  | FFHQ  | MetFaces   | AFHQ  | Microscopy | $p$ | FFHQ  | MetFaces   | AFHQ  | Microscopy |
+| 10  | 1.792 | 3.215      | 3.614 | 4.452      | 0.9 | 1.677 | 3.561      | 4.009 | 4.770      |
+| 30  | 1.807 | 3.232      | 3.629 | 4.470      | 0.8 | 1.805 | 3.651      | 4.076 | 4.841      |
+| 50  | 1.814 | 3.238      | 3.634 | 4.476      | 0.7 | 1.929 | 3.713      | 4.154 | 4.922      |
+| 80  | 1.829 | 3.252      | 3.649 | 4.491      | 0.5 | 2.067 | 3.730      | 4.186 | 4.968      |
+
+### 4.3 ADAPTATION EFFECT ON DISTRIBUTION SHIFT
+
+Theorem 1 expresses the KL divergence between InD and OOD data in terms of their compound MSE residuals on the measurements. This observation motivates adapting an OOD model using only projected measurements from the target distribution: by reducing the residual error, we directly decrease the KL divergence and thereby mitigate distribution shift. Given a pretrained OOD denoiser  $\hat{\mathcal{D}}_\sigma$ , we define the adaptation loss as
+
+$$\mathcal{L}_{\text{adapt}} = \mathbb{E}_{\mathbf{y}, \mathbf{y}_\sigma, \sigma} \left[ \left\| \mathbf{W}(\hat{\mathcal{D}}(\mathbf{V}\mathbf{y}_\sigma) - \mathbf{V}\mathbf{y}) \right\|_2^2 \right]. \quad (10)$$
+
+where the expectation is taken over measurement  $\mathbf{y}$  from InD, their noisy counterparts  $\mathbf{y}_\sigma$ , and diffusion noise levels  $\sigma$ . Minimizing this loss encourages the OOD denoiser to match the InD score function on observed projections, thereby reducing distribution shift without requiring clean images.
+
+To validate the adaptation approach, we start from an OOD model trained on AFHQ and adapt it using only projected measurements from the InD dataset FFHQ. Concretely, we select either 64 or 128 FFHQ training images, obtain their corrupted measurements, and project them onto the measurement-defined latent basis  $\mathbf{V}\mathbf{y}$ . Figure 5 plots the resulting KL divergence across diffusion noise levels  $\sigma$ , comparing the original AFHQ model to two adapted variants, Adapted64 and Adapted128. Even with this limited adaptation data, the KL curves drop noticeably below the unadapted baseline, with Adapted128 yielding the largest reduction. These results confirm that modest, measurement-only adaptation effectively shrinks distribution shift. [These adapted models are obtained by minimizing the measurement-domain KL estimator using only projected FFHQ measurements](#), illustrating that our method serves as a principled adaptation loss rather than only a selection criterion. Implementation details and additional experiments appear in Appendix D.4 and Appendix D.5.
+
+We then evaluate how this reduction in KL translates to improvements on a downstream inverse problem. Using DPS (Chung et al., 2023a) for image inpainting, we compare four models: the InD model (FFHQ), the unadapted OOD model (AFHQ), and the two adapted AFHQ variants. The adaptation procedure fine-tunes the OOD model to better approximate the InD score function using only projected measurements, without access to clean images. [In addition to identifying which pretrained prior is closer to the test distribution, the KL estimator can serve as a training loss to improve an OOD prior.](#) Figure 4 demonstrates this: starting from an AFHQ-trained model, aligning its score function with FFHQ measurements reduces the measurement-domain KL and produces the adapted models with better reconstructions. The figure includes inpainting results on a representative FFHQ test image with mask rate  $p = 0.8$  and measurement noise level  $\sigma_\varepsilon = 0.01$ , reporting both PSNR and LPIPS. As expected, the unadapted OOD model performs poorly on the InD data, while adaptation with 64 or 128 projected measurements substantially improves reconstruction quality. Table 2 confirms this trend quantitatively across settings: adapted models consistently outperform the unadapted OOD model, narrowing the gap toward the InD baseline. These findings show that even lightweight, measurement-based adaptation is effective to mitigate distribution shift in practice.
+
+### 4.4 ABLATION STUDIES
+
+We study how varying the inpainting measurement probability, which controls the degree of ill-posedness, influences the accuracy of KL divergence approximation using the proposed metric. Figure 6 illustrates the difference between the KL divergence computed on clean images and our metric obtained from measurements masked with varying inpainting probabilities. As expected, lower measurement corruption (i.e., higher sampling probability) leads to more accurate KL divergence
+
+378  
+379  
+380  
+381  
+382  
+383  
+384  
+385  
+386  
+387  
+388  
+389  
+390  
+391  
+392  
+393  
+394  
+395  
+396  
+397  
+398  
+399  
+400  
+401  
+402  
+403  
+404  
+405  
+406  
+407  
+408  
+409  
+410  
+411  
+412  
+413  
+414  
+415  
+416  
+417  
+418  
+419  
+420  
+421  
+422  
+423  
+424  
+425  
+426  
+427  
+428  
+429  
+430  
+431
+
+![Figure 3: Visual comparison of inpainting results. The top row shows full reconstructions for Ground Truth, Measurement, AFHQ, Adapted w/64, Adapted w/128, and FFHQ models. The bottom row shows residual maps (left) and zoomed-in regions (right) for each model. PSNR/LPIPS values are provided for each model: Ground Truth (25.57/0.0493), Measurement (25.00/0.0431), AFHQ (25.57/0.0493), Adapted w/64 (25.00/0.0431), Adapted w/128 (26.16/0.0354), and FFHQ (28.57/0.0195).](892f25e3d71d8e315a2a51092a8a8da7_img.jpg)
+
+Figure 3: Visual comparison of inpainting results. The top row shows full reconstructions for Ground Truth, Measurement, AFHQ, Adapted w/64, Adapted w/128, and FFHQ models. The bottom row shows residual maps (left) and zoomed-in regions (right) for each model. PSNR/LPIPS values are provided for each model: Ground Truth (25.57/0.0493), Measurement (25.00/0.0431), AFHQ (25.57/0.0493), Adapted w/64 (25.00/0.0431), Adapted w/128 (26.16/0.0354), and FFHQ (28.57/0.0195).
+
+Figure 3: Visual comparison of inpainting results (DPS (Chung et al., 2023a)) on an FFHQ image with mask rate  $p = 0.8$  and measurement noise level  $\sigma = 0.01$ . The top row shows full reconstructions, while the bottom row displays residual maps (left) and zoomed-in regions (right). Note the performance gap between the InD and OOD models, and the improvement achieved by adapting the OOD models using only corrupted measurements.
+
+Table 2: Comparison of InD, OOD, and Adapted models for image reconstruction using DPS (Chung et al., 2023a), for inpainting with different inpainting masks and measurement noise. **Best** and **second best** are shown.
+
+| Method          | $p = 0.8 \quad \sigma_z = 0.01$ |                    | $p = 0.9 \quad \sigma_z = 0.00$ |                    |
+|-----------------|---------------------------------|--------------------|---------------------------------|--------------------|
+|                 | PSNR $\uparrow$                 | LPIPS $\downarrow$ | PSNR $\uparrow$                 | LPIPS $\downarrow$ |
+| Microscopy      | 21.68                           | 0.1466             | 25.14                           | 0.0707             |
+| MetFaces        | 25.49                           | 0.0766             | 29.60                           | 0.0342             |
+| AFHQ            | 25.84                           | 0.0614             | 30.02                           | 0.0246             |
+| FFHQ            | <b>28.36</b>                    | <b>0.0322</b>      | <b>33.24</b>                    | <b>0.0113</b>      |
+| Adapt64 (TAFHQ) | 26.14                           | 0.0530             | 30.23                           | 0.0208             |
+| Adapt128 (AFHQ) | <b>26.52</b>                    | <b>0.0465</b>      | <b>30.37</b>                    | <b>0.0187</b>      |
+
+estimates. However, the proposed metric remains effective in providing an approximation of the image-domain KL divergence, even under high levels of measurement corruption.
+
+Table 3 presents an ablation study analyzing how the KL divergence approximation responds to measurement noise  $\sigma_z$  and number of measurement examples  $N$  from InD dataset. The results show that KL estimates remain stable even under substantial noise, supporting the robustness of the proposed metric and validating Theorem 1. Notably, reliable estimates are obtained with as few as 20 samples, demonstrating the metric’s effectiveness in both noisy and noiseless setting, using limited number of measurement examples from InD dataset.
+
+## 5 CONCLUSION
+
+We introduced a principled framework for measuring distribution shift in inverse problems using only corrupted measurements and pretrained diffusion scores. Theoretically, we derived a measurement-domain KL estimator that connects distribution shift to a compound MSE residual aggregated over diffusion noise levels (Theorem 1). Practically, the same quantity yields a simple model-selection metric when only a pool of priors is available, and it guides lightweight adaptation by aligning score functions on observed projections. Experiments on image inpainting and MRI show that the measurement-domain KL tracks image-domain KL closely and that the proposed residual consistently ranks models in accordance with the test distribution; a JPEG stress test further suggests robustness even when
+
+![Figure 4: Comparison of the distribution shift. The plot shows D_KL(p_sigma || q_sigma) on the y-axis (ranging from 0 to 2.5) versus sigma (noise level) on the x-axis (ranging from 0 to 80). Two sets of lines are shown: 'prostate' (red) and 'knee' (green). Dashed lines represent the image-domain KL divergence, and solid lines represent the proposed measurement-domain KL metric. The lines for 'prostate' are higher than those for 'knee'. The proposed metric (solid lines) closely tracks the image-domain KL (dashed lines).](f5e70cbe66e71e65b4ae4aa7816d266a_img.jpg)
+
+Figure 4: Comparison of the distribution shift. The plot shows D\_KL(p\_sigma || q\_sigma) on the y-axis (ranging from 0 to 2.5) versus sigma (noise level) on the x-axis (ranging from 0 to 80). Two sets of lines are shown: 'prostate' (red) and 'knee' (green). Dashed lines represent the image-domain KL divergence, and solid lines represent the proposed measurement-domain KL metric. The lines for 'prostate' are higher than those for 'knee'. The proposed metric (solid lines) closely tracks the image-domain KL (dashed lines).
+
+Figure 4: Comparison of the distribution shift (dashed lines), computed using clean images, and our proposed measurement-domain KL metric (solid lines) between an InD model trained on Brain slices and OOD models trained on Knee and Prostate slices from FastMRI dataset with acceleration rate 4. The vertical axis shows  $D_{KL}$ , evaluated as the integrand in Eq. (9) and Eq. (4) up to diffusion noise level  $\sigma$ . The proposed metric accurately tracks the KL divergence.
+
+![Figure 5: A line graph showing KL divergence D_KL(p_z || q_z) on the y-axis (ranging from 0 to 2) versus noise level sigma (ranging from 0 to 80) on the x-axis. Four curves are plotted: Image domain (dashed lines) and Meas. domain (solid lines) for AFHQ, Adapt64, and Adapt128 models. All curves show an increasing trend as noise level increases, with the Meas. domain curves generally showing lower KL divergence than the Image domain curves.](352c5fab6f936356e9570761a02ab71e_img.jpg)
+
+Figure 5: A line graph showing KL divergence D\_KL(p\_z || q\_z) on the y-axis (ranging from 0 to 2) versus noise level sigma (ranging from 0 to 80) on the x-axis. Four curves are plotted: Image domain (dashed lines) and Meas. domain (solid lines) for AFHQ, Adapt64, and Adapt128 models. All curves show an increasing trend as noise level increases, with the Meas. domain curves generally showing lower KL divergence than the Image domain curves.
+
+Figure 5: KL divergence between FFHQ and AFHQ, along with adapted models using 64 and 128 projected measurements. Values are computed in the image domain (dashed) and measurement domain (solid) under inpainting with  $p = 0.8$ . Adaptation using only projected measurements significantly reduces the distributional gap.
+
+![Figure 6: A line graph showing the difference between image-domain KL divergence and measurement-domain approximation, Delta D_KL(p_z || q_z), on the y-axis (ranging from 0.10 to 0.26) versus inpainting probability p on the x-axis (ranging from 0.1 to 0.9). The data points, connected by a dashed line, show a decreasing trend as p increases, indicating that the approximation improves as corruption decreases.](91be14371a97fb5ce9eeb29ae18d07c3_img.jpg)
+
+Figure 6: A line graph showing the difference between image-domain KL divergence and measurement-domain approximation, Delta D\_KL(p\_z || q\_z), on the y-axis (ranging from 0.10 to 0.26) versus inpainting probability p on the x-axis (ranging from 0.1 to 0.9). The data points, connected by a dashed line, show a decreasing trend as p increases, indicating that the approximation improves as corruption decreases.
+
+Figure 6: Difference between image-domain KL divergence (FFHQ vs. AFHQ) and the measurement-domain approximation across varying inpainting probabilities. Smaller differences indicate better approximation; accuracy improves as corruption decreases, while robustness is maintained under severe corruption.
+
+Table 3: KL divergence as a function of data examples  $N$  and measurement noise level  $\sigma_z$ . Note the robustness of the metric to measurement noise. Also note that limited number of corrupted measurement can approximate KL divergence.
+
+| $N \setminus \sigma_z$ | 0.0   | 0.1   | 0.2   | 0.5   | 1.0   | $D_{KL}$ (Img) |
+|------------------------|-------|-------|-------|-------|-------|----------------|
+| <b>20</b>              | 2.098 | 2.085 | 2.085 | 2.091 | 2.114 | 1.974          |
+| <b>40</b>              | 2.070 | 2.074 | 2.074 | 2.079 | 2.102 | 1.935          |
+| <b>80</b>              | 2.063 | 2.116 | 2.116 | 2.119 | 2.140 | 1.978          |
+| <b>120</b>             | 2.073 | 2.098 | 2.098 | 2.102 | 2.124 | 1.956          |
+
+theoretical assumptions are violated. Together, these results indicate that distribution shift can be detected, quantified, and mitigated directly from measurements, without access to clean images, and with practical benefits for downstream reconstruction quality.
+
+## LIMITATIONS
+
+Our framework relies on two assumptions. First, the theoretical guarantees require randomized measurement operators whose collective range spans the signal space. While this is standard in self-supervised inverse problems and satisfied by many random sampling schemes, structured operators such as fixed MRI masks may not fully meet this condition; extending the analysis to such settings is an important direction for future work. Second, we assume independence between measurement operators and denoiser residuals. This assumption underpins prior frameworks such as GSURE and ENSURE, but in scenarios where operators are tightly coupled to the training process, it may be violated and introduce bias. Developing techniques that relax this requirement could enhance the robustness of our metric.
+
+## REPRODUCIBILITY STATEMENT
+
+We have released the code, pretrained models, and dataset used for reporting the results.
+
+## LLMS USAGE STATEMENT
+
+We used large language models for editorial assistance. LLMs were not used to design methods, derive theory, run or analyze experiments.
+
+## --- REFERENCES
+
+- 186  
+187  
+188 Edmond Adib, Amanda Fernandez, Fatemeh Afghah, and John Jeff Prevost. Synthetic ECG Signal  
+189 Generation using Probabilistic Diffusion Models. *IEEE Access*, 11:75818–75828, 2023.  
+190  
+191 Hemant Kumar Aggarwal, Aniket Pramanik, Maneesh John, and Mathews Jacob. ENSURE: A general  
+192 approach for unsupervised training of deep image reconstruction algorithms. *IEEE Transactions  
+193 on Medical Imaging*, 2022.  
+194  
+195 Riccardo Barbano, Alexander Denker, Hyungjin Chung, Tae Hoon Roh, Simon Arridge, Peter Maass,  
+196 Bangti Jin, and Jong Chul Ye. Steerable Conditional Diffusion for Out-of-Distribution Adaptation  
+197 in Medical Image Reconstruction. *IEEE Trans. Med. Img.*, 2025.  
+198  
+199 Shai Ben-David, John Blitzer, Koby Crammer, and Fernando Pereira. Analysis of Rep-  
+200 resentations for Domain Adaptation. In *Proc. NeurIPS*, volume 19, 2006. URL  
+201 [https://proceedings.neurips.cc/paper\\_files/paper/2006/file/](https://proceedings.neurips.cc/paper_files/paper/2006/file/blb0432ceaafb0ce714426e9114852ac7-Paper.pdf)  
+202 [blb0432ceaafb0ce714426e9114852ac7-Paper.pdf](https://proceedings.neurips.cc/paper_files/paper/2006/file/blb0432ceaafb0ce714426e9114852ac7-Paper.pdf).  
+203  
+204 Mayee Chen, Karan Goel, Nimit S Sohoni, Fait Poms, Kayvon Fatahalian, and Christopher Re.  
+205 Mandoline: Model Evaluation under Distribution Shift. In *Proc. ICML*, 2021.  
+206  
+207 Zitong Chen, Chau Pham, Siqi Wang, Michael Doron, Nikita Moshkov, Bryan A. Plummer, and  
+208 Juan C Caicedo. CHAMMI: A Benchmark for Channel-adaptive Models in Microscopy Imaging.  
+209 In *Proc. NeurIPS*, 2023.  
+210  
+211 Yunje Choi, Youngjung Uh, Jaejun Yoo, and Jung-Woo Ha. StarGAN v2: Diverse Image Synthesis  
+212 for Multiple Domains. In *Proc. CVPR*, 2020.  
+213  
+214 Hyungjin Chung and Jong Chul Ye. Score-based Diffusion Models for Accelerated MRI. *Med. Image*  
+215 *Anal.*, 80:102479, 2022.  
+216  
+217 Hyungjin Chung and Jong Chul Ye. Deep Diffusion Image Prior for Efficient OOD Adaptation in 3D  
+218 Inverse Problems. In *Proc. ECCV*, pp. 432–455. Springer, 2024.  
+219  
+220 Hyungjin Chung, Jeongsol Kim, Michael Thompson Mccann, Marc Louis Klasky, and Jong Chul Ye.  
+221 Diffusion Posterior Sampling for General Noisy Inverse Problems. In *Proc. ICLR*, 2023a. URL  
+222 <https://openreview.net/forum?id=OnD9zGAGT0k>.  
+223  
+224 Hyungjin Chung, Dohoon Ryu, Michael T McCann, Marc L Klasky, and Jong Chul Ye. Solving 3D  
+225 Inverse Problems using Pre-trained 2D Diffusion Models. In *Proc. CVPR*, 2023b.  
+226  
+227 Hyungjin Chung, Suhyeon Lee, and Jong Chul Ye. Decomposed Diffusion Sampler for Accelerating  
+228 Large-Scale Inverse Problems. In *Proc. ICLR*, 2024. URL [https://openreview.net/](https://openreview.net/pdf?id=DsEhqQtFAG)  
+229 [pdf?id=DsEhqQtFAG](https://openreview.net/pdf?id=DsEhqQtFAG).  
+230  
+231 Florinel-Alin Croitoru, Vlad Hondru, Radu Tudor Ionescu, and Mubarak Shah. Diffusion Models in  
+232 Vision: A survey. *IEEE Trans. PAMI*, 45(9):10850–10869, 2023.  
+233  
+234 Gabriela Csurka. *A Comprehensive Survey on Domain Adaptation for Visual Applications*, pp. 1–35.  
+235 Springer International Publishing, Cham, 2017.  
+236  
+237 Peng Cui and Jinjia Wang. Out-of-Distribution (OOD) Detection Based on Deep Learning: A  
+238 Review. *Electronics*, 11(21), 2022. ISSN 2079-9292. doi: 10.3390/electronics11213500. URL  
+239 <https://www.mdpi.com/2079-9292/11/21/3500>.  
+240  
+241 Giannis Daras, Hyungjin Chung, Chieh-Hsin Lai, Yuki Mitsufuji, Jong Chul Ye, Peyman Milanfar,  
+242 Alexandros G Dimakis, and Mauricio Delbracio. A Survey on Diffusion Models for Inverse  
+243 Problems. *arXiv:2410.00083*, 2024.  
+244  
+245 Mohammad Zalbagi Darestani, Jiayu Liu, and Reinhard Heckel. Test-Time Training Can Close the  
+246 Natural Distribution Shift Performance Gap in Deep Learning Based Compressed Sensing. In  
+247 *Proc. ICML*, volume 162 of *Proceedings of Machine Learning Research*, pp. 4754–4776. PMLR,  
+248 17–23 Jul 2022.  
+249
+
+---
+
+540       Prafulla Dhariwal and Alexander Nichol. Diffusion Models Beat GANs on Image Synthesis. In *Proc.*  
+541            *NeurIPS*, 2021.
+
+542
+
+543       Zhen Fang, Yixuan Li, Jie Lu, Jiahua Dong, Bo Han, and Feng Liu. Is Out-of-Distribution  
+544            Detection Learnable? In *Proc. NeurIPS*, volume 35, pp. 37199–37213. Curran Asso-  
+545            ciates, Inc., 2022. URL [https://proceedings.neurips.cc/paper\\_files/paper/](https://proceedings.neurips.cc/paper_files/paper/2022/file/f0e91b1314fa5eabf1d7ef6d1561ece6-Paper-Conference.pdf)  
+546            [2022/file/f0e91b1314fa5eabf1d7ef6d1561ece6-Paper-Conference.pdf](https://proceedings.neurips.cc/paper_files/paper/2022/file/f0e91b1314fa5eabf1d7ef6d1561ece6-Paper-Conference.pdf).
+
+547
+
+548       Abolfazl Farahani, Sahar Voghoei, Khaled Rasheed, and Hamid R. Arabnia. A Brief Review of  
+549            Domain Adaptation. In *Advances in Data Science and Information Engineering*, pp. 877–894,  
+550            Cham, 2021. Springer International Publishing. ISBN 978-3-030-71704-9.
+
+551
+
+552       Stanislav Fort, Jie Ren, and Balaji Lakshminarayanan. Exploring the Limits of Out-of-  
+553            Distribution Detection. In *Proc. NeurIPS*, volume 34, pp. 7068–7081. Curran Associates, Inc.,  
+554            2021. URL [https://proceedings.neurips.cc/paper\\_files/paper/2021/](https://proceedings.neurips.cc/paper_files/paper/2021/file/3941c4358616274ac2436eac67fae05-Paper.pdf)  
+555            [file/3941c4358616274ac2436eac67fae05-Paper.pdf](https://proceedings.neurips.cc/paper_files/paper/2021/file/3941c4358616274ac2436eac67fae05-Paper.pdf).
+
+556
+
+557       Yaroslav Ganin and Victor Lempitsky. Unsupervised Domain Adaptation by Backpropagation. In  
+558            *Proc. ICML*, 2015.
+
+559
+
+560       Ruiyuan Gao, Chencheng Zhao, Lanqing Hong, and Qiang Xu. DIFFGUARD: Semantic Mismatch-  
+561            Guided Out-of-Distribution Detection Using Pre-Trained Diffusion Models. In *Proc. ICCV*, pp.  
+562            1579–1589, 2023.
+
+563
+
+564       Davis Gilton, Gregory Ongie, and Rebecca Willett. Model Adaptation for Inverse Problems in  
+565            Imaging. *IEEE Trans. Com. Img.*, 7:661–674, 2021. doi: 10.1109/TCI.2021.3094714.
+
+566
+
+567       Mark S. Graham, Walter H.L. Pinaya, Petru-Daniel Tudosiu, Parashkev Nachev, Sebastien Ourselin,  
+568            and Jorge Cardoso. Denoising Diffusion Models for Out-of-Distribution Detection. In *Proc. CVPR*  
+569            *Workshops*, pp. 2948–2957, June 2023a.
+
+570
+
+571       Mark S Graham, Walter HL Pinaya, Petru-Daniel Tudosiu, Parashkev Nachev, Sebastien Ourselin,  
+572            and Jorge Cardoso. Denoising Diffusion Models for Out-of-distribution Detection. In *Proc. CVPR*,  
+573            pp. 2948–2957, 2023b.
+
+574
+
+575       Dan Hendrycks and Kevin Gimpel. A Baseline for Detecting Misclassified and Out-of-Distribution  
+576            Examples in Neural Networks. In *Proc. ICLR*, 2017.
+
+577
+
+578       Alvin Heng, Harold Soh, et al. Out-of-distribution Detection with a Single Unconditional Diffusion  
+579            Model. In *Proc. NeurIPS*, 2024.
+
+580
+
+581       Jonathan Ho, Ajay Jain, and Pieter Abbeel. Denoising Diffusion Probabilistic Models. In *Proc.*  
+582            *NeurIPS*, 2020.
+
+583
+
+584       Jason Hu, Bowen Song, Jeffrey A Fessler, and Liyue Shen. Test-time Adaptation Improves Inverse  
+585            Problem Solving with Patch-based Diffusion Models. *IEEE Trans. Com. Img.*, 2025.
+
+586
+
+587       Ajil Jalal, Marius Arvinte, Giannis Daras, Eric Price, Alexandros G Dimakis, and Jon Tamir. Robust  
+588            Compressed Sensing MRI with Deep Generative Priors. In *Proc. NeurIPS*, volume 34, pp. 14938–  
+589            14954, 2021.
+
+590
+
+591       Zahra Kadkhodaie, Florentin Guth, Eero P Simoncelli, and Stéphane Mallat. Generalization in  
+592            Diffusion Models Arises from Geometry-adaptive Harmonic Representations. In *Proc. ICLR*,  
+593            2024.
+
+594
+
+595       Guoliang Kang, Lu Jiang, Yi Yang, and Alexander G. Hauptmann. Contrastive Adaptation Network  
+596            for Unsupervised Domain Adaptation. In *Proc. CVPR*, June 2019.
+
+597
+
+598       Tero Karras, Samuli Laine, and Timo Aila. A Style-based Generator Architecture for Generative  
+599            Adversarial Networks. In *Proc. CVPR*, pp. 4401–4410, 2019.
+
+600
+
+601       Tero Karras, Miika Aittala, Janne Hellsten, Samuli Laine, Jaakko Lehtinen, and Timo Aila. Training  
+602            Generative Adversarial Networks with Limited Data. In *Proc. NeurIPS*, volume 33, pp. 12104–  
+603            12114, 2020.
+
+---
+
+594 Tero Karras, Miika Aittala, Timo Aila, and Samuli Laine. Elucidating the Design Space of Diffusion-  
+595 Based Generative Models. In *Proc. NeurIPS*, 2022.
+
+596  
+597 Bahjat Kawar, Michael Elad, Stefano Ermon, and Jiaming Song. Denoising diffusion restoration  
+598 models. In *Proc. NeurIPS*, 2022.
+
+599  
+600 Bahjat Kawar, Noam Elata, Tomer Michaeli, and Michael Elad. GSURE-Based Diffusion Model  
+601 Training with Corrupted Data. *TMLR*, 2023.
+
+602  
+603 A Kazerouni, EK Aghdam, M Heidari, R Azad, M Fayyaz, I Hacihaliloglu, and D Merhof. Diffusion  
+604 Models in Medical Imaging: A Comprehensive Survey. *Med. Image Anal.*, 88:102846–102846,  
+605 2023.
+
+606  
+607 Dongjun Kim, Yeongmin Kim, Wanno Kang, and Il Chul Moon. Refining Generative Process with  
+608 Discriminator Guidance in Score-based Diffusion Models. In *Proc. ICML*, 2023.
+
+609  
+610 Florian Knoll and et. al. fastMRI: A Publicly Available Raw k-Space and DICOM Dataset of Knee  
+611 Images for Accelerated MR Image Reconstruction Using Machine Learning. *Radiology: Artificial  
+612 Intelligence*, 2(1):e190007, 2020.
+
+613  
+614 Pang Wei Koh and et. al. WILDS: A Benchmark of in-the-Wild Distribution Shifts. In *Proc. ICML*,  
+615 2021.
+
+616  
+617 Sean Kulinski and David I Inouye. Towards Explaining Distribution Shifts. In *Proc. ICLR*, pp.  
+618 17931–17952. PMLR, 2023.
+
+619  
+620 Georges Le Bellier and Nicolas Audebert. Detecting Out-Of-Distribution Earth Observation Images  
+621 with Diffusion Models. In *Proc. CVPR Workshops*, pp. 481–491, 2024.
+
+622  
+623 Huayu Li, Gregory Ditzler, Janet Roveda, and Ao Li. DeSCoD-ECG: Deep Score-Based Diffusion  
+624 Model for ECG Baseline Wander and Noise Removal. *IEEE J. Biomed. Health Inform.*, 28(9):  
+625 5081–5091, 2024.
+
+626  
+627 Xin Li, Yulin Ren, Xin Jin, Cuiling Lan, Xingrui Wang, Wenjun Zeng, Xinchao Wang, and Zhibo  
+628 Chen. Diffusion Models for Image Restoration and Enhancement—A Comprehensive Survey. *arXiv  
+629 e-prints*, pp. arXiv–2308, 2023.
+
+630  
+631 Shiyu Liang, Yixuan Li, and R. Srikant. Enhancing The Reliability of Out-of-distribution Image  
+632 Detection in Neural Networks. In *Proc. ICLR*, 2018.
+
+633  
+634 Zhenzhen Liu, Jin Peng Zhou, Yufan Wang, and Kilian Q Weinberger. Unsupervised Out-of-  
+635 Distribution Detection with Diffusion Inpainting. In *Proc. ICLR*, pp. 22528–22538. PMLR, 2023.
+
+636  
+637 Victor Livernoche, Vineet Jain, Yashar Hezaveh, and Siamak Ravanbakhsh. On Diffusion Modeling  
+638 for Anomaly Detection. In *Proc. ICLR*, 2023.
+
+639  
+640 Victor Livernoche, Vineet Jain, Yashar Hezaveh, and Siamak Ravanbakhsh. On Diffusion Modeling  
+641 for Anomaly Detection. In *Proc. ICLR*, 2024. URL [https://openreview.net/forum?  
+642 id=1R3rk7ysXz](https://openreview.net/forum?id=1R3rk7ysXz).
+
+643  
+644 Andrey Malinin and et. al. Shifts: A Dataset of Real Distributional Shift Across  
+645 Multiple Large-Scale Tasks. In *Proc. NeurIPS*, volume 1, 2021. URL [https://  
+646 datasets-benchmarks-proceedings.neurips.cc/paper\\_files/paper/  
+647 2021/file/ad61ab143223efbc24c7d2583be69251-Paper-round2.pdf](https://datasets-benchmarks-proceedings.neurips.cc/paper_files/paper/2021/file/ad61ab143223efbc24c7d2583be69251-Paper-round2.pdf).
+
+648  
+649 K Miyasawa. An Empirical Bayes Estimator of the Mean of a Normal Population. *Bull. Inst. Internat.  
+650 Statist.*, 38:181–188, 1961.
+
+651  
+652 M Raphan and E P Simoncelli. "Least Squares Estimation without Priors or Supervision". *Neural  
+653 Computation*, 23(2):374–420, Feb 2011. doi: 10.1162/NECO\_a\_00076.
+
+654  
+655 H Robbins. An Empirical Bayes Approach to Statistics. In *Proc Third Berkeley Symposium on  
+656 Mathematical Statistics and Probability*, volume I, pp. 157–163. University of CA Press, 1956.
+
+[Appendix and supplementary materials beyond page 12 have been removed.]

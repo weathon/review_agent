@@ -1,0 +1,3338 @@
+# AGENTS HELP AGENTS: EXPLORING TRAINING-FREE KNOWLEDGE DISTILLATION FOR SLMS IN DATA SCI## ENCE CODE GENERATION
+
+
+**Anonymous authors**
+Paper under double-blind review
+
+
+ABSTRACT
+
+
+Knowledge distillation from Large Language Models (LLMs) to locally hosted
+Small Language Models (SLMs) provides advantages for Data Science Code Generation (DSCG) such as enhanced data privacy and reduced response times. However, achieving effective distillation without resource-intensive training is challenging. This paper investigates whether LLMs can distill knowledge to SLMs
+through In-Context Learning (ICL), a training-free method for rapid task adaptation. We present the **Agents** **Help** **Agents** **(AHA)** framework, which facilitates automatic knowledge distillation from LLMs to SLMs via agent orchestration. AHA consists of three phases: exploration through an **Agent Orchestration**
+**Interface** **(AOI)**, memory collection of successful examples, and inference augmented with distilled knowledge. The AOI orchestrates interactions between a
+LLM as a Teacher Agent and a SLM as a Student Agent. And we propose two
+distillation strategies: a static approach that aggregates an offline instruction set
+and a dynamic RAG-based approach that distills knowledge dynamically during
+inference. We evaluate AHA on three challenging code generation tasks for tabular data analysis: TABMWP, BIRD-SQL, and WIKITQ. Experimental results
+demonstrate the effectiveness of AHA, leading to an average 27.5% relative improvement in the performance of the Student Agent **Phi-3-mini** . Additionally,
+relative gains of 14.3% and 30.9% are observed in **Llama-3.1-8B** and **GPT-35-**
+**Turbo**, respectively, even though those models were not calibrated as part of the
+orchestration, highlighting the model-agnostic nature of the distilled knowledge in
+AHA. Further analysis compares distillation and demonstration techniques across
+different data input settings, providing insights into optimal configurations for
+DSCG.
+
+
+1 INTRODUCTION
+
+
+Data Science Code Generation (DSCG) automates the conversion of natural language queries into
+executable code, empowering non-expert information extraction and analysis from tabular data efficiently. This process enhances productivity, reduces the technical barrier for data analysis, and
+allows data scientists to focus on deriving insights, ultimately supporting more effective decisionmaking (Khanbabaei et al., 2018; Han et al., 2011; Fayyad et al., 1996). This is a challenging task
+since it not only requires code generation capability but also data understanding capability.
+
+
+Large Language Models (LLMs) have demonstrated remarkable performance across diverse, complex tasks (Singh et al., 2023; Mu et al., 2024; Chen et al., 2023; Zheng et al., 2024; Deng et al.,
+2023). Leveraging LLMs or LLM agents for automatic code generation from user queries offers an
+effective solution (Yang et al., 2024b; Wang et al., 2024b). However, the integration of LLMs in
+DSCG faces two primary challenges: 1) Privacy concerns arise when utilizing closed-source LLMs
+such as GPT-4 (Achiam et al., 2023) or Claude-3.5-Sonnet (Ogunseyi et al., 2023). 2) Deploying
+large open-source models like Llama-3.1-405B (Dubey et al., 2024) or DeepSeek-v2 (236B) (Liu
+et al., 2024) can be challenging due to their large number of parameters. Balancing these benefits
+and challenges is crucial for effective data science applications.
+
+
+1
+
+
+Small Language Models (SLMs), such as Phi-3-mini (Abdin et al., 2024) and Llama-3.1-8B (Dubey
+et al., 2024), have gained attention for their In-Context Learning (ICL) capabilities but more advantages for local deployment and on-device inference. These models offer computational efficiency
+and enhanced data privacy, crucial for resource-constrained or privacy-sensitive applications (Joshi
+et al., 2024). While SLMs have shown competitive performance in some general tasks including
+natural language understanding (Nie et al., 2020) and code completion (Chen et al., 2021), their
+effectiveness in data science code generation tasks remains an open question.
+
+
+Fine-tuning is a common strategy to enhance SLM capabilities for complex tasks (Petroni et al.,
+2021). However, this approach encounters several challenges in the domain of data science DSCG.
+One primary issue is the limited availability of high-quality training data. Professional tabular
+datasets, such as relational databases, are often small or proprietary, restricting access to substantial
+corpora for training. Additionally, the dual expertise required in both coding syntax and data understanding for accurate annotation further constrains dataset scalability (Li et al., 2024b; Lei et al.,
+2024). This is reflected in recent benchmarks for data science code generation, which typically contain around or fewer than 1,000 samples, highlighting the complexity and resource constraints in
+this field (Hu et al., 2024; Agashe et al., 2019; Lai et al., 2023; Zhang et al., 2023; Yin et al., 2023).
+Recent research has explored distillation from LLMs to SLMs through fine-tuning on synthetic data
+generated (Team et al., 2024; Magister et al., 2023; Kang et al., 2023). While this approach shows
+promise, several challenges persist. For example, frequent updates to code packages introduce new
+syntax that may conflict with previously trained knowledge (Wu et al., 2024). Furthermore, the performance improvements obtained from these methods often fail to generalize well across different
+programming languages or frameworks, requiring extensive re-training for each package update or
+new task (Shen et al., 2022a; Ke et al., 2023). However, In-Context Learning (ICL) can adapt to new
+requirements or tasks by providing relevant instructions or examples, reducing the effort required
+for re-training or continual training. This raises a research question in DS code generation: _**Can**_
+_**LLMs distill knowledge to SLMs through In-Context Learning (ICL)?**_
+
+
+In this paper, we explore the potential of knowledge distillation from LLMs to SLMs via ICL. We
+design Agents Help Agents (AHA), a novel, fully automated framework that enables LLM as a
+Teacher Agent to guide SLMs as Student Agents in complex data science code generation tasks.
+AHA operates in three phases: **exploration**, **memory database collection**, and **knowledge-driven**
+**inference** . During exploration, we employ the Agent Orchestration Interface ( **AOI** ) that allows an
+LLM to probe and analyze SLM code knowledge by converting questions into step-wise functional
+plans and asking SLMs to infill the code for each plan. Then, successful collaborated cases are
+stored in memory databases. We also introduce two novel distillation techniques during inference:
+General Instructions and Meta Instructions.
+
+
+We evaluate AHA on three challenging tabular analysis datasets that need code generation:
+TABMWP (Lu et al., 2023), BIRD-SQL (Li et al., 2024a), and WIKITQ (Pasupat & Liang, 2015).
+The experimental results demonstrate that the AHA framework significantly improves the performance of SLMs across all datasets, validating the potential of our knowledge distillation approach
+via In-Context Learning (ICL). Notably, the performance boost achieved by AHA is not limited to
+the specific SLM trained during the orchestration process but generalizes across other SLMs as well.
+This model-agnostic nature further highlights the flexibility and adaptability of distilled knowledge
+in our framework, enabling it to be applied in a wide range of data science code generation scenarios
+without requiring extensive retraining.
+
+
+2 METHODOLOGY
+
+
+2.1 TASK FORMULATION
+
+Given a natural language query or question _qi_ _∈Q_, where _Q_ = _{q_ 1 _, q_ 2 _, . . ., qN_ _}_ represents a set of
+_N_ queries or instructions, and its corresponding tabular data or database schema information _di_ _∈D_,
+where _D_ = _{d_ 1 _, d_ 2 _, . . ., dN_ _}_, the Small Language Model (SLM) is tasked with generating a single,
+concise, and executable code snippet _ci_ . This code snippet must accurately answer the query _qi_ with
+the associated data _di_ . The function that maps each query-data pair to its corresponding code snippet
+by SLMs is defined as _f_ gen, and can be written as:
+
+
+_ci_ = _f_ gen( _qi, di_ ) for _i_ = 1 _,_ 2 _, . . ., N._ (1)
+
+
+2
+
+
+Figure 1: Overview of the AI agent orchestration system for data science code generation. Left:
+Agent Orchestration Interface (AOI) with abstraction lifting, orchestrated coding, and plan optimization. Center: Memory Database Construction, including trajectory collection and case study
+integration. Right: Knowledge-driven Inference and Planning, featuring tree-based general instruction distillation, RAG-based meta instruction generation, and knowledge-driven code generation.
+
+
+2.2 AGENT ORCHESTRATION INTERFACE
+
+
+The Agent Orchestration Interface (AOI) is designed to mediate the interaction between a Large
+Language Model (LLM), a Teacher Agent, and a Student Agent, represented by the SLM. The
+primary goal of the AOI is to generate successful and informative problem-solving cases, which
+are later used for knowledge distillation in DSCG. The AOI is composed of three key components:
+Abstraction Lifting, Orchestrated Coding, and Plan Optimization.
+
+
+**Abstraction** **Lifting** **(AL).** In this phase, LLM generates a functional plan _Pi_ =
+_{si_ 1 _, si_ 2 _, . . ., siK}_ based on a query _qi_, data input _di_, and the corresponding ground truth (gt) code
+_c_ ˜ _i_ . The ground truth code _c_ ˜ _i_ can either be sourced from an existing dataset or generated by the
+Teacher Agent when it is not directly available but a ground-truth answer string exists. This functional plan is defined as _L_ al( _di, qi,_ ˜ _ci_ ), where _L_ al LLM performing abstraction lifting. Each step _sij_
+in the plan corresponds to a key subtask derived from the query, collectively forming a structured
+template outlining the solution process. These steps are annotated by the LLM with descriptive
+comments and placeholders such as [Fill Your Code Here] in Python or [Fill Your
+Sub-Query] in SQL, as shown in Figure 2, ensuring that the SLM follows the logical flow of
+the entire plan and enables guided code generation. Unlike Chain-Of-Thought (Wei et al., 2022)
+plans, which provide intermediate steps in continuous textual form, our approach bridges high-level
+problem understanding with low-level code implementation logic, allowing the SLM to follow the
+better plan for data science code generation.
+
+
+**Orchestrated** **Coding** **(OC).** Once the functional plan _Pi_ is provided, the SLM considers all
+context including the question and data input to generate the complete orchestrated code _ci_ =
+_f_ gen( _di, qi, Pi_ ) in a single turn by filling all placeholders, ensuring the solution is correct and executable. The results from executing this orchestrated code are then compared to those from a reference solution (such as ground truth answer string or gt codes) to evaluate whether the SLM fully
+understands both the data and the logic needed to answer the question. This comparison serves as
+a key indicator of the problem-solving accuracy of SLM and alignment with the intended solution.
+While the ground truth code may already be available from datasets or generated by the Teacher
+Agent, orchestrated coding and abstraction lifting are crucial for a few reasons. First, AL breaks
+down complex problem-solving tasks into manageable sub-tasks, with the potential to improve the
+performance of the SLMs across a wide range of analytical queries by assisting them in understanding modular structure. Additionally, error isolation can be grounded in the program structure,
+enabling more precise identification of issues and contributing to optimized plans. This is supported
+by our analysis in Section 3.6 that compares chain-of-thought with functional plans across multiple
+turns of orchestration.
+
+
+**Plan** **Optimization** **(PO).** The plan optimization process is an iterative procedure that unfolds
+over multiple turns, denoted by _t_ . During each iteration, the SLM refines the functional plan _Pi_ _[t]_ [.]
+To formalize this interactive optimization process, we define an environment _E_ = _⟨S, A, O, T ⟩_,
+following (Zhou et al., 2023; Xie et al., 2024; Gu et al., 2024), where _S_ represents the state space,
+
+
+3
+
+
+Figure 2: Main steps of AOI demonstrated with a text-to-SQL task example. Teacher Agent converts referenced code to a functional plan for Student Agent to complete. Teacher Agent iteratively
+optimizes the plan until the Student Agent produces correct code. A Python code AOI example is
+provided in Appendix D.1.
+
+
+_A_ the action space (see Table 1), and _O_ the observation space. In this context, the plan _Pi_ _[t]_ [is]
+embedded within the current state _Si_ _[t]_ [, serving as a structure that guides the SLM to generate code.]
+The orchestrated code _c_ _[t]_ _i_ [is the snippet produced by performing the plan] _[ P][ t]_ _i_ [within the environment.]
+
+During each turn, the LLM observes _o_ _[t]_ _i_ [, the outcome of executing orchestrated code] _[ c][t]_ _i_ [generated by]
+the SLM, and selects an action _a_ _[t]_ _i_ [from] _[ A]_ [ to optimize the plan.] [For example, if a step] _[ s][t]_ _ij_ [contains an]
+error such as: "Step j: List players who was born before 1930 and after
+1950", the LLM will apply an action ALT( _·_ ) to correct this, resulting in an updated plan _Pi_ _[t]_ [+1]
+with the refined step _s_ _[t]_ _ij_ [+1] as "Step j: List players who were born after 1930
+and before 1950". This iterative process can be represented as:
+
+
+_Pi_ _[t]_ [+1] = _{s_ _[t]_ _i_ 1 _[, s]_ _i_ _[t]_ 2 _[, . . ., s][t]_ _ij_ [+1] _[, . . ., s]_ _iK_ _[t]_ _[}][,]_ _s_ _[t]_ _ij_ [+1] = _L_ opt( _s_ _[t]_ _ij_ _[, o]_ _i_ _[t][, a]_ _i_ _[t]_ [)] _[.]_ (2)
+
+
+Here, _s_ _[t]_ _ij_ [+1] is updated by the optimization function _L_ opt of the LLM, which integrates the current
+observation _o_ _[t]_ _i_ [,] [action] _[a][t]_ _i_ [and] [sub-optimal] [step] _[s][t]_ _ij_ [.] [The] [system] [transitions] [from] [state] _[S]_ _i_ _[t]_ [to] _[S]_ _i_ _[t]_ [+1]
+through _T_ ( _Si_ _[t][,][ A][t]_ _i_ [)][,] [resulting] [in] [the] [updated] [plan] _[P][ t]_ _i_ [+1] . The SLM then generates the updated orchestrated code _c_ _[t]_ _i_ [+1] = _f_ gen( _qi, di, Pi_ _[t]_ [+1] ) for the new plan. This process repeats until the output is
+correct or the maximum number of iterations _T_ is reached.
+
+
+2.3 MEMORY DATABASE CONSTRUCTION
+
+
+After interactions between the LLM and SLM in AOI, the finalized states are stored in a memory
+database. This database includes the correct orchestrated codes, along with the context of the question and data input. This process ensures that the SLM can efficiently reference and apply related
+knowledge to new, unseen queries.
+
+
+**Case** **Study** **Translation.** Rather than only storing raw, heterogeneous cases that consist of a
+query, plan, and orchestrated code in a simple stacked format, the LLM refines these into case
+study-like representations. These representations distill the reasoning behind the success of each
+example, serving as an intermediate abstraction that emphasizes the underlying rationale for the
+chosen approach. Each case study _Gi_ contains a Case Name, Question, Schema / Value
+Information, Objective, and an Explanation of how the solution code successfully addresses the query using the provided data. An example of this structure is provided in Appendix I.
+As shown in Figure 1 (Mid), AHA performs case study translation only for correct cases, because
+reflecting on incorrect cases without supervision or comparison to correct cases often introduces
+hallucinations.
+
+
+**Correct** **Case** **Collection.** The Correct Case Collection, denoted as _M_, consists of cases where
+the SLM has generated correct orchestrated codes. Each case _Mi_ in this collection contains the
+natural language query _qi_, the corresponding data _di_, the correct orchestrated code ˆ _ci_, which contains
+descriptive comments as shown in Figure 2 (right), and the case study _Gi_ illustrating the solution.
+The set _M_ is the union of all such individual cases:
+
+_M_ =      - _Mi,_ _Mi_ = ( _qi, di,_ ˆ _ci, Gi_ ) _._ (3)
+
+
+_i_
+
+
+4
+
+
+**Action Type** **Expression** **Description**
+
+
+**Decomposition** step(x) _→_ step(a), Split a complex step x into smaller, manstep(b) ageable steps such as step a and step b.
+
+
+**ALT** step(x) _→_ step(y) Replace a step x described by ambiguous or
+incorrect messages with a clearer and correct alternative step y.
+
+
+**ADD** step(x) _→_ step(x), Add a necessary step a to ensure the comstep(a) pleteness of code logic.
+
+
+**DELETE** step(x) _→_ None Remove the unnecessary step x, which may
+lead to misunderstanding by the SLM.
+
+
+**SIMPLIFY** step(x) _→_ Replace a complex step x with a simpler
+simple_step(x) approach. For example, convert recursive
+plans into iterative loops.
+
+
+**SWITCH** packageA.step(x) _→_ Use a simpler package to achieve the same
+packageB.step(x) functionality. For example, conversion
+from Package Linear Regression to
+Correlation Coefficient to determine relationship between two variables.
+
+
+Table 1: The 6 action types utilized by the LLM during the Agent Orchestration Interface (AOI) to
+optimize the plans for better understanding and code generation by SLMs
+
+
+2.4 KNOWLEDGE DISTILLATION FROM MEMORY DATABASE
+
+
+This part presents two methods for distilling knowledge from the memory database: fine-to-coarse
+general instruction generation and RAG-based meta-instruction generation. Distilled knowledge
+then guides the SLM in learning how to plan and generate code more accurately for unseen queries.
+
+
+**Fine-to-Coarse** **Knowledge** **Distillation** **for** **General** **Instructions** **Generation.** Our first approach generates universally applicable, "plug-and-play" instructions through a novel fine-to-coarse
+knowledge distillation method. This technique employs a recursive, tree-based strategy, offering an
+alternative to conventional sequential updating methods. Approaches such as (Askari et al., 2024)
+process batches of examples sequentially and need to select initial examples that often require human efforts. In contrast, our method aims to enable a fully automated workflow, constructing a
+knowledge tree recursively and in parallel, thereby reducing both biases and the need for human
+intervention. We define the set of distilled **General Instruction** _I_ g as:
+
+
+_I_ g = _L_ sum( _M_ ) = _Tl,_ _Tl_ = _L_ agg( _Tl−_ 1) _,_ (4)
+
+
+where _L_ sum is a recursive function executed by the LLM, and _Tl_ is the root node of the tree with the
+highest layer _l_, which encapsulates task-specific knowledge, enabling the SLMs to apply it to new
+examples.
+
+
+At each recursive step, nodes at layer _l_ aggregate knowledge from layer _l −_ 1 using the aggregation
+function _L_ agg, which summarizes local instructions within each batch (see prompts in Figure 12,
+13 of Appendix H for reference). The leaves represent the individual case studies recorded in _M_,
+while higher layers abstract and generalize knowledge from lower ones. The layer of the tree and
+the final number of distilled rules are hyper-parameters, allowing for balancing complexity and
+generalization capability. This hierarchical structure can capture broadly applicable rules, resulting
+in a more general instruction. General Instruction then guides the SLM in generating correct code
+for unseen queries in a plug-and-play manner represented by Figure 1 (Right). A detailed illustration
+with examples can be found in Appendix A.
+
+
+**RAG-based** **Knowledge** **Distillation** **for** **Meta** **Instruction** **Generation.** General Instructions,
+while broadly applicable, often fall short when addressing long-tail problems. To mitigate this gap,
+we propose a Retrieval-Augmented Generation (RAG) framework for localized instruction distillation. In the retrieval phase, we identify the top relevant examples from a memory database _M_ via
+an embedding model. Relevance is measured via a function _D_, expressed as _R_ ( _qi_ ) = _D_ ( _qi, M, k_ ),
+where _k_ is number of most relevant cases.
+
+
+5
+
+
+Then, rather than leveraging the entire heterogeneous context, the case studies of these retrieved
+examples are then fed into the SLM to extrapolate plans for solutions, adhering them to the specific
+query. Here, SLM performs a secondary distillation, extracting shared knowledge patterns from
+these case studies, which have already been distilled by the LLM (Teacher Agent), to generate
+instructions, noted as **Meta-Instruction** **(** _I_ **m** ( _qi_ ) **)**, precisely specific to the current query at hand.
+The process is formalized:
+
+
+_I_ m( _qi_ ) = _f_ agg( _qi, R_ ( _qi_ )) (5)
+
+
+where _f_ agg is an aggregation function applied by the SLM. By doing so, SLMs can generate more relevant and contextually appropriate instructions, effectively bridging the gap between general knowledge and query-specific requirements.
+
+
+**Knowledge-Driven** **Inference.** Harnessing the distilled instructions _I_ _∈_ ( _I_ g _, I_ m( _qi_ )) from the
+memory database, the SLM initially formulates a structured plan _p_ gen, which it subsequently employs to generate code for new queries. For a given query _qi_ and its associated data _di_, this process
+unfolds as follows:
+
+
+_P_ gen = _f_ plan( _qi, di, I_ ) _,_ _ci_ = _f_ gen( _P_ gen _, qi, di_ ) _,_ (6)
+
+
+where _f_ plan denotes the planning function executed by the SLM. This plan serves as a blueprint,
+guiding the following code generation phase. The SLM then employs the function _f_ gen, which takes
+_P_ gen along with the original query _qi_ and data _di_ to generate the final code _ci_ .
+
+
+3 EXPERIMENTS
+
+
+3.1 DATASETS AND METRICS
+
+
+We evaluate our approach on three tabular
+data analysis datasets: WIKITQ (Pasupat & **STATISTIC** **TABMWP** **WIKITQ** **BIRD-SQL**
+Liang, 2015), TABMWP (Lu et al., 2023), and
+
+**Dataset Features**
+
+BIRD-SQL (Li et al., 2024a). These datasets # train examples 1,000 2,000 1,000
+cover various task types and data complexities, # eval examples 1,000 1,000 500
+
+question type Analysis SP SP + Analysis
+
+challenging models to interpret different data # toks / Q 26.5 12.6 20.0
+structures and generate accurate, executable
+
+**Data Structure**
+
+code for question answering. The data statistics data input type Single Single RDB
+are shown in the Table 2. 1). Questions in # rows / data 6.13 28.5 354k
+
+# columns / data 2.22 6.36 73.3
+
+WIKITQ typically involve operations such as
+counting, comparison, and aggregation (e.g., **Code Features**
+
+code type Python Python SQL
+
+How many players scored more answer type String String Code
+than 10 points?, What is the # toks / code N/A N/A 61.15
+largest city by population?).
+We sample 1,000 instances from the test set Table 2: Statistics for three datasets. The term
+( _∼_ 25% of the full set) and 2,000 examples Analysis indicates that the dataset mainly confrom the training set for exploration. Perfor- sists of analytical questions, while SP refers to semance is evaluated using the accuracy metric mantic parsing tasks.
+as implemented by the official evaluation
+scripts (Pasupat & Liang, 2015), which measures the correctness of the final answer derived
+from the generated codes. 2). In TABMWP, questions focus on mathematical word problems
+involving tabular data, extending beyond semantic parsing to include data analysis questions (e.g.,
+Is there a relationship between x and y?). We use 1,000 instances from the
+development set for memory construction and evaluate on the full test set (1,000 non-overlapping
+questions). Performance is evaluated by comparing the generated results with the ground truth
+answers across all grade levels. 3). **BIRD-SQL** presents the most complex data structures and
+comprehensive question types in our evaluation. The data inputs are relational databases, which are
+more challenging than the single tables in WIKITQ and TABMWP. The questions contain both
+semantic parsing and analytical tasks. For exploration, we adopt the mini-train set curated by (Qu
+et al., 2024), which comprises 1,000 examples. Our evaluation is conducted on the mini-dev set, a
+collection of 500 high-quality and challenging cases officially selected by the BIRD-SQL team. We
+evaluate performance by widely adopted execution accuracy (EX) metric for this dataset.
+
+
+**STATISTIC** **TABMWP** **WIKITQ** **BIRD-SQL**
+
+
+**Dataset Features**
+
+
+# train examples 1,000 2,000 1,000
+# eval examples 1,000 1,000 500
+question type Analysis SP SP + Analysis
+# toks / Q 26.5 12.6 20.0
+
+
+**Data Structure**
+
+
+data input type Single Single RDB
+# rows / data 6.13 28.5 354k
+# columns / data 2.22 6.36 73.3
+
+
+**Code Features**
+
+
+code type Python Python SQL
+answer type String String Code
+# toks / code N/A N/A 61.15
+
+
+Table 2: Statistics for three datasets. The term
+Analysis indicates that the dataset mainly consists of analytical questions, while SP refers to semantic parsing tasks.
+
+
+6
+
+
+**Model** **WIKITQ** **TABMWP** **BIRD-SQL**
+
+
+**Accuracy** **Grad.** **1-6** **Grad.** **7-8** **Total** **Sim.** **Med.** **Chal.** **Total**
+
+
+CodeLlama-7B 11.80 26.55 13.11 20.50 43.92 18.00 11.76 24.40
+CodeLlama-13B 34.90 37.27 24.22 31.40 45.27 19.60 17.65 26.80
+StarCoder2-7B 20.70 34.00 27.56 31.10 41.22 21.60 17.65 26.60
+StarCoder2-15B 36.60 39.09 36.44 37.90 55.41 30.40 14.71 34.60
+Phi-3-Small-7B 27.00 46.36 38.00 42.60 52.03 28.40 10.78 31.80
+Phi-3-Medium-14B 44.80 59.45 46.00 53.40 51.35 32.80 13.73 34.40
+_**Student Agent Performance**_
+**Phi-3-Mini-3.8B** 32.50 44.18 38.89 41.80 38.51 21.20 11.76 24.40
++ Chain-Of-Thought 27.70 46.36 35.33 41.40 34.46 22.00 12.75 23.80
++ Static Few-Shot 23.00 37.27 34.89 36.20 47.97 20.80 7.84 26.20
++ Dynamic Few-Shot 16.60 **51.45** **52.89** **52.10** 42.57 18.80 11.76 24.40
++ AHA General Instruction (Ours) 39.50 50.91 46.89 49.10 **51.35** 25.60 **17.65** 31.60
++ AHA Meta Instruction (Ours) **41.10** 48.36 42.44 45.70 **51.35** **30.40** 16.67 **33.80**
+
+
+Table 3: Performance comparison of various SLMs on WIKITQ, TABMWP, and BIRD-SQL, with
+results presented in accuracy percentages. Improvements of our AHA methods over the End-to-End
+Code Gen baseline are highlighted using different intensities of olive color. **Bold** indicates best
+results for Phi-3-Mini, while underlines denote second-best results.
+
+
+3.2 IMPLEMENTATIONS
+
+
+**Setup.** Experiments are conducted on three datasets across two primary settings. For TABMWP
+and WIKITQ, the SLMs are instructed to generate Python Pandas code to answer questions. However, since TABMWP and WIKITQ are QA datasets lacking ground truth code, two additional steps
+are implemented. First, the Teacher Agent is employed to generate initial Python code solutions
+as referenced or ground-truth code _c_ ˜ _i_, prior to the Agent Orchestration Interface (AOI). Second,
+following both orchestrated and inference code generation, the SLM is called upon to produce concise string answers for final accuracy evaluation. This process involved an additional step: given
+the question _qi_ and executed results _oi_, the SLM generated a result string _ri_ = _f_ ans( _qi, oi_ ) with an
+answering prompt, which was then compared to the GT answer string using the official evaluation
+script. For BIRD-SQL, a SQLite environment is established for orchestration and evaluation, following the task formulation _ci_ = _f_ gen( _qi, di_ ). We do not need to generate initial SQL by LLMs as
+ground truth codes since they already contain ground truth SQLs.
+
+
+For General Instruction generation, we set layer of the tree _l_ = 2 and limit number of rules to under
+10. In RAG-based Meta Instruction generation, we employ KNN with L2 distance, setting _k_ = 3
+for top relevant cases and using CodeT5+ (Wang et al., 2023d) as the embedding model. Details are
+in Appendix C.
+
+
+**Baselines** **Models** **and** **Methods.** We define an SLM as suitable for this task if it satisfies two
+criteria: (1) it can perform reasoning through in-context learning (ICL) without relying solely on
+fine-tuning, and (2) it has fewer than 15 billion parameters ( _<_ 15B), enabling inference on an A100
+GPU or less powerful hardware. For closed-source models, we choose GPT-35-Turbo as SLM since
+it has faster inference speed and its performance falls behind other larger models such as GPT-4Turbo or GPT-4o. We implement models for three purposes: 1) **Orchestration** **Models** : In our
+experiment, we select LLM GPT-4o (Achiam et al., 2023) as Teacher Agent and a SLM Phi-3-mini128k (Abdin et al., 2024) as Student Agent, which only contains _<_ 3 _._ 8B parameters. 2) **Evaluation**
+**Models** : There are several families of SLMs for evaluation. Phi-3 models (Abdin et al., 2024),
+CodeLlama models (Roziere et al., 2023), StarCoder2 family (Lozhkov et al., 2024). 3) **Knowledge-**
+**Transmission Models** : We include the widely-used closed-source model GPT-35-Turbo and Llama3.1-8B as new models for evaluation of knowledge transmissions in Section 3.5. Our focus in
+this paper is on single-pass code generation. Thus, the environment is not available for SLMs to
+iteratively refine or generate code in multiple turns as in (Yao et al., 2023; Wang et al., 2024c).
+We consider zero-shot end-to-end code generation, Chain-Of-Thought (Wei et al., 2022), Static
+Few-shot Demonstration (Brown et al., 2020), Dynamic RAG-based Few-shot Demonstrations (Gao
+et al., 2024) as our baseline methods. For fairness, we employ three examples for all few-shot
+demonstration methods.
+
+
+3.3 OVERALL RESULTS
+
+
+**Overall Performance.** Table 3 highlights three key aspects: (1) Knowledge distilled from **AHA**
+can make Phi-3-mini outperform both the End-to-End Code Generation baseline and the widely
+
+7
+
+
+Figure 3: Knowledge transmission from the memory database between GPT-4o and Phi-3-mini
+across three datasets. The results demonstrate that knowledge distilled from AHA can transfer to
+new models.
+
+
+used Chain-of-Thought reasoning technique across all datasets for SLM. Specifically, the Phi-3mini model demonstrates relative improvements ranging from **17.5%** on TABMWP to **38.5%** on
+BIRD-SQL. (2) The enhanced Phi-3-Mini frequently matches or exceeds the performance of larger
+models, especially those with 2-3 times more parameters, notably surpassing CodeLlama-13B by
+**17.7%**, StarCoder2-15B by **11.2%** on the TABMWP benchmark and approaching the performance
+of Phi-3-Medium (which has 4x times the parameters) across all datasets. (3) Our experiments also
+indicate that Chain-of-Thought reasoning can negatively impact SLM performance. In such complex scenarios, we observe that SLMs often generate hallucinations, resulting in incorrect reasoning
+steps. The propagation of these errors due to flawed or invalid thought processes ultimately leads to
+diminished performance (Yee et al., 2024).
+
+
+3.4 DISTILLATION V.S. DEMONSTRATION
+
+
+In this section, given the memory database, we compare the effectiveness of our knowledge distillation techniques, with conventional demonstration-based strategies. In our approach, distillation
+involves transferring knowledge from the memory database to SLMs through task-specific instructions. On the other hand, demonstration-based methods guide SLMs by presenting explicit task
+examples to facilitate analog reasoning (Yu et al., 2024). We implemented two variants of fewshot demonstrations: **Static** : Human experts select three representative examples from the memory
+database, which remain constant across all cases. **Dynamic** **RAG-based** : Examples are selected
+from AHA memory database based on similarity to the current query. For fair comparison, we also
+implement the same RAG system as AHA-MI, described in Section 3.2.
+
+
+Our findings indicate that few-shot demonstration generally underperforms AHA knowledge distillation technqiues on each dataset. However, we observe a surprisingly superior performance of
+the RAG-based few-shot demonstration compared to our designed knowledge distillation and other
+baselines on TABMWP. This effectiveness appears to correlate with the complexity of the input data
+by further analysis. Referring to Table 2, we note that TABMWP presents the simplest data input,
+containing only **2.22** columns and **6.13** rows per data point, with clean values consisting of numbers
+or processed strings. However, when dealing with WIKITQ, which contains irregular value types,
+column names, and BIRD-SQL, which presents complex database schemas and values, SLMs exhibit confusion with such heterogeneous and complex inputs. More critically, SLMs generate 38.2%
+more invalid outputs (e.g., "SELECT \n\n\n\n...") in BIRD-SQL.
+
+
+Based on these observations, we conclude that dynamic few-shot demonstration is more convenient and effective for leveraging the memory database when the input data is less complex. On
+the contrary, for complex data such as tables with dirty values or relational databases, our designed
+knowledge distillation enables SLMs to better utilize knowledge and perform tasks more effectively.
+It is worth noting that in real-world scenarios, complex data schemas and inputs are prevalent (Lee
+et al., 2021). Moreover, our approach exhibits greater scalability as task complexity increases. Although dynamic few-shot learning achieves a slight 3.0% advantage over our method on simpler
+tasks, our technique outperforms it by a significant 16.2% on more complex systems. This asymmetry in performance gains highlights the robust generalization of our knowledge distillation approach
+
+
+8
+
+
+for DSCG tasks across a spectrum of input complexities, from simple to more challenging data
+inputs.
+
+
+3.5 KNOWLEDGE TRANSMISSION
+
+
+While AHA shows notable performance gains for SLMs in data science code generation without
+fine-tuning, an important question arises: _**Is**_ _**the**_ _**distilled**_ _**knowledge**_ _**only**_ _**useful**_ _**to**_ _**the**_ _**Student**_
+_**Agent participated in Orchestration?**_ In order to answer this, we conduct knowledge transmission
+experiments by Llama-3.1-8B and GPT-35-Turbo, which didn’t attend the exploration.
+
+
+The results in Figure 3 demonstrate that both General and Meta Instructions, distilled from AOI
+memory database between GPT-4o and Phi-3-mini, obviously benefit these new models. AHAGI and AHA-MI consistently outperform conventional techniques like COT and End2End across all
+datasets leading to average relative improvement of 14.3% for Llama-3.1-8B and 30.9% for GPT-35Turbo. This proves that distilled knowledge is not limited to the original Student Agent (Phi-3-mini)
+but can transfer effectively to other models without additional fine-tuning, suggesting an efficient
+pathway for knowledge augmentation in emerging SLMs.
+
+
+3.6 ORCHESTRATION MEDIA TYPE ANALYSIS
+
+
+|Or|chestra<br>COT<br>Fun|tion Me<br>plans<br>ctional|dia Type<br>Plans|Col5|Col6|Col7|Col8|Col9|Col10|Col11|
+|---|---|---|---|---|---|---|---|---|---|---|
+||||||||||||
+||||||||||||
+||||||||||||
+||||||||||||
+||||||||||||
+
+
+|Col1|Col2|Col3|Col4|Col5|Col6|Col7|Col8|Col9|Col10|Col11|Orchestra|Col13|Col14|tion Media|Col16|Type|Col18|
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+||||||||||||~~CO~~<br>Fu|~~CO~~<br>Fu|~~CO~~<br>Fu|~~ plans~~<br>nctional Pl|~~ plans~~<br>nctional Pl|ans|ans|
+|||||||||||||||||||
+|||||||||||||||||||
+|||||||||||||||||||
+|||||||||||||||||||
+|||||||||||||||||||
+|||||||||||||||||||
+|||||||||||||||||||
+|||||||||||||||||||
+
+
+Figure 4: Comparison of accuracy and action type distribution for orchestration media types in AOI.
+The experiments are conducted on TABMWP on 1000 training examples across 10 turns.
+
+
+In this section, we assess the impact of various orchestration media types on data efficiency within
+the AOI frameworkduring exploration. Figure 4 (a) presents a comparison of the Phi-3-mini performance growth trends adopting COT plans, the sequantial textual plan, versus functional plans over
+10 turns of plan optimization on 1000 training data in AOI.
+
+
+At the beginning, COT plans enable Phi-3-mini to outperform the functional plans (69.00% vs.
+61.10%). However, as orchestration continues, the functional plans progressively improve, eventually surpassing the COT plans, achieving 86.3% compared to 81.4% by the final round. A visualization of action distributions for plan optimization, performed by GPT-4o in Figure 4 (b), indicates
+that Decomposition and Add occur much more frequently than other actions, generating longer
+plans with more steps and interpretations. In such scenario, Phi-3-mini demonstrates significant
+hallucinations when processing extended COT plans, especially when the number of steps exceeds
+7, we observe that Phi-3-mini would ignore some steps of the plan and hallucinate some steps that
+do not appear in the orignal plan. In contrast, the structured nature of our functional plan forces
+Phi-3-mini to follow each step methodically, ensuring the completion of all placeholders. This
+structured approach provides a clearer sense of task progression since the model perceives the task
+as completed only when all placeholders are filled.
+
+
+In conclusion, functional plans lead to a larger portion of correct cases, promoting a more dataefficient strategy for constructing memory databases, which can be effectively leveraged by SLM
+agents. This finding can prove that our designed functional plans are better orchestration media type
+compared to general COT plans in data science code generation task.
+
+
+4 RELATED WORK
+
+**Data Science Code Generation (DSCG).** DSCG focuses on automating code generation for datacentric tasks, requiring a deep understanding of data formats like CSV, TSV, and relational databases
+
+
+9
+
+
+90
+
+
+85
+
+
+80
+
+
+75
+
+
+70
+
+
+65
+
+
+60
+
+
+1 2 3 4 5 6 7 8 9 10
+Turn
+
+
+40
+
+
+35
+
+
+30
+
+
+25
+
+
+20
+
+
+15
+
+
+10
+
+
+5
+
+
+0
+
+
+decomposition add alt simplify delete switch
+Action Type
+
+
+(a) Accuracy across different AOI turns when
+using COT and Functional Plans as orchestration media.
+
+
+(b) Action type distribution for plan optimization in AOI using two orchestration media types.
+
+
+(RDB). Unlike general code generation models, which primarily generate syntactically correct code
+in response to natural language instructions (Chen et al., 2021; Luo et al., 2024), DSCG must ensure that the generated code correctly interacts with underlying data structures. This involves understanding the schema, format, and semantics of the data, whether in Python code for handling
+tabular data (Chen et al., 2024; Cheng et al., 2023; Shen et al., 2022b) or SQL for interacting with
+relational databases (Yu et al., 2018; Lee et al., 2021; Li et al., 2024a). Spreadsheet-based code
+generation further extends DSCG, automating the generation of formulas and operations in tools
+(Wang et al., 2023a; Bhatia et al., 2023). Even though large language models (LLMs) have demonstrated effectiveness in enhancing the capabilities of SLMs, concerns regarding data privacy in cloud
+environments have prompted a reevaluation of their deployment strategies.
+
+
+**Knowledge** **Distillation.** Knowledge distillation can mitigate this problem by transferring LLM
+capabilities to smaller models, enabling efficient deployment in resource-constrained environments
+(Xu et al., 2024). The field has evolved from early work on softened output training (Hinton, 2015)
+to advanced techniques like task-specific fine-tuning (Sanh, 2019), zero-shot learning (Wang et al.,
+2023b), and instruction-following datasets (Wang et al., 2023c;b). Progressive distillation techniques, such as the Orca framework (Mukherjee et al., 2023), demonstrate the potential for guiding
+the development of efficient open-source models. Self-distillation approaches have explored autonomous training data generation (Wang et al., 2023c). Recent advancements have focused on improving the performance and privacy aspects of DSCG by knowledge distillation (Luo et al., 2024).
+At the same time, synthetic data has been leveraged to enhance the generalization of SQL generation
+across different schemas (Yang et al., 2024a). Even though these techniques are effective, most still
+require training efforts to transfer knowledge. Our AHA framework introduces agent-based distillation through in-context learning, eliminating the need for task-specific fine-tuning and improving
+scalability across models and tasks.
+
+
+**Agent Memory.** Agent memory can improve the capability of LLM-based agents, particularly in
+tasks that require long-term context retention and continuous knowledge accumulation (Zhang et al.,
+2024). Traditionally, research has focused on teaching LLMs to reflect on and evolve from memory built through their own interactions, limiting knowledge transfer to the model performing the
+task (Shinn et al., 2023). For DSCG, memory plays a critical role in managing complex data formats, maintaining long-term context, and learning from iterative analysis processes. For instance,
+reGAL (Stengel-Eskin et al., 2024) introduces a memory mechanism that enables LLMs to reuse
+abstractions across program synthesis tasks by storing and recalling reusable subroutines, significantly improving code generation performance. Similarly, models like MAGIC (Askari et al., 2024)
+have demonstrated how memory can facilitate self-correction in data analysis code generation. In
+more complex software engineering contexts, frameworks like SWE-Agent (Yang et al., 2024b) and
+OpenDevin (Wang et al., 2024b) by codeAct (Wang et al., 2024a) extend the use of memory by considering complicated contexts such as entire code repositories and prior interactions, allowing agents
+to manage more intricate tasks like cross-file dependencies and repository-level refactoring. However, current agent memory systems typically rely on a single model, i.e., memory is constructed and
+knowledge is learned and leveraged exclusively by models like GPT-4, limiting knowledge transfer.
+Our work introduces distillation techniques that enable SLMs to leverage memory orchestrated by
+multiple models, including more capable GPT-4o. This approach allows SLMs to utilize richer, external knowledge for improved performance in knowledge-driven ICL, effectively bridging the gap
+of knowledge sharing between high-capacity models and more efficient SLMs.
+
+
+5 CONCLUSION
+
+
+In this paper, we presented Agents Help Agents (AHA), an automatic framework for efficient knowledge distillation from Large Language Models (LLMs) to Small Language Models (SLMs) in Data
+Science Code Generation (DSCG). AHA leverages In-Context Learning to enhance SLM performance without fine-tuning, using agent orchestration and memory-based distillation to improve task
+accuracy. Evaluations on three challenging tabular data analysis datasets, which requires code generation, show a 27.5% relative performance increase for Phi-3-mini and model-agnostic effectiveness,
+benefiting models like Llama-3.1-8B and GPT-35-Turbo even they did not participate in the orchestration. These results highlight the potential of AHA for developing intelligent applications with a
+focus on privacy and computational efficiency.
+
+
+10
+
+
+REFERENCES
+
+
+Marah Abdin, Sam Ade Jacobs, Ammar Ahmad Awan, Jyoti Aneja, Ahmed Awadallah, Hany
+Awadalla, Nguyen Bach, Amit Bahree, Arash Bakhtiari, Harkirat Behl, et al. Phi-3 technical report: A highly capable language model locally on your phone. _arXiv preprint arXiv:2404.14219_,
+2024.
+
+
+Josh Achiam, Steven Adler, Sandhini Agarwal, Lama Ahmad, Ilge Akkaya, Florencia Leoni Aleman, Diogo Almeida, Janko Altenschmidt, Sam Altman, Shyamal Anadkat, et al. Gpt-4 technical
+report. _arXiv preprint arXiv:2303.08774_, 2023.
+
+
+Rajas Agashe, Srini Iyer, and Luke Zettlemoyer. Juice: A large scale distantly supervised dataset
+for open domain context-based code generation. _EMNLP-IJCNLP_, pp. 5436–5446, 2019. URL
+[https://aclanthology.org/D19-1546.](https://aclanthology.org/D19-1546)
+
+
+Arian Askari, Christian Poelitz, and Xinye Tang. Magic: Generating self-correction guideline for
+in-context text-to-sql. _arXiv preprint arXiv:2406.12692_, 2024.
+
+
+Kushal Bhatia, Sumit Gulwani, Raksha Saikia, and Samuel Samuel. Sheetcopilot: Assistive table
+formula completion with neural code generation models. In _Proceedings of the 36th Annual ACM_
+_Symposium on User Interface Software and Technology_, pp. 701–714, 2023.
+
+
+Tom B. Brown, Benjamin Mann, Nick Ryder, and Others. Language models are few-shot learners. In _Advances_ _in_ _Neural_ _Information_ _Processing_ _Systems_ _33:_ _Annual_ _Conference_ _on_ _Neural_
+_Information Processing Systems 2020, NeurIPS 2020, December 6-12, 2020, virtual_, 2020.
+
+
+Mark Chen, Jerry Tworek, Heewoo Jun, Qiming Yuan, Henrique Ponde De Oliveira Pinto, Jared
+Kaplan, Harri Edwards, Yuri Burda, Nicholas Joseph, Greg Brockman, et al. Evaluating large
+language models trained on code. _arXiv preprint arXiv:2107.03374_, 2021.
+
+
+Wenhu Chen, Xueguang Ma, Xinyi Wang, and William W. Cohen. Program of thoughts prompting:
+Disentangling computation from reasoning for numerical reasoning tasks. _Trans._ _Mach._ _Learn._
+_Res._, 2023, 2023.
+
+
+Xinyun Chen, Maxwell Lin, Nathanael Schärli, and Denny Zhou. Teaching large language models
+to self-debug. In _The Twelfth International Conference on Learning Representations_, 2024.
+
+
+Zhoujun Cheng, Tianbao Xie, Peng Shi, Chengzu Li, Rahul Nadkarni, Yushi Hu, Caiming Xiong,
+Dragomir Radev, Mari Ostendorf, Luke Zettlemoyer, Noah A. Smith, and Tao Yu. Binding language models in symbolic languages. In _The_ _Eleventh_ _International_ _Conference_ _on_ _Learning_
+_Representations_, 2023.
+
+
+Xiang Deng, Yu Gu, Boyuan Zheng, Shijie Chen, Samuel Stevens, Boshi Wang, Huan Sun, and
+Yu Su. Mind2web: Towards a generalist agent for the web. In _Thirty-seventh_ _Conference_ _on_
+_Neural Information Processing Systems_, 2023. [URL https://openreview.net/forum?](https://openreview.net/forum?id=kiYqbO3wqw)
+[id=kiYqbO3wqw.](https://openreview.net/forum?id=kiYqbO3wqw)
+
+
+Dujian Ding, Ankur Mallick, Chi Wang, Robert Sim, Subhabrata Mukherjee, Victor Rühle, Laks
+V. S. Lakshmanan, and Ahmed Hassan Awadallah. Hybrid LLM: Cost-efficient and quality-aware
+query routing. In _The Twelfth International Conference on Learning Representations_, 2024.
+
+
+Abhimanyu Dubey, Abhinav Jauhri, Abhinav Pandey, Abhishek Kadian, Ahmad Al-Dahle, Aiesha
+Letman, Akhil Mathur, Alan Schelten, Amy Yang, Angela Fan, et al. The llama 3 herd of models.
+_arXiv preprint arXiv:2407.21783_, 2024.
+
+
+Usama M. Fayyad, Gregory Piatetsky-Shapiro, and Padhraic Smyth. From data mining to knowledge
+discovery in databases. _AI Mag._, 17(3):37–54, 1996.
+
+
+Dawei Gao, Haibin Wang, Yaliang Li, Xiuyu Sun, Yichen Qian, Bolin Ding, and Jingren Zhou.
+Text-to-sql empowered by large language models: A benchmark evaluation. _Proc. VLDB Endow._,
+17(5):1132–1145, 2024.
+
+
+Yu Gu, Yiheng Shu, Hao Yu, Xiao Liu, Yuxiao Dong, Jie Tang, Jayanth Srinivasa, Hugo Latapie, and
+Yu Su. Middleware for llms: Tools are instrumental for language agents in complex environments.
+_arXiv preprint arXiv:2402.14672_, 2024.
+
+
+11
+
+
+Jiawei Han, Micheline Kamber, and Jian Pei. _Data Mining:_ _Concepts and Techniques, 3rd edition_ .
+Morgan Kaufmann, 2011. ISBN 978-0123814791.
+
+
+Geoffrey Hinton. Distilling the knowledge in a neural network. _arXiv preprint arXiv:1503.02531_,
+2015.
+
+
+Edward J Hu, yelong shen, Phillip Wallis, Zeyuan Allen-Zhu, Yuanzhi Li, Shean Wang, Lu Wang,
+and Weizhu Chen. LoRA: Low-rank adaptation of large language models. In _International Con-_
+_ference on Learning Representations_, 2022.
+
+
+Xueyu Hu, Ziyu Zhao, Shuang Wei, Ziwei Chai, Qianli Ma, Guoyin Wang, Xuwu Wang, Jing Su,
+Jingjing Xu, Ming Zhu, Yao Cheng, Jianbo Yuan, Jiwei Li, Kun Kuang, Yang Yang, Hongxia
+Yang, and Fei Wu. Infiagent-dabench: Evaluating agents on data analysis tasks. In _Forty-first_
+_International Conference on Machine Learning, ICML 2024, Vienna, Austria, July 21-27, 2024_,
+2024.
+
+
+Harshit Joshi, Abishai Ebenezer, José Cambronero Sanchez, Sumit Gulwani, Aditya Kanade, Vu Le,
+Ivan Radiˇcek, and Gust Verbruggen. Flame: A small language model for spreadsheet formulas.
+In _Proceedings of the AAAI Conference on Artificial Intelligence_, volume 38, pp. 12995–13003,
+2024.
+
+
+Minki Kang, Seanie Lee, Jinheon Baek, Kenji Kawaguchi, and Sung Ju Hwang. Knowledgeaugmented reasoning distillation for small language models in knowledge-intensive tasks. In
+_Thirty-seventh Conference on Neural Information Processing Systems_, 2023.
+
+
+Zixuan Ke, Yijia Shao, Haowei Lin, Tatsuya Konishi, Gyuhak Kim, and Bing Liu. Continual pretraining of language models. In _The Eleventh International Conference on Learning Representa-_
+_tions_, 2023.
+
+
+Mohammad Khanbabaei, Farzad Movahedi Sobhani, Mahmood Alborzi, and Reza Radfar. Developing an integrated framework for using data mining techniques and ontology concepts for process
+improvement. _J. Syst. Softw._, 137:78–95, 2018.
+
+
+Yuhang Lai, Chengxi Li, Yiming Wang, Tianyi Zhang, Ruiqi Zhong, Luke Zettlemoyer, Wen-tau
+Yih, Daniel Fried, Sida Wang, and Tao Yu. Ds-1000: A natural and reliable benchmark for data
+science code generation. In _International_ _Conference_ _on_ _Machine_ _Learning_, pp. 18319–18345.
+PMLR, 2023.
+
+
+Chia-Hsuan Lee, Oleksandr Polozov, and Matthew Richardson. Kaggledbqa: Realistic evaluation of
+text-to-sql parsers. In Chengqing Zong, Fei Xia, Wenjie Li, and Roberto Navigli (eds.), _Proceed-_
+_ings_ _of_ _the_ _59th_ _Annual_ _Meeting_ _of_ _the_ _Association_ _for_ _Computational_ _Linguistics_ _and_ _the_ _11th_
+_International Joint Conference on Natural Language Processing, ACL/IJCNLP 2021, (Volume 1:_
+_Long_ _Papers),_ _Virtual_ _Event,_ _August_ _1-6,_ _2021_, pp. 2261–2273. Association for Computational
+Linguistics, 2021.
+
+
+Fangyu Lei, Qian Liu, Yiming Huang, Shizhu He, Jun Zhao, and Kang Liu. S3Eval: A synthetic,
+scalable, systematic evaluation suite for large language model. In _Proceedings of the 2024 Con-_
+_ference of the North American Chapter of the Association for Computational Linguistics:_ _Human_
+_Language_ _Technologies_ _(Volume_ _1:_ _Long_ _Papers)_, pp. 1259–1286, Mexico City, Mexico, June
+2024. Association for Computational Linguistics.
+
+
+Jinyang Li, Binyuan Hui, Ge Qu, Jiaxi Yang, Binhua Li, Bowen Li, Bailin Wang, Bowen Qin,
+Ruiying Geng, Nan Huo, et al. Can llm already serve as a database interface? a big bench for
+large-scale database grounded text-to-sqls. _Advances in Neural Information Processing Systems_,
+36, 2024a.
+
+
+Jinyang Li, Nan Huo, Yan Gao, Jiayi Shi, Yingxiu Zhao, Ge Qu, Yurong Wu, Chenhao Ma, JianGuang Lou, and Reynold Cheng. Tapilot-crossing: Benchmarking and evolving llms towards
+interactive data analysis agents. _arXiv preprint arXiv:2403.05307_, 2024b.
+
+
+Aixin Liu, Bei Feng, Bin Wang, Bingxuan Wang, Bo Liu, Chenggang Zhao, Chengqi Dengr, Chong
+Ruan, Damai Dai, Daya Guo, et al. Deepseek-v2: A strong, economical, and efficient mixtureof-experts language model. _arXiv preprint arXiv:2405.04434_, 2024.
+
+
+12
+
+
+Anton Lozhkov, Raymond Li, Loubna Ben Allal, Federico Cassano, Joel Lamy-Poirier, Nouamane
+Tazi, Ao Tang, Dmytro Pykhtar, Jiawei Liu, Yuxiang Wei, et al. Starcoder 2 and the stack v2: The
+next generation. _arXiv preprint arXiv:2402.19173_, 2024.
+
+
+Pan Lu, Liang Qiu, Kai-Wei Chang, Ying Nian Wu, Song-Chun Zhu, Tanmay Rajpurohit, Peter
+Clark, and Ashwin Kalyan. Dynamic prompt learning via policy gradient for semi-structured
+mathematical reasoning. In _International Conference on Learning Representations (ICLR)_, 2023.
+
+
+Ziyang Luo, Can Xu, Pu Zhao, Qingfeng Sun, Xiubo Geng, Wenxiang Hu, Chongyang Tao, Jing
+Ma, Qingwei Lin, and Daxin Jiang. Wizardcoder: Empowering code large language models with
+evol-instruct. In _The Twelfth International Conference on Learning Representations_, 2024.
+
+
+Lucie Charlotte Magister, Jonathan Mallinson, Jakub Adamek, Eric Malmi, and Aliaksei Severyn.
+Teaching small language models to reason. In _Proceedings_ _of_ _the_ _61st_ _Annual_ _Meeting_ _of_ _the_
+_Association_ _for_ _Computational_ _Linguistics_ _(Volume_ _2:_ _Short_ _Papers)_, pp. 1773–1781, Toronto,
+Canada, July 2023. Association for Computational Linguistics.
+
+
+Yao Mu, Qinglong Zhang, Mengkang Hu, Wenhai Wang, Mingyu Ding, Jun Jin, Bin Wang, Jifeng
+Dai, Yu Qiao, and Ping Luo. Embodiedgpt: Vision-language pre-training via embodied chain of
+thought. _Advances in Neural Information Processing Systems_, 36, 2024.
+
+
+Subhabrata Mukherjee, Arindam Mitra, Ganesh Jawahar, Sahaj Agarwal, Hamid Palangi, and
+Ahmed Awadallah. Orca: Progressive learning from complex explanation traces of gpt-4. _arXiv_
+_preprint arXiv:2306.02707_, 2023.
+
+
+Yixin Nie, Adina Williams, Emily Dinan, Mohit Bansal, Jason Weston, and Douwe Kiela. Adversarial NLI: A new benchmark for natural language understanding. In _Proceedings_ _of_ _the_ _58th_
+_Annual Meeting of the Association for Computational Linguistics, ACL 2020, Online, July 5-10,_
+_2020_, pp. 4885–4901. Association for Computational Linguistics, 2020.
+
+
+Taiwo Blessing Ogunseyi, Cossi Blaise Avoussoukpo, and Yiqiang Jiang. A systematic review of
+privacy techniques in recommendation systems. _International_ _Journal_ _of_ _Information_ _Security_,
+22(6):1651–1664, 2023.
+
+
+Panupong Pasupat and Percy Liang. Compositional semantic parsing on semi-structured tables. In
+_Proceedings_ _of_ _the_ _53rd_ _Annual_ _Meeting_ _of_ _the_ _Association_ _for_ _Computational_ _Linguistics_ _and_
+_the 7th International Joint Conference on Natural Language Processing of the Asian Federation_
+_of_ _Natural Language_ _Processing,_ _ACL 2015,_ _July 26-31,_ _2015,_ _Beijing,_ _China,_ _Volume 1:_ _Long_
+_Papers_, pp. 1470–1480. The Association for Computer Linguistics, 2015.
+
+
+Fabio Petroni, Aleksandra Piktus, Angela Fan, Patrick Lewis, Majid Yazdani, Nicola De Cao, James
+Thorne, Yacine Jernite, Vladimir Karpukhin, Jean Maillard, Vassilis Plachouras, Tim Rocktäschel, and Sebastian Riedel. KILT: a benchmark for knowledge intensive language tasks. In
+_Proceedings of the 2021 Conference of the North American Chapter of the Association for Com-_
+_putational Linguistics:_ _Human Language Technologies_, pp. 2523–2544, Online, June 2021. Association for Computational Linguistics.
+
+
+Mohammadreza Pourreza and Davood Rafiei. Din-sql: Decomposed in-context learning of text-tosql with self-correction. _Advances in Neural Information Processing Systems_, 36, 2024.
+
+
+Ge Qu, Jinyang Li, Bowen Li, Bowen Qin, Nan Huo, Chenhao Ma, and Reynold Cheng. Before
+generation, align it! a novel and effective strategy for mitigating hallucinations in text-to-sql
+generation. _arXiv preprint arXiv:2405.15307_, 2024.
+
+
+Baptiste Roziere, Jonas Gehring, Fabian Gloeckle, Sten Sootla, Itai Gat, Xiaoqing Ellen Tan, Yossi
+Adi, Jingyu Liu, Romain Sauvestre, Tal Remez, et al. Code llama: Open foundation models for
+code. _arXiv preprint arXiv:2308.12950_, 2023.
+
+
+V Sanh. Distilbert, a distilled version of bert: Smaller, faster, cheaper and lighter. _arXiv_ _preprint_
+_arXiv:1910.01108_, 2019.
+
+
+13
+
+
+Da Shen, Xinyun Chen, Chenguang Wang, Koushik Sen, and Dawn Song. Benchmarking language
+models for code syntax understanding. In _Findings_ _of_ _the_ _Association_ _for_ _Computational_ _Lin-_
+_guistics:_ _EMNLP_ _2022_, pp. 3071–3093, Abu Dhabi, United Arab Emirates, December 2022a.
+Association for Computational Linguistics.
+
+
+Li Shen, Yicong Xu, and Hongbo Wang. Handling ambiguity in natural language code generation.
+_Transactions of the Association for Computational Linguistics_, 10:113–126, 2022b. doi: 10.1162/
+tacl_a_00414.
+
+
+Noah Shinn, Federico Cassano, Ashwin Gopinath, Karthik R Narasimhan, and Shunyu Yao. Reflexion: language agents with verbal reinforcement learning. In _Thirty-seventh Conference on Neural_
+_Information Processing Systems_, 2023.
+
+
+Ishika Singh, Valts Blukis, Arsalan Mousavian, Ankit Goyal, Danfei Xu, Jonathan Tremblay, Dieter
+Fox, Jesse Thomason, and Animesh Garg. Progprompt: Generating situated robot task plans using
+large language models. In _2023_ _IEEE_ _International_ _Conference_ _on_ _Robotics_ _and_ _Automation_
+_(ICRA)_, pp. 11523–11530. IEEE, 2023.
+
+
+Elias Stengel-Eskin, Archiki Prasad, and Mohit Bansal. Regal: Refactoring programs to discover
+generalizable abstractions. In _Forty-first International Conference on Machine Learning,_ _ICML_
+_2024, Vienna, Austria, July 21-27, 2024_ . OpenReview.net, 2024.
+
+
+Gemma Team, Morgane Riviere, Shreya Pathak, Pier Giuseppe Sessa, Cassidy Hardin, Surya Bhupatiraju, Léonard Hussenot, Thomas Mesnard, Bobak Shahriari, Alexandre Ramé, et al. Gemma
+2: Improving open language models at a practical size. _arXiv preprint arXiv:2408.00118_, 2024.
+
+
+Bailin Wang, Richard Shin, Xiaodong Liu, Oleksandr Polozov, and Matthew Richardson. RAT-SQL:
+Relation-aware schema encoding and linking for text-to-SQL parsers. In _Proceedings of the 58th_
+_Annual Meeting of the Association for Computational Linguistics_, Online, July 2020. Association
+for Computational Linguistics.
+
+
+Daming Wang, Yijun Liu, and Qiang Zhang. Spreadsheet formula generation using lightweight
+language models. In _Proceedings_ _of_ _the_ _37th_ _AAAI_ _Conference_ _on_ _Artificial_ _Intelligence_, pp.
+2109–2116, 2023a.
+
+
+Xingyao Wang, Yangyi Chen, Lifan Yuan, Yizhe Zhang, Yunzhu Li, Hao Peng, and Heng Ji. Executable code actions elicit better llm agents. In _ICML_, 2024a.
+
+
+Xingyao Wang, Boxuan Li, Yufan Song, Frank F Xu, Xiangru Tang, Mingchen Zhuge, Jiayi Pan,
+Yueqi Song, Bowen Li, Jaskirat Singh, et al. Opendevin: An open platform for ai software
+developers as generalist agents. _arXiv preprint arXiv:2407.16741_, 2024b.
+
+
+Yizhong Wang, Hamish Ivison, Pradeep Dasigi, Jack Hessel, Tushar Khot, Khyathi Chandu, David
+Wadden, Kelsey MacMillan, Noah A Smith, Iz Beltagy, et al. How far can camels go? exploring
+the state of instruction tuning on open resources. _Advances_ _in_ _Neural_ _Information_ _Processing_
+_Systems_, 36:74764–74786, 2023b.
+
+
+Yizhong Wang, Yeganeh Kordi, Swaroop Mishra, Alisa Liu, Noah A. Smith, Daniel Khashabi, and
+Hannaneh Hajishirzi. Self-instruct: Aligning language models with self-generated instructions. In
+_Proceedings of the 61st Annual Meeting of the Association for Computational Linguistics (Volume_
+_1:_ _Long_ _Papers),_ _ACL_ _2023,_ _Toronto,_ _Canada,_ _July_ _9-14,_ _2023_, pp. 13484–13508. Association
+for Computational Linguistics, 2023c.
+
+
+Yue Wang, Hung Le, Akhilesh Deepak Gotmare, Nghi DQ Bui, Junnan Li, and Steven CH Hoi.
+Codet5+: Open code large language models for code understanding and generation. _arXiv_
+_preprint arXiv:2305.07922_, 2023d.
+
+
+Zilong Wang, Hao Zhang, Chun-Liang Li, Julian Martin Eisenschlos, Vincent Perot, Zifeng Wang,
+Lesly Miculicich, Yasuhisa Fujii, Jingbo Shang, Chen-Yu Lee, and Tomas Pfister. Chain-of-table:
+Evolving tables in the reasoning chain for table understanding. In _The_ _Twelfth_ _International_
+_Conference on Learning Representations_, 2024c.
+
+
+14
+
+
+Jason Wei, Xuezhi Wang, Dale Schuurmans, Maarten Bosma, Fei Xia, Ed Chi, Quoc V Le, Denny
+Zhou, et al. Chain-of-thought prompting elicits reasoning in large language models. _Advances in_
+_neural information processing systems_, 35:24824–24837, 2022.
+
+
+Tongtong Wu, Linhao Luo, Yuan-Fang Li, Shirui Pan, Thuy-Trang Vu, and Gholamreza Haffari.
+Continual learning for large language models: A survey. _arXiv preprint arXiv:2402.01364_, 2024.
+
+
+Shitao Xiao, Zheng Liu, Peitian Zhang, Niklas Muennighoff, Defu Lian, and Jian-Yun Nie. Cpack: Packed resources for general chinese embeddings. In _Proceedings of the 47th International_
+_ACM SIGIR Conference on Research and Development in Information Retrieval_, SIGIR ’24, pp.
+641–649, New York, NY, USA, 2024.
+
+
+Tianbao Xie, Danyang Zhang, Jixuan Chen, Xiaochuan Li, Siheng Zhao, Ruisheng Cao, Toh Jing
+Hua, Zhoujun Cheng, Dongchan Shin, Fangyu Lei, et al. Osworld: Benchmarking multimodal
+agents for open-ended tasks in real computer environments. _arXiv_ _preprint_ _arXiv:2404.07972_,
+2024.
+
+
+Xiaohan Xu, Ming Li, Chongyang Tao, Tao Shen, Reynold Cheng, Jinyang Li, Can Xu, Dacheng
+Tao, and Tianyi Zhou. A survey on knowledge distillation of large language models. _arXiv_
+_preprint arXiv:2402.13116_, 2024.
+
+
+Jiaxi Yang, Binyuan Hui, Min Yang, Jian Yang, Junyang Lin, and Chang Zhou. Synthesizing textto-SQL data from weak and strong LLMs. In _Proceedings_ _of_ _the_ _62nd_ _Annual_ _Meeting_ _of_ _the_
+_Association for Computational Linguistics (Volume 1:_ _Long Papers)_, Bangkok, Thailand, August
+2024a.
+
+
+John Yang, Carlos E Jimenez, Alexander Wettig, Kilian Lieret, Shunyu Yao, Karthik Narasimhan,
+and Ofir Press. Swe-agent: Agent-computer interfaces enable automated software engineering.
+_arXiv preprint arXiv:2405.15793_, 2024b.
+
+
+Shunyu Yao, Jeffrey Zhao, Dian Yu, Nan Du, Izhak Shafran, Karthik R Narasimhan, and Yuan
+Cao. React: Synergizing reasoning and acting in language models. In _The Eleventh International_
+_Conference on Learning Representations_ [, 2023. URL https://openreview.net/forum?](https://openreview.net/forum?id=WE_vluYUL-X)
+[id=WE_vluYUL-X.](https://openreview.net/forum?id=WE_vluYUL-X)
+
+
+Evelyn Yee, Alice Li, Chenyu Tang, Yeon Ho Jung, Ramamohan Paturi, and Leon Bergen. Dissociation of faithful and unfaithful reasoning in llms. _arXiv preprint arXiv:2405.15092_, 2024.
+
+
+Pengcheng Yin, Wen-Ding Li, Kefan Xiao, Abhishek Rao, Yeming Wen, Kensen Shi, Joshua Howland, Paige Bailey, Michele Catasta, Henryk Michalewski, Oleksandr Polozov, and Charles Sutton. Natural language to code generation in interactive data science notebooks. In _Proceedings_
+_of_ _the_ _61st_ _Annual_ _Meeting_ _of_ _the_ _Association_ _for_ _Computational_ _Linguistics_ _(Volume_ _1:_ _Long_
+_Papers)_, Toronto, Canada, July 2023.
+
+
+Junchi Yu, Ran He, and Zhitao Ying. THOUGHT PROPAGATION: AN ANALOGICAL APPROACH TO COMPLEX REASONING WITH LARGE LANGUAGE MODELS. In _The_
+_Twelfth_ _International_ _Conference_ _on_ _Learning_ _Representations_, 2024. URL [https://](https://openreview.net/forum?id=SBoRhRCzM3)
+[openreview.net/forum?id=SBoRhRCzM3.](https://openreview.net/forum?id=SBoRhRCzM3)
+
+
+Tao Yu, Rui Zhang, Kai Yang, Michihiro Yasunaga, Dongxu Tan, Murhaf Fawzi Er, Iris Li, Jun Ma,
+Zilin Li, and Dragomir R. Radev. Spider: A large-scale human-labeled dataset for complex and
+cross-domain semantic parsing and text-to-sql task. In _Proceedings_ _of_ _the_ _2018_ _Conference_ _on_
+_Empirical_ _Methods_ _in_ _Natural_ _Language_ _Processing_, pp. 3911–3921, 2018. doi: 10.18653/v1/
+D18-1425.
+
+
+Zeyu Zhang, Xiaohe Bo, Chen Ma, Rui Li, Xu Chen, Quanyu Dai, Jieming Zhu, Zhenhua Dong,
+and Ji-Rong Wen. A survey on the memory mechanism of large language model based agents.
+_arXiv preprint arXiv:2404.13501_, 2024.
+
+
+Zhehao Zhang, Xitao Li, Yan Gao, and Jian-Guang Lou. Crt-qa: A dataset of complex reasoning question answering over tabular data. In _Proceedings_ _of_ _the_ _2023_ _Conference_ _on_ _Empirical_
+_Methods in Natural Language Processing_, pp. 2131–2153, 2023.
+
+
+15
+
+
+Boyuan Zheng, Boyu Gou, Jihyung Kil, Huan Sun, and Yu Su. Gpt-4v(ision) is a generalist web
+agent, if grounded. In _Forty-first_ _International_ _Conference_ _on_ _Machine_ _Learning_, 2024. URL
+[https://openreview.net/forum?id=piecKJ2DlB.](https://openreview.net/forum?id=piecKJ2DlB)
+
+
+Shuyan Zhou, Frank F Xu, Hao Zhu, Xuhui Zhou, Robert Lo, Abishek Sridhar, Xianyi Cheng,
+Yonatan Bisk, Daniel Fried, Uri Alon, et al. Webarena: A realistic web environment for building
+autonomous agents. _arXiv preprint arXiv:2307.13854_, 2023.
+
+
+16
+
+
+A DETAILED DESCRIPTION OF FINE-TO-COARSE KNOWLEDGE
+DISTILLATION
+
+
+We introduce a novel fine-to-coarse knowledge distillation method employing a recursive, tree-based
+approach to generalize to unseen queries. This method improves upon traditional sequential updating techniques by constructing a knowledge tree recursively and in parallel, thereby reducing bias
+and ensuring a more robust distillation process.
+
+
+Our knowledge tree consists of nodes, each containing a batch of successful cases from the set _M_ .
+This structure allows for concurrent summarization of essential rules from diverse examples. We
+define the set of distilled instructions _I_ as:
+
+
+_I_ = _L_ sum( _M_ ) = _Tl,_
+
+
+where _L_ sum is a recursive function executed by the Large Language Model (LLM) to distill knowledge, and _Tl_ is the root node of the tree. This function constructs a multi-layered tree, with each
+layer aggregating knowledge from the preceding layer. The tree’s depth adjusts dynamically based
+on the context length of case studies, ensuring optimal abstraction at each layer.
+
+
+At each recursive step, nodes in the current layer _l_ aggregate knowledge from layer _l −_ 1:
+
+
+_Tl_ = _L_ agg( _Tl−_ 1) _,_
+
+
+where _L_ agg is the aggregation function merging batches of successful cases into more abstract representations.
+
+
+The leaves of the tree (layer _L_ ) contain the original cases from _M_, represented as batches:
+
+
+_TL_ = _{B_ 1 _, B_ 2 _, ..., Bk}_
+
+
+where each batch _Bj_ is a set of successful cases:
+
+
+_Bj_ = _{Mj_ 1 _, Mj_ 2 _, ..., Mjn}_
+
+
+and each successful case _Mji_ is defined as:
+
+
+_Mji_ = ( _qji, dji,_ ˆ _cji, Sji_ )
+
+
+Here, _qji_ is the _i_ _[th]_ natural language query of _j_ _[th]_ batch, _dji_ is the _i_ _[th]_ corresponding data of _j_ _[th]_
+
+batch, ˆ _cji_ is the _i_ _[th]_ orchestrated correct code of _j_ _[th]_ batch, and _Sji_ is the _i_ _[th]_ case study of _j_ _[th]_ batch
+summarizing the solution.
+
+
+Each higher layer in the tree abstracts and summarizes the knowledge from the level below, culminating in the root node _Tl_, which represents the final set of distilled instructions _I_ .
+
+
+This recursive and parallel tree construction allows for simultaneous extraction of rules, significantly
+reducing dependence on the order or selection of initial examples. Each node encompasses multiple
+successful cases, facilitating the extraction of generalized instructions through the identification of
+common patterns and rules.
+
+
+The process continues iteratively from the leaves to the root, resulting in comprehensive and unbiased distilled instructions _I_ . This framework provides a well-rounded guide for the SLM in
+generating correct code for unseen queries, effectively balancing knowledge complexity with SLM
+constraints.
+
+
+Our method represents an advancement in knowledge distillation for language models, offering a
+robust approach to extracting generalizable knowledge from diverse examples and enhancing SLM
+performance on unseen queries.
+
+
+17
+
+
+```
+         Layer 1 Layer 2 Layer 3 … Layer l-1 Layer l
+
+```
+
+Figure 5: Illustration of how Fine-to-Coarse Knowledge Distillation for AHA-GI generation. The
+intermediate layers are omitted.
+
+
+B MODEL IMPLEMENTATION
+
+
+We implement models for three main categories of purpose:
+
+
+B.1 ORCHESTRATION MODELS
+
+
+gpt-4o: The Teacher Agent (gpt-4o) is responsible for several key tasks, including Abstraction
+Lifting (see Section 2.2) and Plan Optimization (see Section 2.2), which are performed while monitoring the performance of the Student Agent. Additionally, the Teacher Agent handles the conversion of complex, heterogeneous cases into more readable case studies for Student Learning Models
+(SLMs), as detailed in Section 2.3. Finally, gpt-4o distills general instructions that contain taskspecific knowledge, as described in Section 2.4. Notably, these general instructions are utilized by
+the SLMs in an offline manner, meaning that gpt-4o does not participate in the inference process
+of the SLMs.
+
+
+phi-3-mini-128k-instruct: For the orchestration process, we select this 3 _._ 8B parameter
+SLM as the Student Agent due to its strong generalization abilities and efficient deployment.
+
+
+B.2 BASELINE MODELS
+
+
+Within the orchestration mode, several families of Student Learning Models (SLMs) are evaluated.
+These include models from the Phi-3, Starcoder 2, and Llama families:
+
+
+**Phi-3 Family** (Abdin et al., 2024)
+
+
+phi-3-mini-128k-instruct (3.8B)
+
+
+phi-3-small-128k-instruct (7B)
+
+
+phi-3-medium-128k-instruct (14B)
+
+
+**Starcoder 2 Family** (Lozhkov et al., 2024)
+
+
+starcoder2-7b-instruct
+
+
+starcoder2-15b-instruct
+
+
+**Llama Family** (Dubey et al., 2024)
+
+
+18
+
+
+**General Instruction:**
+
+1. You should **break down the task into manageable steps**. Each step should build on the previous one,
+guiding you through the process logically.
+
+
+2. You should **emphasize data handling and cleaning**.
+This includes handling missing values, normalizing case, and ensuring data consistency."
+
+
+3. You should **focus on filtering and extraction**. Guide yourself on how to filter and extract relevant data based
+on specific criteria. This is often the core of the analysis."…
+
+
+**1000**
+
+**1001**
+
+**1002**
+
+
+**1003**
+
+**1004**
+
+**1005**
+
+**1006**
+
+**1007**
+
+**1008**
+
+
+**1009**
+
+**1010**
+
+**1011**
+
+**1012**
+
+**1013**
+
+
+**1014**
+
+**1015**
+
+**1016**
+
+**1017**
+
+**1018**
+
+**1019**
+
+
+**1020**
+
+**1021**
+
+**1022**
+
+**1023**
+
+**1024**
+
+**1025**
+
+
+codellama-7b-instruct-hf
+
+
+codellama-13b-instruct-hf
+
+
+B.3 MODELS IN KNOWLEDGE TRANSMISSION
+
+
+In Section 3.5, we explore the knowledge distilled from AHA to newly developed models, particularly in terms of their ability to generalize knowledge. For this evaluation, we select the following
+models:
+
+
+llama-3.1-8b-instruct: This model is broad new, yet it shows significant performance improvements when leveraging the distilled knowledge.
+
+
+gpt-35-turbo-16k: We also include a closed-source model in our experiments to demonstrate
+the effectiveness of our approach across both GPU-deployed and API-based models. Despite its
+number of parameters is unknown, we consider it as one of SLMs since its performance falls behind
+of its more advanced versions such as GPT-4.
+
+
+C DATASET IMPLEMENTATION DETAILS
+
+
+C.1 DATA FILE CONTENT
+
+
+For convenient reproduction and following, we preprocess all dataset into more unified data format of jsonl. In python task (TABMWP, WIKITQ), each line of data contains question_id,
+question, data_path, data_overview, answer_type, answer. In SQL task (BIRDSQL), each line of data contains question_id, question, evidence, data_path, db_id,
+sql.
+
+
+C.2 DATA INPUT CONTENT
+
+
+The main goal of this work is to evaluate the code generation capabilities of models in understanding
+data schemas and structures across multiple datasets. Given the impracticality of providing all data
+values in real-world scenarios in which datasets may consist of millions or even billions of rows,
+we sample values for the part of data input to simulate realistic code generation tasks. We feed the
+markdown format of schemas with data samples as data_overview.
+
+
+For **TABMWP**, we provide only the column names and the first three rows of values. This enables
+models to infer the data structure and value types necessary for Python Pandas code generation
+without exposing all the data.
+
+
+For **WIKITQ**, which contains more complex and varied value types, we provide the first 10 rows of
+values and column names to help models navigate the dataset’s intricacies.
+
+
+In the case of BIRD-SQL, which contains relational databases with complex schemas and diverse
+value types, more advanced schema-linking techniques are often required to retrieve relevant tables
+or columns before answering queries (Wang et al., 2020; Pourreza & Rafiei, 2024). While we
+consider this advanced schema-linking process as future work for AHA, our current focus is on the
+code generation aspect. Therefore, we provide:
+
+
+    - Ground truth retrieved tables, reducing input complexity and simulating realistic humanmachine interactions where users might supply potentially relevant tables.
+
+
+    - Full columns with column meaning description files.
+
+
+    - The first three rows of values for each table.
+
+
+Although the retrieved tables are given, the models must still consider constraints and generate correct SQL queries. As shown in Table 3, performance on Bird-SQL remains relatively low, even with
+simplified table retrieval, highlighting the challenges of generating accurate SQL queries in complex
+database environments. This methodology allows us to evaluate code generation capabilities while
+approximating the real-world challenges of data analysis.
+
+
+19
+
+
+**1026**
+
+**1027**
+
+
+**1028**
+
+**1029**
+
+**1030**
+
+**1031**
+
+**1032**
+
+**1033**
+
+
+**1034**
+
+**1035**
+
+**1036**
+
+**1037**
+
+**1038**
+
+**1039**
+
+
+**1040**
+
+**1041**
+
+**1042**
+
+**1043**
+
+**1044**
+
+
+**1045**
+
+**1046**
+
+**1047**
+
+**1048**
+
+**1049**
+
+**1050**
+
+
+**1051**
+
+**1052**
+
+**1053**
+
+**1054**
+
+**1055**
+
+**1056**
+
+
+**1057**
+
+**1058**
+
+**1059**
+
+**1060**
+
+**1061**
+
+**1062**
+
+
+**1063**
+
+**1064**
+
+**1065**
+
+**1066**
+
+**1067**
+
+
+**1068**
+
+**1069**
+
+**1070**
+
+**1071**
+
+**1072**
+
+**1073**
+
+
+**1074**
+
+**1075**
+
+**1076**
+
+**1077**
+
+**1078**
+
+**1079**
+
+
+C.3 PREVENT MODELS FROM DIRECT ANSWERING
+
+
+We observe two kinds of direct answers behaviors in Python tasks, which leads to unfair evaluation
+of code generation ability:
+
+
+**Unfair** **Data** **Inspection.** We find that SLMs usually generate data inspection codes such as
+print(df.head()) in their code generation. When producing answers given executed results,
+such first few rows will show again in which SLMs tend to answer it correctly even with wrong codes
+or bugs. We need to decouple study of tabular understanding and code generation understanding data
+structure. And the mutually influenced capability would be the future goals of development.
+
+
+**Data** **Leakage.** In datasets like WIKITQ, current popular SLMs tend to exhibit a form of data
+leakage, where models effectively **"memorize"** the ground truth answers, resulting in unfair evaluations. Through a sample of 100 generated codes using the Phi-3-mini baseline across these datasets,
+we observed that the model often embeds the correct answer directly into the code. For instance,
+given the question "Who was the opponent of James V.?", the generated code might
+include a line like opponent = "Smith W.", which corresponds to the ground truth answer.
+The frequency of this leakage is particularly high in WIKITQ, where 23 out of 100 samples exhibits
+this behavior, especially for simpler question types. In contrast, datasets with more complex question structures, such as TABMWP, exhibits only 5 cases of leakage out of 100, while no instances are
+found in BIRD-SQL. These findings suggest that more complex input structures and question/code
+types can effectively reduce the possibility of data leakage.
+
+
+**Mitigating** **Direct** **Answering** **Behaviors.** To address these cheating behaviors, we propose an
+**embodied** **prompt**, as outlined in Section H. This approach minimizes data leakage and prevents
+unfair data inspection during evaluation. As illustrated in Figure 7, we design scenarios where the
+model is informed that it has already inspected the dataset and does not need to generate further data
+inspection commands. Additionally, the embodied prompts encourage the model to approach tasks
+as a professional data analyst, preventing it from assigning variables based on memorized answers.
+Our evaluation shows that this method successfully eliminated data leakage in all 100 tested cases.
+Also, the unfair data inspections appear less frequently. The remaining of unfair data inspections
+will be removed by post-processed by regex functions.
+
+
+We believe that this solution holds promise for addressing data leakage issues in complex benchmark
+evaluations. This is particularly important in DSCG, where datasets are difficult to collect from
+expert teams and frequent re-annotation to prevent leakage is impractical.
+
+
+D AHA FUNCTIONALITY
+
+
+D.1 AOI GENERALIZATION
+
+
+Figure 6: Illustration of how AOI is conducted in Python for Tabular data analysis.
+
+
+20
+
+
+**1080**
+
+**1081**
+
+
+**1082**
+
+**1083**
+
+**1084**
+
+**1085**
+
+**1086**
+
+**1087**
+
+
+**1088**
+
+**1089**
+
+**1090**
+
+**1091**
+
+**1092**
+
+**1093**
+
+
+**1094**
+
+**1095**
+
+**1096**
+
+**1097**
+
+**1098**
+
+
+**1099**
+
+**1100**
+
+**1101**
+
+**1102**
+
+**1103**
+
+**1104**
+
+
+**1105**
+
+**1106**
+
+**1107**
+
+**1108**
+
+**1109**
+
+**1110**
+
+
+**1111**
+
+**1112**
+
+**1113**
+
+**1114**
+
+**1115**
+
+**1116**
+
+
+**1117**
+
+**1118**
+
+**1119**
+
+**1120**
+
+**1121**
+
+
+**1122**
+
+**1123**
+
+**1124**
+
+**1125**
+
+**1126**
+
+**1127**
+
+
+**1128**
+
+**1129**
+
+**1130**
+
+**1131**
+
+**1132**
+
+**1133**
+
+
+**Model** **SIMPLE** **MEDIUM** **CHALLENGING** **OVERALL**
+
+
+_**Zero-Shot End-to-End Code Gen.**_
+Original Checkpoint 38.51 21.20 11.76 24.40
+_LoRA Fine-Tuned_ 39.86 19.20 10.78 23.60
+
+
+_**AHA Knowledge Distillation**_
+General Instruction **51.35** 25.60 **17.65** 31.60
+Meta Instruction **51.35** **30.40** 16.67 **33.80**
+
+
+Table 4: Performance evaluation of Zero-Shot End-to-End Code Generation, LoRA fine-tuning,
+and our proposed knowledge distillation techniques on BIRD-SQL. Deeper red shading indicates
+a larger performance drop compared to the original pre-trained model, while green indicates no
+decline or improvement.
+
+
+Our Agent Orchestration Interface (AOI) is adaptable to different programming languages with different data input settings. Figure 2 shows how AOI is conducted in RDB settings with SQLite, and
+Figure 6 shows how it’s undertaken in Single-tabular data with Python.
+
+
+D.2 FINE-TUNING V.S. AHA KNOWLEDGE DISTILLATION
+
+
+We also compare the performance of knowledge distillation via AHA with the commonly used
+LoRA fine-tuning method (Hu et al., 2022) under the same low-resource setting (1,000 training
+samples) on the BIRD-SQL dataset, specifically for the Phi-3-mini model. As shown in Table 4,
+training with such a limited amount of data can degrade the performance of SLMs. However, AHA
+significantly improves the performance of SLMs when utilizing the same data, with a clear margin
+of advantage. We hypothesize that: 1) the small training set may introduce bias, limiting the model
+generalization; and 2) LoRA fine-tuning struggles to teach SLMs the reasoning capabilities required
+for complex tasks within such an end-to-end training regime. On the Contrary, AHA leverages
+LLMs to automatically decompose difficult questions into more understandable steps to SLMs, and
+distill planning knowledge, which allows SLMs to generalize better when faced with new queries.
+In conclusion, AHA proves to be an effective method for enhancing the performance of SLMs in the
+domain of DSCG, which contains limited annotated data usually.
+
+
+E ABLATION STUDY
+
+
+We conducted a comprehensive ablation study of AHA-MI, as shown in Table 5. Code-T5+ is a
+code embedding model (Wang et al., 2023d), while BGE-Large (Xiao et al., 2024) represents one of
+the state-of-the-art (SOTA) text embedding models. The study examines two types of RAG Index:
+one where distance is computed using question embeddings alone, and another where both question
+and schema embeddings are used. The "Plan + Gen" approach involves first constructing a plan
+with distilled knowledge, followed by generation using knowledge-driven planning. In contrast, the
+"Gen" approach involves direct generation without prior planning. The instruction type labeled w/
+examples refers to cases where a specific example is provided by the Teacher Agent. We evaluate
+performance with 1, 3, and 5 examples to assess the impact of varying numbers of RAG examples.
+The results of the ablation study reveal several key insights:
+
+
+**Code** **embeddings** **outperform** **text** **embeddings.** The superior performance of Code-T5+ over
+BGE-Large-en can be attributed to the nature of the task. While text embeddings emphasize on
+semantic and domain knowledge, code embeddings capture the syntactic and logical structure of
+coding problems, which is crucial for DSCG tasks. Even when presented with identical questions,
+the code solutions can vary significantly depending on the data input. Code-T5+ is able to effectively
+embed questions from a programming perspective, benefiting from its pre-trained corpus, whereas
+text embeddings are less suited for the task.
+
+
+**Embedding only the question is more effective than embedding both the question and schema.**
+The study demonstrates that question-only embeddings lead to better results. This suggests that the
+inclusion of schema in the embedding may introduce unnecessary complexity, which may hinder
+performance on the DSCG task.
+
+
+21
+
+
+**1134**
+
+**1135**
+
+
+**1136**
+
+**1137**
+
+**1138**
+
+**1139**
+
+**1140**
+
+**1141**
+
+
+**1142**
+
+**1143**
+
+**1144**
+
+**1145**
+
+**1146**
+
+**1147**
+
+
+**1148**
+
+**1149**
+
+**1150**
+
+**1151**
+
+**1152**
+
+
+**1153**
+
+**1154**
+
+**1155**
+
+**1156**
+
+**1157**
+
+**1158**
+
+
+**1159**
+
+**1160**
+
+**1161**
+
+**1162**
+
+**1163**
+
+**1164**
+
+
+**1165**
+
+**1166**
+
+**1167**
+
+**1168**
+
+**1169**
+
+**1170**
+
+
+**1171**
+
+**1172**
+
+**1173**
+
+**1174**
+
+**1175**
+
+
+**1176**
+
+**1177**
+
+**1178**
+
+**1179**
+
+**1180**
+
+**1181**
+
+
+**1182**
+
+**1183**
+
+**1184**
+
+**1185**
+
+**1186**
+
+**1187**
+
+
+**Planning is essential for more complex tasks.** The results stress on the importance of planning in
+a knowledge-driven generation. For tasks requiring complex reasoning, the "Plan + Gen" approach
+outperforms direct generation (Gen), indicating that structured planning significantly improves task
+performance.
+
+
+**One** **example** **may** **bias** **the** **SLM.** Involving a single example in the instruction can introduce
+bias in Sequence Learning Models (SLMs). A specific example might cause the SLM to overfollow to certain information, leading to hallucinations. For instance, if the example includes a
+reference to "singer", the SLM may generate plans that include "singer" even when the
+question pertains to an unrelated topic, such as "cars". This observation highlights the lack of
+robustness in SLMs when exposed to overly specific examples. Consequently, it is better to provide
+more general, transferable knowledge in instructions. The degraded performance observed with
+1 RAG example supports this conclusion, as the model becomes overly reliant on the provided
+information.
+
+
+**More** **examples** **do** **not** **always** **improve** **performance.** Interestingly, increasing the number of
+RAG examples (from 1 to 5) results in a performance drop. This suggests that longer input sequences may confuse the SLM, making it more difficult to distill relevant knowledge. Based on
+these findings, we recommend using 3 RAG examples as the optimal balance for complex DSCG
+tasks since it avoids both the biases of a single example and the confusion caused by too many
+examples.
+
+
+**Embedding Model** **RAG Index** **Reasoning Type** **Instruction Type** **# RAG Examples** **Performance**
+
+
+code-t5+ question plan + gen no examples 3 33 _._ 80
+code-t5+ question gen no examples 3 31 _._ 40 ( _↓_ 2 _._ 40)
+bge-large question plan + gen no examples 3 30 _._ 00 ( _↓_ 3 _._ 80)
+code-t5+ question plan + gen w/ examples 3 28 _._ 00 ( _↓_ 5 _._ 80)
+code-t5+ question+schema plan + gen no examples 3 32 _._ 40 ( _↓_ 1 _._ 40)
+code-t5+ question plan + gen no examples 5 31 _._ 80 ( _↓_ 2 _._ 00)
+code-t5+ question plan + gen no examples 1 29 _._ 80 ( _↓_ 4 _._ 00)
+
+
+Table 5: Ablation Study Results of AHA-MI of Phi-3-mini on BIRD-SQL. The table compares
+different embedding models, RAG index (with or without schema), reasoning approaches (planning
+or direct generation), and varying numbers of RAG examples.
+
+
+F ERROR ANALYSIS
+
+
+We conducted an error analysis by sampling 50 incorrect cases for both AHA-MI and AHA-GI
+across three datasets. Although AHA substantially improves the overall performance of SLMs, we
+found that 54% of the errors were caused by over-reasoning. This issue tends to emerge even in
+relatively simple cases. As discussed earlier, SLMs can overly adhere to the instructions derived
+from planning and guidance, which is problematic when the task is enough simple and does not
+require decomposition or reasoning. In these cases, direct code generation would lead to more
+accurate results. The remaining errors stem from common issues in code generation tasks, such as
+incorrect string handling, incorrect column selection, database constrain understanding.
+
+
+G LIMITATIONS AND FUTURE WORK
+
+
+A key limitation of our current approach with AHA is the reliance on initial training examples for
+both LLMs and SLMs to facilitate orchestration. This is why we selected datasets that include a
+training corpus suitable for distilling knowledge. However, an important avenue for future work is
+to explore how to generate such training data in a fully zero-shot manner, without relying on humanannotated or enumerated examples. Additionally, as highlighted in the error analysis, over-reasoning
+negatively impacts performance on simpler tasks, where additional reasoning or decomposition is
+unnecessary. To address this, future work could focus on developing or prompting smaller models to
+act as routers, as proposed by Ding et al. (2024), to classify questions based on whether they require
+planning. This would help avoid over-reasoning in straightforward cases and improve the overall
+efficiency of AHA.
+
+
+22
+
+
+**1188**
+
+**1189**
+
+
+**1190**
+
+**1191**
+
+**1192**
+
+**1193**
+
+**1194**
+
+**1195**
+
+
+**1196**
+
+**1197**
+
+**1198**
+
+**1199**
+
+**1200**
+
+**1201**
+
+
+**1202**
+
+**1203**
+
+**1204**
+
+**1205**
+
+**1206**
+
+
+**1207**
+
+**1208**
+
+**1209**
+
+**1210**
+
+**1211**
+
+**1212**
+
+
+**1213**
+
+**1214**
+
+**1215**
+
+**1216**
+
+**1217**
+
+**1218**
+
+
+**1219**
+
+**1220**
+
+**1221**
+
+**1222**
+
+**1223**
+
+**1224**
+
+
+**1225**
+
+**1226**
+
+**1227**
+
+**1228**
+
+**1229**
+
+
+**1230**
+
+**1231**
+
+**1232**
+
+**1233**
+
+**1234**
+
+**1235**
+
+
+**1236**
+
+**1237**
+
+**1238**
+
+**1239**
+
+**1240**
+
+**1241**
+
+
+H MAIN PROMPTS
+
+
+The zero-shot End-to-End Code Generation prompt is shown in Figure 7, Figure 15 and 17 show the
+zero-shot Chain-Of-Thought reasoning. Figure 18 shows few-shot demonstration prompting. The
+few_shot_examples can be selected by human experts as Static Few-Shot Demonstration, and
+can be retrieved from AHA memory database by RAG system as Dynamic Few-Shot Demonstration.
+
+
+The Figure 7, 8, 9, 10 show prompts for Orchestration between LLMs and SLMs. Figure 11
+presents how LLM convert orchestrated successful cases to more understandable case studies to
+SLMs. LLMs can go through correct cases from memory databases and distill knowledge to an offline and plug-and-plan General Instruction for SLMs to used for new and unseen queries performed
+by prompts shown in Figure 12 and 13. During inference, SLMs can produce Meta Instructions by
+prompts in Figure 14. Given distilled knowledge (instructions), SLMs will plan first as shown in
+Figure 16, and generate codes finally with their knowledge-driven planning, which shows in Figure
+17.
+
+
+I KNOWLEDGE DISTILLATION EXAMPLES
+
+
+I.1 CASE STUDY EXAMPLE
+
+
+The Figure 19 shows the example of case studies on Python task. The Figure 20 and Figure 21
+present examples of AHA-GI and AHA-MI respectively.
+
+```
+     You are a data analyst. Given the data, you need to generate the code first to answer the question:
+
+     # Please Follow:
+     - Do not add data inspection in the plan, such as `df.head()` or `print(df.head())` since this is
+     cheating!
+     - Do not use any external information.
+     - The code should be end-to-end, so you cannot encourage yourself to print other things except
+      final result. More other information lead to be distracted.
+
+     # Question: {question}
+     # Thought: I need to see the data samples in the first 10 rows:
+
+     # Code:
+     ```python
+     import pandas as pd
+     df = pd.read_csv('{data_path}', sep='\t')
+     print(df.head(10))
+     ```
+
+     # Observation:
+     {data_overview}
+
+     # Thought: I can generate remaining code to answer this question:
+     # Code:
+     ```python
+     import pandas as pd
+
+```
+
+Figure 7: Prompt of baseline end-to-end generation for tasks requiring Python.
+
+
+23
+
+
+**1242**
+
+**1243**
+
+
+**1244**
+
+**1245**
+
+**1246**
+
+**1247**
+
+**1248**
+
+**1249**
+
+
+**1250**
+
+**1251**
+
+**1252**
+
+**1253**
+
+**1254**
+
+**1255**
+
+
+**1256**
+
+**1257**
+
+**1258**
+
+**1259**
+
+**1260**
+
+
+**1261**
+
+**1262**
+
+**1263**
+
+**1264**
+
+**1265**
+
+**1266**
+
+
+**1267**
+
+**1268**
+
+**1269**
+
+**1270**
+
+**1271**
+
+**1272**
+
+
+**1273**
+
+**1274**
+
+**1275**
+
+**1276**
+
+**1277**
+
+**1278**
+
+
+**1279**
+
+**1280**
+
+**1281**
+
+**1282**
+
+**1283**
+
+
+**1284**
+
+**1285**
+
+**1286**
+
+**1287**
+
+**1288**
+
+**1289**
+
+
+**1290**
+
+**1291**
+
+**1292**
+
+**1293**
+
+**1294**
+
+**1295**
+
+
+```
+     You are a data analyst trainer. You are educating your student to generate right code to answer
+     tabular data analysis questions. In order to do so, you need to convert your code to code_plan and
+     let your students to fill to understand plans and analysis. So you cannot generate code by your
+     own, only generate plans.
+
+     # Data Overview at the path {data_path} (first ten rows):
+     {data_overview}
+     ...
+
+     # Question: {question}
+     # Original Code:
+     ```python
+     {ground_truth code}
+     ```
+
+     You should convert the code into the code_plan format with the placeholder `[FILL YOUR CODE HERE]`:
+     ```code_plan
+     import ...
+
+     # Step 1:....
+     [Fill Your Code]
+
+     # Step 2:....
+     [Fill Your Code]
+     ...
+
+     # Step N: ....
+     ```
+
+     Generate your code_plan for your student. DO NOT generate any code by your own. Also ignore and
+     remove steps of inspecting the data which leads to student cheating.
+     Please note it's hard for your student to write long code. You will get 1,000 dollars if you have
+     a good job:
+
+```
+
+Figure 8: Prompt converting ground-truth code to functional plan for python task as example. This
+is conducted by **LLM Teacher Agent** .
+
+```
+     You are a data analyst. Given the data, expert customized functional plan, complete
+     each line of code to answer questions correctly:
+
+     # Please Follow:
+     - Do not add data inspection in the plan, such as `df.head()` or `print(df.head())`
+     since this is cheating!
+     - Do not use any external information.
+     - The code should be end-to-end, so you cannot encourage yourself to print other
+      things except final result. More other information lead to be distracted.
+
+     # Question: {question}
+     # Function Plan:
+     ```python
+     {functional plan}
+     ```
+     # Your entire completion code for function plan executable and correct:
+
+     # Code:
+     ```python
+     import pandas as pd
+
+```
+
+Figure 9: Prompt of orchestration coding. This is conducted by **SLM Student Agent** .
+
+
+24
+
+
+**1296**
+
+**1297**
+
+
+**1298**
+
+**1299**
+
+**1300**
+
+**1301**
+
+**1302**
+
+**1303**
+
+
+**1304**
+
+**1305**
+
+**1306**
+
+**1307**
+
+**1308**
+
+**1309**
+
+
+**1310**
+
+**1311**
+
+**1312**
+
+**1313**
+
+**1314**
+
+
+**1315**
+
+**1316**
+
+**1317**
+
+**1318**
+
+**1319**
+
+**1320**
+
+
+**1321**
+
+**1322**
+
+**1323**
+
+**1324**
+
+**1325**
+
+**1326**
+
+
+**1327**
+
+**1328**
+
+**1329**
+
+**1330**
+
+**1331**
+
+**1332**
+
+
+**1333**
+
+**1334**
+
+**1335**
+
+**1336**
+
+**1337**
+
+
+**1338**
+
+**1339**
+
+**1340**
+
+**1341**
+
+**1342**
+
+**1343**
+
+
+**1344**
+
+**1345**
+
+**1346**
+
+**1347**
+
+**1348**
+
+**1349**
+
+
+```
+       You are an expert in error analysis and code planning. Your task is to guide your intern in filling out the code for your logic. You need to generate textual plans
+       as comments that include essential import statements, logics. Currently, the mixed code filled by your intern is incorrect. Then you should analyze and help him.
+
+       ------------------------------------------- case begin: ----------------------------------------------       {last turn case}
+       --------------------------------------- end -------------------------------------------
+       You are experienced data analysis programmer responsible for checking the errors, analyzing the reasons, and helping them correct the code. Note that you cannot
+       fill the code for them directly. You have four options for actions:
+       1. **Decomposition(Step Number, new sub steps**: If a step is too complicated and exceeds the intern's capability, decompose this step into multiple smaller steps
+       for them to fill step by step.
+       Actually, you have to decompose steps if there are multiple functions or multiple lines of code in one step since they are not capable!
+       step a -> step b, step c
+       2. **ALT(Step Number, what do you want to alt in detials**: If a step is ambiguous or requires additional information or options, provide an alternative approach
+       or clarification. But this is a closed-book education, you cannot teach them to use external information aside code and data samples.
+       step a -> step b
+       3. **ADD(Step Number, what do you want to add in details**: If the original step lacks important operations, add a supplementary step to ensure the main code logic
+       is smooth. But this is a closed-book education, you cannot teach them to use external information aside code and data samples.
+       Also all available data are shown, you cannot add or teach them to use `df.head()` to overview data again.
+       step a, step c -> step a, step b, step c
+       4. **DELETE(Step Number, what do you want to delete in details**: If some steps are unnecessary and hinder the intern's understanding of the overall logic, delete
+       them.
+       step a, step b -> step b (deleted step a)
+       5. **SIMPLIFY(Step Number, simplify specific steps)**: If a step is implemented using recursion and this approach is too complex for the intern to understand or
+       debug, suggest a non-recursive approach that achieves the same result.
+       This might involve using iterative methods or other strategies to simplify the logic. If you find code fails due to this, simplify the functions.
+       step a (recursive) -> step a (iterative)
+       6. **SWITCH(Step Name, packages to SWITHC)**: If a function relies heavily on a specific package that is known to be complex or not beginner-friendly, suggest
+       switching to a more intuitive or simpler package that achieves similar functionality. This can help the intern understand the underlying logic without getting
+       bogged down by the complexities of the original package.
+       step a (uses ComplexPackage) -> step a (uses SimplePackage)
+
+       You have to provide reasons based on analysis of errors for choosing this action and show your action in <action></action>, then. Finally, you must execute your
+       chosen action to change original code and fill in the following format:
+
+       # format:
+       Reason:
+       <reason>...</reason>
+       Act:
+       <action>...</action>
+
+       # Updated code plan:
+       ```code_plan
+       import ...
+
+       # Step 1:....
+       [Fill Your Code]
+
+       # Step 2:....
+       [Fill Your Code]
+       ...
+
+       # Step N: ....
+       ```
+
+       ## Please note:
+       - Do not ask students to add data inspection in the code, such as `df.head()` or `print(df.head())`
+       - Do not guide them to use any external information.
+       - The mixed code should be end-to-end, so you cannot encourage student to print other things except the final result. More other information would cause student to
+       be distracted.
+       - Just focus on how to make students learn how to better plan in the end-to-end code generation.
+
+       OK, now change your codes according to your actions.
+       If you don't follow rules, then you will lose 1 million dollars:
+
+```
+
+Figure 10: Prompt of plan optimization. This is conducted by **LLM Teacher Agent** .
+
+```
+      You are a data analyst trainer. You are educating your student to generate pythyon code to answer tabular data analysis questions.
+
+      This is a successful case of your code, perform a case study on this:
+      ------------------------------------------- case begin: ----------------------------------------------      # Question: {question}
+
+      # Data Overview at the path {data_path} (first 10 rows):
+      {data_overview}
+      ...
+
+      # Code:
+      ```python
+      {final orchestrated code}
+      ```
+      ------------------------------------------- case end: ----------------------------------------------
+      perform a concise case study! Your case study should only contain
+
+      ### Case Study: [Case Name]
+      ### Question: [Question]
+      ### Table Info: [Summarized Useful information about Tabular Data]
+      ### Objective:
+      ### Explanation:
+
+      Please note your case study should make your student understand. You don't have to include code again. You will get 1000 dollars if
+      you have a good job:
+
+```
+
+Figure 11: Prompt of case study conversion. This is conducted by **LLM Teacher Agent** .
+
+```
+      You are a data analyst trainer. You are educating your student to generate correct python pandas code to answer tabular
+      data analysis questions. To test and elicit their knowledge of python pandas code, you generate step-by-step plans that
+      allow them to fill in code until they succeed.
+
+      # These are case studies where they fill the correct code:
+      ------------------------------------------- case begin: ----------------------------------------------      {case_study_batch}
+      ------------------------------------------- case end: ----------------------------------------------
+      # Please note:
+      - Do not ask students to add data inspection in the code, such as `df.head()` or `print(df.head())`
+      - Do not guide them to use any external information.
+      - The mixed code should be end-to-end, so you cannot encourage student to print other things except the final result. More
+      other information would cause student to be distracted.
+      - Just focus on how to make students learn how to better plan in the end-to-end code generation.
+
+      According to the previous case studies, analyze and reflect how to generate plans which can make your student fill the
+      correct code. Summarize 5-7 key points.
+
+```
+
+Figure 12: Prompt of aggregation prompt of each batch of case studies. This is conducted by **LLM**
+**Teacher Agent** .
+
+
+25
+
+
+**1350**
+
+**1351**
+
+
+**1352**
+
+**1353**
+
+**1354**
+
+**1355**
+
+**1356**
+
+**1357**
+
+
+**1358**
+
+**1359**
+
+**1360**
+
+**1361**
+
+**1362**
+
+**1363**
+
+
+**1364**
+
+**1365**
+
+**1366**
+
+**1367**
+
+**1368**
+
+
+**1369**
+
+**1370**
+
+**1371**
+
+**1372**
+
+**1373**
+
+**1374**
+
+
+**1375**
+
+**1376**
+
+**1377**
+
+**1378**
+
+**1379**
+
+**1380**
+
+
+**1381**
+
+**1382**
+
+**1383**
+
+**1384**
+
+**1385**
+
+**1386**
+
+
+**1387**
+
+**1388**
+
+**1389**
+
+**1390**
+
+**1391**
+
+
+**1392**
+
+**1393**
+
+**1394**
+
+**1395**
+
+**1396**
+
+**1397**
+
+
+**1398**
+
+**1399**
+
+**1400**
+
+**1401**
+
+**1402**
+
+**1403**
+
+
+```
+      You are a data analyst trainer. You are educating your student to generate correct python pandas code to answer tabular
+      data analysis questions. To test and elicit their knowledge of code, you generate step-by-step plans that allow them to
+      fill in subqueries until they succeed.
+
+      # These are case studies where they fill the correct code:
+      ------------------------------------------- case begin: ----------------------------------------------      {last layer of case studies}
+      ------------------------------------------- case end: ----------------------------------------------
+      # Please note:
+      - Do not ask students to add data inspection in the code, such as `df.head()` or `print(df.head())`
+      - Do not guide them to use any external information.
+      - The mixed code should be end-to-end, so you cannot encourage student to print other things except the final result. More
+      other information would cause student to be distracted.
+      - Just focus on how to make students learn how to better plan in the end-to-end code generation.
+
+      Following case studies, please summarize 5-7 key points about how to plan and generate correct code to answer the tabular
+      data analysis questions accurately.
+      Students will take your notes directly.
+
+      # You need to start with:
+      ```1. You should
+
+```
+
+Figure 13: Prompt of summarization prompt of batch of case studies in the last layer. This is
+conducted by **LLM Teacher Agent** .
+
+```
+     You are a data analysis trainer. Your are teaching your student to plan and generate python code
+     accurately. You find some case study for reference.
+
+     # There are case studies:
+     ------------------------------------------- case begin: ----------------------------------------------     {case_studies}
+     ------------------------------------------- case end: ----------------------------------------------
+     Following case studies, please summarize key 5-7 points about how to plan and generate correct python
+     code to answer the data analysis questions accurately.
+
+     # You will use them to educate your student:
+     ```successful plan suggestions:
+     1. You Should
+
+```
+
+Figure 14: Prompt of in-time summarization for meta-instructions. This is conducted by **SLM**
+**Student Agent** .
+
+```
+     You are a data engineer. Given the sample data, generate python code plan to answer the question
+     accurately.
+
+     # Please Follow:
+     - Do not add data inspection in the plan, such as `df.head()` or `print(df.head())` since this is
+     cheating!
+     - Do not use any external information.
+     - The code should be end-to-end, so you cannot encourage yourself to print other things except final
+      result. More other information lead to be distracted.
+     ```
+
+     # Question: {question}
+     # Thought: I need to see the data samples in the first 10 rows:
+
+     # Code:
+     ```python
+     import pandas as pd
+     df = pd.read_csv('{data_path}', sep='\t')
+     print(df.head(10))
+     ```
+
+     # Observation:
+     {data_overview}
+
+     # Thought: I should have a step-by-step text plan for generating this code first. I will fill my plan
+     into the template in details:
+     ```code_plan
+     Step 1: ...
+     Step 2: ...
+     ...
+     Final Step: ...
+     ```
+
+     Generate your plan step by step for the question:
+
+     # Let's think step by step:
+     ```code_plan
+     Step 1:
+
+```
+
+Figure 15: Prompt of generating Chain-Of-Thought. This is conducted by **SLM Student Agent** .
+
+
+26
+
+
+**1404**
+
+**1405**
+
+
+**1406**
+
+**1407**
+
+**1408**
+
+**1409**
+
+**1410**
+
+**1411**
+
+
+**1412**
+
+**1413**
+
+**1414**
+
+**1415**
+
+**1416**
+
+**1417**
+
+
+**1418**
+
+**1419**
+
+**1420**
+
+**1421**
+
+**1422**
+
+
+**1423**
+
+**1424**
+
+**1425**
+
+**1426**
+
+**1427**
+
+**1428**
+
+
+**1429**
+
+**1430**
+
+**1431**
+
+**1432**
+
+**1433**
+
+**1434**
+
+
+**1435**
+
+**1436**
+
+**1437**
+
+**1438**
+
+**1439**
+
+**1440**
+
+
+**1441**
+
+**1442**
+
+**1443**
+
+**1444**
+
+**1445**
+
+
+**1446**
+
+**1447**
+
+**1448**
+
+**1449**
+
+**1450**
+
+**1451**
+
+
+**1452**
+
+**1453**
+
+**1454**
+
+**1455**
+
+**1456**
+
+**1457**
+
+
+```
+     You are a data engineer. Given the sample data, generate python code plan to answer the question
+
+     # Please Follow:
+     - Do not add data inspection in the plan, such as `df.head()` or `print(df.head())` since this is
+     cheating!
+     - Do not use any external information.
+     - The code should be end-to-end, so you cannot encourage yourself to print other things except final
+      result. More other information lead to be distracted.
+
+     # There are some important successful plan suggestions from experts:
+
+     ```successful plan suggestions:
+     {successful_plan_suggestions}
+     ```
+
+     # Question: {question}
+     # Thought: I need to see the data samples in the first 10 rows:
+
+     # Code:
+     ```python
+     import pandas as pd
+     df = pd.read_csv('{data_path}', sep='\t')
+     print(df.head(10))
+     ```
+
+     # Observation:
+     {data_overview}
+
+     # Thought: Referring to [successful plan suggestions], I should have a step-by-step text plan for
+     generating this code first. I will fill my plan into the template in details:
+     ```code_plan
+     Step 1: ...
+     Step 2: ...
+     ...
+     Final Step: ...
+     ```
+
+     Generate your plan step by step for the question:
+
+     # Let's think step by step:
+     ```code_plan
+     Step 1:
+
+```
+
+Figure 16: Prompt of knowledge-driven planning. This is conducted by **SLM Student Agent** .
+
+```
+     You are a data engineer. Given the sample data, generate python code to answer the question accurately.
+
+     # Question: {question}
+     # Thought: I need to see the data samples in the first 10 rows:
+
+     # Code:
+     ```python
+     import pandas as pd
+     df = pd.read_csv('{data_path}', sep='\t')
+     print(df.head(10))
+     ```
+
+     # Observation:
+     {data_overview}
+
+     # Thought: I can generate code to answer this question and print the result. I will fill my code in the
+     template:
+     ```python
+     [Your Code]
+     ```
+
+     Let's think step by step for the question:
+     {step-wise plans}
+
+     # Code:
+     ```python
+     import pandas as pd
+
+```
+
+Figure 17: Prompt of code generation given step-wise planning. This is conducted by **SLM Student**
+**Agent** .
+
+
+27
+
+
+**1458**
+
+**1459**
+
+
+**1460**
+
+**1461**
+
+**1462**
+
+**1463**
+
+**1464**
+
+**1465**
+
+
+**1466**
+
+**1467**
+
+**1468**
+
+**1469**
+
+**1470**
+
+**1471**
+
+
+**1472**
+
+**1473**
+
+**1474**
+
+**1475**
+
+**1476**
+
+
+**1477**
+
+**1478**
+
+**1479**
+
+**1480**
+
+**1481**
+
+**1482**
+
+
+**1483**
+
+**1484**
+
+**1485**
+
+**1486**
+
+**1487**
+
+**1488**
+
+
+**1500**
+
+**1501**
+
+**1502**
+
+**1503**
+
+**1504**
+
+**1505**
+
+
+**1506**
+
+**1507**
+
+**1508**
+
+**1509**
+
+**1510**
+
+**1511**
+
+
+```
+     You are a data analyst. Given data sample, you need to generate pandas code first to answer the question.
+
+     Generate your pandas code to answer the question, and print the result for your to understand. Fill your
+     code in
+     ```python
+     [Your Code]
+     ```
+
+     # Please follow:
+     - Do not add data inspection in the plan, such as `df.head()` or `print(df.head())` since this is
+     cheating!
+     - Do not use any external information.
+     - The code should be end-to-end, so you cannot encourage yourself to print other things except the final
+     result. More other information would cause sutdent to be distracted.
+
+     There are some examples:
+     ---------------------------- Examples Start ---------------------------     {few_shot_examples}
+     ---------------------------- Examples END ---------------------------
+     # Question: {question}
+     # Thought: I need to see the data samples in the first 10 rows:
+
+     # Code:
+     ```python
+     import pandas as pd
+     df = pd.read_csv('{data_path}', sep='\t')
+     print(df.head(10))
+     ```
+
+     # Observation:
+     {data_overview}
+
+     # Thought: I can generate code to answer this question:
+
+     # Code:
+     ```python
+     import pandas as pd
+
+```
+
+Figure 18: Prompt of few-shot demonstration. This is conducted by **SLM Student Agent** .
+
+
+**### Case Study:** Average Weight Calculation for Specific Players
+
+
+**### Question:**
+What is the average weight of Jamarr Sanders and Robert Williams?
+
+
+**### Table Info:**
+
+     - **Columns**: Name, Height, Weight (lbs.), Position, Class, Hometown, Previous Team(s)
+
+     - **Sample Data**:
+      - Jamarr Sanders: Weight 210 lbs.
+      - Robert Williams: Weight 210 lbs.
+
+
+**### Objective:**
+To calculate the average weight of the players Jamarr Sanders and Robert Williams from the given dataset.
+
+
+**### Explanation:**
+1. **Load Data**: The data is loaded from a tab-separated values (TSV) file.
+2. **Filter Data**: Rows corresponding to the names "Jamarr Sanders" and "Robert Williams" are filtered from the dataset.
+3. **Calculate Average**: The average weight of the filtered rows is computed.
+4. **Output**: The result is printed as an integer.
+
+
+By following these steps, the student can understand how to filter specific rows in a dataset and perform calculations on the filtered data. This case
+demonstrates the practical application of data manipulation and analysis using pandas in Python.
+
+
+Figure 19: Example of case studies for tasks requiring Python. This is conducted by **LLM Teacher**
+**Agent** .
+
+
+28
+
+
+**1512**
+
+**1513**
+
+
+**1514**
+
+**1515**
+
+**1516**
+
+**1517**
+
+**1518**
+
+**1519**
+
+
+**1520**
+
+**1521**
+
+**1522**
+
+**1523**
+
+**1524**
+
+**1525**
+
+
+**1526**
+
+**1527**
+
+**1528**
+
+**1529**
+
+**1530**
+
+
+**1531**
+
+**1532**
+
+**1533**
+
+**1534**
+
+**1535**
+
+**1536**
+
+
+**1537**
+
+**1538**
+
+**1539**
+
+**1540**
+
+**1541**
+
+**1542**
+
+
+**1543**
+
+**1544**
+
+**1545**
+
+**1546**
+
+**1547**
+
+**1548**
+
+
+**1549**
+
+**1550**
+
+**1551**
+
+**1552**
+
+**1553**
+
+
+**1554**
+
+**1555**
+
+**1556**
+
+**1557**
+
+**1558**
+
+**1559**
+
+
+**1560**
+
+**1561**
+
+**1562**
+
+**1563**
+
+**1564**
+
+**1565**
+
+
+1. You should **break down the task into manageable steps**. Each step should build on the previous one, guiding you through the process
+logically.
+
+
+2. You should **emphasize data handling and cleaning**. This includes handling missing values, normalizing case, and ensuring data consistency."
+
+
+3. You should **focus on filtering and extraction**. Guide yourself on how to filter and extract relevant data based on specific criteria. This is often
+the core of the analysis."
+
+
+4. You should **perform aggregation and counting**. Learn how to perform aggregation operations like counting, summing, or finding
+minimum/maximum values to derive insights from the data."
+
+
+5. You should **present the result clearly**. Ensure that the final step involves presenting the result in a clear and concise manner. This reinforces
+the importance of communicating findings effectively."
+
+
+6. You should **avoid distractions**. Keep the instructions focused on the end-to-end process without encouraging unnecessary intermediate
+outputs or external information. This helps maintain your focus on the task at hand."""
+
+
+Figure 20: Example of General Instruction for tasks requiring Python. This is conducted by **LLM**
+**Teacher Agent** .
+
+
+**"question": "which country rank last?"**
+
+
+1. Understand the problem statement and the data structure.
+
+
+2. Load the data using appropriate libraries (e.g., pandas).
+
+
+3. Perform necessary data manipulation and cleaning.
+
+
+4. Identify the relevant columns and values for the analysis.
+
+
+5. Use appropriate functions and methods to **filter**, **sort**, and extract the
+required information.
+
+
+6. Output the result in a clear and concise manner.
+
+
+Figure 21: Example of General Instruction for tasks requiring Python. This is conducted by **SLM**
+**Student Agent** in time.
+
+
+29

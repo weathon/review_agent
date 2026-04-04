@@ -1,0 +1,416 @@
+# OPTIMIZER SELECTION BASED ON FUNCTION-PROXY PROXIMITY
+
+Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+Many machine learning problems involve the challenging task of training a model to fit the training data; this task is especially challenging for nonconvex problems. Many model training algorithms have been proposed, but it is often difficult to determine which algorithm is best suited to a given machine learning problem. To contend with this challenge, we study the effect of loss function curvature shift on optimizers' proxies of the loss function, and obtain a bound on the rate at which a very large family of optimizers (including all of the most prevalent ones) descend towards the loss function's minimum, while only making relatively weak assumptions on the loss function. Uniquely, our bound is tight even in parameter subspaces in which the loss function is concave, which have been shown to bear potential for fast descent while being neglected by existing convergence rate bounds. We demonstrate the applicability of our bound by developing a meta-algorithm for optimizer selection based on it, and validate our meta-algorithm experimentally.
+
+## 1 INTRODUCTION
+
+Machine learning problems involve training a model to fit a target distribution (such as protein structures, image labels, text, etc.), usually given as a set of samples from said distribution. However, no single existing training algorithm (a.k.a. "optimization algorithm", or "optimizer") is best suited to all machine learning problems - each has its unique strengths and weaknesses (see Vaswani et al. (2020); Sivan et al. (2024); Ruder (2016); Mustapha et al. (2021); Bera & Shrivastava (2020); Zeiler (2012); Duchi et al. (2011b); Xu et al. (2017); Wadia et al. (2021); Mittal et al. (2019); Zhou et al. (2020); Schmidt et al. (2021)), such as generalization capability, convergence rate, saddle-point and flat region evasion capability, robustness to hyperparameter choice, computational complexity per-iteration, memory complexity, etc., and different areas in which it empirically seems to work best. This diversity of optimizers raises the question of how to select an optimizer for a given problem; ideally, we would like to have a meta-algorithm for optimizer selection. Moreover, since the best optimizer may vary throughout the training process and among different model parameters, our ideal algorithm should combine optimizers by continually selecting the best optimizer for each individual parameter online, all throughout the training process.
+
+One way to compare the computational overheads of different methods is experimentally; the literature is rich with such experiments on a variety of applications (Xu et al., 2017; Schmidt et al., 2021). On the theoretical side - convergence rate bounds have been proven for various optimizers. However, due to the wide variety of assumptions, convergence rate metrics, bound parameters (which may be expensive - if not impossible - to compute ahead of time), and tightness of the bounds in all of these works, comparing amongst them and applying these bounds for optimizer selection remains a challenging task. Existing bounds are also rarely applicable to novel optimizers, and are insufficiently tight, as may be seen by their failure to demonstrate the empirically-verified faster convergence of the more sophisticated methods that make use of second-order curvature information instead of exclusively gradients. Lastly, most broadly applicable bounds for non-convex functions fail to sufficiently address the rate of curvature change across the loss function surface. One particular area that suffers from neglect is linear subspaces of the parameter space in which the loss function is concave (meaning that a restriction  $f|_{\mathbb{S}} : \mathbb{S} \rightarrow \mathbb{R}$  of the loss function  $f$  to a linear subspace  $\mathbb{S}$  is locally concave). We believe that more attention should be given to these subspaces in the context of neural network optimization; Alain et al. (2018) and Ghorbani et al. (2019) experimentally demonstrate that
+
+there is much to be gained by taking optimal steps in these subspaces, with gains that are often orders of magnitude greater than the potential gains in convex subspaces.
+
+### Our contributions
+
+1. We design a new and refined cubic approximation which gives rise to an easy to compute algorithmic baseline named ELMO (Alg. 1), and prove its minmax-optimality<sup>1</sup> up to the third order. We also show the equivalence between our approach and a special preconditioning matrix which results in a natural refinement of Newton’s method.
+2. Based on this algorithmic baseline, we design a novel meta-algorithm named AMOS (Alg. 2) that enables us to adaptively select between first and second order training methods in order to boost performance.
+3. We present an experimental study on NanoGPT that demonstrates AMOS’s applicability in practice.
+4. We present an experimental study of the Hessian’s rate of change throughout training.
+
+Our paper is organized as follows: In section 2, we review previous work and describe the notation we will use throughout the paper. In section 3, we develop the ELMO algorithm and use it as a baseline for an analysis of arbitrary quasi-Newton optimizer regret. In section 4, we use the bounds we developed to construct a meta-optimizer that selects the appropriate optimizer on-the-fly. Its performance is demonstrated experimentally. Finally, in section 5 we show the value of our novel Lipschitz parameter separation scheme by showing that the Hessian-Lipschitz parameters of certain eigenspaces are much smaller than others, giving optimizers a more accurate loss-function proxy.
+
+## 2 BACKGROUND
+
+**Assumption 1.** *For a given optimization problem with loss function  $f : \mathbb{R}^n \rightarrow \mathbb{R}$ , we assume  $f$  is twice differentiable.*
+
+We note that this assumption is satisfied for all prevalent deep learning optimization problems for all but a zero-measure set of parameters.
+
+### 2.1 NOTATIONS AND DEFINITIONS
+
+**Notation 1.** Let  $\theta_{t+1}, \theta_t \in \mathbb{R}^n$  the parameter vectors of a pair of consecutive iterations of a given optimization algorithm.
+
+- For brevity of notation, we mark  $\Delta\theta_t \triangleq \theta_{t+1} - \theta_t$ .
+- We mark  $\nabla f(\theta_t)$  the gradient of  $f$  and  $\mathcal{H}(\theta_t)$  the Hessian of  $f$  at  $\theta_t$ .
+
+**Notation 2.** Let  $\theta_t \in \mathbb{R}^n$ . We mark  $(v_i(\theta_t), \lambda_i(\theta_t))_{j=0}^n$  an orthogonal eigendecomposition of  $\mathcal{H}(\theta_t)$  (which exists due to the Hessian symmetry property). For brevity of notation, we will sometimes drop the  $(\theta_t)$  and just write  $v_i, \lambda_i$  when the meaning is clear.
+
+Since  $v_i$  and  $-v_i$  are both equally viable eigenvectors, we eliminate ambiguity by assuming
+
+$$\forall i \in [n] : \nabla f(\theta_t)^\top v_i \leq 0 \quad (1)$$
+
+with  $\top$  indicating transposition.
+
+**Definition 1.** We say an algorithm is a *k-order algorithm* if it requires oracle access to the first  $k$  derivatives of  $f$ .
+
+<sup>1</sup>Given an optimization algorithm, there exists an "adversarial" loss function that minimizes the descent obtained by this optimizer, while matching all of the information gathered about the loss-function at a given iteration. We define "regret" as the difference between the actual descent obtained by a given algorithm in this adversarial setting, and the descent obtainable by the most adversary-robust algorithm (meaning that it maximizes loss function descent despite the adversary). An algorithm that computes the minimizer of this regret at each iteration is called "minmax-optimal".
+
+**Notation 3.** For  $\tau \in \mathbb{N}$  we mark  $[\tau] = \{t \in \mathbb{N} : t \leq \tau\}$ .
+
+**Definition 2.** Let  $U, D \in \mathbb{R}^{n \times n}$  s.t.  $D = \text{diag}(d_1, d_2, \dots, d_n)$  is diagonal and  $U$  orthogonal, and let  $\xi : \mathbb{R} \rightarrow \mathbb{R}$ . We mark  $\xi(U \cdot D \cdot U^\top) = U \cdot \text{diag}(\xi(d_1), \xi(d_2), \dots, \xi(d_n)) \cdot U^\top$ .
+
+**Notation 4.** Let  $A, B \in \mathbb{R}^{n \times n}$ . We write  $A \succeq 0$  iff  $A$  is positive semi-definite,  $A \succ 0$  if  $A$  is positive definite,  $A \succeq B$  if  $A - B \succeq 0$  (and likewise for  $A \succ B$ ).
+
+**Definition 3.** We say that an optimization algorithm is a *quasi-Newton optimization algorithm* if its characteristic update rule may be expressed as:
+
+$$\theta_{t+1} = \theta_t - \alpha_t \Phi_t \nabla f(\theta_t)$$
+
+for  $\Phi_t \in \mathbb{R}^{n \times n}$ ,  $\Phi_t \succeq 0$ ,  $\Phi_t^\top = \Phi_t$ ,  $\alpha_t \in \mathbb{R}^+$ . We call  $\Phi_t$  in such algorithms the "preconditioner matrix".
+
+This approach is inspired from Newton's method in convex optimization (see Nocedal & Wright (2006, Chapter 3)) where  $\Phi_t = (\mathcal{H}(\theta_t))^{-1}$ ; see appendix A for a discussion of the challenges and proposed solutions involved in these algorithms. The overwhelming majority of gradient-based optimizers may be expressed as quasi-Newton optimizers (see Martens (2020) for examples), so this paper will concern itself exclusively with this family of optimizers.
+
+**Notation 5.** Throughout this paper, we will mark the point a convergent quasi-Newton algorithm converges to by  $\theta^*$ .
+
+### 2.2 RELATED WORK
+
+The value of the loss function after  $t$  iterations is of particular importance to practitioners, due to its implications on the quality of model. One measure of optimizer quality relating to this value is the objective function sub-optimality gap (OFSOG), defined as  $f(\theta_T) - f(\theta^*)$ . The ARC algorithm is a second-order algorithm that uses a low-rank SVD approximation of the Hessian and estimates a single Hessian-Lipschitz parameter adaptively; Cartis et al. (2012b) prove that OFSOG-optimality (bounding the OFSOG to below  $\epsilon$ ) is achieved by a variant of the ARC algorithm after  $\mathcal{O}(\epsilon^{-1})$  iterations in the convex regime, or  $\mathcal{O}(\log(\epsilon^{-1}))$  iterations in the strongly convex regime. Garmanjani (2020) show similar bounds for the Nonlinear Stepsize Control algorithm family, and Toint (2013) demonstrate that this is a generalization of ARC and trust-region methods. Liu et al. (2024) prove OFSOG-optimality for the Sophia optimizer (a second-order algorithm that approximates the Hessian as a diagonal matrix, which is estimated with Hutchinson's estimator (Hutchinson, 1989)) after  $\mathcal{O}(\epsilon^{-1})$  iterations in the convex regime.
+
+Bottou (2004) partition the optimization process into the initial "search phase", in which the optimizer searches for an approximately convex region in which a local minimum resides, and the later "final phase", in which the optimizer converges to this local minimum.
+
+In the machine learning literature, many common loss functions are "empirical risk functions" - that is, loss functions which can be written as a sum of terms, each of which is a function of only a single sample from the data distribution. When this sum ranges over a very large number of samples, a common approach to estimating it is to perform a Monte Carlo approximation, summing over only a small subset of the terms; this approach is known as the "minibatch approach". Amari (1998) then note that when using this approach,  $\theta_t$  may be seen as a statistical estimator for  $\theta^*$ . Working in the "final phase" (and thus assuming convexity), and adopting the estimator approach to  $\theta_t$  taken by Amari (1998); Bottou & Lecun (2004) give a convergence rate bound for this estimator's variance parameterized by the first- and second-order derivatives at  $\theta^*$ , assuming only that  $\lim_{t \rightarrow \infty} \Phi_t = \mathcal{H}^{-1}(\theta^*)$ . Martens (2020) takes these convergence rates and plugs them into a Taylor approximation of  $f(\theta_t)$  to obtain the asymptotic OFSOG, given by  $f(\theta_T) - f(\theta^*) = \frac{\sigma_T^2}{2T} + o(\frac{1}{T})$ .
+
+Since the goal of optimization is to minimize a loss function, arguably the best metric for measuring an optimization algorithm's quality are the gains it makes as measured by the loss function values, i.e. its rate of loss function descent. Nevertheless, most algorithms' convergence rate bounds relate to their gradient norms; we note, however, that a bound on an algorithm's gradient norm may be a poor proxy for its descent rate in the early, nonconvex "search" phase, since convergence rate bounds may only imply proximity to a critical point of the gradient, which is neither guaranteed to be the point the algorithm will ultimately converge to nor even to have a small loss function value by any measure.
+
+To the best of our knowledge, our bound is the first to directly address the problem of bounding the loss function value in the "search" phase without assuming convexity (despite neural network loss functions rarely being convex in practice).
+
+We refer the reader to appendix B for discussion on previous attempts at universal convergence rate bounds, other convergence rate measures, and the effect of the preconditioner (and correspondingly, the effect of optimizer choice) on convergence rate.
+
+## 3 A MINMAX HESSIAN LIPSCHITZ-AWARE OPTIMIZATION ALGORITHM
+
+Optimization algorithm iterations are comprised of two parts: first, we gather information about the loss function and construct a local model of the loss function, and second - we step to the minimum of this proxy. Accordingly, gradient descent and Newton's method use first- and second-order Taylor approximations of  $f$  respectively, and while these proxies do give a direction of descent in every subspace of the domain space, they do not indicate optimal step sizes in concave subspaces of the domain space (that is, subspaces in which the loss function is locally concave), since concave first- and second-order polynomials have no minima. To obtain a unique step in all settings (so that our optimizer will be sufficiently general to apply to nonconvex and nonquadratic regions of neural network loss functions), we must therefore model  $f$  with a third-order Taylor polynomial.
+
+### 3.1 GENERAL BOUNDS ON PER-ITERATION DESCENT
+
+A recurring theme in the neural network optimization literature is that the greatest-magnitude eigenvalues of the Hessian are slow to change, as well as their eigenvectors; see, for instance, Sivan et al. (2024); Alain et al. (2018); Sagun et al. (2016); Ghorbani et al. (2019); Gur-Ari et al. (2018); Liu et al. (2024). It is common to formalize this as an assumption (see, e.g., O'Leary-Roseberry et al. (2019); Nesterov & Polyak (2006)) of Hessian-Lipschitz continuity with the matrix spectral norm:
+
+$$\exists_{L_H \in \mathbb{R}} \forall_{\theta, \varphi \in \mathbb{R}^n} : \|\mathcal{H}(\theta) - \mathcal{H}(\varphi)\|_2 \leq L_H \cdot \|\theta - \varphi\|_2 \quad (2)$$
+
+This assumption relies on a single scalar  $L_H \in \mathbb{R}$  to describe the entire Hessian's rate of change. With  $\frac{n^2}{2}$  independent entries, however, the Hessian can shift in a far more subtle manner, leading this assumption to be overly conservative, requiring a very large  $L_H$  for the assumption to be satisfied, which leads to looseness in convergence rate bounds and suboptimal performance of algorithms that rely on this scalar. We instead make the following finer-grained assumption on the rate of change of the Hessian's eigendecomposition:
+
+**Assumption 2.** *Hessian Lipschitz-Continuity in each Eigenspace*
+
+For any  $\theta, \varphi \in \mathbb{R}^n$ , let (eigendecompositions)  $\mathcal{H}(\theta) = V \cdot \Lambda \cdot V^\top$ ,  $\mathcal{H}(\varphi) = \tilde{V} \cdot \tilde{\Lambda} \cdot \tilde{V}^\top$  with  $V, \tilde{V} \in \mathbb{R}^{n \times n}$  orthogonal matrices and  $\Lambda = \text{diag}(\lambda_i)_{i=1}^n$ ,  $\tilde{\Lambda} = \text{diag}(\tilde{\lambda}_i)_{i=1}^n \in \mathbb{R}^{n \times n}$  diagonal matrices, sorted s.t.  $\forall_{i \in [n-1]} : \lambda_i \leq \lambda_{i+1}$ ,  $\tilde{\lambda}_i \leq \tilde{\lambda}_{i+1}$ . Then the following are satisfied:
+
+$$\begin{aligned} & \forall_{\theta \in \mathbb{R}^n} \exists_{(\tilde{L}^i)_{i=1}^n \in (\mathbb{R}^+)^n} \forall_{\varphi \in \mathbb{R}^n} : \left| \lambda_i - \tilde{\lambda}_i \right| \leq \tilde{L}^i \cdot \left| (\theta - \varphi)^\top v_i \right| \\ & \forall_{\theta \in \mathbb{R}^n} \exists_{L_R \in \mathbb{R}^+} \forall_{\varphi \in \mathbb{R}^n} : \left\| V - \tilde{V} \right\|_2 \leq L_R \cdot \|\theta - \varphi\|_2 \\ & \exists_{L_H \in \mathbb{R}} \forall_{\theta \in \mathbb{R}^n} \forall_{i \in [n]} : \max \{L_R, \tilde{L}^i\} \leq L_H \wedge \tilde{L}^i \geq L_H^{-1} \end{aligned}$$
+
+When  $\theta$  is the  $t$ -th iterate  $\theta_t$  of an optimization algorithm, we'll mark the corresponding Lipschitz parameters as  $L_t^i$ . We will experimentally demonstrate the significance of this refinement later, by demonstrating that these parameters vary by orders of magnitude.
+
+The above assumption allows us to bound the loss function in each eigenspace of the Hessian; these bounds will then be applicable as tight (since the bounds satisfy assumptions 1 and 2) pessimistic and optimistic models of the loss function in the neighborhood of some iterate  $\theta_t$ :
+
+**Notation 6.** Let  $\theta_t \in \mathbb{R}^n$ ,  $v_i \in \mathbb{R}^n$  an eigenvector of  $\mathcal{H}(\theta_t)$ .
+
+$$M_t^i(x) \triangleq \nabla f(\theta_t)^\top v_i \cdot x + \frac{v_i^\top \mathcal{H}(\theta_t) v_i}{2} \cdot x^2 + \frac{L_t^i}{6} \cdot |x|^3 \quad (3)$$
+
+$$m_t^i(x) \triangleq \nabla f(\theta_t)^\top v_i \cdot x + \frac{v_i^\top \mathcal{H}(\theta_t) v_i}{2} \cdot x^2 - \frac{L_t^i}{6} \cdot |x|^3 \quad (4)$$
+
+#### Lemma 3.1. Eigenspace Descent Bounds
+
+Let  $f : \mathbb{R}^n \rightarrow \mathbb{R}$  be a function satisfying assumptions 1 and 2, and let  $\theta_{t+1} \in \mathbb{R}^n$ . Marking  $\Delta\theta_t = \theta_{t+1} - \theta_t$ , we have
+
+$$\exists (L_t^i)_{i=1}^n \in (\mathbb{R}^+)^n : f(\theta_{t+1}) - f(\theta_t) \leq \sum_{i=1}^n M_t^i (\Delta\theta_t^\top v_i) \quad (5)$$
+
+$$\exists (L_t^i)_{i=1}^n \in (\mathbb{R}^+)^n : f(\theta_{t+1}) - f(\theta_t) \geq \sum_{i=1}^n m_t^i (\Delta\theta_t^\top v_i) \quad (6)$$
+
+We emphasize that unlike most previous works, our bound does not assume convexity and moreover it demonstrates the strong opportunity for descent in subspaces of the parameter space in which the loss function is concave, giving the first theoretical explanation for the experimental results of Alain et al. (2018) and Ghorbani et al. (2019), to the best of our knowledge (since the negative-definite Hessian corresponding to a locally concave loss function lowers the upper bound  $M_t^i$  of the per-iteration descent).
+
+### 3.2 EXPLOITING THESE BOUNDS FOR A MINMAX ALGORITHM
+
+Here we describe how to exploit the refined approximations that we obtain above to design a minimax optimal algorithm named ELMO which is depicted in Alg. 1.
+
+To gain perspective on the upcoming algorithm as minimax-optimal, we restate a special case of the above lemma as follows:  $M_t^i$  is the pointwise maximal function satisfying assumptions 1 and 2:
+
+$$M_t^i(x) = \max_{\substack{\tilde{f}: \mathbb{R} \rightarrow \mathbb{R} \\ \tilde{f}(\theta_t) = f(\theta_t)}} \tilde{f}(\theta_t + x \cdot v_i(\theta_t))$$
+
+In other words,  $M_t$  is the loss function (up to domain- and range-space translation) with the least opportunity for descent while still ensuring that all information collected by a second-order optimizer (with Hessian-Lipschitz oracle access) remains unchanged - i.e. *the adversarial loss function detailed in regret's definition*.
+
+Since each element of the sum is a 1-dimensional trinomial, the minmax step is now easily obtained (due to orthogonality of the eigenspaces, resulting from the Hessian's symmetry) by taking the positive root of each term's derivative:
+
+$$\Delta\theta_t^\top v_i \triangleq \arg \min_{\Delta\theta_t} \sum_{i=1}^n M_t^i (\Delta\theta_t^\top v_i) = \sqrt{\frac{\lambda_i^2 + 2L_t^i |\nabla f(\theta_t)^\top v_i| - \lambda_i}{L_t^i}} \quad (7)$$
+
+#### Algorithm 1 Algorithm ELMO
+
+```
+
+Require:  $\epsilon \in \mathbb{R}^+$ ,  $\theta_0 \in \mathbb{R}^n$ , EIGEN, LIPSCHITZ
+ $t \leftarrow 0$ 
+while  $f(\theta_t) - f(\theta^*) > \epsilon$  do
+   $(\lambda_i, v_i)_{i=1}^n \leftarrow \text{EIGEN}(\mathcal{H}(\theta_t))$ 
+   $(L_t^i)_{i=1}^n \leftarrow \text{LIPSCHITZ}(\theta_t, (v_i)_{i=1}^n)$ 
+   $(\Delta\theta_t^i)_{i=1}^n \leftarrow \sqrt{\frac{\lambda_i^2 + 2L_t^i |\nabla f(\theta_t)^\top v_i| - \lambda_i}{L_t^i}}$ 
+   $\theta_{t+1} \leftarrow \theta_t + \sum_{i=1}^n \Delta\theta_t^i \cdot v_i$ 
+   $t \leftarrow t + 1$ 
+end while
+
+```
+
+The above naturally induces a second-order training algorithm that we name Eigenspace-Lipschitz Minmax Optimizer (ELMO), which we describe in Alg. 1. We present a theoretical investigation of ELMO in Appendix C, and we leave its experimental evaluation to future work to maintain our focus on optimizer selection. We mark EIGEN an eigendecomposition subroutine and LIPSCHITZ a Lipschitz parameter oracle.
+
+Importantly, we observe equation 7's equal applicability to convex and concave regions of the domain space (and ELMO correspondingly) due to the lack of convexity assumptions. Indeed, ELMO makes use of concavity by taking larger steps in concave subspaces than otherwise (since ELMO's second term's step size is proportional to  $-\lambda_i$ ).
+
+### 3.3 THE MINMAX PRECONDITIONER
+
+Here we find algorithm ELMO’s characteristic preconditioner. That is, we find  $\Phi_t$  s.t. ELMO’s step  $\Delta\theta_t^*$  can be expressed as in definition 3. We begin by defining a metric of distance between optimization algorithms by the difference between the steps they take, and find the preconditioner matrix whose corresponding quasi-Newton algorithm is equivalent to algorithm ELMO.
+
+**Notation 7.** For a given algorithm with step  $\Delta\theta_t$  at iteration  $t$ , mark  $\Delta\Delta^i\theta_t = \Delta\theta_t^\top v_i - \Delta\theta_t^{*\top} v_i$  the step’s distance from ELMO’s step. Since  $\Delta\Delta^i\theta_t$  is a function of the algorithm chosen (through  $\Delta\theta_t$ ), it is a function of that algorithm’s defining preconditioner:  $\Delta\Delta^i\theta_t = \Delta\Delta^i\theta_t(\Phi_t)$
+
+This may be understood intuitively by noting that  $\sum_{i=1}^n \Delta\Delta^i\theta_t$  is the  $L_1$  norm of the difference between steps, as measured over the Hessian eigenbasis.
+
+**Lemma 3.2.** *ELMO’s preconditioner*
+
+Let  $f : \mathbb{R}^n \rightarrow \mathbb{R}$  satisfying assumptions 1 and 2. The preconditioner of the quasi-Newton algorithm that is equivalent to ELMO (meaning  $|\Delta\Delta^i\theta_t| = 0$ ) is
+
+$$\Phi_t^{\text{ELMO}} = \arg \min_{\Phi_t \in \mathbb{R}^{n \times n}} |\Delta\Delta^i\theta_t(\Phi_t)| = \left( \frac{\mathcal{H}(\theta_t) + \sqrt{(\mathcal{H}(\theta_t))^2 + 2V \cdot \text{diag} \left( L_t^i \cdot \left| \nabla f(\theta_t)^\top v_i \right|_{i=1}^n \cdot V^\top \right)}}{2} \right)^{-1}$$
+
+This preconditioner shows the mechanistic similarity of our algorithm to Newton’s method: while Newton’s method’s preconditioner is simply the inverse Hessian (which may not be positive definite), the matrix whose inverse is our algorithm’s preconditioner is an average between the Hessian and a positive definite, regularized version of the Hessian, whose every eigenvalue is no less than the corresponding Hessian eigenvalue’s magnitude. This ensures positive semi-definiteness of our preconditioner, with regularization dependent on the loss function’s rate of curvature shift.
+
+In fact, Newton’s algorithm (and correspondingly, most existing quasi-Newton algorithms that approximate it) may even lead to a worst-case *decrease* in model quality, even when the associated loss function is convex, for sufficiently great curvature shift (measured by Lipschitz parameter). Plugging Newton’s step into equation 3 and rearranging tells us that  $\forall_{i \in [n] \text{ s.t. } \lambda_i \geq 0} : M_t^i \left( \frac{|\nabla f(\theta_t)_i v_i|}{\lambda_i} \right) \geq 0$
+
+for any step  $t$  and eigenspace  $i$  with
+
+$$L_t^i \geq 3 \frac{\lambda_i^2}{|\nabla f(\theta_t)^\top v_i|} \quad (8)$$
+
+### 3.4 DESCENT REGRET OF QUASI-NEWTON OPTIMIZATION ALGORITHMS
+
+Algorithm ELMO is regret-optimal among first- and second-order methods in the sense that its model of the loss function is a generalization of quasi-Newton methods’ and Gradient Descent’s models (Appendix F), so it is natural to use it as a baseline against which to measure other optimizers’ regret.
+
+Different datasets imply different units for the parameters of neural networks, however (e.g. a neural network whose training dataset measures distances in miles will have differently scaled parameters than one whose distances are measured in kilometers, and different optimizer step sizes accordingly), so to maintain consistency across a variety of settings, we turn to dimensional analysis (Lin & Segel, 1988) to eliminate this effect on  $\Delta\Delta^i\theta_t$ . For simplicity, we restrict our discussion to the descent of the loss function’s restriction to a given eigenspace  $\text{span}(v_i)$ .
+
+**Notation 8.** Mark  $\Delta\Delta^i\theta_t' = \frac{\Delta\Delta^i\theta_t}{\Delta\theta_t^\top v_i}$  the step’s distance from ELMO’s step relative to ELMO’s step.
+
+In fact, this optimizer metric generalizes several existing metrics, see Appendix D for details.
+
+**Theorem 3.3.** *Worst-case descent rate for arbitrary optimizers*
+
+Let  $f : \mathbb{R}^n \rightarrow \mathbb{R}$  a twice-differentiable function satisfying assumptions 1 and 2, and let  $\Delta\theta_t$  satisfy  $M_t^i(\Delta\theta_t^\top v_i) \leq 0$ . Then
+
+$$\begin{aligned}
+|M_t^i(\Delta\theta_t^\top v_i)| &= \Theta\left(1 + |\Delta\Delta^i\theta_t'|^2\right) \cdot |M_t^i(\Delta\theta_t^\top v_i)| \\
+|m_t^i(\Delta\theta_t^\top v_i)| &= \Theta\left(1 + |\Delta\Delta^i\theta_t'|^p\right) \cdot |m_t^i(\Delta\theta_t^\top v_i)|
+\end{aligned} \tag{9}$$
+
+$$\text{with } p = \begin{cases} 2 & \lambda_i > 0 \wedge \frac{|\nabla f(\theta_t)^\top v_i|}{\lambda_i^2} = 0 \\ 1 & \text{else} \end{cases}$$
+
+In other words, an arbitrary algorithm's descent regret (the ratio between the algorithm's descent in the adversarial setting and the optimal descent in the adversarial setting) is proportional to a polynomial of  $\Delta\Delta^i\theta_t'$ .
+
+## 4 DYNAMIC OPTIMIZER SELECTION
+
+Here we describe a Meta-Optimizer which we name AMOS (Alg. 2) that dynamically combines different optimizers throughout the training process in order to boost performance. AMOS leans on our ELMO minimax optimal baseline.
+
+#### Algorithm 2 Algorithm AMOS
+
+**The AMOS Meta-Optimizer** In section 3.3 we saw a connection between the Lipschitz parameters and second-order optimizer applicability. In particular, we saw that large Lipschitz parameters are a counter-indication for second-order algorithms due to their indication that these algorithms poorly approximate the true loss function. This observation invites us to use these parameters to continually select between a computationally-heavy second-order algorithm and a computationally-light first-order algorithm for each training iteration to avoid the overhead of the second-order algorithm when its payoff does not warrant its overhead. Furthermore, we can combine these algorithms by partitioning the model parameters by the corresponding Lipschitz parameter magnitude, and assigning each partition to the appropriate optimizer.
+
+Concretely, at each Hessian computation, Lipschitz parameters are approximated (line 5) as a running average of the slope of the Hessian eigenvalues,  $L_t^i \approx \alpha_L L_{t-1}^i + (1 - \alpha_L) \frac{|\lambda_i(x_t) - \lambda_i(x_{t-1})|}{\|x_t - x_{t-1}\|}$ ; model parameters<sup>2</sup> whose Lipschitz parameters are above a given threshold are assigned to the first-order optimizer until the next Hessian computation, while parameters whose Lipschitz parameters are beneath said threshold are assigned to the second-order optimizer (lines 7-10).
+
+<sup>2</sup>Most popular second-order optimizers assume diagonal Hessian (e.g. Sophia) or block-diagonal Hessian (e.g. K-FAC) structure, the former of which associates each model parameter with its respective eigenvalue, allowing us to associate it with a Lipschitz parameter (and an analogous Lipschitz parameter may be associated with each block of model parameters in the latter case). For the remaining second-order optimizers, we partition model parameters into Hessian eigenspaces, and assign each eigenspace to its respective optimizer, which reduces overhead by restricting the second-order optimizer to fewer eigenspaces, similarly to Sivan et al. (2024). See appendix A.
+
+![Figure 1: Training trajectory comparison. Two line plots showing loss vs. iteration for AdamW, SGD, Sophia, and Dynamic optimizer selection (ours).](3121afa7ca030b22ee0345864ca6f38b_img.jpg)
+
+The figure contains two line plots side-by-side. The left plot is titled 'Train loss: SGD-Sophia dynamic selection vs. pure optimizers' and the right plot is titled 'Test loss: SGD-Sophia dynamic selection vs. pure optimizers'. Both plots have 'Loss' on the y-axis (ranging from 2 to 8) and 'Iteration' on the x-axis (ranging from 0 to 2000). Four lines are shown in each plot: AdamW (blue), SGD (orange), Sophia (green), and Dynamic optimizer selection (ours) (red). In both plots, the 'ours' line starts at a high loss and drops sharply to a lower loss, then continues to decrease slowly. The SGD line starts at a high loss and drops to a higher loss than 'ours', then continues to decrease slowly. The Sophia line starts at a high loss and drops to a loss similar to 'ours', then continues to decrease slowly. The AdamW line starts at a high loss and drops to a loss similar to 'ours', then continues to decrease slowly. In the train loss plot, the 'ours' line ends at a loss of approximately 1.5, while the other lines end at losses between 2 and 5. In the test loss plot, the 'ours' line ends at a loss of approximately 1.5, while the other lines end at losses between 2 and 5.
+
+Figure 1: Training trajectory comparison. Two line plots showing loss vs. iteration for AdamW, SGD, Sophia, and Dynamic optimizer selection (ours).
+
+Figure 1: Training trajectory comparison. Our SGD-Sophia hybrid selection strategy outperforms all the rest while offloading responsibility for a significant portion of weights to SGD.
+
+### AMOS EXPERIMENTS
+
+We tested AMOS<sup>3</sup> in the NanoGPT language modeling framework by Karpathy (2022); further details on settings in appendix K.
+
+- We trained a 12-layer transformer with 12-head multihead attention on the TinyShakespeare dataset (Karpathy, 2015) for 2010 training iterations. This task involves modeling the character-level distribution of 40,000 lines taken from Shakespeare plays.
+- Our baseline algorithm is AdamW with the tuned hyperparameters from vanilla NanoGPT.
+- We use AMOS to adaptively select between SGD and Sophia throughout training.
+
+Figure 1 presents the training trajectories from our experiments. We see that while pure SGD and Sophia are inferior to AdamW, by using AMOS we are able to combine SGD and Sophia to surpass AdamW on NanoGPT while also offloading 9% of the parameters on average (throughout training) and up to 91% (in a single iteration) to the cheaper first-order optimizer. We ascribe this additional loss minimization to our optimizer avoiding destructive Newton steps (as discussed in section 3.3).
+
+## 5 LIPSCHITZ DISTRIBUTION
+
+Previous works using the Hessian Lipschitz continuity assumption (e.g. ARC (Nesterov & Polyak, 2006) and its variants, O’Leary-Roseberry et al. (2019)) assume a single Lipschitz parameter for all eigenspaces. Although a finite number  $n$  of eigenspaces ensures that such a Lipschitz parameter exists (the maximal Lipschitz parameter), they fail to account for the distribution of these Lipschitz parameters over the eigenspaces. We claim that these parameters vary widely both over the eigenspaces and over the course of training, so that a single constant value fails to capture this structure; in this section we provide evidence for this claim. A discussion of sources of interest in this distribution is deferred to Appendix G.
+
+The first source of evidence for our claim is from existing literature on the subject; we defer a discussion of this to appendix I. To test our claim directly, we modify an ARC implementation (Simpson & Wang, 2023) to compute the steps called for by ELMo at each point reached by a quasi-Newton algorithm, restricted to the subspace spanned by the eigenvectors corresponding to the single most positive and single most negative eigenvalues of each Hessian, and to use distinct Lipschitz parameters for each. Due to the computational difficulty of computing Lipschitz parameters precisely, we use these Lipschitz parameter values as an estimate for  $L^+, L^-$ . We note the crudeness of these adaptive measurements, merely adapting to keep  $\frac{f(\theta_t) - f(\theta_{t+1})}{\sum_{i=1}^n M_i^t}$  within a given range with a restriction to powers of 2; nevertheless, the point is made.
+
+A detailing of our experiment settings is given in appendix J as well as the full set of our experiment results, however we present two experiments in figure 2 for completeness. Our experiments show that
+
+<sup>3</sup>AMOS: Adaptive Meta-algorithm for Optimizer Selection
+
+![Figure 2: Comparisons of convex-subspace Lipschitz parameters to concave-subspace Lipschitz parameters. The figure contains two line plots. The left plot, titled 'Autoencoder-CIFAR10', shows the Lipschitz parameter on a logarithmic y-axis (from 10^-4 to 10^4) against iterations (0 to 8000). The right plot, titled 'Resnet-CELoss-CIFAR10', shows the same on a logarithmic y-axis (from 10^-15 to 10^5). Both plots compare 'EigenARC Lipschitz Convex' (blue line) and 'EigenARC Lipschitz Concave' (orange line). In the autoencoder plot, the concave parameter is generally higher than the convex one. In the ResNet plot, the concave parameter is significantly higher than the convex one, which drops to near zero.](b93cbfb52e37619e688175a6aad9edd9_img.jpg)
+
+Figure 2: Comparisons of convex-subspace Lipschitz parameters to concave-subspace Lipschitz parameters. The figure contains two line plots. The left plot, titled 'Autoencoder-CIFAR10', shows the Lipschitz parameter on a logarithmic y-axis (from 10^-4 to 10^4) against iterations (0 to 8000). The right plot, titled 'Resnet-CELoss-CIFAR10', shows the same on a logarithmic y-axis (from 10^-15 to 10^5). Both plots compare 'EigenARC Lipschitz Convex' (blue line) and 'EigenARC Lipschitz Concave' (orange line). In the autoencoder plot, the concave parameter is generally higher than the convex one. In the ResNet plot, the concave parameter is significantly higher than the convex one, which drops to near zero.
+
+Figure 2: Comparisons of convex-subspace Lipschitz parameters to concave-subspace Lipschitz parameters. *Logarithmic scale*
+
+as expected,  $L^+ \ll L^-$ , and the gap widens exponentially as training progresses in all cases except the autoencoders. Since we saw in section 3.3 that small convex Lipschitz parameters imply effective second-order optimization, this justifies common practice as noted by, e.g. O’Leary-Roseberry et al. (2019), of requiring the preconditioner to be an increasingly better approximation of the inverse Hessian (by increasing the strictness of the inverse Hessian approximation algorithm’s stopping condition) as training progresses. Our findings also support Gur-Ari et al. (2018)’s observation that neural network optimization succeeds despite its nonconvexity due to the gradient residing primarily in convex subspaces, by demonstrating the stability of these convex subspaces.
+
+Several factors seem to impact the size (by orders of magnitude) of the convex Lipschitz parameters, and they appear to be correlated with an intuitive sense of the difficulty of the setting being trained.
+
+- The convex Lipschitz parameters are many orders of magnitude greater in the autoencoder task than in the classification task. We ascribe this gap to the more difficult task of learning a generative representation of the data instead of merely a discriminative representation of it (see Ng (2012, Chapter 4) for a discussion on generative vs. discriminative models).
+- The convex Lipschitz parameters are reduced approximately 100x in the image classification task by adding residual connections. It is well known that residual connections reduce training difficulty (Li et al., 2018).
+- The convex Lipschitz parameters are approximately 100x smaller when training ResNet to perform classification of natural images instead of Gaussian noise with random labels. We ascribe this to greater difficulty involved in discriminating noise, which requires partial memorization of the training set.
+
+The Lipschitz parameters’ indication of Newton’s applicability suggests that the above observations may be applicable as a rule of thumb for optimizer selection; this is validated in experiments in Appendix E.
+
+## 6 CONCLUSION
+
+In this work we developed and analyzed a Hessian eigenspace Lipschitz-aware minmax optimization algorithm ELMo by taking an eigendecomposition-centric approach to locally modelling a loss function. We then proved a widely applicable worst-case relative descent rate bound for quasi-Newton optimizers by comparison to ELMo. We experimented with the Lipschitz distributions, discovering that they are correlated with task difficulty and that they are helpful for optimizer and optimization hyperparameters selection — specifically, integrating second-order information into optimizers at the cost of additional computational complexity is worthwhile in settings where the convex Lipschitz parameters are small, but not those where they are large. Finally, we used all of the above to design algorithm AMOS for dynamic optimizer selection, and demonstrated its performance in experiments.
+
+## REFERENCES
+
+- Naman Agarwal, Brian Bullins, Xinyi Chen, Elad Hazan, Karan Singh, Cyril Zhang, and Yi Zhang.  
+ Efficient full-matrix adaptive regularization. In Kamalika Chaudhuri and Ruslan Salakhutdinov  
+ (eds.), *Proceedings of the 36th International Conference on Machine Learning*, volume 97 of  
+*Proceedings of Machine Learning Research*, pp. 102–110. PMLR, 09–15 Jun 2019. URL <https://proceedings.mlr.press/v97/agarwal19b.html>.
+- Naman Agarwal, Rohan Anil, Elad Hazan, Tomer Koren, and Cyril Zhang. Learning rate grafting:  
+ Transferability of optimizer tuning. 2022. URL [https://openreview.net/forum?id=FpKgG31Z\\_i9](https://openreview.net/forum?id=FpKgG31Z_i9).
+- Guillaume Alain, Nicolas Le Roux, and Pierre-Antoine Manzagol. Negative eigenvalues of the  
+ hessian in deep neural networks. In *6th International Conference on Learning Representations,  
+ ICLR 2018, Vancouver, BC, Canada, April 30 - May 3, 2018, Workshop Track Proceedings*.  
+ OpenReview.net, 2018. URL <https://openreview.net/forum?id=S1liddyDG>.
+- Zeyuan Allen-Zhu. Katyusha: the first direct acceleration of stochastic gradient methods. *Proceedings  
+ of the 49th Annual ACM SIGACT Symposium on Theory of Computing*, 2016. URL <https://api.semanticscholar.org/CorpusID:51918825>.
+- Shun-ichi Amari. Natural Gradient Works Efficiently in Learning. *Neural Computation*, 10(2):  
+ 251–276, 02 1998. ISSN 0899-7667. doi: 10.1162/089976698300017746. URL <https://doi.org/10.1162/089976698300017746>.
+- Rohan Anil, Vineet Gupta, Tomer Koren, Kevin Regan, and Yoram Singer. Second order optimization  
+ made practical. *CoRR*, abs/2002.09018, 2020. URL <https://arxiv.org/abs/2002.09018>.
+- Somenath Bera and Vimal Shrivastava. Analysis of various optimizers on deep convolutional  
+ neural network model in the application of hyperspectral remote sensing image classification.  
+*International Journal of Remote Sensing*, 41:2664–2683, 04 2020. doi: 10.1080/01431161.2019.1694725.
+- Dimitri P. Bertsekas. Incremental least squares methods and the extended kalman filter. *SIAM J.  
+ Optim.*, 6(3):807–822, 1996. doi: 10.1137/S1052623494268522. URL <https://doi.org/10.1137/S1052623494268522>.
+- Aleksandar Botev, Hippolyt Ritter, and David Barber. Practical Gauss-Newton optimisation for  
+ deep learning. In Doina Precup and Yee Whye Teh (eds.), *Proceedings of the 34th International  
+ Conference on Machine Learning*, volume 70 of *Proceedings of Machine Learning Research*,  
+ pp. 557–565. PMLR, 06–11 Aug 2017. URL <https://proceedings.mlr.press/v70/botev17a.html>.
+- Léon Bottou. Stochastic learning. In Olivier Bousquet, Ulrike von Luxburg, and Gunnar Rätsch  
+ (eds.), *Advanced Lectures on Machine Learning: ML Summer Schools 2003, Canberra, Australia,  
+ February 2 - 14, 2003, Tübingen, Germany, August 4 - 16, 2003, Revised Lectures*, pp. 146–168.  
+ Springer Berlin Heidelberg, Berlin, Heidelberg, 2004. ISBN 978-3-540-28650-9. doi: 10.1007/978-3-540-28650-9\_7. URL [https://doi.org/10.1007/978-3-540-28650-9\\_7](https://doi.org/10.1007/978-3-540-28650-9_7).
+- Léon Bottou and Yann Lecun. On-line learning for very large datasets. *J. Applied Stochastic Models  
+ in Business and Industry*, 01 2004.
+- C. Cartis, N.I.M. Gould, and Ph.L. Toint. Complexity bounds for second-order optimality in  
+ unconstrained optimization. *Journal of Complexity*, 28(1):93–108, 2012a. ISSN 0885-064X.  
+ doi: <https://doi.org/10.1016/j.jco.2011.06.001>. URL <https://www.sciencedirect.com/science/article/pii/S0885064X11000537>.
+- Coralia Cartis, Nicholas I. M. Gould, and Philippe L. Toint. Adaptive cubic regularisation methods for  
+ unconstrained optimization. part i: motivation, convergence and numerical results. *Mathematical  
+ Programming*, 127(2):245–295, 2011a. doi: 10.1007/s10107-009-0286-5. URL <https://doi.org/10.1007/s10107-009-0286-5>.
+
+- 540 Coralia Cartis, Nicholas I. M. Gould, and Philippe L. Toint. Adaptive cubic regularisation methods  
+541 for unconstrained optimization. part ii: worst-case function- and derivative-evaluation complexity.  
+542 *Mathematical Programming*, 130(2):295–319, 2011b. doi: 10.1007/s10107-009-0337-y. URL  
+543 <https://doi.org/10.1007/s10107-009-0337-y>.  
+544
+- 545 Coralia Cartis, Nicholas I. M. Gould, and Philippe L. Toint. Evaluation complexity of adaptive cubic  
+546 regularization methods for convex unconstrained optimization. *Optimization Methods and Soft-*  
+547 *ware*, 27:197 – 219, 2012b. URL [https://api.semanticscholar.org/CorpusID:](https://api.semanticscholar.org/CorpusID:16647191)  
+548 16647191.
+- 549 Andrew R. Conn, Nicholas I. M. Gould, and Philippe L. Toint. *Trust-Region Methods*. SIAM,  
+550 Philadelphia, PA, USA, 2000.
+- 551
+- 552 Yann N. Dauphin, Razvan Pascanu, Caglar Gulcehre, Kyunghyun Cho, Surya Ganguli, and Yoshua  
+553 Bengio. Identifying and attacking the saddle point problem in high-dimensional non-convex opti-  
+554 mization. In *Proceedings of the 27th International Conference on Neural Information Processing*  
+555 *Systems - Volume 2*, NIPS’14, pp. 2933–2941, Cambridge, MA, USA, 2014. MIT Press.
+- 556 Alexandre D’efosse, Léon Bottou, Francis R. Bach, and Nicolas Usunier. A simple convergence  
+557 proof of adam and adagrad. *Trans. Mach. Learn. Res.*, 2022, 2020. URL [https://api.](https://api.semanticscholar.org/CorpusID:225213299)  
+558 [semanticscholar.org/CorpusID:225213299](https://api.semanticscholar.org/CorpusID:225213299).
+- 559
+- 560 Ron S. Dembo, Stanley C. Eisenstat, and Trond Steihaug. Inexact newton methods. *SIAM Journal on*  
+561 *Numerical Analysis*, 19(2):400–408, 1982. doi: 10.1137/0719025. URL [https://doi.org/](https://doi.org/10.1137/0719025)  
+562 10.1137/0719025.
+- 563 J.E. Dennis and R.B. Schnabel. *Numerical Methods for Unconstrained Optimization and Non-*  
+564 *linear Equations*. Prentice-Hall Civil Engineering and Engineering Mechanics Se. Prentice-  
+565 Hall, 1983. ISBN 9780136272168. URL [https://books.google.co.il/books?id=](https://books.google.co.il/books?id=4fQAAAAAAAJ)  
+566 4fQAAAAAAAJ.
+- 567
+- 568 Tian Ding, Dawei Li, and Ruoyu Sun. Sub-optimal local minima exist for almost all over-  
+569 parameterized neural networks. *ArXiv*, abs/1911.01413, 2019. URL [https://api.](https://api.semanticscholar.org/CorpusID:207870322)  
+570 [semanticscholar.org/CorpusID:207870322](https://api.semanticscholar.org/CorpusID:207870322).
+- 571
+- 572 John Duchi, Elad Hazan, and Yoram Singer. Adaptive subgradient methods for online learning and  
+573 stochastic optimization. *Journal of Machine Learning Research*, 12(61):2121–2159, 2011a. URL  
+574 <http://jmlr.org/papers/v12/duchill1a.html>.
+- 575
+- 576 John C. Duchi, Elad Hazan, and Yoram Singer. Adaptive subgradient methods for online learning  
+577 and stochastic optimization. *J. Mach. Learn. Res.*, 12:2121–2159, 2011b. URL [https://api.](https://api.semanticscholar.org/CorpusID:538820)  
+578 [semanticscholar.org/CorpusID:538820](https://api.semanticscholar.org/CorpusID:538820).
+- 579
+- 580 S C Eisenstat and H F Walker. Choosing the forcing terms in an inexact newton method. *SIAM*  
+581 *Journal on Scientific Computing*, 17(1), 1 1996. doi: 10.1137/0917003. URL [https://www.](https://www.osti.gov/biblio/218521)  
+582 [osti.gov/biblio/218521](https://www.osti.gov/biblio/218521).
+- 583
+- 584 William R. Esposito and Christodoulos A. Floudas. Gauss-newton method: Least squares, relation to  
+585 newton’s methodgauss-newton method: Least squares, relation to newton’s method. In Christodou-  
+586 los A. Floudas and Panos M. Pardalos (eds.), *Encyclopedia of Optimization*, pp. 733–738. Springer  
+587 US, Boston, MA, 2001. ISBN 978-0-306-48332-5. doi: 10.1007/0-306-48332-7\_151. URL  
+588 [https://doi.org/10.1007/0-306-48332-7\\_151](https://doi.org/10.1007/0-306-48332-7_151).
+- 589
+- 590 Reuben Feinman. Pytorch-minimize: a library for numerical optimization with autograd, 2021. URL  
+591 <https://github.com/rfeinman/pytorch-minimize>.
+- 592
+- 593 Dan Garber, Elad Hazan, Chi Jin, Kakade Sham, Cameron Musco, Praneeth Netrapalli, and Aaron  
+594 Sidford. Faster eigenvector computation via shift-and-invert preconditioning. In Maria Florina  
+595 Balcan and Kilian Q. Weinberger (eds.), *Proceedings of The 33rd International Conference on*  
+596 *Machine Learning*, volume 48 of *Proceedings of Machine Learning Research*, pp. 2626–2634,  
+597 New York, New York, USA, 20–22 Jun 2016. PMLR. URL [https://proceedings.mlr.](https://proceedings.mlr.press/v48/garber16.html)  
+598 [press/v48/garber16.html](https://proceedings.mlr.press/v48/garber16.html).
+
+- 594 R. Garmanjani. A note on the worst-case complexity of nonlinear stepsize control methods for convex  
+595 smooth unconstrained optimization. *Optimization*, 71:1–11, 10 2020. doi: 10.1080/02331934.  
+596 2020.1830088.
+- 597  
+598 Rong Ge, Furong Huang, Chi Jin, and Yang Yuan. Escaping from saddle points — online stochastic  
+599 gradient for tensor decomposition. In Peter Grünwald, Elad Hazan, and Satyen Kale (eds.),  
+600 *Proceedings of The 28th Conference on Learning Theory*, volume 40 of *Proceedings of Machine*  
+601 *Learning Research*, pp. 797–842, Paris, France, 03–06 Jul 2015. PMLR. URL [https://](https://proceedings.mlr.press/v40/Ge15.html)  
+602 [proceedings.mlr.press/v40/Ge15.html](https://proceedings.mlr.press/v40/Ge15.html).
+- 603 Behrooz Ghorbani, Shankar Krishnan, and Ying Xiao. An investigation into neural net opti-  
+604 mization via hessian eigenvalue density. In Kamalika Chaudhuri and Ruslan Salakhutdinov  
+605 (eds.), *Proceedings of the 36th International Conference on Machine Learning*, volume 97 of  
+606 *Proceedings of Machine Learning Research*, pp. 2232–2241. PMLR, 09–15 Jun 2019. URL  
+607 <https://proceedings.mlr.press/v97/ghorbani19b.html>.
+- 608  
+609 Donald Goldfarb, Yi Ren, and Achraf Bahamou. Practical quasi-newton methods for training deep  
+610 neural networks. In H. Larochelle, M. Ranzato, R. Hadsell, M.F. Balcan, and H. Lin (eds.),  
+611 *Advances in Neural Information Processing Systems*, volume 33, pp. 2386–2396. Curran Asso-  
+612 ciates, Inc., 2020. URL [https://proceedings.neurips.cc/paper\\_files/paper/](https://proceedings.neurips.cc/paper_files/paper/2020/file/192fc044e74dffea144f9ac5dc9f3395-Paper.pdf)  
+613 [2020/file/192fc044e74dffea144f9ac5dc9f3395-Paper.pdf](https://proceedings.neurips.cc/paper_files/paper/2020/file/192fc044e74dffea144f9ac5dc9f3395-Paper.pdf).
+- 614 I. J. Good. Rational decisions. *Journal of the Royal Statistical Society. Series B (Methodological)*, 14  
+615 (1):107–114, 1952. ISSN 00359246. URL <http://www.jstor.org/stable/2984087>.
+- 616  
+617 Andreas Griewank. The modification of newton’s method for unconstrained optimization by bounding  
+618 cubic terms. Technical report, Department of Applied Mathematics and Theoretical Physics,  
+619 University of Cambridge, United Kingdom, 1981.
+- 620 Vineet Gupta, Tomer Koren, and Yoram Singer. Shampoo: Preconditioned stochastic tensor op-  
+621 timization. In Jennifer Dy and Andreas Krause (eds.), *Proceedings of the 35th International*  
+622 *Conference on Machine Learning*, volume 80 of *Proceedings of Machine Learning Research*,  
+623 pp. 1842–1850. PMLR, 10–15 Jul 2018. URL [https://proceedings.mlr.press/v80/](https://proceedings.mlr.press/v80/gupta18a.html)  
+624 [gupta18a.html](https://proceedings.mlr.press/v80/gupta18a.html).
+- 625  
+626 Guy Gur-Ari, Daniel A. Roberts, and Ethan Dyer. Gradient descent happens in a tiny subspace.  
+627 *ArXiv*, abs/1812.04754, 2018. URL [https://api.semanticscholar.org/CorpusID:](https://api.semanticscholar.org/CorpusID:54480858)  
+628 [54480858](https://api.semanticscholar.org/CorpusID:54480858).
+- 629 Kaiming He, X. Zhang, Shaoqing Ren, and Jian Sun. Deep residual learning for image recognition.  
+630 *2016 IEEE Conference on Computer Vision and Pattern Recognition (CVPR)*, pp. 770–778, 2015.  
+631 URL <https://api.semanticscholar.org/CorpusID:206594692>.
+- 632  
+633 M.F. Hutchinson. A stochastic estimator of the trace of the influence matrix for laplacian smoothing  
+634 splines. *Communication in Statistics- Simulation and Computation*, 18:1059–1076, 01 1989. doi:  
+635 10.1080/03610919008812866.
+- 636 Maarten Jansen and Gerda Claeskens. Cramér-rao inequality. In Miodrag Lovric (ed.), *International*  
+637 *Encyclopedia of Statistical Science*, pp. 322–323. Springer Berlin Heidelberg, Berlin, Heidelberg,  
+638 2011. ISBN 978-3-642-04898-2. doi: 10.1007/978-3-642-04898-2\_197. URL [https://doi.](https://doi.org/10.1007/978-3-642-04898-2_197)  
+639 [org/10.1007/978-3-642-04898-2\\_197](https://doi.org/10.1007/978-3-642-04898-2_197).
+- 640  
+641 Chi Jin, Rong Ge, Praneeth Netrapalli, Sham M. Kakade, and Michael I. Jordan. How to escape  
+642 saddle points efficiently. In Doina Precup and Yee Whye Teh (eds.), *Proceedings of the 34th*  
+643 *International Conference on Machine Learning*, volume 70 of *Proceedings of Machine Learning*  
+644 *Research*, pp. 1724–1732. PMLR, 06–11 Aug 2017. URL [https://proceedings.mlr.](https://proceedings.mlr.press/v70/jin17a.html)  
+645 [press/v70/jin17a.html](https://proceedings.mlr.press/v70/jin17a.html).
+- 646  
+647 Andrej Karpathy. char-rnn. <https://github.com/karpathy/char-rnn>, 2015.  
+Andrej Karpathy. NanoGPT. <https://github.com/karpathy/nanoGPT>, 2022.
+
+[Appendix and supplementary materials beyond page 12 have been removed.]

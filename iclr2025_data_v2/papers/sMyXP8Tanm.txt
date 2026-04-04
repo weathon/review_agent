@@ -1,0 +1,4290 @@
+# YOUR ABSORBING DISCRETE DIFFUSION SECRETLY MODELS THE CONDITIONAL DISTRIBUTIONS OF CLEAN DATA
+
+
+**Jingyang Ou** [1] _[,]_ [2] **, Shen Nie** [1] _[,]_ [2] **, Kaiwen Xue** [1] _[,]_ [2] **, Fengqi Zhu** [1] _[,]_ [2]
+
+**Jiacheng Sun** [3], **Zhenguo Li** [3], **Chongxuan Li** [1] _[,]_ [2] _[∗]_
+
+1Gaoling School of Artificial Intelligence, Renmin University of China
+2Beijing Key Laboratory of Big Data Management and Analysis Methods, Beijing, China
+3 Huawei Noah’s Ark Lab
+{oujingyang, nieshen,kaiwenxue,chongxuanli}@ruc.edu.cn;
+fengqizhu@whu.edu.cn;{sunjiacheng1,li.zhenguo}@huawei.com;
+
+
+ABSTRACT
+
+
+Discrete diffusion models with absorbing processes have shown promise in language modeling. The key quantities to be estimated are the ratios between the
+marginal probabilities of two transitive states at all timesteps, called the concrete
+score. In this paper, we reveal that the concrete score in absorbing diffusion can be
+expressed as conditional probabilities of clean data, multiplied by a time-dependent
+scalar in an analytic form. Motivated by this finding, we propose reparameterized
+absorbing discrete diffusion (RADD), a dedicated diffusion model without timecondition that characterizes the time-independent conditional probabilities. Besides
+its simplicity, RADD can reduce the number of function evaluations (NFEs) by
+caching the output of the time-independent network when the noisy sample remains
+unchanged in a sampling interval, which enables sampling acceleration. Built upon
+the new perspective of conditional distributions, we further unify absorbing discrete diffusion and any-order autoregressive models (AO-ARMs), showing that
+the upper bound on the negative log-likelihood for the diffusion model can be
+interpreted as an expected negative log-likelihood for AO-ARMs. Further, our
+RADD models achieve SOTA performance among diffusion models on 5 zero-shot
+language modeling benchmarks (measured by perplexity) at the GPT-2 scale. Our
+[code is available at https://github.com/ML-GSAI/RADD.](https://github.com/ML-GSAI/RADD)
+
+
+1 INTRODUCTION
+
+
+Auto-regressive models (Radford et al., 2018; 2019b; Brown et al., 2020) have dominated the
+area of language modeling for many years. In particular, such models significantly benefit from
+large-scale transformers (Vaswani et al., 2017a) and training data and have achieved remarkable
+progress (OpenAI, 2022; Achiam et al., 2023; Touvron et al., 2023; Anil et al., 2023). From a
+probabilistic perspective, the sequential sampling process of auto-regressive models is inefficient
+and limits the reasoning ability in nonsequential orders (Berglund et al., 2023; Lv et al., 2023).
+Intrinsically, this is because such models characterize the joint distribution by the chain rule of
+probability, motivating research on developing other types of generative models for text.
+
+
+Diffusion models (Sohl-Dickstein et al., 2015; Ho et al., 2020; Song et al., 2021b) generate data in a
+coarse-to-fine manner efficiently (Song et al., 2021a; Bao et al., 2022; Zhang & Chen, 2023; Lu et al.,
+2022a;b) and all dimensions simultaneously, providing an appealing alternative to auto-regressive
+models. Among other efforts (Li et al., 2022; Austin et al., 2021; Dieleman et al., 2022; Chen et al.,
+2023; Graves et al., 2024; Xue et al., 2024; He et al., 2022; Campbell et al., 2022; Sun et al., 2023b;
+Meng et al., 2023; Lou et al., 2024) (see Section 5 for a comprehensive discussion), score entropy
+discrete diffusion (SEDD) (Lou et al., 2024) has shown promise in text generation. In particular,
+SEDD has achieved comparable results to auto-regressive models on 5 zero-shot language modeling
+
+
+_∗_ Corresponding to Chongxuan Li.
+
+
+1
+
+
+benchmarks at the GPT-2 scale. Meanwhile, SEDD can reduce the number of function evaluations
+(NFEs) in sampling and fulfill text conditioned on prompts at different positions.
+
+
+Technically, SEDD employs a discrete-state (absorbing) Markov process that adds noises to data by
+randomly replacing a token with a mask token [ **M** ] and then learns a reverse process to denoise from
+an entirely masked sentence. The key quantities to be estimated are the ratios between the marginal
+probabilities of two transitive states at all timesteps, called the **concrete score** . SEDD also proposes
+a “scaling trick” (see details in Section 3) that scales the output of the score estimation by a factor.
+The trick has been proven effective in practice yet not fully understood in theory (Lou et al., 2024).
+
+
+One of our main contributions is to reveal that the concrete score in absorbing diffusion can be
+expressed as conditional probabilities of clean data, multiplied by a time-dependent scalar in an
+analytic form (see Theorem 1). Our finding theoretically explains the benefits of the scaling trick
+as a reparameterization for better optimization. Motivated by the finding, we propose reparameterized absorbing discrete diffusion (RADD), a dedicated diffusion model that characterizes the
+time-independent conditional probabilities by removing the time conditions from the score estimation
+(see Fig. 1). Besides its simplicity, RADD can significantly reduce the NFEs by caching the output of
+the time-independent network when the noisy sample remains unchanged during a sampling interval.
+
+
+Built upon the new understanding of the concrete score, we further unify absorbing discrete diffusion
+and any-order autoregressive models (AO-ARMs) (Uria et al., 2014; Hoogeboom et al., 2022; Shih
+et al., 2022), demonstrating that their training objectives are equivalent (see Theorem 2). To establish
+the theory, we first rewrite the original training objective for absorbing discrete diffusion into a
+simpler form (named _t_ -denoising cross-entropy, _t_ -DCE). Then, we apply a change of variable from
+the time _t_ to the probability that a single-dimensional token is masked at time _t_ in the forward
+process. By integrating the probability variable analytically, we show its equivalence to the training
+objectives for AO-ARMs. These theoretical findings offer a fresh perspective that the upper bound
+on the negative log-likelihood of an absorbing discrete diffusion can be interpreted as the expected
+negative log-likelihood for corresponding AO-ARMs. Furthermore, they provide alternative objective
+functions for training and likelihood evaluation.
+
+
+Empirically, the RADD model converges faster while achieving similar performance to the strongest
+baseline, i.e., SEDD (Lou et al., 2024). Moreover, we trained our RADD models on different objective
+functions, achieving state-of-the-art performance among diffusion models on five zero-shot language
+modeling benchmarks (measured by perplexity) at the GPT-2 scale. This empirical evidence validates
+our theoretical findings.
+
+
+In summary, this paper has several contributions:
+
+
+ - **Deeper understanding of discrete diffusion** : Both the factorization form of the concrete score
+and unified training objective for absorbing discrete diffusion and AO-ARMs reveal important yet
+overlooked theoretical properties of absorbing discrete diffusion, which explain the mysterious
+scaling trick, provide practice guidance, and may inspire future work.
+
+
+ - **Simpler parameterization** : By removing the time conditions, we reparameterize the model to
+focus on a time-independent conditional probability, simplifying the existing model.
+
+
+ - **Efficient sampling** : Leveraging the reparameterized form, RADD can use a caching strategy to
+improve the sampling speed and achieve faster convergence.
+
+
+ - **Enhanced zero-shot language modeling performance** : Our architectural simplifications and
+optimized training loss lead to superior results. On five zero-shot language modeling benchmarks,
+RADD achieves state-of-the-art performance among discrete diffusion models (measured by
+perplexity) at the GPT-2 scale.
+
+
+2 BACKGROUND
+
+
+In this section, we provide an overview of continuous-time discrete diffusion models (Section 2.1)
+and any-order autoregressive models (Section 2.2), with a more detailed discussion available in
+Appendix G. For a complete list of notations and definitions, please refer to Appendix A.
+
+
+2
+
+
+2.1 CONTINUOUS TIME DISCRETE DIFFUSION MODEL
+
+
+**Single** **dimension** Let _x_ denote a single dimensional sample with possible values in _X_ =
+_{_ 1 _, . . ., N_ _}_ . A continuous-time discrete Markov chain at time _t_ is characterized by a transition
+rate matrix _**Q**_ _t_ as follows
+
+_pt_ +∆ _t|t_ (ˆ _x|x_ ) =            - _**Q**_ 1 + _t_ ( _**Q**_ _x,_ ˆ _tx_ ()∆ _x, xt_ +)∆ _ot_ (∆ + _ot_ )(∆ _,_ _t_ ) _,_ _xx_ ˆˆ _̸_ == _x, x,_ (2.1)
+
+
+where _**Q**_ _t_ ( _x,_ ˆ _x_ ) is the ( _x,_ ˆ _x_ ) element of transition rate matrix _**Q**_ _t_, denoting the transition rate from
+state _x_ to state _x_ ˆ at time _t_ . Equivalently, _**Q**_ _t_ ( _x,_ ˆ _x_ ) is defined as
+
+
+_**Q**_ _t_ ( _x,_ ˆ _x_ ) =
+
+
+�lim∆ _t→_ 0 _pt_ +∆ _t|t_ (ˆ _x|x_ )
+
+
+lim∆ _t→_ 0 _t_ +∆∆ _t|tt_ _,_ _x_ ˆ _̸_ = _x,_
+
+lim∆ _t→_ 0 _pt_ +∆ _t|t_ ( _x|x_ ) _−_ 1 _,_ _x_ ˆ = _x._
+
+
+_|_ ∆ _tt_ ( _tx|x_ ) _−_ 1 _,_ _x_ ˆ = _x._ (2.2)
+
+
+Given the above definition, denote _**P**_ _t|s_ ( _x,_ ˆ _x_ ) := _pt|s_ (ˆ _x|x_ ). The following Kolmogorov’s forward
+equation holds (Campbell et al., 2022; Anderson, 2012):
+
+_d_
+
+[=] _**[ P]**_ _[t][|][s]_ _**[Q]**_ _[t][.]_ (2.3)
+_dt_ _**[P]**_ _[t][|][s]_
+
+In practice (Campbell et al., 2022), _**Q**_ _t_ is parameterized as _σ_ ( _t_ ) _**Q**_, where _σ_ ( _t_ ) is a scalar function
+representing the noise schedule and _**Q**_ is a constant matrix. In this case, the solution to Eq. (2.3)
+can be solved analytically as _**P**_ _t|s_ = exp ((¯ _σ_ ( _t_ ) _−_ _σ_ ¯( _s_ )) _**Q**_ ), where _σ_ ¯( _t_ ) = �0 _t_ _[σ]_ [(] _[s]_ [)] _[ds]_ [ and][ exp][ is the]
+matrix exponential. Therefore, we can directly sample _xt_ from _xs_ in one step for any _t > s_ .
+
+
+Further, _**Q**_ is often designed to diffuse towards a uniform distribution or an absorbing state [ **M** ].
+Recent work (Austin et al., 2021; Campbell et al., 2022) suggests that the absorbing matrix achieves
+better empirical performance. Besides, as detailed in Section 3, the specific structure of the absorbing
+matrix can be leveraged to improve performance and accelerate sampling. Therefore, we focus on the
+absorbing matrix as follows:
+
+
+_−_ 1 0 _· · ·_ 0 1
+0 _−_ 1 _· · ·_ 0 1
+... ... ... ... ...
+0 0 _· · ·_ _−_ 1 1
+0 0 _· · ·_ 0 0
+
+
+
+
+
+_._ (2.4)
+
+
+
+_**Q**_ [absorb] =
+
+
+
+
+
+
+
+The time reversal of the forward process is characterized by a reverse transition rate matrix _**Q**_ [˜] _t_ (Sun
+et al., 2023a; Kelly, 1981), whose element from state _xt_ to state _x_ ˆ _t_ is given by
+
+
+_**Q**_ ˜ _t_ ( _xt,_ ˆ _xt_ ) =
+
+
+- _pptt_ (ˆ( _xxtt_ )) _**[Q]**_ _[t]_ [(ˆ] _[x][t][, x][t]_ [)] _[,]_ _x_ ˆ _t_ = _xt,_ (2.5)
+
+_−_ [�] _k_ = _xt_ _**[Q]**_ [˜] _[t]_ [(] _[x][t][, k]_ [)] _[,]_ _x_ ˆ _t_ = _xt._
+
+
+Simulating the reverse process requires learning the reverse transition rate _**Q**_ [˜] _t_ ( _xt,_ ˆ _xt_ ). As _**Q**_ _t_ (ˆ _xt, xt_ )
+is known, it is sufficient to estimate the concrete score _[p]_ _p_ _[t]_ _t_ [(ˆ] ( _[x]_ _x_ _[t]_ _t_ [)] ) [by] [a] [score] [network] _[s][θ]_ [(] _[x][t][, t]_ [)] _[≈]_
+
+
+[ _[p][t]_ [(ˆ] _[x][t]_ [)]
+
+
+[ _p_ _[t]_ _t_ ( _x_ _[t]_ _t_ ) []] _[x]_ [ˆ] _[t][∈X]_ [(Meng et al., 2023).] [Denoising score entropy (DSE) (Lou et al., 2024) is an effective]
+
+objective to train the score network
+
+ - _T_ - 
+
+
+_x_ ˆ� _t_ = _xt_ _**Q**_ _t_ (ˆ _xt, xt_ ) - _sθ_ ( _xt, t_ ) _x_ ˆ _t_ _−_ _p_ _[p]_ _t_ _[t]_ _|_ _[|]_ 0 [0] ( [(ˆ] _x_ _[x]_ _t_ _[t]_ _|_ _[|]_ _x_ _[ x]_ 0 [0][)]
+
+
+   E _xt∼pt|_ 0( _xt|x_ 0)
+0
+
+
+[(ˆ] _[x][t]_ _[|][ x]_ [0][)]    
+_p_ _[p]_ _t_ _[t]_ _|_ _[|]_ 0 [0] ( _xt_ _| x_ 0) [log] _[ s][θ]_ [ (] _[x][t][, t]_ [)] _[x]_ [ˆ] _[t]_ [+] _[ C]_ _dt,_ (2.6)
+
+
+where the optimize irrelevant constant _C_ = _K_ - _pptt||_ 00(ˆ( _xxtt||xx_ 00)) - and _K_ ( _a_ ) := _a_ log _a −_ _a_ . In particular,
+the DSE loss in Eq. (2.6) is an upper bound of the negative log-likelihood with an unknown gap.
+Nevertheless, existing work (Lou et al., 2024) still employs it for training and likelihood evaluation.
+
+
+After training, sampling can be understood as discretizing the following reverse process
+
+_d_
+
+[=] _**[ P]**_ _[s][|][t]_ _**[Q]**_ [˜] _[s][,]_ (2.7)
+_ds_ _**[P]**_ _[s][|][t]_
+
+where _ds_ is an infinitesimal negative timestep and the concrete score is replaced by the score network.
+Existing samplers include the Euler method and Tweedie _τ_ -leaping, as detailed in Appendix D.
+
+
+3
+
+
+**Multi-dimension** In a state space of length _d_ like _X_ _[d]_ = _{_ 1 _, . . ., n}_ _[d]_, we denote the sample as a
+sequence of one-dimensional data, i.e., _**x**_ = _x_ [1] _. . . x_ _[d]_ . The transition matrix _**Q**_ _t_ _∈_ R _[n][d][×][n][d]_ has an
+exponential number of possible states, making it expensive to reverse. To alleviate this issue, existing
+work (Campbell et al., 2022; Lou et al., 2024) assumes independence between dimensions and each
+dimension is a one-dimensional diffusion process with the same transition rate matrix _**Q**_ [tok] _t_ _∈_ R _[n][×][n]_ .
+
+
+Under the independent assumption, _**Q**_ _t_ assigns zero values (Campbell et al., 2022; Lou et al., 2024) for
+all sequences with a Hamming distance larger than 1. Therefore, it is sufficient to model the concrete
+score between sequences that differ by a Hamming distance of 1, such as _**x**_ ˆ _t_ = _x_ [1] _t_ _[. . .]_ [ �] _[x]_ _t_ _[i]_ _[. . . x]_ _t_ _[d]_ [given]
+_**x**_ _t_ = _x_ [1] _t_ _[· · ·][ x]_ _t_ _[d]_ [.] [Therefore, the score network] _**[ s]**_ _[θ]_ [(] _[·][, t]_ [) :] _[ {]_ [1] _[, . . ., n][}][d]_ _[→]_ [R] _[d][×][n]_ [is defined as]
+
+_**s**_ _θ_ ( _**x**_ _t, t_ ) _**x**_ ˆ _t_ = _**s**_ _θ_       - _x_ [1] _t_ _[. . . x]_ _t_ _[i]_ _[. . . x]_ _t_ _[d][, t]_       - [ _i,_       - _x_ _[i]_ _t_ []] _[ ≈]_ _[p]_ _p_ _[t]_ _t_ �� _xx_ [1] _t_ [1] _t_ _[. . .][. . . x]_ [ �] _[x]_ _t_ _[i]_ _t_ _[i]_ _[. . . x][. . . x]_ _t_ _[d]_ _t_ _[d]_ �� _,_ (2.8)
+
+
+which leads to the following expression to estimate the reverse transition rate matrix _**Q**_ [˜] _t_ :
+
+_**Q**_ ˜ _t_  - _x_ [1] _t_ _[. . . x]_ _t_ _[i]_ _[. . . x]_ _t_ _[d][, x]_ _t_ [1] _[. . .]_ [ �] _[x]_ _t_ _[i]_ _[. . . x]_ _t_ _[d]_  - = _**Q**_ [tok] _t_  - _x_  - _[i]_ _t_ _[, x][i]_ _t_  - _pptt_ �� _xx_ [1] _t_ [1] _t_ _[. . .][. . . x]_ [ �] _[x]_ _t_ _[i]_ _t_ _[i]_ _[. . . x][. . . x]_ _t_ _[d]_ _t_ _[d]_ �� (2.9)
+
+_≈_ _**Q**_ [tok] _t_            - _x_            - _[i]_ _t_ _[, x]_ _t_ _[i]_            - _**s**_ _θ_            - _x_ [1] _t_ _[. . . x]_ _t_ _[i]_ _[. . . x]_ _t_ _[d][, t]_            - [ _i,_            - _x_ _[i]_ _t_ []] _[.]_ (2.10)
+
+Existing samplers assume that each dimension is independent within a small interval ∆ _t_ and update
+each dimension in parallel for efficiency (Lou et al., 2024; Campbell et al., 2022).
+
+
+2.2 ANY-ORDER AUTOREGRESSIVE MODELS
+
+
+Any-order autoregressive models (AO-ARMs) (Uria et al., 2014; Hoogeboom et al., 2022; Shih
+et al., 2022) model the joint distribution autoregressively for all possible orders _π_ of the _d_ variables.
+Formally, they factorize the joint distribution as [�] _k_ _[d]_ =1 _[p]_ [(] _[x][π]_ [(] _[k]_ [)] _[|][x][π]_ [(] _[<k]_ [)][)][.] [To learn such a distribution,]
+an AO-ARM utilizes a weight-sharing neural network to model all univariate conditionals and employs
+mask tokens to represent absent variables. During training, the expected negative log-likelihood over
+the uniform distribution of all orders _Uπ_ is minimized:
+
+
+_LAO_ ( _**x**_ 0) = E _π∼Uπ_
+
+
+_d_
+
+- _−_ log _qθ_ ( _x_ _[π]_ 0 [(] _[l]_ [)] _|x_ _[π]_ 0 [(] _[<l]_ [)] ; _π_ ) _._ (2.11)
+
+
+_l_ =1
+
+
+3 REPARAMETERIZED ABSORBING DISCRETE DIFFUSION
+
+
+In Section 3.1, we reveal that the concrete score of absorbing discrete diffusion can be reparameterized
+as conditional distributions of clean data, which enables efficient sampling by caching the output
+of time-independent network (see Section 3.2). In Section 3.3, we unify the training objective of
+absorbing discrete diffusion and AO-ARMs.
+
+
+3.1 REPARAMETERIZING THE CONCRETE SCORE AS CONDITIONAL DISTRIBUTIONS OF CLEAN
+DATA
+
+
+A key observation is that only the transition from the masked token to an unmasked token is valid in
+the reverse process of an absorbing discrete diffusion. In particular, according to the definition of
+the transition matrix of the absorbing process (see Eq. (2.4)), we have _**Q**_ [absorb] (ˆ _x_ _[i]_ _t_ _[, x][i]_ _t_ [)] [=] [0][ for any]
+unmasked _x_ _[i]_ _t_ [= [] **[M]** []][ and] _[x]_ [ˆ] _[i]_ _t_ [=] _[ x][i]_ _t_ [.] [Therefore, the corresponding element in the transition matrix of]
+the reverse process _**Q**_ [˜] _t_ (see Eq. (2.5)) equals zero. Namely,
+
+_**Q**_ ˜ _t_  - _x_ [1] _t_ _[. . . x]_ _t_ _[i]_ _[. . . x]_ _t_ _[d][, x]_ _t_ [1] _[. . .]_ [ �] _[x]_ _t_ _[i]_ _[. . . x]_ _t_ _[d]_  - = _σ_ ( _t_ ) _**Q**_ [absorb][ �] _x_  - _[i]_ _t_ _[, x][i]_ _t_  - _pptt_ �� _xx_ [1] _t_ [1] _t_ _[. . .][. . . x]_ [ �] _[x]_ _t_ _[i]_ _t_ _[i]_ _[. . . x][. . . x]_ _t_ _[d]_ _t_ _[d]_ �� = 0 _,_ (3.1)
+
+for any unmasked state _x_ _[i]_ _t_ [=] [[] **[M]** []][ and] _[x]_ [ˆ] _[i]_ _t_ [=] _[x][i]_ _t_ [and it is unnecessary to model the corresponding]
+
+_pt_ ( _x_ [1] _t_ _[...][x]_ [�] _t_ _[i][...x][d]_ _t_ [)]
+concrete score [Also,] [note that the concrete score always takes the value of one if]
+_pt_ ( _x_ [1] _t_ _[...x]_ _t_ _[i][...x][d]_ _t_ [)] [.]
+
+_x_ ˆ _[i]_ _t_ [=] _[ x]_ _t_ _[i]_ [.] [Therefore, we only need to characterize the concrete score for] _[ x][i]_ _t_ [= [] **[M]** []][ and] _[x]_ [ˆ] _[i]_ _t_ [= [] **[M]** []][.]
+
+
+4
+
+
+Interestingly, in this case, we discover that the concrete score has a simple analytic form w.r.t. to the
+conditional distributions of clean data, as summarized in the following Theorem 1.
+**Theorem** **1.** _(Analytic_ _concrete_ _score_ _in_ _absorbing_ _diffusion,_ _proof_ _in_ _Appendix_ _B)_ _For_ _**x**_ _t_ =
+_x_ [1] _t_ _[. . . x]_ _t_ _[i]_ _[. . . x]_ _t_ _[d]_ _[and]_ _**[x]**_ [ˆ] _[t]_ [=] _[ x]_ [1] _t_ _[. . .]_ [ �] _[x]_ _t_ _[i]_ _[. . . x]_ _t_ _[d][, if][ x]_ _t_ _[i]_ [= [] _**[M]**_ []] _[ and]_ _[x]_ [ˆ] _[i]_ _t_ [= [] _**[M]**_ []] _[, the concrete score at time][ t][ can]_
+_be expressed as a time-independent conditional distribution at time zero multiplied by an analytic_
+_time-dependent term:_
+_pt_              - _x_ [1] _t_ _[. . .]_ [ �] _[x]_ _t_ _[i]_ _[. . . x]_ _t_ _[d]_              - _e_ _[−][σ]_ [¯][(] _[t]_ [)]
+
+_[i]_ _[UM]_
+
+
+_pt_ - _x_ [1] _t_ _[. . . x]_ _t_ _[i]_ _[. . . x]_ _t_ _[d]_ 
+- �� _concrete score_
+
+
+_e_ _[−][σ]_ [¯][(] _[t]_ [)]
+=
+
+
+1 _−_ _e_ _[−][σ]_ [¯][(] _[t]_ [)]
+
+- �� _scalar_
+
+
+_p_ 0(ˆ _x_ _[i]_ _t_ _[|]_ _**[x]**_ _[UM]_ _t_ )
+
+
+            - ��            -            - ��            -            - ��            _concrete score_ _scalar_ _clean data_
+
+_distribution_
+_where_ _**x**_ _[UM]_ _t_ _is the vector consists of all unmasked tokens of_ _**x**_ _t._
+
+
+One immediate implication of Theorem 1 is to theoretically explain the benefit of the “scaling trick”
+in existing work (Lou et al., 2024) (see Appendix C.2 therein), which significantly improves the
+practical performance of discrete diffusion (see Table 1) but has not been fully understood before.
+In particular, the scaling trick divides the output of the score network by a factor. Equivalently, it
+reparameterizes _**s**_ _θ_ ( _**x**_ _t, t_ ) as follows:
+
+_e_ _[−][σ]_ [¯][(] _[t]_ [)]
+_**s**_ _θ_ ( _**x**_ _t, t_ ) = (3.2)
+
+1 _−_ _e_ _[−][σ]_ [¯][(] _[t]_ [)] _**[s]**_ [˜] _[θ]_ [(] _**[x]**_ _[t][, t]_ [)] _[,]_
+
+where _**s**_ ˜ _θ_ ( _**x**_ _t, t_ ) is the output of the reparameterized score network and the scaling factor coincides
+with the time-dependent term in Theorem 1. In the original parameterization, the score network
+_sθ_ must model the whole time-dependent concrete score. In contrast, with the scaling trick, the
+reparameterized score _**s**_ ˜ _θ_ ( _**x**_ _t, t_ ) can focus on capturing the clean data distribution _p_ 0(ˆ _x_ _[i]_ _|_ _**x**_ [UM] _t_ ) and
+simplifies learning, according to Theorem 1.
+
+
+Further, Theorem 1 suggests that the reparameterized score is essentially a conditional probability
+on clean data, which is time-independent. Motivated by this, we propose reparameterized absorbing
+discrete diffusion (RADD), which employs a time-independent network _**c**_ _θ_ ( _**x**_ _t_ ) that defines a model
+distribution _qθ_ by corresponding conditional distributions to approximate data distribution _p_ 0 directly:
+_**c**_ _θ_ ( _**x**_ _t_ )[ _i,_ ˆ _x_ _[i]_ _t_ [] =] _[ q][θ]_ [(ˆ] _[x]_ _t_ _[i][|]_ _**[x]**_ _t_ [UM] ) _≈_ _p_ 0(ˆ _x_ _[i]_ _t_ _[|]_ _**[x]**_ _t_ [UM] ) _._ (3.3)
+
+
+In practice, we make a minimal modification of the score network in SEDD (Lou et al., 2024) for
+simplicity and fairness as shown in Fig. 1. Specifically, we remove the time-conditioning input,
+reducing the architecture to a form similar to the standard GPT model, with softmax as the final
+activation. Further details can be found in Appendix J.1.
+
+
+Our reparameterization approach, which removes _t_, applies to both score and mean parameterizations,
+as detailed in Appendix E. This not only simplifies the training target but also enables a more efficient
+sampling process than SEDD (Lou et al., 2024), as presented below.
+
+
+3.2 EFFICIENT SAMPLERS TO REDUCE NFES BY CACHING THE OUTPUT OF RADD
+
+
+In the reverse process of an absorbing discrete diffusion, once a token transitions from [ **M** ] to an
+unmasked token, it remains unchanged. Consequently, for a sequence consisting of _d_ tokens, there
+will be at most _d_ intervals during the sampling process where changes occur, regardless of the number
+of sampling steps _D_ . In the remaining steps, the sequence remains unchanged across all _d_ dimensions.
+This property allows us to cache _**c**_ _θ_ ( _xt_ ) to avoid the need to reevaluate the time-independent _**c**_ _θ_ when
+_**x**_ _t_ is unchanged in the previous step (see Appendix I for the pseudo-code). However, since SEDD is
+conditioned on time, it does not support this caching strategy for reducing NFEs.
+
+
+The NFEs with the caching strategy is a random variable. To quantify it, we calculate the expected
+NFEs (E-NFEs) in analytic form, conditioned on the sampling method, time steps, and noise schedule.
+For instance, using the Tweedie _τ_ -leaping method with a log-linear noise schedule (Lou et al., 2024),
+the E-NFEs can be expressed by sampling steps _n_ and generating length _l_ [1] (proof in Appendix D.5):
+
+E-NFEs( _n_ ) = _n_ (1 _−_ (1 _−_ [1] (3.4)
+
+_n_ [)] _[l]_ [)] _[,]_
+
+
+1A similar analysis was presented in Chen et al. (2024) for their discrete-time sampler, although it is based
+on different assumptions and applicable to different scenarios. A detailed comparison is provided in Appendix F.
+
+
+5
+
+
+Predicted Concrete Score
+
+
+2000
+
+
+1500
+
+
+1000
+
+
+500
+
+
+0
+
+
+|Col1|Col2|Col3|Col4|Col5|Col6|
+|---|---|---|---|---|---|
+|Multiply|Multiply|Multiply|Multiply|Multiply|Multiply|
+|||||||
+|<br> <br>**80%**<br>**10%**<br>**10%**<br>**R**<br>**A**<br>**D**<br>**20%**<br>**10%**<br>**70%**<br>Predicted Conditional Distributions on Clean Data|<br> <br>**80%**<br>**10%**<br>**10%**<br>**R**<br>**A**<br>**D**<br>**20%**<br>**10%**<br>**70%**<br>Predicted Conditional Distributions on Clean Data|<br> <br>**80%**<br>**10%**<br>**10%**<br>**R**<br>**A**<br>**D**<br>**20%**<br>**10%**<br>**70%**<br>Predicted Conditional Distributions on Clean Data|<br> <br>**80%**<br>**10%**<br>**10%**<br>**R**<br>**A**<br>**D**<br>**20%**<br>**10%**<br>**70%**<br>Predicted Conditional Distributions on Clean Data|<br> <br>**80%**<br>**10%**<br>**10%**<br>**R**<br>**A**<br>**D**<br>**20%**<br>**10%**<br>**70%**<br>Predicted Conditional Distributions on Clean Data|<br> <br>**80%**<br>**10%**<br>**10%**<br>**R**<br>**A**<br>**D**<br>**20%**<br>**10%**<br>**70%**<br>Predicted Conditional Distributions on Clean Data|
+|||||||
+|Softmax|Softmax|Softmax|Softmax|Softmax|Softmax|
+|||||||
+|Layer Norm & Linear|Layer Norm & Linear|Layer Norm & Linear|Layer Norm & Linear|Layer Norm & Linear|Layer Norm & Linear|
+|||||||
+|Transformer Block|Transformer Block|Transformer Block|Transformer Block|Transformer Block|Transformer Block|
+|||||||
+|Embedding Layer|Embedding Layer|Embedding Layer|Embedding Layer|Embedding Layer|Embedding Layer|
+|||||||
+
+
+**[M]** **A** **D** **[M]**
+
+
+Input Tokens
+
+
+Newly Added Layer （ Parameter Free)
+
+
+Simplified Layer (Time Condition Removed)
+
+
+Unchanged Layer (No Time Dependency)
+
+
+Figure 1: **Reparameterized** **network**
+**architecture vs.** **SEDD (DiT).** Our network simplifies the original DiT by removing time conditions and outputs the
+conditional distributions on clean data,
+similar to the standard Transformer. For
+example, with a vocabulary of {R, A, D},
+only the probabilities in the columns corresponding to the [ **M** ] token are meaningful (highlighted in color), since the
+network is designed to learn to denoise
+the masked input. The remaining output,
+shown in grey, will not be utilized.
+
+
+|Col1|Col2|Col3|Col4|Col5|Col6|Col7|Col8|
+|---|---|---|---|---|---|---|---|
+|||||SEDD<br>RADD|Medium<br> Medium|(cache|(cache|
+|||||||||
+|||||||||
+|||||||||
+|||||||||
+|||||||||
+
+
+(b) **Sample quality measured by perplexity (** _↓_ **).** Our RADD
+model, utilizing the cache strategy, achieves slightly better
+perplexity with less time, enabling faster convergence and
+reduced sampling time.
+
+
+0 500 1000 1500 2000
+Sampling Steps n
+
+
+(a) **Expected** **number** **of** **function** **evaluations** **(E-NFEs)**
+**over different sampling steps.** E-NFEs measured by Tweedie
+_τ_ -leaping method with log-linear noise schedule.
+
+
+150
+
+
+120
+
+
+100
+
+
+80
+
+
+Times (s)
+
+
+In Fig. 1a, we plot the curve of Eq. (3.4) in blue, which aligns well with our experiments (red stars).
+This demonstrates that our method theoretically reduces E-NFEs, particularly at larger sampling
+steps. This reduction is also supported by Fig. 1b, where RADD shows faster convergence trends.
+
+
+Furthermore, based on Theorem 1, simplified forms of the reverse process for both Euler method and
+Tweedie _τ_ -leaping method can be derived, which leads to corresponding analytic forms of E-NFEs
+given time steps and noise schedule. We also prove that these two sampling methods are equivalent
+under a log-linear noise schedule for absorbing discrete diffusion (see Appendix D for more details).
+
+
+3.3 UNIFYING ABSORBING DISCRETE DIFFUSION AND ANY-ORDER AUTOREGRESSIVE MODEL
+
+
+Building upon Theorem 1, we further prove the equivalence between absorbing discrete diffusion and
+any-order autoregressive models introduced in Section 2.2, as presented in the following theorem.
+
+
+6
+
+
+**Theorem** **2.** _The_ _absorbing_ _discrete_ _diffusion_ _objective_ _of_ _Eq._ (2.6) _is_ _equivalent_ _to_ _any-order_
+_autoregressive objective of Eq._ (2.11) _when the final total noise level_ _σ_ ¯( _T_ ) _→_ + _∞._
+
+
+The proof of Theorem 2 consists of three key steps, which introduce three different yet equivalent
+loss functions. Below we briefly present the key ideas and defer the proof in Appendix C.
+
+In the first step, by removing the terms _**s**_ _θ_ ( _**x**_ _t, t_ ) _**x**_ ˆ _t_ and _K_ - _pptt||_ 00(ˆ( _**xx**_ _tt||_ _**xx**_ 00)) - in Eq. (2.6), we can define a
+
+simpler loss _L_ _[T]_ _t_ -DCE [called] _[ t]_ [-denoising cross-entropy loss (abbr.] _[t]_ [-DCE][), which is equivalent to DSE]
+loss. In the multi-dimensional case, it has the form:
+
+
+      - _T_
+_L_ _[T]_ _t_ -DCE [(] _**[x]**_ [0][) =] E _**x**_ _t∼pt|_ 0( _**x**_ _t|_ _**x**_ 0)
+
+0
+
+
+
+
+
+[�] _−_ _[σ]_ [(] _[t]_ [)] _[e][−][σ]_ [¯][(] _[t]_ [)]
+
+1 _−_ _e_ _[−][σ]_ [¯][(] _[t]_ [)]
+
+_x_ _[i]_ _t_ [=[] **[M]** []]
+
+
+       - []
+
+_e_ _[−][σ]_ [¯][(] _[t]_ [)]
+
+1 _−_ _e_ _[−][σ]_ [¯][(] _[t]_ [)] _[q][θ]_ [(] _[x]_ 0 _[i]_ _[|]_ _**[x]**_ [UM] _t_ ) 
+
+
+ [�]
+
+
+_[σ]_ [(] _[t]_ [)] _[e][−][σ]_ [¯][(] _[t]_ [)] - _e_ _[−][σ]_ [¯][(] _[t]_ [)]
+
+1 _−_ _e_ _[−][σ]_ [¯][(] _[t]_ [)] [log] 1 _−_ _e_ _[−][σ]_ [¯]
+
+
+ _dt_ (3.5)
+
+
+We emphasize that Eq. (3.5) holds in a nonparametric setting because RADD can be interpreted as a
+model distribution _qθ_ representing the conditional distribution of clean data, which approximates the
+true distribution _p_ 0, as proven in Theorem 1.
+
+
+In the second step, inspired by Kingma et al. (2021), we change the variable from _t_ to _λ_ ( _t_ ) =
+1 _−_ _e_ _[−][σ]_ [¯][(] _[t]_ [)], which represents the probability of a token being masked in [0 _, t_ ] during the forward
+process. Thus, _L_ _[T]_ _t_ -DCE [(] _**[x]**_ [0][)][ can be rewritten as an integral of] _[ λ]_ [, defined as] _[ λ]_ [-denoising cross-entropy]
+loss (abbr. _λ_ -DCE):
+
+
+
+
+
+      - 1
+_Lλ_ -DCE( _**x**_ 0) :=
+
+0
+
+
+
+
+
+1
+_λ_ [E] _**[x]**_ _[λ][∼][p][λ]_ [(] _**[x]**_ _[λ][|]_ _**[x]**_ [0][)]
+
+
+[�] _−_ log _qθ_ ( _**x**_ _[i]_ 0 _[|]_ _**[x]**_ _λ_ [UM][)]
+
+_x_ _[i]_ _λ_ [=[] **[M]** []]
+
+
+ [�]
+
+
+ _dλ,_ (3.6)
+
+
+where _pλ_ ( _**x**_ _λ|_ _**x**_ 0) is the joint distribution induced by masking each dimension in _**x**_ 0 independently
+with a probability _λ_ .
+
+
+Finally, we prove that _λ_ -DCE loss in Eq. (3.6) can be integrated analytically and rewritten as _LAO_ in
+Eq. (2.11). We summarize our proof procedure by the equivalence between these losses:
+
+
+Appendix _C._ 1 Appendix _C._ 2 Appendix _C._ 3
+_L_ _[T]_ DSE [(] _**[x]**_ [0][)] _⇐⇒_ _L_ _[T]_ _t_ -DCE [(] _**[x]**_ [0][)] _⇐⇒_ _Lλ_ -DCE( _**x**_ 0) _⇐⇒_ _LAO_ ( _**x**_ 0) _._ (3.7)
+
+
+A direct benefit from Theorem 2 is that we can use an absorbing discrete diffusion model to sample
+like AO-ARM and vice versa. For training and likelihood evaluation, the four losses in Eq. (3.7) can
+also be used (see Appendix I for pseudo-code). To efficiently estimate the four losses using Monte
+Carlo methods, we can replace the sum or integral with an expectation. Take Eq. (3.6) for example, it
+can be rewritten as the following form of expectation on _λ_ :
+
+
+
+
+
+
+
+
+1
+_Lλ_ -DCE( _**x**_ 0) = E _λ∼U_ ([0 _,_ 1]) _λ_ [E] _**[x]**_ _[λ][∼][p][λ]_ [(] _**[x]**_ _[λ][|]_ _**[x]**_ [0][)]
+
+
+[�] _−_ log _qθ_ ( _**x**_ _[i]_ 0 _[|]_ _**[x]**_ _λ_ [UM][)]
+
+_x_ _[i]_ _λ_ [=[] **[M]** []]
+
+
+ [�]
+
+
+ _._ (3.8)
+
+
+Additionally, Theorem 2 provides a new perspective on the DSE loss. While it has been traditionally
+viewed as an upper bound on the negative log-likelihood for the diffusion model, it can also be
+interpreted as an expected negative log-likelihood over factorial numbers of orderings for AO-ARM
+by Eq. (2.11). As discussed in (Uria et al., 2014), for different orders _π_, _qθ_ ( _x_ 0; _π_ ) will be inconsistent
+in general. Despite this inconsistency, it can be viewed as an ensemble of multiple autoregressive
+models with different orders, potentially more robust than fixed-order models.
+
+
+We mention that Hoogeboom et al. (2022) establish the equivalence between ARMs and the ELBO
+of absorbing diffusion models. In comparison, built upon our Theorem 1, we extend existing work by
+unifying four loss functions in Eq. (3.7), deepening the understanding of absorbing discrete diffusion.
+We provide a detailed discussion in Appendix H and a systematic empirical study in Section 4.3.
+
+
+4 EXPERIMENTS
+
+
+We present the experimental setups in Section 4.1. We then evaluate the performance of accelerated
+generation in Section 4.2 and zero-shot perplexity on various language datasets in Section 4.3.
+
+
+7
+
+
+4.1 SETTINGS
+
+
+Below, we briefly present the experimental settings. For more details, please see Appendix J.
+
+
+**Model.** We use RADD model _**c**_ _θ_ reparameterzied as described in Section 3.1. Compared with
+SEDD models, RADD models have fewer parameters because the time-condition has been eliminated.
+We trained our RADD model _**c**_ _θ_ using denoising score entropy, _t_ -denoising cross-entropy, _λ_ -denoising
+cross-entropy and any-order autoregressive loss, abbreviated as RADD-DSE, RADD- _t_ -DCE, RADD_λ_ -DCE and RADD-AO, since all these models share the same architecture as described in Fig. 1. For
+the SEDD small and medium model, we employed their pre-trained model. When performing text
+generation tasks, we used RADD- _λ_ -DCE medium models.
+
+
+**Data.** Following SEDD, we trained on the OpenWebText (Gokaslan & Cohen, 2019) dataset and
+tested on the LAMBADA, WikiText2, PTB, WikiText103, and One Billion Words datasets (Paperno
+et al., 2016; Merity et al., 2016; Marcus et al., 1993; Chelba et al., 2013). For data splits and data
+processing, we adopted the same settings and techniques as SEDD, which involves packing sentences
+to generate uniform-length blocks as model input.
+
+
+**Training** **setup.** We used a log-linear noise schedule where the expectation of the number of
+changed tokens at time _t_ is linear with _t_ . Following SEDD, we report results for RADD trained over
+400K iterations in Tables 1 and 2. To further analyze the convergence and performance trends, we
+extended the training of RADD-small to 1,000K iterations, detailed in Table 7 of the appendix.
+
+
+**Metric.** Following Lou et al. (2024), we conduct experiments on unconditional generation and
+language modeling tasks. For language modeling tasks, we report the perplexity calculated on the
+dataset with different models. For generation, we assess sample quality using perplexity (PPL) on
+unconditional samples measured by an additional larger language model (i.e., GPT-2 large), and
+sample diversity through unigram entropy (Strudel et al., 2022).
+
+
+4.2 EFFICIENT SAMPLING
+
+
+As shown in Fig.1 of Lou et al. (2024), SEDD surpasses AR in terms of sampling speed. Therefore,
+we compare the sample quality between SEDD and our RADD model measured by perplexity. As
+shown in Fig. 1b, RADD with the caching strategy is more efficient than SEDD. This improvement is
+expected because the NFEs is limited by the generating sequence length. We further conducted batch
+size ablation and compare the running time and unigram entropy as detailed in Appendix J.4.
+
+
+As discussed in Section 3.3, we can also use RADD as an any-order autoregressive model to generate
+samples in different orders, as detailed in Appendix J.4. We present more sampling details in
+Appendix J.3. and the generated samples in Appendix K.1.
+
+
+4.3 IMPROVED ZERO-SHOT PERPLEXITY ON LANGUAGE MODELING
+
+
+Following SEDD, we present zero-shot perplexities on the LAMBADA, WikiText2, PTB, WikiText103, and 1 Billion Words datasets (Radford et al., 2019a) in Tables 1 and 2 and compare the
+zero-shot perplexity of our model with other baseline models (Austin et al., 2021; Gulrajani &
+Hashimoto, 2023; Lou et al., 2024). Perplexities of RADD models are calculated based on their
+corresponding loss (e.g., RADD- _λ_ -DCE on _Lλ_ -DCE), which is valid for likelihood estimation as
+discussed in Section 3.3.
+
+
+Firstly, we conduct an ablation study of the scaling trick in the middle of the Tables 1 and 2. For
+the absorbing diffusion, the perplexity of the scaled version of SEDD outperforms its unscaled
+version, which matches our theoretical discovery in Theorem 1. Secondly, under the same DSE loss
+and similar parameter counts, we observed that the RADD-DSE model without time-conditioning
+outperforms the SEDD-Scale model with time-conditioning. This ablation validates our analysis
+in Section 3.1, indicating that time-conditioning is unnecessary for absorbing discrete diffusion
+models. Additionally, while RADD models trained with four equivalent loss functions achieve
+similar performance, minor discrepancies persist. These differences stem from variations in gradient
+estimation on finite data, leading models to converge at distinct local optima despite the theoretical
+
+
+8
+
+
+Table 1: **Zero-shot language modeling perplexity (** _↓_ **) on five datasets using** _**small**_ **models.** "SEDDUnscale" and "SEDD-Scale" refer to the unscaled and scaled versions of the absorbing models,
+respectively. All SEDD and RADD models are trained for **400k** iterations. Results for other diffusion
+models are based on the upper bound from (Austin et al., 2021; Gulrajani & Hashimoto, 2023; Lou
+et al., 2024). For RADD models, the results are calculated based on the corresponding loss.
+
+
+Method LAMBADA WikiText2 PTB WikiText103 1BW
+
+
+GPT-2 **45.04** 42.43 138.43 41.60 75.20
+
+
+D3PM 93.47 77.28 200.82 75.16 138.92
+PLAID 57.28 51.80 142.60 50.86 91.12
+SEDD-Uniform 65.40 50.27 140.12 49.60 101.37
+
+
+SEDD-Unscale 52.21 44.75 130.49 43.14 80.70
+SEDD-Scale 50.92 41.84 114.24 40.62 79.29
+
+
+RADD-DSE 49.57 38.83 111.74 37.46 **72.35**
+RADD- _t_ -DCE 50.56 39.02 109.03 36.38 72.60
+RADD- _λ_ -DCE 51.70 39.98 **107.85** 37.98 72.99
+RADD-AO 50.27 **38.26** 110.38 **35.90** 74.28
+
+
+Table 2: **Zero-shot** **language** **modeling** **perplexity** **(** _↓_ **)** **on** **five** **datasets** **using** _**medium**_ **models.**
+"SEDD-Unscale" and "SEDD-Scale" refer to the unscaled and scaled versions of the absorbing
+models, respectively. All SEDD and RADD models are trained for **400k** iterations.
+
+
+Method LAMBADA WikiText2 PTB WikiText103 1BW
+
+
+GPT-2 **35.66** 31.80 123.14 31.39 **55.72**
+
+
+SEDD-Unscale 44.60 34.85 93.26 32.97 67.91
+SEDD-Scale 42.77 31.04 87.12 29.98 61.19
+
+
+RADD-DSE 42.30 **29.17** **75.16** **28.03** 57.45
+RADD- _t_ -DCE 43.24 30.19 78.77 29.36 57.95
+RADD- _λ_ -DCE 44.10 30.60 82.08 29.29 60.32
+RADD-AO 41.96 29.96 79.06 28.51 57.07
+
+
+equivalence of their objectives on expectation. Overall, all RADD losses outperform SEDD on
+average across the five datasets, validating our analysis in Sections 3.1 and 3.3.
+
+
+5 RELATED WORK
+
+
+**Continouous-state diffusion models for text generation.** Several works have been proposed to
+apply continuous diffusion to text (Li et al., 2022; Dieleman et al., 2022; Chen et al., 2023; Graves
+et al., 2024). Li et al. (2022) use an embedding layer to map discrete tokens to a latent space
+and learn a continuous-state diffusion on it. Bit Diffusion (Chen et al., 2023) learns a continuous
+diffusion model to generate binary bits of discrete tokens. However, transforming between these
+continuous representations and discrete tokens by thresholding may lose information. Bayesian
+Flow Network (Graves et al., 2024) achieves competitive log-likelihood on character-level language
+modeling tasks and is proven equivalent to continuous stochastic differential equations trained by
+denoising score matching (Xue et al., 2024). Such models underperform auto-regressive models on
+standard text generation tasks.
+
+
+**Discrete-state** **diffusion** **models** **for** **text** **generation.** Several discrete-state diffusion models
+have been proposed (Sohl-Dickstein et al., 2015; Hoogeboom et al., 2021; Austin et al., 2021).
+D3PM (Austin et al., 2021) proposed a diffusion framework based on any probability transition
+matrix and trained with a lower bound of log-likelihood. DiffusionBERT (He et al., 2022) utilizes a
+pre-trained BERT (Devlin et al., 2019b) as an initialization of diffusion. Furthermore, Campbell et al.
+
+
+9
+
+
+(2022) generalizes the framework to continuous time by introducing a rate matrix. It is difficult to
+apply the score matching in such models because the gradient of the data distribution is undefined.
+Several works try to generalize the score matching on discrete data (Lou et al., 2024; Meng et al.,
+2023; Campbell et al., 2022; Sun et al., 2023b; Campbell et al., 2024). Meng et al. (2023) introduce
+the concrete score and the denoising concrete score matching loss. Furthermore, SEDD bridges the
+discrete state diffusion and the concrete score by introducing a denoising score entropy loss (Lou
+et al., 2024). By incorporating an absorbing process, SEDD achieves competitive performance
+with the auto-regressive models, especially, GPT-2. Motivated by the success of absorbing discrete
+diffusion, RADD is specifically designed for this class of models. Due to fundamental differences in
+score formulations, it can not directly apply to other models like multinomial diffusion. Campbell
+et al. (2024) proposed discrete flow models. Chen et al. (2024) proposed a discrete non-Markov
+diffusion model to accelerate sampling, which has some connections to our cache-based acceleration
+in Section 3.2. A detailed comparison can be found in Appendix F.
+
+
+**Concurrent** **works** We mention that Shi et al. (2024) and Sahoo et al. (2024) independently
+conducted related studies on absorbing discrete diffusion. We provide a detailed discussion here.
+
+
+Shi et al. (2024) derived a weighted integral of cross-entropy loss in their Eq.(5) similar to our
+_t_ -DCE loss in Eq. (3.5). Besides, their Proposition 1, which connects the score parameterization
+and the mean parameterization [2], also resembles our Theorem 1. In comparison, we simplified the
+conditional expectation term (related to _t_ ) in Proposition 1 (Shi et al., 2024) to a time-independent
+conditional probability at time zero. Motivated by the finding, we proposed a simpler parameterization
+that enables fast sampling. It is worth noting that the hyperparameters they selected significantly
+contribute to the model’s performance, which also applies to our RADD models (see Appendix J.2
+for details). In addition, Shi et al. (2024) proposed a generalized masked diffusion model allowing
+state-dependent masking schedules.
+
+
+Sahoo et al. (2024) derive the same cross-entropy losses with Shi et al. (2024). Despite lacking a
+theoretical foundation, they conducted time-conditioning ablation which shows that time-conditioning
+has minimal impact on perplexity. Notably, their method for removing time conditioning retained
+the same network structure (e.g., keeping adaptive layer normalization) while setting the time input
+to zero uniformly. In contrast, our approach removes the network structure related to time inputs
+entirely, eliminating the need for time input and thereby simplifying the network design. They also
+proposed a caching strategy to accelerate sampling. While this coincides with our work in Section 3.2,
+we present a complete theoretical analysis of E-NFEs to quantify the acceleration efficiency.
+
+
+**Our unique contribution lies in the decomposition of the concrete score and time-independent**
+**parameterization**, serveing as the foundation for subsequent contributions in Sections 3.2 and 3.3.
+
+
+6 CONCLUSION
+
+
+We introduce RADD, a dedicated discrete diffusion model that characterizes the time-independent
+conditional probabilities, built upon a new factorization form of the concrete score. RADD is more
+efficient by reducing the NFEs with a cache strategy while maintaining comparable performance to
+strong baselines. Additionally, we demonstrated the unification of training objectives for absorbing
+discrete diffusion and AO-ARMs. On five zero-shot language modeling benchmarks, our RADD
+models achieve state-of-the-art performance at the GPT-2 scale.
+
+
+**Limitaition.** Our model has been trained and evaluated primarily on the GPT-2 scale. For broader
+applicability, it is essential to explore the effects of scaling on the performance (Hoffmann et al.,
+2022), which is left as future work. The success of diffusion transformers on images (Bao et al.,
+2023a; Peebles & Xie, 2023a; Bao et al., 2023b) and videos (Bao et al., 2024) suggests that diffusion
+models can be scaled up by incorporating transformers.
+
+
+Another limitation is that our model can only generate full-length outputs, unlike auto-regressive
+models that can produce variable-length outputs. This restricts the flexibility of our model in certain
+applications. We leave the investigation on this issue as future work.
+
+
+2Our conclusions are based on score parameterization but can be extended to mean prediction parameterization
+(please see Appendix E).
+
+
+10
+
+
+ACKNOWLEDGMENTS
+
+
+This work was supported by the National Natural Science Foundation of China (No. 92470118); the
+Beijing Nova Program (No. 20220484044); Beijing Natural Science Foundation (No. L247030).
+
+
+We thank Aaron Lou for his prompt and detailed responses to our inquiries, which greatly assisted
+our research. We also thank Zebin You for his support in setting up the coding environment.
+
+
+**Ethics statement.** For the current theoretical and experimental scope of this paper, we have not
+found any direct social impacts. However, considering future developments, the paper potentially
+contributes to the next-generation large language models. In this context, this work could significantly
+reduce the inference cost of language models but may also lead to hallucinations, amplify biases and
+discrimination in the data, and pose risks of misuse. As with other generative models, addressing
+these issues requires further advancements in the field.
+
+
+**Reproducibility** **statement** We have open-sourced our code in [https://github.com/](https://github.com/ML-GSAI/RADD)
+[ML-GSAI/RADD.](https://github.com/ML-GSAI/RADD) For detailed instructions on environment setup and running scripts, please refer
+to the README.md file. Comprehensive explanations and proofs of our theoretical claims can be
+found in Appendices B and C.
+
+
+REFERENCES
+
+
+Josh Achiam, Steven Adler, Sandhini Agarwal, Lama Ahmad, Ilge Akkaya, Florencia Leoni Aleman,
+Diogo Almeida, Janko Altenschmidt, Sam Altman, Shyamal Anadkat, et al. Gpt-4 technical report.
+_arXiv preprint arXiv:2303.08774_, 2023.
+
+
+William J Anderson. _Continuous-time Markov chains:_ _An applications-oriented approach_ . Springer
+Science & Business Media, 2012.
+
+
+Rohan Anil, Andrew M Dai, Orhan Firat, Melvin Johnson, Dmitry Lepikhin, Alexandre Passos,
+Siamak Shakeri, Emanuel Taropa, Paige Bailey, Zhifeng Chen, et al. Palm 2 technical report. _arXiv_
+_preprint arXiv:2305.10403_, 2023.
+
+
+Jacob Austin, Daniel D. Johnson, Jonathan Ho, Daniel Tarlow, and Rianne van den Berg. Structured
+denoising diffusion models in discrete state-spaces. In _Advances in Neural Information Processing_
+_Systems_, 2021.
+
+
+Fan Bao, Chongxuan Li, Jun Zhu, and Bo Zhang. Analytic-DPM: An analytic estimate of the optimal
+reverse variance in diffusion probabilistic models. In _International_ _Conference_ _on_ _Learning_
+_Representations_, 2022.
+
+
+Fan Bao, Shen Nie, Kaiwen Xue, Yue Cao, Chongxuan Li, Hang Su, and Jun Zhu. All are worth
+words: A vit backbone for diffusion models. In _Proceedings of the IEEE/CVF Conference on_
+_Computer Vision and Pattern Recognition_, pp. 22669–22679, 2023a.
+
+
+Fan Bao, Shen Nie, Kaiwen Xue, Chongxuan Li, Shiliang Pu, Yaole Wang, Gang Yue, Yue Cao,
+Hang Su, and Jun Zhu. One transformer fits all distributions in multi-modal diffusion at scale. In
+_International Conference on Machine Learning_, 2023b.
+
+
+Fan Bao, Chendong Xiang, Gang Yue, Guande He, Hongzhou Zhu, Kaiwen Zheng, Min Zhao,
+Shilong Liu, Yaole Wang, and Jun Zhu. Vidu: a highly consistent, dynamic and skilled text-tovideo generator with diffusion models. _arXiv preprint arXiv:2405.04233_, 2024.
+
+
+Lukas Berglund, Meg Tong, Max Kaufmann, Mikita Balesni, Asa Cooper Stickland, Tomasz Korbak,
+and Owain Evans. The reversal curse: Llms trained on" a is b" fail to learn" b is a". _arXiv preprint_
+_arXiv:2309.12288_, 2023.
+
+
+Tom Brown, Benjamin Mann, Nick Ryder, Melanie Subbiah, Jared D Kaplan, Prafulla Dhariwal,
+Arvind Neelakantan, Pranav Shyam, Girish Sastry, Amanda Askell, et al. Language models are
+few-shot learners. _Advances in neural information processing systems_, 33:1877–1901, 2020.
+
+
+Andrew Campbell, Joe Benton, Valentin De Bortoli, Tom Rainforth, George Deligiannidis, and
+A. Doucet. A continuous time framework for discrete denoising models. In _Advances in Neural_
+_Information Processing Systems_, 2022.
+
+
+11
+
+
+Andrew Campbell, Jason Yim, Regina Barzilay, Tom Rainforth, and Tommi Jaakkola. Generative
+flows on discrete state-spaces: Enabling multimodal flows with applications to protein co-design,
+2024.
+
+
+Ciprian Chelba, Tomas Mikolov, Mike Schuster, Qi Ge, T. Brants, Phillip Todd Koehn, and Tony
+Robinson. One billion word benchmark for measuring progress in statistical language modeling.
+In _Interspeech_, 2013.
+
+
+Ting Chen, Ruixiang Zhang, and Geoffrey Hinton. Analog bits: Generating discrete data using
+diffusion models with self-conditioning, 2023.
+
+
+Zixiang Chen, Huizhuo Yuan, Yongqian Li, Yiwen Kou, Junkai Zhang, and Quanquan Gu. Fast
+sampling via discrete non-markov diffusion models, 2024.
+
+
+Jacob Devlin, Ming-Wei Chang, Kenton Lee, and Kristina Toutanova. BERT: Pre-training of deep
+bidirectional transformers for language understanding. In _Proceedings of the 2019 Conference of_
+_the North American Chapter of the Association for Computational Linguistics:_ _Human Language_
+_Technologies,_ _Volume_ _1_ _(Long_ _and_ _Short_ _Papers)_ . Association for Computational Linguistics,
+2019a.
+
+
+Jacob Devlin, Ming-Wei Chang, Kenton Lee, and Kristina Toutanova. BERT: Pre-training of deep
+bidirectional transformers for language understanding. In _Proceedings of the 2019 Conference of_
+_the North American Chapter of the Association for Computational Linguistics:_ _Human Language_
+_Technologies,_ _Volume_ _1_ _(Long_ _and_ _Short_ _Papers)_ . Association for Computational Linguistics,
+2019b.
+
+
+Sander Dieleman, Laurent Sartran, Arman Roshannai, Nikolay Savinov, Yaroslav Ganin, Pierre H.
+Richemond, Arnaud Doucet, Robin Strudel, Chris Dyer, Conor Durkan, Curtis Hawthorne, Rémi
+Leblond, Will Grathwohl, and Jonas Adler. Continuous diffusion for categorical data, 2022.
+
+
+Aaron Gokaslan and Vanya Cohen. Openwebtext corpus. [http://Skylion007.github.io/](http://Skylion007.github.io/OpenWebTextCorpus)
+[OpenWebTextCorpus, 2019.](http://Skylion007.github.io/OpenWebTextCorpus)
+
+
+Alex Graves, Rupesh Kumar Srivastava, Timothy Atkinson, and Faustino Gomez. Bayesian flow
+networks, 2024.
+
+
+Ishaan Gulrajani and Tatsunori Hashimoto. Likelihood-based diffusion language models. In _Advances_
+_in Neural Information Processing Systems_, 2023.
+
+
+Zhengfu He, Tianxiang Sun, Kuanning Wang, Xuanjing Huang, and Xipeng Qiu. Diffusionbert: Improving generative masked language models with diffusion models. _arXiv_ _preprint_
+_arXiv:2211.15029_, 2022.
+
+
+Jonathan Ho, Ajay Jain, and Pieter Abbeel. Denoising diffusion probabilistic models. _Advances in_
+_neural information processing systems_, 33:6840–6851, 2020.
+
+
+Jordan Hoffmann, Sebastian Borgeaud, Arthur Mensch, Elena Buchatskaya, Trevor Cai, Eliza
+Rutherford, Diego de Las Casas, Lisa Anne Hendricks, Johannes Welbl, Aidan Clark, Tom
+Hennigan, Eric Noland, Katie Millican, George van den Driessche, Bogdan Damoc, Aurelia Guy,
+Simon Osindero, Karen Simonyan, Erich Elsen, Jack W. Rae, Oriol Vinyals, and L. Sifre. Training
+compute-optimal large language models. _ArXiv_, abs/2203.15556, 2022.
+
+
+Emiel Hoogeboom, Didrik Nielsen, Priyank Jaini, Patrick Forré, and Max Welling. Argmax flows
+and multinomial diffusion: Learning categorical distributions. _Advances in Neural Information_
+_Processing Systems_, 34:12454–12465, 2021.
+
+
+Emiel Hoogeboom, Alexey A. Gritsenko, Jasmijn Bastings, Ben Poole, Rianne van den Berg, and
+Tim Salimans. Autoregressive diffusion models. In _10th International Conference on Learning_
+_Representations_, 2022.
+
+
+Frank Kelly. Reversibility and stochastic networks / f.p. kelly. _SERBIULA (sistema Librum 2.0)_, 76,
+06 1981. doi: 10.2307/2287860.
+
+
+12
+
+
+Diederik Kingma, Tim Salimans, Ben Poole, and Jonathan Ho. Variational diffusion models. In
+M. Ranzato, A. Beygelzimer, Y. Dauphin, P.S. Liang, and J. Wortman Vaughan (eds.), _Advances in_
+_Neural Information Processing Systems_, volume 34, pp. 21696–21707. Curran Associates, Inc.,
+2021.
+
+
+Xiang Lisa Li, John Thickstun, Ishaan Gulrajani, Percy Liang, and Tatsunori B. Hashimoto. Diffusionlm improves controllable text generation, 2022.
+
+
+Aaron Lou, Chenlin Meng, and Stefano Ermon. Discrete diffusion modeling by estimating the ratios
+of the data distribution, 2024.
+
+
+Cheng Lu, Yuhao Zhou, Fan Bao, Jianfei Chen, Chongxuan Li, and Jun Zhu. Dpm-solver: A fast
+ode solver for diffusion probabilistic model sampling in around 10 steps. _Advances in Neural_
+_Information Processing Systems_, 35:5775–5787, 2022a.
+
+
+Cheng Lu, Yuhao Zhou, Fan Bao, Jianfei Chen, Chongxuan Li, and Jun Zhu. Dpm-solver++: Fast
+solver for guided sampling of diffusion probabilistic models. _arXiv preprint arXiv:2211.01095_,
+2022b.
+
+
+Ang Lv, Kaiyi Zhang, Shufang Xie, Quan Tu, Yuhan Chen, Ji-Rong Wen, and Rui Yan. Are we falling
+in a middle-intelligence trap? an analysis and mitigation of the reversal curse. _arXiv_ _preprint_
+_arXiv:2311.07468_, 2023.
+
+
+Mitchell P. Marcus, Beatrice Santorini, and Mary Ann Marcinkiewicz. Building a large annotated
+corpus of english: The penn treebank. _Comput. Linguistics_, 19:313–330, 1993.
+
+
+Chenlin Meng, Kristy Choi, Jiaming Song, and Stefano Ermon. Concrete score matching: Generalized
+score matching for discrete data, 2023.
+
+
+Stephen Merity, Caiming Xiong, James Bradbury, and Richard Socher. Pointer sentinel mixture
+models. In _International Conference on Learning Representations_, 2016.
+
+
+OpenAI. ChatGPT: Optimizing Language Models for Dialogue. _OpenAI blog_, November 2022. URL
+[https://openai.com/blog/chatgpt/.](https://openai.com/blog/chatgpt/)
+
+
+Denis Paperno, Germán Kruszewski, Angeliki Lazaridou, Ngoc Quan Pham, Raffaella Bernardi,
+Sandro Pezzelle, Marco Baroni, Gemma Boleda, and Raquel Fernandez. The LAMBADA dataset:
+Word prediction requiring a broad discourse context. In _Proceedings of the 54th Annual Meeting_
+_of_ _the_ _Association_ _for_ _Computational_ _Linguistics_ _(Volume_ _1:_ _Long_ _Papers)_, pp. 1525–1534,
+Berlin, Germany, August 2016. Association for Computational Linguistics. [URL http://www.](http://www.aclweb.org/anthology/P16-1144)
+[aclweb.org/anthology/P16-1144.](http://www.aclweb.org/anthology/P16-1144)
+
+
+William Peebles and Saining Xie. Scalable diffusion models with transformers. In _Proceedings of_
+_the IEEE/CVF International Conference on Computer Vision_, pp. 4195–4205, 2023a.
+
+
+William S. Peebles and Saining Xie. Scalable diffusion models with transformers. In _International_
+_Conference on Computer Vision_, 2023b.
+
+
+Alec Radford, Karthik Narasimhan, Tim Salimans, Ilya Sutskever, et al. Improving language
+understanding by generative pre-training. _OpenAI blog_, 2018.
+
+
+Alec Radford, Jeffrey Wu, Rewon Child, David Luan, Dario Amodei, Ilya Sutskever, et al. Language
+models are unsupervised multitask learners. _OpenAI blog_, 1(8):9, 2019a.
+
+
+Alec Radford, Jeffrey Wu, Rewon Child, David Luan, Dario Amodei, Ilya Sutskever, et al. Language
+models are unsupervised multitask learners. _OpenAI blog_, 1(8):9, 2019b.
+
+
+Subham Sekhar Sahoo, Marianne Arriola, Yair Schiff, Aaron Gokaslan, Edgar Marroquin, Justin T
+Chiu, Alexander Rush, and Volodymyr Kuleshov. Simple and effective masked diffusion language
+models, 2024.
+
+
+Jiaxin Shi, Kehang Han, Zhe Wang, Arnaud Doucet, and Michalis K. Titsias. Simplified and
+generalized masked diffusion for discrete data, 2024.
+
+
+13
+
+
+Andy Shih, Dorsa Sadigh, and Stefano Ermon. Training and inference on any-order autoregressive
+models the right way. In _Proceedings of the 31th International Conference on Machine Learning_,
+2022.
+
+
+Jascha Sohl-Dickstein, Eric Weiss, Niru Maheswaranathan, and Surya Ganguli. Deep unsupervised
+learning using nonequilibrium thermodynamics. In _International conference on machine learning_,
+pp. 2256–2265. PMLR, 2015.
+
+
+Jiaming Song, Chenlin Meng, and Stefano Ermon. Denoising diffusion implicit models. In _Interna-_
+_tional Conference on Learning Representations_, 2021a.
+
+
+Yang Song, Jascha Sohl-Dickstein, Diederik P Kingma, Abhishek Kumar, Stefano Ermon, and Ben
+Poole. Score-based generative modeling through stochastic differential equations. In _International_
+_Conference on Learning Representations_, 2021b.
+
+
+Robin Strudel, Corentin Tallec, Florent Altché, Yilun Du, Yaroslav Ganin, Arthur Mensch, Will
+Grathwohl, Nikolay Savinov, Sander Dieleman, Laurent Sifre, et al. Self-conditioned embedding
+diffusion for text generation. _arXiv preprint arXiv:2211.04236_, 2022.
+
+
+Jianlin Su, Yu Lu, Shengfeng Pan, Bo Wen, and Yunfeng Liu. Roformer: Enhanced transformer with
+rotary position embedding. _Neurocomputing_, 2021.
+
+
+Haoran Sun, Lijun Yu, Bo Dai, Dale Schuurmans, and Hanjun Dai. Score-based continuous-time
+discrete diffusion models. In _The Eleventh International Conference on Learning Representations_,
+2023a.
+
+
+Haoran Sun, Lijun Yu, Bo Dai, Dale Schuurmans, and Hanjun Dai. Score-based continuous-time
+discrete diffusion models, 2023b.
+
+
+Hugo Touvron, Thibaut Lavril, Gautier Izacard, Xavier Martinet, Marie-Anne Lachaux, Timothée
+Lacroix, Baptiste Rozière, Naman Goyal, Eric Hambro, Faisal Azhar, Aurelien Rodriguez, Armand
+Joulin, Edouard Grave, and Guillaume Lample. Llama: Open and efficient foundation language
+models, 2023.
+
+
+Benigno Uria, Iain Murray, and Hugo Larochelle. A deep and tractable density estimator. In
+_Proceedings of the 31th International Conference on Machine Learning_, 2014.
+
+
+Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N Gomez, Łukasz
+Kaiser, and Illia Polosukhin. Attention is all you need. _Advances in neural information processing_
+_systems_, 30, 2017a.
+
+
+Ashish Vaswani, Noam M. Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N. Gomez,
+Lukasz Kaiser, and Illia Polosukhin. Attention is all you need. In _Neural Information Processing_
+_Systems_, 2017b.
+
+
+Kaiwen Xue, Yuhao Zhou, Shen Nie, Xu Min, Xiaolu Zhang, Jun Zhou, and Chongxuan Li. Unifying
+bayesian flow networks and diffusion models through stochastic differential equations, 2024.
+
+
+Qinsheng Zhang and Yongxin Chen. Fast sampling of diffusion models with exponential integrator.
+In _International Conference on Learning Representations_, 2023.
+
+
+Kaiwen Zheng, Yongxin Chen, Hanzi Mao, Ming-Yu Liu, Jun Zhu, and Qinsheng Zhang. Masked
+diffusion models are secretly time-agnostic masked models and exploit inaccurate categorical
+sampling, 2024. [URL https://arxiv.org/abs/2409.02908.](https://arxiv.org/abs/2409.02908)
+
+
+14
+
+
+CONTENTS
+
+
+**1** **Introduction** **1**
+
+
+**2** **Background** **2**
+
+
+2.1 Continuous time discrete diffusion model . . . . . . . . . . . . . . . . . . . . . . 3
+
+
+2.2 Any-order autoregressive models . . . . . . . . . . . . . . . . . . . . . . . . . . . 4
+
+
+**3** **Reparameterized absorbing discrete diffusion** **4**
+
+
+3.1 Reparameterizing the concrete score as conditional distributions of clean data . . . 4
+
+
+3.2 Efficient samplers to reduce NFEs by caching the output of RADD . . . . . . . . . 5
+
+
+3.3 Unifying absorbing discrete diffusion and any-order autoregressive model . . . . . 6
+
+
+**4** **Experiments** **7**
+
+
+4.1 Settings . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 8
+
+
+4.2 Efficient sampling . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 8
+
+
+4.3 Improved zero-shot perplexity on language modeling . . . . . . . . . . . . . . . . 8
+
+
+**5** **Related work** **9**
+
+
+**6** **Conclusion** **10**
+
+
+**A** **Detailed notations and definitions** **16**
+
+
+**B** **Proof of Theorem 1** **17**
+
+
+**C** **Proof of Theorem 2** **19**
+
+
+C.1 Equivalence between DSE loss and t-DCE loss . . . . . . . . . . . . . . . . . . . 20
+
+
+C.2 Equivalence between t-DCE loss and lambda-DCE loss . . . . . . . . . . . . . . . 21
+
+
+C.3 Equivalence between lambda-DCE loss and any-order autoregressive loss . . . . . 22
+
+
+**D** **Sampling methods** **23**
+
+
+D.1 Exact reverse distribution in absorbing discrete diffusion . . . . . . . . . . . . . . 23
+
+
+D.2 Tweedie _τ_ -leaping method and its simplified form in RADD . . . . . . . . . . . . 24
+
+
+D.3 Euler method and its simplified form in RADD . . . . . . . . . . . . . . . . . . . 24
+
+
+D.4 Equivalence of Tweedie _τ_ -leaping and Euler method under log-linear noise schedule 25
+
+
+D.5 Discuss on the expectation of NFEs . . . . . . . . . . . . . . . . . . . . . . . . . 25
+
+
+**E** **Discussion for mean parameterization and RADD** **27**
+
+
+**F** **Comparison with Chen et al. (2024)** **27**
+
+
+**G** **Details of AO-ARMs** **28**
+
+
+15
+
+
+**H** **Comparison to prior works concerning equivalence discussion** **29**
+
+
+**I** **Algorithms for training and sampling** **29**
+
+
+**J** **Experimental details** **31**
+
+
+J.1 Model details . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 31
+
+
+J.2 Training details . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 31
+
+
+J.3 Unconditional generation details . . . . . . . . . . . . . . . . . . . . . . . . . . . 32
+
+
+J.4 Further evaluation of generative perplexity . . . . . . . . . . . . . . . . . . . . . . 32
+
+
+J.5 Further evaluation of zero-shot perplexity . . . . . . . . . . . . . . . . . . . . . . 34
+
+
+**K** **Additional experimental results** **34**
+
+
+K.1 Additional samples . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 34
+
+
+A DETAILED NOTATIONS AND DEFINITIONS
+
+
+We introduce the notations used throughout the paper. Let lower, boldface lower and upper case
+letters represent scalers (e.g., _a_ ), vectors (e.g., _**a**_ ), and matrices (e.g., _**A**_ ), respectively. For a vector _**a**_,
+_a_ _[i]_ denotes its _i_ -th element. For a matrix _**A**_, _**A**_ ( _i, j_ ) denotes ( _i, j_ )-th element. For a vector function _**f**_,
+_**f**_ ( _**x**_ ) _i_ denotes the _i_ -th element of _**f**_ ( _**x**_ ). Constants and random variables are not distinguished in the
+notation if there is no confusion. We represent the distributions of the forward and reverse processes
+by _p_ and _qθ_ respectively. The transition probability from time _s_ to time _t_ is denoted by _pt|s_ ( _·|·_ ), and
+the probability at time _t_ is denoted by _pt_ ( _·_ ). Complete notations and definitions are listed below:
+
+
+    - _x_, _x_ ˆ: Scalar variables representing states in a model.
+
+    - _X_ : A one-dimensional sample space _{_ 1 _, · · ·_ _, N_ _}_ .
+
+    - _**Q**_ _t_ : The transition rate matrix at time _t_ .
+
+    - _p_ : The probability of the forward process defined by the transition rate matrix _**Q**_ _t_ .
+
+    - _qθ_ : The probability of the reverse process defined by model _**c**_ _θ_ .
+
+    - _pt|s_ (ˆ _x|x_ ): The transition probability from state _x_ to state _x_ ˆ from time _s_ to time _t_ .
+
+
+    - _pt_ ( _x_ ): The probability of _x_ at time _t_ .
+
+    - _**P**_ _t|s_ : The transition probability matrix from time _s_ to time _t_ .
+
+
+    - _σ_ ( _t_ ): The noise schedule function.
+
+    - _**Q**_ [˜] _t_ : The reverse transition rate matrix at time _t_ .
+
+    - _**s**_ _θ_ ( _**x**_ _t, t_ ) _**x**_ ˆ _t_ : The corresponding element of _**s**_ _θ_ ( _**x**_ _t, t_ ), which approximates _[p]_ _p_ _[t]_ _t_ [(ˆ] ( _**[x]**_ _**x**_ _[t]_ ) [)] [.]
+
+
+    - [ **M** ]: A special mask token in the absorbing process.
+
+    - _X_ _[d]_ : A multi-dimensional sample space _{_ 1 _, · · ·_ _, N_ _}_ _[d]_ .
+
+    - _**x**_ _t_ : A multi-dimensional vector.
+
+    - _x_ _[i]_ _t_ [:] [The] _[ i]_ [-th element of] _**[ x]**_ _[t]_ [.]
+
+    - _p_ _[i]_ _s|t_ [(] _[·|]_ _**[x]**_ _[t]_ [)][:] [The probability on dimension] _[ i]_ [ from time] _[ s]_ [ to time] _[ t]_ [ conditioned on full vector]
+_**x**_ _t_ .
+
+    - _p_ [tweedie] _s|t_ ( _·|·_ ): The transition probability from time _s_ to time _t_ under Tweedie _τ_ -leaping
+method.
+
+    - _p_ [euler] _s|t_ [(] _[·|·]_ [)][:] [The transition probability from time] _[ s]_ [ to time] _[ t]_ [ under the Euler method.]
+
+    - _**Q**_ [tok] _t_ [:] [Transition rate matrix for each dimension of] _**[ x]**_ _[t]_ [.]
+
+    - _**x**_ [UM] : vector consists of all unmasked tokens of _**x**_ .
+
+
+16
+
+
+- _**x**_ _[a]_ [:] _[b]_ : The elements of _**x**_ with indices ranging from _a_ to _b_ .
+
+
+    - _**c**_ _θ_ ( _**x**_ _t_ ): A network that characterizes the time-independent conditional probabilities in
+reparameterized absorbing discrete diffusion (RADD).
+
+
+    - _d_ : Total sequence length or dimension of _**x**_ .
+
+
+    - _l_ : Generating sequence length.
+
+
+    - _π_ : one permutation, _π_ ( _l_ ) denotes the _l_ -th element of permutation _π_, _π_ ( _<_ _l_ ) denotes the
+elements of permutation _π_ with indices less than _l_ .
+
+
+    - _U_ ( _·_ ): Uniform distribution.
+
+
+    - _pλ_ ( _·|_ _**x**_ 0): The joint distribution induced by masking each dimension in _**x**_ 0 independently
+with a probability _λ_ .
+
+
+    - Cat: Categorical distribution.
+
+
+    - NFEs: Number of function evaluations.
+
+
+    - E-NFEs: Expected number of function evaluations.
+
+
+B PROOF OF THEOREM 1
+
+
+In this section, we provide a detailed proof of Theorem 1, which is carried out in three key steps. The
+core idea of the proof involves leveraging the properties of a continuous-time Markov chain with an
+absorbing state, where the forward diffusion process is independent across different dimensions. This
+independence simplifies the analysis of both the conditional and joint distributions.
+
+
+First, we derive the analytic form of the conditional distribution, as stated in Lemma 1. This can
+be derived directly from Eq. (2.3), but for a better understanding, we provide a more intuitive proof
+for _**Q**_ _t_ = _σ_ ( _t_ ) _**Q**_ [absorb] . Second, we extend this analysis to multiple dimensions to obtain the joint
+distribution, as formalized in Proposition 1. Finally, by simply dividing the joint distributions derived
+in the second step, we decouple the concrete score, thereby completing the proof of Theorem 1.
+
+
+**Lemma 1.** _(Analytic conditional distribution in absorbing diffusion)_ _Suppose {Xt} is a continuous_
+_time Markov chain with transition rate matrix_ _**Q**_ _t_ = _σ_ ( _t_ ) _**Q**_ _[absorb]_ _, given the value x_ 0 _at time zero, the_
+_conditional distribution pt|_ 0( _xt|x_ 0) _has the following analytic form:_
+
+
+_pt|_ 0( _xt|x_ 0) =
+
+
+
+
+
+
+_e_ _[−][σ]_ [¯][(] _[t]_ [)] _,_ _xt_ = _x_ 0 _,_
+1 _−_ _e_ _[−][σ]_ [¯][(] _[t]_ [)] _,_ _xt_ = [ _**M**_ ] _,_ (B.1)
+0 _,_ _xt_ = [ _**M**_ ] _and xt_ = _x_ 0 _._
+
+
+
+
+
+_Proof._ Given the initial value _x_ 0 _∈X_ = _{_ 1 _, · · ·_ _, N_ _}_, we have
+
+
+_xt_ =                  - _x_ 0 _,_ _t < Th,_ (B.2)
+
+[ **M** ] _,_ _t ≥_ _Th._
+
+
+Here, _Th_ represents the holding time before _x_ 0 transitions to the absorbing state [ **M** ].
+
+Based on the definition of the _**Q**_ _t_ in Eq. (2.2) and _**Q**_ [absorb], the probability of _x_ 0 remaining the same
+after a small time increment ∆ _t_ is
+
+
+_pt_ +∆ _t|t_ ( _x_ 0 _|x_ 0) = 1 + _σ_ ( _t_ ) _**Q**_ [absorb] ( _x_ 0 _, x_ 0)∆ _t_ + _o_ (∆ _t_ ) _._ (B.3)
+
+
+Partitioning the interval [0 _, t_ ] into _{sk}_ _[n]_ _k_ =0 [and utilizing the memoryless property of continuous-time]
+Markov chains, we can express the probability of _x_ 0 remaining the same from time 0 to _t_ as a product
+
+
+17
+
+
+of probabilities over these small intervals. This gives us:
+
+
+_pt|_ 0( _x_ 0 _|x_ 0) =
+
+
+=
+
+
+_n_
+
+- _psk|sk−_ 1( _x_ 0 _|x_ 0) (B.4)
+
+
+_k_ =1
+
+
+_n_
+
+
+_k_ =1
+
+
+�1 + _σ_ ( _tk−_ 1) _**Q**_ [absorb] ( _x_ 0 _, x_ 0)( _sk −_ _sk−_ 1) + _o_ ( _sk −_ _sk−_ 1)� (B.5)
+
+
+= exp
+
+
+= exp
+
+
+- _n_ 
+ - ln �1 + _σ_ ( _tk−_ 1) _**Q**_ [absorb] ( _x_ 0 _, x_ 0)( _sk −_ _sk−_ 1) + _o_ ( _sk −_ _sk−_ 1)�
+
+
+_k_ =1
+
+
+- _σ_ ( _tk−_ 1) _**Q**_ [absorb] ( _x_ 0 _, x_ 0)( _sk −_ _sk−_ 1) + _o_ ( _sk −_ _sk−_ 1)
+
+
+_k_ =1
+
+
+(B.6)
+
+
+- _n_
+
+ 
+
+
+_._ (B.7)
+
+
+Let max( _sk −_ _sk−_ 1) _→_ 0, the Riemann sum in Eq. (B.7) equals the following continuous integral:
+
+�� _t_          _pt|_ 0( _x_ 0 _|x_ 0) = exp _σ_ ( _s_ ) _**Q**_ [absorb] ( _x_ 0 _, x_ 0) _ds_ = exp       - _**Q**_ [absorb] ( _x_ 0 _, x_ 0)¯ _σ_ ( _t_ )� _._ (B.8)
+
+0
+
+By Eq. (2.4), _**Q**_ [absorb] ( _x_ 0 _, x_ 0) = _−_ 1, we have
+
+_pt|_ 0( _x_ 0 _|x_ 0) = _P_ ( _Th_ _> t_ ) = _e_ _[−][σ]_ [¯][(] _[t]_ [)] (B.9)
+
+_pt|_ 0([ **M** ] _|x_ 0) = _P_ ( _Th_ _≤_ _t_ ) = 1 _−_ _e_ _[−][σ]_ [¯][(] _[t]_ [)] (B.10)
+
+_pt|_ 0( _k|x_ 0) = 0 if _k_ = [ **M** ] and _k_ = _x_ 0 _._ (B.11)
+
+
+Similarly, given value _xs_ at time _s < t_, the conditional distribution can be expressed as
+
+
+_pt|s_ ( _xt|xs_ ) =
+
+
+
+
+
+
+_e_ _[−]_ [(¯] _[σ]_ [(] _[t]_ [)] _[−][σ]_ [¯][(] _[s]_ [))] _,_ _xt_ = _xs,_
+1 _−_ _e_ _[−]_ [(¯] _[σ]_ [(] _[t]_ [)] _[−][σ]_ [¯][(] _[s]_ [))] _,_ _xt_ = [ **M** ] _,_ (B.12)
+0 _,_ _xt_ = [ **M** ] and _xt_ = _xs._
+
+
+
+
+
+**Proposition 1.** _(Analytic joint distribution in absorbing diffusion)_
+
+
+_Suppose {Xt} is a continuous time Markov chain with transition rate matrix_ _**Q**_ _t_ = _σ_ ( _t_ ) _**Q**_ _[absorb]_ _._ _For_
+_**x**_ _t_ = _x_ [1] _t_ _[· · ·][ x]_ _t_ _[d]_ _[with][ d]_ [1] _[components as]_ [ [] _**[M]**_ []] _[ and][ d]_ [2] [=] _[ d][ −]_ _[d]_ [1] _[components as unmasked tokens,][ p][t]_ [(] _**[x]**_ _[t]_ [)]
+_can be expressed as_
+_pt_ ( _**x**_ _t_ ) = [1 _−_ _e_ _[−][σ]_ [¯][(] _[t]_ [)] ] _[d]_ [1] [ _e_ _[−][σ]_ [¯][(] _[t]_ [)] ] _[d]_ [2] _p_ 0( _**x**_ _[UM]_ _t_ ) _,_ (B.13)
+_where_ _**x**_ _[UM]_ _t_ _is the vector consists of all unmasked tokens of_ _**x**_ _t._
+
+
+Proposition 1 shows that the joint distribution _pt_ ( _**x**_ _t_ ) can be expressed as the multiplication of two
+terms. One is an analytic term only depending on time, the other is a _d_ 2 dimensions joint distribution
+of clean data _p_ 0( _**x**_ [UM] _t_ ) independent of time.
+
+
+_Proof._ Without loss of generality, let’s assume that the preceding _d_ 1 terms of _**x**_ are all [ **M** ], and the
+remaining _d_ 2 terms are unmasked tokens. That is, _**x**_ _t_ = [ **M** ] _· · ·_ [ **M** ] _x_ _[d]_ _t_ [1][+1] _· · · x_ _[d]_ _t_ [, and here] _[ x][k]_ [is an]
+unmasked token in _X_ .
+
+
+Using the law of total probability and Lemma 1, along with the assumption of independence
+between different dimensions of the diffusion process, we can express the joint distribution
+_pt_ ([ **M** ] _· · ·_ [ **M** ] _x_ _[d]_ _t_ [1][+1] _· · · x_ _[d]_ _t_ [)][ as a sum over all possible initial states] _**[ x]**_ [0] _[∈X][ d]_ [:]
+
+
+_pt_ ([ **M** ] _· · ·_ [ **M** ] _x_ _[d]_ _t_ [1][+1] _· · · x_ _[d]_ _t_ [) =] - _pt|_ 0([ **M** ] _· · ·_ [ **M** ] _x_ _[d]_ _t_ [1][+1] _· · · x_ _[d]_ _t_ _[|]_ _**[x]**_ [0][)] _[p]_ [0][(] _**[x]**_ [0][)]
+
+_**x**_ 0 _∈X_ _[d]_
+
+=        - _pt|_ 0([ **M** ] _· · ·_ [ **M** ] _x_ _[d]_ _t_ [1][+1] _· · · x_ _[d]_ _t_ _[|][x]_ 0 [1] _[· · ·][ x]_ 0 _[d]_ [)] _[p]_ [0][(] _[x]_ [1] 0 _[· · ·][ x]_ 0 _[d]_ [)]
+
+_x_ [1] 0 _[∈X]_ _[,][···][,x][d]_ 0 _[∈X]_
+
+
+= 
+
+_x_ [1] 0 _[∈X]_ _[,][···][,x][d]_ 0 _[∈X]_
+
+
+_d_ 1
+
+- _p_ _[k]_ _t|_ 0 [([] **[M]** []] _[|][x]_ 0 _[k]_ [)]
+
+_k_ =1
+
+
+18
+
+
+_d_
+
+ - _p_ _[k]_ _t|_ 0 [(] _[x]_ _t_ _[k][|][x]_ 0 _[k]_ [)] _[p]_ [0][(] _[x]_ [1] 0 _[· · ·][ x]_ 0 _[d]_ [)] _[.]_
+
+_k_ = _d_ 1+1
+
+
+Substituting the analytic forms of _p_ _[k]_ _t|_ 0 [([] **[M]** []] _[|][x]_ 0 _[k]_ [)][ and] _[ p][k]_ _t|_ 0 [(] _[x]_ _t_ _[k][|][x]_ 0 _[k]_ [)][ from Lemma 1, above equations can]
+be further simplified as follows:
+
+
+_d_
+
+ - _p_ _[k]_ _t|_ 0 [(] _[x]_ _t_ _[k][|][x]_ 0 _[k]_ [)] _[p]_ [0][(] _[x]_ [1] 0 _[· · ·][ x]_ 0 _[d]_ [)]
+
+_k_ = _d_ 1+1
+
+
+ 
+
+_x_ [1] 0 _[∈X]_ _[,][···][,x][d]_ 0 _[∈X]_
+
+
+= 
+
+
+_d_ 1
+
+- _p_ _[k]_ _t|_ 0 [([] **[M]** []] _[|][x]_ 0 _[k]_ [)]
+
+_k_ =1
+
+
+_x_ [1] 0 _[∈X]_ _[,][···][,x][d]_ 0 [1] _[∈X]_
+
+
+_d_ 1
+
+- _p_ _[k]_ _t|_ 0 [([] **[M]** []] _[|][x]_ 0 _[k]_ [)[] _[e][−][σ]_ [¯][(] _[t]_ [)][]] _[d]_ [2] _[p]_ [0][(] _[x]_ 0 [1] _[· · ·][ x]_ 0 _[d]_ [1] _[x]_ _t_ _[d]_ [1][+1] _· · · x_ _[d]_ _t_ [)]
+
+_k_ =1
+
+
+=    - [1 _−_ _e_ _[−][σ]_ [¯][(] _[t]_ [)] ] _[d]_ [1] [ _e_ _[−][σ]_ [¯][(] _[t]_ [)] ] _[d]_ [2] _p_ 0( _x_ [1] 0 _[· · ·][ x]_ 0 _[d]_ [1] _[x]_ _t_ _[d]_ [1][+1] _· · · x_ _[d]_ _t_ [)]
+
+_x_ [1] 0 _[∈X]_ _[,][···][,x][d]_ 0 [1] _[∈X]_
+
+=[1 _−_ _e_ _[−][σ]_ [¯][(] _[t]_ [)] ] _[d]_ [1] [ _e_ _[−][σ]_ [¯][(] _[t]_ [)] ] _[d]_ [2]      - _p_ 0( _x_ [1] 0 _[· · ·][ x]_ 0 _[d]_ [1] _[x]_ _t_ _[d]_ [1][+1] _· · · x_ _[d]_ _t_ [)]
+
+_x_ [1] 0 _[∈X]_ _[,][···][,x][d]_ 0 [1] _[∈X]_
+
+=[1 _−_ _e_ _[−][σ]_ [¯][(] _[t]_ [)] ] _[d]_ [1] [ _e_ _[−][σ]_ [¯][(] _[t]_ [)] ] _[d]_ [2] _p_ 0( _x_ _[d]_ _t_ [1][+1] _· · · x_ _[d]_ _t_ [)] _[.]_
+
+
+By noting that _p_ 0( _x_ _[d]_ _t_ [1][+1] _· · · x_ _[d]_ _t_ [) =] _[ p]_ [0][(] _**[x]**_ _t_ [UM] ), in the general case, we have
+
+
+_pt_ ( _**x**_ _t_ ) = [1 _−_ _e_ _[−][σ]_ [¯][(] _[t]_ [)] ] _[d]_ [1] [ _e_ _[−][σ]_ [¯][(] _[t]_ [)] ] _[d]_ [2] _p_ 0( _**x**_ [UM] _t_ ) _,_
+
+
+which demonstrates that the likelihood of the noisy data _**x**_ _t_ at time _t_ equals the likelihood of the
+unmasked part _**x**_ [UM] _t_ at time 0 multiplied by an analytic time-dependent term.
+
+
+**Theorem** **1.** _(Analytic_ _concrete_ _score_ _in_ _absorbing_ _diffusion,_ _proof_ _in_ _Appendix_ _B)_ _For_ _**x**_ _t_ =
+_x_ [1] _t_ _[. . . x]_ _t_ _[i]_ _[. . . x]_ _t_ _[d]_ _[and]_ _**[x]**_ [ˆ] _[t]_ [=] _[ x]_ [1] _t_ _[. . .]_ [ �] _[x]_ _t_ _[i]_ _[. . . x]_ _t_ _[d][, if][ x]_ _t_ _[i]_ [= [] _**[M]**_ []] _[ and]_ _[x]_ [ˆ] _[i]_ _t_ [= [] _**[M]**_ []] _[, the concrete score at time][ t][ can]_
+_be expressed as a time-independent conditional distribution at time zero multiplied by an analytic_
+_time-dependent term:_
+
+
+_pt_ - _x_ [1] _t_ _[. . .]_ [ �] _[x]_ _t_ _[i]_ _[. . . x]_ _t_ _[d]_ 
+_pt_ - _x_ [1] _t_ _[. . . x]_ _t_ _[i]_ _[. . . x]_ _t_ _[d]_ 
+- �� _concrete score_
+
+
+_e_ _[−][σ]_ [¯][(] _[t]_ [)]
+=
+
+1 _−_ _e_ _[−][σ]_ [¯][(] _[t]_ [)]
+
+ - ��  _scalar_
+
+
+_p_ 0(ˆ _x_ _[i]_ _t_ _[|]_ _**[x]**_ _t_ _[UM]_ )
+
+
+- �� _clean data_
+_distribution_
+
+
+_where_ _**x**_ _[UM]_ _t_ _is the vector consists of all unmasked tokens of_ _**x**_ _t._
+
+
+_Proof._ According to Proposition 1, if _x_ _[i]_ _t_ [= [] **[M]** []][ and] _[x]_ [ˆ] _[i]_ _t_ [= [] **[M]** []][,] _**[x]**_ [ˆ][UM] _t_ = ( _**x**_ [UM] _t_ _,_ ˆ _x_ _[i]_ _t_ [)][,]
+
+
+_pt_ (ˆ _**x**_ _t_ ) _t_ )
+_pt_ ( _**x**_ _t_ ) [=] [[1] _[ −]_ [1 _−_ _[e][−]_ _e_ _[σ]_ [¯] _[−]_ [(] _[t][σ]_ [¯][)][]][(] _[d][t]_ [)][1] ] _[−][d]_ [1][1] [ [[] _e_ _[e][−][−][σ][σ]_ [¯][¯][(][(] _[t][t]_ [)][)] ] []] _[d][d]_ [2][2][+1] _p_ 0( _[p]_ _**x**_ [0][(ˆ][UM] _t_ _**[x]**_ [UM] )
+
+_t_ _,_ ˆ _x_ _[i]_ _t_ [)]
+= [[1] _[ −]_ _[e][−][σ]_ [¯][(] _[t]_ [)][]] _[d]_ [1] _[−]_ [1][[] _[e][−][σ]_ [¯][(] _[t]_ [)][]] _[d]_ [2][+1] _[p]_ [0][(] _**[x]**_ [UM]
+
+[1 _−_ _e_ _[−][σ]_ [¯][(] _[t]_ [)] ] _[d]_ [1] [ _e_ _[−][σ]_ [¯][(] _[t]_ [)] ] _[d]_ [2] _p_ 0( _**x**_ [UM] _t_ )
+
+_e_ _[−][σ]_ [¯][(] _[t]_ [)]
+= 1 _−_ _e_ _[−][σ]_ [¯][(] _[t]_ [)] _[p]_ [0][(ˆ] _[x]_ _t_ _[i][|]_ _**[x]**_ [UM] _t_ ) _._
+
+
+C PROOF OF THEOREM 2
+
+
+**Theorem** **2.** _The_ _absorbing_ _discrete_ _diffusion_ _objective_ _of_ _Eq._ (2.6) _is_ _equivalent_ _to_ _any-order_
+_autoregressive objective of Eq._ (2.11) _when the final total noise level_ _σ_ ¯( _T_ ) _→_ + _∞._
+
+
+Here, the infinity final total noise level guarantees that all tokens will be finally masked with
+probability one (1 _−_ _e_ _[−][σ]_ [¯][(] _[T]_ [ )] ). Below we present the detailed proof in three steps.
+
+
+19
+
+
+C.1 EQUIVALENCE BETWEEN DSE LOSS AND T-DCE LOSS
+
+
+For a given noisy input _**x**_ _t_, as established in Section 3.1, _**x**_ ˆ _t_ is valid only when it contains exactly
+one more unmasked token than _**x**_ _t_ . In this case, the transition probability _**Q**_ _t_ (ˆ _**x**_ _t,_ _**x**_ _t_ ) equals _σ_ ( _t_ ).
+_e_ _[−][σ]_ [¯][(] _[t]_ [)]
+Replace _**s**_ _θ_ ( _**x**_ _t_ ) with 1 _−e_ _[−][σ]_ [¯][(] _[t]_ [)] _**[c]**_ _[θ]_ [(] _**[x]**_ _[t]_ [)][, we can express the DSE loss in the multi-dimensional case as]
+
+follows:
+
+
+     - _T_
+_L_ _[T]_ DSE [(] _**[x]**_ [0][) =] E _**x**_ _t∼pt|_ 0( _**x**_ _t|_ _**x**_ 0)
+
+0
+
+
+     - _T_
+_L_ _[T]_ DSE [(] _**[x]**_ [0][) =]
+
+
+
+
+
+ - _σ_ ( _t_ ) - _e_ _[−][σ]_ [¯][(] _[t]_ [)]
+
+1 _−_ _e_ _[−][σ]_ [¯]
+
+_x_ _[i]_ _t_ [=[] **[M]** []] _[,j]_ [=[] **[M]** []]
+
+
+ 
+
+
+1 _−_ _e_ _[−][σ]_ [¯][(] _[t]_ [)] _**[c]**_ _[θ]_ [(] _**[x]**_ _[t]_ [)[] _[i, j]_ []]
+
+
+_e_ _[−][σ]_ [¯][(] _[t]_ [)]
+
+_−_
+
+
+_e_ _[−][σ]_ [¯][(] _[t]_ [)]  -  - _e_ _[−][σ]_ [¯][(] _[t]_ [)]
+
+1 _−_ _e_ _[−][σ]_ [¯][(] _[t]_ [)] _**[c]**_ _[θ]_ [(] _**[x]**_ _[t]_ [)[] _[i, j]_ []] + _K_ 1 _−_ _e_ _[−][σ]_ [¯][(]
+
+
+_e_ _[−][σ]_ [¯][(] _[t]_ [)]  - _e_ _[−][σ]_ [¯][(] _[t]_ [)]
+
+[I][(] _[x]_ 0 _[i]_ [=] _[ j]_ [) log]
+1 _−_ _e_ _[−][σ]_ [¯][(] _[t]_ [)] 1 _−_ _e_ _[−][σ]_ [¯]
+
+
+_e_ _[−][σ]_ [¯][(] _[t]_ [)] ���
+
+1 _−_ _e_ _[−][σ]_ [¯][(] _[t]_ [)] _[I]_ [(] _[x]_ 0 _[i]_ [=] _[ j]_ [)] _dt_
+
+
+ - _T_
+= E _**x**_ _t∼pt|_ 0( _**x**_ _t|_ _**x**_ 0)
+
+0
+
+
+
+
+
+ - _σ_ ( _t_ ) - _e_ _[−][σ]_ [¯][(] _[t]_ [)]
+
+1 _−_ _e_ _[−][σ]_ [¯]
+
+_x_ _[i]_ _t_ [=[] **[M]** []] _[,j]_ [=[] **[M]** []]
+
+
+ 
+
+
+      - []
+
+_e_ _[−][σ]_ [¯][(] _[t]_ [)]
+
+1 _−_ _e_ _[−][σ]_ [¯][(] _[t]_ [)] _**[c]**_ _[θ]_ [(] _**[x]**_ _[t]_ [)[] _[i, j]_ []] 
+
+
+ _dt_
+
+
+ - _T_
++ E _**x**_ _t∼pt|_ 0( _**x**_ _t|_ _**x**_ 0)
+
+0
+
+
+
+
+
+ - _−_ _[σ]_ [(] _[t]_ [)] _[e][−][σ]_ [¯][(] _[t]_ [)]
+
+1 _−_ _e_ _[−][σ]_ [¯][(] _[t]_ [)]
+
+_x_ _[i]_ _t_ [=[] **[M]** []] _[,j]_ [=[] **[M]** []]
+
+
+      - []
+
+_e_ _[−][σ]_ [¯][(] _[t]_ [)]
+
+1 _−_ _e_ _[−][σ]_ [¯][(] _[t]_ [)] _**[c]**_ _[θ]_ [(] _**[x]**_ _[t]_ [)[] _[i, j]_ []] 
+
+
+ 
+
+
+_[σ]_ [(] _[t]_ [)] _[e][−][σ]_ [¯][(] _[t]_ [)] [I][(] _[x]_ 0 _[i]_ [=] _[ j]_ [) log] - _e_ _[−][σ]_ [¯][(] _[t]_ [)]
+
+1 _−_ _e_ _[−][σ]_ [¯][(] _[t]_ [)] 1 _−_ _e_ _[−][σ]_ [¯]
+
+
+ _dt_
+
+
+ - _T_
++ E _**x**_ _t∼pt|_ 0( _**x**_ _t|_ _**x**_ 0)
+
+0
+
+
+
+
+
+ - _σ_ ( _t_ ) _K_ - _e_ _[−][σ]_ [¯][(] _[t]_ [)]
+
+1 _−_ _e_ _[−][σ]_ [¯]
+
+_x_ _[i]_ _t_ [=[] **[M]** []] _[,j]_ [=[] **[M]** []]
+
+
+ 
+
+
+      - []
+
+_e_ _[−][σ]_ [¯][(] _[t]_ [)]
+
+1 _−_ _e_ _[−][σ]_ [¯][(] _[t]_ [)] _[I]_ [(] _[x]_ 0 _[i]_ [=] _[ j]_ [)] 
+
+
+ _dt._
+
+
+We analyze each term in the above equation separately. The first term simplifies due to the property
+
+
+_j_ =[ **M** ] _**[c]**_ _[θ]_ [(] _**[x]**_ _[t]_ [)[] _[i, j]_ [] = 1][:]
+
+
+- _T_
+
+E _**x**_ _t∼pt|_ 0( _**x**_ _t|_ _**x**_ 0)
+0
+
+
+
+
+
+_e_ _[−][σ]_ [¯][(] _[t]_ [)]
+
+[�] _σ_ ( _t_ )
+
+1 _−_ _e_ _[−][σ]_ [¯]
+
+_x_ _[i]_ _t_ [=[] **[M]** []]
+
+
+ [�]
+
+
+1 _−_ _e_ _[−][σ]_ [¯][(] _[t]_ [)]
+
+
+
+
+
+ _dt._ (C.1)
+
+
+The third term can be simplified by substituting _K_ ( _a_ ) = _a_ log _a −_ _a_ and using 0 log 0 = 0:
+
+
+- _T_
+
+E _**x**_ _t∼pt|_ 0( _**x**_ _t|_ _**x**_ 0)
+0
+
+
+
+
+
+_e_ _[−][σ]_ [¯][(] _[t]_ [)]
+
+[�] _σ_ ( _t_ )
+
+1 _−_ _e_ _[−][σ]_ [¯]
+
+_x_ _[i]_ _t_ [=[] **[M]** []]
+
+
+ _dt._ (C.2)
+
+
+ [�]
+
+
+1 _−_ _e_ _[−][σ]_ [¯][(] _[t]_ [)]
+
+
+- _e_ _[−][σ]_ [¯][(] _[t]_ [)]
+log
+
+
+    - []
+
+_e_ _[−][σ]_ [¯][(] _[t]_ [)]
+
+1 _−_ _e_ _[−][σ]_ [¯][(] _[t]_ [)] _[−]_ [1] 
+
+
+Combining the first and third terms:
+
+
+      - _T_
+
+E _**x**_ _t∼pt|_ 0( _**x**_ _t|_ _**x**_ 0)
+0
+
+
+_e_ _[−][σ]_ [¯][(] _[t]_ [)]
+
+[�] _σ_ ( _t_ )
+
+1 _−_ _e_ _[−][σ]_ [¯]
+
+_x_ _[i]_ _t_ [=[] **[M]** []]
+
+
+
+
+
+- []
+
+ _dt_ (C.3)
+
+
+ [�]
+
+
+1 _−_ _e_ _[−][σ]_ [¯][(] _[t]_ [)]
+
+
+- _e_ _[−][σ]_ [¯][(] _[t]_ [)]
+log
+
+1 _−_ _e_ _[−][σ]_ [¯][(] _[t]_ [)]
+
+
+ - _T_
+=
+
+
+1 _−_ _e_ _[−][σ]_ [¯][(] _[t]_ [)]
+
+
+_T_ _e_ _[−][σ]_ [¯][(] _[t]_ [)]
+
+_d_ (1 _−_ _e_ _[−][σ]_ [¯][(] _[t]_ [)] ) _σ_ ( _t_ )
+0 1 _−_ _e_ _[−][σ]_ [¯]
+
+
+- _e_ _[−][σ]_ [¯][(] _[t]_ [)]
+log
+
+1 _−_ _e_ _[−][σ]_ [¯][(] _[t]_ [)]
+
+
+_dt_ (C.4)
+
+
+  - _T_
+= _d_
+
+
+1 _−_ _e_ _[−][σ]_ [¯][(] _[t]_ [)] _[dt.]_ (C.5)
+
+
+_T_ _e_ _[−][σ]_ [¯][(] _[t]_ [)]
+
+_σ_ ( _t_ ) _e_ _[−][σ]_ [¯][(] _[t]_ [)] log
+0 1 _−_ _e_ _[−][σ]_ [¯][(]
+
+
+Introducing a new variable _λ_ ( _t_ ) = 1 _−_ _e_ _[−][σ]_ [¯][(] _[t]_ [)], which represents the probability of a token being
+masked from 0 to _t_ in the forward process. As _σ_ ¯( _t_ ) = �0 _t_ _[σ]_ [(] _[τ]_ [)] _[dτ]_ [and] _[σ]_ [¯][(] _[T]_ [) =] _[ ∞]_ [, we have] _[ λ]_ [(0) = 0][,]
+_λ_ ( _T_ ) = 1 and _dλ_ = _σ_ ( _t_ ) _e_ _[−][σ]_ [¯][(] _[t]_ [)] _dt_ . Obviously, _λ_ ( _t_ ) is invertible, which allows us to perform a change
+of variables from _t_ to _λ_ and simplifies Eq. (C.5) to
+
+
+ - 1
+_d_
+
+
+_dλ_ = _−d_ ( _λ_ log _λ_ + (1 _−_ _λ_ ) log(1 _−_ _λ_ )) _|_ [1] 0 [= 0] _[.]_ (C.6)
+_λ_
+
+
+log [1] _[ −]_ _[λ]_
+0 _λ_
+
+
+20
+
+
+Here we used
+lim [lim]
+_λ→_ 0 _[λ]_ [ log] _[ λ]_ [ =] _λ→_ 1 [(1] _[ −]_ _[λ]_ [) log(1] _[ −]_ _[λ]_ [) = 0] _[.]_
+
+
+Thus, the DSE loss reduces to the second term, which we define as the _t_ -denoising cross-entropy loss
+( _t_ -DCE):
+
+
+
+
+
+      - _T_
+_L_ _[T]_ _t_ -DCE [(] _**[x]**_ [0][) =] E _**x**_ _t∼pt|_ 0( _**x**_ _t|_ _**x**_ 0)
+
+0
+
+
+
+
+
+_x_ _[i]_ _t_ [=[] **[M]** []]
+_j_ =[ **M** ]
+
+
+
+
+
+_dt_
+
+
+
+_−_ _[σ]_ [(] _[t]_ [)] _[e][−][σ]_ [¯][(] _[t]_ [)] [I][(] _[x]_ 0 _[i]_ [=] _[ j]_ [) log] - _e−σ_ ¯( _t_ ) _**c**_ _θ_ ( _**x**_ _t_ )[ _i, j_ ]
+
+1 _−_ _e_ _[−][σ]_ [¯][(] _[t]_ [)] 1 _−_ _e_ _[−][σ]_ [¯][(] _[t]_ [)]
+
+
+ - _T_
+= E _**x**_ _t∼pt|_ 0( _**x**_ _t|_ _**x**_ 0)
+
+0
+
+
+
+
+
+       - []
+
+_e_ _[−][σ]_ [¯][(] _[t]_ [)]
+
+1 _−_ _e_ _[−][σ]_ [¯][(] _[t]_ [)] _**[c]**_ _[θ]_ [(] _**[x]**_ _[t]_ [)[] _[i, x]_ 0 _[i]_ []] 
+
+
+ [�]
+
+
+_[σ]_ [(] _[t]_ [)] _[e][−][σ]_ [¯][(] _[t]_ [)] - _e_ _[−][σ]_ [¯][(] _[t]_ [)]
+
+1 _−_ _e_ _[−][σ]_ [¯][(] _[t]_ [)] [log] 1 _−_ _e_ _[−][σ]_ [¯]
+
+
+ _dt_
+
+
+ - _T_
+= E _**x**_ _t∼pt|_ 0( _**x**_ _t|_ _**x**_ 0)
+
+0
+
+
+
+
+
+[�] _−_ _[σ]_ [(] _[t]_ [)] _[e][−][σ]_ [¯][(] _[t]_ [)]
+
+1 _−_ _e_ _[−][σ]_ [¯][(] _[t]_ [)]
+
+_x_ _[i]_ _t_ [=[] **[M]** []]
+
+[�] _−_ _[σ]_ [(] _[t]_ [)] _[e][−][σ]_ [¯][(] _[t]_ [)]
+
+1 _−_ _e_ _[−][σ]_ [¯][(] _[t]_ [)]
+
+_x_ _[i]_ _t_ [=[] **[M]** []]
+
+
+ [�]
+
+
+_[σ]_ [(] _[t]_ [)] _[e][−][σ]_ [¯][(] _[t]_ [)] - _e_ _[−][σ]_ [¯][(] _[t]_ [)]
+
+1 _−_ _e_ _[−][σ]_ [¯][(] _[t]_ [)] [log] 1 _−_ _e_ _[−][σ]_ [¯]
+
+
+       - []
+
+_e_ _[−][σ]_ [¯][(] _[t]_ [)]
+
+1 _−_ _e_ _[−][σ]_ [¯][(] _[t]_ [)] _[q][θ]_ [(] _[x]_ 0 _[i]_ _[|]_ _**[x]**_ [UM] _t_ ) 
+
+
+ _dt._
+
+
+C.2 EQUIVALENCE BETWEEN T-DCE LOSS AND LAMBDA-DCE LOSS
+
+
+Starting from the _t_ -DCE loss in Eq. (3.5), we can perform a change of variable from _t_ to _λ_ ( _t_ ) =
+1 _−_ _e_ _[−][σ]_ [¯][(] _[t]_ [)], as demonstrated in Appendix C.1. This allows us to rewrite the _t_ -DCE loss integral in
+terms of _λ_ :
+
+
+
+
+       - 1        -        - []
+
+
+
+
+
+    - 1 _−_ _λ_    - []
+
+[�] _−_ log _qθ_ ( _x_ _[i]_ 0 _[|]_ _**[x]**_ _λ_ [UM][)] 
+
+_λ_
+_x_ _[i]_ _λ_ [=[] **[M]** []]
+
+
+ [�]
+
+
+ _dλ_
+
+
+0
+
+
+ - 1
+=
+
+0
+
+
+ - 1
+
+_−_
+
+0
+
+
+1
+_λ_ [E] _**[x]**_ _[λ][∼][p][λ]_ [(] _**[x]**_ _[λ][|]_ _**[x]**_ [0][)]
+
+
+
+
+
+
+
+
+1
+_λ_ [E] _**[x]**_ _[λ][∼][p][λ]_ [(] _**[x]**_ _[λ][|]_ _**[x]**_ [0][)]
+
+
+1
+_λ_ [E] _**[x]**_ _[λ][∼][p][λ]_ [(] _**[x]**_ _[λ][|]_ _**[x]**_ [0][)]
+
+
+[�] log [1] _[ −]_ _[λ]_
+
+_λ_
+
+_x_ _[i]_ _λ_ [=[] **[M]** []]
+
+
+ [�]
+
+
+[�] _−_ log _qθ_ ( _x_ _[i]_ 0 _[|]_ _**[x]**_ _λ_ [UM][)]
+
+_x_ _[i]_ _λ_ [=[] **[M]** []]
+
+
+ _dλ_
+
+
+
+
+
+
+
+
+ _dλ._
+
+
+ [�]
+
+
+_λ_
+
+
+Given the independence of the forward process and Lemma 1, the original probability _pt|_ 0( _**x**_ _t|_ _**x**_ 0)
+can be factorized as [�] _i_ _[d]_ =1 _[p]_ _t_ _[i]_ _|_ 0 [(] _[x]_ _t_ _[i][|][x][i]_ 0 [)][, where]
+
+
+_p_ _[i]_ _t|_ 0 [(] _[x]_ _t_ _[i][|][x]_ 0 _[i]_ [) =]
+
+
+
+
+
+
+1 _−_ _e_ _[−][σ]_ [¯][(] _[t]_ [)] _,_ _x_ _[i]_ _t_ [= [] **[M]** []] _[,]_
+_e_ _[−][σ]_ [¯][(] _[t]_ [)] _,_ _x_ _[i]_ _t_ [=] _[ x]_ 0 _[i]_ _[,]_ (C.7)
+0 _,_ else _._
+
+
+
+
+
+Therefore, the induced probability _pλ_ ( _**x**_ _λ|_ _**x**_ 0) = [�] _i_ _[d]_ =1 _[p]_ _λ_ _[i]_ [(] _[x][i]_ _λ_ _[|][x]_ 0 _[i]_ [)][ where]
+
+
+_p_ _[i]_ _λ_ [(] _[x][i]_ _λ_ _[|][x][i]_ 0 [) =]
+
+
+
+
+
+
+_λ,_ _x_ _[i]_ _λ_ [= [] **[M]** []] _[,]_
+1 _−_ _λ,_ _x_ _[i]_ _λ_ [=] _[ x]_ 0 _[i]_ _[,]_ (C.8)
+0 _,_ else _._
+
+
+
+
+
+Next, consider the second term. Similar to Eq. (C.3), we can prove that it equals zero:
+
+
+ 
+
+         - 1
+
+
+
+
+
+
+
+
+[�] log( [1] _[ −]_ _[λ]_
+
+_λ_
+
+_x_ _[i]_ _λ_ [=[] **[M]** []]
+
+
+ [�]
+
+
+)
+_λ_
+
+
+ = 0 _._ (C.9)
+
+
+0
+
+
+1
+_λ_ [E] _**[x]**_ _[λ][∼][p][λ]_ [(] _**[x]**_ _[λ][|]_ _**[x]**_ [0][)]
+
+
+Therefore, _t_ -DCE loss is equivalent to the first term, defined as _λ_ -denoising cross-entropy ( _λ_ -DCE):
+
+
+
+
+
+      - 1
+_L_ _[T]_ _λ_ -DCE [(] _**[x]**_ [0][) =]
+
+0
+
+
+1
+_λ_ [E] _**[x]**_ _[λ][∼][p][λ]_ [(] _**[x]**_ _[λ][|]_ _**[x]**_ [0][)]
+
+
+21
+
+
+
+
+
+[�] _−_ log _qθ_ ( _x_ _[i]_ 0 _[|]_ _**[x]**_ [UM] _λ_ [)]
+
+_x_ _[i]_ _λ_ [=[] **[M]** []]
+
+
+ [�]
+
+
+ _dλ._ (C.10)
+
+
+C.3 EQUIVALENCE BETWEEN LAMBDA-DCE LOSS AND ANY-ORDER AUTOREGRESSIVE LOSS
+
+
+Based on _λ_ -DCE loss in Eq. (3.6), we first define the sample space and analytically express the
+expectation term.
+
+
+Given _**x**_ 0, we define the sample space of _**x**_ _λ_ as _X_ [˜] ( _**x**_ 0) := _{x_ [1] 0 _[,]_ [ [] **[M]** []] _[} × · · · {][x][d]_ 0 _[,]_ [ [] **[M]** []] _[}]_ [ and] _X_ [˜] _k_ ( _**x**_ 0) :=
+_{_ _**x**_ ˜ : _**x**_ ˜ _∈_ _X_ [˜] ( _**x**_ 0) _∧_ _**x**_ ˜ has exact k dimensions with values [ **M** ] _}_ . It follows that _|X_ [˜] ( _**x**_ 0) _|_ = 2 _[d]_ and
+_|X_ [˜] _k_ ( _**x**_ 0) _|_ = - _kd_ �. Therefore, the sample space _X_ [˜] ( _**x**_ 0) can be decoupled by the number of masked
+tokens _k_ in _**x**_ ˜:
+
+
+ 
+
+       - 1
+
+
+
+
+
+
+
+
+[�] _−_ log _qθ_ ( _x_ _[i]_ 0 _[|]_ _**[x]**_ [UM] _λ_ [)]
+
+_x_ ˜ _[i]_ =[ **M** ]
+
+
+ [�]
+
+
+ _dλ_ (C.11)
+
+
+0
+
+
+ - 1
+=
+
+0
+
+
+ - 1
+=
+
+0
+
+
+ - 1
+=
+
+0
+
+
+1
+_λ_ [E] _**[x]**_ _[λ][∼][p][λ]_ [(] _**[x]**_ _[λ][|]_ _**[x]**_ [0][)]
+
+
+
+
+
+
+
+
+1
+
+_λ_
+
+
+1
+
+_λ_
+
+
+1
+
+_λ_
+
+
+_d_
+
+
+_k_ =0
+
+
+_d_
+
+
+_k_ =1
+
+
+ - _λ_ _[k]_ (1 _−_ _λ_ ) _[d][−][k]_
+
+
+_**x**_ ˜ _∈X_ [˜] _k_ ( _**x**_ 0)
+
+
+ - _pλ_ (˜ _**x**_ _|_ _**x**_ 0)
+
+_x_ ˜ _∈X_ [˜] ( _**x**_ 0)
+
+
+ [�]
+
+
+[�] _−_ log _qθ_ ( _x_ _[i]_ 0 _[|]_ _**[x]**_ [˜][UM][)]
+
+_x_ ˜ _[i]_ =[ **M** ]
+
+
+ _dλ_ (C.12)
+
+
+
+
+
+
+
+
+ - _λ_ _[k]_ (1 _−_ _λ_ ) _[d][−][k]_
+
+
+_**x**_ ˜ _∈X_ [˜] _k_ ( _**x**_ 0)
+
+
+ [�]
+
+
+[�] _−_ log _qθ_ ( _x_ _[i]_ 0 _[|]_ _**[x]**_ [˜][UM][)]
+
+_x_ ˜ _[i]_ =[ **M** ]
+
+
+ _dλ_ (C.13)
+
+
+
+
+
+
+
+
+ [�]
+
+
+[�] _−_ log _qθ_ ( _x_ _[i]_ 0 _[|]_ _**[x]**_ [˜][UM][)]
+
+_x_ ˜ _[i]_ =[ **M** ]
+
+
+ _dλ._ (C.14)
+
+
+The last equation holds because there are no masked tokens when _k_ = 0, and the inner sum is zero.
+
+
+From Eq. (C.14), by rearranging the order of summation and integration, we can analytically evaluate
+the integral �01 _[λ][k][−]_ [1][(1] _[ −]_ _[λ]_ [)] _[d][−][k][dλ]_ [ using the Beta function, which eliminates] _[ λ]_ [:]
+
+
+
+
+
+_d_
+
+_Eq._ (C.14) = 
+
+_k_ =1
+
+
+_d_
+
+=    
+
+_k_ =1
+
+
+_d_
+
+=    
+
+_k_ =1
+
+
+- 1
+
+
+
+
+
+_λ_ _[k][−]_ [1] (1 _−_ _λ_ ) _[d][−][k]_ _dλ_  0
+
+
+ [�]
+
+
+ (C.15)
+
+
+_**x**_ ˜ _∈X_ [˜] _k_ ( _**x**_ 0)
+
+
+[�] _−_ log _qθ_ ( _x_ _[i]_ 0 _[|]_ _**[x]**_ [˜][UM][)]
+
+_x_ ˜ _[i]_ =[ **M** ]
+
+
+
+
+
+( _k −_ 1)!( _d −_ _k_ )!
+
+
+_d_ !
+
+
+
+
+
+
+
+
+
+
+
+ 
+
+_**x**_ ˜ _∈X_ [˜] _k_ ( _**x**_ 0)
+
+
+ [�]
+
+
+[�] _−_ log _qθ_ ( _x_ _[i]_ 0 _[|]_ _**[x]**_ [˜][UM][)]
+
+_x_ ˜ _[i]_ =[ **M** ]
+
+
+ (C.16)
+
+
+1
+_kCd_ _[k]_
+
+
+ 
+
+_**x**_ ˜ _∈X_ [˜] _k_ ( _**x**_ 0)
+
+
+[�] _−_ log _qθ_ ( _x_ _[i]_ 0 _[|]_ _**[x]**_ [˜][UM][)]
+
+_x_ ˜ _[i]_ =[ **M** ]
+
+
+ [�]
+
+
+ _._ (C.17)
+
+
+Eq. (C.17) can be reformulated in terms of an expectation over a uniform distribution _U_ ( _X_ [˜] _k_ ( _**x**_ 0)) as
+follows:
+
+
+
+
+- _−_ log( _qθ_ ( _x_ _[i]_ 0 _[|]_ _**[x]**_ [˜][UM][))] � _._ (C.18)
+
+
+_d_
+
+
+_k_ =1
+
+
+1
+_k_ [E] _**[x]**_ [˜] _[∼][U]_ [(] _X_ [˜] _k_ ( _**x**_ 0))
+
+
+
+
+ [�]
+
+_x_ ˜ _[i]_ =[ **M** ]
+
+
+Let _π_ be one permutation of the integers 1 _, · · ·_ _, d_, and _Uπ_ represent the uniform distribution of all
+orders. We note that Eq. (C.18) is equivalent to the following term from the perspective of any-order
+autoregressive model:
+
+
+_d_
+
+- 1
+
+_k_ [E] _[π][∼][U][π]_
+
+_k_ =1
+
+
+_d_
+
+ - _−_ log _qθ_ ( _x_ _[π]_ 0 [(] _[r]_ [)] _|x_ 0 _[π]_ [(] _[<d][−][k]_ [+1)] ; _π_ ) _._ (C.19)
+
+_r_ = _d−k_ +1
+
+
+Here, _x_ _[π]_ 0 [(] _[<l]_ [)] denotes the sequence of the first _l −_ 1 elements in the permutation _π_ . Given a fixed
+_k_, the term _x_ _[π]_ 0 [(] _[<d][−][k]_ [+1)] can be interpreted as the unmasked part of the noisy data _**x**_ ˜ [UM] . For _r_ =
+
+
+22
+
+
+_d −_ _k_ + 1 _, · · ·_ _, d_, _x_ _[π]_ 0 [(] _[r]_ [)] corresponds to the _k_ items of the masked part. Since both _π_ and _**x**_ ˜ are both
+uniformly sampled, Eq. (C.18) and Eq. (C.19) are equivalent.
+
+
+Further, we can make a simple subscription transformation by letting _l_ = _d −_ _k_ + 1 and change the
+summation to Monte Carlo estimation on Eq. (C.19) :
+
+
+_d_
+
+1         _d ·_ E _l∼U_ (1 _,···,d_ ) _d −_ _l_ + 1 [E] _[π][∼][U][π]_ _−_ log _qθ_ ( _x_ _[π]_ 0 [(] _[r]_ [)] _|x_ _[π]_ 0 [(] _[<l]_ [)] ; _π_ ) _._ (C.20)
+
+_r_ = _l_
+
+
+In (Uria et al., 2014; Hoogeboom et al., 2022), it was proved that Eq. (C.20) is mathematically
+equivalent to Eq. (2.11). Actually, Eq. (C.20) is widely used as a training objective for any-order
+autoregressive models for efficient parallel optimization.
+
+
+This concludes our proof of Theorem 2.
+
+
+D SAMPLING METHODS
+
+
+In this section, we first derived the exact reverse distribution for absorbing discrete diffusion in
+Appendix D.1. This derivation led to simplified forms of the Tweedie _τ_ -leaping and Euler methods,
+detailed in Appendix D.2 and Appendix D.3, respectively. In Appendix D.4, we proved the equivalence of these two methods under a log-linear noise schedule. Finally, in Appendix D.5, we discussed
+the expected number of function evaluations (E-NFEs) for these methods.
+
+
+D.1 EXACT REVERSE DISTRIBUTION IN ABSORBING DISCRETE DIFFUSION
+
+
+**Lemma 2.** _(Analytic reverse distribution in absorbing diffusion)_ _Suppose {Xt} is a continuous time_
+_Markov chain with transition rate matrix_ _**Q**_ _t_ = _σ_ ( _t_ ) _**Q**_ _[absorb]_ _._ _For_ _**x**_ _t_ = _x_ [1] _t_ _[· · ·][ x]_ _t_ _[d]_ _[with]_ _[d]_ [1] _[masked]_
+_tokens and d_ 2 = _d −_ _d_ 1 _unmasked tokens,_ _and_ _**x**_ _s_ = _x_ [1] _s_ _[· · ·][ x]_ _s_ _[d]_ _[with][ d]_ [1] _[−]_ [∆] _[d][ masked tokens and]_
+_d_ 2 + ∆ _d unmasked tokens, the reverse distribution is given by:_
+
+
+_[σ]_ [¯][(] _[s]_ [)] _−e_ _[−][σ]_ [¯][(] _[t]_ [)] �∆ _d_ - 1 _−e_ _[−][σ]_ [¯][(] _[s]_ [)]
+
+1 _−e_ _[−][σ]_ [¯][(] _[s]_ [)] 1 _−e_ _[−][σ]_ [¯][(] _[t]_ [)]
+
+
+- _e_ _[−][σ]_ [¯][(] _[s]_ [)] _−e_ _[−][σ]_ [¯][(] _[t]_ [)]
+
+
+1 _−e_ _[−][σ]_ [¯][(] _[s]_ [)] - _d_ 1 _p_ 0( _**x**_ _UMs_ [)]
+
+1 _−e_ _[−][σ]_ [¯][(] _[t]_ [)] _p_ 0( _**x**_ _[UM]_ _t_ [)] _[,]_ _**x**_ _t_ _⊆UM_ _**x**_ _s,_
+
+
+_ps|t_ ( _**x**_ _s|_ _**x**_ _t_ ) =
+
+
+
+
+
+
+1 _−e_ _[−][σ]_ [¯][(] _[s]_ [)] 1 _−e_ _[−][σ]_ [¯][(] _[t]_ [)] _p_ 0( _**x**_ _[UM]_ _t_ [)] (D.1)
+
+0 _,_ _**x**_ _t_ _̸⊆UM_ _**x**_ _s,_
+
+
+
+
+
+_where_ _**x**_ _t_ _⊆UM_ _**x**_ _s_ _denotes ∀i_ : _**x**_ _[i]_ _t_ [= [] _**[M]**_ []] _[, we have]_ _**[ x]**_ _[i]_ _t_ [=] _**[ x]**_ _s_ _[i]_ _[.]_
+
+
+_Proof._ Using Bayes’ theorem, _ps|t_ ( _**x**_ _s|_ _**x**_ _t_ ) = _pt|s_ ( _**x**_ _t|_ _**x**_ _s_ ) _[p]_ _p_ _[s]_ _t_ [(] ( _**[x]**_ _**x**_ _[s]_ _t_ ) [)] [.]
+
+
+From Proposition 1:
+
+_pt_ ( _**x**_ _t_ ) = [1 _−_ _e_ _[−][σ]_ [¯][(] _[t]_ [)] ] _[d]_ [1] [ _e_ _[−][σ]_ [¯][(] _[t]_ [)] ] _[d]_ [2] _p_ 0( _**x**_ [UM] _t_ ) _,_ (D.2)
+
+_ps_ ( _**x**_ _s_ ) = [1 _−_ _e_ _[−][σ]_ [¯][(] _[s]_ [)] ] _[d]_ [1] _[−]_ [∆] _[d]_ [ _e_ _[−][σ]_ [¯][(] _[s]_ [)] ] _[d]_ [2][+∆] _[d]_ _p_ 0( _**x**_ [UM] _s_ ) _._ (D.3)
+Utilizing Eq. (B.12), we get
+
+
+��
+_e_ _[−]_ [(¯] _[σ]_ [(] _[t]_ [)] _[−][σ]_ [¯][(] _[s]_ [))][�] _[d]_ [2][ �] 1 _−_ _e_ _[−]_ [(¯] _[σ]_ [(] _[t]_ [)] _[−][σ]_ [¯][(] _[s]_ [))][�][∆] _[d]_ _,_ _**x**_ _t_ _⊆_ UM _**x**_ _s,_
+0 _,_ _**x**_ _t_ _̸⊆_ UM _**x**_ _s._ [(D.4)]
+
+
+_pt|s_ ( _**x**_ _t|_ _**x**_ _s_ ) =
+
+
+_d_
+
+- _p_ _[i]_ _t|s_ [(] _[x]_ _t_ _[i][|][x][i]_ _s_ [) =]
+
+_i_ =1
+
+
+Simplifying these equations, we can express _ps|t_ ( _**x**_ _s|_ _**x**_ _t_ ) as
+
+
+_[σ]_ [¯][(] _[s]_ [)] _−e_ _[−][σ]_ [¯][(] _[t]_ [)] �∆ _d_ - 1 _−e_ _[−][σ]_ [¯][(] _[s]_ [)]
+
+1 _−e_ _[−][σ]_ [¯][(] _[s]_ [)] 1 _−e_ _[−][σ]_ [¯][(] _[t]_ [)]
+
+
+- _e_ _[−][σ]_ [¯][(] _[s]_ [)] _−e_ _[−][σ]_ [¯][(] _[t]_ [)]
+
+
+1 _−e_ _[−][σ]_ [¯][(] _[s]_ [)] - _d_ 1 _p_ 0( _**x**_ UM _s_ [)]
+
+1 _−e_ _[−][σ]_ [¯][(] _[t]_ [)] _p_ 0( _**x**_ [UM] _t_ ) _[,]_ _**x**_ _t_ _⊆_ UM _**x**_ _s,_
+
+
+_ps|t_ ( _**x**_ _s|_ _**x**_ _t_ ) =
+
+
+
+
+
+
+1 _−e_ _[−][σ]_ [¯][(] _[s]_ [)] 1 _−e_ _[−][σ]_ [¯][(] _[t]_ [)] _p_ 0( _**x**_ [UM] _t_ ) (D.5)
+
+0 _,_ _**x**_ _t_ _̸⊆_ UM _**x**_ _s._
+
+
+
+
+
+It should be noted that when _**x**_ _t_ _⊆_ UM _**x**_ _s_, the ratio _[p]_ _p_ [0] 0 [(] ( _**[x]**_ _**x**_ _s_ [UM][UM] _t_ [)] ) [can be reformulated as a] _[ d]_ [1][-dimensional]
+
+conditional distribution _p_ 0( _**x**_ [UM] _s_ _|_ _**x**_ [UM] _t_ ) with _N_ _[d]_ [1] states. This is not accessible using our onedimensional conditional distribution _p_ 0(ˆ _x_ _[i]_ _t_ _[|]_ _**[x]**_ [UM] _t_ ) in Theorem 1 if _d_ 1 _>_ 1. Therefore, for efficiency,
+existing samplers assume that each dimension is independent within a small interval and update each
+dimension in parallel (Lou et al., 2024; Campbell et al., 2022).
+
+
+23
+
+
+D.2 TWEEDIE _τ_ -LEAPING METHOD AND ITS SIMPLIFIED FORM IN RADD
+
+
+Given the vector _**x**_ _t_, if we sample each _x_ _[i]_ _s_ [independently, the factorization of marginal distribution]
+_p_ [tweedie] _s|t_ results in the minimum KL divergence with true reverse _ps|t_ ( _**x**_ _s|_ _**x**_ _t_ ) (proof in (Lou et al.,
+2024), Appendix A). This assumption formally defines _p_ [tweedie] _s|t_ as follows:
+
+
+_d_
+
+- _p_ _[i]_ _s|t_ [(] _[x]_ _s_ _[i]_ _[|]_ _**[x]**_ _[t]_ [)] _[.]_ (D.6)
+
+_i_ =1
+
+
+_p_ [tweedie] _s|t_ ( _**x**_ _s|_ _**x**_ _t_ ) =
+
+
+_d_
+
+- _p_ [tweedie] _s|t_ _[,i]_ ( _x_ _[i]_ _s_ _[|]_ _**[x]**_ _[t]_ [) =]
+
+_i_ =1
+
+
+To sample from _p_ [tweedie] _s|t_, we need to derive the analytic form of _p_ _[i]_ _s|t_ [(] _[x]_ _s_ _[i]_ _[|]_ _**[x]**_ _[t]_ [)][.] [Without loss of generality,]
+let’s assume that the preceding _d_ 1 terms of _**x**_ _t_ are all [ **M** ], and the remaining _d_ 2 terms are unmasked
+tokens.
+
+For illustration, we can take _i_ = 1 as an example. Let _X_ [˜] _k_ denote the sample space of length _d_ 1 _−_ 1
+sequence where each sequence has exact _k_ masked tokens, with _|X_ [˜] _k|_ = _Cd_ _[k]_ 1 _−_ 1 _[N][ d]_ [1] _[−]_ [1] _[−][k]_ [.] [When]
+_x_ [1] _s_ [= [] **[M]** []][, According to Lemma 2:]
+
+_p_ [1] _s|t_ [(] _[x]_ _s_ [1] _[|]_ _**[x]**_ _[t]_ [) =]  - _ps|t_ ( _**x**_ _s|_ _**x**_ _t_ )
+
+_**x**_ [2:] _s_ _[d]_
+
+
+- _d_ 1 _p_ 0( _x_ 1 _s_ _[,]_ _**[ x]**_ [2:] _s_ _[d,]_ [UM] _,_ _**x**_ _[d]_ _t_ [1][+1:] _[d]_ )
+_p_ 0( _**x**_ _[d]_ _t_ [1][+1:] _[d]_ )
+
+
+- _k_ +1 � 1 _−_ _e−σ_ ¯( _s_ )
+
+1 _−_ _e_ _[−][σ]_ [¯][(] _[t]_ [)]
+
+
+ 
+
+_**x**_ [2:] _s_ _[d]_ _∈X_ [˜] _k_
+
+
+- _e−σ_ ¯( _s_ ) _−_ _e−σ_ ¯( _t_ )
+
+1 _−_ _e_ _[−][σ]_ [¯][(] _[s]_ [)]
+
+
+=
+
+
+=
+
+
+_d_ 1 _−_ 1
+
+
+_k_ =0
+
+
+_d_ 1 _−_ 1
+
+- _Cd_ _[k]_ 1 _−_ 1
+
+_k_ =0
+
+
+- _d_ 1 _p_ 0( _x_ 1 _s_ _[,]_ _**[ x]**_ _t_ _[d]_ [1][+1:] _[d]_ )
+_p_ 0( _**x**_ _[d]_ _t_ [1][+1:] _[d]_ )
+
+
+- _e−σ_ ¯( _s_ ) _−_ _e−σ_ ¯( _t_ ) - _k_ +1 � 1 _−_ _e−σ_ ¯( _s_ )
+
+1 _−_ _e_ _[−][σ]_ [¯][(] _[s]_ [)] 1 _−_ _e_ _[−][σ]_ [¯][(] _[t]_ [)]
+
+
+- _d_ 1 _p_ 0( _x_ 1 _s_ _[,]_ _**[ x]**_ _t_ _[d]_ [1][+1:] _[d]_ )
+_p_ 0( _**x**_ _[d]_ _t_ [1][+1:] _[d]_ )
+
+
+= _[e][−][σ]_ [¯][(] _[s]_ [)] _[ −]_ _[e][−][σ]_ [¯][(] _[t]_ [)]
+
+1 _−_ _e_ _[−][σ]_ [¯][(] _[s]_ [)]
+
+
+1 + _[e][−][σ]_ [¯][(] _[s]_ [)] _[ −]_ _[e][−][σ]_ [¯][(] _[t]_ [)]
+
+1 _−_ _e_ _[−][σ]_ [¯][(] _[s]_ [)]
+
+
+- _d_ 1 _−_ 1 � 1 _−_ _e−σ_ ¯( _s_ )
+
+1 _−_ _e_ _[−][σ]_ [¯][(] _[t]_ [)]
+
+
+_p_ 0( _x_ [1] _s_ _[,]_ _**[ x]**_ _t_ _[d]_ [1][+1:] _[d]_ )
+
+= _[e][−][σ]_ [¯][(] _[s]_ [)] _[ −]_ _[e][−][σ]_ [¯][(] _[t]_ [)]
+
+1 _−_ _e_ _[−][σ]_ [¯][(] _[t]_ [)] _p_ 0( _**x**_ _[d]_ _t_ [1][+1:] _[d]_ )
+
+
+= _[e][−][σ]_ [¯][(] _[s]_ [)] _[ −]_ _[e][−][σ]_ [¯][(] _[t]_ [)] _p_ 0( _x_ [1] _s_ _[|]_ _**[x]**_ _t_ _[d]_ [1][+1:] _[d]_ ) _._
+
+1 _−_ _e_ _[−][σ]_ [¯][(] _[t]_ [)]
+
+
+Here, we used the binomial expansion identity:
+
+
+- _d_ 1 _−_ 1
+_._
+
+
+_d_ 1 _−_ 1
+
+- _Cd_ _[k]_ 1 _−_ 1
+
+_k_ =0
+
+
+- _e−σ_ ¯( _s_ ) _−_ _e−σ_ ¯( _t_ ) - _k_ 
+= 1 + _[e][−][σ]_ [¯][(] _[s]_ [)] _[ −]_ _[e][−][σ]_ [¯][(] _[t]_ [)]
+
+1 _−_ _e_ _[−][σ]_ [¯][(] _[s]_ [)] 1 _−_ _e_ _[−][σ]_ [¯][(] _[s]_ [)]
+
+
+Similarly, for _x_ [1] _s_ [= [] **[M]** []][:]
+
+
+In general, we have
+
+
+_p_ _[i]_ _s|t_ [(] _[x]_ _s_ _[i]_ _[|]_ _**[x]**_ _[t]_ [) =]
+
+
+11 _−−ee_ _[−][σ]_ [¯][(] _[t]_ [)] _[,]_ _x_ _[i]_ _s_ [= [] **[M]** []] _[, x]_ _t_ _[i]_ [= [] **[M]** []] _[,]_
+
+_δxisxit_ _[,]_ _x_ _[i]_ _t_ [= [] **[M]** []] _[.]_
+
+
+_p_ [1] _s|t_ [([] **[M]** []] _[|]_ _**[x]**_ _[t]_ [) =] [1] 1 _[ −]_ _−_ _[e]_ _e_ _[−][−][σ][σ]_ [¯][¯][(][(] _[s][t]_ [)][)] _[.]_ (D.7)
+
+
+_e_ _[−][σ]_ [¯][(] _[s]_ [)] _−e_ _[−][σ]_ [¯][(] _[t]_ [)]
+
+
+
+
+
+
+1 _−e−_ _[−][σ]_ _e_ [¯][(] _[t]_ [)] _p_ 0( _x_ _[i]_ _s_ _[|]_ _**[x]**_ [UM] _t_ ) _,_ _x_ _[i]_ _s_ [= [] **[M]** []] _[, x][i]_ _t_ [= [] **[M]** []] _[,]_
+
+
+1 _−e_ _[−][σ]_ [¯][(] _[s]_ [)]
+
+
+(D.8)
+
+
+
+
+
+With trained _**c**_ _θ_, we can use _**c**_ _θ_ ( _**x**_ _t_ )[ _i, x_ _[i]_ _s_ []][ to approximate the true conditional distribution] _[ p]_ [0][(] _[x][i]_ _s_ _[|]_ _**[x]**_ [UM] _t_ )
+and sample by Eq. (D.8).
+
+
+D.3 EULER METHOD AND ITS SIMPLIFIED FORM IN RADD
+
+
+According to theory of CTMC (Kelly, 1981; Campbell et al., 2022; Lou et al., 2024), given a particular
+one-dimensional input _xt_, the transition probabilities to _xs_ can be approximately calculated using
+
+
+24
+
+
+Eq. (2.1) and Eq. (2.7) as follows:
+
+
+_ps|t_ ( _xs|xt_ ) = _δxtxs_ + _**Q**_ [˜] _t_ ( _xt, xs_ )( _t −_ _s_ ) + _o_ ( _t −_ _s_ ) _,_ (D.9)
+
+_≈_ _δxtxs_ + _**Q**_ [˜] _t_ ( _xt, xs_ )( _t −_ _s_ ) _,_ (D.10)
+
+
+where
+
+
+_**Q**_ ˜ _t_ ( _xt, xs_ ) =
+
+
+- _**Q**_ _t_ ( _xs, xt_ ) _[p][t]_ [(] _[x][s]_ [)]
+
+
+_**Q**_ _t_ ( _xs, xt_ ) _p_ _[t]_ _t_ ( _x_ _[s]_ _t_ ) _[,]_ _xt_ = _xs,_
+
+_−_ [�] _xt_ = _xs._
+
+_**[Q]**_ [˜] _[t]_ [(] _[x][t][, k]_ [)] _[,]_
+
+
+_t_ _t_ (D.11)
+
+_k_ = _xt_ _**[Q]**_ [˜] _[t]_ [(] _[x][t][, k]_ [)] _[,]_ _xt_ = _xs._
+
+
+Therefore, we can define the Euler approximation of the transition probability (Campbell et al., 2022;
+Lou et al., 2024):
+_p_ [euler] _s|t_ [(] _[x][s][|][x][t]_ [) =] _[ δ][x]_ _t_ _[x]_ _s_ [+] _**[Q]**_ [˜] _[t]_ [(] _[x][t][, x][s]_ [)(] _[t][ −]_ _[s]_ [)] (D.12)
+
+
+For multi-dimensional case, we factorize _p_ [euler] _s|t_ [(] _**[x]**_ _[s][|]_ _**[x]**_ _[t]_ [)][ as][ �] _i_ _[d]_ =1 _[p]_ _s_ [euler] _|t_ _[,i]_ ( _x_ _[i]_ _s_ _[|]_ _**[x]**_ _[t]_ [)][, where] _[ p]_ [euler] _s|t_ _[,i]_ ( _x_ _[i]_ _s_ _[|]_ _**[x]**_ _[t]_ [)]
+is based on Eq. (D.12) which use _**x**_ _t_ to replace _xt_ and _x_ [1] _t_ _[· · ·][ x]_ _s_ _[i]_ _[· · ·][ x]_ _t_ _[d]_ [to replace] _[ x][s]_ [.]
+
+
+In the case of absorbing diffusion, similar to Tweedie- _τ_ leaping method in Appendix D.2, we can use
+Theorem 1 and Eq. (2.4) to simplify Eq. (D.12), which results in
+
+
+_e_ _[−][σ]_ [¯][(] _[t]_ [)]
+_σ_ ( _t_ )
+
+_[−][σ]_ [¯][(]
+
+
+(D.13)
+
+
+_p_ [euler] _s|t_ _[,i]_ ( _x_ _[i]_ _s_ _[|]_ _**[x]**_ _[t]_ [) =]
+
+
+
+
+
+
+1 _−_ _σ_ ( _t_ ) 1 _−e_ _e_ _[−][σ]_ [¯][(] _[t]_ [)] [(] _[t][ −]_ _[s]_ [)] _[,]_ if _x_ _[i]_ _s_ [= [] **[M]** []] _[, x]_ _t_ _[i]_ [= [] **[M]** []]
+
+_δxisxit_ _[,]_ _x_ _[i]_ _t_ [= [] **[M]** []] _[.]_
+
+
+1 _−e_ _e_ _[−][σ]_ [¯][(] _[t]_ [)] [(] _[t][ −]_ _[s]_ [)] _[p]_ [0][(] _[x][i]_ _s_ _[|]_ _**[x]**_ [UM] _t_ ) _,_ if _x_ _[i]_ _s_ [= [] **[M]** []] _[, x][i]_ _t_ [= [] **[M]** []]
+
+
+_e_ _[−][σ]_ [¯][(] _[t]_ [)]
+1 _−_ _σ_ ( _t_ )
+
+_[−][σ]_ [¯][(]
+
+
+
+
+
+In practice, we also use _cθ_ ( _**x**_ _t_ )[ _i, x_ _[i]_ _s_ []][ to approximate the true conditional distribution] _[ p]_ [0][(] _[x][i]_ _s_ _[|]_ _**[x]**_ [UM] _t_ )
+when sampling from Eq. (D.13).
+
+
+D.4 EQUIVALENCE OF TWEEDIE _τ_ -LEAPING AND EULER METHOD UNDER LOG-LINEAR NOISE
+SCHEDULE
+
+
+By comparing Eq. (D.8) and Eq. (D.13), we observe that both the Tweedie _τ_ -leaping and Euler
+methods can be interpreted similarly:
+
+
+    - If _x_ _[i]_ _t_ [is an unmasked token, keep it unchanged, i.e.,] _[ x]_ _s_ _[i]_ [=] _[ x]_ _t_ _[i]_ [.]
+
+    - If _x_ _[i]_ _t_ [is] [a] [masked] [token,] [first] [determine] [whether] [it] [will] [be] [unmasked] [with] [a] [probability]
+_ψ_ ( _t, s_ ). If it is to be unmasked, then sample _x_ _[i]_ _s_ [from] _[ p]_ [0][(] _[x]_ _s_ _[i]_ _[|]_ _**[x]**_ [UM] _t_ ).
+
+
+The only difference lies in the analytic form of _ψ_ ( _t, s_ ). For the two methods, according to Eqs. (D.8)
+and (D.13), their corresponding _ψ_ ( _t, s_ ) are given as follows:
+
+_ψ_ [tweedie] ( _t, s_ ) = _[e][−][σ]_ [¯][(] _[s]_ [)] _[ −]_ _[e][−][σ]_ [¯][(] _[t]_ [)] _,_ (D.14)
+
+1 _−_ _e_ _[−][σ]_ [¯][(] _[t]_ [)]
+
+_e_ _[−][σ]_ [¯][(] _[t]_ [)]
+_ψ_ [euler] ( _t, s_ ) = _σ_ ( _t_ ) 1 _−_ _e_ _[−][σ]_ [¯][(] _[t]_ [)] [(] _[t][ −]_ _[s]_ [)] _[.]_ (D.15)
+
+
+In general cases, these two expressions are not equivalent. However, if we choose a log-linear noise
+schedule ¯ _σ_ ( _t_ ) = 1 _−_ log (1 _−_ (1 _−_ _ϵ_ ) _t_ ), both Eq. (D.15) and Eq. (D.14) can be simplified to the same
+form _ψ_ ( _t, s_ ) as follows:
+
+
+_ψ_ ( _t, s_ ) = _[t][ −]_ _[s]_
+
+
+_,_ (D.16)
+_t_
+
+
+which shows that these two sampling methods are equivalent under a log-linear noise schedule.
+
+
+D.5 DISCUSS ON THE EXPECTATION OF NFES
+
+
+In this part, we show that given the noise schedule _σ_ ( _t_ ) and a set of time steps _{t_ 0 = 0 _, · · ·_ _, tn_ = _T_ _}_,
+the NFEs can be treated as a random variable with a calculable expected value for both Euler method
+and Tweedie _τ_ -leaping method.
+
+
+25
+
+
+Let _l_ denote the length of the generated sequence and _Nk_ _∈{_ 0 _, · · ·_ _, l}_ denote the number of
+dimensions that _**x**_ changed in [ _tk−_ 1 _, tk_ ). Without loss of generality, we first consider the unconditional
+generation case where _l_ = _d_ . The NFEs, E-NFEs, and _Nk_ can be expressed as
+
+
+NFEs( _n_ ) =
+
+
+_n_
+
+
+I( _Nk_ = 0) _,_ (D.17)
+
+_k_ =1
+
+
+_n_
+
+- _P_ ( _Nk_ = 0) _,_ (D.18)
+
+
+_k_ =1
+
+
+E-NFEs( _n_ ) =
+
+
+_n_
+
+
+E[I( _Nk_ = 0)] =
+
+_k_ =1
+
+
+_d_
+
+
+I( _x_ _[i]_ _tk−_ 1 [= [] **[M]** []] _[, x][i]_ _tk_ [= [] **[M]** [])] _[.]_ (D.19)
+_i_ =1
+
+
+_d_
+
+
+_Nk_ =
+
+
+Furthermore, we note that the _d_ dimensions are independent. According to Eqs. (D.8) and (D.13),
+the probability _p_ _[·]_ _s_ _[,i]_ _|t_ [([] **[M]** []] _[|]_ _**[x]**_ _[t]_ [)][ depends only on time and] _[ x]_ _t_ _[i]_ [while independent of the other dimensions]
+
+of _**x**_ _t_ . Thus, _p_ _[·]_ _s_ _[,i]_ _|t_ [([] **[M]** []] _[|]_ _**[x]**_ _[t]_ [)] [=] _[p][·]_ _s_ _[,i]_ _|t_ [([] **[M]** []] _[|][x]_ _t_ _[i]_ [)][.] [Therefore,] [whether] [a] [token] [changes] [from] [masked] [to]
+unmasked is independent across the _d_ dimensions [3] :
+
+
+_p_ �I( _x_ [1] _s_ [= [] **[M]** [])] _[,][ · · ·]_ _[,]_ [ I][(] _[x][d]_ _s_ [= [] **[M]** [])] _[|]_ [I][(] _[x]_ _t_ [1] [= [] **[M]** [])] _[,][ · · ·]_ _[,]_ [ I][(] _[x][d]_ _t_ [= [] **[M]** [])]        - (D.20)
+
+
+=
+
+
+_d_
+
+- _p_ �I( _x_ _[i]_ _s_ [= [] **[M]** [])] _[|]_ [I][(] _[x]_ _t_ _[i]_ [= [] **[M]** [])] - _._ (D.21)
+
+_i_ =1
+
+
+Since _**x**_ _T_ consists entirely of masked tokens with probability one, each dimension of I( _x_ _[i]_ _tk−_ 1 [=]
+
+[ **M** ] _, x_ _[i]_ _tk_ [= [] **[M]** [])][ is independent.] [Consequently,] _[ N][k]_ [follows a binomial distribution with parameters]
+_d_ and _rk_, denoted as _Nk_ _∼_ Binomial( _d, rk_ ), where _rk_ = _p_ ( _x_ _[i]_ _tk−_ 1 [=] [[] **[M]** []] _[, x][i]_ _tk_ [=] [[] **[M]** [])] [represents]
+the probability that _x_ _[i]_ changes within the interval [ _tk−_ 1 _, tk_ ) in each dimension. Therefore, we can
+further simplify Eq. (D.18):
+
+
+_n_
+�(1 _−_ (1 _−_ _rk_ ) _[d]_ ) _._ (D.22)
+
+
+_k_ =1
+
+
+E-NFEs( _n_ ) =
+
+
+_n_
+
+- _P_ ( _Nk_ = 0) =
+
+
+_k_ =1
+
+
+By definition of _rk_ and the property of absorbing diffusion:
+
+_rk_ = _p_ ( _x_ _[i]_ _tk−_ 1 [= [] **[M]** []] _[, x][i]_ _tk_ [= [] **[M]** [])] (D.23)
+
+
+_n_
+
+= _p_ ( _x_ _[i]_ _tk−_ 1 [= [] **[M]** []] _[|][x][i]_ _tk_ [= [] **[M]** [])] - _p_ ( _x_ _[i]_ _tj−_ 1 [= [] **[M]** []] _[|][x]_ _t_ _[i]_ _j_ [= [] **[M]** [])] _[p]_ [(] _[x]_ _t_ _[i]_ _n_ [= [] **[M]** [])] (D.24)
+
+_j_ = _k_ +1
+
+
+_n_
+= �1 _−_ _p_ ( _x_ _[i]_ _tk−_ 1 [= [] **[M]** []] _[|][x]_ _t_ _[i]_ _k_ [= [] **[M]** [])] - - _p_ ( _x_ _[i]_ _tj−_ 1 [= [] **[M]** []] _[|][x]_ _t_ _[i]_ _j_ [= [] **[M]** [])] _[.]_ (D.25)
+
+_j_ = _k_ +1
+
+
+Eq. (D.25) can be determined given the sampling method and noise schedule.
+
+
+For Tweedie _τ_ -leaping, based on Eq. (D.8), we can derive that:
+
+_p_ ( _x_ _[i]_ _tj−_ 1 [= [] **[M]** []] _[|][x]_ _t_ _[i]_ _j_ [= [] **[M]** []) =] [1] _[ −]_ _[e][−][σ]_ [¯][(] _[t][j][−]_ [1][)] _[.]_ (D.26)
+
+1 _−_ _e_ _[−][σ]_ [¯][(] _[t][j]_ [)]
+
+
+Therefore, we can express _rk_ as
+
+
+_rk_ = ( _[e][−][σ]_ [¯][(] _[t][k][−]_ [1][)] _[ −]_ _[e][−][σ]_ [¯][(] _[t][k]_ [)] )
+
+1 _−_ _e_ _[−][σ]_ [¯][(] _[t][k]_ [)]
+
+
+- (1 _−_ [1] _[ −]_ _[e][−][σ]_ [¯][(] _[t][j][−]_ [1][)]
+
+1 _−_ _e_ _[−][σ]_ [¯][(] _[t][j]_ [)]
+
+_j_ = _k_ +1
+
+
+_n_
+
+
+_[ −]_ _[e][−][σ]_ [¯][(] _[t][j][−]_ [1][)] _[e][−][σ]_ [¯][(] _[t][k][−]_ [1][)] _[ −]_ _[e][−][σ]_ [¯][(] _[t][k]_ [)]
+
+1 _−_ _e_ _[−][σ]_ [¯][(] _[t][j]_ [)] [) =] 1 _−_ _e_ _[−][σ]_ [¯][(] _[t][n]_ [)]
+
+
+_._ (D.27)
+1 _−_ _e_ _[−][σ]_ [¯][(] _[t][n]_ [)]
+
+
+3The independence applies to whether a token changes from masked to unmasked. However, the specific
+unmasked token a masked token changes to depends on other dimensions.
+
+
+26
+
+
+For the Euler method, based on Eq. (D.13), we can derive that:
+
+
+_e_ _[−][σ]_ [¯][(] _[t][j]_ [)]
+_p_ ( _x_ _[i]_ _tj−_ 1 [= [] **[M]** []] _[|][x]_ _t_ _[i]_ _j_ [= [] **[M]** []) = 1] _[ −]_ _[σ]_ [(] _[t][j]_ [)] [(] _[t][j]_ _[−]_ _[t][j][−]_ [1][)] _[.]_ (D.28)
+
+1 _−_ _e_ _[−][σ]_ [¯][(] _[t][j]_ [)]
+
+
+[(] _[t][j]_ _[−]_ _[t][j][−]_ [1][))] _[.]_ (D.29)
+1 _−_ _e_ _[−][σ]_ [¯][(] _[t][j]_ [)]
+
+
+_e_ _[−][σ]_ [¯][(] _[t][k]_ [)]
+_rk_ = ( _σ_ ( _tk_ )
+
+1 _−_ _e_ _[−][σ]_ [¯][(] _[t][k]_ [)] [(] _[t][k][ −]_ _[t][k][−]_ [1][))]
+
+
+- (1 _−_ _σ_ ( _tj_ ) _e_ _[−][σ]_ [¯][(] _[t][j]_ [)]
+
+1 _−_ _e_ _[−][σ]_ [¯][(]
+
+_j_ = _k_ +1
+
+
+_n_
+
+
+For conditional generation cases where the generating sequence length _l_ is less than the dimension _d_,
+similar results hold. The only difference is that _Nk_ _∼_ Binomial( _l, rk_ ) and Eq. (D.22) changes to
+
+
+E-NFEs( _n_ ) =
+
+
+_n_
+�(1 _−_ (1 _−_ _rk_ ) _[l]_ ) _._ (D.30)
+
+
+_k_ =1
+
+
+Specifically, if we adopt a log-linear noise schedule and let _tk_ = _n_ _[k]_ [, according to Appendix D.4, the]
+
+Euler method and Tweedie _τ_ -leaping method are equivalent. In this case, Eq. (D.27) simplifies to _n_ [1] [.]
+
+Substituting this result into Eq. (D.22), we obtain
+
+
+[1]
+
+_n_ [)] _[l]_ [) =] _[ n]_ [(1] _[ −]_ [(1] _[ −]_ _n_ [1]
+
+
+(D.31)
+_n_ [)] _[l]_ [)] _[.]_
+
+
+E-NFEs( _n_ ) =
+
+
+_n_
+
+
+�(1 _−_ (1 _−_ [1]
+
+_n_
+
+_k_ =1
+
+
+E DISCUSSION FOR MEAN PARAMETERIZATION AND RADD
+
+
+**Equivalence of modeling** Analogous to the _x_ 0 prediction in continuous state diffusion models,
+Austin et al. (2021) and Campbell et al. (2022) used the mean parameterization _**µ**_ _θ_ ( _**x**_ _t, t_ ) to learn the
+the reverse density _p_ _[i]_ 0 _|t_ [(] _[x]_ 0 _[i]_ _[|]_ _**[x]**_ _[t]_ [)][,] _[ i]_ [ = 1] _[ · · ·][ d]_ [.] [According to the analytic form of reverse distribution in]
+Eq. (D.8), letting _s_ = 0, we have:
+
+
+_p_ _[i]_ 0 _|t_ [(] _[x]_ 0 _[i]_ _[|]_ _**[x]**_ _[t]_ [) =]
+
+
+
+
+
+
+_p_ 0( _x_ _[i]_ 0 _[|]_ _**[x]**_ _t_ [UM] ) _,_ _x_ _[i]_ 0 [= [] **[M]** []] _[, x][i]_ _t_ [= [] **[M]** []] _[,]_
+0 _,_ _x_ _[i]_ 0 [= [] **[M]** []] _[, x]_ _t_ _[i]_ [= [] **[M]** []] _[,]_ (E.1)
+_δxi_ 0 _[x]_ _t_ _[i]_ _[,]_ _x_ _[i]_ _t_ [= [] **[M]** []] _[.]_
+
+
+
+
+
+This shows that the mean prediction is equivalent to learning conditional distributions on clean
+data. In conjunction with our discussion in Section 3.1, the mean parameterization should be timeindependent, denoted as _**µ**_ _θ_ ( _**x**_ _t_ ), and is equivalent to our reparameterized _**c**_ _θ_ ( _**x**_ _t_ ). Empirical results
+like He et al. (2022) and Sahoo et al. (2024), which demonstrate that the time-independent model
+_**µ**_ _θ_ ( _**x**_ _t_ ) performs well, also validate our theory.
+
+
+**Equivalence of training objectives** Shi et al. (2024) proved that the training loss for score parameterization (i.e., DSE loss) and mean parameterization (i.e., negative ELBO loss) are equivalent.
+
+
+**Equivalence of sampling methods** Comparing our Appendix D.2 with Shi et al. (2024); Sahoo
+et al. (2024), it is evident that the Tweedie _τ_ -leaping method for score parameterization is equivalent
+to the sampling method for mean prediction as follows:
+
+
+_qθ_ ( _xs|xt_ ) = _p_ ( _xs|xt, x_ 0 = _µ_ ( _xt_ )) =
+
+
+Cat( _xs_ ; _xt_ ) _,_ _xt_ = [ **M** ] _,_
+Cat( _xs_ ; [1] _[−][α][s]_ _[α][s][−][α][t]_ _xt_ = [ **M** ] _._
+
+**[e]** [[] **[M]** []][ +] _[µ]_ [(] _[x][t]_ [))] _[,]_
+
+
+[1] _[−][α][s]_ _[α][s][−][α][t]_
+
+1 _−αt_ **[e]** [[] **[M]** []][ +] 1 _−αt_
+
+
+1 _[s]_ _−_ _[−]_ _α_ _[α]_ _t_ _[t]_ _[µ]_ [(] _[x][t]_ [))] _[,]_ _xt_ = [ **M** ] _._ (E.2)
+
+
+Here, _αt_ represents the probability of a token remaining unmasked at time _t_, which equals _e_ _[−][σ]_ [¯][(] _[t]_ [)] for
+score parameterization. Therefore, Eq. (E.2) and Eq. (D.8) is equivalent.
+
+
+F COMPARISON WITH CHEN ET AL. (2024)
+
+
+Chen et al. (2024) proposes sampling methods for discrete-time and continuous-time diffusion models
+individually. Consider a sequence _**x**_ of length _d_ :
+
+
+27
+
+
+**Discrete-time models** For models trained over discrete timesteps _T_ train = _{_ 1 _, · · ·_ _, T_ _}_, Chen et al.
+(2024) proposes to pre-sample the _d_ time points _τi_ _∈T_ train, where each _τi_ corresponds to a change
+timepoint for a specific dimension of _**x**_ . These timepoints form a time set _T_ change _⊂T_ train, and updates
+are only applied at these steps. For absorbing diffusion models, as each token changes only once,
+NFEs = _|T_ change _| ≤_ min( _d, T_ ).
+
+
+**Continuous-time** **models** For models trained over continuous time, _d_ change points _τi_ are
+pre-sampled and sorted in ascending order ( _τn_ 1 _< · · · < τnd_ ). Updates are sequentially applied at
+these points, resulting in NFEs = _d_, which resembles the sampling process in AO-ARM. However,
+how to reduce the NEFs to less than _d_ for the continuous-time model has not been investigated.
+
+
+In contrast to Chen et al. (2024), which pre-sample specific time points and update tokens
+only at those predetermined points, RADD leverages a time-independent parameterization that
+updates tokens only when they change. This fundamental difference results in **different applicable**
+**scenarios** for the two methods:
+
+
+ - Chen et al. (2024) applies to both absorbing and multinomial diffusion models. However, for
+continuous-time models like SEDD, their sampling method results in NFEs = _d_ and, as noted, how
+to reduce the NEFs less than _d_ for the continuous-time model has not been investigated.
+
+
+ - RADD, on the other hand, is specifically designed for absorbing diffusion models. It is straightforward to apply the cache strategy of the RADD to continuous-time settings and reduce NEFs to
+less than _d_ because the input of the model is independent of the time.
+
+
+Although the samplers in our paper and in Chen et al. (2024) originate from different formulations,
+the results of Theorem D.1 (Chen et al., 2024) for the discrete-time sampler align with those of our
+Eq. (3.4). However, as discussed above, the two samplers are applicable in different scenarios.
+
+
+G DETAILS OF AO-ARMS
+
+
+Any-order autoregressive models (AO-ARMs) (Uria et al., 2014; Hoogeboom et al., 2022; Shih
+et al., 2022) model the joint distribution autoregressively for _d_ ! different orders _π_ of the _d_ variables.
+Formally, the joint distribution is factorized as [�] _k_ _[d]_ =1 _[p]_ [(] _[x][π]_ [(] _[k]_ [)] _[|][x][π]_ [(] _[<k]_ [)][)] [by] [chain] [rule.] [Therefore,]
+AO-ARMs actually define [�] _k_ _[d]_ =0 _[C]_ _d_ _[k]_ [(] _[d][ −]_ _[k]_ [) =] _[ d]_ [2] _[d][−]_ [1][ distinct univariate conditionals probabilities.]
+
+
+**Architecture** AO-ARMs model all univariate conditionals via a weight-sharing neural network,
+by using the [ **M** ] token for variables that are not present in the condition set [4] . For efficient parallel
+optimization, the architecture is designed such that given the condition set of size _k_, it can predict all
+_d −_ _k_ univariate conditionals at once, similar to the output of conditional distributions in Fig. 1.
+
+
+**Training** AO-ARMs are trained to minimize the negative joint likelihood of a datapoint _**x**_ 0 under
+the expectation over the uniform distribution _Uπ_ of orders. It can be simplified by treating _l_ as a
+random variable with a uniform distribution over cardinalities 1 to _d_ . Further, it can be transformed
+into a form for better parallel optimization:
+
+
+_LAO_ ( _**x**_ 0) = E _π∼Uπ_
+
+
+_d_
+
+- _−_ log _qθ_ ( _x_ _[π]_ 0 [(] _[l]_ [)] _|x_ _[π]_ 0 [(] _[<l]_ [)] ; _π_ ) (G.1)
+
+
+_l_ =1
+
+
+= E _π∼Uπ_ _d ·_ E _l∼U_ (1 _,···,d_ ) _−_ log _qθ_ ( _x_ _[π]_ 0 [(] _[l]_ [)] _|x_ _[π]_ 0 [(] _[<l]_ [)] ; _π_ ) (G.2)
+
+
+1
+= _d ·_ E _l∼U_ (1 _,···,d_ ) _d −_ _l_ + 1 [E] _[π][∼][U]_ [(] _[S][d]_ [)]
+
+
+_d_
+
+- _−_ log _qθ_ ( _x_ _[π]_ 0 [(] _[r]_ [)] _|x_ _[π]_ 0 [(] _[<l]_ [)] ; _π_ ) _._ (G.3)
+
+
+_r_ = _l_
+
+
+Training pseudocode of Eq. (G.3) can be referenced in Algorithm 1.
+
+
+4Condition set corresponds to variables in _xπ_ ( _<k_ ).
+
+
+28
+
+
+**Sampling** The sampling process for AO-ARMs generates data points autoregressively based on a
+randomly sampled order _π_ . Starting from an empty sequence initialized with [ **M** ] tokens, the model
+iteratively predicts the next variable based on the current condition set _x_ _[π]_ [(] _[<k]_ [)] . Since the order _π_
+is chosen randomly, AO-ARMs support generating sequences with any desired ordering, aligning
+with their ability to model _d_ ! orderings during training. Sampling pseudocode can be referenced in
+Algorithm 2.
+
+
+H COMPARISON TO PRIOR WORKS CONCERNING EQUIVALENCE DISCUSSION
+
+
+Austin et al. (2021) and Hoogeboom et al. (2022) have both discussed the relationship between
+absorbing discrete diffusion and AO-ARMs. Below, we provide a detailed comparison of their
+approaches with ours.
+
+
+Austin et al. (2021) made an early attempt to explore the connection between absorbing
+discrete diffusion and AO-ARMs. However, their work lacks rigorous proof. Instead, they qualitatively discuss the correlation between the two loss functions. Notably, in Appendix A.3 of Austin et al.
+(2021), they describe the relationship by stating, _**"this looks very similar ... it is not exactly identical."**_
+
+
+In contrast, our work rigorously establishes this connection. By leveraging the continuoustime framework and the time-independent parameterization presented in Theorem 1, we provide a
+formal proof demonstrating the equivalence between absorbing discrete diffusion and AO-ARM.
+
+
+Hoogeboom et al. (2022) establishes the equivalence between ARMs and the ELBO of the
+absorbing diffusion models directly. In comparison, our approach follows a different path:
+
+
+1. the ELBO was first reduced to _L_ _[T]_ DSE [(] _**[x]**_ [0][)][ as Eq. (2.6), as discussed in detail in Lou et al. (2024).]
+
+2. Using step-by-step substitutions via Eq. (3.7), we further reduce _L_ _[T]_ DSE [(] _**[x]**_ [0][)][ to] _[ L]_ [AO][.]
+
+
+Therefore, our approach offers unique contributions by:
+
+
+**A rigorous and alternative proof** We leverage the time-independent properties of the reparameterization formulation, providing an alternative and rigorous proof of this equivalence.
+
+
+**Equivalence of four losses** Our analysis extends to demonstrate the equivalence of four distinct
+losses, including _L_ _[T]_ DSE [(] _**[x]**_ [0][)][ and] _[ L]_ [AO][(] _**[x]**_ [0][)][ in Eq. (3.7), offering a deeper understanding of absorbing]
+discrete diffusion.
+
+
+**Comprehensive experimental validation** We conduct a thorough study of these loss functions,
+with results presented in Tables 1 and 2. To the best of our knowledge, this exploration has not been
+explored in prior work.
+
+
+I ALGORITHMS FOR TRAINING AND SAMPLING
+
+
+**Algorithm 1** AO-ARM Training
+
+
+**Require:** Network _**c**_ _θ_, samples from data distribution _p_ data
+
+**repeat**
+
+_**x**_ 0 _∼_ _p_ data, _π_ _∼_ _Uπ_ .
+_l ∼_ _U_ (1 _, · · ·_ _, d_ ).
+_**x**_ _[′]_ _←_ I( _π_ _< l_ ) _⊙_ _**x**_ 0 + I( _π_ _≥_ _l_ ) _⊙_ [ **M** ]
+
+Calculate _L_ = _d−dl_ +1    - _di_ = _l_ _[−]_ [log]    - _**c**_ _θ_ ( _**x**_ _[′]_ )[ _π_ ( _i_ ) _, x_ _[π]_ 0 [(] _[i]_ [)] ]�.
+Calculate _∇θL_ and run optimizer.
+**until** converged
+
+
+29
+
+
+**Algorithm 2** AO-ARM Sampling
+
+
+**Require:** Network _**c**_ _θ_
+
+Initialize _**x**_ _←_ [ **M** ] _. . ._ [ **M** ]
+Sample _π_ _∼_ _Uπ_ .
+**for** _i_ in _{_ 1 _, . . ., d}_ **do**
+
+Sample _j_ _∼_ Cat( _**c**_ _θ_ ( _**x**_ )[ _π_ ( _i_ ) _, ·_ ])
+Update _**x**_ _[i]_ _←_ _j_
+**end for**
+
+
+**Algorithm 3** Discrete Diffusion Training ( _t_ -DCE Loss)
+
+
+**Require:** Network _**c**_ _θ_, noise schedule _σ_, time [0 _, T_ ], samples from data distribution _p_ data
+
+**repeat**
+
+
+_**x**_ 0 _∼_ _p_ data, _t ∼_ _U_ ([0 _, T_ ]).
+Construct _**x**_ _t_ by _ξ_ _[i]_ _∼_ _Bernoulli_ ( _e_ _[−][σ]_ [¯][(] _[t]_ [)] ), _x_ _[i]_ _t_ [=][ I][(] _[ξ][i]_ [= 1)] _[x][i]_ 0 [+][ I][(] _[ξ][i]_ [= 0)[] **[M]** []][.]
+
+
+_e_ _[−][σ]_ [¯][(] _[t]_ [)]
+_x_ _[i]_ _t_ [=[] **[M]** []] _[ −][σ]_ [(] _[t]_ [)] 1 _−e_ _[−][σ]_ [¯][(]
+
+
+_e_ _[−][σ]_ [¯][(] _[t]_ [)] 
+1 _−e_ _[−][σ]_ [¯][(] _[t]_ [)] _**[c]**_ _[θ]_ [(] _**[x]**_ _[t]_ [)[] _[i, x][i]_ 0 []] .
+
+
+Calculate _Lθ_ ( _**x**_ _t,_ _**x**_ 0) =
+
+[�]
+
+
+_e_ _[−][σ]_ [¯][(] _[t]_ [)] - _e_ _[−][σ]_ [¯][(] _[t]_ [)]
+
+1 _−e_ _[−][σ]_ [¯][(] _[t]_ [)] [log] 1 _−e_ _[−][σ]_ [¯][(]
+
+
+Calculate _∇θL_ ( _xt, x_ 0) and run optimizer.
+**until** converged
+
+
+**Algorithm 4** Discrete Diffusion Training ( _λ_ -DCE Loss)
+
+
+**Require:** Network _**c**_ _θ_, samples from data distribution _p_ data
+
+**repeat**
+
+
+_**x**_ 0 _∼_ _p_ data, _λ ∼_ _U_ ([0 _,_ 1]).
+Construct _**x**_ _λ_ by _ξ_ _[i]_ _∼_ _Bernoulli_ (1 _−_ _λ_ ), _x_ _[i]_ _λ_ [=][ I][(] _[ξ][i]_ [= 1)] _[x][i]_ 0 [+][ I][(] _[ξ][i]_ [= 0)[] **[M]** []][.]
+Calculate _Lθ_ ( _**x**_ _λ,_ _**x**_ 0) = [�] _x_ _[i]_ _λ_ [=[] **[M]** []] _[ −]_ _λ_ [1] [log] - _**c**_ _θ_ ( _**x**_ _λ_ )[ _i, x_ _[i]_ 0 []] �.
+
+
+_x_ _[i]_ _λ_ [=[] **[M]** []] _[ −]_ _λ_ [1]
+
+
+Calculate _Lθ_ ( _**x**_ _λ,_ _**x**_ 0) = [�] _x_ _[i]_ _λ_ [=[] **[M]** []] _[ −]_ _λ_ [1] [log]  - _**c**_ _θ_ ( _**x**_ _λ_ )[ _i, x_ _[i]_ 0 []] �.
+
+Calculate _∇θL_ ( _xλ, x_ 0) and run optimizer.
+**until** converged
+
+
+**Algorithm 5** Discrete Diffusion Sampling (Unconditional)
+
+
+**Require:** Network _**c**_ _θ_, noise schedule _σ_, time range [0 _, T_ ], step size ∆ _t_
+
+_t ←_ _T_, _**x**_ _T_ _←_ [ **M** ] _. . ._ [ **M** ], _**c**_ _cache_ _←_ _**c**_ _θ_ ( _**x**_ _t_ ).
+**while** _t >_ 0 **do**
+
+**if** Use Euler **then**
+
+Construct transition densities _p_ [euler] _t−_ ∆ _[,i]_ _t|t_ [(] _[x]_ _t_ _[i]_ _−_ ∆ _t_ _[|]_ _**[x]**_ _[t]_ [)][ by Eq. (D.13) with] _**[ c]**_ _[cache]_ [.]
+
+_x_ _[i]_ _t−_ ∆ _t_ _[∼]_ [Cat][(] _[p]_ [euler] _t−_ ∆ _[,i]_ _t|t_ [(] _[x]_ _t_ _[i]_ _−_ ∆ _t_ _[|]_ _**[x]**_ _[t]_ [))][ for all] _[ x]_ _t_ _[i]_ [= [] **[M]** []][,] _[ x]_ _t_ _[i]_ _−_ ∆ _t_ _[←]_ _[x]_ _t_ _[i]_ [for all] _[ x]_ _t_ _[i]_ [= [] **[M]** []][.]
+**end if**
+**if** Use Tweedie _τ_ -leaping **then**
+
+Construct transition densities _p_ _[i]_ _t−_ ∆ _t|t_ [(] _[x]_ _t_ _[i]_ _−_ ∆ _t_ _[|]_ _**[x]**_ _[t]_ [)][ by Eq. (D.8) with] _**[ c]**_ _[cache]_ [.]
+_x_ _[i]_ _t−_ ∆ _t_ _[∼]_ [Cat][(] _[p]_ _t_ _[i]_ _−_ ∆ _t|t_ [(] _[x]_ _t_ _[i]_ _−_ ∆ _t_ _[|]_ _**[x]**_ _[t]_ [))][ for all] _[ x]_ _t_ _[i]_ [= [] **[M]** []][,] _[ x]_ _t_ _[i]_ _−_ ∆ _t_ _[←]_ _[x]_ _t_ _[i]_ [for all] _[ x]_ _t_ _[i]_ [= [] **[M]** []][ .]
+**end if**
+**if** _**x**_ _t−_ ∆ _t_ = _**x**_ _t_ **then**
+
+_**c**_ _cache_ _←_ _**c**_ _θ_ ( _**x**_ _t_ ).
+**end if**
+_t ←_ _t −_ ∆ _t_ .
+**end while**
+
+
+30
+
+
+**Algorithm 6** Discrete Diffusion Sampling (Conditional)
+
+
+**Require:** Network _**c**_ _θ_, noise schedule _σ_, time [0 _, T_ ], step size ∆ _t_, Prompt spaces Ω and tokens _T_ .
+
+_t ←_ _T_, construct _**x**_ _T_ with _**x**_ [Ω] _T_ [=] _[ T]_ [and] _**[ x]**_ [¯Ω] _T_ [= [] **[M]** []][,] _**[ c]**_ _[cache]_ _[←]_ _**[c]**_ _[θ]_ [(] _**[x]**_ _[t]_ [)][.]
+**while** _t >_ 0 **do**
+
+**if** Use Euler **then**
+
+Construct transition densities _p_ [euler] _t−_ ∆ _[,i]_ _t|t_ [(] _[x]_ _t_ _[i]_ _−_ ∆ _t_ _[|]_ _**[x]**_ _[t]_ [)][ by Eq. (D.13) with] _**[ c]**_ _[cache]_ [.]
+
+_x_ _[i]_ _t−_ ∆ _t_ _[∼]_ [Cat][(] _[p]_ [euler] _t−_ ∆ _[,i]_ _t|t_ [(] _[x]_ _t_ _[i]_ _−_ ∆ _t_ _[|]_ _**[x]**_ _[t]_ [))][ for all] _[ x]_ _t_ _[i]_ [= [] **[M]** []][,] _[ x]_ _t_ _[i]_ _−_ ∆ _t_ _[←]_ _[x]_ _t_ _[i]_ [for all] _[ x]_ _t_ _[i]_ [= [] **[M]** []][ .]
+**end if**
+**if** Use Tweedie _τ_ -leaping **then**
+
+Construct transition densities _p_ _[i]_ _t−_ ∆ _t|t_ [(] _[x]_ _t_ _[i]_ _−_ ∆ _t_ _[|]_ _**[x]**_ _[t]_ [)][ by Eq. (D.8) with] _**[ c]**_ _[cache]_ [.]
+_x_ _[i]_ _t−_ ∆ _t_ _[∼]_ [Cat][(] _[p]_ _t_ _[i]_ _−_ ∆ _t|t_ [(] _[x]_ _t_ _[i]_ _−_ ∆ _t_ _[|]_ _**[x]**_ _[t]_ [))][ for all] _[ x]_ _t_ _[i]_ [= [] **[M]** []][,] _[ x]_ _t_ _[i]_ _−_ ∆ _t_ _[←]_ _[x]_ _t_ _[i]_ [for all] _[ x]_ _t_ _[i]_ [= [] **[M]** []][ .]
+**end if**
+**if** _**x**_ _t−_ ∆ _t_ = _**x**_ _t_ **then**
+
+_**c**_ _cache_ _←_ _**c**_ _θ_ ( _**x**_ _t_ ).
+**end if**
+_t ←_ _t −_ ∆ _t_ .
+**end while**
+
+
+J EXPERIMENTAL DETAILS
+
+
+J.1 MODEL DETAILS
+
+
+We implemented our RADD model based on the SEDD architecture, an decoder-only transformer
+model (Vaswani et al., 2017b; Devlin et al., 2019a). Our model incorporates rotary positional
+encoding (Su et al., 2021) but excludes all parts related to time conditioning (i.e., TimeEmbedding,
+adaLN-zero block (Peebles & Xie, 2023b)). Instead, we added a softmax operation at the end of the
+neural network to ensure the output is a valid conditional distribution. This simplified architecture is
+similar to the standard GPT architecture, except the lack of attention mask and multiple probability
+output instead of single one.
+
+
+J.2 TRAINING DETAILS
+
+
+We trained our RADD models using the following configuration settings:
+
+
+    - Batch Size: 512
+
+    - Learning Rate: 3 _×_ 10 _[−]_ [4]
+
+
+    - Exponential Moving Average (EMA):0.9999
+
+
+    - Gradient Clipping: Gradient norm clipped to 1
+
+
+    - Warmup Schedule: Applied for the first 2500 iterations
+
+
+    - weight decay: 0.03
+
+
+    - dropout rate: 0.02
+
+
+The hyperparameters were adapted from (Lou et al., 2024), with modifications referenced from (Shi
+et al., 2024). The main modifications were setting the weight decay to 0.03 and the dropout rate
+to 0.02. Due to limited computational resources, we did not perform a hyperparameter search and
+directly conducted experiments with these settings. Further tuning of hyperparameters may enhance
+performance.
+
+
+In terms of training tokens, 400K iterations correspond to approximately 105 billion tokens, while
+1000K iterations correspond to about 262 billion tokens. It’s worth noting that the entire OpenWebText
+dataset contains only 9 billion tokens, meaning that models went through the dataset multiple times
+during training.
+
+
+The small models are trained on nodes of 32 V100 32G GPUs with float16 precision.
+
+
+31
+
+
+J.3 UNCONDITIONAL GENERATION DETAILS
+
+
+For unconditional generation, we employed a log-linear noise schedule. As illustrated in Section 3.2,
+the Euler method and the Tweedie _τ_ -leaping method are equivalent under this case. In practice, the
+implementation of the Euler method and the Tweedie _τ_ -leaping method remains the same for RADD
+but differs for SEDD. So we measure the perplexity of SEDD by Tweedie _τ_ -leaping method which
+performs slightly better while it suffices to measure the perplexity of RADD once.
+
+
+As suggested by (Zheng et al., 2024), except for Table 4, all samples are generated using float64
+precision of Gumbel-based categorical sampling(abbreviated as fp64 precision below). No annealing
+methods (e.g., top-p or top-k sampling) were applied in our sampling process.
+
+
+J.4 FURTHER EVALUATION OF GENERATIVE PERPLEXITY
+
+
+**Runtime and entropy measurement** To evaluate the efficiency of inference and the diversity of
+samples, we assessed the inference time and unigram entropy averaged across 1024 samples. When
+calculating unigram entropy, we chose the natural logarithm (ln) instead of the log2. We provide
+perplexity and entropy results under both fp64 and fp32 precision in Tables 3 and 4 respectively.
+
+
+Under both precisions, RADD and SEDD exhibit comparable perplexity results for the same number
+of sampling steps. For large sampling steps, perplexity converges under fp64 precision but continues
+to decrease under fp32 precision. This discrepancy is due to precision errors in fp32, which effectively
+function as a form of annealing, resulting in deceptively lower perplexity values (Zheng et al., 2024).
+To evaluate efficiency, we focus on the sampling time under fp64 precision.
+
+
+The RADD model consistently required the shortest sampling time while maintaining similar perplexity levels to the SEDD model. Specifically, RADD achieved a speed-up of up to 2.5 to 3 times
+with large sampling steps, as shown in Table 3. These findings align with the analysis of the E-NFEs
+in Fig. 1a, validating the effectiveness of the RADD model and the caching strategy. Even with 1024
+sampling steps(equal to sequence length), the cache strategy still enables about 1.5 times acceleration.
+
+
+Table 3: **Average inference time,** **perplexity,** **and entropy per sample with varying sampling**
+**steps under fp64 precision.** The table compares the average inference time (in seconds), perplexity
+(PPL), and entropy for the SEDD medium model using Tweedie _τ_ -leaping sampling methods, as
+well as the RADD medium model under a log-linear noise schedule with a caching strategy. The
+experiment is conducted under a single NVIDIA A800 80G GPU with a batch size of 16.
+
+
+Steps 32 64 128 256 512 1024 2048 4096
+
+
+SEDD-medium Time(s) 0.52 0.99 1.91 3.78 7.49 14.93 29.82 59.56
+
+
+RADD-medium Time(s) 0.45 0.80 1.54 2.96 5.32 8.39 12.28 18.20
+
+
+Table 4: **Average perplexity, and entropy per sample with varying sampling steps under fp32**
+**precision** . The table compares the average perplexity (PPL), and entropy for the SEDD medium
+model using Tweedie _τ_ -leaping sampling methods, as well as the RADD medium model under a
+log-linear noise schedule with a caching strategy.
+
+
+Steps 32 64 128 256 512 1024 2048 4096
+
+
+SEDD-medium PPL _↓_ 85 **62** **51** **41** 34 **27** **22**
+Entropy 8.18 8.07 7.96 7.86 7.73 7.60 7.44 7.25
+
+
+RADD-medium PPL _↓_ 126 **84** 63 **51** **41** **33** **27** **22**
+Entropy 8.19 8.09 7.98 7.88 7.75 7.59 7.45 7.27
+
+
+32
+
+
+**Efficiency of our caching strategy with mini-batch** In Appendix D.5, we explored the average
+NFE for the single sample case. This concept, however, extends to the mini-batch case.
+
+
+In a mini-batch, some samples may remain unchanged while others may evolve. To address this, we use a dynamic batch-size strategy. Only the samples that have changed are passed
+through the neural network for computation. While this still involves a "batch-level NFE", the total
+NFE per sample is reduced, effectively enhancing efficiency as in the single-sample case.
+
+
+In comparison, concurrent work Sahoo et al. (2024) does not consider dynamic batch size
+in their implementation, so their practical acceleration falls short of the theoretical potential.
+
+
+To further validate the efficiency, we conducted experiments generating 64 samples under
+various batch sizes. The results, summarized in Table 5, demonstrate that the average generation time
+with our caching strategy consistently outperforms SEDD across different batch sizes and timestep
+configurations. We provide a detailed analysis below:
+
+
+BATCH SIZE AND GPU UTILIZATION For a fixed model, increasing the batch size leads to
+improved GPU utilization before reaching the maximum batch size, reducing the average sampling
+time per sample. In the case of RADD, sampling time decreases significantly as the batch size
+increases from 1 to 4. However, the reduction in sampling time becomes minimal beyond a batch
+size of 4, indicating that GPU utilization has nearly reached its maximum capacity at this point. This
+demonstrates the scalability of our approach within the limits of the hardware’s parallel processing
+capabilities.
+
+
+SEDD VS RADD Under identical batch sizes and timesteps, RADD consistently outperforms
+SEDD in sampling speed. This highlights the efficiency of RADD’s design, where the caching
+mechanism reduces redundant computations and achieves faster generation, especially for larger
+batch sizes and higher timesteps.
+
+
+Table 5: **The average inference time across batch sizes and timesteps of SEDD-medium and**
+**RADD-medium.** Experiments were conducted on an NVIDIA 4090 GPU (24GB VRAM, maximum
+batch size = 8). The average generation time per sample (in seconds) is averaged over 64 samples.
+
+
+**Batch Size** _\_ **Steps** **32** **64** **1024** **2048** **4096**
+
+
+SEDD-medium
+
+
+1 0.98 1.83 3.57 6.95 13.80 27.16 54.76 109.90
+2 0.75 1.43 2.77 5.46 10.85 21.62 43.19 86.23
+4 0.67 1.30 2.56 5.09 10.15 20.27 40.50 80.97
+8 0.70 1.34 2.65 5.25 10.46 20.85 41.68 83.32
+
+
+RADD-medium
+
+
+1 0.77 1.34 2.56 4.86 8.73 14.00 20.45 30.70
+2 0.60 1.08 2.05 3.98 7.32 12.32 18.88 28.97
+4 **0.50** **0.97** **1.87** **3.65** **6.75** 11.26 17.67 27.67
+8 0.51 **0.97** 1.90 3.71 6.76 **10.87** **16.76** **26.58**
+
+
+**Sampling as any-order autoregressive models** As outlined in Theorem 1, _**c**_ _θ_ can be interpreted
+as a conditional distribution over clean data. One natural approach is to use this directly for generating samples, similar to any-order autoregressive models. However, there are _d_ ! possible ways to
+decompose the joint distribution into conditional distributions. We tested three representative cases:
+
+
+    - forward: _p_ ( _x_ [1] _· · · x_ _[d]_ ) = [�] _k_ _[d]_ =1 _[p]_ [(] _[x][k][|][x]_ [(] _[<k]_ [)][)]
+
+    - backward: _p_ ( _x_ [1] _· · · x_ _[d]_ ) = [�] _k_ _[d]_ =1 _[p]_ [(] _[x][k][|][x]_ [(] _[>k]_ [)][)]
+
+
+33
+
+
+- random: _π_ _∼_ _Uπ_, _p_ ( _x_ [1] _· · · x_ _[d]_ ) = [�] _k_ _[d]_ =1 _[p]_ [(] _[x][π]_ [(] _[k]_ [)] _[|][x][π]_ [(] _[<k]_ [)][)]
+
+
+The results are presented in Table 6. Perplexity was calculated as the average over 1024 samples.
+For the random case, we calculated the average perplexity across different randomly generated _π_,
+corresponding to the standard AO-ARMs sampling method. It shows that the result of the standard
+AO-ARMs sampling method aligns closely with the converged perplexity of the _τ_ -leaping method
+under fp64 precision in large steps. Among the different decomposition orders, the forward order
+demonstrated the best performance.
+
+
+Table 6: **Quality of unconditionally generated text evaluated by perplexity (** _↓_ **).** For a fixed model,
+the best perplexity is **bolded** .
+
+
+Method RADD-medium
+
+
+Forward **81.70**
+Backward 103.68
+Random 83.10
+
+
+J.5 FURTHER EVALUATION OF ZERO-SHOT PERPLEXITY
+
+
+In this section, we provide an extended evaluation of the zero-shot language modeling performance
+of RADD models trained for **1000k** iterations. While the results in the main text focus on models
+trained for 400k iterations, training for longer durations can slightly improve model performance due
+to the increased exposure to training data.
+
+
+Table 7: **Additional zero-shot language modeling perplexity (** _↓_ **) for RADD small models.** We
+present the perplexity for RADD models trained for **1000k** iterations based on their corresponding
+loss.
+
+
+Method LAMBADA WikiText2 PTB WikiText103 1BW
+
+
+RADD- _t_ -DCE **48.92** 37.44 102.49 37.20 70.58
+RADD- _λ_ -DCE 49.74 37.13 **98.84** 36.66 **69.77**
+RADD-AO 49.43 **36.86** 102.36 **35.25** 70.71
+
+
+K ADDITIONAL EXPERIMENTAL RESULTS
+
+
+K.1 ADDITIONAL SAMPLES
+
+
+Additional unconditionally and conditionally generated text of RADD- _λ_ -DCE small and medium
+models are reported in Figs. 2 to 5. All of the samples are generated with 1024 steps under a log-linear
+noise schedule.
+
+
+34
+
+
+Civilians of Puerto Ricans in Ohio. Chili replaced beer peas and oyster shs as Kurds
+replaced corn with Louisiana barbeque in Louisiana, where chili served as the dinner dish
+to houseplants: "Cajaro souvlaki".
+In the southwest in the early-19th century, this dish became used in the Texas Southwest.[1][12]
+When the "American" to mean "Spanish F" or "Saw" arose in the thought, first in the
+south of Mexico (Columbus) and later in America (continent), chili served as, When cooked,
+medicinally mixed into dishes as a side dish, with fruits and vegetables, short stewed meals,
+soup to date including poker pot.
+Wackned chili also first appeared in North America in 1819 as some accounts describe its
+use as a turkey stew and chicken hock". Other versions, which are known of by euphemism
+as the sussificatte guitaristi, have pinned the origin of the term on the original date of
+the Passiacoamerica during which Spanish tribesmen could not venture into the region
+until (after the end of the Pequewille; jumples mugged and smoking was observed) Bigger’s
+Passage upon the Coast. Some researchers believe that chili is served as regent proving
+in a nice winter as part of the traditional diet, not barbecue although the Uuy Juaco is
+traditionally eaten.[13][14]
+The Mexican website Chili, which first occurred in 2006, contains a short page reliving 15
+different barbecue recipes already served in Mexico under Brandon and Cincy of the American revolutionary movement of the 19th.[15][18] Chili became a frequentstay of Mexican
+dining at the Walton, Colo., family grocery store in California and North Carolina, and it
+has been found in several American grocery stores. Original scout Midwest founder Michael
+Dunbar declared in 1998 that this corrugated chili dish was "consistent with the food that
+served in Mexico during the 19th century."[16]
+End of era and availability
+The Mexican Chili became regularly served in United States Central Texas as of November 1,
+2004 (December 1934), and has been sold since at Chestnut many times.[17] Many Mexican
+barbecue joints across the West Valley began as a cuisine instead of a regular and later
+would use chili, rather "porocera cooking by returning Mesopotamians."[18][19][20][21]
+In culture [ edit ]
+Chili was a coarse cured dish made with spices and seasoning, usually chili or side chili. Mexican meat was assigned to the game.Wet meats were made using heat, followed sometimes
+with hot beer or wine, such as limes or beer. Stroked chili keeps spaghetti sauce or breast
+dishes such as parmies and cheese. Chili was used to warm flatbread, hot dogs, lamb jerky
+and dried moonplugs. It was also used in hamburger, except where cuts of meat is used in
+meal. The dish was also used in toppdown, fried chicken, egg rolls, papaya noodles, yakka
+noodles, garlic, and onions. Chili is used in wine batter, unsweetened spaghetti squash
+which is often mashed together in sandwiches.
+The Mexican Grill locations are offered at Kearney, Purdue University, we travel to other
+Inc. restaurants either with affordable prices or at semi-cooperative/voluntary locations.
+Stores range from California to Texas. Chili can also become available from the local Italian
+market, often as available at the Chili Jack’s restaurant on the Black Hawk Courthouse.[22]
+Chili is not currently produced for local Italian producers.
+New Mexican imports [ edit ]
+A new emphasis of use of arugared Mexican beans, as well as black beans, BL beans, pickled
+peppers, quesadillas, and peas, form them as a menu item alternatives to items as manufactured by KFC and Mexican Grill.
+The Chili is popular because of tortilla[19] which is a regular ingredient with sandwiches
+between Sundays. According to Google Live-Mexico Taco, making fresh, chili-free meals
+includes pulled pork with cheese removed sweet potatoes, ranch oranges, and mild marlic
+cheese with floured brown bread. Guajías, chillies, and during cold periods are also included
+in Mexican Chili. Caesar salad is featured in many facets of East Mexican Grill. Bay Area
+El-Lachi, Taco Bell employee and blogger, mentions lunch menus. Options, the better bets,
+were the traditional winter chicken dishes on Fridays in the Hudson Brewery that call the
+restaurant proper chili.[21]
+
+
+Figure 2: **Unconditionally generated text of RADD-** _λ_ **-DCE small.**
+
+
+35
+
+
+I have a " Kot actu my vit " Shit " est " thou est first and me first " Work Begins By email:
+10 January 2012 7:21 GMT Kristy
+Latest article at the "Mail Stream page
+Impressions
+Because I am still relying on the e-mails of the EIS server to indicate legitimate databases,
+I fail the virtual sharing argument, share function, disk space index, etc. (Failure is not sufficient to have my mail client be contains privileged information....) once I set the transport
+destination on the email e-mess, it contains privileged information extra.
+My e-mails list which connections have received data, and you can use RSS to view the
+packets. In an application with a connection infrastructure you can create an arbitrary
+object structure, for which and for the system where layers of your communications stack
+are designed.
+" enforce kernel space mass. append first 2. :y ;; 0. cons. end eq bd. nec. end df1 lift8d 1 foo
+8 11 modified-scwd0h 1 ls 120 127 dbbsi 1 dbbsi 1 check 503(123-s3)p #syntkilledestpcoud"
+The client also throws back an IP address hash that can easily be cached right after it
+originally generated; low-level operations run by microservices.
+Using bodyURL parameter, I run a privilege test.
+After a reasonable approximation of Oracle’s best RSA algorithm, the result is of RCELOG
+assuming the assertion that this method works all 1 n of trails [day 11 - day left] + job
+from 5-18 and last for 9 after J.T. Leeper’s Theorem (which then contradict the thesis that
+a cleanup bug may exist). I couldn’t resist finding that, if it did not, needs to be fixed in a
+ASAP in order for exploit.
+A better example to go of is using an IA-64 firewall in Server Enterprise. The result can
+enable you to continue leveraging Server Enterprise’s firewall design, but not ignoring the
+same. Remember, if you want to enforce Server Enterprise’s anomaly control, you need how
+it seems to integrate with both functionality and logic.
+One last reference to the DBTR leak we first found in the world in our focus on Server
+Enterprise is that a client application can not query physical storage systems. The incompatibility of default logic with lightswitch is not of a subject per se restriction. Alten can
+benefit from impertional clanchism, therefore worth keeping in mind that the solution also
+includes both Java EE applications.
+Subsidizing Server Identity
+A collaborative research project specializing in server authentication is as important as it
+is to the user base; it is easy for ORM and AD tools to handle authentication from each
+Server without an extensive need, external to which server.
+To have only one authentication stickler running an instance, and loading a form authentication service that joins one server with a live e.g.i. justifiable sex, a declarative, composableby-side Expanded Persistent Application ( ERP) class is brought about.
+In general, it tends to only need two IDs in an application approaching RHEL.
+InJh mail company distributed in New York City.’s email system, with 6 ID., This application
+should also deal with issued data model, ERP (e.g. data model proxy (0.), database (0.6.)
+boundaries.[ 10]
+The majority is typical chief operating in order to accomplish a technical milestone, and [ ] is kept calm by the development team [ 11]. As a result, being a ready-track application,
+this open consistencyGateway is very much ready.
+A fuzzed server data file with sheltered and forstrap A per day routines with messages such
+as response, reply, reply, excluded is reserved for applications... that contain SQL. A server
+file can be deployed over two machines under the requirements of the application, such
+as building windows of good email for long time, to simulate simple third-party software
+for email-mirroring, or for slab email for messaging. It is also settled that an application
+requiring isolation test passes must have an isolated SQL server resources, which are typically
+lightweight enough by default (tight door if you’re) to manage.
+Configuring Environments standard ( R2. R2 is a practical "dry" multi-purpose instantiation
+mechanism, but it still recieved different designations using knctions that contain module
+mechanism (where or wherever), i.e. only module will be (elegally) it can be harness, but in
+the context supporting the interoperability, not every application must implicitly adopt only
+one and allows supporting the similarity of the particular implementation. Why do it use
+R names, but the usual reason is that: it’s a database that is accessed in a joint framework.
+
+
+Figure 3: **Conditionally generated text of RADD-** _λ_ **-DCE small.** Prompt tokens are in blue.
+
+
+36
+
+
+Hall of Fame quarterback to Pro Bowlist. At times, Wright hasn’t hit this reset button—he
+had a recommittal with the 2011 regime, but he certainly is on notice: Who’d rather be
+unemployed starring tennis all-stars than a 500-castle NFL franchise? Is the experience a
+perfect match for him? Can he go over Suh, who is coming off a Super Bowl championship
+season that included a major letdown expected him to just discuss: a torn ACL?
+Derrick Williams vs. former Nebraska QB Kevin Youkil at the University of Miami: "Bright
+warm-up. Become captivated by the game in right light and suppose, at both the amateur
+and top-level level Brandon Pettit came into consideration from visionary standpoint. Third
+thought: I revered Robb Hart’s job as offensive coordinator while as an assistant coach at
+Iowa State. Let Jimmie Langer tell his story."
+Ricky Duches, former Ohio State coordinator, defeated new LSU offensive line coach Les
+Miles with high school Nebraska quarterback Willy Clabo. (In the movie from Boston,
+Katerla Floodgate also got the Lombardi Trophy.)
+Williams vibes as he recalls his father and—argenceably he’s been better physically and
+at other things—reveals just how big-time football is. And what he received for being so
+synonymous with the game: "Back in 1982, when I was 16, I saw the big-time football. I
+knew what the NFL was...I got to Superdome, and out I knew Jim Brown wasn’t exactly
+greeting Nogueira with a being handshake. But I saw it! [When] else got out on the field, I
+stood there half-swedicking...We liked it for a little while." As Al Crump, the experienced
+conference speaker, was truly dazzled in a ballroom, tells me of her visit, "We’ve been in the
+group for years. I’ve been pretty carefully planning get a visit. There were Seahawks and
+could I say badgers? While suffering." Nineteen-year-old Husker’s fan saw it as a chance
+to make her own observations amidst the relentless publicity during the late-May 26 offsite
+disruption.She’s discovered better than most what other attendees have done when it comes
+to integrity and candor in their feats with interviews, and bloggers featuring her accounts
+of the Washington Redskins and Chuck Siedelbaum. Beginner loves groupies.
+Sgt. Gun Casper Olson, free agents with San Diego at Faulkner: "I got to really get to know
+my brother, Buck (Olson, Sr.). We’re a supervisor in the Major League for the last 15 years,
+who will work with us in the 159 _millionand_ 10 260 per billion level, so we got to get to know
+him every single day. Came to see who often begins and ends up staying where professional
+sports are. Hawaii didn’t offer it as Kansas did." However, in many ways, he was highly
+complimentary of that former team’s coach, comparing what Hawaii offered to Voeltt Park
+whom he described as Kurt Stater of the Eagles: "I got to see Cliff Starsy, North Carolina’s
+head coach at the time, and watch Nick Saban, who was the potential replacement for the
+Alabama coaches before they got his hands on Bradley/Hedge Briles. I watched everything.
+On the football field was his ono. As a coach, he gets so excited, I couldn’t drive with him
+on the field, though he wasn’t playing. His closest friend manages TSA for him. And our
+lineback players’m ht excited that he puts on. I want to know where Robert Griffin III
+would be next because he has reached out to Matt directly. We are so intense that my drive
+won’t much use."
+Chris Jackson, Jr., Jr., 2015 Stanford and Paula, who were then older than him and split
+chances are part of several big families. Jackson’s momma; Paula’s soft loves; and Jackson’s
+pressure on everything in the team and social sphere. Still, they are each given enough
+space to talk about the game ultimately one day. On Monday, for her first hour-long
+conversation as a prospect with people wearing the surrogate for best mothers, she talked of
+her relationship with the ninth-grade scholarship and converting it into an effective recruiting
+tactic; essentially, she had won her family’s trust with linebackers that she could stage for
+a bright future. "And that shows true faith and confidence," she informs me.
+Orryn Lamba Jackson, 2015 sophomore in Cornell, an African-American computer geek
+with giant L.D. glasses, named Abraham Lincoln to Sanford Abraham, the mayor of her
+community in Benton, Ark., that school’s throwback. She is as humble as Los Aldridge,
+where her book was held
+
+
+Figure 4: **Unconditionally generated text of RADD-** _λ_ **-DCE medium.**
+
+
+37
+
+
+I have a ? Well, I don’t really think I leverage capital at the end of the day. I have a - a
+theory that these things are Fiction- ignorable and dangerous.
+Huh. . . Hmm.. But they will never recognise me.
+How fierce am I.. Ma Rdf, called me out in the heat of sanctimonia and ignorance.
+I am in a position of being in the middle, not the pack.
+Primordial wealth has no ample hands, but I am especially heavy. My first step is not gonna
+be rich.
+As much as I claim, I will provide you with nothing. I will force you to do whatever it take
+to go the route that you deem appropriate. I’ll demand that you become my expert tool.
+Usually when they gangge me, I know when their indulgence is not for me.
+You´re practicing WITH the Masochist!
+A young lady took Petra wrapsrt me a strawberry extract while he was thirsty as I was
+eating out that day.
+She bragged as she hugged the unsuspecting waitress to tell him, “Let’s revue that recipe!
+That meth thumb isn’t good.” Besides, she said, “So friggin’ gums don’t mong like that cure
+som a bowl!”<|endoftext|>"liars stalling liars." The Town Movement Leaders Still Nader
+Meanwhile?
+On November 9, a new report [partedially co-written The Environmental Working Group]
+revealed allegations that the EPA had routinely used decoys on pigs in Oregon today, exacerbating Ecolabelion in U.S.-origin food.
+Let’s face it - it is time begged little children to form the cover of the smoke is inferno
+and crime malls - no matter how likely it is for them to say something funny or remember
+their fathers mumbling with far more reluctance when addressing the press. So we expect
+our government agent to be moral when they have a (public) right to information without
+leaving the door open to their investigation
+BILL May they learn our government officials needn’t superlative skills in which case they
+take a tough line...One reason all reported tests are said to be acts of terrorism by corrupt
+agents of the political is you’ve never reached a threshold level you must accept testing. So
+there are two reasons why?
+One is that the public - public opinion has changed recently. Takes time, and no public
+pressure won’t be meaningful to algae farms when the bloggers get down to shove. We were
+honestly assured of all of this pressure on the way-down to Nixon - tell us if you are willing
+to listen to a sly reporter...The folks you Daily Sheeple have the most difficult time doing is
+fishing crackers to gather sand with hundreds of pounds of scales, concrete, or grease trays.
+
+- - Related: Bringing Up:
+Earlier: Former EVA Does “Nader’s EPA” Test In November, Parrotes Daily Exam
+Earlier: Mining Smog’s Seed Means Persuating Boger Ecolideca
+Photo Credit: Biolanao/Whisper<|endoftext|>Macroorganics, published in Environmental
+and Swedish Medicine, have detected an inter-cell growth factor-alpha (IFAS-alpha) gene
+in what the team considers to be the most tasty and dismaying organism and object in
+the world. The researchers studied the diet of 60 million modern sheep, goats, sheep, cattle,
+chickens, rats and mice whose accumulate more data revealed patterns of greater importance
+to be found in the human population. Specifically a gene (IFAS-alpha) disproportionately
+responds in mice to oxidative stress.
+Rheum-enriched flavon fat (AST) and consumption of milk fat-oddimal fractional density
+lipoprotein (FFL) were indeed shown to have significant effects. Medication of these substances in control animals or controls did not induce the selected IFAS-alpha. colon cancer
+rates, in contrast with the original cause in antibiotic- and non-infected control mice that
+underlie the principle, were not necessarily improved.
+In turns antibiotic resistance and colonally carcinogenic antibiotic feeding bacteria are not
+related. Numbers are unclear but the fact these changes are attributed to them proposes
+that conventional antibiotics could not deny known causal effects on the adjacent cousins.
+The Swedish researchers led by Professor Erik Johansson and Anne Kristin GunnarssonSilk both University of Sweden who were elected to chair the "Global VIP Conference on
+Animal Food Physiology" today on May 1 in Vilskovisno, shared by the Office of Ontrialed
+CounsellingASE MEDIC; the high-level Swedish Food Safety Research Institute; Division
+of Borneck, Tissue, Cellular and Virus; System Genomics Service that operates in a joint
+framework.
+
+
+Figure 5: **Conditionally generated text of RADD-** _λ_ **-DCE medium.** Prompt tokens are in blue.
+
+
+38

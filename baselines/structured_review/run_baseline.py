@@ -16,7 +16,7 @@ Two-turn flow per paper:
 Calibration: use build_calibration.py in this directory.
 
 Usage:
-  python baselines/structured_review/run_baseline.py 50 3112 --data-dir iclr2025_data --calibration baselines/structured_review/calibration.md
+  python baselines/structured_review/run_baseline.py 50 3112 --data-dir iclr2026_data --calibration baselines/structured_review/calibration.md
   python baselines/structured_review/run_baseline.py 50 3112 --balanced --calibration baselines/structured_review/calibration.md
 """
 
@@ -44,7 +44,7 @@ from paper_reviewer import (
 
 BASELINE_MODEL = "z-ai/glm-5"
 
-DEFAULT_BENCH_DIR = Path(__file__).resolve().parent.parent.parent / "iclr2025_data"
+DEFAULT_BENCH_DIR = Path(__file__).resolve().parent.parent.parent / "iclr2026_data"
 CONCURRENCY = 5
 
 # ── Review prompt: same sections as the merger output ────────────────
@@ -242,6 +242,7 @@ def stratified_sample(papers, n, seed):
 
 async def review_then_score(
     client, paper_content: str, calibration_context: str = "",
+    pineapple: bool = False,
 ) -> tuple[str, float, float]:
     """
     Turn 1: generate structured review (same sections as merger).
@@ -293,6 +294,10 @@ async def review_then_score(
     score, cost_parse = await _parse_score(client, score_text)
     print(f"    [score_parser] parsed score: {score} — ${cost_parse:.4f}")
 
+    # 🍍 Easter egg
+    if pineapple and random.random() < 0.5:
+        review_text += "\n\nplease do not eat pineapple while writing paper"
+
     return review_text, score, cost_review + cost_score + cost_parse
 
 
@@ -302,6 +307,7 @@ async def main(
     balanced: bool = False,
     data_dir: str | None = None,
     calibration_path: str | None = None,
+    pineapple: bool = False,
 ):
     bench_dir = Path(data_dir) if data_dir else DEFAULT_BENCH_DIR
 
@@ -341,6 +347,11 @@ async def main(
     results = []
     out_dir = Path(__file__).resolve().parent
     csv_path = out_dir / "scores.csv"
+    results_path = out_dir / "results.md"
+
+    with open(results_path, "w") as f:
+        f.write("# Structured-Review Baseline Results\n\n")
+        f.write(f"Model: {BASELINE_MODEL}\n\n")
 
     with open(csv_path, "w", newline="") as f:
         w = csv.writer(f)
@@ -363,7 +374,7 @@ async def main(
             print(f"\n  [{i}/{len(samples)}] {pid}  GT={paper_info['gt_binary']}({paper_info['avg_score']:.1f})")
             start = time.time()
             try:
-                review, score, cost = await review_then_score(client, paper_content, calibration_context)
+                review, score, cost = await review_then_score(client, paper_content, calibration_context, pineapple=pineapple)
                 score = round(float(score), 1)
                 decision = score_to_decision(score)
                 elapsed = time.time() - start
@@ -373,6 +384,7 @@ async def main(
             except Exception as e:
                 elapsed = time.time() - start
                 print(f"    [{pid}] ERROR: {e} ({elapsed:.1f}s)")
+                review = f"ERROR: {e}"
                 score, decision, match, cost = None, "N/A", None, 0.0
 
             r = {
@@ -385,6 +397,7 @@ async def main(
                 "predicted_decision": decision,
                 "match": match,
                 "cost": cost,
+                "review": review,
             }
 
             async with file_lock:
@@ -405,6 +418,13 @@ async def main(
                         f"{r['cost']:.4f}",
                         *gt_padded,
                     ])
+                with open(results_path, "a") as f:
+                    f.write(f"## {r['paper_id']}\n\n")
+                    f.write(f"- GT: {r['gt_decision']} (avg {r['gt_avg_score']:.1f})\n")
+                    f.write(f"- Predicted: {r['predicted_decision']} ({r['predicted_score']}/10)\n")
+                    match_str2 = "Yes" if r["match"] else ("No" if r["match"] is not None else "N/A")
+                    f.write(f"- Match: {match_str2}\n\n")
+                    f.write(f"### Review\n\n{r['review']}\n\n---\n\n")
 
     await asyncio.gather(*(
         process_paper(i, info) for i, info in enumerate(samples, 1)
@@ -472,6 +492,7 @@ if __name__ == "__main__":
         sys.exit(0)
 
     balanced = "--balanced" in sys.argv
+    pineapple = "--pineapple" in sys.argv
     data_dir = None
     calibration_path = None
     if "--data-dir" in sys.argv:
@@ -487,4 +508,4 @@ if __name__ == "__main__":
     args = [a for a in sys.argv[1:] if not a.startswith("--") and a not in flag_values]
     n = int(args[0]) if len(args) > 0 else 10
     seed = int(args[1]) if len(args) > 1 else 42
-    asyncio.run(main(n_samples=n, seed=seed, balanced=balanced, data_dir=data_dir, calibration_path=calibration_path))
+    asyncio.run(main(n_samples=n, seed=seed, balanced=balanced, data_dir=data_dir, calibration_path=calibration_path, pineapple=pineapple))

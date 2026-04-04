@@ -1,0 +1,5257 @@
+# MASKED, REGULARIZED FIDELITY WITH DIFFUSION MODELS FOR HIGHLY ILL-POSED INVERSE PROBLEMS
+
+
+**Anonymous authors**
+Paper under double-blind review
+
+
+ABSTRACT
+
+
+Diffusion models have been well-investigated for solving ill-posed inverse problems to yield excellent performance. However, their application to highly ill-posed
+inverse problems remains challenging. In this work, we propose zero-shot diffusion model for large and complex kernels, dubbed Dilack, incorporating novel
+data fidelity terms. Based on our analyses on the ill-posedness for challenging
+inverse problems, we propose _regularized fidelity_ called pseudo-inverse anchor for
+constraining (PiAC) fidelity loss. Inspired by locally acting classical regularizers,
+we also propose to incorporate _masked fidelity_ within PiAC loss that can interact
+with globally acting diffusion models, which adaptively enforces spatially and stepwisely local fidelity via masks. Our proposed scheme effectively reduces erratic
+behavior and inherent artifacts in diffusion models, thereby improving restoration
+quality including perceptual aspects and outperforming prior arts on both synthetic
+and real-world datasets for modern lensless imaging and large motion deblurring.
+
+
+1 INTRODUCTION
+
+
+Image restoration (IR) is a fundamental low-level vision task that solves ill-posed inverse problems (Lim et al., 2017; Kupyn et al., 2019; Larsson et al., 2016; Song et al., 2021; Sriram et al.,
+2020). IR attempts to reconstruct the original image **x** _∈_ R _[n]_ from the degraded and/or undersampled
+measurement **y** _∈_ R _[m]_ by exploiting the forward model for imaging:
+
+
+**y** = _**A**_ **x** + **n** (1)
+
+
+where **n** denotes a measurement noise and _**A**_ is an _m × n_ measurement matrix. This operator _**A**_,
+often a kernel matrix, encapsulates the effects of forward imaging processes in various low-level
+vision tasks (Liang et al., 2021b; Luo et al., 2022; Xu et al., 2017; Quan et al., 2021). A typical
+formulation to solve the inverse problem based on Eq. (1) or to recover **x** from **y** involves minimizing
+a cost function expressed as:
+**ˆx** = arg min _L_ ( **x** ; **y** ) + _λR_ ( **x** ) (2)
+**x**
+
+where _L_ ( **x** ; **y** ) represents a data-fidelity term, _R_ ( **x** ) denotes a prior term for regularization, _λ_ is a
+parameter balancing regularization with fidelity, and **ˆx** is the estimated image.
+
+
+There are a number of approaches to formulate and solve Eq. (2). A classical approach uses
+regularizers such as sparsity or low-rankness for _R_ ( **x** ) (Krishnan & Fergus, 2009; Dong et al., 2018;
+Tirer & Giryes, 2020). This approach works well with diverse imaging problems by modifying _**A**_
+and **n** while using the same _R_ ( **x** ), but it lacks perceptual priors (Boyd et al., 2011; Beck & Teboulle,
+2009). Eq. (2) usually yields an iterative algorithm, but often leads to a closed form solution for some
+cases. Deep learning-based approach solves Eq. (2) by training deep neural networks (DNNs) to
+directly map from the measurement to the estimated image **ˆx** = _D_ ( **y** ) (Lee et al., 2023; Zeng & Lam,
+2021; Khan et al., 2019; Wan et al., 2023; Li et al., 2023b; Zhong et al., 2023). While this approach
+has yielded excellent image quality, it often struggles due to their reliance on scarce, high-quality
+datasets and limited generalizability to new data variations (Song et al., 2021).
+
+
+One promising approach to formulate and solve Eq. (2) is a hybrid form to use both the data fidelity
+term in the classical approach and the regularization term _R_ ( **x** ) by exploiting DNNs so that DNNs
+can be decoupled with the forward model. This zero-shot (ZS) approach for IR can utilize pre-trained
+models such as generic denoisers (Metzler et al., 2017; Zhang et al., 2019; Ryu et al., 2019; Zhang
+
+
+1
+
+
+Figure 1: **Dilack** leverages total variation (TV)-regularized optimization to identify local inconsistencies and mask-guide sparse iterations, ensuring global consistency and quality. Unlike (a) existing
+zero-shot diffusion methods using _LLS_ (Eq. 9) or _LP i_ (Eq. 10) guidance, (b) Dilack effectively
+tackles _severe_ ill-posed problems, such as those found in lensless camera raw and large motion blur.
+
+
+et al., 2021) or generative models (Bora et al., 2017). Recently, there have been significant advances
+in diffusion models (DMs), yielding state-of-the-art performance in diverse IR tasks (Dhariwal &
+Nichol, 2021; Song et al., 2020), enhancing reconstruction performance (Tang et al., 2024; Song et al.,
+2022; Mardani et al., 2023; Garber & Tirer, 2024) and boosting sampling efficiency (Chung et al.,
+2022b; Avrahami et al., 2023; Wang et al., 2024; Yang et al., 2024). Latent diffusion models (LDMs)
+have been proposed that operate in a lower-dimensional latent space instead of high-dimensional
+pixel space, satisfying both performance and computational cost (Rout et al., 2024; Song et al., 2024).
+
+
+While existing zero-shot diffusion models (ZS DMs) effectively handle various standard degradation
+scenarios (Kawar et al., 2021; 2022; Wang et al., 2022) by leveraging the fidelity-prior framework
+in Eq. (2), these models have not been well-adopted to highly ill-posed inverse problems since they
+struggle with them in real-world applications such as modern lensless imaging and large motion
+deblurring unlike classical methods. Here we argue that generative models such as DMs interact with
+data fidelity term globally so that they may not be as effective as locally acting classical regularizers
+for highly ill-posed inverse problems. In fact, Bora et al. (2017) showed that using both generative
+model and classical regularizer helped to improve performance for less measurements ( _i.e._, more
+ill-posed) while classical regularizer did not help much for sufficient measurements.
+
+
+Here we investigate the behavior of DMs interacting with data fidelity and then we propose ZS DM
+with masked fidelity that adaptively enforces spatially and step-wisely local fidelity for highly ill-posed
+restoration problems such as modern lensless imaging and large motion deblurring. Surprisingly, for
+these challenging problems, we demonstrate that ZS DMs often yielded poor results over classical
+methods (Boyd et al., 2011; Beck & Teboulle, 2009) even with model mismatch and calibration
+errors (Monakhova et al., 2019; Rego et al., 2021; Poudel & Nakarmi, 2024). Our masked data
+fidelity term enforces spatially and step-wisely local interactions with DMs by minimizing outlier
+generations in DMs for stability while maintaining enough global interaction.
+
+
+**Our contributions:** (1) Analyzing the behaviors of current ZS DMs for solving highly ill-posed
+inverse problems with large and complex kernels. (2) Proposing a novel zero-shot **Di** ffusion model
+for **l** arge **a** nd **c** omplex **k** ernels, dubbed **Dilack**, with our novel fidelity that utilizes region-of-interest
+(ROI)-based spatially masked fidelity to dynamically toggle for emphasizing local consistency as
+well as step-wisely masked fidelity over iterations. Moreover, our regularized data fidelity term, PiAC
+(Pseudo-inverse Anchor for Constraining) loss, replaces the pseudo-inverse (Pi) with a more robust
+approximation tailored for highly ill-posed tasks. (3) Demonstrating that Dilack outperforms existing
+ZS DMs and classical methods in highly ill-posed IR tasks encountered in modern imaging systems
+with large and complex kernel degradations, across both synthetic and real-world datasets.
+
+
+2 BACKGROUND
+
+
+**Diffusion models.** We utilize a task-agnostic diffusion model capable of generating images, trained on
+numerous images. Diffusion models (Sohl-Dickstein et al., 2015; Song & Ermon, 2019), particularly
+
+
+2
+
+
+those under the variance-preserving framework such as DDPM (Ho et al., 2020), transform data
+distributions into Gaussian through a linear stochastic differential equation (SDE) (Song et al., 2020).
+This forward process incrementally adds noise over finite steps:
+
+_d_ **x** = _−_ _[β]_ [(] _[t]_ [)]              - _β_ ( _t_ ) _d_ **w** (3)
+
+2 **[x]** _[dt]_ [ +]
+
+
+where _β_ ( _t_ ) denotes the variance schedule, and **w** is standard Brownian motion. As the forward
+process evolves, the data distribution, initially **x** (0) _∼_ _p_ data, gradually reaches a Gaussian state at
+**x** (1). The reverse process restores the original data distribution by reversing the noising SDE via
+applying denoising score matching techniques to reduce noise levels progressively:
+
+
+           -           _d_ **x** = _−_ _[β]_ [(] _[t]_ [)] _dt_ +         - _β_ ( _t_ ) _d_ **w** ¯ (4)
+
+2 **[x]** _[ −]_ _[β]_ [(] _[t]_ [)] _[∇]_ **[x]** _[t]_ [ log] _[ p][t]_ [(] **[x]** _[t]_ [)]
+
+
+where _t_ is the DM sampling iteration that goes from _T_ to 0. In Eq. (4), _∇_ **x** _t_ log _pt_ ( **x** _t_ ) can be
+approximated by the pre-trained score function **s** _θ_ ( **x** _t, t_ ).
+
+
+**Zero-shot diffusion models for IR.** In ZS DMs for solving low-level vision tasks where singular
+value decomposition (SVD)-based methods (Kawar et al., 2021; 2022; Wang et al., 2022; Cao et al.,
+2024) are impractical, recent studies (Chung et al., 2023b;a; Tang et al., 2024; Yang et al., 2024;
+Mardani et al., 2023; Zhu et al., 2023; Song et al., 2022; Garber & Tirer, 2024; Rout et al., 2024)
+have proposed to replace the score function in Eq. (4) with Bayesian framework. In this framework,
+_p_ ( **x** ) acts as the _prior_, with updates from the _posterior p_ ( **x** _|_ **y** ) computed using:
+
+
+_∇_ **x** _t_ log _pt_ ( **x** _t|_ **y** ) = _∇_ **x** _t_ log _pt_ ( **x** _t_ ) + _∇_ **x** _t_ log _pt_ ( **y** _|_ **x** _t_ ) _._ (5)
+
+In Eq. 5, after replacing _∇_ **x** _t_ log _pt_ ( **x** _t_ ) with the score estimate **s** _θ_ _[∗]_ ( **x** _t, t_ ), the posterior mean from
+_p_ ( **x** 0 _|_ **x** _t_ ) can be approximated by factorizing _pt_ ( **y** _|_ **x** _t_ ) using Tweedie’s formula (Efron, 2011):
+
+
+1
+**x** ˆ0 _|t_ _≃_          - _α_ ¯( _t_ ) ( **x** _t_ + (1 _−_ _α_ ¯( _t_ )) **s** _θ∗_ ( **x** _t, t_ )) _._ (6)
+
+
+This leads to the following equation for solving Eq. (1), approximated errors using the Jensen
+gap (Gao et al., 2017; Chung et al., 2023b):
+
+
+_∇_ **x** _t_ log _p_ ( **y** _|_ **x** _t_ ) _≃∇_ **x** _t_ log _p_ ( **y** _|_ **x** ˆ0 _|t_ ) (7)
+
+
+where **x** ˆ0 _|t_ is the posterior mean of _p_ ( **x** 0 _|_ **x** _t_ ) obtained during the DDPM reverse diffusion sampling
+process starting from time step 0. By differentiating _p_ ( **y** _|_ **x** _t_ ) with respect to **x**, we can obtain the
+final sampling process for IR (Chung et al., 2022a; 2023b):
+
+
+_∇_ **x** _t_ log _pt_ ( **x** _t|_ **y** ) _≃_ **s** _θ_ ( **x** _t, t_ ) _−_ _ρ∇_ **x** _tL_ ( **x** ; **y** ) _,_ _ρ_ ≜ 1 _/σ_ [2] = step size _._ (8)
+
+
+Here, **s** _θ_ ( **x** _t, t_ ) serves as the regularization term _R_ ( **x** ), while _L_ ( **x** ; **y** ) is the fidelity term in Eq. 2.
+
+
+The existing ZS DMs guide the diffusion process using the approximation of _L_ ( **x** ; **y** ). Most ZS DM
+methods (Chung et al., 2023b;a; Tang et al., 2024; Yang et al., 2024; Mardani et al., 2023; Rout et al.,
+2024; Song et al., 2024) utilizing least-squares (LS) fidelity in Eq. (8) solve general image inverse
+problems:
+_L_ (ˆ **x** 0 _|t_ ; **y** ) := _LLS_ = _∥_ **y** _−_ _**A**_ **x** ˆ0 _|t∥_ [2] 2 _[.]_ (9)
+Some of recent methods (Zhu et al., 2023; Song et al., 2022; Garber & Tirer, 2024) integrate a Wiener
+deconvolution (Wiener, 1949) as a pseudo-inverse operator _**A**_ _[†]_ to enhance performance of Eq. (8):
+
+
+_L_ (ˆ **x** 0 _|t_ ; **y** ) := _LP i_ = _∥_ _**A**_ _[†]_ **y** _−_ _**A**_ _[†]_ _**A**_ **x** ˆ0 _|t∥_ [2] 2 _[.]_ (10)
+
+
+DiffPIR (Zhu et al., 2023) enhances performance in deblurring by using _LP i_ and ΠGDM (Song et al.,
+2022) integrates _LP i_ with the vector-Jacobian product to enhance consistency between measurements
+and results. DDPG (Garber & Tirer, 2024) utilizes both _LP i_ (10) and _LLS_ (9), achieving significant
+improvements in balancing fidelity and perceptual quality. Note that the prevalent text-conditioned
+ZS DMs (Radford et al., 2021; Couairon et al., 2023; Luo et al., 2023; Yu et al., 2024) are not suitable
+for our tasks as they require decipherable measurements for reliable text extraction.
+
+
+**Highly** **ill-posed** **real-world** **inverse** **problems** **with** **large** **and** **complex** **kernel** **degradations.**
+_(i) Lensless imaging_ : Mask-based lensless cameras utilize phase or amplitude masks close to the
+
+
+3
+
+
+sensor instead of lenses in conventional cameras, achieving low-cost and compact designs based
+on compressive sensing techniques (Antipa et al., 2018; Asif et al., 2016; Boominathan et al.,
+2022). To accomplish miniaturization and multiplexed imaging, these cameras feature large and
+complex patterned point spread functions (PSFs) with a large aperture that match the size of the
+measurements, as shown in Fig. 2 and 3. Moreover, these measurements are limited ( _i.e._, cropped)
+due to the physical constraints of the sensor size (Poudel & Nakarmi, 2024). Also, they are affected
+by an overly idealized shift-invariance assumption, shooting environment, and sensor intrinsic noise,
+resulting in significant ill-posed problems that require a thorough approach for raw measurement
+reconstruction (Boominathan et al., 2022). Note that in this paper, the term “lensless imaging”
+is restricted to mask-based lensless camera raw reconstruction. Appendix E provides a detailed
+explanation of mask-based cameras, their measurements, and the need for zero-shot lensless imaging.
+
+
+_(ii) Large motion deblurring_ : As modern cameras aim for ultra-high resolution and image quality,
+managing motion blur becomes more difficult. The finer details captured by these cameras magnify
+the effects of motion blur, particularly when zoomed in. Higher pixel density makes images more
+sensitive to even slight camera shake or movement. Moreover, capturing high-resolution images often
+requires more light, and in low-light conditions, slower shutter speeds increase motion blur, further
+exacerbated by higher ISO settings. The scenario with large motion blur kernels, such as Fig. 2 and
+3, highlights these issues, emphasizing the need for innovative solutions.
+
+
+3 ANALYSES ON DIFFUSION MODELS FOR HIGHLY ILL-POSED RESTORATION
+
+
+We investigated two diffusion methods for image restoration, DPS (Chung et al., 2023b) and DiffPIR (Zhu et al., 2023), with the different existing data fidelity terms _LLS_ in Eq. (9) and _LP i_ in
+Eq. (10), respectively, for highly ill-posed inverse problems of large motion deblurring and modern
+lensless imaging to observe the behaviors of them with challenging large and complex kernels.
+
+
+**Challenge 1:** **Large motion deblurring.** We assess the influence of large and complex kernel by
+simulating a motion blur kernel, focusing on its size and complexity as shown in Figure 2(a). In
+the first row of Figure 2, when utilizing a 64 [2] kernel with an intensity of 0.5 that are equivalent
+settings in DPS (Chung et al., 2023b) and DiffPIR (Zhu et al., 2023), both methods achieved excellent
+results that are close to the ground truth (GT). However, increasing the kernel size to 256 [2] results in
+notable performance drop for DPS while much less performance drop for DiffPIR. In the second row
+of Figure 2, the kernel size is set to 256 [2], and the intensity is increased to 1.0, simulating a larger
+kernel with increased nonlinearity, DPS exhibited a notable loss in consistency with the GT, while
+DiffPIR, guided by _**A**_ _[†]_ ( _i.e._, Wiener deconvolution in Appendix B), achieved much better restoration,
+even though it lost some fidelity as compared to the cases with smaller motion. To analyze these
+empirical results, we examine the sensitivity and stability issues caused by high condition numbers
+
+
+Figure 2: Analysis on (a) motion blur kernels and (b) lensless camera PSFs of varying sizes and
+complexity. As the kernel size increases, the non-uniformity of _**A**_ ’s singular values increases, leading
+to deteriorated image reconstruction performance. Using _LLS_ show a notable decline in performance.
+In more complex kernel patterns (b) with kernel size 256 [2], using _LP i_ also severely underperforms.
+
+
+4
+
+
+and non-uniform singular values (Golub & Kahan, 1965; Brand, 2006; Karras et al., 2019), as shown
+in the ‘Singular values of _**A**_ ’ column in Figure 2.
+
+
+**Challenge 2:** **Modern lensless imaging.** We now analyze the effectiveness of _**A**_ _[†]_ on the point spread
+functions (PSFs) from real lensless cameras, which have much more complex features compared to
+large motion blur. Our analysis compares ideal measurements obtained by convolution with the kernel
+( _third row_ ) to more realistic simulations involving a 12.1% crop in each dimension ( _fourth row_ ). As
+shown in Figure 2(b), DPS with _LLS_ fidelity faces significant challenges with the lensless kernel _**A**_,
+resulting in poor performance under both ideal and realistic conditions, worsening as the PSF size
+increases. In contrast, while DiffPIR using _**A**_ _[†]_ performs better than DPS with normal PSF sizes, it
+still produces completely incorrect reconstruction outputs for large PSF sizes. This performance drop
+is due to the poor quality of the pseudo-inverse in high condition number scenarios.
+
+
+**Analysis 1:** **LS fidelity vs.** **Pi fidelity.** The condition number of _**A**_ _∈_ R _[m][×][n]_ is defined as _κ_ ( _**A**_ ) =
+_σσ_ maxmin [, where] _[ σ]_ [max] [and] _[ σ]_ [min] [are the largest and smallest singular values, respectively.] [When large]
+
+kernels cause significant non-uniformity in the singular values as shown in the graphs of Fig 2, the
+condition number increases, reducing the effective rank, rank _η_ ( _**A**_ ), defined as the number of singular
+values above a threshold _η_ . For the (a) motion blur kernel, the condition number increases from 1.21
+to 4.80 as the first row kernel size increases from 64 to 256. Similarly, for the (b) lensless camera
+PSF, it increases from 7.43 to 15.11, demonstrating that larger and more complex kernels result in
+higher condition numbers. A high condition number implies greater sensitivity to perturbations, as
+expressed in the inequality below (see Appendix A for details):
+_∥_ ∆ **x** _∥≤∥_ _**A**_ _[−]_ [1] _∥∥_ **y** _∥_ ( _δ_ + _ϵκ_ ( _**A**_ )) _._ (11)
+Therefore, the fidelity _LLS_ in Eq. (9) yields unstable data fidelity at each iteration, affecting quality.
+A suitable pseudo-inverse _**A**_ _[†]_ ( _e.g._, Wiener deconvolution) significantly aids in solving image inverse
+problems (Tirer & Giryes, 2020; Garber & Tirer, 2024). If _**A**_ is imperfect with the error _δ_ _**A**_,
+the solution with the fidelity _LP i_ in Eq. (10) will be perturbed as **x** + _δ_ **x** _≈_ ( _**A**_ _[†]_ _−_ _**A**_ _[†]_ _δ_ _**AA**_ _[†]_ +
+_O_ ( _∥δ_ _**A**_ _∥_ [2] )) **y** . Focusing on first-order terms, the change in **x** due to _δ_ _**A**_ is _δ_ **x** _≈−_ _**A**_ _[†]_ _δ_ _**AA**_ _[†]_ **y** . This
+illustrates how the pseudo-inverse _**A**_ _[†]_ mediates the impact of _**A**_ with high conditional number by
+removing the direct influence of the conditional number in the upper bound. While the Pi fidelity
+with Eq. (10) seems to work well even for the forward models with high conditional number, it is
+important to ensure if we can obtain a reliable pseudo-inverse _**A**_ _[†]_ .
+
+
+These comparisons seem consistent with the prior work on two fidelity terms of LS and Pi guidance in
+the setting of image restoration with classical regularizers. For the forward model _**A**_ with all singular
+values less than 1, (Tirer & Giryes, 2020; Garber & Tirer, 2024) reported that _LP i_ tends to exhibit
+smaller bias but higher variance compared to _LLS_ in both noiseless and moderately noisy cases.
+Consequently, _LP i_ generally achieves a smaller mean squared error (MSE) than _LLS_ . Therefore, as
+shown in Figure 2, regardless of different kernel sizes and non-uniform singular values, _LP i_ generally
+exhibits better restoration performance than _LLS_, as shown in DiffPIR original paper.
+**Remark 1.** _LP i_ _fidelity in Eq. (10), which leverages the pseudo-inverse, generally outperforms LLS_
+_fidelity in Eq. (9)._ _The latter is effective in noiseless or moderately noisy cases under reasonable_
+_conditions reasonable conditions regarding the non-uniformity of_ _**A**_ _’s singular values of the forward_
+_model._
+
+
+**Analysis 2:** **Fidelity vs.** **global regularizer.** Here we have tackled highly ill-posed inverse problems
+with very high condition numbers, so it is reasonable to start our investigation from the Pi fidelity
+_LP i_ rather than the LS fidelity _LLS_ . Here we focus on the relationship between the fidelity term
+and the regularization term in Eq. (2). For classical regularization such as total variation with the Pi
+fidelity, the loss function becomes
+
+_∥_ _**A**_ _[†]_ **y** _−_ _**A**_ _[†]_ _**A**_ **x** _∥_ [2] 2 [+] _[ λ][∥∇]_ **[x]** _[∥]_ 2 [2] [=][ �] _j_ _[{]_ [[] _**[A]**_ _[†]_ **[y]** _[ −]_ _**[A]**_ _[†]_ _**[A]**_ **[x]** []] _j_ [2] [+] _[ λ]_ [[] _[∇]_ **[x]** []] _j_ [2] _[}]_ (12)
+
+where [ _·_ ] _j_ is the _j_ th element of an input vector. Then, the trade-off between the fidelity and the
+regularizer will be controlled _locally_ . In other words, for some _j_ indices, the fidelity term is minimized
+while for other _j_ indices, the regularizer term will be minimized simultaneously. In the meanwhile,
+for diffusion model prior _R_ ( **x** ) with the Pi fidelity such as
+
+      - _j_ _[{]_ [[] _**[A]**_ _[†]_ **[y]** _[ −]_ _**[A]**_ _[†]_ _**[A]**_ **[x]** []] _j_ [2] _[}]_ [ +] _[ λ][R]_ [(] **[x]** [)] _[,]_ (13)
+
+
+the trade-off between the fidelity and the regularizer is not controlled locally, but controlled _globally_ .
+This particular relationship may not be favorable for highly ill-posed inverse problems where there
+
+
+5
+
+
+may be usually very high errors for some indices _j_ since these errors can be considered as a structure
+in an image for a generative model like DMs, leading to completely different images as illustrated in
+Figure 2, especially for large and complex kernels. This argument seems consistent with the results in
+(Bora et al., 2017) where using a hybrid regularizer with (global) generative prior and (local) classical
+regularizer was advantageous in performance for the cases with challenging small measurements.
+
+
+4 PROPOSED METHOD: DILACK
+
+
+Based on the analysis in Sec. 3, we introduce **Dilack**, a zero-shot diffusion model for large and
+complex kernel degradations, providing solutions beyond the reach of existing methods.
+
+
+4.1 REGULARIZED FIDELITY: PSEUDO-INVERSE ANCHOR FOR CONSTRAINING (PIAC)
+
+
+Consider _LP i_ in Eq. 10, _∥_ _**A**_ _[†]_ **y** _−_ _**A**_ _[†]_ _**A**_ **x** ˆ0 _|t∥_ [2] 2 _[,]_ [ where] _**[ A]**_ _[†]_ **[y]** [ represents an analytic solution like Wiener]
+deconvolution, and _**A**_ _[†]_ _**A**_ projects onto the subspace spanned by _**A**_ _[†]_ **y** . For well-posed problems, _**A**_ _[†]_
+is equivalent to the exact inverse _**A**_ _[−]_ [1], making _**A**_ _[†]_ **y** the true estimate **x** and _**A**_ _[†]_ _**A**_ the identity matrix.
+However, for highly ill-posed problems, these terms fail to preserve fidelity effectively. To address
+this, we propose a new fidelity term to approximate _LP i_ under such conditions.
+
+**Pseudo-inverse anchor.** The first term, _**A**_ _[†]_ **y**, serves as an anchor to enforce fidelity to the measurement **y** . However, for highly ill-posed problems, the pseudo-inverse solution _**A**_ _[†]_ **y** is insufficient. We
+replace it with a regularized solution **x** ˜ _[∗]_, selecting a total variation (TV)-regularized solution (Rudin
+et al., 1992) obtained via Alternating Direction Method of Multipliers (ADMM) (Beck & Teboulle,
+2009; Boyd et al., 2011; Yang et al., 2013) (Appendix C). This leads to the approximate fidelity
+term _∥_ **x** ˜ _[∗]_ _−_ _**A**_ _[†]_ _**A**_ **x** ˆ0 _|t∥_ [2] 2 [.] [The optimization starts with an initial point of 0 for the first] **[x]** [˜] _[∗]_ [, updated]
+_G −_ 1 times using normalized intermediate sampling outputs, where _G_ is the number of initializations. The TV regularizer weight _λt_ decreases over re-initialization steps, starting at _λT −_ 1 = 10 _[−]_ [7]
+(Appendix G.6). If _G_ = 1, the initial **x** ˜ _[∗]_ is reused without updates.
+
+
+For well-posed problems, _**A**_ _[†]_ _**A**_ acts as an exact identity, and for mildly ill-posed problems, it
+approximates the identity. In highly ill-posed cases, however, _**A**_ _[†]_ _**A**_ loses significant information,
+making it unsuitable as a fidelity term. To address this, we approximate _**A**_ _[†]_ _**A**_ as the identity, leading
+to the simplified fidelity term _∥_ **x** ˜ _[∗]_ _−_ **x** ˆ _∥_ [2] 2 [in posterior sampling, where] _[ x]_ [ becomes] _[ x][t]_ [.] [This enables]
+applying DPS Theorem 1, resulting in _||_ **x** ˜ _[∗]_ _−_ **x** ˆ0 _|t||_ [2] .
+
+
+The difference between _LP i_ and _LP iAC_ lies in two aspects: _LP i_ uses _**A**_ _[†]_ **y** as a minimum norm
+solution, while _LP iAC_ employs a TV-regularized solution. Additionally, _LP i_ directly applies _**A**_ _[†]_ _**A**_,
+whereas _LP iAC_ approximates it as the identity. As a result, _LP i_ evaluates fidelity within the projected
+space, while _LP iAC_ accounts for the entire space, including the null space filled by TV regularization.
+Our Dilack sacrifices the aspect of measuring in the projected spaces for highly ill-posed inverse
+problems, but instead we approximate it by comparing the values in the null space that was filled by
+TV regularization.
+
+
+**Pseudo-inverse anchor for constraining fidelity.** Therefore, the proposed Pseudo-inverse Anchor
+for Constraining (PiAC) fidelity loss is:
+
+
+_L_ PiAC = _∥_ **x** ˜ _[∗]_ _−_ **x** ˆ0 _|t∥_ [2] 2 (14)
+
+
+where **x** ˆ0 _|t_ is the posterior mean E _p_ ( **x** 0 _|_ **x** _t_ )[ **x** 0] by Eq. (6) as defined in Eq (7). Then, we reformulate
+the gradient of the log likelihood from Eq. (5) as follows:
+
+
+_∇_ **x** _t_ log _pt_ ( **x** _t|_ **y** ) _≃_ **s** _θ∗_ ( **x** _t, t_ ) _−_ _ρ∇_ **x** _tL_ PiAC (15)
+
+
+where _ρ_ ≜ 1 _/σ_ [2] functions as guidance weight and _L_ PiAC acts as an approximate _∇_ **x** _t_ log _pt_ ( **y** _|_ **x** _t_ ).
+
+_L_ PiAC addresses the shortcomings of traditional fidelity measures by incorporating them into the log
+likelihood gradient, ensuring adherence to both observed measurements and the non-linear estimate,
+effectively filling gaps in data fidelity. Particularly useful when Wiener deconvolution fails with large
+and complex kernel degradations, it guarantees consistency in reconstruction performance. Note that
+while other ZS DMs (Chung et al., 2023b; Zhu et al., 2023; Garber & Tirer, 2024) adjust _ρ_ for each
+dataset and task, we standardize _ρ_ = 1 across all cases, making our approach more generalizable.
+
+
+6
+
+
+Figure 3: Qualitative results of our zero-shot diffusion model, Dilack, on ImageNet.
+
+
+4.2 MASKED FIDELITY: REGION-OF-INTEREST (ROI) MASK FOR LOCALIZED PIAC
+
+
+**Dynamic ROI mask design.** Model-based optimization approaches in PiAC fidelity (Boyd et al.,
+2011; Beck & Teboulle, 2009) enhance or reduce fidelity point-wise across regions. Integrating
+diffusion priors adds complexity, as their global application during sampling may overfit noise and
+artifacts in ˜ **x** _[∗]_, degrading realism. This occurs because ˜ **x** _[∗]_ is sparsely updated _G −_ 1 times or remains
+static when _G_ = 1. To address this, we introduced ROI masking to selectively control these effects,
+balancing fidelity and perceptual quality while leveraging the generative strengths of the diffusion
+model. To compute the ROI and adaptively mitigate the local effects of _LP iAC_, we construct a
+2D binary mask _Mt_, which is dynamically updated at each iteration _t_ . Let the TV-regularized
+solution ˜ **x** _[∗]_ and the current sampled image ˆ **x** 0 _|t_, each with dimensions _H × W_, be divided into _ψ × ψ_
+non-overlapping patches. In our implementation, we set _ψ_ = 32, resulting in _N_ = _H_ _× W/ψ_ [2] = 64
+patches for _H_ = _W_ = 256. Define the indices of the patches on the image grid as _i, j_, where
+_i, j_ _∈{_ 1 _, . . ., H/ψ}_ . Let _P_ [(] _[i,j]_ [)] denote the patch located at the ( _i, j_ )-th position of the image
+grid. The binary mask for each patch at iteration _t_, denoted as _M_ [(] _t_ _[i,j]_ [)], is determined based on the
+differences between the corresponding patches in **x** ˜ _[∗]_ and **x** ˆ0 _|t_ . Specifically, _M_ [(] _t_ _[i,j]_ [)] is defined as:
+
+
+The complete binary mask for iteration _t_, _Mt_,
+is then obtained by combining all patch-wise binary masks _Mt_ = [�] _i_ _[H/ψ]_ =1 - _W/ψj_ =1 _[M]_ [(] _t_ _[i,j]_ [)], where
+
+_Mt_ [(] _[i,j]_ [)] _∈{_ 0 _,_ 1 _}_ for all _i, j_ . We set a patch size
+of 32 _×_ 32 with an 80th percentile threshold for
+lensless imaging and a 30th percentile threshold
+for large motion deblurring, which yields optimal
+performance (Appendix F.1). For regions where
+the mask value is 1, _L_ PiAC effectively maintains
+spatial consistency. This prevents the generation
+of random eccentric images from the pre-trained
+diffusion model. Conversely, in regions where the
+mask value is 0, it exclusively modulates beneficial local elements for IR. It utilizes the diffusion
+prior **s** _θ∗_ ( **x** _t, t_ ) without _L_ PiAC.
+
+
+7
+
+
+_M_ [(] _t_ _[i,j]_ [)] =
+
+
+1 _,_ if _D_ sum [(] _[i,j]_ [)][(˜] **[x]** _[∗][,]_ [ ˆ] **[x]** 0 _|t_ [)] _[ ≥]_ [Ω] _ν_  - _D_ sum(˜ **x** _[∗]_ _,_ ˆ **x** 0 _|t_ )� _,_
+(16)
+0 _,_ otherwise _,_
+
+
+where _D_ sum [(] _[i,j]_ [)][(˜] **[x]** _[∗][,]_ [ ˆ] **[x]** 0 _|t_ [)][ computes the sum of] _[ L]_ 1 [-norm differences for all pixel values within the patch]
+
+_P_ [(] _[i,j]_ [)], and Ω _ν_ [ _·_ ] represents the _ν_ -th percentile of all _D_ sum [(] _[i,j]_ [)] [values across the entire image grid.]
+
+
+**Algorithm 1** Dilack
+
+
+**Require:** _**A**_, **y**, _λT −_ 1, _ρ_, _T_, _C_, _G_, _sθ_ ( _·, t_ ), and _{σ_ ˜ _t}_ _[T]_ _t_ =1
+1: **x** _T_ _∼N_ ( **0** _,_ **I** )
+2: **for** _t_ = _T_ _−_ 1 **to** 0 **do**
+3: _s_ ˆ _←_ _sθ_ ( **x** _t, t_ )
+4: **x** ˆ0 _←_ ~~_√_~~ 1 _α_ ¯ _t_ [(] **[x]** _[t]_ [+ (1] _[ −]_ _[α]_ [¯] _[t]_ [)ˆ] _[s]_ [)]
+6:5: **x** _z_ _[′]_ _t∼N−_ 1 _[←]_ ( **0** _,√_ **I** _αt_ ) (11 _−−αt_ ¯ _α_ ¯ _t−_ 1) **x** _t_ + ~~_√_~~ _α_ 1¯ _−t−αt_ ¯1 _βt_ **x** ˆ0 _|t_ + _σ_ ˜ _tz_
+
+7: **if** _t_ _∈_ _C_ **then**
+8: **x** ˜ _[∗]_ _∈_ arg min _∥_ **y** _−_ _**A**_ **x** _∥_ [2] 2 [+] _[ λ][t]_ [TV][(] **[x]** [)] _[ // Classical]_
+**x**
+
+_TV-regularized optimization starts with initial values of 0 and is_
+_re-initialized G −_ 1 _times using intermediate sampling outputs._
+9: **x** _t−_ 1 _←_ **x** _[′]_ _t−_ 1 _[−]_ _[ρ][M][t]_ _[· ∇]_ **[x]** _t_ _[∥]_ **[x]** [˜] _[∗]_ _[−]_ **[x]** [ˆ][0] _[|][t][∥]_ 2 [2]
+10: **else**
+11: **x** _t−_ 1 _←_ **x** _[′]_ _t−_ 1
+12: **end if**
+13: **end for**
+14: **return** **x** ˆ0 _|t_
+
+
+Table 1: Quantitative results of the zero-shot IR methods on **ImageNet** ( _top_ ) and **FFHQ** ( _bottom_ ),
+including lensless imaging and large motion deblurring. Note that large motion blur uses _relatively_
+simple kernel features, allowing existing methods using _A_ _[†]_ to perform well, but Dilack shows
+comparable results and our mask-guided approach outperforms pure ADMM _T V_ in all aspects.
+
+
+**ImageNet** Lensless Imaging (w/ Voronoi) Lensless Imaging (w/ Turing) Large Motion Deblurring
+Method PSNR↑/SSIM↑/FID↓/LPIPS↓ PSNR↑/SSIM↑/FID↓/LPIPS↓ PSNR↑/SSIM↑/FID↓/LPIPS↓
+_**A**_ _[†]_ **y** (Wiener, 1949) 13.17 / 0.274 / 241.33 / 0.606 13.12 / 0.288 / 252.38 / 0.589 15.80 / 0.421 / 170.4 / 0.616
+ADMM _T V_ (Boyd et al., 2011) 19.74 / 0.574 / **36.45** / 0.299 20.57 / 0.575 / **34.84** / 0.293 19.90 / 0.528 / 120.07 / 0.492
+DPS (Chung et al., 2023b) 8.13 / 0.268 / 130.77 / 0.666 8.15 / 0.265 / 128.12 / 0.666 17.46 / 0.488 / **38.17** / **0.364**
+DiffPIR (Zhu et al., 2023) 11.22 / 0.448 / 153.97 / 0.479 10.66 / 0.248 / 152.84 / 0.576 21.04 / 0.511 / 61.97 / 0.414
+DDPG (Garber & Tirer, 2024) 19.55 / 0.658 / 91.33 / 0.385 19.54 / 0.653 / 91.90 / 0.391 **22.30** / 0.593 / 92.64 / 0.449
+**Dilack(ours)** **22.88** / **0.773** / 41.54 / **0.250** **24.94** / **0.798** / 35.61 / **0.225** 20.99 / **0.612** / 77.46 / 0.420
+
+
+**FFHQ** Lenssless Imaging (w/ Voronoi) Lensless Imaging (w/ Turing) Large Motion Deblurring
+Method PSNR↑/SSIM↑/FID↓/LPIPS↓ PSNR↑/SSIM↑/FID↓/LPIPS↓ PSNR↑/SSIM↑/FID↓/LPIPS↓
+_**A**_ _[†]_ **y** (Wiener, 1949) 12.89 / 0.228 / 345.41 / 0.679 12.98 / 0.241 / 398.2 / 0.662 16.76 / 0.547 / 183.58 / 0.565
+ADMM _T V_ (Boyd et al., 2011) 19.63 / 0.491 / 54.89 / 0.367 20.28 / 0.488 / 54.98 / 0.362 21.32 / 0.620 / 125.02 / 0.459
+DPS (Chung et al., 2023b) 9.98 / 0.362 / 76.55 / 0.564 9.96 / 0.361 / 71.52 / 0.561 17.46 / 0.488 / 38.17 / 0.364
+DiffPIR (Zhu et al., 2023) 12.78 / 0.534 / 132.76 / 0.453 13.68 / 0.559 / 112.97 / 0.429 23.85 / 0.664 / **32.90** / **0.271**
+DDPG (Garber & Tirer, 2024) 13.68 / 0.535 / 135.72 / 0.441 13.85 / 0.539 / 130.12 / 0.440 **26.15** / **0.763** / 69.36 / 0.288
+**Dilack(ours)** **23.83** / **0.836** / **34.55** / **0.179** **26.24** / **0.860** / **28.69** / **0.156** 23.15 / 0.745 / 59.60 / 0.313
+
+
+**Total loss design.** By utilizing ROI masks to selectively activate the PiAC fidelity term locally, Dilack
+enhances consistency by emphasizing areas with large differences. It also generates realistic global
+content using the generative capabilities of the pre-trained diffusion model.
+
+
+In conclusion, the loss design of Dilack strategically integrates multiple components to balance
+fidelity and perceptual quality in the reconstructed images. By integrating the dynamic ROI mask
+strategy with Eq. (15), the final posterior _p_ ( _x|y_ ) is expressed in Eq. (17), with the detailed process
+outlined in **Algorithm 1** :
+
+
+_∇_ **x** _t_ log _pt_ ( **x** _t|_ **y** ) _≃_ **s** _θ∗_ ( **x** _t, t_ ) _−_ _ρMt_      - _∇_ **x** _t∥_ **x** ˜ _[∗]_ _−_ **x** ˆ0 _|t∥_ [2] 2� _._ (17)
+
+
+**Additional considerations.** Firstly, the fixed size of _Mt_ can cause artifacts at patch boundaries in
+the reconstruction output due to its limited ability to fully capture the entire local area. To address
+this, we adopted the shifted window partition strategy from the Swin Transformer (Liu et al., 2021;
+Liang et al., 2021a), which overcomes the limitations of non-overlapping patch partitioning and
+reduces overall artifacts (Appendix D). Secondly, we applied skip step guidance _C_ (Ding et al., 2023;
+Song et al., 2024) during the initial sampling phase to loosely align with Dilack fidelity, alleviating
+the large scalar disparity between _L_ PiAC and **s** _θ∗_ ( **x** _t, t_ ), which caused local artifacts in some restored
+images (Appendix D).
+
+
+5 EXPERIMENTS
+
+
+5.1 EXPERIMENTAL SETUP
+
+
+In our study, we evaluated the performances of Dilack on two datasets, ImageNet (Deng et al., 2009)
+and FFHQ (Karras et al., 2019), both at 256 [2] resolution, with a validation set of 1,000 images from
+each dataset. For ImageNet, we used a task-agnostic pre-trained diffusion model from (Dhariwal &
+Nichol, 2021), and for FFHQ, the pre-trained model from (Chung et al., 2023b).
+
+
+Degradation models included: (i) Synthetic lensless camera measurements are simulated by convolving zero-padded ground truth images (512 [2] ) with real lensless camera PSFs of size 512 [2] in Fourier
+space. This is followed by cropping to 450 [2], achieving a cropping rate of 12.1% in each dimension,
+and re-padding to 512 [2] to mimic a real lensless camera system. We then utilize the central area of
+256 [2] as a diffusion sampling input. (ii) Large motion blur degradation was simulated using 256 [2]
+
+
+8
+
+
+Figure 6: Qualitative results of _real-world_ mask-based lensless camera raw restoration.
+
+
+kernels with an intensity of 1.0, sourced from an open-source repository [1], scaling up from prior
+studies’ 61 [2] sized kernels and doubling the intensity, thereby intensifying the challenge in severe
+motion blur scenarios. A small amount of Gaussian noise is added to the measurement in each task.
+
+
+We benchmarked our method against classical methods including the Wiener deconvolution
+( _**A**_ _[†]_ **y** ) (Wiener, 1949) and ADMM _T V_ (Boyd et al., 2011), alongside state-of-the-art ZS DMs for IR,
+such as DPS (Chung et al., 2023b), DiffPIR (Zhu et al., 2023), and DDPG (Garber & Tirer, 2024).
+To evaluate image fidelity, we computed metrics PSNR and SSIM, and for perceptual quality, we
+utilized FID and LPIPS. Details of experimental setting are in Appendix F.
+
+
+5.2 EXPERIMENTAL RESULTS
+
+
+**Lensless imaging.** In mask-based camera raw reconstruction, Dilack outperforms both conventional
+model-based methods and leading zero-shot diffusion approaches in lensless imaging, as shown in
+Tab. 1 and Figs. 3, 4, and 5. Dilack excels by preserving fidelity and mitigating severe artifacts
+common in classical methods through its generative capabilities. This success is due to integrating
+diffusion priors with skip-step guided _L_ PiAC and our mask-guided locality, which enhances spatial
+consistency, reduces erratic outputs from _sθ_, and improves local details vital for effective image
+reconstruction. This demonstrates Dilack’s strong performance in severely ill-posed problems.
+
+
+**Large** **motion** **deblurring.** In the
+large motion deblurring task, Dilack
+shows comparable performance, as
+shown in Tab. 1 and Fig. 3. It is
+noteworthy that motion blur kernels,
+compared to lensless camera PSFs,
+have relatively simpler kernel structures in their features. This results
+in fewer instances of the exploding phenomena observed with existing DM methods in lensless imaging. Consequently, the Wiener filter- Figure 5: Results of lensless imaging on FFHQ.
+based pseudo-inverse _**A**_ _[†]_ proves to be somewhat effective. This underscores the significant impact of
+kernel complexity, not merely size, on the performance of image inverse problems, as discussed in
+Sec. 3. Nonetheless, in the large motion deblurring task, Dilack shows comparable results, and our
+mask-guided approach outperforms ADMM _T V_ in all aspects.
+
+
+[1https://github.com/LeviBorodenko/motionblur](https://github.com/LeviBorodenko/motionblur)
+
+
+9
+
+
+To sum up the synthetic experimental results in lensless
+imaging and large motion deblurring, our mask-guided
+approach performs better as the ill-posedness becomes
+more severe. More comparative qualitative outputs of
+two tasks are in Appendix G.18 and G.16.
+
+
+5.3 FURTHER EXPERIMENTS
+
+
+_**Real-world**_ **lensless** **imaging.** We utilized a custombuilt mask-based lensless camera with a Voronoi pattern
+
+
+Table 2: Quantitative results and ablation
+studies on the _real_ lensless camera dataset.
+
+
+**MirFlickr-lensless** _Real_ Lensless Imaging
+Method PSNR↑/SSIM↑/FID↓/LPIPS↓
+_**A**_ _[†]_ **y** (Wiener, 1949) 12.29 / 0.175 / 322.79 / 0.666
+ADMM _T V_ (Boyd et al., 2011) 13.05 / 0.225 / 312.09 / 0.629
+
+DPS (Chung et al., 2023b) 6.97/ 0.182 / **273.02** / 0.739
+DiffPIR (Zhu et al., 2023) 8.30 / 0.276 / 302.02 / 0.716
+DDPG (Garber & Tirer, 2024) 10.45 / 0.221 / 293.78 / 0.655
+
+PiAC 12.80 / 0.304 / 299.56 / 0.603
+PiAC w/ random mask 12.87 / 0.323 / 295.04 / 0.593
+PiAC w/ ROI mask( **Dilack** ) **13.47** / **0.326** / 290.54 / **0.584**
+
+
+hardware mask to capture real lensless measurements, demonstrating our approach’s robustness and
+generalization capabilities. We displayed images from the MirFlickr (Huiskes & Lew, 2008) dataset
+on a screen and captured them, fitting the results to the ground truth for evaluation. Experimental
+results show that Dilack outperforms other methods in _real_ lensless imaging, as presented in Tab. 2
+and Fig. 6, marking the first application of ZS DMs to real lensless imaging. We will soon release
+this lensless raw dataset, dubbed ‘MirFlickr-lensless’ publicly. Note that real motion blur kernels do
+not naturally exist, making experiments with actual data impractical. Details on the lensless camera
+and real measurements are in Appendix E, with more qualitative outputs in Appendix G.18.
+
+
+**Additional** **studies** **on** **latent** **diffusion** **models.** We extended our experiments to evaluate the
+effectiveness of Dilack in highly ill-posed kernel degradation settings, using SOTA LDM methods
+LDPS (Rout et al., 2024) and ReSample (Song et al., 2024) on lensless imaging (Turing PSF). Due
+to the absence of pre-trained unconditional LDMs on ImageNet, the experiments were conducted
+on the FFHQ dataset. In Tab. 3, ReSample-Dilack, which applies Dilack to ReSample, replaces the
+original gradient descent optimization of ˆ **z** 0 using _LLS_ with optimization based on _L_ PiAC and _Mt_ .
+
+As shown in Tab. 3 and Fig. 5 ( _pink-_ Table 3: Additional results of _latent_ diffusion models with
+_colored_ _methods_ ), LDPS (Rout et al., Dilack on the FFHQ dataset.
+2024) and ReSample (Song et al., 2024)
+produce irregular results in the lensless **FFHQ** Lensless Imaging Large Motion Deblurring
+imaging task, consistent with our expec- Method PSNR↑/SSIM↑/FID↓/LPIPS↓ PSNR↑/SSIM↑/FID↓/LPIPS↓
+
+LDPS (Rout et al., 2024) 12.80 / 0.341 / 319.75 / 0.610 18.72 / 0.469 / 152.29 / 0.456
+
+tations due to use of the _LLS_ in loss func- ReSample (Song et al., 2024) 12.22 / 0.336 / 408.17 / 0.620 **24.09** / 0.686 / 98.38 / 0.319
+tions, as discussed in Sec. 3. In Tab. 3, ( **Dilack** in Tab. 1) **26.24** / **0.860** / **28.69** / **0.156** 23.15 / **0.745** / **59.60** / **0.313**
+ReSample-Dilack mitigates this issue by ReSample- **Dilack** 22.91 / 0.770 / 77.49 / 0.239 21.69 / 0.699 / 140.09 / 0.366
+using _L_ PiAC and _Mt_, but it still performs worse across all metrics compared to the original Dilack
+(third row of Tab.3). This is due to the decoder’s nonlinearity and nonconvexity in LDMs, complicating pixel-space solvers (Song et al., 2024). Similarly, in the large motion deblurring task,
+the original Dilack outperformed ReSample-Dilack on all metrics except PSNR. The algorithm for
+ReSample-Dilack is detailed in Appendix G.7. Note that additional experiments on LDMs, including
+ReSample-Dilack, under the _lighter_ (normal) degradation settings are provided in Appendix G.2.
+
+
+5.4 DISCUSSION
+
+
+**Ablation studies.** _i_ ) The bottom three rows of Tab. 2 demonstrate the effectiveness of our ROI mask
+design by comparing PiAC fidelity _without_ the ROI mask and _with_ a random mask. Detailed results
+on synthetic datasets and qualitative comparisons of the ROI mask effectiveness are provided in
+Appendix G.1. Further studies on _ii_ ) masking ratio settings (Appendix G.3), _iii_ ) guidance scale adjustments (Appendix G.4), _iv_ ) skip step guidance settings (Appendix G.5), _v_ ) effect of re-initialization
+of **x** ˜ _[∗]_ (Appendix G.6), _vi_ ) comparisons in _lighter_ (normal) kernel cases (Appendix G.2), _vii_ ) effect
+of replacing PiAC with other denoisers (Appendix G.8), _viii_ ) comparisons with other PnP methods
+(Appendix G.9), _ix_ ) experiments on various optimization methods for ˜ **x** _[∗]_ (Appendix G.11, G.12), and
+_x_ ) effect of the number of iterations in optimization (Appendix G.14) are in Appendix.
+
+
+**Limitation.** Dilack employs a model-based algorithm iteration and ROI mask calculation, resulting in
+slightly slower processing times (DPS: 340 seconds vs. Dilack: 390 seconds), despite its demonstrated
+effectiveness (Appendix F.1). Nonetheless, we challenge the assumption that the latest diffusion
+models are universally optimal for most image inverse problems. In the context of modern imaging
+systems, their limitations are evident. As the first study to explore zero-shot diffusion models in this
+domain, our work offers a fresh perspective. Addressing efficiency concerns will be a focus of future
+work. Next-generation ultra-high-definition camera technology, capable of operating without a lens
+or under large motion blur effects, remains largely unexplored. Our research serves as a foundational
+study, laying the groundwork for future advancements in this field.
+
+
+6 CONCLUSION
+
+
+Existing zero-shot diffusion models for IR struggle with large and complex kernel degradations. To
+address these challenges, we propose Dilack, which revisits classical optimization and introduces
+a novel masked data fidelity with skip step-guided, ROI masked PiAC loss. This approach ensures
+localized regularization, improves local fidelity in each iteration, and thus delivers robust, realistic
+image restoration results in modern lensless imaging and large motion deblurring.
+
+
+10
+
+
+Table 3: Additional results of _latent_ diffusion models with
+Dilack on the FFHQ dataset.
+
+
+**FFHQ** Lensless Imaging Large Motion Deblurring
+Method PSNR↑/SSIM↑/FID↓/LPIPS↓ PSNR↑/SSIM↑/FID↓/LPIPS↓
+
+LDPS (Rout et al., 2024) 12.80 / 0.341 / 319.75 / 0.610 18.72 / 0.469 / 152.29 / 0.456
+ReSample (Song et al., 2024) 12.22 / 0.336 / 408.17 / 0.620 **24.09** / 0.686 / 98.38 / 0.319
+
+
+( **Dilack** in Tab. 1) **26.24** / **0.860** / **28.69** / **0.156** 23.15 / **0.745** / **59.60** / **0.313**
+ReSample- **Dilack** 22.91 / 0.770 / 77.49 / 0.239 21.69 / 0.699 / 140.09 / 0.366
+
+
+REFERENCES
+
+
+Jesse K Adams, Dong Yan, Jimin Wu, Vivek Boominathan, Sibo Gao, Alex V Rodriguez, Soonyoung
+Kim, Jennifer Carns, Rebecca Richards-Kortum, Caleb Kemere, et al. In vivo lensless microscopy
+via a phase mask generating diffraction patterns with high-contrast contours. _Nature Biomedical_
+_Engineering_, 2022.
+
+
+Nick Antipa, Grace Kuo, Reinhard Heckel, Ben Mildenhall, Emrah Bostan, Ren Ng, and Laura
+Waller. Diffusercam: lensless single-exposure 3d imaging. _Optica_, 2018.
+
+
+M Salman Asif, Ali Ayremlou, Aswin Sankaranarayanan, Ashok Veeraraghavan, and Richard G Baraniuk. Flatcam: Thin, lensless cameras using coded aperture and computation. _IEEE Transactions_
+_on Computational Imaging_, 2016.
+
+
+Omri Avrahami, Ohad Fried, and Dani Lischinski. Blended latent diffusion. _ACM Transactions on_
+_Graphics (TOG)_, 2023.
+
+
+Nakkyu Baek, Yujin Lee, Taeyoung Kim, Jaewoo Jung, and Seung Ah Lee. Lensless polarization
+camera for single-shot full-stokes imaging. _APL Photonics_, 2022.
+
+
+Amir Beck and Marc Teboulle. A fast iterative shrinkage-thresholding algorithm for linear inverse
+problems. _SIAM journal on imaging sciences_, 2(1):183–202, 2009.
+
+
+Vivek Boominathan, Jacob T Robinson, Laura Waller, and Ashok Veeraraghavan. Recent advances
+in lensless imaging. _Optica_, 2022.
+
+
+Ashish Bora, Ajil Jalal, Eric Price, and Alexandros G Dimakis. Compressed sensing using generative
+models. In _ICML_, pp. 537–546, 2017.
+
+
+Stephen Boyd, Neal Parikh, Eric Chu, Borja Peleato, and Jonathan Eckstein. Distributed optimization
+and statistical learning via the alternating direction method of multipliers. _Foundations and Trends_
+_in Machine Learning_, 2011.
+
+
+Matthew Brand. Fast low-rank modifications of the thin singular value decomposition. _Linear algebra_
+_and its applications_, 2006.
+
+
+Jiezhang Cao, Yue Shi, Kai Zhang, Yulun Zhang, Radu Timofte, and Luc Van Gool. Deep equilibrium
+diffusion restoration with parallel sampling. In _CVPR_, 2024.
+
+
+Dorian Chan, Mark Sheinin, and Matthew O’Toole. Spincam: High-speed imaging via a rotating
+point-spread function. In _ICCV_, 2023.
+
+
+Hyungjin Chung, Byeongsu Sim, Dohoon Ryu, and Jong Chul Ye. Improving diffusion models for
+inverse problems using manifold constraints. _NeurIPS_, 2022a.
+
+
+Hyungjin Chung, Byeongsu Sim, and Jong Chul Ye. Come-closer-diffuse-faster: Accelerating
+conditional diffusion models for inverse problems through stochastic contraction. In _CVPR_, 2022b.
+
+
+Hyungjin Chung, Jeongsol Kim, Sehui Kim, and Jong Chul Ye. Parallel diffusion models of operator
+and image for blind inverse problems. In _CVPR_, 2023a.
+
+
+Hyungjin Chung, Jeongsol Kim, Michael Thompson Mccann, Marc Louis Klasky, and Jong Chul Ye.
+Diffusion posterior sampling for general noisy inverse problems. In _ICLR_, 2023b.
+
+
+Guillaume Couairon, Jakob Verbeek, Holger Schwenk, and Matthieu Cord. Diffedit: Diffusion-based
+semantic image editing with mask guidance. In _ICLR_, 2023.
+
+
+Kostadin Dabov, Alessandro Foi, Vladimir Katkovnik, and Karen Egiazarian. Image denoising by
+sparse 3-d transform-domain collaborative filtering. _IEEE Transactions on image processing_, 2007.
+
+
+Jia Deng, Wei Dong, Richard Socher, Li-Jia Li, Kai Li, and Li Fei-Fei. Imagenet: A large-scale
+hierarchical image database. In _CVPR_ . Ieee, 2009.
+
+
+Prafulla Dhariwal and Alexander Nichol. Diffusion models beat gans on image synthesis. _NeurIPS_,
+2021.
+
+
+11
+
+
+Zheng Ding, Xuaner Zhang, Zhuowen Tu, and Zhihao Xia. Restoration by generation with constrained
+priors. _arXiv preprint arXiv:2312.17161_, 2023.
+
+
+Jiangxin Dong, Jinshan Pan, Deqing Sun, Zhixun Su, and Ming-Hsuan Yang. Learning data terms for
+non-blind deblurring. In _Proceedings of the European Conference on Computer Vision (ECCV)_,
+pp. 748–763, 2018.
+
+
+Bradley Efron. Tweedie’s formula and selection bias. _Journal of the American Statistical Association_,
+2011.
+
+
+Xiang Gao, Meera Sitharam, and Adrian E Roitberg. Bounds on the jensen gap, and implications for
+mean-concentrated distributions. _arXiv preprint arXiv:1712.05267_, 2017.
+
+
+Tomer Garber and Tom Tirer. Image restoration by denoising diffusion models with iteratively
+preconditioned guidance. _CVPR_, 2024.
+
+
+Gene Golub and William Kahan. Calculating the singular values and pseudo-inverse of a matrix.
+_Journal of the Society for Industrial and Applied Mathematics, Series B: Numerical Analysis_, 1965.
+
+
+Jonathan Ho, Ajay Jain, and Pieter Abbeel. Denoising diffusion probabilistic models. _NeurIPS_, 2020.
+
+
+Mark J Huiskes and Michael S Lew. The mir flickr retrieval evaluation. In _ICMR_, 2008.
+
+
+Tero Karras, Samuli Laine, and Timo Aila. A style-based generator architecture for generative
+adversarial networks. In _CVPR_, 2019.
+
+
+Bahjat Kawar, Gregory Vaksman, and Michael Elad. Snips: Solving noisy inverse problems stochastically. _NeurIPS_, 2021.
+
+
+Bahjat Kawar, Michael Elad, Stefano Ermon, and Jiaming Song. Denoising diffusion restoration
+models. _NeurIPS_, 2022.
+
+
+Salman S Khan, VR Adarsh, Vivek Boominathan, Jasper Tan, Ashok Veeraraghavan, and Kaushik
+Mitra. Towards photorealistic reconstruction of highly multiplexed lensless images. In _ICCV_,
+2019.
+
+
+Taeyoung Kim, Kyung Chul Lee, Nakkyu Baek, Hyesuk Chae, and Seung Ah Lee. Aperture-encoded
+snapshot hyperspectral imaging with a lensless camera. _APL Photonics_, 2023.
+
+
+Dilip Krishnan and Rob Fergus. Fast image deconvolution using hyper-laplacian priors. _Advances in_
+_neural information processing systems_, 22, 2009.
+
+
+Orest Kupyn, Tetiana Martyniuk, Junru Wu, and Zhangyang Wang. Deblurgan-v2: Deblurring
+(orders-of-magnitude) faster and better. In _Proceedings of the IEEE/CVF international conference_
+_on computer vision_, pp. 8878–8887, 2019.
+
+
+Gustav Larsson, Michael Maire, and Gregory Shakhnarovich. Learning representations for automatic
+colorization. In _Computer_ _Vision–ECCV_ _2016:_ _14th_ _European_ _Conference,_ _Amsterdam,_ _The_
+_Netherlands, October 11–14, 2016, Proceedings, Part IV 14_, pp. 577–593. Springer, 2016.
+
+
+Kyung Chul Lee, Junghyun Bae, Nakkyu Baek, Jaewoo Jung, Wook Park, and Seung Ah Lee. Design
+and single-shot fabrication of lensless cameras with arbitrary point spread functions. _Optica_, 2023.
+
+
+Ying Li, Zhengdai Li, Kaiyu Chen, Youming Guo, and Changhui Rao. Mwdns: reconstruction in
+multi-scale feature spaces for lensless imaging. _Optics Express_, 2023a.
+
+
+Ziyao Li, Zhi Gao, Han Yi, Yu Fu, and Boan Chen. Image deblurring with image blurring. _IEEE_
+_Transactions on Image Processing_, 2023b.
+
+
+Jingyun Liang, Jiezhang Cao, Guolei Sun, Kai Zhang, Luc Van Gool, and Radu Timofte. Swinir:
+Image restoration using swin transformer. In _ICCV_, 2021a.
+
+
+Jingyun Liang, Kai Zhang, Shuhang Gu, Luc Van Gool, and Radu Timofte. Flow-based kernel prior
+with application to blind super-resolution. In _CVPR_, 2021b.
+
+
+12
+
+
+Bee Lim, Sanghyun Son, Heewon Kim, Seungjun Nah, and Kyoung Mu Lee. Enhanced deep residual
+networks for single image super-resolution. In _CVPRW_, 2017.
+
+
+Ze Liu, Yutong Lin, Yue Cao, Han Hu, Yixuan Wei, Zheng Zhang, Stephen Lin, and Baining Guo.
+Swin transformer: Hierarchical vision transformer using shifted windows. In _ICCV_, 2021.
+
+
+Ziwei Luo, Haibin Huang, Lei Yu, Youwei Li, Haoqiang Fan, and Shuaicheng Liu. Deep constrained
+least squares for blind image super-resolution. In _CVPR_, 2022.
+
+
+Ziwei Luo, Fredrik K Gustafsson, Zheng Zhao, Jens Sjolund, and Thomas B Sch¨ on.¨ Controlling
+vision-language models for universal image restoration. In _ICLR_, 2023.
+
+
+Morteza Mardani, Jiaming Song, Jan Kautz, and Arash Vahdat. A variational perspective on solving
+inverse problems with diffusion models. In _ICLR_, 2023.
+
+
+Chris Metzler, Ali Mousavi, and Richard Baraniuk. Learned d-amp: Principled neural network based
+compressive image recovery. _NIPS_, 30, 2017.
+
+
+Kristina Monakhova, Joshua Yurtsever, Grace Kuo, Nick Antipa, Kyrollos Yanny, and Laura Waller.
+Learned reconstructions for practical mask-based lensless imaging. _Optics express_, 2019.
+
+
+Kristina Monakhova, Kyrollos Yanny, Neerja Aggarwal, and Laura Waller. Spectral diffusercam:
+lensless snapshot hyperspectral imaging with a spectral filter array. _Optica_, 2020.
+
+
+Arpan Poudel and Ukash Nakarmi. Deeplir: Attention-based approach for mask-based lensless image
+reconstruction. In _WACVW_, 2024.
+
+
+Yuhui Quan, Zicong Wu, and Hui Ji. Gaussian kernel mixture network for single image defocus
+deblurring. _NeurIPS_, 2021.
+
+
+Alec Radford, Jong Wook Kim, Chris Hallacy, Aditya Ramesh, Gabriel Goh, Sandhini Agarwal,
+Girish Sastry, Amanda Askell, Pamela Mishkin, Jack Clark, et al. Learning transferable visual
+models from natural language supervision. In _ICML_ . PMLR, 2021.
+
+
+Joshua D Rego, Karthik Kulkarni, and Suren Jayasuriya. Robust lensless image reconstruction via
+psf estimation. In _WACV_, pp. 403–412, 2021.
+
+
+Litu Rout, Negin Raoof, Giannis Daras, Constantine Caramanis, Alex Dimakis, and Sanjay Shakkottai.
+Solving linear inverse problems provably via posterior sampling with latent diffusion models.
+_Advances in Neural Information Processing Systems_, 36, 2024.
+
+
+Leonid I Rudin, Stanley Osher, and Emad Fatemi. Nonlinear total variation based noise removal
+algorithms. _Physica D: nonlinear phenomena_, 1992.
+
+
+Ernest Ryu, Jialin Liu, Sicheng Wang, Xiaohan Chen, Zhangyang Wang, and Wotao Yin. Plug-andplay methods provably converge with properly trained denoisers. In _ICML_, 2019.
+
+
+Jascha Sohl-Dickstein, Eric Weiss, Niru Maheswaranathan, and Surya Ganguli. Deep unsupervised
+learning using nonequilibrium thermodynamics. In _ICML_ . PMLR, 2015.
+
+
+Bowen Song, Soo Min Kwon, Zecheng Zhang, Xinyu Hu, Qing Qu, and Liyue Shen. Solving inverse
+problems with latent diffusion models via hard data consistency. In _ICLR_, 2024.
+
+
+Jiaming Song, Arash Vahdat, Morteza Mardani, and Jan Kautz. Pseudoinverse-guided diffusion
+models for inverse problems. In _ICLR_, 2022.
+
+
+Yang Song and Stefano Ermon. Generative modeling by estimating gradients of the data distribution.
+_NeurIPS_, 2019.
+
+
+Yang Song, Jascha Sohl-Dickstein, Diederik P Kingma, Abhishek Kumar, Stefano Ermon, and Ben
+Poole. Score-based generative modeling through stochastic differential equations. In _ICLR_, 2020.
+
+
+Yang Song, Liyue Shen, Lei Xing, and Stefano Ermon. Solving inverse problems in medical imaging
+with score-based generative models. In _ICLR_, 2021.
+
+
+13
+
+
+Anuroop Sriram, Jure Zbontar, Tullie Murrell, Aaron Defazio, C Lawrence Zitnick, Nafissa Yakubova,
+Florian Knoll, and Patricia Johnson. End-to-end variational networks for accelerated mri reconstruction. In _MICCAI 2020_ . Springer, 2020.
+
+
+Haoyue Tang, Tian Xie, Aosong Feng, Hanyu Wang, Chenyang Zhang, and Yang Bai. Solving
+general noisy inverse problem via posterior sampling: A policy gradient viewpoint. In _AISTATS_,
+2024.
+
+
+Tom Tirer and Raja Giryes. Back-projection based fidelity term for ill-posed linear inverse problems.
+_IEEE Transactions on Image Processing_, 29:6164–6179, 2020.
+
+
+Wenbo Wan, Huihui Ma, Zijie Mei, Huilin Zhou, Yuhao Wang, and Qiegen Liu. Multi-phase fza
+lensless imaging via diffusion model. _Optics Express_, 2023.
+
+
+Yinhuai Wang, Jiwen Yu, and Jian Zhang. Zero-shot image restoration using denoising diffusion
+null-space model. In _ICLR_, 2022.
+
+
+Yu Wang, Gencheng Wang, Rong Chen, and Yuzhen Chen. An efficient diffusion for blind face
+restoration. In _ICIGP_, 2024.
+
+
+Norbert Wiener. _Extrapolation, interpolation, and smoothing of stationary time series:_ _with engi-_
+_neering applications_ . The MIT press, 1949.
+
+
+Tengfei Wu, Marc Guillon, Gilles Tessier, and Pascal Berto. Multiplexed wavefront sensing with a
+thin diffuser. _Optica_, 2024.
+
+
+Xiangyu Xu, Jinshan Pan, Yu-Jin Zhang, and Ming-Hsuan Yang. Motion blur kernel estimation via
+deep learning. _IEEE Transactions on Image Processing_, 2017.
+
+
+Lingxiao Yang, Shutong Ding, Yifan Cai, Jingyi Yu, Jingya Wang, and Ye Shi. Guidance with
+spherical gaussian constraint for conditional diffusion. _arXiv preprint arXiv:2402.03201_, 2024.
+
+
+Sen Yang, Jie Wang, Wei Fan, Xiatian Zhang, Peter Wonka, and Jieping Ye. An efficient admm
+algorithm for multidimensional anisotropic total variation regularization problems. In _Proceedings_
+_of the 19th ACM SIGKDD international conference on Knowledge discovery and data mining_, pp.
+641–649, 2013.
+
+
+Fanghua Yu, Jinjin Gu, Zheyuan Li, Jinfan Hu, Xiangtao Kong, Xintao Wang, Jingwen He, Yu Qiao,
+and Chao Dong. Scaling up to excellence: Practicing model scaling for photo-realistic image
+restoration in the wild. _CVPR_, 2024.
+
+
+Tianjiao Zeng and Edmund Y Lam. Robust reconstruction with deep learning to handle model
+mismatch in lensless imaging. _IEEE Transactions on Computational Imaging_, 2021.
+
+
+Kai Zhang, Wangmeng Zuo, and Lei Zhang. Deep plug-and-play super-resolution for arbitrary blur
+kernels. In _CVPR_, 2019.
+
+
+Kai Zhang, Yawei Li, Wangmeng Zuo, Lei Zhang, Luc Van Gool, and Radu Timofte. Plug-and-play
+image restoration with deep denoiser prior. _IEEE T-PAMI_, 2021.
+
+
+Zhihang Zhong, Mingdeng Cao, Xiang Ji, Yinqiang Zheng, and Imari Sato. Blur interpolation
+transformer for real-world motion from blur. In _CVPR_, 2023.
+
+
+Yuanzhi Zhu, Kai Zhang, Jingyun Liang, Jiezhang Cao, Bihan Wen, Radu Timofte, and Luc Van Gool.
+Denoising diffusion models for plug-and-play image restoration. In _CVPRW_, 2023.
+
+
+14
+
+
+## **Appendix**
+
+
+A PROOF OF SENSITIVITY TO PERTURBATIONS IN HIGH CONDITION NUMBER
+SYSTEMS
+
+
+We begin by recalling fundamental linear algebra concepts for systems of equations. Consider the
+solution **x** to the linear system:
+_**A**_ **x** = **y** _,_
+
+where _**A**_ is invertible. This solution can be expressed as:
+
+
+**x** = _**A**_ _[−]_ [1] **y** _._
+
+
+Now, introduce perturbations ∆ _**A**_ to the matrix _**A**_ and ∆ **y** to the vector **y**, leading to the perturbed
+system:
+( _**A**_ + ∆ _**A**_ )( **x** + ∆ **x** ) = **y** + ∆ **y** _._
+
+where ∆ _**A**_ is a small perturbation to _**A**_, and ∆ **y** is a small perturbation to **y** . Expanding and
+rearranging, and noting that _**A**_ **x** = **y**, we get:
+
+
+_**A**_ ∆ **x** + ∆ _**A**_ **x** + ∆ _**A**_ ∆ **x** _≃_ ∆ **y** _._
+
+
+Neglecting the higher-order term ∆ _**A**_ ∆ **x**, we simplify to:
+
+
+_**A**_ ∆ **x** + ∆ _**A**_ **x** _≃_ ∆ **y** _._
+
+
+Assuming _**A**_ is non-singular (invertible), we solve for ∆ **x** :
+
+
+∆ **x** _≃_ _**A**_ _[−]_ [1] (∆ **y** _−_ ∆ _**A**_ **x** ) _._
+
+
+Taking norms on both sides and applying the triangle inequality, we obtain:
+
+
+_∥_ ∆ **x** _∥≤∥_ _**A**_ _[−]_ [1] _∥_ ( _∥_ ∆ **y** _∥_ + _∥_ ∆ _**A**_ **x** _∥_ ) _._
+
+
+Using the sub-multiplicative property of norms, the term _∥_ ∆ _**A**_ **x** _∥_ can be bounded as:
+
+
+_∥_ ∆ _**A**_ **x** _∥≤∥_ ∆ _**A**_ _∥∥_ **x** _∥._
+
+
+Thus, we have:
+_∥_ ∆ **x** _∥≤∥_ _**A**_ _[−]_ [1] _∥_ ( _∥_ ∆ **y** _∥_ + _∥_ ∆ _**A**_ _∥∥_ **x** _∥_ ) _._
+
+
+Substituting _∥_ ∆ **y** _∥≤_ _δ∥_ **y** _∥_ and _∥_ ∆ _**A**_ _∥≤_ _ϵ∥_ _**A**_ _∥_, where ∆ and _ϵ_ are small constants representing the
+relative perturbation magnitudes, gives:
+
+
+_∥_ ∆ **x** _∥≤∥_ _**A**_ _[−]_ [1] _∥_ ( _δ∥_ **y** _∥_ + _ϵ∥_ _**A**_ _∥∥_ **x** _∥_ ) _._
+
+
+Recalling that **x** = _**A**_ _[−]_ [1] **y**, this simplifies to:
+
+
+_∥_ ∆ **x** _∥≤∥_ _**A**_ _[−]_ [1] _∥∥_ **y** _∥_ ( _δ_ + _ϵ∥_ _**A**_ _∥∥_ _**A**_ _[−]_ [1] _∥_ ) _._
+
+
+Recognizing that _∥_ _**A**_ _∥∥_ _**A**_ _[−]_ [1] _∥_ = _κ_ ( _**A**_ ), where _κ_ ( _**A**_ ) is the condition number, we conclude:
+
+
+_∥_ ∆ **x** _∥≤∥_ _**A**_ _[−]_ [1] _∥∥_ **y** _∥_ ( _δ_ + _ϵκ_ ( _**A**_ )) _._
+
+
+Finally, normalizing by _∥_ **x** _∥_ gives:
+
+
+Thus, the relative change in the solution **x** is proportional to the condition number _κ_ ( _**A**_ ), demonstrating the sensitivity of the solution to perturbations in systems with a high condition number.
+
+
+15
+
+
+∆ **x** _∥_ 
+_≤_ _κ_ ( _**A**_ ) _ϵ_ + _δ_ _[∥]_ _**[A]**_ _[∥]_
+_∥_ **x** _∥_ _∥_ **y** _∥_
+
+
+_∥_ ∆ **x** _∥_
+
+
+_∥_ **y** _∥_
+
+
+_._
+
+
+B FORMULATION OF THE WIENER DECONVOLUTION
+
+
+In image inverse problems, the forward model can be formulated as (1). The goal of Wiener
+deconvolution is to estimate the original image **x** by minimizing the overall mean square error in the
+presence of noise. Wiener deconvolution accomplishes this by applying the Wiener filter, which is
+designed to minimize the mean square error between the estimated image and the original image.
+
+
+The Wiener filter is calculated as:
+
+
+where _H_ ( _f_ ) is the Fourier transform of _**A**_, _Sn_ ( _f_ ) is the power spectral density of the noise, and
+_Sx_ ( _f_ ) is the power spectral density of the original image.
+
+
+The Wiener filter in the context of linear algebra can be represented as:
+
+_**A**_ _[†]_ = ( _**A**_ _[T]_ _**A**_ + _λ_ **I** ) _[−]_ [1] _**A**_ _[T]_ _,_
+
+
+where _λ_ is a regularization parameter.
+
+
+Using the singular value decomposition (SVD) of _**A**_ _[T]_ _**A**_, we have:
+
+_**A**_ _[T]_ _**A**_ = _V_ Σ [2] _V_ _[T]_ _,_
+
+
+where _V_ and _U_ are orthogonal matrices, and Σ is a diagonal matrix containing the singular values _σi_ .
+
+
+Thus,
+( _**A**_ _[T]_ _**A**_ + _λ_ **I** ) _[−]_ [1] = _V_ (Σ [2] + _λ_ **I** ) _[−]_ [1] _V_ _[T]_ _._
+
+
+The Wiener filter can then be expressed as:
+
+_**A**_ _[†]_ = _V_ (Σ [2] + _λ_ **I** ) _[−]_ [1] Σ _U_ _[T]_ _._
+
+
+Applying this filter to the observed image vector **y**, we get the estimate of the original image:
+
+**x** _[∗]_ = _**A**_ _[†]_ **y** = _V_ (Σ [2] + _λ_ **I** ) _[−]_ [1] Σ _U_ _[T]_ **y** _._
+
+
+It is important to note the effect of the singular values _σi_ on the filter. When the singular values
+_σi_ are very small, the term (Σ [2] + _λ_ **I** ) _[−]_ [1] becomes very large. This indicates that the filter is highly
+sensitive to noise for small singular values, which can amplify the noise in the recovered image. The
+regularization parameter _λ_ helps to mitigate this effect by preventing the amplification of noise, thus
+stabilizing the inversion process.
+
+
+In summary, the Wiener deconvolution leverages the Wiener filter to recover the original image from
+a blurred and noisy observation by optimally balancing the noise reduction and image deblurring in
+the frequency domain. This process, grounded in minimizing the mean square error, is fundamental
+in restoring degraded images effectively.
+
+
+C ADMM WITH TOTAL VARIATION (TV) REGULARIZATION
+
+
+The Alternating Direction Method of Multipliers (ADMM) breaks down complex optimization
+problems into simpler subproblems, speeding up solutions and enhancing flexibility. By incorporating
+Total Variation (TV) regularization, ADMM becomes adept at tasks like image deblurring and
+denoising, where preserving edges and reducing noise are critical. With TV regularization, ADMM
+promotes sparsity in image gradients, thus maintaining sharp edges by penalizing total image
+variation.
+
+
+C.1 ALGORITHMIC FRAMEWORK
+
+
+The algorithmic framework for ADMM with TV regularization involves the following steps:
+
+
+**Variable splitting.** To separate the fidelity term from TV regularization, an auxiliary variable is
+introduced, allowing independent updates.
+
+
+**Updates.** Iterative updates proceed through three main steps:
+
+
+16
+
+
+_|H_ ( _f_ ) _|_ [2]
+_W_ ( _f_ ) =
+
+
+_,_
+
+_[S][n]_ [(] _[f]_ [)]
+
+_Sx_ ( _f_ )
+
+
+_|H_ ( _f_ ) _|_ [2] + _[S][n]_ [(] _[f]_ [)]
+
+
+- **x-update.** Minimization of the fidelity term with respect to the original variable, often
+employing linear inversion or gradient descent.
+
+    - **z-update.** Application of TV regularization to the auxiliary variable, typically solved using
+a proximal operator enforcing the TV constraint.
+
+    - **Dual update.** Adjustment of the dual variable to align solutions of decomposed subproblems,
+ensuring consistency across splits.
+
+
+C.2 MATHEMATICAL FORMULATION
+
+
+We revisit a generalized cost function in a classical image restoration approach in Eq. (2). For ADMM
+with TV regularization, minimizing the cost function in Eq. (2) is expressed as:
+
+
+1
+**x** ˜ = arg min **x** 2 _[∥]_ _**[A]**_ **[x]** _[ −]_ **[y]** _[∥]_ 2 [2] [+] _[ λ]_ [TV][(] **[x]** [)] (S1)
+
+
+where _∥_ _**A**_ **x** _−_ **y** _∥_ [2] 2 [represents] [a] [data-fidelity] [term,] [and] [TV][(] **[x]** [)] [represents] [a] [regularization] [prior]
+promoting sparsity in image gradients.
+
+
+The optimized estimate at each step for Eq. (S1) is:
+
+
+**x** ˜ _[k]_ [+1] = _Dσ_             - **T** (˜ **x** _[k]_ _,_ **y** _,_ _**A**_ )� (S2)
+
+
+where _Dσ_ is the proximal operator, and **T** is the update function specific to the non-linear optimization
+estimation.
+
+
+The detailed proximal operator formulation of ADMM with TV regularization is:
+
+
+**x** _[k]_ [+1] = arg min **x**        - _∥_ _**A**_ **x** _−_ **y** _∥_ [2] 2 [+] _[ ρ][∥]_ **[x]** _[ −]_ **[z]** _[k]_ [ +] **[ u]** _[k][∥]_ 2 [2]        - _,_ (S3)
+
+**z** _[k]_ [+1] = arg min          - _λ_ TV( **z** ) + _ρ∥_ **x** _[k]_ [+1] _−_ **z** + **u** _[k]_ _∥_ [2] 2� _,_ (S4)
+_z_
+
+**u** _[k]_ [+1] = **u** _[k]_ + **x** _[k]_ [+1] _−_ **z** _[k]_ [+1] _._ (S5)
+
+
+Here, _λ_ is the regularization parameter controlling the strength of the TV term, and _ρ_ is the penalty
+parameter for constraint violations.
+
+
+TV regularization allows precise control over the smoothness and sparsity in image gradients,
+significantly boosting edge preservation crucial for high-quality visual applications. Additionally,
+it improves noise reduction without compromising image structure, offering a clear advantage over
+traditional methods. Furthermore, integrating TV regularization extends ADMM’s scalability and
+flexibility, making it well-suited for large-scale problems across various imaging modalities.
+
+
+D ADDITIONAL CONSIDERATIONS IN METHOD
+
+
+**Shifted window partition.** Due to the initial fixed location of _M_ [(] _t_ _[i,j]_ [)], there is a slight limitation in
+that the local fidelity attention proceeds only within the patch boundary. Therefore, we adopt a shifted
+window partition to reduce discontinuities at patch edges and overall artifacts. Detailed algorithm for
+shifted window partition setting follows as:
+
+
+Here, _D_ sum. [(] _[i,j]_ [)][(] _[·]_ [)][ represents the sum of differences between the pixel values within each patch located at]
+( _i, j_ ), and _Pν_ is the top percentage threshold. The shift amount _r_ is the pixel-wise index, empirically
+calculated as _t_ mod 16.
+
+
+17
+
+
+_M_ [(] _t_ _[i,j]_ [)] ( _r_ ) =
+
+
+- - _∗_ - - - _∗_ - [�]
+1 if _D_ sum. [(] _[i]_ [+] _[r,j]_ [+] _[r]_ [)] **x** ˜ _,_ ˆ **x** 0 _|t_ _≥_ Ω _ν_ _D_ sum. [(] _[i]_ [+] _[r,j]_ [+] _[r]_ [)] **x** ˜ _,_ ˆ **x** 0 _|t_
+
+
+0 otherwise
+
+
+      - _t_
+where _r_ = _t −_ 16
+16
+
+
+**Skip step guidance.** As mentioned in the main paper, we implement skip step guidance _C_ during the
+initial sampling phase to loosely follow PiAC fidelity. The large scalar disparity between _L_ PiAC and
+**s** _θ∗_ ( **x** _t, t_ ) caused local artifacts in some degraded images during the initial sampling. We empirically
+set the skip step guidance to _C_ = 2 for the first half of the initial reverse sampling steps and _C_ = 1
+for the second half, fully applying our mask guidance (Appendix G.5). In other words, steps for
+unconditional generation and our PiAC with _Mt_ proceed alternately in the half of initial phase.
+Detailed algorithm for skip step guidance setting follows as:
+
+
+E REAL-WORLD LENSLESS CAMERA AND ITS MEASUREMENTS
+
+
+**Mask-based lensless camera.** A lensless camera is a new class of compact and low-cost imaging
+devices based on computational image reconstruction. Instead of using a lens, a lensless camera
+uses a phase mask placed in front of an image sensor, achieving ultra-thin designs by reducing
+the thickness of the lens and the focal length of the imaging system. Because the mask randomly
+modulates the incident light from the scene, the encoded intensity information of the scene should be
+recovered through computational processing of the raw measurement that is otherwise unidentifiable.
+Additionally, lensless imaging with 2D PSFs decouples the one-to-one mapping between each position
+in the scene and the sensor pixels, enabling single-shot multiplexed measurements without using
+superpixels. Along with their miniaturization and multiplexing capabilities, various applications
+based on lensless imaging have been widely explored recently, including depth imaging(Antipa
+et al., 2018; Adams et al., 2022), hyperspectral imaging(Monakhova et al., 2020; Kim et al., 2023),
+high-speed imaging(Chan et al., 2023), polarization imaging (Baek et al., 2022), and wavefront
+sensing(Wu et al., 2024).
+
+
+**Advantages:** **lens camera vs.** **lensless camera.** Lensless cameras are typically smaller and lighter,
+making them suitable for applications where space and weight are critical. Without the need for
+expensive lens assemblies, lensless cameras can be more cost-effective to produce. They can naturally
+have a very wide field of view without the distortion issues often associated with wide-angle lenses in
+traditional cameras. With fewer moving parts and no glass lenses, lensless cameras are more robust
+and less susceptible to damage. Furthermore, lensless cameras can utilize advanced computational
+algorithms to reconstruct images, potentially leading to new imaging capabilities and applications.
+They are crucial in the development of next-generation technologies, such as ultra-thin sensors and
+integration into compact electronic devices (Zeng & Lam, 2021; Boominathan et al., 2022; Lee et al.,
+2023).
+
+
+**Design and fabrication of custom-built lensless camera.** Here, we utilize a designed phase mask
+that exhibits a sharper and higher contrast point spread function (PSF) to validate our approach
+with real measurements. We employ a 2D random pattern generation algorithm such as Voronoi
+constellation to generate a target PSF, which exhibits uniform directionality and high contrast with a
+given specific density. Then, the height profile ( _h_ ) of the phase mask with a given target pattern is
+designed with the following optimization problem, where the smoothness constraints are additionally
+utilized to compensate for the fabrication resolution. Revisiting Eq. (2) in the main paper:
+
+
+arg min 2 [+] _[ λ][||]_ [∆] _[h][||]_ 2 [2] _[,]_ (S7)
+_h_ _[||][v]_ [ˆ] _[ −]_ _[v]_ [0] _[||]_ [2]
+
+
+where ˆ _v_ and _v_ 0 denote the estimated and measured PSFs, respectively, ∆ is a Laplacian operator, and
+_λ_ is the weight parameter for smoothness constraint. Following the fabrication protocol in (Lee et al.,
+2023), we fabricated customized phase masks for a lensless camera, sized 1.5 mm x 1.5 mm with
+a 1.4 mm focal length, exhibiting a Voronoi-patterned PSF (Fig. S2 (a)). We then built customized
+lensless cameras by combining the fabricated phase masks with a 3D-printed aperture (Fig. S1 (b)
+and (c)).
+
+
+**Camera setting for data generation.** The dataset is captured by displaying scenes on an OLED
+screen 20 cm in front of the lensless camera with a color sensor (IMX 219), using auto exposure to
+maximize the raw images’ SNR (Fig. S1 (d)). The target FOV is 70 _[◦]_ in both horizontal and vertical
+directions, with a camera resolution of 0.42 _[◦]_ per pixel.
+
+
+18
+
+
+**x** _t_ + **s** _θ∗_ ( **x** _t, t_ ) _,_ if _t ≥_ 500 and _t_ is odd _,_
+**x** _t_ + **s** _θ∗_ ( **x** _t, t_ ) _−_ _ρMt_ - _∇_ **x** _t∥_ **x** ˜ _[∗]_ _−_ **x** ˆ0 _|t∥_ [2] 2� _,_ if _t ≥_ 500 and _t_ is even _,_ (S6)
+**x** _t_ + **s** _θ∗_ ( **x** _t, t_ ) _−_ _ρMt_ - _∇_ **x** _t∥_ **x** ˜ _[∗]_ _−_ **x** ˆ0 _|t∥_ [2] 2� _,_ if _t <_ 500 _._
+
+
+**x** _t−_ 1 _≃_
+
+
+
+
+
+
+
+
+
+(d)
+Display Lensless camera
+
+
+**1000**
+
+**1001**
+
+**1002**
+
+
+**1003**
+
+**1004**
+
+**1005**
+
+**1006**
+
+**1007**
+
+**1008**
+
+
+**1009**
+
+**1010**
+
+**1011**
+
+**1012**
+
+**1013**
+
+
+**1014**
+
+**1015**
+
+**1016**
+
+**1017**
+
+**1018**
+
+**1019**
+
+
+**1020**
+
+**1021**
+
+**1022**
+
+**1023**
+
+**1024**
+
+**1025**
+
+
+|Col1|3|
+|---|---|
+|||
+
+
+**Dataset description for experiment with real measurements.** A total of 100 MirFlickr (Huiskes
+& Lew, 2008) dataset images is captured with the lensless camera with a Voronoi-shaped PSF (Fig.
+S2 (a)). After the raw measurement is cropped to 2400 _×_ 2400 pixels for preprocessing, the raw
+measurement is reconstructed by solving the optimization problem formulated in Sec. B and C,
+obtaining reconstructed images (Fig. S2 (c)).
+
+
+**Dataset pre-processing for diffusion sampling inputs in our experiments.** Real measurement and
+real point spread function (PSF), initially sized at 2464 _×_ 3280, are processed by performing a center
+cropping to a dimension of 2400 _×_ 2400. Subsequently, these cropped images are downscaled to
+a resolution of 512 _×_ 512 through bicubic interpolation. The resulting measurement and PSF are
+then utilized to construct PiAC fidelity. Note that for fair evaluation for the restoration outputs, we
+cropped approximately 5 percent of the outputs to measure performance metrics, aiming to mitigate
+the mismatch between the ground truth (GT) and the restoration outputs caused by sensor hardware
+limitations and shooting conditions, as we discussed before.
+
+
+**Need** **for** **zero-shot** **lensless** **imaging** **models.** Data-driven lensless camera raw reconstruction
+enhances perceptual quality using paired datasets from specific cameras (Lee et al., 2023; Poudel &
+Nakarmi, 2024; Li et al., 2023a; Rego et al., 2021; Zeng & Lam, 2021), but our zero-shot learning
+approach requires no additional training. Lensless cameras, designed for various applications such
+as privacy-preserving imaging, need reconstruction algorithms that generalize well across out-ofdistribution datasets, and our method meets this requirement. This zero-shot model accelerates
+product development for various applications without the need for sensitive training data. While
+ADMM-TV offers reasonable reconstructions, it suffers from quality degradation that depends on
+scene and FOV, especially with increased crop factors. Le-ADMM (Monakhova et al., 2019) uses
+U-net architectures for enhancement but tends to overfit specific hardware datasets. In contrast, our
+Dilack method manages locally varying degradation using masked fidelity without additional training,
+making it adaptable to various lensless cameras.
+
+
+19
+
+
+**1026**
+
+**1027**
+
+
+**1028**
+
+**1029**
+
+**1030**
+
+**1031**
+
+**1032**
+
+**1033**
+
+
+**1034**
+
+**1035**
+
+**1036**
+
+**1037**
+
+**1038**
+
+**1039**
+
+
+**1040**
+
+**1041**
+
+**1042**
+
+**1043**
+
+**1044**
+
+
+**1045**
+
+**1046**
+
+**1047**
+
+**1048**
+
+**1049**
+
+**1050**
+
+
+**1051**
+
+**1052**
+
+**1053**
+
+**1054**
+
+**1055**
+
+**1056**
+
+
+**1057**
+
+**1058**
+
+**1059**
+
+**1060**
+
+**1061**
+
+**1062**
+
+
+**1063**
+
+**1064**
+
+**1065**
+
+**1066**
+
+**1067**
+
+
+**1068**
+
+**1069**
+
+**1070**
+
+**1071**
+
+**1072**
+
+**1073**
+
+
+**1074**
+
+**1075**
+
+**1076**
+
+**1077**
+
+**1078**
+
+**1079**
+
+
+F EXPERIMENTAL DETAILS
+
+
+F.1 IMPLEMENTATION DETAILS.
+
+
+_ρ_ **for** _L_ **PiAC** **settings.** We observe that setting _ρ_, the guidance scale for _L_ PiAC, to a constant value
+yields stable results. It is important to note that other zero-shot diffusion methods (Chung et al.,
+2023b; Zhu et al., 2023; Garber & Tirer, 2024) set _ρ_ differently for each dataset and task. However,
+we standardize _ρ_ to 1 for all cases, making our approach more generalizable: _ρ_ = 1 _/∥_ **x** ˜ _[∗]_ _−_ **x** ˆ0 _|t∥_ .
+
+
+_ν_ **for** _M_ **ROI** **settings.** We also observe that taking _ν_, which is percentage of guided by _L_ PiAC for
+_Mt_, set to constant, yields stable results. We list the _ν_ values used in our Dilack algorithm for each
+problem setting as defined in Eq. 16.
+
+
+    - FFHQ
+
+**–** lensless imaging: _ν_ = 80 _[th]_ percentile
+
+**–** Large motion deblurring: _ν_ = 80 _[th]_ percentile
+
+
+    - ImageNet
+
+**–** lensless imaging: _ν_ = 80 _[th]_ percentile
+
+**–** Large motion deblurring: _ν_ = 30 _[th]_ percentile
+
+
+    - _Real_ mask-based camera raw dataset ( _i.e._, MirFlickr-lensless)
+
+**–** _Real_ lensless imaging: _ν_ = 70 _[th]_ percentile
+
+
+**Compute time.** All experiments were conducted on an RTX 3090 GPU. On a single GPU, processing
+each image takes about 390 seconds, including the ADMM algorithm iterations and mask calculation
+process. Note that DPS (also based on DDPM) takes 340 seconds, indicating that the Dilack process
+does not significantly increase processing time as much as one might expect.
+
+
+**Code availability.** Dilack is based on DPS (Chung et al., 2023b), and the sampling code along with
+sample data are submitted as supplementary materials. This code is an experiment for a real-world
+mask-based lensless camera task.
+
+
+F.2 INVERSE PROBLEM SETUP.
+
+
+Our two tasks: 1) Lensless imaging ( _i.e._, mask-based camera raw reconstruction) and 2) Large motion
+deblurring both involve deblurring kernels, so they share the same forward model. The measurement
+operator _**A**_ _∈_ R _[n][×][n]_ (with _m_ = _n_ ) is a convolution with some blur kernel **k**, i.e., _**A**_ **x** = **x** _∗_ **k** . The
+only difference is the source of the measured kernel: one is from a mask-based camera (PSF), and the
+other is generated from open-source data as mentioned in the main text.
+
+
+Assuming _**A**_ is a circulant matrix, it can be diagonalized by the discrete Fourier transform (DFT).
+Thus, convolution can be computed as element-wise multiplication in the discrete Fourier domain,
+efficiently implemented via Fast Fourier Transform (FFT). Specifically, for **z** _∈_ R _[n]_, the convolution is _**A**_ **z** = _F_ _[−]_ [1] ( _F_ ( **k** ) _F_ ( **z** )), where _F_ denotes the FFT. Similarly, convolution with the
+
+                         
+flipped **k**, represented by _**A**_ _[T]_, is applied as _**A**_ _[T]_ **z** = _F_ _[−]_ [1][ �] _F_ ( **k** ) _F_ ( **z** ) . Finally, the operation
+
+_**A**_ _[T]_ [�] _**AA**_ _[T]_ + _η_ **I** _n_ - _−_ 1 **z** can be computed efficiently as:
+
+
+We utilize Wiener deconvolution and ADMM-TV with specific hyperparameters for each method.
+For DPS, DiffPIR, DDPG, and our method Dilack, we use the same weights from the pre-trained
+diffusion model.
+
+
+_**A**_ _[†]_ **y (Wiener deconvolution).** We set the parameter _α_ of the Wiener filter to 0.0 for the lensless
+imaging task and to 0.01 for the motion deblurring task.
+
+
+20
+
+
+               _**A**_ _[T]_ [�] _**AA**_ _[T]_ + _η_ **I** _n_      - _−_ 1 **z** = _F_ _−_ 1 _|FF_ (( **kk** )) _|F_ [2] (+ **z** _η_ )
+
+
+F.3 COMPARISON METHODS SETUP.
+
+
+_._ (S8)
+
+
+**1080**
+
+**1081**
+
+
+**1082**
+
+**1083**
+
+**1084**
+
+**1085**
+
+**1086**
+
+**1087**
+
+
+**1088**
+
+**1089**
+
+**1090**
+
+**1091**
+
+**1092**
+
+**1093**
+
+
+**1094**
+
+**1095**
+
+**1096**
+
+**1097**
+
+**1098**
+
+
+**1099**
+
+**1100**
+
+**1101**
+
+**1102**
+
+**1103**
+
+**1104**
+
+
+**1105**
+
+**1106**
+
+**1107**
+
+**1108**
+
+**1109**
+
+**1110**
+
+
+**1111**
+
+**1112**
+
+**1113**
+
+**1114**
+
+**1115**
+
+**1116**
+
+
+**1117**
+
+**1118**
+
+**1119**
+
+**1120**
+
+**1121**
+
+
+**1122**
+
+**1123**
+
+**1124**
+
+**1125**
+
+**1126**
+
+**1127**
+
+
+**1128**
+
+**1129**
+
+**1130**
+
+**1131**
+
+**1132**
+
+**1133**
+
+
+**ADMM** _T V_ **.** We configured the parameters of ADMM-TV differently for our tasks. The number of
+optimization iterations was empirically fixed at 1,000. In Eq. (S1), we set initial _λT −_ 1 to 10 _[−]_ [7] for all
+the synthetic and _real_ tasks in both lensless imaging and motion blur tasks. Note that the remaining
+parameters are the same as those used for PiAC fidelity in each task. We assumed zero-gradient
+boundary conditions (Neumann conditions) at the solution space boundaries.
+
+
+**DPS.** We set the step size of DPS as _ζi_ = 1 _/∥y −_ _A_ (ˆ _x_ 0( _xi_ )) _∥_ for all tasks. In previous research, the
+step size was optimized for each specific task. However, for the new tasks proposed in our study,
+optimal parameters have not yet been established, leading us to configure the same parameters across
+all tasks.
+
+
+**DiffPIR.** We set the same parameter settings as those proposed for the 100 NFEs in DifPIR. The
+performance varies significantly depending on the given image noise level. In the case of the (large)
+motion deblur task, injecting the actual noise level of 0.0005 tends to produce artifacts. Therefore,
+the noise level set in the algorithm was adjusted to 0.025.
+
+
+**DDPG.** We used the same settings as those used in the motion deblurring task in DDPG. Specifically,
+using the hyper-parameters for the motion deblur task with _σe_ = 0 _._ 05, we applied _γ_ = 6, _ζ_ = 0 _._ 6,
+and _η_ = 0 _._ 7 across all tasks.
+
+
+While SVD-based methods like DDRM (Kawar et al., 2022), DDNM (Wang et al., 2022), and
+DeqIR (Cao et al., 2024) are effective for separable kernels, they struggle with highly ill-posed
+kernels, making them impractical for 2D image experiments involving complex non-linearity or
+asymmetry. For instance, DDRM works for Gaussian deblurring but fails with more complex tasks
+like motion deblurring. This is why the DPS authors did not test DDRM for motion blur restoration.
+In contrast, our method overcomes these limitations, offering a more flexible solution for complex
+kernel degradations. As noted in Sec. 2, we propose replacing the score function in Eq. 4 with a
+Bayesian framework to tackle more challenging tasks.
+
+
+G ADDITIONAL EXPERIMENTAL RESULTS
+
+
+G.1 EFFECT OF ROI MASK.
+
+
+Table S1: Ablation study of ROI mask on the synthetic datasets. For _real_ lensless dataset, see Tab. 2
+in the main paper. Note that PiAC fidelity is also one of our proposed methods.
+
+
+**Ablation studies** Lensless Imaging (ImageNet) Lensless Imaging (FFHQ) Large Motion Deblur (ImageNet)Large Motion Delbur (FFHQ)
+Guidance PSNR↑/SSIM↑/FID↓/LPIPS↓PSNR↑/SSIM↑/FID↓/LPIPS↓ PSNR↑/SSIM↑/FID↓/LPIPS↓ PSNR↑/SSIM↑/FID↓/LPIPS↓
+ADMM _T V_ 20.57 / 0.575 / 34.84 / 0.293 20.28 / 0.488 / 54.98 / 0.362 19.90 / 0.528 / 120.07 / 0.492 21.32 / 0.625 / 125.02 / 0.459
+**s** _θ_ + _L_ PiAC **25.26** / **0.818** / **33.77** / **0.205** **26.55** / **0.872** / **27.92** / **0.143** 20.61 / 0.593 / 109.88 / 0.448 22.63 / 0.725 / 104.27 / 0.366
+**s** _θ_ + _M_ random [ _L_ PiAC] 23.74 / 0.727 / 49.29 / 0.295 25.62 / 0.828 / 35.83 / 0.191 **20.99** / **0.616** / 84.38 / 0.421 23.04 / 0.738 / **55.86** / 0.320
+**s** _θ_ + _M_ ROI [ _L_ PiAC] 24.94 / 0.798 / 35.61 / 0.225 26.24 / 0.860 / 28.69 / 0.156 **20.99** / 0.612 / **77.46** / **0.420** **23.15** / **0.745** / 59.6 / **0.313**
+
+
+**Without ROI mask.** From the ablation studies indicated in Tab. 2 and S1, without the ROI mask,
+using pure _L_ PiAC leads to poor outputs due to **x** ˜ _[∗]_ ’s inherent noise and artifacts. Additionally, alone
+also struggles to capture local details. The ROI mask helps capture details such as small text, fingers,
+textures, patterns, and facial features (see Fig. S3 and S5). These issues are more pronounced in real
+lensless measurements, which are noisier and blurrier with less accurate local details.
+
+
+**With random mask.** From Tab. 2 and S1, using an ROI mask leads to better performance than a
+random mask. This improvement is due to the ROI mask’s ability to calculate local ROI differences
+between iterations, maintaining continuity, focusing more on local details, and enhancing restoration.
+This validates our ROI mask design. Qualitative results are in Fig. S4.
+
+
+21
+
+
+**1134**
+
+**1135**
+
+
+**1136**
+
+**1137**
+
+**1138**
+
+**1139**
+
+**1140**
+
+**1141**
+
+
+**1142**
+
+**1143**
+
+**1144**
+
+**1145**
+
+**1146**
+
+**1147**
+
+
+**1148**
+
+**1149**
+
+**1150**
+
+**1151**
+
+**1152**
+
+
+**1153**
+
+**1154**
+
+**1155**
+
+**1156**
+
+**1157**
+
+**1158**
+
+
+**1159**
+
+**1160**
+
+**1161**
+
+**1162**
+
+**1163**
+
+**1164**
+
+
+**1165**
+
+**1166**
+
+**1167**
+
+**1168**
+
+**1169**
+
+**1170**
+
+
+**1171**
+
+**1172**
+
+**1173**
+
+**1174**
+
+**1175**
+
+
+**1176**
+
+**1177**
+
+**1178**
+
+**1179**
+
+**1180**
+
+**1181**
+
+
+**1182**
+
+**1183**
+
+**1184**
+
+**1185**
+
+**1186**
+
+**1187**
+
+
+Figure S3: The qualitative comparisons for the effectiveness of the ROI mask in ‘real’ lensless
+camera dataset. ‘w/o Mask’ refers to **s** _θ_ + _L_ PiAC, while ‘with Mask’, which is Dilack, refers to
+**s** _θ_ + _M_ ROI [ _L_ PiAC].
+
+
+Figure S4: Qualitative comparisons for PiAC with Random mask or ROI mask.
+
+
+Figure S5: Qualitative comparisons for PiAC with or without Mask. Note that real lensless comparisons are in Fig. S3 above.
+
+
+Figure S6: Qualitative comparison in _lighter_ (normal) kernel degradation cases. First row: lensless
+imaging, kernel size = 64 [2] ; second row: motion blur, kernel size = 61 [2], intensity = 0.5.
+
+
+22
+
+
+**1188**
+
+**1189**
+
+
+**1190**
+
+**1191**
+
+**1192**
+
+**1193**
+
+**1194**
+
+**1195**
+
+
+**1196**
+
+**1197**
+
+**1198**
+
+**1199**
+
+**1200**
+
+**1201**
+
+
+**1202**
+
+**1203**
+
+**1204**
+
+**1205**
+
+**1206**
+
+
+**1207**
+
+**1208**
+
+**1209**
+
+**1210**
+
+**1211**
+
+**1212**
+
+
+**1213**
+
+**1214**
+
+**1215**
+
+**1216**
+
+**1217**
+
+**1218**
+
+
+**1219**
+
+**1220**
+
+**1221**
+
+**1222**
+
+**1223**
+
+**1224**
+
+
+**1225**
+
+**1226**
+
+**1227**
+
+**1228**
+
+**1229**
+
+
+**1230**
+
+**1231**
+
+**1232**
+
+**1233**
+
+**1234**
+
+**1235**
+
+
+**1236**
+
+**1237**
+
+**1238**
+
+**1239**
+
+**1240**
+
+**1241**
+
+
+G.2 COMPARISONS IN _lighter_ (NORMAL) KERNEL DEGRADATION CASES
+
+
+Table S2: Additional experiments: the comparisons in _lighter_ (normal) kernel degradation cases.
+
+
+**Lighter cases** Lensless Img. w/ kernel 64 (ImageNet)Lensless Img. w/ kernel 64 (FFHQ) Motion Deblur (ImageNet) Motion Deblur (FFHQ)
+Method PSNR↑/SSIM↑/FID↓/LPIPS↓ PSNR↑/SSIM↑/FID↓/LPIPS↓ PSNR↑/SSIM↑/FID↓/LPIPS↓PSNR↑/SSIM↑/FID↓/LPIPS↓
+ADMM _T V_ 31.76 / 0.897 / 18.13 / 0.092 31.55 / 0.879 / 33.46 / 0.111 27.89 / 0.894 / 41.20 / 0.135 29.96 / 0.914 / 46.34 / 0.123
+DPS 18.82 / 0.548 / 142.94 / 0.409 13.39 / 0.691 / 79.60 / 0.261 18.03 / 0.413 / 172.14 / 0.442 23.32 / 0.728 / 65.55 / 0.218
+DiffPIR 29.20 / 0.875 / 13.78 / 0.087 25.76 / 0.711 / 54.95 / 0.227 32.83 / 0.922 / 16.65 / 0.068 28.89 / 0.813 / 48.61 / 0.163
+DDPG 26.75 / 0.748 / 144.16 / 0.317 31.50 / 0.903 / 27.50 / 0.114 35.42 / 0.947 / 30.63 / 0.065 34.40 / 0.934 / 33.29 / 0.080
+**Dilack(ours)** 31.94 / 0.877 / 49.74 / 0.158 35.17 / 0.943 / 34.90 / 0.081 24.78 / 0.703 / 94.82 / 0.317 28.63 / 0.858 / 62.78 / 0.178
+
+LDPS   - 17.76 / 0.482 / 264.39 / 0.512   - 22.07 / 0.608 / 119.15 / 0.352
+ReSample  - 25.44 / 0.763 / 123.12 / 0.281  - 27.16 / 0.800 / 57.36 / 0.179
+ReSample-Dilack - 27.37 / 0.867 / 49.67 / 0.130 - 23.94 / 0.770 / 101.37 / 0.277
+
+
+As shown in Tab. S2 and Fig. S6, Dilack performs well in lighter cases. However, our main focus is on
+addressing the limitations of existing methods in challenging scenarios like lensless imaging and large
+motion deblurring, using the first 100 images (indexes 0–99) from the ImageNet and FFHQ datasets.
+While we respect zero-shot methods for standard tasks, our work targets real-world challenges like
+lensless imaging and severe motion blur, where current methods fail. Dilack addresses these gaps.
+In lensless imaging, reducing the PSF size from 256 to 64 improves performance, and for motion
+blur, decreasing the kernel size (256 to 61) and intensity (1.0 to 0.5) proves effective. The lighter
+motion blur setting aligns with that used in the original DPS paper. Note that the pre-trained weights
+of latent diffusion models are only available for those trained on FFHQ, so experiments on ImageNet
+could not be conducted.
+
+
+G.3 EFFECT OF MASKING RATIO
+
+
+As shown in Fig. S7, there is a trade-off between structural consistency and perceptual quality of the
+restored image depending on the ROI masking ratio. Empirically, we set the synthetic ROI masking
+ratio to 0.8 for synthetic tasks and 0.7 for real lensless imaging, as detailed in Sec. F.1.
+
+
+Figure S7: Effectiveness of masking ratio ( _ν_ _[th]_ percentile) on the ImageNet dataset with synthetic
+lensless task: (a) quantitative results and (b) qualitative results.
+
+
+G.4 EFFECT OF GUIDANCE SCALE
+
+
+The guidance scale for _L_ PiAC is important hyper-parameter since it is given to approximation of
+likelihood (i.e. data consistency) of the inverse problem. In Fig. S8, we show the tendency of
+consistency control according to the intensity of guidance _ρ_ . The lower the guidance scale _ρ_ is, we
+get results that are not consistent with the original image and get blurry. We empirically set the _ρ_
+value 1 for best results in consistency.
+
+
+23
+
+
+**1242**
+
+**1243**
+
+
+**1244**
+
+**1245**
+
+**1246**
+
+**1247**
+
+**1248**
+
+**1249**
+
+
+**1250**
+
+**1251**
+
+**1252**
+
+**1253**
+
+**1254**
+
+**1255**
+
+
+**1256**
+
+**1257**
+
+**1258**
+
+**1259**
+
+**1260**
+
+
+**1261**
+
+**1262**
+
+**1263**
+
+**1264**
+
+**1265**
+
+**1266**
+
+
+**1267**
+
+**1268**
+
+**1269**
+
+**1270**
+
+**1271**
+
+**1272**
+
+
+**1273**
+
+**1274**
+
+**1275**
+
+**1276**
+
+**1277**
+
+**1278**
+
+
+**1279**
+
+**1280**
+
+**1281**
+
+**1282**
+
+**1283**
+
+
+**1284**
+
+**1285**
+
+**1286**
+
+**1287**
+
+**1288**
+
+**1289**
+
+
+**1290**
+
+**1291**
+
+**1292**
+
+**1293**
+
+**1294**
+
+**1295**
+
+
+Figure S8: Effectiveness of guidance scale _ρ_ for _L_ PiAC on the ImageNet dataset with synthetic lensless
+task: (a) quantitative results and (b) qualitative results.
+
+
+G.5 EFFECT OF SKIP STEP GUIDANCE
+
+
+As mentioned in the main paper Sec. 4.2 **Additional considerations** and detailed in Appendix D,
+we conducted an ablation study on the skip step guidance _C_, which defines the steps in the sampling
+iteration where Dilack guidance (PiAC guidance with ROI mask) are applied. To quickly assess the
+trend, we tested on 30 images (indices 0–29) from ImageNet in the lensless imaging task with a
+Turing PSF. Setting _C_ = 2 during the initial diffusion sampling iterations and _C_ = 1 in the latter half
+resulted in the best time-performance efficiency.
+
+
+Table S3: Inference time and performance results for Dilack with various skip step guidance.
+
+|Method|Skip Step Guidance Inference Time PSNR↑/SSIM↑/FID↓/LPIPS↓|
+|---|---|
+|Dilack(ours)|1<br>6:58<br>24.48 / 0.791 / 79.90 / 0.245<br>**2 (frst half) + 1 (latter half)**<br>6:14<br>24.66 / 0.788 / 80.99 / 0.247<br>1 (frst half) + 2 (latter half)<br>6:19<br>23.05 / 0.712 / 119.79 / 0.320<br>2<br>6:07<br>22.72 / 0.702 / 125.59 / 0.330<br>5<br>5:32<br>21.36 / 0.604 / 150.63 / 0.411<br>10<br>5:11<br>19.56 / 0.529 / 175.15 / 0.478|
+
+
+G.6 EFFECT OF TOTAL NUMBERS FOR UPDATING TV-REGULARIZED OPTIMIZATION SOLUTION
+**x** ˜ _[∗]_
+
+
+As shown in **Algorithm 1** of the main paper, classical TV-regularized optimization starts with initial
+values of zero and is re-initialized _G −_ 1 times using intermediate sampling outputs **x** ˆ0 _|t_ . By using
+an appropriate initialization point **x** ˆ0 _|t_, the optimization converges faster and helps prevent the model
+from getting stuck in local minima.
+
+
+We conducted an ablation study on _G_, which specifies the total number of updates for the TVregularized optimization solution **x** ˜ _[∗]_ . The study was performed on 30 images (indices 0–29) from
+the synthetic lensless imaging dataset, using the same implementation settings as in Sec. G.5.
+Additionally, we iteratively updated **x** ˜ _[∗]_ and reduced the regularizer’s hyperparameter _τ_ during
+optimization, allowing traditional regularizers like TV to interact locally with the fidelity term.
+
+The initial _λt_ value, _λT −_ 1, was initially set to 10 _[−]_ [7] and then decreased based on the total initialization
+count (G). Specifically, _λt_ decreases as:
+
+_λt_ = 10 _[−]_ [7] _× {_ 1 _−_ (current ADMM update iteration _/_ total ADMM updates) _}_ (S9)
+
+
+at every _t_ = 1 _,_ 000 _/G_ iteration step when the sampling iteration _t ∈_ _T_ is at an initialization point.
+
+
+Increasing _G_ resulted in a modest increase in PSNR, a pixel-based quality metric, but only slight
+improvements in perceptual quality metrics like LPIPS and FID, while significantly increasing
+inference time. Therefore, to balance inference time and performance metrics, we set _G_ = 1 in our
+experiments, meaning no re-initialization was performed. This approach has the added advantage of
+
+
+24
+
+
+**1296**
+
+**1297**
+
+
+**1298**
+
+**1299**
+
+**1300**
+
+**1301**
+
+**1302**
+
+**1303**
+
+
+**1304**
+
+**1305**
+
+**1306**
+
+**1307**
+
+**1308**
+
+**1309**
+
+
+**1310**
+
+**1311**
+
+**1312**
+
+**1313**
+
+**1314**
+
+
+**1315**
+
+**1316**
+
+**1317**
+
+**1318**
+
+**1319**
+
+**1320**
+
+
+**1321**
+
+**1322**
+
+**1323**
+
+**1324**
+
+**1325**
+
+**1326**
+
+
+**1327**
+
+**1328**
+
+**1329**
+
+**1330**
+
+**1331**
+
+**1332**
+
+
+**1333**
+
+**1334**
+
+**1335**
+
+**1336**
+
+**1337**
+
+
+**1338**
+
+**1339**
+
+**1340**
+
+**1341**
+
+**1342**
+
+**1343**
+
+
+**1344**
+
+**1345**
+
+**1346**
+
+**1347**
+
+**1348**
+
+**1349**
+
+
+performing optimization once before entering the **for** -loop in **Algorithm 1**, allowing for continuous
+use of the initial **x** ˜ _[∗]_, simplifying the implementation.
+
+
+Table S4: Inference time and performance results for Dilack with various total numbers of optimization re-initializations.
+
+|Method|Num. of Updating of x˜∗ Inference Time PSNR↑/SSIM↑/FID↓/LPIPS↓|
+|---|---|
+|Dilack(ours)|**1** (no further updates after the frst optim.)<br>6:14<br>24.66 / 0.788 / 80.99 / 0.247<br>5 (re-init. every 200 iter.)<br>6:58<br>24.97 / 0.791 / 78.80 / 0.243<br>10 (re-init. every 100 iter.)<br>7:24<br>25.08 / 0.792 / 78.81 / 0.242<br>50 (re-init. every 20 iter.)<br>10:06<br>25.55 / 0.793 / 78.87 / 0.240|
+
+
+G.7 EXPERIMENTAL SETUP FOR APPLYING DILACK TO _Latent_ DIFFUSION MODELS
+
+
+G.8 REPLACING PIAC (PSEUDO-INVERSE ANCHOR FOR CONTRAINING) WITH OTHER
+DENOISING TECHNIQUES
+
+
+BM3D (Dabov et al., 2007) is one of the denoising methods and can be applied to pseudo-inverse
+anchor. To evaluate the effectiveness of our PiAC guidance, we replaced PiAC with BM3D while
+preserving all other components of the framework. To quickly assess the trend, we tested on 3 images
+(indices 0–2) from FFHQ in the lensless imaging task with a Turing PSF and large motion deblurring
+task. As demonstrated in Fig. S9, BM3D fails to provide effective guidance as it performs denoising
+without incorporating the kernel, making it unsuitable for highly ill-posed problems involving large
+and complex kernels.
+
+
+G.9 COMPARISON WITH OTHER PLUG-AND-PLAY METHODS
+
+
+Since our Dilack algorithm can be regarded as a Plug-and-Play (PnP) method that combines a
+total variation (TV)-regularized solution and a diffusion prior, we conducted additional experiments
+comparing its results with DPIR (Zhang et al., 2021), a representative PnP approach utilizing a CNNbased pre-trained denoiser. Because the pre-trained weights of DPIR are designed for 128 _×_ 128
+resolution, we resized our inputs accordingly and evaluated our lensless turing kernel based imaging
+task on the ImageNet dataset. We employed a pre-trained diffusion model prior on 128 _×_ 128 inputs
+to match the resolution used in these experiments. As demonstrated in Fig. S10 and Tab. S5, due
+to the limitations of the Wiener process and the use of a CNN-based pre-trained denoiser as a prior
+instead of a diffusion prior, DPIR’s performance was inferior to that of Dilack.
+
+
+25
+
+
+As discussed in Sec. 5.3 of the main paper,
+diffusion models in pixel space perform better
+under our highly ill-posed kernel degradation
+setting. To investigate whether our Dilack
+fidelity can produce similar results in latent
+diffusion models, we conducted additional experiments. **Algorithm 2** presents the application of our proposed Dilack approach to the
+original state-of-the-art latent diffusion model
+ReSample (Song et al., 2024).
+
+
+The main differences between the original ReSample and ReSample-Dilack are: _i_ ) the use
+of latent diffusion models leveraging **z**, _ii_ ) ReSample employs least square guidance _LLS_,
+and _iii_ ) ReSample optimizes ˆ **z** 0 using a gradient descent method.
+
+
+**Require:** _**A**_, **y**, _λT −_ 1, _ρ_, _T_, _C_, _G_, _sθ_ ( _·, t_ ), _{σ_ ˜ _t}_ _[T]_ _t_ =1 [, Encoder] _[ E]_ [(] _[·]_ [)][,]
+Decoder _D_ ( _·_ ), Pretrained LDM Parameters _βt, αt, η, δ_, and Hyperparameter _γ_ to control _σt_ [2]
+1: **z** _T_ _∼N_ ( **0** _,_ **I** )
+2: **for** _t_ = _T_ _−_ 1 _, . . .,_ 0 **do**
+3: _ϵ_ 1 _∼N_ ( **0** _,_ **I** )
+4: _ϵ_ ˆ _t_ +1 = _sθ_ ( **z** _t_ +1 _, t_ + 1)
+5: **z** ˆ0( **z** _t_ +1) = ~~_√_~~ _αt_ ¯1 +1 [(] **[z]** _[t]_ [+1] _[−]_ [�][1] _[ −]_ _[α]_ [¯] _[t]_ [+1] _[ϵ]_ [ˆ] _[t]_ [+1][)]
+
+6: **z** _[′]_ _t_ [=] ~~_[√]_~~ _[α]_ [¯] _[t]_ **[z]** [ˆ][0] [+] �1 _−_ _α_ ¯ _t_ _−_ _ηδ_ [2] _ϵ_ ˆ _t_ +1 + _ηδϵ_ 1
+7: **if** _t_ _∈C_ **then**
+8: **x** ˜ _[∗]_ _∈_ arg min **x** _∥_ **y** _−_ _**A**_ **x** _∥_ [2] 2 [+] _[λ][t]_ [TV][(] **[x]** [)] _[//]_ _[Classical]_
+_TV-regularized_ _optimization_ _starts_ _with_ _initial_ _values_ _of_ _0_ _and_ _is_ _re-_
+_initialized G −_ 1 _times using intermediate sampling outputs._
+9: **z** ˆ0(˜ **x** _[∗]_ ) _∈_ arg min **z** _M_ ROI _· ∥_ **x** ˜ _[∗]_ _−D_ ( **z** ) _∥_ [2] 2
+10: **z** _t_ = StochasticResample( **z** ˆ0(˜ **x** _[∗]_ ) _,_ **z** _[′]_ _t_ _[, γ]_ [)]
+11: **else**
+12: **z** _t_ = **z** _[′]_ _t_ _[// Unconditional sampling.]_
+13: **end if**
+14: **end for**
+15: **return** _D_ ( **z** 0)
+
+
+**Algorithm 2** ReSample-Dilack
+
+
+While all other settings remain unchanged 0
+from the original ReSample paper, the optimization step (highlighted in _purple_ ) varies, leading
+to significantly different results under highly ill-posed kernel degradation settings, as shown in Fig. 5.
+This demonstrates the effectiveness of our Dilack fidelity in challenging scenarios, even when applied
+to existing latent diffusion methods.
+
+
+**1350**
+
+**1351**
+
+
+**1352**
+
+**1353**
+
+**1354**
+
+**1355**
+
+**1356**
+
+**1357**
+
+
+**1358**
+
+**1359**
+
+**1360**
+
+**1361**
+
+**1362**
+
+**1363**
+
+
+**1364**
+
+**1365**
+
+**1366**
+
+**1367**
+
+**1368**
+
+
+**1369**
+
+**1370**
+
+**1371**
+
+**1372**
+
+**1373**
+
+**1374**
+
+
+**1375**
+
+**1376**
+
+**1377**
+
+**1378**
+
+**1379**
+
+**1380**
+
+
+**1381**
+
+**1382**
+
+**1383**
+
+**1384**
+
+**1385**
+
+**1386**
+
+
+**1387**
+
+**1388**
+
+**1389**
+
+**1390**
+
+**1391**
+
+
+**1392**
+
+**1393**
+
+**1394**
+
+**1395**
+
+**1396**
+
+**1397**
+
+
+**1398**
+
+**1399**
+
+**1400**
+
+**1401**
+
+**1402**
+
+**1403**
+
+
+Figure S9: Qualitative results for the synthetic lensless imaging task showing the impact of pseudoinverse anchor variations in our method. BM3D-Dilack indicates that our method uses BM3D as the
+pseudo-inverse anchor instead of ADMM _T V_ .
+
+
+Figure S10: Additional qualitative results of the synthetic lensless imaging task using the Turing
+kernel on the ImageNet dataset under Plug-and-Play algorithms.
+
+
+26
+
+
+**1404**
+
+**1405**
+
+
+**1406**
+
+**1407**
+
+**1408**
+
+**1409**
+
+**1410**
+
+**1411**
+
+
+**1412**
+
+**1413**
+
+**1414**
+
+**1415**
+
+**1416**
+
+**1417**
+
+
+**1418**
+
+**1419**
+
+**1420**
+
+**1421**
+
+**1422**
+
+
+**1423**
+
+**1424**
+
+**1425**
+
+**1426**
+
+**1427**
+
+**1428**
+
+
+**1429**
+
+**1430**
+
+**1431**
+
+**1432**
+
+**1433**
+
+**1434**
+
+
+**1435**
+
+**1436**
+
+**1437**
+
+**1438**
+
+**1439**
+
+**1440**
+
+
+**1441**
+
+**1442**
+
+**1443**
+
+**1444**
+
+**1445**
+
+
+**1446**
+
+**1447**
+
+**1448**
+
+**1449**
+
+**1450**
+
+**1451**
+
+
+**1452**
+
+**1453**
+
+**1454**
+
+**1455**
+
+**1456**
+
+**1457**
+
+
+Table S5: Performance comparison of Dilack and DPIR for lensless turing kernel imaging task on the
+ImageNet dataset.
+
+
+**Task** **Dataset** **Method** **PSNR↑** **/ SSIM↑** **/ FID↓** **/ LPIPS↓**
+
+
+DPIR 9.28 / 0.265 / 236.07 / 0.552
+Lensless Imaging (w/ Turing) ImageNet
+**Dilack(ours)** **24.88** / **0.796** / **92.89** / **0.208**
+
+
+G.10 DPS PERFORMANCE ACROSS VARIOUS STEP-SIZE ADJUSTMENTS
+
+
+DPS (Chung et al., 2023b) is a zero-shot diffusion model designed to address restoration tasks,
+including super-resolution and motion deblurring. However, as shown in Fig. 2, DPS exhibited
+degraded image reconstruction performance, as _LLS_ provides insufficient guidance for highly illposed problems involving large and complex kernels. To evaluate whether step-size optimization
+could improve DPS’s performance, we conducted additional experiments using our two tasks on 100
+sample images (indices 0–99) from the FFHQ dataset. We found that even when optimized, it fails to
+resolve the challenges posed by lensless imaging and large motion deblurring, as shown in Tab. S6.
+
+
+Table S6: Performance comparison of DPS across different step-sizes for lensless imaging and large
+motion deblurring tasks. Regardless of the step-size setting, DPS consistently demonstrates poor
+performance on our tasks, as reflected in the evaluation metrics.
+
+
+**Task** **Dataset** **Step-size** **PSNR↑** **/ SSIM↑** **/ FID↓** **/ LPIPS↓**
+
+
+Lensless Imaging (w/ Turing) FFHQ
+
+
+Large Motion Deblurring FFHQ
+
+
+0.25 11.20 / 0.385 / 120.83 / 0.514
+0.50 10.71 / 0.382 / 134.62 / 0.528
+0.75 10.34 / 0.376 / 136.65 / 0.541
+1.00 9.95 / 0.369 / 150.88 / 0.558
+
+
+0.25 17.70 / 0.502 / 94.48 / 0.364
+0.50 17.99 / 0.514 / 91.80 / 0.348
+0.75 17.87 / 0.512 / 96.66 / 0.347
+1.00 17.85 / 0.511 / 99.10 / 0.349
+
+
+G.11 COMPARISON WITH OTHER SPLITTING-BASED ITERATIVE OPTIMIZATION METHODS
+
+
+As discussed in Sec. C, we use ADMM _T V_, as an anchor to enhance the performance of Dilack.
+To validate the effectiveness of using ADMM _T V_ as the primary anchor in our Dilack algorithm,
+we conducted additional experiments. We compared our method with _ADMM_ - _L_ 1, _ADMM_ - _L_ 2,
+FISTA (Fast Iterative Soft-Thresholding Algorithm, as an alternative optimization method), and HQS
+(a proximal splitting algorithm similar to _ADMMT V_ ). FISTA employed _L_ 1 regularization, while
+HQS used Total Variation (TV), like ADMM _T V_ . Each approach was applied to _LP iAC_ guidance and
+integrated with the diffusion prior in our Dilack framework. These experiments were conducted on
+the lensless turing kernel imaging task using the FFHQ dataset, with a sample size of 100 images
+(indices 0–99). The quantitative results are summarized below. As shown in Fig. S11 and Tab. S7,
+ADMM _T V_ consistently outperformed others, demonstrating its effectiveness and suitability for
+integration into our Dilack algorithm.
+
+
+Table S7: Quantitative comparison of Dilack and its variants with different regularizers and optimization algorithms.
+
+
+**Task** **Dataset** **Method** **PSNR↑** **/ SSIM↑** **/ FID↓** **/ LPIPS↓**
+
+
+Lensless Imaging (w/ Turing) FFHQ
+
+
+FISTA-Dilack 19.30 / 0.745 / 98.06 / 0.249
+HQS-Dilack 12.51 / 0.341 / 363.52 / 0.637
+ADMM _L_ 1-Dilack 16.11 / 0.672 / 126.69 / 0.301
+ADMM _L_ 2-Dilack 22.69 / 0.817 / 64.25 / 0.183
+**Dilack(ours)** **26.23** / **0.863** / **54.84** / **0.149**
+
+
+27
+
+
+**1458**
+
+**1459**
+
+
+**1460**
+
+**1461**
+
+**1462**
+
+**1463**
+
+**1464**
+
+**1465**
+
+
+**1466**
+
+**1467**
+
+**1468**
+
+**1469**
+
+**1470**
+
+**1471**
+
+
+**1472**
+
+**1473**
+
+**1474**
+
+**1475**
+
+**1476**
+
+
+**1477**
+
+**1478**
+
+**1479**
+
+**1480**
+
+**1481**
+
+**1482**
+
+
+**1483**
+
+**1484**
+
+**1485**
+
+**1486**
+
+**1487**
+
+**1488**
+
+
+**1489**
+
+**1490**
+
+**1491**
+
+**1492**
+
+**1493**
+
+**1494**
+
+
+**1495**
+
+**1496**
+
+**1497**
+
+**1498**
+
+**1499**
+
+
+**1500**
+
+**1501**
+
+**1502**
+
+**1503**
+
+**1504**
+
+**1505**
+
+
+**1506**
+
+**1507**
+
+**1508**
+
+**1509**
+
+**1510**
+
+**1511**
+
+
+Figure S11: Additional qualitative analysis of the synthetic lensless imaging task on the FFHQ dataset
+comparing Dilack and its variants with different regularizers and optimization algorithms.
+
+
+Figure S12: Additional qualitative results of the synthetic lensless imaging task using the Turing
+kernel on the FFHQ dataset under standard _L_ 2 data-fidelity term based diffusion algorithms.
+
+
+G.12 ADDITIONAL RESULTS OF TV REGULARIZATION ON EXISTING _L_ 2 DATA-FIDELITY
+
+
+To verify whether TV regularization is effective in representative algorithms that combine the _L_ 2
+data-fidelity term in Eq. (9) and Eq. (10) with a diffusion prior—namely, DPS (Chung et al., 2023b)
+and DiffPIR (Zhu et al., 2023)—,we performed experiments on the FFHQ dataset with a sample
+size of 100 images (indices 0–99) for the lensless Turing kernel deblurring task. Specifically, we
+tested DPS augmented with a TV regularizer (DPS _T V_ ) and DiffPIR augmented with a TV regularizer
+(DiffPIR _T V_ ). As shown in Fig. S12 and Tab. S8, adding TV regularization to Eq. (9) and Eq. (10)
+results in a global smoothing effect, significantly degrading the fidelity of the sampling output. This
+approach is insufficient for handling the highly ill-posed problems addressed by our method.
+
+
+28
+
+
+**1512**
+
+**1513**
+
+
+**1514**
+
+**1515**
+
+**1516**
+
+**1517**
+
+**1518**
+
+**1519**
+
+
+**1520**
+
+**1521**
+
+**1522**
+
+**1523**
+
+**1524**
+
+**1525**
+
+
+**1526**
+
+**1527**
+
+**1528**
+
+**1529**
+
+**1530**
+
+
+**1531**
+
+**1532**
+
+**1533**
+
+**1534**
+
+**1535**
+
+**1536**
+
+
+**1537**
+
+**1538**
+
+**1539**
+
+**1540**
+
+**1541**
+
+**1542**
+
+
+**1543**
+
+**1544**
+
+**1545**
+
+**1546**
+
+**1547**
+
+**1548**
+
+
+**1549**
+
+**1550**
+
+**1551**
+
+**1552**
+
+**1553**
+
+
+**1554**
+
+**1555**
+
+**1556**
+
+**1557**
+
+**1558**
+
+**1559**
+
+
+**1560**
+
+**1561**
+
+**1562**
+
+**1563**
+
+**1564**
+
+**1565**
+
+
+Table S8: Performance results of DPS-TV and DiffPIR-TV for lensless turing kernel imaging task
+on the FFHQ dataset. Consequently, it is evident that the absolute performance values across all
+evaluation metrics are significantly low.
+
+
+**Task** **Dataset** **Method** **PSNR↑** **/ SSIM↑** **/ FID↓** **/ LPIPS↓**
+
+
+Lensless Imaging (w/ Turing) FFHQ DPS _T V_ 9.81 / 0.366 / 149.41 / 0.560
+DiffPIR _T V_ 13.68 / 0.556 / 186.2 / 0.436
+
+
+G.13 HYPERPARAMETER ANALYSIS ON _real_ LENSLESS DATASET
+
+
+We conducted additional experiments on the real lensless imaging task to evaluate how varying step
+numbers in **Algorithm 1** affects the results. The experimental setup was identical to Sec. 5.3, and
+100 images (indices 0–99) were tested. The scenarios are as follows:
+
+
+**Case 1** : Increasing the TV-regularized optimization steps from 1,000 to 2,000.
+
+
+**Case 2** : Setting skip step guidance _C_ = 1 for all sampling iterations.
+
+
+**Case 3** : Increasing the re-initialization count from _G_ = 1 to _G_ = 50.
+
+
+We varied these three settings, and their definitions are described in Sec. 4.2 and **Algorithm 1** . As
+shown in Fig. S13 and Tab. S9, from **Case 1** to **Case 3**, increasing the number of steps naturally
+extended the diffusion sampling time per image. However, the performance of the reconstructed
+images slightly deteriorated, likely due to saturation in the TV-regularized optimization process
+or overly constrained _L_ PiAC guidance. Although there is room for performance improvement, we
+emphasize that real-world datasets are intrinsically challenging due to model mismatch and hardwareinduced noise. As our work is the first to address such highly ill-posed kernel degradation problems
+using zero-shot diffusion models, we believe this study represents an important first step. Specifically,
+in **Case 3**, increasing the re-initializing count _G_ reduced fidelity in real-world problems, unlike in
+synthetic conditions. This indicates that while adjusting _G_ may be beneficial in Sec. G.6 on the
+synthetic lensless imaging dataset, it poses challenges in more complex, real-world scenarios.
+
+
+Figure S13: Additional qualitative results of _real_ lensless imaging task on MirFlickr-lensless dataset
+under various hyperparameters.
+
+
+29
+
+
+**1566**
+
+**1567**
+
+
+**1568**
+
+**1569**
+
+**1570**
+
+**1571**
+
+**1572**
+
+**1573**
+
+
+**1574**
+
+**1575**
+
+**1576**
+
+**1577**
+
+**1578**
+
+**1579**
+
+
+**1580**
+
+**1581**
+
+**1582**
+
+**1583**
+
+**1584**
+
+
+**1585**
+
+**1586**
+
+**1587**
+
+**1588**
+
+**1589**
+
+**1590**
+
+
+**1591**
+
+**1592**
+
+**1593**
+
+**1594**
+
+**1595**
+
+**1596**
+
+
+**1597**
+
+**1598**
+
+**1599**
+
+**1600**
+
+**1601**
+
+**1602**
+
+
+**1603**
+
+**1604**
+
+**1605**
+
+**1606**
+
+**1607**
+
+
+**1608**
+
+**1609**
+
+**1610**
+
+**1611**
+
+**1612**
+
+**1613**
+
+
+**1614**
+
+**1615**
+
+**1616**
+
+**1617**
+
+**1618**
+
+**1619**
+
+
+Table S9: Performance comparison of various hyperparameters on the _real_ lensless camera dataset.
+
+
+**Task** **Dataset** **Method** **Inference Time** **PSNR↑** **/ SSIM↑** **/ FID↓** **/ LPIPS↓**
+
+
+G.15 REGARDING THE POTENTIAL APPLICABILITY TO OTHER TASKS
+
+
+For super-resolution (SR), the _**A**_ matrix consists of a combination of blur kernels and downsampling
+operations. As the degree of downsampling increases, the condition number becomes larger, presenting a challenging scenario where the strengths of our proposed method are expected to be effective.
+However, highly ill-posed SR has not been well investigated in the field yet, so we believe that we
+need to carefully validate one by one. Especially, the impact of downsampling operator is worth
+investigating. Thus, at this moment, we can say that our Dilack can work for SR as compared to other
+prior works, but there is still room for improvement due to the reasons mentioned. The qualitative
+results of toy experiments for SR on the FFHQ dataset can be found in Fig. S14, which are the results
+of our additional experiments with SR x4, x8.
+
+
+For gaussian denoising, it may be difficult to expect the applicability of our Dilack since highly
+ill-posed cases with high noise levels have different ill-posedness from other tasks with kernels. Full
+investigation will be needed for these cases. Nonetheless, under Gaussian noise levels ( _σ_ = 0.05
+to 0.1), our method performs comparable to DPS, though a more comprehensive investigation is
+required for these cases as a future work. The qualitative results of toy experiments for denoising on
+the FFHQ dataset can be found in Fig. S15, which are the results of our additional experiments.
+
+
+G.16 ADDITIONAL EXPERIMENTS UNDER DIFFERENT SEED VALUES
+
+
+We evaluated DPS (Chung et al., 2023b), DiffPIR (Zhu et al., 2023), and Dilack on three sample
+images (indices 0–2) from the FFHQ and ImageNet datasets for lensless imaging with a Turing PSF
+and large motion deblurring.
+
+
+For lensless imaging (Fig. S16 and S17), DPS generates diverse but inaccurate images due to its
+reliance on _LLS_, which struggles with this task. DiffPIR, based on _LP i_, produces closer results but
+still shows notable errors. In contrast, our method generates consistently accurate images closely
+aligned with the ground truth (GT). For large motion deblurring (Fig. S20 and S19), DiffPIR performs
+
+
+30
+
+
+_Real_ Lensless Imaging **MirFlickr-lensless**
+
+
+Case 1 06:39 12.80 / 0.318 / 294.76 / 0.596
+Case 2 06:30 12.81 / 0.318 / 295.86 / 0.597
+Case 3 07:14 10.87 / 0.313 / 305.49 / 0.608
+**Dilack(ours)** 10:30 **13.47** / **0.326** / **290.54** / **0.584**
+
+
+G.14 IMPACT OF ADMM-TV OPTIMIZATION ITERATIONS
+
+
+We employ ADMM-TV for pseudo-inverse guidance, with the optimization iteration serving as a
+critical parameter. To evaluate its impact, we conducted experiments using iterations of 1, 10, and
+1,000 on 30 images (indices 0–29) from FFHQ and ImageNet in the lensless imaging task with
+a Turing PSF, as well as in the large motion deblurring task. As presented in Tab. S10, while 10
+iterations achieve comparable performance, 1,000 iterations consistently deliver superior results
+across various tasks and datasets.
+
+
+Table S10: Performance comparison of _ADMMT V_ optimization iterations for Dilack across different
+tasks and datasets.
+
+
+**Task** **Dataset** _ADMMT V_ **iter.** **num.** **of init.** **PSNR↑** **/ SSIM↑** **/ FID↓** **/ LPIPS↓**
+
+
+Lensless Imaging (w/ Turing)
+
+
+Large Motion Deblurring
+
+
+1,000 1 **26.08** / **0.861** / **65.95** / **0.152**
+FFHQ 1 1,000 16.23 / 0.601 / 267.89 / 0.428
+1 1 16.73 / 0.608 / 313.32 / 0.425
+
+
+1000 1 **24.36** / **0.788** / **80.99** / **0.247**
+ImageNet 1 1000 15.68 / 0.523 / 235.04 / 0.465
+1 1 15.41 / 0.518 / 258.07 / 0.478
+
+
+1000 1 **22.97** / **0.732** / **197.59** / **0.365**
+FFHQ 1 1,000 14.88 / 0.489 / 259.68 / 0.581
+1 1 14.72 / 0.474 / 330.15 / 0.596
+
+
+1000 1 **20.61** / **0.596** / **200.81** / **0.477**
+ImageNet 1 1,000 14.22 / 0.386 / 293.76 / 0.621
+1 1 13.34 / 0.368 / 337.58 / 0.645
+
+
+**1620**
+
+**1621**
+
+
+**1622**
+
+**1623**
+
+**1624**
+
+**1625**
+
+**1626**
+
+**1627**
+
+
+**1628**
+
+**1629**
+
+**1630**
+
+**1631**
+
+**1632**
+
+**1633**
+
+
+**1634**
+
+**1635**
+
+**1636**
+
+**1637**
+
+**1638**
+
+
+**1639**
+
+**1640**
+
+**1641**
+
+**1642**
+
+**1643**
+
+**1644**
+
+
+**1645**
+
+**1646**
+
+**1647**
+
+**1648**
+
+**1649**
+
+**1650**
+
+
+**1651**
+
+**1652**
+
+**1653**
+
+**1654**
+
+**1655**
+
+**1656**
+
+
+**1657**
+
+**1658**
+
+**1659**
+
+**1660**
+
+**1661**
+
+
+**1662**
+
+**1663**
+
+**1664**
+
+**1665**
+
+**1666**
+
+**1667**
+
+
+**1668**
+
+**1669**
+
+**1670**
+
+**1671**
+
+**1672**
+
+**1673**
+
+
+better but produces blurred outputs and inconsistent results across seeds. Our method, however,
+maintains consistency, with only minor noise artifacts.
+
+
+Figure S14: Qualitative comparison of the super-resolution task, as a preliminary evaluation of
+Dilack’s potential extensibility to other applications.
+
+
+31
+
+
+**1674**
+
+**1675**
+
+
+**1676**
+
+**1677**
+
+**1678**
+
+**1679**
+
+**1680**
+
+**1681**
+
+
+**1682**
+
+**1683**
+
+**1684**
+
+**1685**
+
+**1686**
+
+**1687**
+
+
+**1688**
+
+**1689**
+
+**1690**
+
+**1691**
+
+**1692**
+
+
+**1693**
+
+**1694**
+
+**1695**
+
+**1696**
+
+**1697**
+
+**1698**
+
+
+**1699**
+
+**1700**
+
+**1701**
+
+**1702**
+
+**1703**
+
+**1704**
+
+
+**1705**
+
+**1706**
+
+**1707**
+
+**1708**
+
+**1709**
+
+**1710**
+
+
+**1711**
+
+**1712**
+
+**1713**
+
+**1714**
+
+**1715**
+
+
+**1716**
+
+**1717**
+
+**1718**
+
+**1719**
+
+**1720**
+
+**1721**
+
+
+**1722**
+
+**1723**
+
+**1724**
+
+**1725**
+
+**1726**
+
+**1727**
+
+
+Figure S15: Qualitative comparison of the denoising task, as a preliminary evaluation of Dilack’s
+potential extensibility to other applications.
+
+
+32
+
+
+**1728**
+
+**1729**
+
+
+**1730**
+
+**1731**
+
+**1732**
+
+**1733**
+
+**1734**
+
+**1735**
+
+
+**1736**
+
+**1737**
+
+**1738**
+
+**1739**
+
+**1740**
+
+**1741**
+
+
+**1742**
+
+**1743**
+
+**1744**
+
+**1745**
+
+**1746**
+
+
+**1747**
+
+**1748**
+
+**1749**
+
+**1750**
+
+**1751**
+
+**1752**
+
+
+**1753**
+
+**1754**
+
+**1755**
+
+**1756**
+
+**1757**
+
+**1758**
+
+
+**1759**
+
+**1760**
+
+**1761**
+
+**1762**
+
+**1763**
+
+**1764**
+
+
+**1765**
+
+**1766**
+
+**1767**
+
+**1768**
+
+**1769**
+
+
+**1770**
+
+**1771**
+
+**1772**
+
+**1773**
+
+**1774**
+
+**1775**
+
+
+**1776**
+
+**1777**
+
+**1778**
+
+**1779**
+
+**1780**
+
+**1781**
+
+
+All methods, including DPS, DiffPIR, DDPG, ReSample, and LDPS, were evaluated with fixed-seed
+sampling ( _i.e._, one sample per measurement) for PSNR. While a single sample may not fully capture
+performance for individual images, it provides reasonable aggregate results for the entire test dataset.
+
+
+Figure S16: Additional qualitative results of the synthetic lensless imaging task using the Turing
+kernel on the FFHQ dataset under varying seed conditions.
+
+
+33
+
+
+**1782**
+
+**1783**
+
+
+**1784**
+
+**1785**
+
+**1786**
+
+**1787**
+
+**1788**
+
+**1789**
+
+
+**1790**
+
+**1791**
+
+**1792**
+
+**1793**
+
+**1794**
+
+**1795**
+
+
+**1796**
+
+**1797**
+
+**1798**
+
+**1799**
+
+**1800**
+
+
+**1801**
+
+**1802**
+
+**1803**
+
+**1804**
+
+**1805**
+
+**1806**
+
+
+**1807**
+
+**1808**
+
+**1809**
+
+**1810**
+
+**1811**
+
+**1812**
+
+
+**1813**
+
+**1814**
+
+**1815**
+
+**1816**
+
+**1817**
+
+**1818**
+
+
+**1819**
+
+**1820**
+
+**1821**
+
+**1822**
+
+**1823**
+
+
+**1824**
+
+**1825**
+
+**1826**
+
+**1827**
+
+**1828**
+
+**1829**
+
+
+**1830**
+
+**1831**
+
+**1832**
+
+**1833**
+
+**1834**
+
+**1835**
+
+
+Figure S17: Additional qualitative results of the synthetic lensless imaging task using the Turing
+kernel on the ImageNet dataset under varying seed conditions.
+
+
+34
+
+
+**1836**
+
+**1837**
+
+
+**1838**
+
+**1839**
+
+**1840**
+
+**1841**
+
+**1842**
+
+**1843**
+
+
+**1844**
+
+**1845**
+
+**1846**
+
+**1847**
+
+**1848**
+
+**1849**
+
+
+**1850**
+
+**1851**
+
+**1852**
+
+**1853**
+
+**1854**
+
+
+**1855**
+
+**1856**
+
+**1857**
+
+**1858**
+
+**1859**
+
+**1860**
+
+
+**1861**
+
+**1862**
+
+**1863**
+
+**1864**
+
+**1865**
+
+**1866**
+
+
+**1867**
+
+**1868**
+
+**1869**
+
+**1870**
+
+**1871**
+
+**1872**
+
+
+**1873**
+
+**1874**
+
+**1875**
+
+**1876**
+
+**1877**
+
+
+**1878**
+
+**1879**
+
+**1880**
+
+**1881**
+
+**1882**
+
+**1883**
+
+
+**1884**
+
+**1885**
+
+**1886**
+
+**1887**
+
+**1888**
+
+**1889**
+
+
+Figure S18: Additional qualitative results of large motion deblurring task on the FFHQ dataset under
+varying seed conditions. Note that, as discussed earlier in the main paper, large motion blur uses
+relatively simple kernel features, allowing existing methods using A _†_ to perform well, but Dilack
+shows comparable results and our mask-guided approach outperforms pure ADMM _T V_ in all aspects.
+
+
+35
+
+
+**1890**
+
+**1891**
+
+
+**1892**
+
+**1893**
+
+**1894**
+
+**1895**
+
+**1896**
+
+**1897**
+
+
+**1898**
+
+**1899**
+
+**1900**
+
+**1901**
+
+**1902**
+
+**1903**
+
+
+**1904**
+
+**1905**
+
+**1906**
+
+**1907**
+
+**1908**
+
+
+**1909**
+
+**1910**
+
+**1911**
+
+**1912**
+
+**1913**
+
+**1914**
+
+
+**1915**
+
+**1916**
+
+**1917**
+
+**1918**
+
+**1919**
+
+**1920**
+
+
+**1921**
+
+**1922**
+
+**1923**
+
+**1924**
+
+**1925**
+
+**1926**
+
+
+**1927**
+
+**1928**
+
+**1929**
+
+**1930**
+
+**1931**
+
+
+**1932**
+
+**1933**
+
+**1934**
+
+**1935**
+
+**1936**
+
+**1937**
+
+
+**1938**
+
+**1939**
+
+**1940**
+
+**1941**
+
+**1942**
+
+**1943**
+
+
+Figure S19: Additional qualitative results of large motion deblurring task on the ImageNet dataset
+under varying seed conditions. Note that, as discussed earlier in the main paper, large motion blur
+uses relatively simple kernel features, allowing existing methods using A _†_ to perform well, but Dilack
+shows comparable results and our mask-guided approach outperforms pure ADMM _T V_ in all aspects.
+
+
+36
+
+
+**1944**
+
+**1945**
+
+
+**1946**
+
+**1947**
+
+**1948**
+
+**1949**
+
+**1950**
+
+**1951**
+
+
+**1952**
+
+**1953**
+
+**1954**
+
+**1955**
+
+**1956**
+
+**1957**
+
+
+**1958**
+
+**1959**
+
+**1960**
+
+**1961**
+
+**1962**
+
+
+**1963**
+
+**1964**
+
+**1965**
+
+**1966**
+
+**1967**
+
+**1968**
+
+
+**1969**
+
+**1970**
+
+**1971**
+
+**1972**
+
+**1973**
+
+**1974**
+
+
+**1975**
+
+**1976**
+
+**1977**
+
+**1978**
+
+**1979**
+
+**1980**
+
+
+**1981**
+
+**1982**
+
+**1983**
+
+**1984**
+
+**1985**
+
+
+**1986**
+
+**1987**
+
+**1988**
+
+**1989**
+
+**1990**
+
+**1991**
+
+
+**1992**
+
+**1993**
+
+**1994**
+
+**1995**
+
+**1996**
+
+**1997**
+
+
+Figure S20: Diverse sampling outputs for the large motion deblurring task on the FFHQ dataset
+with relaxed fidelity constraints in our guidance settings. While Dilack prioritizes high fidelity over
+diversity, it remains fundamentally consistent with other zero-shot diffusion sampling methods.
+
+
+G.17 SAMPLING DIVERSITY UNDER RELAXED FIDELITY CONSTRAINTS
+
+
+Our Dilack leverages the regularized data fidelity term, PiAC (Pseudo-inverse Anchor for Constraining), to achieve robust guidance in highly ill-posed problems. While this approach ensures
+high fidelity, it inherently results in lower output diversity. Nevertheless, our method remains
+fundamentally a ”sampling” method, consistent with other zero-shot diffusion approaches.
+
+
+To evaluate the diversity of outputs generated by our method, we adjusted the guidance scale _ρ_ to
+0.5 and the masking ratio _ν_ to 0.9, demonstrating the trade-off between fidelity and diversity. For
+this evaluation, we conducted experiments on the FFHQ dataset, testing with two randomly selected
+images as references while varying the sampling seed to analyze the diversity of generated outputs.
+As shown in Fig. S20, the outputs exhibit variations depending on the seed value, allowing for an
+evaluation of diversity.
+
+
+37
+
+
+**1998**
+
+**1999**
+
+
+**2000**
+
+**2001**
+
+**2002**
+
+**2003**
+
+**2004**
+
+**2005**
+
+
+**2006**
+
+**2007**
+
+**2008**
+
+**2009**
+
+**2010**
+
+**2011**
+
+
+**2012**
+
+**2013**
+
+**2014**
+
+**2015**
+
+**2016**
+
+
+**2017**
+
+**2018**
+
+**2019**
+
+**2020**
+
+**2021**
+
+**2022**
+
+
+**2023**
+
+**2024**
+
+**2025**
+
+**2026**
+
+**2027**
+
+**2028**
+
+
+**2029**
+
+**2030**
+
+**2031**
+
+**2032**
+
+**2033**
+
+**2034**
+
+
+**2035**
+
+**2036**
+
+**2037**
+
+**2038**
+
+**2039**
+
+
+**2040**
+
+**2041**
+
+**2042**
+
+**2043**
+
+**2044**
+
+**2045**
+
+
+**2046**
+
+**2047**
+
+**2048**
+
+**2049**
+
+**2050**
+
+**2051**
+
+
+G.18 FURTHER QUALITATIVE RESULTS
+
+
+In what follows, we present more qualitative results for our tasks: lensless imaging, large motion
+deblurring, and _real_ lensless imaging. In severe ill-posed image inverse problems, and as the illposedness becomes more severe, Dilack demonstrates robustness unlike existing diffusion models,
+and provides more realistic results compared to classical methods. To the best of our knowledge, we
+are the first to approach mask-based camera reconstruction using a zero-shot diffusion model.
+
+
+Figure S21: An example of DPS (Chung et al., 2023b)’s intermediate outputs per 150 iteration.
+
+
+Figure S22: Additional qualitative results of synthetic lensless imaging task with Voronoi kernel on
+ImageNet dataset.
+
+
+38
+
+
+**2052**
+
+**2053**
+
+
+**2054**
+
+**2055**
+
+**2056**
+
+**2057**
+
+**2058**
+
+**2059**
+
+
+**2060**
+
+**2061**
+
+**2062**
+
+**2063**
+
+**2064**
+
+**2065**
+
+
+**2066**
+
+**2067**
+
+**2068**
+
+**2069**
+
+**2070**
+
+
+**2071**
+
+**2072**
+
+**2073**
+
+**2074**
+
+**2075**
+
+**2076**
+
+
+**2077**
+
+**2078**
+
+**2079**
+
+**2080**
+
+**2081**
+
+**2082**
+
+
+**2083**
+
+**2084**
+
+**2085**
+
+**2086**
+
+**2087**
+
+**2088**
+
+
+**2089**
+
+**2090**
+
+**2091**
+
+**2092**
+
+**2093**
+
+
+**2094**
+
+**2095**
+
+**2096**
+
+**2097**
+
+**2098**
+
+**2099**
+
+
+**2100**
+
+**2101**
+
+**2102**
+
+**2103**
+
+**2104**
+
+**2105**
+
+
+Figure S23: Additional qualitative results of synthetic lensless imaging task with Voronoi kernel on
+FFHQ dataset.
+
+
+39
+
+
+**2106**
+
+**2107**
+
+
+**2108**
+
+**2109**
+
+**2110**
+
+**2111**
+
+**2112**
+
+**2113**
+
+
+**2114**
+
+**2115**
+
+**2116**
+
+**2117**
+
+**2118**
+
+**2119**
+
+
+**2120**
+
+**2121**
+
+**2122**
+
+**2123**
+
+**2124**
+
+
+**2125**
+
+**2126**
+
+**2127**
+
+**2128**
+
+**2129**
+
+**2130**
+
+
+**2131**
+
+**2132**
+
+**2133**
+
+**2134**
+
+**2135**
+
+**2136**
+
+
+**2137**
+
+**2138**
+
+**2139**
+
+**2140**
+
+**2141**
+
+**2142**
+
+
+**2143**
+
+**2144**
+
+**2145**
+
+**2146**
+
+**2147**
+
+
+**2148**
+
+**2149**
+
+**2150**
+
+**2151**
+
+**2152**
+
+**2153**
+
+
+**2154**
+
+**2155**
+
+**2156**
+
+**2157**
+
+**2158**
+
+**2159**
+
+
+Figure S24: Additional qualitative results of synthetic lensless imaging task with Turing kernel on
+ImageNet dataset.
+
+
+40
+
+
+**2160**
+
+**2161**
+
+
+**2162**
+
+**2163**
+
+**2164**
+
+**2165**
+
+**2166**
+
+**2167**
+
+
+**2168**
+
+**2169**
+
+**2170**
+
+**2171**
+
+**2172**
+
+**2173**
+
+
+**2174**
+
+**2175**
+
+**2176**
+
+**2177**
+
+**2178**
+
+
+**2179**
+
+**2180**
+
+**2181**
+
+**2182**
+
+**2183**
+
+**2184**
+
+
+**2185**
+
+**2186**
+
+**2187**
+
+**2188**
+
+**2189**
+
+**2190**
+
+
+**2191**
+
+**2192**
+
+**2193**
+
+**2194**
+
+**2195**
+
+**2196**
+
+
+**2197**
+
+**2198**
+
+**2199**
+
+**2200**
+
+**2201**
+
+
+**2202**
+
+**2203**
+
+**2204**
+
+**2205**
+
+**2206**
+
+**2207**
+
+
+**2208**
+
+**2209**
+
+**2210**
+
+**2211**
+
+**2212**
+
+**2213**
+
+
+Figure S25: Additional qualitative results of synthetic lensless imaging task with Turing kernel on
+FFHQ dataset.
+
+
+41
+
+
+**2214**
+
+**2215**
+
+
+**2216**
+
+**2217**
+
+**2218**
+
+**2219**
+
+**2220**
+
+**2221**
+
+
+**2222**
+
+**2223**
+
+**2224**
+
+**2225**
+
+**2226**
+
+**2227**
+
+
+**2228**
+
+**2229**
+
+**2230**
+
+**2231**
+
+**2232**
+
+
+**2233**
+
+**2234**
+
+**2235**
+
+**2236**
+
+**2237**
+
+**2238**
+
+
+**2239**
+
+**2240**
+
+**2241**
+
+**2242**
+
+**2243**
+
+**2244**
+
+
+**2245**
+
+**2246**
+
+**2247**
+
+**2248**
+
+**2249**
+
+**2250**
+
+
+**2251**
+
+**2252**
+
+**2253**
+
+**2254**
+
+**2255**
+
+
+**2256**
+
+**2257**
+
+**2258**
+
+**2259**
+
+**2260**
+
+**2261**
+
+
+**2262**
+
+**2263**
+
+**2264**
+
+**2265**
+
+**2266**
+
+**2267**
+
+
+Figure S26: Additional qualitative results of large motion deblurring task on ImageNet dataset.
+
+
+42
+
+
+**2268**
+
+**2269**
+
+
+**2270**
+
+**2271**
+
+**2272**
+
+**2273**
+
+**2274**
+
+**2275**
+
+
+**2276**
+
+**2277**
+
+**2278**
+
+**2279**
+
+**2280**
+
+**2281**
+
+
+**2282**
+
+**2283**
+
+**2284**
+
+**2285**
+
+**2286**
+
+
+**2287**
+
+**2288**
+
+**2289**
+
+**2290**
+
+**2291**
+
+**2292**
+
+
+**2293**
+
+**2294**
+
+**2295**
+
+**2296**
+
+**2297**
+
+**2298**
+
+
+**2299**
+
+**2300**
+
+**2301**
+
+**2302**
+
+**2303**
+
+**2304**
+
+
+**2305**
+
+**2306**
+
+**2307**
+
+**2308**
+
+**2309**
+
+
+**2310**
+
+**2311**
+
+**2312**
+
+**2313**
+
+**2314**
+
+**2315**
+
+
+**2316**
+
+**2317**
+
+**2318**
+
+**2319**
+
+**2320**
+
+**2321**
+
+
+Figure S27: Additional qualitative results of large motion deblurring task on FFHQ dataset.
+
+
+43
+
+
+**2322**
+
+**2323**
+
+
+**2324**
+
+**2325**
+
+**2326**
+
+**2327**
+
+**2328**
+
+**2329**
+
+
+**2330**
+
+**2331**
+
+**2332**
+
+**2333**
+
+**2334**
+
+**2335**
+
+
+**2336**
+
+**2337**
+
+**2338**
+
+**2339**
+
+**2340**
+
+
+**2341**
+
+**2342**
+
+**2343**
+
+**2344**
+
+**2345**
+
+**2346**
+
+
+**2347**
+
+**2348**
+
+**2349**
+
+**2350**
+
+**2351**
+
+**2352**
+
+
+**2353**
+
+**2354**
+
+**2355**
+
+**2356**
+
+**2357**
+
+**2358**
+
+
+**2359**
+
+**2360**
+
+**2361**
+
+**2362**
+
+**2363**
+
+
+**2364**
+
+**2365**
+
+**2366**
+
+**2367**
+
+**2368**
+
+**2369**
+
+
+**2370**
+
+**2371**
+
+**2372**
+
+**2373**
+
+**2374**
+
+**2375**
+
+
+Figure S28: Additional qualitative results of _real_ lensless imaging task on MirFlickr-lensless dataset.
+
+
+44

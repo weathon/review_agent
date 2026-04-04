@@ -1,0 +1,398 @@
+# BEYOND SYNTAX: ACTION SEMANTICS LEARNING FOR APP AGENTS
+
+Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+The recent development of Large Language Models (LLMs) enables the rise of App agents that interpret user intent and operate smartphone Apps through actions such as clicking and scrolling. While prompt-based solutions with proprietary LLM APIs show promising ability, they incur heavy compute costs and external API dependency. Fine-tuning smaller open-source LLMs solves these limitations. However, current supervised fine-tuning methods use a syntax learning paradigm that forces agents to reproduce exactly the ground truth action strings, leading to out-of-distribution (OOD) vulnerability. To fill this gap, we propose **Action Semantics Learning (ASL)**, a novel learning framework, where the learning objective is capturing the semantics of the ground truth actions. Specifically, inspired by the programming language theory, we define the action semantics for App agents as the state transition induced by the action in the user interface. Building on this insight, ASL employs a novel **SEmantic Estimator (SEE)** to compute a semantic similarity to train the App agents in generating actions aligned with the semantics of ground truth actions, even when their syntactic forms differ. SEE is a flexible module that can be applied in both supervised and reinforcement fine-tuning paradigms. To support the effectiveness of ASL, we theoretically demonstrate the superior robustness of ASL for the OOD problem compared with the existing syntax learning paradigm. Extensive experiments across multiple offline and online benchmarks demonstrate that ASL significantly improves the accuracy and generalisation of App agents compared to existing methods.
+
+## 1 INTRODUCTION
+
+The rapid development of Large Language Models (LLMs)<sup>1</sup> has led to the emergence of AI agents across a wide range of domains (Putta et al., 2024; Li et al. (2023); Gou et al. (2023)). Among these, AI agents for smartphone App operation, commonly referred to as App agents, are gaining significant attention for leveraging LLMs to enable fully automated App navigation (Rawles et al., 2024b;a; Wang et al., 2024a; Chen et al., 2024). These agents interpret user-provided goals in natural language and execute tasks such as scheduling, messaging, and online purchasing by interacting with the user interfaces (UIs) via pre-defined actions, such as tapping, scrolling, or entering text. The diversity of smartphone operating systems and UI descriptions, coupled with predefined action sets for specific systems, poses a significant challenge in developing generalisable App agents.
+
+Recent advances in App agents can be broadly grouped into two approaches. One prominent approach leverages proprietary LLMs APIs, such as GPT (Hurst et al., 2024) and Gemini (Hassabis & Kavukcuoglu, 2024), through *prompt engineering* techniques to comprehend user intents and device states, subsequently generating suitable actions (Rawles et al., 2024a; Li et al., 2024). While these App agents exhibit robust reasoning and generalisation capabilities, their practical deployment is often hindered by challenges such as high inference latency, substantial computational resource requirements, and frequent dependence on third-party APIs, which may escalate operational costs and introduce instability. Alternatively, *fine-tuning* smaller LLMs with offline datasets or interactive online trajectories has emerged as a viable strategy, achieving low-latency inference conducive to real-world applications (Wang et al., 2024b; Christianos et al., 2024; Bai et al., 2024). However, current
+
+<sup>1</sup>In this work, LLMs refer to foundation models that process multiple input modalities (e.g., visual or multimodal) and generate textual outputs.
+
+![Figure 1: Our ASL framework. The diagram shows a flow from an App to an App Agent (pi_theta) to an Action (a_t) to a Semantic Estimator, which then provides a Reward back to the App Agent. The App Agent also receives a Ground Truth Action (a_t^G) as input. The App is shown as a screenshot of a file manager. The UI Tree (a_t) is a JSON-like structure representing the UI elements. The Goal (g) is a natural language description of the task. The Action History (h_t) is a list of previous actions. The App Agent (pi_theta) is a box representing the agent's policy. The Action (a_t) is the output of the agent. The Semantic Estimator is a box that takes the action and the goal to produce a reward. The Ground Truth Action (a_t^G) is the correct action for the goal.](9ba3dc91984c80b96f217fb1bddd5c06_img.jpg)
+
+Figure 1: Our ASL framework. The diagram shows a flow from an App to an App Agent (pi\_theta) to an Action (a\_t) to a Semantic Estimator, which then provides a Reward back to the App Agent. The App Agent also receives a Ground Truth Action (a\_t^G) as input. The App is shown as a screenshot of a file manager. The UI Tree (a\_t) is a JSON-like structure representing the UI elements. The Goal (g) is a natural language description of the task. The Action History (h\_t) is a list of previous actions. The App Agent (pi\_theta) is a box representing the agent's policy. The Action (a\_t) is the output of the agent. The Semantic Estimator is a box that takes the action and the goal to produce a reward. The Ground Truth Action (a\_t^G) is the correct action for the goal.
+
+Figure 1: Our ASL framework. The reward corresponds to the function defined in Eq. (2).
+
+supervised methods typically follow a *syntax learning paradigm* that forces agents to reproduce exactly the ground truth action string for each UI within the training data, instead of understanding the underlying action semantics. This leads to an out-of-distribution (OOD) vulnerability: even the UIs slightly differ from the samples within the training data can provoke a dramatic performance drop. An agent trained to follow a specific interface path may fail when the UI changes or alternative options are presented. For example, an agent trained to delete text by generating "Tap the Delete button" will fail if the Delete button is unavailable, whilst the "Cut" button is still visible. See Sec. 3.1 for further discussion of this OOD vulnerability.
+
+To go beyond syntax and capture action semantics, we first draw inspiration from the denotational semantics in programming language theory, which defines program semantics by its effect on system state (Stoy, 1981), to define the action semantics for App agents as the *state transition* induced by the action in the UI environment. Building on this insight, we propose **Action Semantics Learning (ASL)**, a novel learning framework that shifts the learning objective of App agents from exactly reproducing the ground truth action strings to reproducing their semantics. Specifically, during training, the actions generated by the App agent are rewarded by a **SEmantic ESTimator (SEE)** that scores how closely the semantics of the generated action match that of the ground truth action. By employing the semantic reward, ASL considers actions that lead to the same UI state transition as the ground-truth action to be semantically equivalent, thereby guiding the agent to focus on semantics rather than syntactic form. In Sec. 3.4, we theoretically demonstrate that, compared with the syntax learning paradigm, ASL is more robust towards the OOD problem. See Fig. 1 for a visualisation of the proposed ASL framework.
+
+The semantic estimator SEE is the core component of our learning framework. Specifically, SEE leverages an LLM-driven world model to predict the impact of an action on the current UI state and uses BERT to measure the semantic similarity between the effects of the predicted action and the ground truth action. Our design is inspired by recent world-model-empowered web agents (Chae et al., 2024), which leverage predicted observations as offline rewards for prompt engineering. In contrast, we are the first to incorporate world-model predictions directly into the app agent training stage, generating a semantic reward without requiring any extra computational resources for deployment.
+
+Our main contributions are summarised as follows:
+
+- We introduce ASL, a novel learning framework based on action semantics. In this framework, we formulate the App-agent training as the semantics-level learning: an action is correct if it produces the target UI state transition, regardless of its exact syntactic expression. This learning objective contributes to improving the generalisability of App agents.
+- We propose SEE, a novel training-free semantic estimator that generates reward signals based on semantic alignment, enabling the fine-tuning of lightweight models to learn action semantics without additional GPU memory requirements for reward model training.
+- We conduct extensive experiments on various online and offline benchmarks. Empirical results demonstrate that the proposed ASL framework achieves superior accuracy and generalisation compared to existing approaches, especially on more difficult tasks.
+
+## 2 RELATED WORKS
+
+**Prompt-driven App agents.** Prompt-driven App agents mark a substantial advancement in human-device interaction, enabling natural language commands to be translated into precise UI actions on smartphones, tablets, and other mobile devices. Recent research has progressively refined these
+
+systems, with pioneering implementations like AppAgent (Zhang et al., 2023) demonstrating that large pretrained models can effectively map screenshots or accessibility trees to human-like actions. Building on these foundations, more recent frameworks have introduced advanced prompting strategies incorporating planning, self-reflection, and tool use to tackle increasingly complex tasks (Rawles et al., 2024a; Wang et al., 2024a). Despite their strong performance, current prompt-driven App agents remain heavily dependent on proprietary LLM APIs such as GPT and Gemini (Rawles et al., 2024a; Wang et al., 2024a; Zhang et al., 2023; Li et al., 2024). This dependence introduces several limitations, including high inference latency, substantial computational costs, and reliance on third-party services that raise concerns around data privacy, service reliability, and vendor lock-in. These challenges hinder real-world deployment and highlight the need for open, efficient, and controllable alternatives.
+
+**Fine-tuned App agents.** Recent research has focused on fine-tuning smaller models tailored for mobile environments. LiMAC (Christiano et al., 2024) introduces a compact action transformer that predicts UI-grounded actions paired with a fine-tuned vision-language model for textual reasoning, while InfoGUIAgent (Liu et al., 2025b) adopts a two-stage approach that first learns UI semantics from screenshots and then generates actions conditioned on user instructions. Despite architectural differences, these supervised fine-tuning methods follow a syntax learning paradigm that forces agents to reproduce the exact ground truth action string. This paradigm can lead to OOD vulnerability: even slight UI differences from the training data samples can provoke dramatic performance degradation. Complementing these offline approaches, several works explore online optimisation to improve generalisability and robustness to OOD data. DigiRL (Bai et al., 2024) proposes a reinforcement learning framework that simulates App control scenarios and fine-tunes policies from an offline-supervised starting point. DistRL (Wang et al., 2024b) enhances this approach with asynchronous online training, boosting sample efficiency. However, such online methods typically assign rewards based on sparse binary outcomes from the environment, without assessing individual steps. In contrast, our SEE module introduces step-level evaluation, providing finer-grained and smoother feedback at each step rather than relying exclusively on environment-level rewards.
+
+**World model boosted App agents.** World models simulate future states of the environment based on previous states and given actions (LeCun, 2022; Ding et al., 2024). In domains such as robotics, world models (Yang et al., 2023; Zhen et al., 2024; Zhou et al., 2024b; Ajay et al., 2023) can predict future visual states, such as images or videos across diverse environments. These predictive capabilities are critical for enabling robots to understand their surroundings, make informed decisions, and accurately execute tasks. Building on these advances, researchers have extended world modelling to web environments, where models (Chae et al., 2024; Gu et al., 2024; Liu et al., 2023) generate textual predictions of a website’s future state following a user interaction, enabling the development of more accurate web agents. However, existing applications of world models in this setting are typically utilised for providing feedback at test time, which introduces additional inference overhead and remains suboptimal for practical deployment. In our work, we instead leverage world models as a reward signal to fine-tune the agent by computing the semantic similarity between predicted and ground truth actions, requiring no additional inference time or computational resources in deployment.
+
+## 3 METHODOLOGY
+
+In this section, we begin with the problem formulation, which introduces the smartphone app operation task and summarises the key challenge for current fine-tuning methods. Then, we propose a novel learning framework named Action Semantic Learning (ASL) for App agents. Furthermore, we elaborate on the semantic estimator (SEE), the key component within the ASL framework. Finally, we conduct a theoretical analysis to support the effectiveness of the ASL framework.
+
+### 3.1 PROBLEM FORMULATION
+
+**Smartphone operation.** We formulate smartphone operation as a Partially Observable Markov Decision Process defined by  $(\mathcal{S}, \mathcal{A}, \mathcal{T}, \mathcal{R}, \mathcal{O}, \gamma)$ , where  $\mathcal{S}$  represents smartphone system states,  $\mathcal{A}$  denotes actions for operating UIs,  $\mathcal{T}$  is the state transition function,  $\mathcal{R}$  is the utility function,  $\mathcal{O}$  maps states to UI observations, and  $\gamma$  is the discount factor. At each timestep  $t$ , the App agent, which is parameterised by  $\theta$  and denoted as  $\pi_\theta$ , receives an observation  $o_t$  of the current UI state, the user goal  $g$  in natural language, and action history  $h_t$ . The App agent produces an action according to  $a_t^\theta = \pi_\theta(g, h_t, o_t)$ , where the observation  $o_t$  may include a subset of available screenshots and
+
+![Figure 2: Examples of semantically equivalent actions. (a) The ground truth action: 'Action Type: Click', 'Element: 1st Candidate'. (b) A semantically equivalent action: 'Action Type: Keyboard Enter'. (c) A semantically different action: 'Action Type: Click', 'Element: 3rd Candidate'.](dc1e692e5b7efd8e5a2a790c458646d9_img.jpg)
+
+Figure 2 shows three panels (a, b, c) illustrating different actions on a mobile application interface. Panel (a) shows the ground truth action: a click on the first candidate. Panel (b) shows a semantically equivalent action: a keyboard enter. Panel (c) shows a semantically different action: a click on the third candidate.
+
+Figure 2: Examples of semantically equivalent actions. (a) The ground truth action: 'Action Type: Click', 'Element: 1st Candidate'. (b) A semantically equivalent action: 'Action Type: Keyboard Enter'. (c) A semantically different action: 'Action Type: Click', 'Element: 3rd Candidate'.
+
+Figure 2: Examples of semantically equivalent actions: (a) and (b) lead to the same GUI state, while (c) results in a different outcome.
+
+textual information like UI element trees (Li et al., 2024). Let  $\mathcal{D}_{train} = \{(g_i, h_i, o_i, a_i^*)\}_{i=1}^N$  denote a training dataset with  $N$  step samples, where  $a_i^*$  is the ground truth action for sample  $i$ . Our objective is to fine-tune an App agent to maximise the success rate of completing the user goal  $g$ , while also considering generalisation and robustness. For simplicity, we assume  $\gamma = 1$ . The utility function  $\mathcal{R}$  returns 1 when the user goal can be completed in the required maximum action steps, and 0 otherwise.
+
+**OOD vulnerability for syntax learning.** Current supervised approaches for training App agents typically employ a syntax learning paradigm, where models learn to reproduce exactly the ground truth action string (Rawles et al., 2024a; Wang et al., 2024a; Zhang et al., 2023; Li et al., 2024). Mathematically, their learning objective can be formulated as:
+
+$$\arg \min_{\theta} \mathbb{E}_{(g_i, h_i, o_i, a_i^*) \sim \mathcal{D}_{train}} [-\ell_{\theta}^{SFT}(g_i, h_i, o_i, a_i^*)], \quad (1)$$
+
+where  $\ell_{\theta}^{SFT}(g_i, h_i, o_i, a_i^*) = -\log p_{\theta}(a_i^* | g_i, h_i, o_i)$  is the supervised fine-tuning (SFT) loss function for the data sample  $i$  and  $p_{\theta}(a_i^* | g_i, h_i, o_i)$  is the likelihood of the ground truth action under the App agent policy  $\pi_{\theta}$  for the given inputs. The key limitation of this paradigm is that it rewards the model only when the output exactly matches the ground truth action, while penalising all other outputs, even those that share identical semantics with the ground truth action. Consequently, the model optimises for token-level cross-entropy rather than understanding action semantics, leading to severe out-of-distribution (OOD) vulnerability: even minor and naturally occurring variations in UIs can be treated as OOD, causing the model to overfit to training patterns and degrade in generalisation. We formulate this OOD vulnerability as Theorem 3.1 with the proof in the Appendix.
+
+**Theorem 3.1.** Let  $\pi_{\theta}^{SFT}$  be an App agent trained under the syntax-learning objective of Eq. (1); for an  $n$ -step task with ground truth actions  $\{a_1^*, \dots, a_n^*\}$ , define  $P(\text{success}) = \Pr[\text{the agent completes all } n \text{ steps correctly}]$  and, for any semantically preserving but syntactically non-trivial perturbation  $\delta$  satisfying  $\delta(a_i^*) \neq a_i^*$  for at least one  $i$ , define  $P(\text{success} | \delta) = \Pr[\text{the agent completes all } n \text{ steps correctly when each } a_i^* \text{ is replaced by } \delta(a_i^*)]$ ; letting  $\Delta(\delta) = P(\text{success}) - P(\text{success} | \delta)$ , we have  $\Delta(\delta) > 0$ .
+
+### 3.2 ACTION SEMANTICS LEARNING
+
+To solve this OOD vulnerability, we introduce Action Semantics Learning (ASL), where the App agents aim to learn the semantics of ground truth actions, as displayed in Fig. 1.
+
+In this subsection, we begin by formalising the concept of action semantics for App agents. Building on this concept, we derive a semantics-aware loss function that guides the agent to learn the semantics of ground truth actions. Finally, we introduce the semantics-aware fine-tuning pipeline of our ASL framework, which leverages the semantics-aware loss function to train App agents.
+
+**Action semantics.** Inspired by the denotational semantics in programming language theory, which defines program semantics by its effect on system state (Stoy, 1981), we mathematically define the action semantics for App agents as the following:
+
+**Definition 3.1. (Action Semantic).** Let  $\mathcal{S}$  be the set of concrete smartphone states and  $\mathcal{A}$  the set of finite actions. Moreover,  $\mathcal{T} : \mathcal{S} \times \mathcal{A} \rightarrow \Delta(\mathcal{S})$  denotes the state transition function mapping a state-action pair to a probability distribution over next states.  $S(a) := \mathcal{T}(s, a)$ .
+
+Intuitively, the semantics of an action generated by the App agents is defined as the *state transition* induced by the action in the UI environment. This definition is supported by the observation that, in
+
+interactive systems such as mobile UIs, the meaning of an action is not fully captured by the action string, but rather by the transformation it causes in the environment. For instance, tapping different buttons may lead to the same screen, while actions with similar strings may have vastly different effects depending on the context, as shown in Fig. 2. Therefore, a semantic understanding of action must go beyond symbolic identifiers and focus on the consequences of the action.
+
+**Semantics-aware loss function.** With the Definition 3.1, for a ground truth action  $a_i^*$ , we define its semantic equivalence set as  $\mathcal{A}_i^{eq} = \{a \in \mathcal{A} \mid S(a) = S(a_i^*)\}$ . Instead of forcing the App agent to reproduce the exact  $a_i^*$ , we encourage the model to assign high probability to all actions within  $\mathcal{A}_i^{eq}$ . In real-world scenarios,  $\mathcal{A}_i^{eq}$  is typically unavailable, as identifying all semantically equivalent actions requires exhaustive human annotation and environment interaction. To address this, we formulate the learning objective in terms of a semantic reward:
+
+$$J(\theta) = \mathbb{E}_{(g_i, h_i, o_i, a_i^*) \sim \mathcal{D}_{train}} \left[ \mathbb{E}_{a \sim \pi_\theta(\cdot | g_i, h_i, o_i)} [r(a, a_i^*, g_i, h_i, o_i)] \right], \quad (2)$$
+
+where  $r(\cdot)$  is a reward model that quantifies the probability that action  $a$  is semantically equivalent to  $a_i^*$  given the input  $(g_i, h_i, o_i)$ . In practice, we employ a training-free reward model. We elaborate on the design of this reward model in Sec. 3.3.
+
+To optimise the objective function in Eq. (2), we leverage the REINFORCE algorithm (Williams, 1992). This yields the following gradient estimator:
+
+$$\nabla_\theta J(\theta) = \mathbb{E}_{(g_i, h_i, o_i, a_i^*) \sim \mathcal{D}_{train}} \left[ \mathbb{E}_{a \sim \pi_\theta(\cdot | g_i, h_i, o_i)} [r(a, a_i^*, g_i, h_i, o_i)] \nabla_\theta \log p_\theta(a \mid g_i, h_i, o_i) \right],$$
+
+where  $p_\theta(a | g_i, h_i, o_i)$  is the likelihood of an action under the App agent  $\pi_\theta$  for the given inputs. Then, we design the semantics-aware loss function for a data sample  $i$  as:
+
+$$\ell_\theta^S(g_i, h_i, o_i, a_i^*) = -\mathbb{E}_{a \sim \pi_\theta(\cdot | g_i, h_i, o_i)} [r(a, a_i^*, g_i, h_i, o_i) \log p_\theta(a \mid g_i, h_i, o_i)]. \quad (3)$$
+
+In Sec. 3.4, we show that minimising the semantics-aware loss function can lead to an App agent that is more robust to the OOD vulnerability than the one fine-tuned with the syntax learning paradigm.
+
+**Supervised fine-tuning with SEE.** Optimising the semantics-aware loss function in Eq. (3) enables App agents to learn action semantics by rewarding semantically equivalent actions. However, computing this loss requires sampling actions from the agent and scoring these actions using a reward model, which can lead to prohibitively high training costs.
+
+To maintain efficiency, inspired by previous works in the literature (Nakano et al., 2021; Ouyang et al., 2022; Rafailov et al., 2023), we limit the number of sampled actions as one per data sample. However, sampling only a single action can lead to vanishing gradients when the sampled action is not semantically equivalent to the ground truth, hindering effective learning and potentially leading to sub-optimal performance. To address this, we propose a combined loss function that integrates our semantics-aware loss function with the SFT loss function. The loss function is formulated as follows:
+
+$$\ell_\theta^{ASL}(g_i, h_i, o_i, a_i^*) = \ell_\theta^S(g_i, h_i, o_i, a_i^*) + \lambda_i \ell_\theta^{SFT}(g_i, h_i, o_i, a_i^*), \quad (4)$$
+
+where  $\lambda_i = (1 - (1 - \alpha_i)r(a, a_i^*, g_i, h_i, o_i))$ , and  $\alpha_i = \exp(-\ell_\theta^{SFT}(g_i, h_i, o_i, a_i^*))$ . We use  $\alpha_i$  to quantify the syntax dissimilarity between the action generated by the App agent and the ground truth action. The SFT loss function value used to compute  $\alpha_i$  is detached from the gradient computational graph, ensuring it only modulates the SFT term without creating unintended gradient interactions.
+
+Intuitively, the combined loss function operates as follows: (1) when the sampled action is semantically correct but syntactically different, learning is primarily guided by the semantic-aware loss; (2) when the action matches both semantics and syntax, both loss components contribute jointly; and (3) when the action matches neither, the SFT loss dominates, ensuring stable gradient flow even in the absence of semantic reward. This design efficiently mitigates gradient vanishing issues, as it requires sampling only a single action from the App agent per training instance.
+
+**Reinforcement fine-tuning with SEE.** Beyond supervised fine-tuning, we follow DigiRL (Bai et al., 2024) and optimise the policy with advantage-weighted regression (AWR) (Peng et al., 2019). For each transition  $(g_i, h_i, o_i, a_i)$ , we inject a thresholded semantic reward  $\tilde{r}(a_i, \tilde{a}_i, g_i, h_i, o_i) = \mathbb{1}\{r(a_i, \tilde{a}_i, g_i, h_i, o_i) > \tau\}r(a_i, \tilde{a}_i, g_i, h_i, o_i)$ , where  $\tilde{a}_i$  is the teacher model-predicted reference action and  $\tau$  is a semantic threshold. We then define the augmented reward  $r^{sec}(\cdot)$  as:
+
+$$r^{sec}(a_i, \tilde{a}_i, g_i, h_i, o_i) = r^{env}(a_i, g_i, h_i, o_i) + \beta \tilde{r}(a_i, \tilde{a}_i, g_i, h_i, o_i), \quad (5)$$
+
+where  $r^{\text{env}}(\cdot)$  is the original environment reward,  $\tilde{r}(\cdot)$  is the SEE-based semantic reward, and  $\beta > 0$  adjusts the weight of the semantic reward. The step-level advantage is computed as:
+
+$$A^{\text{DigiRL-SEE}}(g_i, h_i, o_i, a_i, \tilde{a}_i) = \eta^{H-i} r^{\text{env}}(a_H, g_H, h_H, o_H) \\ + (1 - \eta^{H-i}) (V^{\text{step}}(g_{i+1}, h_{i+1}, o_{i+1}) + r^{\text{see}}(a_i, \tilde{a}_i, g_i, h_i, o_i) - V^{\text{step}}(g_i, h_i, o_i)), \quad (6)$$
+
+where  $H$  is the horizon,  $\eta \in [0, 1]$  balances the high-variance Monte Carlo estimate  $\eta^{H-i} r^{\text{env}}(a_H, g_H, h_H, o_H)$  and the value-based baseline from a learned doubly-robust estimator  $V^{\text{step}}$ . The optimisation objective of the policy  $\pi_\theta$  is a hard-filtered AWR loss as:
+
+$$L_\theta^{\text{DigiRL-SEE}}(g_i, h_i, o_i, a_i, \tilde{a}_i) = -1 \{ A^{\text{DigiRL-SEE}}(g_i, h_i, o_i, a_i, \tilde{a}_i) > 0 \} \log p_\theta(a_i | g_i, h_i, o_i). \quad (7)$$
+
+SEE augments DigiRL with step-level semantic feedback, thereby improving credit assignment under sparse, binary outcomes and yielding stronger generalisation on long-horizon UI control. In the next section, we elaborate on the Semantic Estimator (SEE) for App agents.
+
+### 3.3 SEE: SEMANTIC ESTIMATOR
+
+To define the semantics of an action, we focus on its effect rather than its string syntax or associated metadata. Predefined actions often come in varying formats, and typically include parameters such as the ID of a UI element that lacks standalone semantic meaning, especially without the associated user input or context. In contrast, we propose that the result of executing an action within a given state carries rich semantic information, and that this outcome can serve as a more meaningful definition of the action itself. We introduce a Semantic Estimator (SEE) that consists of two key components: (1) a world model that simulates the smartphone UI state transitions, and (2) a semantic calculator that estimates the semantic reward by quantifying the similarity between the transitions.
+
+**World model.** Inspired by recent advances in world-model-based web agents (Chae et al., 2024), which leverage predicted future observations as rewards for prompt engineering, SEE utilises a world model to mimic the state transition function  $\mathcal{T}(s, a)$  mentioned in Definition 3.1. Mathematically, the workflow of this world model can be formulated as:
+
+$$\Delta \hat{o}_t = \Phi(o_t, a_t), \quad (8)$$
+
+where  $o_t$  is the textual description of the UI state  $s_t$ ,  $a_t$  is the textual description of an action, and  $\Delta \hat{o}_t$  is the description of the impact of the action  $a_t$  on the UI state  $s_t$ . In practice, we implement this world model based on the proprietary LLM API by leveraging the LLM’s strong capabilities in language understanding and world knowledge to simulate how the environment would evolve in response to the action. The prompt of our world model can be found in the Appendix H.
+
+**Semantic calculator.** With the state transitions generated by the world model, SEE employs a semantic calculator to generate the semantic reward for our ASL framework-generated transitions in two steps. Firstly, the semantic calculator uses BERT (Devlin et al., 2019) to project the generated textual description for state transitions into a feature space. This process can be formulated as:
+
+$$f_t^{\text{gt}} = \text{BERT}(\Delta o_t^{\text{gt}}), \quad f_t^{\text{pre}} = \text{BERT}(\Delta o_t^{\text{pre}}), \quad (9)$$
+
+where  $\Delta o_t^{\text{gt}}$  and  $\Delta o_t^{\text{pre}}$  denote the textual descriptions of the ground truth and predicted state transitions at timestep  $t$ , respectively, and  $f_t^{\text{gt}}, f_t^{\text{pre}} \in \mathbb{R}^d$  are their corresponding feature representations. Then, SEE computes the cosine similarity between the feature vectors to measure semantic alignment:
+
+$$\text{cos}_t = \frac{\langle f_t^{\text{gt}}, f_t^{\text{pre}} \rangle}{|f_t^{\text{gt}}| \cdot |f_t^{\text{pre}}|}. \quad (10)$$
+
+This similarity score is used in our ASL framework as the semantic reward. A higher similarity score indicates a higher probability that a semantic equivalence exists between the action generated by the App agent and the ground truth action, providing a reward signal that guides the training of the agent towards semantically meaningful actions, even when the syntax may differ.
+
+### 3.4 THEORETICAL ANALYSIS
+
+In this section, we demonstrate that enabling the App agent to learn action semantics by minimising the semantic loss function defined in Eq. (3) leads to an agent that is more robust to the OOD
+
+problems compared to an agent that purely optimises the learning objective formulated in Eq. (1). Mathematically, we present Theorem 3.2 with the proof in the Appendix.
+
+**Theorem 3.2.** *Let  $\pi_\theta^S$  be an App agent trained by minimising the semantics-aware loss function defined in Eq. (3), and let  $\pi_\theta^{\text{SFT}}$  be an App agent trained under the syntax-learning objective defined in Eq. (1). For an  $n$ -step task with ground truth actions  $\{a_1^*, \dots, a_n^*\}$ , consider any semantically preserving but syntactically non-trivial perturbation  $\delta$  such that  $\delta(a_i^*) \neq a_i^*$  for at least one  $i$ . Define  $P^S(\text{success} \mid \delta)$  as the success rate of  $\pi_\theta^S$  and  $P^{\text{SFT}}(\text{success} \mid \delta)$  as the success rate of  $\pi_\theta^{\text{SFT}}$  under the perturbation  $\delta$ . Then, we have  $P^S(\text{success} \mid \delta) - P^{\text{SFT}}(\text{success} \mid \delta) > 0$ .*
+
+This theorem highlights that, by focusing on the semantic equivalence of actions rather than exact syntactic matches, the App agent trained with Eq. (3) exhibits higher success rates than an agent trained solely on the syntax-learning objective when encountering the OOD data. We further provide experimental support for our learning framework in Sec. 4.
+
+## 4 EXPERIMENTS
+
+In this section, we first introduce our experimental setup. We then demonstrate the practical value of the proposed ASL framework on two online smartphone operation Apps benchmarks. To evaluate the robustness of the agent fine-tuned by our ASL framework, we also use an offline smartphone operation benchmark. Additionally, we interpret our semantic similarity score as a step-wise reward within an online RL fine-tuning pipeline, and further demonstrate its effectiveness. Finally, we conduct an ablation study to study the contribution of components within the ASL framework.
+
+### 4.1 EXPERIMENTAL SETUP
+
+**Datasets.** We conducted our experiments on five benchmark datasets: *AndroidLab* (Xu et al., 2024a), *AndroidWorld* (Rawles et al., 2024a), *AndroidControl* (Li et al., 2024), *Android-in-the-Wild (AitW)* (Rawles et al., 2024b), and *WebArena-Lite* (Zhou et al., 2024a; Liu et al., 2025a). These datasets encompass a diverse range of mobile UI settings and user interaction tasks, enabling a comprehensive evaluation of our model’s generalisation and understanding capabilities.
+
+**Metrics.** For the online datasets such as *AndroidWorld*, performance is measured by the task-level success rate (TSR), i.e., the ratio of completed tasks to total tasks, where a task is successful if finished within the dataset’s step limit. For the offline dataset *AndroidControl*, we use the step-level success rate (SSR), i.e., the ratio of correctly predicted steps to total steps, where a step is successful if the generated action matches the ground truth
+
+**Implementation details.** For the semantic evaluator, we use Gemini-Flash-2.0 (Hassabis & Kavukcuoglu, 2024) as the LLM to predict the change that an action will bring to the UI state. Batch size was set to 1 and trained for 3 epochs. The training dataset includes 2K human-annotated step-wise samples from apps in the AndroidWorld emulator environment and 70K samples from the AndroidControl benchmark. The 2K human-generated samples are curated to ensure no overlap with the test set in AndroidControl. Low-level instructions from AndroidControl are not used. T3A\* refers to our prompt adapted from T3A, detailed in the Appendix. Qwen-2.5-7B-Instruct-ASL refers to the model fine-tuned with our ASL loss, as defined in Eq. 4.
+
+We report experiments on the AndroidWorld, AndroidLab, and AndroidControl datasets using ASL fine-tuned Qwen-2.5-7B. For the AitW tasks and WebArena-Lite benchmark, we follow Eq. 7 and integrate our SEE module into their RL fine-tuning framework.
+
+### 4.2 ONLINE DATASET COMPARISON
+
+In this experiment, we evaluated model performance in real-time interactive environments using the AndroidWorld (Rawles et al., 2024a) and AndroidLab (Xu et al., 2024a) datasets. This setup is well-suited for testing our core motivation: that models should go beyond syntactic patterns and learn the semantics of actions—that is, their actual outcomes. Specifically, AndroidWorld provides an emulator that mimics real-world conditions by automatically executing actions and employs a hand-crafted rule-based system to verify task completion by checking system status. For AndroidLab, we use 30 provided tasks, excluding those involving question answering. We evaluate AndroidLab by
+
+Table 1: Comparison of different agents in terms of success rate in the AndroidWorld environment. T3A\* refers to our prompt adapted from T3A, presented in the Appendix.
+
+| Type          | Agent  | Model                                 | Input Modality | TSR ↑       |             |             | Overall TSR ↑ |
+|---------------|--------|---------------------------------------|----------------|-------------|-------------|-------------|---------------|
+|               |        |                                       |                | Easy        | Medium      | Hard        |               |
+| Prompt-Driven | SeeAct | GPT-4o                                | Image + Text   | 34.2        | 15.5        | 4.2         | 22.0          |
+|               | T3A    | GPT-4o                                | Image          | 64.9        | 26.2        | <b>14.6</b> | 41.9          |
+|               | M3A    | GPT-4o                                | Image + Text   | 60.5        | 20.2        | 8.3         | 36.6          |
+|               | T3A*   | Qwen2.5-7B-Instruct                   | Text           | 5.6         | 0.0         | 0.0         | 2.5           |
+| Fine-Tuned    | T3A*   | Qwen2.5-7B-Instruct-SFT               | Text           | <b>72.2</b> | 26.8        | 3.13        | 42.5          |
+|               |        | <b>Qwen2.5-7B-Instruct-ASL (Ours)</b> | Text           | <b>72.2</b> | <b>32.1</b> | 12.5        | <b>46.3</b>   |
+
+Table 2: Comparison of different agents in terms of success rate in the AndroidLab environment.
+
+| Type          | Agent            | Model                                  | Input Modality | TSR         |
+|---------------|------------------|----------------------------------------|----------------|-------------|
+| Prompt-Driven | AndroidLab-Agent | Claude-3.5-Sonnet                      | Image + Text   | 24.2        |
+|               |                  | Gemini-1.5-Pro                         | Image + Text   | 13.0        |
+|               |                  | GPT-4o                                 | Image + Text   | 30.1        |
+|               |                  | Gemini-1.5-Pro                         | Text           | 17.2        |
+|               |                  | GPT-4o                                 | Text           | 24.7        |
+|               |                  |                                        |                |             |
+| Fine-Tuned    | T3A*             | Qwen-2.5-7B-Instruct-SFT               | Text           | 33.3        |
+|               |                  | <b>Qwen-2.5-7B-Instruct-ASL (Ours)</b> | Text           | <b>35.5</b> |
+
+executing actions within the AndroidWorld emulator and using an LLM-based evaluator to determine whether each task is completed successfully. Table 1 presents the results on AndroidWorld, reporting success rates across tasks of varying difficulty—categorised as easy, medium, and hard—as well as the overall success rate. As shown in the table, our method outperforms the baseline by a significant margin of 3.8% in overall success rate. The most substantial improvements are observed in medium and hard tasks. We further evaluate our method on the AndroidLab benchmark, with superior results presented in Table 2. Together, these results highlight the generalisation capability of our model in real-world mobile UI environments and underscore the effectiveness of our ASL framework.
+
+### 4.3 OFFLINE DATASET COMPARISON
+
+In this experiment, we evaluated model performance on the offline benchmark AndroidControl (Li et al., 2024). Specifically, we compared predicted actions against ground truth annotations. For action types, we assess whether the predicted action type string exactly matches the ground truth. For actions that involve coordinates, such as click and long press, we follow the evaluation protocol (Rawles et al., 2024b) to determine whether the ground truth coordinate falls within the bounding box of the predicted UI element. As shown in Table 3, we collect and evaluate both prompt-driven and models fine-tuned on AndroidControl. Our model achieves the highest performance across all four splits, highlighting the model’s robustness to new tasks, categories, and applications.
+
+### 4.4 RL FINE-TUNING WITH SEE
+
+To further validate the effectiveness, we evaluate our SEE module with different RL training pipelines on the AitW tasks (Rawles et al., 2024b) and WebArena-Lite benchmark (Zhou et al., 2024a; Liu et al., 2025a). Following prior work (Bai et al., 2024; Wu et al., 2025), we train on the full AitW training task split and evaluate on the first 96 tasks from both train and test splits of the General and Web Shopping categories, with success judged by Gemini (Team et al., 2024). For WebArena-Lite, all methods are trained and evaluated on all 165 tasks, with success assessed by a pretrained outcome reward model. Additional details are provided in Appendix E.2. As shown in Table 4 and Table 5, both baselines consistently benefit from our SEE module. On AitW, Filtered BC-SEE outperforms Filtered BC by 6.9% on General train, while DigiRL-SEE achieves the best overall performance, surpassing DigiRL by 5.9% and 4.2% on General train and test. On WebArena-Lite, Filtered BC-SEE improves by 2.5%, and DigiRL-SEE further outperforms DigiRL by 1.8%. These results indicate that our SEE module provides denser training signals, alleviates the sparse reward issue, and enhances generalisation across mobile app and web control tasks.
+
+Table 3: Comparison across agents of step success rate in the four splits of AndroidControl.
+
+| Type          | Agent  | Model                                                     | Input Modality | SSR $\uparrow$ |             |             |             |
+|---------------|--------|-----------------------------------------------------------|----------------|----------------|-------------|-------------|-------------|
+|               |        |                                                           |                | IDD            | Task-Unseen | Car-Unseen  | App-Unseen  |
+| Prompt-Driven | SeeAct | Gemini-2.5-Flash<br>GPT-4o                                | Image + Text   | 36.7           | 35.9        | 33.7        | 34.4        |
+|               | M3A    | Gemini-2.5-Flash<br>GPT-4o                                |                | 31.5           | 30.7        | 30.6        | 30.9        |
+|               | T3A    | Gemini-2.5-Flash<br>GPT-4o                                |                | 49.4           | 47.9        | 47.9        | 47.9        |
+|               |        | Gemini-2.5-Flash<br>GPT-4o                                | Text           | 60.8           | 59.3        | 60.8        | 60.4        |
+|               | T3A*   | Gemini-2.5-Flash<br>Qwen2.5-7B-Instruct                   |                | 49.1           | 45.4        | 44.4        | 45.0        |
+| Fine-Tuned    |        | Qwen2.5-7B-Instruct                                       |                | 46.8           | 45.3        | 44.7        | 43.5        |
+|               | T3A*   | Qwen2.5-7B-Instruct-SFT<br>Qwen2.5-7B-Instruct-ASL (Ours) | Text<br>Text   | 26.1           | 27.2        | 26.7        | 26.3        |
+|               |        |                                                           |                | 67.4           | 61.2        | 59.7        | 59.7        |
+|               |        |                                                           |                | <b>69.4</b>    | <b>62.3</b> | <b>61.2</b> | <b>61.8</b> |
+
+Table 4: Evaluation of our SEE module on the AitW General and Web Shopping tasks.
+
+| Task         |       | AppAgent | CogAgent | AutoUI | Filtered BC | Filtered BC-SEE      | DigiRL | DigiRL-SEE           |
+|--------------|-------|----------|----------|--------|-------------|----------------------|--------|----------------------|
+| General      | Train | 14.6%    | 25.0%    | 12.5%  | 53.5%       | 60.4% (+6.9%)        | 64.9%  | <b>70.8%</b> (+5.9%) |
+|              | Test  | 16.7%    | 25.0%    | 14.6%  | 62.5%       | 63.5% (+1.0%)        | 67.7%  | <b>71.9%</b> (+4.2%) |
+| Web Shopping | Train | 5.2%     | 31.3%    | 14.6%  | 53.6%       | 55.9% (+2.3%)        | 55.3%  | <b>57.3%</b> (+2.0%) |
+|              | Test  | 8.3%     | 38.5%    | 17.7%  | 54.2%       | <b>56.3%</b> (+2.1%) | 41.3%  | 55.2% (+13.9%)       |
+
+Table 5: Evaluation of our SEE module on the WebArena-Lite benchmark.
+
+|          | SFT   | Filtered BC | Filtered BC-SEE | DigiRL | DigiRL-SEE           |
+|----------|-------|-------------|-----------------|--------|----------------------|
+| Task SSR | 20.0% | 23.0%       | 25.5% (+2.5%)   | 30.3%  | <b>32.1%</b> (+1.8%) |
+
+Table 6: Ablation study on the loss function.
+
+|             | $\ell_{\theta}^{\text{SFT}}$ | $\lambda_1 \ell_{\theta}^{\text{SFT}}$ | $\ell_{\theta}^{\text{ASL}}$ |
+|-------------|------------------------------|----------------------------------------|------------------------------|
+| OOD SSR (%) | 49.8                         | 49.9                                   | <b>51.7</b>                  |
+
+Table 7: Ablation study on reward design.
+
+|             | Gemini-2.0-Flash | SEE (Ours)  |
+|-------------|------------------|-------------|
+| OOD SSR (%) | 50.6             | <b>51.7</b> |
+
+### 4.5 ABLATION STUDY
+
+In this section, we study two key components of our ASL framework: the loss function and the reward model used during training. Ablation studies are conducted using the Qwen2.5-7B-Instruct model, trained on 3K samples from the AndroidControl training set and evaluated on 1K samples from the AndroidControl OOD test set. Results for the loss function ablation are presented in Table 6, where  $\ell_{\theta}^{\text{SFT}}$  denotes the standard SFT loss used in the syntax learning paradigm,  $\lambda_1 \ell_{\theta}^{\text{SFT}}$  represents the weighted SFT loss in our framework, and  $\ell_{\theta}^{\text{ASL}}$  refers to the full loss function used in ASL. The results demonstrate that  $\ell_{\theta}^{\text{ASL}}$  leads to the highest performance, highlighting its effectiveness in enabling the App agent to learn action semantics and improving robustness to OOD scenarios.
+
+Table 7 reports the ablation results on the reward model. In this table, ‘Gemini-2.0-Flash’ denotes a baseline that directly uses Gemini-2.0-Flash to compute the semantics reward, while SEE refers to our proposed semantics estimator. The superior performance of SEE confirms its benefit in providing more informative and stable reward signals during training. These findings validate the effectiveness of both the loss function and the SEE reward model as core components of the ASL framework.
+
+## 5 CONCLUSION
+
+We present Action Semantics Learning (ASL), a novel framework for training App agents that prioritises semantic understanding of actions rather than syntactic reproduction. By defining action semantics as the UI state transition induced by an action, and introducing a lightweight semantic estimator (SEE) to provide reward signals during training, ASL enables agents to treat semantically equivalent actions equally, even when their textual forms differ.
+
+We theoretically prove that ASL improves robustness against out-of-distribution (OOD) variations. In online evaluation on AndroidWorld and AndroidLab, ASL-trained agents outperform both prompt-based closed-source agents and fine-tuned baselines, achieving higher task success rates, especially on medium and hard tasks that require flexible reasoning and semantic generalisation. On the offline AndroidControl benchmark, ASL significantly improves step-level accuracy under unseen task and app settings compared to syntax-based fine-tuning. Experiments applying our SEE reward to RL fine-tuning pipelines further demonstrate the superiority of our approach.
+
+## REFERENCES
+
+- Anurag Ajay, Seungwook Han, Yilun Du, Shuang Li, Abhi Gupta, Tommi Jaakkola, Josh Tenenbaum, Leslie Kaelbling, Akash Srivastava, and Pukit Agrawal. Compositional foundation models for hierarchical planning. *Advances in Neural Information Processing Systems*, 36:22304–22325, 2023.
+- Hao Bai, Yifei Zhou, Jiayi Pan, Mert Cemri, Alane Suhr, Sergey Levine, and Aviral Kumar. Digirl: Training in-the-wild device-control agents with autonomous reinforcement learning. *Advances in Neural Information Processing Systems*, 37:12461–12495, 2024.
+- Hyungjoo Chae, Namyoung Kim, Kai Tzu-iunn Ong, Minju Gwak, Gwanwoo Song, Jihoon Kim, Sunghwan Kim, Dongha Lee, and Jinyoung Yeo. Web agents with world models: Learning and leveraging environment dynamics in web navigation. *arXiv preprint arXiv:2410.13232*, 2024.
+- Jingxuan Chen, Derek Yuen, Bin Xie, Yuhao Yang, Gongwei Chen, Zhihao Wu, Li Yixing, Xurui Zhou, Weiwen Liu, Shuai Wang, et al. Spa-bench: A comprehensive benchmark for smartphone agent evaluation. In *NeurIPS 2024 Workshop on Open-World Agents*, 2024.
+- Filippos Christianos, Georgios Papoudakis, Thomas Coste, Jianye Hao, Jun Wang, and Kun Shao. Lightweight neural app control. *arXiv preprint arXiv:2410.17883*, 2024.
+- Gheorghe Comanici, Eric Bieber, Mike Schaeckermann, Ice Pasupat, Noveen Sachdeva, Inderjit Dhillon, Marcel Blistein, Ori Ram, Dan Zhang, Evan Rosen, et al. Gemini 2.5: Pushing the frontier with advanced reasoning, multimodality, long context, and next generation agentic capabilities. *arXiv preprint arXiv:2507.06261*, 2025.
+- Jacob Devlin, Ming-Wei Chang, Kenton Lee, and Kristina Toutanova. Bert: Pre-training of deep bidirectional transformers for language understanding. In *Proceedings of the 2019 conference of the North American chapter of the association for computational linguistics: human language technologies, volume 1 (long and short papers)*, pp. 4171–4186, 2019.
+- Jingtao Ding, Yunke Zhang, Yu Shang, Yuheng Zhang, Zefang Zong, Jie Feng, Yuan Yuan, Hongyuan Su, Nian Li, Nicholas Sukienik, et al. Understanding world or predicting future? a comprehensive survey of world models. *arXiv preprint arXiv:2411.14499*, 2024.
+- Zhibin Gou, Zhihong Shao, Yeyun Gong, Yujiu Yang, Minlie Huang, Nan Duan, Weizhu Chen, et al. Tora: A tool-integrated reasoning agent for mathematical problem solving. In *ICLR*, 2023.
+- Yu Gu, Boyuan Zheng, Boyu Gou, Kai Zhang, Cheng Chang, Sanjari Srivastava, Yanan Xie, Peng Qi, Huan Sun, and Yu Su. Is your llm secretly a world model of the internet? model-based planning for web agents. *arXiv preprint arXiv:2411.06559*, 2024.
+- Demis Hassabis and Koray Kavukcuoglu. Introducing Gemini 2.0: our new ai model for the agentic era, December 2024. URL <https://blog.google/technology/google-deepmind/google-gemini-ai-update-december-2024/>. Accessed: 2025-05-04.
+- Wenyi Hong, Weihai Wang, Qingsong Lv, Jiazhang Xu, Wenmeng Yu, Junhui Ji, Yan Wang, Zihan Wang, Yuxiao Dong, Ming Ding, et al. Cogagent: A visual language model for gui agents. In *Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition*, pp. 14281–14290, 2024.
+- Aaron Hurst, Adam Lerer, Adam P Goucher, Adam Perelman, Aditya Ramesh, Aidan Clark, AJ Ostrow, Akila Welihinda, Alan Hayes, Alec Radford, et al. Gpt-4o system card. *arXiv preprint arXiv:2410.21276*, 2024.
+- Yann LeCun. A path towards autonomous machine intelligence version 0.9, 2, 2022-06-27. *Open Review*, 62(1):1–62, 2022.
+- Guohao Li, Hasan Hammoud, Hani Itani, Dmitrii Khizbullin, and Bernard Ghanem. Camel: Communicative agents for "mind" exploration of large language model society. *NeurIPS*, 36:51991–52008, 2023.
+
+- 540 Wei Li, William Bishop, Alice Li, Chris Rawles, Folawiyo Campbell-Ajala, Divya Tyamagundlu,  
+541 and Oriana Riva. On the effects of data scale on computer control agents. *arXiv preprint*  
+542 *arXiv:2406.03679*, 2024.
+- 543  
+544 Anthony Liu, Lajanugen Logeswaran, Sungryull Sohn, and Honglak Lee. A picture is worth a  
+545 thousand words: Language models plan from pixels. In *Proceedings of the 2023 Conference on*  
+546 *Empirical Methods in Natural Language Processing*, pp. 16450–16459, 2023.
+- 547 Xiao Liu, Tianjie Zhang, Yu Gu, Iat Long long, Song XiXuan, Yifan Xu, Shudan Zhang, Hanyu  
+548 Lai, Jiadai Sun, Xinyue Yang, et al. Visualagentbench: Towards large multimodal models as  
+549 visual foundation agents. In *The Thirteenth International Conference on Learning Representations*,  
+550 2025a.
+- 551  
+552 Yuhang Liu, Pengxiang Li, Zishu Wei, Congkai Xie, Xueyu Hu, Xichen Xu, Shengyu Zhang,  
+553 Xiaotian Han, Hongxia Yang, and Fei Wu. Infiguiagent: A multimodal generalist gui agent with  
+554 native reasoning and reflection. *arXiv preprint arXiv:2501.04575*, 2025b.
+- 555  
+556 Run Luo, Lu Wang, Wanwei He, and Xiaobo Xia. Gui-r1: A generalist r1-style vision-language  
+557 action model for gui agents. *arXiv preprint arXiv:2504.10458*, 2025.
+- 558  
+559 Reiiichiro Nakano, Jacob Hilton, Suchir Balaji, Jeff Wu, Long Ouyang, Christina Kim, Christopher  
+560 Hesse, Shantanu Jain, Vineet Kosaraju, William Saunders, et al. Webgpt: Browser-assisted  
+561 question-answering with human feedback. *arXiv preprint arXiv:2112.09332*, 2021.
+- 562  
+563 Long Ouyang, Jeffrey Wu, Xu Jiang, Diogo Almeida, Carroll Wainwright, Pamela Mishkin, Chong  
+564 Zhang, Sandhini Agarwal, Katarina Slama, Alex Ray, et al. Training language models to follow  
+565 instructions with human feedback. *Advances in neural information processing systems*, 35:27730–  
+566 27744, 2022.
+- 567  
+568 Jiayi Pan, Yichi Zhang, Nicholas Tomlin, Yifei Zhou, Sergey Levine, and Alane Suhr. Autonomous  
+569 evaluation and refinement of digital agents. In *First Conference on Language Modeling*, 2024.
+- 570  
+571 Xue Bin Peng, Aviral Kumar, Grace Zhang, and Sergey Levine. Advantage-weighted regression:  
+572 Simple and scalable off-policy reinforcement learning. *arXiv preprint arXiv:1910.00177*, 2019.
+- 573  
+574 Pranav Putta, Edmund Mills, Naman Garg, Sumeet Motwani, Chelsea Finn, Divyansh Garg, and  
+575 Rafael Rafailov. Agent q: Advanced reasoning and learning for autonomous ai agents. *arXiv*  
+576 *preprint arXiv:2408.07199*, 2024.
+- 577  
+578 Zehan Qi, Xiao Liu, Iat Long long, Hanyu Lai, Xueqiao Sun, Jiadai Sun, Xinyue Yang, Yu Yang,  
+579 Shuntian Yao, Wei Xu, et al. Webrl: Training llm web agents via self-evolving online curriculum  
+580 reinforcement learning. In *The Thirteenth International Conference on Learning Representations*,  
+581 2025.
+- 582  
+583 Rafael Rafailov, Archit Sharma, Eric Mitchell, Christopher D Manning, Stefano Ermon, and Chelsea  
+584 Finn. Direct preference optimization: Your language model is secretly a reward model. In  
+585 *Thirty-seventh Conference on Neural Information Processing Systems*, 2023. URL <https://openreview.net/forum?id=HPuS1XJaa9>.
+- 586  
+587 Christopher Rawles, Sarah Clinckemaillie, Yifan Chang, Jonathan Waltz, Gabrielle Lau, Marybeth  
+588 Fair, Alice Li, William Bishop, Wei Li, Folawiyo Campbell-Ajala, et al. Androidworld: A dynamic  
+589 benchmarking environment for autonomous agents. *arXiv preprint arXiv:2405.14573*, 2024a.
+- 590  
+591 Christopher Rawles, Alice Li, Daniel Rodriguez, Oriana Riva, and Timothy Lillicrap. An-  
+592 droidinthewild: A large-scale dataset for android device control. *NeurIPS*, 36, 2024b.
+- 593  
+594 Joseph E Stoy. *Denotational semantics: the Scott-Strachey approach to programming language*  
+595 *theory*. MIT press, 1981.
+- 596  
+597 Gemini Team, Petko Georgiev, Ving Ian Lei, Ryan Burnell, Libin Bai, Anmol Gulati, Garrett  
+598 Tanzer, Damien Vincent, Zhufeng Pan, Shibo Wang, et al. Gemini 1.5: Unlocking multimodal  
+599 understanding across millions of tokens of context. *arXiv preprint arXiv:2403.05530*, 2024.
+
+- 594 Junyang Wang, Haiyang Xu, Haitao Jia, Xi Zhang, Ming Yan, Weizhou Shen, Ji Zhang, Fei Huang,  
+595 and Jitao Sang. Mobile-agent-v2: Mobile device operation assistant with effective navigation via  
+596 multi-agent collaboration. *arXiv preprint arXiv:2406.01014*, 2024a.  
+597  
+598 Taiyi Wang, Zhihao Wu, Jianheng Liu, Jianye Hao, Jun Wang, and Kun Shao. Distrl: An asyn-  
+599 chronous distributed reinforcement learning framework for on-device control agents. *arXiv preprint*  
+600 *arXiv:2410.14803*, 2024b.  
+601  
+602 Ronald J Williams. Simple statistical gradient-following algorithms for connectionist reinforcement  
+603 learning. *Machine learning*, 8:229–256, 1992.  
+604  
+605 Qingyuan Wu, Jianheng Liu, Jianye Hao, Jun Wang, and Kun Shao. Advancing autonomous  
+606 vlm agents via variational subgoal-conditioned reinforcement learning. *arXiv preprint*  
+607 *arXiv:2502.07949*, 2025.  
+608  
+609 Yifan Xu, Xiao Liu, Xueqiao Sun, Siyi Cheng, Hao Yu, Hanyu Lai, Shudan Zhang, Dan Zhang,  
+610 Jie Tang, and Yuxiao Dong. Androidlab: Training and systematic benchmarking of android  
+611 autonomous agents. *arXiv preprint arXiv:2410.24024*, 2024a.  
+612  
+613 Yiheng Xu, Zekun Wang, Junli Wang, Dunjie Lu, Tianbao Xie, Amrita Saha, Doyen Sahoo, Tao Yu,  
+614 and Caiming Xiong. Aguvis: Unified pure vision agents for autonomous gui interaction. *arXiv*  
+615 *preprint arXiv:2412.04454*, 2024b.  
+616  
+617 Mengjiao Yang, Yilun Du, Kamyar Ghasemipour, Jonathan Tompson, Dale Schuurmans, and Pieter  
+618 Abbeel. Learning interactive real-world simulators. *arXiv preprint arXiv:2310.06114*, 1(2):6,  
+619 2023.  
+620  
+621 Yuhao Yang, Yue Wang, Dongxu Li, Ziyang Luo, Bei Chen, Chao Huang, and Junnan Li. Aria-ui:  
+622 Visual grounding for gui instructions. *arXiv preprint arXiv:2412.16256*, 2024.  
+623  
+624 Chi Zhang, Zhao Yang, Jiaxuan Liu, Yucheng Han, Xin Chen, Zebiao Huang, Bin Fu, and Gang Yu.  
+625 Appagent: Multimodal agents as smartphone users, 2023.  
+626  
+627 Chi Zhang, Zhao Yang, Jiaxuan Liu, Yanda Li, Yucheng Han, Xin Chen, Zebiao Huang, Bin Fu, and  
+628 Gang Yu. Appagent: Multimodal agents as smartphone users. In *Proceedings of the 2025 CHI*  
+629 *Conference on Human Factors in Computing Systems*, pp. 1–20, 2025.  
+630  
+631 Zhuosheng Zhang and Aston Zhang. You only look at screens: Multimodal chain-of-action agents.  
+632 In *Findings of the Association for Computational Linguistics ACL 2024*, pp. 3132–3149, 2024.  
+633  
+634 Haoyu Zhen, Xiaowen Qiu, Peihao Chen, Jincheng Yang, Xin Yan, Yilun Du, Yining Hong, and  
+635 Chuang Gan. 3d-vla: A 3d vision-language-action generative world model. *arXiv preprint*  
+636 *arXiv:2403.09631*, 2024.  
+637  
+638 Shuyan Zhou, Frank F Xu, Hao Zhu, Xuhui Zhou, Robert Lo, Abhishek Sridhar, Xianyi Cheng,  
+639 Tianyu Ou, Yonatan Bisk, Daniel Fried, et al. Webarena: A realistic web environment for building  
+640 autonomous agents. In *The Twelfth International Conference on Learning Representations*, 2024a.  
+641  
+642 Siyuan Zhou, Yilun Du, Jiaben Chen, Yandong Li, Dit-Yan Yeung, and Chuang Gan. Robodreamer:  
+643 Learning compositional world models for robot imagination. *arXiv preprint arXiv:2404.12377*,  
+644 2024b.  
+645  
+646  
+647
+
+[Appendix and supplementary materials beyond page 12 have been removed.]

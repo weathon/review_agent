@@ -1,0 +1,329 @@
+# NEURAL INTERACTIVE PROOFS
+
+Lewis Hammond\*
+
+lewis.hammond@cs.ox.ac.uk
+
+Sam Adam-Day\*
+
+sam.adam-day@cs.ox.ac.uk
+
+Department of Computer Science, University of Oxford, Oxford, United Kingdom
+
+## ABSTRACT
+
+We consider the problem of how a trusted, but computationally bounded agent (a ‘verifier’) can learn to interact with one or more powerful but untrusted agents (‘provers’) in order to solve a given task. More specifically, we study the case in which agents are represented using neural networks and refer to solutions of this problem as *neural interactive proofs*. First we introduce a unifying framework based on prover-verifier games (Anil et al., 2021), which generalises previously proposed interaction protocols. We then describe several new protocols for generating neural interactive proofs, and provide a theoretical comparison of both new and existing approaches. Finally, we support this theory with experiments in two domains: a toy graph isomorphism problem that illustrates the key ideas, and a code validation task using large language models. In so doing, we aim to create a foundation for future work on neural interactive proofs and their application in building safer AI systems.
+
+## 1 INTRODUCTION
+
+Recent years have witnessed the proliferation of large machine learning (ML) systems (Villalobos et al., 2022), useful for solving an increasingly wide range of tasks. Often, however, it can be difficult to trust the output of these systems, raising concerns about their safety and limiting their applicability in high-stakes situations (Amodei et al., 2016; Bengio et al., 2023; Hendrycks et al., 2023). At the same time, traditional approaches in verification do not scale to today’s most powerful systems (Seshia et al., 2022). There is thus a pressing need to identify new angles via which to gain such assurances.
+
+In response to this need, we take inspiration from *interactive proofs* (IPs) (Goldwasser et al., 1985), one of the most important developments in computational complexity theory and cryptography. In an IP, a computationally bounded but trustworthy *verifier* interacts with a more powerful but untrustworthy *prover* in order to solve a given problem (Figure 1). Under reasonable assumptions, it can be shown that such interactions can allow the verifier to solve many more kinds of problem than it could alone, all while limiting the chance of being misled by the prover.
+
+In this work, we investigate *neural* interactive proofs, in which the prover and verifier are represented by neural networks. Several different instances of this general idea have been proposed in recent years (Irving et al., 2018; Anil et al., 2021; Waldchen et al., 2024), though there is still a gap between the theory inspiring these methods and their practical implementation. Our work aims to help bridge this gap.
+
+![Diagram illustrating the interaction between a Prover and a Verifier in an interactive proof. The Verifier receives input x from distribution P and outputs a sequence of messages m1, m2, ..., mT. The Prover responds with messages, and the Verifier eventually outputs a decision y, which is compared to the true label y.](acdccfc1d546eaad16a58be576456caf_img.jpg)
+
+The diagram shows a 'Verifier' (blue box with a neural network icon) receiving an input  $x \sim \mathbb{P}$  (represented by icons of a document and a person). The Verifier outputs a sequence of messages  $m_1, m_2, \dots, m_T$ . A 'Prover' (pink box with a neural network icon) responds with messages (represented by speech bubble icons). The Verifier then makes a decision, represented by a thumbs-up and thumbs-down icon with a question mark, which is compared to the true label  $y$  (indicated by  $\stackrel{?}{=} y$ ).
+
+Diagram illustrating the interaction between a Prover and a Verifier in an interactive proof. The Verifier receives input x from distribution P and outputs a sequence of messages m1, m2, ..., mT. The Prover responds with messages, and the Verifier eventually outputs a decision y, which is compared to the true label y.
+
+Figure 1: On receiving input  $x$  from distribution  $\mathbb{P}$  the agents exchange messages before the verifier decides on an output  $m_T$ , which is compared to the true label  $y$ .
+
+\*Equal contribution.
+
+### 1.1 CONTRIBUTIONS
+
+We seek to provide a comprehensive treatment of neural interactive proofs spanning both theory and practice. In particular, we provide the following contributions:
+
+- (i) a unifying game-theoretic framework that generalises existing neural IP protocols;
+- (ii) several new neural IP protocols, including those that allow for zero-knowledge proofs;
+- (iii) a theoretical and empirical comparison of both new and existing protocols; and
+- (iv) a well-documented codebase for testing different protocols in different domains, available at <https://github.com/SamAdamDay/neural-interactive-proofs>.
+
+In so doing, we hope to create a foundation for future work on neural interactive proofs and their application in building safer ML systems.
+
+### 1.2 EXAMPLE
+
+In order to aid the reader’s intuition for the concepts we introduce, we provide an example scenario to which all neural IP protocols can be applied, and refer back to this throughout the paper.
+
+**Example 1.** *Consider a domain of challenging programming tasks, each of which is defined by some combination of natural language specification and implicit world knowledge.<sup>1</sup> There is a powerful AI system (a “prover”) capable, in theory, of solving every task, but who does so in an inscrutable way that is difficult to trust. We would like to use a weaker but trusted AI system (a “verifier”) – which is incapable of solving the task by itself – to check that any code produced by the prover really does satisfy the corresponding specification. A pictorial representation is given in Figure 1.*
+
+Formally, this example is a decision problem where the input is a specification and a piece of code. In a neural IP, the agents learn to interact to decide whether the code satisfies the specification.
+
+### 1.3 RELATED WORK
+
+The most closely related work to ours was – until recently – that of Anil et al. (2021), who introduce *prover-verifier games* played between neural networks, which we generalise and build on. While an important first step, this work is limited by the formal strength of the proof systems that result from their specific protocol (as we show), and by its application only to small models and problem instances. Similar to prover-verifier games are the works of Irving et al. (2018) and Wälchli et al. (2024), whose proof systems make use of two provers in competition with one another and are stronger from a theoretical perspective, but are again only applied to very simple problems.
+
+More recently, three papers (concurrent with our own and with each other) have sought to overcome some of the practical limitations of these earlier works by evaluating protocols using LM agents. Kenton et al. (2024) moves beyond earlier efforts (Michael et al., 2023; Khan et al., 2024) by considering several tasks aside from question answering, and also *computational* (instead of merely *informational*) asymmetries between the provers and verifiers. They find that multi-prover ‘debate’ protocols outperform single-prover ‘consultancy’ protocols but that there is a relatively limited benefit to debate compared to the verifier baseline performance. The authors hypothesise that one reason for this is that they do not train their models using the protocol (which is a focus of our work). Kirchner et al. (2024) *do* train their agents to play prover-verifier games using multiple rounds of reinforcement learning, but only on the protocol introduced by Anil et al. (2021), which we show has important theoretical limitations. They find that the helpful prover’s accuracy and the verifier’s robustness to adversarial attacks increase over the course of training, though their primary focus is on the *legibility* of solutions to humans. Finally, and most recently, Arnesen et al. (2024) combine several of the strengths of these two investigations by comparing multiple protocols and training the provers using a novel variant of Direct Preference Optimisation (Rafailov et al., 2023), though they restrict their attention to question-answering. Mirroring Kenton et al. (2024), they find that optimising the provers leads to higher verifier accuracy in debate but not consultancy, and that debate training introduces stronger argumentation (as measured by the use of quotations).
+
+<sup>1</sup>Importantly, we assume that it is impractical or impossible to convert the task description into a specification amenable to standard formal verification tools.
+
+Unlike these recent works, our investigation is not only empirical but aims to further understand the theoretical implications of different protocols. In the same spirit, Brown-Cohen et al. (2024) study *doubly efficient* debate, where the provers run in polynomial time and the verifiers are more efficient still (Goldwasser et al., 2008). They prove that under appropriate assumptions, any polynomial-time computation can be verified using only a constant number of queries to the black-box representing human judgement (and in time linear in the size of a single query). Other closely related research includes work on interactive proofs for *PAC verification* (Goldwasser et al., 2020), where the verifier’s task is to assess whether the prover has produced a near-optimal hypothesis, and – concurrent with, and most similar to, our own work – on *self-proving models* (Amit et al., 2024), where the authors devise a method for training provers to demonstrate the correctness of their outputs to a fixed verifier. Both of these latter works, however, focus on hand-crafted rather than learnt proof systems. In contrast, we take inspiration from Goyal et al. (2019) and hypothesise that such ideas can best be scaled to real-world ML systems if the verifier can *learn* the protocol.
+
+## 2 PRELIMINARIES
+
+This section provides a brief technical background on games and interactive proofs, which are the two main building blocks of neural interactive proofs. In general, we index agents using superscripts and time (or other variables) using subscripts. Vectors  $\mathbf{x}$  are written in bold, and elements of sets  $x \in X$  are written as lowercase and uppercase letters, respectively.  $\Delta(X)$  denotes the set of distributions over  $X$  and  $\mathbf{1}_S : X \rightarrow \{0, 1\}$  represents the indicator function for  $S \subseteq X$ , i.e.  $\mathbf{1}_S(x) = 1$  if and only if  $x \in S$ . Given a vector  $\mathbf{x}$ , we write  $x_{ij}$  for  $(x_i, \dots, x_j)$  where  $i \leq j$ .
+
+### 2.1 PROOF SYSTEMS
+
+Interactive proofs are standardly defined with respect to a decision problem  $(X, S)$ , where  $X$  is the set of problem instances and  $S \subseteq X$  is the set of ‘positive’ instances. In Example 1,  $X$  is the set of all specification-code pairs produced by the prover, and  $S$  is the set of pairs where the code satisfies the specification. The prover and verifier exchange messages from their message spaces  $M^p$  and  $M^v$  respectively. In our example, these could be the space of all text strings under a certain length.
+
+**Definition 2** (Goldwasser et al., 1985; Goldreich, 2001). An *interactive proof system*  $\langle p, v \rangle$  for  $S \subseteq X$  comprises a prover  $p$  and verifier  $v$  which, given an input  $x \in X$ , interact to (stochastically) generate a sequence of messages  $\mathbf{m}_{1:T}$  (a ‘proof’). The (finite) sequence length  $T$  is determined by  $v$ , whose eventual output is given by  $m_T \in \{1, 0\}$ , corresponding to ‘accept’ and ‘reject’, respectively. We denote this (stochastic) proof  $\mathbf{m}_{1:T}$  produced by  $\langle p, v \rangle$  on input  $x$  as  $\langle p, v \rangle(x)$ . We say that  $\langle p, v \rangle$  is  $(\epsilon_c, \epsilon_s)$ -*valid* (or simply ‘valid’) for  $\epsilon_c + \epsilon_s < 1$  if it satisfies:<sup>2</sup>
+
+- **Completeness:** If  $x \in S$ , then  $\langle p, v \rangle(x)_T = 1$  w.p.  $\geq 1 - \epsilon_c$ ;
+- **Soundness:** If  $x \notin S$ , then  $\langle p', v \rangle(x)_T = 0$  w.p.  $\geq 1 - \epsilon_s$  for any prover  $p'$ .
+
+We restrict the prover  $p$  and verifier  $v$  to strategy sets  $P$  and  $V$  respectively. The classes of decision problem  $(X, S)$  for which there exists a valid interactive proof system depend on the choice of these sets. For example, if we let  $P$  be the set of all Turing machines and  $V$  be the set of all probabilistic polynomial time Turing machines, as in the original formulation due to Goldwasser et al. (1985), this gives rise to the class IP (equal to PSPACE, see Shamir, 1992).
+
+**Definition 3** (Goldwasser et al., 1985; Goldreich, 2001). We say that  $\langle p, v \rangle$  is  $(\epsilon_k$ -*statistically*) *zero-knowledge* if for every verifier  $v'$  there is some simulator  $z \in V$ , which outputs a sequence of messages given a problem instance, such that  $\max_{x \in S} \frac{1}{2} \sum_{\mathbf{m}} \left| \mathbb{P}(\langle p, v' \rangle(x) = \mathbf{m}) - \mathbb{P}(z(x) = \mathbf{m}) \right| \leq \epsilon_k$ .
+
+While *validity* can be viewed as a property of the verifier, being *zero-knowledge* can be viewed as a property of the prover. Intuitively,  $\langle p, v \rangle$  is zero-knowledge if the verifier learns only whether  $x \in S$  and nothing else, i.e.  $v'$  does not gain any additional power through their interaction with  $p$  (represented by the fact that  $z \in V$ ).
+
+<sup>2</sup>Technically, we may generalise this to polynomial time functions  $\epsilon_c, \epsilon_s : \mathbb{N} \rightarrow \mathbb{R}$  such that  $\epsilon_c(|x|) + \epsilon_s(|x|) < 1 - \frac{1}{q(|x|)}$  for some polynomial  $q$ .
+
+### 2.2 GAMES
+
+In this work, we study  $n$ -player games  $\mathcal{G} = (N, \Sigma, \mathcal{L})$  where  $N = \{1, \dots, n\}$  are the agents,  $\Sigma := \prod_{i \in N} \Sigma^i$  is a product strategy space and  $\mathcal{L}$  contains loss functions  $\mathcal{L}^i : \Sigma \rightarrow \mathbb{R}$  for  $i \in N$ . Each agent  $i$  selects a strategy  $\sigma^i \in \Sigma^i$  in an attempt to minimise their loss  $\mathcal{L}^i(\sigma)$ . More specifically, we focus our attention on what we term ‘messaging games’, which centre around rounds of communication between the different agents via multiple channels. In Example 1, for instance, the verifier might cross-reference portions of the code or the prover’s answers by sending them to a second, independent prover via a separate channel.
+
+**Definition 4.** In a *messaging game*  $\mathcal{G} = (N, \Sigma, \mathcal{L}; M, C, \mu)$ , play proceeds by agents sending messages  $m^i \in M^i$  via a number of channels  $C \subseteq 2^N$  according to a mechanism  $\mu : C \times \mathbb{N} \rightarrow \Delta(2^N)$ , which determines the set of agents  $N^t \subseteq N$  who can send a message in channel  $c \in C$  at time  $t \in \mathbb{N}$ . When  $\mu(c, t)$  is deterministic we write  $\mu(c, t) = N^t$ . Agents can only observe messages in channels they belong to, denoted  $C(i) := \{c \in C : i \in c\}$ , and cannot identify the sender of any message beyond the channel’s other members. When  $i \in N^t \sim \mu(c, t)$ , agent  $i$  sends a message  $m_{c,t}^i \sim \sigma^i(M^i \mid (m_{c,1:t-1})_{c' \in C(i)})$  based on their previously observed messages across  $C(i)$ . Whenever  $\emptyset \sim \mu(c, t)$ , a random message  $m_{c,t}^0 \sim \rho(M^0 \mid (m_{c,1:t-1})_{c \in C})$  is sent. Finally, play terminates whenever a decision  $m^1 \in M^1 \subseteq M$  is sent in a special channel  $c^\dagger \in C$ . We drop  $M$ ,  $C$ , and  $\mu$  from the notation for  $\mathcal{G}$  when unambiguous or unimportant.
+
+We use  $\mathcal{G}(\sigma^i)$  to denote the  $(n - 1)$ -player game induced when agent  $i$  plays strategy  $\sigma^i$  in  $\mathcal{G}$ , but where the remaining  $n - 1$  agents have not yet chosen their strategies. In practice, we assume that each agent’s strategy space  $\Sigma^i$  is defined by some finite number of parameters  $\Theta^i$ , and will often refer to  $\theta^i \in \Theta^i$  instead of  $\sigma^i$ . Within these games, we make use of two standard equilibrium concepts, which can be defined both locally and globally.
+
+**Definition 5.** A *local Nash equilibrium* (LNE) on  $\hat{\Theta} \subseteq \Theta$  is a strategy profile  $\theta_* \in \hat{\Theta}$  such that:
+
+$$\theta_*^i \in \operatorname{argmin}_{\theta^i \in \hat{\Theta}^i} \mathcal{L}^i(\theta^i, \theta_*^{-i}),$$
+
+for all  $i \in [n]$ . A *local Stackelberg equilibrium* led by player  $i$  (LSE $_i$ ) on  $\hat{\Theta} \subseteq \Theta$  is a strategy profile  $\theta_* \in \hat{\Theta}$  such that:
+
+$$\theta_*^i \in \operatorname{argmin}_{\theta^i \in \hat{\Theta}^i} \max_{\theta_*^{-i} \in \operatorname{LNE}_i(G(\theta^i))} \mathcal{L}^i(\theta^i, \theta_*^{-i}).$$
+
+If  $\hat{\Theta} = \Theta$  then  $\theta_*$  is a (global) Nash/Stackelberg equilibrium (NE/SE). We denote the local and global NEs/i-led SEs of  $G$  by  $\operatorname{LNE}(G)/\operatorname{LSE}_i(G)$  and  $\operatorname{NE}(G)/\operatorname{SE}_i(G)$ , respectively. We consider approximate versions of these concepts, where the argmin for each agent  $i$  has some tolerance  $\epsilon^i \in \mathbb{R}_{\geq 0}$ .<sup>3</sup> Given  $\mathbf{e} = (e^1, \dots, e^n)$ , we denote the approximate equilibria as  $\mathbf{e}$ -NE and  $\mathbf{e}$ -SE.
+
+## 3 PROVER-VERIFIER GAMES
+
+Prover-verifier games (PVGs) were introduced by Anil et al. (2021) as a game-theoretic framework to incentivise learning agents to solve decision problems in a verifiable manner. Concretely, we consider *probabilistic* decision problems  $(X, S, \mathbb{P})$  where  $\mathbb{P}$  is a distribution over  $X$ . In Example 1, for instance, there might be many kinds of programming task and solutions, jointly distributed according to  $\mathbb{P}$ , with the set  $S$  then representing the specification-code pairs. Upon receiving an input  $x \sim \mathbb{P}$ , a verifier interacts with one or more provers according to a high-level protocol determined by the structure of the PVG to see if they can generate a ‘proof’ that  $x \in S$ . The agents in the game receive losses as a function of their strategies for interacting.
+
+In the remainder of the section, we make the above setting and earlier assumptions more formal by introducing a generalisation of PVGs based on the *messaging games* defined earlier. This generalised definition is sufficiently broad so as to capture several other protocols (e.g. Irving et al., 2018; Wälchlen et al., 2024), as well as the new protocols that we introduce in this paper. A summary of the different protocols is shown in Table 1.
+
+<sup>3</sup>Formal mathematical characterisations are provided in the proof of Theorem 8 – see Section C.1.
+
+**Definition 6.** A generalised prover-verifier game (PVG) for a probabilistic decision problem  $(X, S, \mathbb{P})$  is a messaging game  $\mathcal{G} = (N, \Sigma, \mathcal{L}; M, C, \mu)$  played between  $n_p$  provers and  $n_v$  verifiers, where  $N = N^p \sqcup N^v$ . When there is just one prover or verifier, we denote their index  $i \in N$  as  $p$  or  $v$ , respectively. Play begins via the common observation of some  $x \sim \mathbb{P}$ , i.e.  $\mu(c, 0) = \emptyset$  for every channel  $c \in C$ , and  $\rho = \mathbb{P}$ . We assume that that  $c^\dagger = \{v\}$  for some  $v \in N^v$  and that  $M^\dagger = \{1, 0\}$ . Finally, let  $\sigma_u^i$  denote the strategy for agent  $i$  that samples uniformly at random from their message space at every turn, and let  $l_u^v := \min_\sigma \mathcal{L}^v(\sigma)$ . We additionally require that:
+
+1.  $\mathcal{L}^v(\sigma) \leq \mathcal{L}^v(\sigma')$  if and only if  $\mathbb{E}_\sigma[m_T = 1_S(x)] \geq \mathbb{E}_{\sigma'}[m_T = 1_S(x)]$  (the deciding verifier's objective is to output the true label);
+2.  $\min_{\sigma \in N^v} \mathcal{L}^j(\sigma^{N^v}, \sigma_u^{-N^v}) \gg l_u^v$  for any  $j \in N^v$ , where  $\Sigma^{N^v} := \times_{i \in N^v} \Sigma^i$  (the verifier(s) cannot solve the problem);
+3. If (counterfactually)  $c^\dagger = \{p\}$  for  $p \in N^p$  and  $\mu(c^\dagger, 0) = \{p\}$  then  $\min_{\sigma^p} \mathcal{L}^v(\sigma^p, \sigma_u^{-p}) = l_u^v$  (any prover can solve the problem);
+4. There are  $i \in N^v$ ,  $j \in N^p$ , and  $\sigma, \sigma' \in \Sigma$  such that  $\mathcal{L}^i(\sigma) > \mathcal{L}^i(\sigma')$  but  $\mathcal{L}^j(\sigma) \leq \mathcal{L}^j(\sigma')$  (the provers' and verifiers' objectives are not fully aligned).
+
+Different PVGs represent different messaging specifications between the prover(s) and verifier(s), with the basic idea being that we wish to construct a game such that its equilibria correspond to valid proof systems. For example, Anil et al. (2021) introduce a model – which they refer to as an ‘Abstract Decision Problem’ (adp) – in which the prover (deterministically) sends a single message to the verifier, and the verifier must make its decision in response. They show that there is indeed a correspondence when  $\Sigma^p$  is given by a set of deterministic distributions  $\sigma^p(m^p | x)$  – i.e. functions  $\delta^p : X \rightarrow M^p$  – and  $\Sigma^v$  contains the convex combinations of functions  $\delta^v : X \times M^p \rightarrow \{0, 1\}$ . Unfortunately (as we explain further in Section C.1), these restrictions limit the power of the protocol, and relaxing means that the correspondence no longer holds.
+
+**Proposition 7.** There is a probabilistic decision problem  $(X, S, \mathbb{P})$  and an adp game  $\mathcal{G}$  such that – even though there exists some valid interactive proof protocol  $\langle \delta^p, \sigma^v \rangle$  with  $\epsilon_c = 0$  – the fact that  $\langle \delta^p, \sigma^v \rangle \in \text{SE}_v(G)$  is neither necessary nor sufficient for  $\langle \delta^p, \sigma^v \rangle$  to be valid.
+
+Motivated by this negative result, we introduce a new protocol in Section 4 that overcomes these issues. Other forms of protocol can be characterised, for example, as a competition between two provers, which is judged by the verifier. Formal definitions of adp and its limitations, the debate model (Irving et al., 2018) and the ‘Merlin-Arthur Classifier’ (mac) model (Wäldchen et al., 2024) can be found in Section B.
+
+Table 1: A comparison between various proof protocols.
+
+| Protocol | Provers | Verifiers | Rounds | Complexity | ZK | Reference               |
+|----------|---------|-----------|--------|------------|----|-------------------------|
+| adp      | 1       | 1         | 2      | NP         | ✗  | (Anil et al., 2021)     |
+| debate   | 2       | 1         | $T$    | PSPACE     | ✗  | (Irving et al., 2018)   |
+| mac      | 2       | 1         | 2      | MA         | ✗  | (Wäldchen et al., 2024) |
+| nip      | 1       | 1         | $T$    | PSPACE     | ✗  | Ours                    |
+| mnip     | 2       | 1         | $T$    | NEXP       | ✗  | Ours                    |
+| zk-nip   | 1       | 3         | $T$    | PSPACE     | ✓  | Ours                    |
+| zk-mnip  | 2       | 3         | $T$    | NEXP       | ✓  | Ours                    |
+
+## 4 NEURAL INTERACTIVE PROOFS
+
+Unlike in the case of standard interactive proofs, we assume that the verifier has some access to a dataset of labelled examples and aims to *learn* a strategy for interacting with the prover that generalises to any input. More formally, we assume that the verifier has access to a dataset  $\mathcal{D} = \{(x_j, y_j)\}_{1 \leq j \leq m}$  with each  $x_j \sim_{\text{iid}} \mathbb{P}$  and  $y_j = 1_S(x_j)$ . Letting  $\ell(\sigma, x) := \mathbb{E}_\sigma[m_T \neq y]$ , the verifier’s aim is to minimise  $\ell$  across inputs  $x \in X$ .
+
+In this work, we consider two ways of operationalising this aim: the expected loss (or *risk*), and the worst-case loss. We denote the empirical risk with respect to  $\mathcal{D}$  as  $\mathcal{L}_{\mathcal{D}}^{\text{ER}}(\sigma) = \frac{1}{|\mathcal{D}|} \sum_{(x,y) \in \mathcal{D}} \ell(\sigma, x)$ , and the empirical worst-case loss by  $\mathcal{L}_{\mathcal{D}}^{\text{WC}}(\sigma) = \max_{(x,y) \in \mathcal{D}} \ell(\sigma, x)$ . Minimisers of these losses are denoted  $\sigma_{\mathcal{D}}^{\text{ER}}$  and  $\sigma_{\mathcal{D}}^{\text{WC}}$  respectively. We drop  $\mathcal{D}$  from our notation when considering the full space inputs  $X$ , with expectations taken with respect to  $\mathbb{P}$  in the ER case.
+
+While the expected loss is by far the most common objective in contemporary ML, from the perspective of safety-critical systems, we would ideally like to minimise the worst-case loss. In other words, we wish to find some  $\sigma$  such that  $\mathcal{L}^{\text{WC}}(\sigma) - \mathcal{L}^{\text{WC}}(\sigma^{\text{WC}})$  is small. Moreover, this is despite the fact that  $\min_{\sigma^n} \mathcal{L}^j(\sigma^n, \sigma_u^{-N^n})$  is large, as per Definition 6.
+
+Concretely, optimising  $\mathcal{L}^{\text{ER}}(\sigma)$  in the code validation example aims to produce a verifier which on unseen specification-code pairs gives a decision that has a high probability of being correct, even if the prover is able to fool it with incorrect code. Conversely, optimising  $\mathcal{L}^{\text{WC}}(\sigma)$  aims to produce a verifier that has low probability of being fooled on *any* code. Taking inspiration from the `adp` protocol (formally defined in Section B), let us consider a PVG with,  $n_p = n_v = 1$ ,  $C = \{c^1\}$ , and  $\mu(c, t) = \{t \bmod 2\}$ , and loss functions given by:
+
+$$\begin{aligned}\mathcal{L}^p(\sigma) &= \mathcal{L}^{\text{WC}}(\sigma \mid y = 1) - \mathcal{L}^{\text{WC}}(\sigma \mid y = 0), \\ \mathcal{L}^v(\sigma) &= \mathcal{L}^{\text{WC}}(\sigma \mid y = 1) + \mathcal{L}^{\text{WC}}(\sigma \mid y = 0).\end{aligned}$$
+
+We refer to this protocol as `nip`, and it is straightforward to show that this corresponds closely to the notion of an interactive proof.
+
+**Theorem 8.** *Let  $(X, S, \mathbb{P})$  be a probabilistic decision problem that has a valid proof system and  $\mathcal{G}$  a `nip` game. Then  $\sigma$  is a valid IP system if and only if it is an approximate verifier-leading Stackelberg equilibrium of  $\mathcal{G}$ .*
+
+While this proposition essentially reduces the problem of finding a valid proof system to the task of finding an equilibrium in a given game, this task is far from straightforward. In particular, there are two key difficulties. Firstly, there is the challenge of learning to minimise the *worst-case* (as opposed to the expected) loss. Secondly, there is the challenge of finding a *Stackelberg* equilibrium.
+
+### 4.1 WORST-CASE LOSS
+
+The simplest approach to minimising the worst-case loss using finitely many data  $\mathcal{D}$  generated from  $\mathbb{P}$  is to ignore the worst-case performance and simply return some  $\sigma_{\mathcal{D}}^{\text{ER}}$ . The question then becomes: when is minimising the *empirical risk* with respect to  $\mathcal{D}$  sufficient for minimising the worst-case risk with respect to  $X$ ? The following result shows that we can break this down into two properties (defined formally in Section C.2): (a) the empirical worst-case loss being similar to the actual worst-case loss; and (b) for any  $\mathcal{D}$ , the empirical worst-case loss of  $\sigma_{\mathcal{D}}^{\text{ER}}$  being within  $\rho(\mathcal{D})$  of  $\sigma_{\mathcal{D}}^{\text{WC}}$ . These conditions do not always hold, but can do when the problem is sufficiently ‘regular’.
+
+**Proposition 9.** *If  $\Sigma$  has the worst-case uniform convergence property (a) and the  $\rho$ -worst-case robustness property (b) then there is some  $m^{\text{WC}} : (0, 1)^2 \rightarrow \mathbb{N}$  such that for every  $\epsilon, \delta \in (0, 1)$ , if  $|\mathcal{D}| \geq m^{\text{WC}}(\epsilon, \delta)$  then  $\mathcal{L}^{\text{WC}}(\sigma_{\mathcal{D}}^{\text{ER}}) - \mathcal{L}^{\text{WC}}(\sigma^{\text{WC}}) \leq \rho(\mathcal{D}) + \epsilon$  with probability  $1 - \delta$ .*
+
+Alternatively, we can introduce an *adversary*,  $a$ , whose strategy space is  $S \times X \setminus S$  and whose loss function is  $\mathcal{L}^a(\sigma, (s, x)) = -\ell(\sigma, s) - \ell(\sigma, x)$ . We then replace the terms  $\mathcal{L}^{\text{WC}}(\sigma \mid y = i)$  in the original loss functions for the prover and verifier with  $\ell(\sigma, s) - \ell(\sigma, x)$  and  $\ell(\sigma, s) + \ell(\sigma, x)$  respectively. The verifier-leading Stackelberg equilibria of the original `nip` game are then identical to the verifier-prover-leading Stackelberg equilibria in this new three-player game, denoted  $G^a$ . Unlike the classical learning-theoretic approach above in which we assumed we were given a fixed dataset  $\mathcal{D}$  of  $(x, y)$  pairs, we are here assuming access to an adversary capable of outputting any  $x \in X$ . This stronger assumption may not always hold, but when it does, learning can be more efficient (Goldman & Kearns, 1995).
+
+**Proposition 10.** *Let  $(X, S, \mathbb{P})$  be a probabilistic decision problem and  $\mathcal{G}$  a `nip` game. Then  $(\sigma^p, \sigma^v)$  is an approximate verifier-leading SE ( $\epsilon$ -SE $_v$ ) of  $\mathcal{G}$  if and only if there is some  $\sigma^a$  such that  $(\sigma^p, \sigma^v, \sigma^a)$  is an approximate verifier-prover SE ( $\epsilon$ -SE $_{v,p}$ ) of  $G^a$  (the adversarial version of  $\mathcal{G}$ ).*
+
+### 4.2 SOLVING STACKELBERG GAMES
+
+Computing Stackelberg equilibria can be naturally modelled as a bi-level optimisation problem. A standard solution to such problems using gradient-based methods is to employ a timescale separation (Borkar, 2008). In particular, we take the sequential nature of the problem setting into account by explicitly modelling the dependence of  $\theta^p$  on  $\theta^v$  and updating  $\theta^p$  more quickly as part of an ‘inner loop’. Fiez et al. (2020) show that if  $\alpha^v = o(\alpha^p)$  then with high probability the following dynamics will converge locally to the neighbourhood of a LSE $_v$ :
+
+$$\begin{aligned}\theta_{t+1}^p &= \theta_t^p - \alpha^p(t) \cdot \nabla_p \mathcal{L}^p, \\ \theta_{t+1}^v &= \theta_t^v - \alpha^v(t) \cdot \nabla_v \mathcal{L}^v - \nabla_p \mathcal{L}^v \left( \nabla_p^2 \mathcal{L}^p \right)^{-1} \nabla_{pv} \mathcal{L}^p,\end{aligned}$$
+
+where we drop the dependence on  $\theta$  from our notation and write  $\nabla_v$  and  $\nabla_p$  for  $\nabla_{\theta^v}$  and  $\nabla_{\theta^p}$ , respectively. These updates require computing an inverse Hessian vector product, which is intractable when  $\theta^p$  is large. Replacing the term  $\left( \nabla_p^2 \mathcal{L}^p \right)^{-1}$  with  $\alpha^p(t+1)$  leads to the LOLA (Learning with Opponent Learning Awareness) update (Foerster et al., 2018), which aims to actively influence the future policy updates of its opponents. While LOLA may fail to converge, interpolating between the LOLA update and LookAhead (Zhang & Lesser, 2010) leads to local convergence to stable fixed points in differentiable games under self-play (Letcher et al., 2019).
+
+## 5 EXTENSIONS
+
+Finally, we generalise the `nip` protocol along two natural dimensions in order to strengthen the properties of the resulting proof systems.
+
+### 5.1 MULTIPLE PROVERS
+
+Multi-prover interactive proofs (MIPs) are a natural generalisation of classical IPs (Ben-Or et al., 1988), whose additional power results from the fact that while the two provers may correlate their strategies, they are prevented from communicating with one another during their interactions with the verifier (Babai et al., 1991). This allows the verifier to ‘cross-examine’ the provers.
+
+We define the `mnp` protocol identically to the `nip` protocol, but now with two provers,  $p_1$  and  $p_2$ , each of which has the same loss. Valid MIP systems are defined as in Definition 2, with the soundness condition altered such that  $v$  must be robust to any choice of  $p_1', p_2'$ . Using a similar proof to that of Theorem 8, it can be shown that the equilibria of the `mnp` PVG correspond to valid MIP systems. The only subtlety is that due to the provers’ ability to coordinate on a joint strategy and shared random signal beforehand, we must consider *correlated* equilibria (defined in Section C.1).
+
+**Theorem 11.** *Let  $(X, S, \mathbb{P})$  be a probabilistic decision problem that has a valid proof system and  $\mathcal{G}$  a `mnp` game. Then  $\sigma$  is a valid MIP system if and only if it is an approximate verifier-leading correlated Stackelberg equilibrium of  $\mathcal{G}$ .*
+
+### 5.2 ZERO KNOWLEDGE
+
+We now consider whether the prover can prevent the verifier from learning any *more* than to solve the task at hand. We formalise this question as whether the resulting proof system is *zero-knowledge* (ZK). Far from a theoretical curiosity, this may have important practical implications, such as for the prevention of model cloning/stealing via black-box access (Orekhondy et al., 2019).
+
+Recall from Definition 3 that  $\langle p, v \rangle$  is ZK if for any  $v'$  and any  $x$  such that  $y = 1$ , there is another weak agent  $z \in V$  capable of generating approximately the same distribution over message sequences as  $\langle v', p \rangle(x)$ , *without* interacting with  $p$ . While it is possible to introduce a precise analogue of this condition, we wish to investigate whether the verifier can gain knowledge regardless of the value of  $y$ .
+
+We therefore provide a slightly stronger condition that requires statistical closeness between  $\langle v', p \rangle(x, y)$  and  $z(x, y)$  for any  $x$ . In other words, short of the answer  $y$ , there is nothing else that  $v'$  can learn by interacting with  $p$ . We can implement this protocol using a PVG by introducing
+
+an additional verifier agent  $v_2 = v'$  and a simulator  $v_3 = z$ , whose objectives  $\mathcal{L}^{v_2}$  and  $\mathcal{L}^{v_3} := -\mathcal{L}^{v_2}$  are defined via:
+
+$$\mathcal{L}^{v_2}(\sigma) := -\max_x \frac{1}{2} \sum_m \left| \mathbb{P}(\langle \sigma^p, \sigma^{v_2} \rangle(x, y) = m) - \mathbb{P}(\sigma^{v_3}(x, y) = m) \right|,$$
+
+and by adding the term  $\mathcal{L}^{v_3}$  to the prover's loss  $\mathcal{L}^p$ . We refer to the resulting protocol as `zk-nip`, and show that the equilibria of this game correspond to ZK proof systems.
+
+**Theorem 12.** *Let  $(X, S, \mathbb{P})$  be a probabilistic decision problem that has a valid  $\epsilon_k$ -statistically zero-knowledge system and  $\mathcal{G}$  a `zk-nip` game. Then  $\sigma$  is a valid  $\epsilon_k$ -zero-knowledge IP system if it is an approximate verifier-prover-leading Stackelberg equilibrium ( $e\text{-SE}_{v_1, p}$ ) of  $\mathcal{G}$ .*
+
+We note that in this protocol the equilibria contain a Stackelberg hierarchy with more than two levels. Namely, the prover  $p$  commits to their strategy before agents  $v_2$  and  $v_3$ . Technically,  $v_2$  should also be viewed as committing before  $v_3$ , but  $\mathcal{G}(\sigma^{v_1}, \sigma^p)$  is a zero-sum game and so reaching an NE is sufficient.
+
+## 6 EXPERIMENTS
+
+Having characterised the theoretical power of various PVG protocols, it remains to be seen whether they are sufficient for solving real-world problems empirically. Indeed, until very recently (Kenton et al., 2024; Arnesen et al., 2024; Khan et al., 2024), no previous study has attempted to rigorously compare different protocols, and despite this recent progress, it remains unclear what their relative strengths and weaknesses are in practice. To provide further clarity, we conduct experiments in two domains: a toy graph isomorphism problem that illustrates the key ideas, and a code validation task using large language models. Further details about the setup of our experiments can be found in Appendix D, and we release a comprehensive codebase that supports the easy specification of new protocols and their evaluation in new domains. Throughout this section, error bars represent one standard deviation, taken across 10 seeds.
+
+### 6.1 GRAPH ISOMORPHISM
+
+As a warm-up exercise, we consider the problem of testing for graph isomorphism using a synthetic dataset of 10,000 graphs (each with approximately ten vertices) generated via the Erdős-Rényi model. The verifiers and provers are implemented using a graph neural network (GNN) and transformer body, with standard feedforward heads used for sending messages and estimating the value of each state. Agents are trained using independent PPO (Schulman et al., 2017; Schroeder de Witt et al., 2020) and evaluated on a held-out test set. This simple setting has the benefit that by varying the number of GNN layers we can precisely calibrate the capability of the agents to distinguish between isomorphic and non-isomorphic graphs. By controlling the number of rounds of the Weisfeiler-Leman test (Weisfeiler & Leman, 1968) needed to distinguish non-isomorphic graph pairs in the dataset, we ensure a theoretical limit on the accuracy attainable by the verifier alone.
+
+![Figure 2: Test accuracies on the graph isomorphism task. (a) Bar chart showing final test accuracy for ADP, Debate, NIP, and MNIP protocols, comparing Random Prover(s) (dark blue) and Standard (teal). (b) Bar chart showing mean test accuracy for 1, 2, and 3 layers, comparing Random Prover (dark blue), Standard (teal), Narrow (grey), and Wide (light blue). (c) Line plot showing mean difference in prior likelihood for varying prover auxiliary reward coefficients (10^0 to 10^1).](2396add2849eccefcbcfbe1c7142a253_img.jpg)
+
+Figure 2 consists of three subplots. Subplot (a) is a bar chart titled 'Final test accuracy' on the y-axis (ranging from 0.0 to 1.0) and 'ADP', 'Debate', 'NIP', 'MNIP' on the x-axis. For each protocol, there are two bars: 'Random Prover(s)' (dark blue) and 'Standard' (teal). In 'ADP', 'Debate', and 'MNIP', the 'Standard' bar is slightly higher than the 'Random Prover(s)' bar. In 'NIP', the 'Standard' bar is significantly higher. Subplot (b) is a bar chart titled 'Mean test accuracy' on the y-axis (ranging from 0.0 to 1.0) and '1 layer', '2 layers', '3 layers' on the x-axis. For each layer count, there are four bars: 'Random Prover' (dark blue), 'Standard' (teal), 'Narrow' (grey), and 'Wide' (light blue). In all cases, the 'Wide' bar is the highest, followed by 'Standard', then 'Narrow', and finally 'Random Prover'. Subplot (c) is a line plot titled 'Mean difference in prior likelihood' on the y-axis (ranging from 0.000 to 0.018) and 'Prover auxiliary reward coefficient' on the x-axis (logarithmic scale from 10^0 to 10^1). The line starts at approximately 0.007 for 10^0, peaks at approximately 0.009 for 10^1, and then decreases to approximately 0.004 for 10^2.
+
+Figure 2: Test accuracies on the graph isomorphism task. (a) Bar chart showing final test accuracy for ADP, Debate, NIP, and MNIP protocols, comparing Random Prover(s) (dark blue) and Standard (teal). (b) Bar chart showing mean test accuracy for 1, 2, and 3 layers, comparing Random Prover (dark blue), Standard (teal), Narrow (grey), and Wide (light blue). (c) Line plot showing mean difference in prior likelihood for varying prover auxiliary reward coefficients (10^0 to 10^1).
+
+Figure 2: Test accuracies on the graph isomorphism task across (a) interaction protocols and (b) model sizes for `nip`, compared to the baseline of running the protocol with a random prover; and (c) differences in message sequence likelihood for varying prover reward coefficients in `zk-nip`.
+
+We begin by directly comparing the *adp*, *debate*, *nip*, and *mnip* protocols, shown in Figure 2a (plots of the accuracy and mean episode length over training are shown in Section E.1). While we see that *nip* performs favourably, with verifiers learning to near-perfectly classify valid instances when interacting with the prover, other protocols do not see an increase in performance. This, however, is mainly due to the problem setting, in which there is a relatively simple algorithm for testing for isomorphic graphs: the verifier selects a random node from one graph, and if the prover can return a similar node in the second graph, then they are likely isomorphic. This algorithm is not possible under *adp* as the verifier does not send any messages to the prover, and is harder to learn in the presence of multiple provers (as in *debate* and *mnip*).
+
+Rather, the graph isomorphism task is useful as it allows us to assess how the verifier’s performance changes with its computational abilities. More precisely, we vary both the verifier’s network width and its number of layers. We show results for the *nip* protocol in Figure 2b. We observe that – as expected – larger models are able to solve the task whereas smaller models are not, and that by interacting with a (non-random) prover, verifiers gain capability in comparison with interacting with a random prover. Notably, this gap is most pronounced for verifiers that are incapable of solving the task by themselves, but *are* capable of doing so after learning to interact with the prover.
+
+We also investigate the *zk-nip* protocol by varying the coefficient of the  $\mathcal{L}^{v_3}$  term in the prover’s loss, which controls the strength of the prover’s incentive to minimise the simulator’s loss. In Figure 2c, we plot the mean difference between  $\mathbb{P}((\sigma^p, \sigma^{v_2})(x, y) = m)$  and  $\mathbb{P}(\sigma^{v_3}(x, y) = m)$  against the  $\mathcal{L}^{v_3}$  coefficient. We observe a roughly negative correlation, suggesting that the training converges on an equilibrium with lower information leakage as the prover coefficient increases.
+
+### 6.2 CODE VALIDATION
+
+Our second experiment involves a much more complex problem: checking that a given Python program satisfies a natural language specification. In particular, we make use of the Automated Programming Progress Standard (APPS) dataset (Hendrycks et al., 2021), which consists of Python coding challenges with ground-truth solutions written by humans, as well as test cases for checking the solutions. We create a new dataset by drawing two solutions for each problem, one of which we insert a subtle bug into using GPT-4o-mini (OpenAI, 2024), checking that the result is still valid Python code but that it fails on at least one of the test cases. An example is given in Section D.2.1, and the median (Levenshtein) edit distance when inserting a bug is seven. We use GPT-4o as the provers and GPT-4o-mini as the verifiers, fine-tuning both using eight rounds of expert iteration (Anthony et al., 2017). In each iteration, we fine-tune the models from scratch using all previous rollouts, following Kirchner et al. (2024). The models are then evaluated on a held-out test set.
+
+![Figure 3: Performance of each protocol on the code validation task. (a) Bar chart of final test accuracy for ADP, Debate, MAC, NIP, and MNIP protocols compared to a Solo Verifier baseline. (b) Bar chart of the percentage of data points where the verifier always fails for the same protocols. (c) Precision-Recall curve for the protocols.](0f3e3ea50bcceb86f6c524ab2b6f3e7a_img.jpg)
+
+Figure 3 consists of three subplots: (a), (b), and (c).
+
+(a) Final test accuracy: A bar chart showing the final test accuracy for five protocols: ADP, Debate, MAC, NIP, and MNIP. The y-axis ranges from 0% to 60%. A dashed line represents the Solo Verifier baseline at approximately 52%. ADP is at ~55%, Debate at ~52%, MAC at ~53%, NIP at ~58%, and MNIP at ~57%.
+
+(b) Always-fail percentage: A bar chart showing the percentage of data points where the verifier always fails for the same protocols. The y-axis ranges from 0% to 40%. Solo Verifier is at ~48%, ADP at ~22%, Debate at ~42%, MAC at ~10%, NIP at ~12%, and MNIP at ~8%.
+
+(c) Precision and recall: A plot showing Precision (y-axis, 0.5 to 1.0) versus Recall (x-axis, 0.0 to 1.0). Curves are shown for ADP (yellow), Debate (blue), NIP (green), MNIP (red), MAC (purple), and Solo Verifier (grey dashed line). ADP and Debate show the highest performance, while Solo Verifier shows the lowest.
+
+Figure 3: Performance of each protocol on the code validation task. (a) Bar chart of final test accuracy for ADP, Debate, MAC, NIP, and MNIP protocols compared to a Solo Verifier baseline. (b) Bar chart of the percentage of data points where the verifier always fails for the same protocols. (c) Precision-Recall curve for the protocols.
+
+Figure 3: Performance of each protocol on the code validation task, measured by: (a) mean test accuracy; (b) percentage of data points where the verifier always fails; and (c) precision and recall.
+
+We test each of the protocols introduced above, and in all cases we observe a modest improvement in final test accuracy over the baseline of a verifier trained in isolation (Figure 3a). The *nip* and *mnip* protocols see the greatest improvements in accuracy (around 11%). A key differentiator between the protocols is presented in Figure 3b. In line with Theorem 8, an IP system corresponds to minimising the worst-case loss. To measure the extent to which worst-case performance is optimised, we sample rollouts from the trained agents 10 times for each test data point, and record the percentage of these where the verifier always guesses incorrectly. As shown in Figure 3b, most protocols perform significantly better than the solo verifier baseline, with *mnip* performing the best. Figure 3c refines
+
+the accuracy metric by plotting the final precision and recall of each protocol. We see that the *nip* and *mnip* protocols perform well by obtaining a lower false negative rate than the other protocols, while maintaining a high true positive rate.
+
+We observed that both *debate* and the solo verifier have a high precision-to-recall ratio. Further analysis reveals that expert iteration exacerbates an initial low acceptance rate in both cases, because only rollouts where the verifier guesses correctly are included in the fine-tuning data. To remedy this, we introduce a new training scheme ('stabilised' expert iteration) where in an annealed proportion of the rollouts, the verifier's guess is replaced with the true label. Figure 4a shows that this greatly reduces the 'mode collapse' dynamics seen with vanilla expert iteration. In Figure 4b we see that replacing the verifier guess also allows the solo verifier to obtain much higher mean accuracy, which we hypothesise is due to the training scheme being closer to standard supervised fine-tuning. Using this scheme has a small effect on the mean accuracy of each interaction protocol, improving some and worsening others. However, Figure 4c shows that the worst-case performance of every protocol is improved by this training scheme, with the *debate* protocol performing particularly well.
+
+![Figure 4: Three bar charts showing the effect of 'stabilised' expert iteration. (a) Verifier acceptance percentage for Solo Verifier, ADP, Debate, MAC, NIP, and MNIP protocols across Untrained, Standard, and Stabilised conditions. (b) Final test accuracy for the same protocols, with a dashed line for Solo Verifier. (c) Percentage of data points where the verifier always fails for the same protocols.](f519a5be118c846f631c992412353fb9_img.jpg)
+
+Figure 4 consists of three bar charts labeled (a), (b), and (c). All charts compare five interaction protocols: ADP, Debate, MAC, NIP, and MNIP, across three conditions: Untrained (blue hatched), Standard (solid blue), and Stabilised (green hatched). A dashed line in (b) represents the Solo Verifier's accuracy.
+
+| Protocol      | Untrained | Standard | Stabilised |
+|---------------|-----------|----------|------------|
+| Solo Verifier | ~55%      | ~45%     | ~45%       |
+| ADP           | ~20%      | ~15%     | ~55%       |
+| Debate        | ~45%      | ~25%     | ~25%       |
+| MAC           | ~25%      | ~25%     | ~45%       |
+| NIP           | ~40%      | ~55%     | ~45%       |
+| MNIP          | ~55%      | ~45%     | ~40%       |
+
+| Protocol      | Untrained | Standard | Stabilised |
+|---------------|-----------|----------|------------|
+| Solo Verifier | ~75%      | ~60%     | ~55%       |
+| Debate        | ~60%      | ~60%     | ~60%       |
+| MAC           | ~55%      | ~55%     | ~60%       |
+| NIP           | ~60%      | ~60%     | ~65%       |
+| MNIP          | ~65%      | ~65%     | ~65%       |
+
+| Protocol      | Untrained | Standard | Stabilised |
+|---------------|-----------|----------|------------|
+| Solo Verifier | ~35%      | ~20%     | ~15%       |
+| ADP           | ~20%      | ~15%     | ~15%       |
+| Debate        | ~45%      | ~45%     | ~10%       |
+| MAC           | ~10%      | ~10%     | ~10%       |
+| NIP           | ~10%      | ~10%     | ~10%       |
+| MNIP          | ~10%      | ~10%     | ~10%       |
+
+Figure 4: Three bar charts showing the effect of 'stabilised' expert iteration. (a) Verifier acceptance percentage for Solo Verifier, ADP, Debate, MAC, NIP, and MNIP protocols across Untrained, Standard, and Stabilised conditions. (b) Final test accuracy for the same protocols, with a dashed line for Solo Verifier. (c) Percentage of data points where the verifier always fails for the same protocols.
+
+Figure 4: The effect of 'stabilised' expert iteration, measured by: (a) verifier acceptance rate; (b) mean test accuracy; and (c) percentage of data points where the verifier always fails.
+
+## 7 DISCUSSION
+
+Motivated by the problem of developing scalable methods for gaining assurances about the trustworthiness of increasingly large models, we sought to provide a comprehensive treatment of neural interactive proofs spanning both theory and practice. Such assurances will become increasingly important as ML systems are used to complete tasks where it is inefficient or impossible for humans to check for correct behaviour – a problem known as scalable oversight (Amodei et al., 2016; Leike et al., 2018; Christiano et al., 2018). Our results contribute to growing body of work which tentatively suggests that such techniques may be increasingly viable, and moreover may be *aided* by continuing advances in AI capabilities (Khan et al., 2024; Arnesen et al., 2024).
+
+Our present work has a number of limitations, however. First, the algorithms we use for training in our experiments do not make use of some of the more advanced methods described in Section 4.1 and Section 4.2 (for the graph isomorphism task), or RL-based learning (for the code-validation task), which would bring our empirical results closer to their theoretical underpinnings. Second, we only evaluate the protocols on two domains which, while providing a suitable testbed for some of the primary questions we ask in this paper, are far from representative of the increasingly wide range of tasks that contemporary AI systems can be used to solve. Third, we do not evaluate all variations of all protocols, such as *debate* with simultaneous vs. sequential messaging or "open protocols in which the provers *choose* what outcome to argue for in training" (Kenton et al., 2024).
+
+Aside from addressing the limitations described above, the game-theoretic framework and codebase we have introduced in this paper support the future development and evaluation of new protocols, which may provide better theoretical or empirical performance than the protocols we discuss here. Another important avenue for further work is in closing the gap between theory and practice by developing learning-theoretic results (as opposed to complexity-theoretic results based on abstract models of computation such as Turing machines) about the extent to which the computational abilities of learning agents and the amount of data available to them affects the ability for weaker agents to verify stronger agents. We hope that with such advances, it will eventually be possible to generate more rigorous arguments for the safety of models even more advanced than today's state of the art.
+
+## ACKNOWLEDGMENTS
+
+Both authors are grateful for the support of OpenAI (in the form of a Superalignment Fast Grant and a further grant of API credits) and Effective Altruism Funds (in particular, the Long-Term Future Fund). Lewis Hammond also acknowledges the support of an EPSRC Doctoral Training Partnership studentship (Reference: 2218880). Sam Adam-Day also acknowledges the support of EPSRC grant EP/T022124/1.
+
+The authors thank Alessandro Abate, Cem Anil, Lama Ahmad, Jonah Brown-Cohen, Ryan Greenblatt, Roger Grosse, Joe Halpern, Jan Hendrik Kirchner, Nat McAleese, Orr Paradise, Georgios Piliouras, Mike Wooldridge, and several anonymous reviewers for helpful discussions during the completion of this work. They are also grateful to attendees of the Oxford AI Safety Work-In-Progress Sessions, the Next Generation of AI Safety Workshop at ICML 2024, and the Towards Safe & Trustworthy Agents Workshop at NeurIPS 2024, where earlier versions of this work were presented.
+
+## ETHICS STATEMENT
+
+Our contributions are squarely aimed at improving the safety and trustworthiness of advanced AI, both now and in the future. In our paper we also make use of synthetic data in two domains (graph isomorphism and code validation) that present few immediate ethical considerations. With that said, there are at least two remarks worth briefly making. The first is that the methods we present are far from being ready to enforce safety in complex real-world applications, and though inspired by the existence of strong theoretical results in complexity theory, do not enjoy the strength when applied to ML systems (unlike, say, applications in cryptography). Thus, while believe this line of research warrants further work, it should not – in its current form – be understood as guaranteeing safety. The second remark is that training in PVGs revolves fundamentally on training a powerful prover to at least partially deceive or mislead the weaker verifier. Needless to say, training powerful AI systems to be as persuasive as possible (even if only to other AI systems) need not always be societally beneficial, and could lead to the manipulation of humans as well. This concern is especially important to keep in mind as AI systems grow more capable and become more ingrained in peoples’ lives.
+
+## REPRODUCIBILITY STATEMENT
+
+To make sure that our work is reproducible, we provide a full version of our codebase at <https://github.com/SamAdamDay/neural-interactive-proofs>. This includes links to the datasets we used for our two experiments, as well as the code for generating them. Additional details about the data generation processes, agent architectures, and training processes can be found in Section D. Finally, we provide proofs for all of our results in Section C.
+
+## REFERENCES
+
+- Samson Abramsky and Guy McCusker. *Game Semantics*, pp. 1–55. Springer Berlin Heidelberg, 1999. ISBN 9783642586224.
+- Noga Amit, Shafi Goldwasser, Orr Paradise, and Guy Rothblum. Models that prove their own correctness. *arXiv:2405.15722*, May 2024.
+- Dario Amodei, Chris Olah, Jacob Steinhardt, Paul Christiano, John Schulman, and Dan Mané. Concrete problems in AI safety. *arXiv:2108.12099*, 2016.
+- Cem Anil, Guodong Zhang, Yuhuai Wu, and Roger Grosse. Learning to give checkable answers with prover-verifier games. *arXiv:2108.12099*, 2021.
+- Thomas Anthony, Zheng Tian, and David Barber. Thinking fast and slow with deep learning and tree search. In *Proceedings of the 31st International Conference on Neural Information Processing Systems (NIPS)*, pp. 5366–5376, Red Hook, NY, USA, 2017. Curran Associates Inc.
+- Samuel Arnesen, David Rein, and Julian Michael. Training language models to win debates with self-play improves judge accuracy. *arXiv:2409.16636*, September 2024.
+
+- Pablo Daniel Azar and Silvio Micali. Rational proofs. In *Proceedings of the 44th annual ACM Symposium on Theory of Computing (STOC)*. ACM, may 2012.
+- László Babai, Lance Fortnow, and Carsten Lund. Non-deterministic exponential time has two-prover interactive protocols. *Computational Complexity*, 1(1):3–40, 1991.
+- Mislav Balunovic and Martin Vechev. Adversarial training and provable defenses: Bridging the gap. In *Proceedings of the 8th International Conference on Learning Representations (ICLR)*, 2020.
+- Andrea Baronchelli, Maddalena Felici, Vittorio Loreto, Emanuele Caglioti, and Luc Steels. Sharp transition towards shared vocabularies in multi-agent systems. *Journal of Statistical Mechanics: Theory and Experiment*, 2006(06):P06014–P06014, June 2006. ISSN 1742-5468.
+- Michael Ben-Or, Shafi Goldwasser, Joe Kilian, and Avi Wigderson. Multi-prover interactive proofs: How to remove intractability assumptions. In *Proceedings of the 20th Annual ACM Symposium on Theory of Computing (STOC)*, pp. 113–131, New York, NY, USA, 1988. Association for Computing Machinery.
+- Yoshua Bengio, Geoffrey Hinton, Andrew Yao, Dawn Song, Pieter Abbeel, Yuval Noah Harari, Ya-Qin Zhang, Lan Xue, Shai Shalev-Shwartz, Gillian Hadfield, Jeff Clune, Tegan Maharaj, Frank Hutter, Atılım Güneş Baydin, Sheila McIlraith, Qiqi Gao, Ashwin Acharyya, David Krueger, Anca Dragan, Philip Torr, Stuart Russell, Daniel Kahneman, Jan Brauner, and Sören Mindermann. Managing AI risks in an era of rapid progress. *arXiv:2310.17688*, 2023.
+- M. Blum and S. Kanna. Designing programs that check their work. In *Proceedings of the twenty-first annual ACM Symposium on Theory of Computing (STOC)*, 1989.
+- Jan Blumenkamp and Amanda Prorok. The emergence of adversarial communication in multi-agent reinforcement learning. In Jens Kober, Fabio Ramos, and Claire Tomlin (eds.), *Proceedings of the 2020 Conference on Robot Learning (CoRL)*, volume 155 of *Proceedings of Machine Learning Research*, pp. 1394–1414. PMLR, 16–18 Nov 2021.
+- Vivek S. Borkar. *Stochastic Approximation*. Hindustan Book Agency, 2008.
+- Samuel R. Bowman, Jeeeyoon Hyun, Ethan Perez, Edwin Chen, Craig Pettit, Scott Heiner, Kamile Lukošūitė, Amanda Askell, Andy Jones, Anna Chen, Anna Goldie, Azalia Mirhoseini, Cameron McKinnon, Christopher Olah, Daniela Amodei, Dario Amodei, Dawn Drain, Dustin Li, Eli Tran-Johnson, Jackson Kernion, Jamie Kerr, Jared Mueller, Jeffrey Ladish, Joshua Landau, Kamal Ndousse, Liane Lovitt, Nelson Elhage, Nicholas Schiefer, Nicholas Joseph, Noemi Mercado, Nova DasSarma, Robin Larson, Sam McCandlish, Sandipan Kundu, Scott Johnston, Shauna Kravec, Sheer El Showk, Stanislav Fort, Timothy Telleen-Lawton, Tom Brown, Tom Henighan, Tristan Hume, Yuntao Bai, Zac Hatfield-Dodds, Ben Mann, and Jared Kaplan. Measuring progress on scalable oversight for large language models. *arXiv:2211.03540*, 2022.
+- Jonah Brown-Cohen, Geoffrey Irving, and Georgios Piliouras. Scalable AI safety via doubly-efficient debate. In *Proceedings of the 41st International Conference on Machine Learning (ICML)*, 2024.
+- Collin Burns, Pavel Izmailov, Jan Hendrik Kirchner, Bowen Baker, Leo Gao, Leopold Aschenbrenner, Yining Chen, Adrien Ecoffet, Manas Joglekar, Jan Leike, Ilya Sutskever, and Jeff Wu. Weak-to-strong generalization: Eliciting strong capabilities with weak supervision. *arXiv:2312.09390*, 2023.
+- Ran Canetti, Ben Riva, and Guy N. Rothblum. Refereed delegation of computation. *Information and Computation*, 226:16–36, May 2013. ISSN 0890-5401.
+- Chi-Min Chan, Weize Chen, Yusheng Su, Jianxuan Yu, Wei Xue, Shanghang Zhang, Jie Fu, and Zhiyuan Liu. Chateval: Towards better LLM-based evaluators through multi-agent debate. *arXiv:2308.07201*, August 2023.
+- Ching-Lueh Chang. On the computational power of players in two-person strategic games. Master’s thesis, National Taiwan University, 2006.
+
+[Appendix and supplementary materials beyond page 12 have been removed.]

@@ -1,0 +1,323 @@
+# THE DEBATE ON RLVR REASONING CAPABILITY BOUNDARY: SHRINKAGE, EXPANSION, OR BOTH? A TWO-STAGE DYNAMIC VIEW
+
+Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+The ongoing debate on whether reinforcement learning with verifiable rewards (RLVR) expands or shrinks the reasoning capabilities of large language models (LLMs) is still not fully resolved. Some studies contend that RLVR mainly improves sampling efficiency but at the expense of diversity and exploratory capacity, resulting in *capability boundary shrinkage*. In contrast, others demonstrate that prolonged training can lead to the emergence of novel reasoning strategies, suggesting *capability boundary expansion*. To reconcile these contradictory findings, we theoretically and empirically show that *both* perspectives are partially valid—each aligning with a separate phase in an inherent two-stage probability mass dynamic: (1) *Exploitation* stage: initially, the model primarily samples explored high-reward and low-reward tokens, while rarely selecting the potentially optimal token. Positive advantage estimates increase the probability of high-reward tokens and decrease those of low-reward tokens, yet the optimal token’s probability remains largely unchanged during this stage. (2) *Exploration* stage: as training advances, the growth rate of previously acquired high-reward tokens slows as their probabilities approach saturation. When a potentially optimal token—now receiving positive advantage estimates—is occasionally sampled, its probability increases, while those of the originally high-reward tokens decrease. This dynamic suggests that over-exploitation during the exploitation stage may lead to capability boundary shrinkage, whereas prolonged training into the exploration stage can promote an expansion of the reasoning capability boundary. Building upon our insights, we revisit the potential of only using relative negative gradients for prolonging training, providing a theoretical and empirical foundation for the development of more advanced reasoning capabilities.
+
+## 1 INTRODUCTION
+
+Reinforcement learning with verifiable rewards (RLVR) has become a key paradigm for substantially enhancing the reasoning abilities of large language models (LLMs), as exemplified by advanced models such as OpenAI’s O1 and O3 [33, 46] and DeepSeek-R1 [22]. By optimizing pre-trained or chain-of-thought (CoT) [65] fine-tuned models through verifiable reward signals, RLVR enables LLMs to excel in complex logical tasks such as mathematics [42, 81, 82] and programming [37, 41].
+
+Despite empirical successes, a fundamental question is still hotly debated: *does RLVR genuinely expand the reasoning capabilities of base models beyond their original boundaries?* Current evidence is sharply divided. (1) One line of research [80, 85, 13, 25, 44, 55, 21] argues for **capability boundary shrinkage**, contending that while RLVR improves sampling efficiency, it fails to produce genuinely novel reasoning strategies and may even induce a progressive narrowing of reasoning capabilities during training. Empirical evidence from Yue et al. [80] shows that although RLVR-trained models perform better under small- $k$  sampling (e.g.,  $k = 1$ ), base models achieve higher Pass@ $k$  when  $k$  is large. Similarly, Cui et al. [12] document a sharp entropy collapse during training, resulting in overly deterministic behavior [83] and reduced exploratory effectiveness. (2) In contrast, another body of work [39, 66, 38, 68, 79, 63] provides evidence supporting **capability boundary expansion**. Liu et al. [39] attribute previous evidence of capability boundary shrinkage to the premature termination of RL training, which disrupts learning before novel reasoning capabilities can
+
+fully develop. Through prolonged training, they further demonstrate that RLVR can explore and populate new regions of solution space over time. Meanwhile, Wu et al. [68] experimentally show that RLVR can occasionally expand empirical support, producing novel correct solutions beyond the original reach of the base model.
+
+*The debate between these two lines of evidence centers on empirical results; however, the underlying mechanisms responsible for these contradictory findings remain unclear.* To elucidate the mechanisms, we focus on the evolution of the policy model’s probability mass distribution—termed the *probability mass dynamics*. As a conceptual starting point, consider that the search tree [80, 90, 24] for any given prompt is built through iterative sampling from the policy. This tree grows exponentially at a rate of  $\mathcal{O}(V^T)$ , where  $V$  denotes the vocabulary space (token set) size and  $T$  the maximum generation length. Crucially, policy updates can be viewed as a dynamic reallocation of probability mass across the search tree, thereby shaping the reasoning capability boundary.
+
+Through an integrated theoretical and empirical analysis (Section 3), **we demonstrate that both lines of evidence hold validity to some extent**—each corresponding to a distinct stage within a two-stage dynamic of probability mass. Specifically, since the logit for token  $v$  is directly tied to its policy probability—a larger (smaller) logit results in a higher (lower) probability—we analyze the policy gradient of the training objective and derive a bidirectional update rule for the logits (i.e., the pre-Softmax values; Lemma 1). According to this rule, updates to the logits depend on both the advantage estimate  $\hat{A}$  and the current policy distribution  $\pi$ . Under practical optimization settings such as GRPO [56] (where multiple responses are sampled per prompt), Theorem 1 establishes that the expected logit update for token  $v$  is proportional to  $\pi(v) \left[ (1 - \pi(v))\hat{A}(v) - \sum_{u \neq v} \pi(u)\hat{A}(u) \right]$ .
+
+From this view, the overall dynamic appears to unfold in two distinct stages. (1) **Exploitation stage**: initially, the model predominantly samples the already-explored high-reward token and the low-reward token, while the potentially optimal token is selected only infrequently. Driven by positive advantage estimates, the probability of the high-reward token increases, whereas that of the low-reward token decreases. However, the probability of the potentially optimal token remains largely unchanged throughout this stage. This behavior suggests that *over-exploitation during this stage may result in a shrinkage of the capability boundary*. (2) **Exploration stage**: as training progresses, the growth rate of the high-reward token previously explored slows as its probability approaches near saturation ( $1 - \pi \rightarrow 0$ ). When the potentially optimal token—now associated with positive advantage estimates—is occasionally sampled, its probability increases, while that of the formerly high-reward token declines. A key characteristic of this dynamic is the transition of the relative negative sample: from the initially low-reward token to the high-reward token. This implies that with prolonged training, gradient updates can be progressively redirected toward tokens with low initial probability but high potential, once high-probability tokens have stabilized, ultimately *expanding the reasoning capability boundary*. We illustrate these theoretical insights with a toy example (Section 3.2).
+
+Building on our theoretical and experimental insights, a direct way to expand the reasoning capability boundary and mitigate shrinkage is to prolong training while concentrating policy probability updates exclusively on optimizing relative negative samples (denoted -N, Section 4.1) throughout the learning process. Empirical investigations (Section 4) of our strategy—implemented in widely adopted algorithms (e.g. GRPO, GSPO [89]) on benchmark datasets and open-source LLMs verify that GRPO-N (GSPO-N) achieves competitive and stable performance improvements while largely preserving the base model’s diversity, demonstrating the potential for prolonged training. Notably, analysis of the training process reveals instances where incorrect code is initially generated but is later refined and corrected through iterative reflection. Unlike GRPO, which reinforces the entire trajectory—including error-prone steps—GRPO-N effectively prevents such reinforcement.
+
+◇ **Main contributions.** Briefly, this study unveils the underlying mechanisms responsible for the heated debate (boundary shrinkage or expansion) in RLVR from both theoretical and practical perspectives. We emphasize the essential role of fine-grained probability mass allocation and establish a theoretical and empirical basis for understanding the impact of RLVR on reasoning capabilities.
+
+### 1.1 MORE RELATED WORKS
+
+Broadly speaking, our work builds upon lines of research in reinforcement learning for LLM reasoning, LLM learning dynamics, and gradient analysis in preference optimization. A comprehensive review of related work is included in Appendix A due to page constraints.
+
+## 2 PRELIMINARIES AND BACKGROUND
+
+In this section, we describe the core components of our study by reviewing some basic notations.
+
+**RLVR.** Reinforcement learning with verifiable rewards (RLVR) is a paradigm for improving models on tasks with objectively verifiable outcomes. In this formulation, an autoregressive language model is treated as a policy  $\pi_\theta$  (parameter  $\theta$ ). For a given query  $\mathbf{x}$  from a prompt set  $\mathcal{D}$ , the probability of generating a response  $\mathbf{y}$  is defined as  $\pi_\theta(\mathbf{y} \mid \mathbf{x}) = \prod_{t=1}^{|\mathbf{y}|} \pi_\theta(y_t \mid \mathbf{x}, \mathbf{y}_{<t})$ . A deterministic reward function  $r$  assigns a scalar value indicating the correctness of the full response  $\mathbf{y}$  to the prompt  $\mathbf{x}$ . Each token in  $\mathbf{y}$  receives the same reward (1 only if the final answer is correct, and 0 otherwise). The objective is to minimize the loss:  $\mathcal{L}_{\text{RLVR}}(\theta) = -\mathbb{E}_{\mathbf{x} \sim \mathcal{D}, \mathbf{y} \sim \pi_\theta(\cdot \mid \mathbf{x})} [r(\mathbf{x}, \mathbf{y})]$ , where  $r(\mathbf{x}, \mathbf{y}) \in [0, 1]$ .
+
+**A unified framework for policy gradient optimization.** Building on the work of [56, 36, 59], we consider a unified objective  $\mathcal{J}$  that establishes connections among various optimization methods:
+
+$$\mathcal{J}_{\text{RLVR}}(\theta) = \mathbb{E}_{\mathbf{x} \sim \mathcal{D}, \mathbf{y} \sim \pi_{\theta_{\text{old}}}(\cdot \mid \mathbf{x})} \left[ \frac{1}{|\mathbf{y}|} \sum_{t=1}^{|\mathbf{y}|} \min \left( w_t(\theta) \hat{A}_t, \text{clip}(w_t(\theta), 1 - \epsilon, 1 + \epsilon) \hat{A}_t \right) \right], \quad (1)$$
+
+where  $\epsilon$  is a clipping hyperparameter,  $\text{clip}(\cdot)$  is the clipping operation, and the importance ratio of the token  $y_t$  is defined as  $w_t(\theta) = \frac{\pi_\theta(y_t \mid \mathbf{x}, \mathbf{y}_{<t})}{\pi_{\theta_{\text{old}}}(y_t \mid \mathbf{x}, \mathbf{y}_{<t})}$  (the current policy  $\pi_\theta$  and the old policy  $\pi_{\theta_{\text{old}}}$ ).  $\hat{A}_t$  is the advantage of current token and is implemented differently across optimization methods:
+
+• **PPO** (Proximal Policy Optimization [54, 48]).  $\hat{A}_t$  is computed by applying Generalized Advantage Estimation (GAE) [53], based on the value model. This incurs considerable computational and memory overhead, and its effectiveness critically depends on the reliability of its value estimation.
+
+• **GRPO** (Group Relative Policy Optimization [56]). To reduce variance, GRPO and its variants (e.g., DAPO [78] & Dr.GRPO [40]) eliminate reliance on a value model by using Monte Carlo estimates to compute the relative advantage across a group of responses  $\{\mathbf{y}_i\}_{i=1}^G \sim \pi_{\theta_{\text{old}}}$  to the same query (where  $G$  is the group size and all token in  $\mathbf{y}_i$  share the same relative advantage):
+
+$$w_{i,t}(\theta) = \frac{\pi_\theta(y_{i,t} \mid \mathbf{x}, \mathbf{y}_{i,<t})}{\pi_{\theta_{\text{old}}}(y_{i,t} \mid \mathbf{x}, \mathbf{y}_{i,<t})}, \quad \hat{A}_{i,t} = \hat{A}_i = \frac{r(\mathbf{x}, \mathbf{y}_i) - \text{mean}(\{r(\mathbf{x}, \mathbf{y}_i)\}_{i=1}^G)}{\text{std}(\{r(\mathbf{x}, \mathbf{y}_i)\}_{i=1}^G)}$$
+
+• **GSPO** (Group Sequence Policy Optimization [89]). Given that the token-level importance ratio  $w_{i,t}$  in GRPO does not align with sequence-level rewards, GSPO introduces a sequence-level importance ratio  $w_i$  based on sequence likelihood [88]:
+
+$$w_i(\theta) = \left( \frac{\pi_\theta(\mathbf{y}_i \mid \mathbf{x})}{\pi_{\theta_{\text{old}}}(\mathbf{y}_i \mid \mathbf{x})} \right)^{\frac{1}{|\mathbf{y}_i|}} = \exp \left( \frac{1}{|\mathbf{y}_i|} \sum_{t=1}^{|\mathbf{y}_i|} \log \frac{\pi_\theta(y_{i,t} \mid \mathbf{x}, \mathbf{y}_{i,<t})}{\pi_{\theta_{\text{old}}}(y_{i,t} \mid \mathbf{x}, \mathbf{y}_{i,<t})} \right).$$
+
+To better understand the model's learning dynamics under this binary outcome reward setting, we omit the regularization components<sup>1</sup> (e.g., KL term & clipping operation). That is, the policy gradient  $\nabla_\theta \mathcal{J}_{\text{RLVR}}(\theta)$  can be simplified to  $\mathbb{E} \left[ \frac{1}{|\mathbf{y}|} \sum_{t=1}^{|\mathbf{y}|} w_t(\theta) \hat{A}_t \nabla_\theta \log \pi_\theta(y_t \mid \mathbf{x}, \mathbf{y}_{<t}) \right]$  with respect to  $\theta$ . Specifically, taking GRPO as an example (Appendix B.1 for derivation):
+
+$$\nabla_\theta \mathcal{J}_{\text{GRPO}}(\theta) = \mathbb{E}_{\mathbf{x}, \{\mathbf{y}_i\}_{i=1}^G} \left[ \frac{1}{G} \sum_{i=1}^G \frac{1}{|\mathbf{y}_i|} \underbrace{\sum_{t=1}^{|\mathbf{y}_i|} w_{i,t}(\theta) \hat{A}_{i,t}}_{\text{coefficient}} \nabla_\theta \log \pi_\theta(y_{i,t} \mid \mathbf{x}, \mathbf{y}_{i,<t}) \right]. \quad (2)$$
+
+**Remark 1.** Intuitively, if we set  $\hat{A}_{i,t} = 1$  and  $w_{i,t} = 1$  while all  $\mathbf{y}_i$  are correct responses, then Eq.(1) essentially performs maximum likelihood estimation, i.e., supervised fine-tuning (SFT). Furthermore, Eq.(2) indicates that the scalar  $w_{i,t} \hat{A}_{i,t}$  can be interpreted as a weighting coefficient that adjusts the log-likelihood term. This implies that RLVR methods can be viewed as a form of reweighted SFT, where correct responses and incorrect responses contribute positive and negative gradients, respectively [56, 10, 91, 15, 1, 8]. When  $\hat{A}_{i,t}$  is calculated from a comparison of average rewards across groups (e.g., GRPO), the resulting gradient is named the relative policy gradient.
+
+<sup>1</sup>Regularization components are widely regarded as mechanisms for ensuring training stability. Moreover, studies [31, 10] indicate that omitting them does not impair performance when others are properly tuned.
+
+## 3 PROBABILITY MASS DYNAMICS
+
+As described above, we begin by considering a standard task that involves generating a reasoning sequence. In this setting, the model learns a policy  $\pi_\theta(\mathbf{y} \mid \mathbf{x}) = \prod_{t=1}^T \pi_\theta(y_t \mid \mathbf{x}, \mathbf{y}_{<t}) \in \mathbb{R}^{V \times T}$  to map an input  $\mathbf{x}$  to a sequence of predictions  $\mathbf{y} = \{y_1, \dots, y_T\}$ , where  $\mathbf{y} \in V^T$ ,  $V$  is the vocabulary space of size  $V$ , and  $T$  denotes the maximum generation length. Conceptually, the reasoning process can be regarded as a tree search [80, 90, 24]. A search tree is constructed for a given problem by iteratively sampling from the policy model. This process leads to exponential growth in the tree size,  $\mathcal{O}(V^T)$ , reflecting an open-ended and combinatorially infinite reasoning space [47].
+
+Crucially, policy updates can be viewed as dynamically reallocating probability mass over the search tree, thereby shaping the boundary of reasoning capability. Here, we specifically focus on the evolution of the policy model’s probability distribution—referred to as **probability mass dynamics**.
+
+◇ Learning dynamics offer critical insights into the key challenges and counterintuitive behaviors of deep learning [52], with early explanations pointing to network “stiffness” [20] or “local elasticity” [26, 17]. To track the evolution of the probability distribution, we monitor the logits  $\mathbf{z}^\theta \in \mathbb{R}^{V \times T}$  and the log probabilities  $\log \pi_\theta(\mathbf{y} \mid \mathbf{x})$ , where  $\pi_\theta$  is derived from  $\mathbf{z}^\theta$  via a column-wise Softmax  $\pi_\theta(\cdot \mid \mathbf{x}, \mathbf{y}_{<t}) = \text{Softmax}(\mathbf{z}^\theta(\mathbf{x}, \mathbf{y}_{<t}))$ . The **probability mass dynamics** are then defined as:
+
+$$\Delta \mathbf{z}^l(\mathbf{x}) \triangleq \mathbf{z}^{l+1}(\mathbf{x}) - \mathbf{z}^\theta(\mathbf{x}), \quad (3)$$
+
+$$\Delta \log \pi^l(\mathbf{y} \mid \mathbf{x}) \triangleq \log \pi_{l+1}(\mathbf{y} \mid \mathbf{x}) - \log \pi_{l+1}(\mathbf{y} \mid \mathbf{x}), \quad (4)$$
+
+where the model’s parameter  $\theta$  is updated from step  $l$  to  $l + 1$  by performing one policy gradient update on the sample data  $(\mathbf{x}, \mathbf{y})$ . For simplicity, we primarily analyze the case where  $T = 1$  (i.e.,  $\mathbf{y} \in V$ ), meaning  $\Delta \mathbf{z}^l \in \mathbb{R}^{V \times 1}$  and its dimension aligns with the size of the model’s vocabulary. Notably, a larger (smaller) logit results in a higher (lower) probability. For  $T > 1$ , the updates can be computed separately; therefore, we can calculate the the distinct  $T$  updates and stack them together.
+
+### 3.1 A TWO-STAGE DYNAMIC: EXPLOITATION AND EXPLORATION
+
+Given the monotonicity of the Softmax function, the main text focuses mainly on characterizing the changes of  $\mathbf{z}$ . Analysis of the updates to  $\log \pi_\theta$  with respect to  $\theta$  is provided in the Appendix B.3.
+
+**Lemma 1** (Logits Update for Softmax Parameterization). *Consider a policy parameterized by a Softmax function over logits  $\mathbf{z}(\mathbf{x}) := \mathbf{z} = [z_1, \dots, z_V]^T$ , such that the probability of action (or token)  $v$  is given by  $\pi(v) := \pi(v \mid \mathbf{x}) = \text{Softmax}(\mathbf{z})_v = \exp(z_v) / \sum_{v'}^V \exp(z_{v'})$ . Reviewing Eq.(2), if the currently sampled action is  $v$ , let the policy gradient estimate be  $\nabla_{\mathbf{z}} \mathcal{J} \approx \hat{A}(v) \nabla_{\mathbf{z}} \log \pi(v)$ . For a learning rate  $\eta$ , the update rule for the logits at time step  $l$  is (Appendix B.2 for derivation):*
+
+- For the sampled action  $v$ :
+
+$$\mathbf{z}_v^{l+1} \leftarrow \mathbf{z}_v^l + \eta \cdot \hat{A}(v) \cdot (1 - \pi^l(v)), \quad \Delta \mathbf{z}_v^l = \eta \cdot \hat{A}(v) \cdot (1 - \pi^l(v)),$$
+
+- For all other actions  $u \neq v$ :
+
+$$\mathbf{z}_u^{l+1} \leftarrow \mathbf{z}_u^l + \eta \cdot \hat{A}(v) \cdot (-\pi^l(u)), \quad \Delta \mathbf{z}_u^l = \eta \cdot \hat{A}(v) \cdot (-\pi^l(u)).$$
+
+**Remark 2** (Bidirectional Update Rule). *The update to the logit  $\mathbf{z} \in \mathbb{R}^{V \times 1}$  depends on both the advantage estimate  $\hat{A}$  and the current policy distribution  $\pi$ . Specifically, Let  $v$  denote the currently sampled action. (1) when  $\hat{A}(v) > 0$ :  $\mathbf{z}_v$  increases by  $\eta \hat{A}(v)(1 - \pi(v))$  while  $\mathbf{z}_u$  ( $u \neq v$ ) decreases by  $\eta \hat{A}(v)\pi(u)$ ; (2) when  $\hat{A}(v) < 0$ :  $\mathbf{z}_v$  decreases by  $\eta |\hat{A}(v)|(1 - \pi(v))$  while  $\mathbf{z}_u$  ( $u \neq v$ ) increases by  $\eta |\hat{A}(v)|\pi(u)$ . The normalization property of Softmax ensures that when  $\hat{A}(v) > 0$ , the update increases  $\pi(v)$  while decreasing  $\pi(u)$  for all  $u \neq v$ , including other advantageous actions. In contrast, when  $\hat{A}(v) < 0$ , the update increases the probabilities of other actions proportionally to their current policy values. The update may reallocate probability mass toward other potentially advantageous actions that were previously under-sampled.*
+
+The practical update in group policy optimization (e.g. GRPO, DAPO, GSPO, REINFORCE++ [30], GPG [10], GPO [77]), which employs Monte Carlo sampling, arises from the collective effect of a group of responses, thus motivating our analysis of the **expected logits update**.
+
+**Theorem 1** (The Expected Logits Update). *Under the conditions stated in Lemma 1, we assume<sup>2</sup> that  $\mathbf{x} \sim \mathcal{D}$  is i.i.d. and  $\{u_i\}_{i=1}^G$  are randomly sampled from  $\pi(\cdot | \mathbf{x})$ , the expected group relative policy gradient  $\nabla_{\mathbf{z}} \mathcal{J} \in \mathbb{R}^{V \times 1}$  is  $\mathbb{E}_{\mathbf{x} \sim \mathcal{D}, \{u_i\}_{i=1}^G \sim \pi(\cdot | \mathbf{x})} \left[ \frac{1}{G} \sum_{i=1}^G \hat{A}(u_i) \nabla_{\mathbf{z}} \log \pi(u_i) \right]$ . Then the expected logits update is (proof in Appendix B.4):*
+
+$$\mathbb{E}(\Delta z_v^l) = \eta \cdot \pi^l(v) \left[ (1 - \pi^l(v)) \hat{A}(v) - \sum_{u \neq v} \pi^l(u) \hat{A}(u) \right].$$
+
+![Figure 1: A 2x4 grid of line plots showing the probability mass dynamics of policy optimization. Each plot shows 'Probability (0, 1)' on the y-axis (0.0 to 1.0) versus 'Optimization Step' on the x-axis (0 to 7000). A vertical dashed line at step 2000 separates two stages. The top row shows four plots for different initial policies (pi^l(v)=0.05, 0.5, 0.95, 1.0) with identical rewards (r_l=0.5, r_h=1.0). The bottom row shows four plots for different rewards (r_l=0.0, 0.5, 1.0, 1.5) with a fixed initial policy (pi^l(v)=0.5). In all plots, the probability of the high-reward action (r_h=1.0, green line with circles) increases over time, while the probability of the low-reward action (r_l=0.5, blue line with circles) decreases. The high-reward action's probability plateaus at different levels depending on the initial policy and reward.](6de7dcb072cef2388026fb0f504084b2_img.jpg)
+
+Figure 1: A 2x4 grid of line plots showing the probability mass dynamics of policy optimization. Each plot shows 'Probability (0, 1)' on the y-axis (0.0 to 1.0) versus 'Optimization Step' on the x-axis (0 to 7000). A vertical dashed line at step 2000 separates two stages. The top row shows four plots for different initial policies (pi^l(v)=0.05, 0.5, 0.95, 1.0) with identical rewards (r\_l=0.5, r\_h=1.0). The bottom row shows four plots for different rewards (r\_l=0.0, 0.5, 1.0, 1.5) with a fixed initial policy (pi^l(v)=0.5). In all plots, the probability of the high-reward action (r\_h=1.0, green line with circles) increases over time, while the probability of the low-reward action (r\_l=0.5, blue line with circles) decreases. The high-reward action's probability plateaus at different levels depending on the initial policy and reward.
+
+Figure 1: The probability mass dynamics of policy optimization across varying action rewards  $r$  and initial policy probabilities  $\pi$ . Each sub-figure corresponds only to the different rewards and probabilities. The first row compares the impact of different initial policy probabilities under identical rewards, while the second row compares the effect of varying rewards given the same initial policy.
+
+**Remark 3** (A Two-Stage Dynamic of Exploitation and Exploration). *Theorem 1 establishes that the magnitude of the expected logit update  $\Delta z_v^l$  is explicitly governed by  $\pi^l(v)$ . Although the Softmax function guarantees strictly positive probabilities for all actions, a significant number of these actions lie within the extreme tail of the probability distribution. As a result, under finite-sample training conditions, such actions exert negligible influence on parameter updates and are effectively omitted during optimization (that is,  $\pi^l(v) \rightarrow 0$  leads to  $\Delta z_v^l \rightarrow 0$ ). Interestingly, the overall dynamic appears to unfold in two distinct stages. (1) Exploitation stage, corresponding to capability boundary shrinkage: initially, the model mainly samples already-explored high-reward and low-reward tokens, rarely selecting the potentially optimal one. Driven by positive advantage estimates, the probability of the high-reward token increases while the low-reward token decreases. The potentially optimal token’s probability remains largely unchanged (or may even decrease, Remark 2), suggesting that over-exploitation in this stage may cause capability boundary shrinkage. (2) Exploration stage, corresponding to capability boundary expansion: As training continues, the growth of the previously dominant high-reward token slows as it approaches saturation ( $1 - \pi \rightarrow 0$ ). When the potentially optimal token—now receiving positive advantage signals—is occasionally sampled, its probability rises, while that of the former high-reward token decreases. A key feature of this stage is the shift in relative negative sampling: from the initial low-reward token to the once high-reward token. This implies that through prolonged training, gradient updates can be shifted toward tokens with low initial probability but high reward, once high-probability tokens have stabilized. For instance, under the Pass@k metric, raising the probability of at least one correct action above  $1/k$  corresponds to an expansion of the reasoning capability boundary.*
+
+<sup>2</sup>Without loss of generality, we approximate importance ratio  $w \approx 1$ , as regularization components such as the KL penalty and clipping operation are applied in practical training.
+
+### 3.2 DEMONSTRATION WITH A TOY EXAMPLE
+
+Next, to more clearly demonstrate the theoretically predicted two-stage dynamic, we validate the above analysis of probability mass dynamics using a simple toy setting, and subsequently review several widely adopted RLVR tricks and more than three actions case in Appendix C.4.
+
+◇ **Starting with a toy setting.** To better track the probability mass dynamics, we analyze the scenario in a clean and simplified setting, assuming the entire action space consists of only three actions<sup>3</sup>:  $a_1$ , with  $r(a_1) > 0$ , which has been explored;  $a_2$ , with  $r(a_2) > 0$ , which remains unexplored; and  $a_3$ , with  $r(a_3) = 0$ , which has been explored. Let the initial logits be denoted as  $\mathbf{z} = [z(a_1), z(a_2), z(a_3)]^T$ , and the policy as  $\pi(a_i) = \exp(z(a_i)) / \sum_{j \neq i} \exp(z(a_j)), \forall i \in [1, 2, 3]$ . Here, we perform  $G$  action samplings, estimate the relative advantages via  $\hat{A}(a_i) = r(a_i) - \text{mean}(\{r(a_j)\}_{j=1}^G)$ , and subsequently update the logits  $\mathbf{z}$  using the policy gradient update rule given in Theorem 1. As stated in Remark 3, we discuss the following scenario<sup>4</sup>: RLVR reinforces high-probability yet suboptimal actions while overlooking potentially optimal correct actions that initially have low probability, thereby leading to over-exploitation behavior. That is,  $r(a_1) < r(a_2)$ , while initially  $\pi(a_1) > \pi(a_2)$ . For implementation details, see Algorithm 1.
+
+**Results for demonstration.** We sample actions at each optimization step (with  $G = 2, \eta = 0.1$ ) and analyze the probability mass dynamics (a larger  $G$  leads to more stable optimization and does not affect our main findings and conclusions). Figure 1 clearly illustrates the dynamics of the probability mass of policy optimization across different rewards  $r$  & initial policy probabilities  $\pi$ , which aligns with the theoretical analysis in Section 3.1. That is,  $\mathbb{E}(\Delta z(a_i)) = \eta \pi(a_i) \left[ (1 - \pi(a_i)) \hat{A}(a_i) - \sum_{j \neq i}^3 \pi(a_j) \hat{A}(a_j) \right]$ . More specifically, the overall dynamics can be divided into two stages: (1) Initially,  $\pi(a_1)$  and  $\pi(a_3)$  are relatively large while  $\pi(a_2)$  is comparatively small. Since actions  $a_1$  and  $a_3$  are predominantly sampled, and given that  $\hat{A}(a_1) > 0$  and  $\hat{A}(a_3) < 0$ ,  $\pi(a_1)$  increases while  $\pi(a_3)$  decreases. Meanwhile,  $\pi(a_2)$  remains almost unchanged. (2) As  $\pi(a_1)$  increases, the gradient term  $1 - \pi(a_1)$  gradually approaches zero, causing the growth of  $\pi(a_1)$  to stabilize. If training continues beyond this point, when action  $a_2$  is sampled with  $\hat{A}(a_2) > 0$  and  $\hat{A}(a_1) < 0$ ,  $\pi(a_1)$  will decrease while  $\pi(a_2)$  increases. Note that throughout the optimization process, the relative negative actions change (initially  $a_3$  and later  $a_1$ ).
+
+**Remark 4.** *From the two-stage dynamics, (1) it can be observed that although the relative policy gradient method does exhibit the phenomenon of capability boundary shrinkage. However, prolonging the duration of the training may result in further gradient updates being applied to low-probability action sequences once the high-probability ones have reached convergence. This is precisely why the research represented by Cui et al. [12] employs entropy control mechanisms to extend the duration of training. (2) More interestingly, the relative policy gradient may undergo changes during the training process:  $\pi(a_1)$  first increases and then decreases. Therefore, simply using the momentum of policy gradients from the early stages of updates—as in methods like AAPO [71]—to enhance policy optimization is suboptimal. In contrast, approaches such as ProRL [39, 38] periodically reset the reference policy and optimizer states during training.*
+
+## 4 HOW TO PROLONG TRAINING: REVISITING THE ROLE OF RELATIVE NEGATIVE GRADIENTS
+
+Thus far, we have established the imperative of avoiding over-sharpening in the policy distribution—which induces over-exploitation and entropy collapse—and of enabling sustained training. Liu et al. [39] identify a fundamental limitation across existing studies [80, 13, 85]: RL training is frequently terminated prematurely after only a few hundred steps, hindering the models’ ability to fully explore and acquire novel reasoning capabilities. Their conclusions align closely with our findings. Therefore, enhancing training stability and facilitating extended training durations constitute promising directions for future research.
+
+<sup>3</sup>In Section 2, the reward  $r$  is sparse (1 or 0). However, due to the presence of factors such as the importance ratio  $w$ , distinctions arise among positive rewards ( $wr$ ). For brevity of analysis, we ignore the standard deviation  $\text{std}(\{r(a_j)\}_{j=1}^G)$  because it does not affect the sign (positive or negative nature) of  $\hat{A}(a_i)$ .
+
+<sup>4</sup>Otherwise, we can proceed with normal optimization to increase the probability of the optimal action.
+
+In group policy optimization (e.g. GRPO, GSPO), the policy  $\pi_\theta(\mathbf{y} | \mathbf{x}) = \prod_{t=1}^{|\mathbf{y}|} \pi_\theta(y_t | \mathbf{x}, \mathbf{y}_{<t})$  learned by the model is inherently complex. Returning to Section 3, policy updates can be interpreted as dynamically redistributing probability mass across the search tree, which has a size of  $\mathcal{O}(V^T)$ . To unlock the model’s capacity for genuinely novel reasoning, we call for research into strategies that more effectively allocate probability mass. Based on the probability mass dynamics established in Lemma 1 and Theorem 1, optimizing relative negative advantage actions implicitly increases the probability of other actions. A straightforward strategy is to allocate policy probability mass exclusively through relative negative gradients within the overall dynamics. In this part, we will revisit the role of only using relative negative gradients in prolonging training.
+
+### 4.1 EXPERIMENTAL SETUP
+
+We choose Qwen2.5-Math-7B [74] and Llama-3.2-3B-Instruct [60] as our base models for investigation, which align with our hardware resource. **For RLVR algorithms**, we evaluate the standard approach alongside a variant that employs exclusively relative negative gradients<sup>5</sup> (denoted as -N). This comparison includes widely-used methods such as GRPO [22, 56] and GSPO [89]. Moreover, we use the verl framework [57] to train the models and the detailed hyperparameter settings of training and evaluation can be found in Appendix C.2. **For the datasets**, we employ the training set of MATH [28], which comprises 7,500 problems, for model training (with prompt batch size of 1,024). Performance is evaluated on widely-used reasoning benchmarks, (1) in-domain (ID) tasks: the test sets of MATH, AIME 2024, AIME 2025, and AMC 2023. (2) out-of-domain (OOD) tasks: ARC-c [11] (open-domain reasoning), MMLU-Pro [64] (academic reasoning).
+
+Specifically, we adopt Pass@ $k$  as our primary evaluation metric, which measures whether a model can successfully solve a problem within  $k$  attempts. This metric has been widely used to mitigate the unreliability of greedy decoding-based accuracy estimates [29] and to better assess the true capability boundaries of models [7, 9, 80, 91]. The unbiased estimator first generates the  $n$  responses for per question  $\mathbf{x}$  ( $n \geq k$ ), counts the number of correct responses  $c$ , then computes the metric as:
+
+$$\text{Pass@}k = \mathbb{E}_{\mathbf{x} \sim \mathcal{D}} \left[ 1 - \frac{\binom{n-c}{k}}{\binom{n}{k}} \right].$$
+
+### 4.2 TRAINING DYNAMICS AND EVALUATION RESULTS
+
+![Figure 2: Comparison of training dynamics across four metrics: MATH Test Score, MATH Test Entropy, Actor Entropy Loss, and Critic Rewards Mean. The figure contains four line plots. The first plot shows Accuracy (0.65 to 0.78) over training steps (0 to 42). The second plot shows Entropy (0.08 to 0.16) over training steps. The third plot shows Value (0.10 to 0.40) over training steps. The fourth plot shows Value (0.50 to 0.85) over training steps. All plots compare GRPO (blue), GRPO-N (orange), GSPO (green), and GSPO-N (red). GRPO-N consistently shows higher accuracy and lower entropy than the other methods.](84e2ac543ffc4145dc85b05a48ec62e3_img.jpg)
+
+Figure 2: Comparison of training dynamics across four metrics: MATH Test Score, MATH Test Entropy, Actor Entropy Loss, and Critic Rewards Mean. The figure contains four line plots. The first plot shows Accuracy (0.65 to 0.78) over training steps (0 to 42). The second plot shows Entropy (0.08 to 0.16) over training steps. The third plot shows Value (0.10 to 0.40) over training steps. The fourth plot shows Value (0.50 to 0.85) over training steps. All plots compare GRPO (blue), GRPO-N (orange), GSPO (green), and GSPO-N (red). GRPO-N consistently shows higher accuracy and lower entropy than the other methods.
+
+Figure 2: Comparison of the training dynamics of GRPO, GRPO-N, GSPO, and GSPO-N on the MATH benchmark across training steps, using the Qwen2.5-Math-7B model with a prompt batch size of 1,024. **Left Part:** (Left) the greedy decoding accuracy on the MATH test set and (Center Left) the model’s entropy on the MATH test set. **Right Part:** (Center Right) the actor entropy loss and (Right) critic rewards mean during training. GRPO causes the entropy of the base model to collapse over the course of training, suggesting a loss of exploratory capability. In contrast, GRPO-N, GSPO, and GSPO-N all exhibit a pattern where entropy initially decreases and then increases. Notably, the entropy of GRPO-N significantly surpasses that of the base model. All algorithms achieve competitive performance in both greedy decoding accuracy and critic rewards mean.
+
+**Training dynamics.** We characterize the training dynamics by monitoring the greedy decoding accuracy and entropy on a held-out MATH test set over the course of training (Figure 2 for
+
+<sup>5</sup>The relative advantage  $\hat{A}_{i,t}$  is computed over a group of responses. When  $\hat{A}_{i,t} < 0$ , the term  $w_{i,t}(\theta) \hat{A}_{i,t} \nabla_\theta \log \pi_\theta(y_{i,t} | \mathbf{x}, \mathbf{y}_{i,<t})$  is referred to as a relative negative gradient. See Appendix B.5 for the details of relative negative gradients.
+
+Qwen2.5-Math-7B, Figure 4 for Llama-3.2-3B-Instruct), together with the actor entropy loss and critic rewards mean during training. As illustrated, GRPO, GRPO-N, GSPO, and GSPO consistently achieve competitive performance in both greedy decoding accuracy and critic rewards mean. Notably, GRPO leads to a rapid and substantial decline in entropy on the MATH test set. In contrast, GRPO-N, GSPO, and GSPO-N all show an initial decrease in entropy, followed by a consistent increase. Importantly, the entropy on the held-out test set under GRPO-N significantly exceeds that of the base model. This divergence indicates that the standard GRPO may limit output diversity and exploratory capability (see Table 1), both methods that apply sequence-level importance ratio clipping directly (GSPO and GSPO-N) and those that utilize only relative negative gradients (GRPO-N) help mitigate overconfidence in previously sampled responses. Of particular significance, prior study [12] suggests that policy performance comes at the cost of policy entropy, and is therefore bottlenecked by its exhaustion. Therefore, the model optimized by GRPO-N may be a good baseline and maintain the base model’s diversity for prolonging training<sup>6</sup>.
+
+Table 1: Evaluation results of Qwen2.5-Math-7B on in-domain tasks (AMC 2023, AIME 2024, and AIME 2025) and out-of-domain tasks (ARC-c and MMLU-Pro). For each  $k$ , **bold** and underlined numbers indicate the best and second-best results, respectively.
+
+| Algorithm<br>$k$ | Pass@ $k$   |             |             |             |             |             |             |              |              |
+|------------------|-------------|-------------|-------------|-------------|-------------|-------------|-------------|--------------|--------------|
+|                  | 1           | 2           | 4           | 8           | 16          | 32          | 64          | 128          | 256          |
+| <b>AMC 2023</b>  |             |             |             |             |             |             |             |              |              |
+| Base Model       | 40.4        | 55.6        | 69.1        | 79.4        | 85.9        | 89.5        | 92.1        | 94.6         | 97.5         |
+| GRPO             | 60.4        | 69.9        | 77.4        | 82.9        | 86.7        | 89.4        | 91.7        | 94.7         | 97.5         |
+| GRPO-N           | 59.2        | 68.7        | 76.3        | 82.7        | 87.6        | <b>92.3</b> | <b>96.3</b> | <b>99.1</b>  | <b>100.0</b> |
+| GSPO             | 61.1        | 70.5        | 78.0        | 83.9        | 88.1        | 91.6        | 94.4        | 96.2         | 97.5         |
+| GSPO-N           | <b>61.5</b> | <b>71.2</b> | <b>78.5</b> | <b>84.1</b> | <b>88.4</b> | 91.8        | <u>94.8</u> | <u>97.4</u>  | <u>100.0</u> |
+| <b>AIME 2024</b> |             |             |             |             |             |             |             |              |              |
+| Base Model       | 13.6        | 21.8        | 30.5        | 37.5        | 43.5        | 49.7        | 55.8        | 61.4         | 66.7         |
+| GRPO             | 22.6        | 31.5        | 39.5        | 46.2        | 51.9        | 57.3        | 62.9        | 68.9         | 73.3         |
+| GRPO-N           | <u>23.6</u> | <u>33.4</u> | 41.8        | 47.5        | 51.9        | 56.7        | 61.8        | 67.3         | <u>73.3</u>  |
+| GSPO             | <b>25.3</b> | <b>34.7</b> | <b>42.4</b> | <u>48.3</u> | <u>53.6</u> | <u>58.7</u> | <u>63.6</u> | 68.1         | 73.3         |
+| GSPO-N           | 23.3        | 31.1        | <u>42.1</u> | <b>48.8</b> | <b>54.3</b> | <b>59.4</b> | <b>64.4</b> | <b>69.6</b>  | <b>73.3</b>  |
+| <b>AIME 2025</b> |             |             |             |             |             |             |             |              |              |
+| Base Model       | 6.4         | 10.2        | 14.5        | 18.9        | 23.6        | 28.1        | 32.5        | 38.3         | 46.7         |
+| GRPO             | 9.2         | 13.4        | 17.9        | 22.4        | 26.4        | 29.9        | 33.9        | 39.1         | 46.7         |
+| GRPO-N           | 9.5         | 14.2        | 19.1        | 23.8        | 28.7        | <u>34.2</u> | <b>41.6</b> | <b>52.5</b>  | <b>66.7</b>  |
+| GSPO             | 9.6         | <u>14.3</u> | <u>19.2</u> | 23.9        | 28.8        | 34.2        | 40.9        | <u>49.5</u>  | <u>60.0</u>  |
+| GSPO-N           | <b>10.2</b> | <b>14.7</b> | <b>19.6</b> | <b>24.9</b> | <b>29.9</b> | <b>35.0</b> | <u>40.9</u> | 47.3         | 53.3         |
+| <b>ARC-c</b>     |             |             |             |             |             |             |             |              |              |
+| Base Model       | 35.4        | 54.9        | 73.7        | 86.5        | 93.6        | <u>96.9</u> | 98.2        | 99.2         | 100.0        |
+| GRPO             | <u>62.3</u> | 77.4        | <u>86.6</u> | <u>91.6</u> | <u>94.2</u> | 96.3        | <u>98.2</u> | <u>99.5</u>  | <u>100.0</u> |
+| GRPO-N           | 61.7        | <b>78.1</b> | <b>88.5</b> | <b>94.3</b> | <b>97.7</b> | <b>99.5</b> | <b>99.9</b> | <b>100.0</b> | <b>100.0</b> |
+| GSPO             | 59.9        | 74.1        | 83.2        | 89.1        | 93.2        | 95.7        | 96.7        | 96.9         | 96.9         |
+| GSPO-N           | <b>63.9</b> | <u>77.9</u> | 86.5        | 91.1        | 93.7        | 95.5        | 96.5        | 96.9         | 96.9         |
+| <b>MMLU-Pro</b>  |             |             |             |             |             |             |             |              |              |
+| Base Model       | 28.1        | 41.4        | 55.1        | 67.6        | <u>78.1</u> | <b>85.9</b> | <b>91.6</b> | <b>96.2</b>  | <b>100.0</b> |
+| GRPO             | <u>40.1</u> | <u>52.0</u> | <b>62.4</b> | <b>70.8</b> | 76.9        | 80.6        | 83.7        | 87.3         | 90.6         |
+| GRPO-N           | 38.5        | 49.9        | 60.7        | <u>70.1</u> | <b>78.1</b> | <u>84.3</u> | <u>89.0</u> | <u>93.7</u>  | <u>100.0</u> |
+| GSPO             | 40.0        | 50.6        | 60.6        | 69.2        | 75.5        | 79.5        | 82.4        | 85.9         | 90.6         |
+| GSPO-N           | <b>41.6</b> | <b>52.3</b> | <u>61.8</u> | 69.7        | 75.9        | 79.9        | 83.6        | 88.1         | 93.8         |
+
+**Performance on ID&OOD tasks.** As shown in Table 1, for model with strong prior (e.g., Qwen models), both GRPO-N and GSPO-N consistently achieve a favorable trade-off across various values of  $k$  on both ID tasks (e.g., AMC 2023, AIME 2024, and AIME 2025) and OOD tasks (such as ARC-c and MMLU-Pro). In particular, (1) GSPO-N matches the best Pass@1 performance on AMC 2023,
+
+<sup>6</sup>For model with weak prior, we provide the training dynamics and evaluation results of Llama-3.2-3B-Instruct in Appendix C.3. The performance ceiling is related to the base model, yet the key finding remains consistent across different models.
+
+AIME 2025, ARC-c and MMLU-Pro. (2) GRPO-N and GSPO-N reliably improve the reasoning performance of the base model on ID tasks for every value of  $k$ . (3) For OOD tasks, GRPO-N (GSPO-N) achieves higher Pass@ $k$  scores than GRPO (GSPO) across all  $k$  values, demonstrating stable performance improvements while largely preserving the diversity of the base model.
+
+In this subsection, we demonstrate that while all algorithms achieve competitive performance, they exhibit distinct behaviors at the entropy level. This observation motivates further analysis of the **differences among various correct responses** in the next part.
+
+### 4.3 ANALYSIS OF DIFFERENT CORRECT RESPONSES
+
+**Question:** Consider the set of complex numbers  $z$  satisfying  $|1 + z + z^2| = 4$ . The maximum value of the imaginary part of  $z$  can be written in the form  $\frac{\sqrt{m}}{n}$ , where  $m$  and  $n$  are relatively prime positive integers. What is  $m + n$ ?
+
+**Ground-truth Answer:** 21
+
+Let's break down the problem... 1. Let  $z = x + yi$ , where  $x$  and  $y$  are real numbers. 2. Substitute  $z$  and  $z^2$  into the given equation, and squaring both sides:  $(1 + x + x^2 - y^2)^2 + (y + 2xy)^2 = 16$ . 3. We need to find the maximum value of  $y$  that satisfies the above equation. Let's use Python and Sympy to solve this... `<...Python code...>` `<...TypeError...>` 4. The error occurs because... revised code `<...Python code...>` `<...TypeError...>` 5. `<Reproduce revised code behavior...>` 6. The numerical approach can be computationally intensive and may not be the most efficient way to solve this problem. Instead, let's use a more analytical approach... 7. By analyzing the equation, we can see that the maximum value of  $y$  occurs when the real part of the expression inside the magnitude is minimized and the imaginary part is maximized. This happens when  $x = -1/2$  which simplifies the equation to:
+
+$$\left(1 - \frac{1}{2} + \left(-\frac{1}{2}\right)^2 - y^2\right)^2 + \left(y + 2\left(-\frac{1}{2}\right)y\right)^2 = 16$$
+
+8. Taking the square root of both sides, we get:  $\left|\frac{3}{4} - y^2\right| = 4$ . Since  $y^2$  cannot be negative. Solving the second case:  $\frac{3}{4} - y^2 = -4$ ,  $y = \pm \frac{\sqrt{19}}{2}$ . The values  $m$  and  $n$  are 19 and 2, respectively... Therefore,  $m + n = 19 + 2 = 21$ . The final answer is:
+
+{boxed{21}}
+
+**GRPO**
+
+Let's break down the problem... 1. Let  $z = x + yi$ , where  $x$  and  $y$  are real numbers. 2. Square both sides to remove the square root:  $(1 + x + x^2 - y^2)^2 + (y + 2xy)^2 = 16$ . 3. Let's proceed with a numerical approach using Python to find the maximum value of  $y$ . Let's write the Python code to perform this search... `<...Python code...>` `<...Output...>` 4. The numerical method suggests that the maximum value of  $y$  is approximately  $-0.03$ , which is very close to 0. This indicates that the maximum imaginary part of  $z$  is likely 0, but let's verify this by checking the exact form of the solution. 5. Let's consider the equation again:  $(1 + x + x^2 - y^2)^2 + (y + 2xy)^2 = 16$ . 6. We can see that the maximum imaginary part occurs when  $x = -1/2$ . Substituting  $x = -1/2$  into the equation, we get:
+
+$$\left(1 - \frac{1}{2} + \frac{1}{4} - y^2\right)^2 + (y - y)^2 = \left(\frac{3}{4} - y^2\right)^2 = 16$$
+
+7. Solving for  $y$ , we get:  $y^2 = \frac{3}{4} \pm 4$ . Since  $y^2$  must be non-negative, we take the positive root:  $y = \pm \frac{\sqrt{19}}{2}$ . Therefore,  $m = 19$  and  $n = 2$ , so  $m + n = 21$ . Thus, the final answer is:
+
+{boxed{21}}
+
+**GRPO-N**
+
+Figure 3: A comparison of the correct responses of GRPO and GRPO-N (a test case from AMC 2023). The key reasoning steps are presented here, see Appendix C.7 for full procedure.
+
+**Case study.** We present the reasoning processes of GRPO and GRPO-N, as illustrated in Figure 3. Although various responses can yield correct answers through reasoning, their underlying reasoning behaviors differ markedly. Specifically, GRPO tends to repeat similar errors, such as persistently generating code with TypeErrors, and fails to rectify them. In contrast, GRPO-N produces fewer erroneous codes than GRPO. We further examined the responses generated during the training process and found instances where incorrect code was initially produced but later reflected upon and corrected to form the final correct response. GRPO assigns higher probability to the entire trajectory (i.e., the behavior of generating incorrect code is reinforced—a tendency that may significantly affect the model’s self-correction ability), whereas GRPO-N mitigates this issue. This necessitates an inquiry into achieving finer-grained control of probability assignments.
+
+## 5 CONCLUSION AND LIMITATION
+
+**Conclusion.** Based on a two-stage dynamic view of probability mass allocation, this study resolves the ongoing debate on whether RLVR shrinks or expands LLM reasoning capabilities. We show that initial training favors exploitation, potentially narrowing capability boundaries, while prolonged training encourages exploration, enabling genuine expansion. Theoretically and empirically, we demonstrate that both phenomena occur at different phases. Guided by these findings, one can develop new algorithms to foster more advanced reasoning capabilities.
+
+**Limitation.** However, further studies are required on (i) how to design efficient algorithms for fine-grained probability mass allocation; (ii) what kind of base models are more conducive to capability boundary expansion during the RL stage; and (iii) where the ceiling of boundary exploration lies. We leave these questions for our future work.
+
+## 6 MORE DISCUSSION
+
+**Theoretical Contribution.** A good theory should not only explain observations but also inform design. The paper’s main contribution lies in its two-stage framework for interpreting reasoning dynamics in RLVR, not in introducing a strong algorithm. Guided by these findings, one can develop new algorithms to foster more advanced reasoning capabilities. The GRPO-N strategy serves as a straightforward implementation validating the guiding principles of our theory. Additionally, Appendix C.5 provides a method for finer-grained control of probability assignments, inspired by our theoretical analysis.
+
+**Negative Reward Gradients & Negative Advantage Gradients.** Here, we further clarify the methodological and conceptual differences between our work and NSR [91]. (1) As documented in Appendix D.3 of the NSR paper, normalization is disabled in their implementation, and the advantage is defined as the raw reward (i.e., +1 for PSR and -1 for NSR). Consequently, NSR is more precisely described as method using **negative reward gradients**, which does not account for relative changes over the course of training. (2) In contrast, GRPO-N uses **negative advantage gradients**  $\left(\frac{r(x,y_i) - \text{mean}(\{r(x,y_j)\}_{j=1}^G)}{\text{std}(\{r(x,y_j)\}_{j=1}^G)}\right)_{i=1}^G$ . As discussed in our theoretical analysis (Theorem 1), a key feature of the two-stage dynamic is the shift in relative negative samples: from initially low-reward tokens (Figure 1  $a_3$ ) to previously high-reward tokens (Figure 1  $a_1$ ). Consequently, here, positive reward samples still serve the function of computing relative advantages by providing learning signals.
+
+**Rationale for Omitting Regularization (KL, Clipping).** (1) For theoretical analysis. This simplification was made primarily to highlight the core two-stage dynamics of policy optimization under a simplified setting, allowing us to isolate and analyze the fundamental learning stages. (2) For real training. As we stated in Section 2, we acknowledge that in practical implementations, both clipping and KL regularization play important roles in stabilizing training. However, **such simplifications can be justified by empirical evidence**: prior work [31] has shown that omitting the clipping operation does not lead to performance degradation, while studies [31, 10] have demonstrated that the KL term can be removed when other hyperparameters are appropriately tuned. (3) For the effect of clipping and KL-regularization. Cui et al. [12] report that despite the reference KL achieves stable entropy values, it fails to improve policy and instead leads to a degradation in performance. Yu et al. [78] identify that the upper clip can restrict the exploration of the policy, where making an ‘exploitation’ token more probable is much easier yet the probability of an unlikely ‘exploration’ token is too tightly bounded to be uplifted. Therefore, excessive KL-regularization and clipping will lead to limited exploration and premature policy determination, thereby suppressing the emergence of the second phase in the two-stage dynamics.
+
+**Stability Analysis of GSPO/GSPO-N and GRPO/GRPO-N.** (1) First, we recall the key distinction between GSPO and GRPO, as outlined in Section 2: while the token-level importance ratio  $w_{i,t}$  in GRPO may not align well with sequence-level rewards, GSPO introduces a sequence-level importance ratio  $w_i$  based on sequence likelihood. (2) Moreover, certain tokens (such as “wait”) that frequently appear in both positive and negative rollouts can lead to instability when optimized with token-level importance ratios. As illustrated in Figure 2, this explains why both GSPO and GSPO-N exhibit greater stability compared to GRPO and GRPO-N. (3) For theoretical explanation, from a high-level understanding perspective, you can view the sequence as a holistic action. Therefore, the sequence-level importance ratio ( $w_i(\theta)$ ) mitigates, to some extent, the influence of the initial policy’s  $\pi(\cdot | \mathbf{x})$  value on the expected policy gradient  $\left(\mathbb{E}_{\mathbf{x} \sim \mathcal{D}, \{u_i\}_{i=1}^G \sim \pi(\cdot | \mathbf{x})} \left[ \frac{1}{G} \sum_{i=1}^G \hat{A}(u_i) \nabla_{\mathbf{z}} \log \pi(u_i) \right] \right)$ .
+
+**Potential Future Directions.** (1) For finer-grained control of probability assignments: Under current outcome-only reward schemes (in GRPO), trajectories with incorrect intermediate python calls can still receive positive reward if the final answer is correct, effectively reinforcing the model to treat such errors as acceptable (Figure 3). Intuitively, we can filter correct responses based on the count of correct Python (or tools) call executions they contain. (2) To promote diversity, we can employ text similarity metrics [16] to filter the samples. This may help mitigate excessive exploration in the first stage and encourages a transition to the second. For instance, in E-GRPO [87], a dense entity-aware reward is formulated based on the number of ground-truth entities identified, which by definition creates a task-dependent reward. In the future, one can focus on exploring task-independent approaches that eliminate the need for explicit step-wise decomposition and scoring.
+
+## REFERENCES
+
+- [1] Abbas Abdolmaleki, Bilal Piot, Bobak Shahriari, Jost Tobias Springenberg, Tim Hertweck, Michael Bloesch, Rishabh Iyer, Thomas Lampe, Junhyuk Oh, Nicolas Heess, Jonas Buchli, and Martin Riedmiller. Learning from negative feedback, or positive feedback or both. In *International Conference on Learning Representations*, 2025.
+- [2] Chenxin An, Zhihui Xie, Xiaonan Li, Lei Li, Jun Zhang, Shansan Gong, Ming Zhong, Jingjing Xu, Xipeng Qiu, Mingxuan Wang, and Lingpeng Kong. Polaris: A post-training recipe for scaling reinforcement learning on advanced reasoning models, 2025. URL <https://hkunlp.github.io/blog/2025/Polaris>.
+- [3] Sanjeev Arora, Simon S Du, Wei Hu, Zhiyuan Li, Russ R Salakhutdinov, and Ruosong Wang. On exact computation with an infinitely wide neural net. *Advances in neural information processing systems*, 32, 2019.
+- [4] Chenjia Bai, Yang Zhang, Shuang Qiu, Qiaosheng Zhang, Kang Xu, and Xuelong Li. Online preference alignment for language models via count-based exploration. In *The Thirteenth International Conference on Learning Representations*, 2025.
+- [5] Yuntao Bai, Andy Jones, Kamal Ndousse, Amanda Askell, Anna Chen, Nova DasSarma, Dawn Drain, Stanislav Fort, Deep Ganguli, Tom Henighan, et al. Training a helpful and harmless assistant with reinforcement learning from human feedback. *arXiv preprint arXiv:2204.05862*, 2022.
+- [6] Hongyi James Cai, Junlin Wang, Xiaoyin Chen, and Bhuwan Dhingra. How much backtracking is enough? exploring the interplay of sft and rl in enhancing llm reasoning. *arXiv preprint arXiv:2505.24273*, 2025.
+- [7] Mark Chen, Jerry Tworek, Heewoo Jun, Qiming Yuan, Henrique Ponde De Oliveira Pinto, Jared Kaplan, Harri Edwards, Yuri Burda, Nicholas Joseph, Greg Brockman, et al. Evaluating large language models trained on code. *arXiv preprint arXiv:2107.03374*, 2021.
+- [8] Peter Chen, Xiaopeng Li, Ziniu Li, Xi Chen, and Tianyi Lin. Spectral policy optimization: Coloring your incorrect reasoning in grpo. *arXiv preprint arXiv:2505.11595*, 2025.
+- [9] Zhipeng Chen, Xiaobo Qin, Youbin Wu, Yue Ling, Qinghao Ye, Wayne Xin Zhao, and Guang Shi. Pass@ k training for adaptively balancing exploration and exploitation of large reasoning models. *arXiv preprint arXiv:2508.10751*, 2025.
+- [10] Xiangxiang Chu, Hailang Huang, Xiao Zhang, Fei Wei, and Yong Wang. Gpg: A simple and strong reinforcement learning baseline for model reasoning. *arXiv preprint arXiv:2504.02546*, 2025.
+- [11] Peter Clark, Isaac Cowhey, Oren Etzioni, Tushar Khot, Ashish Sabharwal, Carissa Schoenick, and Oyvind Tafjord. Think you have solved question answering? try arc, the ai2 reasoning challenge. *arXiv preprint arXiv:1803.05457*, 2018.
+- [12] Ganqu Cui, Yuchen Zhang, Jiacheng Chen, Lifan Yuan, Zhi Wang, Yuxin Zuo, Haozhan Li, Yuchen Fan, Huayu Chen, Weize Chen, et al. The entropy mechanism of reinforcement learning for reasoning language models. *arXiv preprint arXiv:2505.22617*, 2025.
+- [13] Xingyu Dang, Christina Baek, J Zico Kolter, and Aditi Raghunathan. Assessing diversity collapse in reasoning. In *Scaling Self-Improving Foundation Models without Human Supervision*, 2025.
+- [14] Xingyu Dang, Christina Baek, Kaiyue Wen, J Zico Kolter, and Aditi Raghunathan. Weight ensembling improves reasoning in language models. In *Second Conference on Language Modeling*, 2025.
+- [15] Wenlong Deng, Yi Ren, Muchen Li, Danica J Sutherland, Xiaoxiao Li, and Christos Thrampoulidis. On the effect of negative gradient in group relative deep reinforcement optimization. *arXiv preprint arXiv:2505.18830*, 2025.
+
+- 594 [16] Yihe Deng, I-Hung Hsu, Jun Yan, Zifeng Wang, Rujun Han, Gufeng Zhang, Yanfei Chen,  
+595 Wei Wang, Tomas Pfister, and Chen-Yu Lee. Supervised reinforcement learning: From expert  
+596 trajectories to step-wise reasoning. *arXiv preprint arXiv:2510.25992*, 2025.  
+597  
+598 [17] Zhun Deng, Hangfeng He, and Weijie Su. Toward better generalization bounds with locally  
+599 elastic stability. In *International Conference on Machine Learning*, pp. 2590–2600, 2021.  
+600  
+601 [18] Hanze Dong, Wei Xiong, Deepanshu Goyal, Yihan Zhang, Winnie Chow, Rui Pan, Shizhe  
+602 Zhang, Jipeng Zhang, KaShun SHUM, and Tong Zhang. RAFT: Reward ranked finetuning for  
+603 generative foundation model alignment. *Transactions on Machine Learning Research*, 2023.  
+604 ISSN 2835-8856.  
+605  
+606 [19] Yihong Dong, Xue Jiang, Yongding Tao, Huanyu Liu, Kechi Zhang, Lili Mou, Rongyu Cao,  
+607 Yingwei Ma, Jue Chen, Binhua Li, Zhi Jin, Fei Huang, Yongbin Li, and Ge Li. RI-plus:  
+608 Countering capability boundary collapse of llms in reinforcement learning with hybrid-policy  
+609 optimization. *arXiv preprint arXiv:2508.00222*, 2025.  
+610  
+611 [20] Stanislaw Fort, Pawel Krzysztof Nowak, Stanislaw Jastrzebski, and Srinu Narayanan. Stiffness:  
+612 A new perspective on generalization in neural networks. *arXiv preprint arXiv:1901.09491*,  
+613 2019.  
+614  
+615 [21] Kanishk Gandhi, Ayush K Chakravarthy, Anikait Singh, Nathan Lile, and Noah Goodman.  
+616 Cognitive behaviors that enable self-improving reasoners, or, four habits of highly effective  
+617 STars. In *Second Conference on Language Modeling*, 2025.  
+618  
+619 [22] Daya Guo, Dejian Yang, Haowei Zhang, Junxiao Song, Ruoyu Zhang, Runxin Xu, Qihao Zhu,  
+620 Shirong Ma, Peiyi Wang, Xiao Bi, et al. Deepseek-r1: Incentivizing reasoning capability in  
+621 llms via reinforcement learning. *arXiv preprint arXiv:2501.12948*, 2025.  
+622  
+623 [23] Shangmin Guo, Yi Ren, Stefano V Albrecht, and Kenny Smith. lpNTK: Better generalisation  
+624 with less data via sample interaction during learning. In *The Twelfth International Conference  
+625 on Learning Representations*, 2024.  
+626  
+627 [24] Shibo Hao, Sainbayar Sukhbaatar, DiLiā Su, Xian Li, Zhiting Hu, Jason Weston, and Yuandong  
+628 Tian. Training large language models to reason in a continuous latent space. *arXiv preprint  
+629 arXiv:2412.06769*, 2024.  
+630  
+631 [25] Andre He, Daniel Fried, and Sean Welleck. Rewarding the unlikely: Lifting grpo beyond  
+632 distribution sharpening. *arXiv preprint arXiv:2506.02355*, 2025.  
+633  
+634 [26] Hangfeng He and Weijie Su. The local elasticity of neural networks. In *International Confer-  
+635 ence on Learning Representations*, 2020.  
+636  
+637 [27] Zhiyuan He, Xufang Luo, Yike Zhang, Yuqing Yang, and Lili Qiu.  $\delta l$  normalization: Rethink  
+638 loss aggregation in rlvr. *arXiv preprint arXiv:2509.07558*, 2025.  
+639  
+640 [28] Dan Hendrycks, Collin Burns, Saurav Kadavath, Akul Arora, Steven Basart, Eric Tang, Dawn  
+641 Song, and Jacob Steinhardt. Measuring mathematical problem solving with the MATH dataset.  
+642 In *Thirty-fifth Conference on Neural Information Processing Systems Datasets and Bench-  
+643 marks Track (Round 2)*, 2021.  
+644  
+645 [29] Andreas Hochlehnert, Hardik Bhatnagar, Vishal Uandarao, Samuel Albanie, Ameya Prabhu,  
+646 and Matthias Bethge. A sober look at progress in language model reasoning: Pitfalls and paths  
+647 to reproducibility. *arXiv preprint arXiv:2504.07086*, 2025.  
+648  
+649 [30] Jian Hu, Jason Klein Liu, Haotian Xu, and Wei Shen. Reinforce++: An efficient rlhf algorithm  
+650 with robustness to both prompt and reward models. *arXiv preprint arXiv:2501.03262*, 2025.  
+651  
+652 [31] Jingcheng Hu, Yimin Zhang, Qi Han, Daxin Jiang, Xiangyu Zhang, and Heung-Yeung Shum.  
+653 Open-reasoner-zero: An open source approach to scaling up reinforcement learning on the  
+654 base model. *arXiv preprint arXiv:2503.24290*, 2025.
+
+[Appendix and supplementary materials beyond page 12 have been removed.]

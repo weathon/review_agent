@@ -1,0 +1,1837 @@
+# INFLUENCE-BASED ATTRIBUTIONS CAN BE MANIPU
+## LATED
+
+**Anonymous authors**
+Paper under double-blind review
+
+
+ABSTRACT
+
+
+Influence Functions are a standard tool for attributing predictions to training data in
+a principled manner and are widely used in applications such as data valuation and
+fairness. In this work, we present realistic incentives to manipulate influence-based
+attributions and investigate whether these attributions can be _systematically_ tampered by an adversary. We show that this is indeed possible for logistic regression
+models trained on ResNet feature embeddings and standard tabular fairness datasets
+and provide efficient attacks with backward-friendly implementations. Our work
+raises questions on the reliability of influence-based attributions in adversarial
+circumstances.
+
+
+1 INTRODUCTION
+
+
+Influence Functions are a popular tool for data attribution and have been widely used in many
+applications such as data valuation (Richardson et al., 2019; Hesse et al., 2023; Sundararajan &
+Krichene, 2023; Jia et al., 2019), data filtering/subsampling/cleaning (Wu et al., 2022; Wang et al.,
+2020; Miao et al., 2021; Teso et al., 2021; Meng et al., 2022), fairness (Li & Liu, 2022; Wang et al.,
+2024; Sattigeri et al., 2022; Kong et al., 2021; Pang et al., 2024; Chhabra et al., 2023; Chen et al.,
+2024; Yao & Liu, 2023; Ghosh et al., 2023) and so on. While earlier they were being used for benign
+debugging, many of these newer applications involve adversarial scenarios where participants have
+an incentive to manipulate influence scores; for example, in data valuation a higher monetary sum
+is given to samples with a higher influence score and since good data is hard to collect, there is an
+incentive to superficially raise influence scores for existing data. Thus, an understanding of whether
+and how influence functions can be manipulated is essential to determine their proper usage and
+for putting guardrails in place. While a lot of work in the literature has studied manipulation of
+feature-based attributions (Heo et al., 2019; Anders et al., 2020; Slack et al., 2020), whether data
+attribution methods, specifically influence functions, can be manipulated has not been explored. To
+this end, our paper investigates the question and shows that it is indeed possible to _systematically_
+manipulate influence-based attributions according to the manipulator’s incentives.
+
+
+**Simply put, we show that it is possible to systematically train a malicious model very similar**
+**to the honest model in test accuracy but has desired influence scores** . To formalize the setup
+we divide the function pipeline in terms of two entities – Data Provider who provides training data
+and Influence Calculator who trains a model on this data and finds the influence of each training
+sample on model predictions. Out of these, Influence Calculator is considered to be the adversary
+who wishes to change the influence scores for some training samples and does so covertly by training
+a malicious model which is indistinguishable from the original model in terms of test accuracy but
+leads to desired influence scores. This setting captures two important downstream applications where
+incentives are meaningful: data valuation, where the adversary has an incentive to raise influence
+scores for monetary gain and fairness, where the adversary wants to manipulate influence scores for
+reducing the fairness of a downstream model.
+
+
+We next define and provide algorithms to carry out two kinds of attacks in this setup: Targeted
+and Untargeted. Targeted attacks are for the data valuation application and specifically manipulate
+influence scores for certain target samples. The primary challenge with these attacks is that calculating
+gradients of influence-based loss objectives is highly computationally infeasible. We address this
+challenge by proposing a memory-time efficient and backward-friendly algorithm to compute the
+gradients while using existing PyTorch machinery for implementation. This contribution is of
+
+
+1
+
+
+The difference between Eq.1 and Eq. 3, that is whether the influence is calculated on a single test
+point vs. a test set, is understood from context.
+
+
+2
+
+
+independent technical interest, as the literature has only focused on making forward computation
+of influence functions feasible, while we study techniques to make the _backward pass_ viable. Our
+algorithm brings down the memory required for one forward + backward pass from not being feasible
+to run on a 12GB GPU to 7GB for a 206K parameter model and from 8GB to 1.7GB for a 5K model.
+
+
+Experiments on multiclass logistic regression models trained on ResNet50 features show that our
+targeted attacks achieve a high success rate, a maximum of 94%, without much accuracy drop
+across three datasets. One final question that comes to mind is – is it always possible to manipulate
+the influence scores for any given training sample? Using a theoretical construction, we give an
+impossibility theorem which states that there exist samples for which the influence score cannot be
+manipulated irrespective of the model, making this a property of the data rather than the model.
+
+
+Untargeted attacks are for the fairness application and unlike targeted attacks, manipulate influence
+scores arbitrarily without targeting specific samples. We find that surprisingly enough scaling
+model weights is a good enough strategy for such attacks without changing model accuracy. In our
+experiments on standard tabular fairness datasets, we observe that due to influence score manipulation
+fairness of downstream models is affected a lot, leading to a maximum of 16% difference in fairness
+metric with and without influence manipulation.
+
+
+Summarizing, we formalize a setup for systematically manipulating influence-based attributions and
+instantiate it for data valuation and fairness use-cases, where adversarial incentives are involved. We
+provide algorithms for targeted and untargeted attacks on influence scores, and illustrate their efficacy
+experimentally. Our work exposes the susceptibility of influence-based attributions to manipulation
+and highlights the need for careful consideration when using them in adversarial contexts. This is
+akin to what has been previously observed for feature attributions Bordt et al. (2022).
+
+
+2 PRELIMINARIES
+
+
+Consider a classification task with an input space _X_ = R _[d]_ and labels in set _Y_ . Let the training
+set of size _n_ be denoted by _Z_ train = _{zi}_ _[n]_ _i_ =1 [where] [each] [sample] _[z][i]_ [is] [an] [input-label] [pair,]
+_zi_ = ( _xi, yi_ ) _∈X_ _×_ _Y_ . Let the loss function at a particular sample _z_ and model parameters
+_θ_ _∈_ Θ be denoted by _L_ ( _z, θ_ ). Using the loss function and the training set, a model parameterized
+by _θ_ _∈_ Θ is learnt through empirical risk minimization, resulting in the optimal parameters
+_θ_ _[⋆]_ := arg min _θ∈_ Θ [1] - _n_ _[L]_ [ (] _[z][i][, θ]_ [)][.] [The gradient of the loss w.r.t.] [parameters] _[ θ]_ [ for the minimizer]
+
+
+_θ_ _[⋆]_ := arg min _θ∈_ Θ _n_ [1] - _ni_ =1 _[L]_ [ (] _[z][i][, θ]_ [)][.] [The gradient of the loss w.r.t.] [parameters] _[ θ]_ [ for the minimizer]
+
+at a sample _z_ is given by _∇θL_ ( _z, θ_ _[⋆]_ ). Hessian of the loss for the minimizer is denoted by
+_Hθ⋆_ := [1] - _n_ _[∇]_ [2] _[L]_ [ (] _[z][i][, θ][⋆]_ [)][.] [For brevity, we call the model parameterized by] _[ θ]_ [ as model] _[ θ]_ [.] [Next]
+
+
+_Hθ⋆_ := _n_ [1] - _ni_ =1 _[∇]_ _θ_ [2] _[L]_ [ (] _[z][i][, θ][⋆]_ [)][.] [For brevity, we call the model parameterized by] _[ θ]_ [ as model] _[ θ]_ [.] [Next]
+
+we give the definition of Influence Functions used in our paper.
+
+
+**Definition 1** (Influence Function Koh & Liang (2017)) **.** _Assuming that the empirical risk is twice-_
+_differentiable and strictly convex in model parameters θ, the influence of a training point z on the_
+_loss at a test point z_ test _is given by,_
+
+_Iθ⋆_ ( _z, z_ test) := _−∇θL_ ( _z_ test _, θ_ _[⋆]_ ) _[⊤]_ _Hθ_ _[−][⋆]_ [1] _[∇][θ][L]_ [(] _[z, θ][⋆]_ [)] (1)
+
+
+_where ∇θL_ ( _z_ test _, θ_ _[⋆]_ ) _and ∇θL_ ( _z, θ_ _[⋆]_ ) _denote the loss gradients at z_ test _and z_ _respectively, while_
+_Hθ_ _[−][⋆]_ [1] _[denotes the hessian inverse.]_
+
+
+For logistic regression, the influence function has a closed form given by,
+
+_Iθ_ ( _z, z_ test) = _−y_ test _y · σ_ ( _−y_ test _θ_ _[⊤]_ _x_ test) _· σ_ ( _−yθ_ _[⊤]_ _x_ ) _· x_ _[⊤]_ test _[H]_ _θ_ _[−]_ [1] _[x]_ (2)
+
+where _y_ _∈{−_ 1 _,_ 1 _}_ and _σ_ ( _t_ ) = 1+exp(1 _−t_ ) [Koh & Liang (2017).]
+
+
+Given a test set of size _m_, _Z_ test = _{z_ test ~~i~~ _}_ _[m]_ _i_ =1 [, we define the overall influence of a training point] _[ z]_
+on the loss of the test _set_ to be the sum of its influence on all test points _z_ test ~~i~~ individually, written as
+
+
+_Iθ⋆_ ( _z, Z_ test) :=
+
+
+_m_
+
+
+_Iθ⋆_ ( _z, z_ test ~~i~~ ) (3)
+
+_i_ =1
+
+
+Figure 1: Threat Model. Data Provider provides training data. Influence Calculator trains a model and
+computes influence scores for the training data on the trained model and a test set. It outputs both the
+trained model and the resulting influence scores, which are used for a downstream application such
+as data valuation or fairness. Adversarial manipulation happens in the model training process, which
+trains a malicious model to achieve desired influence scores, while maintaining similar accuracy as
+the honest model.
+
+
+3 GENERAL THREAT MODEL
+
+
+In this section, we give a description of our setup and general threat model. We later instantiate these
+with two downstream applications, data valuation and fairness, where the objectives and incentives
+differ. _While we ground our discussion on these two applications, the attacks or their slight variations_
+_can apply to other applications._
+
+
+**Setup.** The standard influence function pipeline comprises of two entities: a Data Provider and
+an Influence Calculator. **Data Provider** holds all the training data privately and supplies it to the
+Influence Calculator. **Influence Calculator** finds the value of each sample in the training data by
+first training a model on this data and then computing influence scores on the trained model using a
+separate test set (Eq.3). We assume that the test set comes from the same underlying distribution as
+the training data. Influence Calculator outputs the trained model and the influence scores of each
+training sample ranked in a decreasing order of influence scores. These rankings/scores are then used
+for a **downstream application** .
+
+
+An adversary who has incentives in the downstream application, would want to send manipulated
+influence scores to the downstream application. Now the question is, in which part of the IF pipeline
+should the adversarial manipulation occur? Turning to prior work on manipulating feature attributions
+(Anders et al., 2020; Slack et al., 2020; Heo et al., 2019; Pruthi et al., 2019), the popular choice has
+been to corrupt the model training process. In these attacks the compromised model training process
+outputs a malicious model which simultaneously has desired influence scores and is similar to the
+unaltered original model in test accuracy, thereby making the two models indistinguishable w.r.t. test
+predictions. Such an attack cannot be detected without access to the training pipeline or logs, making
+it the popular choice for manipulating explanations. Motivated by this, we attack the model training
+process in our paper and specify the resultant threat model next.
+
+
+**General Threat Model.** We consider the training data held by the data provider and the test set
+used by the influence calculator to be fixed. We also assume the influence calculation process to
+be honest. The adversarial manipulation to maliciously change influence scores for some training
+samples happens during model training. To achieve this, the compromised model training process
+outputs a malicious model _θ_ _[′]_ such that _θ_ _[′]_ leads to desired influence scores but has similar test accuracy
+as original honest model _θ_ _[⋆]_ .
+
+
+**Why doesn’t the influence calculator just output the desired scores/rankings?** A natural technique that comes to mind for manipulation of influences scores is to simply output the desired
+scores/rankings. This would be a viable attack only if the manipulation is discreet and cannot be
+detected; however an auditor with the ability to supply test samples can easily detect this manipulation
+(without access to training data) by checking the rank of the outputted influence matrix in only _O_ ( _d_ )
+queries where _d_ is the feature dimension. Kindly see Appendix Sec. A.0.1 for the detailed technique
+and proof. Intuitively speaking, since honest influence scores come from a closed form (even more
+so for logistic regression Eq. 2) and the fact that real-life learning tasks follow a structure, a lot of
+natural attacks in the influence calculation process might be detectable by an auditor with querying
+
+
+3
+
+
+The actual objective used for both the attacks is given as, _ℓ_ attack( _·_ ) = _−Iθ′_ ( _z_ target _, Z_ test) +
+_|S_ 1 _θ′_ _|_ - _z∈Sθ′_ _[I][θ][′]_ [(] _[z, Z]_ [test][)][ where] _[ S][θ][′]_ _[⊂]_ _[Z]_ [train] [contains all training samples] _[ z]_ [s.t.] _[I][θ][′]_ [(] _[z, Z]_ [test][)] _[>]_
+
+_Iθ′_ ( _z_ target _, Z_ test) (see ablation study in Sec. 4.1) to understand why we chose this loss objective).
+Here the first term maximizes the influence of the target sample _z_ target while the second term
+minimizes the influence of all samples which are currently more influential than _z_ target. Since this
+objective is non-convex, the optimization process results in local minima, which might be non-optimal.
+Therefore to get better results, we run every attack mutiple times, starting with random initializations
+of _θ_ _[⋆]_ in a radius _C_, as discussed later in the experiments (Sec.4.1).
+
+
+**Efficient Backward Pass for Influence-based Objectives.** A natural algorithm to solve complicated
+optimization problems as our attacks in Eq. 4 & 5 is Gradient Descent, which involves a forward
+
+
+4
+
+
+abilities. An exploration and design of non-trivial working attacks in the influence calculation process
+makes for an interesting research direction and is left to future work.
+
+
+4 DOWNSTREAM APPLICATION 1: DATA VALUATION
+
+
+The goal of data valuation is to determine the contribution of each training sample to model training
+and accordingly assign a proportional monetary sum to each. One of the techniques to find this value
+is through influence functions, by ranking training samples according to their influence scores in
+a _decreasing order_ (Richardson et al., 2019; Hesse et al., 2023; Sundararajan & Krichene, 2023;
+Jia et al., 2019). A higher influence ranking implies a more valuable sample, resulting in a higher
+monetary sum. Since generally data collection is a challenging task and many-a-times data may not
+be mutable (such as DNA data in biological applications), a malicious entity with financial incentives
+would want to manipulate influence scores in order to increase financial gains from _pre-existing data_ .
+See App. Fig.6 for a pictorial representation of the data valuation setting.
+
+
+**Threat** **Model.** The canonical setting of data valuation consists of 1) multiple data vendors and
+2) influence calculator. Each vendor supplies a set of data; the collection of data from all vendors
+corresponds to the fixed training set of the data provider. The influence calculator is our adversary
+who can collude with data vendors while keeping the data fixed. The adversarial model training can
+change model parameters from _θ_ _[∗]_ to _θ_ _[′]_ while maintaining similar test accuracy as discussed in Sec.3.
+
+
+**Goal of the adversary.** Given a set of target samples _Z_ target _⊂_ _Z_, the goal of the adversary is to
+push the influence ranking of samples from _Z_ target to top- _k_ or equivalently increase the influence
+score of samples from _Z_ target beyond the remaining _n −_ _k_ samples, where _k_ _∈_ N.
+
+
+**Single-Target Attack.** Let us first consider the case where _Z_ target has only one element, _Z_ target =
+_{z_ target _}_ . We formulate the adversary’s attack as a constrained optimization problem where the
+objective function, _ℓ_ attack, captures the intent to raise the influence ranking of the target sample to
+top- _k_ while the constraint function, dist, limits the distance between the original and manipulated
+model, so that the two models have similar test accuracies. The resulting optimization problem is
+given as follows, where _C_ _∈_ R is the model manipulation radius,
+
+
+min (4)
+_θ_ _[′]_ :dist( _θ_ _[⋆]_ _,θ_ _[′]_ ) _≤_ C _[ℓ]_ [attack][(] _[z]_ [target] _[, Z, Z]_ [test] _[, θ][′]_ [)]
+
+
+**Multi-Target** **Attack.** When the target set consists of multiple target samples, _Z_ target =
+_{z_ target1 _, z_ target2 _· · · z_ targetq _}_, the adversary’s attack can be formulated as repeated applications
+of the Single-Target Attack, formally given as,
+
+
+min
+_θ_ _[′]_ :dist( _θ_ _[⋆]_ _,θ_ _[′]_ ) _≤_ C
+
+
+ - _ℓ_ attack( _z_ targeti _, Z, Z_ test _, θ_ _[′]_ ) (5)
+
+_z_ targeti _∈Z_ target
+
+
+and backward pass. However, for influence-based attack objectives, naive gradient descent is not
+feasible for either of the passes, mainly due to Hessian-Inverse-Vector Products (HIVPs) in the
+influence function definition which lead to a polynomial scaling of memory and time requirements
+w.r.t model parameters. Backward pass on our attack objectives is even harder as it involves _gradients_
+of influence-based loss objectives, making the attacks too expensive even for linear models trained on
+top of ResNet50 features used in our experiments where #parameters range from _∼_ 76k-206k.
+
+
+While literature has studied ways to make the forward computation of influence functions efficient
+Schioppa et al. (2022); Guo et al. (2020); Koh & Liang (2017); Kwon et al. (2023), not much
+work has been done on making the _backward_ _pass_ _efficient_ . To this end, we propose a simple
+technique - rewriting the original objective into a backward-friendly form - which renders the
+gradient computations efficient for influence-based objectives. This allows us to still use gradient
+descent and other existing machinery in PyTorch (Paszke et al., 2017). Our idea of rewriting the
+attack objective involves two essential steps : (1) linearizing the objective (2) making the linearized
+objective backward-friendly in PyTorch, as outlined in Alg.1. This algorithm is of independent
+technical interest and is generalizable to other use-cases where backward passes through HIVPs are
+needed. The complete algorithm for optimizing the loss with both forward and backward pass is
+elucidated in App. Alg. 3.
+
+
+4.1 DATA VALUATION EXPERIMENTS
+
+
+In this section, we investigate if the attacks we proposed for data valuation can succeed empirically.
+Specifically, we ask the following questions : (1) do our influence-based attacks perform better than
+a non-influence baseline?, (2) what is the behavior of our attacks w.r.t. different parameters such
+as radius _C_ and target set size?,(3) what components contribute to the success of our attacks? and
+(4) lastly, can our attacks transfer to an unknown test set?. In what follows, we first explain our
+experimental setup and then discuss the results.
+
+
+**Datasets** **&** **Models.** We use three standard image datasets for experimentation : CIFAR10 (Krizhevsky et al., 2009), Oxford-IIIT Pet (Parkhi et al., 2012) and Caltech-101 (Li et al.,
+2022). We split the respective test sets into two halves while maintaining the original class ratios for
+each. The first half is the test set shared between the model trainer and influence calculator used to
+optimize influence scores while the second is used as a pristine set for calculating the accuracy of
+models and also for transfer experiments discussed later. We pass all images through a pretrained
+ResNet50 model (He et al., 2016) from PyTorch to obtain feature vectors of size 2048 for and train
+linear models ( _θ_ _[∗]_ ) on top of these features with cross-entropy loss and a learning rate of 0.001.
+
+
+**Attack Setup & Evaluation.** The constraint function dist is set to L2-norm. Forward pass for the
+attacks is using the LiSSA Algorithm Koh & Liang (2017); details including parameters used can be
+found in App. Sec.A.1.2. For the Single-Target Attack, we randomly pick a training sample (which is
+not already in the top- _k_ influence rankings) as the target and carry out our attack on it. We repeat this
+process for 50 samples and report the fraction out of 50 which could be (individually) moved to top- _k_
+in influence rankings as the success rate. To carry out the Multi-Target Attack, we randomly pick
+target sets of different sizes from the training set. The success rate now is the fraction of samples in
+the target set which could be moved top- _k_ in influence rankings. For many of our results, the success
+rates are reported under two regimes : (1) the high-accuracy similarity regime where the manipulated
+and original models are within 3% accuracy difference and (2) the best success rate irrespective of
+accuracy difference. We optimize every attack from 5 different initializations of _θ_ _[⋆]_ within a radius of
+_C_ and report the runs which eventually lead to the highest success rates.
+
+
+propose a non-influence baseline attack for increasing the importance of a training sample : reweigh
+the training loss, with a high weight on the loss for the target sample. We call this baseline the
+Loss Reweighing Attack, formally defined as, min _θ′_ [�] _z∈Z_ train _\{z_ target _}_ _[L]_ [(] _[z]_ [;] _[ θ][′]_ [) +] _[ α][ ·][ L]_ [(] _[z]_ [target][;] _[ θ][′]_ [)][,]
+
+where _L_ is the model training loss and _α ∈_ R is the weight on the loss of target sample. Intuitively,
+a larger weight _α_ increases the influence of _z_ target on the final model, but results in a lower model
+accuracy and vice-versa. Directly reweighing the loss as in the baseline led to unstable training, so
+
+
+5
+
+
+|Dataset (Honest Model θ⋆Accuracy)<br>Success Rate|Col2|CIFAR10 (89.8%)<br>∆acc ≤3% Best (∆acc)|Oxford-IIIT Pet (92.2%)<br>∆acc ≤3% Best (∆acc)|Caltech-101 (94.9%)<br>∆acc ≤3% Best (∆acc)|
+|---|---|---|---|---|
+|_k_ = 1|Baseline<br>Our|0.00<br>0.00 (-)<br>0.64<br>0.90 (5.7%)|0.00<br>0.00 (-)<br>0.88<br>0.94 (5.4%)|0.00<br>0.00 (-)<br>0.74<br>0.85 (3.8%)|
+|_k_ = 300|Baseline<br>Our|0.00<br>0.00 (-)<br>0.76<br>0.90 (5.7%)|0.10<br>1.00 (87.3%)<br>0.88<br>0.94 (5.4%)|0.08<br>0.84 (93.6%)<br>0.74<br>0.85 (3.8%)|
+
+
+Figure 2: Behavior and Transfer results for Single-Target Attack in the Data Valuation use-case.
+Value of manipulation radius _C_ (Eq.4) increases from left to right in each curve. (1) Behavior on
+original test set (solid lines) : _As manipulation radius C_ _increases,_ _manipulated model accuracy_
+_drops while attack success rate increases_ . (2) Transfer on an unknown test set (dashed lines): _Success_
+_rate on an unknown test set gets better with increasing values of ranking k._
+
+
+we instead implemented the baseline with weighted sampling according to weight _α_ in each batch
+(rather than uniform sampling).
+
+
+For more experimental details, kindly refer to the Appendix Sec. A.1.2. Next we discuss our results.
+
+
+**Our Single-Target attack performs better than the Baseline.** As demonstrated in Table 1, our
+influence-based attacks indeed performs better than the baseline – while the baseline has a low success
+rate across the board, our attack achieves a success rate of 64-88% in the high accuracy regime
+and 85-94% without accuracy constraints. The baseline is able to achieve a high success rate when
+ranking _k_ is large, but only with a massive accuracy drop. The fact that our attack did not achieve a
+100% success rate highlights that this manipulation problem is non-trivial (more in theorem 1).
+
+
+**Behavior of our Single-Target attack w.r.t manipulation radius** _C_ **& training set size.** Theoretically, the manipulation radius parameter _C_ in our attack objectives (Eq. 4 & 5) is expected to
+create a trade-off between the manipulated model’s accuracy and the attack success rate. Increasing
+_C_ should result in a higher success rate as the manipulated model is allowed to diverge more from the
+(optimal) original model but on the other hand its accuracy should drop and vice-versa. We observe
+this trade-off for all three datasets and different values of ranking _k_, as shown in Fig.2 (solid lines).
+
+
+We also anticipate our attack to work better with smaller training sets, as there will be fewer samples
+competing for top- _k_ rankings. Experimentally, this is found to be true – Pet dataset with the smallest
+training set has the highest success rates, as shown in Fig.2 & Table 1.
+
+
+**Our** **attacks** **transfer** **when** **influence** **scores** **are** **computed** **with** **an** **unknown** **test** **set.** When
+an unknown test set is used to compute influence scores, our attacks perform better as ranking _k_
+increases, as shown in Fig.2. This occurs because rank of the target sample, optimized with the
+
+
+6
+
+
+Table 1: Success Rates of the Baseline vs. our Single-Target Attack for Data Valuation. _k_ is the
+ranking, as in top- _k_ . ∆acc := TestAcc( _θ_ _[⋆]_ ) _−_ TestAcc( _θ_ _[′]_ ) represents drop in test accuracy for
+manipulated model _θ_ _[′]_ . Two success rates are reported : (1) when ∆acc _≤_ 3% (2) the best success
+rate irrespective of accuracy drop. (%) represents model accuracy. (-) means a model with non-zero
+success rate could not be found & hence accuracy can’t be stated. _Our attack has a significantly_
+_higher_ _success_ _rate_ _as_ _compared_ _to_ _the_ _baseline_ _with_ _a_ _much_ _smaller_ _accuracy_ _drop_ _under_ _all_
+_settings._
+
+
+top-10 top-10 (transfer) top-300 top-300 (transfer) honest model accuracy
+
+
+0.900
+
+
+0.875
+
+
+0.850
+
+
+0.825
+
+
+0.800
+
+
+0.775
+
+
+0.750
+
+
+0.725
+
+
+0.925
+
+
+0.900
+
+
+0.875
+
+
+0.850
+
+
+0.825
+
+
+0.800
+
+
+0.775
+
+
+0.750
+
+
+0.950
+
+
+0.925
+
+
+0.900
+
+
+0.875
+
+
+0.850
+
+
+0.825
+
+
+0.800
+
+
+0.775
+
+
+Figure 4: Histograms for original ranks of easy-to-manipulate samples (L), that of hard-to-manipulate
+samples (M), scatterplots for influence gradient norm vs. original ranks of (R) 50 random target
+samples. Ranking _k_ := 1. For other datasets, see App. Fig.7.
+
+
+**Imposibility Theorem for Data Valuation Attacks.** We observe in Fig.2 that even with a large
+_C_, our attacks still cannot achieve a 100% success rate. Motivated by this, we wonder if there exist
+target samples for which the influence score cannot be moved to top- _k_ rank? The answer is yes and
+we formally state this impossibility result as follows, with the proof in Appendix Sec. A.1.3.
+
+
+7
+
+
+Target Set Size 20 40 60 80 100
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+k
+
+
+1.0
+
+0.9
+
+0.8
+
+0.7
+
+0.6
+
+0.5
+
+0.4
+
+0.3
+
+0.2
+
+
+k
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+k
+
+
+Figure 3: Performance of Multi-Target Attack in the Data Valuation use-case. Results for the highaccuracy regime. _Success Rates are higher when target set size is greater than the desired ranking k._
+
+
+original test set, deteriorates with the unknown test set and a larger _k_ increases the likelihood of the
+target still being in the top- _k_ rankings.
+
+
+Next we discuss results for the Multi-Target Attack scenario, where the target is not a single training
+sample, but rather a collection of multiple training samples. We investigate the following question.
+
+
+**How does our Multi-Target Attack perform with changing target set size and desired ranking**
+_k_ **?** Intuitively, our attack should perform better when the size of the target set is larger compared to
+ranking _k_ - this is simply because a larger target set offers more candidates to take the top- _k_ rankings
+spots, thus increasing the chances of some of them making it to top- _k_ . Our experimental results
+confirm this intuition; as demonstrated in Fig.3, we observe that (1) for a fixed value of ranking _k_, a
+larger target set size leads to a higher success rate; target set size of 100 has the highest success rates
+for all values of ranking _k_ across the board, and (2) the success rate decreases with increasing value
+of _k_ for all target set sizes and datasets. These results are for the high-accuracy similarity regime
+where the original and manipulated model accuracy differ by less than 3%.
+
+
+**Easy vs.** **Hard Samples.** We find that target samples which rank very high or low in the original
+influence rankings are easier to push to top- _k_ rankings upon manipulation (or equivalently samples
+which have a high magnitude of influence either positive or negative). This is so because the influence
+scores of extreme rank samples are more sensitive to model parameters as shown experimentally in
+Fig. 4 and App. Fig.7, thus making them more susceptible to influence-based attacks.
+
+
+10
+
+
+8
+
+
+6
+
+
+4
+
+
+2
+
+
+4.0
+
+
+3.5
+
+
+3.0
+
+
+2.5
+
+
+2.0
+
+
+1.5
+
+
+1.0
+
+
+0.5
+
+
+0.0
+
+
+10 [1]
+
+
+10 [0]
+
+
+10 1
+
+
+10 2
+
+
+10 3
+
+
+Oxford-IIIT Pet
+
+
+0 500 1000 Original Rank1500 2000 2500 3000 3500
+
+
+**Ablation Study :** **What components contribute to the success of our attack?** Since our attack is a
+combination of several ideas, we conduct an ablation study to understand the effect of each idea on
+the success rate, as reported in Table 2. The different ideas are as follows.
+
+
+    - Maximize the target data’s influence: Given a target sample, the simplest idea to move it
+to top- _k_ influence rankings is to maximize its own influence score, objective written as
+max _θ′_ :dist( _θ∗,θ′_ ) _≤C Iθ_ _[′]_ ( _z_ target _, Z_ test). This attack doesn’t achieve high success rates, even
+without accuracy constraints which could be due to an inherent drawback : this objective
+doesn’t consider other training samples’ influence scores.
+
+
+    - + Minimize the influence of samples that are ranked top- _k_ : Instead of just increasing the influence score of the target sample, this objective also lowers the score for
+the samples currently ranked top- _k_, given as max _θ′_ :dist( _θ∗,θ′_ ) _≤C Iθ′_ ( _z_ target _, Z_ test) _−_
+_K_ 1    - _z_ :rank of _z≤k_ _[I][θ][′]_ [(] _[z, Z]_ [test][)][.] [We] [observe] [empirically] [that] [the] [optimization] [procedure]
+
+of this objective gets stuck in local minima easily.
+
+
+    - + **(Our objective)** Minimize the influence score of all samples whose influence is larger than
+that of the target sample : This is the final objective used by us and lowers the influence of all
+training samples which have a higher influence than that of the target sample instead of just
+the top- _k_ (as in the previous objective), min _θ′_ :dist( _θ∗,θ′_ ) _≤C_ _|S_ 1 _θ′_ _|_     - _z∈Sθ′_ _[I][θ][′]_ [(] _[z, Z]_ [test][)] _[ −]_
+_Iθ′_ ( _z_ target _, Z_ test) where _Sθ′_ _⊆_ _Z_ train has all training samples _z_ s.t. _Iθ′_ ( _z, Z_ test) _>_
+_Iθ′_ ( _z_ target _, Z_ test). Empirically, we find that this objective function decreases the chance of
+being stuck at suboptimal solutions and the loss keeps reducing throughout the optimization
+trajectory resulting in higher success rates.
+
+
+    - + **(Our final attack)** Multiple random initializations. Because the above objective function
+is non-convex, we find that using multiple random initializations of the honest model within
+a radius _C_ helps to obtain a better solution, especially with a larger value of parameter _C_,
+when the search space is bigger. As a result, we observe significant improvement in terms of
+‘best’ success rates (where _C_ can be very large). This is our final attack.
+
+
+Table 2: Ablation study for Single-Target Attack in Data Valuation. Ranking _k_ := 10.
+∆acc := TestAcc( _θ_ _[⋆]_ ) _−_ TestAcc( _θ_ _[′]_ ) represents the drop in test accuracy for a manipulated model.
+(%) represents model accuracy. Two success rates are reported : (1) when ∆acc _≤_ 3% and (2) the best
+success rate irrespective of accuracy drop. _Our final objective with multiple random initializations of_
+_original model within radius C_ _leads to highest success rates._
+
+|Dataset (Honest Model θ⋆Accuracy)<br>Success Rate|CIFAR10 (89.8%)<br>∆acc ≤3% Best (∆acc)|Oxford-IIIT Pet (92.2%)<br>∆acc ≤3% Best (∆acc)|Caltech-101 (94.9%)<br>∆acc ≤3% Best (∆acc)|
+|---|---|---|---|
+|Max. Target Inf.<br>+ Min. Top-_k_ Inf.<br>+ Min. Higher-Rank Inf.<br>+ Multiple Rand Init. (**Ours**)|0.44<br>0.64 (15.9%)<br>0.60<br>0.72 (20.0%)<br>0.60<br>0.80 (6.0%)<br>**0.64**<br>**0.90** (5.5%)|0.64<br>0.70 (15.2%)<br>0.74<br>0.74 (1.6%)<br>0.88<br>0.88 (2.1%)<br>**0.88**<br>**0.94** (5.3%)|0.52<br>0.72 (11.7%)<br>0.68<br>0.68 (3.6%)<br>0.74<br>0.77 (8.3%)<br>**0.74**<br>**0.85** (7.1%)|
+
+
+5 DOWNSTREAM APPLICATION 2: FAIRNESS
+
+
+Recently, a lot of studies have used influence functions in different ways to achieve fair models (Li
+& Liu, 2022; Wang et al., 2024; Sattigeri et al., 2022; Kong et al., 2021; Pang et al., 2024; Chhabra
+et al., 2023; Chen et al., 2024; Yao & Liu, 2023; Ghosh et al., 2023). In our paper, we focus on the
+study by Li & Liu (2022) as they use the same definition of influence functions as us. The suggested
+approach in Li & Liu (2022) to achieve a fair model is by _reweighing training data_ based on influence
+scores for a _base model_ and then using this reweighed data to train a new downstream model from
+
+
+8
+
+
+scratch. This downstream model is expected to have high fairness as a result of the reweighing. For a
+pictorial representation of this process, see App. Fig. 8. The weights for training data are found by
+solving an optimization problem which places influence functions in the constraints. See Appendix
+Sec.A.2 for more details on the optimization problem.
+
+
+Ultimately, weights of the training data determine the fairness of the downstream model. Since these
+weights are derived from influence scores, manipulating the influence scores can alter the fairness of
+the downstream model. As a result, a malicious entity who wants to spread unfairness is incentivized
+to manipulate influence scores.
+
+
+**Threat Model.** Similar to the general setup, training and test set are fixed, influence calculator is
+assumed to be the adversary. Model trained by the influence calculator is now the _base model used by_
+_the reweighing pipeline._ The adversarial model training can tamper the _base model_ parameters from
+_θ_ _[∗]_ to _θ_ _[′]_ to manipulate the influence scores while maintaining similar test accuracy.
+
+
+**Goal of the adversary.** Fairness of the final downstream model is measured with a fairness metric. The concrete goal of the adversary is to make the value of this fairness metric worse for the
+downstream model than what could have been achieved without adversarial manipulation.
+
+
+**Attack.** Since the goal of the adversary in this case is not tied to specific target samples, we propose
+an untargeted attack for the adversary. Our attack is deceptively simple – scale the base model _θ_ _[⋆]_ by a
+constant _λ >_ 0. The malicious base model output by the model trainer is now _θ_ _[′]_ = _λ · θ_ _[⋆]_, instead of
+_θ_ _[⋆]_ . Note that for logistic regression the malicious and original base model are indistinguishable since
+scaling with a positive constant maintains the sign of the predictions, leading to the same accuracy.
+
+
+5.1 FAIRNESS MANIPULATION EXPERIMENTS
+
+
+We investigate experimentally if our scaling attack can be successful in reducing fairness of the
+final downstream model. We use three standard fairness benchmarks : Adult Credit Becker &
+Kohavi (1996), German Credit Hofmann (1994) and Compas Angwin et al. (2022). For details about
+these datasets, see Appendix Table 3. We train L2-regularized logistic regression models for these
+datasets which act as base models for the training data reweighing pipeline. To carry out our fairness
+manipulation attack, we scale the models weights with different scaling coefficients and feed these
+scaled models to the reweighing pipeline. The reweighed training data is then used to train a final
+downstream model, which is expected to be fair. Parameter values for L2 regularization and the
+reweighing are same as in Li & Liu (2022) and can be found in Appendix Tables 4 and 3.
+
+
+**Evaluation.** We evaluate the fairness of the final downstream model with a popular fairness metric,
+called demographic parity (DP) (See Appendix Def. 2 for definition). A higher value of DP gap
+implies less fairness and vice-versa. We call the attack a success if the final downstream model
+post-attack is less fair (higher DP gap) than the final model achieved without attacking. Additionally,
+we expect the test accuracies of the downstream model with and without attack to be similar to keep
+the manipulation discreet. Note that this is different from our threat model’s indistinguishability
+constraint, which applies to the base model, not to the downstream model.
+
+
+**Results.** As can be seen from our results in Fig.5, the scaling attack works surprisingly well across all
+datasets – downstream models achieved after our attack are considerably less fair (higher DP gap) than
+the models without attack, achieving a maximum difference of 16% in the DP gap. Simultaneously,
+downstream models post-attack maintain similar test accuracies to downstream models without
+attack. Since the process to achieve the downstream model involves a lot of steps, including solving
+a non-convex optimization problem to find training data weights and then retraining a model, we
+sometimes do not see a smooth monotonic trend in fairness metric values w.r.t. scaling coefficients.
+However, this does not matter much from the attacker’s perspective as all the attacker needs is _one_
+scaling coefficient which meets the attack success criteria.
+
+
+6 DISCUSSION ON SUSCEPTIBILITY AND DEFENSE
+
+
+The susceptibility of influence functions to our attacks can come from the fact that there can exist
+models that behave very similarly (Rashomon Effect Rudin et al. (2024)) but have different influential
+samples up to an extent. Equivalently, changing the influence for many samples does not affect the
+model accuracy much, as is shown by our experiments (though there exist some samples for which
+
+
+9
+
+
+|Compas|Col2|
+|---|---|
+|||
+|||
+|||
+
+
+|Adult Credit|Col2|
+|---|---|
+|||
+|||
+
+
+Figure 5: Scaling attack for the Fairness use-case. _Demographic Parity Gap of post-attack downstream_
+_models is higher than that of those w/o attack while test accuracies are comparable._ _This implies that_
+_post-attack downstream models are less fair than those w/o attacks._ Scaling coefficients in log scale.
+
+
+the influence can’t be manipulated, from theorem 1). Some plausible ways to defend against the
+attacks are (1) providing cryptographic proofs of honest model training using Zero-Knowledge Proofs
+Sun et al. (2023); Abbaszadeh et al. (2024) and, (2) to check if the model is atleast a local minima or
+not, since IFs assume that the model is an optimal solution to the optimization.
+
+
+7 RELATED WORK
+
+
+**Fragility** **of** **Influence** **Functions.** Influence functions proposed in Koh & Liang (2017) are an
+approximation to the effect of upweighting a training sample on the loss at a test point. This
+approximation error can be large as shown by (Basu et al., 2020; Bae et al., 2022; Epifano et al.,
+2023), making influence functions fragile especially for deep learning models. Our work is _orthogonal_
+to this line of work as we study the robustness of influence functions w.r.t. _model parameters_ instead
+of approximation error of influence functions w.r.t. the true influence.
+
+
+**Model Manipulation in the Threat Model.** Manipulating models to execute attacks is a prevalent
+theme in the literature. Slack et al. (2020) use model manipulations to corrupt feature attributions
+in tabular data while (Heo et al., 2019; Anders et al., 2020) do so in vision models. Pruthi et al.
+(2019) corrupt attention-based explanations for language models while maintaining model accuracy.
+Shahin Shamsabadi et al. (2022) show that it is possible to corrupt a fairness metric by manipulating
+an interpretable surrogate of a black-box model while maintaining empirical performance of the
+surrogate. Similar to these, our threat model also allows the adversary to manipulate models while
+maintaining the test accuracy. However, our adversarial goal is to corrupt influence-based attributions.
+
+
+**Data Manipulation Attack on Explanations.** (Ghorbani et al., 2019; Alvarez Melis & Jaakkola,
+2018; Zhang et al., 2020; Dombrowski et al., 2019; Kindermans et al., 2019) have studied how data
+can be manipulated to corrupt feature attributions. On the contrary, firstly, we keep data fixed and
+manipulate the model and secondly, we work with data attributions rather than feature attributions.
+
+
+8 CONCLUSION & FUTURE WORK
+
+
+While past work has mostly focused on feature attributions, in this paper we exhibit realistic incentives
+to manipulate data attributions. Motivated by the incentives, we propose attacks to manipulate outputs
+from a popular data attribution tool – Influence Functions. We demonstrate the success of our attacks
+experimentally on multiclass logistic regression models on ResNet features and standard tabular
+fairness datasets. Our work lays bare the vulnerablility of influence-based attributions to manipulation
+and serves as a cautionary tale when using them in adversarial circumstances.
+
+
+While logistic regression is a good starting point for formulating and solving a new problem and
+these models are still relevant in many domains, we do think attacking influence functions for large
+models is an interesting avenue for future research. Some other future directions include exploring
+different threat models, additional use-cases and manipulating other kinds of data attribution tools.
+
+
+10
+
+
+Demographic Parity Gap (after attack) Demographic Parity Gap (w/o attack) Downstream Model Test Acc. (after attack) Downstream Model Test Acc. (w/o attack)
+
+
+0.20
+
+
+0.18
+
+
+0.16
+
+
+0.14
+
+
+0.12
+
+
+0.10
+
+
+0.08
+
+
+0.06
+
+
+10 3 Scaling Coefficient10 2 10 1 10 [0]
+
+
+0.83
+
+
+0.82
+
+
+0.81
+
+
+0.80
+
+
+0.79
+
+
+0.18
+
+
+0.17
+
+
+0.16
+
+
+0.15
+
+
+0.14
+
+
+0.13
+
+
+0.12
+
+
+10 3 Scaling Coefficient10 2 10 1 10 [0]
+
+
+0.6625
+
+
+0.6600
+
+
+0.6575
+
+
+0.6550
+
+
+0.6525
+
+
+0.6500
+
+
+0.6475
+
+
+0.155
+
+
+0.150
+
+
+0.145
+
+
+0.140
+
+
+0.135
+
+
+10 3 Scaling Coefficient10 2 10 1 10 [0]
+
+
+0.660
+
+
+0.658
+
+
+0.656
+
+
+0.654
+
+
+0.652
+
+
+0.650
+
+
+0.648
+
+
+0.646
+
+
+REFERENCES
+
+
+Kasra Abbaszadeh, Christodoulos Pappas, Jonathan Katz, and Dimitrios Papadopoulos. Zeroknowledge proofs of training for deep neural networks. _Cryptology ePrint Archive_, 2024.
+
+
+David Alvarez Melis and Tommi Jaakkola. Towards robust interpretability with self-explaining neural
+networks. _Advances in neural information processing systems_, 31, 2018.
+
+
+Christopher Anders, Plamen Pasliev, Ann-Kathrin Dombrowski, Klaus-Robert Muller, and Pan Kessel.¨
+Fairwashing explanations with off-manifold detergent. In _International Conference on Machine_
+_Learning_, pp. 314–323. PMLR, 2020.
+
+
+Julia Angwin, Jeff Larson, Surya Mattu, and Lauren Kirchner. Machine bias. In _Ethics of data and_
+_analytics_, pp. 254–264. Auerbach Publications, 2022.
+
+
+Juhan Bae, Nathan Ng, Alston Lo, Marzyeh Ghassemi, and Roger B Grosse. If influence functions
+are the answer, then what is the question? _Advances in Neural Information Processing Systems_,
+35:17953–17967, 2022.
+
+
+Samyadeep Basu, Philip Pope, and Soheil Feizi. Influence functions in deep learning are fragile.
+_arXiv preprint arXiv:2006.14651_, 2020.
+
+
+Barry Becker and Ronny Kohavi. Adult. UCI Machine Learning Repository, 1996. DOI:
+https://doi.org/10.24432/C5XW20.
+
+
+Sebastian Bordt, Michele Finck, Eric Raidl, and Ulrike von Luxburg.` Post-hoc explanations fail to
+achieve their purpose in adversarial contexts. In _Proceedings of the 2022 ACM Conference on_
+_Fairness, Accountability, and Transparency_, pp. 891–905, 2022.
+
+
+Ruizhe Chen, Jianfei Yang, Huimin Xiong, Jianhong Bai, Tianxiang Hu, Jin Hao, Yang Feng,
+Joey Tianyi Zhou, Jian Wu, and Zuozhu Liu. Fast model debias with machine unlearning. _Advances_
+_in Neural Information Processing Systems_, 36, 2024.
+
+
+Anshuman Chhabra, Peizhao Li, Prasant Mohapatra, and Hongfu Liu. “what data benefits my classifier?” enhancing model performance and interpretability through influence-based data selection.
+2023.
+
+
+Ann-Kathrin Dombrowski, Maximillian Alber, Christopher Anders, Marcel Ackermann, KlausRobert Muller,¨ and Pan Kessel. Explanations can be manipulated and geometry is to blame.
+_Advances in neural information processing systems_, 32, 2019.
+
+
+Cynthia Dwork, Moritz Hardt, Toniann Pitassi, Omer Reingold, and Richard Zemel. Fairness through
+awareness. In _Proceedings of the 3rd innovations in theoretical computer science conference_, pp.
+214–226, 2012.
+
+
+Jacob R Epifano, Ravi P Ramachandran, Aaron J Masino, and Ghulam Rasool. Revisiting the fragility
+of influence functions. _Neural Networks_, 162:581–588, 2023.
+
+
+Amirata Ghorbani, Abubakar Abid, and James Zou. Interpretation of neural networks is fragile. In
+_Proceedings of the AAAI conference on artificial intelligence_, volume 33, pp. 3681–3688, 2019.
+
+
+Bishwamittra Ghosh, Debabrota Basu, and Kuldeep S Meel. “how biased are your features?”:
+Computing fairness influence functions with global sensitivity analysis. In _Proceedings of the 2023_
+_ACM Conference on Fairness, Accountability, and Transparency_, pp. 138–148, 2023.
+
+
+Han Guo, Nazneen Fatema Rajani, Peter Hase, Mohit Bansal, and Caiming Xiong. Fastif:
+Scalable influence functions for efficient model interpretation and debugging. _arXiv_ _preprint_
+_arXiv:2012.15781_, 2020.
+
+
+Kaiming He, Xiangyu Zhang, Shaoqing Ren, and Jian Sun. Deep residual learning for image
+recognition. In _Proceedings of the IEEE conference on computer vision and pattern recognition_,
+pp. 770–778, 2016.
+
+
+Juyeon Heo, Sunghwan Joo, and Taesup Moon. Fooling neural network interpretations via adversarial
+model manipulation. _Advances in neural information processing systems_, 32, 2019.
+
+
+11
+
+
+Joshua Hesse, Davide Boldini, and Stephan Sieber. Data valuation: A novel approach for analyzing
+high throughput screen data using machine learning. 2023.
+
+
+Hans Hofmann. Statlog (German Credit Data). UCI Machine Learning Repository, 1994. DOI:
+https://doi.org/10.24432/C5NC77.
+
+
+Ruoxi Jia, David Dao, Boxin Wang, Frances Ann Hubis, Nick Hynes, Nezihe Merve Gurel, Bo Li,¨
+Ce Zhang, Dawn Song, and Costas J Spanos. Towards efficient data valuation based on the
+shapley value. In _The 22nd International Conference on Artificial Intelligence and Statistics_, pp.
+1167–1176. PMLR, 2019.
+
+
+Pieter-Jan Kindermans, Sara Hooker, Julius Adebayo, Maximilian Alber, Kristof T Schutt,¨ Sven
+Dahne, Dumitru Erhan, and Been Kim.¨ The (un) reliability of saliency methods. _Explainable AI:_
+_Interpreting, explaining and visualizing deep learning_, pp. 267–280, 2019.
+
+
+Diederik P Kingma and Jimmy Ba. Adam: A method for stochastic optimization. _arXiv preprint_
+_arXiv:1412.6980_, 2014.
+
+
+Pang Wei Koh and Percy Liang. Understanding black-box predictions via influence functions. In
+_International conference on machine learning_, pp. 1885–1894. PMLR, 2017.
+
+
+Shuming Kong, Yanyan Shen, and Linpeng Huang. Resolving training biases via influence-based
+data relabeling. In _International Conference on Learning Representations_, 2021.
+
+
+Alex Krizhevsky, Geoffrey Hinton, et al. Learning multiple layers of features from tiny images. 2009.
+
+
+Yongchan Kwon, Eric Wu, Kevin Wu, and James Zou. Datainf: Efficiently estimating data influence
+in lora-tuned llms and diffusion models. _arXiv preprint arXiv:2310.00902_, 2023.
+
+
+Fei-Fei Li, Marco Andreeto, Marc’Aurelio Ranzato, and Pietro Perona. Caltech 101, Apr 2022.
+
+
+Peizhao Li and Hongfu Liu. Achieving fairness at no utility cost via data reweighing with influence.
+In _International conference on machine learning_, pp. 12917–12930. PMLR, 2022.
+
+
+Xianjia Meng, Yong Yang, Ximeng Liu, and Nan Jiang. Active forgetting via influence estimation
+for neural networks. _International Journal of Intelligent Systems_, 37(11):9080–9107, 2022.
+
+
+Xiaoye Miao, Yangyang Wu, Lu Chen, Yunjun Gao, Jun Wang, and Jianwei Yin. Efficient and
+effective data imputation with influence functions. _Proceedings of the VLDB Endowment_, 15(3):
+624–632, 2021.
+
+
+Jinlong Pang, Jialu Wang, Zhaowei Zhu, Yuanshun Yao, Chen Qian, and Yang Liu. Fair classifiers without fair training: An influence-guided data sampling approach. _arXiv_ _preprint_
+_arXiv:2402.12789_, 2024.
+
+
+Omkar M Parkhi, Andrea Vedaldi, Andrew Zisserman, and CV Jawahar. Cats and dogs. In _2012_
+_IEEE conference on computer vision and pattern recognition_, pp. 3498–3505. IEEE, 2012.
+
+
+Adam Paszke, Sam Gross, Soumith Chintala, Gregory Chanan, Edward Yang, Zachary DeVito,
+Zeming Lin, Alban Desmaison, Luca Antiga, and Adam Lerer. Automatic differentiation in
+pytorch. 2017.
+
+
+Danish Pruthi, Mansi Gupta, Bhuwan Dhingra, Graham Neubig, and Zachary C Lipton. Learning to
+deceive with attention-based explanations. _arXiv preprint arXiv:1909.07913_, 2019.
+
+
+Adam Richardson, Aris Filos-Ratsikas, and Boi Faltings. Rewarding high-quality data via influence
+functions. _arXiv preprint arXiv:1908.11598_, 2019.
+
+
+Cynthia Rudin, Chudi Zhong, Lesia Semenova, Margo Seltzer, Ronald Parr, Jiachang Liu, Srikar
+Katta, Jon Donnelly, Harry Chen, and Zachery Boner. Amazing things come from having many
+good models. _arXiv preprint arXiv:2407.04846_, 2024.
+
+
+Prasanna Sattigeri, Soumya Ghosh, Inkit Padhi, Pierre Dognin, and Kush R Varshney. Fair infinitesimal jackknife: Mitigating the influence of biased training data points without refitting. _Advances_
+_in Neural Information Processing Systems_, 35:35894–35906, 2022.
+
+
+12
+
+
+Andrea Schioppa, Polina Zablotskaia, David Vilar, and Artem Sokolov. Scaling up influence functions.
+In _Proceedings of the AAAI Conference on Artificial Intelligence_, volume 36, pp. 8179–8186, 2022.
+
+
+Ali Shahin Shamsabadi, Mohammad Yaghini, Natalie Dullerud, Sierra Wyllie, Ulrich A¨ıvodji, Aisha
+Alaagib, Sebastien Gambs, and Nicolas Papernot.´ Washing the unwashable: On the (im) possibility
+of fairwashing detection. _Advances in Neural Information Processing Systems_, 35:14170–14182,
+2022.
+
+
+Dylan Slack, Sophie Hilgard, Emily Jia, Sameer Singh, and Himabindu Lakkaraju. Fooling lime
+and shap: Adversarial attacks on post hoc explanation methods. In _Proceedings of the AAAI/ACM_
+_Conference on AI, Ethics, and Society_, pp. 180–186, 2020.
+
+
+Haochen Sun, Tonghe Bai, Jason Li, and Hongyang Zhang. Zkdl: Efficient zero-knowledge proofs of
+deep learning training. _Cryptology ePrint Archive_, 2023.
+
+
+Mukund Sundararajan and Walid Krichene. Inflow, outflow, and reciprocity in machine learning. In
+_International Conference on Machine Learning_, pp. 33195–33208. PMLR, 2023.
+
+
+Stefano Teso, Andrea Bontempelli, Fausto Giunchiglia, and Andrea Passerini. Interactive label
+cleaning with example-based explanations. _Advances in Neural Information Processing Systems_,
+34:12966–12977, 2021.
+
+
+Haonan Wang, Ziwei Wu, and Jingrui He. Fairif: Boosting fairness in deep learning via influence
+functions with validation set sensitive attributes. In _Proceedings of the 17th ACM International_
+_Conference on Web Search and Data Mining_, pp. 721–730, 2024.
+
+
+Zifeng Wang, Hong Zhu, Zhenhua Dong, Xiuqiang He, and Shao-Lun Huang. Less is better:
+Unweighted data subsampling via influence function. In _Proceedings of the AAAI Conference on_
+_Artificial Intelligence_, volume 34, pp. 6340–6347, 2020.
+
+
+Ga Wu, Masoud Hashemi, and Christopher Srinivasa. Puma: Performance unchanged model
+augmentation for training data removal. In _Proceedings_ _of_ _the_ _AAAI_ _conference_ _on_ _artificial_
+_intelligence_, volume 36, pp. 8675–8682, 2022.
+
+
+Yuanshun Yao and Yang Liu. Understanding unfairness via training concept influence. _arXiv preprint_
+_arXiv:2306.17828_, 2023.
+
+
+Xinyang Zhang, Ningfei Wang, Hua Shen, Shouling Ji, Xiapu Luo, and Ting Wang. Interpretable
+deep learning under fire. In _29th {USENIX} security symposium ({USENIX} security 20)_, 2020.
+
+
+13
+
+
+A APPENDIX
+
+
+A.0.1 AUDITING THE INFLUENCE CALCULATOR BY SUPPLYING TEST DATA
+
+
+We provide an auditing algorithm that can detect if the influence calculator outputs arbitrary numbers
+as influence scores.
+
+
+We first collect a sequence of test points _z_ test ~~1~~ _, · · ·_ _, z_ test d such that the rank of _G_ test is _d_, where
+the _i_ th row in _G_ test _∈_ R _[d][×][d]_ is _∇θL_ ( _z_ test _, θ_ _[∗]_ ) and _d_ is the size of model parameters _θ_ _[∗]_ . This can
+be done because _θ_ _[∗]_ is publicly known by the auditor. We then query the influence calculator by
+feeding _z_ test ~~i~~ one by one and collect the returned influence scores as _I_ _∈_ R _[m][×][n]_ . We compute
+the matrix _C_ := _G_ _[−]_ test [1] _[I]_ [.] [Then] [we] [feed] [a] [new] [sequence] [of] [test] [points] _[z]_ [test] ~~[d]~~ [+1] _[,][ · · ·]_ _[, z]_ [test] ~~[2]~~ [d] [and]
+suppose _Ii_ _∈_ R _[m]_ ( _i_ = _d_ + 1 _, · · ·_ _,_ 2 _d_ ) are the returned influence scores. If there is any _i_ s.t.
+_Ii_ = _∇θL_ ( _z_ test _, θ_ _[∗]_ ) _[⊤]_ _C_, we return _True_, i.e. state this influence calculator is malicious; otherwise,
+we return _False_ .
+
+
+We prove that if the influence calculator is honest, this algorithm will return False. In this
+case, _I_ = _−G_ test _Hθ∗_ _G_ _[⊤]_ train [.] Then the returned score _Ii_ = _−∇θL_ ( _z_ test _, θ_ _[∗]_ ) _[⊤]_ _Hθ∗_ _G_ _[⊤]_ train [=]
+_∇θL_ ( _z_ test _, θ_ _[∗]_ ) _[⊤]_ _G_ _[−]_ test [1] - _−G_ test _Hθ∗_ _G_ _[⊤]_ train� = _−∇θL_ ( _z_ test _, θ_ _[∗]_ ) _[⊤]_ _G_ _[−]_ test [1] _[I]_ = _∇θL_ ( _z_ test _, θ_ _[∗]_ ) _[⊤]_ _C_
+should pass the auditing. In contrast, if the malicious influence calculator returns arbitrary scores, it
+will be captured by this auditing algorithm.
+
+
+A.1 DATA MANIPULATION ATTACK DETAILS
+
+
+Figure 6: Data Valuation Setup and Threat Model.
+
+
+A.1.1 EFFICIENT BACKWARD PASS ALGORITHM
+
+
+Our idea of rewriting the attack objective involves two essential steps : (1) linearizing the objective
+(2) making the linearized objective backward-friendly in PyTorch.
+
+
+_Linearize the attack objective_ : Generally the attack objective can be a non-linear combination of
+infuence functions over different training samples, which makes the backward pass inefficient.
+Therefore we first transform the given objective into a linear combination of influence functions,
+_ℓ_ ˆattack(( _Iθ_ ( _z, Z_ test) : _z_ _∈_ _Z_ )) := _u_ _[⊤]_ ( _Iθ_ ( _z, Z_ test) : _z_ _∈_ _Z_ ) for some vector _u ∈_ R _[n]_, such that, the
+objective and gradient values are the same, _ℓ_ [ˆ] attack( _·_ ) = _ℓ_ attack( _·_ ) and _∇θℓ_ [ˆ] attack( _·_ ) = _∇θℓ_ attack( _·_ ).
+Observe that from chain rule _∇θℓ_ attack( _Iθ_ ( _z, Z_ test) : _z_ _∈_ _Z_ ) = [�] _z∈Z_ _∂I∂ℓθ_ (attack _z,Z_ test) _[· ∇][θ][I][θ]_ [(] _[z, Z]_ [test][)][.]
+
+Therefore, we can set _u_ as - _∂I∂ℓθ_ (attack _z,Z_ test) [:] _[ z]_ _[∈]_ _[Z]_ - while meeting the equal objective and gradient
+value requirement. Influence scores in this vector are computed using an efficient forward pass
+algorithm, given in Alg. 2.
+
+
+_Get a PyTorch backward-friendly attack objective_ : Simply expanding our linearized attack objective gives, _ℓ_ [ˆ] attack( _·_ ) = _vθ,_ _[⊤]_ 1 _[H]_ _θ_ _[−]_ [1] _[v][θ,]_ [2] [where] _[v][θ,]_ [1] [=] [(] _[−∇][θ]_ - _mi_ =1 _[L]_ [ (] _[z]_ [test] ~~[i]~~ _[, θ]_ [))] [and] _[v][θ,]_ [2] [=]
+
+- _∇θ_ - _z∈Z_ _[u][z]_ _[·][ L]_ [(] _[z, θ]_ [)] �. Gradient computations for this objective will have to go through HIVPs,
+
+which is highly inefficient. Therefore we next convert the linearized objective into one which does not
+involve HIVPs, again such that the objective and gradient values are same as the original objective.
+
+
+14
+
+
+When using the original influence-based objective naively, it was not possible to even do one backward
+pass due to memory constraints. This algorithm brings down the memory required for one forward +
+backward pass from not being feasible to run on a 12GB GPU to 7GB for a 206K parameter model
+and from 8GB to 1.7GB for a 5K model.
+
+
+15
+
+
+Using chain rule, the gradient of the expanded linearized attack objective can be written as
+_∇θℓ_ [ˆ] attack( _·_ ) = ( _∇θvθ,_ 1) _[⊤]_ _u_ 2 + _u_ _[⊤]_ 1 [(] _[∇][θ][v][θ,]_ [2][)] _[ −]_ _[u]_ 1 _[⊤]_ [(] _[∇][θ][H][θ]_ [)] _[ u]_ [2] [where] _[u]_ [1] [=] _[H]_ _θ_ _[−]_ [1] _[v][θ,]_ [1] [and] _[u]_ [2] [=]
+_Hθ_ _[−]_ [1] _[v][θ,]_ [2][.] [PyTorch supports the gradient computation for functions] [of gradient,] [making] _[v][θ,]_ [1] [and]
+_vθ,_ 2 backward-friendly. PyTorch also calculates gradients for functions of hessian vector products
+_implicitly_, which leads to efficiency. Additionally, we can precompute _u_ 1, _u_ 2 and freeze them.
+
+
+As a result, our final backward-friendly objective function is efficient and backward-friendly with
+PyTorch and is given as, _ℓ_ [¯] attack( _θ_ ) = _vθ,_ _[⊤]_ 1 _[u]_ [2][ +] _[ u]_ 1 _[⊤][v][θ,]_ [2] _[−]_ _[u][⊤]_ 1 _[H][θ][u]_ [2][.] [The algorithm for computing our]
+backward-friendly objective _ℓ_ [¯] attack is elucidated in Alg. 1.
+
+
+**Derivation for expanding the linearized objective:**
+
+
+_ℓ_ ˆattack(( _Iθ_ ( _z, Z_ test) : _z_ _∈_ _Z_ )) = _u_ _[⊤]_ ( _Iθ_ ( _z, Z_ test) : _z_ _∈_ _Z_ )
+
+=          - _uz_ _· Iθ_ ( _z, Z_ test)
+
+
+_z∈Z_
+
+
+= - _uz_ _·_
+
+
+_z∈Z_
+
+
+= - _uz_ _·_
+
+
+_z∈Z_
+
+
+_m_
+
+- _Iθ_ ( _z_ test i _, z_ )
+
+
+_i_ =1
+
+
+_m_
+
+- _−∇θL_ ( _z_ test _,_ i _, θ_ ) _[⊤]_ _Hθ_ _[−]_ [1] _[∇][θ][L]_ [(] _[z, θ]_ [)]
+
+_i_ =1
+
+
+_L_ ( _z_ test _,_ i _, θ_ )
+
+_i_ =1
+
+
+- _⊤_
+
+
+_∇θ_ - _uz_ _· L_ ( _z, θ_ )
+
+
+_z∈Z_
+
+
+=
+
+
+_−∇θ_
+
+
+_m_
+
+
+_Hθ_ _[−]_ [1]
+
+
+= _vθ,_ _[⊤]_ 1 _[H]_ _θ_ _[−]_ [1] _[v][θ,]_ [2]
+
+
+where _vθ,_ 1 = ( _−∇θ_ - _mi_ =1 _[L]_ [ (] _[z]_ [test] _[,]_ [i] _[, θ]_ [))][ and] _[ v][θ,]_ [2] [=] - _∇θ_ - _z∈Z_ _[u][z]_ _[·][ L]_ [(] _[z, θ]_ [)] �.
+
+
+**Chain Rule for gradient of expanded linearized objective:**
+
+
+_∇θℓ_ [ˆ] attack(( _Iθ_ ( _z, Z_ test) : _z_ _∈_ _Z_ )) = _∇θvθ,_ _[⊤]_ 1 _[H]_ _θ_ _[−]_ [1] _[v][θ,]_ [2]
+
+= ( _∇θvθ,_ 1) _[⊤]_ _· Hθ_ _[−]_ [1] _[v][θ,]_ [2][ +] _[ v]_ _θ,_ _[⊤]_ 1 _[H]_ _θ_ _[−]_ [1] ( _∇θvθ,_ 2) _−_ _vθ,_ _[⊤]_ 1 _[H]_ _θ_ _[−]_ [1] ( _∇θHθ_ ) _Hθ_ _[−]_ [1] _[v][θ,]_ [2]
+
+= ( _∇θvθ,_ 1) _[⊤]_ _u_ 2 + _u_ _[⊤]_ 1 [(] _[∇][θ][v][θ,]_ [2][)] _[ −]_ _[u]_ 1 _[⊤]_ [(] _[∇][θ][H][θ]_ [)] _[ u]_ [2]
+
+
+where _u_ 1 = _Hθ_ _[−]_ [1] _[v][θ,]_ [1][ and] _[ u]_ [2] [=] _[ H]_ _θ_ _[−]_ [1] _[v][θ,]_ [2][.]
+
+
+**Algorithm 1** Get ~~B~~ ackward ~~F~~ riendly ~~A~~ ttack ~~O~~ bjective
+**Input:** Model Parameters _θ_, Train Set _Z_, Test Set _Z_ test, Loss _L_, Original Attack Objective _ℓ_ attack
+**Output:** Backward-Friendly Attack Objective _ℓ_ [¯] attack( _θ_ )
+
+1: Compute ( _Iθ_ ( _z, Z_ test) : _z_ _∈_ _Z_ ) from Appendix Alg. 2
+
+2: Compute _u_ :=  - _∂I∂ℓθ_ (attack _z,Z_ test) [:] _[ z]_ _[∈]_ _[Z]_  
+
+
+3: Compute _vθ,_ 1 := ( _−∇θ_ - _mi_ =1 _[L]_ [ (] _[z]_ [test] ~~[i]~~ _[, θ]_ [))][ and] _[ v][θ,]_ [2] [:=] - _∇θ_ 
+
+
+4: Compute and freeze _u_ 1 := _Hθ_ _[−]_ [1] _[v][θ,]_ [1][ and] _[ u]_ [2] [:=] _[ H]_ _θ_ _[−]_ [1] _[v][θ,]_ [2]
+5: Compute _ℓ_ [¯] attack( _θ_ ) := _vθ,_ _[⊤]_ 1 _[u]_ [1][ +] _[ u]_ 2 _[⊤][v][θ,]_ [2] _[−]_ _[u][⊤]_ 1 _[H][θ][u]_ [2]
+6: **Return:** _ℓ_ [¯] attack( _θ_ )
+
+
+_z∈Z_ _[u][z]_ _[·][ L]_ [(] _[z, θ]_ [)] 
+
+**Algorithm 2** ForwardOnlyInf
+**Input:** Parameters _θ_, train set _Z_, test set _Z_ test, loss _L_
+**Output:** ( _Iθ_ ( _z, Z_ test) : _z_ _∈_ _Z_ )
+
+1: Compute _L_ ( _Z_ test _, θ_ ) := _∇θ_  - _mi_ =1 _[L]_ [ (] _[z]_ [test] ~~[i]~~ _[, θ]_ [)]
+2: Compute _s_ test := _Hθ_ _[−]_ [1] _[L]_ [ (] _[Z]_ [test] _[, θ]_ [)][ by the hessian-inverse-vector product in Koh & Liang (2017).]
+3: _∀z_ _∈_ _Z_, compute _Iθ_ ( _z, Z_ test) := _s_ _[⊤]_ test _[∇][θ][L]_ [ (] _[z, θ]_ [)]
+4: **Return:** ( _Iθ_ ( _z, Z_ test) : _z_ _∈_ _Z_ )
+
+
+**Algorithm 3** Gradient-based optimization for Attack Loss _ℓ_ attack
+**Input:** Parameters _θ_ _[⋆]_, Radius _C_, train set _Z_, test set _Z_ test, loss _L_, attack objective _ℓ_ attack, gradientbased optimizer _Opt_, distance function dist
+**Output:** _θ_ _[′]_
+
+1: Set _θ_ 0 := Randomly chosen model parameters from a ball of radius _C_ centered around _θ_ _[⋆]_,
+_B_ ( _θ_ _[⋆]_ _, C_ ) where distance is calculated using dist
+2: **for** _t_ = 1 **to** _T_ **do**
+3: _ℓ_ ¯attack( _θt−_ 1) = Get ~~B~~ ackward ~~F~~ riendly ~~A~~ ttack ~~O~~ bjective( _θt−_ 1, _Z_, _Z_ test, _L_, _ℓ_ attack)
+4: Compute _∇θℓ_ [¯] attack( _θt−_ 1) through _ℓ_ [¯] attack( _θt−_ 1).Backward() in PyTorch
+5: Update _θt−_ 1 _→_ _θt_ by the given gradient-based optimizer _Opt_
+6: If _θt_ _∈B/_ ( _θ_ _[⋆]_ _, C_ ), clip _θt_ to lie within _B_ ( _θ_ _[⋆]_ _, C_ ) where distance is calculated using dist
+7: **end for**
+8: **Return:** _θ_ _[′]_ := _θT_
+
+
+A.1.2 EXPERIMENTAL DETAILS
+
+
+**Dataset Details.** CIFAR10 (Krizhevsky et al., 2009) has a training/test set size of 50000/10000 with
+10 output classes, Oxford-IIIT Pet (Parkhi et al., 2012) has a training/test set size of 3680/3669 with
+37 output classes and Caltech-101 (Li et al., 2022) has a training/test set size of 6941/1736 with 101
+output classes.
+
+
+**Forward** **pass** **Details.** We use the LiSSA implementation given at [https://github.com/](https://github.com/nimarb/pytorch_influence_functions)
+[nimarb/pytorch_influence_functions with recursion depth=1e6, scale=25 and damping](https://github.com/nimarb/pytorch_influence_functions)
+factor= 0.01.
+
+
+**Attack Details.** To optimize our attack objective, we use algorithm Alg. 3 for computing gradients
+with Adam as the optimizer Kingma & Ba (2014). We use two learning rates _{_ 0 _._ 01 _,_ 0 _._ 1 _}_ and 100
+steps of updates. We optimize every attack from 5 different initializations. We run our attacks with
+multiple values of the constraint radius _C_ = _{_ 0 _._ 05 _,_ 0 _._ 1 _,_ 0 _._ 2 _,_ 0 _._ 5 _}_ . For each regime, the reported
+number is the highest we could obtain with different values of constants _C_ or _α_ .
+
+
+**Baseline Details.** For training a model under the baseline attack we choose Adam as the optimizer,
+set the batch size as 256 and update for 1400 steps. We ran the baseline for different weights _α_ with
+a logarithmic scaling from 10 to 1e18. We use weighted sampling instead of uniform to account for
+the weight on the target sample.
+
+
+A.1.3 PROOF OF IMPOSSIBILITY THEOREM (THEOREM 1)
+
+
+_Proof of Theorem 1._ We first introduce a construction of 2-class classification dataset _Z_ train _, Z_ test _⊆_
+R _[d]_ _× {_ 1 _, −_ 1 _}_ and show under this construction and a logistic regression model _θ_, there exists a target
+data _z_ target _∈_ _Z_ train such that no matter how we manipulate this linear model _θ_, i.e. _∀θ_ _∈_ R _[d]_, the
+rank of _Iθ_ ( _z_ target _, Z_ test) among ( _Iθ_ ( _z, Z_ test) : _z_ _∈_ _Z_ train) _cannot_ reach top-1.
+
+
+Denote _zi_ _∈_ R _[d]_ as a one-hot vector which has all zeros except 1 at the _i_ th dimension. We construct
+_Z_ test as _{_ ( **e** 1 _,_ 1) _}_, and construct _Z_ train = _{_ ( _zi, yi_ ) _|i_ = 2 _, · · ·_ _, d}∪{_ ( **e** 1 _,_ 1) _,_ ( _−_ **e** 1 _,_ 1) _}_ where _yi_ can
+be arbitrarily selected from _{_ 1 _, −_ 1 _}_ . By choosing _z_ target = ( **e** 1 _,_ 1) _∈_ _Z_ train and _z_ bar = ( _−_ **e** 1 _,_ 1) _∈_
+_Z_ train, next we are going to prove _Iθ_ ( _z_ target _, Z_ test) _<_ _Iθ_ ( _z_ bar _, Z_ test) for any _θ_ _∈_ R _[d]_, which
+indicates _Iθ_ ( _z_ target _, Z_ test) among ( _Iθ_ ( _z_ target _, Z_ test) : _z_ _∈_ _Z_ train) _cannot_ reach top-1.
+
+
+16
+
+
+Figure 7: Histograms for original ranks of easy-to-manipulate samples, Histograms for original ranks
+of hard-to-manipulate samples, Scatterplots for influence gradient norm vs. original ranks of the 50
+random target samples. Ranking _k_ := 1. _Easy-to-manipulate samples have extreme original influence_
+_ranks (large positive or negative) as the samples with the extreme rankings also have higher influence_
+_gradient norms, where the gradient is taken w.r.t._ _model parameters._
+
+
+17
+
+
+We adopt the computation of influence function on logistic regression from the original influence function paper (Koh & Liang, 2017). Denote _r_ ( _zi, θ_ ) = _σ_ ( _zi_ _[⊤][θ]_ [)] _[ ·][ σ]_ [(] _[−][z]_ _i_ _[⊤][θ]_ [)] [where] _[σ]_ [(] _[t]_ [)] [=]
+1+exp(1 _−t_ ) _[>]_ [ 0][.] [Then the Hessian] _[ H][θ]_ [of the logistic regression training loss] _d_ +11 - _z∈Z_ train _[L]_ [(] _[z, θ]_ [)]
+
+is _Hθ_ = _d_ +11 �2 _r_ ( **e** 1 _, θ_ ) **e** 1 **e** _[⊤]_ 1 [+][ �] _i_ _[d]_ =2 _[r]_ [(] _[z][i][, θ]_ [)] _[z][i][z]_ _i_ _[⊤]_ - _._ Then we can calculate the influence function
+for _z_ target and _z_ bar:
+
+
+_d_ + 1
+_Iθ_ ( _z_ target _, Z_ test) = _−σ_ ( _−θ_ _[⊤]_ **e** 1) _· σ_ ( _θ_ _[⊤]_ **e** 1) _·_ **e** _[⊤]_ 1 _[H]_ _θ_ _[−]_ [1] **[e]** [1] [=] _[ −][σ]_ [(] _[−][θ][⊤]_ **[e]** [1][)] _[ ·][ σ]_ [(] _[θ][⊤]_ **[e]** [1][)] _[ ·]_
+_r_ ( **e** 1 _, θ_ ) _[<]_ [ 0] _[,]_
+
+
+_d_ + 1
+_Iθ_ ( _z_ bar _, Z_ test) = _−σ_ ( _−θ_ _[⊤]_ **e** 1) _· σ_ ( _θ_ _[⊤]_ **e** 1) **e** _[⊤]_ 1 _[H]_ _θ_ _[−]_ [1][(] _[−]_ **[e]** [1][) =] _[ σ]_ [(] _[−][θ][⊤]_ **[e]** [1][)] _[ ·][ σ]_ [(] _[θ][⊤]_ **[e]** [1][)] _[ ·]_
+_r_ ( **e** 1 _, θ_ ) _[>]_ [ 0] _[.]_
+
+
+This complete the proof: _∀θ_, _Iθ_ ( _z_ target _, Z_ test) _<_ 0 _< Iθ_ ( _z_ bar _, Z_ test) and therefore _z_ target can never
+achieve top-1.
+
+
+The above construction can be generalized to top- _K_ for any _K_ _>_ 1: we can construct _Z_ test as
+_{_ ( **e** 1 _,_ 1) _}_, and construct _Z_ train = _{_ ( _zi, yi_ ) _|i_ = 2 _, · · ·_ _, d} ∪{_ ( **e** 1 _,_ 1) _, K_ duplicated ( _−_ **e** 1 _,_ 1) _}_ where
+_yi_ can be arbitrarily selected from _{_ 1 _, −_ 1 _}_ . Then similar to the proof above, by choosing _z_ target =
+( **e** 1 _,_ 1) _∈_ _Z_ train and _K_ duplicated training point in the training set _z_ bar _[k]_ [=] [(] _[−]_ **[e]** [1] _[,]_ [ 1)] _[, k]_ _[∈]_ [[] _[K]_ []][, we]
+can prove _∀θ_, _Iθ_ ( _z_ target _, Z_ test) _<_ 0 and _∀θ, k_ _∈_ [ _K_ ], _Iθ_ ( _z_ bar _[k]_ _[, Z]_ [test][)] _[ >]_ [ 0][.] [Consequently,] _[ ∀][θ]_ [,] _[ z]_ [target]
+will not achieve top- _K_ .
+
+
+10
+
+
+8
+
+
+6
+
+
+4
+
+
+2
+
+
+7
+
+
+6
+
+
+5
+
+
+4
+
+
+3
+
+
+2
+
+
+1
+
+
+5
+
+
+4
+
+
+3
+
+
+2
+
+
+1
+
+
+4.0
+
+
+3.5
+
+
+3.0
+
+
+2.5
+
+
+2.0
+
+
+1.5
+
+
+1.0
+
+
+0.5
+
+
+8
+
+
+6
+
+
+4
+
+
+2
+
+
+3.0
+
+
+2.5
+
+
+2.0
+
+
+1.5
+
+
+1.0
+
+
+0.5
+
+
+10 [1]
+
+
+10 [0]
+
+
+10 1
+
+
+10 2
+
+
+10 3
+
+
+10 [0]
+
+
+10 2
+
+
+10 4
+
+
+10 6
+
+
+10 [1]
+
+
+10 [0]
+
+
+10 1
+
+
+10 2
+
+
+10 3
+
+
+10 4
+
+
+Oxford-IIIT Pet
+
+
+0 500 1000 Original Rank1500 2000 2500 3000 3500
+
+
+Caltech-101
+
+
+0 1000 2000Original Rank3000 4000 5000 6000 7000
+
+
+CIFAR10
+
+
+0 10000 Original Rank20000 30000 40000 50000
+
+
+**Fairness Metric.** We define the fairness metric used in our paper, Demographic Parity.
+
+**Definition** **2** (Demographic Parity Gap (DP) Dwork et al. (2012)) **.** _Given_ _a_ _data_ _distribution_ _D_
+_over_ _X_ [¯] _× {_ 0 _,_ 1 _}_ _from_ _which_ _features_ _x_ _[\][a]_ _and_ _sensitive_ _attribute_ _x_ _[a]_ _∈{_ 0 _,_ 1 _}_ _are_ _jointly_ _drawn_
+_from, Demographic Parity gap for a model fθ_ _is defined to be the difference in the rate of positive_
+_predictions between the two groups, |_ Pr(ˆ _y_ _|_ _x_ _[a]_ = 0) _−_ Pr(ˆ _y_ _|_ _x_ _[a]_ = 1) _| where_ _y_ ˆ _is the prediction_
+_fθ_ ( _x_ _[\][a]_ _, x_ _[a]_ ) _._
+
+
+Dataset Predict Train / Val. / Test Split #Dim. Sensitive Attribute Group Pos. Rate
+Adult if annual income _>_ = 50k 22622 _/_ 7540 _/_ 15060 102 Gender - Male / Female 0 _._ 312 _/_ 0 _._ 113
+Compas if defendant rearrested in 2 yrs. 3700 _/_ 1234 _/_ 1233 433 Race - White / Non-white 0 _._ 609 _/_ 0 _._ 518
+German Credit good/bad credit risk 600 _/_ 200 _/_ 200 56 Age - 30 0 _._ 742 _/_ 0 _._ 643
+
+
+Table 3: Details for datasets used in our Fairness Manipulation attack experiments. In our setting, the
+Validation set is the test set shared between the model trainer and influence calculator. The Test set is
+an untouched set which is used to assess the performance and fairness of the final model achieved
+after the training with the reweighed training set. All our results are reported on this untouched Test
+set. Table details borrowed from Li & Liu (2022).
+
+
+18
+
+
+Figure 8: Overview of the process to achieve a fair model, as proposed by Li & Liu (2022). Our
+adversary, the model trainer manipulates the base model used to calculate influence scores.
+
+
+A.2 FAIRNESS MANIPULATION ATTACK DETAILS
+
+
+**Optimization Problem for Reweighing Training Data as proposed by Li & Liu (2022)** is given as
+follows,
+
+
+minimize 
+
+
+minimize - _i_ _[w][i]_
+
+subject to - _[w][i]_
+
+
+- _i_ _[w][i][I]_ [fair] [(] _[z][i]_ [) =] _[ −][f]_ fair _[ V]_
+
+
+- _i_ _[w][i][I]_ [util] [(] _[z][i]_ [)] _[ ≤]_ [0]
+
+_wi_ _∈_ [0 _,_ 1]
+
+
+(6)
+
+
+where _wi_ refers to the weight of the _i_ _[th]_ training sample, _zi_ refers to the _i_ _[th]_ training sample, _I_ util
+refers to our influence function, _I_ fair refers to some fairness influence function and _f_ fair _[V]_ [corresponds]
+to a differentiable fairness metric. In our threat model, the adversary manipulates the base model,
+which changes the influence scores _I_ util .
+
+
+An advanced version of the above optimization problem using additional parameters ( _β, γ_ ) which
+lead to various tradeoffs is given as,
+
+
+minimize 
+
+
+minimize - _i_ _[w][i]_
+
+subject to - _i_ _[w][i][I]_ [fair] [(] _[z][i]_ [)] _[ ≤−]_ [(1] _[ −]_ _[β]_ [)] _[ℓ][ν]_ fair _[,]_
+
+   -   
+
+
+- _i_ _[w][i][I]_ [util] [(] _[z][i]_ [)] _[ ≤]_ _[γ]_ [ (min] **[v]** - _i_ _[v][i][I]_ [util] [(] _[z][i]_ [))] _[,]_
+
+_wi_ _∈_ [0 _,_ 1] _._
+
+
+(7)
+
+
+**1000**
+
+**1001**
+
+**1002**
+
+
+**1003**
+
+**1004**
+
+**1005**
+
+**1006**
+
+**1007**
+
+**1008**
+
+
+**1009**
+
+**1010**
+
+**1011**
+
+**1012**
+
+**1013**
+
+
+**1014**
+
+**1015**
+
+**1016**
+
+**1017**
+
+**1018**
+
+**1019**
+
+
+**1020**
+
+**1021**
+
+**1022**
+
+**1023**
+
+**1024**
+
+**1025**
+
+
+Dataset Model _ℓ_ 2 reg. DP ( _β, γ_ )
+Adult 2.26 (0.8,0.3)
+Compas 37.00 (0.3,0.1)
+German Credit 5.85 (0.5,0.0)
+
+
+Table 4: Details for the Fairness Manipulation attack experiments. We use the same values of
+parameters as used by Li & Liu (2022).
+
+
+19

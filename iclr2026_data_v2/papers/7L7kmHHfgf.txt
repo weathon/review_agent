@@ -1,0 +1,1196 @@
+# PIRN : PROTOTYPICAL-BASED INTRA-MODAL RECON## STRUCTION WITH NORMALITY COMMUNICATION FOR
+# MULTIMODAL ANOMALY DETECTION
+
+
+**Yiting Li** [1] **, Xulei Yang** [1] **, Jing Zhang** _[†]_ [2] **, Sichao Tian** [3] **, Jingyi Liao** [1] **, Fayao Liu** [1] _[†]_
+
+1Institute for Infocomm Research, A*STAR, Singapore
+2School of Computer Science and Engineering, Macao University of Science and Technology
+3Institute of Medicinal Plant Development, Chinese Academy of Medical Sciences and Peking
+Union Medical College, China
+_{_ li ~~y~~ iting, yang ~~x~~ ulei, liu ~~f~~ ayao _}_ @a-star.edu.sg
+
+
+ABSTRACT
+
+
+Unsupervised multimodal anomaly detection (MAD) aims to detect anomalies
+by using both RGB and 3D modalities. However, existing methods struggle in
+few-shot scenarios where the number of normal training samples is limited. Specifically, cross-modal alignment approaches fail to learn reliable correspondences
+from scarce normal data, whereas memory-based methods often misclassify unseen
+normal variations as anomalies. To address these issues, we propose **PIRN**, a
+prototype-driven reconstruction framework equipped with explicit cross-modal
+knowledge transfer. Instead of relying on dense feature alignment or heavy memory
+banks, **PIRN** uses a compact set of learnable prototypes to capture diverse normal
+patterns and constrain feature reconstruction. Specifically, our framework incorporates three core innovations. We introduce Balanced Prototype Assignment (BPA),
+which employs balanced optimal transport to ensure uniform prototype utilization
+and prevent codebook collapse. Next, we propose Adaptive Prototype Refinement
+(APR), which uses gated prototype updates to dynamically expand the model’s
+knowledge of unseen normal variations during inference. To enable each modality
+to assist the other in reconstructing, we further develop a Multimodal Normality
+Communication (MNC) module that exchanges high-level normal cues between
+modalities via gated cross-attention. Extensive experiments on the MVTec 3D-AD,
+Eyecandies, and Real-IAD benchmarks validate the effectiveness of **PIRN**, where
+it consistently achieves superior performance compared to existing baselines under
+challenging few-shot settings.
+
+
+1 INTRODUCTION
+
+
+Multimodal anomaly detection (MAD; Wang et al., 2023; Costanzino et al., 2024; Long et al.,
+2025) identifies anomalies by inspecting both RGB images and 3D point clouds. Compared with
+single-modality methods, MAD-based methods can reveal defects that are invisible to either modality
+alone. However, existing MAD methods still struggle in few-shot scenarios where only a handful
+of normal samples per class are available for training (Fang et al., 2023; Tian et al., 2024; Huang
+et al., 2022). For example, cross-modal alignment approaches such as CFM (Costanzino et al., 2024)
+and LSFA (Tu et al., 2024) attempt to learn dense correspondences between RGB and 3D modalities
+using only normal data. An anomaly is identified when features of one modality cannot be predicted
+from those of the other modality. However, with very few normal samples, the learned mapping
+captures only narrow cross-modal correlations and fails on unseen yet normal correspondences at
+test time. Memory-bank methods such as M3DM (Wang et al., 2023) and SG-DM (Chu et al., 2023)
+store normal features as exemplars and detect anomalies by measuring the divergence between a
+test sample and its k-nearest exemplars. With limited normal samples, memory-based models fail to
+capture the full range of normal variation, leading to false positives on mildly deviating test samples.
+
+
+†Corresponding author.
+
+
+1
+
+
+Figure 1: **Left:** Comparison with state-of-the-art methods on the Eyecandies dataset (AUROC _I_
+metric). PIRN achieves superior anomaly detection accuracy using less than 1% of the training data,
+significantly outperforming existing methods in data-scarce scenarios. **Right:** t-SNE visualization
+of patch tokens and prototypes in the RGB decoder feature space (MVTec 3D-AD, 10-shot setting).
+BPA ( _bottom_ ) yields a more uniform prototype distribution over normal features, whereas a softmax
+assignment ( _top_ ) results in underutilized/collapsed prototypes.
+
+
+As such, both alignment- and memory-based approaches degrade significantly in the challenging
+few-shot settings (see Fig. 1 **Left** ).
+
+
+We address these limitations with **PIRN** : **P** rototypical-based **I** ntra-modal **R** econstruction with
+**N** ormality Communication for few-shot MAD. Rather than overfitting to sparse data via dense
+cross-modal matching or relying on large memory banks, **PIRN** emphasizes robust **Intra-modal Fea-**
+**ture Reconstruction** using a vector-quantized codebook of discrete normality-aware prototypes (Van
+Den Oord et al., 2017). By reconstructing the features of each modality from a compact codebook,
+**PIRN** enforces an information bottleneck (Alemi et al., 2017; Seo et al., 2023; Zhang et al., 2024b)
+that retains only essential patterns of normal texture and geometry while ignoring irrelevant details.
+Consequently, anomalies that cannot be well represented by the prototypes yield large reconstruction
+errors.
+
+
+Prototype-based reconstruction in a few-shot scenario faces several challenges. First, standard softassignment schemes (e.g., softmax attention) are prone to the codebook collapse issue (Zheng &
+Vedaldi, 2023). During training, a few prototypes tend to encode common normal modes, whereas the
+rest receive fewer updates and become inactive. This issue not only reduces the model’s capacity but
+also narrows the prototype codebook’s coverage of normality. Second, a static prototype codebook
+learned from scarce training data often fails to capture wide variations in normality (Zhang et al.,
+2024a; Wei et al., 2023). As a result, a normal test sample may contain unseen yet still-normal
+patterns that cannot align with any learned prototype, leading to false-positive predictions. Third,
+existing prototype-based AD methods (Mao et al., 2025; Luo et al., 2025) treat each modality in
+isolation, ignoring the complementary information between texture and geometry. Without effective
+cross-modal collaboration, subtle defects unique to one modality may go undetected.
+
+
+We introduce three designs to address the above limitations. **First**, Balanced Prototype Assignment
+(BPA) formulates the patch-to-prototype matching task as a balanced optimal transport problem
+(Peyre & Cuturi, 2019), thus ensuring that each prototype captures a distinct normal pattern.´ This
+prevents codebook collapse and promotes diverse normal coverage with limited normal samples. As
+shown in Fig. 1 **Right**, BPA yields a more uniform prototype distribution than softmax assignment.
+**Second**, Adaptive Prototype Refinement (APR) bridges the train–test distribution gap by treating the
+prototypes as adaptive memory at inference. APR uses a lightweight GRU to update the prototype
+vectors based on the test image’s normal context, without corrupting them with anomaly contexts.
+This on-the-fly refinement expands the prototypes’ coverage to new normal variations that are absent
+during training. **Third**, we introduce Multimodal Normality Communication (MNC) that exchanges
+prototypical normality knowledge across modalities via a two-stage process. The first stage aligns
+high-level normal concepts encoded by prototypes across modalities through graph refinement. In the
+second stage, these refined prototypes serve as anchors to guide fine-grained feature reconstruction
+via cross-attention. As such, this allows each modality to reinforce the other’s understanding of
+
+
+2
+
+
+Figure 2: (a) **Overview of PIRN.** Given an RGB image and a surface-normal map, PIRN uses pretrained frozen encoders to extract features _Ergb_ and _Esn_ . A prototype-aware multi-layer decoder then
+reconstructs these features into **Z** [bpa] (intra-modal purified) and **Z** [mnc] (cross-modal purified), which
+are used to generate anomaly maps. PIRN introduces three key components: 1) APR for adaptive
+prototype refinement to capture unseen normal patterns at test time; 2) BPA for balanced prototype
+assignment to mitigate codebook collapse; and 3) MNC for cross-modal prototype communication.
+(b) Details of the three components.
+
+
+normality, enabling more discriminative detection of challenging anomalies (e.g., subtle defects) that
+might go undetected when each modality is used in isolation.
+
+
+Together, these modules enable our model to learn and communicate normal patterns effectively
+across modalities, significantly improving anomaly detection in data-scarce settings. Our main
+contributions are summarized as follows:
+
+
+    - We present **PIRN**     - a robust _Prototypical-based Intra-modal Reconstruction with cross-_
+_modal Normality Communication_ framework for few-shot MAD.
+
+
+    - We introduce BPA to prevent codebook collapse and capture more diverse normal patterns.
+A lightweight APR module is further proposed to expand the prototypes’ coverage to unseen
+yet normal variations at inference.
+
+
+    - We propose an MNC mechanism that shares normal information across modalities via
+cross-modal knowledge transfer, enabling each modality to help reconstruct the other’s
+normal features and clearly highlight anomalies.
+
+
+2 RELATED WORK
+
+
+**2D Anomaly Detection.** Many recent 2D anomaly detection (AD) methods constrain normal feature
+representations by using discrete prototypes to encode “normality.” For example, HVQ-Trans (Lu
+et al., 2023) preserves typical normal patterns as a vector-quantized prototype codebook, preventing
+the “identical shortcut” issue and ensuring anomalies cannot be perfectly reconstructed. Similarly,
+
+
+3
+
+
+RLR (He et al., 2024) introduces a learnable reference representation to discourage shortcut solutions
+and explicitly model normal patterns. DPDL (Wang et al., 2025) learns multiple Gaussian prototypes
+and diffuses normal samples toward these cluster centers, forming a compact normal feature space
+to exclude anomalies. INP-Former (Luo et al., 2025) extracts intrinsic normal prototypes directly
+from each test image, eliminating reliance on external memory bank and achieving state-of-theart performance in 2D AD tasks. Gong et al. (2019) introduce MemAE, a memory-augmented
+autoencoder that utilizes an explicit memory bank to record prototypical normal patterns, thereby
+constraining reconstruction to learned normality. Guo et al. (2023) propose a template-guided
+approach, utilizing exemplars from the normal training library to guide the hierarchical restoration
+of input features, detecting anomalies via reconstruction deviations. However, lacking explicit
+cross-modal interaction, such methods are not directly applicable to MAD tasks.
+
+
+**Multimodal Anomaly Detection.** Existing MAD methods mostly rely on cross-modal alignment
+or memory banks, with some exploring architecture search and distillation. Cross-modal alignment
+approaches (e.g., CFM (Costanzino et al., 2024), LSFA (Tu et al., 2024)) learn to align RGB and
+3D features using only normal data, detecting anomalies when one modality’s features cannot be
+predicted by the other. These methods fuse texture and geometry cues effectively but need diverse
+normal samples to establish reliable cross-modal correspondences. Alternatively, memory-based
+models such as M3DM (Wang et al., 2023) and SG-DM (Chu et al., 2023) store normal feature
+patterns (either fused or modality-specific) and identify deviations as anomalies. Such methods
+suffer in few-shot settings: any unseen yet normal pattern not shown in the memory can lead to
+misidentification. Beyond alignment and memory methods, 3D-ADNAS (Long et al., 2025) optimizes
+feature fusion architectures via neural architecture search.
+
+
+3 METHOD
+
+
+3.1 FRAMEWORK OVERVIEW
+
+
+To the best of our knowledge, **PIRN** (overview in Fig. 2) is the first multimodal anomaly detection
+(AD) framework to integrate a vector-quantized prototype codebook into a Vision Transformer (ViT;
+Dosovitskiy et al., 2021) encoder–decoder architecture. Specifically, for each modality, we learn a
+compact codebook of _K_ vector-quantized discrete prototypes. These prototypes serve as reference
+points for typical normal textures and geometries, constraining reconstruction to rely solely on normal
+information.
+
+
+**Frozen ViT Encoder.** We employ two parallel ViT encoders, _E_ rgb and _E_ sn, which are pre-trained
+and kept frozen. _E_ rgb processes the input RGB image, while _E_ sn processes the corresponding surfacenormal map. We extract multi-scale features from a set of intermediate layers of each encoder and
+aggregate them via element-wise averaging to form a single feature map per modality (denoted _Ergb_
+and _Esn_, each in R _[N]_ _[×][C]_ ). These aggregated feature maps serve as both the input to the decoder and
+the target for reconstruction.
+
+
+**Cascaded Prototype-Aware Decoder.** The decoder consists of a stack of prototype-aware layers
+that progressively reconstruct a normal version of input features. Each decoder layer performs
+three sequential operations. First, Adaptive Prototype Refinement (APR) updates each modality’s
+prototype codebook via a gated recurrent unit (GRU; Chung et al., 2014), enhancing adaptability to
+the current sample. Next, Balanced Prototype Assignment (BPA) assigns each patch token to the
+updated prototypes via balanced optimal transport, promoting uniform prototype utilization. Finally,
+Multimodal Normality Communication (MNC) aligns the refined prototypes from both modalities
+through graph-based attention, and then exchanges high-level normality knowledge between the two
+modalities.
+
+
+3.2 BALANCED PROTOTYPE ASSIGNMENT (BPA)
+
+
+Allowing each token to softly match against all _K_ prototypes can lead to a codebook collapse: some
+prototypes may eventually become under-utilized, reducing the diversity of normal patterns the
+codebook can represent. BPA addresses this issue by formulating the token-to-prototype assignment
+as a balanced _optimal_ _transport_ (OT) problem. Instead of using softmax assignment that might
+
+
+4
+
+
+over-concentrate on a few prototypes, BPA promotes two properties for a more uniform prototype
+usage: (1) **patch-to-prototype selectivity**, encouraging each patch token to concentrate its mass
+on only a few prototype codes (controlled by the OT cost and entropic regularization); and (2)
+**uniform prototype utilization**, ensuring all prototypes receive a balanced share of patch assignments.
+Therefore, BPA encourages each prototype to specialize in a distinct normal pattern, yielding a more
+diverse and representative codebook.
+
+Specifically, let **Z** = _{zn}_ _[N]_ _n_ =1 [denote the set of] _[ N]_ [patch tokens input to a given decoder layer (for]
+the first decoder layer of each modality, **Z** equals the corresponding encoder output _Ergb_ or _Esn_ ).
+Let _P_ = _{pk}_ _[K]_ _k_ =1 [denote the prototype vectors of a specific modality’s codebook.] [In practice, before]
+applying BPA we first refine the prototypes using APR (detailed in the next section), which adapts
+_P_ to the normal context of the input image. This ensures that BPA operates on prototypes already
+tailored to the current sample.
+
+We then define a cost matrix _C_ _∈_ R _[N]_ _[×][K]_ with _Cnk_ = 1 _−_ _∥zznn∥∥·ppkk∥_ [representing the cosine distance]
+
+between patch token _zn_ and prototype _pk_ . BPA aims to find an optimal transport plan _T_ _[∗]_ _∈_ R _[N]_ _≥_ 0 _[×][K]_
+that minimizes the assignment cost under equal-mass constraints:
+
+
+_K_
+
+- _Tnk Cnk_
+
+
+_k_ =1
+
+
+_T_ _[∗]_ = arg min
+_T_
+
+
+_N_
+
+
+_n_ =1
+
+
+(1)
+
+
+s.t. _T_ **1** _K_ = **a** _,_ _T_ _[⊤]_ **1** _N_ = **b** _,_
+
+
+where **a** = **1** _N_ and **b** = _K_ _[N]_ **[1]** _[K]_ [.]
+
+
+This optimal transport formulation yields a balanced soft assignment to avoid trivial solutions (e.g.,
+all patches assigned to a single prototype) and ensures full prototype utilization. We solve it using the
+Sinkhorn algorithm (Cuturi, 2013) with entropic regularization. We then use the optimal plan _T_ _[∗]_ to
+reconstruct each patch token as a weighted combination of these prototypes.
+
+
+_zn_ [bpa] =
+
+
+_K_
+
+- _Tnk_ _[∗]_ _[p][k][.]_ (2)
+
+
+_k_ =1
+
+
+This effectively projects the input query tokens _{zn}_ _[N]_ _n_ =1 [onto the prototype space under the learned]
+OT weights _T_ _[∗]_ . Thus, BPA acts as an information bottleneck by reconstructing each patch token
+from only a limited set of normality-aware prototypes. As a result, only normal patterns can be
+reliably reconstructed, and anomalous features in the query input are largely filtered out, leading to
+large reconstruction errors in anomalous regions. We refer to **Z** [bpa] = _{zn_ [bpa] _}_ _[N]_ _n_ =1 [as] _[ intra-modal]_
+_reconstruction_, since they are derived solely from the normal prototypes of the same modality.
+
+
+3.3 ADAPTIVE PROTOTYPE REFINEMENT (APR) VIA OPTIMAL TRANSPORT
+
+
+Our framework relies on a set of prototypes _{pk}_ _[K]_ _k_ =1 [as a compact codebook of normal patterns, which]
+allows the model to capture diverse normal patterns during training and adapt to unseen variations at
+test time. To achieve this, we introduce Adaptive Prototype Refinement (APR), which dynamically
+refines the prototypes using the normal context extracted from the current input. Importantly, APR
+operates on the patch tokens **Z** that are extracted from the previous decoder layer (or the encoder’s
+output for the first decoder layer), before any reconstruction is performed in the current decoder layer.
+
+
+To ensure that only normal patch tokens can contribute to each prototype, we compute an optimal
+transport alignment between the patch tokens and the prototypes. Similar to Eq. (1), we derive
+the OT plan Γ _[∗]_ . This plan associates each prototype _pk_ with a weighted subset of patch tokens
+in **Z** = _{zn}_ _[N]_ _n_ =1 [that] [it] [best] [represents.] [We] [then] [compute] [a] [context] [vector] [for] [prototype] _[p][k]_ [as] [a]
+(column-normalized) OT-weighted mean of its matched patch tokens: _ck_ = [�] _n_ _[N]_ =1 [¯Γ] _nk_ _[∗]_ _[z][n]_ [, where]
+¯Γ _[∗]_ _nk_ [denotes the] _[ k]_ [-th column of][ Γ] _[∗]_ [normalized such that][ �] _n_ _[N]_ =1 [¯Γ] _nk_ _[∗]_ [= 1][.]
+
+
+This OT-based context extraction provides robust guidance for prototype refinement. By finding
+an optimal matching between prototypes and patch tokens under balanced constraints, an out-ofdistribution (anomalous) patch tends to be assigned more diffusely across prototypes (i.e., with
+low affinity to any single prototype), thereby contributing weakly to each prototype context. This
+
+
+5
+
+
+encourages each prototype _pk_ to be updated primarily using reliable in-distribution (normal) patches,
+enabling robust refinement even in the presence of minor anomalies. Finally, we update each prototype
+_pk_ to _p_ _[′]_ _k_ [by incorporating its context] _[ c][k]_ [via a GRU, whose gating mechanism restricts the integration]
+of unreliable anomalous contexts by leaving _pk_ essentially unchanged.
+
+
+3.4 MULTIMODAL NORMALITY COMMUNICATION (MNC)
+
+
+To model complementary cues from texture (RGB) and geometry (surface normals), we introduce a
+Multimodal Normality Communication (MNC) module that exchanges normal information between
+the two branches. The key idea is that each modality can assist the other in understanding normality,
+thereby better highlighting true anomalies and suppressing false positives. To ensure robust knowledge
+transfer, MNC exchanges prototype-based normal knowledge between modalities, rather than raw
+patch features that may contain anomalies during testing. The decoder of each modality is guided
+to reconstruct features not only from its own prototypes but also from high-level normal patterns
+of the other modality. MNC operates in two stages: a _prototype alignment_ stage and a _cross-modal_
+_normality injection_ stage.
+
+
+**Stage 1:** **2D and 3D Prototype Alignment.** We treat all prototypes from both modalities as nodes
+in a unified graph and perform cross-modal message passing to align them. Specifically, we construct
+a graph with 2 _K_ nodes, consisting of _K_ RGB prototypes and _K_ surface-normal prototypes. We
+connect each prototype to its nearest neighbors in the other modality using KNN in the feature space
+of _ℓ_ 2-normalized prototypes, and then apply a multi-head Graph Attention Network (GAT; Velickoviˇ c´
+et al., 2018) to propagate information across these edges. This graph-based refinement pulls the two
+sets of prototypes into a shared semantic space: prototypes representing similar structures (e.g., a
+flat surface or an edge) are drawn closer and enriched with complementary context from the other
+modality. Let **P** _[′]_ _rgb_ [and] **[ P]** _sn_ _[′]_ [denote the refined RGB and surface-normal prototype sets after this]
+alignment. As a result, the two branches obtain _aligned prototypes_ that encode a consistent crossmodal notion of normal texture and geometry. Similar prototype-level alignment strategies (Huang
+et al., 2025; Tang et al., 2023; Pahde et al., 2021) have proven effective in multimodal representation
+learning.
+
+
+**Stage** **2:** **Cross-Modal** **Normality** **Injection.** After alignment, the refined prototypes serve as
+anchors to guide fine-grained feature reconstruction via cross-attention. In this stage, each patch
+token from one modality will attend to the other modality’s refined prototypes to inject any normal
+information it lacks. To suppress anomalous details in test samples, we first purify each modality’s
+patch tokens using its intra-modal information. Specifically, we use the intra-modal purified tokens
+_zn_ [bpa] as an attention mask to reweight the original patch tokens _zn_ channel-wise. This yields purified
+tokens **Z** _[′]_ = _{zn · σ_ ( _zn_ [bpa] ) _}_ _[N]_ _n_ =1 [, where] _[ σ]_ [(] _[·]_ [)][ is the sigmoid function.] [These purified tokens] **[ Z]** _[′]_ [are]
+then used as queries in the cross-modal attention.
+
+
+For cross-modal knowledge exchange, we employ a cross-attention layer (Vaswani et al., 2017)
+where the refined prototypes of one modality act as keys and values, and the purified patch tokens
+from the other modality act as queries. Taking the RGB branch as an example, let **Z** _[′]_ _rgb_ [denote the]
+purified tokens of the RGB branch and **P** _[′]_ _sn_ [denote the set of stage-1 refined prototypes from the]
+surface-normal branch. We compute the cross-attention output as:
+
+
+          - **Z** _′rgb_ _[W][Q]_ [(] **[P]** _sn_ _[′]_ _[W][K]_ [)] _[⊤]_
+CA( **Z** _[′]_ _rgb_ _[,]_ **[ P]** _[′]_ _sn_ [) = SoftMax] ~~_√_~~
+
+_d_
+
+
+( **P** _[′]_ _sn_ _[W][V]_ [)] _[,]_ (3)
+
+
+where _WQ, WK, WV_ are projection matrices and _d_ is the channel dimension of **Z** _[′]_ _rgb_ [.]
+
+
+To prevent overwhelming the patch features with irrelevant information, we introduce a learnable
+gating scalar _γ_ to modulate the cross-attention output. Specifically, we add a scaled version of the
+cross-attention result to the original token representation:
+
+**Z** [mnc] _rgb_ [=] **[ Z]** _rgb_ _[′]_ [+] _[ g][rgb]_ _[·]_ [ CA(] **[Z]** _[′]_ _rgb_ _[,]_ **[ P]** _[′]_ _sn_ [)] _[,]_ _grgb_ = tanh( _γrgb_ ) _,_
+
+(4)
+**Z** [mnc] _sn_ = **Z** _[′]_ _sn_ [+] _[ g][sn]_ _[·]_ [ CA(] **[Z]** _[′]_ _sn_ _[,]_ **[ P]** _[′]_ _rgb_ [)] _[,]_ _gsn_ = tanh( _γsn_ ) _,_
+
+
+where _γrgb_ and _γsn_ are learnable scalar parameters (one per decoder layer) and _grgb, gsn_ serve as
+gates on the cross-modal information. This gating mechanism allows the network to control the extent
+
+
+6
+
+
+Figure 3: **Left:** Compared to existing MAD methods (10-shot), our anomaly maps are sharper with
+fewer false positives. **Right:** Comparison of anomaly score distributions for normal and anomalous
+samples (10-shot, MVTec-3D-AD). **PIRN** shows clearer distribution separation.
+
+
+of cross-modal fusion for each layer. By exchanging high-level normality knowledge and injecting
+it into fine-grained patch tokens, MNC establishes a robust correspondence between modalities at
+the prototype level. Unlike methods that attempt dense patch-to-patch alignment between modalities
+(which can be unreliable given limited data), our prototype-centric exchange avoids direct dense
+mappings and thus offers greater robustness on unseen test samples.
+
+We refer to **Z** [mnc] _rgb_ [and] **[Z]** [mnc] _sn_ as _cross-modal_ _purified_ _reconstructions_, as they are obtained using
+normal prototypes from both modalities. We then fuse **Z** [bpa] and **Z** [mnc] via element-wise summation
+to produce the final reconstructed features for each modality: **Z** [rec] _rgb_ [=] **[Z]** [bpa] _rgb_ [+] **[ Z]** _rgb_ [mnc] [and] **[Z]** [rec] _sn_ [=]
+**Z** [bpa] _sn_ [+] **[ Z]** _sn_ [mnc][.]
+
+
+**Training and Inference** We train **PIRN** end-to-end using an intra-modal feature reconstruction
+loss, e.g., a soft mining loss (Luo et al., 2025). In practice, we minimize the cosine distance between
+the encoder’s patch embeddings ( _Ergb_ and _Esn_ ) and the corresponding reconstructed embeddings
+( **Z** [rec] _rgb_ [and] **[Z]** [rec] _sn_ [)] [across] [all] [spatial] [locations] [for] [both] [modalities.] [During] [inference,] [we] [compute]
+an anomaly score map by comparing encoder-extracted features with reconstructed features. For
+modality _m ∈{rgb, sn}_ and the _i_ -th patch, the anomaly score is _d_ [(] _i_ _[m]_ [)] = 1 _−_ cos( _Ei_ [(] _[m]_ [)] _,_ **Z** [rec] _i_ _[,]_ [(] _[m]_ [)] ).
+These patch-level anomaly maps are upsampled to the input resolution and summed across branches
+to produce a fused anomaly heatmap. The final image-level anomaly score is the maximum value in
+this fused heatmap.
+
+
+4 EXPERIMENTS
+
+
+**Implementation Details.** We adopt a ViT-Base / 14 transformer as the backbone encoder for RGB
+and surface-normal inputs, initialized with DINOv2 (Oquab et al., 2023) pre-trained weights and
+kept **frozen** during training. We follow FIND’s (Li et al., 2025) procedure to generate surface normal
+maps from 3D point clouds. To obtain robust multi-scale features, we aggregate patch tokens from
+layers 2–10 of the pretrained ViT by element-wise averaging. Unless otherwise specified, we use
+_K_ = 10 prototypes per modality. The decoder is a cascaded architecture with _L_ = 2 layers. We use
+Adam (Kingma & Ba, 2014) optimizer (learning rate 1 _×_ 10 _[−]_ [4] ) for 60 epochs in few-shot tasks and 8
+epochs in all-shot tasks.
+
+
+**Baselines** **and** **Evaluation** **Protocol.** We compare PIRN with representative MAD baselines,
+including BTF (Horwitz & Hoshen, 2023), AST (Rudolph et al., 2023), M3DM (Wang et al., 2023),
+CFM (Costanzino et al., 2024), and 3D-ADNAS (Long et al., 2025). We also include the recent 2D
+prototype-based reconstruction method INP-Former (Luo et al., 2025). To ensure a fair comparison
+in the multimodal setting, the 2D INP-Former baseline is adapted to a two-stream architecture that
+
+
+7
+
+
+**k-Shot** **Method** **MVTec-3D-AD** **Eyecandies**
+
+**AUROC** _I_ **AUROC** _P_ **AUPRO** **AUROC** _I_ **AUROC** _P_ **AUPRO**
+
+
+5
+
+
+10
+
+
+50
+
+
+All
+
+
+BTF (Horwitz & Hoshen, 2023) 0.671 0.980 0.920 0.652 0.815 0.738
+AST (Rudolph et al., 2023) 0.680 0.950 0.903 0.633 0.741 0.691
+M3DM (Wang et al., 2023) 0.822 0.984 0.937 0.764 0.871 0.807
+CFM (Costanzino et al., 2024) 0.811 0.986 0.949 0.795 0.879 0.801
+3D-ADNAS (Long et al., 2025) 0.826 - - 0.775 0.875 INP-Former (Luo et al., 2025) 0.851 0.988 0.957 0.859 0.946 0.862
+**Ours** **0.890** **0.990** **0.960** **0.895** **0.955** **0.887**
+
+
+BTF (Horwitz & Hoshen, 2023) 0.695 0.983 0.928 0.685 0.834 0.806
+AST (Rudolph et al., 2023) 0.689 0.946 0.835 0.671 0.767 0.624
+M3DM (Wang et al., 2023) 0.845 0.986 0.943 0.824 0.890 0.812
+CFM (Costanzino et al., 2024) 0.845 0.987 0.954 0.838 0.903 0.825
+3D-ADNAS (Long et al., 2025) 0.848 - - 0.807 0.869 INP-Former (Luo et al., 2025) 0.885 0.989 0.960 0.872 0.947 0.870
+**Ours** **0.922** **0.991** **0.966** **0.912** **0.969** **0.896**
+
+
+BTF (Horwitz & Hoshen, 2023) 0.806 0.989 0.947 0.721 0.856 0.824
+AST (Rudolph et al., 2023) 0.794 0.974 0.929 0.739 0.862 0.715
+M3DM (Wang et al., 2023) 0.907 0.989 0.955 0.836 0.933 0.846
+CFM (Costanzino et al., 2024) 0.906 0.991 0.965 0.852 0.926 0.851
+3D-ADNAS (Long et al., 2025) 0.890 - - 0.868 0.912 INP-Former (Luo et al., 2025) 0.921 0.991 0.965 0.902 0.967 0.892
+**Ours** **0.945** **0.993** **0.970** **0.924** **0.975** **0.908**
+
+
+BTF (Horwitz & Hoshen, 2023) 0.865 0.992 0.959 0.740 0.883 0.845
+AST (Rudolph et al., 2023) 0.937 0.976 0.944 0.780 0.902 0.744
+M3DM (Wang et al., 2023) 0.945 0.992 0.964 0.882 0.977 0.887
+CFM (Costanzino et al., 2024) 0.954 0.993 0.971 0.881 0.974 0.887
+3D-ADNAS (Long et al., 2025) 0.951 - - 0.946 0.970 INP-Former (Luo et al., 2025) 0.952 0.994 0.971 0.934 0.981 0.918
+**Ours** **0.963** **0.994** **0.973** **0.948** **0.983** **0.923**
+
+
+|Modules Metrics<br>BPA APR MNC AUROCI AUROCP AUPRO|Col2|
+|---|---|
+|✗<br>✗<br>✗<br>✗<br>✓<br>✓<br>✓<br>✗<br>✓<br>✓<br>✓<br>✗<br>✓<br>✓<br>✓|0.828<br>0.976<br>0.952<br>0.883<br>0.990<br>0.956<br>0.916<br>0.990<br>0.961<br>0.867<br>0.988<br>0.947<br>0.922<br>0.991<br>0.966|
+
+
+Table 1: Comparison of anomaly detection and localization performance on **MVTec-3D-AD** and **Eyecandies** under different training
+shots.
+
+
+Table 2: Contribution of each component in few-shot regime, performance under 10-shot normal setting on **MVTec-3D-**
+**AD** .
+
+
+**Setting / Modality** **AUROC** _I_ **AUROC** _P_ **AUPRO** **F1max** _I_
+
+
+**5-shot**
+
+
+RGB-only 0.794 0.966 0.890 0.910
+Surface Normals-only 0.854 0.972 0.912 0.932
+**RGB + Surface Normals** 0.890 0.990 0.960 0.940
+
+
+**10-shot**
+
+
+RGB-only 0.827 0.968 0.901 0.921
+Surface Normals-only 0.879 0.974 0.920 0.937
+**RGB + Surface Normals** 0.922 0.991 0.966 0.951
+
+
+**All-shot**
+
+
+RGB-only 0.874 0.977 0.917 0.929
+Surface Normals-only 0.937 0.977 0.928 0.946
+**RGB + Surface Normals** 0.963 0.994 0.973 0.962
+
+
+Table 3: Effect of modality availability
+(RGB-only vs. SN-only vs. RGB+SN)
+under different training shots on **MVTec-**
+**3D-AD** .
+
+
+processes RGB images and surface normal maps independently. Both branches use the same ViT-B/14
+backbone and input resolution as in PIRN. Following the same post-processing (upsampling and
+Gaussian smoothing) used in our pipeline, their patch-level anomaly maps are fused via element-wise
+summation to produce the final predictions. We report AUROC at the image-level (AUROC _I_ ),
+pixel-level AUROC (AUROC _P_ ), and AUPRO following prior work (Costanzino et al., 2024).
+
+
+**Main** **Results.** As shown in Tab. 1, our method consistently outperforms the best-performing
+baseline on both MVTec-3D-AD and Eyecandies across all metrics in varying few-shot settings. On
+MVTec-3D-AD, it improves AUROC _I_ by +3.9 (5-shot), +3.7 (10-shot), and +2.4 (50-shot) over the
+strongest baseline. On Eyecandies, it improves AUROC _I_ by +3.6 (5-shot), +4.0 (10-shot), and +2.2
+(50-shot). These consistent gains validate PIRN’s effectiveness under extremely limited training data.
+PIRN also achieves the best performance in the full-shot setting.
+
+
+**Qualitative Analysis.** As shown in Fig. 3, **PIRN** enables a more accurate anomaly localization with
+fewer false positives. Furthermore, our method yields a more separable anomaly score distribution
+with a larger margin and less overlap between normal and anomalous scores. These qualitative results
+further validate **PIRN** ’s effectiveness in few-shot scenarios. Fig. 5 in the appendix further highlights
+the complementary strengths of the RGB and 3D branches. For texture-only anomalies, the RGB
+branch alone accurately localizes the defect region, whereas the surface-normal branch can produce
+false positives. We further report per-category results in Appendix Tab. 11.
+
+
+**Ablation of Token Aggregation in APR.** Tab. 7 compares various token aggregation methods
+used by APR. Global averaging performs the worst (AUROC _I_ 91.5%) due to indiscriminate token
+pooling. Top- _k_ averaging improves performance (AUROC _I_ = 92.1%), whereas balanced OT yields
+the best results. The slight gain of balanced OT over top- _k_ averaging indicates that balanced token
+contributions enable more consistent prototype learning.
+
+
+**Effect of Modality Availability/Each Component** Tab. 3 reports single-modality detection results.
+Across all shot settings, the model with surface normals (SN) consistently outperforms RGB, e.g.,
+achieving 0.879 vs. 0.827 AUROC _I_ at 10 shots. This indicates that geometric cues carry richer
+discriminative information for anomaly detection. Combining both modalities yields further improvement, with the performance gain most pronounced under the 5-shot setting, where each modality
+has limited coverage of normal variation. This confirms that MNC’s cross-modal communication is
+particularly valuable when per-modality representations are underrepresented due to scarce training
+data.
+
+
+8
+
+
+**Method** **AUROC** _I_ _↑_ **FLOPs** _↓_ **(G)** **Latency** _↓_ **(ms)**
+
+
+M3DM (2023) 0.845 263.27 21.61
+CFM (2024) 0.845 552.53 60.57
+FIND (SOTA) 0.921 728.46 76.09
+**PIRN (Ours)** **0.922** **103.36** **17.49**
+
+
+Table 4: Computation efficiency comparison on 10shot MVTec-3D-AD.
+
+
+**Number of layers** **AUROC** _I_ **AUROC** _P_ **AUPRO**
+
+
+_L_ = 1 0.921 0.993 0.967
+_L_ = 2 **0.924** **0.994** **0.968**
+_L_ = 4 0.913 0.992 0.964
+_L_ = 8 0.869 0.985 0.949
+
+
+Table 6: Ablation on the number of decoder layers in
+the 10-shot setting (only normal data).
+
+
+**Prototypes** _K_ **AUROC** _I_ **AUROC** _P_ **AUPRO** **F1max** _I_
+
+
+_K_ = 5 0.954 0.993 0.969 0.957
+_K_ = 10 **0.963** **0.994** **0.973** **0.962**
+_K_ = 50 0.940 0.991 0.966 0.952
+_K_ = 100 0.901 0.984 0.950 0.947
+
+
+Table 5: Ablation on the number of prototypes _K_ in
+the all-shot setting on MVTec-3D-AD (normal-only).
+
+
+**Method** **AUROC** _I_ **AUROC** _P_ **AUPRO**
+
+
+w/o APR module 0.916 0.990 0.961
+Global Averaging 0.915 0.989 0.960
+Top- _k_ Averaging 0.921 0.991 0.964
+Balanced Optimal Transport 0.922 0.991 0.966
+
+
+Table 7: Performance on **MVTec-3D-AD** under different aggregation methods in APR.
+
+
+Figure 4: Visualization of Feature Displacement via BPA Routing. Green: normal; Red: anomalous.
+
+
+We further validate each proposed module on the MVTec-3D-AD dataset, with results in Tab. 2. The
+baseline model (first row) excludes all proposed modules. The full **PIRN** model achieves superior
+performance. Removing each component from the full model results in a consistent performance
+drop, validating the contribution of every component.
+
+
+**Effect of Codebook Size/Decoder Depth.** Tab. 5 examines the prototype count _K_ in the all-shot
+setting. With only _K_ = 5 prototypes, the codebook is too small to cover the diversity of normal
+patterns. In contrast, a larger codebook size ( _K_ = 50 _/_ 100) degrades performance because excessive
+prototypes weaken the information bottleneck: it allows anomalous patches to find close matches
+and be faithfully reconstructed. We also conduct comprehensive ablation studies on the number
+of decoder layers ( _L_ ) under the 10-shot setting (Table 6), using only normal data. We find _L_ = 2
+provides the optimal trade-off (0.924 AUROC _I_ ). Increasing the depth further (e.g., _L_ = 8) leads to
+significant performance degradation. This demonstrates that excessively deep decoders suffer from
+overfitting in this few-shot regime.
+
+
+**Computational** **Efficiency.** To clarify the trade-off between complexity and performance, we
+compare **PIRN** with representative reconstruction-based MAD baselines, including M3DM (Wang
+et al., 2023), CFM (Costanzino et al., 2024), and the recent SOTA FIND (Li et al., 2025), on the
+10-shot MVTec-3D-AD setting. We report accuracy (AUROC _I_ ) together with FLOPs and latency
+(input 224 _×_ 224, batch size = 1). As shown in Tab. 4, PIRN achieves the best AUROC _I_ (0.922)
+while being the most efficient, requiring only 103.36G FLOPs and 17.49ms latency, which is **85%**
+**fewer FLOPs** and **4.35** _×_ **faster** than FIND (728.46G, 76.09ms).
+
+
+**Analysis of Prototype-based Normality Encoding** To better interpret how PIRN’s prototypes
+encode normality, we added a new OT-movement visualization in Fig. 4. For several MVTec-3D-AD
+categories (e.g., bagel, peach), we visualize the displacement of patch tokens from their initial
+
+
+9
+
+
+Table 8: Comparison of different methods on the Real-IAD D3 dataset. The highest value in each
+row is marked in red, and the second highest value in blue.
+
+|Modality|RGB|Col3|3D|2D+3D|Col6|Col7|D3|RGB + SN|
+|---|---|---|---|---|---|---|---|---|
+|Model|Cfow|SimpleNet|PointMAE|AST|PointMAE+PatchCore|M3DM|D3M|PIRN (Ours)|
+|Metrics|AUROC_I_<br>AUROC_P_|AUROC_I_<br>AUROC_P_|AUROC_I_<br>AUROC_P_|AUROC_I_<br>AUROC_P_|AUROC_I_<br>AUROC_P_|AUROC_I_<br>AUROC_P_|AUROC_I_<br>AUROC_P_|AUROC_I_<br>AUROC_P_|
+|audio ~~j~~ack ~~s~~ocket<br>common ~~m~~ode ~~f~~lter<br>connector ~~h~~ousing-female<br>crimp st ~~c~~able ~~m~~ount ~~b~~ox<br>dc ~~p~~ower ~~c~~onnector<br>ethernet ~~c~~onnector<br>ferrite ~~b~~ead<br>fork ~~c~~rimp ~~t~~erminal<br>fuse ~~h~~older<br>headphone ~~j~~ack ~~s~~ocket<br>humidity ~~s~~ensor<br>knob ~~c~~ap<br>lattice ~~b~~lock ~~p~~lug<br>lego ~~p~~in ~~c~~onnector ~~p~~late<br>lego ~~p~~ropeller<br>limit ~~s~~witch<br>miniature ~~l~~ifting ~~m~~otor<br>power jack<br>purple ~~c~~lay ~~p~~ot<br>telephone ~~s~~pring ~~s~~witch|0.943<br>0.944<br>0.271<br>0.847<br>0.839<br>0.921<br>0.180<br>0.442<br>0.661<br>0.726<br>0.967<br>0.853<br>0.529<br>0.914<br>0.462<br>0.657<br>0.853<br>0.861<br>0.996<br>0.914<br>0.781<br>0.836<br>0.637<br>0.893<br>0.833<br>0.852<br>0.828<br>0.877<br>0.615<br>0.739<br>0.846<br>0.950<br>0.402<br>0.799<br>0.354<br>0.664<br>0.343<br>0.571<br>0.575<br>0.910|0.973<br>0.926<br>0.717<br>0.822<br>0.795<br>0.891<br>0.372<br>0.745<br>0.661<br>0.725<br>0.981<br>0.866<br>0.408<br>0.806<br>0.416<br>0.945<br>0.564<br>0.957<br>0.933<br>0.879<br>0.737<br>0.890<br>0.672<br>0.879<br>0.790<br>0.898<br>0.857<br>0.947<br>0.939<br>0.799<br>0.823<br>0.790<br>0.402<br>0.760<br>0.176<br>0.489<br>0.343<br>0.938<br>0.627<br>0.916|0.763<br>0.655<br>0.725<br>0.687<br>0.958<br>0.428<br>0.291<br>0.363<br>0.849<br>0.507<br>1.000<br>0.656<br>0.634<br>0.717<br>0.422<br>0.62<br>0.309<br>0.605<br>0.607<br>0.633<br>0.644<br>0.562<br>0.656<br>0.425<br>0.769<br>0.776<br>0.361<br>0.482<br>0.348<br>0.620<br>0.763<br>0.545<br>0.717<br>0.435<br>0.433<br>0.687<br>0.869<br>0.271<br>0.771<br>0.413|0.860<br>0.590<br>0.899<br>0.802<br>0.914<br>0.716<br>0.485<br>0.589<br>0.995<br>0.770<br>1.000<br>0.906<br>0.894<br>0.817<br>0.595<br>0.773<br>0.597<br>0.754<br>0.660<br>0.696<br>0.565<br>0.723<br>0.919<br>0.656<br>0.842<br>0.919<br>0.847<br>0.629<br>0.471<br>0.703<br>0.804<br>0.641<br>0.766<br>0.467<br>0.564<br>0.645<br>0.635<br>0.445<br>0.951<br>0.551|0.926<br>0.673<br>0.523<br>0.922<br>0.870<br>0.919<br>0.713<br>0.931<br>0.720<br>0.921<br>0.947<br>0.956<br>0.913<br>0.932<br>0.769<br>0.952<br>0.736<br>0.927<br>0.919<br>0.942<br>0.689<br>0.933<br>0.903<br>0.958<br>0.911<br>0.923<br>0.662<br>0.759<br>0.540<br>0.727<br>0.822<br>0.938<br>0.948<br>0.962<br>0.981<br>0.923<br>0.921<br>0.961<br>0.827<br>0.944|0.981<br>0.699<br>0.580<br>0.934<br>0.920<br>0.979<br>0.749<br>0.933<br>0.715<br>0.950<br>0.983<br>0.978<br>0.965<br>0.966<br>0.780<br>0.964<br>0.770<br>0.948<br>0.982<br>0.982<br>0.717<br>0.958<br>0.925<br>0.938<br>0.917<br>0.958<br>0.681<br>0.734<br>0.530<br>0.773<br>0.863<br>0.966<br>0.975<br>0.991<br>0.996<br>0.902<br>0.944<br>0.953<br>0.856<br>0.936|0.983<br>0.757<br>0.618<br>0.947<br>0.931<br>0.951<br>0.811<br>0.969<br>0.922<br>0.947<br>0.996<br>0.970<br>0.967<br>0.978<br>0.819<br>0.946<br>0.866<br>0.915<br>0.994<br>0.987<br>0.780<br>0.969<br>0.931<br>0.947<br>0.939<br>0.941<br>0.891<br>0.889<br>0.739<br>0.863<br>0.925<br>0.984<br>0.823<br>0.961<br>0.973<br>0.947<br>0.962<br>0.922<br>0.934<br>0.957|0.950<br>0.964<br>0.826<br>0.883<br>0.972<br>0.971<br>0.659<br>0.961<br>0.944<br>0.994<br>0.997<br>0.992<br>0.717<br>0.993<br>0.978<br>0.991<br>0.998<br>0.996<br>0.942<br>0.975<br>0.744<br>0.991<br>0.923<br>0.976<br>0.892<br>0.969<br>0.981<br>0.980<br>1.000<br>0.933<br>0.961<br>0.971<br>0.604<br>0.838<br>0.595<br>0.862<br>0.871<br>0.997<br>0.904<br>0.987|
+|<br>Avg|0.645<br>0.808|0.659<br>0.843|0.644<br>0.554|0.693<br>0.650|0.812<br>0.905|0.841<br>0.922|0.890<br>0.937|0.873<br>0.961|
+
+
+feature space location ( _z_ pre) to their final location after BPA+APR+MNC reconstruction ( _z_ post).
+We project prototypes and tokens into a shared 2D PCA space and draw the displacement vectors
+(∆= _z_ post _−_ _z_ pre). In the plots, translucent lines show per-token movements, and bold arrows indicate
+the average movement of normal (green) and anomalous (red) tokens. BPA encourages prototypes
+to serve as stable anchors for normal patterns. Normal embeddings that initially lie near prototype
+clusters undergo only small shifts during reconstruction. This suggests that the learned prototype
+codebook covers in-distribution normal patterns well. In contrast, anomalous tokens that initially lie
+farther away require larger displacements toward normal prototypes. The displacement histograms
+validates that our prototype-based reconstruction induces strong normal/anomalous discrimination.
+
+
+**Experiment results on Real-IAD D3 dataset.** We further conduct comprehensive experiments on
+the challenging Real-IAD D3 (Zhu et al., 2025) dataset in the full-data training setting. Real-IAD
+D3 comprises industrial components in real-world settings with various anomaly types and complex
+geometries. As Table 8 shows, PIRN achieves highly competitive performance. It achieves the
+best overall anomaly localization (AUROC _P_ 0.961) in 13 out of 20 categories, and it also achieves
+the second-best anomaly detection (AUROC _I_ 0.873). In particular, D [3] M (AUROC _I_ 0.890) uses a
+unique tri-modal data representation (combining 2D, Pseudo-3D and 3D inputs). In contrast, PIRN
+relies solely on two standard modalities: RGB images and surface normals. Despite utilizing fewer
+modalities, PIRN achieves a better localization performance and significantly outperforms D [3] M in
+specific categories, such as fork ~~c~~ rimp ~~t~~ erminal (0.978 vs. 0.819 AUROC _I_ ) and lego ~~p~~ ropeller (1.000
+vs. 0.739 AUROC _I_ ).
+
+
+5 CONCLUSION
+
+
+We introduced **PIRN**, a novel framework for few-shot multimodal anomaly detection that unifies
+prototype-based intra-modal reconstruction with cross-modal normality communication. **PIRN**
+models normality from scarce data via an adaptive prototype codebook. Its effectiveness comes from
+three key innovations: Balanced Prototype Assignment (BPA) utilizes balanced optimal transport to
+mitigate codebook collapse. Adaptive Prototype Refinement (APR) dynamically adapts prototypes
+during inference to bridge the train-test distribution gap. Multimodal Normality Communication
+(MNC) facilitates the exchange of high-level normality cues across modalities. Extensive evaluations
+across MVTec 3D-AD, Eyecandies, and Real-IAD D3 demonstrate that **PIRN** establishes significant
+performance gains in challenging few-shot settings.
+
+
+ACKNOWLEDGEMENTS
+
+
+This work is supported by the Agency for Science, Technology and Research (A*STAR) under its
+MTC Programmatic Funds (Grant No. M23L7b0021).
+
+
+10
+
+
+REFERENCES
+
+
+Alexander A Alemi, Ian Fischer, Joshua V Dillon, and Kevin Murphy. Deep variational information
+bottleneck. In _International Conference on Learning Representations (ICLR)_, 2017.
+
+
+Yu-Min Chu, Chieh Liu, Ting-I Hsieh, Hwann-Tzong Chen, and Tyng-Luh Liu. Shape-guided dualmemory learning for 3D anomaly detection. In _Proceedings of the 40th International Conference_
+_on Machine Learning_, volume 202 of _Proceedings of Machine Learning Research_, pp. 6185–6194.
+PMLR, 2023.
+
+
+Junyoung Chung, Caglar Gulcehre, KyungHyun Cho, and Yoshua Bengio. Empirical evaluation of
+gated recurrent neural networks on sequence modeling. _arXiv preprint arXiv:1412.3555_, 2014.
+
+
+Alex Costanzino, Pierluigi Zama Ramirez, Giuseppe Lisanti, and Luigi Di Stefano. Multimodal
+industrial anomaly detection by crossmodal feature mapping. In _Proceedings of the IEEE/CVF_
+_Conference on Computer Vision and Pattern Recognition (CVPR)_, pp. 17234–17243, 2024.
+
+
+Marco Cuturi. Sinkhorn distances: Lightspeed computation of optimal transport. In _Advances in_
+_Neural Information Processing Systems_, volume 26, 2013.
+
+
+Alexey Dosovitskiy, Lucas Beyer, Alexander Kolesnikov, Dirk Weissenborn, Xiaohua Zhai, Thomas
+Unterthiner, Mostafa Dehghani, Matthias Minderer, Georg Heigold, Sylvain Gelly, Jakob Uszkoreit,
+and Neil Houlsby. An image is worth 16x16 words: Transformers for image recognition at scale.
+In _International Conference on Learning Representations_, 2021.
+
+
+Zheng Fang, Xiaoyang Wang, Haocheng Li, Jiejie Liu, Qiugui Hu, and Jimin Xiao. Fastrecon: Fewshot industrial anomaly detection via fast feature reconstruction. In _Proceedings of the IEEE/CVF_
+_International Conference on Computer Vision (ICCV)_, pp. 17481–17490, 2023.
+
+
+Dong Gong, Lingqiao Liu, Vuong Le, Budhaditya Saha, Moussa Reda Mansour, Svetha Venkatesh,
+and Anton van den Hengel. Memorizing normality to detect anomaly: Memory-augmented deep
+autoencoder for unsupervised anomaly detection. In _Proceedings of the IEEE/CVF International_
+_Conference on Computer Vision (ICCV)_, pp. 1705–1714, 2019.
+
+
+Hewei Guo, Liping Ren, Jingjing Fu, Yuwang Wang, Zhizheng Zhang, Cuiling Lan, Haoqian Wang,
+and Xinwen Hou. Template-guided hierarchical feature restoration for anomaly detection. In
+_Proceedings of the IEEE/CVF International Conference on Computer Vision (ICCV)_, pp. 6447–
+6458, 2023.
+
+
+Liren He, Zhengkai Jiang, Jinlong Peng, Wenbing Zhu, Liang Liu, Qiangang Du, Xiaobin Hu,
+Mingmin Chi, Yabiao Wang, and Chengjie Wang. Learning unified reference representation for
+unsupervised multi-class anomaly detection. In _European Conference on Computer Vision_, pp.
+216–232. Springer, 2024.
+
+
+Eliahu Horwitz and Yedid Hoshen. Back to the feature: Classical 3D features are (almost) all you
+need for 3D anomaly detection. In _Proceedings of the IEEE/CVF Conference on Computer Vision_
+_and Pattern Recognition (CVPR) Workshops_, pp. 2968–2977, 2023.
+
+
+Chaoqin Huang, Haoyan Guan, Aofan Jiang, Ya Zhang, Michael Spratling, and Yan-Feng Wang.
+Registration based few-shot anomaly detection. In _European Conference on Computer Vision_, pp.
+303–319. Springer, 2022.
+
+
+Xinlei Huang, Zhiqi Ma, Dian Meng, Yanran Liu, Shiwei Ruan, Qingqiang Sun, Xubin Zheng, and
+Ziyue Qiao. Praga: prototype-aware graph adaptive aggregation for spatial multi-modal omics
+analysis. In _Proceedings of the AAAI Conference on Artificial Intelligence_, volume 39, pp. 326–333,
+2025.
+
+
+Diederik P Kingma and Jimmy Ba. Adam: A method for stochastic optimization. _arXiv preprint_
+_arXiv:1412.6980_, 2014.
+
+
+Yiting Li, Fayao Liu, Jingyi Liao, Sichao Tian, Chuan-Sheng Foo, and Xulei Yang. FIND: Fewshot anomaly inspection with normal-only multi-modal data. In _Proceedings of the IEEE/CVF_
+_International Conference on Computer Vision (ICCV)_, pp. 23290–23299, 2025.
+
+
+11
+
+
+Kaifang Long, Guoyang Xie, Lianbo Ma, Jiaqi Liu, and Zhichao Lu. Revisiting multimodal fusion
+for 3d anomaly detection from an architectural perspective. In _Proceedings of the AAAI Conference_
+_on Artificial Intelligence_, volume 39, pp. 12273–12281, 2025.
+
+
+Ruiying Lu, YuJie Wu, Long Tian, Dongsheng Wang, Bo Chen, Xiyang Liu, and Ruimin Hu. Hierarchical vector quantized transformer for multi-class unsupervised anomaly detection. _Advances in_
+_Neural Information Processing Systems_, 36:8487–8500, 2023.
+
+
+Wei Luo, Yunkang Cao, Haiming Yao, Xiaotian Zhang, Jianan Lou, Yuqi Cheng, Weiming Shen,
+and Wenyong Yu. Exploring intrinsic normal prototypes within a single image for universal
+anomaly detection. In _Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern_
+_Recognition (CVPR)_, pp. 9974–9983, 2025.
+
+
+Kai Mao, Ping Wei, Yiyang Lian, Yangyang Wang, and Nanning Zheng. Beyond single-modal
+boundary: Cross-modal anomaly detection through visual prototype and harmonization. In
+_Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)_,
+pp. 9964–9973, 2025.
+
+
+Maxime Oquab, Timothee´ Darcet, Theo´ Moutakanni, Huy Vo, Marc Szafraniec, Vasil Khalidov,
+Pierre Fernandez, Daniel Haziza, Francisco Massa, Alaaeldin El-Nouby, et al. DINOv2: Learning
+robust visual features without supervision. _arXiv preprint arXiv:2304.07193_, 2023.
+
+
+Frederik Pahde, Mihai Puscas, Tassilo Klein, and Moin Nabi. Multimodal prototypical networks
+for few-shot learning. In _Proceedings of the IEEE/CVF Winter Conference on Applications of_
+_Computer Vision (WACV)_, pp. 2644–2653, 2021.
+
+
+Gabriel Peyre and Marco Cuturi.´ Computational optimal transport: With applications to data science.
+_Foundations and Trends in Machine Learning_, 11(5-6):355–607, 2019. doi: 10.1561/2200000073.
+
+
+Marco Rudolph, Tom Wehrbein, Bodo Rosenhahn, and Bastian Wandt. Asymmetric student-teacher
+networks for industrial anomaly detection. In _Proceedings of the IEEE/CVF Winter Conference on_
+_Applications of Computer Vision (WACV)_, pp. 2592–2602, 2023.
+
+
+Sangwoo Seo, Sungwon Kim, and Chanyoung Park. Interpretable prototype-based graph information
+bottleneck. _Advances in Neural Information Processing Systems_, 36:76737–76748, 2023.
+
+
+Pin Tang, Hai-Ming Xu, and Chao Ma. Prototransfer: Cross-modal prototype transfer for point cloud
+segmentation. In _Proceedings of the IEEE/CVF International Conference on Computer Vision_
+_(ICCV)_, pp. 3337–3347, 2023.
+
+
+Long Tian, Hongyi Zhao, Ruiying Lu, Rongrong Wang, Yujie Wu, Liming Wang, Xiongpeng He,
+and Xiyang Liu. Foct: Few-shot industrial anomaly detection with foreground-aware online
+conditional transport. In _Proceedings of the 32nd ACM International Conference on Multimedia_,
+pp. 6241–6249, 2024.
+
+
+Yuanpeng Tu, Boshen Zhang, Liang Liu, Yuxi Li, Jiangning Zhang, Yabiao Wang, Chengjie Wang,
+and Cairong Zhao. Self-supervised feature adaptation for 3d industrial anomaly detection. In
+_European Conference on Computer Vision_, pp. 75–91. Springer, 2024.
+
+
+Aaron Van Den Oord, Oriol Vinyals, et al. Neural discrete representation learning. _Advances in_
+_Neural Information Processing Systems_, 30, 2017.
+
+
+Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N Gomez, Łukasz
+Kaiser, and Illia Polosukhin. Attention is all you need. _Advances in neural information processing_
+_systems_, 30, 2017.
+
+
+Petar Velickoviˇ c, Guillem Cucurull, Arantxa Casanova, Adriana Romero, Pietro Li´ o, and Yoshua`
+Bengio. Graph attention networks. In _International_ _Conference_ _on_ _Learning_ _Representations_
+_(ICLR)_, 2018.
+
+
+Fuyun Wang, Tong Zhang, Yuanzhi Wang, Yide Qiu, Xin Liu, Xu Guo, and Zhen Cui. Distribution
+prototype diffusion learning for open-set supervised anomaly detection. In _Proceedings of the_
+_IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)_, pp. 20416–20426,
+2025.
+
+
+12
+
+
+Yue Wang, Jinlong Peng, Jiangning Zhang, Ran Yi, Yabiao Wang, and Chengjie Wang. Multimodal
+industrial anomaly detection via hybrid fusion. In _Proceedings of the IEEE/CVF Conference on_
+_Computer Vision and Pattern Recognition (CVPR)_, pp. 8032–8041, 2023.
+
+
+Yujie Wei, Jiaxin Ye, Zhizhong Huang, Junping Zhang, and Hongming Shan. Online prototype
+learning for online continual learning. In _Proceedings of the IEEE/CVF International Conference_
+_on Computer Vision (ICCV)_, pp. 18764–18774, 2023.
+
+
+Ce Zhang, Simon Stepputtis, Katia Sycara, and Yaqi Xie. Dual prototype evolving for test-time
+generalization of vision-language models. _Advances in Neural Information Processing Systems_,
+37:32111–32136, 2024a.
+
+
+Yilan Zhang, Yingxue Xu, Jianqi Chen, Fengying Xie, and Hao Chen. Prototypical information bottlenecking and disentangling for multimodal cancer survival prediction. In _The Twelfth International_
+_Conference on Learning Representations_, 2024b.
+
+
+Chuanxia Zheng and Andrea Vedaldi. Online clustered codebook. In _Proceedings of the IEEE/CVF_
+_International Conference on Computer Vision (ICCV)_, pp. 22798–22807, 2023.
+
+
+Wenbing Zhu, Lidong Wang, Ziqing Zhou, Chengjie Wang, Yurui Pan, Ruoyi Zhang, Zhuhao Chen,
+Linjie Cheng, Bin-Bin Gao, Jiangning Zhang, et al. Real-iad d3: A real-world 2d/pseudo-3d/3d
+dataset for industrial anomaly detection. In _Proceedings of the IEEE/CVF Conference on Computer_
+_Vision and Pattern Recognition (CVPR)_, pp. 15214–15223, 2025.
+
+
+13
+
+
+A APPENDIX
+
+
+Algorithm 1 provides pseudocode for the full **PIRN** pipeline.
+
+
+**Algorithm 1** Pseudocode of the proposed **PIRN** framework.
+
+
+1: **Input:** RGB image and surface-normal map
+2: **Output:** Anomaly map (heatmap)
+
+3: Extract multi-scale features _Ergb_ and _Esn_ using frozen ViT encoders
+4: Initialize patch tokens: _Zrgb_ _←_ _Ergb_, _Zsn_ _←_ _Esn_ .
+5: Randomly initialize prototypes _Prgb_ and _Psn_ .
+6: **for** each decoder layer _ℓ_ = 1 to _L_ **do**
+7: _**Adaptive Prototype Refinement (APR)**_
+8: Compute Γ _[∗]_ _rgb_ [and][ Γ] _sn_ _[∗]_ [by solving the balanced OT in Eq.][ (1)][ for][ (] _[Z][rgb][, P][rgb]_ [)][ and][ (] _[Z][sn][, P][sn]_ [)]
+
+9: Compute context vectors _c_ _[rgb]_ _k_ and _c_ _[sn]_ _k_ [for each prototype by column-normalized OT-weighted]
+averaging of patch tokens
+10: Update each prototype _p_ _[rgb]_ _k_ and _p_ _[sn]_ _k_ [using][ GRU(] _[p][k][, c][k]_ [)]
+11: _**Balanced Prototype Assignment (BPA)**_
+12: Compute _Trgb_ _[∗]_ [and] _[ T][ ∗]_ _sn_ [by solving Eq. (1) for][ (] _[Z][rgb][, P][rgb]_ [)][ and][ (] _[Z][sn][, P][sn]_ [)]
+
+13: Reconstruct patch tokens: _Zrgb_ _[bpa]_ [=] _[ T]_ _rgb_ _[ ∗]_ _[P][rgb]_ [,] _Zsn_ _[bpa]_ [=] _[ T]_ _sn_ _[ ∗]_ _[P][sn]_ (Eq. (2))
+14: _**MNC Stage 1:**_ _**2D and 3D Prototype Alignment**_
+15: Align prototypes via cross-modal graph attention to obtain refined _Prgb_ _[′]_ [and] _[ P][ ′]_ _sn_
+16: _**MNC Stage 2:**_ _**Cross-Modal Feature Injection**_
+17: Purify patch tokens: _Zrgb_ _[′]_ [=] _[ Z][rgb][ ·][ σ]_ [(] _[Z]_ _rgb_ _[bpa]_ [)][,] _Zsn_ _[′]_ [=] _[ Z][sn]_ _[·][ σ]_ [(] _[Z]_ _sn_ _[bpa]_ [)]
+18: Compute cross-attention outputs: CA( _Zrgb_ _[′]_ _[,]_ _[P][ ′]_ _sn_ [)][ and][ CA(] _[Z]_ _sn_ _[′]_ _[,]_ _[P][ ′]_ _rgb_ [)] (Eq. (3))
+19: Apply gating to obtain _Zrgb_ _[mnc]_ [and] _[ Z]_ _sn_ _[mnc]_ (Eq. (4))
+
+20: Fuse reconstructions: _Zrgb_ _[rec]_ [=] _[ Z]_ _rgb_ _[bpa]_ [+] _[ Z]_ _rgb_ _[mnc]_ [,] _Zsn_ _[rec]_ [=] _[ Z]_ _sn_ _[bpa]_ [+] _[ Z]_ _sn_ _[mnc]_
+21: Update _Zrgb_ _←_ _Zrgb_ _[rec]_ [,] _[Z][sn]_ _[←]_ _[Z]_ _sn_ _[rec]_
+22: **end for**
+23: Compute per-modality patch anomaly scores: _d_ [(] _i_ _[rgb]_ [)] = 1 _−_ cos( _Ei_ [(] _[rgb]_ [)] _,_ _Zrgb,i_ _[rec]_ [)] [and] _[d]_ [(] _i_ _[sn]_ [)] =
+
+1 _−_ cos( _Ei_ [(] _[sn]_ [)] _,_ _Zsn,i_ _[rec]_ [)]
+
+24: Fuse modalities to obtain the final anomaly map: _di_ = _d_ [(] _i_ _[rgb]_ [)] + _d_ [(] _i_ _[sn]_ [)]
+
+
+B MORE IMPLEMENTATION DETAILS
+
+
+B.1 DETAILS OF GATED PROTOTYPE UPDATE VIA GRU.
+
+
+To ensure that prototypes coherently represent normal features, we update each prototype by incorporating this context vector _{ck}_ through a gated recurrent unit (GRU) update. We treat the original
+prototype _pk_ as the hidden state and its context _ck_ as the input to a GRU cell, producing an updated
+prototype _p_ _[′]_ _k_ [.]
+
+
+The GRU’s gating mechanism dynamically controls the extent to which each prototype is updated,
+ensuring that only normal context is integrated while minimizing the incorporation of anomalous
+information during testing. Formally, the update for prototype _pk_ is given by:
+
+
+             -              _uk_ = _σ_ _Wz_ [ _pk_ ; _ck_ ] + _bz_ _,_ (5)
+
+
+             -              _rk_ = _σ_ _Wr_ [ _pk_ ; _ck_ ] + _br_ _,_ (6)
+
+
+               -               _p_ ˜ _k_ = tanh _W_ [ _rk ⊙_ _pk_ ; _ck_ ] + _b_ _,_ (7)
+
+_p_ _[′]_ _k_ [=] _[ u][k]_ _[⊙]_ _[p][k]_ [+] [(1] _[ −]_ _[u][k]_ [)] _[ ⊙]_ _[p]_ [˜] _[k]_ _[,]_ (8)
+
+
+where [ _·_ ; _·_ ] denotes vector concatenation, _⊙_ is element-wise multiplication, _σ_ ( _·_ ) is the sigmoid
+activation, and _Wz, Wr, W_ (with corresponding biases _bz, br, b_ ) are learnable weights. Eqs. (5)–(8)
+
+
+14
+
+
+Figure 5: Qualitative results on Eyecandies with various types of anomalies, showing the complementary roles of the 2D and 3D branch in **PIRN** .
+
+
+Figure 6: Localization performance on test samples with large or pervasive anomalies (10-shot normal
+training). PIRN accurately highlights extensive defects, demonstrating the APR module’s robustness
+against prototype corruption even when anomalies dominate the input.
+
+
+are the standard GRU equations adapted to our prototype refinement setting: _uk_ is the update gate
+that decides how much of the previous prototype _pk_ to keep, _rk_ is the reset gate that modulates the
+influence of the past prototype when computing a candidate update, and _p_ ˜ _k_ is the candidate new
+
+
+15
+
+
+**Method** **AUROC** _I_ **AUROC** _P_ **AUPRO**
+
+
+Softmax Attention 0.832 0.967 0.929
+Linear Attention 0.845 0.968 0.931
+Sigmoid Attention 0.878 0.976 0.954
+
+
+Table 9: Ablation of prototype assignment in BPA on
+**MVTec-3D-AD** .
+
+
+**Backbone** **AUROC** _I_ **AUROC** _P_ **AUPRO**
+
+
+DINOv1 ViT-B/8 0.892 0.974 0.946
+DINOv2 ViT-B/14 0.923 0.993 0.968
+DINOv2 ViT-L/14 0.928 0.994 0.970
+
+
+Table 10: Comparison of anomaly detection and localization performance on **MVTec-3D-AD** under different
+backbones (10 shots).
+
+
+prototype state. The final refined prototype _p_ _[′]_ _k_ [is a convex combination of the old prototype and the]
+candidate state, weighted by the update gate.
+
+
+This GRU-based update mechanism is crucial for maintaining robustness during prototype refinement.
+If the context _ck_ aligns well with the original prototype, the GRU will produce a small _uk_, allowing
+the new information _p_ ˜ _k_ to significantly override the old state _pk_ . Otherwise, if the context _ck_ is
+unreliable due to an anomalous region that does not match any learned prototype, the update gate _uk_
+will be high (near 1) to keep the prototype unchanged. In this way, the GRU acts as a learnable gate:
+it adaptively suppresses anomalous information and only injects context when it is deemed normal.
+
+
+B.2 GENERATING SURFACE NORMAL IMAGES FROM POINT CLOUD.
+
+
+We follow FIND’s Li et al. (2025) procedure to generate surface normal maps. The MVTec 3DAD dataset provides per-pixel 3D point cloud data for each sample. Using these organized point
+clouds, we compute a corresponding surface normal map. According to FIND Li et al. (2025),
+background pixels in point cloud are removed following the standard procedure in M3DM (Wang
+et al., 2023). For the foreground pixels, we use Open3D to compute normals by fitting a local plane
+to each point’s neighborhood (KD-tree search with nearest neighbors _k_ = 30). This produces an
+initial normal vector. We further enforce directional coherence using Open3D’s orient ~~n~~ ormals
+
+~~c~~ onsistent ~~t~~ angent ~~p~~ lane with a connectivity setting of 50. After surface normal estimation,
+we project the computed normals back onto the image grid to form a normal map. For model training,
+we convert the normal vectors into a color image by linearly mapping each normal component to the
+
+[0 _,_ 255] range. The resulting normal maps are saved as PNG images.
+
+
+B.3 HARDWARE FOR TRAINING.
+
+
+All experiments were conducted on a workstation running Ubuntu 20.04 LTS. The system was
+equipped with two NVIDIA RTX 4090 GPUs with 128 GB of RAM. Our implementation was in
+Python 3.9 using PyTorch 1.13 (with CUDA 11.6 and cuDNN 8.1 for GPU acceleration). We also
+utilized OpenCV 4.8 for image processing and Open3D 0.17 for 3D data handling.
+
+
+C ABLATION STUDIES
+
+
+C.1 ADDITIONAL ABLATIONS ON BPA AND BACKBONE
+
+
+We provide additional ablations analyzing (i) prototype assignment strategies in BPA and (ii) backbone
+architectures for the frozen encoders on **MVTec-3D-AD** . As shown in Tab. 9, softmax and linear
+attention yield the weakest results (AUROC _I_ _<_ 85%), suggesting that enforcing balanced prototype
+usage is crucial for stable reconstruction under limited data. As PIRN uses frozen encoders, feature
+quality impacts performance (Tab. 10). On 10-shot MVTec 3D-AD, DINOv2 (ViT-B/14) outperforms
+DINOv1 (ViT-B/8), improving AUROC _I_ from 0.892 to 0.923 (+3.1%) due to richer semantic
+representations. Scaling to ViT-L/14 yields marginal gains (0.928). Crucially, PIRN remains robustly
+competitive even with the sub-optimal DINOv1.
+
+
+C.2 ROBUSTNESS TO LARGE-SCALE ANOMALIES.
+
+
+Fig. 6 shows qualitative results on test samples where anomalies occupy a large portion of the object.
+PIRN remains robust because APR performs a constrained, single-step refinement around the learned
+
+
+16
+
+
+Table 11: Comparisons of per-category anomaly detection performance on MVTec-3D-AD.
+
+
+**Method** **Bagel** **Cable Gland** **Carrot** **Cookie** **Dowel** **Foam** **Peach** **Potato** **Rope** **Tire** **Mean**
+
+
+**AUROC** _I_
+
+BTF (Horwitz & Hoshen, 2023) 0.938 0.765 0.972 0.888 0.960 0.664 0.904 0.929 0.982 0.726 0.865
+AST (Rudolph et al., 2023) 0.983 0.873 0.976 0.971 0.932 0.885 0.974 **0.981** **1.000** 0.797 0.937
+M3DM (Wang et al., 2023) 0.994 0.909 0.972 0.976 0.960 0.942 0.973 0.899 0.972 0.850 0.945
+CFM (Costanzino et al., 2024) 0.994 0.888 **0.984** **0.993** **0.980** 0.888 0.941 0.943 0.980 **0.953** 0.954
+3D-ADNAS (Long et al., 2025) **0.997** **1.000** 0.971 0.986 0.966 0.948 0.897 0.873 **1.000** 0.867 0.951
+Shape Guided (Chu et al., 2023) 0.986 0.894 0.983 0.991 0.976 0.857 0.990 0.965 0.990 0.869 0.947
+**PIRN** 0.971 0.973 0.941 0.957 0.975 **0.993** **0.992** 0.950 0.996 0.880 **0.963**
+
+
+**AUPRO@30%**
+
+
+BTF (Horwitz & Hoshen, 2023) 0.976 0.969 0.979 **0.973** 0.933 0.888 0.896 0.912 0.950 0.971 0.959
+AST (Rudolph et al., 2023) 0.970 0.947 0.981 0.939 0.913 0.906 0.979 0.982 0.889 0.940 0.944
+M3DM (Wang et al., 2023) 0.970 0.971 0.979 0.950 0.941 0.932 0.977 0.971 0.971 0.975 0.964
+CFM (Costanzino et al., 2024) 0.979 0.972 0.982 0.945 0.950 0.968 0.980 0.943 0.950 **0.981** 0.971
+Shape Guided (Chu et al., 2023) **0.981** 0.973 0.982 0.971 0.962 **0.978** **0.981** **0.983** **0.974** 0.975 **0.976**
+**PIRN** 0.966 **0.978** **0.983** 0.972 **0.976** 0.971 **0.981** 0.978 **0.974** 0.951 0.973
+
+
+normal codebook rather than unconstrained test-time re-learning. First, APR extracts prototype
+contexts via entropy-regularized optimal transport, which assigns negligible mass to patches that are
+dissimilar to all normal prototypes, thereby limiting the influence of anomalous regions. Second, the
+GRU gate (trained only on normal data) tends to close when the context is unreliable, preventing
+prototype corruption.
+
+
+C.3 PER-CATEGORY RESULTS ON MVTEC-3D-AD.
+
+
+PIRN demonstrates strong detection performance on the MVTec-3D-AD dataset (Table 11). It
+achieves a mean AUROC _I_ of **0.963**, surpassing the strongest baseline CFM (0.954) and the previous
+state-of-the-art 3D-ADNAS (0.951). It also outperforms other representative baselines such as M3DM
+(0.945) and AST (0.937). These results demonstrate that PIRN not only improves average detection
+accuracy but also localizes diverse texture and shape defects in complex anomaly detection scenarios.
+
+
+D VISUALIZATION OF ANOMALY LOCALIZATION.
+
+
+Fig. 7 and Fig. 8 illustrate PIRN’s anomaly localization results on the Eyecandies and MVTec 3D-AD
+datasets, respectively. These qualitative results highlight PIRN’s robustness in capturing fine-grained
+defect details while avoiding false positives.
+
+
+E LLM USAGE DISCLOSURE.
+
+
+We used a large language model to support language editing for the camera ready version, including
+improving clarity, grammar, and overall presentation of the manuscript. All scientific contributions, such as research conception, methodological design, experimental setup, result analysis, and
+interpretation—were carried out by the authors, who take full responsibility for the content.
+
+
+17
+
+
+Figure 7: Visualization of localization performance on the Eyecandies dataset (5-shot normal training).
+From left to right: RGB images, surface normals, anomaly maps predicted by the RGB branch,
+anomaly maps predicted by the surface-normal branch, the fused anomaly map.
+
+
+18
+
+
+Figure 8: Visualization of localization performance on the MVTec 3D-AD dataset (5-shot normal
+training). From left to right: RGB images, surface normals, anomaly maps predicted by the RGB
+branch, anomaly maps predicted by the surface-normal branch, the fused anomaly map.
+
+
+19

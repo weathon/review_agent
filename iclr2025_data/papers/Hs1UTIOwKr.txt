@@ -1,0 +1,462 @@
+# MITIGATING COPY BIAS IN IN-CONTEXT LEARNING THROUGH NEURON PRUNING
+
+Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+Large language models (LLMs) have demonstrated impressive few-shot in-context learning (ICL) abilities. Still, we show that they are sometimes prone to a ‘copying bias’, where they copy answers from provided examples instead of learning the underlying patterns. In this work, we propose a novel and simple method to mitigate such copying bias. First, we create a synthetic task and use the Integrated Gradients method to identify neurons that prioritize copying over generalization. We demonstrate that pruning these neurons consistently improves performance across a diverse set of ICL tasks. We also show that our method is applicable across various LLM architectures, including Transformers and State-Space Models, without requiring modifications. In our analysis, we adopt a task-recognition perspective on ICL and examine task vectors (Hendel et al., 2023) induced by the model. We find that pruning enhances the quality of these vectors, suggesting that the pruned neurons previously hindered effective task recognition.
+
+## 1 INTRODUCTION
+
+In-Context Learning (ICL) (Brown et al., 2020) has recently emerged as a powerful and simple alternative to traditional training and fine-tuning. ICL involves presenting a Large Language Models (LLM) with a “context” consisting of several example pairs, each containing an input and its corresponding correct output, followed by a test example for prediction. For instance, consider the following prompt:
+
+Dolphin  $\rightarrow$  2, Beautiful  $\rightarrow$  5, Octopus  $\rightarrow$
+
+In this case, the model must leverage the contextual information from the given examples to identify the underlying pattern of mapping words to vowel counts; based on this, it must then predict that the **correct** answer for “Octopus” is “3”.
+
+While ICL has shown considerable effectiveness, its use in few-shot scenarios faces significant challenges (Zhao et al., 2021; Razeghi et al., 2022). In these settings, the inherent scarcity of labeled examples becomes a critical bottleneck, as ICL often requires a substantial number of in-context examples to generalize effectively. Moreover, the performance of ICL is highly sensitive to various aspects of the prompt and the presentation of the examples. Factors such as the specific wording of the prompt (Wang et al., 2024), the order in which the examples are presented (Lu et al., 2021), and their relevance to the target example can significantly influence the outcome. Consequently, in domains where labeled data is limited, these challenges collectively hinder the reliable application of ICL, emphasizing the need for strategies that can mitigate sensitivity and make the most of the scarce examples available.
+
+Recent research has primarily addressed these challenges by focusing on prompt formulation strategies, including techniques for selecting optimal templates and examples (Zhou et al., 2023b; Hao et al., 2022; Lu et al., 2022), as well as calibration methods (Han et al., 2023; Zhao et al., 2021). However, existing work has not yet explored how errors in in-context learning (ICL) relate to the internal processes of LLMs or how to correct them through targeted model modifications.
+
+Our study takes a novel approach by investigating neural activation patterns related to a common challenge in ICL: copying errors. Referring back to the vowel-counting example, a copying error would occur if the model were to output “2” or “5” for Octopus, instead of the correct answer “3”.
+
+In these cases, the model appears to directly copy an answer from the provided examples rather than generating the correct, novel response based on the induced underlying pattern.
+
+In this work, we hypothesize that there is a small subset of neurons in language models that prioritize copying behavior over task recognition. We posit that these mechanisms can be task-agnostic; that is, the same neurons are responsible for this reasoning shortcut across a range of tasks. We further hypothesize that deactivating these neurons will make the model less likely to follow shortcuts and encourage it to focus on recognizing underlying regularities.
+
+To identify these neurons, we employ the vowel-counting task and apply the attribution method, Integrated Gradients (IG) (Sundararajan et al., 2017), to trace the copying errors to individual neurons. We then select the top contributing neurons as "copying neurons." The vowel-counting task is particularly interesting, as it appears challenging for a range of models and elicits the copying behavior in these models. We demonstrate that deactivating the neurons identified using this single task improves results across a diverse range of ICL problems, making our method practical – since the neurons do not need to be selected for each individual task – and confirming the existence of a general mechanism prioritizing the shortcut over reasoning.
+
+In summary, our contributions are fourfold: (1) We identify the copying bias in ICL and demonstrate that LLMs, particularly smaller ones, suffer from a high percentage of these errors. (2) We introduce a method to identify specific neurons responsible for triggering the copying behavior (copying neurons). (3) We show that pruning these identified neurons leads to out-of-the-box improvement across a wide range of ICL tasks. (4) We utilize the task vectors framework introduced by (Hendel et al., 2023), quantifying a model's ability to recognize and adapt to tasks during ICL. Using this framework, we provide evidence that pruning the copying neurons enhances the quality of task vectors, indicating improved task representation. This finding explains the observed performance gains across various ICL tasks.
+
+## 2 RELATED WORK
+
+ICL, first introduced by (Brown et al., 2020), has attracted significant interest in recent years due to its ability to enable large language models to perform complex downstream tasks without explicit fine-tuning. By leveraging contextual information provided within the input prompts, these models can dynamically adapt their behavior and generate contextually relevant outputs across a wide range of tasks. While it is commonly associated with Transformer architectures, ICL has also been explored in other model architectures, such as State-Space Models and the RWKV model (Grazzi et al., 2024b; Park et al., 2024). Leading to a wide line of works that seek to improve the effectiveness of ICL mechanisms (Zhao et al., 2021; Wei et al., 2023; Chu et al., 2023; Zhou et al., 2023a; Wei et al., 2024; Li et al., 2024), as well as studies that aim to explain the underlying processes and dynamics of how models internalize and utilize context (Min et al., 2022; Liu et al., 2022; Xie et al., 2022; Olsson et al., 2022; Von Oswald et al., 2023; Dai et al., 2022b).
+
+Works proposing methods to improve ICL have mainly focused on prompt selection and prompt formulation strategies. Zhou et al. (2023a) propose a different prompting strategy that breaks down a complex problem into a series of simpler subproblems and then solves them in sequence. Zhang et al. (2022b) reformulate the example selection for ICL as a sequential decision problem, and propose a reinforcement learning algorithm for identifying generalizable policies to select demonstration examples. Sørensen et al. (2022) introduces a method for unsupervised selection of prompt templates by maximizing the mutual information between the input and the corresponding model output. Lu et al. (2022) show that the order in which the samples are provided can make a significant difference and propose a method for finding the optimal permutation.
+
+While the majority of approaches to improving ICL have focused on various methods of prompt engineering, such as prompt selection and formulation strategies, our work takes a fundamentally different approach. To the best of our knowledge, this is the first attempt to enhance ICL through a neuron-level analysis, specifically by identifying and pruning neurons that contribute to copying (which we define in Section 3.1) within large language models.
+
+Neuron-Level analysis involves examining individual neurons within the model to determine their specific roles. Relevant studies in this area have aimed to understand and categorize neurons into groups based on their functional roles. For example, Voita et al. (2023) show that individual neu-
+
+rons in LLMs correspond to different groups such as dead neurons, positional neurons, and N-gram neurons. Furthermore, Gurnee et al. (2024) discusses an additional group of categories including entropy neurons, alphabet neurons, syntax neurons, and semantic neurons. Chen et al. (2024) identify safety neurons, which are responsible for safety behaviors. Neuron-level analysis was further expanded to study multilingual LLMs. Tang et al. (2024) detect language-specific and language-agnostic related neurons in multilingual language models. Neuron-Level analysis is typically performed through activation analysis, where one examines the patterns of neuron activations across various inputs (Voita et al., 2023; Gurnee et al., 2024; Stolfo et al., 2024). Attribution methods, such as Integrated Gradients (Sundararajan et al., 2017), are also employed to quantify the contribution of individual neurons to the model’s output, **thus, allowing the discovery of different neuron familiess** (Dai et al., 2022a; Shi et al., 2024).
+
+## 3 METHOD
+
+This section presents our method for detecting and mitigating copying in ICL. First, in section 3.1 we revisit the ICL setting, formally define what are the copying errors, and introduce the Integrated Gradients attribution method. In section 3.2 we elaborate on how we create a synthetic dataset that will be used as a proxy for our proposed detection method, and in section 3.3 we present our method for detecting and mitigating copying neurons.
+
+### 3.1 PRELIMINARIES
+
+**In-Context Learning** ICL enables a model  $f$  to adapt to downstream tasks without any parameter updates. This is achieved by forming a prompt  $p$  that includes concatenated training examples. In ICL, a prompt  $p$  is constructed by linking the task inputs with their corresponding labels as follows:
+
+$$p = x_1 : y_1, x_2 : y_2, \dots, x_n : y_n, x_{n+1} : \quad (1)$$
+
+Using this prompt, the model  $f$  predicts the most probable label  $y$  that completes the prefix  $p$  according to the function  $f$ . In this framework, few-shot learning is characterized by the number of examples in the prompt. Furthermore, we denote  $S = [y_1, y_2, \dots, y_n]$  as the set of the in-context example answers for prompt  $p$ , then we say  $p$  is an  $|S| = n$ -shot in-context prompt.
+
+**Copying Bias** Copying bias, as we define it, refers to the phenomenon where a language model  $f$  returns an incorrect answer that is one of the labels  $S$  of the in-context samples provided in the prompt. In other words, given a prompt  $p$  under the  $n$ -shot ICL settings, a prediction  $y_{n+1}$  is called a copying prediction if (1) :  $y_{n+1}$  is a wrong prediction and (2) :  $y_{n+1} \in S$ .
+
+We hypothesize that there exists a small number of neurons, which we call copying neurons, that trigger the model to copy responses from the prompt examples  $S$  of the prompt  $p$ . The identification of these neurons is, therefore, crucial for understanding how LLMs balance copying and generalization, and for enhancing the reliability and interpretability of these models. We further hypothesize that pruning these neurons by setting their weights to zero would encourage the model to reason rather than solely rely on copying, thereby improving its ability to generalize under few-shot ICL.
+
+**Integrated Gradients (IG)** Integrated Gradients (IG) is a popular technique in explainable AI (Sundararajan et al., 2017) used to elucidate the relationship between a model’s predictions and its input features. It applies to any differentiable model and is computationally efficient. IG works by generating attributions based on integrating the gradients as the input varies between a *baseline* and the final input of interest (the path):
+
+$$\mathbf{IG}(f, \tilde{x}, x, i) = (x_i - \tilde{x}_i) \int_{\alpha=0}^1 \frac{\partial f(\tilde{x}) \cdot d\alpha}{\partial f(\tilde{x}_i)} \bigg|_{\tilde{x}=\tilde{x}+\alpha(x-\tilde{x})}, \quad (2)$$
+
+where  $f(\cdot)$  denotes the prediction of the model,  $x$  is the input vector of interest that we want to attribute,  $\tilde{x}$  is the baseline input vector and  $i$  is an index denoting the indices of features of interest. The baseline represents a reference point against which the input of interest is compared. More specifically, the baseline is an input vector that is supposed to reflect a neutral, missing, or reference
+
+state. The idea behind using a baseline is to measure how the model’s output changes as we transition from this baseline state to the actual input of interest. This change is quantified by integrating the gradients along this path. In our experiments, we use the constant zero baseline as proposed in the original paper of IG. This baseline is straightforward to implement and often provides meaningful attributions. The integral is practically computed using the Riemann sum approximation:
+
+$$\text{IG}(f, \tilde{x}, x, i) \approx \frac{(x_i - \tilde{x}_i)}{m} \sum_{r=1}^m \frac{\partial f(\tilde{x} + \frac{r}{m}(x - \tilde{x}))}{\partial x_i}, \quad (3)$$
+
+where  $m$  is the total number of Riemann steps.
+
+### 3.2 PROXY ICL DATASET GENERATION
+
+The Integrated Gradients (IG) method operates by backpropagating the probability of the prediction. To effectively utilize IG within our framework, we require a set of in-context examples with ground-truth labels. We avoid relying on access to target task data for neuron selection, as this would limit the practicality of our approach. Instead, we utilize a [synthetic proxy dataset to identify and prune neurons](#) on evaluation tasks. This approach also aligns with our research hypothesis that copying neurons are largely task-agnostic. This synthetic dataset is employed within the Integrated Gradients framework to identify copying neurons.
+
+The specific task we choose is that of vowel counting since the mapping from a word to such structural attributes requires reasoning. [LLMs can occasionally make errors on this and similar tasks](#),<sup>1</sup> potentially outputting copying responses. The synthetic samples we utilize simply map an arbitrary word to its corresponding vowel counts (e.g., *apple*: 2). To construct a diverse set of examples, we extract words from a dictionary and calculate their respective vowel counts. [In our implementation, we used two examples per prompt to keep the problem tractable while still allowing us to study copying behavior. To eliminate the possibility of label repetition, we ensured that each prompt’s examples \( \$S\$ \) contained distinct vowel counts, with the target word’s vowel count always differing from those in  \$S\$ .](#) We sampled words with vowel counts ranging from 1 to 8, providing sufficient diversity while avoiding repetition within prompts. For dataset construction, we generated 400 ICL prompts, each using a 2-shot format: 300 examples were used for computing neuron importance scores, and 100 were reserved for validation to determine the optimal pruning configuration. The test answers were carefully designed to never appear in the prompt responses, ensuring clear evaluation of copying behavior.
+
+### 3.3 COPYING NEURONS DETECTION
+
+Denote  $V$  as the vocabulary space,  $p$  as the in-context prompt of interest containing  $n$  in-context examples, and  $S_p = [y_1, \dots, y_n]$  the set of labels of the different examples in the prompt  $p$ . In our detection process, we are only interested in prompts  $p$  on which the model outputs a wrong prediction  $y \in S_p$  (hence the copying) and denote  $\tilde{y} \notin S_p$  as the ground-truth answer. Let  $w^l \in \mathbb{R}^{d_1 \times d_2}$  be the weight matrix of the linear layer at block  $l$  on which our detection process operates. Furthermore, we define the model output  $P_p(y|\tilde{w}_j^l)$  as the probability of predicting a certain answer  $y \in V$ .
+
+$$P(y|\tilde{w}_j^l, p) = P(y|w_j^l = \tilde{w}_j^l, p), \quad (4)$$
+
+where  $w_j^{(l)}$  denotes the  $j$ -th intermediate neuron in the  $l$ -th layer of interest (Figure 1),  $\tilde{w}_j^l$  is a given constant that  $w_j^l$  is assigned to. We define  $l_v = \sum_i^n P(y = y_i \in S_p|w_j^l = \tilde{w}_j^l, p)$  as the probability of predicting an answer which is provided in the prompt examples (in  $S$ ), we also define  $l_o = P(y = \tilde{y} \notin S_p|w_j^l = \tilde{w}_j^l, p)$  as the probability of predicting the ground-truth answer  $\tilde{y}$ . Lastly, we define  $\Delta L = l_v - l_o$  as the prediction shift.
+
+Copying, by definition, occurs when the model’s prediction shifts from the true answer to one of the responses provided in the prompt. Thus, copying neurons are those that drive  $\Delta L$ .
+
+By leveraging IG, we can attribute  $\Delta L$  to individual components. This approach enables us to identify specific neurons responsible for copying within the LLM.
+
+<sup>1</sup>See, e.g., <https://community.openai.com/t/incorrect-count-of-r-characters-in-the-word-strawberry> 829618.
+
+![Figure 1: A high-level depiction of the proposed method of detecting copying neurons. (a) shows the model being fed ICL prompts from a synthetic dataset. The prompts include 'Member', 'OPT2', 'Bloom2', 'dense_h_to_4h', and 'Llama2'. The model outputs a wrong response 'Dolphin : 2, Beautiful : 5, Octopus : 3' with probabilities 0.4, 0.3, and 0.2 respectively. (b) shows the model being fed the same prompts, but the output is 'Dolphin : 2, Beautiful : 5, Octopus : 3' with probabilities 0.4, 0.3, and 0.2. The Integrated Gradients (IG) framework is used to attribute the output to neurons in the targeted layer. The diagram shows a 'Block' containing neurons, with one neuron highlighted in red. The IG framework is applied to this neuron to determine its contribution to the output.](690fce4fb5c9cbb8beb560cb2a3fcbeb_img.jpg)
+
+Figure 1: A high-level depiction of the proposed method of detecting copying neurons. (a) shows the model being fed ICL prompts from a synthetic dataset. The prompts include 'Member', 'OPT2', 'Bloom2', 'dense\_h\_to\_4h', and 'Llama2'. The model outputs a wrong response 'Dolphin : 2, Beautiful : 5, Octopus : 3' with probabilities 0.4, 0.3, and 0.2 respectively. (b) shows the model being fed the same prompts, but the output is 'Dolphin : 2, Beautiful : 5, Octopus : 3' with probabilities 0.4, 0.3, and 0.2. The Integrated Gradients (IG) framework is used to attribute the output to neurons in the targeted layer. The diagram shows a 'Block' containing neurons, with one neuron highlighted in red. The IG framework is applied to this neuron to determine its contribution to the output.
+
+Figure 1: A high-level depiction of our proposed method of detecting copying neurons. First, in (a) we feed ICL prompts from the synthetic dataset. In this phase, we are only interested in the prompts where the model outputs a wrong response which also appears in the prompt examples. Second, in (b) we use these prompts and calculate the sum of the probabilities over predicted responses that appear in the prompt. This sum is used within the IG framework to attribute it to neurons in the targeted layer.
+
+To quantify the contribution of a neuron  $w_j^l$  to the prediction shift ( $\Delta L$ ), we gradually change  $w_j^l$  from 0 (the *baseline*) to its original value  $\hat{w}_j^{(l)}$  computed by the model and integrate the gradients:
+
+$$\begin{aligned} \text{Attr}(w_j^l, p, S_p) &= \text{IG}(w_j^l) = (\hat{w}_j^l - 0) \int_{\alpha=0}^1 \frac{\partial |\Delta L|}{\partial w_j^l} d\alpha \\ &= \sum_i \hat{w}_j^{(l)} \int_{\alpha=0}^1 \frac{\partial |P(y_i|\alpha \hat{w}_j^l, p) - P(\hat{y}|\alpha \hat{w}_j^l, p)|}{\partial w_j^l} d\alpha, \end{aligned} \quad (5)$$
+
+$$\text{Attr}(w_j^l, p, S_p) = \text{IG}(w_j^l) = \sum_i \frac{\hat{w}_j^l}{m} \sum_{r=1}^m \frac{\partial |P(y_i|\frac{r}{m} \hat{w}_j^l, p) - P(\hat{y}|\frac{r}{m} \hat{w}_j^l, p)|}{\partial w_j^l}, \quad (6)$$
+
+where  $m = 20$  is the number of approximation steps we use in our experiments, following (Sundararajan et al., 2017).
+
+Finally, we compute the final attribution scores for the neurons  $[w_j^l]$  by averaging  $\text{Attr}(w_j^l)$  across all samples in the synthetic dataset, resulting in a relevance score that quantifies the extent to which a neuron contributes to copying.
+
+$$\text{R}(w_j^l) = \frac{1}{|D|} \sum_{k=1}^{|D|} \frac{\text{Attr}(w_j^l, p_k, S_{p_k}) - \min_{k'} \text{Attr}(w_j^l, p_{k'}, S_{p_{k'}})}{\max_{k'} \text{Attr}(w_j^l, p_{k'}, S_{p_{k'}}) - \min_{k'} \text{Attr}(w_j^l, p_{k'}, S_{p_{k'}})}, \quad (7)$$
+
+where  $D$  is the synthetic dataset and  $p_k$  is the  $k$ -th sample of the synthetic dataset.
+
+To mitigate the copying bias, we propose to suppress the weights of the detected copying neurons as follows:
+
+$$w_i^l = \begin{cases} 0, & \text{R}(w_i^l) \geq \sigma, \\ w_i^l, & \text{R}(w_i^l) < \sigma. \end{cases} \quad (8)$$
+
+where  $\sigma$  is the filtering threshold and is tuned using a validation dataset.
+
+![Figure 2: Percentage of total errors and copying errors for GPT2-Small, Bloom-560M, and OPT1.3B models across 3 ICL tasks (To Lower, Present Simple Gerund, Singular to Plural) for 1, 2, 3, and 4 shots. Dark bars represent unpruned models, lighter bars represent pruned models, and shaded parts represent copying error rates.](c54b3ca7603d65d4589151bc3a49d054_img.jpg)
+
+Figure 2 consists of a 3x3 grid of bar charts. The rows represent three models: GPT2-Small (top), Bloom-560M (middle), and OPT1.3B (bottom). The columns represent three tasks: To Lower (left), Present Simple Gerund (middle), and Singular to Plural (right). Each chart shows the percentage of total errors (y-axis, 0-100) for 1, 2, 3, and 4 shots (x-axis). For each shot, there are two bars: a dark bar for the unpruned model and a lighter bar for the pruned model. The shaded part of each bar represents the copying error rate.
+
+| Model      | Task                  | Shot   | Unpruned Total Error (%) | Pruned Total Error (%) | Unpruned Copying Error (%) | Pruned Copying Error (%) |
+|------------|-----------------------|--------|--------------------------|------------------------|----------------------------|--------------------------|
+| GPT2-Small | To Lower              | 1 Shot | ~68                      | ~38                    | ~68                        | ~38                      |
+|            |                       | 2 Shot | ~10                      | ~5                     | ~10                        | ~5                       |
+|            |                       | 3 Shot | ~5                       | ~2                     | ~5                         | ~2                       |
+|            |                       | 4 Shot | ~2                       | ~1                     | ~2                         | ~1                       |
+|            | Present Simple Gerund | 1 Shot | ~75                      | ~65                    | ~75                        | ~65                      |
+|            |                       | 2 Shot | ~65                      | ~50                    | ~65                        | ~50                      |
+|            |                       | 3 Shot | ~60                      | ~50                    | ~60                        | ~50                      |
+|            |                       | 4 Shot | ~55                      | ~45                    | ~55                        | ~45                      |
+|            | Singular to Plural    | 1 Shot | ~65                      | ~60                    | ~65                        | ~60                      |
+| 2 Shot     |                       | ~60    | ~55                      | ~60                    | ~55                        |                          |
+| 3 Shot     |                       | ~60    | ~55                      | ~60                    | ~55                        |                          |
+| 4 Shot     |                       | ~60    | ~55                      | ~60                    | ~55                        |                          |
+| Bloom-560M | To Lower              | 1 Shot | ~55                      | ~45                    | ~55                        | ~45                      |
+|            |                       | 2 Shot | ~15                      | ~10                    | ~15                        | ~10                      |
+|            |                       | 3 Shot | ~10                      | ~5                     | ~10                        | ~5                       |
+|            |                       | 4 Shot | ~5                       | ~2                     | ~5                         | ~2                       |
+|            | Present Simple Gerund | 1 Shot | ~65                      | ~55                    | ~65                        | ~55                      |
+|            |                       | 2 Shot | ~55                      | ~45                    | ~55                        | ~45                      |
+|            |                       | 3 Shot | ~45                      | ~35                    | ~45                        | ~35                      |
+|            |                       | 4 Shot | ~40                      | ~30                    | ~40                        | ~30                      |
+|            | Singular to Plural    | 1 Shot | ~70                      | ~60                    | ~70                        | ~60                      |
+| 2 Shot     |                       | ~55    | ~50                      | ~55                    | ~50                        |                          |
+| 3 Shot     |                       | ~60    | ~50                      | ~60                    | ~50                        |                          |
+| 4 Shot     |                       | ~50    | ~45                      | ~50                    | ~45                        |                          |
+| OPT1.3B    | To Lower              | 1 Shot | ~100                     | ~85                    | ~100                       | ~85                      |
+|            |                       | 2 Shot | ~75                      | ~15                    | ~75                        | ~15                      |
+|            |                       | 3 Shot | ~25                      | ~10                    | ~25                        | ~10                      |
+|            |                       | 4 Shot | ~10                      | ~5                     | ~10                        | ~5                       |
+|            | Present Simple Gerund | 1 Shot | ~85                      | ~75                    | ~85                        | ~75                      |
+|            |                       | 2 Shot | ~75                      | ~55                    | ~75                        | ~55                      |
+|            |                       | 3 Shot | ~50                      | ~35                    | ~50                        | ~35                      |
+|            |                       | 4 Shot | ~40                      | ~30                    | ~40                        | ~30                      |
+|            | Singular to Plural    | 1 Shot | ~65                      | ~60                    | ~65                        | ~60                      |
+| 2 Shot     |                       | ~65    | ~60                      | ~65                    | ~60                        |                          |
+| 3 Shot     |                       | ~60    | ~55                      | ~60                    | ~55                        |                          |
+| 4 Shot     |                       | ~55    | ~50                      | ~55                    | ~50                        |                          |
+
+Figure 2: Percentage of total errors and copying errors for GPT2-Small, Bloom-560M, and OPT1.3B models across 3 ICL tasks (To Lower, Present Simple Gerund, Singular to Plural) for 1, 2, 3, and 4 shots. Dark bars represent unpruned models, lighter bars represent pruned models, and shaded parts represent copying error rates.
+
+Figure 2: Percentage of total errors and copying errors for both the pruned and un-pruned models, results are shown for 3 ICL tasks across 3 different models: GPT2-Small, Bloom-560M, and OPT1.3B. The dark bar in each diagram represents the unpruned version while the lighter bar represents the pruned version; the entire bar height represents the total error of the model and the shaded part represents the copying error rate.
+
+## 4 EXPERIMENTS
+
+Our approach offers a generic method for detecting copying neurons, applicable to any language model. To demonstrate the generalizability of our method across different models and tasks, we conduct extensive experiments on a diverse set of LLMs. This includes the recent state-space models, such as Mamba (Gu & Dao, 2023) as well as a broad spectrum of transformer-based models, including OPT (Zhang et al., 2022a), GPT2 (Radford et al., 2019), Bloom (Le Scao et al., 2023) and LLaMA Touvron et al. (2023); Dubey et al. (2024).
+
+**Data** In all of our experiments, we follow Hendel et al. (2023) and Grazzi et al. (2024a) and study 18 tasks in 3 different categories including algorithmic (to lowercase, to uppercase, list first, list last, list max, list min, and next letter), linguistic (present to past, present to gerund, singular to plural, antonyms, and past to perfect), and knowledge (landmark, currency, country to capital, person to language, religion, and continent), the algorithmic tasks are generated automatically, for the linguistic we use the GitHub Repositories<sup>23</sup> and the knowledge data is taken from Meng et al. (2022). Additionally, we also incorporate real-world datasets like sentiment classification, including SST2, SST5, and subsets from the BIG-Bench Tasks (Suzgun et al., 2022). For more information about the data, refer to Appendix A.
+
+**Implementation Details** For each model, we use the synthetic validation dataset introduced in Section 3.2 to identify the optimal block and the number of copying neurons to prune as follows. IG, as defined in Equation 7, is applied across the layers of interest (summarized in Appendix B) in all of the blocks in the model. As described in Section. 3.3, this procedure quantifies which
+
+<sup>2</sup><https://github.com/Drulac/English-Verbs-Conjugates>
+
+<sup>3</sup><https://github.com/sindresorhus/irregular-plurals>
+
+324  
+325  
+326  
+327  
+328  
+329  
+330  
+331  
+332  
+333  
+334  
+335  
+336  
+337  
+338  
+339  
+340  
+341  
+342  
+343  
+344  
+345  
+346  
+347  
+348  
+349  
+350  
+351  
+352  
+353  
+354  
+355  
+356  
+357  
+358  
+359  
+360  
+361  
+362  
+363  
+364  
+365  
+366  
+367  
+368  
+369  
+370  
+371  
+372  
+373  
+374  
+375  
+376  
+377
+
+![Figure 3: Summary of the results over the synthetic ICL tasks. The figure consists of eight scatter plots arranged in a 2x4 grid, showing the performance of pruned models compared to baseline models for various tasks (OPT2-Small, OPT2-Medium, Bloom-560M, Bloom-1.2B, OPT-350M, OPT-1.3B, Mamba-130M, Mamba-370M). Each plot has 'Pruned Model' on the y-axis and 'Baseline Model' on the x-axis, both ranging from 0.0 to 1.0. A diagonal line represents perfect performance. Data points are colored by task (T1-T18) and shaped by the number of shots (1, 2, 3, 4).](c0843c6d138705289960d9f53a6e72a1_img.jpg)
+
+Figure 3: Summary of the results over the synthetic ICL tasks. The figure consists of eight scatter plots arranged in a 2x4 grid, showing the performance of pruned models compared to baseline models for various tasks (OPT2-Small, OPT2-Medium, Bloom-560M, Bloom-1.2B, OPT-350M, OPT-1.3B, Mamba-130M, Mamba-370M). Each plot has 'Pruned Model' on the y-axis and 'Baseline Model' on the x-axis, both ranging from 0.0 to 1.0. A diagonal line represents perfect performance. Data points are colored by task (T1-T18) and shaped by the number of shots (1, 2, 3, 4).
+
+Figure 3: Summary of the results over the synthetic ICL tasks, for more information on the tasks and the exact numbers, refer to Appendix D.
+
+![Figure 4: Results of Llama-2 and Llama-3 over SST2, SST5, and Object Counting task from BBH benchmark. The figure contains three bar charts. The first chart shows 'Llama 2 Over SST2' with accuracy ranging from 0.80 to 0.94. The second chart shows 'Llama 2 Over SST5' with accuracy ranging from 0.50 to 0.75. The third chart shows 'Llama 3-8B Over BBH Object Counting' with accuracy ranging from 0.350 to 0.550. Each chart compares four methods (ICL, Ours, Zhou et al., '23, Yang et al., '23) across 1, 2, 3, and 4 shots.](c64e9e9f3b0b828a5f6ac70441877764_img.jpg)
+
+Figure 4: Results of Llama-2 and Llama-3 over SST2, SST5, and Object Counting task from BBH benchmark. The figure contains three bar charts. The first chart shows 'Llama 2 Over SST2' with accuracy ranging from 0.80 to 0.94. The second chart shows 'Llama 2 Over SST5' with accuracy ranging from 0.50 to 0.75. The third chart shows 'Llama 3-8B Over BBH Object Counting' with accuracy ranging from 0.350 to 0.550. Each chart compares four methods (ICL, Ours, Zhou et al., '23, Yang et al., '23) across 1, 2, 3, and 4 shots.
+
+Figure 4: Results of Llama-2 and Llama-3 over SST2, SST5, and Object Counting task from BBH benchmark
+
+neurons contribute most significantly to the copying errors. Furthermore, we use the validation set introduced in Section 3.2 in order to find the optimal pruning rate and the optimal block that maximizes the validation accuracy over the proxy ICL validation set, we apply multiple pruning rates ranging from 1% to 10%, in 1% increments (i.e., [1%, 2%, 3%, ..., 10%]) over each layer in all of the blocks in the model, and use the best validation accuracy performing configuration to use for the unseen ICL tasks. This procedure allows us to determine the optimal block and the optimal number of neurons to prune for maximizing the accuracy on the validation proxy ICL set. The layers we choose to apply the detection and pruning procedures are summarized in Appendix B.
+
+### 4.1 VALIDATING THE PREVALENCE OF COPYING ERRORS
+
+To validate the significance of copying errors, we first conduct an error analysis for three representative ICL tasks (to lower, singular to plural, and present simple to gerund) across a range of large
+
+language models (GPT2-Small, Bloom-560M, and OPT-1.3B). In this analysis, we show the percentage of copying errors as defined in Section 3.1 out of the total number of errors. The results are presented in Figure 2. In this figure, we present a comparative analysis of error rates across different models and tasks. The dark bars show error rates for the baseline (unpruned) model, while the light bars display results for the pruned model. Each bar is composed of two elements: an unfilled portion representing the total error rate, depicted by the full height of the bar with a black outline, and a filled portion below indicating the copying error rate, which is a subset of the total error rate. Evidently, most of the errors in these few-shot ICL tasks stem from copying, these models tend to replicate responses based on examples provided in the prompt, rather than generalizing to new contexts. Additionally, our pruning method significantly reduces the number of copying errors thus also reducing the total error rate. [More analysis on Copying Error can be found in Appendix C.](#)
+
+### 4.2 TASKS EVALUATION
+
+To demonstrate the generalizability of our approach across model architectures, we include a range of models: (1) Transformer-based: OPT, GPT-2, BLOOM, LLaMA, and (2) Mamba state space models of various sizes.
+
+For each synthetic ICL task, we utilize the test sets introduced by Hendel et al. (2023). We report the mean accuracy across these test sets for each model and task configuration over the different shots (1, 2, 3, and 4) evaluated using various seeds. Figure. 3 presents a scatter plot comparing the performance of our pruned model against the baseline (non-pruned) model. A diagonal line representing equal performance is included for reference. Data points falling above this line indicate instances where our pruned model achieves higher accuracy than the baseline, while points below the line represent cases where the baseline model outperforms. As evident from the distribution of points that is dominated by those above the diagonal, our pruned model consistently demonstrates superior accuracy across a wide range of ICL tasks for different shot instances, underscoring the effectiveness of our targeting neuron pruning strategy. We believe that the fact our technique rarely leads to a performance drop – and when it does, the impact is only marginal – makes it particularly appealing for practical applications. For the exact numbers, we refer the reader to Appendix D. [Additionally, we also test our method on multi-token output tasks, the analysis, and the results are presented in Appendix E. While our pruning method demonstrates substantial improvements in ICL performance, it is important to consider potential tradeoffs in other model capabilities. For a detailed evaluation of these tradeoffs, including the impact on language modeling and knowledge-intensive reasoning tasks, please refer to Appendix F.](#)
+
+In order to test our approach beyond this benchmark ICL tasks, we also test it on tasks that are based on three datasets of collected data: SST-2, SST-5, and the object counting sub-task from the BBH benchmark (Suzgun et al., 2022). In these cases, to allow a comparison with previous work, we use Llama-2 (Touvron et al., 2023) and Llama-3 (Dubey et al., 2024). The same synthetic dataset of vowel mapping is used for copying neurons detection.
+
+We include two recent baselines. The first is Weighted In-Context Learning (WICL) by Yang et al. (2023), which improves the performance of LLMs on downstream tasks by assigning and applying optimal weights to demonstration examples during ICL. The second, Automatic Prompt Engineer (APE) by Zhou et al. (2023b), automatically generates and selects optimal instructions for large language models to improve their performance on various ICL tasks without relying on human-crafted prompts.
+
+The results for these three benchmarks are presented in Figure 4. Evidently, our method significantly improves over the baseline LLM as well as over the two baselines. [For a more comprehensive analysis on the effect of shot count beyond the few-shot regime, we conduct additional experiments with up to 64 shots, reported in Appendix G. While our method’s improvements are most pronounced in the few-shot setting, it continues to yield consistent benefits even with increased examples.](#)
+
+### 4.3 TASKS-VECTOR ANALYSIS
+
+Next, we build upon the recent task-vectors framework of Hendel et al. (2023) to study the relationship between copying neurons pruning and the quality of the emerged task vectors in ICL. By comparing the task vectors generated by pruned and unpruned models across various ICL scenarios,
+
+we seek to understand if our proposed targeted pruning can enhance a model’s ability to distill task-relevant information from demonstrations, specifically under the few shots settings. Furthermore, we follow the setup of Hendel et al. (2023) and report ICL accuracy using the standard ICL prompting (denoted by ICL), the accuracy obtained by using the emerged Task-Vectors without pruning the copying neurons (denoted as Task-Vectors) and the accuracy obtained by using task vectors obtained from the model with the pruned copying neurons (denoted as Task-Vectors-Pruned).
+
+In Figure 5, we show the results of OPT-2.7B and Bloom-560M models over the “Singular Plural” and “Country Capital” ICL tasks. As can be seen from the results, pruning the copying neurons indeed yields better Task-Vectors for ICL. This suggests that our pruning strategy may be effectively identifying and removing neurons that were interfering with the model’s ability to infer the underlying task. For more results on additional models and tasks, refer to Appendix H.
+
+![Figure 5: Four bar charts showing Task-Vectors accuracies over OPT-2.7B and Bloom-560M models for Singular Plural and Country Capital ICL tasks across 1, 2, 3, and 4 shots. Each chart compares ICL (red), Task-Vectors (dark green), and Task-Vectors-Pruned (light green) methods. In all cases, Task-Vectors-Pruned achieves higher accuracy than Task-Vectors, often approaching or exceeding ICL accuracy.](bedcca5cdf168e3508ef511d94ec514c_img.jpg)
+
+| Model      | Task            | Shots  | ICL  | Task-Vectors | Task-Vectors-Pruned |
+|------------|-----------------|--------|------|--------------|---------------------|
+| OPT 2.7B   | Singular Plural | 1 shot | 0.35 | 0.28         | 0.32                |
+|            |                 | 2 shot | 0.48 | 0.25         | 0.35                |
+|            |                 | 3 shot | 0.52 | 0.22         | 0.38                |
+|            |                 | 4 shot | 0.55 | 0.25         | 0.35                |
+|            | Country Capital | 1 shot | 0.25 | 0.18         | 0.22                |
+|            |                 | 2 shot | 0.42 | 0.15         | 0.25                |
+|            |                 | 3 shot | 0.48 | 0.12         | 0.28                |
+|            |                 | 4 shot | 0.52 | 0.15         | 0.25                |
+| Bloom 560M | Singular Plural | 1 shot | 0.32 | 0.28         | 0.30                |
+|            |                 | 2 shot | 0.42 | 0.30         | 0.38                |
+|            |                 | 3 shot | 0.45 | 0.32         | 0.40                |
+|            |                 | 4 shot | 0.48 | 0.35         | 0.42                |
+|            | Country Capital | 1 shot | 0.20 | 0.18         | 0.19                |
+|            |                 | 2 shot | 0.25 | 0.18         | 0.22                |
+|            |                 | 3 shot | 0.28 | 0.15         | 0.22                |
+|            |                 | 4 shot | 0.30 | 0.18         | 0.22                |
+
+Figure 5: Four bar charts showing Task-Vectors accuracies over OPT-2.7B and Bloom-560M models for Singular Plural and Country Capital ICL tasks across 1, 2, 3, and 4 shots. Each chart compares ICL (red), Task-Vectors (dark green), and Task-Vectors-Pruned (light green) methods. In all cases, Task-Vectors-Pruned achieves higher accuracy than Task-Vectors, often approaching or exceeding ICL accuracy.
+
+Figure 5: Task-Vectors accuracies over OPT-2.7B and Bloom-560M models tested on (1) Singular Plural and (2) Country Capital ICL tasks. We show the Task-Vectors accuracies with and without pruning the detected copying errors, as can be seen, pruning the copying errors improves the quality of the extracted Task-Vectors across the different shots  $\in [1, 2, 3, 4]$  for the two models and ICL tasks.
+
+### 4.4 ABLATION STUDIES
+
+We present multiple ablation studies to evaluate and understand the different components of our proposed detection and pruning methods. These ablation studies were conducted with the OPT-350M, GPT2-Small, and Bloom-560M models, over the Linguistic Antonyms, and Letter to Upper ICL tasks.
+
+Our first experiment focuses on using “Prediction Shift” within the IG framework. We aim to determine whether applying IG to the prediction shift, as defined in Section 3.3, is essential for our proposed method’s effectiveness. To this end, we compare our approach with an alternative where IG is applied to the predicted probability (specifically, the maximum probability) instead. Results are presented in Tab.1 (“Max IG” row) clearly shows that the prediction shift is essential for the success of our proposed method.
+
+We further check the effect of min-max normalizing the IG scores across the samples from the proxy ICL task we use in the detection process. The results without this normalization are reported under “w/o Norm”. As can be seen, normalizing the scores across the samples can significantly enhance the detection process of the copying neurons.
+
+Additionally, we explore a baseline case where we randomly prune the same percentage of neurons as in the best-performing version of our method. This experiment, labeled as “Random” in Tab.1, shows a degradation in ICL accuracy for some shot settings, underscoring the importance of our targeted pruning strategy. To further evaluate the generality of our copying neuron detection method, we conducted experiments using various proxy ICL tasks beyond vowel counting. The detailed analysis and results can be found in Appendix I. Further analysis of our method’s effectiveness across different experimental settings, including combinations with task descriptions, comparisons with fine-tuning approaches, and evaluations on balanced datasets, can be found in Appendix J.
+
+| Shot                       | OPT-350M |             |        |          |        | GPT-Small |             |        |          |        | Bloom-560M |             |        |          |        |
+|----------------------------|----------|-------------|--------|----------|--------|-----------|-------------|--------|----------|--------|------------|-------------|--------|----------|--------|
+|                            | ICL      | Ours        | Max IG | w/o Norm | Random | ICL       | Ours        | Max IG | w/o Norm | Random | ICL        | Ours        | Max IG | w/o Norm | Random |
+| <b>Linguistic Antonyms</b> |          |             |        |          |        |           |             |        |          |        |            |             |        |          |        |
+| 1                          | 0.20     | <b>0.29</b> | 0.18   | 0.22     | 0.20   | 0.06      | <b>0.19</b> | 0.17   | 0.15     | 0.08   | 0.57       | <b>0.61</b> | 0.55   | 0.59     | 0.57   |
+| 2                          | 0.32     | <b>0.38</b> | 0.30   | 0.34     | 0.30   | 0.10      | <b>0.29</b> | 0.29   | 0.21     | 0.12   | 0.68       | 0.68        | 0.68   | 0.68     | 0.67   |
+| 3                          | 0.33     | <b>0.37</b> | 0.33   | 0.34     | 0.30   | 0.11      | <b>0.27</b> | 0.25   | 0.23     | 0.11   | 0.71       | 0.71        | 0.70   | 0.70     | 0.70   |
+| 4                          | 0.29     | <b>0.33</b> | 0.27   | 0.31     | 0.27   | 0.11      | <b>0.25</b> | 0.25   | 0.22     | 0.13   | 0.73       | <b>0.77</b> | 0.73   | 0.77     | 0.75   |
+| <b>Letter to Uppercase</b> |          |             |        |          |        |           |             |        |          |        |            |             |        |          |        |
+| 1                          | 0.24     | <b>0.51</b> | 0.30   | 0.37     | 0.23   | 0.24      | <b>0.53</b> | 0.37   | 0.45     | 0.34   | 0.76       | <b>0.81</b> | 0.77   | 0.78     | 0.76   |
+| 2                          | 0.72     | <b>0.87</b> | 0.72   | 0.81     | 0.72   | 0.96      | 0.96        | 0.95   | 0.96     | 0.96   | 0.92       | <b>0.96</b> | 0.91   | 0.95     | 0.90   |
+| 3                          | 0.85     | <b>0.94</b> | 0.85   | 0.90     | 0.84   | 1.00      | 1.00        | 0.98   | 0.99     | 1.00   | 0.96       | <b>0.98</b> | 0.96   | 0.96     | 0.96   |
+| 4                          | 0.92     | <b>0.97</b> | 0.91   | 0.94     | 0.92   | 1.00      | 1.00        | 0.99   | 1.00     | 1.00   | 0.96       | <b>0.98</b> | 0.95   | 0.95     | 0.95   |
+
+Table 1: Ablation studies for the different components in our method over OPT-350M, GPT2-Small, and Bloom-560M models applied on the Linguistic Antonyms, and Letter to Upper ICL tasks
+
+## 5 CONCLUSIONS AND DISCUSSION
+
+We presented a novel method to mitigate copying bias in few-shot In-Context Learning by pruning neurons that are linked to this behavior according to the integrated gradients interoperability method. Our approach consistently improved performance across a variety of ICL tasks and model architectures. These findings highlight the potential of targeted neuron pruning as an effective strategy for optimizing the capabilities of large language models.
+
+The “out-of-the-box” improvements provided by our method, without the need for task-specific data or fine-tuning, have significant practical implications for deploying more reliable few-shot learning systems. Our approach allows for the enhancement of LLM performance across a wide range of tasks using only a simple, synthetic dataset for neuron identification. Moreover, the consistent improvements observed across different model architectures suggest that this method could be broadly applicable, potentially becoming a standard post-processing step in LLM deployment pipelines.
+
+The success of our pruning method in improving performance across various tasks indicates that “copying neurons” may be acting as a form of shortcut, inhibiting the model’s ability to engage in more sophisticated reasoning processes. This observation aligns with recent work on shortcut learning in neural networks (Yom Din et al., 2024; Belrose et al., 2023) and suggests that in-context learning quality could potentially be improved by carefully modulating the influence of different neuron groups or pathways.
+
+Our results suggest that by pruning copying neurons, we enhance the model’s ability to distill task-relevant information from demonstrations, leading to more effective task vectors. This raises interesting questions about the relationship between neuron-level representations and the higher-level task embeddings captured by task vectors. Specifically, it may be useful to consider the representation in a way that disentangles multiple activation pathways.
+
+## REFERENCES
+
+- Nora Belrose, Zach Furman, Logan Smith, Danny Halawi, Igor Ostrovsky, Lev McKinney, Stella Biderman, and Jacob Steinhardt. Eliciting latent predictions from transformers with the tuned lens. *arXiv preprint arXiv:2303.08112*, 2023.
+- Tom Brown, Benjamin Mann, Nick Ryder, Melanie Subbiah, Jared D Kaplan, Prafulla Dhariwal, Arvind Neelakantan, Pranav Shyam, Girish Sastry, Amanda Askell, et al. Language models are few-shot learners. *Advances in neural information processing systems*, 33:1877–1901, 2020.
+- Jianhui Chen, Xiaozhi Wang, Zijun Yao, Yushi Bai, Lei Hou, and Juanzi Li. Finding safety neurons in large language models. *arXiv preprint arXiv:2406.14144*, 2024.
+- Timothy Chu, Zhao Song, and Chiwun Yang. Fine-tune language models to approximate unbiased in-context learning. *arXiv preprint arXiv:2310.03331*, 2023.
+
+- 540 Damai Dai, Li Dong, Yaru Hao, Zhifang Sui, Baobao Chang, and Furu Wei. Knowledge neurons  
+541 in pretrained transformers. In *Proceedings of the 60th Annual Meeting of the Association for*  
+542 *Computational Linguistics (Volume 1: Long Papers)*, pp. 8493–8502, Dublin, Ireland, May 2022a.  
+543 Association for Computational Linguistics. doi: 10.18653/v1/2022.acl-long.581. URL [https://](https://aclanthology.org/2022.acl-long.581)  
+544 [//aclanthology.org/2022.acl-long.581](https://aclanthology.org/2022.acl-long.581).
+- 545 Damai Dai, Yutao Sun, Li Dong, Yaru Hao, Shuming Ma, Zhifang Sui, and Furu Wei. Why can gpt  
+546 learn in-context? language models implicitly perform gradient descent as meta-optimizers. *arXiv*  
+547 *preprint arXiv:2212.10559*, 2022b.
+- 548
+- 549 Abhimanyu Dubey, Abhinav Jauhri, Abhinav Pandey, Abhishek Kadian, Ahmad Al-Dahle, Aiesha  
+550 Letman, Akhil Mathur, Alan Schelten, Amy Yang, Angela Fan, et al. The llama 3 herd of models.  
+551 *arXiv preprint arXiv:2407.21783*, 2024.
+- 552
+- 553 Riccardo Grazzi, Julien Siems, Simon Schrodi, Thomas Brox, and Frank Hutter. Is mamba capable  
+554 of in-context learning? *arXiv preprint arXiv:2402.03170*, 2024a.
+- 555 Riccardo Grazzi, Julien Niklas Siems, Simon Schrodi, Thomas Brox, and Frank Hutter. Is mamba  
+556 capable of in-context learning? In *ICLR 2024 Workshop on Mathematical and Empirical Un-*  
+557 *derstanding of Foundation Models*, 2024b. URL [https://openreview.net/forum?id=](https://openreview.net/forum?id=Iia0cnjMh2)  
+558 [Iia0cnjMh2](https://openreview.net/forum?id=Iia0cnjMh2).
+- 559
+- 560 Albert Gu and Tri Dao. Mamba: Linear-time sequence modeling with selective state spaces. *arXiv*  
+561 *preprint arXiv:2312.00752*, 2023.
+- 562 Wes Gurnee, Theo Horsley, Zifan Carl Guo, Tara Rezaei Kheirkhah, Qinyi Sun, Will Hathaway,  
+563 Neel Nanda, and Dimitris Bertsimas. Universal neurons in gpt2 language models. *arXiv preprint*  
+564 *arXiv:2401.12181*, 2024.
+- 565
+- 566 Zhixiong Han, Yaru Hao, Li Dong, Yutao Sun, and Furu Wei. Prototypical calibration for few-shot  
+567 learning of language models. In *The Eleventh International Conference on Learning Representa-*  
+568 *tions*, 2023.
+- 569
+- 570 Yaru Hao, Yutao Sun, Li Dong, Zhixiong Han, Yuxian Gu, and Furu Wei. Structured prompting:  
+571 Scaling in-context learning to 1,000 examples. *arXiv preprint arXiv:2212.06713*, 2022.
+- 572
+- 573 Roee Hendel, Mor Geva, and Amir Globerson. In-context learning creates task vectors. *arXiv*  
+574 *preprint arXiv:2310.15916*, 2023.
+- 575
+- 576 Dan Hendrycks, Collin Burns, Steven Basart, Andy Zou, Mantas Mazeika, Dawn Song, and  
+577 Jacob Steinhardt. Measuring massive multitask language understanding. *arXiv preprint*  
+578 *arXiv:2009.03300*, 2020.
+- 579
+- 580 Cheng-Ping Hsieh, Simeng Sun, Samuel Krman, Shantanu Acharya, Dima Rekes, Fei Jia, Yang  
+581 Zhang, and Boris Ginsburg. Ruler: What’s the real context size of your long-context language  
+582 models? *arXiv preprint arXiv:2404.06654*, 2024.
+- 583
+- 584 Teven Le Scao, Angela Fan, Christopher Akiki, Ellie Pavlick, Suzana Ilić, Daniel Hesslow, Roman  
+585 Castagnà, Alexandra Sasha Luccioni, François Yvon, Matthias Gallé, et al. Bloom: A 176b-  
+586 parameter open-access multilingual language model. 2023.
+- 587
+- 588 Yichuan Li, Xiyao Ma, Sixing Lu, Kyumin Lee, Xiaohu Liu, and Chenlei Guo. MEND: Meta  
+589 demonstration distillation for efficient and effective in-context learning. In *The Twelfth Interna-*  
+590 *tional Conference on Learning Representations*, 2024. URL [https://openreview.net/](https://openreview.net/forum?id=2Y5kBPtU0o)  
+591 [forum?id=2Y5kBPtU0o](https://openreview.net/forum?id=2Y5kBPtU0o).
+- 592
+- 593 Jiachang Liu, Dinghan Shen, Yizhe Zhang, Bill Dolan, Lawrence Carin, and Weizhu Chen. What  
+594 makes good in-context examples for GPT-3? In Eneko Agirre, Marianna Apidianaki, and Ivan  
+595 Vulić (eds.), *Proceedings of Deep Learning Inside Out (DeeLIO 2022): The 3rd Workshop on*  
+596 *Knowledge Extraction and Integration for Deep Learning Architectures*, pp. 100–114, Dublin,  
+597 Ireland and Online, May 2022. Association for Computational Linguistics. doi: 10.18653/v1/  
+598 2022.deelio-1.10. URL <https://aclanthology.org/2022.deelio-1.10>.
+
+- 594 Yao Lu, Max Bartolo, Alastair Moore, Sebastian Riedel, and Pontus Stenetorp. Fantastically ordered  
+595 prompts and where to find them: Overcoming few-shot prompt order sensitivity. *arXiv preprint*  
+596 *arXiv:2104.08786*, 2021.
+- 597  
+598 Yao Lu, Max Bartolo, Alastair Moore, Sebastian Riedel, and Pontus Stenetorp. Fantastically ordered  
+599 prompts and where to find them: Overcoming few-shot prompt order sensitivity. In *Proceedings*  
+600 *of the 60th Annual Meeting of the Association for Computational Linguistics (Volume 1: Long*  
+601 *Papers)*, pp. 8086–8098. Association for Computational Linguistics, May 2022. doi: 10.18653/  
+602 v1/2022.acl-long.556. URL <https://aclanthology.org/2022.acl-long.556>.
+- 603 Kevin Meng, David Bau, Alex Andonian, and Yonatan Belinkov. Locating and editing factual  
+604 associations in gpt. *Advances in Neural Information Processing Systems*, 35:17359–17372, 2022.
+- 605  
+606 Sewon Min, Xinxi Lyu, Ari Holtzman, Mikel Artetxe, Mike Lewis, Hannaneh Hajishirzi, and Luke  
+607 Zettlemoyer. Rethinking the role of demonstrations: What makes in-context learning work?,  
+608 2022. URL <https://arxiv.org/abs/2202.12837>.
+- 609 Catherine Olsson, Nelson Elhage, Neel Nanda, Nicholas Joseph, Nova DasSarma, Tom Henighan,  
+610 Ben Mann, Amanda Askell, Yuntao Bai, Anna Chen, et al. In-context learning and induction  
+611 heads. *arXiv preprint arXiv:2209.11895*, 2022.
+- 612  
+613 Jongho Park, Jaeseung Park, Zheyang Xiong, Nayoung Lee, Jaewoong Cho, Samet Oymak, Kang-  
+614 wook Lee, and Dimitris Papailiopoulos. Can mamba learn how to learn? a comparative study on  
+615 in-context learning tasks. *arXiv preprint arXiv:2402.04248*, 2024.
+- 616 Alec Radford, Jeffrey Wu, Rewon Child, David Luan, Dario Amodei, Ilya Sutskever, et al. Language  
+617 models are unsupervised multitask learners. *OpenAI blog*, 1(8):9, 2019.
+- 618  
+619 Yasaman Razeghi, Robert L Logan IV, Matt Gardner, and Sameer Singh. Impact of pretraining term  
+620 frequencies on few-shot reasoning. *arXiv preprint arXiv:2202.07206*, 2022.
+- 621  
+622 Dan Shi, Renren Jin, Tianhao Shen, Weilong Dong, Xinwei Wu, and Deyi Xiong. Ircan: Mitigating  
+623 knowledge conflicts in llm generation via identifying and reweighting context-aware neurons.  
+624 *arXiv preprint arXiv:2406.18406*, 2024.
+- 625  
+626 Taylor Sorensen, Joshua Robinson, Christopher Michael Rytting, Alexander Glenn Shaw, Kyle Jef-  
+627 frey Rogers, Alexia Pauline Delorey, Mahmoud Khalil, Nancy Fulda, and David Wingate. An  
+628 information-theoretic approach to prompt engineering without ground truth labels. *arXiv preprint*  
+629 *arXiv:2203.11364*, 2022.
+- 630  
+631 Alessandro Stolfo, Ben Wu, Wes Gurnee, Yonatan Belinkov, Xingyi Song, Mrinmaya Sachan,  
+632 and Neel Nanda. Confidence regulation neurons in language models. *arXiv preprint*  
+633 *arXiv:2406.16254*, 2024.
+- 634  
+635 Mukund Sundararajan, Ankur Taly, and Qiqi Yan. Axiomatic attribution for deep networks. In  
+636 *International conference on machine learning*, pp. 3319–3328. PMLR, 2017.
+- 637  
+638 Mirac Suzgun, Nathan Scales, Nathanael Schärli, Sebastian Gehrmann, Yi Tay, Hyung Won Chung,  
+639 Aakanksha Chowdhery, Quoc V Le, Ed H Chi, Denny Zhou, et al. Challenging big-bench tasks  
+640 and whether chain-of-thought can solve them. *arXiv preprint arXiv:2210.09261*, 2022.
+- 641  
+642 Tianyi Tang, Wenyang Luo, Haoyang Huang, Dongdong Zhang, Xiaolei Wang, Xin Zhao, Furu Wei,  
+643 and Ji-Rong Wen. Language-specific neurons: The key to multilingual capabilities in large lan-  
+644 guage models. In *Proceedings of the 62nd Annual Meeting of the Association for Computational*  
+645 *Linguistics (Volume 1: Long Papers)*, pp. 5701–5715. Association for Computational Linguistics,  
+646 August 2024. URL <https://aclanthology.org/2024.acl-long.309>.
+- 647  
+648 Hugo Touvron, Louis Martin, Kevin Stone, Peter Albert, Amjad Almahairi, Yasmine Babaei, Niko-  
+649 lay Bashlykov, Soumya Batra, Prajjwal Bhargava, Shruti Bhosale, et al. Llama 2: Open foundation  
+650 and fine-tuned chat models. *arXiv preprint arXiv:2307.09288*, 2023.
+- 651  
+652 Elena Voita, Javier Ferrando, and Christoforos Nalmpantis. Neurons in large language models:  
+653 Dead, n-gram, positional. *arXiv preprint arXiv:2309.04827*, 2023.
+
+[Appendix and supplementary materials beyond page 12 have been removed.]

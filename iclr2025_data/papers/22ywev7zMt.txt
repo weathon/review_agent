@@ -1,0 +1,413 @@
+# ON THE OUT-OF-DISTRIBUTION GENERALIZATION OF SELF-SUPERVISED LEARNING
+
+Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+In this paper, we focus on the out-of-distribution (OOD) generalization of self-supervised learning (SSL). By analyzing the mini-batch construction during the SSL training phase, we first give one plausible explanation for SSL having OOD generalization. Then, from the perspective of data generation and causal inference, we analyze and conclude that SSL learns spurious correlations during the training process, which leads to a reduction in OOD generalization. To address this issue, we propose a post-intervention distribution (PID) grounded in the Structural Causal Model. PID offers a scenario where the spurious variable and label variable is mutually independent. Besides, we demonstrate that if each mini-batch during SSL training satisfies PID, the resulting SSL model can achieve optimal worst-case OOD performance. This motivates us to develop a batch sampling strategy that enforces PID constraints through the learning of a latent variable model. Through theoretical analysis, we demonstrate the identifiability of the latent variable model and validate the effectiveness of the proposed sampling strategy. Experiments conducted on various downstream OOD tasks demonstrate the effectiveness of the proposed sampling strategy.
+
+## 1 INTRODUCTION
+
+Self-supervised learning (SSL) has emerged as a powerful paradigm for training machine learning models without relying on labeled data. SSL models aim to generate general-purpose representations and are typically used as pre-trained weights to effectively initialize downstream tasks. They have demonstrated significant progress in computer vision, achieving competitive or superior performance on various downstream tasks compared to supervised learning approaches (Chen et al., 2020; Grill et al., 2020a; Zbontar et al., 2021; He et al., 2022; Tong et al., 2022). However, despite their superior performance, SSL models face significant challenges in generalizing to out-of-distribution (OOD) data. Understanding and improving the OOD generalization capabilities of SSL is crucial for deploying these models in real-world scenarios where the data distribution can shift over time.
+
+To investigate the OOD generalization properties of SSL, we propose examining the batch construction process during training. SSL methods are generally categorized into two main types: discrimination-based SSL (D-SSL) (Chen et al., 2020; Grill et al., 2020a) and generation-based SSL (G-SSL) (He et al., 2022; Tong et al., 2022). The core principle of D-SSL is augmentation invariance, ensuring that the feature representations of two different augmentations of the same sample are similar. In contrast, G-SSL focuses on the mask and reconstruction principle, where a portion of a sample is masked and then reconstructed using an encoder-decoder structure. Leveraging these principles, augmented samples derived from the same original sample, as well as samples before and after masking, can be considered anchor-related pairs. During SSL training, each pair is treated as a distinct class, effectively framing each mini-batch as a multi-class learning task. Consequently, the SSL training process can be perceived as learning a distribution over tasks based on discrete training tasks, enabling the trained SSL model to generalize to new, unseen tasks, thus demonstrating its OOD generalization capability. However, machine learning is prone to learning spurious correlations that vary between classes and environments (Wang et al., 2023a; 2022). Therefore, although SSL is highly effective in OOD generalization, from a multi-task perspective, different mini-batches in the SSL training process can be considered as different tasks or environments. Consequently, it may still face the challenge of mitigating spurious correlations.”
+
+Building upon the analysis presented in Section 3, we examine the aforementioned challenge from the perspectives of data generation and causal inference. First, we conclude that the similarity or reconstruction between samples within a pair is affected by several unobservable factors, such as background or texture information independent of the foreground. We also find that the spurious correlation between the anchor and the unobservable variable can vary with the tasks, making it difficult to eliminate it using the unified causal criterion proposed by (Pearl et al., Pearl, 2009). Furthermore, we demonstrate that, under these circumstances, the SSL model learns to measure similarity or reconstruct using spurious causal factors. This reliance leads to a lack of discriminability within each mini-batch task, preventing the SSL model from effectively learning the true task distribution and consequently resulting in diminished OOD generalization. To address this issue, we define a new distribution called the post-intervention distribution (PID), characterized by mutual independence between the unobservable variable and the anchor. We demonstrate that when the task distribution adheres to PID, the SSL model trained under this condition achieves the lowest worst-case risk, thereby attaining optimal worst-case OOD performance. This insight motivates us to design a new mini-batch sampling strategy that ensures the resulting mini-batches satisfy PID constraints, thereby enhancing the OOD generalization capability of SSL.
+
+Based on the above analysis and discussion, we propose a novel mini-batch sampling strategy consisting of two stages. In the first stage, we aim to learn a latent variable model to capture the correlations between different variables, i.e., conditional distributions. We prove the identifiability and uniqueness of the resulting latent variable model under a given equivalence relation. In the second stage, we propose a sufficient condition to obtain the balancing score. Using this, we obtain the mini-batch samples through balancing score matching. We also provide a theoretical guarantee that the mini-batches obtained by the proposed sampling strategy approximately satisfy the PID.
+
+In summary, we make the following contributions: **1) Analysis of SSL Batch Construction:** We provide a detailed analysis of how mini-batch construction in SSL influences OOD generalization; **2) Causal Framework for SSL:** We introduce a causal framework to understand and mitigate the impact of spurious correlations on SSL models; **3) PID-Based Sampling Strategy:** We propose a theoretically grounded mini-batch sampling strategy that ensures the generated batches conform to PID, improving OOD performance; **4) Empirical Validation:** We validate our approach through extensive experiments, demonstrating significant improvements in OOD generalization across multiple tasks.
+
+## 2 REVISITING SSL FROM A PAIRWISE PERSPECTIVE
+
+During the training phase, the training data is structured into mini-batches, with each mini-batch denoted as  $X_{tr} = \{x_i\}_{i=1}^N$ , where  $x_i$  represents the  $i$ -th sample and  $N$  is the total number of samples. In D-SSL methods such as SimCLR (Chen et al., 2020), BYOL (Grill et al., 2020a), and Barlow Twins (Zbontar et al., 2021), each sample in  $X_{tr}$  undergoes stochastic data augmentation to generate two augmented views, e.g., for  $x_i \in X_{tr}$ , the augmented samples can be represented as  $x_i^1$  and  $x_i^2$ . For G-SSL methods, like MAE (He et al., 2022) and VideoMAE (Tong et al., 2022),  $x_i$  is first divided into multiple small blocks, with some blocks masked, and the remaining blocks reassembled into a new sample, denoted as  $x_i^1$ . The original sample is then referred to as  $x_i^2$ . Thus, the augmented dataset in SSL (whether D-SSL or G-SSL) is represented as  $X_{tr}^{aug} = \{x_i^1, x_i^2\}_{i=1}^N$ . The pair  $\{x_i^1, x_i^2\}$  forms the  $i$ -th pair, and SSL aims to learn a feature extractor  $f$  from these pairs.
+
+The objective of D-SSL methods typically consists of two components: alignment and regularization (Wang & Isola, 2020; Chen et al., 2021a). The alignment part is to maximize the similarity between samples that share the same pair in the embedding space, and the regularization part aims to constrain the learning behavior via inductive bias, e.g., SimCLR (Chen et al., 2020) constrains the feature distribution to satisfy a uniform distribution. Meanwhile, G-SSL methods (He et al., 2022) can be regarded as implementing alignment of samples within a pair based on an encoding-decoding structure, by inputting sample  $x_i^1$  into this structure to generate a sample, and making it as consistent as possible with sample  $x_i^2$ . It is noteworthy that “alignment” in D-SSL is often implemented based on anchor points, that is, viewing one sample in a pair as an anchor, the training process of such SSL methods can be seen as gradually pulling the other sample in this pair towards the anchor. The concept of anchor is also applicable to G-SSL, where  $x_i^2$  is viewed as the anchor, and thus the training process of such SSL methods can be viewed as gradually constraining  $x_i^1$  to approach  $x_i^2$ .
+
+Based on the above discussion, when we consider the anchor as the label or the center of clustering, each mini-batch in the SSL training phase thus can be viewed as a multi-class classification task. Specifically,  $X_{tr}^{i, aug} = \{x_i^+, x_i^{\text{anchor}}\}_{l=1}^{2N}$  consists of data from  $N$  categories, where  $x_i^+$  is the positive sample of the  $i$ -th category whose clustering center is  $x_i^{\text{anchor}}$ . Furthermore, the variability of data across mini-batches implies that each mini-batch corresponds to a distinct training task or domain.
+
+## 3 MOTIVATION AND CAUSAL ANALYSIS
+
+In this section, we first offer a plausible explanation for the OOD generalization capability of SSL models from a task distribution perspective. Next, based on data generation principle and causal inference, we demonstrate that SSL methods may measure similarity or reconstruction using spurious correlations between pairs, which reduces their OOD generalization performance. Finally, through theoretical analysis, we present that even in the case of spurious associations, we can further improve the OOD generalization of SSL by constraining the data distribution.
+
+### 3.1 FORMATION OF THE PROBLEM: CAUSAL PERSPECTIVE
+
+According to Section 2, different mini-batches correspond to distinct classification tasks. Therefore, the training process of SSL can be described as follows: given a distribution over tasks and a data distribution for each task (refer to **Appendix E** for more details), the SSL model is learned based on various training tasks and their corresponding data. The performance of the SSL model is then evaluated on test tasks that are disjoint from the training tasks. This learning paradigm involves estimating the true task distribution from discrete training tasks (refer to **Appendix E** for more details), enabling the SSL model to generalize to new, unseen tasks (i.e., test tasks). This also explains well why the SSL model exhibits good performance in transfer tasks (Chen et al., 2020; Grill et al., 2020a; Zbontar et al., 2021), i.e., it has good OOD generalization. However, machine learning models are prone to learning spurious correlations during the training phase (Wang et al., 2023a; 2022). For example, compared to the foreground features of input data, researchers have found that machine learning models tend to rely on the superficial texture information or background information of the data for decision-making (Geirhos et al., 2018; Qiang et al., 2022; Xu et al., 2020). Therefore, although the SSL model has been effective in OOD generalization, we find that it still faces the challenge of spurious correlations.
+
+We further analyze the above challenge from the perspective of data generation and causal inference. Without loss of generality, for each pair in the SSL training process, we denote the anchor as  $x^{\text{label}}$  and the other sample as  $x^+$ . Based on (Zimmermann et al., 2021; Von Kügelgen et al., 2021),  $x^+$  can be regarded as caused by anchor  $x^{\text{label}}$ , an unobserved latent variable  $s \in \mathbb{R}^n$  and an independent noise variable  $\epsilon$  with the following formulation:
+
+$$x^+ = F(s, x^{\text{label}}) + \epsilon, \quad (1)$$
+
+![Figure 1: The Structural Causal Model (SCM) for Equation (1). The diagram shows three nodes: epsilon (ε) at the top left, s (s) at the top right, and x^+ (x+) at the bottom left. A solid arrow points from epsilon to x+. A solid arrow points from s to x+. A dotted line connects s and x^label (x^label) at the bottom right.](b612b838f94982799a69461ffb078a73_img.jpg)
+
+```
+
+graph TD
+    epsilon[ε] -- solid --> x_plus[x+]
+    s[s] -- solid --> x_plus
+    s -.-> x_label[x^label]
+  
+```
+
+Figure 1: The Structural Causal Model (SCM) for Equation (1). The diagram shows three nodes: epsilon (ε) at the top left, s (s) at the top right, and x^+ (x+) at the bottom left. A solid arrow points from epsilon to x+. A solid arrow points from s to x+. A dotted line connects s and x^label (x^label) at the bottom right.
+
+Figure 1: The SCM for Equation (1).
+
+where  $F$  is a reversible injective function. From a causal perspective, Equation (1) can be reformulated as the Structural Causal Model (SCM) shown in Figure 1. The solid arrow indicates that there is a direct causal relationship between the two variables, e.g.,  $x^{\text{label}} \rightarrow x^+$  states that  $x^{\text{label}}$  is the direct cause of obtaining  $x^+$ . The dotted line indicates that the relationship between the variables is not clear and varies with different environments. Notably, this paper focuses exclusively on scenarios where the semantic information within  $x^+$  is related only to  $x^{\text{label}}$ , that is,  $s$  does not contain any causal semantics related to the task. Next, we examine two examples illustrated in Figure 2. In Figure 2 (a),  $s$  represents the assigned color, for example, the color of numbers varies by category, as in the ColoredMNIST dataset (Arjovsky et al., 2019). Here,  $e_{id}$  denotes the class index. Consequently, within a mini-batch during training, samples from different classes may have a different texture color. In Figure 2 (b),  $s$  indicates assigned stylistic attributes, e.g., sketches, cartoon styles, or photographs, and  $e_{id}$  denotes the batch index. This scenario commonly occurs in multi-view or domain generalization contexts, like the tasks in the PACS dataset (Li et al., 2017). Therefore, during training, different batches may exhibit different styles, with samples under each style possessing
+
+![Figure 2: Two causal diagrams illustrating variability in the causal relationship between x^label and s. (a) Example task related to ColoredMNIST dataset: A box labeled 'backgrounds, textures, etc. that are unique to pair, e.g., the color of small number is red.' points to s. A box labeled 'class index' points to x^label. (b) Example task related to PACS dataset: A box labeled 'stylistic attributes of samples, e.g., sketches, cartoon images, photographs' points to s. A box labeled 'batch index' points to x^label. Both diagrams show epsilon pointing to x^+, x^+ pointing to x^label, and s pointing to x^label.](2fa4a1bf91d0f34e87c689fbc1211fe3_img.jpg)
+
+Figure 2: Two causal diagrams illustrating variability in the causal relationship between x^label and s. (a) Example task related to ColoredMNIST dataset: A box labeled 'backgrounds, textures, etc. that are unique to pair, e.g., the color of small number is red.' points to s. A box labeled 'class index' points to x^label. (b) Example task related to PACS dataset: A box labeled 'stylistic attributes of samples, e.g., sketches, cartoon images, photographs' points to s. A box labeled 'batch index' points to x^label. Both diagrams show epsilon pointing to x^+, x^+ pointing to x^label, and s pointing to x^label.
+
+Figure 2: Two specific instances illustrate the variability in the causal relationship between  $x^{\text{label}}$  and  $s$  due to environmental changes. The black squares are variables and the arrows indicate causality.
+
+unique appearance attributes. In both figures,  $s$  does not capture the foreground semantics between  $x^{\text{label}}$  and  $x^+$ , and the correlation between  $x^{\text{label}}$  and  $x^+$  may vary depending on the settings.
+
+Based on Figure 2 (a) and (b), we obtain that the causal relationship between  $x^{\text{label}}$  and  $s$  changes with unknown environmental variations, making it difficult to eliminate based on a unified causal criterion proposed in (Pearl et al.). From Figure 2 (a), due to the existence of path  $x^{\text{label}} \dots s \rightarrow x^+$ , the following proposition states that the correlation between  $x^{\text{label}}$  and  $x^+$  is influenced by  $s$ .
+
+**Proposition 3.1** *Revisiting SSL from a pairwise perspective and assuming that the two samples in each pair satisfy Equation (1), we can obtain that the learned SSL model will use non-causal factor, i.e., the unobserved latent variable  $s$ , to measure the similarity or reconstruct in a pair.*
+
+Detailed proof of Proposition 3.1 is provided in Appendix A.1. Notably, when SSL models measure the similarity or reconstruct between paired elements using non-causal factors, the extracted representations may incorporate semantics irrelevant to the task. From the pairwise perspective, this may result in SSL failing to effectively learn each specific task, thereby hindering the modeling of the task distribution and ultimately reducing the OOD generalization ability of SSL.
+
+### 3.2 MOTIVATION: POST-INTERVENTION DISTRIBUTION
+
+As shown in Figure 2, regardless of the correlation between  $s$  and  $x^{\text{label}}$ , the generation mechanism of  $x^+$  is invariant. Because SCM can also be considered as a joint probability distribution, thus, we use the following distribution set to represent the joint probability distribution related to Figure 1:
+
+$$\mathcal{D} = \left\{ p(x^+, x^{\text{label}}, s) = p(x^+ | x^{\text{label}}, s) p(x^{\text{label}}) p(s | x^{\text{label}}) \mid p(x^{\text{label}}), p(s | x^{\text{label}}) > 0 \right\}. \quad (2)$$
+
+Instead of exploring what the specific structure of  $x^{\text{label}} \dots s \rightarrow x^+$ , we propose to consider using Post-Intervention Distribution (PID) to model  $p(x^+, x^{\text{label}}, s)$ , which can be defined as:
+
+**Definition 3.2** *If  $p(x^+, x^{\text{label}}, s) = p(x^+ | x^{\text{label}}, s) p(x^{\text{label}}) p(s)$ , then  $p(x^+, x^{\text{label}}, s)$  is defined as PID. In other words,  $x^{\text{label}}$  and  $s$  are independent in PID.*
+
+We use  $p^{\text{PI}}$  to denote distributions belonging to the PID family. As we can see,  $p(x^+ | x^{\text{label}}, s)$  is both a component of  $p^{\text{PI}}(x^+, x^{\text{label}}, s)$  and a result of the unchanged causal mechanism  $s \rightarrow x^+ \leftarrow x^{\text{label}}$  in Figure 1. Then, the corresponding SCM of  $p^{\text{PI}}(x^+, x^{\text{label}}, s)$  is shown as Figure 3. In this new distribution, because there are no paths between  $s$  and  $x^{\text{label}}$ , we can obtain that  $x^+$  and  $x^{\text{label}}$  are only correlated through the stable causal relation  $x^+ \leftarrow x^{\text{label}}$ . Then, from a probabilistic perspective, what we argue is that compared to SSL models trained on batches satisfying other distribution constraints in  $\mathcal{D}$ , SSL models trained on batches that meet the PID distribution constraint have the lowest worst-case risk. To support this statement, we build upon (Pearl, 2009) by introducing an assumption regarding the invertibility of functions:
+
+**Assumption 3.3** *There exist functions  $F_{x^{\text{label}}}$ ,  $F_s$  and noise variables  $\epsilon_{x^{\text{label}}}$ ,  $\epsilon_s$ , such that  $(x^{\text{label}}, s) = F^{-1}(x^+ - \epsilon) = (F_{x^{\text{label}}}(x^+ - \epsilon_{x^{\text{label}}}), F_s(x^+ - \epsilon_s))$ , and  $\epsilon_{x^{\text{label}}} \perp_{\text{PI}} \epsilon_s$ .*
+
+**Assumption 3.3** implies that  $x^{\text{label}} \perp_{\text{PID}} s | x^+$ , and the intuitive explanation of **Assumption 3.3** can be found in **Appendix F**. Based on Section 2 and Section 3.1, both D-SSL and G-SSL share a common learning objective: aligning the positive sample in a pair with its corresponding anchor. Thus, the learning objectives of D-SSL and G-SSL can be unified as maximizing  $p_f(x^{\text{label}} | x^+)$ . The difference lies in how they achieve  $p_f(x^{\text{label}} | x^+)$ . For example, the training data is first projected to the feature space by  $f$ , then SimCLR uses a contrastive loss to achieve  $p_f(x^{\text{label}} | x^+)$ , while MAE employs the  $L_2$ -norm achieve  $p_f(x^{\text{label}} | x^+)$ . We can then obtain the following conclusion:
+
+**Theorem 3.4** *From a Bayesian perspective, the alignment part of the SSL learning objective, e.g., constrain samples under the same pair to be similar in the feature space, can be expressed as  $\max p_f(x^{\text{label}} | x^+)$ . Given  $f$ , the risk on a batch with  $e \in \mathcal{D}$  as the distributional constraint can be presented as:  $\mathcal{L}^e(f) = \mathbb{E}_{p^e(x^+, x^{\text{label}})} - \log p_f(x^{\text{label}} | x^+)$ , where  $p^e(x^+, x^{\text{label}})$  denotes the joint distribution. Under Assumption 3.3, when  $f^* = \arg \min \mathcal{L}^e(f)$ , s.t.  $e \in \text{PID}$ , we have  $f^*$  is the minimax optimal across all elements in  $\mathcal{D}$ , e.g.,  $f^* = \arg_f \min \max_{e \in \mathcal{D}} \mathcal{L}^e(p_f(x^{\text{label}} | x^+))$ .*
+
+Detailed proof of **Theorem 3.4** is provided in **Appendix A.2**. **Theorem 3.4** implies that when  $\mathcal{D}$  is sufficiently large and diverse, no other  $f$  obtained from training on any distribution can achieve better worst-case OOD performance than the PID. Notably, transferring Figure 1 to Figure 3 is similar to backdoor adjustment in causal inference (Pearl et al.). However, from backdoor adjustment perspective, it is straightforward to explain why PID can improve the OOD performance of D-SSL: during the learning of each task, PID eliminates the influence of background semantic confounding (Qiang et al., 2022). However, for G-SSL, regardless of the relationship between  $s$  and  $x^{\text{label}}$ , G-SSL inherently requires encoding background semantics. Thus, explaining the improvement of OOD performance of G-SSL from the backdoor adjustment perspective is incorrect. Therefore, **Theorem 3.4** is provided to explain why PID can improve the OOD performance of both D-SSL and G-SSL simultaneously. Also, an intuitive explanation of **Theorem 3.4** is shown in **Appendix F**. Moreover, **Theorem 3.4** motivates us to design a new mini-batch sampling strategy to ensure that the resulting mini-batches satisfy PID, thereby improving the OOD generalization of SSL.
+
+## 4 THE PROPOSED METHOD
+
+In this section, we present the proposed method which consists of two stages. In the first stage, we use a latent variable model, e.g., variational autoencoder (VAE) (Kingma & Welling, 2013a), to learn the underlying distribution  $p(x^+, x^{\text{label}}, s)$  for each batch task. In the second stage, we use the learned distribution to obtain a sampling strategy that can create a PID based on training data.
+
+### 4.1 LEARNING LATENT VARIABLE MODEL
+
+As shown in Equation (2), to learn the underlying joint distribution  $p(x^+, x^{\text{label}}, s)$  for each batch task, we need to know  $p(x^+ | x^{\text{label}}, s), p(x^{\text{label}}), p(s | x^{\text{label}})$  in each batch task. Because that  $p(x^+ | x^{\text{label}}, s)$  is the unchanged causal mechanism, so we can use a unified  $f$  to model  $p(x^+ | x^{\text{label}}, s)$  in all tasks. Based on the discussion in Section 2, we obtain that  $x^{\text{label}}$  is regarded as the label. So,  $p(x^{\text{label}})$  can be regarded as the label distribution, and we can represent it with the same uniform distribution in all tasks. Based on the mean-field approximation (Blei et al., 2017; Sripurumbudur et al., 2013) which can be expressed as a closed form of the true prior, we obtain that when the causal relationship between the latent covariate and the label changes with the tasks, an exponential family distribution has the ability to model the conditional distribution  $p(s | x^{\text{label}})$ , thus, we have the following assumption for each batch task:
+
+**Assumption 4.1** *Denote the mini-batch task index as  $e$ , the correlation between  $x^{\text{label}}$  and  $s$  in the data distribution  $p^e(x^+, x^{\text{label}}, s)$  of a task is characterized by:*
+
+$$p_{\mathbb{T}, \lambda^e}^e(s | x^{\text{label}}) = \prod_{i=1}^n \frac{Q_i(s_i)}{K_i^e(x^{\text{label}})} \exp[\sum_{j=1}^k T_{ij}(s_i) \lambda_{ij}^e(x^{\text{label}})], \quad (3)$$
+
+where  $n$  is the dimension of the latent variable  $s$ ,  $k$  is the dimension of each sufficient statistic,  $s_i$  is the  $i$ -th element of  $s$ ,  $Q = [Q_i]: s \rightarrow \mathbb{R}^n$  is the base measure,  $T = [T_{ij}]: s \rightarrow \mathbb{R}^{nk}$  is the sufficient statistics,  $K^e = [K_i^e]: x^{\text{label}} \rightarrow \mathbb{R}^n$  is the normalizing constraint, and  $\lambda^e = [\lambda_{ij}^e]: x^{\text{label}} \rightarrow \mathbb{R}^{nk}$ .
+
+Note that  $k$ ,  $Q$ , and  $T$  are determined by the type of chosen exponential family distribution and thus independent of  $e$ , this guides us to constrain all batch tasks to share these parameters during the training phase. For ease of calculation, we set  $Q_i(\cdot) = \exp(\cdot / -2)$  and  $K^e$  as the feature normalization operator. For  $\lambda^e$ , since it varies with  $e$ , we implement it as the output of a network. Specifically, we first average all the data of a batch, then feed it into a learnable network  $g$ , and output the corresponding  $\lambda^e$ . For  $T$ , we need to guarantee it to be a sufficient statistic, one simple way to implement this is the constant transformation. Considering the identifiability of the parameters, we implement it as  $T_{ij}(\cdot) = a_{ij} \times \cdot$ , where  $A = [a_{ij}]$  is a learnable parameter. Up to this point, we obtain the implementation of  $p_{\theta}^T(x^+, s | x^{\text{label}})$  as  $p_{g,A}(s | x^{\text{label}})$ . Then, we implement the conditional generative model in each  $e \in \mathcal{D}$  with parameters  $\theta = (f, g, A)$  as:  $p_{\theta}^e(x^+, s | x^{\text{label}}) = p_f(x^+ | s, x^{\text{label}}) p_{g,A}(s | x^{\text{label}})$ .
+
+Motivated by the VAE, we estimate the above conditional generative model with the following regularized evidence lower bound (ELBO) in each batch distribution  $e$ :
+
+$$\mathcal{L}_{\theta, \phi}^e = \mathbb{E}_{q_{\phi}(s | x^+, x^{\text{label}})} [\log p_f(x^+ | s, x^{\text{label}})] - \text{KL}(q_{\phi}(s | x^+, x^{\text{label}}) || p_{g,A}(s | x^{\text{label}})) - \alpha \sum_{i,j} A_{,i} A_{,j}, \quad (4)$$
+
+where  $A_{,i}$  is the column vector of  $A$ ,  $\text{KL}(\cdot)$  is the KL-divergence, and  $\alpha$  is a hyperparameter. As for  $q_{\phi}(s | x^+, x^{\text{label}})$ , it is implemented by a learnable network  $\phi$  that outputs the mean and variance, and we use reparameterization trick (Kingma & Welling, 2013b) to deal with it during training. The last term of Equation (4) is to constrain the column vector orthogonality of  $A$ . The training process of Equation (4) is similar to meta-learning, e.g., Prototype Networks (Snell et al., 2017), because that we construct a series of tasks during the training phase. Thus, from a meta-learning perspective, training with Equation (4) also indicates that the learned  $\theta$  can be adaptable for all available tasks.
+
+We further show that we can uniquely recover the model parameter  $\theta$  up to an equivalence relation. Specifically, we first give the definition of the equivalence relation based on (Motiian et al., 2017):
+
+**Definition 4.2**  $(f, g, A) \sim_W (f', g', A')$ , if and only if there exists an invertible matrix  $W \in \mathbb{R}^{nk \times nk}$  and a vector  $b \in \mathbb{R}^{nk}$ , such that  $A(f^{-1}(x)) = WA'(f'^{-1}(x)) + b, \forall x \in X_{tr}^{aug}$ .
+
+Then, motivated by (Khemakhem et al., 2020), the identifiability condition of  $\theta$  can be presented as:
+
+**Theorem 4.3** Suppose that  $p_{\theta}^e(x^+, s | x^{\text{label}}) = p_f(x^+ | s, x^{\text{label}}) p_{g,A}(s | x^{\text{label}})$  and the generation process of  $X^+$  can be represented by the SCM depicted in Figure 1, a sufficient condition for  $\theta = (f, g, A)$  to be  $\sim_A$ -identifiable is given as: 1) Suppose that  $p_e(x^+ - f(x^{\text{label}}, s)) = p_f(x^+ | x^{\text{label}}, s)$ ,  $\phi_e$  is the characteristic function of  $p_e(x^+ - f(x^{\text{label}}, s))$ , and the set  $\{x^+ | \phi_e(x^+) = 0\}$  has measure zero; 2) The sufficient statistics  $T$  are differentiable almost everywhere, and  $[T_{ij}]_{1 \leq j \leq k}$  are linearly independent on any subset of  $X^+$  with measure greater than zero; 3) There exist  $nk + 1$  distinct pairs  $(x_0^{\text{label}}, e_0), \dots, (x_n^{\text{label}}, e_{nk})$  such that the  $nk \times nk$  matrix  $L = (\lambda^{e_1}(x_0^{\text{label}}) - \lambda^{e_0}(x_0^{\text{label}}), \dots, \lambda^{e_{nk}}(x_n^{\text{label}}) - \lambda^{e_0}(x_0^{\text{label}}))$  is invertible.
+
+Detailed proof of Theorem 4.3 is provided in Appendix A.3. In Equation (4), we constrain the column vector orthogonality of  $A$ , this can lead to the linearly independence of elements of  $T$ , thus, the second assumption of Theorem 4.3 holds. Meanwhile, according to Section 2, we can obtain that each ancestor training sample can be regarded as a class, by combining different classes with each other, we can construct adequate tasks, thus, the third assumption of Theorem 4.3 can easily holds. Therefore, based on Theorem 4.3, we can obtain that  $\theta$  can be uniquely recovered. Moreover, the detailed explanation of the identifiability of spurious variable  $s$  is provided in Appendix G.
+
+### 4.2 THE PROPOSED MINI-BATCH SAMPLING STRATEGY
+
+As shown in (Rosenbaum & Rubin, 1981), balancing score matching has become a useful tool in the average treatment effect estimation. One of its purposes is to reveal the true causal relationship from the observational data. It is defined as:
+
+**Definition 4.4** A balancing score  $ba(s)$  is a function of covariate  $s$  that satisfies:  $s \perp x^{\text{label}} | ba(s)$ .
+
+From (Rosenbaum & Rubin, 1981), we can obtain that many functions can be used as a balancing score, among them, propensity score  $p(x^{\text{label}} | s)$  is the coarsest one. Motivated by this, given the batch task with  $nu$  pairs, we define the propensity score under the SSL scenario as:
+
+**Definition 4.5** The propensity score for a batch task in SSL scenario is  $mi(s) = [p(x_j^{\text{label}}|s)]_{j=1}^{\text{nu}}$ .
+
+Then, given a function  $ba(s)$ , we present a sufficient condition that it can be the balancing score:
+
+**Corollary 4.6** Let  $ba(s)$  be a function of  $s$ , a sufficient condition that  $ba(s)$  can be regarded as a balancing score is that there exists a function  $\psi$  such that  $mi(s) = \psi(ba(s))$ .
+
+The proof of **Corollary 4.6** can be directly obtained based on **Theorem 1** and **Theorem 2** in Rosenbaum & Rubin (1981). We use  $ba^e(s)$  to denote the balancing score for a specific batch task  $e$  of SSL. Then, the corresponding propensity score can be represented as  $mi^e(s) = [p^e(x_j^{\text{label}}|s)]_{j=1}^{\text{nu}}$ , which can be derived from  $p_{T, X^e}^e(s|x_j^{\text{label}})$  as defined in Equation (3):
+
+$$p^e(x_j^{\text{label}}|s) = \frac{p_{g,A}(s|x_j^{\text{label}})p^e(x_j^{\text{label}})}{\sum_{j=1}^{\text{nu}} p_{g,A}(s|x_j^{\text{label}})p^e(x_j^{\text{label}})}, \quad (5)$$
+
+where  $p^e(x_j^{\text{label}}) = 1/\text{nu}$ , because that  $p^e(x_j^{\text{label}})$  is defined empirically as a uniform distribution.
+
+Based on **Corollary 4.6**, we set  $\psi$  as identical transformation and propose to use the propensity score computed from Equation (5) directly as our balancing score, e.g.,  $ba(s) = mi^e(s)$ . Next, we derive the proposed sampling strategy. When given the training data  $X^{tr} = \{x_i^+, x_i^{\text{label}}\}_{i=1}^{\text{mu}}$  with  $\text{mu}$  pairs, we can obtain  $X^e$  of Equation (5) based on the mean of the entire dataset. Then, for each pair, we firstly obtain  $s$  based on the learned  $q_{\theta}^e(s|x^+, x^{\text{label}})$  and secondly obtain  $ba(s)$  by setting  $\text{nu} = \text{mu}$  in Equation (5). Finally, the proposed sampling strategy is constructed by matching  $ba(s)$  of the selected pair with  $1 \leq a \leq N - 1$  different pairs that have the same/closest balancing score. The detailed sampling strategy is shown as follows:
+
+#### --- **Algorithm 1:** The Proposed Mini-Batch Sampling Strategy. ---
+
+**Input:** Training datasets  $X^{tr} = \{x_i^+, x_i^{\text{label}}\}_{i=1}^{\text{mu}}$ , a balancing score  $ba(\cdot)$  inferred from each training pair  $(x_i^+, x_i^{\text{label}})$ , and a distance metrics  $d : ba(\cdot) \times ba(\cdot) \rightarrow \mathbb{R}$ ;
+
+**Output:** A mini-batch of data  $D^{\text{PI}}$  consisting of  $a + 1$  examples;  
+ $D^{\text{PI}} \leftarrow \text{Empty}; i \leftarrow 0;$
+
+**for**  $i = 0$  **do**
+
+Randomly sample a pair  $(x_i^+, x_i^{\text{label}})$  from  $X_{tr}^{\text{aug}}$ , add it to  $D^{\text{PI}}$ ;
+
+Compute balancing score  $ba(s_i)$  from  $(x_i^+, x_i^{\text{label}})$ ;
+
+Set  $i \leftarrow i + 1;$
+
+**for**  $1 \leq i \leq a$  **do**
+
+$j = \arg \min_{x_j^+ \in X_{tr}^{\text{aug}} \setminus D^{\text{PI}}} d(ba(s_j), ba(s_i));$
+
+Add  $(x_j^+, x_j^{\text{label}})$  to  $D^{\text{PI}}$ ;
+
+Set  $i \leftarrow i + 1.$
+
+---
+
+We denote the data distribution obtained from **Algorithm 1** as  $\hat{p}(x^+, x^{\text{label}}, s)$ , then we have:
+
+**Theorem 4.7** If  $d(ba(s_j), ba(s_i)) = 0$  in **Algorithm 1**, the obtained mini-batch is regarded as sampling from a PID, e.g.,  $\hat{p}(x^{\text{label}}|s) = p^{\text{PI}}(x^{\text{label}})$ .
+
+Detailed proof and high-level explanation of **Theorem 4.7** is provided in **Appendix A.4** and **F**. Based on **Theorem 4.7**, if at each step, we achieve perfect matching (i.e.,  $ba(s_j) = ba(s_i)$ ), and the obtained mini-batch samples can be regarded as sampled from the PID. However, an exact match of the balancing score is unlikely during the SSL training phase (each pair has only one positive sample), so a larger  $a$  can introduce noise. This can be mitigated by selecting a smaller  $a$ , which increases the dependency between  $x^{\text{label}}$  and  $s$ . Thus, in practice, the choice of  $a$  reflects a trade-off between the quality of balancing score matching and the degree of dependency between  $x^{\text{label}}$  and  $s$ .
+
+## 5 EXPERIMENTS
+
+In this section, we first introduce the datasets used in experiments. Next, we evaluate our method on multiple tasks, including unsupervised learning, semi-supervised learning, transfer learning, and
+
+few-shot learning. We introduce the experimental setups in the corresponding sections. Finally, we perform ablation studies. All results reported are the averages of five runs performed on NVIDIA RTX 4090 GPUs. More experiments are shown in **Appendix C** due to space limitations.
+
+### 5.1 BENCHMARK DATASETS
+
+For unsupervised learning, we select ImageNet-100 (Tian et al., 2020) and ImageNet (Deng et al., 2009) for analysis. For semi-supervised learning, we select ImageNet (Deng et al., 2009) for evaluation. For transfer learning, we select PASCAL VOC (Everingham et al., 2010) and COCO (Lin et al., 2014) for analysis. For few-shot learning, we evaluate the proposed method on Omniglot (Lake et al., 2019), miniImageNet (Vinyals et al., 2016), and CIFAR-FS (Bertinetto et al., 2018).
+
+### 5.2 EMPIRICAL ANALYSIS
+
+In this article, we primarily address the OOD generalization of SSL. Our experimental design consists of the following steps: First, we validate that the proposed sampling strategy enhances the performance of SSL methods in in-distribution scenarios using unsupervised tasks. Second, we classify OOD tasks by difficulty into semi-supervised tasks, transfer learning tasks, and few-shot learning tasks, and subsequently evaluate the proposed sampling strategy on these tasks. Meanwhile, we also conduct experiments on generative SSL, the evaluation are provided in **Appendix C.1**.
+
+**Experimental setup.** Our proposed sampling strategy can be applied to any D-SSL and G-SSL models. It only changes the mini-batch generation mechanism without affecting the training process or altering the hyperparameter settings. Therefore, the hyperparameter settings for all our experiments are consistent with the methods we are comparing, and we will not elaborate on them here.
+
+**Results on unsupervised learning tasks.** **Table 1** shows the top-1 and top-5 linear classification accuracies on ImageNet-100 and ImageNet for unsupervised learning task. We can observe that applying the proposed method achieves stable performance improvement, and significantly outperforms the state-of-the-art (SOTA) methods on all datasets and all the SSL baselines.
+
+**Results on semi-supervised learning tasks.** **Table 2** shows the results on ImageNet for semi-supervised learning task. We can observe that no matter 1% or 10% of the labels are available in 1000 epochs, the improvement brought by the proposed methods reaches more than 3% on Top-1 and 2% on Top-5 results. This further demonstrate the effectiveness of the proposed method.
+
+**Results on transfer learning tasks.** **Table 3** shows the results on the most commonly used object detection and instance segmentation protocol Chen et al. (2020); Zbontar et al. (2021) for transfer learning. The results shows that introducing the proposed method achieve stable improvements in all the metrics, tasks, and baselines, reaching an average improvement of nearly 3.8%.
+
+**Results on few-shot learning tasks.** **Table 4** shows the effect of the proposed sampling strategy on standard few-shot transfer learning tasks. From the results, we can see that compared to the original baselines, introducing our proposed method achieves remarkable performance improvement, achieving more than 5% improvement. These results demonstrate the superiority of the proposed method under data-scarce conditions and further proves its effectiveness.
+
+In summary, from all the experimental results, we can observe that when the SSL methods are trained based on mini-batches generated by our proposed sampling strategy, they all further improve their performance and by at least 2%. This shows that our sampling strategy is effective in further reducing the false correlation information in the distribution of the mini-batch task, which leads to better causal learning and improves the OOD generalization of the SSL model.
+
+### 5.3 ABLATION STUDY
+
+**Influence of the batch size hyperparameter  $a$ .** According to **Algorithm 1**,  $a$  is the hyperparameter of the proposed sampling strategy, which represent the batch size. As shown in **Theorem 4.7**, we can obtain that a suitable  $a$  is important. To explore whether the SSL model is more sensitive to the original batch size or to  $a$ , we conduct experiments based on ImageNet and BYOL, and the corresponding results are shown in **Figure 4**. We can observe that the performance of BYOL rapidly deteriorates with batch size. In contrast, the performance of BYOL + Ours remains stable over a
+
+Table 1: The Top-1 and Top-5 classification accuracies of linear classifier on the ImageNet-100 dataset and the Top-1 results for ImageNet dataset with ResNet-50 as feature extractor.
+
+| Method                              | ImageNet-100        |                     | ImageNet            |                     |
+|-------------------------------------|---------------------|---------------------|---------------------|---------------------|
+|                                     | Top-1               | Top-5               | 400 Epochs          | 1000 Epochs         |
+| SimCLR (Chen et al., 2020)          | 70.15 ± 0.16        | 89.75 ± 0.14        | 69.24 ± 0.21        | 70.45 ± 0.30        |
+| MoCo (He et al., 2020)              | 72.80 ± 0.17        | 91.64 ± 0.11        | 69.76 ± 0.21        | 71.16 ± 0.23        |
+| SimSiam (Chen & He, 2021)           | 73.01 ± 0.16        | 92.36 ± 0.27        | 70.86 ± 0.34        | 71.37 ± 0.22        |
+| Barlow Twins (Zbontar et al., 2021) | 75.97 ± 0.25        | 92.91 ± 0.19        | 70.22 ± 0.15        | 73.29 ± 0.15        |
+| SwAV (Caron et al., 2020)           | 75.78 ± 0.15        | 92.36 ± 0.15        | 70.76 ± 0.34        | 73.27 ± 0.11        |
+| DINO (Caron et al., 2021)           | 75.43 ± 0.18        | 93.32 ± 0.19        | 71.98 ± 0.26        | 73.94 ± 0.29        |
+| REL2 (Tomaser et al., 2022)         | 75.38 ± 0.15        | 93.52 ± 0.13        | 71.84 ± 0.21        | 72.17 ± 0.20        |
+| MEC (Liu et al., 2022a)             | 78.43 ± 0.17        | 92.84 ± 0.20        | 72.91 ± 0.27        | 75.07 ± 0.24        |
+| VICRegL (Bardes et al., 2022)       | 75.96 ± 0.16        | 95.97 ± 0.26        | 72.14 ± 0.30        | 75.07 ± 0.22        |
+| SimCLR + Ours                       | 73.32 ± 0.17        | 91.78 ± 0.18        | 72.24 ± 0.20        | 73.66 ± 0.25        |
+| MoCo + Ours                         | 74.71 ± 0.22        | 93.89 ± 0.17        | 72.04 ± 0.21        | 74.06 ± 0.20        |
+| SimSiam + Ours                      | 75.66 ± 0.15        | 93.02 ± 0.21        | 72.66 ± 0.22        | 73.67 ± 0.21        |
+| Barlow Twins + Ours                 | 77.77 ± 0.18        | 94.99 ± 0.20        | 73.08 ± 0.21        | 75.89 ± 0.17        |
+| SwAV + Ours                         | 76.99 ± 0.11        | 95.03 ± 0.20        | 73.25 ± 0.24        | 77.42 ± 0.21        |
+| DINO + Ours                         | 77.47 ± 0.15        | 96.01 ± 0.17        | 74.21 ± 0.20        | 75.99 ± 0.17        |
+| VICRegL + Ours                      | <b>78.20 ± 0.14</b> | <b>95.97 ± 0.21</b> | <b>74.91 ± 0.14</b> | <b>77.77 ± 0.21</b> |
+
+Table 2: The semi-supervised learning accuracies ( $\pm$  95% confidence interval) on the ImageNet dataset with the ResNet-50 pre-trained on the Imagenet dataset.
+
+| Method                              | Epochs | 1%                |                   | 10%               |                   |
+|-------------------------------------|--------|-------------------|-------------------|-------------------|-------------------|
+|                                     |        | Top-1             | Top-5             | Top-1             | Top-5             |
+| MoCo (He et al., 2020)              | 200    | 43.8 ± 0.2        | 72.3 ± 0.1        | 61.9 ± 0.1        | 84.6 ± 0.2        |
+| BYOL (Grill et al., 2020b)          | 200    | 54.8 ± 0.2        | 78.8 ± 0.1        | 68.0 ± 0.2        | 88.5 ± 0.2        |
+| BYOL + Ours                         | 200    | <b>66.5 ± 0.2</b> | <b>74.4 ± 0.2</b> | <b>63.0 ± 0.3</b> | <b>85.6 ± 0.2</b> |
+| MoCo + Ours                         | 200    | <b>57.4 ± 0.2</b> | <b>80.1 ± 0.2</b> | <b>71.4 ± 0.2</b> | <b>90.2 ± 0.1</b> |
+| SimCLR (Chen et al., 2020)          | 1000   | 48.3 ± 0.1        | 75.5 ± 0.1        | 65.6 ± 0.1        | 87.3 ± 0.2        |
+| MoCo (He et al., 2020)              | 1000   | 52.3 ± 0.1        | 77.9 ± 0.2        | 68.4 ± 0.1        | 88.0 ± 0.2        |
+| BYOL (Grill et al., 2020b)          | 1000   | 56.3 ± 0.2        | 79.6 ± 0.2        | 69.7 ± 0.2        | 89.1 ± 0.1        |
+| SimSiam (Chen & He, 2021)           | 1000   | 54.9 ± 0.2        | 79.5 ± 0.2        | 68.0 ± 0.1        | 89.9 ± 0.3        |
+| Barlow Twins (Zbontar et al., 2021) | 1000   | 55.0 ± 0.1        | 79.2 ± 0.1        | 67.7 ± 0.2        | 88.3 ± 0.2        |
+| REL2 (Tomaser et al., 2022)         | 1000   | 55.2 ± 0.2        | 80.0 ± 0.1        | 68.0 ± 0.2        | 88.9 ± 0.2        |
+| MEC (Liu et al., 2022a)             | 1000   | 54.8 ± 0.1        | 79.4 ± 0.2        | 70.0 ± 0.1        | 89.1 ± 0.1        |
+| VICRegL (Bardes et al., 2022)       | 1000   | 54.9 ± 0.1        | 79.6 ± 0.2        | 67.2 ± 0.1        | 89.4 ± 0.2        |
+| SimCLR + Ours                       | 1000   | 50.8 ± 0.2        | 77.8 ± 0.2        | 67.3 ± 0.1        | 89.9 ± 0.2        |
+| MoCo + Ours                         | 1000   | 53.9 ± 0.2        | 78.9 ± 0.2        | 71.2 ± 0.1        | 89.5 ± 0.1        |
+| BYOL + Ours                         | 1000   | <b>68.9 ± 0.2</b> | <b>81.9 ± 0.2</b> | <b>72.4 ± 0.2</b> | <b>91.2 ± 0.1</b> |
+| Barlow Twins + Ours                 | 1000   | 57.6 ± 0.2        | 80.6 ± 0.1        | 68.9 ± 0.2        | <b>91.8 ± 0.2</b> |
+
+Table 3: The results of transfer learning on object detection and instance segmentation with C4 backbone as the feature extractor. “AP” is the average precision, “AP<sub>N</sub>” represents the average precision when the IoU (Intersection and Union Ratio) threshold is  $N\%$ .
+
+| Method                        | VOC 07 detection |             | VOC 07+12 detection |             | COCO detection   |             | COCO instance segmentation       |                    |                                  |
+|-------------------------------|------------------|-------------|---------------------|-------------|------------------|-------------|----------------------------------|--------------------|----------------------------------|
+|                               | AP <sub>50</sub> | AP          | AP <sub>50</sub>    | AP          | AP <sub>50</sub> | AP          | AP <sub>50</sub> <sup>mask</sup> | AP <sup>mask</sup> | AP <sup>mask</sup> <sub>75</sub> |
+| Supervised                    | 74.4             | 42.4        | 42.7                | 81.3        | 53.5             | 58.8        | 58.2                             | 38.2               | 41.2                             |
+| SimCLR (Chen et al., 2020)    | 75.9             | 46.8        | 50.1                | 81.8        | 55.5             | 61.4        | 57.7                             | 37.9               | 40.9                             |
+| MoCo (He et al., 2020)        | 77.1             | 46.8        | 52.5                | 82.5        | 57.4             | 64.0        | 58.9                             | 39.3               | 42.5                             |
+| BYOL (Grill et al., 2020b)    | 77.1             | 47.0        | 49.9                | 81.4        | 55.3             | 61.1        | 57.8                             | 37.9               | 40.9                             |
+| SimSiam (Chen & He, 2021)     | 77.3             | 48.5        | 52.5                | 82.4        | 57.0             | 63.7        | 59.3                             | 39.2               | 42.1                             |
+| SwAV (Caron et al., 2020)     | 75.5             | 46.5        | 49.6                | 82.6        | 56.1             | 62.7        | 58.6                             | 38.4               | 41.3                             |
+| MEC (Liu et al., 2022a)       | 77.4             | 48.3        | 52.3                | 82.8        | 57.5             | 64.5        | 59.8                             | 39.8               | 43.2                             |
+| VICRegL (Bardes et al., 2022) | 75.9             | 47.4        | 52.3                | 82.6        | 56.4             | 62.9        | 59.2                             | 39.8               | 42.1                             |
+| SimCLR + Ours                 | 77.6             | 50.1        | 51.7                | 82.3        | 58.3             | 63.9        | 59.2                             | 40.6               | 43.9                             |
+| MoCo + Ours                   | 79.4             | 50.2        | <b>54.9</b>         | <b>86.1</b> | <b>60.2</b>      | <b>66.1</b> | 61.4                             | 44.9               | <b>59.2</b>                      |
+| BYOL + Ours                   | 79.1             | 50.4        | 51.9                | 83.9        | 58.7             | 64.1        | 60.6                             | 39.9               | 43.7                             |
+| SimSiam + Ours                | <b>80.5</b>      | <b>50.8</b> | 54.4                | 85.2        | 59.5             | 66.1        | 62.3                             | 42.5               | 43.9                             |
+| SwAV + Ours                   | 77.9             | 49.3        | 51.8                | 84.9        | 58.1             | 65.8        | 62.1                             | 40.2               | 43.9                             |
+| VICRegL + Ours                | 77.9             | 50.4        | 53.9                | 85.2        | 58.8             | 65.3        | <b>63.1</b>                      | <b>42.2</b>        | <b>45.3</b>                      |
+
+wide range of batch sizes from 256 to 4096, and only drops for smaller values. Thus, we can obtain that although the proposed sampling strategy has a high requirement on a, the SSL method is less sensitive to a compared to the original batch size, which implies the effectiveness of our strategy.
+
+**Influence of  $\alpha$ .** In Equation 4,  $\alpha$  as a hyperparameter, controls the weight of the term that constrains the orthogonality of the column vectors in the matrix A. This constraint prevents the model from learning redundant or interdependent features, enhancing its generalization and stability. To evaluate its impact, we assess the performance of SimCLR+Ours and MoCo+Ours with varying  $\alpha$  (ranging in [0.001, 0.01, 0.1, 1, 10]) on ImageNet-100, using the same configurations as in SSL. The results in Figure 5 show that performance peaks at  $\alpha = 1$ , which is also our setting.
+
+## 6 RELATED WORK
+
+**SSL** is an effective unsupervised representation learning paradigm, aimed at learning general representations suitable for various downstream tasks. From (Jaiswal et al., 2020; Kang et al., 2023), existing SSL models can be divided into two main types, i.e., D-SSL and G-SSL. The D-SSL methods, e.g., SimCLR (Chen et al., 2020), BYOL (Grill et al., 2020a), Barlow Twins (Zbontar et al., 2021), DINO (Caron et al., 2021), and Moco v3 (Chen et al., 2021b), are modeled based on the augmentation invariance principle. The G-SSL methods, e.g., MAE (He et al., 2022), VideoMAE (Tong et al., 2022), iBOT (Zhou et al.), SMA (Xie et al., 2024), are modeled based on the mask and reconstruction principle. In real-world scenarios, the data distribution can shift over time. Thus, improving the OOD generalization of SSL is crucial. Ni et al. (Ni et al., 2021) proposed to increase OOD generalization of SSL by meta-learning. MEC (Liu et al., 2022b) presents that a generalizable representation should be the one that admits the maximum entropy. AugSelf (Lee et al., 2021) encourages to preserve augmentation-aware information, which could be beneficial for feature transferability. KRR-ST (Lee et al., 2023) finds that distillation of SSL features using external knowledge
+
+Table 4: Few-shot transfer learning accuracies ( $\pm$  95% confidence interval) on miniImageNet, Omniglot, and CIFAR-FS datasets with C4 as the backbone.
+
+| Method                    | Omniglot                |                         |                         | miniImageNet            |                         |                         | CIFAR-FS                |                         |                         |
+|---------------------------|-------------------------|-------------------------|-------------------------|-------------------------|-------------------------|-------------------------|-------------------------|-------------------------|-------------------------|
+|                           | (5,1)                   | (5,5)                   | (20,1)                  | (5,1)                   | (5,5)                   | (20,1)                  | (5,1)                   | (5,5)                   | (20,1)                  |
+| SimCLR(Chen et al., 2020) | 90.83 $\pm$ 0.21        | 97.67 $\pm$ 0.21        | 81.67 $\pm$ 0.23        | 42.32 $\pm$ 0.38        | 51.10 $\pm$ 0.37        | 36.36 $\pm$ 0.36        | 49.44 $\pm$ 0.30        | 60.02 $\pm$ 0.29        | 39.29 $\pm$ 0.30        |
+| MoCo(He et al., 2020)     | 87.83 $\pm$ 0.20        | 95.52 $\pm$ 0.19        | 80.03 $\pm$ 0.21        | 40.56 $\pm$ 0.34        | 49.41 $\pm$ 0.37        | 36.52 $\pm$ 0.38        | 45.35 $\pm$ 0.31        | 58.11 $\pm$ 0.32        | 37.89 $\pm$ 0.32        |
+| SwAV(Caron et al., 2020)  | 91.28 $\pm$ 0.19        | 97.21 $\pm$ 0.20        | 82.02 $\pm$ 0.20        | 44.39 $\pm$ 0.36        | 54.91 $\pm$ 0.36        | 37.13 $\pm$ 0.37        | 49.39 $\pm$ 0.29        | 62.20 $\pm$ 0.30        | 40.19 $\pm$ 0.32        |
+| SimCLR + Ours             | 95.05 $\pm$ 0.22        | <b>98.96</b> $\pm$ 0.16 | 91.15 $\pm$ 0.20        | 47.14 $\pm$ 0.21        | 62.88 $\pm$ 0.21        | 39.97 $\pm$ 0.16        | <b>53.18</b> $\pm$ 0.24 | 67.91 $\pm$ 0.14        | 46.94 $\pm$ 0.21        |
+| MoCo + Ours               | 93.22 $\pm$ 0.21        | 97.93 $\pm$ 0.19        | 88.93 $\pm$ 0.22        | 46.93 $\pm$ 0.21        | 61.22 $\pm$ 0.21        | 41.12 $\pm$ 0.24        | 51.76 $\pm$ 0.22        | 66.42 $\pm$ 0.21        | 44.93 $\pm$ 0.23        |
+| SwAV + Ours               | <b>96.24</b> $\pm$ 0.26 | 98.76 $\pm$ 0.22        | <b>91.96</b> $\pm$ 0.21 | <b>49.15</b> $\pm$ 0.21 | <b>64.28</b> $\pm$ 0.29 | <b>42.22</b> $\pm$ 0.21 | 52.64 $\pm$ 0.24        | <b>70.18</b> $\pm$ 0.21 | <b>48.19</b> $\pm$ 0.14 |
+
+![Figure 4: Influence of the hyperparameter a. A line graph showing the decrease of accuracy from baseline for BYOL and BYOL+Ours across different batch sizes (4096, 2048, 1024, 512, 256, 128). BYOL+Ours maintains a smaller decrease in accuracy compared to BYOL as the batch size decreases.](f519a5be118c846f631c992412353fb9_img.jpg)
+
+| Batch Size or a + 1 | BYOL  | BYOL+Ours |
+|---------------------|-------|-----------|
+| 4096                | 0.0   | 0.0       |
+| 2048                | -0.35 | -0.15     |
+| 1024                | -0.35 | -0.15     |
+| 512                 | -0.55 | -0.25     |
+| 256                 | -0.75 | -0.35     |
+| 128                 | -2.45 | -0.95     |
+
+Figure 4: Influence of the hyperparameter a. A line graph showing the decrease of accuracy from baseline for BYOL and BYOL+Ours across different batch sizes (4096, 2048, 1024, 512, 256, 128). BYOL+Ours maintains a smaller decrease in accuracy compared to BYOL as the batch size decreases.
+
+Figure 4: Influence of the hyperparameter  $a$ .
+
+![Figure 5: Influence of the hyperparameter alpha. A line graph showing accuracy (%) for SimCLR+Ours and MoCo+Ours across different values of alpha (0.001, 0.01, 0.1, 1, 10). MoCo+Ours generally achieves higher accuracy than SimCLR+Ours, with both peaking around alpha=1.](8ee3b76dd49f31624d287885bc2c81ee_img.jpg)
+
+| $\alpha$ | SimCLR+Ours | MoCo+Ours |
+|----------|-------------|-----------|
+| 0.001    | 71.5        | 72.8      |
+| 0.01     | 72.5        | 73.8      |
+| 0.1      | 72.8        | 74.5      |
+| 1        | 73.2        | 74.8      |
+| 10       | 73.0        | 74.5      |
+
+Figure 5: Influence of the hyperparameter alpha. A line graph showing accuracy (%) for SimCLR+Ours and MoCo+Ours across different values of alpha (0.001, 0.01, 0.1, 1, 10). MoCo+Ours generally achieves higher accuracy than SimCLR+Ours, with both peaking around alpha=1.
+
+Figure 5: Influence of the hyperparameter  $\alpha$ .
+
+can effectively improve OOD generalization. COLT (Bai et al., 2023) attempts to extend additional training samples from OOD datasets for improved SSL long-tailed learning. While various methods have been proposed with impressive performance, a remaining challenge is these approaches have to contend with trade-offs between inductive biases or approaches without theoretical guarantees. In this paper, we extend the understanding of SSL by analyzing its OOD generalization through the lens of causal inference and batch construction. Our proposed method addresses the limitations of existing approaches and offers a new direction for enhancing the OOD generalization of SSL.
+
+**Causality Analysis in SSL** plays a crucial role in helping to identify and understand the underlying relationships between variables. Recent works Sontakke et al. (2021); Zuo et al. (2021); Qiang et al. (2022); Wang et al. (2024a) have focused on developing methods that leverage causal inference to extract more robust feature representations. For instance, Song et al. (2023) used causal invariance to obtain causal SSL representations and improve learning efficiency. Von Kügelgen et al. (2021) studied the identifiability of latent representations based on paired views of observations to study the effect of data augmentation performed in practice. However, most of them build causal analysis on in-distribution, but ignore the influence of spurious correlations under OOD generalization settings. In this paper, we explore the essential reasons for spurious correlations in SSL and propose a method that makes the relationships between variables free from the influence of spurious correlations.
+
+## 7 CONCLUSION
+
+In this paper, we focus on the OOD generalization of SSL models. First, we establish the connection between mini-batches formed during the SSL training phase and multi-class tasks. Next, we explain the rationale for OOD generalization of SSL from a multi-task learning perspective. We then analyze how existing SSL models, when learning mini-batch tasks, rely on spurious correlations to measure sample similarity, leading to suboptimal performance. This reliance affects the SSL model’s approximation of the task distribution, resulting in reduced OOD generalization. We provide a causal analysis of this issue and theoretically examine the intrinsic reasons for incorporating spurious correlations during the learning process. Based on our causal analysis, we demonstrate that when mini-batches satisfy a specific distribution, e.g., PID, SSL models achieve optimal worst-case OOD performance. This insight guides us to propose a new mini-batch sampling strategy that ensures the resulting mini-batches satisfy the PID constraints. We provide a theoretical analysis of the effectiveness of this method and validate its efficacy through various downstream tasks.
+
+## REPRODUCIBILITY STATEMENT
+
+For the theoretical results, this work offers clear assumptions and complete proofs in the **Appendix**. The algorithm’s source code is also submitted as supplementary materials. For the experimental datasets, detailed data processing steps and the experimental setup are provided in the **Appendix**.
+
+## REFERENCES
+
+- Aviad Aberdam, Ron Litman, Shahar Tsiper, Oron Anschel, Ron Slossberg, Shai Mazor, R Manmatha, and Pietro Perona. Sequence-to-sequence contrastive learning for text recognition. In *Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition*, pp. 15302–15312, 2021.
+- Martin Arjovsky, Léon Bottou, Ishaaan Gulrajani, and David Lopez-Paz. Invariant risk minimization. *arXiv: Machine Learning, arXiv: Machine Learning*, Jul 2019.
+- Jianhong Bai, Zuozhu Liu, Hualiang Wang, Jin Hao, Yang Feng, Huanpeng Chu, and Haoji Hu. On the effectiveness of out-of-distribution data in self-supervised long-tail learning. *arXiv preprint arXiv:2306.04934*, 2023.
+- Adrien Bardes, Jean Ponce, and Yann LeCun. Vicregl: Self-supervised learning of local visual features. *arXiv preprint arXiv:2210.01571*, 2022.
+- Luca Bertinetto, Joao F Henriques, Philip HS Torr, and Andrea Vedaldi. Meta-learning with differentiable closed-form solvers. *arXiv preprint arXiv:1805.08136*, 2018.
+- David M. Blei, Alp Kucukelbir, and Jon D. McAuliffe. Variational inference: A review for statisticians. *Journal of the American Statistical Association*, pp. 859–877, Apr 2017. doi: 10.1080/01621459.2017.1285773. URL <http://dx.doi.org/10.1080/01621459.2017.1285773>.
+- Mathilde Caron, Ishan Misra, Julien Mairal, Priya Goyal, Piotr Bojanowski, and Armand Joulin. Unsupervised learning of visual features by contrasting cluster assignments. *CoRR*, abs/2006.09882, 2020. URL <https://arxiv.org/abs/2006.09882>.
+- Mathilde Caron, Hugo Touvron, Ishan Misra, Herve Jegou, Julien Mairal, Piotr Bojanowski, and Armand Joulin. Emerging properties in self-supervised vision transformers. In *2021 IEEE/CVF International Conference on Computer Vision (ICCV)*, Oct 2021. doi: 10.1109/iccv48922.2021.00951. URL <http://dx.doi.org/10.1109/iccv48922.2021.00951>.
+- Ting Chen, Simon Kornblith, Mohammad Norouzi, and Geoffrey Hinton. A simple framework for contrastive learning of visual representations. In *International conference on machine learning*, pp. 1597–1607. PMLR, 2020.
+- Ting Chen, Calvin Luo, and Lala Li. Intriguing properties of contrastive losses. *Advances in Neural Information Processing Systems*, 34:11834–11845, 2021a.
+- Xinlei Chen and Kaiming He. Exploring simple siamese representation learning. In *Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition*, pp. 15750–15758, 2021.
+- Xinlei Chen, Sihong Xie, and Kai He. An empirical study of training self-supervised vision transformers. *Cornell University - arXiv, Cornell University - arXiv*, Apr 2021b.
+- Jia Deng, Wei Dong, Richard Socher, Li-Jia Li, Kai Li, and Li Fei-Fei. Imagenet: A large-scale hierarchical image database. In *2009 IEEE conference on computer vision and pattern recognition*, pp. 248–255. Ieee, 2009.
+- Alexey Dosovitskiy, Lucas Beyer, Alexander Kolesnikov, Dirk Weissenborn, Xiaohua Zhai, Thomas Unterthiner, Mostafa Dehghani, Matthias Minderer, Georg Heigold, Sylvain Gelly, et al. An image is worth 16x16 words: Transformers for image recognition at scale. *arXiv preprint arXiv:2010.11929*, 2020.
+
+- 594 Mark Everingham, Luc Van Gool, Christopher KI Williams, John Winn, and Andrew Zisserman.  
+595 The pascal visual object classes (voc) challenge. *International journal of computer vision*, 88(2):  
+596 303–338, 2010.  
+597  
+598 Itai Gat, Idan Schwartz, Alexander Schwing, and Tamir Hazan. Removing bias in multi-modal  
+599 classifiers: Regularization by maximizing functional entropies. *Advances in Neural Information*  
+600 *Processing Systems*, 33:3197–3208, 2020.  
+601  
+602 Robert Geirhos, Patricia Rubisch, Claudio Michaelis, Matthias Bethge, FelixA. Wichmann,  
+603 and Wieland Brendel. Imagenet-trained cnns are biased towards texture; increasing shape  
+604 bias improves accuracy and robustness. *International Conference on Learning Representa-*  
+605 *tions,International Conference on Learning Representations*, Sep 2018.  
+606  
+607 Jean-Bastien Grill, Florian Strub, Florent Alché, Corentin Tallec, Pierre Richemond, Elena  
+608 Buchatskaya, Carl Doersch, Bernardo Avila Pires, Zhaohan Guo, Mohammad Gheshlaghi Azar,  
+609 et al. Bootstrap your own latent-a new approach to self-supervised learning. *Advances in neural*  
+610 *information processing systems*, 33:21271–21284, 2020a.  
+611  
+612 Jean-Bastien Grill, Florian Strub, Florent Alché, Corentin Tallec, Pierre H Richemond, Elena  
+613 Buchatskaya, Carl Doersch, Bernardo Avila Pires, Zhaohan Daniel Guo, Mohammad Gheshlaghi  
+614 Azar, et al. Bootstrap your own latent: A new approach to self-supervised learning. *arXiv preprint*  
+615 *arXiv:2006.07733*, 2020b.  
+616  
+617 K. Hamidieh, H. Zhang, S. Sankaranarayanan, and M. Ghassemi. Views can be deceiving: Improved  
+618 ssl through feature space augmentation. *Proceedings of the International Conference on Machine*  
+619 *Learning*, 2024.  
+620  
+621 Kaiming He, Xiangyu Zhang, Shaoqing Ren, and Jian Sun. Deep residual learning for image recog-  
+622 nition. In *Proceedings of the IEEE conference on computer vision and pattern recognition*, pp.  
+623 770–778, 2016.  
+624  
+625 Kaiming He, Georgia Gkioxari, Piotr Dollár, and Ross Girshick. Mask r-cnn. In *Proceedings of the*  
+626 *IEEE international conference on computer vision*, pp. 2961–2969, 2017.  
+627  
+628 Kaiming He, Haoqi Fan, Yuxin Wu, Saining Xie, and Ross Girshick. Momentum contrast for  
+629 unsupervised visual representation learning. In *Proceedings of the IEEE/CVF conference on*  
+630 *computer vision and pattern recognition*, pp. 9729–9738, 2020.  
+631  
+632 Kaiming He, Xinlei Chen, Saining Xie, Yanghao Li, Piotr Dollár, and Ross Girshick. Masked au-  
+633 toencoders are scalable vision learners. In *Proceedings of the IEEE/CVF conference on computer*  
+634 *vision and pattern recognition*, pp. 16000–16009, 2022.  
+635  
+636 Ashish Jaiswal, Ashwin Ramesh Babu, Mohammad Zaki Zadeh, Debapriya Banerjee, and Filia  
+637 Makedon. A survey on contrastive self-supervised learning. *Technologies*, 9(1):2, 2020.  
+638  
+639 Mingu Kang, Heon Song, Seonwook Park, Donggeun Yoo, and Sérgio Pereira. Benchmarking self-  
+640 supervised learning on diverse pathology datasets. In *Proceedings of the IEEE/CVF Conference*  
+641 *on Computer Vision and Pattern Recognition*, pp. 3344–3354, 2023.  
+642  
+643 Ilyaes Khemakhem, Diederik Kingma, Ricardo Monti, and Aapo Hyvarinen. Variational autoen-  
+644 coders and nonlinear ica: A unifying framework. In *International conference on artificial intelli-*  
+645 *gence and statistics*, pp. 2207–2217. PMLR, 2020.  
+646  
+647 Diederik P Kingma and Max Welling. Auto-encoding variational bayes. *arXiv preprint*  
+648 *arXiv:1312.6114*, 2013a.  
+649  
+650 DiederikP. Kingma and Max Welling. Auto-encoding variational bayes. *arXiv: Machine Learn-*  
+651 *ing,arXiv: Machine Learning*, Dec 2013b.  
+652  
+653 Brenden M Lake, Ruslan Salakhutdinov, and Joshua B Tenenbaum. The omniglot challenge: a  
+654 3-year progress report. *Current Opinion in Behavioral Sciences*, 29:97–104, 2019.
+
+[Appendix and supplementary materials beyond page 12 have been removed.]

@@ -1,0 +1,323 @@
+# OPTIMAL TRANSPORT FOR TIME-SERIES IMPUTATION
+
+Hao Wang<sup>1</sup> Zhengnan Li<sup>2</sup> Haoxuan Li<sup>3</sup> Xu Chen<sup>4</sup> Mingming Gong<sup>5,6</sup>  
+Bin Chen<sup>7</sup> Zhichao Chen<sup>1,\*</sup>
+
+<sup>1</sup>Zhejiang University <sup>2</sup>Communication University of China <sup>3</sup>Peking University
+
+<sup>4</sup>Renmin University of China <sup>5</sup>The University of Melbourne
+
+<sup>6</sup>Mohamed bin Zayed University of Artificial Intelligence
+
+<sup>7</sup>University of Chinese Academy of Sciences
+
+Ho-ward@outlook.com fmllyd@cuc.edu.cn justuschencse@zju.edu.cn
+
+## ABSTRACT
+
+Missing data imputation through distribution alignment has demonstrated advantages for non-temporal datasets but exhibits suboptimal performance in time-series applications. The primary obstacle is crafting a discrepancy measure that simultaneously (1) *captures temporal patterns*—accounting for periodicity and temporal dependencies inherent in time-series—and (2) *accommodates non-stationarity*, ensuring robustness amidst multiple coexisting temporal patterns. In response to these challenges, we introduce the Proximal Spectrum Wasserstein (PSW) discrepancy, a novel discrepancy tailored for comparing two *sets* of time-series based on optimal transport. It incorporates a pairwise spectral distance to encapsulate temporal patterns, and a selective matching regularization to accommodate non-stationarity. Subsequently, we develop the PSW for Imputation (PSW-I) framework, which iteratively refines imputation results by minimizing the PSW discrepancy. Extensive experiments demonstrate that PSW-I effectively accommodates temporal patterns and non-stationarity, outperforming prevailing time-series imputation methods. Code is available at <https://github.com/FMLYD/PSW-I>.
+
+## 1 INTRODUCTION
+
+The incompleteness of time-series data is a widespread issue in many fundamental fields. For example, in healthcare (Prosperi et al., 2020), users utilize monitoring devices to track their health data, but these records may be incomplete due to occasional device failures or disconnections. Similarly, in manufacturing and process engineering (Wang et al., 2024a), automation equipment often includes sensors that monitor operational statistics for safety and efficiency, but these records can also be affected by human errors or sensor malfunctions. Such incompleteness damages data integrity, which is critical for accurate and reliable analytics (Qiu et al., 2024; 2025; Liu et al., 2024), highlighting the importance of effective Time-Series Imputation (TSI) techniques.
+
+Deep learning methods have attracted substantial attention in TSI due to their ability to model nonlinearities and temporal dependencies. These methods can be classified into two categories: *predictive methods*, which estimate deterministic values for the missing entries within the time-series (Cao et al., 2018; Du et al., 2023), and *generative methods*, which generate missing values conditionally given observed ones (Luo et al., 2018). Despite their effectiveness, they are primarily challenged by model selection amidst incomplete data (Jarrett et al., 2022), and require masking some observed entries during training to generate labels (Chen et al., 2024), which can limit performance especially given high missing ratios.
+
+To counteract the defects with deep imputation methods, alignment-based methods have emerged as an alternative. These methods eliminate the need for masking observed entries and training parametric models on incomplete data, offering advantages in sample efficiency and implementation simplicity. While alignment-based methods have proven to be effective for imputing missing data in non-temporal datasets (Muzellec et al., 2020; Zhao et al., 2023; Wang et al., 2024a;b), their application to TSI is challenging and remains largely unexplored. Our experiments (see Section 4.2) indicate that directly
+
+\*Corresponding author.
+
+applying existing alignment-based methods to temporal data yields poor performance. Therefore, how to adapt distribution alignment methods to TSI remains a challenging and open problem.
+
+In distribution alignment, the choice of discrepancy measure matters, which should accommodate the dataset characteristics (Court et al., 2017; Wang et al., 2023; Liu et al., 2022b). Typically, time-series are uniquely characterized by temporal patterns, such as periodicities and temporal dependencies, and often exhibit non-stationary fluctuations. Motivated by this, the key to accommodate the alignment-based imputation methods to TSI is devising a discrepancy measure that captures temporal patterns while accommodating non-stationarity in time-series.
+
+To this end, we propose the *Proximal Spectrum Wasserstein (PSW)* discrepancy, a discrepancy tailored to compare *sets* of time-series based on optimal transport. Specifically, PSW integrates a Pairwise Spectral Distance (PSD), which transforms time-series into the frequency domain and then calculates the pair-wise absolute difference. By comparing time-series in the frequency domain, the underlying temporal dependencies and patterns are captured. Moreover, PSW incorporates Selective Matching Regularization (SMR), which relaxes the hard matching constraints of traditional optimal transport to enable flexible mass matching between distributions. This relaxation enhances robustness to non-stationarity. Building upon PSW, we propose the PSW for Imputation (PSW-I) framework, which iteratively refines the imputed missing values by minimizing the PSW discrepancy. Extensive experiments demonstrate that PSW-I effectively captures temporal patterns and accommodates non-stationarity and significantly outperforms existing time-series imputation methods.
+
+**Contributions.** The key contributions of this study are summarized as follows:
+
+- We propose the PSW discrepancy, which innovatively extends optimal transport to compare distributions of time-series by encapsulating temporal patterns and accommodating non-stationarity.
+- We develop PSW-I, the first alignment-based method for TSI. It eliminates the need for masking observed entries during training and the complexities of training parametric models on incomplete data, enhancing sample efficiency and ease of operation.
+- We conduct comprehensive experiments on publicly available real-world datasets to validate the effectiveness of PSW-I, demonstrating its superiority over existing TSI methods.
+
+## 2 PRELIMINARIES
+
+### 2.1 PROBLEM FORMULATION
+
+Suppose  $\mathbf{X}^{(\text{id})} \in \mathbb{R}^{N \times D}$  is the ideally complete time-series with  $N$  chronologically-ordered observations and  $D$  features. The missing entries are indicated by a binary matrix  $\mathbf{M} \in \{0, 1\}^{N \times D}$ , where  $\mathbf{M}_{n,d}$  is set to 1 if the corresponding entry  $\mathbf{X}_{n,d}^{(\text{id})}$  is missing, and 0 otherwise. Consequently, the observed dataset  $\mathbf{X}^{(\text{obs})}$  can be obtained via the Hadamard product:  $\mathbf{X}^{(\text{obs})} := \mathbf{X}^{(\text{id})} \odot (1 - \mathbf{M}) + \text{nan} \odot \mathbf{M}$ . The goal of TSI is to construct an imputed data matrix  $\mathbf{X}^{(\text{imp})} \in \mathbb{R}^{N \times D}$  based on the observed entries in  $\mathbf{X}^{(\text{obs})}$ , such that  $\mathbf{X}^{(\text{imp})} \approx \mathbf{X}^{(\text{id})}$ .
+
+### 2.2 OPTIMAL TRANSPORT
+
+Optimal Transport (OT) is a mathematical tool that quantifies the discrepancy between two probability distributions by finding the least-cost plan to transform one distribution into the other. Originally proposed by Monge (1781), the formulation involved finding an optimal mapping between two continuous distributions. However, this original formulation posed challenges related to the existence and uniqueness of solutions. Addressing these issues, Kantorovich (2006) proposed a more computationally feasible formulation in Definition 1, a convex programming problem solvable via the simplex algorithm (Dissler and Skutella, 2019).
+
+**Definition 2.1.** Consider empirical distributions  $\alpha = \alpha_{1:n}$  and  $\beta = \beta_{1:m}$ , each with  $n$  and  $m$  samples, respectively; we seek a feasible plan  $\mathbf{T} \in \mathbb{R}_+^{n \times m}$  to transport  $\alpha$  to  $\beta$  at the minimum possible cost:
+
+![Figure 1: Case study on the discrepancies calculated in the time and frequency domains. (a) Discrepancy on ETTh1 and Electricity. (b) 8 temporal patches on ETTh1 and their spectra.](d9d706121d1c4ba9ad2c793746382361_img.jpg)
+
+Figure 1 consists of two parts. Part (a) shows two line plots of Discrepancy vs. Batch size (B) for ETTh1 and Electricity datasets. The x-axis ranges from 16 to 1024, and the y-axis ranges from 0.05 to 0.15 for ETTh1 and 0.05 to 0.25 for Electricity. Two series are shown:  $W^0$  (blue squares) and  $W^{m^0}$  (orange circles). Both series show a decreasing trend as batch size increases, with  $W^0$  consistently showing higher discrepancy than  $W^{m^0}$ . Part (b) shows two plots for 8 temporal patches on ETTh1. The left plot shows Volume vs. Time (0 to 150), displaying a noisy time-series signal. The right plot shows Volume vs. Frequency (0 to 80), displaying the power spectral density (PSD) of the time-series, with a prominent peak at low frequency.
+
+Figure 1: Case study on the discrepancies calculated in the time and frequency domains. (a) Discrepancy on ETTh1 and Electricity. (b) 8 temporal patches on ETTh1 and their spectra.
+
+Figure 1: Case study on the discrepancies calculated in the time and frequency domains.
+
+$$\mathcal{W}(\alpha, \beta) := \min_{\mathbf{T} \in \Pi(\alpha, \beta)} \langle \mathbf{D}, \mathbf{T} \rangle, \quad (1)$$
+
+$$\Pi(\alpha, \beta) := \begin{cases} \mathbf{T}_{i,1} + \dots + \mathbf{T}_{i,m} = \mathbf{a}_i, i = 1, \dots, n, \\ \mathbf{T}_{1,j} + \dots + \mathbf{T}_{n,j} = \mathbf{b}_j, j = 1, \dots, m, \\ \mathbf{T}_{i,j} \geq 0, i = 1, \dots, n, j = 1, \dots, m, \end{cases}$$
+
+where  $\mathcal{W}(\alpha, \beta)$  denotes the minimum transport cost, known as the standard Wasserstein discrepancy;  $\mathbf{D} \in \mathbb{R}_+^{n \times m}$  represents the pairwise distances calculated as  $\mathbf{D}_{i,j} = \|\alpha_i - \beta_j\|_2$ ;  $\mathbf{a} = [\mathbf{a}_1, \dots, \mathbf{a}_n]$  and  $\mathbf{b} = [\mathbf{b}_1, \dots, \mathbf{b}_m]$  are the masses of samples in  $\alpha$  and  $\beta$ , respectively.
+
+## 3 METHODOLOGY
+
+### 3.1 MOTIVATION
+
+Distribution alignment has proven effective for imputing missing data in non-temporal datasets (Muzellec et al., 2020; Zhao et al., 2023), offering advantages in sample efficiency and implementation simplicity. These methods operate by iteratively sampling subsets of the incomplete dataset and updating missing entries to minimize distributional discrepancies between these subsets. This ensures that the imputed values maintain statistical properties consistent with the entire dataset, grounded in the assumption that different subsets from the same dataset share the same distribution.
+
+However, applying distribution alignment to TSI poses significant challenges. Our experiments (see Section 4.2) indicate that existing alignment-based methods perform poorly on temporal data. In the field of domain adaptation (Courty et al., 2017; Liu et al., 2022b), it is well-recognized that the effectiveness of distribution alignment heavily depends on the choice of discrepancy measure, which must be tailored to the specific properties of the data and the task. Therefore, we aim to refine the discrepancy measure to accommodate the unique characteristics of time-series data, for enhancing TSI performance. Importantly, there are several questions that need to be answered. Do existing discrepancy measures accommodate the characteristics, such as the temporal patterns and non-stationarity, in time-series data? How to design a discrepancy measure for comparing distributions of time-series? Does designed discrepancy improve imputation performance?
+
+### 3.2 PAIRWISE SPECTRUM DISTANCE FOR TEMPORAL PATTERN ENCAPSULATION
+
+Time-series data are characterized by temporal patterns, which reflects correlations between different time steps and provide rich semantic information essential for comparing time-series. The canonical Wasserstein discrepancy ( $\mathcal{W}$ ) fails to capture these temporal patterns because the pairwise distance is computed on a step-wise basis, treating the observations at each step independently and disregarding temporal correlations. A simple modification might involve using a patch-wise distance: employing a sliding window to generate temporal patches of size  $T$  and subsequently computing distances between patches. However, this method still treats different steps within the patch individually, failing to measure dissimilarity between patches in a way that encapsulates their temporal patterns.
+
+To address this limitation, we propose the Pairwise Spectrum Distance (PSD), which uses the Discrete Fourier Transform (DFT) to convert time-domain data into the frequency domain. The DFT decomposes each temporal patch into its spectral components (Wu et al., 2025; Wang et al., 2025),
+
+![Figure 2: The impact of non-stationarity and the resilience of PSW to it. The figure is divided into three sub-panels: (a) Ideal case, (b) Exemplar case 1, and (c) Exemplar case 2. Each panel contains a 'Transport matrix' heatmap and a 'Transport results' line plot. In (a), the matrix is block-diagonal and the plot shows two distinct modes. In (b) and (c), the matrices are more complex and the plots show multiple overlapping modes, illustrating non-stationarity. The plots use different colors (blue, orange, green) to represent different modes or batches of samples.](e94f3bbb6f7501b9a1344dd0210e5dd8_img.jpg)
+
+Figure 2: The impact of non-stationarity and the resilience of PSW to it. The figure is divided into three sub-panels: (a) Ideal case, (b) Exemplar case 1, and (c) Exemplar case 2. Each panel contains a 'Transport matrix' heatmap and a 'Transport results' line plot. In (a), the matrix is block-diagonal and the plot shows two distinct modes. In (b) and (c), the matrices are more complex and the plots show multiple overlapping modes, illustrating non-stationarity. The plots use different colors (blue, orange, green) to represent different modes or batches of samples.
+
+Figure 2: The impact of non-stationarity and the resilience of PSW to it. The toy dataset includes two batches of samples, each distinguished by color. Two modes co-exist due to non-stationarity, differentiated by the vertical positioning of the samples.
+
+where each component corresponds to specific temporal patterns in the data. By comparing patches in the frequency domain, PSD effectively captures and compares the underlying temporal patterns. Building upon PSD, we propose the Spectrum-enhanced Wasserstein distance in Definition 3.1.
+
+**Definition 3.1** (Spectrum-enhanced Wasserstein Distance). The distance between two distributions  $\alpha, \beta \in \mathbb{R}^{B \times T \times D}$  of temporal patches is defined as  $\mathcal{W}^{(F)}(\alpha, \beta) = \min_{\mathbf{T} \in \Pi(\alpha, \beta)} (\mathbf{D}^{(F)}, \mathbf{T})$ , where  $\mathbf{T}$  is the patch size,  $\mathbf{D}^{(F)}$  is the pairwise distance matrix with elements computed using the Pairwise Spectrum Distance:  $\mathbf{D}_{i,j}^{(F)} = \|\mathcal{F}(\alpha_i) - \mathcal{F}(\beta_j)\|_1$ , and  $\mathcal{F}$  denotes the DFT operator.
+
+**Case Study.** Fig. 1 (a) compares  $\mathcal{W}$  and  $\mathcal{W}^{(F)}$ . Specifically,  $\mathcal{W}^{(F)}$  consistently decreases with increasing batch sizes and achieves comparable performance of  $\mathcal{W}$  with smaller batch sizes. For instance, the value of  $\mathcal{W}^{(F)}$  with a batch size of 128 approximates the value of  $\mathcal{W}$  with a batch size of 1024. This efficiency arises because spectrum captures the consistent patterns across patches, especially in periodic data where spectral amplitudes are stable despite significant changes in the time domain in Fig. 1 (b). These findings demonstrate the advantage of  $\mathcal{W}^{(F)}$  for time-series data, as it better captures temporal patterns.
+
+### 3.3 SELECTIVE MATCHING REGULARIZATION FOR NON-STATIONARITY ROBUSTNESS
+
+Time-series data often exhibit *non-stationarity*, characterized by time-varying patterns and sudden fluctuations. For instance, the Electricity dataset shows significant differences in consumption patterns between weekdays, weekends, and holidays; similarly, the Weather dataset displays distinct climatological patterns across different seasons. This non-stationarity produces multiple coexisting patterns or regimes within the data, complicating the accurate calculation of distributional discrepancies.
+
+The canonical Wasserstein discrepancy (Definition 2.1) struggles in the presence of non-stationarity. As illustrated in Fig. 2, it may incorrectly pair patches from different modes, leading to inaccurate distributional discrepancies and misleading imputation updates. This issue arises due to the matching constraints that require matching of all masses of all samples (Wang et al., 2023). Consequently, assuming that a patch from a new mode, denoted as  $\delta_z$ , is added to  $\alpha$ , the matching constraints force a match between  $\delta_z$  and patches in  $\beta$ , distorting the matching process and yielding an imprecise estimate of the discrepancy. This vulnerability is formalized in Lemma 3.2, which shows that the Wasserstein distance  $\mathcal{W}$  increases as the added mode deviates further from the typical elements of  $\beta$ .
+
+**Lemma 3.2.** Suppose that  $\tilde{\alpha} = \zeta \delta_z + (1 - \zeta)\alpha$  is a distribution perturbed by a Dirac mode at  $z$  with relative mass  $\zeta \in (0, 1)$ . For a sample  $y^*$  in the support of  $\beta$ , Fatras et al. (2021) demonstrate:
+
+$$\mathcal{W}(\tilde{\alpha}, \beta) \geq (1 - \zeta)\mathcal{W}(\alpha, \beta) + \zeta \left( D(z, y^*) - g(y^*) + \int g d\beta \right)$$
+
+where  $D(z, y^*)$  is the deviation of  $\delta_z$ ,  $g$  is the optimal dual potential of  $\mathcal{W}(\alpha, \beta)$ .
+
+To enhance robustness to non-stationarity, it is plausible to relax the marginal matching constraints, allowing for matching a flexible mass of each patch. Inspired by weak transport principles (Chizat
+
+![Figure 3: Workflow of PSW-I with p_miss = 0.3. The diagram illustrates the data flow from input X^t to output D. It shows two parallel paths: one for 'Sample' data and one for 'Gradient masking' data. The 'Sample' path involves imputation updates and proximal spectral transport. The 'Gradient masking' path involves matrix M and M^# processing. A legend indicates symbols for transported mass, forward pass, backward pass, and missing indices.](690fce4fb5c9cbb8beb560cb2a3fcbeb_img.jpg)
+
+The diagram illustrates the workflow of PSW-I. It starts with an input matrix  $X^t$  (4x4) being sampled into two matrices  $\alpha \in \mathbb{R}^{B \times T}$  and  $\beta \in \mathbb{R}^{B \times T}$ . These are processed through a 'Proximal Spectrum Transport' block, which uses a distance matrix  $\mathbf{D}^{(F)}$  and a matching strength  $\kappa$  to produce a transport plan  $\mathbf{T}$ . This plan is then used for 'Imputation update' and 'Gradient masking'. The 'Imputation update' block uses the transport plan to update missing values in  $X^t$ . The 'Gradient masking' block uses the transport plan to mask gradients for missing indices. The final output is a 'Differential' block. A legend indicates that solid circles represent 'Transported mass', solid arrows represent 'Forward pass', dashed arrows represent 'Backward pass', and blue shaded areas represent 'Missing indices'.
+
+Figure 3: Workflow of PSW-I with p\_miss = 0.3. The diagram illustrates the data flow from input X^t to output D. It shows two parallel paths: one for 'Sample' data and one for 'Gradient masking' data. The 'Sample' path involves imputation updates and proximal spectral transport. The 'Gradient masking' path involves matrix M and M^# processing. A legend indicates symbols for transported mass, forward pass, backward pass, and missing indices.
+
+Figure 3: The workflow of PSW-I with  $p_{\text{miss}} = 0.3$ . The batch size ( $B$ ) is set to 2 and the patch size ( $T$ ) is set to 4. The number of features ( $D$ ) is omitted for clarity.
+
+et al., 2018; Séjourné et al., 2019), we introduce the *Proximal Spectral Wasserstein (PSW)* discrepancy, which replaces the hard marginal constraints with Selective Matching Regularization (SMR). This approach removes the requirement to match all mass between distributions, thus accommodating the coexistence of multiple modes and enhancing robustness to non-stationarity.
+
+**Definition 3.3** (Proximal Spectral Wasserstein Discrepancy). *The PSW discrepancy seeks a transport plan  $\mathbf{T} \in \mathbb{R}_+^{n \times m}$  that transports the distribution  $\alpha$  to  $\beta$  at minimal cost, defined as:*
+
+$$\mathcal{P}^\kappa(\alpha, \beta) := \min_{\mathbf{T} \geq 0} \left\langle \mathbf{D}^{(F)}, \mathbf{T} \right\rangle + \kappa \left( D_{\text{KL}}(\mathbf{T} \mathbf{1}_n \| \Delta_n) + D_{\text{KL}}(\mathbf{T}^\top \mathbf{1}_m \| \Delta_m) \right) \quad (2)$$
+
+where  $\mathbf{D}^{(F)}$  is the pairwise distance matrix computed using PSD;  $\kappa$  is the matching strength;  $\Delta_n = \mathbf{1}_n/n$  and  $\Delta_m = \mathbf{1}_m/m$  are uniform simplex vectors;  $\mathcal{P}^\kappa$  denotes the PSW discrepancy.
+
+**Case Study.** To illustrate the limitations of the existing Wasserstein discrepancy and the robustness of PSW to non-stationarity, we conduct a case study shown in Fig. 2. Ideally, in the absence of non-stationarity, Wasserstein discrepancy based on OT accurately matches patches within the same mode and correctly estimate the distributional discrepancy. However, in the presence of non-stationarity, we investigate two exemplary cases:
+
+- **Example 1:** When the proportions of different modes vary across batches, standard OT incorrectly matches patches from different modes due to its force to match all mass. This leads to a biased Wasserstein discrepancy. In contrast,  $\mathcal{P}$  employs a selective matching strategy, focusing on typical patches and effectively avoiding false matches across modes given small matching strength  $\kappa \leq 10$ .
+- **Example 2:** When a newly emerging mode exists in a non-overlapping area between two modes, standard OT forces matching of the outlier mode with others, leading to inappropriate pairings and interfering with the matching of other patches. Conversely,  $\mathcal{P}$  resists the interference as  $\kappa$  decreases. When  $\kappa$  is reduced to 5, the outlier mode is effectively excluded from the matching process.
+
+Our approach differs from the entropic unbalanced optimal transport (Séjourné et al., 2019; Fratras et al., 2021), which also relaxes matching constraints through regularization, by omitting entropic regularization from formulation. This omission is crucial, as entropic regularization has been shown to hinder missing value imputation (Chen et al., 2024). Notably, without entropic regularization, the OT associated with PSW cannot be solved using the Sinkhorn algorithm. Instead, we employ the majorization-minimization algorithm (Chapel et al., 2021) to solve the OT problem. In Section 4.4, we present a rigorous comparative study that highlights the advantages of PSW over traditional entropic unbalanced optimal transport methods in the context of TSI.
+
+### 3.4 PSW-I: PSW FOR TIME-SERIES IMPUTATION
+
+While PSW effectively compares and balances distributions of temporal patches, it does not directly perform time-series imputation. To fill this gap, we propose the PSW for Imputation (PSW-I)
+
+framework, which iteratively minimizes the PSW discrepancy between batches of patches to refine the imputation of missing values. The core steps of PSW-I are outlined in Fig. 3 and explained below.
+
+**Initialization.** The incomplete dataset  $\mathbf{X}^{(\text{obs})}$  is initialized by filling each missing entry with the average of its nearest observed steps, producing an initial imputation matrix  $\mathbf{X}^{t=0}$ . The imputed values are treated as learnable parameters, and their gradients are tracked in subsequent steps.
+
+**Forward Pass.** Two batches of temporal patches, denoted as  $\alpha \in \mathbb{R}^{\mathbf{B} \times \mathbf{D} \times \mathbf{T}}$  and  $\beta \in \mathbb{R}^{\mathbf{B} \times \mathbf{D} \times \mathbf{T}}$ , are sampled from the current imputed dataset  $\mathbf{X}^t$  with batch size  $\mathbf{B}$ . The PSW discrepancy  $\mathcal{P}$  is then computed between these two batches according to Algorithm 1.
+
+**Backward Pass.** The gradients of the PSW discrepancy  $\mathcal{P}$  with respect to  $\alpha$  and  $\beta$  are calculated as follows using automatic differentiation:
+
+$$\frac{\partial \mathcal{P}}{\partial \alpha_i} := \sum_{j=1}^{\mathbf{m}} \mathbf{T}_{i,j} \mathbf{W}^{(\mathbf{F})} \cdot \text{sign}(\mathbf{e}_{i,j})^\top, \quad i = 1, 2, \dots, \mathbf{B},$$
+
+$$\frac{\partial \mathcal{P}}{\partial \beta_j} := - \sum_{i=1}^{\mathbf{n}} \mathbf{T}_{i,j} \mathbf{W}^{(\mathbf{F})} \cdot \text{sign}(\mathbf{e}_{i,j})^\top, \quad j = 1, 2, \dots, \mathbf{B},$$
+
+where  $\mathbf{W}^{(\mathbf{F})}$  denotes the DFT matrix<sup>1</sup>,  $\mathbf{e}_{i,j} = (\alpha_i - \beta_j) \mathbf{W}^{(\mathbf{F})} \in \mathbb{R}^{\mathbf{T}}$ . These gradients are used to update the imputed values in  $\alpha$  and  $\beta$  via gradient descent with an update rate  $\eta$ . Only the imputed values are updated during this process. PSW-I iteratively executes the forward and backward passes until hitting the early-stopping criteria on the validation dataset.
+
+**Theoretical Justification.** We demonstrate that the PSW discrepancy is a valid discrepancy measure and satisfies the properties of a metric under mild conditions (Theorem C.1). Furthermore, we prove that PSW is robust to non-stationarity in data (Theorem C.2). Due to the convexity of the PSW discrepancy with respect to inputs  $\alpha$  and  $\beta$ , the convergence of PSW-I is guaranteed with error bounds (Theorem C.3). Detailed proofs are provided in Appendix C.
+
+## 4 EMPIRICAL INVESTIGATION
+
+### 4.1 EXPERIMENTAL SETUP
+
+- **Datasets:** Experiments are performed on public time-series datasets (Wu et al., 2021; Liu et al., 2024), including ETT, Electricity, Traffic, Weather, PEMS03, Illness, and Exchange. To simulate point-wise missingness (Du et al., 2024), a binary mask matrix is generated by sampling a Bernoulli random variable with a predetermined mean for missing ratios. Additional missing mechanisms and their associated results are presented in Appendix D.
+- **Baselines:** PSW-I is compared against representative TSI methods: (1) the predictive TSI methods (DLinear (Zeng et al., 2023), FreTS (Yi et al., 2023), TimesNet (Wu et al., 2023), iTransformer (Liu et al., 2024), PatchTST (Nie et al., 2023), Transformer (Vaswani et al., 2017), SAITS (Du et al., 2023) and SCINet (Liu et al., 2022a)), (2) the generative TSI methods (CSDI (Tashiro et al., 2021)). Additionally, the performance of distribution alignment methods tailored for non-temporal data (TDM (Zhao et al., 2023) and Sinkhorn (Muzellec et al., 2020)) is evaluated for comparison.
+- **Implementation details:** To ensure consistency in experimental conditions, the batch size  $\mathbf{B}$  is fixed at 256. The Adam optimizer, known for its adaptive update rate and effective convergence, is employed for training, with an update rate  $\eta = 0.01$ . We exclude 5% of the indices from the training data to form the validation set. The key hyperparameters involved in PSW-I are tuned to minimize the MSE on the validation set. The patch size is tuned within {24, 36, 48}; the matching strength is tuned within {1, 10, 100, 1000}. The experiments are conducted on a platform with two Intel(R) Xeon(R) Platinum 8383C CPUs @ 2.70GHz and a NVIDIA GeForce RTX 4090 GPU. Performance is evaluated using modified mean absolute error (MAE) and mean squared error (MSE) following (Zhao et al., 2023; Jarrett et al., 2022), with a focus on imputation errors over missing entries. We set  $\mathbf{T}_{\max} = 200$  and  $\ell_{\max} = 1,000$  to ensure convergence, applying early stopping on the validation dataset with a patience of 10.
+
+<sup>1</sup>The definition of the DFT matrix is presented in Definition C.4, and the gradient derivation is detailed in Theorem C.5. Notably, our gradient formulation omits the gradients from the optimal transport plan  $\mathbf{T}$  with respect to  $\alpha$  and  $\beta$  to enhance the efficiency and stability of the calculation process.
+
+Table 1: Imputation performance in terms of MSE and MAE on 10 datasets.
+
+| Datasets<br>Metrics | ETTh1        |              | ETTh2        |              | ETTm1        |              | ETTm2        |              | Electricity  |              | Traffic      |              | Weather      |              | Illness      |              | Exchange     |              | PEMS03       |              |
+|---------------------|--------------|--------------|--------------|--------------|--------------|--------------|--------------|--------------|--------------|--------------|--------------|--------------|--------------|--------------|--------------|--------------|--------------|--------------|--------------|--------------|
+|                     | MSE          | MAE          | MSE          | MAE          | MSE          | MAE          | MSE          | MAE          | MSE          | MAE          | MSE          | MAE          | MSE          | MAE          | MSE          | MAE          | MSE          | MAE          | MSE          | MAE          |
+| Transformer         | 0.222        | 0.322        | 0.221        | 0.312        | 0.06         | 0.16         | 0.041        | 0.134        | 0.12         | 0.228        | 0.216        | 0.214        | 0.195        | 0.132        | 0.24         | 0.3          | 0.224        | 0.186        | 0.081        | 0.184        |
+| DLinear             | <u>0.144</u> | <u>0.267</u> | 0.108        | 0.231        | 0.103        | 0.221        | 0.084        | 0.201        | 0.137        | 0.271        | 0.251        | 0.272        | 0.274        | 0.185        | 0.21         | 0.273        | 0.261        | 0.216        | 0.112        | 0.261        |
+| TimesNet            | 0.253        | 0.353        | 0.133        | 0.263        | 0.061        | 0.173        | 0.068        | 0.186        | 0.129        | 0.254        | <u>0.201</u> | 0.243        | 0.28         | 0.189        | 0.231        | 0.277        | 0.319        | 0.264        | 0.076        | 0.19         |
+| FreTS               | 0.184        | 0.312        | 0.147        | 0.259        | 0.055        | 0.159        | 0.039        | 0.135        | 0.155        | 0.285        | 0.234        | 0.27         | 0.178        | 0.12         | 0.278        | 0.325        | 0.228        | 0.189        | 0.109        | 0.252        |
+| PatchTST            | 0.171        | 0.297        | 0.126        | 0.258        | <u>0.05</u>  | <u>0.149</u> | <u>0.03</u>  | <u>0.118</u> | 0.138        | 0.262        | 0.235        | 0.238        | 0.247        | 0.167        | 0.605        | 0.505        | 0.237        | 0.197        | 0.065        | 0.179        |
+| SCINet              | 0.149        | 0.275        | 0.128        | 0.248        | 0.067        | 0.176        | 0.064        | 0.179        | 0.125        | 0.239        | 0.29         | 0.314        | 0.198        | 0.136        | 0.617        | 0.473        | 0.298        | 0.247        | 0.106        | 0.249        |
+| iTransformer        | 0.163        | 0.281        | 0.101        | <u>0.211</u> | 0.056        | 0.156        | 0.034        | 0.125        | 0.128        | 0.251        | 0.252        | 0.269        | 0.188        | 0.127        | 0.316        | 0.31         | <u>0.068</u> | <u>0.056</u> | <u>0.08</u>  | 0.203        |
+| SAITS               | 0.216        | 0.305        | 0.183        | 0.256        | 0.056        | 0.154        | 0.042        | 0.129        | <u>0.114</u> | <u>0.216</u> | 0.224        | <u>0.207</u> | <u>0.132</u> | <u>0.089</u> | <u>0.167</u> | <u>0.216</u> | 1.005        | 0.833        | 0.083        | 0.189        |
+| CSDI                | 0.151        | 0.269        | <u>0.098</u> | <u>0.263</u> | 0.101        | 0.177        | <u>0.158</u> | <u>0.113</u> | 0.533        | 0.269        | 0.306        | 0.324        | 0.158        | 0.107        | 0.356        | 0.384        | 0.1          | 0.103        | 0.115        | <u>0.17</u>  |
+| Sinkhorn            | 0.877        | 0.65         | 0.807        | 0.603        | 0.934        | 0.698        | 0.893        | 0.67         | 0.986        | 0.821        | 1.012        | 0.729        | 0.793        | 0.672        | 0.549        | 0.382        | 0.723        | 0.599        | 0.968        | 0.855        |
+| TDM                 | 0.982        | 0.742        | 0.971        | 0.731        | 0.999        | 0.752        | 0.988        | 0.742        | 0.939        | 0.795        | 0.948        | 0.698        | 0.865        | 0.689        | 0.841        | 0.607        | 0.938        | 0.776        | 0.925        | 0.828        |
+| <b>PSW-I (Ours)</b> | <b>0.126</b> | <b>0.231</b> | <b>0.046</b> | <b>0.142</b> | <b>0.047</b> | <b>0.131</b> | <b>0.021</b> | <b>0.094</b> | <b>0.106</b> | <b>0.208</b> | <b>0.197</b> | <b>0.199</b> | <b>0.107</b> | <b>0.072</b> | <b>0.067</b> | <b>0.122</b> | <b>0.031</b> | <b>0.026</b> | <b>0.049</b> | <b>0.149</b> |
+
+Kindly Note: Each entry represents the average results at four missing ratios: 0.1, 0.3, 0.5, and 0.7. The best and second-best results are **bold** and underlined, respectively.
+
+Table 2: Ablation study results.
+
+| Model               | SMR | PSD | Electricity                         |                                     | ETTh1                               |                                     |
+|---------------------|-----|-----|-------------------------------------|-------------------------------------|-------------------------------------|-------------------------------------|
+|                     |     |     | MSE                                 | MAE                                 | MSE                                 | MAE                                 |
+| PSW-I <sup>†</sup>  | ✗   | ✗   | $0.116 \pm 0.004$                   | $0.227 \pm 0.008$                   | $0.096 \pm 0.002$                   | $0.204 \pm 0.006$                   |
+| PSW-I <sup>‡</sup>  | ✗   | ✓   | $0.080 \pm 0.003$                   | $0.196 \pm 0.004$                   | $0.085 \pm 0.001$                   | $0.208 \pm 0.004$                   |
+| PSW-I <sup>††</sup> | ✓   | ✗   | $0.115 \pm 0.003$                   | $0.218 \pm 0.005$                   | $0.091 \pm 0.003$                   | $0.194 \pm 0.006$                   |
+| PSW-I               | ✓   | ✓   | <b><math>0.075 \pm 0.003</math></b> | <b><math>0.180 \pm 0.004</math></b> | <b><math>0.077 \pm 0.002</math></b> | <b><math>0.188 \pm 0.004</math></b> |
+
+Kindly Note: The best results are **bold**. “\*” marks the results that significantly outperform PSW-I<sup>†</sup>, with  $p$ -value  $< 0.05$  over paired-sample t-test.
+
+### 4.2 OVERALL PERFORMANCE
+
+Table 1 compares the performance of PSW-I with baseline methods, averaged over four missing ratios: 0.1, 0.3, 0.5, and 0.7. Key observations from the results are as follows:
+
+- Effectiveness of Existing TSI Methods.** Existing TSI methods demonstrate promising performance. Notably, fundamental time-series models such as iTransformer and SCINet exhibit very competitive results, achieving the best performance among baselines in 4 out of 20 cases. These models effectively capture temporal patterns present in the data and leverage them for imputation tasks. Meanwhile, methods specifically crafted for TSI, such as SAITS and CSDI, also achieve comparable performance, each attaining the best performance among baselines in 4 out of 20 cases. Albeit with suboptimal structure for capturing temporal patterns, the specialized mechanisms for TSI, such as the conditional generation strategy in CSDI, effectively raise the performance comparable to advanced fundamental time-series models.
+- Limitations of Alignment-Based Methods in TSI.** Alignment-based methods, including Sinkhorn and TDM, demonstrate strong performance on non-temporal data (Zhao et al., 2023) but fall short in TSI tasks. Specifically, their performance in Table 1 is significantly inferior to that of prevailing TSI methods. This discrepancy can be attributed to their inability to capture temporal patterns inherent in time-series data and vulnerability to non-stationarity due to their inherent i.i.d. assumption (Muzellec et al., 2020), resulting in suboptimal imputation results.
+- Superiority of the Proposed PSW-I Method.** PSW-I retains the advantages of alignment-based methods: it does not require masking observed entries during training or training parametric models on incomplete data. This distinguishes it from prevailing TSI methods and positions it as a promising alternative. Moreover, PSW-I counteracts the limitation of alignment-based methods to capture temporal patterns and accommodate non-stationarity. Overall, PSW-I achieves the best performance across all 10 datasets, often surpassing the best baseline by significant margins (e.g., on PEMS03), showcasing its efficacy in real-world applications.
+
+![Figure 4: Varying patch length and matching strength results with missing ratios 0.1, 0.3, 0.5 and 0.7. The figure consists of four subplots: (a) Varying patch length results on Illness, (b) Varying patch length results on ETTh1, (c) Varying matching strength results on Illness, and (d) Varying matching strength results on ETTh1. Each subplot shows MAE and MSE on the y-axis against T (patch length) or K (matching strength) on the x-axis. Four data series are shown for missing ratios 0.1, 0.3, 0.5, and 0.7. In all cases, the proposed method (PSW-I) maintains lower MAE and MSE compared to the baseline (OT) as the patch length or matching strength increases.](3121afa7ca030b22ee0345864ca6f38b_img.jpg)
+
+Figure 4: Varying patch length and matching strength results with missing ratios 0.1, 0.3, 0.5 and 0.7. The figure consists of four subplots: (a) Varying patch length results on Illness, (b) Varying patch length results on ETTh1, (c) Varying matching strength results on Illness, and (d) Varying matching strength results on ETTh1. Each subplot shows MAE and MSE on the y-axis against T (patch length) or K (matching strength) on the x-axis. Four data series are shown for missing ratios 0.1, 0.3, 0.5, and 0.7. In all cases, the proposed method (PSW-I) maintains lower MAE and MSE compared to the baseline (OT) as the patch length or matching strength increases.
+
+Figure 4: Varying patch length and matching strength results with missing ratios 0.1, 0.3, 0.5 and 0.7.
+
+Table 3: Varying pairwise distance results.
+
+| Distances | Electricity  |       |              |       |              |       |
+|-----------|--------------|-------|--------------|-------|--------------|-------|
+|           | MSE          | ΔMSE  | MRE          | ΔMRE  | MAE          | ΔMAE  |
+| PSW-T     | 0.080        | -     | 0.233        | -     | 0.193        | -     |
+| PSW-A     | 0.079        | 1.3%↓ | 0.231        | 0.9%↓ | 0.191        | 1.0%↓ |
+| PSW-P     | 0.079        | 1.3%↓ | 0.229        | 1.7%↓ | 0.189        | 2.1%↓ |
+| PSW       | <b>0.075</b> | 6.7%↓ | <b>0.218</b> | 6.9%↓ | <b>0.180</b> | 7.2%↓ |
+| Distances | ETTh1        |       |              |       |              |       |
+|           | MAE          | ΔMAE  | MSE          | ΔMSE  | MRE          | ΔMRE  |
+| PSW-T     | 0.082        | -     | 0.268        | -     | 0.202        | -     |
+| PSW-A     | 0.081        | 1.2%↓ | 0.265        | 1.1%↓ | 0.200        | 1.0%↓ |
+| PSW-P     | 0.081        | 1.2%↓ | 0.263        | 1.9%↓ | 0.198        | 2.0%↓ |
+| PSW       | <b>0.077</b> | 6.5%↓ | <b>0.250</b> | 7.2%↓ | <b>0.188</b> | 7.4%↓ |
+
+Table 4: Varying discrepancy results.
+
+| Discrepancies | Electricity  |       |              |       |              |       |
+|---------------|--------------|-------|--------------|-------|--------------|-------|
+|               | MSE          | ΔMSE  | MRE          | ΔMRE  | MAE          | ΔMAE  |
+| OT            | 0.082        | -     | 0.239        | -     | 0.196        | -     |
+| EMD           | 0.080        | 2.5%↓ | 0.225        | 6.2%↓ | 0.184        | 6.5%↓ |
+| UOT           | 0.077        | 6.5%↓ | 0.226        | 5.8%↓ | 0.186        | 5.4%↓ |
+| Ours          | <b>0.075</b> | 9.3%↓ | <b>0.218</b> | 9.6%↓ | <b>0.180</b> | 8.9%↓ |
+| Discrepancies | ETTh1        |       |              |       |              |       |
+|               | MSE          | ΔMSE  | MRE          | ΔMRE  | MAE          | ΔMAE  |
+| OT            | 0.084        | -     | 0.273        | -     | 0.206        | -     |
+| EMD           | 0.079        | 6.3%↓ | 0.264        | 3.4%↓ | 0.202        | 2.0%↓ |
+| UOT           | 0.081        | 3.7%↓ | 0.263        | 3.8%↓ | 0.198        | 4.0%↓ |
+| Ours          | <b>0.077</b> | 9.1%↓ | <b>0.250</b> | 9.2%↓ | <b>0.188</b> | 9.6%↓ |
+
+### 4.3 ABLATIVE ANALYSIS
+
+Table 2 presents an ablation study dissecting the contributions of the Pairwise Spectrum Distance (PSD) and Selective Matching Regularization (SMR), the two key components of the proposed PSW-I framework. The baseline model without PSD and SMR computes the Sinkhorn discrepancy using the Euclidean distance between patches. While this naive model performs suboptimally, it still outperforms the standard Sinkhorn imputation method (as shown in Table 1) because the patch-wise distance somewhat captures more temporal patterns than the step-wise distance.
+
+Incorporating PSD and SMR significantly improves imputation performance by effectively encapsulating temporal patterns through spectral representation, and accommodating non-stationarity by matching a flexible set of samples. The PSW-I framework, which integrates both PSD and SMR, achieves the best performance, demonstrating the effectiveness of combining these two components.
+
+### 4.4 GENERALITY ANALYSIS
+
+In this section, we explore some alternative implementations to the key components of PSW-I to justify its rationale and advantages. Table 3 and 4 present the results, where  $\Delta$  denotes the relative performance reduction. The primary observations are summarized as follows.
+
+- Effects of the Discrepancy Measure.** Our approach accommodates the non-stationarity by replacing the matching constraints in OT with a soft regularizer (SMR), leading to significant performance improvements over standard OT in Table 3. Notably, the UOT method in domain adaptation (Fratras et al., 2021; Séjourné et al., 2019) also relaxes matching constraints and can be adapted to TSI, similarly enhancing imputation performance compared to standard OT. However, our method differs from the standard UOT formulation by omitting entropic regularization, which proves to be beneficial to missing value imputation (see the discussion by Chen et al. (2024)). The results comparing OT (with entropic regularization) versus EMD (without entropic regularization)
+
+![Figure 5: Varying batch size and update rate results with missing ratios 0.1, 0.3, 0.5 and 0.7. The figure consists of four subplots: (a) Varying batch size results on Illness, (b) Varying batch size results on ETTh1, (c) Varying update rate results on Illness, and (d) Varying update rate results on ETTh1. Each subplot shows MAE on the y-axis against B (batch size) or η (update rate) on the x-axis. Four data series are shown for missing ratios 0.1, 0.3, 0.5, and 0.7. In (a) and (b), MAE generally decreases as B increases from 8 to 256. In (c) and (d), MAE generally decreases as η increases from 0.0001 to 0.05, with a slight increase at η=0.05.](b93cbfb52e37619e688175a6aad9edd9_img.jpg)
+
+Figure 5: Varying batch size and update rate results with missing ratios 0.1, 0.3, 0.5 and 0.7. The figure consists of four subplots: (a) Varying batch size results on Illness, (b) Varying batch size results on ETTh1, (c) Varying update rate results on Illness, and (d) Varying update rate results on ETTh1. Each subplot shows MAE on the y-axis against B (batch size) or η (update rate) on the x-axis. Four data series are shown for missing ratios 0.1, 0.3, 0.5, and 0.7. In (a) and (b), MAE generally decreases as B increases from 8 to 256. In (c) and (d), MAE generally decreases as η increases from 0.0001 to 0.05, with a slight increase at η=0.05.
+
+Figure 5: Varying batch size and update rate results with missing ratios 0.1, 0.3, 0.5 and 0.7.
+
+are provided in Table 3. By avoiding entropic regularization, our method acquires rectified transport plans that are more effective for imputation tasks.
+
+- **Effects of the Distance Metric.** The proposed Pairwise Spectrum Distance (PSD) computes the patch-wise distance by measuring the difference of their spectrum. Compared to calculating the patch-wise distance in the time domain (PSW-T in Table 3), using distance metrics that consider amplitude characteristics (PSW-A) or phase characteristics (PSW-P) individually leads to performance improvements, as they capture distinct aspects of temporal patterns. Specifically, PSW-A focuses on the strength of frequency components, while PSW-P captures the timing information inherent in the phase. Combining both amplitude and phase characteristics in PSW provides a comprehensive encapsulation of temporal patterns and achieves the best performance.
+
+### 4.5 PARAMETER SENSITIVITY ANALYSIS
+
+In this section, we examine the impact of critical hyperparameters on the performance of PSW-I. The results are presented in Fig. 4 and 5. The primary observations are summarized as follows:
+
+- The patch length ( $T$ ) determines the scale of temporal patterns that PSD captures. When  $T$  is reduced to 1, the model effectively degrades to naive alignment-based models (Muzellec et al., 2020) that overlook temporal patterns. Increasing  $T$  to 24 leads to substantial performance improvements, underscoring the importance of temporal patterns for TSI. However, further increasing  $T$  beyond 24 deteriorates performance, which could be attributed to the curse of dimensionality in the Wasserstein discrepancy, reducing its discriminability in high-dimensional spaces (Chizat et al., 2020).
+- The matching strength ( $\kappa$ ) controls the flexibility of matching mass in SMR. As  $\kappa$  decreases, the robustness to non-stationarity property is enhanced. The consistent performance gains underscore the importance of accommodating non-stationarity for TSI and the efficacy of SMR.
+- The batch size ( $B$ ) determines the scale of the optimization problem when calculating PSW discrepancy. Overall, model performance is not highly sensitive to it in cases with low missing ratios. However, in cases with high missing ratios, a smaller batch size is beneficial, as it enables more fine-grained comparisons between distributions and can improve sample efficiency. Therefore, choosing a smaller batch size is advantageous for both accuracy and efficiency in such scenarios.
+- The learning rate ( $\eta$ ) controls the model convergence. As  $\eta$  increases, the imputation error initially decreases and then increases, indicating the presence of an optimal value. A learning rate of 0.01 yields the best overall results, effectively balancing convergence stability and speed.
+
+## 5 CONCLUSION
+
+This study introduces the PSW-I approach, offering a fresh perspective on OT for time-series imputation. The core innovation is the PSW discrepancy: an instrumental and versatile discrepancy
+
+measure for comparing distributions of time-series. Based on the proposed PSW discrepancy, we further derive a novel time-series imputation approach, termed PSW-I, which significantly enhances imputation performance on various real-world time-series datasets.
+
+**Limitations and Future Work.** This work employs the DFT to encapsulate temporal patterns, which primarily captures global frequency components and may not effectively represent local or transient patterns. Future work could explore advanced spectral methods, such as wavelet transforms, to enhance temporal resolution. Additionally, due to the curse of dimensionality, there is a bottleneck when increasing the patch size to improve performance. Enhancing the scalability of PSW-I to exceedingly long-term patterns remains a challenging yet promising direction for future research.
+
+## ACKNOWLEDGEMENT
+
+This work was supported by National Natural Science Foundation of China (623B2002), National Science and Technology Major Project of China (2022ZD0120005), ARC DE210101624 and ARC DP240102088. The first author extends a special gratitude to Prof. Degui Yang of Central South University, for his exceptional signal processing lectures and generous research guidance during S.T.E.M. studies.
+
+## REFERENCES
+
+- Jason M. Altschuler, Jonathan Weed, and Philippe Rigollet. Near-linear time approximation algorithms for optimal transport via sinkhorn iteration. In *Proc. Adv. Neural Inf. Process. Syst.*, pages 1964–1974, 2017.
+- Nicolas Bonneel, Michiel van de Panne, Sylvain Paris, and Wolfgang Heidrich. Displacement interpolation using lagrangian mass transport. *ACM Trans. Graph.*, 30(6):158, 2011.
+- Wei Cao, Dong Wang, Jian Li, Hao Zhou, Lei Li, and Yitan Li. Brits: Bidirectional recurrent imputation for time series. In *Proc. Adv. Neural Inf. Process. Syst.*, volume 31, 2018.
+- Laetitia Chapel, Rémi Flamary, Haoran Wu, Cédric Févotte, and Gilles Gasso. Unbalanced optimal transport through non-negative penalized linear regression. In *Proc. Adv. Neural Inf. Process. Syst.*, pages 23270–23282, 2021.
+- Zhengping Che, Sanjay Purushotham, Kyunghyun Cho, David Sontag, and Yan Liu. Recurrent neural networks for multivariate time series with missing values. *Scientific reports*, 8(1):6085, 2018.
+- Yu Chen, Wei Deng, Shikai Fang, Fengpei Li, Nicole Tianjiao Yang, Yikai Zhang, Kashif Rasul, Shandian Zhe, Anderson Schneider, and Yuriy Nevmyvaka. Provably convergent schrödinger bridge with applications to probabilistic time series imputation. In *Proc. Int. Conf. Mach. Learn.*, pages 4485–4513, 2023.
+- Zhichao Chen, Haoxuan Li, Fangyikang Wang, Haotian Zhang, Hu Xu, Xiaoyu Jiang, Zhihuan Song, and Hao Wang. Rethinking the diffusion models for missing data imputation: A gradient flow perspective. In *Proc. Adv. Neural Inf. Process. Syst.*, 2024.
+- Lenaïc Chizat, Gabriel Peyré, Bernhard Schmitzer, and François-Xavier Vialard. Scaling algorithms for unbalanced optimal transport problems. *Math. Comput.*, 87(314):2563–2609, 2018.
+- Lenaïc Chizat, Pierre Roussillon, Flavien Léger, François-Xavier Vialard, and Gabriel Peyré. Faster wasserstein distance estimation with the sinkhorn divergence. In *Proc. Adv. Neural Inf. Process. Syst.*, 2020.
+- Nicolas Courty, Rémi Flamary, Devis Tuia, and Alain Rakotomamonjy. Optimal transport for domain adaptation. *IEEE Trans. Pattern Anal. Mach. Intell.*, 39(9):1853–1865, 2017.
+- Yann Disser and Martin Skutella. The simplex algorithm is np-mighty. *ACM Trans. Algorithms*, 15(1):5:1–5:19, 2019.
+- Wenjie Du. Pypots: A python toolbox for data mining on partially-observed time series. *arXiv preprint arXiv:2305.18811*, 2023.
+- Wenjie Du, David Côté, and Yan Liu. Saits: Self-attention-based imputation for time series. *Expert Syst. Appl.*, 219:119619, 2023.
+- Wenjie Du, Jun Wang, Linglong Qian, Yiyuan Yang, Fanxing Liu, Zepu Wang, Zina Ibrahim, Haoxin Liu, Zhiyuan Zhao, Yingjie Zhou, et al. Tsi-bench: Benchmarking time series imputation. *arXiv preprint arXiv:2406.12747*, 2024.
+- Kilian Fatras, Thibault Séjourné, Rémi Flamary, and Nicolas Courty. Unbalanced minibatch optimal transport; applications to domain adaptation. In *Proc. Int. Conf. Mach. Learn.*, volume 139, pages 3186–3197, 2021.
+- Vincent Fortuin, Dmitry Baranchuk, Gunnar Rätsch, and Stephan Mandt. Gp-vae: Deep probabilistic time series imputation. In *Proc. Int. Conf. Artif. Intell. Statist.*, pages 1651–1661, 2020.
+- Hongfan Gao, Wangmeng Shen, Xiangfei Qiu, Ronghui Xu, Jilin Hu, and Bin Yang. Diffimp: Efficient diffusion model for probabilistic time series imputation with bidirectional mamba backbone. *arXiv preprint arXiv:2410.13338*, 2024.
+- Albert Gu, Karan Goel, and Christopher Re. Efficiently modeling long sequences with structured state spaces. In *Proc. Int. Conf. Learn. Represent.*, 2021.
+
+- Daniel Jarrett, Bogdan Cebere, Tennison Liu, Alicia Curth, and Mihaela van der Schaar. Hyperimpute: Generalized iterative imputation with automatic model selection. In *Proc. Int. Conf. Mach. Learn.*, volume 162, pages 9916–9937, 2022.
+- Leonid V Kantorovich. On the translocation of masses. *J. Math. Sci.*, 133(4):1381–1382, 2006.
+- Trent Kyono, Yao Zhang, Alexis Bellot, and Mihaela van der Schaar. MIRACLE: causally-aware imputation via learning missing data mechanisms. In *Proc. Adv. Neural Inf. Process. Syst.*, pages 23806–23817, 2021.
+- Haozhe Li, Yilin Liao, Zijian Tian, Zhaoran Liu, Jiaqi Liu, and Xingguo Liu. Bidirectional stackable recurrent generative adversarial imputation network for specific emitter missing data imputation. *IEEE Trans. Inf. Forensics Security*, 19:2967–2980, 2024.
+- Minhao Liu, Ailing Zeng, Muxi Chen, Zhijian Xu, Qiuxia Lai, Lingna Ma, and Qiang Xu. Scinet: time series modeling and forecasting with sample convolution and interaction. In *Proc. Adv. Neural Inf. Process. Syst.*, 2022a.
+- Weiming Liu, Xiaolin Zheng, Mengling Hu, and Chaochao Chen. Collaborative filtering with attribution alignment for review-based non-overlapped cross domain recommendation. In *Proc. Int. Conf. World Wide Web*, pages 1181–1190, 2022b.
+- Yong Liu, Tengge Hu, Haoran Zhang, Haixu Wu, Shiyu Wang, Lintao Ma, and Mingsheng Long. itransformer: Inverted transformers are effective for time series forecasting. In *Proc. Int. Conf. Learn. Represent.*, 2024.
+- Yonghong Luo, Xiangrui Cai, Ying Zhang, Jun Xu, et al. Multivariate time series imputation with generative adversarial networks. In *Proc. Adv. Neural Inf. Process. Syst.*, volume 31, 2018.
+- R Malarvizhi and Antony Selvadoss Thanamani. K-nearest neighbor in missing data imputation. *Int. J. Eng. Res. Dev.*, 5(1):5–7, 2012.
+- Simone Di Marino and Augusto Gerolin. An optimal transport approach for the schrödinger bridge problem and convergence of sinkhorn algorithm. *J. Sci. Comput.*, 85(2):27, 2020.
+- Pierre-Alexandre Mattei and Jes Frellsen. MIWAE: deep generative modelling and imputation of incomplete data sets. In *Proc. Int. Conf. Mach. Learn.*, volume 97, pages 4413–4423, 2019.
+- Rahul Mazumder, Trevor Hastie, and Robert Tibshirani. Spectral regularization algorithms for learning large incomplete matrices. *J. Mach. Learn. Res.*, 11:2287–2322, 2010.
+- Xiaoye Miao, Yangyang Wu, Jun Wang, Yunjun Gao, Xudong Mao, and Jianwei Yin. Generative semi-supervised learning for multivariate time series imputation. In *Proc. AAAI Conf. Artif. Intell.*, volume 35, pages 8983–8991, 2021.
+- Gaspard Monge. Mémoire sur la théorie des déblais et des remblais. *Mem. Math. Phys. Acad. Royale Sci.*, pages 666–704, 1781.
+- Boris Muzellec, Julie Josse, Claire Boyer, and Marco Cuturi. Missing data imputation using optimal transport. In *Proc. Int. Conf. Mach. Learn.*, volume 119, pages 7130–7140, 2020.
+- Yuqi Nie, Nam H Nguyen, Phanwadee Sinthong, and Jayant Kalagnanam. A time series is worth 64 words: Long-term forecasting with transformers. In *Proc. Int. Conf. Learn. Represent.*, 2023.
+- Yidong Ouyang, Liyan Xie, Chongxuan Li, and Guang Cheng. Missdiff: Training diffusion models on tabular data with missing values. *arXiv preprint arXiv:2307.00467*, 2023.
+- Gabriel Peyré and Marco Cuturi. Computational optimal transport. *Found. Trends Mach. Learn.*, 11(5-6):355–607, 2019.
+- Mattia C. F. Prosperi, Guo, Sperrin, S. Koopman, Jae S. Min, Xing He, Shannan N. Rich, Mo Wang, Iain E. Buchan, and Jiang Bian. Causal inference and counterfactual prediction in machine learning for actionable healthcare. *Nat. Mach. Intell.*, 2(7):369–375, 2020.
+
+[Appendix and supplementary materials beyond page 12 have been removed.]

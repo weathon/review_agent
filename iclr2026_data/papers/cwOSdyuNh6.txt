@@ -1,0 +1,310 @@
+# ENHANCED GENERATIVE MODEL EVALUATION WITH CLIPPED DENSITY AND COVERAGE
+
+**Nicolas Salvy**
+
+Inria, CentraleSupélec, Université Paris-Saclay  
+nicolas.salvy@inria.fr
+
+**Hugues Talbot**
+
+CentraleSupélec, Inria, Université Paris-Saclay  
+hugues.talbot@centralesupelec.fr
+
+**Bertrand Thirion**
+
+Inria, CEA, Université Paris-Saclay  
+bertrand.thirion@inria.fr
+
+## ABSTRACT
+
+Although generative models have made remarkable progress in recent years, their use in critical applications has been hindered by an inability to reliably evaluate the quality of their generated samples. Quality refers to at least two complementary concepts: fidelity and coverage. Current quality metrics often lack reliable, interpretable values due to an absence of calibration or insufficient robustness to outliers. To address these shortcomings, we introduce two novel metrics: *Clipped Density* and *Clipped Coverage*. By clipping individual sample contributions, as well as the radii of nearest neighbor balls for fidelity, our metrics prevent out-of-distribution samples from biasing the aggregated values. Through analytical and empirical calibration, these metrics demonstrate linear score degradation as the proportion of bad samples increases. Thus, they can be straightforwardly interpreted as equivalent proportions of good samples. Extensive experiments on synthetic and real-world datasets demonstrate that *Clipped Density* and *Clipped Coverage* outperform existing methods in terms of robustness, sensitivity, and interpretability when evaluating generative models.
+
+![Figure 1: A line graph showing the relative score of various coverage metrics as a function of the proportion of bad synthetic samples (from 0.0 to 1.0). The y-axis is 'Relative score' (0.0 to 1.0). The x-axis is 'Proportion of bad synthetic samples' (0.0 to 1.0). The metrics plotted are: Recall (blue circles), Coverage (orange squares), symRecall (green triangles), beta-Recall (purple diamonds), TopR (brown inverted triangles), P-recall (grey circles), RecallCover (yellow stars), ClippedCoverage (ours) (red crosses), and Ideal (dashed line). The 'Ideal' line is a straight line from (0,1) to (1,0). The 'ClippedCoverage (ours)' line follows the 'Ideal' line very closely, showing a linear degradation. Other metrics like Recall and Coverage remain high until the proportion of bad samples reaches 1.0, where they drop to 0.0. P-recall and TopR drop more quickly but are still above the Ideal line.](59c76d920f3faf3933d80a47647d42a9_img.jpg)
+
+Figure 1: A line graph showing the relative score of various coverage metrics as a function of the proportion of bad synthetic samples (from 0.0 to 1.0). The y-axis is 'Relative score' (0.0 to 1.0). The x-axis is 'Proportion of bad synthetic samples' (0.0 to 1.0). The metrics plotted are: Recall (blue circles), Coverage (orange squares), symRecall (green triangles), beta-Recall (purple diamonds), TopR (brown inverted triangles), P-recall (grey circles), RecallCover (yellow stars), ClippedCoverage (ours) (red crosses), and Ideal (dashed line). The 'Ideal' line is a straight line from (0,1) to (1,0). The 'ClippedCoverage (ours)' line follows the 'Ideal' line very closely, showing a linear degradation. Other metrics like Recall and Coverage remain high until the proportion of bad samples reaches 1.0, where they drop to 0.0. P-recall and TopR drop more quickly but are still above the Ideal line.
+
+Figure 1: **Measuring the coverage of a mixture of good and bad samples (CIFAR-10)**: Various coverage metrics are evaluated relative to their maximum value as the proportion of bad synthetic samples increases. Only *Clipped Coverage* displays the desired linear degradation.
+
+## 1 INTRODUCTION
+
+In recent years, remarkable progress has been achieved in generative models, which are being actively explored in various fields, such as healthcare (Pinaya et al., 2022; Fernandez et al., 2024; Tudosiu et al., 2024; Zhu et al., 2024; Bluethgen et al., 2024). However, deploying them in high-stakes applications depends on reliably evaluating the quality of synthetic data to ensure its trustworthiness.
+
+This evaluation is inherently challenging, especially for high-dimensional data. The true underlying distributions of this data are often unknown and complex. They also do not conform to known parametric families. These factors make computing the support or density infeasible in practice. Current model evaluation often relies on metrics such as Fréchet Inception Distance (FID) (Heusel et al., 2017) and FD-DINOv2 (Stein et al., 2023) for images. These metrics provide a single, compound score representing overall sample quality. Thus, it is impossible to determine whether poor performance stems from a lack of realism or variety (Sajjadi et al., 2018).
+
+To address this issue, the quality of synthetic data can be broken down into at least two core concepts, fidelity and coverage, and measured separately with a pair of metrics. Fidelity metrics assess how similar each synthetic sample is to the input data (Naeem et al., 2020). Conversely, coverage metrics measure the extent to which synthetic samples represent the distribution of real data, taking into consideration how the rarity or commonness of real data is reflected in the synthetic samples. However, a recent position paper by Räisä et al. (2025) argues that all existing fidelity and diversity metrics are flawed, highlighting an urgent need for new metrics that address these shortcomings.
+
+To determine whether generative models can be truly dependable, particularly in sensitive applications, the metrics used to evaluate them must be trustworthy. This means that they must be robust, sensitive to genuine deficiencies, and provide interpretable scores. A key challenge is robustness to outliers. Real-world datasets often contain out-of-distribution samples such as corruptions, anomalies, or simply samples very different from the rest (see Figure 7 for examples in CIFAR-10). Similarly, generative models can produce “bad” samples that are far from the real data distribution. These outliers can disproportionately influence evaluation scores, masking true performance issues.
+
+Beyond robustness, interpretability is crucial. Metrics should offer more than just relative comparisons (i.e., knowing that one model is better than another). As emphasized by Räisä et al. (2025), for a metric to be truly useful in practice, its absolute value must be meaningful, since even the best-performing model in a comparison might still be of poor quality. Critically, Räisä et al. (2025) notes that, currently, no fidelity or coverage metric offers this property. Ideally, for straightforward interpretability, a score of  $x$  would indicate performance equivalent to having a proportion of  $x$  good samples and  $(1 - x)$  bad ones. However, as shown in Figure 1, current coverage metrics fail to achieve this. We show in Figure 4 that current fidelity metrics are similarly untrustworthy.
+
+In this paper, we introduce *Clipped Density* and *Clipped Coverage*, two novel metrics designed to overcome these limitations. Our contributions are:
+
+- **Trustworthy Evaluation:** Our metrics achieve robustness to outliers by clipping individual sample contributions to the aggregate score and, for *Clipped Density*, by limiting the radii of nearest-neighbor spheres used to measure the density. This prevents out-of-distribution samples from skewing the evaluation while preserving sensitivity to genuine issues.
+- **Interpretable Absolute Scores:** Through empirical calibration for *Clipped Density* and theoretical analysis for *Clipped Coverage*, we ensure that scores degrade linearly with the proportion of bad samples, providing absolute interpretability.
+
+The paper is structured as follows: Section 2 provides background on existing metrics. Section 3 reviews related work. Section 4 introduces our *Clipped Density* and *Clipped Coverage* metrics. Section 5 details our experiments and results, and Section 6 discusses implications and limitations.
+
+## 2 BACKGROUND
+
+We consider a setting in which we are given  $N$  i.i.d. samples  $\{x_i^r\}_{i=1}^N$  from an unknown data (reference, or real) distribution  $p_r$  and  $M$  i.i.d. samples  $\{x_j^s\}_{j=1}^M$  generated from an unknown synthetic data distribution  $p_s$ . In this section, we review relevant metrics for evaluating generative models that aim to disentangle two aspects of synthetic data: fidelity (how realistic each synthetic sample is) and coverage (how well the synthetic samples populate the real density distribution). These metrics serve as the basis for our proposed improvements.
+
+Assuming given supports  $S^r$  for the real distribution and  $S^s$  for the synthetic distribution, *Precision* measures the proportion of synthetic samples that fall within  $S^r$ , while *Recall* measures the
+
+proportion of i.i.d. real samples that fall in  $S^*$  (Sajjadi et al., 2018; Simon et al., 2019).
+
+$$\text{Precision} = \mathbb{P}_{p_r}[S^r] = \mathbb{P}_{p_r}[S^r \cap S^s] \quad \text{Recall} = \mathbb{P}_{p_r}[S^s] = \mathbb{P}_{p_r}[S^r \cap S^s] \quad (1)$$
+
+However, the underlying densities  $d^r$  and  $d^s$  and their supports  $S^r$  and  $S^s$  are unknown, making such computation infeasible. In practice, *improved Precision* and *Recall* (Kynkäänniemi et al., 2019) approximate these supports by the union of balls centered at each observed sample, with a radius equal to the distance  $\text{NND}_k$  from its center to its  $k$ -th Nearest Neighbor (Burman & Nolan, 1992). We denote by  $\text{NND}_k^r$  and  $\text{NND}_k^s$  the distance to the  $k$ -th nearest real and synthetic sample, respectively.
+
+$$\text{iPrecision} = \mathbb{P}_{p_r}[\hat{S}^r \cap S^s] = \frac{1}{M} \sum_{j=1}^M \mathbf{1}_{x_j^s \in \cup_{i=1}^N B(x_i^r, \text{NND}_k^r(x_i^r))} \quad (2)$$
+
+$$\text{iRecall} = \mathbb{P}_{p_r}[S^r \cap \hat{S}^s] = \frac{1}{N} \sum_{i=1}^N \mathbf{1}_{x_i^r \in \cup_{j=1}^M B(x_j^s, \text{NND}_k^s(x_j^s))} \quad (3)$$
+
+Yet, *iPrecision* and *iRecall* are strongly biased by out-of-distribution samples. Real outliers, being far from their nearest neighbors, create large balls and bias the estimation of  $S^r$ . Similarly, bad synthetic samples compromise the approximation of the synthetic support (Naeem et al., 2020).
+
+*Density* and *Coverage* (Naeem et al., 2020) aim to alleviate this issue by going beyond a binary in/out decision. *Density* counts, for each synthetic sample, how many real  $k$ -NN balls it falls within, normalized by  $k$ . Thus, outliers with large balls contribute only  $\frac{1}{k}$  to the fidelity of a given synthetic sample, instead of 1 for *iPrecision* (Naeem et al., 2020). As approximating density is impractical in high-dimensional spaces, the *Density* metric instead uses distances through  $k$ -NN balls. It represents the average relative density  $d^s/d^r$ , providing a relative measure of how many synthetic points fall within real balls, normalized by their mass  $k$ . To avoid estimation bias when approximating the synthetic distribution, which may contain many bad samples, additional considerations are needed. *Coverage* flips the perspective (Naeem et al., 2020): instead of computing the proportion of real samples within at least one synthetic ball, *Coverage* calculates the proportion of real samples that are *covered*, by having at least one synthetic sample within their ball:  $\text{Coverage} = \mathbb{P}_{p_r}[\hat{S}^r \cap S^s]$ .
+
+$$\text{Density} = \frac{1}{kM} \sum_{j=1}^M \sum_{i=1}^N \mathbf{1}_{x_j^s \in B(x_i^r, \text{NND}_k^r(x_i^r))} \quad \text{Coverage} = \frac{1}{N} \sum_{i=1}^N \mathbf{1}_{\exists j, x_j^s \in B(x_i^r, \text{NND}_k^r(x_i^r))} \quad (4)$$
+
+Although *Density* is less affected by outliers in the target distribution, it remains influenced by them (Park & Kim, 2023). Additionally, *Density* is not bounded by 1 (Naeem et al., 2020), making interpretation challenging when empirical estimates exceed this value (Cheema & Urner, 2023; Kim et al., 2023). Similar to *iPrecision* and *iRecall*, *Coverage* is limited to analyzing supports and misses density mismatches: a few synthetic samples can cover high-density regions by lying within many real balls, and adding more synthetic samples there might not increase the score (Park & Kim, 2023).
+
+## 3 RELATED WORK
+
+Recent works have aimed to improve these metrics. *Precision Cover* and *Recall Cover*, analogous to *Precision* and *Recall*, were introduced by Cheema & Urner (2023). They count a ball as covered only if it contains at least  $k' > 1$  samples. A probabilistic approach was introduced by Park & Kim (2023): *P-precision* and *P-recall*. These measure the probability that a synthetic (resp., real) sample lies within a random sub-support of the real (resp., synthetic) distribution.
+
+To address the problem of large-radius balls, Khayatkhoei & AbdAlmageed (2023) have employed a dual-perspective approach with *symPrecision* and *symRecall*: *symRecall* is defined as the minimum of *Recall* and *Coverage*, while *symPrecision* is the minimum of *Precision* and the *complementary Precision* metric computed from the reversed perspective. Some alternative approaches do not rely on nearest-neighbor approximations.  $\alpha$ -*Precision* and  $\beta$ -*Recall* (Alaa et al., 2022) employ a one-class approach to estimate supports containing a fraction  $\alpha$  (resp.  $\beta$ ) of a dataset. They measure the proportion of the other dataset found within supports of varying levels. *Topological Precision* and *Recall* (Kim et al., 2023) estimate support via topologically conditioned density kernels.
+
+Recently, Räisä et al. (2025) developed a benchmark of sanity checks for generative model metrics using synthetic data, finding that all existing fidelity and coverage metrics are flawed. Our own tests
+
+based on real-world data (Figures 1, 4 and 5) confirm this conclusion. That work further emphasizes that no current metric is suitable for absolute evaluations, calling for more research in this area. Our work addresses these concerns directly by introducing new metrics that overcome these limitations. We show in Appendix H that our proposed metrics also perform well on their synthetic benchmark.
+
+In the following section, we introduce metrics designed to resolve these issues by being *i*) robust to outliers, and by *ii*) providing clearly interpretable values.
+
+## 4 METHOD
+
+Our proposed metrics are designed to satisfy several key properties. Firstly, they should be *robust to outliers* (Desideratum 1). Secondly, the metrics should exhibit *linear score degradation*: if a proportion  $x$  of samples are bad, the score should decrease by  $x$  (Desideratum 2a). The metrics should be *normalized* between 0 and 1 (Desideratum 2b), allowing their values to be interpreted on their own.
+
+These properties enable a straightforward interpretation: a score of  $x$  indicates that the synthetic dataset achieves the same fidelity or coverage as a dataset composed of a proportion  $x$  of real samples and  $(1 - x)$  bad samples. This does not imply that the synthetic dataset is a mixture of good and bad samples, but rather that its fidelity or coverage is equivalent to that of such a mixture. A score difference of  $y$  between two datasets corresponds to  $y$  more bad samples in the equivalent scoring scenario.
+
+### 4.1 CLIPPED DENSITY
+
+#### 4.1.1 A ROBUST FIDELITY METRIC
+
+To measure fidelity, the *Density* metric counts the number of real balls each synthetic sample falls within. This approach can exceed 1 and is vulnerable to outliers, as it relies on adaptive ball radii.
+
+Figure 2 illustrates a failure case of the *Density* metric on a synthetic dataset containing a single bad sample (bottom left), with  $k = 2$ . In this configuration, the two centered points each receive a fidelity score of  $\frac{3}{2}$ , while the bad sample obtains a fidelity of 0. So, the overall dataset fidelity is computed as  $\frac{1}{3} (2 \times \frac{3}{2} + 0) = 1$ : an ideal score. While this is an example in dimension 2, the problem worsens in higher dimensions as the number of balls a sample can belong to increases (Radovanovic et al., 2010), allowing one over-occurring sample to mask an increasing number of bad synthetic samples.
+
+To prevent over-occurring samples from masking defects, we modify the aggregation approach. The intuitive idea is to limit the contribution of each sample to the metric: the fidelity of any synthetic sample should not exceed 1. Applying this modification to Figure 2, the fidelity score becomes  $\frac{1}{3} (2 \times \min(\frac{3}{2}, 1) + 0) = \frac{2}{3}$ , which effectively detects the presence of the bad sample.
+
+On the other hand, real outliers can have extremely large distances to their nearest neighbors, resulting in balls with significantly larger radii. In dimension  $d$ , the volume of a ball of radius  $r$  is proportional to  $r^d$ . Not only do outliers create much larger balls, but any point in a low-density region does so as well, which dramatically skews the metrics. These balls have a fixed *mass*  $k$ , but their *volume* varies. Balls of large *volume* can contribute disproportionately more than the others. To ensure balanced contributions that limit outlier influence, we clip the radius of each ball to the median of the distances to the  $k$ -th nearest neighbor.
+
+$$R_k(x_i^r) = \min(\text{NND}_k^r(x_i^r), \text{median}(\{\text{NND}_k^r(x_l)\}_{l=1}^N)) \quad (5)$$
+
+This results in the following metric that satisfies Desideratum 1, robustness to outliers:
+
+$$\text{ClippedDensity}_{\text{unnorm}} = \frac{1}{M} \sum_{j=1}^M \min \left( \underbrace{\frac{1}{k} \sum_{l=1}^N \mathbf{1}_{x_j^s \in B(x_l^r, R_k(x_l^r))}}_{\# \{ \text{clipped real balls } x_j^s \text{ is within} \}}, 1 \right) \quad (6)$$
+
+![Figure 2: A diagram showing three overlapping green circles representing balls. Inside the circles are blue 'X' marks representing real data and red dots representing synthetic data. One red dot is outside all circles, labeled 'Bad sample'. Below the diagram, the text shows: Density = 1/3 * (2 * 3/2 + 0) = 1 and ClippedDensity = 1/3 * (2 * 1 + 0) = 2/3.](e0d425c8e4eef259e4c52d81426d93fa_img.jpg)
+
+Bad sample       $\text{Density} = \frac{1}{3} \left( 2 \times \frac{3}{2} + 0 \right) = 1$   
+ $\text{ClippedDensity} = \frac{1}{3} (2 \times 1 + 0) = \frac{2}{3}$
+
+Figure 2: A diagram showing three overlapping green circles representing balls. Inside the circles are blue 'X' marks representing real data and red dots representing synthetic data. One red dot is outside all circles, labeled 'Bad sample'. Below the diagram, the text shows: Density = 1/3 \* (2 \* 3/2 + 0) = 1 and ClippedDensity = 1/3 \* (2 \* 1 + 0) = 2/3.
+
+Figure 2: **Clipped Density corrects Density’s failure:** In a simple setup with a single bad synthetic sample, *Density* yields a value of 1. By clipping the fidelity of individual samples to 1, we obtain an adjusted score of  $\frac{2}{3}$ .
+
+![Figure 3: A line graph showing the relationship between the proportion of bad samples (x-axis, 0.0 to 1.0) and ClippedCoverage (y-axis, 0.0 to 1.0). Three lines are plotted: ClippedCoverage_unnorm (blue solid line), Theoretical (orange dashed line), and ClippedCoverage (green dashed line). The blue line starts at ~0.75 and decreases non-linearly. The orange and green lines start at 1.0 and decrease linearly to 0.0 at x=1.0.](6de7dcb072cef2388026fb0f504084b2_img.jpg)
+
+Figure 3: A line graph showing the relationship between the proportion of bad samples (x-axis, 0.0 to 1.0) and ClippedCoverage (y-axis, 0.0 to 1.0). Three lines are plotted: ClippedCoverage\_unnorm (blue solid line), Theoretical (orange dashed line), and ClippedCoverage (green dashed line). The blue line starts at ~0.75 and decreases non-linearly. The orange and green lines start at 1.0 and decrease linearly to 0.0 at x=1.0.
+
+Figure 3: **Correcting Clipped Coverage linear decay:** The *unnormalized Clipped Coverage* (blue) does not decrease linearly with the proportion of bad samples. We theoretically compute its expected behavior (orange) and correct it (green).
+
+#### 4.1.2 NORMALIZING FOR INTERPRETABILITY
+
+Since  $\text{ClippedDensity}_{\text{unnorm}}$  is an average over synthetic samples, a proportion  $x$  of bad samples directly reduces the score by  $x$ , satisfying Desideratum 2a. To achieve normalization between 0 and 1 (Desideratum 2b), we require an ideal value of 1. We achieve this ideal value empirically by evaluating the fidelity score of the real data using a leave-one-out strategy. For each sample  $x_i^r$ , we count the number of clipped real balls  $j$  (with  $j \neq i$ ) that contain it. This computation is efficient, as we have already obtained the indices of real samples inside each ball during the radius computation.
+
+We normalize  $\text{ClippedDensity}_{\text{unnorm}}$  by the value computed for real data,  $\text{ClippedDensity}_{\text{real}}$ , and clip the result to 1, since scores exceeding 1 would lack meaningful interpretation. The final normalized metric is:
+
+$$\text{ClippedDensity} = \min \left( \frac{\text{ClippedDensity}_{\text{unnorm}}}{\text{ClippedDensity}_{\text{real}}}, 1 \right) \quad (7)$$
+
+### 4.2 CLIPPED COVERAGE
+
+#### 4.2.1 A ROBUST COVERAGE METRIC
+
+To measure coverage, the *Coverage* metric considers the proportion of real samples whose balls contain at least one synthetic sample. To reflect the real data *distribution* and not just its support, we adopt an approach similar to *Clipped Density*. Instead of only checking for the presence of synthetic samples inside a real ball, we count how many there are. Then, to bound the contribution of each real sample, individual coverage scores are capped at 1. This results in the following formulation:
+
+$$\text{ClippedCoverage}_{\text{unnorm}} = \frac{1}{N} \sum_{i=1}^N \min \left( \frac{1}{k} \underbrace{\sum_{j=1}^M \mathbf{1}_{x_j^s \in B(x_i^r, \text{NND}_k(x_i^r))}}_{\# \{ \text{synthetic samples within } x_i^r \text{'s ball} \}}, 1 \right) \quad (8)$$
+
+For each real sample, we compare the *mass* of synthetic samples in its ball to the *mass* of real samples. To balance real points’ contributions, the *mass* of each ball is fixed: no radius clipping is applied.  $\text{ClippedCoverage}_{\text{unnorm}}$  satisfies Desideratum 1 of robustness to outliers.
+
+#### 4.2.2 CALIBRATING FOR INTERPRETABILITY
+
+The blue curve in Figure 3 shows  $\text{ClippedCoverage}_{\text{unnorm}}$  when the real and synthetic distributions are identical (far left) and as bad samples are progressively introduced into the synthetic distribution. To satisfy Desideratum 2, the score should follow  $1 - x$  for  $x$ , the proportion of bad samples. To correct the metric’s behavior, we start by deriving its expected value as a function of  $x$ .
+
+**Lemma 1.** *If the real and synthetic distributions are identical, i.e.,  $\{x_i^r\}_{i=1}^N$  and  $\{x_j^s\}_{j=1}^M$  are  $N+M$  i.i.d. samples from the same distribution, then the expected value of  $\text{ClippedCoverage}_{\text{unnorm}}$  is:*
+
+$$\mathbb{E}[\text{ClippedCoverage}_{\text{unnorm}}] = \sum_{j=1}^M \min\left(\frac{j}{k}, 1\right) \binom{M}{j} \frac{\beta(k+j, M-j+N-k)}{\beta(k, N-k)} \quad (9)$$
+
+where  $\beta$  is the beta function.
+
+The proof of Lemma 1 is provided in Appendix A. To parameterize the curve, we now consider the case with a proportion  $x$  of bad synthetic samples. Since such samples always lie outside any real ball, the expected score becomes equivalent to the ideal case in Lemma 1 but with  $M_x = \lfloor M(1-x) \rfloor$  synthetic samples instead of  $M$ . We denote this as  $f_{\text{expected}}(x)$ , shown in orange in Figure 3.
+
+To satisfy Desideratum 2, the expected value of the metric should be  $1-x$  when the proportion of bad samples is  $x$ . This calibration ensures both a linear degradation of the score (Desideratum 2a) and normalization to a consistent  $[0, 1]$  range regardless of the dataset or choice of  $k$  (Desideratum 2b). We seek a function  $g$  such that  $g \circ f_{\text{expected}}(x) = 1-x$ . Since  $M_x$  can only take integers values  $m$  between 0 and  $M$ , it suffices to find  $g$  for  $f_{\text{expected}}(M_x = m)$  where  $m \in \{0, \dots, M\}$ .
+
+We can efficiently compute  $f_{\text{expected}}(M_x = m)$  for all  $m$  (see Appendix B.1). Given these values, the function  $g$  is computed numerically. Since  $f_{\text{expected}}$  decreases with  $x$ , we reverse it to form a sorted list of  $f_{\text{expected}}$  values. For a given  $\text{ClippedCoverage}_{\text{unnorm}}$  score  $s$ , we find the index  $i(s) \in \{0, \dots, M\}$  such that inserting the value  $s$  at index  $i(s)$  keeps the list sorted. Then,  $g(s) = 1 - \frac{i(s)}{M}$ . The final normalized metric, which recovers the desired behavior shown in green in Figure 3, is:
+
+$$\text{ClippedCoverage} = g \circ \text{ClippedCoverage}_{\text{unnorm}} \quad (10)$$
+
+## 5 EXPERIMENTS
+
+### 5.1 EXPERIMENTAL SETUP
+
+We compared our metrics against multiple baselines, using the original code for  $\alpha$ -*Precision*,  $\beta$ -*Recall*, and *TopP&R*, and reimplementing *Precision*, *Recall*, *Density*, *Coverage*, *symPrecision*, *symRecall*, *P-precision*, *P-recall*, and *Precision Recall Cover* for performance reasons (see Appendix B.2 for comparisons). For consistency with previous works, we set  $k = 5$  where applicable;  $k' = 3$  and  $C = 3$ , as recommended for *Precision Recall Cover*, and used default parameters everywhere else.
+
+Experiments were conducted on a single NVIDIA H100 GPU with 80GB of RAM. When images are evaluated, metrics are computed on image data in the embedding space of the “Large” DINOv2 model (DINOv2-ViT-L/14 (Oquab et al., 2023)), as recommended by Stein et al. (2023).
+
+### 5.2 METRIC EVALUATION TESTS
+
+To ensure proper behavior, we evaluated metrics in various scenarios by controlling dataset composition and hence the expected scores. Most tests were performed on CIFAR-10 (Krizhevsky et al., 2009), with 2500 samples from each of the 10 classes for the real set and the other 2500 for the synthetic set. We report mean  $\pm$  std over 10 splits. Results are summarized in Figures 4e and 5c.
+
+**CIFAR-10 Simultaneous mode dropping:** To verify that fidelity metrics do not capture coverage, we performed a simultaneous mode dropping test on CIFAR-10 (Figure 4b, from Naeem et al. (2020)). In this test, the synthetic set progressively replaced samples from all but one class with samples from the remaining class, while the real set remained unchanged. To maintain a constant number of samples per set, only 2500 samples were used in this test, with results reported as mean  $\pm$  std over 100 splits. Since the synthetic set is always a subset of CIFAR-10, fidelity scores should remain stable and close to their maximum. However, *Precision Cover* (yellow) and *symPrecision* (green) appear to capture coverage, as they deviate from their maximum value.
+
+**CIFAR-10 matched real and synthetic out-of-distribution sample proportion:** To evaluate robustness to out-of-distribution samples, we conducted a test on CIFAR-10 (Figures 4c and 5a, inspired by Figure 5 of Naeem et al. (2020)), where we progressively replaced both real and synthetic
+
+![Figure 4: Testing fidelity metrics. Four line plots (a-d) showing relative scores for various metrics across different scenarios. (a) Fidelity reduction with bad samples (CIFAR-10): Relative score vs. Proportion of bad synthetic samples. (b) Simultaneously dropping modes (CIFAR-10): Relative score vs. Proportion of data kept per mode. (c) Introducing bad real & syn. samples (CIFAR-10): Relative score vs. Proportion of bad samples. (d) Translating syn. Gaussian with 2 bad samples: Relative score vs. mu. (e) Legend and summary table.](73c3e4508cae529acf4e6c7fa70b361a_img.jpg)
+
+(a) Fidelity reduction with bad samples (CIFAR-10)
+
+(b) Simultaneously dropping modes (CIFAR-10)
+
+(c) Introducing bad real & syn. samples (CIFAR-10)
+
+(d) Translating syn. Gaussian with 2 bad samples
+
+(e) Legend and summary
+
+| Legend                | Figure 4a | Figure 4b | Figure 4c | Figure 4d |
+|-----------------------|-----------|-----------|-----------|-----------|
+| Precision             | ✓         | ✓         | ✓         | ✗         |
+| Density               | ✓         | ✓         | ✓         | ✗         |
+| symPrecision          | ✓         | ✗         | ✓         | ✗         |
+| $\alpha$ -Precision   | ✓         | ✓         | ✗         | ✗         |
+| TopP                  | ✗         | ✓         | ✗         | ✓         |
+| P-precision           | ✓         | ✓         | ✗         | ✓         |
+| PrecisionCover        | ✓         | ✗         | ✓         | ✓         |
+| ClippedDensity (ours) | ✓         | ✓         | ✓         | ✓         |
+| --- Ideal             |           |           |           |           |
+
+Figure 4: Testing fidelity metrics. Four line plots (a-d) showing relative scores for various metrics across different scenarios. (a) Fidelity reduction with bad samples (CIFAR-10): Relative score vs. Proportion of bad synthetic samples. (b) Simultaneously dropping modes (CIFAR-10): Relative score vs. Proportion of data kept per mode. (c) Introducing bad real & syn. samples (CIFAR-10): Relative score vs. Proportion of bad samples. (d) Translating syn. Gaussian with 2 bad samples: Relative score vs. mu. (e) Legend and summary table.
+
+Figure 4: **Testing fidelity metrics** (legend/summary in (e)). Scenarios: (a) increasing bad synthetic sample proportion; (b) simultaneous mode dropping: progressively replacing all but one class with the last class; (c) matched real & synthetic out-of-distribution samples at equal rates; (d) synthetic distribution translation with one real outlier and one bad synthetic sample. Only *Clipped Density* consistently behaves as expected: linearity (a), stability (b, c), and symmetry with sensitivity (d).
+
+CIFAR-10 samples with out-of-distribution samples (noise images) at the same rate. Since the synthetic set is constructed identically to the real set in all cases, scores should remain stable and close to their maximum value. However,  $\alpha$ -Precision (purple), TopP (brown), and P-precision (gray) show instability and deviate from the expected value.
+
+**Synthetic data translation:** Since real-world datasets like CIFAR-10 contain outliers, we use a test based on synthetic data (Figures 4d and 5b, adapted from Naeem et al. (2020)) to evaluate robustness to the first out-of-distribution sample. We use 25000 standard Gaussian samples (dim 32, 5 splits). The synthetic set is translated by  $\mu \in [-1, 1]$  in all dimensions and includes a bad sample at  $-3$ . The real set includes an outlier at  $3$ . Ideally, scores should form symmetric bell-shaped curves, dropping rapidly as  $\mu$  moves away from  $0$  to detect distribution shifts. For fidelity (Figure 4d), Precision (blue) and Density (orange) are non-symmetric due to the real outlier’s large ball, which in turn affects symPrecision (green).  $\alpha$ -Precision (purple) and P-precision (gray) show low sensitivity (flat
+
+![Figure 5: Testing coverage metrics. (a) Line plot showing Relative score vs. Proportion of bad samples (0.00 to 0.03). Most metrics stay near 1.0, while P-recall (grey) decreases. (b) Line plot showing Relative score vs. mu (-1.0 to 1.0). Most metrics are symmetric around mu=0, while Recall (blue) is skewed. (c) Legend and summary table.](3121afa7ca030b22ee0345864ca6f38b_img.jpg)
+
+(a) Introducing bad real & syn. samples (CIFAR-10)
+
+(b) Translating syn. Gaussian with 2 bad samples
+
+(c) Legend and summary
+
+| Legend                 | Figure 1 | Figure 5a | Figure 5b |
+|------------------------|----------|-----------|-----------|
+| Recall                 | X        | ✓         | X         |
+| Coverage               | X        | ✓         | ✓         |
+| symRecall              | X        | ✓         | X         |
+| $\beta$ -Recall        | X        | ✓         | X         |
+| TopR                   | X        | X         | ✓         |
+| P-recall               | X        | X         | X         |
+| RecallCover            | X        | ✓         | ✓         |
+| ClippedCoverage (ours) | ✓        | ✓         | ✓         |
+| Ideal                  |          |           |           |
+
+Figure 5: Testing coverage metrics. (a) Line plot showing Relative score vs. Proportion of bad samples (0.00 to 0.03). Most metrics stay near 1.0, while P-recall (grey) decreases. (b) Line plot showing Relative score vs. mu (-1.0 to 1.0). Most metrics are symmetric around mu=0, while Recall (blue) is skewed. (c) Legend and summary table.
+
+Figure 5: **Testing coverage metrics** (legend/result summary in (c)). Metrics are evaluated under different scenarios: (a) matched real & synthetic out-of-distribution samples; (b) distribution translation with a real outlier at 3 and a bad synthetic sample at -3. *Clipped Coverage* exhibits all desired properties: linearity (Figure 1), stability (a), symmetry and sensitivity (b), unlike other metrics.
+
+curves around 0). For coverage (Figure 5b), *Recall* (blue) is non-symmetric due to the bad synthetic sample, which also affects *symRecall* (green). This happens because the bad sample’s ball grows as the rest of the synthetic data moves away, covering the real set when  $\mu$  is near 1.  *$\beta$ -recall* (purple) and *TopR* (brown) are also non-symmetric, indicating instability or insufficient robustness.
+
+**CIFAR-10 Progressive bad sample introduction:** To test sensitivity and interpretability, we progressively introduced bad samples (noise images) into a synthetic set of CIFAR-10 images (Figures 1 and 4a). Scores should decrease linearly with the proportion of bad samples (see Section 4). For coverage metrics, only *Clipped Coverage* (red) exhibited this linear degradation. Most fidelity metrics, being averages of individual sample fidelities, decreased linearly. However, *TopP* (brown) deviated significantly, while *Precision Cover* (yellow) and  *$\alpha$ -Precision* (purple) showed slight deviations.
+
+**Summary:** Across all results (see also Figures 4e and 5c), only *Clipped Density* and *Clipped Coverage* show the desired behavior in all tests. Other fidelity metrics either inappropriately capture coverage (e.g., *symPrecision*, *Precision Cover*), lack sensitivity (e.g.,  *$\alpha$ -Precision*, *P-precision*), or lack robustness to outliers (e.g., *Precision*, *Density*, *TopP*). For coverage metrics, only *Clipped Coverage* shows a linear decrease in score with increasing bad sample fraction, while some metrics are also insufficiently robust to outliers (e.g., *Recall*, *symRecall*,  *$\beta$ -Recall*, *TopR*, *P-recall*).
+
+### 5.3 EVALUATION ON REAL DATASETS
+
+We evaluated various generative models on CIFAR-10 (Krizhevsky et al., 2009), ImageNet (Deng et al., 2009), LSUN Bedroom (Yu et al., 2015), and FFHQ (Kazemi & Sullivan, 2014), using categories and 50000 samples from the data publicly shared by Stein et al. (2023) (see Figure 6 and Appendix I). When possible, for conditional models, we kept an equal number of samples from each class (see Appendix C or Appendix A of Stein et al. (2023) for more details). A comparison with
+
+![Figure 6: Fidelity vs Coverage on various datasets. The figure consists of eight scatter plots arranged in a 2x4 grid. The top row shows 'ClippedCoverage (ours)' on the y-axis (0.0 to 1.0) against 'ClippedDensity (ours)' on the x-axis (0.0 to 1.0) for datasets CIFAR-10, ImageNet, LSUN Bedroom, and FFHQ. The bottom row shows 'Coverage' on the y-axis (0.0 to 1.0) against 'Density' on the x-axis for the same datasets. A legend at the top identifies seven baseline models: Consistency (red circle), Diffusion (green diamond), GAN (blue triangle), Normalizing Flow (purple square), Transformer (orange circle), and VAE (red circle). A detailed legend at the bottom lists 28 specific models and their corresponding markers and colors, including LSMG-ODE, PFMM, iDDPM-DDIM, ACGAN-Mod, BigGAN-Deep, LOGAN, MHGAN, ReACGAN, StyleGAN-XL, StyleGAN2-ada, WGAN-GP, RESFLOW, NVAE, ADM, ADMG, ADMG-ADMU, DiT-XL-2, DiT-XL-2-guided, LDM, BigGAN, GigaGAN, StyleGAN-XL, Mask-GIT, RQ-Transformer, Consistency-set1, Consistency-set2, ADM-dropout, DDPM, iDDPM, Diff-ProjGAN, Projected-GAN, StyleGAN, Unleash-Trans, LDM, InsGen, Projected-GAN, StyleGAN-XL, StyleGAN2-ada, StyleNAT, StyleSwin, Unleash-Trans, and Efficient-vdVAE.](b93cbfb52e37619e688175a6aad9edd9_img.jpg)
+
+Figure 6: Fidelity vs Coverage on various datasets. The figure consists of eight scatter plots arranged in a 2x4 grid. The top row shows 'ClippedCoverage (ours)' on the y-axis (0.0 to 1.0) against 'ClippedDensity (ours)' on the x-axis (0.0 to 1.0) for datasets CIFAR-10, ImageNet, LSUN Bedroom, and FFHQ. The bottom row shows 'Coverage' on the y-axis (0.0 to 1.0) against 'Density' on the x-axis for the same datasets. A legend at the top identifies seven baseline models: Consistency (red circle), Diffusion (green diamond), GAN (blue triangle), Normalizing Flow (purple square), Transformer (orange circle), and VAE (red circle). A detailed legend at the bottom lists 28 specific models and their corresponding markers and colors, including LSMG-ODE, PFMM, iDDPM-DDIM, ACGAN-Mod, BigGAN-Deep, LOGAN, MHGAN, ReACGAN, StyleGAN-XL, StyleGAN2-ada, WGAN-GP, RESFLOW, NVAE, ADM, ADMG, ADMG-ADMU, DiT-XL-2, DiT-XL-2-guided, LDM, BigGAN, GigaGAN, StyleGAN-XL, Mask-GIT, RQ-Transformer, Consistency-set1, Consistency-set2, ADM-dropout, DDPM, iDDPM, Diff-ProjGAN, Projected-GAN, StyleGAN, Unleash-Trans, LDM, InsGen, Projected-GAN, StyleGAN-XL, StyleGAN2-ada, StyleNAT, StyleSwin, Unleash-Trans, and Efficient-vdVAE.
+
+Figure 6: Fidelity vs Coverage on various datasets
+
+human evaluations in Appendix G confirms that *Clipped Density* and *Clipped Coverage* align well with human judgment.
+
+As shown in Figure 6, on CIFAR-10 and ImageNet, the *Density* values exceed 1, while the *Clipped Density* values remain stable. In Appendix D, we analyze RESFLOW-generated CIFAR-10 data, demonstrating that its inflated *Density* score of 2.47 is driven by real out-of-distribution samples. Additionally, Appendix E provides a step-by-step evaluation of *Clipped Density* on the generated datasets, quantifying the impact of each modification to the original *Density* metric.
+
+Across all datasets, our results consistently show diffusion models outperforming GANs. The range of values observed for our metrics appears to reflect the training dataset size: CIFAR-10 (50k samples, max score  $\approx 0.4$ ), FFHQ (70k, max  $\approx 0.4$ ), LSUN Bedroom (1.5M, max  $\approx 0.7$ ), and ImageNet (14M, max 1.0). Interpreting the absolute scores, a value of 0.4 for CIFAR-10 and FFHQ suggests that, on these datasets, top generative models achieve results equivalent to only 40% of good samples and 60% bad samples. This highlights substantial room for improvement, an insight only possible because the absolute values of *Clipped Density* and *Clipped Coverage* are interpretable.
+
+This absolute interpretability also allows us to assess models without requiring a reference model for comparison, as demonstrated on Chest X-Rays in Appendix F.
+
+Furthermore, using GAN-generated data with varying truncation parameters, we show in Appendix J that *Clipped Density* and *Clipped Coverage* effectively capture the expected trade-off between fidelity and coverage. We found *Clipped Density* and *Clipped Coverage* to be robust to the choice
+
+of  $k$  (Appendix L) and empirically studied their stability as a function of the sample size, showing a standard deviation proportional to  $1/\sqrt{N}$  (Appendix M). Additionally, we tested the metrics in diverse contexts, including imputed distortions (Appendix N), failure scenarios such as missing rare modes (Appendix O), and other modalities like music data (Appendix P). Finally, samples from the datasets can be visually inspected in Appendix S.
+
+## 6 DISCUSSION AND CONCLUSION
+
+*Clipped Density* and *Clipped Coverage* offer significant improvements in robustness, sensitivity, and interpretability. These improvements result from several key design choices. To enhance robustness, we cap individual sample contributions at 1. For *Clipped Density*, we further mitigate outlier impact by clipping the *volumes* of real nearest-neighbor balls to prevent them from dominating the score. In contrast, for *Clipped Coverage*, we maintain balls of constant *mass* to ensure balanced contributions. Capping the contribution prevents high-performing samples from disproportionately hiding low-performing ones. This careful handling of sample contributions and ball properties enhances robustness while preserving sensitivity.
+
+For interpretability, both metrics are calibrated to degrade linearly as the proportion of bad samples increases. *Clipped Density* achieves this through normalization by the real data’s score. For *Clipped Coverage*, whose uncalibrated behavior is non-linear (as shown in Figure 3), we theoretically derived its expected behavior and applied a correction to ensure linearity. This combination of robust aggregation and principled calibration allows *Clipped Density* and *Clipped Coverage* to provide not only trustworthy relative comparisons between models but also meaningful absolute scores. This is crucial in practice for assessing whether a model meets a required quality threshold.
+
+Despite these improvements, limitations remain. *Clipped Density* and *Clipped Coverage* build on an accepted benchmark of progressively passed tests, but it is not exhaustive, and there might be missing cases. Furthermore, we did not provide a theoretical analysis of the metrics in the infinite sample limit. Additionally, while we evaluate fidelity and coverage, other aspects matter, such as *memorization*: are generated samples reproductions of training data? Memorization metrics include GAN-test (Shmelkov et al., 2018), identifiability (Yoon et al., 2020), authenticity (Alaa et al., 2022), and the calibrated  $l_2$  distance (Carlini et al., 2023). We used DINOv2 as recommended (Stein et al., 2023), but comparing embedding models for generative model evaluation remains an open question.
+
+In conclusion, *Clipped Density* and *Clipped Coverage* provide a trustworthy framework for generative model evaluation, offering robust, sensitive, and interpretable assessments.
+
+Code to reproduce the experiments and use *Clipped Density* and *Clipped Coverage* is available at <https://github.com/nicolassalvy/ClippedDensityCoverage>.
+
+## ACKNOWLEDGMENTS
+
+This work benefited from state aid managed by the Agence Nationale de la Recherche under the France 2030 programme, reference ANR-22-PESN-0012 and from the European Union’s Horizon 2020 Research Infrastructures Grant EBRAIN-Health 101058516. This work was performed using HPC resources from GENCI-IDRIS (Grant 2024-AD011014887R1).
+
+## REFERENCES
+
+- Ahmed Alaa, Boris Van Breugel, Evgeny S Saveliev, and Mihaela van der Schaar. How faithful is your synthetic data? sample-level metrics for evaluating and auditing generative models. In *International Conference on Machine Learning*, pp. 290–306. PMLR, 2022.
+- Christian Bluethgen, Pierre Chambon, Jean-Benoit Delbrouck, Rogier van der Sluijs, Małgorzata Polacin, Juan Manuel Zambrano Chaves, Tanishq Mathew Abraham, Shivanshu Purohit, Curtis P Langlotz, and Akshay S Chaudhari. A vision–language foundation model for the generation of realistic chest x-ray images. *Nature Biomedical Engineering*, pp. 1–13, 2024.
+- Sam Bond-Taylor, Peter Hesse, Hiroshi Sasaki, Toby P Breckon, and Chris G Willecocks. Unleashing transformers: Parallel token prediction with discrete absorbing diffusion for fast high-resolution image generation from vector-quantized codes. In *European Conference on Computer Vision*, pp. 170–188. Springer, 2022.
+- Andrew Brock, Jeff Donahue, and Karen Simonyan. Large scale gan training for high fidelity natural image synthesis. In *7th International Conference on Learning Representations, ICLR 2019, New Orleans, LA, USA, May 6-9, 2019*, 2019.
+- P Burman and D Nolan. Location-adaptive density estimation and nearest-neighbor distance. *Journal of Multivariate Analysis*, 40(1):132–157, 1992.
+- Nicolas Carlini, Jamie Hayes, Milad Nasr, Matthew Jagielski, Vikash Sehwag, Florian Tramer, Borja Balle, Daphne Ippolito, and Eric Wallace. Extracting training data from diffusion models. In *32nd USENIX Security Symposium (USENIX Security 23)*, pp. 5253–5270, 2023.
+- Huiwen Chang, Han Zhang, Lu Jiang, Ce Liu, and William T Freeman. Maskgit: Masked generative image transformer. In *Proceedings of the IEEE/CVF conference on computer vision and pattern recognition*, pp. 11315–11325, 2022.
+- Fasil Cheema and Ruth Urner. Precision recall cover: A method for assessing generative models. In *International Conference on Artificial Intelligence and Statistics*, pp. 6571–6594. PMLR, 2023.
+- Ricky TQ Chen, Jens Behrmann, David K Duvenaud, and Jörn-Henrik Jacobsen. Residual flows for invertible generative modeling. *Advances in Neural Information Processing Systems*, 32, 2019.
+- Michaël Defferrard, Kirell Benzi, Pierre Vandergheynst, and Xavier Bresson. FMA: A dataset for music analysis. In Sally Jo Cunningham, Zhiyao Duan, Xiao Hu, and Douglas Turnbull (eds.), *Proceedings of the 18th International Society for Music Information Retrieval Conference, ISMIR 2017, Suzhou, China, October 23-27, 2017*, pp. 316–323, 2017.
+- Jia Deng, Wei Dong, Richard Socher, Li-Jia Li, Kai Li, and Li Fei-Fei. Imagenet: A large-scale hierarchical image database. In *2009 IEEE conference on computer vision and pattern recognition*, pp. 248–255. Ieee, 2009.
+- Prafulla Dhariwal and Alexander Nichol. Diffusion models beat gans on image synthesis. *Advances in neural information processing systems*, 34:8780–8794, 2021.
+- Benjamin Elizalde, Soham Deshmukh, Mahmoud Al Ismail, and Huaming Wang. CLAP learning audio concepts from natural language supervision. In *IEEE International Conference on Acoustics, Speech and Signal Processing ICASSP 2023, Rhodes Island, Greece, June 4-10, 2023*, pp. 1–5. IEEE, 2023.
+- Paul Embrechts and Marius Hofert. A note on generalized inverses. *Mathematical Methods of Operations Research*, 77:423–432, 2013.
+- Virginia Fernandez, Walter Hugo Lopez Pinaya, Pedro Borges, Mark S Graham, Petru-Daniel Tudosiu, Tom Vercauteren, and M Jorge Cardoso. Generating multi-pathological and multi-modal images and labels for brain mri. *Medical Image Analysis*, pp. 103278, 2024.
+- James E Gentle. *Computational statistics*, volume 308. Springer, 2009.
+
+- Azalea Gui, Hannes Gamper, Sebastian Braun, and Dimitra Emmanouilidou. Adapting frechet audio distance for generative music evaluation. In *IEEE International Conference on Acoustics, Speech and Signal Processing, ICASSP 2024, Seoul, Republic of Korea, April 14-19, 2024*, pp. 1331–1335. IEEE, 2024.
+- Ishaan Gulrajani, Faruk Ahmed, Martin Arjovsky, Vincent Dumoulin, and Aaron C Courville. Improved training of wasserstein gans. *Advances in neural information processing systems*, 30, 2017.
+- Louay Hazami, Rayhane Mama, and Ragavan Thuirairatnam. Efficient-vdvae: Less is more. *arXiv preprint arXiv:2203.13751*, 2022.
+- Martin Heusel, Hubert Ramsauer, Thomas Unterthiner, Bernhard Nessler, and Sepp Hochreiter. Gans trained by a two time-scale update rule converge to a local nash equilibrium. *Advances in neural information processing systems*, 30, 2017.
+- Jonathan Ho, Ajay Jain, and Pieter Abbeel. Denoising diffusion probabilistic models. *Advances in neural information processing systems*, 33:6840–6851, 2020.
+- Qiang Huang and Anthony KH Tung. Lightweight-yet-efficient: Revitalizing ball-tree for point-to-hyperplane nearest neighbor search. In *2023 IEEE 39th International Conference on Data Engineering (ICDE)*, pp. 436–449. IEEE, 2023.
+- Marco Jiralerspong, Joey Bose, Ian Gemp, Chongli Qin, Yoram Bachrach, and Gauthier Gidel. Feature likelihood divergence: evaluating the generalization of generative models using samples. *Advances in Neural Information Processing Systems*, 36:33095–33119, 2023.
+- Minguk Kang, Woohyeon Shim, Minsu Cho, and Jaesik Park. Rebooting acgan: Auxiliary classifier gans with stable training. *Advances in neural information processing systems*, 34:23505–23518, 2021.
+- Minguk Kang, Joonghyuk Shin, and Jaesik Park. Studiogan: a taxonomy and benchmark of gans for image synthesis. *IEEE Transactions on Pattern Analysis and Machine Intelligence*, 45(12): 15725–15742, 2023a.
+- Minguk Kang, Jun-Yan Zhu, Richard Zhang, Jaesik Park, Eli Shechtman, Sylvain Paris, and Taesung Park. Scaling up gans for text-to-image synthesis. In *Proceedings of the IEEE/CVF conference on computer vision and pattern recognition*, pp. 10124–10134, 2023b.
+- Tero Karras, Timo Aila, Samuli Laine, and Jaakko Lehtinen. Progressive growing of gans for improved quality, stability, and variation. In *6th International Conference on Learning Representations, ICLR 2018, Vancouver, BC, Canada, April 30 - May 3, 2018, Conference Track Proceedings*. OpenReview.net, 2018.
+- Tero Karras, Samuli Laine, and Timo Aila. A style-based generator architecture for generative adversarial networks. In *Proceedings of the IEEE/CVF conference on computer vision and pattern recognition*, pp. 4401–4410, 2019.
+- Tero Karras, Miika Aittala, Janne Hellsten, Samuli Laine, Jaakko Lehtinen, and Timo Aila. Training generative adversarial networks with limited data. *Advances in neural information processing systems*, 33:12104–12114, 2020.
+- Vahid Kazemi and Josephine Sullivan. One millisecond face alignment with an ensemble of regression trees. In *Proceedings of the IEEE conference on computer vision and pattern recognition*, pp. 1867–1874, 2014.
+- Mahyar Khayatkhoei and Wael AbdAlmageed. Emergent asymmetry of precision and recall for measuring fidelity and diversity of generative models in high dimensions. In *International Conference on Machine Learning*, pp. 16326–16343. PMLR, 2023.
+- Pum Jun Kim, Yoojin Jang, Jisu Kim, and Jaejun Yoo. Topp&r: Robust support estimation approach for evaluating fidelity and diversity in generative models. *Advances in Neural Information Processing Systems*, 36:7831–7866, 2023.
+
+[Appendix and supplementary materials beyond page 12 have been removed.]
