@@ -26,6 +26,8 @@ from pydantic import BaseModel
 load_dotenv()  # loads .env from cwd or parent dirs
 
 # ── Config ────────────────────────────────────────────────────────────
+PROVIDER = "zai" 
+
 
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
