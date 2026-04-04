@@ -139,6 +139,8 @@ Four baselines are provided for comparison against the full multi-agent pipeline
 
 ```
 baselines/
+├── always_predict_6/         # trivial baseline: always predicts score=6, Accept
+│   └── run_baseline.py
 ├── direct_review/            # single-turn direct scoring (no review pipeline)
 │   └── run_direct_baseline.py
 └── structured_review/        # structured review matching merger sections
@@ -146,12 +148,12 @@ baselines/
     └── build_calibration.py
 ```
 
-### Always-predict-6 baseline (`run_baseline.py`)
+### Always-predict-6 baseline (`baselines/always_predict_6/run_baseline.py`)
 
 Predicts score=6 and decision=Accept for every paper. No model calls, no calibration. This is the trivial baseline — any useful system must beat it.
 
 ```bash
-python run_baseline.py 50 3112 --balanced --data-dir iclr2026_unbalanced --calibration calibration.md
+python baselines/always_predict_6/run_baseline.py 50 3112 --balanced --data-dir iclr2026_unbalanced --calibration calibration.md
 ```
 
 The `--calibration` flag only excludes calibration paper IDs from sampling — no calibration context is used.
@@ -261,7 +263,7 @@ Results forthcoming — re-running on the new ICLR 2026 unbalanced test set with
 | `bench_scores.csv` | Per-paper: predicted score, GT avg score, all GT reviewer scores, match |
 | `bench_scores_scatter.png` | Scatter plot + ROC curve |
 | `bench_run.log` | Complete stdout/stderr log of the run |
-| `baseline_scores.csv` | Always-predict-6 baseline results |
+| `baseline_scores.csv` | Always-predict-6 baseline results (now at `baselines/always_predict_6/baseline_scores.csv`) |
 | `direct_baseline_scores.csv` | Direct-scoring baseline results |
 | `calibration.md` | Few-shot calibration examples (multi-agent review bundle + human scores) |
 | `calibration_ids.json` | Paper IDs excluded from benchmark |
@@ -307,10 +309,10 @@ python build_calibration.py [seed] [options]
   --no-related-work       Skip related work search
 ```
 
-### `run_baseline.py`
+### `baselines/always_predict_6/run_baseline.py`
 
 ```
-python run_baseline.py [n] [seed] [options]
+python baselines/always_predict_6/run_baseline.py [n] [seed] [options]
 
   --balanced              Stratified sampling across score bins
   --data-dir <path>       Dataset directory
