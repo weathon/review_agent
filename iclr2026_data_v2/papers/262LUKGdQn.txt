@@ -1,0 +1,2272 @@
+# KDP: SIMPLIFYING REPRESENTATION DYNAMICS IN KERNEL SPACE
+
+
+**Zeyu Ma** [1] _[,]_ [2] **, Wanying Wang** [2] **, Guchu Zou** [3] **, Mingang Chen** [2] **, Jianhong Wu** [1] _[∗]_
+
+1Shanghai Normal University
+2Shanghai Key Laboratory of Computer Software Testing and Evaluating
+3Shanghai Institute of Ceramics, Chinese Academy of Sciences
+wujianhong@shnu.edu.cn,
+_{_ mzy, wangwy, cmg _}_ @sscenter.sh.cn,
+zouguchu@mail.sic.ac.cn
+
+
+ABSTRACT
+
+
+This paper proposes Kernelized Dynamics Pruning (KDP), a novel layer pruning
+method from the perspective of simplifying representation dynamics within large
+language models (LLMs). Motivated by the high similarity between consecutive
+layer representations, we view the LLM’s forward pass as a discrete-time dynamical system. We speculate that this phenomenon indicates the model’s internal
+dynamics have entered a “slow manifold”, which exhibits computational redundancy. Based on this insight, we project the representations into a kernel space
+where the complex, non-linear transformation between them is simplified to an
+approximately linear one. Then, a simple network learns the inverse kernel transformation, thereby enabling the pruning of the entire layer block. Both theoretical
+analysis and extensive experiments validate the effectiveness of KDP, demonstrating its superiority over existing pruning baselines.
+
+
+1 INTRODUCTION
+
+
+Large language models (LLMs) have demonstrated exceptional performance across various tasks
+and domains (Touvron et al., 2023; Grattafiori et al., 2024; Yang et al., 2025; Liu et al., 2024). However, as models increase in scale, the substantial computational and hardware deployment costs pose
+significant challenges, limiting their broader application in real-world scenarios. Pruning is a primary technique for model compression aimed at alleviating the aforementioned problems (Louizos
+et al., 2017; Xia et al., 2023; Sun et al., 2024; Ma et al., 2023). Among various pruning methods,
+layer pruning is garnering increasing attention because it naturally leads to inference acceleration
+and model size reduction without requiring special handling.
+
+
+The prevailing layer pruning paradigm involves removing redundant layers (Song et al., 2024; Men
+et al., 2024) or substituting them with compact modules (Yang et al., 2024; Chen et al., 2025), with
+a primary emphasis on the choice of pruning locations and the techniques for performance recovery
+(e.g., fine-tuning or distillation). However, this line of work largely overlooks the fundamental
+properties of the model’s internal dynamic flow, thereby leaving the potential simplification patterns
+unexplored, see Appendix C for details on related work. We suggest that pruning can be viewed
+not only as a method to “construct” a smaller sub-network, but also as a process to “search” for a
+geometric viewpoint that reveals the inherent simplicity of complex dynamics.
+
+
+LLMs exhibit a notable characteristic: their consecutive layers tend to learn highly similar representations (Ding et al., 2025). As demonstrated in Figure 1, we employ both the centered kernel
+alignment (CKA, Kornblith et al., 2019) and the cosine similarity metric to measure the similarity of
+layer representations from the perspectives of the original space and the kernel space, respectively,
+and find that multiple consecutive layers exhibit consistently high similarity. This observation raises
+a key research question: _Does representational similarity equate to computational redundancy which_
+_can be substituted by a simple function_ ?
+
+
+_∗_ Corresponding author: Jianhong Wu
+
+
+1
+
+
+Viewing the forward pass of an LLM as a discrete-time dynamical system, high representational
+similarity signifies the system’s entry into a “slow manifold”, characterized by a small velocity. We
+assume that in such regions, the system’s short-term evolution can be described by a much simpler
+function (e.g., a linearized first-order approximation), rather than requiring the nonlinear dynamics
+of a complete Transformer block. However, substituting the non-linear forward pass with linear
+dynamics may result in the loss of fine-grained details, which could contain low-variance, taskrelevant information (Cloos et al., 2025). Notably, Figure 1 shows that the similarity measured in the
+kernel space is substantially higher than that in the original space. This observation suggests that the
+kernel space possesses stronger capability in modeling high-dimensional relationships, consistent
+with the intuition behind SVMs (Cortes & Vapnik, 1995). Consequently, it exhibits higher similarity
+and suggests a potential for linear simplification. Motivated by this, we aim to identify a Hilbert
+space in which the complex dynamics become amenable to linear approximation, thereby enabling
+effective layer pruning via linear simplification in kernel space.
+
+
+Based on these insights, we propose **Kernelized** **Dynamics** **Pruning** **(KDP)**, simplifying representational dynamics within a kernel space to reduce computational redundancy. Specifically, our
+method proceeds in the following two steps. First, we jointly optimize a learnable kernel transformation and the linear coefficients mapping between layers. Second, an inverse transformation
+network maps these representations from the kernel space back to the original space, reconstructing
+the original layer to enable model pruning.
+
+
+We validate the effectiveness of our method through both theoretical analysis and extensive experiments. First, we present a theorem providing an error bound for approximating multi-layer representations with linear transformations in the kernel space, thereby demonstrating that cross-layer
+representations can be linearly approximated within this space. We further show that the linear approximation capability in the kernel space surpasses that in the original space, providing a theoretical
+foundation for KDP. Extensive experimental results empirically answer our guiding research questions, demonstrating that exploiting representation similarity significantly simplifies computational
+processes by eliminating redundancy. KDP learns simplified internal representational dynamics in
+kernel space using only localized representation supervision, without requiring fine-tuning of the
+entire model on downstream tasks. This method enables effective modeling with limited data and
+obviates the need for post-training to restore performance. Our main contributions are as follows:
+
+
+- We reformulate layer pruning as the search for an optimal geometric embedding within a Reproducing Kernel Hilbert Space and propose Kernelized Dynamics Pruning (KDP) method, which
+linearizes representational dynamics using the kernel trick to simplify consecutive layers.
+
+
+- We provide a theoretical error bound for linearization in the kernel space and demonstrate the
+modeling and linear simplification advantages of the kernel space, with experimental results corroborating the theoretical analysis.
+
+
+- We conduct extensive experiments on 15 benchmarks, demonstrating that our method maintains
+superior performance while requiring only a small number of trainable parameters and limited
+calibration data, eliminating the need for additional post-training.
+
+
+2 PRELIMINARIES & THEORETICAL ANALYSIS
+
+
+2.1 PROBLEM SETUP & KERNELIZATION
+
+
+**LLM** **Forward** **Formulation.** Consider an LLM composed of a sequence of _N_ Pre-Norm Transformer layers, F1 _, . . .,_ F _N_ . Given an input **x**, for the _l_ -th layer, the forward pass is written as
+
+
+**h** _l_ +1( **x** ) = **h** _l_ ( **x** ) + f _l_ (Norm( **h** _l_ ( **x** ))) _._ (1)
+
+Here, Norm( _·_ ) denotes the Layer Normalization function, **h** _l_ ( **x** ) _∈_ R _[d]_ denotes the _l_ -th layer representation and f _l_ ( _·_ ) denotes the backbone function of the Transformer layer composed of multi-head
+attention (MHA) and feed-forward neural network (FFN). For simplicity, we write **h** for **h** ( _·_ ) when
+the context is clear.
+
+
+**Kernel Model.** A kernel is a function k( **x** _,_ **y** ) that measures the similarity between two data points
+**x** and **y** . It is formally defined as an inner product in a feature space _H_ . Gaussian Radial Basis Function (RBF) kernel (i.e., k( **x** _,_ **y** ) = exp( _−γ∥_ **x** _−_ **y** _∥_ [2] )) is the canonical choice due to
+
+
+2
+
+
+Figure 1: Inter-layer Cosine and CKA Similarity of 3 LLaMA LLMs.
+
+
+**Algorithm 1:** **Kernelized Dynamics Pruning**
+
+
+1: **Require:** Pretrained LLM F, calib. set _D_, RFF dim _m_,
+low-rank _r_, block max length _K_ max, budget _B_,
+stability step _γ_, weight _W_, training iters _T_ .
+2: Let _G_ be the set of _B_ non-overlapping model blocks
+F _l_ : _l_ + _K_ max that maximize the similarity score
+CKA( **h** _l,_ **h** _l_ + _K_ max ).
+
+
+3: **procedure** JOINTKERNELLINEARIZATION
+4: **for** ( _l, · · ·_ _, l_ + _K_ max) _∈G_ **do**
+5: Define _φθ_, operators _{_ **A** _i}_ _[k]_ _i_ =1
+6: **for** minibatch _B_ _⊂D_ **do**
+7: _φ_ �( **h** _l_ + _k_ ( _B_ )) _←_ �� _ki_ =1 **[A]** _[i]_ - _φθ_ ( **h** _l_ ( _B_ ))
+8: _L_ ( _·_ ) _←L_ mse + _L_ cos
+9: Update _θ_ and _{_ **A** _i}_ _[k]_ _i_ =1
+10: **return** _{θ_ [(] _[l]_ [)] _, {_ **A** [(] _i_ _[l]_ [)] _}_ _[k]_ _i_ =1 _[}][l][∈G]_
+
+
+11: **procedure** TRAININVERSENETWORK
+12: **for** ( _l, · · ·_ _, l_ + _K_ max) _∈G_ **do**
+13: Define inverse network _Rϕ_
+14: **for** minibatch _B_ _⊂D_ **do**
+15: **h** - **l** + **k** _←R_ ( _φ_ �( **h** _l_ + _k_ ))
+16: _L_ ( _·_ ) _←L_ mse + _L_ norm
+17: Update _ϕ_
+18: **return** _{ϕ_ [(] _[l]_ [)] _}l∈G_
+
+
+19: **procedure** FOLDBLOCK
+20: Define _S_ ( **h** ) _←Iϕ_ ��� _ki_ =1 **[A]** _[i]_ - _φθ_ ( **h** )�
+
+21: Replace F _l, . . .,_ F _l_ + _k_ with _S_
+
+
+its universality and consistency(Steinwart, 2002). In this paper, we employ a learnable Random
+Fourier Features (RFF) kernel to learn a data-driven, anisotropic Gaussian RBF kernel (Rahimi &
+Recht, 2007), which enhances representational capacity and reduces computational cost. The kernel is approximated by the inner product of a low-dimensional feature map _φ_ ( _·_ ) : R _[d]_ _→_ R [2] _[m]_,
+k( **x** _,_ **y** ) _≈_ _φ_ ( **x** ) _[⊤]_ _φ_ ( **y** ), where _φ_ ( **x** ) is defined as:
+
+
+1
+_φ_ ( **x** ) = ~~_√_~~
+_m_
+
+
+�cos - **W** _[⊤]_ **x** + **b** - _⊤_ _,_ sin - **W** _[⊤]_ **x** + **b** - _⊤_ [�] _[⊤]_ _._ (2)
+
+
+Here the columns of weight matrix **W** _∈_ R _[d][×][m]_ are i.i.d. samples drawn from _N_ (0 _,_ **Σ** ), and the elements of bias vector **b** _∈_ R _[m]_ are i.i.d. samples drawn from U(0 _,_ 2 _π_ ). In contrast to the original RFF
+kernel, which relies on a pre-defined spectral distribution, here the covariance matrix **Σ** is learnable
+and parameterized as **Σ** = **D** + **LL** _[⊤]_, **D** = diag(exp( _**λ**_ )) is a diagonal matrix parameterized by a
+learnable vector _**λ**_ _∈_ R _[d]_ and **L** _∈_ R _[d][×][r]_ is a learnable low-rank factor matrix, where the rank _r_ is
+a hyperparameter that satisfies _r_ _≪_ _d_ . Equation 2 effectively learns an anisotropic Guassian RBF
+kernel k( **x** _,_ **y** ) = exp - _−_ [1] 2 [(] **[x]** _[ −]_ **[y]** [)] _[⊤]_ **[Σ]** _[−]_ [1][(] **[x]** _[ −]_ **[y]** [)] - whose distance metric is adapted to the data.
+
+**Symbol** **Denotation.** In this paper, the _ℓp_ -norm of a vector **v** = ( _v_ 1 _, · · ·_ _, vm_ ) _[⊤]_ is denoted by
+_∥_ **v** _∥p_ ≜ [�] _[m]_ _i_ =1 [(] **[v]** _i_ _[p]_ [)][1] _[/p]_ [,] [with] [the] [subscript] [omitted] [for] [the] [standard] _[ℓ]_ [2][-norm] [(i.e.,] _[∥]_ **[v]** _[∥]_ [≜] _[∥]_ **[v]** _[∥]_ [2][),]
+the operator norm for a matrix is denoted by _∥· ∥_ op, ( _x_ )+ = max _{x,_ 0 _}_ denotes the positive part
+of vairable _x_, and _O_ ( _·_ ) denotes the standard Big-O notation for an asymptotic upper bound. For
+detailed definitions of technical machine learning terms, such as ERM and population risk, please
+refer to the Appendix A.
+
+
+2.2 FORWARD DYNAMICS ON A SLOW MANIFOLD
+
+
+The residual connection described in Equation 1 motivates us to view the Transformer’s forward
+pass as a discrete-time dynamical system. The term f _l_ ( _·_ ) can be seen as a “velocity” or “update”
+vector that perturbs the current state **h** _l_, thereby producing the state of the next layer, **h** _l_ +1.
+
+
+As shown in Figure 1, consecutive layer representations in LLMs exhibit strikingly high similarity. Within this dynamical framework, high similarity between **h** _l_ +1 and **h** _l_ is directly equivalent to
+the update vector having a small relative norm, i.e., _∥_ f _l_ (Norm ( **h** _l_ )) _∥≪∥_ **h** _l∥_, indicating that the
+
+
+3
+
+
+system’s trajectory has entered a “slow manifold”. If the transformation between layers is minor,
+the local dynamics of a Transformer block f _l_ could potentially be approximated by a far simpler
+function. This is a common practice in fields such as the numerical analysis of partial differential
+equations (PDEs) and model order reduction (e.g. (Murray, 2007), more detailed analysis can be
+found in the Appendix H). While a first-order approximation (i.e., local linearization of the dynamics) is a natural approach, the Transformer’s forward pass is fundamentally nonlinear. Applying
+such an approximation directly in the original representation space would therefore lead to significant information loss, as it would neglect crucial nonlinear feature interactions. Note that in Figure
+1, the CKA similarity generally exceeds cosine similarity, which is consistent with the property
+that the high-dimensional representation induced by the kernel space captures complex representational relationships more effectively. Therefore, we assume that there exists a kernel function _φ_ ( _·_ )
+that induces a Hilbert space where the layer-wise transformation becomes approximately linear, i.e.,
+_φ_ ( **h** _l_ +1) _≈_ **A** _lφ_ ( **h** _l_ ).
+
+
+2.3 THEORETICAL RESULTS
+
+
+As argued in Section 2.2, when adjacent layers exhibit high representational similarity, the forward
+propagation enters a slow manifold where a simpler rule can capture short-horizon dynamics, an
+approximation that becomes more accurate in a suitable kernel space. In this section, we present
+the theoretical formalization of these arguments. First, we derive the error bound for linear fitting
+of multi-layer representations in the kernel space, demonstrating that consecutive layers with highly
+similar representations can be reduced to linear transformations in this space. Subsequently, we
+prove that the kernel space exhibits superior fitting capacity for layer simplification compared to the
+original representation space. The detailed proofs are provided in Appendix D.
+**Theorem 1** (Kernel Linearization Error Bound) **.** _Let φθ_ : R _[d]_ _→_ R [2] _[m]_ _be a feature map such that_
+_∥φθ_ ( **h** ) _∥_ 2 _≤_ _Rφ_ _for_ _all_ _representations_ **h** _._ _Let_ **A** _i_ _be_ _linear_ _operators_ _for_ _the_ _i-th_ _step_ _transition_
+_with_ _∥_ **A** _i∥_ op _≤_ _B_ **A** _._ _Let_ ( _θ,_ [�] _{_ **A** [�] _i}_ ) _be_ _the_ _Empirical_ _Risk_ _Minimization(ERM)_ _solution_ _on_ _an_ _n-_
+_sample training set, and let L_ ERM _denote the minimum empirical one-step squared error._ _Then for_
+_any_ _δ_ _∈_ (0 _,_ 1) _,_ _with_ _probability_ _at_ _least_ 1 _−_ _δ_ _over_ _the_ _draw_ _of_ _the_ _training_ _set,_ _for_ _every_ _starting_
+
+�� _l_ + _k−_ 1                   _layer l and horizon k_ _≥_ 1 _, the k-step error Ek,l_ ( _θ,_ [�] _{_ **A** [�] _i}_ ) := _φθ_ �( **h** _l_ + _k_ ) _−_ _i_ = _l_ **A** - _i_ _φθ_ �( **h** _l_ )
+_satisfies_
+
+
+�� _Ek,l_ ( _θ,_ - _{_ - **A** _i}_ )�� _≤_
+
+
+_n_
+
+- �� _(a)_
+
+
+_L_ ERM + _C B_ **A** [2] _[R]_ _φ_ [2]
+
+
+- 2 _m_ log(2 _m/δ_ )
+
+
+_k−_ 1
+
+- _B_ **A** _[k][−]_ [1] _[−][j]_
+
+_j_ =0
+
+
+- �� _(b)_
+
+
+_._ (3)
+
+
+_·_
+
+
+Theorem 1 yields a two-factor bound on _k_ -step error: a single-step term ( _a_ ) that captures the linear
+model’s in-kernel fitting ability plus its generalization gap, and a multi-step accumulation factor ( _b_ )
+that governs how errors accumulate across replaced layers. Theoretically, for the bounded parameters _Rφ_ and _B_ **A**, the error bound converges at a rate of _O_ (1 _/_ _[√]_ _n_ ) with the sample size _n_ . In subsequent experiments illustrated in Figure 5, we establish empirical values forstrating that these bounds are well-behaved, i.e., they are significantly smaller than _B_ **A** an _[√]_ d _n R_ . Therefore, _φ_, demonTheorem 1 demonstrates that consecutive layers can be well simplified as linear transformations in
+kernel space.
+
+
+Further, we can prove that compared to learning a linear approximation in the original representation
+space, the kernel space yields a smaller linear approximation error. Before that, the fitting capability
+of kernel space is given in the following lemma.
+
+**Lemma** **1** (Kernel Existence) **.** _For_ _any_ _given_ _ϵ_ _>_ 0 _,_ _there_ _exists_ _a_ _Random_ _Fourier_ _Feature_ _map_
+_φ_ : R _[d]_ _→_ R [2] _[m]_ _(defined by suitable parameters_ **W** _,_ **b** _, and a sufficiently large dimension_ 2 _m) and a_
+_corresponding linear operator_ **A** _, such that:_ E **h** _l∼D_ [ _∥φ_ ( **h** _l_ +1) _−_ **A** _φ_ ( **h** _l_ ) _∥_ ] _< ϵ._
+
+
+The proof of Lemma 1 is a direct application of the Universal Kernels (Micchelli et al.,
+2006). Next, our analysis begins with two function classes. Consider the following two
+function classes at the _l_ -th layer of an LLM: the identity class of the original space _F_ ID :=
+_{x �→_ **A** _x_ : _∥_ **A** _∥_ op _≤_ _B_ **A** _},_ with a population risk of _R_ ID( **A** ) := E - _∥_ **h** _l_ +1 _−_ **Ah** _l∥_ [2][�] ; the RFF
+class _F_ RFF := _{x �→_ **A** _φθ_ ( _x_ ) : _∥_ **A** _∥_ op _≤_ _B_ **A** _, ∥φ_ ( _x_ ) _∥≤_ _Rφ, θ_ _∈_ Θ _},_ with a population risk of
+
+
+4
+
+
+_R_ RFF( _θ,_ **A** ) := E - _∥φθ_ ( **h** _l_ +1) _−_ **A** _φθ_ ( **h** _l_ ) _∥_ [2][�] . Note the minimum population approximation error
+of the two classes as:
+
+
+apxID := inf apxRFF := inf
+_∥_ **A** _∥_ op _≤B_ **A** _[R]_ [ID][(] **[A]** [)] _[,]_ _θ∈_ Θ _,∥_ **A** _∥_ op _≤B_ **A** _,∥φ_ ( _x_ ) _∥≤Rφ_ _[R]_ [RFF][(] _[θ,]_ **[ A]** [)] _[.]_
+
+
+Let **A** [�] ID and ( _θ,_ [�] **A** [�] RFF) be the ERM solutions on the respective classes. We can get the following
+conclusion on the superior fitting capacity of Kernel space.
+
+**Theorem 2** (Kernel Advantage) **.** _Let_ ∆:= apx _ID −_ _ϵ >_ 0 _._ _For any δ, there exist m_ _[′]_ _, c, C_ _>_ 0 _, such_
+_that for RFF dimension_ 2 _m > m_ _[′]_ _and_
+
+
+ 
+16 _CB_ **A** [2]
+
+
+  
+_[cm]_ _δ_ _−_ _Rh_ [2] _d_ log _[cd]_ _δ_
+
+
+- _Rφ_ [2] 2 _m_ log [2] _[cm]_ _δ_
+
+
+_δ_
+
+
+�2
+
+
+_n ≥_
+
+
++
+
+_,_ (4)
+∆ [2]
+
+
+_the following holds with probability at least_ 1 _−_ _δ:_ _RRFF_ ( _θ,_ [�] **A** [�] _RFF_ ) _≤RID_ ( **A** [�] _ID_ ) _._
+
+
+Theorem 2 establishes that in the kernel space, a well-trained RFF with dimensionality greater than
+2 _m_ achieves lower population risk compared to simplification in the original representation space.
+This result further substantiates the necessity of performing linearized model compression in the
+kernel space. Experiments in Table 3 empirically validate the superiority of the kernel space over
+the original representation space.
+
+
+3 KERNELIZED DYNAMICS PRUNING
+
+
+As argued in Section 2, on both intuitive and theoretical grounds, representational similarity implies
+computational redundancy, so that the complex module can be simplified better in kernel space.
+Building on this foundation, this section details our pruning method, Kernelized Dynamics Pruning
+(KDP). The algorithm is presented in Algorithm 1.
+
+
+3.1 KERNEL LINEARIZATION JOINT TRAINING
+
+
+The first step is to identify which parts of the network to prune. Inspired by prior work (Chen
+et al., 2025; Ding et al., 2025; Gromov et al., 2025), we focus on replacing blocks of multiple
+consecutive Transformer layers. To control the cumulative error as shown in Equation 1, we set the
+consecutive layers to be replaced with a maximum length _K_ max. For each block, we first compute
+the CKA similarity between the output representations of the first and last layers of consecutive
+blocks. Following standard practice (e.g., Ding et al., 2025), we exclude the initial and final 10%
+of the model’s layers from consideration, as they are empirically known to be sensitive to pruning.
+Combining these criteria, we rank all eligible blocks according to their CKA scores and advance the
+highest-scoring candidate to the kernel linearization training stage.
+
+
+For the candidate block for pruning, we learn a replacement module by jointly optimizing the learnable RFF kernel parameters _θ_ and the multi-step linear operators _{_ **A** _i}_ _[K]_ _i_ =1 [max] [.] [For] [each] [training]
+sample _x ∈D_, the estimate ( _θ,_ [�] _{_ **A** [�] _i}_ ) is given by:
+
+
+_x∈D_
+
+
+(5)
+
+
+arg min
+_θ,{_ **A** _i}_
+
+
+_K_ max
+
+
+_i_ =1
+
+
+- _∥_ **A** _iφθ_ ( **h** _l_ + _i−_ 1( _x_ )) _−_ _φθ_ ( **h** _l_ + _i_ ( _x_ )) _∥_ [2]
+
+
++ (1 _−_ _W_ _⊙_ cos ( **A** _iφθ_ ( **h** _l_ + _i−_ 1( _x_ )) _, φθ_ ( **h** _l_ + _i_ ( _x_ ))))             - _._
+
+
+Here, _⊙_ denotes element-wise multiplication. The loss function is composed of two terms: a reconstruction loss and a weighted cosine similarity loss. The latter is designed to encourage a finergrained alignment of the representations’ geometric structure. Specifically, this cosine similarity
+term is modulated by a weight matrix _W_, which assigns greater importance to tokens based on their
+position, prioritizing those towards the end of the sequence. To improve convergence stability, **A** _i_
+is parameterized as **A** _i_ = **I** + _γi_ **B** _i_ that preserves the additive nature of LLM’s forward pass (see
+Equation 1), where the scalar _γi_ and the matrix **B** _i_ are trainable parameters. In addition, we initialize
+**A** _i_ at the start of each iteration with its Ordinary Least Squares (OLS) estimate in the current RFF
+kernel space to accelerate training.
+
+
+5
+
+
+Figure 2: Overall illustration of KDP. KDP replaces a multi-layer Transformer block via a two-step
+process: first, it projects and linearizes non-linear representations in a kernel space; second, it learns
+an inverse mapping from the kernel space back to the original space using a simple network.
+
+
+3.2 INVERSE TRANSFORMATION NETWORK
+
+
+Once the joint training converges, we can get _k_ -step prediction in the kernel space, i.e., _φ_ �( **h** _l_ + _k_ ) =
+�� _k_ _i_ =1 **[A]** [�] _[i]_ _φ_   - _θ_ ( **h** _l_ ). However, this output must be mapped back to the original space for layer
+
+replacement. Thus, an inverse transformation network, _I_ ( _·_ ) _ϕ_ : R [2] _[m]_ _→_ R _[d]_, takes the kernel-space
+prediction _φ_ �( **h** _l_ + _k_ ) as input, to reconstruct representation in original space **h** _l_ + _k_, denote as **h** [�] _l_ + _k_ .
+The estimate _ϕ_ is given by:
+
+[�]
+
+
+arg min
+_ϕ_
+
+
+- _∥Iϕ_ ( _φ_ - ( **h** _l_ + _k_ ( _x_ ))) _−_ **h** _l_ + _k_ ( _x_ ) _∥_ [2] _._ (6)
+
+_x∈D_
+
+
+We parameterize the inverse transformation network _I_ as a two-layer MLP with a scalar scaling
+factor _α_, i.e. _I_ ( **x** ) := _α ·_ MLP( **x** ). We observe that the iterative application of the linear operators
+_{_ **A** _i}_ in the kernel space can lead to a significant decrease in the representation’s norm. The scaling
+factor _α_ explicitly compensates for this norm decay, enabling a more stable and efficient recovery
+of the original representation’s scale.
+
+
+4 EXPERIMENTS
+
+
+4.1 SETUP
+
+
+**Models.** Our experiments are conducted on 6 popular open-source models: LLaMA2-7B, LLaMA213B (Touvron et al., 2023), LLaMA3.1-8B, LLaMA3-8B (Grattafiori et al., 2024), OPT-2.7B and
+OPT-6.7B. (The results for the OPT model are presented in the Appendix E.) Following prior work,
+we prune the layers that account for approximately 25% of the original parameters.
+
+
+**Training** **Datasets.** For training, we construct a composite dataset of 4000 samples by randomly
+selecting 500 samples from the training set of each of the following datasets: PIQA (Bisk et al.,
+2020), CMMLU (Y¨uksel et al., 2024), BoolQ (Clark et al., 2019), C3 (Sun et al., 2020), MNLI
+(Williams et al., 2018), Race-High/Middle (Lai et al., 2017), and SlimPajama (Shen et al., 2024).
+
+
+**Benchmarks.** For a comprehensive evaluation, we assess the models on 15 standard datasets. We
+group the evaluation tasks into two categories: generation and classification. For the classification,
+the evaluation is conducted on the test sets of the aforementioned datasets, excluding SlimPajama,
+and is supplemented with 6 additional datasets: CHID (Zheng et al., 2019), HellaSwag (Zellers
+et al., 2019), CoQA (Reddy et al., 2019), WSC (Levesque et al., 2012), SST2 (Socher et al., 2013),
+and C3 (Sun et al., 2020). We also evaluate 3 benchmarks for generative capabilities. For WikiText
+(Merity et al., 2017) and C4 (Raffel et al., 2020), we evaluate their Perplexity (PPL), and for XSum
+(Narayan et al., 2018), we evaluate ROUGE1. We use the LM Evaluation Harness (Gao et al., 2024)
+with default parameters in our evaluations.
+
+
+**Baselines.** Beyond the dense model, we consider six structured pruning methods: ShortGPT (Men
+et al., 2024) and SLEB (Song et al., 2024), which prune the network directly via metrics without
+
+
+6
+
+
+retraining, and LaCo (Yang et al., 2024), Streamline (Chen et al., 2025), SliceGPT (Ashkboos et al.,
+2024), and LLM-Pruner (Ma et al., 2023), which first prune or replace network components and
+then employ a retraining phase to recover performance.
+
+
+4.2 MAIN RESULTS
+
+
+Table 1 and Table 2 show the effects of different pruning methods on classification and generative
+tasks. The two tables present detailed scores on each benchmark, the overall average, and the retained performance rate. In the tables, “Dense” refers to the original model and “w/o kernel” is
+an ablation of our method that only removes the identified layers. “Ours” denotes our proposed
+method, while “Ours _[†]_ ” refers to our method after being fine-tuned using Parameter-Efficient FineTuning (PEFT). (Details of PEFT are provided in the Appendix B.) Table 1 shows that our method’s
+retained performance surpasses that of the best-performing baseline by 9.1%, 8.3%, and 9.3% on
+LLaMA2-7B, LLaMA2-13B, and LLaMA3-8B, respectively. Our method also achieves comparable
+performance on generative tasks. Notably, it requires no retraining phase to recover performance.
+
+
+It is worth noting that on the SST-2 dataset, a simple binary classification task, existing methods
+show a notable performance degradation despite performing well on other complex benchmarks.
+We suppose that this phenomenon arises because simpler tasks rely more heavily on coarse-grained
+information, which prior methods tend to prune inadvertently, thereby leading to instability. In contrast, our method consistently maintains its effectiveness, indicating its superior capacity to preserve
+the model’s essential capabilities.
+
+
+The comparison with the “w/o Kernel” demonstrates the effectiveness of KDP. While directly pruning consecutive layers leads to a significant degradation in performance, our method of simplifying
+these layers in the kernel space yields substantial gains. Specifically, it boosts the average retained
+4.3 FURTHER ANALYSIS
+performance by 31.9%, 23.1%, and 18.9% percentage points for the three models, respectively.
+
+
+**Representational patterns can be learned within the kernel space.** Figure 4 presents a comparison between the predicted representations and the ground-truth representations viewed in the kernel
+space. Specifically, we feed a sample from the CMMLU dataset into LLaMA2-7B, where layers 10
+through 14 have been replaced by KDP. RFF kernel projects the 14- _th_ layers’ output representations
+into a (sequence length _×_ 1024) matrix. To visualize these representations, we take rows 0, 25, and
+50, reshape each into a 32 _×_ 32 matrix, and render them as heatmaps. As observed, minor deviations
+tend to increase with the sequence position, which motivated our weight-scaling design in Equation
+5. To this end, the predicted representations closely match the actual ones. Notably, KDP not only
+captures the general trends of the representations but also accurately fits outlier points, which are
+critical to model performance (Sun et al., 2024). This highlights KDP’s ability to effectively learn
+and preserve essential patterns of the representations in the kernel space.
+
+
+**As training progresses,** _B_ **A and** _Rφ_ **behave well.** Figure 5 illustrates the evolution of the operator
+norms for _{_ **A** _i}_ and _φ_ ( _·_ ) during the training of two LLMs. _Rφ_ remains consistently below 1.5,
+while _B_ **A** decreases rapidly before converging. These observations validate the effectiveness of the
+error bound presented in Theorem 1.
+
+
+**Step 1 dominates the pruning performance, while Step 2 serves primarily as the inverse kernel**
+**mapping.** Figure 4 intuitively illustrates the effectiveness of kernel-space fitting in Step 1. To gain
+deeper insights into the KDP process and identify the component responsible for high performance,
+we analyze its training dynamics in Figure 3. The left panel shows that in Step 1, the loss drops
+sharply and converges within approximately 100 epochs. Concurrently, the middle panel depicts
+the cosine similarity between the predicted and ground-truth representations increasing as the loss
+decreases, confirming effective learning in the kernel space. By contrast, the right panel shows that
+
+
+Step1 Cosine Similarity
+
+|Col1|Col2|Col3|Col4|Layer3<br>Layer2|-Layer5<br>7-Layer29|
+|---|---|---|---|---|---|
+|||||Layer9<br>Layer7<br>Layer2<br>Layer1<br>Layer1|-Layer11<br>-Layer9<br>3-Layer25<br>1-Layer13<br>7-Layer19<br>|
+
+
+0 100 200 300 400 500
+Epoch
+
+
+4.5
+
+
+4.0
+
+
+3.5
+
+
+Step1 Loss
+
+|Col1|Col2|Col3|Col4|Layer3-|-Layer5|
+|---|---|---|---|---|---|
+|||||~~Layer3~~<br>Layer2<br>Layer9<br>Layer7<br>Layer2<br>~~Layer1~~<br>|~~Layer5~~<br>7-Layer29<br>-Layer11<br>-Layer9<br>3-Layer25<br>~~1-Layer13~~<br>|
+|||||Layer1|7-Layer19|
+
+
+0 100 200 300 400 500
+Epoch
+
+
+1.0
+
+
+0.5
+
+
+0.0
+
+
+10 [1]
+
+
+10 [0]
+
+
+10 1
+
+
+10 2
+
+
+Step2 Loss
+
+|Col1|Col2|Col3|Col4|Col5|Col6|Layer3-Layer5|Col8|
+|---|---|---|---|---|---|---|---|
+|||||||Layer3-Layer5<br>~~Layer7-Layer9~~<br>Layer9-Layer1<br>Layer11-Layer<br>~~Layer17-Layer~~<br>Layer23-Layer<br>|1<br>13<br>~~19~~<br>25<br>|
+|||||||||
+|||||||||
+|||||||Layer27-Layer|29|
+
+
+0 20 40 60 80 100
+Epoch
+
+
+Figure 3: Training loss on LLaMA2-13B. From left to right, the panels show: (a) the loss curve
+during Step 1, (b) the cosine similarity during Step 1, and (c) the loss curve for Step 2.
+
+
+7
+
+
+Table 1: Performance comparison of different baselines on classification benchmarks. “ _[∗]_ ” indicates
+the results in the original paper. “ _[†]_ ” indicates the results after fine-tuning. Average (Avg.) represents
+the arithmetic mean of Accuracy across all datasets. Retained performance (RP.) represents the
+percentage of the original model’s performance retained by the pruning method.
+
+
+**LLM** **Method** **Ratio**
+
+
+**Avg.** **RP.**
+
+
+Table 2: Performance comparison of different baselines on generation benchmarks. For Perplexity,
+a lower score means better performance ( _↓_ ), while for ROUGE, a higher score means better ( _↑_ ).
+
+
+LLaMA2-7B LLaMA2-13B LLaMA-3.1-8B
+Models RP(PPL) RP(Rouge)
+WIKI _↓_ C4 _↓_ Xsum _↑_ WIKI _↓_ C4 _↓_ Xsum _↑_ WIKI _↓_ C4 _↓_ Xsum _↑_
+
+
+Dense 5.5 7.0 19.2 4.9 6.5 22.7 6.1 8.8 27.2 100% 100%
+Streamline _[†]_ 9.9 17.1 **19.7** 43.7 81.7 **19.5** 377.1 201.1 21.5 5.3% **87.8%**
+SLEB 12.9 19.3 10.0 33.3 45.5 17.3 55.8 79.6 13.1 15.7% 58.5%
+w _\_ - Kernel 13.2 17.4 12.8 20.7 27.9 16.0 120.7 103.6 17.5 12.8% 67.0%
+Ours **8.3** 13.5 15.3 17.2 25.0 18.0 205.7 113.6 **21.8** 10.1% 79.7%
+Ours _[†]_ **8.3** **9.3** 17.0 **13.2** **15.0** 19.3 **31.7** **14.6** 20.2 **42.1%** 81.8%
+
+
+8
+
+
+Figure 4: Kernel space representation visualization.
+The heatmap panels show (from left to right) the predicted representation, the ground-truth representation,
+and their difference for a sample from CMMLU. The
+color range is unified for the first two panels to highlight their similarity.
+
+
+Figure 5: Operator norms of _φ_ ( _·_ ) and _{_ **A** _i}_
+during training. The line corresponds to
+_∥_ **A** _i∥_ op; the shaded region is the norm of
+_∥φ_ ( **h** [¯] _l_ ) _∥_ op for the shared kernel space, calculated from mean-subtracted samples.
+
+
+Model Performance(Acc) Comparison Across Pruning Rates
+
+
+629.8
+
+547.9
+
+466.1
+
+384.3
+
+302.4
+
+220.6
+
+138.8
+
+57.0
+
+-24.9
+
+
+Model Performance(PPL) Comparison Across Pruning Rates
+
+
+51.48
+
+47.95
+
+44.42
+
+40.88
+
+37.35
+
+33.82
+
+30.28
+
+26.75
+
+23.21
+
+
+|Mode|ls|Col3|Col4|Col5|Col6|Col7|Col8|Line Style|
+|---|---|---|---|---|---|---|---|---|
+|~~LLaM~~<br>|~~-2-7B~~<br>|||||||~~Baseline~~<br>|
+|~~LLaM~~<br>|~~-2-13~~<br>|||||||~~Post-Training~~|
+|~~LLaM~~|~~-3-8B~~||||||||
+||||||||||
+||||||||||
+||||||||||
+||||||||||
+||||||||||
+||||||||||
+||||||||||
+||||||||||
+||||||||||
+||||||||||
+||||||||||
+
+
+|Mod|els|Col3|Col4|Col5|Col6|Col7|Col8|Line Style|
+|---|---|---|---|---|---|---|---|---|
+|~~LLa~~<br>|~~A-2-7B~~<br>|||||||~~Baseline~~<br>|
+|~~LLa~~<br>|~~A-2-13~~<br>|||||||~~Post-Training~~|
+|~~LLaM~~|~~A-3-8B~~||||||||
+||||||||||
+||||||||||
+||||||||||
+||||||||||
+||||||||||
+||||||||||
+||||||||||
+||||||||||
+||||||||||
+||||||||||
+||||||||||
+
+
+0% 10% 20% 30% 40% 50%
+Pruning Rate
+
+
+0% 10% 20% 30% 40% 50%
+Pruning Rate
+
+
+Figure 6: Performance of CMMLU and WIKI when we prune with increasing pruning ratio.
+
+
+the loss in Step 2 converges within only 20 steps, suggesting that the inverse transformation network
+_I_ carries out a relatively simple task. We also conduct an ablation study to evaluate the performance
+impact of barely training for each step, with the results detailed in the Appendix F. In conclusion,
+these results demonstrate that Step 1 is the primary contributor to the pruning performance of KDP.
+
+
+4.4 ABLATION STUDY
+
+
+**Different** **Pruning** **Ratios.** As shown in Figure 6, we evaluate our method on the CMMLU and
+WIKI Text across various models and pruning ratios. The method exhibits strong retained performance on CMMLU, maintaining over 90% of the original performance at a pruning rate of around
+28% and over 80% at rates exceeding 50%, which confirms its robustness. The results show that
+the models’ overall performance degrades linearly with an increasing pruning rate. However, on
+generative tasks, the PPL behaves differently across models. Specifically, LLaMA3-8B exhibits a
+rapid increase, whereas the PPL for LLaMA2-7B and LLaMA2-13B remains relatively stable.
+
+
+**Different** **Linearization** **Methods.** To validate the importance of the kernel transformation, we
+compare KDP against a simplified baseline that performs linear fitting directly in the original representation space. As shown in Table 3, both OLS-based methods exhibit a drastic degradation in
+performance on the LLaMA3-8B model. In contrast, KDP significantly outperforms both baselines
+across all tasks. These results provide strong evidence that the transformations between Transformer
+layers are highly non-linear. Linear approximation in the original representation space, as attempted
+by OLS, is incapable of capturing these complex dynamics, resulting in severe information loss.
+This observation further corroborates Theorem 2, demonstrating the necessity of learning linear
+transformations in the kernel space.
+
+
+9
+
+
+**Different Max Length.** To analyze the impact of _K_ max, we incrementally prune more layers from
+LLaMA2-7B and compare two strategies for block selection: expanding a fixed initial block or
+choosing a new one based on CKA similarity. Table 4 demonstrates our method’s robustness in
+simplifying short-term dynamics. Model performance is stable when replacing few layers ( _K_ max _≤_
+3) but degrades catastrophically as more layers are replaced. This observed non-linear degradation
+strongly supports our theoretical analysis (Theorem 1), which shows that the approximation error
+grows exponentially with the number of layers, leading to instability.
+
+
+Table 3: Comparison with direct linearization in
+the original space via OLS on LLaMA3-8B.
+
+
+Method HeSW CoQA MMLU
+
+
+Dense 75.7 72.5 67.2
+
+Direct OLS 31.3 0.0 26.7
+
+Sequential OLS 30.7 0.0 28.2
+
+Ours 61.5 37.7 55.5
+
+
+5 CONCLUSION
+
+
+Table 4: Ablation study on max length _K_ max.
+
+
+|Kmax|Pruned Layers|HeSW CoQA MMLU|
+|---|---|---|
+|3<br>4<br>4<br>5<br>5<br>6<br>6|[6,7]<br>[6,7,8]<br>[10,11,12]<br>[6,7,8,9]<br>[12,13,14,15]<br>[6,7,8,9,10]<br>[11,12,13,14,15]|72.1<br>65.2<br>48.5<br>71.0<br>64.8<br>46.0<br>71.3<br>65.1<br>47.7<br>65.1<br>57.8<br>43.8<br>66.1<br>61.6<br>44.9<br>47.6<br>41.8<br>24.0<br>43.2<br>40.4<br>27.3|
+
+
+In this paper, we introduce a new perspective on layer pruning that simplifies the information flow
+by operating within a kernel space. Based on this perspective, we propose a novel method named
+as KDP. We demonstrate the effectiveness of our method through both theoretical analysis and empirical experiments. Our future work includes exploring more kernel functions and adapting our
+pruning method for multimodal LMs.
+
+
+REPRODUCIBILITY STATEMENT
+
+
+We have taken several measures to ensure the reproducibility of our work. A detailed description
+of our proposed framework, algorithms, and experimental settings is provided in the main text and
+Appendix B. Additional implementation details and ablation studies are included in the paper. For
+theoretical results, we present all assumptions and complete proofs in the Appendix. All datasets
+used in our experiments are publicly available. Furthermore, we submit an anonymous link to the
+source code and scripts for reproducing our experiments.
+
+
+ACKNOWLEDGMENTS
+
+
+Wu gratefully acknowledges the financial support from the National Natural Science Foundation of
+China (Grant No. 72173086).
+
+
+This work is also funded by Science and Technology Commission of Shanghai Municipality Program, China (No.24DZ2202100) and Shanghai Municipal Commission of Economy and Informatization, China (No.RZ-RGZN-01-25-1369).
+
+
+REFERENCES
+
+
+Yongqi An, Xu Zhao, Tao Yu, Ming Tang, and Jinqiao Wang. Fluctuation-Based Adaptive Structured Pruning for Large Language Models. In _Proceedings of the AAAI conference on Artificial_
+_Intelligence_, pp. 10865–10873, 2024.
+
+
+Saleh Ashkboos, Maximilian L. Croci, Marcelo Gennari Do Nascimento, Torsten Hoefler, and James
+Hensman. SliceGPT: Compress Large Language Models by Deleting Rows and Columns. In _The_
+_Twelfth International Conference on Learning Representations_, 2024.
+
+
+Yonatan Bisk, Rowan Zellers, Jianfeng Gao, Yejin Choi, and others. PIQA: Reasoning about Physical Commonsense in Natural Language. In _Proceedings_ _of_ _the_ _AAAI_ _conference_ _on_ _Artificial_
+_Intelligence_, volume 34, pp. 7432–7439, 2020.
+
+
+10
+
+
+Xiaodong Chen, Yuxuan Hu, Jing Zhang, Yanling Wang, Cuiping Li, and Hong Chen. Streamlining Redundant Layers to Compress Large Language Models. In _The Thirteenth International_
+_Conference on Learning Representations_, 2025.
+
+
+Christopher Clark, Kenton Lee, Ming-Wei Chang, Tom Kwiatkowski, Michael Collins, and Kristina
+Toutanova. BoolQ: Exploring the Surprising Difficulty of Natural Yes/No Questions. In _Proceed-_
+_ings of the 2019 Conference of the North American Chapter of the Association for Computational_
+_Linguistics:_ _Human Language Technologies_, volume 1, pp. 2924–2936, 2019.
+
+
+Nathan Cloos, Moufan Li, Markus Siegel, Scott L. Brincat, Earl K. Miller, Guangyu Robert Yang,
+and Christopher J. Cueva. Differentiable Optimization of Similarity Scores Between Models and
+Brains. In _The Thirteenth International Conference on Learning Representations_, 2025.
+
+
+Corinna Cortes and Vladimir Vapnik. Support-Vector Networks. _Machine Learning_, 20(3):273–297,
+1995.
+
+
+Xuan Ding, Rui Sun, Yunjian Zhang, Xiu Yan, Yueqi Zhou, Kaihao Huang, Suzhong Fu, Angelica I
+Aviles-Rivero, Chuanlong Xie, and Yao Zhu. A Sliding Layer Merging Method for Efficient
+Depth-Wise Pruning in LLMs, 2025. [URL https://arxiv.org/abs/2502.19159.](https://arxiv.org/abs/2502.19159)
+
+
+Elias Frantar and Dan Alistarh. SparseGPT: Massive Language Models Can be Accurately Pruned
+in One-Shot. In _International Conference on Machine Learning_, volume 202, pp. 10323–10337,
+2023.
+
+
+Leo Gao, Jonathan Tow, Baber Abbasi, Stella Biderman, Sid Black, Anthony DiPofi, Charles Foster,
+Laurence Golding, Jeffrey Hsu, Alain Le Noac’h, et al. The Language Model Evaluation Harness,
+2024. [URL https://zenodo.org/records/12608602.](https://zenodo.org/records/12608602)
+
+
+Yuri Gardinazzi, Karthik Viswanathan, Giada Panerai, Alessio Ansuini, Alberto Cazzaniga, and
+Matteo Biagetti. Persistent topological features in large language models. In _International Con-_
+_ference on Machine Learning_, 2025.
+
+
+Aaron Grattafiori, Abhimanyu Dubey, Abhinav Jauhri, Abhinav Pandey, Abhishek Kadian, Ahmad
+Al-Dahle, Aiesha Letman, Akhil Mathur, Alan Schelten, Alex Vaughan, et al. The Llama 3 Herd
+of Models, 2024. [URL https://arxiv.org/abs/2407.21783.](https://arxiv.org/abs/2407.21783)
+
+
+Andrey Gromov, Kushal Tirumala, Hassan Shapourian, Paolo Glorioso, and Daniel A. Roberts. The
+Unreasonable Ineffectiveness of the Deeper Layers. In _The Thirteenth International Conference_
+_on Learning Representations_, 2025.
+
+
+Lumer G¨unter. Bochner’s theorem, states, and fourier transforms of measures. _Studia Mathematica_,
+46(2):135–140, 1973. [URL http://eudml.org/doc/217761.](http://eudml.org/doc/217761)
+
+
+Shwai He, Guoheng Sun, Zheyu Shen, and Ang Li. What Matters in Transformers? Not All Attention is Needed, 2024. [URL https://arxiv.org/abs/2406.15786.](https://arxiv.org/abs/2406.15786)
+
+
+Bo-Kyeong Kim, Geonmin Kim, Tae-Ho Kim, Thibault Castells, Shinkook Choi, Junho Shin, and
+Hyoung-Kyu Song. Shortened LLaMA: A Simple Depth Pruning for Large Language Models,
+2024. [URL https://arxiv.org/abs/2402.02834.](https://arxiv.org/abs/2402.02834)
+
+
+Simon Kornblith, Mohammad Norouzi, Honglak Lee, and Geoffrey Hinton. Similarity of Neural
+Network Representations Revisited. In _International Conference on Machine Learning_, pp. 3519–
+3529. PMlR, 2019.
+
+
+Vedang Lad, Jin Hwa Lee, Wes Gurnee, and Max Tegmark. The Remarkable Robustness of LLMs:
+Stages of Inference?, 2024. [URL https://arxiv.org/abs/2406.19384.](https://arxiv.org/abs/2406.19384)
+
+
+Guokun Lai, Qizhe Xie, Hanxiao Liu, Yiming Yang, and Eduard Hovy. RACE: Large-scale ReAding
+Comprehension Dataset From Examinations. In _Proceedings of the 2017 Conference on Empirical_
+_Methods in Natural Language Processing_, pp. 785–794, 2017.
+
+
+Qi Le, Enmao Diao, Ziyan Wang, Xinran Wang, Jie Ding, Li Yang, and Ali Anwar. Probe Pruning:
+Accelerating LLMs through Dynamic Pruning via Model-Probing. In _The_ _Thirteenth_ _Interna-_
+_tional Conference on Learning Representations_, 2025.
+
+
+11
+
+
+Namhoon Lee, Thalaiyasingam Ajanthan, and Philip H. S. Torr. SNIP: Single-shot Network Pruning
+based on Connection Sensitivity. In _The_ _Seventh_ _International_ _Conference_ _on_ _Learning_ _Repre-_
+_sentations_, 2019.
+
+
+Hector J. Levesque, Ernest Davis, and Leora Morgenstern. The Winograd Schema Challenge. In
+_Proceedings of the Thirteenth International Conference on Principles of Knowledge Representa-_
+_tion and Reasoning_, pp. 552–561, 2012.
+
+
+Xun Liang, Hanyu Wang, Huayi Lai, Simin Niu, and Shichao Song. SEAP: Training-free Sparse
+Expert Activation Pruning Unlock the Brainpower of Large Language Models, 2025. URL
+[https://arxiv.org/abs/2503.07605.](https://arxiv.org/abs/2503.07605)
+
+
+Aixin Liu, Bei Feng, Bing Xue, Bingxuan Wang, Bochao Wu, Chengda Lu, Chenggang Zhao,
+Chengqi Deng, Chenyu Zhang, Chong Ruan, et al. Deepseek-V3 Technical Report, 2024. URL
+[https://arxiv.org/abs/2412.19437.](https://arxiv.org/abs/2412.19437)
+
+
+Zichang Liu, Jue Wang, Tri Dao, Tianyi Zhou, Binhang Yuan, Zhao Song, Anshumali Shrivastava,
+Ce Zhang, Yuandong Tian, Christopher Re, et al. Deja Vu: Contextual Sparsity for Efficient
+LLMs at Inference Time. In _International Conference on Machine Learning_, pp. 22137–22176,
+2023.
+
+
+Christos Louizos, Max Welling, and Diederik P Kingma. Learning sparse neural networks through
+_L_ ~~0~~ regularization, 2017. [URL https://arxiv.org/abs/1712.01312.](https://arxiv.org/abs/1712.01312)
+
+
+Xinyin Ma, Gongfan Fang, and Xinchao Wang. LLM-Pruner: On the Structural Pruning of Large
+Language Models. In _Advances in Neural Information Processing Systems_, 2023.
+
+
+Xin Men, Mingyu Xu, Qingyu Zhang, Bingning Wang, Hongyu Lin, Yaojie Lu, Xianpei Han, and
+Weipeng Chen. ShortGPT: Layers in Large Language Models are More Redundant Than You
+Expect. In _Findings of the Association for Computational Linguistics_, 2024.
+
+
+Stephen Merity, Caiming Xiong, James Bradbury, and Richard Socher. Pointer Sentinel Mixture
+Models. In _The Fifth International Conference on Learning Representations_, 2017.
+
+
+Charles A. Micchelli, Yuesheng Xu, and Haizhang Zhang. Universal Kernels. _Journal of Machine_
+_Learning Research_, 7(95):2651–2667, 2006.
+
+
+Mehryar Mohri, Afshin Rostamizadeh, and Ameet Talwalkar. _Foundations_ _of_ _Ma-_
+_chine_ _Learning_ . 2018. URL [https://mitpress.ublish.com/ebook/](https://mitpress.ublish.com/ebook/foundations-of-machine-learning--2-preview/7093/Cover)
+[foundations-of-machine-learning--2-preview/7093/Cover.](https://mitpress.ublish.com/ebook/foundations-of-machine-learning--2-preview/7093/Cover)
+
+
+J.D. Murray. _Mathematical_ _Biology:_ _I._ _An_ _Introduction_ . Interdisciplinary Applied Mathematics.
+Springer New York, 2007. ISBN 9780387224374. [URL https://books.google.co.jp/](https://books.google.co.jp/books?id=4WbpP90Gk1YC)
+[books?id=4WbpP90Gk1YC.](https://books.google.co.jp/books?id=4WbpP90Gk1YC)
+
+
+Shashi Narayan, Shay B. Cohen, and Mirella Lapata. Don’t Give Me the Details, Just the Summary!
+Topic-Aware Convolutional Neural Networks for Extreme Summarization. In _Proceedings of the_
+_2018 Conference on Empirical Methods in Natural Language Processing_, pp. 1797–1807, 2018.
+
+
+Colin Raffel, Noam Shazeer, Adam Roberts, Katherine Lee, Sharan Narang, Michael Matena, Yanqi
+Zhou, Wei Li, and Peter J Liu. Exploring the limits of transfer learning with a unified text-to-text
+transformer. _Journal of Machine Learning Research_, 21(140):1–67, 2020.
+
+
+Ali Rahimi and Benjamin Recht. Random Features for Large-Scale Kernel Machines. In _Advances_
+_in Neural Information Processing Systems_, volume 20, 2007.
+
+
+Siva Reddy, Danqi Chen, and Christopher D. Manning. CoQA: A Conversational Question Answering Challenge. _Transactions_ _of_ _the_ _Association_ _for_ _Computational_ _Linguistics_, 7:249–266,
+2019.
+
+
+Zhiqiang Shen, Tianhua Tao, Liqun Ma, Willie Neiswanger, Zhengzhong Liu, Hongyi Wang, Bowen
+Tan, Joel Hestness, Natalia Vassilieva, Daria Soboleva, et al. SlimPajama-DC: Understanding Data Combinations for LLM Training, 2024. [URL https://arxiv.org/abs/2309.](https://arxiv.org/abs/2309.10818)
+[10818.](https://arxiv.org/abs/2309.10818)
+
+
+12
+
+
+Richard Socher, Alex Perelygin, Jean Wu, Jason Chuang, Christopher D. Manning, Andrew Ng,
+and Christopher Potts. Recursive Deep Models for Semantic Compositionality Over a Sentiment
+Treebank. In _Proceedings_ _of_ _the_ _2013_ _Conference_ _on_ _Empirical_ _Methods_ _in_ _Natural_ _Language_
+_Processing_, pp. 1631–1642, 2013.
+
+
+Jiwon Song, Kyungseok Oh, Taesu Kim, Hyungjun Kim, Yulhwa Kim, and Jae-Joon Kim. SLEB:
+Streamlining LLMs through Redundancy Verification and Elimination of Transformer Blocks. In
+_International Conference on Machine Learning_, 2024.
+
+
+Yang Song and Stefano Ermon. _Generative modeling by estimating gradients of the data distribu-_
+_tion_ . Curran Associates Inc., Red Hook, NY, USA, 2019.
+
+
+Ingo Steinwart. On the Influence of the Kernel on the Consistency of Support Vector Machines. 2:
+67–93, 2002.
+
+
+Kai Sun, Dian Yu, Dong Yu, and Claire Cardie. Investigating Prior Knowledge for Challenging
+Chinese Machine Reading Comprehension. _Transactions_ _of_ _the_ _Association_ _for_ _Computational_
+_Linguistics_, 8:141–155, 2020.
+
+
+Mingjie Sun, Zhuang Liu, Anna Bair, and J. Zico Kolter. A Simple and Effective Pruning Approach
+for Large Language Models. In _The Twelfth International Conference on Learning Representa-_
+_tions_, 2024.
+
+
+Hugo Touvron, Louis Martin, Kevin Stone, Peter Albert, Amjad Almahairi, Yasmine Babaei, Nikolay Bashlykov, Soumya Batra, Prajjwal Bhargava, Shruti Bhosale, et al. Llama 2: Open Foundation and Fine-Tuned Chat Models, 2023. [URL https://arxiv.org/abs/2307.09288.](https://arxiv.org/abs/2307.09288)
+
+
+Adina Williams, Nikita Nangia, and Samuel Bowman. A Broad-Coverage Challenge Corpus for
+Sentence Understanding through Inference. In _Proceedings of the 2018 Conference of the North_
+_American Chapter of the Association for Computational Linguistics: Human Language Technolo-_
+_gies_, volume 1, pp. 1112–1122, 2018.
+
+
+Mengzhou Xia, Tianyu Gao, Zhiyuan Zeng, and Danqi Chen. Sheared LLaMA: Accelerating Language Model Pre-training via Structured Pruning, 2023. URL [https://arxiv.org/abs/](https://arxiv.org/abs/2310.06694)
+[2310.06694.](https://arxiv.org/abs/2310.06694)
+
+
+An Yang, Anfeng Li, Baosong Yang, Beichen Zhang, Binyuan Hui, Bo Zheng, Bowen Yu, Chang
+Gao, Chengen Huang, Chenxu Lv, et al. Qwen3 Technical Report, 2025. URL [https://](https://arxiv.org/abs/2505.09388)
+[arxiv.org/abs/2505.09388.](https://arxiv.org/abs/2505.09388)
+
+
+Yifei Yang, Zouying Cao, and Hai Zhao. LaCo: Large Language Model Pruning via Layer Collapse.
+In _Findings_ _of_ _the_ _Association_ _for_ _Computational_ _Linguistics:_ _EMNLP_ _2024_, pp. 6401–6417,
+2024.
+
+
+Alexander Yom Din, Taelin Karidi, Leshem Choshen, and Mor Geva. Jump to Conclusions: ShortCutting Transformers with Linear Transformations. In _Proceedings of the 2024 Joint International_
+_Conference on Computational Linguistics, Language Resources and Evaluation (LREC-COLING_
+_2024)_, pp. 9615–9625, 2024.
+
+
+Arda Y¨uksel, Abdullatif K¨oksal, L¨utfi Kerem Senel, Anna Korhonen, and Hinrich Schuetze. TurkishMMLU: Measuring Massive Multitask Language Understanding in Turkish. In _Findings of the_
+_Association for Computational Linguistics:_ _EMNLP 2024_, pp. 7035–7055, 2024.
+
+
+Rowan Zellers, Ari Holtzman, Yonatan Bisk, Ali Farhadi, and Yejin Choi. HellaSwag: Can a Machine Really Finish Your Sentence? In _Proceedings of the 57th Annual Meeting of the Association_
+_for Computational Linguistics_, pp. 4791–4800, 2019.
+
+
+Susan Zhang, Stephen Roller, Naman Goyal, Mikel Artetxe, Moya Chen, Shuohui Chen, Christopher Dewan, Mona Diab, Xian Li, Xi Victoria Lin, et al. OPT: Open Pre-trained Transformer
+Language Models, 2022. [URL https://arxiv.org/abs/2205.01068.](https://arxiv.org/abs/2205.01068)
+
+
+Chujie Zheng, Minlie Huang, and Aixin Sun. ChID: A Large-scale Chinese IDiom Dataset for
+Cloze Test. In _Proceedings_ _of_ _the_ _57th_ _Annual_ _Meeting_ _of_ _the_ _Association_ _for_ _Computational_
+_Linguistics_, pp. 778–787, 2019.
+
+
+13
+
+
+APPENDIX
+
+
+A PRELIMINARIES
+
+
+**Empirical Risk Minimization.** Empirical Risk Minimization (ERM) is a fundamental principle in
+statistical learning theory. Given a class of functions _H_ and a dataset _D_ = _{_ ( _xi, yi_ ) _}_ _[n]_ _i_ =1 [sampled]
+i.i.d. from an unknown distribution _P_, ERM selects the function that minimizes the empirical loss:
+
+
+_R_ ˆ( _h_ ) = [1]
+
+_n_
+
+
+_n_
+
+- _ℓ_ ( _h_ ( _xi_ ) _, yi_ ) _,_ _h_ ERM = arg min _R_ ˆ( _h_ ) _._
+
+_h∈H_
+_i_ =1
+
+
+ERM serves as a tractable surrogate for minimizing the population risk _R_ ( _h_ ) =
+E( _x,y_ ) _∼P_ [ _ℓ_ ( _h_ ( _x_ ) _, y_ )].
+
+
+**Population Approximation Error.** The Population Approximation Error (PAE) measures the discrepancy between empirical performance and the true expected performance:
+
+apx( _h_ ) = �� _R_ ( _h_ ) _−_ _R_ ˆ( _h_ ) �� _._
+
+A small approximation error indicates that the empirical distribution is a good proxy for the underlying population distribution.
+
+
+_L_ _[′]_ **-Lipschitz Continuity.** A function _f_ : _X_ _→_ R _[d]_ is _L_ _[′]_ -Lipschitz continuous if
+_∥f_ ( _x_ ) _−_ _f_ ( _x_ _[′]_ ) _∥≤_ _L_ _[′]_ _∥x −_ _x_ _[′]_ _∥,_ _∀_ _x, x_ _[′]_ _∈X_ _._
+
+
+**Rademacher Complexity.** Given a class of real-valued functions _F_ and samples _{x_ 1 _, . . ., xn}_, the
+empirical Rademacher complexity of _F_ is defined as
+
+
+_n_
+
+
+_σi f_ ( _xi_ )
+
+_i_ =1
+
+
+Rˆ _n_ ( _F_ ) = E _σ_
+
+
+sup
+_f_ _∈F_
+
+
+1
+
+_n_
+
+
+_,_
+
+
+where _σi_ are i.i.d. Rademacher random variables taking values _±_ 1 with equal probability.
+Rademacher complexity measures the expressive capacity of the function class _F_ : a larger value
+indicates a richer class that may overfit, while a smaller value suggests better generalization ability.
+A standard uniform generalization bound is
+
+
+               - ~~�~~ log(1 _/δ_ )
+
+_R_ ( _f_ ) _≤_ _R_ [ˆ] ( _f_ ) + 2 R [ˆ] _n_ ( _F_ ) + _O_
+
+_n_
+
+
+holding for all _f_ _∈F_ with probability at least 1 _−_ _δ_ .
+
+
+_,_
+
+
+B REPRODUCIBILITY STATEMENT & EXPERIMENTAL DETAILS
+
+
+**Hyperparameters.** In our main experiments, the maximum sequence length for representation
+extraction is set to 128. For Step 1, we configure the training process as follows. The dimension of
+the kernel transformation (2 _m_ ) is set to 1024. We use the Adam optimizer with an initial learning
+rate of 0.01. A learning rate scheduler is employed, which reduces the learning rate by a factor
+of 0.5 if the performance does not improve for 3 consecutive epochs (patience = 3). The model
+is trained with a batch size of 100 until convergence. The weights, denoted by _W_, are set as a
+geometric sequence with a base of 2 and exponents ranging from 0 to num ~~l~~ ayers _−_ 1. For Step 2,
+the model is trained for 100 epochs using the Adam optimizer. The learning rate is set to a fixed
+value of 1e-3, and the batch size is 128. Pruned layers in the main results are shown in the following
+table 5. Training was conducted on an 8 _×_ NVIDIA A100 server, leveraging pipeline parallelism to
+distribute different layers of the model across the GPUs.
+
+
+We fix the two base random matrices **Z** and **V** with their vectorizations Vec( **Z** ) _∼Nd×m_ (0 _, I_ )
+and Vec( **V** ) _∼Nr×m_ (0 _, I_ ) at initialization. At each forward pass we construct frequencies Ω=
+**D** [1] _[/]_ [2] **Z** + **LV**, where **D** and **L** are learnable. As _m_ _→∞_, the empirical covariance (1 _/m_ )ΩΩ _[⊤]_
+concentrates around **Σ** = **D** + **LL** _[⊤]_ . We do not resample **Z** _,_ **V** during training; learning occurs via
+**D** and **L** .
+
+
+**Post training.** To counter the rise in perplexity induced by kernelized layer replacement, we apply
+a low-rank adaptation only at the output projection, i.e., on the final hidden-to-vocabulary mapping.
+
+
+14
+
+
+Table 5: Pruning Results for LLaMA Models.
+
+
+LLM Pruning Ratio Pruned Layers
+
+
+LLaMA-2-7B 22.8% [6,7], [10,11], [14,15], [18,19], [22,23]
+
+LLaMA-2-13B 23.4% [3,4], [7,8], [9,10], [17,19], [27,28]
+
+LLaMA-3-8B 25.8% [6,7], [9,10], [12,13], [15,16], [18,19]
+
+
+When the output head is tied to the input embeddings, we insert a lightweight 1 _×_ 1 linear “logit
+adapter” before the head and place LoRA on this adapter; otherwise, LoRA is attached directly
+to the head. All other parameters remain frozen (including the kernel map _φθ_, the linear maps
+_{_ **A** _i}_, and the inverse mapping), so the structural simplification of KDP is preserved while the
+“representation→logits” distribution is re-calibrated. Training uses teacher forcing with knowledge
+distillation from the unpruned teacher: the objective is _L_ = _λ_ KL( _p_ teacher _∥_ _p_ student)+(1 _−λ_ ) CE with
+_λ_ = 0 _._ 5 and temperature _τ_ = 1 _._ 0; we find _τ_ _∈_ [1 _,_ 2] behaves similarly, and report _τ_ = 1 _._ 0. LoRA
+hyperparameters are rank _r_ = 8, _α_ = 32, and dropout 0 _._ 05. Optimization uses Adam (lr 1 _×_ 10 _[−]_ [4],
+no weight decay), bf16, gradient clip 1.0, warmup 3% with cosine decay, and early stopping on
+validation PPL. We train for 1–2 epochs on the calibaration dataset, which is reported in Section 3.1
+and sequence length of 2048. After training, the LoRA weights are merged into the output head,
+adding no runtime overhead.
+
+
+C RELATED WORK
+
+
+**Redundency** **in** **LLMs.** The existence of substantial redundancy within LLMs has been demonstrated through multiple perspectives. Liu et al. (2023) and Yom Din et al. (2024) reveal that successive transformer blocks in LLMs exhibit remarkable similarity in their representational outputs.
+Gardinazzi et al. (2025) hierarchically analyze representations by examining topological features.
+They observe that the early layers exhibit numerous short-lived topological structures. In contrast,
+structures in the middle layers become long-lived (or persistent), before short-lived structures reappear in the late layers. This indicates that the middle layers possess significant redundancy. Song
+et al. (2024) indicates the residual connection structure inherent in transformer architectures constrains each block to make only incremental contributions to the overall representation, resulting in
+high similarity between block representations. Men et al. (2024) and Gromov et al. (2025) find multiple layers perform similar or overlapping computations to refine predictions. Lad et al. (2024) also
+shows that LLMs exhibit inherent redundancy, particularly in intermediate layers, where dropping
+middle layers yields minimal impact on final model performance. To reduce model redundancy,
+pruning has emerged as a mainstream method for removing parameters and improving efficiency.
+
+
+**Weight Pruning.** Weight pruning is divided into structured pruning and unstructured pruning from
+the perspective of the pruning paradigm. Unstructured pruning removes individual weights or neurons based on predefined importance scores (Lee et al., 2019; Frantar & Alistarh, 2023; Sun et al.,
+2024). Although effective in reducing model size, unstructured pruning typically leads to irregular
+sparsity patterns, which significantly hinder hardware efficiency and deployment flexibility. Structured pruning has emerged as a powerful technique for optimizing neural networks by removing
+entire groups of weights while maintaining computational efficiency.
+
+
+Structured pruning eliminates entire columns within weight matrices (An et al., 2024; Ashkboos
+et al., 2024; Le et al., 2025; Liang et al., 2025), attention heads (He et al., 2024), or even graph-based
+structures (Ma et al., 2023), resulting in more hardware-friendly sparsity. Despite their structural
+advantages, these methods often disrupt the model’s original architectural flow and typically require
+customized software or hardware to realize actual inference acceleration.
+
+
+**Layer** **Pruning.** To preserve architectural integrity, layer-wise structured pruning removes entire
+layers based on their representational redundancy. LaCo (Yang et al., 2024) groups consecutive
+layers and replaces them with layer-wise parameter difference to achieve compression. ShortGPT
+(Men et al., 2024) computes BI scores—akin to cosine similarity—between layers to identify and remove less important ones. SLEB (Song et al., 2024) estimates layer importance using perplexity and
+prunes those deemed insignificant. Ding et al. (2025) using Centered Kernel Alignment (CKA, Kornblith et al., 2019), map representations to a kernel space to measure similarity and remove blocks
+with high CKA scores. Streamlining (Chen et al., 2025) adopts cosine similarity to identify redun
+
+15
+
+
+dant layers and utilizes knowledge distillation to restore performance post-pruning. However, these
+studies are typically metric-driven, focusing on identifying layers to prune rather than approaching the problem from a model dynamics perspective by fundamentally replacing parameter-heavy
+blocks with simpler modules. As a result, they either directly eliminate redundant layers (Song
+et al., 2024; Men et al., 2024)—inevitably incurring performance degradation—or require extensive
+data for fine-tuning (Kim et al., 2024; Yang et al., 2024; Gromov et al., 2025) or distillation (Chen
+et al., 2025) to mitigate the loss. This overlooks the opportunity to uncover simplified structural
+alternatives that enable rapid post-pruning recovery with minimal data.
+
+
+D PROOF
+
+
+_Proof of Theorem 1._ First, we establish a high-probability generalization bound on the one-step linear approximation error. For any given step _l_, we approximate _φ_ ( **h** _l_ +1) using a linear transformation
+**A** _l_ on _φ_ ( **h** _l_ ). The error vector for this one-step prediction is defined as:
+**e** _l_ = _φ_ ( **h** _l_ +1) _−_ **A** _lφ_ ( **h** _l_ ) _._ (7)
+
+The corresponding expected loss under the true distribution is given by:
+
+
+                  _L_ ( _θ,_ [�] **A** [�] _i_ ) = E _∥φθ_ �( **h** _l_ +1) _−_ **A** [�] _lφθ_ �( **h** _l_ ) _∥_ [2][�] _._ (8)
+
+
+We invoke the standard uniform convergence bound based on Rademacher complexity (Mohri et al.,
+2018, Theorem 1). Since _∥φ_ ( **h** ) _∥≤_ _Rφ_ and _∥_ **A** _i∥_ op _≤_ _BA_, the squared loss _ℓ_ ( _y, y_ _[′]_ ) = _∥y −_ _y_ _[′]_ _∥_ [2] is
+_L_ _[′]_ -Lipschitz on the ball _{∥y∥, ∥y_ _[′]_ _∥≤_ ( _B_ **A** +1) _Rφ}_ and has range in [0 _,_ ( _B_ **A** +1) [2] _Rφ_ [2] []][.] [Therefore,]
+with probability at least 1 _−_ _δ_, for all ( _θ, {_ **A** _i}_ ) in the hypothesis class _H_ _[′]_ = _{_ **h** _�→_ **A** _φθ_ ( **h** ) _∈_ R _[d]_ :
+_∥_ **A** _∥_ op _≤_ _B_ **A** _,_ _θ_ _∈_ Θ _,_ _∥φθ_ ( **h** ) _∥≤_ _Rϕ }_, it holds that
+
+
+_L_ ( _θ,_ [�] _{_ **A** [�] _i}_ ) _≤_ _L_ ERM + 2 _L_ _[′]_ _ℜn_ ( _H_ _[′]_ ) + ( _B_ **A** + 1) [2] _Rφ_ [2]
+
+
+- log(1 _/δ_ )
+
+_._ (9)
+2 _n_
+
+
+Next we bound _ℜn_ ( _H_ _[′]_ ). For each row **A** _l_ [ _i_ ] of **A** _l_ we have _∥_ **A** _l_ [ _i_ ] _∥_ [2] _≤_ _B_ **A**, and _∥φ_ ( **h** ) _∥≤_
+_Rφ_, hence the linear class satisfies R _n_ ( _H_ _[′]_ ) ≲ _B_ **A** _Rφ_ ~~�~~ 2 _m/n_ . Applying the standard contraction
+(shrinkage) lemma for Lipschitz losses to _ℓ_ _◦H_ _[′]_ yields
+
+
+_L_ ( _θ,_ [�] _{_ **A** [�] _i}_ ) _≤_ _L_ ERM + _C B_ **A** [2] _[R]_ _φ_ [2]
+
+
+for a universal constant _C_ _>_ 0.
+
+
+~~�~~ 2 _m_ log(2 _m/δ_ )
+
+_._ (10)
+_n_
+
+
+ing expansion and triangle inequality, we have **From one-step to** _k_ **-step.** Let _ej_ = _φθ_ �( **h** _j_ +1) _−_ **A** [�] _jφθ_ �( **h** _j_ ) be the one-step residual. By a telescop
+
+
+_φθ_ �( **h** _l_ + _k_ ) _−_ - _[l]_ [+] - _[k][−]_ [1] **A** - _i_ - _φθ_ �( **h** _l_ ) = _el_ + _k−_ 1 +
+
+_i_ = _l_
+
+
+_l_ + _k−_ 2
+
+
+_j_ = _l_
+
+
+- **A** - _l_ + _k−_ 1 _· · ·_ **A** - _j_ +1 _ej._ (11)
+
+
+From the Equation 10 it follows that for the learned model parameters, with probability 1 _−_ _δ_ there
+is a single-step prediction error vector with the number of paradigms bounded in the:
+
+
+- 2 _m_ log(2 _m/δ_ )
+
+_._ (12)
+_n_
+
+
+_∥el∥_ = _∥φθ_ �( **h** _l_ +1) _−_ **A** [�] _l φθ_ �( **h** _l_ ) _∥H_ _≤_
+
+
+_L_ ERM + _C B_ **A** [2] _[R]_ _φ_ [2]
+
+
+Using the Equation 12, for any consecutive _k_ step state sequence, the cumulative error of _Ek_ is
+�� _l_ + _k−_ 1        defined as _Ek_ = _φθ_ - ( **h** _l_ + _k_ ) _−_ _i_ = _l_ **A** - _i_ _φθ_ - ( **h** _l_ ). By submultiplicativity, we have:
+
+
+�����
+
+
+_l_ + _k−_ 1
+
+
+_∥Ek∥≤_
+
+
+_l_ + _k−_ 1
+
+
+_t_ = _l_
+
+
+**A**  - _i_
+
+_i_ = _t_ +1
+
+
+_∥et∥≤_
+�����op
+
+
+_l_ + _k−_ 1
+
+- _B_ **A** _[l]_ [+] _[k][−]_ [1] _[−][t]_ _∥et∥_ _._ (13)
+
+_t_ = _l_
+
+
+Let _j_ = _t −_ _l ∈{_ 0 _, · · ·_ _, k −_ 1 _}_, we have:
+
+
+_∥Ek∥≤_
+
+
+_k−_ 1
+
+- _B_ **A** _[k][−]_ [1] _[−][j]_ _∥el_ + _j∥_ _,_ (14)
+
+_j_ =0
+
+
+16
+
+
+here, let
+_b_
+
+     - **A**     - _i_ :=
+
+
+_i_ = _a_
+
+
+**A** - _b_ - **A** _b−_ 1 _· · ·_ **A** - _a,_ _a ≤_ _b,_ (15)
+**I** _,_ _a > b_ _[.]_
+
+
+Given that the Equation 12 has indicated, with the probability 1 _−_ _δ_ event, each step is _∥ej∥≤_
+
+
+_L_ ERM + _CB_ **A** [2] _[R]_ _φ_ [2] - _d_ log( _nd/δ_ )
+
+
+_n_, we can adjust _δ_ so that the probability applies equally to all 1 _≤_
+
+
+_j_ _≤_ _k_ steps by means of the union bound. Therefore, under the same high probability event,
+substitute the above equation and extract the common factor outside the sum equation to obtain the
+upper bound of the cumulative error norm of the _k_ step:
+
+
+_L_ ERM + _CB_ **A** [2] _[R]_ _φ_ [2]
+
+
+
+
+
+- _B_ **A** _[k][−]_ [1] _[−][j]_
+
+_j_ =0
+
+
+
+
+
+ _._ (16)
+
+
+
+
+- 2 _m_ log(2 _m/δ_ )
+
+_n_  _·_
+
+
+_k−_ 1
+
+ 
+
+
+_∥Ek∥≤_
+
+
+�
+
+
+
+
+
+Here, [�] _j_ _[k]_ =0 _[−]_ [1] _[B]_ **A** _[k][−]_ [1] _[−][j]_ is the linear mapping error of the _k_ step-by-step accumulation amplified coefficient via the gradual transfer. When _B_ **A** _<_ 1, the coefficient converges to (1 _−_ _B_ **A** ) _[−]_ [1], and
+_B_ **A** = 1 degenerates into a linear growth of _k_ .
+
+
+_Proof of Lemma 1._ We prove in two steps. First, in the ideal (infinite-dimensional) feature space
+induced by a universal, translation-invariant kernel (e.g., Gaussian RBF), any continuous target
+mapping can be approximated arbitrarily well by a linear operator on the canonical feature map.
+Second, by Random Fourier Features, the infinite-dimensional feature map can be approximated by
+a finite feature map _φ_ to arbitrary accuracy on the support of _D_ . Combining the two approximations
+and using the triangle inequality yields the desired bound.
+
+
+**Universality** **of** **the** **kernel and** **linear representability in the RKHS feature space.** Let k( _x, y_ )
+be a continuous, positive definite, translation-invariant kernel on R _[d]_ whose spectral measure has full
+support (e.g., the Gaussian RBF kernel). Result from (Micchelli et al., 2006) says that its RKHS
+_H_ k in the tight set _K_ on which is consistently dense for continuous functions: for any continuous
+function _f_ : _K_ _→_ R and any _η_ _>_ 0, exist _f_ _[∗]_ _∈H_ k such that sup _x⊂K |f_ _[⋆]_ ( _x_ ) _−_ _f_ ( _x_ ) _|_ _<_ _η_ . Denote
+Φ : R _[d]_ _→Hk_ is the feature mapping, _⟨_ Φ( _x_ ) _,_ Φ( _y_ ) _⟩H_ k = k( _x, y_ ). Let the true mapping between layers be **h** _l_ +1 = _f_ ( **h** _l_ ). For any _u ∈H_ k, consider _gu_ ( **h** _l_ ) := _⟨u,_ Φ( **h** _l_ +1) _⟩H_ k = _⟨u,_ Φ( _f_ ( **h** _l_ )) _⟩H_ k _, u ∈_
+_H_ k _._ When _f_, Φ is continuous, _gu_ is continuous in _K_ . By the consistency densities in the previous
+paragraph, given an arbitrary _δ_ _>_ 0, exists _fu_ _[∗]_ _[∈H]_ [k] [make]
+sup _∥gu_ ( **h** _l_ ) _−_ _fu_ _[⋆]_ [(] **[h]** _[l]_ [)] _[∥]_ _[< δ.]_ (17)
+_hl∈K_
+
+The nature of the regenerating nucleus suggests that _fu_ _[⋆]_ [(] **[h]** _[l]_ [)] [=] _[⟨][w][u][,]_ [ Φ (] **[h]** _[l]_ [)] _[⟩]_ _H_ k _[.]_ [Take] [a] [set] [of]
+_{uj}_ _[J]_ _j_ =1 _[⊂H]_ [k] [to] [fetch] _[ϕ]_ [(] _[·]_ [)] [of] [the] [former] _[j]_ [coordinates,] [we] [can] [get] [the] [corresponding] _[w][j]_ [,] [and]
+let every upper bound on the agreement error for each coordinate is _δj_ . Let the linear operator
+**A** _∞_ Φ ( **h** _l_ ) := [�] _j_ _[J]_ =1 _[⟨][w][j][,]_ [ Φ (] **[h]** _[l]_ [)] _[⟩]_ _Hk_ _[u][j]_ [.] [So there is a consistent error bound]
+
+
+
+
+
+1 _/_ 2
+
+
+
+
+
+**h** sup _l∈K_ _∥_ Φ ( **h** _l_ +1) _−_ **A** _∞_ Φ ( **h** _l_ ) _∥H_ k _≤_
+
+
+_J_
+
+ 
+
+
+- _δj_ [2]
+
+
+_j_ =1
+
+
+_._ (18)
+
+
+Choose _{δj}_ so that right term _≤_ _ε_ 1 (for example, _ε_ 1 = _ϵ/_ 2), we can get
+**h** sup _l∈K_ _∥_ Φ ( **h** _l_ +1) _−_ **A** _∞_ Φ ( **h** _l_ ) _∥H_ k _< ϵ/_ 2 _._ (19)
+
+Since the expectation is less than the upper bound, there is
+
+E **h** _l∼D ∥_ Φ ( **h** _l_ +1) _−_ **A** _∞_ Φ ( **h** _l_ ) _∥_ [2] _H_ k _[≤]_ [(] _[ϵ/]_ [2)][2] _[.]_ (20)
+
+
+**Approximating the infinite-dimensional map by Random Fourier Features.** By Bochner’s theorem (G¨unter, 1973), for translation-invariant kernels there exist RFF maps _φ_ : R _[d]_ _→_ R [2] _[m]_ such that
+inner products of _φ_ approximate the kernel. Rahimi & Recht (2007) shows that, with high probability over the draw of the features, one can uniformly approximate popular shift-invariant kernels on
+compact sets to within any tolerance _εk_ _>_ 0 using only _D_ = 2 _m_ = _O_ ( _ε_ _[−]_ _k_ [2] log(1 _/εk_ )) dimensions:
+sup _|⟨φ_ ( _x_ ) _, φ_ ( _y_ ) _⟩−_ _k_ ( _x, y_ ) _| ≤_ _εk,_ (21)
+_x,y∈K_
+
+
+17
+
+
+for any compact _K_ _⊂_ R _[d]_ containing the support of the data, provided _m_ is sufficiently large (highprobability statement).
+
+
+Define the (possibly infinite-dimensional) feature map Φ associated with _k_ so that k( _x, y_ ) =
+_⟨_ Φ( _x_ ) _,_ Φ( _y_ ) _⟩_ . The uniform approximation above implies that, on _K_,
+
+
+_∥⟨φ_ ( _x_ ) _, φ_ ( _y_ ) _⟩−⟨_ Φ( _x_ ) _,_ Φ( _y_ ) _⟩∥≤_ _εk_ for all _x, y_ _∈K,_ (22)
+
+
+i.e., _x_ _�→_ _φ_ ( _x_ ) is an _εk_ -isometric embedding of _x_ _�→_ Φ( _x_ ) at the level of pairwise inner products.
+Let **A** _∞_ be the operator satisfying
+
+sup _∥_ Φ ( **h** _l_ +1) _−_ **A** _∞_ Φ ( **h** _l_ ) _∥≤_ _ϵ_ 1 with _ϵ_ 1 _<_ _[ϵ]_ (23)
+_hl∈K_ 2 _[.]_
+
+
+Consider the finite-dimensional least-squares problem in RFF space and let **A** be a minimizer of
+
+_∥_ **A** min _∥≤B_ **A** [E][(] _[h][l][,h][l]_ [+1][)] _[∼D][ ∥][φ]_ [ (] **[h]** _[l]_ [+1][)] _[ −]_ **[A]** _[φ]_ [ (] **[h]** _[l]_ [)] _[∥]_ [2] _[ .]_ (24)
+
+
+Because the squared loss expands into inner products and norms, and because RFF inner products
+uniformly approximate kernel inner products on _K_, the objective in the RFF space uniformly approximates the kernel-space objective up to an additive _O_ ( _εk_ ) term (with constant depending only
+on _R_ Φ and _B_ **A** . Consequently, there exists a matrix **A** with _∥_ **A** _∥≤_ _B_ **A** such that
+
+E _∥φ_ ( **h** _l_ +1) _−_ **A** _φ_ ( **h** _l_ ) _∥_ [2] _≤_ E _∥_ Φ ( **h** _l_ +1) _−_ **A** _∞_ Φ ( **h** _l_ ) _∥_ [2] + _Cεk._ (25)
+
+
+Choosing _m_ large enough so that _εk_ _≤_ _ϵ/_ (2 _C_ ) and using the bound in Equation 20, we obtain
+
+E **h** _l∼D ∥φ_ ( **h** _l_ +1) _−_ **A** _φ_ ( **h** _l_ ) _∥_ [2] _< ϵ,_ (26)
+
+
+which completes this part.
+
+
+_Proof of Theorem 2._ We start from Lemma 1, which guarantees the existence of an RFF map _φθ∗_
+(with sufficiently large 2 _m_ ) and a linear operator **A** _[∗]_ such that _R_ RFF( _θ_ _[∗]_ _,_ **A** _[∗]_ ) _≤_ _ϵ_ = apxID _−_ ∆. The
+rest is a finite-sample comparison: let **A** [�] ID and ( _θ,_ [�] **A** [�] RFF) be the ERM solutions in the two classes;
+standard uniform-convergence bounds control their true risks by the respective optimal risks plus
+generalization terms _E_ ID( _n, δ_ ) and _E_ RFF( _n, δ_ ). Choosing _n_ so that _E_ RFF( _n, δ_ ) + _E_ ID( _n, δ_ ) _≤_ ∆
+then yields _R_ RFF( _θ,_ [�] **A** [�] RFF) _≤R_ ID( **A** [�] ID), establishing the kernel advantage with probability at least
+1 _−_ _δ_ .
+
+
+**Existence of a low-risk RFF predictor.** By Lemma 1, pick _ϵ_ = apxID _−_ ∆ _>_ 0. Then there exist
+_θ_ _[∗]_ and **A** _[∗]_ with _∥_ **A** _[∗]_ _∥_ op _≤_ _B_ **A** and sufficiently large 2 _m_ such that _R_ RFF( _θ_ _[∗]_ _,_ **A** _[∗]_ ) _≤_ _ϵ_ ; equivalently,
+apxRFF _≤_ _ϵ <_ apxID.
+
+
+**Uniform** **convergence** **and** **ERM** **risks.** We now turn to finite samples. Let **A** [�] ID _∈_
+arg min **A** _⊂F_ ID _R_ [�] ID( **A** ) and ( _θ,_ [�] **A** [�] RFF _∈_ arg min( _θ,_ **A** ) _∈F_ RFF _R_ [�] RFF( _θ,_ **A** ). Let **A** _[∗]_ ID _∈_
+arg min _F_ ID _R_ ID( **A** ) and ( _θ_ _[∗]_ _,_ **A** _[∗]_ ) _∈_ arg min _F_ RFF _R_ RFF( _θ,_ **A** ), which implies that:
+
+apxID := _R_ ID ( **A** _[∗]_ ID [)] _[,]_ apxRFF := _R_ RFF ( _θ_ _[∗]_ _,_ **A** _[∗]_ ) _._ (27)
+
+Fix _δ_ _∈_ (0 _,_ 1). There exists an event _E_ with probability at least 1 _−_ 2 _[δ]_ [on] [which] [the] [following]
+
+double-sided uniform deviations hold simultaneously for both classes:
+
+
+_,_
+
+
+_n,_ _[δ]_
+
+2
+
+
+sup
+**A** _⊂F_ ID
+
+
+_R_ ID( **A** ) _−_ _R_ �ID( **A** ) _≤_ _ε_ ID
+��� ���
+
+
+(28)
+
+_,_
+
+
+_n,_ _[δ]_
+
+2
+
+
+sup
+( _θ,_ **A** ) _⊂F_ RFF
+
+
+_R_ RFF( _θ,_ **A** ) _−_ _R_ �RFF( _θ,_ **A** ) _≤_ _ε_ RFF
+��� ���
+
+
+with
+
+
+~~�~~
+
+_ε_ ID( _n, δ_ ) = _CB_ **A** [2] _[R]_ _h_ [2] _d_ log _n_     - _cdδ_     - _,_ _ε_ RFF( _n, δ_ ) = _CB_ **A** [2] _[R]_ _φ_ [2]
+
+
+Define for brevity
+
+
+~~�~~
+2 _m_ log  - _cmδ_  - _._ (29)
+
+_n_
+
+
+_E_ ID( _n, δ_ ) := 2 _ε_ ID - _n,_ _[δ]_
+
+
+2 _[δ]_ - _,_ _E_ RFF( _n, δ_ ) := 2 _ε_ RFF - _n,_ 2 _[δ]_
+
+
+2 _[δ]_ - _._ (30)
+
+
+18
+
+
+On _E_, by Equation 28, we have
+
+
+_n,_ _[δ]_
+
+
+_R_ RFF - _θ,_ ˆ **A** - RFF� _≤_ apxRFF + 2 _ε_ RFF
+
+
+2
+
+
+_,_
+
+
+(31)
+_R_ RFF - _θ,_ ˆ **A** - RFF� _≤_ apxRFF + _E_ RFF( _n, δ_ ) _._
+
+
+On the same high–probability event on which the double–sided uniform deviation bounds hold, we
+also have
+_R_ ID( **A** [�] ID) _≥_ apxID _−E_ ID( _n, δ_ ) _,_ _E_ ID( _n, δ_ ) := 2 _ε_ ID� _n,_ 2 _[δ]_     - _._ (32)
+
+
+_Proof of Equation 32._ By the deviation bound, _R_ ID( **A** ) _≥_ _R_ [�] ID( **A** ) _−_ _ε_ ID( _n, δ/_ 2) for all **A** _∈F_ ID.
+Hence
+_R_ ID( **A** [�] ID) _≥_ _R_ [�] ID( **A** [�] ID) _−_ _ε_ ID� _n,_ 2 _[δ]_ - _≥_ _R_ [�] ID( **A** _[∗]_ ID [)] _[ −]_ _[ε]_ [ID] - _n,_ 2 _[δ]_ - _≥R_ ID( **A** _[∗]_ ID [)] _[ −]_ [2] _[ ε]_ [ID] - _n,_ 2 _[δ]_ - _,_
+
+where the middle inequality uses ERM optimality of **A** [�] ID and the last one uses the deviation bound
+again. Since apxID = _R_ ID( **A** _[∗]_ ID [)][, Equation 32 follows.]
+
+
+**Comparison via the approximation margin.** From Lemma 1, there exists ∆ _>_ 0 such that
+apxRFF _≤_ apxID _−_ ∆ _._ (33)
+Combining Equation 33 with the already established bound in Equation 35 and the ID lower bound
+in Equation 31, we obtain on the same event:
+
+
+_R_ RFF( _θ,_ [�] **A** [�] RFF) _≤_ apxID _−_ ∆+ _E_ RFF( _n, δ_ ) _,_ _R_ ID( **A** [�] ID) _≥_ apxID _−E_ ID( _n, δ_ ) _._ (34)
+Therefore, a sufficient condition for
+
+_R_ RFF( _θ,_ [�] **A** [�] RFF) _≤R_ ID( **A** [�] ID)
+is
+_E_ RFF( _n, δ_ ) + _E_ ID( _n, δ_ ) _≤_ ∆ _._ (35)
+
+
+**Choice of Sample Size** _n_ **.** We now choose sufficiently large _n_ to ensure that the RFF model’s true
+risk falls below that of the identity model by a margin of at least ∆.
+
+
+Here we require _n_ such that the sum of the two classes’ generalization error bounds is bounded by ∆.
+Since _E_ RFF is typically larger than _E_ ID, we can further simplify this to the (conservative) requirement
+_E_ RFF( _n, δ_ ) _≥_ ∆ _/_ 2 and _E_ ID( _n, δ_ ) _≤_ ∆ _/_ 2. Apparently it’s similar the other way around. Substituting
+the definitions of _E_ RFF and _E_ ID, we obtain the explicit condition on _n_ :
+
+
+2 _[δ]_ - _≥_ _R_ [�] ID( **A** _[∗]_ ID [)] _[ −]_ _[ε]_ [ID] - _n,_ 2 _[δ]_
+
+
+2 _[δ]_ - _≥R_ ID( **A** _[∗]_ ID [)] _[ −]_ [2] _[ ε]_ [ID] - _n,_ 2 _[δ]_
+
+
+2 _[δ]_ - _,_
+
+
+(36)
+4 _[.]_
+
+
+and _CB_ **A** [2] _[R]_ _h_ [2]
+4 _[,]_
+
+
+~~�~~
+_d_ log [2] _[cd]_
+
+
+_δ_ _≤_ [∆]
+_n_ 4
+
+
+_CB_ **A** [2] _[R]_ _φ_ [2]
+
+
+2 _m_ log [4] _[cm]_
+
+
+_δ_ _≤_ [∆]
+_n_ 4
+
+
+This condition can be rewritten more compactly as:
+
+
+ 
+16 _CB_ **A** [2]
+
+
+  
+_[cm]_ _δ_ _−_ _Rh_ [2] _d_ log [2] _δ_ _[cd]_
+
+
+- _Rφ_ [2] 2 _m_ log [4] _[cm]_ _δ_
+
+
+_δ_
+
+
+�2
+
+
+_n ≥_ _N_ _[∗]_ (∆ _, d,_ 2 _m, δ_ ) :=
+
+
++
+
+_,_ (37)
+∆ [2]
+
+
+Here ( _x_ )+ = max _{x,_ 0 _}_ denotes the positive part, which appears because if the term in parentheses
+is negative (i.e. if _Rφ_ [2][�] 2 _m_ log(4 _cm/δ_ ) _< Rh_ [2] - _d_ log(2 _cd/δ_ )), then the RFF class actually has no
+
+larger complexity term than the ID class, and the sample requirement can be significantly weak. In
+the typical case 2 _m_ _≫_ _d_, the term in parentheses will be positive, and the _N_ _[∗]_ given above is the
+dominant sample complexity threshold.
+
+
+E EXPERIMENTS ON OPT MODEL
+
+
+The performance is further evaluated on two OPT models (OPT-2.7B and OPT-6.7B, Zhang et al.,
+2022) with the results presented in Table 6 and Table 7. The results indicate that our method maintains robust performance even on relatively small models. While experiencing a marginal decline
+on generation tasks, our method’s performance on generation tasks stays comparable, showing no
+signs of collapse.
+
+
+19
+
+
+Table 6: Performance comparison on OPT-2.7B and OPT-6.7B.
+
+
+**LLM** **Method**
+
+
+**Avg.** **RP.**
+
+
+Table 7: Performance of OPT model on generation benchmarks. For Perplexity, a lower score means
+better performance ( _↓_ ), while for ROUGE, a higher score means better performance ( _↑_ ).
+
+
+LLM Method WIKI _↓_ C4 _↓_ Xsum _↑_ RP(PPL) RP(Rouge)
+
+
+OPT-2.7B
+
+
+Dense 15.1 31.3 6.5 100.0 100.0
+
+Ours 28.0 37.2 2.8 69.0 43.1
+
+
+Ours 13.9 22.1 6.0 67.0 43.8
+
+
+F MORE ABLATION STUDIES
+
+
+**Different** **Pruning** **Ratios(HellaSwag** **and** **BoolQ).** Although CMMLU (Figure 7) is a comprehensive benchmark, the dense model’s performance on it remains relatively low. To mitigate this
+potential side effect, we present performance curves on HellaSwag and BoolQ across various pruning rates. The results confirm that the overall performance still exhibits a consistent linear decline.
+
+
+**Different** **Kernel** **Sizes.** A kernel function for our objective must address a fundamental tradeoff; it must be powerful enough to simplify the system’s dynamics, yet sufficiently constrained
+to retain the core information required by the task. For example, a trivial kernel that maps all
+representations to a constant would perfectly linearize the dynamics, but at the cost of a complete
+“information collapse” that invalidates the model. Therefore, our goal is to design a non-trivial
+kernel that can effectively model the simplified dynamics on the slow manifold. Given such a kernel,
+we can simplify the transformations between layers, thereby enabling layer pruning. To validate this
+point, beyond the end-to-end downstream experiments in the main text, we further investigate how
+the method’s performance varies with different kernel sizes (i.e., 2 _m_ ).
+
+
+Figure 8 illustrates the impact of varying kernel sizes on the performance of LLaMA2-7B across
+three representative datasets (Hellaswag, CoQA and MMLU). With smaller kernel sizes, such as 256
+
+
+Model Performance on Hellaswag Across Pruning Rates
+
+
+80.15
+
+77.55
+
+74.95
+
+72.35
+
+69.75
+
+67.15
+
+64.55
+
+61.95
+
+59.35
+
+
+77.50
+
+72.56
+
+67.62
+
+62.69
+
+57.75
+
+52.81
+
+47.88
+
+42.94
+
+38.00
+
+
+|Mod|els|Col3|Col4|Col5|Col6|Col7|Line Style|
+|---|---|---|---|---|---|---|---|
+|~~LLa~~<br>|~~A-2-7B~~<br>||||||~~Baseline~~<br>|
+|~~LLa~~<br>|~~A-2-13B~~<br>||||||~~Post-Training~~|
+|~~LLaM~~|~~A-3-8B~~|||||||
+|||||||||
+|||||||||
+|||||||||
+|||||||||
+|||||||||
+|||||||||
+|||||||||
+|||||||||
+|||||||||
+|||||||||
+|||||||||
+
+
+|Mod|Col2|els|Col4|Col5|Col6|Col7|Col8|Line Style|
+|---|---|---|---|---|---|---|---|---|
+|~~LLa~~<br>|~~LLa~~<br>|~~A-2-7B~~<br>||||||~~Baseline~~<br>|
+|~~LLa~~<br>|~~LLa~~<br>|~~A-2-13B~~<br>||||||~~Post-Training~~|
+|~~LLaM~~|~~LLaM~~|~~A-3-8B~~|||||||
+||||||||||
+||||||||||
+||||||||||
+||||||||||
+||||||||||
+||||||||||
+||||||||||
+||||||||||
+||||||||||
+||||||||||
+||||||||||
+
+
+0% 10% 20% 30% 40% 50%
+Pruning Rate
+
+
+Model Performance on BoolQ Across Pruning Rates
+
+
+0% 10% 20% 30% 40% 50%
+Pruning Rate
+
+
+Figure 7: Performance of HellaSwag and BoolQ when we prune with increasing pruning ratio.
+
+
+20
+
+
+and 512, there is a significant drop in performance, which suggests that critical information is lost
+due to excessive compression. Conversely, once the kernel size reaches 1024, the performance gains
+become marginal. This indicates that a 1024-dimensional kernel space, induced by our learnable
+RFF can encode the model’s essential information.
+
+
+**Data** **efficiency.** As presented in Table 8, our method demonstrates high data efficiency, utilizing
+only marginally more data than SliceGPT. Critically, our method does not require any post-training
+to restore performance.
+
+
+Table 8: Data usage statistics for each methods.
+
+
+Method Need Training Need Fine-tuning Total Sample
+
+
+SLEB - - /
+ShortGPT  -  - /
+LaCo - - 1B
+Streamline  -  - 30k
+LLMPruner  -  - 50k
+SliceGPT  -  - 1k
+Ours  -  - 4k
+
+
+80
+
+70
+
+60
+
+50
+
+40
+
+30
+
+20
+
+10
+
+0
+
+
+|Dataset Accuracy Comparison Across Kernel Sizes<br>HeSW CoQA 73.3 .2 1 .4 69.8|Col2|Col3|Col4|Col5|Col6|Col7|Col8|Col9|Col10|Col11|Col12|Col13|Col14|Col15|Col16|Col17|Col18|Col19|Col20|Col21|Col22|Col23|Col24|Col25|Col26|Col27|Col28|Col29|Col30|
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+|||6|48.9|48.9|48.9|48.9|48.9|45.2<br><br>|45.2<br><br>|45.2<br><br>|45.2<br><br>|45.2<br><br>|65.<br>.1<br>45|65.<br>.1<br>45|65.<br>.1<br>45|65.<br>.1<br>45|65.<br>.1<br>45|66<br>.4<br>45<br>44.7|66<br>.4<br>45<br>44.7|66<br>.4<br>45<br>44.7|66<br>.4<br>45<br>44.7|66<br>.4<br>45<br>44.7|.7<br>45.9|.7<br>45.9|.7<br>45.9||45.4<br>47.7<br><br>~~MMLU~~|45.4<br>47.7<br><br>~~MMLU~~|45.4<br>47.7<br><br>~~MMLU~~|
+||||||33.7<br>34|33.7<br>34|33.7<br>34|.9<br>29.5|.9<br>29.5|.9<br>29.5||||30.6|30.6|||||||||||||||
+|||||||||||||||||||||||||||||||
+|||||||||||||||||||||||||||||||
+|||||||||||||||||||||||||||||||
+
+
+Kernel Size
+
+
+Figure 8: Ablation study on kernel size _m_ .
+
+
+**Sensitivity analysis for each step.** To further investigate the importance of each step, we conduct
+an ablation study under extreme conditions on LLaMA-2-7B. We individually train either Step 1
+or Step 2 for a minimal number of epochs, forcing the subsequent steps to handle all performance
+modeling. As shown in Table 9, we observe a significant performance collapse in both scenarios.
+A significant discrepancy in performance becomes evident after a short training period. Training
+Step 1 for just 5 epochs, despite recovering some performance, still falls considerably short of the
+original baseline. Conversely, training Step 2 for five epochs achieves performance almost on par
+with the fully trained method. This provides strong support for our central thesis presented in the
+main text: that the trained kernel function models performance, while the inverse transformation
+network’s role is to learn the corresponding inverse transformation.
+
+
+Table 9: Sensitivity analysis for each step.
+
+
+Method HeSW CoQA MMLU
+
+
+Original 65.1 45.4 28.1
+Barely Step 1 (1 Epoch) 43.9 17.0 24.2
+Barely Step 1 (5 Epoch) 52.1 27.0 26.7
+Barely Step 2 (1 Epoch) 43.7 13.0 24.4
+Barely Step 2 (5 Epoch) 60.0 43.7 26.3
+
+
+**Speed** **up.** To further assess the practicality of our method, we compare its performance and efficiency across several mainstream LLaMA models, with detailed results in Table 10. We mainly focus on focuses on quantifying the impact of reducing inference computation (FLOPs) on the models’
+average performance (Avg RP). For LLaMA-2-7B, FLOPs were reduced by 23.13%, which brought
+a 1.30x theoretical inference speedup. For LLaMA-2-13B, FLOPs were reduced by 23.64%, achieving a 1.30x speedup, and the performance retention rate reached 92.9%; this is the result with the
+best performance-efficiency trade-off among the three. In summary, the experimental results demonstrate that our method effectively accelerates the inference of LLMs. It offers a tunable mechanism
+for trading acceptable performance degradation for significant gains in computational efficiency.
+This feature holds substantial practical value for deploying large models in resource-constrained
+environments.
+
+
+**Different training datasets.** To evaluate the performance of our method across various datasets, we
+conduct experiments on the LLaMA2-7b model. The results are presented in Table 11. Specifically,
+the “Fewer” setting utilizes a training set comprising 200 samples each from BoolQ, CMMLU, and
+Slimpajama. In contrast, the “More” setting augmented this base dataset with data from CoQA
+and HellaSwag, totaling 11.4k samples. Here, “Avg.” denotes the average performance across the
+datasets. “RP. on Dense” and “RP. on std.” indicate the Retained Performance relative to the Dense
+model and the standard dataset (reported in the main text), respectively. The experimental results
+
+
+21
+
+
+Table 10: Performance and efficiency comparison.
+
+
+**Model** **Method** **FLOPs (G)** **Change (%)** **SpeedUp**
+
+
+LLaMA-2-7B
+
+
+LLaMA-2-13B
+
+
+Dense 845.71 - SLEB 664.38 27.29 1.27 _×_
+ShortGPT 612.57 38.06 1.38 _×_
+Streamline 586.67 30.63 1.44 _×_
+SliceGPT 717.63 15.14 1.17 _×_
+**Ours** 650.06 23.13 1.30 _×_
+
+
+Dense 1645.01 - SLEB 1320.20 19.74 1.24 _×_
+ShortGPT 1239.00 24.68 1.33 _×_
+Streamline 1229.76 25.24 1.34 _×_
+SliceGPT 1392.89 15.32 1.18 _×_
+**Ours** 1255.99 23.64 1.30 _×_
+
+
+demonstrate the remarkable efficiency of our method. Our standard configuration (“Standard”),
+using only 4k data samples, achieved 91.4% of the performance of the Dense model (average score
+of 58.69). Notably, the “Fewer” configuration, with merely 0.6k samples, attained 97.7% of the
+performance of the standard configuration, indicating that our method is not sensitive to the data
+volume and possesses strong generalization capabilities. Furthermore, by increasing the dataset size,
+the “More” configuration surpassed the standard version’s performance (103.1%), which validates
+the scalability of our method. In conclusion, this ablation study highlights the robustness of our
+method with respect to data quantity.
+
+
+Table 11: Performance comparison of LLaMA-2-7B under different training data setups.
+
+
+**LLM** **Datasets**
+
+
+**Avg.** **RP. on Dense** **RP. on std.**
+
+
+Dense 34.9 73.3 79.7 66.2 72.3 48.9 30.8 42.8 93.2 44.8 58.69 100.0       
+Standard (8d 4k) 33.6 65.1 70.1 45.4 71.6 44.7 28.1 39.9 94.0 43.7 53.62 91.4 100.0
+
+Fewer (3d 0.6k) 33.1 72.7 76.5 46.0 72.7 29.3 26.4 36.3 90.5 40.2 52.37 89.2 97.7
+
+More (10d 11.4k) 34.9 73.0 77.0 47.9 70.7 44.7 30.3 38.0 92.4 44.3 55.32 94.3 103.1
+
+
+G MORE VISUALIZATION
+
+
+This section presents additional visualizations of the fitting results. Following the mechanism previously detailed in Figure 4, these figures provide a clearer illustration of the fitting quality.
+
+
+H MORE ANALYSIS OF SLOW MANIFOLD HYPOTHESIS
+
+
+The manifold hypothesis posits that high-dimensional data often reside on a manifold with a dimensionality much lower than that of the ambient space, which is beneficial in various fields (Song &
+Ermon, 2019). This leads us to consider whether this property also holds for the LLM’s internal
+representations, allowing them to be embedded in a low-dimensional manifold. The internal representations of the model are sequential. As shown in Equation 1, in standard Pre-Norm Transformers,
+**h** _l_ +1 is obtained by adding an increment to **h** _l_ . We therefore define this increment as the velocity of
+change in the representation.
+
+
+Although CKA and Cosine similarity are measures of similarity rather than distance, they are closely
+correlated with distance measures on the manifold. This implies that high similarity between two
+representations corresponds to a small distance between them. This two similarity matrices in Figure
+1 provide quantitative evidence for this. When the representation change over a single propagation
+step is small, we consider the representation to be in a stable state on the manifold, which is often
+feasible to model this stable evolution using a simple dynamical model.
+
+
+The concept of using linear approximations for nonlinear dynamics finds parallels in many fields.
+Beyond the fundamental example of calculus, a typical case in partial differential equations (PDEs)
+
+
+22
+
+
+Figure 9: Additional Visualizations of Representation Fitting.
+
+
+23
+
+
+3D t-SNE Visualization of Layer Representations
+
+
+75
+
+50
+
+25
+
+0
+
+
+Layer 0
+Layer 4
+Layer 8
+Layer 12
+Layer 16
+Layer 20
+Layer 24
+Layer 28
+
+
+Figure 10: The representation propagation trajectories for 100 samples within LLaMA2-7B. The
+X and Z axes denote the t-SNE coordinates, while the Y-axis represents the layer index. An inspection along the Y-axis (layer depth) reveals that the trajectories for individual samples remain
+well-separated and exhibit strong linearity. Furthermore, the transformation between adjacent layers is gradual.
+
+
+is the Fisher equation. Its full form is: _ut_ = _Duxx_ + _ru −_ _K_ _[r]_ _[u]_ [2] _[.]_ [ However, in the vicinity of] _[ u]_ [ =] _[ K]_ [,]
+
+this equation is often simplified into the following linear PDE: _vt_ = _Dvxx −_ _rv_ .
+
+
+To provide further intuitive support for our hypothesis, we visualized the representational trajectories
+across different layers for 100 samples from LLaMA2-7B using t-SNE in Figure 10. The resulting
+plot clearly exhibits a strong linear trend, which in turn validates the feasibility of our method.
+
+
+I ADDITIONAL OVERHEAD ANALYSIS
+
+
+KDP introduces additional parameters during two steps: Kernel Linearization Joint Training requires
+training the parameters _θ_, **A** _i_ defined in Equation 5; Inverse Transformation Network involves training the parameter _ϕ_ from Equation 6. Specifically, when we replace a block of _K_ max consecutive
+layers, the parameter counts for the three components ( _θ_, **A** _i_, _ϕ_ ) are as follows:
+
+
+_θ_ **:** The RFF kernel learns a data-driven anisotropic Gaussian RBF kernel. Its learnable parameters _θ_
+are derived from the parameterization of the covariance matrix Σ = **D** + **LL** _[⊤]_ . This parameterization
+consists of two components: First, the diagonal matrix **D** = diag(exp( _λ_ )), is parameterized by
+the learnable vector _λ_ _∈_ R _[d]_, contributing _d_ parameters. Second, **L** _∈_ R _[d][×][r]_ is a learnable lowrank factor matrix, which contributes _d × r_ parameters. Therefore, the total parameter count is:
+Params( _θ_ ) = _d_ + _dr_ = _d_ (1 + _r_ ).
+
+
+**A** _i_ **:** Each operator **A** _i_ maps the kernel space representation _φ_ ( **h** _l_ + _i−_ 1) _∈_ R [2] _[m]_ to _φ_ ( **h** _l_ + _i_ ) _∈_ R [2] _[m]_ .
+Consequently, **A** _i_ is a (2 _m_ ) _×_ (2 _m_ ) matrix. To ensure stable training, **A** _i_ is parameterized as
+**A** _i_ = **I** + _γi_ **B** _i_ . The learnable parameters for each **A** _i_ thus consist of the scalar _γi_ and the matrix
+**B** _i_ _∈_ R [2] _[m][×]_ [2] _[m]_ . This results in a total parameter count of Params( **A** _i_ ) = _K_ max _·_ (1 + (2 _m_ ) [2] ).
+
+�� _k_              Notably, once training is complete, only the product _i_ =1 **[A]** [�] _[i]_ needs to be stored. Consequently,
+
+during the inference phase, the final parameter count is reduced to only: Params( **A** _i_ ) = (2 _m_ ) [2] .
+
+
+textbf _ϕ_ : This represents the parameters for the inverse transformation network _I_ ( _·_ ). The network
+is parameterized as _I_ ( _x_ ) := _α ·_ MLP( _x_ ), where _α_ is a learnable scalar and MLP( _·_ ) stands for a
+two-layer MLP network. The total parameter count is given by: Params( _ϕ_ ) = 1 + (2 _m · d_ hidden +
+_d_ hidden) + ( _d_ hidden _· d_ + _d_ ).
+
+
+Therefore, during the training phase, the total introduced parameter count is
+
+
+Params [Trian] (KDP) = _d_ (1 + _r_ ) + _K_ max(1 + (2 _m_ ) [2] ) + (1 + _d_ hidden(2 _m_ + _d_ + 1) + _d_ ) _,_
+
+
+24
+
+
+and during the inference phase, the total introduced parameter count is
+
+Params [Inference] (KDP) = _d_ (1 + _r_ ) + (2 _m_ ) [2] + (1 + _d_ hidden(2 _m_ + _d_ + 1) + _d_ ) _._
+
+
+The FLOPS and corresponding parameter counts under different _k_ are in the Table 12, which demonstrate that the additional overhead introduced by KDP is minimal.
+
+
+Table 12: FLOPs and parameter retention under _k_ = 2 and _k_ = 3.
+
+
+**LLM** **FLOPs (G)** **Params (M)**
+
+
+_k_ = 2 _k_ = 3 _k_ = 2 _k_ = 3
+
+
+Transformer Block 51.80 77.71 404.77 607.15
+LLaMA-2-7B Fold Block 2.89 12.40
+Retention Rate 5.59% 3.73% 3.07% 2.05%
+
+
+Transformer Block 81.20 121.80 634.41 951.61
+LLaMA-2-13B Fold Block 3.4 14.83
+Retention Rate 4.19% 2.79% 2.34% 1.56%
+
+
+J THE USE OF LLMS
+
+
+We thank the Large Language Model (LLM) for its assistance in proofreading and polishing the
+manuscript’s language. The LLM was not involved in the idea, theoretical development, or experimental aspects of this research.
+
+
+25

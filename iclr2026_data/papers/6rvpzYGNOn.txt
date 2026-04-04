@@ -1,0 +1,386 @@
+# ACCURACY-FIRST RÉNYI DIFFERENTIAL PRIVACY AND POST-PROCESSING IMMUNITY
+
+Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+The accuracy-first perspective of differential privacy addresses an important shortcoming by allowing a data analyst to adaptively adjust the quantitative privacy bound instead of sticking to a predetermined bound. Existing works on the accuracy-first perspective have neglected an important property of differential privacy known as post-processing immunity, which ensures that an adversary is not able to weaken the privacy guarantee by post-processing. We address this gap by determining which existing definitions in the accuracy-first perspective have post-processing immunity, and which do not. The only definition with post-processing immunity, pure ex-post privacy, lacks useful tools for practical problems, such as an ex-post analogue of the Gaussian mechanism, and an algorithm to check if accuracy on separate private validation set is high enough. To address this, we propose a new definition based on Rényi differential privacy that has post-processing immunity, and we develop basic theory and tools needed for practical applications. We demonstrate the practicality of our theory with an application to synthetic data generation, where our algorithm successfully adjusts the privacy bound until an accuracy threshold is met on a private validation dataset.
+
+## 1 INTRODUCTION
+
+As the volume of data collection and capabilities of machine learning models increase, the need for methods to use the data while maintaining the privacy of data subjects grows ever larger. Differential privacy (DP; Dwork et al., 2006b) has become the gold-standard definition of privacy to address this need.
+
+However, differential privacy is a very strict definition. First, it requires protection against a worst-case adversary with very strong capabilities, which necessitates very strong protection that can heavily decrease the utility of an analysis. Second, it requires specifying a numerical privacy bound before running the algorithm, which precludes workflows such as reducing the privacy bound over time in case the data becomes less sensitive, using different bounds for different audiences (Rosenblatt et al., 2024), and addressing low utility by decreasing the privacy protection afterwards (Liggett et al., 2017; Nanayakkara et al., 2024).
+
+Motivated by these issues, Liggett et al. (2017) proposed the *accuracy-first* perspective to DP, where the analyst sets a minimum utility (accuracy) threshold, and finds the strongest privacy bound that empirically meets the threshold. As the privacy bound now depends on the private data, standard DP definitions, known as *ex-ante* definitions, are not applicable. Instead, this perspective requires a new type of privacy definition that allows the privacy bound to depend on the private data, known as *ex-post privacy*. Liggett et al. (2017) proposed the first ex-post privacy definition, pure ex-post privacy, and developed a *Laplace noise reduction* mechanism that satisfies their definition. In subsequent work, Whitehouse et al. (2022) proposed a probabilistic relaxation, and developed the *Brownian mechanism*, an analogue of the Gaussian mechanism (Dwork et al., 2006a) of ex-ante DP providing higher utility. In parallel to our work, Ghazi et al. (2025) developed a hyperparameter tuning algorithm for the accuracy-first perspective, and proposed ex-post privacy definitions based on *approximate DP* (ADP, Dwork et al., 2006a) and *Rényi DP* (RDP; Mironov, 2017).
+
+However, these works have neglected an important aspect that any privacy definition should have, known as *post-processing immunity* (Dwork & Roth, 2014). Post-processing immunity is the
+
+requirement that any processing of the output of a private algorithm cannot decrease the privacy guarantee. It is clear why any sensible privacy definition (Mironov, 2017; Dong et al., 2022) should have post-processing immunity: without it, an adversary could use post-processing to infer private information more easily than promised, making the guarantee weaker than promised (Meiser, 2018).
+
+**Contributions** Our goal is to address this gap by determining whether previous ex-post privacy definitions have post-processing immunity, and by developing additional theory that supports mechanisms for practical problems under ex-post privacy guarantees with post-processing immunity.
+
+1. We propose a new notation for ex-post privacy definitions that makes the promised privacy bound a part of the output of the algorithm, instead of making it a separate function of the output. The new notation allows defining post-processing immunity in an elegant way, while we were not able to find a satisfactory definition with the old notation, and neither has any previous work (Liggett et al., 2017; Whitehouse et al., 2022; Ghazi et al., 2025) that we know of. We then formulate the existing definitions to use our new notation. See Section 3.1 for details.
+2. After the translation to the new notation, we prove that the pure ex-post privacy definition of Liggett et al. (2017) has post-processing immunity, while the probabilistic relaxation of Whitehouse et al. (2022) does not have it. This motivates the development of an alternative relaxation that both has post-processing immunity, and supports the Brownian mechanism. See Section 3.2 for details, and Table 1 for a summary.
+3. We investigate an ex-post privacy definition based on RDP, which has been proposed in parallel by Ghazi et al. (2025). We prove that this definition has post-processing immunity, along with many basic properties that are useful in constructing practical mechanisms. In particular, we provide an algorithm that checks whether accuracy on a private validation dataset is high enough, whereas previous works only provide algorithms to check accuracy on the training set (Liggett et al., 2017; Whitehouse et al., 2022). See Section 4.
+4. We prove that the Brownian mechanism satisfies ex-post RDP in Section 5. This is the first time the Brownian mechanism has been proven to satisfy an ex-post definition with post-processing immunity. Our proof uses a more elementary view of the Brownian mechanism than Whitehouse et al. (2022), that does not require working with stochastic processes, which may be of interest to future work.
+5. We give a practical example of using the Brownian mechanism and our theory in Section 6. We generate synthetic data, and ensure that the accuracy of a classifier trained on the synthetic data on a private validation dataset is high enough on a minimal privacy budget. We find that our implementation is able to achieve high accuracy while keeping a tight privacy budget. [We give another example in Appendix E, where we fine-tune an image classifier, ensuring a minimum accuracy while minimising the privacy budget.](#)
+
+### 1.1 RELATED WORK
+
+The closest related works are those by Liggett et al. (2017), Whitehouse et al. (2022) and Ghazi et al. (2025) that have proposed several ex-post privacy definitions. Follow-up work (Rogers et al., 2023) has studied compositions involving ex-post private mechanisms. None of these have proven that any ex-post privacy definition has post-processing immunity.
+
+Another line of related work is known as privacy odometers (Rogers et al., 2016). A privacy odometer allows running a sequence of mechanisms with adaptively selected privacy bounds and keeps track of the cumulative privacy budget that has been spent. Odometers have been developed for several DP definitions (Rogers et al., 2016; Feldman & Zrnic, 2021; Lécuyer, 2021; Koskela et al., 2023; Whitehouse et al., 2023) and more general sequences of mechanisms (Haney et al., 2023). While odometers do not provide ex-ante DP guarantees, they can provide ex-post guarantees. See Appendix A for more details.
+
+## 2 BACKGROUND
+
+In this section, we introduce required background material on DP (Section 2.1) and ex-post privacy (Section 2.2).
+
+**Common Notations** We use  $p_P(y)$  to denote the density function of a random variable  $P$  at a value  $y$ . We do not necessarily assume that  $P$  is continuous, but rather assume that  $P$  has a density function with regards to some base measure  $\mu$ , which is a much more general condition. This allows us to treat discrete and continuous distributions in the same way.
+
+We use  $y_{i:j}$  to denote a sequence of values from index  $i$  to  $j$ . If  $j < i$ , we take the sequence to be empty. Table 2 in the Appendix contains summary of common notations we use.
+
+### 2.1 DIFFERENTIAL PRIVACY BASICS
+
+Differential privacy quantitatively formalises the notion of privacy loss resulting from the release of an output that depends on private input data. This can be formalised in several ways. For the standard ex-ante setting with the privacy bound fixed upfront, we present two definitions. The first is the most commonly used definition, known as *approximate DP* (ADP) or  $(\epsilon, \delta)$ -DP. The second is known as *Rényi DP* (RDP).
+
+**Definition 2.1** (Dwork et al. 2006a). *An algorithm  $\mathcal{M}: \mathcal{X} \rightarrow \mathcal{Y}$  is  $(\epsilon, \delta)$ -DP for  $\epsilon \geq 0, 0 \leq \delta < 1$  if, for all neighbouring  $X, X' \in \mathcal{X}$  and all measurable  $A \subset \mathcal{Y}$ ,*
+
+$$\Pr(\mathcal{M}(X) \in A) \leq e^\epsilon \Pr(\mathcal{M}(X') \in A) + \delta. \quad (1)$$
+
+The case with  $\delta = 0$  is also known as pure DP, and denoted  $\epsilon$ -DP.
+
+**Definition 2.2** (Mironov, 2017). *An algorithm  $\mathcal{M}: \mathcal{X} \rightarrow \mathcal{Y}$  is  $(\alpha, \epsilon)$ -RDP for  $\epsilon \geq 0, \alpha > 1$  if, for all neighbouring  $X, X' \in \mathcal{X}$ ,*
+
+$$\frac{1}{\alpha - 1} \ln \mathbb{E}_{y \sim \mathcal{M}(X)} \left[ \left( \frac{p_{\mathcal{M}(X)}(y)}{p_{\mathcal{M}(X')} (y)} \right)^\alpha \right] \leq \epsilon. \quad (2)$$
+
+It is possible to define RDP for  $\alpha = 1$  and  $\alpha = \infty$  by taking a limit of the left hand side, but we will not consider those values in this paper.
+
+DP algorithms are also called mechanisms. We use  $X \sim X'$  to denote neighbouring datasets. The neighbourhood relation  $\sim$  is domain-specific, but the results in this paper, with the exception of the experiments in Section 6, are agnostic to the definition.
+
+We will also make use of *privacy loss functions* (PLF) and *privacy loss random variables* (PLRV).
+
+**Definition 2.3** (Sommer et al. 2019). *For random variables  $P, Q$ , with respective density functions  $p_P, p_Q$ , the PLF is  $\mathcal{L}(y) = \ln \frac{p_P(y)}{p_Q(y)}$  and the PLRV is  $L = \mathcal{L}(y)$ , where  $y \sim P$ .*
+
+The PLF  $\mathcal{L}_{X/X'}^\mathcal{M}$ , and PLRV  $L_{X/X'}^\mathcal{M}$ , for a mechanism  $\mathcal{M}$  and datasets  $X \sim X'$  is formed by setting  $P = \mathcal{M}(X)$  and  $Q = \mathcal{M}(X')$ . The definition of  $(\epsilon, 0)$ -DP is then equivalent to  $\Pr(L_{X/X'}^\mathcal{M} > \epsilon) = 0$  for all  $X \sim X'$ .
+
+### 2.2 ACCURACY-FIRST DIFFERENTIAL PRIVACY
+
+In the accuracy-first perspective of DP, the privacy bound is not fixed upfront, and can vary based on the result of a mechanism, possibly in a data-dependent way. Since common ex-ante definitions of DP require a fixed privacy bound (Dwork & Roth, 2014; Mironov, 2017; Dong et al., 2022), the accuracy-first perspective requires generalised definitions that can accommodate a data-dependent privacy bound. We call these definitions ex-post privacy definitions after the first such definition from Liggett et al. (2017).
+
+**Definition 2.4** (Liggett et al. 2017; Whitehouse et al. 2022). *An algorithm  $\mathcal{M}: \mathcal{X} \rightarrow \mathcal{Y}$  is  $(\mathcal{E}, \delta)$ -probabilistically ex-post private for  $\mathcal{E}: \mathcal{Y} \rightarrow \mathbb{R}_{\geq 0}$  if, for all  $X \sim X'$ ,*
+
+$$\Pr_{y \sim \mathcal{M}(X)} (\mathcal{L}_{X/X'}^\mathcal{M}(y) > \mathcal{E}(y)) \leq \delta. \quad (3)$$
+
+The original definition from Liggett et al. (2017) has  $\delta = 0$ . To distinguish it from the  $\delta > 0$  case, we will refer to the  $\delta = 0$  case as  $\mathcal{E}$ -pure ex-post privacy. These definitions accommodate a varying privacy bound by making the bound a function  $\mathcal{E}$  of the output  $y$ .
+
+Table 1: Summary of ex-post privacy definitions. The columns indicate whether the definition has post-processing immunity (PPI) and whether the Brownian mechanism (BM) satisfies it. Whether  $\delta$ -approximate ex-post privacy has PPI is currently unknown, indicated by “?”. The PPI column shows the status for the formulations of the definitions using our notation from Section 3.1.
+
+| Definition                              | PPI | BM | Source                                  |
+|-----------------------------------------|-----|----|-----------------------------------------|
+| Pure ex-post privacy                    | ✓*  | ✗  | Liggett et al., 2017, Definition 2.3    |
+| $\delta$ -probabilistic ex-post privacy | ✗*  | ✓  | Whitehouse et al., 2022, Definition 2.2 |
+| $\delta$ -approximate ex-post privacy   | ?   | ✓* | Ghazi et al., 2025, Definition 5        |
+| $\alpha$ -ex-post RDP                   | ✓*  | ✓* | This work, Definition 4.1               |
+
+\*Proven in this work.
+
+Recently, Ghazi et al. (2025) have proposed<sup>1</sup> an ex-post privacy definition similar to ADP, which we call *approximate ex-post privacy* to distinguish from the previous definition.
+
+**Definition 2.5** (Ghazi et al., 2025). *An algorithm  $\mathcal{M}: \mathcal{X} \rightarrow \mathcal{Y}$  is  $(\mathcal{E}, \delta)$ -approximately ex-post private for  $\mathcal{E}: \mathcal{Y} \rightarrow \mathbb{R}_{\geq 0}$  if, for all  $X \sim X'$  and measurable  $S \subseteq \mathcal{Y}$ ,*
+
+$$\Pr_{y \sim \mathcal{M}(X)}(y \in S) \leq \mathbb{E}_{y \sim \mathcal{M}(X')} [e^{\mathcal{E}(y)} \mathbb{I}_{y \in S}] + \delta. \quad (4)$$
+
+Due to the recency of this definition, we leave closer examinations of it for future work.
+
+## 3 POST-PROCESSING IN EX-POST PRIVACY
+
+In ex-ante DP, post-processing immunity requires that processing the output of a DP mechanism without further access to the input data cannot weaken the DP guarantee (Dwork & Roth, 2014). Any sensible privacy definition should have post-processing immunity (Mironov, 2017; Dong et al., 2022), since if an adversary can weaken a privacy guarantee by simply post-processing, that guarantee was not real in the first place (Meiser, 2018). Indeed, common ex-ante DP definitions have post-processing immunity (Dwork et al., 2006a,b; Bun & Steinke, 2016; Mironov, 2017; Dong et al., 2022).
+
+In addition, post-processing immunity is extremely useful in constructing DP mechanisms to solve practical problems, as it allows choosing an intermediate quantity to release with a simple DP mechanism, and using that to solve the problem without needing to consider DP further. Many DP algorithms for solving complex problems, such as DP-SGD (Rajkumar & Agarwal, 2012; Song et al., 2013; Abadi et al., 2016), and DP synthetic data generation (Hardt et al., 2012), use this design.
+
+In contrast to ex-ante DP, we are not aware of prior work proving that any ex-post privacy definition has post-processing immunity. To rectify this problem, we start with a very basic issue: the notation used in ex-post privacy definitions (Section 3.1). We then determine whether pure ex-post privacy and  $\delta$ -probabilistic ex-post privacy have post-processing immunity (Section 3.2). See Table 1 for a summary of the results.
+
+### 3.1 EX-POST PRIVACY NOTATION
+
+The original notation for ex-post private mechanisms, presented in Section 2.2, has a major problem when considering post-processing. All of the definitions use a function  $\mathcal{E}: \mathcal{Y} \rightarrow \mathbb{R}_{\geq 0}$  that computes the privacy bound based on the output. For simplicity, in the following we simply refer to  $\mathcal{E}$ -ex-post privacy, leaving out the  $\delta$  and the exact definition, as this issue applies to all of the definitions.
+
+A naive statement of post-processing immunity would say that if a randomised function  $f: \mathcal{Y} \rightarrow \mathcal{Y}'$  is applied to the output of an  $\mathcal{E}$ -ex-post private mechanism  $\mathcal{M}: \mathcal{X} \rightarrow \mathcal{Y}$ , the resulting mechanism  $\mathcal{M}' = f \circ \mathcal{M}$  is  $\mathcal{E}$ -ex-post private. However, this statement is not coherent: the domain of  $\mathcal{E}$  must match the range of the mechanism, but the domain of  $\mathcal{E}$  is  $\mathcal{Y}$ , while the range of  $\mathcal{M}'$  is  $\mathcal{Y}'$ . To state
+
+<sup>1</sup>Ghazi et al. (2025) credit this definition to Wu et al. (2019), which is the journal version of Liggett et al. (2017), but we did not find the definition in that paper, and are not aware of any other work proposing it.
+
+post-processing immunity, we would need to construct a function  $\mathcal{E}': \mathcal{Y}' \rightarrow \mathbb{R}_{\geq 0}$  that is in some way equivalent to  $\mathcal{E}$ .
+
+However, we have not been able to come up with a satisfactory construction of  $\mathcal{E}'$  that works for all  $f$ . One could attempt to define  $\mathcal{E}'(y') = \sup_{y \in f^{-1}(y')} \mathcal{E}(y)$ , where  $f^{-1}$  denotes the preimage. However, this is potentially extremely pessimistic. For example, consider the Brownian mechanism in the form presented by Whitehouse et al. (2022), where the mechanism releases the output  $y \in \mathbb{R}$  and the final noise variance  $T > 0$ , and  $\mathcal{E}$  is computed from  $T$ . Suppose that the noise variances are calibrated in such a way that  $\mathcal{E}(T) \in [0.1, 10]$ . Consider the post-processing  $g(y, T) = y$  that forgets  $T$ . Since a particular value of  $y$  as output does not rule out any  $T > 0$  as a possible output, we have  $g^{-1}(y) = \{(y, T) \mid T > 0, 0.1 \leq \mathcal{E}(T) \leq 10\}$ , so with this definition of  $\mathcal{E}'$ , we have  $\mathcal{E}'(y) = 10$  for all  $y \in \mathbb{R}$ .
+
+To solve this issue, we introduce a new notion that makes the privacy bound a part of the output of the mechanism. Mathematically, we define a mechanism in the ex-post setting to be a randomised function  $\mathcal{M}: \mathcal{X} \rightarrow \mathcal{Y} \times \mathbb{R}_{\geq 0}$ . We use  $\mathcal{M}(X)_y \in \mathcal{Y}$  to denote the output of interest from the mechanism, and denote the returned privacy bound by  $\mathcal{M}(X)_\epsilon \in \mathbb{R}_{\geq 0}$ . In total, the mechanism returns the pair  $\mathcal{M}(X) = (\mathcal{M}(X)_y, \mathcal{M}(X)_\epsilon)$ . Since  $\epsilon$  is part of the output, an ex-post privacy definition must account for the fact that releasing  $\epsilon$  may also cause privacy loss, so the PLF  $\mathcal{L}_{X/X'}^{\mathcal{M}}(y, \epsilon)$  is now a function of the pair  $(y, \epsilon)$ .
+
+Next, we present a formulation of the probabilistic ex-post privacy definition (Definition 2.4) using our notation. The other definitions can be converted similarly. As the privacy bound is now part of the mechanism's output, we drop the  $\mathcal{E}$  from the definition, so it is now called  $\delta$ -probabilistic ex-post privacy.
+
+**Definition 3.1** ( $\delta$ -probabilistic ex-post privacy). *An algorithm  $\mathcal{M}: \mathcal{X} \rightarrow \mathcal{Y} \times \mathbb{R}_{\geq 0}$  is  $\delta$ -probabilistically ex-post private if, for all  $X \sim X'$ ,*
+
+$$\Pr_{(y, \epsilon) \sim \mathcal{M}(X)} (\mathcal{L}_{X/X'}^{\mathcal{M}}(y, \epsilon) > \epsilon) \leq \delta. \quad (5)$$
+
+Now we can elegantly define post-processing for ex-post mechanisms. Since this is different from function composition, we use  $\odot$  to denote this operation.
+
+**Definition 3.2.** *Let  $\mathcal{M}: \mathcal{X} \rightarrow \mathcal{Y} \times \mathbb{R}_{\geq 0}$  be a mechanism and let  $f: \mathcal{Y} \rightarrow \mathcal{Y}'$  be a randomised function. We define the post-processing of  $\mathcal{M}$  with  $f$ , denoted  $\mathcal{M}' = f \odot \mathcal{M}$ , to be the mechanism*
+
+$$\mathcal{M}'(X)_y = f(\mathcal{M}(X))_y, \quad (6)$$
+
+$$\mathcal{M}'(X)_\epsilon = \mathcal{M}(X)_\epsilon. \quad (7)$$
+
+With this definition of post-processing, we can simply define post-processing immunity to mean that  $\mathcal{M}$  and  $\mathcal{M}'$  satisfy the same ex-post privacy notion, whether it be  $\delta$ -probabilistic ex-post privacy or any other definition. In Section 3.2, we show that Definition 3.1 satisfies post-processing immunity when  $\delta = 0$ , but not when  $\delta > 0$ .
+
+As  $\epsilon$  is part of the mechanism's output, we allow post-processing both the output of interest  $y$  and  $\epsilon$ , but the returned privacy bound of the post-processed mechanism does not change. This is in line with the capabilities of an adversary: they can arbitrarily attempt to find an easier representation of  $(y, \epsilon)$  to attack, but they cannot change what the original mechanism claimed the privacy bound to be.
+
+Disregarding post-processing, Definition 3.1 and Definition 2.4 are equivalent in the following sense. First, consider a pair  $(\mathcal{M}, \mathcal{E})$  from Definition 2.4. We can define  $\mathcal{M}'(X)_y = \mathcal{M}(X)_y$  and  $\mathcal{M}'(X)_\epsilon = \mathcal{E}(\mathcal{M}(X))$ . Now  $\mathcal{M}'$  satisfies Definition 3.1 if and only if  $(\mathcal{M}, \mathcal{E})$  satisfy Definition 2.4. In the other direction, if we have a mechanism  $\mathcal{M}$  from Definition 3.1, we can define  $\mathcal{M}'(X) = (\mathcal{M}(X)_y, \mathcal{M}(X)_\epsilon)$  and  $\mathcal{E}(y, \epsilon) = \epsilon$ . Again,  $\mathcal{M}'$  satisfies Definition 2.4 if and only if  $\mathcal{M}$  satisfies Definition 3.1.
+
+### 3.2 POST-PROCESSING IMMUNITY STATUS FOR EXISTING DEFINITIONS
+
+Next, we show that the original ex-post privacy definition (Liggett et al., 2017) (Definition 3.1 with  $\delta = 0$ ) has post-processing immunity. We defer all proofs in this section to Appendix C.2.
+
+**Theorem 3.3.** Let  $\mathcal{M}$  be a pure ex-post private mechanism with continuous (or discrete) output distributions and let  $f$  be a randomised function with continuous (or discrete) output distributions. Then the post-processed mechanism  $\mathcal{M}' = f \circ \mathcal{M}$  (see Definition 3.2) is pure ex-post private.
+
+Note that unlike our other theory, we were only able to prove this theorem for the continuous and discrete special cases, and leave a more general treatment to future work.
+
+In contrast, next we show that  $\delta$ -probabilistic ex-post privacy with  $\delta > 0$  does not have post-processing immunity. This is because  $\delta$ -probabilistic ex-post privacy generalises  $(\epsilon, \delta)$ -probabilistic-DP, which we define next.
+
+**Definition 3.4** (Meiser 2018, Definition 4). A mechanism  $\mathcal{M}$  is  $(\epsilon, \delta)$ -probabilistically DP if, for all neighbouring datasets  $X, X'$ , there is a set  $S^\delta$  with  $\Pr(\mathcal{M}(X) \in S^\delta) \leq \delta$  such that for all measurable  $S$ ,
+
+$$\Pr(\mathcal{M}(X) \in S \setminus S^\delta) \leq e^\epsilon \Pr(\mathcal{M}(X') \in S \setminus S^\delta). \quad (8)$$
+
+Meiser (2018) shows that Definition 3.4 does not have post-processing immunity. The simplest counterexample has a mechanism with binary input and four possible outputs, and a post-processing that simply combines two of the possible outputs into one. The probabilities of each input-output pair are chosen such that the original mechanism is  $(\epsilon, \delta)$ -probabilistically DP, but the post-processed one is not.
+
+It turns out that Definition 3.4 is a special case of  $\delta$ -probabilistic ex-post privacy, which means that  $\delta$ -probabilistic ex-post privacy cannot have post-processing immunity either when  $\delta > 0$ .
+
+**Theorem 3.5.** For mechanisms  $\mathcal{M}$  with constant  $\mathcal{M}(X)_\epsilon = \epsilon_c$ ,  $\delta$ -probabilistic ex-post privacy (Definition 3.1) is equivalent to  $(\epsilon_c, \delta)$ -probabilistic DP (Definition 3.4).
+
+## 4 EX-POST RDP
+
+In this section, we define ex-post RDP and prove some basic properties. We give a Bayesian interpretation of ex-post RDP similar to that of Mironov (2017) for ex-ante RDP in Appendix B.
+
+**Definition of ex-post RDP** The definition of RDP uses the following inequality:
+
+$$\frac{1}{\alpha - 1} \ln \mathbb{E}_{y \sim \mathcal{M}(X')} \left[ \left( \frac{p_{\mathcal{M}(X)}(y)}{p_{\mathcal{M}(X')}(y)} \right)^\alpha \right] \leq \epsilon. \quad (9)$$
+
+It is possible to move  $\epsilon$  inside the expectation and arrive at an equivalent inequality:
+
+$$\mathbb{E}_{y \sim \mathcal{M}(X')} \left[ e^{(1-\alpha)\epsilon} \left( \frac{p_{\mathcal{M}(X)}(y)}{p_{\mathcal{M}(X')}(y)} \right)^\alpha \right] \leq 1. \quad (10)$$
+
+This motivates an ex-post version of RDP:
+
+**Definition 4.1.** A mechanism  $\mathcal{M}: \mathcal{X} \rightarrow \mathcal{Y} \times \mathbb{R}_{\geq 0}$  is  $\alpha$ -ex-post RDP ( $\alpha > 1$ ) if, for all neighbouring  $X \sim X'$ ,
+
+$$\mathbb{E}_{(y, \epsilon) \sim \mathcal{M}(X')} \left[ e^{(1-\alpha)\epsilon} \left( \frac{p_{\mathcal{M}(X)}(y, \epsilon)}{p_{\mathcal{M}(X')}(y, \epsilon)} \right)^\alpha \right] \leq 1. \quad (11)$$
+
+Note that unlike the definition of RDP, we do not permit  $\alpha = 1$  or  $\alpha = \infty$  in this work, and leave the investigation whether ex-post RDP could be extended to them for future work. The reason is that the limits used to define these cases for RDP are not as well-understood when  $\epsilon$  is a random variable inside the expectation. This definition has also been proposed in parallel work (Ghazi et al., 2025), though using the original ex-post privacy notation instead of our notation.
+
+We also present an ex-post version of zero-concentrated DP (zCDP; Bun & Steinke, 2016) in Appendix D (Definition D.1) that relates to ex-post RDP the same way the ex-ante versions are related.
+
+**Basic Properties of Ex-post RDP** In the rest of this section, we prove many basic theorems about ex-post RDP that we use to construct a practical mechanism in Section 6. All proofs are deferred to Appendix C.3. We start with post-processing immunity.
+
+**Theorem 4.2.** *Let  $\mathcal{M}$  be an  $\alpha$ -ex-post RDP mechanism and let  $f$  be a randomised function. Then the post-processed mechanism  $\mathcal{M}'(X) = f \circ \mathcal{M}$  (Definition 3.2) is  $\alpha$ -ex-post RDP.*
+
+Next, we prove that if an ex-post RDP mechanism has an upper bound on the returned  $\epsilon$ , the mechanism is ex-ante RDP.
+
+**Theorem 4.3.** *Let  $\mathcal{M}$  be an  $\alpha$ -ex-post RDP mechanism with  $\mathcal{M}(X)_\epsilon \leq \epsilon_c$  almost surely for all  $X \in \mathcal{X}$ . Then  $\mathcal{M}$  is  $(\alpha, \epsilon_c)$ -RDP.*
+
+The next theorem shows that ex-post RDP mechanisms can be adaptively composed. This also covers compositions mixing ex-ante RDP and ex-post RDP mechanism, as ex-ante RDP is a special case of ex-post RDP.
+
+**Theorem 4.4.** *Let  $\mathcal{M}_i(X, y_{1:i-1})$ ,  $1 \leq i \leq T$  be  $\alpha$ -ex-post RDP mechanisms. Then the adaptive composition  $\mathcal{M}^*(X) = (y_{1:T}, \sum_{i=1}^T \epsilon_i)$  with*
+
+$$y_i = \mathcal{M}_i(X, y_{1:i-1})_y \quad (12)$$
+
+$$\epsilon_i = \mathcal{M}_i(X, y_{1:i-1})_\epsilon \quad (13)$$
+
+is  $\alpha$ -ex-post RDP. If  $\mathcal{M}^*$  additionally releases the intermediate  $\epsilon_i$  values, it remains  $\alpha$ -ex-post RDP.
+
+The next theorem shows how an ex-post RDP mechanism can be constructed out of a composition of RDP mechanisms with fully adaptive privacy bounds.
+
+**Theorem 4.5.** *Let  $\mathcal{M}_i(X, \epsilon, y_{1:i-1})$ ,  $1 \leq i \leq K$  be mechanisms that are  $(\alpha, \epsilon)$ -RDP for any  $\epsilon \geq 0$ . Then the adaptive composition with adaptive privacy bounds  $\mathcal{M}^*(X)$  defined as*
+
+$$y_1 = \mathcal{M}_1(X, \epsilon_1, \emptyset) \quad (14)$$
+
+$$\epsilon_i = \mathcal{E}(y_{1:i-1}, \epsilon_{1:i-1}) \quad (15)$$
+
+$$y_i = \mathcal{M}_i(X, \epsilon_i, y_{1:i-1}), \quad (16)$$
+
+$\mathcal{M}^*(X)_y = y_{1:K}$ , and  $\mathcal{M}^*(X)_\epsilon = \sum_{i=1}^K \epsilon_i$  is  $\alpha$ -ex-post RDP. The mechanism that additionally releases the intermediate  $\epsilon_{1:K}$  values is also  $\alpha$ -ex-post RDP.
+
+While the theorem assumes that there is a fixed number  $K$  of mechanisms that are run, in practice one can stop early based on the released values by setting  $\mathcal{E}(y_{1:i-1}, \epsilon_{1:i-1}) = 0$  for all iterations after  $i$ . This makes  $K$  the maximum number of iterations that can be run, but this has no practical effect, since one can set  $K$  to be an arbitrarily large number without any downsides.
+
+The previous theorem does not allow the privacy bounds to depend on private data, except through the outputs of the base mechanisms. The following theorem allows a private data-dependent stopping rule, shown in Algorithm 1. Unlike similar results in previous works (Liggett et al., 2017; Whitehouse et al., 2022), this theorem uses a separate private dataset for the stopping criterion, which, in machine learning applications, allows checking whether accuracy crosses a threshold on validation data instead of training data.
+
+**Theorem 4.6.** *Let a dataset  $X$  be divided into a training set  $X_y$  and validation set  $X_\epsilon$ , that are disjoint, in any data-independent manner. Let  $\mathcal{M}_i(X_y, \epsilon_i, y_{1:i-1})$ ,  $1 \leq i \leq K$  be mechanisms that are  $(\alpha, \epsilon_i)$ -RDP, and let  $\mathcal{T}(X_\epsilon, y_{1:i-1})$  be a stopping rule that is  $(\alpha, \epsilon_T)$ -RDP,  $\alpha > 1$ . Then the adaptive composition with adaptive data-dependent privacy bounds  $\mathcal{M}^*$  defined in Algorithm 1 with  $\mathcal{M}^*(X)_y = (t, y_{1:t}, \epsilon_{1:t})$ ,  $\mathcal{M}^*(X)_\epsilon = \epsilon$  is  $\alpha$ -ex-post RDP.*
+
+**Algorithm 1:** Ex-post Composition with Data-Dependent Stopping Criterion
+
+**Input:** Dataset  $X$  divided into train set  $X_y$  and validation set  $X_\epsilon$ ,  $(\alpha, \epsilon_i)$ -RDP mechanisms  $\mathcal{M}_i$ ,  $(\alpha, \epsilon_T)$ -RDP stopping rule  $\mathcal{T}$ , privacy bound choosing rule  $\mathcal{E}$
+
+**Output:** Number of outputs  $t$ , sequence of outputs  $y_{1:t}$ , privacy bounds  $\epsilon_{1:t}$ , total privacy bound  $\epsilon$
+
+```
+
+for  $1 \leq i \leq K$  do
+   $\epsilon_i \leftarrow \mathcal{E}(y_{1:i-1}, \epsilon_{1:i-1})$ ;
+   $y_i \leftarrow \mathcal{M}_i(X_y, \epsilon_i, y_{1:i-1})$ ;
+   $c \leftarrow \mathcal{T}(X_\epsilon, y_i)$ ;
+  if  $c = \text{Halt}$  then
+     $t \leftarrow i$ ;
+     $\epsilon \leftarrow \max \left( \sum_{j=1}^t \epsilon_j, \epsilon_T \right)$ ;
+    return  $t, y_{1:t}, \epsilon_{1:t}, \epsilon$ ;
+  end
+end
+
+```
+
+## 5 EX-POST RDP FOR THE BROWNIAN MECHANISM
+
+The Brownian mechanism (Whitehouse et al., 2022) is the accuracy-first analogue of the Gaussian mechanism (Dwork et al., 2006a). The idea of the mechanism is to add Gaussian noise to each release of a function  $f: \mathcal{X} \rightarrow \mathbb{R}^d$  like the Gaussian mechanism, and reduce the variance of the noise if the privacy budget is increased for the next release. The added noises at each release are correlated in such a way that the latest release contains all of the information on the private data  $X$  that the previous releases contain, so the privacy costs of multiple releases do not accumulate. The appropriate correlations are obtained from a stochastic process called *Brownian motion*. We defer the mathematical definition to Definition C.3 in the Appendix.
+
+We analyse the Brownian mechanism through an alternative perspective that does not use Brownian motion directly. Consider a mechanism that, given an initial RDP bound  $(\alpha, \epsilon_1)$ , releases a sensitive value  $f(X)$  with the Gaussian mechanism  $\hat{s}_1 \sim f(X) + \mathcal{N}(0, \sigma_1^2)$ , where  $\sigma_1^2 = \frac{\alpha \Delta^2}{2\epsilon_1}$  is selected to satisfy  $(\alpha, \epsilon_1)$ -RDP. For subsequent releases  $2 \leq i \leq K$ , the mechanism receives an RDP budget  $\epsilon_i = \mathcal{E}(\hat{s}_{1:i-1}, \epsilon_{1:i-1}) > \epsilon_{i-1}$  with constant  $\alpha$ , sets  $\sigma_i^2 = \frac{\alpha \Delta}{2(\epsilon_i - \epsilon_{i-1})}$  according to the extra RDP budget that became available with the increase<sup>2</sup> to  $\epsilon_i$ . The mechanism then releases  $\hat{s}_i = f(X) + \mathcal{N}(0, \sigma_i^2)$  with the Gaussian mechanism. Finally, the mechanism releases precision-weighted values  $\hat{s}_{1:K}$ , with  $\hat{s}_1 = \bar{s}_1$  and
+
+$$\hat{s}_i = \left( \sum_{j=1}^i \frac{1}{\sigma_j^2} \right)^{-1} \left( \sum_{j=1}^i \frac{1}{\sigma_j^2} \bar{s}_j \right) \quad (17)$$
+
+for  $2 \leq i \leq K$  as the final output. This weighting is the minimum variance unbiased linear weighting for estimating  $f(X)$  given the noisy observations  $\bar{s}_i$  with known variances  $\sigma_i^2$  (Covington et al., 2025, Theorem 4.1). We call this mechanism the sequential precision-weighted Gaussian mechanism, and summarise it in pseudocode in Algorithm 2 in the Appendix.
+
+Next, we show that the sequential precision-weighted Gaussian mechanism is ex-post RDP using the theory from Section 4, and that the mechanism is equivalent to the Brownian mechanism. We defer the proofs to Appendix C.4.
+
+**Lemma 5.1.** *The sequential precision-weighted Gaussian mechanism (Algorithm 2) is  $\alpha$ -ex-post RDP.*
+
+The privacy analysis transfers to the Brownian mechanism, since the two mechanisms are equivalent.
+
+**Theorem 5.2.** *For any dataset  $X$ , function  $f$  with  $\ell_2$ -sensitivity  $\Delta$ , RDP order  $\alpha$ ,  $\epsilon$  selector  $\mathcal{E}$ , the output of Algorithm 2 has the same distribution as the Brownian mechanism in Algorithm 3.*
+
+**Corollary 5.3.** *The Brownian mechanism (Algorithm 3 in the Appendix) is  $\alpha$ -ex-post RDP.*
+
+*Proof.* Follows directly from Lemma 5.1 and Theorem 5.2.  $\square$
+
+Corollary 5.3 immediately implies that the Brownian mechanism is also approximately ex-post private (Definition 2.5) due to a conversion formula from Ghazi et al. (2025, Lemma 7). In Figure 1, we compare this bound to the probabilistic ex-post privacy bounds of Whitehouse et al. (2022). Note that this comparison assumes that probabilistic ex-post privacy implies approximate ex-post privacy, which we conjecture to hold since it holds for the ex-ante definitions, but has not been proven rigorously. The comparison shows that all bounds are very similar when their free parameters are optimised, so the post-processing immunity and additional flexibility of our RDP-based bound does not come at the cost of utility. Our RDP bound and the linear bound of Whitehouse et al. (2022) are equal within floating-point error, so they are likely mathematically equal.
+
+## 6 SYNTHETIC DATA GENERATION EXPERIMENT
+
+To evaluate how the Brownian mechanism works in practice, we generate synthetic tabular data from summary statistics (McKenna et al., 2019) released by the mechanism. We evaluate the quality of
+
+<sup>2</sup>We can handle  $\epsilon_i = \epsilon_{i-1}$  by setting  $\sigma_i^2 = \infty$  and then using the convention that  $\frac{1}{\infty} = 0$  and that a Gaussian distribution with infinite variance has some arbitrary fixed value, which will later always be multiplied by 0.
+
+![Figure 1: Comparison of ex-post RDP-based bound and other bounds for the Brownian mechanism. The figure contains two line plots. The left plot, titled 'Mixture & Linear Tuned Per-σ', shows Sigma (y-axis, log scale from 10^0 to 10^2) versus Epsilon (ADP, δ = 10^-5) (x-axis, linear scale from 0 to 10). The right plot, titled 'Mixture & Linear Tuned for One σ', shows Sigma (y-axis, log scale from 10^0 to 10^2) versus Epsilon (ADP, δ = 10^-5) (x-axis, linear scale from 0 to 10). Both plots compare RDP (Ours) (blue solid line) with other bounds: RDP (Ours, sigma) (orange solid line), Optim. Linear (green dotted line), and Optim. Mixture (red dashed line). In the left plot, all bounds are very similar. In the right plot, the RDP (Ours) bound is lower than the others, which are tuned for specific σ values (1 or 10).](b93cbfb52e37619e688175a6aad9edd9_img.jpg)
+
+Figure 1: Comparison of ex-post RDP-based bound and other bounds for the Brownian mechanism. The figure contains two line plots. The left plot, titled 'Mixture & Linear Tuned Per-σ', shows Sigma (y-axis, log scale from 10^0 to 10^2) versus Epsilon (ADP, δ = 10^-5) (x-axis, linear scale from 0 to 10). The right plot, titled 'Mixture & Linear Tuned for One σ', shows Sigma (y-axis, log scale from 10^0 to 10^2) versus Epsilon (ADP, δ = 10^-5) (x-axis, linear scale from 0 to 10). Both plots compare RDP (Ours) (blue solid line) with other bounds: RDP (Ours, sigma) (orange solid line), Optim. Linear (green dotted line), and Optim. Mixture (red dashed line). In the left plot, all bounds are very similar. In the right plot, the RDP (Ours) bound is lower than the others, which are tuned for specific σ values (1 or 10).
+
+Figure 1: Comparison of our ex-post RDP-based bound and the bounds of Whitehouse et al. (2022) (mixture and linear) for the Brownian mechanism in approximate-ex-post privacy (Definition 2.5), showing all bounds are very similar. This is assuming probabilistic ex-post privacy implies approximate ex-post privacy, which we conjecture is true since it is true in ex-ante DP. In the left panel, we optimise all free parameters of each bound individually for each value of  $\sigma$ . In the right panel, we use the recommended procedure of Whitehouse et al. (2022) for their bounds, meaning we optimise them for a specific  $\sigma$ , either 1 or 10. This makes these bounds suboptimal for other values of  $\sigma$ .
+
+![Figure 2: Accuracies and ε values for synthetic data generation on Adult data. The figure contains two scatter plots. The left plot, titled 'All Releases - Plain Gaussian', shows Validation Accuracy (y-axis, linear scale from 0.80 to 0.83) versus Epsilon (RDP, α = 20) (x-axis, log scale from 0.01 to 1.0). The right plot, titled 'All Releases - SVT', shows Validation Accuracy (y-axis, linear scale from 0.80 to 0.83) versus Epsilon (RDP, α = 20) (x-axis, log scale from 0.01 to 1.0). Both plots show Accepted Output (orange dots) and Rejected Output (blue dots). A dashed horizontal line represents the Accuracy Threshold (approx. 0.825), and a dashed horizontal line represents the Non-DP Validation Accuracy (approx. 0.83).](bedcca5cdf168e3508ef511d94ec514c_img.jpg)
+
+Figure 2: Accuracies and ε values for synthetic data generation on Adult data. The figure contains two scatter plots. The left plot, titled 'All Releases - Plain Gaussian', shows Validation Accuracy (y-axis, linear scale from 0.80 to 0.83) versus Epsilon (RDP, α = 20) (x-axis, log scale from 0.01 to 1.0). The right plot, titled 'All Releases - SVT', shows Validation Accuracy (y-axis, linear scale from 0.80 to 0.83) versus Epsilon (RDP, α = 20) (x-axis, log scale from 0.01 to 1.0). Both plots show Accepted Output (orange dots) and Rejected Output (blue dots). A dashed horizontal line represents the Accuracy Threshold (approx. 0.825), and a dashed horizontal line represents the Non-DP Validation Accuracy (approx. 0.83).
+
+Figure 2: Accuracies and  $\epsilon$  values for synthetic data generation on Adult data, showing that the mechanism is able to minimise the privacy cost while ensuring high accuracy. The plain Gaussian (left) mechanism generally accepts higher accuracies than SVT (right). The plot shows results from 50 repeats. The x-axis only shows  $\epsilon$  for the synthetic data generation and accuracy threshold checking. The values are logarithmically spaced. For query selection,  $\epsilon_{\text{query}} = 0.01$ , and  $\epsilon_{\text{total}} = \epsilon_{\text{query}} + \epsilon$ . Non-DP validation accuracy is computed from synthetic data without DP noise. The plotted value is mean accuracy over 10 repeats of synthetic data generation.
+
+synthetic data with the accuracy of a gradient-boosting classifier, and check whether the accuracy meets a minimum threshold on private validation data that is disjoint from training data. We use the UCI Adult dataset (Kohavi & Becker, 1996). See Appendix D for details.
+
+We choose  $\epsilon$  values for each release of the Brownian mechanism from a fixed list, containing 7 values, logarithmically spaced between 0.01 and 1. We start by releasing with the lowest  $\epsilon$ , and if the generated synthetic data does not meet the accuracy threshold, we release with the next  $\epsilon$  in the list. This is repeated until the threshold is met, or the list is exhausted.
+
+Since the validation data we use for the accuracy threshold check is also private, we consider two options to implement the check under DP: a composition of plain Gaussian mechanisms that release noisy accuracies under DP, and sparse vector technique (SVT; Dwork et al., 2009, Zhu & Wang, 2020). Note that both of these checks are noisy, meaning that they do not always return the correct result of the check.
+
+For privacy bounds, we use  $\alpha = 20$  throughout. We use an RDP preprocessing step (McKenna et al., 2021) to select the summary statistic queries with  $\epsilon_{\text{query}} = 0.01$ , and set  $\epsilon_{\text{check}} = 0.01$  for checking the accuracy threshold. The  $\epsilon$  for synthetic data generation comes from the Brownian mechanism. By Theorems 4.4 and 4.6 and the fact that  $\epsilon \geq \epsilon_{\text{check}}$ , the total privacy bound is  $\epsilon_{\text{total}} = \epsilon_{\text{query}} + \max(\epsilon, \epsilon_{\text{check}}) = \epsilon_{\text{query}} + \epsilon$ . As we focus on the Brownian mechanism, we only include  $\epsilon$ , not  $\epsilon_{\text{total}}$ , in our plots. Table 3 in the Appendix converts the  $\epsilon$  values we use to approximate ex-post privacy (Definition 2.5).
+
+Figure 2 shows the validation accuracies and  $\epsilon$  values from 50 repeated runs of the Brownian mechanism and synthetic data generation, with a fixed set of queries. Figure 3 in Appendix D shows distributions of  $\epsilon$  values, and validation and test accuracies for the accepted outputs of the mechanism. We see that the Brownian mechanism is able to minimise the privacy cost while approximately meeting the accuracy threshold. The plain Gaussian threshold check generally gives higher accuracies, but SVT gives smaller  $\epsilon$  values.
+
+## 7 DISCUSSION AND CONCLUSION
+
+**Interpreting Ex-Post Privacy Bounds** Since allowing a data-dependent privacy bound in ex-post privacy is a major change from ex-ante privacy, it is important to discuss how ex-post privacy bounds should be interpreted. This applies equally to all ex-post privacy definitions, including ones not using our notation from Section 3.1.
+
+For one run of an ex-post mechanism, the returned privacy bound should be reported, along with the details of how it is computed. The value can then be interpreted in a similar way as the corresponding ex-ante privacy bound, see Appendix B for ex-post RDP and Liggett et al. (2017) for pure ex-post privacy. Values from different runs can easily be compared: the smaller privacy bound is more private.
+
+The more difficult case is comparing mechanisms, in which case the privacy bound is a random variable. A major difficulty is that this random variable depends on the private data, so comparisons using the private data may leak privacy. To circumvent this, it may be possible to use a prior for the private data, and compare the distributions of the privacy bounds under that prior. The distributions can be compared for example by examining their CDFs, though it will not be possible to always establish that one mechanism is more private than the other. We leave an in-depth investigation of this to future work.
+
+**Limitations** Ex-post RDP inherits many of the limitations of RDP. First, RDP is not as easy to interpret as  $f$ -DP or Gaussian DP (GDP; Dong et al., 2022), which are defined in terms of optimal performance of a distinguisher. RDP has a Bayesian interpretation (Mironov, 2017), which we extend to ex-post RDP in Appendix B, but these are not as clear as  $f$ -DP or GDP. Second, the conversion from RDP to approximate DP or  $f$ -DP is lossy in the ex-ante setting, which we expect to also hold in the ex-post setting. For both reasons, we expect developing ex-post GDP or  $f$ -DP, and determining further properties of approximate ex-post privacy, to be a promising directions for future research.
+
+**Conclusion** In this work, we determined which ex-post privacy definitions have post-processing immunity and which do not. As the one definition with post-processing immunity does not support the Brownian mechanism, we filled this gap by proposing a new ex-post privacy definition with post-processing immunity, the Brownian mechanism, and supporting theory that enables application to practical problems. We demonstrated one such application: tabular synthetic data generation, where our mechanism successfully met a downstream classification accuracy threshold while minimising the spent privacy budget.
+
+## REPRODUCIBILITY STATEMENT
+
+Our experiment is described in Section 6, with details in Appendix D. The code for the experiment is included in the supplementary material and will be released under an open-source license if the paper is accepted.
+
+## USE OF LARGE LANGUAGE MODELS
+
+Github copilot was used to assist writing the code for the experiment.
+
+## REFERENCES
+
+- Martin Abadi, Andy Chu, Ian J. Goodfellow, H. Brendan McMahan, Ilya Mironov, Kunal Talwar, and Li Zhang. Deep Learning with Differential Privacy. In *Proceedings of the 2016 ACM SIGSAC Conference on Computer and Communications Security*, pp. 308–318. ACM, 2016.
+- Takuya Akiba, Shotaro Sano, Toshihiko Yanase, Takeru Ohta, and Masanori Koyama. Optuna: A next-generation hyperparameter optimization framework. In *Proceedings of the 25th ACM SIGKDD International Conference on Knowledge Discovery & Data Mining*, pp. 2623–2631. ACM, 2019.
+- Borja Balle, Gilles Barthe, Marco Gaboardi, Justin Hsu, and Tetsuya Sato. Hypothesis Testing Interpretations and Rényi Differential Privacy. In *Proceedings of the Twenty Third International Conference on Artificial Intelligence and Statistics*, pp. 2496–2506. PMLR, 2020.
+- Richard F Bass. *Stochastic Processes*. Cambridge University Press, 2011.
+- Mark Bun and Thomas Steinke. Concentrated Differential Privacy: Simplifications, Extensions, and Lower Bounds. In *Theory of Cryptography - 14th International Conference*, pp. 635–658, 2016.
+- Kai Chen, Xiaochen Li, Chen Gong, Ryan McKenna, and Tianhao Wang. Benchmarking Differentially Private Tabular Data Synthesis, 2025. URL <http://arxiv.org/abs/2504.14061>.
+- Christian Covington, Xi He, James Honaker, and Gautam Kamath. Unbiased Statistical Estimation and Valid Confidence Intervals Under Differential Privacy. *Statistica Sinica*, 35:651–670, 2025.
+- Jinshuo Dong, Aaron Roth, and Weijie J. Su. Gaussian Differential Privacy. *Journal of the Royal Statistical Society Series B: Statistical Methodology*, 84(1):3–37, 2022.
+- Alexey Dosovitskiy, Lucas Beyer, Alexander Kolesnikov, Dirk Weissenborn, Xiaohua Zhai, Thomas Unterthiner, Mostafa Dehghani, Matthias Minderer, Georg Heigold, Sylvain Gelly, Jakob Uszkoreit, and Neil Houlsby. An Image is Worth 16x16 Words: Transformers for Image Recognition at Scale. In *International Conference on Learning Representations*, 2021.
+- Cynthia Dwork and Aaron Roth. The Algorithmic Foundations of Differential Privacy. *Foundations and Trends in Theoretical Computer Science*, 9(3-4):211–407, 2014.
+- Cynthia Dwork, Krishnaram Kenthapadi, Frank McSherry, Ilya Mironov, and Moni Naor. Our Data, Ourselves: Privacy Via Distributed Noise Generation. In *Advances in Cryptology - EUROCRYPT*, volume 4004 of *Lecture Notes in Computer Science*, pp. 486–503. Springer, 2006a.
+- Cynthia Dwork, Frank McSherry, Kobbi Nissim, and Adam D. Smith. Calibrating Noise to Sensitivity in Private Data Analysis. In *Third Theory of Cryptography Conference*, volume 3876 of *Lecture Notes in Computer Science*, pp. 265–284. Springer, 2006b.
+- Cynthia Dwork, Moni Naor, Omer Reingold, Guy N. Rothblum, and Salil Vadhan. On the complexity of differentially private data release: Efficient algorithms and hardness results. In *Proceedings of the Forty-First Annual ACM Symposium on Theory of Computing, STOC '09*, pp. 381–390. ACM, 2009.
+- Vitaly Feldman and Tijana Zrnic. Individual Privacy Accounting via a Rényi Filter. In *Advances in Neural Information Processing Systems*, volume 34, pp. 28080–28091. Curran Associates, Inc., 2021.
+
+- 594 Badih Ghazi, Pritish Kamath, Alexander Knop, Ravi Kumar, Pasin Manurangsi, and Chiyuan Zhang.  
+595 Private Hyperparameter Tuning with Ex-Post Guarantee, 2025. URL [http://arxiv.org/](http://arxiv.org/abs/2508.15183)  
+596 [abs/2508.15183](http://arxiv.org/abs/2508.15183).  
+597  
+598 Samuel Haney, Michael Shoemate, Grace Tian, Salil Vadhan, Andrew Vyrros, Vicki Xu, and  
+599 Wanrong Zhang. Concurrent Composition for Interactive Differential Privacy with Adaptive  
+600 Privacy-Loss Parameters. In *Proceedings of the 2023 ACM SIGSAC Conference on Computer and*  
+601 *Communications Security*, CCS '23, pp. 1949–1963, New York, NY, USA, 2023. Association for  
+602 Computing Machinery.  
+603 Moritz Hardt, Katrina Liggett, and Frank McSherry. A Simple and Practical Algorithm for Differen-  
+604 tially Private Data Release. In *Advances in Neural Information Processing Systems*, volume 25, pp.  
+605 2348–2356. Curran Associates, Inc., 2012.  
+606  
+607 Diederik P. Kingma and Jimmy Ba. Adam: A method for stochastic optimization. In *3rd International*  
+608 *Conference on Learning Representations*, 2015.  
+609  
+610 Ronny Kohavi and Barry Becker. Adult. UCI Machine Learning Repository, 1996. URL [https:](https://archive.ics.uci.edu/dataset/2/adult)  
+611 [//archive.ics.uci.edu/dataset/2/adult](https://archive.ics.uci.edu/dataset/2/adult).  
+612  
+613 Antti Koskela, Marlon Tobaben, and Antti Honkela. Individual Privacy Accounting with Gaussian  
+614 Differential Privacy. In *The Eleventh International Conference on Learning Representations*, 2023.  
+615  
+616 Alex Krizhevsky. Learning multiple layers of features from tiny images. Master's thesis, University  
+617 of Toronto, 2009.  
+618  
+619 Mathias Lécuyer. Practical Privacy Filters and Odometers with Rényi Differential Privacy and  
+620 Applications to Differentially Private Deep Learning, 2021. URL [http://arxiv.org/abs/](http://arxiv.org/abs/2103.01379)  
+621 [2103.01379](http://arxiv.org/abs/2103.01379).  
+622  
+623 Katrina Liggett, Seth Neel, Aaron Roth, Bo Waggoner, and Steven Z. Wu. Accuracy First: Selecting a  
+624 Differential Privacy Level for Accuracy Constrained ERM. In *Advances in Neural Information*  
+625 *Processing Systems*, volume 30. Curran Associates, Inc., 2017.  
+626  
+627 Ryan McKenna, Daniel Sheldon, and Gerome Miklau. Graphical-model based estimation and  
+628 inference for differential privacy. In *Proceedings of the 36th International Conference on Machine*  
+629 *Learning*, volume 97 of *Proceedings of Machine Learning Research*, pp. 4435–4444. PMLR, 2019.  
+630  
+631 Ryan McKenna, Gerome Miklau, and Daniel Sheldon. Winning the NIST Contest: A scalable and  
+632 general approach to differentially private synthetic data. *Journal of Privacy and Confidentiality*, 11  
+633 (3), 2021.  
+634  
+635 Sebastian Meiser. Approximate and Probabilistic Differential Privacy Definitions, 2018. URL  
+636 <https://eprint.iacr.org/2018/277>.  
+637  
+638 Priyanka Nanayakkara, Hyeok Kim, Yifan Wu, Ali Sarvghad, Narges Mahyar, Gerome Miklau, and  
+639 Jessica Hullman. Measure-Observe-Remeasure: An Interactive Paradigm for Differentially-Private  
+640 Exploratory Analysis. In *2024 IEEE Symposium on Security and Privacy (SP)*, pp. 1047–1064,  
+641 2024.  
+642  
+643 Arun Rajkumar and Shivani Agarwal. A Differentially Private Stochastic Gradient Descent Algorithm  
+644 for Multiparty Classification. In *Proceedings of the Fifteenth International Conference on Artificial*  
+645 *Intelligence and Statistics*, volume 22 of *Proceedings of Machine Learning Research*, pp. 933–941.  
+646 PMLR, 2012.  
+647  
+648 Ryan Rogers, Gennady Samorodnitsky, Steven Wu, and Aditya Ramdas. Adaptive Privacy Com-  
+649 position for Accuracy-first Mechanisms. In *Advances in Neural Information Processing Systems*,  
+650 volume 37. Curran Associates, Inc., 2023.
+
+[Appendix and supplementary materials beyond page 12 have been removed.]

@@ -1,0 +1,3778 @@
+SEPARABLE NEURAL NETWORKS:
+APPROXIMATION
+THEORY, NTK REGIME, AND PRECONDITIONED GRA-
+DIENT DESCENT
+Yisi Luo1, Deyu Meng1∗
+1Xi’an Jiaotong University
+yisiluo1221@foxmail.com, dymeng@mail.xjtu.edu.cn
+ABSTRACT
+Separable neural networks (SepNNs) are emerging neural architectures that sig-
+niﬁcantly reduce computational costs by factorizing a multivariate function into
+linear combinations of univariate functions, beneﬁting downstream applications
+such as implicit neural representations (INRs) and physics-informed neural net-
+works (PINNs). However, fundamental theoretical analysis for SepNN, including
+detailed representation capacity and spectral bias characterization & alleviation,
+remains unexplored. This work makes three key contributions to theoretically un-
+derstanding and improving SepNN. First, using Weierstrass-based approximation
+and universal approximation theory, we prove that SepNN can approximate any
+multivariate function with arbitrary precision, conﬁrming its representation com-
+pleteness. Second, we derive the neural tangent kernel (NTK) regimes for SepNN,
+showing that the NTK of inﬁnite-width SepNN converges to a deterministic (or
+random) kernel under inﬁnite (or ﬁxed) decomposition rank, with corresponding
+convergence and spectral bias characterization. Third, we propose an efﬁcient sep-
+arable preconditioned gradient descent (SepPGD) for optimizing SepNN, which
+alleviates the spectral bias of SepNN by provably adjusting its NTK spectrum. The
+SepPGD enjoys an efﬁcient O(nD) complexity for nD training samples, which
+is much more efﬁcient than previous neural network PGD methods. Extensive
+experiments for kernel ridge regression, image and surface representation using
+INRs, and numerical PDEs using PINNs validate the efﬁciency of SepNN and the
+effectiveness of SepPGD for alleviating spectral bias.
+1
+INTRODUCTION
+Separable neural networks (SepNNs) are a class of neural architectures that represent a multivari-
+ate function as a linear combination of univariate functions, each parameterized by a lightweight
+factor neural network (Liang et al., 2022; Cho et al., 2023; Luo et al., 2024). A key advantage of
+SepNNs lies in their ability to signiﬁcantly reduce computational costs by reducing network prop-
+agations. The computational efﬁciency makes SepNN particularly advantageous and efﬁcient in
+applications such as implicit neural representations (INRs) (Liang et al., 2022; Luo et al., 2024),
+physical-informed neural networks (PINNs) (Cho et al., 2023; Yu et al., 2024), and neural radiance
+ﬁelds (Chen et al., 2022). Compared to other efﬁcient architectures for neural networks, SepNNs
+hold unique efﬁciency advantages. Especially, a classical line of work employs tensor decompo-
+sition to factorize the weights of networks (Liu & Parhi, 2023), thereby reducing the number of
+parameters. This efﬁcient architecture is the most closely related to SepNNs. However, SepNNs
+are motivated by a fundamentally different idea. Rather than decomposing the network weights,
+the principle of SepNNs is to separate the input vector into multiple smaller inputs and process
+each input using factor networks. This design uniquely improves efﬁciency in scenarios involving
+coordinate-based neural networks and function evaluations on grids by reusing the factor outputs.
+Such a structure is particularly advantageous in applications like INRs (Liang et al., 2022), which
+map coordinates to pixel values, and PINNs (Cho et al., 2023), which map coordinates to physical
+∗Corresponding author. Code of SepPGD is in https://github.com/YisiLuo/SepPGD
+1
+
+
+ﬁelds. Moreover, SepNNs not only facilitate efﬁcient training, but also offer improved interpretabil-
+ity and robustness by leveraging low-dimensional representations and interpretable factor modeling,
+demonstrating strong potential for scientiﬁc applications such as separable operator learning (Yu
+et al., 2024), radio map construction in wireless communication (Yuan et al., 2025), geophysical
+full waveform inversion in Earth science (Chen et al., 2025), and transcriptomics analysis in bioin-
+formatics (Song et al., 2023). Therefore, the structure and efﬁciency of SepNNs hold important
+value across a variety of practical machine learning applications. We make more discussions on the
+efﬁciency advantage of SepNNs in Section A.1.
+Formally, a D-variable SepNN fΘ(x1, · · · , xD) can be expressed as
+fΘ(x1, · · · , xD) = L(fΘ1(x1), · · · , fΘd(xD)) : RD →R,
+where L denotes a type of linear combination that encodes the interactions between different uni-
+variate factor functions {fΘd(xd)}D
+d=1 (the factor functions {fΘd(xd)}D
+d=1 are parameterized by
+univariate neural networks, such as multi-layer perceptrons (MLPs)), and Θ = {Θ1, · · · , ΘD} are
+learnable parameters. In the bivariate case D = 2, the inner product is a classical (if not only) choice
+for L (see for example (Liang et al., 2022; Wang et al., 2025)):
+fΘ(x1, x2) = fΘ1(x1)⊤fΘ2(x2) : R2 →R,
+(1)
+where fΘ1(x1), fΘ2(x2) : R →RR are factor functions mapping separated inputs to R-dimensional
+latent vectors, and R serves as a “rank” parameter that determines the representation capacity of the
+SepNN. In the multivariate case where D > 2, multiple alternatives exist for deﬁning the linear com-
+bination L. A natural and widely-used option is the tensor canonical parafac (CP) decomposition
+(Kargas & Sidiropoulos, 2021), which will be the primary focus of this study:
+(CP)
+fΘ(x1, · · · , xD) =
+R
+X
+r=1
+(fΘ1(x1))r (fΘ2(x2))r · · · (fΘD(xD))r : RD →R,
+(2)
+which computes the inner product between D factor functions {fΘd(xd) : R →RR}D
+d=1, and
+(fΘd(xd))r denotes the r-th component of fΘd(xd).
+The CP SepNN (2) degenerates into (1)
+when D = 2. In addition, other stochastic tensor decomposition formulations can be considered
+to construct the SepNN. For instance, the tensor-train (TT) decomposition represents multivari-
+ate functions by a sequence of lower-dimensional tensor functions (Gorodetsky et al., 2019; Zhou
+et al., 2025), and the tensor Tucker decomposition introduces an additional core tensor C to encode
+weighted multilinear relationships into SepNNs (Luo et al., 2024):
+(TT)
+fΘ(x1, · · · , xD) =
+R1
+X
+r1=1
+R2
+X
+r2=1
+· · ·
+RD−1
+X
+rD−1=1
+(fΘ1(x1))1,r1 (fΘ2(x2))r1,r2 · · · (fΘD(xD))rD−1,1 ,
+(Tucker)
+fΘ(x1, · · · , xD) = C ×1 fΘ1(x1) ×2 · · · ×D fΘD(xD) : RD →R.
+(3)
+Here,
+C
+∈
+RR1×···×RD
+denotes the core tensor in the Tucker decomposition model,
+(R1, · · · , RD) denotes the TT or Tucker rank of the model, ×d : RR1×···×RD × RRd
+→
+RR1×···×Rd−1×Rd+1×···×RD denotes the tensor product between a tensor and a vector, i.e., C ×d
+fΘd(xd) := foldd(unfoldd(C)fΘd(xd)), where fΘd(xd) ∈RRd is the factor output in the Tucker
+model, unfoldd : RR1×···×RD →R
+Q
+d′̸=d Rd′×Rd denotes the unfolding operator from a tensor to a
+matrix, and foldd : R
+Q
+d′̸=d Rd′ →RR1×···×Rd−1×Rd+1×···×RD denotes the folding operator from
+a vector to a tensor. The (fθd(xd))rd−1,rd denotes the (rd−1, rd)-th output component of the matrix-
+valued univariate function fθd(xd) : R →RRd−1×Rd in the TT model. The aforementioned linear
+combinations L can be viewed as speciﬁc instances within the generalized linear Einstein summation
+for multi-dimensional array (Ahlander, 2002). Furthermore, nonlinear combinations (e.g., nonlinear
+activations (Li et al., 2025b)) can also be considered to enhance the stochasticity among factors.
+The efﬁciency advantage of SepNNs comes from its separability nature. Especially, when training
+on a D-dimensional grid tensor with each dimension containing n training samples (for instance,
+with training inputs of the form {(x1, · · · , xD) | xd = 1, 2, · · · , n, d = 1, · · · , D}, which contains
+nD training samples), the SepNN only needs to query nD times of inputs by querying the separated
+input xd in each dimension via factor functions and then combining the outputs through the linear
+combination L. Hence, the computational complexity of a SepNN scales as O(nD) in an epoch,
+compared to O(nD) for a conventional neural network (Cho et al., 2023; Luo et al., 2024). This
+2
+
+
+efﬁciency superiority makes SepNNs advantageous in downstream applications such as INRs (Liang
+et al., 2022; Luo et al., 2024) and PINNs (Cho et al., 2023; Vemuri et al., 2025).
+While SepNNs have enabled a variety of promising applications, their theoretical foundations re-
+main relatively underdeveloped, hindering a deeper understanding of their representation capacity
+and optimization behaviors. In this work, we seek to address the following fundamental questions re-
+garding the theoretical aspects of SepNNs: 1) Do SepNNs possess sufﬁcient representation capacity
+to approximate any continuous multivariate function in Euclidean space? 2) How can we character-
+ize the training dynamics of SepNNs and identify any inherent spectral bias during optimization? 3)
+How can the spectral bias of SepNNs be mitigated to further enhance training efﬁciency? To address
+these fundamental questions, this work makes the following contributions:
+• Using a novel combination of Weierstrass-based approximation and universal approxi-
+mation theories, we rigorously establish an approximation theorem that SepNNs possess
+the capacity to approximate any continuous multivariate function with arbitrary precision,
+thereby conﬁrming their representation completeness.
+• We derive the neural tangent kernel (NTK) regimes for SepNNs under different asymptotic
+conditions. The SepNN’s NTK converges to a deterministic kernel under inﬁnite width and
+inﬁnite rank, and converges to a random kernel under inﬁnite width and ﬁxed rank, provid-
+ing new insights into the spectral bias characterization and training behavior of SepNNs.
+• We further propose a scalable separable preconditioned gradient descent (SepPGD) method
+that provably adjusts the eigenvalue distribution of NTK matrix, effectively alleviating
+spectral bias of SepNNs. The SepPGD achieves a signiﬁcantly lower computational com-
+plexity of O(nD) for nD training samples, which is much more efﬁcient than existing neu-
+ral network preconditioning methods. Extensive experiments across various downstream
+tasks including kernel ridge regression, image & surface representation using INRs, and
+PINNs demonstrate the improved efﬁciency and effectiveness of our SepPGD approach for
+alleviating spectral bias of SepNNs.
+2
+APPROXIMATION THEORY OF SEPNN
+Approximation Theory. For any continuous multivariate function f(x1, · · · , xD) deﬁned on a
+compact set, it is well-established that standard neural networks such as MLPs with suitable acti-
+vation functions can approximate it to arbitrary accuracy (Leshno et al., 1993; Pinkus, 1999)—a
+result known as the universal approximation theorem. However, such a universal approximation
+theory remains lacking for SepNN structures. To ﬁll this blank, our ﬁrst contribution is to establish
+a universal approximation theorem of SepNNs (including CP, TT, and Tucker (2)-(3)) as follows.
+Theorem 1 (Universal approximation theorem of multivariate SepNNs). Let X1 ⊂R, X2 ⊂
+R, · · · , XD ⊂R and X = X1 × X2 × · · · × XD ⊂RD be any compact sets, and let f(x) : X →R
+be a continuous multivariate function where x := (x1, · · · , xD). For any ϵ > 0, the following
+statements hold, in which all MLPs are drawn in the set {W2σ(W1x + b) : W2 ∈R ˜
+W ×W , W1 ∈
+RW ×1, b ∈RW , ˜W, W ∈N+} with σ a non-polynomial function.
+(CP) There exist rank R ∈N+ and univariate MLPs fΘd : Xd →RR (d = 1, · · · , D) such that
+sup
+x∈X
+f(x) −
+R
+X
+r=1
+(fΘ1(x1))r (fΘ2(x2))r · · · (fΘD(xD))r
+ < ϵ.
+(TT) There exist ranks R1, · · · , RD−1 ∈N+ and univariate MLPs fΘd : Xd →RRd−1Rd
+(d = 1, · · · , D, R0 = RD = 1) such that
+sup
+x∈X
+
+f(x) −
+R1
+X
+r1=1
+R2
+X
+r2=1
+· · ·
+RD−1
+X
+rD−1=1
+(fΘ1(x1))1,r1 (fΘ2(x2))r1,r2 · · · (fΘD(xD))rD−1,1
+
+< ϵ.
+(Tucker) There exist ranks R1, · · · , RD ∈N+, univariate MLPs fΘd : Xd →RRd (d = 1, · · · , D),
+and a core tensor C ∈RR1×···×RD such that
+sup
+x∈X
+f(x) −C ×1 fΘ1(x1) ×2 · · · ×D fΘD(xD)
+ < ϵ,
+3
+
+
+where ×d : (RR1×···×RD × RRd) →RR1×···×Rd−1×Rd+1×···×RD denotes the mode-d spe-
+ciﬁc product between a tensor and a vector.
+The theorem states that any continuous multivariate function on compact sets can be well approxi-
+mated by either the CP, TT, or Tucker SepNNs. The detailed proof, which is based on the combina-
+tion of Stone-Weierstrass theorem (Fedorova, 2002) and universal approximation theorem (Leshno
+et al., 1993), is placed in Appendix Section A.5. We go through the proof sketch as follows.
+First, taking the CP SepNN (2) as an example, we consider the associated separable function class:
+A =
+n
+g : X →R : g(x1, · · · , xN) =
+R
+X
+r=1
+(g1(x1))r (g2(x2))r · · · (gD(xD))r , R ∈N, (gd(xd))r ∈C(Xd)
+o
+.
+The function class A consists of all separable functions that can be expressed in the CP form, using
+the linear combination of vector-valued continuous univariate functions gd(xd) : Xd →RR deﬁned
+on compact sets Xd. By slightly extending the classical universal approximation theorem (Leshno
+et al., 1993) to vector-valued functions, we show that each gd(xd) can be approximated by an MLP
+with non-polynomial activation functions. Hence, for any function in A, there exists a SepNN
+that approximates it up to arbitrary precision—a fact that can be formalized by bounding the total
+approximation error via the Cauchy-Schwarz inequality across the errors of the factor MLPs.
+It therefore remains to show that A is dense in C(X), the space of continuous functions over X. This
+would imply that any continuous multivariate function can be approximated arbitrarily well by an
+element of A, and consequently by a SepNN. To establish the density of A, we leverage the Stone-
+Weierstrass theorem (Fedorova, 2002), which asserts that a function class deﬁned on a compact set
+X is dense in C(X) if it: (1) contains the identity function; (2) separates points in X (i.e., for any
+a ̸= b in X, there exists g ∈A such that g(a) ̸= g(b)); and (3) is closed under algebraic operations.
+We carefully examine that A meets these requirements. By combining this with standard universal
+approximation results, we conclude with the universal approximation capacity of SepNNs.
+Related Work. (Cho et al., 2023) provided the approximation theory for the bivariate SepNN (1).
+Their proof is based on the orthogonal basis functions construction for the tensor product function
+space. Compared to this prior art, our approximation theory extends to any multivariate function
+approximation with D ≥2 and more types of SepNNs such as TT and Tucker, and includes the
+result in (Cho et al., 2023) as a special case when D = 2 for CP SepNN (2). Furthermore, our
+proof offers a simpler alternative against (Cho et al., 2023) for the D = 2 case of CP SepNN.
+Another work (Yu et al., 2024) deduced the approximation theory for a separable physical-informed
+operator network, which is related to the CP SepNN (2). Their proof is based on the separability of
+the sine activation function using trigonometric angle addition and universal approximation theory.
+Compared to this work, we characterize a more general class of SepNNs using any non-polynomial
+activation functions and deduce the approximation error more systematically for various types of
+SepNNs. Our proof technique is uniﬁed and broadly applicable to these structures, such as separable
+operator network. The SepNN is also closely related to the Kolmogorov-Arnold network (KAN)
+(Liu et al., 2025), which represents learnable neurons as weighted summations of independent spline
+bases and serves as a fundamental architecture in scientiﬁc applications (Li et al., 2025a). It is a
+promising direction to extend the suggested proof technique to KAN approximation and its variants.
+3
+NTK REGIMES AND SPECTRAL BIAS CHARACTERIZATION
+NTK Regimes. While the SepNN is demonstrated to be a universal approximator for multivariate
+function representation, its training dynamics remain poorly understood even for classical learn-
+ing problems with gradient descent. We borrow the theoretical tools of NTK (Jacot et al., 2018;
+Arora et al., 2019a) and aim to characterize the training process of SepNNs via associated kernel
+regression. Our main contributions are as follows. First, under the asymptotic regime of inﬁnite
+network width and inﬁnite rank, we prove that the NTK of a SepNN—which can be expressed as
+the summation over factor MLPs’ NTKs (Lemma 1)—converges to a deterministic kernel (Theorem
+2), analogous to known results for standard MLPs (Jacot et al., 2018). This result allows us to char-
+4
+
+
+(a) Initial NTK (ﬁx rank)
+(b) Initial NTK
+(c) NTK during training
+(d) NTK matrix spectrum
+Figure 1: SepNN NTK veriﬁcation using ten runs over multiple random seeds for square loss opti-
+mization using gradient descent. (a) The difference between NTK matrices in adjacent random seeds
+at initialization vs. SepNN width W (under ﬁxed rank R = 50). (b) The difference between NTK
+matrices in adjacent random seeds at initialization vs. SepNN width W and rank R (we set W = R).
+(c) The difference between NTK matrices at 100 training steps and at initialization over ten random
+seeds. (d) The NTK matrix eigenvalue distribution at initialization over ten random seeds.
+acterize the convergence rate of wide SepNNs and to identify spectral bias related to the eigenvalue
+distribution of the NTK matrix1.
+Lemma 1 (NTK of CP SepNN). Let the multivariate CP SepNN be deﬁned as fΘ(x1, · · · , xD) =
+1
+√
+R
+PR
+r=1 (fΘ1(x1))r (fΘ2(x2))r · · · (fΘD(xD))r : RD →R, where each fΘd : R →RR is a
+parametric MLP with parameters Θd, and Θ = (Θ1, · · · , ΘD) is the collection of all parameters.
+Then the NTK of fΘ, deﬁned as KΘ(x, x′) := ⟨∇ΘfΘ(x), ∇ΘfΘ(x′)⟩for x = (x1, · · · , xD) and
+x′ = (x′
+1, · · · , x′
+D), is given by
+KΘ(x, x′) = 1
+R
+D
+X
+d=1
+ad(x)⊤KΘd(xd, x′
+d)ad(x′),
+(4)
+where KΘd(xd, x′
+d) ∈RR×R is the NTK matrix of the d-th factor MLP fΘd with elements
+(KΘd(xd, x′
+d))r,s
+=
+
+∇Θd (fΘd(xd))r , ∇Θd (fΘd(x′
+d))s
+
+, and ad(x) is a vector deﬁned by
+ad(x) =
+ Q
+d′̸=d
+ fΘd′(xd′)
+
+1 , Q
+d′̸=d
+ fΘd′(xd′)
+
+2 , · · · , Q
+d′̸=d
+ fΘd′(xd′)
+
+R
+⊤
+∈RR.
+Theorem 2 (Deterministic NTK under inﬁnite width and inﬁnite rank). Let the CP SepNN be deﬁned
+as fΘ(x1, · · · , xD) =
+1
+√
+R
+PR
+r=1 (fΘ1(x1))r (fΘ2(x2))r · · · (fΘD(xD))r : RD →R, where each
+factor MLP fΘd : R →RR has the architecture fΘd(xd) =
+1
+√
+W W2,dσ(W1,dxd+bd), with W1,d ∈
+RW ×1, bd ∈RW , W2,d ∈RR×W , and σ a differentiable activation function with derivative ˙σ. Let
+each element of W1,d, bd, W2,d be independently initialized by N(0, 1). Then, as both the width
+W →∞and the rank R →∞, the NTK of fΘ converges almost surely to a deterministic kernel
+KΘ(x, x′)
+a.s.
+−→
+D
+X
+d=1
+k(xd, x′
+d)
+Y
+d′̸=d
+cd′(xd′, x′
+d′),
+where cd(xd, x′
+d)
+=
+Ew,b∼N(0,1) (σ(wxd + b)σ(wx′
+d + b)) and k(xd, x′
+d)
+=
+cd(xd, x′
+d) +
+Ew,b∼N(0,1) ( ˙σ(wxd + b) ˙σ(wx′
+d + b)(xdx′
+d + 1)).
+Remark 1. The proof of Lemma 1 and Theorem 2 are placed in Appendix Sections A.6-A.7. While
+we consider the two-layer MLP in Theorem 2, it is straightforward to extend to multi-layer MLPs or
+other network structures by utilizing the corresponding NTK formulations (Arora et al., 2019b).
+Remark 2. Using similar arguments to standard NTK analysis (Jacot et al., 2018; Arora et al.,
+2019a), it is easy to show that the deterministic NTK of SepNN also stays ﬁxed (in terms of a small
+error) during training when W, R →∞(under square loss function and inﬁnitely-small learning
+rate). This can be achieved by bounding the difference of NTK at two training time points using
+O( 1
+√
+R) and O(
+1
+√
+W ) related to the small movement of each weight. Such asymptotic analysis of
+NTK during training is formally analyzed in Appendix Section A.4.
+1For simplicity, the NTK analysis is primarily conducted for the CP SepNN (2), while we believe it can
+be readily extended to TT and Tucker SepNNs. For the CP SepNN, we introduce a scaling factor
+1
+√
+R in the
+SepNN to ensure the convergence of NTK, which does not affect the universal approximation Theorem 1.
+5
+
+
+Spectral Bias Characterization. Consider training pairs {xi, yi}n
+i=1 and square loss minimization:
+minΘ 1
+2
+Pn
+i=1(fΘ(xi) −yi)2 with fΘ a CP SepNN. Using the same argument as classical NTK
+analysis (Jacot et al., 2018; Arora et al., 2019a), under inﬁnitely small learning rate, the dynamics
+of network predictions u(t) = (fΘ(t)(x1), · · · , fΘ(t)(xn))⊤∈Rn under standard gradient descent
+optimizer would follow du(t)
+dt
+= −K(t)(u(t) −y), where Θ(t) and K(t) ∈Rn×n respectively
+denote the weights and NTK matrix of the SepNN at training time t over training samples {xi}
+(i.e., (K(t))i,j = KΘ(xi, xj)), and y = (y1, · · · , yn)⊤. If the NTK of the SepNN stays ﬁxed
+during training (as is expected for SepNNs with sufﬁciently large width and rank), the dynamics
+become du(t)
+dt
+= −K(u(t) −y) where K denotes the ﬁxed NTK matrix. Denote the eigenvalue
+decomposition of K as K = Pn
+i=1 λiviv⊤
+i , where λ1 ≥· · · ≥λn ≥0 are eigenvalue and
+v1, · · · , vn are orthogonal eigenvectors. Multiplying both sides by vi, we obtain
+d
+dt
+ v⊤
+i u(t)
+
+=
+−v⊤
+i K(u(t) −y) = −λi
+ v⊤
+i (u(t) −y)
+
+. This differential equation has an analytical solution:
+v⊤
+i (u(t) −y) = exp (−λit)
+
+v⊤
+i (u(0) −y)
+
+.
+(5)
+Hence, the training error (u(t)−y) and its convergence rate can be characterized by the eigenvalues
+of the NTK matrix. Note that {vi} form an orthogonal basis, hence (u(t) −y) = Pn
+i=1 v⊤
+i (u(t) −
+y). Each term v⊤
+i (u(t) −y) decays exponentially due to the exp (−λit) term in (5), driving the
+total training error (u(t) −y) converging to zero as well. The components of labels y that project
+onto the eigenvectors vi with larger eigenvalue λi converge faster than those correspond to smaller
+eigenvalues due to the exp (−λit) term, a property known as the spectral bias of neural networks
+trained with gradient descent (Geifman et al., 2024; Shi et al., 2025; 2024). This indicates that
+convergence is slower along directions corresponding to smaller eigenvalues, often requiring more
+training steps if the condition number of NTK matrix is large. The NTK-based convergence rate
+applies to SepNNs as well, hence SepNNs also exhibit inherent spectral bias due to the uneven
+eigenvalue distribution of the NTK matrix (Fig. 1(d)). In Section 4, we introduce an efﬁcient
+SepPGD method to alleviate spectral bias in SepNNs by adjusting the eigenvalue distribution.
+Random NTK Under Fixed Rank. In practice, the rank R of SepNNs is often chosen to be smaller
+compared to network width to promote low-dimensional representations and better generalization
+(Liang et al., 2022; Luo et al., 2024). Therefore, we further consider the ﬁxed rank and inﬁnite width
+asymptotic regime, and prove that the NTK converges to a stochastic kernel deﬁned by Gaussian
+processes associated with the covariance of factor MLPs. This indicates that inﬁnite rank R is
+necessary to obtain a deterministic NTK by applying the large number law to vanish the covariance.
+Corollary 1 (Random NTK under inﬁnite width and ﬁxed rank). Let the CP SepNN be deﬁned as
+fΘ(x1, · · · , xD) =
+1
+√
+R
+PR
+r=1 (fΘ1(x1))r (fΘ2(x2))r · · · (fΘD(xD))r : RD →R and the assump-
+tions in Theorem 2 hold. Then, for a ﬁxed rank R, as the width of the factor MLP W →∞, the NTK
+of the SepNN fΘ converges in distribution to a stochastic kernel
+KΘ(x, x′)
+d
+−→
+D
+X
+d=1
+k(xd, x′
+d)Vd(x, x′),
+where Vd(x, x′) =
+1
+R
+PR
+r=1
+Q
+d′̸=d
+ fΘd′(xd′)
+
+r
+ fΘd′(x′
+d′)
+
+r, in which each factor
+ fΘd′(xd′)
+
+r
+is a Gaussian process with covariance E(
+ fΘd′(xd′)
+
+r
+ fΘd′(x′
+d′)
+
+r) = cd(xd′, x′
+d′).
+Remark 3. Under the ﬁxed rank condition, the training dynamic can not be characterized uniformly
+using a ﬁxed NTK matrix as in (5) due to the randomness. However, the random NTK can at
+least characterize the training dynamic within a small range of training time around t by using
+the potential stochastic differential equation and probability bound, which are promising future
+directions. We also empirically ﬁnd that even with small rank, the proposed SepPGD method is
+effective in accelerating convergence and alleviating spectral bias in SepNNs (Appendix Table 3).
+All NTK theoretical results are empirically validated in Fig. 1. Fig. 1(a) shows that under a ﬁxed
+rank R, the NTK at initialization does not converge to a ﬁxed kernel and holds randomness even
+with larger network width (Corollary 1). Fig. 1(b) shows that the NTK at initialization tends to
+converge towards a deterministic kernel with joint increase of network width and decomposition
+rank (Theorem 2). Fig. 1(c) shows that the NTK tends to stay ﬁxed during training with joint
+increase of network width and decomposition rank (Remark 2). Finally, Fig. 1(d) illustrates the
+6
+
+
+spectral bias that the eigenvalues of the SepNN’s NTK matrix decay rapidly, resulting in slower
+convergence within components that project onto eigenvectors of these smaller eigenvalues.
+Another positive property of SepNN is that its NTK matrix can be computed in parallel over multiple
+inputs, resulting in greater efﬁciency compared to computing the NTK matrices of other neural
+architectures (Novak et al., 2022; Mohamadi et al., 2023). In fact, the SepNN’s NTK (12) admits an
+elegant form that allows the NTK matrix over grid inputs to be expressed as a Kronecker product of
+smaller NTK matrices (detailed in Appendix Section A.3), thereby improving efﬁciency.
+4
+EFFICIENT SEPARABLE PRECONDITIONED GRADIENT DESCENT
+Prior Arts. The NTK-based preconditioning methods are proposed in recent works (Geifman et al.,
+2024; Shi et al., 2025), which adjust the eigenvalue distribution of the NTK matrix, thereby mod-
+ulating the convergence rate. Especially, consider a D-dimensional data grid and nD training la-
+bels sorted in a vector y ∈RnD, and the vector of network predictions fΘ(X) ∈RnD, where
+X ∈RD×nD are batched inputs. The training residual is r = fΘ(X) −y and the square loss is
+∥r∥2
+ℓ2. Then, a gradient descent iteration with learning rate η is given by Θ ←Θ −η∇ΘfΘ(X)⊤r.
+According to (5), the convergence rate is related to the spectrum of NTK matrix, denoted by
+K here. (Geifman et al., 2024) proposed the following PGD with a preconditioning matrix S:
+Θ ←Θ −η∇ΘfΘ(X)⊤Sr. In this way, the convergence rate is related to the eigenvalues of KS.
+Hence, the preconditioner S ∈RnD×nD is constructed to modulate the spectrum of KS so as to
+improve convergence (Geifman et al., 2024). For nD training samples, this method has complexity
+O(nD) by applying S. Later, (Shi et al., 2025) leveraged this method to alleviate the spectral bias
+of INRs. They reduced the complexity of NTK matrix application by sampling a mini-batch, which
+enjoys O(nD/p) complexity with p > 1 denoting the number of mini-batches. Their precondi-
+tioning method can be expressed as Θ ←Θ −η∇ΘfΘ(Xi)⊤Siri, where Xi, Si, ri are sampled
+mini-batches. Different from these methods, our SepPGD applies smaller preconditioners separately
+for factor MLPs, further reducing computational complexity.
+SepPGD and Properties. We ﬁrst elaborate the training conﬁguration of SepNNs for square loss
+optimization on grid points2. SepNNs exhibit efﬁciency beneﬁts when applied to separable grid
+points (Liang et al., 2022; Cho et al., 2023). We therefore consider input points situated on a grid
+ˆx1 × · · · × ˆxD = {(x1, · · · , xD) | xd ∈ˆxd, d = 1, · · · , D} ⊂RD, where each ˆxd is a discrete
+set (or say vector) of points in R. For simplicity, we assume that each ˆxd has cardinality n, meaning
+each dimension contains n training samples, resulting in a total of nD training samples. Consider a
+SepNN fΘ(x) =
+1
+√
+R
+PR
+r=1 (fΘ1(x1))r · · · (fΘD(xD))r : RD →R. Each factor MLP fΘd : R →
+RR is applied in parallel to the input vector ˆxd ∈Rn, yielding a factor matrix fΘd(ˆxd) ∈RR×n.
+The corresponding optimization model is formulated as
+min
+Θ
+1
+2
+nD
+X
+i=1
+(fΘ(xi) −yi)2, xi ∈ˆx1 × · · · × ˆxD.
+(6)
+Owing to the grid structure of the training data, the labels {yi}nD
+i=1 can be naturally reshaped into a
+D-th order tensor Y ∈Rn×···×n. Let R := (ZΘ −Y) ∈Rn×···×n denote the residual tensor during
+training, where (ZΘ)i1,··· ,iD = fΘ((ˆx1)i1, · · · , (ˆxD)iD) is the (i1, · · · , iD)-th SepNN output.
+The motivation behind SepPGD is to perform PGD for each factor MLP separately. We ﬁrst compute
+D factor preconditioning matrices {Sd}D
+d=1 for the D factor MLPs {fΘd}D
+d=1. This involves calcu-
+lating a pseudo NTK matrix KΘd ∈Rn×n for each fΘd on the corresponding input data ˆxd ∈Rn
+using sum-of-logits (Mohamadi et al., 2023), followed by eigenvalue modulation as described in
+(Geifman et al., 2024; Shi et al., 2025). Speciﬁcally, we calculate Sd = I −Pk
+i=1(1 −g(λi)
+λi )viv⊤
+i ,
+where {λi, vi} are eigenvalues and eigenvectors of KΘd. We set the modulation function g(λi) =
+λk for i ≤k and g(λi) = λi for i > k by following (Shi et al., 2025), which makes the eigenvalues
+2Using grid inputs is a common training conﬁguration for SepNNs, such as coordinate grids of images in
+INRs (Liang et al., 2022) and grid collocation points in PINNs (Cho et al., 2023), which facilitate efﬁcient
+parallel training. For non-grid inputs, SepNNs remain applicable, though the computational complexity for
+NTK evaluation and SepPGD becomes equivalent to standard networks (Liang et al., 2022; Cho et al., 2023).
+7
+
+
+of Sd more evenly distributed for the ﬁrst k eigenvalues. Furthermore, denote ⊕the concatenation
+of vectors. We are now ready to present the proposed SepPGD algorithm.
+Deﬁnition 1 (Separable PGD). Consider the optimization problem (6) and the SepNN fΘ(x) =
+1
+√
+R
+PR
+r=1 (fΘ1(x1))r · · · (fΘD(xD))r : RD →R. Given D symmetric factor preconditioning
+matrices {Sd ∈Rn×n}D
+d=1 for factor MLPs {fΘd}D
+d=1, the SepPGD iteration is given by
+Θ ←Θ −η
+D
+M
+d=1
+(∇Θd⟨fΘd(ˆxd), Md⟩)
+|
+{z
+}
+gradient of factor MLP
+,
+(7)
+where Md is the mode-d speciﬁc preconditioner deﬁned by
+Md =
+ 
+R
+M
+r=1
+O
+d′̸=d
+fΘd′ (ˆxd′)r,:
+|
+{z
+}
+R×nD−1
+! 
+unfoldd
+ D
+X
+d=1
+(R ×d Sd)
+!
+|
+{z
+}
+nD−1×n
+!
+∈RR×n, d = 1, · · · , D,
+(8)
+where the subscript fΘd′(ˆxd′)r,: refers to the r-th row of the factor matrix fΘd′(ˆxd′) ∈RR×n. The
+N
+d′̸=d refers to the outer product that calculates between D −1 vectors {fΘd′(ˆxd′)r,: ∈R1×n}
+and returns a single long vector of size 1 × nD−1, and LR
+r=1 denotes the concatenation between R
+vectors and returns an R × nD−1 matrix. The unfoldd : Rn1×···×nD →R
+Q
+d′̸=d nd′×nd denotes
+the unfolding operator from a tensor to a matrix, and ×d denotes the mode-d tensor-matrix product,
+a convention in tensor decomposition literature (Kolda & Bader, 2009; Luo et al., 2024).
+Remark 4 (Computational complexity). The computational complexity comparison of different pre-
+conditioning methods is given in Table 1. In terms of applying the preconditioner, SepPGD scales
+as O(nD) by multiplying D n-by-n preconditioning matrices {Md}, while standard NTK-based
+method (Geifman et al., 2024) scales as O(nD) by multiplying an nD-by-nD preconditioning ma-
+trix S. Moreover, the preconditioner construction stage in SepPGD is also more efﬁcient. Speciﬁ-
+cally, SepPGD constructs the preconditioner by calculating the NTK matrix and performing eigen-
+value decomposition for D factor NTK matrices {KΘd}, each of size n × n. In contrast, classical
+NTK-based PGD (Geifman et al., 2024) requires the same operations on a single large NTK ma-
+trix of size nD × nD. Therefore, the preconditioner construction complexity for SepPGD scales as
+O(D(n3 + n2P)) (note that NTK matrix calculation consumes O(n2P) and eigenvalue decompo-
+sition consumes O(n3))3, where P is the number of network parameters, while the classical NTK-
+based PGD method scales as O(n3D + n2DP). We therefore see that SepPGD is more efﬁcient in
+both preconditioner construction and application.
+Table 1: Computational complexity comparison (in terms of applying the preconditioner) of several
+preconditioning methods for nD training samples using an over-parameterized SepNN fΘ : RD →
+R with P learnable parameters (nD < P). Here, r denotes training residual, H ∈RP ×P denotes
+the Hessian matrix, S ∈RnD×nD denotes the NTK-based preconditioning matrix, Si ∈R
+nD
+p × nD
+p
+denotes the mini-batch version of the NTK preconditioning matrix, and Md ∈RR×n denotes the
+proposed mode-d speciﬁc preconditioner deﬁned in (8).
+Preconditioning method
+Gradient formulation
+Complexity
+Hessian-based methods
+H−1∇ΘfΘ(X)⊤r
+O(P)
+Modiﬁed NTK spectrum (Geifman et al., 2024)
+∇ΘfΘ(X)⊤Sr
+O(nD) (nD < P)
+Inductive gradient adjustment (Shi et al., 2025)
+∇ΘfΘ(Xi)⊤Siri (mini-batch)
+O(nD/p) (p > 1)
+Separable PGD (Ours)
+LD
+d=1 ∇Θd⟨fΘd(ˆxd), Md⟩
+O(nD)
+While the formulations in (7)-(8) seem complicated, we can more easily interpret the motivation and
+preconditioner construction Md in the two-dimensional case D = 2 by connecting it with classical
+methods (Geifman et al., 2024; Shi et al., 2025).
+3Note that constructing the preconditioner in (8) also involves a matrix product with complexity O(nD−1).
+However, the primary computational cost of NTK-based PGD lies in the computation of the NTK matrix, which
+requires high-dimensional derivative calculations, and the eigenvalue decomposition of the NTK matrix, which
+involves inner numerical iterations (Geifman et al., 2024; Shi et al., 2025). In comparison, the matrix product
+in (8) is orders of magnitude less expensive in practice.
+8
+
+
+(a) Kernel ridge regression                                                            (b) Image representation
+(a) Kernel ridge regression                                                            (b) Image representation
+Figure 2: Convergence curves for KRR and image representation using INRs.
+Lemma 2. Let the SepNN be fΘ(x) = fΘ1(x1)⊤fΘ2(x2) : R2 →R and the suppositions in
+Deﬁnition 1 hold. Then the SepPGD iteration in (7) is equivalent to the classical NTK-based PGD
+as Θ ←Θ−η∇ΘfΘ(X)⊤˜Sr, where X ∈R2×n2 are batched inputs, r = vec(R⊤) is the vectored
+training residual, and ˜S = (S1 ⊗In + In ⊗S2) ∈Rn2×n2 is constructed by Kronecker product.
+Speciﬁcally, this implies [∇Θ1⟨fΘ1(ˆx1), M1⟩, ∇Θ2⟨fΘ2(ˆx2), M2⟩] = ∇ΘfΘ(X)⊤˜Sr.
+The proof is provided in Appendix Section A.9. Lemma 2 establishes the connection between
+the proposed SepPGD method (7) and the classical NTK-based PGD (Geifman et al., 2024; Shi
+et al., 2025) under an appropriate choice of the large preconditioner ˜S. Although the two PGD
+methods are equivalent in this setting, SepPGD is computationally more efﬁcient.
+This efﬁ-
+ciency comes from the parallel computation of factor gradients. Speciﬁcally, the total gradient
+∇ΘfΘ(X)⊤˜Sr can be written in the form of outer products like (C⊤⊗A)vec(B) (see Section
+A.9), whereas the factor gradients {∇Θd⟨fΘd(ˆxd), Md⟩}D
+d=1 in SepPGD are computed via matrix
+products like vec(ABC) in the O(n) dimensional space. This is more efﬁcient than evaluating
+the matrix product (C⊤⊗A)vec(B) in the O(n2) dimension. The key property we are using
+here is the equivalence between the Kronecker product expression and the vectorized matrix prod-
+uct, i.e., (C⊤⊗A)vec(B) = vec(ABC). This allows us to decompose the large preconditioner
+˜S ∈Rn2×n2 into smaller preconditioners Md ∈Rn×n and perform the SepPGD in an efﬁcient
+manner. Lemma 2 can also be extended to non-grid inputs. Especially, if we construct the precondi-
+tioner as ˜S = P
+d Sd, then the SepPGD gradient ∇Θd⟨fΘd((X)d,:), Md⟩for some non-grid inputs
+X ∈RD×n (n non-grid points in D-dimensional space) is equivalent to the classical NTK-based
+PGD update ∇ΘfΘ(X)T ˜Sr under element-wise evaluation without Kronecker product structure.
+Here, Md = einsum(⊙d′̸=dfΘ′
+d((X)d′,:), P
+d Sdr; (R, n) × (n) →(R, n)) is the d-th precondi-
+tioner constructed by Einstein product, where ⊙denotes element-wise product. We use this formu-
+lation to test SepPGD for non-grid inputs; see Section A.2.
+Given the equivalence between SepPGD and NTK-based PGD (Geifman et al., 2024), it therefore
+remains to show that the constructed preconditioner ˜S = (S1 ⊗In + In ⊗S2) is indeed effective
+in adjusting the eigenvalue distribution of K ˜S to accelerate convergence. This can possibly be
+veriﬁed, because the eigenvalue of a Kronecker product matrix S1⊗In is the product of eigenvalues
+of S1 and In. Therefore, ˜S would have better spectrum (i.e., smaller condition number) than ˜
+K =
+(KΘ1 ⊗In + In ⊗KΘ2) since Sd has better spectrum than KΘd. Suppose that ˜
+K is close to the
+true NTK matrix K (which can be veriﬁed using the NTK matrix formulation in Lemma 3). We
+can ultimately show that K ˜S has better spectrum than K. Therefore, the proposed SepPGD could
+provably and efﬁciently adjust the spectrum of the SepNN’s NTK matrix during training, effectively
+alleviating spectral bias. In practice, SepPGD allows the preconditioner {Md} to be efﬁciently
+updated every ten iterations, which is computationally expensive in previous methods. It is believed
+that the result in Lemma 2 (and the analysis following) can be readily extended to multivariate cases
+D > 2. Also, based on the convergence result of NTK-based preconditioning algorithm (Geifman
+et al., 2024), we can also deduce the convergence and solution consistency (w.r.t. standard gradient
+descent) of our SepPGD algorithm by using the equivalence between SepPGD and the corresponding
+kernel ridge regression with representer theorem. This is left for future research.
+5
+NUMERICAL EXPERIMENTS
+The numerical results are presented to verify the effectiveness of SepPGD for improving conver-
+gence of SepNNs. Examples include kernel ridge regression (KRR), image and surface representa-
+tion using INRs, and PINNs. Detailed experimental settings are placed in Appendix Section A.12.
+9
+
+
+Original
+MLP
+SepNN
+SepNN (SepPGD)
+Original
+MLP
+SepNN
+SepNN (SepPGD)
+PSNR Inf
+PSNR 26.64
+PSNR 26.48
+PSNR 33.30
+IoU 1.0
+IoU 0.985
+IoU 0.983
+IoU 0.992
+Figure 3: Visual results for image and 3D surface representation using SepPGD.
+(a) Convergence curves                         (b) Ground-truth                                    (c) PINN                           (d) Separable PINN           (e) Separable PINN (SepPGD)
+y
+            MSE 0                                           MSE 0.092                                 MSE 0.042                                 MSE 0.037                   
+(a) Convergence curves                         (b) Ground-truth                                    (c) PINN                           (d) Separable PINN           (e) Separable PINN (SepPGD)
+y
+            MSE 0                                           MSE 0.092                                 MSE 0.042                                 MSE 0.037                   
+Figure 4: Convergence curves and results for the 3D diffusion equation using PINNs.
+KRR. Following (Geifman et al., 2024), we perform KRR by using the gradients of neural network
+w.r.t. parameters as the feature function of kernel (see Appendix Section A.12 for detailed formu-
+lation and settings). We test both MLP and CP SepNN, and compare SepPGD with the classical
+NTK-based PGD, the modiﬁed spectrum kernel (MSK) (Geifman et al., 2024; Shi et al., 2025). Fol-
+lowing (Geifman et al., 2024), we consider both noisy (standard deviation 0.01) and noiseless cases.
+The convergence behavior, measured by testing MSE during training, is shown in Fig. 2(a). Because
+the efﬁciency advantage of SepNN and SepPGD comes from the lower complexity in an iteration,
+we plot the convergence curve w.r.t. execution time rather than iteration number. In noiseless case,
+SepPGD achieves the fastest convergence. In the presence of noise, SepPGD remains robust, while
+MSK has slower convergence. SepPGD improves SepNN to a large margin as shown in Fig. 2.
+Image Representation and Recovery. We leverage INR for image representation and recovery
+(inpainting) by following the settings in (Sitzmann et al., 2020; Shi et al., 2025). Convergence curves
+and representation visual examples are shown in Fig. 2(b) and Fig. 3’s left. SepPGD effectively
+improves the convergence of SepNN by alleviating spectral bias and better capturing image ﬁne
+details. Moreover, SepPGD accelerates the convergence without affecting the model’s generalization
+(in most cases improving generalization); see image inpainting results in Appendix Fig. 10.
+Surface Representation. We perform surface representation by representing the volumetric occu-
+pancy grids of a 3D surface using INRs (Shi et al., 2025). The results (under the same iteration num-
+ber) with intersection over union (IoU) are shown in Fig. 3’s right. SepPGD effectively improves the
+ability of SepNN to capture surface textures and details by alleviating spectral bias during training.
+PINNs. We use the separable PINN (Cho et al., 2023) (CP SepNN) and perform the tests on 3D
+diffusion, Klein-Gordon, and Helmholtz equations using grid samples. Convergence curves using
+testing MSE vs. time and visual examples (under the same iteration) are shown in Fig. 4. More
+results are shown in Appendix Figs. 13-14. The separable PINN (Cho et al., 2023) is more efﬁcient
+than classical PINN, and SepPGD further enhances the convergence speed of separable PINN.
+6
+CONCLUSIONS AND DISCUSSIONS
+We established the universal approximation theory for SepNNs, deduced their NTK regimes, and
+proposed an efﬁcient separable PGD to alleviate spectral bias of SepNNs. The algorithm was shown
+to be effective in various applications such as image & surface representation and PINNs. We fur-
+ther elaborate on the potential impact of our proposed theory and method. First, SepNNs have been
+attracting growing attention in various applications due to their efﬁcient structure, such as INRs and
+PINNs. Numerical experiments demonstrate that SepPGD can effectively speed up convergence in
+applications involving INRs and PINNs (e.g., in image and surface representation and numerical
+PDEs). Therefore, we believe that our theory and the corresponding algorithm have the potential to
+beneﬁt these ﬁelds and address related challenges. Moreover, SepNNs are also increasingly being
+adopted across diverse scientiﬁc domains by leveraging their efﬁcient structure and interpretability
+(Cho et al., 2023; Song et al., 2023; Chen et al., 2025). Therefore, understanding the theoretical ap-
+proximation ability, training behavior (e.g., NTK regime), and addressing the potential optimization
+challenge of SepNNs are believed to be valuable and important for these practical applications.
+10
+
+
+ACKNOWLEDGMENTS
+This work is supported by the Fundamental and Interdisciplinary Disciplines Breakthrough Plan of
+the Ministry of Education of China (JYB2025XDXM101), the NSFC (No. 124B2029, 62476214),
+and the Tianyuan Fund for Mathematics of the National Natural Science Foundation of China (Grant
+No. 12426105). We thank the anonymous reviewers for the constructive and valuable comments.
+REFERENCES
+K. Ahlander. Einstein summation for multidimensional arrays. Computers & Mathematics with
+Applications, 44(8):1007–1017, 2002.
+Sanjeev Arora, Simon Du, Wei Hu, Zhiyuan Li, and Ruosong Wang.
+Fine-grained analysis of
+optimization and generalization for overparameterized two-layer neural networks. In Proceedings
+of the 36th International Conference on Machine Learning (ICML), volume 97, pp. 322–332,
+2019a.
+Sanjeev Arora, Simon S. Du, Wei Hu, Zhiyuan Li, Ruslan Salakhutdinov, and Ruosong Wang. On
+exact computation with an inﬁnitely wide neural net. In Proceedings of the 33rd International
+Conference on Neural Information Processing Systems (NeurIPS), pp. 8141–8150, 2019b.
+Liliana Borcea, Josselin Garnier, Alexander V. Mamonov, and J¨orn Zimmerling. When data driven
+reduced order modeling meets full waveform inversion. SIAM Review, 66(3):501–532, 2024.
+Anpei Chen, Zexiang Xu, Andreas Geiger, Jingyi Yu, and Hao Su. TensoRF: Tensorial radiance
+ﬁelds. In 17th European Conference on Computer Vision (ECCV), pp. 333–350, 2022.
+Ruihua Chen, Bangyu Wu, Meng Li, and Yisi Luo. Full-waveform inversion with velocity model
+low-rank implicit neural representation. IEEE Transactions on Geoscience and Remote Sensing,
+63:1–16, 2025. doi: 10.1109/TGRS.2025.3594184.
+Junwoo Cho, Seungtae Nam, Hyunmo Yang, Seok-Bae Yun, Youngjoon Hong, and Eunbyung Park.
+Separable physics-informed neural networks. In Thirty-seventh Conference on Neural Informa-
+tion Processing Systems, pp. 23761–23788, 2023.
+Sven Dummer, Nicola Strisciuglio, and Christoph Brune. Rda-inr: Riemannian diffeomorphic au-
+toencoding via implicit neural representations. SIAM Journal on Imaging Sciences, 17(4):2302–
+2330, 2024.
+V. P. Fedorova. The Stone–Weierstrass Theorem and Spaces of Measures, volume 72, pp. 417–427.
+Springer, 2002.
+Amnon Geifman, Daniel Barzilai, Ronen Basri, and Meirav Galun. Controlling the inductive bias
+of wide neural networks by modifying the kernel’s spectrum. Transactions on Machine Learning
+Research, 2024. ISSN 2835-8856.
+Alex Gorodetsky, Sertac Karaman, and Youssef Marzouk. A continuous analogue of the tensor-train
+decomposition. Computer Methods in Applied Mechanics and Engineering, 347:59–84, 2019.
+Yicheng Li Qian Lin Jun S. Liu Haobo Zhang, Jianfa Lai. Towards a statistical understanding of
+neural networks: Beyond the neural tangent kernel theories. arXiv:2412.18756, 2024.
+Russell L. Herman. Generalized fourier series and function spaces. In An Introduction to Fourier
+Analysis. Chapman and Hall/CRC, 2016.
+Arthur Jacot, Franck Gabriel, and Clement Hongler. Neural tangent kernel: Convergence and gen-
+eralization in neural networks. In S. Bengio, H. Wallach, H. Larochelle, K. Grauman, N. Cesa-
+Bianchi, and R. Garnett (eds.), Advances in Neural Information Processing Systems, volume 31,
+2018.
+Nikos Kargas and Nicholas D. Sidiropoulos. Supervised learning and canonical decomposition of
+multivariate functions. IEEE Transactions on Signal Processing, 69:1097–1107, 2021.
+11
+
+
+Patrick Kidger and Terry Lyons. Universal Approximation with Deep Narrow Networks. In Pro-
+ceedings of Thirty Third Conference on Learning Theory, volume 125, pp. 2306–2327, 2020.
+Diederik Kingma and Jimmy Ba. Adam: A method for stochastic optimization. In International
+Conference on Learning Representations (ICLR), 2015.
+Tamara G. Kolda and Brett W. Bader. Tensor decompositions and applications. SIAM Review, 51
+(3):455–500, 2009.
+Jaehoon Lee, Yasaman Bahri, Roman Novak, Sam Schoenholz, Jeffrey Pennington, and Jascha Sohl-
+dickstein. Deep neural networks as gaussian processes. In International Conference on Learning
+Representations (ICLR), 2018.
+S. Lee, G. Wolberg, and S.Y. Shin. Scattered data interpolation with multilevel b-splines. IEEE
+Transactions on Visualization and Computer Graphics, 3(3):228–244, 1997. doi: 10.1109/2945.
+620490.
+Moshe Leshno, Vladimir Ya. Lin, Allan Pinkus, and Shimon Schocken. Multilayer feedforward net-
+works with a nonpolynomial activation function can approximate any function. Neural Networks,
+6(6):861–867, 1993.
+Longlong Li, Yipeng Zhang, Guanghui Wang, and Kelin Xia. Kolmogorov-arnold graph neural
+networks for molecular property prediction. Nature Machine Intelligence, 7:1346–1354, 2025a.
+Yanyi Li, Xi Zhang, Yisi Luo, and Deyu Meng. Deep rank-one tensor functional factorization for
+multi-dimensional data recovery. In Proceedings of the AAAI Conference on Artiﬁcial Intelli-
+gence, volume 39, pp. 18539–18547, 2025b.
+Yicheng Li, Zixiong Yu, Guhan Chen, and Qian Lin. On the eigenvalue decay rates of a class of
+neural-network related kernel functions deﬁned on general domains. Journal of Machine Learning
+Research, 25(1):3977 – 4023, 2024.
+Ruofan Liang, Hongyi Sun, and Nandita Vijaykumar. CoordX: Accelerating implicit neural repre-
+sentation with a split MLP architecture. In International Conference on Learning Representations
+(ICLR), 2022.
+Chaoyue Liu, Libin Zhu, and Mikhail Belkin. On the linearity of large non-linear models: when
+and why the tangent kernel is constant. In Proceedings of the 34th International Conference on
+Neural Information Processing Systems, pp. 15954 – 15964, 2020.
+Xingyi Liu and Keshab K. Parhi. Tensor decomposition for model reduction in neural networks: A
+review. IEEE Circuits and Systems Magazine, 23(2):8–28, 2023.
+Ziming Liu, Yixuan Wang, Sachin Vaidya, Fabian Ruehle, James Halverson, Marin Soljacic,
+Thomas Y. Hou, and Max Tegmark. KAN: Kolmogorov-Arnold networks. In The Thirteenth
+International Conference on Learning Representations, 2025.
+Yisi Luo, Xile Zhao, Zhemin Li, Michael K. Ng, and Deyu Meng. Low-rank tensor function rep-
+resentation for multi-dimensional data recovery.
+IEEE Transactions on Pattern Analysis and
+Machine Intelligence, 46(5):3351–3369, 2024.
+Mohamad Amin Mohamadi, Wonho Bae, and Danica J. Sutherland. A fast, well-founded approxi-
+mation to the empirical neural tangent kernel. In Proceedings of the 40th International Conference
+on Machine Learning, pp. 25061–25081, 2023.
+Roman Novak, Jascha Sohl-Dickstein, and Samuel S Schoenholz. Fast ﬁnite width neural tangent
+kernel. In Proceedings of the 39th International Conference on Machine Learning, volume 162,
+pp. 17018–17044, 2022.
+Allan Pinkus. Approximation theory of the MLP model in neural networks. Acta Numerica, 8:
+143–195, 1999. doi: 10.1017/S0962492900002919.
+Ali Rahimi and Benjamin Recht. Random features for large-scale kernel machines. In Proceedings
+of the 21st International Conference on Neural Information Processing Systems, pp. 1177–1184,
+2007.
+12
+
+
+Vishwanath Saragadam, Daniel LeJeune, Jasper Tan, Guha Balakrishnan, Ashok Veeraraghavan,
+and Richard G. Baraniuk. Wire: Wavelet implicit neural representations. In 2023 IEEE/CVF
+Conference on Computer Vision and Pattern Recognition (CVPR), pp. 18507–18516, 2023.
+Kexuan Shi, Xingyu Zhou, and Shuhang Gu. Improved implicit neural representation with fourier
+reparameterized training. In 2024 IEEE/CVF Conference on Computer Vision and Pattern Recog-
+nition (CVPR), pp. 25985–25994, 2024.
+Kexuan Shi, Hai Chen, Leheng Zhang, and Shuhang Gu. Inductive gradient adjustment for spectral
+bias in implicit neural representations. In The Forty-Second International Conference on Machine
+Learning, 2025.
+Vincent Sitzmann, Julien Martel, Alexander Bergman, David Lindell, and Gordon Wetzstein. Im-
+plicit neural representations with periodic activation functions. In International Conference on
+Neural Information Processing Systems, volume 33, pp. 7462–7473, 2020.
+Tianci Song, Charles Broadbent, and Rui Kuang. GNTD: reconstructing spatial transcriptomes with
+graph-guided neural tensor decomposition informed by spatial and functional relations. Nature
+Communications, 14:8276, 2023.
+Matthew Tancik, Pratul Srinivasan, Ben Mildenhall, Sara Fridovich-Keil, Nithin Raghavan, Utkarsh
+Singhal, Ravi Ramamoorthi, Jonathan Barron, and Ren Ng. Fourier features let networks learn
+high frequency functions in low dimensional domains. In International Conference on Neural
+Information Processing Systems, volume 33, pp. 7537–7547, 2020.
+Alexander Tsigler and Peter L. Bartlett. Benign overﬁtting in ridge regression. Journal of Machine
+Learning Research, 24(123):1–76, 2023.
+Sai Karthikeya Vemuri, Tim B¨uchner, Julia Niebling, and Joachim Denzler.
+Functional tensor
+decompositions for physics-informed neural networks. In International Conference on Pattern
+Recognition, pp. 32–46, 2025.
+Ting Wang, Zipei Yan, Jizhou Li, Xile Zhao, Chao Wang, and Michael Ng. Hyperspectral and
+multispectral image fusion with arbitrary resolution through self-supervised representations. In-
+ternational Journal of Computer Vision, 2025. https://doi.org/10.1007/s11263-025-02540-1.
+Xinling Yu, Sean Hooten, Ziyue Liu, Yequan Zhao, Marco Fiorentino, Thomas Van Vaerenbergh,
+and Zheng Zhang. Separable operator networks. Transactions on Machine Learning Research,
+2024. ISSN 2835-8856.
+Haoxuan Yuan, Zhe Chen, Zheng Lin, Jinbo Peng, Yuhang Zhong, Xuanjie Hu, Songyan Xue, Wei
+Li, and Yue Gao. Constructing 4D radio map in LEO satellite networks with limited samples. In
+IEEE International Conference on Computer Communications (INFOCOM), 2025.
+Ting-Wei Zhou, Xi-Le Zhao, Wei-Hao Wu, Jian-Li Wang, and Yi-Si Luo. Frequency-aware implicit
+neural representation for multi-dimensional data recovery. IEEE Transactions on Circuits and
+Systems for Video Technology, 2025. doi=10.1109/TCSVT.2025.3575475.
+A
+APPENDIX
+A.1
+MORE DISCUSSIONS
+A.1.1
+EFFICIENCY ADVANTAGE OF SEPNNS
+We make more discussions on the efﬁciency advantage of SepNNs. The computational advantage of
+SepNNs is most relevant in certain structured settings, and does not directly imply faster training in
+all scenarios compared to architectures like convolutional neural networks (CNNs). We would like
+to clarify that SepNNs are primarily designed for problems where the input is a set of coordinate
+points on a grid, such as in INRs and PINNs. In these cases, the input is not a high-dimensional
+signal like an image, but rather a low-dimensional coordinate space. CNNs, while highly efﬁcient
+for image-like data through localized convolution and parallelism, are less naturally suited to such
+13
+
+
+coordinate-based inputs, as they rely on spatial locality and translation invariance, which may not
+align with the structure of the problem. In contrast, SepNNs exploit the separable structure of the
+grid to reduce the number of unique function evaluations from O(nD) (as in a standard MLP applied
+naively to all grid points) to O(nD), resulting in faster training on grid coordinate points. This
+makes SepNNs particularly advantageous in training coordinate networks on grids, such as image
+representation using INRs and evaluating grid collocation points in PINNs. Therefore, the beneﬁts
+of SepNNs are most pronounced in these structured settings.
+From a mathematical perspective, the theory may inspire several promising future research direc-
+tions. SepNNs are inherently related to decomposition-based algebraic structures such as nonnega-
+tive matrix factorization (NMF) and tensor decomposition. Therefore, our NTK analysis for SepNNs
+provides a theoretical tool to bridge neural network optimization with classical NMF, tensor decom-
+position, and related scientiﬁc computing topics. Furthermore, the NTK theory can be naturally
+extended to separable operator learning (Cho et al., 2023), providing a theoretical tool for learning
+mappings between function spaces. Moreover, based on the NTK analysis, another future research
+line is to study adaptive feature learning regime (Haobo Zhang, 2024) induced by SepNNs, which is
+particularly interesting for SepNNs since they can learn disentangled representations, making them
+suited to extract interpretable features from multimodal data.
+A.1.2
+DISCUSSIONS ON THEORETICAL ANALYSIS
+Our current theoretical analysis establishes the universal approximation capability of SepNNs and
+does not yet provide explicit approximation error rates in terms of network rank or width. In future
+work, we can consider function spaces spanned by Fourier bases and leveraging the decay properties
+of Fourier coefﬁcients (Herman, 2016) to derive approximation error bounds with respect to the
+rank, in order to provide theoretical guidance for practical rank selection. This could be achieved by
+formulating the Fourier expansion in the SepNN form (Kargas & Sidiropoulos, 2021). Moreover, we
+can try to characterize the approximation ability of SepNNs w.r.t. width by borrowing approximation
+theory for narrow neural networks (Kidger & Lyons, 2020) in future research.
+While this work considers the CP-type SepNN (which is the most classical SepNN type) to perform
+the NTK analysis, we believe the NTK analysis can be extended to TT- and Tucker-type SepNNs in
+a similar fashion. For TT-type SepNNs, the derivation would closely follow CP, relying on tensor
+products of NTKs corresponding to factor MLPs. For Tucker-type SepNNs, analogous NTK results
+are also expected to hold, provided the asymptotic behavior and boundedness of the core tensor C
+are appropriately treated. We regard this extension as a valuable direction for future research.
+Our current theoretical analysis does not yet provide comprehensive convergence guarantees or
+generalization error bounds for the ﬁxed-rank regime. Such analysis is crucial for a deeper un-
+derstanding of the training and generalization behaviors of SepNNs. Still, we believe the present
+theoretical framework offers a valuable initial insight, as it establishes a convergence analysis for
+SepNNs under inﬁnite rank regime. In fact, by applying probability bounds related to the law of
+large numbers with respect to the rank parameter R, we anticipate that an ϵ-convergence bound on
+the training residual could be derived for a ﬁxed rank R = O(1/ϵ2), in a manner analogous to
+classical probability convergence bound analyses for wide MLPs (see, e.g., Theorem 4.1 in (Arora
+et al., 2019a)). In future work, we can leverage more advanced tools from stochastic NTK analysis
+and explore training dynamics beyond the convergent NTK regime (Liu et al., 2020), to provide a
+more comprehensive theoretical understanding on convergence and generalization of SepNNs under
+small rank. Moreover, in the ﬁxed-rank regime, the factor MLPs of the SepNN converge to random
+Gaussian processes. This implies that their outputs serve as random feature maps for each input.
+The SepNN then performs a tensor product of these random features. This connection allows us
+to consider the well-established theoretical framework of random feature models (Rahimi & Recht,
+2007) to analyze the potential property of SepNNs under ﬁxed-rank settings, providing a way to
+derive non-asymptotic convergence rates and generalization bounds for ﬁxed-rank SepNN.
+The proposed preconditioner in this work is designed to modulate the eigenvalue distribution of
+the NTK matrix K to accelerate training convergence. By applying the modulation function g(λ) to
+smooth the top k eigenvalues, the resulting preconditioned product matrix K ˜S is guaranteed to have
+a condition number no larger than K. This is because the dominant large eigenvalues are reduced,
+leading to a more uniform spectral distribution. In future work, we can derive quantitative bounds on
+the condition number of the modulated NTK matrix by leveraging its eigenvalue decay properties.
+14
+
+
+For instance, tools from (Li et al., 2024) on the eigenvalue decay rates of kernel functions could be
+employed. We regard this as a promising direction for further research. Regarding the effect of the
+preconditioner on generalization, existing studies (e.g., (Geifman et al., 2024; Tsigler & Bartlett,
+2023)) suggest that slowing the eigenvalue decay of the kernel matrix can introduce an implicit
+regularization effect, helping prevent overﬁtting and improving generalization. While the current
+manuscript does not include a rigorous theoretical analysis of generalization, the above references
+provide a way for establishing formal generalization guarantees for SepPGD.
+While we consider the two-layer MLP in Theorem 2, it is straightforward to extend to multi-layer
+MLPs or other network structures by utilizing the corresponding NTK formulations (Arora et al.,
+2019b). Especially, for SepNNs with multi-layer factor neural networks, we can use the correspond-
+ing NTK analysis for multi-layer neural networks to study their theoretical property (Arora et al.,
+2019b). Especially, (Arora et al., 2019b) has shown that the NTK of a multi-layer neural network
+(beyond two-layer) converges to a deterministic kernel under inﬁnite width. Their results are based
+on the recursive formulation of the covariance matrix of hidden layers in a multi-layer network (cf.
+Theorem 3.1 in (Arora et al., 2019b)). By borrowing this type of technique, we believe the theoret-
+ical result for SepNN (Theorem 2 in our manuscript) can be readily extended to multi-layer MLPs
+by replacing the two-layer factor NTK k(xd, x′
+d) with multi-layer NTK formulations.
+Our analysis in this paper can be readily generalized to multi-output SepNN fΘ : RD →RDout
+by applying multi-output NTK approximation (Mohamadi et al., 2023). Moreover, the detailed
+convergence and generalization bounds of SepNNs under ﬁxed rank conditions warrants further dis-
+cussions. It is also interesting to apply SepPGD to more applications, such as implicit full waveform
+inversion (Borcea et al., 2024; Chen et al., 2025) and diffeomorphic autoencoding (Dummer et al.,
+2024).
+A.1.3
+RELATIONS TO KAN
+The recently popular structure KAN (Liu et al., 2025) is closely related to the SepNN. Especially,
+each layer of KAN can be viewed as a type of SepNN. Speciﬁcally, consider the input vector
+x = [x(1), x(2), · · · , x(n)]T . A single KAN layer (Liu et al., 2025) (take single-output as an ex-
+ample), denoted as Φ(·) : Rn →R, is deﬁned as Φ(x) = Pn
+j=1 φ1,j(x(j)), where each univariate
+function φ1,j(·) : R →R is parameterized as φ1,j(x(j)) = ω1,j h
+b(x(j)) + PK
+k=1 c1,j
+k Bk(x(j))
+i
+.
+Here, {c1,j
+k } for k = 1, . . . , K are trainable parameters, and {Bk(·)} are spline basis functions as
+used in (Liu et al., 2025). We observe that the output Φ(x) is a linear combination (speciﬁcally,
+summation) of learnable univariate functions φ1,j(x(j)), which shares a similar spirit with SepNNs.
+Therefore, each KAN layer can be viewed as a SepNN, though it does not directly correspond to the
+CP, TT, or Tucker types. The distinction lies in how the linear combination is realized. In KAN, it
+is implemented via simple addition of univariate functions, while in the SepNNs discussed in our
+manuscript, the combination is realized via tensor product (e.g., CP, TT, or Tucker). The most sig-
+niﬁcant commonality between KAN and SepNN is that both architectures learn univariate functions
+and compose multivariate functions through linear combinations of these univariate components.
+This characteristic fundamentally differentiates KAN from conventional MLPs, and similarly dis-
+tinguishes SepNNs from their non-separable counterparts.
+A.1.4
+MODULATION FUNCTION CHOICE
+We conducted a sensitivity analysis on the modulation function g(λ). Speciﬁcally, we compared
+two forms of g(λ): g1(λi) = λk for i ≤k, and g1(λi) = λi for i > k (the version used in the
+experiment); g2(λi) = √λi for i ≤k, and g2(λi) = λi for i > k. We also varied the number of
+modulated eigenvalues k to assess sensitivity. The results in Table 2 below demonstrate that SepPGD
+remains effective under both modulation functions, and g1(λ) yields better performance. Moreover,
+the method shows robustness to the choice of k within a certain range (e.g., k ∈(60, 90)). These
+ﬁndings indicate that with a suitable modulation function that smooths the eigenvalue distribution,
+the proposed SepPGD method is not overly sensitive to the speciﬁc form of g(λ).
+15
+
+
+Table 2: PSNR performance on image representation using INRs with different modulation func-
+tions.
+k
+30
+40
+50
+60
+70
+80
+90
+100
+w/o SepPGD
+26.48
+26.48
+26.48
+26.48
+26.48
+26.48
+26.48
+26.48
+g1(λ)
+26.79
+26.95
+29.65
+33.04
+33.30
+34.28
+34.21
+34.06
+g2(λ)
+26.92
+27.70
+27.91
+30.81
+31.58
+31.74
+31.95
+30.23
+Table 3: Sensitivity analysis (PSNR) for rank R in the SepNN and k in the eigenvalue modulation
+function for image representation on the original sized Plane image.
+Rank R
+100
+200
+300
+400
+500
+600
+700
+k
+30
+40
+50
+60
+70
+80
+90
+SepNN
+26.36 26.74 26.54 26.61 26.48 26.49 26.45
+SepNN
+26.48 26.48 26.48 26.48 26.48 26.48 26.48
+SepNN (SepPGD) 31.59 32.69 33.41 33.65 33.30 33.54 33.40
+SepNN (SepPGD) 26.79 26.95 29.65 33.04 33.30 34.28 34.21
+A.1.5
+HYPERPARAMETER SENSITIVITY AND MORE EXPERIMENTS
+We conduct sensitivity analysis on two critical hyperparameters: the rank R in SepNN and the pa-
+rameter k in the modulation function g(λ) used in the SepPGD algorithm. The image representation
+results are summarized in Table 3. For varying ranks R, our SepPGD consistently enhances the
+performance of SepNN. We ﬁnd that setting k > 60 in this case effectively mitigates the spectral
+bias in SepNN by adjusting the NTK spectrum. In particular, values of k ∈{60, 70, 80, 90} produce
+a desirable effect for enhancing convergence efﬁciency. Our SepPGD method is not overly sensitive
+to the choice of k.
+The sensitivity analysis of our SepPGD w.r.t. the preconditioner update frequency is shown in the
+Table 4 below. SepPGD is relatively not sensitive to the preconditioner update frequency. This is
+because the NTK matrix would not change abruptly during training and thus the preconditioner is
+effective for NTK eigenvalue modulation across a number of iterations.
+Table 4: PSNR performance on image representation using INRs with different preconditioner up-
+date frequency (number of iterations between preconditioner updates).
+Update frequency
+10
+100
+300
+500
+700
+900
+1100
+SepNN
+26.48
+26.48
+26.48
+26.48
+26.48
+26.48
+26.48
+SepNN (SepPGD)
+33.30
+33.29
+33.16
+33.12
+33.09
+33.06
+33.06
+The performance of SepPGD with different activation functions as well as the Fourier feature map-
+ping (Tancik et al., 2020) is shown in the Table 5 below. SepPGD improves the convergence speed
+of the SepNN baseline with different activation functions and Fourier encoding structures.
+Table 5: PSNR performance on image representation using INRs with different activation func-
+tion/network structure.
+Activation
+Sin
+Cos
+ReLU
+LeakyReLU
+Fourier feature +ReLU
+Fourier feature+LeakyReLU
+SepNN
+26.48
+21.83
+18.20
+18.20
+30.89
+30.94
+SepNN (SepPGD)
+33.30
+30.06
+20.02
+20.74
+40.49
+40.51
+The performance with different width is shown in the Table 6 below. With a sufﬁcient width (e.g.,
+width> 200), the SepPGD is effective in accelerating the convergence of SepNN.
+The experimental results for the image representation under additive Gaussian noise are shown in the
+Table 7 below. Under moderate to low noise deviation, SepPGD demonstrates robustness and im-
+proves the denoising performance of SepNN. However, when the noise deviation is large, SepPGD
+tends to overﬁt to the noise components. This behavior is expected, as SepPGD accelerates con-
+vergence toward high-frequency details, which can cause it to ﬁt high-frequency noise more rapidly
+16
+
+
+Table 6: PSNR performance on image representation using INRs with different network width.
+Width
+100
+200
+300
+400
+500
+600
+700
+SepNN
+22.46
+23.88
+25.21
+26.19
+26.48
+27.08
+27.20
+SepNN (SepPGD)
+22.79
+31.46
+32.75
+33.22
+33.30
+33.89
+34.35
+when the noise level is high and no explicit regularizations are applied. In future work, we can
+introduce suitable regularizations (e.g., total variation) to enhance robustness in noisy scenarios.
+Table 7: PSNR performance on image representation using INRs with Gaussian noise.
+Noise standard deviation
+0.01
+0.03
+0.05
+0.07
+0.09
+SepNN
+26.40
+26.35
+26.27
+25.85
+25.29
+SepNN (SepPGD)
+33.26
+31.08
+28.20
+26.35
+25.06
+Moreover, we employ SVD truncation to synthesize images with varying ranks, and then apply a
+SepNN model with a ﬁxed rank of R = 100 to represent these images via INRs. The relationship
+between the approximation error (MSE) and the true separation rank of the target image is given
+in the Table 8 below. It can be observed that as the image rank increases, the approximation er-
+ror of SepNN also grows. In contrast, SepPGD effectively enhances convergence efﬁciency (and
+consequently reduces the approximation error) across different data ranks.
+Table 8: Approximation error (MSE) vs. true separation rank of the target image data (Setting the
+model rank R = 100) using a bivariate CP SepNN.
+Data rank
+100
+200
+300
+400
+500
+SepNN
+0.052
+0.061
+0.063
+0.064
+0.066
+SepNN (SepPGD)
+0.021
+0.030
+0.035
+0.036
+0.037
+A.2
+EXPERIMENTS ON NON-GRID INPUTS
+We further conducted experiments on non-grid tasks using INRs. Speciﬁcally, we randomly sam-
+pled 500 non-grid points along with their corresponding function values (f1(x, y), f2(x, y), f3(x, y)
+from Eqs. (16)-(18)) to form the non-grid training dataset. We then train a SepNN to ﬁt these
+non-grid samples, as shown in Table 9 below. For non-grid data, the proposed SepPGD gradient is
+formulated as ∇Θd⟨fΘd((X)d,:), Md⟩, where X ∈RD×n are non-grid input points and Md is con-
+structed by some Einstein products between factor outputs, preconditioner Sd, and training residual
+r (especially, Md = einsum(⊙d′̸=dfΘ′
+d((X)d′,:), P
+d Sdr; (R, n) × (n) →(R, n)), where ⊙de-
+notes element-wise product and einsum denotes the Einstein product between matrix and vector).
+This formulation reduces to point-wise evaluations and yields similar efﬁciency and effectiveness to
+classical NTK-based preconditioning methods, such as the MSK (Geifman et al., 2024). Therefore,
+it is reasonable that SepNN (SepPGD) performs comparably to SepNN (MSK) on non-grid data,
+while both outperform the original SepNN. The efﬁciency advantage of SepPGD comes primarily
+from the separable structure of grid inputs, which is a prevalent training conﬁguration in applications
+such as image grids in INRs and grid collocation points in PINNs.
+Table 9: MSE performance of SepPGD for non-grid data f1(x, y), f2(x, y), f3(x, y) by learning
+function representations using INRs.
+Data
+f1(x, y)
+f2(x, y)
+f3(x, y)
+SepNN
+0.020
+0.030
+0.075
+SepNN (MSK)
+0.014
+0.024
+0.058
+SepNN (SepPGD)
+0.015
+0.021
+0.062
+17
+
+
+A.3
+EFFICIENT NTK MATRIX COMPUTATION
+Another merit of the SepNN’s NTK is that its NTK matrix can be computed in parallel over multi-
+ple inputs, resulting in greater efﬁciency compared to computing the NTK matrices of other neural
+architectures (Novak et al., 2022; Mohamadi et al., 2023). In fact, the SepNN’s NTK (12) admits an
+elegant form that allows the NTK matrix over grid inputs to be expressed as a Kronecker product
+of smaller NTK matrices (Lemma 3), thereby improving efﬁciency. For simplicity, the NTK ma-
+trix derivation is presented for the bivariate case D = 2 because the NTK matrix formulation for
+multivariate cases D > 2 would be much more lengthy.
+Lemma 3 (Exact NTK matrix of SepNN). Let the bivariate CP SepNN be fΘ(x1, x2)
+=
+1
+√
+R
+PR
+r=1 (fΘ1(x1))r (fΘ2(x2))r, where each fΘd : R →RR (d = 1, 2) is a parametric MLP with
+parameters Θd, and Θ = (Θ1, Θ2). Consider the grid input points {(x1, x2)|xd ∈ˆxd, d = 1, 2}
+where ˆxd ∈Rn. The NTK matrix K ∈Rn2×n2 of fΘ over these grid points is given by:
+K = 1
+R
+R
+X
+r,s=1
+
+K(r,s)
+1
+⊗
+
+(fΘ2(ˆx2))⊤
+r,:(fΘ2(ˆx2))s,:
+
++
+
+(fΘ1(ˆx1))⊤
+r,:(fΘ1(ˆx1))s,:
+
+⊗K(r,s)
+2
+
+,
+(9)
+where (fΘd(ˆxd))r,: ∈R1×n denotes the r-th row of the output factor matrix fΘd(ˆxd) ∈RR×n
+(fΘd takes each element in ˆxd as input in parallel) and each smaller NTK matrix K(r,s)
+d
+∈Rn×n
+(d = 1, 2) is deﬁned by
+
+K(r,s)
+d
+
+i,j =
+D
+∇Θd
+
+fΘd((ˆxd)i)
+
+r, ∇Θd
+
+fΘd((ˆxd)j)
+
+s
+E
+.
+The proof is in Section A.10. Lemma 3 shows that computing the NTK matrix of the SepNN on grid
+points only requires computing some Kronecker products between smaller matrices of size n × n,
+compared to computing the direct n2 × n2 NTK matrix needed by other neural architectures for
+n2 grid points. Furthermore, we can further decrease the complexity using pseudo NTK. While
+computing the exact NTK matrices {K(r,s)
+d
+} of multi-output factor MLPs fΘd requires O(nR)
+complexity due to the R outputs, researchers usually consider computing the pseudo NTK matrix
+(Mohamadi et al., 2023; Novak et al., 2022) instead. In this work, we leverage the rank-one sum-of-
+logits approximation to approximate the NTK matrix of the multi-output factor MLP fΘd, reducing
+complexity to O(n). The pseudo NTK of the bivariate SepNN fΘ is formulated as
+K ≈1
+R
+
+K1 ⊗
+
+fΘ2(ˆx2)⊤fΘ2(ˆx2)
+
++
+
+fΘ1(ˆx1)⊤fΘ1(ˆx1)
+
+⊗K2
+
+,
+(10)
+where K1, K2 ∈Rn×n are pseudo NTK matrices of the multi-output factor MLPs fΘ1, fΘ2 : R →
+RR on training points ˆx1 ∈Rn and ˆx2 ∈Rn, computed using sum-of-logits (Mohamadi et al.,
+2023). The relative approximation error between the pseudo NTK matrix (10) and the exact NTK
+matrix (9), which is a simple weighted addition of the errors induced by K1, K2, would scale as
+O(
+√
+W) (network width) by using analogous arguments as in (Mohamadi et al., 2023).
+A.4
+FIXED NTK DURING TRAINING
+Theorem 3 (SepNN NTK during training). Let the multivariate CP SepNN be deﬁned as
+fΘ(x1, · · · , xD) =
+1
+√
+R
+PR
+r=1 (fΘ1(x1))r (fΘ2(x2))r · · · (fΘD(xD))r : RD →R, where each
+fΘd : R →RR is a parametric MLP with parameters Θd, and Θ = (Θ1, · · · , ΘD) is the col-
+lection of all parameters. Let each factor MLP fΘd : R →RR has the architecture fΘd(xd) =
+1
+√
+W W2,dσ(W1,dxd + bd), with W1,d ∈RW ×1, bd ∈RW , W2,d ∈RR×W , and σ a differentiable
+activation function with derivative ˙σ. Let σ, ˙σ be Lipschitz smooth. Consider n training samples
+{xi, yi}n
+i=1. Assume the weight (e.g., W1,d) are initialized by i.i.d. N(0, 1). Let the input norm
+∥xi∥ℓ2 and label yi being uniformly bounded by some constants O(1). Consider standard gradient
+descent optimizer with inﬁnitely small learning rate. Then, given a training time t > 0, as both
+the width W →∞and the rank R →∞, the NTK of fΘ during training converges to the NTK at
+initialization KΘ(t)(xi, xj) →KΘ(0)(xi, xj) for all xi, xj ∈{xi}n
+i=1.
+The proof of Theorem 3 is placed in Section A.11. The NTK matrix of SepNN during training
+converges to the NTK matrix at initialization, meaning that the training dynamic of SepNN under
+inﬁnite width and rank can be characterized by the corresponding linear kernel regression associated
+18
+
+
+with its NTK, allowing the convergence analysis in Eq. (5) to be true. It is also possible to bound
+the NTK change |KΘ(t) −KΘ(0)| by Chebyshev-type inequality through leveraging the variance of
+|KΘ(t) −KΘ(0)| related to O( t
+R) with a ﬁxed R and small step sizes. Indeed, when W, R →∞,
+the variance vanishes and KΘ(t) converges to KΘ(0) almost surely under inﬁnitely small step sizes.
+With a ﬁxed R and small step sizes, we can instead use the Chebyshev inequality to quantify the
+error |KΘ(t) −KΘ(0)| using probability bounds related to R and the step size.
+A.5
+Proof of Theorem 1
+Proof. The proof consists of two main steps, including demonstrating the density of the separable
+function classes (CP, TT, and Tucker), and approximating the univariate functions in the decompo-
+sitions using neural networks.
+We ﬁrst demonstrate the density of separable function classes using the Stone-Weierstrass theorem.
+Consider the algebra A of functions on X = X1 × · · · × XN deﬁned by
+A =
+n
+g : X →R : g(x1, · · · , xN) =
+R
+X
+r=1
+(g1(x1))r (g2(x2))r · · · (gD(xD))r , R ∈N, (gd(xd))r ∈C(Xd)
+o
+.
+We show that this algebra is closed under addition, multiplication, and scalar multiplication.
+Closed Under Multiplication. Let two functions g, h ∈A be given by
+g(x) =
+Rg
+X
+r=1
+D
+Y
+d=1
+(gd(xd))r, h(x) =
+Rh
+X
+s=1
+D
+Y
+d=1
+(hd(xd))s ∈A,
+where (gd(xd))r, (hd,s(xd))r ∈C(Xd) are continuous univariate functions. Their product is
+g(x)h(x) =
+
+
+Rg
+X
+r=1
+D
+Y
+d=1
+(gd(xd))r
+
+
+ Rh
+X
+s=1
+D
+Y
+d=1
+(hd(xd))s
+!
+=
+Rg
+X
+r=1
+Rh
+X
+s=1
+D
+Y
+d=1
+(gd(xd))r(hd(xd))s.
+Deﬁne new rank R = RgRh. For each d and each index pair t = (r, s) (where t = 1, · · · , R),
+deﬁne new continuous functions
+(cd(xd))t = (gd(xd))r(hd(xd))s.
+Then we have
+g(x)h(x) =
+R
+X
+t=1
+D
+Y
+d=1
+(cd(xd))t,
+which is clearly in A. Thus, the CP form is closed under multiplication.
+Meanwhile, let two functions g and h have TT decompositions:
+g(x) =
+Rg
+1
+X
+r1=1
+· · ·
+Rg
+D−1
+X
+rD−1=1
+g1(x1)1,r1g2(x2)r1,r2 · · · gD(xD)rD−1,1,
+h(x) =
+Rh
+1
+X
+s1=1
+· · ·
+Rh
+D−1
+X
+sD−1=1
+h1(x1)1,s1h2(x2)s1,s2 · · · hD(xD)sD−1,1,
+where gd(xd) ∈RRg
+d−1×Rg
+d and hd(xd) ∈RRh
+d−1×Rh
+d are matrix-valued continuous functions with
+Rg
+0 = Rg
+D = 1 and Rh
+0 = Rh
+D = 1. Their product is
+g(x)h(x) =
+X
+r1,··· ,rD−1
+X
+s1,··· ,sD−1
+(g1(x1)1,r1h1(x1)1,s1) (g2(x2)r1,r2h2(x2)s1,s2) · · ·
+ gD(xD)rD−1,1hD(xD)sD−1,1
+
+.
+Deﬁne new ranks Td = Rg
+dRh
+d for d = 1, · · · , D−1, and deﬁne new matrix-valued functions fd(xd)
+as follows. For d = 1, f1(x1) is a 1 × T1 matrix with elements
+f1(x1)1,t1 = g1(x1)1,r1h1(x1)1,s1,
+19
+
+
+where t1 = r1s1. For d = 2, · · · , D −1, fd(xd) is a Td−1 × Td matrix with elements
+fd(xd)td−1,td = gd(xd)rd−1,rdhd(xd)sd−1,sd,
+where td−1 = rd−1sd−1 and td = rdsd. For d = D, fD(xD) is a TD−1 × 1 matrix with elements
+fD(xD)tD−1,1 = gD(xD)rD−1,1hD(xD)sD−1,1.
+Then we have
+g(x)h(x) =
+T1
+X
+t1=1
+· · ·
+TD−1
+X
+tD−1=1
+f1(x1)1,t1f2(x2)t1,t2 · · · fD(xD)tD−1,1,
+which is in TT form. Thus, the TT form is closed under multiplication.
+Let two functions g and h have Tucker decompositions:
+g(x) = Cg ×1 g1(x1) ×2 · · · ×D gD(xD) =
+X
+r1,··· ,rD
+Cg
+r1,··· ,rD
+D
+Y
+d=1
+(gd(xd))rd,
+h(x) = Ch ×1 h1(x1) ×2 · · · ×D hD(xD) =
+X
+s1,··· ,sD
+Ch
+s1,··· ,sD
+D
+Y
+d=1
+(hd(xd))sd,
+where gd(xd) ∈RRg
+d, hd(xd) ∈RRh
+d are vector-valued continuous functions, and Cg
+∈
+RRg
+1×···×Rg
+D, Ch ∈RRh
+1 ×···×Rh
+D are core tensors. Their product is
+g(x)h(x) =
+X
+r1,··· ,rD
+X
+s1,··· ,sD
+Cg
+r1,··· ,rDCh
+s1,··· ,sD
+D
+Y
+d=1
+(gd(xd))rd(hd(xd))sd.
+Deﬁne new ranks Td = Rg
+dRh
+d for d = 1, · · · , D, and deﬁne a new core tensor Cgh ∈RT1×···×TD
+with elements
+Cgh
+t1,··· ,tD = Cg
+r1,··· ,rDCh
+s1,··· ,sD,
+where td = rdsd for each d. Deﬁne new vector-valued functions fd(xd) ∈RTd with elements
+(fd(xd))td = (gd(xd))rd(hd(xd))sd.
+Then we have
+g(x)h(x) = Cgh ×1 f1(x1) ×2 · · · ×D fD(xD),
+which is in Tucker form. Thus, the Tucker form is closed under multiplication.
+Closed Under Addition. We verify that the function classes deﬁned by CP, TT, and Tucker decom-
+positions are closed under addition. Let two functions g, h ∈A be
+g(x) =
+Rg
+X
+r=1
+D
+Y
+d=1
+(gd(xd))r, h(x) =
+Rh
+X
+s=1
+D
+Y
+d=1
+(hd(xd))s ∈A,
+where (gd(xd))r, (hd(xd))s ∈C(Xd) are continuous univariate functions. Their sum is
+g(x) + h(x) =
+Rg
+X
+r=1
+D
+Y
+d=1
+(gd(xd))r +
+Rh
+X
+s=1
+D
+Y
+d=1
+(hd(xd))s.
+Deﬁne new rank R = Rg +Rh and for each d, deﬁne new continuous functions fd : Xd →RR with
+components
+(fd(xd))r =
+(
+(gd(xd))r,
+r = 1, · · · , Rg,
+(hd(xd))r−Rg,
+r = Rg + 1, · · · , R.
+Then we have
+g(x) + h(x) =
+R
+X
+r=1
+D
+Y
+d=1
+(fd(xd))r,
+which is clearly in A. Thus, the CP form is closed under addition.
+20
+
+
+Let two functions g and h have TT decompositions
+g(x) =
+Rg
+1
+X
+r1=1
+· · ·
+Rg
+D−1
+X
+rD−1=1
+g1(x1)1,r1g2(x2)r1,r2 · · · gD(xD)rD−1,1,
+h(x) =
+Rh
+1
+X
+s1=1
+· · ·
+Rh
+D−1
+X
+sD−1=1
+h1(x1)1,s1h2(x2)s1,s2 · · · hD(xD)sD−1,1,
+where gd(xd) ∈RRg
+d−1×Rg
+d and hd(xd) ∈RRh
+d−1×Rh
+d are matrix-valued continuous functions with
+Rg
+0 = Rg
+D = 1 and Rh
+0 = Rh
+D = 1. Their sum is g(x) + h(x). Deﬁne new ranks Td = Rg
+d + Rh
+d for
+d = 1, · · · , D −1, and deﬁne new matrix-valued functions fd(xd) as follows. For d = 1, f1(x1) is
+a 1 × T1 matrix with elements
+f1(x1)1,t =
+(
+g1(x1)1,t,
+t = 1, · · · , Rg
+1,
+h1(x1)1,t−Rg
+1,
+t = Rg
+1 + 1, · · · , T1.
+For d = 2, · · · , D −1, fd(xd) is a Td−1 × Td matrix with elements
+fd(xd)t,u =
+
+
+
+
+
+gd(xd)t,u,
+t ≤Rg
+d−1, u ≤Rg
+d,
+hd(xd)t−Rg
+d−1,u−Rg
+d,
+t > Rg
+d−1, u > Rg
+d,
+0,
+otherwise.
+For d = D, fD(xD) is a TD−1 × 1 matrix with elements
+fD(xD)t,1 =
+(
+gD(xD)t,1,
+t ≤Rg
+D−1,
+hD(xD)t−Rg
+D−1,1,
+t > Rg
+D−1.
+Then we have
+g(x) + h(x) =
+T1
+X
+t1=1
+· · ·
+TD−1
+X
+tD−1=1
+f1(x1)1,t1f2(x2)t1,t2 · · · fD(xD)tD−1,1,
+which is in TT form. Thus, the TT form is closed under addition.
+Let two functions g and h have Tucker decompositions
+g(x) = Cg ×1 g1(x1) ×2 · · · ×D gD(xD), h(x) = Ch ×1 h1(x1) ×2 · · · ×D hD(xD),
+where Cg ∈RRg
+1×···×Rg
+D, Ch ∈RRh
+1 ×···×Rh
+D, and gd(xd) ∈RRg
+d, hd(xd) ∈RRh
+d are vector-valued
+continuous functions. Their sum is g(x)+h(x). Deﬁne new ranks Td = Rg
+d+Rh
+d for d = 1, · · · , D,
+and deﬁne a new core tensor C ∈RT1×···×TD with elements
+Ci1,··· ,iD =
+
+
+
+
+
+Cg
+i1,··· ,iD,
+if id ≤Rg
+d for all d,
+Ch
+i1−Rg
+1,··· ,iD−Rg
+D,
+if id > Rg
+d for all d,
+0,
+otherwise.
+Deﬁned new vector-valued functions fd(xd) ∈RTd with elements
+(fd(xd))r =
+(
+(gd(xd))r,
+r = 1, · · · , Rg
+d,
+(hd(xd))r−Rg
+d,
+r = Rg
+d + 1, · · · , Td.
+Then we have
+g(x) + h(x) = C ×1 f1(x1) ×2 · · · ×D fD(xD),
+which is in Tucker form. Thus, the Tucker form is closed under addition.
+Closed Under Scalar Multiplication. For any CP, Tucker, or TT functions, it is easy to show that
+multiplying them with a scalar are still CP, Tucker, or TT functions. Hence the separable function
+classes are closed under scalar multiplication.
+Separate Points. We further verify that the function classes deﬁned by CP, TT, and Tucker de-
+compositions separate points.
+That is, for any two distinct points p ̸= q in the compact set
+21
+
+
+X = X1 × · · · × XD, there exists a function g in the respective class such that g(p) ̸= g(q).
+Consider the CP form:
+g(x) =
+R
+X
+r=1
+D
+Y
+d=1
+(gd(xd))r.
+Since p ̸= q, there exists some dimension d0 such that pd0 ̸= qd0. Choose R = 1 and deﬁne the
+functions such that for d = d0, gd0 : Xd0 →R to be a continuous function such that gd0(pd0) ̸=
+gd0(qd0) (such a function exists since continuous functions can separate points in one dimension)
+and for d ̸= d0, gd(xd) = 1. Then we have
+g(x) =
+D
+Y
+d=1
+gd(xd)
+and
+g(p) = gd0(pd0)
+Y
+d̸=d0
+1 ̸= gd0(qd0)
+Y
+d̸=d0
+1 = g(q).
+Thus, the CP form separates points.
+Consider the TT form:
+g(x) =
+R1
+X
+r1=1
+· · ·
+RD−1
+X
+rD−1=1
+(g1(x1))1,r1 (g2(x2))r1,r2 · · · (gD(xD))rD−1,1 .
+Choose all ranks Rd = 1 for d = 1, · · · , D −1. Then the TT form simpliﬁes to
+g(x) = (g1(x1))1,1 (g2(x2))1,1 · · · (gD(xD))1,1 .
+Since p ̸= q, there exists d0 such that pd0 ̸= qd0.
+Choose gd0 such that (gd0(pd0))1,1 ̸=
+(gd0(qd0))1,1, and for other d, choose gd to be the constant function (gd(xd))1,1 = 1. Then we
+have
+g(p) ̸= g(q).
+(11)
+Thus, the TT form separates points.
+Note that CP is a special case of Tucker by setting the core tensor C as diagonal. Since the CP
+function class separates points, the Tucker function class separates points as well.
+Contain Identity Functions. We verify that the function classes deﬁned by CP, TT, and Tucker
+decompositions contain identity functions (constant functions). Consider the CP form:
+g(x) =
+R
+X
+r=1
+D
+Y
+d=1
+(gd(xd))r.
+To obtain a constant function g(x) = c for some constant c ∈R, we can choose R = 1, gd(xd) = cd
+where cd is a constant for each d = 1, · · · , D such that QD
+d=1 cd = c. Then we have
+g(x) =
+D
+Y
+d=1
+cd = c.
+Thus, the CP form contains identity functions.
+Consider the TT form:
+g(x) =
+R1
+X
+r1=1
+· · ·
+RD−1
+X
+rD−1=1
+(g1(x1))1,r1 (g2(x2))r1,r2 · · · (gD(xD))rD−1,1 .
+To obtain a constant function g(x) = c, we can choose all ranks Rd = 1 for d = 1, · · · , D −1,
+and for each d = 1, · · · , D, gd(xd) to be a constant matrix with all elements equal to cd such that
+QD
+d=1 cd = c. Then we have
+g(x) =
+D
+Y
+d=1
+cd = c.
+Thus, the TT form contains identity functions.
+22
+
+
+Note that CP is a special case of Tucker, hence the Tucker function class contains the identity
+function as well.
+By the Stone-Weierstrass theorem (Fedorova, 2002), the CP function class A is dense in C(X) (as
+well as the TT and Tucker function classes). Therefore, for any continuous multivariate function f
+and ϵ
+2 > 0, there exists a CP function PR
+r=1 (g1(x1))r (g2(x2))r · · · (gD(xD))r such that
+sup
+x∈X
+f(x) −
+R
+X
+r=1
+(g1(x1))r (g2(x2))r · · · (gD(xD))r
+ < ϵ
+2.
+Likewise, there exist TT function PR1
+r1=1
+PR2
+r2=1 · · · PRD−1
+rD−1=1 (g1(x1))1,r1 (g2(x2))r1,r2 · · · (gD(xD))rD−1,1
+and Tucker function C ×1 g1(x1) ×2 · · · ×D gD(xD) such that
+sup
+x∈X
+
+f(x) −
+R1
+X
+r1=1
+R2
+X
+r2=1
+· · ·
+RD−1
+X
+rD−1=1
+(g1(x1))1,r1 (g2(x2))r1,r2 · · · (gD(xD))rD−1,1
+
+< ϵ
+2,
+sup
+x∈X
+f(x) −C ×1 g1(x1) ×2 · · · ×D gD(xD)
+ < ϵ
+2,
+where each component of the factor function gd(xd) (i.e., (gd(xd))r) is a single-output continuous
+function deﬁned on compact set Xd. The standard universal approximation theory (Leshno et al.,
+1993) states that for any δ > 0 and any single-output continuous function (gd(xd))r deﬁned on
+compact sets, there exists an MLP (f ′
+Θd(xd))r sampled in {W2σ(W1x + b) : W2 ∈R1×W , W1 ∈
+RW ×1, b ∈RW , W ∈N+} with σ a non-polynomial function such that
+sup
+x∈Xd
+|(gd(xd))r −(f ′
+Θd(xd))r| < δ, r = 1, · · · , R.
+Let these R single-output MLPs be {(f ′
+Θd(xd))r = W r
+2 σ(W r
+1 x + br)}R
+r=1. Therefore, we can
+construct a single R-output vector-valued MLP with the form
+fΘd(xd) = W2σ(W1x + b) ∈RR,
+where W2 = diag(W 1
+2 , · · · , W R
+2 ), W1 = (W 1
+1
+⊤, · · · , W R
+1
+⊤)⊤, b = (b1⊤, · · · , bR⊤)⊤such
+that supx∈Xd |(gd(xd))r −(fΘd(xd))r| < δ for each component r = 1, · · · , R. We have thus
+extended the classical universal approximation theorem (Leshno et al., 1993) to vector-valued func-
+tions. Especially, each gd(xd) can be well approximated (in a component-wise manner) by a vector-
+valued MLP fΘd : Xd →RR sampled in the set {W2σ(W1x + b) : W2 ∈R ˜
+W ×W , W1 ∈
+RW ×1, b ∈RW , ˜W, W ∈N+} with σ a non-polynomial activation function.
+For any continuous multivariate function f : X →R, let the CP approximation be
+g(x) =
+R
+X
+r=1
+(g1(x1))r(g2(x2))r · · · (gD(xD))r,
+such that supx∈X |f(x) −g(x)| < ϵ
+2. Let the CP SepNN approximation be:
+fΘ(x) =
+R
+X
+r=1
+(fΘ1(x1))r(fΘ2(x2))r · · · (fΘD(xD))r,
+with supxd∈Xd |(gd(xd))r −(fΘd(xd))r| < δ for d = 1, · · · , D and r = 1, · · · , R. The total error
+is bounded by
+|f(x) −fΘ(x)| ≤|f(x) −g(x)| + |g(x) −fΘ(x)|
+< ϵ
+2 +
+
+R
+X
+r=1
+ D
+Y
+d=1
+(gd(xd))r −
+D
+Y
+d=1
+(fΘd(xd))r
+! .
+Since each (gd(xd))r and (fΘd(xd))r is continuous on a compact set, they are bounded. Let M
+be a common upper bound such that |(gd(xd))r| ≤M and |(fΘd(xd))r| ≤M for all d, r, and
+x ∈X. Using the generalized Cauchy-Schwarz inequality
+QD
+d=1 ad −QD
+d=1 bd
+ ≤PD
+d=1 |ad −
+bd|
+Qd−1
+j=1 |aj|
+ QD
+j=d+1 |bj|
+
+we have that for each r:
+
+D
+Y
+d=1
+(gd(xd))r −
+D
+Y
+d=1
+(fΘd(xd))r
+ ≤DM D−1 max
+d
+|(gd(xd))r −(fΘd(xd))r| < DM D−1δ.
+23
+
+
+Thus we have
+
+R
+X
+r=1
+ D
+Y
+d=1
+(gd(xd))r −
+D
+Y
+d=1
+(fΘd(xd))r
+! < RDM D−1δ.
+Choosing δ =
+ϵ
+2RDM D−1 we have
+|f(x) −fΘ(x)| < ϵ
+2 + ϵ
+2 = ϵ,
+and the approximation theory of CP SepNN is thus established.
+For any continuous multivariate function f : X →R, let the TT approximation be
+g(x) =
+R1
+X
+r1=1
+· · ·
+RD−1
+X
+rD−1=1
+(g1(x1))1,r1(g2(x2))r1,r2 · · · (gD(xD))rD−1,1,
+with supx∈X |f(x) −g(x)| < ϵ
+2. Let the TT SepNN approximation be
+fΘ(x) =
+R1
+X
+r1=1
+· · ·
+RD−1
+X
+rD−1=1
+(fΘ1(x1))1,r1(fΘ2(x2))r1,r2 · · · (fΘD(xD))rD−1,1,
+with supxd∈Xd |(gd(xd))r,s −(fΘd(xd))r,s| < δ for all d, r, s. The total error is bounded by
+|f(x) −fΘ(x)| ≤|f(x) −g(x)| + |g(x) −fΘ(x)|
+< ϵ
+2 +
+
+X
+r1,··· ,rD−1
+ D
+Y
+d=1
+(gd(xd))rd−1,rd −
+D
+Y
+d=1
+(fΘd(xd))rd−1,rd
+!
+,
+where r0
+=
+1 and rD
+=
+1.
+Let M be a common upper bound for all components
+(gd(xd))rd−1,rd, (fΘd(xd))rd−1,rd on compact sets. The number of terms in the sum P
+r1,··· ,rD−1 is
+QD−1
+d=1 Rd. Using the generalized Cauchy-Schwarz inequality
+QD
+d=1 ad −QD
+d=1 bd
+ ≤PD
+d=1 |ad−
+bd|
+Qd−1
+j=1 |aj|
+ QD
+j=d+1 |bj|
+
+, for each term we have the bound
+
+D
+Y
+d=1
+(gd(xd))rd−1,rd −
+D
+Y
+d=1
+(fΘd(xd))rd−1,rd
+ < DM D−1δ.
+Thus we have
+|g(x) −fΘ(x)| <
+ D−1
+Y
+d=1
+Rd
+!
+DM D−1δ.
+Choosing δ =
+ϵ
+2(
+QD−1
+d=1 Rd)DM D−1 we have
+|f(x) −fΘ(x)| < ϵ
+2 + ϵ
+2 = ϵ,
+and the universal approximation theory of TT SepNN is established.
+Let the Tucker approximation be
+g(x) = C ×1 g1(x1) ×2 · · · ×D gD(xD),
+with supx∈X |f(x) −g(x)| < ϵ
+2. Let the Tucker SepNN approximation be
+fΘ(x) = C ×1 fΘ1(x1) ×2 · · · ×D fΘD(xD),
+with supxd∈Xd |(gd(xd))r −(fΘd(xd))r| < δ for all d, r. The total error is bounded by:
+|f(x) −fΘ(x)| ≤|f(x) −g(x)| + |g(x) −fΘ(x)|
+< ϵ
+2 + |C ×1 g1(x1) ×2 · · · ×D gD(xD) −C ×1 fΘ1(x1) ×2 · · · ×D fΘD(xD)| .
+Using the property of mode-d product, we have
+|g(x) −fΘ(x)| ≤
+X
+r1,··· ,rD
+|Cr1,··· ,rD|
+
+D
+Y
+d=1
+(gd(xd))rd −
+D
+Y
+d=1
+(fΘd(xd))rd
+ .
+24
+
+
+Let M be a common upper bound for all components (gd(xd))rd, (fΘd(xd))rd on compact sets, and
+assume each element of C is bounded by N. The number of terms in the summation is QD
+d=1 Rd.
+For each term we have
+
+D
+Y
+d=1
+(gd(xd))rd −
+D
+Y
+d=1
+(fΘd(xd))rd
+ < DM D−1δ.
+Thus we have
+|g(x) −fΘ(x)| <
+ D
+Y
+d=1
+Rd
+!
+NDM D−1δ.
+Choosing δ =
+ϵ
+2(
+QD
+d=1 Rd)NDM D−1 , we have
+|f(x) −fΘ(x)| < ϵ
+2 + ϵ
+2 = ϵ,
+and the approximation theory of Tucker SepNN is established. Note that the approximation theory
+of Tucker SepNN can also be directly concluded by using the fact that CP is a special case of Tucker.
+The proof is ﬁnally completed.
+A.6
+Proof of Lemma 1
+Proof. The NTK is deﬁned as
+KΘ(x, x′) =
+
+∇ΘfΘ(x), ∇ΘfΘ(x′)
+
+.
+The gradient could decompose as
+∇ΘfΘ(x) = (∇Θ1fΘ(x), ∇Θ2fΘ(x), · · · , ∇ΘDfΘ(x)) .
+Thus, the inner product becomes
+KΘ(x, x′) =
+D
+X
+d=1
+
+∇ΘdfΘ(x), ∇ΘdfΘ(x′)
+
+.
+For ﬁxed d, the gradient with respect to Θd is
+∇ΘdfΘ(x) =
+1
+√
+R
+R
+X
+r=1
+
+Y
+d′̸=d
+ fΘd′ (xd′)
+
+r
+
+∇Θd (fΘd(xd))r .
+We ﬁrst compute the inner product of factor gradients
+
+∇ΘdfΘ(x), ∇ΘdfΘ(x′)
+
+= 1
+R
+R
+X
+r=1
+R
+X
+s=1
+
+Y
+d′̸=d
+ fΘd′ (xd′)
+
+r
+
+
+
+Y
+d′̸=d
+ fΘd′ (x′
+d′)
+
+s
+
+
+∇Θd (fΘd(xd))r , ∇Θd
+ fΘd(x′
+d)
+
+s
+
+.
+By deﬁnition, the inner product of gradients is the (r, s)-th element of the NTK matrix KΘd(xd, x′
+d),
+i.e.,
+
+∇Θd (fΘd(xd))r , ∇Θd (fΘd(x′
+d))s
+
+= (KΘd(xd, x′
+d))r,s. Deﬁne the vector
+ad(x) =
+
+Y
+d′̸=d
+ fΘd′ (xd′)
+
+1 ,
+Y
+d′̸=d
+ fΘd′ (xd′)
+
+2 , · · · ,
+Y
+d′̸=d
+ fΘd′ (xd′)
+
+R
+
+
+⊤
+.
+Then the summation above simpliﬁes to
+1
+R
+R
+X
+r=1
+R
+X
+s=1
+(ad(x))r(ad(x′))s
+ KΘd(xd, x′
+d)
+
+r,s = 1
+Rad(x)⊤KΘd(xd, x′
+d)ad(x′).
+Therefore we have
+
+∇ΘdfΘ(x), ∇ΘdfΘ(x′)
+
+= 1
+Rad(x)⊤KΘd(xd, x′
+d)ad(x′).
+Summing over all d yields the ﬁnal NTK
+KΘ(x, x′) =
+D
+X
+d=1
+
+∇ΘdfΘ(x), ∇ΘdfΘ(x′)
+
+= 1
+R
+D
+X
+d=1
+ad(x)⊤KΘd(xd, x′
+d)ad(x′).
+The proof is completed.
+25
+
+
+A.7
+Proof of Theorem 2
+Proof. By Lemma 1, the NTK of the CP SepNN is given by
+KΘ(x, x′) = 1
+R
+D
+X
+d=1
+ad(x)⊤KΘd(xd, x′
+d)ad(x′).
+We then analyze the behavior of this expression as W →∞and R →∞.
+We ﬁrst analyze the behavior of each factor function fΘd(x) =
+1
+√
+W W2,dσ(W1,dx + bd). The j-th
+output component (j = 1, · · · , R) of the network is
+(fΘd(x))j =
+1
+√
+W
+W
+X
+i=1
+(W2,d)j,i σ((W1,d)ix + (bd)i).
+Let zi = (W1,d)ix + (bd)i. The gradients of (fΘd(x))j w.r.t. the parameters are
+∂(fΘd(x))j
+∂(W2,d)j,i =
+1
+√
+W
+σ(zi), and ∂(fΘd(x))j
+∂(W2,d)j′,i
+= 0, j′ ̸= j.
+∂(fΘd(x))j
+∂(W1,d)i
+=
+1
+√
+W
+(W2,d)j,i ˙σ(zi) x.
+∂(fΘd(x))j
+∂(bd)i
+=
+1
+√
+W
+(W2,d)j,i ˙σ(zi).
+The (j, j′)-th element of the NTK matrix is
+(KΘd(x, x′))j,j′ =
+X
+i
+∂(fΘd(x))j
+∂(W2,d)j,i
+∂(fΘd(x′))j′
+∂(W2,d)j′,i
++
+X
+i
+∂(fΘd(x))j
+∂(W1,d)i
+∂(fΘd(x′))j′
+∂(W1,d)i
++
+X
+i
+∂(fΘd(x))j
+∂(bd)i
+∂(fΘd(x′))j′
+∂(bd)i
+.
+For j ̸= j′, all terms involve products of independent zero-mean variables (i.e., (W2,d)j,i and
+(W2,d)j′,i), hence E[(KΘd(x, x′))j,j′] = 0. Thus, the NTK matrix is diagonal. We now compute
+the diagonal elements (KΘd(x, x′))j,j. For a ﬁxed j, we have
+(KΘd(x, x′))j,j =
+X
+i
+∂(fΘd(x))j
+∂(W2,d)j,i
+∂(fΘd(x′))j
+∂(W2,d)j,i +
+X
+i
+∂(fΘd(x))j
+∂(W1,d)i
+∂(fΘd(x′))j
+∂(W1,d)i
++
+X
+i
+∂(fΘd(x))j
+∂(bd)i
+∂(fΘd(x′))j
+∂(bd)i
+=
+X
+i
+ 1
+W σ(zi)σ(z′
+i)
+
++
+X
+i
+ 1
+W (W2,d)2
+j,i ˙σ(zi) ˙σ(z′
+i)xx′
+
++
+X
+i
+ 1
+W (W2,d)2
+j,i ˙σ(zi) ˙σ(z′
+i)
+
+,
+where zi = (W1,d)ix + (bd)i and z′
+i = (W1,d)ix′ + (bd)i. Combining these terms we have
+(KΘd(x, x′))j,j = 1
+W
+X
+i
+σ(zi)σ(z′
+i) + 1
+W
+X
+i
+(W2,d)2
+j,i ˙σ(zi) ˙σ(z′
+i)(xx′ + 1).
+Taking the expectation over parameters we have
+E[(KΘd(x, x′))j,j] = E
+ 
+1
+W
+X
+i
+σ(zi)σ(z′
+i)
+!
++ E
+ 
+1
+W
+X
+i
+(W2,d)2
+j,i ˙σ(zi) ˙σ(z′
+i)(xx′ + 1)
+!
+.
+Since (W2,d)j,i is independent of (W1,d)i and (bd)i, and E[(W2,d)2
+j,i] = 1, we have
+E[(W2,d)2
+j,i ˙σ(zi) ˙σ(z′
+i)] = E[(W2,d)2
+j,i]E[ ˙σ(zi) ˙σ(z′
+i)] = E[ ˙σ(zi) ˙σ(z′
+i)].
+Thus we have
+E[(KΘd(x, x′))j,j] = E
+ 
+1
+W
+X
+i
+σ(zi)σ(z′
+i)
+!
++ E
+ 
+1
+W
+X
+i
+˙σ(zi) ˙σ(z′
+i)
+!
+(xx′ + 1).
+As W →∞, by the law of large numbers, we get
+1
+W
+X
+i
+σ(zi)σ(z′
+i) →Ew,b∼N (0,1)[σ(wx + b)σ(wx′ + b)],
+1
+W
+X
+i
+˙σ(zi) ˙σ(z′
+i) →Ew,b∼N (0,1)[ ˙σ(wx + b) ˙σ(wx′ + b)].
+26
+
+
+Therefore we have
+lim
+W →∞(KΘd(x, x′))j,j = Ew,b
+ σ(wx + b)σ(wx′ + b)
+
++ Ew,b
+ ˙σ(wx + b) ˙σ(wx′ + b)
+
+(xx′ + 1)
+= k(x, x′)
+by deﬁnition of k(x, x′). Since this limit is identical for all j, the NTK matrix KΘd(x, x′) converges
+to k(x, x′)IR. Substituting the diagonal form of KΘd into the NTK expression
+KΘ(x, x′) = 1
+R
+D
+X
+d=1
+k(xd, x′
+d)
+R
+X
+r=1
+(ad(x))r(ad(x′))r,
+where (ad(x))r = Q
+d′̸=d(fΘd′(xd′))r. Consider the inner summation for each d:
+Vd := 1
+R
+R
+X
+r=1
+(ad(x))r(ad(x′))r = 1
+R
+R
+X
+r=1
+Y
+d′̸=d
+(fΘd′ (xd′))r(fΘd′ (x′
+d′))r.
+The factor MLPs are i.i.d. across the output components r (see (Lee et al., 2018)), and the terms
+(fΘd′(xd′))r and (fΘd′(x′
+d′))r are also independent across d′. By the law of large numbers, as
+R →∞, we have
+Vd →E
+
+Y
+d′̸=d
+(fΘd′ (xd′))r(fΘd′ (x′
+d′))r
+
+=
+Y
+d′̸=d
+E
+ (fΘd′ (xd′))r(fΘd′ (x′
+d′))r
+
+.
+As W →∞, by the neural network Gaussian process theory (Lee et al., 2018), we have that fΘd′
+converges to a Gaussian process with covariance
+E
+ (fΘd′ (xd′))r(fΘd′ (x′
+d′))r
+
+= Ew,b∼N (0,1)[σ(wxd′ + b)σ(wx′
+d′ + b)] = cd′(xd′, x′
+d′),
+where cd′(xd′, x′
+d′) = Ew,b∼N(0,1) (σ(wxd′ + b)σ(wx′
+d′ + b)) is by deﬁnition. Therefore, we have
+Vd →
+Y
+d′̸=d
+cd′(xd′, x′
+d′),
+and the overall NTK converges to
+KΘ(x, x′) →
+D
+X
+d=1
+k(xd, x′
+d)
+Y
+d′̸=d
+cd′(xd′, x′
+d′),
+as stated in the theorem. Since the convergence of each factor MLP’s NTK matrix is almost sure
+as W →∞, and the law of large numbers gives almost sure convergence as R →∞, the overall
+convergence is in almost sure regime.
+A.8
+Proof of Corollary 1
+Proof. We prove Corollary 1 by leveraging the results from Theorem 2 and Lemma 1. Recall that
+the CP SepNN is deﬁned as
+fΘ(x1, · · · , xD) =
+1
+√
+R
+R
+X
+r=1
+(fΘ1(x1))r (fΘ2(x2))r · · · (fΘD(xD))r ,
+where each factor MLP fΘd : R →RR has the architecture
+fΘd(xd) =
+1
+√
+W
+W2,dσ(W1,dxd + bd)
+with parameters initialized independently from N(0, 1). From Lemma 1, the NTK of the SepNN is
+KΘ(x, x′) = 1
+R
+D
+X
+d=1
+ad(x)⊤KΘd(xd, x′
+d)ad(x′),
+where (ad(x))r = Q
+d′̸=d(fΘd′(xd′))r and KΘd(xd, x′
+d) is the NTK matrix of the d-th factor MLP.
+Consider the limit as the width W →∞while the rank R is ﬁxed. From the proof of Theorem 2,
+27
+
+
+for each factor MLP fΘd, as W →∞, the NTK matrix KΘd(xd, x′
+d) converges almost surely to a
+deterministic diagonal matrix
+KΘd(xd, x′
+d) →k(xd, x′
+d)IR,
+where
+k(xd, x′
+d)
+=
+cd(xd, x′
+d) + Ew,b∼N(0,1) ( ˙σ(wxd + b) ˙σ(wx′
+d + b)(xdx′
+d + 1))
+and
+cd(xd, x′
+d) = Ew,b∼N(0,1) (σ(wxd + b)σ(wx′
+d + b)). Substituting this into the NTK expression
+KΘ(x, x′) →1
+R
+D
+X
+d=1
+k(xd, x′
+d)
+R
+X
+r=1
+(ad(x))r(ad(x′))r.
+Deﬁne
+Vd(x, x′) := 1
+R
+R
+X
+r=1
+(ad(x))r(ad(x′))r = 1
+R
+R
+X
+r=1
+Y
+d′̸=d
+(fΘd′ (xd′))r(fΘd′ (x′
+d′))r.
+Then we have
+KΘ(x, x′) →
+D
+X
+d=1
+k(xd, x′
+d)Vd(x, x′).
+It remains to characterize the behavior of Vd(x, x′). The factor MLPs are initialized independently
+across dimensions d′, and for each ﬁxed d′, the output components (fΘd′(xd′))r for r = 1, · · · , R
+are independent and i.i.d. due to the independent initialization of W2,d′ (Lee et al., 2018). As
+W →∞, each output (fΘd′(xd′))r converges to a Gaussian process with covariance function
+E
+ (fΘd′ (xd′))r(fΘd′ (x′
+d′))r
+
+= cd′(xd′, x′
+d′)
+by the neural network Gaussian process theory (Lee et al., 2018). Consequently, as W →∞,
+KΘ(x, x′) converges in distribution to the stochastic kernel
+D
+X
+d=1
+k(xd, x′
+d)Vd(x, x′),
+where Vd(x, x′) =
+1
+R
+PR
+r=1
+Q
+d′̸=d(fΘd′ (xd′))r(fΘd′(x′
+d′))r and each (fΘd′(xd′))r is a Gaussian
+process with covariance cd′(xd′, x′
+d′).
+A.9
+Proof of Lemma 2
+Proof. From the construction of Md in (8) we can see that
+M1 = fΘ2(ˆx2)
+
+R⊤S1 + S2R⊤
+, M2 = fΘ1(ˆx1) (S1R + RS2) ,
+where we have used the symmetry of Sd. Let A = fΘ1(ˆx1) ∈RR×n, B = fΘ2(ˆx2) ∈RR×n.
+Then the output matrix of the SepNN is ZΘ = A⊤B. The vectorized output (let X ∈R2×n2 be
+row-ﬁrst batched inputs) is
+vec(Z⊤
+Θ ) = vec(B⊤A) = (In ⊗B⊤)vec(A).
+For parameters Θ1, the gradient given by classical NTK-based PGD is
+∇Θ1fΘ(X)⊤˜Sr =
+∂vec(Z⊤
+Θ )
+∂Θ1
+⊤
+˜Sr.
+Since ∂vec(Z⊤
+Θ )
+∂Θ1
+= (In ⊗B⊤) ∂vec(A)
+∂Θ1
+, we have
+∂vec(Z⊤
+Θ )
+∂Θ1
+⊤
+=
+∂vec(A)
+∂Θ1
+⊤
+(In ⊗B).
+Thus we have
+∇Θ1fΘ(X)⊤˜Sr =
+∂vec(A)
+∂Θ1
+⊤
+(In ⊗B) ˜Sr.
+The gradient in SepPGD is
+∇Θ1⟨A, M1⟩=
+∂vec(A)
+∂Θ1
+⊤
+vec(M1) =
+∂vec(A)
+∂Θ1
+⊤
+vec(B(R⊤S1 + S2R⊤)).
+28
+
+
+By the Kronecker product property (C⊤⊗A)vec(B) = vec(ABC), we can obtain
+(In ⊗B) ˜Sr = (In ⊗B)(S1 ⊗In + In ⊗S2)vec(R⊤)
+= (In ⊗B)vec(R⊤S1 + S2R⊤)
+= vec(BR⊤S1 + BS2R⊤)
+= vec(B(R⊤S1 + S2R⊤)).
+Therefore we have
+∇Θ1fΘ(X)⊤˜Sr = ∇Θ1⟨A, M1⟩.
+Similarly we can show that ∇Θ2fΘ(X)⊤˜Sr = ∇Θ2⟨B, M2⟩. These results imply that
+[∇Θ1⟨fΘ1(ˆx1), M1⟩, ∇Θ2⟨fΘ2(ˆx2), M2⟩] = ∇ΘfΘ(X)⊤˜Sr,
+and hence the SepPGD is equivalent to the classical NTK-based PGD.
+A.10
+Proof of Lemma 3
+Proof. The NTK of the SepNN for two points x = (x1, x2) and x′ = (x′
+1, x′
+2) is
+KΘ(x, x′) =
+
+∇Θ1fΘ(x), ∇Θ1fΘ(x′)
+
++
+
+∇Θ2fΘ(x), ∇Θ2fΘ(x′)
+
+.
+The gradients are
+∇Θ1fΘ(x) =
+1
+√
+R
+R
+X
+r=1
+(fΘ2(x2))r ∇Θ1 (fΘ1(x1))r ,
+∇Θ2fΘ(x) =
+1
+√
+R
+R
+X
+r=1
+(fΘ1(x1))r ∇Θ2 (fΘ2(x2))r .
+Thus we have
+
+∇Θ1fΘ(x), ∇Θ1fΘ(x′)
+
+= 1
+R
+R
+X
+r,s=1
+(fΘ2(x2))r
+ fΘ2(x′
+2)
+
+s
+
+∇Θ1 (fΘ1(x1))r , ∇Θ1
+ fΘ1(x′
+1)
+
+s
+
+,
+
+∇Θ2fΘ(x), ∇Θ2fΘ(x′)
+
+= 1
+R
+R
+X
+r,s=1
+(fΘ1(x1))r
+ fΘ1(x′
+1)
+
+s
+
+∇Θ2 (fΘ2(x2))r , ∇Θ2
+ fΘ2(x′
+2)
+
+s
+
+.
+Therefore,
+KΘ(x, x′) = 1
+R
+R
+X
+r,s=1
+
+(fΘ2(x2))r
+ fΘ2(x′
+2)
+
+s
+
+∇Θ1 (fΘ1(x1))r , ∇Θ1
+ fΘ1(x′
+1)
+
+s
+
++ (fΘ1(x1))r
+ fΘ1(x′
+1)
+
+s
+
+∇Θ2 (fΘ2(x2))r , ∇Θ2
+ fΘ2(x′
+2)
+
+s
+ 
+.
+Let ˆxd = ((ˆxd)1, · · · , (ˆxd)n)⊤for d = 1, 2. Deﬁne Fd ∈RR×n with (Fd)r,i = (fΘd((ˆxd)i))r, so
+(fΘd(ˆxd))r,: ∈R1×n is the r-th row of Fd. For r, s = 1, · · · , R, deﬁne K(r,s)
+d
+∈Rn×n by
+
+K(r,s)
+d
+
+i,j =
+D
+∇Θd
+ fΘd((ˆxd)i)
+
+r , ∇Θd
+
+fΘd((ˆxd)j)
+
+s
+E
+.
+The NTK matrix K ∈Rn2×n2 has entries
+K(i,j),(i′,j′) = KΘ
+
+((ˆx1)i, (ˆx2)j), ((ˆx1)i′, (ˆx2)j′)
+
+.
+Substituting into the above expression:
+K(i,j),(i′,j′) = 1
+R
+R
+X
+r,s=1
+ 
+fΘ2((ˆx2)j)
+
+r
+
+fΘ2((ˆx2)j′)
+
+s
+
+∇Θ1
+ fΘ1((ˆx1)i)
+
+r , ∇Θ1
+ fΘ1((ˆx1)i′)
+
+s
+
++
+ fΘ1((ˆx1)i)
+
+r
+ fΘ1((ˆx1)i′)
+
+s
+D
+∇Θ2
+
+fΘ2((ˆx2)j)
+
+r , ∇Θ2
+
+fΘ2((ˆx2)j′)
+
+s
+E 
+.
+According to the deﬁnitions of Fd and K(r,s)
+d
+we have
+K(i,j),(i′,j′) = 1
+R
+R
+X
+r,s=1
+
+(F2)r,j(F2)s,j′
+
+K(r,s)
+1
+
+i,i′ + (F1)r,i(F1)s,i′
+
+K(r,s)
+2
+
+j,j′
+
+.
+29
+
+
+Note that
+(F2)r,j(F2)s,j′ =
+
+(fΘ2(ˆx2))⊤
+r,:(fΘ2(ˆx2))s,:
+
+j,j′
+and
+(F1)r,i(F1)s,i′ =
+
+(fΘ1(ˆx1))⊤
+r,:(fΘ1(ˆx1))s,:
+
+i,i′ .
+Therefore, the ﬁrst term in K(i,j),(i′,j′) corresponds to
+K(r,s)
+1
+⊗
+
+(fΘ2(ˆx2))⊤
+r,:(fΘ2(ˆx2))s,:
+
+,
+and the second term in K(i,j),(i′,j′) corresponds to
+
+(fΘ1(ˆx1))⊤
+r,:(fΘ1(ˆx1))s,:
+
+⊗K(r,s)
+2
+.
+Summing over r, s and scaling by 1/R gives
+K = 1
+R
+R
+X
+r,s=1
+
+K(r,s)
+1
+⊗
+
+(fΘ2(ˆx2))⊤
+r,:(fΘ2(ˆx2))s,:
+
++
+
+(fΘ1(ˆx1))⊤
+r,:(fΘ1(ˆx1))s,:
+
+⊗K(r,s)
+2
+
+,
+as required.
+A.11
+Proof of Theorem 3
+Proof. According to Lemma 1, the NTK of fΘ, deﬁned as KΘ(x, x′) := ⟨∇ΘfΘ(x), ∇ΘfΘ(x′)⟩
+for x = (x1, · · · , xD) and x′ = (x′
+1, · · · , x′
+D), is given by
+KΘ(x, x′) = 1
+R
+D
+X
+d=1
+ad(x)⊤KΘd(xd, x′
+d)ad(x′),
+(12)
+where KΘd(xd, x′
+d) ∈RR×R is the NTK matrix of the d-th factor MLP fΘd with elements
+(KΘd(xd, x′
+d))r,s
+=
+
+∇Θd (fΘd(xd))r , ∇Θd (fΘd(x′
+d))s
+
+, and ad(x) is a vector deﬁned by
+ad(x) =
+ Q
+d′̸=d
+ fΘd′(xd′)
+
+1 , Q
+d′̸=d
+ fΘd′(xd′)
+
+2 , · · · , Q
+d′̸=d
+ fΘd′(xd′)
+
+R
+⊤
+∈RR. In the
+inﬁnitely small under standard gradient descent optimizer with inﬁnitely smaller learning rate, the
+dynamics of network predictions u(t) = (fΘ(t)(x1), · · · , fΘ(t)(xn))⊤∈Rn under standard gradi-
+ent descent optimizer would follow du(t)
+dt
+= −K(t)(u(t) −y), where K(t) ∈Rn×n is the NTK
+matrix over {xi}. The dynamics of each network weight w(t) under standard gradient descent op-
+timizer with inﬁnitely smaller learning rate would follow dw(t)
+dt
+= −P
+i(fΘ(t)(xi) −yi)
+dfΘ(t)(xi)
+dw(t)
+.
+For a ﬁxed d, denote at
+i = ad(xi) ∈RR, where ad(xi) are deﬁned using the network weights
+at time t, i.e., Θ(t) (since the asymptotic behavior of each ad(xi) is the same, we can discard
+the subscript d for simplicity). Denote Kt
+i,j = KΘd(t)((xi)d, (xj)d) ∈RR×R. We bound the
+difference KΘ(t)(xi, xj) −KΘ(0)(xi, xj) using
+|KΘ(t)(xi, xj) −KΘ(0)(xi, xj)| =
+
+1
+R
+X
+d
+ at
+iKt
+i,jat
+j −a0
+i Kt
+i,jat
+j + a0
+i Kt
+i,jat
+j −a0
+i K0
+i,ja0
+j
+
+
+≤1
+R
+X
+d
+(at
+i −a0
+i )Kt
+i,jat
+j
+ +
+a0
+i (Kt
+i,jat
+j −K0
+i,ja0
+j)
+
+≤1
+R
+X
+d
+(at
+i −a0
+i )Kt
+i,jat
+j
+ +
+a0
+i Kt
+i,j(at
+j −a0
+j)
+ +
+a0
+i (Kt
+i,j −K0
+i,j)a0
+j
+ .
+(13)
+We next show that the variance of the movements |at
+i −a0
+i |, |at
+j −a0
+j|, |Kt
+i,j −K0
+i,j| and
+at
+j, a0
+i , a0
+j, Kt
+i,j are bounded by some constants related to R, W.
+30
+
+
+Let the loss function be L = 1
+2(fΘ(xi) −yi)2. Then the dynamic of each weight matrix W2,d is
+d(W2,d)r,s
+dt
+= −
+∂L
+∂(W2,d)r,s
+= −
+X
+i
+(fΘ(xi) −yi) ∂fΘ(xi)
+∂(W2,d)r,s
+= −
+X
+i
+( fΘ(xi)
+| {z }
+Var. O(1)
+−yi) 1
+√
+R
+
+
+
+
+
+
+
+Y
+d′̸=d
+(fΘd′ (xi)d′)r
+|
+{z
+}
+Var. O(1)
+
+
+
+
+
+
+
+1
+√
+W
+σ(zs)
+| {z }
+Var. O(1)
+= O(
+1
+√
+RW
+)X,
+where zs = (W1,d)sx + (bd)s and X is a r.v. with variance O(1), and Q
+d′̸=d(fΘd′(xi)d′)r has
+variance O(1) by the i.i.d. N(0, 1) weight assumption and the scaling factor
+1
+√
+W following the
+neural network Gaussian process theory (Lee et al., 2018). Also, we have used the fact that D is a
+ﬁxed constant dimension. Therefore d(W2,d)r,s
+dt
+has variance O(
+1
+RW ). Similarly, we have
+d(W1,d)s
+dt
+= −
+X
+i
+(fΘ(xi) −yi)
+1
+√
+W
+1
+√
+R
+(xi)d
+X
+r
+
+Y
+d′̸=d
+(fΘd′ (xi)d′)r
+
+
+|
+{z
+}
+Var. O(R)
+(W2,d)r,s ˙σ(zs)
+= O(
+1
+√
+W
+) 1
+√
+R
+Y,
+where Y has variance O(R), and thus
+1
+√
+RY has variance O(1). Therefore d(W1,d)s
+dt
+has variance
+O( 1
+W ). Similarly, d(bd)s
+dt
+can be written as O(
+1
+√
+W ) 1
+√
+RY for some r.v. Y of variance O(R). For
+each weight w(t), its movement is |w(t) −w(0)| ≤
+R t
+0 | w(τ)
+dτ |dτ. Therefore, the network prediction
+change ∥fΘd(t)((xi)d) −fΘd(0)((xi)d)∥ℓ2 is bounded by
+∥fΘd(t)((xi)d)−fΘd(0)((xi)d)∥ℓ2 =
+1
+√
+W
+∥W2,d(t)σ(W1,d(t)(xi)d + bd(t)) −W2,d(0)σ(W1,d(0)(xi)d + bd(0))∥ℓ2
+≤
+1
+√
+W
+∥(W2,d(t) −W2,d(0))
+|
+{z
+}
+Var. O(t)
+σ(W1,d(t)(xi)d + bd(t))
+|
+{z
+}
+Var. O(W )
+∥ℓ2
++
+1
+√
+W
+∥W2,d(0)
+|
+{z
+}
+Var. O(RW )
+(σ(W1,d(t)(xi)d + bd(t)) −σ(W1,d(0)(xi)d + bd(0)))
+|
+{z
+}
+Var. O(t)
+∥ℓ2,
+where we have used the Lipschitz smoothness of σ and the small movement of each (W1,d)s and
+(W2,d)r,s to compose the total movement by summing over the variance. This implies that the total
+movement ∥fΘd(t)((xi)d) −fΘd(0)((xi)d)∥ℓ2 has variance not larger than O(Rt), and thus each
+rank component’s movement |(fΘd(t)((xi)d))r −(fΘd(0)((xi)d))r| has variance not larger than
+O(t). According to the proof of Theorem 2, we have each factor MLP’s NTK formulation:
+(KΘd(x, x′))j,j = 1
+W
+X
+i
+σ(zi)σ(z′
+i) + 1
+W
+X
+i
+(W2,d)2
+j,i ˙σ(zi) ˙σ(z′
+i)(xx′ + 1),
+(14)
+31
+
+
+where zi = (W1,d)ix + (bd)i and z′
+i = (W1,d)ix′ + (bd)i. According to (14), for two points x, x′,
+the change of factor NTK matrix is
+|(KΘd(t)(x, x′))j,j−(KΘd(0)(x, x′))j,j| ≤1
+W
+X
+i
+|σ(zi(t))σ(z′
+i(t)) −σ(zi(0))σ(z′
+i(0))|
++ 1
+W
+X
+i
+|(W2,d(t))2
+j,i ˙σ(zi(t)) ˙σ(z′
+i(t)) −(W2,d(0))2
+j,i ˙σ(zi(0)) ˙σ(z′
+i(0))||xx′ + 1|
+= 1
+W
+X
+i
+| σ(zi(t))σ(z′
+i(t)) −σ(zi(t))σ(z′
+i(0))
+|
+{z
+}
+Var. O( t
+W )
++ σ(zi(t))σ(z′
+i(0)) −σ(zi(0))σ(z′
+i(0))
+|
+{z
+}
+Var. O( t
+W )
+|
++ 1
+W
+X
+i
+| (W2,d(t))2
+j,i ˙σ(zi(t)) ˙σ(z′
+i(t)) −(W2,d(t))2
+j,i ˙σ(zi(0)) ˙σ(z′
+i(0))
+|
+{z
+}
+Var. O( t
+W )
++ (W2,d(t))2
+j,i ˙σ(zi(0)) ˙σ(z′
+i(0)) −(W2,d(0))2
+j,i ˙σ(zi(0)) ˙σ(z′
+i(0))
+|
+{z
+}
+Var. O(
+t
+RW )
+||xx′ + 1|.
+Therefore, the change |(KΘd(t)(x, x′))j,j −(KΘd(0)(x, x′))j,j| would have variance not larger than
+O( t
+W ) by summing over i and the scaling factor
+1
+W . In the inﬁnite width limit, the factor NTK
+matrix KΘd(x, x′) ∈RR×R is diagonal. Hence the factor NTK matrix KΘd(x, x′) ∈RR×R
+change norm ∥KΘd(t)(x, x′) −KΘd(0)(x, x′)∥op has variance not larger than O( t
+W ) in terms of
+operator norm (the largest diagonal element). Similarly, the NTK matrix norm ∥KΘd(t)(x, x′)∥op
+has variance not larger than O(1) from the operator norm of a matrix. The vector ad(x) is deﬁned
+as ad(x) =
+Q
+d′̸=d(fΘd′(xd′))1, · · · , Q
+d′̸=d(fΘd′(xd′))R
+⊤
+. Each element has variance O(1),
+so the norm ∥ad(x)∥ℓ2 has variance not larger than O(R). Its change norm ∥at
+d(x) −a0
+d(x)∥ℓ2 has
+variance not larger than O(t) by the argument before and the neural network Gaussian process (Lee
+et al., 2018). By substituting all the variance bounds into (13), we see that 1
+R
+(at
+i −a0
+i )Kt
+i,jat
+j
+ has
+variance not larger than
+1
+R2 O(t)O(1)O(R) = O( t
+R). 1
+R
+a0
+i Kt
+i,j(at
+j −a0
+j)
+ has variance not larger
+than
+1
+R2 O(R)O(1)O(t) = O( t
+R).
+1
+R
+a0
+i (Kt
+i,j −K0
+i,j)a0
+j
+ has variance
+1
+R2 O(R)O( t
+W )O(R) =
+O( t
+W ). Hence the total error has variance not larger than O( t
+R) + O( t
+W ). When W, R →∞,
+such variance vanishes and the total error |KΘ(t)(xi, xj) −KΘ(0)(xi, xj)| →0 almost surely. This
+implies that KΘ(t)(xi, xj) →KΘ(0)(xi, xj) for all xi, xj in training data.
+A.12
+DETAILED EXPERIMENTAL SETTINGS AND MORE RESULTS
+KRR. Using the KRR of NTK could mimic the behavior of inﬁnite-width neural networks because
+the training dynamic of neural networks with inﬁnite width can be characterized by their correspond-
+ing NTK. Following (Geifman et al., 2024), we perform KRR by using the gradients of the neural
+network w.r.t. parameters as the feature function of the kernel. We test both MLP and CP SepNN,
+and compare the CP SepPGD with the classical NTK-based PGD, the modiﬁed spectrum kernel
+(MSK) (Geifman et al., 2024). Following (Geifman et al., 2024), we consider both noisy (standard
+deviation 0.01) and noiseless cases. The convergence behavior is measured by testing MSE during
+training. Because the efﬁciency advantage of SepNN and SepPGD comes from the lower complexity
+in an iteration, we plot the convergence curve w.r.t. execution time rather than iteration number. All
+experiments are conducted on an RTX 2080TI GPU. All experiments are conducted in the full-batch
+optimization setting to align with theories.
+Speciﬁcally, given an initialization of network parameters Θ0 ∈RP (with P denoting the number
+of parameters), let φ(x) := ∇Θ0fΘ0(x) and h(x, Θ′) := ⟨Θ′, φ(x)⟩. Let X denote the batched
+inputs and y the batched labels. The KRR w.r.t. the preconditioned loss is
+min
+Θ′∈Rp
+1
+2
+S1/2(h(X, Θ′) −y)
+
+2
+2 + 1
+2γ ∥Θ′∥2
+ℓ2 ,
+(15)
+where S is the preconditioner in the NTK-based PGD. We use gradient descent to optimize the
+parameters Θ′ to perform the KRR by using the NTK at initialization. We utilize the Adam optimizer
+(Kingma & Ba, 2015) with learning rate 0.001 and weight decay 0.0001, where the weight decay
+serves as the regularization term (ℓ2-norm of weight vector Θ′) in KRR. The rank of the bivariate
+32
+
+
+(a) f1(x,y)                                                                                     (b) f2(x,y)
+(a) f1(x,y)                                                                                     (b) f2(x,y)
+Figure 5: Convergence curves for KRR on data f1(x, y) and f2(x, y).
+CP SepNN is set as 100. The network width is set as 200. The depth of MLPs is set to 3. The
+preconditioner of each method is updated once every 10 iterations. In the modulation function g(λ),
+we set k = 5 for SepPGD and k = 25 for MSK (ﬁned-tuned using trial-and-error). The activation
+function in MLPs and factor MLPs in SepNNs is set as ReLU for KRR. We use the following
+analytical functions from (Lee et al., 1997) to perform the KRR testing.
+f1(x, y) =1
+3 exp
+ −81
+4 ((x −1/2)2 + (y −1/2)2)
+
+,
+(16)
+f2(x, y) =1.25 + cos(5.4y)
+6 + 6(3x −1)2 ,
+(17)
+f3(x, y) =1
+9(tanh(9 −9x −9y) + 1).
+(18)
+We randomly select 30 × 30 = 900 training points and 30 × 30 = 900 testing points on grids in
+the interval [−1, 1] × [−1, 1]. We add Gaussian noise with standard deviation 0.01 on the training
+set in the noise case. Results are averaged across ﬁve random seeds. The result in Fig. 2 lists
+the convergence curves for f3(x, y). The results (convergence curves during training, i.e., MSE on
+testing sets during training) for f1 and f2 are shown in Fig. 5.
+(a) Peppers                                                                                     (b) Plane
+(a) Peppers                                                                                     (b) Plane
+Figure 6: Convergence curves for image representation on downsampled data Peppers and Plane.
+Figure 7: Convergence curves for image representation using PSNR vs. iteration.
+Image Representation and Recovery. For image representation, we consider using the SepNN to
+approximate the image by feeding the coordinates of images into the SepNNs and output the image
+values, a convention in INRs (Sitzmann et al., 2020; Shi et al., 2025). We use the image datasets
+Baboon, Peppers, and Plane4 (512 × 512 × 3) as shown in Figs. 10-12.
+The experiments contain two parts. In the ﬁrst part, we run MLP, MLP (MSK), CP SepNN, CP
+SepNN (MSK), and CP SepNN (SepPGD) for image representation (Fig. 2(b) and Fig. 6) on down-
+sampled images with smaller resolution to ﬁt the computational overhead, since the NTK calculation
+in MSK is expensive for images of large sizes. In the second part, we run MLP, SepNN, and SepNN
+(SepPGD) for image representation and recovery (inpainting) (Fig. 3 and Figs. 8-12) on the original
+image sizes. For the original size, the MSK run out of memory on our GPU and hence we omit
+4https://sipi.usc.edu/database/database.php
+33
+
+
+Original
+MLP
+SepNN
+SepNN (SepPGD)
+PSNR Inf
+PSNR 21.58
+PSNR 21.24
+PSNR 28.13
+Figure 8: Visual results for image representation via INR and SepPGD on Baboon
+.
+Original
+MLP
+SepNN
+SepNN (SepPGD)
+PSNR Inf
+PSNR 27.69
+PSNR 27.34
+PSNR 33.17
+Figure 9: Visual results for image representation via INR and SepPGD on Peppers.
+Observed
+Original
+MLP
+SepNN
+SepNN (SepPGD)
+PSNR Inf
+PSNR 26.75
+PSNR 28.37
+PSNR 28.93
+Figure 10: Visual results for image inpainting via INR and SepPGD on Plane.
+Observed
+Original
+MLP
+SepNN
+SepNN (SepPGD)
+PSNR Inf
+PSNR 21.15
+PSNR 20.94
+PSNR 21.21
+Figure 11: Visual results for image inpainting via INR and SepPGD on Baboon.
+Observed
+Original
+MLP
+SepNN
+SepNN (SepPGD)
+PSNR Inf
+PSNR 27.66
+PSNR 29.01
+PSNR 29.58
+Figure 12: Visual results for image inpainting via INR and SepPGD on Peppers.
+the comparison with MSK on original sized images. The network width is set to 150 for smaller
+images, a smaller value since the NTK calculation for MLP and MSK runs out of memory for larger
+width. We train the neural networks using INRs by feeding the image coordinates into the network
+and output the corresponding image value for image representation, following INR works (Sitzmann
+et al., 2020; Shi et al., 2025). For image recovery (i.e., image inpainting), we randomly sample 30%
+points in the image as incompleted entries. We then train the models on other 70% known pixels
+and predict the values of incompleted entries using the trained model for image inpainting. For the
+ﬁrst part using smaller images, we report the image representation MSE w.r.t. execution time using
+convergence curves (Fig. 2(b) and Fig. 6) to show the convergence superiority of SepPGD. For the
+34
+
+
+(a) Convergence curves                         (b) Ground-truth                                        (c) PINN                               (d) Separable PINN             (e) Separable PINN (SepPGD)
+             MSE 0                                              MSE 0.056                                     MSE 0.029                                  MSE 0.018                     
+y
+(a) Convergence curves                         (b) Ground-truth                                        (c) PINN                               (d) Separable PINN             (e) Separable PINN (SepPGD)
+             MSE 0                                              MSE 0.056                                     MSE 0.029                                  MSE 0.018                     
+y
+Figure 13: Convergence curves and results for the 3D Klein-Gordon equation using PINNs.
+y
+(a) Convergence curves                         (b) Ground-truth                                                  (c) PINN                               (d) Separable PINN                  (e) Separable PINN (SepPGD)
+             MSE 0                                                        MSE 0.029                                     MSE 0.018                                        MSE 0.016                   
+y
+(a) Convergence curves                         (b) Ground-truth                                                  (c) PINN                               (d) Separable PINN                  (e) Separable PINN (SepPGD)
+             MSE 0                                                        MSE 0.029                                     MSE 0.018                                        MSE 0.016                   
+Figure 14: Convergence curves and results for the 3D Helmholtz equation using PINNs.
+second part using larger images, we present visual results to display the recovery of image details
+and textures (Fig. 3 and Figs. 8-12).
+In the ﬁrst part using smaller images, we consider both noisy (standard deviation 0.01) and noiseless
+cases. The convergence behavior is measured by image MSE during training. Because the efﬁciency
+advantage of SepNN and SepPGD comes from the lower complexity in an iteration, we plot the
+convergence curve w.r.t. execution time rather than iteration number (While we have also reported
+the convergence curves w.r.t. iteration for larger images; see Fig. 7). All experiments are conducted
+on an RTX 2080TI GPU. For all experiments of image representation, we utilize the Adam optimizer
+(Kingma & Ba, 2015) with learning rate 0.0001 and without weight decay. For smaller images, the
+rank of the bivariate CP SepNN is set as 150. The network width is set as 150. For original sized
+images, the rank and network width are set to 500. The depth of MLPs is set to 3. The preconditioner
+of each method is updated once every 10 iterations. The images are ﬁtted channel-by-channel using
+bivariate SepNNs. In the modulation function g(λ), we set k = 10 for smaller images and k = 70
+for original sized images. For MSK, we set k = 25 in the modulation function (ﬁne-tuned using
+trial-and-error). All MLPs and factor MLPs in SepNNs are parameterized by the SIREN structure
+(Sitzmann et al., 2020), a well-studied method in INRs. For original sized images, we run 1300
+iterations for all methods to ensure fair comparisons between their convergence behavior.
+Convergence curves in Fig. 2(b) list the result for Baboon. The convergence curves for Peppers
+and Plane are shown in Fig. 6. We note that in these ﬁgures, MLP (MSK) does not obviously
+improve the convergence of MLP. This is because the MSK under full-batch condition requires gen-
+erally larger computational costs for image data, resulting similar convergence speed as compared
+with the pure MLP. Image representation results in Fig. 3 and Figs. 8-9 (under the same iteration
+number for different methods) show that SepPGD effectively alleviates the spectral bias of SepNN
+to improve convergence, thus better capturing image details and structures. Figs. 10-12 (under the
+same iteration number for different methods) show that SepPGD does not affect the generalization
+ability of the SepNN for image inpainting, even leads to improvements in most time. This shows
+the robustness and effectiveness of the proposed SepPGD for preserving the generalization while
+accelerating training convergence. In Fig. 7, we show the PSNR vs. iteration curves using original
+sized images. SepPGD clearly enhances the convergence speed and alleviates spectral bias of the
+SepNN by observing the convergence curves.
+Surface Representation. The 3D surface representation in Fig. 3 is conducted on the Thai statue
+dataset (Saragadam et al., 2023; Shi et al., 2025) (304 × 512 × 262 occupancy cube). In the mod-
+ulation function g(λ), we set k = 20 for SepPGD. All MLPs and factor MLPs in SepNNs are
+parameterized by the SIREN structure (Sitzmann et al., 2020), a well-studied method in INRs. We
+run 1000 iterations for all methods to ensure fair comparisons between their convergence behavior.
+We utilize the Adam optimizer (Kingma & Ba, 2015) with learning rate 0.005 and without weight
+decay. The rank of the CP SepNN is set as 200. The network width is set as 256. The depth of
+MLPs is set to 3. The preconditioner of each method is updated once every 10 iterations. Here, the
+CP SepNN and SepPGD are the three-dimensional case in Deﬁnition 1 (D = 3). Since the MSK run
+out of memory for full-batch settings in our platform, we do not compare this method for surface
+representation. Although we can run the MSK using mini-batch versions (Shi et al., 2025) (i.e., by
+35
+
+
+sampling a part of training samples in each iteration), we remark that our theory and algorithm are
+mainly derived for full-batch settings, and hence comparing with mini-batch methods is not manda-
+tory. In contrast, our SepPGD can be efﬁciently implemented for full-batch algorithms by virtue of
+the O(nD) complexity. Deriving the training dynamics and implicit regularization of mini-batch
+algorithms are promising directions for future researches.
+PINN. Following the framework of separable PINNs as introduced in (Cho et al., 2023), our ex-
+periments are performed on the 3D diffusion, Helmholtz, and Klein-Gordon equations (Figs. 4, 13,
+and 14). For the detailed formulations of these equations, we refer readers to equations (51)–(59)
+in (Cho et al., 2023). Unlike the loss function used in (Cho et al., 2023), the physics-informed loss
+in our experiments contains four components: the PDE residual loss, the initial condition loss, the
+boundary condition loss, and an additional data loss. Here, the data loss corresponds to training
+the PINN model using a set of grid-based training points, which enables the application of the pro-
+posed SepPGD algorithm via the ℓ2-norm of the data loss. We also apply SepPGD to the initial and
+boundary condition losses. For the PDE residual loss, which involves derivatives, we do not employ
+the SepPGD algorithm, as extending PGD to derivative-based losses requires substantially different
+algorithmic treatment. We leave this promising direction to future work.
+In the modulation function g(λ), we set k = 5 in SepPGD for the data loss in PINNs, while setting
+k = 2 for boundary and initial losses after trial-and-error parameter tuning. All MLPs and factor
+MLPs in SepNNs are parameterized by the SIREN structure (Sitzmann et al., 2020) to enhance the
+convergence for PINNs. We run 5000 iterations for all methods to ensure fair comparisons between
+their convergence behavior. We utilize the Adam optimizer (Kingma & Ba, 2015) with learning rate
+0.005 and without weight decay. The rank of the CP SepNN is set as 64. The network width is
+set as 64 as well. The preconditioners for the three loss functions (data, boundary, and initial loss
+functions) are computed at initialization and remain ﬁxed throughout the training process to reduce
+computational cost, since we need to update three preconditioners for the PINN. For each example,
+we sample 16 × 16 × 16 grid collocation and training points, while evaluating the trained models on
+30 × 30 × 30 grid testing points to test the generalization ability. The number of layers in all MLPs
+is set to 4 by following (Cho et al., 2023). The results in Figs. 4, 13, and 14 show that SepPGD has
+substantial potential in accelerating the convergence of separable PINNs.
+LLM use. LLMs were rarely used in this paper to polish writing. All technical contents and con-
+ceptualizations were made by humans.
+36

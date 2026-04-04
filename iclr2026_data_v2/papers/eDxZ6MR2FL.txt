@@ -1,0 +1,1736 @@
+# ARE LARGE LANGUAGE MODELS REALLY RELIABLE ZERO-SHOT TIME SERIES FORECASTER? FAILURE ANALYSIS VIA THE LENS OF STATIONARITY
+
+
+**Anonymous authors**
+Paper under double-blind review
+
+
+ABSTRACT
+
+
+Large Language Models (LLMs) have been widely adapted as zero-shot time series forecasters recently. However, the reliability of such approach is still under debate. To address this, we propose a novel, simple and rigorous evaluation
+methodology on zero-shot LLM forecasters via the lens of stationarity. An unbiased and robust zero-shot forecaster should preserve stationarity, i.e. given an input series with distinct time-independent mean and variance, a capable forecaster
+should maintain these same data characteristics in the output. Our comprehensive experiments discover that LLMs consistently fail on preserving stationarity,
+with forecasts contaminated by profound hidden biases and trends persistently
+visible even after averaging over hundreds of iterations. Furthermore, the reasoning content of LLMs reveals that LLMs incline to blind guessing simplistic
+numeric patterns through the last few time steps of the input series, without genuine understanding of the full time series. Our findings underscore the crucial
+need for cautious application of LLMs in zero-shot time series forecasting. Our
+code repository will be publicly available upon publication of the paper.
+
+
+1 INTRODUCTION
+
+
+Time series forecasting drives critical applications across science, engineering, and business, spanning retail sales analysis (B¨ose et al., 2017), financial modeling (Sezer et al., 2020), traffic forecasting (Kablaoui et al., 2024), and healthcare monitoring (Morid et al., 2023a). The advent of
+Large Language Models (LLMs) like GPT (Achiam et al., 2023), Llama (Touvron et al., 2023), and
+DeepSeek (Liu et al., 2024a), renowned for their exceptional reasoning and generalization capabilities, has sparked their application in time series tasks like classifying, forecasting, and detecting
+anomalies (Chang et al., 2023; Zhou et al., 2023; Cao et al., 2024; Jin et al., 2024a;b; Liu et al.,
+2024c; Sun et al., 2024). A standout approach, **zero-shot** forecasting, which harnesses pretrained
+LLMs’ language-based generalization capabilities to model time series without requiring any further
+reprogramming and finetuning, is gaining traction in academia and industry through methods like
+LLMTime (Gruver et al., 2023) and PromptCast (Xue & Salim, 2023).
+
+
+Although these studies suggest that LLMs, excelling at handling sequential dependencies in text,
+might extend this capability to time series dependencies, direct validations between language modeling and time series forecasting remain largely underexplored. Enthusiasm for LLM-based forecasting contrasts with emerging skepticism. For example, in the **few-shot** (a.k.a. reprogrammed and
+finetuned) LLM forecasting approach, Tan et al. (2024) performed detailed ablations and discovered
+that simple patched attention encoders rival few-shot LLM forecasters with far less computation,
+challenging their necessity. However, the validity of the zero-shot approach remains unresolved.
+
+
+**To answer this debate,** **we propose a novel, simple and rigorous approach to examine the va-**
+**lidity** **of** **zero-shot** **LLM** **time** **series** **forecasters** **via** **the** **lens** **of** **stationarity.** Stationarity is a
+fundamental property in time series analysis, whose strong form is too restrictive and seldom employed in the real world, but its weak form is widely applied (Petric˘a et al., 2017), for example, in
+financial and economic modeling (Mills & Markellos, 2008), medical science (Morid et al., 2023b)
+and environmental detections (Baek et al., 2009). For brevity, stationarity refers to weak stationarity from now on. In layman’s terms, stationary means that the mean, variance and autocovariance
+
+
+1
+
+
+of a time series are time-invariant. Such property is highly desired in time series analysis because
+it entails that the future can be predicted from the past (Dare et al., 2022). Therefore, although
+most real-world time series are non-stationary, they are often transformed by iterative differencing
+or Seasonal-Trend decomposition using Loess (STL), to stationary series for further analysis (Whittle, 1953; Dickey & Pantula, 1987; Hamilton, 2020). Traditional time series methods, like ARIMA
+(Autoregressive Integrated Moving Average), are built upon stationarity (Zhang, 2018).
+
+
+**We** **propose** **to** **judge** **whether** **LLMs** **are** **reliable**
+**zero-shot** **forecasters** **by** **evaluating** **if** **their** **fore-**
+**casts** **preserve** **stationarity** **when** **prompted** **with**
+**distinctly** **stationary** **inputs.** If the input time series is stationary and contains a distinct mean and
+variance, an unbiased and robust zero-shot forecaster
+should generate forecasts with the same mean and
+variance as the input, without any hidden trends or Figure 1: Motivation of stationarity preserbiases contaminating the forecasts. For example, the vation evaluation: Sensible (green) vs. Unreleft hand side of Figure 1 shows an input series mov- liable (red and blue) forecasts.
+ing around 0 with distinct mean and variance, for
+which it is natural for us to expect the forecasts on the right hand side to be unbiased with similar
+mean and variance as in green color (which is basically the core idea of stationarity). If the forecasts, however, appear as in red or blue colors, we would undoubtedly discard them and deem the
+forecasters unreliable.
+
+
+Some may argue that accuracy is a more common and standard metric so why aren’t we using accuracy for evaluation? Because **LLMs are the first ever textual models boasting zero-shot capabili-**
+**ties across diverse tasks, including time series forecasting** . Before LLMs, no textual models have
+ever claimed extraordinary generalization capabilities to perform well on time series tasks without
+specialized training. Traditional models are trained and tested with specific datasets (Lim & Zohren,
+2021; Benidis et al., 2022). For example, if a model is trained with train-set from source A, then we
+will use the corresponding test-set from A for evaluation, in which case the accuracy is a sensible
+metric. However, we won’t evaluate that same model with a totally irrelevant test-set from source B,
+in which case the accuracy becomes irrelevant. Now, as **zero-shot LLMs have never been trained**
+**on any specific time series data, it is** _**impossible**_ **for us to define a test-set as a common ground**
+**that** **everyone** **agree** . More specifically, given the daily price of a stock and the temperature of a
+city both undergo the below time series in the last 10 days:
+
+
+[32 _,_ 33 _,_ 25 _,_ 24 _,_ 30 _,_ 25 _,_ 24 _,_ 23 _,_ 25 _,_ 30] _,_ (1)
+
+
+if the stock price and city temperature tomorrow are 35 and 25 respectively, which value should we
+take as the correct answer? Clearly this is an _unanswerable_ question for **zero-shot** LLM forecasters.
+
+
+While accuracy is not a sensible and reliable metric, some may suggest using the unconditional
+distribution of _all_ existing time series in the world, in which case we do not need to worry about
+specific test-sets. If there are time series from source A, B and C etc., each with its own conditional
+distributions, we can build an unconditional distribution _encompassing_ all time series in the world
+by the probabilities of their sources A, B and C etc., that is, with possible abuses of notations,
+
+
+_P_ ( _Xt_ ) = _P_ ( _Xt|A_ ) _P_ ( _A_ ) + _P_ ( _Xt|B_ ) _P_ ( _B_ ) + _. . . ._ (2)
+
+
+Evaluating the accuracy of such _P_ ( _Xt_ ) is theoretically correct, but it is practically infeasible, because it is impossible for us to model all those _P_ ( _A_ ) and _P_ ( _B_ ) etc. in the world.
+
+
+In fact, **our analysis via stationarity is such a** _**theoretically impossible**_ **statistical approach pre-**
+**sented** **in** **its** **most** **practical** **and** **generic** **form**, with the minimal requirement on the time series’
+1st and 2nd moments instead of modeling the complete distributions. Even more importantly, **sta-**
+**tionarity preservation is not only a more sensible metric than accuracy, but also a more basic**
+**criteria than accuracy.** Given stationary inputs with distinct mean and variance, if a zero-shot forecaster cannot generate forecasts with the same distinct mean and variance, like in the unreliable red
+and blue forecasts in Figure 1, it is _meaningless_ to discuss the accuracy of such forecasts, because
+we know they must be inaccurate, and such forecasters shall be abandoned directly.
+
+
+Via the lens of stationarity, we assert a profound claim: **LLMs are not justified for zero-shot time**
+**series forecasting.** We substantiate this claim by a series of statistically rigorous hypothesis testing
+experiments to be discussed in later sections. Our findings are:
+
+
+2
+
+
+- Zero-shot LLMs notably struggle to preserve stationarity in their forecasts, with this shortfall
+largely stemming from their inability to maintain the homogenity of 2nd moment, i.e. variance,
+over time in their forecasts.
+
+- Pronounced hidden trends and biases appear in the forecasts of LLMs, for example, exponentially
+increasing trends is particularly prevalent across nearly all LLMs given stationary inputs.
+
+- Oversimplification of reasoning processes and disregard for global structure and long-term dependencies have been identified in the the deep reasoning content of zero-shot LLM forecasters,
+offering a plausible explanation of their observed unreliability.
+
+
+2 RELATED WORK
+
+
+**Deep Learning Models.** Over the past decade, deep learning techniques, including Convolutional
+Neural Networks (CNNs), Recurrent Neural Networks (RNNs), Long Short-Term Memory (LSTM)
+and Gated Recurrent Unit (GRU) networks, have been widely utilized for time series tasks (J´unior
+& Nievola, 2018; Sezer et al., 2020; Lara-Ben´ıtez et al., 2021; Leung & Zhao, 2021). More recently,
+small and simple transformer-based models, such as TimesNet (Wu et al., 2023), Autoformer (Wu
+et al., 2022) and Informer (Zhou et al., 2021), have been popular in time series tasks given the
+versatility and adaptability of Transformer architectures (Vaswani et al., 2017).
+
+
+**Few-shot LLM Forecasters.** Beyond the zero-shot approach, the few-shot approach, where LLMs
+are reprogrammed or finetuned, has also emerged as a key strategy for time series applications. For
+instance, Chang et al. (2023) adjusted transformer modules and positional encodings to adapt pretrained LLMs for forecasting; Zhou et al. (2023) developed a tailored finetuning technique, “OneFitAll”, using GPT-2. Additionally, Jin et al. (2024a); Liu et al. (2024c); Sun et al. (2024) proposed
+unique reprogramming and word embedding techniques to bridge LLM embeddings with time series data. In contrast, Tan et al. (2024) conducted an in-depth ablation study on few-shot LLM
+forecasters, finding their performance lacks an edge over simpler transformer models.
+
+
+3 HYPOTHESES AND METHODOLOGY
+
+
+We start with a mathematical exposition of stationarity, followed by the 3 hypotheses concerning
+zero-shot LLM forecasters and our evaluation framework.
+
+
+3.1 WEAK STATIONARITY
+
+
+A weakly stationary (Solci et al., 2023) time series _{Xt}_ imposes constraints on its mean function
+_mX_ ( _t_ ) := E[ _Xt_ ] and autocovariance function _KXX_ ( _t_ 1 _, t_ 2) := E[( _Xt_ 1 _−mX_ ( _t_ 1))( _Xt_ 2 _−mX_ ( _t_ 2))]:
+
+
+1. Its 1st moment, i.e. mean, remains constant, i.e.
+_mX_ ( _t_ ) = _mX_ ( _t_ + _i_ ) _,_ for all _i, t ∈_ R _._ (3)
+
+
+2. Its autocovariance depends solely on the time difference _τ_ = _t_ 1 _−_ _t_ 2 between _t_ 1 and _t_ 2, i.e.
+_KXX_ ( _t_ 1 _, t_ 2) = _KXX_ ( _t_ 1 _−_ _t_ 2 _,_ 0) =: _KXX_ ( _τ_ ) _,_ for all _t_ 1 _, t_ 2 _∈_ R _._ (4)
+
+
+3. Its 2nd moment, i.e. variance, must be finite.
+
+
+3.2 THE 3 KEY HYPOTHESES
+
+
+Hypothesis 1 addresses the central inquiry of this study: can zero-shot LLM forecasters preserve
+stationarity in their forecasts?
+
+
+Since stationarity comprises 3 distinct properties, a detailed examination of each is warranted, motivating the following hypotheses:
+
+
+3
+
+
+Hypothesis 2 focuses on the aspect of mean equality from equation 3, while Hypothesis 3 is about
+the autocavariance homogeneity stated in equation 4.
+
+
+3.3 EVALUATION METHODOLOGY
+
+
+We outline our evaluation methodology in a generic setting. Consider a dataset with _N_ time series, each of length _L_, all stationary, split into input-output pairs at an 0.8:0.2 ratio. For a series _{X_ 1 _, X_ 2 _, . . ., XL}_, the pair is ( _{X_ 1 _, X_ 2 _, . . ., X⌊_ 0 _._ 8 _L⌋}, {X⌊_ 0 _._ 8 _L⌋_ +1 _, . . ., XL}_ ). The input
+_{X_ 1 _, X_ 2 _, . . ., X⌊_ 0 _._ 8 _L⌋}_ is fed to forecasters, producing forecasts _{X_ [ˆ] _⌊_ 0 _._ 8 _L⌋_ +1 _, . . .,_ _X_ [ˆ] _L}_ . Evaluation
+methods (See Appendix A for more details) for the hypotheses are:
+
+
+**Hypothesis 1.** For each time series, the input is processed by forecasters and the resulting forecasts
+are evaluated by the Augmented Dickey-Fuller (ADF) test (Mushtaq, 2011). The objective is to test
+whether the generated forecasts preserve the same stationarity properties as the inputs.
+
+
+For Hypotheses 2 and 3, a stricter assumption is required on the dataset. For Hypothesis 1, the
+evaluation is sensible even if those time series in the dataset possess different 1st and 2nd moments
+as long as they are all stationary. For Hypotheses 2 and 3, however we require all time series to share
+the same 1st and 2nd moments, in order for statistically significant mean and variance comparisons.
+
+
+**Hypothesis 2.** After obtaining forecasts from a forecaster for all the _N_ time series in the dataset,
+sample mean is computed at each of the _⌈_ 0 _._ 2 _L⌉_ time steps across all _N_ time series. This yields
+_⌈_ 0 _._ 2 _L⌉_ sample means corresponding to the _⌈_ 0 _._ 2 _L⌉_ time steps. These sample means are then evaluated individually for equality to the dataset’s theoretical mean via _t_ test (Kim, 2015). In other words,
+we check if these _⌈_ 0 _._ 2 _L⌉_ sample means are time-invariant.
+
+
+**Hypothesis** **3.** Similar to Hypothesis 2, Hypothesis 3 is evaluated across all time series at each
+time step. To simplify the test, time difference _τ_ in equation 4 is set to be zero, in which case
+autocovariance reduces to variance. Specifically, forecasts from all _N_ time series are collected and
+separated into _⌈_ 0 _._ 2 _L⌉_ groups by their time steps. Levene’s test (Nordstokke & Zumbo, 2010) is then
+used to examine whether the variances inside these _⌈_ 0 _._ 2 _L⌉_ groups are statistically homogeneous to
+each other. In other words, we check if these _⌈_ 0 _._ 2 _L⌉_ sample variances are time-invariant.
+
+
+4 EXPERIMENTS
+
+
+4.1 TIME SERIES DATA
+
+
+Our dataset includes both **synthetic** and **real-world** time series for analysis.
+
+
+**Synthetic** **Datasets.** To begin, we construct 3 synthetic datasets with 3 classical stationary processes: **AR(1):** First-order Autoregressive Model, **MA(1):** First-order Moving Average Model, and
+**ARMA(1, 1):** Autoregressive Moving Average Model.
+
+
+Each of them randomly generates _N_ = 150 time series of length _L_ = 500 with fixed parameters and
+different random seeds. Specifically, we use autoregressive coefficient _ϕ_ = 0 _._ 7 for AR(1), moving
+average coefficient _θ_ = 0 _._ 7 for MA(1), and both _ϕ_ = _θ_ = 0 _._ 7 for ARMA(1, 1), whose stationarity
+are all proven rigorously in traditional statistical analysis (Box et al., 2015; Zhang, 2018). They
+serve as controlled and objective testbeds for evaluating whether LLM forecasters can internalize
+and retain core characteristics of stationary time series as indicated in the 3 hypotheses.
+
+
+4
+
+
+**Real-world Datasets.** Real-world data often feature greater noise, variability, and structural complexity, offering a practical lens on LLM forecasters’ performance. We selected 2 real-world datasets
+from different sources:
+
+
+- **Darts:** It consists of 8 representative univariate datasets from the Darts library (Herzen et al.,
+2022), covering a variety of natural and economic phenomena: 1. AirPassengersDataset, 2. AusBeerDataset, 3. MonthlyMilkDataset, 4. SunspotsDataset, 5. TaylorDataset, 6. TemperatureDataset, 7. USGasolineDataset, and 8. WineDataset.
+
+For relatively long Darts datasets such as SunspotsDataset, TaylorDataset, and TemperatureDataset, we downsample them by factors of 3, 4, and 7, respectively, to fit within LLMs’ context
+windows, yielding final lengths _L_ between 144 and 1008 for the 8 datasets.
+
+
+- **Stocks:** It comprises the daily log return time series of 6 major U.S. stocks: 1. Amazon (AMZN),
+2. Berkshire Hathaway (BRK-B), 3. Alphabet (GOOGL), 4. Meta (META), 5. Microsoft (MSFT),
+and 6. UnitedHealth Group (UNH). Their daily closing prices are first exported from Yahoo
+Finance (Bordino et al., 2014) over the period of June 21, 2021 to June 15, 2023, and then adjusted
+for dividends and stock splits etc. Their log return series (Dai et al., 2021) of length _L_ = 500 are
+then computed from these adjusted closing price series.
+
+
+**Seasonal-Trend Decomposition Using Loess (STL).** While the 3 synthetic datasets are proven to be
+stationary, there is no guarantee of stationarity for the two real-world datasets. Instead, it is normal
+for real-world time series to exhibit trends or seasonality. Since differencing may not easily remove
+subtle trends and seasonal components rooted in real-world data (Hyndman & Athanasopoulos,
+2018), STL (Cleveland et al., 1990; Wen et al., 2019) is adopted. It decomposes a time series into
+trend, seasonal and stationary residual components in an iterative manner.
+
+
+4.2 LLM AND BASELINE FORECASTERS
+
+
+**LLM** **Forecasters.** A total of 9 LLMs are selected to enable a comprehensive evaluation of the
+3 key hypotheses. The selected models span both proprietary and open-source types, and cover
+diverse architectures, capabilities and parameter sizes (ranging from a few billion to hundreds of
+billions): **GPT-3.5**, **GPT-4**, **GPT-4o**, **o3-mini**, **DeepSeek-V3** **671B** **(DS-V3)**, **Gemini** **2.5** **Flash**
+**(Gemini)**, **Grok** **3**, **Llama-2** **7B** **(Llama-2)**, and **Mistral** **Small** **3.2** **24B** **(Mistral)** . Gruver et al.
+(2023) pioneered a tokenization scheme for zero-shot time series forecasting in LLMTime, which
+lays the foundation of LLM-based zero-shot time series tasks and serves as the standard tokenization
+scheme dominantly used in subsequent studies (Alnegheimish et al., 2024; Liu et al., 2024b; Merrill
+et al., 2024). Accordingly, we follow the same scheme for tokenizing and embedding time series
+into textual prompts and decoding forecasts. More technical details are provided in Appendix B.
+
+
+**Baselines.** To benchmark the performance of LLM forecasters, we include 5 simple statistical
+models (Dzikeviˇcius & Saranda, [ˇ] 2010; Box et al., 2015; Shumway & Stoffer, 2017; Hyndman &
+Athanasopoulos, 2018). For fair comparison, their structural parameters are fixed to align with the
+zero-shot setting of LLMs, avoiding any additional tuning:
+
+
+- **Autoregressive** **Integrated** **Moving** **Average** **(ARIMA)** : It is normally denoted as
+ARIMA( _p, d, q_ ), where _p_ is the order of AR component, _d_ is the degree of differencing, and _q_
+is the order of MA component. In our experiments, ( _p, d, q_ ) is set to be (1 _,_ 0 _,_ 1).
+
+
+- **Simple Moving Average (SMA)** : It is the rolling unweighted mean of the previous _k_ time steps.
+In our experiments, _k_ is set to be 10.
+
+
+- **Exponential Moving Average (EMA)** : Similar to SMA, it is a moving average but applies exponential weights to past time steps, with smoothing factor _α_ (0 _< α <_ 1). Here, we take _α_ = 0 _._ 5.
+
+
+- **Input Mean Forecasting (IMF)** : It takes the mean of the input series for all subsequent forecasts,
+i.e. _X_ [ˆ] _i>⌊_ 0 _._ 8 _L⌋_ = _X⌊_ 0 _._ 8 _L⌋_ + _X⌊⌊_ 00 _.._ 88 _LL⌋−⌋_ 1+ _···_ + _X_ 1 .
+
+
+- **Na¨ıve Method (Na¨ıve)** : It takes the last value of the input series for all subsequent forecasts, i.e.
+_X_ ˆ _i>⌊_ 0 _._ 8 _L⌋_ = _X⌊_ 0 _._ 8 _L⌋_ .
+
+
+5
+
+
+Figure 2: Hypothesis 1: Pass rates of forecasts by the ADF test at 5% significance level.
+
+
+5 RESULTS AND DISCUSSION
+
+
+5.1 STATIONARITY VALIDATION
+
+
+Table 1 confirms that all input series _X_ 1 _, . . ., X⌊_ 0 _._ 8 _L⌋_ in all our 5 datasets pass the ADF test (i.e., are
+stationary), _t_ test (the sample mean equals the theoretical value), and Levene’s test (sample variance
+homogeneity). **This validates the assumption of stationary inputs for all datasets and provides**
+**a sound foundation for our subsequent analysis of all the 3 hypotheses.**
+
+
+Specifically, Table 1 presents the following statistics:
+
+
+- The **ADF** row indicates the proportion of input series passing the ADF test at 5% significance
+level, for example, **1.00** for the entry under **ADF** and **AR(1)** means that all the 150 input series in
+the synthetic dataset AR(1) pass the ADF test.
+
+
+- The _**t**_ row shows the average _t_ -statistics on whether the sample mean across all input series at each
+of the _⌊_ 0 _._ 8 _L⌋_ time steps in the concerned datasets equals to their theoretical value.
+
+
+- The **Lev.** row reports the Levene’s test statistics for assessing whether the sample variances across
+all input series are equal at each of the _⌊_ 0 _._ 8 _L⌋_ time steps.
+
+
+In Table 1 and all other tables in this paper, *, **, and *** denote 10%, 5%, and 1% significance.
+Bolded test statistics indicate rejection of the null hypothesis at the specified significance level.
+
+
+The entries under _**t**_ and **Lev.** for real-world datasets (Darts and Stocks) in Table 1 are empty due to
+the lack of a uniform theoretical mean and variance across their 8 and 6 input series, respectively.
+As both _t_ test and Levene’s test require the assumption of an identical theoretical mean and variance
+across all input series in the same datasets, real-world datasets cannot satisfy this criterion with ease.
+For the same reason, **Hypotheses 2 and 3 are evaluated only on the synthetic datasets.**
+
+
+5.2 HYPOTHESIS 1
+
+
+Figure 2 displays the proportion of forecasts passing the ADF test at 5% significance level. For
+example, the value of **0.50** for Dataset **Stocks** and Model **Llama-2** implies that among the 6 forecasts
+in the stocks dataset, only 3 of them are evaluated to be stationary, achieving a 50% pass rate. Lighter
+shades in this heatmap indicate higher pass rates; darker shades suggest lower rates.
+
+
+Upon a closer scrutiny, among the 45 evaluations across the 5 datasets and 9 LLMs, only 5 of them
+achieve a 100% pass rate. Particularly, among the 27 evaluations for the synthetic datasets, only 2 of
+them attain pass rates higher than 80%, both by **Gemini** . Conversely, the pass rates of other LLMs
+like **o3-mini**, **DS-V3**, **GPT-4**, **Mistral** and **Grok 3** all fall below 60%, showing significant failure.
+
+
+6
+
+
+Table 1: Stationarity validation of synthetic
+and real-world input series.
+
+
+**Test** **Synthetic Dataset** **Real-world Dataset**
+
+
+**AR(1)** **MA(1)** **ARMA(1, 1)** **Darts** **Stocks**
+
+
+ADF 1.00 1.00 1.00 1.00 1.00
+_t_ 0.04 0.09 -0.13 / /
+Lev. 1.07 1.02 1.07 / /
+
+
+Table 2: Hypotheses 2 and 3: Evaluation results for
+baselines with _t_ test and Levene’s test.
+
+
+**Dataset** **ARIMA** **EMA** **IMF** **Na¨ıve** **SMA**
+
+
+_t_ **Lev.** _t_ **Lev.** _t_ **Lev.** _t_ **Lev.** _t_ **Lev.**
+
+
+AR(1) 1.33 **61.80** [***] 0.51 0 1.27 0 0.96 0 0.16 0.01
+MA(1) 1.26 **79.47** [***] 0.95 0.01 1.25 0 **1.72** [*] 0 0.42 0.09
+ARMA(1,1) 1.25 **78.15** [***] 0.68 0 1.20 0 0.71 0 0.03 0.01
+
+
+Table 3: Hypotheses 2 and 3: Evaluation results for LLMs with _t_ test and Levene’s test.
+
+
+**Dataset** **GPT-3.5** **GPT-4** **GPT-4o** **o3-mini** **DS-V3** **Gemini** **Grok 3** **Llama-2** **Mistral**
+
+
+_t_ **Lev.** _t_ **Lev.** _t_ **Lev.** _t_ **Lev.** _t_ **Lev.** _t_ **Lev.** _t_ **Lev.** _t_ **Lev.** _t_ **Lev.**
+
+
+AR(1) 2.54 **1.25** [**] 1.92 **13.46** [***] **1.85** [*] **1.49** [***] **7.96** [***] **4.80** [***] **5.56** [**] **24.84** [***] 0.10 **1.24** [*] **4.67** [**] **6.67** [***] **1.92** [*] **11.37** [***] 1.02 **3.82** [***]
+
+MA(1) 1.69 1.00 0.76 **3.21** [***] 1.29 1.15 **13.15** [***] **2.53** [***] **2.60** [**] **3.63** [***] 0.64 1.06 **4.28** [***] **13.49** [***] 4.41 **23.99** [***] 1.02 **1.79** [***]
+
+ARMA(1,1) 0.74 **1.42** [***] 1.78 **26.90** [***] 1.33 **1.80** [***] **5.79** [***] **1.73** [***] **5.45** [**] **26.04** [***] 0.53 0.48 **8.17** [***] **52.74** [***] -2.51 **23.27** [***] **2.82** [**] **8.03** [***]
+
+
+In contrast, the 5 simple baselines excel at preserving stationarity, with almost full 100% pass rates
+among the 25 evaluations across the 5 datasets and 5 baselines. **Our** **comparison** **here** **is** **not** **to**
+**suggest** **that** **such** **simple** **baselines** **are** **advanced** **and** **accurate** **forecasting** **tools** **which** **defeat**
+**LLMs, but such stark contrast against the disappointing performance of LLMs further high-**
+**lights the unreliability of zero-shot LLM forecasters.** We **reject Hypothesis 1** and conclude:
+
+
+5.3 HYPOTHESIS 2
+
+
+Tables 2 and 3 report the results of the _t_ tests and Levene’s tests in evaluating the baseline and LLM
+forecasts on the 3 synthetic datasets respectively.
+
+
+The _t_ test statistics in Table 3 show that among the 9 LLMs, only 3 of them, namely **GPT-3.5**,
+**GPT-4** and **Gemini**, can maintain the equality of means in their forecasts across all 3 synthetic
+datasets. All remaining LLMs fail to maintain the equality of means in at least one of the 3 datasets.
+Notably, **o3-mini**, **DS-V3**, and **Grok 3** struggle and fail entirely in all 3 datasets, indicating complete
+incompetence in preserving 1st moment characteristics in forecasting.
+
+
+On the other hand, Table 2 indicates that all 5 baselines are able to maintain the equality of means in
+all 3 datasets, except the Na¨ıve Method is rejected at 10% significance level for MA(1). Such striking
+contrast between LLMs and baselines once again highlights the relatively inferior performance of
+zero-shot LLM forecasters, leading us to **reject Hypothesis 2** .
+
+
+5.4 HYPOTHESIS 3
+
+
+The Levene’s test statistics in Table 3 suggest that, except for **Gemini**, all LLMs reject the null
+hypothesis of Levene’s test in at least 2 or all 3 synthetic datasets, indicating significant variance
+variations across the _⌈_ 0 _._ 2 _L⌉_ time steps. In sharp contrast, Table 2 shows that among the 5 baselines,
+only ARIMA fails to retain variance homogeneity. Such apparent contrast underscores the pronounced deficiencies of LLMs in capturing and preserving the 2nd moment and linear dependence
+structure present in the input series, prompting us to **reject Hypothesis 3** .
+
+
+A closer look at the _**t**_ and **Lev.** columns in Table 3 reveals deeper insights on why LLMs fail
+on preserving stationarity. The failure of LLMs in preserving the 2nd moments is markedly more
+pronounced than for the 1st moment, as evidenced by the respectively **occasional** versus **frequent**
+rejections of the null hypotheses in the _**t**_ and **Lev.** columns in Table 3.
+
+
+For example, for LLMs like **Gemini**, **GPT-3.5** and **GPT-4**, which all maintain the equality of means
+in their forecasts, their **increasing** violation of variance homogeneity in respectively 1, 2 and 3 synthetic datasets reconciles to their **decreasing** pass rates in the ADF tests. Such correlation suggests
+that the failures in stationarity preservation likely originates from violations of variance homogeneity instead of equality of means. While the 1st moment, i.e. mean, is simpler to model and capture,
+the 2nd moment features like variance and autocovariance are essentially more complicated as they
+involve intricate dependency and variations between time steps.
+
+
+7
+
+
+(a) GPT-3.5 (b) GPT-4 (c) GPT-4o (d) ARIMA
+
+
+(e) o3-mini (f) DS-V3 (g) Gemini (h) EMA
+
+
+(i) Grok 3 (j) Llama-2 (k) Mistral (l) SMA
+
+
+Figure 3: Average forecasts from 150 runs of LLMs and baselines on the 3 synthetic datasets. More
+detailed results are provided in Appendix C.1.
+
+
+5.5 IN-DEPTH DISCUSSION
+
+
+5.5.1 HIDDEN TRENDS AND BIASES
+
+
+Figure 3 shows the averaged zero-shot forecasts by LLMs and 3 selected baselines (ARIMA, EMA,
+and SMA) over 150 runs on the synthetic datasets, aiming for deeper insights beyond the findings
+above. The IMF and Na¨ıve baselines are omitted since their forecasts are constant by definition.
+
+
+Except for **Gemini**, all other 8 LLMs **exhibit exponentially varying trends** in their averaged forecasts for at least 1 synthetic dataset, reconciling the significant violations of stationarity observed
+in the above evaluations of the 3 hypotheses. Notably, **Grok 3** ’s averaged forecasts on AR(1) surge
+beyond 3000 after 100 time steps, while the true values remain within _±_ 0 _._ 3, implying errors over **4**
+**orders of magnitude** larger than the ground truth.
+
+
+Two phenomenal observations should also be remarked here. First, all LLMs, except **GPT-3.5**
+and **Gemini**, exhibit a **hidden** **increasing** **trend** in their averaged forecasts as observed in at least
+1 synthetic dataset. Second, all LLMs, except **Gemini** and **Llama-2**, display a **hidden** **positive**
+**bias** towards forecasting positive values more frequently than negative ones in at least 2 synthetic
+datasets. Both phenomena are clearly and persistently visible even after averaging over 150 runs,
+so they are not random and insignificant, but telling us an important message— **these hidden biases**
+**and trends are contaminating the LLM forecasts secretly** .
+
+
+Such hidden trends and biases may arise from similar inductive biases rooted in language modeling.
+For example, “is” rather than “are” should follow from “he” in English grammar and such rules
+can be ideally generalized across all English texts. However, LLM forecasters may misapply such
+
+
+8
+
+
+generalization to numeric series, favoring certain numerical trends and patterns over others, although
+there should not be any equivalent “grammatical” rule in time series dictating that, for instance,
+“130” rather than “128” should follow from “121, 124, 127”.
+
+
+5.5.2 OVER SIMPLISTIC REASONING
+
+
+As advanced LLMs increasingly incorporate deep reasoning capabilities, we have selected
+DeepSeek-R1 (DS-R1), the first model to claim such proficiency, as a representative case to explore
+the reasoning content underlying the failures of LLM forecasters.
+
+
+However, as illustrated by the red highlighted sentences in Figure 4, LLMs primarily focus on the
+last few time steps of the input to fit those templates and infer the overall characteristics or trends,
+**ignoring the global structure** of the full series. While candidate templates and patterns are **blind**
+**guessed** over the last few time steps, globally correct forecasts are often overridden by templates
+which are obviously incorrect but matching the last time steps by luck. Such **overdependence on**
+**local information** is likely one of the key reasons for the failures of zero-shot LLM forecasters and
+reveals their lack of genuine statistical understanding on time series, resulting in overconfidence in
+erroneous trends and substantial prediction biases.
+
+
+6 CONCLUSION
+
+
+In this paper, we introduce a novel, simple, and robust framework to assess the suitability and reliability of LLMs as zero-shot time series forecasters. This evaluation method tests the widely accepted
+assumption that, given an input series with a distinct mean and variance, forecasters should preserve
+these characteristics in their forecasts—a principle we term stationarity preservation. Through comprehensive experiments, we find that: 1) LLMs significantly fail to maintain stationarity, primarily
+due to greater difficulty in preserving 2nd moments compared to 1st moments; 2) LLM forecasts are
+severely contaminated by persistent hidden biases and trends, even after averaging over hundreds
+of iterations; 3) Analysis of their deep reasoning content reveals that LLM forecasters overly rely
+on blind guessing of local patterns from the final few time steps, rather than modeling the overall
+structure of the input series. These findings challenge prevailing enthusiasm and caution against the
+uncritical use of zero-shot LLM forecasters.
+
+
+9
+
+
+In our prior comparisons across various LLMs
+and baselines, DS-R1 was not included among
+the evaluated models. This exclusion stems from
+two key factors: firstly, its responses require
+mandatory deep reasoning, which is computationally intensive and cost-inefficient; secondly,
+it is fundamentally ill-suited for time-series forecasting tasks, a point elaborated below through
+an analysis of an excerpt from its reasoning content for such tasks. Figure 4 presents an excerpt
+of its reasoning content when forecasting on the
+synthetic dataset AR(1).
+
+
+As shown by the blue highlighted sentences in
+Figure 4, LLMs incline on using **simple** **arith-**
+**metic** **operations** (e.g. differences, squares) to
+the input series to extract patterns, or randomly
+fitting the input series to **well-known** **templates**
+such as random walks, ARIMA models, primes,
+or Fibonacci series. For stationary series, such
+“template-based fitting” strategies may occasionally approximate parts of the structure.
+
+
+Figure 4: Excerpt from DS-R1 reasoning content. More detailed results are in Appendix C.2.
+
+
+REPRODUCIBILITY STATEMENT
+
+
+We provide detailed descriptions of the methods (Section 3.3, Appendix A), the data and its processing steps (Section 4.1), and models and experimental settings (Section 4.2, Appendix B). Although
+the code repository will be publicly available upon publication of the paper, we have provided sufficient information in the main text and appendices to allow readers to understand the experimental
+design, method implementation, and analysis of the results.
+
+
+REFERENCES
+
+
+Josh Achiam, Steven Adler, Sandhini Agarwal, Lama Ahmad, Ilge Akkaya, Florencia Leoni Aleman, Diogo Almeida, Janko Altenschmidt, Sam Altman, Shyamal Anadkat, et al. GPT-4 technical
+report. _arXiv preprint arXiv:2303.08774_, 2023.
+
+
+Sarah Alnegheimish, Linh Nguyen, Laure Berti-Equille, and Kalyan Veeramachaneni. Large
+language models can be zero-shot anomaly detectors for time series? _arXiv_ _preprint_
+_arXiv:2405.14755_, 2024.
+
+
+Jungho Baek, Yongsung Cho, and Won W Koo. The environmental consequences of globalization:
+A country-specific time-series analysis. _Ecological economics_, 68(8-9):2255–2264, 2009.
+
+
+Konstantinos Benidis, Syama Sundar Rangapuram, Valentin Flunkert, Yuyang Wang, Danielle Maddix, Caner Turkmen, Jan Gasthaus, Michael Bohlke-Schneider, David Salinas, Lorenzo Stella,
+et al. Deep learning for time series forecasting: Tutorial and literature survey. _ACM Computing_
+_Surveys_, 55(6):1–36, 2022.
+
+
+Ilaria Bordino, Nicolas Kourtellis, Nikolay Laptev, and Youssef Billawala. Stock trade volume prediction with yahoo finance user browsing behavior. In _2014 IEEE 30th International Conference_
+_on Data Engineering_, pp. 1168–1173. IEEE, 2014.
+
+
+Joos-Hendrik B¨ose, Valentin Flunkert, Jan Gasthaus, Tim Januschowski, Dustin Lange, David Salinas, Sebastian Schelter, Matthias Seeger, and Yuyang Wang. Probabilistic demand forecasting at
+scale. _VLDB_, 2017.
+
+
+George EP Box, Gwilym M Jenkins, Gregory C Reinsel, and Greta M Ljung. _Time series analysis:_
+_forecasting and control_ . John Wiley & Sons, 2015.
+
+
+Defu Cao, Furong Jia, Sercan O Arik, Tomas Pfister, Yixiang Zheng, Wen Ye, and Yan Liu. Tempo:
+Prompt-based generative pre-trained transformer for time series forecasting. In _ICLR_, 2024.
+
+
+Arijit Chakrabarti and Jayanta K Ghosh. AIC, BIC and recent advances in model selection. _Philos-_
+_ophy of statistics_, pp. 583–605, 2011.
+
+
+Ching Chang, Wen-Chih Peng, and Tien-Fu Chen. LLM4TS: Two-stage fine-tuning for time-series
+forecasting with pre-trained llms. _arXiv preprint arXiv:2308.08469_, 2023.
+
+
+Robert B Cleveland, William S Cleveland, Jean E McRae, Irma Terpenning, et al. Stl: A seasonaltrend decomposition. _J. off. Stat_, 6(1):3–73, 1990.
+
+
+Min Dai, Hanqing Jin, Steven Kou, and Yuhong Xu. A dynamic mean-variance analysis for log
+returns. _Management Science_, 67(2):1093–1108, 2021.
+
+
+Jayeola Dare, Aye O Patrick, and David O Oyewola. Comparison of stationarity on Ljung box test
+statistics for forecasting. _Earthline Journal of Mathematical Sciences_, 8(2):325–336, 2022.
+
+
+David A Dickey and Wayne A Fuller. Distribution of the estimators for autoregressive time series
+with a unit root. _Journal of the American statistical association_, 74(366a):427–431, 1979.
+
+
+David A Dickey and Sastry G Pantula. Determining the order of differencing in autoregressive
+processes. _Journal of Business & Economic Statistics_, 5(4):455–461, 1987.
+
+
+Audrius Dzikeviˇcius and Svetlana Saranda. [ˇ] Ema versus sma usage to forecast stock markets: the
+case of S&P 500 and OMX Baltic Benchmark. _Business:_ _Theory and Practice_, 11(3):248–255,
+2010.
+
+
+10
+
+
+Nate Gruver, Marc Finzi, Shikai Qiu, and Andrew G Wilson. Large language models are zero-shot
+time series forecasters. In _NeurIPS_, 2023.
+
+
+James D Hamilton. _Time series analysis_ . Princeton university press, 2020.
+
+
+Julien Herzen, Francesco L¨assig, Samuele Giuliano Piazzetta, Thomas Neuer, L´eo Tafti, Guillaume
+Raille, Tomas Van Pottelbergh, Marek Pasieka, Andrzej Skrodzki, Nicolas Huguenin, et al. Darts:
+User-friendly modern machine learning for time series. _Journal of Machine Learning Research_,
+23(124):1–6, 2022.
+
+
+Rob J Hyndman and George Athanasopoulos. _Forecasting:_ _principles and practice_ . OTexts, 2018.
+
+
+Ming Jin, Shiyu Wang, Lintao Ma, Zhixuan Chu, James Y Zhang, Xiaoming Shi, Pin-Yu Chen, Yuxuan Liang, Yuan-Fang Li, Shirui Pan, et al. Time-llm: Time series forecasting by reprogramming
+large language models. In _ICLR_, 2024a.
+
+
+Ming Jin, Yifan Zhang, Wei Chen, Kexin Zhang, Yuxuan Liang, Bin Yang, Jindong Wang, Shirui
+Pan, and Qingsong Wen. Position paper: What can large language models tell us about time series
+analysis. In _ICML_, 2024b.
+
+
+Norberto Ritzmann J´unior and Julio Cesar Nievola. A generalized financial time series forecasting model based on automatic feature engineering using genetic algorithms and support vector
+machine. In _2018 International Joint Conference on Neural Networks (IJCNN)_, pp. 1–8. IEEE,
+2018.
+
+
+Reham Kablaoui, Imtiaz Ahmad, Sa’ed Abed, and Mohamad Awad. _Engineering Science and Tech-_
+_nology, an International Journal_, pp. 101754, 2024.
+
+
+Tae Kyun Kim. T test as a parametric statistic. _Korean journal of anesthesiology_, 68(6):540–546,
+2015.
+
+
+Pedro Lara-Ben´ıtez, Manuel Carranza-Garc´ıa, and Jos´e C Riquelme. An experimental review on
+deep learning architectures for time series forecasting. _International Journal of Neural Systems_,
+31(03):2130001, 2021.
+
+
+Tim Leung and Theodore Zhao. Financial time series analysis and forecasting with hilbert–huang
+transform feature generation and machine learning. _Applied_ _Stochastic_ _Models_ _in_ _Business_ _and_
+_Industry_, 37(6):993–1016, 2021.
+
+
+Bryan Lim and Stefan Zohren. Time-series forecasting with deep learning: a survey. _Philosophical_
+_Transactions of the Royal Society A_, 379(2194):20200209, 2021.
+
+
+Aixin Liu, Bei Feng, Bing Xue, Bingxuan Wang, Bochao Wu, Chengda Lu, Chenggang Zhao,
+Chengqi Deng, Chenyu Zhang, Chong Ruan, et al. Deepseek-v3 technical report. _arXiv preprint_
+_arXiv:2412.19437_, 2024a.
+
+
+Haoxin Liu, Zhiyuan Zhao, Jindong Wang, Harshavardhan Kamarthi, and B Aditya Prakash. Lstprompt: Large language models as zero-shot time series forecasters by long-short-term prompting. _arXiv preprint arXiv:2402.16132_, 2024b.
+
+
+Peiyuan Liu, Hang Guo, Tao Dai, Naiqi Li, Jigang Bao, Xudong Ren, Yong Jiang, and Shu-Tao
+Xia. Calf: Aligning llms for time series forecasting via cross-modal fine-tuning. _arXiv preprint_
+_arXiv:2403.07300_, 2024c.
+
+
+Mike A Merrill, Mingtian Tan, Vinayak Gupta, Thomas Hartvigsen, and Tim Althoff. Language
+models still struggle to zero-shot reason about time series. In _EMNLP_, 2024.
+
+
+Rupert G Miller Jr. _Beyond ANOVA: basics of applied statistics_ . CRC press, 1997.
+
+
+Terence C Mills and Raphael N Markellos. _The_ _econometric_ _modelling_ _of_ _financial_ _time_ _series_ .
+Cambridge university press, 2008.
+
+
+Prabhaker Mishra, Uttam Singh, Chandra M Pandey, Priyadarshni Mishra, and Gaurav Pandey. Application of student’s t-test, analysis of variance, and covariance. _Annals of cardiac anaesthesia_,
+22(4):407–411, 2019.
+
+
+11
+
+
+Mohammad Amin Morid, Olivia R. Liu Sheng, and Joseph Dunbar. Time series prediction using
+deep learning methods in healthcare. _ACM_ _Transactions_ _on_ _Management_ _Information_ _Systems_,
+pp. 1–29, 2023a.
+
+
+Mohammad Amin Morid, Olivia R Liu Sheng, and Joseph Dunbar. Time series prediction using
+deep learning methods in healthcare. _ACM_ _Transactions_ _on_ _Management_ _Information_ _Systems_,
+14(1):1–29, 2023b.
+
+
+Rizwan Mushtaq. Augmented dickey fuller test. 2011.
+
+
+David W Nordstokke and Bruno D Zumbo. A new nonparametric levene test for equal variances.
+_Psicol´ogica_, 31(2):401–430, 2010.
+
+
+Andreea-Cristina Petric˘a, Stelian Stancu, and Virgil Ghit,ulescu. Stationarity–the central concept in
+time series analysis. _International Journal of Emerging Research in Management and Technology_,
+6(1):6–16, 2017.
+
+
+Omer Berat Sezer, Mehmet Ugur Gudelek, and Ahmet Murat Ozbayoglu. Financial time series forecasting with deep learning: A systematic literature review: 2005–2019. _Applied soft computing_,
+90, 2020.
+
+
+Robert H Shumway and David S Stoffer. Arima models. In _Time series analysis and its applications:_
+_with R examples_, pp. 75–163. Springer, 2017.
+
+
+Carlo Corrˆea Solci, Vald´erio Anselmo Reisen, and Paulo Canas Rodrigues. Robust local bootstrap
+for weakly stationary time series in the presence of additive outliers. _Stochastic_ _Environmental_
+_Research and Risk Assessment_, 37(8):2977–2992, 2023.
+
+
+Chenxi Sun, Yaliang Li, Hongyan Li, and Shenda Hong. Test: Text prototype aligned embedding to
+activate llm’s ability for time series. In _ICLR_, 2024.
+
+
+Mingtian Tan, Mike Merrill, Vinayak Gupta, Tim Althoff, and Tom Hartvigsen. Are language
+models actually useful for time series forecasting? _Advances in Neural Information Processing_
+_Systems_, 37:60162–60191, 2024.
+
+
+Hugo Touvron, Thibaut Lavril, Gautier Izacard, Xavier Martinet, Marie-Anne Lachaux, Timoth´ee
+Lacroix, Baptiste Rozi`ere, Naman Goyal, Eric Hambro, Faisal Azhar, et al. Llama: Open and
+efficient foundation language models (2023). _arXiv preprint arXiv:2302.13971_, 2023.
+
+
+Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N Gomez,
+Łukasz Kaiser, and Illia Polosukhin. Attention is all you need. _Advances_ _in_ _neural_ _informa-_
+_tion processing systems_, 30, 2017.
+
+
+Bruce S Weir and William G Hill. Estimating F-statistics. _Annual review of genetics_, 36(1):721–750,
+2002.
+
+
+Qingsong Wen, Jingkun Gao, Xiaomin Song, Liang Sun, Huan Xu, and Shenghuo Zhu. Robuststl:
+A robust seasonal-trend decomposition algorithm for long time series. In _Proceedings of the AAAI_
+_conference on artificial intelligence_, volume 33, pp. 5409–5416, 2019.
+
+
+Peter Whittle. Estimation and information in stationary time series. _Arkiv_ _f¨or_ _matematik_, 2(5):
+423–434, 1953.
+
+
+Haixu Wu, Jiehui Xu, Jianmin Wang, and Mingsheng Long. Autoformer: Decomposition transformers with auto-correlation for long-term series forecasting. 2022.
+
+
+Haixu Wu, Tengge Hu, Yong Liu, Hang Zhou, Jianmin Wang, and Mingsheng Long. TimesNet:
+Temporal 2d-variation modeling for general time series analysis. 2023.
+
+
+Hao Xue and Flora D Salim. Promptcast: A new prompt-based learning paradigm for time series
+forecasting. _IEEE Transactions on Knowledge and Data Engineering_, 2023.
+
+
+Mingda Zhang. Time series: Autoregressive models ar, ma, arma, arima. _University of Pittsburgh_,
+2018.
+
+
+12
+
+
+Haoyi Zhou, Shanghang Zhang, Jieqi Peng, Shuai Zhang, Jianxin Li, Hui Xiong, and Wancai Zhang.
+Informer: Beyond efficient transformer for long sequence time-series forecasting. In _AAAI-21_
+_Technical Tracks 12_, 2021.
+
+
+Tian Zhou, Peisong Niu, Liang Sun, Rong Jin, et al. One fits all: Power general time series analysis
+by pretrained lm. In _NeurIPS_, 2023.
+
+
+13
+
+
+A RELEVANT CONCEPTS
+
+
+A.1 STATIONARITY TESTING VIA THE AUGMENTED DICKEY–FULLER TEST
+
+
+The Augmented Dickey–Fuller (ADF) test (Mushtaq, 2011) is a widely used statistical method for
+evaluating the stationarity of time series data. It tests the null hypothesis that a unit root is present in
+the series, which implies non-stationarity. Rejection of the null hypothesis suggests that the series is
+stationary, meaning its statistical properties (e.g., mean and variance) do not change over time.
+
+
+The ADF test is based on estimating the following regression model:
+
+
+where _yt_ is the time series of interest, ∆ denotes the first-difference operator, _t_ is the deterministic
+time trend, _l_ is the number of lagged difference terms included to account for serial correlation, and
+_εt_ is a white noise error term.
+
+
+The key parameter in this model is _γ_, which governs the presence of a unit root. The null hypothesis
+_H_ 0 : _γ_ = 0 corresponds to a unit root (non-stationary series), while the alternative hypothesis
+_H_ 1 : _γ_ _<_ 0 indicates stationarity.
+
+
+The test produces a test statistic based on the estimated value of _γ_ and its standard error. This statistic is then compared against critical values derived from the Dickey–Fuller distribution (Dickey &
+Fuller, 1979). Additionally, a _p_ -value is reported to quantify the strength of the evidence against the
+null hypothesis: a small _p_ -value (typically _<_ 0 _._ 05) indicates strong evidence in favor of stationarity.
+
+
+In all experiments, the lag order _l_ is selected automatically using the Akaike Information Criterion
+(AIC), which balances model fit and complexity to avoid underfitting or overfitting (Chakrabarti
+& Ghosh, 2011). This ensures that the test remains reliable across series with different lengths or
+autocorrelation structures.
+
+
+The ADF test thus provides a robust statistical framework for assessing whether forecast series
+preserve the stationarity property of the original inputs.
+
+
+A.2 STATISTICAL TESTING VIA THE ONE-SAMPLE _t_ TEST
+
+
+The one-sample _t_ test (Kim, 2015) is a classical parametric method used to evaluate whether the
+sample mean of a given statistic significantly deviates from a specified theoretical value. In the
+context of this study, the test is used to determine whether the mean of model forecasts at each time
+step is statistically different from the expected value under the theoretical data-generating process.
+
+
+Formally, the _t_ test evaluates the null hypothesis:
+
+_H_ 0 : _µ_ = _µ_ 0 _,_ (6)
+where _µ_ is the true mean of the population and _µ_ 0 is the theoretical reference value. Given a sample
+_{x_ 1 _, x_ 2 _, . . ., xn}_, the test statistic is computed as:
+
+_t_ = _[x]_ [¯] _[ −]_ _[µ]_ [0] (7)
+
+_s/_ ~~_[√]_~~ _n_ _[,]_
+
+
+where ¯ _x_ is the sample mean, _s_ is the sample standard deviation, and _n_ is the number of observations.
+
+
+This statistic follows a Student’s _t_ -distribution (Mishra et al., 2019) with _n −_ 1 degrees of freedom
+under the null hypothesis. The corresponding _p_ -value quantifies the probability of observing a test
+statistic as extreme as the one computed, assuming the null hypothesis is true. Smaller _p_ -values indicate stronger evidence against the null, with statistical significance assessed relative to the chosen
+significance threshold.
+
+
+In this study, the null hypothesis is set as _µ_ 0 = 0, corresponding to the theoretical expectation of zero
+for the statistic under examination. The test is conducted independently at each forecast time step,
+across multiple forecast series. The resulting _t_ -statistics and _p_ -values are then aggregated—typically
+by averaging—over all time steps to obtain a summary measure of deviation from the null. This
+procedure enables a comprehensive evaluation of whether the forecasts systematically violate the
+expected first-order properties implied by stationarity.
+
+
+14
+
+
+∆ _yt_ = _α_ + _βt_ + _γyt−_ 1 +
+
+
+_l_
+
+- _δi_ ∆ _yt−i_ + _εt,_ (5)
+
+
+_i_ =1
+
+
+A.3 TESTING VARIANCE HOMOGENEITY VIA LEVENE’S TEST
+
+
+Levene’s test (Nordstokke & Zumbo, 2010) is a widely used method for assessing the homogeneity
+of variances across multiple groups. The null hypothesis of the test is that all groups have equal
+variances. The test is robust to departures from normality and is commonly applied before further
+analysis that requires equal variances.
+
+
+Formally, consider _k_ groups, each containing observations _{xij}_ for _i_ = 1 _, . . ., k_ and _j_ = 1 _, . . ., ni_ .
+Let
+
+
+be the mean of group _i_ . Define the absolute deviations
+
+
+_zij_ = _|xij_ _−_ _x_ ¯ _i|._ (9)
+
+
+Levene’s test then performs a one-way analysis of variance (ANOVA) (Miller Jr, 1997) on the _zij_ :
+
+
+_[−]_ _[k]_ [)]                              - _ki_ =1 _[n][i]_ [(¯] _[z][i][·][ −]_ _[z]_ [¯] _[··]_ [)][2]
+_W_ = [(] _[N]_ _k −_ 1 _·_       - _ki_ =1       - _nj_ =1 _i_ [(] _[z][ij]_ _[−]_ _[z]_ [¯] _[i][·]_ [)][2] _[,]_ (10)
+
+
+where _N_ = [�] _i_ _[k]_ =1 _[n][i]_ [is the total number of observations,] _[z]_ [¯] _[i][·]_ [is the mean of the deviations in group]
+_i_, and _z_ ¯ _··_ is the overall mean of the deviations.
+
+
+Under the null hypothesis of equal variances, the test statistic _W_ follows an _F_ -distribution (Weir &
+Hill, 2002) with ( _k −_ 1) and ( _N_ _−_ _k_ ) degrees of freedom.
+
+
+In the context of this study, Levene’s test is applied to the forecast values at each time step treated as
+separate groups, in order to evaluate whether the variance of forecasts remains consistent over time.
+Significant rejection of the null hypothesis indicates heteroscedasticity or variance instability in the
+forecasted series, which may suggest that the model fails to preserve the variance structure of the
+original stationary input series.
+
+
+15
+
+
+_x_ ¯ _i_ = [1]
+
+_ni_
+
+
+_ni_
+
+
+_xij_ (8)
+
+_j_ =1
+
+
+B MODELS AND EXPERIMENTS
+
+
+B.1 LLM DEPLOYMENT
+
+
+The Large Language Models (LLMs) employed in our study are summarized according to their
+developers as follows:
+
+
+    - OpenAI: **GPT-3.5**, **GPT-4**, **GPT-4o** and **o3-mini**
+
+
+    - DeepSeek: **DeepSeek-V3 671B (DS-V3)** and **DeepSeek-R1 671B**
+
+
+    - Meta: **Llama-2 7B (Llama-2)**
+
+
+    - xAI: **Grok 3**
+
+
+    - Google: **Gemini 2.5 Flash (Gemini)**
+
+
+    - Mistral: **Mistral Small 3.2 24B(Mistral)**
+
+
+These models represent a broad spectrum of model sizes, optimization objectives (e.g., reasoning,
+efficiency), and deployment modalities (e.g., public APIs, open-source checkpoints), offering a comprehensive perspective on the capabilities and limitations of current LLMs in zero-shot time series
+forecasting.
+
+
+To ensure a strict zero-shot setting and maintain a balance between generation diversity and output
+stability, all LLMs were queried with a temperature of 0.7. This setting allows the models to exhibit
+a degree of creativity necessary for pattern inference, while avoiding overly stochastic or unfocused
+outputs.
+
+
+B.2 TOKEN LIMIT ADJUSTMENT
+
+
+Given the context window limitations inherent in LLMs, we incorporate two mechanisms to ensure forecasting in appropriate length. First, the prompts explicitly specify a minimum length requirement for the forecasts. Second, we control the upper bound of token generation using the
+max ~~t~~ okens parameter in the LLM API. Such setup ensures sufficient length of the forecasts and
+minimizes the risk of early termination or incomplete forecasts.
+
+
+B.3 INTERRUPTION-RESILIENT MECHANISM
+
+
+In the process of performing zero-shot time series forecasting using LLMs, various sources of uncertainty may lead to unexpected interruptions. For example, API-based calls can be affected by
+network instability or slow model response times, while locally deployed models may suffer from
+memory limitations or unexpected runtime issues. These risks are particularly pronounced when
+conducting large-scale evaluations on synthetic datasets, such as the 150 runs we perform for each
+class of synthetic data.
+
+
+To mitigate the impact of such interruptions and avoid resource-intensive reruns, we implemented
+an **interruption-resilient mechanism**, which includes the following components:
+
+
+    - **Real-time saving** : During the forecasting process, intermediate results and execution logs
+are continuously saved to local storage. This ensures that completed results are preserved
+even if the process is interrupted.
+
+
+    - **Skip** **mechanism** : Upon restart, the program automatically detects completed sequences
+and skips them, resuming only from the sequences that have not yet been processed. This
+improves both computational efficiency and robustness.
+
+
+This mechanism significantly enhances the reproducibility and stability of large-scale forecasting
+experiments, ensuring that all tasks can be reliably completed even in less stable execution environments.
+
+
+16
+
+
+C COMPLETE FORECAST VISUALIZATIONS AND REASONING CONTENTS
+
+
+This section supplements the main text by providing detailed visualizations of forecasting results
+and reasoning contents on the 3 synthetic datasets.
+
+
+C.1 FORECASTS VISUALIZATIONS
+
+
+Figures 5–7 illustrate the forecasts of 9 LLMs and 5 baseline models on the AR(1), MA(1), and
+ARMA(1,1) datasets, respectively. Specifically, in each experiment, a model generates a forecast
+series of length 100. The curves shown in the figures represent the average value at each time
+step across 150 forecast series, resulting in a length-100 mean forecast series. Compared to the
+aggregated plots in the main text, these dataset-specific visualizations offer a more fine-grained
+perspective on model performance. In each figure, the orange solid lines represent the forecasts of
+individual LLMs, while the black dashed lines indicate the ground truth.
+
+
+(a) GPT-3.5 (b) GPT-4 (c) GPT-4o
+
+
+(d) o3-mini (e) DS-V3 (f) Gemini
+
+
+(g) Grok 3 (h) Llama-2 (i) Mistral
+
+
+Figure 5: Comparison of forecast performance across 9 LLMs on AR(1) synthetic data.
+
+
+Figure 5 presents the average forecast series of 9 LLMs and 5 baseline models on the AR(1) dataset.
+Except for **Gemini** and **Mistral**, the remaining **7** **LLMs** exhibit pronounced **exponential** **trends**
+in their forecasts. Among them, 6 models—excluding **GPT-3.5** —display strong **upward** **trends**,
+which deviate significantly from the stationarity of the input AR(1) series. Although **Mistral** outputs
+negative values at a few time steps, the majority of its forecasts remain positive, contradicting the
+zero-mean property of the underlying series. All LLMs, except for Gemini, exhibit varying degrees
+of **positive bias**, further indicating their limited ability to preserve the mean-stationary nature of the
+input series.
+
+
+17
+
+
+(a) GPT-3.5 (b) GPT-4 (c) GPT-4o
+
+
+(d) o3-mini (e) DS-V3 (f) Gemini
+
+
+(g) Grok 3 (h) Llama-2 (i) Mistral
+
+
+Figure 6: Comparison of forecast performance across 9 LLMs on MA(1) synthetic data.
+
+
+18
+
+
+**1000**
+
+**1001**
+
+**1002**
+
+
+**1003**
+
+**1004**
+
+**1005**
+
+**1006**
+
+**1007**
+
+**1008**
+
+
+**1009**
+
+**1010**
+
+**1011**
+
+**1012**
+
+**1013**
+
+
+**1014**
+
+**1015**
+
+**1016**
+
+**1017**
+
+**1018**
+
+**1019**
+
+
+**1020**
+
+**1021**
+
+**1022**
+
+**1023**
+
+**1024**
+
+**1025**
+
+
+(a) GPT-3.5 (b) GPT-4 (c) GPT-4o
+
+
+(d) o3-mini (e) DS-V3 (f) Gemini
+
+
+(g) Grok 3 (h) Llama-2 (i) Mistral
+
+
+Figure 7: Comparison of forecast performance across 9 LLMs on ARMA(1, 1) synthetic data.
+
+
+Figure 6 shows the average forecast series on the MA(1) dataset. Notably, **o3-mini**, **DS-V3**,
+and **Grok** **3** exhibit clear upward trends in their forecasts, with all predicted values being positive—indicating strong positive bias. In addition, **GPT-3.5**, **GPT-4o**, and **Mistral** also show varying
+degrees of positive bias. These forecasting behaviors are inconsistent with the stationarity of the input MA(1) series, further suggesting that most LLMs struggle to capture and preserve the statistical
+properties of the underlying input series.
+
+
+Figure 7 visualizes the average forecast series on the ARMA(1,1) dataset. Similar to the previous
+datasets, the forecasts produced by LLMs exhibit clear signs of non-stationarity, despite the input
+ARMA(1,1) series being stationary. Specifically, **GPT-4**, **GPT-4o**, **o3-mini**, **DS-V3**, **Grok**, and
+**Mistral** all generate forecast series with strong upward trends and a tendency toward positive values,
+indicating pronounced positive bias. In contrast, **GPT-3.5** shows a downward trend, while **Llama-2**
+exhibits a nonlinear pattern—first decreasing and then increasing. These behaviors are inconsistent
+with the properties of stationary input series, further suggesting that LLMs generally struggle to
+maintain the statistical characteristics of such inputs.
+
+
+C.2 REASONING CONTENTS
+
+
+Figures 8–10 present a more complete version of the reasoning content generated by **DeepSeek-R1**
+when forecasting an AR(1), MA(1), and ARMA(1,1) series, respectively, extending the abbreviated
+examples shown in the main text. These detailed illustrations offer a clearer view of the model’s stepby-step forecasting logic. In each figure, blue highlights indicate preferences for simple arithmetic
+operations or well-known sequence patterns; red highlights reflect an over-reliance on the final few
+time steps of the input; and purple highlights trace the reasoning steps leading to the model’s final
+forecast.
+
+
+19
+
+
+**1026**
+
+**1027**
+
+
+**1028**
+
+**1029**
+
+**1030**
+
+**1031**
+
+**1032**
+
+**1033**
+
+
+**1034**
+
+**1035**
+
+**1036**
+
+**1037**
+
+**1038**
+
+**1039**
+
+
+**1040**
+
+**1041**
+
+**1042**
+
+**1043**
+
+**1044**
+
+
+**1045**
+
+**1046**
+
+**1047**
+
+**1048**
+
+**1049**
+
+**1050**
+
+
+**1051**
+
+**1052**
+
+**1053**
+
+**1054**
+
+**1055**
+
+**1056**
+
+
+**1057**
+
+**1058**
+
+**1059**
+
+**1060**
+
+**1061**
+
+**1062**
+
+
+**1063**
+
+**1064**
+
+**1065**
+
+**1066**
+
+**1067**
+
+
+**1068**
+
+**1069**
+
+**1070**
+
+**1071**
+
+**1072**
+
+**1073**
+
+
+**1074**
+
+**1075**
+
+**1076**
+
+**1077**
+
+**1078**
+
+**1079**
+
+
+Figure 8: Reasoning patterns of DeepSeek-R1 on AR(1) series.
+
+
+20
+
+
+**1080**
+
+**1081**
+
+
+**1082**
+
+**1083**
+
+**1084**
+
+**1085**
+
+**1086**
+
+**1087**
+
+
+**1088**
+
+**1089**
+
+**1090**
+
+**1091**
+
+**1092**
+
+**1093**
+
+
+**1094**
+
+**1095**
+
+**1096**
+
+**1097**
+
+**1098**
+
+
+**1099**
+
+**1100**
+
+**1101**
+
+**1102**
+
+**1103**
+
+**1104**
+
+
+**1105**
+
+**1106**
+
+**1107**
+
+**1108**
+
+**1109**
+
+**1110**
+
+
+**1111**
+
+**1112**
+
+**1113**
+
+**1114**
+
+**1115**
+
+**1116**
+
+
+**1117**
+
+**1118**
+
+**1119**
+
+**1120**
+
+**1121**
+
+
+**1122**
+
+**1123**
+
+**1124**
+
+**1125**
+
+**1126**
+
+**1127**
+
+
+**1128**
+
+**1129**
+
+**1130**
+
+**1131**
+
+**1132**
+
+**1133**
+
+
+Figure 9: Reasoning patterns of DeepSeek-R1 on MA(1) series.
+
+
+21
+
+
+**1134**
+
+**1135**
+
+
+**1136**
+
+**1137**
+
+**1138**
+
+**1139**
+
+**1140**
+
+**1141**
+
+
+**1142**
+
+**1143**
+
+**1144**
+
+**1145**
+
+**1146**
+
+**1147**
+
+
+**1148**
+
+**1149**
+
+**1150**
+
+**1151**
+
+**1152**
+
+
+**1153**
+
+**1154**
+
+**1155**
+
+**1156**
+
+**1157**
+
+**1158**
+
+
+**1159**
+
+**1160**
+
+**1161**
+
+**1162**
+
+**1163**
+
+**1164**
+
+
+**1165**
+
+**1166**
+
+**1167**
+
+**1168**
+
+**1169**
+
+**1170**
+
+
+**1171**
+
+**1172**
+
+**1173**
+
+**1174**
+
+**1175**
+
+
+**1176**
+
+**1177**
+
+**1178**
+
+**1179**
+
+**1180**
+
+**1181**
+
+
+**1182**
+
+**1183**
+
+**1184**
+
+**1185**
+
+**1186**
+
+**1187**
+
+
+Figure 10: Reasoning patterns of DeepSeek-R1 on ARMA(1, 1) series.
+
+
+22
+
+
+**1188**
+
+**1189**
+
+
+**1190**
+
+**1191**
+
+**1192**
+
+**1193**
+
+**1194**
+
+**1195**
+
+
+**1196**
+
+**1197**
+
+**1198**
+
+**1199**
+
+**1200**
+
+**1201**
+
+
+**1202**
+
+**1203**
+
+**1204**
+
+**1205**
+
+**1206**
+
+
+**1207**
+
+**1208**
+
+**1209**
+
+**1210**
+
+**1211**
+
+**1212**
+
+
+**1213**
+
+**1214**
+
+**1215**
+
+**1216**
+
+**1217**
+
+**1218**
+
+
+**1219**
+
+**1220**
+
+**1221**
+
+**1222**
+
+**1223**
+
+**1224**
+
+
+**1225**
+
+**1226**
+
+**1227**
+
+**1228**
+
+**1229**
+
+
+**1230**
+
+**1231**
+
+**1232**
+
+**1233**
+
+**1234**
+
+**1235**
+
+
+**1236**
+
+**1237**
+
+**1238**
+
+**1239**
+
+**1240**
+
+**1241**
+
+
+D LLM USAGE STATEMENT
+
+
+We used LLM as a general-purpose writing assistant to polish grammar, improve readability, and
+rephrase some sentences in the paper. No text was generated verbatim without human verification,
+and all technical content, method design, experiments, and conclusions were entirely created and
+validated by the authors. The LLM was not used for data generation, result fabrication, or literature
+review automation, and it did not contribute to research ideation beyond language refinement. The
+authors take full responsibility for the entire content of this work.
+
+
+23

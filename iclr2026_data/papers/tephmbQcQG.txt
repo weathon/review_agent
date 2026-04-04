@@ -1,0 +1,500 @@
+# FINETUNING-FREE ALIGNMENT OF DIFFUSION MODEL FOR TEXT-TO-IMAGE GENERATION
+
+Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+Diffusion models have demonstrated remarkable success in text-to-image generation. While many existing alignment methods primarily focus on fine-tuning pre-trained diffusion models to maximize a given reward function, these approaches require extensive computational resources and may not generalize well across different objectives. In this work, we propose a novel finetuning-free alignment framework by leveraging the underlying nature of the alignment problem—sampling from reward-weighted distributions. Moreover, we give an in-depth discussion of adopting current guidance methods for text-to-image alignment. We identify a fundamental challenge: the adversarial nature of the guidance term can introduce undesirable artifacts in the generated images. To address this, we propose a regularization strategy that stabilizes the guidance signal. We evaluate our approach on a text-to-image benchmark and demonstrate comparable performance to state-of-the-art models with one-step generation while achieving at least a 60% reduction in computational cost.
+
+## 1 INTRODUCTION
+
+Diffusion models have achieved impressive performance in text-to-image generation, as demonstrated by state-of-the-art models such as Imagen (Saharia et al., 2022), DALL-E 3 (Betker et al.), and Stable Diffusion (Rombach et al., 2021). These models have been proven capable of generating high-quality, creative images even from novel and complex text prompts.
+
+Inspired by Reinforcement Learning from Human Feedback (RLHF) (Ouyang et al., 2022), many alignment approaches leverage preference pairs to fine-tune models for generating samples that align with task-specific objectives. RLHF-type methods (Lee et al., 2023; Fan et al., 2023; Black et al., 2023; Clark et al., 2024; Chakraborty et al., 2024) typically learn a reward function and then use the policy gradients (Jaques et al., 2016; 2020) to update the model. On the other hand, Direct Preference Optimization (DPO)-type methods (Rafailov et al., 2024; Wallace et al., 2023; Yang et al., 2023; Liang et al., 2024; Yang et al., 2024) directly optimize the model to adhere to human preferences, without requiring explicit reward modeling or reinforcement learning.
+
+Despite their effectiveness, these approaches require modifying model parameters through fine-tuning, which comes with several limitations. For example, fine-tuning for new reward functions is computationally expensive and often requires carefully designed training strategies; otherwise, optimizing on a limited set of input prompts can limit generalization to unseen prompts. More importantly, existing fine-tuning approaches do not fully exploit the structure of the alignment problem. Instead, they typically apply Low-Rank Adaptation (LoRA) to optimize model weights for a specific reward function, which may not be the most efficient strategy.
+
+In contrast, plug-and-play alignment methods integrate new objectives without modifying the underlying model parameters, significantly reducing computational costs while adapting flexibly to different reward functions. In this paper, we develop a plug-and-play guidance term for the text-to-image diffusion models. Instead of treating alignment purely as a fine-tuning problem, we formulate it as a sampling problem from a reward-weighted distribution, leveraging its unique structure. We demonstrate that the score function required for this reward-weighted distribution can be effectively decomposed into the pre-trained score function with an additional guidance term. However, we also identify a critical issue: it is hard to determine the strength of the guidance, stemming from the adversarial nature of the guidance. To address this, we introduce a novel regularization term that
+
+![Figure 1: Qualitative comparison with Vanilla SDXL, Diffusion-DPO, and SPO. The figure is a 5x8 grid of images. The rows are labeled on the left: 'Vanilla SDXL', 'Diffusion-DPO-SDXL', 'SDXL-SPO', 'Ours (SDXL)', and 'Ours (SDXL-5)'. The columns represent different prompts. The 'Ours' rows show significantly improved image quality and alignment with the prompts compared to the other methods.](c803f6f6e2c49429d2951832bd0f208d_img.jpg)
+
+054  
+055  
+056  
+057  
+058  
+059  
+060  
+061  
+062  
+063  
+064  
+065  
+066  
+067  
+068  
+069  
+070  
+071  
+072  
+073
+
+Figure 1: Qualitative comparison with Vanilla SDXL, Diffusion-DPO, and SPO. The figure is a 5x8 grid of images. The rows are labeled on the left: 'Vanilla SDXL', 'Diffusion-DPO-SDXL', 'SDXL-SPO', 'Ours (SDXL)', and 'Ours (SDXL-5)'. The columns represent different prompts. The 'Ours' rows show significantly improved image quality and alignment with the prompts compared to the other methods.
+
+074 Figure 1: [Qualitative comparison with Vanilla SDXL, Diffusion-DPO, and SPO](#). Our method  
+ 075 achieves better aesthetic quality and stronger alignment with the text prompt. Prompts are provided  
+ 076 in the Appendix B.3.
+
+077  
+ 078 mitigates this issue and empirically validates its effectiveness on a text-to-image benchmark with  
+ 079 one-step generation.
+
+080  
+ 081 Our contributions can be summarized as follows.
+
+- 082  
+ 083 • We identify that the alignment problem exhibits a particular structure well-suited for  
+ 084 guidance-based methods—namely, alignment can be framed as sampling from a reward-  
+ 085 weighted distribution. Based on this insight, we introduce a finetuning-free alignment  
+ 086 framework that leverages guidance to achieve alignment efficiently.
+- 087  
+ 088 • We uncover a critical challenge in applying guidance-based methods to text-to-image dif-  
+ 089 fusion models: the adversarial nature of guidance can lead to undesirable artifacts in the  
+ 090 generated images, compromising visual quality and alignment with human preferences.
+- 091  
+ 092 • We propose a regularization technique for training the guidance network, mitigating the  
+ 093 identified issue and achieving strong performance on text-to-image alignment benchmarks.  
+ 094 Furthermore, we demonstrate the effectiveness of our approach in the one-step generation  
+ 095 setting, significantly reducing computational costs.
+
+###### 096 1.1 RELATED WORK
+
+097  
+ 098 Existing alignment methods can be broadly categorized into two approaches: RLHF-based method  
+ 099 that uses policy gradient to update the diffusion models, and DPO-based methods that use a  
+ 100 parametrization trick to update the diffusion models without explicitly learning the reward function.  
+ 101
+
+102 **RLHF-based alignment of diffusion model.** [The authors](#) first train a reward model to predict  
+ 103 human feedback and adopt a reward-weighted finetuning objective to align the diffusion model in  
+ 104 (Lee et al., 2023). In (Fan et al., 2023; Black et al., 2023), the authors use policy gradient algorithms  
+ 105 to update the diffusion models under Kullback–Leibler (KL) constraints. [The authors](#) propagate the  
+ 106 reward function gradient through the full sampling procedure in (Clark et al., 2024). They reduce the  
+ 107 memory costs by adopting low-rank adaptation (LoRA) (Hu et al., 2021) and gradient checkpointing  
+ 108 (Chen et al., 2016).
+
+**DPO-based alignment of diffusion model.** This line of works (Wallace et al., 2023; Yang et al., 2023) directly applies DPO (Rafailov et al., 2024) to align the diffusion model with human preference. In (Liang et al., 2024), Liang et al. propose a step-aware preference model and a step-wise re-sampler to align the preference optimization target with the denoising performance at each timestep. The authors take on a finer dense reward perspective and derive a tractable alignment objective that emphasizes the initial steps in (Yang et al., 2024).
+
+**Training-free guidance.** This line of work (Chung et al., 2022; Graikos et al., 2022; Lu et al., 2023; Song et al., 2023; Bansal et al., 2023; Yu et al., 2023; Shen et al., 2024; Ye et al., 2024) explores the use of diffusion models as plug-and-play priors for solving inverse problems. Recently, several studies (Li et al., 2024) have focused on adopting training-free guidance to enhance alignment in language tasks, particularly in discrete diffusion models. Some work Shen et al. (2024); Tang et al. (2024); Uehara et al. (2024); Ma et al. (2025); Singhal et al. (2025) study inference-time optimization for alignment. However, to the best of our knowledge, there has been limited exploration of applying guidance to address the challenge of text-to-image alignment in the context of one-step generation. This gap motivates our work.
+
+## 2 PRELIMINARY
+
+In this section, we focus on existing techniques for aligning pre-trained models with human preferences. We first provide a brief description of Diffusion Model in Section 2.1. Then, we decompose the alignment procedure into two important components, reward learning to model the human preference in Section 2.2 and the alignment methods in Section 2.3.
+
+### 2.1 DIFFUSION MODELS
+
+The diffusion model (Ho et al., 2020; Song et al., 2021) first gradually injects Gaussian noise into samples  $\mathbf{x}_0$  from the data distribution by following the stochastic differential equation:
+
+$$d\mathbf{x}_t = \mathbf{f}(\mathbf{x}_t, t)dt + g(t)d\mathbf{w}, \quad t \in [0, T], \quad (1)$$
+
+where  $\mathbf{w}$  is the standard Brownian motion,  $\mathbf{f}(\cdot, t) : \mathbb{R}^d \rightarrow \mathbb{R}^d$  is a drift coefficient, and  $g(\cdot) : \mathbb{R} \rightarrow \mathbb{R}$  is a diffusion coefficient. We use  $p_t(\mathbf{x})$  to denote the marginal distribution of  $\mathbf{x}_t$  at time  $t$ . And we can use the time reversal of equation 1 for generation, which admits the following form (Anderson, 1982):
+
+$$d\mathbf{x}_t = [\mathbf{f}(\mathbf{x}_t, t) - g(t)^2 \nabla_{\mathbf{x}} \log p_t(\mathbf{x}_t)] dt + g(t)d\bar{\mathbf{w}}, \quad (2)$$
+
+where  $\bar{\mathbf{w}}$  is a standard Brownian motion when time flows backwards from  $T$  to 0, and  $dt$  is an infinitesimal negative time step. The score function of each marginal distribution  $\nabla_{\mathbf{x}} \log p_t(\mathbf{x})$  needs to be estimated by the following score matching objective:
+
+$$\min_{\theta} \mathbb{E}_t \left\{ \lambda(t) \mathbb{E}_{p_t(\mathbf{x}_t)} \left[ \|\mathbf{s}_{\theta}(\mathbf{x}_t, t) - \nabla_{\mathbf{x}_t} \log p_t(\mathbf{x}_t)\|_2^2 \right] \right\}, \quad (3)$$
+
+where  $\lambda(t) : [0, T] \rightarrow \mathbb{R}_{>0}$  is a positive weighting function,  $t$  is uniformly sampled over  $[0, T]$ . The latent diffusion model (Rombach et al., 2021; Podell et al., 2023) further extends diffusion models to text-to-image generation. They use an image encoder  $\mathcal{E}$  that maps  $\mathbf{x}$  into a latent representation and use a text encoder  $\tau$  that maps the prompts  $y$  into an embedding as the condition.
+
+### 2.2 REWARD LEARNING
+
+The Bradley-Terry (BT) models (Bradley & Terry, 1952) (or more general Plackett-Luce ranking models (Plackett, 1975; Luce, 1979)) are a popular way to model preferences. Given a prompt  $y$  and a pair of answers  $\mathbf{x}_w \succ \mathbf{x}_l \mid y$ , where  $\mathbf{x}_w$  denotes the winning response and  $\mathbf{x}_l$  denotes the losing response under the preference of humans. The BT model depicts the preference distribution as
+
+$$p(\mathbf{x}_w \succ \mathbf{x}_l \mid y) = \frac{\exp(r(\mathbf{x}_w, y))}{\exp(r(\mathbf{x}_w, y)) + \exp(r(\mathbf{x}_l, y))},$$
+
+where  $r(\mathbf{x}, y)$  denotes the reward model and can be learned by the following maximum likelihood objective,
+
+$$\min_{\phi} -\mathbb{E}_{(\mathbf{x}_w, \mathbf{x}_l, y) \sim \mathcal{D}} [\log \sigma(r(\mathbf{x}_w, y) - r(\mathbf{x}_l, y))], \quad (4)$$
+
+where  $\mathcal{D} = \left\{ \mathbf{x}_w^{(i)}, \mathbf{x}_l^{(i)}, y^{(i)} \right\}_{i=1}^N$  is the offline preference dataset and  $\sigma$  denotes the logistic function.
+
+### 2.3 ALIGNMENT OF DIFFUSION MODEL
+
+Building on the success of alignment techniques for finetuning large pre-trained language models, many studies have explored aligning diffusion models with human preferences. A detailed discussion follows.
+
+**RLHF.** This type of works (Lee et al., 2023; Xu et al., 2023; Fan et al., 2023; Black et al., 2023; Clark et al., 2024) finetune the pre-trained model  $\pi_{\text{ref}}$  by policy gradient objective (Jaques et al., 2016; 2020),
+
+$$\max_{\pi_\theta} \mathbb{E}_{y \sim \mathcal{D}_{\text{prompt}}, x \sim \pi_\theta(x|y)} [r(\mathbf{x}, y)] - \beta \mathbb{D}_{\text{KL}} [\pi_\theta(\mathbf{x} | y) \| \pi_{\text{ref}}(\mathbf{x} | y)], \quad (5)$$
+
+where  $\mathcal{D}_{\text{prompt}}$  denotes the prompt dataset. This type of method requires a pre-trained reward function for policy optimization (Schulman et al., 2017).
+
+**DPO.** The authors propose not to explicitly learn the reward function in (Rafailov et al., 2024). They start with the analytic solution of equation 5 as the energy-guided form,
+
+$$\pi_\theta(\mathbf{x} | y) = \frac{1}{Z(y)} \pi_{\text{ref}}(\mathbf{x} | y) \exp\left(\frac{1}{\beta} r(\mathbf{x}, y)\right), \quad (6)$$
+
+where  $Z(y) = \int \pi_{\text{ref}}(\mathbf{x} | y) \exp\left(\frac{1}{\beta} r(\mathbf{x}, y)\right) d\mathbf{x}$  is the partition function. Therefore, they can reparametrize the reward function  $r(\mathbf{x}, y)$  as
+
+$$r(\mathbf{x}, y) = \beta \log \frac{\pi_\theta(\mathbf{x} | y)}{\pi_{\text{ref}}(\mathbf{x} | y)} + \beta \log Z(y). \quad (7)$$
+
+Plugging equation 7 into equation 4, we yield the objective of DPO-type methods:
+
+$$\min -\mathbb{E}_{(\mathbf{x}_w, \mathbf{x}_l, y) \sim \mathcal{D}} \left[ \log \sigma \left( \beta \log \frac{\pi_\theta(\mathbf{x}_w | y)}{\pi_{\text{ref}}(\mathbf{x}_w | y)} - \beta \log \frac{\pi_\theta(\mathbf{x}_l | y)}{\pi_{\text{ref}}(\mathbf{x}_l | y)} \right) \right]. \quad (8)$$
+
+## 3 METHOD
+
+In this section, we introduce the proposed finetuning free method to directly sample from the reward-guided distribution. We introduce the methodology formulation in Section 3.1. We provide an in-depth analysis of several vanilla methods for calculating the guidance, as discussed in Section 3.2. We highlight that these vanilla guidance methods exhibit adversarial guidance, which generates undesirable artifacts and worsens performance, particularly in text-to-image generation. Then, we present an enhanced method in Section 3.3 that alleviates the problem.
+
+### 3.1 METHODOLOGY FORMULATION
+
+Inspired by previous works from transfer learning (Ouyang et al., 2024), we consider preference learning in terms of transferring a pre-trained diffusion model to adapt to the given preference data. To this end, we propose a finetuning-free alignment method for the diffusion models. Instead of using RLHF-type (like equation 5) or DPO-type (like equation 8) alignments, we propose to directly sample from the reward-weighted distribution  $\pi_r(\mathbf{x} | y)$  in equation 6 leveraging the relationships between score functions in the following Theorem.
+
+**Theorem 3.1.** Let the conditional distribution of reference diffusion model  $\pi_{\text{ref}}(\mathbf{x}|y)$  be denoted as distribution  $p$  and the reward-weighted distribution  $\pi_r(\mathbf{x}|y)$  defined in equation 6 as distribution  $q$ . Under some mild assumption of the forward noising process detailed in Appendix A, let  $\phi^*$  be the optimal solution for the conditional diffusion model trained on target domain  $q(\mathbf{x}_0, y)$ , i.e.,
+
+$$\phi^* = \arg \min_{\phi} \mathbb{E}_t \left\{ \lambda(t) \mathbb{E}_{q_t(\mathbf{x}_t, y)} \left[ \left\| \mathbf{s}_\phi(\mathbf{x}_t, y, t) - \nabla_{\mathbf{x}_t} \log q_t(\mathbf{x}_t | y) \right\|_2^2 \right] \right\}, \quad (9)$$
+
+![Figure 2: Illustration of the Adversarial Nature of Guidance. The figure shows two rows of generated images of a cockatoo wearing sunglasses. The top row, labeled 'Tweedie's formula', shows images for 'No guidance', 'Alpha=1.0', 'Alpha=10', 'Alpha=20', and 'Alpha=50'. The bottom row, labeled 'Directly backpropagate', shows images for 'No guidance', 'Alpha=0.1', 'Alpha=0.5', 'Alpha=1.0', and 'Alpha=2.0'. As the guidance strength (Alpha) increases, the sunglasses become more pronounced and eventually become undesirable artifacts.](a0167e3dcece9dcd8a378bcd98fb9cfa_img.jpg)
+
+Figure 2: Illustration of the Adversarial Nature of Guidance. The figure shows two rows of generated images of a cockatoo wearing sunglasses. The top row, labeled 'Tweedie's formula', shows images for 'No guidance', 'Alpha=1.0', 'Alpha=10', 'Alpha=20', and 'Alpha=50'. The bottom row, labeled 'Directly backpropagate', shows images for 'No guidance', 'Alpha=0.1', 'Alpha=0.5', 'Alpha=1.0', and 'Alpha=2.0'. As the guidance strength (Alpha) increases, the sunglasses become more pronounced and eventually become undesirable artifacts.
+
+Figure 2: Illustration of the Adversarial Nature of Guidance. When the strength of the guidance is too small, there is little difference between the generated images with or without guidance. However, as the magnitude of the guidance increases (from left to right), undesirable artifacts become more pronounced. The prompt is "A 3D Rendering of a cockatoo wearing sunglasses. The sunglasses have a deep black frame with bright pink lenses. Fashion photography, volumetric lighting, CG rendering".
+
+then
+
+$$s_{\phi^*}(\mathbf{x}_t, y, t) = \underbrace{\nabla_{\mathbf{x}_t} \log p_t(\mathbf{x}_t|y)}_{\text{pre-trained conditional model on source}} + \underbrace{\nabla_{\mathbf{x}_t} \log \mathbb{E}_{p(\mathbf{x}_0|\mathbf{x}_t, y)} \left[ \exp\left(\frac{1}{\beta} r(\mathbf{x}_0, y)\right) \right]}_{\text{conditional guidance}}. \quad (10)$$
+
+The proof can be found in Appendix A. Based on equation 19, we can calculate the additional guidance term rather than finetuning the text-to-image generative model by RLHF-type (like equation 5) or DPO-type (like equation 8). In general, the guidance term in equation 19 is not easy to compute because we need to sample from  $p(\mathbf{x}_0|\mathbf{x}_t, y)$  for each  $\mathbf{x}_t$  in the generation process. In the following, we first discuss the existing ways to calculate the guidance term.
+
+### 3.2 VANILLA METHOD TO COMPUTE THE GUIDANCE TERM
+
+**M1: Direct backpropagate through diffusion process.** The first method directly backpropagates through diffusion process to calculate  $\nabla_{\mathbf{x}_t} \log \mathbb{E}_{p(\mathbf{x}_0|\mathbf{x}_t, y)} \left[ \exp\left(\frac{1}{\beta} r(\mathbf{x}_0, y)\right) \right]$  for fine-tuning the diffusion model. In Song et al. (2023), the author proposes an unbiased Monte Carlo estimation:
+
+$$\nabla_{\mathbf{x}_t} \log \mathbb{E}_{p(\mathbf{x}_0|\mathbf{x}_t, y)} \left[ \exp\left(\frac{1}{\beta} r(\mathbf{x}_0, y)\right) \right] \approx \nabla_{\mathbf{x}_t} \log \frac{1}{n} \sum_{i=1}^n \exp\left(\frac{1}{\beta} r(\mathbf{x}_i^0, y)\right), \quad (11)$$
+
+where  $\mathbf{x}_i^0$  denotes the  $i$ -th sample drawn from  $p(\mathbf{x}_0|\mathbf{x}_t, y)$ . However, this Monte Carlo estimation significantly increases memory costs, especially in text-to-image generation. Inspired by recent studies (Clark et al., 2024), we can borrow the same techniques, e.g., accumulated gradients along the diffusion process using techniques such as low-rank adaptation (LoRA) (Hu et al., 2021) and truncation or gradient checkpointing (Prabhudesai et al., 2023; Clark et al., 2024), to alleviate the memory cost of backpropagate through the diffusion process for calculating the guidance term. We can further reduce the memory cost by using the few-step diffusion model as the reference model. Despite these techniques, the memory requirements remain higher compared to the proposed approach.
+
+**M2: Approximate and apply Tweedie's formula.** The second method first approximates the guidance term inspired by (Chung et al., 2022):
+
+$$\nabla_{\mathbf{x}_t} \log \mathbb{E}_{p(\mathbf{x}_0|\mathbf{x}_t,y)} \left[ \exp \left( \frac{1}{\beta} r(\mathbf{x}_0, y) \right) \right] \approx \frac{1}{\beta} \nabla_{\mathbf{x}_t} r(\mathbb{E}_{p(\mathbf{x}_0|\mathbf{x}_t,y)}[\mathbf{x}_0], y). \quad (12)$$
+
+Then, Tweedie’s formula is further applied by Bansal et al. (2023); Chung et al. (2022); Yu et al. (2023):
+
+$$\mathbb{E}[\mathbf{x}_0 | \mathbf{x}_t, y] = \mathbf{x}_t + \sigma_t^2 \nabla_{\mathbf{x}_t} \log p_t(\mathbf{x}_t | y).$$
+
+However, as noted by Lu et al. (2023); Song et al. (2023), the approximation used in equation 12 is biased, leading to an incorrect calculation of the guidance term.
+
+In the following, we empirically evaluate the effectiveness of these methods for aligning text-to-image generation tasks. We first identify a previously overlooked issue that contributes to suboptimal alignment performance. Fig 2 illustrates the performance of two vanilla methods under the guidance of PickScore (Kirstain et al., 2023), a reward function that evaluates whether the generated images align with human aesthetic and semantic preferences. The x-axis represents the strength of the guidance term, denoted by  $\alpha$  <sup>1</sup>. Our experiments reveal that tuning this hyperparameter presents significant challenges. Insufficient values of  $\alpha$  produce results indistinguishable from unguided generation, while excessive values introduce substantial artifacts that degrade image quality.
+
+We attribute this phenomenon to the adversarial nature of the guidance mechanism, as observed in prior work (Shen et al., 2024). In equation 19, the guidance term is directly added to the estimated score. If the landscape is not smooth or does not behave well <sup>2</sup>, the adversarial nature of the guidance can lead to undesirable artifacts in the generated images. To address these limitations, our proposed framework provides theoretical guarantees for generating properly aligned distributions with a fixed strength parameter  $\alpha = 1$ . Furthermore, we develop an additional regularization technique for training the guidance network that mitigates these instability issues.
+
+### 3.3 PROPOSED FINETUNING-FREE GUIDANCE
+
+We first utilize the following trick to calculate the conditional expectation. This trick has been used in previous works such as (Ouyang et al., 2024; Lu et al., 2023).
+
+**Lemma 3.2.** *For a neural network  $h_\psi(\mathbf{x}_t, y, t)$  parameterized by  $\psi$ , define the objective*
+
+$$\mathcal{L}_{\text{guidance}}(\psi) := \mathbb{E}_{p(\mathbf{x}_0, \mathbf{x}_t, y)} \left[ \left\| h_\psi(\mathbf{x}_t, y, t) - \exp \left( \frac{1}{\beta} r(\mathbf{x}_0, y) \right) \right\|_2^2 \right], \quad (13)$$
+
+*then its minimizer  $\psi^* = \arg \min_{\psi} \mathcal{L}_{\text{guidance}}(\psi)$  satisfies:*
+
+$$h_{\psi^*}(\mathbf{x}_t, y, t) = \mathbb{E}_{p(\mathbf{x}_0|\mathbf{x}_t, y)} \left[ \exp \left( \frac{1}{\beta} r(\mathbf{x}_0, y) \right) \right].$$
+
+By Lemma 3.2, we can instead estimate the value  $\mathbb{E}_{p(\mathbf{x}_0|\mathbf{x}_t, y)} \left[ \exp \left( \frac{1}{\beta} r(\mathbf{x}_0, y) \right) \right]$  using the guidance network  $h_{\psi^*}$  obtained by minimizing the objective function  $\mathcal{L}_{\text{guidance}}(\psi)$ , which can be approximated by easy sampling from the joint distribution  $p(\mathbf{x}_0, \mathbf{x}_t, y)$ . Then, the estimated score function for the aligned diffusion model can be calculated as follows:
+
+$$\mathbf{s}_{\psi^*}(\mathbf{x}_t, y, t) = \underbrace{\nabla_{\mathbf{x}_t} \log p(\mathbf{x}_t | y)}_{\text{pre-trained model on source}} + \underbrace{\nabla_{\mathbf{x}_t} \log h_{\psi^*}(\mathbf{x}_t, y, t)}_{\text{guidance network}}. \quad (14)$$
+
+To alleviate the adversarial nature of the guidance, we can adopt the consistency regularization  $\mathcal{L}_{\text{consistence}}$  to learn the guidance network  $h_{\psi^*}$  better, i.e., the gradient of  $\mathcal{L}_{\text{consistence}}(\mathbf{x}_t, y, t)$  with respect to  $\mathbf{x}_t$  should match the score in preferred data. The key point of this regularization is that we
+
+<sup>1</sup>Although there is no  $\alpha$  in equation 19, many guidance methods (Lu et al., 2023; Song et al., 2023) add this hyperparameter in practice to balance the strength of guidance term with the score.
+
+<sup>2</sup>We use landscape to describe the change of reward given the change of images.
+
+Table 1: Comparison of finetuning-free alignment algorithms. Our method uniquely provides theoretical guarantees for the correct form for guidance with a step size guarantee.
+
+| Method              | Classifier Guidance                                        | Direct backpropagate (M1)                                                                                   | Tweedie’s formula (M2)                                                                                   | Ours                                                     |
+|---------------------|------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------|----------------------------------------------------------|
+| Formulation         | $\frac{1}{\beta} \nabla_{\mathbf{x}_t} r(\mathbf{x}_t, y)$ | $\nabla_{\mathbf{x}_t} \log \frac{1}{n} \sum_{i=1}^n \exp\left(\frac{1}{\beta} r(\mathbf{x}_i^0, y)\right)$ | $\frac{1}{\beta} \nabla_{\mathbf{x}_t} r(\mathbb{E}_{p(\mathbf{x}_0 \mathbf{x}_t, y)}[\mathbf{x}_0], y)$ | $\nabla_{\mathbf{x}_t} \log h_{\psi^*}(\mathbf{x}_t, y)$ |
+| Unbiased            | $\times$                                                   | $\checkmark$                                                                                                | $\times$                                                                                                 | $\checkmark$                                             |
+| Step size guarantee | $\times$                                                   | $\times$                                                                                                    | $\times$                                                                                                 | $\checkmark$                                             |
+
+cannot easily change the landscape of a given predetermined reward function, but we can regularize the landscape of the learned guidance network to ensure the generation of high-quality images.
+
+$$\psi^* = \arg \min_{\psi} \mathcal{L}_{\text{consistence}}$$
+
+$$:= \mathbb{E}_{q(\mathbf{x}_0, y)} \mathbb{E}_{q(\mathbf{x}_t|\mathbf{x}_0)} \left[ \left\| \nabla_{\mathbf{x}_t} \log p(\mathbf{x}_t|\mathbf{x}_0, y) + \nabla_{\mathbf{x}_t} \log h_{\psi}(\mathbf{x}_t, y, t) - \nabla_{\mathbf{x}_t} \log q(\mathbf{x}_t|\mathbf{x}_0, y) \right\|_2^2 \right]. \quad (15)$$
+
+Combining the consistency regularization terms together with the original guidance loss equation 24, the final learning objective for the guidance network can be described as follows:
+
+$$\psi^* = \arg \min_{\psi} \{ \mathcal{L}_{\text{guidance}} + \eta \mathcal{L}_{\text{consistence}} \}, \quad (16)$$
+
+where  $\eta \geq 0$  are hyperparameters that control the strength of additional regularization, which also enhances the flexibility of our solution scheme.
+
+### 3.4 FURTHER IMPROVEMENT TO ONE-STEP GENERATION
+
+The training objective in equation 24 and equation 15 is agnostic to the reference model, meaning we can use any pre-trained diffusion model with any reward function, whether differentiable or not. Given that one-step generative models are fast and computationally efficient for practical use, can we design an explicit training objective for a one-step text-to-image model?
+
+Surprisingly, the solution is remarkably simple—instead of sampling  $t$  uniformly from  $[0, T]$ , we can simply set  $t = T$ . This small modification offers several advantages. First, while one-step diffusion models may not perform as well as few-step (2–4) models (Salimans & Ho, 2022), we empirically find that with additional guidance, their performance improves significantly, as presented in Section 4.3. Additionally, the guidance network  $h_{\psi}$  becomes time-independent, meaning it always guides the diffusion model from  $\mathbf{x}_T$  to  $\mathbf{x}_0$ . Empirically, we find that  $h_{\psi}$  is easy to train—with ten training epochs on the Pick-a-Pic V1 dataset, our guidance network produces high-quality images, which can be found in Section 4.2. We summarize the final learning pipeline in Algorithm 1 in the Appendix.
+
+### 3.5 FURTHER EXTENSION TO FLOW MATCHING
+
+Given that state-of-the-art models are grounded in Diffusion Transformers (Peebles & Xie, 2022) and flow matching (Lipman et al., 2022), we present the exact form of flow-matching guidance in the theorem below.
+
+**Theorem 3.3.** *Let  $\phi^*$  be the optimal solution for the conditional flow matching model trained on target domain  $q(\mathbf{x}_1, y)$  (where  $\mathbf{x}_1$  are sampled from data distribution,  $\mathbf{v}_q(\mathbf{x}_t, y, t)$  denotes the oracle velocity field on target distribution), i.e.,*
+
+$$\phi_q^* = \arg \min_{\phi} \mathbb{E}_t \left\{ \mathbb{E}_{q_t(\mathbf{x}_t|y)} \left[ \left\| \mathbf{v}_{\phi}(\mathbf{x}_t, y, t) - \mathbf{v}_q(\mathbf{x}_t, y, t) \right\|_2^2 \right] \right\},$$
+
+then
+
+$$\mathbf{v}_{\phi_q^*}(\mathbf{x}_t, y, t) = \mathbf{v}_{\phi_p}(\mathbf{x}_t, y, t) + \mathbb{E}_{\mathbf{x}_1 \sim p_{1|t}(\mathbf{x}_1|\mathbf{x}_t, y)} \left[ \left( \frac{\exp\left(\frac{1}{\beta} r(\mathbf{x}_1, y)\right)}{\mathbb{E}_{\mathbf{x}'_1 \sim p_{1|t}(\mathbf{x}'_1|\mathbf{x}_t, y)} \left[ \exp\left(\frac{1}{\beta} r(\mathbf{x}'_1, y)\right) \right]} - 1 \right) \mathbf{v}_t(\mathbf{x}_t | \mathbf{x}_1, y) \right], \quad (17)$$
+
+According to the formulation of equation 17, we propose a training-free guidance that directly calculates the guidance term, which can be found in A.2. Compared with no base-model fine-tuning proposed in equation 14, this formulation offers greater computational efficiency.
+
+## 4 EXPERIMENTAL RESULTS
+
+In this section, we present our comprehensive experimental evaluation, demonstrating the effectiveness of our finetuning-free method for sampling directly from reward-guided distributions. We first outline our experimental setup and evaluation criteria in Section 4.1, followed by benchmark results against state-of-the-art methods in Section 4.2. Finally, we provide an in-depth ablation study that validates our key theoretical claims and demonstrates the superior performance of our guidance network in Section 4.3.
+
+### 4.1 EXPERIMENTAL SETUP
+
+We follow the official configurations recommended for SPO (Liang et al., 2024), Diffusion-DPO (Wallace et al., 2023), and MAPO (She et al., 2024). Diffusion-DPO and MAPO are fine-tuned on the Pick-a-Pic V2 dataset, which contains over 800k image preference pairs. In contrast, SPO is fine-tuned online using 4k text prompts (without images) randomly selected from Pick-a-Pic V1. Our method trains the guidance network offline using 583k image preference pairs from Pick-a-Pic V1. Overall, our method and the competing models in the text-to-image alignment benchmark are trained on comparable datasets, allowing for a fair comparison.
+
+We adopt Stable Diffusion XL (SDXL)-Turbo as the reference model for one-step text-to-image generation. SDXL-Turbo is specifically designed for fast inference by incorporating a distillation process that reduces the number of required denoising steps while maintaining high image quality. Unlike SDXL, which typically requires 20–50 steps for high-fidelity generation, SDXL-Turbo leverages progressive distillation (Sauer et al., 2023) to achieve comparable performance in as few as one to four steps. Since the distillation dataset is a subset of the original SDXL training data, it may not introduce additional information to improve performance. We also include ablation studies in Section 4.3 to verify the effectiveness of our method.
+
+**Implementation Detail** Since the guidance network takes noisy images  $x_T$  and prompts  $y$  as input and outputs a scalar value, we adopt the same variational autoencoder (VAE), tokenizer, and text encoder from the reference diffusion model for encoding image and text. Consequently, the trainable parameters of our guidance network are quite small. In practice, we adopt two convolutional layers for processing VAE-encoded feature maps and a five-layer multi-layer perceptron (MLP) to project the image and text embedding to a scalar. The total parameter size of the guidance network is only 72 MB, making it lightweight and easy to train. We train the guidance network on the Pick-a-Pic training dataset for 10 epochs with batch size 32, Adam optimizer, learning rate 1e-3, and hyperparameters  $\eta = 1$ .
+
+**Evaluation Criterion** Following established evaluation protocols (Wallace et al., 2023; Liang et al., 2024), we report quantitative results using 500 validation prompts from the validation unique split of Pick-a-Pic. We adopt four evaluation criteria to evaluate different aspects of image quality. PickScore (Kirstain et al., 2023) measures overall human preference by aggregating judgments on aesthetic appeal, coherence, and realism. HPSV2 (Wu et al., 2023) assesses prompt adherence, ensuring the generated image accurately reflects the given textual description. ImageReward (Xu et al., 2023) quantifies human preference based on fine-grained attributes such as composition, detail preservation, and semantic relevance. Lastly, the aesthetic evaluation model from LAION (Schuhmann, 2022) focuses on visual appeal, capturing factors such as color harmony, style, and artistic quality.
+
+### 4.2 EXPERIMENTAL RESULTS
+
+As shown in Table 2, our method surpasses baseline approaches across four evaluation criteria, demonstrating its effectiveness in enhancing text-to-image alignment. The improvements are observed in both perceptual quality and semantic coherence, indicating that our guidance network
+
+432  
+433  
+434  
+435  
+436  
+437  
+438  
+439  
+440  
+441  
+442  
+443  
+444  
+445  
+446  
+447  
+448  
+449  
+450  
+451  
+452  
+453  
+454  
+455  
+456  
+457  
+458  
+459  
+460  
+461  
+462  
+463  
+464  
+465  
+466  
+467  
+468  
+469  
+470  
+471  
+472  
+473  
+474  
+475  
+476  
+477  
+478  
+479  
+480  
+481  
+482  
+483  
+484  
+485
+
+![Figure 3: A row of six images showing a frog holding an apple in a forest. The images are labeled: 'No guidance 1-step', 'No guidance 2-step', 'No guidance 3-step', 'Tweedie's 1-step', 'Backpropagate 1-step', and 'Our 1-step'. The 'Our 1-step' image shows a more refined and detailed frog compared to the others.](0ba998c66ef6a980bac9c0c12e9452bf_img.jpg)
+
+Figure 3: A row of six images showing a frog holding an apple in a forest. The images are labeled: 'No guidance 1-step', 'No guidance 2-step', 'No guidance 3-step', 'Tweedie's 1-step', 'Backpropagate 1-step', and 'Our 1-step'. The 'Our 1-step' image shows a more refined and detailed frog compared to the others.
+
+Figure 3: Effectiveness of the Proposed Method: The results demonstrate that 2-step and 3-step generation significantly improve the quality of the generated images compared to one-step generation. While two vanilla guidance methods (Tweedie’s formula or directly backpropagation summarized in Section 3.2) fail to produce meaningful changes in the scene despite appropriate guidance strength, our method successfully achieves this enhancement. The prompt is “A photo of a frog holding an apple while smiling in the forest”.
+
+Table 2: Benchmark comparison of different methods on text-to-image alignment. Our method achieves the highest scores in PickScore, HPSV2, and Aesthetic metrics, demonstrating superior alignment and image quality.
+
+| Type             | Method               | PickScore    | HPSV2        | ImageReward   | Aesthetic     | Training GPU Hour |
+|------------------|----------------------|--------------|--------------|---------------|---------------|-------------------|
+| Baseline         | SDXL                 | 21.95        | 26.95        | 0.5380        | 5.950         | -                 |
+| Training-free    | Direct backpropagate | 21.84        | 27.53        | 0.5870        | 5.922         | -                 |
+|                  | Tweedie’s formula    | 22.34        | 28.76        | 0.9501        | 6.002         | -                 |
+| Finetuning-based | Diff.-DPO            | 22.64        | 29.31        | 0.9436        | 6.015         | 4800              |
+|                  | SPO                  | 23.06        | 31.80        | <b>1.0803</b> | 6.364         | 234               |
+| Finetuning-free  | Ours                 | <b>23.08</b> | <b>32.12</b> | 1.0625        | <b>6.452</b>  | <b>92</b>         |
+| Baseline         | SD3.5 large turbo    | 22.30        | 30.29        | 1.0159        | 6.5190        | -                 |
+| Finetuning-free  | Ours                 | <b>23.14</b> | <b>32.31</b> | 1.1025        | <b>6.5280</b> | -                 |
+
+successfully refines image generation to better match textual descriptions. This performance gain highlights the advantages of our lightweight architecture and the optimization strategy used during training. Figure 1 provides a qualitative comparison with baseline methods, further illustrating the superior visual fidelity and text alignment achieved by our approach.
+
+### 4.3 ABLATION STUDY
+
+In this section, we first verify the advantages of our proposed method against other finetuning-free guidance methods in Table 1. We then analyze the impact of few-step (2–4) generation compared to one-step generation, highlighting how our guidance term significantly enhances performance.
+
+As illustrated in Figure 3, vanilla guidance methods struggle to induce meaningful improvements in generated images, even with carefully tuned guidance strength. Increasing the guidance parameter  $\alpha$  often leads to undesirable artifacts rather than quality improvements. In contrast, our method effectively enhances image generation by leveraging a regularized guidance network, demonstrating its ability to refine scene details and improve alignment with input prompts.
+
+Figure 4: Ablation study comparing the performance of our method with no guidance and two vanilla guidance methods under one-step and multi-step generation. Our method outperforms all baselines, which demonstrates the effectiveness of our guidance network in refining image quality and prompt alignment.
+
+| Method                 | PickScore    |
+|------------------------|--------------|
+| Ours (1 step)          | <b>23.08</b> |
+| No guidance (1 step)   | 22.14        |
+| Tweedie’s (1 step)     | 22.34        |
+| Backpropagate (1 step) | 21.84        |
+| No guidance (2 steps)  | 22.64        |
+| No guidance (3 steps)  | 22.56        |
+
+To further explore this, we examine the performance of our method against two vanilla guidance techniques, Tweedie’s and Backpropagate, as well as the no guidance baseline, all under a one-step sampling condition. As shown in Table 4, our method achieves the highest PickScore. This demonstrates that our regularized guidance network provides a substantial improvement over no guidance scenario and traditional methods. Consistent with prior studies, increasing the number of steps from one to two or three results in improved image quality, as shown in Figure 3 and Table 4. However, our method enables one-step generation to achieve performance even better than 2- or 3-step generation, highlighting the power of our guidance network. In Appendix B, we include the sensitive analysis of the regularization strength and we provide the experiments with non-differentiable reward on the GenEval benchmark (Ghosh et al., 2023) in Appendix B.4.
+
+## 5 CONCLUSION
+
+In this paper, we introduced a novel finetuning-free framework for aligning text-to-image diffusion models with human preferences. By formulating alignment as sampling from a reward-weighted distribution, our approach eliminates the need for computationally expensive fine-tuning and instead leverages a plug-and-play guidance mechanism. Specifically, we decomposed the score function into a pre-trained score and an additional guidance term, enabling efficient alignment without modifying the underlying diffusion model. Moreover, we identified a key challenge: the adversarial nature of the guidance term can lead to undesirable artifacts. To mitigate this, we proposed a regularization strategy that stabilizes guidance. Our experimental results on the text-to-image benchmark demonstrated that our method effectively aligns model outputs with human preferences.
+
+## ETHICS STATEMENT
+
+This work complies with the ICLR Code of Ethics. It does not involve human subjects, sensitive personal information, or experiments with potential harm to individuals or communities. All experiments rely exclusively on publicly available datasets and benchmarks.
+
+## REPRODUCIBILITY STATEMENT
+
+We attach the code in the supplementary materials. The assumption and theoretical result can be found in Theorem A.1. The proof can be found in Appendix A.1.
+
+## REFERENCES
+
+- Brian. D. O. Anderson. Reverse-time diffusion equation models. *Stochastic Processes and their Applications*, 12:313–326, 1982. URL <https://api.semanticscholar.org/CorpusID:3897405>.
+- Arpit Bansal, Hong-Min Chu, Avi Schwarzschild, Soumyadip Sengupta, Micah Goldblum, Jonas Geiping, and Tom Goldstein. Universal guidance for diffusion models. *2023 IEEE/CVF Conference on Computer Vision and Pattern Recognition Workshops (CVPRW)*, pp. 843–852, 2023. URL <https://api.semanticscholar.org/CorpusID:256846836>.
+- Georgios Batzolis, Jan Stanczuk, Carola-Bibiane Schönlieb, and Christian Etmann. Conditional image generation with score-based diffusion models. *ArXiv*, abs/2111.13606, 2021. URL <https://api.semanticscholar.org/CorpusID:244709128>.
+- James Betker, Gabriel Goh, Li Jing, TimBrooks, Jianfeng Wang, Linjie Li, LongOuyang, JuntangZhuang, JoyceLee, YufeiGuo, WesamManassra, PrafullaDhariwal, CaseyChu, YunxinJiao, and Aditya Ramesh. Improving image generation with better captions. URL <https://api.semanticscholar.org/CorpusID:264403242>.
+- Kevin Black, Michael Janner, Yilun Du, Ilya Kostrikov, and Sergey Levine. Training diffusion models with reinforcement learning. *ArXiv*, abs/2305.13301, 2023. URL <https://api.semanticscholar.org/CorpusID:258833251>.
+
+- 540 Ralph Allan Bradley and Milton E. Terry. Rank analysis of incomplete block designs: I.  
+541 the method of paired comparisons. *Biometrika*, 39:324, 1952. URL <https://api.semanticscholar.org/CorpusID:125209808>.  
+542  
+543 Souradip Chakraborty, Jiahao Qiu, Hui Yuan, Alec Koppel, Dinesh Manocha, Furong Huang, Amrit  
+544 Bedi, and Mengdi Wang. MaxMin-RLHF: Alignment with diverse human preferences. In *Pro-*  
+545 *ceedings of the 41st International Conference on Machine Learning*, volume 235 of *Proceedings*  
+546 *of Machine Learning Research*, pp. 6116–6135. PMLR, 2024.  
+547  
+548 Tianqi Chen, Bing Xu, Chiyuan Zhang, and Carlos Guestrin. Training deep nets with sublinear  
+549 memory cost. *ArXiv*, abs/1604.06174, 2016. URL <https://api.semanticscholar.org/CorpusID:15865278>.  
+550  
+551 Hyungjin Chung, Jeongsol Kim, Michael T. McCann, Marc Louis Klasky, and J. C. Ye. Diffu-  
+552 sion posterior sampling for general noisy inverse problems. *ArXiv*, abs/2209.14687, 2022. URL  
+553 <https://api.semanticscholar.org/CorpusID:252596252>.  
+554  
+555 Kevin Clark, Paul Vicol, Kevin Swersky, and David J. Fleet. Directly fine-tuning diffusion models  
+556 on differentiable rewards. *ICLR*, 2024. URL <https://api.semanticscholar.org/CorpusID:263310957>.  
+557  
+558 Ying Fan, Olivia Watkins, Yuqing Du, Hao Liu, Moonkyung Ryu, Craig Boutilier, P. Abbeel,  
+559 Mohammad Ghavamzadeh, Kangwook Lee, and Kimin Lee. Dpok: Reinforcement learning  
+560 for fine-tuning text-to-image diffusion models. *ArXiv*, abs/2305.16381, 2023. URL <https://api.semanticscholar.org/CorpusID:258947323>.  
+561  
+562 Dhruba Ghosh, Hanna Hajishirzi, and Ludwig Schmidt. Geneval: An object-focused framework  
+563 for evaluating text-to-image alignment. *ArXiv*, abs/2310.11513, 2023. URL <https://api.semanticscholar.org/CorpusID:264288728>.  
+564  
+565 Alexandros Graikos, Nikolay Malkin, Nebojsa Jojic, and Dimitris Samaras. Diffusion mod-  
+566 els as plug-and-play priors. *ArXiv*, abs/2206.09012, 2022. URL <https://api.semanticscholar.org/CorpusID:249889060>.  
+567  
+568 Jonathan Ho, Ajay Jain, and Pieter Abbeel. Denoising diffusion probabilistic models. In *NeurIPS*,  
+569 2020.  
+570  
+571 J. Edward Hu, Yelong Shen, Phillip Wallis, Zeyuan Allen-Zhu, Yuanzhi Li, Shean Wang, and  
+572 Weizhuo Chen. Lora: Low-rank adaptation of large language models. *ArXiv*, abs/2106.09685,  
+573 2021. URL <https://api.semanticscholar.org/CorpusID:235458009>.  
+574  
+575 Natasha Jaques, Shixiang Shane Gu, Dzmitry Bahdanau, José Miguel Hernández-Lobato, Richard E.  
+576 Turner, and Douglas Eck. Sequence tutor: Conservative fine-tuning of sequence generation mod-  
+577 els with kl-control. In *International Conference on Machine Learning*, 2016. URL <https://api.semanticscholar.org/CorpusID:15636415>.  
+578  
+579 Natasha Jaques, Judy Hanwen Shen, Asma Ghandeharioun, Craig Ferguson, Àgata Lapedriza,  
+580 Noah Jones, Shixiang Shane Gu, and Rosalind Picard. Human-centric dialog training  
+581 via offline reinforcement learning. *ArXiv*, abs/2010.05848, 2020. URL <https://api.semanticscholar.org/CorpusID:222291028>.  
+582  
+583 Yuval Kirstain, Adam Polyak, Uriel Singer, Shahbuland Matiana, Joe Penna, and Omer Levy. Pick-  
+584 a-pic: An open dataset of user preferences for text-to-image generation. *ArXiv*, abs/2305.01569,  
+585 2023. URL <https://api.semanticscholar.org/CorpusID:258437096>.  
+586  
+587 Kimin Lee, Hao Liu, Moonkyung Ryu, Olivia Watkins, Yuqing Du, Craig Boutilier, P. Abbeel,  
+588 Mohammad Ghavamzadeh, and Shixiang Shane Gu. Aligning text-to-image models using human  
+589 feedback. *ArXiv*, abs/2302.12192, 2023. URL <https://api.semanticscholar.org/CorpusID:257102772>.  
+590  
+591 Xiner Li, Yulai Zhao, Chenyu Wang, Gabriele Scalia, Gökçen Eraslan, Surag Nair, Tommaso Bian-  
+592 calani, Aviv Regev, Sergey Levine, and Masatoshi Uehara. Derivative-free guidance in continuous  
+593 and discrete diffusion models with soft value-based decoding. *ArXiv*, abs/2408.08252, 2024. URL  
+594 <https://api.semanticscholar.org/CorpusID:271874728>.  
+595
+
+- 594 Zhanhao Liang, Yuhui Yuan, Shuyang Gu, Bohan Chen, Tiankai Hang, Ji Li, and Liang Zheng. Aes-  
+595 thetic post-training diffusion models from generic preferences with step-by-step preference op-  
+596 timization. *ArXiv*, abs/2406.04314, 2024. URL [https://api.semanticscholar.org/](https://api.semanticscholar.org/CorpusID:270285804)  
+597 CorpusID:270285804.
+- 598 Yaron Lipman, Ricky T. Q. Chen, Heli Ben-Hamu, Maximilian Nickel, and Matt Le. Flow  
+599 matching for generative modeling. *ArXiv*, abs/2210.02747, 2022. URL [https://api.](https://api.semanticscholar.org/CorpusID:252734897)  
+600 [semanticscholar.org/CorpusID:252734897](https://api.semanticscholar.org/CorpusID:252734897).
+- 601
+- 602 Cheng Lu, Huayu Chen, Jianfei Chen, Hang Su, Chongxuan Li, and Jun Zhu. Contrastive energy  
+603 prediction for exact energy-guided diffusion sampling in offline reinforcement learning. In *In-  
+604 ternational Conference on Machine Learning*, 2023. URL [https://api.semanticscholar.](https://api.semanticscholar.org/CorpusID:258309302)  
+605 [org/CorpusID:258309302](https://api.semanticscholar.org/CorpusID:258309302).
+- 606 R. Duncan Luce. Individual choice behavior: A theoretical analysis. 1979. URL [https://api.](https://api.semanticscholar.org/CorpusID:123178801)  
+607 [semanticscholar.org/CorpusID:123178801](https://api.semanticscholar.org/CorpusID:123178801).
+- 608
+- 609 Nanye Ma, Shangyuan Tong, Haolin Jia, Hexiang Hu, Yu-Chuan Su, Mingda Zhang, Xuan Yang,  
+610 Yandong Li, T. Jaakkola, Xuhui Jia, and Saining Xie. Inference-time scaling for diffusion mod-  
+611 els beyond scaling denoising steps. 2025. URL [https://api.semanticscholar.org/](https://api.semanticscholar.org/CorpusID:275570556)  
+612 CorpusID:275570556.
+- 613 Long Ouyang, Jeff Wu, Xu Jiang, Diogo Almeida, Carroll L. Wainwright, Pamela Mishkin, Chong  
+614 Zhang, Sandhini Agarwal, Katarina Slama, Alex Ray, John Schulman, Jacob Hilton, Fraser Kel-  
+615 ton, Luke E. Miller, Maddie Simens, Amanda Askell, Peter Welinder, Paul Francis Christiano,  
+616 Jan Leike, and Ryan J. Lowe. Training language models to follow instructions with human  
+617 feedback. *ArXiv*, abs/2203.02155, 2022. URL [https://api.semanticscholar.org/](https://api.semanticscholar.org/CorpusID:246426909)  
+618 CorpusID:246426909.
+- 619 Yidong Ouyang, Liyan Xie, Hongyuan Zha, and Guang Cheng. Transfer learning for diffusion  
+620 models. *NeurIPS*, 2024. URL [https://api.semanticscholar.org/CorpusID:](https://api.semanticscholar.org/CorpusID:270063340)  
+621 270063340.
+- 622
+- 623 William S. Peebles and Saining Xie. Scalable diffusion models with transformers. *2023 IEEE/CVF*  
+624 *International Conference on Computer Vision (ICCV)*, pp. 4172–4182, 2022. URL [https:](https://api.semanticscholar.org/CorpusID:254854389)  
+625 [//api.semanticscholar.org/CorpusID:254854389](https://api.semanticscholar.org/CorpusID:254854389).
+- 626 Robin L. Plackett. The analysis of permutations. *Journal of The Royal Statistical Society Series*  
+627 *C-applied Statistics*, 24:193–202, 1975. URL [https://api.semanticscholar.org/](https://api.semanticscholar.org/CorpusID:116534299)  
+628 CorpusID:116534299.
+- 629
+- 630 Dustin Podell, Zion English, Kyle Lacey, A. Blattmann, Tim Dockhorn, Jonas Muller, Joe Penna,  
+631 and Robin Rombach. Sdxl: Improving latent diffusion models for high-resolution image syn-  
+632 thesis. *ArXiv*, abs/2307.01952, 2023. URL [https://api.semanticscholar.org/](https://api.semanticscholar.org/CorpusID:259341735)  
+633 CorpusID:259341735.
+- 634 Mihir Prabhudesai, Anirudh Goyal, Deepak Pathak, and Katerina Fragkiadaki. Aligning text-to-  
+635 image diffusion models with reward backpropagation. *ArXiv*, abs/2310.03739, 2023. URL  
+636 <https://api.semanticscholar.org/CorpusID:263671961>.
+- 637
+- 638 Rafael Rafailov, Archit Sharma, Eric Mitchell, Christopher D Manning, Stefano Ermon, and Chelsea  
+639 Finn. Direct preference optimization: Your language model is secretly a reward model. *Advances*  
+640 *in Neural Information Processing Systems*, 36, 2024.
+- 641 Robin Rombach, A. Blattmann, Dominik Lorenz, Patrick Esser, and Björn Ommer. High-resolution  
+642 image synthesis with latent diffusion models. *2022 IEEE/CVF Conference on Computer Vision*  
+643 *and Pattern Recognition (CVPR)*, pp. 10674–10685, 2021.
+- 644 Chitwan Saharia, William Chan, Saurabh Saxena, Lala Li, Jay Whang, Emily L. Denton, Seyed  
+645 Kamyar Seyed Ghasemipour, Burcu Karagol Ayan, Seyedeh Sara Mahdavi, Raphael Gontijo  
+646 Lopes, Tim Salimans, Jonathan Ho, David J. Fleet, and Mohammad Norouzi. Photorealistic  
+647 text-to-image diffusion models with deep language understanding. *ArXiv*, abs/2205.11487, 2022.  
+URL <https://api.semanticscholar.org/CorpusID:248986576>.
+
+[Appendix and supplementary materials beyond page 12 have been removed.]

@@ -1,0 +1,1940 @@
+# EVA: EVOLUTIONARY ATTACKS ON GRAPHS
+
+
+**Anonymous authors**
+Paper under double-blind review
+
+
+ABSTRACT
+
+
+Even a slight perturbation in the graph structure can cause a significant drop in the
+accuracy of graph neural networks (GNNs). Most existing attacks leverage gradient
+information to perturb edges. This relaxes the attack’s optimization problem from
+a discrete to a continuous space, resulting in solutions far from optimal. It also
+restricts the adaptability of the attack to non-differentiable objectives. Instead,
+we propose an evolutionary-based algorithm to solve the discrete optimization
+problem directly. Our Evolutionary Attack (EvA) works with any black-box
+model and objective, eliminating the need for a differentiable proxy loss. This
+permits us to design two novel attacks that: reduce the effectiveness of robustness
+certificates and break conformal sets. We introduce a sparse encoding that results
+in memory complexity that is linear in the attack budget. EvA reduces the accuracy
+by an additional _∼_ 11% on average compared to the best previous attack, revealing
+significant untapped potential in designing attacks.
+
+
+1 INTRODUCTION
+
+
+Given the widespread applications of graph neural networks (GNNs), studying their robustness to
+natural and adversarial noise is of great importance. In node classification, GNNs leverage the edge
+structure between data points to improve their performance. However, a small perturbation in the
+graph structure (adding or removing a few edges) can significantly reduce GNNs’ accuracy, even
+below the performance of an MLP (which completely discards the structure). Similar to images
+and continuous data, most of the proposed (structure) attacks are gradient-based. They compute the
+gradients of a loss w.r.t. the adjacency matrix and apply a perturbation according to that. Gradientbased attacks face several challenges. They solve a relaxation of the original combinatorial (discrete)
+optimization problem – the entries of the adjacency matrix are relaxed from _{_ 0 _,_ 1 _}_ to [0 _,_ 1]. They
+need a differentiable proxy loss function since the actual objective of the attacker (e.g. accuracy) is
+often not differentiable, and the usual proxy such cross-entropy is suboptimal (Geisler et al., 2023).
+They assume white-box access to the model, including the structure and the weights. This limits the
+applicability or requires surrogate models. They can provide a false sense of security since defenses
+may be obfuscating gradients (Athalye et al., 2018; Geisler et al., 2023) and can get stuck in local
+minima. Their memory complexity grows quadratically w.r.t the number of nodes. Although the
+adjacency matrix is often sparse, the gradients w.r.t. it are not. As a result, tricks like block coordinate
+descent are needed (Geisler et al., 2021). We propose a model-agnostic evolutionary attack (EvA)
+that fixes all five of the above issues.
+
+
+EvA explores the space of possible perturbations with a genetic algorithm (GA). Our approach
+operates in the discrete space of potential perturbations without information from gradients – avoiding
+relaxation. It directly optimizes the objective (like accuracy) as long as it provides a meaningful
+signal. In addition to eliminating the need for a differentiable proxy, this black-box access to the
+objective enables us to define a broader class of attacks. In fact, it allowed us to easily design two
+novel attacks on graphs that aim at decreasing the effectiveness of robustness certificates or that break
+conformal guarantees. EvA shows outstanding effectiveness on vanilla and adversarially trained
+models compared to SOTA attacks. Unlike the gradient-based attacks, our attack has a _O_ ( _ϵ · E_ )
+memory complexity where _ϵ_ is the perturbation budget, and _E_ is the number of edges. This is because
+instead of storing a squared block of gradients, which scales with the size of the adjacency matrix,
+we only store the edge perturbations as an index. During the evaluation, we also maintain the same
+sparsity in representation as the graph itself. To take advantage of the available free memory, we
+employ a batch evaluation approach that speeds up the optimization.
+
+
+1
+
+
+Adversarial attacks are supposed to be imperceptible. In
+images, this is modeled by a _Lp_ -ball of a small radius.
+Similarly, for the graph structure, a commonly used metric
+is the _L_ 0 ball, which allows changing of the node degree significantly. Since this may be perceptible, we can
+incorporate _constraints_ in our attack that limit the number of perturbations per node, in addition to the global
+budget. Similar to gradient-based attacks (Geisler et al.,
+2021), we set this so-called local budget to a fraction of the
+node’s original degree. Interestingly, in some cases, our
+constrained attack can even beat the best unconstrained
+gradient-based attack. Overall, EvA finds significantly
+better solutions compared to the previous state-of-the-art
+methods (Geisler et al., 2021; Gosch et al., 2024), which
+highlight the sub-optimality of gradient-based methods.
+
+
+Given the black-box nature of EvA, we were easily able
+to introduce the first graph certificate attack. One defense
+against adversarial attacks is to certify the prediction of a
+(smoothed) classifier (Bojchevski et al., 2020).
+
+
+|Col1|Col2|Col3|Col4|Col5|Col6|Col7|
+|---|---|---|---|---|---|---|
+||||||||
+|||||~~_ϵ_ =~~<br>_ϵ_ =|~~  0~~~~_._05~~<br>  0_._1||
+||||||||
+||||||||
+||||||||
+
+
+Certificates provide a robustness guarantee that the prediction will not change given a limited set of
+possible perturbations (e.g., at most _ra_ additions and _rd_ deletions). The certified ratio is the fraction
+of nodes for which the guarantee holds. Here, we define the attacker’s objective as decreasing the
+certified ratio. EvA can decrease the ratio below the MLP level (which is by definition robust to any
+perturbation in structure), while also preserving the clean accuracy – making it less noticable to a
+defender. We also introduce the first conformal attack on graphs. Conformal prediction (CP) converts
+any model’s output to prediction sets with a guarantee to cover the true label with (adjustable) high
+probability. With EvA we can attack these conformal sets to either break the guarantee of increase
+the sets size (making them useless). While in principle one can design gradient-based attacks for
+these two new objectives, the amount of work is nontrivial since there are many non-differentiable
+components that would need to be relaxed. In contrast, for EvA, designing a new attack is simply a
+matter of changing the fitness function of the GA.
+
+
+Importantly, perhaps the main contributions of this work is to highlight a scarcely explored research
+direction for attacks. Even off-the-shelf genetic algorithms significantly outperform gradient-based
+attacks. Fig. 1 compares EvA to the other attacks proposed over time. Our custom adaptive mutation
+further improves performance, but we argue that the space of evolutionary (and more broadly searchbased) attacks has a lot of untapped potential.
+
+
+2 BACKGROUND AND RELATED WORK
+
+
+**Problem setup.** We focus on attacking the semi-supervised node classification task on graphs via
+perturbing a small number of edges. Formally, we are given a graph _G_ = ( _**X**_ _,_ _**A**_ _,_ _**y**_ ) in which _**X**_ is
+the features matrix assigning a feature vector _**x**_ _i_ to each node _vi_ in the graph, _**A**_ is the adjacency
+matrix (often sparse) that represents the set of edges _E_, and _**y**_ is the partially observable vector of
+labels. Nodes are partitioned into labeled and unlabeled sets _V_ = _Vl ∪Vu_ . The GNN is trained on an
+observed subgraph _G_ tr that includes the labeled nodes. Gosch et al. (2024) argue that the transductive
+setup, where _G_ tr = _G_ is unrealistic since perfect robustness can be achieved by memorizing the
+training graph. Therefore, we mainly focus on the inductive setting where a model _f_ is trained on an
+induced subgraph _G_ tr _⊆G_, validated on _G_ val _⊆G_ and tested on _G_ test where _G_ tr _⊂G_ val _⊂G_ test = _G_ .
+
+**Threat model.** Our goal is to find a perturbation matrix _**P**_ _∈{_ 0 _,_ 1 _}_ _[n][×][n]_ that flips entities of the
+adjacency matrix _**A**_ [˜] = _**A**_ _⊕_ _**P**_ to decrease the accuracy as much as possible. Here _n_ = _|V|_, and _⊕_ is
+the element-wise XOR operator. For a given function _f_ as the GNN model, the accuracy is defined
+as [�] _vi∈V_ att [(1] _[/][|V]_ [att] _[|]_ [)] _[ ·]_ **[ 1]** [[] _[f]_ [(] _[G]_ [)] _[v]_ _i_ [=] _[y][i]_ []] [where] _[V]_ [att] [is] [the] [set] [of] [nodes] [that] [we] [attack.] [In] [global]
+
+attacks this is usually the test nodes, while in targeted attacks the target is a single node. To keep the
+perturbations imperceptible, we assume that the adversary can only perturb up to _δ_ := _ϵ_ _·|E_ [ _V_ att : _V_ ] _|_
+edges where _E_ [ _A_ : _B_ ] is the subset of edges between nodes in _A_ and _B_ . Formally, for any generic
+
+
+2
+
+
+0.8
+
+
+0.7
+
+
+0.6
+
+
+Attack
+
+
+Figure 1: Reported performance of various attacks for transductive setting
+
+
+loss function _L_,
+
+
+define the fitness function fit : [ _[n]_ 2 [(] _[n][ −]_ [1)]] _[δ]_ _[�→]_ [R][,] [as] [fit(] _**[s]**_ [)] [=] _[L]_ [(] _**[X]**_ _[,]_ _**[ A]**_ _[ ⊕]_ _**[P][s]**_ _[,]_ _**[ y]**_ [)][.] [Note] [that] [this]
+
+objective can be non-differentiable, such as accuracy. As long as the loss function has enough
+sensitivity to differentiate between various individuals, we use it directly as the fitness (see § 4 for
+extended discussion). (iii) Crossover: Is an operation that defines a new population element by
+combining two existing ones. The crossover operation at point _j_ defines a new candidate vector
+_**s**_ new = cross _j_ ( _**s**_ 1 _,_ _**s**_ 2) := _**s**_ 1[: _j_ ] _•_ _**s**_ [ _j_ + 1 :] where _•_ is the concatenation of two vectors. Crossover
+
+
+_**P**_ = arg max _L_ ( _f_ ( _G_ ( _**X**_ _,_ _**A**_ _⊕_ _**P**_ ))att _,_ _**y**_ att)
+_**P**_ (1)
+
+_s.t._ **1** _N_ _**P**_ **1** _[⊤]_ _N_ _[≤]_ _[ϵ][ · |E]_ [[] _[V]_ [att] [:] _[ V]_ []] _[|]_
+
+
+Here _f_ ( _·_ )att returns the vector of predictions for the nodes in _V_ att. In an evasion attack, _L_ is the
+accuracy. Eq. 1 can include additional constraints like the local constraint from Gosch et al. (2023)
+that restrict the number of perturbation per node to some fraction (e.g., half) of its degree.
+
+
+**Gradient-based attacks.** A common approach to attack the graph structure is to compute the gradient
+of the loss function w.r.t. the adjacency matrix. This requires a relaxation on the domain of _**A**_ from
+_{_ 0 _,_ 1 _}_ _[n][×][n]_ to [0 _,_ 1] _[n][×][n]_ . If the loss function is not differentiable (e.g., accuracy), then a differentiable
+surrogate like the categorical cross entropy or tanh-margin (Geisler et al., 2023) is used instead.
+We compute the derivatives of the loss w.r.t. _**A**_ and update the perturbation matrix. Finally, the
+edges are either sampled or rounded from the perturbation matrix, which returns the solution to the
+binary domain. There are various tricks to improve gradient-based attacks, but most follow a similar
+high-level procedure.
+
+
+**Related Work.** Adversarial attacks on graphs are generally divided into two main categories: evasion
+attacks Xu et al. (2019); Zügner et al. (2018); Geisler et al. (2023); Gosch et al. (2024), where the
+attacker perturbs the graph after the model has been trained, and poisoning attacks Zügner et al.
+(2020); Lingam et al. (2023); Zügner et al. (2018), where the attacker modifies the graph prior to
+training. These attacks can be further classified into global attacks (e.g., Geisler et al. (2023); Zhu
+et al. (2023)), which target multiple node predictions simultaneously, and targeted attacks, which
+focus on a single node or a subset of nodes. The manipulations can involve altering node attributes,
+modifying edge structures, or introducing malicious nodes. The earliest adversarial attacks on graphs
+were inspired by techniques used on continuous data, utilizing gradients to approximate perturbations
+on inherently discrete edges Xu et al. (2019); Zügner et al. (2018); Geisler et al. (2023). Additionally,
+reinforcement learning has been employed as an alternative approach to execute adversarial attacks
+Dai et al. (2018). Attackers leverage reinforcement learning algorithms to refine their attack strategies
+and disrupt the learning process of GNNs Sun et al. (2023). Although some new attacks have been
+proposed in recent years (e.g., by Zhang et al. (2024; 2023); Wang et al. (2023)), they are all based
+on some traditional algorithms (like gradient-based methods).
+
+
+3 EVA: EVOLUTIONARY ATTACK
+
+
+Our evolutionary-based attack (EvA) uses a genetic algorithm (Holland, 1984) as a heuristic to directly
+optimize _Eq._ 1. We define an initial set of possible (candidate) perturbations – called “population” –
+and iteratively improve this population. In each iteration, the individuals in the population are ordered
+based on their fitness, specifically in terms of how much each individual decreases the accuracy. We
+draft the next population by keeping the best individuals and producing new ones as a function of
+them. Our population for the next iteration is finalized after a mutation which introduces additional
+randomness that helps with exploration. Each element in the population is a possible perturbation,
+which is encoded as a vector of indices where an edge is flipped.
+
+
+**Genetic** **algorithm** **(GA)** **in** **EvA.** We can define a genetic solver through the definition of four
+main components. (i) Population: It is a set of feasible answers to the problem which gradually
+improve over iterations. In our case each population element is one potential perturbation on the
+adjacency matrix. We define mapping Π : _**x**_ _i,t_ _∈_ [ _[n]_ [(] _[n][ −]_ [1)]] _[δ]_ _[�→]_ [[] _[n]_ []][2] [which] [is] [an] [enumeration]
+
+
+adjacency matrix. We define mapping Π : _**x**_ _i,t_ _∈_ [ _[n]_ 2 [(] _[n][ −]_ [1)]] _[δ]_ _[�→]_ [[] _[n]_ []][2] [which] [is] [an] [enumeration]
+
+on the upper triangle of the _n × n_ adjacency matrix. With that, we define each candidate as set
+_**s**_ _i,t_ _∈_ [ _[n]_ [(] _[n][ −]_ [1)]] _[δ]_ [which refers to a perturbation.] [The corresponding perturbation matrix] _**[ P]**_ _[i,t]_ [is]
+
+
+_**s**_ _i,t_ _∈_ [ _[n]_ 2 [(] _[n][ −]_ [1)]] _[δ]_ [which refers to a perturbation.] [The corresponding perturbation matrix] _**[ P]**_ _[i,t]_ [is]
+
+simply defined as _**P**_ _i,t_ [ _p, q_ ] = _**P**_ _i,t_ [ _q, p_ ] = 1 _⇔∃j_ : _**s**_ _i,t_ [ _j_ ] = Π _[−]_ [1] ( _p, q_ ) for _p_ _<_ _q_ . (ii) Fitness:
+Is a notion of how close to optimal each population element is. Given any loss function _L_ we
+define the fitness function fit : [ _[n]_ [(] _[n][ −]_ [1)]] _[δ]_ _[�→]_ [R][,] [as] [fit(] _**[s]**_ [)] [=] _[L]_ [(] _**[X]**_ _[,]_ _**[ A]**_ _[ ⊕]_ _**[P][s]**_ _[,]_ _**[ y]**_ [)][.] [Note] [that] [this]
+
+
+3
+
+
+In § 3 we defined the baseline evolutionary attack and discussed the possible drawbacks. As shown in
+Fig. 2 the baseline EvA already outperforms the SOTA. Additionally, with the following modifications
+we increase its effectiveness by a notable margin. The key insight is that the baseline attack, same as
+many gradient-based attacks defined their target space as the entire graph – entire space of _[n]_ 2 [(] _[n][ −]_ [1)]
+
+possible edges. As mentioned in § 2, perturbations that do have both endpoints in the training subgraph
+can be easily reverted just by memorizing the training subgraph. Additionally, perturbations outside of
+the receptive field of _V_ att are a waste of budget as they do not affect the prediction of the target nodes.
+
+
+4
+
+
+operation with more than one point is defined recursively in the order of joints. The number of
+crossovers _k_ cross is a hyperparameter (see § C), and their location is chosen randomly in the range
+of the perturbation size. (iv) Mutation: Is a random operation that allows further exploration. The
+function mutate : [ _[n]_ [(] _[n][ −]_ [1)]] _[δ]_ _[�→]_ [[] _[n]_ [(] _[n][ −]_ [1)]] _[δ]_ [is] [a] [random] [mapping] [of] [a] [candidate] [to] [another.]
+
+
+_[n]_ 2 [(] _[n][ −]_ [1)]] _[δ]_ _[�→]_ [[] _[n]_ 2
+
+
+function mutate : [ _[n]_ 2 [(] _[n][ −]_ [1)]] _[δ]_ _[�→]_ [[] _[n]_ 2 [(] _[n][ −]_ [1)]] _[δ]_ [is] [a] [random] [mapping] [of] [a] [candidate] [to] [another.]
+
+One simple mutation function changes each index with some mutation probability _p_ to some other
+index in the range (uniformly at random). In § 4 we discuss more advanced mutation strategies that
+significantly improve performance.
+
+
+Given all the ingredients above, GA operates by iteratively evolving the population toward a good
+solution. The algorithm begins with an initial random population. In EvA, this population is a
+set of vectors _S_ 0 = _{_ _**s**_ _i,_ 0 _}_ _[n]_ _i_ =1 _[p]_ [with random elements, where] _[ n][p]_ [is the number of candidates in the]
+population. By definition, our candidates always encode a valid perturbation—the budget of the
+perturbation is enforced by the length of each candidate vector.
+
+
+In each iteration, candidates are evaluated using the fitness function. Based on the fitness scores, an
+elite sub-population of parents and new children is selected to proceed to the next iteration, while the
+rest of the population is removed. To create a new child, parents are selected through a tournament
+selection process: in each tournament, _n_ tour random parents are chosen, and the best among them is
+selected for crossover and subsequent mutation. This process repeats for _t_ generations.
+
+
+**Sparse encoding of the attack.** The population in our framework is an encoding of the perturbation
+matrix. The naive way for encoding this problem is to create a boolean vector of size _N_ [2] encoding
+which entries are flipped, which results in memory complexity of _O_ ( _|S|N_ [2] ) where _|S|_ is the
+population size. Instead, we introduce an approach that leverages the sparse nature of the solution
+and reduces the complexity to _O_ ( _|S| · ϵ · |E_ [ _V_ att : _V_ ] _|_ ). In this encoding, instead of retaining all
+possible edges, we only keep the indices of the edges we want to flip. Therefore, any element in
+the population _**z**_ _∈S_ is a vector of _p_ = _⌊ϵ · |E_ [ _V_ att : _V_ ] _|⌋_ dimensions where each entity of it is an
+index in adjacency matrix _**z**_ [ _i_ ] _∈{_ 1 _, · · · n_ ( _n −_ 1) _/_ 2 _}_ with _n_ = _|V|_ . We use diagonal enumeration
+of an upper triangular _n × n_ matrix as the encoding (see § B). The perturbation vector can contain
+repeated elements. During the evaluation of the vector, we transform it to a perturbation matrix _**Pz**_,
+and we compute the perturbed adjacency _**A**_ [˜] = _**A**_ _⊕_ _**Pz**_ . All the mentioned computations are in sparse
+representation, and each individual of the population takes _O_ ( _δ_ ) space. Moreover, with this encoding,
+we directly enforce the global budget since the size of each individual in the population is by design
+the number of allowed perturbations.
+
+
+**Acceptable** **fitness** **functions.** The fitness function in GA is accessed in a black-box manner.
+Therefore, properties like differentiability are not a requirement, which allows us to use the accuracy
+directly. However, for scenarios like targeted attacks, where the objective is to only misclassify a
+single node, the 0-1 loss function is not a suitable fitness function. In other words, with the 0-1 loss,
+random search and GA are practically equivalent. Ideally, small changes in the solution should be
+reflected in the fitness function as well. This sensitivity to various individuals prevents GA from
+remaining in local optima. In § 5, we discuss the choice of fitness in targeted attacks.
+
+
+**Drawbacks.** The aforementioned setup is the very baseline variant of EvA. While already effective
+(outperforming SOTA), in Fig. 2, we resolve several drawbacks by changing the definition of the
+initial population and the mutation function. In the baseline variant, a population is allowed to contain
+perturbations that are outside of the receptive field of the GNN for _V_ att. This means that (at least for
+initial generations) a proportion of the attacking budget is wasted on ineffective perturbations. Even
+for perturbations connecting nodes with both ends outside of _V_ att, the defender can easily revert them
+by memorizing the training subgraph. In § 4, we discuss further improvements.
+
+
+4 ENHANCING THE SEARCH
+
+
+**Initial population.** Our baseline initial population consists of random perturbations in the entire
+space of _**A**_ . This is a naive approach that disregards closeness to _V_ att. Instead, we restrict the initial
+population to have at least one endpoint in _V_ att. This can easily done by randomly sampling both
+endpoints, one inside _V_ att and one in _V_, and then mapping the edges back to the indices via Π.
+
+
+**Targeted and adaptive mutation.** After initialization, another way to balance the exploration and
+exploitation power of the algorithm is by introducing diversity in the population. In the baseline
+uniform mutation function, we change each edge to another random edge in _V_ with some mutation
+probability _p_ . Same as in initialization, we define the “targeted mutation (TM)” by restricting the
+new mutated edge to have at least one end-point in _V_ att. Remarkably, this modification shows a
+significant improvement as shown in Fig. 2. Furthermore, when the attack succeeds in altering
+a node’s prediction, additional perturbations connected to it do not gain any more performance.
+Therefore, we exclude them from the endpoint that was restricted to _V_ att. Notably, we still allow
+those nodes to connect to other nodes in _V_ att as they can also increase the misclassification risk for
+other nodes. We call the latter approach “adaptive targeted mutation” (ATM).
+
+
+**Stacking perturbations.** Each population (at each iteration of EvA) needs to evaluate every individual. This means that each individual requires a forward pass on the perturbed graph. As mentioned
+before, our population takes _O_ ( _δ_ ) memory, and during the evaluation, we still maintain the sparse
+representation of the graph. Therefore, if the memory budget allows, we can evaluate several perturbations at once by combining perturbed graphs into one large (disconnected) graph and running
+only one forward pass. In practice, for small datasets like CoraML, we only run one forward pass per
+iteration, as the entire population of 1024 individuals can be evaluated once.
+
+
+**Fitness Function.** As we mentioned in § 1, one of the problems with gradient-based meth
+objective. To further understand the effect of the loss func
+an additional experiment where
+
+tion of EvA with the cross
+|PRBCD EvA-MG<br>EvA-Acc EvA-CE|Col2|Col3|Col4|Col5|Col6|Col7|
+|---|---|---|---|---|---|---|
+|PRBCD<br>EvA-Acc<br>EvA-MG<br>EvA-CE||Ev|A-Acc||EvA-C|EvA-C|
+||||||||
+||||||||
+||||||||
+||||||||
+
+
+|PRBCD EvA-TM<br>EvA-UM EvA-ATM<br>.8|Col2|Col3|Col4|Col5|Col6|
+|---|---|---|---|---|---|
+|.8<br>PRBCD<br>EvA-UM<br>EvA-TM<br>EvA-ATM|EvA|-UM||EvA-A|EvA-A|
+|.4<br>.6||||||
+|.4<br>.6||||||
+|.4<br>.6||||||
+
+entropy and margin-based loss 1% 5% 10% 15% 20% 1% 5% 10% 15% 20%
+functions, which have become
+popular in adversarial attacks as
+surrogates for accuracy. This ex
+Figure 2: Effect of optimizing for different objective functions (left)
+
+periment seeks to evaluate the
+
+and the influence of mutation type on EvA performance (right).
+
+effect of the fitness function on
+attack performance. The results,
+shown in Fig. 2, indicate that cross-entropy does not use the budget effectively. On the contrary, the
+margin-based loss provides a well-correlated surrogate loss. Since PRBCD also uses the margin-based
+loss, we see that the main reason for the large gap to EvA is not the loss function. We hypothesise
+that EvA, leveraging the exploratory capabilities of genetic algorithms, can more effectively explore
+the solution space and avoid bad local optima, while PRBCD gets stuck.
+
+
+**Sensitivity.** The fitness landscape should be sensitive – small changes in the solution should ideally
+result in (at least some) changes in the fitness score. For EvA, higher sensitivity results in a better
+selection of the population for breeding and distinguishes even the smallest advantage of a specific
+individual. We empirically show that accuracy has enough sensitivity for the global attack and low
+to medium size budget. However, as we discuss in § 5 for targeted attacks, the variability of the
+fitness function decreases to two values _{_ 0 _,_ 1 _}_ . We discuss further in § D.1 why low sensitivity of the
+objective function makes GA-based methods close to random search.
+
+
+**Effect** **of** **scaling.** A larger population provides greater diversity among solutions, which helps
+prevent early convergence to sub-optimal solutions, therefore the population size has a considerable
+impact on the performance of EvA. To observe this effect, we conducted experiments by changing the
+population size while keeping other parameters fixed on the PubMed dataset. For a fair comparison,
+we also attempted to scale PRBCD by increasing the number of steps and the size of the block
+
+
+5
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+1% 5% 10% 15% 20%
+
+
+1% 5% 10% 15% 20%
+
+
+Figure 2: Effect of optimizing for different objective functions (left)
+and the influence of mutation type on EvA performance (right).
+
+
+|Col1|25 27 29 211<br>26 28 210 212|Col3|Col4|Col5|Col6|Col7|
+|---|---|---|---|---|---|---|
+|||~~2~~<br>26|~~2~~<br>28|~~2~~<br>210|~~2~~<br>2|~~2~~<br>2|
+||||||||
+||||||||
+||||||||
+||||||||
+||||||||
+
+
+|Col1|Col2|Col3|Col4|Col5|Col6|
+|---|---|---|---|---|---|
+||||||0.5M|
+||||||1.0M<br>~~.0M~~|
+||||||4.0M|
+|||||||
+|||||||
+
+
+|Col1|Col2|Col3|Col4|Col5|rm|
+|---|---|---|---|---|---|
+|||||Unifo|rm|
+|||||||
+|||||ATM||
+|||||||
+|||||||
+|||||||
+|||||||
+|||||||
+
+
+Figure 3: Effect of scaling on EvA and PRBCD performance (left, middle), the effect of mutation
+type and scaling on at 0 _._ 1% budget (right) on Pubmed dataset.
+
+
+coordinate subspace. In this experiment, we exponentially increased the block size, starting from
+500 up to 4 million. As shown in Fig. 3 (left), increasing the population size improves EvA’s ability
+to find better solutions by exploring the search space more effectively. Increasing the number of
+steps also increases the success rate of the attack. In contrast, PRBCD does not achieve further
+improvement by increasing the block size or the number of training steps.
+
+
+We further investigate the effects of scaling and mutation types together. Fig. 3 (right) shows that
+adaptive targeted mutation can consistently enhance performance across all population sizes and
+outperform the uniform approach. This highlights the importance of selecting effective mutation
+strategies. Moreover, further exploration and refinement of mutation techniques could reveal more
+effective mutations, which could be explored in future studies.
+
+
+5 OTHER OBJECTIVES
+
+
+**Local attacks.** Gosch et al. (2024) argue that the perturbations within a global budget can still cause
+meaningful changes to the graph structure. For example, a perturbation might add edges to the node,
+increasing its degree to more than twice its current level while staying within the global budget. This
+can drastically alter the graph structure locally around that node, making the attack noticeable or, at
+the very least, impacting the graph’s structural semantics. Therefore, they argue for a threat model
+that, in addition to a global budget, has a local budget that limits the number of perturbations per
+node to an _ϵ_ loc proportion of its degree.
+
+
+**Local constrained mutation.** We enforce this constraint as a new mutation applied before finalizing
+the population. In our mutation, we count the row (or column) summation of the perturbation matrix
+which quantifies the number of edges added to (or removed from) each node. Calling the nodes with
+perturbation degree higher than _ϵ_ loc _·_ deg( _vi_ ) (the local perturbation budget) as “violating”, we run
+an iterative refinement procedure where at each step we remove one edge from violating nodes and
+insert a non-violating edge instead. This refinement procedure continues until the local constraints
+are satisfied. Additionally, we rewrite the adaptive targeted mutation to account for the local budget –
+we restrict the mutation edges to those with remaining local budget for both end-points.
+
+
+**Targeted** **attacks.** The targeted attack aims at one node to misclassify it with the least possible
+number of perturbations. With the discussion in § 4 the binary objective does not capture differences
+between different solutions. Therefore we use a proxy tanh-margin loss as the fitness function.
+
+
+5.1 ATTACKING NOVEL OBJECTIVES
+
+
+In cases where the objective is not differentiable (e.g. accuracy), to apply gradient-based attacks,
+we need to find a differentiable surrogate that approximates the original objective. This is already
+discussed in § 4. Using these attacks becomes even more challenging when the attack objective is
+complicated and defined through several non-differentiable components (e.g., quantile computation
+or majority voting). Since our method nullifies the need for information from gradients, we can easily
+
+
+6
+
+
+0 200 400 600 800 1k
+
+Steps
+
+
+0 200 400 600 800 1k
+
+Steps
+
+
+0.7
+
+
+0.6
+
+
+0.5
+
+
+0.4
+
+
+0 200 400 600 800 1k
+
+Steps
+
+
+Figure 4: The conformal coverage (left) and conformal set size attack (middle) on Vanilla and
+adversarially trained GCN. The certificate attack (right) on GCN. All plots are for CoraML.
+
+
+optimize for novel complex objectives. We define three new attacks on graphs: reducing the certified
+ratio of a smoothing-based model, decreasing the coverage, and the set size of conformal sets.
+
+
+**Attacking randomized smoothing-based certificates.** A robustness certificate guarantees that the
+prediction of the classifier remains the same within the threat model. One way to obtain such a
+guarantee (for a black-box model) is through randomized smoothing. A smoothing scheme _ξ_ is a
+random function mapping an input _**x**_ to a nearby point _**x**_ _[′]_ (e.g. additive isotropic Gaussian noise
+_**x**_ _[′]_ = _ξ_ ( _**x**_ ) = _**x**_ + _**ϵ**_, where _**ϵ**_ _∼N_ ( **0** _, σ_ [2] _**I**_ )). The convolution of the smoothing scheme and the
+classifier Pr[ _f_ ( _**x**_ + _**ϵ**_ ) = _y_ ] changes slowly around _**x**_ and this allows us to bound the worst-case
+minimum of the smooth prediction probability within _B_ . If this minimum is above 0 _._ 5, we can certify
+that the smooth model returns the same label for any _**x**_ ˜ _∈B_ ( _**x**_ ). A possible adversarial objective is to
+reduce the number of nodes that are certified (a.k.a. certified ratio).
+
+
+For certifying a prediction we compute the majority vote – the probability that the classifier predicts
+the top class for randomized _**x**_ _[′]_ _∼_ _ξ_ ( _**x**_ ). Then, we find a lower bound for this probability within the
+perturbation ball (see § D). Exact computation of the majority vote is generally intractable. Instead,
+we use Monte-Carlo (MC) sampling. These operations are not directly differentiable.
+
+
+A naive implementation of the certified ratio objective is to compute _n_ mc random samples for each
+candidate perturbation _**A**_ [˜] . This makes the attack extremely slow as in each iteration, we need _np ·_ _n_ mc
+samples, and for each Monte Carlo sample, we need _n_ [2] samples from the Bernoulli distribution.
+Since statistical rigor is not crucial during the attack, we employ an efficient sampling strategy where
+we start with initial samples from clean _**A**_, and for each perturbation, we only resample for the edges
+in _**A**_ [˜] _△_ _**A**_ . We use the stacked inference technique (see § 4) on MC samples which ultimately reduces
+the computation to one inference per each perturbation _**A**_ [˜] . Moreover, the certified radius is only a
+function of the smooth classifier’s probability and it is non-decreasing w.r.t. it. This allows us to
+reduce all certificate computations to one binary search for the minimum required probability. Then
+the objective is to minimize the number of nodes with probability above this threshold. We further
+discuss this attack in § D.
+
+
+**Attacking conformal prediction.** Instead of label prediction, conformal prediction (CP) returns
+prediction sets that are guaranteed to include the true label with 1 _−_ _α_ probability. This post-hoc
+statistical method treats the model as a black-box and requires only a calibration set of labeled points
+whose labels were not used during model training. CP is applicable in both inductive and transductive
+Graph Neural Networks (GNNs) under the assumption of node-exchangeability (Zargarbashi &
+Bojchevski, 2024). Adversarial attacks on conformal prediction aim to decrease the empirical
+coverage by perturbing the input. In addition, we also define an attack that reduces the applicability
+of the prediction sets by increasing the average set size.
+
+
+To compute prediction sets we need to compute a quantile from the set of true calibration conformity
+scores and compare the scores of the test node to the quantile threshold. This operation is again not
+directly differentiable which is not a problem for EvA. In our experimental setup, the defender calibrates on a random subset of _Vu_ (besides the test, this is the only set with labels unseen by the model).
+Assuming that the unlabeled and test nodes are originally exchangeable (node-exchangeability),
+the conformal guarantee is valid in the inductive setup upon recalibration on the clean graph. By
+
+
+7
+
+
+3.0
+
+
+2.5
+
+
+2.0
+
+
+1.5
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.8
+
+
+0.6
+
+
+1% 5% 10% 15% 20%
+
+Epsilon
+
+
+1% 5% 10% 15% 20%
+
+Epsilon
+
+
+1% 5% 10% 15%
+
+Epsilon
+
+
+perturbing the edge structure we can easily break this guarantee. Therefore our objective is to change
+the edge structure such that the coverage is minimized. Intuitively, this requires maximizing the
+distribution shift between the test and calibration scores. We can perform conformal prediction for
+each individual in the population, and we set the coverage of _V_ att as the objective function.
+
+
+Since we don’t know the exact subset of the unlabeled nodes taken as calibration, we can use the
+unlabeled set entirely as the calibration set. Given that the defender will randomly sample from
+unlabeled nodes during the calibration, the coverage remains roughly the same for exchangeable
+subsets of _Vu_ (Berti & Rigo, 1997). To the best of our knowledge, so far this is the only adversarial
+attack on the graph structure to break conformal inductive GNNs. Similarly, by changing the objective
+to the negative average set size, we can easily attack the usability of prediction sets (see Fig. 4).
+
+
+6 EMPIRICAL RESULTS
+
+
+With our empirical evaluations (i) we show that current gradient-based attacks are still very far from
+optimal since EvA outperforms them by a notable margin. (ii) We show that EvA inherently results
+in attacks that perturb each node with less change in nodes’ degree. This is even without posing local
+budget restrictions. (iii) We also show even by adding local restrictions EvA still outperforms other
+gradient-based local attacks. (iv) The effectiveness of EvA is consistent across various models, and
+vanilla or robust training setups. (v) With the black-box nature of the attack we introduce the first
+attack that reduces the certified ratio and the first attack that breaks conformal sets on graphs.
+
+
+**Experimental setup.** We evaluate EvA on common graph datasets: Cora-ML (McCallum et al.,
+2004), Citeseer (Sen et al., 2008), and PubMed (Namata et al., 2012). Shchur et al. (2018) show that
+GNN evaluation is sensitive to the initial train/val/test split. Therefore, we averaged our results for
+each dataset/model over five different data splits. In contrast with common GNN attacks, Gosch et al.
+(2024) show that transductive setup carries a false sense of robustness. In other words, trivially one
+can gain perfect robustness just by memorizing the clean data; models with robust and self-training
+also show to exploit this flaw. Following them, we report our results in an inductive setting. We
+divide graph nodes into four subsets: training, validation, and testing, each with 10% of the nodes
+and we leave the remaining 60% as unlabeled data. For completeness, in § A we compare attacks in
+the transductive setting as well, where again EvA is more effective.
+
+
+Following Lingam et al. (2023), we maintain the distribution of labels for sampling train, validation,
+and test nodes. This provides a more realistic scenario compared to commonly used methods, such as
+sampling for training and validation with the same count probability for each class. For completeness
+in § A we report various sampling setups. However the this does not change the order between
+methods. Further information about the model and hyperparameters can be found in § C.
+
+
+**Attacking vanilla models.** As shown in Fig. 5, EvA outperforms the SOTA attack PRBCD by a
+significant margin. This comparison remains consistent across various datasets and models. We report
+these results extensively in § A. Interestingly, we show that in many vanilla and robust models, a very
+small budget _ϵ ∼_ 0 _._ 05 EvA drops the accuracy below the level of the MLP model. This is a condition
+where the model leveraging the structure works worse than a model that completely ignores edges.
+
+
+|MLP PRBCD<br>0.8<br>0.7|Col2|Col3|Col4|Col5|Col6|Col7|Col8|Col9|LRBCD|Col11|Col12|EvA EvALocal<br>0.8|Col14|Col15|Col16|Col17|Col18|Col19|
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+|||||||0.4<br>0.5<br>0.6<br>|||||||0.6<br>0.7||||||
+||||||||||||||||||||
+||||||||||||||||||||
+
+
+Figure 5: Performance of EvA on CoraML. From left to right the results are on Vanila GCN,
+adversarially trained GCN using PRBCD, and Soft-Median-GDC model.
+
+
+8
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+_ϵ_ : 1% 5% 10% 15% 20% 1% 5% 10% 15% 20%
+
+
+1% 5% 10% 15% 20%
+
+
+|NA 1 2 3 4 5 6 7 8 9 10<br>EvA<br>40 60 PRBCD|Col2|Col3|Col4|Col5|Col6|Col7|Col8|Col9|Col10|Col11|Col12|Col13|Col14|Col15|Col16|Col17|Col18|Col19|Col20|Col21|Col22|Col23|Col24|Col25|Col26|Col27|Col28|Col29|Col30|Col31|Col32|Col33|Col34|Col35|Col36|Col37|
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+||||||||||||||20||||||||||||||20<br>40||||||||||
+
+
+Figure 6: The number of perturbations (in different colors) that have been used by EvA (left) and
+PRBCD (middle) to target nodes with a specific degree. The right figures present the number of
+violations that EvA, PRBCD introduce (for _ϵ_ loc = 0 _._ 5). NA (black) indicates a failed attack.
+
+
+The SoftMedian model seems to show an inherent robustness to both EvA and PRBCD. Therefore,
+to break the model below the accuracy of MLP, we require _≥_ 0 _._ 2 perturbation budget. Even in the
+SoftMedian model, our attack is significantly more effective in comparison to PRBCD.
+
+
+**Adversarially trained models.** Similar to vanilla models, EvA outperforms other approaches for
+robust models by a notable margin. As expected, models trained with EvA were shown to be more
+robust, and other attacks were less effective to them. However, this additional robustness is not
+significant. Table 9 (§ A) compares attacks in models with different adversarial training.
+
+
+**Local attacks.** Building upon the discussion in § 5, we enforce the local constraint by adding a
+mutation function that iteratively removes edges exceeding the local budget. The local variant of EvA
+also shows to be consistently better than the local LRBCD attack. For the PubMed dataset EvA’s
+effectiveness has a slower trend by increasing the budget _ϵ_ . On PubMed (see § A), when enforcing
+locally constrained mutation, the number of reconsidered edges increases due to the density of the
+graph. This makes the search significantly harder. On other datasets, though, EvA shows consistently
+better results and, more importantly, sharper decrease at lower _ϵ_ .
+
+
+**Targeted attack.** We perform attacks on each node separately, with varying budgets from one to a
+maximum of 10 edges, until the prediction changes. As we discussed in § 5, the accuracy on one node
+is non-expressive. Therefore we use the tanh-Margin proxy loss. Fig. 6 (left and middle) compares
+EvA and PRBCD in tagetted attack. Our results show that PRBCD performs better with a budget of
+one, but is outperformed by EvA for budgets of two and higher. For instance, on the CoraML dataset
+PRBCD fails to modify 16 nodes with a maximum of 10 changes (NA, black), whereas this number
+is reduced to only 2 nodes for EvA. This result is expected due to the combinatorial nature of the
+problem: for budgets up to two, a greedy approach can find the optimal solution, but as the budget
+increases beyond three, the problem becomes significantly more complex.
+
+
+**Attacking certificates.** As shown in Fig. 4 (right) we reduce the certified ratio - the number of nodes
+that the certificate can guarantee for the specified threat model - to a ratio below the accuracy of the
+MLP model. The MLP model here is a baseline as it is robust to any structure perturbation by trivially
+ignoring edges. We report the ratio certified by sparse smoothing (Bojchevski et al., 2020) with
+_p_ =0 _._ 4, and _p_ + = 2 _×_ 10 _[−]_ 5. Here _p_ +, and _p−_ are Bernoulli parameters of flipping a zero or one. We
+reported the result for _B_ 0 _,_ 3 which means 0 edge addition and 3 deletions. While we aim to decrease
+the certified ratio, a direct outcome is that the certified accuracy drops. For a 5% budget, the certified
+accuracy drops below MLP, which is resilient to any structural perturbation by definition. Notably,
+the clean (smooth) accuracy stays the same making this attack less noticable. For this experiment we
+used the GPRGNN model with robust training using PRBCD attack.
+
+
+**Attacking conformal prediction.** We report the first structure attack to inductive conformal GNN
+(Zargarbashi & Bojchevski, 2024). As shown in Fig. 4 (right) the coverage drops quickly as we
+increase the perturbation budget. As expected, in an adversarially trained model, we observe a slower
+decrease in the empirical coverage. Another interesting objective to attack is increasing the set size
+since it affects the usability of the prediction set. In Fig. 4 (middle) we show that both vanilla and
+robust models are vulnerable to this attack.
+
+
+9
+
+
+1 2 3 4 5
+
+Degree Violation
+
+
+40
+
+
+20
+
+
+0
+
+
+0
+
+
+1 2 3 4 5-7 +8
+
+Degree
+
+
+1 2 3 4 5-7 +8
+
+Degree
+
+
+Figure 7: The upper triangle of each heatmap represents the perturbation connections for PRBCD,
+the lower triangle corresponds to the same for EvA, and the diagonal is set to zero.
+
+
+**Local degree violation.** In this experiment, we did not enforce the local degree constraint in both EvA
+and PRBCD. However, we compared the final solutions to assess how often the solutions violated
+this constraint. Fig. 6 (right) shows that EvA generally produces more diverse attacks, utilizing the
+global budget more efficiently, which leads to improved performance. Overall, EvA violates less for
+any degree number and therefore in total.
+
+
+**Label diversity.** We further conduct an ablation study on the solutions found by EvA and PRBCD
+under a specific budget of 10%. In this experiment, we keep all hyperparameters of EvA and PRBCD
+fixed and run them across 10 different seeds. We then compare the average solutions generated by
+each adversary. The left figure in Fig. 7 shows the number of connections across different labels. In
+both cases, the methods focus more on label 5 than on the others, but EvA distributes the connections
+more uniformly compared to PRBCD. The middle figure illustrates the nodes with original degrees
+ranging from 1 to greater than 8. The results indicate that, in both attacks, most of the budget is spent
+connecting to low-degree nodes. However, compared to PRBCD, EvA allocates more of the budget
+to higher-degree nodes. Additionally, we calculate the margin loss for each node in the original graph
+and discretize them into eight levels. As shown in the right figure of Fig. 7, EvA allocates more of
+the budget to higher-margin nodes, resulting in a non-trivial solution that achieves a better optimum.
+Finally, it seems that EvA identifies solutions that differ from greedy-based heuristic, which usually
+only targets low-degree or low-margin nodes.
+
+
+7 CONCLUSION
+
+
+In contrast to gradient-based adversarial attacks on graph structure, we developed a new attack (EvA)
+based on a heuristic genetic algorithm. By eliminating differentiation, we can directly optimize for
+the objective of the adversary (e.g. the model’s accuracy). This black-box nature enables us to define
+complex adversarial goals, including attacks on robustness certificates and conformal prediction. Our
+novel attacks decrease the certified ratio, and conformal coverage, and increase the conformal set size.
+We propose an encoding that reduces the memory complexity of the attack to the same order as the
+perturbation budget which allows us to adapt to various computational constraints. Given the drastic
+decrease in the model’s accuracy by applying EvA, we highlight that even SOTA gradient-based
+attacks are far from optimal. Our main message is that search-based attacks are underexplored yet
+powerful as shown by our results.
+
+
+**Limitations.** We use an off-the-shelf genetic algorithm. Surely, there is room for designing search
+algorithms specific to the domain of the problem or hybrids of gradient and evolutionary search. As
+the graph size increases, the search space expands exponentially which makes convergence harder.
+While we remove the white-box assumption, we still assume the adversary has full knowledge of the
+graph and labels (same as most other attacks). This limitation can be easily addressed in future work.
+EvA uses many forward passes through the model which can be unrealistic in some attack scenarios.
+We leave the design of a further query-efficient variant for the future.
+
+
+10
+
+
+Pert Connection Label
+
+
+0 1 2 3 4 5 6 7
+
+
+40
+
+
+30
+
+
+20
+
+
+10
+
+
+0
+
+
+Pert Connection Degree
+
+
+0 2 4 6 8
+
+
+15
+
+
+10
+
+
+5
+
+
+0
+
+
+Pert Connection Margin
+
+
+0 2 4 6 8
+
+
+30
+
+
+20
+
+
+10
+
+
+0
+
+
+ETHICS STATEMENT
+
+
+In this paper, we propose an adversarial attack without white-box access. However, our main focus is
+to point out the vulnerability of GNN models, opening the discussion on the need for more robust
+and reliable models, our results can be used to exploit the vulnerability of current GNNs.
+
+
+REPRODUCABILITY
+
+
+For reproducibility, we have uploaded the complete anonymized codebase on OpenReview.
+
+
+REFERENCES
+
+
+Anish Athalye, Nicholas Carlini, and David Wagner. Obfuscated gradients give a false sense of
+security: Circumventing defenses to adversarial examples. In _International conference on machine_
+_learning_, pp. 274–283. PMLR, 2018.
+
+
+Patrizia Berti and Pietro Rigo. A glivenko-cantelli theorem for exchangeable random variables.
+_Statistics & probability letters_, 32(4):385–391, 1997.
+
+
+Aleksandar Bojchevski, Johannes Gasteiger, and Stephan Günnemann. Efficient robustness certificates for discrete data: Sparsity-aware randomized smoothing for graphs, images and more. In
+_International Conference on Machine Learning_, pp. 1003–1013. PMLR, 2020.
+
+
+Eli Chien, Jianhao Peng, Pan Li, and Olgica Milenkovic. Adaptive universal generalized pagerank
+graph neural network, 2021.
+
+
+Hanjun Dai, Hui Li, Tian Tian, Xin Huang, Lin Wang, Jun Zhu, and Le Song. Adversarial attack on
+graph structured data. In _International conference on machine learning_, pp. 1115–1124. PMLR,
+2018.
+
+
+Simon Geisler, Tobias Schmidt, Hakan ¸Sirin, Daniel Zügner, Aleksandar Bojchevski, and Stephan
+Günnemann. Robustness of graph neural networks at scale. _Advances_ _in_ _Neural_ _Information_
+_Processing Systems_, 34:7637–7649, 2021.
+
+
+Simon Geisler, Tobias Schmidt, Hakan ¸Sirin, Daniel Zügner, Aleksandar Bojchevski, and Stephan
+Günnemann. Robustness of graph neural networks at scale, 2023. [URL https://arxiv.org/](https://arxiv.org/abs/2110.14038)
+[abs/2110.14038.](https://arxiv.org/abs/2110.14038)
+
+
+Lukas Gosch, Simon Geisler, Daniel Sturm, Bertrand Charpentier, Daniel Zügner, and Stephan
+Günnemann. Adversarial training for graph neural networks: Pitfalls, solutions, and new directions.
+In _37th Conference on Neural Information Processing Systems (Neurips)_, 2023.
+
+
+Lukas Gosch, Simon Geisler, Daniel Sturm, Bertrand Charpentier, Daniel Zügner, and Stephan
+Günnemann. Adversarial training for graph neural networks: Pitfalls, solutions, and new directions.
+_Advances in Neural Information Processing Systems_, 36, 2024.
+
+
+John H Holland. Genetic algorithms and adaptation. _Adaptive control of ill-defined systems_, pp.
+317–333, 1984.
+
+
+Vijay Lingam, Mohammad Sadegh Akhondzadeh, and Aleksandar Bojchevski. Rethinking label
+poisoning for gnns: Pitfalls and attacks. In _The Twelfth International Conference on Learning_
+_Representations_, 2023.
+
+
+Andrew McCallum, Kamal Nigam, Jason D. M. Rennie, and Kristie Seymore. Automating the
+construction of internet portals with machine learning. _Information Retrieval_, 3:127–163, 2004.
+
+
+Galileo Namata, Ben London, Lise Getoor, and Bert Huang. Query-driven active surveying for
+collective classification. 2012.
+
+
+Prithviraj Sen, Galileo Namata, Mustafa Bilgic, Lise Getoor, Brian Gallagher, and Tina Eliassi-Rad.
+Collective classifcation in network data. 2008.
+
+
+11
+
+
+Oleksandr Shchur, Maximilian Mumme, Aleksandar Bojchevski, and Stephan Günnemann. Pitfalls
+of graph neural network evaluation. _arXiv preprint arXiv:1811.05868_, 2018.
+
+
+Lichao Sun, Yingtong Dou, Carl Yang, Kai Zhang, Ji Wang, Philip S. Yu, Lifang He, and Bo Li.
+Adversarial attack and defense on graph data: A survey. _IEEE Transactions on Knowledge and_
+_Data Engineering_, 35(8):7693–7711, 2023. doi: 10.1109/TKDE.2022.3201243.
+
+
+Nihat Engin Toklu, Timothy Atkinson, Vojtˇech Micka, Paweł Liskowski, and Rupesh Kumar Srivastava. Evotorch: scalable evolutionary computation in python. _arXiv preprint arXiv:2302.12600_,
+2023.
+
+
+Yexin Wang, Zhi Yang, Junqi Liu, Wentao Zhang, and Bin Cui. Scapin: Scalable graph structure
+perturbation by augmented influence maximization. _Proc. ACM Manag. Data_, 1(2), June 2023.
+doi: 10.1145/3589291. [URL https://doi.org/10.1145/3589291.](https://doi.org/10.1145/3589291)
+
+
+Kaidi Xu, Hongge Chen, Sijia Liu, Pin-Yu Chen, Tsui-Wei Weng, Mingyi Hong, and Xue Lin.
+Topology attack and defense for graph neural networks: An optimization perspective. _arXiv_
+_preprint arXiv:1906.04214_, 2019.
+
+
+Soroush H Zargarbashi and Aleksandar Bojchevski. Conformal inductive graph neural networks.
+_arXiv preprint arXiv:2407.09173_, 2024.
+
+
+Chenhan Zhang, Shiyao Zhang, James J. Q. Yu, and Shui Yu. Sam: Query-efficient adversarial
+attacks against graph neural networks. _ACM Trans. Priv. Secur._, 26(4), November 2023. ISSN
+2471-2566. doi: 10.1145/3611307. [URL https://doi.org/10.1145/3611307.](https://doi.org/10.1145/3611307)
+
+
+Jianfu Zhang, Yan Hong, Dawei Cheng, Liqing Zhang, and Qibin Zhao. Hierarchical attacks on largescale graph neural networks. In _ICASSP 2024 - 2024 IEEE International Conference on Acoustics,_
+_Speech and Signal Processing (ICASSP)_, pp. 7635–7639, 2024. doi: 10.1109/ICASSP48485.2024.
+10448076.
+
+
+Guanghui Zhu, Mengyu Chen, Chunfeng Yuan, and Yihua Huang. Simple and efficient partial
+graph adversarial attack: A new perspective, 2023. [URL https://arxiv.org/abs/2308.](https://arxiv.org/abs/2308.07834)
+[07834.](https://arxiv.org/abs/2308.07834)
+
+
+Daniel Zügner, Amir Akbarnejad, and Stephan Günnemann. Adversarial attacks on neural networks
+for graph data. In _Proceedings of the 24th ACM SIGKDD international conference on knowledge_
+_discovery & data mining_, pp. 2847–2856, 2018.
+
+
+Daniel Zügner, Oliver Borchert, Amir Akbarnejad, and Stephan Günnemann. Adversarial attacks
+on graph neural networks: Perturbations and their patterns. _ACM Transactions on Knowledge_
+_Discovery from Data (TKDD)_, 14(5):1–31, 2020.
+
+
+12
+
+
+A SUPPLEMENTARY EXPERIMENTS
+
+
+**Transductive Setting.** In § 6, we discussed that evaluating robustness in transductive setup is flawed
+since trivial robustness can be gained just by memorization of the clean graph (Gosch et al., 2024).
+However, for completeness, Table 1 reports the attacks’ effectiveness in this setup. Consistent with
+other experiments, here also EvA outperforms SOTA. We provide the result for EvA, PRBCD, and
+for completeness, we also provide the result for PGA, which is a more recent attack.
+
+
+Table 1: Classification accuracy (%) on the CoraML dataset in the transductive setting under different
+attacks and perturbation levels _ϵ_ . Results are averaged over multiple runs with standard deviations.
+
+
+_ϵ_
+Model Attack
+
+0.01 0.02 0.05 0.10 0.15 0.20
+
+
+LRBCD 80 _._ 0 _±_ 2 _._ 0 78 _._ 0 _±_ 2 _._ 0 73 _._ 0 _±_ 1 _._ 0 66 _._ 0 _±_ 1 _._ 0 61 _._ 0 _±_ 2 _._ 0 57 _._ 0 _±_ 2 _._ 0
+GCN PRBCD 79 _._ 0 _±_ 2 _._ 0 77 _._ 0 _±_ 2 _._ 0 72 _._ 0 _±_ 2 _._ 0 65 _._ 0 _±_ 2 _._ 0 60 _._ 0 _±_ 2 _._ 0 56 _._ 0 _±_ 2 _._ 0
+EvA 77 _._ 0 _±_ 2 _._ 0 74 _._ 0 _±_ 2 _._ 0 66 _._ 0 _±_ 2 _._ 0 60 _._ 0 _±_ 2 _._ 0 59 _._ 0 _±_ 3 _._ 0 57 _._ 0 _±_ 3 _._ 0
+
+
+LRBCD 79 _._ 0 _±_ 3 _._ 0 77 _._ 0 _±_ 3 _._ 0 72 _._ 0 _±_ 4 _._ 0 63 _._ 0 _±_ 7 _._ 0 55 _._ 0 _±_ 12 _._ 0 49 _._ 0 _±_ 16 _._ 0
+GPRGNN PRBCD 79 _._ 0 _±_ 3 _._ 0 76 _._ 0 _±_ 4 _._ 0 70 _._ 0 _±_ 5 _._ 0 62 _._ 0 _±_ 7 _._ 0 55 _._ 0 _±_ 10 _._ 0 50 _._ 0 _±_ 13 _._ 0
+EvA 77 _._ 0 _±_ 3 _._ 0 73 _._ 0 _±_ 5 _._ 0 64 _._ 0 _±_ 6 _._ 0 57 _._ 0 _±_ 10 _._ 0 53 _._ 0 _±_ 13 _._ 0 50 _._ 0 _±_ 16 _._ 0
+
+
+**Inductive Setting.** Here, we present additional results specifically for the inductive setting. Unlike the
+transductive setup, where robustness can be misleadingly achieved through memorization of the clean
+graph, the inductive framework provides a more comprehensive assessment of model performance in
+real-world scenarios. In this section, we detail the effectiveness of our method compared to other
+approaches.
+
+
+Table 2: Classification accuracy (%) on the CoraML dataset in the inductive setting under different
+attacks and perturbation levels _ϵ_ . Results are averaged over multiple runs with standard deviations.
+
+
+_ϵ_
+Model Attack
+
+0.01 0.02 0.05 0.10 0.15 0.20
+
+APPNP EvA 76 _._ 65 _±_ 1 _._ 32 71 _._ 03 _±_ 1 _._ 44 56 _._ 51 _±_ 1 _._ 60 49 _._ 32 _±_ 1 _._ 84 44 _._ 77 _±_ 2 _._ 04 41 _._ 42 _±_ 1 _._ 41
+PRBCD 78 _._ 65 _±_ 0 _._ 99 75 _._ 30 _±_ 1 _._ 27 68 _._ 75 _±_ 1 _._ 22 61 _._ 57 _±_ 1 _._ 65 55 _._ 44 _±_ 1 _._ 58 49 _._ 96 _±_ 2 _._ 42
+
+GAT EvA 64 _._ 20 _±_ 1 _._ 89 58 _._ 51 _±_ 2 _._ 45 40 _._ 99 _±_ 1 _._ 60 15 _._ 30 _±_ 4 _._ 47 9 _._ 40 _±_ 6 _._ 83 8 _._ 11 _±_ 6 _._ 65
+PRBCD 70 _._ 07 _±_ 2 _._ 82 66 _._ 55 _±_ 2 _._ 21 58 _._ 58 _±_ 3 _._ 33 49 _._ 61 _±_ 6 _._ 55 39 _._ 86 _±_ 6 _._ 78 36 _._ 94 _±_ 7 _._ 09
+
+GCN EvA 74 _._ 80 _±_ 1 _._ 50 68 _._ 97 _±_ 1 _._ 58 52 _._ 95 _±_ 1 _._ 91 41 _._ 99 _±_ 2 _._ 06 37 _._ 65 _±_ 2 _._ 74 35 _._ 37 _±_ 2 _._ 38
+PRBCD 76 _._ 44 _±_ 1 _._ 64 73 _._ 17 _±_ 1 _._ 39 66 _._ 48 _±_ 2 _._ 13 58 _._ 51 _±_ 1 _._ 77 52 _._ 67 _±_ 2 _._ 09 47 _._ 19 _±_ 2 _._ 02
+
+GPRGNN [EvA] 72 _._ 53 _±_ 4 _._ 11 66 _._ 83 _±_ 4 _._ 54 51 _._ 53 _±_ 5 _._ 57 42 _._ 21 _±_ 8 _._ 52 37 _._ 01 _±_ 9 _._ 83 34 _._ 52 _±_ 9 _._ 83
+PRBCD 74 _._ 95 _±_ 3 _._ 08 71 _._ 67 _±_ 2 _._ 76 64 _._ 84 _±_ 4 _._ 18 57 _._ 94 _±_ 4 _._ 55 53 _._ 24 _±_ 5 _._ 20 48 _._ 68 _±_ 6 _._ 52
+
+
+**Stratified sampling.** Although unrealistic, in Table 8 we compare attacks in case the models are
+trained train/val/test sampled with the same number of nodes across different classes. Consistent with
+other results, EvA shows to be better here as well.
+
+
+**Attacking accuracy of vanilla and robust models.** Table 9 compares EvA with SOTA PRBCD,
+and LRBCD. We compare both three attacks on vanilla models or models trained with adversarial
+examples of either of the attacks. Across all setups, EvA shows a comparably better performance.
+
+
+A.1 EXPERIMENTS
+
+
+**Vanilla Models Experients.** For the experimental results, we mainly focus on the inductive setting
+introduced by (Lingam et al., 2023), where during training, we only use _G_ tr, and during the attack,
+we target _G_ test. We also provide results for the transductive setting, showcasing that our attack
+outperforms previous gradient-based methods, independent of the training setting. We conduct
+
+
+13
+
+
+Table 3: Classification accuracy (%) on the CoraML dataset in the inductive setting under different
+attacks and perturbation levels _ϵ_ . Results are averaged over multiple runs with standard deviations.
+
+
+_ϵ_
+Model Attack
+
+0.01 0.02 0.05 0.10 0.15 0.20
+
+
+Table 4: Classification accuracy (%) on the Citeseer dataset in the inductive setting under different
+attacks and perturbation levels _ϵ_ . Results are averaged over multiple runs with standard deviations.
+
+
+_ϵ_
+Model Attack
+
+0.01 0.02 0.05 0.10 0.15 0.20
+
+APPNP EvA - - 74 _._ 29 _±_ 0 _._ 88 65 _._ 00 _±_ 1 _._ 15 59 _._ 76 _±_ 2 _._ 33 54 _._ 76 _±_ 1 _._ 19
+PRBCD 87 _._ 26 _±_ 0 _._ 90 85 _._ 48 _±_ 1 _._ 49 81 _._ 79 _±_ 1 _._ 08 76 _._ 55 _±_ 0 _._ 68 72 _._ 44 _±_ 1 _._ 66 69 _._ 29 _±_ 1 _._ 69
+
+GAT EvA - - 67 _._ 14 _±_ 3 _._ 65 51 _._ 19 _±_ 4 _._ 21 37 _._ 74 _±_ 4 _._ 94 27 _._ 62 _±_ 9 _._ 49
+PRBCD 84 _._ 52 _±_ 2 _._ 27 82 _._ 62 _±_ 2 _._ 20 76 _._ 55 _±_ 5 _._ 59 70 _._ 00 _±_ 6 _._ 09 67 _._ 02 _±_ 4 _._ 27 63 _._ 15 _±_ 4 _._ 19
+
+GCN EvA 86 _._ 67 _±_ 1 _._ 71 82 _._ 86 _±_ 2 _._ 12 72 _._ 74 _±_ 2 _._ 74 58 _._ 33 _±_ 3 _._ 01 49 _._ 76 _±_ 3 _._ 22 44 _._ 29 _±_ 3 _._ 33
+PRBCD 87 _._ 38 _±_ 1 _._ 81 85 _._ 83 _±_ 2 _._ 43 80 _._ 95 _±_ 2 _._ 06 74 _._ 29 _±_ 4 _._ 22 69 _._ 76 _±_ 4 _._ 34 67 _._ 62 _±_ 4 _._ 96
+
+GPRGNN [EvA] 87 _._ 26 _±_ 2 _._ 75 83 _._ 81 _±_ 2 _._ 50 73 _._ 45 _±_ 3 _._ 17 61 _._ 43 _±_ 4 _._ 66 55 _._ 48 _±_ 3 _._ 84 50 _._ 12 _±_ 4 _._ 86
+PRBCD 88 _._ 45 _±_ 2 _._ 29 86 _._ 31 _±_ 2 _._ 45 82 _._ 02 _±_ 2 _._ 61 77 _._ 14 _±_ 2 _._ 84 73 _._ 93 _±_ 3 _._ 89 69 _._ 64 _±_ 3 _._ 47
+
+
+experiments on the Cora-ML Citeseer, and Pubmed datasets, trained GCN, GPRGNN, APPNP and
+GAT. We run the attack for six different budgets (0.01, 0.02, 0.05, 0.1, 0.15, 0.2). Further details on
+training and attack hyperparameters are provided in C. We also use EvoTorch (Toklu et al., 2023) to
+impelement EvA.
+
+
+**Robust Models.** Similarly, we provide the results for the adversarially trained model. In this case,
+during training, we use an adversarial attack at each step to attack _G_ tr, and then we retrain the model
+on the adversarially perturbed graph _G_ [˜] tr. The robust budget ( _ϵrobust_ ) for adversarial attack during
+training was 0 _._ 02. This process repeats in each epoch of training until the model converges. We
+similarly use the inductive setting since, as Gosch et al. (2023) shows, in the transductive setup, the
+evaluation is flawed by a false sense of robustness. This originates from the fact that if, during the
+training process, the defender has access to perfect knowledge of all nodes in the graph, it can achieve
+perfect robustness by memorizing the clean structure of the graph in the model’s weights. Table 9
+presents our results in this setting. As the results indicate, EvA outperforms all previous attacks, even
+in adversarially trained models.
+
+
+**Attacking Certificate.** As we discussed, EvA still be used in the case that we don’t have access to a
+non-differentiable objective. In this experiment, we introduced a certificate attack which, to the best
+of our knowledge, is the first attack on certificates that reduces the certificate guarantees ....
+
+
+Any possible appendices should be placed after bibliographies. If your paper has appendices,
+please submit the appendices together with the main body of the paper. There will be no separate
+supplementary material submission. The main text should be self-contained; reviewers are not obliged
+to look at the appendices when writing their review comments.
+
+
+14
+
+
+GCN
+
+
+GPRGNN
+
+
+EvA 74 _._ 80 _±_ 1 _._ 50 68 _._ 97 _±_ 1 _._ 58 52 _._ 95 _±_ 1 _._ 91 41 _._ 99 _±_ 2 _._ 06 37 _._ 65 _±_ 2 _._ 74 35 _._ 37 _±_ 2 _._ 38
+EvaLocal 75 _._ 09 _±_ 1 _._ 73 69 _._ 82 _±_ 1 _._ 96 60 _._ 21 _±_ 2 _._ 04 56 _._ 09 _±_ 1 _._ 93 54 _._ 16 _±_ 2 _._ 48 52 _._ 88 _±_ 1 _._ 79
+LRBCD 78 _._ 51 _±_ 1 _._ 56 75 _._ 94 _±_ 1 _._ 54 71 _._ 10 _±_ 1 _._ 16 64 _._ 41 _±_ 1 _._ 65 60 _._ 14 _±_ 1 _._ 73 57 _._ 37 _±_ 1 _._ 45
+PRBCD 76 _._ 44 _±_ 1 _._ 64 73 _._ 17 _±_ 1 _._ 39 66 _._ 48 _±_ 2 _._ 13 58 _._ 51 _±_ 1 _._ 77 52 _._ 67 _±_ 2 _._ 09 47 _._ 19 _±_ 2 _._ 02
+PGA 79 _._ 58 _±_ 1 _._ 61 76 _._ 92 _±_ 1 _._ 73 70 _._ 94 _±_ 1 _._ 89 64 _._ 62 _±_ 1 _._ 92 60 _._ 46 _±_ 2 _._ 25 57 _._ 54 _±_ 2 _._ 46
+
+
+EvA 72 _._ 53 _±_ 4 _._ 11 66 _._ 83 _±_ 4 _._ 54 51 _._ 53 _±_ 5 _._ 57 42 _._ 21 _±_ 8 _._ 52 37 _._ 01 _±_ 9 _._ 83 34 _._ 52 _±_ 9 _._ 83
+EvaLocal 73 _._ 31 _±_ 3 _._ 30 67 _._ 26 _±_ 4 _._ 17 58 _._ 29 _±_ 7 _._ 96 53 _._ 38 _±_ 11 _._ 42 51 _._ 10 _±_ 12 _._ 66 49 _._ 96 _±_ 13 _._ 63
+LRBCD 77 _._ 51 _±_ 1 _._ 81 74 _._ 80 _±_ 1 _._ 41 68 _._ 83 _±_ 1 _._ 90 62 _._ 56 _±_ 1 _._ 71 59 _._ 07 _±_ 1 _._ 53 55 _._ 66 _±_ 1 _._ 71
+PRBCD 74 _._ 95 _±_ 3 _._ 08 71 _._ 67 _±_ 2 _._ 76 64 _._ 84 _±_ 4 _._ 18 57 _._ 94 _±_ 4 _._ 55 53 _._ 24 _±_ 5 _._ 20 48 _._ 68 _±_ 6 _._ 52
+PGA 78 _._ 55 _±_ 3 _._ 03 75 _._ 33 _±_ 3 _._ 69 68 _._ 63 _±_ 5 _._ 11 61 _._ 55 _±_ 6 _._ 97 56 _._ 60 _±_ 8 _._ 52 54 _._ 91 _±_ 7 _._ 46
+
+
+Table 5: Classification accuracy (%) on the Citeseer dataset in the inductive setting under different
+attacks and perturbation levels _ϵ_ . Results are averaged over multiple runs with standard deviations.
+
+
+_ϵ_
+Model Attack
+
+0.01 0.02 0.05 0.10 0.15 0.20
+
+
+The advantage of this solution is that it can also be implemented in a vectorized way, making
+everything parallelizable.
+
+
+C DATASETS AND MODELS, AND HYPERPARAMETERS
+
+
+C.1 STATISTICS OF DATASETS
+
+
+In our experiments, we mainly conduct experiments on the commonly used graph datasets: CoraML, Citeseer, and PubMed, which are all representative academic citation networks. Their specific
+characteristics are as follows:
+
+
+**Cora-ML.** The Cora-ML dataset contains 2,810 papers as nodes, with citation relationships between
+them as edges, resulting in 7,981 edges. Each paper is categorized into one of 7 classes corresponding
+
+
+15
+
+
+GCN
+
+
+GPRGNN
+
+
+EvA 86 _._ 67 _±_ 1 _._ 71 82 _._ 86 _±_ 2 _._ 12 72 _._ 74 _±_ 2 _._ 74 58 _._ 33 _±_ 3 _._ 01 49 _._ 76 _±_ 3 _._ 22 44 _._ 29 _±_ 3 _._ 33
+EvaLocal 87 _._ 38 _±_ 1 _._ 65 83 _._ 57 _±_ 2 _._ 17 78 _._ 21 _±_ 3 _._ 17 76 _._ 43 _±_ 2 _._ 62 75 _._ 00 _±_ 3 _._ 23 74 _._ 52 _±_ 3 _._ 16
+LRBCD 88 _._ 45 _±_ 2 _._ 17 86 _._ 43 _±_ 2 _._ 71 83 _._ 69 _±_ 2 _._ 48 80 _._ 12 _±_ 3 _._ 30 78 _._ 45 _±_ 3 _._ 89 75 _._ 36 _±_ 4 _._ 81
+PRBCD 87 _._ 38 _±_ 1 _._ 81 85 _._ 83 _±_ 2 _._ 43 80 _._ 95 _±_ 2 _._ 06 74 _._ 29 _±_ 4 _._ 22 69 _._ 76 _±_ 4 _._ 34 67 _._ 62 _±_ 4 _._ 96
+
+
+EvA 87 _._ 26 _±_ 2 _._ 75 83 _._ 81 _±_ 2 _._ 50 73 _._ 45 _±_ 3 _._ 17 61 _._ 43 _±_ 4 _._ 66 55 _._ 48 _±_ 3 _._ 84 50 _._ 12 _±_ 4 _._ 86
+EvaLocal 87 _._ 50 _±_ 2 _._ 27 84 _._ 29 _±_ 2 _._ 04 80 _._ 48 _±_ 3 _._ 96 77 _._ 86 _±_ 4 _._ 56 76 _._ 43 _±_ 5 _._ 06 75 _._ 12 _±_ 6 _._ 57
+LRBCD 89 _._ 76 _±_ 2 _._ 50 87 _._ 98 _±_ 2 _._ 48 85 _._ 12 _±_ 2 _._ 76 81 _._ 90 _±_ 2 _._ 83 79 _._ 64 _±_ 4 _._ 08 78 _._ 45 _±_ 4 _._ 92
+PRBCD 88 _._ 45 _±_ 2 _._ 29 86 _._ 31 _±_ 2 _._ 45 82 _._ 02 _±_ 2 _._ 61 77 _._ 14 _±_ 2 _._ 84 73 _._ 93 _±_ 3 _._ 89 69 _._ 64 _±_ 3 _._ 47
+
+
+Table 6: Classification accuracy (%) on the PubMed dataset in the inductive setting under different
+attacks and perturbation levels _ϵ_ . Results are averaged over multiple runs with standard deviations.
+
+
+_ϵ_
+Model Attack
+
+0.01 0.02 0.05 0.10 0.15 0.20
+
+APPNP EvA 73 _._ 85 _±_ 2 _._ 35 69 _._ 64 _±_ 2 _._ 16 57 _._ 07 _±_ 2 _._ 32 47 _._ 03 _±_ 2 _._ 18 43 _._ 94 _±_ 1 _._ 83 41 _._ 93 _±_ 2 _._ 18
+PRBCD 75 _._ 54 _±_ 2 _._ 34 72 _._ 44 _±_ 2 _._ 28 65 _._ 14 _±_ 2 _._ 26 57 _._ 15 _±_ 2 _._ 59 51 _._ 04 _±_ 2 _._ 79 45 _._ 75 _±_ 2 _._ 60
+
+GAT EvA 69 _._ 15 _±_ 1 _._ 83 64 _._ 62 _±_ 1 _._ 81 52 _._ 17 _±_ 1 _._ 71 33 _._ 62 _±_ 2 _._ 05 26 _._ 62 _±_ 3 _._ 74 24 _._ 21 _±_ 4 _._ 27
+PRBCD 71 _._ 33 _±_ 1 _._ 53 67 _._ 78 _±_ 1 _._ 79 59 _._ 73 _±_ 2 _._ 10 49 _._ 87 _±_ 1 _._ 36 42 _._ 04 _±_ 1 _._ 57 35 _._ 94 _±_ 1 _._ 66
+
+GCN EvA 72 _._ 60 _±_ 2 _._ 19 68 _._ 35 _±_ 2 _._ 41 56 _._ 15 _±_ 1 _._ 92 42 _._ 93 _±_ 2 _._ 64 40 _._ 46 _±_ 2 _._ 76 39 _._ 11 _±_ 2 _._ 98
+PRBCD 74 _._ 99 _±_ 1 _._ 99 71 _._ 90 _±_ 2 _._ 03 64 _._ 16 _±_ 2 _._ 32 55 _._ 54 _±_ 2 _._ 79 49 _._ 32 _±_ 2 _._ 66 43 _._ 90 _±_ 3 _._ 09
+
+GPRGNN [EvA] 72 _._ 01 _±_ 4 _._ 18 67 _._ 61 _±_ 4 _._ 28 55 _._ 95 _±_ 4 _._ 32 _−_ _−_ 42 _._ 39 _±_ 9 _._ 63
+PRBCD 74 _._ 37 _±_ 3 _._ 40 71 _._ 66 _±_ 3 _._ 55 64 _._ 51 _±_ 4 _._ 94 56 _._ 21 _±_ 6 _._ 46 50 _._ 26 _±_ 7 _._ 41 45 _._ 81 _±_ 8 _._ 47
+
+
+B TECHNICAL DETAILS OF EVA
+
+
+**Mapping function:** **enumeration over** _**A**_ For enumerating over _**A**_, instead of using the row and
+column indices of the node to select, we introduced indexing. For a directed graph, the indexing
+starts from 0 to _n_ [2] _−_ 1. However, in an undirected graph, we only need the upper triangular part of
+the matrix _**A**_ . To achieve this, we use the following algebraic solution to find the row and column of
+the perturbation by referencing only the upper triangular indexing.
+
+
+_r_ = _n −_ 2 _−_
+
+
+��
+
+_−_ 8 _l_ + 4 _n_ ( _n −_ 1) _−_ 7
+
+_−_ 0 _._ 5
+2
+
+
+          - ( _n −_ _r_ )( _n −_ _r −_ 1)
+
+_c_ = 1 + _l_ + _r −_ _[n]_ [(] _[n][ −]_ [1)] +
+
+2 2
+
+
+(2)
+
+
+Table 7: Classification accuracy (%) on the PubMed dataset in the inductive setting under different
+attacks and perturbation levels _ϵ_ . Results are averaged over multiple runs with standard deviations.
+
+
+_ϵ_
+Model Attack
+
+0.01 0.02 0.05 0.10 0.15 0.20
+
+
+Table 8: Classification accuracy (%) on the CoraML dataset in the inductive setting under different
+attacks and perturbation levels _ϵ_ . Results are averaged over multiple runs with standard deviations.
+Training, validation, and test sets are stratifed.
+
+
+_ϵ_
+Model Attack
+
+0.01 0.02 0.05 0.10 0.15 0.20
+
+
+LRBCD 80 _._ 0 _±_ 2 _._ 7 77 _._ 4 _±_ 2 _._ 6 71 _._ 4 _±_ 2 _._ 7 65 _._ 5 _±_ 3 _._ 9 61 _._ 2 _±_ 4 _._ 2 57 _._ 6 _±_ 4 _._ 5
+GCN PRBCD 78 _._ 7 _±_ 2 _._ 8 75 _._ 3 _±_ 3 _._ 4 67 _._ 9 _±_ 3 _._ 4 59 _._ 5 _±_ 3 _._ 5 53 _._ 0 _±_ 4 _._ 1 48 _._ 4 _±_ 3 _._ 7
+EvA 77 _._ 0 _±_ 2 _._ 9 71 _._ 4 _±_ 3 _._ 3 54 _._ 4 _±_ 4 _._ 7 44 _._ 3 _±_ 3 _._ 3 40 _._ 9 _±_ 3 _._ 7 37 _._ 3 _±_ 3 _._ 7
+
+
+LRBCD 76 _._ 2 _±_ 7 _._ 9 73 _._ 1 _±_ 7 _._ 9 66 _._ 1 _±_ 11 _._ 5 60 _._ 5 _±_ 11 _._ 7 56 _._ 4 _±_ 12 _._ 4 53 _._ 4 _±_ 12 _._ 9
+GPRGNN PRBCD 74 _._ 4 _±_ 9 _._ 6 70 _._ 7 _±_ 10 _._ 0 63 _._ 8 _±_ 10 _._ 4 56 _._ 1 _±_ 11 _._ 1 49 _._ 3 _±_ 11 _._ 4 45 _._ 1 _±_ 11 _._ 0
+EvA 71 _._ 9 _±_ 10 _._ 4 65 _._ 0 _±_ 11 _._ 4 50 _._ 1 _±_ 11 _._ 4 41 _._ 8 _±_ 14 _._ 0 37 _._ 2 _±_ 14 _._ 6 35 _._ 2 _±_ 15 _._ 7
+
+
+to different subfields of machine learning. Each node is represented by a 1,433-dimensional bag-ofwords (BoW) feature vector derived from the words in the titles and abstracts of the papers.
+
+
+**Citeseer.** The CiteSeer dataset is also an academic citation network dataset consisting of 3,312 papers
+from 6 subfields of computer science and a total of 4,732 citation edges. Similar to Cora-ML, each
+paper as a node is represented by a BoW feature vector with a dimensionality of 3,703.
+
+
+**PubMed.** The PubMed dataset is derived from a citation network of biomedical literature that
+contains 19,717 papers as nodes and 44,338 citation edges. Each paper is categorized into one of 3
+classes based on its topic. The node features in PubMed are 500-dimensional vectors.
+
+
+C.2 DETAILS OF MODELS
+
+
+In the following sections, we detail the hyperparameters and architectural details for the models
+performed in this paper. The experimental configuration files, including all hyperparameters, will be
+made publicly available upon acceptance of the paper.
+
+
+**GCN.** We utilize a two-layer GCN with 64 hidden units. A dropout rate of 0.5 is applied during
+training.
+
+
+**GAT.** Our GAT model consists of two layers with 64 hidden units and a single attention head.
+During training, we apply a dropout rate of 0.5 to the hidden units, but no dropout is applied to the
+neighborhood.
+
+
+**APPNP.** We use a two-layer MLP with 64 hidden units to encode the node attributes. We then
+apply generalized graph diffusion, using a transition matrix and coefficients _γK_ = (1 _−_ _α_ ) _K_ and
+_γl_ = _α_ (1 _−_ _α_ ) _l_ for _l < K_ .
+
+
+**GPRGNN.** Similar to APPNP, we employ a two-layer MLP with 64 hidden units for the predictive
+part. We use the symmetric normalized adjacency matrix with self-loops as the transition matrix and
+
+
+16
+
+
+GCN
+
+
+GPRGNN
+
+
+EvA 72 _._ 60 _±_ 2 _._ 18 68 _._ 35 _±_ 2 _._ 41 56 _._ 15 _±_ 1 _._ 92 42 _._ 93 _±_ 2 _._ 64 40 _._ 46 _±_ 2 _._ 76 39 _._ 11 _±_ 2 _._ 98
+EvaLocal 74 _._ 49 _±_ 2 _._ 05 70 _._ 53 _±_ 2 _._ 10 66 _._ 97 _±_ 2 _._ 86 74 _._ 75 _±_ 3 _._ 14 74 _._ 04 _±_ 2 _._ 09 72 _._ 99 _±_ 2 _._ 09
+LRBCD 74 _._ 89 _±_ 2 _._ 04 71 _._ 48 _±_ 2 _._ 49 65 _._ 68 _±_ 2 _._ 90 60 _._ 24 _±_ 3 _._ 15 56 _._ 81 _±_ 3 _._ 02 54 _._ 07 _±_ 2 _._ 99
+PRBCD 74 _._ 99 _±_ 1 _._ 99 71 _._ 90 _±_ 2 _._ 03 64 _._ 16 _±_ 2 _._ 32 55 _._ 54 _±_ 2 _._ 79 49 _._ 32 _±_ 2 _._ 66 43 _._ 90 _±_ 3 _._ 09
+
+
+EvA 72 _._ 01 _±_ 4 _._ 18 67 _._ 61 _±_ 4 _._ 28 55 _._ 95 _±_ 4 _._ 32 _−_ _−_ 42 _._ 39 _±_ 9 _._ 63
+EvaLocal 73 _._ 36 _±_ 3 _._ 71 69 _._ 68 _±_ 3 _._ 93 65 _._ 61 _±_ 6 _._ 75 70 _._ 64 _±_ 2 _._ 85 72 _._ 27 _±_ 5 _._ 06 71 _._ 40 _±_ 5 _._ 41
+LRBCD 74 _._ 50 _±_ 3 _._ 66 71 _._ 57 _±_ 4 _._ 10 65 _._ 88 _±_ 6 _._ 12 60 _._ 33 _±_ 5 _._ 70 56 _._ 75 _±_ 7 _._ 74 53 _._ 75 _±_ 8 _._ 18
+PRBCD 74 _._ 37 _±_ 3 _._ 40 71 _._ 66 _±_ 3 _._ 55 64 _._ 51 _±_ 4 _._ 94 56 _._ 21 _±_ 6 _._ 46 50 _._ 26 _±_ 7 _._ 41 45 _._ 81 _±_ 8 _._ 47
+
+
+Table 9: Classification accuracy (%) on the CoraML dataset under different attacks and adversarial
+training methods. The results are averaged over multiple runs with standard deviations.
+
+
+_ϵ_
+Model Adv. Tr. Attack
+
+0.01 0.02 0.05 0.10 0.15 0.20
+
+
+LRBCD 78 _._ 51 _±_ 1 _._ 56 75 _._ 94 _±_ 1 _._ 54 71 _._ 10 _±_ 1 _._ 16 64 _._ 41 _±_ 1 _._ 65 60 _._ 14 _±_ 1 _._ 73 57 _._ 37 _±_ 1 _._ 45
+None PRBCD 76 _._ 44 _±_ 1 _._ 64 73 _._ 17 _±_ 1 _._ 39 66 _._ 48 _±_ 2 _._ 13 58 _._ 51 _±_ 1 _._ 77 52 _._ 67 _±_ 2 _._ 09 47 _._ 19 _±_ 2 _._ 02
+EvA 74 _._ 80 _±_ 1 _._ 50 68 _._ 97 _±_ 1 _._ 58 52 _._ 95 _±_ 1 _._ 91 41 _._ 99 _±_ 2 _._ 06 37 _._ 65 _±_ 2 _._ 74 35 _._ 37 _±_ 2 _._ 38
+
+
+LRBCD 79 _._ 64 _±_ 1 _._ 77 77 _._ 51 _±_ 2 _._ 41 73 _._ 10 _±_ 1 _._ 54 68 _._ 19 _±_ 1 _._ 11 64 _._ 84 _±_ 1 _._ 92 62 _._ 35 _±_ 3 _._ 00
+LRBCD PRBCD 78 _._ 79 _±_ 1 _._ 88 75 _._ 87 _±_ 1 _._ 41 69 _._ 75 _±_ 1 _._ 81 62 _._ 35 _±_ 2 _._ 70 56 _._ 80 _±_ 3 _._ 04 54 _._ 23 _±_ 4 _._ 71
+EvA 76 _._ 80 _±_ 1 _._ 29 71 _._ 10 _±_ 1 _._ 64 56 _._ 30 _±_ 1 _._ 66 48 _._ 40 _±_ 2 _._ 91 43 _._ 06 _±_ 2 _._ 43 40 _._ 85 _±_ 2 _._ 70
+
+
+LRBCD 80 _._ 71 _±_ 1 _._ 16 77 _._ 86 _±_ 0 _._ 81 73 _._ 81 _±_ 0 _._ 54 69 _._ 40 _±_ 0 _._ 91 66 _._ 48 _±_ 1 _._ 08 63 _._ 77 _±_ 1 _._ 73
+PRBCD PRBCD 78 _._ 93 _±_ 1 _._ 27 76 _._ 30 _±_ 1 _._ 27 70 _._ 25 _±_ 1 _._ 74 64 _._ 06 _±_ 1 _._ 83 59 _._ 50 _±_ 2 _._ 84 56 _._ 58 _±_ 4 _._ 53
+EvA 76 _._ 80 _±_ 0 _._ 77 71 _._ 53 _±_ 1 _._ 65 57 _._ 44 _±_ 2 _._ 13 49 _._ 11 _±_ 3 _._ 05 44 _._ 70 _±_ 2 _._ 96 41 _._ 92 _±_ 3 _._ 32
+
+
+LRBCD 80 _._ 85 _±_ 1 _._ 36 78 _._ 58 _±_ 0 _._ 99 74 _._ 66 _±_ 1 _._ 11 69 _._ 89 _±_ 0 _._ 93 66 _._ 98 _±_ 0 _._ 92 65 _._ 05 _±_ 1 _._ 08
+EvA PRBCD 79 _._ 79 _±_ 1 _._ 80 76 _._ 51 _±_ 1 _._ 31 71 _._ 25 _±_ 1 _._ 54 64 _._ 34 _±_ 1 _._ 97 60 _._ 43 _±_ 1 _._ 32 58 _._ 22 _±_ 2 _._ 26
+EvA 77 _._ 22 _±_ 1 _._ 87 71 _._ 96 _±_ 2 _._ 38 57 _._ 94 _±_ 3 _._ 08 50 _._ 04 _±_ 3 _._ 29 44 _._ 91 _±_ 3 _._ 44 42 _._ 63 _±_ 2 _._ 33
+
+
+LRBCD 77 _._ 51 _±_ 2 _._ 81 74 _._ 80 _±_ 3 _._ 08 68 _._ 83 _±_ 4 _._ 20 62 _._ 56 _±_ 4 _._ 69 59 _._ 07 _±_ 5 _._ 98 55 _._ 66 _±_ 6 _._ 99
+None PRBCD 74 _._ 95 _±_ 3 _._ 08 71 _._ 67 _±_ 2 _._ 76 64 _._ 84 _±_ 4 _._ 18 57 _._ 94 _±_ 4 _._ 55 53 _._ 24 _±_ 5 _._ 20 48 _._ 68 _±_ 6 _._ 52
+EvA 72 _._ 53 _±_ 4 _._ 11 66 _._ 83 _±_ 4 _._ 54 51 _._ 53 _±_ 5 _._ 57 42 _._ 21 _±_ 8 _._ 52 37 _._ 01 _±_ 9 _._ 84 34 _._ 52 _±_ 9 _._ 83
+
+
+LRBCD 81 _._ 57 _±_ 2 _._ 58 79 _._ 72 _±_ 2 _._ 22 75 _._ 59 _±_ 2 _._ 31 71 _._ 32 _±_ 2 _._ 20 68 _._ 97 _±_ 2 _._ 10 66 _._ 69 _±_ 2 _._ 25
+LRBCD PRBCD 80 _._ 71 _±_ 2 _._ 61 78 _._ 51 _±_ 2 _._ 29 72 _._ 88 _±_ 2 _._ 38 66 _._ 90 _±_ 1 _._ 95 61 _._ 78 _±_ 1 _._ 99 57 _._ 51 _±_ 3 _._ 72
+EvA 78 _._ 79 _±_ 2 _._ 69 72 _._ 95 _±_ 2 _._ 67 63 _._ 42 _±_ 3 _._ 15 56 _._ 58 _±_ 4 _._ 68 52 _._ 88 _±_ 5 _._ 61 49 _._ 96 _±_ 5 _._ 75
+
+
+LRBCD 80 _._ 43 _±_ 2 _._ 01 78 _._ 01 _±_ 1 _._ 91 73 _._ 74 _±_ 1 _._ 66 69 _._ 96 _±_ 2 _._ 14 67 _._ 19 _±_ 2 _._ 51 64 _._ 84 _±_ 3 _._ 20
+PRBCD PRBCD 80 _._ 21 _±_ 2 _._ 43 77 _._ 30 _±_ 2 _._ 63 71 _._ 53 _±_ 2 _._ 67 65 _._ 12 _±_ 3 _._ 21 60 _._ 07 _±_ 4 _._ 10 55 _._ 37 _±_ 3 _._ 85
+EvA 78 _._ 79 _±_ 2 _._ 45 73 _._ 10 _±_ 2 _._ 54 62 _._ 85 _±_ 4 _._ 93 56 _._ 94 _±_ 6 _._ 64 53 _._ 74 _±_ 7 _._ 65 51 _._ 60 _±_ 8 _._ 10
+
+
+LRBCD 79 _._ 64 _±_ 0 _._ 89 76 _._ 44 _±_ 0 _._ 68 72 _._ 95 _±_ 1 _._ 04 69 _._ 04 _±_ 1 _._ 26 67 _._ 05 _±_ 1 _._ 46 65 _._ 48 _±_ 1 _._ 88
+EvA PRBCD 78 _._ 51 _±_ 0 _._ 60 75 _._ 87 _±_ 1 _._ 32 70 _._ 32 _±_ 0 _._ 89 64 _._ 91 _±_ 1 _._ 14 59 _._ 57 _±_ 1 _._ 75 56 _._ 16 _±_ 1 _._ 62
+EvA 76 _._ 51 _±_ 0 _._ 44 70 _._ 96 _±_ 0 _._ 41 60 _._ 85 _±_ 3 _._ 07 54 _._ 73 _±_ 3 _._ 99 50 _._ 25 _±_ 5 _._ 57 48 _._ 83 _±_ 5 _._ 95
+
+
+Table 10: Dataset Statistics
+**Dataset** **Nodes** **Edges** **Features** **Classes**
+
+
+**Cora-ML** 2,810 7,981 1,433 7
+**Citeseer** 3,312 4,732 3,703 6
+**PubMed** 19,717 44,338 500 3
+
+
+randomly initialize the diffusion coefficients. We consider a total of _K_ = 10 diffusion steps, with _α_
+set to 0.1. During training, we apply a dropout rate of 0.2 to the MLP, while no dropout is applied
+to the adjacency matrix. Unlike the method in Chien et al. (2021), we always learn the diffusion
+coefficients with weight decay, which acts as a regularization mechanism to prevent the coefficients
+from growing indefinitely.
+
+
+**SoftMedian GDC.** We follow the default configuration from Geisler et al. (2023), using a temperature
+of _T_ = 0 _._ 2 or the SoftMedian aggregation, with 64 hidden dimensions and a dropout rate of 0.5.
+We fix the Personalized PageRank diffusion coefficient to _α_ = 0 _._ 15 and apply a top _k_ = 64
+sparsification. During the attacks, the model remains fully differentiable, except for the sparsification
+of the propagation matrix.
+
+
+**MLP.** We design the MLP following the prediction module of GPRGNN and APPNP, incorporating
+two layers with 64 hidden units. During training, we apply a dropout rate of 0.2 to the hidden layer.
+
+
+C.3 HYPERPARAMETER SETUP
+
+
+In EvA we set the capacity of the computation to the same as the population, this means that all
+perturbations within a population are in one combined inference. However, in some cases where the
+
+
+17
+
+
+graph is large (e.g. PubMed), we reduce this number. Table 11 shows the hyper-parameter selection in
+almost all experiments. We only change the population number in some experiments, like certificate
+attacks, to reduce the computation. E.g., in the certificate attack, the population is reduced by a factor
+of 10.
+
+
+C.4 ATTACK HYPERPARAMETERS
+
+
+To assess the robustness of GNNs, we utilize the following attacks and hyperparameters. Based on
+Geisler et al. (2023), we also select the tanh-margin loss as the attack objective.
+
+
+**PRBCD.** We closely adhere to the setup outlined by Geisler et al. (2023). A block size of 500,000 is
+used with 500 training epochs. Afterward, the model state from the best epoch is restored, followed
+by 100 additional epochs with a decaying learning rate and no block resampling. Additionally, the
+learning rate is scaled according to _δ_ and the block size, as recommended by Geisler et al. (2023).
+
+
+**LRBCD.** The same block size of 500,000 is used with 500 training epochs. The learning rate is
+scaled based on _δ_ and the block size, following the same approach as PRBCD. The local budget is
+consistently set as 0.5.
+
+
+**EvA.** We set the population size to 1024 in most cases. Our mutation rate is 0.01, and increasing this
+number breaks the balance between exploration and exploitation, leading to less effective attacks.
+We run each attack for 500 iterations in most cases. In cases like certificate attacks, which are
+time-consuming, we reduce this number to 100. The details are summarized in Table 11.
+
+
+**PGA.** For the PGA, we adopt the same setting as in Zhu et al. (2023). We use GCN as the surrogate
+model and tanhMarginMCE-0.5 as the loss type. The attack is configured with 1 greedy step, a
+pre-selection ratio of 0.1, and a selection ratio of 0.6. Additionally, the influence ratio is set to 0.8,
+with the selection policy based on node degree and margin.
+
+
+Table 11: Hyper-parameters for PRBCD, LRBCD, and EvA
+
+**Hyper-parameter** **PRBCD** **LRBCD** **Hyper-parameter** **EvA**
+
+
+Epochs 500 500 No. Steps 500
+Fine-tune Epochs 100 0 Mutation Rate 0.01
+Keep Heuristic WeightOnly WeightOnly Tournament Size 2
+Search Space Size 500,000 500,000 Population Size 1,024
+Loss Type tanhMargin tanh-Margin No. Crossovers 30
+Early Stopping N/A False Mutation Method Adaptive
+
+
+D DETAILS ON NOVEL OBJECTIVES
+
+
+**Smoothing-based certificate.** We define a randomized model as a convolution of the original model
+and a smoothing scheme. The smoothing scheme _ξ_ : _X_ _�→X_ is a randomized function mapping the
+given input to a random nearby point. For graph structure, we use the sparse smoothing certificate
+(Bojchevski et al., 2020), which certifies whether within _Bra,rd_ the prediction of the smooth model
+remains the same. Here _ra_ is the maximum number of possible additions, and _rd_ is the maximum
+number of edge deletions. The smoothing function is defined by two Bernoulli parameters _p_ +, and
+_p−_ ; i.e. for each entity of _**A**_, if it is zero, it will be toggled with _p_ + probability and otherwise with _p−_ .
+
+
+The robustness certificate also accesses the model _f_ as a black box and defines a smooth model
+as _f_ [¯] _y_ ( _**x**_ ) = E[I[ _f_ ( _ξ_ ( _**x**_ )) = _y_ ]] - each random sample _**x**_ _[′]_ is one vote for class _f_ ( _**x**_ _[′]_ ) and _f_ [¯] _y_ is the
+proportion of votes for class _y_ . Let _p_ = _f_ [¯] _y_ ( _**x**_ ); the certificate finds a lower bound probability
+_p_ _≥_ min _**x**_ ˜ _∈B_ ( _**x**_ ) _f_ [¯] _y_ (˜ _**x**_ ) and acts as a decision function I[ _y_ _≥_ 0 _._ 5]. In other words, the certificate
+returns yes, in case it is guaranteed that the smooth model will not return any value lower than 0 _._ 5 for
+class _y_ within _nB_ ( _**x**_ ). For further details about how to compute the certificate, see (Bojchevski et al.,
+2020).
+
+
+**Adaptive sampling for certificate attack.** Statistical rigor is not a necessity while attacking the
+certificate. Therefore, while attacking, we can reduce the cost of resampling by only resampling the
+
+
+18
+
+
+**1000**
+
+**1001**
+
+**1002**
+
+
+**1003**
+
+**1004**
+
+**1005**
+
+**1006**
+
+**1007**
+
+**1008**
+
+
+**1009**
+
+**1010**
+
+**1011**
+
+**1012**
+
+**1013**
+
+
+**1014**
+
+**1015**
+
+**1016**
+
+**1017**
+
+**1018**
+
+**1019**
+
+
+**1020**
+
+**1021**
+
+**1022**
+
+**1023**
+
+**1024**
+
+**1025**
+
+
+subset of the graph that was perturbed. In other words, we initialize the search by computing samples
+_**A**_ 1 _, . . .,_ _**A**_ _m_, and for each perturbation _**A**_ [˜] we only resample the edges in _**A**_ _△_ _**A**_ [˜] . For each edge in
+that set, if the edge was added via the perturbations, we resample _m_ Bernoulli variable with _p−_, and
+otherwise _p_ +. We substitute those samples in the same entry of _**A**_ 1 _, . . .,_ _**A**_ _m_, and by running this
+process _|δ|_ times, we assume that _**A**_ [˜] 1 _, · · ·_ _**A**_ [˜] _m_ are representative as a new set of _m_ samples for _**A**_ [˜] .
+This adaptive sampling reduces the number of random computations from _m · n_ [2] to _m · |δ|_, which is
+significantly lower. Surely, to evaluate the final perturbation (the reported effectiveness), we don’t
+use this approach, as it is statistically flawed and only applicable to reduce the computation during
+the attack.
+
+
+D.1 FITNESS FUNCTION
+
+
+For a targeted attack, since the objective space is limited to the set _{_ 0 _,_ 1 _}_, the sensitivity is very
+low. As a result, the method becomes equivalent to a random search. The zero-one fitness function
+means that all individuals with different perturbations receive the same score, causing the algorithm
+to behave more like a random search, as ties in each tournament are broken randomly. Secondly,
+since only one individual with a score of one is sufficient to halt the algorithm, all elite populations
+before success have scores of zero, which again results in random selection from them.
+
+
+D.2 PERFORMANCE ON ARXIV
+
+
+To demonstrate the scalability of our attack on larger datasets, we also present results for the Arxiv
+dataset. For this, we consider two realistic scenarios. In the first scenario, similar to the previous
+one, the attacker has access to modify a limited number of edges. We provide results for three values
+of epsilon: 0 _._ 1% _,_ 0 _._ 5% _,_ 1 _._ 0%. Table 12 summarizes the results for this scenario. EvA outperforms
+PRBCD for smaller budgets and achieves comparable performance with a 1% budget, which could
+be further improved by scaling and increasing computational resources.
+
+
+Table 12: Comparison of PRBCD and EvA performance for varying _ϵ_ values
+
+
+**Method** **Clean** **0.1%** **0.5%** **1%**
+
+
+PRBCD 70.53 69.83 68.64 66.27
+EvA 70.53 69.21 67.59 66.86
+
+
+Alternatively, in a more practical scenario, the attacker compromise a subset of nodes (e.g., 1,000
+nodes) and get access to them, referred to as control nodes, and strategically target a specific
+group within the network (the target group). For example, in a social network, an attacker could
+purchase 1,000 user accounts and use them to influence the performance of other subgroups. For this
+experiment, we randomly sampled 1,000 nodes five times and also randomly selected 1,500 nodes
+5 time s as target group nodes. We then ran EvA and PRBCD and reported the average results in
+Table 13. Our method outperforms PRBCD in this scenario as well.
+
+
+In summary, we demonstrate that our attack can be effectively applied and that it outperforms previous
+state-of-the-art methods.
+
+
+Table 13: Comparison of PRBCD and EvA performance for varying _ϵ_ values using contorl nodes
+
+
+**Method** **Clean** **1%** **5%**
+
+
+PRBCD 64.89 54.7
+EvA 59.3 53.92
+
+
+D.3 TIME ANALYSIS
+
+
+We also present an ablation study to compare the time analysis by evaluating the memory and wall
+clock time between EvA and the PRBCD method. In this experiment, we evaluate EvA with different
+numbers of steps, population sizes, and parallel evaluations, while PRBCD is run with varying
+
+
+19
+
+
+**1026**
+
+**1027**
+
+
+**1028**
+
+**1029**
+
+**1030**
+
+**1031**
+
+**1032**
+
+**1033**
+
+
+**1034**
+
+**1035**
+
+**1036**
+
+**1037**
+
+**1038**
+
+**1039**
+
+
+**1040**
+
+**1041**
+
+**1042**
+
+**1043**
+
+**1044**
+
+
+**1045**
+
+**1046**
+
+**1047**
+
+**1048**
+
+**1049**
+
+**1050**
+
+
+**1051**
+
+**1052**
+
+**1053**
+
+**1054**
+
+**1055**
+
+**1056**
+
+
+**1057**
+
+**1058**
+
+**1059**
+
+**1060**
+
+**1061**
+
+**1062**
+
+
+**1063**
+
+**1064**
+
+**1065**
+
+**1066**
+
+**1067**
+
+
+**1068**
+
+**1069**
+
+**1070**
+
+**1071**
+
+**1072**
+
+**1073**
+
+
+**1074**
+
+**1075**
+
+**1076**
+
+**1077**
+
+**1078**
+
+**1079**
+
+
+|Col1|P<br>1|arallel Eval<br>6.0|128.0|Col5|
+|---|---|---|---|---|
+|3<br>~~6~~|3<br>~~6~~|2.0<br>~~4.0~~|256.0<br>~~512.0~~|256.0<br>~~512.0~~|
+||||||
+||||||
+||||||
+
+
+Figure 8: Comparing the memory usage between EvA and PRBCD
+
+
+numbers of epochs and block sizes on the PubMed dataset. Fig. 8 (left) shows the results for EvA
+and PRBCD in terms of memory usage, wall clock time and method performance. Our method
+demonstrates comparable performance within the same level of wall clock time (less than a minute).
+Moreover, by increasing the wall clock time—through and memory either by a larger population
+size or more steps— EvA achieves additional benefits. Additionally, in Fig. 8 (right), we highlight
+how our framework provides a trade-off between time and memory for achieving the same level of
+accuracy by varying the number of parallel evaluations. For each point in the figure, we observe
+identical performance; however, the methods differ in memory usage due to different number of
+parallel evaluation, leading to variations in wall clock time.
+
+
+D.4 COMPARISON WITH (DAI ET AL., 2018)
+
+
+(Dai et al., 2018) proposed a practical black-box attack (PBA), dividing it into PBA-C (with access
+to logits - continuous) and PBA-D (access only to the labels - discrete). As stated in (Dai et al.,
+2018), a genetic algorithm for global attacks requires PBA-C because it relies on logits, with the
+fitness function being the negative log-likelihood. We demonstrate that EvA not only eliminates
+the need for logits but also performs even better by directly optimizing for accuracy rather than
+using log-likelihood. To compare our method with (Dai et al., 2018), we modified the algorithm’s
+fitness function and mutation mechanism to replicate the results reported in (Dai et al., 2018). This
+implementation retains scalability benefits, as it is also built upon our sparse encoded representation.
+Note here we re-implement Dai et al. (2018) in our sparse and parallelized framework. Their
+[original implementation uses dense adjacency matrices and sequential evaluation and would achieve](https://github.com/Hanjun-Dai/graph_adversarial_attack/tree/master)
+a significantly worse result within the same memory/run-time constraint. Even with our efficient
+re-implementation Dai et al. (2018) is significantly worse than ours. Table 14 provides the results
+for the CoraML dataset using the GCN architecture. EvA also significantly outperforms (Dai et al.,
+2018). Additionally, since our method is independent of gradients, we established the first attack
+on conformal prediction and certification. For conformal prediction, we attack coverage and set
+size where the latter criteria are not yet explored (to the best of our knowledge). Attacks tending to
+decrease certificate effectiveness are also under-explored in GNNs. In this work, we aim to achieve
+both attack on certified accuracy and certified ratio.
+
+
+**Attack Name** **Clean** **0** _**.**_ **01** **0** _**.**_ **02** **0** _**.**_ **05** **0** _**.**_ **1** **0** _**.**_ **15** **0** _**.**_ **2**
+
+
+(Dai et al., 2018) 81 _._ 07 _±_ 2 _._ 07 78 _._ 50 _±_ 1 _._ 66 76 _._ 66 _±_ 2 _._ 22 72 _._ 53 _±_ 1 _._ 91 68 _._ 75 _±_ 1 _._ 45 65 _._ 34 _±_ 1 _._ 20 63 _._ 27 _±_ 2 _._ 47
+
+EvA 81 _._ 07 _±_ 2 _._ 07 **74.80** _±_ 1 _._ 50 **68.97** _±_ 1 _._ 58 **52.95** _±_ 1 _._ 91 **41.99** _±_ 2 _._ 06 **37.65** _±_ 2 _._ 74 **35.37** _±_ 2 _._ 38
+
+
+Table 14: Accuracy results of different attack methods under varying _**ϵ**_ values.
+
+
+20
+
+
+0.20
+
+
+0.15
+
+
+0.10
+
+
+0.05
+
+
+30
+
+
+25
+
+
+20
+
+
+15
+
+
+10
+
+
+5
+
+
+3
+
+
+10
+20
+30
+
+
+1
+
+
+0
+
+
+3.0 3.5 4.0
+
+Wall Clock Time

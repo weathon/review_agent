@@ -67,8 +67,8 @@ DEFAULT_BENCH_DIR = Path(__file__).parent / "AI-Scientist" / "review_iclr_bench"
 
 
 def load_ground_truth(bench_dir: Path) -> tuple[list[dict], Path]:
-    """Load GT from either AI-Scientist TSV or iclr2025_data CSV format."""
-    # Try iclr2025_data format first (CSV with paper_id, title, decision, gt_binary, avg_score, score_0..5)
+    """Load GT from either AI-Scientist TSV or iclr2026_data CSV format."""
+    # Try iclr2026_data format first (CSV with paper_id, title, decision, gt_binary, avg_score, score_0..5)
     csv_file = bench_dir / "ratings.csv"
     tsv_file = bench_dir / "ratings_subset.tsv"
 

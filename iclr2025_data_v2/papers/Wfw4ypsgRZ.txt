@@ -1,0 +1,1941 @@
+# DECODING GAME: ON MINIMAX OPTIMALITY OF HEURISTIC TEXT GENERATION STRATEGIES
+
+
+**Sijin Chen** _[∗]_ **,** **Omar Hagrass** _[†]_ **,** **Jason M. Klusowski** _[†]_
+Princeton University, Princeton, NJ 08540, USA
+_{_ chensj,oh2588,jason.klusowski _}_ @princeton.edu
+
+
+ABSTRACT
+
+
+Decoding strategies play a pivotal role in text generation for modern language
+models, yet a puzzling gap divides theory and practice. Surprisingly, strategies
+that should intuitively be optimal, such as Maximum a Posteriori (MAP), often
+perform poorly in practice. Meanwhile, popular heuristic approaches like Top- _k_
+and Nucleus sampling, which employ truncation and normalization of the conditional next-token probabilities, have achieved great empirical success but lack
+theoretical justifications. In this paper, we propose Decoding Game, a comprehensive theoretical framework which reimagines text generation as a two-player
+zero-sum game between Strategist, who seeks to produce text credible in the true
+distribution, and Nature, who distorts the true distribution adversarially. After
+discussing the decomposibility of multi-step generation, we derive the optimal
+strategy in closed form for one-step Decoding Game. It is shown that the adversarial Nature imposes an implicit regularization on likelihood maximization, and
+truncation-normalization methods are first-order approximations to the optimal
+strategy under this regularization. Additionally, by generalizing the objective and
+parameters of Decoding Game, near-optimal strategies encompass diverse methods such as greedy search, temperature scaling, and hybrids thereof. Numerical
+experiments are conducted to complement our theoretical analysis.
+
+
+1 INTRODUCTION
+
+
+Decoding strategies underpin the mechanism of generating a text sequence from a given language
+model, and therefore become an essential component of modern Large Language Models (OpenAI,
+2024). Specifically, given an autoregressive language model P which encodes the conditional next
+[�]
+token probability P [�] ( _Xt|X<t_ ), one aims to generate a high-quality sequence ( _X_ 1 _, . . ., XT_ ) by some
+strategy based on P. Perhaps one of the most straightforward strategies is Maximum a Posteriori
+
+[�]
+(MAP), looking for the most probable sequence, i.e., the one with the maximum predicted likelihood
+P�( _X_ 1 _, . . ., XT_ ). Considering the computation cost of an exact MAP, one would naturally turn to
+some local heuristic variants such as greedy search, beam search (Graves, 2012; Sutskever et al.,
+2014), and contrastive search (Su et al., 2022).
+
+
+These deterministic searching methods based on likelihood maximization can achieve state-of-theart performance especially in closed-ended tasks, such as translation, coding, math problem solving,
+and summarization (Shi et al., 2024). Counter-intuitively, in open-ended text generation tasks, these
+strategies usually lead to low-quality, degenerate texts, even with heavily trained state-of-the-art
+language models (Shi et al., 2024; Wiher et al., 2022; Hashimoto et al., 2019). Instead, stochastic
+sampling methods that randomly select the next token are observed to yield better outputs. Popular
+strategies include Top- _k_ sampling (Fan et al., 2018), Nucleus (Top- _p_ ) sampling (Holtzman et al.,
+2020), _η_ sampling (Hewitt et al., 2022), and Mirostat sampling (Basu et al., 2021), among others.
+
+
+They follow a truncation-normalization design, namely (1) sampling the next token from a truncated
+distribution by removing the tail probabilities, and (2) rescaling the remaining probabilities by a
+normalizing constant. Some other methods like Basis-Aware sampling (Finlayson et al., 2024) and
+
+
+_∗_ Department of Electrical and Computer Engineering
+
+_†_ Department of Operations Research and Financial Engineering
+
+
+1
+
+
+Typical sampling (Meister et al., 2023) also rely on truncation but may discard high-probability
+tokens besides the tail; see Section 2 for details. Formally, if (ˆ _p_ 1 _, . . .,_ ˆ _pd_ ) is the vector of the
+predicted probability of all candidate next-tokens _{_ 1 _, . . ., d}_, these methods decide an index set _S_
+and sample a token _i_ with probability
+
+
+_qi_ _∝_ _p_ ˆ _i_ 1( _i∈S_ ) _._
+
+
+Here, different designs define the truncation set _S_ using distinct criteria: Top- _k_ sampling uses a fixed
+size threshold, Nucleus sampling uses cumulative probability mass, and entropy-based methods use
+information-theoretic thresholds ( _η_ ).
+
+
+Regarding decoding strategies, there is an interesting dichotomy between theory and practice. From
+a statistical perspective, likelihood maximization approaches are desired to succeed by seeking or
+approximating the posterior mode of P, but usually underperform in practice on open-ended gener
+[�]
+ation tasks. On the contrary, despite their empirical superiority over likelihood maximization, the
+design of randomized sampling strategies remains mostly heuristic and the theory behind is poorly
+understood. To resolve this dichotomy, this paper aims to propose a comprehensive theoretical
+framework of text generation, where _heuristic sampling strategies, rather than likelihood maximiza-_
+_tion, are proved to be (near-)optimal_ .
+
+
+Now, we shall introduce the motivations behind our framework before presenting it formally.
+
+
+1.1 MOTIVATION AND OUR FRAMEWORK
+
+
+**First** **thought.** At first sight, a statistician may naturally relate these truncation methods with the
+concept of sparsity and regularization, and further attempt to handcraft a constrained or penalized
+optimization problem where they are optimal strategies. This is easier than it may sound: for example, we can design a distance metric so that Top- _k_ sampling is the best sparse approximation to
+the original distribution according to this metric, such as _ℓ_ 0 distance that directly controls sparsity.
+The major flaw of such approaches is that their objectives and constraints mostly come from nonprincipled, reverse engineering and lack statistical motivations. Therefore, they may not be able to
+provide theoretical insight into questions like why sparse solutions are favored, and why we should
+adopt a specific regularization term and distance metric.
+
+
+**Second thought.** Let us restart from the most significant observation that likelihood-maximization
+approaches fail in practice. What does this imply? If P is the _true_ distribution of natural language, it
+is reasonable to expect that the trained language model P is away from P. This makes P-likelihood
+
+[�] [�]
+an unreliable criterion of a generated text, and hence leads to the failure of likelihood maximization.
+On the other hand, the appropriate criterion a strategy would like to maximize is the P-likelihood of
+a generated sequence.
+
+
+However, note that for generality, we restrict ourselves from assuming too many structures on the
+true distribution P, except for its bounded deviation from P. This “model-free” setup brings an
+
+[�]
+adversarial nature to text generation: in the worst case, P can try its best to degrade the quality of
+our generated text within its distance budget.
+
+
+**Decoding Game.** These ideas lead to our proposal, _Decoding Game_, a two-player zero-sum game
+between Strategist (S) and Nature (N). In this game, player S chooses a (randomized) decoding
+strategy to generate a text sequence that, in expectation, achieves good log-likelihood in the true
+distribution. On the other hand, player N is always able to shift the true distribution adversarially to
+reduce the text quality. Knowing the decoding strategy beforehand, player N chooses the worst-case
+true distribution P. Formally, a _T_ -step Decoding Game is represented by
+
+
+max min EQ log P( _X_ 1 _, . . ., XT_ _| X_ 0) _,_
+Q P _∈N_ ( [�] P)
+
+
+where, conditioned on a given prompt _X_ 0, Q is the probability measure on ( _X_ 1 _, . . ., XT_ ) induced
+by the decoding strategy of player S, and _N_ (P [�] ) refers to a neighborhood of P. The objective of the
+
+[�]
+game is the true log-likelihood of a length- _T_ sequence generated from strategy Q, in expectation.
+
+
+For player S, an equivalent perspective is robust optimization (Ben-Tal et al., 2009). Since player S
+has no knowledge of P, it aims to find a strategy that can work consistently well for all the possible
+true distributions. To achieve such robustness against an adversarial distributional shift, player S
+
+
+2
+
+
+should optimize the log-likelihood in the _worst_ case of P to ensure that its strategy does not lead to
+poor performance in _any_ case, which corresponds to the minimax formulation.
+
+
+If there is no adversary (P = P always holds), then the game reduces to P-likelihood maximization,
+
+[�] [�]
+and naive MAP is exactly the solution. However, when an adversary is present, MAP becomes
+sub-optimal and the game invites more interesting consequences.
+
+
+1.2 CONTRIBUTION
+
+
+We conduct in-depth investigations into Decoding Game. The main results include:
+
+
+    - **Criticality** **of** **one-step** **Decoding** **Game.** In Section 3, we identify the role of one-step
+Decoding Game in understanding the multi-step setting. We build up a recursive structure
+for the multi-step game, and argue the computational intractability of obtaining a global
+solution in modern LLMs. Instead, we construct a locally optimal mechanism that involves
+solving a one-step Decoding Game locally at each timestep, and justify its worst-case performance.
+
+    - **Optimality** **of** **heuristic** **strategies** **under** **implicit** **regularization.** Under total variation
+(TV) distance, we provide closed-form solutions to the one-step Decoding Game for both
+players. In Section 4.1, we show that the optimal strategy of player N imposes an _ℓ∞_ -type
+regularization on the log-likelihood. As a result, tail truncation-normalization sampling
+strategies emerge as first-order approximations to the optimal strategy of player S; see
+Section 4.2.
+
+    - **Generalizability of the framework.** In Section 4.3, we further discuss the consequences
+of using different objectives for Decoding Game, recovering other types of strategies such
+as temperature-based methods. The exclusive advantage of log-likelihood, in contrast to
+other objectives, is also highlighted under the general framework.
+
+    - **Empirical evidence.** Building on the general theory, in Section 5, we propose _Game sam-_
+_pling_ (Algorithm 1) and empirically evaluate its performance in open-ended text generation with GPT-2 models. The experiments suggest that Game sampling is able to outperform other strategies, which corroborates our optimality results. The code is available at
+[https://github.com/omar-hagrass/decoding-game.](https://github.com/omar-hagrass/decoding-game)
+
+
+Decoding Game provides a comprehensive theoretical framework that rigorously establishes optimality results for heuristic sampling strategies. It largely differs from existing interpretations which,
+to different extents, provide some theoretical viewpoints as partial justifications for their design. We
+will briefly review them in Section 2.
+
+
+At the same time, we believe that the statistically meaningful motivations and minimal assumptions behind Decoding Game open up its potential for future research on decoding strategies; see
+discussions in Section 6.
+
+
+2 RELATED WORKS
+
+
+2.1 EXISTING THEORETICAL INTERPRETATIONS
+
+
+Theoretical explanations for decoding methods have been very sparse and existing works are relatively limited. Known perspectives presented in literature include (1) overestimation of token probabilities, (2) surprisal and perplexity of generated text, and (3) implicit regularization on MAP.
+
+
+Following the long-held intuition (Holtzman et al., 2020) that language models tend to assign excessive probability to the unreliable tail, Finlayson et al. (2024) explained truncation as a remedy for
+this problem, showing that it can correctly discard the tokens out of the support of the true distribution when overestimation is upper-bounded. They further credited overestimation to the Softmax
+Bottleneck (Yang et al., 2018) brought by the language model architecture, motivating a new truncation mechanism that may remove high-probability tokens besides the tail. However, this structural
+assumption may not well account for the broadness of the source of overestimation. Additionally, it
+is unclear why rescaling all the remaining probabilities by the same constant is considered the best
+approach after truncation.
+
+
+3
+
+
+A similar idea of identifying the correct support has also driven prior works such as Hewitt et al.
+(2022) and Meister et al. (2023). Hewitt et al. (2022) modeled the predictions as a mixture of true distribution and uniform-like smoothing distribution, and viewed truncation as a way to desmooth the
+output. Meister et al. (2023) proposed to compute the support that better aligns with the informationtheoretic metrics of human text measured by token surprisal and entropy, under assumptions on the
+behavior of human speakers. In this method, high-probabilty tokens may be discarded as well.
+
+
+Basu et al. (2021) theoretically derived the perplexity of various sampling methods under the statistical assumption that next-token probabilities follow a Zipf distribution, comparing how the hyperpamameter of each method influences the order of perplexity. This particular Zipfian assumption may
+not fully capture the complicated probability distributions encoded by modern language models.
+
+
+An earlier work (Meister et al., 2020) attempted to explain heuristic methods such as beam search
+as an implicit regularization imposed on MAP. However, the design of regularization term seems to
+lack statistical motivations. They also suggest a qualitative relationship between the regularization
+term and the uniformity of surprisal of generated sequences, but the detailed mechanism is not well
+understood mathematically.
+
+
+Overall, each of them motivates the design of heuristic decoding methods to a certain extent, but
+to the best of our knowledge, we are not aware of any comprehensive theoretical framework that
+establishes optimality results.
+
+
+2.2 TEXT GENERATION AS DECISION MAKING
+
+
+Another line of work, though not directly working on the theory of heuristic decoding schemes,
+views the problem of text generation as optimizing the policy of a decision-making agent working in
+an environment with or without adversary. This perspective resonates with our rationale behind the
+Decoding Game. For example, Jacob et al. (2024) proposed a game between a generation strategy
+and a text quality discriminator, and empirically demonstrated the advantage of the decoding strategy
+at the Nash equilibrium of this game in multiple tasks. Other recent works such as Snell et al. (2023);
+Kim et al. (2023); Mudgal et al. (2024) modeled next-token generation as (token-level) Markov
+decision processes, and applied reinforcement learning techniques for controlled decoding.
+
+
+2.3 ROBUST OPTIMIZATION AND REGULARIZATION
+
+
+Our framework also draws a connection to robust optimization (Ben-Tal et al., 2009), which aims to
+find solutions with stable performance under data uncertainty or perturbations. Given the adversarial
+nature of uncertainty, robust optimization is typically formulated as a minimax problem that seek
+the best response to the worst-case data realizations. Interestingly, while the sparsity brought by
+truncation sampling can be seen as regularization, it is known that regularization and robustness
+are strongly correlated in various machine learning problems (Derman et al., 2021; Shaham et al.,
+2018; Bertsimas et al., 2011), as solving an optimization problem with regularization is equivalent
+to solving its non-regularized robust counterpart. For instance, lasso and ridge optimization can be
+reformulated as robust optimization problems, where the data matrix is subject to different types of
+perturbations: ridge regression corresponds to Frobenius norm-bounded perturbations while lasso
+corresponds to column-wise _ℓ_ 2-norm bounded perturbations (Shaham et al., 2018). The theory
+developed in this paper also confirms such an equivalence between robustness and regularization.
+
+
+3 FORMULATION
+
+
+3.1 NOTATIONS
+
+
+Throughout, we use boldface letters to represent vectors and vector-valued mappings, and use
+blackboard bold letters to represent probability measures and expectations. For a sequence
+( _x_ 0 _, x_ 1 _, . . ., xT_ ), we define _x<t_ = ( _x_ 0 _, . . ., xt−_ 1). For a vector _**a**_ = ( _a_ 1 _, . . ., ad_ ), _**a**_ 1: _i_ =
+( _a_ 1 _, . . ., ai_ ) is the vector extracting its first _i_ components. The _ℓp_ norm ( _p_ _≥_ 1) of _**a**_ is defined
+as _∥_ _**a**_ _∥p_ = ( [�] _[d]_ _i_ =1 _[|][a][i][|][p]_ [)][1] _[/p]_ [,] [with] _[ℓ][∞]_ [norm] _[∥]_ _**[a]**_ _[∥]_ _∞_ [=] [max] _[i][≤][d][ |][a][i][|]_ [.] [The] [total] [variation] [(TV)] [dis-]
+tance between two probability vectors _**p**_ _,_ _**q**_ is defined as _d_ TV( _**p**_ _,_ _**q**_ ) = [1] 2 _[∥]_ _**[p]**_ _[ −]_ _**[q]**_ _[∥]_ 1 [.] [For] [a] [function]
+
+_f_ : R _→_ R, _f_ ( _**a**_ ) represents the elementwise application of _f_ to the vector _**a**_, and _**a**_ _/_ _**b**_ represents
+
+
+4
+
+
+the elementwise division of _**a**_ by _**b**_ . For a finite set _V_, ∆( _V_ ) denotes the probability simplex of
+dimension _|V|_, and _V_ _[t]_ denotes the Cartesian product _V_ _× ... × V_ ( _t_ times). We always assume that
+optimization variables have to satisfy probability constraints (e.g., lying in the probability simplex,
+or the space of probability measures), and will not specify them explicitly for conciseness.
+
+
+3.2 DECODING GAME
+
+
+We describe the _T_ -step Decoding Game in full detail. Suppose _V_ = _{_ 1 _,_ 2 _, ..., d}_ is the vocabulary of all _d_ tokens, and the natural language follows a true distribution P. Upon training, we
+obtain a language model P that approximates the true P. Beginning with a prescribed context
+
+[�]
+_X_ 0 = (prompt _, ⟨_ BOS _⟩_ ), we generate a sequence ( _X_ 1 _, . . ., XT_ ) with a possibly randomized decoding strategy, which is represented by another measure Q such that next tokens are selected with
+probability Q( _Xt_ _|_ _X<t_ ). We can then evaluate the quality of the generated sequence by testing
+whether the true distribution P is also likely to yield such a sequence. Specifically, for a typical
+sequence generated from Q, we use its log-likelihood in P-measure as the criterion
+
+_L_ _[T]_ (Q _,_ P) = EQ log P( _X_ 1 _, . . ., XT_ _| X_ 0) _,_
+
+
+which is also the negative cross-entropy between Q and P when viewed as distributions on _V_ _[T]_ .
+
+
+The _T_ -step Decoding Game is a two-player zero-sum game on this criterion between Strategist
+(S) and Nature (N), where player S chooses Q (by choosing a decoding strategy) to maximize the
+criterion of the generation, while player N chooses P within a neighborhood of P to minimize it.
+
+[�]
+This gives rise to the following formulation:
+
+max min _L_ _[T]_ (Q _,_ P) = max min EQ log P( _X_ 1 _, . . ., XT_ _| X_ 0) _._ (MDG)
+Q P _∈N_ ( [�] P) Q P _∈N_ ( [�] P)
+
+
+In other words, without knowing P specifically, player S seeks a strategy to optimize the objective
+_L_ _[T]_ in the worst case among _N_ (P [�] ).
+
+
+As a starting point of further understanding of the multi-step game, we build up a picture at _T_ = 1. In
+this case, the probability measure P is represented by a _d_ -dimensional probability vector _**p**_ _∈_ ∆( _V_ ),
+where _pi_ = P( _X_ 1 = _i_ _|_ _X_ 0). Similarly, the one-step strategy Q is represented by _**q**_ _∈_ ∆( _V_ ). We
+use TV distance to define the neighborhood _N_ (ˆ _**p**_ ) = _{_ _**p**_ : _d_ TV( _**p**_ _,_ _**p**_ ˆ) _≤_ _ϵ}_, leading to the one-step
+Decoding Game
+
+
+max min _L_ [1] (Q _,_ P) = max min (ODG)
+Q P _∈N_ ( [�] P) _**q**_ _**p**_ _∈N_ ( ˆ _**p**_ ) _**[q]**_ _[⊤]_ [log] _**[ p]**_ _[.]_
+
+
+Our theoretical analysis in Section 4 will be mainly devoted to the one-step setting (ODG). Before
+that, we shall still take a deeper look into the general (MDG) and justify why the one-step game is a
+representative case that captures the essence of the general setting.
+
+
+3.3 REDUCTION FROM MULTIPLE STEPS
+
+
+In the multi-step setting, given a context _x<t_ _∈V_ _[t][−]_ [1], a probability measure P computes the conditional next-token distribution P( _· | x<t_ ). Similar to one-step setting, such a next-token distribution
+corresponds to a _d_ -dimensional probability vector _**p**_ _t_ ( _x<t_ ) _∈_ ∆( _V_ ). We define the neighborhood in
+(MDG) as
+
+
+_N_ (P [�] ) = �P : _d_ TV( _**p**_ _t_ ( _x<t_ ) _,_ _**p**_ ˆ _t_ ( _x<t_ )) _≤_ _ϵ,_ _∀x<t_ _∈V_ _[t][−]_ [1] and _t ≤_ _T_    - _,_
+
+
+which, as an extension from the one-step case, controls the dissimilarity between any pairs of conditional next-token distribution in TV distance. [1]
+
+
+Then, we can recast (MDG) as
+
+
+max min EQ log P( _X_ 1 _, . . ., XT_ _| X_ 0) = max min
+Q P _∈N_ ( [�] P) Q P _∈N_ ( [�] P)
+
+
+_T_
+
+
+EQ log P( _Xt_ _| X<t_ )
+
+_t_ =1
+
+
+1It can also be interpreted as the _ϵ_ -ball of the TV-sup distance _d_ (P _,_ �P) = max _{d_ TV( _**p**_ _t_ ( _x<t_ ) _,_ _**p**_ ˆ _t_ ( _x<t_ )) :
+_x<t_ _∈_ _V_ _[t][−]_ [1] _, t ≤_ _T_ _}_, which is half of the (1 _, ∞_ ) mixed norm (Horn & Johnson, 1985) of the matrix concatenating all the conditional distributions difference _**p**_ _t_ ( _x<t_ ) _−_ _**p**_ ˆ _t_ ( _x<t_ ) as its columns.
+
+
+5
+
+
+= max min
+Q P _∈N_ ( [�] P)
+
+
+= max min
+Q P _∈N_ ( [�] P)
+
+
+_T_
+
+
+E _X<t∼_ Q[E _Xt∼_ Q( _·|X<t_ )[log P( _Xt_ _| X<t_ )]]
+_t_ =1
+
+
+_T_
+
+
+E _X<t∼_ Q[ _**q**_ _t_ ( _X<t_ ) _[⊤]_ log _**p**_ _t_ ( _X<t_ )]
+
+_t_ =1
+
+
+= max
+
+Q
+
+
+_T_
+
+
+E _X<t∼_ Q
+
+_t_ =1
+
+
+- min _._ (1)
+_**p**_ _t_ ( _X<t_ ) _∈N_ ( ˆ _**p**_ _t_ ( _X<t_ )) _**[q]**_ _[t]_ [(] _[X][<t]_ [)] _[⊤]_ [log] _**[ p]**_ _[t]_ [(] _[X][<t]_ [)]
+
+
+Here, (1) uses the fact that the minimization problem is inherently separable in each next-token
+distributions _**p**_ _t_ ( _x<t_ ).
+
+
+Directly solving (MDG) or (1) is computationally intractable. Theoretically, one can exploit the
+recursive structure in (1) and apply dynamic programming, but the scale of the problem grows as
+Ω( _d_ _[T]_ ), and such an approach would take poly( _d_ _[T]_ ) time. Considering the computational cost of
+working on a modern LLM, in this paper we turn to local solutions that do not probe into the global
+structure of the problem. It is given by a locally optimal mechanism
+
+
+_**q**_ ˜ _t_ ( _x<t_ ) = argmax min _**q**_ _t_ ( _x<t_ ) _[⊤]_ log _**p**_ _t_ ( _x<t_ ) _∀x<t_ _∈V_ _[t][−]_ [1] _,_ (2)
+_**q**_ _t_ ( _x<t_ ) _**p**_ _t_ ( _x<t_ ) _∈N_ ( ˆ _**p**_ _t_ ( _x<t_ ))
+
+
+thus going back to (ODG). In addition to significantly alleviating the computational cost, it turns
+out that such a local mechanism also provides the optimal worst-case performance over all decision
+processes that do not exploit future information of P. We state this result formally next.
+
+[�]
+
+**Definition 3.1.** _We say a strategy_ Q = Q(P [�] ) _has no foresight if for any t ≤_ _T_ _, we have_ _**q**_ _t_ ( _x<t_ ; P [�] ) =
+_**q**_ _t_ ( _x<t_ ; P [�] _[′]_ ) _for any_ P [�] _and_ P [�] _[′]_ _satisfying_ _**p**_ ˆ _s_ ( _x<s_ ) = _**p**_ ˆ _[′]_ _s_ [(] _[x][<s]_ [)] _[ ∀][s][ ≤]_ _[t][.]_
+
+**Assumption 3.2.** _ϵ < ∥_ _**p**_ ˆ _t_ ( _x<t_ ) _∥∞_ _for all t ≤_ _T_ _and x<t_ _∈V_ _[t][−]_ [1] _._
+
+
+**Proposition 3.3.** _Given arbitrary_ P _from the space of probability measures on V_ _[T]_ _,_ _let_ Q = Q(P [�] )
+
+[�]
+_be any strategy with no foresight._ _Moreover, let_ P _[∗]_ = P _[∗]_ (P [�] _,_ Q) _be the optimal strategy of player N_
+_against_ Q _._ _If Assumption 3.2 holds and_ Q = Q(P [�] ) _is the strategy induced by_ (2) _, then_
+
+[�] [�]
+
+
+inf _L_ _[T]_ (Q [�] _,_ P _[∗]_ ) _≥_ inf _L_ _[T]_ (Q _,_ P _[∗]_ ) _._
+
+�P �P
+
+
+Here, we make Assumption 3.2 so that the optimal value of the game is always well-defined, by
+staying away from _−∞_ . Proposition 3.3 provides worst-case justifications for optimizing the imminent one-step reward of the game at each timestep _t_ . In what follows, we will be devoted to the
+one-step game (ODG) for theoretical analysis.
+
+
+4 THEORETICAL ANALYSIS
+
+
+In this section, we study the optimal strategies for both _**p**_ and _**q**_ in (ODG). We will show that the
+optimal _**q**_ imposes an _ℓ∞_ -type regularization on the log-likelihood, and the optimal _**p**_ solving the
+regularized maximization yields tail truncation-normalization sampling methods. Finally, we extend our analysis from log-likelihood to a general type of objectives, which recovers other heuristic
+methods and also highlights an exclusive advantage of log-likelihood.
+
+
+For (ODG), we make the following assumptions.
+
+
+**Assumption** **4.1.** _The_ _probabilities_ _are_ _strictly_ _positive_ _and,_ _without_ _loss_ _of_ _generality,_ _sorted_ _in_
+_decreasing order, i.e.,_ _p_ ˆ1 _≥_ _p_ ˆ2 _≥· · · ≥_ _p_ ˆ _d_ _>_ 0 _._
+
+
+**Assumption 4.2.** _The distance budget ϵ satisfies_ _p_ ˆ _d_ _≤_ _ϵ <_ _p_ ˆ1 _._
+
+
+4.1 _p_ -STRATEGY: IMPLICIT REGULARIZATION
+
+
+For a given _**q**_, we have the following characterization for the optimal strategy of _**p**_ .
+
+
+6
+
+
+**Theorem 4.3.** _Under Assumption 4.1 and 4.2, let_ ˆ _ı_ = max _{i_ : _p_ ˆ _i_ _> ϵ}._ _Define_ _**w**_ ˆ _∈_ R [ˆ] _[ı]_ _elementwise_
+_by_ _w_ ˆ _i_ = log _p_ ˆ _i/ϵ_ (ˆ _pi−ϵ_ ) _[.]_ _[Then, for a given]_ _**[ q]**_ _[, the optimal]_ _**[p]**_ [˜] _[ for]_ [ (ODG)] _[ satisfies]_
+
+_**q**_ _[⊤]_ log _**p**_ ˜ = min   - _**q**_ _⊤_ log _**p**_ ˆ _−_ _ϵ ∥_ _**q**_ 1:ˆ _ı/_ ˆ _**w**_ _∥∞_ _,_ _if qi_ = 0 _,_ _∀i >_ ˆ _ı_ ;
+_**p**_ : _dTV_ ( _**p**_ _,_ ˆ _**p**_ ) _≤ϵ_ _**[q]**_ _[⊤]_ [log] _**[ p]**_ [ =] _−∞,_ _otherwise._
+
+
+We give several remarks on Theorem 4.3.
+
+
+**Tail truncation.** Due to the fact that lim _x↓_ 0 log( _x_ ) = _−∞_, any _**q**_ possessing a non-zero tail in the
+index set _{i_ : _p_ ˆ _i_ _≤_ _ϵ}_ will lead to a _−∞_ objective value, because setting the corresponding _pi_ to
+zero is within the reach of the adversary. This implies a hard truncation constraint _qi_ = 0 _∀i_ _≥_ ˆ _ι_,
+namely the optimal _**q**_ must come without such a tail. However, more components can be additionally
+truncated in the maximization part, due to the _ℓ∞_ regularization effect we derived.
+
+
+**Tackling non-convexity.** The minimization problem in _**p**_ is non-convex, because it has a concave
+objective. Therefore, it is inherently hard to characterize the structures of the optimal _**p**_ ˜: it may not
+even be unique. However, under TV distance, the geometry of the feasible region is a polytope.
+This benefits our analysis because the minimum is known to be attained at the vertices (Horst,
+1984), restricting the candidate solutions within a finite set. Switching to other dissimilarity metrics
+than TV distance, such as KL divergence, would change the geometry and require very different
+techniques, which is left for future work.
+
+
+**Implicit** **regularization.** With optimal _**p**_ ˜, the remaining part of the game is a regularized loglikelihood maximization in terms of _**q**_ :
+max _**q**_ _**q**_ _[⊤]_ log _**p**_ ˆ _−_ _ϵ ∥_ _**q**_ 1:ˆ _ı/_ ˆ _**w**_ _∥∞_ _,_ s.t. _qi_ = 0 _,_ _∀i >_ ˆ _ı_
+
+with an _ℓ∞_ -type regularization term _∥_ _**q**_ 1:ˆ _ı/_ _**w**_ ˆ _∥∞_ . Note that we have _**w**_ ˆ _≈_ _**p**_ ˆ1:ˆ _ı_ by applying firstorder approximation to the function log(1 + _x_ ). If no adversary is present ( _ϵ_ = 0), there is no
+regularization effect and trivially, greedy sampling solves the one-step log-likelihood maximization.
+This establishes an equivalence between regularization and robustness against an adversary, which
+has been observed in the robust optimization literature; see Section 2.3.
+
+
+4.2 _q_ -STRATEGY: HEURISTIC SAMPLING METHODS
+
+
+Now we present the optimal solution to the regularized maximization problem.
+**Theorem 4.4.** _Under Assumption 4.1 and 4.2, let_ ˆ _ı_ = max _{i_ : _p_ ˆ _i_ _> ϵ}, and_ _w_ ˆ _i_ = log(ˆ _pi/ϵ_ (ˆ _pi−ϵ_ )) _[for]_
+_all i ≤_ ˆ _ı._ _Define the threshold_
+
+
+_._
+
+
+_I−_ 1
+
+
+_w_ ˆ _i_ log(ˆ _pi/p_ ˆ _I_ ) _≤_ _ϵ,_ _p_ ˆ _I_ _> ϵ_
+
+_i_ =1
+
+
+_I_ ˆ = max
+
+
+_I_ :
+
+
+_Then, the optimal_ _**q**_ ˜ _for_ (ODG) _is given elementwise by_
+_q_ ˜ _i_ _∝_ _w_ ˆ _i_ 1(1 _≤i≤I_ ˆ) _._
+
+**Corollary 4.5.** _By first-order approximation,_ _w_ ˆ _i_ _≈_ _p_ ˆ _i, and hence_ _q_ ˜ _i_ _∝_ _p_ ˆ _i_ 1(1 _≤i≤I_ ˆ) _, where_
+
+
+_._
+
+
+_I−_ 1
+
+
+_p_ ˆ _i_ log(ˆ _pi/p_ ˆ _I_ ) _≤_ _ϵ,_ _p_ ˆ _I_ _> ϵ_
+
+_i_ =1
+
+
+_I_ ˆ = max
+
+
+_I_ :
+
+
+_Thus, up to first-order approximation, a tail truncation-normalization sampling strategy is optimal._
+
+
+Clearly, Theorem 4.4 describes a sampling strategy that truncates tail probabilities and keeps only
+the subset _{_ 1 _, . . .,_ _I_ [ˆ] _}_ as the support. Note that _I_ [ˆ] _≤_ ˆ _ı_ always holds. The new distribution on the
+support _**q**_ ˜1:ˆ _I_ is _not_ a simple rescaling of the original weights _**p**_ ˆ1:ˆ _I_ by a normalization constant, which
+is different from past heuristic designs. However, according to Corollary 4.5, rescaling emerges as
+a first-order approximation to the optimal strategy.
+
+
+Under first-order approximation, the truncation threshold of _**q**_ ˜ has an information-theoretic interpretation. Note that if _I_ belongs to the support _{_ 1 _, . . .,_ _I_ [ˆ] _}_, then [�] _i_ _[I]_ =1 _[−]_ [1] _[p]_ [ˆ] _[i]_ [ log(ˆ] _[p][i][/][p]_ [ˆ] _[I]_ [)] _[≤]_ _[ϵ]_ [, which is]
+equivalent to
+log(1 _/p_ ˆ _I_ ) _≤_ _H_ (ˆ _**p**_ 1: _I−_ 1) + _CI_ _,_
+
+
+7
+
+
+where _H_ (ˆ _**p**_ 1: _I−_ 1) is the entropy of _**p**_ ˆ1: _I−_ 1, and _CI_ := log �1 _/_ [�] _i_ _[I]_ =1 _[−]_ [1] _[p]_ [ˆ] _[i]_ �+ _ϵ/_ ( [�] _[I]_ _i_ =1 _[−]_ [1] _[p]_ [ˆ] _[i]_ [)] _[ ≈]_ _[ϵ]_ [ for large]
+_I_ . [2] Thus, when constructing the support, for large _I_, we grow the existing support _{_ 1 _, . . ., I_ _−_ 1 _}_
+by adding _I_ if its self-information (surprisal) log(1 _/p_ ˆ _I_ ) is small compared to the existing entropy
+plus a small amount. In other words, this token selection mechanism modulates the total number of
+surprisals.
+
+
+Notably, this truncation threshold is different from previous truncation-based methods like Nucleus
+sampling. However, one can still recover these strategies, say Nucleus sampling, by setting an
+appropriate _ϵ_ that depends on _p_, the hyperparameter of Nucleus sampling, and also the distribution
+_p_ ˆ _i_ . This involves an adaptive _ϵ_ that changes at every decoding step.
+
+
+4.3 GENERALIZATION FROM LOG-LIKELIHOOD
+
+
+Beyond the log-likelihood, our analysis can be extended to games with more general objectives,
+taking the form
+max min ( _f_ -ODG)
+_**q**_ _**p**_ : _d_ TV( _**p**_ _,_ ˆ _**p**_ ) _≤ϵ_ _**[q]**_ _[⊤][f]_ [(] _**[p]**_ [)] _[,]_
+
+where _f_ : R _→_ R is applied elementwise on _**p**_ . We assume the following for ( _f_ -ODG).
+
+**Assumption 4.6.** _f_ _is non-decreasing and concave. Moreover,_ ( _ϵ, f_ ) _satisfies either of the following_
+_conditions:_
+
+
+_(i)_ _p_ ˆ _d_ _≤_ _ϵ <_ _p_ ˆ1 _, and_ lim _x↓_ 0 _f_ ( _x_ ) = _−∞_ ;
+
+_(ii)_ 0 _< ϵ <_ _p_ ˆ _d, and_ [�] _[d]_ _i_ =1 _[−]_ [1] _ff_ (ˆ(ˆ _ppii_ )) _−−ff_ (ˆ(ˆ _ppdi−_ + _ϵϵ_ )) _[≥]_ [1] _[.]_
+
+
+Clearly, our previous log-likelihood game (ODG), which uses _f_ ( _x_ ) = log( _x_ ), satisfies part (i) of
+this assumption. The following result establishes the solution to the general game ( _f_ -ODG), and
+encompasses Theorem 4.4 as a special case.
+
+**Theorem 4.7.** _Under Assumption 4.1 and 4.6, let_
+
+
+_SI_ =
+
+
+_I−_ 1
+
+
+_i_ =1
+
+
+_f_ (ˆ _pi_ ) _−_ _f_ (ˆ _pI_ )
+_f_ (ˆ _pi_ ) _−_ _f_ (ˆ _pi −_ _ϵ_ ) _[,]_
+
+
+_and define the threshold_ _I_ [ˆ] = max _{I_ : _SI_ _≤_ 1 _,_ _p_ ˆ _I_ _> ϵ}._ _Then, the optimal_ _**q**_ ˜ _for_ ( _f_ -ODG) _is given_
+_elementwise by_
+_ϵ_
+_q_ ˜ _i_ _∝_ (3)
+_f_ (ˆ _pi_ ) _−_ _f_ (ˆ _pi −_ _ϵ_ ) [1][(1] _[≤][i][≤][I]_ [ˆ][)] _[.]_
+
+**Corollary 4.8.** _Suppose f_ _is also differentiable._ _By first-order approximation on f_ _,_ _we have_ _q_ ˜ _i_ _∝_
+1
+_f_ _[′]_ (ˆ _pi_ ) [1] (1 _≤i≤I_ [ˆ] ) _[, where]_
+
+
+_I−_ 1
+
+
+_i_ =1
+
+
+_f_ _[′]_ (ˆ _pi_ ) _≤_ _ϵ,_ _p_ ˆ _I_ _> ϵ_
+
+
+_._
+
+
+_I_ ˆ = max
+
+
+_I_ :
+
+
+_f_ (ˆ _pi_ ) _−_ _f_ (ˆ _pI_ )
+
+
+There are two interesting consequences of this general result.
+
+
+**Exclusive** **advantage** **of** **log.** Log-likelihood is the _only_ objective that makes it optimal to rescale
+the remaining probabilities by a normalization constant. This is because enforcing _f_ _[′]_ 1( _x_ ) [=] _[x]_ [in]
+Corollary 4.8 leads to _f_ ( _x_ ) = log( _x_ ) (up to a constant). Therefore, there is an exclusive connection
+between log-likelihood and rescaling.
+
+
+**Temperature scaling.** Second, since rescaling is not necessarily optimal, it is worth understanding
+how we treat the remaining probabilities under another _f_ . One example is _f_ ( _x_ ) = _[x]_ [1] 1 _[−]_ _−_ [1] 1 _[/τ]_ _/τ_ _[ −]_ [1], where
+
+_τ_ = 1. [3] Taking the derivative, we have _f_ _[′]_ (ˆ1 _pi_ ) [= exp] - log _τ_ _p_ ˆ _i_ - = _p_ ˆ _i_ [1] _[/τ]_, hence recovering temperature
+sampling (Hinton, 2015) where the temperature is controlled by _τ_ . This shows the general game
+( _f_ -ODG) is able to express a variety of sampling strategies.
+
+
+2Note that min _{Id,−_ 1 1 _/ϵ}_ _[≤]_ [�] _[I]_ _i_ =1 _[−]_ [1] _[p]_ [ˆ] _[i]_ _[≤]_ [1][ by Assumption 4.1 and the fact that] _[p]_ [ˆ] _[i]_ _[≥]_ _[p]_ [ˆ] _[I]_ _[> ϵ]_ [ for all] _[ i < I]_ [.]
+
+
+3Note that lim _τ_ _→_ 1 _x_ [1] _[−]_ [1] _[/τ]_ _−_ 1
+
+
+1 _−_ 1 _/τ_ = log _x_ .
+
+
+8
+
+
+5 EXPERIMENTS
+
+
+Building on the truncation and normalization mechanism given in the general theory, we propose
+_Game_ _sampling_ as outlined in Algorithm 1, and empirically evaluate its performance in text generation. Regarding the algorithm design, the objectives to our concern are _f_ ( _x_ ) = _[x]_ [1] 1 _[−]_ _−_ [1] 1 _[/τ]_ _/τ_ _[ −]_ [1] and
+
+_f_ ( _x_ ) = log( _x_ ), as a special case of _τ_ = 1. For better practical results, we relax the restrictions on
+the value of _ϵ_ in Assumption 4.6.
+
+
+**Algorithm 1** Game sampling
+
+
+**Input:** 0 _< ϵ ≤_ 1, and _τ_ _>_ 0
+**if** _τ_ = 1 **then** _▷_ log-likelihood objective
+compute _SI_ = [�] _i_ _[I]_ =1 _[−]_ [1] _[p]_ [ˆ] _[i]_ [ log(ˆ] _[p][i][/][p]_ [ˆ] _[I]_ [)]
+find _I_ [ˆ] = max _{I_ : _SI_ _≤_ _ϵ}_
+set _qi_ = _p_ ˆ _i_ 1(1 _≤i≤I_ ˆ)
+**else if** _τ_ = 1 **then** _▷_ temperature sampling objective
+compute _SI_ = (1 _−_ 1 _/τ_ ) _[−]_ [1][ �] _i_ _[I]_ =1 _[−]_ [1] _[p]_ [ˆ] _[i]_ �1 _−_ (ˆ _pi/p_ ˆ _I_ ) [1] _[−]_ [1] _[/τ]_ [�]
+
+find _I_ [ˆ] = max _{I_ : _SI_ _≤_ _ϵ}_
+set _qi_ = _p_ ˆ [1] _i_ _[/τ]_ 1(1 _≤i≤I_ ˆ)
+**end if**
+normalize _qi_ : _qi_ _←_ _qi/_ [�] _j_ _[d]_ =1 _[q][j]_
+sample the next word based on the distribution _**q**_
+
+
+[We conduct an open-ended text generation task using web text from the GPT-2 output dataset.](https://github.com/openai/gpt-2-output-dataset) For
+each of the 5,000 articles in the Webtext test set, we use the first 35 tokens as prompts, with a
+maximum generation length of 256 tokens. For each type of GPT-2 model (Small, Medium, Large,
+XL) (Radford et al., 2019), GPT-J-6B (Wang & Komatsuzaki, 2021), and Llama-2-7B (Touvron
+et al., 2023), we evaluate the following metrics:
+
+
+1. **Perplexity** : The perplexity of the generated text under the corresponding model.
+2. **Repetition frequency** : The fraction of generations with repetitions. A generation is considered repetitive if it contains at least two contiguous copies of the same phrase, of any
+length, at the token level.
+3. **MAUVE score** (Pillutla et al., 2021): for comparison with human-written text, we use the
+corresponding human continuations from the test set, up to a maximum of 256 tokens.
+
+
+A good performance is characterized by a high MAUVE score and close-to-human perplexity and
+repetition.
+
+
+We compare seven decoding strategies: the proposed Game sampling (Algorithm 1), Nucleus sampling (Holtzman et al., 2020), Contrastive search (Su et al., 2022), Typical sampling (Meister et al.,
+2023), Basis-Aware sampling (BA- _η_ ) (Finlayson et al., 2024), Greedy sampling (using argmax _i_ _p_ ˆ _i_ ),
+and Pure sampling (sampling _i_ with probability _p_ ˆ _i_ ). We use the best-performing hyperparameters
+for each strategy as determined by the MAUVE score.
+
+
+The results are presented in Table 1, with a more detailed breakdown in Appendix B. Game sampling
+achieves the best performance in GPT-J-6B, GPT-2 XL, Medium, and Small models, and scores the
+second highest in GPT-2 Large and Llama-2-7B models, next to Nucleus sampling and BA- _η_ respectively. We remark that BA- _η_ involves matrix decomposition and operates at a higher computation
+cost compared to our method.
+
+
+We also experiment with different values of _ϵ_ and _τ_, with details in Appendix B. In general, larger
+values of _ϵ_ tend to produce better results in terms of higher MAUVE score, lower repetition frequency, and human-level perplexity. Smaller _ϵ_ values reduce perplexity, but at the expense of more
+repetitions and lower MAUVE scores. In terms of _τ_, the best performance for each _ϵ_ choice was
+achieved at _τ_ _≈_ 2, yielding the highest MAUVE score. Similar to _ϵ_, smaller _τ_ values tend to reduce perplexity, but produce more repetitions with lower MAUVE scores. MAUVE score begins to
+decline when _τ_ exceeds 2.
+
+
+9
+
+
+Method Perplexity Repetition MAUVE
+
+
+Game ( _ϵ_ = 0 _._ 95 _, τ_ = 2) **23.590** **0.002** **0.926**
+Nucleus ( _p_ = 0 _._ 9) 25.116 0.004 0.923
+Contrastive ( _α_ = 0 _._ 6) 2.267 0.835 0.035
+Typical ( _p_ = 0 _._ 9) 10.785 0.019 0.888
+BA- _η_ ( _η_ = 0 _._ 0001) 29.610 **0.002** 0.917
+Greedy 2.163 0.886 0.0155
+Pure 62.001 0.0002 0.845
+_Human_ _21.559_ _0.002_ _−_
+
+
+GPT-2 Small
+
+
+Method Perplexity Repetition MAUVE
+
+
+Game ( _ϵ_ = 0 _._ 99 _, τ_ = 2 _._ 5) 15.458 0.001 0.947
+Nucleus ( _p_ = 0 _._ 95) **13.699** **0.002** **0.954**
+Contrastive ( _α_ = 0 _._ 6) 4.448 0.006 0.892
+Typical ( _p_ = 0 _._ 9) 6.590 0.012 0.924
+BA- _η_ ( _η_ = 0 _._ 0001) 15.223 0.0008 **0.954**
+Greedy 2.169 0.760 0.039
+Pure 21.952 0.0008 0.931
+_Human_ _13.755_ _0.002_ _−_
+
+
+GPT-2 Large
+
+
+Method Perplexity Repetition MAUVE
+
+
+Game ( _ϵ_ = 0 _._ 99 _, τ_ = 2 _._ 5) 19.729 **0.002** **0.833**
+Nucleus ( _p_ = 0 _._ 99) 23.149 **0.002** 0.806
+Contrastive ( _α_ = 0 _._ 6) 6.573 0.007 0.715
+Typical ( _p_ = 0 _._ 9) **8.747** 0.016 0.769
+BA- _η_ ( _η_ = 0 _._ 0001) 12.307 **0.002** 0.826
+Greedy 2.603 0.731 0.043
+Pure 27.327 0.001 0.798
+_Human_ _9.950_ _0.002_ _−_
+
+
+GPT-J-6B
+
+
+Method Perplexity Repetition MAUVE
+
+
+Game ( _ϵ_ = 0 _._ 95 _, τ_ = 2) **17.499** **0.002** **0.945**
+Nucleus ( _p_ = 0 _._ 9) 19.221 **0.002** **0.945**
+Contrastive ( _α_ = 0 _._ 6) 2.431 0.677 0.049
+Typical ( _p_ = 0 _._ 9) 9.018 0.010 0.923
+BA- _η_ ( _η_ = 0 _._ 0001) 24.119 0.0006 0.933
+Greedy 2.247 0.808 0.029
+Pure 48.553 0.0004 0.848
+_Human_ _15.923_ _0.002_ _−_
+
+
+GPT-2 Medium
+
+
+Method Perplexity Repetition MAUVE
+
+
+Game ( _ϵ_ = 0 _._ 99 _, τ_ = 2) **11.333** **0.003** **0.958**
+Nucleus ( _p_ = 0 _._ 95) 14.589 **0.003** 0.955
+Contrastive ( _α_ = 0 _._ 6) 5.235 0.006 0.912
+Typical ( _p_ = 0 _._ 9) 7.342 0.011 0.932
+BA- _η_ ( _η_ = 0 _._ 0001) 13.495 **0.001** 0.946
+Greedy 2.411 0.672 0.065
+Pure 23.505 0.0004 0.942
+_Human_ _12.319_ _0.002_ _−_
+
+
+GPT-2 XL
+
+
+Method Perplexity Repetition MAUVE
+
+
+Game ( _ϵ_ = 0 _._ 95 _, τ_ = 1 _._ 5) 14.000 0.128 0.858
+Nucleus ( _p_ = 0 _._ 95) 31.125 0.154 0.853
+Contrastive ( _α_ = 0 _._ 6) **5.375** 0.236 0.702
+Typical ( _p_ = 0 _._ 9) 5.156 0.209 0.719
+BA- _η_ ( _η_ = 0 _._ 0001) 8.375 **0.002** **0.890**
+Greedy 3.109 0.457 0.537
+Pure 44.500 0.016 0.813
+_Human_ _6.469_ _0.002_ _−_
+
+
+Llama-2-7B
+
+
+Table 1: Evaluations on open-ended text generation with different decoding strategies. Boldface values indicate
+the highest MAUVE score and the closest-to-human perplexity and repetition. The best-performing hyperparameters are selected for each strategy.
+
+
+6 CONCLUSION
+
+
+In this paper, we proposed Decoding Game, a two-player zero-sum game where a Strategist aims
+to maximize the log-likelihood of the generated text under the true probability measure, while an
+adversarial Nature seeks to distort the true measure within an _ϵ_ -error budget to degrade the text.
+After discussing the decomposibility of multi-step generation, we studied the optimal strategies
+for both players of the typical one-step Decoding Game. We proved that, as Nature enforces its
+optimal strategy, it imposes an _ℓ∞_ -type regularization on the log-likelihood maximization problem.
+By solving this regularized maximization in closed form, we identified tail truncation-normalization
+sampling as a first-order approximation to the optimal strategy.
+
+
+We also generalized our theory from log-likelihood to a broader class of objectives. In deriving the
+general solution, we observed that log-likelihood is the only objective that makes it optimal to rescale
+the remaining probabilities by a normalizing constant. Selecting other types of objectives leads to
+different ways of treating the remaining probabilities, including temperature sampling. Moreover,
+we empirically evaluated the performance of Game sampling, a sampling strategy built upon the
+general theory, in open-ended text generation.
+
+
+We believe that Decoding Game provides comprehensive theoretical understanding for the heuristic
+design of sampling strategies, by rigorously establishing regularization effect and optimality results.
+The statistically meaningful motivation and minimal assumptions behind Decoding Game open up
+its potential for future research, both theoretical and practical, on text generation strategies. For example, it would be interesting to generalize the metric beyond TV distance. Also, our formulation of
+the multi-step game shares similarities with token-level Markov decision processes, and efficiently
+tackling multi-step strategy via reinforcement learning would be another direction.
+
+
+10
+
+
+ACKNOWLEDGEMENTS
+
+
+We extend our special thanks to the anonymous reviewers for their insightful comments and suggestions that greatly enhanced this work. We are also grateful to Danqi Chen for helpful discussions.
+Klusowski acknowledges financial support from the National Science Foundation through CAREER
+DMS-2239448.
+
+
+REFERENCES
+
+
+Charalambos D. Aliprantis and Kim C. Border. _Infinite dimensional analysis:_ _a hitchhiker’s guide_ .
+Springer, Berlin, 2006.
+
+
+Sourya Basu, Govardana Sachitanandam Ramachandran, Nitish Shirish Keskar, and Lav R. Varshney. Mirostat: A neural text decoding algorithm that directly controls perplexity. In _International_
+_Conference on Learning Representations_ [, 2021. URL https://openreview.net/forum?](https://openreview.net/forum?id=W1G1JZEIy5_)
+[id=W1G1JZEIy5_.](https://openreview.net/forum?id=W1G1JZEIy5_)
+
+
+Aharon Ben-Tal, Arkadi Nemirovski, and Laurent El Ghaoui. Robust optimization. 2009.
+
+
+Dimitris Bertsimas, David B. Brown, and Constantine Caramanis. Theory and applications of robust
+optimization. _SIAM_ _Review_, 53(3):464–501, 2011. doi: 10.1137/080734510. URL [https:](https://doi.org/10.1137/080734510)
+[//doi.org/10.1137/080734510.](https://doi.org/10.1137/080734510)
+
+
+Stephen Boyd and Lieven Vandenberghe. _Convex Optimization_ . Cambridge University Press, 2004.
+[URL https://web.stanford.edu/˜boyd/cvxbook/.](https://web.stanford.edu/~boyd/cvxbook/)
+
+
+Esther Derman, Matthieu Geist, and Shie Mannor. Twice regularized mdps and the
+equivalence between robustness and regularization. In M. Ranzato, A. Beygelzimer,
+Y. Dauphin, P.S. Liang, and J. Wortman Vaughan (eds.), _Advances_ _in_ _Neural_ _In-_
+_formation_ _Processing_ _Systems_, volume 34, pp. 22274–22287. Curran Associates, Inc.,
+2021. URL [https://proceedings.neurips.cc/paper_files/paper/2021/](https://proceedings.neurips.cc/paper_files/paper/2021/file/bb1443cc31d7396bf73e7858cea114e1-Paper.pdf)
+[file/bb1443cc31d7396bf73e7858cea114e1-Paper.pdf.](https://proceedings.neurips.cc/paper_files/paper/2021/file/bb1443cc31d7396bf73e7858cea114e1-Paper.pdf)
+
+
+Angela Fan, Mike Lewis, and Yann Dauphin. Hierarchical neural story generation. In Iryna
+Gurevych and Yusuke Miyao (eds.), _Proceedings_ _of_ _the_ _56th_ _Annual_ _Meeting_ _of_ _the_ _Associa-_
+_tion_ _for_ _Computational_ _Linguistics_ _(Volume_ _1:_ _Long_ _Papers)_, pp. 889–898, Melbourne, Australia, July 2018. Association for Computational Linguistics. doi: 10.18653/v1/P18-1082. URL
+[https://aclanthology.org/P18-1082.](https://aclanthology.org/P18-1082)
+
+
+Matthew Finlayson, John Hewitt, Alexander Koller, Swabha Swayamdipta, and Ashish Sabharwal. Closing the curious case of neural text degeneration. In _The Twelfth International Confer-_
+_ence_ _on_ _Learning_ _Representations_, 2024. URL [https://openreview.net/forum?id=](https://openreview.net/forum?id=dONpC9GL1o)
+[dONpC9GL1o.](https://openreview.net/forum?id=dONpC9GL1o)
+
+
+Alex Graves. Sequence transduction with recurrent neural networks, 2012. URL [https:](https://arxiv.org/abs/1211.3711)
+[//arxiv.org/abs/1211.3711.](https://arxiv.org/abs/1211.3711)
+
+
+Godfrey Harold Hardy, John Edensor Littlewood, and George P´olya. _Inequalities_ . Cambridge
+University Press, 1952.
+
+
+Tatsunori B. Hashimoto, Hugh Zhang, and Percy Liang. Unifying human and statistical evaluation for natural language generation. In Jill Burstein, Christy Doran, and Thamar Solorio (eds.),
+_Proceedings of the 2019 Conference of the North American Chapter of the Association for Com-_
+_putational_ _Linguistics:_ _Human_ _Language_ _Technologies,_ _Volume_ _1_ _(Long_ _and_ _Short_ _Papers)_, pp.
+1689–1701, Minneapolis, Minnesota, June 2019. Association for Computational Linguistics. doi:
+10.18653/v1/N19-1169. [URL https://aclanthology.org/N19-1169.](https://aclanthology.org/N19-1169)
+
+
+John Hewitt, Christopher D. Manning, and Percy Liang. Truncation sampling as language model
+desmoothing, 2022. [URL https://arxiv.org/abs/2210.15191.](https://arxiv.org/abs/2210.15191)
+
+
+Geoffrey Hinton. Distilling the knowledge in a neural network. _arXiv preprint arXiv:1503.02531_,
+2015.
+
+
+11
+
+
+Ari Holtzman, Jan Buys, Li Du, Maxwell Forbes, and Yejin Choi. The curious case of neural text
+degeneration. In _International_ _Conference_ _on_ _Learning_ _Representations_, 2020. URL [https:](https://openreview.net/forum?id=rygGQyrFvH)
+[//openreview.net/forum?id=rygGQyrFvH.](https://openreview.net/forum?id=rygGQyrFvH)
+
+
+Roger A. Horn and Charles R. Johnson. _Matrix Analysis_ . Cambridge University Press, 1985.
+
+
+Reiner Horst. On the global minimization of concave functions. _Operations-Research-Spektrum_,
+6(4):195–205, 1984. doi: 10.1007/BF01720068. URL [https://doi.org/10.1007/](https://doi.org/10.1007/BF01720068)
+[BF01720068.](https://doi.org/10.1007/BF01720068)
+
+
+Athul Paul Jacob, Yikang Shen, Gabriele Farina, and Jacob Andreas. The consensus game:
+Language model generation via equilibrium search. In _The_ _Twelfth_ _International_ _Confer-_
+_ence_ _on_ _Learning_ _Representations_, 2024. URL [https://openreview.net/forum?id=](https://openreview.net/forum?id=n9xeGcI4Yg)
+[n9xeGcI4Yg.](https://openreview.net/forum?id=n9xeGcI4Yg)
+
+
+Minbeom Kim, Hwanhee Lee, Kang Min Yoo, Joonsuk Park, Hwaran Lee, and Kyomin Jung. Criticguided decoding for controlled text generation. In Anna Rogers, Jordan Boyd-Graber, and Naoaki
+Okazaki (eds.), _Findings of the Association for Computational Linguistics:_ _ACL 2023_, pp. 4598–
+4612, Toronto, Canada, July 2023. Association for Computational Linguistics. doi: 10.18653/
+v1/2023.findings-acl.281. [URL https://aclanthology.org/2023.findings-acl.](https://aclanthology.org/2023.findings-acl.281)
+[281.](https://aclanthology.org/2023.findings-acl.281)
+
+
+Clara Meister, Ryan Cotterell, and Tim Vieira. If beam search is the answer, what was the question?
+In Bonnie Webber, Trevor Cohn, Yulan He, and Yang Liu (eds.), _Proceedings of the 2020 Confer-_
+_ence on Empirical Methods in Natural Language Processing (EMNLP)_, pp. 2173–2185, Online,
+November 2020. Association for Computational Linguistics. doi: 10.18653/v1/2020.emnlp-main.
+170. [URL https://aclanthology.org/2020.emnlp-main.170.](https://aclanthology.org/2020.emnlp-main.170)
+
+
+Clara Meister, Tiago Pimentel, Gian Wiher, and Ryan Cotterell. Locally typical sampling. _Trans-_
+_actions_ _of_ _the_ _Association_ _for_ _Computational_ _Linguistics_, 11:102–121, 2023. doi: 10.1162/
+tacl ~~a~~ 00536. [URL https://aclanthology.org/2023.tacl-1.7.](https://aclanthology.org/2023.tacl-1.7)
+
+
+Sidharth Mudgal, Jong Lee, Harish Ganapathy, YaGuang Li, Tao Wang, Yanping Huang, Zhifeng
+Chen, Heng-Tze Cheng, Michael Collins, Trevor Strohman, Jilin Chen, Alex Beutel, and Ahmad
+Beirami. Controlled decoding from language models, 2024. URL [https://arxiv.org/](https://arxiv.org/abs/2310.17022)
+[abs/2310.17022.](https://arxiv.org/abs/2310.17022)
+
+
+OpenAI. Gpt-4 technical report, 2024. [URL https://arxiv.org/abs/2303.08774.](https://arxiv.org/abs/2303.08774)
+
+
+Krishna Pillutla, Swabha Swayamdipta, Rowan Zellers, John Thickstun, Sean Welleck, Yejin Choi,
+and Zaid Harchaoui. Mauve: Measuring the gap between neural text and human text using divergence frontiers. In _NeurIPS_, 2021.
+
+
+Alec Radford, Jeffrey Wu, Rewon Child, David Luan, Dario Amodei, Ilya Sutskever, et al. Language
+models are unsupervised multitask learners. _OpenAI blog_, 1(8):9, 2019.
+
+
+Ralph Tyrell Rockafellar. _Convex_ _Analysis_ . Princeton University Press, Princeton, 1970. ISBN
+9781400873173. doi: doi:10.1515/9781400873173. URL [https://doi.org/10.1515/](https://doi.org/10.1515/9781400873173)
+[9781400873173.](https://doi.org/10.1515/9781400873173)
+
+
+Uri Shaham, Yutaro Yamada, and Sahand Negahban. Understanding adversarial training: Increasing
+local stability of supervised models through robust optimization. _Neurocomputing_, 307:195–204,
+September 2018. ISSN 0925-2312. doi: 10.1016/j.neucom.2018.04.027. URL [http://dx.](http://dx.doi.org/10.1016/j.neucom.2018.04.027)
+[doi.org/10.1016/j.neucom.2018.04.027.](http://dx.doi.org/10.1016/j.neucom.2018.04.027)
+
+
+Chufan Shi, Haoran Yang, Deng Cai, Zhisong Zhang, Yifan Wang, Yujiu Yang, and Wai Lam. A
+thorough examination of decoding methods in the era of llms, 2024. [URL https://arxiv.](https://arxiv.org/abs/2402.06925)
+[org/abs/2402.06925.](https://arxiv.org/abs/2402.06925)
+
+
+Charlie Victor Snell, Ilya Kostrikov, Yi Su, Sherry Yang, and Sergey Levine. Offline RL for natural
+language generation with implicit language q learning. In _The Eleventh International Conference_
+_on Learning Representations_, 2023. [URL https://openreview.net/forum?id=aBH_](https://openreview.net/forum?id=aBH_DydEvoH)
+[DydEvoH.](https://openreview.net/forum?id=aBH_DydEvoH)
+
+
+12
+
+
+Yixuan Su, Tian Lan, Yan Wang, Dani Yogatama, Lingpeng Kong, and Nigel Collier. A contrastive framework for neural text generation. In Alice H. Oh, Alekh Agarwal, Danielle Belgrave,
+and Kyunghyun Cho (eds.), _Advances_ _in_ _Neural_ _Information_ _Processing_ _Systems_, 2022. URL
+[https://openreview.net/forum?id=V88BafmH9Pj.](https://openreview.net/forum?id=V88BafmH9Pj)
+
+
+Ilya Sutskever, Oriol Vinyals, and Quoc V Le. Sequence to sequence learning with neural
+networks. In Z. Ghahramani, M. Welling, C. Cortes, N. Lawrence, and K.Q. Weinberger
+(eds.), _Advances in Neural Information Processing Systems_, volume 27. Curran Associates, Inc.,
+2014. URL [https://proceedings.neurips.cc/paper_files/paper/2014/](https://proceedings.neurips.cc/paper_files/paper/2014/file/a14ac55a4f27472c5d894ec1c3c743d2-Paper.pdf)
+[file/a14ac55a4f27472c5d894ec1c3c743d2-Paper.pdf.](https://proceedings.neurips.cc/paper_files/paper/2014/file/a14ac55a4f27472c5d894ec1c3c743d2-Paper.pdf)
+
+
+Hugo Touvron, Louis Martin, Kevin Stone, Peter Albert, Amjad Almahairi, Yasmine Babaei, Nikolay Bashlykov, Soumya Batra, Prajjwal Bhargava, Shruti Bhosale, Dan Bikel, Lukas Blecher,
+Cristian Canton Ferrer, Moya Chen, Guillem Cucurull, David Esiobu, Jude Fernandes, Jeremy
+Fu, Wenyin Fu, Brian Fuller, Cynthia Gao, Vedanuj Goswami, Naman Goyal, Anthony Hartshorn,
+Saghar Hosseini, Rui Hou, Hakan Inan, Marcin Kardas, Viktor Kerkez, Madian Khabsa, Isabel
+Kloumann, Artem Korenev, Punit Singh Koura, Marie-Anne Lachaux, Thibaut Lavril, Jenya Lee,
+Diana Liskovich, Yinghai Lu, Yuning Mao, Xavier Martinet, Todor Mihaylov, Pushkar Mishra,
+Igor Molybog, Yixin Nie, Andrew Poulton, Jeremy Reizenstein, Rashi Rungta, Kalyan Saladi,
+Alan Schelten, Ruan Silva, Eric Michael Smith, Ranjan Subramanian, Xiaoqing Ellen Tan, Binh
+Tang, Ross Taylor, Adina Williams, Jian Xiang Kuan, Puxin Xu, Zheng Yan, Iliyan Zarov, Yuchen
+Zhang, Angela Fan, Melanie Kambadur, Sharan Narang, Aurelien Rodriguez, Robert Stojnic,
+Sergey Edunov, and Thomas Scialom. Llama 2: Open foundation and fine-tuned chat models,
+2023. [URL https://arxiv.org/abs/2307.09288.](https://arxiv.org/abs/2307.09288)
+
+
+Ben Wang and Aran Komatsuzaki. GPT-J-6B: A 6 Billion Parameter Autoregressive Language
+Model. [https://github.com/kingoflolz/mesh-transformer-jax, May 2021.](https://github.com/kingoflolz/mesh-transformer-jax)
+
+
+Gian Wiher, Clara Meister, and Ryan Cotterell. On decoding strategies for neural text generators.
+_Transactions of the Association for Computational Linguistics_, 10:997–1012, 2022.
+
+
+Zhilin Yang, Zihang Dai, Ruslan Salakhutdinov, and William W. Cohen. Breaking the softmax
+bottleneck: A high-rank RNN language model. In _International Conference on Learning Repre-_
+_sentations_, 2018. [URL https://openreview.net/forum?id=HkwZSG-CZ.](https://openreview.net/forum?id=HkwZSG-CZ)
+
+
+13
+
+
+A PROOFS
+
+
+A.1 PROOF OF PROPOSITION 3.3
+
+
+For probability vectors _**q**_ _,_ _**p**_ _,_ _**p**_ ˆ _∈_ ∆( _V_ ), define _M_ ( _**q**_ _,_ _**p**_ ˆ) = min _**p**_ _∈N_ ( ˆ _**p**_ ) _**q**_ _[⊤]_ log _**p**_, and _M_ (ˆ _**p**_ ) =
+max _**q**_ min _**p**_ _∈N_ ( ˆ _**p**_ ) _**q**_ _[⊤]_ log _**p**_ . Then, the _t_ -step total rewards of no-foresight strategy Q(P [�] ) and locally
+optimal strategy Q(P [�] ) are respectively given by
+
+[�]
+
+
+_L_ _[t]_ (Q(P [�] ) _,_ P _[∗]_ (P [�] _,_ Q)) =
+
+
+_L_ _[t]_ (Q [�] (P [�] ) _,_ P _[∗]_ (P [�] _,_ Q)) =
+
+[�]
+
+
+_t_
+
+
+E _X<s∼_ Q(�P)[ _M_ ( _**q**_ _s_ ( _X<s_ ) _,_ _**p**_ ˆ _s_ ( _X<s_ ))] := _R_ _[t]_ (Q(P [�] ) _,_ P [�] ) _,_
+_s_ =1
+
+
+_t_
+
+
+E _X<s∼_ Q�(�P)[ _M_ (ˆ _**p**_ _s_ ( _X<s_ ))] := _R_ [�] _[t]_ (P [�] ) _._
+_s_ =1
+
+
+Since _ϵ_ _<_ max _i_ _p_ ˆ _i_, _M_ (ˆ _**p**_ ) is always bounded from below. Moreover, as the set-valued mapping
+_**p**_ ˆ _�→_ _N_ (ˆ _**p**_ ) satisfies upper and lower hemicontinuity and _N_ (ˆ _**p**_ ) is compact, _M_ is continuous in _**p**_ ˆ
+by Berge’s Maximum Theorem (Aliprantis & Border, 2006), which further implies the continuity of
+_R_ - _[t]_ . Since the space of P� is compact, we conclude that infimum of _R_ - _[t]_ can be attained at some P� _[∗]_,
+namely inf _R_ _[t]_ (P [�] ) = _R_ _[t]_ (P [�] _[∗]_ ).
+
+[�] [�]
+
+Now, if _**q**_ _t_ ( _x<t_ ; P [�] _[∗]_ ) = _**q**_ ˜ _t_ ( _x<t_ ; P [�] _[∗]_ ) _∀t_, we are done. Otherwise, let _t_ 0 be the first step such that
+_**q**_ _t_ 0( _x<t_ 0; P [�] _[∗]_ ) _̸_ = _**q**_ ˜ _t_ 0( _x<t_ 0; P [�] _[∗]_ ). We have
+
+
+_t_ 0 _−_ 1
+
+
+E _X<s∼_ Q(�P _∗_ )[ _M_ ( _**q**_ _s_ ( _X<s_ ) _,_ _**p**_ ˆ _[∗]_ _s_ [(] _[X][<s]_ [))] =]
+_s_ =1
+
+
+_t_ 0 _−_ 1
+
+
+E _X<s∼_ Q�(�P _∗_ )[ _M_ (˜ _**q**_ _s_ ( _X<s_ ) _,_ _**p**_ ˆ _[∗]_ _s_ [(] _[X][<s]_ [))]] _[,]_
+_s_ =1
+
+
+E _X<t_ 0 _∼_ Q(�P _∗_ )[ _M_ ( _**q**_ _t_ 0( _X<t_ 0) _,_ _**p**_ ˆ _[∗]_ _t_ 0 [(] _[X][<t]_ 0 [))]] _[ ≤]_ [E] _X<t_ 0 _∼_ Q [�] ( [�] P _[∗]_ ) [[] _[M]_ [(˜] _**[q]**_ _[t]_ 0 [(] _[X][<t]_ 0 [)] _[,]_ _**[p]**_ [ˆ] _[∗]_ _t_ 0 [(] _[X][<t]_ 0 [))]] _[,]_
+
+which implies _R_ _[t]_ [0] (Q(P [�] _[∗]_ ) _,_ P [�] _[∗]_ ) _≤_ _R_ [�] _[t]_ [0] (P [�] _[∗]_ ). Consider P [�] _[∗∗]_ defined as follows. For each _x<s_ _∈V_ _[s][−]_ [1],
+
+      - _**p**_ ˆ _∗s_ [(] _[x][<s]_ [)] _[,]_ _s ≤_ _t_ 0 _,_
+_**p**_ ˆ _[∗∗]_ _s_ [(] _[x][<s]_ [) =]
+_**p**_ ˆ _[∗]_ _s_ [(] _[x][∗]_ _<s_ [)][ where] _[ x][∗]_ _<s_ [= argmin] _x∈V_ _[s][−]_ [1] _[ M]_ [(˜] _**[q]**_ _[s]_ [(] _[x]_ [)] _[,]_ _**[p]**_ [ˆ] _[∗]_ _s_ [(] _[x]_ [))] _[,]_ _s > t_ 0 _._
+
+In words, P [�] _[∗∗]_ can be understood as shifting the future structure of P [�] _[∗]_ after _t_ 0. Since the strategy
+Q(P [�] ) is defined to have no foresight, we have _**q**_ _s_ ( _x<s_ ; P [�] _[∗∗]_ ) = _**q**_ _s_ ( _x<s_ ; P [�] _[∗]_ ) for _s ≤_ _t_ 0. Hence,
+
+_R_ _[t]_ [0] (Q(P [�] _[∗∗]_ ) _,_ P _[∗∗]_ ) _≤_ _R_ [�] _[t]_ [0] (P [�] _[∗]_ ) (4)
+
+[�]
+
+holds as well.
+
+Due to our construction of P [�] _[∗∗]_, the future rewards after _t_ 0 satisfy
+
+
+_T_
+
+ 
+E _X<s∼_ Q(�P _∗∗_ )[ _M_ ( _**q**_ _s_ ( _X<s_ ) _,_ _**p**_ ˆ _[∗∗]_ _s_ [(] _[X][<s]_ [))]] _[ ≤]_
+_s_ = _t_ 0+1
+
+
+_≤_
+
+
+_≤_
+
+
+namely
+
+
+_T_
+
+- max _**[p]**_ [ˆ] _[∗∗]_ _s_ [(] _[x][<s]_ [))]
+
+_s_ = _t_ 0+1 _x<s∈V_ _[s][−]_ [1] _[ M]_ [(] _**[q]**_ _[s]_ [(] _[x][<s]_ [)] _[,]_
+
+
+_T_
+
+- max _**[p]**_ [ˆ] _[∗∗]_ _s_ [(] _[x][<s]_ [))]
+
+_s_ = _t_ 0+1 _x<s∈V_ _[s][−]_ [1] _[ M]_ [(˜] _**[q]**_ _[s]_ [(] _[x][<s]_ [)] _[,]_
+
+
+_T_
+
+
+_T_
+
+
+_T_
+
+
+E _X<s∼_ Q�(�P _∗_ )[ _M_ (˜ _**q**_ _s_ ( _X<s_ ) _,_ _**p**_ ˆ _[∗]_ _s_ [(] _[X][<s]_ [))]] _[,]_
+_s_ = _t_ 0+1
+
+
+_R_ _[T]_ (Q(P [�] _[∗∗]_ ) _,_ P _[∗∗]_ ) _−R_ _[t]_ [0] (Q(P [�] _[∗∗]_ ) _,_ P _[∗∗]_ ) _≤_ _R_ [�] _[T]_ (P [�] _[∗]_ ) _−_ _R_ [�] _[t]_ [0] (P [�] _[∗]_ ) _._ (5)
+
+[�] [�]
+
+With (4) and (5), we conclude that
+
+inf�P _R_ _[T]_ (Q(P [�] ) _,_ P [�] ) _≤R_ _[T]_ (Q(P [�] _[∗∗]_ ) _,_ P [�] _[∗∗]_ ) _≤_ _R_ [�] _[T]_ (P [�] _[∗]_ ) = inf�P _R_                - _[T]_ (P�) _,_
+
+
+which proves the result.
+
+
+14
+
+
+A.2 PROOF OF THEOREM 4.7
+
+
+We shall only prove the general theorem, as Theorem 4.3 and 4.4 are direct consequences.
+
+
+Consider the minimization problem
+
+
+min (6)
+_**p**_ _∈N_ ( ˆ _**p**_ ) _**[q]**_ _[⊤][f]_ [(] _**[p]**_ [)] _[,]_
+
+
+where _N_ (ˆ _**p**_ ) = _{_ _**p**_ _∈_ ∆( _V_ ) : _d_ TV( _**p**_ _,_ _**q**_ ) _≤_ _ϵ}._
+
+
+The feasible region _N_ (ˆ _**p**_ ) is a convex polytope since it is the intersection of two convex polytopes—
+the probability simplex ∆( _V_ ) and the _ϵ_ -TV-distance ball _{_ _**p**_ : [1] 2 _[∥]_ _**[p]**_ _[ −]_ _**[p]**_ [ˆ] _[∥]_ 1 _[≤]_ _[ϵ][}]_ [.] [Moreover, due to]
+
+concavity of _f_, it is easy to show that _**q**_ _[⊤]_ _f_ ( _**p**_ ) is concave in _**p**_ . It is well-known that minimizers of
+a concave function over a polytope are attained at one of the vertices (Horst, 1984). Now, we let _U_
+be the set of the vertices of _N_ (ˆ _**p**_ ).
+
+
+We will consider the two cases of the theorem separately, due to their differences in the geometry of
+the feasibility.
+
+**Case 1** : _ϵ <_ _p_ ˆ _d,_ and [�] _[d]_ _i_ =1 _[−]_ [1] _ff_ (ˆ(ˆ _ppii_ )) _−−ff_ (ˆ(ˆ _ppdi−_ + _ϵϵ_ )) _[≥]_ [1][.]
+
+
+Since _ϵ <_ _p_ ˆ _d,_ the set _U_ can be written as _U_ = _{_ _**p**_ ˆ _−_ _ϵ_ _**e**_ _i_ + _ϵ_ _**e**_ _j_ : _i ̸_ = _j}._ Hence, we have
+
+
+min
+_**p**_ _∈N_ ( ˆ _**p**_ ) _**[q]**_ _[⊤][f]_ [(] _**[p]**_ [) = min] _**p**_ _∈U_ _**[q]**_ _[⊤][f]_ [(] _**[p]**_ [)]
+
+= _**q**_ _[⊤]_ _f_ (ˆ _**p**_ ) + min [+] _[ ϵ]_ [)] _[ −]_ _[f]_ [(ˆ] _[p][j]_ [))] _[}]_
+_i,j_ : _i_ = _j_ _[{][q][i]_ [ (] _[f]_ [(ˆ] _[p][i][ −]_ _[ϵ]_ [)] _[ −]_ _[f]_ [(ˆ] _[p][i]_ [)) +] _[ q][j]_ [ (] _[f]_ [(ˆ] _[p][j]_
+
+= _**q**_ _[⊤]_ _f_ (ˆ _**p**_ ) _−_ max      - _qig_ _[−]_ (ˆ _pi_ ) _−_ _qjg_ [+] (ˆ _pi_ )� _,_
+_i,j_ : _i_ = _j_
+
+where _g_ _[−]_ ( _x_ ) := _f_ ( _x_ ) _−_ _f_ ( _x −_ _ϵ_ ) _,_ and _g_ [+] ( _x_ ) := _f_ ( _x_ + _ϵ_ ) _−_ _f_ ( _x_ ) _._ Taking this result into our game,
+the remaining _**q**_ -maximization part is equivalent to
+
+
+min
+_**q**_ _∈_ ∆( _V_ )
+
+
+       -        - [�]
+
+_−_ _**q**_ _[⊤]_ _f_ (ˆ _**p**_ ) + max _qig_ _[−]_ (ˆ _pi_ ) _−_ _qjg_ [+] (ˆ _pi_ ) _._ (7)
+_i,j_ : _i_ = _j_
+
+
+**Ordering of the optimal solution** . We claim that any optimal _**q**_ _[∗]_ has ordered elements, with _q_ 1 _[∗]_ _[≥]_
+
+_· · · ≥_ _qd_ _[∗]_ [.] [Observe that both] _[ g]_ [+][ and] _[ g][−]_ [are non-increasing, since] _[ f]_ [is a concave and non-decreasing]
+function. Therefore, if a _**q**_ has unordered elements, we can rearrange its elements it in descending
+order, and rearrangement inequality (Hardy et al., 1952) implies that that the term _−_ _**q**_ _[⊤]_ _f_ (ˆ _**p**_ ) will
+decrease. Moreover, by reordering, the term max _i,j_ : _i_ = _j {qig_ _[−]_ (ˆ _pi_ ) _−_ _qjg_ [+] (ˆ _pi_ ) _}_ will also decrease.
+This is because
+
+
+max - _qig_ _[−]_ (ˆ _pi_ ) _−_ _qjg_ [+] (ˆ _pj_ )� = max
+_i_ = _j_ _i_
+
+
+= max
+_j_
+
+
+- _qig_ _[−]_ (ˆ _pi_ ) _−_ min
+_j_ : _j_ = _i_ _[q][j][g]_ [+][(ˆ] _[p][j]_ [)]
+
+
+- max _,_
+_i_ : _i_ = _j_ _[q][i][g][−]_ [(ˆ] _[p][i]_ [)] _[ −]_ _[q][j][g]_ [+][(ˆ] _[p][j]_ [)]
+
+
+Thus, for any fixed _i_, if we reorder the rest of the elements, min _j_ = _i qjg_ [+] (ˆ _pj_ ) will increase, making
+the entire term smaller. Further, by fixing _j_ and reordering by placing _qi_ in the correct position,
+max _i_ = _j qig_ _[−]_ (ˆ _pi_ ) will decrease. In total, rearranging _**q**_ in descending order will decrease both terms,
+resulting in a lower overall objective.
+
+
+**Analyzing KKT optimality** . Introducing dual variables _**λ**_ _∈_ R _[d]_ + _[, ν]_ _[∈]_ [R][,] [the Lagrangian of (7) is]
+given by
+
+
+_._
+
+
+_L_ ( _**q**_ _,_ _**λ**_ _, ν_ ) := _−_ _**q**_ _[⊤]_ _f_ (ˆ _**p**_ ) + max - _qig_ _[−]_ (ˆ _pi_ ) _−_ _qjg_ [+] (ˆ _pj_ )� _−_ _**λ**_ _[⊤]_ _**q**_ + _ν_
+_i,j_ : _i_ = _j_
+
+
+- _d_
+
+ 
+
+
+_qi −_ 1
+
+_i_ =1
+
+
+One can check that the objective in (7) is convex in _**q**_ . Moreover, since there exists _**q**_ ˜ _∈_ relint(∆( _V_ ))
+with _**q**_ ˜ _>_ 0, strong duality holds. Therefore, _**q**_ _[∗]_ is optimal if and only if there exists _**λ**_ _[∗]_ _, ν_ _[∗]_ such that
+the following Karush-Kuhn-Tucker (KKT) conditions are satisfied (Boyd & Vandenberghe, 2004):
+
+
+      
+           -           - [�]
+**0** _∈−f_ (ˆ _**p**_ ) + _∂_ max _qi_ _[∗][g][−]_ [(ˆ] _[p][i]_ [)] _[ −]_ _[q]_ _j_ _[∗][g]_ [+][(ˆ] _[p][j]_ [)] _−_ _**λ**_ _[∗]_ + _ν_ _[∗]_ **1** _,_ (first-order stationarity)
+_i,j_ : _i_ = _j_
+
+
+15
+
+
+_**q**_ _[∗]_ _∈_ ∆( _V_ ) _,_ _**λ**_ _[∗]_ _≥_ 0 _,_ (primal-dual feasibility)
+_λ_ _[∗]_ _i_ _[q]_ _i_ _[∗]_ [= 0] _∀i,_ (complementary slackness)
+
+
+where the subdifferential _∂_ (Rockafellar, 1970) of the nonsmooth function inside represents the
+convex hull of the subgradients of the maximizing coordinates, given by
+
+
+        
+            -            - [�]
+_∂_ max _qi_ _[∗][g][−]_ [(ˆ] _[p][i]_ [)] _[ −]_ _[q]_ _j_ _[∗][g]_ [+][(ˆ] _[p][j]_ [)] = conv ( _D_ ) _,_
+_i_ = _j_
+
+
+  
+                         -                         - [�]
+_D_ = _g_ _[−]_ (ˆ _pi_ ) _**e**_ _i −_ _g_ [+] (ˆ _pj_ ) _**e**_ _j_ : _i ̸_ = _j,_ _qi_ _[∗][g][−]_ [(ˆ] _[p][i]_ [)] _[ −]_ _[q]_ _j_ _[∗][g]_ [+][(ˆ] _[p][j]_ [) =] [max] _qi_ _[∗][g][−]_ [(ˆ] _[p][i]_ [)] _[ −]_ _[q]_ _j_ _[∗][g]_ [+][(ˆ] _[p][j]_ [)] _._
+_i,j_ : _i_ = _j_
+
+
+Now we show that _**q**_ _[∗]_ defined by _qi_ _[∗]_ [=] _g_ _[−]_ _c_ (ˆ _pi_ ) [1][(1] _[≤][i][≤][I]_ _[∗]_ [)] [satisfies] [KKT] [conditions] [for] [some] [dual]
+variables _**λ**_ _[∗]_ _, ν_ _[∗]_, where _c_ is a normalizing constant. Let
+
+_J_ := _{i_ : _qi_ _[∗][g][−]_ [(ˆ] _[p][i]_ [) =] _[ c][}]_ [ =] _[ {]_ [1] _[ ≤]_ _[i][ ≤]_ _[I]_ _[∗][}][,]_
+
+_N_ := _{i_ : _qi_ _[∗][g]_ [+][(ˆ] _[p][i]_ [) = 0] _[}]_ [ =] _[ {][I]_ _[∗]_ _[< i][ ≤]_ _[d][}][.]_
+
+Then, as _SI_ is non-decreasing in _I_, we have
+
+
+_I_ _[∗]_ _−_ 1
+
+     
+
+_k_ =1
+
+
+and
+_I_ _[∗]_ _−_ 1
+
+     
+
+_k_ =1
+
+
+Moreover, since
+
+
+_f_ (ˆ _pk_ ) _−_ _f_ (ˆ _pi_ ) _≤_ 1 _,_ _∀i ∈J,_ (8)
+
+_g_ _[−]_ (ˆ _pk_ )
+
+
+_f_ (ˆ _pk_ ) _−_ _f_ (ˆ _pi_ )
+
+_>_ 1 _,_ _∀i ∈N_ _._ (9)
+_g_ _[−]_ (ˆ _pk_ )
+
+
+_d−_ 1
+
+_Sd_ = 
+
+_k_ =1
+
+
+_f_ (ˆ _pk_ ) _−_ _f_ (ˆ _pd_ )
+
+_>_
+_g_ _[−]_ (ˆ _pk_ )
+
+
+_d−_ 1
+
+
+_k_ =1
+
+
+_f_ (ˆ _pk_ ) _−_ _f_ (ˆ _pd_ + _ϵ_ )
+
+_≥_ 1 _,_
+_g_ _[−]_ (ˆ _pk_ )
+
+
+we know that _I_ _[∗]_ _< d_ must hold, and _N_ is always non-empty.
+
+
+To show that KKT conditions are satisfied, it is equivalent to prove that there exist _ν_ _[∗]_, _**λ**_ _[∗]_ _≥_ 0 with
+_λ_ _[∗]_ _i_ [= 0][ for] _[ i][ ∈J]_ [, and coefficients] _[ γ][ij]_ _[≥]_ [0][ for][ (] _[i, j]_ [)] _[ ∈J]_ _[× N]_ [with][ �] _i∈J_ - _j∈N_ _[γ][ij]_ [= 1][ such that]
+
+
+ _i∈J_
+
+
+_j∈N_ _[γ][ij]_ [= 1][ such that]
+
+
+
+
+ 1( _i∈J_ ) _−_ _g_ [+] (ˆ _pi_ )
+
+
+
+
+ [�] _γji_
+
+_j∈J_
+
+
+
+
+ 1( _i∈N_ ) _−_ _λ_ _[∗]_ _i_ [1] ( _i∈N_ ) [+] _[ ν][∗]_ [= 0] _[,]_
+
+
+_−f_ (ˆ _pi_ ) + _g_ _[−]_ (ˆ _pi_ )
+
+
+which is equivalent to
+
+
+
+
+ [�] _γij_
+
+_j∈N_
+
+
+
+
+_−f_ (ˆ _pi_ ) + _g_ _[−]_ (ˆ _pi_ )  [�] _γij_
+
+_j∈N_
+
+
+
+
+_−f_ (ˆ _pi_ ) _−_ _g_ [+] (ˆ _pi_ )  [�] _γji_
+
+_j∈J_
+
+
+The above linear system is satisfied for
+
+
+
+
+ + _ν_ _[∗]_ = 0 _,_ _i ∈J,_ (10)
+
+
+
+
+ + _ν_ _[∗]_ = _λ_ _[∗]_ _i_ _[≥]_ [0] _[,]_ _i ∈N_ _._ (11)
+
+
+- _−_ 1 ��
+
+
+_k∈J_
+
+
+   
+_f_ (ˆ _pk_ )
+_g_ _[−]_ (ˆ _pk_ ) _[−]_ [1]
+
+
+_ν_ _[∗]_ =
+
+
+��
+
+
+_k∈J_
+
+
+1
+_g_ _[−]_ (ˆ _pk_ )
+
+
+_,_
+
+
+_γij_ = _[f]_ [(ˆ] _g_ _[p][−][i]_ [)] (ˆ _[ −]_ _pi_ ) _[ν][∗]_ 1( _j_ = _d_ ) _,_
+
+_λ_ _[∗]_ _i_ [=] - _−f_ (ˆ _pi_ ) _−_ _g_ [+] (ˆ _pd_ )1( _i_ = _d_ ) + _ν_ _[∗]_ [�] 1( _i∈N_ ) _._
+
+
+16
+
+
+Moreover, (8) and (9) respectively imply that _γij_ _≥_ 0 and _λ_ _[∗]_ _i_ _[≥]_ [0][ for all] _[ I]_ _[∗]_ _[< i < d]_ [.] [We also have]
+_λ_ _[∗]_ _d_ _[≥]_ [0][ because]
+
+
+_d−_ 1
+
+
+_k_ =1
+
+
+_f_ (ˆ _pk_ ) _−_ _f_ (ˆ _pd_ ) _−_ _g_ [+] (ˆ _pd_ )
+
+=
+_g_ _[−]_ (ˆ _pk_ )
+
+
+_d−_ 1
+
+
+_k_ =1
+
+
+_f_ (ˆ _pk_ ) _−_ _f_ (ˆ _pd_ + _ϵ_ )
+
+_≥_ 1 _._
+_g_ _[−]_ (ˆ _pk_ )
+
+
+Therefore, the above choices of _ν_ _[∗]_, _γij_, and _λ_ _[∗]_ satisfy the linear system and all constraints. Thus,
+( _**q**_ _[∗]_ _,_ _**λ**_ _[∗]_ _, ν_ _[∗]_ ) satisfy the KKT conditions, and hence _**q**_ _[∗]_ is the optimal solution to problem ( _f_ -ODG).
+
+
+**Case 2** : _p_ ˆ _d_ _≤_ _ϵ <_ _p_ ˆ1 _,_ and lim _x↓_ 0 _f_ ( _x_ ) = _−∞_ .
+
+
+Let _A_ = _{i_ : _p_ ˆ _i_ _≤_ _ϵ}_ and _Q_ = _{_ _**q**_ _∈_ ∆( _V_ ) : _qi_ = 0 _∀i_ _∈A}_ . Suppose we use some strategy
+_**q**_ _∈Q/_, i.e., there is some _j_ _∈A_ such that _qj_ = 0. Since lim _x↓_ 0 _f_ ( _x_ ) = _−∞_, the adversary can
+always find _**p**_ = _**p**_ ˆ _−_ _p_ ˆ _j_ _**e**_ _j_ that makes the objective _−∞_ . Thus, an optimal strategy must come from
+_Q_ . Similar to Case 1, the _**p**_ -minimization part can be written in terms of the vertex set _U_ as follows:
+
+
+min
+_**p**_ _∈N_ ( ˆ _**p**_ ) _**[q]**_ _[⊤][f]_ [(] _**[p]**_ [) = min] _**p**_ _∈U_ _**[q]**_ _[⊤][f]_ [(] _**[p]**_ [)]
+
+
+= min
+_**p**_ _∈UA_ _**[q]**_ _[⊤][f]_ [(] _**[p]**_ [)]
+
+= _**q**_ _[⊤]_ _f_ (ˆ _**p**_ ) + min [+] _[ ϵ]_ [)] _[ −]_ _[f]_ [(ˆ] _[p][j]_ [))] _[}]_
+( _i,j_ ) _∈C_ _[{][q][i]_ [ (] _[f]_ [(ˆ] _[p][i][ −]_ _[ϵ]_ [)] _[ −]_ _[f]_ [(ˆ] _[p][i]_ [)) +] _[ q][j]_ [ (] _[f]_ [(ˆ] _[p][j]_
+
+
+= _**q**_ _[⊤]_ _f_ (ˆ _**p**_ ) _−_ max
+( _i,j_ ) _∈C_
+
+
+- _qig_ _[−]_ (ˆ _pi_ ) _−_ _qjg_ [+] (ˆ _pi_ )�
+
+
+= _**q**_ _[⊤]_ _f_ (ˆ _**p**_ ) _−_ max (12)
+_i/∈A_ _[q][i][g][−]_ [(ˆ] _[p][i]_ [)] _[,]_
+
+
+where _UA_ = _{_ _**p**_ ˆ _−_ _ϵ_ _**e**_ _i_ + _ϵ_ _**e**_ _j_ : _i ̸_ = _j, i_ _∈A}/_, and _C_ = _{_ ( _i, j_ ) : _i ̸_ = _j, i_ _∈A}/_ . (12) follows because
+_qj_ = 0 for any _j_ _∈A_ . Thus, the problem of interest is equivalent to
+
+
+min
+_**q**_ _∈Q_
+
+
+- 
+_−_ _**q**_ _[⊤]_ _f_ (ˆ _**p**_ ) + max _._
+_i/∈A_ _[q][i][g][−]_ [(ˆ] _[p][i]_ [)]
+
+
+In other words, we only need to solve _**q**_ _[∗]_ from a lower-dimensional problem
+
+
+min
+_**q**_ _∈_ ∆( _VA_ )
+
+
+- 
+_−_ _**q**_ _[⊤]_ _f_ (ˆ _**p**_ ) + max _qig_ _[−]_ (ˆ _pi_ ) _,_
+_i_
+
+
+where _VA_ is a truncated vocabulary with _|VA|_ = _d −|A|_ .
+
+**Ordering of the optimal solution** . Similar to Case 1, an optimal _**q**_ _[∗]_ is ordered with _q_ 1 _[∗]_ _[≥· · · ≥]_ _[q]_ _d_ _[∗]_ [.]
+
+
+**Analyzing KKT optimality** . The Lagrangian can be similarly defined as
+
+
+
+
+
+
+
+
+ _,_
+
+
+_L_ ( _**q**_ _,_ _**λ**_ _, ν_ ) := _−_ _**q**_ _[⊤]_ _f_ (ˆ _p_ ) + max _qig_ _[−]_ (ˆ _pi_ ) _−_ _**λ**_ _[⊤]_ _**q**_ + _ν_
+_i_
+
+
+and strong duality holds as well. The KKT conditions are
+
+
+_d−|A|_
+
+
+
+
+
+_qi −_ 1
+
+_i_ =1
+
+
+          -           **0** _∈−f_ (ˆ _**p**_ ) + _∂_ max _qi_ _[∗][g][−]_ [(ˆ] _[p][i]_ [)] _−_ _**λ**_ _[∗]_ + _ν_ _[∗]_ **1** _,_ (first-order stationarity)
+_i_
+
+_**q**_ _[∗]_ _∈_ ∆( _VA_ ) _,_ _**λ**_ _[∗]_ _≥_ 0 _,_ (primal-dual feasibility)
+_λ_ _[∗]_ _i_ _[q]_ _i_ _[∗]_ [= 0] _∀i,_ (complementary slackness)
+
+where _∂_ (max _i qi_ _[∗][g][−]_ [(ˆ] _[p][i]_ [)) := conv (] _[{][g][−]_ [(ˆ] _[p][i]_ [)] _**[e]**_ _[i]_ [:] _[ q]_ _i_ _[∗][g][−]_ [(ˆ] _[p][i]_ [) = max] _[i][ q]_ _i_ _[∗][g][−]_ [(ˆ] _[p][i]_ [)] _[}]_ [)][.] [Let]
+
+_J_ = _{i_ : _qi_ _[∗][g][−]_ [(ˆ] _[p][i]_ [) =] _[ c][}]_ [ =] _[ {]_ [1] _[ ≤]_ _[i][ ≤]_ _[I]_ _[∗][}][,]_ _N_ = _{i_ : _qi_ _[∗][g][−]_ [(ˆ] _[p][i]_ [) = 0] _[}]_ [ =] _[ {][I]_ _[∗]_ _[< i][ ≤]_ _[d][ −|A|}][,]_
+
+where _c_ := max _i qi_ _[∗][g][−]_ [(ˆ] _[p][i]_ [)][.] [It] [is] [sufficient] [to] [show] [that] [there] [exist] _[ν][∗]_ [,] _**[λ]**_ _[∗]_ _[≥]_ [0] [with] _[λ][∗]_ _i_ [=] [0] [for]
+_i ∈J_, and coefficients _γi_ _≥_ 0 for _i ∈J_ with [�] _i∈J_ _[γ][i]_ [= 1][, such that]
+
+_−f_ (ˆ _pi_ ) + _γig_ _[−]_ (ˆ _pi_ )1 _{i∈J } −_ _λ_ _[∗]_ _i_ [1] _{i∈N }_ [+] _[ ν][∗]_ [= 0] _[.]_
+
+
+17
+
+
+This is achieved by setting
+
+
+  - _−_ 1
+
+1 ��
+_g_ _[−]_ (ˆ _pk_ )
+
+_k∈J_
+
+
+   
+_f_ (ˆ _pk_ )
+_g_ _[−]_ (ˆ _pk_ ) _[−]_ [1]
+
+
+_ν_ _[∗]_ =
+
+
+��
+
+
+_k∈J_
+
+
+_,_
+
+
+_γi_ = _[f]_ [(ˆ] _[p][i]_ [)] _[ −]_ _[ν][∗]_ _≥_ 0 _,_ for _i ∈J,_
+
+_g_ _[−]_ (ˆ _pi_ )
+
+
+_λ_ _[∗]_ _i_ [= (] _[ν][∗]_ _[−]_ _[f]_ [(ˆ] _[p][i]_ [))][ 1] ( _i∈N_ ) _[≥]_ [0] _[.]_
+
+Moreover, _γi_ _≥_ 0 and _λ_ _[∗]_ _i_ _[≥]_ [0] [follow] [from] [the] [fact] [that] _[S][I]_ _[≤]_ [1] _[∀][I]_ _[∈J]_ [and] _[S][I]_ _[>]_ [1] _[∀][I]_ _[∈N]_ [,]
+respectively.
+
+
+B ADDITIONAL EXPERIMENTS
+
+
+In Tables 2 and 3, we present additional experimental results obtained using various choices of _ϵ_ and
+_τ_ in Game sampling algorithm. These experiments provide further insights into the performance
+and sensitivity of the model under different parameter settings. We also explored different values of
+_ϵ_ _∈{_ 0 _._ 1 _,_ 0 _._ 3 _,_ 0 _._ 5 _,_ 0 _._ 8 _,_ 0 _._ 9 _}_ alongside different _τ_ values. However, since the best performance was
+consistently achieved with _ϵ_ = 0 _._ 95 or _ϵ_ = 0 _._ 99, we report only those values here to highlight the
+effect of changing _τ_ .
+
+
+As part of this evaluation, we also analyzed the point at which probabilities are truncated and renormalized in Game sampling and Nucleus sampling for a randomly selected article from the WebText
+test set, using the GPT-2 XL model. The GPT-2 model has a total vocabulary size of 50,000 tokens,
+so truncating the probability distribution can significantly reduce the set of candidate words for the
+next token. Figures 1a and 1b illustrate how these sampling strategies truncate the probability distribution. Figure 1a shows the distribution for the next word when using only 1 token as context, along
+with the index where probabilities are truncated and set to zero. In contrast, Figure 1b presents the
+distribution for the next word when using the first 35 tokens as context, providing more information
+for the model to generate the next word. With more context, the model is expected to be more certain
+about the next word, and the figure highlights the corresponding truncation points. Notably, Game
+sampling truncates a substantial portion of the 50,000-token distribution and dynamically adjusts
+the cutoff point based on the shape of the distribution (see Algorithm 1).
+
+
+(a) context: 1 token (b) context: 35 tokens
+
+
+Figure 1: Next-token probability distribution in GPT-2 XL model and truncation threshold of Game sampling
+and Nucleus sampling.
+
+
+18
+
+
+_ϵ_ _τ_ Perplexity Repetition MAUVE
+
+
+0.95 1.0 6.874 0.087 0.739
+0.95 1.1 7.960 0.058 0.809
+0.95 1.5 13.336 0.015 0.898
+0.95 2.0 23.592 0.003 0.926
+0.95 2.5 40.129 0.002 0.908
+0.95 3.0 66.481 0.001 0.815
+0.95 3.5 107.544 0.001 0.699
+0.95 4.0 172.822 0.001 0.474
+
+
+0.99 1.0 7.067 0.081 0.746
+0.99 1.1 8.275 0.055 0.820
+0.99 1.5 14.231 0.012 0.897
+0.99 2.0 26.783 0.002 0.917
+0.99 2.5 48.508 0.002 0.864
+0.99 3.0 89.308 0.001 0.745
+0.99 3.5 161.402 0.001 0.529
+0.99 4.0 296.453 0.001 0.273
+
+
+GPT-2 Small
+
+
+_ϵ_ _τ_ Perplexity Repetition MAUVE
+
+
+0.95 1.0 4.596 0.066 0.823
+0.95 1.1 4.972 0.050 0.856
+0.95 1.5 6.851 0.013 0.909
+0.95 2.0 9.883 0.005 0.942
+0.95 2.5 14.084 0.002 0.942
+0.95 3.0 19.634 0.002 0.930
+0.95 3.5 27.779 0.001 0.913
+0.95 4.0 39.256 0.001 0.837
+
+
+0.99 1.0 4.683 0.066 0.826
+0.99 1.1 5.083 0.046 0.861
+0.99 1.5 7.130 0.010 0.917
+0.99 2.0 10.629 0.006 0.947
+0.99 2.5 15.958 0.001 0.947
+0.99 3.0 24.128 0.001 0.919
+0.99 3.5 37.613 0.001 0.845
+0.99 4.0 60.031 0.001 0.685
+
+
+GPT-2 Large
+
+
+_ϵ_ _τ_ Perplexity Repetition MAUVE
+
+
+0.95 1.0 6.067 0.048 0.858
+0.95 1.1 6.804 0.037 0.883
+0.95 1.5 10.423 0.010 0.926
+0.95 2.0 17.499 0.003 0.945
+0.95 2.5 28.738 0.001 0.919
+0.95 3.0 46.973 0.001 0.858
+0.95 3.5 78.152 0.001 0.721
+0.95 4.0 132.77 0.001 0.475
+
+
+0.99 1.0 6.176 0.047 0.845
+0.99 1.1 6.947 0.033 0.879
+0.99 1.5 11.019 0.008 0.941
+0.99 2.0 19.482 0.002 0.938
+0.99 2.5 34.662 0.002 0.911
+0.99 3.0 63.555 0.001 0.792
+0.99 3.5 120.889 0 0.497
+0.99 4.0 243.844 0 0.257
+
+
+GPT-2 Medium
+
+
+_ϵ_ _τ_ Perplexity Repetition MAUVE
+
+
+0.95 1.0 5.146 0.050 0.861
+0.95 1.1 5.559 0.033 0.891
+0.95 1.5 7.475 0.014 0.935
+0.95 2.0 10.541 0.004 0.950
+0.95 2.5 14.636 0.002 0.948
+0.95 3.0 20.458 0.002 0.929
+0.95 3.5 28.410 0.001 0.919
+0.95 4.0 39.374 0.001 0.873
+
+
+0.99 1.0 5.219 0.044 0.852
+0.99 1.1 5.660 0.032 0.886
+0.99 1.5 7.784 0.010 0.943
+0.99 2.0 11.333 0.003 0.958
+0.99 2.5 16.690 0.003 0.952
+0.99 3.0 24.796 0.002 0.924
+0.99 3.5 38.056 0.001 0.885
+0.99 4.0 60.236 0.001 0.739
+
+
+GPT-2 XL
+
+
+Table 2: Evaluations on the text generated by different types of GPT-2 models using Game sampling under
+different hyperparameters.
+
+
+19
+
+
+_ϵ_ _τ_ Perplexity Repetition MAUVE
+
+
+0.95 1.0 5.757 0.069 0.640
+0.95 1.1 6.285 0.049 0.670
+0.95 1.5 8.528 0.015 0.759
+0.95 2.0 12.313 0.005 0.794
+0.95 2.5 17.210 0.003 0.811
+0.95 3.0 24.362 0.001 0.801
+0.95 3.5 33.905 0.002 0.778
+0.95 4.0 48.921 0.001 0.664
+
+
+0.99 1.0 5.897 0.066 0.664
+0.99 1.1 6.436 0.046 0.687
+0.99 1.5 8.957 0.013 0.762
+0.99 2.0 13.263 0.004 0.809
+0.99 2.5 19.729 0.002 0.833
+0.99 3.0 29.696 0.002 0.791
+0.99 3.5 46.506 0 0.720
+0.99 4.0 77.289 0.001 0.522
+
+
+GPT-J-6B
+
+
+_ϵ_ _τ_ Perplexity Repetition MAUVE
+
+
+0.95 1.0 8.500 0.131 0.842
+0.95 1.1 9.938 0.134 0.831
+0.95 1.5 14.000 0.128 0.858
+0.95 2.0 23.875 0.149 0.843
+0.95 2.5 36.250 0.162 0.834
+0.95 3.0 52.000 0.173 0.813
+0.95 3.5 63.750 0.174 0.797
+0.95 4.0 87.000 0.182 0.753
+
+
+0.99 1.0 8.938 0.130 0.831
+0.99 1.1 10.250 0.134 0.845
+0.99 1.5 15.625 0.136 0.854
+0.99 2.0 26.625 0.153 0.840
+0.99 2.5 41.750 0.165 0.822
+0.99 3.0 60.000 0.181 0.806
+0.99 3.5 84.500 0.178 0.759
+0.99 4.0 119.500 0.177 0.686
+
+
+Llama-2-7B
+
+
+Table 3: Evaluations on the text generated by GPT-J-6B and Llama-2-7B models using Game sampling under
+different hyperparameters.
+
+
+20

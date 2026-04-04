@@ -1,0 +1,1605 @@
+## - TRANSFORMERS LEARN TO IMPLEMENT MULTI STEP GRADIENT DESCENT WITH CHAIN OF THOUGHT 
+
+**Jianhao Huang**[1] _[∗]_ **, Zixuan Wang**[2] _[∗]_ **, Jason D. Lee**[2] 1Shanghai Jiaotong University, 2Princeton University huang ~~j~~ h2021@sjtu.edu.cn, _{_ wangzx, jasonlee _}_ @princeton.edu 
+
+## ABSTRACT 
+
+Chain of Thought (CoT) prompting has been shown to significantly improve the performance of large language models (LLMs), particularly in arithmetic and reasoning tasks, by instructing the model to produce intermediate reasoning steps. Despite the remarkable empirical success of CoT and its theoretical advantages in enhancing expressivity, the mechanisms underlying CoT training remain largely unexplored. In this paper, we study the training dynamics of transformers over a CoT objective on an in-context weight prediction task for linear regression. We prove that while a one-layer linear transformer without CoT can only implement a single step of gradient descent (GD) and fails to recover the ground-truth weight vector, a transformer with CoT prompting can learn to perform multi-step GD autoregressively, achieving near-exact recovery. Furthermore, we show that the trained transformer effectively generalizes on the unseen data. Empirically, we demonstrate that CoT prompting yields substantial performance improvements. 
+
+## 1 INTRODUCTION 
+
+Transformer-based Large Language Models (LLMs) have demonstrated significant success across various language modeling tasks, achieving state-of-the-art performance in numerous domains (OpenAI, 2023). Remarkably, these models have also unlocked complex reasoning abilities, particularly in mathematical problem-solving and coding tasks (Chowdhery et al., 2023; Anil et al., 2022; Achiam et al., 2023). A key method driving this advancement is the Chain of Thought (CoT), which enables LLMs to generate intermediate reasoning steps autoregressively rather than providing a direct answer. This process effectively improves the model’s capacity to solve complex problems. In practice, CoT reasoning can be elicited either by providing few-shot CoT examples or by appending prompts like “let’s think step by step” to bootstrap the model’s response (Kojima et al., 2022; Wei et al., 2022; Suzgun et al., 2022; Nye et al., 2021). 
+
+Theoretically, CoT enables LLMs to perform multi-step sequential computations by generating intermediate results, thereby significantly improving the expressive power of transformers (Li et al., 2024b; Feng et al., 2024; Merrill & Sabharwal, 2023a) compared to standard decoder transformers that generate direct outputs without intermediate reasoning (Liu et al., 2022; Merrill & Sabharwal, 2023b). Despite these theoretical insights, it remains unclear how transformers are **trained** on CoT data to effectively execute multi-step reasoning. Furthermore, it is unknown whether a transformer trained specifically with an auto-regressive objective with multi-step CoT can substantially outperform one trained to directly output answers without CoT. 
+
+This paper takes an initial step beyond expressiveness to study the training dynamics of transformers when trained on CoT data. Specifically, following the modified in-context learning (ICL) setting on linear regression proposed by Ahn et al. (2023); Zhang et al. (2023), we use it as a testbed to analyze the training process with the CoT framework implemented. We name the task **in-context weight prediction** where the goal is to predict the linear weight vector from the sequence of input prompts. Instead of performing direct ICL and outputting a prediction, the transformer with CoT prompting is allowed to generate multiple intermediate steps before arriving at the final answer. We theoretically investigate the transformer’s training trajectory on the CoT objective and show the expressiveness 
+
+> _∗_ Equal Contribution (alphabetical order). 
+
+1 
+
+gap between transformers trained with CoT and those without. Our main results show this separation is **learnable** : gradient-based algorithm can learn the constructed transformer with CoT. 
+
+We summarize our contributions as follows: 
+
+- **Expressiveness Gap.** We characterize the global optimum of the population loss for the incontext weight prediction task on linear regression using a one-layer transformer without CoT prompting. Our results show that, without CoT, the transformer at the global minimizer effectively performs a single step of gradient descent (GD)(Theorem 3.1), leading to significant errors in predicting the _d_ -dimensional weight vector _**w**[∗] ∈_ R _[d]_ when the number of examples for ICL is _n_ = Θ([�] _d_ ) (Corollary 3.1). In contrast, we demonstrate that a one-layer transformer with CoT prompting can achieve near-exact recovery by executing multi-step GD (Theorem 3.2). 
+
+- **Convergence.** We prove the convergence results of running gradient flow on the population CoT loss under mild assumptions (Theorem 4.1). Our analysis uses a novel stage-wise approach combining dynamics analysis and landscape properties: the parameters initially approach the global minimizer, followed by local convergence toward the final solution. Our proof technique involves a novel characterization of the complicated population gradient. Furthermore, we prove that the trained transformer can exhibit both in-distribution and out-of-distribution generalization (Theorem 4.2) at inference time. We are the first to establish the learnable separation between transformers with and without CoT under the in-context linear regression setting. We empirically validate that the trained transformer converges to the minimizer predicted by our theory, with a distinct performance gap between models trained with and without CoT prompting. 
+
+**Outline.** In Section 2, we formalize the problem setting including the data model, the one-layer transformer architecture, and the CoT prompting format. In Section 3, we theoretically show the performance gap between the transformer with and without CoT. Section 4 consists of our main results, including our dynamics analysis and out-of-distribution (OOD) generalization result. Section 5 empirically validates the advantage of CoT. 
+
+## 1.1 RELATED WORKS 
+
+**Training dynamics of transformers.** Several works have studied the training process of specific transformer architectures. Jelassi et al. (2022); Li et al. (2023) examined the training process and sample complexity of Vision Transformer (Dosovitskiy et al., 2020). Tarzanagh et al. (2023); Ataee Tarzanagh et al. (2023); Li et al. (2024a) explored the connection between the optimization landscape of self-attention mechanisms and the Support Vector Machine problem. Tian et al. (2023a;c) provided insights into the training dynamics of the self-attention and MLP layers during the training process respectively. 
+
+A related line of research focuses on Markov-like data models. Bietti et al. (2024) studied the _induction head_ mechanism from the perspective of associative memory. Nichani et al. (2024) demonstrated that a simplified two-layer transformer provably learns a generalized induction head on latent causal graphs. Chen et al. (2024b) further proved that a modified two-layer multi-head transformer can learn in-context generalized _n_ -gram. Edelman et al. (2024) investigated the multi-stage phase transitions during training on bigram and _n_ -gram ( _n ≥_ 3). Additionally, Makkuva et al. (2024) studied the loss landscape of transformers trained on sequences from a Markov Chain. 
+
+Another growing body of literature aims to understand the training dynamics of in-context learning (ICL). Garg et al. (2022) first empirically studied the ICL capabilities of transformers over a variety of function classes. Aky¨urek et al. (2022); Von Oswald et al. (2023) investigated the behavior of transformers on random ICL instances of linear regression. Several works have also established the existence of deep transformers capable of implementing multi-step gradient descent (GD) across different domains (Fu et al., 2023; Bai et al., 2023; Giannou et al., 2023). Mahankali et al. (2023); Ahn et al. (2024) analyzed the loss landscape of the linear regression ICL task and Zhang et al. (2023) proved global convergence on a one-layer linear self-attention layer using gradient flow. Gatmiry et al. (2024) demonstrated that a linear looped transformer with specific update procedures can learn to implement multi-step GD for linear regression. Further analyses of training dynamics under more realistic assumptions about data models and architectures have been conducted by Huang et al. (2023); Kim & Suzuki (2024); Chen et al. (2024a). For a detailed discussion see Appendix A.1. 
+
+2 
+
+Compared to prior works, our study and Huang et al. (2023); Ahn et al. (2024); Zhang et al. (2023); Tarzanagh et al. (2023); Nichani et al. (2024); Kim & Suzuki (2024); Wang et al. (2024); Chen et al. (2024b); Ren et al. (2024) all use similar reparameterizations that combine key and query matrices to simplify the training dynamics. Moreover, many previous studies (Tian et al., 2023a; Zhang et al., 2023; Huang et al., 2023; Nichani et al., 2024; Kim & Suzuki, 2024; Chen et al., 2024a; Gatmiry et al., 2024) adopted the population loss to facilitate the analysis of these dynamics. 
+
+A closely related work is Gatmiry et al. (2024), which shows that a looped transformer can implement multi-step GD on the ICL linear regression task to directly predict the query answer in context. In comparison, the goal of our setting is to predict the weight vector from the input examples using a realistic CoT autoregressive generation process. Theoretically, we also establish a performance gap between transformers with CoT and those without. See Appendix A.2 for a more detailed discussion. 
+
+**Chain of Thought and Scratchpad** The CoT prompting method was first introduced by Wei et al. (2022) to enhance the multi-step reasoning capability of LLMs. Before the formalization of CoT, Nye et al. (2021) demonstrated that allowing language models to generate intermediate results on “ _scratchpads_ ” dramatically boosts the multi-step computation ability of LLMs. Wang et al. (2022b); Yao et al. (2024); Creswell et al. (2022); Zhou et al. (2022) further proposed variants of the CoT/scratchpad method to improve the efficiency and reliability of generation. 
+
+Recently, several works have attempted to understand CoT from both experimental and theoretical perspectives. Wang et al. (2022a); Saparov & He (2022); Shi et al. (2022); Paul et al. (2023) empirically studied the capability of CoT, providing valuable insights on its reasoning processes. Meanwhile, Wu et al. (2023); Tutunov et al. (2023); Hou et al. (2023); Cabannes et al. (2024) investigated CoT through the lens of mechanistic interpretability. On the theoretical side, Liu et al. (2022); Merrill & Sabharwal (2023a); Li et al. (2024b); Feng et al. (2024) explored the expressive power of transformers with CoT, showing that CoT can significantly extend the expressivity of transformers in the context of circuit complexity. Hu et al. (2024) investigated the statistical foundations of CoT. However, the training dynamics of CoT remain largely unexplored. To the best of our knowledge, this work is among the first theoretical analyses of training dynamics on CoT/scratchpad objectives. 
+
+## 2 PRELIMINARIES 
+
+In this section, we describe the modified in-context learning linear regression task, i.e. **in-context weight prediction** , the one-layer linear self-attention architecture, and the Chain of Thought (CoT) prompting formulation. 
+
+**Notation** We use [ _T_ ] to denote the set _{_ 1 _,_ 2 _, ..., T }_ . Scalars are in lower-case unbolded letters ( _y, α_ , etc.). Matrices and vectors are denoted in upper-case bold letters ( _**W** ,_ _**V**_ , etc.) and lower-case bold letters ( _**x** ,_ _**w**_ , etc.), respectively. _**W**_ [ _i,j_ ] _,_ _**W**_ [ _i,_ :] _,_ _**W**_ [: _,j_ ] respectively denotes the ( _i, j_ )-th entry, _i_ -th row, and _j_ -th column of the matrix _**W**_ . _**W**_ [: _,−_ 1] means the last column of the matrix _**W**_ . The notation _**W** ij_ denotes block matrices/vectors on the _i_ -th row and _j_ -th column according to context. For norm, _∥·∥_ denotes _ℓ_ 2 norm and _∥· ∥F_ denotes the Frobenius norm. We use 1 _{·}_ to denote the indicator function. We use _O_[˜] ( _·_ ) to hide logarithmic factors in the asymptotic notations. 
+
+## 2.1 IN-CONTEXT WEIGHT PREDICTION 
+
+Previous works (Zhang et al., 2023; Ahn et al., 2023; 2024; Aky¨urek et al., 2022; Mahankali et al., 2023) focus on the in-context learning (ICL) task on linear regression. We suppose the data sequence is sampled from a linear regression task where the ground-truth 
+
+**==> picture [326 x 14] intentionally omitted <==**
+
+The goal of in-context learning is to predict the correct label _**w**[∗⊤]_ _**x**_ query given a query _**x**_ query and the previous example pairs ( _**x** i, yi_ ). Most previous works (Zhang et al., 2023; Ahn et al., 2024; Mahankali et al., 2023) show the transformer predicts the query label _y_ query by implicitly doing a one-step gradient descent without predicting the linear classifier _**w**[∗]_ . 
+
+In this work, we go one step further: instead of directly outputting the query label, we require the transformers to implement gradient descent to learn the ground-truth weight vector _**w**[∗]_ . We call this task **in-context weight prediction** for linear regression. Specifically, the data sequence is in the following format: 
+
+3 
+
+**==> picture [324 x 43] intentionally omitted <==**
+
+where _**X**_ := [ _**x**_ 1 _, · · · ,_ _**x** n_ ] is the data matrix and _**w**_ 0 is the initialization of the linear parameter _**w**_ ˆ. We assume _**w**_ 0 = **0** _d_ for simplicity, and define _de_ = 2 _d_ + 2. Our setting is similar to the setting in Bai et al. (2023) where multi-layer transformers are constructed to do explicit multi-step GD on the weight vector _**w**_ ˆ. We separate the input example space and the weight vector space as in Bai et al. (2023) (the _{_ **p** _i}i∈_ [ _N_ +1]) in order to facilitate training. Moreover, we add a dummy token (an extra 1) at the end of each token similar to what Bai et al. (2023) did in their input sequence format. 
+
+## 2.2 LINEAR SELF-ATTENTION LAYER 
+
+We consider a one-layer linear self-attention (LSA) module with residual connection, following the setting in Zhang et al. (2023); Ahn et al. (2023); Gatmiry et al. (2024): we remove the softmax( _·_ ) non-linearity, consolidate the projection and value matrix into a single matrix _**V** ∈_ R _[d][e][×][d][e]_ , and merge the key and query matrices into _**W** ∈_ R _[d][e][×][d][e]_ . We denote 
+
+**==> picture [282 x 23] intentionally omitted <==**
+
+The prediction of the transformer will be the last token of the output sequence, namely 
+
+**==> picture [311 x 24] intentionally omitted <==**
+
+Since the first ( _d_ +1) entries of the full weight tokens ( **0** _,_ 0 _,_ _**w** ,_ 1) are zero, only part of the _**W**_ and _**V**_ affect the prediction. We can rewrite the parameter _**V** ,_ _**W**_ into block matrices 
+
+**==> picture [354 x 43] intentionally omitted <==**
+
+where the block matrices are in the following shape ( _i, j ∈{_ 1 _,_ 2 _}_ ): 
+
+_**V**_ 2 _i−_ 1 _,_ 2 _j−_ 1 _,_ _**W**_ 2 _i−_ 1 _,_ 2 _j−_ 1 _∈_ R _[d][×][d]_ ; _**V**_ 2 _i−_ 1 _,_ 2 _j,_ _**W**_ 2 _i−_ 1 _,_ 2 _j,_ _**V**_ 2 _[⊤] i,_ 2 _j−_ 1 _[,]_ _**[ W]**_ 2 _[ ⊤] i,_ 2 _j−_ 1 _[∈]_[R] _[d][×]_[1][;] _[ v]_[2] _[i,]_[2] _[j][, w]_[2] _[i,]_[2] _[j][∈]_[R] _[.]_ In the following sections, we will show only _**V**_ 31, _**W**_ 13, and _w_ 24 affects the prediction. We will further prove that all other entries are always zero along the training trajectory if initialized at zero. 
+
+## 2.3 CHAIN-OF-THOUGHT PROMPTING 
+
+In language modeling tasks, transformers have been proven to be versatile in various downstream tasks. However, transformers struggle to solve mathematical or scientific problems with one single generation, where several reasoning steps are required. CoT was then proposed to make transformers learn to generate intermediate results auto-regressively before reaching the answer. 
+
+With CoT, we allow the transformer to generate _k_ steps before it outputs the final prediction _**w**_ ˆ _k_ for the ground-truth _**w**[∗]_ . Specifically, given the generated input sequence _**Z**_[ˆ] _i_ at the _i_ -th step of generation, we have _f_ LSA( _**Z**_[ˆ] _i_ )[: _,−_ 1] as the prediction of the next token (( _i_ +1)-th token), and append ˆ it to the end of the current sequence s.t. _**Z**_[ˆ] _i_ +1 = � _**Z** i, f_ LSA( _**Z**_[ˆ] _i_ )[: _,−_ 1]�. After _k_ generation steps, the CoT process induces _k_ intermediate sequences _{_ _**Z**_[ˆ] _i}[k] i_ =1[in the following form:] 
+
+**==> picture [360 x 43] intentionally omitted <==**
+
+ˆ Here, we define _**w** i_ := _f_ LSA( _**Z**_[ˆ] _i−_ 1)[ _d_ +2:2 _d_ +1 _,−_ 1] as the _i_ -th step prediction for the weight vector. The other entries in the same column are irrelevant and we denote them as _⋆_ . Finally, the transformer inputs the last generated sequence _**Z**_[ˆ] _k_ back to the transformer once again to generate the final output _**w**_ ˆ _k_ +1 := _f_ LSA( _**Z**_[ˆ] _k_ )[ _d_ +2:2 _d_ +1 _,−_ 1] as the prediction of the weight vector _**w**[∗]_ . 
+
+4 
+
+Different from the inference time generation, the training process is similar to pre-training on the ground-truth sequence to predict the next token. Specifically, we input the transformer with CoT ground-truth sequences _**Z** i_ : 
+
+**==> picture [360 x 43] intentionally omitted <==**
+
+where _**w** i_ = _**w** i−_ 1 _− η ·_ _**[X]**_[(] _**[X]**[⊤]_ _**[w]** n[i][−]_[1] _[−]_ _**[y]**[⊤]_[)] is the ground-truth intermediate weight vector after _i_ gradient steps on the linear regression objective. Each gradient step adopts a fixed learning rate _η_ for all possible training instances _{_ _**X** ,_ _**w** }_ when generating the ground-truth sequence _**Z** i_ . Note that _**Z** i_ is the corresponding ground-truth sequence of _**Z**_[ˆ] _i_ . 
+
+In the training objective for the _i_ -th step, the transformer is required to predict the next token _**Z** i_ +1[: _,−_ 1] := ( **0** _d,_ 0 _,_ _**w** i_ +1 _,_ 1) given the _i_ -th ground-truth intermediate sequence _**Z** i_ . Finally, we predict the final ground-truth weight vector _**w**[∗]_ with the final intermediate sequence _**Z** k_ . The CoT **training** objective given a sample prompt _**X** ,_ _**y**_ then becomes: 
+
+**==> picture [337 x 30] intentionally omitted <==**
+
+Here we denote _**w** k_ +1 := _**w**[∗]_ for clarity. Following Zhang et al. (2023); Nichani et al. (2024); Kim & Suzuki (2024); Tian et al. (2023b); Chen et al. (2024a); Gatmiry et al. (2024), we consider the gradient flow dynamics over the population loss of the CoT objective: 
+
+**==> picture [331 x 13] intentionally omitted <==**
+
+For clarity, we write the expectation as E _**X** ,_ _**w** ∗_ [ _·_ ]. The following differential equation gives the gradient flow dynamics of the parameters: 
+
+**==> picture [155 x 21] intentionally omitted <==**
+
+When measuring the performance after training, we apply the CoT **inference** procedure to generate _k_ intermediate sequences _{_ _**Z**_[ˆ] _i}[k] i_ =1[and consider the final output token] _[ f]_[( ˆ] _**[Z]**[k]_[)][[:] _[,][−]_[1]][by inputting the] last generated sequence _**Z**_[ˆ] _k_ . The performance evaluation is measured on the error between the final output _f_ ( _**Z**_[ˆ] _k_ )[: _,−_ 1] and the ground-truth _**w**[∗]_ : 
+
+**==> picture [329 x 25] intentionally omitted <==**
+
+When CoT prompting is not used ( _k_ = 0), the evaluation loss _L_[Eval] is equivalent to _L_[CoT] . 
+
+3 EXPRESSIVENESS IMPROVEMENT WITH CHAIN OF THOUGHT 
+
+In this section, we theoretically explore the performance gap on our data model between transformers with CoT and those without. We first prove that a one-layer transformer without CoT can only implement a one-step GD and cannot recover the ground-truth, while it can near-exactly predict the ground-truth parameter with CoT by implementing multi-step GD. 
+
+## 3.1 ONE-LAYER TRANSFORMER CANNOT RECOVER GROUND-TRUTH 
+
+For the ICL linear regression task, the optimal prediction given by a one-layer linear transformer is equivalent to a single step of GD on the MSE objective of linear regression (Mahankali et al., 2023). What about our task on predicting the ground-truth weight vector _**w**[∗]_ in context? The following theorem proves that the optimal solution is still a one-step GD solution. 
+
+**Theorem 3.1** (Lower bound without CoT) **.** _If the global minimizer of L_[Eval] ( _**V** ,_ _**W**_ ) _is_ ( _**V**[∗] ,_ _**W**[∗]_ ) _, the corresponding one-layer transformer f_ LSA( _**Z**_ 0)[: _,−_ 1] _implements one step GD on a linear model with some learning rate η[∗]_ = _n_ + _nd_ +1 _[and the transformer outputs]_[ (] **[0]** _[d][,]_[ 0] _[,][η] n[∗]_ _**[Xy]**[⊤][,]_[ 1)] _[.]_ 
+
+5 
+
+We briefly present the high-level intuitions in the proof and the detailed proof is deferred to Appendix B.1. We use a similar technique in Mahankali et al. (2023) when proving the optimality of one-step GD in the ICL task. The key strategy of the proof is to replace ( **0** _d,_ 0 _,_ _**w**[∗] ,_ 1) in the evaluation loss _L_[Eval] ( _**V** ,_ _**W**_ ) (Equation (7)) with ( **0** _d,_ 0 _,[η] n[∗]_ _**[Xy]**[⊤][,]_[ 1)][ in the following form.] 
+
+**==> picture [287 x 30] intentionally omitted <==**
+
+In order to prove this equation above, we show the gradient of the original loss Equation (7) and this formula are identical. We first obtain the closed-form formula of the expected gradient for both sides with regard to _**X** ,_ _**w**[∗]_ . Then we use the symmetric property of the distribution of _**X** ,_ _**w**[∗]_ to simplify the gradient expressions, and eventually prove them equal. 
+
+The equivalent form of loss indicates that the evaluation loss only depends on the _ℓ_ 2 distance between the output of the linear self-attention module and � **0** _d,_ 0 _,[η] n[∗]_ _**[Xy]**[⊤][,]_[ 1] �. Therefore, any ( _**V** ,_ _**W**_ ) is a global minimizer of this loss function if and only if the output of _f_ LSA( _**Z** k_ )[: _,−_ 1] is ( **0** _d,_ 0 _,[η] n[∗]_ _**[Xy]**[⊤][,]_[ 1)][.][Meanwhile, one can assign] 
+
+**==> picture [310 x 43] intentionally omitted <==**
+
+and the one-layer transformer achieves the optimal solution, which concludes the proof. 
+
+Is a one-step gradient solution good enough? Most of the previous ICL work Zhang et al. (2023); Ahn et al. (2023); Gatmiry et al. (2024) consider the number of examples _n →_ + _∞_ when _d_ is fixed. In this case, the one-step GD solution can perfectly find the ground-truth weight vector _**w**[∗]_ . However, a simple corollary of this theorem indicates that the one-step solution has a non-negligible error when there are limited samples, e.g. _n_ = Θ([�] _d_ ). This number of examples _n_ is required to guarantee the reconstruction of _**w**[∗] ∈_ R _[d]_ . 
+
+_d_[2] **Corollary 3.1.** _For any parameters_ ( _**V** ,_ _**W**_ ) _in the one-layer transformer, L_[Eval] ( _**V** ,_ _**W**_ ) _≥_ Θ� _n_ � _. d→_ + _∞ Moreover, if n_ = Θ([˜] _d_ ) _, L_[Eval] ( _**V** ,_ _**W**_ ) = Θ([˜] _d_ ) _−−−−−→_ + _∞._ 
+
+_Proof._ By Theorem 3.1, we directly calculate the evaluation loss on the global optimum: 
+
+**==> picture [360 x 89] intentionally omitted <==**
+
+and we finish the proof by substituting _n_ with Θ([˜] _d_ ). 
+
+## 3.2 ONE-LAYER TRANSFORMER WITH COT CAN IMPLEMENT MULTI-STEP GD 
+
+The previous subsection shows that the one-step solution by the one-layer transformer without CoT is not the endgame. Nevertheless, CoT can become the savior for this simple transformer because it enables the transformer to generate several intermediate computation steps to improve the final performance. The following theorem shows that with the reinforcement of CoT, there exists a one-layer transformer that can perform multi-step GD using intermediate generations. We show that Θ(log _d_ ) steps of CoT can remarkably improve the performance, reducing the error from Θ( poly log _d d_[)][to] _O_ (1 _/_ poly _d_ ). With constant learning rate, Θ(log _d_ ) steps of GD is also necessary to reconstruct _**w**[∗]_ accurately. The proof is deferred to Appendix B.2. 
+
+6 
+
+**Theorem 3.2** (Informal) **.** _There exists_ _**V**[∗] and_ _**W**[∗] s.t. f_ LSA( _**Z** k_ )[: _,−_ 1] _outputs_ ( **0** _d,_ 0 _,_ _**w** k,_ 1) _where_ _**w** k_ := � _**I** −_ ( _**I** − n[η]_ _**[XX]**[⊤]_[)] _[k]_[�] _**w**[∗] is the k-step GD solution with learning rate η on a linear regression model. Moreover, if n_ = Ω([˜] _d_ ) _, k_ = Ω(log _d_ ) _, η ∈_ (0 _._ 1 _,_ 1) _, then the evaluation loss_ 
+
+**==> picture [352 x 31] intentionally omitted <==**
+
+With the one-step GD solution in Theorem 3.1, the proof is straightforward: we assign the parameters ( _**V** ,_ _**W**_ ) in the same form of Equation (8), with the _η[∗]_ replaced by _η_ . However, now the transformer is allowed to generate _k_ steps before reaching the final output. We can inductively calculate the _i_ -th step of generation, showing that the output is exactly the _i_ -th gradient step: 
+
+**==> picture [222 x 12] intentionally omitted <==**
+
+After _k_ +1 steps, we have the final output � _**I** −_ ( _**I** − n[η]_ _**[XX]**[⊤]_[)] _[k]_[+1][�] _**w**[∗]_ by induction and the evaluation loss becomes Equation (9). By Lemma D.4, the final loss is upper bounded by _O_ � poly(1 _d_ ) �. This is strictly better than a one-step GD solution by comparing with Corollary 3.1. 
+
+Now we theoretically display the expressivity improvement of transformers brought by CoT. In the following sections, we will further prove that **this separation is learnable** simply by gradient flow. 
+
+4 GRADIENT DYNAMICS OVER CHAIN OF THOUGHT 
+
+In this section, we go beyond the construction and prove our convergence result on the CoT objective. We show that the final solution found by gradient flow is approximately our construction in Theorem 3.2, which is significantly better than the one-step gradient descent solution without CoT. 
+
+## 4.1 MAIN RESULTS 
+
+According to our construction in Theorem 3.2, we use the following specific initialization to zero out the irrelevant blocks while keeping the essential blocks _**W**_ 13 _,_ _**V**_ 31 _,_ and _w_ 24. 
+
+**Assumption 4.1** (Initialization) **.** _Let σ >_ 0 _be a parameter. We assume the initialization of the parameters satisfies that_ 
+
+**==> picture [246 x 43] intentionally omitted <==**
+
+_Here_ _**W**_ 13(0) =[�] _[d] i_ =1 _[λ] i_ _**[W][u]**[i]_ _**[u]**[⊤] i[and]_ _**[ V]**_[31][(0) =][ �] _[d] i_ =1 _[λ] i_ _**[V][u]**[i]_ _**[u]**[⊤] i[are symmetric and simultaneously] diagonalizable, λ_ _**[V]** i[≤−][σ, λ]_ _**[W]** i ∈_ [ _σ,_ 2[1][]] _[.][Further, we fix][ w]_[24][=] _[ −]_[1] _[ for all][ t >]_[ 0] _[.]_ 
+
+This initialization follows Chen et al. (2024a) by assuming _**V**_ 31 and _**W**_ 13 share the same set of eigenvectors. It is close to the particular symmetric random initialization schemes discussed in Zhang et al. (2023) with a scaling factor _σ_ . We use this specific initialization to zero out the irrelevant blocks, and we fix _w_ 24 = _−_ 1 to break the homogeneity of the model and avoid multiple global minimizers. Those simplification facilitates the analysis of the complex dynamical system. 
+
+Now we prove that under appropriate initialization, gradient flow will nearly converge to the global minimizer. We provide a proof sketch in the next subsection. See Appendix C.3 for details. 
+
+**Theorem 4.1** (Informal, Global Convergence) **.** _Suppose n_ = Ω([˜] _d_ ) _, η ∈_ (0 _._ 1 _,_ 0 _._ 9) _, k_ = Θ(log _d_ ) _. Under Assumption 4.1 with σ_ = Θ(1) _, if we run gradient flow on the population loss in Equation_ (5) _,_ 1 _then after time t_ = _O_ �log _d_ + log[1] _ϵ_ � _, we have L_[CoT] ( _t_ ) _≤ ϵ for any ϵ ∈_ � poly( _d_ ) _[,]_[ 1] � _._ 
+
+## 4.2 PROOF IDEAS 
+
+In this subsection, we briefly outline the proof of Theorem 4.1. 
+
+Before analyzing the dynamics, we first prove that under Assumption 4.1, the gradient dynamics only depend on the parameter blocks _**W**_ 13( _t_ ) _,_ _**V**_ 31( _t_ ) _, w_ 24, while other blocks stay zero (Lemma C.2). This is because the Gaussian data assumption makes sure the gradients of these 
+
+7 
+
+blocks are zero once initialized at zero, except for _**W**_ 13( _t_ ) _,_ _**V**_ 31( _t_ ) _, w_ 24. By this lemma, we can simplify the linear self-attention formula and consider the following equivalent yet simplified loss (we denote _**W**_[�] := _**W**_ 13 _,_ _**V**_[�] := _**V**_ 31, and _w_ 24 is fixed as _−_ 1.): 
+
+**==> picture [342 x 61] intentionally omitted <==**
+
+For ease of presentation, we denote _**S**_ := _n_ 1 _**[XX]**[⊤]_[.][To][analyze][the][gradient][dynamics,][we][first] need to compute the exact closed-form gradient instead of keeping the expectation. However, the formula involves the _i_ -th step weight vector _**w** i_ = � _**I** −_ ( _**I** − η_ _**S**_ ) _[i]_[�] _**w**[∗]_ , involving the higher order moments of the Wishart matrix _**S**_[1] whose closed form is hard to obtain. In our paper, we provide a tighter estimate compared to previous work (Gatmiry et al., 2024) using the concentration of the Wishart matrix _**S**_ (Vershynin, 2018) when _n_ = Θ( _d_ poly log _d_ ) to estimate the expectation. In particular, we use the exponential decaying tail probability bound for the operator norm of the error _δ_ _**S**_ := _**S** −_ _**I**_ . For example, when estimating the expectation E[( _**I** − η_ _**S**_ ) _[i]_ ], we can decompose the expectation into two cases: when _∥δ_ _**S** ∥op_ is small, ( _**I** − η_ _**S**_ ) _[i] ≈_ (1 _− η_ ) _[i]_ _**I**_ ; when _∥δ_ _**S** ∥_ is larger than a threshold, the rest part of the expectation can be controlled by integrating the exponential decaying tail probability.[2] The concentration lemmas are provided in Appendix D. 
+
+The motivation behind a better concentration estimation is to ensure nearly independent dynamics along different eigenspaces _{_ _**u** i}[d] i_ =1[of] _**W**_[�] and _**V**_[�] . As an extreme case, we consider _n →∞_ and _**S**_ converges to _**I**_ almost surely. Now the gradient component on the _**u** i_ _**u**[⊤] i_[subspace is only dependent] on _λ_ _**V** i_[�][and] _[ λ]_ _**W** i_[�] without any other _λ_ _**V** j_[�] _[, λ]_ _**W** j_[�] _[, j]_[=] _[i]_[ involved.][That means there is no interaction be-] tween two different subspaces, i.e. the dynamics are independent. However, some interactions are introduced since the concentration error _δ_ _**S**_ = 0 when _n_ is finite. Therefore, the improved characterization of the expected gradient is essential to upper bound the interaction between the dynamics of different eigenspaces _{_ _**u** i}[d] i_ =1[,][leading][to][a][nearly][independent][evolution][at][initialization.][This] independence property motivates us to conduct the following stage-wise analysis: 
+
+**Stage 1:** _**W**_[�] _,_ _**V**_[�] **converges to near-optimal.** In this stage, the dynamics along each direction _**u** i_ stay nearly independent. Specifically, we can expand the gradient flow dynamics for _**V**_[�] , _**W**_[�] and project them into the eigenspaces _**u** i_ _**u**[⊤] i_[to][get][the][dynamics][of][the][eigenvalues] _[λ]_[ �] _**V** i_ := _**u**[⊤] i_ _**[V u]**_[�] _[i]_[,] _**W** λi_[�] := _**u**[⊤] i_ _**W u**_[�] _i_ . The dynamics of eigenvalues are characterized by the following Lemma 4.1 where we can prove that the interaction terms between different subspaces are bounded by _O_ (1 _/_ log[2] _d_ ). **Lemma 4.1** (Informal version of Lemma C.6) **.** _The dynamics of λ_ _**V** i_[�] _and λ_ _**W** i_[�] _are given by the following equations with_ ��� _δ_ � _j_ _**V**_ ��� _≤ O_ � log1[2] _d_ � _,_ ��� _δ_ � _j_ _**W**_ ��� _≤ O_ � log1[2] _d_ � _:_ 
+
+**==> picture [375 x 69] intentionally omitted <==**
+
+This nearly independent evolution along each eigenvector _**u** i_ enables us to analyze the individual dynamics of _λ_ _**V** i_[�][and] _[ λ]_ _**W** i_[�] at the beginning of training. Under Assumption 4.1, _λ_ _**V** j_[�] _[, λ]_ _**W** j_[�] are initialized Θ(1). By Lemma 4.1, we prove by induction that the eigenvalues will go through two phases: (1) _λ_ _**V** j_[�] 
+
+> 1To deal with the similar problem, Gatmiry et al. (2024) proposed a simple combinatorial method to estimate the expectation. We use the same technique to get a certain form of the expectation (see Appendix D), but the bound is not tight enough to get the desired results. See discussion in Appendix A.2. 
+
+> 2This method can keep the (1 _−η_ ) _i_ factor to prevent introducing unwanted estimation errors when _i_ is large. 
+
+8 
+
+increases yet stay smaller than _−O_ � _k_ (1 _−_ 1 _λ_ _**W** j_[�] ) �, while _λ_ _**W** j_[�] increases to 1 _−o_ (1). (2) _λ_ _**W** j_[�] stays _o_ (1)close to 1, and _λ_ _**V** j_[�][also converges to] _[ o]_[(1)][-close to] _[ −][η]_[.][Here all] _[ o]_[(1)][ terms are some] _[ O]_[(1] _[/]_[ log] _[c][ d]_[)] terms for some constant� _c >_ 0. That indicates that the distance between the eigenvalues and the target ��� _λ_ � _**V** j_[+] _[ η]_ ��� _,_ ��� _λ_ _**W** j −_ 1��� converge to _O_ (1 _/_ log _c d_ ) for all _j ∈_ [ _d_ ] at the end of Stage 1. 
+
+**Stage 2: Local convergence.** One may expect that after Stage 1, the transformer can approximate gradient steps quite accurately since the parameter _**V**_[�] _,_ _**W**_[�] are both _o_ (1)-close to ground-truth along each direction _**u** i_ . Unfortunately, the sum of error in _d_ directions can still be Θ([�] _d_ ) since we can only reduce the error to _O_ (1 _/_ poly log _d_ ) in each direction. So for now, the solution cannot recover the weight vector _**w**[∗]_ at this stage. To address this issue, we further consider the exact form of the interaction terms _δj_ _**W**_[�] _[, δ] j_[ �] _**V**_[and analyze the local convergence.][By fine-grained expansion of the error] terms, we notice that _δj_ _**W**_[�] and _δj_ _**V**_[�][are always coupled with some individual residual like][ (1] _[ −][λ]_ _**W** j_[�][)][,] ( _η_ + _λ_ _**V** j_[�][)][,][or][some][weighted][average][or][those][individual][residuals.][Meanwhile,][the][coefficient][of] the residual in the interaction terms is still upper bounded by _O_ (1 _/_ poly log _d_ ). That enables us to derive some gradient lower bound similar to PL-conditions (Lemma C.12) when _**V**_[�] _,_ _**W**_[�] are close to the ground-truth, leading to local convergence to near-optimal at a linear rate. 
+
+The final training error is some _O_ ( poly1 _d_[)][, which depends on the inference step] _[ k]_[and ground-truth] _η_ . Note that the optimal loss value is also at least polynomially small in _d_ given Θ(log _d_ ) CoT steps. Therefore, now we can conclude that the transformer can learn to implement multi-step GD when given intermediate ground-truth states after optimizing the CoT loss with gradient flow. 
+
+## 4.3 OUT-OF-DISTRIBUTION GENERALIZATION AT INFERENCE 
+
+In this section, we prove that after training, the transformer not only correctly predicts the weight vector in context with CoT generation, but also can generalize out-of-distribution (OOD). The following theorem shows that the trained transformer obtained from Theorem 4.1 with CoT generalizes over other problem instances when the input example sequence has an OOD covariance, as long as the covariance is not too ill-conditioned. Here _L_[Eval] **Σ** is defined as the OOD evaluation loss in eq. (7) with the in-context examples _**x** i ∼N_ (0 _,_ **Σ** ) and weight vector _**w**[∗] ∼N_ (0 _,_ _**I**_ ): 
+
+**==> picture [294 x 25] intentionally omitted <==**
+
+**Theorem 4.2** (Informal, Theorem C.2) **.** _Suppose n_ = Ω([˜] _d_ ) _, η ∈_ (0 _._ 1 _,_ 0 _._ 9) _, k[′]_ = Θ(log _d_ ) _. Assume the out-of-distribution covariance is well-conditioned: η[δ][≤][λ]_[min][(] **[Σ]**[)] _[≤][λ]_[max][(] **[Σ]**[)] _[≤]_[2] _[−] η[δ] for some_ 1 _constant δ >_ 0 _. Then after training in Theorem 4.1, we have L_[Eval] **Σ** ( _t_ ) _≤ ϵ for any ϵ ∈_ � poly( _d_ ) _[,]_[ 1] � _._ 
+
+Note that this theorem covers both in-distribution (when _η_ = _δ_ ) and OOD tasks at evaluation, indicating that the transformer is trained to implement a general iterative optimization algorithm. Moreover, the inference step number _k[′]_ in this theorem can go beyond the training CoT steps _k_ , achieving better estimation for _**w**[∗]_ . 
+
+One may think once the next-token-prediction training loss _L_[CoT] converges to zero based on groundtruth CoT data, the transformer naturally learns to do multi-step reasoning at inference, i.e. _L_[Eval] is small. However, at the _i_ -th generation step, the transformer is predicting the next weight token _**w**_ ˆ _i_ +1 based on the previous generation _**w**_ ˆ _i_ instead of the ground-truth intermediate step _**w** i_ . It is possible that prediction error for each step accumulates or even increases exponentially. In this theorem, we expand the sum of all the prediction errors at each step and show a converging series of errors throughout the inference process. That ensures we can achieve any _O_ ( poly(1 _d_ )[)][-small evaluation loss] when we have _k[′]_ = Θ(log _d_ ) reasoning steps. The detailed proof is provided in Appendix C.4. 
+
+## 5 EXPERIMENTS 
+
+In this section, we introduce our experimental setup on our in-context weight vector prediction task to numerically validate our theoretical results. Specifically, we show that parameters of the 
+
+9 
+
+transformer match the prediction of our theory when optimized over the CoT loss. Furthermore, we present the gap of evaluation loss _L_[Eval] in Equation (7) between transformers with and without CoT. 
+
+**Experimental Setup** We train the transformer architecture in Equation (3) on the synthetic data. The data distribution follows our in-context weight prediction task in Equation (1). In particular, we choose the token dimensions _d_ = 10, number of in-context examples _n_ = 20, and GD learning rate _η_ = 0 _._ 4 for generating the ground-truth intermediate states. We use a batch size _B_ = 1000 and run Adam with learning rate _α_ = 0 _._ 001 for _τ_ = 750 iterations. More details refer to Appendix E. 
+
+**Global convergence** Our experiments show that the structure that weights of the full model exhibit is consistent with Theorem 3.2. At final convergence, all of the entries of _**W**_ converge to zero except the elements on the diagonal in the top-right corner block (the red box in the heatmap of _**W**_ , Figure 1), while all the entries of _**V**_ are near zero except elements on the diagonal in the bottom-left corner (the red box in the heatmap of _**V**_ , Figure 1). Also, the pattern shows _**W**_ 13 = _α_ _**I** , w_ 24 = _−α,_ and _**V**_ 31 = _− α[η]_ _**[I]**_[with][some][scaling][factor] _[α]_[,][3][which][is][equivalent][to][the][construction][stated][in] Theorem 3.2 and Theorem 4.1. That means the transformer implements one step of gradient descent **0** _d,_ 0 _, − n[η]_ _**[XX]**[⊤]_[(] _**[w]**[i][ −]_ _**[w]**[∗]_[)] _[,]_[ 0][before the residual connection, and the autoregressive CoT process] enables model to perform multi-step GD. 
+
+**Performance improvement** We empirically verify the evaluation loss gap between transformers with and without CoT shown by Theorem 3.1 and Theorem 3.2. Our experiments in Figure 2 demonstrate that the evaluation loss of transformers with CoT converges to near zero even when _k_ = 10. In comparison, the optimal expected loss that the one-layer linear transformer can achieve (the **pink** dashed line, from Corollary 3.1) is much larger than any of the model that applies multiple steps of computation. We also observe that evaluation loss at convergence keeps decreasing when the number of reasoning steps _k_ increases from 10 to 40, which is consistent with Theorem C.1 where larger _k_ allows for smaller error _ϵ_ . 
+
+**==> picture [149 x 9] intentionally omitted <==**
+
+**----- Start of picture text -----**<br>
+Heatmap of V Heatmap of W<br>**----- End of picture text -----**<br>
+
+
+**==> picture [168 x 102] intentionally omitted <==**
+
+**----- Start of picture text -----**<br>
+5 k=10<br>k=20<br>4<br>k=30<br>k=40<br>3<br>without CoT<br>2<br>1<br>0<br>0 100 200 300 400 500 600 700<br>iteration<br>Eval Loss<br>**----- End of picture text -----**<br>
+
+
+Figure 1: **Model weights:** We present the heatmap of the weights of the trained transformer. We initialize _**V** ,_ _**W**_ randomly at _t_ = 0, where _n_ = 20, _d_ = 10 and _k_ = 20. After training, all entries of _**V**_ and _**W**_ converge to zero except the two blocks highlighted in the red box. Moreover, the pattern matches the theoretical results. 
+
+Figure 2: _k_ **-step v.s. 1-step:** We plot the evaluation loss _L_[Eval] when _n_ = 20, _d_ = 10. We randomly initialize the transformer. For transformers with CoT, loss converges to near zero while transformers without CoT cannot. Moreover, the loss at convergence decreases when _k_ increases. 
+
+## 6 CONCLUSION 
+
+This paper investigates the training dynamics of transformers when the Chain of Thought (CoT) prompting is introduced. By focusing on the in-context weight prediction task, our theoretical results demonstrate that transformers can learn to implement iterative algorithms like multi-step GD with the enhancement of CoT, highlighting the essential role of CoT in multi-step reasoning tasks. Our empirical findings corroborate these theoretical insights, indicating that CoT prompting provides significant performance benefits. 
+
+There are still many open problems. Can we move beyond population loss on the in-context weight prediction task and show a sample complexity guarantee? Can CoT empower the transformer to acquire compositional reasoning capability instead of doing the same iterative steps? 
+
+> 3In Figure 1, _α >_ 0 while all _α_ = 0 works for the construction. Empirically, the sign of _α_ depends on the random initialization, and both positive and negative solutions exist. 
+
+10 
+
+## ACKNOWLEDGEMENT 
+
+JDL acknowledges support of the NSF CCF 2002272, NSF IIS 2107304, NSF CIF 2212262, ONR Young Investigator Award, and NSF CAREER Award 2144994. 
+
+## REFERENCES 
+
+- Josh Achiam, Steven Adler, Sandhini Agarwal, Lama Ahmad, Ilge Akkaya, Florencia Leoni Aleman, Diogo Almeida, Janko Altenschmidt, Sam Altman, Shyamal Anadkat, et al. Gpt-4 technical report. _arXiv preprint arXiv:2303.08774_ , 2023. 
+
+- Kwangjun Ahn, Xiang Cheng, Minhak Song, Chulhee Yun, Ali Jadbabaie, and Suvrit Sra. Linear attention is (maybe) all you need (to understand transformer optimization). _arXiv preprint arXiv:2310.01082_ , 2023. 
+
+- Kwangjun Ahn, Xiang Cheng, Hadi Daneshmand, and Suvrit Sra. Transformers learn to implement preconditioned gradient descent for in-context learning. _Advances in Neural Information Processing Systems_ , 36, 2024. 
+
+- Ekin Aky¨urek, Dale Schuurmans, Jacob Andreas, Tengyu Ma, and Denny Zhou. What learning algorithm is in-context learning? investigations with linear models. _arXiv preprint arXiv:2211.15661_ , 2022. 
+
+- Cem Anil, Yuhuai Wu, Anders Andreassen, Aitor Lewkowycz, Vedant Misra, Vinay Ramasesh, Ambrose Slone, Guy Gur-Ari, Ethan Dyer, and Behnam Neyshabur. Exploring length generalization in large language models. _Advances in Neural Information Processing Systems_ , 35:38546–38556, 2022. 
+
+- Davoud Ataee Tarzanagh, Yingcong Li, Xuechen Zhang, and Samet Oymak. Max-margin token selection in attention mechanism. _Advances in Neural Information Processing Systems_ , 36:48314– 48362, 2023. 
+
+- Yu Bai, Fan Chen, Huan Wang, Caiming Xiong, and Song Mei. Transformers as statisticians: Provable in-context learning with in-context algorithm selection. _arXiv preprint arXiv:2306.04637_ , 2023. 
+
+- Alberto Bietti, Vivien Cabannes, Diane Bouchacourt, Herve Jegou, and Leon Bottou. Birth of a transformer: A memory viewpoint. _Advances in Neural Information Processing Systems_ , 36, 2024. 
+
+- Vivien Cabannes, Charles Arnal, Wassim Bouaziz, Alice Yang, Francois Charton, and Julia Kempe. Iteration head: A mechanistic study of chain-of-thought. _arXiv preprint arXiv:2406.02128_ , 2024. 
+
+- Siyu Chen, Heejune Sheen, Tianhao Wang, and Zhuoran Yang. Training dynamics of multi-head softmax attention for in-context learning: Emergence, convergence, and optimality. _arXiv preprint arXiv:2402.19442_ , 2024a. 
+
+- Siyu Chen, Heejune Sheen, Tianhao Wang, and Zhuoran Yang. Unveiling induction heads: Provable training dynamics and feature learning in transformers. _arXiv preprint arXiv:2409.10559_ , 2024b. 
+
+- Aakanksha Chowdhery, Sharan Narang, Jacob Devlin, Maarten Bosma, Gaurav Mishra, Adam Roberts, Paul Barham, Hyung Won Chung, Charles Sutton, Sebastian Gehrmann, et al. Palm: Scaling language modeling with pathways. _Journal of Machine Learning Research_ , 24(240): 1–113, 2023. 
+
+- Antonia Creswell, Murray Shanahan, and Irina Higgins. Selection-inference: Exploiting large language models for interpretable logical reasoning. _arXiv preprint arXiv:2205.09712_ , 2022. 
+
+- Nan Ding, Tomer Levinboim, Jialin Wu, Sebastian Goodman, and Radu Soricut. Causallm is not optimal for in-context learning. _arXiv preprint arXiv:2308.06912_ , 2023. 
+
+11 
+
+- Alexey Dosovitskiy, Lucas Beyer, Alexander Kolesnikov, Dirk Weissenborn, Xiaohua Zhai, Thomas Unterthiner, Mostafa Dehghani, Matthias Minderer, Georg Heigold, Sylvain Gelly, et al. An image is worth 16x16 words: Transformers for image recognition at scale. _arXiv preprint arXiv:2010.11929_ , 2020. 
+
+- Benjamin L Edelman, Ezra Edelman, Surbhi Goel, Eran Malach, and Nikolaos Tsilivis. The evolution of statistical induction heads: In-context learning markov chains. _arXiv preprint arXiv:2402.11004_ , 2024. 
+
+- Guhao Feng, Bohang Zhang, Yuntian Gu, Haotian Ye, Di He, and Liwei Wang. Towards revealing the mystery behind chain of thought: a theoretical perspective. _Advances in Neural Information Processing Systems_ , 36, 2024. 
+
+- Deqing Fu, Tian-Qi Chen, Robin Jia, and Vatsal Sharan. Transformers learn higher-order optimization methods for in-context learning: A study with linear models. _arXiv preprint arXiv:2310.17086_ , 2023. 
+
+- Shivam Garg, Dimitris Tsipras, Percy S Liang, and Gregory Valiant. What can transformers learn in-context? a case study of simple function classes. _Advances in Neural Information Processing Systems_ , 35:30583–30598, 2022. 
+
+- Khashayar Gatmiry, Nikunj Saunshi, Sashank J. Reddi, Stefanie Jegelka, and Sanjiv Kumar. Can looped transformers learn to implement multi-step gradient descent for in-context learning? In _Forty-first International Conference on Machine Learning_ , 2024. URL https: //openreview.net/forum?id=o8AaRKbP9K. 
+
+- Angeliki Giannou, Shashank Rajput, Jy-yong Sohn, Kangwook Lee, Jason D Lee, and Dimitris Papailiopoulos. Looped transformers as programmable computers. _arXiv preprint arXiv:2301.13196_ , 2023. 
+
+- Yifan Hou, Jiaoda Li, Yu Fei, Alessandro Stolfo, Wangchunshu Zhou, Guangtao Zeng, Antoine Bosselut, and Mrinmaya Sachan. Towards a mechanistic interpretation of multi-step reasoning capabilities of language models. _arXiv preprint arXiv:2310.14491_ , 2023. 
+
+- Xinyang Hu, Fengzhuo Zhang, Siyu Chen, and Zhuoran Yang. Unveiling the statistical foundations of chain-of-thought prompting methods. _arXiv preprint arXiv:2408.14511_ , 2024. 
+
+- Yu Huang, Yuan Cheng, and Yingbin Liang. In-context convergence of transformers. _arXiv preprint arXiv:2310.05249_ , 2023. 
+
+- Samy Jelassi, Michael Sander, and Yuanzhi Li. Vision transformers provably learn spatial structure. _Advances in Neural Information Processing Systems_ , 35:37822–37836, 2022. 
+
+- Juno Kim and Taiji Suzuki. Transformers learn nonlinear features in context: Nonconvex mean-field dynamics on the attention landscape. _arXiv preprint arXiv:2402.01258_ , 2024. 
+
+- Takeshi Kojima, Shixiang Shane Gu, Machel Reid, Yutaka Matsuo, and Yusuke Iwasawa. Large language models are zero-shot reasoners. _Advances in neural information processing systems_ , 35:22199–22213, 2022. 
+
+- Hongkang Li, Meng Wang, Sijia Liu, and Pin-Yu Chen. A theoretical understanding of shallow vision transformers: Learning, generalization, and sample complexity. _arXiv preprint arXiv:2302.06015_ , 2023. 
+
+- Yingcong Li, Yixiao Huang, Muhammed E Ildiz, Ankit Singh Rawat, and Samet Oymak. Mechanics of next token prediction with self-attention. In _International Conference on Artificial Intelligence and Statistics_ , pp. 685–693. PMLR, 2024a. 
+
+- Zhiyuan Li, Hong Liu, Denny Zhou, and Tengyu Ma. Chain of thought empowers transformers to solve inherently serial problems. _arXiv preprint arXiv:2402.12875_ , 2024b. 
+
+- Bingbin Liu, Jordan T Ash, Surbhi Goel, Akshay Krishnamurthy, and Cyril Zhang. Transformers learn shortcuts to automata. _arXiv preprint arXiv:2210.10749_ , 2022. 
+
+12 
+
+- Arvind Mahankali, Tatsunori B Hashimoto, and Tengyu Ma. One step of gradient descent is provably the optimal in-context learner with one layer of linear self-attention. _arXiv preprint arXiv:2307.03576_ , 2023. 
+
+- Ashok Vardhan Makkuva, Marco Bondaschi, Adway Girish, Alliot Nagle, Martin Jaggi, Hyeji Kim, and Michael Gastpar. Attention with markov: A framework for principled analysis of transformers via markov chains. _arXiv preprint arXiv:2402.04161_ , 2024. 
+
+William Merrill and Ashish Sabharwal. The expresssive power of transformers with chain of thought. _arXiv preprint arXiv:2310.07923_ , 2023a. 
+
+- William Merrill and Ashish Sabharwal. The parallelism tradeoff: Limitations of log-precision transformers. _Transactions of the Association for Computational Linguistics_ , 11:531–545, 2023b. 
+
+- Eshaan Nichani, Alex Damian, and Jason D Lee. How transformers learn causal structure with gradient descent. _arXiv preprint arXiv:2402.14735_ , 2024. 
+
+- Maxwell Nye, Anders Johan Andreassen, Guy Gur-Ari, Henryk Michalewski, Jacob Austin, David Bieber, David Dohan, Aitor Lewkowycz, Maarten Bosma, David Luan, et al. Show your work: Scratchpads for intermediate computation with language models. _arXiv preprint arXiv:2112.00114_ , 2021. 
+
+OpenAI. Gpt-4 technical report, 2023. 
+
+- Adam Paszke, Sam Gross, Francisco Massa, Adam Lerer, James Bradbury, Gregory Chanan, Trevor Killeen, Zeming Lin, Natalia Gimelshein, Luca Antiga, Alban Desmaison, Andreas K¨opf, Edward Yang, Zach DeVito, Martin Raison, Alykhan Tejani, Sasank Chilamkurthy, Benoit Steiner, Lu Fang, Junjie Bai, and Soumith Chintala. Pytorch: An imperative style, high-performance deep learning library, 2019. 
+
+- Debjit Paul, Mete Ismayilzada, Maxime Peyrard, Beatriz Borges, Antoine Bosselut, Robert West, and Boi Faltings. Refiner: Reasoning feedback on intermediate representations. _arXiv preprint arXiv:2304.01904_ , 2023. 
+
+- Yunwei Ren, Zixuan Wang, and Jason D Lee. Learning and transferring sparse contextual bigrams with linear transformers. In _The Thirty-eighth Annual Conference on Neural Information Processing Systems_ , 2024. 
+
+- Abulhair Saparov and He He. Language models are greedy reasoners: A systematic formal analysis of chain-of-thought. _arXiv preprint arXiv:2210.01240_ , 2022. 
+
+- Freda Shi, Mirac Suzgun, Markus Freitag, Xuezhi Wang, Suraj Srivats, Soroush Vosoughi, Hyung Won Chung, Yi Tay, Sebastian Ruder, Denny Zhou, et al. Language models are multilingual chain-of-thought reasoners. _arXiv preprint arXiv:2210.03057_ , 2022. 
+
+- Mirac Suzgun, Nathan Scales, Nathanael Sch¨arli, Sebastian Gehrmann, Yi Tay, Hyung Won Chung, Aakanksha Chowdhery, Quoc V Le, Ed H Chi, Denny Zhou, et al. Challenging big-bench tasks and whether chain-of-thought can solve them. _arXiv preprint arXiv:2210.09261_ , 2022. 
+
+- Davoud Ataee Tarzanagh, Yingcong Li, Christos Thrampoulidis, and Samet Oymak. Transformers as support vector machines. _arXiv preprint arXiv:2308.16898_ , 2023. 
+
+- Yuandong Tian, Yiping Wang, Beidi Chen, and Simon Du. Scan and snap: Understanding training dynamics and token composition in 1-layer transformer. _arXiv preprint arXiv:2305.16380_ , 2023a. 
+
+- Yuandong Tian, Yiping Wang, Beidi Chen, and Simon Du. Scan and Snap: Understanding Training Dynamics and Token Composition in 1-layer Transformer, July 2023b. URL http://arxiv. org/abs/2305.16380. arXiv:2305.16380 [cs]. 
+
+- Yuandong Tian, Yiping Wang, Zhenyu Zhang, Beidi Chen, and Simon Du. Joma: Demystifying multilayer transformers via joint dynamics of mlp and attention. _arXiv preprint arXiv:2310.00535_ , 2023c. 
+
+13 
+
+Rasul Tutunov, Antoine Grosnit, Juliusz Ziomek, Jun Wang, and Haitham Bou-Ammar. Why can large language models generate correct chain-of-thoughts? _arXiv preprint arXiv:2310.13571_ , 2023. 
+
+Roman Vershynin. _High-dimensional probability: An introduction with applications in data science_ , volume 47. Cambridge university press, 2018. 
+
+- Johannes Von Oswald, Eyvind Niklasson, Ettore Randazzo, Jo˜ao Sacramento, Alexander Mordvintsev, Andrey Zhmoginov, and Max Vladymyrov. Transformers learn in-context by gradient descent. In _International Conference on Machine Learning_ , pp. 35151–35174. PMLR, 2023. 
+
+- Boshi Wang, Sewon Min, Xiang Deng, Jiaming Shen, You Wu, Luke Zettlemoyer, and Huan Sun. Towards understanding chain-of-thought prompting: An empirical study of what matters. _arXiv preprint arXiv:2212.10001_ , 2022a. 
+
+- Xuezhi Wang, Jason Wei, Dale Schuurmans, Quoc Le, Ed Chi, Sharan Narang, Aakanksha Chowdhery, and Denny Zhou. Self-consistency improves chain of thought reasoning in language models. _arXiv preprint arXiv:2203.11171_ , 2022b. 
+
+- Zixuan Wang, Stanley Wei, Daniel Hsu, and Jason D Lee. Transformers provably learn sparse token selection while fully-connected nets cannot. In _Forty-first International Conference on Machine Learning_ , 2024. 
+
+- Jason Wei, Xuezhi Wang, Dale Schuurmans, Maarten Bosma, Fei Xia, Ed Chi, Quoc V Le, Denny Zhou, et al. Chain-of-thought prompting elicits reasoning in large language models. _Advances in Neural Information Processing Systems_ , 35:24824–24837, 2022. 
+
+- Skyler Wu, Eric Meng Shen, Charumathi Badrinath, Jiaqi Ma, and Himabindu Lakkaraju. Analyzing chain-of-thought prompting in large language models via gradient-based feature attributions. _arXiv preprint arXiv:2307.13339_ , 2023. 
+
+Shunyu Yao, Dian Yu, Jeffrey Zhao, Izhak Shafran, Tom Griffiths, Yuan Cao, and Karthik Narasimhan. Tree of thoughts: Deliberate problem solving with large language models. _Advances in Neural Information Processing Systems_ , 36, 2024. 
+
+- Ruiqi Zhang, Spencer Frei, and Peter L Bartlett. Trained transformers learn linear models in-context. _arXiv preprint arXiv:2306.09927_ , 2023. 
+
+- Denny Zhou, Nathanael Sch¨arli, Le Hou, Jason Wei, Nathan Scales, Xuezhi Wang, Dale Schuurmans, Claire Cui, Olivier Bousquet, Quoc Le, et al. Least-to-most prompting enables complex reasoning in large language models. _arXiv preprint arXiv:2205.10625_ , 2022. 
+
+14 
+
+## A DISCUSSION AND LIMITATION 
+
+## A.1 RELATED WORKS ON EXPRESSIVENESS 
+
+Our work is closely related to the previous works in multi-step GD using multi-layer attention layers, including Bai et al. (2023); Fu et al. (2023); Ding et al. (2023); Ahn et al. (2024); Giannou et al. (2023); Gatmiry et al. (2024). These works guarantee that transformers are **expressive enough** to do in-context learning by implementing gradient descent, and they serve as the foundation of our work which focuses on **optimization** . Most of them focus on the in-context learning setup as the testbed so we naturally follow the setup to understand the advantage of CoT. 
+
+Most of the above works on **expressiveness** focus on those iterative algorithms, e.g. (preconditioned) gradient descent on various objectives (Bai et al., 2023; Ahn et al., 2024; Ding et al., 2023), Newton methods/matrix inverse (Giannou et al., 2023), etc. Those papers have similar constructive proof techniques using multi-layer transformers: they construct a basic block(s) to represent one step of some iterative algorithm and stack them up to do multi-steps of that algorithm. Sometimes the blocks can be even the same, which means a “looped” transformer, i.e. implementing the same transformer blocks several times as a loop, can express those algorithms. In our warm-up construction for a better understanding of the setup, we use similar techniques to construct the linear transformer that allows auto-regressive generation to iteratively implement the block. However, we require the practical auto-regressive setting, which is novel in the literature. 
+
+Most importantly, despite the close relation between our work and those previous expressiveness papers, our work mainly focuses on the **optimization** perspective. It is a big step beyond expressiveness because there is no guarantee that one can algorithmically find the constructed solutions in the previous work. Ahn et al. (2024); Gatmiry et al. (2024) are the only two papers related to optimization of multi-layer transformers over in-context linear regression setup. Ahn et al. (2024) analyzed the global optimizer/critical points for multi-layer transformers, but they didn’t prove that any gradient-based algorithm can reach those solutions. Compared to all the works above, our proof techniques for the main theorems are completely orthogonal and **not** straightforward extensions of the previous papers like Bai et al. (2023). 
+
+Gatmiry et al. (2024) is the most related work to us. They also proved some results on **learning** to implement multi-step GD by looped transformer. We will highlight the differences and **our novel contributions** of our work in the next section. 
+
+## A.2 DISCUSSION ON GATMIRY ET AL. (2024) 
+
+In this section, we compare our work with Gatmiry et al. (2024). We begin by outlining the similarities and connections between the two works before highlighting our theoretical contributions in contrast to Gatmiry et al. (2024). 
+
+Both Gatmiry et al. (2024) and our study analyze the dynamics of a one-layer linear transformer in the context of a linear regression task, demonstrating that transformers can implement multi-step gradient descent. We adopt similar architectural frameworks to those in Zhang et al. (2023); Ahn et al. (2024; 2023); Mahankali et al. (2023), as well as several other works. The key connection between our work and Gatmiry et al. (2024) lies in the observation that both looped transformers and transformers with CoT prompting through autoregressive generation are capable of naturally implementing iterative algorithms like gradient descent. 
+
+However, our data model and training objective are intrinsically different from those in Gatmiry et al. (2024), leading to distinct insights. While Gatmiry et al. (2024) focuses on an ICL setting for linear regression tasks involving examples and a query, our task is centered on predicting the ground-truth weight vector _**w**[∗]_ within context, i.e. in-context weight prediction. The final converging solutions are totally different, even though they both are equivalent to some type of GD. From the perspective of the training objective, Gatmiry et al. (2024) uses a standard squared loss over the ICL objective. In contrast, we use a sum of squared losses across all intermediate steps, corresponding to the CoT loss defined in Equation (6). Therefore, we highlight the effectiveness in improving the performance of the CoT prompting on a shallow transformer, while Gatmiry et al. (2024) stress a multi-layer transformer with shared weights (looped transformer) can do multi-step GD through the layers. 
+
+15 
+
+From a technical perspective, Gatmiry et al. (2024) fix the outer layer and train only the matrix _**A**_ , which is analogous to our matrix _**W**_ . In contrast, our work allows for training both layers of the transformer, providing a stronger analysis of training dynamics. Our proof strategy is also novel, given that our training dynamics are more complicated: obtaining our final solution requires solving a challenging _d_ -dimensional dynamical system, whereas prior work in ICL reduces the outer layer to a scalar. 
+
+**As a more profound theoretical contribution, we rigorously establish a clear performance gap between the one-layer transformer without CoT and the ones with CoT.** Specifically, the one-layer transformer without CoT is restricted to a single step of GD, with the final error Θ( _d/_ poly log _d_ ), while a one-layer transformer with CoT can achieve a _O_ (1 _/_ poly _d_ ) loss with only Θ(log _d_ ) steps. On the other hand, Gatmiry et al. (2024) do not show their transformer implementing the multi-step GD can outperform the transformer with one-step GD. According to Theorem 4.2, the looped transformer in their setting can only provably get the final loss down to _[d]_[5] _[/]_ ~~_√_~~[2] _[L] n[·]_[4] _[L]_ , where _L_ is the number of loops. However, a one-layer transformer can achieve Θ( _d_[2] _/n_ ) loss by implementing one-step of GD, **asymptotically better than the multi-step solution in Gatmiry et al. (2024)** . 
+
+- A.3 LOOPED TRANSFORMER LEARNS TO IMPLEMENT MULTI-STEP GRADIENT DESCENT (IMPROVED VERSION) 
+
+In this section, we also discuss how our estimation technique improves the result in Gatmiry et al. (2024) for looped transformers. The gap between our analysis lies in our different methods of calculating the terms in the gradient concerning Wishart matrices. For intuition, we introduce **the novel expectation calculation method** in Section 4, which asymptotically improves the estimation of higher moments of Wishart matrices in Gatmiry et al. (2024). We adopt the combinatorial technique in Gatmiry et al. (2024) to compute the form of E _**S**_ **Λ** _**S**[k]_ **Γ** _**S**[k][′]_[�] , but when we calculate the expected � gradient we use the concentration tail bound technique to calculate the expectation. 
+
+We will demonstrate that applying our techniques proves looped transformers outperform their counterparts without looping in the ICL setting. Here, we follow the notations, models and loss defined in Gatmiry et al. (2024). We focus on the simple setting with **Σ** = _**I**_ , but the same technique should also be applied to cases with other covariance matrices. 
+
+**Definition A.1** (Corollary A.4 in Gatmiry et al. (2024)) **.** _The loss for loop Transformer is_ 
+
+**==> picture [154 x 25] intentionally omitted <==**
+
+By using our techniques, we strengthen the conclusion and obtain the following theorem. 
+
+**Theorem A.1.** _Suppose n_ = Ω( _dL_[2] log[2] _d_ ) _and ∥_ _**A**_ (0) _∥_ = _O_ (1) _. Consider the gradient flow with respect to the loss L_ ( _**A** ,_ **0** ) _:_ 
+
+d d _t_ _**[A]**_[(] _[t]_[) =] _[ −∇]_ _**[A]**[L]_[(] _**[A]**_[(] _[t]_[)] _[,]_ **[ 0]**[)] _[.]_ 
+
+_L_[2] _d_ log[2] _d L_[�] 1 _d L_[�] _Then, for any ξ >_ Θ�� _n_ � _, after time t ≥_ Ω� _L_[2] � _ξ_ � _[L][−]_[1] _, we have L_ ( _**A**_ ( _t_ ) _,_ **0** ) _≤ ξ._ 1 _In particular, given any polynomially small ξ >_ Θ( poly( _d_ )[)] _[, there exists][ L]_[ = Θ(log] _[ d]_[)] _[, the final loss] L_ ( _**A**_ ( _t_ ) _,_ **0** ) _≤ ξ._ 
+
+**Remark.** This result also gets arbitrary polynomially small loss as the case in the CoT setting, establishing the separation between looped transformer and the transformer without loop. 
+
+_Proof._ Denote _λi_ to be the _i_ -th eigenvalue of _**A**_ and _**u** i_ to be the corresponding eigenvector. Let 
+
+**==> picture [138 x 17] intentionally omitted <==**
+
+Suppose _**u** ∈_ arg max _**u** i,i∈_ [ _d_ ] _|_ 1 _− λi|_ is the corresponding eigenvector. Apply Lemma A.3, we have 
+
+**==> picture [187 x 21] intentionally omitted <==**
+
+16 
+
+Multiply _**u**_ on both sides (note that _**u**_ is a fixed direction, so the time-differential is zero), we obtain 
+
+**==> picture [215 x 22] intentionally omitted <==**
+
+Note that the gradient of _**A**_ has the same eigenvectors _**u** i_ as _**A**_ . Therefore, ∆2 _L_ have the same eigenvector as _**A**_ and we have 
+
+**==> picture [350 x 44] intentionally omitted <==**
+
+**==> picture [289 x 23] intentionally omitted <==**
+
+We can therefore upper bound the difference between _λ_ and 1 by solving the ODE: 
+
+_− L−_ 1 1 (1 _− λ_ ( _t_ ))[2] _≤_ �(1 _− λ_ (0))[2] _[−]_[2] _[L]_ + 3 _L_ ( _L −_ 1) _t_ � _._ When the training time _t ≥_ Ω� _L_ 1[2] � _dξ_ � _[L] L[−]_[1][�] _,_ the largest eigenvalue of _**I** −_ _**A**_ , i.e. 
+
+**==> picture [118 x 31] intentionally omitted <==**
+
+_L_[�] _L_[2] _d_ log[2] _d_ To satisfy the condition on Lemma A.3, the _ξ_ should be lower bounded by Θ� _d_ � _n_ � . Now consider the loss expression: 
+
+**==> picture [323 x 106] intentionally omitted <==**
+
+By the computation above, _L_ ( _**A** ,_ **0** ) _≤_ Θ( _ξ_ ) _._ In particular, when _L_ = _c_ log _d_ and _n ≥_ 2( _L_[2] _d_ log[2] _d_ ) with _c >_ 1, the loss is smaller than _O_ ( _d[c][−]_[1] ). Hence, only _O_ (log _d_ ) steps of looping can achieve arbitrary polynomially small loss _O_ ( poly(1 _d_ )[)][.] 
+
+**Remark.** If we have Θ(log _d_ ) steps of GD using this looped transformer, we can get an arbitrary polynomially small loss. It is a huge improvement compared to Gatmiry et al. (2024), and this result successfully establishes a separation between the looped transformer and the ones without the loop. **Lemma A.1** (Equation (24) in Gatmiry et al. (2024)) **.** _The derivative of the loss can be written as_ 
+
+**==> picture [236 x 31] intentionally omitted <==**
+
+**==> picture [342 x 75] intentionally omitted <==**
+
+17 
+
+_Proof._ Denote _δ_ _**S**_ = _**S** −_ _**I**_ . Then we expand the term in the expectation: 
+
+( _**I** −_ _**SA**_ ) _[i]_ _**S**_ ( _**I** −_ _**SA**_ )[2] _[L][−]_[1] _[−][i]_ = ( _**I** −_ _**A** − δ_ _**S** ·_ _**A**_ ) _[i]_ ( _**I**_ + _δ_ _**S**_ )( _**I** −_ _**A** − δ_ _**S** ·_ _**A**_ )[2] _[L][−]_[1] _[−][i]_ Now take expectation to both sides. Note that E[ _δ_ _**S**_ ] = **0** , so all terms containing first order _δ_ _**S**_ vanish. We denote 
+
+**==> picture [396 x 31] intentionally omitted <==**
+
+to be the sum of all higher order terms (the degree of _δ_ _**S** ≥_ 2). We can estimate the expectation using similar technique as in Lemma D.1. 
+
+**==> picture [395 x 124] intentionally omitted <==**
+
+To get an estimate of the operator norm, we bound each term (Term 1 to Term 3) respectively. 
+
+## **Term 1:** 
+
+**==> picture [326 x 35] intentionally omitted <==**
+
+Note that _∥δ_ _**S** ∥_ is of order _O_ (� _nd_[)][ with high probability, the term in the middle is less than 1 and] 2 the dominating term of the error is �(2 _L −_ 1) _[∥][δ] ∥_ _**[S] I** −[∥][·]_ _**A**[∥]_ _**[A]** ∥[∥]_ � = _O_ ( log1 _d_[)][.] 
+
+## **Term 2:** 
+
+**==> picture [378 x 186] intentionally omitted <==**
+
+**==> picture [244 x 77] intentionally omitted <==**
+
+18 
+
+When _∥_ ∆[�] _∥≥ s_ where _s ≥_ log _C[′] d_[, we can first upper bound the] _[ ∥]_[∆][�] _[∥]_[with] _[ ∥][δ]_ _**[S]**[∥]_[using :][there exists] some constant _C_ 1 _>_ 0 s.t. 
+
+**==> picture [192 x 19] intentionally omitted <==**
+
+Therefore, when _∥_ ∆[�] _∥≥ s_ , _∥δ_ _**S** ∥≥_ min _{ C[s]_[1] 1 _[/] L_[2] _[,][s]_[1] _[/] C_[(2] 1 _[L] L_[+4)] _}_ . To apply the tail bound, we need to make sure we pick some _s[′]_ such that max � _δ, δ_[2][�] _≤_ min _{ C[s]_[1] 1 _[/] L_[2] _[,][s]_[1] _[/] C_[(2] 1 _[L] L_[+4)] _}_ to upper bound the integral of probability, where _δ_ = _C_ (� _nd_[+] ~~_√_~~ _s[′] n_[)][.][Now][since] _[s][>]_ log _C[′] d_[,][min] _[{] C[s]_[1] 1 _[/] L_[2] _[,][s]_[1] _[/] C_[(2] 1 _[L] L_[+4)] _} ≥ Cα_ log132 _d_ for some constant _Cα_ . Therefore, we just need max _{_ ~~_√_~~ _[s][′] n[,][s] n[′]_[2] _[}][≤]_[min] _[{] C[s]_[1] 1 _[/] L_[2] _[,][s]_[1] _[/] C_[(2] 1 _[L] L_[+4)] _},_ i.e. _s[′] ≤ s_[1] _[/]_[(2] _[L]_[+4)] ~~_[√]_~~ _n s_[1] _[/]_[(4] _[L]_[+8)] ~~_[√]_~~ _n_ ~~_√_~~ _sn s_[1] _[/]_[4] ~~_[√]_~~ _n_ min � _C_ 2 _L , C_ 3 ~~_√_~~ _L , C_ 4 _L[, C]_[5] ~~_√_~~ _L_ � _._ 
+
+Applying the tail bound (18) with _s[′]_ = min � _C_ 2 _s_[1] _[/]_[(2] _[L] L_[+4)] ~~_[√]_~~ _n , C_ 3 _s_[1] _[/]_[(4] ~~_√_~~ _[L]_[+8)] _L_ ~~_[√]_~~ _n , C_ 4 ~~_√_~~ _Lsn[, C]_[5] _s_[1] ~~_√_~~ _[/]_[4] _L_ ~~_[√]_~~ _n_ � where _C_ 2 _, C_ 3 _, C_ 4 _, C_ 5 are some constant, we have the error term for the tail expectation, 
+
+**==> picture [296 x 60] intentionally omitted <==**
+
+Now we estimate the upper bound of error with 
+
+**==> picture [278 x 26] intentionally omitted <==**
+
+2 _[n]_ For the first term, let _x_ = _[C] L_[2][2] _[s]_[1] _[/]_[(] _[L]_[+2)][:] 
+
+**==> picture [364 x 99] intentionally omitted <==**
+
+The second term, let _x_ = _C_ 3[2] _[·][s]_[1] _[/]_[(2] _L[L]_[+4)] _n_ : 
+
+**==> picture [391 x 185] intentionally omitted <==**
+
+19 
+
+The fourth term, let _x_ = _C_ 5[2] _[·][s]_[1] _L[/]_[2] _[n]_[:] 
+
+**==> picture [264 x 94] intentionally omitted <==**
+
+Therefore, we plug this error back into the upper bound of _∥_ ∆ _∥_ : 
+
+**==> picture [310 x 60] intentionally omitted <==**
+
+**Lemma A.3.** _Assume n_ = Ω[˜] � _dL_[2][�] _, for any_ _**A** that ∥_ _**I** −_ _**A** ∥≥_ Θ _L_[2] _d_ lo _n_ g[2] _d , we have the_ �� � _following gradient estimate: ∇_ _**A** L_ ( _**A** ,_ **0** ) = _−_ 2 _L_ ( _**I** −_ _**A**_ )[2] _[L][−]_[1] _−∥_ _**I** −_ _**A** ∥_[2] _[L][−]_[1] ∆2 _L._ 
+
+**==> picture [110 x 19] intentionally omitted <==**
+
+_Proof._ We use our technique to estimate the derivative of the loss. By Lemma A.1, we have 
+
+**==> picture [236 x 30] intentionally omitted <==**
+
+Apply Lemma A.2 to each term in the summation, we have 
+
+**==> picture [292 x 19] intentionally omitted <==**
+
+where ∆ _i_ has _O_ � log1 _d_ �-operator norm. Denote ∆2 _L_ =[�][2] _i_ =0 _[L][−]_[1] ∆ _i_ and add all terms together, we obtain _∇_ _**A** L_ ( _**A** ,_ **0** ) = _−_ 2 _L_ ( _**I** −_ _**A**_ )[2] _[L][−]_[1] _−∥_ _**I** −_ _**A** ∥_[2] _[L][−]_[1] ∆2 _L._ where ∆2 _L_ has _O_ � log _L d_ �-operator norm. 
+
+A.4 LIMITATION AND FUTURE DIRECTIONS 
+
+**Architecture and parameterization** In this work, we use the single-layer linear transformer to analyze the training dynamics. Moreover, we adopt the same reparameterization and similar initialization in previous works (Zhang et al., 2023; Tian et al., 2023a; Chen et al., 2024a; Mahankali et al., 2023; Ahn et al., 2024). It deviates from the practical softmax attention with _**Q** ,_ _**K** ,_ _**V**_ parameterization and random initialization, which is a limitation of this work. 
+
+However, analyzing the linear counterpart of the model before targeting the more difficult practical models is common in the development of learning theory. As for linear attention, the connection between linear attention and softmax attention is also partially justified by the empirical observations in Ahn et al. (2023). Analyzing the dynamics using more practical architectures will be a very important and fundamental future direction. 
+
+20 
+
+**Population loss and sample complexity** Following most of the previous work, we use population loss when analyzing the training trajectory instead of using finite sample loss. This modification is to simplify the analysis and focus on the population dynamics without noise. A possible future step is to generalize this analysis to a finite sample setting and train the model with online SGD. 
+
+**CoT on iterative tasks** In this work, we mainly focus on **iterative** tasks, one of the simplest forms where multi-step CoT can help yield better performance. That serves as the initial step towards understanding why CoT helps reasoning following the first principle. As a limitation, though CoT can empower the transformer to acquire compositional reasoning capability instead of doing the same iterative step, it is a much harder question beyond our paper’s scope. It is a very important future direction and definitely worth further exploring. 
+
+## B PROOFS OF THEOREMS IN SECTION 3 
+
+In this section, we prove the expressiveness results of the linear transformers with and without CoT. In Appendix B.1, we prove that a one-layer linear transformer without CoT can only obtain the one-step gradient descent solution. In Appendix B.2, we prove that there exists a one-layer linear transformer that implements multi-step gradient descent with the CoT prompting. As corollaries, there exists a separation between the one-step and multi-step solutions. 
+
+## B.1 PROOF OF THEOREM 3.1 
+
+We first restate the theorem: 
+
+**Theorem B.1** (Lower bound without CoT) **.** _If the global minimizer of L_[Eval] ( _**V** ,_ _**W**_ ) _is_ ( _**V**[∗] ,_ _**W**[∗]_ ) _, the corresponding one-layer transformer f_ LSA( _**Z**_ 0)[: _,−_ 1] _implements one step GD on a linear model with some learning rate η_ = _n_ + _nd_ +1 _[and the transformer outputs] n[η]_ _**[Xy]**[⊤][.]_ 
+
+_Proof._ Recall the loss expression in Equation (5) when _k_ = 0, 
+
+**==> picture [369 x 57] intentionally omitted <==**
+
+**==> picture [351 x 53] intentionally omitted <==**
+
+After proving this property, we can conclude that the optimal solution without CoT is exactly the one-step solution _n[η]_ _**[Xy]**[⊤]_[.][We prove this result by showing the gradient of those two loss functions] are the same. 
+
+First, before calculating the gradient, we extract the identical parts of the loss. Notice that the ground-truth entries are all zero in _i_ = 1 _,_ 2 _, · · · , d, d_ + 1 _,_ 2 _d_ + 2 positions in both expressions. Therefore, that part of error is the norm of the output _f_ LSA( _**Z**_ 0)[: _,−_ 1] in those corresponding entries: 
+
+**==> picture [313 x 37] intentionally omitted <==**
+
+which is the same for both expressions. Therefore, we just need to consider 
+
+**==> picture [238 x 21] intentionally omitted <==**
+
+**==> picture [38 x 9] intentionally omitted <==**
+
+which corresponds to the ground-truth signals. Here _**V**_ [ _d_ +2:2 _d_ +1 _,_ :] = [ _**V**_ 31 _,_ _**V**_ 32 _,_ _**V**_ 33 _,_ _**V**_ 34]. We only need to prove that 
+
+**==> picture [353 x 21] intentionally omitted <==**
+
+21 
+
+for some constant _C_ . 
+
+We show the gradients of both sides are the same, and equivalently the differential of both sides should be the same. The differential of L.H.S. is 
+
+**==> picture [262 x 35] intentionally omitted <==**
+
+and the differential of R.H.S. is 
+
+**==> picture [372 x 97] intentionally omitted <==**
+
+Therefore, we only need to prove that 
+
+We expand this expression _f_ LSA( _**Z**_ 0)[ _d_ +2:2 _d_ +1 _,−_ 1] (Note that now we don’t have the assumption of initialization): 
+
+**==> picture [371 x 195] intentionally omitted <==**
+
+and the differential of _f_ LSA( _**Z**_ 0)[ _d_ +2:2 _d_ +1 _,−_ 1] is 
+
+**==> picture [320 x 88] intentionally omitted <==**
+
+Now, to prove Equation (10), we compare the differential for each parameter on both sides. For all parameter, we start from the left side and prove it equal to the right. 
+
+**==> picture [398 x 73] intentionally omitted <==**
+
+22 
+
+**==> picture [377 x 114] intentionally omitted <==**
+
+So those two d _**V**_ 31 terms are identical. 
+
+**==> picture [397 x 248] intentionally omitted <==**
+
+So those two d _**V**_ 32 terms are identical. 
+
+**==> picture [318 x 46] intentionally omitted <==**
+
+since E[ _**w**[∗]_ ] = **0** _d_ . Therefore those two are equal. 
+
+**==> picture [397 x 174] intentionally omitted <==**
+
+23 
+
+**==> picture [234 x 25] intentionally omitted <==**
+
+Thus the two d _**W**_ 14 terms are the same. 
+
+**==> picture [397 x 173] intentionally omitted <==**
+
+Therefore the differential for _w_ 24 are the same. 
+
+**==> picture [318 x 45] intentionally omitted <==**
+
+since E[ _**w**[∗]_ ] = **0** _d_ . Therefore those two are also equal. 
+
+In conclusion, Equation (10) holds since all the differential terms are equal. Therefore, _∃C_ 
+
+**==> picture [353 x 22] intentionally omitted <==**
+
+which finishes our proof. 
+
+B.2 PROOF OF THEOREM 3.2 
+
+Here we restate the Theorem 3.2 and provide the detailed proof. 
+
+**Theorem B.2.** _Suppose n_ = Θ( _d_ log[5] _d_ ) _, k ≥ C_ log _d, η ∈_ (0 _._ 1 _,_ 0 _._ 9) _. There exists_ _**V**[∗] and_ _**W**[∗] s.t. f_ LSA( _**Z** k_ )[: _,−_ 1] _outputs_ ( **0** _d,_ 0 _,_ _**w** k_ +1 _,_ 1) _where_ _**w** i_ := � _**I** −_ ( _**I** − n[η]_ _**[XX]**[⊤]_[)] _[i]_[�] _**w**[∗] is the k-step GD solution with learning rate η on a linear regression model. Moreover, the evaluation loss_ 
+
+**==> picture [347 x 31] intentionally omitted <==**
+
+_Proof._ We construct _**V**[∗]_ and _**W**[∗]_ in the following way, 
+
+**==> picture [307 x 43] intentionally omitted <==**
+
+Now the transformer is allowed to generate _k_ steps before reaching the final output. We can inductively calculate the _i_ -th step of generation, showing that the output is exactly the parameter after _i_ -th gradient step ( _i_ = 1 _,_ 2 _, ..., k_ + 1): 
+
+**==> picture [318 x 48] intentionally omitted <==**
+
+24 
+
+**==> picture [206 x 33] intentionally omitted <==**
+
+After _k_ +1 steps, we have the final output � _**I** −_ ( _**I** − n[η]_ _**[XX]**[⊤]_[)] _[k]_[+1][�] _**w**[∗]_ by induction and the evaluation loss becomes Equation (9). By Lemma D.4, the final loss is 
+
+**==> picture [312 x 128] intentionally omitted <==**
+
+## C PROOF OF THEOREM 4.1 
+
+C.1 GRADIENT COMPUTATION OF THE FULL MODEL OVER THE COT OBJECTIVE 
+
+In this appendix, we compute the gradient of the full model given the Assumption 4.1 and prove the equivalence between the dynamics of the full model and a simplified model. Throughout the appendix, we denote the _**S**_ = _n_[1] _**[XX]**[⊤]_[for simplicity.][And recall the] _[ i]_[-th step of the linear classifier] is _**w** i_ = ( _**I** −_ ( _**I** − η_ _**S**_ ) _[i]_ ) _**w**[∗]_ . 
+
+In Section 2.2, we have the full attention model 
+
+**==> picture [223 x 24] intentionally omitted <==**
+
+and the Chain of Thought (CoT) objective 
+
+**==> picture [286 x 31] intentionally omitted <==**
+
+We define the error for the _i_ -th step 
+
+**==> picture [214 x 21] intentionally omitted <==**
+
+By linearity of expectation, we know the gradient of the CoT objective is the sum of gradients of all CoT steps: _∇L_[CoT] =[�] _[k] i_ =1 _[∇L][i]_[.][Now we can calculate the gradients of] _**[ V]**[ ,]_ _**[ W]**_[based on the loss] of each CoT step: 
+
+**Lemma C.1** (Gradients of the full model) **.** _The gradient of_ _**V** ,_ _**W** are given by the following equations:_ 
+
+**==> picture [380 x 66] intentionally omitted <==**
+
+_Proof._ The loss is given by eq. (6): 
+
+**==> picture [325 x 31] intentionally omitted <==**
+
+25 
+
+Take differential of the loss for the _i_ -th step _Li_ and we have 
+
+**==> picture [318 x 104] intentionally omitted <==**
+
+Then the gradients of _**W** ,_ _**V**_ of the _Li_ are: 
+
+**==> picture [365 x 113] intentionally omitted <==**
+
+Take the sum of the two equations above from _i_ = 0 to _k_ , and we finish the proof. 
+
+Now we consider the gradient flow (GF) trajectory (note that _**w**_ 24 is fixed under Assumption 4.1): 
+
+**==> picture [280 x 85] intentionally omitted <==**
+
+Recall the block matrix form of _**V** ,_ _**W**_ : 
+
+According to the construction in Theorem 3.2, the blocks _**W**_ 13 _,_ _**V**_ 31 _, w_ 24 are the only relevant parameter blocks, while the others should be zeroed out. Next, we prove that if we initialize those irrelevant blocks to 0, then they will stay at 0 along the gradient descent trajectory. 
+
+**Lemma C.2.** _Under the Assumption 4.1, when the linear transformer is trained under GF, we have for all t >_ 0 _, the parameters_ _**V**_ ( _t_ ) _,_ _**W**_ ( _t_ ) _have the following form:_ 
+
+**==> picture [264 x 44] intentionally omitted <==**
+
+_Proof._ To prove this lemma, we prove that when the irrelevant blocks are 0, the gradients _∇_ _**V** Li, ∇_ _**W** Li_ for those blocks are always 0 and they never update the corresponding parameter block. Also, note that _w_ 24 = _−_ 1 for all _t >_ 0. 
+
+First, we calculate the output of the linear self-attention _**V Z** i ·_ 
+
+_**Z** i[⊤]_ _**[W Z]**[i]_ [: _,−_ 1] : _n_ 
+
+**==> picture [88 x 18] intentionally omitted <==**
+
+**==> picture [290 x 52] intentionally omitted <==**
+
+26 
+
+**==> picture [427 x 345] intentionally omitted <==**
+
+Therefore, we know all blocks of the gradient are zero except the positions of _**V**_ 31 and _**V**_ 32. 
+
+Now look at _∇_ _**V**_ 32 _Li_ : 
+
+**==> picture [303 x 83] intentionally omitted <==**
+
+Note that _**w** i_ = � _**I** −_ ( _**I** − η_ _**S**_ ) _[i]_[�] _**w**[∗]_ for all _i ∈_ [ _k_ ], and _**w** k_ +1 = _**w**[∗]_ . Therefore, for all _i ∈ {_ 0 _,_ 1 _, · · · , k_ +1 _}_ the formula inside the expectation is an odd function of _**w**[∗]_ . Since _**w**[∗] ∼N_ (0 _,_ _**I** d_ ), the expectation should be **0** _d_ . 
+
+Similarly, we calculate the gradient of the _**W**_ : 
+
+**==> picture [439 x 128] intentionally omitted <==**
+
+27 
+
+**==> picture [374 x 96] intentionally omitted <==**
+
+Since we fix _w_ 24, we only consider the remaining three blocks. First, we consider the gradient of the vector block _**W**_ 14: 
+
+**==> picture [374 x 21] intentionally omitted <==**
+
+Notice that the _**XX**[⊤]_ _**V**_ 31( _t_ ) _[⊤]_ _**V**_ 31( _t_ ) _**XX**[⊤]_ ( _**W**_ 13( _t_ ) _**w** i −_ _**w**[∗]_ ) _−n_ ( _**w** i_ +1 _−_ _**w** i_ ) is odd in _**w**[∗]_ . Therefore the expectation is **0** _d_ . Similarly, we consider the other block _**W**_ 23: 
+
+**==> picture [419 x 59] intentionally omitted <==**
+
+In conclusion, all the blocks have zero gradient except _**V**_ 31 _,_ _**W**_ 13 given that they are all zero matrices. Under Assumption 4.1, all the irrelevant blocks remain zero matrices for all _t ≥_ 0. 
+
+By Lemma C.2, we prove that along the gradient flow trajectory under Assumption 4.1, the objective of the linear self-attention model with residual connection can be equivalently transform to the following simplified form. 
+
+**Lemma C.3.** _Under Assumption 4.1, we have the training objective_ 
+
+**==> picture [274 x 31] intentionally omitted <==**
+
+_where_ _**S**_ = _n_[1] _**[XX]**[⊤][and]_[ ∆] _**[w]**[i]_[:=] _**[ w]**[i]_[+1] _[ −]_ _**[w]**[i][,][ i]_[ = 0] _[,]_[ 1] _[..., k][ is the residual for each step][ i][.]_ 
+
+_Proof._ Given the following CoT objective, 
+
+**==> picture [356 x 108] intentionally omitted <==**
+
+By Lemma C.2, we plug in the _**V** ,_ _**W**_ expressions and get: 
+
+Since _**y**[⊤]_ = _**X**[⊤]_ _**w**[∗]_ , we have 
+
+**==> picture [332 x 16] intentionally omitted <==**
+
+Put it back to the loss expression and we complete the proof. 
+
+Now the chain of thought loss can be rewritten into the form by Lemma C.3, we can directly calculate the gradient update using the simplified loss for clarity. We denote the only relevant blocks _**W**_[�] := _**W**_ 13 and _**V**_[�] := _**V**_ 31. Moreover, we can further expand the CoT loss with ∆ _**w** i_ = _−η ·_ _**[XX]** n[⊤]_ ( _**w** i −_ 
+
+28 
+
+_**w**[∗]_ ) for _i ∈{_ 0 _,_ 1 _, · · · , k −_ 1 _}_ , and ∆ _**w** k_ = _**w**[∗] −_ _**w** k_ . That leads to the following expression of the CoT loss: 
+
+**==> picture [326 x 56] intentionally omitted <==**
+
+Observe that the final loss only depends on the ( _d_ + 2) to (2 _d_ + 2) entries of the transformer’s output, indicating we can simplify the model a bit and prune out the irrelevant part. We can define a simplified one-layer transformer to get the loss form above, where the dynamics of the equivalent model is exactly the same with the original dynamics of _**W**_ 13 and _**V**_ 31. Accordingly, the last token input of the transformer for _i_ -th step becomes _**w** i_ and the label becomes _**w** i_ +1 since the other entries in the original input/label ( **0** _,_ 0 _,_ _**w** i,_ 1) do not affect prediction. 
+
+**==> picture [279 x 36] intentionally omitted <==**
+
+_to be the reduced model of the one-layer transformer in Equation_ (3) _. For ease of presentation, we denote f_ _**θ**_ ( _**w** i_ ) := _f_ _**θ**_ ( _**X** ,_ _**Z** i_ ) _._ 
+
+In the following sections, we will consider the equivalent form of transformer. Here we present the gradient with regard to the reduced model. For clarification, throughout this section we will denote _**w** k_ +1 := _**I** −_ ( _**I** − η_ _**S**_ ) _[k]_[+1][�] _**w**[∗]_ as the ( _k_ + 1)-th update, and _**w**[∗]_ is the ground-truth. � 
+
+**Lemma C.4.** _The gradient of_ _**V**_[�] _and_ _**W**_[�] 
+
+_**W** are given by the following expectations:_ 
+
+**==> picture [397 x 65] intentionally omitted <==**
+
+_Proof._ Given the equivalent CoT loss in Equation (13), we take the gradient with regard to _**V**_[�] of the loss and we have 
+
+**==> picture [398 x 66] intentionally omitted <==**
+
+The second step is because we subtract E ( _fθ_ ( _**w** k_ ) _−_ _**w** k_ +1) _**w** k[⊤]_ _**W**_[�] _[⊤] −_ _**w**[∗][T]_[ �] _**S**_ from the second � � � term and put it into the summation. Similarly, the partial derivative of _**W**_[�] should be: 
+
+**==> picture [309 x 66] intentionally omitted <==**
+
+Therefore we complete the proof. 
+
+C.2 GRADIENT CHARACTERIZATION OVER THE COT OBJECTIVE 
+
+In this section, we compute the exact gradient for the reduced model parameters to facilitate analysis on the dynamics. For clarification, throughout this section we will denote _**w** k_ +1 := _**I** −_ ( _**I** − η_ _**S**_ ) _[k]_[+1][�] _**w**[∗]_ as the ( _k_ + 1)-th update, and _**w**[∗]_ is the ground-truth. � 
+
+29 
+
+We first compute our gradients for the simplfied model defined in Definition C.1, which is equivalent to the full model’s dynamics. Recall that under assumption 4.1, we have _**V**_[�] _,_ _**W**_[�] are simultaneously diagonalizable, with the orthonormal basis _{_ _**u** i}[d] i_ =1[.][We][denote][the][orthogonal][matrix][formed][by] the basis as _**U**_ . We will observe that _**u** i_ are always the eigenvector of _**V**_[�] _,_ _**W**_[�] , so we denote _**V**_[�] = _**U**_ **Λ** _**V**_[�] _**U** ⊤,_ � _**W**_ = _**U**_ **Λ** _**W**_[�] _**U** ⊤._ For clarity, we ignore the timestamp when calculating the gradients and dynamics. 
+
+We present an accurate estimate of the gradient in the following Lemma C.5. We intensively use the concentration lemma in Appendix D to separate the main terms dominating the gradient flow dynamics, and some bounded error terms that may complicate the analysis. We also call the error terms as ‘interaction terms’, since they contain the interactions between two subspaces _**u** i_ _**u**[⊤] i_[and] _**u** j_ _**u**[⊤] j_[.][The][structure][of][the][interaction][terms][∆] _**V**_[�] _,_ ∆ _**W**_[�] are further characterized in this lemma, which is essential for the final local convergence analysis. 
+
+**Lemma C.5.** _Suppose n_ = Θ( _d_ log[5] _d_ ) _, η ∈_ (0 _._ 1 _,_ 0 _._ 9) _, k_ = _⌈c_ log _d⌉. Under Assumption 4.1, if we run gradient flow on the population loss in Equation_ (6) _, then the gradient of_ _**V**_[�] _and_ _**W**_[�] _are characterized by the following equations:_ 
+
+**==> picture [413 x 228] intentionally omitted <==**
+
+_Proof._ Recall the gradients formula of _**V**_[�] and _**W**_[�] by Lemma C.4: 
+
+**==> picture [393 x 65] intentionally omitted <==**
+
+We expand the reduced model _fθ_ ( _**w** i_ ) in Definition C.1, and get the residual term 
+
+**==> picture [231 x 63] intentionally omitted <==**
+
+Substitute _fθ_ ( _**w** i_ ) _−_ _**w** i_ +1 term in the dynamics by the equation above, we have 
+
+**==> picture [425 x 30] intentionally omitted <==**
+
+30 
+
+**==> picture [398 x 332] intentionally omitted <==**
+
+**==> picture [398 x 317] intentionally omitted <==**
+
+31 
+
+We define ∆ _**V** i_[�][as the sum of all the interaction terms] **Λ** _**V**_[�] + _η_ _**I**_ ( _**ξ**_ 1 _−_ _**ξ**_ 3 _−_ _**ξ**_ 5 + _**ξ**_ 6)+ _η_ ( _**ξ**_ 2 _−_ _**ξ**_ 4) ( ) for the _i_ -th term in the summation of dynamics of _**V**_[�] . From the analysis above, there exist diagonal matrices _**AV** i_[�][,] _**[B]**_ , _**C**_ , _**D**_ with their operator norm _O_ ~~(—)~~ log1[3] _d_[,][such that (note every matrix is] diagonal, so they commute) 
+
+**==> picture [248 x 53] intentionally omitted <==**
+
+We define ∆ _**V** −_[�] 1[as the interaction term brought by Term 7 since there is no summation in Term 7.][It] is obvious that ∆ _**V** −_[�] 1[(1] _[ −][η]_[)] _[k]_[.] |i _op[≤][O]_ C)) 
+
+Now we denote 
+
+**==> picture [93 x 30] intentionally omitted <==**
+
+to be the sum of all interaction term of the dynamics of **Λ** _**V**_[�] . From the definition of ∆ _**V** i_[�][and][ ∆] _**V** −_[�] 1 above, there exist diagonal matrices _**AV**_[�] , _**BV**_[�] , _**CV**_[�] , _**DV**_[�] and _**E**_ 0 _**V**_[�] satisfying _**A** ,_ _**C** ≤_ Iu _O_ ~~I~~ log1[2] _d_[,] n _**B** ,_ _**D**_ l _≤ O d_ log1[2] _d_ and ii _**E** ≤ O_ © (1 _− η_ ) _[k]_ ) such that (because _k_ = Θ(log _d_ )) ∆� _**V**_ � = **Λ** _**V**_ � + _η_ _**I AV**_ � +tr _**I** −_ **Λ** _**W**_ � **Λ** _**W**_ � _**BV**_ � + _**I** −_ **Λ** _**W**_ � _**CV**_ � +tr _**I** −_ **Λ** _**W**_ � _**DV**_ � + _**E**_ 0 _**V**_ � ( ) (© )) © ) 6) Sum up all the seven terms together and we have _∂L_ = _**U**_  _k_ + 1 _−_ 2 1 _−_ (1 _− η_ ) _[k]_[+1] +[1] _[ −]_[(][1] _[ −][η]_[)][2] _[k]_[+2]  **Λ** _**W**_ � **Λ** _**V**_ � **Λ** _**W**_ � + _η_ _**I**_  _**U**[⊤] ∂_ ~~_~~ _**V**_[�]  ~~re~~ _η η_ (2 _− η_ )   _−_ _**U** k_ + 1 _−_[1] _[ −]_[(][1] _[ −][η]_[)] _[k]_[+1] **Λ** _**V**_ � **Λ** _**W**_ � + _η_ _**I U**[⊤] η_ ( ~~——)~~ J _−_ _**U** k_ + 1 _−_[1] _[ −]_[(][1] _[ −][η]_[)] _[k]_[+1] **Λ** _**W**_ � **Λ** _**V**_ � + _η_ _**I U**[⊤] η_ ( )() + _**U**_ ( _k_ + 1) **Λ** _**V**_ � + _η_ _**I U**[⊤]_ + _**U**_ ∆[�] _**V**_ � _**U** ⊤_ ae) Denote _**E**_ 1 _**V**_[�][to be the sum of all] _[ O]_[(1] _[ −][η]_[)] _[k]_ terms in the dynamics of _**V**_[�] : 
+
+**==> picture [414 x 159] intentionally omitted <==**
+
+32 
+
+Similar to the calculation of the dynamics of _**V**_[�] , we can also have 
+
+**==> picture [496 x 346] intentionally omitted <==**
+
+We define ∆ _**W** −_[�] 1[as the interaction term brought by the last term] 
+
+**==> picture [467 x 260] intentionally omitted <==**
+
+33 
+
+**==> picture [366 x 171] intentionally omitted <==**
+
+Moreover, ∆ _**W**_[�] has the form 
+
+Since _∥_ _**A**_ + _**B** ∥op ≤∥_ _**A** ∥op_ + _∥_ _**B** ∥op_ and _∥_ _**AB** ∥op ≤∥_ _**A** ∥op∥_ _**B** ∥op_ , it is obvious that 
+
+**==> picture [214 x 25] intentionally omitted <==**
+
+After obtaining the estimation of the gradient by lemma C.5, we can decompose the gradient updates into the dynamics along each eigenspace _**u** i_ , which can be characterized by the following lemma. 
+
+**Lemma C.6.** _Suppose_ _**V**_[�] =[�] _[d] j_ =1 _[λ]_[ �] _**V** j_ _**[u]**[j]_ _**[u]**[⊤] j[,]_[ �] _**W**_ =[�] _[d] j_ =1 _[λ]_ _**W** j_[�] _**[u]**[j]_ _**[u]**[⊤] j[.][The dynamics of the eigen-] values of_ _**V**_[�] _and_ _**W**_[�] _are given by the following equations:_ 
+
+**==> picture [397 x 85] intentionally omitted <==**
+
+_Proof._ This is directly obtained from Lemma C.5. 
+
+C.3 PROOF OF THE MAIN THEOREM 4.1 
+
+In this section, we prove Theorem 4.1, which characterizes the CoT loss of the trained transformer. First, we restate the theorem. 
+
+**Theorem C.1** (Global Convergence) **.** _Suppose n_ = Θ( _d_ log[5] _d_ ) _, η ∈_ (0 _._ 1 _,_ 0 _._ 9) _, k_ = _⌈c_ log _d⌉,_ 1 3(1 _−η_ ) 1 _c_ log � 1 _−η_ � _>_ 2 _. Under Assumption 4.1 with some constant σ >_ (2 _−η_ ) _k_ +1 _[,][if][we][run][gradi-] ent flow on the population loss in Equation_ (6) _, then after time t_ = _O_ �log _d_ + log[1] _ϵ_ � _, we have_ log _d L_[CoT] ( _t_ ) _≤ ϵ for any ϵ ≥_ Θ� _dc_ log ( 1 _−_ 1 _η_[)] _[−]_[2] � _._ 
+
+_Proof._ According to the previous sections, we can reduce the original optimization problem to Equation (13), and consider the equivalent reduced model (Definition C.1). By Lemma C.5, we fully characterized the gradient expression, which decomposes the gradient of _**V**_[�] and _**W**_[�] into main signal terms with large norm at initialization (terms before ∆ _**V**_[�] _,_ ∆ _**W**_[�] ) and interaction terms (∆ _**V**_[�] _,_ ∆ _**W**_[�] ) with bounded norm _O_ ( log1[2] _d_[)][ for all] _[ t >]_[ 0][.] 
+
+The decomposition motivates us to conduct a stage-wise analysis. We first analyze the dynamics in **Stage 1** when the distance between the parameters _**V**_[�] _,_ _**W**_[�] and the ground-truth is larger than 
+
+34 
+
+_O_ ( log1[2] _d_[)][.][In][this][stage,][the][bounded][error][can][be][dominated][by][the][signal][terms][in][the][gradient,] leading to nearly independent dynamics along each direction _**u** i_ . After this stage, we enter **Stage 2** as a local convergence phase. We describe the dynamics below in detail. **Stage 1** In the first stage, the dynamics are dominated by the main terms, and the interaction terms ∆ _**V**_[�] _,_ ∆ _**W**_[�] can be somehow be ignored. Specifically, by Lemma C.6, given the dynamics of _λ_ _**V** j_[�] _[, λ]_ _**W** j_[�][:] 
+
+**==> picture [397 x 60] intentionally omitted <==**
+
+we can conclude that the dynamics of the eigenvalue _λ_ _**V** j_[�] _[, λ]_ _**W** j_[�] mainly depend on themselves when the main term (terms before _δj_ _**W**_[�] _[, δ] j_[ �] _**V**_[) are larger than] _[ O]_[(] log1[2] _d_[)][, which is within the stage 1.][That is,] the dynamics within the subspace _**u** i_ _**u**[⊤] i_[for] _**[V]**_[�] _[ ,]_[ �] _**W**_ are almost independent with other subspaces. In this stage, we focus on the analysis of _λ_ _**V** j_[�] _[, λ]_ _**W** j_[�] depending on their own value. The first stage can be further divided into two phases. 
+
+**Stage 1, Phase 1.** At the beginning of training, we have 
+
+**==> picture [351 x 58] intentionally omitted <==**
+
+**==> picture [151 x 32] intentionally omitted <==**
+
+d _λ_ _**W** j_ � 1 according to the dynamics for both sides. With this upper bound, we prove d _t ≥ O_ � _k_ � _._ Therefore, _λ_ _**W** j_[�] will converge to 1 _−_ ( _k_ + 1) _[−]_ 12[7] in _t_ 1 = _O_ (log _d_ ) time (Lemma C.9). 
+
+**Stage 1, Phase 2.** After time _t_ 1, we have _λ_ _**W** j_[�] very close to the ground-truth value 1. Meanwhile, the lower bound for _λ_ _**V** j_[�][still holds, and it will further decrease.][Specifically,] 
+
+**==> picture [311 x 32] intentionally omitted <==**
+
+By Lemma C.10, we can prove that _λ_ _**W** j_[�] will stay close to 1 _− o_ (1): 
+
+**==> picture [185 x 16] intentionally omitted <==**
+
+for any _t ≥ t_ 1. With this condition, a converging condition for ( _λ_ _**V** j_[�][+] _[ η]_[)][can][be][deducted][from] Lemma C.11: 
+
+**==> picture [171 x 34] intentionally omitted <==**
+
+Lemma C.11 shows that ��� _λ_ � _**V** j_[+] _[ η]_ ��� converges to ( _k_ + 1) _−_ 121 in _t_ 2 = _O_ (log log _d_ ) time. 
+
+35 
+
+**Stage 2.** Now the eigenvalues are already close to ground-truth: 
+
+**==> picture [312 x 20] intentionally omitted <==**
+
+According to the expansion of the error terms in Lemma C.5, we notice that _δj_ _**W**_[�] and _δj_ _**V**_[�][are always] coupled with some individual residual like ( **Λ** _**V**_[�] + _η_ _**I**_ ), ( **Λ** _**W**_[�] _−_ _**I**_ ), or some weighted average _d_ 1[tr] �( **Λ** _**V**_[�] + _η_ _**I**_ ) **Λ** _**V**_[�][�] . Meanwhile, the coefficient of this kind of residual in the interaction terms is still upper bounded by _O_ (1 _/_ log[2] _d_ ). That helps us to derive the PL-condition like gradient lower bound (Lemma C.12): 
+
+**==> picture [288 x 64] intentionally omitted <==**
+
+where _α_ = _O_ �(1 _− η_ ) _[k]_[�] _≥_ 0. 
+
+By Lemma C.12, we know ��� _λ_ � _**V** j_[+] _[ η]_ ��� and ���1 _− λ_ _**W** j_ � ��� converge to _δ ∈_ �Θ� _d_ 2 _c_[log (1] _[−][η]_[)+] 2[1] � _,_ 1� in _t_ 3 = _O_ �log[1] _δ_ � time. At this time, there exist diagonal matrices _**A**_ and _**B**_ satisfying _∥_ _**A** ∥op ≤_ Θ(1) and _∥_ _**B** ∥op ≤_ Θ(1) such that 
+
+**==> picture [176 x 15] intentionally omitted <==**
+
+Now we consider the CoT loss given by Lemma C.3 
+
+**==> picture [266 x 55] intentionally omitted <==**
+
+Apply Lemma C.13, we directly obtain that 
+
+**==> picture [106 x 14] intentionally omitted <==**
+
+Since _δ ∈_ �Θ� _d_ 2 _c_[log (1] _[−][η]_[)+][1] 2 � _,_ 1�, the CoT loss is smaller than _ϵ_ = Θ� _d[c]_[ log (1] _[−][η]_[)+2] log _d_ �. The local convergence takes _t_ 3 = _O_ �log[1] _δ_ � = _O_ �log[1] _ϵ_ �. Considering all stages, at time _t_ = _t_ 1 + _t_ 2 + _t_ 3 = _O_ (log _d_ ) + _O_ � 1 _ϵ_ �, we have _L_[CoT] ( _**θ**_ ) _≤ ϵ._ 
+
+**==> picture [396 x 82] intentionally omitted <==**
+
+_Proof._ Directly consider the derivative 
+
+**==> picture [322 x 49] intentionally omitted <==**
+
+36 
+
+Substitute the derivatives with the equations in Lemma C.6, we have 
+
+**==> picture [431 x 662] intentionally omitted <==**
+
+**==> picture [225 x 64] intentionally omitted <==**
+
+**Lemma C.8** (Upper bound of _λ_ _**V** j_[�][)] **[.]** _[Under Assumption 4.1, if][ λ]_ _**W** j_[�] _≤_ 1 _−_ ( _k_ + 1) _[−]_ 12[7] _, it holds that_ 
+
+**==> picture [274 x 32] intentionally omitted <==**
+
+_Proof._ We prove by induction. First, check the initialization _λ_ _**V** j_[�][(0)] _[≤−][σ]_[,] _[σ][≤][λ]_ _**W** j_[�][(0)] _[≤]_[1] 2[.][If] 1 _σ ≥_[3][(] 2[1] _−[−] η[η]_[)] _k_ +1[, then we have] 
+
+**==> picture [288 x 32] intentionally omitted <==**
+
+If the inequality holds until some time _t_ 1, that is for any _t < t_ 1, we have 
+
+but 
+
+By Lemma C.7, we have 
+
+**==> picture [181 x 157] intentionally omitted <==**
+
+Therefore, there exists some time _t[′] < t_ 1 such that 
+
+**==> picture [179 x 32] intentionally omitted <==**
+
+which is a contradiction. Hence, the proof is complete. 
+
+**Lemma C.9** ( _λ_ _**W** j_[�] converges to near optimal) **.** _Under Assumption 4.1, it takes O_ (log _d_ ) _time for λ_ _**W** j_[�] _to converge to_ 1 _−_ ( _k_ + 1) _[−]_ 12[7] _._ 
+
+_Proof._ Recall the gradient of _λ_ _**W** j_[�] in Lemma C.6 
+
+**==> picture [318 x 99] intentionally omitted <==**
+
+Substitute _λ_ _**V** j_[�][with Lemma C.8, we have] 
+
+38 
+
+**==> picture [232 x 272] intentionally omitted <==**
+
+In _O_ (log _d_ ) time, _λ_ _**W** j_[�] can converge to 1 _−_ ( _k_ + 1) _[−]_ 12[7] . **Lemma C.10.** _Assume λ_ _**W** j_[�][(] _[t]_[1][)][=][1] _[ −]_[(] _[k]_[ + 1)] _[−]_ 12[7] _and λ_ _**V** j_[�][(] _[t]_[1][)] _[<][−]_ 2(2[3][(][1] _−[−] η[η]_ )[)] ( _k_ +1)�1 _−_ 1 _λ_ _**W** j_[�] ( _t_ 1)� _, for any t ≥ t_ 1 _it holds that_ 
+
+**==> picture [190 x 16] intentionally omitted <==**
+
+_Proof._ First, it is clear that the inequality holds at time _t_ 1. If the inequality doesn’t hold, then there exists _t[′] > t_ 1 such that 
+
+**==> picture [284 x 35] intentionally omitted <==**
+
+or 
+
+**==> picture [284 x 35] intentionally omitted <==**
+
+In the first case, it suffices to prove 
+
+to show 
+
+**==> picture [283 x 76] intentionally omitted <==**
+
+which says there exists _t_ 1 _≤ t[′′] < t[′]_ such that 
+
+**==> picture [114 x 16] intentionally omitted <==**
+
+and leads to a contradiction. Recall the gradient of _λ[V] j_[�][in Lemma C.6] 
+
+**==> picture [410 x 28] intentionally omitted <==**
+
+39 
+
+**==> picture [407 x 189] intentionally omitted <==**
+
+and thus we have 
+
+**==> picture [59 x 9] intentionally omitted <==**
+
+else 
+
+In the second case, 
+
+**==> picture [129 x 24] intentionally omitted <==**
+
+still holds for any _t_ 1 _≤ t ≤ t[′]_ . Recall the gradient of _λ_ _**W** j_[�] in Lemma C.6 
+
+**==> picture [407 x 153] intentionally omitted <==**
+
+There exists _t_ 1 _≤ t[′′] < t[′]_ such that 
+
+**==> picture [109 x 16] intentionally omitted <==**
+
+which is a contradiction. Hence, the proof is complete. 
+
+**Lemma C.11** ( _λ_ _**V** j_[�][converges to near optimal)] **[.]** _[Assume]_ 
+
+**==> picture [185 x 16] intentionally omitted <==**
+
+_then it takes O_ (log log _d_ ) _time for_ ��� _λ_ � _**V** j_[+] _[ η]_ ��� _to converge to_ ( _k_ + 1) _−_ 121 _._ 
+
+_Proof._ From Lemma C.10, we know 
+
+**==> picture [431 x 83] intentionally omitted <==**
+
+40 
+
+**==> picture [402 x 546] intentionally omitted <==**
+
+_Proof._ Consider the error term in Lemma C.6 more carefully, we have 
+
+**==> picture [325 x 92] intentionally omitted <==**
+
+41 
+
+**==> picture [354 x 212] intentionally omitted <==**
+
+and 
+
+**==> picture [386 x 435] intentionally omitted <==**
+
+Utilizing Mean Inequality, we have 
+
+42 
+
+Insert the inequality into the equation and we have 
+
+**==> picture [431 x 379] intentionally omitted <==**
+
+Plug in the inequality and we have 
+
+**==> picture [384 x 222] intentionally omitted <==**
+
+43 
+
+Take the sum of both sides separately, we have 
+
+**==> picture [392 x 112] intentionally omitted <==**
+
+From Jensen’s Inequality with _f_ ( _x_ ) = _x_[2] , we have 
+
+**==> picture [110 x 70] intentionally omitted <==**
+
+Therefore, it holds for diagonal matrix **Λ** _∈_ R _[d][×][d]_ that 
+
+Plug in the inequality and we have 
+
+**==> picture [397 x 149] intentionally omitted <==**
+
+**==> picture [176 x 14] intentionally omitted <==**
+
+_then it holds that_ 
+
+**==> picture [106 x 12] intentionally omitted <==**
+
+_Proof._ Now we consider the CoT loss given by Lemma C.3 
+
+**==> picture [396 x 140] intentionally omitted <==**
+
+44 
+
+We first consider the term in the summation: 
+
+**==> picture [485 x 369] intentionally omitted <==**
+
+Similarly, for Term 2 and Term 3, we have 
+
+**==> picture [398 x 243] intentionally omitted <==**
+
+45 
+
+Recall the CoT loss in Equation (16) and Equation (17). By the analysis above, we directly obtain that 
+
+_L_[CoT] ( _**θ**_ ) = _O_ � _δ_[2] _d_ log _d_ � _._ 
+
+Hence, the proof is complete. 
+
+**==> picture [397 x 47] intentionally omitted <==**
+
+_where ∥_ ∆ _∥op_ = _O_ ( _[k] n_[2] _[d]_[)] _[ ≤][O]_ � log1[3] _d_ � _. Moreover, the error is in the form_ ∆= _α_ 1 **ΛΓ** + _α_ 2 tr( **Λ** ) **Γ** + _α_ 3 tr( **Γ** ) **Λ** + _α_ 4 tr( **Λ** ) tr( **Γ** ) _**I**_ + _α_ 5 tr( **ΛΓ** ) _**I** where α_ 1 = _O_ � _kn_[2] _d_ � _, α_ 2 _, α_ 3 _, α_ 5 = _O_ � _kn_[2] � _, α_ 4 = _O_ ( _nd[k]_[2][)] _[.]_ 
+
+_Proof._ We can directly get the lemma by applying Lemma D.2 to E[ _**S**_ **ΛΓ** _**S**_ ], E� _**S**_ **Λ** ( _**I** − η_ _**S**_ ) _[k]_ **Γ** _**S**_ �. 
+
+**==> picture [397 x 53] intentionally omitted <==**
+
+_where ∥_ ∆ _∥op_ = _O_ ( _[k] n_[2] _[d]_[)] _[ ≤][O]_ � log1[3] _d_ � _. Moreover, the error is in the form_ 
+
+∆= _α_ 1 **ΛΓ** + _α_ 2 tr( **Λ** ) **Γ** + _α_ 3 tr( **Γ** ) **Λ** + _α_ 4 tr( **Λ** ) tr( **Γ** ) _**I**_ + _α_ 5 tr( **ΛΓ** ) _**I** where α_ 1 = _O_ � _kn_[2] _d_ � _, α_ 2 _, α_ 3 _, α_ 5 = _O_ � _kn_[2] � _, α_ 4 = _O_ ( _nd[k]_[2][)] _[.]_ 
+
+_Proof._ We can directly get the lemma by applying Lemma D.2 to E[ _**S**_ **ΛΓ** _**S**_ ], E� _**S**_ **Λ** ( _**I** − η_ _**S**_ ) _[k]_ **Γ** _**S**_ � and E� _**S**_ **Λ** ( _**I** − η_ _**S**_ )[2] _[k]_ **Γ** _**S**_ �. 
+
+**Lemma C.16.** _Suppose_ _**S**_ = _n_ 1 � _ni_ =1 _**[x]**[i]_ _**[x]** i[⊤][,][n]_[=][Θ(] _[d]_[ log][5] _[ d]_[)] _[, k]_[=] _[O]_[(log] _[ d]_[)] _[, η]_[=][Θ(1)] _[∈]_ (0 _._ 1 _,_ 0 _._ 9) _, ∥_ **Λ** _∥op ≤_ Θ(1) _, ∥_ **Γ** _∥op ≤_ Θ(1) _. Then the expectation_ E� _**S**_ **Λ** _**S**_ **Γ** � _**I** −_ ( _**I** − η_ _**S**_ ) _[k]_[��] = �1 _−_ (1 _− η_ ) _[k]_[�] **ΛΓ** + ∆ _, where ∥_ ∆ _∥op_ = _O_ ( _[k] n_[2] _[d]_[)] _[ ≤][O]_ � log1[3] _d_ � _. Moreover, the error is in the form_ 
+
+∆= _α_ 1 **ΛΓ** + _α_ 2 tr( **Λ** ) **Γ** + _α_ 3 tr( **Γ** ) **Λ** + _α_ 4 tr( **Λ** ) tr( **Γ** ) _**I**_ + _α_ 5 tr( **ΛΓ** ) _**I** where α_ 1 = _O_ � _kn_[2] _d_ � _, α_ 2 _, α_ 3 _, α_ 5 = _O_ � _kn_[2] � _, α_ 4 = _O_ ( _nd[k]_[2][)] _[.]_ 
+
+_Proof._ We can directly get the lemma by applying Lemma D.3 to E[ _**S**_ **Λ** _**S**_ **Γ** ], E� _**S**_ **Λ** _**S**_ **Γ** ( _**I** − η_ _**S**_ ) _[k]_[�] . 
+
+**==> picture [397 x 77] intentionally omitted <==**
+
+**==> picture [347 x 34] intentionally omitted <==**
+
+46 
+
+_Proof._ We can directly get the lemma by applying Lemma D.3 to E[ _**S**_ **Λ** _**S**_ **Γ** ], E� _**S**_ **Λ** _**S**_ **Γ** ( _**I** − η_ _**S**_ ) _[k]_[�] and E� _**S**_ **Λ** _**S**_ **Γ** ( _**I** − η_ _**S**_ )[2] _[k]_[�] . 
+
+C.4 OUT-OF-DISTRIBUTION GENERALIZATION 
+
+1 We restate the formal theorem here. We still denote _**S**_ :=[simplicity.][Note][that][the] _n_ _**[XX]**[⊤]_[for] number of steps _k_ can be different/larger compared to the step number in the previous training theorem. **Theorem C.2.** _Suppose n_ = Θ( _d_ log[5] _d_ ) _, η ∈_ (0 _._ 1 _,_ 0 _._ 9) _, k_ = _C_ log _d. Assume the out-ofdistribution input data_ _**x** i ∼N_ ( **0** _d,_ **Σ** ) _, i ∈_ [ _n_ ] _where η[δ][≤][λ]_[min][(] **[Σ]**[)] _[≤][λ]_[max][(] **[Σ]**[)] _[≤]_ 2 _−η δ for some constant δ >_ 0 _._ 1 _, and_ _**w**[∗] ∼N_ ( **0** _d,_ _**I**_ ) _. Then the trained transformer in Theorem 4.1 satisfies_ 1 1 _that L_[Eval] **Σ** ( _t_ ) _≤ ϵ for any ϵ ∈ d[−][C]_[ log][(][min] _[{]_ 1 _−η[,]_ 1 _−δ[}]_[)][+1] log[2] _d,_ 1 _._ � � 
+
+_Proof._ Recall the definition of the evaluation loss and our reduced transformer (Definition C.1) 
+
+**==> picture [260 x 48] intentionally omitted <==**
+
+ˆ where _**Z**_[ˆ] _k_ is the generated sequence after _k_ steps and _**w** k_ := _f_ _**θ**_ ( ˆ _**w** k−_ 1) is the _k_ -th generated intermediate weight vector. Note that each step the transformer is inputted with the last step prediction. ˆ We define the prediction error at each step _i_ is ∆ _**w** i_ := _**w** i −_ _**w** i_ = _f_ _**θ**_ ( ˆ _**w** i−_ 1) _−_ _**w** i_ . We expand the term _f_ _**θ**_ ( ˆ _**w** k_ ) _−_ _**w**[∗]_ and sum up the error accumulation as follows: 
+
+**==> picture [382 x 51] intentionally omitted <==**
+
+After one step of decomposition, we notice that the error ∆ _**w** k_ +1 can be decomposed into two parts: (1) The approximation error predicting _**w** k_ +1 with ground-truth input _**w** k_ . We define it 
+
+**==> picture [177 x 15] intentionally omitted <==**
+
+(2) The accumulated error from the last inference step: _**I**_ + _**V S**_[�] _**W**_[�] ∆ _**w** k_ . Therefore, we can � � inductively calculate the sum of the error: 
+
+**==> picture [389 x 99] intentionally omitted <==**
+
+Then we have our evaluation loss upper bounded: 
+
+**==> picture [388 x 69] intentionally omitted <==**
+
+47 
+
+We first consider the first term: E _∥_ ( _**w** k_ +1 _−_ _**w**[∗]_ ) _∥_[2] : 
+
+**==> picture [361 x 33] intentionally omitted <==**
+
+Then we consider the second summation term. Since the parameters of the reduced model _**V**_[�] = _−η_ _**I**_ + _**A** ,_ _**W**_[�] = _**I**_ + _**B**_ , where _∥_ _**A** ∥op, ∥_ _**B** ∥op ≤ d[−]_[1] 2 _[C]_[ log][(] 1 _−_ 1 _η_[)][+] 2[1] for some constant _c >_ 0, we want to bound the prediction error given the ground-truth input. By Lemma D.6, we have 
+
+**==> picture [284 x 88] intentionally omitted <==**
+
+Therefore, plug those back to Equation (*), the total evaluation loss should be upper bounded by 1 1 1 1 _L_[Eval] ( _**θ**_ ) _≤ O d[−][C]_[ log][(][min] _[{]_ 1 _−η[,]_ 1 _−δ[}]_[)][+1] _· k_[2][�] = _O_ ( _d[−][C]_[ log][(][min] _[{]_ 1 _−η[,]_ 1 _−δ[}]_[)][+1] log[2] _d_ ) � 
+
+## D SUPPLEMENTARY LEMMAS 
+
+## D.1 CONCENTRATION LEMMAS 
+
+In this appendix, we prove some concentration lemmas to estimate the expected gradient more accurately. Throughout the proof, **Λ** _,_ **Γ** are both symmetric matrices with orthonormal eigenbasis _{_ _**u** i}[d] i_ =1[.] 
+
+**Lemma D.1.** _Suppose_ _**S**_ = _n_ 1 � _ni_ =1 _**[x]**[i]_ _**[x]** i[⊤][,][n]_[=][Θ(] _[d]_[ log][5] _[ d]_[)] _[, k]_[=] _[O]_[(log] _[ d]_[)] _[, η]_[=][Θ(1)] _[∈]_ (0 _._ 1 _,_ 0 _._ 9) _, ∥_ **Λ** _∥op ≤_ Θ(1) _. Then the expectation_ 
+
+**==> picture [170 x 14] intentionally omitted <==**
+
+1 _where ∥_ ∆ _∥op ≤ O_ ( _[k] n_[2] _[d]_[)][=] _[O]_ � log[3] _d_ � _. Moreover, the error is in the form_ ∆= _α_ 1 **Λ** + _α_ 2 tr( **Λ** ) _**I** , where α_ 1 = _O_ � _kn_[2] _d_ � _, α_ 2 = _O_ � _kn_[2] � _._ 
+
+_Proof._ Denote _δ_ _**S**_ := _**S** −_ _**I**_ . Then we expand the term _**S**_ **Λ** ( _**I** − η_ _**S**_ ) _[k]_ _**S**_ : 
+
+**==> picture [67 x 12] intentionally omitted <==**
+
+**==> picture [174 x 13] intentionally omitted <==**
+
+**==> picture [386 x 107] intentionally omitted <==**
+
+Now take expectation to both sides. Note that E[ _δ_ _**S**_ ] = 0, so all the terms only contain first order _δ_ _**S**_ vanish. We denote 
+
+**==> picture [318 x 25] intentionally omitted <==**
+
+48 
+
+which denotes all the higher order terms (the degree of _δ_ _**S** ≥_ 2.) 
+
+Since we have the tail bound for _δ_ _**S**_ in Theorem 4.6.1 Vershynin (2018) (In this lemma _∥· ∥_ is operator norm if without specification): 
+
+**==> picture [398 x 411] intentionally omitted <==**
+
+Now upper bound all matrices with their operator norm and combine all terms with the same degree of _δ_ _**S**_ . We have 
+
+**==> picture [396 x 182] intentionally omitted <==**
+
+When _∥_ ∆[�] _∥≥ s_ where _s ≥[C][′] n[k]_[2] _[d]_ , we can first upper bound the _∥_ ∆[�] _∥_ with _∥δ_ _**S** ∥_ using the second row of eq. (*1): there exists some constant _C_ 1 _>_ 0 s.t. 
+
+49 
+
+Therefore, when _∥_ ∆[�] _∥≥ s_ , _∥δ_ _**S** ∥≥_ min _{[s] C_[1] 1 _[/] k_[2] _[,][s]_[1] _[/] C_[(] 1 _[k] k_[+2)] _}_ . To apply the tail bound, we need to make sure we pick some _s[′]_ such that max � _δ, δ_[2][�] _≤_ min _{[s] C_[1] 1 _[/] k_[2] _[,][s]_[1] _[/] C_[(] 1 _[k] k_[+2)] _}_ to upper bound the integral of probability, where _δ_ = _C_ ( ~~�~~ _nd_[+] ~~_√_~~ _s[′] n_[)][.][Now][since] _[s][>] C[′] nk_[2] _d_ , min _{[s] C_[1] 1 _[/] k_[2] _[,][s]_[1] _[/] C_[(] 1 _[k] k_[+2)] _} ≥ Cα_ � _nd_ for some constant _Cα_ . Therefore, we just need max _{_ ~~_√_~~ _[s][′] n[,][s] n[′]_[2] _[}][≤]_[min] _[{][s] C_[1] 1 _[/] k_[2] _[,][s]_[1] _[/] C_[(] 1 _[k] k_[+2)] _},_ i.e. _s[′] ≤ s_[1] _[/]_[(] _[k]_[+2)] ~~_[√]_~~ _n s_[1] _[/]_[(2] _[k]_[+4)] ~~_[√]_~~ _n_ ~~_√_~~ _sn s_[1] _[/]_[4] ~~_[√]_~~ _n_ min � _C_ 2 _k , C_ 3 ~~_√_~~ _k , C_ 4 _k[, C]_[5] ~~_√_~~ _k_ � _._ 
+
+**==> picture [397 x 94] intentionally omitted <==**
+
+Now we estimate the upper bound of error with 
+
+**==> picture [272 x 26] intentionally omitted <==**
+
+2 _[n]_ For the first term, let _x_ = _[C] k_[2][2] _[s]_[2] _[/]_[(] _[k]_[+2)][:] 
+
+**==> picture [382 x 101] intentionally omitted <==**
+
+The second term, let _x_ = _C_ 3[2] _[·][s]_[1] _[/]_[(] _k[k]_[+2)] _n_ : 
+
+**==> picture [374 x 100] intentionally omitted <==**
+
+4 _[sn]_ For the third term, let _x_ = _[C] k_[2][2][:] 
+
+**==> picture [274 x 57] intentionally omitted <==**
+
+The fourth term, let _x_ = _C_ 5[2] _[·][s]_[1] _k[/]_[2] _[n]_[:] 
+
+**==> picture [131 x 28] intentionally omitted <==**
+
+50 
+
+**==> picture [270 x 64] intentionally omitted <==**
+
+Therefore, we plug this error back to the upper bound of _∥_ ∆ _∥_ : 
+
+**==> picture [374 x 59] intentionally omitted <==**
+
+Finally, since by Lemma D.8, we know the error is in the form ∆= _α_ 1 **Λ** + _α_ 2 tr( **Λ** ) _**I**_ for all **Λ** . Therefore _α_ 1 = _O_ � _kn_[2] _d_ � _, α_ 2 = _O_ � _kn_[2] � _._ 
+
+**Lemma D.2.** _Suppose_ _**S**_ = _n_ 1 � _ni_ =1 _**[x]**[i]_ _**[x]** i[⊤][,][n]_[=][Θ(] _[d]_[ log][5] _[ d]_[)] _[, k]_[=] _[O]_[(log] _[ d]_[)] _[, η]_[=][Θ(1)] _[∈]_ (0 _._ 1 _,_ 0 _._ 9) _, ∥_ **Λ** _∥op ≤_ Θ(1) _, ∥_ **Γ** _∥op ≤_ Θ(1) _. Then the expectation_ 
+
+**==> picture [184 x 13] intentionally omitted <==**
+
+_where ∥_ ∆ _∥op_ = _O_ ( _[k] n_[2] _[d]_[)] _[ ≤][O]_ � log1[3] _d_ � _. Moreover, the error is in the form_ ∆= _α_ 1 **ΛΓ** + _α_ 2 tr( **Λ** ) **Γ** + _α_ 3 tr( **Γ** ) **Λ** + _α_ 4 tr( **Λ** ) tr( **Γ** ) _**I** where α_ 1 = _O_ � _kn_[2] _d_ � _, α_ 2 _, α_ 3 _, α_ 5 = _O_ � _kn_[2] � _, α_ 4 = _O_ ( _nd[k]_[2][)] _[.]_ 
+
+**==> picture [297 x 11] intentionally omitted <==**
+
+_Proof._ Denote _δ_ _**S**_ := _**S** −_ _**I**_ . Then we expand the term _**S**_ **Λ** ( _**I** − η_ _**S**_ ) _[k]_ **Γ** _**S**_ : 
+
+**==> picture [73 x 13] intentionally omitted <==**
+
+**==> picture [181 x 12] intentionally omitted <==**
+
+**==> picture [393 x 107] intentionally omitted <==**
+
+Take expectation to both sides. Note that E[ _δ_ _**S**_ ] = 0, so all the first order term vanish. We denote 
+
+**==> picture [368 x 24] intentionally omitted <==**
+
+which denotes all the higher order terms (the degree of _δ_ _**S** ≥_ 2.) 
+
+We can estimate the expectation using similar technique as in Lemma D.1. First, given _s_ = _√d_ and _∥δ_ _**S** ∥≤_ max � _δ, δ_[2][�] = _C_ ~~�~~ _nd_[(since] _[ n]_[ = Θ(] _[d]_[ log][5] _[ d]_[)][), we upper bound the operator norm of][∆][�][:] 
+
+**==> picture [358 x 80] intentionally omitted <==**
+
+51 
+
+**==> picture [407 x 374] intentionally omitted <==**
+
+Now upper bound the operator norm of the error term ∆ := E[∆][�] . Suppose _**u**_ := _∥_ ∆ _**u** ∥_ arg max _**u**_ : _∥_ _**u** ∥_ =1 _∥_ _**u** ∥_[, then the operator norm becomes:] 
+
+When _∥_ ∆[�] _∥≥ s_ where _s ≥[C][′] n[k]_[2] _[d]_ , there exists some constant _C_ 1 _>_ 0 s.t. 
+
+**==> picture [186 x 19] intentionally omitted <==**
+
+Therefore, when _∥_ ∆[�] _∥≥ s_ , _∥δ_ _**S** ∥≥_ min _{[s] C_[1] 1 _[/] k_[2] _[,][s]_[1] _[/] C_[(] 1 _[k] k_[+2)] _}_ . Like Lemma D.1, applying the tail bound _s_[1] _[/]_[(] _[k]_[+2)] ~~_[√]_~~ _n s_[1] _[/]_[(2] _[k]_[+4)] ~~_[√]_~~ _n_ ~~_√_~~ _sn s_[1] _[/]_[4] ~~_[√]_~~ _n_ (18) with _s[′] ≤_ min � _C_ 2 _k , C_ 3 ~~_√_~~ _k , C_ 4 _k[, C]_[5] ~~_√_~~ _k_ � where _C_ 2 _, C_ 3 _, C_ 4 _, C_ 5 are some constant, we have the error term for the tail expectation 
+
+**==> picture [294 x 57] intentionally omitted <==**
+
+_∞_ Use the exact same argument, 2 � _C[′] nk_[2] _d_ exp� _−s[′]_[2][�] d _s ≤[k] n_[2] _[d][.]_[ Thus, the upper bound of] _[ ∥]_[∆] _[∥]_[is:] 
+
+**==> picture [374 x 59] intentionally omitted <==**
+
+Finally by Lemma D.8, we know the error is in the form ∆= _α_ 1 **ΛΓ** + _α_ 2 tr( **Λ** ) **Γ** + _α_ 3 tr( **Γ** ) **Λ** + _α_ 4 tr( **Λ** ) tr( **Γ** ) _**I**_ for all **Λ** _,_ **Γ** . Therefore _α_ 1 = _O_ � _kn_[2] _d_ � _, α_ 2 _, α_ 3 = _O_ � _kn_[2] � _, α_ 4 = _O_ ( _nd[k]_[2][)] _[.]_ 
+
+52 
+
+**Lemma D.3.** _Suppose_ _**S**_ = _n_ 1 � _ni_ =1 _**[x]**[i]_ _**[x]** i[⊤][,][n]_[=][Θ(] _[d]_[ log][5] _[ d]_[)] _[, k]_[=] _[O]_[(log] _[ d]_[)] _[, η]_[=][Θ(1)] _[∈]_ (0 _._ 1 _,_ 0 _._ 9) _, ∥_ **Λ** _∥op ≤_ Θ(1) _, ∥_ **Γ** _∥op ≤_ Θ(1) _. Then the expectation_ 
+
+**==> picture [184 x 14] intentionally omitted <==**
+
+_where ∥_ ∆ _∥op ≤ O_ � log1[3] _d_ � _. Moreover, the error is in the form_ ∆= _α_ 1 **ΛΓ** + _α_ 2 tr( **Λ** ) **Γ** + _α_ 3 tr( **Γ** ) **Λ** + _α_ 4 tr( **Λ** ) tr( **Γ** ) _**I**_ + _α_ 5 tr( **ΛΓ** ) _**I**_ 
+
+_where α_ 1 = _O_ � _kn_[2] _d_ � _, α_ 2 _, α_ 3 _, α_ 5 = _O_ � _kn_[2] � _, α_ 4 = _O_ ( _nd[k]_[2][)] _[.]_ 
+
+_Proof._ Denote _δ_ _**S**_ := _**S** −_ _**I**_ . Then we expand the term _**S**_ **Λ** _**S**_ **Γ** ( _**I** − η_ _**S**_ ) _[k]_ : _**S**_ **Λ** _**S**_ **Γ** ( _**I** − η_ _**S**_ ) _[k]_ 
+
+**==> picture [394 x 107] intentionally omitted <==**
+
+Take expectation to both sides. Note that E[ _δ_ _**S**_ ] = 0, so all the first order term vanish. We denote 
+
+**==> picture [360 x 25] intentionally omitted <==**
+
+which denotes all the higher order terms (the degree of _δ_ _**S** ≥_ 2.) 
+
+We can estimate the expectation using similar technique as in Lemma D.1. Given _s_ = _√d_ and _∥δ_ _**S** ∥≤_ max � _δ, δ_[2][�] = _C_ ~~�~~ _nd_[(since] _[ n]_[=][Θ(] _[d]_[ log][5] _[ d]_[)][),][we upper bound the operator norm of][∆][�][.] We directly expand the formula and upper bound all matrices with their operator norm and combine all terms with the same degree of _δ_ _**S**_ . We have 
+
+**==> picture [407 x 106] intentionally omitted <==**
+
+Now upper bound the operator norm of ∆:= E[∆][�] . Suppose _**u**_ := arg max _**u**_ : _∥_ _**u** ∥_ =1 _∥∥_ ∆ _**uu** ∥∥_[, then] 
+
+**==> picture [274 x 55] intentionally omitted <==**
+
+When _∥_ ∆[�] _∥≥ s_ where _s ≥[C][′] n[k]_[2] _[d]_ , there exists some constant _C_ 1 _>_ 0 s.t. 
+
+**==> picture [186 x 19] intentionally omitted <==**
+
+53 
+
+Therefore, when _∥_ ∆[�] _∥≥ s_ , _∥δ_ _**S** ∥≥_ min _{[s] C_[1] 1 _[/] k_[2] _[,][s]_[1] _[/] C_[(] 1 _[k] k_[+2)] _}_ . Like Lemma D.1, applying the tail bound _s_[1] _[/]_[(] _[k]_[+2)] ~~_[√]_~~ _n s_[1] _[/]_[(2] _[k]_[+4)] ~~_[√]_~~ _n_ ~~_√_~~ _sn s_[1] _[/]_[4] ~~_[√]_~~ _n_ (18) with _s[′] ≤_ min � _C_ 2 _k , C_ 3 ~~_√_~~ _k , C_ 4 _k[, C]_[5] ~~_√_~~ _k_ � where _C_ 2 _, C_ 3 _, C_ 4 _, C_ 5 are some constant, we have 
+
+**==> picture [403 x 180] intentionally omitted <==**
+
+_Proof._ Denote _δ_ _**S**_ := _**S** −_ _**I**_ . Then we expand the term **Λ** ( _**I** − η_ _**S**_ ) _[k]_ : 
+
+**==> picture [390 x 116] intentionally omitted <==**
+
+Take expectation to both sides. Note that E[ _δ_ _**S**_ ] = 0, so all the first order term vanish. We denote 
+
+which denotes all the higher order terms (the degree of _δ_ _**S** ≥_ 2.) 
+
+We can estimate the expectation using similar technique as in Lemma D.1. First, given _s_ = _√d_ and _∥δ_ _**S** ∥≤_ max � _δ, δ_[2][�] = _C_ ~~�~~ _nd_[(since] _[ n]_[ = Θ(] _[d]_[ log][5] _[ d]_[)][), we upper bound the operator norm of][∆][�][:] 
+
+**==> picture [275 x 39] intentionally omitted <==**
+
+Now upper bound all matrices by operator norm and combine all terms with the same degree of _δ_ _**S**_ : 
+
+**==> picture [379 x 64] intentionally omitted <==**
+
+Now upper bound the operator norm of the error. Suppose _**u**_ := arg max _**u**_ : _∥_ _**u** ∥_ =1 
+
+_∥_ ∆ _**u** ∥ ∥_ _**u** ∥_[, we have] 
+
+**==> picture [334 x 55] intentionally omitted <==**
+
+54 
+
+When _∥_ ∆[�] _∥≥ s_ where _s ≥[C][′] n[k]_[2] _[d]_ , there exists some constant _C_ 1 _>_ 0 s.t. 
+
+**==> picture [186 x 19] intentionally omitted <==**
+
+Therefore, when _∥_ ∆[�] _∥≥ s_ , _∥δ_ _**S** ∥≥_ min _{[s] C_[1] 1 _[/] k_[2] _[,][s]_[1] _[/] C_[(] 1 _[k] k_[+2)] _}_ . Like Lemma D.1, applying the tail bound _s_[1] _[/]_[(] _[k]_[+2)] ~~_[√]_~~ _n s_[1] _[/]_[(2] _[k]_[+4)] ~~_[√]_~~ _n_ ~~_√_~~ _sn s_[1] _[/]_[4] ~~_[√]_~~ _n_ (18) with _s[′] ≤_ min � _C_ 2 _k , C_ 3 ~~_√_~~ _k , C_ 4 _k[, C]_[5] ~~_√_~~ _k_ � where _C_ 2 _, C_ 3 _, C_ 4 _, C_ 5 are some constant, we have the error term for the tail expectation 
+
+**==> picture [402 x 109] intentionally omitted <==**
+
+## D.2 CONCENTRATION LEMMAS FOR OUT-OF-DISTRIBUTION DATA 
+
+For non-isotropic covariance Gaussian data input, we also have the concentration around the covariance **Σ** when _n_ = Θ( _d_ log _[c] d_ ) for _c >_ 0. We still denote _**S**_ = _n_ 1 _**[XX]**[⊤]_[.][The][following][lemmas] are involved in the calculation for the evaluation process, for in-distribution and out-of-distribution input examples _**X**_ . 
+
+_n_ **Lemma D.5.** _Suppose_ _**S**_ = _n_[1] � _i_ =1 _**[x]**[i]_ _**[x]** i[⊤][where]_ _**[ x]**[i][∼N]_[(] **[0]** _[d][,]_ **[ Σ]**[)] _[,] η[δ][≤][λ]_[min][(] **[Σ]**[)] _[≤][λ]_[max][(] **[Σ]**[)] _[≤]_ 2 _−η δ for some constant δ >_ 0 _._ 1 _, n_ = Θ( _d_ log[5] _d_ ) _, k_ = _O_ (log _d_ ) _, η_ = Θ(1) _∈_ (0 _._ 1 _,_ 0 _._ 9) _. Then the expectation_ tr �E( _**I** − η_ _**S**_ ) _[k]_[�] _≤_ 2 _d_ (1 _− δ_ ) _[k] ._ 
+
+_Proof._ Denote _δ_ _**S**_ := _**S** −_ **Σ** . Then we expand the term **Λ** ( _**I** − η_ _**S**_ ) _[k]_ : 
+
+**==> picture [409 x 146] intentionally omitted <==**
+
+We can estimate the expectation using similar technique as in Lemma D.1. First, given _s_ = _√d_ and _∥δ_ _**S** ∥≤_ max � _δ, δ_[2][�] = _C_ ~~�~~ _nd_[(since] _[ n]_[ = Θ(] _[d]_[ log][5] _[ d]_[)][), we upper bound the operator norm of][∆][�][:] 
+
+**==> picture [220 x 39] intentionally omitted <==**
+
+Now upper bound all matrices by operator norm and combine all terms with the same degree of _δ_ _**S**_ : 
+
+**==> picture [360 x 31] intentionally omitted <==**
+
+55 
+
+**==> picture [331 x 29] intentionally omitted <==**
+
+**==> picture [354 x 79] intentionally omitted <==**
+
+Now upper bound the operator norm of the error. Suppose _**u**_ := arg max _**u**_ : _∥_ _**u** ∥_ =1 
+
+When _∥_ ∆[�] _∥≥ s_ where _s ≥[C][′] n[k]_[2] _[d]_ , there exists some constant _C_ 1 _>_ 0 s.t. 
+
+**==> picture [186 x 19] intentionally omitted <==**
+
+Therefore, when _∥_ ∆[�] _∥≥ s_ , _∥δ_ _**S** ∥≥_ min _{[s] C_[1] 1 _[/] k_[2] _[,][s]_[1] _[/] C_[(] 1 _[k] k_[+2)] _}_ . Like Lemma D.1, applying the tail bound _s_[1] _[/]_[(] _[k]_[+2)] ~~_[√]_~~ _n s_[1] _[/]_[(2] _[k]_[+4)] ~~_[√]_~~ _n_ ~~_√_~~ _sn s_[1] _[/]_[4] ~~_[√]_~~ _n_ (18) with _s[′] ≤_ min � _C_ 2 _k , C_ 3 ~~_√_~~ _k , C_ 4 _k[, C]_[5] ~~_√_~~ _k_ � where _C_ 2 _, C_ 3 _, C_ 4 _, C_ 5 are some constant, we have the error term for the tail expectation 
+
+**==> picture [402 x 88] intentionally omitted <==**
+
+Finally, the absolute value of the trace should be upper bounded by 
+
+**==> picture [212 x 31] intentionally omitted <==**
+
+The next lemma deals with the prediction error. 
+
+**Lemma D.6.** _Suppose_ _**S**_ = _n_ 1 � _ni_ =1 _**[x]**[i]_ _**[x]** i[⊤][where]_ _**[x]**[i][∼N]_[(] **[0]** _[d][,]_ **[ Σ]**[)] _[,][and][the][covariance][matrix] satisfies η[δ][≤][λ]_[min][(] **[Σ]**[)] _[ ≤][λ]_[max][(] **[Σ]**[)] _[ ≤]_[2] _[−] η[δ] for some constant δ >_ 0 _. Assume n_ = Θ( _d_ log[5] _d_ ) _, k_ = _O_ (log _d_ ) _, η_ = Θ(1) _∈_ (0 _._ 1 _,_ 0 _._ 9) _. Denote that_ _**A**_ := _**V**_[�] + _η_ _**I** ,_ _**B**_ := _**W**_[�] _−_ _**I** , ∥_ _**A** ∥op, ∥_ _**B** ∥op ≤_ Θ( _d[−][c]_ ) _. Then for any i < k,_ 
+
+**==> picture [332 x 26] intentionally omitted <==**
+
+_Proof._ We will adopt a similar method as we did throughout Lemma D.1 to Lemma D.4. First, we expand the left hand side loss: 
+
+**==> picture [330 x 95] intentionally omitted <==**
+
+56 
+
+The second equation is due to _**w** i_ = ( _**I** −_ ( _**I** − η_ _**S**_ ) _[i]_ ), and we arranged to stress the error terms. The third line is because E[ _**w**[∗]_ _**w**[∗⊤]_ ] = _**I** ._ The last line is _∥· ∥F ≤ √d∥·∥op_ . 
+
+Now we expand each term of the expression within the operator norm into _**A** ,_ _**B** ,_ _**I** ,_ and _**S**_ : 
+
+**==> picture [194 x 13] intentionally omitted <==**
+
+� _**V S**_ � _**W**_ + _η_ _**S**_ = _**ASB** − η_ _**SB**_ + _**AS** ,_ _**V**_[�] + _η_ _**I**_ = _**A** ._ 
+
+Therefore the formula becomes (consider each term separately) 
+
+**==> picture [245 x 59] intentionally omitted <==**
+
+We still denote _δ_ _**S**_ = _**S** −_ **Σ** . We first consider when the concentration holds, a.k.a _∥δ_ _**S** ∥≤ C_ ~~�~~ _nd_[.] Since _∥_ _**A** ∥, ∥_ _**B** ∥≤ O_ ( _d[−][c]_ ), their error are dominated by _C_ � _nd_[. We reduce this case to the previous] Lemma D.5. Therefore we can upper bound the expression by 
+
+**==> picture [292 x 38] intentionally omitted <==**
+
+(1 _−δ_ )[2] _[i]_ That means this part of the expectation is upper bounded by _d ·_[9] 4[(1] _[ −][δ]_[)][2] _[i][ ·][ O]_[(] _[d][−]_[2] _[c]_[) =] _[ O]_ � _d[−]_[2] _[c]_[+1] � Then we estimate the tail expectation. We first upper bound the above formula by _∥δ_ _**S** ∥_ : 
+
+**==> picture [376 x 39] intentionally omitted <==**
+
+Use the same argument as in Lemma D.1 to calculate the integral of tail bound, the tail expectation (1 _−δ_ )[2] _[i]_ can also be upper bounded by _O_ � _d[−]_[2] _[c]_[+1] �. Combine those two part and we finish the proof. 
+
+D.3 THE FORM OF EXPECTATION 
+
+**==> picture [396 x 61] intentionally omitted <==**
+
+_Proof._ We notice that by changing the basis to _{_ _**u** s}[d] s_ =1[,] 
+
+**==> picture [375 x 20] intentionally omitted <==**
+
+ˆ Definethe basis, the covariance matrix of _**x** i_ = _**U**[⊤]_ _**x** i_ . Since gaussian is isotropic, we have _**x**_ ˆ _i_ should also be the same: E[ ˆ _**x** i_ ] = _**U**[⊤]_ E[ _**x** i_ ] = **0** . After we change 
+
+**==> picture [132 x 13] intentionally omitted <==**
+
+Therefore _**x**_ ˆ _i_ has the same distribution as _**x** i_ and we have 
+
+**==> picture [358 x 19] intentionally omitted <==**
+
+57 
+
+Subsequently, we only need to consider the expectation of _**Se** s_ _**e**[⊤] s_ _**[S]**[k]_ _**[e]**[t]_ _**[e]**[⊤] t_ _**[S]**[k][′]_[.][Decompose] _**[ x]**[i]_[into] the sum of basis vectors and we get _**x** i_ =[�] _[d] j_ =1 _[x][ij]_ _**[e]**[j][.]_ 
+
+Plug in the decomposition into the expectation and we have 
+
+**==> picture [368 x 225] intentionally omitted <==**
+
+Note that _**e**[⊤] a_ _**[e]**[b]_[=][0][only][when] _[a]_[=] _[b]_[,][so] _**[e]**[⊤] a_ _**[e]**[s]_ _**[e]**[⊤] s_ _**[e]**[b]_[=][0][only][when] _[a]_[=] _[b]_[=] _[s]_[.][Therefore,][we] only need to consider the case where _j_ 2 _q−_ 1 = _j_ 2 _q_ for any _q ∈_ [1 _, k_ + _k[′]_ ]. By symmetry, we know E� _**Se** s_ _**e**[⊤] s_ _**[S]**[k]_ _**[e]**[t]_ _**[e]**[⊤] t_ _**[S]**[k][′]_[�] is a diagonal matrix, so we have _j_ 0 = _j_ 2( _k_ + _k′_ )+1. We denote 
+
+**==> picture [273 x 15] intentionally omitted <==**
+
+to be one of the standard basis in R _[d][×][d]_ space. It is a non-zero matrix when _j_ 1 = _s_ and _jk_ +1 = _t_ . By the analysis above, we have 
+
+**==> picture [406 x 27] intentionally omitted <==**
+
+Let _P_ (2 _k_ + 2) be the set of all distinct ways of partitioning _{i_ 0 _j_ 0 _, i_ 0 _j_ 1 _· · · , ik_ + _k′jk_ + _k′, ik_ + _k′j_ 0 _}_ into _k_ + 1 unordered pairs _p_ = (( _p_ 1 _, p_ 2) _, · · · ,_ ( _p_ 2 _k_ +1 _, p_ 2 _k_ +2)). From Isserlis’ theorem, we have 
+
+**==> picture [284 x 33] intentionally omitted <==**
+
+Plug it in the expectation and we have 
+
+**==> picture [375 x 73] intentionally omitted <==**
+
+To make sure the term in the summation is non-zero, _p_ 2 _q−_ 1 = _p_ 2 _q_ should hold for any 1 _≤ q ≤ k_ +1. Now consider the graph _Gp_ and _Gp[′]_[with vertices] _[ {]_[0] _[,]_[ 1] _[,][ · · ·][, k]_[ +] _[ k][′][}]_[.][If] _[ i][u]_ 1 _[j][v]_ 1[is paired with] _[ i][u]_ 2 _[j][v]_ 2[,] then we put an edge between _u_ 1 and _u_ 2 into _Gp_ and put an edge between _v_ 1 and _v_ 2 into _Gp[′]_[, which] means _iu_ 1 = _iu_ 2 and _jv_ 1 = _jv_ 2. Therefore, for a cycle _C_ = ( _u_ 1 _, u_ 2 _, · · · , ur_ ) in _Gp_ or _Gp[′]_[, we have] _iu_ 1 = _iu_ 2 = _· · ·_ = _iur_ or _ju_ 1 = _ju_ 2 = _· · ·_ = _jur_ . Note that we have _n_ or _d_ choices for the value of the circle. Here we use C( _·_ ) to denote the set of circles in the graph and use _|_ C( _·_ ) _|_ to denote the number of circles in the graph. Let _c[∗]_ be the cycle in _Gp[′]_[which includes the vertex] _[ j]_[0][.] 
+
+58 
+
+**Case 1:** _s_ = _t_ **.** For the partition _p_ where _j_ 1 _∈ c[∗]_ and _jk_ +1 _∈ c_ = _c[∗]_ , there is only one choice _′_ for _c_ and _c[∗]_ to take. So the term in the summation should be _n[|]_[ C(] _[G][p]_[)] _[|] d[|]_[ C(] _[G] p_[)] _[|−]_[2] _**e** s_ _**e**[⊤] s_[.][Simi-] larly, for the partition _p_ where _jk_ +1 _∈ c[∗]_ and _j_ 1 _∈ c_ = _c[∗]_ , the term in the summation should be _′ n[|]_[ C(] _[G][p]_[)] _[|] d[|]_[ C(] _[G] p_[)] _[|−]_[2] _**e** t_ _**e**[⊤] t_[.][For the partition] _[ p]_[ where] _[ j]_[1] _[∈][c][′]_[=] _[c][∗]_[and] _[ j][k]_[+1] _[∈][c][′′]_[=] _[c][∗]_[, there is only] one choice for _c[′]_ and _c[′′]_ to take. Therefore, the expectation should be 
+
+**==> picture [345 x 142] intentionally omitted <==**
+
+Recall Equation (19), we prove that 
+
+**==> picture [228 x 18] intentionally omitted <==**
+
+**Case 2:** _s_ = _t_ **.** For the partition _p_ where _j_ 1 _, jk_ +1 _∈ c[∗]_ , there is only one choice for _c[∗]_ to take. So _′_ the term in the summation should be _n[|]_[ C(] _[G][p]_[)] _[|] d[|]_[ C(] _[G] p_[)] _[|−]_[1] _**e** s_ _**e**[⊤] s_[. For the partition] _[ p]_[ where] _[ j]_[1] _[∈][c][∗]_[and] _jk_ +1 _∈ c ̸_ = _c[∗]_ , there is only one choice for _c_ and _c[∗]_ to take. So the term in the summation should be _′ n[|]_[ C(] _[G][p]_[)] _[|] d[|]_[ C(] _[G] p_[)] _[|−]_[2] _**e** s_ _**e**[⊤] s_[.][Similarly, for the partition] _[ p]_[ where] _[ j][k]_[+1] _[∈][c][∗]_[and] _[ j]_[1] _[∈][c]_[=] _[c][∗]_[, the term] _′_ in the summation should be _n[|]_[ C(] _[G][p]_[)] _[|] d[|]_[ C(] _[G] p_[)] _[|−]_[2] _**e** s_ _**e**[⊤] s_[.][For][the][partition] _[p]_[where] _[j]_[1] _[∈][c][′]_[=] _[c][∗]_[and] _jk_ +1 _∈ c[′′]_ = _c[∗]_ , there is only one choice for _c[′]_ and _c[′′]_ to take. Therefore, the expectation should be 
+
+**==> picture [347 x 154] intentionally omitted <==**
+
+Recall Equation (19), we prove that 
+
+**==> picture [182 x 19] intentionally omitted <==**
+
+Hence, the proof is complete. 
+
+_n_ **Lemma D.8.** _Suppose_ _**S**_ = _n_[1] � _i_ =1 _**[x]**[i]_ _**[x]** i[⊤][, then the expectation is in the following form for any][ k][:]_ E _**S**_ **Λ** _**S**[k]_ **Γ** _**S**[k][′]_[�] = _β_ 1 **ΛΓ** + _β_ 2 tr( **Λ** ) **Γ** + _β_ 3 tr( **Γ** ) **Λ** + _β_ 4 tr( **Λ** ) tr( **Γ** ) _**I**_ + _β_ 5 tr( **ΛΓ** ) _**I** ._ � _where_ **Λ** =[�] _[d] j_ =1 _[λ]_ **[Λ]** _j_ _**[u]**[j]_ _**[u]**[⊤] j[,]_ **[ Γ]**[ =][ �] _[d] j_ =1 _[λ]_ **[Γ]** _j_ _**[u]**[j]_ _**[u]**[⊤] j[.]_ 
+
+59 
+
+_Proof._ By lemma D.7, we have: 
+
+**==> picture [314 x 55] intentionally omitted <==**
+
+The first term here can be expand into the following form: 
+
+**==> picture [178 x 32] intentionally omitted <==**
+
+**==> picture [317 x 11] intentionally omitted <==**
+
+Meanwhile, the second term is directly _α_ 4 **ΛΓ** + _α_ 5 tr( **ΛΓ** ) _**I** ._ We pick _β_ 2 = _α_ 1 _, β_ 3 = _α_ 2 _, β_ 4 = _α_ 3 _, β_ 1 = _α_ 4 _− α_ 1 _− α_ 2 _, β_ 5 = _α_ 5 _− α_ 3, and we complete the proof. 
+
+60 
+
+## E EXPERIMENTAL DETAILS 
+
+For all our experiments, we use pytorch Paszke et al. (2019) and models are trained on an NVIDIA RTX A6000. Each experiment takes about 1 hour. 
+
+**Setup** In all our experiments, we choose _d_ = 10, _n_ = 20 and _η_ = 0 _._ 4. The architecture is 
+
+**==> picture [223 x 24] intentionally omitted <==**
+
+and data is drawn from the distribution in Equation (1). The batch size _B_ is 1000 and the learning rate _α_ is 0 _._ 001. The total time is _τ_ = 750 iterations. In the first experiment, _k_ is chosen as 20 while _k_ = 10 _,_ 20 _,_ 30 _,_ 40 in the second experiment. The baseline (evaluation loss of transformers without CoT) is given by Corollary 3.1 where _η[∗]_ = _n_ + _nd_ +1[:] 
+
+**==> picture [212 x 26] intentionally omitted <==**
+
+**In-distribution Generalization** We empirically verify the evaluation loss gap between transformers with and without CoT shown by Theorem 3.1 and Theorem 3.2. Our experiments in Figure 2 demonstrate that the evaluation loss of transformers with CoT converges to near zero even when _k_ = 10. See Section 5 for details. 
+
+**Out-of-distribution Generalization** In addition, we empirically verify the OOD generalization result shown by Theorem 4.2. We sample 10 different covariance matrices from the distribution which complies to 
+
+**==> picture [144 x 24] intentionally omitted <==**
+
+where _η_ = 0 _._ 4 and _η_ = 0 _._ 4. 10 experiments are taken to show the generality of our results for each set of experiment. Our experiment in Figure 3 exhibits that the OOD loss of transformers with CoT converges to near zero when _k_ = 10 _,_ 20 _,_ 30 _,_ 40 as the training loss/in-distribution loss converges to zero. The final loss also drops when the number of reasoning steps increases. 
+
+**==> picture [238 x 148] intentionally omitted <==**
+
+**----- Start of picture text -----**<br>
+5 k=10<br>k=20<br>4 k=30<br>k=40<br>3<br>2<br>1<br>0<br>0 50 100 150 200 250 300 350<br>iteration<br>OOD Loss<br>**----- End of picture text -----**<br>
+
+
+Figure 3: **OOD Generalization:** We plot the OOD loss _L_[Eval] **Σ** when _n_ = 20, _d_ = 10. Each set of experiments sampled 10 different **Σ** . The mean results are presented as line charts, with variance represented by shaded areas. As shown, OOD loss will converge to near zero. 
+
+Given all experiments above, we conclude that transformers with CoT can converge to our construction (Theorem 4.1), surpass those without CoT (Corollary 3.1, Theorem 3.2) and generalize well to unseen data (Theorem 4.2). 
+
+61

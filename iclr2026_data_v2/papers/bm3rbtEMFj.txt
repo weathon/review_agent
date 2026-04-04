@@ -1,0 +1,4091 @@
+# ELMUR: EXTERNAL LAYER MEMORY WITH UP## DATE/REWRITE FOR LONG-HORIZON RL PROBLEMS
+
+
+**Egor Cherepanov** [1] _[,]_ [2] **, Alexey K. Kovalev** [1] _[,]_ [2] **, Aleksandr I. Panov** [1] _[,]_ [2]
+
+1AXXX, 2MIRIAI
+cherepanov@axxx.tech
+
+
+ABSTRACT
+Real-world robotic agents must act under partial observability and long horizons,
+where key cues may appear long before they affect decision making. However,
+most modern approaches rely solely on instantaneous information, without incorporating insights from the past. Standard recurrent or transformer models struggle
+with retaining and leveraging long-term dependencies: context windows truncate
+history, while naive memory extensions fail under scale and sparsity. We propose
+**ELMUR** ( **E** xternal **L** ayer **M** emory with **U** pdate/ **R** ewrite), a transformer architecture with structured external memory. Each layer maintains memory embeddings,
+interacts with them via bidirectional cross-attention, and updates them through an
+**L** east **R** ecently **U** sed **(LRU)** memory module using replacement or convex blending. ELMUR extends effective horizons up to 100,000 times beyond the attention
+window and achieves a 100% success rate on a synthetic T-Maze task with corridors up to one million steps. In POPGym, it outperforms baselines on more than
+half of the tasks. On MIKASA-Robo sparse-reward manipulation tasks with visual observations, it nearly doubles the performance of strong baselines, achieving
+the best success rate on 21 out of 23 tasks and improving the aggregate success
+rate across all tasks by about 70% over the previous best baseline. These results
+demonstrate that structured, layer-local external memory offers a simple and scalable approach to decision making under partial observability. Code and project
+page: **[https://elmur-paper.github.io/](https://elmur-paper.github.io/)** .
+
+
+1 INTRODUCTION
+
+
+Imagine a robot cooking pasta: it stirs once, adds salt, and later adds salt again, repeating until the
+dish is inedible. The issue is simple: the robot cannot remember if salt was already added, since
+it dissolves invisibly, nor how much is still in the container. This is a case of partial observability
+
+- the world rarely reveals all necessary information. Humans recall past actions effortlessly, but
+robots lack this ability. Though effective in controlled settings (Kim et al., 2024; Black et al.,
+2024), robots often fail under partial observability (Fang et al., 2025; Cherepanov et al., 2026a).
+Standard recurrent (Ouyang et al., 2025) and transformer (Gao et al., 2025) models rely heavily
+on short observation windows, making them brittle under long-horizon dependencies and sparse
+signals. This motivates hybrid memory-augmented transformers that explicitly store and retrieve
+past information (Fang et al., 2025; Shi et al., 2025).
+
+
+Within the Reinforcement Learning (RL) paradigm (Sutton et al., 1998), long-horizon challenges
+are compounded by sample inefficiency and sparse rewards: real-world exploration is costly and
+unsafe, while simulation suffers from a sim-to-real gap (Zhang et al., 2025a). Offline RL mitigates
+this with pre-collected datasets (Levine et al., 2020), but usually assumes dense feedback; reshaping
+sparse rewards demands domain knowledge and risks bias (Wu et al., 2021; Mu et al., 2024; Wang
+et al., 2025a). In robotics, delayed feedback makes long-term memory indispensable. A complementary paradigm is Imitation Learning (IL) (Zare et al., 2024), whose simplest form, Behavior
+Cloning (BC), reduces control to supervised learning on demonstration pairs. Building on this idea,
+recent Vision-Language-Action (VLA) models (Brohan et al., 2022; Team et al., 2024; Kim et al.,
+2024) scale with large datasets, yet their fixed transformer windows (Fang et al., 2025; Shi et al.,
+2025) leave three challenges: (i) extending context without quadratic cost, (ii) mitigating truncationinduced forgetting, and (iii) retaining task-relevant information across long horizons. This motivates
+our central question: **how** **can** **we** **equip** **IL** **policies** **with** **efficient** **long-term** **memory** **to** **solve**
+**long-horizon, partially observable tasks?**
+
+
+1
+
+
+```
+transformer
+  decoder
+
+```
+
+
+```
+Memory Track
+
+```
+
+```
+Info transformer partclassic Layer MemoryExternal memory rewriting token-memoryinteraction
+
+```
+
+
+Figure 1: **ELMUR overview.** Each transformer layer is augmented with an external memory track
+that runs in parallel with the token track. Tokens attend to memory through a mem2tok block, while
+memory embeddings are updated from tokens through a tok2mem block. LRU block selectively
+rewrites memory via replacement or convex blending, ensuring bounded yet persistent storage. This
+design enables token-memory interaction and long-horizon recall beyond the attention window.
+
+
+To address these challenges, we introduce **ELMUR** ( **E** xternal **L** ayer **M** emory with **U** pdate/ **R** ewrite),
+a transformer architecture in which every layer is augmented with a structured external layer memory (Figure 1). ELMUR combines three ingredients: (i) layer-local memory embeddings that
+persist across segments, (ii) bidirectional token–memory read/write interaction via cross-attention
+(mem2tok, tok2mem), and (iii) a Least Recently Used (LRU) update block that refreshes memory
+through replacement or convex blending, balancing stability and adaptability. This design enables
+efficient segment-level recurrence and extends retention of task-relevant information up to 100 _,_ 000 _×_
+beyond the native attention window, making long-horizon decision making feasible in robotics.
+
+
+We evaluate ELMUR on the synthetic T-Maze (Ni et al., 2023), the robotic MIKASARobo (Cherepanov et al., 2026a) suite of sparse-reward manipulation tasks with visual observations,
+and the diverse POPGym benchmark (Morad et al., 2023a), all designed to test memory under partial observability. ELMUR achieves a 100% success rate on T-Maze corridors up to one million
+steps, nearly doubles baseline performance on MIKASA-Robo, ranking first on 21 of 23 tasks and
+increasing the overall success rate across the suite by roughly 70% relative to the strongest prior
+method, and obtains the top score on 24 of 48 POPGym tasks. These results demonstrate that ELMUR enables stable retention of task-relevant information, efficient long-term storage, and robust
+generalization under partial observability.
+
+
+Our contributions are twofold:
+
+
+    - **We propose ELMUR**, a transformer with layer-local external memory, bidirectional tokenmemory cross-attention, and an LRU-based update rule rewriting memory via replacement
+or convex blending (Section 3). This design extends memory horizons far beyond the
+attention window.
+
+
+    - **We** **empirically** **demonstrate** that ELMUR achieves robust generalization under partial
+observability across synthetic, robotic, and puzzle/control tasks (Section 5).
+
+
+    - **We provide a theoretical analysis** of LRU-based memory dynamics, establishing formal
+bounds on forgetting, retention horizons, and stability of memory embeddings (Section 4).
+
+
+2 BACKGROUND
+
+
+Many real-world robotic and control tasks involve partial observability, where the agent cannot
+directly access the true system state (Lauri et al., 2022). This setting is modeled as a partially
+observable Markov decision process (POMDP), defined as the tuple ( _S, A, O, T, Z, R, ρ_ 0 _, γ_ ) _,_ with
+latent state space _S_, action space _A_, and observation space _O_ . The transition dynamics are _T_ :
+_S_ _×_ _A_ _→_ ∆( _S_ ), where _T_ ( _s_ _[′]_ _|_ _s, a_ ) is the probability of reaching _s_ _[′]_ after taking _a_ in _s_ . The
+observation function _Z_ : _S × A →_ ∆( _O_ ) specifies _Z_ ( _o | s_ _[′]_ _, a_ ), the probability of observing _o_ after
+
+
+2
+
+
+**Algorithm** **1** ELMUR layer update for segment _i_ at layer _ℓ_ . Inputs are token hidden states _h_ _∈_
+R _[B][×][L][×][d]_, memory ( _m, p_ ) with _m ∈_ R _[B][×][M]_ _[×][d]_, anchors _p ∈_ Z _[B][×][M]_, and absolute times _t_ . Outputs
+are updated hidden states _h_ _[′]_ and memory ( _m_ _[′]_ _, p_ _[′]_ ).
+
+
+_// Input embedding (before first layer) – to encode observation_
+1: _h ←_ ObsEncoder( _o_ )
+
+_// Token track – sequence processing and enrichment with information from memory_
+2: _h ←_ AddNorm� _h_ + SelfAttention( _h_ ; causal mask)�
+
+3: _B_ rel _←_ RelativeBias( _t, p_ ) _// bias for adding temporal dependence_
+4: _h ←_ AddNorm� _h_ + CrossAttention( _Q_ = _h,_ _K_ = _m,_ _V_ = _m_ ; noncausal mask _,_ _B_ read)�
+
+5: _h ←_ AddNorm� _h_ + TokenFFN( _h_ )�
+
+6: _h_ _[′]_ _←_ _h_
+
+_// Output decoding (after final layer)_
+7: _a ←_ ActionHead( _h_ _[′]_ ) _// map to action distribution and compute loss_
+_// Memory track_
+8: _B_ rel _←_ RelativeBias( _p, t_ ) _// reversed bias for write_
+9: _u ←_ AddNorm� _m_ + CrossAttention( _Q_ = _m,_ _K_ = _h_ _[′]_ _,_ _V_ = _h_ _[′]_ ; noncausal mask _,_ _B_ write)�
+
+10: _u_ ˜ _←_ AddNorm� _u_ + MemoryFFN( _u_ )�
+
+11: ( _m_ _[′]_ _, p_ _[′]_ ) _←_ LRU( _m,_ _p,_ _u,_ ˜ _t_ )
+12: **return** _h_ _[′]_ _,_ ( _m_ _[′]_ _, p_ _[′]_ )
+
+
+reaching _s_ _[′]_ under action _a_ . The reward function is _R_ : _S_ _× A_ _→_ R, the initial state distribution is
+_ρ_ 0 _∈_ ∆( _S_ ), and _γ_ _∈_ (0 _,_ 1) is the discount factor.
+
+
+In the special case of full observability, the observation equals the state ( _ot_ _≡_ _st_ ), reducing the
+POMDP to a Markov decision process (MDP). The optimal policy then depends only on the current
+state, _π_ _[∗]_ ( _at_ _| st_ ). In the general POMDP case, however, the agent cannot access _st_ directly and must
+rely on the full history _ht_ = ( _o_ 0 _, a_ 0 _, o_ 1 _, a_ 1 _, . . ., ot_ ), yielding _π_ _[∗]_ ( _at_ _|_ _ht_ ). A practical alternative
+is to approximate history with a learned memory state _mt_ = _fϕ_ ( _mt−_ 1 _, ot, at−_ 1) _,_ _πθ_ : _M_ _→_
+∆( _A_ ) _,_ _πθ_ ( _at_ _| mt_ ), where _fϕ_ is a, for instance, recurrent (Hausknecht & Stone, 2015) or memoryaugmented (Parisotto et al., 2020) update rule.
+
+
+3 METHOD
+
+
+Many real-world decision-making tasks
+involve long horizons and partial observability, where key information may
+appear thousands of steps before it is
+needed. Standard transformers are limited by a fixed attention window: naive
+extensions of context length increase cost
+quadratically, while truncation causes forgetting. Efficient long-term reasoning
+thus requires a mechanism to store and
+retrieve task-relevant information across
+long trajectories. To this end, we propose **ELMUR** (External Layer Memory
+with Update/Rewrite), a GPT-style (Radford et al., 2019) transformer decoder augmented with structured external memory.
+Unlike architectures that simply cache hidden states (Dai et al., 2019), ELMUR
+equips each layer with its own memory
+track and explicit read–write operations,
+enabling persistent storage and selective
+updating via the LRU memory management.
+
+
+Figure 2: **LRU-based** **memory** **management** **in** **EL-**
+**MUR.** Each layer maintains _M_ memory slots, initialized with random vectors (green). As new segments
+arrive, tokens write updates into empty slots (purple)
+by full replacement. Once all slots are filled, the least
+recently used slot is refreshed via a convex update with
+parameter _λ_ that blends new content with the previous
+memory (grey). Anchors below each row indicate the
+timestep of the most recent update. This scheme ensures bounded capacity while preserving long-horizon
+information.
+
+
+3
+
+
+**ELMUR Overview.** As shown in Figure 1, each ELMUR layer has two coupled tracks. The **token**
+**track** processes observations into actions, while the **memory track** persists across segments. Both
+interact through cross-attention: memory shapes token representations, and tokens update memory. Interaction occurs via mem2tok (read) and tok2mem (write) blocks, modulated by relative
+biases from token timesteps and memory anchors. Trajectories are split into segments, processed
+sequentially for efficiency and recurrent memory updates. At each segment’s end, hidden states update memory, carried forward. LRU memory management fills empty slots first, then refreshes the
+least used slot by convexly blending old and new information. This bidirectional design provides
+temporally grounded memory for long-horizon decisions. Algorithm 1 summarizes the method.
+
+
+**Segment-Level** **Recurrence.** Feeding infinitely long sequences into a transformer is infeasible,
+since self-attention scales quadratically. Splitting into shorter segments reduces cost but complicates
+information flow. Segment-level recurrence addresses this by treating the transformer as an RNN
+over segments, passing memory from one segment to the next (Dai et al., 2019; Bulatov et al., 2022).
+In ELMUR, this memory is realized as layer-local external memory instead of cached activations.
+Each layer maintains memory that is read within the current segment and updated before moving to
+the next. Formally, with context length _L_, a trajectory of length _T_ is partitioned into _S_ = _⌈T/L⌉_
+segments _Si_ : **h** [(] _[i]_ [)] = TokenTrack� _Si,_ sg( **m** _[i][−]_ [1] )�, where **h** [(] _[i]_ [)] _∈_ R _[B][×][L][×][d]_ denotes the hidden states
+of tokens in segment _i_, computed from the segment _Si_ and the detached memory sg( **m** _[i][−]_ [1] ) carried
+from the previous segment.
+
+
+**Token** **Track.** Within each segment _Si_, observations are encoded into token embeddings **x** _∈_
+R _[L][×][d]_, where _d_ is the model dimension. The token track models local dependencies and augments
+them with information from memory **m** _∈_ R _[M]_ _[×][d]_ . Standard transformers rely on fixed-window selfattention, whereas ELMUR also retrieves information from its external memory via cross-attention,
+allowing predictions to depend not only on recent tokens but on distant past events stored in memory.
+Self-attention, equipped with relative positional encodings (Dai et al., 2019) and a causal mask,
+models local dependencies within the segment:
+
+**h** sa = AddNorm( **x** + SelfAttention( **x** )) _,_ (1)
+where AddNorm( _·_ ) denotes a residual connection followed by normalization. Long-term context is
+handled by external memory. Tokens’ hidden states **h** sa then query memory via the mem2tok:
+**h** mem2tok = AddNorm( **h** sa + CrossAttention( _Q_ = **h** sa _,_ _K,_ _V_ = **m** )) _._ (2)
+
+Here memory embeddings act as keys and values, with a non-causal mask and a relative bias reflecting token-memory temporal distance. Finally, representations are refined with a feed-forward
+network (FFN). In contrast to popular Decision Transformer (DT) Chen et al. (2021) that employ
+a standard MLP-based FFN, we adopt a DeepSeek-MoE FFN (Dai et al., 2024), following the design of DeepSeek-V3 (Liu et al., 2024a). Mixture-of-Experts (MoE) improve parameter efficiency
+and specialization by routing tokens to a sparse set of experts, scaling capacity without proportional
+compute. This design enables expressive updates while keeping inference efficient:
+
+**h** = AddNorm( **h** mem2tok + FFN( **h** mem2tok)) _._ (3)
+
+The resulting hidden states are then passed to the action head, applied only after the final layer.
+Training is supervised, minimizing the error between predicted and demonstrated actions, using
+mean squared loss for continuous spaces and cross-entropy for discrete ones. The loss backpropagates through the entire network to update model parameters.
+
+
+**Memory Track.** Reading from memory is not enough for long-horizon reasoning; the model must
+also write new information. Without an explicit write path, past events would be forgotten or cached
+inefficiently. The memory track addresses this by allowing tokens to update persistent memory,
+retaining salient information while overwriting less useful content.
+
+
+Each layer maintains its own memory embeddings **m** _∈_ R _[M]_ _[×][d]_ . After processing a segment, token
+states update memory through the tok2mem block:
+
+**m** tok2mem = AddNorm( **m** + CrossAttention( _Q_ = **m** _,_ _K, V_ = **h** )) _._ (4)
+
+As in mem2tok, a non-causal mask is applied, but the relative bias is reversed to favor temporally
+aligned memory embeddings. Updates are then refined by a FFN with residual connection:
+
+**m** new = AddNorm( **m** tok2mem + FFN( **m** tok2mem)) _,_ (5)
+
+
+4
+
+
+analogous to the token track, the FFN uses a DeepSeek-MoE block instead of a standard MLP.
+
+
+Finally, **m** new is merged with existing slots via the LRU rule (Figure 2, Figure 2), filling empty
+slots first and otherwise refreshing the least recently used by convex blending. This keeps memory
+bounded yet consistently updated with relevant information.
+
+
+**Relative** **Bias.** When memory extends across multiple segments, absolute indices become ambiguous: the same token position may correspond to different points in the trajectory. To resolve
+this, the model requires a signal that encodes relative distances between tokens and memory entries.
+ELMUR provides this signal through a learned relative bias added to cross-attention logits:
+
+Attn( **Q** _,_ **K** ) = **[QK]** ~~_√_~~ _[⊤]_ + **B** rel _._ (6)
+
+_dh_
+
+
+The bias **B** rel is derived from pairwise offsets ∆= _±_ ( _t−p_ ) between a token position _t_ and a memory
+anchor _p_ (the last update time of a slot). Offsets are clamped to [ _−D_ max+1 _, D_ max _−_ 1], where _D_ max
+is the maximum relative distance supported by the bias table. These clamped values are shifted into
+
+[0 _,_ 2 _D_ max _−_ 2] and used to index a learnable embedding table **E** _∈_ R [(2] _[D]_ [max] _[−]_ [1)] _[×][H]_, where _H_ is the
+number of attention heads. Each offset corresponds to a per-head embedding **E** [∆] _∈_ R _[H]_, and
+stacking these indices produces
+
+
+**B** rel =
+
+
+- **E** [ _t −_ _p_ ] _∈_ R _[B][×][H][×][L][×][M]_ _,_ mem2tok (read)
+
+(7)
+**E** [ _p −_ _t_ ] _∈_ R _[B][×][H][×][M]_ _[×][L]_ _,_ tok2mem (write) _._
+
+
+In the read path (mem2tok), the bias
+prioritizes retrieval from temporally close
+memory embeddings while keeping distant ones accessible. In the write path
+(tok2mem), offsets are reversed, guiding updates toward memory embeddings
+aligned with the writing tokens. Both directions draw from the same embedding
+table **E** but can learn distinct patterns.
+By relying on relative rather than absolute
+timestep, ELMUR ensures consistent and
+coherent memory interactions across long
+horizons.
+
+
+_// Choose write index_
+5: empty _←_ ( _p <_ 0)
+6: **if** any empty **then**
+7: _j_ _[⋆]_ _←_ first(empty) _// use first empty slot_
+8: _α ←_ 1 _// full replacement_
+9: **else**
+10: _j_ _[⋆]_ _←_ arg min _j pj_ _// least recently used_
+11: _α ←_ _λ_ _// convex blend_
+12: **end if**
+
+
+**Algorithm** **2** LRU update for layer memory. Inputs:
+current memory ( _m, p_ ) (may be uninitialized), candidate updates _u_ ˜, newest segment time _t_, blend _λ_ _∈_ [0 _,_ 1],
+init scale _σ_ . Output: updated memory ( _m_ _[′]_ _, p_ _[′]_ ).
+
+
+_// Initialization (cold start)_
+1: **if** _m, p_ uninitialized **then**
+2: _m ←N_ (0 _, σ_ [2] _I_ ) _// initial slots_
+3: _p ←−_ **1** _// sentinel anchors_
+4: **end if**
+
+
+**Memory** **Management** **with** **LRU.** Ex
+9:
+
+ternal memory must remain bounded:
+
+10:
+
+storing every token is infeasible, while
+
+11:
+
+naive truncation risks catastrophic forget
+12:
+
+ting. A principled policy is needed to decide which slots to refresh or preserve as
+
+13:
+
+new content arrives. ELMUR employs a
+
+14:
+
+Least Recently Used (LRU) block (Figure 2, Figure 2) that manages _M_ slots per 15:
+layer, each holding a vector and an anchor 16:
+(its last update time). By always updating
+the least recently used slot, the block ensures bounded capacity while retaining context.
+
+
+_// Integrate_
+13: blend _←_ _α_ ˜ _uj⋆_ + (1 _−_ _α_ ) _mj⋆_
+14: _m_ _[′]_ _←_ _m_ ; _m_ _[′]_ _j_ _[⋆]_ _[←]_ [blend]
+15: _p_ _[′]_ _←_ _p_ ; _p_ _[′]_ _j_ _[⋆]_ _[←]_ _[t]_
+16: **return** ( _m_ _[′]_ _, p_ _[′]_ )
+
+
+At training start, **initialization** samples embeddings from _N_ (0 _, σ_ [2] _I_ ) and marks them empty. While
+empty slots remain, **full replacement** inserts new vectors directly. Once all slots are filled, the block
+switches to **convex update**, blending the oldest slot with new content:
+**m** _j_ _[i]_ [+1] = _λ_ **m** _[i]_ new [+1] [+ (1] _[ −]_ _[λ]_ [)] **[ m]** _j_ _[i]_ _[,]_ (8)
+
+where _λ_ _∈_ [0 _,_ 1] is a tunable hyperparameter that controls the balance between overwriting and
+retention. By adjusting _λ_, one can choose whether memory favors fast plasticity (larger _λ_ ) or longterm stability (smaller _λ_ ). This policy uses memory capacity fully before overwriting and applies
+gradual blending thereafter, enabling bounded yet persistent long-horizon memory.
+
+
+5
+
+
+By combining token-level processing with an explicit memory system, ELMUR offers three core
+advantages: (i) relative-bias cross-attention provides temporally grounded read-write access, (ii) the
+LRU-based manager ensures bounded capacity while remaining adaptive, and (iii) segment-level
+recurrence enables scalable learning over long horizons.
+
+
+4 THEORETICAL ANALYSIS
+
+
+Understanding the retention properties of ELMUR’s memory is crucial for characterizing its ability
+to handle long-horizon dependencies. In this section, we analyze how information is preserved or
+forgotten under the LRU update mechanism. We derive bounds on memory retention and effective
+horizons, and connect these results to the empirical behaviors observed in long-horizon tasks.
+
+
+At the core of ELMUR’s memory module is the convex update rule with blending factor _λ ∈_ [0 _,_ 1].
+Let fix a memory embedding _j_ at segment index _i_ . If this memory embedding is selected for update
+with new content **m** new _[i]_ [+1][,] [the] [rule] [(][Figure] [2][)] [is] **[m]** _[ i]_ _j_ [+1] = _λ_ **m** new _[i]_ [+1] [+] [(1] _[−]_ _[λ]_ [)] **[ m]** _[ i]_ _j_ [,] [while] [all] [other]
+memory embeddings _n_ = _j_ remain unchanged: **m** _n_ _[i]_ [+1] = **m** _n_ _[i]_ [.] [If] [the] [memory] [embedding] [was]
+empty, the update reduces to full replacement **m** _j_ _[i]_ [+1] = **m** new _[i]_ [+1][.]
+
+
+**Proposition 1 (Exponential Forgetting).** After _k_ overwrites of memory embedding _j_, the content
+evolves as
+
+
+**m** _j_ _[i]_ [+] _[k]_ = (1 _−_ _λ_ ) _[k]_ **m** _j_ _[i]_ [+]
+
+
+_k_
+
+- _λ_ (1 _−_ _λ_ ) _[k][−][u]_ **m** new _[i]_ [+] _[u][,]_ (9)
+
+_u_ =1
+
+
+where **m** new _[i]_ [+] _[u]_ [denotes the write at update] _[ i]_ [+] _[u]_ [ (see Appendix][ A.1][ for a full derivation). Consequently,]
+the coefficient of the initial content **m** _j_ _[i]_ [after] _[k]_ [overwrites] [is] [(1] _[ −]_ _[λ]_ [)] _[k]_ [,] [and] [the] [contribution] [of] [the]
+write performed _τ_ updates earlier is _λ_ (1 _−_ _λ_ ) _[τ]_ _[−]_ [1] .
+
+
+**Corollary (Half-life).** The number of overwrites _k_ 0 _._ 5 after which the contribution of **m** _j_ _[i]_ [halves is]
+
+
+_k_ 0 _._ 5 = [ln(1] _[/]_ [2)]
+
+
+[ln(1] _[/]_ [2)] ln 2 ln 2
+
+ln(1 _−λ_ ) [=] _−_ ln(1 _−λ_ ) _[∼]_ _λ_
+
+
+_k_ 0 _._ 5 = ln(1 _−λ_ ) [=] _−_ ln(1 _−λ_ ) _[∼]_ _λ_ _[,]_ as _λ →_ 0 _._ Thus, smaller _λ_ extends retention, while larger _λ_
+
+accelerates overwriting.
+
+
+**Effective horizon in environment steps.** Since only one memory embedding is updated per segment of length _L_, a memory is overwritten once every _M_ segments in expectation. The _effective_
+_retention_ _horizon_ _H_ ( _ϵ_ ) thus quantifies how many environment steps a stored contribution remains
+influential before its weight decays below a negligible threshold _ϵ_, i.e., _H_ ( _ϵ_ ) = _M_ _· L ·_ ln(1ln( _−ϵ_ ) _λ_ ) _[.]_ [ In]
+particular, the half-life in environment steps is _H_ 0 _._ 5 = _M ·_ _L_ _·_ _−_ ln(1ln 2 _−λ_ ) _[∼]_ _[M][ ·]_ _[L]_ _[·]_ [ln 2] _λ_ _[,]_ as _λ →_ 0 _._
+
+
+Unlike models where all memory is updated at every step (like RNNs), ELMUR’s LRU policy
+ensures (i) memory embeddings not selected for overwrite retain their content exactly until replacement, and (ii) once selected, their contributions decay exponentially with rate _λ_ . This produces a
+retention horizon that scales linearly with both the number of memory embeddings _M_ and the segment length _L_, providing a conservative lower bound. In practice, effective horizons are often much
+longer (Figure 3).
+
+
+**Proposition** **2** **(Memory** **Boundedness).** A natural question is whether repeated convex updates
+could cause memory values to grow without limit. We show that, under standard bounded-input
+assumptions, the norm of every memory embedding remains uniformly bounded throughout training
+and inference. Suppose that every new write is norm-bounded, _∥_ **m** new _[t]_ _[∥≤]_ _[C]_ [for] [some] [constant]
+_C_ _>_ 0, and the initial memory satisfies _∥_ **m** _j_ [0] _[∥≤]_ _[C]_ [.] [Then for all segments] _[ i]_ [ and slots] _[ j]_ [, it holds that]
+_∥_ **m** _j_ _[i][∥≤]_ _[C.]_ [ Since each update is a convex combination of the previous and a bounded new values,]
+the memory embedding always remains inside the closed ball of radius _C_ . This guarantees stability
+of activations even across arbitrarily long trajectories. See Appendix A.2 for the detailed proof.
+
+
+6
+
+
+5 EXPERIMENTS
+
+
+We evaluate ELMUR on synthetic (Ni et al., 2023) tasks, 48 POPGym puzzle/control tasks (Morad
+et al., 2023a), and robotic manipulation (Cherepanov et al., 2026a), all designed to test memory
+under partial observability. Our study is guided by the following research questions (RQs):
+
+
+1. **RQ1** : Does ELMUR retain information across horizons far beyond its attention window?
+
+
+2. **RQ2** : How well does ELMUR generalize to shorter and longer sequences?
+
+
+3. **RQ3** : Is ELMUR effective on manipulation tasks with visual observations?
+
+
+4. **RQ4** : How consistent is ELMUR across puzzles, control, and robotics tasks?
+
+
+5. **RQ5** : What is the impact of components of ELMUR on its memorization?
+
+
+5.1 BENCHMARKS AND BASELINES
+
+
+We evaluate ELMUR on three benchmarks designed to isolate memory (Appendix, Figure 7). The
+**T-Maze** requires recalling an early cue after traversing a long corridor with sparse rewards. The
+**MIKASA-Robo** suite provides robotic tabletop tasks with RGB observations and continuous actions, including color-recall (RememberColor) and delayed reversal (TakeItBack). Finally,
+**POPGym** offers a diverse collection of partially observable puzzles and control environments for
+evaluating general memory use. Detailed descriptions can be found in Appendix A.4.
+
+
+We compare against baselines spanning sequence models and offline RL for long-horizon tasks.
+We include transformers - Decision Transformer (DT) (Chen et al., 2021) and Recurrent Action
+Transformer with Memory (RATE) (Cherepanov et al., 2026c) — as representative architectures for
+memory-augmented policy learning. We also evaluate DMamba (Ota, 2024), a state-space model
+with efficient recurrence, as a recent alternative to attention. For IL/offline RL, we use Behavior
+Cloning (BC) via MLP as the simplest supervised baseline, Conservative Q-Learning (CQL) (Kumar
+et al., 2020) as a strong offline RL method, and Diffusion Policy (DP) (Chi et al., 2023) as a stateof-the-art generative policy. Together, these span transformer, state-space, and offline/generative
+approaches, providing a competitive reference set for evaluation. We do not compare with online
+RL baselines, since they assume interactive data collection with exploration, yielding incomparable
+training budgets. Likewise, we omit real-robot experiments to avoid confounds such as latency,
+resets, and safety constraints, focusing instead on controlled, reproducible studies.
+
+
+**Experimental** **Setup.** For **RQ1**, we test T-Maze cue retention by training with short contexts
+( _L_ =10, _S_ =3) and evaluating on corridors up to 10 [6] steps. For **RQ2**, we train on 7 T-Maze
+lengths distributions (9–900) and validate on 11 shorter/longer ones (9–9600) to assess interpolation and extrapolation. For **RQ3**, we use MIKASA-Robo tasks, training by imitation from expert demonstrations and evaluating zero-shot. For **RQ4**, we compare T-Maze, POPGym-48, and
+MIKASA-Robo to test robustness across synthetic puzzles, control, and robotics. For **RQ5**, we
+ablate RememberColor3-v0, varying _M_, _λ_, _σ_, and ( _L, S_ ), and remove relative bias, LRU, and
+per-layer memory to measure component contributions.
+
+
+**Evaluation Protocol.** Unless stated otherwise, each model is trained with three (four for T-Maze)
+independent runs (different initialization). For each run we evaluate on 100 episodes with distinct
+environment seeds and compute the run mean. We then report the grand mean _±_ standard error of
+the mean (SEM) across the three run means. For per-task leaderboards (e.g., POPGym-48) we apply
+this protocol per task and aggregate as specified in the benchmark.
+
+
+**Training Details and Hardware.** All models are trained from scratch under the same data budgets
+and preprocessing. We use segment-level recurrence with detached memory between segments;
+losses are applied on each processed segment. Optimizers, schedulers, and hyperparameters follow
+the task-specific configuration table in Appendix, Table 7. All experiments were run on a single
+NVIDIA A100 (80 GB) per job. Training/evaluation code paths, seeds, and environment versions
+are fixed across methods for reproducibility.
+
+
+7
+
+
+|0.8<br>↑<br>Rate<br>0.6<br>Success<br>0.4<br>0.2|Col2|Col3|Col4|Col5|Col6|Col7|Col8|Col9|Col10|Col11|Col12|Col13|Col14|Col15|Col16|Col17|Col18|Col19|Col20|Col21|Col22|Col23|Col24|Col25|Col26|Col27|
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+|0.2<br>0.4<br>0.6<br>0.8<br><br>Success Rate ↑|||||||||||||||||||||||||||
+|0.2<br>0.4<br>0.6<br>0.8<br><br>Success Rate ↑|||||||||||||||||||||||||||
+|0.2<br>0.4<br>0.6<br>0.8<br><br>Success Rate ↑|||||||||||||||||||||||||||
+|0.2<br>0.4<br>0.6<br>0.8<br><br>Success Rate ↑|||||||||||||||||||||||||||
+|0.2<br>0.4<br>0.6<br>0.8<br><br>Success Rate ↑|||||||||||||||||||||||||||
+|0.2<br>0.4<br>0.6<br>0.8<br><br>Success Rate ↑|||<br>|~~L~~<br>RAT|~~UR (Ours~~<br>E||~~RMT~~<br>TrXL|~~D~~<br>D|amb|a|||~~BC-~~<br>BC-|~~STM~~<br>MLP||||<br>|<br>|~~rsistent~~<br>ndom a|~~ ge~~<br> ent|~~ t~~|||||
+
+
+0.010 ~~[1]~~ 10 ~~[2]~~ 10 ~~[3]~~ 10 ~~[4]~~ 10 ~~[5]~~ 10 ~~[6]~~
+
+T-Maze Inference Corridor Length
+
+
+Figure 3: Success rate on the T-Maze task as a function of inference corridor length. ELMUR
+achieves a **100% success rate** up to corridor lengths of **one million steps** . In this figure, the context
+length is _L_ = 10 with _S_ = 3 segments; thus **ELMUR carries information across horizons 100,000**
+**times longer than its context window** .
+
+
+5.2 RESULTS
+
+
+We evaluate ELMUR on T-Maze, MIKASARobo, and POPGym, addressing RQ1–RQ5 on
+retention, generalization, manipulation, crossdomain robustness, and ablations.
+
+
+**RQ1:** **Retention** **beyond** **attention.** To test
+memory retention, we train on T-Maze corridors of length _T_ while restricting the context
+size to _L < T_, forcing the model to solve tasks
+where the cue must be preserved beyond the native attention span. At validation, we evaluate
+on much longer
+
+
+|00±0.00|1.00±0.|001.00±0.00|1.00±0.00|1.00±0.00|1.00±0.00|1.00±0.00|1.00±0.00|1.00±0.00|1.00±0.00|1.00±0.0|
+|---|---|---|---|---|---|---|---|---|---|---|
+|**00±0.00**|**1.00±0.**|**00**<br>**1.00±0.00**|**1.00±0.00**|**1.00±0.00**|**1.00±0.00**|**1.00±0.00**|**1.00±0.00**<br>|**1.00±0.00**|**1.00±0.00**|**1.00±0.0**|
+|**00±0.00**|**1.00±0.**|**00**<br>**1.00±0.00**|**1.00±0.00**|**1.00±0.00**|**1.00±0.00**|**1.00±0.00**|**1.00±0.00**<br>|**1.00±0.00**|**1.00±0.00**|**1.00±0.0**|
+|**00±0.00**|**1.00±0.**|**00**<br>**1.00±0.00**|**1.00±0.00**|**1.00±0.00**|**1.00±0.00**|**1.00±0.00**|**1.00±0.00**<br>|**1.00±0.00**|**1.00±0.00**|**1.00±0.0**|
+|**00±0.00**|**1.00±0.**|**00**<br>**1.00±0.00**|**1.00±0.00**|**1.00±0.00**|**1.00±0.00**|**1.00±0.00**|**1.00±0.00**<br>|**1.00±0.00**|**1.00±0.00**|**1.00±0.0**|
+|**00±0.00**|**1.00±0.**|**00**<br>**1.00±0.00**|**1.00±0.00**|**1.00±0.00**|**1.00±0.00**|**1.00±0.00**|**1.00±0.00**<br>|**1.00±0.00**|**1.00±0.00**|**1.00±0.0**|
+|**00±0.00**|**1.00±0.**|**00**<br>**1.00±0.00**|**1.00±0.00**|**1.00±0.00**|**1.00±0.00**|**1.00±0.00**|**1.00±0.00**<br>|**1.00±0.00**|**1.00±0.00**|**1.00±0.0**|
+
+
+Figure 4: **Generalization** **of** **ELMUR** **across**
+**T-Maze** **lengths.** Each cell shows success rate
+(mean _±_ standard error) for training vs. validation lengths. ELMUR transfers perfectly: models
+trained on shorter sequences retain 100% success
+up to 9600 steps. Training lengths were split into
+three equal segments.
+
+
+9 30 90 150 300 600 900 1200 2400 4800 9600
+
+**Validation Sequence Length**
+
+
+corridors — up to one million steps — without
+
+three equal segments.
+
+increasing _L_, thereby probing memory retention far beyond the training horizon. ELMUR
+achieves 100% success even under this extreme extrapolation (Figure 3), implying retention horizons nearly 100 _,_ 000 _×_ larger than the attention window ( _L_ =10 with only _S_ =3 segments used during
+training).
+
+
+**RQ2: Generalization across sequence lengths.** We train ELMUR on T-Maze with short contexts
+(3 to 300 steps) and then evaluate across 11 validation lengths ranging from 9 to 9600 steps. The
+model transfers seamlessly in both directions: it solves tasks shorter than those seen during training
+without overfitting to a fixed scale, and it also extrapolates to sequences orders of magnitude longer.
+As shown in Figure 4, ELMUR maintains 100% success across all train/test pairs, demonstrating
+robust generalization beyond the training horizon.
+
+
+**RQ3:** **Manipulation** **with** **visual** **observations.** Results in Table 1 indicate that ELMUR achieves higher success rates than other baselines on the MIKASA-Robo tasks. In
+
+
+Table 1: Success rates (mean _±_ standard error) on MIKASA-Robo tasks, averaged over 3 runs with
+100 evaluation seeds. ELMUR outperforms baselines, showing stronger memory in manipulation.
+See results for all 32 MIKASA-Robo tasks in Appendix, Table 8
+
+
+.
+
+**Task** **RATE** **DT** **BC-MLP** **CQL-MLP** **DP** **ELMUR (ours)**
+
+
+8
+
+
+TakeItBack-v0, it obtains Table 2: Aggregated returns on 48 POPGym tasks.
+0 _._ 78 _±_ 0 _._ 03 compared to 0 _._ 42 _±_ 0 _._ 24
+
+performance remains stable as the number
+of distractors increases. Overall, ELMUR
+shows more reliable performance under visual interference in manipulation tasks with pixel inputs.
+
+
+Table 2: Aggregated returns on 48 POPGym tasks.
+
+
+**RATE** **DT** **Rand.** **BC-MLP** **BC-LSTM** **ELMUR**
+
+
+**RQ4:** **Robustness** **across** **domains.** Across synthetic (T-Maze), control/puzzle (48 POPGym),
+and robotic (MIKASA-Robo) benchmarks, ELMUR consistently outperforms baselines, generalizing across diverse modalities, actions, and rewards. On POPGym, it achieves the best overall score
+(10.4), with the largest gains on memory puzzles (1.2 vs. 0.45 for RATE; DT and BC-LSTM score
+below zero), showing the importance of explicit memory for long-term dependencies. On reactive tasks, ELMUR stays competitive without sacrificing puzzle performance, ranking first on 24 of
+48 tasks (full results in Table 5). Figure 5 shows consistent per-task gains over DT, especially on
+memory-intensive puzzles. Improved retention comes with little overhead: on T-Maze, ELMUR has
+2.1M parameters (vs. 1.7M for RATE, 1.8M for DT) yet runs faster per step (6 _._ 8 _±_ 0 _._ 5 ms) than RATE
+(7 _._ 2 _±_ 0 _._ 3 ms) and DT (10 _._ 7 _±_ 0 _._ 1 ms). Efficiency stems from (i) a short attention window with longterm context handled by bounded memory, so complexity depends on memory size not sequence
+length, and (ii) MoE feed-forward layers, which raise capacity without proportional compute. Thus,
+explicit memory is both effective and efficient for long-horizon RL.
+
+
+Table 3: Ablation study results.
+
+
+**RQ5:** **Ablation** **Study.** We ablate ELMUR’s memory design Table 3: Ablation study results.
+on RememberColor3-v0 (Figure 6, Table 3). Unless noted,
+
+**Setting** **Score**
+
+models use _per-layer_ memory, relative-bias token–memory crossattention, and LRU-based updates; _shared_ _memory_ denotes em- Baseline ELMUR 1 _._ 00 _±_ 0 _._ 00
+
+Shared memory 0 _._ 45 _±_ 0 _._ 03
+
+beddings shared across layers. In Figure 6 (b–d) the LRU factor No rel. bias 0 _._ 95 _±_ 0 _._ 05
+is fixed to _λ_ = 0 to isolate other effects. Results average three No LRU 0 _._ 43 _±_ 0 _._ 22
+runs of 20 episodes. Performance scales with memory size _M_ : No rel. bias; No LRU 0 _._ 22 _±_ 0 _._ 11
+when _M_ _≥_ _N_ (the number of segments needed), success is near- MoE _→_ MLP 1 _._ 00 _±_ 0 _._ 00
+perfect; when _M_ _<_ _N_, accuracy drops sharply, especially near
+_M_ _≈_ _N_ (Figure 6, c–d). Intermediate blending ( _λ_ _≈_ 0 _._ 4–0 _._ 6) is unstable (Figure 6, a), while
+larger initialization _σ_ mitigates collapse (Figure 6, b). Finer recurrence (shorter segments, larger _N_ )
+stresses capacity unless _M_ scales accordingly. Component ablations confirm that capacity and LRU
+dominate. Removing LRU leaves stale entries, and removing both LRU and relative bias prevents
+effective retrieval. Relative bias gives modest gains, while shared memory degrades performance,
+underscoring the value of layer-local design. Finally, replacing MoE-FFN with MLP-FFN preserves
+accuracy while improving computational efficiency.
+
+
+To confirm that memory mechanisms do not harm performance on fully observable MDPs, we evaluated all models on the simple control task CartPole-v1 (Towers et al., 2024). ELMUR, RATE,
+RMT, TrXL, BC-MLP, BC-LSTM, and CQL all achieved the maximum return of 500 _±_ 0, showing
+that adding memory does not break performance in standard MDP settings. See additional results on
+more competitive D4RL benchmark (Todorov et al., 2012) with MDP tasks in the Appendix, Section A.5, Table 4.
+
+
+**Setting** **Score**
+
+
+Baseline ELMUR 1 _._ 00 _±_ 0 _._ 00
+Shared memory 0 _._ 45 _±_ 0 _._ 03
+No rel. bias 0 _._ 95 _±_ 0 _._ 05
+No LRU 0 _._ 43 _±_ 0 _._ 22
+No rel. bias; No LRU 0 _._ 22 _±_ 0 _._ 11
+MoE _→_ MLP 1 _._ 00 _±_ 0 _._ 00
+
+
+100%
+
+10%
+
+1%
+
+
+0%
+
+
+-1%
+
+-10%
+
+
+Figure 5: ELMUR compared to DT on all 48 POPGym tasks. Each model was trained with three
+independent runs, validated over 100 episodes each. Bars show the mean performance with 95%
+confidence intervals computed over these three means. ELMUR achieves consistent improvements
+over DT, with the largest gains on memory-intensive puzzles.
+
+
+9
+
+
+|Col1|Col2|Col3|Col4|Col5|Col6|Col7|
+|---|---|---|---|---|---|---|
+|||||||M < N<br>M > N|
+||||||||
+
+
+60-1 30-2 20-3 15-4 12-5 10-6 6-10
+Segment Length - Number of Segments
+
+
+|Col1|Col2|Col3|Col4|Col5|Col6|Col7|Col8|M < N|
+|---|---|---|---|---|---|---|---|---|
+||||||||<br> <br>|<br>M > N<br>M=N|
+
+
+1 2 3 4 16 32 128 256 512
+Number of Memory Embeddings
+
+
+1.0
+
+
+0.5
+
+
+0.0
+
+**a)**
+
+
+|Col1|Col2|Col3|Col4|Col5|
+|---|---|---|---|---|
+|||||M < N<br>M > N|
+||||||
+
+
+0.00 0.25 0.50 0.75 1.00
+LRU Blending Factor ( _λ_ )
+
+
+|Col1|Col2|Col3|Col4|Col5|Col6|
+|---|---|---|---|---|---|
+||||||M < N<br>M > N|
+|||||||
+
+
+0.00 0.25 0.50 0.75 1.00
+Memory Initialization Value ( _σ_ )
+
+
+1.0
+
+
+0.5
+
+
+0.0
+
+**d)**
+
+
+1.0
+
+
+0.5
+
+
+0.0
+
+**b)**
+
+
+1.0
+
+
+0.5
+
+
+0.0
+
+**c)**
+
+
+Figure 6: **Ablations** **of** **ELMUR’s** **memory** **hyperparameters** **on** **RememberColor3-v0.** (a)
+LRU blending factor ( _λ_ ), (b) memory embeddings initialization ( _σ_ ), (c) number of memory embeddings ( _M_ ), and (d) segment configuration ( _L −_ _S_ ). Curves compare settings where the number of
+memory embeddings is smaller than the required segments to solve the task ( _M_ _< N_ ) versus larger
+( _M_ _>_ _N_ ). Results show that sufficient memory capacity ( _M_ _≥_ _N_ ) yields stable success, while
+under-provisioned memory ( _M_ _< N_ ) is highly sensitive to _λ_, _σ_, and segmentation.
+
+
+6 RELATED WORK
+
+
+**Manipulation.** Transformer approaches to robotic manipulation can be broadly categorized by
+their underlying design principles. _Perception-centric visuomotor transformers_ focus on multi-view
+or 3D perception to improve near fully observable control (Shridhar et al., 2023; Goyal et al., 2024).
+_Sequence/skill_ _modeling_ distills demonstrations into reusable action chunks but remains bottlenecked by limited context (Huang et al., 2023; Kobayashi et al., 2025). _Planning/value-augmented_
+_transformers_ integrate transformers with planning or value learning for closed-loop control under
+finite context (Zhang et al., 2025b; Hu et al., 2025). _Alternative backbones_ adopt state-space models
+or diffusion for efficiency, but without persistent memory (Liu et al., 2024b; Chi et al., 2023). _Scal-_
+_ing_ _to_ _VLA_ broadens task coverage with language but still suffers from fixed horizons, with some
+remedies via summarization, feature banks, or hierarchy (Zitkovich et al., 2023; Team et al., 2024;
+Kim et al., 2024; Fang et al., 2025; Shi et al., 2025). ELMUR differs by training as a standard IL
+transformer while removing the context bottleneck through structured, layer-local external memory.
+
+
+**Memory.** Efforts to extend sequence models to long horizons take several forms. _Implicit recur-_
+_rence_ _and_ _state-space_ _models_ compress history in hidden dynamics, offering efficiency but little
+control over forgetting (Beck et al., 2024; Gu & Dao, 2023). _External_ _memory_ _with_ _learned_ _ac-_
+_cess_ provides addressable storage but complicates optimization (Graves et al., 2016; Santoro et al.,
+2016). _Transformer_ _context_ _extension_ retains history via caches or auxiliary slots but keeps memory peripheral (Dai et al., 2019). In RL, memory is often implemented through _episodic_ _buffers_
+for salient events (Lampinen et al., 2021) or _sequence-model adaptations_ that retrofit transformers
+for recurrence (Parisotto et al., 2020; Cherepanov et al., 2026b). Architectures vary in integration:
+RATE (Cherepanov et al., 2026c) concatenates memory with tokens, Memformer (Wu et al., 2020)
+uses global slots, and Block-Recurrent Transformers (Hutchins et al., 2022) recycle hidden states.
+ELMUR instead gives each layer an external memory with dedicated mem2tok/tok2mem crossattention and LRU updates, yielding bounded memory for long-horizon tasks (Appendix A.6).
+
+
+7 CONCLUSION
+
+
+We introduced ELMUR, a transformer architecture with layer-local external memory, bidirectional
+token–memory cross-attention, and an LRU-based update rule. Unlike prior methods, ELMUR
+integrates explicit memory into every layer, achieving retention horizons up to 100 _,_ 000 _×_ beyond
+the native attention window. Our analysis establishes formal guarantees on half-life and boundedness under convex blending, and experiments on T-Maze, 48 POPGym tasks, and MIKASA-Robo
+demonstrate consistent improvements over strong baselines, underscoring reliable credit assignment
+under partial observability. We envision ELMUR as a simple and extensible framework for longhorizon decision-making with scalable memory in sequential control.
+
+
+REPRODUCIBILITY STATEMENT
+
+
+We have taken several measures to ensure the reproducibility of our results. **Model details:** A complete description of the ELMUR architecture, including pseudocode for the layer update and the
+LRU-based memory module, is provided in Section 3, Algorithm 1, and Figure 2. **Theoretical re-**
+
+
+10
+
+
+**sults:** All assumptions and formal proofs of our propositions on exponential forgetting, half-life, and
+boundedness are presented in Section 4 and detailed in Appendix A.1–A.2. **Experimental** **setup:**
+Benchmarks, training procedures, and evaluation protocols are described in Section 5, with additional specifications (hyperparameters, dataset preprocessing, random seeds, and hardware setup)
+reported in Appendix 7 and A.4. **Baselines:** All baselines are implemented from open-source libraries or faithfully re-implemented with hyperparameters matched to their original publications,
+as described in Section 5 and Appendix A.6. **Code and data:** An anonymous repository with the
+implementation of ELMUR, training scripts, and configuration files is provided in the supplementary material. Together, these resources enable full replication of both our theoretical analysis and
+empirical findings.
+
+
+REFERENCES
+
+
+Herv´e Abdi and Lynne J Williams. Principal component analysis. _Wiley interdisciplinary reviews:_
+_computational statistics_, 2(4):433–459, 2010.
+
+
+Amir Hosein Khas Ahmadi. _Memory-based graph networks_ . University of Toronto (Canada), 2020.
+
+
+Maximilian Beck, Korbinian P¨oppel, Markus Spanring, Andreas Auer, Oleksandra Prudnikova,
+Michael Kopp, G¨unter Klambauer, Johannes Brandstetter, and Sepp Hochreiter. xlstm: Extended
+long short-term memory. _Advances_ _in_ _Neural_ _Information_ _Processing_ _Systems_, 37:107547–
+107603, 2024.
+
+
+Ali Behrouz, Peilin Zhong, and Vahab Mirrokni. Titans: Learning to memorize at test time. _arXiv_
+_preprint arXiv:2501.00663_, 2024.
+
+
+Johan Bjorck, Fernando Casta˜neda, Nikita Cherniadev, Xingye Da, Runyu Ding, Linxi Fan,
+Yu Fang, Dieter Fox, Fengyuan Hu, Spencer Huang, et al. Gr00t n1: An open foundation model
+for generalist humanoid robots. _arXiv preprint arXiv:2503.14734_, 2025.
+
+
+Kevin Black, Noah Brown, Danny Driess, Adnan Esmail, Michael Equi, Chelsea Finn, Niccolo
+Fusai, Lachy Groom, Karol Hausman, Brian Ichter, et al. _pi_ ~~0~~ : A vision-language-action flow
+model for general robot control. _arXiv preprint arXiv:2410.24164_, 2024.
+
+
+Anthony Brohan, Noah Brown, Justice Carbajal, Yevgen Chebotar, Joseph Dabis, Chelsea Finn,
+Keerthana Gopalakrishnan, Karol Hausman, Alex Herzog, Jasmine Hsu, et al. Rt-1: Robotics
+transformer for real-world control at scale. _arXiv preprint arXiv:2212.06817_, 2022.
+
+
+Aydar Bulatov, Yury Kuratov, and Mikhail Burtsev. Recurrent memory transformer. _Advances_ _in_
+_Neural Information Processing Systems_, 35:11079–11091, 2022.
+
+
+Yevgen Chebotar, Quan Vuong, Karol Hausman, Fei Xia, Yao Lu, Alex Irpan, Aviral Kumar, Tianhe
+Yu, Alexander Herzog, Karl Pertsch, et al. Q-transformer: Scalable offline reinforcement learning
+via autoregressive q-functions. In _Conference on Robot Learning_, pp. 3909–3928. PMLR, 2023.
+
+
+Lili Chen, Kevin Lu, Aravind Rajeswaran, Kimin Lee, Aditya Grover, Misha Laskin, Pieter Abbeel,
+Aravind Srinivas, and Igor Mordatch. Decision transformer: Reinforcement learning via sequence
+modeling. _Advances in neural information processing systems_, 34:15084–15097, 2021.
+
+
+Egor Cherepanov, Nikita Kachaev, Alexey Kovalev, and Aleksandr Panov. Memory, benchmark &
+robots: A benchmark for solving complex tasks with reinforcement learning. In _The Fourteenth_
+_International Conference on Learning Representations_ [, 2026a. URL https://openreview.](https://openreview.net/forum?id=9cLPurIZMj)
+[net/forum?id=9cLPurIZMj.](https://openreview.net/forum?id=9cLPurIZMj)
+
+
+Egor Cherepanov, Nikita Kachaev, Artem Zholus, Alexey Kovalev, and Aleksandr Panov. Unraveling the complexity of memory in RL agents: an approach for classification and evaluation. In _The_ _Fourteenth_ _International_ _Conference_ _on_ _Learning_ _Representations_, 2026b. URL
+[https://openreview.net/forum?id=lJKdOYFF5W.](https://openreview.net/forum?id=lJKdOYFF5W)
+
+
+Egor Cherepanov, Aleksei Staroverov, Alexey Kovalev, and Aleksandr Panov. Recurrent action
+transformer with memory. In _The Fourteenth International Conference on Learning Representa-_
+_tions_, 2026c. [URL https://openreview.net/forum?id=kByN4v0M3e.](https://openreview.net/forum?id=kByN4v0M3e)
+
+
+11
+
+
+Cheng Chi, Zhenjia Xu, Siyuan Feng, Eric Cousineau, Yilun Du, Benjamin Burchfiel, Russ Tedrake,
+and Shuran Song. Diffusion policy: Visuomotor policy learning via action diffusion. _The Inter-_
+_national Journal of Robotics Research_, pp. 02783649241273668, 2023.
+
+
+Damai Dai, Chengqi Deng, Chenggang Zhao, RX Xu, Huazuo Gao, Deli Chen, Jiashi Li, Wangding
+Zeng, Xingkai Yu, Yu Wu, et al. Deepseekmoe: Towards ultimate expert specialization in mixtureof-experts language models. _arXiv preprint arXiv:2401.06066_, 2024.
+
+
+Zihang Dai, Zhilin Yang, Yiming Yang, Jaime Carbonell, Quoc V Le, and Ruslan Salakhutdinov. Transformer-xl: Attentive language models beyond a fixed-length context. _arXiv_ _preprint_
+_arXiv:1901.02860_, 2019.
+
+
+Murtaza Dalal, Ajay Mandlekar, Caelan Garrett, Ankur Handa, Ruslan Salakhutdinov, and Dieter Fox. Imitating task and motion planning with visuomotor transformers. _arXiv_ _preprint_
+_arXiv:2305.16309_, 2023.
+
+
+Siyu Ding, Junyuan Shang, Shuohuan Wang, Yu Sun, Hao Tian, Hua Wu, and Haifeng Wang. Erniedoc: A retrospective long-document modeling transformer. _arXiv_ _preprint_ _arXiv:2012.15688_,
+2020.
+
+
+Kevin Esslinger, Robert Platt, and Christopher Amato. Deep transformer q-networks for partially
+observable reinforcement learning. _arXiv preprint arXiv:2206.01078_, 2022.
+
+
+Haoquan Fang, Markus Grotz, Wilbert Pumacay, Yi Ru Wang, Dieter Fox, Ranjay Krishna, and
+Jiafei Duan. Sam2act: Integrating visual foundation model with a memory architecture for robotic
+manipulation. _arXiv preprint arXiv:2501.18564_, 2025.
+
+
+Niklas Funk, Julen Urain, Joao Carvalho, Vignesh Prasad, Georgia Chalvatzaki, and Jan Peters.
+Actionflow: Equivariant, accurate, and efficient policies with spatially symmetric flow matching.
+_arXiv preprint arXiv:2409.04576_, 2024.
+
+
+Kai Gao, Fan Wang, Erica Aduh, Dylan Randle, and Jane Shi. Must: Multi-head skill transformer
+for long-horizon dexterous manipulation with skill progress. _arXiv_ _preprint_ _arXiv:2502.02753_,
+2025.
+
+
+Ankit Goyal, Jie Xu, Yijie Guo, Valts Blukis, Yu-Wei Chao, and Dieter Fox. Rvt: Robotic view
+transformer for 3d object manipulation. In _Conference on Robot Learning_, pp. 694–710. PMLR,
+2023.
+
+
+Ankit Goyal, Valts Blukis, Jie Xu, Yijie Guo, Yu-Wei Chao, and Dieter Fox. Rvt-2: Learning precise
+manipulation from few demonstrations. _arXiv preprint arXiv:2406.08545_, 2024.
+
+
+Alex Graves, Greg Wayne, and Ivo Danihelka. Neural turing machines. _arXiv_ _preprint_
+_arXiv:1410.5401_, 2014.
+
+
+Alex Graves, Greg Wayne, Malcolm Reynolds, Tim Harley, Ivo Danihelka, Agnieszka GrabskaBarwinska, Sergio Gomez Colmenarejo, Edward Grefenstette, Tiago Ramalho, John P. Agapiou,
+Adri`a Puigdom`enech Badia, Karl Moritz Hermann, Yori Zwols, Georg Ostrovski, Adam Cain,
+Helen King, Christopher Summerfield, Phil Blunsom, Koray Kavukcuoglu, and Demis Hassabis.
+Hybrid computing using a neural network with dynamic external memory. _Nature_, 538:471–476,
+2016. [URL https://api.semanticscholar.org/CorpusID:205251479.](https://api.semanticscholar.org/CorpusID:205251479)
+
+
+Jake Grigsby, Justin Sasek, Samyak Parajuli, Daniel Adebi, Amy Zhang, and Yuke Zhu. Amago-2:
+Breaking the multi-task barrier in meta-reinforcement learning with transformers. _Advances_ _in_
+_Neural Information Processing Systems_, 37:87473–87508, 2024.
+
+
+Albert Gu and Tri Dao. Mamba: Linear-time sequence modeling with selective state spaces. _arXiv_
+_preprint arXiv:2312.00752_, 2023.
+
+
+Albert Gu, Karan Goel, and Christopher R´e. Efficiently modeling long sequences with structured
+state spaces. _arXiv preprint arXiv:2111.00396_, 2021.
+
+
+ByungOk Han, Jaehong Kim, and Jinhyeok Jang. A dual process vla: Efficient robotic manipulation
+leveraging vlm. _arXiv preprint arXiv:2410.15549_, 2024.
+
+
+12
+
+
+Matthew J Hausknecht and Peter Stone. Deep recurrent q-learning for partially observable mdps. In
+_AAAI fall symposia_, volume 45, pp. 141, 2015.
+
+
+Sepp Hochreiter and J¨urgen Schmidhuber. Long short-term memory. _Neural Computation_, 9:1735–
+1780, 1997. [URL https://api.semanticscholar.org/CorpusID:1915014.](https://api.semanticscholar.org/CorpusID:1915014)
+
+
+Jiaheng Hu, Rose Hendrix, Ali Farhadi, Aniruddha Kembhavi, Roberto Mart´ın-Mart´ın, Peter Stone,
+Kuo-Hao Zeng, and Kiana Ehsani. Flare: Achieving masterful and adaptive robot policies
+with large-scale reinforcement learning fine-tuning. In _2025_ _IEEE_ _International_ _Conference_ _on_
+_Robotics and Automation (ICRA)_, pp. 3617–3624. IEEE, 2025.
+
+
+Xiaoyu Huang, Dhruv Batra, Akshara Rai, and Andrew Szot. Skill transformer: A monolithic policy
+for mobile manipulation. In _Proceedings of the IEEE/CVF International Conference on Computer_
+_Vision_, pp. 10852–10862, 2023.
+
+
+Chia-Yu Hung, Qi Sun, Pengfei Hong, Amir Zadeh, Chuan Li, U Tan, Navonil Majumder, Soujanya
+Poria, et al. Nora: A small open-sourced generalist vision language action model for embodied
+tasks. _arXiv preprint arXiv:2504.19854_, 2025.
+
+
+DeLesley Hutchins, Imanol Schlag, Yuhuai Wu, Ethan Dyer, and Behnam Neyshabur. Blockrecurrent transformers. _Advances_ _in_ _neural_ _information_ _processing_ _systems_, 35:33248–33261,
+2022.
+
+
+Physical Intelligence, Kevin Black, Noah Brown, James Darpinian, Karan Dhabalia, Danny Driess,
+Adnan Esmail, Michael Equi, Chelsea Finn, Niccolo Fusai, et al. _pi_ ~~_{_~~ 0 _._ 5 _}_ : a vision-languageaction model with open-world generalization. _arXiv preprint arXiv:2504.16054_, 2025.
+
+
+Michael Janner, Qiyang Li, and Sergey Levine. Offline reinforcement learning as one big sequence
+modeling problem. _Advances in neural information processing systems_, 34:1273–1286, 2021.
+
+
+Yunfan Jiang, Agrim Gupta, Zichen Zhang, Guanzhi Wang, Yongqiang Dou, Yanjun Chen, Li FeiFei, Anima Anandkumar, Yuke Zhu, and Linxi Fan. Vima: General robot manipulation with
+multimodal prompts. _arXiv preprint arXiv:2210.03094_, 2(3):6, 2022.
+
+
+Angelos Katharopoulos, Apoorv Vyas, Nikolaos Pappas, and Franc¸ois Fleuret. Transformers are
+rnns: Fast autoregressive transformers with linear attention. In _International conference on ma-_
+_chine learning_, pp. 5156–5165. PMLR, 2020.
+
+
+Moo Jin Kim, Karl Pertsch, Siddharth Karamcheti, Ted Xiao, Ashwin Balakrishna, Suraj Nair,
+Rafael Rafailov, Ethan Foster, Grace Lam, Pannag Sanketi, et al. Openvla: An open-source
+vision-language-action model. _arXiv preprint arXiv:2406.09246_, 2024.
+
+
+Moo Jin Kim, Chelsea Finn, and Percy Liang. Fine-tuning vision-language-action models: Optimizing speed and success. _arXiv preprint arXiv:2502.19645_, 2025.
+
+
+Masato Kobayashi, Thanpimon Buamanee, Yuki Uranishi, and Haruo Takemura. Ilbit: Imitation
+learning for robot using position and torque information based on bilateral control with transformer. _IEEJ Journal of Industry Applications_, 14(2):161–168, 2025.
+
+
+Aviral Kumar, Aurick Zhou, George Tucker, and Sergey Levine. Conservative q-learning for offline
+reinforcement learning. _Advances in neural information processing systems_, 33:1179–1191, 2020.
+
+
+Andrew Lampinen, Stephanie Chan, Andrea Banino, and Felix Hill. Towards mental time travel:
+a hierarchical memory for reinforcement learning agents. _Advances in Neural Information Pro-_
+_cessing Systems_, 34:28182–28195, 2021.
+
+
+Mikko Lauri, David Hsu, and Joni Pajarinen. Partially observable markov decision processes in
+robotics: A survey. _IEEE Transactions on Robotics_, 39(1):21–40, 2022.
+
+
+Hung Le, Kien Do, Dung Nguyen, Sunil Gupta, and Svetha Venkatesh. Stable hadamard
+memory: Revitalizing memory-augmented agents for reinforcement learning. _arXiv_ _preprint_
+_arXiv:2410.10132_, 2024.
+
+
+13
+
+
+Sergey Levine, Aviral Kumar, George Tucker, and Justin Fu. Offline reinforcement learning: Tutorial, review, and perspectives on open problems. _arXiv preprint arXiv:2005.01643_, 2020.
+
+
+Qixiu Li, Yaobo Liang, Zeyu Wang, Lin Luo, Xi Chen, Mozheng Liao, Fangyun Wei, Yu Deng,
+Sicheng Xu, Yizhong Zhang, et al. Cogact: A foundational vision-language-action model for
+synergizing cognition and action in robotic manipulation. _arXiv preprint arXiv:2411.19650_, 2024.
+
+
+Xinghang Li, Minghuan Liu, Hanbo Zhang, Cunjun Yu, Jie Xu, Hongtao Wu, Chilam Cheang,
+Ya Jing, Weinan Zhang, Huaping Liu, et al. Vision-language foundation models as effective robot
+imitators. _arXiv preprint arXiv:2311.01378_, 2023.
+
+
+Aixin Liu, Bei Feng, Bing Xue, Bingxuan Wang, Bochao Wu, Chengda Lu, Chenggang Zhao,
+Chengqi Deng, Chenyu Zhang, Chong Ruan, et al. Deepseek-v3 technical report. _arXiv preprint_
+_arXiv:2412.19437_, 2024a.
+
+
+Hao Liu, Matei Zaharia, and Pieter Abbeel. Ring attention with blockwise transformers for nearinfinite context. _arXiv preprint arXiv:2310.01889_, 2023.
+
+
+Jiaming Liu, Mengzhen Liu, Zhenyu Wang, Pengju An, Xiaoqi Li, Kaichen Zhou, Senqiao Yang,
+Renrui Zhang, Yandong Guo, and Shanghang Zhang. Robomamba: Efficient vision-languageaction model for robotic reasoning and manipulation. _Advances in Neural Information Processing_
+_Systems_, 37:40085–40110, 2024b.
+
+
+Jiaming Liu, Hao Chen, Pengju An, Zhuoyang Liu, Renrui Zhang, Chenyang Gu, Xiaoqi Li, Ziyu
+Guo, Sixiang Chen, Mengzhen Liu, Chengkai Hou, Mengdi Zhao, KC alex Zhou, Pheng-Ann
+Heng, and Shanghang Zhang. Hybridvla: Collaborative diffusion and autoregression in a unified
+vision-language-action model, 2025. [URL https://arxiv.org/abs/2503.10631.](https://arxiv.org/abs/2503.10631)
+
+
+Steven Morad, Ryan Kortvelesy, Matteo Bettini, Stephan Liwicki, and Amanda Prorok. POPGym:
+Benchmarking partially observable reinforcement learning. In _The_ _Eleventh_ _International_ _Con-_
+_ference_ _on_ _Learning_ _Representations_, 2023a. URL [https://openreview.net/forum?](https://openreview.net/forum?id=chDrutUTs0K)
+[id=chDrutUTs0K.](https://openreview.net/forum?id=chDrutUTs0K)
+
+
+Steven Morad, Ryan Kortvelesy, Stephan Liwicki, and Amanda Prorok. Reinforcement learning
+with fast and forgetful memory. _Advances in Neural Information Processing Systems_, 36:72008–
+72029, 2023b.
+
+
+Tongzhou Mu, Minghua Liu, and Hao Su. Drs: Learning reusable dense rewards for multistage tasks. _ArXiv_, abs/2404.16779, 2024. [URL https://api.semanticscholar.org/](https://api.semanticscholar.org/CorpusID:269362133)
+[CorpusID:269362133.](https://api.semanticscholar.org/CorpusID:269362133)
+
+
+Tianwei Ni, Michel Ma, Benjamin Eysenbach, and Pierre-Luc Bacon. When do transformers shine
+in rl? decoupling memory from credit assignment. _Advances in Neural Information Processing_
+_Systems_, 36:50429–50452, 2023.
+
+
+Toshihiro Ota. Decision mamba: Reinforcement learning via sequence modeling with selective state
+spaces. _arXiv preprint arXiv:2403.19925_, 2024.
+
+
+Zikai Ouyang, Kaijun Wang, Junwei Liu, Haibo Lu, and Wei Zhang. Scil: Stage-conditioned imitation learning for multi-stage manipulation. _IEEE Control Systems Letters_, 2025.
+
+
+Emilio Parisotto and Ruslan Salakhutdinov. Neural map: Structured memory for deep reinforcement
+learning. _arXiv preprint arXiv:1702.08360_, 2017.
+
+
+Emilio Parisotto, Francis Song, Jack Rae, Razvan Pascanu, Caglar Gulcehre, Siddhant Jayakumar,
+Max Jaderberg, Raphael Lopez Kaufman, Aidan Clark, Seb Noury, et al. Stabilizing transformers
+for reinforcement learning. In _International_ _conference_ _on_ _machine_ _learning_, pp. 7487–7498.
+PMLR, 2020.
+
+
+Bo Peng, Eric Alcaide, Quentin Anthony, Alon Albalak, Samuel Arcadinho, Stella Biderman,
+Huanqi Cao, Xin Cheng, Michael Chung, Matteo Grella, et al. Rwkv: Reinventing rnns for
+the transformer era. _arXiv preprint arXiv:2305.13048_, 2023.
+
+
+14
+
+
+Subhojeet Pramanik, Esraa Elelimy, Marlos C Machado, and Adam White. Agalite: Approximate
+gated linear transformers for online reinforcement learning. _arXiv_ _preprint_ _arXiv:2310.15719_,
+2023.
+
+
+Delin Qu, Haoming Song, Qizhi Chen, Yuanqi Yao, Xinyi Ye, Yan Ding, Zhigang Wang, JiaYuan
+Gu, Bin Zhao, Dong Wang, et al. Spatialvla: Exploring spatial representations for visuallanguage-action model. _arXiv preprint arXiv:2501.15830_, 2025.
+
+
+Alec Radford, Jeffrey Wu, Rewon Child, David Luan, Dario Amodei, Ilya Sutskever, et al. Language
+models are unsupervised multitask learners. _OpenAI blog_, 1(8):9, 2019.
+
+
+Jack W Rae, Anna Potapenko, Siddhant M Jayakumar, and Timothy P Lillicrap. Compressive
+transformers for long-range sequence modelling. _arXiv preprint arXiv:1911.05507_, 2019.
+
+
+Moritz Reuss, Hongyi Zhou, Marcel R¨uhle, Omer [¨] Erdinc¸ Ya˘gmurlu, Fabian Otto, and Rudolf Lioutikov. FLOWER: Democratizing generalist robot policies with efficient vision-language-action
+flow policies. In _7th_ _Robot_ _Learning_ _Workshop:_ _Towards_ _Robots_ _with_ _Human-Level_ _Abilities_,
+2025. [URL https://openreview.net/forum?id=ifo8oWSLSq.](https://openreview.net/forum?id=ifo8oWSLSq)
+
+
+Ivan Rodkin, Yuri Kuratov, Aydar Bulatov, and Mikhail Burtsev. Associative recurrent memory
+transformer. _arXiv preprint arXiv:2407.04841_, 2024.
+
+
+Adam Santoro, Sergey Bartunov, Matthew M. Botvinick, Daan Wierstra, and Timothy P. Lillicrap. Meta-learning with memory-augmented neural networks. In _International_ _Conference_
+_on Machine Learning_, 2016. [URL https://api.semanticscholar.org/CorpusID:](https://api.semanticscholar.org/CorpusID:6466088)
+[6466088.](https://api.semanticscholar.org/CorpusID:6466088)
+
+
+Hao Shi, Bin Xie, Yingfei Liu, Lin Sun, Fengrong Liu, Tiancai Wang, Erjin Zhou, Haoqiang Fan,
+Xiangyu Zhang, and Gao Huang. Memoryvla: Perceptual-cognitive memory in vision-languageaction models for robotic manipulation. _arXiv preprint arXiv:2508.19236_, 2025.
+
+
+Mohit Shridhar, Lucas Manuelli, and Dieter Fox. Perceiver-actor: A multi-task transformer for
+robotic manipulation. In _Conference on Robot Learning_, pp. 785–799. PMLR, 2023.
+
+
+Artyom Sorokin, Nazar Buzun, Leonid Pugachev, and Mikhail Burtsev. Explain my surprise: Learning efficient long-term memory by predicting uncertain outcomes. 07 2022. doi: 10.48550/arXiv.
+2207.13649.
+
+
+Richard S Sutton, Andrew G Barto, et al. _Reinforcement learning:_ _An introduction_, volume 1. MIT
+press Cambridge, 1998.
+
+
+Denis Tarasov, Alexander Nikulin, Ilya Zisman, Albina Klepach, Nikita Lyubaykin, Andrei Polubarov, Alexander Derevyagin, and Vladislav Kurenkov. Nina: Normalizing flows in action.
+training vla models with normalizing flows, 2025. [URL https://arxiv.org/abs/2508.](https://arxiv.org/abs/2508.16845)
+[16845.](https://arxiv.org/abs/2508.16845)
+
+
+Gemini Robotics Team, Saminda Abeyruwan, Joshua Ainslie, Jean-Baptiste Alayrac, Montserrat Gonzalez Arenas, Travis Armstrong, Ashwin Balakrishna, Robert Baruch, Maria Bauza,
+Michiel Blokzijl, et al. Gemini robotics: Bringing ai into the physical world. _arXiv_ _preprint_
+_arXiv:2503.20020_, 2025.
+
+
+Octo Model Team, Dibya Ghosh, Homer Walke, Karl Pertsch, Kevin Black, Oier Mees, Sudeep
+Dasari, Joey Hejna, Tobias Kreiman, Charles Xu, et al. Octo: An open-source generalist robot
+policy. _arXiv preprint arXiv:2405.12213_, 2024.
+
+
+Emanuel Todorov, Tom Erez, and Yuval Tassa. Mujoco: A physics engine for model-based control.
+In _2012_ _IEEE/RSJ_ _international_ _conference_ _on_ _intelligent_ _robots_ _and_ _systems_, pp. 5026–5033.
+IEEE, 2012.
+
+
+Mark Towers, Ariel Kwiatkowski, Jordan Terry, John U Balis, Gianluca De Cola, Tristan Deleu,
+Manuel Goul˜ao, Andreas Kallinteris, Markus Krimmel, Arjun KG, et al. Gymnasium: A standard
+interface for reinforcement learning environments. _arXiv preprint arXiv:2407.17032_, 2024.
+
+
+15
+
+
+Linji Wang, Tong Xu, Yuanjie Lu, and Xuesu Xiao. Reward training wheels: Adaptive auxiliary
+rewards for robotics reinforcement learning. _arXiv preprint arXiv:2503.15724_, 2025a.
+
+
+Yongyi Wang, Lingfeng Li, Bozhou Chen, Ang Li, Hanyu Liu, Qirui Zheng, Xionghui Yang, and
+Wenxin Li. Synthetic pomdps to challenge memory-augmented rl: Memory demand structure
+modeling. _arXiv preprint arXiv:2508.04282_, 2025b.
+
+
+Junjie Wen, Yichen Zhu, Jinming Li, Zhibin Tang, Chaomin Shen, and Feifei Feng. Dexvla:
+Vision-language model with plug-in diffusion expert for general robot control. _arXiv_ _preprint_
+_arXiv:2502.05855_, 2025a.
+
+
+Junjie Wen, Yichen Zhu, Jinming Li, Minjie Zhu, Zhibin Tang, Kun Wu, Zhiyuan Xu, Ning Liu,
+Ran Cheng, Chaomin Shen, et al. Tinyvla: Towards fast, data-efficient vision-language-action
+models for robotic manipulation. _IEEE Robotics and Automation Letters_, 2025b.
+
+
+Jason Weston, Sumit Chopra, and Antoine Bordes. Memory networks. _arXiv_ _preprint_
+_arXiv:1410.3916_, 2014.
+
+
+Qingyang Wu, Zhenzhong Lan, Kun Qian, Jing Gu, Alborz Geramifard, and Zhou Yu. Memformer:
+A memory-augmented transformer for sequence modeling. _arXiv_ _preprint_ _arXiv:2010.06891_,
+2020.
+
+
+Yuhuai Wu, Markus N Rabe, DeLesley Hutchins, and Christian Szegedy. Memorizing transformers.
+_arXiv preprint arXiv:2203.08913_, 2022.
+
+
+Zheng Wu, Wenzhao Lian, Vaibhav Unhelkar, Masayoshi Tomizuka, and Stefan Schaal. Learning
+dense rewards for contact-rich manipulation tasks. In _2021_ _IEEE_ _International_ _Conference_ _on_
+_Robotics and Automation (ICRA)_, pp. 6214–6221. IEEE, 2021.
+
+
+William Yue, Bo Liu, and Peter Stone. Learning memory mechanisms for decision making through
+demonstrations. _arXiv preprint arXiv:2411.07954_, 2024.
+
+
+Maryam Zare, Parham M Kebria, Abbas Khosravi, and Saeid Nahavandi. A survey of imitation
+learning: Algorithms, recent developments, and challenges. _IEEE Transactions on Cybernetics_,
+2024.
+
+
+Daniil Zelezetsky, Egor Cherepanov, Alexey K Kovalev, and Aleksandr I Panov. Re: Frame–
+retrieving experience from associative memory. _arXiv preprint arXiv:2508.19344_, 2025.
+
+
+Jianke Zhang, Yanjiang Guo, Xiaoyu Chen, Yen-Jen Wang, Yucheng Hu, Chengming Shi, and
+Jianyu Chen. Hirt: Enhancing robotic control with hierarchical robot transformers. _arXiv preprint_
+_arXiv:2410.05273_, 2024.
+
+
+Kun Zhang, Peng Yun, Jun Cen, Junhao Cai, Didi Zhu, Hangjie Yuan, Chao Zhao, Tao Feng,
+Michael Yu Wang, Qifeng Chen, et al. Generative artificial intelligence in robotic manipulation:
+A survey. _arXiv preprint arXiv:2503.03464_, 2025a.
+
+
+Xinyu Zhang, Yuhan Liu, Haonan Chang, Liam Schramm, and Abdeslam Boularias. Autoregressive
+action sequence learning for robotic manipulation. _IEEE Robotics and Automation Letters_, 2025b.
+
+
+Qingqing Zhao, Yao Lu, Moo Jin Kim, Zipeng Fu, Zhuoyang Zhang, Yecheng Wu, Zhaoshuo Li,
+Qianli Ma, Song Han, Chelsea Finn, et al. Cot-vla: Visual chain-of-thought reasoning for visionlanguage-action models. In _Proceedings of the Computer Vision and Pattern Recognition Confer-_
+_ence_, pp. 1702–1713, 2025.
+
+
+Tony Z Zhao, Vikash Kumar, Sergey Levine, and Chelsea Finn. Learning fine-grained bimanual
+manipulation with low-cost hardware. _arXiv preprint arXiv:2304.13705_, 2023.
+
+
+Haoyu Zhen, Xiaowen Qiu, Peihao Chen, Jincheng Yang, Xin Yan, Yilun Du, Yining Hong, and
+Chuang Gan. 3d-vla: A 3d vision-language-action generative world model. _arXiv_ _preprint_
+_arXiv:2403.09631_, 2024.
+
+
+Ruijie Zheng, Yongyuan Liang, Shuaiyi Huang, Jianfeng Gao, Hal Daum´e III, Andrey Kolobov,
+Furong Huang, and Jianwei Yang. Tracevla: Visual trace prompting enhances spatial-temporal
+awareness for generalist robotic policies. _arXiv preprint arXiv:2412.10345_, 2024.
+
+
+16
+
+
+Brianna Zitkovich, Tianhe Yu, Sichun Xu, Peng Xu, Ted Xiao, Fei Xia, Jialin Wu, Paul Wohlhart,
+Stefan Welker, Ayzaan Wahid, et al. Rt-2: Vision-language-action models transfer web knowledge
+to robotic control. In _Conference on Robot Learning_, pp. 2165–2183. PMLR, 2023.
+
+
+17
+
+
+A APPENDIX
+
+
+A.1 PROOF OF EXPONENTIAL FORGETTING IN LRU UPDATES
+
+
+**Proposition 1 (Exponential Forgetting).** Fix a slot _j_ and a segment index _i_ . Suppose this slot is
+updated _k_ times at segments _i_ + 1 _, . . ., i_ + _k_ according to
+
+**m** _j_ _[t]_ [=] _[λ]_ **[ m]** _[ t]_ new [+] [(1] _[ −]_ _[λ]_ [)] **[ m]** _[ t]_ _j_ _[−]_ [1] _,_ _t_ = _i_ + 1 _, . . ., i_ + _k,_ (10)
+
+
+with 0 _≤_ _λ ≤_ 1. Then
+
+
+**m** _j_ _[i]_ [+] _[k]_ = (1 _−_ _λ_ ) _[k]_ **m** _j_ _[i]_ [+]
+
+
+_k_
+
+- _λ_ (1 _−_ _λ_ ) _[k][−][u]_ **m** new _[i]_ [+] _[u][.]_ (11)
+
+_u_ =1
+
+
+Consequently, the coefficient of the initial content **m** _j_ _[i]_ [after] _[ k]_ [ overwrites is][ (1] _[ −]_ _[λ]_ [)] _[k]_ [, and the coeffi-]
+cient of the write performed _τ_ updates ago (at segment _i_ + _τ_ ) is _λ_ (1 _−_ _λ_ ) _[τ]_ _[−]_ [1] .
+
+
+**Proof.** We prove Equation 11 by induction on _k_ .
+
+
+_Base case k_ = 1 _._ By the update rule,
+
+**m** _j_ _[i]_ [+1] = _λ_ **m** new _[i]_ [+1] [+ (1] _[ −]_ _[λ]_ [)] **[ m]** _[ i]_ _j_ _[,]_ (12)
+
+
+which matches Equation 11 with _k_ = 1.
+
+
+_Induction step._ Assume Equation 11 holds for some _k_ _≥_ 1. For _k_ + 1,
+
+**m** _j_ _[i]_ [+] _[k]_ [+1] = _λ_ **m** new _[i]_ [+] _[k]_ [+1] + (1 _−_ _λ_ ) **m** _j_ _[i]_ [+] _[k]_ _._ (13)
+
+Insert the induction hypothesis for **m** _j_ _[i]_ [+] _[k]_ :
+
+
+               
+**m** _j_ _[i]_ [+] _[k]_ [+1] = _λ_ **m** new _[i]_ [+] _[k]_ [+1] + (1 _−_ _λ_ )
+
+
+Distribute (1 _−_ _λ_ ) and regroup terms:
+
+
+(1 _−_ _λ_ ) _[k]_ **m** _j_ _[i]_ [+]
+
+
+_k_
+
+- _λ_ (1 _−_ _λ_ ) _[k][−][u]_ **m** new _[i]_ [+] _[u]_
+
+_u_ =1
+
+
+_._ (14)
+
+
+**m** _j_ _[i]_ [+] _[k]_ [+1] = (1 _−_ _λ_ ) _[k]_ [+1] **m** _j_ _[i]_ [+]
+
+
+_k_
+
+- _λ_ (1 _−_ _λ_ ) [(] _[k]_ [+1)] _[−][u]_ **m** new _[i]_ [+] _[u]_ [+] _[ λ]_ **[ m]** _[ i]_ new [+] _[k]_ [+1] _,_ (15)
+
+_u_ =1
+
+
+which is exactly Equation 11 with _k_ replaced by _k_ + 1. This completes the induction.
+
+
+Finally, the coefficients in Equation 11 form a convex combination:
+
+
+_k−_ 1
+�(1 _−_ _λ_ ) _[r]_ = 1 _,_ (16)
+
+
+_r_ =0
+
+
+(1 _−_ _λ_ ) _[k]_ +
+
+
+_k_
+
+- _λ_ (1 _−_ _λ_ ) _[k][−][u]_ = (1 _−_ _λ_ ) _[k]_ + _λ_
+
+
+_u_ =1
+
+
+so it is meaningful to call them “fractions” of contribution.
+
+
+**Corollary** **(Half-life).** The number of overwrites _k_ 0 _._ 5 after which the contribution of **m** _j_ _[i]_ [halves]
+satisfies
+
+
+ln(1 _/_ 2)
+
+[1] 2 = _⇒_ _k_ 0 _._ 5 = ln(1 _−_ _λ_ ) _[.]_ (17)
+
+
+(1 _−_ _λ_ ) _[k]_ [0] _[.]_ [5] = [1]
+
+
+Equivalently,
+
+ln 2
+_k_ 0 _._ 5 = _−_ ln(1 _−_ _λ_ ) _[.]_ (18)
+
+Using the Maclaurin series expansion ln(1 _−_ _λ_ ) _∼−λ_ as _λ →_ 0, we obtain
+
+
+lim [=] [ln 2] _[.]_ (19)
+_λ→_ 0 _[k]_ [0] _[.]_ [5] _[ ·][ λ]_
+
+
+Hence,
+
+_k_ 0 _._ 5 _∼_ [ln 2] as _λ →_ 0 _,_ (20)
+
+_λ_
+
+showing that smaller _λ_ yields longer retention horizons, while larger _λ_ overwrites past content more
+aggressively.
+
+
+18
+
+
+A.2 BOUNDEDNESS OF MEMORY EMBEDDINGS
+
+
+Fix a slot _j_ and consider its update rule,
+
+**m** _j_ _[i]_ [+1] = _λ_ **m** new _[i]_ [+1] [+ (1] _[ −]_ _[λ]_ [)] **[ m]** _[ i]_ _j_ _[,]_ 0 _≤_ _λ ≤_ 1 _._ (21)
+
+
+We prove the claim by induction on _i_ .
+
+_Base case._ At _i_ = 0, the assumption gives _∥_ **m** _j_ [0] _[∥≤]_ _[C]_ [.]
+
+_Induction step._ Assume _∥_ **m** _j_ _[i][∥≤]_ _[C]_ [for some] _[ i][ ≥]_ [0][.] [Using the update rule,]
+
+_∥_ **m** _j_ _[i]_ [+1] _∥_ = _∥λ_ **m** new _[i]_ [+1] [+ (1] _[ −]_ _[λ]_ [)] **[ m]** _[ i]_ _j_ _[∥][.]_ (22)
+
+
+By the triangle inequality and the inductive hypothesis,
+
+_∥_ **m** _j_ _[i]_ [+1] _∥≤_ _λ∥_ **m** new _[i]_ [+1] _[∥]_ [+ (1] _[ −]_ _[λ]_ [)] _[∥]_ **[m]** _[ i]_ _j_ _[∥≤]_ _[λC]_ [ + (1] _[ −]_ _[λ]_ [)] _[C]_ [=] _[ C.]_ (23)
+
+Thus _∥_ **m** _j_ _[i]_ [+1] _∥≤_ _C_, completing the induction.
+
+
+Therefore, for all _i_, the memory embedding satisfies _∥_ **m** _j_ _[i][∥≤]_ _[C]_ [.]
+
+
+A.3 MEMORY-INTENSIVE ENVIRONMENTS
+
+
+**Event–recall** **pairs** **and** **correlation** **horizon.**
+Following (Cherepanov et al., 2026b), let _αt_ [∆] _e_ _[t]_
+denote an event of duration ∆ _t_ starting at time
+_te_, and let _βtr_ ( _αt_ [∆] _e_ _[t]_ [)] [be] [a] [later] [decision] [point]
+that must recall information from that event.
+Define the **correlation horizon** as
+
+
+_ξ_ = _tr −_ _te −_ ∆ _t_ + 1 _._ (24)
+
+
+For an environment, collect all event–recall
+horizons into the set Ξ = _{ξn}n_ .
+
+
+(a) MIKASA-Robo: RememberColor9-v0 (top)
+and TakeItBack-v0 (bottom).
+
+
+Recent works have proposed alternative
+but complementary definitions of memoryintensive environments. For instance, Wang
+et al. (2025b) formalize **memory** **demand**
+
+(b) T-Maze. (c) Some POPGym tasks.
+
+**structures** that capture the minimal past sufficient to predict future transitions and rewards, Figure 7: **Environments used in experiments.**
+while Yue et al. (2024) introduce **memory**
+**dependency** **pairs** to annotate which past observations must be recalled for correct decisions.
+Both perspectives emphasize controllable ways to scale memory difficulty, either by increasing
+order/span or by manipulating dependency graphs. In this paper, we adopt the event–recall horizon
+framework for clarity and analytical tractability, but note that these alternative views are broadly
+consistent and provide useful tools for designing and benchmarking memory-intensive tasks.
+
+
+(b) T-Maze. (c) Some POPGym tasks.
+
+
+Figure 7: **Environments used in experiments.**
+
+
+**Definition (memory-intensive environment).** A POMDP _M_ [˜] _P_ is **memory-intensive** if min _n_ Ξ _>_
+1; i.e., every relevant decision depends on information separated by at least one intervening step,
+making reactive (myopic) policies insufficient. This definition cleanly separates POMDPs that genuinely require memory from those that are effectively MDP-like.
+
+
+A.4 MEMORY-INTENSIVE ENVIRONMENTS
+
+
+The memory-intensive environments used in this work are presented in Figure 7.
+
+
+**T-Maze.** The T-Maze (Ni et al., 2023) features a corridor ending in a junction with two goals.
+At the start, one goal is randomly revealed, and the agent must recall this cue after traversing the
+corridor to choose the correct branch. Observations are vectors; actions are discrete. Rewards are
+sparse, provided only upon reaching the correct goal. The task tests whether the model can retain
+early cues across long delays.
+
+
+19
+
+
+Table 4: Normalized scores on MuJoCo tasks from the D4RL benchmark (Todorov et al.,
+2012). Baselines include Trajectory Transformer (TT) (Janner et al., 2021), Decision Transformer
+(DT) (Chen et al., 2021), Conservative Q-Learning (CQL) (Kumar et al., 2020), and Behavior
+Cloning (BC) from (Chen et al., 2021). **Top-1** and **Top-2** results are highlighted. ( _R, o, a_ ) and
+( _o_ ) denote two conditioning modes of ELMUR: conditioning on returns-to-go, observations, and
+actions, or conditioning on observations alone, respectively.
+
+|Dataset Environment|CQL DT BC TT RATE ELMUR (R, o, a) ELMUR (o)|
+|---|---|
+|ME<br>HalfCheetah<br>ME<br>Hopper<br>ME<br>Walker2d|91.6<br>86.8_±_1.3<br>59.9<br>95.0_±_0.2<br>87.4_±_0.1<br>86.4_±_2.7<br>89.1_±_0.6<br>105.4<br>107.6_±_1.8<br>79.6<br>110.0_±_2.7<br>112.5_±_0.2<br>111.7_±_0.2<br>85.3_±_1.6<br>108.8<br>108.1_±_0.2<br>36.6<br>101.9_±_6.8<br>108.7_±_0.5<br>108.9_±_0.2<br>108.4_±_0.1|
+|M<br>HalfCheetah<br>M<br>Hopper<br>M<br>Walker2d|44.4<br>42.6_±_0.1<br>43.1<br>46.9_±_0.4<br>43.5_±_0.3<br>43.2_±_0.1<br>43.1_±_0.1<br>58.0<br>67.6_±_1.0<br>63.9<br>61.1_±_3.6<br>77.4_±_1.4<br>78.0_±_0.8<br>78.6_±_1.0<br>72.5<br>74.0_±_1.4<br>77.3<br>79.0_±_2.8<br>80.7_±_0.7<br>79.4_±_0.2<br>79.5_±_0.4|
+|MR<br>HalfCheetah<br>MR<br>Hopper<br>MR<br>Walker2d|45.5<br>36.6_±_0.8<br>4.3<br>41.9_±_2.5<br>39.0_±_0.6<br>40.4_±_0.6<br>39.8_±_1.0<br>95.0<br>82.7_±_7.0<br>27.6<br>91.5_±_3.6<br>83.7_±_8.2<br>64.8_±_1.6<br>87.6_±_1.7<br>77.2<br>66.6_±_3.0<br>36.9<br>82.6_±_6.9<br>73.7_±_1.4<br>75.0_±_6.8<br>60.8_±_1.7|
+|**Average**|77.6<br>74.7<br>47.7<br>78.9<br>78.5<br>76.4<br>74.7|
+
+
+**MIKASA-Robo** **benchmark.** We further evaluate on the MIKASA-Robo benchmark (Cherepanov et al., 2026a), which provides robotic tabletop manipulation tasks designed
+for memory evaluation. Each environment simulates a 7-DoF arm with a two-finger gripper.
+Observations are paired RGB images (3 _×_ 128 _×_ 128) from a static and wrist camera; actions are
+continuous (7 joints + gripper). Rewards are binary, given only on task success. We study two
+families of MIKASA-Robo tasks: (i) RememberColor[3,5,9]-v0, where the agent must
+recall the color of a hidden cube after a delay with distractors, and (ii) TakeItBack-v0, where
+the agent first moves a cube to a goal, then must return it once the goal changes.
+
+
+**POPGym benchmark.** POPGym benchmark (Morad et al., 2023a) is a large suite of 48 partially
+observable environments designed to stress agent memory. The tasks span two categories: (i) diagnostic memory puzzles, which require agents to remember cues or solve algorithmic sequence
+problems (e.g., copy, reverse, n-back, and long-horizon T-Mazes), and (ii) partially observable control tasks, which adapt classic control benchmarks such as CartPole, MountainCar, and LunarLander
+to observation-limited settings. This diversity allows POPGym to test both symbolic memory skills
+and generalization in continuous control, providing a broad and challenging benchmark for evaluating memory-augmented RL methods. Detailed results across all 48 POPGym tasks for each of
+considered baselines are presented in Table 5.
+
+
+A.5 TRAJECTORY CONDITIONING
+
+
+To assess (1) how ELMUR behaves on standard high-dimensional MDP control tasks and (2) how
+different conditioning schemes influence performance, we evaluate it on the MuJoCo domains of the
+D4RL benchmark (Todorov et al., 2012). The datasets contain trajectories of heterogeneous quality,
+including many far from expert level, which typically requires conditioning on returns-to-go and
+actions (as in DT (Chen et al., 2021)) to enable trajectory stitching.
+
+
+We therefore test two conditioning modes for ELMUR: ( _R, o, a_ ), analogous to DT, and _o_ -only,
+as in standard behavior cloning. Despite the lower quality of D4RL data, ELMUR achieves an
+average normalized score of 76.4 under ( _R, o, a_ ) conditioning, only about 2% higher than with _o_ only conditioning. This demonstrates that the model remains robust to the choice of conditioning
+variables and does not rely on access to return-to-go or action labels to perform well.
+
+
+Overall, ELMUR matches or exceeds the performance of several established offline RL baselines
+on these MDP tasks, confirming that its strong results are not restricted to memory-centric POMDP
+environments. Its competitive behavior across conditioning modes further highlights its versatility
+and ability to leverage suboptimal trajectories effectively.
+
+
+20
+
+
+Table 5: **POPGym benchmark results.** Reported scores are mean _±_ standard error, averaged over 3
+runs and evaluated with 100 random seeds. Across 21 partially observable tasks spanning puzzle and
+control domains, ELMUR achieves the best performance on 12 tasks, underscoring the effectiveness
+of its memory module for reasoning under partial observability.
+
+
+**Expert**
+**POPGym-48 Task** **RATE** **DT** **Random** **BC-MLP** **BC-LSTM** **ELMUR**
+**PPO-GRU**
+
+
+**Sum of returns** 9.54 5.80 -12.24 -6.83 8.96 **10.41** 16.51
+
+
+A.6 EXTENDED RELATED WORK
+
+
+**Transformers for manipulation.** Work on transformer-based manipulation splits into characteristic families with complementary strengths and limits. _Perception-centric visuomotor transformers_
+emphasize 3D or multi-view geometry to map pixels to precise end-effector actions under (near) full
+observability, excelling at spatial alignment but assuming short temporal credit assignment: PerAct (Shridhar et al., 2023), RVT (Goyal et al., 2023), RVT-2 (Goyal et al., 2024). _Sequence/skill_
+_models_ distill demonstrations into reusable action chunks and long-horizon trajectories, improving sample efficiency but remaining bottlenecked by finite context windows: ACT (Zhao et al.,
+2023), Skill Transformer (Huang et al., 2023), ILBiT (Kobayashi et al., 2025). _Planning/RL-driven_
+_transformers_ blend sequence modeling with value learning or planning for closed-loop control under uncertainty, yet still inherit fixed-context limitations: OPTIMUS (Dalal et al., 2023), ActionFlow (Funk et al., 2024), Q-Transformer (Chebotar et al., 2023), CCT/ARP (Zhang et al., 2025b),
+FLaRe (Hu et al., 2025). _Alternative backbones_ (state-space, diffusion) target long continuous horizons and smooth control but lack explicit persistent state: RoboMamba (Liu et al., 2024b), Diffusion
+Policy (Chi et al., 2023).
+
+
+21
+
+
+**VLA models for manipulation.** VLA models broaden task coverage by conditioning on language
+and scaling data, while keeping the transformer core unchanged and context-bounded. _Instruction-_
+_following generalists_ demonstrate broad skill repertoires with language prompts but no explicit longterm memory: RT-1 (Brohan et al., 2022), RT-2 (Zitkovich et al., 2023), Octo (Team et al., 2024),
+OpenVLA (Kim et al., 2024), VIMA (Jiang et al., 2022). _Efficiency/modularity_ _variants_ freeze
+large encoders and train lightweight adapters or experts for practicality at scale: RoboFlamingo (Li
+et al., 2023), CogACT (Li et al., 2024), FLOWER (Reuss et al., 2025), NinA (Tarasov et al., 2025).
+_Reasoning/hierarchy extensions_ inject geometric priors, step-wise reasoning, or multi-level control
+while still relying on finite windows: 3D-VLA (Zhen et al., 2024), CoT-VLA (Zhao et al., 2025),
+TraceVLA (Zheng et al., 2024), HiRT (Zhang et al., 2024), DP-VLA (Han et al., 2024). _Special-_
+_ized and hybrid designs_ tailor the backbone to domain constraints (dexterous hands, spatial priors) or
+mix diffusion with autoregression: HybridVLA (Liu et al., 2025), DexVLA (Wen et al., 2025a), SpatialVLA (Qu et al., 2025), OpenVLA-OFT (Kim et al., 2025). _Generalist robot agents_ pursue openworld embodiment with growing breadth but inherit the same temporal limitations: TinyVLA (Wen
+et al., 2025b), _π_ 0 (Black et al., 2024), _π_ 0 _._ 5 (Intelligence et al., 2025), GR00T N1 (Bjorck et al.,
+2025), Gemini Robotics (Team et al., 2025), NORA (Hung et al., 2025).
+
+
+**Memory in Deep Learning.** Mechanisms for long-term information fall into three broad tracks.
+_Implicit recurrence and long-range sequence models_ retain information in hidden dynamics but offer
+limited, indirect control over storage and forgetting: LSTM (Hochreiter & Schmidhuber, 1997), xLSTM (Beck et al., 2024), linear-attention Transformers (Katharopoulos et al., 2020), RWKV (Peng
+et al., 2023), S4 (Gu et al., 2021), Mamba (Gu & Dao, 2023). _Explicit external memory with learned_
+_read–write_ provides addressable storage with content-based access, trading off simplicity for optimization/scaling complexity: NTM (Graves et al., 2014), DNC (Graves et al., 2016), Memory Networks (Weston et al., 2014), differentiable memory for meta-learning (Santoro et al., 2016), recent
+variants (Ahmadi, 2020). _Transformer_ _context_ _extension_ pushes horizons via cached activations,
+compression, or auxiliary memory modules but typically keeps memory peripheral to the core token computation: Transformer-XL (Dai et al., 2019), Compressive Transformer (Rae et al., 2019),
+Memorizing Transformer (Wu et al., 2022), Ring Attention (Liu et al., 2023), Memformer (Wu et al.,
+2020), associative-memory Transformers (Rodkin et al., 2024), ERNIE-style memory (Ding et al.,
+2020), test-time memorization (TiTANS) (Behrouz et al., 2024).
+
+
+**Memory** **in** **RL.** In partially observed decision processes, memory is not optional; it is the
+state estimator. _Spatial/episodic_ _buffers_ externalize salient facts in read–write maps or associative stores (navigational and episodic use-cases): Neural Map (Parisotto & Salakhutdinov, 2017),
+HCAM (Lampinen et al., 2021), Stable Hadamard Memory (Le et al., 2024). _Sequence-model_
+_adaptations_ retrofit transformers for recurrence and stability in RL, improving long-horizon training but leaving persistence bounded by context: DTQN (Esslinger et al., 2022), GTrXL (Parisotto
+et al., 2020), AGaLiTe (Pramanik et al., 2023), AMAGO-2 (Grigsby et al., 2024). _Evaluation frame-_
+_works_ formalize memory demands and failure modes under partial observability: (Cherepanov et al.,
+2026b; Yue et al., 2024; Wang et al., 2025b). _Transformers with external stores for RL_ insert explicit
+memory alongside the policy, but often as a sequence-level attachment: RATE (Cherepanov et al.,
+2026c), FFM (Morad et al., 2023b), Re:Frame (Zelezetsky et al., 2025).
+
+
+**Memory** **in** **manipulation** **tasks.** Long-horizon, partially observed manipulation has motivated
+three practical extensions. _Trajectory_ _summarization_ compresses the past into a short token set,
+trading completeness for compactness: TraceVLA (Zheng et al., 2024). _External_ _feature_ _banks_
+cache recent visual features for retrieval, focusing attention but leaving distant history underrepresented: SAM2Act+ (Fang et al., 2025). _Structured memory modules_ interface an explicit store with
+the policy to persist scene/task variables: MemoryVLA (Shi et al., 2025). _Hierarchies_ shift temporal burden to slow planners or high-level controllers, which may mask but not remove the need
+for persistent state at the policy layer: HiRT (Zhang et al., 2024), DP-VLA (Han et al., 2024). For
+evaluation, _targeted benchmarks_ isolate memory factors: MemoryBench (Fang et al., 2025); broader
+suites capture multiple memory types and delays: MIKASA-Robo (Cherepanov et al., 2026a).
+
+
+22
+
+
+Table 6: Returns on ViZDoom-Two-Colors (mean _±_ standard error over 6 runs). **Top-1** and **Top-2**
+results are highlighted.
+
+
+**Method** **Return (mean** _±_ **sem)**
+
+
+ELMUR 55 _._ 28 _±_ 0 _._ 94
+RATE 59 _._ 21 _±_ 1 _._ 19
+DT 31 _._ 45 _±_ 1 _._ 21
+RMT 53 _._ 53 _±_ 3 _._ 15
+TrXL 49 _._ 62 _±_ 0 _._ 88
+BC-LSTM 52 _._ 16 _±_ 2 _._ 59
+CQL-MLP 12 _._ 49 _±_ 0 _._ 19
+Random 4 _._ 78
+
+
+A.7 3D VISUAL NAVIGATION
+
+
+To evaluate ELMUR’s ability to handle 3D long-horizon navigation with visual input, we additionally experiment in the ViZDoom-Two-Colors environment (Sorokin et al., 2022). The agent moves
+in a room with an acid floor that continuously drains health at every timestep. At the beginning of
+each episode it briefly observes a single colored pole (green or red) for 45 steps. The pole then disappears, and the agent must navigate among green and red objects scattered on the floor and collect
+only those whose color matches the initial pole in order to receive rewards and restore health. The
+results in Table 6 show that ELMUR matches the performance of the previous best baseline within
+statistical uncertainty, indicating that ELMUR is effective not only on memory-intensive manipulation tasks but also on challenging memory-dependent navigation tasks with 3D visual observations.
+
+
+A.8 TRAINING PROCESS
+
+
+When training ELMUR, we compute the loss on every segment processed recursively, detaching the
+memory state between segments (i.e., without backpropagation through time). The choice of loss
+depends on the task domain: for T-Maze, CartPole-v1, and a subset of POPGym tasks with discrete actions, we apply a cross-entropy loss; for MIKASA-Robo and the remaining POPGym tasks
+with continuous actions, we use a mean-squared error (MSE) loss. The ELMUR hyperparameters
+used in the experiments are presented in The ELMUR hyperparameters used in the experiments are
+presented in Table 7.
+
+
+For data, we follow a consistent offline imitation-learning setup. Each MIKASA-Robo environment
+provides a dataset of 1000 expert demonstrations generated by a PPO policy trained with oracle-level
+state access. For T-Maze, we collect 6000 successful oracle-level trajectories. For POPGym, we
+adopt the datasets of Morad et al. (2023a), consisting of 3000 trajectories per environment generated
+by a PPO-GRU expert. Finally, for CartPole-v1, we use 1000 successful trajectories collected from
+a pre-trained PPO policy.
+
+
+Figure 8: **ViZDoom-Two-Colors environment.**
+
+
+23
+
+
+**Parameter** **RememberColor** **TakeItBack** **T-Maze** **POPGym-AutoencodeEasy** **CartPole-v1**
+
+
+_d_ model 128 32 128 64 128
+Routed _d_ ff 128 256 32 128 128
+Shared _d_ ff 128 32 512 256 256
+Layers 4 2 2 12 4
+Heads 16 16 2 4 4
+Experts (MoE) 16 1 2 1 4
+Shared Experts 1 1 2 2 1
+Top- _k_ routing 2 1 3 1 2
+Memory size 256 32 2 8 16
+Memory init std 0.1 0.001 0.001 0 0.01
+Memory dropout 0.06 0.23 0.01 0.17 0.05
+LRU blend _α_ 0.40 0.20 0.05 0.80 0.9
+Dropout 0.13 0.01 0.10 0.14 0.10
+Dropatt 0.30 0.18 0.17 0.26 0.10
+Label smoothing 0.21 0.20 0.16 0.22 0.00
+Context length 20 60 10 35 30
+Batch size 64 64 128 128 512
+Learning rate 2.05e-4 2.57e-4 2.06e-4 1.16e-4 3.0e-4
+Warmup steps 30000 30000 10000 50000 1000
+Cosine decay True False True False True
+LR end factor 0.1 0.01 1.0 0.01 0.1
+Weight decay 0.001 0.01 0.0001 0.1 0.01
+Epochs 200 300 1000 800 100
+Grad clip 5 1 5 5 1.0
+Beta1 0.99 0.9 0.95 0.99 0.9
+Beta2 0.99 0.99 0.999 0.99 0.999
+
+
+Table 7: **Hyperparameters for** **ELMUR.** We report all architecture and training parameters used
+across tasks.
+
+
+A.9 MEMORY PROBING
+
+
+To examine whether ELMUR stores task-relevant information in its external memory rather than
+relying solely on increased parameter count, we perform a controlled memory probing study on
+the RememberColor3-v0 environment. The goal is to determine whether memory embeddings
+contain linearly or nonlinearly decodable information about the target cube color, which serves as
+the minimal sufficient statistic required for correct decision making in the recall stage of the task.
+
+
+**Dataset** **construction.** We first train an ELMUR policy to expert-level performance on
+RememberColor3-v0. Using the trained policy, we collect 1000 evaluation episodes and extract, at every timestep, all layer-local memory embeddings and the corresponding ground-truth target color. We retain only episodes that successfully complete the task to avoid confounding effects
+from incorrect trajectories and to ensure that the probed representations correspond to functional
+memory usage. The resulting dataset contains tuples of the form
+
+( _ℓ, t, m_ [(] _t_ _[ℓ]_ [)] _[, y]_ [)] _[,]_
+
+where _ℓ_ is the layer index, _t_ is the timestep at which the memory vector was recorded, _m_ [(] _t_ _[ℓ]_ [)] _∈_ R _[M]_ _[×][d]_
+is the memory embedding of layer _ℓ_ at timestep _t_, and _y_ _∈{_ 0 _,_ 1 _,_ 2 _}_ is the target color label.
+
+
+**Probing** **protocol.** Memory in ELMUR is structured and evolves differently across layers and
+timesteps. To distinguish these effects, we construct a separate probing dataset for every layer
+_ℓ_ _∈{_ 0 _, . . ., L −_ 1 _}_ and every chosen timestep _t_ (we use _t_ _∈{_ 0 _,_ 1 _,_ 5 _,_ 10 _,_ 20 _}_ ). For each pair ( _ℓ, t_ )
+we train an independent probe on the corresponding memory vectors _{m_ [(] _t_ _[ℓ]_ [)] _[}]_ [.]
+
+
+Each probe is a three-layer multilayer perceptron (MLP) with hidden size 512 and ReLU nonlinearities. We train the probes with a cross-entropy loss to predict the target cube color solely from the
+memory vector. Probes are trained with Adam for 200 epochs using an 80/20 train-validation split.
+Importantly, probes are not allowed to influence the base policy; the probing procedure is strictly
+post-hoc.
+
+
+**Memory Evaluation.** For every ( _ℓ, t_ ) pair we report the accuracy and confusion matrix of the corresponding probe. At _t_ =0, when memory is initialized with random noise, all layers yield roughly
+
+
+24
+
+
+Confusion Matrix - Timestep 0, Layer 0
+
+|33.3|28.6|38.1|
+|---|---|---|
+|22.6|32.1|45.3|
+|38.5|30.8|30.8|
+
+
+**Red** **Green** **Blue**
+
+
+Predicted Label
+
+
+Confusion Matrix - Timestep 1, Layer 0
+
+|92.1|7.9|0.0|
+|---|---|---|
+|13.2|79.2|7.5|
+|0.0|1.5|98.5|
+
+
+**Red** **Green** **Blue**
+
+
+Predicted Label
+
+
+Confusion Matrix - Timestep 5, Layer 0
+
+|100.0|0.0|0.0|
+|---|---|---|
+|0.0|100.0|0.0|
+|0.0|0.0|100.0|
+
+
+**Red** **Green** **Blue**
+
+
+Predicted Label
+
+
+Confusion Matrix - Timestep 10, Layer 0
+
+|100.0|0.0|0.0|
+|---|---|---|
+|0.0|100.0|0.0|
+|0.0|0.0|100.0|
+
+
+**Red** **Green** **Blue**
+
+
+Predicted Label
+
+
+Confusion Matrix - Timestep 20, Layer 0
+
+|100.0|0.0|0.0|
+|---|---|---|
+|3.8|96.2|0.0|
+|0.0|0.0|100.0|
+
+
+**Red** **Green** **Blue**
+
+
+Predicted Label
+
+
+100
+
+
+80
+
+
+60
+
+
+40
+
+
+20
+
+
+0
+
+
+100
+
+
+80
+
+
+60
+
+
+40
+
+
+20
+
+
+0
+
+
+100
+
+
+80
+
+
+60
+
+
+40
+
+
+20
+
+
+0
+
+
+100
+
+
+80
+
+
+60
+
+
+40
+
+
+20
+
+
+0
+
+
+100
+
+
+80
+
+
+60
+
+
+40
+
+
+20
+
+
+0
+
+
+Confusion Matrix - Timestep 0, Layer 1
+
+|33.3|36.5|30.2|
+|---|---|---|
+|32.1|24.5|43.4|
+|33.8|26.2|40.0|
+
+
+**Red** **Green** **Blue**
+
+
+Predicted Label
+
+
+Confusion Matrix - Timestep 1, Layer 1
+
+|71.4|28.6|0.0|
+|---|---|---|
+|28.3|67.9|3.8|
+|0.0|7.7|92.3|
+
+
+**Red** **Green** **Blue**
+
+
+Predicted Label
+
+
+Confusion Matrix - Timestep 5, Layer 1
+
+|100.0|0.0|0.0|
+|---|---|---|
+|11.3|88.7|0.0|
+|0.0|0.0|100.0|
+
+
+**Red** **Green** **Blue**
+
+
+Predicted Label
+
+
+Confusion Matrix - Timestep 10, Layer 1
+
+|100.0|0.0|0.0|
+|---|---|---|
+|0.0|100.0|0.0|
+|0.0|0.0|100.0|
+
+
+**Red** **Green** **Blue**
+
+
+Predicted Label
+
+
+Confusion Matrix - Timestep 20, Layer 1
+
+|100.0|0.0|0.0|
+|---|---|---|
+|0.0|100.0|0.0|
+|0.0|0.0|100.0|
+
+
+**Red** **Green** **Blue**
+
+
+Predicted Label
+
+
+100
+
+
+80
+
+
+60
+
+
+40
+
+
+20
+
+
+0
+
+
+100
+
+
+80
+
+
+60
+
+
+40
+
+
+20
+
+
+0
+
+
+100
+
+
+80
+
+
+60
+
+
+40
+
+
+20
+
+
+0
+
+
+100
+
+
+80
+
+
+60
+
+
+40
+
+
+20
+
+
+0
+
+
+100
+
+
+80
+
+
+60
+
+
+40
+
+
+20
+
+
+0
+
+
+Confusion Matrix - Timestep 0, Layer 2
+
+|38.1|19.0|42.9|
+|---|---|---|
+|39.6|20.8|39.6|
+|43.1|20.0|36.9|
+
+
+**Red** **Green** **Blue**
+
+
+Predicted Label
+
+
+Confusion Matrix - Timestep 1, Layer 2
+
+|71.4|23.8|4.8|
+|---|---|---|
+|47.2|39.6|13.2|
+|12.3|10.8|76.9|
+
+
+**Red** **Green** **Blue**
+
+
+Predicted Label
+
+
+Confusion Matrix - Timestep 5, Layer 2
+
+|95.2|4.8|0.0|
+|---|---|---|
+|17.0|81.1|1.9|
+|0.0|0.0|100.0|
+
+
+**Red** **Green** **Blue**
+
+
+Predicted Label
+
+
+Confusion Matrix - Timestep 10, Layer 2
+
+|100.0|0.0|0.0|
+|---|---|---|
+|0.0|100.0|0.0|
+|0.0|0.0|100.0|
+
+
+**Red** **Green** **Blue**
+
+
+Predicted Label
+
+
+Confusion Matrix - Timestep 20, Layer 2
+
+|100.0|0.0|0.0|
+|---|---|---|
+|0.0|100.0|0.0|
+|0.0|0.0|100.0|
+
+
+**Red** **Green** **Blue**
+
+
+Predicted Label
+
+
+100
+
+
+80
+
+
+60
+
+
+40
+
+
+20
+
+
+0
+
+
+100
+
+
+80
+
+
+60
+
+
+40
+
+
+20
+
+
+0
+
+
+100
+
+
+80
+
+
+60
+
+
+40
+
+
+20
+
+
+0
+
+
+100
+
+
+80
+
+
+60
+
+
+40
+
+
+20
+
+
+0
+
+
+100
+
+
+80
+
+
+60
+
+
+40
+
+
+20
+
+
+0
+
+
+Confusion Matrix - Timestep 0, Layer 3
+
+|27.0|27.0|46.0|
+|---|---|---|
+|30.2|26.4|43.4|
+|33.8|16.9|49.2|
+
+
+**Red** **Green** **Blue**
+
+
+Predicted Label
+
+
+Confusion Matrix - Timestep 1, Layer 3
+
+|41.3|30.2|28.6|
+|---|---|---|
+|30.2|32.1|37.7|
+|15.4|12.3|72.3|
+
+
+**Red** **Green** **Blue**
+
+
+Predicted Label
+
+
+Confusion Matrix - Timestep 5, Layer 3
+
+|87.3|12.7|0.0|
+|---|---|---|
+|24.5|67.9|7.5|
+|0.0|9.2|90.8|
+
+
+**Red** **Green** **Blue**
+
+
+Predicted Label
+
+
+Confusion Matrix - Timestep 10, Layer 3
+
+|100.0|0.0|0.0|
+|---|---|---|
+|5.7|94.3|0.0|
+|0.0|0.0|100.0|
+
+
+**Red** **Green** **Blue**
+
+
+Predicted Label
+
+
+Confusion Matrix - Timestep 20, Layer 3
+
+|85.7|12.7|1.6|
+|---|---|---|
+|13.2|86.8|0.0|
+|1.5|3.1|95.4|
+
+
+**Red** **Green** **Blue**
+
+
+Predicted Label
+
+
+100
+
+
+80
+
+
+60
+
+
+40
+
+
+20
+
+
+0
+
+
+100
+
+
+80
+
+
+60
+
+
+40
+
+
+20
+
+
+0
+
+
+100
+
+
+80
+
+
+60
+
+
+40
+
+
+20
+
+
+0
+
+
+100
+
+
+80
+
+
+60
+
+
+40
+
+
+20
+
+
+0
+
+
+100
+
+
+80
+
+
+60
+
+
+40
+
+
+20
+
+
+0
+
+
+Figure 9: **Memory** **probing** **confusion** **matrices** **on** **RememberColor3-v0.** Each panel shows
+the confusion matrix (percentage) of the color probe trained on ELMUR memory embeddings for
+a specific timestep (rows, _t_ _∈{_ 0 _,_ 1 _,_ 5 _,_ 10 _,_ 20 _}_ ) and layer (columns, _ℓ_ _∈{_ 0 _,_ 1 _,_ 2 _,_ 3 _}_ ). At _t_ =0 (top
+row), when memory is still random, all probes sit near the 33% chance level, indicating that the
+target color is not decodable from initialization. After the first write at _t_ =1, the first layer already
+supports accurate decoding, with performance gradually decreasing for deeper layers. At _t_ =5, once
+the cue has disappeared, probes achieve almost perfect accuracy, including 100% for the first layer.
+At the decision time _t_ =10 and late in the episode at _t_ =20, prediction remains essentially perfect in
+the first three layers and very high in the last layer, demonstrating stable long-horizon retention of
+the target color in memory.
+
+
+33% accuracy per class, indicating that the target color is not decodable from the initial memory embeddings. After the first update at _t_ =1, the first layer already supports reliable decoding for all three
+colors, with accuracy gradually decreasing for deeper layers, which shows that the model writes a
+usable color code into memory immediately after observing the cue. By _t_ =5, when the colored cube
+
+
+25
+
+
+Slot 0
+
+
+Slot 1
+
+
+Slot 2
+
+
+Slot 0
+
+
+Slot 1
+
+
+Slot 2
+
+
+Slot 0
+
+
+Slot 1
+
+
+Slot 2
+
+
+Slot 0
+
+
+Slot 1
+
+
+Slot 2
+
+
+**Layer 0: Memory Update Pattern**
+
+
+0 2 4 6 8 10 12 14 16 18 20 22 24 26 28 30 32 34 36 38 40 42 44 46 48 50 52 54 56 58
+
+**Timestep**
+
+
+**Layer 1: Memory Update Pattern**
+
+
+0 2 4 6 8 10 12 14 16 18 20 22 24 26 28 30 32 34 36 38 40 42 44 46 48 50 52 54 56 58
+
+**Timestep**
+
+
+**Layer 2: Memory Update Pattern**
+
+
+0 2 4 6 8 10 12 14 16 18 20 22 24 26 28 30 32 34 36 38 40 42 44 46 48 50 52 54 56 58
+
+**Timestep**
+
+
+**Layer 3: Memory Update Pattern**
+
+
+0 2 4 6 8 10 12 14 16 18 20 22 24 26 28 30 32 34 36 38 40 42 44 46 48 50 52 54 56 58
+
+**Timestep**
+
+
+1.00
+
+
+0.75
+
+
+0.50
+
+
+0.25
+
+
+0.00
+
+
+1.00
+
+
+0.75
+
+
+0.50
+
+
+0.25
+
+
+0.00
+
+
+1.00
+
+
+0.75
+
+
+0.50
+
+
+0.25
+
+
+0.00
+
+
+1.00
+
+
+0.75
+
+
+0.50
+
+
+0.25
+
+
+0.00
+
+
+Figure 10: **Memory** **update** **patterns** **across** **layers** **on** **RememberColor3-v0.** Each heatmap
+shows, for one ELMUR layer, which memory slot is updated at each timestep (horizontal axis:
+timestep _t_ _∈_ [0 _,_ 60], vertical axis: slots 0–2; green indicates an update, purple indicates no update).
+All layers exhibit the same structured schedule: early in the episode only slot 0 is updated, then
+responsibility shifts to slot 1, and finally to slot 2, producing a clean rotation of writes enforced by
+the LRU policy. After a slot becomes inactive it is not modified again, which implies that once the
+target color has been written into a slot its content is preserved for the remainder of the episode
+without further overwriting.
+
+
+has disappeared from the scene, prediction accuracy improves further, reaching 100% for the first
+layer and remaining high for the others. At _t_ =10, when the agent sees all three cubes and must select
+the target, the probes achieve 100% accuracy on the first three layers and near perfect accuracy on
+the last layer, and the same pattern persists at _t_ =20. Aggregated confusion matrices across layers
+and timesteps are shown in Figure 9.
+
+
+Together, these findings confirm that ELMUR allocates memory capacity to storing the latent task
+variable required to solve the environment and that its superior performance arises from functional
+memory usage rather than increased model size. In addition, the memory update patterns in Figure 10 show a consistent and interpretable write schedule across layers: each episode produces a
+single dominant write into a dedicated slot immediately after observing the cue, followed by long
+spans of preservation with no overwriting. The LRU mechanism activates only when necessary,
+producing sparse, well-timed updates rather than continuous churn.
+
+
+The inter-slot similarity analysis in Figure 11 further supports this behavior. At the moment when
+the target cube is first observed, all layers exhibit a sharp transition in cosine similarity structure:
+a single slot becomes highly similar across repeated episodes while the remaining slots remain
+decorrelated. This indicates that ELMUR allocates one stable slot as the canonical container for the
+task variable. After this write event, the similarity trajectories remain nearly constant throughout
+
+
+26
+
+
+**Layer 0: Inter-Slot Cosine Similarity**
+
+**(Mean ± Std across 20 batches)**
+
+
+**Layer 0: Std Dev for All Cubes**
+
+|Col1|Col2|Col3|Col4|Col5|Slot 0,<br>Slot 1,|Group 0 (n=20)<br>Group 0 (n=20)|Col8|
+|---|---|---|---|---|---|---|---|
+||||||Slot 2,|Group 0 (n=20)||
+
+
+0 10 20 30 40 50 60
+**Timestep**
+
+
+**Layer 1: Std Dev for All Cubes**
+
+|Col1|Col2|Col3|Col4|Col5|Slot 0,|Group 0 (n=20)|Col8|
+|---|---|---|---|---|---|---|---|
+||||||<br>Slot 1,<br>Slot 2,|<br> Group 0 (n=20)<br> Group 0 (n=20)||
+|||||||||
+
+
+0 10 20 30 40 50 60
+**Timestep**
+
+
+**Layer 2: Std Dev for All Cubes**
+
+|Col1|Col2|Col3|Col4|Col5|Slot 0,|Group 0 (n=20)|Col8|
+|---|---|---|---|---|---|---|---|
+||||||<br>Slot 1,<br>Slot 2,|<br> Group 0 (n=20)<br> roup 0 (n=20)||
+|||||||||
+
+
+0 10 20 30 40 50 60
+**Timestep**
+
+
+**Layer 3: Std Dev for All Cubes**
+
+|Col1|Col2|Col3|Col4|Col5|Slot 0,|Group 0 (n=20)|Col8|
+|---|---|---|---|---|---|---|---|
+||||||Slot 1,<br>Slot 2,|roup 0 (n=20)<br> roup 0 (n=20)||
+|||||||||
+
+
+0 10 20 30 40 50 60
+**Timestep**
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+|Col1|Slots 0-1<br>Slots 0-2<br>Slots 1-2|Col3|Col4|Col5|Col6|Col7|Col8|
+|---|---|---|---|---|---|---|---|
+|||||||||
+|||||||||
+
+
+0 10 20 30 40 50 60
+**Timestep**
+
+
+**Layer 1: Inter-Slot Cosine Similarity**
+
+**(Mean ± Std across 20 batches)**
+
+|Col1|Slots 0-1<br>Slots 0-2|Col3|Col4|Col5|Col6|Col7|Col8|
+|---|---|---|---|---|---|---|---|
+||Slots 1-2|||||||
+|||||||||
+|||||||||
+
+
+0 10 20 30 40 50 60
+**Timestep**
+
+
+**Layer 2: Inter-Slot Cosine Similarity**
+
+**(Mean ± Std across 20 batches)**
+
+|Col1|Slots 0-1<br>Slots 0-2|Col3|Col4|Col5|Col6|Col7|Col8|
+|---|---|---|---|---|---|---|---|
+||Slots 1-2|||||||
+|||||||||
+|||||||||
+
+
+0 10 20 30 40 50 60
+**Timestep**
+
+
+**Layer 3: Inter-Slot Cosine Similarity**
+
+**(Mean ± Std across 20 batches)**
+
+|Col1|Slots 0-1<br>Slots 0-2<br>Slots 1-2|Col3|Col4|Col5|Col6|Col7|Col8|
+|---|---|---|---|---|---|---|---|
+|||||||||
+|||||||||
+|||||||||
+
+
+0 10 20 30 40 50 60
+**Timestep**
+
+
+0.4
+
+
+0.3
+
+
+0.2
+
+
+0.1
+
+
+0.4
+
+
+0.3
+
+
+0.2
+
+
+0.1
+
+
+0.4
+
+
+0.3
+
+
+0.2
+
+
+0.1
+
+
+0.4
+
+
+0.3
+
+
+0.2
+
+
+0.1
+
+
+Figure 11: **Inter–slot** **similarity** **and** **variance** **of** **memory** **embeddings** **on**
+**RememberColor3-v0.** For each ELMUR layer (rows), the left panels show the cosine
+similarity between pairs of memory slots (0–1, 0–2, 1–2) as a function of timestep, averaged over 20
+batches (shaded region: standard deviation). Around the transition to the second segment ( _t_ = 20)
+the similarities jump from near zero to higher, stable values, indicating that one slot acquires a
+structured representation which becomes partially shared with the others. A second transition to the
+third segment appears at _t_ = 40, when another slot is written, after which the similarity profiles
+remain nearly constant, consistent with persistent storage. The right panels show the standard
+deviation of embeddings within each slot over episodes. Only the currently written slot exhibits
+a sharp increase in variance at its corresponding write time, while the other slots remain nearly
+constant, confirming that the model performs localized, slot-specific writes followed by stable
+retention of the encoded content.
+
+
+the blank stage and the distractor stage, demonstrating that the stored representation is preserved
+without drift.
+
+
+The slotwise variance plots show the same phenomenon from a complementary angle. The chosen
+slot exhibits a sudden rise in variance immediately after the cue is written, reflecting the encoding of
+task-specific information, while the unused slots retain near-zero variance for the remainder of the
+episode. Throughout the delay period the variance of the active slot remains stable, indicating that
+the stored color representation is neither degraded nor rewritten.
+
+
+Taken together, the update patterns, similarity dynamics, and variance profiles reveal a coherent
+mechanism: ELMUR performs a targeted, one-shot write into a designated memory slot, then maintains this representation with high stability until retrieval, even in the presence of visually similar
+distractors. This behavior aligns precisely with the probing results and provides strong causal evidence that ELMUR employs explicit long-term memory rather than incidental capacity effects. A
+more detailed, layer-wise visualization of evolution of memory embeddings across the entire episode
+is presented in Figure 12.
+
+
+A.10 PCA MEMORY ANALYSIS
+
+
+The geometric structure of memory representations is further illustrated by the Principal Component
+Analysis (PCA; Abdi & Williams (2010)) in Figure 13. The top row shows projections colored by
+memory slot (slots 0, 1, and 2), while the bottom row shows projections colored by layer. From left
+to right, we display all target colors together, then restrict to red, green, and blue targets respectively.
+In the slot based views, embeddings from different slots largely occupy the same manifolds for a
+
+
+27
+
+
+**Memory Evolution Across Time**
+
+
+**t=0** **t=6** **t=12** **t=18** **t=24** **t=30** **t=36** **t=42** **t=48** **t=54** **t=60**
+
+
+Slot 0
+
+
+Slot 1
+
+
+Slot 2
+
+
+Slot 0
+
+
+Slot 1
+
+
+Slot 2
+
+
+Slot 0
+
+
+Slot 1
+
+
+Slot 2
+
+
+Slot 0
+
+
+Slot 1
+
+
+Slot 2
+
+
+2.0
+
+
+1.5
+
+
+1.0
+
+
+0.5
+
+
+0.0
+
+
+−0.5
+
+
+−1.0
+
+
+−1.5
+
+
+−2.0
+
+
+0 50 **Dim** 100
+
+
+0 50 **Dim** 100
+
+
+0 50 **Dim** 100
+
+
+0 50 **Dim** 100
+
+
+0 50 **Dim** 100
+
+
+0 50 **Dim** 100
+
+
+0 50 **Dim** 100
+
+
+0 50 **Dim** 100
+
+
+0 50 **Dim** 100
+
+
+0 50 **Dim** 100
+
+
+0 50 **Dim** 100
+
+
+Figure 12: **Memory** **evolution** **across** **layers,** **slots,** **and** **time** **on** **RememberColor3-v0.**
+Each block corresponds to a snapshot of the memory state at a given timestep (columns, _t_ _∈_
+_{_ 0 _,_ 6 _, . . .,_ 60 _}_ ). Within each block, rows index memory slots (0–2) for a given layer (stacked vertically from Layer 0 to Layer 3), and the horizontal axis shows embedding dimensions. Color encodes
+activation value. Early timesteps exhibit near-random low-amplitude activations, while after the cue
+is observed a single slot in each layer becomes strongly structured and remains stable over subsequent timesteps. Later in the episode additional slots are written once and then preserved, illustrating
+that ELMUR performs sparse, slot-specific updates followed by long-horizon retention of the encoded representation.
+
+
+fixed color, indicating that slots are not tied to particular colors and instead share a common content
+space. In the layer based views, points from different layers form well separated clusters, especially
+when conditioning on a single color, which suggests that deeper layers produce progressively more
+structured and compact encodings of the target color while maintaining clear separation between
+colors in the joint view.
+
+
+The temporal evolution of memory representations is illustrated in Figure 14, which shows PCA
+projections of all memory vectors with color indicating timestep. The first panel aggregates all target
+colors, while the remaining three panels condition on red, green, and blue targets respectively. In all
+cases the trajectories exhibit a characteristic pattern: memories start from a diffuse cloud near the
+initialization region (early timesteps in purple), then rapidly converge onto a small number of lowdimensional manifolds after the cue is written, and remain confined there for the rest of the episode
+(late timesteps in green). Conditioning on a single color reveals that these manifolds are largely
+color specific, with each target color occupying its own stable region in PCA space and showing
+minimal drift over time. This behavior indicates that ELMUR quickly encodes the target color
+into a compact representation and maintains it throughout the delay and retrieval phases without
+substantial degradation.
+
+
+A.11 CROSS-ATTENTION MAPS
+
+
+Figure 15 visualizes the cross-attention patterns of the write (tok2mem, left) and read (mem2tok,
+right) modules. Each row corresponds to one of the 16 attention heads, the horizontal axis shows
+timesteps (0-60), and the vertical axis indexes the three memory slots. In the tok2mem maps,
+attention is almost entirely suppressed at the beginning of the episode and then exhibits a short, highintensity burst around the cue presentation, concentrated on a single slot across many heads. After
+this write event, activity becomes sparse with only occasional weak updates, consistent with a oneshot allocation of the cue into a dedicated slot followed by long-term preservation. In contrast, the
+mem2tok maps display more sustained but still structured activity: once the cue has been written,
+several heads repeatedly attend to the same slot throughout the blank interval and the decision phase,
+with peaks near the timesteps where the agent must choose the correct cube. Other heads remain
+nearly inactive or attend to alternative slots, suggesting head specialization. Overall, these attention
+patterns corroborate the memory probing and similarity analyses, showing that ELMUR performs a
+sharp, localized write of the target color into a single slot and then repeatedly reads from that slot
+during subsequent reasoning and action.
+
+
+28
+
+
+**PCA Projection by Memory Slot**
+
+|Col1|Col2|Col3|Col4|Col5|Col6|Slot 0|
+|---|---|---|---|---|---|---|
+|||||||Slot 1<br>Slot 2|
+||||||||
+||||||||
+||||||||
+||||||||
+||||||||
+
+
+−3 −2 −1 **PC1** 0 1 2 3
+
+
+**PCA Projection by Layer**
+
+|Col1|Col2|Col3|Col4|Col5|Col6|Layer 0|
+|---|---|---|---|---|---|---|
+|||||||Layer 1<br>Layer 2<br>Layer 3|
+||||||||
+||||||||
+||||||||
+||||||||
+||||||||
+
+
+−3 −2 −1 **PC1** 0 1 2 3
+
+
+2
+
+
+1
+
+
+0
+
+
+−1
+
+
+−2
+
+
+2
+
+
+1
+
+
+0
+
+
+−1
+
+
+−2
+
+
+**PCA Projection by Memory Slot**
+
+|Col1|Col2|Col3|Col4|Col5|Col6|Col7|Col8|
+|---|---|---|---|---|---|---|---|
+|||||||||
+|||||||||
+|||||||||
+|||||||||
+||Slot 0<br>|||||||
+||Slot 1<br>Slot 2|||||||
+
+
+−3 −2 −1 **PC1** 0 1 2 3
+
+
+**PCA Projection by Layer**
+
+|Col1|Col2|Col3|Col4|Col5|Col6|Col7|Col8|
+|---|---|---|---|---|---|---|---|
+|||||||||
+|||||||||
+|||||||||
+|||||||||
+||Layer 0<br>Layer 1<br>|||||||
+||Layer 2<br>Layer 3|||||||
+
+
+−3 −2 −1 **PC1** 0 1 2 3
+
+
+3
+
+
+2
+
+
+1
+
+
+0
+
+
+−1
+
+
+−2
+
+
+3
+
+
+2
+
+
+1
+
+
+0
+
+
+−1
+
+
+−2
+
+
+2
+
+
+1
+
+
+0
+
+
+−1
+
+
+−2
+
+
+−3
+
+
+2
+
+
+1
+
+
+0
+
+
+−1
+
+
+−2
+
+
+−3
+
+
+**PCA Projection by Memory Slot**
+
+|Col1|Col2|Col3|Col4|Col5|Col6|Col7|Col8|
+|---|---|---|---|---|---|---|---|
+|||||||||
+|||||||||
+|||||||||
+|||||||||
+||Slot 0<br>|||||||
+||~~Slot 1~~<br>Slot 2|||||||
+
+
+−3 −2 −1 **PC1** 0 1 2 3
+
+
+**PCA Projection by Layer**
+
+|Col1|Col2|Col3|Col4|Col5|Col6|Col7|Col8|
+|---|---|---|---|---|---|---|---|
+|||||||||
+|||||||||
+|||||||||
+|||||||||
+||Layer 0<br>Layer 1<br>|||||||
+||~~Layer 2~~<br>Layer 3|||||||
+
+
+−3 −2 −1 **PC1** 0 1 2 3
+
+
+2
+
+
+1
+
+
+0
+
+
+−1
+
+
+−2
+
+
+−3
+
+
+2
+
+
+1
+
+
+0
+
+
+−1
+
+
+−2
+
+
+−3
+
+
+**PCA Projection by Memory Slot**
+
+|Col1|Col2|Col3|Col4|Col5|Col6|Col7|Col8|
+|---|---|---|---|---|---|---|---|
+|||||||||
+|||||||||
+|||||||||
+||Slot 0<br>|||||||
+||~~Slot 1~~<br>Slot 2|||||||
+
+
+−3 −2 −1 **PC1** 0 1 2 3
+
+
+**PCA Projection by Layer**
+
+|Col1|Col2|Col3|Col4|Col5|Col6|Col7|Col8|
+|---|---|---|---|---|---|---|---|
+|||||||||
+|||||||||
+|||||||||
+||Layer 0<br>Layer 1<br>|||||||
+||~~Layer 2~~<br>Layer 3|||||||
+
+
+−3 −2 −1 **PC1** 0 1 2 3
+
+
+Figure 13: **PCA structure of memory embeddings by slot and layer on RememberColor3-v0.**
+Each panel shows a 2D PCA projection of all memory vectors. The top row colors points by memory
+slot (0, 1, 2), while the bottom row colors them by layer (0, 1, 2, 3). From left to right, we display
+embeddings for all target colors, and then restricted to red, green, and blue targets respectively.
+In the slot-based views, embeddings from different slots largely occupy the same manifolds for a
+fixed color, indicating that slots share a common content space rather than being tied to particular
+colors. In contrast, the layer-based views form well-separated clusters, especially when conditioning
+on a single color, showing that deeper layers produce progressively more specialized and compact
+representations of the same latent task variable.
+
+
+**PCA Projection of Memory Vectors**
+
+
+−3 −2 −1 **PC1** 0 1 2 3
+
+
+60
+
+
+50
+
+
+40
+
+
+30
+
+
+20
+
+
+10
+
+
+0
+
+
+2
+
+
+1
+
+
+0
+
+
+−1
+
+
+−2
+
+
+**PCA Projection of Memory Vectors**
+
+
+−3 −2 −1 **PC1** 0 1 2 3
+
+
+60
+
+
+50
+
+
+40
+
+
+30
+
+
+20
+
+
+10
+
+
+0
+
+
+3
+
+
+2
+
+
+1
+
+
+0
+
+
+−1
+
+
+−2
+
+
+2
+
+
+1
+
+
+0
+
+
+−1
+
+
+−2
+
+
+−3
+
+
+**PCA Projection of Memory Vectors**
+
+
+−3 −2 −1 **PC1** 0 1 2 3
+
+
+60
+
+
+50
+
+
+40
+
+
+30
+
+
+20
+
+
+10
+
+
+0
+
+
+2
+
+
+1
+
+
+0
+
+
+−1
+
+
+−2
+
+
+−3
+
+
+**PCA Projection of Memory Vectors**
+
+
+−3 −2 −1 **PC1** 0 1 2 3
+
+
+60
+
+
+50
+
+
+40
+
+
+30
+
+
+20
+
+
+10
+
+
+0
+
+
+Figure 14: **PCA projection of memory embeddings over time.** Each panel shows memory vectors
+from all layers and slots in RememberColor3-v0, projected onto the first two principal components and colored by timestep (see colorbar). From left to right we plot all episodes, and then subsets
+conditioned on the target cube being red, green, or blue. Early timesteps occupy a diffuse region of
+the space, while vectors shortly after the cue observation move into compact, color-specific clusters
+that remain stable for the rest of the episode, indicating that the memory state rapidly converges to a
+persistent representation of the target color.
+
+
+A.12 LIMITATIONS
+
+
+ELMUR uses a simple LRU rule with fixed blending, which makes its memory mechanism transparent and easy to analyze, though future work could explore adaptive variants. Segment-level
+recurrence adds a small cross-attention cost per layer, but this cost scales with the fixed number
+of memory slots rather than sequence length, making efficiency predictable even in long horizons.
+MoE-based FFNs already provide parameter efficiency at our scale, and larger architectures may further amplify this benefit. Finally, our study focuses on synthetic, POPGym, and simulated robotic
+tasks under IL, giving controlled and reproducible insights; extending to online RL and real-robot
+deployments offers promising next steps.
+
+
+29
+
+
+**Attention Weights (tok2mem)**
+
+
+0
+
+
+1
+
+
+2
+
+
+0
+
+
+1
+
+
+2
+
+
+0
+
+
+1
+
+
+2
+
+
+0
+
+
+1
+
+
+2
+
+
+0
+
+
+1
+
+
+2
+
+
+0
+
+
+1
+
+
+2
+
+
+0
+
+
+1
+
+
+2
+
+
+0
+
+
+1
+
+
+2
+
+
+0
+
+
+1
+
+
+2
+
+
+0
+
+
+1
+
+
+2
+
+
+0
+
+
+1
+
+
+2
+
+
+0
+
+
+1
+
+
+2
+
+
+0
+
+
+1
+
+
+2
+
+
+0
+
+
+1
+
+
+2
+
+
+0
+
+
+1
+
+
+2
+
+
+0
+
+
+1
+
+
+2
+
+
+0 5 10 15 20 25 30 35 40 45 50 55
+
+
+Timestep
+
+
+**Attention Weights (mem2tok)**
+
+
+0 5 10 15 20 25 30 35 40 45 50 55
+
+
+Timestep
+
+
+0.2
+
+
+0.1
+
+
+0.2
+
+
+0.1
+
+
+0.2
+
+
+0.1
+
+
+0.2
+
+
+0.1
+
+
+0.2
+
+
+0.1
+
+
+0.2
+
+
+0.1
+
+
+0.2
+
+
+0.1
+
+
+0.2
+
+
+0.1
+
+
+0.2
+
+
+0.1
+
+
+0.2
+
+
+0.1
+
+
+0.2
+
+
+0.1
+
+
+0.2
+
+
+0.1
+
+
+0.2
+
+
+0.1
+
+
+0.2
+
+
+0.1
+
+
+0.2
+
+
+0.1
+
+
+0.2
+
+
+0.1
+
+
+0
+
+
+1
+
+
+2
+
+
+0
+
+
+1
+
+
+2
+
+
+0
+
+
+1
+
+
+2
+
+
+0
+
+
+1
+
+
+2
+
+
+0
+
+
+1
+
+
+2
+
+
+0
+
+
+1
+
+
+2
+
+
+0
+
+
+1
+
+
+2
+
+
+0
+
+
+1
+
+
+2
+
+
+0
+
+
+1
+
+
+2
+
+
+0
+
+
+1
+
+
+2
+
+
+0
+
+
+1
+
+
+2
+
+
+0
+
+
+1
+
+
+2
+
+
+0
+
+
+1
+
+
+2
+
+
+0
+
+
+1
+
+
+2
+
+
+0
+
+
+1
+
+
+2
+
+
+0
+
+
+1
+
+
+2
+
+
+0.4
+
+
+0.2
+
+
+0.4
+
+
+0.2
+
+
+0.4
+
+
+0.2
+
+
+0.4
+
+
+0.2
+
+
+0.4
+
+
+0.2
+
+
+0.4
+
+
+0.2
+
+
+0.4
+
+
+0.2
+
+
+0.4
+
+
+0.2
+
+
+0.4
+
+
+0.2
+
+
+0.4
+
+
+0.2
+
+
+0.4
+
+
+0.2
+
+
+0.4
+
+
+0.2
+
+
+0.4
+
+
+0.2
+
+
+0.4
+
+
+0.2
+
+
+0.4
+
+
+0.2
+
+
+0.4
+
+
+0.2
+
+
+Figure 15: **Cross–attention** **patterns** **between** **tokens** **and** **memory** **slots** **in** **ELMUR.** Heatmaps
+show attention weights for the _tok2mem_ module (left) and the _mem2tok_ module (right) in the
+RememberColor3-v0 task. Each row corresponds to one of the 16 attention heads, the horizontal axis is the timestep ( _t_ _∈_ [0 _,_ 60]), and the vertical axis indexes the three memory slots. Color
+intensity indicates the magnitude of the attention weight. tok2mem heads exhibit sparse, sharply
+localized write events into a single slot around cue and update timesteps, whereas mem2tok heads
+display broader read patterns that concentrate on the slot carrying the target color during the decision
+phase, consistent with targeted write, once storage followed by repeated retrieval of the latent task
+variable.
+
+
+30
+
+
+Table 8: **Offline RL baselines on the MIKASA-Robo benchmark.** We compare transformer-based
+methods (RATE, DT), behavior cloning (BC), classical offline RL algorithms (CQL), and Diffusion
+Policy (DP) across all 32 tasks. Scores are reported as mean _±_ sem over three seeds, with each seed
+averaged over 100 evaluation episodes. All models are trained from RGB observations (top-view
+and wrist-view cameras) under sparse, success-only rewards. Even with access to memory, existing
+baselines (RATE, DT) fail on most tasks, whereas ELMUR achieves the highest performance on
+21 of the 23 tasks with non zero success rates and exceeds the previous state-of-the-art, RATE, by
+roughly 70% in aggregate success across all 32 tasks.
+
+
+**Environment** **RATE** **DT** **BC** **CQL** **DP** **ELMUR**
+
+BunchOfColors3-v0 0.00 _±_ 0.00 0.00 _±_ 0.00 0.00 _±_ 0.00 0.00 _±_ 0.00 0.00 _±_ 0.00 0.00 _±_ 0.00
+BunchOfColors5-v0 0.00 _±_ 0.00 0.00 _±_ 0.00 0.00 _±_ 0.00 0.00 _±_ 0.00 0.00 _±_ 0.00 0.00 _±_ 0.00
+BunchOfColors7-v0 0.00 _±_ 0.00 0.00 _±_ 0.00 0.00 _±_ 0.00 0.00 _±_ 0.00 0.00 _±_ 0.00 0.00 _±_ 0.00
+SeqOfColors3-v0 0.00 _±_ 0.00 0.00 _±_ 0.00 0.00 _±_ 0.00 0.00 _±_ 0.00 0.00 _±_ 0.00 0.00 _±_ 0.00
+SeqOfColors5-v0 0.00 _±_ 0.00 0.00 _±_ 0.00 0.00 _±_ 0.00 0.00 _±_ 0.00 0.00 _±_ 0.00 0.00 _±_ 0.00
+SeqOfColors7-v0 0.00 _±_ 0.00 0.00 _±_ 0.00 0.00 _±_ 0.00 0.00 _±_ 0.00 0.00 _±_ 0.00 0.00 _±_ 0.00
+ChainOfColors3-v0 0.00 _±_ 0.00 0.00 _±_ 0.00 0.00 _±_ 0.00 0.00 _±_ 0.00 0.00 _±_ 0.00 0.00 _±_ 0.00
+ChainOfColors5-v0 0.00 _±_ 0.00 0.00 _±_ 0.00 0.00 _±_ 0.00 0.00 _±_ 0.00 0.00 _±_ 0.00 0.00 _±_ 0.00
+ChainOfColors7-v0 0.00 _±_ 0.00 0.00 _±_ 0.00 0.00 _±_ 0.00 0.00 _±_ 0.00 0.00 _±_ 0.00 0.00 _±_ 0.00
+**Sum Across All Tasks** 5.42 3.15 3.92 2.66 4.02 **9.24**
+
+
+31

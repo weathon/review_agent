@@ -1,0 +1,408 @@
+# AUTOMATED BLACK-BOX PROMPT ENGINEERING FOR PERSONALIZED TEXT-TO-IMAGE GENERATION
+
+Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+Prompt engineering is an effective but labor-intensive way to control text-to-image (T2I) generative models. Its time-intensive nature and complexity have spurred the development of algorithms for automated prompt generation. However, these methods often struggle with transferability across T2I models, require white-box access to the underlying model, or produce non-intuitive prompts. In this work, we introduce PRISM, an algorithm that automatically produces human-interpretable and transferable prompts that can effectively generate desired concepts given only black-box access to T2I models. Inspired by large language model (LLM) jail-breaking, PRISM leverages the in-context learning ability of LLMs to iteratively refine the candidate prompt distribution built upon the reference images. Our experiments demonstrate the versatility and effectiveness of PRISM in generating accurate prompts for objects, styles, and images across multiple T2I models, including Stable Diffusion, DALL-E, and Midjourney.
+
+## 1 INTRODUCTION
+
+An important goal of generative modeling is to design algorithms capable of steering generative models to produce desired output images. Early attempts, which often centered on particular architectures or tasks, were largely characterized by manually-curated data collection, fine-tuning, or retraining from scratch (Srivastava & Salakhutdinov, 2012; Mirza & Osindero, 2014; Isola et al., 2017; Zhu et al., 2017). These requirements are often costly, and the resulting solutions usually do not transfer well between models. Thus despite the promise of these methods, efficient and generalized algorithms for controllable generation remain sought after.
+
+Today, perhaps the most popular approach for controllable generation is to guide the generation process with a piece of textual information, or prompt, that describes the properties of the desired output using text-to-image (T2I) generative models (Rombach et al., 2022; Yu et al., 2022). Through text, T2I models allow users to quickly and easily describe a wide variety of concepts, and users can more efficiently explore the behavior of their model through a myriad of strategies (Chao et al. (2023); Wen et al. (2023)). The predominant method for obtaining such input text is to manually design candidate prompts in an iterative, trial-and-error fashion, a process known as *prompt engineering*, based on what the user (prompt engineer) *believes* will lead to a desirable output. Unfortunately, these practices are often sensitive to different phrasings (Webson & Pavlick, 2022), require expert domain knowledge, and are notably inefficient as they necessitate a human in the loop.
+
+Motivated by the drawbacks of manual prompt engineering, a recent line of work known as *personalized* or *subject-driven* T2I generation has sought to automate the controllable generation pipeline. Given a collection of reference images that capture specific concepts, such as artistic style or shared objects, personalized T2I algorithms are designed to produce images that reflect those concepts illustrated in the reference images. While personalized T2I methods often involve fine-tuning or retraining the underlying T2I model (Ruiz et al., 2023; Chen et al., 2023; Shi et al., 2023), several approaches focus specifically on automating prompt engineering to generate effective prompts. Unfortunately, existing algorithms in this spirit tend to require pre-collected, architecture-specific keywords<sup>1</sup> or white-box, embedding-based optimization (Gal et al., 2023; Mahajan et al., 2023), leading to non-interpretable prompts (Wen et al., 2023) and preclude the possibility of directly generating prompts for closed-source T2I models (e.g., Midjourney or DALL-E).
+
+<sup>1</sup><https://github.com/pharmapsychotic/clip-interrogator>
+
+![Diagram of the PRISM framework for prompt refinement and iterative sampling. The process starts with a 'Prompt Engineer Assistant F' (represented by a robot head) and a 'T2I Generator G' (represented by a robot head). 'Reference Images' (three photos of a fluffy brown and white dog) are input to both. The 'Output Prompt' from F is concatenated (indicated by a plus sign) with the output from G. This combined prompt is then used by three different models: 'Stable Diffusion', 'Dall-E', and 'Midjourney'. Each model generates an image: Stable Diffusion generates 'A photo of my dog on the beach', Dall-E generates 'A photo of my dog sleeping', and Midjourney generates 'A photo of my dog skiing down a mountain'. The 'Judge D' (represented by a robot head) evaluates these generated images and provides feedback to the 'Prompt Engineer Assistant F'.](9ba3dc91984c80b96f217fb1bddd5c06_img.jpg)
+
+Diagram of the PRISM framework for prompt refinement and iterative sampling. The process starts with a 'Prompt Engineer Assistant F' (represented by a robot head) and a 'T2I Generator G' (represented by a robot head). 'Reference Images' (three photos of a fluffy brown and white dog) are input to both. The 'Output Prompt' from F is concatenated (indicated by a plus sign) with the output from G. This combined prompt is then used by three different models: 'Stable Diffusion', 'Dall-E', and 'Midjourney'. Each model generates an image: Stable Diffusion generates 'A photo of my dog on the beach', Dall-E generates 'A photo of my dog sleeping', and Midjourney generates 'A photo of my dog skiing down a mountain'. The 'Judge D' (represented by a robot head) evaluates these generated images and provides feedback to the 'Prompt Engineer Assistant F'.
+
+Figure 1: Given a set of reference images, our method, PRISM, is capable of creating human-interpretable and accurate prompts for the desired concept that are also transferable to both open-sourced and closed-sourced text-to-image models.  $\oplus$  denotes prompt concatenation.
+
+In order to address these shortcomings, we propose *Prompt Refinement and Iterative Sampling Mechanism* (PRISM), a new automated prompt engineering algorithm for personalized T2I generation. A key observation is that prompt engineers repeat the process of updating their “belief” of what makes an effective prompt based on the difference between their desired results and the generated images from previous iterations. Inspired by jailbreaking attacks on large language models (LLMs) (Chao et al., 2023) and *LLMs as optimizers* (Pryzant et al., 2023), we design an algorithm that operates with only limited human input, is capable of generating human interpretable and editable prompts, makes minimal assumptions about the underlying T2I model, and generalizes across different T2I models, including popular black-box models such as DALL-E and Midjourney.
+
+Given a set of reference images, our method first generates an initial prompt and its corresponding image using a vision-language model (VLM) as “prompt engineer assistant” and a T2I generator. We then obtain a score indicating the visual similarity of the generated image and the reference image with respect to the targeting concept via another VLM as judge. Leveraging LLMs’ in-context learning abilities (Shin et al., 2020; Zhou et al., 2023; Yang et al., 2024), we instruct the prompt engineer assistant VLM to update the candidate prompt distribution based on the previously generated prompt, images, and the evaluation scores. This processing, shown in Figure 1, is then repeated for a predetermined number of iterations. In the end, PRISM outputs the best-performing prompt by re-evaluating the top prompts generated from this process. In this way, PRISM seamlessly integrates iterative reasoning into the image generation process, much like a real prompt engineer. Our approach can therefore go beyond basic image-to-image transformations and conventional single-shot methods, providing a more versatile and robust framework for generating images that are both visually precise and contextually relevant.
+
+Experimentally, our method shows significantly better generalizability and transferability as we achieve the best performance in almost all metrics when experimenting with closed-source models in comparison to baselines including Textual Inversion (Gal et al., 2023), PEZ (Wen et al., 2023), BLIP2 (Li et al., 2023) and CLIP-Interrogator<sup>1</sup>. Our results also indicate that PRISM consistently outperforms existing methods with respect to human-interpretability while maintaining high visual accuracy. Finally, we demonstrate that the strong human interpretability makes the prompts generated by PRISM easily editable, unlocking a wide array of creative possibilities in real life.
+
+## 2 RELATED WORKS
+
+**Controllable T2I generation** Several methods tackle conditional image generation in a training-free manner by using pretrained diffusion models as priors (Meng et al., 2022; Chung et al., 2023; Song et al., 2022; He et al., 2023), and analogous approaches exist for T2I diffusion models (Yu et al., 2023; Rout et al., 2023; He et al., 2024). However, these methods assume that the controllability objectives can be formulated as differentiable loss functions, require access to model parameters and involve complex hyperparameter tuning. Another class of approaches (Zhang et al., 2023; Ye et al., 2023; Ruiz et al., 2023; Chen et al., 2023; Shi et al., 2023) also improve the controllability of pretrained T2I models, but they require expensive fine-tuning or re-training of the underlying model
+
+![Figure 2: An illustration of PRISM. The diagram shows a feedback loop between a Prompt Engineer Assistant F, a T2I Generator G, and a Judge D. Assistant F receives a 'System' prompt and a 'Reference Image' to generate a 'Candidate Prompt'. Generator G takes the 'Candidate Prompt' and 'Reference Images' to produce 'Generated Images'. Judge D takes the 'Generated Images' and 'Reference Image' to produce a 'Score' and a 'System' feedback prompt.](1b7d539e02a202c2cf2d97698b911447_img.jpg)
+
+The diagram illustrates the PRISM framework. At the top, a 'System' prompt for the 'Prompt Engineer Assistant F' states: "I am a helpful prompt engineer assistant. I will generate great prompts for this object...". Another 'System' prompt for the 'Judge D' states: "Some of the colors and the design features are missing. I should improve my prompts accordingly...". The 'Prompt Engineer Assistant F' (represented by a camera icon) receives a 'Reference Image' of a sneaker and a 'Candidate Prompt' (initially "a photo of a" + "pastel-colored sneaker with purple toe, white laces, grayish-white vamp, yellow stripe, white midsole") to generate a new 'Candidate Prompt'. The 'T2I Generator G' (represented by a robot icon) takes the 'Candidate Prompt' and 'Reference Images' to produce 'Generated Images'. The 'Judge D' (represented by a robot icon) takes the 'Generated Images' and 'Reference Image' to produce a 'Score: 5/10 Generated Image' and a 'System' feedback prompt: "I am an impartial judge and I will try my best to rate the similarity of the objects in these images...".
+
+Figure 2: An illustration of PRISM. The diagram shows a feedback loop between a Prompt Engineer Assistant F, a T2I Generator G, and a Judge D. Assistant F receives a 'System' prompt and a 'Reference Image' to generate a 'Candidate Prompt'. Generator G takes the 'Candidate Prompt' and 'Reference Images' to produce 'Generated Images'. Judge D takes the 'Generated Images' and 'Reference Image' to produce a 'Score' and a 'System' feedback prompt.
+
+Figure 2: An illustration of PRISM. “System” indicates the system prompt setups for the VLMs.
+
+every time they are applied to a new task. Prompt tuning methods (Gal et al., 2023; Wen et al., 2023; Mahajan et al., 2023) are in the same spirit as this paper, as they do not require training of the T2I model and condition generations on given reference images. However, unlike PRISM, these methods require access to the underlying model parameters or produce non-interpretable prompts.
+
+**Prompt engineering** Manual prompt engineering is a popular approach to eliciting desired behaviors from large pre-trained models because it uses little or no data and does not require fine-tuning (Radford et al., 2021; Brown et al., 2020). However, major drawbacks of manual prompt engineering include its laborious nature, its reliance on domain expertise, and its sensitivity to phrasings (Lu et al., 2022; Webson & Pavlick, 2022). To address this issue, several methods have been proposed to construct prompts in an automated manner (Shin et al., 2020; Gao et al., 2021; Zhou et al., 2022; 2023; Manikandan et al., 2023; Pryzant et al., 2023; Yang et al., 2024), and some have applied similar techniques to various downstream tasks (Mañas et al., 2024; Liu et al., 2024; Yang et al., 2023; Hao et al., 2024). In particular, Liu et al. (2024) applied the algorithm they designed for image classification to image inversion. Moreover, LLM jailbreaking focuses on automatically designing prompts that elicits specific content (often objectionable or illicit) from a targeted LLM (Zou et al., 2023; Wei et al., 2024; Robey et al., 2023; Liu et al., 2023). A particularly relevant work is Chao et al. (2023), which uses an auxiliary LLM to iteratively construct jailbreak prompts. Our method builds on this idea to create prompts to generate images satisfying the desired criteria.
+
+## 3 METHOD
+
+### 3.1 PROBLEM STATEMENT
+
+First, let  $x \in \mathcal{X}$  denote an image, and  $y \in \mathcal{Y}$  denote a textual prompt. Given a collection of reference images  $\{x_i\}_{i=1}^M$ , a prompt engineer  $F : \mathcal{X} \rightarrow \mathcal{Y}$  samples a candidate prompt  $y$  corresponding to each reference image  $x$ , i.e.,  $y \sim p_{p_F}(y | x)$ . A T2I generative model  $G : \mathcal{Y} \rightarrow \mathcal{X}$  then uses this candidate prompt to generate a new image,  $x \sim p_{p_G}(x | y)$ , and a judge model  $D : \mathcal{X} \times \mathcal{X} \rightarrow [0, 1]$  then scores the visual similarity between the images based on some criteria. Our goal is then to find the best prompt:
+
+$$y^* (\{x_i\}_{i=1}^M) = \arg \max_{y \in \mathcal{Y}} \sum_{i=1}^M s(x_i, y), \quad (1)$$
+
+where  $s(x_{\text{target}}, y) = \mathbb{E}_{x \sim p_{p_G}(x|y)} [D(x, x_{\text{target}})]$ .
+
+The criteria can be any visual similarity metric that may or may not be easy to specify in a closed form, including “how similar are the main objects in the images” or “how similar are the styles of the image” or “how similar are the two images in general”. The resulting  $y^*$  should be able to generate
+
+#### **Algorithm 1** Prompt Refinement and Iterative Sampling Mechanism (PRISM)
+
+---
+
+```
+
+1: Input:  $N$  streams,  $K$  iterations,  $\{x_i\}_{i=1}^M$  reference images
+2: Output: Best prompt  $y^*$  based on total score
+3: for  $n = 1$  to  $N$  in parallel do
+4:   for  $k = 1$  to  $K$  do
+5:     Randomly sample an  $x_{k,n}$  from  $\{x_i\}_{i=1}^M$ 
+6:     F samples  $y_{k,n} \sim p_{\theta_F}(y \mid x_{k,n})$ 
+7:     G samples  $\hat{x}_{k,n} \sim p_{\theta_G}(x \mid y_{k,n})$ 
+8:     D calculates an in-iteration score  $s'(x_{k,n}, y_{k,n}) = \mathbf{D}(x_{k,n}, \hat{x}_{k,n})$ 
+9:     Update  $p_{\theta_F}$  based on  $x_{k,n}, \hat{x}_{k,n}, y_{k,n}, s'(x_{k,n}, y_{k,n})$  and the chat history of stream  $n$ 
+10:  end for
+11: end for
+12: Collect the subset  $\{y_c\}_{c=1}^C$  with the  $C$ -best in-iteration scores
+13: Re-evaluate this subset with total score  $\sum_{i=1}^M s(x_i, y_c)$ 
+14: Return the prompt with the best total score. In case of a tie, return the prompt with the highest
+    log likelihood.
+
+```
+
+---
+
+an image that is very close to the reference images based on the criteria with some (possibly unseen) T2I models  $p_{\theta}(x \mid y)$ .
+
+### 3.2 ALGORITHM
+
+Our method, Prompt Refinement and Iterative Sampling Mechanism (PRISM), is an iterative process that repeats a prompt refinement subroutine for  $K$  iterations in  $N$  parallel streams, where  $N \times K$  is a predetermined compute budget. At iteration  $k$ , the  $n$ -th stream of PRISM randomly selects a reference image  $x_{k,n}$  from  $\{x_i\}_{i=1}^M$  and uses **F** to sample a candidate prompt  $y_{k,n}$  from  $p_{\theta_F}(y \mid x_{k,n})$ . Then it queries **G** to generate a single  $\hat{x}_{k,n}$  from  $y_{k,n}$  with  $p_{\theta_G}(x \mid y_{k,n})$  and evaluate the prompt with **D** to obtain an in-iteration score  $s'(x_{k,n}, y_{k,n}) = \mathbf{D}(x_{k,n}, \hat{x}_{k,n})$ . At the end of the iteration, we use the generated  $y_{k,n}$  and its score to update  $p_{\theta_F}(y \mid x)$ . After the entire process, we collect the subset of  $\{y_c\}_{c=1}^C$  generated throughout this process that has the  $C$ -best in-iteration scores. Then we re-evaluate this subset with the total score  $\sum_{i=1}^M s(x_i, y_c)$  and return the prompt with the best total score. If there is a tie, then we return the prompt with the highest log likelihood. The pseudocode and an illustration for this algorithm are outlined in Algorithm 1 and Figure 2 respectively.
+
+The key difference between PRISM and prior methods is that PRISM updates the entire sampling distribution of prompts, whereas prior works (Gal et al., 2023; Wen et al., 2023; Mahajan et al., 2023) directly update the tokens of a single prompt or the embeddings of the prompt. We believe that maintaining the whole prompt distribution is beneficial as text-to-image generation is not a one-to-one operation, i.e. an image can be described by multiple different text prompts and the same text prompt can correspond to multiple differently generated images. Having access to the whole distribution allows the method to sample a more diverse range of prompts without starting from scratch and may also help the optimization escape potential local optima.
+
+Since PRISM only requires samples from **G**, one may use any T2I model of their choice. However, careful consideration is needed when designing **F** and **D**, which we will elaborate on below.
+
+### 3.3 DESIGNING AND UPDATING **F** and $p_{\theta_F}$
+
+**What is  $p(y \mid x)$ ?** In general, it is not obvious what the joint or the conditional distribution of all text and images is, so some form of approximation is unavoidable. In the context of image generation, a natural choice of the image-conditioned text distribution is an image captioning model. Traditional captioning models, however, fall short in controlled image generation for two primary reasons: (1) The level of detail necessary for generating specific images far exceeds what generic captioning models provide (Liang et al., 2023); (2) effective prompts for T2I models are often not grammatically correct sentences but rather collection of phrases that describe the details about the image, which generic captioning models are not trained to generate. For example, in Figure 5, the second reference image is generated by the prompt “*A broken robot lays on the ground with plants growing over it, somber, HD, hyper realistic, intricate detail*” with Stable Diffusion, but a caption
+
+for this image will not include components like “HD” or “hyper realistic”. As a result, instead of “a good description of an image”, we wish to directly model “possible prompts that are used to generate this image”.
+
+**Desiderata** A desirable **F** can sample from a distribution  $p_{\theta_F}(y | x)$  that models “the prompt that can be used to generate this image”, and it should also be easily updated if the current generation is suboptimal. Ideally, such an update can be done without any retraining or fine-tuning since these operations are generally expensive and incompatible with black-box T2I models.
+
+**Vision-Language Models as F** VLMs stand out as the ideal choice for **F** due to their ability to directly tailor the generation of prompts via system prompts and to adapt through in-context learning without requiring access to the model’s parameters. Specifically, since the model can ingest both images and texts, we can incorporate the history of reference images, intermediate prompts, generated images, and the evaluation scores all in the context of the LLM. Then, the model can be prompted to jointly reason over all available information and perform in-context learning. The in-context learning facilitates iterative refinement of the prompt to update the posterior distribution based on feedback or even additional human instructions, without the need for model retraining. Concretely, the model would process how the image generative model is affected by different prompts, propose improvements, and create new prompts, much like a prompt engineer. This way, we can naturally incorporate iterative reasoning into the image generation process and go beyond simple image-to-image transformations and traditional single-shot generation, and thus offers a more robust and versatile framework for producing accurate and contextually relevant images. In practice, we design system prompts that explicitly condition the LLM to generate improvements and new prompts given the results from the previous iterations, similar to the chain-of-thought (Wei et al., 2022) and textual gradients (Pryzant et al., 2023) technique.
+
+### 3.4 DESIGNING THE JUDGE MODEL D
+
+We have a wider range of choices for the judge model as long as it provides a notion of similarity between a pair of images. A simple solution is to use pre-trained discriminative models such as CLIP (Radford et al., 2021), and measure the distance in their embedding spaces. While these models have seen various degrees of success, they also come with inherent limitations – the discriminative objective (e.g., contrastive loss) does not incentivize the model to attend to fine-grained details, an issue similar to the shortcomings of using captioning models to generate prompts (Liang et al., 2023). Moreover, in image generation, the criteria of success can be nuanced and difficult to quantify through traditional similarity metrics yet can be effortlessly described in human language. Lastly, the similarity we wish to measure may only involve some part of the visual features (e.g. color), and not all applications share the same notion of similarity. If we want to use pretrained discriminative models, then we need to find a different model for each task, which can be inefficient.
+
+In light of these challenges, an ideal judge model should be flexible for different kinds of criteria and can perform fine-grained analysis of the images. Once again, a VLM emerges as the perfect candidate: using system prompts and in-context learning, we can easily specify metrics that may be otherwise difficult to describe or evaluate and even intervene in the reasoning chain if we want to, and, more importantly, the same model can be applied to a wide range of tasks.
+
+## 4 EXPERIMENTS
+
+### 4.1 EXPERIMENTAL SETTINGS
+
+**Implementation Details** For all of our experiments, we choose GPT-4V (OpenAI, 2023) as both the prompt engineer assistant model **F** and the judge **D**. We also fix the T2I generator as SDXL-Turbo (Sauer et al., 2023) for all of our experiments. We design different system prompts for both **F** and **D** for each task and we provide details about the system prompts in the appendix.
+
+We evaluate the prompts generated from PRISM and baselines with five different T2I models. In particular, we choose two open-sourced models, Stable Diffusion 2.1 (SD 2.1) and SDXL-Turbo, and two closed-sourced models, Dall-E 2 and Dall-E 3, to quantitatively measure the performance. We also qualitatively showcase results from Midjourney, which is another closed-sourced T2I platform. For SD 2.1 and SDXL-Turbo, we clip all prompt lengths to 77 due to their context length constraint.
+
+We compare PRISM and baselines in two settings: personalized T2I generation and direct image inversion, and we will elaborate on the task definitions in their corresponding sections below. For
+
+|            | Reference                                                                  | Context                                               | Textual Inversion                                      | CLIP-Interrogator                                                                           | BLIP2                                                                          | PEZ                                             | PRISM (Ours)                                                                                                                                                    |
+|------------|----------------------------------------------------------------------------|-------------------------------------------------------|--------------------------------------------------------|---------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------|-------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| SD1.2      | <p>Image: Reference image of a dog in a jungle</p>                         | a dog in the jungle                                   | <p>Image: Textual Inversion result: Not Applicable</p> | <p>Image: CLIP-Interrogator result: Not Applicable</p>                                      | <p>Image: BLIP2 result: a dog is sitting on the ground with its tongue out</p> | <p>Image: PEZ result: comp beautiful dog...</p> | <p>Image: PRISM (Ours) result: A fluffy brown dog with a white and yellow collar, sitting in a lush green jungle with sunlight filtering through the trees.</p> |
+|            | <p>Image: Reference image of a sneaker with Eiffel Tower in background</p> | a sneaker with the Eiffel Tower in the background     | <p>Image: Textual Inversion result: Not Applicable</p> | <p>Image: CLIP-Interrogator result: Not Applicable</p>                                      | <p>Image: BLIP2 result: a pair of blue sneakers on a brick wall</p>            | <p>Image: PEZ result: cute sneakers...</p>      | <p>Image: PRISM (Ours) result: sneakers with a blue and white pattern, sitting on a brick wall.</p>                                                             |
+| Dall-E 2   | <p>Image: Reference image of a cat in a purple wizard outfit</p>           | a cat in a purple wizard outfit                       | <p>Image: Not Applicable</p>                           | <p>Image: CLIP-Interrogator result: a gray cat sitting on a white table...</p>              | <p>Image: BLIP2 result: a gray cat sitting on a white table...</p>             | <p>Image: PEZ result: gray cat...</p>           | <p>Image: PRISM (Ours) result: A gray cat wearing a purple wizard hat and robe, sitting on a white table.</p>                                                   |
+|            | <p>Image: Reference image of a toy with a tree and autumn leaves</p>       | a toy with a tree and autumn leaves in the background |                                                        | <p>Image: CLIP-Interrogator result: a red stuffed animal sitting on top of a monitor...</p> | <p>Image: BLIP2 result: a red stuffed animal sitting on top of a monitor</p>   | <p>Image: PEZ result: red stuffed animal...</p> | <p>Image: PRISM (Ours) result: A red stuffed animal sitting on a monitor with autumn leaves in the background.</p>                                              |
+| Midjourney | <p>Image: Reference image of a backpack in a river</p>                     | my backpack in the river                              | <p>Image: Not Applicable</p>                           | <p>Image: CLIP-Interrogator result: a dog backpack sitting on the grass...</p>              | <p>Image: BLIP2 result: a dog backpack sitting on the grass</p>                | <p>Image: PEZ result: dog backpack...</p>       | <p>Image: PRISM (Ours) result: A blue backpack sitting on a grassy bank next to a river.</p>                                                                    |
+
+Figure 3: Qualitative results for personalized T2I generation on DreamBooth dataset.
+
+personalized T2I generation, we use a maximum budget of 40 and report the quantitative results with  $N = 10, K = 4$ . For direct image inversion, we use a maximum budget of 30 and report the quantitative results with  $N = 6, K = 5$ .
+
+**Baselines** We choose Textual Inversion (TI) (Gal et al., 2023), BLIP-2 (BLIP2) (Li et al., 2023), CLIP-Interrogator (CLIP-Int) and PEZ (Wen et al., 2023) as the baselines. Textual Inversion trains a “soft token” which cannot be directly translated into regular human language to represent the concepts in the reference images. BLIP-2 is the state-of-the-art image captioning model. CLIP-Interrogator<sup>1</sup> combines BLIP-2 captions with a suffix which is created by searching a pre-collected bank of keywords using CLIP (Radford et al., 2021) score. PEZ is a gradient-based optimization method that searches for the best combination of existing tokens in the vocabulary with CLIP similarity. **For image inversion, we also include a VLM-based baseline, Liu et al. (2024), to demonstrate the effectiveness of our algorithm.** Notice that TI requires training on individual models and CLIP-Int requires a pre-collected keyword bank, both of which provides unfair advantages over our setting.
+
+**Evaluation Metrics** We evaluate the prompt interpretability using mean negative log-likelihood (NLL) calculated from Mistral 7B (Jiang et al., 2023). For image quality evaluation, we mainly measure the CLIP image similarity score (CLIP-I) to quantify the difference between the generated images and the reference images. Following Ruiz et al. (2023), we also use DINO V2 (Oquab et al., 2024) embedding similarity to calculate the object-sensitive image similarity for the personalized T2I generation task. We chose CLIP-ViT-L-14 and DINO-V2-Base as the base models. For Dall-E 2 and Dall-E 3, we also compare the number of times each method fails to pass its black-box safeguard. More failures indicate a higher potential to produce unsafe prompts. For each prompt, we allow 5 attempts before counting it as a failure.
+
+### 4.2 PERSONALIZED TEXT-TO-IMAGE GENERATION
+
+We first demonstrate PRISM’s ability to find human-interpretable and accurate prompts to describe certain objects or styles in the task of personalized T2I generation. Given a set of reference images that depict the same concept (such as objects and style), this task requires the T2I model to synthesize images in new contexts while maintaining the original concept.
+
+**Datasets** We use DreamBooth dataset (Ruiz et al., 2023) to quantitatively compare the performance in personalized T2I generation. DreamBooth dataset contains 30 daily objects and each subject has 4-6 images. For each subject, we adopt the 25 prompt templates curated by DreamBooth to create varying contexts and scenarios to test the fidelity of the subject representation in diverse settings. We generate 4 images for each subject and template combination with open sourced T2I models, and 1 image for each combination with closed sourced T2I models. For Textual Inversion, we follow the original setting to fill the templates and for all the other methods, we use the class noun to fill the template and the output prompts that describe these concepts serve as suffixes.
+
+Table 1: Personalized T2I results on DreamBooth dataset. Bold fonts indicate the best score and underlines indicate the second best score.
+
+| Method              | Prompt | SD 2.1       |              | SDXL Turbo   |              | Dall-E 2     |              | Dall-E 3     |             |
+|---------------------|--------|--------------|--------------|--------------|--------------|--------------|--------------|--------------|-------------|
+|                     |        | NLL ↓        | CLIP-I ↑     | DINO ↑       | CLIP-I ↑     | DINO ↑       | CLIP-I ↑     | DINO ↑       | Failed ↓    |
+| TI (SD 2.1)         | -      | -            | 0.707        | 0.443        | -            | -            | -            | -            | -           |
+| TI (SDXL)           | -      | -            | -            | -            | <b>0.771</b> | <b>0.504</b> | -            | -            | -           |
+| CLIP-Int            | -      | <u>4.361</u> | <u>0.733</u> | <u>0.446</u> | 0.490        | 0.490        | <u>0.711</u> | <u>0.464</u> | 13.3%       |
+| BLIP2               | -      | 4.378        | 0.706        | 0.408        | 0.729        | 0.456        | 0.707        | 0.430        | <b>6.9%</b> |
+| PEZ                 | -      | 6.188        | 0.709        | 0.384        | 0.722        | 0.418        | 0.676        | 0.389        | 16.7%       |
+| <b>PRISM (Ours)</b> | -      | <b>3.466</b> | <b>0.743</b> | <b>0.464</b> | <u>0.770</u> | <u>0.499</u> | <b>0.734</b> | <b>0.482</b> | <b>6.9%</b> |
+
+![Figure 4: Qualitative results for personalized style T2I generation on Wikiart dataset. The figure is a grid showing 'Reference' and 'Context' images on the left, followed by generated images and prompts for 'CLIP-Interrogator', 'BLIP2', 'PEZ', and 'PRISM (Ours)'. Rows include SD 2.1, SDXL-Turbo, Dall-E 2, Dall-E 3, and Midjourney examples. PRISM consistently generates more detailed and style-accurate results compared to other methods.](c1c7af7ea36be0323047962df57d75b0_img.jpg)
+
+Figure 4: Qualitative results for personalized style T2I generation on Wikiart dataset. The figure is a grid showing 'Reference' and 'Context' images on the left, followed by generated images and prompts for 'CLIP-Interrogator', 'BLIP2', 'PEZ', and 'PRISM (Ours)'. Rows include SD 2.1, SDXL-Turbo, Dall-E 2, Dall-E 3, and Midjourney examples. PRISM consistently generates more detailed and style-accurate results compared to other methods.
+
+Figure 4: Qualitative results for personalized style T2I generation on Wikiart dataset.
+
+We also qualitatively demonstrate the ability to represent a certain artistic style using Wikiart dataset (Tan et al., 2019). We use three images from each artist as reference images. To create diverse scenes, we follow He et al. (2024) and use descriptive prompts from PartiPrompts (Yu et al., 2022) as prefixes to the output prompts similar to the previous setting.
+
+**DreamBooth Dataset Results** Table 1 and Figure 3 respectively show the quantitative and qualitative results on the DreamBooth dataset. As we can observe, PRISM achieves the best performance across the board except for the image similarity metrics for SDXL-Turbo.
+
+In terms of object fidelity, we find PRISM to constantly achieve accurate depiction of the target subject while the baselines sometimes struggle to capture all fine-grained details like the colors of the animals and the shape of the shoe sole. And out of the four training-free methods we experiment with, PRISM is the only one that can attempt to tackle complicated objects such as the red monster toy and the dog-shaped backpack when all the other methods fail to generate even remotely similar objects. Due to the nature of their methodologies, BLIP-2 and CLIP-Interrogator also capture the background and other irrelevant elements in the scene when describing the objects. However, unlike our method, where we can directly specify the tasks and the judging criteria in the system prompts of the VLMs, there is no simple way to automatically filter out those irrelevant elements in BLIP-2 and CLIP-Interrogator’s outputs. Even though Textual Inversion obtains marginally higher CLIP-I scores and DINO scores with SDXL-Turbo, it requires a lot more modeling assumptions than our method, and the new embeddings it learns are not transferable – not even to SD 2.1.
+
+PRISM is the only method in our experiments that can produce fully human-readable prompts while providing enough relevant details. In particular, we can observe that PEZ renders completely indecipherable texts, BLIP-2 only describes the general scene but fails to mention any visual details and textual inversion is entirely not interpretable since it produces soft embeddings. Since CLIP-Interrogator combines the results from BLIP-2 and a CLIP search, it improves the interpretability
+
+![Figure 5: Image inversion results for different methods on different T2I models. The figure is a grid showing results for SD2.1, SDXL-Turbo, Dall-E 2, Dall-E 3, and Midjourney models. Each row shows a reference image, the CLIP-Interrogator prompt, and the generated images from BLIP2, PEZ, and PRISM (Ours).](892f25e3d71d8e315a2a51092a8a8da7_img.jpg)
+
+Figure 5 displays image inversion results across five T2I models: SD2.1, SDXL-Turbo, Dall-E 2, Dall-E 3, and Midjourney. For each model, the figure shows a 'Reference' image, a 'CLIP-Interrogator' prompt, and the generated images from 'BLIP2', 'PEZ', and 'PRISM (Ours)'. The PRISM (Ours) column consistently shows more accurate and detailed reconstructions compared to the other methods.
+
+Figure 5: Image inversion results for different methods on different T2I models. The figure is a grid showing results for SD2.1, SDXL-Turbo, Dall-E 2, Dall-E 3, and Midjourney models. Each row shows a reference image, the CLIP-Interrogator prompt, and the generated images from BLIP2, PEZ, and PRISM (Ours).
+
+Figure 5: Image inversion results for different methods on different T2I models.
+
+Table 2: Metrics for the image inversion results. old fonts indicate the best score and underlines indicate the second best score.
+
+| Method            | Prompt       | SD 2.1       | SDXL Turbo   | Dall-E 2     |             | Dall-E 3     |             |
+|-------------------|--------------|--------------|--------------|--------------|-------------|--------------|-------------|
+|                   | NLL ↓        | CLIP-I ↑     | CLIP-I ↑     | CLIP-I ↑     | Failed ↓    | CLIP-I ↑     | Failed ↓    |
+| CLIP-Int          | <u>4.193</u> | <b>0.800</b> | <b>0.783</b> | <b>0.761</b> | 17.0%       | <u>0.719</u> | <b>0.0%</b> |
+| BLIP2             | 4.299        | 0.710        | 0.707        | 0.687        | <u>2.0%</u> | 0.695        | <b>0.0%</b> |
+| PEZ               | 6.736        | 0.746        | 0.726        | 0.616        | 3.0%        | 0.635        | <b>0.0%</b> |
+| Liu et al. (2024) | <b>2.520</b> | <u>0.713</u> | <u>0.720</u> | <u>0.689</u> | <b>0.0%</b> | <u>0.732</u> | <b>0.0%</b> |
+| PRISM (Ours)      | <u>2.762</u> | <u>0.749</u> | <u>0.776</u> | <u>0.741</u> | <u>2.0%</u> | <b>0.767</b> | <b>0.0%</b> |
+
+over PEZ-like gradient search-only method. However, it still falls short in terms of human readability in comparison to our method.
+
+When transferring the output prompts to black-box T2I models, our method shows even larger advantages over the baselines. We also observe that our method produces the fewest unsafe prompts judged by Dall-E safeguards, while the baselines fail to pass the safeguard up to 16.7% of the time.
+
+**Wikiart Results** In Figure 4, we show a qualitative comparison between our method and baselines on the Wikiart dataset. We find that our method is capable of precisely identifying the genres, eras, and sometimes even the names of the artists when describing the style of the reference artworks. On the other hand, the baselines fail to recognize these crucial keywords, even when they have access to a pre-collected bank of words that is supposed to provide accurate descriptions of art styles. In addition, PRISM can provide other fine-grained details such as pen strokes style and color palettes in a human-interpretable way to better assist the generation of the target style.
+
+### 4.3 DIRECT IMAGE INVERSION
+
+To demonstrate the versatility of our method, we also compare PRISM the baselines in the task of direct image inversion. In this task, the goal is to directly find the prompt that can exactly generate the input image. Here the number of reference images is  $M = 1$  and we aim to capture all aspects of the image, including the subjects, background, theme, style, and other details in the scene.
+
+Table 3: Comparison with GPT-4V in both personalized T2I generation and direct image inversion experiments.
+
+| Method | Image        |              | Object       |              |
+|--------|--------------|--------------|--------------|--------------|
+|        | NLL          | CLIP-I       | NLL          | CLIP-I       |
+| GPT-4V | <b>2.356</b> | 0.756        | <b>3.393</b> | 0.757        |
+| PRISM  | 2.762        | <b>0.776</b> | 3.466        | <b>0.770</b> |
+
+![Figure 6: Qualitative comparison with GPT-4V. The figure shows a 2x3 grid of images. The first column is labeled 'Reference' and shows a white robot and a circular cityscape. The second column is labeled 'GPT-4V' and shows the same robot and cityscape but with lower quality. The third column is labeled 'PRISM (Ours)' and shows the same robot and cityscape with higher quality, closer to the reference.](c37fe03d7cad74ad675a0eb16aa43821_img.jpg)
+
+Figure 6: Qualitative comparison with GPT-4V. The figure shows a 2x3 grid of images. The first column is labeled 'Reference' and shows a white robot and a circular cityscape. The second column is labeled 'GPT-4V' and shows the same robot and cityscape but with lower quality. The third column is labeled 'PRISM (Ours)' and shows the same robot and cityscape with higher quality, closer to the reference.
+
+Figure 6: Qualitative comparison with GPT-4V.
+
+**Datasets** We use images from the DiffusionDB dataset (Wang et al., 2022) for the direct image inversion task. This dataset includes a wide variety of image pairs generated by Stable Diffusion and we choose a random sample of 100 images from the `large_random_10k` split on Huggingface.
+
+**Results** As shown in Table 2, we immediately see a significant improvement in the human-interpretability of inverted prompts using PRISM. While expected for methods, such as PEZ, which has no language prior, we also find that our method finds text that more closely aligns with a learned distribution of English language text (i.e. lower NLL) than CLIP-Interrogator and BLIP2.
+
+When comparing the image quality, we first note that because all images in DiffusionDB are generated by Stable Diffusion, which is exactly the model design space of CLIP-Interrogator and PEZ, it gives significant modeling assumption advantages to these baselines over our method when testing on Stable Diffusion models. This advantage enables relatively high performance for these baselines on Stable Diffusion models, but it does not transfer well into other closed-sourced models. In fact, we can even observe that CLIP-Interrogator generates the highest quality images with SD 2.1, which is the weakest model in this comparison, and the lowest quality images with Dall-E 3, which is the strongest T2I model in this table. This phenomenon indicates that the design choices of CLIP-Interrogate and PEZ are heavily overfitted on Stable Diffusion, and have poor generalizability to other models. On the other hand, the prompts produced by PRISM generalize significantly better than the baselines and we achieve better results with more powerful T2I models. When compared with the other VLM baseline Liu et al. (2024), with which a thorough comparison is included in Section F, PRISM performs it in almost all metrics, indicating a superior algorithmic design.
+
+Qualitatively, our method also provides prompts that are both semantically aligned with and can generate images that are visually similar to the reference. In particular, Figure 5, shows that we can find text that aligns with the image, even when those images have particularly unique features. For example, in Figure 5 Dall-E3 generated a grid of images of animal faces. Not only does the PRISM’s prompt explicitly include a request for this grid structure, unlike our comparison methods, but it also takes into account the coloration of the background in the reference. In the second row of Figure 5, our method is also the only method that captures the small flowers in the grass, showcasing the capability of identifying and reflecting small fine-grained details from the reference.
+
+### 4.4 ABLATION STUDY
+
+**Comparison with GPT-4V** While we can use any VLM (which we demonstrate in Appendix C.2), it is nonetheless useful to understand what benefits PRISM adds to an already capable foundation model like GPT-4V. Therefore, we compare our method with GPT-4V’s zero-shot performance with the same system prompts for both tasks on SDXL-Turbo. We can see in Table 3 that PRISM consistently outperforms GPT-4V’s zero-shot performance, although the latter is already compelling. In Figure 6, we can also observe that qualitatively GPT-4V can capture the high-level semantics of the reference images but still misses fine-grained details.
+
+**Effect of Budgets** Next we take a closer look at the effect of increasing the budget in PRISM. Figure 7 and 8 show the effect of increasing the number of streams  $N$  and the number of iterations  $K$  respectively. We observe that when increasing  $N$  and keeping  $K$  fixed, we can obtain steady performance improvements in both human readability and prompt accuracy. When increasing  $K$
+
+486  
+487  
+488  
+489  
+490  
+491  
+492  
+493  
+494  
+495  
+496  
+497  
+498  
+499  
+500  
+501  
+502  
+503  
+504  
+505  
+506  
+507  
+508  
+509  
+510  
+511  
+512  
+513  
+514  
+515  
+516  
+517  
+518  
+519  
+520  
+521  
+522  
+523  
+524  
+525  
+526  
+527  
+528  
+529  
+530  
+531  
+532  
+533  
+534  
+535  
+536  
+537  
+538  
+539
+
+![Figure 7: Line graph showing Prompt Log Likelihood (blue line) and Image CLIP Score (orange line) vs Number of Streams (N) with fixed K=5. Both metrics increase as N increases from 2 to 6.](7801d00a216dc4dc8a7d210dcb5fe3c5_img.jpg)
+
+| Number of Streams (N) | Prompt Log Likelihood | Image CLIP Score |
+|-----------------------|-----------------------|------------------|
+| 2                     | -2.81                 | 0.770            |
+| 4                     | -2.75                 | 0.773            |
+| 6                     | -2.74                 | 0.776            |
+
+Figure 7: Line graph showing Prompt Log Likelihood (blue line) and Image CLIP Score (orange line) vs Number of Streams (N) with fixed K=5. Both metrics increase as N increases from 2 to 6.
+
+Figure 7: Ablation study on different numbers of streams  $N$  with fixed  $K = 5$ .
+
+![Figure 8: Line graph showing Prompt Log Likelihood (blue line) and Image CLIP Score (orange line) vs Number of Iterations (K) with fixed N=3. Prompt Log Likelihood decreases while Image CLIP Score increases as K increases from 1 to 5.](6b32b7b928d34eeccb15c29cdf9d2cb3_img.jpg)
+
+| Number of Iterations (K) | Prompt Log Likelihood | Image CLIP Score |
+|--------------------------|-----------------------|------------------|
+| 1                        | -2.45                 | 0.770            |
+| 2                        | -2.63                 | 0.766            |
+| 3                        | -2.65                 | 0.771            |
+| 5                        | -2.73                 | 0.773            |
+
+Figure 8: Line graph showing Prompt Log Likelihood (blue line) and Image CLIP Score (orange line) vs Number of Iterations (K) with fixed N=3. Prompt Log Likelihood decreases while Image CLIP Score increases as K increases from 1 to 5.
+
+Figure 8: Ablation study on different numbers of iterations  $K$  with fixed  $N = 3$ .
+
+![Reference image of a woman with blue hair and a green hoodie. Reconstruction image of the same woman. Generated image with blue hair edit. Generated image with hoodie edit. Generated image with circular logo edit. Generated image with hand edit. Generated image with NYC time square background edit.](d3f6de4fe9f9138fc6afc584b5104433_img.jpg)
+
+| Reference    | Reconstruction | PRISM Generated Prompt                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |                                                |                                                         |  |
+|--------------|----------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|------------------------------------------------|---------------------------------------------------------|--|
+|              |                | Generate a hyper-realistic portrait of an Asian female with bright, vivid neon orange chin-length bob haircut, straight bangs above eyebrows. She looks to her left with a strong, determined expression, wearing a saturated green turtleneck outfit with bright yellow accents and a distinct circular logo on the chest. Her left fist is prominently clenched in front of her, showing motivation. The background is a deep purple with bright, well-defined diagonal white lens flares, high contrast lighting. |                                                |                                                         |  |
+|              |                |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |                                                |                                                         |  |
+| ... blue ... | ... hoodie ... | ... a distinct circular logo that says "PRISM" ...                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | ... Her left hand is waving at the camera. ... | ... The background is NYC time square on a rainy night. |  |
+
+Reference image of a woman with blue hair and a green hoodie. Reconstruction image of the same woman. Generated image with blue hair edit. Generated image with hoodie edit. Generated image with circular logo edit. Generated image with hand edit. Generated image with NYC time square background edit.
+
+Figure 9: Prompt editing demonstration with Midjourney.
+
+and keeping  $N$  fixed, although we do not observe a monotonic relationship between the performance and  $K$ , we can still notice a general upward trend in prompt accuracy. In Appendix D, we discuss the trade-off between  $N$  and  $K$  to better inform practitioners how to choose these hyperparameters. Besides adjusting the budget, one can also use cheaper or open-sourced VLMs to lower the cost. In Appendix C.2, we experiment with GPT-4o-mini and IDEFICS2 (Laurençon et al., 2024), two significantly cheaper and smaller VLMs to demonstrate the cost-flexibility of PRISM.
+
+### 4.5 PROMPT EDITING
+
+Because the prompts produced by PRISM are very human-interpretable, after obtaining a prompt from the reference images, one can easily modify the output prompts to change attributes in their desired generated images. Figure 9 demonstrates an examples of prompt editing with PRISM on Midjourney. With simple and intuitive prompt edits, we are able to change specific attributes of the images while keeping the other components in the scene relatively unchanged.
+
+## 5 CONCLUSION
+
+In this paper, we propose PRISM, an algorithm that automatically creates human-interpretable and accurate text prompts for text-to-image generative models, based on visual concepts provided by reference images. Our method iteratively refines the sampling distribution of the text prompt via VLM in-context learning and is capable of creating prompts that are transferable to any T2I models, including black-box platforms like Dall-E and Midjourney. We hope our work also encourages researchers, particularly those in non-LLM fields, to consider how the advancements in LLMs can offer simple yet effective solutions to problems that pre-LLM methods have struggled to address.
+
+## ETHIC STATEMENT
+
+Just as LLMs are susceptible to being jailbroken or adversarially manipulated by malicious actors (Zou et al., 2023), our method may also be vulnerable to malicious intent, potential bias, or limitations in the base models. Therefore, we will implement necessary safeguards upon the public release of our code and are committed to keep up with future advancements in improving the safety of our method.
+
+## REPRODUCIBILITY STATEMENT
+
+To reproduce PRISM, one can refer to the general description and the pseudocode of our method in Section 3. Details about the experimental settings, including model choices, hyperparameter choices and evaluation details are included in Section 4 and Section A in the appendix. We provide the demo code of our method [here](#) which will also be publicly released with the paper upon publication.
+
+## REFERENCES
+
+- Tom Brown, Benjamin Mann, Nick Ryder, Melanie Subbiah, Jared D Kaplan, Prafulla Dhariwal, Arvind Neelakantan, Pranav Shyam, Girish Sastry, Amanda Askell, et al. Language models are few-shot learners. 33:1877–1901, 2020.
+- Patrick Chao, Alexander Robey, Edgar Dobriban, Hamed Hassani, George J Pappas, and Eric Wong. Jailbreaking black box large language models in twenty queries. *arXiv preprint arXiv:2310.08419*, 2023.
+- Wenhui Chen, Hexiang Hu, Yandong Li, Nataniel Ruiz, Xuhui Jia, Ming-Wei Chang, and William W Cohen. Subject-driven text-to-image generation via apprenticeship learning. 36:30286–30305, 2023.
+- Hyungjin Chung, Jeongsol Kim, Michael Thompson Mccann, Marc Louis Klasky, and Jong Chul Ye. Diffusion posterior sampling for general noisy inverse problems. 2023. URL <https://openreview.net/forum?id=Ond9zGAGT0k>.
+- Rinon Gal, Yuval Alaluf, Yuval Atzmon, Or Patashnik, Amit Haim Bermano, Gal Chechik, and Daniel Cohen-Or. An image is worth one word: Personalizing text-to-image generation using textual inversion. 2023. URL <https://openreview.net/forum?id=NAQvF08TcyG>.
+- Tianyu Gao, Adam Fisch, and Danqi Chen. Making pre-trained language models better few-shot learners. In *Joint Conference of the 59th Annual Meeting of the Association for Computational Linguistics and the 11th International Joint Conference on Natural Language Processing, ACL-IJCNLP 2021*, pp. 3816–3830. Association for Computational Linguistics (ACL), 2021.
+- Yaru Hao, Zewen Chi, Li Dong, and Furu Wei. Optimizing prompts for text-to-image generation. *Advances in Neural Information Processing Systems*, 36, 2024.
+- Yutong He, Ruslan Salakhutdinov, and J. Zico Kolter. Localized text-to-image generation for free via cross attention control. *arXiv preprint arXiv:2306.14636*, 2023.
+- Yutong He, Naoki Murata, Chieh-Hsin Lai, Yuhta Takida, Toshimitsu Uesaka, Dongjun Kim, Wei-Hsiang Liao, Yuki Mitsufuji, J Zico Kolter, Ruslan Salakhutdinov, and Stefano Ermon. Manifold preserving guided diffusion. 2024. URL <https://openreview.net/forum?id=o3BxOLoxm1>.
+- Phillip Isola, Jun-Yan Zhu, Tinghui Zhou, and Alexei A Efros. Image-to-image translation with conditional adversarial networks. 2017.
+- Albert Q. Jiang, Alexandre Sablayrolles, Arthur Mensch, Chris Bamford, Devendra Singh Chaplot, Diego de las Casas, Florian Bressand, Gianna Lengyel, Guillaume Lample, Lucile Saulnier, Lélio Renard Lavaud, Marie-Anne Lachaux, Pierre Stock, Teven Le Scao, Thibaut Lavril, Thomas Wang, Timothée Lacroix, and William El Sayed. Mistral 7b, 2023.
+
+- 594 Hugo Laurençon, Léo Tronchon, Matthieu Cord, and Victor Sanh. What matters when building  
+595 vision-language models?, 2024.
+- 596  
+597 Junnan Li, Dongxu Li, Silvio Savarese, and Steven Hoi. BLIP-2: bootstrapping language-image  
+598 pre-training with frozen image encoders and large language models. *JMLR.org*, 2023.
+- 599 Paul Pu Liang, Yun Cheng, Xiang Fan, Chun Kai Ling, Suzanne Nie, Richard J. Chen, Zihao Deng,  
+600 Nicholas Allen, Randy Auerbach, Faisal Mahmood, Ruslan Salakhutdinov, and Louis-Philippe  
+601 Morency. Quantifying & modeling multimodal interactions: An information decomposition  
+602 framework. 2023. URL <https://openreview.net/forum?id=J1gBijopla>.
+- 603  
+604 Shihong Liu, Samuel Yu, Zhiqiu Lin, Deepak Pathak, and Deva Ramanan. Language models as  
+605 black-box optimizers for vision-language models. In *Proceedings of the IEEE/CVF Conference*  
+606 *on Computer Vision and Pattern Recognition*, pp. 12687–12697, 2024.
+- 607 Xiaogeng Liu, Nan Xu, Muhao Chen, and Chaowei Xiao. Autodan: Generating stealthy jailbreak  
+608 prompts on aligned large language models. *arXiv preprint arXiv:2310.04451*, 2023.
+- 609  
+610 Yao Lu, Max Bartolo, Alastair Moore, Sebastian Riedel, and Pontus Stenetorp. Fantastically  
+611 ordered prompts and where to find them: Overcoming few-shot prompt order sensitivity.  
+612 In Smaranda Muresan, Preslav Nakov, and Aline Villavicencio (eds.), *Proceedings of the 60th An-*  
+613 *nual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers)*, ACL  
+614 2022, Dublin, Ireland, May 22-27, 2022, pp. 8086–8098. Association for Computational Linguis-  
+615 tics, 2022. doi: 10.18653/V1/2022.ACL-LONG.556. URL [https://doi.org/10.18653/](https://doi.org/10.18653/v1/2022.acl-long.556)  
+616 [v1/2022.acl-long.556](https://doi.org/10.18653/v1/2022.acl-long.556).
+- 617 Shweta Mahajan, Tanzila Rahman, Kwang Moo Yi, and Leonid Sigal. Prompting hard or  
+618 hardly prompting: Prompt inversion for text-to-image diffusion models. *arXiv preprint*  
+619 *arXiv:2312.12416*, 2023.
+- 620 Oscar Mañas, Pietro Astolfi, Melissa Hall, Candace Ross, Jack Urbanek, Adina Williams, Aish-  
+621 warya Agrawal, Adriana Romero-Soriano, and Michal Drozdzal. Improving text-to-image con-  
+622 sistency via automatic prompt optimization. *arXiv preprint arXiv:2403.17804*, 2024.
+- 623  
+624 Hariharan Manikandan, Yiding Jiang, and J Zico Kolter. Language models are weak learn-  
+625 ers. volume 36, pp. 50907–50931, 2023. URL [https://openreview.net/forum?id=](https://openreview.net/forum?id=559NJBfN20)  
+626 [559NJBfN20](https://openreview.net/forum?id=559NJBfN20).
+- 627 Chenlin Meng, Yutong He, Yang Song, Jiaming Song, Jiajun Wu, Jun-Yan Zhu, and Stefano Ermon.  
+628 SDEdit: Guided image synthesis and editing with stochastic differential equations. 2022.
+- 629  
+630 Mehdi Mirza and Simon Osindero. Conditional generative adversarial nets. *arXiv preprint*  
+631 *arXiv:1411.1784*, 2014.
+- 632 OpenAI. Gpt-4 technical report, 2023.
+- 633  
+634 Maxime Oquab, Timothée Darcet, Théo Moutakanni, Huy V. Vo, Marc Szafraniec, Vasil Khali-  
+635 dov, Pierre Fernandez, Daniel HAZIZA, Francisco Massa, Alaaeldin El-Nouby, Mido Assran,  
+636 Nicolas Ballas, Wojciech Galuba, Russell Howes, Po-Yao Huang, Shang-Wen Li, Ishan Misra,  
+637 Michael Rabbat, Vasu Sharma, Gabriel Synnaeve, Hu Xu, Herve Jegou, Julien Mairal, Patrick  
+638 Labatut, Armand Joulin, and Piotr Bojanowski. DINOv2: Learning robust visual features with-  
+639 out supervision. *Transactions on Machine Learning Research*, 2024. ISSN 2835-8856. URL  
+640 <https://openreview.net/forum?id=a68SUT6zFt>.
+- 641 Reid Pryzant, Dan Iter, Jerry Li, Yin Tat Lee, Chenguang Zhu, and Michael Zeng. Automatic prompt  
+642 optimization with" gradient descent" and beam search. *arXiv preprint arXiv:2305.03495*, 2023.
+- 643  
+644 Alec Radford, Jong Wook Kim, Chris Hallacy, Aditya Ramesh, Gabriel Goh, Sandhini Agarwal,  
+645 Girish Sastry, Amanda Askell, Pamela Mishkin, Jack Clark, et al. Learning transferable visual  
+646 models from natural language supervision. pp. 8748–8763. PMLR, 2021.
+- 647 Alexander Robey, Eric Wong, Hamed Hassani, and George J Pappas. Smoothllm: Defending large  
+language models against jailbreaking attacks. *arXiv preprint arXiv:2310.03684*, 2023.
+
+[Appendix and supplementary materials beyond page 12 have been removed.]

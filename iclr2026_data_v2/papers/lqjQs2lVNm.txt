@@ -1,0 +1,1890 @@
+# LEARNING SEMI-STRUCTURED SPARSITY FOR LLMS
+## VIA SHARED AND CONTEXT-AWARE HYPERNETWORK
+
+
+**Lu Sun** [1] _[,]_ [3] _[∗]_ **Jun Sakuma** [1] _[,]_ [2]
+
+
+1Center for Advanced Intelligence Project (AIP), RIKEN, Tokyo 103-0027, Japan
+2School of Computing, Institute of Science Tokyo, Tokyo 152-8550, Japan
+3Unprecedented-scale Data Analytics Center, Tohoku University, Sendai 980-0845, Japan
+lu.sun.e4@tohoku.ac.jp, sakuma@c.titech.ac.jp
+
+
+ABSTRACT
+
+
+Large Language Models (LLMs) achieve state-of-the-art performance but are
+costly to deploy in resource-constrained environments. Pruning with _n_ : _m_ semistructured sparsity reduces computation and enables hardware acceleration, yet
+existing methods face a trade-off: one-shot approaches are efficient but heuristic,
+while optimization-based methods are accurate but expensive. We introduce **Hy-**
+**perPrune**, a resource-efficient framework that directly optimizes _n_ : _m_ sparsity.
+A lightweight hypernetwork, shared across layers and conditioned on learnable
+embeddings, generates structured masks in a one-shot, layer-wise manner. _Con-_
+_tinual pruning_ preserves cross-layer knowledge, and _feature outlier regularization_
+retains critical activations, unifying the strengths of heuristic and optimizationbased methods. Experiments on LLaMA-7B to 70B show state-of-the-art accuracy–sparsity trade-offs on a single A100 GPU, achieving higher efficiency, accuracy, and scalability than prior approaches. HyperPrune offers a practical, scalable, and hardware-friendly solution for structured LLM pruning.
+
+
+1 INTRODUCTION
+
+
+Large Language Models (LLMs) have transformed artificial intelligence, advancing state-of-the-art
+performance in language understanding, reasoning, generation, and diverse applications (Brown
+et al., 2020; OpenAI, 2023; Grattafiori et al., 2024). Models such as GPT-4 (OpenAI, 2023),
+LLaMA (Touvron et al., 2023a), and OPT (Zhang et al., 2022), with billions to trillions of parameters, excel in translation, multi-step reasoning, and creative generation. However, their massive
+scale hinders deployment in resource-constrained environments: for example, LLaMA-70B requires
+over 130 GB of GPU memory, exceeding the limits of edge devices, mobile platforms, or embedded
+systems (Cai et al., 2020; Frantar & Alistarh, 2023; Dettmers et al., 2023; Cheng et al., 2024). This
+bottleneck motivates efficient compression and acceleration techniques.
+
+
+To address LLM scaling challenges, the community has developed diverse compression techniques,
+including quantization (Dettmers et al., 2023; Frantar et al., 2022a), knowledge distillation (Hinton et al., 2015; Jiao et al., 2020), low-rank approximation (Hu et al., 2021; Xu et al., 2024a), and
+pruning (Frantar et al., 2022b; Dong et al., 2024). Among these, pruning is particularly attractive:
+it preserves the original architecture, offers fine-grained interpretability, complements quantization,
+and is increasingly supported by specialized hardware. Recent NVIDIA GPUs (e.g., A100, H100)
+natively support _n_ : _m_ structured sparsity, enabling up to 2 _×_ throughput gains in matrix multiplications, lower memory usage, and accuracy comparable to dense models (Hubara et al., 2021; Zhou
+et al., 2021; Fang et al., 2024; Sun et al., 2025). Empirical evidence further reinforces pruning:
+over-parameterized networks often generalize as well or better when pruned (Reed, 1993; Arora
+et al., 2018); compressing a pretrained dense model outperforms training sparse from scratch (Zhu
+& Gupta, 2017); and many layers tolerate aggressive pruning without performance loss (Wang et al.,
+2018). These factors make pruning a practical and powerful tool for LLM compression.
+
+
+_∗_ Work done while at RIKEN AIP. Current affiliation: Tohoku University.
+
+
+1
+
+
+𝑙
+
+
+|Col1|Col2|Col3|Col4|!𝐖𝒍|Col6|Col7|Col8|
+|---|---|---|---|---|---|---|---|
+|||||||||
+|||||||||
+|||||||||
+
+
+|Col1|Col2|Col3|Col4|Col5|
+|---|---|---|---|---|
+|𝐌𝒍"𝟏|𝐌𝒍"𝟏|𝐌𝒍"𝟏|𝐌𝒍"𝟏|𝐌𝒍"𝟏|
+|𝐌𝒍"𝟏|||||
+
+
+|𝐖<br>𝒍"𝟏|Col2|Col3|Col4|Col5|
+|---|---|---|---|---|
+|𝐖𝒍"𝟏|||||
+
+
+Figure 1: **The** **HyperPrune** **Framework.** HyperPrune learns semi-structured sparse patterns for
+LLM weight matrices, illustrated here with 2:4 sparsity. It prunes matrices _{_ **W** _}_ across components
+(e.g., Q, K, V, projections) in a layer-wise manner. For each layer _ℓ_, a shared hypernetwork _hθ_
+generates a binary mask **M** _ℓ_, producing sparse weights **W** [�] _ℓ_ = **W** _ℓ_ _⊙_ **M** _ℓ_ . These are optimized via
+the layer loss _Lossℓ_, which is then minimized by optimizing _θ_ . The hypernetwork is context-aware
+through layer ( **e** _ℓ_ ) and component ( **t** ) embeddings, and further regularized by feature-outlier and
+continual-pruning objectives to retain important features and prevent catastrophic forgetting.
+
+
+Yet pruning for LLMs remains nascent. Early iterative prune–retrain methods (Han et al., 2015;
+Louizos et al., 2018) are infeasible for today’s billion-parameter models, prompting more efficient
+strategies. One-shot heuristics such as SparseGPT (Frantar & Alistarh, 2023) and Wanda (Sun et al.,
+2024) derive sparsity masks from small calibration sets but suffer from reconstruction loss, poor
+scalability, and lack of native _n_ : _m_ support. Optimization-based approaches like MaskLLM (Fang
+et al., 2024) achieve higher accuracy by learning _n_ : _m_ masks on larger calibration sets, but require
+massive resources (e.g., thousands of GPU hours for LLaMA-2 (Touvron et al., 2023b)). Recent
+methods such as MaskPro (Sun et al., 2025) reduce costs but still struggle with policy gradient
+variance and linearly increased memory size. Overall, current pruning approaches face two key
+challenges: (i) an accuracy–efficiency trade-off, where heuristics degrade at high sparsity and optimization methods are costly; and (ii) lack of efficient, direct _n_ : _m_ support. Since hardware
+accelerators benefit most from _n_ : _m_ sparsity, an effective framework must enforce such structure
+efficiently, within realistic budgets, without sacrificing accuracy.
+
+
+In this work, we present **HyperPrune**, a resource-efficient, optimization-based framework for _n_ : _m_
+semi-structured pruning of LLMs. While heuristic methods are efficient, they cannot guarantee
+_n_ : _m_ sparsity, and existing optimization-based approaches enforce it at high computational cost
+for billion-scale models. HyperPrune overcomes these challenges with a shared, lightweight hypernetwork _hθ_ that generates layer- and component-specific masks **M** _ℓ_ conditioned on context-aware
+embeddings **e** and **t**, producing sparse weights **W** _ℓ_ _⊙_ **M** _ℓ_, as illustrated in Fig. 1. This design
+enables adaptive pruning across layers and components, promotes cross-layer knowledge sharing,
+mitigates catastrophic forgetting, and scales efficiently to large LLMs. Crucially, we show theoretically that minimizing the reconstruction loss of pruned layers is equivalent to maximizing the
+mutual information between dense and pruned models under the _n_ : _m_ constraint (Theorem 1), providing a principled relaxation of discrete mask optimization. Combined with feature-outlier and
+continual-pruning regularizations, HyperPrune preserves critical activations and ensures stable sequential pruning. Together, the context-aware hypernetwork, information-theoretic foundation, and
+novel regularizations offer an efficient, scalable, and principled approach to structured LLM pruning.
+Experiments demonstrate strong accuracy–sparsity trade-offs on models from 7B to 70B parameters,
+all on a single A100 GPU (80GB).
+
+
+Our main contributions are:
+
+
+2
+
+
+- **Hypernetwork-based** **structured** **pruning.** We propose HyperPrune, the first
+optimization-based framework that generates _n_ : _m_ sparse masks using a shared, contextaware hypernetwork, enabling adaptive and layer-wise structured pruning across LLM
+components.
+
+
+    - **Information-theoretic foundation for** _n_ : _m_ **sparsity.** We show that maximizing mutual
+information under _n_ : _m_ constraints is approximately equivalent to minimizing a reconstruction loss via a differentiable relaxation (Theorem 1), providing the first informationtheoretic justification for structured mask learning.
+
+
+    - **Regularization** **for** **feature** **and** **knowledge** **preservation.** We introduce _feature_ _outlier_
+_regularization_ to preserve critical activations and _continual pruning regularization_ to mitigate catastrophic forgetting during sequential layer-wise pruning.
+
+
+    - **Scalable** **and** **practical** **pruning.** HyperPrune scales to LLMs up to 70B parameters on
+a single A100 GPU and consistently outperforms both heuristic and optimization-based
+baselines on zero-shot and generation benchmarks.
+
+
+2 RELATED WORK
+
+
+**LLM Pruning.** Pruning reduces redundant parameters while aiming to preserve performance, often motivated by the Lottery Ticket Hypothesis (Frankle & Carbin, 2018; 2019). Recent LLM pruning methods fall into two main categories: **One-shot, heuristic methods.** Magnitude pruning (Han
+et al., 2015) removes the smallest weights and remains a strong baseline. SparseGPT (Frantar &
+Alistarh, 2023) and Wanda (Sun et al., 2024) prune in a single pass using layer-wise reconstruction
+or magnitude heuristics, reaching 50% sparsity without retraining but degrading at higher levels.
+Extensions include OWL (Yin et al., 2024) for outlier weights, ShortGPT (Men et al., 2024) and
+AdaInfer (Fan et al., 2024) for layer skipping, and LaCo (Yang et al., 2024b) and SliceGPT (Ashkboos et al., 2024) for embedding compression. Pruner-Zero (Dong et al., 2024) evolves symbolic
+pruning metrics via genetic programming, while RIA (Zhang et al., 2024) leverages relative importance, activations, and channel permutation to outperform heuristics. **Optimization-based** **meth-**
+**ods.** ALPS (Meng et al., 2024) enforces unstructured sparsity with ADMM (Boyd et al., 2011),
+and BESA (Xu et al., 2024b) differentiably allocates layer-wise sparsity. ShearedLLM (Xia et al.,
+2024) prunes efficiently at scale, while LoSA (Huang et al., 2025) integrates pruning with LoRA
+fine-tuning. These methods achieve higher accuracy under extreme unstructured sparsity but require thousands of GPU hours on 7B–70B models and do not natively support _n_ : _m_ structured
+sparsity. MaskLLM (Fang et al., 2024) enforces strict _n_ : _m_ patterns via probabilistic masking but
+incurs prohibitive memory and computational overhead due to its large mask parameters. MaskPro
+(Sun et al., 2025) mitigates some of this cost with a linear-space probabilistic formulation, yet it
+still suffers from high-variance gradients and memory usage that grows linearly with model size.
+In contrast, heuristic methods are efficient but brittle, while existing optimization-based approaches
+are accurate yet resource-intensive and often cannot scale to large LLMs with _n_ : _m_ sparsity. Our
+proposed **HyperPrune** overcomes these limitations through _layer-wise optimization with a shared,_
+_context-aware hypernetwork_, whose memory footprint depends only on individual layer size rather
+than the full model. This design reduces both memory and compute demands while retaining high
+pruning quality and scalability.
+
+
+**Hypernetwork-Based Methods.** Hypernetworks (Ha et al., 2017; Chauhan et al., 2024) generate
+parameters for a target network, enabling continual learning (Wang et al., 2024), few-shot adaptation (Wang et al., 2020), and multi-task modeling (Zhang & Yang, 2022). By conditioning on
+embeddings, they can produce task-specific weights, masks, or adapters. Examples include HyperShot (Sendera et al., 2023) and HyperTransformer (Karimi Mahabadi et al., 2021) for few-shot
+learning, and Polyhistor (Liu et al., 2022) for multi-task vision–language tasks. Continual learning
+approaches (von Oswald et al., 2020) use low-dimensional task embeddings to compress knowledge
+and transfer across tasks. Hypernetworks have also been used for compression: LoRA (Hu et al.,
+2021) and Text-to-LoRA (Charakorn et al., 2025) generate low-rank adapters, HyperMask (Ksiazek
+& Spurek, 2025) learns binary masks, HyperLogic (Yang et al., 2024a) generates logical rules, and
+Bayesian (Krueger et al., 2017) or noise-modulating (Eyring et al., 2025) hypernetworks improve
+robustness or efficiency. Despite their versatility, hypernetworks have not been applied to LLM
+pruning due to the enormous output space, structured sparsity requirements, and heterogeneous lay
+
+3
+
+
+ers. **HyperPrune** overcomes these challenges by generating _n_ : _m_ masks for each group of _m_
+consecutive weights using a shared hypernetwork, reducing the effective output space from the full
+weight matrix to size _m_, while conditioning on layer- and component-specific embeddings to handle
+heterogeneous layers efficiently.
+
+
+3 PRELIMINARIES
+
+
+Consider a LLM parameterized by **W** . The goal of pruning is to learn a binary mask **M** of the same
+dimension, where _Mij_ = 0 removes the corresponding parameter and _Mij_ = 1 keeps it. Given an
+input **x** from a calibration set _D_, the standard pruning objective is:
+min E **x** _∼D_ [ _L_ LLM( **x** ; **W** _⊙_ **M** )] _,_ s.t. _∥_ **M** _∥_ 0 _< C,_ (1)
+**M**
+
+where _L_ LLM is the LLM loss and the _ℓ_ 0 constraint enforces sparsity and _⊙_ denotes the element-wise
+product. Despite its simplicity, Eq. 1 is intractable at LLM scale due to the combinatorial _ℓ_ 0 constraint, and it yields unstructured sparsity that offers little acceleration on modern GPUs (Sun et al.,
+2024; Fang et al., 2024). Two main directions address these issues: **heuristic one-shot pruning** and
+**optimization-based pruning** .
+
+
+**One-Shot,** **Heuristic** **Pruning.** Instead of learning a global mask, one-shot methods prune by
+directly optimizing a layer-specific mask **M** _ℓ_ to minimize the reconstruction error:
+
+2 [�]
+min ��� **W** _ℓ_ **x** _ℓ−_ 1 _−_ ( **W** _ℓ_ _⊙_ **M** _ℓ_ ) **x** _ℓ−_ 1�� _,_ s.t. _∥_ **M** _ℓ∥_ 0 _< C,_ (2)
+**M** _ℓ_ [E] **[x]** _[∼D]_
+
+where **x** _ℓ−_ 1 denotes the input to the _ℓ_ -th layer. [1] Various score-based heuristics (Frantar & Alistarh,
+2023; Sun et al., 2024) approximate this NP-hard problem using a small calibration set. However,
+the resulting masks are usually _unstructured_, incompatible with hardware-friendly _n_ : _m_ sparsity.
+Enforcing group-wise sparsity heuristically approximates _n_ : _m_ but often incurs accuracy loss.
+
+
+**Optimization-based Pruning.** Optimization-based methods enforce _n_ : _m_ semi-structured sparsity
+by directly constraining each group of _m_ consecutive weights to retain exactly _n_ nonzero entries.
+Reformulating Eq. 1, the objective becomes
+
+                    -                     _{_ **M** _i|_ **M** min _i∈S_ _[n]_ [:] _[m]_ _}_ [E] **[x]** _[∼D]_ _L_ LLM( **x** ; _{_ **W** _i ⊙_ **M** _i}_ ) _,_ (3)
+
+where a weight matrix **W** _∈_ R _[d]_ [1] _[×][d]_ [2] (superscript _c_ and subscript _ℓ_ omitted for clarity) is partitioned
+row-wise into _[d]_ [1] _m_ _[d]_ [2] disjoint groups of _m_ consecutive elements. Each group **W** _i_ is paired with a
+
+binary mask **M** _i_, and the collection _{_ **M** _i|_ **M** _i_ _∈S_ _[n]_ [:] _[m]_ _}_ _[d]_ _i_ =1 [1] _[d]_ [2] _[/m]_ specifies masks for all groups with
+constraints **M** _i_ _∈S_ _[n]_ [:] _[m]_, _∀i_ . Here, _S_ _[n]_ [:] _[m]_ denotes the set of valid _n_ : _m_ sparsity patterns. For example,
+in the widely adopted 2:4 case, the feasible mask set is
+_S_ [2:4] = _{_ **s** 1 _,_ **s** 2 _, . . .,_ **s** 6 _}_ = _{_ [1 _,_ 1 _,_ 0 _,_ 0] _,_ [1 _,_ 0 _,_ 1 _,_ 0] _,_ [1 _,_ 0 _,_ 0 _,_ 1] _,_ [0 _,_ 1 _,_ 1 _,_ 0] _,_ [0 _,_ 1 _,_ 0 _,_ 1] _,_ [0 _,_ 0 _,_ 1 _,_ 1] _},_ (4)
+In general, _|S_ _[n]_ [:] _[m]_ _|_ = - _mn_ - (e.g., _|S_ [2:4] _|_ = 6, _|S_ [4:8] _|_ = 70). To make the discrete optimization
+in Eq. 4 tractable, Fang et al. (2024); Sun et al. (2025) sample masks from a relaxed categorical
+distribution over _S_ _[n]_ [:] _[m]_ and apply the Gumbel-Softmax trick (Jang et al., 2017; Maddison et al.,
+2017) for differentiability, enabling more effective scaling to large calibration sets _D_ than heuristics.
+
+
+4 METHODOLOGY
+
+
+Heuristic pruning is efficient but cannot guarantee _n_ : _m_ structured masks, while optimization-based
+methods enforce _n_ : _m_ sparsity but are costly for billion-scale models. We propose **HyperPrune**, a
+framework for efficient structured pruning of LLMs. HyperPrune uses a lightweight shared hypernetwork with contextual embeddings to generate _n_ : _m_ masks sequentially, incorporates continual
+pruning to preserve cross-layer knowledge, and applies feature-outlier regularization to retain critical weights. We further enable end-to-end optimization via continuous relaxation and improve
+efficiency and generalization through sparse-prior transfer.
+
+
+1Strictly speaking, a superscript _c_ should be used for both **x** _ℓ−_ 1 and **W** _ℓ_ to indicate the component _c_ _∈C_ .
+Here, _C_ = _{q, k, v, o, u, d, g}_ refers to the set of Transformer subcomponents, where _q, k, v, o_ correspond to
+multi-head self-attention (MHSA) and _u, d, g_ correspond to the feed-forward network (FFN). For readability,
+we omit these superscripts throughout the paper.
+
+
+4
+
+
+4.1 EFFICIENT LAYER-WISE MASK OPTIMIZATION VIA HYPERNETWORK
+
+
+**Layer-wise Mask Optimization.** Unlike one-shot pruning in Eq. 2 that relies on heuristic scores
+or global methods in Eq. 3 that optimize masks for the entire model, we adopt a layer-wise strategy.
+For each Transformer layer _ℓ_ _∈_ [ _L_ ] with function _f_, the objective is:
+
+
+               _{_ **M** _ℓ,i|_ **M** min _ℓ,i∈S_ _[n]_ [:] _[m]_ _}_ [E] **[x]** _[∼D]_ _∥f_ ( _{_ **W** _ℓ,i},_ **x** _ℓ−_ 1) _−_ _f_ ( _{_ **W** _ℓ,i ⊙_ **M** _ℓ,i},_ **x** _ℓ−_ 1) _∥_ [2][�] _,_ (5)
+
+
+where _{_ **M** _ℓ,i}_ is the set of _n_ : _m_ groups (defined in Eq. 3) of the _ℓ_ -th layer mask **M** _ℓ_ . This approach
+scales under resource constraints, as only the current layer’s weights and activations need GPU
+memory, and it provides a stronger objective than one-shot pruning by optimizing at the layer rather
+than component level. Two challenges remain: (i) pruning layers independently may lose cross-layer
+knowledge, and (ii) directly optimizing large binary masks **M** _ℓ_ is infeasible for modern LLMs—for
+instance, a single FFN projection in LLaMA-70B contains over 1.7B parameters, making naive
+layer-wise optimization impractical without additional parameterization or compression.
+
+
+**Shared** **Hypernetwork** **for** _n_ : _m_ **Sparsity.** To overcome the limitations of Eq. 5, rather than
+directly learning independent layer-wise masks **M** _ℓ_, **HyperPrune** employs a lightweight shared hypernetwork to generate _n_ : _m_ structured masks across all layers, enhancing both memory efficiency
+and cross-layer knowledge transfer. For a Transformer layer _ℓ_ with weight matrix **W** _ℓ_, and under
+the grouping scheme of Eq. 3, the _i_ -th group mask **M** _ℓ,i_ is sampled from its corresponding weight
+group **W** _ℓ,i_ via the shared hypernetwork _hθ_ : R _[m]_ _�→_ R _[m]_ :
+
+
+**M** _ℓ,i_ _∼_ _hθ_ ( **W** _ℓ,i_ ) _,_ _∀i ∈_      - _d_ 1 _md_ 2      - _,_ _∀ℓ_ _∈_ [ _L_ ] _._ (6)
+
+
+For each group **W** _ℓ,i_, the hypernetwork outputs logits **p** _ℓ,i_ over the valid _n_ : _m_ mask set _S_ _[n]_ [:] _[m]_ =
+_{_ **s** _j_ _∈{_ 0 _,_ 1 _}_ _[m]_ : _∥_ **s** _j∥_ 0 = _n}_ based on P( **M** _ℓ,i_ = **s** _j_ ) = _pℓ,ij_, **s** _j_ _∈S_ . The mask for group _i_ is
+generated contextually from its weights **W** _ℓ,i_ :
+
+
+**M** _ℓ,i_ _∼_ Categorical( **p** _ℓ,i_ ) _,_ **p** _ℓ,i_ = Softmax( _hθ_ ( **W** _ℓ,i_ )) _,_ (7)
+
+
+where _hθ_ : R _[m]_ _�→_ R _[m]_ is the shared hypernetwork and _S_ _[n]_ [:] _[m]_ the valid mask set defined in Eq. 4. This
+shared, group-wise design drastically reduces hypernetwork size while capturing local dependencies
+within each _m_ -sized block. For example, producing 6 logits from _m_ =4 weights requires only a few
+thousand parameters, whereas a na¨ıve full-matrix hypernetwork for the FFN up-projection ( **W** _u_ _∈_
+R [4096] _[×]_ [11008] in LLaMA-7B) would demand tens of millions of input/output dimensions— _billions_
+of parameters, several orders larger. Handling extremely high-dimensional LLM layers under strict
+_n_ : _m_ sparsity makes this shared, local-mask generation a necessary and non-trivial innovation for
+memory- and compute-efficient structured pruning.
+
+
+**Context-Aware** **Embeddings.** To adapt the shared hypernetwork to different pruning contexts
+across layers and components, we introduce trainable conditional embeddings. A **layer embedding**
+**e** _ℓ_ _∈_ R _[d]_ identifies the _ℓ_ -th layer for depth-specific adaptation, while a **component** **embedding**
+**t** _∈_ R _[d]_ specifies the pruned component—Query ( **t** _q_ ), Key ( **t** _k_ ), Value ( **t** _v_ ), Output ( **t** _o_ ) for MHSA,
+and Up-projection ( **t** _u_ ), Down-projection ( **t** _d_ ), Gating ( **t** _g_ ) for FFN. These embeddings are learned
+jointly with the hypernetwork, adding _d_ _×_ ( _L_ + 7) parameters: one per layer and seven shared
+globally. Initialization and optimization details are in Appendix D.4.
+
+
+Using the shared hypernetwork and embeddings, HyperPrune generates context-aware masks:
+
+min _θ,_ **e** _,_ **t** [E] **[x]** _[∼D]_ [E] _[{]_ **[M]** _[ℓ,i][∼][h][θ]_ [(] **[W]** _[ℓ,i][,]_ **[e]** _[ℓ][,]_ **[t]** [)] _[}]_   - _∥f_ ( _{_ **W** _ℓ,i},_ **x** _ℓ−_ 1) _−_ _f_ ( _{_ **W** _ℓ,i ⊙_ **M** _ℓ,i},_ **x** _ℓ−_ 1) _∥_ [2][�] _._ (8)
+
+
+This formulation captures structural regularities across layers while remaining flexible to
+component-level variations. HyperPrune thus balances generalization (via shared parameters) and
+specialization (via embeddings), yielding more effective and transferable pruning.
+
+
+**Information-Theoretic** **Interpretations.** From an information-theoretic view, optimizing Eq. 8
+corresponds to maximizing the mutual information between dense and pruned models, formalized
+in Theorem 1.
+
+
+5
+
+
+|Col1|Col2|Col3|Col4|
+|---|---|---|---|
+|0|1|0|1|
+|||||
+|||||
+
+
+|Layer-<br>Hypernetwork ℎ<br>! wise Loss<br>0.01<br>0.01<br>0.02 0 1 0 1 ⨀<br>0.01<br>0.94<br>0.01<br>Frozen Pruned|Col2|
+|---|---|
+||0.94<br>0.01<br>0.01<br>0.02<br>0.01<br>0.01|
+
+
+weights 𝐖 [$]
+
+
+|1|1|0|0|
+|---|---|---|---|
+|1|0|1|0|
+|1|0|0|1|
+|0|1|1|0|
+|0|1|0|1|
+|0|0|1|1|
+
+
+Mask set 𝑆 Logits 𝒑 Probability 𝒛 Mask 𝐌 [$]
+
+
+weights 𝐖
+
+
+Figure 2: Illustration of generating _n_ : _m_ semi-structured sparsity masks via continuous relaxation
+with a hypernetwork (example: 2 : 4). The hypernetwork takes frozen weights **W** as input and
+outputs logits **p** over mask patterns. Probabilities **z** and the relaxed mask **M** are computed via
+
+[�]
+Eq. 37, yielding pruned weights **W** = **W** _⊙_ **M** [�] used in Eq. 12. This relaxation allows gradients to
+
+[�]
+flow through mask selection, enabling end-to-end updates of _θ_ .
+
+
+**Theorem** **1** (Stochastic Relaxation of _n_ : _m_ Masked Linear Approximation) **.** _Let_ **W** _∈_ R _[d][×][d]_ _and_
+**x** _∼D. Partition a binary mask_ **M** _into B_ = _d_ [2] _/m disjoint blocks {_ **M** _i} of size m, each constrained_
+_to satisfy n_ : _m sparsity._ _Let_ E[ **M** ] _denote the block-wise expectation of these random masks._ _Then,_
+
+**M** max _∈Sn_ : _m_ _[I]_ [(] _[f]_ [(] **[W]** _[,]_ **[ x]** [);] _[ f]_ [(] **[W]** _[ ⊙]_ **[M]** _[,]_ **[ x]** [))] _[⇔]_ [min] _{_ **p** _i}_ [E] **[x]** _[∼D][∥][f]_ [(] **[W]** _[,]_ **[ x]** [)] _[ −]_ _[f]_ [(] **[W]** _[ ⊙]_ [E][[] **[M]** []] _[,]_ **[ x]** [)] _[∥]_ [2] _[,]_
+
+
+_where {_ **p** _i} parameterize a differentiable relaxation of the discrete n_ : _m mask selection._
+
+
+**Proof Sketch.** Let **Z** = _f_ ( **W** _,_ **x** ) and **Z** [ˆ] = _f_ ( **W** _⊙_ **M** _,_ **x** ). Under a small perturbation assumption,
+the sparse output can be viewed as a noisy version of the dense output, and for linear layers with
+Gaussian inputs, maximizing their mutual information is approximately equivalent to minimizing
+the expected squared difference E **x** _∥_ **Z** _−_ **Z** [ˆ] _∥_ [2] . To enable differentiable optimization under _n_ : _m_ constraints, we introduce a block-wise categorical distribution over feasible masks and replace **M** with
+its expectation, which by linearity yields the surrogate objective E **x** _∥f_ ( **W** _,_ **x** ) _−f_ ( **W** _⊙_ E[ **M** ] _,_ **x** ) _∥_ [2] .
+The full proof is provided in Appendix A.
+
+
+This theorem shows that learning stochastic _n_ : _m_ masks via soft probabilities is equivalent to maximizing the information preserved between dense and pruned layers. As a result, discrete structured
+sparsity can be optimized through a smooth reconstruction objective, enabling efficient end-to-end
+training of the hypernetwork.
+
+
+4.2 REGULARIZED HYPERNETWORK FOR ENHANCED MASK LEARNING
+
+
+**Continual Pruning Regularization.** Layer-wise pruning risks _catastrophic forgetting_ : when optimizing the hypernetwork _h_ for the current layer _ℓ_, knowledge from earlier layers (1 _, . . ., ℓ_ _−_ 1)
+may be overwritten. The formulation in Eq. 8 targets only the current layer and lacks consistency
+with prior ones. Inspired by continual learning (Wang et al., 2024), HyperPrune preserves past
+knowledge by regularizing the hypernetwork to remain consistent on previously pruned layers. In
+this _continual_ _pruning_ setting (Mallya et al., 2018; Golkar et al., 2019; Ksiazek & Spurek, 2025),
+the hypernetwork parameters _θ_ _[′]_ after pruning layer _ℓ_ _−_ 1 initialize those for layer _ℓ_ . To mitigate
+forgetting, we penalize discrepancies between the outputs of _hθ_ _[′]_ and _hθ_ over earlier layers:
+
+
+_ℓ−_ 1 
+
+_∥hθ′_ ( **W** _ℓ′,_ **e** _ℓ′,_ **t** ) _−_ _hθ_ ( **W** _ℓ′,_ **e** _ℓ′,_ **t** ) _∥_ [2]
+_ℓ_ _[′]_ =1
+
+
+_R_ continual = E **W** _∼DW_
+
+
+1
+( _ℓ_ _−_ 1)
+
+
+_._ (9)
+
+
+The factor ( _ℓ−_ 1 1) [normalizes] [across] [layers,] [preventing] [scale-up] [of] [the] [regularization.] [In] [practice,]
+since only **W** _ℓ_ is loaded during pruning, the expectation can be approximated by caching a small
+subset _DW_ of **W** from previous layers (discussed in Appendix D.8). This regularization serves as
+_functional knowledge distillation_, aligning past and current hypernetworks. More broadly, it can be
+seen as an information-theoretic constraint (e.g., KL divergence or mutual information preservation)
+that stabilizes behavior across layers and prevents abrupt shifts that degrade mask quality.
+
+
+6
+
+
+**Feature** **Outlier** **Regularization.** Large-scale LLMs (typically _>_ 6B parameters) often produce
+hidden features with unusually high magnitudes. These _feature outliers_ are not noise; they encode
+key semantic and structural information and strongly influence predictions (Dettmers et al., 2022).
+Naively pruning weights linked to such features can severely degrade performance, especially under
+structured sparsity. To mitigate this, we introduce a feature-aware regularization that favors preserving weights interacting with high-magnitude activations (large weight and input norms). Formally:
+
+
+                   _R_ outlier = E **x** _∼D_ E **M** _∼hθ_ _∥_ ( **W** _ℓ_ _⊙_ **M** _ℓ_ ) _·_ Diag( **x** _ℓ−_ 1) _∥_ [2][�] _,_ (10)
+
+
+where Diag( _·_ ) forms a diagonal matrix. This biases pruning toward directions aligned with highmagnitude activations, protecting critical semantic channels and preserving accuracy and robustness.
+Interestingly, for a single component (ignoring E **M** for simplicity), this regularization can be reformulated as
+
+
+E **x** _∼D_
+
+
+2 [�]
+**W** _ℓ_ _·_ Diag( **x** _ℓ−_ 1) = ����� ���
+
+_i,j_
+
+
+- �2 _W_ - _ℓ,ij_ _·_ E **x** _∼D_ [ _xℓ−_ 1 _,j_ ] + _W_ - _ℓ,ij_ [2] [Var[] _[x][ℓ][−]_ [1] _[,j]_ []] _[,]_ (11)
+
+_i,j_
+
+
+with **W** [�] _ℓ_ = **W** _ℓ_ _⊙_ **M** _ℓ_ . The first term recovers Wanda’s importance score (Sun et al., 2024),
+based on average weight–activation alignment. The second term captures feature variance, ensuring
+even zero-mean features affecting outputs are preserved. Together, they provide a variance-aware
+importance measure for more robust pruning under stochastic or heterogeneous inputs.
+
+
+**Formulation of HyperPrune.** By combining continual pruning regularization (9), feature outlier
+regularization (10), and hypernetwork-based pruning (8), the full objective of **HyperPrune** is:
+
+
+min _θ,_ **e** _,_ **t** [E] **[x]** _[∼D]_ [E] **[M]**
+
+
+2 [�]
+_f_ ( **W** _ℓ,_ **x** _ℓ−_ 1) _−_ _f_ ( **W**  - _ℓ,_ **x** _ℓ−_ 1) _−_ _λ_ 1 _R_ outlier + _λ_ 2 _R_ continual
+���� ���
+
+
+s.t. **W** [�] _ℓ,i_ = **W** _ℓ,i ⊙_ **M** _ℓ,i,_ **M** _ℓ,i_ _∼_ Categorical( **p** _ℓ,i_ ) _,_ **p** _ℓ,i_ = Softmax( _hθ_ ( **W** _ℓ,i,_ **e** _ℓ,_ **t** )) _,_
+
+P( **M** _ℓ,i_ = **s** _j_ ) = _pℓ,ij,_ **s** _j_ _∈S,_ _i ∈_     - _d_ 1 _md_ 2     - _,_ _ℓ_ _∈_ [ _L_ ] _,_ (12)
+
+
+where _λ_ 1 _, λ_ 2 _≥_ 0 are regularization hyperparameters.
+
+
+HyperPrune is a hypernetwork-based, continual-learning-inspired framework for _n_ : _m_ semistructured pruning of LLMs. Rather than jointly optimizing masks across all layers, it prunes each
+layer sequentially via a shared hypernetwork, retaining knowledge from previous layers to mitigate catastrophic forgetting and reduce memory usage. Categorical mask sampling is relaxed with
+the Gumbel-Softmax trick for end-to-end gradient-based optimization (Algorithm 1); details are in
+Appendix B. Fig. 1 illustrates this context-aware, hypernetwork-based mask generation.
+
+
+5 EXPERIMENTS
+
+
+5.1 EXPERIMENTAL SETUP
+
+
+**Models and Baselines.** We evaluate **HyperPrune** [2] on a diverse set of pre-trained large language
+models, including **LLaMA-2** (7B/13B/70B) (Touvron et al., 2023b), to assess both performance
+and scalability. We compare against representative heuristic and optimization-based pruning methods: **Magnitude** (Han et al., 2015), **Wanda** (Sun et al., 2024), **SparseGPT** (Frantar & Alistarh,
+2023), **Pruner-Zero** (Dong et al., 2024), and **MaskPro** (Sun et al., 2025). We exclude MaskLLM
+(Fang et al., 2024) due to its prohibitive computational cost, which requires thousands of GPU hours
+and 520K calibration samples even for LLaMA-2-13B. Instead, we adopt MaskPro as a strong
+optimization-based baseline that achieves competitive results with substantially lower cost (Sun
+et al., 2025). Full experimental configurations and additional results are provided in Appendix D.
+
+
+**Evaluation and Datasets.** For methods requiring calibration data, either for pruning-score computation or optimization, we follow SparseGPT and Wanda and use 128 sequences sampled from the
+C4 training set (Raffel et al., 2020), with context length matching the model. For HyperPrune, we
+
+
+[2https://github.com/futuresun912/HyperPrune.git](https://github.com/futuresun912/HyperPrune.git)
+
+
+7
+
+
+**Algorithm 1** HyperPrune: Semi-Structured Pruning via Shared and Context-Aware Hypernetwork
+
+
+1: **Input:** Pretrained LLM with _L_ layers, calibration data _D_
+2: **Initialize:** Shared hypernetwork _hθ_, layer embeddings _{_ **e** _ℓ}_, task embeddings _{_ **t** _c}_
+3: **for** layer _ℓ_ = 1 to _L_ **do**
+4: Load **W** _ℓ_ into GPU
+5: **while** not converged **do**
+6: Get input activation **x** _ℓ−_ 1 from _D_
+7: **for** block _i_ in **W** _ℓ_ **do**
+8: Compute logits: log **p** _ℓ,i_ = _hθ_ ( **W** _ℓ,i,_ **e** _ℓ,_ **t** )
+
+9: Sample structured mask **M** [�] _ℓ,i_ via Gumbel-Softmax
+
+10: Prune weights: **W** [�] _ℓ,i_ = **W** _ℓ,i ⊙_ **M** [�] _ℓ,i_
+11: **end for**
+12: Forward pass: **x** _ℓ_ = _f_ ( **W** [�] _ℓ,_ **x** _ℓ−_ 1)
+13: Compute reconstruction loss _L_ recon and outlier regularization _R_ outlier
+14: Compute continual pruning regularization from past layers _R_ continual
+15: Update _θ_, **e** _ℓ_, and _{_ **t** _}_ using total loss _L_ = _L_ recon _−_ _λ_ 1 _· R_ outlier + _λ_ 2 _· R_ continual
+16: **end while**
+17: Freeze _hθ_ as _hθ′_ for future regularization
+18: Unload **W** _ℓ_ to free memory
+19: **end for**
+20: **return** Final pruned model with structured sparse weights
+
+
+optimize the Gumbel logits for 200 steps while keeping LLM weights frozen. Consistent with prior
+work, C4 is used for pruning calibration and Wikitext (Merity et al., 2017) for perplexity evaluation
+(PPL). We further adopt the EleutherAI LM Harness (Gao et al., 2024) for zero-shot evaluation on
+downstream tasks (measured by accuracy), providing a standardized and reproducible benchmark.
+All experiments are conducted on a single NVIDIA A100 GPU (80GB).
+
+
+**Sparse Pattern.** We exclude the embedding layer and the final classification head from pruning,
+as pruning them significantly harms performance while only accounting for about 1% of model
+parameters. All remaining linear layers are pruned under the 2:4 semi-structured sparsity pattern.
+For heuristic methods that do not natively support semi-structured sparsity, we follow the procedure
+in (Frantar & Alistarh, 2023; Sun et al., 2024), selecting two elements to retain within each group of
+four consecutive weights based on their pruning scores.
+
+
+5.2 EXPERIMENTAL RESULTS
+
+
+**Performance** **Evaluation.** This section evaluates the efficacy of our proposed pruning method
+with respect to two key questions: (i) whether generative performance is preserved after structured pruning, measured by perplexity on standard language modeling benchmarks such as WikiText (Merity et al., 2017), and (ii) whether zero-shot generalization is maintained across diverse
+downstream tasks using the EleutherAI LM Harness (Gao et al., 2024). As shown in Table 1, our
+method, **HyperPrune**, consistently achieves the best trade-off between perplexity and accuracy
+across all model scales. For **LLaMA-2** **7B**, HyperPrune reduces Wikitext perplexity to **10.11** and
+attains the highest mean accuracy of **53.76**, outperforming heuristic methods (e.g., SparseGPT at
+51.00) and optimization-based methods (e.g., MaskPro at 52.81). On **LLaMA-2 13B**, HyperPrune
+leads with a mean accuracy of **59.25**, slightly surpassing MaskPro (58.97) while maintaining competitive perplexity ( **7.60** ). For **LLaMA-2 70B**, HyperPrune achieves a mean accuracy of **68.57** with
+low perplexity ( **5.13** ), exceeding all baselines. These results demonstrate that end-to-end training of
+a compact shared hypernetwork for mask generation enables HyperPrune to robustly retain generative quality and cross-task generalization. In contrast, traditional heuristics suffer from estimation
+errors in weight scoring, and optimization-based methods such as MaskPro face memory limitations
+on large models (e.g., LLaMA-2 70B) or MaskLLM require substantially more calibration samples
+and GPU resources than HyperPrune, highlighting its effectiveness and efficiency (See Table 7).
+
+
+8
+
+
+Table 1: Evaluation of language modeling and zero-shot task performance under 2:4 sparsity on
+models with frozen weights. Pruning methods were calibrated on the C4 dataset and evaluated on
+Wikitext-2 (perplexity) and seven zero-shot tasks (accuracy), following the methodology of (Frantar
+& Alistarh, 2023; Sun et al., 2024). Best results are in bold and second-best are underlined.
+
+
+**Method** **Wikitext** _↓_ **BoolQ** _↑_ **RTE** _↑_ **HellaS.** _↑_ **WinoG.** _↑_ **ARC-E** _↑_ **ARC-C** _↑_ **OBQA** _↑_ **Mean** _↑_
+
+
+**LLaMA-2 7B** 5.12 77.74 62.82 57.17 68.90 76.39 43.52 31.40 59.71
+
+
+- Magnitude 52.85 56.33 51.38 42.47 61.03 59.68 27.61 21.98 45.78
+
+- SparseGPT 10.39 70.56 58.90 43.46 **66.71** 64.17 29.95 23.22 51.00
+
+- Wanda 11.09 67.62 53.17 40.95 62.38 61.76 31.23 24.32 48.78
+
+- Pruner-Zero 10.35 69.14 53.43 54.68 60.54 61.57 32.17 **32.60** 52.02
+
+- MaskPro 12.29 **71.12** **61.37** 46.18 65.82 66.12 **32.85** 26.20 52.81
+**HyperPrune** **10.11** 70.69 60.22 **55.28** 64.50 **66.32** 32.55 26.76 **53.76**
+
+
+**LLaMA-2 13B** 4.57 80.52 65.34 60.06 72.22 79.42 48.46 35.20 63.03
+
+
+- Magnitude 8.31 65.70 54.25 50.17 62.06 62.51 31.72 23.23 49.95
+
+- SparseGPT 8.27 76.78 59.48 46.61 68.69 70.64 36.66 25.50 54.91
+
+- Wanda 8.29 76.83 61.26 47.83 66.92 69.34 36.87 26.43 55.07
+
+- Pruner-Zero **7.53** 77.89 56.68 63.37 67.72 69.70 37.29 **36.00** 58.38
+
+- MaskPro 8.16 **78.05** **62.22** 63.18 67.67 70.93 **37.56** 33.18 58.97
+**HyperPrune** 7.60 77.63 61.84 **64.20** **67.77** **71.00** 37.50 34.80 **59.25**
+
+
+**LLaMA-2 70B** 3.12 83.40 67.87 66.10 78.06 82.55 54.44 37.20 67.08
+
+
+- Magnitude 6.33 73.22 57.03 58.41 74.30 76.17 45.23 35.46 59.97
+
+- SparseGPT 5.44 79.53 **70.75** 59.03 76.62 78.96 48.57 33.82 64.61
+
+- Wanda 5.21 **82.18** 69.83 59.37 76.25 79.33 47.29 34.84 64.16
+
+- Pruner-Zero **4.87** 81.40 67.87 77.60 74.11 79.45 **50.00** 43.40 67.69
+**HyperPrune** 5.13 81.75 70.20 **77.83** **77.60** **79.50** 49.62 **43.51** **68.57**
+
+
+(a) Scalability on language modeling (b) Scalability on zero-shot generalization
+
+
+Figure 3: Perplexity on Wikitext (a) and mean accuracy across seven zero-shot tasks (b) for different
+pruning methods, evaluated with increasing numbers of calibration samples (1, 2, 4, 8, 16, 32, 64,
+128, 256, and 512). The results illustrate how performance scales with additional calibration data.
+
+
+**Scalability** **Evaluation.** To evaluate whether HyperPrune can generate scalable pruning masks
+that exploit structural redundancy across layers and modules while minimizing performance degradation, we adopt a held-out calibration protocol following MaskLLM. As shown in Fig. 3, **Hyper-**
+**Prune** consistently outperforms competing methods in both Wikitext perplexity and zero-shot mean
+accuracy, with performance steadily improving as more calibration samples are used. With 512
+samples, it achieves the lowest perplexity ( _≈_ 10 _._ 2) and highest mean accuracy ( _>_ 53%), indicating
+strong data efficiency and scalability. Although MaskPro performs competitively, it is consistently
+surpassed by HyperPrune, while heuristic approaches such as Wanda and SparseGPT show weaker
+scalability and limited gains from additional calibration data. These results demonstrate that HyperPrune not only delivers superior overall performance but also effectively leverages increasing
+calibration data, making it a robust and scalable solution for pruning large language models.
+
+
+**Ablation Studies.** We evaluate the contribution of each HyperPrune component on LLaMA-2-7B
+by removing layer embeddings (le), component embeddings (ce), continual pruning (cp), or featureoutlier (fo) regularization. Removing either embedding consistently degrades performance (e.g.,
+
+
+9
+
+
+(a) Effect of context-aware embedding (b) Effect of regularization
+
+
+Figure 4: Ablation study of HyperPrune on the Wikitext dataset. (a) Impact of context-aware embeddings, where **le** and **ce** denote layer and component embeddings. (b) Impact of regularizations,
+where **cp** and **fo** denote continual pruning and feature outlier retention.
+
+
+perplexity increases from 10.11 to 11.36), confirming that contextual conditioning is important for
+generating high-quality structured masks, with layer embeddings having a slightly larger impact
+than component embeddings. Similarly, disabling cp or fo increases perplexity (e.g., 10.11 to 11.06
+without fo), highlighting their role in stabilizing sequential pruning and preserving salient features
+during sparsification. Overall, these ablations show that both context-aware embeddings and the
+proposed regularization strategies are necessary to maintain low perplexity and achieve effective
+layer-wise structured pruning.
+
+
+**Computational and Memory Efficiency.** We evaluate the practical efficiency of HyperPrune under 2:4 structured sparsity. On an A100 GPU, kernel-level speedups of 1.55–1.65 _×_ translate into an
+end-to-end latency reduction for LLaMA-2-7B from 248 ms to 174 ms (1.43 _×_ ; see Appendix D.9),
+demonstrating tangible inference gains under realistic deployment settings. Importantly, these improvements arise from hardware-aligned structured sparsity, ensuring that theoretical sparsity translates into actual runtime acceleration. HyperPrune is also highly efficient during mask optimization
+(Appendix D.10, D.11). Tables 7 and 8 show that it reduces pruning-mask training cost by nearly an
+order of magnitude, requiring only 7–15 GPU hours and 15–22 GB memory for LLaMA-2 7B/13B.
+This is substantially lower than MaskPro and dramatically more efficient than MaskLLM, which requires 1200–2300 GPU hours and hundreds of GB of memory, while HyperPrune remains feasible
+even at 70B scale. Overall, these results demonstrate that HyperPrune achieves strong computational
+and memory efficiency without sacrificing scalability to modern large-scale LLMs.
+
+
+6 CONCLUSION AND FUTURE WORK
+
+
+We introduced **HyperPrune**, a practical framework for learning _n_ : _m_ semi-structured sparsity in
+LLMs. HyperPrune employs a compact shared hypernetwork to generate block-wise masks in a
+sliding, layer-wise fashion, conditioned on learned embeddings. It incorporates continual-learning
+and feature-outlier regularizers to preserve cross-layer knowledge and protect critical activations.
+This enables direct optimization for hardware-friendly _n_ : _m_ sparsity with low memory and compute
+overhead, supporting models from 7B to 70B parameters on a single A100 GPU. Experiments on
+LLaMA show that HyperPrune maintains language modeling performance and provides tangible
+speedups under 2:4 sparsity, demonstrating its efficiency for LLM deployment.
+
+
+Nonetheless, HyperPrune has limitations. It relies on sufficient calibration data, potentially reducing
+robustness under domain shift, and the lightweight hypernetwork faces a capacity–generalization
+trade-off, motivating adaptive or hierarchical designs. Future work includes evaluation on diverse
+inference stacks and hardware, and integration with complementary techniques such as quantization
+or low-rank adaptation to maximize practical impact.
+
+
+10
+
+
+ACKNOWLEDGMENTS
+
+
+We sincerely thank the anonymous reviewers for their constructive feedback and valuable suggestions, which have helped improve the clarity and quality of this work. This work was supported in
+part by JST (JPMJNX25C2, JPMJKP24C3, JPMJCR23M4, JPMJCR21D3), JSPS (23H00483), and
+120251002.
+
+
+REFERENCES
+
+
+Sanjeev Arora, Rong Ge, Behnam Neyshabur, and Yi Zhang. Stronger generalization bounds for
+deep nets via a compression approach. In _International_ _conference_ _on_ _machine_ _learning_, pp.
+254–263. PMLR, 2018.
+
+
+Saleh Ashkboos, Maximilian L. Croci, Marcelo Gennari do Nascimento, Torsten Hoefler, and
+James Hensman. SliceGPT: Compress large language models by deleting rows and columns.
+In _The_ _Twelfth_ _International_ _Conference_ _on_ _Learning_ _Representations_, 2024. URL [https:](https://openreview.net/forum?id=vXxardq6db)
+[//openreview.net/forum?id=vXxardq6db.](https://openreview.net/forum?id=vXxardq6db)
+
+
+Stephen Boyd, Neal Parikh, Eric Chu, Borja Peleato, and Jonathan Eckstein. Distributed optimization and statistical learning via the alternating direction method of multipliers. _Foundations and_
+_Trends® in Machine Learning_, 3(1):1–122, 2011.
+
+
+Tom Brown, Benjamin Mann, Nick Ryder, Melanie Subbiah, Jared D Kaplan, Prafulla Dhariwal, Arvind Neelakantan, Pranav Shyam, Girish Sastry, Amanda Askell, Sandhini Agarwal, Ariel Herbert-Voss, Gretchen Krueger, Tom Henighan, Rewon Child, Aditya Ramesh,
+Daniel Ziegler, Jeffrey Wu, Clemens Winter, Chris Hesse, Mark Chen, Eric Sigler, Mateusz
+Litwin, Scott Gray, Benjamin Chess, Jack Clark, Christopher Berner, Sam McCandlish, Alec
+Radford, Ilya Sutskever, and Dario Amodei. Language models are few-shot learners. In
+H. Larochelle, M. Ranzato, R. Hadsell, M.F. Balcan, and H. Lin (eds.), _Advances_ _in_ _Neu-_
+_ral_ _Information_ _Processing_ _Systems_, volume 33, pp. 1877–1901. Curran Associates, Inc.,
+2020. URL [https://proceedings.neurips.cc/paper_files/paper/2020/](https://proceedings.neurips.cc/paper_files/paper/2020/file/1457c0d6bfcb4967418bfb8ac142f64a-Paper.pdf)
+[file/1457c0d6bfcb4967418bfb8ac142f64a-Paper.pdf.](https://proceedings.neurips.cc/paper_files/paper/2020/file/1457c0d6bfcb4967418bfb8ac142f64a-Paper.pdf)
+
+
+Han Cai, Chuang Gan, Tianzhe Wang, Zhekai Zhang, and Song Han. Once for all: Train one
+network and specialize it for efficient deployment. In _International_ _Conference_ _on_ _Learning_
+_Representations_, 2020. [URL https://arxiv.org/pdf/1908.09791.pdf.](https://arxiv.org/pdf/1908.09791.pdf)
+
+
+Rujikorn Charakorn, Edoardo Cetin, Yujin Tang, and Robert Tjarko Lange. Text-to-loRA: Instant
+transformer adaption. In _Forty-second_ _International_ _Conference_ _on_ _Machine_ _Learning_, 2025.
+[URL https://openreview.net/forum?id=zWskCdu3QA.](https://openreview.net/forum?id=zWskCdu3QA)
+
+
+Vinod Kumar Chauhan, Jiandong Zhou, Ping Lu, Soheila Molaei, and David A Clifton. A brief
+review of hypernetworks in deep learning. _Artificial Intelligence Review_, 57(9):250, 2024.
+
+
+Hongrong Cheng, Miao Zhang, and Javen Qinfeng Shi. A survey on deep neural network pruning:
+Taxonomy, comparison, analysis, and recommendations. _IEEE Trans. Pattern Anal. Mach. Intell._,
+46(12):10558–10578, December 2024. ISSN 0162-8828. doi: 10.1109/TPAMI.2024.3447085.
+[URL https://doi.org/10.1109/TPAMI.2024.3447085.](https://doi.org/10.1109/TPAMI.2024.3447085)
+
+
+Tim Dettmers, Mike Lewis, Younes Belkada, and Luke Zettlemoyer. Llm.int8(): 8-bit matrix multiplication for transformers at scale. In _Proceedings of the 36th International Conference on Neural_
+_Information_ _Processing_ _Systems_, NIPS ’22, Red Hook, NY, USA, 2022. Curran Associates Inc.
+ISBN 9781713871088.
+
+
+Tim Dettmers, Artidoro Pagnoni, Ari Holtzman, and Luke Zettlemoyer. Qlora: efficient finetuning
+of quantized llms. In _Proceedings_ _of_ _the_ _37th_ _International_ _Conference_ _on_ _Neural_ _Information_
+_Processing Systems_, NIPS ’23, Red Hook, NY, USA, 2023. Curran Associates Inc.
+
+
+Peijie Dong, Lujun Li, Zhenheng Tang, Xiang Liu, Xinglin Pan, Qiang Wang, and Xiaowen Chu.
+Pruner-zero: evolving symbolic pruning metric from scratch for large language models. In _Pro-_
+_ceedings of the 41st International Conference on Machine Learning_, ICML’24. JMLR.org, 2024.
+
+
+11
+
+
+Luca Eyring, Shyamgopal Karthik, Alexey Dosovitskiy, Nataniel Ruiz, and Zeynep Akata. Noise
+hypernetworks: Amortizing test-time compute in diffusion models. _arXiv preprint_, 2025.
+
+
+Siqi Fan, Xin Jiang, Xiang Li, Xuying Meng, Peng Han, Shuo Shang, Aixin Sun, Yequan Wang,
+and Zhongyuan Wang. Not all layers of llms are necessary during inference. _arXiv_ _preprint_
+_arXiv:2403.02181_, 2024.
+
+
+Gongfan Fang, Hongxu Yin, Saurav Muralidharan, Greg Heinrich, Jeff Pool, Jan Kautz, Pavlo
+Molchanov, and Xinchao Wang. MaskLLM: Learnable semi-structured sparsity for large language models. In _The_ _Thirty-eighth_ _Annual_ _Conference_ _on_ _Neural_ _Information_ _Processing_ _Sys-_
+_tems_, 2024. [URL https://openreview.net/forum?id=Llu9nJal7b.](https://openreview.net/forum?id=Llu9nJal7b)
+
+
+Jonathan Frankle and Michael Carbin. The lottery ticket hypothesis: Finding sparse, trainable neural
+networks. _arXiv preprint arXiv:1803.03635_, 2018.
+
+
+Jonathan Frankle and Michael Carbin. The lottery ticket hypothesis: Finding sparse, trainable neural
+networks. In _International Conference on Learning Representations (ICLR)_ . 2019.
+
+
+Elias Frantar and Dan Alistarh. Sparsegpt: massive language models can be accurately pruned in
+one-shot. In _Proceedings of the 40th International Conference on Machine Learning_, ICML’23.
+JMLR.org, 2023.
+
+
+Elias Frantar, Saleh Ashkboos, Torsten Hoefler, and Dan Alistarh. GPTQ: Accurate post-training
+compression for generative pretrained transformers. _arXiv preprint arXiv:2210.17323_, 2022a.
+
+
+Elias Frantar, Sidak Pal Singh, and Dan Alistarh. Optimal brain compression: a framework for
+accurate post-training quantization and pruning. In _Proceedings of the 36th International Confer-_
+_ence on Neural Information Processing Systems_, NIPS ’22, Red Hook, NY, USA, 2022b. Curran
+Associates Inc. ISBN 9781713871088.
+
+
+Leo Gao, Jonathan Tow, Baber Abbasi, Stella Biderman, Sid Black, Anthony DiPofi, Charles Foster, Laurence Golding, Jeffrey Hsu, Alain Le Noac’h, Haonan Li, Kyle McDonell, Niklas Muennighoff, Chris Ociepa, Jason Phang, Laria Reynolds, Hailey Schoelkopf, Aviya Skowron, Lintang
+Sutawika, Eric Tang, Anish Thite, Ben Wang, Kevin Wang, and Andy Zou. The language model
+evaluation harness, 07 2024. [URL https://zenodo.org/records/12608602.](https://zenodo.org/records/12608602)
+
+
+Siavash Golkar, Micheal Kagan, and Kyunghyun Cho. Continual learning via neural pruning. In
+_Real Neurons & Hidden Units: Future directions at the intersection of neuroscience and artificial_
+_intelligence @ NeurIPS 2019_, 2019. [URL https://openreview.net/forum?id=Hyl_](https://openreview.net/forum?id=Hyl_XXYLIB)
+[XXYLIB.](https://openreview.net/forum?id=Hyl_XXYLIB)
+
+
+Aaron Grattafiori, Abhimanyu Dubey, Abhinav Jauhri, Abhinav Pandey, Abhishek Kadian, Ahmad
+Al-Dahle, Aiesha Letman, Akhil Mathur, Alan Schelten, Alex Vaughan, Amy Yang, Angela Fan,
+Anirudh Goyal, Anthony Hartshorn, Aobo Yang, Archi Mitra, Archie Sravankumar, Artem Korenev, Arthur Hinsvark, Arun Rao, Aston Zhang, Aurelien Rodriguez, Austen Gregerson, Ava
+Spataru, Baptiste Roziere, Bethany Biron, Binh Tang, Bobbie Chern, Charlotte Caucheteux,
+Chaya Nayak, Chloe Bi, Chris Marra, Chris McConnell, Christian Keller, Christophe Touret,
+Chunyang Wu, Corinne Wong, Cristian Canton Ferrer, Cyrus Nikolaidis, Damien Allonsius,
+Daniel Song, Danielle Pintz, Danny Livshits, Danny Wyatt, David Esiobu, Dhruv Choudhary,
+Dhruv Mahajan, Diego Garcia-Olano, Diego Perino, Dieuwke Hupkes, Egor Lakomkin, Ehab
+AlBadawy, Elina Lobanova, Emily Dinan, Eric Michael Smith, Filip Radenovic, Francisco
+Guzm´an, Frank Zhang, Gabriel Synnaeve, Gabrielle Lee, Georgia Lewis Anderson, Govind Thattai, Graeme Nail, Gregoire Mialon, Guan Pang, Guillem Cucurell, Hailey Nguyen, Hannah Korevaar, Hu Xu, Hugo Touvron, Iliyan Zarov, Imanol Arrieta Ibarra, Isabel Kloumann, Ishan Misra,
+Ivan Evtimov, Jack Zhang, Jade Copet, Jaewon Lee, Jan Geffert, Jana Vranes, Jason Park, Jay Mahadeokar, Jeet Shah, Jelmer van der Linde, Jennifer Billock, Jenny Hong, Jenya Lee, Jeremy Fu,
+Jianfeng Chi, Jianyu Huang, Jiawen Liu, Jie Wang, Jiecao Yu, Joanna Bitton, Joe Spisak, Jongsoo Park, Joseph Rocca, Joshua Johnstun, Joshua Saxe, Junteng Jia, Kalyan Vasuden Alwala,
+Karthik Prasad, Kartikeya Upasani, Kate Plawiak, Ke Li, Kenneth Heafield, Kevin Stone, Khalid
+El-Arini, Krithika Iyer, Kshitiz Malik, Kuenley Chiu, Kunal Bhalla, Kushal Lakhotia, Lauren
+Rantala-Yeary, Laurens van der Maaten, Lawrence Chen, Liang Tan, Liz Jenkins, Louis Martin,
+Lovish Madaan, Lubo Malo, Lukas Blecher, Lukas Landzaat, Luke de Oliveira, Madeline Muzzi,
+
+
+12
+
+
+Mahesh Pasupuleti, Mannat Singh, Manohar Paluri, Marcin Kardas, Maria Tsimpoukelli, Mathew
+Oldham, Mathieu Rita, Maya Pavlova, Melanie Kambadur, Mike Lewis, Min Si, Mitesh Kumar Singh, Mona Hassan, Naman Goyal, Narjes Torabi, Nikolay Bashlykov, Nikolay Bogoychev, Niladri Chatterji, Ning Zhang, Olivier Duchenne, Onur C¸ elebi, Patrick Alrassy, Pengchuan
+Zhang, Pengwei Li, Petar Vasic, Peter Weng, Prajjwal Bhargava, Pratik Dubal, Praveen Krishnan,
+Punit Singh Koura, Puxin Xu, Qing He, Qingxiao Dong, Ragavan Srinivasan, Raj Ganapathy, Ramon Calderer, Ricardo Silveira Cabral, Robert Stojnic, Roberta Raileanu, Rohan Maheswari, Rohit Girdhar, Rohit Patel, Romain Sauvestre, Ronnie Polidoro, Roshan Sumbaly, Ross Taylor, Ruan
+Silva, Rui Hou, Rui Wang, Saghar Hosseini, Sahana Chennabasappa, Sanjay Singh, Sean Bell,
+Seohyun Sonia Kim, Sergey Edunov, Shaoliang Nie, Sharan Narang, Sharath Raparthy, Sheng
+Shen, Shengye Wan, Shruti Bhosale, Shun Zhang, Simon Vandenhende, Soumya Batra, Spencer
+Whitman, Sten Sootla, Stephane Collot, Suchin Gururangan, Sydney Borodinsky, Tamar Herman,
+Tara Fowler, Tarek Sheasha, Thomas Georgiou, Thomas Scialom, Tobias Speckbacher, Todor Mihaylov, Tong Xiao, Ujjwal Karn, Vedanuj Goswami, Vibhor Gupta, Vignesh Ramanathan, Viktor
+Kerkez, Vincent Gonguet, Virginie Do, Vish Vogeti, V´ıtor Albiero, Vladan Petrovic, Weiwei
+Chu, Wenhan Xiong, Wenyin Fu, Whitney Meers, Xavier Martinet, Xiaodong Wang, Xiaofang
+Wang, Xiaoqing Ellen Tan, Xide Xia, Xinfeng Xie, Xuchao Jia, Xuewei Wang, Yaelle Goldschlag, Yashesh Gaur, Yasmine Babaei, Yi Wen, Yiwen Song, Yuchen Zhang, Yue Li, Yuning
+Mao, Zacharie Delpierre Coudert, Zheng Yan, Zhengxing Chen, Zoe Papakipos, Aaditya Singh,
+Aayushi Srivastava, Abha Jain, Adam Kelsey, Adam Shajnfeld, Adithya Gangidi, Adolfo Victoria,
+Ahuva Goldstand, Ajay Menon, Ajay Sharma, Alex Boesenberg, Alexei Baevski, Allie Feinstein,
+Amanda Kallet, Amit Sangani, Amos Teo, Anam Yunus, Andrei Lupu, Andres Alvarado, Andrew Caples, Andrew Gu, Andrew Ho, Andrew Poulton, Andrew Ryan, Ankit Ramchandani, Annie Dong, Annie Franco, Anuj Goyal, Aparajita Saraf, Arkabandhu Chowdhury, Ashley Gabriel,
+Ashwin Bharambe, Assaf Eisenman, Azadeh Yazdan, Beau James, Ben Maurer, Benjamin Leonhardi, Bernie Huang, Beth Loyd, Beto De Paola, Bhargavi Paranjape, Bing Liu, Bo Wu, Boyu
+Ni, Braden Hancock, Bram Wasti, Brandon Spence, Brani Stojkovic, Brian Gamido, Britt Montalvo, Carl Parker, Carly Burton, Catalina Mejia, Ce Liu, Changhan Wang, Changkyu Kim, Chao
+Zhou, Chester Hu, Ching-Hsiang Chu, Chris Cai, Chris Tindal, Christoph Feichtenhofer, Cynthia
+Gao, Damon Civin, Dana Beaty, Daniel Kreymer, Daniel Li, David Adkins, David Xu, Davide
+Testuggine, Delia David, Devi Parikh, Diana Liskovich, Didem Foss, Dingkang Wang, Duc Le,
+Dustin Holland, Edward Dowling, Eissa Jamil, Elaine Montgomery, Eleonora Presani, Emily
+Hahn, Emily Wood, Eric-Tuan Le, Erik Brinkman, Esteban Arcaute, Evan Dunbar, Evan Smothers, Fei Sun, Felix Kreuk, Feng Tian, Filippos Kokkinos, Firat Ozgenel, Francesco Caggioni,
+Frank Kanayet, Frank Seide, Gabriela Medina Florez, Gabriella Schwarz, Gada Badeer, Georgia
+Swee, Gil Halpern, Grant Herman, Grigory Sizov, Guangyi, Zhang, Guna Lakshminarayanan,
+Hakan Inan, Hamid Shojanazeri, Han Zou, Hannah Wang, Hanwen Zha, Haroun Habeeb, Harrison Rudolph, Helen Suk, Henry Aspegren, Hunter Goldman, Hongyuan Zhan, Ibrahim Damlaj,
+Igor Molybog, Igor Tufanov, Ilias Leontiadis, Irina-Elena Veliche, Itai Gat, Jake Weissman, James
+Geboski, James Kohli, Janice Lam, Japhet Asher, Jean-Baptiste Gaya, Jeff Marcus, Jeff Tang, Jennifer Chan, Jenny Zhen, Jeremy Reizenstein, Jeremy Teboul, Jessica Zhong, Jian Jin, Jingyi Yang,
+Joe Cummings, Jon Carvill, Jon Shepard, Jonathan McPhie, Jonathan Torres, Josh Ginsburg, Junjie Wang, Kai Wu, Kam Hou U, Karan Saxena, Kartikay Khandelwal, Katayoun Zand, Kathy
+Matosich, Kaushik Veeraraghavan, Kelly Michelena, Keqian Li, Kiran Jagadeesh, Kun Huang,
+Kunal Chawla, Kyle Huang, Lailin Chen, Lakshya Garg, Lavender A, Leandro Silva, Lee Bell,
+Lei Zhang, Liangpeng Guo, Licheng Yu, Liron Moshkovich, Luca Wehrstedt, Madian Khabsa,
+Manav Avalani, Manish Bhatt, Martynas Mankus, Matan Hasson, Matthew Lennie, Matthias
+Reso, Maxim Groshev, Maxim Naumov, Maya Lathi, Meghan Keneally, Miao Liu, Michael L.
+Seltzer, Michal Valko, Michelle Restrepo, Mihir Patel, Mik Vyatskov, Mikayel Samvelyan, Mike
+Clark, Mike Macey, Mike Wang, Miquel Jubert Hermoso, Mo Metanat, Mohammad Rastegari,
+Munish Bansal, Nandhini Santhanam, Natascha Parks, Natasha White, Navyata Bawa, Nayan
+Singhal, Nick Egebo, Nicolas Usunier, Nikhil Mehta, Nikolay Pavlovich Laptev, Ning Dong,
+Norman Cheng, Oleg Chernoguz, Olivia Hart, Omkar Salpekar, Ozlem Kalinli, Parkin Kent,
+Parth Parekh, Paul Saab, Pavan Balaji, Pedro Rittner, Philip Bontrager, Pierre Roux, Piotr Dollar,
+Polina Zvyagina, Prashant Ratanchandani, Pritish Yuvraj, Qian Liang, Rachad Alao, Rachel Rodriguez, Rafi Ayub, Raghotham Murthy, Raghu Nayani, Rahul Mitra, Rangaprabhu Parthasarathy,
+Raymond Li, Rebekkah Hogan, Robin Battey, Rocky Wang, Russ Howes, Ruty Rinott, Sachin
+Mehta, Sachin Siby, Sai Jayesh Bondu, Samyak Datta, Sara Chugh, Sara Hunt, Sargun Dhillon,
+Sasha Sidorov, Satadru Pan, Saurabh Mahajan, Saurabh Verma, Seiji Yamamoto, Sharadh Ra
+
+13
+
+
+maswamy, Shaun Lindsay, Shaun Lindsay, Sheng Feng, Shenghao Lin, Shengxin Cindy Zha,
+Shishir Patil, Shiva Shankar, Shuqiang Zhang, Shuqiang Zhang, Sinong Wang, Sneha Agarwal,
+Soji Sajuyigbe, Soumith Chintala, Stephanie Max, Stephen Chen, Steve Kehoe, Steve Satterfield, Sudarshan Govindaprasad, Sumit Gupta, Summer Deng, Sungmin Cho, Sunny Virk, Suraj
+Subramanian, Sy Choudhury, Sydney Goldman, Tal Remez, Tamar Glaser, Tamara Best, Thilo
+Koehler, Thomas Robinson, Tianhe Li, Tianjun Zhang, Tim Matthews, Timothy Chou, Tzook
+Shaked, Varun Vontimitta, Victoria Ajayi, Victoria Montanez, Vijai Mohan, Vinay Satish Kumar, Vishal Mangla, Vlad Ionescu, Vlad Poenaru, Vlad Tiberiu Mihailescu, Vladimir Ivanov,
+Wei Li, Wenchen Wang, Wenwen Jiang, Wes Bouaziz, Will Constable, Xiaocheng Tang, Xiaojian Wu, Xiaolan Wang, Xilun Wu, Xinbo Gao, Yaniv Kleinman, Yanjun Chen, Ye Hu, Ye Jia,
+Ye Qi, Yenda Li, Yilin Zhang, Ying Zhang, Yossi Adi, Youngjin Nam, Yu, Wang, Yu Zhao,
+Yuchen Hao, Yundi Qian, Yunlu Li, Yuzi He, Zach Rait, Zachary DeVito, Zef Rosnbrick, Zhaoduo Wen, Zhenyu Yang, Zhiwei Zhao, and Zhiyu Ma. The llama 3 herd of models, 2024. URL
+[https://arxiv.org/abs/2407.21783.](https://arxiv.org/abs/2407.21783)
+
+
+David Ha, Andrew M. Dai, and Quoc V. Le. Hypernetworks. In _International Conference on Learn-_
+_ing Representations_, 2017. [URL https://openreview.net/forum?id=rkpACe1lx.](https://openreview.net/forum?id=rkpACe1lx)
+
+
+Song Han, Jeff Pool, John Tran, and William J. Dally. Learning both weights and connections
+for efficient neural networks. In _Proceedings_ _of_ _the_ _29th_ _International_ _Conference_ _on_ _Neural_
+_Information_ _Processing_ _Systems_ _-_ _Volume_ _1_, NIPS’15, pp. 1135–1143, Cambridge, MA, USA,
+2015. MIT Press.
+
+
+Geoffrey Hinton, Oriol Vinyals, and Jeff Dean. Distilling the knowledge in a neural network, 2015.
+[URL https://arxiv.org/abs/1503.02531.](https://arxiv.org/abs/1503.02531)
+
+
+Edward J Hu, Yelong Shen, Phillip Wallis, Zeyuan Allen-Zhu, Yuanzhi Li, Shean Wang, Lu Wang,
+and Weizhu Chen. Lora: Low-rank adaptation of large language models. _arXiv_ _preprint_
+_arXiv:2106.09685_, 2021.
+
+
+Weizhong Huang, Yuxin Zhang, Xiawu Zheng, Liuyang, Jing Lin, Yiwu Yao, and Rongrong Ji.
+Dynamic low-rank sparse adaptation for large language models. In _The Thirteenth International_
+_Conference on Learning Representations_ [, 2025. URL https://openreview.net/forum?](https://openreview.net/forum?id=oXh0939Zzq)
+[id=oXh0939Zzq.](https://openreview.net/forum?id=oXh0939Zzq)
+
+
+Itay Hubara, Brian Chmiel, Moshe Island, Ron Banner, Joseph (Seffi) Naor, and Daniel Soudry. Accelerated sparse neural training: a provable and efficient method to find n:m transposable masks.
+In _Proceedings of the 35th International Conference on Neural Information Processing Systems_,
+NIPS ’21, Red Hook, NY, USA, 2021. Curran Associates Inc. ISBN 9781713845393.
+
+
+Eric Jang, Shixiang Gu, and Ben Poole. Categorical reparameterization with gumbel-softmax. In
+_International Conference on Learning Representations_, 2017. [URL https://openreview.](https://openreview.net/forum?id=rkE3y85ee)
+[net/forum?id=rkE3y85ee.](https://openreview.net/forum?id=rkE3y85ee)
+
+
+Xiaoqi Jiao, Yichun Yin, Lifeng Shang, Xin Jiang, Xiao Chen, Linlin Li, Fang Wang, and Qun
+Liu. TinyBERT: Distilling BERT for natural language understanding. In Trevor Cohn, Yulan
+He, and Yang Liu (eds.), _Findings_ _of_ _the_ _Association_ _for_ _Computational_ _Linguistics:_ _EMNLP_
+_2020_, pp. 4163–4174, Online, November 2020. Association for Computational Linguistics.
+doi: 10.18653/v1/2020.findings-emnlp.372. URL [https://aclanthology.org/2020.](https://aclanthology.org/2020.findings-emnlp.372/)
+[findings-emnlp.372/.](https://aclanthology.org/2020.findings-emnlp.372/)
+
+
+Rabeeh Karimi Mahabadi, Sebastian Ruder, Mostafa Dehghani, and James Henderson. Parameterefficient multi-task fine-tuning for transformers via shared hypernetworks. In _Annual Meeting of_
+_the Association for Computational Linguistics_, 2021.
+
+
+David Krueger, Chin-Wei Huang, Riashat Islam, Ryan Turner, Alexandre Lacoste, and Aaron
+Courville. Bayesian hypernetworks. _arXiv preprint arXiv:1710.04759_, 2017.
+
+
+Kamil Ksiazek and Przemysław Spurek. Hypermask: Adaptive hypernetwork-based masks for continual learning. _Neural_ _Networks_, 191:107736, 2025. ISSN 0893-6080. doi: https://doi.org/
+10.1016/j.neunet.2025.107736. URL [https://www.sciencedirect.com/science/](https://www.sciencedirect.com/science/article/pii/S0893608025006161)
+[article/pii/S0893608025006161.](https://www.sciencedirect.com/science/article/pii/S0893608025006161)
+
+
+14
+
+
+Yen-Cheng Liu, Chih-Yao Ma, Junjiao Tian, Zijian He, and Zsolt Kira. Polyhistor: parameterefficient multi-task adaptation for dense vision tasks. NIPS ’22, Red Hook, NY, USA, 2022.
+Curran Associates Inc. ISBN 9781713871088.
+
+
+Christos Louizos, Max Welling, and Diederik P. Kingma. Learning sparse neural networks through
+_l_ 0 regularization. In _International Conference on Learning Representations_ [, 2018. URL https:](https://openreview.net/forum?id=H1Y8hhg0b)
+[//openreview.net/forum?id=H1Y8hhg0b.](https://openreview.net/forum?id=H1Y8hhg0b)
+
+
+Chris J Maddison, Andriy Mnih, and Yee Whye Teh. The concrete distribution: A continuous
+relaxation of discrete random variables. In _ICLR_, 2017.
+
+
+Arun Mallya, Dillon Davis, and Svetlana Lazebnik. Piggyback: Adapting a single network to multiple tasks by learning to mask weights. In _Computer Vision – ECCV 2018:_ _15th European Con-_
+_ference, Munich, Germany, September 8-14, 2018, Proceedings, Part IV_, pp. 72–88, Berlin, Heidelberg, 2018. Springer-Verlag. ISBN 978-3-030-01224-3. doi: 10.1007/978-3-030-01225-0 ~~5~~ .
+[URL https://doi.org/10.1007/978-3-030-01225-0_5.](https://doi.org/10.1007/978-3-030-01225-0_5)
+
+
+Xin Men, Mingyu Xu, Qingyu Zhang, Bingning Wang, Hongyu Lin, Yaojie Lu, Xianpei Han, and
+Weipeng Chen. Shortgpt: Layers in large language models are more redundant than you expect,
+2024.
+
+
+Xiang Meng, Kayhan Behdin, Haoyue Wang, and Rahul Mazumder. ALPS: Improved optimization for highly sparse one-shot pruning for large language models. In _The Thirty-eighth Annual_
+_Conference on Neural Information Processing Systems_, 2024. [URL https://openreview.](https://openreview.net/forum?id=0lBx844upd)
+[net/forum?id=0lBx844upd.](https://openreview.net/forum?id=0lBx844upd)
+
+
+Stephen Merity, Caiming Xiong, James Bradbury, and Richard Socher. Pointer sentinel mixture models. In _International_ _Conference_ _on_ _Learning_ _Representations_, 2017. URL [https:](https://openreview.net/forum?id=Byj72udxe)
+[//openreview.net/forum?id=Byj72udxe.](https://openreview.net/forum?id=Byj72udxe)
+
+
+OpenAI. GPT-4 Technical Report. _arXiv_ _preprint_ _arXiv:2303.08774_, 2023. URL [https://](https://arxiv.org/abs/2303.08774)
+[arxiv.org/abs/2303.08774.](https://arxiv.org/abs/2303.08774)
+
+
+Colin Raffel, Noam Shazeer, Adam Roberts, Katherine Lee, Sharan Narang, Michael Matena, Yanqi
+Zhou, Wei Li, and Peter J. Liu. Exploring the limits of transfer learning with a unified text-to-text
+transformer. _J. Mach. Learn. Res._, 21(1), January 2020. ISSN 1532-4435.
+
+
+R. Reed. Pruning algorithms-a survey. _IEEE Transactions on Neural Networks_, 4(5):740–747, 1993.
+doi: 10.1109/72.248452.
+
+
+Marcin Sendera, Marcin Przewiezlikowski, Konrad Karanowski, Maciej Zieba, Jacek Tabor, and
+Przemyslaw Spurek. Hypershot: Few-shot learning by kernel hypernetworks. In _Proceedings of_
+_the IEEE/CVF Winter Conference on Applications of Computer Vision (WACV)_, pp. 2469–2478,
+January 2023.
+
+
+Noam Shazeer. Glu variants improve transformer. _arXiv_ _preprint_ _arXiv:2002.05202_, 2020. URL
+[https://arxiv.org/abs/2002.05202.](https://arxiv.org/abs/2002.05202)
+
+
+Mingjie Sun, Zhuang Liu, Anna Bair, and J Zico Kolter. A simple and effective pruning approach
+for large language models. In _The Twelfth International Conference on Learning Representations_,
+2024. [URL https://openreview.net/forum?id=PxoFut3dWW.](https://openreview.net/forum?id=PxoFut3dWW)
+
+
+Yan Sun, Qixin Zhang, Zhiyuan Yu, Xikun Zhang, Li Shen, and Dacheng Tao. Maskpro: Linearspace probabilistic learning for strict (n:m)-sparsity on large language models, 2025. URL
+[https://arxiv.org/abs/2506.12876.](https://arxiv.org/abs/2506.12876)
+
+
+Hugo Touvron, Thibaut Lavril, Gautier Izacard, Xavier Martinet, Marie-Anne Lachaux, Timoth´ee
+Lacroix, Baptiste Rozi`ere, Naman Goyal, Eric Hambro, Faisal Azhar, Aurelien Rodriguez, Armand Joulin, Edouard Grave, and Guillaume Lample. Llama: Open and efficient foundation
+language models, 2023a. [URL https://arxiv.org/abs/2302.13971.](https://arxiv.org/abs/2302.13971)
+
+
+15
+
+
+Hugo Touvron, Louis Martin, Kevin Stone, Peter Albert, Amjad Almahairi, Yasmine Babaei, Nikolay Bashlykov, Soumya Batra, Prajjwal Bhargava, Shruti Bhosale, Dan Bikel, Lukas Blecher,
+Cristian Canton Ferrer, Moya Chen, Guillem Cucurull, David Esiobu, Jude Fernandes, Jeremy
+Fu, Wenyin Fu, Brian Fuller, Cynthia Gao, Vedanuj Goswami, Naman Goyal, Anthony Hartshorn,
+Saghar Hosseini, Rui Hou, Hakan Inan, Marcin Kardas, Viktor Kerkez, Madian Khabsa, Isabel
+Kloumann, Artem Korenev, Punit Singh Koura, Marie-Anne Lachaux, Thibaut Lavril, Jenya Lee,
+Diana Liskovich, Yinghai Lu, Yuning Mao, Xavier Martinet, Todor Mihaylov, Pushkar Mishra,
+Igor Molybog, Yixin Nie, Andrew Poulton, Jeremy Reizenstein, Rashi Rungta, Kalyan Saladi,
+Alan Schelten, Ruan Silva, Eric Michael Smith, Ranjan Subramanian, Xiaoqing Ellen Tan, Binh
+Tang, Ross Taylor, Adina Williams, Jian Xiang Kuan, Puxin Xu, Zheng Yan, Iliyan Zarov, Yuchen
+Zhang, Angela Fan, Melanie Kambadur, Sharan Narang, Aurelien Rodriguez, Robert Stojnic,
+Sergey Edunov, and Thomas Scialom. Llama 2: Open foundation and fine-tuned chat models,
+2023b. [URL https://arxiv.org/abs/2307.09288.](https://arxiv.org/abs/2307.09288)
+
+
+Johannes von Oswald, Christian Henning, Benjamin F. Grewe, and Jo˜ao Sacramento. Continual
+learning with hypernetworks. In _International_ _Conference_ _on_ _Learning_ _Representations_, 2020.
+[URL https://arxiv.org/abs/1906.00695.](https://arxiv.org/abs/1906.00695)
+
+
+Liyuan Wang, Xingxing Zhang, Hang Su, and Jun Zhu. A Comprehensive Survey of Continual
+Learning: Theory, Method and Application . _IEEE_ _Transactions_ _on_ _Pattern_ _Analysis_ _&_ _Ma-_
+_chine_ _Intelligence_, 46(08):5362–5383, August 2024. ISSN 1939-3539. doi: 10.1109/TPAMI.
+2024.3367329. [URL https://doi.ieeecomputersociety.org/10.1109/TPAMI.](https://doi.ieeecomputersociety.org/10.1109/TPAMI.2024.3367329)
+[2024.3367329.](https://doi.ieeecomputersociety.org/10.1109/TPAMI.2024.3367329)
+
+
+Xin Wang, Fisher Yu, Zi-Yi Dou, Trevor Darrell, and Joseph E. Gonzalez. Skipnet: Learning dynamic routing in convolutional networks. In _Computer Vision – ECCV 2018: 15th European Con-_
+_ference,_ _Munich,_ _Germany,_ _September 8-14,_ _2018,_ _Proceedings,_ _Part XIII_, pp. 420–436, Berlin,
+Heidelberg, 2018. Springer-Verlag. ISBN 978-3-030-01260-1. doi: 10.1007/978-3-030-01261-8
+25. [URL https://doi.org/10.1007/978-3-030-01261-8_25.](https://doi.org/10.1007/978-3-030-01261-8_25)
+
+
+Yaqing Wang, Quanming Yao, James T. Kwok, and Lionel M. Ni. Generalizing from a few examples: A survey on few-shot learning. _ACM_ _Comput._ _Surv._, 53(3), June 2020. ISSN 0360-0300.
+doi: 10.1145/3386252. [URL https://doi.org/10.1145/3386252.](https://doi.org/10.1145/3386252)
+
+
+Mengzhou Xia, Tianyu Gao, Zhiyuan Zeng, and Danqi Chen. Sheared LLaMA: Accelerating language model pre-training via structured pruning. In _The_ _Twelfth_ _International_ _Confer-_
+_ence_ _on_ _Learning_ _Representations_, 2024. URL [https://openreview.net/forum?id=](https://openreview.net/forum?id=09iOdaeOzp)
+[09iOdaeOzp.](https://openreview.net/forum?id=09iOdaeOzp)
+
+
+Mingxue Xu, Yao Lei Xu, and Danilo P. Mandic. Tensorgpt: Efficient compression of large language models based on tensor-train decomposition, 2024a. URL [https://arxiv.org/](https://arxiv.org/abs/2307.00526)
+[abs/2307.00526.](https://arxiv.org/abs/2307.00526)
+
+
+Peng Xu, Wenqi Shao, Mengzhao Chen, Shitao Tang, Kaipeng Zhang, Peng Gao, Fengwei An,
+Yu Qiao, and Ping Luo. Besa: Pruning large language models with blockwise parameter-efficient
+sparsity allocation. In _The Twelfth International Conference on Learning Representations (ICLR)_,
+2024b. [URL https://openreview.net/forum?id=TzR9u3GZzO.](https://openreview.net/forum?id=TzR9u3GZzO)
+
+
+Yang Yang, Wendi Ren, and Shuang Li. Hyperlogic: Enhancing diversity and accuracy in rule learning with hypernets. In _The_ _Thirty-eighth_ _Annual_ _Conference_ _on_ _Neural_ _Information_ _Processing_
+_Systems_, 2024a. [URL https://openreview.net/forum?id=gJbZyKGfd6.](https://openreview.net/forum?id=gJbZyKGfd6)
+
+
+Yifei Yang, Zouying Cao, and Hai Zhao. LaCo: Large language model pruning via layer collapse. In Yaser Al-Onaizan, Mohit Bansal, and Yun-Nung Chen (eds.), _Findings of the Association_
+_for Computational Linguistics:_ _EMNLP 2024_, pp. 6401–6417, Miami, Florida, USA, November
+2024b. Association for Computational Linguistics. doi: 10.18653/v1/2024.findings-emnlp.372.
+[URL https://aclanthology.org/2024.findings-emnlp.372/.](https://aclanthology.org/2024.findings-emnlp.372/)
+
+
+Lu Yin, You Wu, Zhenyu Zhang, Cheng-Yu Hsieh, Yaqing Wang, Yiling Jia, Gen Li, Ajay Jaiswal,
+Mykola Pechenizkiy, Yi Liang, Michael Bendersky, Zhangyang Wang, and Shiwei Liu. Outlier
+weighed layerwise sparsity (owl): a missing secret sauce for pruning llms to high sparsity. In
+_Proceedings_ _of_ _the_ _41st_ _International_ _Conference_ _on_ _Machine_ _Learning_, ICML’24. JMLR.org,
+2024.
+
+
+16
+
+
+Susan Zhang, Stephen Roller, Naman Goyal, Mikel Artetxe, Moxian Chen, Shuohui Chen, Christopher Choi, Daniel Lakhotia, Anthony Li, Yanzhe Malykhin, Bryan O’Horo, Anjali Pandey, Sesh
+Santhanam, Stephen Santhanam, Vivek Sharma, Kevin Shleifer, Eric Wenzek, and Luke Zettlemoyer. OPT: Open Pre-trained Transformer Language Models. _arXiv preprint arXiv:2205.01068_,
+2022. [URL https://arxiv.org/abs/2205.01068.](https://arxiv.org/abs/2205.01068)
+
+
+Yingtao Zhang, Haoli Bai, Haokun Lin, Jialin Zhao, Lu Hou, and Carlo Vittorio Cannistraci. Plugand-play: An efficient post-training pruning method for large language models. In _The_ _Twelfth_
+_International Conference on Learning Representations_, 2024. [URL https://openreview.](https://openreview.net/forum?id=Tr0lPx9woF)
+[net/forum?id=Tr0lPx9woF.](https://openreview.net/forum?id=Tr0lPx9woF)
+
+
+Yu Zhang and Qiang Yang. A survey on multi-task learning. _IEEE Transactions on Knowledge and_
+_Data Engineering_, 34(12):5586–5609, 2022. doi: 10.1109/TKDE.2021.3070203.
+
+
+Aojun Zhou, Yukun Ma, Junnan Zhu, Jianbo Liu, Zhijie Zhang, Kun Yuan, Wenxiu Sun, and Hongsheng Li. Learning n:m fine-grained structured sparse neural networks from scratch. In _Interna-_
+_tional Conference on Learning Representations_, 2021.
+
+
+Michael Zhu and Suyog Gupta. To prune, or not to prune: exploring the efficacy of pruning for
+model compression, 2017. [URL https://arxiv.org/abs/1710.01878.](https://arxiv.org/abs/1710.01878)
+
+
+A PROOF OF THEOREM 1: STOCHASTIC RELAXATION OF _n_ : _m_ SPARSE
+MASKING VIA EXPECTED MSE LOSS
+
+
+Here we present the full version of Theorem 1 along with its detailed proof, which were omitted
+from the main text for clarity.
+**Theorem** **2** (Stochastic Relaxation of _n_ : _m_ Masked Linear Approximation) **.** _Let_ **W** _∈_ R _[d][×][d]_ _and_
+**x** _∼D._ _Partition a binary mask_ **M** _∈{_ 0 _,_ 1 _}_ _[d][×][d]_ _into B_ = _d_ [2] _/m blocks {_ **M** _i} of size m, with_
+
+**M** _i_ _∼_ _Categorical_ ( _pi_ ) _,_ _pi_ _∈_ ∆ _[|S|−]_ [1] _,_ _Sn_ : _m_ = _{_ **s** _∈{_ 0 _,_ 1 _}_ _[m]_ : _∥_ **s** _∥_ 0 = _n}._
+
+
+_Define the relaxed mask_ E[ **M** ] = [ [�]
+
+
+_j_ _[p]_ [1] _[j]_ **[s]** _[j][, . . .,]_ [ �]
+
+
+_j_ _[p][Bj]_ **[s]** _[j]_ []] _[ ∈]_ [[0] _[,]_ [ 1]] _[d][×][d][.]_ _[Then]_
+
+
+**M** max _∈Sn_ : _m_ _[I]_ [(] _[f]_ [(] **[W]** _[,]_ **[ x]** [);] _[ f]_ [(] **[W]** _[ ⊙]_ **[M]** _[,]_ **[ x]** [))] _[⇔]_ [min] _{pi}_ [E] **[x]** _[∼D][∥][f]_ [(] **[W]** _[,]_ **[ x]** [)] _[ −]_ _[f]_ [(] **[W]** _[ ⊙]_ [E][[] **[M]** []] _[,]_ **[ x]** [)] _[∥]_ [2] _[,]_
+
+
+_where {pi} provide a differentiable relaxation of discrete n_ : _m sparsity and f_ _denotes MHSA/FFN_
+_layers (linear activation)._
+
+
+_Proof._ We split the proof into two main parts: (i) the reduction from mutual information to a mean
+squared error (MSE) objective under a small-noise approximation, and (ii) the stochastic relaxation
+of the discrete mask into a continuous surrogate via expectation.
+
+
+**Part 1:** **From Mutual Information to Expected MSE.** We consider the mutual information between the dense and sparse linear layer outputs: _I_ - _f_ ( **W** _,_ **x** ); _f_ ( **W** _⊙_ **M** _,_ **x** �, where _f_ denotes the
+function of MHSA or FFN with linear activation, and we omit the layer subscript _L_ for brevity. We
+aim to show that minimizing the MSE between the outputs of a dense model and a pruned model
+is equivalent to maximizing the mutual information between them under mild assumptions. Let us
+denote:
+
+
+    - **Z** := _f_ ( **W** _,_ **x** ) — the output of the original dense layer,
+
+
+    - **Z** [ˆ] := _f_ ( **W** _⊙_ **M** _,_ **x** ) — the output of the pruned sparse layer,
+
+
+    - **M** _∈Sn_ : _m_     - the binary sparsity mask constrained by the _n_ : _m_ sparsity pattern.
+
+
+**Step 1:** **Additive Noise Model**
+
+
+We model the sparse output as a noisy version of the dense output:
+
+
+**Z** ˆ = **Z** + _**ϵ**_ _,_ (13)
+
+
+17
+
+
+where the noise term
+
+_**ϵ**_ := _f_ ( **W** _⊙_ **M** _,_ **x** ) _−_ _f_ ( **W** _,_ **x** ) = _f_ ( **W** _⊙_ ( **M** _−_ **11** _[⊤]_ ) _,_ **x** ) (14)
+
+
+represents the information loss due to masking. We assume:
+
+
+    - _**ϵ**_ is zero-mean, isotropic, and independent of **x**,
+
+
+    - the noise magnitude is small (i.e., pruning induces small perturbations).
+
+
+**Step 2:** **Gaussian Assumption and Joint Distribution**
+
+
+Assuming the input
+**x** _∼N_ ( **0** _,_ **Σx** ) _,_ (15)
+
+both outputs **Z** and **Z** [ˆ] are linear Gaussian transformations of **x**, thus jointly Gaussian random vectors.
+
+
+**Step 3:** **Mutual Information for Jointly Gaussian Variables**
+
+
+Recall that for jointly Gaussian variables **Z** and **Z** [ˆ], the mutual information is given by
+
+
+[1] _[|]_ **[Σ][Z]** [ˆ] _[|]_
+
+2 [log] _|_ **Σ** ˆ
+
+
+_I_ ( **Z** ; **Z** [ˆ] ) = [1]
+
+
+(16)
+_|_ **ΣZ** ˆ _|_ **Z** _|_ _[,]_
+
+
+where
+**ΣZ** ˆ = Cov( **Z** [ˆ] ) _,_ **ΣZ** ˆ _|_ **Z** = Cov( **Z** [ˆ] _|_ **Z** ) _._ (17)
+
+
+Since **Z** [ˆ] = **Z** + _**ϵ**_ and _**ϵ**_ is independent of **Z**,
+
+
+**ΣZ** ˆ _|_ **Z** = **Σ** _**ϵ**_ _,_ **ΣZ** ˆ = **ΣZ** + **Σ** _**ϵ**_ _._ (18)
+
+
+Therefore,
+
+
+[1] _[|]_ **[Σ][Z]** [ +] **[ Σ]** _**[ϵ]**_ _[|]_
+
+2 [log] _|_ **Σ** _**ϵ**_ _|_
+
+
+_I_ ( **Z** ; **Z** [ˆ] ) = [1]
+
+
+_._ (19)
+_|_ **Σ** _**ϵ**_ _|_
+
+
+**Step 4:** **Approximation for Small Noise Covariance**
+
+
+When the noise covariance **Σ** _**ϵ**_ is small compared to **ΣZ**, we apply the matrix determinant lemma or
+first-order Taylor expansion:
+
+_|_ **ΣZ** + **Σ** _**ϵ**_ _| ≈|_ **ΣZ** _|_ �1 + Tr                      - **Σ** _[−]_ **Z** [1] **[Σ]** _**[ϵ]**_ �� _._ (20)
+
+
+Thus,
+
+
+[1] _[|]_ **[Σ][Z]** _[|]_ �1 + Tr( **Σ** _[−]_ **Z** [1] **[Σ]** _**[ϵ]**_ [)] 
+2 [log] _|_ **Σ** _**ϵ**_ _|_
+
+
+_I_ ( **Z** ; **Z** [ˆ] ) _≈_ [1]
+
+
+_|_ **Σ** _**ϵ**_ _|_
+
+
+= [1]
+
+2
+
+
+        -        - [�]
+
+log _[|]_ **[Σ][Z]** _[|]_ 1 + Tr( **Σ** _[−]_ **Z** [1] **[Σ]** _**[ϵ]**_ [)] _._ (21)
+
+_|_ **Σ** _**ϵ**_ _|_ [+ log]
+
+
+Ignoring the weak dependence on the trace term in the small noise regime, the dominant term is
+
+_I_ ( **Z** ; **Z** [ˆ] ) _≈_ const _−_ 2 [1] [log] _[ |]_ **[Σ]** _**[ϵ]**_ _[|][.]_ (22)
+
+
+**Step 5:** **Trace Approximation and Connection to MSE**
+
+
+If **Σ** _**ϵ**_ is diagonal or near-diagonal, the log-determinant can be approximated by the trace:
+
+
+log _|_ **Σ** _**ϵ**_ _| ≈_ Tr( **Σ** _**ϵ**_ ) _._ (23)
+
+
+Recalling that
+Tr( **Σ** _**ϵ**_ ) = E **x**                 - _∥_ _**ϵ**_ _∥_ [2] 2� _,_ (24)
+
+
+18
+
+
+we arrive at the key equivalence:
+
+
+2
+
+[1] **Z** _−_ **Z** ˆ
+
+2 [E] **[x]** ��� ���2
+
+
+_I_ ( **Z** ; **Z** [ˆ] ) _≈_ const _−_ [1]
+
+
+(25)
+2 _[.]_
+
+
+**Final Conclusion:**
+
+
+Maximizing the mutual information between dense and sparse outputs is approximately equivalent
+to minimizing their expected squared difference:
+
+**M** max _∈Sn_ : _m_ _[I]_ - _f_ ( **W** _,_ **x** ); _f_ ( **W** _⊙_ **M** _,_ **x** )� _⇐⇒_ **M** min _∈Sn_ : _m_ [E] **[x]** _[ ∥][f]_ [(] **[W]** _[,]_ **[ x]** [)] _[ −]_ _[f]_ [(] **[W]** _[ ⊙]_ **[M]** _[,]_ **[ x]** [)] _[∥]_ 2 [2] _[.]_ [(26)]
+
+
+This provides an information-theoretic justification for using MSE-based objectives in _n_ : _m_ sparsity
+mask learning and pruning.
+
+
+**Part** **2:** **Stochastic** **Relaxation** **via** **Expected** **Mask.** To enable differentiable optimization, we
+introduce a stochastic relaxation. Let the binary mask **M** _∈{_ 0 _,_ 1 _}_ _[d]_ be partitioned into _B_ = _d/m_
+non-overlapping blocks _{_ **M** _i}_ _[B]_ _i_ =1 [of size] _[ m]_ [.] [Each block is constrained to belong to the] _[ n]_ [:] _[m]_ [ mask]
+set:
+
+
+                - _m_
+_Sn_ : _m_ := _{_ **s** _j_ _∈{_ 0 _,_ 1 _}_ _[m]_ _| ∥_ **s** _j∥_ 0 = _n},_ with _K_ = _|S|_ =
+_n_
+
+
+_._ (27)
+
+
+Instead of selecting a fixed **M** _i_, we sample it from a categorical distribution over _Sn_ : _m_ :
+
+
+**M** _i_ _∼_ Categorical( _pi_ ) _,_ where _pi_ = ( _pi_ 1 _, . . ., piK_ ) _∈_ ∆ _[K][−]_ [1] _,_
+
+
+_K_
+
+- _pij_ = 1 _._
+
+
+_j_ =1
+
+
+P[ **M** _i_ = **s** _j_ ] = _pij,_ with **s** _j_ _∈Sn_ [(] _[m]_ : _m_ [)] _[.]_ (28)
+
+
+The expected value of each block becomes:
+
+
+E[ **M** _i_ ] =
+
+
+_K_
+
+- _pij_ **s** _j._ (29)
+
+
+_j_ =1
+
+
+Then, the full mask is formed as **M** = [ **M** 1 _, . . .,_ **M** _B_ ] _∈Sn_ : _m_, and its expectation is given by:
+
+
+E **M** _∼p_ [ **M** ] := [E[ **M** 1] _, . . .,_ E[ **M** _B_ ]] = - - _[K]_ _p_ 1 _j_ **s** _j, . . .,_
+
+
+_j_ =1
+
+
+_K_
+
+- _pBj_ **s** _j_ - _∈_ [0 _,_ 1] _[d]_ (30)
+
+
+_j_ =1
+
+
+Let **Z** [ˆ] := _f_ ( **W** _⊙_ **M** _,_ **x** ) again denote the sparse output. Taking the expectation over the mask:
+
+
+E **M** _∼p_ [ **Z** [ˆ] ] = E[ _f_ ( **W** _⊙_ **M** _,_ **x** )] = _f_ ( **W** _⊙_ E **M** _∼p_ [ **M** ] _,_ **x** ) _,_ (31)
+
+
+using the linearity of expectation and the independence of **x** and **M** . Note that here _f_ denotes a
+function of MHSA or FFN with linear activation.
+
+
+The expected squared error between the dense output and the expected sparse output becomes:
+
+
+_L_ ( _p_ ) := E **x** _∥f_ ( **W** _,_ **x** ) _−_ E **M** _∼p_ [ _f_ ( **W** _⊙_ **M** _,_ **x** )] _∥_ [2] (32)
+
+= E **x** _∥f_ ( **W** _,_ **x** ) _−_ _f_ ( **W** _⊙_ E[ **M** ] _,_ **x** ) _∥_ [2] (33)
+
+= E **x** �� _f_ ( **W** _⊙_ ( **11** _⊤_ _−_ E[ **M** ]) _,_ **x** )��2 _._ (34)
+
+
+The relaxation transforms a discrete selection problem into a continuous optimization over categorical parameters _pi_ . When _pi_ becomes one-hot (i.e., _pij_ = 1 for some _j_ ), the relaxation recovers a
+valid deterministic _n_ : _m_ sparse mask. Thus, optimizing the surrogate loss:
+
+min _{pi}_ [E] **[x]** _[ ∥][f]_ [(] **[W]** _[,]_ **[ x]** [)] _[ −]_ _[f]_ [(] **[W]** _[ ⊙]_ [E][[] **[M]** []] _[,]_ **[ x]** [)] _[∥]_ [2] (35)
+
+
+19
+
+
+serves as a smooth surrogate to the original discrete problem:
+
+**M** min _∈Sn_ : _m_ [E] **[x]** _[ ∥][f]_ [(] **[W]** _[,]_ **[ x]** [)] _[ −]_ _[f]_ [(] **[W]** _[ ⊙]_ **[M]** _[,]_ **[ x]** [)] _[∥]_ [2] _[ .]_ (36)
+
+
+This surrogate can be optimized using standard gradient-based methods by parameterizing _pi_ (e.g.,
+via logits and softmax). This result shows that our relaxation bridges discrete sparsity and differentiable training, justifying mask learning as an information-preserving approximation while retaining
+_n_ : _m_ structure. This concludes the proof.
+
+
+_Remark_ 3 (On the Linear and Gaussian Assumptions) _._ Theorem 1 is derived under a linear-layer
+and Gaussian input assumption to obtain a clean mutual-information-to-MSE relaxation. Although
+Transformer blocks include nonlinearities (e.g., SwiGLU (Shazeer, 2020)), the justification remains
+valid in practice for two reasons. First, pruning is performed in a small-perturbation regime, where a
+first-order Taylor expansion provides an accurate local linearization of the nonlinear layer, allowing
+the additive-noise and reconstruction-error analysis to apply to the Jacobian-linearized dynamics.
+Second, the Gaussianity assumption concerns high-dimensional pre-activations (e.g., FFN inputs),
+which are empirically close to Gaussian due to aggregation through residual connections and the
+stabilizing effect of LayerNorm (a Central Limit Theorem (CLT)-like phenomenon). Empirically,
+we observe that the pruning-induced reconstruction error closely follows a Gaussian distribution
+across layers, further supporting the validity of the approximation in practical LLM settings.
+
+
+B OPTIMIZATION
+
+
+**Continuous** **Relaxation** **via** **the** **Gumbel-Softmax** **Trick.** Optimizing Eq. 12 is challenging because mask variables are sampled from a categorical distribution, making the problem discrete
+and non-differentiable. To enable end-to-end training, we reparameterize mask selection using the
+Gumbel-Softmax relaxation (Jang et al., 2017; Maddison et al., 2017). The categorical distribution
+over _S_ with logits **p** _ℓ,i_ is relaxed as:
+
+
+**M** - _ℓ,i_ =
+
+
+_|S|_
+
+- _j_ =1 _zℓ,i,j_ _·_ **s** _j,_ _zℓ,i,j_ = - _j_ exp ((log _[′]_ [ exp ((log] _pℓ,i,j_ _[ p][ℓ,i,j]_ + _[′]_ _π_ [+] _ℓ,i,j_ _[ π][ℓ,i,j]_ ) _/τ_ _[′]_ [)] ) _[/τ]_ [)] _[,]_ (37)
+
+
+where _πℓ,i,j_ _∼_ Gumbel(0 _,_ 1) and _τ_ _>_ 0 is a temperature controlling the approximation to discreteness. The mask set is _S_ = _{_ **s** 1 _, . . .,_ **s** _|S|}_ . As _τ_ _→_ 0, the relaxation converges to discrete selection;
+during training, _τ_ is annealed to transition from soft interpolation to near-discrete pruning. With this
+relaxation, masked weights are updated as **W** [�] _ℓ,i_ = **W** _ℓ,i_ _⊙_ **M** [�] _ℓ,i_ . Fig. 2 illustrates the relaxation
+process, which permits gradient flow through mask selection, enabling gradient-based optimization.
+Algorithm 1 summarizes the HyperPrune framework.
+
+
+**Temperature Annealing Schedule in Gumbel-Softmax Relaxation.** In experiments, we use the
+standard exponential temperature annealing schedule for the Gumbel–Softmax relaxation. The temperature _τ_ is initialized at a relatively high value to enable smooth gradients and is gradually annealed toward a small, non-zero final value. Concretely, we adopt
+
+
+_τ_ ( _t_ ) = max( _τf_ _,_ _τ_ 0 _·_ exp( _−η t_ )) _,_
+
+
+where we set _τ_ 0 = 1 _._ 0, _τf_ = 0 _._ 5, and use a small decay rate _η_ (typically in the range 10 _[−]_ [5] to 10 _[−]_ [4] ),
+following common practice and the schedule recommended in (Jang et al., 2017). Here _t_ is the
+current training step (or epoch). This annealing strategy stabilizes early training while progressively
+encouraging the hypernetwork to produce near-discrete mask selections.
+
+
+**Optimization** **Algorithm.** Algorithm 1 details the training procedure of HyperPrune. The algorithm is designed to efficiently generate semi-structured pruning masks through a shared, contextaware hypernetwork while maintaining memory scalability across large LLMs. At each layer, the
+pretrained weights are loaded onto the GPU in blocks, and the hypernetwork—conditioned on both
+layer embeddings and task embeddings—produces logits that parameterize a Gumbel-Softmax distribution for sampling structured 2:4 masks. This stochastic relaxation enables differentiable mask
+learning while respecting hardware-friendly sparsity. During optimization, the model minimizes a
+
+
+20
+
+
+reconstruction loss to preserve activation fidelity, combined with two key regularizations: (i) outlier
+retention to safeguard critical features, and (ii) continual pruning to enforce cross-layer consistency
+and knowledge transfer. After training each layer, the hypernetwork parameters are partially frozen
+to stabilize future pruning decisions, and the corresponding weights are offloaded to reduce memory
+usage, allowing the method to scale to models as large as LLaMA-2 70B on a single A100 GPU.
+By jointly leveraging context-aware embeddings, structured mask sampling, and memory-efficient
+training, HyperPrune directly aligns pruning with both accuracy retention and practical deployability.
+
+
+C TRANSFER LEARNING FOR SPARSE PRIORS
+
+
+To accelerate HyperPrune training and leverage prior knowledge, we incorporate sparse priors into
+the relaxed distribution over candidate masks **s** _j_ _∈S_ . Such priors can be obtained from fast heuristic
+pruning methods like Wanda (Sun et al., 2024). We bias the logits of candidate masks toward a
+reference prior **M** using cosine similarity:
+
+[�]
+
+
+log _pℓ,ij_ _←_ log _pℓ,ij_ + _γ ·_ log
+
+
+exp( _β ·_ cos-sim( **M** [�] _i,_ **s** _j_ ))
+
+ - _j_ _[′]_ [ exp(] _[β][ ·]_ [ cos-sim][(] **M** [�] _i,_ **s** _j′_ ))
+
+
+_,_ (38)
+
+
+where _γ_ controls the prior strength and _β_ sharpens the similarity-based softmax. This preserves
+the probabilistic semantics while softly biasing selection toward masks structurally aligned with the
+prior. Setting _γ_ = 0 ignores the prior, whereas larger _γ_ interpolates smoothly toward prior-guided
+pruning.
+
+
+**Automatically Adjusting** _γ_ **.** To allow the model to gradually transition from relying on the prior to
+relying on its own learned signal, we anneal the prior influence parameter _γ_ over time. Specifically,
+we decay _γ_ according to an exponential schedule:
+
+
+_γt_ = _γ_ 0 _·_ exp( _−α · t_ ) _,_ (39)
+
+
+where _γ_ 0 is the initial prior strength, _α_ _>_ 0 is a decay rate hyperparameter, and _t_ is the current
+training step (or epoch). This annealing scheme ensures that the model initially benefits from the
+guidance of the prior mask, but progressively shifts toward data-driven learning as training advances.
+
+
+The decay rate _α_ can be tuned to control how quickly the prior influence vanishes. A smaller _α_ leads
+to a slower decay, allowing the prior to remain active longer, which is useful in low-data or noisy
+regimes. This dynamic adjustment supports a smooth interpolation between prior-driven exploration
+and model-driven convergence.
+
+
+D EXPERIMENTS
+
+
+D.1 TRAINING ENVIRONMENT
+
+
+Table 2: Technical Specifications of the Training Environment (Hardware and Software) used for all
+Main Paper Experiments.
+
+
+**GPU** **CPU** **CUDA** **OS** **PyTorch**
+
+
+1 _×_ A100 (80GB Memory) 2 _×_ AMD EPYC 7742 2.25GHz 64 cores 11.4 Ubuntu 20.04 2.6.0
+
+
+All experiments for HyperPrune are conducted on a single NVIDIA A100 GPU with 80GB memory,
+supported by dual AMD EPYC 7742 CPUs (64 cores, 2.25GHz). The software stack includes
+CUDA 11.4, PyTorch 2.6.0, and Ubuntu 20.04, as summarized in Table 2. This environment is
+representative of widely available high-performance computing clusters used for large-scale model
+training. The ample GPU memory of the A100 allows efficient handling of models up to 14B
+parameters without gradient checkpointing or offloading, ensuring stable and reproducible training.
+Meanwhile, the combination of optimized CUDA kernels and the latest PyTorch backend provides
+reliable support for semi-structured sparsity and mixed-precision training, both of which are crucial
+
+
+21
+
+
+for accelerating pruning and fine-tuning. We note that HyperPrune does not rely on customized
+kernels beyond the standard PyTorch and CUTLASS implementations, making our method portable
+to other modern GPU architectures that support 2:4 sparsity.
+
+
+D.2 COMPARISON METHODS
+
+
+We evaluate the proposed **HyperPrune** against four heuristic pruning methods: **Magnitude** (Han
+et al., 2015), **Wanda** [3] (Sun et al., 2024), **SparseGPT** [4] (Frantar & Alistarh, 2023), and **Pruner-**
+**Zero** [5] (Dong et al., 2024), as well as one optimization-based pruning baseline: **MaskPro** [6] (Sun
+et al., 2025). For all methods, we use the publicly available implementations provided by the original
+authors and follow their recommended configurations. The only exception is **Magnitude**, for which
+we use the implementation provided in the Wanda library.
+
+
+D.3 HYPERPARAMETER CONFIGURATION
+
+
+Table 3: Training details and hyper-parameters for mask training in HyperPrune.
+
+
+Model Optimizer #Iterations Hidden dim _λ_ 1 _λ_ 2 Prior _α_ _γ_ 0
+
+LLaMA-2 7B AdamW(5e-4, wd=0.1) 2,000 _{_ 256 _,_ 512 _}_ [1e-3, 1e3] [1e-3, 1e3] SparseGPT 2 1e-5
+LLaMA-2 13B AdamW(5e-4, wd=0.1) 2,000 _{_ 256 _,_ 512 _}_ [1e-2, 1e2] [1e-3, 1e3] SparseGPT 2 1e-5
+LLaMA-2 70B AdamW(5e-4, wd=0.1) 2,000 _{_ 256 _,_ 512 _}_ [1e-2, 1e2] [1e-3, 1e3] SparseGPT 2 1e-5
+
+
+Table 3 summarizes the hyper-parameters used for training pruning masks in HyperPrune across
+different model scales. We employ the AdamW optimizer with a learning rate of 5e-4 and weight
+decay of 0.1, and fix the training schedule to 2,000 steps, which we found sufficient for convergence
+of mask learning without overfitting to the calibration data. Embeddings in the hypernetwork are
+initialized from a zero-mean Gaussian distribution with variance 0.01 to ensure stable early training.
+Specifically, the lightweight hypernetwork employs a four-layered feedforward network. We explore
+two configurations for the hidden layer size: 256 and 512 neurons. The regularization coefficients
+_λ_ 1 and _λ_ 2, which balance continual pruning and feature outlier retention, are selected from broad
+logarithmic ranges to capture model-specific sensitivities. For LLaMA-2 7B, stronger regularization
+( _λ_ 1 _∈_ [10 _[−]_ [3] _,_ 10 [3] ]) was required to stabilize pruning, whereas for larger models (13B and 70B), a
+narrower range ( _λ_ 1 _∈_ [10 _[−]_ [2] _,_ 10 [2] ]) proved more effective, reflecting improved robustness at scale.
+The prior is initialized with SparseGPT masks to provide a strong starting point, and the scaling
+factors _α_ = 2 and _γ_ 0 = 10 _[−]_ [5] in Eq. 39 are kept fixed across models for consistent sparsity control.
+It confirms that our method is not overly sensitive to hyperparameter tuning and scales reliably
+across model sizes.
+
+
+For architectural conflagration of the hypernetwork in HyperPrune, we performed a small-scale hyperparameter search over the hypernetwork architecture during development. Specifically, we evaluated variants with 1–3 hidden layers and widths _{_ 128 _,_ 256 _,_ 512 _,_ 1024 _}_ . This grid search showed
+that beyond a certain capacity, e.g., more than two hidden layers or widths larger than 512, the performance of HyperPrune remained essentially unchanged, while training cost increased. The 4-layer
+FFN with 256/512 hidden dimensions therefore represents a stable operating point: it is expressive
+enough to model structured masks across layers, yet compact enough to maintain efficiency.
+
+
+D.4 CONTEXT-AWARE EMBEDDING INITIALIZATION AND OPTIMIZATION
+
+
+**Initialization.** Jointly optimizing the task embedding **e** _t_ and hypernetwork parameters _θ_ can be
+unstable. Careful initialization of **e** _t_ improves convergence and generalization. For initializing
+**e** [(0)] _t_ [,] [a] **[ one-hot vector with added small Gaussian noise]** [ is recommended (] **[e]** [(0)] _t_ = **1** _t_ + _ϵ,_ _ϵ_ _∼_
+_N_ (0 _, σ_ [2] **I** ) _,_ _σ_ _≪_ 1). This approach combines the benefits of clear task separation from one-hot
+encoding with the advantages of smooth optimization provided by the noise, which also helps break
+
+
+[3https://github.com/locuslab/wanda](https://github.com/locuslab/wanda)
+[4https://github.com/IST-DASLab/sparsegpt](https://github.com/IST-DASLab/sparsegpt)
+[5https://github.com/pprp/Pruner-Zero](https://github.com/pprp/Pruner-Zero)
+[6https://github.com/woodenchild95/Maskpro](https://github.com/woodenchild95/Maskpro)
+
+
+22
+
+
+symmetry and facilitates early-stage gradient flow. When training, consider applying **norm** **regu-**
+**larization** ( _λ∥_ **e** _t∥_ [2] ), using **smaller** **learning** **rates** specifically for **e** _t_, and optionally **freezing** **e** _t_
+during the initial warmup phase.
+
+
+Unlike discrete and untrainable one-hot embeddings, which create a hard separation between tasks
+and ignore their relationships, trainable embeddings offer a continuous, dense representation that
+can be updated with gradients. This allows them to capture the similarity between tasks, leading
+to improved generalization and scalability. The trainable approach enables soft parameter sharing
+across tasks, making it a more efficient and effective method for hypernetworks.
+
+
+**Configuration** **of** **Embedding** **Dimensionality.** In our hyperparameter search, we experimented
+with several embedding dimensions for both the layer-specific embeddings **e** and the component
+embeddings **t**, specifically _{_ 48 _,_ 64 _,_ 96 _,_ 128 _}_ . We found that once the embedding size exceeds a
+relatively small threshold (e.g., _d_ _≥_ 96), further increasing the dimensionality brings no noticeable
+performance improvement while incurring additional computational cost. Based on this study, we
+recommend using _d_ = 64 for the layer embeddings and the component embeddings.
+
+
+**Optimization of Context-Aware Embeddings.** Both embeddings are learned jointly with the hypernetwork parameters _θ_ via backpropagation, forming part of the input to _hθ_ in Eq. 12. Specifically,
+for each weight group **W** _ℓ,i_, the hypernetwork generates a probabilistic _n_ : _m_ mask conditioned on
+the corresponding embeddings:
+
+
+**p** _ℓ,i_ = Softmax� _hθ_ ( **W** _ℓ,i,_ **e** _ℓ,_ **t** )� _,_
+
+
+where **t** is the component embedding for the current subcomponent. Gradients of the reconstruction loss and regularization terms are backpropagated through _hθ_ to update both the hypernetwork
+parameters and the embeddings, allowing the embeddings to capture layer- and component-specific
+pruning patterns. This results in a small set of context-aware parameters ( _d ×_ ( _L_ + 7) in total) that
+modulate mask generation adaptively across the network.
+
+
+D.5 GENERALIZATION TO LLAMA-3 MODELS
+
+
+To assess whether HyperPrune extends beyond LLaMA-2, we further evaluate its performance on the
+more recent **LLaMA-3 8B** (Grattafiori et al., 2024), which incorporates revised activation functions
+and architectural updates. As shown in Table 4, HyperPrune maintains strong pruning performance
+on this modern architecture, achieving a Wikitext-2 perplexity of **15.63** . This surpasses Wanda,
+SparseGPT, and MaskPro, and closely approaches the Pruner-Zero baseline (15.21). These results
+indicate that HyperPrune’s sparsity patterns and pruning dynamics transfer effectively to contemporary LLM families.
+
+
+Table 4: Wikitext-2 perplexity of pruning methods applied to LLaMA-3 8B under identical sparsity
+settings. HyperPrune generalizes well to the updated LLaMA-3 architecture, outperforming prior
+baselines and closely matching the strong Pruner-Zero method.
+
+|Method|Wikitext-2 PPL|
+|---|---|
+|LLaMA-3 8B (Dense)|5.76<br>|
+|Magnitude Pruning<br>SparseGPT<br>Wanda<br>Pruner-Zero<br>MaskPro<br>HyperPrune|2.43_×_103<br>18.38<br>21.34<br>**15.21**<br>16.70<br>15.63|
+
+
+D.6 SCALABILITY OF THE CALIBRATION SET
+
+
+We evaluate the effect of calibration dataset size on zero-shot performance for LLaMA-2-7B, as
+shown in Table 5. The results indicate a consistent improvement across all tasks as the dataset size
+increases from 32 to 256 samples. For example, accuracy on BoolQ rises from 64.83% to 70.85%,
+
+
+23
+
+
+Table 5: Zero-shot evaluations of masks trained with different dataset sizes on LLaMA-2-7B.
+
+
+**Dataset Size** **BoolQ** _↑_ **RTE** _↑_ **HellaS.** _↑_ **WinoG.** _↑_ **ARC-E** _↑_ **ARC-C** _↑_ **OBQA** _↑_ **Mean** _↑_
+
+
+32 samples 64.83 53.95 50.65 59.11 61.84 24.34 21.51 48.03
+64 samples 67.94 57.72 53.64 62.21 63.94 29.99 24.54 51.43
+128 samples 70.69 60.22 55.28 64.50 66.32 32.55 26.76 53.76
+256 samples 70.85 60.46 56.34 64.70 67.20 32.78 27.20 54.22
+
+
+RTE from 53.95% to 60.46%, HellaSwag from 50.65% to 56.34%, WinoGrande from 59.11% to
+64.70%, ARC-Easy from 61.84% to 67.20%, ARC-Challenge from 24.34% to 32.78%, and OpenBookQA from 21.51% to 27.20%. Correspondingly, the overall mean accuracy improves steadily
+from 48.03% with 32 samples to 54.22% with 256 samples. These findings highlight two key observations. First, while increasing the calibration dataset size consistently boosts performance, the
+gains are relatively modest, suggesting diminishing returns beyond a few hundred samples. Second,
+even with only 32 samples, HyperPrune achieves reasonably strong zero-shot performance across
+diverse tasks, demonstrating its robustness and ability to learn effective masks from limited calibration data. Overall, these results underscore HyperPrune’s efficiency in leveraging small datasets
+while maintaining strong generalization.
+
+
+D.7 SUPPLEMENTARY RESULTS FOR ABLATION STUDY
+
+
+(a) Effect of regularization (b) Effect of context-aware embedding
+
+
+Figure 5: Perplexity on Wikitext (a) and Mean Accuracy on seven zero-shot tasks (b) for different
+pruning methods, evaluated using 1, 2, 4, 8, 16, 32, 64, 128, 256, and 512 calibration samples.
+
+
+Fig. 5 present ablation studies on HyperPrune on zero-shot tasks, which analyzes the contribution of
+its core components across LLaMA-2-7B models of different sizes. Panel (a) evaluates the impact of
+regularization, showing that removing either continual pruning (w/o cp) or feature orthogonality
+(w/o fo) generally reduces Mean Accuracy, with the full HyperPrune consistently achieving the
+best results, especially on the 7B and 70B models. Panel (b) examines the effect of context-aware
+embeddings, where excluding the learnable embedding (w/o le) or context-awareness (w/o ce)
+substantially degrades performance on the 7B and 13B models, confirming their importance for
+adapting pruning to downstream tasks.
+
+
+D.8 EVALUATION OF THE SAMPLING NUMBER OF PARAMETERS
+
+
+In Eq. 12, we maintain a set of layer-wise model parameters in the LLM to compute the expectation over **W** for continual pruning. Figure 6 explores the effect of pruning density by varying the
+number of sampled parameters per layer. As expected, perplexity on Wikitext decreases as sparsity is reduced, but plateaus after roughly 50 sampled parameters, while Mean Accuracy on seven
+zero-shot tasks follows a similar trend. Importantly, LLaMA-2-70B retains strong performance
+even under high sparsity, highlighting HyperPrune’s robustness and efficiency in preserving critical
+weights across model scales.
+
+
+24
+
+
+(a) Effect of regularization (b) Effect of context-aware embedding
+
+
+Figure 6: Perplexity on Wikitext (a) and Mean Accuracy on seven zero-shot tasks (b) for HyperPrune, evaluated using 10, 30, 50, 70, 90, and 110 sampled parameters per layer of LLaMA-2-7B.
+
+
+D.9 INFERENCE SPEEDUP SIMULATION.
+
+
+Table 6: Acceleration of matrix multiplication (in milliseconds) for LLaMA-2-7B with semistructured 2:4 sparsity obtained by HyperPrune on an NVIDIA A100 GPU.
+
+
+**LLaMA Layer** **Dense (ms)** **2:4 Sparsity (ms)** **Speedup**
+
+
+q/k/v/o projection 2.15 1.30 1.65 _×_
+up/gate projection 5.95 3.70 1.61 _×_
+down projection 6.05 3.90 1.55 _×_
+
+
+We evaluate the practical inference benefits of HyperPrune on an NVIDIA A100 GPU by leveraging hardware-friendly 2:4 structured sparsity. Following (Frantar & Alistarh, 2023), we measure
+latency for matrix multiplications in linear layers using the high-performance CUTLASS GEMM
+kernel. As reported in Table 6, the q/k/v/o, up/gate, and down projection layers achieve speedups of
+1.55–1.65 _×_, resulting in an average per-layer acceleration of approximately 1.60 _×_ . Applied endto-end on LLaMA-2-7B, this corresponds to a 1.43 _×_ reduction in overall inference latency (248 ms
+_→_ 174 ms). These results demonstrate that HyperPrune’s learned pruning masks not only induce
+structured sparsity but also provide substantial computational efficiency on modern accelerators,
+highlighting their practical value for real-world deployment.
+
+
+D.10 MEMORY SCALABILITY
+
+
+Table 7: Memory (GB) required for training with 2:4 sparsity.
+
+
+**Model** **MaskLLM** **MaskPro** **HyperPrune (est.)**
+
+
+LLaMA-2 7B 339.56 39.36 15.46
+LLaMA-2 13B 630.80 68.41 21.63
+LLaMA-2 70B         -         - 33.74
+
+
+Table 7 reports the memory required for training LLaMA-2 models (7B, 13B, 70B) under 2:4 sparsity across 8 _×_ A100 GPUs. The results highlight a sharp contrast in scalability among methods.
+**MaskLLM** suffers from extremely high memory overhead due to its dense mask parameterization, exceeding 600 GB for LLaMA-2 13B and failing with out-of-memory (OOM) errors at 70B
+scale, making it impractical for very large models. **MaskPro**, in contrast, maintains nearly constant memory consumption because of its lightweight linear probability modeling, requiring only
+39–68 GB for 7B–13B. However, it cannot scale to the 70B model within a single-node setting.
+**HyperPrune** achieves a better balance: by using a compact shared hypernetwork with contextaware embeddings and layer-wise memory offloading, it incurs only modest overhead compared to
+MaskPro, requiring 15.46 GB for 7B and 21.63 GB for 13B, while remaining feasible even at 70B
+
+
+25
+
+
+with 33.74 GB. These results demonstrate that HyperPrune is both memory-efficient and scalable,
+enabling structured pruning of trillion-scale models on realistic hardware budgets, unlike methods
+such as MaskLLM that become prohibitive at large scales.
+
+
+D.11 GPU-HOUR AND WALL-CLOCK COSTS FOR MASK TRAINING.
+
+
+Table 8 provides a detailed comparison of computational and memory overhead for 2 : 4 sparsity
+on LLaMA-2 models, reporting GPU hours and memory usage for mask training under identical
+calibration sizes. As shown, HyperPrune has significantly lower computational and memory costs
+compared to MaskPro and MaskLLM. For LLaMA-2 7B, MaskLLM requires _≈_ 1200 GPU hours
+and 339.56 GB of memory across 8× A100 GPUs, while MaskPro uses 10 GPU hours and 39.36 GB.
+HyperPrune achieves the same task using only 7 GPU hours and 15.46 GB. Similarly, for LLaMA-2
+13B, MaskLLM takes _≈_ 2300 GPU hours, MaskPro 22 GPU hours, whereas HyperPrune only 15
+GPU hours with 21.63 GB. We do not report LLaMA-2 70B here because MaskLLM and MaskPro
+cannot complete pruning on a single A100 GPU. These results demonstrate HyperPrune’s practical
+advantage in both computation and memory.
+
+
+Table 8: GPU hours and memory usage required for training pruning masks under 2 : 4 structured
+sparsity on LLaMA-2 models. HyperPrune achieves the lowest computational and memory cost
+across all settings, while MaskLLM requires orders of magnitude more resources and fails to scale
+to larger models.
+
+|LLaMA-2 7B LLaMA-2 13B<br>Method<br>Memory (GB) GPU Hours Memory (GB) GPU Hours|Col2|Col3|
+|---|---|---|
+|MaskLLM<br>MaskPro<br>**HyperPrune**|339.56<br>_≈_1200<br>39.36<br>10<br>**15.46**<br>**7**|630.80<br>_≈_2300<br>68.41<br>22<br>**21.63**<br>**15**|
+
+
+D.12 ABLATION STUDY: EFFECT OF PRIOR-BASED INITIALIZATION
+
+
+We investigate the impact of prior-based initialization on HyperPrune by testing three variants: initialization from a **SparseGPT** **prior** (Frantar & Alistarh, 2023), from a **Wanda** **prior** (Sun et al.,
+2024), and with **no prior** . Experiments were conducted on LLaMA-2-7B and LLaMA-2-13B using
+Wikitext-2 perplexity. As shown in Table 9, prior-based initialization consistently improves pruning quality, with SparseGPT providing the strongest gains. These results indicate that HyperPrune
+effectively leverages upstream sparsity patterns while remaining robust to the choice of prior.
+
+
+Table 9: Ablation on prior-based initialization for HyperPrune. Using a SparseGPT or Wanda prior
+improves Wikitext-2 perplexity on both LLaMA-2-7B and 13B, while HyperPrune without a prior
+performs worse, indicating the benefit—but not strict necessity—of prior information.
+
+
+**Initialization Method** **LLaMA-2 7B** **LLaMA-2 13B**
+
+
+HyperPrune + SparseGPT prior **10.11** **7.60**
+HyperPrune + Wanda prior 10.28 7.79
+HyperPrune (no prior) 10.75 8.04
+
+
+26

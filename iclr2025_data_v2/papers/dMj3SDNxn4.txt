@@ -1,0 +1,1280 @@
+# UNICORNN: UNIMODAL CALIBRATED ORDINAL RE## GRESSION NEURAL NETWORK
+
+
+**Anonymous authors**
+Paper under double-blind review
+
+
+ABSTRACT
+
+
+Ordinal regression is a supervised machine learning technique aimed at predicting
+the value of a discrete dependent variable with an ordered set of possible outcomes.
+Many of the algorithms that have been developed to address this issue rely on maximum likelihood for training. However, the standard maximum likelihood approach
+often fails to adequately capture the inherent order of classes, even though it tends
+to produce well-calibrated probabilities. Alternatively, some methods use Optimal
+Transport (OT) divergence as their training objective. Unlike maximum likelihood,
+OT accounts for the ordering of classes; however, in this manuscript, we show that
+it doesn’t always yield well-calibrated probabilities. To overcome these limitations,
+we introduce UNICORNN, an approach inspired by the well-known Proportional
+Odds Model, which offers three key guarantees: (i) it ensures unimodal output probabilities, a valuable feature for many real-world applications; (ii) it employs OT loss
+during training to accurately capture the natural order of classes; (iii) it provides
+well-calibrated probability estimates through a post-training accuracy-preserving
+calibration step. Experimental results on six real-world datasets demonstrate that
+UNICORNN consistently either outperforms or performs as well as recently proposed deep learning approaches for ordinal regression. It excels in both accuracy
+and probability calibration, while also guaranteeing output unimodality. The code
+will be publicly available upon acceptance.
+
+
+1 INTRODUCTION
+
+
+Ordinal regression is an area of supervised machine learning, where the goal is to predict the value of
+a discrete dependent variable, whose set of (symbolic) possible values is ordered. Despite often being
+overshadowed by more common tasks like classification and regression, ordinal regression covers a
+wide range of important applications, such as medical severity grading, credit rating, age estimation,
+and many more (De Vente et al., 2020; Wienholt et al., 2024; Niu et al., 2016; Kim and Ahn, 2012).
+
+
+Many practitioners often treat ordinal regression problems as classification or regression problems
+(for example, this was the case with many submissions to Kaggle’s Diabetic Retinopathy competition [1]
+in 2015). While having common characteristics with both classification and regression, ordinal
+regression can arguably be viewed as a mid-point between the two. An ordinal model is of course
+similar to a classification model, in that both predict a discrete value (“label”) out of a finite set of
+possible ones. However, the existence of an order on the set of labels, when available, can potentially
+lead to improved performance compared to a standard classifier, which does not assume such order
+exists. This typically occurs via distinguishing between the severity of prediction mistakes: while
+in classification typically ”all mistakes are created equal", in ordinal regression different mistakes
+may be associated with different severity (for example, in the context of tumor grade prediction,
+predicting "3" when the ground truth value is "4" may be less severe than a "1" prediction). In
+regression problems, the dependent variable naturally does take values from an ordered set, however,
+this set is typically a continuum and is treated numerically, while in ordinal regression it lacks any
+numerical relation beyond merely order. Therefore, regression performance may be sensitive to
+monotonic transformations of the dependent variable, while such sensitivity does not take place in
+ordinal regression problems, as the order is invariant to monotonic transformations. Hence one may
+
+
+1https://www.kaggle.com/c/diabetic-retinopathy-detection/
+
+
+1
+
+
+expect that typical ordinal regression algorithms have the potential to outperform classification or
+regression approaches when the range of the dependent variable is finite and ordered.
+
+
+A fundamental ordinal regression model is the Proportional Odds Model (POM) (McCullagh, 1980),
+a generalized linear model similar in spirit to logistic regression, however the logits are defined
+for their cumulative probabilities. One potential source of sub-optimality of POM and of several
+recently-proposed approaches for deep ordinal regression, is the often-reasonable requirement that a
+probabilistic model for ordinal regression will output unimodal probabilities. A _k_ -level multinomial
+distribution is called _unimodal_ if there exists _j_ _∈{_ 1 _, . . ., k}_ such that Pr( _Y_ = 1) _≤_ _. . . ≤_ Pr( _Y_ =
+_j_ ) _≥_ _. . ._ _≥_ Pr( _Y_ = _k_ ). Although there are domains in which unimodality is not necessarily a
+desirable property, such as tasks where the most common targets tend to fall at the extremes, in many
+other real-world domains it is a natural requirement, for example, when predicting a grade of a tumor,
+it may be counter-intuitive to trust a model prediction which says that a predicted tumor’s grade
+is either "1" or "4", but not "2" or "3". However, unimodality is unfortunately not always fulfilled
+despite often being a desired characteristic. While this was identified by several recent works for deep
+ordinal regression (Gao et al., 2017; Diaz and Marathe, 2019; Liu et al., 2019a; 2020), unimodality is
+often encouraged (but not enforced) via soft targets. However, as we show in Section 2, using soft
+targets is suboptimal for achieving unimodality.
+
+
+Another essential feature of an ordinal regression model is its ability to effectively capture the ordered
+relationship among classes within its training objective, while still reflecting the certainty of the
+model in its predictions. POM is typically trained via maximum likelihood, similar to several recently
+proposed deep ordinal regression approaches (Belharbi et al., 2019; Vargas et al., 2020; Fu et al., 2018;
+Beckham and Pal, 2017; Berg et al., 2020; Vishnu et al., 2019). We argue that maximum likelihood
+is a sub-optimal measure of quality for ordinal regression setup, as it only considers the probability
+mass the model assigns to the true class, ignoring the remaining mass. This implicitly assumes that
+“all mistakes are equal”, which, as discussed above, is not the case for ordinal regression. However, a
+benefit of maximum likelihood is that it tends to yield well-calibrated probabilities. A well-calibrated
+model ensures that, for example, a 90% predicted probability corresponds to events that actually
+occur 90% of the time. However, many models, including recent deep ordinal regression approaches,
+struggle with this. These models often exhibit overconfidence or underconfidence, meaning their
+probability outputs are unreliable indicators of their true prediction certainty. Another commonly
+used loss function for ordinal regression tasks is Optimal Transport (OT) divergence. OT excels at
+capturing the inherent order between labels, potentially making it a better fit. However, as we explain
+in Section 3.3, OT might lead to peaked output distribution that lacks calibration.
+
+
+In this manuscript, we therefore focus on two main contributions. First, We present UNICORNN, a
+novel approach for ordinal regression, based on deep learning machinery, which tackles the three
+issues pointed out above (i) it contains a mechanism to enforce _unimodality of the output distribution_,
+implemented via architectural design, (ii) it _effectively_ _captures_ _the_ _ordered_ _relationship_ _among_
+_classes_ using OT as a training objective (iii) it undergoes a post-training calibration process to output
+_well-calibrated probability estimates_ that reflect the model’s confidence in its predictions while still
+preserving the model’s accuracy. Second, as discussed in Section 3 _._ 3, we identify a trade-off between
+certain requirements, noting that OT may prioritize peaked distributions over calibrated ones, which,
+to the best of our knowledge, was not pointed out in the literature in the context of deep ordinal
+regression. Importantly, this bonds the requirements together, as other methods that utilize OT as
+a training objective, end up being uncalibrated. We present experimental results on six real-world
+image benchmark datasets which demonstrate that UNICORNN consistently performs on par with
+and often better than several recently proposed approaches for deep ordinal regression in terms of
+both prediction accuracy and probability calibration while having an unimodality guarantee.
+
+
+2 RELATED WORK
+
+
+Being a traditional area of machine learning and statistics, there exists a large corpus of literature on
+ordinal regression. In this section, we focus on approaches based on recent deep-learning architectures.
+Several such approaches have been proposed in recent years. One common approach is to turn the
+ordinal regression problem into a multi-label classification problem (Fu et al., 2018; Liu et al., 2017;
+2018b; Vishnu et al., 2019; Berg et al., 2020; Cheng et al., 2008; Li et al., 2021). We argue that the
+multi-label approach has two major problematic aspects: first, the output probabilities are not always
+
+
+2
+
+
+guaranteed to be consistent, in the sense of increasing cumulative distribution (i.e., we would like
+to predict Pr( _y_ _≤_ 1) _≤_ Pr( _y_ _≤_ 2) _≤_ _. . ._ _≤_ Pr( _y_ _≤_ _k_ ). Second, even if the output probabilities
+are consistent, as is the case in Liu et al. (2018a); Shi et al. (2023); Cao et al. (2020), the predicted
+class probabilities are not necessarily unimodal. This is the case in several recent works (Liu et al.,
+2019b; Vargas et al., 2020; Pan et al., 2018; Kook et al., 2020). Another line of research focuses on
+addressing ordinal regression by developing unbiased estimator-based approaches that are robust to
+label noise, as proposed by Garg and Manwani (2020).
+
+
+One elegant mechanism is to obtain unimodal output probabilities, based on either the Poisson or
+the Binomial distributions (Beckham and Pal, 2017), which are both unimodal. In both cases, the
+model outputs a scalar ( _λ_ in the case of the Poisson, _p_ in the case of the binomial) for each prediction,
+which is then mapped to a probability mass function that is used (after normalization) as the model
+output probabilities. Moreover, this method also learns a dataset-wide _τ_ parameter which controls the
+shape of the output distribution. While being a convenient architectural-based solution for handling
+unimodality, this approach is inherently limited in its ability to express the level of uncertainty of the
+model’s prediction. To see why, note that since a single parameter determines both the location of
+the mode and the decay of the probabilities, the model cannot output a highly flat or highly peaked
+probability vector, for example.
+
+
+A different approach to unimodality has been to train the model with soft targets (Gao et al., 2017;
+Diaz and Marathe, 2019; Liu et al., 2019a; 2020). However, we argue that the utilization of soft targets
+suffers from two important disadvantages. First, unimodality is only encouraged, but not enforced.
+In Section 5 we will show cases where models trained with soft targets yield large amounts of
+non-unimodal predictions. Second, soft targets have a pre-defined decay pattern, which is determined
+a-priori and hence does not reflect any level of uncertainty with respect to the prediction. Therefore,
+they are equivalent (in the sense of a 1:1 map) to Dirac predictions (i.e., “one-hot”), and are devoid
+of any probabilistic insight whatsoever. As we show in this paper, our approach attends to both
+issues: we guarantee unimodal outputs, by design, and yield well-calibrated probabilities outputs that
+reflect the model’s uncertainty. Other approaches for handling unimodality include Li et al. (2022);
+Cardoso et al. (2023), where unimodality is encouraged through a dedicated loss term (although
+not guaranteed), and Belharbi et al. (2019), which employs constrained optimization to achieve
+unimodality on the training data, but with no guarantees on the predictions on test data.
+
+
+Several works use cross entropy as a training objective while using one-hot (or binary) targets (Belharbi et al., 2019; Vargas et al., 2020; Fu et al., 2018; Beckham and Pal, 2017; Berg et al., 2020;
+Vishnu et al., 2019; Cardoso et al., 2023). Also, an accuracy-preserving calibration on a cross-entropy
+trained model was proposed in (Esaki et al., 2024). However, in the case of one-hot targets, the
+cross entropy term equals the negative logarithm of the probability assigned by the model to the true
+class, making it invariant to the distribution of the remaining probability mass. While reasonable
+in a standard classification setting, this ignores the order of the classes, making it sub-optimal for
+an ordinal regression setting. Nonetheless, as cross-entropy is a proper-scoring rule, it tends to
+yield calibrated probability estimates (Lakshminarayanan et al., 2017). To address cross-entropy’s
+limitation in handling the order of classes, some approaches use OT loss (Hou et al., 2016; Beckham
+and Pal, 2017; Liu et al., 2019a), which is a natural way to incorporate the order of the classes into
+the loss term. However, OT tends to favor peaked output distributions instead of calibrated ones
+(see Section 3.3). UNICORNN aims to benefit from both the ability to capture the order of classes
+using OT as a training objective, and the generation of calibrated probability estimates through
+accuracy-preserving calibration.
+
+
+In summary, to the best of our knowledge, no existing work has successfully met all three fundamental
+requirements for an effective ordinal regression model: (i) Ensuring unimodality in the output
+distribution, ideally through architectural design; (ii) Aligning the training objective function with
+the ordinal nature of the label space; (iii) Reflecting the model’s uncertainty in the decay of the
+output probabilities, preferably with well-calibrated probabilities. These requirements led to the
+development of UNICORNN, presented in this paper.
+
+
+3
+
+
+It is convenient to interpret equation 1 by viewing _β_ _[T]_ _x_ as a factor that shifts the standard logistic
+density function, while the _αj_ terms are thresholds, with respect to which the cumulative probabilities
+are defined. This is depicted in Figure 1.
+
+
+Let ( _x, y_ ) be a realization of ( _X, Y_ ). The likelihood assigned by the model to ( _x, y_ ) is
+
+
+_L_ ( _α, β_ ; ( _x, y_ )) = P( _Y_ = _y|X_ = _x_ ; _α, β_ ) = _F_ ( _αy −_ _β_ _[T]_ _x_ ) _−_ _F_ ( _αy−_ 1 _−_ _β_ _[T]_ _x_ ) _,_ (2)
+
+
+considering _α_ 0 = _−∞_ and _αk_ = _∞_ . The model is typically trained in a standard fashion by
+maximizing the log-likelihood function on the training data.
+
+
+Despite its popularity, POM has two key limitations: First, the model’s output probabilities are not
+necessarily unimodal (see Figure 2). Second, the likelihood function in equation 2 depends only on
+the probability the model assigns to the correct class _y_ and is invariant to the way the remaining
+probability mass is assigned by the model. This ignores the order on the label set, and hence does not
+use important information that might be used to improve prediction quality, as depicted in Figure 2.
+This is also true of ordinal likelihood proposed in Chu et al. (2005). In addition, it is important to
+
+
+4
+
+
+Figure 1: The proportional odds model. _xi_
+is a realization of _X_ . The standard logistic
+density is shifted by _β_ _[T]_ _xi_ . The thresholds _αj_
+define the bins which determine the probability predicted by the model to each class. For
+example, the green area defines the probability Pr( _Y_ = 3) for given _α_ 1 _, . . ., α_ 5 and _β_ .
+
+
+3 PRELIMINARIES
+
+
+3.1 THE PROPORTIONAL ODDS MODEL
+
+
+Figure 2: POM deficiencies. The plots illustrate two instances of POM, which highlight
+its two deficiencies: (1) POM does not always
+output unimodal probabilities: the first plot
+shows an example where the output probabilities are such that Pr( _Y_ = 1) _>_ Pr( _Y_ =
+2) _<_ Pr( _Y_ = 3) _>_ Pr( _Y_ = 4). (2) The
+likelihood function of POM is invariant to the
+way the predicted probability mass of the incorrect classes is assigned: if the correct class
+is 3, both instances have the same likelihood,
+even though in the second instance, the probability mass assigned to neighboring class 2
+is larger.
+
+
+Let ( _X, Y_ ) _∈X_ _× Y_ be random variables, having joint probability _PXY_, where _X_ = R _[d]_, _Y_ =
+_{_ 1 _, . . ., k}_, and 1 _, . . ., k_ are considered as symbols. Let _⪯_ be an order relation defined on _Y_ such
+that 1 _⪯_ _. . . ⪯_ _k_ . The proportional odds model is parametrized by _α ∈_ R _[|Y|−]_ [1] _, β_ _∈_ R _[d]_ and applies
+to data _{_ ( _xi, yi_ ) _}_ _[n]_ _i_ =1 [, sampled i.i.d from] _[ P][XY]_ [ .] [Let] _[ ϵ]_ [ be a logistic random variable (thus having a]
+sigmoid cumulative distribution function _F_ ( _x_ ) = 1+exp(1 _−x_ ) [), and let] _[ Z]_ [be a random variable defined]
+as _Z_ = _β_ _[T]_ _X_ + _ϵ_ . The entries of _α_ are used to define the cumulative conditional probabilities via
+
+
+P( _Y_ _⪯_ _j|X_ = _x_ ) = Pr( _Z_ _≤_ _αj_ ) = _F_ ( _αj_ _−_ _β_ _[T]_ _x_ ) (1)
+
+
+Similarly to logistic regression, this yields linear log-odds (logits), however, defined with respect to
+cumulative terms
+
+
+_γj_ _≡_ log [P][(] _[Y]_ _[⪯]_ _[j][|][X]_ [=] _[ x]_ [)]
+
+
+[P]
+
+_[−]_ _[β][T][ x]_
+P( _Y_ _≻_ _j|X_ = _x_ ) [=] _[ α][j]_
+
+
+mention that as the cross-entropy term is essentially equivalent to the model’s negative log-likelihood
+function, this invariance to the partition of the remaining mass over the incorrect classes is common
+to all models trained via cross-entropy minimization, as long as the target labels are one-hot. In
+Section 4 we will show how UNICORNN overcomes these two limitations of POM.
+
+
+3.2 PROBABILITY CALIBRATION
+
+
+Probability Calibration refers to the alignment between the predicted probabilities generated by a
+classification model and the true, empirical probabilities observed in the data. For instance, it is
+anticipated that when a classification model assigns a probability of 0.8 to class _i_ for a certain sample,
+approximately 80% of those samples would indeed belong to class _i_ based on their ground truth
+labels. Formally, the concept of calibration can be defined as:
+
+
+P[ _y_ = _i|pi_ ( _x_ ) = _q_ ] = _q,_ _∀q_ _∈_ [0 _,_ 1] _, i ∈_ [ _k_ ] (3)
+
+
+Here, _k_ denotes the number of classes, _x_ and _y_ represent the model input and the ground truth
+class, respectively, and _pi_ ( _x_ ) signifies the model’s output probability for class _i_ given input _x_ . The
+probability is taken over the joint distribution of _x, y_ .
+
+
+Alternatively, if we denote _y_ as a one-hot vector indicating the ground truth label, we can express an
+equivalent definition to equation 3: A classification model is calibrated when E _x,y_ [ _y|p_ ( _x_ )] = _p_ ( _x_ ). In
+practice, _p_ ( _x_ ) is a one-to-one function, hence we can refine the definition further: E _x,y_ [ _y|x_ ] = _p_ ( _x_ ).
+
+
+To achieve calibration, minimizing the squared _L_ 2 norm on the difference between the two terms
+is desirable. However, given the unknown _real_ joint distribution _x, y_, we can only approximate
+E _x,y_ [ _y|x_ ]. One approach is to use a Monte Carlo approximation with one sample, yielding the
+approximation _y_, i.e., minimize the following:
+
+
+_BS_ ( _y, p_ ( _x_ )) = _∥y −_ _p_ ( _x_ ) _∥_ [2] 2 (4)
+
+
+This term is known as the Brier Score (BS) (Brier, 1950). BS is a well-known Proper Scoring Rule
+(Dawid and Musio, 2014), which evaluates the accuracy of probabilistic predictions. Proper scoring
+rules are maximized when the probabilistic forecast matches the true probability distribution of
+outcomes. Therefore, we will use BS as a training objective to calibrate the model predictions.
+
+
+**Accuracy-Preserving Calibration** An accuracy-preserving calibration method is a technique that
+adjusts the probability outputs of a pre-trained model to improve their calibration, without affecting
+the model’s accuracy. A popular method is Temperature Scaling (TS) (Guo et al., 2017), which learns
+a single temperature parameter that is used to rescale the model’s logits before applying the softmax
+activation, adjusting the confidence predictions. Adaptive Temperature Scaling (ATS) (Balanya
+et al., 2024) extends TS such that instead of a single temperature parameter, it learns a mapping
+_x �→_ _T_ ( _x_ ) that adaptively scales the logits based on the input _x_ . As part of UNICORNN we define
+an accuracy-preserving calibration method with similarity to TS and ATS which is trained via Brier
+Score (Section 4.3).
+
+
+3.3 OPTIMAL TRANSPORT
+
+
+Let M be a finite metric space with moving cost metric _c_ ( _x, y_ ) between elements _x, y_ _∈_ _M_, and
+let _p, q_ be probability mass functions on _M_ . The optimal transport (OT) or 1-Wasserstein distance
+between _q_ and _p_ is defined as:
+
+
+                 
+
+
+_OT_ ( _p, q_ ) =
+
+
+_OT_ ( _p, q_ ) = inf
+_γ∈_ Γ
+
+
+_c_ ( _x, y_ ) _dγ_ ( _x, y_ ) _,_ (5)
+_M_ _×M_
+
+
+Where Γ is the set of joint probabilities on _M_ _× M_ with marginals _q_ and _p_, and _c_ specifies moving
+costs between elements of _M_ . This computes the optimal way to transport _q_ into _p_ . When _q_ is a
+Dirac (one-hot), OT simplifies to:
+
+
+_k_
+
+- _pic_ ( _i, j_ ) _,_ (6)
+
+
+_i_ =1
+
+
+5
+
+
+Where _j_ is the correct class and _k_ is the number of classes. With model outputs _p_ and one-hot target
+_q_, this loss is differentiable w.r.t _p_ . The cost metric _c_ can encode domain knowledge. For ordered
+classes _M_ = 1 _, ..., k_, a natural cost is _c_ ( _i, j_ ) = _|i −_ _j|_ _[m]_ for some _m ≥_ 1.
+
+
+Importantly, one drawback of OT as a loss function, is its tendency to prioritize peaked distributions
+over the actual probabilities. For instance, Let _x_ represent a sample data point, _y_ denote the class
+label associated with _x_, and _q_ be the one-hot encoded vector representation of _y_ . Consider the
+conditional probabilities P[ _y_ = 1 _|x_ ] = 0 _._ 25 _,_ P[ _y_ = 2 _|x_ ] = 0 _._ 5 _,_ P[ _y_ = 3 _|x_ ] = 0 _._ 25. Now, suppose
+there are two model outputs: _p_ 1 = [0 _._ 25 _,_ 0 _._ 5 _,_ 0 _._ 25] and _p_ 2 = [0 _,_ 1 _,_ 0]. To achieve calibration, the
+model should ideally output _p_ 1 as it equals the conditional probability distribution _y|x_ . However,
+it is notable that for the cost metric _c_ ( _i, j_ ) = _|i −_ _j|_, we find that _OT_ ( _p_ 1 _, q_ ) = 1 with a combined
+probability of 0 _._ 25 + 0 _._ 25 = 0 _._ 5, and _OT_ ( _p_ 1 _, q_ ) = 0 _._ 5 with a probability of 0 _._ 5. Consequently,
+E _y|x_ [ _OT_ ( _p_ 1 _, q_ )] = 0 _._ 75, and similarly, E _y|x_ [ _OT_ ( _p_ 2 _, q_ )] = 0 _._ 5. This observation indicates that OT
+tends to favor peaked distributions over calibrated ones. UNICORNN addresses this challenge, as
+described in Section 4.3.
+
+
+4 UNICORNN
+
+
+In this section we describe our novel mechanism for UNImodal Calibrated Ordinal Regression Neural
+Network, UNICORNN an approach for architectural-based generation of unimodal output probability
+distributions, as well as accuracy-preserving probability calibration.
+
+
+4.1 RATIONAL
+
+
+Achieving unimodality directly via architectural design has a major advantage since the output
+probabilities are guaranteed to be unimodal for every input instance, as is also the case for the
+mechanism proposed in Beckham and Pal (2017). However, UNICORNN employs the truncated
+normal distribution, depending on two parameters ( _µ, σ_ ), which influence the location of the mode
+and the decay of the probability mass. This adds flexibility to the shape of the output probability
+vector, compared to the mechanism in Beckham and Pal (2017) where a single parameter determines
+both the mode and the decay. For determining the mode of the distribution, a map _x �→_ _µ_ is learned
+via OT using equation 6. However, as mentioned in Section 3.3, OT tends to favor peaked distributions
+over calibrated ones. To address this issue, we adopt an accuracy-preserving calibration strategy
+where, subsequent to learning a map _x �→_ _µ_, the model further learns a map _x �→_ _σ_ by optimizing
+the Brier Score using equation 4, while maintaining the previously learned map _x �→_ _µ_ fixed.
+
+
+4.2 UNIMODAL OUTPUT PROBABILITIES GENERATION
+
+
+Inspired by POM, we utilize thresholds to define bins, so that the total mass inside each bin is the
+output probability of the corresponding class. However, we observe that the lack of unimodality of
+POM can be fixed by letting the bins be of equal length and remain fixed during training.
+
+
+Therefore, instead of learning the thresholds, during training two maps _x �→_ _µ, x �→_ _σ_ are learned,
+where _µ_ is a location parameter, and _σ_ is a scale parameter. Both define a truncated normal distribution
+_N_ trunc( _µ, σ_ [2] _, −_ 1 _,_ 1) (a normal distribution which having the same density as the normal density on
+
+[-1,1], normalized to have a unit integral, and is zero outside this interval), from which the output
+probabilities are derived.
+
+
+Formally, we divide the range [ _−_ 1 _,_ 1] to _k_ equal bins similarly to da Costa et al. (2008), where _k_ is
+the number of classes, defined by _−_ 1 = _α_ 0 _, α_ 1 _, ..., αk_ = 1, so that _αi −_ _αi−_ 1 = _k_ [2] [.] [The probabilities]
+
+are given by
+
+
+_pi_ ( _x_ ) = P( _Y_ = _i|X_ = _x_ ) = _Fµ_ ( _x_ ) _,σ_ ( _x_ )( _αi_ ) _−_ _Fµ_ ( _x_ ) _,σ_ ( _x_ )( _αi−_ 1) _,_ (7)
+
+
+where _Fµ,σ_ ( _·_ ) is the _N_ trunc( _µ, σ_ [2] _, −_ 1 _,_ 1) cumulative distribution function, and note that _µ, σ_ are in
+fact functions of the input instance _x_ .
+
+
+To compensate for the fact that the probability-generating mechanism depends on fewer parameters
+than POM (2 for the former, _d_ + _k −_ 1 for the latter), the maps _x �→_ _µ, x �→_ _σ_ are expressed via two
+deep neural networks (DNNs) which share a common backbone model, hence can represent a complex
+
+
+6
+
+
+Figure 3: Generation of unimodal output probabilities for _k_ = 3 classes. An input _x_ is mapped to a
+( _µ, σ_ ) pair, which defines a truncated normal distribution _N_ trunc( _µ, σ_ [2] _, −_ 1 _,_ 1) over the real line. The
+output probabilities are proportional to the mass in the bins, which are of equal length. The green
+area equals to probability _p_ 2( _x_ ), corresponding to P( _Y_ = 2 _|X_ = _x_ ).
+
+
+nonlinear relation. Our proposed mechanism for the generation of unimodal output probabilities is
+depicted in Figure 3.
+
+
+The following lemma, proved in Appendix A, establishes that the model output probabilities are
+indeed unimodal.
+**Lemma** **1.** _Let_ _x_ _∈_ R _[d]_ _be_ _an_ _input_ _to_ _the_ _model,_ _which_ _is_ _mapped_ _to_ _µ_ = _µ_ ( _x_ ) _, σ_ = _σ_ ( _x_ ) _._ _Let_
+_p_ 1 _, . . . pk_ _be_ _the_ _model_ _output_ _probabilities,_ _generated_ _via_ _equation_ _7._ _Then_ _p_ 1 _, . . . pk_ _define_ _a_
+_unimodal multinomial random variable._
+
+
+4.3 ACCURACY-PRESERVING CALIBRATION IN UNICORNN
+
+
+UNICORNN introduces a re-training procedure for _x_ _�→_ _σ_ mapping while preserving the already
+trained mapping _x_ _�→_ _µ_ . The learning of _x_ _�→_ _σ_ is done by minimizing the Brier Score loss
+in equation 4, which ensures well-calibrated probabilities and preserves the model accuracy. Since
+the mapping _x �→_ _σ_ controls the decay of the generated probabilities and the mapping _x �→_ _µ_ which
+controls the mode remains unchanged, the accuracy is not affected by the calibration, resulting in an
+accuracy-preserving calibration. We state it in the following lemma (proved in Appendix B).
+**Lemma 2.** _Let x ∈_ R _[d]_ _be an input to the model, mapped to µ_ = _µ_ ( _x_ ) _, σ_ 1 = _σ_ 1( _x_ ) _._ _Let σ_ 2 = _σ_ 2( _x_ )
+_be a re-trained mapping via minimization of loss using equation 4._ _Let p_ _[σ]_ 1 [1] _[, . . ., p]_ _k_ _[σ]_ [1] _[and][ p]_ 1 _[σ]_ [2] _[, . . ., p]_ _k_ _[σ]_ [2]
+_be the model output probabilities generated using_ ( _µ, σ_ 1) _and_ ( _µ, σ_ 2) _, respectively, via equation 7._
+_Then:_
+argmax1 _≤i≤k pi_ _[σ]_ [1] = argmax1 _≤i≤k pi_ _[σ]_ [2] _[.]_
+
+
+4.4 TRAINING PROCEDURE
+
+
+To summarize, UNICORNN’s training process consists of two distinct phases, as detailed in Algorithms 1, 2. In the first phase, described in Algorithm 1, the parameters _θµ_ and _θσ_ of _µ_ ( _·_ ) and _σ_ ( _·_ ),
+respectively, along with the backbone parameters _ϕ_, are jointly optimized using Gradient Descent to
+minimize the OT loss defined in Eq. 6.
+
+
+In the second phase, outlined in Algorithm 2, the parameters _θµ_ and _ϕ_ are kept fixed, while _θσ_ is
+further optimized via Gradient Descent to minimize the Brier Score (BS) defined in Eq. 4.
+
+
+**Algorithm 1** Optimal Transport-based Training
+**Input:** Training data _D_ = _{_ ( _xi, yi_ ) _}_ _[N]_ _i_ =1 [, number of classes] _[ k]_ [, batch size] _[ b]_ [, number of epochs] _[ T]_
+**Output:** Parameters _θµ_, _θσ_ of _µ_ ( _·_ ) and _σ_ ( _·_ ), respectively, and backbone parameters _ϕ_
+
+
+1: Initialize parameters _θµ_, _θσ_, _ϕ_
+2: **for** epoch _t_ = 1 to _T_ **do**
+3: **for** each batch _B_ _⊆D_ of size _b_ **do**
+4: Compute _µϕ,θµ_ ( _xi_ ) and _σϕ,θσ_ ( _xi_ ) for all _xi_ _∈B_ and calculate _p_ ( _xi_ ) using Eq. 7
+5: Compute the loss _L_ OT( _B_ ) = [1] - [OT][(] _[p]_ [(] _[x][i]_ [)] _[, y][i]_ [)][ using Eq. 6]
+
+
+[1] 
+_b_
+
+
+5: Compute the loss _L_ OT( _B_ ) = _b_ �( _xi,yi_ ) _∈B_ [OT][(] _[p]_ [(] _[x][i]_ [)] _[, y][i]_ [)][ using Eq. 6]
+
+6: Update _θµ_, _θσ_, _ϕ_ via Gradient Descent
+7: **end for**
+8: **end for**
+9: **return** _θµ_, _θσ_, _ϕ_
+
+
+7
+
+
+**Algorithm 2** Accuracy Preserving Calibration
+**Input:** Training data _D_ = _{_ ( _xi, yi_ ) _}_ _[N]_ _i_ =1 [, number of classes] _[ k]_ [, batch size] _[ b]_ [, number of epochs] _[ T]_ [,]
+parameters _θµ_ of _µ_ ( _·_ ) and backbone parameters _ϕ_
+**Output:** Parameters _θσ_ of _σ_ ( _·_ )
+
+1: **for** epoch _t_ = 1 to _T_ **do**
+2: **for** each batch _B_ _⊆D_ of size _b_ **do**
+3: Compute _µϕ,θµ_ ( _xi_ ) and _σϕ,θσ_ ( _xi_ ) for all _xi_ _∈B_ and calculate _p_ ( _xi_ ) using Eq. 7
+4: Compute the loss _L_ BS( _B_ ) = [1] _b_ �( _xi,yi_ ) _∈B_ [BS(] _[p]_ [(] _[x][i]_ [)] _[, y][i]_ [)][ using Eq. 4]
+
+5: Update **only** _θσ_ via Gradient Descent
+6: **end for**
+7: **end for**
+8: **return** _θσ_
+
+
+5 EXPERIMENTAL RESULTS
+
+
+5.1 DATASETS
+
+
+We evaluate UNICORNN on six real-world benchmark image datasets, involving various ordinal
+regression tasks: age-detection (Adience Eidinger et al. (2014), FG-Net Fu et al. (2014), AAF Cheng
+et al. (2019)), facial beauty prediction (SCUT-FBP5500 Liang et al. (2018)), bio-medical image
+classification (Retina-MNIST Yang et al. (2021)) and image aesthetics estimation (EVA Kang et al.
+(2020)). A more detailed description of the datasets appears in Appendix D . Some examples from
+the Adience and Retina-MNIST datasets are shown in Figure 4.
+
+
+5.2 BENCHMARK
+
+
+We compare UNICORNN to five recently presented approaches for deep ordinal regression, with
+unimodal output probabilities and to a deep learning approach of POM:
+
+
+**DLDL (Gao et al., 2017)**, an approach utilizing soft labels, generated using squared exponentially
+decaying distributions, trained using Kullback-Leibler divergence minimization (equivalent to crossentropy minimization).
+
+
+**SORD (Diaz and Marathe, 2019)**, an approach utilizing soft labels, generated using linear exponentially decaying distributions, trained using Kullback-Leibler divergence minimization.
+
+
+**Beckham and Pal (2017)**, an architectural-based approach in which unimodal output probabilities are
+generated using the binomial distribution (single-learned parameter), trained using optimal transport
+loss.
+
+
+**Liu et al. (2019a)**, an approach utilizing soft labels, created as a mixture of Dirac, uniform, and
+linear exponentially decaying distributions, trained using optimal transport loss.
+
+
+**POM (McCullagh, 1980)**, a variant of the POM, incorporating a deep learning model with a POM
+layer integrated on top, trained using cross-entropy loss.
+
+
+**UnimodalNet (Cardoso et al., 2023)**, a non-parametric architectural-based approach for unimodality,
+trained using cross-entropy loss.
+
+
+To perform a fair comparison, we implemented all methods, using the same image transformations,
+backbone CNN and training procedures, so that the methods differ only in their output layer architectures and loss functions. We performed 5 independent trials, using the same train-validation-test
+splits for all methods. Additional technical details can be found in Appendix E. For reproducibility,
+the supplementary material contains code reproducing the results reported in this section.
+
+
+5.3 EVALUATION METRICS
+
+
+We report several commonly-used evaluation metrics for ordinal regression tasks: Mean Absolute
+Error (MAE), One-Off Accuracy (OOA), Spearman correlation, Quadratic Weighted Kappa (QWK),
+as well as the percentage of test examples with unimodal predicted output probabilities.
+
+
+8
+
+
+Figure 4: Left: Examples from the Adience dataset. The age category is indicated above each image.
+Right: Examples from the Retina mnist dataset. Diabetic Retinopathy classes are indicated above.
+
+
+In addition, following the discussion in section 3.2, we evaluate the model’s probability calibration
+using the well known Expected Calibration Error (ECE). ECE quantifies the discrepancy between
+predicted probabilities and actual outcomes, measuring how well the predicted probabilities of a
+model align with the true likelihood of the predicted events. To compute ECE, the [0 _,_ 1] interval is
+first divided into a set of _b_ equal-length bins. ECE is defined as:
+
+
+where _b_ is the number of probability bins (in all of our experiments _b_ = 10), Acc( _Bi_ ) is the empirical
+accuracy in bin _Bi_ and Conf( _Bi_ ) is the average predicted probability in bin _Bi_ . An ECE of 0 indicates
+perfect calibration, while higher values signify miscalibration, with the model being over-confident
+or under-confident.
+
+
+5.4 RESULTS ON REAL WORLD DATASETS
+
+
+Table 1 shows the test results of each method on the six benchmark datasets. As can be seen,
+UNICORNN performs at least on par and often better than the compared baselines, in a fairly
+consistent manner, across the various datasets and evaluation metrics, specifically with respect
+to the MAE, where UNICORNN outperforms on all the six datasets. In addition, observe that
+only UNICORNN, UnimodalNet and Beckham and Pal (2017) output unimodal probabilities, via
+architectural design, while the other baselines, trained using soft targets, do not always output
+unimodal probabilities. Yet, unlike UnimodalNet and Beckham and Pal (2017) which tend to produce
+poorly calibrated probability estimates, UNICORNN outperforms all baselines in terms of probability
+calibration across five datasets, while on the EVA dataset, the difference from SORD is negligible.
+
+
+5.5 ABLATION STUDY
+
+
+In this section, we analyzed the impact of the calibration phase introduced in Section 4.3 on the
+ECE values of UNICORNN. Table 2 shows the ECE with and without the calibration phase on the
+Adience, EVA, AAF, and Retina MNIST datasets. Without calibration, the ECE is higher, indicating
+that the model’s outputs are not well-calibrated due to the OT properties discussed in Section 3.3.
+This highlights the importance of incorporating the calibration step to accurately reflect the model’s
+confidence in its predictions.
+
+
+6 CONCLUSION
+
+
+In this manuscript, we identify several issues with current deep ordinal regression methods, including
+the potential for OT to result in poor probability calibration. We therefore presented UNICORNN,
+an approach for deep ordinal regression, inspired by the proportional odds model. UNICORNN
+utilizes an architectural mechanism for the generation of unimodal output probabilities, trained using
+OT objective and calibrated using an accuracy-preserving calibration process which encourages
+uncertainty awareness. We demonstrated that while performing on par with and often better than
+other recently proposed approaches for ordinal regression, the presented method enjoys the benefits
+of _guaranteed_ unimodal and well-calibrated output probabilities.
+
+
+9
+
+
+_ECE_ =
+
+
+_b_
+
+
+_i_ =1
+
+
+_|Bi|_
+
+_|X|_ _[|]_ [Acc][(] _[B][i]_ [)] _[ −]_ [Conf][(] _[B][i]_ [)] _[|][,]_
+
+
+Table 1: Performance of various methods on real world datasets, in a mean _±_ std format
+
+
+**Dataset** **Method** **MAE** _↓_ **OOA** _↑_ **Spearman** _↑_ **QWK** _↑_ **% Unimodal** _↑_ **ECE (** _b_ = 10 **)** _↓_
+
+
+Table 2: The effect of UNICORNN’s calibration phase on the ECE for the Adience and Retina
+MNIST datasets.
+
+**Dataset** **Post-hoc Calibration** **ECE (** _b_ = 10 **)** _↓_
+
+
+yes **.06** _±_ **.01**
+Retina MNIST
+no .38 _±_ .007
+
+
+yes **.07** _±_ **.03**
+Adience
+no .18 _±_ .03
+
+
+yes **.03** _±_ **.01**
+AAF
+no .28 _±_ .01
+
+
+yes **.08** _±_ **.02**
+EVA
+no .32 _±_ .02
+
+
+**Reproducibility Statement** All technical details of the experiments are provided in Section E, also
+the code will be made publicly available upon acceptance of this work.
+
+
+REFERENCES
+
+
+Balanya, S. A., Maroñas, J., and Ramos, D. (2024). Adaptive temperature scaling for robust
+calibration of deep neural networks. _Neural Computing and Applications_, pages 1–23.
+
+
+10
+
+
+Adience
+
+
+Retina MNIST
+
+
+FG-NET
+
+
+AAF
+
+
+SCUT-FBP5500
+
+
+EVA
+
+
+Beckham and Pal .5 _±_ .06 .93 _±_ .01 **.9** _±_ **.01** **.91** _±_ **.02** **1** _±_ **0** .23 _±_ .05
+Liu et al. .47 _±_ .05 .94 _±_ .01 .89 _±_ .02 .9 _±_ .02 .47 _±_ .04 .21 _±_ .03
+DLDL .49 _±_ .06 .93 _±_ .01 .88 _±_ .02 .89 _±_ .03 .62 _±_ .08 .42 _±_ .04
+SORD .47 _±_ .06 .94 _±_ .01 .89 _±_ .02 .9 _±_ .02 .99 _±_ .003 .14 _±_ .03
+POM .48 _±_ .06 .94 _±_ .01 .89 _±_ .03 **.91** _±_ **.03** .81 _±_ .04 .32 _±_ .04
+UnimodalNet .49 _±_ .06 .93 _±_ .01 .88 _±_ .02 .90 _±_ .03 **1** _±_ **0** .34 _±_ .04
+UNICORNN **.46** _±_ **.05** **.95** _±_ **.01** **.9** _±_ **.02** **.91** _±_ **.02** **1** _±_ **0** **.07** _±_ **.03**
+
+
+Beckham and Pal .8 _±_ .02 .79 _±_ .01 .58 _±_ .02 .55 _±_ .02 **1** _±_ **0** .17 _±_ .01
+Liu et al. .68 _±_ .02 **.82** _±_ **.01** **.61** _±_ **.02** .58 _±_ .02 .72 _±_ .03 .27 _±_ .01
+DLDL .72 _±_ .02 .81 _±_ .01 .59 _±_ .02 .58 _±_ .01 .98 _±_ .01 .29 _±_ .01
+SORD .75 _±_ .02 .78 _±_ .01 .58 _±_ .007 .57 _±_ .007 .87 _±_ .03 .11 _±_ .01
+POM .83 _±_ .02 .76 _±_ .01 .53 _±_ .02 .53 _±_ .02 .43 _±_ .03 .17 _±_ .01
+UnimodalNet .74 _±_ .02 .8 _±_ .01 .59 _±_ .01 .58 _±_ .01 **1** _±_ **0** .14 _±_ .01
+UNICORNN **.67** _±_ **.009** **.82** _±_ **.007** **.61** _±_ **.01** **.59** _±_ **.01** **1** _±_ **0** **.06** _±_ **.01**
+
+
+Beckham and Pal .44 _±_ .06 .95 _±_ .03 .80 _±_ .04 .79 _±_ .03 **1** _±_ **0** .16 _±_ .02
+Liu et al. .32 _±_ .08 .96 _±_ .02 .86 _±_ .03 .84 _±_ .04 .01 _±_ .01 .08 _±_ .02
+DLDL .4 _±_ .09 .96 _±_ .02 .81 _±_ .03 .81 _±_ .03 .12 _±_ .04 .49 _±_ .06
+SORD .36 _±_ .08 .97 _±_ .02 .84 _±_ .05 .82 _±_ .04 .99 _±_ .01 .26 _±_ .05
+POM .33 _±_ .06 .97 _±_ .02 .84 _±_ .04 .85 _±_ .04 .41 _±_ .06 .21 _±_ .03
+UnimodalNet .36 _±_ .07 .97 _±_ .01 .84 _±_ .02 .84 _±_ .03 **1** _±_ **0** .25 _±_ .04
+UNICORNN **.31** _±_ **.08** **.99** _±_ **.02** **.87** _±_ **.03** **.88** _±_ **.01** **1** _±_ **0** **.07** _±_ **.02**
+
+
+Beckham and Pal .61 _±_ .13 .91 _±_ .05 .81 _±_ .03 .8 _±_ .05 **1** _±_ **0** .16 _±_ .04
+Liu et al. .43 _±_ .01 **.97** _±_ **.005** .82 _±_ .01 **.85** _±_ **.01** .7 _±_ .17 .22 _±_ .01
+DLDL .54 _±_ .02 .95 _±_ .01 .77 _±_ .01 .77 _±_ .02 .95 _±_ .02 .32 _±_ .02
+SORD .44 _±_ .02 .96 _±_ .01 .82 _±_ .01 .84 _±_ .01 **1** _±_ **0** .14 _±_ .02
+POM .45 _±_ .01 .96 _±_ .01 .80 _±_ .01 .83 _±_ .01 .48 _±_ .07 .28 _±_ .02
+UnimodalNet .45 _±_ .01 .96 _±_ .01 .80 _±_ .01 .83 _±_ .01 **1** _±_ **0** .30 _±_ .01
+UNICORNN **.42** _±_ **.01** **.97** _±_ **.005** **.83** _±_ **.01** **.85** _±_ **.005** **1** _±_ **0** **.03** _±_ **.01**
+
+
+Beckham and Pal .62 _±_ .12 .92 _±_ .04 .84 _±_ .02 .81 _±_ .05 **1** _±_ **0** .19 _±_ .08
+Liu et al. .54 _±_ .03 .95 _±_ .01 .83 _±_ .01 .82 _±_ .01 .18 _±_ .14 .27 _±_ .02
+DLDL .68 _±_ .05 .9 _±_ .01 .79 _±_ .02 .73 _±_ .02 .86 _±_ .08 .28 _±_ .04
+SORD .57 _±_ .03 .94 _±_ .01 .83 _±_ .01 .81 _±_ .01 .99 _±_ .005 .09 _±_ .02
+POM .53 _±_ .03 .95 _±_ .01 .83 _±_ .01 .83 _±_ .01 .28 _±_ .04 .33 _±_ .03
+UnimodalNet .52 _±_ .02 .95 _±_ .01 .82 _±_ .01 .83 _±_ .01 **1** _±_ **0** .35 _±_ .01
+UNICORNN **.47** _±_ **.02** **.96** _±_ **.01** **.85** _±_ **.01** **.85** _±_ **.01** **1** _±_ **0** **.06** _±_ **.02**
+
+
+Beckham and Pal .61 _±_ .03 .93 _±_ .01 **.6** _±_ **.01** **.6** _±_ **.02** **1** _±_ **0** .11 _±_ .01
+Liu et al. .65 _±_ .02 .91 _±_ .02 .53 _±_ .01 .52 _±_ .02 .72 _±_ .05 .31 _±_ .01
+DLDL .66 _±_ .03 .91 _±_ .01 .53 _±_ .02 .52 _±_ .02 .98 _±_ .01 .2 _±_ .01
+SORD .6 _±_ .02 .93 _±_ .01 .58 _±_ .02 .57 _±_ .02 **1** _±_ **0** **.07** _±_ **.02**
+POM .65 _±_ .03 .91 _±_ .01 .53 _±_ .02 .53 _±_ .03 .89 _±_ .02 .45 _±_ .02
+UnimodalNet .66 _±_ .03 .91 _±_ .01 .52 _±_ .02 .52 _±_ .02 **1** _±_ **0** .45 _±_ .02
+UNICORNN **.57** _±_ **.01** **.94** _±_ **.005** **.6** _±_ **.01** .58 _±_ .01 **1** _±_ **0** .08 _±_ .02
+
+
+Beckham, C. and Pal, C. (2017). Unimodal probability distributions for deep ordinal classification.
+In _Proceedings_ _of_ _the_ _34th_ _International_ _Conference_ _on_ _Machine_ _Learning-Volume_ _70_, pages
+411–419.
+
+
+Belharbi, S., Ben Ayed, I., McCaffrey, L., and Granger, E. (2019). Non-parametric uni-modality
+constraints for deep ordinal classification. _arXiv_, pages arXiv–1911.
+
+
+Berg, A., Oskarsson, M., and O’Connor, M. (2020). Deep ordinal regression with label diversity.
+_arXiv preprint arXiv:2006.15864_ .
+
+
+Brier, G. W. (1950). Verification of forecasts expressed in terms of probability. _Monthly weather_
+_review_, 78(1):1–3.
+
+
+Cao, W., Mirjalili, V., and Raschka, S. (2020). Rank consistent ordinal regression for neural networks
+with application to age estimation. _Pattern Recognition Letters_, 140:325–331.
+
+
+Cardoso, J. S., Cruz, R., and Albuquerque, T. (2023). Unimodal distributions for ordinal regression.
+_arXiv preprint arXiv:2303.04547_ .
+
+
+Cheng, J., Li, Y., Wang, J., Yu, L., and Wang, S. (2019). Exploiting effective facial patches for robust
+gender recognition. _Tsinghua Science and Technology_, 24(3):333–345.
+
+
+Cheng, J., Wang, Z., and Pollastri, G. (2008). A neural network approach to ordinal regression.
+In _2008_ _IEEE_ _International_ _Joint_ _Conference_ _on_ _Neural_ _Networks_ _(IEEE_ _World_ _Congress_ _on_
+_Computational Intelligence)_, pages 1279–1284. IEEE.
+
+
+Chu, W., Ghahramani, Z., and Williams, C. K. (2005). Gaussian processes for ordinal regression.
+_Journal of machine learning research_, 6(7).
+
+
+da Costa, J. F. P., Alonso, H., and Cardoso, J. S. (2008). The unimodal model for the classification of
+ordinal data. _Neural Networks_, 21(1):78–91.
+
+
+Dawid, A. P. and Musio, M. (2014). Theory and applications of proper scoring rules. _Metron_,
+72(2):169–183.
+
+
+De Vente, C., Vos, P., Hosseinzadeh, M., Pluim, J., and Veta, M. (2020). Deep learning regression
+for prostate cancer detection and grading in bi-parametric mri. _IEEE Transactions on Biomedical_
+_Engineering_, 68(2):374–383.
+
+
+Diaz, R. and Marathe, A. (2019). Soft labels for ordinal regression. In _Proceedings of the IEEE_
+_Conference on Computer Vision and Pattern Recognition_, pages 4738–4747.
+
+
+Eidinger, E., Enbar, R., and Hassner, T. (2014). Age and gender estimation of unfiltered faces. _IEEE_
+_Transactions on Information Forensics and Security_, 9(12):2170–2179.
+
+
+Esaki, Y., Nakamura, A., Kawano, K., Tokuhisa, R., and Kutsuna, T. (2024). Accuracy-preserving
+calibration via statistical modeling on probability simplex. _arXiv preprint arXiv:2402.13765_ .
+
+
+Fu, H., Gong, M., Wang, C., Batmanghelich, K., and Tao, D. (2018). Deep ordinal regression network
+for monocular depth estimation. In _Proceedings of the IEEE Conference on Computer Vision and_
+_Pattern Recognition_, pages 2002–2011.
+
+
+Fu, Y., Hospedales, T. M., Xiang, T., Gong, S., and Yao, Y. (2014). Interestingness prediction by
+robust learning to rank. In _European conference on computer vision_, pages 488–503. Springer.
+
+
+Gao, B.-B., Xing, C., Xie, C.-W., Wu, J., and Geng, X. (2017). Deep label distribution learning with
+label ambiguity. _IEEE Transactions on Image Processing_, 26(6):2825–2838.
+
+
+Garg, B. and Manwani, N. (2020). Robust deep ordinal regression under label noise. In _Asian_
+_conference on machine learning_, pages 782–796. PMLR.
+
+
+Guo, C., Pleiss, G., Sun, Y., and Weinberger, K. Q. (2017). On calibration of modern neural networks.
+In _International conference on machine learning_, pages 1321–1330. PMLR.
+
+
+11
+
+
+Hou, L., Yu, C.-P., and Samaras, D. (2016). Squared earth mover’s distance-based loss for training
+deep neural networks. _arXiv preprint arXiv:1611.05916_ .
+
+
+Kang, C., Valenzise, G., and Dufaux, F. (2020). Eva: An explainable visual aesthetics dataset. In
+_Joint Workshop on Aesthetic and Technical Quality Assessment of Multimedia and Media Analytics_
+_for Societal Trends_, pages 5–13.
+
+
+Kim, K.-j. and Ahn, H. (2012). A corporate credit rating model using multi-class support vector
+machines with an ordinal pairwise partitioning approach. _Computers_ _&_ _Operations_ _Research_,
+39(8):1800–1811.
+
+
+Kook, L., Herzog, L., Hothorn, T., Dürr, O., and Sick, B. (2020). Deep and interpretable regression
+models for ordinal outcomes. _arXiv preprint arXiv:2010.08376_ .
+
+
+Lakshminarayanan, B., Pritzel, A., and Blundell, C. (2017). Simple and scalable predictive uncertainty
+estimation using deep ensembles. _Advances in neural information processing systems_, 30.
+
+
+Li, Q., Wang, J., Yao, Z., Li, Y., Yang, P., Yan, J., Wang, C., and Pu, S. (2022). Unimodalconcentrated loss: Fully adaptive label distribution learning for ordinal regression. In _Proceedings_
+_of the IEEE/CVF Conference on Computer Vision and Pattern Recognition_, pages 20513–20522.
+
+
+Li, W., Huang, X., Lu, J., Feng, J., and Zhou, J. (2021). Learning probabilistic ordinal embeddings
+for uncertainty-aware regression. In _Proceedings of the IEEE/CVF Conference on Computer Vision_
+_and Pattern Recognition_, pages 13896–13905.
+
+
+Liang, L., Lin, L., Jin, L., Xie, D., and Li, M. (2018). Scut-fbp5500: A diverse benchmark dataset for
+multi-paradigm facial beauty prediction.
+
+
+Liu, X., Fan, F., Kong, L., Diao, Z., Xie, W., Lu, J., and You, J. (2020). Unimodal regularized neuron
+stick-breaking for ordinal classification. _Neurocomputing_ .
+
+
+Liu, X., Han, X., Qiao, Y., Ge, Y., Li, S., and Lu, J. (2019a). Unimodal-uniform constrained
+wasserstein training for medical diagnosis. In _Proceedings of the IEEE International Conference_
+_on Computer Vision Workshops_, pages 0–0.
+
+
+Liu, X., Zou, Y., Song, Y., Yang, C., You, J., and K Vijaya Kumar, B. (2018a). Ordinal regression
+with neuron stick-breaking for medical diagnosis. In _Proceedings of the European Conference on_
+_Computer Vision (ECCV)_, pages 0–0.
+
+
+Liu, Y., Kong, A. W.-K., and Goh, C. K. (2017). Deep ordinal regression based on data relationship
+for small datasets. In _IJCAI_, pages 2372–2378.
+
+
+Liu, Y., Wai Kin Kong, A., and Keong Goh, C. (2018b). A constrained deep neural network for
+ordinal regression. In _Proceedings_ _of_ _the_ _IEEE_ _Conference_ _on_ _Computer_ _Vision_ _and_ _Pattern_
+_Recognition_, pages 831–839.
+
+
+Liu, Y., Wang, F., and Kong, A. W. K. (2019b). Probabilistic deep ordinal regression based on
+gaussian processes. In _Proceedings of the IEEE International Conference on Computer Vision_,
+pages 5301–5309.
+
+
+McCullagh, P. (1980). Regression models for ordinal data. _Journal of the Royal Statistical Society:_
+_Series B (Methodological)_, 42(2):109–127.
+
+
+Niu, Z., Zhou, M., Wang, L., Gao, X., and Hua, G. (2016). Ordinal regression with multiple output
+cnn for age estimation. In _Proceedings of the IEEE conference on computer vision and pattern_
+_recognition_, pages 4920–4928.
+
+
+Pan, H., Han, H., Shan, S., and Chen, X. (2018). Mean-variance loss for deep age estimation from a
+face. In _Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition_, pages
+5285–5294.
+
+
+Shi, X., Cao, W., and Raschka, S. (2021). Deep neural networks for rank-consistent ordinal regression
+based on conditional probabilities. _arXiv preprint arXiv:2111.08851_ .
+
+
+12
+
+
+Shi, X., Cao, W., and Raschka, S. (2023). Deep neural networks for rank-consistent ordinal regression
+based on conditional probabilities. _Pattern Analysis and Applications_, 26(3):941–955.
+
+
+Vargas, V. M., Gutiérrez, P. A., and Hervás-Martínez, C. (2020). Cumulative link models for deep
+ordinal classification. _Neurocomputing_ .
+
+
+Vishnu, T., Malhotra, P., Vig, L., Shroff, G., et al. (2019). Data-driven prognostics with predictive
+uncertainty estimation using ensemble of deep ordinal regression models. _International Journal of_
+_Prognostics and Health Management_, 10(4).
+
+
+Wienholt, P., Hermans, A., Khader, F., Puladi, B., Leibe, B., Kuhl, C., Nebelung, S., and Truhn, D.
+(2024). An ordinal regression framework for a deep learning based severity assessment for chest
+radiographs. _arXiv preprint arXiv:2402.05685_ .
+
+
+Yang, J., Shi, R., Wei, D., Liu, Z., Zhao, L., Ke, B., Pfister, H., and Ni, B. (2021). Medmnist v2: A
+large-scale lightweight benchmark for 2d and 3d biomedical image classification. _arXiv preprint_
+_arXiv:2110.14795_ .
+
+
+13
+
+
+A PROOF OF LEMMA 1
+
+
+_Proof._ Let _pi, pi_ +1 be the output probabilities of two adjacent classes, and let _−_ 1 = _α_ 0 _, . . ., αk_ = 1
+be the thresholds. We will show that (i) if _µ_ _≤_ _αi−_ 1 then _pi_ _≥_ _pi_ +1. Symmetrical argument will
+then imply that if _µ ≥_ _αi_ +1 then _pi_ +1 _≥_ _pi_ (ii) if _µ ∈_ ( _αi−_ 1 _, αi_ ) then _pi_ _> pi_ +1, whenever the latter
+exists. Similarly, this would imply that _pi_ _> pi−_ 1. Together, (i) and (ii) will prove the statement of
+the lemma.
+
+
+Denote by _f_ the density of the _N_ trunc( _µ, σ_ [2] _, −_ 1 _,_ 1) distribution. To prove (i) observe that _pi_ _>_
+2 _f_ ( _kαi_ ) _> pi_ +1.
+
+To prove (ii), divide the _i_ ’th bin to two sub-bins _Bi,_ 1 _, Bi,_ 2, of lengths _a_ = _µ −_ _αi−_ 1 and _b_ = _αi −_ _µ_,
+respectively. Similarly, divide the _i_ + 1’th bin to two bins _Bi_ +1 _,_ 1 _, Bi_ +1 _,_ 2 length _b_ and _a_, respectively.
+Then from (i)
+
+            -             
+
+
+Adding up equation 8 and equation 9, we obtain _pi_ _> pi_ +1. Apart from just being unimodal, we also
+proved that if _µ ∈_ ( _αi−_ 1 _, αi_ ) then class _i_ is the predicted class by the model.
+
+
+B PROOF OF LEMMA 2
+
+
+_Proof._ Let _−_ 1 = _α_ 0 _< α_ 1 _< . . . < αk_ = 1 be the thresholds. In the proof of Lemma 1 (Appendix
+A), we demonstrated that for any _i ∈{_ 1 _, . . ., k}_, if _µ ∈_ ( _αi−_ 1 _, αi_ ), then class _i_ is the predicted class
+by the model.
+
+
+Given that the two sets of parameters of the truncated normal distribution, ( _µ, σ_ 1 [2][)][ and][ (] _[µ, σ]_ 2 [2][)][ share]
+the same mean _µ_ and the thresholds _α_ 0 _, . . ., αk_ are constant, the predicted class _i_ remains the same
+for both sets of parameters regardless of the variances _σ_ 1 [2] [and] _[ σ]_ 2 [2][.]
+
+
+C ADDITIONAL EXPERIMENTS
+
+
+C.1 COMPARING UNICORNN AGAINST CORN
+
+
+Table C.1 describes the results of two experiments of UNICORNN against CORN [2] (Shi et al., 2023)
+on the Adience and EVA datasets. The technical details of the experiments are the same as the ones
+that appear in Appendix E. As can be seen, UNICORNN outperforms CORN on both datasets with
+lower MAE scores..
+
+
+C.2 COMPARING UNICORNN AGAINST CORN ON NEW DATASETS
+
+
+In Table C.2 we provide the MAE results of our method trained on AFAD and Fireman dataset
+additionally to the results from Shi et al. (2021) for CE-NN, OR-NN, CORAL and CORN. The
+results for these baselines were borrowed from Shi et al. (2021). We train our model with the same
+
+
+2https://github.com/Raschka-research-group/corn-ordinal-neuralnet/blob/main/model-code/simple-scripts/mlp_corn.py
+
+
+14
+
+
+      _f_ ( _x_ ) _dx >_
+_Bi,_ 2
+
+
+_f_ ( _x_ ) _dx._ (8)
+_Bi_ +1 _,_ 1
+
+
+In addition, observe that
+
+           
+
+
+      - _a_
+_f_ ( _x_ ) _dx_ =
+_Bi,_ 1 0
+
+
+_f_ ( _µ_ + _x_ ) _dx_
+0
+
+
+ - _a_
+
+_>_ _f_ ( _µ_ + 2 _b_ + _x_ ) _dx_
+
+0
+
+
+ = _f_ ( _x_ ) _dx._ (9)
+
+_Bi_ +1 _,_ 2
+
+
+Table 3: UNICORNN vs CORN.
+
+**Method** **Dataset** **MAE** _↓_
+
+
+CORN .52 _±_ .07
+Adience
+UNICORNN **.46** _±_ **.05**
+
+
+CORN .67 _±_ .02
+EVA
+UNICORNN **.57** _±_ **.01**
+
+
+backbone as in Shi et al. (2021), Resnet-34 for AFAD dataset, and with two-layer MLP with hidden
+dimension of size 300 for Fireman dataset. Both datasets are balanced and the train, validation and
+test splits are the same as in Shi et al. (2021). We train our method 5 times with different random
+intialization seeds. Our method ourperforms the baselines on both datasets.
+
+
+Table 4: Test MAE of methods trained on AFAD and Fireman Datasets
+
+**Method** **AFAD** **Fireman**
+CE-NN 3.28 _±_ 0.04 0.8 _±_ 0.01
+OR-NN 2.85 _±_ 0.03 0.76 _±_ 0.01
+CORAL 2.99 _±_ 0.03 0.82 _±_ 0.01
+CORN 2.81 _±_ 0.02 0.76 _±_ 0.01
+UNICORNN **2.645** _±_ **0.02** **0.755** _±_ **0.003**
+
+
+C.3 COMPARING UNICORNN AGAINST SIMPLE CONSTRAINT-UNIMODAL BASELINE
+
+
+We conduct an additional experiment to compare our method with a simple baseline classifier
+trained using cross-entropy loss and a unimodality constraint. In this baseline, the model predicts
+a K-dimensional probability vector for each sample, and the unimodality constraint is enforced by
+minimizing pairwise distances between the predicted probability values. Specifically, the distances
+are set to be negative for probabilities at indices lower than the target label and positive for indices
+higher than the target label. Further implementation details are available in the project repository.
+
+
+The results, shown in Table C.3, indicate that the baseline achieves near-unimodal distributions ( 80%
+unimodality) on the Fireman dataset but does not guarantee perfect unimodality. Additionally, the
+Mean Absolute Error (MAE) of this baseline is higher compared to UNICORNN. Notably, when
+applied to the AFAD dataset with the same training parameters, the baseline fails to produce unimodal
+predictions, highlighting its limitations in maintaining unimodality across different datasets.
+
+
+Table 5: Performance Comparison on Balanced Datasets (AFAD and Fireman)
+**Method** **AFAD (balanced)** **Fireman (balanced)**
+**MAE** _↓_ **Unimodality** _↑_ **MAE** _↓_ **Unimodality** _↑_
+UNICORNN 2 _._ 64 _±_ 0 _._ 02 1 _._ 0 _±_ 0 _._ 0 0 _._ 755 _±_ 0 _._ 003 1 _._ 0 _±_ 0 _._ 0
+Classifer with Unimodality 2 _._ 846 _±_ 0 _._ 04 0 _._ 11 _±_ 0 _._ 04 0 _._ 808 _±_ 0 _._ 003 0 _._ 865 _±_ 0 _._ 05
+
+
+D DATASETS
+
+
+Tabel 6 contains information on the benchmark datasets used for our experiments.
+
+
+**Adience** : During the training the images are resized to (256,256). Additionally, random crop of size
+224 and random horizontal flip are applied as augmentations.
+
+
+**FG-Net** : We partitioned the dataset to 8 classes, corresponding to decades. Augmentations are the
+same as in the Adience experiment.
+
+
+**RetinaMNIST** dataset has 5 classes, and we apply random affine, horizontal and vertical flips as
+augmentations during the training. The size of the images is (28,28) as provided by the dataset
+contributors. The train/test splits are proved by the contributors and were used as-is.
+
+
+15
+
+
+Figure 5: Examples from the FG-Net dataset. Age classes are indicated above each image.
+
+
+Figure 6: Examples from the EVA dataset. Aesthetics classes are indicated above each image.
+
+
+**SCUT-FBP5500** dataset contains 5500 face images beautifully ranked from 1 to 5 continuously. we
+partition the data into 8 classes in accordance with the rank. Augmentations are the same as in the
+Adience experiment.
+
+
+**EVA (Explainable Visual Aesthetics)** dataset contains 5101 images aesthetically ranked from 0 to 10
+by multiple voters. We calculate the average score for each image and partition the data into 5 classes
+in accordance with the average score. Augmentations are the same as in the Adience experiment.
+
+
+**AAF** **(All-Age-Faces)** dataset is already pre-processed and contains 13,322 face images (mostly
+Asian), distributed across all ages (from 2 to 80). We partitioned the dataset into 6 classes. Augmentations are the same as in the Adience experiment.
+
+
+**AFAD (The Asian Face data)** [3] dataset (Niu et al., 2016) contains 165,501 faces in the age range
+of 15-40 years. No additional preprocessing was applied to this dataset since the faces were already
+centered. Following Shi et al. (2021), we use a balanced version of the AFAD dataest [4] with 13 age
+labels in the age range of 18-30 years, resulting in total 60K samples.
+
+
+**Fireman** [5] dataset is a tabular dataset that contains 40,768 instances, 10 numeric features, and an
+ordinal response variable with 16 categories. We use a balanced version of this dataset [6] consisting of
+2,543 instances per class and 40,688 from the 16 ordinal classes in total.
+
+
+Figures 5, 6, 7, 8 show examples from the FG-Net, EVA, AAF and SCUT-FBP5500 datasets,
+respectively.
+
+
+E TECHNICAL DETAILS
+
+
+Table 7 shows the technical details for the experiments on the real world benchmark datasets reported
+in this manuscript.
+
+
+The Adam optimizer was used in all experiments, with the default _β_ = (0 _._ 9 _,_ 0 _._ 999). The means
+and standard deviations reported in table 1 are based on 5 repetitions of each experiment, differing
+in weights initialization and random train-test splits, except for Adience, for which we repeated
+the experiment five times, using the same train-test splits as the creators of the dataset [7] . For the
+
+
+3https://github.com/afad-dataset/tarball
+4https://github.com/Raschka-research-group/corn-ordinal-neuralnet/tree/main/datasets/afad
+5https://github.com/gagolews/ordinal_regression_data
+6https://github.com/Raschka-research-group/corn-ordinal-neuralnet/tree/main/datasets/firemen
+[7https://github.com/GilLevi/AgeGenderDeepLearning/tree/master/Folds/](https://github.com/GilLevi/AgeGenderDeepLearning/tree/master/Folds/train_val_txt_files_per_fold)
+[train_val_txt_files_per_fold](https://github.com/GilLevi/AgeGenderDeepLearning/tree/master/Folds/train_val_txt_files_per_fold)
+
+
+16
+
+
+Figure 7: Examples from the AAF dataset. Age classes are indicated above each image.
+
+
+Figure 8: Examples from the SCUT-FBP5500 dataset. Beauty classes are indicated above each image.
+
+
+accuracy-preserving calibration phase (Section 4.3), we used early stopping and the number of epochs
+and learned parameters were changed for each dataset, as shown in Table 8.
+
+
+F COMPUTATION DETAILS
+
+
+We implement our model in Pytorch and run experiments on a Linux server with NVIDIA GeForce
+GTX 1080 Ti, A100 80GB PCIe GPUs and Intel(R) Core(TM) i7-8700 CPU 3.20GHz CPU.
+
+
+17
+
+
+Table 6: Benchmark datasets characteristics
+
+
+**Dataset** **Task** **Train Images** **Val Images** **Test Images** **Classes**
+
+
+Adience age estimation pre-defined splits 8
+FG-Net age estimation 802 100 100 8
+RetinaMNIST DR classification 1080 120 400 5
+AAF age estimation 9058 1599 2665 6
+EVA aesthetics estimation 3684 651 766 6
+SCUT-FBP5500 facial beauty prediction 4250 350 900 8
+
+
+Table 7: Technical details of the experiments
+
+
+**Dataset** **Backbone** **Epochs** **Batch Size** **Initial LR** **Decay LR After (epochs)** **Weight Decay**
+
+
+Adience ResNet-101 100 64 10 _[−]_ [4] 40 10 _[−]_ [5]
+
+FG-Net ResNet-18 100 32 10 _[−]_ [4] 40 10 _[−]_ [4]
+
+RetinaMNIST ResNet-18 100 16 10 _[−]_ [4] 80, 90 10 _[−]_ [4]
+
+AAF ResNet-18 100 64 10 _[−]_ [4] - 10 _[−]_ [3]
+
+EVA ResNet-18 145 64 10 _[−]_ [4] - 10 _[−]_ [5]
+
+SCUT-FBP5500 ResNet-18 100 64 10 _[−]_ [4] - 10 _[−]_ [3]
+
+
+Table 8: Post-hoc calibration technical details
+
+
+**Dataset** **Epochs** **Learned Parameters**
+
+
+Adience 100 250
+FG-Net 100 250
+RetinaMNIST 100 1000
+AAF 100 150
+EVA 100 50
+SCUT-FBP5500 100 100
+
+
+18

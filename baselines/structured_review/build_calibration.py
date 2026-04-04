@@ -6,8 +6,8 @@ multi-agent merger) for each calibration paper, then pairs it with the real
 human score. Output is used as few-shot context when scoring new papers.
 
 Usage:
-  python baselines/structured_review/build_calibration.py --data-dir iclr2025_data
-  python baselines/structured_review/build_calibration.py --data-dir iclr2025_data --seed 42
+  python baselines/structured_review/build_calibration.py --data-dir iclr2026_data
+  python baselines/structured_review/build_calibration.py --data-dir iclr2026_data --seed 42
 """
 
 import asyncio
@@ -223,7 +223,7 @@ async def main(data_dir: str | None = None, seed: int = 42):
     for r in results:
         print(f"  {r['paper_id']}: avg={r['avg_score']:.1f} scores={r['scores']} dec={r['gt_binary']}")
     print(f"\nTo use:")
-    print(f"  python baselines/structured_review/run_baseline.py 50 3112 --data-dir {data_dir or 'iclr2025_data'} --calibration baselines/structured_review/calibration.md")
+    print(f"  python baselines/structured_review/run_baseline.py 50 3112 --data-dir {data_dir or 'iclr2026_data'} --calibration baselines/structured_review/calibration.md")
 
 
 if __name__ == "__main__":

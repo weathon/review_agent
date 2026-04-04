@@ -1,0 +1,443 @@
+# BOOSTING LANGUAGE MODEL FINE-TUNING VIA ZEROTH-ORDER HYBRID METHODS WITH ADDI- TIONAL MEMORY AID
+
+**Anonymous authors**
+
+Paper under double-blind review
+
+## ABSTRACT
+
+When adjusting large language models (LLM) for downstream applications, parameter-efficient fine-tuning (PEFT) significantly reduces memory costs. However, due to the need to store the activation values of backpropagation during gradient computation, traditional First-order (FO) fine-tuning algorithms generate a large amount of memory overhead. Zeroth-order (ZO) algorithms eliminate the need for activation storage by approximating gradients using finite differences of function values, providing a feasible solution when GPU memory is insufficient. However, the existing ZO methods have the problem of slow convergence, and they have far from realized the potential memory advantage of dual forward propagation. In this paper, a low-rank ZO gradient estimation method is proposed, which uses low-rank fast calculation and stable sampling strategy to accelerate the convergence of the model. Simultaneously, we divide the model into different hierarchical blocks, optimize the shallow blocks using the low-rank ZO optimizer, and perform FO optimization on the deepest blocks (closest to the output) to accelerate convergence. We further propose memory offloading scheduling, offloading the hierarchical blocks that have already participated in computation into CPU memory, and only moving the blocks that need to be calculated into GPU memory. By using this method, we can fine-tune very large models, such as the OPT-175B with over 175 billion parameters, on a GPU with only 17GB memory, while maintaining a relatively fast convergence speed and fine-tuning performance close to the FO algorithm.
+
+## 1 INTRODUCTION
+
+Large language models (LLMs) have exhibited remarkable capabilities in diverse fields (Achiam et al. (2023); Brown et al. (2020); Solaiman et al. (2019)). Fine-tuning pre-trained models has emerged as the standard strategy for tailoring LLMs to particular downstream tasks (Gururangan et al. (2020); Sanh et al. (2021)). Parameter-efficient fine-tuning (PEFT) techniques, like those introduced by Hu et al. (2021b); Lester et al. (2021), seek to minimize memory usage by keeping the majority of pre-trained weights fixed and adjusting only a limited number of parameters. Nonetheless, even employing these methods, first-order (FO) optimization algorithms such as stochastic gradient descent (SGD) (Amari (1993) and Adam Kingma & Ba (2014) continue to face significant memory burdens because of the requirement to retain activation values for back-propagation in gradient calculations. This challenge intensifies further in scenarios involving extended contexts, where activations constitute the primary source of memory consumption.
+
+To improve memory efficiency, a promising option is to use zeroth-order (ZO) algorithms (Spall (1992)). Unlike first-order (FO) methods, ZO algorithms avoid explicit gradient computations; instead, they estimate gradients via finite differences of function evaluations. This removes the need for backpropagation and storing activations, yielding substantial memory savings. Over the past decades, ZO methods have been studied extensively (Duchi et al. (2013); Nesterov & Spokoiny (2015); Berahas et al. (2019)) and have recently been applied to fine-tuning LLMs (Malladi et al. (2023b)). In particular, Malladi et al. (2023b) adapts the classical ZO stochastic gradient descent (ZO-SGD) algorithm (Ghadimi & Lan (2013)) into a memory-optimized variant (MeZO), which reduces memory usage to about one quarter of that of standard SGD.
+
+Nevertheless, ZO algorithms face several challenges for LLM fine-tuning. A key issue is the rank mismatch between ZO gradient estimates and true FO gradients: FO gradients obtained via backpropagation during LLM fine-tuning are typically low-rank Malladi et al. (2023b); Zhao et al. (2024b); Hao et al. (2024), whereas the ZO gradients in MeZO arise from Gaussian perturbations and are therefore nearly full-rank. Introducing a low-rank parameterization into ZO could reduce computation and potentially accelerate convergence. Despite its memory advantages, MeZO can degrade accuracy and require more optimization steps than full first-order fine-tuning across multiple tasks Malladi et al. (2023b). Moreover, because ZO avoids backpropagation, it naturally supports offloading and reloading modules between CPU and GPU without storing activations or communicating gradients, offering additional opportunities to reduce runtime GPU memory.
+
+To focus on solving the two major issues of slow convergence speed and further memory optimization, we proposed HZO (Hybrid Zeroth-Order Optimization). The key to addressing these two challenges is to first divide the model into different hierarchical blocks, apply low-rank adaptation ZO to some shallow blocks (those closer to the input), accelerate computation. Using FO for deep blocks (those closer to the output), which avoids unnecessary backpropagation. By processing different hierarchical blocks with different methods, we can accelerate convergence. For the memory optimization issue under the HZO framework, we designed a unique scheduling algorithm that allows the hierarchical blocks involved in computation to enter GPU memory, while those that have been computed are removed from GPU memory. Compared to the MeZO Malladi et al. (2023b) algorithm, this approach has almost no additional communication time and makes it possible to fine-tune OPT-175B on a single 24G RTX4090.
+
+In brief, the main contributions are as follows:
+
+- We propose a low-order ZO gradient estimator. Our method uses a low-rank perturbation matrix to derive the ZO gradient, and introduce the stable sampling strategy. At the same time, using a random seed to store the matrix further reduces GPU memory consumption.
+- Integrating zeroth-order and first-order optimizers for fine-tuning language models. After dividing the model into different hierarchical blocks, HZO is equipped with inter-layer mixed optimization, using the FO algorithm only for deep blocks to accelerate convergence speed.
+- Compared to first-order optimizers, ZO is more suitable for CPU offloading due to the lack of communication with GPU memory for activation values and gradients. In the context of ZO optimization methods, a similar pipeline scheduling approach is applied to significantly reduce GPU memory requirements.
+
+## 2 RELATED WORK
+
+### 2.1 ZEROTH-ORDER OPTIMIZATION AND MEMORY-EFFICIENT FINE-TUNING
+
+Zeroth-order (ZO) optimization estimates gradients through function evaluations, bypassing explicit backpropagation and offering a memory-efficient alternative for large model adaptation. Classical ZO methods, such as ZO-SGD, ZO-Adam, and ZO-SVRG Ghadimi & Lan (2013); Chen et al. (2019); Ji et al. (2019), often face high variance and slow convergence in high-dimensional settings. To mitigate these issues, strategies like sparse gradient estimation Balasubramanian & Ghadimi (2018) and feature reuse Chen et al. (2023) have been proposed. In parallel, memory-efficient fine-tuning techniques for large language models (LLMs), such as LoRA Hu et al. (2021a) and gradient compression Zhao et al. (2024a), significantly reduce trainable parameters or optimizer state sizes. Unlike first-order methods, ZO eliminates the need to store activations, making it appealing for LLM fine-tuning Malladi et al. (2023a). Recent work has further improved ZO efficiency via variance reduction Gautam et al. (2024), sparse masking Liu et al. (2024).
+
+### 2.2 HYBRID OPTIMIZATION
+
+Hybrid optimization remains relatively underexplored. Landro, Gallo, and La Grassa Landro et al. (2020) integrate SGD and Adam through the application of fixed weights to equilibrate the inputs from gradient estimations provided by each optimizer. Comparable to traditional fine-tuning
+
+employing FO optimizers, this technique necessitates considerable memory. Ansari pour et al. Ansari pour et al. (2022) suggest hybrid optimization at the model scale within a decentralized optimization framework in a distributed setup (with certain agents refined via ZO and others via FO), which differs substantially from our approach. The hybrid optimization detailed in our research functions at the layer level (i.e., inter-layer strategy). Some people have proposed a hybrid optimization strategy, but it consumes a lot of memory Chen et al. (2025).
+
+## 3 METHODOLOGY
+
+In this section, we will introduce the technical details of the proposed Hybrid Zeroth-Order Optimization (HZO), as shown in Figure 1. The left side of Figure 1 describes the hybrid optimization, and the right side describes the memory scheduling algorithm. To ensure thoroughness, we first outline the traditional ZO, as well as the MeZO Malladi et al. (2023b) method, and then delve into the technical details of our approach.
+
+### 3.1 ZEROTH-ORDER (ZO) OPTIMIZATION
+
+We consider the following optimization problem:
+
+$$\min_{\mathbf{X}} f(\mathbf{X}) := \mathbb{E}_{\xi}[F(\mathbf{X}; \xi)], \quad (1)$$
+
+where  $\mathbf{X}$  denotes the set of trainable parameters with dimension  $d$ . For instance, in the large language model (LLM) fine-tuning process, we can express  $\mathbf{X} = \{X_{\ell}\}_{\ell=1}^{\mathcal{L}}$  where  $X_{\ell} \in \mathbb{R}^{m_{\ell} \times n_{\ell}}$  represents the  $\ell$ -th weight matrix and  $\mathcal{L}$  is the total number of layers. The function  $F(\mathbf{X}; \xi)$  is the loss function that depends on a random variable  $\xi$ .
+
+The ZO approach approximates gradients exclusively via function assessments, bypassing the necessity for explicit gradient details. Two prevalent schemes for gradient estimation encompass the deterministic Coordinate-wise Gradient Estimation (CGE) Lian et al. (2016); Chen et al. (2023) and the Randomized vector-wise Gradient Estimation (RGE) Nesterov & Spokoiny (2015). These are formally articulated as:
+
+$$\hat{\nabla} F(\mathbf{X}; \xi) := \sum_{i=1}^d \frac{F(\mathbf{X} + \epsilon \mathbf{E}_i; \xi) - F(\mathbf{X} - \epsilon \mathbf{E}_i; \xi)}{2\epsilon} \mathbf{E}_i \quad (2)$$
+
+$$\hat{\nabla} F(\mathbf{X}; \xi) := \frac{F(\mathbf{X} + \epsilon \mathbf{Z}; \xi) - F(\mathbf{X} - \epsilon \mathbf{Z}; \xi)}{2\epsilon} \mathbf{Z}. \quad (3)$$
+
+The scalar  $\epsilon$  denotes the perturbation magnitude, which affects the accuracy of the gradient approximation. Both  $\mathbf{E}_i$  and  $\mathbf{Z}$  have the same dimensions as  $\mathbf{X}$ . The quantity  $\mathbf{E}_i$  is a basis vector/matrix with its  $i$ -th element set to one and all other elements set to zero, whereas the elements of  $\mathbf{Z}$  are randomly generated, typically sampled independently from a standard normal distribution. An extension of the RGE method is the  $q$ -RGE approach. In this case, the RGE is computed  $q$  times independently, and the final gradient estimate is obtained by averaging these estimations.
+
+$$\mathbf{X}^{t+1} = \mathbf{X}^t - \alpha \hat{\nabla} F(\mathbf{X}^t; \xi^t) \quad (4)$$
+
+where  $\alpha$  denotes the step size, also referred to as the learning rate, and  $\hat{\nabla} F$  represents the gradient estimated using ZO information.
+
+### 3.2 MEMORY-EFFICIENT ZO-SGD (MEZO)
+
+The conventional ZO-SGD implementation involves significant memory expenses. For instance, during the creation of the gradient estimator via the RGE scheme, the classic ZO-SGD approach demands memory allocation for the perturbation matrix  $\mathbf{Z}$ . To address this memory burden, the MeZO method Malladi et al. (2023b) emerged as an optimized, memory-saving alternative to ZO-SGD. In contrast to the traditional method, MeZO eliminates the need to store the full perturbation matrix  $\mathbf{Z}$ . Rather, it conducts the perturbation and ZO-SGD updates directly in situ and utilizes a strategy of preserving the random seed for generating  $\mathbf{Z}$ , enabling its recreation as required. Although this results in extra computational demands, it substantially lowers memory consumption.
+
+![Diagram of a Transformer architecture showing layers 0 to L-1. Layer 0 is at the bottom, receiving input, and Layer L-1 is at the top, producing output. A vertical stack of layers is shown with '...' between Layer 2 and Layer L-1. A 'FO optimizer' (green box) is connected to Layer L-1. A 'ZO optimizer' (blue box) is connected to Layer 2. A 'GPU Memory (calculating)' box on the right contains 'Transformer Layer 1'. Arrows show data flow: from Layer 0 to Layer 1 (in GPU memory), from Layer 1 to Layer 2, and from Layer 2 to Layer L-1. A double-headed arrow connects Layer 2 and Layer 1 in GPU memory, indicating a swap operation.](2fa4a1bf91d0f34e87c689fbc1211fe3_img.jpg)
+
+Diagram of a Transformer architecture showing layers 0 to L-1. Layer 0 is at the bottom, receiving input, and Layer L-1 is at the top, producing output. A vertical stack of layers is shown with '...' between Layer 2 and Layer L-1. A 'FO optimizer' (green box) is connected to Layer L-1. A 'ZO optimizer' (blue box) is connected to Layer 2. A 'GPU Memory (calculating)' box on the right contains 'Transformer Layer 1'. Arrows show data flow: from Layer 0 to Layer 1 (in GPU memory), from Layer 1 to Layer 2, and from Layer 2 to Layer L-1. A double-headed arrow connects Layer 2 and Layer 1 in GPU memory, indicating a swap operation.
+
+Figure 1: The middle solid line part belongs to the part temporarily stored in the CPU memory, and the right side is the block swapped into the GPU for computation.
+
+### 3.3 LOW-RANK ZEROTH-ORDER GRADIENT ESTIMATOR
+
+Gradients in large language models (LLMs) display low-rank characteristics. Prior research has thoroughly examined the low-rank properties inherent in neural networks Li et al. (2018); Larsen et al. (2021). These investigations indicate that loss landscapes are confined to an intrinsic dimensionality, suggesting that model parameters can be refined effectively within a low-rank subspace. Moreover, further studies Sagun et al. (2017); Gur-Ari et al. (2018) have shown that stochastic gradients tend to converge dynamically into an exceptionally compact subspace, particularly during the fine-tuning of LLMs Zhang et al. (2023). Contemporary research Zhao et al. (2024a) further supplies theoretical justification that the gradient matrix assumes a low-rank form throughout LLM training and adaptation.
+
+We propose a matrix-wise ZO gradient estimator, LGE, that preserves the low-rank structure in gradients. In LLM fine-tuning, let  $\mathbf{X} = \{X_\ell\}_{\ell=1}^L$  represent the model's weights, where  $X_\ell \in \mathbb{R}^{m_\ell \times n_\ell}$  is the weight matrix of the  $\ell$ -th layer. We sample two matrices,  $U_\ell \in \mathbb{R}^{m_\ell \times r_\ell}$  and  $V_\ell \in \mathbb{R}^{n_\ell \times r_\ell}$ , from standard normal distributions, where  $r_\ell \ll \min\{m_\ell, n_\ell\}$ . The LGE for the partial gradient of the  $\ell$ -th weight matrix is defined as
+
+$$\hat{\nabla}_{X_\ell} F(\mathbf{X}; \xi) := \frac{F\left(\{X_\ell + \epsilon U_\ell V_\ell^T\}_{\ell=1}^L; \xi\right) - F\left(\{X_\ell - \epsilon U_\ell V_\ell^T\}_{\ell=1}^L; \xi\right)}{2\epsilon} (U_\ell V_\ell^T / r_\ell). \quad (5)$$
+
+The scaling factor  $1/r_\ell$  is introduced to ensure that LGE is an unbiased estimator of the true gradient as  $\epsilon \rightarrow 0$ . Defining
+
+$$U := \{U_\ell\}_{\ell=1}^L, \quad V := \{V_\ell\}_{\ell=1}^L, \quad r := \{r_\ell\}_{\ell=1}^L, \quad \nabla F(\mathbf{X}; \xi) := \{\nabla_{X_\ell} F(\mathbf{X}; \xi)\}_{\ell=1}^L,$$
+
+we express
+
+$$X \pm \epsilon UV^T := \{X_\ell \pm \epsilon U_\ell V_\ell^T\}_{\ell=1}^L, \quad UV^T / r := \{U_\ell V_\ell^T / r_\ell\}_{\ell=1}^L.$$
+
+Using these notations, LGE can be written into a more compact form:
+
+$$\hat{\nabla} F(\mathbf{X}; \xi) := \frac{F(\mathbf{X} + \epsilon UV^T; \xi) - F(\mathbf{X} - \epsilon UV^T; \xi)}{2\epsilon} (UV^T / r). \quad (6)$$
+
+Using the definition in (5), we observe that the gradient matrix  $\nabla_{X_\ell} F(\mathbf{X}; \xi)$  has a rank of at most  $r_\ell$ , effectively capturing the low-rank structure of the FO gradient in LLM fine-tuning.
+
+Following the LGE definition (6), we introduce the LGE operator
+
+$$\text{LGE}(\mathbf{X}, U, V, r, \epsilon, \xi) := \frac{F(\mathbf{X} + \epsilon UV^T; \xi) - F(\mathbf{X} - \epsilon UV^T; \xi)}{2\epsilon} (UV^T / r) \quad (7)$$
+
+To solve problem (1), the vanilla recursion with the LGE scheme is as follows. For any  $t \geq 0$ ,
+
+$$\begin{aligned} X^{t+1} &= X^t - \alpha \tilde{\nabla} F(X^t; \xi^t) \\ \text{where } \tilde{\nabla} F(X^t; \xi^t) &= \text{LGE}(X^t, U^t, V^t, r, \epsilon, \xi^t). \end{aligned} \quad (8)$$
+
+In practice, we only need to store  $U_\ell$  and  $V_\ell$  for each layer  $\ell$ , and we apply the perturbation and the update layer by layer, eliminating the need to retain the full gradient estimator  $U_\ell V_\ell^T$ . Since  $r_\ell \ll \min\{m_\ell, n_\ell\}$ , the additional memory required for storing  $U_\ell$  and  $V_\ell$  is negligible. Moreover, memory costs can be further reduced using the random seed technique (Malladi et al., 2023). Instead of storing  $U_\ell$  and  $V_\ell$  directly, only the random seeds  $s_\ell^U$  and  $s_\ell^V$  used to generate them are saved. Whenever  $U_\ell$  and  $V_\ell$  are needed, the seeds  $s_\ell^U$  and  $s_\ell^V$  are used to regenerate these matrices, thereby eliminating the need for their storage. While this approach reduces memory usage, it introduces additional floating-point operations (flops) due to the regeneration process.
+
+**stable sampling strategy.** In the main recursion (8), the variable  $X^t$  is updated within the subspace spanned by  $U^t$  and  $V^t$  at each iteration  $t$ . However, if  $U^t$  and  $V^t$  are resampled at every iteration, the subspace will shift too frequently. This limits the algorithm's ability to adequately explore one low-rank subspace over a longer period, potentially causing abrupt changes in the model parameters  $X$  at each iteration and degrading fine-tuning performance.
+
+Additionally, ZO methods capture less information about the true gradient compared to FO algorithms, necessitating more iterations to achieve similar performance. In other words, multiple ZO steps may be required to match the progress of a single FO step. This suggests that maintaining a low-rank structure in the gradient estimator at each step is insufficient; instead, the cumulative sum of gradient estimators over several consecutive iterations must also preserve a low-rank structure.
+
+The motivations outlined above lead us to propose a stable sampling strategy. While  $U$  is sampled at every iteration  $t$ , we only sample  $V$  every  $\nu$  iterations, where  $\nu > 0$  represents the chosen period duration. During the iterations  $t \in \{k\nu, \dots, (k+1)\nu - 1\}$  for each period  $k$ , the matrix  $V^{(k)}$  remains fixed, thus restricting the model update to the subspace spanned by  $V^{(k)}$ . This leads to our proposed HZO algorithm, whose update rule for any  $t \geq 0$  is defined as:
+
+$$(X^{t+1} = X^t - \alpha \tilde{\nabla} F(X^t; \xi^t), \quad \text{where } \tilde{\nabla} F(X^t; \xi^t) = \text{LGE}(X^t, U^t, V^{(k)}, r, \epsilon, \xi^t)). \quad (9)$$
+
+With the stable sampling strategy,  $\nabla F(X^t; \xi^t)$  consistently lies within the subspace determined by  $V^{(k)}$  for any  $t \in \{k\nu, \dots, (k+1)\nu - 1\}$ . Therefore, the accumulation of the estimated gradients over these consecutive  $\nu$  steps, which can be viewed as a more accurate approximation of the true gradient in a single FO step, has a rank that does not exceed  $r$ . When  $\nu = 1$ , the HZO update rule (9) reduces to the standard recursion (8). Detailed mathematical proof process can be found in Appendix A.1.
+
+**Hyperparameter tuning.** The parameter  $\nu$ , which defines the number of steps over which  $X^t$  is updated within the same subspace, is critical for performance and should be set to a moderate value. If  $\nu$  is too small, frequent subspace shifts may lead to abrupt model changes, while a  $\nu$  that is too large limits the algorithm to focus only on a few subspaces, potentially reducing generalization. The parameter  $r$  defines the rank of the gradient estimator. Since the true gradient rank is unknown, we typically set  $r$  as a small constant that is significantly less than both  $m_\ell$  and  $n_\ell$  to avoid additional memory overhead. In our experiments, we set  $r_\ell = r$  through all layers. The typical choices for the parameters are  $r = 2, 4, 8$  and  $\nu = 50, 100$ .
+
+### 3.4 INTER-LAYER HYBRID OPTIMIZATION
+
+While MeZO provides advantages in terms of memory efficiency, it experiences notable reductions in accuracy relative to complete fine-tuning using SGD or Adam. To address these limitations, we introduce a low-order hybrid optimizer designed to enhance MeZO's effectiveness while adhering to memory constraints, achieved through the fusion of a ZO optimizer and a FO optimizer. The inter-layer approach features two variations: (1) Z+F, which applies the ZO optimizer for training the shallow layers and the FO optimizer for the deep layers; (2) F+Z, which employs the FO optimizer for the shallow layers and the ZO optimizer for the deep layers.
+
+#### **Algorithm 1** Resample-Triggered FO: HZO with FO on $t \bmod \nu = 0$
+
+**Require:** Parameters  $X = \{X_\ell\}_{\ell=1}^L$ , loss  $F(X; \xi)$ ; total steps  $T$ ; ZO scale  $\varepsilon$ ; ZO lr  $\alpha$ ; FO lr  $\eta$ ; stable interval  $\nu$ ; ranks  $\{r_\ell\}$ ; layer partition:  $\mathcal{Z}$  (ZO layers),  $\mathcal{O}$  (FO layers near output)
+
+```
+
+1: for  $t = 0, \dots, T - 1$  do
+2:   for  $\ell \in \mathcal{Z}$  do
+3:     Sample  $U_\ell \sim \mathcal{N}(0, 1)^{m_\ell \times r_\ell}$  ▷ ZO uses fresh  $U$  every step
+4:     if  $t \bmod \nu = 0$  then
+5:       Sample  $V_\ell \sim \mathcal{N}(0, 1)^{n_\ell \times r_\ell}$  ▷ stable resampling of  $V$  every  $\nu$  steps
+6:      $X \leftarrow \text{PERTURBZ}(X, +\varepsilon, \{U_\ell, V_\ell\}_{\ell \in \mathcal{Z}})$ 
+7:      $F^+ \leftarrow F(X; \xi)$ 
+8:      $X \leftarrow \text{PERTURBZ}(X, -2\varepsilon, \{U_\ell, V_\ell\}_{\ell \in \mathcal{Z}})$ 
+9:      $F^- \leftarrow F(X; \xi)$ 
+10:     $X \leftarrow \text{PERTURBZ}(X, +\varepsilon, \{U_\ell, V_\ell\}_{\ell \in \mathcal{Z}})$  ▷ reset to base
+11:     $c \leftarrow \frac{F^+ - F^-}{2\varepsilon}$  ▷ two-point finite difference
+12:    for  $\ell \in \mathcal{Z}$  do ▷ ZO update in the current low-rank subspace
+13:       $X_\ell \leftarrow X_\ell - \alpha c (U_\ell V_\ell^\top / r_\ell)$ 
+14:    if  $t \bmod \nu = 0$  then ▷ when  $V$  is resampled, do one FO update on output-proximal layers
+15:       $\{g_\ell\}_{\ell \in \mathcal{O}} \leftarrow \text{FO-BACKWARD}(X, \xi, \mathcal{O})$ 
+16:      for  $\ell \in \mathcal{O}$  do
+17:         $X_\ell \leftarrow X_\ell - \eta g_\ell$  ▷ or use your optimizer: Adam/Adafactor, etc.
+18:  procedure PERTURBZ( $X, \varepsilon, \{U_\ell, V_\ell\}_{\ell \in \mathcal{Z}}$ )
+19:    for  $\ell \in \mathcal{Z}$  do
+20:       $X_\ell \leftarrow X_\ell + \varepsilon U_\ell V_\ell^\top$  ▷ perturb only ZO layers
+21:    return  $X$ 
+22:  procedure FO-BACKWARD( $X, \xi, \mathcal{O}$ )
+23:    Freeze layers in  $\mathcal{Z}$ ; enable grads for layers in  $\mathcal{O}$ 
+24:     $G \leftarrow \nabla_{\{X_\ell: \ell \in \mathcal{O}\}} F(X; \xi)$  ▷ one forward + one backward
+25:    return  $\{G_\ell\}_{\ell \in \mathcal{O}}$ 
+
+```
+
+Interlayer mixing optimization, after analyzing the peak memory consumption during the fine-tuning period, it is evident that the positioning of the FO optimization layer significantly affects overall memory usage. Compared to the F+Z solution, the Z+F solution uses the ZO optimizer for shallow layers and the FO optimizer for deep layers, which can reduce more memory consumption because they need to cache more activations. Therefore, we adopted this solution, as shown on the left side of Figure 1. In this solution, the gradient calculations of the ZO and FO optimizers are independent. For the deep layers optimized by the FO optimizer, we perform backpropagation to obtain their gradients. For the shallow layers trained using the ZO optimizer, we conduct two forward passes to approximate their gradients. Subsequently, we adjust the parameters of the shallow and deep layers independently.
+
+**Triggering Mechanism (Resample-Triggered FO)** The first-order (FO) update is only triggered when  $t \bmod \nu = 0$ , and it aligns strictly with the resampling of  $V$ ; all other iterations perform zero-order (ZO) updates. Specifically, within each low-rank subspace determined by the current  $V$ ,  $\nu$  consecutive ZO two-point differences and updates are performed; when  $t \equiv 0 \pmod{\nu}$  and  $V$  needs to be resampled, after completing the ZO updates for that step (or alternatively, first FO and then ZO), a single FO backpropagation update is performed on the layers near the output, i.e., the set  $\mathcal{O}$ . This strategy implements the concept of “accumulating within the subspace + fine-tuning upon switching” and is consistent with the stable sampling motivation of HZO as well as the main loop structure in Algorithm 1. It maintains stable accumulation within the subspace while quickly correcting during the subspace switch using first-order information.
+
+### 3.5 DYNAMIC SCHEDULER DESIGN FOR EFFICIENT OVERLAP
+
+As shown on the right side of Figure 1. We enhance memory management through the pre-allocation of a reusable memory block for transformers on the GPU, which avoids the inefficiencies associated with frequent memory allocations and deallocations amid data exchanges between the CPU and GPU. This allocated memory is flexibly repurposed for each transformer block successively, accelerating data movements and maintaining consistent GPU memory consumption, ultimately boosting overall computational performance.
+
+Additionally, we implement the approach described by Li et al. Li et al. (2020), utilizing communication buckets to improve the efficiency of block-based transmissions. In particular, we merge parameter segments inside blocks into unified memory buckets, thereby elevating the effectiveness of communications.
+
+To overlap the data loading and computation process, we propose a dynamic scheduler, utilizing the asynchronous execution on different CUDA streams. Specifically, our scheduler includes three CUDA streams, which are utilized to control the  $i$ -th transformer block’s computation, the  $(i+1)$ -th block’s uploading, and the  $(i-1)$ -th block’s offloading concurrently. This design minimizes data transfer conflicts and maximizes GPU utilization by keeping computational and communication channels active.
+
+A key benefit of our framework lies in the dual-forward mechanism, which effectively doubles the computation duration while leaving the communication time per block unaltered. This improvement markedly elevates the probability of achieving full overlap between communication and computation operations, particularly given that CPU-GPU communication is typically slower than GPU-based computation. Our subsequent assessments reveal that, owing to ZO’s distinctive dual forward passes—which prolong computation relative to the single forward pass—communication latencies cease to represent the dominant bottleneck across the majority of cases.
+
+## 4 EXPERIMENTS
+
+Our experiments assess the algorithms using language models (LMs) across different sizes, encompassing RoBERTa-large Liu et al. (2019) and extensive autoregressive LMs like OPT-13B, 30B, and 66B Zhang et al. (2022). Details can be found in the appendix A.3.1. Additionally, we examine LLaMA models Touvron et al. (2023) in multiple scales. Details can be found in the appendix A.3.3 We benchmark our HZO algorithms against MeZO Malladi et al. (2023b) and its derivatives LoHO Chen et al. (2025), plus other reference methods such as zero-shot and in-context learning (ICL) techniques. Additionally, we evaluate full fine-tuning and LoRA employing the gradient-based Adam optimizer Kingma & Ba (2014), denoted as FT and FT-LoRA, respectively. To ensure equitable comparisons, we execute a comprehensive grid search over the hyperparameters specified in Malladi et al. (2023b) and adopt the superior outcomes for MeZO and its variants.
+
+### 4.1 RESULTS ON OPT
+
+To further assess the efficacy of HZO on extensive language models, we broaden our investigation to the OPT models Zhang et al. (2022) featuring billions of parameters (13B, 30B, and 66B).
+
+For OPT, we conduct experiments on the following datasets: SST-2, RTE, CB De Marneffe et al. (2019), BoolQ Clark et al. (2019), WSC Levesque et al. (2012), WiC Pilehvar & Camacho-Collados (2018), MultiRC Khashabi et al. (2018), COPA Roemmele et al. (2011), ReCoRD Zhang et al. (2018), SQuAD Rajpurkar et al. (2016), and DROP Dua et al. (2019). Based on Table 2, HZO delivers strong results across multiple tasks, often approaching or surpassing full fine-tuning. On BoolQ, HZO reaches 73.04, more than six points higher than in-context learning (66.72) and above MeZO (68.02), although LoHO attains 73.68. On CoPA, HZO achieves 89.70, clearly outperforming LoHO (84.13) and full fine-tuning (78.98). For reading comprehension, HZO obtains 86.00 on SQuAD and 63.12 on MultiRC, exceeding LoHO (82.29 and 61.40, respectively); on ReCoRD, it scores 81.15—below ICL (82.29) and LoHO (81.67) but above full fine-tuning (74.28). Full fine-tuning remains stronger on several tasks, notably CB, where it reaches 84.18 while HZO attains 68.42; the gaps are small on SST-2 (91.94 for full fine-tuning and 91.76 for HZO) and RTE (70.76 for full fine-tuning and 70.21 for HZO). HZO underperforms on DROP (30.63) relative to MeZO
+
+| Experiment  | Hyperparameters                | Values                                                                                                                    |
+|-------------|--------------------------------|---------------------------------------------------------------------------------------------------------------------------|
+| <b>HZO</b>  | Batch size                     | 16                                                                                                                        |
+|             | Learning rate                  | $\{1 \times 10^{-6}, 1 \times 10^{-7}\}$                                                                                  |
+|             | $\epsilon$                     | $\{1 \times 10^{-3}, 1 \times 10^{-4}\}$                                                                                  |
+|             | Rank (r)<br>Interval ( $\nu$ ) | $\{1, 2, 4\}$<br>$\{50, 100\}$                                                                                            |
+| <b>MeZO</b> | Batch size                     | 16                                                                                                                        |
+|             | Learning rate                  | $\{1 \times 10^{-6}, 1 \times 10^{-7}\}$ or $\{1 \times 10^{-6}, 5 \times 10^{-7}, 1 \times 10^{-7}\}$ for SQuAD and DROP |
+| <b>LoHO</b> | Batch size                     | 16                                                                                                                        |
+|             | Learning rate                  | $\{1 \times 10^{-4}, 5 \times 10^{-5}\}$ or $\{1 \times 10^{-4}, 5 \times 10^{-5}, 1 \times 10^{-5}\}$ for SQuAD and DROP |
+| <b>FT</b>   | Batch size                     | 8                                                                                                                         |
+|             | Learning rate                  | $\{1 \times 10^{-5}, 5 \times 10^{-5}, 8 \times 10^{-5}\}$                                                                |
+
+Table 1: The hyperparameter grids used for OPT experiments
+
+(31.13), LoHO (31.33), and full fine-tuning (31.28). Overall, HZO is a competitive alternative to full fine-tuning, with clear strengths on WSC, CoPA, and SQuAD, and competitive results on ReCoRD. HZO demonstrates accelerated convergence across different model scales, such as 13B and 66B. As
+
+| Task       | SST-2        | RTE          | CB           | BoolQ        | WSC          | WiC          | MultiRC      | CoPA         | ReCoRD       | SQuAD        | DROP         |
+|------------|--------------|--------------|--------------|--------------|--------------|--------------|--------------|--------------|--------------|--------------|--------------|
+| Zero-shot  | 58.86        | 59.45        | 46.31        | 59.15        | 38.44        | 54.83        | 47.08        | 80.03        | 81.01        | 46.23        | 14.46        |
+| ICL        | 87.14        | 62.18        | 57.16        | 66.72        | 39.34        | 50.39        | 52.96        | 87.10        | <b>82.29</b> | 75.94        | 29.55        |
+| MeZO       | 91.41        | 68.09        | 65.91        | 68.02        | 61.70        | 60.23        | 59.55        | 88.19        | 81.36        | 81.84        | 31.13        |
+| LoHO       | 89.71        | 68.09        | 67.85        | <b>73.68</b> | 63.43        | 60.12        | 61.40        | 84.13        | 81.67        | 82.29        | <b>31.33</b> |
+| <b>HZO</b> | <b>91.76</b> | <b>70.21</b> | <b>68.42</b> | 73.04        | <b>63.81</b> | <b>63.93</b> | <b>63.12</b> | <b>89.70</b> | 81.15        | <b>86.00</b> | 30.63        |
+| FT         | 91.94        | 70.76        | 84.18        | 77.01        | 63.37        | 70.29        | 71.29        | 78.98        | 74.28        | 84.90        | 31.28        |
+
+Table 2: Experiments on OPT-13B (with 10000 examples). ICL: in-context learning; FT: full fine-tuning with Adam. The best results are shown in bold except for FT.
+
+shown in Figure 2, the method consistently converges faster on diverse datasets and architectures. For instance, on the WiC dataset with the OPT-66B configuration, the HZO algorithm reaches the same training loss as MeZO in only half the epochs, while also producing smoother trajectories with reduced loss oscillations.
+
+![Figure 2: Convergence speed on different models and datasets. (a) Loss vs Epoch on SQuAD dataset opt-13b. (b) Loss vs Epoch on WiC dataset opt-66b. Both plots show HZO (blue dashed line) converging faster and smoother than MeZO (orange dashed line).](aa14b9ec884bf40ce06c161be468cd84_img.jpg)
+
+Figure 2 consists of two line plots. Plot (a) is titled 'Loss vs Epoch on SQuAD dataset opt-13b' and shows the training loss over 200 epochs. The y-axis represents 'Loss' ranging from 0.6 to 1.4, and the x-axis represents 'Epochs' from 0 to 200. A blue dashed line (HZO) starts at a loss of approximately 1.3 and decreases steadily to about 0.55 by epoch 200. An orange dashed line (MeZO) starts at the same loss but decreases more slowly, reaching about 0.75 by epoch 200. Plot (b) is titled 'Loss vs Epoch on WiC dataset opt-66b' and shows the training loss over 200 epochs. The y-axis represents 'Loss' ranging from 0.65 to 0.93, and the x-axis represents 'Epochs' from 0 to 200. A blue dashed line (HZO) starts at a loss of approximately 0.92 and decreases to about 0.65 by epoch 200. An orange dashed line (MeZO) starts at the same loss but decreases more slowly, reaching about 0.85 by epoch 200. Both plots include a legend indicating that the blue dashed line represents HZO and the orange dashed line represents MeZO.
+
+Figure 2: Convergence speed on different models and datasets. (a) Loss vs Epoch on SQuAD dataset opt-13b. (b) Loss vs Epoch on WiC dataset opt-66b. Both plots show HZO (blue dashed line) converging faster and smoother than MeZO (orange dashed line).
+
+Figure 2: Convergence speed on different models and datasets
+
+Based on Table 3, HZO shows strong performance on SuperGLUE for both OPT-30B and OPT-66B, often matching or exceeding baselines, with a few exceptions. For OPT-30B, HZO achieves 93.81 on SST-2 and 72.99 on BoolQ, outperforming in-context learning (66.24) and MeZO (68.11) on the latter. On WSC and WiC, HZO obtains 65.43 and 58.31, higher than MeZO (63.36 and 56.46) and in-context learning (56.65 and 51.24). On SQuAD, HZO reaches 85.00, above in-context learning (77.82) and zero-shot (46.70), while MeZO attains 85.97. For OPT-66B, HZO attains 92.41 on SST-2 and 74.74 on RTE, slightly above MeZO (92.14 and 71.40) and clearly above in-context learning (89.20 and 65.29). HZO also delivers 74.71 on BoolQ and 84.26 on SQuAD, exceeding MeZO (73.64 and 83.85) and in-context learning (62.61 and 81.12). The only metric where MeZO leads
+
+| Task          | SST-2        | RTE          | BoolQ        | WSC          | WiC          | SQuAD        |
+|---------------|--------------|--------------|--------------|--------------|--------------|--------------|
+| 30B Zero-shot | 56.69        | 51.98        | 39.12        | 38.50        | 50.17        | 46.70        |
+| 30B ICL       | 82.01        | <b>66.82</b> | 66.24        | 56.65        | 51.24        | 77.82        |
+| 30B MeZO      | 90.67        | 64.41        | 68.11        | 63.36        | 56.46        | <b>85.97</b> |
+| 30B HZO       | <b>93.81</b> | 65.83        | <b>72.99</b> | <b>65.43</b> | <b>58.31</b> | 85.00        |
+| 66B Zero-shot | 57.53        | 67.34        | 66.68        | 43.26        | 50.72        | 47.96        |
+| 66B ICL       | 89.20        | 65.29        | 62.61        | 52.90        | 55.00        | 81.12        |
+| 66B MeZO      | 92.14        | 71.40        | 73.64        | <b>64.45</b> | 57.67        | 83.85        |
+| 66B HZO       | <b>92.41</b> | <b>74.74</b> | <b>74.71</b> | 64.32        | <b>59.49</b> | <b>84.26</b> |
+
+Table 3: Experiments on OPT-30B and OPT-66B on SuperGLUE benchmark. For each model size, the best results are shown in bold.
+
+| Model    | GPU Memory Usage (GB) ↓ |              |               |                     | Throughput (tokens/sec) ↑ |             |                    |             |
+|----------|-------------------------|--------------|---------------|---------------------|---------------------------|-------------|--------------------|-------------|
+|          | MeZO (FP32)             | HZO(FP32)    | MeZO (FP16)   | HZO (FP16)          | MeZO (FP32)               | HZO(FP32)   | MeZO (FP16)        | HZO(FP16)   |
+| OPT-1.3B | 8.69                    | 4.98(x0.57)  | 5.68(x0.65)   | <b>3.64(x0.42)</b>  | 1998                      | 1955(x0.97) | <b>6629(x3.32)</b> | 6448(x3.23) |
+| OPT-2.7B | 14.17                   | 5.79(x0.41)  | 8.84(x0.62)   | <b>4.48(x0.29)</b>  | 1104                      | 1086(x0.98) | <b>4229(x4.83)</b> | 4220(x3.82) |
+| OPT-6.7B | 32.16                   | 8.22(x0.26)  | 16.20(x0.50)  | <b>4.88(x0.15)</b>  | 492                       | 485(x0.97)  | <b>2349(x4.77)</b> | 2270(x4.70) |
+| OPT-13B  | 57.38                   | 10.48(x0.18) | 28.99(x0.51)  | <b>6.04(x0.11)</b>  | 266                       | 259(x0.97)  | <b>1326(x4.98)</b> | 1251(x4.70) |
+| OPT-30B  | 143.45                  | 15.61(x0.11) | 62.40(x0.43)  | <b>8.65(x0.06)</b>  | 136                       | 122(x0.90)  | <b>641(x4.71)</b>  | 514(x3.78)  |
+| OPT-66B  | 290.75                  | 21.77(x0.07) | 126.33(x0.43) | <b>11.79(x0.04)</b> | 46                        | 40(x0.87)   | <b>325(x7.07)</b>  | 273(x5.93)  |
+| OPT-175B | 623.49                  | 33.22(x0.05) | 269.27(x0.43) | <b>17.62(x0.03)</b> | 17                        | 14(x0.82)   | <b>566(x3.29)</b>  | 37(x2.18)   |
+
+Table 4: Key findings from HZO performance across diverse model setups and in both FP32 and FP16 precision modes. Bold numbers indicate the lowest memory usage and highest throughput for each model. Our HZO achieves a throughput close to MeZO while maintaining minimal memory consumption.
+
+is WSC (64.45 compared with HZO 64.32). Overall, HZO provides robust gains over in-context learning and zero-shot, and often matches or slightly outperforms MeZO across large models.
+
+Based on Table 4, HZO consistently reduces GPU memory usage across OPT models. For OPT-6.7B, it uses 8.22 GB in FP32 compared with MeZO’s 32.16 GB (reduction  $\approx 74\%$ ) and 4.88 GB in FP16 compared with 16.20 GB (reduction  $\approx 70\%$ ). These reductions enable larger models: in FP16, HZO requires 11.79 GB for OPT-66B and 17.62 GB for OPT-175B, whereas MeZO needs 126.33 GB and 269.27 GB. Throughput remains broadly comparable to MeZO: on OPT-2.7B in FP32, HZO achieves 1086 tokens/s compared with 1104; in FP16 it is typically within about 3–20% of MeZO (for OPT-66B, 273 tokens/s compared with 325). Overall, FP16 memory savings range from roughly 36–54% on smaller models to about 70–95% from 6.7B upward, while maintaining throughput close to MeZO.
+
+### 4.2 ABLATION STUDY
+
+Details of the ablation experiment can be found in Appendix A.3.4. We have also proven the convergence, with details in Appendix A.2.
+
+## 5 CONCLUSION
+
+In summary, this work introduces a low-rank zeroth-order gradient estimation method that effectively reduces memory consumption while preserving competitive fine-tuning performance. By combining hierarchical block-wise optimization with a hybrid ZO-FO strategy and proposing an offloading scheme between GPU and CPU memory, the method enables large-scale models such as OPT-175B to be fine-tuned on limited hardware resources. The proposed approach not only mitigates the slow convergence issue inherent in conventional ZO methods but also achieves convergence behavior comparable to first-order algorithms, thereby providing a practical and efficient solution for parameter-efficient fine-tuning of large language models under memory-constrained environments.
+
+## REFERENCES
+
+OpenAI Josh Achiam, Steven Adler, Sandhini Agarwal, Lama Ahmad, and Ilge Akkaya. Gpt-4 technical report. 2023. URL <https://api.semanticscholar.org/CorpusID:>
+
+- 486 257532815.
+- 487
+- 488 Shun-ichi Amari. Backpropagation and stochastic gradient descent method. *Neurocomputing*, 5:  
+489 185–196, 1993. URL <https://api.semanticscholar.org/CorpusID:30699194>.
+- 490
+- 491 Matin Ansaripour, Shayan Talaei, Giorgi Nadiradze, and Dan Alistarh. Hybrid decentralized op-  
+492 timization: Leveraging both first- and zeroth-order optimizers for faster convergence. In *AAAI*  
+493 *Conference on Artificial Intelligence*, 2022. URL [https://api.semanticscholar.org/](https://api.semanticscholar.org/CorpusID:272397977)  
+CorpusID:272397977.
+- 494
+- 495 Krishnakumar Balasubramanian and Saeed Ghadimi. Zeroth-order (non)-convex stochastic opti-  
+496 mization via conditional gradient and gradient updates. *ArXiv*, abs/1809.06474, 2018. URL  
+497 <https://api.semanticscholar.org/CorpusID:52295256>.
+- 498
+- 499 Roy Bar-Haim, Ido Dagan, Bill Dolan, Lisa Ferro, Danilo Giampicolo, Bernardo Magnini, and  
+500 Idan Szpektor. The second pascal recognising textual entailment challenge. In *Proceedings of the*  
+501 *Second PASCAL Challenges Workshop on Recognising Textual Entailment*, 2006.
+- 502
+- 503 Luisa Bentivogli, Ido Dagan, Bernardo Magnini, and Danilo Giampicolo. The fifth pascal recog-  
+504 nizing textual entailment challenge. In *Proceedings of Text Analysis Conference (TAC)*, 2009.
+- 505
+- 506 Albert S. Berahas, Liyuan Cao, Krzysztof Choromanski, and Katya Scheinberg. A theo-  
+507 retical and empirical comparison of gradient approximations in derivative-free optimization.  
+508 *Foundations of Computational Mathematics*, 22:507 – 560, 2019. URL [https://api.](https://api.semanticscholar.org/CorpusID:146120814)  
+semanticscholar.org/CorpusID:146120814.
+- 509
+- 510 Samuel R Bowman, Gabor Angeli, Christopher Potts, and Christopher D Manning. A large anno-  
+511 tated corpus for learning natural language inference. In *Proceedings of the 2015 Conference on*  
+512 *Empirical Methods in Natural Language Processing*, pp. 632–642, 2015.
+- 513
+- 514 Tom B. Brown, Benjamin Mann, Nick Ryder, Melanie Subbiah, Jared Kaplan, Prafulla Dhari-  
+515 wal, Arvind Neelakantan, Pranav Shyam, Girish Sastry, Amanda Askell, Sandhini Agar-  
+516 wal, Ariel Herbert-Voss, and Gretchen Krueger. Language models are few-shot learn-  
+517 ers. *ArXiv*, abs/2005.14165, 2020. URL [https://api.semanticscholar.org/](https://api.semanticscholar.org/CorpusID:218971783)  
+CorpusID:218971783.
+- 518
+- 519 Aochuan Chen, Yimeng Zhang, Jinghan Jia, James Diffenderfer, Jiancheng Liu, Konstantinos  
+520 Parasynis, Yihua Zhang, Zheng Zhang, Bhavya Kailkhura, and Sijia Liu. Deepzero: Scaling  
+521 up zeroth-order optimization for deep model training. *ArXiv*, abs/2310.02025, 2023. URL  
+522 <https://api.semanticscholar.org/CorpusID:263609305>.
+- 523
+- 524 Minping Chen, You-Liang Huang, and Zeyi Wen. Towards efficient low-order hybrid optimizer for  
+525 language model fine-tuning. In *AAAI Conference on Artificial Intelligence*, 2025. URL [https://](https://api.semanticscholar.org/CorpusID:277767644)  
+526 [//api.semanticscholar.org/CorpusID:277767644](https://api.semanticscholar.org/CorpusID:277767644).
+- 527
+- 528 Xiangyi Chen, Sijia Liu, Kaidi Xu, Xingguo Li, Xue Lin, Mingyi Hong, and David Cox. Zo-adamm:  
+529 Zeroth-order adaptive momentum method for black-box optimization. In *Neural Information*  
+530 *Processing Systems*, 2019. URL [https://api.semanticscholar.org/CorpusID:](https://api.semanticscholar.org/CorpusID:202777327)  
+202777327.
+- 531
+- 532 Christopher Clark, Kenton Lee, Ming-Wei Chang, Tom Kwiatkowski, Michael Collins, and Kristina  
+533 Toutanova. Boolq: Exploring the surprising difficulty of natural yes/no questions. In *Proceedings*  
+534 *of the 2019 Conference of the North American Chapter of the Association for Computational*  
+535 *Linguistics*, pp. 2924–2936, 2019.
+- 536
+- 537 Ido Dagan, Oren Glickman, and Bernardo Magnini. The pascal recognising textual entailment chal-  
+538 lenge. In *Proceedings of the First International Conference on Machine Learning Challenges:*  
+539 *Evaluating Predictive Uncertainty Visual Object Classification, and Recognising Textual Entail-*  
+540 *ment*, pp. 177–190, 2005.
+- 541
+- 542 Marie-Catherine De Marneffe, Mandi Simons, and Judith Tonhauser. The commitmentbank: Inves-  
+543 tigating projection in naturally occurring discourse. In *Proceedings of Sinn und Bedeutung 23*,  
+544 pp. 107–124, 2019.
+
+- 540 Dheeru Dua, Yizhong Wang, Pradeep Dasigi, Gabriel Stanovsky, Sameer Singh, and Matt Gard-  
+541 ner. Drop: A reading comprehension benchmark requiring discrete reasoning over paragraphs.  
+542 In *Proceedings of the 2019 Conference of the North American Chapter of the Association for*  
+543 *Computational Linguistics*, pp. 2368–2378, 2019.
+- 544 John C. Duchi, Michael I. Jordan, Martin J. Wainwright, and Andre Wibisono. Optimal rates for  
+545 zero-order convex optimization: The power of two function evaluations. *IEEE Transactions on*  
+546 *Information Theory*, 61:2788–2806, 2013. URL [https://api.semanticscholar.org/](https://api.semanticscholar.org/CorpusID:552111)  
+547 CorpusID:552111.
+- 548
+- 549 Tamnay Gautam, Youngsuk Park, Hao Zhou, Parameswaran Raman, and Wooseok Ha. Variance-  
+550 reduced zeroth-order methods for fine-tuning language models. *arXiv preprint arXiv:2404.08080*,  
+551 2024.
+- 552 Saeed Ghadimi and Guanghui Lan. Stochastic first- and zeroth-order methods for noncon-  
+553 vex stochastic programming. *SIAM J. Optim.*, 23:2341–2368, 2013. URL [https://api.](https://api.semanticscholar.org/CorpusID:14112046)  
+554 [semanticscholar.org/CorpusID:14112046](https://api.semanticscholar.org/CorpusID:14112046).
+- 555
+- 556 Danilo Giampiccolo, Bernardo Magnini, Ido Dagan, and Bill Dolan. The third pascal recognizing  
+557 textual entailment challenge. In *Proceedings of the ACL-PASCAL Workshop on Textual Entail-  
+558 ment and Paraphrasing*, pp. 1–9, 2007.
+- 559 Guy Gur-Ari, Daniel A Roberts, and Ethan Dyer. Gradient descent happens in a tiny subspace. *arXiv*  
+560 *preprint arXiv:1812.04754*, 2018.
+- 561
+- 562 Suchin Gururangan, Ana Marasović, Swabha Swayamdipta, Kyle Lo, Iz Beltagy, Doug Downey, and  
+563 Noah A. Smith. Don’t stop pretraining: Adapt language models to domains and  
+564 tasks. *ArXiv*, abs/2004.10964, 2020. URL [https://api.semanticscholar.org/](https://api.semanticscholar.org/CorpusID:216080466)  
+565 CorpusID:216080466.
+- 566 Yongchang Hao, Yanshuai Cao, and Lili Mou. Flora: Low-rank adapters are secretly gradient  
+567 compressors. *ArXiv*, abs/2402.03293, 2024. URL [https://api.semanticscholar.org/](https://api.semanticscholar.org/CorpusID:267412117)  
+568 CorpusID:267412117.
+- 569
+- 570 Edward J Hu, Yelong Shen, Phillip Wallis, Zeyuan Allen-Zhu, Yuanzhi Li, Shean Wang, Lu Wang,  
+571 and Weizhu Chen. Lora: Low-rank adaptation of large language models. *arXiv preprint*  
+572 *arXiv:2106.09685*, 2021a.
+- 573 J. Edward Hu, Yelong Shen, Phillip Wallis, Zeyuan Allen-Zhu, Yuanzhi Li, Shean Wang, and  
+574 Weizhu Chen. Lora: Low-rank adaptation of large language models. *ArXiv*, abs/2106.09685,  
+575 2021b. URL <https://api.semanticscholar.org/CorpusID:235458009>.
+- 576
+- 577 Kaiyi Ji, Zhe Wang, Yi Zhou, and Yingbin Liang. Improved zeroth-order variance reduced algo-  
+578 rithms and analysis for nonconvex optimization. In *International Conference on Machine Learn-*  
+579 *ing*, 2019. URL <https://api.semanticscholar.org/CorpusID:174800372>.
+- 580
+- 581 Daniel Khashabi, Eunsool Choi, Han Han, Dan Roth, Sameer Singh, Karl Stratos, Alon Talmor,  
+582 Travis Wolfe, Yiben Zhou, Chris Callison-Burch, et al. Looking beyond the surface: A challenge  
+583 set for reading comprehension over multiple sentences. In *Proceedings of the 2018 Conference*  
+584 *of the North American Chapter of the Association for Computational Linguistics*, pp. 252–262,  
+585 2018.
+- 586 Diederik P. Kingma and Jimmy Ba. Adam: A method for stochastic optimization.  
+587 *CoRR*, abs/1412.6980, 2014. URL [https://api.semanticscholar.org/CorpusID:](https://api.semanticscholar.org/CorpusID:6628106)  
+588 6628106.
+- 589
+- 590 Nicola Landro, Ignazio Gallo, and Riccardo La Grassa. Mixing adam and sgd: a combined opti-  
+591 mization method. *ArXiv*, abs/2011.08042, 2020. URL [https://api.semanticscholar.](https://api.semanticscholar.org/CorpusID:226964883)  
+592 [org/CorpusID:226964883](https://api.semanticscholar.org/CorpusID:226964883).
+- 593 Brett W Larsen, Stanislav Fort, Nic Becker, and Surya Ganguli. How many degrees of freedom do  
+594 we need to train deep networks: a loss landscape perspective. *arXiv preprint arXiv:2107.05802*,  
+595 2021.
+
+- 594 Brian Lester, Rami Al-Rfou, and Noah Constant. The power of scale for parameter-efficient prompt  
+595 tuning. In *Conference on Empirical Methods in Natural Language Processing*, 2021. URL  
+596 <https://api.semanticscholar.org/CorpusID:233296808>.  
+597
+- 598 Hector Levesque, Ernest Davis, and Leora Morgenstern. The winograd schema challenge. In *Pro-*  
+599 *ceedings of the Thirteenth International Conference on Principles of Knowledge Representation*  
+600 *and Reasoning*, pp. 552–561, 2012.
+- 601 Chunyuan Li, Heerad Farkhoor, Rosanne Liu, and Jason Yosinski. Measuring the intrinsic dimension  
+602 of objective landscapes. *arXiv preprint arXiv:1804.08838*, 2018.
+- 603
+- 604 Shen Li, Yanli Zhao, Rohan Varma, Omkar Salpekar, Pieter Noordhuis, Teng Li, Adam Paszke, Jeff  
+605 Smith, Brian Vaughan, Pritam Damania, and Soumith Chintala. Pytorch distributed. *Proceedings*  
+606 *of the VLDB Endowment*, 13:3005 – 3018, 2020. URL [https://api.semanticscholar.](https://api.semanticscholar.org/CorpusID:220250008)  
+607 [org/CorpusID:220250008](https://api.semanticscholar.org/CorpusID:220250008).
+- 608
+- 609 Xiangru Lian, Huan Zhang, Cho-Jui Hsieh, Yijun Huang, and Ji Liu. A comprehensive  
+610 linear speedup analysis for asynchronous stochastic parallel optimization from zeroth-order  
+611 to first-order. In *Neural Information Processing Systems*, 2016. URL [https://api.](https://api.semanticscholar.org/CorpusID:8281479)  
+612 [semanticscholar.org/CorpusID:8281479](https://api.semanticscholar.org/CorpusID:8281479).
+- 613
+- 614 Yinhai Liu, Myle Ott, Naman Goyal, Jingfei Du, Mandar Joshi, Danqi Chen, Omer Levy, Mike  
+615 Lewis, Luke Zettlemoyer, and Veselin Stoyanov. Roberta: A robustly optimized bert pretraining  
+616 approach. *ArXiv*, abs/1907.11692, 2019. URL [https://api.semanticscholar.org/](https://api.semanticscholar.org/CorpusID:198953378)  
+617 [CorpusID:198953378](https://api.semanticscholar.org/CorpusID:198953378).
+- 618
+- 619 Yong Liu, Zirui Zhu, Chaoyu Gong, Minhao Cheng, Cho-Jui Hsieh, and Yang You. Sparse  
+620 mezo: Less parameters for better performance in zeroth-order llm fine-tuning. *arXiv preprint*  
+621 *arXiv:2402.15751*, 2024.
+- 622
+- 623 Sadhika Malladi, Tianyu Gao, Eshaan Nichani, Alex Damian, Jason D Lee, Danqi Chen, and Sanjeev  
+624 Arora. Fine-tuning language models with just forward passes. *Advances in Neural Information*  
+625 *Processing Systems*, 36:53038–53075, 2023a.
+- 626
+- 627 Sadhika Malladi, Tianyu Gao, Eshaan Nichani, Alexandru Damian, Jason D. Lee, Danqi Chen, and  
+628 Sanjeev Arora. Fine-tuning language models with just forward passes. *ArXiv*, abs/2305.17333,  
+629 2023b. URL <https://api.semanticscholar.org/CorpusID:258959274>.
+- 630
+- 631 Yurii Nesterov and Vladimir G. Spokoiny. Random gradient-free minimization of convex func-  
+632 tions. *Foundations of Computational Mathematics*, 17:527 – 566, 2015. URL [https://api.](https://api.semanticscholar.org/CorpusID:2147817)  
+633 [semanticscholar.org/CorpusID:2147817](https://api.semanticscholar.org/CorpusID:2147817).
+- 634
+- 635 Mohammad Taher Pilehvar and Jose Camacho-Collados. Wic: The word-in-context dataset for  
+636 evaluating context-sensitive meaning representations. In *Proceedings of the 2018 Conference on*  
+637 *Empirical Methods in Natural Language Processing*, pp. 1267–1276, 2018.
+- 638
+- 639 Pranav Rajpurkar, Jian Zhang, Konstantin Lopyrev, and Percy Liang. Squad: 100,000+ questions for  
+640 machine comprehension of text. In *Proceedings of the 2016 Conference on Empirical Methods in*  
+641 *Natural Language Processing*, pp. 2383–2392, 2016.
+- 642
+- 643 Melissa Roemmele, Cosmin Bejan, and Andrew Gordon. Choice of plausible alternatives: An  
+644 evaluation of commonsense causal reasoning. In *Proceedings of the 2011 AAAI Spring Symposium*  
+645 *on Logical Formalizations of Commonsense Reasoning*, 2011.
+- 646
+- 647 Levent Sagun, Utku Evci, V Ugur Guney, Yann Dauphin, and Leon Bottou. Empirical analysis of  
+648 the hessian of over-parametrized neural networks. *arXiv preprint arXiv:1706.04454*, 2017.
+- 649
+- 650 Victor Sanh, Albert Webson, Colin Raffel, Stephen H. Bach, Lintang Sutawika, Zaid Alyafeai,  
+651 Antoine Chaffin, and Arnaud Stiegler. Multitask prompted training enables zero-shot task gen-  
+652 eralization. *ArXiv*, abs/2110.08207, 2021. URL [https://api.semanticscholar.org/](https://api.semanticscholar.org/CorpusID:239009562)  
+653 [CorpusID:239009562](https://api.semanticscholar.org/CorpusID:239009562).
+
+[Appendix and supplementary materials beyond page 12 have been removed.]

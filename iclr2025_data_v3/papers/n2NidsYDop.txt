@@ -1,0 +1,3345 @@
+# TRANSFORMERS PROVABLY SOLVE PARITY EFFICIENTLY WITH CHAIN OF THOUGHT
+
+
+**Juno Kim** **[1,2]** _[∗]_ **Taiji Suzuki** **[1,2]**
+
+1Department of Mathematical Informatics, University of Tokyo
+2Center for Advanced Intelligence Project, RIKEN
+_∗_ `junokim@berkeley.edu`
+
+
+ABSTRACT
+
+
+This work provides the first theoretical analysis of training transformers to solve
+complex problems by recursively generating intermediate states, analogous to
+fine-tuning for chain-of-thought (CoT) reasoning. We consider training a one-layer
+transformer to solve the fundamental _k_ -parity problem, extending the work on
+RNNs by Wies et al. (2023). We establish three key results: (1) any finite-precision
+gradient-based algorithm, without intermediate supervision, requires substantial
+iterations to solve parity with finite samples. (2) In contrast, when intermediate
+parities are incorporated into the loss function, our model can learn parity in one
+gradient update when aided by _teacher forcing_, where ground-truth labels of the
+reasoning chain are provided at each generation step. (3) Even without teacher
+forcing, where the model must generate CoT chains end-to-end, parity can be
+learned efficiently if augmented data is employed to internally verify the soundness
+of intermediate steps. Our findings, supported by numerical experiments, show
+that task decomposition and stepwise reasoning naturally arise from optimizing
+transformers with CoT; moreover, self-consistency checking can improve multistep reasoning ability, aligning with empirical studies of CoT.
+
+
+1 INTRODUCTION
+
+
+Large language models (LLMs) based on the transformer architecture (Vaswani et al., 2017) have
+achieved astounding success across a variety of natural language processing and machine learning
+tasks (see e.g. Wan et al., 2024; Minaee et al., 2024; Naveed et al., 2024; Zhao et al., 2024). However,
+they often struggle when tasked with solving complex reasoning problems, especially in a zero-shot
+setting without any form of intermediate guidance or supervision (Geva et al., 2021; Rae et al.,
+2022; Arkoudas, 2023; Wang et al., 2024). These failures are particularly evident in tasks requiring
+multi-hop reasoning or compounded logical steps (Sakarvadia et al., 2024).
+
+
+A promising approach to overcome these limitations is chain-of-thought (CoT) reasoning, where the
+model is prompted or fine-tuned to solve complex tasks step-by-step by explicitly making intermediate
+reasoning steps to arrive at the desired answers (Wei et al., 2022; Kojima et al., 2022). Since its
+discovery, CoT reasoning has been shown to significantly enhance the problem-solving capabilities of
+LLMs while also increasing the interpretability and trustworthiness of the reasoning process, and has
+spawned numerous prompting techniques (Liu et al., 2023; Qiao et al., 2023) and applications for a
+variety of downstream tasks including common-sense reasoning, mathematical problem-solving, and
+symbolic or multi-modal reasoning; see e.g. Zhang et al. (2023b); Yu et al. (2023); Chu et al. (2024)
+for surveys on CoT. In particular, besides being used as a prompting method, directly training or
+fine-tuning models to generate CoT has also been shown to significantly improve multi-step reasoning
+performance (Nye et al., 2021; Wei et al., 2022; Zelikman et al., 2022; Lightman et al., 2024).
+
+
+Despite these empirical successes, however, the theoretical understanding of the CoT mechanism
+and task decomposition in transformers is still limited. Existing works focus on characterizing the
+expressivity of transformers equipped with CoT, providing constructions which can solve certain
+complexity classes (Feng et al., 2023; Merrill & Sabharwal, 2023; 2024; Li et al., 2024b), studying
+the class of functions that can be learned in-context with CoT (Li et al., 2023; Bhattamishra et al.,
+2024), or analyzing the estimation error of multi-step models (Hu et al., 2024). Nevertheless, such
+
+
+1
+
+
+approaches do not indicate how such capabilities might emerge when training transformers to generate
+reasoning chains. Li et al. (2024a) analyze the training dynamics of a one-layer transformer in an
+in-context learning setting and show that CoT ability may be acquired; however, they do not consider
+explicitly training with CoT chains, which is a more difficult problem since the objective depends on
+the recursive application of the transformer to itself.
+
+
+In this paper, we seek to formalize the mechanism through which stepwise reasoning emerges in
+transformers optimized to generate CoT chains. We focus on the specific problem of _bit subset parity_
+(learning the parity of an unknown subset of _k_ bits from a _d_ -bit input), which is known to be impossible
+to learn end-to-end with any finite-precision gradient-based algorithm in polynomial steps (ShalevShwartz et al., 2017; Shamir, 2018). In contrast, Wies et al. (2023) have demonstrated that recurrent
+neural networks (RNNs) can solve parity efficiently when provided with intermediate supervision. We
+build on this direction to establish positive optimization guarantees for the transformer architecture.
+Our object of study is a one-layer transformer incorporating a softmax attention layer, feedforward
+layer and positional encoding, that is recursively applied to its own output to generate a sequence of
+intermediate parity computations to arrive at the desired output, analogous to CoT generation. Our
+contributions are summarized as follows.
+
+
+ - We extend the impossibility result for parity (Theorem 1), which was established only for
+population gradient descent, to the more realistic finite-sample setting in Theorem 2. We prove
+that any iterative algorithm with access to an approximate gradient oracle for the end-to-end
+empirical loss cannot solve a random target parity within a specific polynomial number of steps.
+
+
+ - In contrast, we show that when the loss is summed over all intermediate states, by utilizing
+_teacher_ _forcing_, a form of process supervision wherein ground-truth intermediate steps are
+provided during training, [1] our model can learn any parity in a single gradient update (Theorem 5).
+This shows the benefits of training directly with CoT chains to acquire task decomposition ability.
+
+ - We further consider training with CoT generated end-to-end without teacher forcing, [2] and show
+that parity can still be learned in a logarithmic number of steps if augmented data is employed to
+check the validity of intermediate steps (Theorem 7), thereby mimicking self-consistency checks
+often used in CoT reasoning (Zelikman et al., 2022; Wang et al., 2023; Huang et al., 2023a).
+
+
+ - We conduct numerical experiments supporting our findings (Section 4 and Appendix D).
+
+
+Our results provide theoretical insights into how transformers can naturally and efficiently optimize
+to perform task decomposition, emphasizing the role of explicit intermediate supervision for complex
+tasks. Moreover, these findings corroborate recent empirical studies on CoT reasoning demonstrating
+improved performance through process supervision and internal validation of reasoning chains
+(Huang et al., 2023a; Tian et al., 2024; Lightman et al., 2024).
+
+
+1.1 RELATED WORKS
+
+
+**Complexity of transformers.** A line of work aims to understand the effectiveness of CoT from
+the perspective of complexity theory. Feng et al. (2023) show that autoregressive transformers of
+constant size can solve basic arithmetic tasks by recursively generating CoT reasoning steps, which
+is not possible when directly generating the solution; this separation arises because looping the
+generated outputs back to its inputs increases the ‘effective depth’ of the model. Works such as
+Chiang et al. (2023); Merrill & Sabharwal (2023) study the expressivity of fixed-precision transformer
+architectures in terms of classes of formal languages. Merrill & Sabharwal (2024); Li et al. (2024b)
+show that CoT reasoning enables recognizing wider language classes, and characterizes the increased
+expressivity depending on the length of the reasoning chain. Sanford et al. (2024) studies the relation
+between transformers and massively parallel computation protocols, showing that logarithmic depth
+suffices to solve multi-hop induction tasks that cannot be efficiently solved by other sequence models.
+
+
+1Teacher forcing or process supervision is a training procedure for recurrent models in which the model
+receives the ground truth output at time _t_ as input at time _t_ + 1 during training (Goodfellow et al., 2016, p.377).
+Many fine-tuning methods with ground-truth CoT chains implement teacher forcing, being more effective than
+output supervision with chains generated end-to-end (Deng et al., 2023; Tian et al., 2024; Lightman et al., 2024).
+2Teacher forcing can induce exposure bias where a model is not robust to its own errors. In practice, partial
+(scheduled or random) teacher forcing methods are used to overcome this issue (Bengio et al., 2015; Goyal et al.,
+2017; Mihaylova & Martins, 2019).
+
+
+2
+
+
+Additionally, Li et al. (2023); Bhattamishra et al. (2024) study the class of functions that can be
+learned in context by transformers with CoT from the point of view of in-context learning.
+
+
+**Optimization** **and** **generalization** **of** **CoT.** Zhu et al. (2024) study the ‘reversal curse’ via the
+training dynamics of a one-layer transformer and shows that the model fails to generalize from
+_A →_ _B_, _B_ _→_ _C_ to _A →_ _C_ as an argument for the necessity of explicit step-by-step reasoning. Hu
+et al. (2024) study CoT prompting from a statistical estimation perspective by introducing a multi-step
+latent variable model for CoT and analyzing its approximation, generalization and prompting-based
+errors. Notably, Li et al. (2024a) study the training dynamics of a one-layer attention-only transformer
+model in an in-context learning setting and show that CoT generalization capability can be obtained.
+However, this does not address the possibility or benefits of training with CoT chains. Lightman et al.
+(2024) empirically study training LLMs with either process or outcome supervision, showing that the
+former significantly outperforms the latter when training to solve challenging reasoning tasks.
+
+
+**Parity and task decomposition.** The difficulty of learning parity without task decomposition is
+established in Shalev-Shwartz et al. (2017); Shamir (2018). The work most relevant to our paper is
+Wies et al. (2023), which study task decomposition for parity with classical Elman RNNs. They show
+that by incorporating intermediate states into the loss function and utilizing teacher forcing, parity
+can be solved with polynomial iterations and embedding size. Our Theorem 5 extends this positive
+result to autoregressive transformers, rigorously establishing the benefits of CoT-based training.
+
+
+2 PROBLEM SETUP
+
+
+**Notation.** We write [ _n_ ] := _{_ 1 _,_ 2 _, · · ·_ _, n}_ for any integer _n_ . Scalar operations apply componentwise
+to vectors, e.g. for _**z**_ _∈_ R _[n]_ we write _ϕ_ ( _**z**_ ) = ( _ϕ_ ( _z_ 1) _, · · ·_ _, ϕ_ ( _zn_ )) _[⊤]_, _**z**_ [2] = _**z**_ _⊙_ _**z**_ = ( _z_ 1 [2] _[,][ · · ·]_ _[, z]_ _n_ [2] [)][ and]
+_|_ _**z**_ _|_ = ( _|z_ 1 _|, · · ·_ _, |zn|_ ) _[⊤]_ . The 2-norm is always denoted by _∥·∥_ . The multi-linear inner product or
+contraction of _**z**_ 1 _, · · ·_ _,_ _**z**_ _r_ _∈_ R _[n]_ for any _r_ _∈_ N is denoted as _⟨_ _**z**_ 1 _, · · ·_ _,_ _**z**_ _r⟩_ := [�] _i_ _[n]_ =1 _[z]_ [1] _[,i][ · · ·][ z][r,i]_ [.] [In]
+particular, _⟨_ _**z**_ 1 _⟩_ = _**z**_ 1 _[⊤]_ **[1]** _[n]_ [and] _[ ⟨]_ _**[z]**_ [1] _[,]_ _**[ z]**_ [2] _[⟩]_ [=] _**[ z]**_ 1 _[⊤]_ _**[z]**_ [2][.]
+
+
+2.1 THE PARITY PROBLEM
+
+
+Let _d ≥_ _k_ _≥_ 2 be integers and let _P_ denote the set of size _k_ subsets of _{_ 1 _, · · ·_ _, d}_ equipped with the
+uniform distribution. In this paper, we study the _k_ -parity problem for _d_ -bit inputs _**x**_ = ( _xj_ ) _[d]_ _j_ =1 _[∼]_
+Unif( _{±_ 1 _}_ _[d]_ ), where the output _y_ = [�] _j∈p_ _[x][j]_ [is determined by the parity of an unknown subset of]
+
+
+Unif( _{±_ 1 _}_ ), where the output _y_ = [�] _j∈p_ _[x][j]_ [is determined by the parity of an unknown subset of]
+
+bits _p ∈_ _P_ . We abuse notation and identify the set of indices _p_ with the corresponding parity mapping
+_**x**_ _�→_ [�] _j∈p_ _[x][j]_ [.] [Given] _[ n]_ [ samples][ (] _**[x]**_ _[i][, y][i]_ [)] _[i][∈]_ [[] _[n]_ []][, our goal is to predict the parity of any test input.]
+
+
+It is known that parity is fundamentally difficult in the sense that it cannot be solved in polynomial
+time by any finite-precision gradient-based algorithm, such as neural networks. More precisely,
+let _{fθ_ _|_ _θ_ _∈_ Θ _}_ be any differentiable (w.r.t. _θ_ ) parametrized model with polynomially bounded
+gradients, _∥∇fθ_ ( _**x**_ ) _∥_ = _O_ (poly( _d_ )), and define the population loss _L_ [¯] = E _**x**_ �( _y −_ _fθ_ ( _**x**_ )) [2][�] . We
+presume access to an _ε_ - _approximate gradient oracle_ _∇_ for _L_, which takes any _θ_ _∈_ Θ as query and
+
+[�]
+returns a vector _∇_ [�] _L_ [¯] ( _θ_ ) satisfying _∥∇_ [�] _L_ [¯] ( _θ_ ) _−∇L_ [¯] ( _θ_ ) _∥_ 2 _≤_ _ε_, potentially in an adversarial manner.
+Then the following holds:
+
+**Theorem 1** (Wies et al. (2023), Theorem 4) **.** _Let ℓ_ 0 _−_ 1 _be the zero-one loss._ _There exists an O_ ( _e_ _[−][d/]_ [3] ) _-_
+_approximate oracle_ _∇_ _such that_ [3] _the output θ_ ( _A_ ) _of any iterative algorithm A which sequentially_
+
+[�]
+_makes at most O_ (poly( _d_ )) _queries to_ _∇L_ [¯] _must satisfy_
+
+[�]
+
+E _**x**_         - _ℓ_ 0 _−_ 1( _p_ ( _**x**_ ) _, fθ_ ( _A_ )( _**x**_ ))� _≥_ [1] 2 _[−]_ _[O]_ [(] _[e][−][d]_ [)]
+
+_with probability at least_ 1 _−_ _O_ ( _e_ _[−][d/]_ [3] ) _, when the target parity p is uniformly sampled from P_ _._
+
+
+The intuition is that the set _P_ of parity functions is exponentially large in the sense that all elements
+of _P_ are pairwise orthogonal with respect to the data distribution. This implies that the variance of
+
+
+3The original paper states that _A_ can be any iterative gradient-based algorithm which receives an Ω( _e−d/_ 3)approximation of the gradient at each step. However, to be more precise, the result is only valid for certain
+adversarial perturbation schemes.
+
+
+3
+
+
+_j∈p_ _[x][j]_ [.] [Given] _[ n]_ [ samples][ (] _**[x]**_ _[i][, y][i]_ [)] _[i][∈]_ [[] _[n]_ []][, our goal is to predict the parity of any test input.]
+
+
+h = 3
+
+
+_x_ 23 = _y_
+
+
+h = 2
+
+
+h = 1
+
+
+_x_ 21 _x_ 22
+
+
+_x_ 17 _x_ 18 _x_ 19 _x_ 20
+
+
+h = 0 _x_ 1 _x_ 2 _x_ 3 _x_ 4 _x_ 5 _x_ 6 _x_ 7 _x_ 8 _x_ 9 _x_ 10 _x_ 11 _x_ 12 _x_ 13 _x_ 14 _x_ 15 _x_ 16
+
+
+Figure 1: A hierarchical decomposition of an 8-parity problem for _d_ = 16. Here _x_ 17 = _x_ 1 _x_ 4 so that
+c1[17] = 1, c2[17] = 4, p[17] = 21 and h[17] = 1.
+
+
+each gradient call _∇L_ [¯] ( _θ_ ) with respect to the target parity _p_ is exponentially small (Shalev-Shwartz
+et al., 2017) and is drowned out by the noise from the adversarial oracle, so that no information can
+be gained on the target without exponentially many queries. See Section 3.1 for more details.
+
+
+**Task decomposition.** As in Wies et al. (2023), we assume _k_ = 2 _[v]_ for an integer _v_ for simplicity
+and decompose the problem into a hierarchy of 2-parity computations which can be efficiently learned
+in a sequential manner by our model. This is expressed as a complete binary tree _T_ of height _v_ and
+2 _k_ _−_ 1 nodes. The lowest level contains _k_ nodes representing the bits _xjm_ for _m ∈_ [ _k_ ]. The remaining
+nodes are labeled _xd_ +1 _, · · ·_ _, xd_ + _k−_ 1 starting from the next lowest level and moving upwards, left
+to right. The largest index in level _ℓ_ for 0 _≤_ _ℓ_ _≤_ _v_ is denoted as _dℓ_ = _d_ + [�] _j_ _[ℓ]_ =1 [2] _[v][−][j]_ [,] _[d]_ [0] [=] _[d]_ [.]
+Also, for each _m > d_, the indices of the two child nodes of _xm_ are denoted as c1[ _m_ ] _,_ c2[ _m_ ] where
+1 _≤_ c1[ _m_ ] _<_ c2[ _m_ ] _< m_ . In addition, the parent node index of _xm_ is denoted as p[ _m_ ] and the level
+or height of _xm_ is denoted as h[ _m_ ], so that _d_ h[ _m_ ] _−_ 1 _< m ≤_ _d_ h[ _m_ ].
+
+
+2.2 TRANSFORMER MODEL
+
+
+_**e**_ 1
+
+
+_**e**_ _m_
+
+
+_**x**_ _[i]_
+
+
+_· · ·_
+
+_**x**_ ˆ _d_ + _k−_ 1 = _**y**_ ˆ
+
+
+_**u**_ 1
+
+
+|ϕ|Col2|Col3|
+|---|---|---|
+|_ϕ_|_ϕ_|_ϕ_|
+|_ϕ_|||
+
+
+|ι ◦ϕ|Col2|Col3|
+|---|---|---|
+|_ι ◦ϕ_|_ι ◦ϕ_|_ι ◦ϕ_|
+|_ι ◦ϕ_|||
+
+
+(a) Recursive generation of intermediate states.
+
+
+(b) Filtered generation with data augmentation.
+
+
+Figure 2: Illustration of the recursive data generation process by the transformer model. (a) Each
+token consists of a one-hot positional encoding _**e**_ _j_ and parity data _**x**_ _j_ . The _d_ input tokens (blue)
+are fixed. The token _**x**_ ˆ _m_ is generated at the ( _m −_ _d_ )th step by computing attention scores based on
+position, combining the previous tokens and applying the feedforward layer _ϕ_ . _**x**_ ˆ _d_ + _k−_ 1 is returned as
+the model prediction. (b) For the no teacher forcing setup in Section 3.3, data augmentation _**u**_ _j_ is
+implemented to check for self-consistency. If the augmented outputs from the previous generation
+(red) are uninformative, a filter _ι_ is applied to zero out the subsequent output.
+
+
+We study a one-layer transformer architecture employing absolute positional encoding and a singlehead softmax attention layer followed by a shallow feedforward layer; skip connections are omitted
+for simplicity. See Figure 2 for a visualization of our setup.
+
+
+4
+
+
+_Data encoding_ : Each input token _**x**_ _j_ = ( _x_ _[i]_ _j_ [)] _[n]_ _i_ =1 [for] _[ j]_ _[∈]_ [[] _[d]_ []][ is the] _[ n]_ [-dimensional vector consisting]
+of the _j_ th bit of each sample _**x**_ _[i]_ . We also add dummy tokens _**x**_ _d_ +1 _, · · ·_ _,_ _**x**_ _d_ + _k−_ 1 initially set to **0** _n_,
+which will learn to sequentially generate the actual intermediate nodes. Each _**x**_ _j_ is concatenated
+with the one-hot positional encoding _**e**_ _j_ _∈_ R _[d]_ [+] _[k][−]_ [1] for _j_ _∈_ [ _d_ + _k −_ 1] to form the internal input
+_**p**_ _j_ = ( _**x**_ _[⊤]_ _j_ _**[e]**_ _j_ _[⊤]_ [)] _[⊤]_ _[∈]_ [R] _[n]_ [+] _[d]_ [+] _[k][−]_ [1][ to the attention layer.]
+
+
+_Softmax attention layer_ : The attention layer is defined as in (1) in terms of key, query and value
+matrices **K** _,_ **Q** _,_ **V** . We fix the first _n_ columns of **K** _,_ **Q** to zero so that the attention scores are
+determined by only the positional encodings. This ensures that the transformer focuses on learning
+which positions contribute to the parity at each step. **K** _,_ **Q** are then reparametrized by a single matrix
+**W** _∈_ R [(] _[d]_ [+] _[k][−]_ [1)][2] ; conversely, the value matrix is set to only preserve the _**x**_ component, as follows.
+
+
+**K** _[⊤]_ **Q** = - **0** _n×n_ **0** _n×_ ( _d_ + _k−_ 1)
+**0** ( _d_ + _k−_ 1) _×n_ **W**
+
+
+_,_ **V** =  - **I** _n×n_ **0** _n×_ ( _d_ + _k−_ 1)� _._
+
+
+This type of reparametrization is common in the literature to make dynamical analysis tractable
+(Zhang et al., 2023a; Huang et al., 2023b; Mahankali et al., 2023; Kim & Suzuki, 2024).
+
+
+_Feedforward_ _layer_ : The feedforward layer realizes a fixed link function _ϕ_ : [ _−_ 1 _,_ 1] _→_ [ _−_ 1 _,_ 1],
+applied elementwise and only to the _**x**_ _j_ component; the positional encodings are not affected. To
+exploit the decomposition of our task into 2-parities, we choose _ϕ_ such that _ϕ_ (0) = _−_ 1, _ϕ_ ( _±_ 1) = 1
+so that sums are converted into parities, i.e. _ϕ_ ( _[a]_ [+] 2 _[b]_ [)] [=] _[ab]_ [ for] _[ a, b]_ _[∈{±]_ [1] _[}]_ [.] [Moreover, we require]
+
+that _ϕ_ _[′]_ (0) = _ϕ_ _[′]_ ( _±_ 1) = 0 and assume _ϕ_ is symmetric and sufficiently regular, so that we may expand
+_ϕ_ ( _t_ ) = _−_ 1 + _ct_ [2] + _O_ ( _|t|_ [4] ) and _ϕ_ _[′]_ ( _t_ ) = 2 _ct_ + _O_ ( _|t|_ [3] ).
+
+
+The transformer computes TF( _**x**_ 1 _, · · ·_ _,_ _**x**_ _d_ + _k−_ 1; **W** ) = (ˆ _**x**_ 1 _, · · ·_ _,_ ˆ _**x**_ _d_ + _k−_ 1) where the original data
+_**x**_ ˆ _j_ = _**x**_ _j, j_ _∈_ [ _d_ ] remain unchanged and tokens _**x**_ ˆ _d_ +1 _, · · ·_ _,_ ˆ _**x**_ _d_ + _k−_ 1 are computed as
+
+
+_m−_ 1
+
+- _σj_ ( _**w**_ _m_ ) _**x**_ _j,_ (1)
+
+
+_j_ =1
+
+
+_**x**_ ˆ _m_ = _ϕ_ (ˆ _**z**_ _m_ ) _,_ _**z**_ ˆ _m_ =
+
+
+_m−_ 1
+
+- **V** _**p**_ ˆ _j_ _·_ softmax(ˆ _**p**_ _[⊤]_ _j_ **[K]** _[⊤]_ **[Q]** _**[p]**_ [ˆ] _[m]_ [) =]
+
+_j_ =1
+
+
+where the softmax scores _σj_ ( _**w**_ _m_ ) = _e_ _[w][j,m]_ _/_ [�] _α_ _[m]_ =1 _[−]_ [1] _[e][w][α,m]_ [.] [Here,] [we] [have] [implicitly] [added] [the]
+causal mask _wj,m_ _←−∞_ to the attention layer for _j_ _≥_ _m_ or _m ≤_ _d_ . Note that each ˆ _**z**_ _m,_ ˆ _**x**_ _m_ will be
+contained in the cube [ _−_ 1 _,_ 1] _[d]_ as long as the input tokens are also contained in [ _−_ 1 _,_ 1] _[d]_ .
+
+
+**Chain of thought.** Consider repeatedly applying TF( _·_ ) to its own output to generate a ‘reasoning
+chain.’ Since the input tokens are fixed, the token _**x**_ ˆ _d_ +1 will be updated once and then always yield
+the same value afterwards. Next, since _**x**_ ˆ _d_ +2 depends on the input tokens and _**x**_ ˆ _d_ +1, it will be updated
+twice before becoming fixed. Repeating this, the entire chain stops updating after at most _k −_ 1 steps,
+yielding the output
+
+TF [(] _[k][−]_ [1)] ( _**x**_ 1 _, · · ·_ _,_ _**x**_ _d,_ **0** _n, · · ·_ _,_ **0** _n_ ; **W** ) = (ˆ _**x**_ 1 _, · · ·_ _,_ ˆ _**x**_ _d_ + _k−_ 1)
+
+where the intermediate predictions are recursively computed as _**x**_ ˆ _m_ = _ϕ_ ( [�] _[m]_ _j_ =1 _[−]_ [1] _[σ][j]_ [(] _**[w]**_ _[m]_ [)ˆ] _**[x]**_ _[j]_ [)][.] [Finally,]
+the top node is returned as the model prediction _**y**_ ˆ = _**x**_ ˆ _d_ + _k−_ 1.
+
+
+This process can be seen as a simplified version of CoT reasoning, albeit not in an in-context learning
+setting: instead of one-shot predicting _y_ _[i]_ from _**x**_ _[i]_, the model starts by solving simpler subtasks and
+uses the information to attack compound problems, learning to generate intermediate reasoning steps
+_**x**_ _d_ +1 _→· · ·_ _→_ _**x**_ _d_ + _k−_ 1 to finally arrive at the desired solution. Importantly, this process is not
+possible if the model is only trained on the one-shot data ( _**x**_ _[i]_ _, y_ _[i]_ ) _i∈_ [ _n_ ] as we show in Section 3.1.
+Instead, we incorporate the prediction error for all intermediate states directly into our loss function
+(Lightman et al., 2024). We also consider shortening the reasoning chain by using a different causal
+mask in Section 3.3, which will result in improved control of error and faster convergence.
+
+
+3 MAIN RESULTS
+
+
+3.1 HARDNESS OF PARITY WITHOUT COT
+
+
+Before analyzing our transformer model, we first prove a negative learning result in the absence of
+intermediate supervision that extends Theorem 1, which was stated with respect to the population
+objective _L_ [¯] and zero-one test loss _ℓ_ 0 _−_ 1, to finite samples and mean squared loss.
+
+
+5
+
+
+Let _fθ_ : _{±_ 1 _}_ _[d]_ _→_ R be any differentiable parametrized model and suppose we select the target
+parity _p_ uniformly at random from _P_ . In the finite-sample setting, _n_ i.i.d. samples ( _**x**_ _[i]_ _, y_ _[i]_ ) _i∈_ [ _n_ ] are
+generated as _**x**_ _[i]_ _∼_ Unif( _{±_ 1 _}_ _[d]_ ), _y_ _[i]_ = _p_ ( _**x**_ _[i]_ ) and we are given access to (approximate) gradients
+from the empirical loss
+
+
+_n_ _[,]_
+2 _[∥][p][ −]_ _[f][θ][∥]_ [2]
+
+
+_Ln_ ( _θ_ ) = [1]
+
+2 _n_
+
+
+_n_
+
+
+�( _y_ _[i]_ _−_ _fθ_ ( _**x**_ _[i]_ )) [2] = [1]
+
+2
+
+_i_ =1
+
+
+where _∥·∥n_ is the empirical norm. It is important that the model _fθ_ is applied to each _**x**_ _[i]_ separately
+and does not cross-reference between different samples, as there exist more efficient parity-learning
+algorithms if the data is allowed to be manipulated freely. For example, Gaussian elimination can
+solve parity with _O_ ( _d_ ) samples and _O_ ( _d_ [3] ) iterations (Raz, 2018). Moreover, this implies that neural
+networks trained with stochastic gradient descent can also solve parity in polynomial time (Abbe &
+Sandon, 2020). Instead, in our setting the model is forced to learn from the averaged gradient signal
+and can only implicitly utilize the correlation between samples.
+
+
+We show the following result for learning parities with finite-samples in Appendix A:
+
+
+**Theorem 2** (hardness of finite-sample parity) **.** _Suppose k_ = Θ( _d_ ) _._
+
+
+(1) _If n_ = _e_ [Ω(] _[d]_ [)] _and fθ_ _has polynomially bounded gradients, there exists an e_ _[−]_ [Ω(] _[d]_ [)] _-approximate_
+_gradient oracle_ _∇_ _such that with probability_ 1 _−_ _e_ _[−]_ [Ω(] _[d]_ [)] _over random sampling, the output θ_ ( _A_ )
+
+[�]
+_of any iterative (possibly randomized) algorithm which makes at most O_ (poly( _d_ )) _queries to_
+_∇_  - _Ln_ _has L_ 2 _-loss lower bounded as_
+
+E _p∈P,_ _**x**_ �( _p_ ( _**x**_ ) _−_ _fθ_ ( _A_ )( _**x**_ )) [2][�] _≥_ 1 _−_ _e_ _[−]_ [Ω(] _[d]_ [)] _._
+
+
+(2) _If n_ = Ω( _d_ _[ν]_ ) _and ∥∇fθ∥_ = _O_ ( _d_ _[ν]_ [1] ) _, there exists an O_ ( _d_ _[−][ν]_ [2] ) _-approximate gradient oracle_ _∇_ [�]
+_such that with probability_ 1 _−_ _e_ _[−]_ [Ω(] _[d]_ [)] _over random sampling, the output θ_ ( _A_ ) _of any iterative_
+_(possibly randomized) algorithm which makes at most O_ ( _d_ _[ν]_ [3] ) _queries to_ _∇_ [�] _Ln_ _has L_ 2 _-loss lower_
+_bounded, where ν_ = 4 _ν_ 1 + 4 _ν_ 2 + 2 _ν_ 3 + 2 _ν_ 4 + 1 _, as_
+
+E _p∈P,_ _**x**_ �( _p_ ( _**x**_ ) _−_ _fθ_ ( _A_ )( _**x**_ )) [2][�] _≥_ 1 _−_ _O_ ( _d_ _[−][ν]_ [4] ) _._
+
+
+We remark that the bounds are asymptotically optimal since _fθ_ _≡_ 0 is a valid estimator. Moreover,
+the expectation over _p ∈_ _P_ can be replaced by the corresponding ‘with high probability’ statement.
+
+
+A counter-intuitive aspect of the above result is that parity becomes potentially more difficult when
+the number of samples increases. Indeed, with exponential samples _n_ = _e_ [Ω(] _[d]_ [)] (1) we basically
+recover the statement of Theorem 1, while the guarantees for _n_ = poly( _d_ ) (2) are also polynomial in
+_d_ . This is because the difficulty of parity (Theorem 1) fundamentally depends on the following result:
+
+**Proposition** **3** (Shalev-Shwartz et al. (2017), Theorem 1) **.** _Suppose_ _x_ _be_ _a_ _random_ _variable_ _in_
+R _[d]_ _._ _Let_ _H_ _be_ _a_ _class_ _of_ _bounded_ _real-valued_ _functions_ _on_ R _[d]_ _such_ _that_ E _**x**_ [ _h_ ( _**x**_ ) _h_ _[′]_ ( _**x**_ )] = 0 _for_
+_any_ _two_ _distinct_ _h, h_ _[′]_ _∈_ _H_ _and_ _fθ_ _a_ _differentiable_ _parametric_ _model_ _with_ _gradients_ _bounded_ _by_
+E _**x**_ [ _∥∇fθ∥_ [2] ] _≤_ _F_ ( _θ_ ) [2] _._ _Then for the loss Fh_ ( _θ_ ) := E _**x**_ [( _h_ ( _**x**_ ) _−_ _fθ_ ( _**x**_ )) [2] ] _where h is chosen uniformly_
+_at random from H, the gradient variance is bounded as_
+
+Var( _θ_ ; _H_ ) := E _h∈H_        - _∥∇Fh_ ( _θ_ ) _−_ E _h′∈H_ [ _∇Fh′_ ( _θ_ )] _∥_ [2][�] _≤_ _[F]_ _|H|_ [(] _[θ]_ [)][2] _[.]_
+
+
+Since all - _kd_ - = _e_ [Θ(] _[d]_ [)] parities in _P_ are pairwise orthogonal with respect to the uniform distribution
+Unif( _{±_ 1 _}_ _[d]_ ), it follows that the variance of _∇L_ [¯] is exponentially small and the target signal can
+be drowned out by a correspondingly small noise from the oracle. However, this is not true for the
+empirical distribution which cannot distinguish all elements in _P_ with only poly( _d_ ) samples; the
+empirical correlation of two random parities will generally be Θ( _n_ _[−]_ [1] _[/]_ [2] ). Therefore a more careful
+decorrelation argument is needed, resulting in the weaker guarantees of Theorem 2(2). Another
+technical difference is that Theorem 1 only considers the strong zero-one loss (more formally, their
+results can be seen to hold for any parity estimator _p_ ˆ _θ_ ( _A_ ) _∈_ _P_ depending on the algorithm output),
+while we prove the _L_ 2 lower bound for any real-valued estimator _fθ_ ( _A_ ).
+
+
+6
+
+
+3.2 COT WITH TEACHER FORCING
+
+
+When training with teacher forcing, at each position _d_ + 1 _≤_ _m ≤_ _d_ + _k −_ 1, the ground-truth labels
+of the preceding intermediate states _**x**_ 1 _, · · ·_ _,_ _**x**_ _m−_ 1 are fed into the transformer input to obtain the
+predictor _**x**_ ˆ _m_ at the _m_ th position,
+_**x**_ ˆ _m_ = TF( _**x**_ 1 _, · · ·_ _,_ _**x**_ _m−_ 1 _,_ **0** _n, · · ·_ _,_ **0** _n_ ; **W** ) _m._
+
+The loss function then computes the squared error over all states,
+
+
+_L_ ( **W** ) = [1]
+
+2 _n_
+
+
+_d_ + _k−_ 1
+
+- _∥_ _**x**_ ˆ _m −_ _**x**_ _m∥_ [2] _._ (2)
+
+
+_m_ = _d_ +1
+
+
+Since each sequence of values ˆ _xd_ +1 _,i, · · ·_ _,_ ˆ _xd_ + _k−_ 1 _,i_ are generated depending only on the corresponding sample _**x**_ _[i]_ and the parameter matrix **W**, this can be rewritten in terms of the augmented labels
+_y_ ¯ _[i]_ = ( _x_ _[i]_ _d_ +1 _[,][ · · ·]_ _[, x][i]_ _d_ + _k−_ 1 [)] _[⊤]_ [as]
+
+
+_L_ ( **W** ) = [1]
+
+2 _n_
+
+
+_n_
+
+- _∥y_ ¯ _[i]_ _−_ _f_ _[◦]_ ( _**x**_ _[i]_ ; **W** ) _∥_ [2] _,_ _fm_ _[◦]_ [(] _**[x]**_ _[i]_ [;] **[ W]** [) =] _[x]_ [ˆ] _[m,i][,]_ _d_ + 1 _≤_ _m ≤_ _d_ + _k −_ 1
+
+
+_i_ =1
+
+
+for a fixed mapping _f_ _[◦]_ : _{±_ 1 _}_ _[d]_ _×_ R [(] _[d]_ [+] _[k][−]_ [1)][2] _→_ R _[k][−]_ [1], mirroring the setting of Theorem 2. Hence
+our model does not cross-reference between samples; moreover, the gradient of _f_ _[◦]_ is bounded as
+
+
+_√_
+**Lemma 4.** _For all_ _**x**_ _,_ **W** _it holds uniformly that ∥∇_ **W** _f_ _[◦]_ ( _**x**_ ; **W** ) _∥≤_ _O_ (
+
+
+_d_ ) _._
+
+
+At inference time, test inputs _**x**_ 1 _, · · ·_ _,_ _**x**_ _d_ are randomly generated and the prediction for _**y**_ test =
+_p_ ( _**x**_ 1 _, · · ·_ _,_ _**x**_ _d_ ) is computed by iterating TF to generate all _k −_ 1 reasoning steps without reference
+to ground-truth labels; _**y**_ ˆtest = TF [(] _[k][−]_ [1)] ( _**x**_ 1 _, · · ·_ _,_ _**x**_ _d,_ **0** _n, · · ·_ _,_ **0** _n_ ; **W** ) _d_ + _k−_ 1. Our positive learning
+result in this setting is as follows.
+**Theorem 5** (CoT with teacher forcing) **.** _Suppose n_ = Ω( _d_ [2+] _[ϵ]_ ) _for ϵ >_ 0 _, d is sufficiently large and_
+_let_ _∇_ _be any O_ ( _d_ _[−]_ [2] _[−][ϵ/]_ [8] ) _-approximate gradient oracle._ [4] _Set initialization_ **W** [(0)] = **0** _and learning_
+
+[�]
+_rate η_ = Θ( _d_ [2+] _[ϵ/]_ [16] ) _._ _Then for any target parity p_ _∈_ _P_ _, it holds with probability_ 1 _−_ exp( _−d_ _[ϵ/]_ [2] )
+_over random sampling that the one-step update_ **W** [(1)] = **W** [(0)] _−_ _η∇L_ ( **W** [(0)] ) _w.r.t._ _the objective_ (2)
+
+[�]
+_with teacher forcing achieves loss ∥_ _**y**_ ˆtest _−_ _**y**_ test _∥∞_ _≤_ _O_ ( _d_ _[−][ϵ/]_ [8] ) _._
+
+
+On the other hand, Theorem 2(2) shows that when _n_ = Ω( _d_ [11+] _[ϵ]_ ), any iterative algorithm querying an
+_O_ ( _d_ _[−]_ [2] _[−][ϵ/]_ [8] )-approximate oracle, with gradients bounded as in Lemma 4, requires more than Ω( _d_ _[ϵ/]_ [4] )
+
+[�]
+queries to attain a nontrivial ( _<_ 2 [1] [)][ loss.] [This establishes a strict separation between learning parities]
+
+without intermediate supervision and our CoT transformer. The gap increases with more samples as _ϵ_
+increases; moreover, when _n_ = _e_ [Ω(] _[d]_ [)], we have a much stronger separation by Theorem 2(1), where
+an exponential number of queries is required to learn _p_ .
+
+
+_Sketch of proof._ The result is shown by explicitly calculating the gradient with respect to each weight
+_wj,m_ and extracting the gradient signal. As the softmax scores are uniform at initialization, the
+gradient can be expanded to obtain multilinear contraction or ‘interaction’ terms between the tokens
+_**x**_ 1 _, · · ·_ _,_ _**x**_ _m−_ 1, one such example being
+1 1           - _⟨_ _**x**_ _m,_ _**x**_ _α,_ _**x**_ _β⟩_ _._
+_n_ _[⟨]_ _**[x]**_ _[m][,]_ [ ˆ] _**[z]**_ _[m][,]_ [ ˆ] _**[z]**_ _[m][⟩]_ [=] _n_ ( _m −_ 1) [2]
+
+_α,β_
+
+
+In the above equation, if _α, β_ are the two child nodes of _m_, the parity _xαxβxm_ _≡_ 1 will be
+trivial and _⟨_ _**x**_ _m,_ _**x**_ _α,_ _**x**_ _β⟩_ = _n_ . On the other hand, for nontrivial parities the interaction strength
+will generally be _O_ ( _[√]_ _n_ log _d_ ) due to sample concentration. For sufficiently large _n_, the trivial
+parities dominate, allowing us to extract the leading term. Performing these computations up to
+fourth order interaction terms, we show that the dominating signal of the gradient is Θ( _d_ _[−]_ [2] ) when
+_j_ = c1[ _m_ ] _,_ c2[ _m_ ] and _O_ ( _d_ _[−]_ [2] _[−][ϵ/]_ [8] ) otherwise. Hence the transformer learns to increase only the
+weights at the relevant positions for each subtask, and is able to compute the desired 2-parity
+_**x**_ ˆ _m_ _≈_ _ϕ_ ( 2 [1] [(ˆ] _**[x]**_ [c][1][[] _[m]_ []][ + ˆ] _**[x]**_ [c][2][[] _[m]_ []][))] _[ ≈]_ _**[x]**_ [ˆ] [c][1][[] _[m]_ []] _**[x]**_ [ˆ] [c][2][[] _[m]_ []][ at each node during its forward pass.] [The full proof][ is]
+
+provided in Appendix B.
+
+
+4In fact, we only require that each component of the gradient has error at most _O_ ( _d−_ 2 _−ϵ/_ 8) for Theorems 5,
+7, which follows since the _L∞_ error is bounded above by _L_ 2.
+
+
+7
+
+
+3.3 COT WITHOUT TEACHER FORCING
+
+
+In this section, we extend Theorem 5 to training a transformer without teacher forcing, which is
+employed alongside teacher forcing in practice to ensure robustness at test time (Bengio et al., 2015;
+Goyal et al., 2017; Mihaylova & Martins, 2019). The main difficulty in this setting is that wrong
+answers propagate to later generation steps, exponentially amplifying errors and drowning out the
+main gradient signals. Error accumulation is also a central practical issue of CoT (Zhang & Parkes,
+2023; Wang et al., 2023). To solve this issue, we make some modifications to our transformer model.
+
+
+First, we minimize the number of required reasoning steps by imposing a slightly stronger form of
+autoregressivity where each intermediate state _**x**_ [+] _m_ [depends on all tokens] _**[ x]**_ _j_ [+][,] _[ j]_ [=] [1] _[,][ · · ·]_ _[, d]_ [h][[] _[m]_ []] _[−]_ [1]
+up to the previous level, rather than the immediately preceding token. This can be expressed as the
+causal mask _wj,m_ _←−∞_ for _j_ _>_ _d_ h[ _m_ ] _−_ 1 or _m_ _≤_ _d_ ; see Figure 3. This ensures that the model
+gradients are polynomially bounded as in Theorem 2 and that errors can propagate a logarithmic
+rather than a linear number of steps, and can be easily implemented as the indices _dℓ_ are known.
+
+
+_m_ = _d_ _d_ 0
+
+
+_d_ 1
+_d_ 2
+
+
+Figure 3: Causal mask for **W** _[⊤]_ with teacher forcing (left); without teacher forcing (right). The gray
+entries are set to _−∞_ .
+
+
+Second, we implement a data augmentation technique where random _d_ -bit strings _**u**_ _[i]_ _∼_ Unif( _{±_ 1 _}_ _[d]_ ),
+_i ∈_ [ _n_ _[′]_ ] are appended to the original dataset ( _**x**_ _[i]_ ) _i∈_ [ _n_ ]. The resulting augmented tokens are denoted
+as _**x**_ [+] _j_ [=] [(] _**[x]**_ _[⊤]_ _j_ _**[u]**_ _j_ _[⊤]_ [)] _[⊤]_ _[∈]_ [R] _[n]_ [+] _[n][′]_ [,] _**[ u]**_ _[j]_ [=] [(] _[u][i]_ _j_ [)] _[n]_ _i_ =1 _[′]_ [so that] _**[ p]**_ _[j]_ [=] [((] _**[x]**_ [+] _j_ [)] _[⊤]_ _**[e]**_ _j_ _[⊤]_ [)] _[⊤]_ [(the notation is extended]
+to _j_ _> d_ ), and the key, query and value matrices are appropriately enlarged. The ground truth labels
+as well as the intermediate states for the augmented data are unknown, so they are not included in
+the loss function. Nevertheless, unlabeled data can still suffice for self-consistency (Huang et al.,
+2023a); their purpose is to filter for ‘faulty reasoning’ in the following sense. If the weights are not
+sufficiently trained, the output of a node _xj_ will consist of all nearly _−_ 1s and thus be uninformative
+for computing any parities. If the augmented tokens newly generated in the previous iteration of
+TF( _·_ ) (i.e. up to _**u**_ _dℓ−_ 1) are uninformative, we zero out its output on the basis that all subsequent
+reasoning will be wrong. This is achieved by adding the following filter after the feedforward layer _ϕ_ :
+
+
+          - **0** _∥_ _**u**_ _j_ + **1** _n′∥∞_ _< ε_ 0 for any _dℓ−_ 2 _< j_ _≤_ _dℓ−_ 1 _,_
+_∀_ _**z**_ [+] _∈_ R _[n]_ [+] _[n][′]_ _,_ _ιℓ_ ( _**z**_ [+] ) =
+_**z**_ [+] otherwise.
+
+
+Without teacher forcing, during training the entire reasoning chain is generated by iteratively applying
+TF to its own output until convergence, which takes _v_ = log2 _k_ rather than _k −_ 1 steps due to the
+imposed block autoregressivity. Hence TF [(] _[v]_ [)] ( _**x**_ [+] 1 _[,][ · · ·]_ _[,]_ _**[ x]**_ [+] _d_ _[,]_ **[ 0]** _[n]_ [+] _[n][′][,][ · · ·]_ [;] **[ W]** [) = (ˆ] _**[x]**_ [+] 1 _[,][ · · ·]_ _[,]_ [ ˆ] _**[x]**_ [+] _d_ + _k−_ 1 [)]
+where the tokens _**x**_ ˆ [+] _d_ +1 _[,][ · · ·]_ _[,]_ [ ˆ] _**[x]**_ [+] _d_ + _k−_ 1 [are recursively generated per level as]
+
+
+_**x**_ ˆ [+] _m_ [=] _[ ι]_ h[ _m_ ] _[◦]_ _[ϕ]_ [(ˆ] _**[z]**_ _m_ [+] [)] _[,]_ _**z**_ ˆ _m_ [+] [=]
+
+
+_d_ h[ _m_ ] _−_ 1
+
+- _σj_ ( _**w**_ _m_ )ˆ _**x**_ [+] _j_ _[.]_ (3)
+
+_j_ =1
+
+
+The loss is computed against the ground-truth labels as in (2). As before, each sequence of generated
+states depends only on each sample _**x**_ _[i]_ and the augmented data **U** = ( _**u**_ _[i]_ ) _i∈_ [ _n′_ ], so we may express
+
+
+_L_ ( **W** _,_ **U** ) = [1]
+
+2 _n_
+
+
+_n_
+
+- _∥y_ ¯ _[i]_ _−_ _f_ _[×]_ ( _**x**_ _[i]_ ; **W** _,_ **U** ) _∥_ [2] _,_ _fm_ _[×]_ [(] _**[x]**_ _[i]_ [;] **[ W]** _[,]_ **[ U]** [) =] _[x]_ [ˆ] _[m,i]_ (4)
+
+
+_i_ =1
+
+
+for a fixed mapping _f_ _[×]_, so that the samples are again not cross-referenced. By considering the
+propagation of gradients up the chain, the gradient of _f_ _[×]_ can be shown to be bounded as follows.
+**Lemma 6.** _For all_ _**x**_ _,_ **W** _,_ **U** _we have ∥∇_ **W** _f_ _[×]_ ( _**x**_ ; **W** _,_ **U** ) _∥≤_ _O_ ( _d_ _[g]_ ) _where g_ = log2 _∥ϕ_ _[′]_ _∥∞_ + 1 _/_ 2 _._
+
+
+8
+
+
+The exact exponent _g_ depends on the shape of _ϕ_ . Since _ϕ_ (0) = _−_ 1 and _ϕ_ (1) = 1, it must hold that
+_∥ϕ_ _[′]_ _∥∞_ _>_ 2. Conversely, any such _∥ϕ_ _[′]_ _∥∞_ may be achieved by taking _ϕ_ to be locally quadratic around
+0 _, ±_ 1 and smoothly joining the curve segments with straight lines of slope _±_ (2 + _ϵ_ ). Furthermore,
+such a link function can be realized by a simple shallow feedforward layer using e.g. _O_ (1) ReQU
+neurons. Hence _g_ can be taken to be arbitrarily close to 1 _._ 5.
+
+
+Finally, we implement a simple weight quantization method by rounding each entry of **W** to the
+nearest integer after every update; **W** [(] _[t]_ [+1)] = r[ **W** [(] _[t]_ [)] _−_ _η∇_ [�] **W** _L_ ( **W** [(] _[t]_ [)] _,_ **U** )], where r : R _→_ Z is
+the nearest-integer operator. Equivalently, the gradients themselves are quantized. Integer-based
+quantization methods are widely used in practice to accelerate training and reduce memory usage
+(Wu et al., 2020; Jacob et al., 2018), and have been successfully implemented in LLMs to facilitate
+efficient fine-tuning (Dettmers et al., 2022; 2023). In our theoretical setting, quantization also allows
+us to simplify computations involving propagation of error.
+
+
+In this setting, we obtain the following learning result.
+**Theorem 7** (CoT without teacher forcing) **.** _Suppose n_ = Ω( _d_ [2+] _[ϵ]_ ) _for ϵ_ _>_ 0 _, n_ _[′]_ = poly( _d_ ) _,_ [5] _d is_
+_sufficiently large and let_ _∇_ _be any O_ ( _d_ _[−]_ [2] _[−][ϵ/]_ [8] ) _-approximate gradient oracle._ _Set_ **W** [(0)] = **0** _and_
+
+[�]
+_η_ = Θ( _d_ [2+] _[ϵ/]_ [16] ) _._ _Then for any target parity p_ _∈_ _P_ _, it holds with probability_ 1 _−_ exp( _−d_ [(] _[ϵ][∧]_ [1)] _[/]_ [2] )
+_over random sampling of (original and augmented) data that the sequence of updates_ **W** [(] _[t]_ [+1)] =
+r[ **W** [(] _[t]_ [)] _−_ _η∇L_ ( **W** [(] _[t]_ [)] _,_ **U** )] _w.r.t._ _the_ _objective_ (4) _without_ _teacher_ _forcing_ _achieves_ _exponentially_
+
+[�]
+_small loss ∥_ _**y**_ ˆtest _−_ _**y**_ test _∥∞_ _≤_ exp( _−_ Ω( _d_ _[ϵ/]_ [16] )) _in_ log2 _k iterations._
+
+
+This gives the same order of separation from Theorem 2(2) as in Section 3.2. Hence transformers can
+learn parities even without teacher forcing, if the consistency of the chain of reasoning is suitably
+controlled for. Moreover, our result shows that logarithmic time suffices to learn parity by exploiting
+the hierarchical decomposition in Figure 1. This extends the circuit complexity result in Merrill &
+Sabharwal (2024), which states that bounded-depth transformers with a logarithmic number of CoT
+steps can express problems in log-space; Theorem 7 guarantees that transformers of depth one can
+_learn by gradient descent_ any such function in the exponentially large class _P_ .
+
+
+_Sketch of proof._ The idea is to inductively show that each 2-parity subtask _xm_ at level _ℓ_ will become
+solved at time _t_ = _ℓ_ . When _t ≤_ _ℓ_ _−_ 2, _xm_ cannot utilize its child nodes _x_ c1[ _m_ ] _, x_ c2[ _m_ ] since they will
+also not be optimized, so the weights do not change. At time _ℓ_ _−_ 1, its child nodes learn to output
+their parities with high precision, so the objective is approximately equivalent to that of Theorem 5.
+Then the gradient signal will similarly concentrate on _w_ c1[ _m_ ] _,m, w_ c2[ _m_ ] _,m_ and _xm_ will become solved
+in the next step. It remains to bound the gradients arising from the loss terms further down the chain
+_**x**_ _d_ +1 _→· · · →_ _**x**_ _d_ + _k−_ 1 (propagation of error), and verify that irrelevant weights _wj,m_ (p[ _j_ ] _̸_ = _m_ )
+and already optimized weights do not change. The full proof is provided in Appendix C.
+
+
+4 NUMERICAL EXPERIMENTS
+
+
+In this section, we present numerical experiments which support and complement our theoretical
+findings. Compared to the carefully calibrated step sizes and weight updates in Theorems 5 and 7,
+these experiments study a more realistic training scenario by taking relatively small learning rates and
+tracking the loss trajectories over a longer period of training. We train one-layer transformers based
+on the architecture described in Section 2 to solve a random _k_ -parity problem with 64-bit inputs for
+_k_ = 8 _,_ 16 _,_ 32. Specifically, we implement and compare the following four models.
+
+
+ - **Direct:** TF( _·_ ) is applied to itself _k −_ 1 times to generate the reasoning chain end-to-end and the
+model prediction ˆ _**y**_ is directly compared to the ground truth _**y**_ with the prediction loss 21 _n_ _[∥]_ _**[y]**_ [ˆ] _[−]_ _**[y]**_ _[∥]_ [2][.]
+
+ - **CoT:** TF( _·_ ) is applied to itself to generate the reasoning chain end-to-end and the sequence of
+intermediate states is compared to the ground truth as in (2). Here, we also implement the causal
+mask in Figure 3 (right) so that only log2 _k_ iterations are needed, for additional stability.
+
+ - **CoT + teacher forcing:** implements the model in Section 3.2 with teacher forcing.
+
+ - **CoT + self-consistency:** implements the model in Section 3.3 with the causal mask in Figure 3
+(right) and data augmentation for consistency checks. Weight quantization is omitted.
+
+
+5Any polynomial order suffices for the number of augmented data samples.
+
+
+9
+
+
+Figure 4: CoT loss (left) and prediction loss (right) curves for the four models when _d_ = 64, _k_ = 32.
+For the CoT+consistency model, dashed lines indicate when the filters of each level are deactivated.
+
+
+All models are optimized using full-batch gradient descent on 100K 64-bit samples with a single
+Tesla T4 GPU. The three CoT models are trained with the ‘CoT loss’ (2) scaled by _k−_ 1 1 [to match the]
+prediction loss of the direct model. Figure 4 shows training curves for the CoT loss (left) and the
+prediction loss (right) over 350 epochs when _k_ = 32; results for all _k_ and more details are provided
+in Appendix D.
+
+
+We first note that the direct model (red) completely fails to learn the target, plateauing almost
+immediately. We observed that the weights become nearly uniform so that _**y**_ ˆ _≈_ **0** _n_ and the prediction
+error is stuck at 0.5. This was not improved by using a multilayer transformer instead of repeated
+composition. The basic CoT model (yellow) is able to significantly decrease CoT loss but fails to fully
+solve the problem and eventually becomes unstable. Moreover, the prediction loss never improves
+beyond 0.5. Indeed, due to the hierarchical structure of parity, the model has no chance of making
+an informative prediction at the last level _**x**_ _d_ + _k−_ 1 unless all preceding levels have been fully solved.
+In contrast, we verify that CoT with teacher forcing (blue) solves parity efficiently as predicted in
+Section 3.2, even with a small learning rate. After a burn-in phase, the CoT loss steadily decreases to
+nearly zero, at which point the prediction loss also decreases rapidly as the final level is solved.
+
+
+CoT with self-consistency (green) is also able to solve parity efficiently as predicted. Furthermore,
+the corresponding CoT loss curve clearly exhibits multiple learning stages. In the beginning, the
+model is essentially optimizing only the first level as subsequent outputs are zeroed out. After a
+short burn-in phase, the weights are optimized so that the softmax scores concentrate on the relevant
+nodes, at which point the CoT loss sharply decreases and the filters for the next level are deactivated,
+unlocking the next learning stage. This phased optimization repeats until all levels are fully solved
+and is crucial to arriving at the correct answer (in essence, teacher forcing is doing this at all levels
+simultaneously). Notably, a similar behavior seems to arise in the basic CoT model as well but fails
+due to accumulating error, further justifying the use of the filtering mechanism.
+
+
+These results confirm that training explicitly for CoT generation can improve performance on multistep tasks, and that controlling error accumulation via teacher forcing or self-consistency is key to
+ensuring proper step-by-step learning.
+
+
+5 CONCLUSION
+
+
+In this paper, by focusing on the _k_ -parity problem, we provide an initial theoretical foundation for
+training transformers with CoT to perform stepwise reasoning. Our results show that gradient-based
+learning of parity requires significant iterations without intermediate supervision, but task decomposition using teacher forcing enables efficient learning in a single gradient update. Furthermore,
+when transformers are trained to generate reasoning chains end-to-end, data augmentation and selfconsistency checks can enhance their ability to solve complex tasks. Our work takes the first steps
+towards understanding how CoT can be leveraged to improve multi-step reasoning capability of
+foundation models.
+
+
+10
+
+
+ACKNOWLEDGMENTS
+
+
+JK was partially supported by JST CREST (JPMJCR2015). TS was partially supported by JSPS
+KAKENHI (24K02905, 20H00576) and JST CREST (JPMJCR2115).
+
+
+REFERENCES
+
+
+Emmanuel Abbe and Colin Sandon. On the universality of deep learning. In _Advances in Neural_
+_Information Processing Systems_, 2020.
+
+
+Konstantine Arkoudas. GPT-4 Can’t Reason. _arXiv preprint arXiv:2308.03762_, 2023.
+
+
+Samy Bengio, Oriol Vinyals, Navdeep Jaitly, and Noam Shazeer. Scheduled sampling for sequence
+prediction with recurrent neural networks. In _Advances in Neural Information Processing Systems_,
+2015.
+
+
+Satwik Bhattamishra, Arkil Patel, Phil Blunsom, and Varun Kanade. Understanding in-context
+learning in transformers and LLMs by learning to learn discrete functions. In _International_
+_Conference on Learning Representations_, 2024.
+
+
+David Chiang, Peter Cholak, and Anand Pillay. Tighter bounds on the expressivity of transformer
+encoders. In _International Conference on Machine Learning_, 2023.
+
+
+Zheng Chu, Jingchang Chen, Qianglong Chen, Weijiang Yu, Tao He, Haotian Wang, Weihua Peng,
+Ming Liu, Bing Qin, and Ting Liu. Navigate through enigmatic labyrinth: a survey of chain of
+thought reasoning: advances, frontiers and future. In _Association for Computational Linguistics_,
+2024.
+
+
+Yuntian Deng, Kiran Prasad, Roland Fernandez, Paul Smolensky, Vishrav Chaudhary, and Stuart Shieber. Implicit chain of thought reasoning via knowledge distillation. _arXiv_ _preprint_
+_arXiv:2311.01460_, 2023.
+
+
+Tim Dettmers, Mike Lewis, Younes Belkada, and Luke Zettlemoyer. GPT3.int8(): 8-bit matrix
+multiplication for transformers at scale. In Alice H. Oh, Alekh Agarwal, Danielle Belgrave, and
+Kyunghyun Cho (eds.), _Advances in Neural Information Processing Systems_, 2022.
+
+
+Tim Dettmers, Artidoro Pagnoni, Ari Holtzman, and Luke Zettlemoyer. QLoRA: efficient finetuning
+of quantized LLMs. In _Advances in Neural Information Processing Systems_, 2023.
+
+
+Guhao Feng, Bohang Zhang, Yuntian Gu, Haotian Ye, Di He, and Liwei Wang. Towards revealing
+the mystery behind chain of thought: a theoretical perspective. In _Advances in Neural Information_
+_Processing Systems_, 2023.
+
+
+Mor Geva, Daniel Khashabi, Elad Segal, Tushar Khot, Dan Roth, and Jonathan Berant. Did Aristotle
+Use a laptop? A question answering benchmark with implicit reasoning strategies. _Transactions of_
+_the Association for Computational Linguistics_, 9:346–361, 2021.
+
+
+Ian Goodfellow, Yoshua Bengio, and Aaron Courville. _Deep Learning_ . MIT Press, 2016. `[http:](http://www.deeplearningbook.org)`
+`[//www.deeplearningbook.org](http://www.deeplearningbook.org)` .
+
+
+Kartik Goyal, Chris Dyer, and Taylor Berg-Kirkpatrick. Differentiable scheduled sampling for credit
+assignment. In _Association for Computational Linguistics_, 2017.
+
+
+Xinyang Hu, Fengzhuo Zhang, Siyu Chen, and Zhuoran Yang. Unveiling the statistical foundations
+of chain-of-thought prompting methods. _arXiv preprint arXiv:2408.14511_, 2024.
+
+
+Jiaxin Huang, Shixiang Gu, Le Hou, Yuexin Wu, Xuezhi Wang, Hongkun Yu, and Jiawei Han. Large
+language models can self-improve. In _Proceedings of the 2023 Conference on Empirical Methods_
+_in Natural Language Processing_, pp. 1051–1068, Singapore, December 2023a. Association for
+Computational Linguistics.
+
+
+Yu Huang, Yuan Cheng, and Yingbin Liang. In-context convergence of Transformers. _arXiv preprint_
+_arXiv:2310.05249_, 2023b.
+
+
+11
+
+
+Benoit Jacob, Skirmantas Kligys, Bo Chen, Menglong Zhu, Matthew Tang, Andrew Howard, Hartwig
+Adam, and Dmitry Kalenichenko. Quantization and training of neural networks for efficient
+integer-arithmetic-only inference. In _Proceedings of the IEEE Conference on Computer Vision and_
+_Pattern Recognition_, 2018.
+
+
+Juno Kim and Taiji Suzuki. Transformers learn nonlinear features in context: nonconvex mean-field
+dynamics on the attention landscape. In _International Conference on Machine Learning_, 2024.
+
+
+Takeshi Kojima, Shixiang Shane Gu, Machel Reid, Yutaka Matsuo, and Yusuke Iwasawa. Large
+language models are zero-shot reasoners. In _Advances in Neural Information Processing Systems_,
+2022.
+
+
+Hongkang Li, Meng Wang, Songtao Lu, Xiaodong Cui, and Pin-Yu Chen. How do nonlinear
+transformers acquire generalization-guaranteed CoT ability? In _High-dimensional_ _Learning_
+_Dynamics 2024:_ _The Emergence of Structure and Reasoning_, 2024a.
+
+
+Yingcong Li, Kartik Sreenivasan, Angeliki Giannou, Dimitris Papailiopoulos, and Samet Oymak. Dissecting chain-of-thought: compositionality through in-context filtering and learning. In _Advances_
+_in Neural Information Processing Systems_, 2023.
+
+
+Zhiyuan Li, Hong Liu, Denny Zhou, and Tengyu Ma. Chain of thought empowers transformers to
+solve inherently serial problems. In _International Conference on Learning Representations_, 2024b.
+
+
+Hunter Lightman, Vineet Kosaraju, Yuri Burda, Harrison Edwards, Bowen Baker, Teddy Lee, Jan
+Leike, John Schulman, Ilya Sutskever, and Karl Cobbe. Let’s verify step by step. In _International_
+_Conference on Learning Representations_, 2024.
+
+
+Pengfei Liu, Weizhe Yuan, Jinlan Fu, Zhengbao Jiang, Hiroaki Hayashi, and Graham Neubig.
+Pre-train, prompt, and predict: a systematic survey of prompting methods in natural language
+processing. _ACM Comput. Surv._, 55(9), January 2023.
+
+
+Arvind Mahankali, Tatsunori B. Hashimoto, and Tengyu Ma. One step of gradient descent is
+provably the optimal in-context learner with one layer of linear self-attention. _arXiv_ _preprint_
+_arXiv:2307.03576_, 2023.
+
+
+William Merrill and Ashish Sabharwal. A logic for expressing log-precision transformers. In
+_Advances in Neural Information Processing Systems_, 2023.
+
+
+William Merrill and Ashish Sabharwal. The expressive power of transformers with chain of thought.
+In _International Conference on Learning Representations_, 2024.
+
+
+Tsvetomila Mihaylova and Andre F. T. Martins.´ Scheduled sampling for transformers. In _Association_
+_for Computational Linguistics:_ _Student Research Workshop_, 2019.
+
+
+Shervin Minaee, Tomas Mikolov, Narjes Nikzad, Meysam Chenaghlu, Richard Socher, Xavier
+Amatriain, and Jianfeng Gao. Large language models: a survey, 2024.
+
+
+Humza Naveed, Asad Ullah Khan, Shi Qiu, Muhammad Saqib, Saeed Anwar, Muhammad Usman,
+Naveed Akhtar, Nick Barnes, and Ajmal Mian. A comprehensive overview of large language
+models, 2024.
+
+
+Maxwell Nye, Anders Johan Andreassen, Guy Gur-Ari, Henryk Michalewski, Jacob Austin, David
+Bieber, David Dohan, Aitor Lewkowycz, Maarten Bosma, David Luan, Charles Sutton, and
+Augustus Odena. Show your work: scratchpads for intermediate computation with language
+models. _arXiv preprint arXiv:2112.00114_, 2021.
+
+
+Shuofei Qiao, Yixin Ou, Ningyu Zhang, Xiang Chen, Yunzhi Yao, Shumin Deng, Chuanqi Tan, Fei
+Huang, and Huajun Chen. Reasoning with language model prompting: a survey. In Anna Rogers,
+Jordan Boyd-Graber, and Naoaki Okazaki (eds.), _Proceedings of the 61st Annual Meeting of the_
+_Association for Computational Linguistics (Volume 1:_ _Long Papers)_, pp. 5368–5393, Toronto,
+Canada, July 2023. Association for Computational Linguistics.
+
+
+12
+
+
+Jack W. Rae, Sebastian Borgeaud, Trevor Cai, Katie Millican, Jordan Hoffmann, Francis Song, John
+Aslanides, Sarah Henderson, Roman Ring, Susannah Young, Eliza Rutherford, Tom Hennigan,
+Jacob Menick, Albin Cassirer, Richard Powell, George van den Driessche, Lisa Anne Hendricks,
+Maribeth Rauh, Po-Sen Huang, Amelia Glaese, Johannes Welbl, Sumanth Dathathri, Saffron
+Huang, Jonathan Uesato, John Mellor, Irina Higgins, Antonia Creswell, Nat McAleese, Amy Wu,
+Erich Elsen, Siddhant Jayakumar, Elena Buchatskaya, David Budden, Esme Sutherland, Karen
+Simonyan, Michela Paganini, Laurent Sifre, Lena Martens, Xiang Lorraine Li, Adhiguna Kuncoro,
+Aida Nematzadeh, Elena Gribovskaya, Domenic Donato, Angeliki Lazaridou, Arthur Mensch,
+Jean-Baptiste Lespiau, Maria Tsimpoukelli, Nikolai Grigorev, Doug Fritz, Thibault Sottiaux,
+Mantas Pajarskas, Toby Pohlen, Zhitao Gong, Daniel Toyama, Cyprien de Masson d’Autume,
+Yujia Li, Tayfun Terzi, Vladimir Mikulik, Igor Babuschkin, Aidan Clark, Diego de Las Casas,
+Aurelia Guy, Chris Jones, James Bradbury, Matthew Johnson, Blake Hechtman, Laura Weidinger,
+Iason Gabriel, William Isaac, Ed Lockhart, Simon Osindero, Laura Rimell, Chris Dyer, Oriol
+Vinyals, Kareem Ayoub, Jeff Stanway, Lorrayne Bennett, Demis Hassabis, Koray Kavukcuoglu,
+and Geoffrey Irving. Scaling language models: methods, analysis and insights from training
+Gopher. _arXiv preprint arXiv:2112.11446_, 2022.
+
+
+Ran Raz. Fast learning requires good memory: a time-space lower bound for parity learning. _J. ACM_,
+66(1), 2018.
+
+
+Mansi Sakarvadia, Aswathy Ajith, Arham Khan, Daniel Grzenda, Nathaniel Hudson, Andre Bauer,´
+Kyle Chard, and Ian Foster. Memory injections: correcting multi-hop reasoning failures during
+inference in transformer-based language models. _arXiv preprint arXiv:2309.05605_, 2024.
+
+
+Clayton Sanford, Daniel Hsu, and Matus Telgarsky. Transformers, parallel computation, and logarithmic depth. _arXiv preprint arXiv:2402.09268_, 2024.
+
+
+Shai Shalev-Shwartz, Ohad Shamir, and Shaked Shammah. Failures of gradient-based deep learning.
+In _International Conference on Machine Learning_, 2017.
+
+
+Ohad Shamir. Distribution-specific hardness of learning neural networks. _Journal_ _of_ _Machine_
+_Learning Research_, 19, August 2018.
+
+
+Yijun Tian, Yikun Han, Xiusi Chen, Wei Wang, and Nitesh V. Chawla. TinyLLM: learning a small
+student from multiple large language models. _arXiv preprint arXiv:2402.04616_, 2024.
+
+
+Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N Gomez, Ł ukasz
+Kaiser, and Illia Polosukhin. Attention is all you need. In _Advances_ _in_ _Neural_ _Information_
+_Processing Systems_, 2017.
+
+
+Zhongwei Wan, Xin Wang, Che Liu, Samiul Alam, Yu Zheng, Jiachen Liu, Zhongnan Qu, Shen Yan,
+Yi Zhu, Quanlu Zhang, Mosharaf Chowdhury, and Mi Zhang. Efficient large language models: a
+survey. _Transactions on Machine Learning Research_, 2024. ISSN 2835-8856. Survey Certification.
+
+
+Xuezhi Wang, Jason Wei, Dale Schuurmans, Quoc V Le, Ed H. Chi, Sharan Narang, Aakanksha
+Chowdhery, and Denny Zhou. Self-consistency improves chain of thought reasoning in language
+models. In _International Conference on Learning Representations_, 2023.
+
+
+Zhiwei Wang, Yunji Wang, Zhongwang Zhang, Zhangchen Zhou, Hui Jin, Tianyang Hu, Jiacheng
+Sun, Zhenguo Li, Yaoyu Zhang, and Zhi-Qin John Xu. Towards understanding how transformer
+perform multi-step reasoning with matching operation. _arXiv preprint arXiv:2405.15302_, 2024.
+
+
+Jason Wei, Xuezhi Wang, Dale Schuurmans, Maarten Bosma, brian ichter, Fei Xia, Ed H. Chi,
+Quoc V Le, and Denny Zhou. Chain of thought prompting elicits reasoning in large language
+models. In _Advances in Neural Information Processing Systems_, 2022.
+
+
+Noam Wies, Yoav Levine, and Amnon Shashua. Sub-task decomposition enables learning in sequence
+to sequence tasks. In _International Conference on Learning Representations_, 2023.
+
+
+Hao Wu, Patrick Judd, Xiaojie Zhang, Mikhail Isaev, and Paulius Micikevicius. Integer quantization
+for deep learning inference: principles and empirical evaluation. _arXiv preprint arXiv:2004.09602_,
+2020.
+
+
+13
+
+
+Zihan Yu, Liang He, Zhen Wu, Xinyu Dai, and Jiajun Chen. Towards better chain-of-thought
+prompting strategies: a survey, 2023.
+
+
+Eric Zelikman, Yuhuai Wu, Jesse Mu, and Noah Goodman. STaR: bootstrapping reasoning with
+reasoning. In _Advances in Neural Information Processing Systems_, 2022.
+
+
+Hugh Zhang and David C. Parkes. Chain-of-thought reasoning is a policy improvement operator,
+2023.
+
+
+Ruiqi Zhang, Spencer Frei, and Peter L. Bartlett. Trained Transformers learn linear models in-context.
+_arXiv preprint arXiv:2306.09927_, 2023a.
+
+
+Zhuosheng Zhang, Yao Yao, Aston Zhang, Xiangru Tang, Xinbei Ma, Zhiwei He, Yiming Wang, Mark
+Gerstein, Rui Wang, Gongshen Liu, and Hai Zhao. Igniting language intelligence: the hitchhiker’s
+guide from chain-of-thought reasoning to language agents. _arXiv_ _preprint_ _arXiv:2311.11797_,
+2023b.
+
+
+Wayne Xin Zhao, Kun Zhou, Junyi Li, Tianyi Tang, Xiaolei Wang, Yupeng Hou, Yingqian Min,
+Beichen Zhang, Junjie Zhang, Zican Dong, Yifan Du, Chen Yang, Yushuo Chen, Zhipeng Chen,
+Jinhao Jiang, Ruiyang Ren, Yifan Li, Xinyu Tang, Zikang Liu, Peiyu Liu, Jian-Yun Nie, and
+Ji-Rong Wen. A survey of large language models, 2024.
+
+
+Hanlin Zhu, Baihe Huang, Shaolun Zhang, Michael Jordan, Jiantao Jiao, Yuandong Tian, and Stuart
+Russell. Towards a theoretical understanding of the ’reversal curse’ via training dynamics. _arXiv_
+_preprint arXiv:2405.04669_, 2024.
+
+
+14
+
+
+## APPENDIX
+
+
+A PROOF OF THEOREM 2
+
+
+Denote the empirical inner product on R _[d]_ by _⟨f, g⟩n_ = _n_ [1] - _ni_ =1 _[f]_ [(] _**[x]**_ _[i]_ [)] _[g]_ [(] _**[x]**_ _[i]_ [)][ and the corresponding]
+
+norm as _∥f_ _∥_ [2] _n_ [=] _[ ⟨][f, f]_ _[⟩][n]_ [.] [We also write]
+
+
+_Ln,p_ ( _θ_ ) = [1]
+
+
+2 _n_
+
+
+[1] _n_ [=] [1]
+
+2 _[∥][p][ −]_ _[f][θ][∥]_ [2] 2 _n_
+
+
+_n_
+�( _p_ ( _**x**_ _[i]_ ) _−_ _fθ_ ( _**x**_ _[i]_ )) [2]
+
+
+_i_ =1
+
+
+to emphasize the dependency of _Ln_ on _p_ . Note that ( _d/k_ ) _[k]_ _≤_ - _kd_ - _≤_ ( _ed/k_ ) _[k]_ so that _|P_ _|_ = _e_ [Θ(] _[d]_ [)] .
+
+
+**Bounding gradient variance.** Consider the variance of the empirical gradient _∇Ln,p_ w.r.t. the
+target parity _p_ :
+Var _n_ ( _θ_ ; _P_ ) := E _p∈P_        - _∥∇Ln,p_ ( _θ_ ) _−_ E _p′∈P_ [ _∇Ln,p′_ ( _θ_ )] _∥_ [2][�] _._
+
+We proceed to evaluate the magnitude of Var _n_ ( _θ_ ; _P_ ). For _p, p_ _[′]_ _∈_ _P_ with _p ̸_ = _p_ _[′]_ it holds that
+
+
+
+
+
+
+
+
+ _._
+
+
+_n_
+
+
+_i_ =1
+
+
+
+
+
+[�] _x_ _[i]_ _j_ 
+_j∈p_ _j_ _[′]_ _∈p_ _[′]_
+
+
+
+
+
+ [�] _x_ _[i]_ _j_
+
+_j∈p_ ∆ _p_ _[′]_
+
+
+_⟨p, p_ _[′]_ _⟩n_ = [1]
+
+_n_
+
+
+_⟨p, p_ _[′]_ _⟩n_ = [1]
+
+
+ [�]
+
+
+_n_
+
+
+_i_ =1
+
+
+ = _n_ [1]
+
+
+- _x_ _[i]_ _j_ _[′]_
+
+_j_ _[′]_ _∈p_ _[′]_
+
+
+Since [�] _j∈p_ ∆ _p_ _[′][ x]_ _j_ _[i]_ [is i.i.d.] [Unif(] _[{±]_ [1] _[}]_ [)][ for fixed] _[ p, p][′]_ [, by applying a union bound over Hoeffding’s]
+
+inequality, it follows for _δ_ := �4 _d/n_ that
+
+
+�2 _d_
+_._
+
+
+- - _d_
+_≤_
+_k_
+
+
+�2 - 2
+_e_ _[−]_ [2] _[d]_ _≤_
+_e_
+
+
+Pr
+
+
+- 
+sup
+_p_ = _p_ _[′][ |⟨][p, p][′][⟩][n][| ≥]_ _[δ]_
+
+
+      _≤|P_ _|_ ( _|P_ _| −_ 1) exp _−_ _[nδ]_ [2]
+
+2
+
+
+Then with probability at least 1 _−_ _e_ _[−]_ [Ω(] _[d]_ [)] over random sampling, every off-diagonal component of
+the Gram matrix _GP_ := ( _⟨p, p_ _[′]_ _⟩n_ ) _p,p′∈P_ has magnitude at most _δ_, while the diagonal entries are
+equal to 1. By the Gershgorin circle theorem, the maximum eigenvalue of _GP_ satisfies
+
+
+_|λ_ max( _GP_ ) _−_ 1 _| ≤_ ( _|P_ _| −_ 1) _δ,_
+
+
+thus _λ_ max( _GP_ ) _≤_ 2(1 _∨|P_ _|δ_ ). This implies that _P_ constitutes a partial frame for the empirical _L_ [2]
+
+norm with the corresponding frame upper bound. More specifically, for _f_ : R _[d]_ _→_ R, decompose
+
+
+_f_ =             - _cp · p_ + _f_ 0 _,_ _f_ 0 _∈_ (span _P_ ) _[⊥]_ _,_
+
+_p∈P_
+
+
+for some coefficient sequence _c_ = ( _cp_ ) _p∈P_ . It follows that
+
+
+       _∥f_ _∥_ [2] _n_ _[≥∥][f]_ _[−]_ _[f]_ [0] _[∥]_ [2] _n_ [=] _cpcp′⟨p, p_ _[′]_ _⟩n_ = _∥G_ [1] _P_ _[/]_ [2] _[c][∥]_ [2]
+
+_p,p_ _[′]_ _∈P_
+
+
+and
+
+  
+
+
+= _∥GP c∥_ [2] _≤_ _λ_ max( _GP_ ) _∥f_ _∥_ [2] _n_ _[.]_
+
+
+�2
+
+
+- _⟨f, p⟩_ [2] _n_ [=] 
+_p∈P_ _p∈P_
+
+
+��
+
+
+_p∈P_
+
+
+_cp′⟨p, p_ _[′]_ _⟩_
+_p_ _[′]_ _∈P_
+
+
+Denoting _D_ = dim Θ, we can therefore bound Var _n_ ( _θ_ ; _P_ ) as
+
+
+Var _n_ ( _θ_ ; _P_ ) = inf   - _∥∇Ln,p_ ( _θ_ ) _−_ _µ∥_ [2][�]
+_µ∈_ R _[D]_ [ E] _[p][∈][P]_
+
+
+
+
+
+_n_
+
+
+�( _fθ_ ( _**x**_ _[i]_ ) _−_ _p_ ( _**x**_ _[i]_ )) _∇fθ_ ( _**x**_ _[i]_ ) _−_ [1]
+
+_n_
+
+_i_ =1
+
+
+�����
+
+
+2 []
+
+
+_n_
+
+
+_≤_ E _p∈P_
+
+
+= E _p∈P_
+
+
+_D_
+
+
+
+
+1
+
+_n_
+�����
+
+
+- _⟨∇θj_ _fθ, p⟩_ [2] _n_
+
+
+_j_ =1
+
+
+
+
+
+_n_
+
+
+- _fθ_ ( _**x**_ _[i]_ ) _∇fθ_ ( _**x**_ _[i]_ )
+
+
+_i_ =1
+
+
+
+
+
+
+
+
+_D_
+
+- _⟨∇θj_ _fθ, p⟩_ [2] _n_
+
+
+_j_ =1
+
+
+
+
+1
+ = _|P_ _|_
+
+
+15
+
+
+_p∈P_
+
+
+_≤_
+
+
+_D_
+
+
+_j_ =1
+
+
+_λ_ max( _GP_ )
+
+_|P_ _|_ _∥∇θj_ _fθ∥_ [2] _n_
+
+
+sup _∥∇fθ_ ( _**x**_ ) _∥_ [2] _._
+_θ,_ _**x**_
+
+
+- 4 _d_ 
+
+_n_
+
+
+_≤_ 2
+
+
+1
+_|P_ _|_ _[∨]_
+
+
+Now by Chebyshev’s inequality, for any _ε >_ 0 it holds that
+
+Pr ( _∥∇Ln,p_ ( _θ_ ) _−_ E _p′∈P_ [ _∇Ln,p′_ ( _θ_ )] _∥_ _> ε_ ) _≤_ [Var] _[n]_ [(] _[θ]_ [;] _[ P]_ [)] _._
+
+_ε_ [2]
+
+
+**Constructing the oracle.** As in Shamir (2018), we define the _ε_ -approximate oracle _∇_ as
+
+[�]
+
+�E _p′∈P_ [ _∇Ln,p′_ ( _θ_ )] _∥∇Ln,p_ ( _θ_ ) _−_ E _p′∈P_ [ _∇Ln,p′_ ( _θ_ )] _∥≤_ _ε,_
+_∇_    - _Ln,p_ ( _θ_ ) = _∇Ln,p_ ( _θ_ ) otherwise.
+
+
+By union bounding, we see that during _T_ steps the oracle always defaults to the mean gradient and
+does not reveal any information on the true parity _p_, with probability at least
+
+
+- 4 _d_
+
+
+_n_
+
+
+sup _∥∇fθ_ ( _**x**_ ) _∥_ [2] _,_
+_θ,_ _**x**_
+
+
+Pr( _Q_ ) _≥_ 1 _−_ [2] _[T]_
+
+_ε_ [2]
+
+
+1
+_|P_ _|_ _[∨]_
+
+
+where _Q_ _⊆_ _P_ denotes the corresponding subset of the hypothesis space. Note that the argument
+can be extended to any randomized algorithm and random initialization in a straightforward manner
+by lifting to the product probability space, and so we consider _Q_ to be fixed. Then for any target
+parity _p ∈_ _Q_, the output _θ_ ( _A_ ) of the algorithm after _T_ steps does not depend on _p_, so the predictor
+_f_ = _fθ_ ( _A_ ) is also fixed.
+
+
+**Lower** **bounding** **the** **loss.** We first remark that a simpler proof can be given for the sup norm
+error, which is enough to establish a separation. Consider arbitrary _p, p_ _[′]_ _∈_ _P_ with _p_ = _p_ _[′]_ and let
+_**x**_ _∈{±_ 1 _}_ _[d]_ be such that _p_ ( _**x**_ ) _̸_ = _p_ _[′]_ ( _**x**_ ), then
+
+_|p_ ( _**x**_ ) _−_ _f_ ( _**x**_ ) _|_ + _|p_ _[′]_ ( _**x**_ ) _−_ _f_ ( _**x**_ ) _| ≥|_ 1 _−_ _f_ ( _**x**_ ) _|_ + _|−_ 1 _−_ _f_ ( _**x**_ ) _| ≥_ 2 _._
+
+
+Now let _σ_ : _Q →_ _Q_ be any automorphism of _Q_ with no fixed points. The _L∞_ error can be bounded
+below by restricting to the noninformative set _Q_ as follows.
+
+
+       �� _p_ ( _**x**_ ) _−_ _fθ_ ( _A_ )( _**x**_ )�� _≥_ E _p∈P_
+
+
+1
+=
+2 _|P_ _|_
+
+
+- 1 _{p∈Q}_ sup
+_**x**_ _[|][p]_ [(] _**[x]**_ [)] _[ −]_ _[f]_ [(] _**[x]**_ [)] _[|]_
+
+
+_p∈Q_
+
+
+E _p∈P_
+
+
+sup
+_**x**_
+
+
+- sup
+_**x**_ _[|][p]_ [(] _**[x]**_ [)] _[ −]_ _[f]_ [(] _**[x]**_ [)] _[|]_ [ + sup] _**x**_ _[|][σ][ ◦]_ _[p]_ [(] _**[x]**_ [)] _[ −]_ _[f]_ [(] _**[x]**_ [)] _[|]_
+
+
+1
+_≥_
+2 _|P_ _|_ _[·]_ [ 2] _[|][Q][|]_ [ = Pr(] _[Q]_ [)] _[.]_
+
+
+For mean squared error, we similarly restrict to _Q_ so that
+
+E _p∈P,_ _**x**_ �( _p_ ( _**x**_ ) _−_ _fθ_ ( _A_ )( _**x**_ )) [2][�] _≥_ E _p∈P,_ _**x**_ �1 _{p∈Q}_ ( _p_ ( _**x**_ ) _−_ _f_ ( _**x**_ )) [2][�] _._
+
+
+Since the range of _p_ is contained in [ _−_ 1 _,_ 1], the above loss will not increase when _f_ is replaced by its
+clipped version _f_ [¯] ( _**x**_ ) = ( _f_ ( _**x**_ ) _∧_ 1) _∨_ ( _−_ 1). Moreover, in Lemma 8 (proved at the end of the section)
+we show that _|_ E _p∈P_ [ _p_ ( _**x**_ )] _| ≤_ _e_ _[−]_ [Ω(] _[d]_ [)] holds with probability 1 _−_ _e_ _[−]_ [Ω(] _[d]_ [)] over the sample space of _**x**_,
+so that
+��E _p∈P,_ _**x**_         - _p_ ( _**x**_ ) _f_ [¯] ( _**x**_ )��� _≤_ (1 _−_ _e−_ Ω( _d_ ))E _p∈P_ [ _p_ ( _**x**_ )] + _e−_ Ω( _d_ ) _≤_ _e−_ Ω( _d_ )
+
+
+and also
+
+E _p∈P,_ _**x**_ �1 _{p∈Q}p_ ( _**x**_ ) _f_ [¯] ( _**x**_ )� = E _p∈P,_ _**x**_    - _p_ ( _**x**_ ) _f_ [¯] ( _**x**_ )� _−_ E _p∈P,_ _**x**_ �1 _{p/∈Q}p_ ( _**x**_ ) _f_ [¯] ( _**x**_ )�
+
+_≤_ _e_ _[−]_ [Ω(] _[d]_ [)] + (1 _−_ Pr( _Q_ ))E _**x**_          - _|f_ [¯] ( _**x**_ ) _|_          
+
+
+_≤_ _e_ _[−]_ [Ω(] _[d]_ [)] + [(1] _[ −]_ [Pr(] _[Q]_ [))][2]
+
+
+E _**x**_  - _f_ ¯( _**x**_ )2� _._
+2
+
+
+[Pr(] _[Q]_ [))]
+
++ [Pr(] _[Q]_ [)]
+2 Pr( _Q_ ) 2
+
+
+16
+
+
+Therefore we may bound
+
+
+E _p∈P,_ _**x**_ �( _p_ ( _**x**_ ) _−_ _fθ_ ( _A_ )( _**x**_ )) [2][�] _≥_ E _p∈P,_ _**x**_ �1 _{p∈Q}_ ( _p_ ( _**x**_ ) _−_ _f_ [¯] ( _**x**_ )) [2][�]
+
+= Pr( _Q_ ) _−_ 2E _p∈P,_ _**x**_ �1 _{p∈Q}p_ ( _**x**_ ) _f_ [¯] ( _**x**_ )� + Pr( _Q_ ) _·_ E _**x**_              - _f_ ¯( _**x**_ )2�
+
+_≥_ Pr( _Q_ ) _−_ [(1] _[ −]_ [Pr(] _[Q]_ [))][2] _−_ 2 _e_ _[−]_ [Ω(] _[d]_ [)]
+
+Pr( _Q_ )
+
+1
+_≥_ 2 _−_
+Pr( _Q_ ) _[−]_ [2] _[e][−]_ [Ω(] _[d]_ [)]
+
+
+- 4 _d_
+
+
+_n_
+
+
+sup _∥∇fθ_ ( _**x**_ ) _∥_ [2] _−_ 2 _e_ _[−]_ [Ω(] _[d]_ [)] _,_ (5)
+_θ,_ _**x**_
+
+
+_≥_ 1 _−_ [4] _[T]_
+
+_ε_ [2]
+
+
+1
+_|P_ _|_ _[∨]_
+
+
+where we have used the inequality 2 _−_ (1 _−_ _t_ ) _[−]_ [1] _≥_ 1 _−_ 2 _t_, valid for _t ∈_ [0 _,_ [1] 2 []][.]
+
+
+The proof is completed by evaluating the following cases.
+
+
+(1) If _n_ = _e_ [Ω(] _[d]_ [)] and _T, ∥∇fθ∥_ = _O_ (poly( _d_ )), the gradient variance is bounded as Var _n_ ( _θ_ ; _P_ ) _≤_
+_e_ _[−]_ [Ω(] _[d]_ [)] . By taking _ε_ = Var _n_ ( _θ_ ; _P_ ) [1] _[/]_ [3], it follows that Pr( _Q_ ) = 1 _−_ _e_ _[−]_ [Ω(] _[d]_ [)] and (5) yields the
+lower bound 1 _−_ _e_ _[−]_ [Ω(] _[d]_ [)] .
+(2) If _n_ = Ω( _d_ _[ν]_ ), _∥∇fθ∥_ = _O_ ( _d_ _[ν]_ [1] ), _ε_ = Θ( _d_ _[−][ν]_ [2] ) and _T_ = _O_ ( _d_ _[ν]_ [3] ), the gradient variance is
+bounded as Var _n_ ( _θ_ ; _P_ ) _≤_ _O_ ( _d_ [2] _[ν]_ [1][+] _[ν]_ [3][+1] _[/]_ [2] _[−][ν/]_ [2] ) = _O_ ( _d_ _[−]_ [2] _[ν]_ [2] _[−][ν]_ [4] ) and (5) yields the lower bound
+1 _−_ _O_ ( _d_ _[−][ν]_ [4] ).
+
+
+**Lemma 8.** _If k_ = Θ( _d_ ) _, it holds with probability at least_ 1 _−_ _e_ _[−]_ [Ω(] _[d]_ [)] _over random sampling that_
+
+
+_|_ E _p∈P_ [ _p_ ( _**x**_ )] _| ≤_ _e_ _[−]_ [Ω(] _[d]_ [)] _._
+
+
+_Proof._ Let _m_ denote the number of _−_ 1s in _**x**_ . By the Chernoff bound for the binomial distribution,
+
+
+_d_
+Pr _m −_
+����� 2
+
+
+_δd_
+_≤_
+���� 2
+
+
+- - _≥_ 1 _−_ 2 exp _−_ _[δ]_ [2] _[d]_
+
+6
+
+
+for a constant _δ_ _∈_ (0 _,_ 1) to be determined, so we assume the above event throughout the proof.
+Moreover denoting the complement parity _p_ _[c]_ = [ _d_ ] _\ p_, it holds that _p_ ( _**x**_ ) = _x_ 1 _· · · xd · p_ _[c]_ ( _**x**_ ) and
+_|_ E _p∈P_ [ _p_ ( _**x**_ )] _|_ = _|_ E _p∈P_ [ _p_ _[c]_ ( _**x**_ )] _|_, so it suffices to consider the case where 2 _k_ _≤_ _d_ .
+
+
+Without loss of generality, we may assume that _**x**_ = ( _−_ 1 _, · · ·_ _, −_ 1 _,_ 1 _, · · ·_ _,_ 1) so that _p_ ( _**x**_ ) is decided
+as ( _−_ 1) _[|][p][∩]_ [[] _[m]_ []] _[|]_ . We bound the cardinality of the set _P_ + := _{p ∈_ _P_ _| p_ ( _**x**_ ) = 1 _}_ . Each parity in _P_ +
+can be determined by choosing 2 _j_ elements from [ _m_ ] and _k −_ 2 _j_ elements from [ _d_ ] _\_ [ _m_ ]. Denoting
+by [ _t_ ] _j_ the _coefficient_ of operator of order _j_, we can evaluate
+
+
+�� _d −_ _m_ _k −_ 2 _j_
+
+
+[ _t_ ] _k−_ 2 _j_ (1 + _t_ ) _[d][−][m]_ =
+
+
+_⌊m/_ 2 _⌋_
+
+
+_j_ =0
+
+
+- _m_
+
+2 _j_
+
+
+[ _t_ ] _k_ (1 + _t_ ) _[d][−][m]_ _t_ [2] _[j]_
+
+
+_|P_ + _|_ =
+
+
+=
+
+
+_⌊m/_ 2 _⌋_
+
+
+_j_ =0
+
+
+_⌊m/_ 2 _⌋_
+
+
+_j_ =0
+
+
+- _m_
+
+2 _j_
+
+
+- _m_
+
+2 _j_
+
+
+_⌊m/_ 2 _⌋_
+= [ _t_ ] _k_ (1 + _t_ ) _[d][−][m]_ 
+
+_j_ =0
+
+
+- _m_
+
+2 _j_
+
+
+_t_ [2] _[j]_ = [1]
+
+2 [[] _[t]_ []] _[k]_ [(1 +] _[ t]_ [)] _[d][−][m]_ [((1 +] _[ t]_ [)] _[m]_ [ + (1] _[ −]_ _[t]_ [)] _[m]_ [)]
+
+
+_t_ [2] _[j]_ = [1]
+
+
+= [1]
+
+2
+
+
++ [1]
+
+2 [[] _[t]_ []] _[k]_ [(1] _[ −]_ _[t]_ [2][)] _[m][′]_ [(1 +] _[ st]_ [)] _[d][−]_ [2] _[m][′]_
+
+
++ [1]
+
+
+�� _d −_ 2 _m′_ 
+_,_
+
+_k −_ 2 _j_
+
+
+17
+
+
+_⌊k/_ 2 _⌋_
+
+
+- ( _−_ 1) _[j]_ - _m′_
+
+_j_
+
+_j_ =0
+
+
+_j_
+
+
+= [1]
+
+2
+
+
+- _d_
+
+_k_
+
+
+- _d_
+
+_k_
+
+
++ _[s][k]_
+
+2
+
+
++ _[s][k]_
+
+
+where _m_ _[′]_ = _m ∧_ ( _d −_ _m_ ) and _s_ = _±_ 1. It further follows that
+
+
+- 1
+_≤_
+2 _|P_ _|_
+
+
+_⌊k/_ 2 _⌋_
+
+
+_j_ =0
+
+
+_|P_ + _|_
+���� _|P_ _|_
+
+
+_⌊k/_ 2 _⌋_
+
+
+_j_ =0
+
+
+- _m′_
+
+
+_j_
+
+
+�� _d −_ 2 _m′_
+
+_k −_ 2 _j_
+
+
+- _⌊d/_ 2 _⌋_
+
+_j_
+
+
+�� _⌊δd⌋_ _k −_ 2 _j_
+
+
+_P_ + _|_
+
+_|P_ _|_ _[−]_ 2 [1]
+
+
+2
+
+
+1
+_≤_
+���� 2 _|P_ _|_
+
+
+_≤_ _[d]_
+
+4
+
+
+- _d −⌊d/_ 2 _⌋−⌊δd⌋_ - _−_ 1
+_k −⌊k/_ 2 _⌋−⌊δd/_ 2 _⌋_
+
+
+_≤_ _[⌊][k/]_ [2] _[⌋]_
+
+2
+
+
+- _d_ - _−_ 1� _⌊d/_ 2 _⌋_
+_k_ _⌊k/_ 2 _⌋_
+
+
+�� _⌊δd⌋_
+_⌊δd/_ 2 _⌋_
+
+
+_≤_ _[d]_
+
+
+- _d_
+
+_k_
+
+
+- _⌊d/_ 4 _⌋_
+_⌊k/_ 4 _⌋_
+
+
+- _−k/_ 4
+= _e_ _[−]_ [Θ(] _[d]_ [)] _._
+
+
+_≤_ _[d]_
+
+4
+
+
+_≤_ _[d]_
+
+
+- _−_ 1
+_≤_ _[d]_
+
+4
+
+
+- _−_ 1
+_≤_ _[d]_
+
+
+Here, we have chosen _δ_ = [1] 4 _[∧]_ 2 _kd_ [=] [Θ(1)] [and] [used] [the] [inequality] - _ab_ 11++ _ab_ 22++ _ba_ 33� _≥_ - _ab_ 11�� _ab_ 22�� _ab_ 33�.
+
+From this, we conclude that
+
+
+_≤_ _e−_ Ω( _d_ )
+����
+
+
+_|P_ _\ P_ + _| −|P_ + _|_
+_|_ E _p∈P_ [ _p_ ( _**x**_ )] _|_ =
+���� _|P_ _|_
+
+
+with probability 1 _−_ _e_ _[−]_ [Ω(] _[d]_ [)] .
+
+
+_|P_ _\ P_ + _| −|P_ + _|_
+_|_ E _p∈P_ [ _p_ ( _**x**_ )] _|_ =
+���� _|P_ _|_
+
+
+B PROOF OF THEOREM 5
+
+
+**Proof of Lemma 4.** For each _d_ + 1 _≤_ _m ≤_ _d_ + _k −_ 1 and 1 _≤_ _j_ _< m_, the only component of _f_ _[◦]_
+depending on _wj,m_ is _fm_ _[◦]_ [and]
+_∂fm_ _[◦]_ [(] _**[x]**_ [;] **[ W]** [)] = _|ϕ′_ (ˆ _zm_ ) _| ·_ _∂z_ ˆ _m_
+���� _∂wj,m_ ���� ���� _∂wj,m_ ����
+
+
+_∂wj,m_
+
+
+= _|ϕ′_ (ˆ _zm_ ) _| ·_ _∂z_ ˆ _m_
+���� ���� _∂wj,m_
+
+
+����
+
+
+������
+
+
+_≤∥ϕ_ _[′]_ _∥∞_
+
+
+= _∥ϕ_ _[′]_ _∥∞_
+
+
+������
+
+
+_σj_ ( _**w**_ _m_ )(1 _−_ _σj_ ( _**w**_ _m_ )) _xj_ _−_ _σj_ ( _**w**_ _m_ ) - _σα_ ( _**w**_ _m_ ) _xα_
+������ _α_ = _j_
+
+
+_σj_ ( _**w**_ _m_ )(1 _−_ _σj_ ( _**w**_ _m_ )) _xj_ _−_ _σj_ ( _**w**_ _m_ ) ������ _α_ = _j_
+
+
+_∂σj_ ( _**w**_ _m_ )
+
+
+_j_ _m_ _xj_ +  
+_∂wj,m_
+
+
+_α_ = _j_
+
+
+_∂σα_ ( _**w**_ _m_ )
+
+_xα_
+_∂wj,m_
+
+
+������
+
+
+_≤∥ϕ_ _[′]_ _∥∞σj_ ( _**w**_ _m_ )(1 _−_ _σj_ ( _**w**_ _m_ )) + _∥ϕ_ _[′]_ _∥∞σj_ ( _**w**_ _m_ ) - _σα_ ( _**w**_ _m_ )
+
+
+_α_ = _j_
+
+_≤_ 2 _∥ϕ_ _[′]_ _∥∞σj_ ( _**w**_ _m_ ) _._
+
+
+Hence it follows that
+
+
+_d_ + _k−_ 1 _d_ + _k−_ 1
+
+  - _∥∇_ **W** _fm_ _[◦]_ _[∥]_ [2] _[≤]_ [4] _[∥][ϕ][′][∥]_ [2] _∞_  
+
+_m_ = _d_ +1 _m_ = _d_ +1
+
+
+as desired.
+
+
+_m−_ 1
+
+- _σj_ ( _**w**_ _m_ ) [2] _≤_ 4 _∥ϕ_ _[′]_ _∥_ [2] _∞_ [(] _[k][ −]_ [1) =] _[ O]_ [(] _[d]_ [)] _[,]_
+
+
+_j_ =1
+
+
+We say that a parity _xj_ 1 _· · · xjr_ for 1 _≤_ _j_ 1 _, · · ·_ _, jr_ _≤_ _d_ + _k −_ 1 is _trivial_ if it always equals 1, or
+equivalently if its reduction to the independent bits _x_ 1 _, · · ·_ _, xd_ cancel out mod 2. For example, the
+parity _x_ 1 _x_ 4 _x_ 17 in Figure 1 is trivial. Define _Ir,m_ as the set of nontrivial index _r_ -tuples less than _m_ :
+
+
+_Ir,m_ = _{_ ( _j_ 1 _, · · ·_ _, jr_ ) _|_ 1 _≤_ _j_ 1 _, · · ·_ _, jr_ _≤_ _m −_ 1 _,_ _xj_ 1 _· · · xjr_ _̸≡_ 1 _}._
+
+
+In particular, _I_ 1 _,m_ = [ _m −_ 1] since no single parity is trivial.
+
+**Lemma 9** (concentration of interaction terms) **.** _If each bit x_ _[i]_ _j_ _[for][ i][ ∈]_ [[] _[n]_ []] _[,][ j]_ _[∈]_ [[] _[d]_ []] _[ is i.i.d.]_ _[generated]_
+_from the uniform distribution on {±_ 1 _}, for any p >_ 0 _it holds with probability at least_ 1 _−_ _p that_
+
+
+2 [32] _[d]_ [4] _._
+_n_ [log] _p_
+
+
+max
+1 _≤r≤_ 4
+( _j_ 1 _,···,jr_ ) _∈Ir,m_
+
+
+_|⟨_ _**x**_ _j_ 1 _, · · ·_ _,_ _**x**_ _jr_ _⟩|_ _≤_ _κ_ :=
+
+_n_
+
+
+_|⟨_ _**x**_ _j_ 1 _, · · ·_ _,_ _**x**_ _jr_ _⟩|_
+
+
+18
+
+
+_Proof._ Each tuple ( _j_ 1 _, · · ·_ _, jr_ ) _∈_ _Ir,m_ computes a specific nontrivial parity _xj_ 1 _· · · xjr_ for which the
+bits _x_ _[i]_ _j_ 1 _[· · ·][ x]_ _j_ _[i]_ _r_ [,] _[ i]_ [ = 1] _[,][ · · ·]_ _[, n]_ [ are i.i.d.] [Unif(] _[{±]_ [1] _[}]_ [)][ due to symmetry.] [By Hoeffding’s inequality we]
+have that
+
+Pr ( _|⟨_ _**x**_ _j_ 1 _, · · ·_ _,_ _**x**_ _jr_ _⟩| ≥_ _λ_ ) _≤_ 2 _e_ _[−][λ]_ [2] _[/]_ [2] _[n]_ _._
+
+
+Moreover, _|Ir,m| ≤_ ( _d_ + _k −_ 1) _[r]_ _≤_ (2 _d −_ 1) _[r]_ so that
+
+
+_|I_ 1 _,m|_ + _· · ·_ + _|I_ 4 _,m| ≤_ (2 _d −_ 1) + _· · ·_ + (2 _d −_ 1) [4] _<_ (2 _d_ ) [4] _._
+
+
+Therefore it follows by union bounding that
+
+
+      -      Pr max _[,]_ _**[ x]**_ _[j][r]_ _[⟩| ≥]_ _[λ]_ _≤_ 32 _d_ [4] _e_ _[−][λ]_ [2] _[/]_ [2] _[n]_ _,_
+1 _≤r≤_ 4 _,_ ( _j_ 1 _,···,jr_ ) _∈Ir,m_ _[|⟨]_ _**[x]**_ _[j]_ [1] _[,][ · · ·]_
+
+
+which implies the statement.
+
+
+In particular, we take _n_ = Ω( _d_ [2+] _[ϵ]_ ) and _p_ = exp( _−d_ _[ϵ/]_ [2] ) so that _κ_ = _O_ ( _d_ _[−]_ [1] _[−][ϵ/]_ [4] ). This will ensure
+that the informative gradient signals will dominate the irrelevant interaction terms.
+
+
+We now proceed to the main proof of Theorem 5. The superscript (0) at initialization is omitted for
+simplicity. The loss can be written more explicitly as
+
+
+_m−_ 1
+
+- _σj_ ( _**w**_ _m_ ) _**x**_ _j._
+
+
+_j_ =1
+
+
+_L_ ( **W** ) = [1]
+
+2 _n_
+
+
+_d_ + _k−_ 1
+
+ - _∥ϕ_ (ˆ _**z**_ _m_ ) _−_ _**x**_ _m∥_ [2] _,_ _**z**_ ˆ _m_ =
+
+
+_m_ = _d_ +1
+
+
+It is straightforward to verify for 1 _≤_ _α < m_ that
+
+
+_∂σα_ ( _**w**_ _m_ )
+
+= ( _δjα −_ _σα_ ( _**w**_ _m_ )) _σj_ ( _**w**_ _m_ ) = ( _δjα −_ _σj_ ( _**w**_ _m_ )) _σα_ ( _**w**_ _m_ )
+_∂wj,m_
+
+
+and
+
+
+_∂_ _**z**_ ˆ _m_
+=
+_∂wj,m_
+
+
+_m−_ 1
+
+- ( _δjα −_ _σj_ ( _**w**_ _m_ )) _σα_ ( _**w**_ _m_ ) _**x**_ _α_ = _σj_ ( _**w**_ _m_ )( _**x**_ _j_ _−_ _**z**_ ˆ _m_ ) _._
+
+
+_α_ =1
+
+
+Then the gradient of _L_ with respect to each element _wj,m_ at initialization can be computed as
+
+
+[1]
+
+_n_ [(] _[ϕ]_ [(ˆ] _**[z]**_ _[m]_ [)] _[ −]_ _**[x]**_ _[m]_ [)] _[⊤]_ _[∂ϕ]_ _∂w_ [(ˆ] _**[z]**_ _j,m_ _[m]_ [)]
+
+
+_∂L_
+( **W** ) = [1]
+_∂wj,m_ _n_
+
+
+_∂wj,m_
+
+
+= _[σ][j]_ [(] _**[w]**_ _[m]_ [)] _⟨ϕ_ (ˆ _**z**_ _m_ ) _−_ _**x**_ _m, ϕ_ _[′]_ (ˆ _**z**_ _m_ ) _,_ _**x**_ _j_ _−_ _**z**_ ˆ _m⟩_ (6)
+
+_n_
+
+
+1
+= _−_ _[−]_ _**[z]**_ [ˆ] _[m][⟩]_ (7)
+_n_ ( _m −_ 1) _[⟨]_ _**[x]**_ _[m][,]_ [ 2] _[c]_ _**[z]**_ [ˆ] _[m][,]_ _**[ x]**_ _[j]_
+
++ 1         - _−_ **1** _n_ + _c_ _**z**_ ˆ _m_ [2] _[,]_ [ 2] _[c]_ _**[z]**_ [ˆ] _[m][,]_ _**[ x]**_ _[j]_ _[−]_ _**[z]**_ [ˆ] _[m]_         - (8)
+_n_ ( _m −_ 1)
+
++ 1         - _O_ ( _|_ _**z**_ ˆ _m|_ [4] ) _,_ 2 _c_ _**z**_ ˆ _m,_ _**x**_ _j_ _−_ _**z**_ ˆ _m_         - (9)
+_n_ ( _m −_ 1)
+
++ 1         - _ϕ_ (ˆ _**z**_ _m_ ) _−_ _**x**_ _m, O_ ( _|_ _**z**_ ˆ _m|_ [3] ) _,_ _**x**_ _j_ _−_ _**z**_ ˆ _m_         - _._ (10)
+_n_ ( _m −_ 1)
+
+
+**Computing interaction strengths.** The term (7) will be shown to contain the dominating gradient
+signal when _j_ = c1[ _m_ ] _,_ c2[ _m_ ], while the other terms can be bounded as perturbations. Let _ℓ_ = h2[ _m_ ]
+so that _xm_ computes a 2 _[ℓ]_ -parity.
+
+For term (7), we substitute ˆ _**z**_ _m_ = _m_ 1 _−_ 1 - _α_ _**[x]**_ _[α]_ [ at initialization to expand]
+
+
+1 1
+
+_[−]_ _**[z]**_ [ˆ] _[m][⟩]_ [=]
+_n_ _[⟨]_ _**[x]**_ _[m][,]_ [ ˆ] _**[z]**_ _[m][,]_ _**[ x]**_ _[j]_ _n_ ( _m −_ 1)
+
+
+_⟨_ _**x**_ _m,_ _**x**_ _α,_ _**x**_ _j⟩−_ 1  _n_ ( _m −_ 1) [2]
+_α_ _α,β_
+
+
+_⟨_ _**x**_ _m,_ _**x**_ _α,_ _**x**_ _β⟩_ _,_
+
+_α,β_
+
+
+19
+
+
+where the dummy indices _α, β, · · ·_ are taken to run over [ _m −_ 1]. Let us evaluate the third-order
+interaction terms _⟨_ _**x**_ _m,_ _**x**_ _α,_ _**x**_ _β⟩_ . If h[ _α_ ] = _ℓ_, _xmxα_ computes the parity of 2 _[ℓ]_ [+1] independent bits
+from _x_ 1 _, · · ·_ _, xd_ so _xmxαxβ_ cannot be trivial, hence ( _m, α, β_ ) _∈_ _I_ 3 _,m_ and _|⟨_ _**x**_ _m,_ _**x**_ _α,_ _**x**_ _β⟩| ≤_ _nκ_ by
+Lemma 9. Similarly, h[ _β_ ] = _ℓ_ implies that ( _m, α, β_ ) _∈_ _I_ 3 _,m_ . Suppose h[ _α_ ] _,_ h[ _β_ ] _≤_ _ℓ_ _−_ 1; unless
+h[ _α_ ] = h[ _β_ ] = _ℓ_ _−_ 1, the combined parity _xαxβ_ will not contain enough independent bits to cancel
+out the 2 _[ℓ]_ bits in _xm_, so again ( _m, α, β_ ) _∈_ _I_ 3 _,m_ . Moreover if h[ _α_ ] = h[ _β_ ] = _ℓ_ _−_ 1, _xmxαxβ_ will be
+trivial if and only if _{α, β}_ = _{_ c1[ _m_ ] _,_ c2[ _m_ ] _}_, in which case _⟨_ _**x**_ _m,_ _**x**_ _α,_ _**x**_ _β⟩_ = _n_ . Thus we have that
+
+
+1
+
+_n_
+
+
+_⟨_ _**x**_ _m,_ _**x**_ _α,_ _**x**_ _β⟩_ = 2 + [1]
+
+_n_
+
+_α_
+
+
+_n_
+
+
+ - _⟨_ _**x**_ _m,_ _**x**_ _α,_ _**x**_ _β⟩_ = 2 + _O_ (( _m −_ 1) [2] _κ_ ) _._
+
+
+( _m,α,β_ ) _∈I_ 3 _,m_
+
+
+Similarly, the contraction _⟨_ _**x**_ _m,_ _**x**_ _α,_ _**x**_ _j⟩_ can be nontrivial only if p[ _j_ ] = _m_ and only when _α_ is the
+other child node of _xm_, so that
+
+
+1
+
+_n_
+
+
+- _⟨_ _**x**_ _m,_ _**x**_ _α,_ _**x**_ _j⟩_ = �1 + _O_ (( _m −_ 1) _κ_ ) p[ _j_ ] = _m,_
+
+_O_ (( _m −_ 1) _κ_ ) otherwise.
+_α_
+
+
+Since _κ_ = _O_ ( _d_ _[−]_ [1] _[−][ϵ/]_ [4] ) and _d_ _<_ _m_ _≤_ 2 _d −_ 1, we can therefore isolate the leading term of order
+Θ( _d_ _[−]_ [2] ) as
+
+
+1
+
+_−_ _[−]_ _**[z]**_ [ˆ] _[m][⟩]_
+_n_ ( _m −_ 1) _[⟨]_ _**[x]**_ _[m][,]_ [ 2] _[c]_ _**[z]**_ [ˆ] _[m][,]_ _**[ x]**_ _[j]_
+
+2 _c_ 2 _c_
+= _−_ ( _m −_ 1) [2] [(1] _[{]_ [p][[] _[j]_ []=] _[m][}]_ [ +] _[ O]_ [(] _[dκ]_ [)) +] ( _m −_ 1) [3] [(2 +] _[ O]_ [(] _[d]_ [2] _[κ]_ [))]
+
+2 _c_
+= _−_ ( _m −_ 1) [2] [1] _[{]_ [p][[] _[j]_ []=] _[m][}]_ [ +] _[ O]_ [(] _[d][−]_ [2] _[−][ϵ/]_ [4][)] _[.]_
+
+
+Next, for term (8), we expand
+
+
+_n_ - _**z**_ ˆ _m_ 4 - _._
+
+
+1 - _−_ **1** _n_ + _c_ _**z**_ ˆ _m_ [2] _[,]_ [ 2] _[c]_ _**[z]**_ [ˆ] _[m][,]_ _**[ x]**_ _[j]_ _[−]_ _**[z]**_ [ˆ] _[m]_ - = _−_ [2] _[c]_
+_n_ _n_
+
+
+_[c]_ [2] _[c]_
+
+_n_ _[⟨]_ _**[z]**_ [ˆ] _[m][,]_ _**[ x]**_ _[j][⟩]_ [+] _n_
+
+
+_n_ _[c]_ - _**z**_ ˆ _m_ 2 - + [2] _n_ _[c]_ [2]
+
+
+_[c]_ [2]  - _**z**_ ˆ _m_ 3 _[,]_ _**[ x]**_ _[j]_  - _−_ [2] _[c]_ [2]
+
+_n_ _n_
+
+
+The second-order terms can be computed as
+
+
+1
+=
+_m −_ 1 [+] _[ O]_ [(] _[κ]_ [)] _[,]_
+
+
+1 1
+_n_ _[⟨]_ _**[z]**_ [ˆ] _[m][,]_ _**[ x]**_ _[j][⟩]_ [=] _n_ ( _m −_ 1)
+
+
+_⟨_ _**x**_ _j,_ _**x**_ _j⟩_ + - _⟨_ _**x**_ _α,_ _**x**_ _j⟩_
+
+
+_α_ = _j_
+
+
+_⟨_ _**x**_ _α,_ _**x**_ _β⟩_
+
+_α_ = _β_
+
+
+1
+=
+_m −_ 1 [+] _[ O]_ [(] _[κ]_ [)] _[.]_
+
+
+_n_ 1 - _**z**_ ˆ _m_ 2 - = _n_ ( _m −_ 1 1) [2]
+
+
+��
+
+
+_⟨_ _**x**_ _α,_ _**x**_ _α⟩_ +  
+_α_ _α_ = _β_
+
+
+We evaluate the fourth-order interaction terms by looking at when ( _α, β, γ, δ_ ) _∈/_ _I_ 4 _,m_ can occur.
+Without loss of generality, suppose h[ _α_ ] _≤_ h[ _β_ ] _≤_ h[ _γ_ ] _≤_ h[ _δ_ ].
+
+
+(i) If h[ _β_ ] _<_ h[ _γ_ ] _<_ h[ _δ_ ], the parities of _xα, xβ, xγ_ must combine without overlaps to cancel out
+_xδ_, so it must hold that _xγ_ is a child of _xδ_ and _xα, xβ_ are the two children of the other child.
+This subtree is fully determined by the choice of the index _δ_ and one of its child nodes, so there
+are at most _O_ ( _d_ ) trivial 4-tuples in this case.
+(ii) If h[ _β_ ] = h[ _γ_ ] _<_ h[ _δ_ ], it still must hold that h[ _γ_ ] = h[ _δ_ ] _−_ 1. Moreover, both _xβ, xγ_ must
+be children of _xδ_ ; otherwise, the bits of _xδ_ and the non-child node cannot be canceled out
+by the remaining nodes. Then either _xβ_ = _xγ_ or _xβxγ_ = _xδ_, and in both cases we see that
+_xαxβxγxδ_ cannot be trivial.
+(iii) If h[ _β_ ] _<_ h[ _γ_ ] = h[ _δ_ ], it must be that _γ_ = _δ_, otherwise the bits of _xγxδ_ cannot be canceled out
+by _xαxβ_ . It follows that _xαxβ_ _≡_ 1 and _α_ = _β_, so there are _O_ ( _d_ [2] ) trivial 4-tuples in this case.
+(iv) If h[ _β_ ] = h[ _γ_ ] = h[ _δ_ ], it must again hold that two indices must be equal, and the remaining
+two indices must also be equal, so there are also _O_ ( _d_ [2] ) trivial 4-tuples.
+
+
+Hence it follows that
+_n_ 1     - _**z**_ ˆ _m_ 4     - = _n_ ( _m −_ 1 1) [4]     - _⟨_ _**x**_ _α,_ _**x**_ _β,_ _**x**_ _γ,_ _**x**_ _δ⟩_
+
+_α,β,γ,δ_
+
+
+20
+
+
+= 1 _n_ ( _m −_ 1) [4]
+
+
+_O_ ( _nκ_ )
+
+( _α,β,γ,δ_ ) _∈I_ 4 _,m_
+
+
+ - _n_ + 1 
+_n_ ( _m −_ 1) [4]
+( _α,β,γ,δ_ ) _∈/I_ 4 _,m_ ( _α,β,γ,δ_ )
+
+
+_|I_ 4 _,m|_
+
+= _[|]_ [[] _[m][ −]_ [1]][4] _[ \][ I]_ [4] _[,m][|]_ +
+
+( _m −_ 1) [4] ( _m −_ 1) [4] _[O]_ [(] _[κ]_ [) =] _[ O]_ [(] _[d][−]_ [2][ +] _[ κ]_ [)] _[.]_
+
+
+Furthermore, suppose _α, β, γ, δ_ are constrained to contain the index _j_ . Then case (i) above counts
+_O_ (1) nontrivial tuples, while case (i), while cases (iii),(iv) count at most _O_ ( _d_ ) tuples since there is
+only one free index to be determined. Hence we also have
+
+_n_ 1   - _**z**_ ˆ _m_ 3 _[,]_ _**[ x]**_ _[j]_   - = _n_ ( _m −_ 1 1) [3]   - _⟨_ _**x**_ _α,_ _**x**_ _β,_ _**x**_ _γ,_ _**x**_ _j⟩_ = ( _mO −_ ( _d_ 1)) [3] [+] _[ O]_ [(] _[κ]_ [) =] _[ O]_ [(] _[d][−]_ [2][ +] _[ κ]_ [)] _[.]_
+
+_α,β,γ_
+
+
+Combining the above, we obtain that
+
+_n_ ( _m_ 1 _−_ 1) - _−_ **1** _n_ + _c_ _**z**_ ˆ _m_ [2] _[,]_ [ 2] _[c]_ _**[z]**_ [ˆ] _[m][,]_ _**[ x]**_ _[j]_ _[−]_ _**[z]**_ [ˆ] _[m]_ - = _−_ ( _m −_ 2 _c_ 1) [2] [+] ( _m −_ 2 _c_ 1) [2] [+] _m_ _[O]_ _−_ [(] _[κ]_ [)] 1 [=] _[ O]_ [(] _[d][−]_ [2] _[−][ϵ/]_ [4][)] _[.]_
+
+
+For term (9), we note that - _|_ _**z**_ ˆ _m|_ [4][�] = - _**z**_ ˆ _m_ 4 - = _O_ ( _nd_ _[−]_ [2] + _nκ_ ) as derived above. Then since each
+component of ˆ _**z**_ _m_, _**x**_ _j_ _−_ _**z**_ ˆ _m_ are contained in [ _−_ 1 _,_ 1] _,_ [ _−_ 2 _,_ 2], respectively, we have that
+
+1      - _O_ ( _|_ _**z**_ ˆ _m|_ [4] ) _,_ 2 _c_ _**z**_ ˆ _m,_ _**x**_ _j_ _−_ _**z**_ ˆ _m_      - = 4 _c_      - _|_ _**z**_ ˆ _m|_ [4][�] ) = _O_ ( _d_ _[−]_ [2] _[−][ϵ/]_ [4] ) _._
+_n_ ( _m −_ 1) _n_ ( _m −_ 1) _[O]_ [(]
+
+
+Finally for term (10), by the Cauchy-Schwarz inequality we have
+
+
+1 - _|_ _**z**_ ˆ _m|_ [3][�] = [1]
+_n_ _n_
+
+
+_n_
+
+- _|z_ ˆ _m,i|_ [3]
+
+
+_i_ =1
+
+
+�1 _/_ 2
+
+
+= _n_ [1] - _**z**_ ˆ _m_ 2 �1 _/_ 2 � _**z**_ ˆ _m_ 4 �1 _/_ 2
+
+
+�1 _/_ 2 � _n_
+
+ - _z_ ˆ _m,i_ [4]
+
+
+_i_ =1
+
+
+_≤_ [1]
+
+_n_
+
+
+- _n_
+
+ - _z_ ˆ _m,i_ [2]
+
+
+_i_ =1
+
+
+= [1] [=] _[ O]_ [(] _[d][−]_ [1] _[−][ϵ/]_ [8][)] _[,]_
+
+_n_ _[O]_ [(] _[nd][−]_ [1][)][1] _[/]_ [2] _[ ·][ O]_ [(] _[nd][−]_ [2][ +] _[ nκ]_ [)][1] _[/]_ [2]
+
+
+and so we may bound
+
+1     - _ϕ_ (ˆ _**z**_ _m_ ) _−_ _**x**_ _m, O_ ( _|_ _**z**_ ˆ _m|_ [3] ) _,_ _**x**_ _j_ _−_ _**z**_ ˆ _m_     - = 4     - _|_ _**z**_ ˆ _m|_ [3][�] ) = _O_ ( _d_ _[−]_ [2] _[−][ϵ/]_ [8] ) _._
+_n_ ( _m −_ 1) _n_ ( _m −_ 1) _[O]_ [(]
+
+
+From (7)-(10) we conclude that
+
+
+_∂L_ 2 _c_
+_∂wj,m_ ( **W** ) = _−_ ( _m −_ 1) [2] [1] _[{]_ [p][[] _[j]_ []=] _[m][}]_ [ +] _[ O]_ [(] _[d][−]_ [2] _[−][ϵ/]_ [8][)] _[,]_
+
+
+and the same result applies to the approximate gradient _∇_ [�] _wj,m_ _L_ at initialization since the cutoff does
+not apply and each component of the noise is bounded by _O_ ( _d_ _[−]_ [2] _[−][ϵ/]_ [8] ).
+
+
+**Concentration of softmax scores.** Taking _η_ = _d_ [2+] _[ϵ/]_ [16], the updated weights **W** [(1)] = _−η∇L_ ( **W** )
+
+[�]
+become
+
+_wj,m_ [(1)] [=] [2] ( _[cd]_ _m −_ [2+] _[ϵ/]_ 1) [16][2] [1] _[{]_ [p][[] _[j]_ []=] _[m][}]_ [ +] _[ O]_ [(] _[d][−][ϵ/]_ [16][)] _[.]_
+
+
+In particular, for each _j_ = c1[ _m_ ] _,_ c2[ _m_ ] the softmax scores satisfy
+
+_σj_ ( _**w**_ _m_ [(1)][) =] _[ e][w]_ _j,m_ [(1)] _/_ [�] _α_ _[e][w]_ _α,m_ [(1)] _≤_ _e_ _[w]_ _j,m_ [(1)] _[−][w]_ c [(1)] 1[ _m_ ] _,m_ _≤_ exp( _−_ Ω( _d_ _[ϵ/]_ [16] )) _._
+
+As softmax scores must sum to 1, it holds that _σ_ c1[ _m_ ]( _**w**_ _m_ [(1)][) +] _[ σ]_ c2[ _m_ ] [(] _**[w]**_ _m_ [(1)][)] _[ ≥]_ [1] _[ −]_ [exp(] _[−]_ [Ω(] _[d][ϵ/]_ [16][))]
+and moreover
+
+_σ_ c1[ _m_ ]( _**w**_ _m_ [(1)][)] = _e_ _[w]_ c [(1)] 1[ _m_ ] _,m_ _[−][w]_ c [(1)] 2[ _m_ ] _,m_ _≤_ exp( _O_ ( _d_ _[−][ϵ/]_ [16] )) _≤_ 1 + _O_ ( _d_ _[−][ϵ/]_ [16] )
+
+_σ_ c2[ _m_ ]( _**w**_ _m_ [(1)][)]
+
+
+21
+
+
+from the inequality _e_ _[t]_ _≤_ 1 + _O_ ( _t_ ) for small _t_ _>_ 0. By symmetry, _σ_ c2[ _m_ ]( _**w**_ _m_ [(1)][)] _[/σ]_ c1[ _m_ ] [(] _**[w]**_ _m_ [(1)][)] _[≤]_
+1 + _O_ ( _d_ _[−][ϵ/]_ [16] ). By simple algebraic manipulation, we can conclude that
+
+
+1
+_m_ [)] _[, σ]_ c2[ _m_ ] [(] _**[w]**_ _m_ [(1)][)] _[ ≤]_ [1]
+2 _[−]_ _[O]_ [(] _[d][−][ϵ/]_ [16][)] _[ ≤]_ _[σ]_ [c][1][[] _[m]_ []][(] _**[w]**_ [(1)] 2 [+] _[ O]_ [(] _[d][−][ϵ/]_ [16][)] _[.]_
+
+That is, the updated attention layer ˆ _**z**_ _m_ [(1)] [=][ �] _j_ _[σ][j]_ [(] _**[w]**_ _m_ [(1)][)] _**[x]**_ _j_ [has learned to take the average of the two]
+
+child nodes and ignore the remaining input tokens at each step.
+
+
+**Evaluating the forward pass.** Now to bound the updated prediction loss, we evaluate the error
+_∥_ _**x**_ ˆ [(1)] _m_ _[−]_ _**[x]**_ _m_ _[∥]_ _∞_ [of each step of the forward pass for] _[ d]_ [ + 1] _[ ≤]_ _[m][ ≤]_ _[d]_ [ +] _[ k][ −]_ [1][.] [More precisely, define]
+the increasing sequence
+_ϵm_ = _d<j_ max _≤m_ ��� _**x**_ ˆ (1) _j_ _−_ _**x**_ _j_ ��� _∞_ _[,]_ _ϵd_ = 0 _._
+
+
+Then
+��� _**x**_ ˆ (1)c1[ _m_ ] _[−]_ _**[x]**_ [c][1][[] _[m]_ []] ��� _∞_ _[,]_ ��� _**x**_ ˆ (1)c2[ _m_ ] _[−]_ _**[x]**_ [c][1][[] _[m]_ []] ��� _∞_ _[≤]_ _[ϵ]_ [c][1][[] _[m]_ []] _[, ϵ]_ [c][2][[] _[m]_ []] _[≤]_ _[ϵ][m][−]_ [1] _[,]_
+
+
+and for the intermediate values ˆ _**z**_ _m_ [(1)] [we have]
+
+_**z**_ ˆ _m_ (1) _[−]_ _**[x]**_ [c][1][[] _[m]_ []] [+] _**[ x]**_ [c][2][[] _[m]_ []] _≤_
+���� 2 ����
+
+
+������ _∞_
+
+
+_**z**_ ˆ _m_ [(1)] _[−]_ _**x**_ ˆ [(1)] c1[ _m_ ] [+] _**[x]**_ [ˆ] [(1)] c2[ _m_ ]
+2
+������
+
+
+2
+
+
+_≤_
+���� _∞_
+
+
++ _ϵm−_ 1
+
+
+- _σj_ ( _**w**_ _m_ [(1)][) +] _σ_ c1[ _m_ ]( _**w**_ _m_ (1) [)] _[ −]_ [1]
+
+���� 2
+p[ _j_ ]= _m_
+
+
++ _ϵm−_ 1
+����
+
+
+_≤_ 
+
+
+2
+
+
++ _σ_ c2[ _m_ ]( _**w**_ _m_ (1) [)] _[ −]_ [1]
+���� ���� 2
+
+
+_≤_ 2 _d_ exp( _−_ Ω( _d_ _[ϵ/]_ [16] )) + _O_ ( _d_ _[−][ϵ/]_ [16] ) + _ϵm−_ 1
+
+_≤_ _C_ 1 _d_ _[−][ϵ/]_ [16] + _ϵm−_ 1 _,_
+
+
+for some constant _C_ 1 _>_ 0. Since _ϕ_ behaves like a quadratic near 0 _, ±_ 1, it follows that
+
+
+_ϵm_ = _∥_ _**x**_ ˆ [(1)] _m_ _[−]_ _**[x]**_ _[m][∥][∞]_ [=] _ϕ_ (ˆ _**z**_ _m_ (1) [)] _[ −]_ _[ϕ]_ - _**x**_ c1[ _m_ ] + _**x**_ c2[ _m_ ] _≤_ _C_ 2( _C_ 1 _d_ _[−][ϵ/]_ [16] + _ϵm−_ 1) [2]
+���� 2 ����� _∞_
+
+
+for some constant _C_ 2 _>_ 0 depending only on _ϕ_ . Then for sufficiently large _d_, by choosing _C_ 3 such
+that _C_ 2( _C_ 1 + _C_ 3 _d_ _[−][ϵ/]_ [16] ) [2] _≤_ _C_ 3, for _ϵm−_ 1 _≤_ _C_ 3 _d_ _[−][ϵ/]_ [8] it follows that
+
+_ϵm_ _≤_ _C_ 2( _C_ 1 _d_ _[−][ϵ/]_ [16] + _C_ 3 _d_ _[−][ϵ/]_ [8] ) [2] _≤_ _C_ 3 _d_ _[−][ϵ/]_ [8] _,_
+
+thus _ϵm_ = _O_ ( _d_ _[−][ϵ/]_ [8] ) inductively for all _m_ . We conclude that _∥_ _**y**_ ˆ _−_ _**y**_ _∥∞_ = _∥_ _**x**_ ˆ [(1)] _d_ + _k−_ 1 _[−]_ _**[x]**_ _d_ [(1)] + _k−_ 1 _[∥][∞]_
+is bounded for all inputs as _O_ ( _d_ _[−][ϵ/]_ [8] ).
+
+
+C PROOF OF THEOREM 7
+
+
+**Proof of Lemma 6.** For the iterative generation scheme (3), each _wj,m_ affects _x_ ˆ _m_ as well as all
+nodes _x_ ˆ _α_ on higher levels h[ _α_ ] _>_ h[ _m_ ] through _x_ ˆ _m_ . We bound the contribution of each term to the
+total gradient inductively with respect to the level. Define for each _d < m ≤_ _d_ + _k_ _−_ 1, 1 _≤_ _j_ _≤_ _m−_ 1
+and 0 _< ℓ_ _≤_ _v_ the quantity
+
+
+_ξj,m,ℓ_ := max
+_α≤dℓ_
+
+
+_∂x_ ˆ _α_
+
+_._
+
+���� _∂wj,m_ ����
+
+
+We denote _κ_ := _∥ϕ_ _[′]_ _∥∞_ for brevity. Clearly _ξj,m,ℓ_ = 0 for _ℓ<_ h[ _m_ ] and
+
+
+_∂x_ ˆ _m_
+_ξj,m,_ h[ _m_ ] = ���� _∂wj,m_
+
+
+_≤_ _κσj_ ( _**w**_ _m_ ) _|xj_ _−_ _z_ ˆ _m| ≤_ 2 _κσj_ ( _**w**_ _m_ ) _._
+����
+
+
+Moreover for any _α_ with h[ _α_ ] = _ℓ>_ h[ _m_ ], we can bound by the chain rule
+_∂x_ ˆ _α_ _≤|ϕ′_ (ˆ _zα_ ) _| ·_ _d_        - _ℓ−_ 1 _σβ_ ( _**w**_ _α_ ) _[∂][x]_ [ˆ] _[β]_ _≤_ _κξ_
+���� _∂wj,m_ ���� _∂wj,m_
+
+������ ������
+
+
+_≤|ϕ′_ (ˆ _zα_ ) _| ·_
+����
+
+
+������
+
+
+ - _σβ_ ( _**w**_ _α_ ) _[∂][x]_ [ˆ] _[β]_
+
+_∂w_
+
+_β_ = _d_ h[ _m_ ]+1
+
+
+_dℓ−_ 1
+
+
+_∂wj,m_
+
+
+_≤_ _κξj,m,ℓ−_ 1 _,_
+������
+
+
+22
+
+
+yielding the relation _ξj,m,ℓ_ _≤_ _κξj,m,ℓ−_ 1. Iterating, we obtain that _ξj,m,ℓ_ _≤_ 2 _κ_ _[ℓ][−]_ [h][[] _[m]_ []+1] _σj_ ( _**w**_ _m_ ).
+Therefore we can bound the total gradient by the following.
+
+
+_d_ + _k−_ 1
+
+- _∥∇_ **W** _fα_ _[×][∥]_ [2] [=]
+
+_α_ = _d_ +1
+
+
+=
+
+
+_≤_
+
+
+_≤_
+
+
+_d_ + _k−_ 1
+
+
+_m_ = _d_ +1
+
+
+_d_ + _k−_ 1
+
+
+_m_ = _d_ +1
+
+
+_−_ 1 _v_
+
+- _σj_ ( _**w**_ _m_ ) [2] 
+
+_j_ =1 _ℓ_ =1
+
+
+_dℓ_
+
+ - _∥∇_ **W** _fα_ _[×][∥]_ [2]
+
+_α_ = _dℓ−_ 1+1
+
+
+_v_
+
+
+_ℓ_ =1
+
+
+_v_
+
+
+_ℓ_ =1
+
+
+_dℓ_
+
+
+_dℓ_
+
+ 
+
+_α_ = _dℓ−_ 1+1
+
+
+_d_ + _k−_ 1
+
+
+_m_ = _d_ +1
+
+
+_m−_ 1
+
+
+_j_ =1
+
+
+2
+
+
+_∂x_ ˆ _α_
+���� _∂wj,m_
+
+
+����
+
+
+_m−_ 1
+
+
+_j_ =1
+
+
+_m−_ 1
+
+
+- 2 _[v][−][ℓ]_ _·_ 4 _κ_ [2] _[ℓ][−]_ [2][h][[] _[m]_ []+2]
+
+
+_ℓ_ =1
+
+
+_v_
+�( _dℓ_ _−_ _dℓ−_ 1) _ξj,m,ℓ_ [2]
+
+
+_ℓ_ =1
+
+
+_v_
+
+
+- _ℓ_ 4 _κ_ [2]
+_≤_
+
+
+_d_ + _k−_ 1
+
+ - _κ_ [2] _[v][−]_ [2][h][[] _[m]_ []+2]
+
+
+_m_ = _d_ +1
+
+
+_≤_ 4
+
+
+_d_ + _k−_ 1
+
+
+_d_ + _k−_ 1 _v_
+
+- 2 _[v]_ _κ_ _[−]_ [2][h][[] _[m]_ []+2] 
+
+_m_ = _d_ +1 _ℓ_ =1
+
+
+_ℓ_ =1
+
+
+- _κ_ 2
+
+
+2
+
+
+- _ℓ_ 4 _κ_ [2]
+_≤_
+
+_κ_ [2] _−_ 2
+
+
+_κ_ [2] _−_ 2
+
+
+4 _κ_ [2]
+_≤_
+
+_κ_ [2] _−_ 2
+
+
+4 _κ_ [2]
+_≤_
+
+
+_v_
+
+
+�( _dℓ_ _−_ _dℓ−_ 1) _κ_ [2] _[v][−]_ [2] _[ℓ]_ [+2] = 4 _κ_ [4]
+
+_κ_ [2] _−_
+
+_ℓ_ =1
+
+
+_v_
+�(2 _κ_ [2] ) _[v][−][ℓ]_
+
+
+_ℓ_ =1
+
+
+4 _κ_ [2]
+_≤_ [=] _[ O]_ [(] _[d]_ [2 log][2] _[ κ]_ [+1][)] _[,]_
+
+( _κ_ [2] _−_ 2)(2 _κ_ [2] _−_ 1) [(2] _[κ]_ [2][)] _[v]_
+
+
+since 2 _[v]_ = _k_ = _O_ ( _d_ ).
+
+
+We first provide a concentration bound for the augmented data, which we take to hold throughout the
+proof by conditioning on the high probability event.
+
+
+~~_√_~~
+**Lemma 10** (concentration of augmented data) **.** _For n_ _[′]_ = poly( _d_ ) _,_ _with probability_ 1 _−_ _e_ _[−]_ [Ω(]
+
+
+**Lemma 10** (concentration of augmented data) **.** _For n_ _[′]_ = poly( _d_ ) _,_ _with probability_ 1 _−_ _e_ _[−]_ [Ω(] _d_ )
+
+_over random sampling of the augmented data_ _**u**_ 1 _, · · ·_ _,_ _**u**_ _d, it holds that ∥_ _**u**_ _j_ + **1** _n′∥∞_ = 2 _for all_
+1 _≤_ _j_ _≤_ _d_ + _k −_ 1 _and_
+
+
+������
+
+
+������ _∞_
+
+
+_≤_ _O_ ( _d_ _[−]_ [1] _[/]_ [4] ) _._
+
+
+_dℓ_
+
+- _**x**_ [+] _j_
+
+_j_ =1
+
+
+_dℓ_
+
+
+max
+0 _≤ℓ≤v_
+
+
+1
+_dℓ_
+
+
+_Proof._ The nodes _xdℓ−_ 1+1 _, · · ·_ _, xdℓ_ at each level _ℓ_ compute independent parities, even though parities
+at different levels can be correlated. By Hoeffding’s inequality and union bounding over coordinates,
+it follows that
+
+
+_dℓ_             -             
+   - _**x**_ [+] _j_ _≤_ 2( _dℓ_ _−_ _dℓ−_ 1) log [2] _p_ _[n][′]_ = 2 _v−_ 2 _ℓ_ +1 log [2] _p_ _[n][′]_
+
+������ _j_ = _dℓ−_ 1+1 ������ _∞_
+
+with probability at least 1 _−_ _p_ . Again union bounding, the above holds for all levels 0 _≤_ _ℓ_ _≤_ _v_
+simultaneously with probability at least 1 _−_ _vp_, so that
+
+
+_dℓ_ _ℓ_ _v−ℓ_ _[′]_ +1         -         
+_d_ 1 _ℓ_     - _**x**_ [+] _j_ _≤_     - 2 _d_ 2 log [2] _p_ _[n][′]_ _≤_ 2( _√_ 2 + 1) _d_ 1 [log] [2] _p_ _[n][′]_ = _O_ ( _d_ _[−]_ [1] _[/]_ [4] )
+
+������ _j_ =1 ������ _ℓ_ _[′]_ =0
+
+
+_dℓ_
+
+
+������ _∞_
+
+
+_≤_
+
+
+2
+
+
+log [2] _[n][′]_
+
+
+_p_
+
+
+ - _**x**_ [+] _j_
+
+_j_ = _dℓ−_ 1+1
+
+
+2( _dℓ_ _−_ _dℓ−_ 1) log [2] _[n][′]_
+
+
+_v−ℓ_ +1
+= 2 2
+_p_
+
+
+log [2] _[n][′]_
+
+
+_[n][′]_ _√_
+
+_≤_ 2(
+_p_
+
+
+_≤_
+
+
+_v−ℓ_ _[′]_ +1
+2 2
+
+
+1 [2] _[n][′]_
+_d_ [log] _p_
+
+
+2 + 1)
+
+
+1
+_dℓ_
+
+
+_dℓ_
+
+
+- _**x**_ [+] _j_
+
+_j_ =1
+
+
+������ _∞_
+
+
+_ℓ_
+
+
+_ℓ_ _[′]_ =0
+
+
+2
+
+_d_
+
+
+= _O_ ( _d_ _[−]_ [1] _[/]_ [4] )
+_p_
+
+
+~~_√_~~
+for all _ℓ_ if _p_ = _e_ _[−]_
+
+
+for all _ℓ_ if _p_ = _e_ _[−]_ _d_ . In addition, the probability that _**u**_ _j_ = _−_ **1** _n′_ for some _j_ _≤_ _d_ + _k −_ 1 is bounded
+
+by 2 _d ·_ 2 _[−][n][′]_ = _e_ _[−]_ [Ω(] _[d]_ [)] ; otherwise, at least one entry is equal to 2.
+
+
+Now to prove Theorem 7, we show by induction that with high probability, the weights can be written
+for constants _Cℓ_ = Θ(1) as
+
+
+_wj,m_ [(] _[t]_ [)] [=]
+
+
+
+
+
+
+r[ _C_ h[ _m_ ] _d_ _[ϵ/]_ [16] ] h[ _m_ ] _≤_ _t,_ p[ _j_ ] = _m,_
+_−∞_ _j_ _> d_ h[ _m_ ] _−_ 1 or _m ≤_ _d,_ (11)
+0 otherwise _._
+
+
+
+
+
+Clearly (11) is satisfied when _t_ = 0. Suppose (11) holds at time _t −_ 1 for _t ≥_ 1.
+
+
+23
+
+
+**Evaluating the forward pass.** We first evaluate the forward pass iteration of the transformer up to
+level h[ _m_ ] _≤_ _t_ ; fixing 0 _< C_ _<_ min _ℓ≤v Cℓ_, it holds that
+
+
+1
+_σj_ ( _**w**_ _m_ [(] _[t]_ [)][)] _[ ≤]_ _≤_ exp( _−Cd_ _[ϵ/]_ [16] )
+
+exp( _w_ c [(] 1 _[t]_ [)] [ _m_ ] _,m_ [) + exp(] _[w]_ c [(] 2 _[t]_ [)] [ _m_ ] _,m_ [) +] _[ d]_ [h][[] _[m]_ []] _[−]_ [1] _[ −]_ [2]
+
+
+when p[ _j_ ] _̸_ = _m_ and
+
+
+1 _−_ _d_ exp( _−Cd_ _[ϵ/]_ [16] )
+
+
+2 _[.]_
+
+
+_−Cd_ )
+
+_≤_ _σ_ c1[ _m_ ]( _**w**_ _m_ [(] _[t]_ [)][)] _[, σ]_ c2[ _m_ ] [(] _**[w]**_ _m_ [(] _[t]_ [)][)] _[ ≤]_ [1]
+2 2
+
+
+For the augmented tokens, define the increasing per-level error sequence
+
+
+_ϵℓ_ = max
+_d<j≤dℓ_
+
+
+��� _**x**_ ˆ +( _j_ _t_ ) _−_ _**x**_ [+] _j_ ��� _∞_ _[,]_ _ϵ_ 0 = 0 _._
+
+
+We recursively bound _ϵℓ_ as before up to _ϵt_ ; this will simultaneously verify that the filter _ι_ is not
+applied for the first _t_ + 1 levels since _∥_ _**u**_ [(] _j_ _[t]_ [)] + **1** _n′∥∞_ _≥_ 2 _−_ _ϵt_ due to Lemma 10.
+
+
+For each state ˆ _**z**_ _m_ [+(] _[t]_ [)] with h[ _m_ ] = _ℓ_ we have
+_**z**_ ˆ _m_ +( _t_ ) _−_ _**x**_ [+] c1[ _m_ ] [+] 2 _**[ x]**_ c [+] 2[ _m_ ]
+����� ����� _∞_
+
+
+- _σj_ ( _**w**_ _m_ [(] _[t]_ [)][) +] _σ_ c1[ _m_ ]( _**w**_ _m_ ( _t_ ) [)] _[ −]_ [1]
+
+���� 2
+p[ _j_ ]= _m_
+
+
+_≤_ 
+
+
+2
+
+
++ _σ_ c2[ _m_ ]( _**w**_ _m_ ( _t_ ) [)] _[ −]_ [1] + _ϵℓ−_ 1
+���� ���� 2 ����
+
+
+_≤_ (2 _d −_ 2) exp( _−Cd_ _[ϵ/]_ [16] ) + _ϵℓ−_ 1 _._
+
+
+Since _ϕ_ behaves like a quadratic near 0 _, ±_ 1, it follows that
+
+
+_ϵℓ_ _≤_ _C_ 2((2 _d −_ 2) exp( _−Cd_ _[ϵ/]_ [16] ) + _ϵℓ−_ 1) [2] _,_
+
+
+and we can inductively verify _ϵℓ_ _≤_ exp( _−Cd_ _[ϵ/]_ [16] ) as well as _∥_ _**z**_ ˆ _m_ [+(] _[t]_ [)] _−_ _**z**_ _m_ [+] _[∥][∞]_ _[≤]_ [2] _[d]_ [ exp(] _[−][Cd][ϵ/]_ [16][)]
+holds for all _ℓ_ _≤_ _t_ for sufficiently large _d_ .
+
+
+On the other hand, for the forward pass for levels h[ _m_ ] _>_ _t_ the softmax scores are uniform over
+_d_ h[ _m_ ] _−_ 1 tokens; moreover, the filter _ι_ will be applied to all tokens on level _t_ + 2 and higher. Indeed,
+the output of nodes on level h[ _m_ ] = _t_ + 1 reads
+
+
+_**x**_ ˆ [+(] _m_ _[t]_ [)] = _ϕ_ (ˆ _**z**_ _m_ [+(] _[t]_ [)] ) _,_ _**z**_ ˆ _m_ [+(] _[t]_ [)] = [1]
+
+
+( _**x**_ [+] 1 [+] _[ · · ·]_ [ +] _**[ x]**_ _d_ [+] _t_ [) +] _[ O]_ [(] _[ϵ][ℓ]_ [)] _[,]_
+_dt_
+
+
+_d_ [1] _t_ (ˆ _**x**_ [+(] 1 _[t]_ [)] + _· · ·_ + _**x**_ ˆ [+(] _dt_ _[t]_ [)] ) = _d_ [1]
+
+
+so that _∥_ _**z**_ ˆ _m_ [+(] _[t]_ [)] _∥∞_ _≤_ _O_ ( _d_ _[−]_ [1] _[/]_ [4] ) by Lemma 10. Then
+
+
+_∥_ _**u**_ ˆ [(] _m_ _[t]_ [)] [+] **[ 1]** _[n][′][∥][∞]_ _[≤]_ _[C]_ [2] _[∥|]_ _**[z]**_ [ˆ] _m_ [+(] _[t]_ [)] _|_ [2] _∥≤_ _O_ ( _d_ _[−]_ [1] _[/]_ [2] )
+
+
+so that if _O_ ( _d_ _[−]_ [1] _[/]_ [2] ) _<_ _ε_ 0, the filter zeroes out the output of each node on level _t_ + 2. Then the
+intermediate states of nodes _xm′_ on level _t_ + 2 read
+
+
+1 _dt_
+_**z**_ ˆ _m_ [+(] _[′][t]_ [)] = _dt_ +1 (ˆ _**x**_ [+(] 1 _[t]_ [)] + _· · ·_ + _**x**_ ˆ [+(] _dt_ _[t]_ [)] ) = _dt_ +1 _**z**_ ˆ _m_ [+(] _[t]_ [)] _,_
+
+
+which again activates the filter. Repeating this process for the remaining levels, we conclude that
+_∥_ _**z**_ ˆ _m_ [+(] _[t]_ [)] _∥∞_ _≤_ _O_ ( _d_ _[−]_ [1] _[/]_ [4] ) and so _∥_ _**x**_ ˆ [+(] _m_ _[t]_ [)] + **1** _n_ + _n′∥∞_ _≤_ _O_ ( _d_ _[−]_ [1] _[/]_ [2] ) holds simultaneously for all nodes
+h[ _m_ ] _> t_ (and all timesteps _t_ for which (11) is valid).
+
+
+**Evaluating the updates.** Define ¯ _**z**_ _m_ [(] _[t]_ [)] [=] _d_ 1 _t_ - _dj_ =1 _t_ _**[x]**_ _[j]_ [so that]
+
+
+_∥_ _**z**_ ˆ _m_ [(] _[t]_ [)] _[−]_ _**[z]**_ [¯] _m_ [(] _[t]_ [)] _[∥][∞]_ _[≤]_ [1]
+
+_dt_
+
+
+_dt_
+
+- _∥_ _**x**_ ˆ [(] _j_ _[t]_ [)] _−_ _**x**_ _j∥∞_ _≤_ exp( _−Cd_ _[ϵ/]_ [16] ) _._
+
+_j_ =1
+
+
+24
+
+
+We proceed to evaluate the gradient of _L_ at (11). For the weights _wj,m_ with h[ _m_ ] = _t_ +1, by isolating
+the errors from the forward pass we have
+
+
+_m_ [)]
+_ϕ_ (ˆ _**z**_ _m_ [(] _[t]_ [)][)] _[ −]_ _**[x]**_ _[m][, ][∂ϕ]_ [(ˆ] _**[z]**_ [(] _[t]_ [)]
+_∂wj,m_
+
+
+_∂_
+_∂wj,m_
+
+
+- 1 _m_ _[−]_ _**[x]**_ _[m][∥]_ [2] = [1]
+2 _n_ _[∥]_ _**[x]**_ [ˆ] [(] _[t]_ [)] _n_
+
+
+_m_ [)]
+= _[σ][j]_ [(] _**[w]**_ [(] _[t]_ [)]
+_n_
+
+
+- _ϕ_ (ˆ _**z**_ _m_ [(] _[t]_ [)][)] _[ −]_ _**[x]**_ _[m][, ϕ][′]_ [(ˆ] _**[z]**_ _m_ [(] _[t]_ [)][)] _[,]_ [ ˆ] _**[x]**_ [(] _j_ _[t]_ [)] _−_ _**z**_ ˆ _m_ [(] _[t]_ [)]
+
+
+1
+=
+_ndt_
+
+
+- _ϕ_ (¯ _**z**_ _m_ [(] _[t]_ [)][)] _[ −]_ _**[x]**_ _[m][, ϕ][′]_ [(¯] _**[z]**_ _m_ [(] _[t]_ [)][)] _[,]_ _**[ x]**_ _[j]_ _[−]_ _**[z]**_ [¯] _m_ [(] _[t]_ [)]
+
+
+  - 4
++ _O_ (1 + _∥ϕ_ _[′]_ _∥∞_ + _∥ϕ_ _[′′]_ _∥∞_ ) _∥_ _**z**_ ˆ _m_ [(] _[t]_ [)] _[−]_ _**[z]**_ [¯] _m_ [(] _[t]_ [)] _[∥][∞]_
+_dt_
+
+
+1
+=
+_ndt_
+
+
+- _ϕ_ (¯ _**z**_ _m_ [(] _[t]_ [)][)] _[ −]_ _**[x]**_ _[m][, ϕ][′]_ [(¯] _**[z]**_ _m_ [(] _[t]_ [)][)] _[,]_ _**[ x]**_ _[j]_ _[−]_ _**[z]**_ [¯] _m_ [(] _[t]_ [)] + _O_ (exp( _−Cd_ _[ϵ/]_ [16] )) _._
+
+
+Then the first term is identical to the initial gradient (6) analyzed in the proof of Theorem 5 except
+for the differences in indices, and from the same computation we obtain the leading term:
+
+
+_∂_
+_∂wj,m_
+
+
+- 1 _m_ _[−]_ _**[x]**_ _[m][∥]_ [2] = _−_ [2] _[c]_ 1 _{_ p[ _j_ ]= _m}_ + _O_ ( _d_ _[−]_ [2] _[−][ϵ/]_ [8] ) _,_
+2 _n_ _[∥]_ _**[x]**_ [ˆ] [(] _[t]_ [)] _d_ [2] _t_
+
+
+which holds with probability 1 _−_ exp( _−d_ _[ϵ/]_ [2] ) if _n_ = Ω( _d_ [2+] _[ϵ]_ ) under the same setting of Lemma 9.
+
+
+For all other nodes on level _t_ + 1 or below, the output does not depend on the weight _wj,m_, so the
+gradient of the squared error with respect to _wj,m_ is zero. Moreover, all nodes on level _t_ + 2 or above
+are zeroed out due to the filter and hence also has zero gradient. Then the oracle error is absorbed
+into the second term and the update after time _t_ + 1 with learning rate fixed to _η_ = _d_ [2+] _[ϵ/]_ [16] _η_ 0 reads
+
+_d_ [2+] _[ϵ/]_ [16]
+_wj,m_ [(] _[t]_ [)] _[−]_ _[η]_ [ �] _[∇][w]_ _j,m_ _[L]_ [(] **[W]** [(] _[t]_ [)] _[,]_ **[ U]** [) = 2] _[cη]_ [0] 1 _{_ p[ _j_ ]= _m}_ + _O_ ( _d_ _[−][ϵ/]_ [16] ) _._
+
+_d_ [2] h[ _m_ ] _−_ 1
+
+
+By choosing _η_ 0 such that none of the leading terms lands exactly on a half-integer, we have that for
+sufficiently large _d_,
+
+
+_d_ [2+] _[ϵ/]_ [16]
+2 _cη_ 0
+
+_d_ [2] h[ _m_ ] _−_ 1
+
+
+_w_ c [(] 1 _[t]_ [+1)] [ _m_ ] _,m_ [=] _[ w]_ c [(] 2 _[t]_ [+1)] [ _m_ ] _,m_ [=][ r]
+
+
+if p[ _j_ ] _̸_ = _m_ . We verify that
+
+
+_,_ _wj,m_ [(] _[t]_ [+1)] = r[ _O_ ( _d_ _[−][ϵ/]_ [16] )] = 0
+
+
+0 _≤_ _Cℓ_ = 2 _cη_ 0 _d_ [2+] _[ϵ/]_ [16]
+
+2 _d_ [2]
+
+
+_cη_ 0
+
+
+_≤_ 2 _cη_ 0 _._
+_d_ [2] _ℓ−_ 1
+
+
+Also, the weights _wj,m_ such that h[ _m_ ] _≥_ _t_ + 2 only affect the nodes that are zeroed out, so that the
+gradient is also bounded as _O_ ( _d_ _[−][ϵ/]_ [16] ) and _wj,m_ [(] _[t]_ [+1)] = 0.
+
+
+It remains to evaluate the gradient signal of weights _wj,m_ with h[ _m_ ] _≤_ _t_, which have already been
+updated in previous steps. Define the error
+
+
+_._
+����� _∞_
+
+
+_ξj,m,ℓ_ := max
+1 _≤α≤dℓ_
+
+
+_∂_ _**x**_ ˆ [(] _α_ _[t]_ [)]
+����� _∂wj,m_
+
+
+This is similar to the error control in the proof of Lemma 6, but we exploit the fact that parities up to
+level _t_ are solved to obtain a much tighter bound. Let us expand _ϕ_ _[′]_ ( _t_ ) = 2 _c_ _[′]_ (1 _−_ _t_ ) + _O_ ((1 _−_ _t_ ) [2] )
+near 1 and 2 _c_ _[′]_ ( _−_ 1 _−_ _t_ ) + _O_ ((1 + _t_ ) [2] ) near _−_ 1 for some positive constant _c_ _[′]_ . Recall
+
+_∥_ _**z**_ ˆ _α_ [+(] _[t]_ [)] _−_ _**z**_ _α_ [+] _[∥][∞]_ _[≤]_ [2] _[d]_ [ exp(] _[−][Cd][ϵ/]_ [16][)] _[,]_ h[ _α_ ] _≤_ _t_
+
+holds in the forward pass, so each component _**z**_ ˆ _α,i_ [(] _[t]_ [)] [is] _[ O]_ [(exp(] _[−][Cd][ϵ/]_ [16][))][-close to either of] _[ ±]_ [1][.] [It]
+
+follows that _|ϕ_ _[′]_ (ˆ _**z**_ _α,i_ [(] _[t]_ [)] [)] _[|]_ [ =] _[ O]_ [(exp(] _[−][Cd][ϵ/]_ [16][))][, so we can bound]
+
+
+_ξj,m,_ h[ _m_ ] =
+
+
+_∂_ _**x**_ ˆ [(] _m_ _[t]_ [)] _≤_ 2 _∥ϕ_ _[′]_ (ˆ _**z**_ _m_ [(] _[t]_ [)][)] _[∥][∞][σ][j]_ [(] _**[w]**_ _[m]_ [)] _[ ≤]_ _[O]_ [(exp(] _[−][Cd][ϵ/]_ [16][))] _[.]_
+����� _∂wj,m_ ����� _∞_
+
+
+25
+
+
+Moreover, for any _α_ on level h[ _α_ ] = _ℓ_, h[ _m_ ] _< ℓ_ _≤_ _t_ the magnitude of the derivative of the output
+_**x**_ ˆ [(] _α_ _[t]_ [)] [can be bounded as]
+����� _∂w∂_ _**x**_ ˆ _j,m_ [(] _α_ _[t]_ [)] ����� _≤_ ��� _ϕ′_ (ˆ _**z**_ _α_ ( _t_ ) [)] ��� _∞_ _dβ_             - _ℓ_ =1 _−_ 1 _σβ_ ( _**w**_ _α_ [(] _[t]_ [)][)] ����� _∂w∂_ _**x**_ ˆ _j,m_ [(] _β_ _[t]_ [)] ����� _≤_ _O_ (exp( _−Cd_ _[ϵ/]_ [16] )) _ξj,m,ℓ−_ 1 _._
+
+
+_dℓ−_ 1
+
+
+_≤_ ��� _ϕ′_ (ˆ _**z**_ _α_ ( _t_ ) [)] ��� _∞_
+����� _∞_
+
+
+- _σβ_ ( _**w**_ _α_ [(] _[t]_ [)][)]
+
+_β_ =1
+
+
+_∂_ _**x**_ ˆ [(] _β_ _[t]_ [)]
+����� _∂wj,m_
+
+
+_≤_ _O_ (exp( _−Cd_ _[ϵ/]_ [16] )) _ξj,m,ℓ−_ 1 _._
+����� _∞_
+
+
+This implies that _ξj,m,t_ = _ξj,m,t−_ 1 = _· · ·_ = _ξj,m,_ h[ _m_ ] _≤_ _O_ (exp( _−Cd_ _[ϵ/]_ [16] )). Furthermore, for any _α_
+on level h[ _α_ ] = _t_ + 1 it holds that
+_∂_ _**x**_ ˆ [(] _α_ _[t]_ [)] _≤∥ϕ_ _[′]_ _∥∞_    - _dt_ _σβ_ ( _**w**_ _α_ [(] _[t]_ [)][)] _∂_ _**x**_ ˆ [(] _β_ _[t]_ [)] _≤∥ϕ_ _[′]_ _∥∞ξj,m,t_ _≤_ _O_ (exp( _−Cd_ _[ϵ/]_ [16] )) _._
+����� _∂wj,m_ ����� _β_ =1 ����� _∂wj,m_ �����
+
+
+_≤∥ϕ_ _[′]_ _∥∞ξj,m,t_ _≤_ _O_ (exp( _−Cd_ _[ϵ/]_ [16] )) _._
+����� _∞_
+
+
+_≤∥ϕ_ _[′]_ _∥∞_
+����� _∞_
+
+
+_dt_
+
+
+- _σβ_ ( _**w**_ _α_ [(] _[t]_ [)][)]
+
+_β_ =1
+
+
+_∂_ _**x**_ ˆ [(] _β_ _[t]_ [)]
+����� _∂wj,m_
+
+
+Thus we have for all _α_ with h[ _α_ ] _≤_ _t_ + 1,
+
+
+= _O_ (exp( _−Cd_ _[ϵ/]_ [16] )) _,_
+����� _∞_
+
+
+_≤_ 2
+
+
+_∂_ _**x**_ ˆ [(] _α_ _[t]_ [)]
+����� _∂wj,m_
+
+
+_∂_
+_∂wj,m_
+
+
+- 1 - - _α_
+_α_ _[−]_ _**[x]**_ _[α][∥]_ [2] = [1] _**x**_ ˆ [(] _α_ _[t]_ [)] _[−]_ _**[x]**_ _[α][,]_ _[∂]_ _**[x]**_ [ˆ] [(] _[t]_ [)]
+2 _n_ _[∥]_ _**[x]**_ [ˆ] [(] _[t]_ [)] _n_ _∂wj,m_
+
+
+and the nodes on level _t_ + 2 or above are zeroed out due to the filter. Hence the gradient signal is
+exponentially small and
+
+
+_∇_      - _wj,m_ _L_ ( **W** [(] _[t]_ [)] _,_ **U** ) = _O_ ( _d_ exp( _−Cd_ _[ϵ/]_ [16] )) + _O_ ( _d_ _[−]_ [2] _[−][ϵ/]_ [8] ) _,_
+
+
+so that _wj,m_ [(] _[t]_ [+1)] = r[ _wj,m_ [(] _[t]_ [)] [+] _[ O]_ [(] _[d][−][ϵ/]_ [16][)] =] _[ w]_ _j,m_ [(] _[t]_ [)] [.] [This concludes the proof of (][11][).]
+
+
+Finally, after time _t_ = _v_ the weights at all levels have been updated, so that repeating the analysis of
+the forward pass yields that
+
+_∥_ _**y**_ ˆtest _−_ _**y**_ test _∥∞_ = ��� _**x**_ ˆ ( _dt_ +) _k−_ 1 _[−]_ _**[x]**_ _[d]_ [+] _[k][−]_ [1] ��� _∞_ _[≤]_ _[ϵ][v]_ _[≤]_ [exp(] _[−][Cd][ϵ/]_ [16][)] _[,]_
+
+
+as was to be shown.
+
+
+D EXPERIMENTAL DETAILS
+
+
+For the transformer architecture, the feedforward layer was fixed to the following piecewise quadratic
+link function:
+
+
+_ϕ_ ( _t_ ) =
+
+
+
+
+
+
+_−_ 4 _t_ [2] _−_ 8 _t −_ 3 _t ∈_ [ _−_ 1 _, −_ 0 _._ 5)
+4 _t_ [2] _−_ 1 _t ∈_ [ _−_ 0 _._ 5 _,_ 0 _._ 5)
+
+_−_ 4 _t_ [2] + 8 _t −_ 3 _t ∈_ [0 _._ 5 _,_ 1] _._
+
+
+
+
+
+For all CoT models, learning rates were fixed to _η_ = 15 _,_ 50 _,_ 100 for _k_ = 8 _,_ 16 _,_ 32. For the direct
+model, the learning rate was scaled to 0 _._ 01 _η_ to ensure stability of training. For the self-consistency
+model, filtering was done through an equivalent weight-based filter, which checks if any softmax
+score exceeds a threshold value, here set to 0.4. Moreover, we found that adding a 10% fraction of
+the gradient from the prediction loss to that of the CoT loss resulted in more stable training.
+
+
+Figure 5 shows CoT loss and prediction loss curves for _k_ = 8 _,_ 16 _,_ 32, extending Figure 4. The direct
+model fails to learn parity in all cases, while CoT with teacher forcing always learns efficiently. For
+CoT with self-consistency, a similar analysis as in Section 4 can be applied for _k_ = 8 _,_ 16 with two
+or three distinct learning stages. We also observe that the basic CoT model manages to fully solve
+the problem for _k_ = 8 (two intermediate levels) but not for _k_ = 16 _,_ 32 (three and four intermediate
+levels), indicating that assistance (teacher forcing or self-consistency checking) becomes necessary
+for more complex tasks.
+
+
+26
+
+
+Figure 5: CoT loss (left) and prediction loss (right) curves for the four models when _d_ = 64, _k_ = 32
+(top), _k_ = 16 (middle) and _k_ = 8 (bottom). For the CoT+consistency model, dashed lines indicate
+when the filters of each level are deactivated.
+
+
+27

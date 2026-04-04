@@ -1,0 +1,415 @@
+# TOKEN-BY-TOKEN ELECTION: IMPROVING LANGUAGE MODEL REASONING THROUGH TOKEN-LEVEL MULTI-MODEL COLLABORATION
+
+**Anonymous authors**
+
+Paper under double-blind review
+
+## ABSTRACT
+
+With the continuous development of large language models (LLMs), they have demonstrated amazing capabilities in many areas of natural language processing (NLP). However, due to their inherent limitations, the performance of a single model on many complex reasoning tasks has reached a bottleneck. A feasible solution is to introduce external feedback to further improve model performance, among which multi-model collaboration is a particularly promising approach. In this paper, we propose token-by-token election (TTE), a novel token-level multi-model collaboration strategy. Different from the common multi-model collaboration methods that operates at the overall answer level, TTE performs multi-model elections at the lowest token level. It selects the optimal token from the next token distributions given by multiple LLMs and then generates the answer autoregressively, allowing multiple LLMs to reach a consensus on each token. Inspired by human behavior, TTE consists of three election modes, including Cooperation, Competition, and Counting, all of which aim to sample the optimal token from multiple distributions. By strictly controlling the generation quality of each token, TTE can improve the quality of the overall answer and break through the performance bottleneck of a single LLM. Through extensive experiments on a variety of different types of reasoning benchmarks, we demonstrate the powerful performance of TTE, which further improves the performance compared to the current state-of-the-art single LLM and other multi-model collaborative methods. The code will be released on GitHub.
+
+## 1 INTRODUCTION
+
+With the rapid development of large language models (LLMs), numerous impressive works such as GPT4 (Achiam et al., 2023), Llama3 (Dubey et al., 2024), and Qwen2 (Yang et al., 2024) have emerged. People are increasingly accustomed to seeking answers from LLMs when encountering problems, and even researchers consult LLMs during their scientific work. Although LLMs have demonstrated remarkable capabilities in many areas of natural language processing (NLP), they often show their inability to perform complex reasoning tasks (Fu et al., 2022). Therefore, how to further improve the performance of LLMs in complex reasoning tasks has become a hot topic (Kojima et al., 2022; Liang et al., 2023). Enhancing model performance from training side is very costly, as training a language model requires significant resources. Furthermore, performance improvements have begun to plateau due to the slowing impact of scaling laws (Kaplan et al., 2020; Touvron et al., 2023). Therefore, more and more research (Wei et al., 2022; Wang et al., 2022; Kojima et al., 2022; Madaan et al., 2024; Shinn et al., 2024) has begun to focus on improving model performance from the inference side.
+
+Improving the performance of LLMs from the inference side differs from training-based methods which optimize model parameters (Ouyang et al., 2022; Rafailov et al., 2024). It is typically achieved by optimizing the model input (Zhang et al., 2022; Kojima et al., 2022) or refining the model output (Madaan et al., 2024; Kim et al., 2024), so it generally does not require additional training data and computing resources. Two typical methods are the chain of thought (CoT) approaches (Wei et al., 2022; Fu et al., 2022) and the self-correction approaches (Madaan et al., 2024; Shinn et al., 2024). The former improves response quality by providing several examples to guide LLMs in answering
+
+![Figure 1: Diagram illustrating the implementation of the proposed Token-level Token Election (TTE) method. (a) shows a single LLM sampling from its output next token distribution. (b) shows multiple LLMs (LLM1, LLM2, ..., LLMK) generating next token distributions, which are then combined via an election process to select the optimal next token.](9ba3dc91984c80b96f217fb1bddd5c06_img.jpg)
+
+The diagram is divided into two parts, (a) and (b).  
+ Part (a) shows a single LLM. At the bottom, input tokens  $x_1, x_2, \dots, x_{t-1}$  and a dashed box for  $x_t$  are fed into the LLM. The LLM outputs a distribution  $P(x_t | x_1, x_2, \dots, x_{t-1})$ . A dashed arrow labeled 'sampling from one distribution' points from this distribution to a box containing  $x_t$ . A solid arrow labeled 'autoaggression' points from the  $x_t$  box back to the LLM.  
+ Part (b) shows multiple LLMs:  $LLM_1, LLM_2, \dots, LLM_K$ . All LLMs share the same input tokens  $x_1, x_2, \dots, x_{t-1}$  and dashed box for  $x_t$ . Each LLM outputs its own distribution:  $P_1(x_t | x_1, x_2, \dots, x_{t-1}), P_2(x_t | x_1, x_2, \dots, x_{t-1}), \dots, P_K(x_t | x_1, x_2, \dots, x_{t-1})$ . These distributions are fed into an 'election in multiple distributions' process. The output of this process is  $x_t$ . A dashed arrow labeled 'sampling from one distribution' points from the election process to  $x_t$ . A solid arrow labeled 'autoaggression' points from the  $x_t$  box back to the LLMs.
+
+Figure 1: Diagram illustrating the implementation of the proposed Token-level Token Election (TTE) method. (a) shows a single LLM sampling from its output next token distribution. (b) shows multiple LLMs (LLM1, LLM2, ..., LLMK) generating next token distributions, which are then combined via an election process to select the optimal next token.
+
+Figure 1: From the implementation point of view, the proposed TTE is an adjustment based on single model autoregression. (a) A single LLM samples the next token from its output next token distribution and generates the response autoregressively. (b) The proposed TTE selects the optimal next token from multiple next token distributions given by multiple LLMs and generates the response autoregressively, realizing multi-model collaboration at the lowest token level.
+
+questions step-by-step, while the latter enhances response quality through iterative refinement of the answers. However, as the performance of individual LLMs continues to improve (Dubey et al., 2024; GLM et al., 2024), recent studies (Huang et al., 2023; Kojima et al., 2022; Yin et al., 2023) have pointed out that the performance gains of these two methods on LLMs are diminishing, particularly for smaller models. In addition, these two methods that rely on the model’s own capabilities to improve the quality of answers are difficult to break through the inherent limitations of the model without external feedback. An effective solution is to introduce external feedback to further improve model performance, among which multi-model collaboration is a very promising approach.
+
+Different LLMs usually have different knowledge boundaries and their own strengths (Wan et al., 2024; Jiang et al., 2023). If their capabilities can be well synergized, it will certainly enhance the reasoning ability of the language model and break through the performance bottleneck of a single LLM (Khan et al., 2024; Du et al., 2023), which is also the expected goal of multi-model collaboration. Previous multi-model collaboration methods (Khan et al., 2024; Liang et al., 2023; Du et al., 2023) mostly conduct majority voting or discuss at the level of the overall answer. For the same question, each LLM puts forward its own point of view and tries to convince other models, so as to finally reach a consensus among multiple models. The debate process usually involves selecting the final answer based on certain rules or introducing a new referee model. This may require many rounds of debate and relies heavily on one of the models to give a strong correct answer and convince the other debaters to get the final answer.
+
+It is generally believed that the knowledge of LLM is stored in its massive parameters, but the output next token distribution is the specific external manifestation of its knowledge<sup>1</sup> (Hinton, 2015; Wan et al., 2024; Radford et al., 2019). Therefore, a straightforward idea is to combine the knowledge of multiple LLMs by combining the next token distributions given by these models. In this paper, we propose token-by-token election (TTE), a novel token-level multi-model collaboration strategy. Specifically, TTE generates answers based on autoregression (Vaswani, 2017; Radford, 2018), but unlike the autoregression of a single LLM, the token generated by TTE at each step is sampled from multiple next token distributions generated by different LLMs. Since each token is generated through the collaboration of multiple models, the final answer is also produced through their joint decision. Huang et al. (2024) have pointed out that some low-quality answers may start to deteriorate from a certain token. Our starting point is to improve the quality of the overall answer by improving the quality of each token. We believe that the tokens selected by the joint decision of multiple models are better. This behavior is similar to a review team checking the document word by word to avoid errors and discussing uncertain parts to determine the final wording thereby improving the quality of document. Moreover, we are surprised to find that this token-level collaboration strategy even exhibits some emergent capabilities. In some cases, TTE can give the
+
+<sup>1</sup>LLM’s output is obtained by autoregressive sampling from this distribution, so LLM’s knowledge determines the quality of its output.
+
+correct answers even when multiple LLMs individually give incorrect answers, which reflects the saying “two heads are better than one”.
+
+In order to sample the optimal token from the next token distributions given by multiple LLMs, inspired by human behavior, we design three sampling modes: (1) Cooperation, comprehensively considering the next token distributions given by multiple LLMs to make a selection; (2) Competition, competing among the candidate tokens given by multiple LLMs to make a selection; (3) Counting, counting votes for different tokens from multiple LLMs to make a selection. These three election modes are all dedicated to selecting the optimal token from the next token distributions provided by multiple LLMs, strictly controlling the quality of each step of autoregression to improve the overall answer quality, thereby enhancing the language model reasoning.
+
+We conduct extensive experiments on three categories of tasks: mathematical reasoning, symbolic reasoning, and commonsense reasoning. The results show that our approach achieves significant improvements over previous strong baselines. In addition, each mode performs well in different categories of tasks, demonstrating its specific strengths. Further exploration reveals the advantages of TTE over existing multi-model methods, achieving our goal of combining the capabilities of different models, and even demonstrating certain emergent capabilities (Lu et al., 2023). We also conduct an evaluation on a reliability evaluation benchmark, and the results show that TTE can improve the authenticity of the answer to a certain extent, thereby enhancing the credibility of decisions.
+
+In summary, our main contributions include: (1) We propose token-by-token election, a novel token-level multi-model collaboration strategy. As far as we know, we are the first to attempt multi-model collaboration at the token level, offering a new perspective in this field. (2) We introduce three election modes, including cooperation, competition and counting, all of which are committed to improving the quality of the selected token, thus breaking through the performance bottleneck of a single LLM. (3) Evaluations on multiple reasoning benchmarks demonstrate the superior performance of our proposed method.
+
+## 2 TOKEN-BY-TOKEN ELECTION
+
+Given the same question, different LLMs usually give different answers. This is because they have learned different knowledge due to the difference in network architecture, training data and training process (Raiaan et al., 2024). As mentioned earlier, it is generally believed that the knowledge is stored in the huge parameters of LLMs (Radford et al., 2019), and the output next token probability distribution is the specific external manifestation of their knowledge (Hinton, 2015; Wan et al., 2024). Therefore, our starting point is to combine the knowledge of different LLMs by combining these distributions:
+
+$$\begin{aligned} P_t &= \text{Combine}(P_t^1, P_t^2, \dots, P_t^K), \\ KN_t &= \text{Combine}(KN_t^1, KN_t^2, \dots, KN_t^K), \end{aligned} \quad (1)$$
+
+where  $P_t$  represents distributions,  $KN$  represents knowledge and *Combine* represents a certain combination.
+
+The primary objective of the proposed TTE is to select the optimal token at each step of autoregression through multi-model collaboration, thereby improving the quality of the overall output by enhancing the quality of individual tokens, since the output of the language model is composed of these individual tokens. The overall architecture of TTE is shown in the Figure 1. Specifically, we aim to combine the different next token probability distributions generated by multiple LLMs to select the current optimal token. As these different distributions encapsulate distinct knowledge from the respective LLMs, our aim is to achieve the optimal integration of diverse LLM capabilities in this manner. By incorporating external feedback and knowledge from various LLMs (Yin et al., 2023), our multi-model collaboration method TTE can overcome the performance limitations of a single model.
+
+In the following sections, we first introduce some basic content of LLM autoregression, then introduce the three election models we proposed, and finally briefly summarize the differences between our method and previous methods.
+
+### 2.1 PRELIMINARIES
+
+From the implementation point of view, the proposed TTE is an adjustment based on single model autoregression, as shown in Figure 1. For single LLM inference, given an input text sequence  $Text$ , it will first be tokenized to obtain a token sequence  $T$ :
+
+$$T = \text{tokenize}(\text{text}), \quad (2)$$
+
+where  $T = \{t_i\}_{i=1}^N$ ,  $t_i$  represents an independent token in  $T$ , and  $N$  is the length of  $T$ . The tokenize operation is a necessary step for LLM inference. It converts the text into a sequence of tokens that the LLM can process. This is usually done by a tokenizer equipped with the LLM. Then we feed  $T$  into an LLM  $\mathcal{M}$ , which will calculate the probability distribution  $P$  of the next token,  $P$  is essentially a conditional probability distribution:
+
+$$P(t_{N+1} | \{t_i\}_{i=1}^N) = \mathcal{M}(\{t_i\}_{i=1}^N), \quad (3)$$
+
+$P$  contains the probability values for each token in the LLM tokenizer's vocabulary being the next token. The next token will be sampled based on  $P$  and will be used as additional input to the original sequence to continue generating subsequent tokens until the end token  $\langle \text{eos} \rangle$  (end of sentence) is output. At each step the model is auto-regressive (Graves, 2013), consuming the previously generated symbols as additional input when generating the next (Vaswani, 2017). Finally, the tokenizer will decode all generated tokens back into text to get the final output result of LLM.
+
+### 2.2 ELECTION MODES
+
+Given the same input,  $K$  LLMs  $\{\mathcal{M}_j\}_{j=1}^K$  will output  $K$  next token distributions  $\{P_j\}_{j=1}^K$ . Since the tokenizers of different LLMs are different, we need to decode them into the probability distribution of the next word so that the  $K$  LLMs can be aligned in the same semantic space. So we can get  $K$  next word distributions  $\{P_j^w\}_{j=1}^K$ . What we need to do is to sample the optimal next word  $\text{next\_word}$  from  $\{P_j^w\}_{j=1}^K$ :
+
+$$\text{next\_word} = \text{Sample}(\{P_j^w\}_{j=1}^K). \quad (4)$$
+
+For sampling from a single distribution, strategies such as Top-k (Fan et al., 2018) and Top-p (Holtzman et al., 2019) are commonly used. For sampling from multiple distributions, inspired by human behaviors, we have designed the following three sampling modes, including Cooperation, Competition and Counting:
+
+**Cooperation.** For each next word probability distribution  $P^w$ , we use the Top-k (Fan et al., 2018) strategy to sample the top  $H$  words with the highest probability (the probability of the other words is very small so there is no need to consider them, which can also reduce complexity). In this way, from the  $K$  distributions given by  $K$  LLMs, we can get  $K$  dictionaries, where each key represents a word, and each value represents its probability. Cooperation is to add the values of these  $K$  dictionaries according to the same key, and then select the one with the highest probability. In this way, the optimal next word is elected through multi-model cooperation.
+
+**Competition.** For each next word probability distribution  $P^w$ , we select the word with the highest probability as the candidate, so we get  $K$  candidates from  $K$  LLMs. It is generally believed that the higher the probability of the LLM output, the greater its confidence in that output (Radford et al., 2019; Liang et al., 2022; Kuhn et al., 2023; Shih et al., 2023). We select the candidate with the highest probability as the optimal next word, which is equivalent to selecting the LLM with the highest confidence to answer at each step. In this way, the optimal next word is elected through multi-model competition.
+
+**Counting.** For each next word probability distribution  $P^w$ , similar to the cooperation mode, we only keep the top  $H$  words, which all have the probability of being the next word Fan et al. (2018); Jiang et al. (2021). We count the number of times each word appears in the  $K$  dictionaries. The higher the count, the more LLMs we believe recognize it. We select the word with the most appearances as the optimal next word. If two words have the same number of votes, we select the one with a higher total probability. In this way, the optimal next word is elected through counting the votes given by multiple LLMs.
+
+The pseudo code of Algorithm 1 shows the complete process of TTE generating an answer based on a question, note that we have only described the general core process and many details have been omitted. We also give a theoretical analysis of TTE in Appendix A.
+
+#### **Algorithm 1** Token-by-Token Election
+
+---
+
+```
+
+Require: Multiple LLMs  $\{M_j\}_{j=1}^K$ , query  $q$ 
+0 :  $response = str()$ ,  $length = 0$ , storing answers and indicating answer length
+1 : while  $length \leq max\_length$ :
+2 :   for  $j$  in range( $K$ ):
+3 :     Input query  $q$  into LLM and get the next token distribution:  $P_j = M_j(q)$ .
+4 :     Convert the next token distribution  $P_j$  to next word distribution  $P_j^w$ .
+5 :     Use the election modes to sample the next word:  $next\_word = Sample(\{P_j^w\}_{j=1}^K)$ .
+6 :     Slice the  $next\_word$  as additional input to the original input:  $q = q.join(next\_word)$ .
+7 :     Sequence length increases:  $length = length + 1$ .
+8 :     Generate answers autoregressively:  $response = response.join(next\_word)$ .
+9 :     Determine whether the end token  $\langle eos \rangle$  is generated, if so, stop the loop.
+10 : end
+11 : return  $response$ 
+
+```
+
+---
+
+### 2.3 RELATION TO PRIOR WORK
+
+FuseLLM (Wan et al., 2024) also leverages the distributions provided by multiple LLMs, but it is a training-based method aimed at knowledge distillation. It combines the next token probability matrices given by multiple LLMs to obtain soft labels, which are used to supervise the training process of the student model, thereby distilling the knowledge from multiple teacher models into the student model. In contrast, our TTE directly samples from multiple distributions and generates answers autoregressively, making it a method that does not require training. The two approaches have fundamental differences.
+
+## 3 EXPERIMENTS
+
+### 3.1 EXPERIMENT SETUP
+
+**Tasks and datasets.** We evaluate the performance of our proposed TTE method on the following benchmarks:
+
+- **Arithmetic Reasoning.** For this task, we select four datasets of different difficulty, including SVAMP (Patel et al., 2021), GSM8K (Cobbe et al., 2021), AddSub (Hosseini et al., 2014) and AQuA (Ling et al., 2017).
+- **Commonsense Reasoning.** We select four datasets to evaluate the TTE’s performance, including CommonsenseQA (Talmor et al., 2018), StrategyQA (Geva et al., 2021), OpenBookQA (Mihaylov et al., 2018) and ARC-c (Clark et al., 2018).
+- **Symbolic Reasoning.** We select four datasets from BigBench (Srivastava et al., 2022) for testing, including Date Understanding, Penguin, Colored Objects and Logical Deduction.
+- **Reliability Evaluation.** We select TruthfulQA (Lin et al., 2021) to evaluate the reliability and truthfulness of the answers generated by language models.
+
+**Baselines.** We compare the proposed TTE with three sets of widely used baselines: (1) source LLMs, including Qwen-2 7B (Yang et al., 2024), Llama-3 8B (Dubey et al., 2024) and GLM-4 9B (GLM et al., 2024); (2) CoT (Wei et al., 2022) methods: the performance of the above three LLMs after using CoT prompting; (3) Majority Voting, a widely used collaboration method, the answers of the three models are subjected to majority voting to select the most consistent answer. We also compare with two multi-model collaboration methods EoT (Yin et al., 2023) and MAD (Du et al., 2023) on partial datasets.
+
+**Implementation details.** In the main experiment, we use three SOTA open source LLMs: Qwen-2 7B, Llama-3 8B and GLM-4 9B. The top 5 words are sampled in the Top-k sampling algorithm. We use regular expressions to extract the answers from LLM’s answers to calculate the accuracy. The whole method is training-free, and most experiments are completed on one Nvidia H800 GPU.
+
+Table 1: Comparison of accuracy on four mathematical reasoning datasets using various election modes of TTE and strong baselines. The best results are highlighted in **bold**. All results are expressed as a percentage of accuracy, with the % symbol omitted. We also compute the arithmetic average of the four results for quick comparison, which is shown in the Avg. column.
+
+| Methods / Datasets |                 | SVAMP       | GSM8K       | AddSub      | AQuA        | Avg.        |
+|--------------------|-----------------|-------------|-------------|-------------|-------------|-------------|
+| Single LLM         | Qwen-2-7B       | 88.8        | 81.5        | 90.3        | 61.4        | 80.5        |
+|                    | Llama-3-8B      | 80.6        | 77.5        | 84.3        | 48.4        | 72.7        |
+|                    | GLM-4-9B        | 86.2        | 77.7        | 87.6        | 55.9        | 76.8        |
+| CoT                | Qwen-2-7B       | 90.0        | 82.3        | <b>90.8</b> | <b>65.5</b> | 82.1        |
+|                    | Llama-3-8B      | 85.2        | 79.6        | 86.5        | 54.2        | 76.3        |
+|                    | GLM-4-9B        | 88.6        | 79.6        | 87.5        | 58.1        | 78.4        |
+| Multi-Model        | Majority Voting | 90.8        | 79.0        | 91.3        | 60.5        | 80.4        |
+| TTE (Ours)         | Cooperation     | 91.2        | 83.3        | <b>91.5</b> | <b>65.5</b> | 82.8        |
+|                    | Competition     | <b>91.5</b> | <b>84.9</b> | 91.3        | 64.1        | <b>83.0</b> |
+|                    | Counting        | 90.3        | 84.1        | 90.3        | 60.3        | 81.2        |
+
+Table 2: Comparison of accuracy on four commonsense reasoning datasets using various election modes of TTE and strong baselines.
+
+| Methods / Datasets |                 | CSQA        | StrategyQA  | OpenBookQA  | ARC-c       | Avg.        |
+|--------------------|-----------------|-------------|-------------|-------------|-------------|-------------|
+| Single LLM         | Qwen-2-7B       | 68.3        | 69.6        | 78.0        | 79.7        | 73.9        |
+|                    | Llama-3-8B      | 65.4        | 68.8        | 71.4        | 74.2        | 70.0        |
+|                    | GLM-4-9B        | 65.2        | 71.3        | 79.6        | 80.5        | 74.4        |
+| CoT                | Qwen-2-7B       | 71.9        | 73.2        | 81.0        | 81.0        | 76.7        |
+|                    | Llama-3-8B      | 67.9        | 70.2        | 75.3        | 76.3        | 72.4        |
+|                    | GLM-4-9B        | 67.3        | 71.8        | 79.5        | 79.4        | 74.5        |
+| Multi-Model        | Majority Voting | 72.2        | 71.8        | 80.6        | 83.2        | 77.0        |
+| TTE (Ours)         | Cooperation     | <b>76.9</b> | 75.2        | 82.2        | 83.1        | 79.3        |
+|                    | Competition     | 75.7        | 74.8        | 80.2        | 82.1        | 78.2        |
+|                    | Counting        | 76.5        | <b>75.6</b> | <b>83.4</b> | <b>83.8</b> | <b>79.8</b> |
+
+### 3.2 MAIN RESULTS
+
+We select Qwen-2 7B, Llama-3 8B, and GLM-4 9B as the baseline single LLMs, which are among the most advanced open-source LLMs. Each of these models has its own advantages and disadvantages in different datasets and generally represents the best performance of models with similar parameter scales on these datasets.
+
+**Mathematical Reasoning.** The quantitative results on four datasets are shown in Table 1. It can be seen that the proposed TTE achieves significant performance improvements in most cases. Comparing the three single models, Qwen performs the best in mathematics, while Llama performs the worst. It can also be observed that the performance improvement brought by CoT to Llama is significantly greater than that of the other two models, but CoT does not bring much improvement to the other two models with better performance. Furthermore, naive majority voting does not guarantee performance improvement over the best-performing single model. Finally, all three collaborative modes are improved compared to the single model, and the Competition mode performs the best in terms of average scores.
+
+**Commonsense Reasoning.** The quantitative results on four datasets are shown in Table 2. It can be clearly seen that the proposed TTE achieves significant performance improvements. Comparing the three single models, GLM performs the best in this task, while Llama still performs the worst. It is observed that the performance improvement brought by CoT is still not significant enough, especially for the GLM, there is almost no improvement. In addition, majority voting brings certain performance improvements, which are generally better than the best performance of a single model. Finally, all three collaborative modes are improved compared to the single model, and the Counting mode performs the best in terms of average scores.
+
+**Symbolic Reasoning.** The quantitative results on four datasets are shown in Table 3. The proposed TTE still achieves the best performance in most cases, with the Cooperation mode performing best and the Competition mode performing worse in terms of average scores, but all of them are improved compared to the best performance of a single LLM. Comparing the three single models, GLM
+
+Table 3: Comparison of accuracy on four symbolic reasoning datasets from BigBench using various election modes of TTE and strong baselines.
+
+| Methods / Datasets |                 | Date        | Penguin     | Colored Objects | Logical Deduction | Avg.        |
+|--------------------|-----------------|-------------|-------------|-----------------|-------------------|-------------|
+| Single LLM         | Qwen-2-7B       | 57.2        | 77.4        | 74.0            | 74.8              | 70.9        |
+|                    | Llama-3-8B      | 65.6        | 75.3        | 64.8            | 63.6              | 67.3        |
+|                    | GLM-4-9B        | 54.0        | 81.5        | 76.4            | 81.4              | 73.3        |
+| CoT                | Qwen-2-7B       | 66.5        | 79.2        | 73.2            | 77.3              | 74.1        |
+|                    | Llama-3-8B      | <b>69.6</b> | 76.1        | 66.4            | 70.1              | 70.6        |
+|                    | GLM-4-9B        | 58.2        | 81.3        | 76.9            | 82.0              | 74.6        |
+| Multi-Model        | Majority Voting | 65.0        | 82.3        | 79.5            | 81.2              | 77          |
+| TTE (Ours)         | Cooperation     | 68.9        | <b>84.9</b> | 78.8            | <b>83.2</b>       | <b>79.0</b> |
+|                    | Competition     | 68.5        | 82.8        | 76.2            | 78.4              | 76.5        |
+|                    | Counting        | 67.3        | 81.5        | <b>81.2</b>     | 82.4              | 78.1        |
+
+performs the best in this task, while Llama still performs the worst. Moreover, it can be seen that the performance improvement brought by CoT is still not significant enough and majority voting brings certain performance improvements, which are generally better than the best performance of a single model.
+
+**Analysis:** From the above experiments, it can be seen that compared with the performance of single models and other baseline methods, the three modes of TTE perform relatively well and have improved. In general, the three modes have their own excellent performances. The Cooperation mode performs best in symbolic reasoning tasks, the Competition mode performs best in mathematical reasoning tasks, and the Counting mode performs best in commonsense reasoning tasks.
+
+In addition, it can be clearly seen that CoT does not improve the performance of a single model enough in most cases and sometimes even causes performance regression. A possible explanation is that more chain thinking data has been introduced in the post-training (Rafailov et al., 2024; Ouyang et al., 2022) process of these latest LLMs (Dubey et al., 2024; Yang et al., 2024; GLM et al., 2024) so they have learned to think step by step even without obvious prompts. Besides, some previous studies (Wei et al., 2022; Kojima et al., 2022) have also shown that the CoT method is more effective for LLMs with larger parameters and has less impact on LLMs with fewer parameters.
+
+Finally, we can see that although majority voting is a very simple way of collaboration, it can still bring certain performance improvements compared to single models most of the time, which is also consistent with the experience of human collective wisdom.
+
+### 3.3 RELIABILITY EVALUATION
+
+The validity of LLM outputs is crucial, and their reliability is equally indispensable. The main experiments in Section 3.2 have already demonstrated that our proposed TTE can significantly enhance the reasoning performance of language models. Therefore, we are also interested in exploring whether TTE can improve the reliability of language models. For this purpose, we select TruthfulQA (Lin et al., 2021), a classic and widely used benchmark for evaluating the truthfulness of language model outputs, which can reflect the reliability of LLM outputs to some extent.
+
+The results are shown in Table 4. The three metrics in the table indicate higher truthfulness of the model outputs when they are larger. It can be clearly seen that the metrics for the three single models are relatively close, while our proposed TTE in its three modes achieves significantly higher metrics, indicating that TTE enhances the reliability of language model outputs to some extent. This evaluation of truthfulness differs from the evaluation of reasoning performance, it requires the model to have encountered the relevant content in the training data to answer factual questions, rather than being able to generalize like reasoning tasks. For example, knowing that the previous U.S. president was Trump does not necessarily mean the model can infer that the current president is Biden. The model can only make the correct response to factual questions if it has been trained on relevant data. The knowledge boundary of LLMs largely determines the truthfulness of their responses. The performance of TTE also meets our expectation of effectively combining the knowledge of multiple models to some extent.
+
+Table 4: Performance of TTE in reliability evaluation. We report three metrics on the TruthfulQA benchmark, where larger values indicate more truthful results.
+
+| Model/Metric |             | ROUGE | BLEU  | BLEURT |
+|--------------|-------------|-------|-------|--------|
+| Single LLM   | Qwen-2.7B   | 0.548 | 0.532 | 0.659  |
+|              | Llama-3.8B  | 0.555 | 0.517 | 0.634  |
+|              | GLM-4.9B    | 0.587 | 0.536 | 0.660  |
+| TTE (Ours)   | Cooperation | 0.598 | 0.551 | 0.661  |
+|              | Competition | 0.593 | 0.546 | 0.657  |
+|              | Counting    | 0.595 | 0.554 | 0.658  |
+
+Table 5: Ablation on the number of used LLMs. The Cooperation mode is used here for multi-model collaboration.
+
+| Model          | SVAMP | CSQA | Penguin |
+|----------------|-------|------|---------|
+| Qwen           | 88.8  | 68.3 | 77.4    |
+| Llama          | 80.6  | 65.4 | 75.3    |
+| GLM            | 86.2  | 65.2 | 81.5    |
+| Qwen+Llama     | 90.2  | 73.7 | 85.1    |
+| Qwen+GLM       | 91.0  | 74.1 | 85.3    |
+| Llama+GLM      | 87.3  | 71.7 | 84.2    |
+| Qwen+Llama+GLM | 91.2  | 76.9 | 84.9    |
+
+Table 6: Comparison with other collaboration methods.
+
+| Method            | SVAMP | CSQA | Penguin |
+|-------------------|-------|------|---------|
+| EoT               | 88.9  | 74.3 | 82.1    |
+| MAD               | 90.1  | 73.9 | 80.3    |
+| TTE (Cooperation) | 91.2  | 76.9 | 84.9    |
+| TTE (Competition) | 91.5  | 75.7 | 82.8    |
+| TTE (Counting)    | 90.3  | 76.5 | 81.5    |
+
+### 3.4 ABLATION STUDY
+
+**Ablation on the number of used LLMs.** We show the evaluation results of using different numbers of LLMs in Table 5. It can be seen that as the number of LLMs increases from one to three, the overall performance gradually improves. The magnitude of this change is different in different tasks. We also notice that in some cases, the effect of using two models is better than that of using three. We think this is reasonable. When human groups collaborate, it is not always the case that more participants lead to better outcomes, the ability of the participants is a key factor. But in general, using more models will expand the knowledge boundary of TTE and thus improve performance.
+
+**Ablation of the number of sampled words  $H$ .** We show the evaluation results of using different numbers of sampled words in Figure 2. The performance of the Competition mode is independent of the number of sampled words. In the Cooperation mode, it can be clearly seen that the performance hardly changes after the number of sampled words reaches 5. The possible reason is that the probability of the top 5 words is large, and the probability of the following words is too small, so their addition will not have much impact on the performance. In Counting mode, as the number of sampled words increases, the performance drops significantly. This is because in counting mode, we prioritize counting the number of times a word appears in multiple distributions when counting votes rather than considering their probability values. When there are too many sampled words, the probability of the following words is actually very small. Introducing too many words with very small probabilities will have a significant negative impact on the results.
+
+![Figure 2: Three line graphs showing accuracy (%) vs. sampled words (2.5 to 20.0) for SVAMP, CSQA, and Penguin tasks. Each graph compares Cooperation (blue), Competition (orange), and Counting (green) modes. Cooperation and Competition modes maintain high accuracy (around 90% and 80% respectively), while the Counting mode's accuracy drops sharply as the number of sampled words increases.](2396add2849eccefcbcfbe1c7142a253_img.jpg)
+
+| Task    | Mode        | 2.5  | 5.0  | 10.0 | 15.0 | 20.0 |
+|---------|-------------|------|------|------|------|------|
+| SVAMP   | cooperation | 91.2 | 91.2 | 91.2 | 91.2 | 91.2 |
+|         | competition | 88.8 | 88.8 | 88.8 | 88.8 | 88.8 |
+|         | counting    | 60.0 | 62.0 | 45.0 | 35.0 | 25.0 |
+| CSQA    | cooperation | 76.9 | 76.9 | 76.9 | 76.9 | 76.9 |
+|         | competition | 68.3 | 68.3 | 68.3 | 68.3 | 68.3 |
+|         | counting    | 65.0 | 65.0 | 55.0 | 45.0 | 35.0 |
+| Penguin | cooperation | 84.9 | 84.9 | 84.9 | 84.9 | 84.9 |
+|         | competition | 77.4 | 77.4 | 77.4 | 77.4 | 77.4 |
+|         | counting    | 40.0 | 40.0 | 35.0 | 25.0 | 15.0 |
+
+Figure 2: Three line graphs showing accuracy (%) vs. sampled words (2.5 to 20.0) for SVAMP, CSQA, and Penguin tasks. Each graph compares Cooperation (blue), Competition (orange), and Counting (green) modes. Cooperation and Competition modes maintain high accuracy (around 90% and 80% respectively), while the Counting mode's accuracy drops sharply as the number of sampled words increases.
+
+Figure 2: The effect of the number of sampled words on the three modes of TTE.
+
+### 3.5 COMPARISON WITH OTHER COLLABORATION METHODS
+
+As shown in the previous experimental results, our TTE breaks through the performance bottleneck of a single model and achieves the goal of multi-model collaboration. In addition, we also want to explore its competitiveness in multi-model collaboration methods. We select two represen-
+
+Table 7: Examples where TTE is able to answer correctly even though all three models answer incorrectly. Incorrect answers are shown in **red** and correct answers are shown in **blue**. Since some answers are too long, we have made some adjustments to facilitate presentation, but the core content remains unchanged. Cooperation mode is used here.
+
+|                 | GSM8K                                                                                                                                                                                                                                                                                                                                                                                                                                     | CSQA                                                                                                                                                                                                                                                                                                                         |
+|-----------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| <b>Question</b> | The book is printed on paper that, when stacked, is 100 pages to the inch. Each paper is printed on both sides, with one page of the book printed on each side. How many pages are in the book, if it is 1.5 inches thick?                                                                                                                                                                                                                | Kramer wrote a self-referential book. What might that book be about? (A) counter (B) coffee table (C) school room (D) backpack (E) bedside table                                                                                                                                                                             |
+| <b>Qwen</b>     | To find out how many pages are in the book, we need to understand that each inch of the book's thickness represents 100 pages (since the paper is 100 pages per inch). Given that the book is 1.5 inches thick, we can calculate the total number of pages as follows:<br>Total pages = Thickness of the book in inches $\times$ Pages per inch<br>Total pages = $1.5 \times 100 = 150$<br>Therefore, the book has <b>**150 pages**</b> . | Analysis: A self-referential book is one that refers to itself, often discussing its own structure, content, or writing process. Given this context, the book would likely delve into themes related to literature, writing, or the act of creating a book. Answer: <b>(E) bedside table</b>                                 |
+| <b>Llama</b>    | The book is 1.5 inches thick. Each inch has 100 pages. So 1.5 inches will have $1.5 \times 100 = 150$ pages. The answer is <b>150</b> .                                                                                                                                                                                                                                                                                                   | Analysis: The question is asking what Kramer might write a self-referential book about. A self-referential book is a book that refers to itself, often in a humorous or ironic way. Kramer is a character from the TV show "Seinfeld", known for his eccentricities and witty remarks. Correct answer: <b>(A) The Kramer</b> |
+| <b>GLM</b>      | If the paper is 100 pages to the inch and each paper is printed on both sides, then each inch of thickness corresponds to 50 pages (since one side of the paper is one page). If the book is 1.5 inches thick, then the number of pages in the book would be: $1.5 \text{ inches} \times 50 \text{ pages per inch} = 75 \text{ pages}$ . So, the book has <b>75</b> pages.                                                                | Among the options, "bedside table" (E) is the closest to a book, as it is a piece of furniture that could be associated with a book (books are often placed on bedside tables). Given the limitations of the options, the most appropriate answer would be: <b>(E) bedside table</b>                                         |
+| <b>TTE</b>      | If the book is 1.5 inches thick and each paper is 1/100 of an inch thick, then the number of papers in the book is $1.5 \text{ inches} \times 100 \text{ papers/inch} = 150 \text{ papers}$ . Since each paper has two sides, and each side is a page, the total number of pages in the book is $150 \text{ papers} \times 2 \text{ sides/paper} = 300 \text{ pages}$ .                                                                   | Coffee table could be a possibility, as a coffee table is a common piece of furniture that Kramer might have written about in a self-referential manner. Answer: <b>(B) coffee table</b>                                                                                                                                     |
+
+tative approaches: (1) Multi-Agent Debate (Du et al., 2023), where multiple models express their arguments, and a judge manages the debate process to determine the final solution. (2) Exchange of Thought (Yin et al., 2023), a recently released method that builds cross-model communication strategies based on network topologies. As shown in Table 6, TTE steadily outperforms these two innovative baselines across different modes.
+
+### 3.6 EXAMPLES OF EMERGENT CAPABILITIES
+
+The goal of TTE is to combine the capabilities of multiple models to break through the performance bottlenecks of a single LLM. Traditional multi-model collaboration methods rely on most models providing the same correct answer for majority voting, or rely on one model providing a highly confident correct answer to convince the others to reach a consensus. However, we are surprised to find that our TTE can provide the correct answer even when each individual model answers incorrectly, demonstrating a certain level of emergent ability, akin to the saying "two heads are better than one".
+
+Typical examples are shown in Table 7. It can be clearly seen that for the same math problem, the three LLMs give wrong answers of 150, 150 and 75 respectively, ignoring the fact that a piece of paper has two sides or confusing the logical relationship, while TTE gives the correct answer of 300; for another question, the three single LLMs fail to figure out the meaning of "a self-refine book" and thus can not give a correct answer, but TTE understands and gives the correct answer. We speculate that the token-level collision of ideas in TTE has brought some different inspirations, and may sometimes achieve the effect of  $1 + 1$  being greater than 2. More examples and discussion can be seen in Appendix B.
+
+## 4 RELATED WORK
+
+In this section, we will introduce some mainstream methods to improve LLM performance from the inference side. These methods are all training-free and do not require a lot of computing resources, including chain of thought prompting, self-correction, and multi-model collaboration methods.
+
+### 4.1 CHAIN OF THOUGHT PROMPTING
+
+Wei et al. (2022) first proposed the method to improve the reasoning performance of LLM by constructing chain of thought prompts, mainly by constructing contextual examples to teach LLM to analyze step by step and then output the answer. Since then, many works (Kojima et al., 2022; Wang et al., 2022; Fu et al., 2022; Chia et al., 2023; Zhang et al., 2022) have been further improved on this basis. In addition to the correct examples, Chia et al. (2023) also added the wrong thinking process to let the model further learn to avoid mistakes. Kojima et al. (2022) proposed a zero-shot CoT method, which allows the model to learn step-by-step analysis by adding the universal instruction "Let's think step by step", thus avoiding the need to construct examples. Furthermore, self-consistency method (Wang et al., 2022) was proposed to replace the greedy decoding strategy in CoT, by sampling the outputs of multiple paths and using majority voting to select the final answer, the reasoning performance of the single model was further improved. Subsequently, (Fu et al., 2022) pointed out that more complex thought chain prompts have better effects, and the more complex answers output are more credible, and further improved the self-consistency method based on complexity.
+
+### 4.2 SELF-CORRECTION
+
+A method that utilizes the model's own capabilities for self-correction (Madaan et al., 2024; Shinn et al., 2024; Sean et al., 2022; Kim et al., 2024; Bai et al., 2022) has been proposed to further improve the quality of answers output by the model. Madaan et al. (2024) used the model's own feedback to find errors and modify their own output, improving the quality of the output through continuous iteration and modification until the stopping condition is met. Kim et al. (2024) introduced some simple prompts to allow LLM to recursively criticize and improve its output. Shinn et al. (2024) reflected the task feedback signal through verbal feedback and then maintained the LLM's own reflected text in the episodic memory buffer to induce better decisions in subsequent trials. However, Huang et al. (2023) pointed out that these self-correction methods have great limitations and do not significantly improve LLM in a fair setting.
+
+### 4.3 MULTI-MODEL COLLABORATION
+
+Using multiple LLMs to solve problems is still in its early stages (Yin et al., 2023). It is usually done by imitating some group collaboration behaviors of humans to conduct multi-model collaboration (Khan et al., 2024; Liang et al., 2023; Du et al., 2023; Yin et al., 2023; Sun et al., 2023). The goal is to combine the advantages of multiple models and introduce external feedback from other models to break through the performance bottleneck of a single model (Liang et al., 2023). The simplest method of multi-model collaboration is to perform majority voting based on the answers given by multiple LLMs. In addition, many methods begin to allow LLMs to interact with each other. Liang et al. (2023) and Du et al. (2023) enhanced the performance of LLM in specific tasks by allowing multiple LLMs to debate on the same problem and finally reach a consensus. Yin et al. (2023) proposed a cross-model exchange based on network topology to obtain feedback from other LLMs to improve their own output. Inspired by human behavior, Sun et al. (2023) proposed multiple collaboration modes, including discussion, review, and retrieval, to jointly work towards enhancing model inference performance. Different from these methods that interact at the overall answer level, our proposed TTE collaborates at the lowest token level and directly generates answers by reaching consensus at each token, avoiding possible tedious multi-round discussions.
+
+## 5 CONCLUSION
+
+In this paper, we propose TTE, an innovative token-level multi-model collaboration paradigm. By selecting the optimal next token from the next token distributions given by multiple LLMs and generating answers autoregressively, TTE can effectively integrate the capabilities of multiple models to break the performance bottleneck of a single model. The excellent performance on multiple tasks proves the effectiveness and reliability of our method. In addition, compared with previous multi-model collaboration methods, TTE has other advantages, such as no need to manually construct prompts for collaboration, no need for multiple rounds of discussion, and even shows certain emergence capabilities. We hope that TTE can provide a new perspective for multi-model collaboration. Discussion and limitation are provided in Appendix C.
+
+## REFERENCES
+
+- 540  
+ 541  
+ 542 Josh Achiam, Steven Adler, Sandhini Agarwal, Lama Ahmad, Ilge Akkaya, Florencia Leoni Ale-  
+ 543 man, Diogo Almeida, Janko Altenschmidt, Sam Altman, Shyamal Anadkat, et al. Gpt-4 technical  
+ 544 report. *arXiv preprint arXiv:2303.08774*, 2023.  
+ 545  
+ 546 Yuntao Bai, Saurav Kadavath, Sandipan Kundu, Amanda Askell, Jackson Kernion, Andy Jones,  
+ 547 Anna Chen, Anna Goldie, Azalia Mirhoseini, Cameron McKinnon, et al. Constitutional ai: Harm-  
+ 548 lessness from ai feedback. *arXiv preprint arXiv:2212.08073*, 2022.  
+ 549  
+ 550 Yew Ken Chia, Guizhen Chen, Luu Anh Tuan, Soujanya Poria, and Lidong Bing. Contrastive chain-  
+ 551 of-thought prompting. *arXiv preprint arXiv:2311.09277*, 2023.  
+ 552  
+ 553 Peter Clark, Isaac Cowhey, Oren Etzioni, Tushar Khot, Ashish Sabharwal, Carissa Schoenick, and  
+ 554 Oyvind Tafjord. Think you have solved question answering? try arc, the ai2 reasoning challenge.  
+ 555 *arXiv preprint arXiv:1803.05457*, 2018.  
+ 556  
+ 557 Karl Cobbe, Vineet Kosaraju, Mohammad Bavarian, Mark Chen, Heewoo Jun, Lukasz Kaiser,  
+ 558 Matthias Plappert, Jerry Tworek, Jacob Hilton, Reiichiro Nakano, et al. Training verifiers to  
+ 559 solve math word problems. *arXiv preprint arXiv:2110.14168*, 2021.  
+ 560  
+ 561 Yilun Du, Shuang Li, Antonio Torralba, Joshua B Tenenbaum, and Igor Mordatch. Improv-  
+ 562 ing factuality and reasoning in language models through multiagent debate. *arXiv preprint  
+ 563 arXiv:2305.14325*, 2023.  
+ 564  
+ 565 Abhimanyu Dubey, Abhinav Jauhri, Abhinav Pandey, Abhishek Kadian, Ahmad Al-Dahle, Aiesha  
+ 566 Letman, Akhil Mathur, Alan Schelten, Amy Yang, Angela Fan, et al. The llama 3 herd of models.  
+ 567 *arXiv preprint arXiv:2407.21783*, 2024.  
+ 568  
+ 569 Angela Fan, Mike Lewis, and Yann Dauphin. Hierarchical neural story generation. *arXiv preprint  
+ 570 arXiv:1805.04833*, 2018.  
+ 571  
+ 572 Yao Fu, Hao Peng, Ashish Sabharwal, Peter Clark, and Tushar Khot. Complexity-based prompting  
+ 573 for multi-step reasoning. In *The Eleventh International Conference on Learning Representations*,  
+ 574 2022.  
+ 575  
+ 576 Mor Geva, Daniel Khashabi, Elad Segal, Tushar Khot, Dan Roth, and Jonathan Berant. Did aristotle  
+ 577 use a laptop? a question answering benchmark with implicit reasoning strategies. *Transactions of  
+ 578 the Association for Computational Linguistics*, 9:346–361, 2021.  
+ 579  
+ 580 Team GLM, Aohan Zeng, Bin Xu, Bowen Wang, Chenhui Zhang, Da Yin, Diego Rojas, Guanyu  
+ 581 Feng, Hanlin Zhao, Hanyu Lai, Hao Yu, Hongning Wang, Jiadai Sun, Jiajie Zhang, Jiale Cheng,  
+ 582 Jiayi Gui, Jie Tang, Jing Zhang, Juanzi Li, Lei Zhao, Lindong Wu, Lucen Zhong, Mingdao Liu,  
+ 583 Minlie Huang, Peng Zhang, Qinkai Zheng, Rui Lu, Shuaiqi Duan, Shudan Zhang, Shulin Cao,  
+ 584 Shuxun Yang, Weng Lam Tam, Wenyi Zhao, Xiao Liu, Xiao Xia, Xiaohan Zhang, Xiaotao Gu,  
+ 585 Xin Lv, Xinghan Liu, Xinyi Liu, Xinyue Yang, Xixuan Song, Xunkai Zhang, Yifan An, Yifan  
+ 586 Xu, Yuanhao Niu, Yuanhao Yang, Yueyan Li, Yushi Bai, Yuxiao Dong, Zehan Qi, Zhaoyang Wang,  
+ 587 Zhen Yang, Zhengxiao Du, Zhenyu Hou, and Zihan Wang. Chatglm: A family of large language  
+ 588 models from glm-130b to glm-4 all tools, 2024.  
+ 589  
+ 590 Alex Graves. Generating sequences with recurrent neural networks. *arXiv preprint  
+ 591 arXiv:1308.0850*, 2013.  
+ 592  
+ 593 Geoffrey Hinton. Distilling the knowledge in a neural network. *arXiv preprint arXiv:1503.02531*,  
+ 594 2015.  
+ 595  
+ 596 Ari Holtzman, Jan Buys, Li Du, Maxwell Forbes, and Yejin Choi. The curious case of neural text  
+ 597 degeneration. *arXiv preprint arXiv:1904.09751*, 2019.  
+ 598  
+ 599 Mohammad Javad Hosseini, Hannaneh Hajishirzi, Oren Etzioni, and Nate Kushman. Learning to  
+ 600 solve arithmetic word problems with verb categorization. In *Proceedings of the 2014 Conference  
+ 601 on Empirical Methods in Natural Language Processing (EMNLP)*, pp. 523–533, 2014.
+
+- 594 Jie Huang, Xinyun Chen, Swaroop Mishra, Huaixiu Steven Zheng, Adams Wei Yu, Xinying Song,  
+595 and Denny Zhou. Large language models cannot self-correct reasoning yet. *arXiv preprint*  
+596 *arXiv:2310.01798*, 2023.
+- 597  
+598 Qidong Huang, Xiaoyi Dong, Pan Zhang, Bin Wang, Conghui He, Jiaqi Wang, Dahua Lin, Weiming  
+599 Zhang, and Nghai Yu. Opera: Alleviating hallucination in multi-modal large language models  
+600 via over-trust penalty and retrospection-allocation. In *Proceedings of the IEEE/CVF Conference*  
+601 *on Computer Vision and Pattern Recognition*, pp. 13418–13427, 2024.
+- 602 Dongfu Jiang, Xiang Ren, and Bill Yuchen Lin. Llm-blender: Ensembling large language models  
+603 with pairwise ranking and generative fusion. *arXiv preprint arXiv:2306.02561*, 2023.
+- 604 Zhengbao Jiang, Jun Araki, Haibo Ding, and Graham Neubig. How can we know when language  
+605 models know? on the calibration of language models for question answering. *Transactions of the*  
+606 *Association for Computational Linguistics*, 9:962–977, 2021.
+- 607  
+608 Jared Kaplan, Sam McCandlish, Tom Henighan, Tom B Brown, Benjamin Chess, Rewon Child, Scott  
+609 Gray, Alec Radford, Jeffrey Wu, and Dario Amodei. Scaling laws for neural language  
+610 models. *arXiv preprint arXiv:2001.08361*, 2020.
+- 611 Akbir Khan, John Hughes, Dan Valentine, Laura Ruis, Kshitij Sachan, Ansh Radhakrishnan, Ed-  
+612 ward Grefenstette, Samuel R Bowman, Tim Rocktäschel, and Ethan Perez. Debating with more  
+613 persuasive llms leads to more truthful answers. *arXiv preprint arXiv:2402.06782*, 2024.
+- 614 Geunwoo Kim, Pierre Baldi, and Stephen McAleer. Language models can solve computer tasks.  
+615 *Advances in Neural Information Processing Systems*, 36, 2024.
+- 616  
+617 Takeshi Kojima, Shixiang Shane Gu, Machel Reid, Yutaka Matsuo, and Yusuke Iwasawa. Large  
+618 language models are zero-shot reasoners. *Advances in neural information processing systems*,  
+619 35:22199–22213, 2022.
+- 620 Lorenz Kuhn, Yarin Gal, and Sebastian Farquhar. Semantic uncertainty: Linguistic invariances for  
+621 uncertainty estimation in natural language generation. *arXiv preprint arXiv:2302.09664*, 2023.
+- 622  
+623 Percy Liang, Rishi Bommasani, Tony Lee, Dimitris Tsipras, Dilara Soylu, Michihiro Yasunaga, Yian  
+624 Zhang, Deepak Narayanan, Yuhuai Wu, Ananya Kumar, et al. Holistic evaluation of language  
+625 models. *arXiv preprint arXiv:2211.09110*, 2022.
+- 626 Tian Liang, Zhiwei He, Wenxiang Jiao, Xing Wang, Yan Wang, Rui Wang, Yujiu Yang, Zhaopeng  
+627 Tu, and Shuming Shi. Encouraging divergent thinking in large language models through multi-  
+628 agent debate. *arXiv preprint arXiv:2305.19118*, 2023.
+- 629 Stephanie Lin, Jacob Hilton, and Owain Evans. Truthfulqa: Measuring how models mimic human  
+630 falsehoods. *arXiv preprint arXiv:2109.07958*, 2021.
+- 631  
+632 Wang Ling, Dani Yogatama, Chris Dyer, and Phil Blunsom. Program induction by rationale gen-  
+633 eration: Learning to solve and explain algebraic word problems. *arXiv preprint arXiv:1705.04146*,  
+634 2017.
+- 635 Sheng Lu, Irina Bigoulaeva, Rachneet Sachdeva, Harish Tayyar Madabushi, and Iryna Gurevych.  
+636 Are emergent abilities in large language models just in-context learning? *arXiv preprint*  
+637 *arXiv:2309.01809*, 2023.
+- 638 Aman Madan, Niket Tandon, Prakhar Gupta, Skyler Hallinan, Luyu Gao, Sarah Wiegreffe, Uri  
+639 Alon, Nouha Dziri, Shrimai Prabhumoye, Yiming Yang, et al. Self-refine: Iterative refinement  
+640 with self-feedback. *Advances in Neural Information Processing Systems*, 36, 2024.
+- 641 Todor Mihaylov, Peter Clark, Tushar Khot, and Ashish Sabharwal. Can a suit of armor conduct  
+642 electricity? a new dataset for open book question answering. *arXiv preprint arXiv:1809.02789*,  
+643 2018.
+- 644  
+645 Long Ouyang, Jeffrey Wu, Xu Jiang, Diogo Almeida, Carroll Wainwright, Pamela Mishkin, Chong  
+646 Zhang, Sandhini Agarwal, Katarina Slama, Alex Ray, et al. Training language models to fol-  
+647 low instructions with human feedback. *Advances in neural information processing systems*, 35:  
+27730–27744, 2022.
+
+[Appendix and supplementary materials beyond page 12 have been removed.]

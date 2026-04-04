@@ -1,0 +1,461 @@
+# LDP: A LIGHTWEIGHT DENOISING PLUGIN ENHANCING GENERALIZATION IN SINGLE-IMAGE SUPER-RESOLUTION
+
+Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+Current single-image super-resolution (SISR) models struggle to generalize to real-world degradations. To address this challenge, we propose LDP, an innovative lightweight denoising autoencoder (DAE) plug-in. It improves the generalization ability of SR models via low-resolution (LR) images prediction-based cyclic regularization. LDP models the SISR degradation process within the DAE framework. It leverages a property of diffusion models, where after noise is added, high-resolution (HR) images and LR features become aligned, so that denoising noisy HR features is equivalent to denoising noisy LR features. During the corruption process, noise is added independently to each HR patch. During the denoising process, a convolutional denoiser uses learned filters to approximate blur kernels. In addition, LR degradation is used to distinguish different LR from the same HR. LDP can be applied to SR models in two modes: as a training loss to improve reconstruction quality, or as an inference post-processing step to correct artifacts. Extensive experiments demonstrate that LDP substantially improves the generalization of existing SR models to unseen degradations.
+
+![Figure 1: (a) Diagram of the LDP architecture integrated into an arbitrary SR model. (b) Scatter plot showing PSNR improvements over baselines.](1559db1c389771b44f7dc11d48b06079_img.jpg)
+
+(a) Arbitrary SR model
+
+The diagram shows a training pipeline where a Low Resolution (LR) image is input to an SR Model to produce a Super-Resolution (SR) image. Simultaneously, the SR image is processed by an LDP module to generate a denoised LR' image. A supervision loss is calculated between the original LR and the denoised LR' image. The LDP module is defined by the equation:  $LR' = ((SR + n) * k) \downarrow_s$ , where  $n$  is noise and  $k$  is a kernel.
+
+(b) Boosts over baselines (DIV2K-Hybrid)
+
+| Model    | Original PSNR | +LDP PSNR |
+|----------|---------------|-----------|
+| FeMaSR   | 23.40         | 23.72     |
+| StableSR | 19.77         | 21.43     |
+| SwinIR   | 23.52         | 24.35     |
+| MambaIR  | 24.35         | 24.73     |
+
+Figure 1: (a) Diagram of the LDP architecture integrated into an arbitrary SR model. (b) Scatter plot showing PSNR improvements over baselines.
+
+Figure 1: Our LDP is a lightweight denoising autoencoder-based plug-in that can be seamlessly integrated into arbitrary SR models, operating as a training-time loss or an inference-time module.
+
+## 1 INTRODUCTION
+
+Single Image Super-Resolution (SISR) aims to reconstruct high-resolution (HR) images from their low-resolution (LR) counterparts. SISR is widely applied in various fields, such as medical imaging Li et al. (2024a) and remote sensing Dong et al. (2024). Deep learning has advanced SISR architectures from Convolutional Neural Network (CNN) Dong et al. (2014) to Transformer Liang et al. (2021); Chen et al. (2023b) and State-Space Model Guo et al. (2024; 2025), achieving higher reconstruction accuracy. Meanwhile, generative methods, including Generative Adversarial Network (GAN) Chen et al. (2022) and Diffusion Model Wang et al. (2024); Yue et al. (2025); Zhang et al. (2025), have been explored to improve perceptual quality.
+
+Despite advances in SR architectures, existing models struggle to generalize to unseen degradations. Recent approaches leverage data augmentation and self-supervised learning techniques to tackle this challenge. Data augmentation approaches typically fall into two categories: generating synthetic distortions Zhang et al. (2021a); Wang et al. (2021), or employing generative models Li et al. (2022); Chen et al. (2025) to synthesize paired data from unpaired LR and HR images. However, these methods may harm performance Zhang et al. (2023) or are limited to in-distribution datasets. Self-supervised approaches rely on either image-specific training Schocher et al. (2018); Ulyanov et al. (2018) or test-time adaptation Hussein et al. (2020); Zhou et al. (2023); Chen et al. (2024), utilizing internal image statistics and priors. However, they suffer from high computational cost or the need for model-specific adaptation. Addressing unseen degradations efficiently remains a key challenge.
+
+To address these limitations, we propose LDP, a lightweight denoising autoencoder (DAE) plug-in. It improves the generalization ability of SR models via LR prediction-based cyclic regularization. LDP models the SISR degradation process within the DAE framework. It leverages a property of diffusion models, where after noise is added, high-resolution (HR) images and LR features become aligned Wang et al. (2023b), making denoising noisy HR features equivalent to denoising noisy LR features. LDP takes high-resolution images (ground-truth HR or SR outputs) as input for degradation modeling, with LR high-frequency components as a condition to distinguish different LR images from the same HR. During the corruption process, LDP introduces patch-dependent Gaussian noise. This enables the model to learn fine-grained degradation in local patches, rather than assuming the same degradation for the whole image. During the denoising process, a lightweight convolutional denoiser learns the blur kernels associated with the degradation model. Built on these designs, LDP accurately generates corresponding LR image and generalizes well to unseen degradations. LDP applies to SR models in two modes: as a training-time loss function to improve reconstruction quality, or as an inference-time post-processing step that corrects artifacts independently of training. Extensive experiments verify that LDP significantly improves the generalization ability of existing SR models on unknown complex degradations.
+
+Overall, our contributions are three-fold:
+
+- We propose LDP, an innovative lightweight denoising autoencoder plug-in for single-image super-resolution that enhances the generalization of existing SR models.
+- LDP is a conditional degradation model that generates LR images from HR inputs by explicitly conditioning on LR high-frequency components. LDP operates in two modes: as a degradation-aware training-time loss function, or as an inference-time correction module (e.g., Posterior Sampling for diffusion models).
+- LDP enhances reconstruction quality during training as a loss function and mitigates artifacts at inference independently of training. Both modes improve SR model generalization to unknown complex degradations.
+
+## 2 RELATED WORK
+
+### 2.1 IMPROVING GENERALIZATION IN SR
+
+The limited generalization ability of SR models to unseen degradations remains a major challenge for real-world applications. Existing SR methods address this issue using two main approaches: data augmentation and self-supervised learning. Data augmentation methods seek to bridge the training–inference gap by creating synthetic data with degradations that approximate real-world scenarios. One line of works explicitly model degradations using predefined operations. BSRGAN Zhang et al. (2021a) generates complex degradations by sequentially combining downsampling, blur, noise, and compression in random order, producing varied LR images for training. RealESRGAN Wang et al. (2021) introduces higher-order degradations to reflect real-world degradation chains. While BSRGAN and RealESRGAN enable non-blind SR models to handle blind scenarios through multi-degradation training, such strategies may compromise performance on in-distribution benchmarks Zhang et al. (2023). Alternatively, implicit modeling methods leverage generative models to synthesize paired data from real LR and unpaired HR images. GAN Yuan et al. (2018); Li et al. (2022); Yin et al. (2023) or diffusion-based Chen et al. (2025) methods learn degradation priors to create realistic training pairs. However, their generalization remains limited to in-distribution data. Self-supervised learning enables SISR training using only LR images without
+
+paired HR supervision. ZSSR Shocher et al. (2018) and DIP Ulyanov et al. (2018) exploit internal patterns or implicit priors without external data. CorrectFilter Hussein et al. (2020); Zhou et al. (2023) aligns inputs with the training distribution of pre-trained models. Lway Chen et al. (2024) uses a degradation model to synthesize LR images from SR outputs for test-time fine-tuning. Although effective, these methods are computationally expensive or require model-specific adaptation.
+
+### 2.2 CONSTRAINING THE SR SOLUTION SPACE VIA DEGRADATION MODELING
+
+Degradation modeling, applied jointly with the SR model, introduces structural constraints that ensure reconstructed LR outputs align with the LR input, effectively narrowing the solution space to favor LR-consistent reconstructions. DRN Guo et al. (2020) adds a degradation branch that projects SR outputs back to the LR domain, enforcing reconstruction consistency and improving stability. DualSR Emad et al. (2021) introduces a dual-path framework where a GAN-based downsampler and an upsampler are jointly trained with cycle consistency to model and reverse image-specific degradations. SCL-SASR Chen et al. (2023a) adopts a similar bidirectional design under MAP estimation, coupling SR and degradation networks to adapt to test-time degradations. Lway Chen et al. (2024) introduces test-time adaptation with pre-trained degradation models to fine-tune SR models, increasing generalization to unseen degradations. Despite their benefits, these methods face several limitations: DRN handles only bicubic downsampling; DualSR and SCL-SASR require image-specific optimization or joint training; and Lway introduces significant computational overhead due to its large model size. In contrast, our method supports a wide range of degradations through an explicitly modeled degradation process within a lightweight denoising autoencoder framework. Our degradation modeling framework is adaptable to various training settings, from large-scale supervised learning to image-specific fine-tuning, and can also be applied directly at test time. The framework is lightweight and does not incur significant computational cost.
+
+Degradation modeling is also applied during inference in diffusion-based image restoration to enforce LR consistency. ILVR Choi et al. (2021) guides the sampling process of DDPM Ho et al. (2020) using a reference image to maintain low-frequency consistency across the denoising steps. DR2 Wang et al. (2023b) shows that injecting additional Gaussian noise makes LR and HR distributions less distinguishable, allowing noise-corrupted LR images to be treated as noise-corrupted HR images during sampling. MCG Chung et al. (2022) ensures samples stay close to the data manifold by projecting the gradient of the measurement function onto its tangent space. DPS Chung et al. (2023) further leverages the degradation process to connect the LR observation to the predicted clean image at each step. In our method, LDP degrades each predicted clean image during diffusion inference, treating it as SR to produce a predicted LR image. We then enforce LR cyclic consistency by applying the tailored loss  $\mathcal{L}_{\text{sym}}^{\text{CT}}$  (Eq. 16), which penalizes the discrepancy between the predicted LR and the ground-truth LR. This degradation-aware constraint enhances fidelity by suppressing artifacts and promoting structural consistency in the SR results.
+
+## 3 PROPOSED METHOD
+
+Section 3.1 outlines the motivation behind LDP. Section 3.2 introduces the overall framework of LDP. Section 3.3 then details its training and inference modes, describing LDP’s own training, its application in fine-tuning SR models, and its role as a post-processing step for diffusion models.
+
+### 3.1 MOTIVATION
+
+To improve the generalization of existing SR models on unknown complex degradations, we adopt a degradation modeling approach applied jointly with the SR model. This introduces structural constraints that ensure the reconstructed LR outputs are aligned with the LR input, effectively narrowing the solution space to favor LR-consistent reconstructions. Our LDP integrates degradation modeling Yue et al. (2022) into the denoising autoencoder, reinterpreting denoising as a controllable degradation applied to HR images. In the classical degradation formulation, this can be expressed as:
+
+$$y = ((x + n) \otimes k) \downarrow_s, \quad (1)$$
+
+where  $x \in \mathbb{R}^{H \times W \times 3}$  is the HR image,  $y \in \mathbb{R}^{\frac{H}{s} \times \frac{W}{s} \times 3}$  is the LR image,  $n$  is the noise,  $k$  is the blur kernel, and  $s$  is the downsampling scale. We further leverage a property of diffusion models,
+
+![Figure 2: (a) The framework of LDP. (b) Degradation Prediction Module. (c) Noise Addition Module. (d) Denoiser Module.](2fa4a1bf91d0f34e87c689fbc1211fe3_img.jpg)
+
+Figure 2 illustrates the framework of the proposed Low-Degradation Prediction (LDP) model. It consists of four main modules: (a) The framework of LDP, (b) Degradation Prediction Module, (c) Noise Addition Module, and (d) Denoiser Module.
+
+- (a) The framework of LDP:** This module takes the high-frequency component  $y_{hf}$  and the input image  $x$  as inputs.  $y_{hf}$  is processed by a Degradation Prediction Module to produce  $C'$ .  $x$  is processed by a Noise Addition Module to produce  $F$ .  $F$  is then processed by a Downsample Module to produce the predicted LR output  $y'$ .
+- (b) Degradation Prediction Module:** This module takes  $y_{hf}$  as input and processes it through a series of Convolutional layers (Conv), Residual Blocks (RB), and a Reshape layer to produce weights  $W_{deg}$ . These weights are multiplied with a Degradation Prompt  $P_D$  to produce  $C'$ .
+- (c) Noise Addition Module:** This module takes  $x$  as input and generates a patch-dependent noise  $n$  from a Gaussian distribution  $\mathcal{N}(0, \epsilon)$ . This noise is added to  $x$  to produce the noisy HR features  $x_t$ .
+- (d) Denoiser Module:** This module takes  $x_t$  and  $C'$  as inputs.  $x_t$  is processed by a Convolutional layer (Conv) to produce  $z$ .  $C'$  is processed by a Time Embedder (TEmb) to produce  $t$ .  $z$  and  $t$  are then processed by a series of Convolutional layers (Conv), Residual Blocks (RB), and a Modulate layer (Mod) to produce the final output  $F$ .
+
+Figure 2: (a) The framework of LDP. (b) Degradation Prediction Module. (c) Noise Addition Module. (d) Denoiser Module.
+
+Figure 2: (a) **LDP Framework.**  $LR_{hf}$  predicts degradation  $C'$ , guiding the noise-perturbed HR features to generate the LR output via denoising and downsampling. (b) **Degradation Prediction.** Stacked RB generate weights from  $LR_{hf}$  and multiply them with  $P_D$  to produce  $C'$ . (c) **Noise Addition.** Patch-dependent noise is added to HR features at random timesteps. (d) **Denoiser.** A lightweight CNN denoises  $HR_t$  conditioned on  $z$  using CRBs with AdaLN.
+
+whereby after noise is added, HR features and LR features become aligned Wang et al. (2023b), making denoising noisy HR features equivalent to denoising noisy LR features. This allows us to perform degradation modeling on HR images using a denoising autoencoder. However, there remains a challenge: since the SR task is inherently ill-posed, a condition is required to differentiate between different LR images generated from the same HR image under varying degradations. This condition must satisfy three criteria: (1) it cannot be the LR image itself, otherwise the network might take shortcuts and fail to learn meaningful degradations; (2) it must be discriminative for different LR images corresponding to the same HR image; and (3) it should be simple and easy to obtain. We define this condition as  $LR_{hf}$ , obtained by subtracting the  $s^t$ -fold downsampled-then-upsampled LR image from the original LR image. In summary, we use a denoising autoencoder to perform degradation modeling on the input HR image, with the condition  $LR_{hf}$  controlling the type of degradation in the output. During application, this approach constrains the super-resolution (SR) model to produce outputs whose LR reconstructions (via our LDP) are consistent with the original LR input, thus enforcing LR cyclic consistency and effectively guiding the SR model.
+
+### 3.2 FRAMEWORK
+
+Figure 2 (a) illustrates the framework of our proposed LDP, which consists of four main modules: the Degradation Prediction Module (DPM), Noise Addition Module (NAM), Denoiser Module and Downsample Module. Designed as a denoising autoencoder, LDP functions as a conditional degradation model that generates LR images from HR inputs by conditioning on LR high-frequency components. To facilitate both implementation and interpretability, we adopt the noise corruption process from diffusion models Ho et al. (2020). The overall process of LDP is formulated as:
+
+$$x_t = NAM(x, t), \quad (2)$$
+
+$$y' = D(Denoiser(x_t | DPM(y_{hf}, t))), \quad (3)$$
+
+Where  $y'$  is the predicted LR images, and  $y_{hf}$  is the LR high-frequency component.  $t$  is a patch-dependent timestep,  $x_t$  is the noised HR features,  $NAM(\cdot)$  is the Noise Addition Module,  $DPM(\cdot)$  is the Degradation Prediction Module and  $D(\cdot)$  is the Downsample Module.
+
+**Degradation Prediction Module.** Figure 2 (b) shows the DPM diagram. Its input is the high-frequency component of the LR image, computed by subtracting the  $s^2$ -fold downsampled-then-upsampling LR image from the original LR image, which can be formulated as:
+
+$$y_{hf} = y - y \downarrow_{s^2} \uparrow_{s^2}, \quad (4)$$
+
+where  $\downarrow_{s^2}$  and  $\uparrow_{s^2}$  denote the downsampling and upsampling operations with scale factor  $s^2$ , respectively. To extract degradation information, we use prompts to encode degradation-specific details Potlapalli et al. (2023). First, a weight map  $w$  is derived from  $y_{hf}$ , and then resized to match the spatial dimensions of  $x$  (i.e.,  $H \times W$ ). This resized weight map is multiplied element-wise with the Degradation Prompt  $P_D$ . It forms a degradation map  $C' \in \mathbb{R}^{H \times W \times C}$  and serves as the condition for the denoiser. The process can be formulated as:
+
+$$w = (\text{RB}_4 \circ \text{RB}_3 \circ \downarrow_2 \circ \text{RB}_2 \circ \text{RB}_1) \circ \text{Conv}(y_{hf}), \quad (5)$$
+
+$$C' = P_D \otimes \text{Resize}(w, H, W), \quad (6)$$
+
+where  $\text{RB}(\cdot)$  denotes a residual block consisting of two  $3 \times 3$  convolutional layers with a SiLU activation in between,  $\text{Conv}(\cdot)$  represents a convolutional layer,  $\circ$  denotes function composition applied sequentially from right to left, and  $\otimes$  denotes element-wise multiplication. The downsampling operator  $\downarrow_2$  further reduces spatial resolution and disrupts local structures. The degradation prompt  $P_D \in \mathbb{R}^{N_p \times C}$  is jointly learned to encode degradation-specific information.
+
+**Noise Addition and Denoiser Module.** Our framework integrates degradation modeling Yue et al. (2022) into the denoising autoencoder, reinterpreting denoising as a controllable degradation applied to HR images. During the corruption process, we perturb HR images using a patch-wise noise schedule. Specifically, following the diffusion noise schedule, each patch  $x_i \in \mathbb{R}^{P \times P \times C}$  is assigned a random timestep  $t_i$ , and its noisy version is obtained as:
+
+$$x_i^{(t_i)} = \sqrt{\bar{\alpha}_{t_i}} x_i + \sqrt{1 - \bar{\alpha}_{t_i}} \epsilon_i, \quad \epsilon_i \sim \mathcal{N}(0, \mathbf{I}), \quad (7)$$
+
+where  $\bar{\alpha}_{t_i}$  denotes the cumulative product of noise scheduling coefficients at time  $t_i$  and  $\epsilon_i$  is standard Gaussian noise. This patch-wise formulation enables each image region to undergo a different level of degradation, allowing the model to better capture spatially varying corruption. The final noisy image is denoted as  $x_t$ .
+
+During the denoising process, a lightweight CNN acting as the denoiser module estimates the blur kernel and extracts intermediate feature  $F$  conditioned on the degradation map  $C'$ . The feature  $F$  are then downsampled to produce the predicted LR image. Specifically, the denoiser module comprises  $L$  Condition Residual Blocks (CRBs) that leverage Adaptive Layer Normalization (AdaLN) Perez et al. (2018); Li et al. (2024b) for conditional modulation. For each  $P \times P$  patch, the assigned timestep  $t_i$  is embedded and combined with  $C'$  to produce a patch-specific condition  $z$ . This condition is passed through a SiLU activation and a linear layer to generate modulation parameters  $\alpha$ ,  $\beta$ , and  $\gamma$  corresponding to scaling, bias, and gating. In the residual path, features are first normalized via LayerNorm and modulated by  $\alpha$  and  $\beta$ , then processed by a residual block, gated with  $\gamma$ , and finally added back to the input. The CRB can be formulated as:
+
+$$t_{emb} = T\text{Emb}(t), \quad (8)$$
+
+$$\alpha, \beta, \gamma = \text{Linear}(\text{SiLU}(C' + t_{emb})), \quad (9)$$
+
+$$x'_t = \alpha \otimes (\text{LN}(F_{t-1})) + \beta, \quad (10)$$
+
+$$F_t = \gamma \otimes \text{RB}(x'_t) + F_{t-1}, \quad (11)$$
+
+where  $T\text{Emb}(\cdot)$  is the timestep embedder,  $F_{t-1}$  is the output of the previous CRB, and the initial feature is set as  $F_0 = x_t$ . The  $\text{RB}(\cdot)$  in the final CRB is simplified to a single convolutional layer.
+
+**Downsample Module.** The module adjusts the feature map to match the spatial resolution of the original LR image. Features  $F$  are first downsampled by a factor of  $s$ , then processed by a residual block and a convolutional layer:
+
+$$y' = \text{Conv}(\text{RB}(F \downarrow_s)). \quad (12)$$
+
+Here,  $\text{RB}$  and the final convolutional layer are used to enhance feature representation and maintain smooth transitions between downsampled regions.
+
+### 3.3 TRAINING AND INFERENCE MODES OF LDP
+
+**Training LDP.** Following Lway Chen et al. (2024), LDP is trained by supervising only the high-frequency components of the predicted LR images. We apply the Discrete Wavelet Transform (DWT) to decompose the predicted LR image  $y'$  into four subbands (LL, LH, HL, HH). The high-frequency subbands (LH, HL, HH) are then summed and normalized to form a weight map  $M$ , which is subsequently used to compute both the L1 loss and the LPIPS loss Zhang et al. (2018):
+
+$$\mathcal{L}_{sym}^T = \lambda_1 \mathcal{L}_1(M \otimes y', M \otimes y) + \lambda_2 \mathcal{L}_{LPIPS}(M \otimes y', M \otimes y), \quad (13)$$
+
+where  $\lambda_1$  and  $\lambda_2$  are the corresponding loss weights.
+
+**Fine-Tuning SR Models with LDP.** In fine-tuning, the original loss of pretrained SR models is augmented with a frequency loss Xie et al. (2023) that supervises the amplitude and phase components of SR and HR images in the frequency domain:
+
+$$\mathcal{L}_{fre} = \frac{1}{HW} \sum_{u=0}^{H-1} \sum_{v=0}^{W-1} D(\mathcal{F}(x')(u, v), \mathcal{F}(x)(u, v)), \quad (14)$$
+
+$$D(\mathcal{F}(x'), \mathcal{F}(x)) = \left( (\mathcal{R}(\mathcal{F}(x')) - \mathcal{R}(\mathcal{F}(x)))^2 + (\mathcal{I}(\mathcal{F}(x')) - \mathcal{I}(\mathcal{F}(x)))^2 \right)^{\gamma/2}, \quad (15)$$
+
+where  $x$  and  $x'$  are the HR image and SR result,  $\mathcal{F}(x)$  denotes the 2D Fourier transform of  $x$ , and  $\mathcal{R}(\cdot)$  and  $\mathcal{I}(\cdot)$  denote its real and imaginary parts.  $\gamma$  controls the sharpness of the frequency distance and is set to 1 by default.  $(u, v)$  indexes the frequency domain. In addition, LDP enforces cycle consistency by reconstructing the LR image from the SR output and minimizing a symmetric loss:
+
+$$\mathcal{L}_{sym}^{FT} = \lambda_1 \mathcal{L}_1(M' \otimes y', M' \otimes y) + \lambda_2 \mathcal{L}_{LPIPS}(M' \otimes y', M' \otimes y) + \lambda_3 \mathcal{L}_{fre}(M' \otimes y', M' \otimes y), \quad (16)$$
+
+where  $M' = \tau \cdot M$ ,  $\tau$  scales the high-frequency weight map  $M$  by a scalar  $\tau$ .
+
+**Diffusion Posterior Sampling with LDP.** Our LDP can also be applied during inference in diffusion models via Diffusion Posterior Sampling (DPS) Chung et al. (2023), which uses the gradient of a data fidelity term to guide sampling and better align the results with the LR input:
+
+$$\nabla_{x_t} \log p_t(x_t|y) \simeq s_{\theta \cdot}(x_t, t) - \rho \nabla_{x_t} \mathcal{L}_{sym}^{FT}(LDP(\hat{x}_0, y_{hf}), y), \quad (17)$$
+
+where  $s_{\theta \cdot}(x_t, t)$  denotes the score function (the noise predictor in DDPM Ho et al. (2020)), and  $LDP(\cdot)$  represents our LDP degradation model.  $\hat{x}_0$  denotes the predicted clean image at each time step, and we treat it as the SR output. In latent diffusion models,  $\hat{x}_0$  is first decoded into the pixel space before computing the gradient.
+
+## 4 EXPERIMENT
+
+### 4.1 IMPLEMENTATION DETAILS
+
+**Training LDP.** We train LDP on LSDIR Li et al. (2023) dataset using BSRGAN Zhang et al. (2021a) to synthesize diverse degradation datasets. For a scale factor of  $s = 4$ , the key hyperparameters are  $s' = 2$ ,  $L = 3$ ,  $P = 16$ ,  $N_p = 32$ ,  $\lambda_1 = \lambda_2 = 1$ , and  $C = 64$ , resulting in 642k parameters. We use the Adam Kingma & Ba (2015) optimizer with  $\beta_1 = 0.9$  and  $\beta_2 = 0.99$ , with a fixed learning rate of 0.001. The batch size is 12, with  $256 \times 256$  HR patches. The timesteps  $t_i$  are sampled from [500, 1000] to align the noisy HR and LR features. We adopt the diffusion batch multiplier Li et al. (2024b) with a value of 4 to perform multiple noise realizations per HR image. Training is conducted on a single NVIDIA RTX A6000 for 60K iterations, taking approximately 16 hours.
+
+**Fine-Tuning SR Models.** We fine-tune existing SR models on the DF2K dataset (DIV2K Agustsson & Timofte (2017) and Flickr2K Lim et al. (2017)) using BSRGAN degradation patterns, with our LDP employed as an auxiliary loss. Details are provided in the Appendix D.
+
+**Testing.** For synthetic testing, we generate five distinct datasets from the DIV2K validation set using bsrGAN.plus (BSRGAN Zhang et al. (2021a) and Real-ESRGAN Wang et al. (2021)), corresponding to the following degradation types: (1) downsampling, (2) noise, (3) blur, (4) JPEG compression, and (5) hybrid degradations following bsrGAN.plus defaults. For real-world testing,
+
+Table 1: Performance of multiple degradation models in LR prediction on synthetic multi-degradation datasets.
+
+| Methods | Metrics | Down          | Noise         | Blur          | JPEG          | Hybrid        |
+|---------|---------|---------------|---------------|---------------|---------------|---------------|
+| DRN     | PSNR↑   | <b>32.05</b>  | <b>27.25</b>  | 26.38         | <b>29.65</b>  | 27.03         |
+|         | SSIM↑   | 0.9529        | 0.7812        | 0.8273        | <b>0.9270</b> | 0.8998        |
+|         | LPIPS↓  | <b>0.0794</b> | 0.2474        | 0.3207        | <b>0.0826</b> | 0.3360        |
+| DualSR  | PSNR↑   | 19.58         | 18.77         | 19.36         | 18.57         | 19.36         |
+|         | SSIM↑   | 0.4814        | 0.4712        | 0.4911        | 0.4612        | 0.4883        |
+|         | LPIPS↓  | 0.1408        | 0.1399        | 0.1844        | 0.1492        | 0.2130        |
+| LDP     | PSNR↑   | 29.15         | 26.71         | <b>28.41</b>  | 28.01         | <b>27.94</b>  |
+|         | SSIM↑   | 0.9283        | <b>0.8978</b> | <b>0.9159</b> | 0.9243        | <b>0.9173</b> |
+|         | LPIPS↓  | 0.0985        | <b>0.1248</b> | <b>0.1417</b> | 0.0877        | <b>0.1025</b> |
+
+Table 2: Similarity between the LR images generated by multiple degradation models and the downsampled SR images.
+
+| Methods | Metrics | Down          | Noise         | Blur          | JPEG          | Hybrid        |
+|---------|---------|---------------|---------------|---------------|---------------|---------------|
+| DRN     | PSNR↑   | <b>34.02</b>  | 31.57         | <b>34.99</b>  | 31.35         | <b>35.10</b>  |
+|         | SSIM↑   | <b>0.9638</b> | 0.9590        | <b>0.9692</b> | 0.9587        | <b>0.9679</b> |
+|         | LPIPS↓  | <b>0.0365</b> | <b>0.0436</b> | <b>0.0306</b> | <b>0.0467</b> | <b>0.0296</b> |
+| DualSR  | PSNR↑   | 22.58         | 20.79         | 22.57         | 20.46         | 22.85         |
+|         | SSIM↑   | 0.6689        | 0.6502        | 0.7044        | 0.6356        | 0.7164        |
+|         | LPIPS↓  | 0.1264        | 0.1040        | 0.1262        | 0.1279        | 0.1175        |
+| LDP     | PSNR↑   | 28.41         | 25.93         | 25.04         | 27.42         | 26.28         |
+|         | SSIM↑   | 0.8895        | 0.7508        | 0.7596        | 0.8886        | 0.7597        |
+|         | LPIPS↓  | 0.1551        | 0.3043        | 0.3278        | 0.1293        | 0.3586        |
+
+![Figure 3: Qualitative results of multiple degradation models for LR prediction on synthetic datasets. The figure shows a grid of images for five degradation scenarios: Down, Noise, Blur, JPEG, and Hybrid. Each scenario has two columns of images. The first column shows the input Low Resolution (LR) image and the output of the SwinIR (SR) model. The second column shows the input LR image and the output of the DualSR model. The third column shows the input LR image and the output of the LDP model. The fourth column shows the input LR image and the output of the DRN model. The fifth column shows the input LR image and the output of the HR (High Resolution) image. The sixth column shows the input LR image and the output of the LDP model. The seventh column shows the input LR image and the output of the DRN model. The eighth column shows the input LR image and the output of the DualSR model. The ninth column shows the input LR image and the output of the SwinIR (SR) model. The tenth column shows the input LR image and the output of the LDP model. The eleventh column shows the input LR image and the output of the DRN model. The twelfth column shows the input LR image and the output of the DualSR model. The thirteenth column shows the input LR image and the output of the SwinIR (SR) model. The fourteenth column shows the input LR image and the output of the LDP model. The fifteenth column shows the input LR image and the output of the DRN model. The sixteenth column shows the input LR image and the output of the DualSR model. The seventeenth column shows the input LR image and the output of the SwinIR (SR) model. The eighteenth column shows the input LR image and the output of the LDP model. The nineteenth column shows the input LR image and the output of the DRN model. The twentieth column shows the input LR image and the output of the DualSR model. The twenty-first column shows the input LR image and the output of the SwinIR (SR) model. The twenty-second column shows the input LR image and the output of the LDP model. The twenty-third column shows the input LR image and the output of the DRN model. The twenty-fourth column shows the input LR image and the output of the DualSR model. The twenty-fifth column shows the input LR image and the output of the SwinIR (SR) model. The twenty-sixth column shows the input LR image and the output of the LDP model. The twenty-seventh column shows the input LR image and the output of the DRN model. The twenty-eighth column shows the input LR image and the output of the DualSR model. The twenty-ninth column shows the input LR image and the output of the SwinIR (SR) model. The thirtieth column shows the input LR image and the output of the LDP model. The thirty-first column shows the input LR image and the output of the DRN model. The thirty-second column shows the input LR image and the output of the DualSR model. The thirty-third column shows the input LR image and the output of the SwinIR (SR) model. The thirty-fourth column shows the input LR image and the output of the LDP model. The thirty-fifth column shows the input LR image and the output of the DRN model. The thirty-sixth column shows the input LR image and the output of the DualSR model. The thirty-seventh column shows the input LR image and the output of the SwinIR (SR) model. The thirty-eighth column shows the input LR image and the output of the LDP model. The thirty-ninth column shows the input LR image and the output of the DRN model. The fortieth column shows the input LR image and the output of the DualSR model. The forty-first column shows the input LR image and the output of the SwinIR (SR) model. The forty-second column shows the input LR image and the output of the LDP model. The forty-third column shows the input LR image and the output of the DRN model. The forty-fourth column shows the input LR image and the output of the DualSR model. The forty-fifth column shows the input LR image and the output of the SwinIR (SR) model. The forty-sixth column shows the input LR image and the output of the LDP model. The forty-seventh column shows the input LR image and the output of the DRN model. The forty-eighth column shows the input LR image and the output of the DualSR model. The forty-ninth column shows the input LR image and the output of the SwinIR (SR) model. The fiftieth column shows the input LR image and the output of the LDP model. The fifty-first column shows the input LR image and the output of the DRN model. The fifty-second column shows the input LR image and the output of the DualSR model. The fifty-third column shows the input LR image and the output of the SwinIR (SR) model. The fifty-fourth column shows the input LR image and the output of the LDP model. The fifty-fifth column shows the input LR image and the output of the DRN model. The fifty-sixth column shows the input LR image and the output of the DualSR model. The fifty-seventh column shows the input LR image and the output of the SwinIR (SR) model. The fifty-eighth column shows the input LR image and the output of the LDP model. The fifty-ninth column shows the input LR image and the output of the DRN model. The sixtieth column shows the input LR image and the output of the DualSR model. The sixty-first column shows the input LR image and the output of the SwinIR (SR) model. The sixty-second column shows the input LR image and the output of the LDP model. The sixty-third column shows the input LR image and the output of the DRN model. The sixty-fourth column shows the input LR image and the output of the DualSR model. The sixty-fifth column shows the input LR image and the output of the SwinIR (SR) model. The sixty-sixth column shows the input LR image and the output of the LDP model. The sixty-seventh column shows the input LR image and the output of the DRN model. The sixty-eighth column shows the input LR image and the output of the DualSR model. The sixty-ninth column shows the input LR image and the output of the SwinIR (SR) model. The seventieth column shows the input LR image and the output of the LDP model. The seventy-first column shows the input LR image and the output of the DRN model. The seventy-second column shows the input LR image and the output of the DualSR model. The seventy-third column shows the input LR image and the output of the SwinIR (SR) model. The seventy-fourth column shows the input LR image and the output of the LDP model. The seventy-fifth column shows the input LR image and the output of the DRN model. The seventy-sixth column shows the input LR image and the output of the DualSR model. The seventy-seventh column shows the input LR image and the output of the SwinIR (SR) model. The seventy-eighth column shows the input LR image and the output of the LDP model. The seventy-ninth column shows the input LR image and the output of the DRN model. The eightieth column shows the input LR image and the output of the DualSR model. The eighty-first column shows the input LR image and the output of the SwinIR (SR) model. The eighty-second column shows the input LR image and the output of the LDP model. The eighty-third column shows the input LR image and the output of the DRN model. The eighty-fourth column shows the input LR image and the output of the DualSR model. The eighty-fifth column shows the input LR image and the output of the SwinIR (SR) model. The eighty-sixth column shows the input LR image and the output of the LDP model. The eighty-seventh column shows the input LR image and the output of the DRN model. The eighty-eighth column shows the input LR image and the output of the DualSR model. The eighty-ninth column shows the input LR image and the output of the SwinIR (SR) model. The ninetieth column shows the input LR image and the output of the LDP model. The ninety-first column shows the input LR image and the output of the DRN model. The ninety-second column shows the input LR image and the output of the DualSR model. The ninety-third column shows the input LR image and the output of the SwinIR (SR) model. The ninety-fourth column shows the input LR image and the output of the LDP model. The ninety-fifth column shows the input LR image and the output of the DRN model. The ninety-sixth column shows the input LR image and the output of the DualSR model. The ninety-seventh column shows the input LR image and the output of the SwinIR (SR) model. The ninety-eighth column shows the input LR image and the output of the LDP model. The ninety-ninth column shows the input LR image and the output of the DRN model. The hundredth column shows the input LR image and the output of the DualSR model.](67b83c4adaaa4de02d367168308deb2a_img.jpg)
+
+Figure 3: Qualitative results of multiple degradation models for LR prediction on synthetic datasets. The figure shows a grid of images for five degradation scenarios: Down, Noise, Blur, JPEG, and Hybrid. Each scenario has two columns of images. The first column shows the input Low Resolution (LR) image and the output of the SwinIR (SR) model. The second column shows the input LR image and the output of the DualSR model. The third column shows the input LR image and the output of the LDP model. The fourth column shows the input LR image and the output of the DRN model. The fifth column shows the input LR image and the output of the HR (High Resolution) image. The sixth column shows the input LR image and the output of the LDP model. The seventh column shows the input LR image and the output of the DRN model. The eighth column shows the input LR image and the output of the DualSR model. The ninth column shows the input LR image and the output of the SwinIR (SR) model. The tenth column shows the input LR image and the output of the LDP model. The eleventh column shows the input LR image and the output of the DRN model. The twelfth column shows the input LR image and the output of the DualSR model. The thirteenth column shows the input LR image and the output of the SwinIR (SR) model. The fourteenth column shows the input LR image and the output of the LDP model. The fifteenth column shows the input LR image and the output of the DRN model. The sixteenth column shows the input LR image and the output of the DualSR model. The seventeenth column shows the input LR image and the output of the SwinIR (SR) model. The eighteenth column shows the input LR image and the output of the LDP model. The nineteenth column shows the input LR image and the output of the DRN model. The twentieth column shows the input LR image and the output of the DualSR model. The twenty-first column shows the input LR image and the output of the SwinIR (SR) model. The twenty-second column shows the input LR image and the output of the LDP model. The twenty-third column shows the input LR image and the output of the DRN model. The twenty-fourth column shows the input LR image and the output of the DualSR model. The twenty-fifth column shows the input LR image and the output of the SwinIR (SR) model. The twenty-sixth column shows the input LR image and the output of the LDP model. The twenty-seventh column shows the input LR image and the output of the DRN model. The twenty-eighth column shows the input LR image and the output of the DualSR model. The twenty-ninth column shows the input LR image and the output of the SwinIR (SR) model. The thirtieth column shows the input LR image and the output of the LDP model. The thirty-first column shows the input LR image and the output of the DRN model. The thirty-second column shows the input LR image and the output of the DualSR model. The thirty-third column shows the input LR image and the output of the SwinIR (SR) model. The thirty-fourth column shows the input LR image and the output of the LDP model. The thirty-fifth column shows the input LR image and the output of the DRN model. The thirty-sixth column shows the input LR image and the output of the DualSR model. The thirty-seventh column shows the input LR image and the output of the SwinIR (SR) model. The thirty-eighth column shows the input LR image and the output of the LDP model. The thirty-ninth column shows the input LR image and the output of the DRN model. The fortieth column shows the input LR image and the output of the DualSR model. The forty-first column shows the input LR image and the output of the SwinIR (SR) model. The forty-second column shows the input LR image and the output of the LDP model. The forty-third column shows the input LR image and the output of the DRN model. The forty-fourth column shows the input LR image and the output of the DualSR model. The forty-fifth column shows the input LR image and the output of the SwinIR (SR) model. The forty-sixth column shows the input LR image and the output of the LDP model. The forty-seventh column shows the input LR image and the output of the DRN model. The forty-eighth column shows the input LR image and the output of the DualSR model. The forty-ninth column shows the input LR image and the output of the SwinIR (SR) model. The fiftieth column shows the input LR image and the output of the LDP model. The fifty-first column shows the input LR image and the output of the DRN model. The fifty-second column shows the input LR image and the output of the DualSR model. The fifty-third column shows the input LR image and the output of the SwinIR (SR) model. The fifty-fourth column shows the input LR image and the output of the LDP model. The fifty-fifth column shows the input LR image and the output of the DRN model. The fifty-sixth column shows the input LR image and the output of the DualSR model. The fifty-seventh column shows the input LR image and the output of the SwinIR (SR) model. The fifty-eighth column shows the input LR image and the output of the LDP model. The fifty-ninth column shows the input LR image and the output of the DRN model. The sixtieth column shows the input LR image and the output of the DualSR model. The sixty-first column shows the input LR image and the output of the SwinIR (SR) model. The sixty-second column shows the input LR image and the output of the LDP model. The sixty-third column shows the input LR image and the output of the DRN model. The sixty-fourth column shows the input LR image and the output of the DualSR model. The sixty-fifth column shows the input LR image and the output of the SwinIR (SR) model. The sixty-sixth column shows the input LR image and the output of the LDP model. The sixty-seventh column shows the input LR image and the output of the DRN model. The sixty-eighth column shows the input LR image and the output of the DualSR model. The sixty-ninth column shows the input LR image and the output of the SwinIR (SR) model. The seventieth column shows the input LR image and the output of the LDP model. The seventy-first column shows the input LR image and the output of the DRN model. The seventy-second column shows the input LR image and the output of the DualSR model. The seventy-third column shows the input LR image and the output of the SwinIR (SR) model. The seventy-fourth column shows the input LR image and the output of the LDP model. The seventy-fifth column shows the input LR image and the output of the DRN model. The seventy-sixth column shows the input LR image and the output of the DualSR model. The seventy-seventh column shows the input LR image and the output of the SwinIR (SR) model. The seventy-eighth column shows the input LR image and the output of the LDP model. The seventy-ninth column shows the input LR image and the output of the DRN model. The eightieth column shows the input LR image and the output of the DualSR model. The eighty-first column shows the input LR image and the output of the SwinIR (SR) model. The eighty-second column shows the input LR image and the output of the LDP model. The eighty-third column shows the input LR image and the output of the DRN model. The eighty-fourth column shows the input LR image and the output of the DualSR model. The eighty-fifth column shows the input LR image and the output of the SwinIR (SR) model. The eighty-sixth column shows the input LR image and the output of the LDP model. The eighty-seventh column shows the input LR image and the output of the DRN model. The eighty-eighth column shows the input LR image and the output of the DualSR model. The eighty-ninth column shows the input LR image and the output of the SwinIR (SR) model. The ninetieth column shows the input LR image and the output of the LDP model. The ninety-first column shows the input LR image and the output of the DRN model. The ninety-second column shows the input LR image and the output of the DualSR model. The ninety-third column shows the input LR image and the output of the SwinIR (SR) model. The ninety-fourth column shows the input LR image and the output of the LDP model. The ninety-fifth column shows the input LR image and the output of the DRN model. The ninety-sixth column shows the input LR image and the output of the DualSR model. The ninety-seventh column shows the input LR image and the output of the SwinIR (SR) model. The ninety-eighth column shows the input LR image and the output of the LDP model. The ninety-ninth column shows the input LR image and the output of the DRN model. The hundredth column shows the input LR image and the output of the DualSR model.
+
+Figure 3: Qualitative results of multiple degradation models for LR prediction on synthetic datasets. (Zoom in for details)
+
+we evaluate on RealSR Cai et al. (2019), RealSRSet Zhang et al. (2021b), and DPED Ignatov et al. (2017) datasets. We evaluate using PSNR, SSIM Wang et al. (2004), and LPIPS Zhang et al. (2018) as reference metrics, and NIQE Mittal et al. (2012), MANIQA Yang et al. (2022), CLIPIQA Wang et al. (2023a), MUSIQ Ke et al. (2021), and QAlign Wu et al. (2024) as non-reference metrics. For diffusion models, synthetic datasets are center-cropped to  $512 \times 512$ , and real-world datasets follow the StableSR Wang et al. (2024).
+
+### 4.2 EFFECTIVENESS OF LDP IN LR PREDICTION
+
+To thoroughly evaluate the effectiveness of the proposed LDP, we conduct extensive experiments under five degradation scenarios and compare it with two existing degradation models, DRN Guo et al. (2020) and DualSR Emad et al. (2021). In this experiment, we first generate SR images using SwinIR Liang et al. (2021), and then apply the degradation models provided by LDP, DRN, and DualSR to obtain predicted LR images from the SR outputs. These predictions are compared with the LR inputs to the SR model, and the results are reported in Table 1. In addition, Table 2 reports the similarity between the LR images produced by each degradation model and the downsampled SR images. A higher similarity indicates that the degradation model collapses into trivial downsampling rather than applying the specific degradations implied by the input LR. As shown in the tables, LDP performs consistently well across all degradation types. Importantly, the similarity between the LDP-generated LR and the downsampled SR is significantly lower than that between the LDP-generated LR and the input LR, demonstrating that LDP does not degenerate into simple downsampling. In contrast, DRN behaves almost identically to bicubic downsampling: because its inputs include only HR (SR results) images without any conditional signals, it fails to map an SR image to the multiple possible LR variants implied by different degradations. DualSR also struggles to properly handle diverse degradation types, particularly under complex mixed settings. As illustrated in Fig. 3, LDP effectively degrades high-frequency structures, further validating its ability to generate perceptually realistic LR images even under challenging degradations. In contrast, DRN and DualSR largely produce LR outputs that resemble simple downsampled versions of the SR images, indicating that they fail to apply the intended degradations.
+
+Table 3: Performance improvements of blind SR models across diverse architectures using our proposed LDP on synthetic multi-degradation benchmarks. We generate synthetic benchmarks from the DIV2K validation set using five types of degradation: (1) Downsampling (Down), (2) Noise, (3) Blur, (4) JPEG, and (5) Hybrid degradations following bsrngn.plus defaults.
+
+| Datasets | Scale | Metrics | FeMaSR | +LDP                    | StableSR | +LDP                    | SwinIR | +LDP                    | MambaIR | +LDP                    |
+|----------|-------|---------|--------|-------------------------|----------|-------------------------|--------|-------------------------|---------|-------------------------|
+| Down     | ×4    | PSNR↑   | 24.22  | <b>25.06 (+0.84)</b>    | 20.35    | <b>21.73 (+1.38)</b>    | 25.44  | <b>25.86 (+0.42)</b>    | 26.58   | <b>26.63 (+0.05)</b>    |
+|          | ×4    | SSIM↑   | 0.6793 | <b>0.7105 (+0.0312)</b> | 0.4998   | <b>0.5642 (+0.0644)</b> | 0.7210 | <b>0.7242 (+0.0032)</b> | 0.7393  | <b>0.7403 (+0.0010)</b> |
+|          | ×4    | LPIPS↓  | 0.2637 | <b>0.2490 (-0.0147)</b> | 0.3746   | <b>0.2870 (-0.0876)</b> | 0.2579 | <b>0.2538 (-0.0041)</b> | 0.2054  | <b>0.2005 (-0.0049)</b> |
+| Noise    | ×4    | PSNR↑   | 22.82  | <b>23.64 (+1.02)</b>    | 19.95    | <b>21.48 (+1.53)</b>    | 24.35  | <b>25.04 (+0.70)</b>    | 26.11   | <b>26.34 (+0.23)</b>    |
+|          | ×4    | SSIM↑   | 0.6519 | <b>0.6857 (+0.0338)</b> | 0.4560   | <b>0.5599 (+0.1039)</b> | 0.7130 | <b>0.7198 (+0.0068)</b> | 0.7382  | <b>0.7411 (+0.0029)</b> |
+|          | ×4    | LPIPS↓  | 0.2788 | <b>0.2624 (-0.0164)</b> | 0.4279   | <b>0.3040 (-0.1239)</b> | 0.2676 | <b>0.2659 (-0.0017)</b> | 0.2279  | <b>0.2219 (-0.0060)</b> |
+| Blur     | ×4    | PSNR↑   | 24.12  | <b>24.42 (+0.30)</b>    | 19.98    | <b>21.50 (+1.52)</b>    | 24.03  | <b>24.67 (+0.64)</b>    | 24.99   | <b>25.33 (+0.34)</b>    |
+|          | ×4    | SSIM↑   | 0.6639 | <b>0.6787 (+0.0148)</b> | 0.4373   | <b>0.5437 (+0.1064)</b> | 0.6764 | <b>0.6833 (+0.0069)</b> | 0.6892  | <b>0.6942 (+0.0050)</b> |
+|          | ×4    | LPIPS↓  | 0.3168 | <b>0.3199 (+0.0031)</b> | 0.5112   | <b>0.4763 (-0.0349)</b> | 0.3197 | <b>0.3168 (-0.0029)</b> | 0.2768  | <b>0.2751 (-0.0017)</b> |
+| JPEG     | ×4    | PSNR↑   | 22.92  | <b>23.87 (+0.95)</b>    | 20.17    | <b>21.91 (+1.74)</b>    | 24.55  | <b>25.27 (+0.72)</b>    | 26.36   | <b>26.59 (+0.23)</b>    |
+|          | ×4    | SSIM↑   | 0.6696 | <b>0.7068 (+0.0372)</b> | 0.5141   | <b>0.5943 (+0.0802)</b> | 0.7301 | <b>0.7372 (+0.0071)</b> | 0.7497  | <b>0.7538 (+0.0041)</b> |
+|          | ×4    | LPIPS↓  | 0.2633 | <b>0.2508 (-0.0125)</b> | 0.3682   | <b>0.2767 (-0.0915)</b> | 0.2535 | <b>0.2506 (-0.0029)</b> | 0.2113  | <b>0.2063 (-0.0050)</b> |
+| Hybrid   | ×4    | PSNR↑   | 23.40  | <b>23.72 (+0.32)</b>    | 19.27    | <b>21.43 (+2.16)</b>    | 23.52  | <b>24.35 (+0.83)</b>    | 24.35   | <b>24.71 (+0.36)</b>    |
+|          | ×4    | SSIM↑   | 0.6211 | <b>0.6392 (+0.0181)</b> | 0.3656   | <b>0.5197 (+0.1541)</b> | 0.6458 | <b>0.6492 (+0.0034)</b> | 0.6587  | <b>0.6636 (+0.0049)</b> |
+|          | ×4    | LPIPS↓  | 0.3453 | <b>0.3516 (+0.0063)</b> | 0.5727   | <b>0.4461 (-0.1266)</b> | 0.3634 | <b>0.3571 (-0.0063)</b> | 0.3244  | <b>0.3210 (-0.0034)</b> |
+
+![Figure 4: Qualitative results on synthetic datasets with ×4 scale factor. The figure shows a 2x10 grid of images. The first row shows zoomed-in crops of a landscape with a yellow field and a blue sky. The second row shows zoomed-in crops of a person sitting at a desk. The columns are labeled: Bicubic, FeMaSR, +LDP, StableSR, +LDP, SwinIR, +LDP, MambaIR, +LDP, and HR (High Resolution). The +LDP columns show improved visual quality compared to the base models.](efca2dce0095c9dc2a68e9af6b2bfd40_img.jpg)
+
+Figure 4: Qualitative results on synthetic datasets with ×4 scale factor. The figure shows a 2x10 grid of images. The first row shows zoomed-in crops of a landscape with a yellow field and a blue sky. The second row shows zoomed-in crops of a person sitting at a desk. The columns are labeled: Bicubic, FeMaSR, +LDP, StableSR, +LDP, SwinIR, +LDP, MambaIR, +LDP, and HR (High Resolution). The +LDP columns show improved visual quality compared to the base models.
+
+Figure 4: Qualitative results on synthetic datasets with  $\times 4$  scale factor. (Zoom in for details)
+
+### 4.3 IMPROVING EXISTING SR MODELS VIA FINE-TUNING WITH LDP
+
+We evaluate LDP on Blind SR models, including the GAN-based FeMaSR Chen et al. (2022), Diffusion-based StableSR Wang et al. (2024), Transformer-based SwinIR Liang et al. (2021), and Mamba-based MambaIR Guo et al. (2024). In these experiments, LDP is applied only during the fine-tuning stage and is not used at inference.
+
+**Improving SR Models on Synthetic Benchmarks.** Quantitative and qualitative results are presented in Tab. 3 and Fig. 4 (Fig. 7 in Appendix). As listed in Tab. 3, incorporating LDP consistently improves all baseline models across all degradation types. Among them, MambaIR+LDP achieves the best overall performance. SwinIR and StableSR also benefit significantly from LDP. StableSR, in particular, shows substantial relative gains under challenging conditions such as Blur and Hybrid. These results highlight LDP’s effectiveness in narrowing the solution space via cycle consistency, enabling stronger generalization to unknown degradations. Although FeMaSR+LDP outperforms the original model in most metrics, its LPIPS values in Blur and Hybrid remain higher. As shown in Fig. 4, LDP effectively reduces GAN artifacts and corrects texture distortions, significantly improving perceptual quality. The low LPIPS scores of the original FeMaSR are likely due to severe GAN artifacts misinterpreted as texture.
+
+**Improving SR Models on Real-World Benchmarks.** Quantitative and qualitative results are presented in Tab. 4 and Fig. 5 (Fig. 8 in Appendix). Table 4 shows that incorporating LDP consistently improves the performance of existing blind SR models across almost all datasets and metrics, demonstrating its enhanced generalization to unseen degradations. For FeMaSR, LDP suppresses GAN-induced artifacts, producing more stable, natural outputs. This can lower no-reference metrics, e.g., the CLIPIQA score drops on RealSR, as such metrics may favor visually striking but structurally inaccurate results. As shown in Fig. 5, the visual results explain the numerical improvements, with LDP mitigating ringing and GAN-induced artifacts, thereby enhancing visual fidelity and contributing to the better no-reference metrics scores.
+
+### 4.4 LDP FOR POSTERIOR SAMPLING OF PRETRAINED DIFFUSION MODELS
+
+We evaluated how LDP enhances pre-trained diffusion models through posterior sampling, including LDM Rombach et al. (2022), StableSR Wang et al. (2024), ResShift Yue et al. (2025), and UPSR Zhang et al. (2025). Quantitative and qualitative results are presented in Tab. 5 and
+
+Table 4: Performance improvements of blind SR models across diverse architectures using our proposed LDP on real-world benchmarks.
+
+| Datasets  | Scale | Metrics  | FeMaSR | +LDP             | StableSR | +LDP             | SwinIR | +LDP             | MambaIR | +LDP             |
+|-----------|-------|----------|--------|------------------|----------|------------------|--------|------------------|---------|------------------|
+| RealSR    | ×4    | NIQE↓    | 4.708  | 5.533 (+0.825)   | 7.446    | 6.331 (-1.115)   | 4.773  | 4.838 (+0.065)   | 5.330   | 5.350 (+0.020)   |
+|           | ×4    | MANIQA↓  | 0.3450 | 0.3654 (+0.0224) | 0.3303   | 0.3548 (+0.0245) | 0.3510 | 0.3742 (+0.0232) | 0.2882  | 0.3374 (+0.0492) |
+|           | ×4    | CLIPIQA↑ | 0.5645 | 0.4482 (-0.1163) | 0.4886   | 0.5213 (+0.0327) | 0.4739 | 0.5478 (+0.0739) | 0.3989  | 0.4642 (+0.0653) |
+|           | ×4    | MUSIQ↑   | 58.94  | 60.70 (+1.76)    | 52.99    | 59.26 (+6.27)    | 59.67  | 61.91 (+2.24)    | 51.87   | 57.85 (+5.98)    |
+|           | ×4    | QAlign↑  | 3.695  | 3.860 (+0.165)   | 2.347    | 2.646 (+0.299)   | 3.820  | 3.877 (+0.057)   | 3.631   | 3.766 (+0.135)   |
+| DPED      | ×4    | NIQE↓    | 5.045  | 5.704 (+0.659)   | 7.616    | 7.228 (-0.388)   | 4.982  | 4.821 (-0.161)   | 5.983   | 5.430 (-0.553)   |
+|           | ×4    | MANIQA↓  | 0.3102 | 0.2710 (-0.0393) | 0.3086   | 0.2970 (-0.0086) | 0.2637 | 0.2832 (+0.0195) | 0.2334  | 0.2767 (+0.0433) |
+|           | ×4    | CLIPIQA↑ | 0.5570 | 0.5610 (+0.0040) | 0.3968   | 0.3363 (-0.0605) | 0.5402 | 0.4538 (+0.1136) | 0.3083  | 0.3850 (+0.0767) |
+|           | ×4    | MUSIQ↑   | 49.14  | 44.07 (-5.07)    | 42.97    | 45.08 (+2.11)    | 42.10  | 45.91 (+3.81)    | 35.25   | 44.64 (+9.39)    |
+|           | ×4    | QAlign↑  | 3.429  | 3.262 (-0.167)   | 2.033    | 2.311 (+0.278)   | 2.988  | 3.090 (+0.102)   | 3.192   | 3.248 (+0.056)   |
+| RealSRSet | ×4    | NIQE↓    | 5.236  | 5.952 (+0.716)   | 6.090    | 5.586 (-0.504)   | 5.424  | 5.441 (+0.017)   | 5.726   | 5.893 (+0.167)   |
+|           | ×4    | MANIQA↓  | 0.4006 | 0.4002 (-0.0004) | 0.3904   | 0.4012 (+0.0108) | 0.3740 | 0.3938 (+0.0198) | 0.2978  | 0.3555 (+0.0577) |
+|           | ×4    | CLIPIQA↑ | 0.6874 | 0.5683 (-0.1191) | 0.6057   | 0.6214 (+0.0157) | 0.5843 | 0.6376 (+0.0533) | 0.4793  | 0.5428 (+0.0635) |
+|           | ×4    | MUSIQ↑   | 64.65  | 64.07 (-0.58)    | 60.15    | 62.84 (+2.69)    | 63.60  | 65.33 (+1.73)    | 55.96   | 61.28 (+5.32)    |
+|           | ×4    | QAlign↑  | 3.776  | 3.870 (+0.094)   | 2.916    | 3.247 (+0.331)   | 2.749  | 3.222 (+0.573)   | 3.454   | 3.632 (+0.198)   |
+
+![Figure 5: Qualitative results on real-world benchmarks with ×4 scale factor. The image shows a grid of 10 columns. Each column represents a different method: Bicubic, FeMaSR, FeMaSR + LDP, StableSR, StableSR + LDP, SwinIR, SwinIR + LDP, MambaIR, MambaIR + LDP, and a zoomed-in view of the original image. Each column contains three rows of images: the top row shows the full image, the middle row shows a zoomed-in crop, and the bottom row shows a further zoomed-in crop of the middle row. The zoomed-in crops highlight the performance differences between the methods in terms of texture and structural consistency.](c37fe03d7cad74ad675a0eb16aa43821_img.jpg)
+
+Figure 5: Qualitative results on real-world benchmarks with ×4 scale factor. The image shows a grid of 10 columns. Each column represents a different method: Bicubic, FeMaSR, FeMaSR + LDP, StableSR, StableSR + LDP, SwinIR, SwinIR + LDP, MambaIR, MambaIR + LDP, and a zoomed-in view of the original image. Each column contains three rows of images: the top row shows the full image, the middle row shows a zoomed-in crop, and the bottom row shows a further zoomed-in crop of the middle row. The zoomed-in crops highlight the performance differences between the methods in terms of texture and structural consistency.
+
+Figure 5: Qualitative results on real-world benchmarks with  $\times 4$  scale factor. (Zoom in for details)
+
+Fig. 6 (Fig. 9 in Appendix). As listed in Tab. 5, after applying LDP, the baselines show improvements across nearly all metrics on most datasets. For instance, StableSR demonstrates notable gains in MANIQA, CLIPIQA, and MUSIQ scores after applying LDP, while ResShift and UPSR also achieve higher metric values in most cases. For StableSR, we applied the noise-subtraction technique (Appendix E), which accounts for the differences from Tab. 4. As showed in Fig. 6, our LDP effectively reduces texture artifacts while preserving structural consistency.
+
+## 5 ABLATION STUDY
+
+In ablation study, we examine the loss components, patch size, frequency band selection, scale factor for high-frequency acquisition, performance of LDP under severe degradations, and computational burden of LDP. Further details are provided in Appendix F.
+
+**Ablation of Loss Terms in the Fine-Tuning Stage.** Table 6 presents the impact of different loss components in  $\mathcal{L}_{sym}^{FT}$  (Equ. 16) and  $\mathcal{L}_{fre}$  (Equ. 14) during fine-tuning of pretrained SwinIR models, evaluated on the synthetic Hybrid dataset. In all experiments, we set  $\tau = 100$  and the weight of each loss term is set to 1. All variants using any combination of the proposed losses outperform the baseline. Incorporating both symmetric and frequency losses (LDPV5–LDPV7) consistently improves perceptual quality (lower LPIPS) and reconstruction accuracy (higher PSNR and SSIM), with LDPV7 achieving the best overall performance, highlighting the complementary nature of these loss components. The LDP parameters can be universally configured as  $\tau = 100$  and  $\lambda_1 = \lambda_2 = \lambda_3 = 1$  for any super-resolution model, leading to improved generalization performance.
+
+**Ablation of the weight of  $\tau$ .** Table 7 presents the impact of different weight of  $\tau$  when fine-tuning SwinIR. All values of  $\tau$  outperform the baseline, with  $\tau = 100$  achieving the best overall performance.
+
+## 6 LIMITATIONS AND CONCLUSION
+
+We propose LDP, a lightweight denoising autoencoder plug-in. By integrating HR images and the high-frequency component of LR, the model achieves realistic degradation modeling while maintaining efficiency. Experiments show LDP significantly improves the generalization of existing SR models on unseen degradations after fine-tuning, and enables test-time artifact correction. However, LDP has two main limitations: (1) in posterior sampling, it lacks generative ability and only per-
+
+Table 5: Improving Diffusion models via posterior sampling with LDP on real-world benchmarks.
+
+| Datasets  | Scale | Metrics  | LDM           | +LDP                    | StableSR | +LDP                    | ResShift      | +LDP                    | UPSR         | +LDP                    |
+|-----------|-------|----------|---------------|-------------------------|----------|-------------------------|---------------|-------------------------|--------------|-------------------------|
+| RealSR    | ×4    | NIQE↓    | <b>6.651</b>  | 6.830 (+0.179)          | 5.948    | <b>5.636</b> (-0.312)   | <b>8.021</b>  | 8.027 (+0.006)          | 4.854        | <b>4.834</b> (-0.020)   |
+|           | ×4    | MANIQA↓  | <b>0.2904</b> | 0.2810 (-0.0094)        | 0.3552   | <b>0.3644</b> (+0.0092) | <b>0.3487</b> | 0.3486 (-0.0001)        | 0.3901       | <b>0.3908</b> (+0.0007) |
+|           | ×4    | CLIPIQA↑ | <b>0.4564</b> | 0.4319 (-0.0245)        | 0.4840   | <b>0.5031</b> (+0.0191) | 0.5353        | <b>0.5354</b> (+0.0001) | 0.5278       | <b>0.5361</b> (+0.0083) |
+|           | ×4    | MUSIQ↓   | <b>52.09</b>  | 50.37 (-1.72)           | 55.11    | <b>56.56</b> (+1.45)    | 56.85         | 56.85                   | 64.82        | <b>64.70</b> (-0.12)    |
+|           | ×4    | Qalign↑  | <b>2.685</b>  | 2.610 (-0.075)          | 2.607    | <b>2.716</b> (+0.109)   | 3.036         | 3.036                   | 3.218        | <b>3.231</b> (+0.013)   |
+| DPED      | ×4    | NIQE↓    | <b>8.724</b>  | 8.770 (+0.046)          | 6.456    | <b>6.267</b> (-0.189)   | 9.429         | <b>9.415</b> (-0.014)   | <b>6.266</b> | 6.281 (+0.015)          |
+|           | ×4    | MANIQA↓  | 0.2381        | <b>0.2418</b> (+0.0037) | 0.3255   | <b>0.3341</b> (+0.0086) | <b>0.3107</b> | 0.3104 (-0.0003)        | 0.3151       | <b>0.3163</b> (+0.0012) |
+|           | ×4    | CLIPIQA↑ | <b>0.3718</b> | 0.3681 (-0.0037)        | 0.4041   | <b>0.4063</b> (+0.0012) | 0.4875        | <b>0.4879</b> (+0.0004) | 0.4094       | 0.4026 (-0.0068)        |
+|           | ×4    | MUSIQ↓   | <b>32.92</b>  | 32.55 (-0.37)           | 45.55    | <b>49.25</b> (+3.70)    | 44.63         | 44.59 (-0.04)           | 46.47        | <b>46.52</b> (+0.05)    |
+|           | ×4    | Qalign↑  | 1.901         | <b>1.917</b> (+0.016)   | 2.302    | <b>2.343</b> (+0.041)   | 2.422         | <b>2.423</b> (+0.001)   | 2.271        | 2.257 (-0.014)          |
+| RealSRNet | ×4    | NIQE↓    | 6.349         | <b>6.258</b> (-0.091)   | 4.898    | <b>4.687</b> (-0.211)   | <b>6.979</b>  | 7.011 (+0.032)          | <b>4.864</b> | 4.878 (+0.014)          |
+|           | ×4    | MANIQA↓  | 0.3407        | <b>0.3470</b> (+0.0063) | 0.4411   | <b>0.4573</b> (+0.0162) | 0.4004        | 0.4004                  | 0.4647       | <b>0.4720</b> (+0.0073) |
+|           | ×4    | CLIPIQA↑ | <b>0.5439</b> | 0.5311 (-0.0128)        | 0.6384   | <b>0.6584</b> (+0.0200) | 0.6656        | <b>0.6658</b> (+0.0002) | 0.6709       | <b>0.6753</b> (+0.0044) |
+|           | ×4    | MUSIQ↓   | 58.54         | <b>59.52</b> (+0.98)    | 62.73    | <b>62.96</b> (+0.23)    | 66.05         | <b>66.06</b> (+0.01)    | 69.68        | <b>69.74</b> (+0.06)    |
+|           | ×4    | Qalign↑  | 3.046         | <b>3.089</b> (+0.043)   | 3.193    | 3.192 (-0.001)          | <b>3.561</b>  | 3.560 (-0.001)          | <b>3.705</b> | 3.656 (-0.049)          |
+
+![Figure 6: Qualitative results of LDP enhances diffusion models through posterior sampling at 4x scale SR. The figure shows a 2x9 grid of images. The first row shows original images of a building. The second row shows zoomed-in crops of the same images. Below each crop, the method used is labeled: Bicubic, LDM, +LDP, StableSR, +LDP, ResShift, +LDP, UPSR, +LDP. The +LDP method consistently shows sharper details and better texture recovery compared to the base models.](07f537f57749b75157f742525e6a8dbc_img.jpg)
+
+Figure 6: Qualitative results of LDP enhances diffusion models through posterior sampling at 4x scale SR. The figure shows a 2x9 grid of images. The first row shows original images of a building. The second row shows zoomed-in crops of the same images. Below each crop, the method used is labeled: Bicubic, LDM, +LDP, StableSR, +LDP, ResShift, +LDP, UPSR, +LDP. The +LDP method consistently shows sharper details and better texture recovery compared to the base models.
+
+Figure 6: Qualitative results of LDP enhances diffusion models through posterior sampling at  $\times 4$  scale SR. (Zoom in for details)
+
+Table 6: Ablation study of the loss terms used in the fine-tuning stage of pretrained SwinIR models.
+
+| Methods  | $L_{\mathcal{L}}^{Sym}$ | $L_{\mathcal{L}}^{Sym}$ | $L_{\mathcal{L}}^{Sym}$ | $L_{\mathcal{L}}^{Sym}$ | PSNR↑        | SSIM↑         | LPIPS↓        |
+|----------|-------------------------|-------------------------|-------------------------|-------------------------|--------------|---------------|---------------|
+|          |                         | $L_{LPIPS}^{Sym}$       | $L_{Rec}^{Sym}$         | $L_{Rec}^{Sym}$         |              |               |               |
+| baseline | ×                       | ×                       | ×                       | ×                       | 23.52        | 0.6458        | 0.3634        |
+| LDPV1    | ×                       | ×                       | ×                       | ✓                       | 23.99        | 0.6481        | 0.3591        |
+| LDPV2    | ✓                       | ✓                       | ×                       | ×                       | 24.08        | 0.6406        | 0.3585        |
+| LDPV3    | ×                       | ×                       | ✓                       | ×                       | 24.01        | 0.6404        | 0.3582        |
+| LDPV4    | ✓                       | ✓                       | ✓                       | ×                       | 24.13        | 0.6406        | 0.3609        |
+| LDPV5    | ✓                       | ✓                       | ×                       | ✓                       | 24.33        | 0.6499        | 0.3578        |
+| LDPV6    | ×                       | ×                       | ✓                       | ✓                       | 24.28        | <b>0.6500</b> | 0.3580        |
+| LDPV7    | ✓                       | ✓                       | ✓                       | ✓                       | <b>24.35</b> | 0.6492        | <b>0.3571</b> |
+
+Table 7: Ablation study of the  $\tau$  weight.
+
+| $\tau_{au}$ | PSNR↑        | SSIM↑         | LPIPS↓        |
+|-------------|--------------|---------------|---------------|
+| -           | 23.52        | 0.6458        | 0.3634        |
+| 0.1         | 24.15        | <b>0.6547</b> | 0.3601        |
+| 1           | 24.27        | <b>0.6547</b> | 0.3595        |
+| 10          | 24.30        | 0.6500        | 0.3596        |
+| 100         | <b>24.35</b> | 0.6492        | <b>0.3571</b> |
+
+forms texture rectification; (2) It does not support unpaired degradation modeling, as the generated LR image inevitably retains information from the input LR high-frequency components.
+
+## REFERENCES
+
+- Eirikur Agustsson and Radu Timofte. NTIRE 2017 challenge on single image super-resolution: Dataset and study. In *IEEE Conference on Computer Vision and Pattern Recognition Workshops*, pp. 1122–1131, 2017.
+- Arpit Bansal, Eitan Borgnia, Hong-Min Chu, Jie Li, Hamid Kazemi, Furong Huang, Micah Goldblum, Jonas Geiping, and Tom Goldstein. Cold diffusion: Inverting arbitrary image transforms without noise. In *Advances in Neural Information Processing Systems*, 2023.
+- Jianhui Cai, Hui Zeng, Hongwei Yong, Zisheng Cao, and Lei Zhang. Toward real-world single image super-resolution: A new benchmark and a new model. In *IEEE International Conference on Computer Vision*, pp. 3086–3095, 2019.
+- Chaofeng Chen, Xinyu Shi, Yipeng Qin, Xiaoming Li, Xiaoguang Han, Tao Yang, and Shihui Guo. Real-world blind super-resolution via feature matching with implicit high-resolution priors. In *ACM International Conference on Multimedia*, pp. 1329–1338, 2022.
+
+- 540 Haoyu Chen, Wenbo Li, Jinjin Gu, Jingjing Ren, Haoze Sun, Xueyi Zou, Zhensong Zhang, Youliang Yan, and  
+541 Lei Zhu. Low-res leads the way: Improving generalization for super-resolution by self-supervised learning.  
+542 In *IEEE Conference on Computer Vision and Pattern Recognition*, pp. 25857–25867, 2024.
+- 543 Honggang Chen, Xiaohai He, Hong Yang, Yuanyuan Wu, Linbo Qing, and Ray E. Sheriff. Self-supervised  
+544 cycle-consistent learning for scale-arbitrary real-world single image super-resolution. *Expert Systems with  
+545 Applications*, 212:118657, 2023a.
+- 546 Xiangyu Chen, Xintao Wang, Jiantao Zhou, Yu Qiao, and Chao Dong. Activating more pixels in image super-  
+547 resolution transformer. In *IEEE Conference on Computer Vision and Pattern Recognition*, pp. 22367–22377,  
+548 2023b.
+- 549 Yuying Chen, Mingde Yao, Wenbo Li, Renjing Pei, Jinjing Zhao, and Wenqi Ren. Unsupervised diffusion-  
+550 based degradation modeling for real-world super-resolution. In *Proceedings of the AAAI Conference on  
+551 Artificial Intelligence*, pp. 2348–2356, 2025.
+- 552 Jooyoung Choi, Sungwon Kim, Yonghyun Jeong, Youngjune Gwon, and Sungroh Yoon. ILVR: conditioning  
+553 method for denoising diffusion probabilistic models. In *IEEE International Conference on Computer Vision*,  
+554 pp. 14347–14356, 2021.
+- 555 Hyungjin Chung, Byeongsu Sim, Dohoon Ryu, and Jong Chul Ye. Improving diffusion models for inverse  
+556 problems using manifold constraints. In *Advances in Neural Information Processing Systems*, 2022.
+- 557 Hyungjin Chung, Jeongsol Kim, Michael Thompson McCann, Marc Louis Klasky, and Jong Chul Ye. Dif-  
+558 fusion posterior sampling for general noisy inverse problems. In *International Conference on Learning  
+559 Representations*, 2023.
+- 560 Chao Dong, Chen Change Loy, Kaiming He, and Xiaoou Tang. Learning a deep convolutional network for  
+561 image super-resolution. In *European conference on computer vision*, pp. 184–199, 2014.
+- 562 Runmin Dong, Shuai Yuan, Bin Luo, Mengxuan Chen, Jinxiao Zhang, Lixian Zhang, Weijia Li, Juepeng  
+563 Zheng, and Haohuan Fu. Building bridges across spatial and temporal resolutions: Reference-based super-  
+564 resolution via change priors and conditional diffusion model. In *IEEE Conference on Computer Vision and  
+565 Pattern Recognition*, pp. 27674–27684, 2024.
+- 566 Mohammad Emad, Maurice Peemen, and Henk Corporaal. DualSR: Zero-shot dual learning for real-world  
+567 super-resolution. In *IEEE Winter Conference on Applications of Computer Vision*, pp. 1629–1638, 2021.
+- 568 Hang Guo, Jinmin Li, Tao Dai, Zhihao Ouyang, Xudong Ren, and Shu-Tao Xia. MambaIR: A simple baseline  
+569 for image restoration with state-space model. In *European conference on computer vision*, pp. 222–241,  
+570 2024.
+- 571 Hang Guo, Yong Guo, Yaohua Zha, Yulun Zhang, Wenbo Li, Tao Dai, Shu-Tao Xia, and Yawei Li. Mam-  
+572 balRV2: Attentive state space restoration. In *IEEE Conference on Computer Vision and Pattern Recognition*,  
+573 2025.
+- 574 Yong Guo, Jian Chen, Jingdong Wang, Qi Chen, Jiezhang Cao, Zeshuai Deng, Yanwu Xu, and Mingkui Tan.  
+575 Closed-loop matters: Dual regression networks for single image super-resolution. In *IEEE Conference on  
+576 Computer Vision and Pattern Recognition*, pp. 5406–5415, 2020.
+- 577 Jonathan Ho, Ajay Jain, and Pieter Abbeel. Denoising diffusion probabilistic models. In *Advances in Neural  
+578 Information Processing Systems*, 2020.
+- 579 Shady Abu Hussein, Tom Tirer, and Raja Giryes. Correction filter for single image super-resolution: Robusti-  
+580 fying off-the-shelf deep super-resolvers. In *IEEE Conference on Computer Vision and Pattern Recognition*,  
+581 pp. 1425–1434, 2020.
+- 582 Andrey Ignatov, Nikolay Kobyshev, Radu Timofte, Kenneth Vanhoey, and Luc Van Gool. DSLR-Quality photos  
+583 on mobile devices with deep convolutional networks. In *IEEE International Conference on Computer Vision*,  
+584 pp. 3297–3305, 2017.
+- 585 Junjie Ke, Qifei Wang, Yilin Wang, Peyman Milanfar, and Feng Yang. MUSIQ: multi-scale image quality  
+586 transformer. In *IEEE/CVF International Conference on Computer Vision*, pp. 5128–5137, 2021.
+- 587 Diederik P Kingma and Jimmy Ba. Adam: A method for stochastic optimization. In *International Conference  
+588 on Learning Represent*, 2015.
+- 589 Guangyuan Li, Chen Rao, Juncheng Mo, Zhanjie Zhang, Wei Xing, and Lei Zhao. Rethinking diffusion model  
+590 for multi-contrast MRI super-resolution. In *IEEE Conference on Computer Vision and Pattern Recognition*,  
+591 pp. 11365–11374, 2024a.
+- 592
+- 593
+
+- 594 Tianhong Li, Yonglong Tian, He Li, Mingyang Deng, and Kaiming He. Autoregressive image generation  
+595 without vector quantization. In *Advances in Neural Information Processing Systems*, 2024b.
+- 596
+- 597 Xiaoming Li, Chaofeng Chen, Xianhui Lin, Wangmeng Zuo, and Lei Zhang. From face to natural image:  
+598 Learning real degradation for blind image super-resolution. In *European conference on computer vision*, pp.  
+599 376–392, 2022.
+- 600 Yawei Li, Kai Zhang, Jingyun Liang, Jiezhang Cao, Ce Liu, Rui Gong, Yulun Zhang, Hao Tang, Yun Liu,  
+601 Denis Demandolx, Rakesh Ranjan, Radu Timofte, and Luc Van Gool. LSDIR: A large scale dataset for  
+602 image restoration. In *IEEE Conference on Computer Vision and Pattern Recognition Workshops*, pp. 1775–  
+603 1787, 2023.
+- 604 Jingyun Liang, Jiezhang Cao, Guolei Sun, Kai Zhang, Luc Van Gool, and Radu Timofte. SwinIR: Image  
+605 restoration using swin transformer. In *IEEE International Conference on Computer Vision*, pp. 1833–1844,  
+606 2021.
+- 607
+- 608 Bee Lim, Sanghyun Son, Heewon Kim, Seungjun Nah, and Kyoung Mu Lee. Enhanced deep residual net-  
+609 works for single image super-resolution. In *IEEE Conference on Computer Vision and Pattern Recognition  
+610 Workshops*, pp. 136–144, 2017.
+- 611 Anish Mittal, Rajiv Soundararajan, and Alan C Bovik. Making a “completely blind” image quality analyzer.  
+612 *IEEE Signal Processing Letters*, 20(3):209–212, 2012.
+- 613
+- 614 Ethan Perez, Florian Strub, Harm de Vries, Vincent Dumoulin, and Aaron C. Courville. Film: Visual reasoning  
+615 with a general conditioning layer. In *Proceedings of the AAAI Conference on Artificial Intelligence*, pp.  
+616 3942–3951, 2018.
+- 617 Vaishnav Potlapalli, Syed Waqas Zamir, Salman H. Khan, and Fahad Shahbaz Khan. Promptir: Prompting for  
+618 all-in-one image restoration. In *Advances in Neural Information Processing Systems*, 2023.
+- 619
+- 620 Robin Rombach, Andreas Blattmann, Dominik Lorenz, Patrick Esser, and Björn Ommer. High-resolution im-  
+621 age synthesis with latent diffusion models. In *IEEE Conference on Computer Vision and Pattern Recognition*,  
+622 pp. 10674–10685, 2022.
+- 623 Assaf Shocher, Nadav Cohen, and Michal Irani. “Zero-Shot” super-resolution using deep internal learning. In  
+624 *IEEE Conference on Computer Vision and Pattern Recognition*, pp. 3118–3126, 2018.
+- 625
+- 626 Jiaming Song, Chenlin Meng, and Stefano Ermon. Denoising diffusion implicit models. In *International  
+627 Conference on Learning Representations*, 2021.
+- 628 Dmitry Ulyanov, Andrea Vedaldi, and Victor S. Lempitsky. Deep image prior. In *IEEE Conference on Computer  
+629 Vision and Pattern Recognition*, pp. 9446–9454, 2018.
+- 630
+- 631 Jianyi Wang, Kelvin C. K. Chan, and Chen Change Loy. Exploring CLIP for assessing the look and feel of  
+632 images. In *AAAI Conference on Artificial Intelligence*, pp. 2555–2563, 2023a.
+- 633
+- 634 Jianyi Wang, Zongsheng Yue, Shangchen Zhou, Kelvin C. K. Chan, and Chen Change Loy. Exploiting diffusion  
+635 prior for real-world image super-resolution. *International Journal of Computer vision*, 2024.
+- 636
+- 637 Xintao Wang, Liangbin Xie, Chao Dong, and Ying Shan. Real-ESRGAN: Training real-world blind super-  
+638 resolution with pure synthetic data. In *International Conference on Computer Vision Workshops*, pp. 1905–  
+639 1914, 2021.
+- 640
+- 641 Zhixin Wang, Ziyang Zhang, Xiaoyun Zhang, Huangjie Zheng, Mingyuan Zhou, Ya Zhang, and Yanfeng Wang.  
+642 DR2: diffusion-based robust degradation remover for blind face restoration. In *IEEE Conference on Com-  
+643 puter Vision and Pattern Recognition*, pp. 1704–1713, 2023b.
+- 644
+- 645 Zhou Wang, Alan C Bovik, Hamid R Sheikh, and Eero P Simoncelli. Image quality assessment: from error  
+646 visibility to structural similarity. *IEEE Transactions on Image Processing*, 13(4):600–612, 2004.
+- 647
+- 648 Haoning Wu, Zicheng Zhang, Weixia Zhang, Chaofeng Chen, Chunyi Li, Liang Liao, Annan Wang, Erli Zhang,  
+649 Wenzhi Sun, Qiong Yan, Xiongkuo Min, Guangtai Zhai, and Weisi Lin. Q-align: Teaching lmms for visual  
+650 scoring via discrete text-defined levels. In *International Conference on Machine Learning*, 2024.
+- 651
+- 652 Jiahao Xie, Wei Li, Xiaohang Zhan, Ziwei Liu, Yew-Soon Ong, and Chen Change Loy. Masked frequency  
+653 modeling for self-supervised visual pre-training. In *International Conference on Learning Representations*,  
+654 2023.
+
+[Appendix and supplementary materials beyond page 12 have been removed.]

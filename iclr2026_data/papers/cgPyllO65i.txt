@@ -1,0 +1,435 @@
+# PANDORA: DIFFUSION-BASED PROTEIN CONFORMATION GENERATION
+
+Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+The field of protein design has garnered significant attention in AI for Science (AI4Science). While most existing studies focus on generating native protein structures for applications such as binding target discovery and drug design, this paper tackles a different problem. We aim to generate both native and non-native protein conformations, i.e., 3D structures along the folding pathway. This task holds significant potential for advancing key applications, including folding pathway prediction, drug discovery, and the study of protein misfolding diseases. To address this challenge, we introduce *Pandora* (i.e., *Protein Conformation Diffusion Model for Generation*), a novel diffusion-based framework designed to generate diverse, physically and chemically plausible protein backbone structures. By leveraging a diffusion architecture, Pandora captures a broad spectrum of folding patterns while adhering to biophysical constraints. Extensive experiments across multiple protein folding pathway datasets demonstrate the effectiveness and generalizability of our approach in producing realistic and biologically meaningful conformations. The implementation of Pandora is publicly available at <https://anonymous.4open.science/r/Pandora-71AD>.
+
+## 1 INTRODUCTION
+
+Proteins are fundamental biological macromolecules that govern a vast array of processes essential to life. Comprised of amino acid chains that fold into intricate three-dimensional structures, proteins exhibit diverse functionalities that are closely tied to their conformations. Understanding the geometric and structural properties of proteins is crucial for deciphering their mechanisms of action and functional diversity. Such insights are pivotal for driving innovations in areas like medicine (Kuhlman & Bradley, 2019), protein folding pathway (Majewski et al., 2023), and understanding protein misfolding disease (Hartl, 2017).
+
+### 1.1 MOTIVATION
+
+In recent years, breakthroughs like AlphaFold (Senior et al., 2020), AlphaFold 2 (Jumper et al., 2021), and the more recent AlphaFold 3 (Abramson et al., 2024) have significantly advanced our understanding of native protein structures. Beyond structural prediction, these landmark studies have catalyzed widespread interest in applying deep learning to biological sciences, sparking a surge of innovative research. For instance, methods such as RoseTTAFold (Baek et al., 2021), ESMFold (Lin et al., 2022), ProteinBERT (Brandes et al., 2022) showcase the transformative potential of deep learning in addressing complex biological problems, further establishing AI4Science as a driving force in protein research. While these advances have primarily targeted the prediction of static, native protein structures, they often overlook the dynamic folding pathways and transient intermediate conformations that proteins undergo during folding. Recent studies (Zheng et al., 2024; Wu et al., 2024; Ruzmetov et al., 2025) have investigated near-equilibrium conformations of folded proteins, offering important insights into the structural fluctuations of stable proteins. However, this line of research remains limited, as it fails to model the full folding process—particularly the transient, non-native conformations essential for understanding protein folding mechanisms.
+
+Understanding these non-native conformations is crucial for uncovering the mechanisms behind protein folding and misfolding, which are directly linked to various diseases such as Alzheimer’s and Parkinson’s (Selkoe, 2004). The inability to fully capture the spectrum of protein conformations
+
+![Figure 1: Different protein conformations. (a) proper folding and misfolding: A diagram showing a protein folding from a disordered state into a structured native state, with a box labeled 'PANDORA' containing a misfolded state. (b) conformation information: A detailed chemical diagram of a protein backbone segment showing atoms (N, Cα, C, O, R), bond lengths (L1, L2, L3), bond angles (θ1, θ2, θ3), and dihedral angles (X1, X2, X3).](aa80c10a3e1e30168349845f79264f3c_img.jpg)
+
+Figure 1: Different protein conformations. (a) proper folding and misfolding: A diagram showing a protein folding from a disordered state into a structured native state, with a box labeled 'PANDORA' containing a misfolded state. (b) conformation information: A detailed chemical diagram of a protein backbone segment showing atoms (N, Cα, C, O, R), bond lengths (L1, L2, L3), bond angles (θ1, θ2, θ3), and dihedral angles (X1, X2, X3).
+
+Figure 1: Different protein conformations.
+
+highlights the need for novel computational frameworks capable of exploring both native and non-native protein structures. Traditional approaches to studying non-native conformations in the folding process primarily rely on molecular dynamics (MD) simulations (Binder et al., 2004), which solve differential equations using mathematical and physical models. However, such simulations are computationally expensive and time-prohibitive, particularly for larger proteins. For example, simulating a protein’s folding process over  $10\mu s$  can take months (Shaw et al., 2010), or even longer, due to the immense computational cost of resolving molecular interactions at extremely fine time steps. Addressing these limitations, the emergence of deep learning-based approaches offers new hope, enabling the modeling of longer timescales and the dynamics of larger proteins, thereby facilitating advancements across multiple domains.
+
+**Protein Folding Mechanisms.** Understanding how proteins fold into their native structures (as shown in Figure 1 (a)) is essential for uncovering the principles that govern their functionality. Some research (e.g., (Zhao et al., 2023; Janson et al., 2023)) explore folding pathway by utilizing deep learning techniques, while (Majewski et al., 2023) accelerates dynamics via coarse-grained simulation. Recently, (Ianeselli et al., 2025) makes use of Variational autoencoders to predict folding actions. Understanding the process by which a protein transitions between conformations is essential, making the study of non-native conformations particularly important.
+
+**Protein Misfolding Mechanisms.** Investigating protein misfolding mechanisms (as shown in Figure 1 (a)) is crucial for understanding the causes of various diseases, such as Alzheimer’s, Parkinson’s, and Huntington’s disease. Misfolding occurs when proteins deviate from their intended folding pathways, resulting in the adoption of aberrant conformations that often aggregate into toxic structures. Some research (e.g., (Englander et al., 2007)) studies misfolding protein in the manner of experimental observations, while (Bhowmik et al., 2018) utilizes clustering methods to find potentially misfolded states among various non-native conformations. By leveraging deep learning methods that can sample a diverse ensemble of non-native conformations, we can better uncover elusive misfolded states, thereby enhancing our understanding of misfolding pathways and their role in disease mechanisms.
+
+As highlighted above, advancing our understanding of protein folding and misfolding mechanisms requires the ability to generate a diverse range of both native and non-native conformations that reflect the intricacies of folding pathways. Producing a wide variety of native and non-native states provides several benefits. Firstly, it enables the discovery of critical intermediates that contribute to protein aggregation and misfolding-related diseases. Additionally, studying non-native conformations provides structural insights into the folding process, revealing how proteins transition between different states along their folding pathways. Therefore, *developing innovative methods to generate and analyze diverse non-native conformations is of paramount importance.*
+
+### 1.2 CHALLENGES AND CONTRIBUTIONS
+
+Native protein structure prediction has been well studied in many papers (e.g., (Senior et al., 2020; Jumper et al., 2021; Baek et al., 2021; Lin et al., 2022; Abramson et al., 2024)), and meanwhile some studies (e.g., (Zheng et al., 2024; Wu et al., 2024; Ruzmetov et al., 2025)) focus on states near the properly folded protein. In addition, some works have explored folding pathways, such as (Zhao et al., 2023; Janson et al., 2023; Majewski et al., 2023; Ianeselli et al., 2025). However, most of these works may not be capable of generating various non-native protein conformations. As a consequence, several challenges remain underexplored.
+
+- **Challenge 1: Stochastic conformations.** Protein folding is an inherently complex process influenced by environmental factors, such as temperature, which introduces a degree of randomness into the folding pathways. Even when using MD simulations, the outcomes can vary and exhibit
+
+stochasticity. Therefore, it is essential to develop models that inherently incorporate this randomness to better capture the diversity of folding behaviors. If we directly apply previous methods, such as AlphaFold 2 (Jumper et al., 2021), ESMFold (Lin et al., 2022), and so on, we can only obtain finite and determined protein conformations, which is not desirable to address this challenge. Some of other methods (e.g., Janson et al., 2023; Ianeselli et al., 2025) focusing on non-native conformations also fall into such inability. Thus, it is crucial to take stochasticity into account so as to generate diverse non-native conformations.
+
+- **Challenge 2: Structurally valid conformations.** Ensuring that the generated conformations are not only diverse but also structurally valid is a significant challenge. Non-native conformations must satisfy physical and chemical constraints, such as steric clashes, bond angles, and dihedral angles, to remain biologically meaningful. Simply generating diverse conformations without considering structural validity may result in unrealistic, unstable, or biologically irrelevant structures. Some methods (e.g., (Huang et al., 2024)) generate molecules that may not be able to capture the special backbone structure of conformations, while some methods (e.g., (Zheng et al., 2024; Ruzmetov et al., 2025)) only concentrate on native proteins and may not be capable of modeling the diversity of non-native conformations. Furthermore, several methods (e.g., Lu et al. (2023); Wang et al. (2024); Shen et al. (2025)) generate conformations at the amino acid residue level, implicitly fixing certain bond lengths and bond angles during generation. However, prior studies (Lundgren & Niemi, 2012; Peng et al., 2014; Karplus et al., 2008) have shown that, for internal residues, key bond angles, particularly the  $N - C\alpha - C$  angle, are not invariant but vary systematically with secondary structure. This suggests that treating such angles as rigid may overlook important conformation-dependent stereochemistry. Thus, it is essential to integrate mechanisms or constraints that can guarantee the structural plausibility of the generated conformations at the atomic level under the premise of diversity, with particular emphasis on maintaining atomic-level stereochemical fidelity.
+
+**Our approach and contributions.** We propose Pandora (shorted for Protein Conformation Diffusion Model for Generation), a novel framework designed to generate diverse and structurally valid protein conformations. Pandora operates through two primary phases: the forward process and the reverse process. In the forward process, a conditional transformer model that fully embeds structural information is trained to denoise perturbed conformations. In the reverse process, a random conformation is progressively refined step by step using regulation techniques, ultimately producing a wide range of valid conformations. The key contributions of this paper are summarized as follows.
+
+- **Non-native Protein conformation Generation.** To the best of our knowledge, this is the first work that explores generating diverse non-native protein conformations in protein folding pathways in atomic level. Generating such conformations is crucial for understanding intermediate folding states and misfolding mechanisms, as well as for advancing research in protein structure prediction and related applications.
+- **An innovative method driven by the diffusion framework.** We develop an effective method, Pandora, to generate diverse conformations for different proteins. For one thing, Pandora considers intrinsic connection information (i.e., amino acids, atoms, chemical bonds) since this information is identical for the same protein. For another, Pandora also incorporates different structural information (i.e., bond lengths, bond angles, and dihedral angles), as these geometric differences are fundamental in determining the diverse conformations of an identical protein.
+- **Experimental results.** We perform comprehensive experiments on multiple protein folding pathway datasets to assess the generation capability of Pandora. Experimental results show that our algorithm outperforms baseline methods by a significant margin while maintaining robust generalizability.
+
+## 2 PROBLEM DEFINITION AND OVERVIEW
+
+We first define the protein conformation generation problem and then present the overview of our proposed Pandora. Appendix A.1 lists the frequently used notations and terminologies in the paper.
+
+### 2.1 PROBLEM DEFINITION
+
+**Protein.** Proteins consist of chains of amino acid residues. Each residue contains an alpha carbon ( $C\alpha$ ) atom, which is bonded to an amino group ( $-NH_2$ ), a carboxyl group ( $-COOH$ ), and a side-chain ( $-R$ ) that determines the residue type. Consecutive residues are linked by peptide
+
+![Figure 2: Overview of Pandora. The diagram illustrates the three main phases of the Pandora model: (a) noising and embedding, (b) model architecture, and (c) reverse process. Phase (a) shows a protein structure being noised and then processed through an embedding step that includes atom types, bond lengths, and angles. Phase (b) details the model architecture, which consists of L layers of conditional transformer blocks. Each block contains a node encoder, an edge encoder, and an MLP. Phase (c) shows the reverse process where the model denoises the samples step-by-step, starting from a noisy state and gradually recovering the original protein structure.](2fa4a1bf91d0f34e87c689fbc1211fe3_img.jpg)
+
+Figure 2: Overview of Pandora. The diagram illustrates the three main phases of the Pandora model: (a) noising and embedding, (b) model architecture, and (c) reverse process. Phase (a) shows a protein structure being noised and then processed through an embedding step that includes atom types, bond lengths, and angles. Phase (b) details the model architecture, which consists of L layers of conditional transformer blocks. Each block contains a node encoder, an edge encoder, and an MLP. Phase (c) shows the reverse process where the model denoises the samples step-by-step, starting from a noisy state and gradually recovering the original protein structure.
+
+Figure 2: Overview of Pandora.
+
+bonds, formed through a dehydration synthesis process. A protein sequence can be represented as  $\mathcal{S} = [s_1, s_2, \dots, s_n]$ , where  $n$  is the number of residues, and  $s_i \in \{0, \dots, 19\}$  indicates the type of the  $i$ -th residue.
+
+**Backbone.** The protein backbone is composed of the nitrogen ( $N$ ) from the amino group, the alpha carbon ( $C\alpha$ ), the carbonyl carbon ( $C$ ), and the carbonyl oxygen ( $O$ ). The backbone structure is the most essential part of a protein. Given the backbone, the full protein conformation can be reconstructed using various tools (e.g., (Krivov et al., 2009; Zhang et al., 2023)).
+
+**Conformation.** A protein’s conformation refers to its 3D structure, which can be represented as a series of atomic coordinates defining the spatial arrangement of its atoms. Then, conformation can be formulated as  $COORD = [coor_1, coor_2, \dots, coor_n]$ , where  $coor_i$  denotes the set of atom coordinates belonging to the  $i$ -th residue, while the backbone coordinates are thereby  $COORD^{(bb)}$ .
+
+To generate biologically plausible conformations, the bond lengths  $\mathcal{L}$  (as shown in Figure 1 (b)) between atoms must adhere to their natural distributions. Otherwise, deviations in bond lengths can lead to an increase in bond energy, resulting in unrealistic conformations. Similarly, bond angles  $\Theta$  and dihedral torsions (i.e., dihedral angles  $\mathcal{X}$ ) (as shown in Figure 1 (b)) play a crucial role in determining how a protein folds and twists. Therefore, the bond angles and dihedral angles of generated conformations must also conform to their natural distributions. Detailed definitions of  $\mathcal{L}$ ,  $\Theta$ , and  $\mathcal{X}$  can be found in Appendix A.1.
+
+Note that given the atomic coordinates  $COORD^{(bb)}$ , one can derive  $(\mathcal{L}, \Theta, \mathcal{X})$ , and conversely, given  $(\mathcal{L}, \Theta, \mathcal{X})$ , the corresponding coordinates can also be reconstructed, though additional rotation and translation may be required. In summary,  $COORD^{(bb)} \Leftrightarrow (\mathcal{L}, \Theta, \mathcal{X})$  under the assumption of rotation and translation invariance. Since protein conformations remain unchanged under any rotation or translation, generating  $(\mathcal{L}, \Theta, \mathcal{X})$  directly avoids the invariance problem that arises when generating coordinates directly. Based on this, the problem can be formally defined as follows.
+
+**Problem Statement.** Given the types of amino acids  $\mathcal{S}$  of a protein conformation, the task is to find a model  $\Phi$  that can help generate  $\xi \triangleq (\mathcal{L}, \Theta, \mathcal{X})$  that conform to biological plausibility. That is, we aim to model the conditional distribution  $p_\Phi(\xi|\mathcal{S}) \triangleq p_\Phi(\mathcal{L}, \Theta, \mathcal{X}|\mathcal{S})$ .
+
+### 2.2 OVERVIEW OF PANDORA
+
+We present the overview of Pandora in Figure 2. There are two main phases in Pandora.
+
+**Forward Process.** We first train a denoising model that can denoise the noised conformations, which consists of two main steps.
+
+**Noising and Embedding.** To fully utilize conformation information, we initially construct a graph for the noised conformations, and then embed the graph with amino acid types, bond information, and angle information in nodes and edges as shown in Figure 2 (a).
+
+**Conditional Transformer.** As depicted in Figure 2 (b), we employ conditional transformer blocks to update the node and edge features by mutual deep interaction. Meanwhile, conditional information is also incorporated to enhance the representation of nodes and edges. Based on the acquired representation, we calculate the denoised bond lengths, bond angles, and dihedral angles by simple Multi-Layer Perceptron (MLP) layers (Rosenblatt, 1958).
+
+**Reverse Process.** Given a random structure as presented in Figure 2 (c), we apply the denoising model to denoise random conformations steps by steps. During each step, we regulate the conformation to ensure plausibility and add noise to introduce stochasticity.
+
+## 3 METHODOLOGY
+
+In this section, we present Pandora, Protein Conformation Diffusion Model for Generation). We first give the formulation of diffusion process on conformation graphs in Sec. 3.1 and then provide the details of Pandora architecture in Sec. 3.2. Finally, we introduce the inference procedure in Sec. 3.3.
+
+### 3.1 DIFFUSION MODELS
+
+Denoising diffusion probabilistic models (Ho et al., 2020) are a type of generative model that captures the underlying data distribution of  $\xi$  (defined in Sec. 2.1) by employing a forward process and a reverse process. Following (Song et al., 2020; Jing et al., 2022), we aim to construct a diffusion process  $\{\xi_t\}_{t=0}^T$  indexed by a continuous time variable  $t \in [0, T]$ , such that  $\xi_0 \sim p_0$  (i.e., data distribution), for which we have a dataset of independent and identically distributed (i.i.d.) samples. Then, This diffusion process can be modeled as the solution to an Itô Stochastic Differential Equation (SDE), given by the following formula:
+
+$$d\xi = \mathbf{f}(\xi, t)dt + g(t)d\mathbf{w}, \quad (1)$$
+
+where  $\mathbf{w}$  is the Wiener process,  $\mathbf{f}(\xi, t) : \mathbb{R}^{|\xi|} \rightarrow \mathbb{R}^{|\xi|}$  is the drift coefficient of  $\xi_t$  and  $g(t)$  is the diffusion coefficient of  $\xi_t$ . Given  $\xi_T \sim p_T$  (i.e., prior distribution), for which we have a tractable form to generate samples efficiently, the reverse process samples from the prior and yields samples from the data distribution  $p_0(\xi)$  by solving the reverse SDE.
+
+$$d\xi = [\mathbf{f}(\xi_t, t) - g^2(t)\nabla_{\xi} \log p_t(\xi)]dt + g(t)d\tilde{\mathbf{w}}. \quad (2)$$
+
+Here,  $\tilde{\mathbf{w}}$  is a standard Wiener process when time flows backwards from  $T$  to 0, and  $dt$  is an infinitesimal negative timestep. With definition above, our goal is to train a neural network  $\Phi$  to fit the score  $\nabla_{\xi} \log p_t(\xi)$ . Inspired by the techniques applied in (Huang et al., 2024), we train  $\Phi$  to recover  $\xi_0$  by optimizing the following objective function.
+
+$$\min_{\theta} \mathbb{E}_t \left\{ \lambda(t) \mathbb{E}_{\xi_0} \mathbb{E}_{\xi_t | \xi_0} [\|\Phi_{\theta}(\xi_t, t) - \xi_0\|_2^2] \right\} \quad (3)$$
+
+With proper choice of  $\lambda(t)$  (Huang et al., 2024; Song et al., 2020), it is equivalent to the simple noise prediction loss used in (Ho et al., 2020).
+
+### 3.2 NETWORK ARCHITECTURE
+
+There are two main stages, including Noising and Embedding (in Sec. 3.2.1) and Conditional Transformer (in Sec. 3.2.2).
+
+#### 3.2.1 NOISING AND EMBEDDING
+
+**Noising.** For a given backbone of a protein conformation, we first obtain its bond length, bond angle, and dihedral angle information, marked by  $\xi_0 = (\mathcal{L}_0, \Theta_0, \mathcal{X}_0)$ . Then, we add noise with different levels corresponding to  $t$  by the following formula:
+
+$$\xi_t = f_{\text{cut}}(\sqrt{\bar{\alpha}_t} \cdot \xi_0 + \sqrt{1 - \bar{\alpha}_t} \cdot \epsilon) \quad (4)$$
+
+where  $\epsilon$  is the Gaussian noise, while definition of  $\bar{\alpha}_t$  and  $\alpha/\beta$  schedule are detailed in Appendix A.2. Note that a bond angle only ranges in  $[0, \pi]$ , while a dihedral angle only ranges in  $[-\pi, \pi)$ , which means that we must regulate  $\Theta_t$  and  $\mathcal{X}_t$  to maintain consistency. For simplicity, we directly apply a cutoff operation  $f_{\text{cut}}$  so that  $\Theta_t$  and  $\mathcal{X}_t$  remain within their respective valid ranges.
+
+**Embedding.** To fully utilize information, we embed both node (i.e., atom) and edge (i.e., a pair of nodes) information by processing  $x_i$  (i.e., all information of the  $i$ -th atom).
+
+**Node Embedding.** For each atom, we embed atom types, amino acid types, and  $\xi_i$  into a high-dimensional representation. Atom types and amino acid types are mapped into high-dimensional space using the embedding functions  $f_{\text{at}}^a : \{C, C\alpha, N, O\} \rightarrow \mathbb{R}^{l_{\text{at}}}$  and  $f_{\text{g}}^s : \mathcal{S} \rightarrow \mathbb{R}^{l_s}$ , respectively. Meanwhile,  $\xi_t = (L_t, \Theta_t, \mathcal{X}_t)$  is transformed using Gaussian smearing techniques (Unke & Meuwly,
+
+2019), which smooth discrete data (e.g., bond length, bond angle, dihedral angle) into continuous distributions. This involves applying several Exponential Gaussian Kernels given by:
+
+$$f_{\xi}^{\epsilon}, f_{\phi}^{\epsilon}, f_{\chi}^{\epsilon}(x) \triangleq \left\{ \exp(\beta_k^{\epsilon} \cdot (x - \mu_k^{\epsilon})^2) \right\}_{k=1}^K : \mathbb{R} \rightarrow \mathbb{R}^K \quad (5)$$
+
+where the definitions of  $\beta_k^{\epsilon}$ ,  $\mu_k^{\epsilon}$ , and  $K$ , as well as additional details about the embedding functions, are provided in Appendix A.3.. Consequently, the embedding of node  $i$  is obtained by concatenating the above representations, i.e.,  $x_i^{\epsilon} \triangleq [f_{at}^{\epsilon}; f_S^{\epsilon}; f_E^{\epsilon}; f_{\phi}^{\epsilon}; f_{\chi}^{\epsilon}](x_i) \in \mathbb{R}^{l_{ne}}$
+
+**Edge Embedding.** For each edge between a pair of nodes, we also construct effective edge embeddings by mapping them to high-dimensional representations. First, we check whether there is a chemical bond by  $f_{cb}^{\epsilon} \in \{0, 1\}$ . Then, we compute the distance  $d_{ij} = f_d^{\epsilon}(x_i, x_j)$  between atom  $i$  and  $j$  via a distance function. Similarly, we leverage Gaussian smearing  $f_{dr}^{\epsilon} : \mathbb{R} \rightarrow \mathbb{R}^K$  to smooth the distance relation. Meanwhile, we further discretize distance to capture additional relationships between atom pairs by a series of boolean functions  $f_b^{\epsilon}(d_{ij}) \triangleq \{I(d_{ij} \leq d_k)\}_{k=1}^K$ , where  $d_k$ 's are a series of thresholds illustrated in Appendix A.3. In summary, the embedding of edge is obtained by concatenating the above terms, i.e.,  $x_{ij}^{\epsilon} \triangleq [f_{cb}^{\epsilon}; f_d^{\epsilon}; f_{dr}^{\epsilon}; f_b^{\epsilon}](x_i, x_j) \in \mathbb{R}^{l_{ee}}$
+
+#### 3.2.2 CONDITIONAL TRANSFORMER
+
+We first introduce the core attention mechanism, then illustrate how time information is embedded into the conditional architecture, and finally explain how to recover  $\xi_0$ .
+
+**Attention Mechanism.** Inspired by (Huang et al., 2024), we also extend Transformer (Vaswani et al., 2017) with the assistance of edge information. The procedure in the  $l$ -th layer is as follows:
+
+$$\begin{aligned} q_i^{(l)}, k_i^{(l)}, v_i^{(l)} &= \text{FC}_{q,k,v}^{(l)}(x_i^{(l)}), \quad q_{ij}^{(l)}, v_{ij}^{(l)} = \text{FC}_{q,v}^{(l)}(x_{ij}^{(l)}) \\ w_{ij}^{(l)} &= (\tanh(q_{ij}^{(l)}) \odot q_i^{(l)}) \cdot k_j^{(l)}, \quad m_i^{(l)} = \sum_j w_{ij}^{(l)} (\tanh(v_{ij}^{(l)}) \odot v_i^{(l)}) \end{aligned} \quad (6)$$
+
+where FC is a fully connected layer. The above process is denoted as  $\text{Att}(x_i^{(l)}, x_{ij}^{(l)})$ .
+
+**Conditional Architecture.** Directly concatenating time information into node or edge embedding may fail to let them fully interact. To address this, we implement two useful functions proposed in (Huang et al., 2024), i.e.,  $f_{ln}(x, c) = (1 + \text{MLP}(c)) \cdot \text{LN}(x) + \text{MLP}(c)$  and  $f_s(x, c) = \text{MLP}(c) \cdot h$ . Here, LN refers to layer normalization (Ba et al., 2016) and  $c$  is the conditional information of  $t$ , which is embedded using Sinusoidal Position Embeddings (Vaswani et al., 2017). Then, we can define multihead attention blocks with conditional  $m_i^{(l)} = \text{Att}(f_{ln}(x_i^{(l)}, c), f_s(x_{ij}^{(l)}, c))$ . Initially,  $x_i^{(0)}$  and  $x_{ij}^{(0)}$  are set to  $x_i^{\epsilon}$  and  $x_{ij}^{\epsilon}$ , respectively. By Equation (6), we update node and edge information by the following equations:
+
+$$\hat{x}_i^{(l)} = f_s(m_i^{(l)}, c) + x_i^{(l)}, \quad x_i^{(l+1)} = f_s(\text{MLP}(f_{ln}(\hat{x}_i^{(l)}), c), c) + \hat{x}_i^{(l)} \quad (7)$$
+
+$$\hat{x}_{ij}^{(l)} = f_s(\text{FC}(m_i^{(l)} + m_j^{(l)}), c) + x_{ij}^{(l)}, \quad x_{ij}^{(l+1)} = f_s(\text{MLP}(f_{ln}(\hat{x}_{ij}^{(l)}), c), c) + \hat{x}_{ij}^{(l)}$$
+
+**$\xi_0$  Recovery.** After  $L$  layers of conditional attention layers, we obtain  $x_i^{(L)}$  for node  $i$ . Inspired by (Zhang et al., 2022), for an arbitrary bond length  $\xi_{ij}$ , bond angle  $\xi_{ijk}$ , or dihedral angle  $\xi_{ijkl}$ , we compute its change  $\Delta \xi_{ij..} \triangleq \text{MLP}(\text{mean}(x_i^{(L)}, x_j^{(L)}, \dots))$ . For instance, when calculating dihedral angles, the offset is computed as  $\Delta \xi_{ijkl} = \text{MLP}((x_i^{(L)} + x_j^{(L)} + x_k^{(L)} + x_l^{(L)})/4)$ . Finally, we can acquire  $\hat{\xi}_0$  by the following equations:
+
+$$\hat{\xi}_0 \triangleq \Phi_{\theta}(\xi_t, t) = f_{\text{cut}}(\xi_t + \Delta \xi) \quad (8)$$
+
+### 3.3 INFERENCE
+
+The inference process of Pandora is adapted from the sampling process in (Ho et al., 2020), given by the following equations:
+
+$$\hat{\epsilon} = \frac{\xi_t - \sqrt{\alpha_t} \cdot \hat{\xi}_0}{\sqrt{1 - \alpha_t}}, \quad \tilde{\xi}_{t-1} = \frac{\xi_t - \frac{1 - \alpha_t}{\sqrt{1 - \alpha_t}} \hat{\epsilon}}{\sqrt{\alpha_t}}, \quad \xi_{t-1} = f_{\text{cut}}(\tilde{\xi}_{t-1} + \sigma_t \epsilon \cdot I(t > 1)) \quad (9)$$
+
+Table 1: Comparison on  $\xi_0$  recovery and ablation study.
+
+| Methods                      | JODO  | JODO-L | GearNet | STR2STR | CONF.D. | CONF.R. | Pandora      | - len | - angle | - torsion | - type |
+|------------------------------|-------|--------|---------|---------|---------|---------|--------------|-------|---------|-----------|--------|
+| $\text{MAE}_{\mathcal{L}}$ ↓ | 0.176 | 0.093  | 0.422   | 0.526   | 0.337   | 0.157   | <b>0.025</b> | 0.168 | 0.026   | 0.025     | 0.025  |
+| $\text{MAE}_{\Theta}$ ↓      | 0.293 | 0.218  | 0.430   | 0.375   | 0.252   | 0.201   | <b>0.050</b> | 0.052 | 0.190   | 0.051     | 0.051  |
+| $\text{MAE}_{\chi}$ ↓        | 1.415 | 1.369  | 0.753   | 1.167   | 1.083   | 0.702   | <b>0.374</b> | 0.380 | 0.382   | 0.688     | 0.446  |
+
+As the time steps  $t$  decrease from  $T$  to 1, we can obtain  $\xi_0$  at  $t = 1$ . Note that during each reverse step, we perform cutoff functions twice: once in Equation (8) and once in Equation (9), so that we can regulate the generated conformation to maintain consistency and ensure that the conformations remain coherent throughout the generation process.
+
+## 4 EXPERIMENTS
+
+### 4.1 EXPERIMENTAL SETUP
+
+**Datasets.** In our experiments, we use molecular dynamics simulation datasets from (Lindorff-Larsen et al., 2011). We use five datasets for training (Villin, WW domain, Protein B, BBL, and Homeodomain) and two datasets for testing and generalization evaluation (Trp-cage and BBA), ensuring that the test proteins are unseen during training. Appendix B.1 provides a brief description of each dataset and reports the numbers of atoms, amino acids, and conformations. Details of hyperparameters are provided in Appendix B.2.
+
+**Algorithms.** We evaluate the performance of several methods for molecular conformation generation. As a representative baseline, we include JODO (Huang et al., 2024), an atomic coordinate generation model. We also introduce an enhanced variant, JODO-L, which incorporates an additional  $\xi_0$  loss term to improve conformational plausibility. For further comparison, we include several additional baselines: GearNet (as implemented in DiffPack (Zhang et al., 2022)), STR2STR (Lu et al., 2023), CONFDIFF (Wang et al., 2024), and CONFROVER (Shen et al., 2025). Further details on all baseline methods are provided in Appendix B.3.
+
+**Evaluation Metrics.** We evaluate the quality of  $\xi_0$  recovery using three metrics, including bond length mean absolute error ( $\text{MAE}_{\mathcal{L}}$ ), bond angle MAE ( $\text{MAE}_{\Theta}$ ), and dihedral angle MAE ( $\text{MAE}_{\chi}$ ). As for evaluation of inference, we compare the generated  $\xi_0$  distribution with the true  $\xi_0$  distribution by histogram, the Wasserstein distance (Villani, 2021), and probability density map.
+
+We conduct experiments on a Linux server with an AMD EPYC 9654 96-Core CPU, 1TB of RAM, and 8 Nvidia RTX A6000 GPUs. We provide the codes The codes can be accessed at <https://anonymous-4open.science/r/Pandora-71AD>.
+
+### 4.2 $\xi_0$ RECOVERY
+
+Table 1 shows the performance comparison (averaged over three trials) of Pandora and the baselines on  $\xi_0$  recovery across five datasets, while standard deviations and results for each dataset are provided in Appendix B.4. In summary, Pandora consistently outperforms the baseline methods in recovering the lengths and angles of different conformations with marginal fluctuation. This superior performance highlights Pandora’s ability to better capture structural variations and accurately reconstruct conformations, making it a reliable tool for such tasks.
+
+As for other methods, JODO-L outperforms JODO across all three metrics, primarily due to the incorporation of the  $\xi_0$  loss in JODO-L. While this modification enhances its performance, the dihedral recovery still exhibits a significantly larger MAE compared to Pandora. On the other hand, GearNet achieves a relatively smaller  $\text{MAE}_{\chi}$  but suffers from higher MAE in bond length and bond angle recovery. Additionally, STR2STR delivers moderate results but incurs larger errors in  $\text{MAE}_{\mathcal{L}}$  and  $\text{MAE}_{\Theta}$ . CONFDIFF (CONF.D.) improves over STR2STR across all three metrics, with a notable gain on  $\text{MAE}_{\Theta}$ , yet still trails Pandora. CONFROVER (CONF.R.) further reduces errors relative to CONFDIFF, achieving the strongest baseline performance on bond angle and dihedral recovery.
+
+### 4.3 ABLATION STUDY
+
+As described in Sec. 3.2.1, the node embedding consists of several components. To evaluate the impact of each component, we measure the performance by removing specific parts, including amino acid types (-type), bond length (-len), bond angle (-angle), dihedral angle (-torsion).
+
+Table 2: Wasserstein distance between true and generated distribution on training dataset.
+
+| Methods | $\mathcal{L}_1 \downarrow$ | $\mathcal{L}_2 \downarrow$ | $\mathcal{L}_3 \downarrow$ | $\mathcal{L}_4 \downarrow$ | $\Theta_1 \downarrow$ | $\Theta_2 \downarrow$ | $\Theta_3 \downarrow$ | $\Theta_4 \downarrow$ | $\chi_1 \downarrow$ | $\chi_2 \downarrow$ | $\chi_3 \downarrow$ | $\chi_4 \downarrow$ |
+|---------|----------------------------|----------------------------|----------------------------|----------------------------|-----------------------|-----------------------|-----------------------|-----------------------|---------------------|---------------------|---------------------|---------------------|
+| JODO    | 0.072                      | 0.065                      | 0.052                      | 0.091                      | 0.191                 | 0.102                 | 0.133                 | 0.094                 | 0.742               | 0.394               | 1.311               | 0.884               |
+| JODO-L  | 0.078                      | 0.057                      | 0.061                      | 0.078                      | 0.208                 | 0.180                 | 0.185                 | 0.159                 | 0.751               | 0.567               | 1.317               | 0.885               |
+| GearNet | 1.438                      | 1.425                      | 1.444                      | 1.438                      | 1.097                 | 1.006                 | 0.905                 | 0.951                 | 2.878               | 2.543               | 1.091               | 2.977               |
+| Pandora | <b>0.023</b>               | <b>0.020</b>               | <b>0.017</b>               | <b>0.022</b>               | <b>0.022</b>          | <b>0.021</b>          | <b>0.018</b>          | <b>0.014</b>          | <b>0.121</b>        | <b>0.153</b>        | <b>0.088</b>        | <b>0.163</b>        |
+
+As shown in Table 1, removing bond length, bond angle, or dihedral angle Gaussian smearing leads to a significant increase in the corresponding MAE, while standard deviations are provided in Appendix B.4. For instance, if bond length Gaussian smearing is removed,  $\text{MAE}_{\mathcal{L}}$  increases by approximately 6 times. Similarly,  $\text{MAE}_{\Theta}$  and  $\text{MAE}_{\chi}$  increase by 3 times and 1 time, respectively, when the corresponding components are removed. However, the changes in the remaining MAE values are negligible. Regarding removal of amino acid types, both  $\text{MAE}_{\mathcal{L}}$  and  $\text{MAE}_{\Theta}$  change marginally, while  $\text{MAE}_{\chi}$  exhibits a significant increase. This is likely because different amino acid types influence the dihedral angles of peptide bonds formed during dehydration condensation. The information encoded in amino acid types plays a crucial role in guiding the prediction of dihedral angles. Once this information is removed, the model struggles to accurately predict these angles, leading to a noticeable decline in performance.
+
+### 4.4 INFERENCE
+
+The detailed definitions of  $\mathcal{L}$ ,  $\Theta$ , and  $\chi$  can be found in Appendix A.1. Note that methods such as STR2STR, CONFDIFF, and CONFROVER operate at the residue level. As a result, certain bond lengths, bond angles, and dihedrals are fixed during generation, making distributional comparisons on these variables non-informative. We therefore report average Wasserstein distances across five datasets in Table 2. The complete results for all methods are provided are provided in Appendix B.5.
+
+From the results above, we can conclude that Pandora consistently exhibits small Wasserstein distances across all metrics, indicating its ability to generate conformations with a realistic distribution that closely matches the ground truth. Additionally, although JODO-L outperforms JODO in  $\xi_0$  recovery, the scenario is different here. Specifically, JODO achieves better performance than JODO-L in terms of  $\Theta$  and  $\chi$ . This is likely because the modifications in JODO-L, while effective in reducing  $\text{MAE}_{\Theta}$  and  $\text{MAE}_{\chi}$ , do not translate effectively to  $\Theta$  and  $\chi$  inference. As for GearNet, it struggles to generate conformations that align with the true distribution, particularly in bond length ( $\mathcal{L}$ ), where its performance is notably weaker.
+
+To gain deeper insight into how Pandora effectively generates realistic conformations, we provide histograms of the true and generated distributions for  $\mathcal{L}$ ,  $\Theta$ , and  $\chi$  for all datasets in Appendix B.5. Histograms for other datasets across all methods are also presented in Appendix B.5. Figure 5, analogous to Figure 3, demonstrates that Pandora’s generated distributions closely align with true distributions, particularly for  $\Theta$  and  $\chi$ . While the  $\mathcal{L}$  distributions exhibit a noticeable rightward shift, the magnitude of this shift is approximately  $+0.025 \text{Å}$ , which aligns with  $\text{MAE}_{\mathcal{L}}$  and is negligible when compared to typical bond lengths of  $1.1 \text{Å}$  to  $1.7 \text{Å}$ . Furthermore, Pandora effectively captures the asymmetry in  $\chi_1$ , demonstrating its ability to recognize chirality in amino acids. In contrast, other methods, such as JODO, tend to produce symmetric dihedral angle distributions, thereby ignoring chirality, as illustrated in Figure 10 in Appendix B.5.
+
+### 4.5 GENERALIZATION
+
+We evaluate the generalizability of Pandora using two additional protein datasets that were excluded from the training set, meaning these proteins were never seen during training. As shown in Table 3, Pandora successfully generates plausible conformational structures for unseen proteins while maintaining a low Wasserstein distance, demonstrating its strong generalization capability. For a clearer illustration, histograms for dataset BBA are presented in Figure 3, while those for dataset Trp-cage are provided in Appendix B.6. As shown in the figures, the generated distributions closely align with the true distributions, further validating Pandora’s generalizability. Moreover, we evaluate joint distributions over the radius of gyration ( $R_g$ , a compactness measure) and the root mean square deviation (RMSD, a deviation from a reference after alignment). As shown in Figure 4, Pandora’s samples closely match the true  $R_g$ -RMSD landscape, reproducing the high-density ridge, its orientation, and the spread toward higher RMSD, further supporting Pandora’s generalizability. Probability density maps for other datasets are provided in Appendix B.7.
+
+Table 3: Wasserstein distance between true and generated distribution on inference set.
+
+| Datasets | $\mathcal{L}_1 \downarrow$ | $\mathcal{L}_2 \downarrow$ | $\mathcal{L}_3 \downarrow$ | $\mathcal{L}_4 \downarrow$ | $\Theta_1 \downarrow$ | $\Theta_2 \downarrow$ | $\Theta_3 \downarrow$ | $\Theta_4 \downarrow$ | $\chi_1 \downarrow$ | $\chi_2 \downarrow$ | $\chi_3 \downarrow$ | $\chi_4 \downarrow$ |
+|----------|----------------------------|----------------------------|----------------------------|----------------------------|-----------------------|-----------------------|-----------------------|-----------------------|---------------------|---------------------|---------------------|---------------------|
+| BBA      | 0.024                      | 0.021                      | 0.018                      | 0.021                      | 0.025                 | 0.026                 | 0.014                 | 0.011                 | 0.585               | 0.533               | 0.183               | 0.673               |
+| Trp-cage | 0.023                      | 0.019                      | 0.017                      | 0.021                      | 0.024                 | 0.018                 | 0.020                 | 0.014                 | 0.268               | 0.134               | 0.105               | 0.262               |
+
+![Figure 3: Pandora-generated histograms for dataset BBA. The figure consists of 12 subplots arranged in a 2x6 grid. Each subplot shows a histogram of a specific molecular property for the BBA dataset, comparing 'True' (gray) and 'Ours' (colored) distributions. The properties are: 1. Radius of Gyration (Rg) (nm), 2. Root Mean Square Deviation (RMSD) (nm), 3. Number of Contacts, 4. Solvent Accessible Surface Area (SASA) (Å²), 5. Number of Hydrogen Bonds, 6. Number of Salt Bridges. The distributions are generally well-aligned between the true and generated data.](bedcca5cdf168e3508ef511d94ec514c_img.jpg)
+
+Figure 3: Pandora-generated histograms for dataset BBA. The figure consists of 12 subplots arranged in a 2x6 grid. Each subplot shows a histogram of a specific molecular property for the BBA dataset, comparing 'True' (gray) and 'Ours' (colored) distributions. The properties are: 1. Radius of Gyration (Rg) (nm), 2. Root Mean Square Deviation (RMSD) (nm), 3. Number of Contacts, 4. Solvent Accessible Surface Area (SASA) (Å²), 5. Number of Hydrogen Bonds, 6. Number of Salt Bridges. The distributions are generally well-aligned between the true and generated data.
+
+Figure 3: Pandora-generated histograms for dataset BBA.
+
+![Figure 4: Pandora-generated probability density map for dataset Trp-cage. The figure shows two 2D density plots. The left plot is labeled 'True' and the right plot is labeled 'Ours'. Both plots show the relationship between Radius of Gyration (Rg) (nm) on the y-axis and Root Mean Square Deviation (RMSD) (nm) on the x-axis. A color bar on the right indicates the negative log probability, -ln(p(Rg, RMSD)), ranging from 0 (blue) to 22 (red). The density maps are highly similar, showing a concentrated region of high probability around Rg = 1.5 nm and RMSD = 1.0 nm.](925f55ce69802b9d3b00546382663ee2_img.jpg)
+
+Figure 4: Pandora-generated probability density map for dataset Trp-cage. The figure shows two 2D density plots. The left plot is labeled 'True' and the right plot is labeled 'Ours'. Both plots show the relationship between Radius of Gyration (Rg) (nm) on the y-axis and Root Mean Square Deviation (RMSD) (nm) on the x-axis. A color bar on the right indicates the negative log probability, -ln(p(Rg, RMSD)), ranging from 0 (blue) to 22 (red). The density maps are highly similar, showing a concentrated region of high probability around Rg = 1.5 nm and RMSD = 1.0 nm.
+
+Figure 4: Pandora-generated probability density map for dataset Trp-cage.
+
+## 5 RELATED WORK
+
+**Diffusion Models for Molecule Generation.** Diffusion models find extensive applications across diverse areas of molecule generation. There are many works focusing on molecule generation, such as (Hoogeboom et al., 2022; Jing et al., 2022; Wu et al., 2022; Huang et al., 2023; Xu et al., 2022; Wang et al., 2025), demonstrating that diffusion models have been successfully applied to molecular design, yielding remarkable results. Proteins, as a unique class of molecules, have also garnered significant attention in the field of protein design. Thus, many works (Anand & Achim, 2022; Wu et al., 2024; Ingraham et al., 2023; Watson et al., 2023; Lin & AlQuraishi, 2023; Luo et al., 2022; Watson et al., 2022; Yim et al., 2023; Lu et al., 2023; Wang et al., 2024; Shen et al., 2025) apply diffusion models to tackle diverse tasks. These advancements highlight the growing impact of diffusion models in advancing molecular and protein science.
+
+**Protein Folding and Misfolding.** Protein folding remains a fundamental challenge in molecular biology that has yet to be fully resolved. Correctly folded proteins are essential for nearly all biological functions, and failures in folding can lead to severe consequences, such as loss of function or the aggregation of misfolded proteins. Numerous studies have explored folding pathways through both theoretical and experimental approaches (Onuchic & Wolynes, 2004; Dill et al., 2008; Lindorff-Larsen et al., 2011), while other works focus on generating trajectories using deep learning methods Shen et al. (2025); Jing et al. (2024). Meanwhile, significant attention has been given to understanding the mechanisms of protein misfolding (Dobson, 2003; Englander et al., 2007; Bhowmik et al., 2018; Hartl, 2017), which is often implicated in neurodegenerative diseases like Alzheimer’s, Parkinson’s, and Huntington’s disease (Selkoe, 2004). These efforts collectively aim to deepen our understanding of protein behavior and pave the way for advancements in addressing misfolding-related diseases.
+
+## 6 CONCLUSION
+
+This paper focuses on the generation of backbone structures for both native and non-native protein conformations. To generate diverse and biologically plausible protein conformations, we propose Pandora, a versatile framework that fully integrates comprehensive information and leverages a conditional transformer architecture. Pandora employs proper regulation during inference, enabling the production of desirable conformations. Extensive experiments demonstrate the effectiveness of Pandora in generating diverse protein conformations and validate the practicality and generalizability of the proposed model.
+
+## REFERENCES
+
+- 486  
+487  
+488 Josh Abramson, Jonas Adler, Jack Dunger, Richard Evans, Tim Green, Alexander Pritzel, Olaf  
+489 Ronneberger, Lindsay Willmore, Andrew J Ballard, Joshua Bambrick, et al. Accurate structure  
+490 prediction of biomolecular interactions with alphafold 3. *Nature*, 630(8016):493–500, 2024.  
+491  
+492 Namrata Anand and Tudor Achim. Protein structure and sequence generation with equivariant  
+493 denoising diffusion probabilistic models. *arXiv preprint arXiv:2205.15019*, 2022.  
+494  
+495 Jimmy Lei Ba, Jamie Ryan Kiros, and Geoffrey E Hinton. Layer normalization. *arXiv preprint  
+496 arXiv:1607.06450*, 2016.  
+497  
+498 Minkyung Baek, Frank DiMaio, Ivan Anishchenko, Justas Dauparas, Sergey Ovchinnikov, Gyu Rie  
+499 Lee, Jue Wang, Qian Cong, Lisa N Kinch, R Dustin Schaeffer, et al. Accurate prediction of protein  
+500 structures and interactions using a three-track neural network. *Science*, 373(6557):871–876, 2021.  
+501  
+502 Debsindhu Bhowmik, Shang Gao, Michael T Young, and Arvind Ramanathan. Deep clustering of  
+503 protein folding simulations. *BMC bioinformatics*, 19:47–58, 2018.  
+504  
+505 Kurt Binder, Jürgen Horbach, Walter Kob, Wolfgang Paul, and Fathollah Varnik. Molecular dynamics  
+506 simulations. *Journal of Physics: Condensed Matter*, 16(5):S429, 2004.  
+507  
+508 Nadav Brandes, Dan Ofer, Yam Peleg, Nadav Rappoport, and Michal Linial. Proteinbert: a universal  
+509 deep-learning model of protein sequence and function. *Bioinformatics*, 38(8):2102–2110, 2022.  
+510  
+511 Ken A Dill, S Banu Ozkan, M Scott Shell, and Thomas R Weikl. The protein folding problem. *Annu.  
+512 Rev. Biophys.*, 37(1):289–316, 2008.  
+513  
+514 Christopher M Dobson. Protein folding and misfolding. *Nature*, 426(6968):884–890, 2003.  
+515  
+516 S Walter Englander, Leland Mayne, and Mallela MG Krishna. Protein folding and misfolding:  
+517 mechanism and principles. *Quarterly reviews of biophysics*, 40(4):1–41, 2007.  
+518  
+519 F Ulrich Hartl. Protein misfolding diseases. *Annual review of biochemistry*, 86(1):21–26, 2017.  
+520  
+521 Jonathan Ho, Ajay Jain, and Pieter Abbeel. Denoising diffusion probabilistic models. *Advances in  
+522 neural information processing systems*, 33:6840–6851, 2020.  
+523  
+524 Emiel Hoogeboom, Victor Garcia Satorras, Clément Vignac, and Max Welling. Equivariant diffusion  
+525 for molecule generation in 3d. In *International conference on machine learning*, pp. 8867–8887.  
+526 PMLR, 2022.  
+527  
+528 Han Huang, Leilei Sun, Bowen Du, and Weifeng Lv. Learning joint 2-d and 3-d graph diffusion  
+529 models for complete molecule generation. *IEEE Transactions on Neural Networks and Learning  
+530 Systems*, 2024.  
+531  
+532 Lei Huang, Hengtong Zhang, Tingyang Xu, and Ka-Chun Wong. Mdm: Molecular diffusion model  
+533 for 3d molecule generation. In *Proceedings of the AAAI Conference on Artificial Intelligence*,  
+534 volume 37, pp. 5105–5112, 2023.  
+535  
+536 Alan Ianeselli, Jewon Im, Eddie Cavallin, and Mark Gerstein. Generative world models to compute  
+537 protein folding pathways. *bioRxiv*, pp. 2025–03, 2025.  
+538  
+539 John B Ingraham, Max Baranov, Zak Costello, Karl W Barber, Wujie Wang, Ahmed Ismail, Vincent  
+540 Frappier, Dana M Lord, Christopher Ng-Thow-Hing, Erik R Van Vlack, et al. Illuminating protein  
+541 space with a programmable generative model. *Nature*, 623(7989):1070–1078, 2023.  
+542  
+543 Giacomo Janson, Gilberto Valdes-Garcia, Lim Heo, and Michael Feig. Direct generation of protein  
+544 conformational ensembles via machine learning. *Nature Communications*, 14(1):774, 2023.  
+545  
+546 Bowen Jing, Gabriele Corso, Jeffrey Chang, Regina Barzilay, and Tommi Jaakkola. Torsional  
+547 diffusion for molecular conformer generation. *Advances in neural information processing systems*,  
+548 35:24240–24253, 2022.  
+549
+
+- 540 Bowen Jing, Hannes Stärk, Tommi Jaakkola, and Bonnie Berger. Generative modeling of molecular  
+541 dynamics trajectories. *Advances in Neural Information Processing Systems*, 37:40534–40564,  
+542 2024.
+- 543  
+544 John Jumper, Richard Evans, Alexander Pritzel, Tim Green, Michael Figurnov, Olaf Ronneberger,  
+545 Kathryn Tunyasuvunakool, Russ Bates, Augustin Židek, Anna Potapenko, et al. Highly accurate  
+546 protein structure prediction with alphafold. *nature*, 596(7873):583–589, 2021.
+- 547  
+548 P Andrew Karplus, Maxim V Shapovalov, Roland L Dunbrack Jr, and Donald S Berkholz. A forward-  
+549 looking suggestion for resolving the stereochemical restraints debate: ideal geometry functions.  
+550 *Biological Crystallography*, 64(3):335–336, 2008.
+- 551  
+552 Georgii G Krivov, Maxim V Shapovalov, and Roland L Dunbrack Jr. Improved prediction of protein  
+553 side-chain conformations with scwrl4. *Proteins: Structure, Function, and Bioinformatics*, 77(4):  
+554 778–795, 2009.
+- 555  
+556 Brian Kuhlman and Philip Bradley. Advances in protein structure prediction and design. *Nature  
+557 Reviews Molecular Cell Biology*, 20(11):681–697, 2019.
+- 558  
+559 Yeqing Lin and Mohammed AlQuraishi. Generating novel, designable, and diverse protein structures  
+560 by equivariantly diffusing oriented residue clouds. *arXiv preprint arXiv:2301.12485*, 2023.
+- 561  
+562 Zeming Lin, Halil Akin, Roshan Rao, Brian Hie, Zhongkai Zhu, Wenting Lu, Allan dos Santos Costa,  
+563 Maryam Fazel-Zarandi, Tom Sercu, Sal Candido, et al. Language models of protein sequences at  
+564 the scale of evolution enable accurate structure prediction. *BioRxiv*, 2022:500902, 2022.
+- 565  
+566 Kresten Lindorff-Larsen, Stefano Piana, Ron O Dror, and David E Shaw. How fast-folding proteins  
+567 fold. *Science*, 334(6055):517–520, 2011.
+- 568  
+569 Jiarui Lu, Bozitao Zhong, Zuobai Zhang, and Jian Tang. Str2str: A score-based framework for  
+570 zero-shot protein conformation sampling. *arXiv preprint arXiv:2306.03117*, 2023.
+- 571  
+572 Martin Lundgren and Antti J Niemi. Correlation between protein secondary structure, backbone bond  
+573 angles, and side-chain orientations. *Physical Review E—Statistical, Nonlinear, and Soft Matter  
+574 Physics*, 86(2):021904, 2012.
+- 575  
+576 Shitong Luo, Yufeng Su, Xingang Peng, Sheng Wang, Jian Peng, and Jianzhu Ma. Antigen-specific  
+577 antibody design and optimization with diffusion-based generative models for protein structures.  
+578 *Advances in Neural Information Processing Systems*, 35:9754–9767, 2022.
+- 579  
+580 Maciej Majewski, Adrià Pérez, Philipp Thölke, Stefan Doerr, Nicholas E Charron, Toni Giorgino,  
+581 Brooke E Husic, Cecilia Clementi, Frank Noé, and Gianni De Fabritiis. Machine learning coarse-  
+582 grained potentials of protein thermodynamics. *Nature communications*, 14(1):5739, 2023.
+- 583  
+584 Alexander Quinn Nichol and Prafulla Dhariwal. Improved denoising diffusion probabilistic models.  
+585 In *International conference on machine learning*, pp. 8162–8171. PMLR, 2021.
+- 586  
+587 José Nelson Onuchic and Peter G Wolynes. Theory of protein folding. *Current opinion in structural  
+588 biology*, 14(1):70–75, 2004.
+- 589  
+590 Xubiao Peng, Alireza Chenani, Shuangwei Hu, Yifan Zhou, and Antti J Niemi. A three dimensional  
+591 visualisation approach to protein heavy-atom structure reconstruction. *BMC structural biology*, 14  
+592 (1):27, 2014.
+- 593  
+594 Frank Rosenblatt. The perceptron: a probabilistic model for information storage and organization in  
+595 the brain. *Psychological review*, 65(6):386, 1958.
+- 596  
+597 Talant Ruzmetov, Ta I Hung, Saisri Padmajaa Jonnalagedda, Si-han Chen, Parisa Fasihianfarid,  
+598 Zhefeng Guo, Bir Bhanu, and Chia-en A Chang. Sampling conformational ensembles of highly  
+599 dynamic proteins via generative deep learning. *Journal of Chemical Information and Modeling*, 65  
+600 (5):2487–2502, 2025.
+- 601  
+602 Dennis J Selkoe. Cell biology of protein misfolding: the examples of alzheimer’s and parkinson’s  
+603 diseases. *Nature cell biology*, 6(11):1054–1061, 2004.
+
+- 594 Andrew W Senior, Richard Evans, John Jumper, James Kirkpatrick, Laurent Sifre, Tim Green,  
+595 Chongli Qin, Augustin Židek, Alexander WR Nelson, Alex Bridgland, et al. Improved protein  
+596 structure prediction using potentials from deep learning. *Nature*, 577(7792):706–710, 2020.  
+597
+- 598 David E Shaw, Paul Maragakis, Kresten Lindorff-Larsen, Stefano Piana, Ron O Dror, Michael P  
+599 Eastwood, Joseph A Bank, John M Jumper, John K Salmon, Yibing Shan, et al. Atomic-level  
+600 characterization of the structural dynamics of proteins. *Science*, 330(6002):341–346, 2010.  
+601
+- 602 Yuning Shen, Lihao Wang, Huizhuo Yuan, Yan Wang, Bangji Yang, and Quanquan Gu. Simul-  
+603 taneous modeling of protein conformation and dynamics via autoregression. *arXiv preprint*  
+604 *arXiv:2505.17478*, 2025.
+- 605 Yang Song, Jascha Sohl-Dickstein, Diederik P Kingma, Abhishek Kumar, Stefano Ermon, and Ben  
+606 Poole. Score-based generative modeling through stochastic differential equations. *arXiv preprint*  
+607 *arXiv:2011.13456*, 2020.
+- 608 Oliver T Unke, and Markus Meuwly. Physnet: A neural network for predicting energies, forces, dipole  
+609 moments, and partial charges. *Journal of chemical theory and computation*, 15(6):3678–3693,  
+610 2019.  
+611
+- 612 Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N Gomez, Łukasz  
+613 Kaiser, and Illia Polosukhin. Attention is all you need. *Advances in neural information processing*  
+614 *systems*, 30, 2017.  
+615
+- 616 Cédric Villani. *Topics in optimal transportation*, volume 58. American Mathematical Soc., 2021.  
+617
+- 618 Yan Wang, Lihao Wang, Yuning Shen, Yiqun Wang, Huizhuo Yuan, Yue Wu, and Quanquan  
+619 Gu. Protein conformation generation via force-guided se (3) diffusion models. *arXiv preprint*  
+620 *arXiv:2403.14088*, 2024.  
+621
+- 622 Zixu Wang, Yangyang Chen, Xiulan Guo, Yayang Li, Pengyong Li, Chunyan Li, Xiucui Ye, and  
+623 Tetsuya Sakurai. Diffseqmol: A non-autoregressive diffusion-based approach for molecular  
+624 sequence generation and optimization. *Current Bioinformatics*, 20(1):46–58, 2025.  
+625
+- 626 Joseph L Watson, David Juergens, Nathaniel R Bennett, Brian L Trippe, Jason Yim, Helen E Eisenach,  
+627 Woody Ahern, Andrew J Borst, Robert J Ragotte, Lukas F Milles, et al. Broadly applicable and  
+628 accurate protein design by integrating structure prediction networks and diffusion generative  
+629 models. *BioRxiv*, pp. 2022–12, 2022.  
+630
+- 631 Joseph L Watson, David Juergens, Nathaniel R Bennett, Brian L Trippe, Jason Yim, Helen E Eisenach,  
+632 Woody Ahern, Andrew J Borst, Robert J Ragotte, Lukas F Milles, et al. De novo design of protein  
+633 structure and function with rfdiffusion. *Nature*, 620(7976):1089–1100, 2023.  
+634
+- 635 Kevin E Wu, Kevin K Yang, Rianne van den Berg, Sarah Alamdari, James Y Zou, Alex X Lu, and  
+636 Ava P Amini. Protein structure generation via folding diffusion. *Nature communications*, 15(1):  
+637 1059, 2024.  
+638
+- 639 Lemeng Wu, Chengyue Gong, Xingchao Liu, Mao Ye, and Qiang Liu. Diffusion-based molecule  
+640 generation with informative prior bridges. *Advances in neural information processing systems*, 35:  
+641 36533–36545, 2022.  
+642
+- 643 Minkai Xu, Lantao Yu, Yang Song, Chence Shi, Stefano Ermon, and Jian Tang. Geodiff: A geometric  
+644 diffusion model for molecular conformation generation. *arXiv preprint arXiv:2203.02923*, 2022.  
+645
+- 646 Jason Yim, Brian L Trippe, Valentin De Bortoli, Emile Mathieu, Arnaud Doucet, Regina Barzilay,  
+647 and Tommi Jaakkola. Se (3) diffusion model with application to protein backbone generation.  
+648 *arXiv preprint arXiv:2302.02277*, 2023.  
+649
+- 650 Yangtian Zhang, Zuobai Zhang, Bozitao Zhong, Sanchit Misra, and Jian Tang. Diffpack: A torsional  
+651 diffusion model for autoregressive protein side-chain packing. *Advances in Neural Information*  
+652 *Processing Systems*, 36:48150–48172, 2023.
+
+[Appendix and supplementary materials beyond page 12 have been removed.]

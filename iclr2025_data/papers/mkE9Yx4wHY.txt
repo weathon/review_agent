@@ -1,0 +1,334 @@
+# ANCHORED ALIGNMENT FOR SELF-EXPLANATIONS ENHANCEMENT
+
+Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+In this work, we introduce a methodology for alignment designed to enhance the ability of large language models (LLMs) to articulate their reasoning—*self-explanation*—even in the absence of annotated rationale explanations. Our alignment methodology comprises three key components: explanation quality assessment, self-preference dataset generation, and model alignment. Additionally, we present a novel technique called *Alignment with Anchor Preference Pairs*, which improves the selection of preference pairs by categorizing model outputs into three groups: consistently correct, consistently incorrect, and variable. By applying tailored strategies to each category, we enhance the effectiveness of Direct Preference Optimization (DPO). Our experimental results demonstrate that this approach significantly improves explanation quality while maintaining accuracy compared to other fine-tuning strategies.
+
+## 1 INTRODUCTION
+
+Large language models (LLMs) have demonstrated remarkable capabilities across various tasks. However, fine-tuning these models for specific applications often leads to a critical trade-off: improvements in one area may compromise the model’s generalization capabilities (Yang et al., 2024; Kirk et al., 2024). In our study, we aim to enhance a secondary task—specifically, the model’s ability to articulate reasoning processes in natural language, a skill known as *self-explanation* (Madsen et al., 2024a)—in parallel with the primary task, despite the constraint of not having human-annotated rationales.
+
+The lack of annotated data of both high- and low-quality explanations can be framed in the context of model aligning without human preference data. Recent research has explored ways to align LLMs without direct human input. Some approaches generate self-instruct data to fine-tune models (Wang et al., 2023; Chen et al., 2023; Gulcehre et al., 2023), while others, like Bai et al. (2022); Yuan et al. (2024); Wu et al. (2024), use LLM-generated feedback to train reward models. Building on these advancements, we propose an end-to-end approach to align LLMs on classification tasks while also ensuring the generation of high-quality self-explanations, even without annotated data for this secondary task. Our approach integrates three core components: evaluating generated explanations, creating self-preference datasets, and aligning the model. Additionally, we introduce *Alignment with Anchor Preference Pairs*, a method that improves preference pair selection by categorizing model responses into three groups: consistently correct, consistently incorrect, and variable. For each category, we apply tailored strategies to construct preference pairs, which are then used in the Direct Preference Optimization (DPO) phase (Rafailov et al., 2023). Our results demonstrate that this method consistently improves explanation quality, mitigating the degradation caused by SFT. Moreover, we show that using anchor preference pairs outperforms self-alignment strategies that rely solely on judge-based evaluations for preference pair selection.
+
+Our contributions are summarized as follows:
+
+- (i). We introduce a framework for the qualitative assessment of self-explanations, designed to evaluate how effectively the model conveys its reasoning.
+- (ii). We analyze how supervised fine-tuning for classification tasks affects the quality of self-explanations. Our findings demonstrate that while SFT improves classification accuracy, it often reduces explanation quality, underscoring the need for improved alignment strategies.
+
+- (iii). We propose a novel method, *Alignment with Anchor Preference Pairs*, for constructing high-quality preference pairs when building self-preference datasets. This method uses the model’s behavior on each input prompt to apply specific strategies while creating preference pairs. Our approach consistently outperforms other methods that rely solely on judge-based evaluations for selecting preference pairs.
+- (iv). We develop an end-to-end methodology for aligning LLMs to downstream classification tasks while maintaining the quality of their self-explanations, even in the absence of explanation-rich datasets.
+
+## 2 A FRAMEWORK FOR QUALITATIVE ASSESSMENT OF SELF-EXPLANATIONS
+
+### 2.1 QUALITY CRITERIA FOR EFFECTIVE SELF-EXPLANATIONS
+
+We focus on the model’s ability to provide a holistic explanation, which we define as one that excels across multiple criteria, collectively determining what constitutes a good explanation. This approach contrasts with previous work that emphasized specific trustworthiness metrics, such as faithfulness (Madsen et al., 2024b;a; Lanham et al., 2023; Lyu et al., 2023; Turpin et al., 2023; Parcalabescu & Frank, 2024) and truthfulness (Zhang et al., 2024; Sharma et al., 2023; Burns et al., 2022; Joshi et al., 2024). A high-quality, holistic explanation may be unfaithful in the sense that it does not accurately represent the model’s internal reasoning, or conversely, a faithful explanation that truly reflects the model’s reasoning may suffer from a lack of clarity, reducing its quality. While aiming for explanations that fulfill a holistic explanation framework might incidentally enhance faithfulness, it is not a strict requirement.
+
+We evaluate self-explanations based on the following criteria:
+
+1. **Logical coherence:** The explanation should follow a clear and logical reasoning process, with all components cohesively connected to form a unified, non-contradictory narrative.
+2. **Clarity:** The explanation must present ideas clearly and precisely, using appropriate terminology to effectively communicate complex concepts without unnecessary complexity.
+3. **Relevance:** The explanation should comprehensively address the task at hand, directly answering the specific context or requirements without omitting critical information.
+4. **Depth of argumentation:** The explanation must provide strong reasoning and credible evidence to support its conclusions, reflecting a deep understanding of the task.
+5. **Factual accuracy:** This criterion assesses the correctness of individual claims within the explanation. While related to truthfulness, factual accuracy focuses on whether specific statements align with established knowledge.
+
+### 2.2 SELF-EXPLANATIONS EVALUATION METHODOLOGY
+
+Let  $\mathcal{M}$  represent a large language model tasked with generating responses for a classification problem. Each response consists of two components: a self-explanation, denoted as  $\varepsilon_i$ , and a predicted classification label,  $\hat{y}_i$ , corresponding to an input prompt  $x_i$ . The self-explanation  $\varepsilon_i$  is produced by prompting the model to articulate its reasoning before providing a final prediction, following the Chain-of-Thought prompting strategy (Wei et al., 2022).
+
+Our methodology is inspired by recent approaches that utilize LLMs as evaluators of other models’ outputs (Dubois et al., 2023; Li et al., 2024; Fernandes et al., 2023; Bai et al., 2023; Saha et al., 2024). This approach has shown versatility, extending beyond simple evaluation to various applications in model improvement and self-alignment strategies. For instance, researchers have employed this framework to generate self-instruct data for fine-tuning models (Wang et al., 2023; Chen et al., 2023; Gulcehre et al., 2023) and to create feedback for training reward models (Bai et al., 2022; Yuan et al., 2024; Wu et al., 2024).
+
+For our evaluation, we employ a more capable model,  $\mathcal{M}_{\text{judge}}$ , to assess the quality of self-explanations  $\varepsilon_i$  based on predefined criteria (detailed in Section 2.1). The evaluation process proceeds as follows:
+
+1. For each criterion  $\kappa$ ,  $\mathcal{M}_{\text{Judge}}$  assigns a qualitative verdict  $v_{i,\kappa}$  from the set {excellent, good, fair, poor, bad}. The prompt used by  $\mathcal{M}_{\text{Judge}}$  is provided in Appendix F.2.
+2. Each verdict  $v_{i,\kappa}$  is mapped to a numerical score  $s_{i,\kappa}$  (see Appendix F.1).
+3. The overall score for an explanation,  $s_i$ , is computed as the sum of scores across all criteria:
+
+$$s_i = \sum_{\kappa=1}^K s_{i,\kappa}$$
+
+To assess the quality of self-explanations generated by different models, we adopt a pairwise evaluation (see Appendix A) strategy consistent with previous work (Chen et al., 2023; Yuan et al., 2024; Wu et al., 2024).
+
+## 3 SELF-EXPLANATION ALIGNMENT WITH ANCHOR PREFERENCE PAIRS
+
+In this section, we introduce a methodology for alignment designed to enhance the ability of large language models (LLMs) to articulate their reasoning—*self-explanation*—even in the absence of annotated rationale explanations. However, we assume access to human-annotated data in the form of classification datasets for domain-specific adaptation, reflecting a common constraint in real-world applications, where comprehensive explanation data is often scarce or prohibitively expensive compared to classification datasets.
+
+Building on prior work (Bai et al., 2022; Wang et al., 2023; Yuan et al., 2024; Wu et al., 2024), our alignment methodology incorporates familiar components such as self-preference dataset generation, human-free evaluation of candidate responses using *LLM-as-Judge*, preference pair selection, and model alignment.
+
+However, our approach differs from previous methods in two key ways: First, for the assessment of candidate responses, we use the evaluation explanation quality framework introduced in Sections 2.1 and 2.2. Second, we propose a novel technique, *Alignment with Anchor Preference Pairs*, which improves preference pair selection by categorizing model outputs into three groups: consistently correct, consistently incorrect, and variable. By applying tailored strategies to each category, we enhance the effectiveness of DPO.
+
+The steps of the methodology are as follows:
+
+1. Supervised fine-tuning of the base model  $\mathcal{M}_{\text{Base}}$  specifically on a target classification task, resulting in  $\mathcal{M}_{\text{SFT}}$ .
+2. Instruct  $\mathcal{M}_{\text{SFT}}$  to generate multiple explanation-prediction pairs for each prompt, and evaluate the quality of these self-explanations using the methodology outlined in Sections 2.1 and 2.2. During alignment, the base model  $\mathcal{M}_{\text{Base}}$  acts as the judge  $\mathcal{M}_{\text{Judge}}$ , ensuring the process remains self-contained.
+3. Construct an alignment dataset by selecting preference pairs using an anchor-based strategy (see Section 3.3).
+4. Align  $\mathcal{M}_{\text{SFT}}$  via DPO with the dataset created in the third step, producing the aligned model  $\mathcal{M}_{\text{Anchor}}$ .
+
+### 3.1 SUPERVISED FINE-TUNING WITHOUT ANNOTATED EXPLANATIONS
+
+We fine-tuned the base model,  $\mathcal{M}_{\text{Base}}$ , on classification datasets (the primary task) to obtain  $\mathcal{M}_{\text{SFT}}$ , simulating scenarios where explanation annotations are unavailable. To replicate typical domain-specific adaptations and avoid potential gains from multi-task learning, we fine-tuned a separate model for each task. During fine-tuning, loss was calculated only on the target tokens corresponding to the correct choice sentence, excluding the system instruction and question. We generated the full text of the selected option to provide richer context and preserve the model’s text generation capabilities. Details on datasets and training setups are provided in Section 4.1.
+
+### 3.2 SELF-PREFERENCE DATASET CREATION
+
+We generate self-preference data for alignment as follows:
+
+1. **Generate candidate responses:** We sample  $N$  diverse pairs of explanations and predictions from  $\mathcal{M}_{\text{SFT}}$ , denoted as  $\{\varepsilon_i^n, \hat{y}_i^n\}_{n=1}^N$ , where  $\varepsilon_i^n$  represents the explanation for the  $n$ -th prediction  $\hat{y}_i^n$  corresponding to the prompt  $x_i$ .
+2. **Evaluate candidate responses:** We use the methodology described in Section 2.2 to evaluate the self-explanations generated from the candidate responses, assigning a score  $s_i^n$  to each explanation  $\varepsilon_i^n$ . During the creation of the self-preference dataset, we employ  $\mathcal{M}_{\text{base}}$  as the judge ( $\mathcal{M}_{\text{judge}}$ ). This ensures that the model alignment process remains self-contained, without the need for external models, except for evaluation purposes. The decision to use  $\mathcal{M}_{\text{base}}$  as the judge stems from the observation that  $\mathcal{M}_{\text{SFT}}$  exhibits a decline in explanation quality (see Section 4.1.1) and reduced agreement with the evaluation judge (see Appendix C).
+
+### 3.3 PREFERENCE PAIRS VIA ANCHOR SELECTION
+
+We introduce a method to enhance the selection of preference pairs by categorizing model responses into three groups: consistently correct, consistently incorrect, and variable. For each category, we apply specific strategies to construct preference pairs, which are then used in the DPO phase. To evaluate the model’s consistency on a given input prompt, a ground truth reference, or *anchor*, is required. We use a classification task as the probing mechanism.
+
+**Preference Pairs for Consistently Correct Prompts:** For input prompts  $x_i$  where  $\mathcal{M}_{\text{SFT}}$  consistently produces correct answers (i.e.,  $\hat{y}_i^n = y_i$  for all  $n \in \{1, \dots, N\}$ ), preference pairs are constructed based on the quality of the explanations. Let  $s_i^n$  denote the score assigned by the judge  $\mathcal{M}_{\text{judge}}$  to the  $n$ -th explanation  $\varepsilon_i^n$  for prompt  $x_i$ . We define two sets:  $\mathbb{A}_i^w = \{\varepsilon_i^n : s_i^n = \max_{j \in \{1, \dots, N\}} s_i^j\}$ , which contains all explanations that achieve the highest score for prompt  $x_i$ , and  $\mathbb{A}_i^l = \{\varepsilon_i^n : s_i^n < \max_{j \in \{1, \dots, N\}} s_i^j\}$ , which includes all explanations with scores lower than the maximum for prompt  $x_i$ .
+
+**Preference Pairs for Variable Performance:** For input prompts  $x_i$  where  $\mathcal{M}_{\text{SFT}}$  produces a mix of correct and incorrect predictions (i.e.,  $\hat{y}_i^n \neq y_i$  for some  $n \in \{1, \dots, N\}$ ), preference pairs are constructed contrastively. We define the set  $\mathbb{B}_i^w = \{\varepsilon_i^n : \hat{y}_i^n = y_i\}$ , which contains explanations associated with correct predictions. From this set, we extract  $\mathbb{A}_i^w \subseteq \mathbb{B}_i^w$ , the subset of explanations with the highest scores assigned by  $\mathcal{M}_{\text{judge}}$ , i.e.,  $\mathbb{A}_i^w = \{\varepsilon_i^n \in \mathbb{B}_i^w : s_i^n = \max_{j \in \mathbb{B}_i^w} s_i^j\}$ . The set  $\mathbb{A}_i^l = \{\varepsilon_i^n : \hat{y}_i^n \neq y_i \text{ and } s_i^n < \max_{j \in \mathbb{A}_i^w} s_i^j\}$  contains explanations corresponding to incorrect predictions, with scores lower than the maximum score in  $\mathbb{A}_i^w$ .
+
+**Preference Pairs for Consistently Incorrect Prompts:** For prompts where all predictions from  $\mathcal{M}_{\text{SFT}}$  are incorrect (i.e.,  $\hat{y}_i^n \neq y_i$  for all  $n \in \{1, \dots, N\}$ ), all corresponding explanations are placed in the set  $\mathbb{A}_i^l$ . To generate a winning explanation, we employ the  $\mathcal{M}_{\text{Base}}$  model in a consultant role, similar to the LLM-as-a-Debater approach proposed by Khan et al. (2024). Since the inference hyperparameters for the LLM in this consulting role might differ from those used during the generation of preference pairs, we refer to this model as  $\mathcal{M}_{\text{Debater}}$  to avoid confusion. Specifically, we provide the correct answer  $y_i$  to the LLM and request an argument supporting this answer, which is then assigned to the set  $\mathbb{A}_i^w$  as the winning explanation.
+
+Finally, preference pairs are constructed for each instruction prompt  $x_i$  by randomly sampling  $\varepsilon_i^w$  from  $\mathbb{A}_i^w$  as the winning explanation and  $\varepsilon_i^l$  from  $\mathbb{A}_i^l$  as the losing explanation. The resulting preference pair is denoted as  $(x_i, \varepsilon_i^w, \varepsilon_i^l)$ . The detailed algorithm is presented in Algorithm 1.
+
+## 4 EXPERIMENTS
+
+In all experiments, we utilized LLaMA-3-8B-Instruct as our base model. Our study involved comparing four distinct model configurations:
+
+1.  $\mathcal{M}_{\text{Base}}$ : The base model, which remains unmodified.
+2.  $\mathcal{M}_{\text{SFT}}$ : This model was obtained by performing supervised fine-tuning on the  $\mathcal{M}_{\text{Base}}$  model using only classification tasks, simulating scenarios where explanation annotations are not available.
+
+#### **Algorithm 1** Generating Preference Pairs Via Anchor Selection
+
+```
+
+1: Input: Instruction prompt  $x_i$ , model predictions  $\{\hat{y}_i^n\}_{n=1}^N$ , true label  $y_i$ , judge model  $\mathcal{M}_{\text{Judge}}$ ,
+   debater model  $\mathcal{M}_{\text{Debater}}$ 
+2: Output: Preference pairs  $(x_i, \varepsilon_i^w, \varepsilon_i^l)$ 
+3: Initialize:  $\mathbb{A}_i^w \leftarrow \emptyset, \mathbb{A}_i^l \leftarrow \emptyset$ 
+4: for each explanation  $\varepsilon_i^n$  do
+5:   Compute score  $s_i^n$  from  $\mathcal{M}_{\text{Judge}}$ 
+6: end for
+7: if  $\hat{y}_i^n = y_i$  for all  $n \in \{1, \dots, N\}$  then ▷ Consistently Correct Prompts
+8:    $\mathbb{A}_i^w \leftarrow \{\varepsilon_i^n : s_i^n = \max_{j \in \{1, \dots, N\}} s_i^j\}$ 
+9:    $\mathbb{A}_i^l \leftarrow \{\varepsilon_i^n : s_i^n = \min_{j \in \{1, \dots, N\}} s_i^j\}$ 
+10: else if  $\hat{y}_i^n \neq y_i$  for some  $n \in \{1, \dots, N\}$  then ▷ Variable Performance Prompts
+11:    $\mathbb{B}_i^w \leftarrow \{\varepsilon_i^n : \hat{y}_i^n = y_i\}$ 
+12:    $\mathbb{A}_i^w \leftarrow \{\varepsilon_i^n \in \mathbb{B}_i^w : s_i^n = \max_{j \in \mathbb{B}_i^w} s_i^j\}$ 
+13:    $\mathbb{A}_i^l \leftarrow \{\varepsilon_i^n : \hat{y}_i^n \neq y_i \wedge s_i^n < \max_{j \in \mathbb{B}_i^w} s_i^j\}$ 
+14: else ▷ Consistently Incorrect Prompts
+15:    $\mathbb{A}_i^l \leftarrow \{\varepsilon_i^n : \hat{y}_i^n \neq y_i \text{ for all } n \in \{1, \dots, N\}\}$ 
+16:   Generate argument  $\varepsilon_i^{\text{debater}}$  using  $\mathcal{M}_{\text{Debater}}$  given  $y_i$ 
+17:    $\mathbb{A}_i^w \leftarrow \{\varepsilon_i^{\text{debater}}\}$ 
+18: end if
+19: Sample  $\varepsilon_i^w$  from  $\mathbb{A}_i^w$ 
+20: Sample  $\varepsilon_i^l$  from  $\mathbb{A}_i^l$ 
+21: Return  $(x_i, \varepsilon_i^w, \varepsilon_i^l)$ 
+
+```
+
+3.  $\mathcal{M}_{\text{Rank}}$ : The  $\mathcal{M}_{\text{SFT}}$  model was further refined using DPO, employing a self-preference dataset constructed from rank-ordered preference pairs derived solely from judge-based evaluations of the explanations. This approach aligns with methodologies described in Bai et al. (2022); Wang et al. (2023); Yuan et al. (2024); Wu et al. (2024).
+4.  $\mathcal{M}_{\text{Anchor}}$  (ours): Similar to  $\mathcal{M}_{\text{Rank}}$ , this model was refined using DPO but utilized a self-preference dataset created with our proposed anchored method for selecting preference pairs.
+
+Since both  $\mathcal{M}_{\text{Rank}}$  and  $\mathcal{M}_{\text{Anchor}}$  undergo an additional stage of DPO alignment with the self-preference dataset, we will collectively refer to them as self-aligned models in comparison to  $\mathcal{M}_{\text{SFT}}$ .
+
+### 4.1 EXPERIMENTAL SETUP
+
+**Datasets:** We selected four datasets for our experiments: AQuA-Rat (Ling et al., 2017), ARC-Challenge (Clark et al., 2018), LogiQA (Liu et al., 2020), and OpenbookQA (Mihaylov et al., 2018). These datasets are established benchmarks for reasoning tasks, requiring a challenging reasoning process, which makes them an ideal fit for evaluating the quality of self-explanations. A key factor in their selection was the size of their training sets, which provided a sufficient number of input prompts to support the creation of the self-preference dataset. In the case of AQuA-Rat, we sampled 5,000 examples due to computational constraints. For evaluation, we used the test split of each dataset. For detailed dataset descriptions, see Appendix D.
+
+**SFT Training Details:** For  $\mathcal{M}_{\text{SFT}}$ , we used the AdamW optimizer with a learning rate of  $5 \times 10^{-5}$  for one epoch, following a cosine schedule with 10% warmup steps. Gradient clipping was set to 0.3, and we used an effective batch size of 12. Loss was computed only on the assistant’s completions. Instead of fine-tuning the entire model, we applied a LoRA adapter ( $\alpha = 128$ , dropout = 0.05, rank  $r = 256$ ) to all linear layers. LoRA adapters were used to accelerate training and to act as a regularization method (Biderman et al., 2024), addressing the overfitting tendencies of DPO (Thakkar et al., 2024), which is applied during the later alignment phase.
+
+**Self-Preference Dataset:** To ensure the integrity of our evaluation process, we created separate self-preference datasets for each benchmark. These datasets were built using input prompts specific to
+
+each task, ensuring that the DPO alignment data remained uncontaminated by exposure to multiple tasks. This approach prevents the artificial inflation of results that could occur if models were aligned across diverse tasks, unlike SFT models, which are trained on one classification task at a time. To create the self-preference dataset for aligning  $\mathcal{M}_{\text{Rank}}$  and  $\mathcal{M}_{\text{Anchor}}$ , we sampled  $N = 4$  responses from  $\mathcal{M}_{\text{SFT}}$  for each input prompt (settings: temperature  $T = 0.6$  and top-k value of 0.9). This sample size provided a reasonable assessment of the model’s consistency and variability. The prompt used is presented in Appendix G. In cases of consistently incorrect responses,  $\mathcal{M}_{\text{Base}}$  was employed as the debater model (Llama-3-8B-Instruct) with adjusted parameters ( $T = 0.5$ , top-k 0.9). The responses were scored by  $\mathcal{M}_{\text{Judge}}$ , which was the same base model, ensuring a self-contained alignment process. This setup differs from the evaluation phase, where a more capable model serves as the judge. The scoring of explanations followed the methodology outlined in Section 2.2, with  $\mathcal{M}_{\text{Judge}}$  using fixed inference parameters ( $T = 0$ ). For  $\mathcal{M}_{\text{Rank}}$ , preference pairs were chosen based on the assigned scores, with the highest-scoring explanation designated as the winner, and the losing explanation randomly selected from the remaining candidates. The preference pairs for  $\mathcal{M}_{\text{Anchor}}$  were selected using the methodology outlined in Section 3.3, and these pairs were then used to align the models through DPO.
+
+**DPO Training Details:** For DPO-aligned models ( $\mathcal{M}_{\text{Rank}}$ ,  $\mathcal{M}_{\text{Anchor}}$ ), we used similar hyperparameters as in the SFT phase but reduced the learning rate to  $5 \times 10^{-7}$  and trained for 2.6k steps with an effective batch size of 6. The DPO process used a  $\beta$  value of 0.1 and updated the LoRA weights obtained during SFT.
+
+**Evaluation:** We evaluated our models along two main dimensions: prediction accuracy and self-explanation quality. To account for variability in model outputs, we generated  $N = 16$  explanation-prediction pairs per input prompt. The inference settings mirrored those used to create the self-preference dataset, with a temperature of  $T = 0.6$  and top-k set to 0.9 and the same prompt used during the creation of the self-preference dataset (see Appendix G.3). Average prediction accuracy was used to measure performance on downstream tasks. To assess self-explanation quality, we performed head-to-head comparisons between the aligned models ( $\mathcal{M}_{\text{SFT}}$ ,  $\mathcal{M}_{\text{Rank}}$ ,  $\mathcal{M}_{\text{Anchor}}$ ) and the base model ( $\mathcal{M}_{\text{Base}}$ ).
+
+**Ablation Study:** To validate our design choices, we conduct two types of ablation experiments. First, we create variants of  $\mathcal{M}_{\text{Anchor}}$  by combining different strategies outlined in Section 3.3 to construct the anchor-preference dataset. The variants studied include  $\mathcal{M}_{\text{Anchor}}(\text{CC})$ ,  $\mathcal{M}_{\text{Anchor}}(\text{CC}+\text{V})$ , and  $\mathcal{M}_{\text{Anchor}}(\text{CC}+\text{V}+\text{CI})$ , where "Consistently Correct" (CC), "Variant" (V), and "Consistently Incorrect" (CI) denote the respective strategies. Notably,  $\mathcal{M}_{\text{Anchor}}(\text{CC}+\text{V}+\text{CI})$  represents the full version of  $\mathcal{M}_{\text{Anchor}}$ , and the terms may be used interchangeably throughout the discussion.
+
+Furthermore, we evaluate the aligned models using Mistral-Large-Instruct-2407, Qwen2.5-72B-Instruct, and Llama3-70B-Instruct as  $\mathcal{M}_{\text{Judge}}$ , validating the robustness of our method across diverse evaluation settings.
+
+#### 4.1.1 IMPACT OF SUPERVISED FINE-TUNING ON SELF-EXPLANATIONS
+
+We observed a significant trade-off in evaluation results before and after applying supervised fine-tuning on a classification task (see Table 1). While SFT notably improved classification accuracy, it resulted in a substantial decline in the quality of self-explanations compared to the base model. The average decrement in  $\mathcal{M}_{\text{SFT}}$  from the equilibrium point, as measured across judges, ranged from 6.5% to 13.3% across benchmarks.
+
+Building on evidence that supervised fine-tuning can improve performance on specific tasks at the expense of a model’s generalization abilities (Yang et al., 2024; Kirk et al., 2024), we hypothesize that this decline occurs because the task of selecting predefined answers does not inherently encourage the model to articulate its reasoning, leading to a specialization that diminishes the quality of the generated explanations.
+
+These findings highlight the necessity for alignment techniques that can preserve high-quality explanations in situations where datasets with annotated explanations are unavailable for fine-tuning.
+
+Table 1: **Comparison of Aligned Models.** The table presents average accuracy along-side pairwise evaluations of self-explanation quality. Pairwise evaluations are conducted using Mistral-Large-Instruct-2407, Qwen2.5-72B-Instruct, and LLama3-70B-Instruct as judges. Additionally, for the ablation study, we report the performance of  $\mathcal{M}_{\text{Anchor}}$  under various strategy combinations used to construct the self-preference dataset. The strategies include Consistently Correct (CC), Variant (V), and Consistently Incorrect (CI).
+
+| Dataset          | $\mathcal{M}_{\text{Base}}$<br>Acc. (%) | $\mathcal{M}_{\text{Align}}$<br>Type    | $\mathcal{M}_{\text{Align}}$<br>Acc. (%) | $\varepsilon(W + \frac{T}{2})$ Rate (%) $\uparrow$ |                   |                      |                  |
+|------------------|-----------------------------------------|-----------------------------------------|------------------------------------------|----------------------------------------------------|-------------------|----------------------|------------------|
+|                  |                                         |                                         |                                          | $J_{\text{LLama}}$                                 | $J_{\text{Qwen}}$ | $J_{\text{Mistral}}$ | $J_{\text{Avg}}$ |
+| AQuA Rat         | $47.1 \pm 2.9$                          | $\mathcal{M}_{\text{SFT}}$              | $47.7 \pm 2.7$                           | 42.2                                               | 47.2              | 41.1                 | 43.5             |
+|                  |                                         | $\mathcal{M}_{\text{Rank}}$ (Baseline)  | $48.3 \pm 2.1$                           | 43.1                                               | 48.3              | 41.5                 | 44.3             |
+|                  |                                         | $\mathcal{M}_{\text{Anchor}}$ (CC)      | $49.3 \pm 3.1^*$                         | 44.7                                               | 49.0              | 43.3                 | 45.7             |
+|                  |                                         | $\mathcal{M}_{\text{Anchor}}$ (CC+V)    | $48.3 \pm 2.9$                           | 42.9                                               | 48.1              | 42.6                 | 44.5             |
+|                  |                                         | $\mathcal{M}_{\text{Anchor}}$ (CC+V+CI) | <b><math>51.1 \pm 3.0</math></b>         | <b>48.0</b>                                        | <b>49.5</b>       | <b>46.3</b>          | <b>47.9</b>      |
+| ARC<br>Challenge | $76.4 \pm 0.7$                          | $\mathcal{M}_{\text{SFT}}$              | $81.0 \pm 0.7$                           | 36.8                                               | 32.0              | 41.3                 | 36.7             |
+|                  |                                         | $\mathcal{M}_{\text{Rank}}$ (Baseline)  | $81.9 \pm 1.1^*$                         | 48.4                                               | 48.2              | 49.2                 | 48.6             |
+|                  |                                         | $\mathcal{M}_{\text{Anchor}}$ (CC)      | $81.6 \pm 1.3^*$                         | 47.3                                               | 46.7              | 48.0                 | 47.3             |
+|                  |                                         | $\mathcal{M}_{\text{Anchor}}$ (CC+V)    | <b><math>82.0 \pm 1.1</math></b>         | 48.6                                               | 48.7              | 49.7                 | 49.0             |
+|                  |                                         | $\mathcal{M}_{\text{Anchor}}$ (CC+V+CI) | <b><math>82.0 \pm 0.9</math></b>         | <b>51.6</b>                                        | <b>52.1</b>       | <b>52.4</b>          | <b>52.0</b>      |
+| LogiQA           | $41.4 \pm 1.1$                          | $\mathcal{M}_{\text{SFT}}$              | $45.2 \pm 0.7$                           | 34.6                                               | 34.6              | 42.6                 | 37.3             |
+|                  |                                         | $\mathcal{M}_{\text{Rank}}$ (Baseline)  | $46.0 \pm 1.5^*$                         | 47.1                                               | 45.0              | 47.8                 | 46.6             |
+|                  |                                         | $\mathcal{M}_{\text{Anchor}}$ (CC)      | $45.8 \pm 1.4^*$                         | 48.5                                               | 46.8              | 49.2                 | 48.2             |
+|                  |                                         | $\mathcal{M}_{\text{Anchor}}$ (CC+V)    | $46.1 \pm 1.7^*$                         | 47.3                                               | 45.2              | 48.1                 | 46.9             |
+|                  |                                         | $\mathcal{M}_{\text{Anchor}}$ (CC+V+CI) | <b><math>46.6 \pm 2.2</math></b>         | <b>53.4</b>                                        | <b>50.9</b>       | <b>51.3</b>          | <b>51.9</b>      |
+| Openbook<br>QA   | $71.7 \pm 1.3$                          | $\mathcal{M}_{\text{SFT}}$              | <b><math>87.4 \pm 1.1</math></b>         | 38.4                                               | 36.2              | 46.3                 | 40.3             |
+|                  |                                         | $\mathcal{M}_{\text{Rank}}$ (Baseline)  | $87.0 \pm 1.1^*$                         | 45.4                                               | 45.1              | 48.9                 | 46.5             |
+|                  |                                         | $\mathcal{M}_{\text{Anchor}}$ (CC)      | $87.1 \pm 0.5^*$                         | 45.5                                               | 45.4              | 49.2                 | 46.7             |
+|                  |                                         | $\mathcal{M}_{\text{Anchor}}$ (CC+V)    | <b><math>87.4 \pm 0.8</math></b>         | 46.2                                               | 46.0              | <b>49.6</b>          | 47.3             |
+|                  |                                         | $\mathcal{M}_{\text{Anchor}}$ (CC+V+CI) | $87.0 \pm 0.9^*$                         | <b>46.5</b>                                        | <b>46.9</b>       | <b>49.6</b>          | <b>47.7</b>      |
+
+#### 4.1.2 ANALYSIS OF SELF-ALIGNED MODELS
+
+**Prediction Accuracy:** The self-preference dataset used during the DPO phase is designed with the primary objective of improving explanation quality rather than maximizing accuracy. However, it is essential to ensure that enhancing the models' self-explanation capabilities does not compromise their performance on the primary task, as measured by classification accuracy. To assess this, we compute the average classification accuracy<sup>1</sup> and the standard deviation across multiple evaluation runs ( $N = 16$ ), as shown in Table 1.
+
+The results indicate that the self-aligned models,  $\mathcal{M}_{\text{Rank}}$  and  $\mathcal{M}_{\text{Anchor}}$ , across all tested strategy combinations, either maintain or improve upon the classification accuracy gains achieved by the seed model,  $\mathcal{M}_{\text{SFT}}$ , relative to the base model,  $\mathcal{M}_{\text{Base}}$ . Notably, while the accuracy performances of  $\mathcal{M}_{\text{Anchor}}$  and  $\mathcal{M}_{\text{Rank}}$  are similar across most tasks, there is one exception:  $\mathcal{M}_{\text{Anchor}}$  significantly outperforms  $\mathcal{M}_{\text{Rank}}$  on the AQuA-Rat dataset, with statistical significance. Further analysis of the variability in  $\mathcal{M}_{\text{Anchor}}$ 's performance across different datasets is provided in Section 4.1.4.
+
+**Self-Explanation Quality:** Pairwise evaluations of self-explanation quality (see Table 1) show that the initial decline in explanation performance observed in  $\mathcal{M}_{\text{SFT}}$  is partially inherited by both  $\mathcal{M}_{\text{Rank}}$  and  $\mathcal{M}_{\text{Anchor}}$ , since they both use  $\mathcal{M}_{\text{SFT}}$  as the seed model during the DPO alignment phase. Nevertheless, both  $\mathcal{M}_{\text{Rank}}$  and  $\mathcal{M}_{\text{Anchor}}$  achieve significant improvements in explanation quality over  $\mathcal{M}_{\text{SFT}}$ , with  $\mathcal{M}_{\text{Anchor}}$  demonstrating the strongest performance across benchmarks and evaluation judges. When compared to the base model,  $\mathcal{M}_{\text{Anchor}}$  shows similar performance, winning half of the
+
+<sup>1</sup>The maximum value is bolded, and results marked with a (\*) indicate no statistical difference from the top performer.
+
+benchmarks, and significantly narrows the gap in explanation quality introduced by  $\mathcal{M}_{\text{SFT}}$  on the remaining benchmark datasets. Regarding the ablation study, we observe that the highest explanation quality is achieved when the strategies (CC), (V), and (CI) are combined.
+
+![Figure 1: Average Self-Explanation Scores per Evaluation Criterion. The figure contains four radar charts for datasets AQUA-Rat, ARC-Challenge, LogiQA, and OpenbookQA. Each chart plots five criteria: Logical Coherence, Factual Accuracy, Depth of Argumentation, Relevance, and Clarity. Four models are compared: Base Model (red), SFT (teal), SFT & DPO with Rank preference pairs (orange), and SFT & DPO with Anchor preference pairs (ours) (blue). The charts show that the proposed method generally achieves higher scores across most criteria, particularly in Logical Coherence and Factual Accuracy.](a71911ad87414271aeb190e0eebcb989_img.jpg)
+
+Figure 1: Average Self-Explanation Scores per Evaluation Criterion. The figure contains four radar charts for datasets AQUA-Rat, ARC-Challenge, LogiQA, and OpenbookQA. Each chart plots five criteria: Logical Coherence, Factual Accuracy, Depth of Argumentation, Relevance, and Clarity. Four models are compared: Base Model (red), SFT (teal), SFT & DPO with Rank preference pairs (orange), and SFT & DPO with Anchor preference pairs (ours) (blue). The charts show that the proposed method generally achieves higher scores across most criteria, particularly in Logical Coherence and Factual Accuracy.
+
+Figure 1: **Average Self-Explanation Scores per Evaluation Criterion.** Average scores for each evaluation criterion used to assess self-explanations, as described in Section 2.1. The scores are provided for all evaluated models across the benchmark datasets.
+
+#### 4.1.3 ANALYSIS OF INDIVIDUAL EVALUATION DIMENSIONS
+
+Figure 1 presents the average scores for each evaluation criterion used to assess self-explanations, as described in Section 2.1, for all evaluated models across the benchmark datasets.
+
+Overall, the self-aligned models outperform  $\mathcal{M}_{\text{SFT}}$  across all evaluation criteria, with  $\mathcal{M}_{\text{Anchor}}$  consistently achieving better results than  $\mathcal{M}_{\text{Rank}}$ .
+
+Additionally, we observe that the degradation in self-explanation quality due to SFT varies significantly depending on the dataset used for fine-tuning. Two notable trends emerge from the analysis. First, for more complex tasks—where complexity is measured by lower test accuracy—such as AQUA-Rat and LogiQA, the decline in explanation quality is more pronounced across all criteria. Second, evaluation dimensions for which the base model originally received lower scores tend to experience a more significant drop in performance after SFT.
+
+#### 4.1.4 IMPACT OF PREFERENCE PAIRS CATEGORY DISTRIBUTION
+
+We define  $\lambda$  as the proportion of the self-preference dataset used to align  $\mathcal{M}_{\text{Anchor}}$ , corresponding to preference pairs selected under the (CI) or (V) strategies (see Section 3.3). This metric,  $\lambda$ , offers insight into how the composition of the self-preference dataset for  $\mathcal{M}_{\text{Anchor}}$  differs from that of  $\mathcal{M}_{\text{Rank}}$ .
+
+The (CI) and (V) strategies ensure—assuming the self-explanation is faithful—that the winning explanation  $\varepsilon_i^w$  supports the ground-truth label  $y_i$ . For the (V) strategy, this is achieved by sampling  $\varepsilon_i^w$  from the set  $\mathbb{B}_i^w = \{\varepsilon_i^n : \hat{y}_i^n = y_i\}$ . In the case of the (CI) strategy,  $\mathcal{M}_{\text{Debater}}$  is employed to provide arguments that explicitly support  $y_i$ .
+
+In contrast,  $\mathcal{M}_{\text{Rank}}$ —which serves as our baseline—selects pairs for the preference dataset solely based on scores assigned by judges during its creation. As a result, it does not guarantee that the winning explanations,  $\varepsilon_i^w$ , will support the ground-truth label  $y_i$ . The likelihood of selecting cases in the preference dataset where  $\varepsilon_i^w$  aligns with an outcome different from  $y_i$  increases, particularly as  $\lambda$  grows.
+
+We evaluated improvements by analyzing the differences in accuracy and  $J_{\text{Avg}}$  between  $\mathcal{M}_{\text{Anchor}}$  and  $\mathcal{M}_{\text{Rank}}$  in relation to  $\lambda$  (see Figure 2). In both cases, we observed a trend showing that  $\mathcal{M}_{\text{Anchor}}$  demonstrates a greater relative improvement compared to  $\mathcal{M}_{\text{Rank}}$  as  $\lambda$  increases. This supports our design principle that tailoring strategies based on model behavior is crucial for improving the quality of self-preference datasets and avoiding the reinforcement of problematic behavior.
+
+![Figure 2: Impact of Preference Pairs Category Distribution. Two scatter plots showing the impact of lambda (λ) on accuracy and J_Avg difference between M_Anchor and M_Rank for four datasets: AQuA Rat, ARC-Challenge, LogiQA, and OpenbookQA. The left plot shows Δacc(M_Anchor - Rank) and the right plot shows J_Avg(M_Anchor) - J_Avg(M_Rank). Both plots show a general upward trend as λ increases from 0 to 70.](0f3e3ea50bcceb86f6c524ab2b6f3e7a_img.jpg)
+
+Figure 2 consists of two scatter plots. The left plot shows the change in accuracy,  $\Delta \text{acc}(\mathcal{M}_{\text{Anchor}} - \text{Rank})$ , on the y-axis (ranging from -0.5 to 3.0) against the proportion  $\lambda$  on the x-axis (ranging from 0 to 70). The right plot shows the difference in average judge score,  $J_{\text{Avg}}(\mathcal{M}_{\text{Anchor}}) - J_{\text{Avg}}(\mathcal{M}_{\text{Rank}})$ , on the y-axis (ranging from 0 to 7) against  $\lambda$  on the x-axis (ranging from 0 to 70). Both plots include data points for four datasets: AQuA Rat (cyan circle), ARC-Challenge (blue square), LogiQA (light blue triangle), and OpenbookQA (purple diamond). In both plots, the data points generally show an upward trend as  $\lambda$  increases, indicating that the relative improvement of  $\mathcal{M}_{\text{Anchor}}$  over  $\mathcal{M}_{\text{Rank}}$  increases with  $\lambda$ .
+
+| Dataset       | $\lambda$ | $\Delta \text{acc}(\mathcal{M}_{\text{Anchor}} - \text{Rank})$ (Left Plot) | $J_{\text{Avg}}(\mathcal{M}_{\text{Anchor}}) - J_{\text{Avg}}(\mathcal{M}_{\text{Rank}})$ (Right Plot) |
+|---------------|-----------|----------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------|
+| OpenbookQA    | ~8        | ~0.0                                                                       | ~1.2                                                                                                   |
+| ARC-Challenge | ~15       | ~0.1                                                                       | ~3.2                                                                                                   |
+| LogiQA        | ~45       | ~0.6                                                                       | ~5.2                                                                                                   |
+| AQuA Rat      | ~65       | ~2.8                                                                       | ~3.8                                                                                                   |
+
+Figure 2: Impact of Preference Pairs Category Distribution. Two scatter plots showing the impact of lambda (λ) on accuracy and J\_Avg difference between M\_Anchor and M\_Rank for four datasets: AQuA Rat, ARC-Challenge, LogiQA, and OpenbookQA. The left plot shows Δacc(M\_Anchor - Rank) and the right plot shows J\_Avg(M\_Anchor) - J\_Avg(M\_Rank). Both plots show a general upward trend as λ increases from 0 to 70.
+
+Figure 2: **Impact of Preference Pairs Category Distribution:** Presents the relative improvements in accuracy (left) and  $J_{\text{Avg}}$  difference between  $\mathcal{M}_{\text{Anchor}}$  and  $\mathcal{M}_{\text{Rank}}$  (right) with respect to  $\lambda$ .
+
+## 5 RELATED WORK
+
+**LLM-as-Evaluator:** This concept refers to the ability of large language models (LLMs) to evaluate the outputs of other LLMs, a technique commonly referred to as LLM-as-a-Judge. This approach has gained considerable traction in recent years (Dubois et al., 2023; Li et al., 2024; Fernandes et al., 2023; Bai et al., 2023) and is frequently used to assess LLM performance across various downstream tasks (Zheng et al., 2023). It has proven particularly effective in automating evaluations, as demonstrated on platforms like LMSys Chatbot Arena. Key implementations include direct scoring based on specific criteria, pairwise comparisons (Liu et al., 2024), reference-based evaluations, and ensemble methods (Verga et al., 2024). While LLM-as-a-Judge offers scalability and consistency, it can also inherit biases from the evaluation model, potentially amplifying problematic outputs (Huang et al., 2024). Despite these challenges, it remains a valuable tool due to its efficiency and cost-effectiveness in evaluating LLM systems. In our work, we introduce a framework for the qualitative assessment of *self-explanations* using the LLM-as-a-Judge technique, designed to evaluate how effectively a model conveys its reasoning.
+
+**Self-Alignment:** Several approaches have been developed to improve LLMs without requiring human-annotated feedback. One method involves fine-tuning models using high-quality, self-
+
+generated input-output pairs (Wang et al., 2023; Chen et al., 2023; Gulcehre et al., 2023), though this can perpetuate biases in example selection without a clear mechanism for improving selection quality. Another influential approach is Constitutional AI (Bai et al., 2022), where an LLM provides feedback and refines responses, which are then used to train a separate, static reward model. Building on this concept, Yuan et al. (2024) and Wu et al. (2024) proposed using the LLM itself as a dynamic reward model, eliminating the need for a static one. This allows for continuous improvement in both generation and evaluation capabilities through iterative training processes. In our work, we introduce a novel method for creating a self-preference dataset. Our approach, called *Alignment with Anchor Preference Pairs*, enhances preference pair selection by categorizing model behavior in response to each input prompt and applying tailored strategies for each category. To evaluate a model’s consistency for a given input prompt, an anchor—i.e., a ground-truth reference—is required, which we derive from a classification task used as a probing mechanism.
+
+**LLM-as-a-Debater:** This adversarial approach aims to improve model performance through argumentation. In Perez et al. (2019), debaters are limited to extracting relevant statements from a source text, rather than generating original arguments. Du et al. (2023) extended this concept by involving multiple LLM instances to debate their individual responses over several rounds, eventually converging on a shared final answer. Khan et al. (2024) further developed this approach by using debate-like scenarios to challenge and refine model outputs through simulated arguments. In our work, we adopt the LLM-as-a-Debater approach in the role of a consultant, specifically following Khan et al. (2024), for cases where the model’s response to certain input prompts is *consistently incorrect*. This strategy enables the creation of self-preference examples that avoid reinforcing problematic behavior.
+
+## 6 LIMITATIONS
+
+We acknowledge some limitations in our approach. First, evaluating the model’s consistency on a given input prompt requires an anchor—ground truth reference. Consequently, the selection of preference pairs via the anchor strategy relies on a classification task as the probing mechanism, which restricts its applicability. Second, when ranking the quality of self-explanations, we assign equal weights across all evaluation dimensions. This uniform weighting may not accurately reflect the varying significance of different aspects of explanation quality, which can differ depending on the user or specific application. Moreover, this approach may overlook instances where individual explanations degrade in separate criteria, potentially leading to preference pairs where score differences arise from unrelated factors.
+
+Finally, using the base model as the judge during the creation of the self-preference dataset addresses the issue that  $\mathcal{M}_{\text{STF}}$  exhibits a decline in explanation quality (see Section 4.1.1) and reduced agreement with the evaluation judge (see Appendix C). However, this approach could become a bottleneck in scenarios where multiple iterations of alignment are performed, as the base model remains static and may fail to capture important evaluation nuances over time.
+
+## 7 CONCLUSION
+
+In this work, we introduced a methodology for alignment that enhances LLMs’ ability to generate high-quality self-explanations, even in the absence of annotated rationale explanations. Our approach provides an end-to-end solution for aligning LLMs on classification tasks, ensuring that they not only produce accurate predictions but also articulate coherent explanations for their decisions. This is achieved through three core components: evaluating the quality of generated explanations, creating self-preference datasets, and aligning the model. Central to our approach is *Alignment with Anchor Preference Pairs*, a novel method that refines preference pair selection by categorizing model outputs into three groups: consistently correct, consistently incorrect, and variable. For each category, we apply tailored strategies to construct preference pairs, which are then used in DPO. Our empirical results demonstrate that this method consistently improves explanation quality, reducing the degradation caused by task specialization. Furthermore, we show that using anchor preference pairs outperforms self-alignment methods that rely solely on judge-based evaluations for preference pair selection.
+
+## REFERENCES
+
+- Yuntao Bai, Saurav Kadavath, Sandipan Kundu, Amanda Askell, Jackson Kernion, Andy Jones, Anna Chen, Anna Goldie, Azalia Mithoseini, Cameron McKinnon, Carol Chen, Catherine Olson, Christopher Olah, Danny Hernandez, Dawn Drain, Deep Ganguli, Dustin Li, Eli Tran-Johnson, Ethan Perez, Jamie Kerr, Jared Mueller, Jeffrey Ladish, Joshua Landau, Kamal Ndoussé, Kamile Lukosuite, Liane Lovitt, Michael Sellitto, Nelson Elhage, Nicholas Schiefer, Noemi Mercado, Nova DasSarma, Robert Lasenby, Robin Larson, Sam Ringer, Scott Johnston, Shauna Kravec, Sheer El Showk, Stanislav Fort, Tamera Lanham, Timothy Telleen-Lawton, Tom Conerly, Tom Henighan, Tristan Hume, Samuel R. Bowman, Zac Hatfield-Dodds, Ben Mann, Dario Amodei, Nicholas Joseph, Sam McCandlish, Tom Brown, and Jared Kaplan. Constitutional AI: Harmlessness from AI Feedback, December 2022. URL <http://arxiv.org/abs/2212.08073>. arXiv:2212.08073 [cs].
+- Yushi Bai, Jiahao Ying, Yixin Cao, Xin Lv, Yuze He, Xiaozhi Wang, Jifan Yu, Kaisheng Zeng, Yijia Xiao, Haozhe Lyu, Jiayin Zhang, Juanzi Li, and Lei Hou. Benchmarking Foundation Models with Language-Model-as-an-Examiner. *Advances in Neural Information Processing Systems (NeurIPS)*, 36:78142–78167, December 2023.
+- Dan Biderman, Jacob Portes, Jose Javier Gonzalez Ortiz, Mansheej Paul, Philip Greengard, Connor Jennings, Daniel King, Sam Havens, Vitaliy Chiley, Jonathan Frankle, Cody Blakeney, and John Patrick Cunningham. LoRA Learns Less and Forgets Less. *Transactions on Machine Learning Research*, May 2024. ISSN 2835-8856. URL <https://openreview.net/forum?id=aIoEru2qCG>.
+- Collin Burns, Haotian Ye, Dan Klein, and Jacob Steinhardt. Discovering Latent Knowledge in Language Models Without Supervision. *International Conference on Learning Representations (ICLR)*, September 2022.
+- Lichang Chen, Shiyang Li, Jun Yan, Hai Wang, Kalpa Gunaratna, Vikas Yadav, Zheng Tang, Vijay Srinivasan, Tianyi Zhou, Heng Huang, and Hongxia Jin. AlpacaGasus: Training a Better Alpaca with Fewer Data. *International Conference on Learning Representations (ICLR)*, October 2023.
+- Peter Clark, Isaac Cowhey, Oren Etzioni, Tushar Khot, Ashish Sabharwal, Carissa Schoenick, and Oyvind Tafjord. Think you have Solved Question Answering? Try ARC, the AI2 Reasoning Challenge, March 2018. URL <http://arxiv.org/abs/1803.05457>. arXiv:1803.05457 [cs].
+- Yilun Du, Shuang Li, Antonio Torralba, Joshua B. Tenenbaum, and Igor Mordatch. Improving Factuality and Reasoning in Language Models through Multiagent Debate. *Advances in Neural Information Processing Systems (NeurIPS)*, 2023.
+- Yann Dubois, Chen Xuechen Li, Rohan Taori, Tianyi Zhang, Ishaaan Gulrajani, Jimmy Ba, Carlos Guestrin, Percy S. Liang, and Tatsunori B. Hashimoto. AlpacaFarm: A Simulation Framework for Methods that Learn from Human Feedback. *Advances in Neural Information Processing Systems (NeurIPS)*, 36:30039–30069, December 2023.
+- Patrick Fernandes, Daniel Deutsch, Mara Finkelstein, Parker Riley, André Martins, Graham Neubig, Ankush Garg, Jonathan Clark, Markus Freitag, and Orhan Firat. The Devil Is in the Errors: Leveraging Large Language Models for Fine-grained Machine Translation Evaluation. *Proceedings of the Eighth Conference on Machine Translation*, pp. 1066–1083, December 2023. doi: 10.18653/v1/2023.wmt-1.100. URL <https://aclanthology.org/2023.wmt-1.100>.
+- Caglar Gulcehre, Tom Le Paine, Srivatsan Srinivasan, Ksenia Konyushkova, Lotte Weerts, Abhishek Sharma, Aditya Siddhant, Alex Ahern, Miaosen Wang, Chenjie Gu, Wolfgang Macherey, Arnaud Doucet, Orhan Firat, and Nando de Freitas. Reinforced Self-Training (ReST) for Language Modeling, August 2023. URL <http://arxiv.org/abs/2308.08998>. arXiv:2308.08998 [cs].
+- Hui Huang, Yingqi Qu, Hongli Zhou, Jing Liu, Muyun Yang, Bing Xu, and Tiejun Zhao. On the Limitations of Fine-tuned Judge Models for LLM Evaluation, June 2024. URL <http://arxiv.org/abs/2403.02839>. arXiv:2403.02839 [cs].
+
+- 594 Nitish Joshi, Javier Rando, Abulhair Saparov, Najoung Kim, and He He. Personas as a Way to  
+595 Model Truthfulness in Language Models, February 2024. URL [http://arxiv.org/abs/](http://arxiv.org/abs/2310.18168)  
+596 [2310.18168](http://arxiv.org/abs/2310.18168). arXiv:2310.18168 [cs].  
+597  
+598 Akbir Khan, John Hughes, Dan Valentine, Laura Ruis, Kshitij Sachan, Ansh Radhakrishnan, Ed-  
+599 ward Grefenstette, Samuel R. Bowman, Tim Rocktäschel, and Ethan Perez. Debating with More  
+600 Persuasive LLMs Leads to More Truthful Answers. *International Conference on Machine Learn-*  
+601 *ing (ICML)*, pp. 23662–23733, 2024. ISSN: 2640-3498.  
+602  
+603 Robert Kirk, Ishita Mediratta, Christoforos Nalmpantis, Jelena Luketina, Eric Hambro, Edward  
+604 Grefenstette, and Roberta Raileanu. Understanding the Effects of RLHF on LLM Gener-  
+605 alisation and Diversity, February 2024. URL <http://arxiv.org/abs/2310.06452>.  
+606 arXiv:2310.06452 [cs].  
+607  
+608 Tamera Lanham, Anna Chen, Ansh Radhakrishnan, Benoit Steiner, Carson Denison, Danny Her-  
+609 nandez, Dustin Li, Esin Durmus, Evan Hubinger, Jackson Kernion, Kamile Lukošūitė, Karina  
+610 Nguyen, Newton Cheng, Nicholas Joseph, Nicholas Schiefer, Oliver Rausch, Robin Larson,  
+611 Sam McCandlish, Sandipan Kundu, Saurav Kadavath, Shannon Yang, Thomas Henighan, Tim-  
+612 othy Maxwell, Timothy Telleen-Lawton, Tristan Hume, Zac Hatfield-Dodds, Jared Kaplan, Jan  
+613 Brauner, Samuel R. Bowman, and Ethan Perez. Measuring Faithfulness in Chain-of-Thought  
+614 Reasoning, July 2023. URL <http://arxiv.org/abs/2307.13702>. arXiv:2307.13702  
+615 [cs].  
+616  
+617 Xian Li, Ping Yu, Chunting Zhou, Timo Schick, Omer Levy, Luke Zettlemoyer, Jason Weston,  
+618 and Mike Lewis. Self-Alignment with Instruction Backtranslation, March 2024. URL [http:](http://arxiv.org/abs/2308.06259)  
+619 [//arxiv.org/abs/2308.06259](http://arxiv.org/abs/2308.06259). arXiv:2308.06259 [cs].  
+620  
+621 Wang Ling, Dani Yogatama, Chris Dyer, and Phil Blunsom. Program Induction by Rationale Gen-  
+622 eration: Learning to Solve and Explain Algebraic Word Problems. *Proceedings of the 55th Annual*  
+623 *Meeting of the Association for Computational Linguistics (Volume 1: Long Papers)*, pp. 158–167,  
+624 July 2017. doi: 10.18653/v1/P17-1015. URL <https://aclanthology.org/P17-1015>.  
+625  
+626 Jian Liu, Leyang Cui, Hanmeng Liu, Dandan Huang, Yile Wang, and Yue Zhang. LogiQA: A  
+627 Challenge Dataset for Machine Reading Comprehension with Logical Reasoning. *Proceedings of*  
+628 *the Twenty-Ninth International Joint Conference on Artificial Intelligence*, pp. 3622–3628, 2020.  
+629 doi: 10.24963/ijcai.2020/501.  
+630  
+631 Yinhong Liu, Han Zhou, Zhijiang Guo, Ehsan Shareghi, Ivan Vulić, Anna Korhonen, and Nigel  
+632 Collier. Aligning with Human Judgement: The Role of Pairwise Preference in Large Language  
+633 Model Evaluators, March 2024. URL <https://arxiv.org/abs/2403.16950v3>.  
+634  
+635 Qing Lyu, Shreya Havaldar, Adam Stein, Li Zhang, Delip Rao, Eric Wong, Marianna Apidianaki,  
+636 and Chris Callison-Burch. Faithful Chain-of-Thought Reasoning. *International Joint Conference*  
+637 *on Natural Language Processing and the 3rd Conference of the Asia-Pacific Chapter of the Asso-*  
+638 *ciation for Computational Linguistics*, pp. 305–329, November 2023. doi: 10.18653/v1/2023.ijc-nlp-main.20.  
+639 URL <https://aclanthology.org/2023.ijc-nlp-main.20>.  
+640  
+641 Andreas Madsen, Sarath Chandar, and Siva Reddy. Are self-explanations from Large Lan-  
+642 guage Models faithful? *Association for Computational Linguistics (ACL)*, pp. 295–337, Au-  
+643 gust 2024a. doi: 10.18653/v1/2024.findings-acl.19. URL [https://aclanthology.org/](https://aclanthology.org/2024.findings-acl.19)  
+644 [2024.findings-acl.19](https://aclanthology.org/2024.findings-acl.19).  
+645  
+646 Andreas Madsen, Siva Reddy, and Sarath Chandar. Faithfulness Measurable Masked Language  
+647 Models. *International Conference on Machine Learning (ICML)*, pp. 34161–34202, July  
+648 2024b. URL <https://proceedings.mlr.press/v235/madsen24a.html>. ISSN:  
+649 2640-3498.  
+650  
+651 Todor Mihaylov, Peter Clark, Tushar Khot, and Ashish Sabharwal. Can a Suit of Armor Conduct  
+652 Electricity? A New Dataset for Open Book Question Answering. *Empirical Methods in Natural*  
+653 *Language Processing (EMNLP)*, pp. 2381–2391, October 2018. doi: 10.18653/v1/D18-1260.  
+654 URL <https://aclanthology.org/D18-1260>.  
+655
+
+[Appendix and supplementary materials beyond page 12 have been removed.]

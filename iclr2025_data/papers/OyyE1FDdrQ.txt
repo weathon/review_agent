@@ -1,0 +1,352 @@
+# $q$ -EXPONENTIAL FAMILY FOR POLICY OPTIMIZATION
+
+Lingwei Zhu\*
+
+University of Tokyo  
+lingwei14@ualberta.ca
+
+Haseeb Shah\*
+
+University of Alberta  
+hshah1@ualberta.ca
+
+Han Wang\*
+
+University of Alberta  
+han8@ualberta.ca
+
+Yukie Nagai
+
+University of Tokyo
+
+Martha White
+
+University of Alberta
+
+## ABSTRACT
+
+Policy optimization methods benefit from a simple and tractable policy parametrization, usually the Gaussian for continuous action spaces. In this paper, we consider a broader policy family that remains tractable: the  $q$ -exponential family. This family of policies is flexible, allowing the specification of both heavy-tailed policies ( $q > 1$ ) and light-tailed policies ( $q < 1$ ). This paper examines the interplay between  $q$ -exponential policies for several actor-critic algorithms conducted on both online and offline problems. We find that heavy-tailed policies are more effective in general and can consistently improve on Gaussian. In particular, we find the Student’s t-distribution to be more stable than the Gaussian across settings and that a heavy-tailed  $q$ -Gaussian for Tsallis Advantage Weighted Actor-Critic consistently performs well in offline benchmark problems. In summary, we find that the Student’s t policy a strong candidate for drop-in replacement to the Gaussian. Our code is available at <https://github.com/lingweizhu/qexp>.
+
+## 1 INTRODUCTION
+
+Policy optimization methods optimize the parameters of a stochastic policy towards maximizing some performance measure (Sutton et al., 1999). These methods benefit from a simple and tractable policy functional. For discrete action spaces, the Boltzmann-Gibbs (BG) policy is often preferred (Mei et al., 2020; Cen et al., 2022); while the Gaussian policy is standard for the continuous case. For continuous action spaces, sampling the BG policy is computationally expensive due to the normalizing log-partition function. A Gaussian policy is often used as a tractable approximation. While there are other candidates such as the Beta policy (Chou et al., 2017), the Gaussian remains the most common choice for both online and offline policy optimization methods (Haarnoja et al., 2018; Neumann et al., 2023; Xiao et al., 2023).
+
+In this paper, we consider a broader policy family that remains tractable called the  $q$ -exponential family. The  $q$ -exponential family was proposed to study non-extensive system behaviors in the statistical physics (Naudts, 2010; Matsuzoe & Ohara, 2011), and has recently been exploited in transformers (Peters et al., 2019; Martins et al., 2022). By setting  $q = 1$ , it recovers the standard exponential family. With  $q > 1$ , we can obtain policies with heavier tails than the Gaussian, such as the Student’s t-distribution (Kobayashi, 2019) or the Lévy Process distribution (Simsekli et al., 2019; Bedi et al., 2024). Heavy-tailed distributions can preferable as they are more robust (Lange et al., 1989), can facilitate exploration and help escape local optima in the sparse reward context (Chakraborty et al., 2023). When  $q < 1$ , light-tailed (sparse) policies such as the  $q$ -Gaussian distribution can be recovered. The sparse  $q$ -Gaussian has finite support and
+
+![Figure 1: A plot showing the policy parametrizations in this paper. The x-axis is labeled 'a' and the y-axis is labeled 'pi_theta(a)'. The plot compares four distributions: Gaussian (red line), q-Gaussian q = 0 (grey line), q-Gaussian q = 2 (blue line), and Student's t nu = 2 (yellow line). The q-Gaussian q = 2 distribution is the most spread out, followed by the Student's t nu = 2 distribution, then the Gaussian distribution, and finally the q-Gaussian q = 0 distribution which is the most concentrated.](207c4bf0dce180461dfd17ac04bb84bc_img.jpg)
+
+Figure 1: A plot showing the policy parametrizations in this paper. The x-axis is labeled 'a' and the y-axis is labeled 'pi\_theta(a)'. The plot compares four distributions: Gaussian (red line), q-Gaussian q = 0 (grey line), q-Gaussian q = 2 (blue line), and Student's t nu = 2 (yellow line). The q-Gaussian q = 2 distribution is the most spread out, followed by the Student's t nu = 2 distribution, then the Gaussian distribution, and finally the q-Gaussian q = 0 distribution which is the most concentrated.
+
+Figure 1: The policy parametrizations in this paper. Student’s t is a  $q$ -exponential with  $q = 1 + 2/(\nu + 1) \approx 1.67$ .
+
+\*indicates joint first authors.
+
+| Reference                                  | Scope of exp $_q$  | Explicit? | Heavy & Sparse? | Continuous? | RL? |
+|--------------------------------------------|--------------------|-----------|-----------------|-------------|-----|
+| Naudts (2010); Matsuzoe & Ohara (2011)     | $q \in \mathbb{R}$ | -         | ✓               | ✓           | ✗   |
+| Martins et al. (2022)                      | $q < 1$            | -         | ✗               | ✓           | ✗   |
+| Lee et al. (2018); Chow et al. (2018a)     | $q = 0$            | ✓         | ✗               | ✗           | ✓   |
+| Lee et al. (2020); Zhu et al. (2023; 2024) | $q < 1$            | ✗         | ✗               | ✓           | ✓   |
+| Li et al. (2023)                           | $q = 0$            | ✓         | ✗               | ✓           | ✓   |
+| This paper                                 | $q \in \mathbb{R}$ | ✓         | ✓               | ✓           | ✓   |
+
+Table 1: Existing works and their scopes. We are the first to consider the general  $q$ -exponential family for the parameterized policy in reinforcement learning. The family includes continuous heavy-tailed and sparse policies. Prior works in RL considered only the discrete case or continuous policy with a specific entropic index  $q$ . Further, in many cases they still used a Gaussian policy parameterization to approximate an implicit target distribution that is a  $q$ -exponential, rather than explicitly using the  $q$ -Gaussian as the policy parameterization.
+
+can serve as a continuous generalization of the discrete sparsemax. As a result,  $q$ -Gaussian helps alleviate safety concerns incurred by the infinite support Gaussian (Xu et al., 2023; Li et al., 2023).
+
+Such  $q$ -exponential families have been considered in reinforcement learning, with the existing work summarized in Table 1. Lee et al. (2018); Chow et al. (2018b) studied the discrete setting with  $q = 0$ , called the sparsemax. Li et al. (2023) similarly considered  $q = 0$  policy parameterization for the continuous action setting. All other works, however, used a Gaussian policy parameterization to (implicitly) approximate an idealized target distribution that is  $q$ -Gaussian, and specifically for  $q < 1$  Lee et al. (2020); Zhu et al. (2024). Such a choice is suboptimal, as Gaussians are used to approximate light-tailed (sparse) target policies. And in fact that choice was not strictly necessary as the policy parameterization need not have been chosen to be Gaussian: it could also have been a  $q$ -Gaussian. Though obvious in hindsight, this gap was likely due to simply not considering the use of general continuous  $q$ -exponential family for the policy parameterization, which is what we introduce in this work.
+
+In this paper, we empirically investigate the  $q$ -exponential family as a replacement for the Gaussian inside several existing policy optimization algorithms. Our contributions include the following. (1) We show how to use  $q$ -exponential family policy parameterizations inside a variety of existing actor-critic algorithms. (2) We provide comprehensive experiments on both online and offline problems showing that  $q$ -exponential family policies can improve on the Gaussian by a large margin. In particular, we find that the Student’s  $t$  policy is more stable, performing well across algorithms and problems, shown in Figure 2. (3) We provide empirical evidence supporting the assumption that algorithms may prefer specific policies depending on the actor loss objective. In particular, we find that by replacing the Gaussian with a heavy-tailed  $q$ -Gaussian, Tsallis Advantage Weighted Actor-Critic (Zhu et al., 2024) consistently performs better across offline benchmark problems. This outcome makes sense; as mentioned above, this algorithm implicitly has a target policy that is a  $q$ -Gaussian, so using a matching  $q$ -Gaussian parameterization should perform better.
+
+## 2 BACKGROUND
+
+We focus on discounted Markov Decision Processes (MDPs) expressed by the tuple  $(\mathcal{S}, \mathcal{A}, P, \mu, r, \gamma)$ , where  $\mathcal{S}$  and  $\mathcal{A}$  denote state space and action space, respectively. Let  $\Delta(\mathcal{X})$  denote the set of probability distributions over  $\mathcal{X}$ .  $P$  and  $\mu$  denote the transition probability and initial state distribution, respectively.  $r(s, a)$  defines the reward associated with that transition.  $\gamma \in (0, 1)$  is the discount factor.
+
+![Figure 2: Performance relative to the Squashed Gaussian on the offline D4RL MuJoCo task. The chart shows performance relative to Squashed Gaussian (%) for four policies: Heavy-Tailed q-Gaussian, Student's t, Beta, and Gaussian. The Heavy-Tailed q-Gaussian policy shows the highest performance, followed by Student's t, Beta, and Gaussian. A dashed vertical line at 100% indicates the performance of the Squashed Gaussian policy.](1ac0e11d90bece49015adc89be472a39_img.jpg)
+
+| Policy                     | Performance relative to Squashed Gaussian (%) |
+|----------------------------|-----------------------------------------------|
+| Heavy-Tailed $q$ -Gaussian | ~110                                          |
+| Student’s $t$              | ~105                                          |
+| Beta                       | ~100                                          |
+| Gaussian                   | ~95                                           |
+
+Figure 2: Performance relative to the Squashed Gaussian on the offline D4RL MuJoCo task. The chart shows performance relative to Squashed Gaussian (%) for four policies: Heavy-Tailed q-Gaussian, Student's t, Beta, and Gaussian. The Heavy-Tailed q-Gaussian policy shows the highest performance, followed by Student's t, Beta, and Gaussian. A dashed vertical line at 100% indicates the performance of the Squashed Gaussian policy.
+
+Figure 2: Performance relative to the Squashed Gaussian on the offline D4RL MuJoCo task, averaged across the selected algorithms and environments.
+
+A policy  $\pi : \mathcal{S} \rightarrow \Delta(\mathcal{A})$  is a mapping from the state space to distributions over actions. To assess the quality of a policy, we define the expected return as  $J(\pi) = \int_{\mathcal{S}} \rho^\pi(s) \int_{\mathcal{A}} \pi(a|s) r(s, a) da ds$ , where  $\rho^\pi(s) = \sum_{t=0}^{\infty} \gamma^t P(s_t = s)$  is the unnormalized state visitation frequency. The goal is to learn a policy that maximizes  $J(\pi)$ . We also define the action value and state value as  $Q^\pi(s, a) = \mathbb{E}_\pi [\sum_{t=0}^{\infty} \gamma^t r(s_t, a_t) | s_0 = s, a_0 = a]$ ,  $V^\pi(s) = \mathbb{E}_\pi [Q^\pi(s, a)]$ . For the ease of later notations, we write the dependence on state as subscript, e.g.  $Q(s, a)$  will be written as  $Q_s(a)$ .
+
+In practice, the policy is often parametrized by a vector of parameters  $\theta \in \mathbb{R}^n$ . The policy can then be optimized by adjusting its parameters to the high reward region utilizing its gradient information.
+
+The Policy Gradient Theorem (Sutton et al., 1999) featured by many policy gradient methods states that the gradient can be computed by:
+
+$$\nabla_\theta J(\pi; \theta) = \mathbb{E}_{s \sim \rho^\pi, a \sim \pi_\theta} [Q_s^\pi(a) \nabla_\theta \ln \pi_s(a; \theta)].$$
+
+In practice, the expectation is approximated by sampling. When the state space is large, the action value function is also parametrized, leading to the Actor-Critic methods (Degris et al., 2012).
+
+In contrast to the study of policy gradient algorithms, the impact of specific policy parametrizations on performance remains a less studied topic. Researchers typically consider policy parametrizations that can be written as the following:
+
+$$\pi_s(a; \theta) = \frac{1}{Z_s} \exp(\theta^\top \phi_s(a)) = \exp(\theta^\top \phi_s(a) - Z'_s). \quad (1)$$
+
+Here,  $\phi_s(a)$  is a vector of statistics and  $\theta \in \mathbb{R}^n$  is a vector of parameters,  $Z_s$  is the normalizing constant ensuring the policy is a valid distribution and  $Z_s := \exp(Z'_s)$ . One immediate instance is the Boltzmann-Gibbs (BG) policy  $\pi_{\text{BG},s}(a; \theta) = \exp(Q_s(a) - Z_s)$ , where  $Z'_s = \ln \int \exp(Q_s(a)) da$  is the log-partition function. In the discrete case, it is also called the *softmax transformation* (Cover & Thomas, 2006). BG policy has been studied extensively in RL for encouraging exploration and smoothing the optimization landscape, to name a few applications (Haarnoja et al., 2018; Ahmed et al., 2019; Cen et al., 2022). However, evaluating the log-partition function is in general intractable.
+
+## 3 EXPONENTIAL AND $q$ -EXPONENTIAL FAMILIES
+
+We first review the commonly used policy parametrizations. They permit an expression using the exponential function. We arrive at the more general  $q$ -exponential family by deforming the exponential. In Table 2, we summarize all policies presented in the paper.
+
+### 3.1 THE EXPONENTIAL FAMILY POLICIES
+
+The Gaussian policy is one of the simplest distributions one can consider due to its omnipresence in statistics and parametric estimation as well as its widely available sampling procedure implementations. Since evaluating the log-partition function of BG is intractable, due to the aforementioned advantages many researchers consider the Gaussian policy instead:  $\pi_s(a) = \frac{1}{\sqrt{2\pi}\sigma_s} \exp\left(-\frac{(a-\mu_s)^2}{2\sigma_s^2}\right)$ . For simplicity we drop the dependence on state  $s$ . To see it is a member of the exponential family, in Eq. (1) let  $\theta = [\frac{\mu}{\sigma^2}, -\frac{1}{2\sigma^2}]^\top$  for  $\mu \in (-\infty, \infty), \sigma > 0$ ;  $\phi_s(a) = [a, a^2]^\top$ , and  $Z_s = \ln(\sqrt{2\pi}\sigma)$ . This amounts to setting  $Q_s(a) = -\frac{(a-\mu)^2}{2\sigma^2}$  in the BG (Gu et al., 2016). We write a Gaussian policy as  $\pi_{\mathcal{N},s}(a) = \mathcal{N}(a; \mu, \sigma^2)$ . The gradients of the Gaussian are  $\nabla_\mu \ln \pi_s(a) = \frac{(a-\mu)}{\sigma^2}$  and  $\nabla_\sigma \ln \pi_s(a) = \frac{(a-\mu)^2}{\sigma^3} - \frac{1}{\sigma}$ . On one hand, the Gaussian policy is simple to implement. On the other hand, when  $\sigma$  becomes small, Gaussian can be unstable due to overly large gradients and can prematurely concentrate on a suboptimal action. As a result, it is susceptible to noise/outliers and does not encourage sufficient exploration due to its thin tails. This paper investigates location-scale alternatives within the generalized  $q$ -exponential family.
+
+Another interesting member is the Beta distribution (Chou et al., 2017):  $\pi_{\text{Beta},s}(a) = \frac{\Gamma(\alpha+\beta)}{\Gamma(\alpha)\Gamma(\beta)} a^{\alpha-1} (1-a)^{\beta-1}$ ,  $a \in (0, 1)$ , where  $\Gamma(\cdot)$  is the gamma function. It can be retrieved from equation 1 by letting  $\theta = [\alpha, \beta]^\top$ ,  $\phi_s(a) = [\ln a, \ln(1-a)]^\top$ ,  $Z_s = \frac{\Gamma(\alpha)\Gamma(\beta)}{\Gamma(\alpha+\beta)}$ . Since Beta distribution's support is bounded between  $(0, 1)$ , Chou et al. (2017) argued that it might alleviate the
+
+| Family   | Policy                                                     | Parameters $\theta$                                  | Statistics $\phi_s(a)$ | Normalization $Z_s$                                                                                                                                                                | $\nabla \ln \pi_s(a)$ |
+|----------|------------------------------------------------------------|------------------------------------------------------|------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-----------------------|
+| exp      | Gaussian                                                   | $[\frac{\mu}{\sigma^2}, -\frac{1}{2\sigma^2}]$       | $[a, a^2]$             | $\sqrt{2\pi}\sigma$                                                                                                                                                                | Eq. (13)              |
+|          | Beta                                                       | $[\alpha, \beta]$                                    | $[\ln a, \ln(1-a)]$    | $\frac{\Gamma(\alpha)\Gamma(\beta)}{\Gamma(\alpha+\beta)}$                                                                                                                         | -                     |
+| $q$ -exp | Student's t                                                | $[\frac{-2\mu}{\nu\sigma^2}, \frac{1}{\nu\sigma^2}]$ | $[a, a^2]$             | $\frac{\sqrt{\pi\nu}\sigma\Gamma(\frac{\nu}{2})}{\Gamma(\frac{\nu-1}{2})}$                                                                                                         | Eq. (14)              |
+|          | $q$ -Gaussian ( $q < 1$ )<br>$q$ -Gaussian ( $1 < q < 3$ ) | $[\frac{\mu}{\sigma^2}, -\frac{1}{2\sigma^2}]$       | $[a, a^2]$             | $\sqrt{\frac{\pi}{1-q}\frac{\Gamma(\frac{1}{1-q}+\frac{1}{2})}{\Gamma(\frac{1}{1-q})}}$<br>$\sqrt{\frac{\pi}{q-1}\frac{\Gamma(\frac{1}{q-1}-\frac{1}{2})}{\Gamma(\frac{1}{q-1})}}$ | Eq. (15)              |
+
+Table 2: Policy parametrizations from the exp and  $q$ -exp families studied in this paper. We are primarily interested in the location-scale family. Their multivariate forms are shown in Appendix A.
+
+![Figure 3: Three plots showing the behavior of exp_q(x) and ln_q(x) for different values of q. The left plot shows exp_q(x) for q = -1, 0, 1, 2. The middle plot shows ln_q(x) for q = -1, 0, 1, 2. The right plot shows the probability density function pi_q(a) for q = -1, 0, 1, 2.](f961cbef0f8217e216b553bed270315b_img.jpg)
+
+Figure 3 consists of three subplots. The left plot shows the function  $\exp_q x$  on the y-axis against  $x$  on the x-axis, ranging from -2 to 2. The middle plot shows the function  $\ln_q x$  on the y-axis against  $x$  on the x-axis, ranging from 0 to 3. The right plot shows the probability density function  $\pi_q(a)$  on the y-axis against  $a$  on the x-axis. All three plots compare four curves corresponding to  $q = -1$  (dotted),  $q = 0$  (dashed),  $q = 1$  (solid), and  $q = 2$  (dash-dot). In the left plot, for  $q < 1$ , the function returns zero values for negative  $x$ . In the middle plot, for  $q > 1$ , the function decays more slowly towards zero. In the right plot, the  $q$ -Gaussian distribution with  $q = -1$  is the most peaked, while the distribution with  $q = 2$  is the most spread out.
+
+Figure 3: Three plots showing the behavior of exp\_q(x) and ln\_q(x) for different values of q. The left plot shows exp\_q(x) for q = -1, 0, 1, 2. The middle plot shows ln\_q(x) for q = -1, 0, 1, 2. The right plot shows the probability density function pi\_q(a) for q = -1, 0, 1, 2.
+
+Figure 3:  $\exp_q x$  and  $\ln_q x$  for  $q < 1$  and  $q > 1$ . When  $q = 1$  they respectively recover their standard counterpart. For  $q < 1$  the  $q$ -exp can return zero values and hence  $q$ -exp policies may achieve sparsity. For  $q > 1$ ,  $q$ -exp decays more slowly towards 0, resulting in heavy-tailed behaviors. The rightmost shows the  $q$ -Gaussian with different  $q$ .
+
+bias introduced by truncating Gaussian densities outside the action space bounds. The beta policy is the only non-location-scale family distribution in this paper. However, as we will show in the experiments, the Beta policy generally does not perform favourably against the Gaussian.
+
+### 3.2 THE $q$ -EXPONENTIAL FAMILY, HEAVY-TAILED AND LIGHT-TAILED POLICIES
+
+Generalizing the exponential family using the  $q$ -exponential function has been extensively discussed in statistical physics (Naudts, 2002; Tsallis, 2009; Naudts, 2010; Amari & Ohara, 2011). In the machine learning literature, the  $q$ -exponential generalization has attracted some attention since it allows for tuning the tail behavior by adjusting the value of  $q$  (Sears, 2008; Ding & Vishwanathan, 2010; Amid et al., 2019). The  $q$ -exponential and its unique inverse function  $q$ -logarithm are:
+
+$$\exp_q x := \begin{cases} \exp x, & q = 1 \\ [1 + (1 - q)x]_+^{\frac{1}{1-q}}, & q \neq 1 \end{cases}, \quad \ln_q x := \begin{cases} \ln x, & q = 1 \\ \frac{x^{1-q} - 1}{1-q}, & q \neq 1 \end{cases} \quad (2)$$
+
+where  $[x]_+ := \max\{x, 0\}$ .  $q$ -exp/log generalize exp/log since  $\lim_{q \rightarrow 1} \exp_q x = \exp x$  and  $\lim_{q \rightarrow 1} \ln_q x = \ln x$ . Similar to exp,  $q$ -exp is an increasing and convex function for  $q > 0$ , satisfying  $\exp_q(0) = 1$ . However, an important difference of  $q$ -exp is that  $\exp_q(a + b) \neq \exp_q(a) \exp_q(b)$  unless  $q = 1$ . We visualize  $q$ -exp/log in Figure 3.
+
+We now define the  $q$ -exponential family as:
+
+$$\pi_{q,s}(a; \theta) = \frac{1}{Z_{q,s}} \exp_q(\theta^\top \phi_s(a)) = \exp_q(\theta^\top \phi_s(a) - Z'_{q,s}), \quad (3)$$
+
+where  $\theta, \phi_s(a), Z_{q,s}$  have similar meanings to equation 1. Note that  $Z_{q,s} \neq \exp_q(Z'_{q,s})$  unless  $q = 1$ . The  $q$ -exponential family includes the  $q$ -Gaussian and Student's t distributions described in the next subsections.
+
+#### 3.2.1 $q$ -GAUSSIAN
+
+As the counterpart of Gaussian in the  $q$ -exp family,  $q$ -Gaussian unifies both light-tailed and heavy-tailed policies by varying the entropic index  $q$  (Matsuzoe & Ohara, 2011):
+
+$$\pi_{N_q,s}(a) = \frac{1}{Z_{q,s}} \exp_q \left( -\frac{(a - \mu)^2}{2\sigma^2} \right),$$
+
+$$\text{where } Z_{q,s} = \begin{cases} \sigma \sqrt{\frac{\pi}{1-q}} \Gamma\left(\frac{1}{1-q} + 1\right) / \Gamma\left(\frac{1}{1-q} + \frac{3}{2}\right) & \text{if } -\infty < q < 1, \\ \sigma \sqrt{\frac{\pi}{q-1}} \Gamma\left(\frac{1}{q-1} - \frac{1}{2}\right) / \Gamma\left(\frac{1}{q-1}\right) & \text{if } 1 < q < 3. \end{cases} \quad (4)$$
+
+It is heavy-tailed when  $1 < q < 3$  and light-tailed when  $q < 1$ .  $\pi_{N_q,s}(a)$  is no longer integrable for  $q \geq 3$  (Naudts, 2010). We visualize these  $q$ -Gaussians in Figure 3.
+
+Since popular libraries like the PyTorch (Paszke et al., 2019) do not have implementations of  $q$ -Gaussians available, we discuss their sampling methods. It was shown by (Martins et al., 2022) that a sparse  $q$ -Gaussian ( $q < 1$ ) random variable permits a stochastic representation  $\mu + rAu$ , where  $u \sim \text{Unif}(\mathbb{S}^N)$  is a random sample from the  $N-1$  dimensional unit sphere.  $A$  is the scaled matrix  $|\Sigma|^{-\frac{1}{2N+1-q}} \Sigma^{\frac{1}{2}}$ .  $r$  is the radius of the distribution, and the ratio follows the Beta distribution  $r^2/R^2 \sim \text{Beta}((2-q)/(1-q), N/2)$ , where  $R$  is radius of the supporting sphere of the standard  $q$ -Gaussian  $\mathcal{N}_q(0, I)$ :
+
+$$R = \left( \frac{\Gamma\left(\frac{N}{2} + \frac{2-q}{1-q}\right)}{\Gamma\left(\frac{2-q}{1-q}\right) \pi^{\frac{N}{2}}} \cdot \left(\frac{2}{1-q}\right)^{\frac{1}{1-q}} \right)^{\frac{1-q}{2+(1-q)N}}. \quad (5)$$
+
+Notice that  $R$  depends only on the dimensionality  $N$  and the entropic index  $q$ . This method provides low-variance samples, but unfortunately it does not extend to  $q > 1$ . Therefore, for  $1 < q < 3$  we adopt the Generalized Box-Müller Method (GBMM) (Thistleleton et al., 2007) to transform uniform random variables  $u_1, u_2 \sim \text{Unif}(0, 1)^N$  by the following:
+
+$$z_1 = \sqrt{-2 \ln_q(u_1)} \cdot \cos(2\pi u_2), \quad z_2 = \sqrt{-2 \ln_q(u_1)} \cdot \sin(2\pi u_2). \quad (6)$$
+
+Then each of  $z_1, z_2$  is a standard  $q$ -Gaussian variable with new entropic index  $q' = (3q-1)/(q+1)$ . Often we know the desired  $q'$  in advance, in this case we simply let the  $q$ -log take on the index  $q = (q'-1)/(3-q')$ . The desired random vector is given by  $\mu + \Sigma^{\frac{1}{2}}z$ .
+
+#### 3.2.2 STUDENT'S T
+
+Heavy-tailed distributions like the Student's t are popular for robust modelling (Lange et al., 1989). The Student's t distribution is
+
+$$\pi_{St,s}(a) = \frac{\Gamma\left(\frac{\nu+1}{2}\right)}{\sqrt{\nu\pi}\sigma \Gamma\left(\frac{\nu}{2}\right)} \left( 1 + \frac{(a - \mu)^2}{\sigma\nu} \right)^{-\frac{\nu+1}{2}}, \quad (7)$$
+
+where  $\nu > 0$  is the degree of freedom. As  $\nu \rightarrow \infty$ , Student's t distribution approaches the Gaussian. Numerically, Student's t with  $\nu \geq 30$  is considered to closely match the Gaussian. Therefore,  $\nu$  can be an important learnable parameter in addition to its location  $\mu$  and scale  $\sigma$ . It allows the policy to adaptively balance the exploration-exploitation trade-off by interpolating the Gaussian and heavy-tailed policies. Now let  $q = 1 + \frac{2}{\nu+1}$  and define
+
+$$Z_{q,s} := \frac{\sqrt{\nu\pi}\sigma \Gamma\left(\frac{\nu}{2}\right)}{\Gamma\left(\frac{\nu+1}{2}\right)}, \quad \theta^\top \phi_s(a) := \frac{Z_{q,s}^{q-1}}{(1-q)} \frac{(a - \mu)^2}{\sigma},$$
+
+$$\Rightarrow \pi_{St,s}(a) = \exp_q(\theta^\top \phi_s(a) - \ln_2 Z_{q,s}), \quad (8)$$
+
+##### Algorithm 1: $q$ -Gaussian sampling
+
+---
+
+```
+
+Input:  $q, N, \mu, \Sigma$ 
+if  $q < 1$  then
+  sample  $u \sim \text{Unif}(\mathbb{S}^N)$ 
+  sample  $z \sim \text{Beta}\left(\frac{2-q}{1-q}, \frac{N}{2}\right)$ 
+  compute  $R$  per Eq. (5)
+  compute  $A = |\Sigma|^{-\frac{1}{2N+1-q}} \Sigma^{\frac{1}{2}}$ 
+  return  $\mu + \sqrt{z}R^2Au$ 
+else if  $q > 1$  then
+  sample  $u_1, u_2 \sim \text{Unif}(0, 1)^N$ 
+  compute  $z$  by GBMM Eq. (6)
+  return  $\mu + \Sigma^{\frac{1}{2}}z$ 
+
+```
+
+---
+
+which we see it is indeed a  $q$ -exp policy and  $Z'_{q,s} = \ln_{2-q} Z_{q,s}$ . Student's t policy has been used in (Kobayashi, 2019) to encourage exploration and to escape local optima. Another related case is the Cauchy's distribution recovered when  $q = 2$  (or  $\nu = 1$  from Student's t). Cauchy's distribution can be used as the starting point for learning Student's t. Note that Cauchy's distribution does not have valid mean, variance or any higher moments.
+
+## 4 USING $q$ -EXPONENTIAL FAMILIES FOR ACTOR-CRITIC ALGORITHMS
+
+In this section, we outline three key actor-critic algorithms we use in our study and the nuances of incorporating  $q$ -exp policies into them. For example, the  $q$ -exp policies may not have closed-form Shannon entropy. Therefore, approximations are needed for algorithms like SAC and GreedyAC. Moreover, though for the Gaussian evaluating the log-likelihood for off-policy/offline actions causes no problem, it raises a new issue for the light-tailed  $q$ -Gaussian, since these actions can fall outside of its support.
+
+**Soft Actor-Critic.** SAC (Haarnoja et al., 2018) encourages exploration by adding to reward the Shannon entropy. The actor minimizes the following KL loss
+
+$$\mathcal{L}_{\text{SAC}}(\phi) := \mathbb{E}_{s \sim \mathcal{B}} [D_{\text{KL}}(\pi_{\phi,s} \parallel \pi_{\text{BG},s})] = \mathbb{E}_{s \sim \mathcal{B}} \left[ D_{\text{KL}} \left( \pi_{\phi,s} \parallel \frac{\exp(\tau^{-1} Q_s)}{Z_s} \right) \right],$$
+
+where states are sampled from replay buffer  $\mathcal{B}$ . The parametrized policy  $\pi_{\phi}$  is projected to be close to the BG policy. By default  $\pi_{\phi}$  is chosen to be the Gaussian policy, but potentially a more exploring policy like the Student's t could be better. Depending on action values, BG can have multiple modes and heavy tails. The Gaussian may not be able to fully capture these characteristics.
+
+**Greedy Actor-Critic.** GreedyAC (Neumann et al., 2023) maintains an additional proposal policy for exploration by maximizing Shannon entropy augmented rewards. Its actor policy maximizes unbiased reward and learns from the high-quality actions generated by the proposal policy. To simplify notations, we use  $I(s)$  to denote the set of high quality actions given  $s$ .
+
+$$\begin{aligned} \mathcal{L}_{\text{GreedyAC, prop}}(\phi) &:= \mathbb{E}_{\substack{s \sim \mathcal{B} \\ a \in I(s)}} [-\ln \pi_{\phi,s} - \mathcal{H}(\pi_{\phi,s})], \\ \mathcal{L}_{\text{GreedyAC, actor}}(\bar{\phi}) &:= \mathbb{E}_{\substack{s \sim \mathcal{B} \\ a \in I(s)}} [-\ln \pi_{\bar{\phi},s}]. \end{aligned}$$
+
+GreedyAC maximizes log-likelihood of the actor and entropy-augmented likelihood for the proposal policy. Note that when  $\pi_{\phi,s}$  is a  $q$ -exp policy, it may not have a closed-form Shannon entropy expression. Therefore, we can use log-probabilities as a surrogate just like in SAC.
+
+**Tsallis Advantage Weighted Actor-Critic.** TAWAC (Zhu et al., 2024) proposed to use a light-tailed  $q$ -exp policy for offline learning. However, the light-tailed distribution was approximated with the Gaussian which is an infinite-support policy. Let  $\pi_{\mathcal{D}}$  denote the empirical behavior policy and  $\mathcal{D}$  the offline dataset. TAWAC minimizes the following actor loss:
+
+$$\mathcal{L}(\phi) := \mathbb{E}_{s \sim \mathcal{D}} [D_{\text{KL}}(\pi_{\text{TKL},s} \parallel \pi_{\phi,s})] = \mathbb{E}_{\substack{s \sim \mathcal{D} \\ a \sim \pi_{\mathcal{D}}}} \left[ -\exp_{q'} \left( \frac{Q_s(a) - V_s}{\tau} \right) \ln \pi_{\phi,s}(a) \right], \quad (9)$$
+
+where  $\pi_{\text{TKL},s}(a) \propto \pi_{\mathcal{D},s}(a) \exp_{q'}(\tau^{-1}(Q_s(a) - V_s))$  denotes the Tsallis KL regularized policy.  $\pi_{\phi,s}$  mimics a TKL policy which can be sparse depending on  $q'$ . In this case, it is natural to expect that a sparse policy parametrization may lead to better performance.
+
+Algorithms like TAWAC that sample from a behavior policy  $\pi_{\mathcal{D}}$  needs extra caution when using the  $q$ -exp policies. When the light-tailed  $q$ -Gaussian is used, numerical issues can be incurred since the action sampled may fall outside the support of  $\pi_{\phi}$ , leading to undefined log-likelihood. To resolve this problem, we propose to sample from  $\pi_{\phi}$  a batch of  $K$  actions and replace the out-of-support action with the in-support one with least  $L_2$  distance, see Alg. 2.
+
+---
+
+**Algorithm 2:** Out-of-support action handling for the light-tailed  $q$ -Gaussian
+
+---
+
+**Input:** out-of-support action  $a$   
+sample in-support actions  $\{b_i\}_{i=1:K}$   
+solve  $i^* = \arg \min_i |b_i - a|_2^2$   
+**return**  $b_{i^*}$
+
+---
+
+![Figure 4: Learning curves on the classic control environments. The figure is a 4x3 grid of plots. The columns represent three environments: Mountain Car, Acrobot, and Pendulum. The rows represent four different algorithms: SAC, Greedy-AC, TAWAC(0), and TAWAC(2). Each plot shows the reward (y-axis) over the number of steps (x-axis). The x-axis ranges from 0 to 300,000 steps. The y-axis ranges from -1000 to -200 for Mountain Car and Acrobot, and from -3500 to -500 for Pendulum. Each plot contains multiple lines representing different policy parameterizations: Beta (purple), Gaussian (red), Light-tailed Gaussian (orange), Student-t (green), and Heavy-tailed Gaussian (blue). The lines are semi-transparent, showing the density of the curves. In most cases, the Gaussian policy (red) shows lower reward performance compared to other policies, especially in the Mountain Car and Acrobot environments.](73c3e4508cae529acf4e6c7fa70b361a_img.jpg)
+
+Figure 4: Learning curves on the classic control environments. The figure is a 4x3 grid of plots. The columns represent three environments: Mountain Car, Acrobot, and Pendulum. The rows represent four different algorithms: SAC, Greedy-AC, TAWAC(0), and TAWAC(2). Each plot shows the reward (y-axis) over the number of steps (x-axis). The x-axis ranges from 0 to 300,000 steps. The y-axis ranges from -1000 to -200 for Mountain Car and Acrobot, and from -3500 to -500 for Pendulum. Each plot contains multiple lines representing different policy parameterizations: Beta (purple), Gaussian (red), Light-tailed Gaussian (orange), Student-t (green), and Heavy-tailed Gaussian (blue). The lines are semi-transparent, showing the density of the curves. In most cases, the Gaussian policy (red) shows lower reward performance compared to other policies, especially in the Mountain Car and Acrobot environments.
+
+Figure 4: Learning curves on the classic control environments. Only the Gaussian and the best policy parametrization for each setting were shown with full opacity. The best policy is picked based on the total area under the curve (AUC). TAWAC(0) refers to TAWAC with entropic index  $q' = 0$  in Eq. (9). Despite tuning hyperparameters separately for each policy, Gaussian is the best policy in only 1/12 settings. In most other settings, the Gaussian policy performs significantly worse than the best.
+
+![Figure 5: Two bar charts comparing different policy parameterizations. The left chart shows the 'Percentage of times better than Gaussian' for Heavy-Tailed Gaussian, Student-t, Beta, and Light-Tailed Gaussian. The right chart shows the 'Count of times the policy is best' for the same parameterizations. A dashed line at 50% in the left chart indicates the threshold for being better than Gaussian on average.](a6a8016b231533e7f34b550f4676afc6_img.jpg)
+
+| Policy Parametrization | Percentage of times better than Gaussian | Count of times the policy is best |
+|------------------------|------------------------------------------|-----------------------------------|
+| Heavy-Tailed Gaussian  | ~25%                                     | 1                                 |
+| Student-t              | ~75%                                     | 5                                 |
+| Beta                   | ~42%                                     | 3                                 |
+| Light-Tailed Gaussian  | ~66%                                     | 2                                 |
+| Gaussian               | 0%                                       | 1                                 |
+
+Figure 5: Two bar charts comparing different policy parameterizations. The left chart shows the 'Percentage of times better than Gaussian' for Heavy-Tailed Gaussian, Student-t, Beta, and Light-Tailed Gaussian. The right chart shows the 'Count of times the policy is best' for the same parameterizations. A dashed line at 50% in the left chart indicates the threshold for being better than Gaussian on average.
+
+Figure 5: (Left) The percentage of times that each policy parametrization is better than the Gaussian across all algorithm-environment combinations based on total AUC. If the bar is above the 50% line, then it means that the policy parametrization is better than Gaussian on average. We see that Student’s t and Light-tailed Gaussians are better than the Gaussian in 75% and 66% of the settings, respectively. (Right) Count of times where a policy parametrization performed the best across all algorithm-environment combinations based on AUC. We observe that the student-t policy performed the best in 5/12 settings, whereas the Gaussian policy performed the best only once.
+
+## 5 EXPERIMENTS
+
+Our empirical study’s primary goal is to understand better the performance differences under this broader class of policy parameterizations in both online and offline settings. We ran experiments
+
+with different algorithms, to get a better sense of how conclusions about policy parameterization vary across different actor-critic algorithms.
+
+We parametrize Student’s t’s DOF parameter  $\nu$  in addition to its location and scale. By contrast, the heavy-tailed  $q$ -Gaussian is fixed at  $q = 2$ , since its allowable range is  $1 < q < 3$ . For the light-tailed  $q$ -Gaussian, we opt for the standard choice of  $q = 0$ . Since Student’s t, heavy-tailed  $q$ -Gaussian, and Gaussian have unbounded support, we clipped the sampled action to fit the task’s action space without modifying the density. We swept the hyperparameters using five random seeds, then increased the number of seeds to 10 for the best parameter setting. The hyperparameter sweep ranges and the best values are provided in Appendix D.2 and D.3.
+
+### 5.1 ONLINE CLASSIC CONTROL
+
+**Domains and Baselines.** We used three classical control environments in the continuous action setting: Mountain Car (Sutton & Barto, 2018), Pendulum (Degris et al., 2012) and Acrobot (Sutton & Barto, 2018). We chose the cost-to-goal version of Mountain Car, which outputs  $-1$  reward per time step to encourage reaching the goal early. We compared SAC, GreedyAC and two versions of TAWAC,  $q' = 0$  and  $q' = 2$ .
+
+**Results.** Figure 4 shows the learning curves of all algorithm-environment combinations. Only the Gaussian and the environment-specific best policy are shown with full opacity, computed based on area under curve (AUC). One immediate observation is that, though all three algorithms by default choose the Gaussian policy, it was seldom the best policy parametrization. Environment-wise, on Mountain Car the Gaussian did not rank the best for any of the algorithms. By contrast, the Beta policy attained the first place with SAC, as was the light-tailed  $q$ -Gaussian with TAWAC. The same trend for the Gaussian holds in Acrobot and Pendulum as well, with exception only on TAWAC(0) Acrobot, where its curve closely resembled that of the light-tailed  $q$ -Gaussian.
+
+Algorithm-wise, three observations are to be made: (i) on Mountain Car the Beta policy performed significantly better than others. This could be due to its flexibility in maintaining a skewed distribution shape that matches the BG policy more closely in contrast to the other location scale family members. (ii) The  $q$ -Gaussians in general outperformed the Gaussian on TAWAC(0) and TAWAC(2) whose actor explicitly mimics a  $q$ -exp policy. (iii) Student’s t has ranked the top involving all three algorithms. Figure 5 LHS summarizes the percentage of each policy parametrization outperforming the Gaussian. The Student’s t and light-tailed Gaussian went above 50%, suggesting potentially greater applicability. The RHS shows out of 12 total combinations, how many times each policy parametrization has ranked the top. The result shows that the Student’s t attained 5 times, contrasting the 1 time of the Gaussian.
+
+In Figure 6 we visualized the evolution of Gaussian and  $q$ -Gaussian policies on the starting state over the first  $4 \times 10^4$  steps (10% of the entire learning horizon). Note that the allowed action range is  $[-1, 1]$  but the plot shows  $[-2, 2]$  for better visualization. Gaussian tends to quickly concentrate like a delta policy. This can be detrimental to algorithms like SAC and GreedyAC which demand stochasticity to generate diverse samples. By contrast, both light- and heavy-tailed  $q$ -Gaussians tend to be more stochastic.
+
+In Figure 11 we show the Manhattan plot of SAC with all swept hyperparameters on all environments. Though there is no a definitive winner for all cases, it is visible that the Student’s t and Gaussian have a similar behavior to hyperparameter changes. Therefore, if we are tackling a problem where the Gaussian works, the Student’s t is very likely to work. And judging from Fig. 5, we know that Student’s t is 75% more likely to perform better than Gaussian given the same hyperparameter sweeping range.
+
+![Figure 6: Policy evolution of GreedyAC on Mountain Car. The plot shows the density of actions over 40,000 steps for three policy types: Gaussian (red line), Heavy-tailed q-Gaussian (blue line), and Light-tailed q-Gaussian (green line). The x-axis represents 'Action' from -2 to 2, and the y-axis represents 'Density' from 0 to 1. The z-axis represents 'Steps (x10^4)' from 0 to 4. The Gaussian policy (red) shows a sharp, narrow peak that collapses into a delta-like policy (a single vertical line) after approximately 10,000 steps. The Heavy-tailed q-Gaussian (blue) and Light-tailed q-Gaussian (green) policies show broader, more stable distributions that remain spread out across the action space throughout the 40,000 steps.](f5e70cbe66e71e65b4ae4aa7816d266a_img.jpg)
+
+Figure 6: Policy evolution of GreedyAC on Mountain Car. The plot shows the density of actions over 40,000 steps for three policy types: Gaussian (red line), Heavy-tailed q-Gaussian (blue line), and Light-tailed q-Gaussian (green line). The x-axis represents 'Action' from -2 to 2, and the y-axis represents 'Density' from 0 to 1. The z-axis represents 'Steps (x10^4)' from 0 to 4. The Gaussian policy (red) shows a sharp, narrow peak that collapses into a delta-like policy (a single vertical line) after approximately 10,000 steps. The Heavy-tailed q-Gaussian (blue) and Light-tailed q-Gaussian (green) policies show broader, more stable distributions that remain spread out across the action space throughout the 40,000 steps.
+
+Figure 6: Policy evolution of GreedyAC on Mountain Car. The Gaussian collapsed into a delta-like policy after only 10% of the learning horizon.
+
+![Figure 7: Normalized scores on Medium-Replay level datasets from the MuJoCo suite. The figure consists of three bar charts for HalfCheetah, Hopper, and Walker2d environments. Each chart compares four algorithms (TAWAC, AWAC, IQL, InAC) across three Gaussian distributions: Squashed Gaussian (green), Student's t (orange), and Heavy-Tailed q-Gaussian (blue). The y-axis represents Normalized Return from 0 to 100. In most cases, TAWAC with Heavy-Tailed q-Gaussian achieves the highest return, while InAC with Squashed Gaussian often achieves the lowest.](b93cbfb52e37619e688175a6aad9edd9_img.jpg)
+
+Figure 7: Normalized scores on Medium-Replay level datasets from the MuJoCo suite. The figure consists of three bar charts for HalfCheetah, Hopper, and Walker2d environments. Each chart compares four algorithms (TAWAC, AWAC, IQL, InAC) across three Gaussian distributions: Squashed Gaussian (green), Student's t (orange), and Heavy-Tailed q-Gaussian (blue). The y-axis represents Normalized Return from 0 to 100. In most cases, TAWAC with Heavy-Tailed q-Gaussian achieves the highest return, while InAC with Squashed Gaussian often achieves the lowest.
+
+Figure 7: Normalized scores on Medium-Replay level datasets from the MuJoCo suite. The black bar shows the median. Boxes and whiskers are  $1\times$  and  $1.5\times$  interquartile ranges, respectively. See Figure 15 for full comparison. Environment-wise, TAWAC with heavy-tailed  $q$ -Gaussian is often the top performer. Algorithm-wise, Student’s  $t$  consistently outperforms Squashed Gaussian.
+
+### 5.2 OFFLINE D4RL MUJOCo
+
+![Figure 8: Relative improvement to the Squashed Gaussian policy, averaged over multiple environments in the MuJoCo suite. The figure shows three bar charts for Medium-Expert Data, Medium Data, and Medium-Replay Data. Each chart compares four algorithms (TAWAC, AWAC, IQL, InAC) across four Gaussian distributions: Gaussian (red), Beta (purple), Student's t (orange), and Heavy-Tailed q-Gaussian (blue). The y-axis represents the Proportion to Squashed Gaussian Performance from 40% to 120%. A dashed line at 100% indicates the baseline. Student's t consistently outperforms the Squashed Gaussian baseline across all environments and algorithms. Heavy-tailed q-Gaussian with TAWAC and IQL also shows significant improvement.](891ff9b651838b7f59e9a1612a739e15_img.jpg)
+
+Figure 8: Relative improvement to the Squashed Gaussian policy, averaged over multiple environments in the MuJoCo suite. The figure shows three bar charts for Medium-Expert Data, Medium Data, and Medium-Replay Data. Each chart compares four algorithms (TAWAC, AWAC, IQL, InAC) across four Gaussian distributions: Gaussian (red), Beta (purple), Student's t (orange), and Heavy-Tailed q-Gaussian (blue). The y-axis represents the Proportion to Squashed Gaussian Performance from 40% to 120%. A dashed line at 100% indicates the baseline. Student's t consistently outperforms the Squashed Gaussian baseline across all environments and algorithms. Heavy-tailed q-Gaussian with TAWAC and IQL also shows significant improvement.
+
+Figure 8: Relative improvement to the Squashed Gaussian policy, averaged over multiple environments in the MuJoCo suite. The Student’s  $t$  consistently outperforms the Gaussian with all the chosen algorithms. The heavy-tailed  $q$ -Gaussian with TAWAC and IQL also achieved significant improvement. The improvement can reach up to  $\sim 20\%$ . Black vertical lines at the top indicate one standard error.
+
+**Domains and Baselines.** We used the standard benchmark MuJoCo suite from D4RL to evaluate algorithm-policy combinations (Fu et al., 2020). The following algorithms are compared: TAWAC, Advantage Weighted Actor-Critic (AWAC) (Nair et al., 2021), Implicit Q-Learning (IQL) (Kostrikov et al., 2022), In-sample Actor-Critic (InAC) (Xiao et al., 2023). For TAWAC, we fixed its leading  $q'$ -exp with  $q' = 0$ . In Appendix C.2 we detailed the compared algorithms. We also included a popular variant of the Gaussian known as the Squashed Gaussian for comparison. Being able to evaluate the offline log-probability is critical to the tested algorithms, we found that light-tailed  $q$ -Gaussian leads to poor performance even with random online sampling, hence we do not show them here.
+
+**Results.** Figure 7 compared the normalized scores on the Medium-Replay datasets. It can be seen that environment-wise, TAWAC + heavy-tailed  $q$ -Gaussian was the top performer, and could improve on the Squashed Gaussian by a non-negligible margin. On HalfCheetah, heavy-tailed  $q$ -Gaussian attained the best score with every algorithm. Algorithm-wise, the heavy-tailed  $q$ -Gaussian or/and Student’s  $t$  were better or equivalent to the Squashed Gaussian, except with AWAC on Hopper. Student’s  $t$  was stable across algorithms, including those with which heavy-tailed  $q$ -Gaussian performed poorly (e.g., InAC). This demonstrates the value of the learnable DOF parameter that allows it interpolates the Gaussian. In Appendix E we provided comparison on other policies and datasets.
+
+Figure 8 summarized the relative improvement over the Squashed Gaussian across environments. Several observations can be made: (i) though the Squashed Gaussian outperformed the Gaussian in general, it was seldom the best performer. (ii) the Student’s  $t$  could consistently perform better
+
+![Figure 9: Policy evolution of all actions dimensions of TAWAC on Walker2d Medium Replay. The figure consists of six 3D surface plots arranged in a 2x3 grid, labeled '1st Dimension' through '6th Dimension'. Each plot shows the density of actions (y-axis, 0 to 1) over steps (x-axis, 0 to 4e6) and action values (z-axis, -1.5 to 1.5). Three policies are compared: Heavy-Tailed q-Gaussian (blue), Student's t (orange), and Gaussian (red). Each plot includes a legend with DOF values: 1st (DOF=1, 3, 5, 7, 9), 2nd (DOF=1, 3, 4, 5, 6), 3rd (DOF=1, 2, 3, 4, 5), 4th (DOF=1, 4, 6, 8, 10), 5th (DOF=1, 3, 5, 7, 9), and 6th (DOF=1, 2, 3, 4, 5). The plots show that the Student's t policy is more flexible, with lighter tails in some dimensions (e.g., 4th, 5th) and heavier tails in others (e.g., 3rd, 6th). Peaks at the edges are caused by clipping actions into the allowed range.](4e0ade2f41b66d5602160da5cc978274_img.jpg)
+
+Figure 9: Policy evolution of all actions dimensions of TAWAC on Walker2d Medium Replay. The figure consists of six 3D surface plots arranged in a 2x3 grid, labeled '1st Dimension' through '6th Dimension'. Each plot shows the density of actions (y-axis, 0 to 1) over steps (x-axis, 0 to 4e6) and action values (z-axis, -1.5 to 1.5). Three policies are compared: Heavy-Tailed q-Gaussian (blue), Student's t (orange), and Gaussian (red). Each plot includes a legend with DOF values: 1st (DOF=1, 3, 5, 7, 9), 2nd (DOF=1, 3, 4, 5, 6), 3rd (DOF=1, 2, 3, 4, 5), 4th (DOF=1, 4, 6, 8, 10), 5th (DOF=1, 3, 5, 7, 9), and 6th (DOF=1, 2, 3, 4, 5). The plots show that the Student's t policy is more flexible, with lighter tails in some dimensions (e.g., 4th, 5th) and heavier tails in others (e.g., 3rd, 6th). Peaks at the edges are caused by clipping actions into the allowed range.
+
+Figure 9: Policy evolution of all actions dimensions of TAWAC on Walker2d Medium Replay. Student’s t was flexible in that on some dimensions it had lighter tails like the Gaussian by having large DOF (e.g. 4th), and with heavier tails on the others by having smaller DOF (e.g. 3rd, 6th). The peaks at the edges were caused by clipping actions into the allowed range.
+
+than the Gaussian, the improvement can sometimes reach up to  $\sim 20\%$ . The same holds for the heavy-tailed  $q$ -Gaussian with TAWAC and IQL. (iii) though there was no single winner for all cases, choosing the Student’s t for the actors with exponential loss functions (AWAC, IQL, InAC), or the heavy-tailed  $q$ -Gaussian for  $q$ -exponential actor losses (e.g. TAWAC) are generally effective.
+
+Figure 9 visualized the policy evolution of the Squashed Gaussian and the two heavy-tailed policies, learned with TAWAC on Medium-Replay Walker2D. Squashed Gaussian tended to converge slower here. Since the offline MuJoCo environments are fully deterministic, a wide distribution indicates failure of finding the mode of the optimal action and therefore can be detrimental to learning performance. The Squashed Gaussian converged slower than the heavy-tailed (performed the best) and the Student’s t. Student’s t was flexible in that it beared lighter tails like the Gaussian in some dimensions by having a large DOF, for example in the 4th and 5th dimensions. On the other hand, it could take heavy tails by having a small DOF like in the 3rd and 6th dimensions.
+
+## 6 CONCLUSION
+
+The Gaussian policy is standard for policy optimization algorithms on continuous action spaces. In this paper we considered a broader family of policies that remains tractable, called the  $q$ -exponential family. We empirically investigated their utility as a promising alternative to the Gaussian. Specifically, we looked at the Student’s t, light- and heavy-tailed  $q$ -Gaussian policies. Extensive experiments on both online and offline tasks with various actor-critic methods showed that heavy-tailed policies are in general effective. In summary, we found the Student’s t policy to be generally more performant and stable than the Gaussian and could be used as a drop-in replacement. By contrast, the Heavy-tailed  $q$ -Gaussian seemed to favor especially Tsallis regularization and outperformed the baselines.
+
+We acknowledge that the paper has limitations. Perhaps the greatest is the inherent dilemma of the light-tailed  $q$ -Gaussian evaluating out-of-support actions. Off-policy/offline algorithms require evaluating actions from some behavior policy and the actions can fall outside the support of the sparse  $q$ -Gaussian. Naively discarding these samples results extremely slow or no learning. In this paper we proposed to alleviate this issue by replacing them with the in-support sampled action with the least  $L_2$  distance. Nonetheless, this method did not help much in offline experiments. We envision a potential solution that is left to future investigation: projecting the out-of-support actions precisely to the boundary of the  $q$ -Gaussian.
+
+## REFERENCES
+
+- Zafarali Ahmed, Nicolas Le Roux, Mohammad Norouzi, and Dale Schuurmans. Understanding the impact of entropy on policy optimization. In *Proceedings of 36th International Conference on Machine Learning*, volume 97, pp. 151–160, 2019.
+- Shun-ichi Amari and Atsumi Ohara. Geometry of q-exponential family of probability distributions. *Entropy*, 13(6):1170–1185, 2011.
+- Ehsan Amid, Manfred K. Warmuth, and Sriram Srinivasan. Two-temperature logistic regression based on the tsallis divergence. In *Proceedings of the Twenty-Second International Conference on Artificial Intelligence and Statistics*, volume 89, pp. 2388–2396, 2019.
+- Amrit Singh Bedi, Anjaly Parayil, Junyu Zhang, Mengdi Wang, and Alec Koppel. On the sample complexity and metastability of heavy-tailed policy search in continuous control. *Journal of Machine Learning Research*, 25(39):1–58, 2024.
+- Boris Belousov and Jan Peters. Entropic regularization of markov decision processes. *Entropy*, 21(7), 2019.
+- Shicong Cen, Chen Cheng, Yuxin Chen, Yuting Wei, and Yuejie Chi. Fast global convergence of natural policy gradient methods with entropy regularization. *Operations Research*, 70(4): 2563–2578, 2022.
+- Souradip Chakraborty, Amrit Singh Bedi, Kasun Weerakoon, Prithvi Poddar, Alec Koppel, Pratap Tokekar, and Dinesh Manocha. Dealing with sparse rewards in continuous control robotics via heavy-tailed policy optimization. In *2023 IEEE International Conference on Robotics and Automation (ICRA)*, pp. 989–995, 2023.
+- Po-Wei Chou, Daniel Maturana, and Sebastian Scherer. Improving stochastic policy gradients in continuous control with deep reinforcement learning using the beta distribution. In *Proceedings of the 34th International Conference on Machine Learning*, pp. 834–843, 2017.
+- Yinlam Chow, Ofr Nachum, and Mohammad Ghavamzadeh. Path consistency learning in Tsallis entropy regularized MDPs. In *International Conference on Machine Learning*, pp. 979–988, 2018a.
+- Yinlam Chow, Nachum Ofr, Edgar Duenez-guzman, and Mohammad Ghavamzadeh. A Lyapunov-based Approach to Safe Reinforcement Learning. In *Annual Conference on Neural Information Processing Systems (NIPS)*, pp. 1–10, 2018b.
+- Thomas M. Cover and Joy A. Thomas. *Elements of Information Theory (Wiley Series in Telecommunications and Signal Processing)*. Wiley-Interscience, USA, 2006.
+- Thomas Degrís, Martha White, and Richard S. Sutton. Off-policy actor-critic. In *Proceedings of the 29th International Conference on International Conference on Machine Learning*, pp. 179–186, 2012.
+- Nan Ding and S.v.n. Vishwanathan. t-logistic regression. In *Advances in Neural Information Processing Systems*, volume 23, 2010.
+- Justin Fu, Aviral Kumar, Ofr Nachum, George Tucker, and Sergey Levine. D4rl: Datasets for deep data-driven reinforcement learning, 2020.
+- Scott Fujimoto and Shixiang Shane Gu. A minimalist approach to offline reinforcement learning. In *Thirty-Fifth Conference on Neural Information Processing Systems*, 2021.
+- S. Furuichi, K. Yanagi, and K. Kuriyama. Fundamental properties of tsallis relative entropy. *Journal of Mathematical Physics*, 45(12):4868–4877, 2004.
+- Shigeru Furuichi. On the maximum entropy principle and the minimization of the fisher information in tsallis statistics. *Journal of Mathematical Physics*, 50:013303, 01 2010.
+- Peter Grünwald and Alexander Dawid. Game theory, maximum entropy, minimum discrepancy and robust bayesian decision theory. *Annals of Statistics*, 32, 2004.
+
+- Shixiang Gu, Timothy Lillicrap, Ilya Sutskever, and Sergey Levine. Continuous deep q-learning with model-based acceleration. In *Proceedings of The 33rd International Conference on Machine Learning*, pp. 2829–2838, 2016.
+- Tuomas Haarnoja, Aurick Zhou, Pieter Abbeel, and Sergey Levine. Soft actor-critic: Off-policy maximum entropy deep reinforcement learning with a stochastic actor. In *Proceedings of the 35th International Conference on Machine Learning*, pp. 1861–1870, 2018.
+- E. T. Jaynes. Information theory and statistical mechanics. *Phys. Rev.*, 106:620–630, 1957.
+- Taisuke Kobayashi. Student-t policy in reinforcement learning to acquire global optimum of robot control. *Applied Intelligence*, 49:4335–4347, 2019.
+- Ilya Kostrikov, Ashvin Nair, and Sergey Levine. Offline reinforcement learning with implicit q-learning. In *International Conference on Learning Representations*, 2022.
+- Kenneth L. Lange, Roderick J. A. Little, and Jeremy M. G. Taylor. Robust statistical modeling using the t distribution. *Journal of the American Statistical Association*, 84:881–896, 1989.
+- Kyungjae Lee, Sungjoon Choi, and Songhwai Oh. Sparse markov decision processes with causal sparse tsallis entropy regularization for reinforcement learning. *IEEE Robotics and Automation Letters*, 3:1466–1473, 2018.
+- Kyungjae Lee, Sungyub Kim, Sungbin Lim, Sungjoon Choi, Mineui Hong, Jae In Kim, Yong-Lae Park, and Songhwai Oh. Generalized tsallis entropy reinforcement learning and its application to soft mobile robots. In *Robotics: Science and Systems XVI*, pp. 1–10, 2020.
+- Yuhan Li, Wenzhuo Zhou, and Ruoqing Zhu. Quasi-optimal reinforcement learning with continuous actions. In *The Eleventh International Conference on Learning Representations*, 2023.
+- André F. T. Martins, Marcos Treviso, António Farinhas, Pedro M. Q. Aguiar, Mário A. T. Figueiredo, Mathieu Blondel, and Vlad Niculae. Sparse continuous distributions and fenchel-young losses. *Journal of Machine Learning Research*, 23(257):1–74, 2022.
+- Hiroshi Matsuzoe and Atsumi Ohara. Geometry of q-exponential families. In *Recent Progress in Differential Geometry and Its Related Fields*, pp. 55–71, 2011.
+- Jincheng Mei, Chenjun Xiao, Csaba Szepesvari, and Dale Schuurmans. On the global convergence rates of softmax policy gradient methods. In *Proceedings of the 37th International Conference on Machine Learning*, volume 119, pp. 6820–6829, 2020.
+- Ashvin Nair, Murtaza Dalal, Abhishek Gupta, and Sergey Levine. {AWAC}: Accelerating online reinforcement learning with offline datasets, 2021.
+- Jan Naudts. Deformed exponentials and logarithms in generalized thermostatistics. *Physica A: statistical Mechanics and Its Applications*, 316:323–334, 2002.
+- Jan Naudts. The q-exponential family in statistical physics. *Journal of Physics: Conference Series*, pp. 012003, 2010.
+- Samuel Neumann, Sungsu Lim, Ajin George Joseph, Yangchen Pan, Adam White, and Martha White. Greedy actor-critic: A new conditional cross-entropy method for policy improvement. In *The Eleventh International Conference on Learning Representations*, 2023.
+- Adam Paszke, Sam Gross, Francisco Massa, Adam Lerer, James Bradbury, Gregory Chanan, Trevor Killeen, Zeming Lin, Natalia Gimelshein, Luca Antiga, Alban Desmaison, Andreas Kopf, Edward Yang, Zachary DeVito, Martin Raison, Alykhan Tejani, Sasank Chilamkurthy, Benoit Steiner, Lu Fang, Junjie Bai, and Soumith Chintala. Pytorch: An imperative style, high-performance deep learning library. In *Advances in Neural Information Processing Systems 32*, pp. 8024–8035, 2019.
+- Ben Peters, Vlad Niculae, and André F. T. Martins. Sparse sequence-to-sequence models. In *Proceedings of the 57th Annual Meeting of the Association for Computational Linguistics*, pp. 1504–1519, 2019.
+
+[Appendix and supplementary materials beyond page 12 have been removed.]

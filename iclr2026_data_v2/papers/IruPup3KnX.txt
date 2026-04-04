@@ -1,0 +1,2762 @@
+# CONFHIT: CONFORMAL GENERATIVE DESIGN WITH ORACLE FREE GUARANTEES
+
+
+**Siddhartha Laghuvarapu** [1] **, Ying Jin** [2] _[∗]_ **, Jimeng Sun** [1] _[∗]_
+
+1 Siebel School of Computing and Data Science, University of Illinois Urbana-Champaign, IL, USA
+2 Department of Statistics and Data Science, Wharton School, University of Pennysylvania, PA, USA
+{sl160,jimeng}@illinois.edu, yjinstat@wharton.upenn.edu
+
+
+ABSTRACT
+
+
+The success of deep generative models in scientific discovery requires not only the
+ability to generate novel candidates but also reliable guarantees that these candidates indeed satisfy desired properties. Recent conformal-prediction methods offer
+a path to such guarantees, but its application to generative modeling in drug discovery is limited by budget constraints, lack of oracle access, and distribution shift. To
+address these challenges, we introduce CONFHIT, a model-agnostic framework
+that provides validity guarantees under these conditions. CONFHIT formalizes two
+central questions: (i) Certification: whether a generated batch can be guaranteed
+to contain at least one hit with a user-specified confidence level, and (ii) Design:
+whether the generation can be refined to a compact set without weakening this
+guarantee. CONFHIT leverages weighted exchangeability between historical and
+generated samples to eliminate the need for an experimental oracle, constructs
+multiple-sample density-ratio weighted conformal p-value to quantify statistical
+confidence in hits, and proposes a nested testing procedure to certify and refine
+candidate sets of multiple generated samples while maintaining statistical guarantees. Across representative generative molecule design tasks and a broad range
+of methods, CONFHIT consistently delivers valid coverage guarantees at multiple
+confidence levels while maintaining compact certified sets, thereby establishing a
+principled and reliable framework for generative modeling.
+
+
+1 INTRODUCTION
+Deep generative modeling has demonstrated remarkable ability to explore high-dimensional spaces,
+driving advances in various applications like text generation (Radford et al., 2018), image synthesis (Ho et al., 2022), protein engineering (Madani et al., 2020), and molecular discovery (GómezBombarelli et al., 2018). In critical domains such as drug discovery, however, the success requires
+more than generation: While powerful generative models have been developed to accelerate earlystage discovery (Madani et al., 2021; Hoogeboom et al., 2022; Yim et al., 2023), their practical utility
+depends on whether the generated candidates indeed satisfy key biochemical properties. Since these
+properties can only be verified through costly wet-lab or in-vivo experiments, it is crucial to assess
+and guarantee, in advance, the viability of the generated samples (hits), leading to a central question:
+
+
+_Given a generative model, how to construct batches of generated samples that can,_
+_with high statistical confidence, be guaranteed to contain at least one valid hit?_
+
+Conformal prediction provides a model-agnostic framework for establishing statistical guarantees for
+black-box prediction models (Vovk et al., 2005), and is recently extended to calibrate any generative
+model to produce sets of generated samples that contain at least one high-quality instance with high
+probability (Quach et al., 2023; Ulmer et al., 2024; Shahrokhi et al., 2025). While such guarantees
+can be profoundly useful, direct application of the existing methods in resource-restricted problems
+like drug discovery is limited by several challenges. (i) _Certification:_ With limited generation budget
+and no assumptions on the generative model, it is not always feasible to produce a valid hit – therefore
+important to state clearly when a guarantee can be provided and when it cannot. On the technical side,
+(ii) _Lack of oracle access_ : Existing methods rely on an oracle that evaluates newly generated samples
+for existing inputs (such as by comparing to a gold-standard output). In drug discovery, this means
+one needs to synthesize and experimentally validate the generated samples, which is infeasible in
+resource-limited settings alike (Kladny et al., 2024). (iii) _Distribution shift_ : The generated candidates
+may follow a distribution different from the calibration data, violating the exchangeability assumption.
+
+
+_∗_ These authors jointly supervised this work.
+
+
+1
+
+
+**(A)**
+
+
+**(B)**
+
+
+**Model**
+
+
+**Input** 𝑿𝒕𝒆𝒔𝒕 **Sampled outputs**
+
+
+Certification:
+
+
+Design:
+
+
+Figure 1: (a) Problem setup: given an input, certify and generate a set of candidates that contains at least one “hit”
+(green) with probability at least 1 _−_ _α_ . (b) CONFHIT workflow. Given a nested sequence of candidate batches,
+we estimate the density ratio between labeled data and generated samples, compute a conformal p-value for each
+batch to quantify the confidence in it containing a hit, and return the smallest batch whose p-value falls below _α_ .
+
+
+We introduce CONFHIT, a model-agnostic framework that provides reliability guarantees for generative modeling in resource-constrained settings. To tackle the budget limitation, we expand the
+generation problem into two connected fundamental questions:
+
+1. _Certification._ Given an input _X_ [¯] test, a batch _C_ 0( _X_ [¯] test) of generated samples and an unknown
+property indicator _A_ ( _·_ ) _∈{_ 0 _,_ 1 _}_, can we guarentee, at a given confidence level 1 _−α ∈_ (0 _,_ 1),
+that the batch _C_ ( _X_ [¯] test) contains at least a hit?
+2. _Design._ In cases with strong confidence, can we design a compact candidate set _C_ ( _X_ [¯] test)
+while preserving the guarantee that it contains a valid hit with probability at least 1 _−_ _α_ ?
+
+
+Here _A_ ( _·_ ) _∈{_ 0 _,_ 1 _}_ is an oracle that returns 1 only when the sample satisfies a desired property. In
+molecule design, it may indicate whether a molecule _x_ improves upon a seed molecule _X_ [¯] test in terms
+of activity, and these questions ensure the experimental validation on _C_ ( _X_ [¯] test) is unlikely to be wasted
+effort (Figure 1a). We remark that, in resource-abundant settings, certification and refinement can be
+combined: the generation budget may be enlarged until certification is achieved, after which the set is
+pruned to a compact certified subset, leading to the same validity guarantees by existing methods.
+
+
+To eliminate oracle access and handle the distribution shift, CONFHIT leverages the exchangeability
+structure between historical (labeled) and generated samples, rather than among generated samples
+for both existing and new model inputs as in earlier methods, and estimates their density ratio,
+thereby inducing _weighted_ exchangeability (Tibshirani et al., 2019; Jin & Candès, 2023a). For the
+certification problem, given any viability-scoring function, we construct a weighted permutation
+p-value that quantifies the evidence against the global null that none of the samples in the generated
+batch are viable. For the design problem, CONFHIT then examines the certification confidence of a
+nested sequence of candidate batches, and returns the smallest batch that can be certified at a given
+confidence level _α ∈_ (0 _,_ 1). We show that this procedure bounds the probability of returning a batch
+with no viable sample below _α ∈_ (0 _,_ 1), regardless of the scoring function and the generative model.
+
+
+We demonstrate the robust guarantees of CONFHIT on two representative generative design tasks: (i)
+**Constrained molecule optimisation**, which seeks a new molecule that satisfies a target property
+while remaining similar to a given scaffold; **(ii) Structure-based drug discovery**, which aims to
+generate molecules that are active against a given protein. We summarize our contributions below:
+
+
+  - We formalise the task of generative modeling in resource-constrained settings with a conformal
+validity guarantee: given an input context (such as a lead molecule or protein pocket), certify and
+produce a set of candidates that contains at least one hit at a pre-specified confidence level 1 _−_ _α_ .
+
+  - We introduce a class of density-ratio-weighted, multiple-test-sample conformal p-values for the
+certification problem, and show their validity for certifying the existence of at least one hit in a
+given batch of generated samples under distribution shift.
+
+  - We propose a general nested testing framework that achieves the validity guarantees for the
+design problem. In specific, we show that given a sequence of our p-values, stopping as soon as
+the p-value drops below _α_ achieves finite-sample error control.
+
+  - We develop practical strategies for two key elements in the method: score modelling and density
+ratio estimation, and demonstrate the robust performance on two standard molecule design tasks:
+constrained molecule optimisation and structure-based drug discovery.
+
+
+2
+
+
+**Related Work.** Conformal prediction (CP) (Vovk et al., 2005) offers distribution-free uncertainty
+quantification for any black-box model by constructing prediction sets from exchangeable calibration
+data (Papadopoulos et al., 2002). Recent advances extend CP to generative tasks (Angelopoulos
+et al., 2021; Quach et al., 2023; Shahrokhi et al., 2025; Kladny et al., 2024). However, these methods
+require oracle access, which is impractical for resource-constrained scenarios like drug discovery.
+
+
+In scientific/drug discovery tasks, conformal prediction has so far primarily been used in predictive
+inference for regression and classification problems in property prediction (Sun et al., 2017; Svensson
+et al., 2018; Cortés-Ciriano & Bender, 2018; 2019; Zhang et al., 2021) and their extension to
+covariate-shift settings via importance-weight estimation (Fannjiang et al., 2022; Laghuvarapu et al.,
+2023; Prinster et al., 2023; Fannjiang & Park, 2025). Beyond prediction-set construction, conformal
+selection employs p-values to prioritize compounds with selective error control (Bai et al., 2024;
+Jin & Candès, 2023b; Bai & Jin, 2024). As we address a distinct generative design problem, our
+formulation, inference scheme, and methodology differ sharply from prior work.
+
+
+Meanwhile, there is a growing literature on generative modelling in scientific design tasks, including
+goal-directed small-molecule optimization (Gómez-Bombarelli et al., 2018; Jin et al., 2020), structurebased ligand design (Corso et al., 2022; Guan et al., 2023), large-scale protein generators (Madani
+et al., 2020; Ingraham et al., 2019; Strokach & Kim, 2022), and materials discovery (Xie et al., 2022;
+Zeni et al., 2023). Our contributions are orthogonal to this literature as CONFHIT is model agnostic
+and offers guarantees for building property-satisfying samples from these generative models.
+
+
+To summarize, compared with existing works, CONFHIT is the first framework that (i) eliminates the
+need for oracle access, (ii) corrects for covariate shift between historical and generated samples, and
+(iii) provides finite-sample guarantees for both certification and compact design in generative design.
+
+
+2 PROBLEM FORMULATION
+For expositional convenience, we slightly override the notations in Section 1.
+
+
+**Data and distributions.** We assume access to a set of i.i.d. labeled (calibration) samples _D_ calib =
+_{_ ( _Xi, Yi_ ) _}_ _[n]_ _i_ =1 [from an unknown distribution] _[ P]_ [, e.g., molecules from past campaigns with known]
+properties. Here _Xi_ _∈X_ is the feature, e.g., the chemical structure of a molecule, and _Yi_ _∈{_ 0 _,_ 1 _}_
+is a binary label, e.g., oracle-judged _Yi_ = _A_ ( _Xi_ ). A generative model _M_ produces i.i.d. samples _{Xn_ + _j}j≥_ 1 from another distribution _Q_ with unknown labels _{Yn_ + _j}j≥_ 1 (the properties
+_Yn_ + _j_ = _A_ ( _Xn_ + _j_ ) should they be judged by the oracle). Although _Q_ ’s density is, in principle,
+computable, doing so is often costly. Instead, we assume a covariate shift between the two distributions: d _Q/_ d _P_ ( _x, y_ ) = _w_ ( _x_ ) for some function _w_ : _X_ _→_ R [+] . It posits that _X_ captures all the
+information for predicting _Y_, which is especially sensible and standard in drug discovery contexts
+where the biological property is determined by the structure (though in a highly complex fashion).
+
+
+**Guarantees.** We now formalize our guarantees for (i) certifying the presence of a hit in a set of
+generated candidates, and (ii) constructing a set of samples with at least a hit. For goal (i), given a
+pre-specified confidence level _α ∈_ (0 _,_ 1) and a generated set _C_ 0 [new] := _{Xn_ + _j}_ _[N]_ _j_ =1 [of budget] _[ N]_ _[∈]_ [N][+][,]
+we aim to propose a test _ψ_ ( _D_ calib _, C_ 0 [new] ) _∈{_ 0 _,_ 1 _}_ such that
+
+(Certification) P� _ψ_ ( _D_ calib _, C_ 0 [new] ) = 1 �� _A_ ( _Xn_ + _j_ ) = 0 _,_ _∀_ 1 _≤_ _j_ _≤_ _N_  - _≤_ _α,_ (1)
+
+
+that is, the probability of falsely certifying a low-quality candidate set is upper bounded by _α_ . For
+goal (ii), we would like to find a (random) stopping point _N_ [ˆ] _≤_ _N_ such that
+
+
+(Design) P� _A_ ( _Xn_ + _j_ ) = 0 _,_ _∀_ 1 _≤_ _j_ _≤_ _N_ [ˆ]   - _≤_ _α,_ (2)
+
+
+outputing the list of samples _C_ [ˆ][new] := ( _Xn_ +1 _, . . ., Xn_ + _N_ ˆ [)][ which contains a hit while controlling the]
+error of vacuous declaration. We define _N_ [ˆ] = 0 to accommodate cases where we are not confident
+enough to declare any positive sample within the generation budget (failure of certification). [1]
+
+
+3 METHOD
+
+
+We introduce our conformal nested testing framework to address the certification problem (Section 3.1)
+and the design problem (Section 3.2), and prove their model-agnostic, finite-sample guarantees.
+
+
+1This is consistent with existing works on uncertainty quantification for generative models (Quach et al.,
+2023), where a “null” option (i.e., the method fails to confidently generate good samples) is required.
+
+
+3
+
+
+3.1 CERTIFICATION: JOINT WEIGHTED CONFORMAL P-VALUE
+
+
+We begin by addressing the certification problem: _Given a set of generated samples, how to quantify_
+_the confidence in it containing a hit?_ Our key strategy is to construct a p-value based on conformal
+inference ideas that test the presence of any hit in _{Xn_ + _j}_ _[N]_ _j_ =1 [.] [Recall that there is a covariate shift]
+_w_ ( _x_ ) = d _Q/_ d _P_ ( _x, y_ ) for the labeled calibration data and the new test samples. To fix ideas, we
+assume the density ratio _w_ ( _·_ ) is known for now, and discuss estimated density ratio in Remark 3.3.
+
+
+Our p-values leverage the inactive calibration data _{Xi_ : _i_ _∈I_ 0 _}_ where _I_ 0 := _{i_ _∈_ [ _n_ ]: _Yi_ = 0 _}_ .
+We let _**X**_ = ( _X_ 1 _, . . ., Xn_ 0 _, Xn_ +1 _, . . ., Xn_ + _N_ ) denote the vector of (inactive) calibration and test
+covariates. Following split conformal prediction (Vovk et al., 2005), we let _V_ : _X_ _[n]_ [0][+] _[N]_ _→_ R be
+any function whose training process is independent of _{_ ( _Xi, Yi_ ) _}i≥_ 1, which is then viewed as fixed.
+We call _V_ the _conformity score_ function, whose choice is discussed near the end of this subsection.
+Without loss of generality, we assume a larger value of the conformity score indicates stronger
+confidence in the presence of a positive value in _{Yn_ + _j}_ _[N]_ _j_ =1 [.]
+
+
+To address multiple test points without introducing too much computational overhead, we leverage
+randomization (see Appendix A.1 for the non-randomized version). Let Π _N_ be the collection of
+all permutations of _{_ 1 _, . . ., n_ 0 _, n_ + 1 _, . . ., n_ + _N_ _}_, and denote the identity mapping as _π_ [(0)], i.e.,
+_π_ [(0)] ( _i_ ) = _i_ for any _i_ . Formally, fixing any _B_ _∈_ N [+], we draw _π_ [(1)] _, . . ., π_ [(] _[B]_ [)] [i.i.d.] _∼_ Unif(Π _N_ ), the
+uniform distribution over the permutation space. Define
+
+
+      - _B_
+_b_ =0 _[w]_ [¯][(] _[π]_ [(] _[b]_ [)][;] _**[ X]**_ [)][ 1] _[{][V]_ [ (] _[π]_ [0][;] _**[ X]**_ [)] _[ ≤]_ _[V]_ [ (] _[π]_ [(] _[b]_ [)][;] _**[ X]**_ [)] _[}]_
+_p_ [rand] _N_ =         - _B_ _._ (3)
+
+_b_ =0 _[w]_ [¯][(] _[π]_ [(] _[b]_ [)][;] _**[ X]**_ [)]
+
+Here, for any permutation _π_ _∈_ Π _N_, we define the conformity score from the permuted data
+_V_ ( _π_ ; _**X**_ ) = _V_ ( _Xπ_ (1) _, . . ., Xπ_ ( _n_ 0) _, Xπ_ ( _n_ +1) _, . . ., Xπ_ ( _n_ + _k_ )) _,_ and _w_ ¯( _π_ ; _**X**_ ) = [�] _j_ _[k]_ =1 _[w]_ [(] _[X][π]_ [(] _[n]_ [+] _[j]_ [)][)] _[,]_
+is the joint likelihood ratio after permutation _π_, where _w_ ( _x_ ) = d _Q/_ d _P_ ( _x, y_ ) is the density ratio.
+
+
+The construction of our p-value relies on an analysis of the exchangeability structure between the
+inactive calibration data _{Xi_ : _i_ _∈I_ 0 _}_ and the test samples _{Xn_ + _j}_ _[N]_ _j_ =1 [under] [distribution] [shift,]
+detailed in Appendix A.2 due to limited space. It extends the conformal p-values in the literature via
+an extended weighted exchangeability structure (Tibshirani et al., 2019) for multiple test samples (Hu
+& Lei, 2024; Jin & Candès, 2023a); these connections are discussed in Appendix A.3.
+
+
+The following theorem establishes the finite-sample validity of the randomization p-value (3). Notably,
+this holds regardless of the number of sampled permutations. Its proof is in Appendix B.4.
+
+**Theorem 3.1.** _Under the covariate shift assumption, it holds for any fixed t ∈_ [0 _,_ 1] _that_
+
+
+P� _p_ [rand] _N_ _≤_ _t_ �� max1 _≤j≤N_ _Yn_ + _j_ = 0� _≤_ _t._
+
+
+_Therefore, the certification test function ψ_ ( _Dcalib, {Xn_ + _j}_ _[N]_ _j_ =1 [) =][ 1] _[{][p]_ [rand] _N_ _≤_ _α} achieves_ (1) _._
+
+
+Inheriting the model-free nature of conformal inference, the validity of _pk_ and _p_ [rand] _k_ holds regardless
+of the score function _V_, as long as its training process is independent of the calibration and test data.
+
+**Remark** **3.2** (Outlier detection) **.** _Our_ _p-values_ _can_ _also_ _be_ _viewed_ _as_ _testing_ _for_ _the_ _presence_ _of_
+at least _one outlier in {Xn_ + _j}_ _[m]_ _j_ =1 _[when][ {][X][i][}][i][∈I]_ 0 _[are viewed as calibration inliers.]_ _[We refer the]_
+_readers to discussion on the connection to outlier detection under covariate shifts (Bates et al., 2023;_
+_Jin & Candès, 2023a) in Appendix A.4._
+
+**Remark 3.3** (Estimated density ratio) **.** _In many practical scenarios, the density ratio w_ ( _·_ ) _is unknown_
+_or difficult to evaluate._ _In such cases, we estimate the density ratio by_ _w_ ˆ( _·_ ) _, and use_ _w_ ˆ( _·_ ) _instead_
+_of_ _w_ ( _·_ ) _in_ _the_ _construction_ _of_ _our_ _p-values_ _{pk}._ _For_ _instance,_ _we_ _can_ _train_ _the_ _density_ _ratio_
+_over_ _a_ _random_ _subset_ _of_ _all_ _the_ _labeled_ _data_ _and_ _independently_ _generated_ _test_ _samples._ _We_ _do_
+_not write the exact formulas for such plug-in p-values for brevity._ _Recognizing that the success of_
+CONFHIT _hinges_ _on_ _accurate_ _density_ _ratio_ _estimation,_ _we_ _provide_ _a_ _thorough_ _discussion_ _on_ _the_
+_robustness of_ CONFHIT _with estimated weights and several practical diagostics in Section 3.3._
+
+
+**Conformity score function.** Because we certify the candidate set when _pN_ is small, _V_ must grow
+when _Xn_ +1: _n_ + _N_ contains a positive to indicate strong confidence. To this end, we assume access to
+a pre-trained model _µ_ ˆ : _X_ _→_ R that predicts the unknown property _Yn_ + _j_ based on _Xn_ + _j_, which will
+be used in the score _V_ . We suggest several natural choices: (i) Max-pooling: _V_ ( _x_ 1: _n_ 0 _, xn_ +1: _n_ + _N_ ) =
+
+
+4
+
+
+max1 _≤j≤N_ _µ_ ˆ( _xn_ + _j_ ), (ii) Sum-of-prediction: _V_ ( _x_ 1: _n_ 0 _, xn_ +1: _n_ + _N_ ) = [�] _j_ _[N]_ =1 _[µ]_ [ˆ][(] _[x][n]_ [+] _[j]_ [)][,] [(iii)] [Rank-]
+
+sum: _V_ ( _x_ 1: _n_ 0 _, xn_ +1: _n_ + _N_ ) = [�] _j_ _[N]_ =1 _[R][n]_ [+] _[j]_ [, where] _[ R][n]_ [+] _[j]_ [is the rank among all scores, (iv) Likelihood]
+
+ratio: _V_ ( _x_ 1: _n_ 0 _, xn_ +1: _n_ + _N_ ) = [�] _j_ _[N]_ =1 [log(] 1 _−µ_ ˆ( _µ_ ˆ _x_ ( _nx_ + _n_ + _j_ ) _j_ ) [)][.] [We explain these scores in Appendix][ A.5][.] [We]
+note that CONFHIT is model-agnostic: practitioners can choose any suitable model to build the score
+_V_ . The quality of the score/model affects the power, but not the error control of CONFHIT. Finally,
+practitioners may want to avoid sample splitting when labeled data is limited; we provide such a
+variant in Appendix A.6 where the labeled data are used for both training _µ_ ˆ and p-value construction.
+
+
+3.2 DESIGN: CONFORMAL NESTED TESTING
+
+
+Upon the valid p-value and certification test for a given candidate set, we proceed to address the
+design problem: _How to propose a compact set of generated samples that contains at least one hit_
+_with high probability?_ To this end, we connect (2) to the problem of constructing a smaller subset of
+candidates that can be certified by our procedure, and establish its statistical guarantee.
+
+
+To be specific, for every 1 _≤_ _k_ _≤_ _N_, we consider the null hypothesis
+
+
+_Hk_ : _Yn_ + _j_ = 0 _,_ _∀_ 1 _≤_ _j_ _≤_ _k._ (4)
+
+
+That is, _Hk_ posits that none of the first _k_ generated instances obeys the desired property. From a
+hypothesis testing perspective, rejecting _Hk_ thus suggests sufficient confidence in declaring a hit in
+_{Xn_ + _j}_ _[k]_ _j_ =1 [.] [The certification strategy in Section][ 3.1][ is readily applicable to obtain a p-value] _[ p][k]_ [for]
+certifying each subset _{Xn_ + _j}_ _[k]_ _j_ =1 [indexed by] _[ k]_ [ that obeys][ P][(] _[p][k]_ _[≤]_ _[t][ |][ H][k]_ [is true][)] _[ ≤]_ _[t]_ [ for] _[ t][ ∈]_ [[0] _[,]_ [ 1]][.]
+
+Our solution to the design problem appears simple: determine an index _N_ [ˆ] such that _HN_ ˆ [can] [be]
+rejected (i.e., _{Xn_ + _j}_ _[k]_ _j_ =1 [can be confidently declared as containing a hit).] [Specifically, suppose we]
+can construct a _decreasing_ sequence of p-values _pk_ _∈_ [0 _,_ 1] for each fixed _Hk_ . Then, we set
+
+
+_N_ ˆ := inf          - _k_ : _pk_ _≤_ _α_          - _._ (5)
+
+
+That is, we take the first p-value that passes the significance level _α ∈_ (0 _,_ 1). Theorem 3.4 confirms
+the validity of this nested testing strategy, whose proof is in Appendix B.1.
+**Theorem** **3.4.** _Suppose_ _the_ _p-values_ _pk_ _∈_ [0 _,_ 1] _obey:_ _(i)_ _Monotonicity:_ _p_ 1 _≥_ _p_ 2 _≥· · · pN_ _._ _(ii)_
+_Validity:_ _For any fixed k_ _≥_ 1 _and t ∈_ [0 _,_ 1] _, it holds that_ P( _pk_ _≤_ _t | Hk_ _is true_ ) _≤_ _t._ _Then, we have_
+
+
+P(max1 _≤j≤N_ ˆ _[Y][n]_ [+] _[j]_ [= 0)] _[ ≤]_ _[α]_
+
+
+_for the generation threshold_ _N_ [ˆ] _computed as in_ (5) _._ _Here Hk_ _is defined in_ (4) _._
+
+
+We note that any p-values _{p_ ˜ _k}_ obeying condition (ii) in Theorem 3.4, such as those constructed
+in the certification problem, can be turned to _pk_ = max _k≤j≤N_ _p_ ˜ _j_ which satisfy both conditions in
+Theorem 3.4. Perhaps surprisingly, even though we are simultaneously examining multiple batches
+of candidates, it turns out that using a _monotone_ sequence of _individually_ valid p-values suffices
+to achieve our goal, and no adjustment for multiplicity is needed. We remark that the key to our
+theoretical guarantee is the nested nature of the hypotheses: if _Hk_ is true, then all “earlier” hypotheses
+_{Hℓ}ℓ≤k_ must also be true. We thus call our method “conformal nested testing”.
+
+
+**CONFHIT:** **Putting everything together.** So far, we have completed all the elements of CONFHIT.
+We summarize the entire procedure in Algorithm 1, including both certification (for every nested
+subset) and design. Note that the input _w_ ˆ( _·_ ) denotes an estimated density ratio function, which
+coincides with _w_ ( _·_ ) when the density ratio is known. When it fails to certify even the largest batch,
+CONFHIT flags “not confident enough” to clearly communicate the difficulty of the generation task.
+
+3.3 ROBUSTNESS AND DIAGNOSTICS FOR DENSITY RATIO ESTIMATION
+
+
+The density ratio often needs to be estimated in practice and its quality naturally affects the performance of CONFHIT. The difference between historical assay data and newly generated molecules
+is a persistent issue in drug discovery and needs to be addressed in nearly all conformal prediction
+methods in this domain (Krstajic, 2021; Laghuvarapu et al., 2023; Jin & Candès, 2023a; Fannjiang
+& Park, 2025). Estimating the density ratio is a statistically standard problem used in many fields
+including machine learning, statistics, and causal inference with rich existing toolboxes such as kernel
+or classification-based methods beyond the kernel density estimation in our experiments (Horvitz &
+
+
+5
+
+
+**Algorithm 1** CONFHIT
+
+**Input:** Calibration data _{Xi}_ _[n]_ _i_ =1 [0] [for which] _[ Y][i]_ [= 0][, test data] _[ {][X][n]_ [+] _[j][}][N]_ _j_ =1 [, conformity score] _[ V]_ [:] _[X][ n]_ [0][+] _[k]_ _[→]_ [R][,]
+(estimated) weight function _w_ ˆ : _X_ _→_ R [+], confidence level _α ∈_ (0 _,_ 1), budget _N_ _∈_ N [+], Monte Carlo size
+_B_ _∈_ N [+] .
+1: **for** _k_ = 1 _, . . ., N_ **do**
+2: Set Π = _{_ all permutations of _{_ 1 _, . . ., n_ 0 _, n_ + 1 _, . . ., n_ + _k} }_ . // Sequential conformal p-values
+3: Draw _π_ [(] _[b]_ [)] [i.i.d.] _∼_ Unif(Π) for _b_ = 1 _, . . ., B_ .
+4: Compute p-value _pk_ as in (3) with _w_ ( _x_ ) := _w_ ˆ( _x_ ).
+5: **end for**
+6: Set _pk_ = max _k′≥k pk′_ iteratively for _k_ = _N_ _−_ 1 _, . . .,_ 1 // Monotonize p-values
+7: Compute _N_ [ˆ] = argmax _{k_ _∈_ [ _N_ ]: _pk_ _≤_ _α}_, with _N_ [ˆ] = 0 if _pN_ _> α_
+**Output:** Confident shortlist _C_ := _{Xn_ + _j}Nj_ ˆ=1 [or “not confident enough” when] _N_ [ˆ] = 0.
+
+
+Thompson, 1952; Shimodaira, 2000; Sugiyama et al., 2007; Nguyen et al., 2010; Sugiyama et al.,
+2012; Shapiro, 2003). Below, we elaborate on (i) a theoretical analysis of CONFHIT’s robustness to
+the estimation error, followed by (ii) three diagnostic approaches for the estimation quality.
+
+
+Theorem 3.5 shows that with estimated density ratio, the error inflation depends on how _aggressive_
+(resp. _conservative_ ) the weights are for small (resp. _large_ ) p-values; its proof is in Appendix B.5.
+**Theorem 3.5** (Robustness to estimation error) **.** _Let_ _p_ ˆ _N_ _be the p-value_ (3) _using any estimated weights_
+_w_ ˆ( _·_ ) _._ _Define the positive/negative parts of the estimation error_ _δ_ [ˆ] _[±]_ ( _π_ ; _**X**_ ) = [ _w_ [ˆ] ¯( _π_ ; _**X**_ ) _−_ _w_ ¯( _π_ ; _**X**_ )] _±,_
+_with_ _w_ [ˆ] ¯( _π_ ; _**X**_ ) = [�] _j_ _[N]_ =1 _[w]_ [ˆ][(] _[X][π]_ [(] _[n]_ [+] _[j]_ [)][)] _[.]_ _[Then, for any fixed][ t][ ∈]_ [(0] _[,]_ [ 1)] _[, we have]_
+
+
+ - - - _t_ ˆ _·_ ∆ˆ [+] +(1 _−t_ ˆ) _·_ ∆ˆ _[−]_
+P _p_ ˆ _[rand]_ _N_ _≤_ _t_ ��� 1 _≤_ max _j≤N_ _[Y][n]_ [+] _[j]_ [= 0] _≤_ _t_ + E - _Bb_ =0 _w_ [¯] ( _π_ [(] _[b]_ [)] ; _**X**_ )
+
+
+         max1 _≤j≤N Yn_ + _j_ = 0 _,_
+���
+
+
+_where, setting_ _p_ ˆ _N_ ( _v_ ) :=
+
+
+- _Bb_ =0 _w_ [ˆ][¯] ( _π_ [(] _[b]_ [)] ; _**X**_ ) 1 _{v≤V_ ( _π_ [(] _[b]_ [)] ; _**X**_ ) _}_
+
+  - _Bb_ =0 _w_ [ˆ¯] ( _π_ [(] _[b]_ [)] ; _**X**_ ) _}_ _, we define_ _v_ ˆ = argmax _{V_ ( _π_ [(] _[b]_ [)] ; _**X**_ ): _π_ _∈_
+
+
+Π _,_ _p_ ˆ _N_ ( _V_ ( _π_ [(] _[b]_ [)] ; _**X**_ )) _≤_ _t} as the score cutoff, and the corresponding p-value as_ _t_ [ˆ] := _p_ ˆ _N_ (ˆ _v_ ) _, and_
+
+
+ˆ∆ [+] = [�] _b_ _[B]_ =0 _[δ]_ [ˆ][+][(] _[π]_ [(] _[b]_ [)][;] _**[ X]**_ [)][ 1] _[{][V]_ [ (] _[π]_ [(] _[b]_ [)][;] _**[ X]**_ [)] _[ <]_ _[v]_ [ˆ] _[}][,]_ ˆ∆ _[−]_ = [�] _b_ _[B]_ =0 _[δ]_ [ˆ] _[−]_ [(] _[π]_ [(] _[b]_ [)][;] _**[ X]**_ [)][ 1] _[{][V]_ [ (] _[π]_ [(] _[b]_ [)][;] _**[ X]**_ [)] _[ ≥]_ _[v]_ [ˆ] _[}][.]_
+
+
+While Theorem 3.5 offers insights on how the guarantees degrade with the (unknown) estimation
+error, it is often useful to perform robustness diagnostics in practice. The three approaches below are
+demonstrated in our experiments in “Robustness check” Section 4.5.
+
+**(1) Balance check.** Following the balancing idea in causal inference (Ben-Michael et al., 2021),
+reweighting via the correct density ratio will bring the empirical mean of any function of the covariates
+in the calibration data close to that of the test data (under the null with no hits). A natural diagnostic
+is to check the imbalance _|_ _n_ [1] 0 - _ni_ =10 _[w]_ [ˆ][(] _[X][i]_ [)] _[f]_ [(] _[X][i]_ [)] _[ −]_ _k_ [1] - _kj_ =1 _[f]_ [(] _[X][n]_ [+] _[j]_ [)] _[|]_ [ for some] _[ f]_ [ :] _[X]_ _[→]_ [R][.]
+
+**(2) Validation shift.** A second approach is to examine the reliability of estimation via synthetic shift.
+One may create artificial distribution shifts in the labeled data, such as by scaffold splitting; with one
+fold as the calibration data and the other as the test data, one can use the known labels to examine the
+uniformity of p-values and the quality of the density ratio estimation algorithm.
+
+**(3) Sensitivity analysis.** Finally, one may conduct sensitivity analysis to probe the robustness of
+CONFHIT to perturbations of estimated weights. Similar to causal inference (Rosenbaum, 2005), we
+may assume the correct weights are within a distance from the estimated weights, and examine the
+worst-case p-values and testing results while varying the weights within the assumed range.
+
+
+While generative models do not naturally provide a built-in notion of reliability, CONFHIT augments
+them with new capabilities for practical deployment; it is model-agnostic and only relies on a scalar
+quantity, the density ratio, that can be validated and stress-tested, thereby making the uncertainty
+measurable and more robust than trusting the raw model alone (Section 4.5, “Additional baselines”).
+
+
+4 EXPERIMENTS
+
+
+4.1 TASKS, MODELS, AND DATASETS
+We evaluate our framework on two representative conditional molecule-generation tasks and highlight
+the model-agnostic nature of our approach by employing five generative models spanning VAE,
+
+
+6
+
+
+_n_ [1] 0 - _ni_ =10 _[w]_ [ˆ][(] _[X][i]_ [)] _[f]_ [(] _[X][i]_ [)] _[ −]_ _k_ [1]
+
+
+_k_ [1] - _kj_ =1 _[f]_ [(] _[X][n]_ [+] _[j]_ [)] _[|]_ [ for some] _[ f]_ [ :] _[X]_ _[→]_ [R][.]
+
+
+autoregressive transformers, diffusion models, and Bayesian Flow Networks. For _evaluation_ purposes,
+we use computational oracles to judge the property of generated samples since wet-lab evaluation is
+infeasible (Jin et al., 2020); the oracle is not used in running CONFHIT.
+
+**App. 1:** **Constrained Molecule Optimisation (CMO).** Given a seed molecule _X_ [¯] that _fails_ a target
+property, the goal is to generate a molecule _X_ that is close in Tanimoto distance to _X_ [¯] and satisfies
+the property. This task reflects lead-optimisation workflows where _experimental_ assays provide
+ground-truth. Following the standard practice of using a computational oracle, in our experiments,
+we use the property _DRD2_ _receptor_ _binding_ _(DRD2)_, with success ( _Y_ = 1) if DRD2( _x_ ) _>_ 0 _._ 5.
+Additional comphrehensive results on Quantitative Estimate of Drug-likeness improvement (QED)
+reported in the Appendix E.2.
+
+
+To demonstrate the compatibility of CONFHIT with general generative models, we employ two
+state-of-the-art CMO models: 1. _H_ GRAPH2GRAPH, a hierarchical VAE editing scaffold-level motifs
+while preserving validity (Jin et al., 2020); 2. _SELF-_ EDIT, an autoregressive transformer generating
+SELFIES strings to optimise the property while maintaining similarity to the seed (Jiao et al., 2023).
+
+
+We take a subset of the training split in Chemprop (Yang et al., 2019) of ChEMBL data (Gaulton
+et al., 2012) as the labeled calibration data _{X_ [¯] _i, Xi, Yi}_ _[n]_ _i_ =1 [(seed input, sample from past campaigns,]
+and oracle property), following Jin et al. (2020). Inactive molecules in the test split serve as test
+inputs _{X_ [¯] [(] _[ℓ]_ [)] _}_ _[L]_ _ℓ_ =1 [.] [For each] _[X]_ [¯] [(] _[ℓ]_ [)][, the model generates] _[ {][X]_ _n_ [(] _[ℓ]_ + [)] _j_ _[}]_ _j_ _[m]_ =1 [.]
+
+
+**App. 2: Structure-Based Drug Discovery (SBDD).** Here the input _X_ [¯] is a 3D protein binding pocket,
+and the task is to generate ligands _X_ that bind to it, so the label _Y_ depends on ( _X, X_ [¯] ). Following
+standard practice, for evaluation purposes only, we use AutoDock Vina (Trott & Olson, 2010) as
+computation oracle and label a ligand as a hit if its score is below _−_ 7 _._ 5 kcal mol _[−]_ [1] ; such a threshold
+captures about 75% of known active samples in CrossDock (Francoeur et al., 2020a).
+
+
+In this task, we apply CONFHIT with three state-of-the-art SBDD models: _TargetDiff_ (Guan et al.,
+2023), an SE(3)-equivariant diffusion model conditioned on pocket meshes; _DecompDiff_ (Guan et al.,
+2024), using decomposed priors to separate structural components; _MolCRAFT_ (Qu et al., 2024), a
+Bayesian Field Network operating fully in continuous parameter space.
+
+The calibration data are protein-ligand pairs _{_ ( _X_ [¯] _i, Xi_ ) _}_ _[n]_ _i_ =1 [from] [CrossDocked] [(][Francoeur] [et] [al.][,]
+2020b). Following the same split in Guan et al. (2023), we use the proteins in the test split as inputs
+_{X_ [¯] [(] _[ℓ]_ [)] _}_ _[L]_ _ℓ_ =1 [, and the model generates candidate ligands] _[ {][X][n]_ [+] _[j][}]_ _j_ _[N]_ =1 [given each input] _[X]_ [¯] [(] _[ℓ]_ [)][.]
+
+
+4.2 IMPLEMENTATION DETAILS
+**Conformity Score Function.** We define _V_ using a property prediction model _µ_ ˆ( _·_ ):
+
+
+ - **CMO.** For both properties (QED and DRD2) we train a binary classifier _µ_ ˆ( _·_ ) with molecular graph
+inputs using the Chemprop library (Yang et al., 2019) and ChEMBL data splits in Jin et al. (2020).
+
+ - **SBDD.** We train an EGNN _µ_ ˆ( _·_ ) (Satorras et al., 2021) on PDBBind crystal structure data (Wang
+et al., 2005) to predict binding affinity, using TARGETDIFF (Guan et al., 2023) codebase.
+
+In both tasks, _µ_ ˆ is trained on data independent of calibration and test sets. Training details, hyperparameters, and compute for _µ_ ˆ and the generative models are given in Appendix C. For conciseness,
+we present most results with the Max-pooling score _V_ ( _x_ 1: _n_ 0 _, xn_ +1: _n_ + _k_ ) = max1 _≤j≤k_ _µ_ ˆ( _xn_ + _j_ ).
+Comparisons to other score functions appear in Figure 4.
+
+
+**Density Ratio Estimation.** We leverage kernel density estimation (KDE) for constructing the weights
+in our p-values. Following the discussion in Lemma A.2 in Appendix A.2, the desired weight _w_ ( _·_ )
+equals the _marginal_ density ratio of generated samples, regardless of hit status. Also, plugging in the
+densities for the joint distribution of input/generation pairs, denoted as _q_ ˜(¯ _x, x_ ) and _p_ ˜(¯ _x, x_ ), yields the
+same p-value due to normalization. Thus, we directly estimate _p_ ˜( _·_ ) and _q_ ˜( _·_ ) to ensure sufficient data
+for estimation. Following CODRUG (Laghuvarapu et al., 2023), we extract latent features _g_ (¯ _x, x_ )
+from the penultimate layer of the property model, and fit Gaussian KDEs _p_ ˆ(¯ _x, x_ ) and _q_ ˆ( _g_ (¯ _x, x_ )) on
+calibration and test samples, forming weights _w_ ˜(¯ _x, x_ ) = _q_ ˆ( _g_ (¯ _x, x_ )) _/p_ ˆ( _g_ (¯ _x, x_ )).
+
+
+4.3 RESULTS: CERTIFICATION
+
+In this section, we present results of the certification experiment, where the goal (1) is to certify the
+presence of a hit in a batch of fixed size _N_ at level _α_ . Our evaluation focuses on (i) error control, and
+(ii) power, i.e., the frequency of successfully certifying hits. Results for both CMO and SBDD tasks
+
+
+7
+
+
+Figure 2: **Certification results.** Left: realized error rates at fixed _N_ for different models and error levels _α_ in
+SBDD (upper) and CMO (lower). Middle: average error rates while varying budget _N_ . Right: power, i.e., the
+fraction of actives certified at various error level _α_ and budget _N_ values. The dashed line denotes the ideal
+_y_ = _x_ error bound. Our method consistently achieves valid coverage across scenarios. Results are averaged over
+5 random runs; error bars and additional results for other values of _N_ are in Appendix E.2
+
+
+Figure 3: **Design results.** Error rate at fixed _N_ for different methods (left), mean set sizes averaged across
+methods at different values of _N_ (middle), and empty set percentage at different values of _N_ (right) across target
+levels _α_ . The top row shows results for SBDD and the bottom for CMO. Dashed black line in the error plots
+indicates the ideal _y_ = _x_ bound. CONFHIT achieves tight error control while producing substantially smaller
+sets. Results are averaged over 5 random runs; additional results are provided in the Appendix E.2.
+
+
+across different generative models are shown in Figure 2. The left panel reports the empirical error
+rate, i.e. the frequency of certifying sets that contain no hit. Across all settings, we observe tight
+error control. The middle panel shows the error rates (averaged across methods for visualization)
+for different budgets _N_, and we observe that the error stays below the target error levels. Finally,
+the right panel plots the fraction of sets containing an active that are certified as a function of _α_
+at different, where CONFHIT is able to detect true hits with satisfactory power. As expected, this
+fraction increases with the significance level and set size _N_ .
+
+
+4.4 RESULTS: DESIGN
+
+In this section, we present experiments for the design problem in (2), where we prune a generated
+batch to obtain compact subsets while preserving tight error control. As summarized in Figure 3, our
+nested procedure refines candidate sets while preserving statistical guarantees.
+
+
+As we address a novel problem under unique constraints, there are no directly comparable baselines
+(existing methods in conformal generative modeling (Quach et al., 2023; Kladny et al., 2024) are
+not comparable due to the unavailable oracle). Instead, we consider two baselines to demonstrate
+the benefits of CONFHIT: **(i)** **Bonferroni** **correction.** Given _N_ test samples, we threshold the
+one-test-sample p-value (set each candidate as the test set in (3)) at _α/N_ . It provides a stronger
+guarantee of no false certification for any test sample, but can be conservative. **(ii) Certification-only.**
+The certification procedure from Section 4.3, which serves as a baseline without pruning.
+
+
+8
+
+
+**Compared** **with** **Bonferroni,** our approach substantially outperforms in both CMO and SBDD
+tasks. At stringent levels ( _α_ = 0 _._ 1), Bonferroni yields empty sets for nearly 100% of SBDD inputs,
+while CONFHITleads to empty set frequency as low as 16% for _N_ = 15 [2] . Moreover, in the rare
+cases where Bonferroni is able to make discoveries, it usually exhaust the full budget, whereas
+CONFHIT consistently prunes to 2-5 molecules (30-50% of the full budget). Due to conservativeness,
+Bonferroni has low or near zero error rates, whereas CONFHIT achieves adaptive and tight coverage.
+
+
+**Compared with certification-only** whose results are in Figure 2, the nested procedure successfully
+prunes promising initial large sets to smaller ones. For example, in SBDD at _α_ = 0 _._ 1 with _N_ = 15,
+the nested procedure reduces the mean set size to about 4 molecules without compromising the error
+control. Similar improvements hold in CMO, where nested pruning typically halves the certified set
+size while delivering tighter agreement between realized and nominal error.
+
+
+In summary, CONFHIT delivers compact certified sets with strict error control. It largely avoids
+vacuous results and yields smaller, more actionable shortlists with higher coverage for subsequent
+experimental validation. This makes our framework particularly valuable in scientific discovery
+workflows, where experimental budgets require both statistical confidence and practical tractability.
+
+
+4.5 ADDITIONAL INVESTIGATIONS
+
+
+**Choice of test statistic.** While we report the results with the Max-pool conformity score, Figure 4
+evaluate CONFHIT with five choices of the conformity score _V_ ( _·_ )— _min_, _mean_, likelihood-ratio
+( _LR_ ), rank-sum, and _max_ —on the SBDD task with TARGETDIFF at a budget of _N_ = 5; results
+for other tasks and budgets show similar patterns and are provided in the Appendix E.2. Across
+the board, CONFHIT consistently keeps the realised error rate close to the target _α_, confirming the
+model-agnostic validity. However, the choice of the score does affect power: _max_ certifies most often
+(e.g., 73 % of seeds at _α_ = 0 _._ 1), while rank-sum is the most conservative.
+
+
+Figure 4: Comparison of score statistics on TargetDiff (SBDD, N=5). Left: rejection (power) at _α_ = 0 _._ 1 _,_ 0 _._ 3.
+Right: error vs. _α_ . All remain valid; the _max_ statistic shows the highest power.
+
+
+**Choice of property prediction model.** As we discussed in the end of Section 3.1, the choice of the
+property prediction model only affects the power. We performed an ablation study with weak property
+prediction models by adding noninformative perturbations to the predictions. CONFHIT maintains
+robust error rate control despite that the weaker predictor decreases the power; see Appendix F.
+
+
+**Distribution shift adjustment.** The guarantees of CONFHIT in both certification and design rely
+on valid p-values, which further hinges on distribution shift adjustment. As an ablation study, we
+compare CONFHIT with the version without distribution shift adjustment, i.e., taking _w_ ( _·_ ) _≡_ 1.
+We observe that running CONFHIT without distribution shift adjustment can violate the coverage
+guarantee especially for stringent target error rates, for example, using the TARGETDIFF model in the
+SBDD task, and the SELFEDIT model in the CMO task. The differences are highlighted in Figure
+5a. In addition, we plot the distribution of p-values computed with negative samples across different
+datasets and observe that they are approximately uniform; see Appendix E.3.
+
+
+**Robustness check.** We exemplify the robustness diagnostics in Section 3.3, with a sensitivity-analysis
+in Appendix H.1, synthetic validation with a realistic scaffold split in Appendix H.2 and a balance
+check based on key features in Appendix H.3. First, by perturbing the weights via a power law,
+we showcase how to examine the robustness of CONFHIT’s output, with additional evaluation to
+show the mild degradation of error control. Meanwhile, CONFHIT achieves tight error control under
+synthetic scaffold splits, and the estimated density ratio improves the balance in key features.
+
+
+2Returning empty sets means no enough confidence under the generation budget _N_, which is inevitable
+without strong assumptions on the generative power.
+
+
+9
+
+
+Figure 5: (a) **Distribution shift adjustment** (left). Coverage violations when CONFHIT is run without density
+correction. (b) **Budget analysis** (middle and right). Fraction of inputs with at least one hit under increasing
+generation budget. Solid lines: fraction of actual hits; dashed lines: predicted fraction of hits.
+
+
+**Additional baselines.** We additionally evaluate two baselines. (i) A **heuristic baseline** which uses
+an estimated probability to calibrate the generation batch size (Appendix G.1). It violates error
+control when the estimation quality moderately degrades; in contrast, CONFHIT is model-agnostic
+and maintains validity under the same degradation (Appendix F), showing that principled uncertainty
+quantification provides robust guarantees. (ii) An **oracle** **baseline** which (unrealistically) labels
+generated samples (Quach et al., 2023) yet without covariate shift adjustment (Appendix G.2). Even
+with oracle access, ignoring the distribution shift leads to both high errors and high frequency of
+empty sets (perhaps since it relies on exchangeability between _inputs_, which reduces the sample size).
+
+
+4.6 WORKING UNDER AN OVERALL BUDGET
+
+
+Finally, we demonstrate the utility of CONFHIT for allocating a fixed budget across multiple tasks. In
+drug discovery campaigns, scientists often work with multiple generation inputs but can only validate
+a limited number of samples experimentally. In this setting, the confidence in valid hits provided by
+CONFHIT serves as a practical heuristic for budget allocation—deciding how many candidates to
+synthesize per task. Given _K_ inputs (tasks) and a total budget _B_, we fix a maximum size _N_ for each
+input; then, CONFHIT suggests the smallest subset which contains a hit for each input at a confidence
+level _α_ . We then vary the value of _α_ until the budget is exhausted. Finally, we estimate the fraction
+of tasks whose output set contains a hit via (1 _−_ _α_ ) minus the fraction of empty sets (i.e., when
+CONFHIT fails to certify a hit at level _α_ ). The exact procedure is described in Appendix D.
+
+
+In Figure 5b, we compare predicted and realized positives under different budget levels (measured
+as multiples of the number _K_ of inputs). Across both CMO and SBDD, the realized fraction of
+actives consistently exceeds our estimates, showing the reliability and practical utility of CONFHIT.
+Complementing the certification and design results, this budge allocation perspective confirms the
+robust empirical performance of CONFHIT when coupled with more complex, albeit heuristic,
+applications. Of course, we acknowledge that this is only a heuristic approach without formal
+theoretical guarantees, and the application of CONFHIT in such tasks warrants careful future study.
+
+
+5 CONCLUSION
+
+
+In this work, we introduced CONFHIT, a model-agnostic framework that delivers finite-sample
+guarantees for conditional generative models. By re-weighting calibration data with density ratios,
+CONFHIT corrects the distributional shift from historical compounds to model-generated candidates,
+thereby removing the need for an external experimental oracle, an assumption required by all existing
+conformal-prediction approaches in generative modeling. Building on these adjusted weights, we
+derive a nested conformal p-value that certifies the probability of sampling at least one viable
+molecule. Across two standard benchmarks for optimization of constrained molecules and structurebased design, and across a wide range of methods and budget regimes, CONFHIT consistently
+provides valid coverage guarantees while maintaining compact certified sets. Our results establish
+CONFHIT as a principled and practical framework for both certification and design, enabling reliable
+generative modeling under stringent resource constraints.
+
+
+**Limitations** The coverage guarantee relies on density-ratio estimates, which can be noisy when
+the calibration set is small or the feature extractor is poorly aligned with the target domain. Our
+experiments focus on small molecules; extending the approach to proteins or other macromolecules
+with larger, more structured generative space will require additional work. Validation currently relies
+on in-silico oracles; without wet-lab confirmation, transferability remains to be seen. Demonstrating
+robustness across broader chemical and experimental settings is a key direction for future research.
+
+
+10
+
+
+6 ETHICS STATEMENT
+
+
+Because the framework is model-agnostic and targets conditional molecule generation, we expect
+it to benefit diverse discovery pipelines in chemistry, biology, and materials science. The work
+builds on long-standing practices in molecular modeling, so we do not anticipate negative societal
+consequences. However, we acknowledge potential dual use, such as designing harmful compounds,
+and responsible use will require oversight and access controls.
+
+
+**LLM Usage** The use of LLMs in this work is limited to polishing the writing and assisting with
+code-related tasks.
+
+
+7 REPRODUCIBILITY STATEMENT
+
+
+All experimental settings are described in Section 4.1, with an extended discussion of
+implementation details in Appendix C. Information on compute resources and runtime
+is provided in Section C.4. The code, datasets along with the config files used for
+experiments in this work are included at [https://github.com/siddharthal/](https://github.com/siddharthal/CONFHIT-Conformal-Generative-Design-with-Oracle-Free-Guarantees)
+[CONFHIT-Conformal-Generative-Design-with-Oracle-Free-Guarantees](https://github.com/siddharthal/CONFHIT-Conformal-Generative-Design-with-Oracle-Free-Guarantees)
+and are further detailed in Appendix C.5.
+
+
+REFERENCES
+
+
+Anastasios N. Angelopoulos, Stephen Bates, Emmanuel J. Candès, Michael I. Jordan, and Lihua
+Lei. Learn then test: Calibrating predictive algorithms to achieve risk control. _arXiv preprint_
+_arXiv:2110.01052_, 2021.
+
+
+Tian Bai and Ying Jin. Optimized conformal selection: Powerful selective inference after conformity
+score optimization. _arXiv preprint arXiv:2411.17983_, 2024.
+
+
+Tianyu Bai, Puchen Tang, Yifan Xu, Vladimir Svetnik, Abbass Khalili, Xusheng Yu, and Andrew
+Yang. Conformal selection for efficient and accurate compound screening in drug discovery. _arXiv_
+_preprint arXiv:2402.12345_, 2024.
+
+
+Stephen Bates, Emmanuel Candès, Lihua Lei, Yaniv Romano, and Matteo Sesia. Testing for outliers
+with conformal p-values. _The Annals of Statistics_, 51(1):149–178, 2023.
+
+
+Eli Ben-Michael, Avi Feller, David A Hirshberg, and José R Zubizarreta. The balancing act in causal
+inference. _arXiv preprint arXiv:2110.14831_, 2021.
+
+
+Gabriele Corso, Hannes Stärk, Bowen Jing, Regina Barzilay, and Tommi Jaakkola. Diffdock:
+Diffusion steps, twists, and turns for molecular docking. _arXiv preprint arXiv:2210.01776_, 2022.
+
+
+Isidro Cortés-Ciriano and Andreas Bender. Deep confidence: A computationally efficient framework
+for calculating reliable prediction errors for deep neural networks. _Journal of Chemical Information_
+_and Modeling_, 59(3):1269–1281, 2018.
+
+
+Isidro Cortés-Ciriano and Andreas Bender. Concepts and applications of conformal prediction in
+computational drug discovery. _arXiv preprint arXiv:1908.03569_, 2019.
+
+
+Clara Fannjiang and Ji Won Park. Reliable algorithm selection for machine learning–guided design.
+_arXiv preprint arXiv:2503.20767_, 2025.
+
+
+Clara Fannjiang, Stephen Bates, Anastasios N. Angelopoulos, Jennifer Listgarten, and Michael I.
+Jordan. Conformal prediction under feedback covariate shift for biomolecular design. _Proceedings_
+_of the National Academy of Sciences_, 119(43):e2204569119, 2022.
+
+
+Ronald Aylmer Fisher and Ronald A Fisher. _The design of experiments_ . Springer, 1971.
+
+
+Patrick Francoeur, Ruben J. Gomez-Bombarelli, Jianfeng Pei, and Rohit Singh. Three-dimensional
+convolutional neural networks and a crossdocked dataset for structure-based drug design. _Journal_
+_of Chemical Information and Modeling_, 60(9):4200–4215, 2020a. doi: 10.1021/acs.jcim.0c00411.
+
+
+11
+
+
+Paul G Francoeur, Tomohide Masuda, Jocelyn Sunseri, Andrew Jia, Richard B Iovanisci, Ian Snyder,
+and David R Koes. Three-dimensional convolutional neural networks and a cross-docked data set
+for structure-based drug design. _Journal of chemical information and modeling_, 60(9):4200–4215,
+2020b.
+
+
+Anna Gaulton, Louisa J Bellis, A Patricia Bento, Jon Chambers, Mark Davies, Anne Hersey, Yvonne
+Light, Shaun McGlinchey, David Michalovich, Bissan Al-Lazikani, et al. Chembl: a large-scale
+bioactivity database for drug discovery. _Nucleic acids research_, 40(D1):D1100–D1107, 2012.
+
+
+Jiaqi Guan, Wesley Wei Qian, Xingang Peng, Yufeng Su, Jian Peng, and Jianzhu Ma. 3d equivariant
+diffusion for target-aware molecule generation and affinity prediction. In _International Conference_
+_on Learning Representations (ICLR)_, 2023. [URL https://openreview.net/forum?id=](https://openreview.net/forum?id=kJqXEPXMsE0)
+[kJqXEPXMsE0.](https://openreview.net/forum?id=kJqXEPXMsE0)
+
+
+Jiaqi Guan, Xiangxin Zhou, Yuwei Yang, Yu Bao, Jian Peng, Jianzhu Ma, Qiang Liu, Liang Wang,
+and Quanquan Gu. Decompdiff: diffusion models with decomposed priors for structure-based
+drug design. _arXiv preprint arXiv:2403.07902_, 2024.
+
+
+Rafael Gómez-Bombarelli, Jennifer N. Wei, David Duvenaud, and et al. Automatic chemical design
+using a data-driven continuous representation of molecules. _ACS Central Science_, 4(2):268–276,
+2018.
+
+
+Jonathan Ho, Chitwan Saharia, William Chan, David J Fleet, Mohammad Norouzi, and Tim Salimans.
+Cascaded diffusion models for high fidelity image generation. _Journal_ _of_ _Machine_ _Learning_
+_Research_, 23(47):1–33, 2022.
+
+
+Emiel Hoogeboom, Victor Garcia Satorras, and et al. Equivariant diffusion for molecular generation
+in 3d. In _International Conference on Machine Learning_, 2022.
+
+
+Daniel G Horvitz and Donovan J Thompson. A generalization of sampling without replacement from
+a finite universe. _Journal of the American statistical Association_, 47(260):663–685, 1952.
+
+
+Xiaoyu Hu and Jing Lei. A two-sample conditional distribution test using conformal prediction and
+weighted rank sum. _Journal of the American Statistical Association_, 119(546):1136–1154, 2024.
+
+
+John Ingraham, Vikas K. Garg, Regina Barzilay, and Tommi Jaakkola. Generative models for
+graph-based protein design. In _Advances in Neural Information Processing Systems_, 2019.
+
+
+Miao Jiao, Yiqing Wang, Xiufeng Chen, and Tien Huynh. Self-edit: Structure-constrained molecular
+optimisation using selfies editing transformer. _Applied Intelligence_, 53(18):21455–21471, 2023.
+doi: 10.1007/s10489-023-04915-8.
+
+
+Wengong Jin, Regina Barzilay, and Tommi Jaakkola. Hierarchical generation of molecular graphs
+using structural motifs. In _Proceedings of the 37th International Conference on Machine Learn-_
+_ing_ _(ICML)_, pp. 4839–4848, 2020. URL [https://proceedings.mlr.press/v119/](https://proceedings.mlr.press/v119/jin20a.html)
+[jin20a.html.](https://proceedings.mlr.press/v119/jin20a.html)
+
+
+Ying Jin and Emmanuel J Candès. Model-free selective inference under covariate shift via weighted
+conformal p-values. _arXiv preprint arXiv:2307.09291_, 2023a.
+
+
+Ying Jin and Emmanuel J Candès. Selection by prediction with conformal p-values. _Journal_ _of_
+_Machine Learning Research_, 24(244):1–41, 2023b.
+
+
+Klaus-Rudolf Kladny, Bernhard Schölkopf, and Michael Muehlebach. Conformal generative
+modeling with improved sample efficiency through sequential greedy filtering. _arXiv preprint_
+_arXiv:2410.01660_, 2024.
+
+
+Damjan Krstajic. Critical assessment of conformal prediction methods applied in binary classification
+settings. _Journal_ _of_ _Chemical_ _Information_ _and_ _Modeling_, 61(10):4823–4826, 2021. doi: 10.
+[1021/acs.jcim.1c00549. URL https://doi.org/10.1021/acs.jcim.1c00549. PMID:](https://doi.org/10.1021/acs.jcim.1c00549)
+34550693.
+
+
+12
+
+
+Siddhartha Laghuvarapu, Zhen Lin, and Jimeng Sun. Codrug: Conformal drug property prediction
+with density estimation under covariate shift. _Advances in Neural Information Processing Systems_,
+36:37728–37747, 2023.
+
+
+Ali Madani, Bryan McCann, Nikhil Naik, Nitish Shirish Keskar, Namrata Anand, Raphael R. Eguchi,
+Po-Ssu Huang, and Richard Socher. Progen: Language modeling for protein generation. _arXiv_
+_preprint arXiv:2004.03497_, 2020.
+
+
+Ali Madani, Bryan McCann, Nikhil Naik, and et al. Progen: Language modeling for protein
+generation. _arXiv preprint arXiv:2004.03497_, 2021.
+
+
+XuanLong Nguyen, Martin J Wainwright, and Michael I Jordan. Estimating divergence functionals
+and the likelihood ratio by convex risk minimization. _IEEE Transactions on Information Theory_,
+56(11):5847–5861, 2010.
+
+
+Harris Papadopoulos, Kostas Proedrou, Vassilis Vovk, and Alex Gammerman. Inductive confidence
+machines for regression. In _Proceedings of the 13th European Conference on Machine Learning_
+_(ECML)_, pp. 345–356, 2002.
+
+
+Drew Prinster, Suchi Saria, and Anqi Liu. Jaws-x: Addressing efficiency bottlenecks of conformal
+prediction under standard and feedback covariate shift. In _Proceedings of the 40th International_
+_Conference on Machine Learning (ICML)_, 2023.
+
+
+Yanru Qu, Keyue Qiu, Yuxuan Song, Jingjing Gong, Jiawei Han, Mingyue Zheng, Hao Zhou, and
+Wei-Ying Ma. Molcraft: structure-based drug design in continuous parameter space. _arXiv preprint_
+_arXiv:2404.12141_, 2024.
+
+
+Victor Quach, Adam Fisch, Tal Schuster, Adam Yala, Jae Ho Sohn, Tommi S Jaakkola, and Regina
+Barzilay. Conformal language modeling. _arXiv preprint arXiv:2306.10193_, 2023.
+
+
+Alec Radford, Karthik Narasimhan, Tim Salimans, Ilya Sutskever, et al. Improving language
+understanding by generative pre-training. 2018.
+
+
+Paul R Rosenbaum. Sensitivity analysis in observational studies. _Encyclopedia_ _of_ _statistics_ _in_
+_behavioral science_, 4:1809–1814, 2005.
+
+
+Vıctor Garcia Satorras, Emiel Hoogeboom, and Max Welling. E (n) equivariant graph neural networks.
+In _International conference on machine learning_, pp. 9323–9332. PMLR, 2021.
+
+
+Hooman Shahrokhi, Devjeet Raj Roy, Yan Yan, Venera Arnaoudova, and Janaradhan Rao Doppa.
+Conformal prediction sets for deep generative models via reduction to conformal regression. _arXiv_
+_preprint arXiv:2503.10512_, 2025.
+
+
+Alexander Shapiro. Monte carlo sampling methods. _Handbooks in operations research and manage-_
+_ment science_, 10:353–425, 2003.
+
+
+Hidetoshi Shimodaira. Improving predictive inference under covariate shift by weighting the loglikelihood function. _Journal of statistical planning and inference_, 90(2):227–244, 2000.
+
+
+Alexey Strokach and Philip M. Kim. Deep generative modeling for protein design. _Current Opinion_
+_in Structural Biology_, 72:226–236, 2022. doi: 10.1016/j.sbi.2021.11.008.
+
+
+Masashi Sugiyama, Shinichi Nakajima, Hisashi Kashima, Paul Buenau, and Motoaki Kawanabe.
+Direct importance estimation with model selection and its application to covariate shift adaptation.
+_Advances in neural information processing systems_, 20, 2007.
+
+
+Masashi Sugiyama, Taiji Suzuki, and Takafumi Kanamori. _Density_ _ratio_ _estimation_ _in_ _machine_
+_learning_ . Cambridge University Press, 2012.
+
+
+Jiangming Sun, Lars Carlsson, Ernst Ahlberg, Ulf Norinder, Ola Engkvist, and Hongming Chen. Applying mondrian cross-conformal prediction to estimate prediction confidence on large imbalanced
+bioactivity data sets. _Journal of Chemical Information and Modeling_, 57(7):1591–1598, 2017.
+
+
+13
+
+
+Fredrik Svensson, Natalia Aniceto, Ulf Norinder, Isidro Cortés-Ciriano, Ola Spjuth, Lars Carlsson,
+and Andreas Bender. Conformal regression for quantitative structure–activity relationship modeling—quantifying prediction uncertainty. _Journal of Chemical Information and Modeling_, 58(5):
+1132–1140, 2018.
+
+
+Ryan J Tibshirani, Rina Foygel Barber, Emmanuel Candes, and Aaditya Ramdas. Conformal
+prediction under covariate shift. _Advances in neural information processing systems_, 32, 2019.
+
+
+Oleg Trott and Arthur J Olson. Autodock vina: improving the speed and accuracy of docking with
+a new scoring function, efficient optimization, and multithreading. _Journal_ _of_ _computational_
+_chemistry_, 31(2):455–461, 2010.
+
+
+Dennis Ulmer, Chrysoula Zerva, and André F. T. Martins. Non-exchangeable conformal language
+generation with nearest neighbors. 2024. [URL https://arxiv.org/abs/2402.00707.](https://arxiv.org/abs/2402.00707)
+arXiv:2402.00707.
+
+
+Vladimir Vovk, Alexander Gammerman, and Glenn Shafer. _Algorithmic learning in a random world_,
+volume 29. Springer, 2005.
+
+
+Renxiao Wang, Xueliang Fang, Yipin Lu, Chao-Yie Yang, and Shaomeng Wang. The pdbbind
+database: methodologies and updates. _Journal of medicinal chemistry_, 48(12):4111–4119, 2005.
+
+
+Tian Xie, Xiang Fu, Octavian-Eugen Ganea, Regina Barzilay, and Tommi Jaakkola. Crystal diffusion
+variational autoencoder for periodic material generation. In _International Conference on Learning_
+_Representations_, 2022.
+
+
+Kevin Yang, Kyle Swanson, Wenhao Jin, Connor Coley, and Philipp Eiden et al. Analyzing learned
+molecular representations for property prediction. _Journal of Chemical Information and Modeling_,
+59(8):3370–3388, 2019. doi: 10.1021/acs.jcim.9b00237.
+
+
+Jason Yim, Andrew Campbell, Andrew YK Foong, Michael Gastegger, José Jiménez-Luna, Sarah
+Lewis, Victor Garcia Satorras, Bastiaan S Veeling, Regina Barzilay, Tommi Jaakkola, et al. Fast
+protein backbone generation with se (3) flow matching, 2023.
+
+
+Claudio Zeni, Robert Pinsler, Daniel Zügner, Andrew Fowler, Matthew Horton, et al. Mattergen: A
+generative model for inorganic materials design. _arXiv preprint arXiv:2312.03687_, 2023.
+
+
+Jin Zhang, Ulf Norinder, and Fredrik Svensson. Deep learning–based conformal prediction of toxicity.
+_Journal of Chemical Information and Modeling_, 61(6):2648–2657, 2021.
+
+
+A ADDITIONAL DISCUSSION
+
+
+A.1 NON-RANDOMIZED CONFORMAL P-VALUE
+
+
+Let Π be the collection of all permutations of _{_ 1 _, . . ., n_ 0 _, n_ + 1 _, . . ., n_ + _k}_ . For any permutation
+_π_ _∈_ Π, we denote the score obtained by permuting the observed features by _π_ as
+_V_ ( _π_ ; _**X**_ ) = _V_ ( _Xπ_ (1) _, . . ., Xπ_ ( _n_ 0) _, Xπ_ ( _n_ +1) _, . . ., Xπ_ ( _n_ + _k_ )) _._
+
+
+We additionally denote the identity mapping as _π_ 0, i.e., _π_ 0( _i_ ) = _i_ for any _i_ . Finally, we define
+
+
+ _pk_ =
+
+
+_._ (6)
+_π∈_ Π _[w]_ [¯][(] _[π]_ [;] _**[ X]**_ [)]
+
+
+_π∈_ Π _[w]_ [¯][(] _[π]_ [;] _**[ X]**_ [)][ 1] _[{][V]_ [ (] _[π]_ [0][;] _**[ X]**_ [)] _[ ≤]_ _[V]_ [ (] _[π]_ [;] _**[ X]**_ [)] _[}]_
+
+  
+
+
+Here, _w_ ¯( _π_ ; _**X**_ ) = [�] _j_ _[k]_ =1 _[w]_ [(] _[X][π]_ [(] _[n]_ [+] _[j]_ [)][)] _[,]_ [ the joint likelihood ratio after permutation] _[ π]_ [, where] _[ w]_ [(] _[x]_ [)][ is]
+the density ratio. In a nutshell, _pk_ considers all permutations of the inactive calibration samples
+and the test samples, and compute the weighted rank of the score computed with observed data,
+_V_ ( _π_ 0; _**X**_ ), among all scores with permuted data.
+
+
+The validity of the deterministic p-value is established in the following theorem, whose proof is in
+Appendix B.3.
+**Theorem A.1.** _Under the covariate shift assumption, it holds for any fixed t ∈_ [0 _,_ 1] _that_
+
+P� _pk_ _≤_ _t_ �� _max_ 1 _≤j≤kYn_ + _j_ = 0� _≤_ _t._
+
+
+14
+
+
+A.2 JOINT WEIGHTED EXCHANGEABILITY
+
+
+In this part, we characterize the exchangeability structure of the inactive calibration data _{Xi}i∈I_ 0
+and the test samples _{Xn_ + _j}_ _[k]_ _j_ =1 [under the null case]
+
+
+_Hk_ : max [= 0] _[.]_
+1 _≤j≤k_ _[Y][n]_ [+] _[j]_
+
+
+Here for generality, we use the index _k_ to indicate that _{Xn_ + _j}_ _[k]_ _j_ =1 [might be a subset of the original]
+proposal. The following lemma characterizes the distribution of these data conditional on the labels.
+Its proof simply applies the Bayes’ rule, whose proof is deferred to Appendix B.2 for completeness.
+**Lemma A.2.** _Conditional on {Zi}_ _[n]_ _i_ =1 _[∪{][Z][n]_ [+] _[j][}][j][≥]_ [1] _[as well as]_ [ max][1] _[≤][j][≤][k][ Y][n]_ [+] _[j]_ [= 0] _[, the features]_
+_{Xi}i∈I_ 0 _are_ _i.i.d._ _from_ _P_ 0 := _PX | Y_ =0 _,_ _whereas_ _{Xn_ + _j}_ _[k]_ _j_ =1 _[are]_ _[i.i.d.]_ _[from]_ _[Q]_ [0] [:=] _[Q][X][ |][ Y]_ [ =0] _[.]_
+_Furthermore,_ d _Q_ 0 _/_ d _P_ 0( _x_ ) = _w_ ( _x_ ) _, where w_ ( _x_ ) = [d] _[Q]_ [(] _[x, y]_ [) =] [d] _[Q][X]_ [(] _[x]_ [)] _[ is the density ratio.]_
+
+
+[d] _[Q]_ [d] _[Q][X]_
+
+d _P_ [(] _[x, y]_ [) =] d _PX_
+
+
+_[X]_
+
+d _PX_ [(] _[x]_ [)] _[ is the density ratio.]_
+
+
+Lemma A.2 states that, conditional on all labels, on the “null” event that _Hk_ is true, the “marginal”
+density ratio _w_ ( _x_ ) suffices to adjust for distribution shifts between the inactive calibration data in _I_ 0
+and the newly generated data. We discuss its implications on density ratio estimation below.
+
+**Remark A.3.** _When w_ ( _·_ ) _is unknown, Lemma A.2 justifies using a random subset of the labeled data_
+_and an independent set of generated samples (no matter whether they are active) to estimate w_ ( _·_ ) _._
+_An alternative approach is to directly estimate the density ratio between {Xi}i∈I_ 0 _and {Xn_ + _j}_ _[k]_ _j_ =1 _[.]_
+_However, this approach leads to quite limited sample sizes when k is small._
+
+
+Lemma A.2 allows to characterize the exchangeability structure among calibration and test points,
+extending the weighted exchangeability notion (Tibshirani et al., 2019) to multiple test points. It
+is a consequence of a conditional permutation-style result which extends foundational results in
+conformal prediction (Vovk et al., 2005; Tibshirani et al., 2019).
+
+
+Let [ _**X**_ ] = [ _X_ 1 _, . . ., Xn_ 0 _, Xn_ +1 _, . . ., Xk_ ] be the unordered set of the features, and fix any value
+
+[ _**x**_ ] = [ _x_ 1 _, . . ., xn_ 0 _, xn_ 0+1 _, . . ., xn_ 0+ _k_ ]. Then, given [ _**X**_ ] = [ _**x**_ ], the only randomness that remains
+lies in which value in _**x**_ corresponds to each _Xi_ . Proposition A.4 is a direct implication of Lemma A.2,
+extending the weighted exchangeability notion in Tibshirani et al. (2019) to multiple test points.
+
+**Proposition A.4.** _Let_ Π _be the collection of all permutations of_ [ _n_ 0 + _k_ ] _._ _Then, for any fixed values_
+_x_ 1 _, . . ., xn_ 0 _, xn_ 0+1 _, . . ., xn_ 0+ _k, and any permutation π_ : [ _n_ 0 + _k_ ] _→_ [ _n_ 0 + _k_ ] _,_
+
+
+                     - _w_ ¯( _π_ ; _x_ 1: _n_ 0+ _k_ )
+P [cond][�] _X_ 1 = _xπ_ (1) _, . . ., Xn_ 0+ _k_ = _xπ_ ( _n_ 0+ _k_ ) ��� [ _**X**_ ] = [ _**x**_ ] =   
+_π_ _[′]_ _∈_ Π _[w]_ [¯][(] _[π][′]_ [;] _[ x]_ [1:] _[n]_ [0][+] _[k]_ [)] _[,]_
+
+_where we define_ _w_ ¯( _π_ ; _x_ 1: _n_ 0+ _k_ ) := [�] _j_ _[k]_ =1 _[w]_ [(] _[x][π]_ [(] _[n]_ 0 [+] _[j]_ [)][)] _[, and]_ [ P][cond][(] _[·]_ [)] _[ denotes the distribution after]_
+_conditioning on {Zi}_ _[n]_ _i_ =1 _[∪{][Z][n]_ [+] _[j][}][j][≥]_ [1] _[ as well as]_ [ max][1] _[≤][j][≤][k][ Y][n]_ [+] _[j]_ [= 0] _[.]_
+
+
+Proposition A.4 describes the probability of ( _X_ 1 _, . . ., Xn_ 0+ _k_ ) taking on the value of any permutation
+of _**x**_ conditional on the unordered set of their realized values. Such a conditional permutation-style
+result is foundational for many results in conformal inference, thereby connecting our p-value to
+existing conformal p-values. Specifically, when _w_ ( _·_ ) _≡_ 1 and _m_ = 1, it reduces to the standard
+exchangeability condition, and the p-value (6) coincides with the classical conformal p-value. In
+general with _m_ = 1, it reduces to the weighted exchangeablity studied in (Tibshirani et al., 2019),
+and our p-value (6) coincides with the weighted conformal p-value (Tibshirani et al., 2019; Jin &
+Candès, 2023a). We discuss the connections in the next subsection.
+
+
+A.3 CONFORMAL P-VALUE FOR ONE TEST POINT
+
+
+Our p-values build on conformal prediction ideas (Vovk et al., 2005). To provide more contexts, we
+briefly discuss the widely used conformal p-value for one test point, the key concept in deriving
+conformal prediction sets. Given any function _s_ : _X_ _× Y_ _→_ R (often referred to as “nonconformity
+score”) whose training process is independent of the calibration data _{_ ( _Xi, Yi_ ) _}_ _[n]_ _i_ =1 [and a new test]
+point _Xn_ +1, the conformal p-value is defined as
+
+_p_ ( _y_ ) = [1 +][ �] _i_ _[n]_ =1 [1] _[{][s]_ [(] _[X][i][, Y][i]_ [)] _[ ≤]_ _[s]_ [(] _[X][n]_ [+1] _[, y]_ [)] _[}]_ _._ (7)
+
+_n_ + 1
+
+
+15
+
+
+When _{_ ( _Xi, Yi_ ) _}_ _[n]_ _i_ =1 [+1] [are exchangeable (such as i.i.d.)] [across] _[ i][ ∈]_ [[] _[n]_ [ + 1]][, one can show that] _[ p]_ [(] _[Y][n]_ [+1][)]
+is dominated by Unif[0 _,_ 1]. This property is key in constructing prediction sets for the unknown
+_Yn_ +1. Recently, conformal p-values based on exchangeability are used in the context of multiple
+testing for detecting outliers (Bates et al., 2023) and identifying test instances with desirable label
+values (Jin & Candès, 2023b). Extensions to covariate shift settings are also studied for individual
+p-value (Tibshirani et al., 2019) and multiple testing (Jin & Candès, 2023a).
+
+
+Here we briefly discuss Remark 3.2. Note that when _m_ = 1, _n_ := _n_ 0 and _w_ ( _x_ ) _≡_ 1 in (7), setting
+
+
+_V_ ( _x_ 1 _, . . ., xn_ 0 _, xn_ +1) = _s_ ( _xn_ +1 _,_ 0) _,_
+
+
+where we use _y_ = 0 as a placeholder, our p-value (6) reduces to _p_ (0) in (7).
+
+
+A.4 CONNECTION TO OUTLIER DETECTION UNDER COVARIATE SHIFT
+
+
+A more explicit connection is that of our p-value to the outlier detection p-value. Formally, for a test
+i.i.d.
+point _Xn_ +1 independent of calibration “inliers” _{Xi}_ _[n]_ _i_ =1 _∼_ _P_, Bates et al. (2023) proposes using
+the conformal p-value (the signs are flipped to be consistent with the current notations)
+
+_p_ = [1 +][ �] _i_ _[n]_ =1 [1] _[{][s]_ [(] _[X][i]_ [)] _[ ≤]_ _[s]_ [(] _[X][n]_ [+1][)] _[}]_
+
+_n_ + 1
+
+
+to test the null hypothesis _H_ 0 : _Xn_ +1 _∼_ _P_, where _s_ : _X_ _→_ R is a score indicating how likely a value
+_x_ is an outlier compared with the normal values under _P_ . Under the null hypothesis _H_ 0, it can be
+shown that the p-value _p_ is dominated by Unif[0 _,_ 1].
+
+
+Jin & Candès (2023a) extend this problem to outlier detection under covariate shift, where
+_H_ 0 : _Xn_ +1 _∼_ _Q_ for some distribution _Q_ obeying d _Q/_ d _P_ ( _x_ ) = _w_ ( _x_ ) for a known density ratio _w_ ( _·_ ). The corresponding weighted conformal p-value is
+
+
+_i_ =1 _[w]_ [(] _[X][i]_ [)][ 1] _[{][s]_ [(] _[X][i]_ [)] _[ ≤]_ _[s]_ [(] _[X][n]_ [+1][)] _[}]_
+_pw_ = _[w]_ [(] _[X][n]_ [+1][) +][ �] _[n]_         - _n_ +1 _._ (8)
+_i_ =1 _[w]_ [(] _[X][i]_ [)]
+
+
+In this case, our p-value (6) reduces to (8) by setting
+
+
+_V_ ( _x_ 1 _, . . ., xn_ 0 _, xn_ +1) = _s_ ( _xn_ +1) _._
+
+
+That is, the score function in our setting can be viewed as an “outlier” score for the new test point.
+
+Again for generality, we use the index _k_ (instead of _N_ ) to indicate that _{Xn_ + _j}_ _[k]_ _j_ =1 [might] [be]
+a subset of the original proposal. Finally, we remark that by Lemma A.2, our null hypotheses
+i.i.d. i.i.d.
+_Hk_ : max1 _≤j≤k Yn_ + _j_ = 0 implies _Xn_ + _j_ _∼_ _Q_ 0 where d _Q_ 0 _/_ d _P_ 0( _x_ ) = _w_ ( _x_ ) and _{Xi}i∈I_ 0 _∼_
+_P_ 0. Thus, our p-value _pk_ can be viewed as testing the global null hypotheses
+
+
+_H_ ˜ _k_ : _{Xn_ + _j}_ _[k]_ _j_ =1 i.i.d. _∼_ _Q_ 0
+
+
+using calibration “inliers” _{Xi}i∈I_ 0 i.i.d. _∼_ _P_ 0. Therefore, _pk_ can be viewed as extending _pw_ in (8) to
+simultaneous inference for multiple test points.
+
+
+A.5 CHOICE OF SCORE FUNCTION
+
+
+Drawing inspirations from classical permutation tests, we suggest several natural choices:
+
+
+  - _Max-pooling._ Since we aim to judge whether _any one_ of the test samples is promising enough, a
+natural choice is _V_ ( _x_ 1: _n_ 0 _, xn_ +1: _n_ + _k_ ) = max1 _≤j≤k_ _µ_ ˆ( _xn_ + _j_ ), the maximum predicted test score.
+
+
+  - _Sum-of-prediction_ . Inspired by Fisher’s randomization test in causal inference (Fisher & Fisher,
+1971), we can compare the average predicted values between test and calibration data. Up to
+permutations, it is equivalent to setting _V_ ( _x_ 1: _n_ 0 _, xn_ +1: _n_ + _k_ ) = [�] _j_ _[k]_ =1 _[µ]_ [ˆ][(] _[x][n]_ [+] _[j]_ [)][.]
+
+  - _Rank-sum statistic_ . Inspired by Wilcoxon’s rank-sum test, we compare the sum of ranks of the
+test points. Up to permutations, we set _V_ ( _x_ 1: _n_ 0 _, xn_ +1: _n_ + _k_ ) = [�] _j_ _[k]_ =1 _[R][n]_ [+] _[j]_ [, where] _[ R][n]_ [+] _[j]_ [is the]
+rank of _µ_ ˆ( _Xn_ + _j_ ) among _{µ_ ˆ( _Xi_ ) _}_ _[n]_ _i_ =1 [0] _[∪{][µ]_ [ˆ][(] _[X][n]_ [+] _[ℓ]_ [)] _[}]_ _ℓ_ _[k]_ =1 [(in an ascending order).]
+
+
+16
+
+
+- _Likelihood ratio statistic._ Inspired by the likelihood ratio test, we observe that ˆ _µ_ ( _x_ ) can be viewed
+as an estimator P( _Y_ = 1 _| X_ = _x_ ), thus _µ_ ˆ( _x_ ) _/_ (1 _−_ _µ_ ˆ( _Xn_ + _j_ )) serves as an estimator for the
+likelihood ratio for testing _Yn_ + _j_ = 0 given _Xn_ + _j_ . Accordingly, we consider the joint likelihood
+ratio for the test points and set _V_ ( _x_ 1: _n_ 0 _, xn_ +1: _n_ + _k_ ) = [�] _j_ _[k]_ =1 [log(ˆ] _[µ]_ [(] _[x][n]_ [+] _[j]_ [)] _[/]_ [(1] _[ −]_ _[µ]_ [ˆ][(] _[x][n]_ [+] _[j]_ [))][.]
+
+
+A.6 NON-SPLIT VERSION OF CONFHIT
+
+
+In the main text, we discuss CONFHIT when the conformity score is based on a pre-trained model
+_µ_ ˆ : _X_ _→_ R, as standard in split conformal prediction (Vovk et al., 2005). This makes our framework
+naturally compatible with any pre-trained prediction models in the literature (such as those in our
+experiments). However, practitioners may want to involve all the labeled data in both model training
+and calibration of p-values. In this part, we present an extension of CONFHIT where the labeled
+inactive data are used in both training and calibration, yet still maintaining type-I error control.
+Notably, this feature is unique to our problem (since we condition on the labels on the null event).
+
+
+Formally, we let _A_ be any generic training algorithm that produces a prediction model _A_ ( _Z_ 1 _, . . ., ZN_ )
+based on labeled input data ( _Z_ 1 _, . . ., ZN_ ) with _Zi_ = ( _Xi, Yi_ ). We assume that the training process
+of _A_ is permutation invariant to its input data, which is satisfied by many commonly used algorithms.
+
+We first consider the certification problem. Recall that the inactive labeled data is _{_ ( _Xi,_ 0) _}_ _[n]_ _i_ =1 [0] [, the]
+active labeled data, without loss of generality, is _{_ ( _Xi,_ 1) _}_ _[n]_ _i_ = _n_ 0+1 [, and the test data is] _[ {][X][n]_ [+] _[j][}][k]_ _j_ =1 [.]
+We consider the imputed data _Z_ [˜] _n_ + _j_ = ( _Xn_ + _j,_ 0) for 1 _≤_ _j_ _≤_ _k_, and
+_D_ ˜ = ( _Z_ 1 _, . . ., Zn,_ _Z_ ˜ _n_ +1 _, . . .,_ _Z_ ˜ _n_ + _k_ ) _._
+
+Then, we let _µ_ ˆ( _·_ ) = _A_ ( _D_ [˜] ), i.e., the trained model with the imputed data. Finally, we define the
+conformity scores _V_ as well as the p-value in the same way as in Section 3.1. These p-values for
+each _k_ _∈_ N [+] can then be combined in the same way as in Section 3.2 to address the design problem.
+
+
+It is straightforward to see that our p-value remains valid conditional on max1 _≤j≤k{Yn_ + _j}_ = 0:
+Since the trained model _µ_ ˆ is invariant to the permutation of data in _D_ [˜], under any permutation over
+_{_ 1 _, . . ., n_ 0 _, n_ + 1 _, . . ., n_ + _k}_, the trained model remains the same, and the weighted exchangeability
+between the conformity scores follows exactly the same arguments.
+
+
+B TECHNICAL PROOF
+
+
+B.1 PROOF OF THEOREM 3.4
+
+
+_Proof of Theorem 3.4._ We define _K_ 0 = max _{k_ _≤_ _N_ : max1 _≤j≤k Yn_ + _j_ = 0 _}_, i.e., the last instance
+where all earlier molecules are non-positive. We also let _K_ 0 = 0 when _Zn_ +1 = 1 so that _K_ 0 is
+well-defined. Note that _K_ 0 is measurable with respect to _{Yn_ + _j}j≥_ 1. Conditional on _{Yn_ + _j}j≥_ 1,
+_K_ 0 thus becomes deterministic, and by the definition of _N_ [ˆ], we have
+
+P� max _Yn_ + _j_ = 0 _{Yn_ + _j}j≥_ 1� = P� _N_ ˆ _>_ 0 _,_ max _Zn_ + _j_ = 0 _{Yn_ + _j}j≥_ 1�
+��� ���
+1 _≤j≤N_ [ˆ] _j≤N_ [ˆ]
+
+
+                -                 = P 0 _<_ _N_ [ˆ] _≤_ _K_ 0 _{Zn_ + _j}j≥_ 1 1 _{K_ 0 _>_ 0 _}._ (*)
+���
+
+Since the p-values are monotone, we know _N_ [ˆ] _≤_ _K_ 0 is equivalent to _pK_ 0 _≤_ _α_, hence
+
+        -         (*) = P _pK_ 0 _≤_ _α_ _{Zn_ + _j}j≥_ 1 1 _{K_ 0 _>_ 0 _}_
+���
+
+
+        -         = P _pK_ 0 _≤_ _α_ _{Zn_ + _j}j≥_ 1 _,_ max [= 0] 1 _{K_ 0 _>_ 0 _} ≤_ _α._
+��� _j≤K_ 0 _[Z][n]_ [+] _[j]_
+
+Here the second line uses the fact that max _j≤K_ 0 _Zn_ + _j_ is measurable with respect to _{Zn_ + _j}j≥_ 1, as
+well as the validity condition (ii). Finally, by the tower property, we obtain the desired result.
+
+
+B.2 PROOF OF LEMMA A.2
+
+
+_Proof of Lemma A.2._ Conditional on all calibration and test labels as well as max1 _≤j≤k Yn_ + _j_ = 0,
+it is clear that the features in _I_ 0 are i.i.d. from _P_ 0 := _PX | Y_ =0, whereas the features _{Xn_ + _j}_ _[k]_ _j_ =1 [are]
+
+
+17
+
+
+i.i.d. from _Q_ 0 := _QX | Y_ =0. By the Bayes’ rule, the two distributions are related by
+
+
+d _Q_ 0 [= 0] _[ |][ X]_ [=] _[ x]_ [)]
+
+( _x_ ) = _[Q]_ [(] _[Y]_
+d _P_ 0 _P_ ( _Y_ = 0 _| X_ = _x_ )
+
+
+( _x_ ) = _w_ ( _x_ ) _,_
+d _PX_
+
+
+d _Q_ 0
+
+
+[= 0] _[ |][ X]_ [=] _[ x]_ [)] d _QX_
+
+_[Q]_ [(] _[Y]_
+
+_P_ ( _Y_ = 0 _| X_ = _x_ ) d _PX_
+
+
+where _PX_, _QX_ are the distribution of _X_ under _P_ and _Q_, respectively. Here, we used the fact that
+_Q_ ( _Y_ = 0 _| X_ = _x_ ) = _P_ ( _Y_ = 0 _| X_ = _x_ ) due to the covariate shift assumption.
+
+
+B.3 PROOF OF THEOREM A.1
+
+
+_Proof of Theorem A.1._ Throughout we condition on _{Zi}i≥_ 1 and max _j≤k Zn_ + _j_ = 0, and let P [cond]
+
+denote the distribution conditional on these information. For any fixed vector _**x**_ _∈X_ _[n]_ [0][+] _[k]_,
+conditional on [ _**X**_ ] = [ _**x**_ ], we let _pk_ ( _π_ ; _**x**_ ) be the p-value obtained when the data is realized
+as ( _X_ 1 _, . . ., Xn_ 0 _, Xn_ +1 _, . . ., Xn_ + _k_ ) = ( _xπ_ (1) _, . . ., xπ_ ( _n_ 0) _, xπ_ ( _n_ +1) _, . . ., xπ_ ( _n_ + _k_ )). We assume
+_V_ ( _π_ ; _**X**_ )’s have no ties almost surely for simplicity, but all the arguments go through in general.
+
+
+Under the conditions of Lemma A.2, Proposition A.4 implies that
+
+
+P [cond] ( _pk_ = _pk_ ( _π_ ; _**x**_ ) _|_ [ _**X**_ ] = [ _**x**_ ])
+
+
+_w_ ¯( _π_ ; _**x**_ )
+= P [cond] ( _**X**_ = ( _xπ_ (1) _, . . ., xπ_ ( _n_ + _k_ )) _|_ [ _**X**_ ] = [ _**x**_ ]) =      
+_π_ _[′]_ _∈_ Π _[w]_ [¯][(] _[π][′]_ [;] _**[ x]**_ [)] _[.]_
+
+
+Therefore, noting that by definition
+
+
+   _pk_ ( _π_ ; _**x**_ ) =
+
+
+[ 1] _[{][V]_ [ (˜] _[π][ ◦]_ _[π]_ [;] _**[ x]**_ [)] _[ ≥]_ _[V]_ [ (] _[π]_ [;] _**[ x]**_ [)] _[}]_ 
+=
+_π_ ˜ _∈_ Π _[w]_ [¯][(˜] _[π]_ [;] _**[ x]**_ [)]
+
+
+_,_
+_π_ ˜ _∈_ Π _[w]_ [¯][(˜] _[π]_ [;] _**[ x]**_ [)]
+
+
+_π_ ˜ _∈_ Π _[w]_ [¯][(˜] _[π][ ◦]_ _[π]_ [;] _**[ x]**_ [)][ 1] _[{][V]_ [ (˜] _[π][ ◦]_ _[π]_ [;] _**[ x]**_ [)] _[ ≥]_ _[V]_ [ (] _[π]_ [;] _**[ x]**_ [)] _[}]_
+
+   
+
+
+_π_ ˜ _∈_ Π _[w]_ [¯][(˜] _[π]_ [;] _**[ x]**_ [)][ 1] _[{][V]_ [ (˜] _[π]_ [;] _**[ x]**_ [)] _[ ≥]_ _[V]_ [ (] _[π]_ [;] _**[ x]**_ [)] _[}]_
+
+  
+
+
+and letting _πt_ be the permutation with the largest _V_ ( _πt_ ; _**x**_ ) such that _pk_ ( _πt_ ; _**x**_ ) _≤_ _t_, we have
+
+P [cond] ( _pk_ _≤_ _t |_ [ _**X**_ ] = [ _**x**_ ]) =  - 1 _{pk_ ( _π_ ; _**x**_ ) _≤_ _t} ·_ P [cond][�] _pk_ = _pk_ ( _π_ ; _**x**_ ) �� [ _**X**_ ] = [ _**x**_ ]�
+
+_π∈_ Π
+
+
+- 1 _{pk_ ( _π_ ; _**x**_ ) _≤_ _t} ·_ - _w_ ¯( _π_ ; _**x**_ )
+
+_π∈_ Π _π_ _[′]_ _∈_ Π _[w]_ [¯][(] _[π]_
+
+
+= 
+
+
+_π_ _[′]_ _∈_ Π _[w]_ [¯][(] _[π][′]_ [;] _**[ x]**_ [)]
+
+
+- 1 _{V_ ( _π_ ; _**x**_ ) _≥_ _V_ ( _πt_ ; _**x**_ ) _} ·_ - _w_ ¯( _π_ ; _**x**_ )
+
+_π∈_ Π _π_ _[′]_ _∈_ Π _[w]_ [¯][(] _[π][′]_
+
+
+= 
+
+
+_π_ _[′]_ _∈_ Π _[w]_ [¯][(] _[π][′]_ [;] _**[ x]**_ [)] [=] _[ p][k]_ [(] _[π][t]_ [;] _**[ x]**_ [)] _[ ≤]_ _[t.]_
+
+
+Here the first equality uses the conditional distribution described above, the third equality uses the
+monotonicity of _pk_ ( _π_ ; _**x**_ ) in _V_ ( _π_ ; _**x**_ ) and the definition of _πt_, and the last equality holds by definition.
+Marginalizing over [ _**X**_ ] (but still conditional on _{Zi}i_ _[n]_ =1 [+] _[k]_ [and][ max][1] _[≤][j][≤][k][ Y][n]_ [+] _[j]_ [=] [0][) then leads ][to]
+the desired result.
+
+
+B.4 PROOF OF THEOREM 3.1
+
+
+_Proof of Theorem 3.1._ As usual, throughout, we condition on _{Yi}i≥_ 1 and max1 _≤j≤k Yn_ + _j_ = 0,
+and use P [cond] to denote the distribution given these information. We condition on the event that
+the unordered set [ _**x**_ ] = [ _**x**_ ] for any fixed vector _**x**_ = ( _x_ 1 _, . . ., xn_ 0 _, xn_ +1 _, . . ., xn_ + _k_ ). The labels
+_{Zi}_ _[n]_ _i_ =1 [+] _[k]_ [are also conditioned on as usual.] [The randomness then comes from (i) which values in][ [] _**[x]**_ []]
+correspond to each data point, and (ii) the randomly sampled permutations.
+
+
+Let ˆ _π_ be the unique permutation of _{_ 1 _, . . ., n_ 0 _, n_ +1 _, . . ., n_ + _k}_ such that _**X**_ = ( _xπ_ ˆ(1) _, . . ., xπ_ ˆ( _n_ + _k_ )).
+Then for any permutation _π_ _∈_ Π, we have
+
+
+_V_ ( _π_ ; _**X**_ ) = _V_ ( _π ◦_ _π_ [(0)] ; _**X**_ ) = _V_ ( _π ◦_ _π_ ˆ; _**x**_ ) _,_
+
+
+and similarly for _w_ ¯( _π_ ; _**X**_ ) = _w_ ¯( _π_ _◦_ _π_ ˆ; _**x**_ ). By Proposition A.4, we know that P(ˆ _π_ = _π |_ [ _**X**_ ] =
+
+[ _**x**_ ]) _∝_ _w_ ¯( _π_ ; _**x**_ ), where we recall the definition of _w_ ¯( _π_ ; _**x**_ ) = [�] _j_ _[k]_ =1 _[w]_ [(] _[x][π]_ [(] _[n]_ [+] _[j]_ [)][)][.] [In] [addition,] [we]
+have
+
+_b_ =1 _[w]_ [¯][(ˆ] _[π][ ◦]_ _[π]_ [(] _[b]_ [)][;] _**[ x]**_ [)][ 1] _[{][V]_ [ (ˆ] _[π]_ [;] _**[ x]**_ [)] _[ ≤]_ _[V]_ [ (ˆ] _[π][ ◦]_ _[π]_ [(] _[b]_ [)][;] _**[ x]**_ [)] _[}]_
+_p_ [rand] _k_ = _[w]_ [¯][(ˆ] _[π]_ [;] _**[ x]**_ [) +][ �] _[B]_ _,_
+
+_w_ (ˆ _π_ ; _**x**_ ) + [�] _b_ _[B]_ =1 _[w]_ [(ˆ] _[π][ ◦]_ _[π]_ [(] _[b]_ [)][;] _**[ x]**_ [)]
+
+
+18
+
+
+where _**x**_ is the fixed vector, and the randomness comes from _π_ ˆ and _{π_ [(] _[b]_ [)] _}_ _[B]_ _b_ =1 [.]
+
+
+For notational simplicity, we denote _π_ ˆ [(0)] = _π_ ˆ, and _π_ ˆ [(] _[b]_ [)] = _π_ ˆ _◦_ _π_ [(] _[b]_ [)] for _b_ = 1 _, . . ., B_ . We now study
+the joint distribution of (ˆ _π_ [(0)] _,_ ˆ _π_ [(1)] _, . . .,_ ˆ _π_ [(] _[B]_ [)] ). For any fixed permutations _π_ 0 _, . . ., πB_ _∈_ Π, we note
+
+
+                        P [cond][�] _π_ ˆ [(0)] = _π_ 0 _,_ ˆ _π_ [(1)] = _π_ 1 _, . . .,_ ˆ _π_ [(] _[B]_ [)] = _πB_ [ _**X**_ ] = [ _**x**_ ]
+���
+
+
+                            = P [cond][�] _π_ ˆ = _π_ 0 _, π_ [(1)] = _π_ 0 _[−]_ [1] _◦_ _π_ 1 _, . . .,_ ˆ _π_ [(] _[B]_ [)] = _π_ 0 _[−]_ [1] _◦_ _πB_ ��� [ _**X**_ ] = [ _**x**_ ]
+
+1
+= _|_ Π _|_ _[B]_ _[·]_ [ P][cond][(ˆ] _[π]_ [=] _[ π]_ [0] _[ |]_ [ [] _**[X]**_ [] = [] _**[x]**_ [])] _[ ∝]_ _[w]_ [¯][(] _[π]_ [0][;] _**[ x]**_ [)] _[,]_
+
+
+where _π_ 0 _[−]_ [1] is the inverse permutation of _π_ 0. Above, the last equality uses the fact that _π_ [(1)] _, . . ., π_ [(] _[B]_ [)]
+are i.i.d. uniformly sampled from Π and independent of everything. Therefore, when we further
+conditional on the unordered set of realized values of the permutations [ˆ _π_ [(0)] _,_ ˆ _π_ [(1)] _, . . .,_ ˆ _π_ [(] _[B]_ [)] ] =
+
+[ _π_ 0 _, . . ., πB_ ] for any (fixed) value of _π_ 0 _, . . ., πB_, we know that
+
+
+P [cond][�] (ˆ _π_ [(0)] _,_ ˆ _π_ [(1)] _, . . .,_ ˆ _π_ [(] _[B]_ [)] ) = ( _πσ_ (0) _, . . ., πσ_ ( _B_ )) [ˆ _π_ (0) _,_ ˆ _π_ (1) _, . . .,_ ˆ _π_ ( _B_ )] = [ _π_ 0 _, . . ., πB_ ] _,_ [ _**X**_ ] = [ _**x**_ ]�
+���
+
+_w_ ¯( _πσ_ (0); _**x**_ )
+=
+
+ 
+_σ∈_ Π [˜] _[w]_ [¯][(] _[π][σ]_ [(0)][;] _**[ x]**_ [)] _[,]_
+
+
+where Π [˜] is the collection of all permutations of _{_ 0 _,_ 1 _, . . ., B}_ . This also means that for every
+_b ∈{_ 0 _,_ 1 _, . . ., B}_,
+
+P [cond][�] _π_ ˆ [(0)] = _πb_ ��� [ˆ _π_ (0) _,_ ˆ _π_ (1) _, . . .,_ ˆ _π_ ( _B_ )] = [ _π_ 0 _, . . ., πB_ ]� =    - _Bw_ ¯( _πb_ ; _**x**_ ) _._ (9)
+_b_ _[′]_ =0 _[w]_ [¯][(] _[π][b][′]_ [;] _**[ x]**_ [)]
+
+
+On the other hand, for any _σ_ _∈_ Π [˜], when (ˆ _π_ [(0)] _,_ ˆ _π_ [(1)] _, . . .,_ ˆ _π_ [(] _[B]_ [)] ) = ( _πσ_ (0) _, . . ., πσ_ ( _B_ )), we have
+
+
+[�] _b_ _[B]_ =1 _[w]_ [¯][(] _[π][σ]_ [(] _[b]_ [)][;] _**[ x]**_ [)][ 1] _[{][V]_ [ (] _[π][σ]_ [(0)][;] _**[ x]**_ [)] _[ ≤]_ _[V]_ [ (] _[π][σ]_ [(] _[b]_ [)][;] _**[ x]**_ [)] _[}]_
+_p_ [cond] _k_ = _[w]_ [¯][(] _[π][σ]_ [(0)][;] _**[ x]**_ [) +]
+
+_w_ ¯( _πσ_ (0); _**x**_ ) + [�] _b_ _[B]_ =1 _[w]_ [¯][(] _[π][σ]_ [(] _[b]_ [)][;] _**[ x]**_ [)]
+
+    - _B_
+_b_ =0 _[w]_ [¯][(] _[π][b]_ [;] _**[ x]**_ [)][ 1] _[{][V]_ [ (] _[π][σ]_ [(0)][;] _**[ x]**_ [)] _[ ≤]_ _[V]_ [ (] _[π][b]_ [;] _**[ x]**_ [)] _[}]_
+=     - _B_ _._ (10)
+
+_b_ =0 _[w]_ [¯][(] _[π][b]_ [;] _**[ x]**_ [)]
+
+
+That is, the value of _p_ [cond] _k_ only depends on which value among ( _π_ 0 _, . . ., πB_ ) the data permutation
+_π_ ˆ [(0)] takes on. Thus,
+
+P [cond][�] _p_ [rand] _k_ _≤_ _t_ ��� [ˆ _π_ (0) _,_ ˆ _π_ (1) _, . . .,_ ˆ _π_ ( _B_ )] = [ _π_ 0 _, . . ., πB_ ] _,_ [ _**X**_ ] = [ _**x**_ ]�
+
+=  - P�(ˆ _π_ [(0)] _,_ ˆ _π_ [(1)] _, . . .,_ ˆ _π_ [(] _[B]_ [)] ) = ( _πσ_ (0) _, . . ., πσ_ ( _B_ )) [ˆ _π_ (0) _,_ ˆ _π_ (1) _, . . .,_ ˆ _π_ ( _B_ )] = [ _π_ 0 _, . . ., πB_ ]�
+
+���
+_σ∈_ Π [˜]
+
+
+_×_ 1
+
+
+�� _B_ _b_ =0 _[w]_ [¯][(] _[π][b]_ [;] _**[ x]**_ [)][ 1] _[{][V]_ [ (] _[π][σ]_ [(0)][;] _**[ x]**_ [)] _[ ≤]_ _[V]_ [ (] _[π][b]_ [;] _**[ x]**_ [)] _[}]_
+
+_≤_ _t_
+
+   - _B_
+_b_ =0 _[w]_ [¯][(] _[π][b]_ [;] _**[ x]**_ [)]
+
+
+=
+
+
+=
+
+
+_B_
+
+- P� _π_ ˆ [(0)] = _πb∗_ [ˆ _π_ (0) _,_ ˆ _π_ (1) _, . . .,_ ˆ _π_ ( _B_ )] = [ _π_ 0 _, . . ., πB_ ]�
+
+���
+_b_ _[∗]_ =0
+
+
+_B_
+
+
+_b_ _[∗]_ =0
+
+
+_≤_ _t._
+
+
+_×_ 1
+
+
+- - _B_
+_b_ =0 _[w]_ [¯][(] _[π][b]_ [;] _**[ x]**_ [)][ 1] _[{][V]_ [ (] _[π][b][∗]_ [;] _**[ x]**_ [)] _[ ≤]_ _[V]_ [ (] _[π][b]_ [;] _**[ x]**_ [)] _[}]_
+
+_≤_ _t_
+
+   - _B_
+_b_ =0 _[w]_ [¯][(] _[π][b]_ [;] _**[ x]**_ [)]
+
+
+_w_ ¯( _πb∗_ ; _**x**_ )
+1
+
+- _B_
+_b_ _[′]_ =0 _[w]_ [¯][(] _[π][b][′]_ [;] _**[ x]**_ [)]
+
+
+- - _B_
+_b_ =0 _[w]_ [¯][(] _[π][b]_ [;] _**[ x]**_ [)][ 1] _[{][V]_ [ (] _[π][b][∗]_ [;] _**[ x]**_ [)] _[ ≤]_ _[V]_ [ (] _[π][b]_ [;] _**[ x]**_ [)] _[}]_
+
+_≤_ _t_
+
+   - _B_
+_b_ =0 _[w]_ [¯][(] _[π][b]_ [;] _**[ x]**_ [)]
+
+
+Here, the first equality follows from (10), the third equality follows from (9), and the last inequality
+is by definition. Finally, marginalizing over [ _**X**_ ] and [ˆ _π_ [(0)] _, . . .,_ ˆ _π_ [(] _[B]_ [)] ] yields the desired result.
+
+
+19
+
+
+B.5 PROOF OF THEOREM 3.5
+
+
+In this part, we prove the robustness of joint weighted conformal p-value with estimated density ratio.
+For generality, we use a general index _k_ instead of the total budget _N_, to indicate that _{Xn_ + _j}_ _[k]_ _j_ =1
+can be a subset of the original samples (as in Section 3.2). For conceptual simplicity, we present the
+detailed proof for deterministic p-values (Appendix A.1), and the result for randomized p-values in
+the main text naturally follows with the same ideas.
+
+
+_Proof of Theorem 3.5._ Let P [cond] ( _·_ ) denote the distribution conditional on all the labels _{Yi}i≥_ 1 and
+the event max1 _≤j≤k Yn_ + _j_ = 0. Following the arguments in the proof of Theorem A.1, for any
+fixed value _**x**_, we let _pk_ ( _π_ ; _**x**_ ) be the p-value with the correct weights _w_ ( _·_ ) obtained when the data
+is realized as ( _X_ 1 _, . . ., Xn_ 0 _, Xn_ +1 _, . . ., Xn_ + _k_ ) = ( _xπ_ (1) _, . . ., xπ_ ( _n_ 0) _, xπ_ ( _n_ +1) _, . . ., xπ_ ( _n_ + _k_ )), and
+similarly we define _p_ ˆ _k_ ( _π_ ; _**x**_ ). Then we have _p_ ˆ _k_ ( _V_ ( _π_ ; _**x**_ )) = _p_ ˆ _k_ ( _π_ ; _**x**_ ) where _p_ ˆ _k_ ( _v_ ) is defined in
+Theorem 3.5, and by definition, we have
+
+   - _w_ ˆ¯( _π_ ; _**x**_ )
+
+
+- 1 _{p_ ˆ _k_ ( _π_ ; _**x**_ ) _≤_ _t_ [ˆ] _} ·_ - _w_ ˆ¯( _π_ ; _**x**_ )
+
+_π∈_ Π _π_ _[′]_ _∈_ Π _[w]_ [ˆ¯][(] _[π]_
+
+
+_π_ _[′]_ _∈_ Π _[w]_ [ˆ¯][(] _[π][′]_ [;] _**[ x]**_ [)] [=] _[p]_ [ˆ] _[k]_ [(ˆ] _[v]_ [)] _[ ≤]_ _[t]_ [ˆ] _[ ≤]_ _[t.]_
+
+
+In addition, by the definition of _t_ [ˆ], we have _p_ ˆ _k_ ( _π_ ; _**x**_ ) _≤_ _t_ [ˆ] if and only if _p_ ˆ _k_ ( _π_ ; _**x**_ ) _≤_ _t_ for any _π_ _∈_ Π.
+As a result, we have
+
+P [cond][�] _p_ ˆ _k_ _≤_ _t_ �� [ _**X**_ = _**x**_ ]� =   - 1 _{p_ ˆ _k_ ( _π_ ; _**x**_ ) _≤_ _t} ·_   - _w_ ¯( _π_ ; _**x**_ )
+
+_π∈_ Π _π_ _[′]_ _∈_ Π _[w]_ [¯][(] _[π][′]_ [;] _**[ x]**_ [)]
+
+
+- 1 _{p_ ˆ _k_ ( _π_ ; _**x**_ ) _≤_ _t_ [ˆ] _} ·_ - _w_ ¯( _π_ ; _**x**_ )
+
+_π∈_ Π _π_ _[′]_ _∈_ Π _[w]_ [¯][(] _[π]_
+
+
+= 
+
+
+_π_ _[′]_ _∈_ Π _[w]_ [¯][(] _[π][′]_ [;] _**[ x]**_ [)]
+
+
+- 1 _{p_ ˆ _k_ ( _π_ ; _**x**_ ) _≤_ _t_ [ˆ] _}_ - - _w_ ¯( _π_ ; _**x**_ )
+
+_π∈_ Π _π_ _[′]_ _∈_ Π _[w]_ [¯][(] _[π]_
+
+
+_≤_ _t_ [ˆ] + 
+
+
+_w_ ¯( _π_ ; _**x**_ ) _w_ ˆ¯( _π_ ; _**x**_ )
+
+
+    _π_ _[′]_ _∈_ Π _[w]_ [¯][(] _[π][′]_ [;] _**[ x]**_ [)] _[−]_ _π_ _[′]_ _∈_ Π _[w]_ [ˆ¯][(] _[π]_
+
+
+_π_ _[′]_ _∈_ Π _[w]_ [ˆ¯][(] _[π][′]_ [;] _**[ x]**_ [)]
+
+
+- 1 _{V_ ( _π_ ; _**x**_ ) _≥_ _v_ ˆ _}_ - _w_ ¯( _π_ ; _**x**_ ) _w_ ˆ¯( _π_ ; _**x**_ )
+
+     -     _π∈_ Π _π_ _[′]_ _∈_ Π _[w]_ [¯][(] _[π][′]_ [;] _**[ x]**_ [)] _[−]_ _π_ _[′]_ _∈_ Π _[w]_ [ˆ¯][(] _[π]_
+
+
+_≤_ _t_ [ˆ] + 
+
+
+_π_ _[′]_ _∈_ Π _[w]_ [ˆ¯][(] _[π][′]_ [;] _**[ x]**_ [)]
+
+
+       _π∈_ Π _[w]_ [¯][(] _[π]_ [;] _**[ x]**_ [)][ 1] _[{][V]_ [ (] _[π]_ [;] _**[ x]**_ [)] _[ ≥]_ _[v]_ [ˆ] _[}]_
+
+_−_
+
+ _π_ _[′]_ _∈_ Π _[w]_ [¯][(] _[π][′]_ [;] _**[ x]**_ [)]
+
+
+=: _t_ + ∆ [ˆ] _._
+_π_ _[′]_ _∈_ Π _[w]_ [ˆ¯][(] _[π][′]_ [;] _**[ x]**_ [)]
+
+
+  _≤_ _t_ +
+
+
+_π∈_ Π _[w]_ [ˆ¯][(] _[π]_ [;] _**[ x]**_ [)][ 1] _[{][V]_ [ (] _[π]_ [;] _**[ x]**_ [)] _[ ≥]_ _[v]_ [ˆ] _[}]_
+
+ - _[′]_
+
+
+Rearranging the terms, we have
+
+
+[)][ 1] _[{][V]_ [ (] _[π]_ [;] _**[ x]**_ [)] _[ ≥]_ _[v]_ [ˆ] _[}]_ ��� _π∈_ Π _[w]_ [ˆ¯][(] _[π]_ [;] _**[ x]**_ [)][ 1] _[{][V]_ [ (] _[π]_ [;] _**[ x]**_ [)] _[ <]_ _[v]_ [ˆ] _[}]_ 
+�� _[′]_ ��� _[′]_ 
+
+
+ˆ∆=
+
+
+_≤_
+
+
+_≤_
+
+
+��
+
+
+���
+_π∈_ Π _[w]_ [¯][(] _[π]_ [;] _**[ x]**_ [)][ 1] _[{][V]_ [ (] _[π]_ [;] _**[ x]**_ [)] _[ ≥]_ _[v]_ [ˆ] _[}]_
+
+
+���
+_π_ _[′]_ _∈_ Π _[w]_ [¯][(] _[π][′]_ [;] _**[ x]**_ [)]
+
+
+       _π_ _[′]_ _∈_ Π _[w]_ [ˆ¯][(] _[π][′]_ [;] _**[ x]**_ [)]
+
+
+���
+_π_ _[′]_ _∈_ Π _[w]_ [¯][(] _[π][′]_ [;] _**[ x]**_ [)]
+
+
+      _π_ _[′]_ _∈_ Π _[w]_ [ˆ¯][(] _[π][′]_ [;] _**[ x]**_ [)]
+
+
+��
+
+
+[)][ 1] _[{][V]_ [ (] _[π]_ [;] _**[ x]**_ [)] _[ <]_ _[v]_ [ˆ] _[}]_ ��� _π∈_ Π _[w]_ [ˆ¯][(] _[π]_ [;] _**[ x]**_ [)][ 1] _[{][V]_ [ (] _[π]_ [;] _**[ x]**_ [)] _[ ≥]_ _[v]_ [ˆ] _[}]_ 
+�� _[′]_ ��� _[′]_ 
+
+
+_−_
+
+
+_π∈_ Π _[w]_ [¯][(] _[π]_ [;] _**[ x]**_ [)][ 1] _[{][V]_ [ (] _[π]_ [;] _**[ x]**_ [)] _[ <]_ _[v]_ [ˆ] _[}]_ ���
+
+
+���
+_π_ _[′]_ _∈_ Π _[w]_ [¯][(] _[π][′]_ [;] _**[ x]**_ [)]
+
+
+      _π_ _[′]_ _∈_ Π _[w]_ [ˆ¯][(] _[π][′]_ [;] _**[ x]**_ [)]
+
+
+���
+_π∈_ Π [[ ˆ¯] _[w]_ [(] _[π]_ [;] _**[ x]**_ [) + ˆ] _[δ][−]_ [(] _[π]_ [;] _**[ x]**_ [)]][ 1] _[{][V]_ [ (] _[π]_ [;] _**[ x]**_ [)] _[ ≥]_ _[v]_ [ˆ] _[}]_
+
+
+��
+
+
+[(] _[π]_ [;] _**[ x]**_ [)]][ 1] _[{][V]_ [ (] _[π]_ [;] _**[ x]**_ [)] _[ ≥]_ _[v]_ [ˆ] _[}]_ ��� _π∈_ Π _[w]_ [ˆ¯][(] _[π]_ [;] _**[ x]**_ [)][ 1] _[{][V]_ [ (] _[π]_ [;] _**[ x]**_ [)] _[ <]_ _[v]_ [ˆ] _[}]_  
+�� _[′]_ ��� _[′]_ 
+
+
+���
+_π_ _[′]_ _∈_ Π _[w]_ [¯][(] _[π][′]_ [;] _**[ x]**_ [)]
+
+
+      _π_ _[′]_ _∈_ Π _[w]_ [ˆ¯][(] _[π][′]_ [;] _**[ x]**_ [)]
+
+
+��
+
+
+[(] _[π]_ [;] _**[ x]**_ [)]][ 1] _[{][V]_ [ (] _[π]_ [;] _**[ x]**_ [)] _[ <]_ _[v]_ [ˆ] _[}]_ ��� _π∈_ Π _[w]_ [ˆ¯][(] _[π]_ [;] _**[ x]**_ [)][ 1] _[{][V]_ [ (] _[π]_ [;] _**[ x]**_ [)] _[ ≥]_ _[v]_ [ˆ] _[}]_  
+�� _[′]_ ��� _[′]_ 
+
+
+_−_
+
+
+_π∈_ Π [[ ˆ¯] _[w]_ [(] _[π]_ [;] _**[ x]**_ [)] _[ −]_ _[δ]_ [ˆ][+][(] _[π]_ [;] _**[ x]**_ [)]][ 1] _[{][V]_ [ (] _[π]_ [;] _**[ x]**_ [)] _[ <]_ _[v]_ [ˆ] _[}]_ ���
+
+
+���
+_π_ _[′]_ _∈_ Π _[w]_ [¯][(] _[π][′]_ [;] _**[ x]**_ [)]
+
+
+      _π_ _[′]_ _∈_ Π _[w]_ [ˆ¯][(] _[π][′]_ [;] _**[ x]**_ [)]
+
+
+���
+_π∈_ Π _[δ]_ [ˆ] _[−]_ [(] _[π]_ [;] _**[ x]**_ [)][ 1] _[{][V]_ [ (] _[π]_ [;] _**[ x]**_ [)] _[ ≥]_ _[v]_ [ˆ] _[}]_
+
+
+��
+
+
+[)][ 1] _[{][V]_ [ (] _[π]_ [;] _**[ x]**_ [)] _[ ≥]_ _[v]_ [ˆ] _[}]_ ��� _π∈_ Π _[w]_ [ˆ¯][(] _[π]_ [;] _**[ x]**_ [)][ 1] _[{][V]_ [ (] _[π]_ [;] _**[ x]**_ [)] _[ <]_ _[v]_ [ˆ] _[}]_  
+�� _[′]_ ��� _[′]_ 
+
+
+��
+
+
+[)][ 1] _[{][V]_ [ (] _[π]_ [;] _**[ x]**_ [)] _[ <]_ _[v]_ [ˆ] _[}]_ ��� _π∈_ Π _[w]_ [ˆ¯][(] _[π]_ [;] _**[ x]**_ [)][ 1] _[{][V]_ [ (] _[π]_ [;] _**[ x]**_ [)] _[ ≥]_ _[v]_ [ˆ] _[}]_ 
+�� _[′]_ ��� _[′]_ 
+
+
++
+
+
+_π∈_ Π _[δ]_ [ˆ][+][(] _[π]_ [;] _**[ x]**_ [)][ 1] _[{][V]_ [ (] _[π]_ [;] _**[ x]**_ [)] _[ <]_ _[v]_ [ˆ] _[}]_ ���
+
+
+���
+_π_ _[′]_ _∈_ Π _[w]_ [¯][(] _[π][′]_ [;] _**[ x]**_ [)]
+
+
+_,_
+
+       _π_ _[′]_ _∈_ Π _[w]_ [ˆ¯][(] _[π][′]_ [;] _**[ x]**_ [)]
+
+
+where we used the non-negativity of the weights and the definition of _δ_ [ˆ] _[±]_ ( _π_ ; _**x**_ ). Further, noting that
+_t_ ˆ = - _π∈_ Π _w_ [ˆ¯] ( _π_ ; _**X**_ ) 1 _{v_ ˆ _≤V_ ( _π_ ; _**X**_ ) _}_, we thus have
+
+
+_π∈_ Π _w_ [ˆ¯] ( _π_ ; _**X**_ ) 1 _{v_ ˆ _≤V_ ( _π_ ; _**X**_ ) _}_
+
+ 
+
+
+, we thus have
+_π∈_ Π _w_ [ˆ¯] ( _π_ ; _**X**_ ) _}_
+
+
+_π∈_ Π _[δ]_ [ˆ] _[−]_ [(] _[π]_ [;] _**[ x]**_ [)][ 1] _[{][V]_ [ (] _[π]_ [;] _**[ x]**_ [)] _[ ≥]_ _[v]_ [ˆ] _[}]_ - + _t_ [ˆ] _·_ ��
+
+
+��
+ˆ∆ _≤_ [(1] _[ −]_ _[t]_ [ˆ][)] _[ ·]_
+
+
+_**[ x]**_ [)] _[ ≥]_ _[v]_ [ˆ] _[}]_ - + _t_ [ˆ] _·_ �� _π∈_ Π _[δ]_ [ˆ][+][(] _[π]_ [;] _**[ x]**_ [)][ 1] _[{][V]_ [ (] _[π]_ [;] _**[ x]**_ [)] _[ <]_ _[v]_ [ˆ] _[}]_ 
+- _[′]_
+
+
+_,_
+_π_ _[′]_ _∈_ Π _[w]_ [¯][(] _[π][′]_ [;] _**[ x]**_ [)]
+
+
+20
+
+
+which completes our proof for the results of _pk_ .
+
+
+Finally, all the arguments still go through (following some arguments in the proof of Theorem 3.1)
+for _p_ ˆ _k_ after replacing Π by _{π_ [(] _[b]_ [)] _}_ _[B]_ _b_ =0 [and] [additionally] [conditioning] [on] [the] [unordered] [set] [of]
+_{π, π_ ˆ [(1)] _, . . ., π_ [(] _[B]_ [)] _}_, where _π_ ˆ is the permutation such that _**X**_ = ( _xπ_ (1) _, . . ., xπ_ ( _n_ + _k_ )). We omit
+the details here for brevity.
+
+
+C EXPERIMENTAL SETTING DETAILS
+
+
+C.1 CONSTRAINED MOLECULE OPTIMIZATION
+
+
+For training the generator, we used the publicly available training code from the HGRAPH2GRAPH
+(Jin et al., 2020) repository. We retained the default training/test splits and randomly held out 20% of
+the training set for calibration. The test set contains 800 samples and is also sourced from the same
+repository.
+
+
+For the SELF-EDIT (Jiao et al., 2023) baseline, we used the same data splits and obtained the training
+code from its official repository. Both models were trained with their default configurations, without
+modification.
+
+
+In all cases, we sampled up to 50 candidate molecules per input until a sufficient number of _eligible_
+candidates were obtained. We defined _ineligible_ candidates as those that were invalid (e.g., chemically
+invalid), duplicates, or out-of-distribution (OOD) with respect to the training data. We retained only
+those test samples for which at least _N_ _∈{_ 5 _,_ 10 _}_ valid candidates could be generated.
+
+
+The property oracles were sourced from RDKit for QED and from the Therapeutics Data Commons
+library for DRD2.
+
+
+**Density** **Estimation** **and** **Scoring** **Function.** We trained a molecular property predictor using
+the Chemprop(Yang et al., 2019) library for both QED and DRD2 tasks. The model used a
+3-layer Message passing Neural Network with a final hidden dimension of 4 for feature extraction and was trained for 5 epochs using the default Chemprop trainer settings. We used the
+MulticomponentMessagePassing module without any modification.
+
+
+For density estimation, we followed the CODRUG approach by extracting penultimate layer features
+and fitting a Gaussian kernel density estimator (KDE) using the scipy library with a bandwidth of 1.
+To filter OOD samples, we computed the 95th percentile density on the calibration set and removed
+test-time generated molecules falling below this threshold. Additional samples were drawn until the
+target number _N_ of valid candidates was met.
+
+
+For sequential p-value computation, we used 2000 Monte Carlo samples per test instance.
+
+
+C.2 HYPERPARAMETER CHOICES AND DESIGN JUSTIFICATIONS
+
+
+**Density ratio model and feature selection.** For density estimation, we follow the CODRUG procedure, which has been shown to be robust for small-molecule density estimation under covariate shift.
+We use the penultimate-layer representation of the property predictor, which yields a 4-dimensional
+feature vector that is expressive yet low-dimensional enough to enable stable kernel density estimation. For bandwidth selection, we adopt the same strategy as CODRUG: we perform a 5-fold
+cross-validation over bandwidths _{_ 0 _._ 1 _,_ 1 _,_ 10 _}_, compute the KDE likelihood on each held-out split,
+and choose the bandwidth with the highest average likelihood. This avoids post-hoc tuning and
+ensures that the KDE matches the calibration distribution as closely as possible.
+
+
+**Predictive model selection.** Conformal validity does not depend on the complexity of the predictive
+model, but the power of the method improves when better predictors and more discriminative score
+functions are used. To avoid unnecessary tuning, we select models with strong reported performance
+and publicly available implementations. For the CMO tasks (QED/DRD2), we train a standard
+Chemprop MPNN. For the SBDD task, we use the default EGNN predictor from the TARGETDIFF
+implementation. These choices are simple, stable, and sufficient for producing informative conformity
+scores.
+
+
+21
+
+
+**Choice of test statistic.** Since the procedure operates on a _set_ of generated molecules, the choice of
+score statistic affects the power but not the validity. We use the **maximum** score across the set, which
+is a natural heuristic in this context: if at least one strong candidate is present, the max-score captures
+this evidence immediately, whereas statistics such as the mean or min dilute the signal with weaker
+candidates. Empirically, we found the max statistic to produce higher power and lower rejection rates
+than alternatives.
+
+
+**Number** **of** **permutations** **(** _B_ **).** We set _B_ = 2000 Monte Carlo permutations, which we found
+sufficient for stable performance while maintaining modest computational cost. Running the full
+CONFHIT procedure with _B_ = 2000 takes only **4 minutes for 800 samples** (see Fig. 6). We also
+evaluated _B_ _∈{_ 500 _,_ 1000 _,_ 2000 _,_ 5000 _}_ and observed negligible variance in empirical coverage
+across these values, confirming that the Monte Carlo approximation converges quickly. Runtime
+scales linearly with _B_, and 2000 provides an effective balance between statistical stability and
+efficiency.
+
+
+Figure 6: Error rate as a function of the number of Monte Carlo permutations B for DRD2 with HGraph2Graph
+(N = 5). The empirical error rate remains stable with minimal variance.
+
+
+C.3 STRUCTURE-BASED DRUG DISCOVERY
+
+
+For this task, we used a pre-trained generative model checkpoint obtained from the official TARGETDIFF (Guan et al., 2023) repository, along with their corresponding test set.
+
+
+To estimate scores and extract features, we trained an EGNN-based model using their provided
+codebase. We modified the final hidden layer to output an 8-dimensional embedding. For validation
+data, we used protein-ligand complexes from the CrossDocked2020 (Francoeur et al., 2020a) dataset,
+excluding all training and test set entries to avoid data leakage.
+
+
+Density estimation was performed as above, using Gaussian KDE with a bandwidth of 1.
+
+
+C.4 COMPUTE RESOURCES
+
+
+All experiments were conducted on a single NVIDIA A100 GPU. The approximate runtime per
+component is as follows:
+
+
+    - Property predictor training (QED/DRD2): 20 minutes
+
+    - HGRAPH2GRAPH generator training: 10 hours
+
+    - SELF-EDIT training: 48 hours
+
+    - Density estimator training for SBDD: 24 hours
+
+    - Inference using TARGETDIFF: 30 minutes
+
+    - CONFHIT procedure per test batch: 30 minutes (over 800 samples; _≈_ 2.25 seconds/sample)
+
+**–** Candidate generation (CMO task): 14 minutes ( _≈_ 1.05 seconds/sample)
+
+
+22
+
+
+**–** Predictor feature extraction: 6 minutes ( _≈_ 0.45 seconds/sample)
+
+**–** KDE computation: 3 minutes ( _≈_ 0.23 seconds/sample)
+
+**–** Running the conformal procedure: 4 minutes ( _≈_ 0.30 seconds/sample)
+
+
+C.5 CODE AND DATA AVAILABILITY
+
+
+We include with the code the following:
+
+
+    - Model checkpoints.
+
+    - Extracted features and CrossDocked identifiers used for calibration in SBDD.
+
+    - Calibration and test splits.
+
+    - Configuration files for reproducing results across datasets and models.
+
+    - Installation instructions.
+
+
+The code is publicly available at [https://github.com/siddharthal/](https://github.com/siddharthal/CONFHIT-Conformal-Generative-Design-with-Oracle-Free-Guarantees)
+[CONFHIT-Conformal-Generative-Design-with-Oracle-Free-Guarantees](https://github.com/siddharthal/CONFHIT-Conformal-Generative-Design-with-Oracle-Free-Guarantees)
+and is distributed under MIT license.
+
+
+D WORKING UNDER AN OVERALL BUDGET
+
+
+In Section 4.6, we discussed the application of CONFHIT in providing practically useful heuristics
+while constructing predicting sets when a fixed total budget _B_ is available. The detailed algorithm is
+provided in Algorithm 2.
+
+
+**Algorithm 2** Working under an overall budget
+
+**Input:** Calibration data _{Xi}_ _[n]_ _i_ =1 [0] [with] _[ Y][i]_ [= 0][, test batches] _[ {][X]_ [(] _[t]_ [)] _[}][T]_ _t_ =1 [of size] _[ N]_ [, conformity score] _[ V]_ [, weight]
+function _w_ ˆ, grid of confidence levels _A ⊂_ (0 _,_ 1), total budget _B_ _∈_ N [+] .
+1: Initialize _P_ [ˆ] max _←_ 0, _C_ _[⋆]_ _←∅_, _α_ _[⋆]_ _←_ 0.
+2: **for** each _α ∈A_ **do**
+3: For each test batch _t_ = 1 _, . . ., T_, run Algorithm 1 with level _α_ to obtain prunded prediction sets _Ct_ [(] _[α]_ [)] .
+4: Compute total cost _C_ = [�] _t_ _[T]_ =1 _[|C]_ _t_ [(] _[α]_ [)] _|_ .
+5: Record number of empty sets _E_ = _|{t_ : _Ct_ [(] _[α]_ [)] = _∅}|_ .
+6: **if** _C_ _> B_ **then**
+7: Sort _Ct_ [(] _[α]_ [)] in descending order of size.
+8: Iteratively delete sets until total cost _C_ _≤_ _B_ .
+9: Let _D_ be the number of deleted sets.
+10: **else**
+11: Set _D_ _←_ 0.
+12: **end if**
+13: Estimate positives as _P_ [ˆ] ( _α_ ) = (1 _−_ _α_ ) _−_ _E −_ _D_ .
+14: **if** _P_ [ˆ] ( _α_ ) _>_ _P_ [ˆ] max **then**
+15: Update _P_ [ˆ] max _←_ _P_ [ˆ] ( _α_ ), _C_ _[⋆]_ _←{Ct_ [(] _[α]_ [)] _}_, _α_ _[⋆]_ _←_ _α_ .
+16: **end if**
+17: **end for**
+**Output:** Best estimated positives _P_ [ˆ] max with corresponding sets _C_ _[⋆]_ at significance level _α_ _[⋆]_ .
+
+
+E ADDITIONAL EXPERIMENTS
+
+
+E.1 DETAILED RESULTS
+
+
+In this section, we provide error bars for the plots in Sections 4.3 and 4.4. The tables include Error
+Rate, fraction certified, empty set fraction and mean set size depicted in 4.3 and 4.4 along with
+standard deviation computed over 5 random runs, across different methods. Further, we report
+metrics on the Constrained Molecule Optimization (CMO) task, using the Qualitative Estimate of
+Drug-Likeness (QED) property with success ( _Y_ = 1) if QED( _x_ ) _>_ 0 _._ 9, following Jin et al. (2020).
+
+
+23
+
+
+E.1.1 CERTIFICATION RESULTS
+
+
+Table 1: DRD2_HGRAPH Certification Results
+
+
+_N_ _α_ Error Rate (%) Certified Fraction (%)
+
+
+3 0.1 6 _._ 5 _±_ 1 _._ 1 22 _._ 6 _±_ 2 _._ 4
+3 0.2 9 _._ 6 _±_ 1 _._ 4 33 _._ 2 _±_ 4 _._ 1
+3 0.3 18 _._ 5 _±_ 1 _._ 9 39 _._ 8 _±_ 4 _._ 7
+3 0.4 26 _._ 8 _±_ 2 _._ 1 47 _._ 6 _±_ 3 _._ 5
+3 0.5 26 _._ 0 _±_ 2 _._ 0 57 _._ 5 _±_ 6 _._ 8
+
+
+5 0.1 7 _._ 3 _±_ 2 _._ 0 43 _._ 0 _±_ 4 _._ 3
+5 0.2 9 _._ 3 _±_ 1 _._ 2 53 _._ 0 _±_ 4 _._ 6
+5 0.3 12 _._ 2 _±_ 3 _._ 2 68 _._ 8 _±_ 6 _._ 2
+5 0.4 21 _._ 8 _±_ 2 _._ 6 65 _._ 1 _±_ 4 _._ 6
+5 0.5 21 _._ 6 _±_ 2 _._ 2 70 _._ 2 _±_ 6 _._ 1
+
+
+7 0.1 5 _._ 5 _±_ 0 _._ 6 51 _._ 5 _±_ 5 _._ 1
+7 0.2 8 _._ 1 _±_ 1 _._ 2 60 _._ 6 _±_ 2 _._ 5
+7 0.3 11 _._ 8 _±_ 3 _._ 1 66 _._ 2 _±_ 5 _._ 2
+7 0.4 19 _._ 7 _±_ 3 _._ 2 70 _._ 4 _±_ 3 _._ 6
+7 0.5 20 _._ 6 _±_ 2 _._ 2 74 _._ 5 _±_ 6 _._ 2
+
+
+Table 2: DRD2_SELFEDIT Certification Results
+
+
+_N_ _α_ Error Rate (%) Certified Fraction (%)
+
+
+3 0.1 7 _._ 1 _±_ 0 _._ 4 19 _._ 1 _±_ 2 _._ 1
+3 0.2 8 _._ 7 _±_ 1 _._ 7 21 _._ 5 _±_ 3 _._ 1
+3 0.3 19 _._ 8 _±_ 1 _._ 2 28 _._ 2 _±_ 3 _._ 2
+3 0.4 19 _._ 8 _±_ 1 _._ 6 39 _._ 3 _±_ 4 _._ 1
+3 0.5 28 _._ 3 _±_ 3 _._ 3 42 _._ 5 _±_ 5 _._ 2
+
+
+5 0.1 7 _._ 0 _±_ 1 _._ 0 22 _._ 8 _±_ 3 _._ 1
+5 0.2 7 _._ 4 _±_ 1 _._ 3 25 _._ 9 _±_ 2 _._ 5
+5 0.3 16 _._ 4 _±_ 2 _._ 2 30 _._ 2 _±_ 4 _._ 1
+5 0.4 17 _._ 4 _±_ 2 _._ 6 41 _._ 7 _±_ 4 _._ 6
+5 0.5 26 _._ 9 _±_ 3 _._ 2 45 _._ 7 _±_ 5 _._ 1
+
+
+7 0.1 6 _._ 3 _±_ 0 _._ 9 29 _._ 0 _±_ 2 _._ 2
+7 0.2 9 _._ 8 _±_ 1 _._ 6 38 _._ 3 _±_ 3 _._ 1
+7 0.3 16 _._ 8 _±_ 2 _._ 1 42 _._ 3 _±_ 4 _._ 7
+7 0.4 17 _._ 1 _±_ 2 _._ 2 47 _._ 6 _±_ 4 _._ 9
+7 0.5 26 _._ 4 _±_ 4 _._ 2 51 _._ 6 _±_ 5 _._ 6
+
+
+24
+
+
+Table 3: QED_HGRAPH Certification Results
+
+
+_N_ _α_ Error Rate (%) Certified Fraction (%)
+
+
+3 0.1 7 _._ 8 _±_ 1 _._ 2 49 _._ 3 _±_ 2 _._ 0
+3 0.2 13 _._ 4 _±_ 1 _._ 6 47 _._ 8 _±_ 1 _._ 8
+3 0.3 16 _._ 3 _±_ 2 _._ 1 54 _._ 0 _±_ 1 _._ 0
+3 0.4 19 _._ 4 _±_ 2 _._ 7 56 _._ 8 _±_ 1 _._ 0
+3 0.5 21 _._ 8 _±_ 3 _._ 2 60 _._ 8 _±_ 3 _._ 4
+
+
+7 0.1 7 _._ 9 _±_ 0 _._ 5 52 _._ 2 _±_ 3 _._ 2
+7 0.2 14 _._ 6 _±_ 1 _._ 6 56 _._ 5 _±_ 2 _._ 0
+7 0.3 17 _._ 9 _±_ 2 _._ 1 56 _._ 7 _±_ 2 _._ 2
+7 0.4 20 _._ 3 _±_ 1 _._ 2 65 _._ 5 _±_ 3 _._ 1
+7 0.5 22 _._ 5 _±_ 3 _._ 4 72 _._ 0 _±_ 2 _._ 7
+
+
+Table 4: QED_SELFEDIT Certification Results
+
+
+_N_ _α_ Error Rate (%) Certified Fraction (%)
+
+
+3 0.1 7 _._ 6 _±_ 1 _._ 2 42 _._ 6 _±_ 6 _._ 1
+3 0.2 10 _._ 4 _±_ 0 _._ 6 54 _._ 6 _±_ 3 _._ 9
+3 0.3 14 _._ 2 _±_ 1 _._ 3 52 _._ 2 _±_ 2 _._ 7
+3 0.4 15 _._ 7 _±_ 2 _._ 1 57 _._ 0 _±_ 3 _._ 6
+3 0.5 17 _._ 2 _±_ 3 _._ 7 62 _._ 7 _±_ 4 _._ 1
+
+
+7 0.1 11 _._ 9 _±_ 1 _._ 4 52 _._ 2 _±_ 3 _._ 5
+7 0.2 21 _._ 6 _±_ 2 _._ 1 62 _._ 3 _±_ 4 _._ 0
+7 0.3 29 _._ 7 _±_ 2 _._ 5 61 _._ 2 _±_ 2 _._ 9
+7 0.4 30 _._ 8 _±_ 1 _._ 2 77 _._ 9 _±_ 4 _._ 3
+7 0.5 32 _._ 9 _±_ 3 _._ 2 78 _._ 4 _±_ 1 _._ 6
+
+
+Table 5: TARGETDIFF Certification Results
+
+
+_N_ _α_ Error Rate (%) Certified Fraction (%)
+
+
+5 0.1 8 _._ 4 _±_ 2 _._ 6 42 _._ 9 _±_ 2 _._ 5
+5 0.2 10 _._ 8 _±_ 3 _._ 0 52 _._ 1 _±_ 2 _._ 9
+5 0.3 11 _._ 4 _±_ 2 _._ 3 57 _._ 7 _±_ 3 _._ 8
+5 0.4 14 _._ 9 _±_ 4 _._ 4 64 _._ 3 _±_ 3 _._ 6
+5 0.5 17 _._ 1 _±_ 3 _._ 0 68 _._ 5 _±_ 3 _._ 4
+
+
+10 0.1 5 _._ 3 _±_ 2 _._ 5 57 _._ 8 _±_ 4 _._ 3
+10 0.2 8 _._ 2 _±_ 3 _._ 3 63 _._ 9 _±_ 3 _._ 6
+10 0.3 9 _._ 3 _±_ 2 _._ 0 68 _._ 8 _±_ 2 _._ 6
+10 0.4 11 _._ 5 _±_ 2 _._ 7 72 _._ 4 _±_ 4 _._ 0
+10 0.5 12 _._ 8 _±_ 3 _._ 9 76 _._ 6 _±_ 3 _._ 7
+
+
+15 0.1 10 _._ 1 _±_ 1 _._ 1 69 _._ 5 _±_ 3 _._ 3
+15 0.2 7 _._ 6 _±_ 1 _._ 2 70 _._ 0 _±_ 4 _._ 6
+15 0.3 8 _._ 7 _±_ 1 _._ 5 73 _._ 1 _±_ 5 _._ 1
+15 0.4 9 _._ 8 _±_ 2 _._ 0 74 _._ 5 _±_ 2 _._ 5
+15 0.5 12 _._ 0 _±_ 1 _._ 8 79 _._ 7 _±_ 2 _._ 3
+
+
+25
+
+
+Table 6: MOLCRAFT Certification Results
+
+
+_N_ _α_ Error Rate (%) Certified Fraction (%)
+
+
+5 0.1 7 _._ 0 _±_ 1 _._ 2 40 _._ 1 _±_ 2 _._ 7
+5 0.2 11 _._ 0 _±_ 1 _._ 8 47 _._ 9 _±_ 3 _._ 5
+5 0.3 12 _._ 7 _±_ 1 _._ 0 55 _._ 5 _±_ 4 _._ 9
+5 0.4 15 _._ 1 _±_ 1 _._ 2 63 _._ 1 _±_ 4 _._ 9
+5 0.5 16 _._ 6 _±_ 1 _._ 2 68 _._ 1 _±_ 3 _._ 8
+
+
+10 0.1 5 _._ 2 _±_ 1 _._ 6 58 _._ 3 _±_ 5 _._ 8
+10 0.2 6 _._ 7 _±_ 1 _._ 1 64 _._ 2 _±_ 5 _._ 8
+10 0.3 7 _._ 5 _±_ 1 _._ 4 67 _._ 6 _±_ 4 _._ 9
+10 0.4 9 _._ 0 _±_ 1 _._ 6 71 _._ 1 _±_ 7 _._ 1
+10 0.5 9 _._ 0 _±_ 2 _._ 9 73 _._ 5 _±_ 7 _._ 5
+
+
+15 0.1 7 _._ 3 _±_ 1 _._ 0 55 _._ 4 _±_ 4 _._ 1
+15 0.2 9 _._ 1 _±_ 2 _._ 0 59 _._ 8 _±_ 5 _._ 8
+15 0.3 9 _._ 1 _±_ 3 _._ 6 68 _._ 7 _±_ 5 _._ 9
+15 0.4 9 _._ 5 _±_ 3 _._ 0 69 _._ 1 _±_ 7 _._ 2
+15 0.5 11 _._ 5 _±_ 4 _._ 9 76 _._ 2 _±_ 7 _._ 8
+
+
+Table 7: DECOMPDIFF Certification Results
+
+
+_N_ _α_ Error Rate (%) Certified Fraction (%)
+
+
+5 0.1 3 _._ 2 _±_ 2 _._ 2 56 _._ 6 _±_ 1 _._ 4
+5 0.2 3 _._ 1 _±_ 1 _._ 9 63 _._ 5 _±_ 1 _._ 2
+5 0.3 4 _._ 7 _±_ 2 _._ 0 69 _._ 0 _±_ 2 _._ 4
+5 0.4 5 _._ 2 _±_ 2 _._ 4 73 _._ 4 _±_ 0 _._ 8
+5 0.5 5 _._ 4 _±_ 2 _._ 6 77 _._ 0 _±_ 1 _._ 2
+
+
+10 0.1 2 _._ 1 _±_ 1 _._ 6 74 _._ 4 _±_ 4 _._ 0
+10 0.2 3 _._ 1 _±_ 2 _._ 5 76 _._ 4 _±_ 3 _._ 5
+10 0.3 5 _._ 2 _±_ 3 _._ 1 79 _._ 6 _±_ 3 _._ 4
+10 0.4 6 _._ 2 _±_ 2 _._ 8 82 _._ 7 _±_ 3 _._ 6
+10 0.5 5 _._ 9 _±_ 3 _._ 0 82 _._ 7 _±_ 2 _._ 1
+
+
+15 0.1 2 _._ 6 _±_ 3 _._ 2 83 _._ 2 _±_ 5 _._ 7
+15 0.2 2 _._ 5 _±_ 3 _._ 2 83 _._ 9 _±_ 5 _._ 0
+15 0.3 1 _._ 6 _±_ 2 _._ 7 85 _._ 8 _±_ 5 _._ 3
+15 0.4 1 _._ 6 _±_ 2 _._ 8 85 _._ 1 _±_ 6 _._ 2
+15 0.5 2 _._ 5 _±_ 3 _._ 1 87 _._ 1 _±_ 5 _._ 2
+
+
+26
+
+
+E.1.2 DESIGN RESULTS
+
+
+DRD2_HGRAPH
+
+
+Table 8: DRD2_HGRAPH Design Results
+
+
+_N_ _α_ Error Rate (%) Mean Set Size Empty Set (%)
+
+
+3 0.1 4 _._ 2 _±_ 0 _._ 3 1 _._ 9 _±_ 0 _._ 0 68 _._ 8 _±_ 1 _._ 3
+3 0.2 6 _._ 6 _±_ 0 _._ 5 1 _._ 8 _±_ 0 _._ 0 46 _._ 1 _±_ 1 _._ 3
+3 0.3 9 _._ 1 _±_ 0 _._ 6 1 _._ 8 _±_ 0 _._ 0 25 _._ 3 _±_ 1 _._ 8
+3 0.4 11 _._ 0 _±_ 0 _._ 8 1 _._ 6 _±_ 0 _._ 0 15 _._ 0 _±_ 1 _._ 3
+3 0.5 13 _._ 0 _±_ 0 _._ 8 1 _._ 5 _±_ 0 _._ 0 9 _._ 9 _±_ 0 _._ 8
+
+
+5 0.1 5 _._ 4 _±_ 1 _._ 6 2 _._ 4 _±_ 0 _._ 7 47 _._ 9 _±_ 2 _._ 6
+5 0.2 7 _._ 9 _±_ 2 _._ 5 2 _._ 1 _±_ 0 _._ 7 28 _._ 7 _±_ 2 _._ 8
+5 0.3 10 _._ 4 _±_ 3 _._ 3 1 _._ 8 _±_ 0 _._ 6 15 _._ 8 _±_ 2 _._ 1
+5 0.4 12 _._ 4 _±_ 4 _._ 0 1 _._ 6 _±_ 0 _._ 5 11 _._ 3 _±_ 1 _._ 9
+5 0.5 13 _._ 9 _±_ 4 _._ 4 1 _._ 4 _±_ 0 _._ 5 8 _._ 8 _±_ 1 _._ 5
+
+
+7 0.1 3 _._ 6 _±_ 0 _._ 8 3 _._ 1 _±_ 0 _._ 1 53 _._ 0 _±_ 1 _._ 2
+7 0.2 6 _._ 3 _±_ 0 _._ 7 2 _._ 6 _±_ 0 _._ 1 30 _._ 0 _±_ 1 _._ 4
+7 0.3 9 _._ 0 _±_ 1 _._ 0 2 _._ 1 _±_ 0 _._ 0 15 _._ 8 _±_ 0 _._ 7
+7 0.4 11 _._ 2 _±_ 1 _._ 1 1 _._ 8 _±_ 0 _._ 0 9 _._ 2 _±_ 0 _._ 5
+7 0.5 12 _._ 9 _±_ 1 _._ 2 1 _._ 7 _±_ 0 _._ 0 5 _._ 9 _±_ 0 _._ 6
+
+
+DRD2_SELFEDIT
+
+
+Table 9: DRD2_SELFEDIT Design Results
+
+
+_N_ _α_ Error Rate (%) Mean Set Size Empty Set (%)
+
+
+3 0.1 9 _._ 8 _±_ 1 _._ 3 2 _._ 0 _±_ 0 _._ 0 64 _._ 5 _±_ 0 _._ 5
+3 0.2 14 _._ 6 _±_ 2 _._ 2 1 _._ 9 _±_ 0 _._ 1 42 _._ 3 _±_ 0 _._ 2
+3 0.3 19 _._ 6 _±_ 3 _._ 2 1 _._ 7 _±_ 0 _._ 0 24 _._ 0 _±_ 0 _._ 9
+3 0.4 22 _._ 5 _±_ 3 _._ 2 1 _._ 6 _±_ 0 _._ 0 12 _._ 3 _±_ 0 _._ 1
+3 0.5 24 _._ 5 _±_ 4 _._ 0 1 _._ 5 _±_ 0 _._ 0 7 _._ 3 _±_ 0 _._ 6
+
+
+5 0.1 9 _._ 5 _±_ 1 _._ 2 2 _._ 6 _±_ 0 _._ 1 53 _._ 0 _±_ 1 _._ 5
+5 0.2 14 _._ 0 _±_ 2 _._ 4 2 _._ 3 _±_ 0 _._ 1 33 _._ 3 _±_ 2 _._ 6
+5 0.3 20 _._ 7 _±_ 2 _._ 1 2 _._ 0 _±_ 0 _._ 0 14 _._ 9 _±_ 0 _._ 6
+5 0.4 25 _._ 8 _±_ 2 _._ 6 1 _._ 7 _±_ 0 _._ 1 8 _._ 1 _±_ 1 _._ 1
+5 0.5 28 _._ 8 _±_ 3 _._ 1 1 _._ 6 _±_ 0 _._ 0 4 _._ 2 _±_ 0 _._ 4
+
+
+7 0.1 11 _._ 8 _±_ 1 _._ 3 3 _._ 1 _±_ 0 _._ 1 46 _._ 6 _±_ 0 _._ 8
+7 0.2 19 _._ 5 _±_ 3 _._ 3 2 _._ 6 _±_ 0 _._ 0 22 _._ 9 _±_ 3 _._ 5
+7 0.3 24 _._ 8 _±_ 6 _._ 3 2 _._ 1 _±_ 0 _._ 1 12 _._ 2 _±_ 1 _._ 9
+7 0.4 28 _._ 6 _±_ 7 _._ 1 1 _._ 8 _±_ 0 _._ 1 7 _._ 4 _±_ 1 _._ 7
+7 0.5 31 _._ 6 _±_ 6 _._ 3 1 _._ 7 _±_ 0 _._ 0 4 _._ 0 _±_ 0 _._ 6
+
+
+QED_HGRAPH
+
+
+27
+
+
+Table 10: QED_HGRAPH Design Results
+
+
+_N_ _α_ Error Rate (%) Mean Set Size Empty Set (%)
+
+
+3 0.1 10 _._ 1 _±_ 0 _._ 7 1 _._ 2 _±_ 0 _._ 0 70 _._ 7 _±_ 1 _._ 9
+3 0.2 17 _._ 0 _±_ 0 _._ 6 1 _._ 3 _±_ 0 _._ 0 45 _._ 4 _±_ 1 _._ 6
+3 0.3 21 _._ 2 _±_ 1 _._ 4 1 _._ 3 _±_ 0 _._ 1 26 _._ 8 _±_ 0 _._ 9
+3 0.4 25 _._ 2 _±_ 1 _._ 5 1 _._ 3 _±_ 0 _._ 0 13 _._ 2 _±_ 1 _._ 2
+3 0.5 28 _._ 2 _±_ 1 _._ 7 1 _._ 2 _±_ 0 _._ 0 6 _._ 9 _±_ 0 _._ 6
+
+
+5 0.1 12 _._ 2 _±_ 0 _._ 7 2 _._ 6 _±_ 0 _._ 0 27 _._ 2 _±_ 0 _._ 2
+5 0.2 18 _._ 8 _±_ 1 _._ 1 2 _._ 3 _±_ 0 _._ 1 7 _._ 1 _±_ 0 _._ 2
+5 0.3 24 _._ 4 _±_ 1 _._ 2 1 _._ 8 _±_ 0 _._ 0 0 _._ 0 _±_ 0 _._ 0
+5 0.4 27 _._ 7 _±_ 1 _._ 3 1 _._ 6 _±_ 0 _._ 1 0 _._ 0 _±_ 0 _._ 0
+5 0.5 29 _._ 9 _±_ 1 _._ 0 1 _._ 5 _±_ 0 _._ 1 0 _._ 0 _±_ 0 _._ 0
+
+
+7 0.1 10 _._ 4 _±_ 1 _._ 2 2 _._ 5 _±_ 0 _._ 1 56 _._ 6 _±_ 0 _._ 8
+7 0.2 17 _._ 5 _±_ 1 _._ 2 2 _._ 0 _±_ 0 _._ 0 31 _._ 7 _±_ 1 _._ 8
+7 0.3 22 _._ 0 _±_ 1 _._ 4 1 _._ 7 _±_ 0 _._ 1 18 _._ 9 _±_ 1 _._ 6
+7 0.4 26 _._ 1 _±_ 1 _._ 5 1 _._ 4 _±_ 0 _._ 0 9 _._ 4 _±_ 1 _._ 5
+7 0.5 29 _._ 1 _±_ 1 _._ 6 1 _._ 3 _±_ 0 _._ 0 4 _._ 9 _±_ 1 _._ 1
+
+
+QED_SELFEDIT
+
+
+Table 11: QED_SELFEDIT Design Results
+
+
+_N_ _α_ Error Rate (%) Mean Set Size Empty Set (%)
+
+
+3 0.1 10 _._ 1 _±_ 0 _._ 4 1 _._ 2 _±_ 0 _._ 0 64 _._ 8 _±_ 1 _._ 8
+3 0.2 14 _._ 4 _±_ 0 _._ 9 1 _._ 3 _±_ 0 _._ 1 45 _._ 2 _±_ 1 _._ 5
+3 0.3 18 _._ 8 _±_ 1 _._ 4 1 _._ 3 _±_ 0 _._ 1 27 _._ 1 _±_ 1 _._ 8
+3 0.4 21 _._ 5 _±_ 1 _._ 9 1 _._ 2 _±_ 0 _._ 1 13 _._ 3 _±_ 1 _._ 0
+3 0.5 23 _._ 4 _±_ 1 _._ 9 1 _._ 2 _±_ 0 _._ 0 7 _._ 0 _±_ 1 _._ 0
+
+
+5 0.1 11 _._ 9 _±_ 0 _._ 8 2 _._ 7 _±_ 0 _._ 1 26 _._ 0 _±_ 2 _._ 4
+5 0.2 20 _._ 1 _±_ 1 _._ 2 2 _._ 3 _±_ 0 _._ 1 7 _._ 0 _±_ 0 _._ 7
+5 0.3 25 _._ 8 _±_ 1 _._ 4 1 _._ 9 _±_ 0 _._ 1 0 _._ 0 _±_ 0 _._ 0
+5 0.4 28 _._ 4 _±_ 1 _._ 5 1 _._ 6 _±_ 0 _._ 1 0 _._ 0 _±_ 0 _._ 0
+5 0.5 29 _._ 9 _±_ 2 _._ 1 1 _._ 5 _±_ 0 _._ 2 0 _._ 0 _±_ 0 _._ 0
+
+
+7 0.1 18 _._ 2 _±_ 2 _._ 7 2 _._ 1 _±_ 0 _._ 2 56 _._ 7 _±_ 1 _._ 5
+7 0.2 26 _._ 9 _±_ 3 _._ 8 1 _._ 9 _±_ 0 _._ 2 34 _._ 7 _±_ 2 _._ 9
+7 0.3 34 _._ 5 _±_ 3 _._ 0 1 _._ 6 _±_ 0 _._ 1 18 _._ 3 _±_ 2 _._ 2
+7 0.4 39 _._ 2 _±_ 3 _._ 0 1 _._ 4 _±_ 0 _._ 1 10 _._ 2 _±_ 2 _._ 5
+7 0.5 42 _._ 1 _±_ 2 _._ 5 1 _._ 3 _±_ 0 _._ 0 5 _._ 7 _±_ 1 _._ 6
+
+
+TARGETDIFF
+
+
+28
+
+
+Table 12: TARGETDIFF Design Results
+
+
+_N_ _α_ Error Rate (%) Mean Set Size Empty Set (%)
+
+
+5 0.1 10 _._ 0 _±_ 1 _._ 5 2 _._ 5 _±_ 0 _._ 1 37 _._ 9 _±_ 2 _._ 6
+5 0.2 17 _._ 4 _±_ 1 _._ 5 2 _._ 2 _±_ 0 _._ 1 21 _._ 4 _±_ 3 _._ 1
+5 0.3 27 _._ 2 _±_ 3 _._ 5 2 _._ 0 _±_ 0 _._ 1 8 _._ 6 _±_ 0 _._ 0
+5 0.4 34 _._ 2 _±_ 2 _._ 9 1 _._ 7 _±_ 0 _._ 1 2 _._ 1 _±_ 1 _._ 4
+5 0.5 37 _._ 0 _±_ 1 _._ 2 1 _._ 6 _±_ 0 _._ 0 0 _._ 4 _±_ 0 _._ 7
+
+
+10 0.1 9 _._ 4 _±_ 2 _._ 7 3 _._ 7 _±_ 0 _._ 1 21 _._ 9 _±_ 8 _._ 0
+10 0.2 22 _._ 5 _±_ 3 _._ 5 2 _._ 9 _±_ 0 _._ 0 6 _._ 2 _±_ 3 _._ 5
+10 0.3 29 _._ 4 _±_ 0 _._ 9 2 _._ 3 _±_ 0 _._ 0 1 _._ 2 _±_ 0 _._ 0
+10 0.4 35 _._ 6 _±_ 0 _._ 9 1 _._ 8 _±_ 0 _._ 0 0 _._ 0 _±_ 0 _._ 0
+10 0.5 37 _._ 5 _±_ 3 _._ 5 1 _._ 6 _±_ 0 _._ 1 0 _._ 0 _±_ 0 _._ 0
+
+
+15 0.1 11 _._ 2 _±_ 1 _._ 8 4 _._ 7 _±_ 0 _._ 1 15 _._ 0 _±_ 5 _._ 3
+15 0.2 21 _._ 9 _±_ 2 _._ 7 3 _._ 5 _±_ 0 _._ 0 3 _._ 8 _±_ 1 _._ 8
+15 0.3 31 _._ 9 _±_ 0 _._ 9 2 _._ 4 _±_ 0 _._ 0 1 _._ 2 _±_ 1 _._ 8
+15 0.4 36 _._ 9 _±_ 2 _._ 7 1 _._ 8 _±_ 0 _._ 0 0 _._ 6 _±_ 0 _._ 9
+15 0.5 38 _._ 1 _±_ 2 _._ 7 1 _._ 6 _±_ 0 _._ 1 0 _._ 0 _±_ 0 _._ 0
+
+
+MOLCRAFT
+
+
+Table 13: MOLCRAFT Design Results
+
+
+_N_ _α_ Error Rate (%) Mean Set Size Empty Set (%)
+
+
+5 0.1 9 _._ 8 _±_ 1 _._ 2 2 _._ 6 _±_ 0 _._ 1 40 _._ 7 _±_ 1 _._ 9
+5 0.2 18 _._ 7 _±_ 1 _._ 4 2 _._ 3 _±_ 0 _._ 2 20 _._ 7 _±_ 5 _._ 6
+5 0.3 26 _._ 0 _±_ 3 _._ 1 2 _._ 0 _±_ 0 _._ 1 7 _._ 7 _±_ 0 _._ 7
+5 0.4 29 _._ 3 _±_ 5 _._ 3 1 _._ 7 _±_ 0 _._ 0 2 _._ 4 _±_ 0 _._ 0
+5 0.5 32 _._ 9 _±_ 4 _._ 2 1 _._ 6 _±_ 0 _._ 0 1 _._ 2 _±_ 1 _._ 2
+
+
+10 0.1 9 _._ 9 _±_ 1 _._ 3 3 _._ 6 _±_ 0 _._ 3 22 _._ 2 _±_ 3 _._ 3
+10 0.2 18 _._ 2 _±_ 2 _._ 0 3 _._ 0 _±_ 0 _._ 2 9 _._ 9 _±_ 2 _._ 1
+10 0.3 25 _._ 1 _±_ 0 _._ 7 2 _._ 2 _±_ 0 _._ 1 2 _._ 9 _±_ 1 _._ 4
+10 0.4 28 _._ 0 _±_ 1 _._ 4 1 _._ 8 _±_ 0 _._ 1 2 _._ 1 _±_ 0 _._ 7
+10 0.5 29 _._ 6 _±_ 2 _._ 5 1 _._ 7 _±_ 0 _._ 1 0 _._ 4 _±_ 0 _._ 7
+
+
+15 0.1 11 _._ 1 _±_ 0 _._ 0 4 _._ 3 _±_ 0 _._ 0 16 _._ 0 _±_ 0 _._ 0
+15 0.2 19 _._ 8 _±_ 0 _._ 0 3 _._ 2 _±_ 0 _._ 0 1 _._ 2 _±_ 0 _._ 0
+15 0.3 23 _._ 5 _±_ 0 _._ 0 2 _._ 2 _±_ 0 _._ 0 1 _._ 2 _±_ 0 _._ 0
+15 0.4 27 _._ 2 _±_ 0 _._ 0 1 _._ 8 _±_ 0 _._ 0 1 _._ 2 _±_ 0 _._ 0
+15 0.5 28 _._ 4 _±_ 0 _._ 0 1 _._ 6 _±_ 0 _._ 0 1 _._ 2 _±_ 0 _._ 0
+
+
+DECOMPDIFF
+
+
+29
+
+
+Table 14: DECOMPDIFF Design Results
+
+
+_N_ _α_ Error Rate (%) Mean Set Size Empty Set (%)
+
+
+5 0.1 9 _._ 6 _±_ 2 _._ 6 2 _._ 6 _±_ 0 _._ 3 25 _._ 0 _±_ 2 _._ 2
+5 0.2 16 _._ 7 _±_ 4 _._ 7 2 _._ 3 _±_ 0 _._ 2 11 _._ 7 _±_ 0 _._ 7
+5 0.3 24 _._ 2 _±_ 0 _._ 7 2 _._ 0 _±_ 0 _._ 0 2 _._ 5 _±_ 2 _._ 2
+5 0.4 26 _._ 7 _±_ 0 _._ 7 1 _._ 7 _±_ 0 _._ 1 1 _._ 2 _±_ 0 _._ 0
+5 0.5 28 _._ 8 _±_ 1 _._ 2 1 _._ 6 _±_ 0 _._ 1 0 _._ 8 _±_ 0 _._ 7
+
+
+10 0.1 11 _._ 2 _±_ 0 _._ 5 3 _._ 4 _±_ 0 _._ 1 13 _._ 5 _±_ 0 _._ 9
+10 0.2 19 _._ 2 _±_ 0 _._ 1 2 _._ 7 _±_ 0 _._ 0 2 _._ 6 _±_ 0 _._ 0
+10 0.3 24 _._ 4 _±_ 3 _._ 6 2 _._ 1 _±_ 0 _._ 1 0 _._ 0 _±_ 0 _._ 0
+10 0.4 26 _._ 3 _±_ 0 _._ 9 1 _._ 7 _±_ 0 _._ 1 0 _._ 0 _±_ 0 _._ 0
+10 0.5 27 _._ 6 _±_ 0 _._ 9 1 _._ 6 _±_ 0 _._ 1 0 _._ 0 _±_ 0 _._ 0
+
+
+15 0.1 9 _._ 6 _±_ 0 _._ 9 4 _._ 3 _±_ 0 _._ 4 8 _._ 3 _±_ 2 _._ 7
+15 0.2 19 _._ 2 _±_ 3 _._ 6 2 _._ 9 _±_ 0 _._ 1 1 _._ 3 _±_ 1 _._ 8
+15 0.3 23 _._ 7 _±_ 4 _._ 5 2 _._ 3 _±_ 0 _._ 1 0 _._ 0 _±_ 0 _._ 0
+15 0.4 26 _._ 9 _±_ 3 _._ 6 1 _._ 8 _±_ 0 _._ 0 0 _._ 0 _±_ 0 _._ 0
+15 0.5 27 _._ 6 _±_ 2 _._ 7 1 _._ 7 _±_ 0 _._ 1 0 _._ 0 _±_ 0 _._ 0
+
+
+30
+
+
+E.2 COMPARING DIFFERENT TEST STATISTICS
+
+
+In this section, we include additional results for Section 4.5 comparing different test statistics. While
+the power varies based on the choice of the test statistic, CONFHIT attains valid coverage across
+statistics.
+
+
+Figure 7: Comparison of score statistics on DRD2 (HGRAPH2GRAPH, N=3). Left: rejection (power) at
+_α_ = 0 _._ 1 _,_ 0 _._ 3. Right: error vs. _α_
+
+
+Figure 8: Comparison of score statistics on DRD2 (HGRAPH2GRAPH, N=5). Left: rejection (power) at
+_α_ = 0 _._ 1 _,_ 0 _._ 3. Right: error vs. _α_
+
+
+Figure 9: Comparison of score statistics on DRD2 (HGRAPH2GRAPH, N=7). Left: rejection (power) at
+_α_ = 0 _._ 1 _,_ 0 _._ 3. Right: error vs. _α_
+
+
+31
+
+
+Figure 10: Comparison of score statistics on SBDD (TARGETDIFF, N=5). Left: rejection (power) at _α_ = 0 _._ 1 _,_ 0 _._ 3.
+Right: error vs. _α_
+
+
+Figure 11: Comparison of score statistics on SBDD (TARGETDIFF, N=10). Left: rejection (power) at _α_ =
+0 _._ 1 _,_ 0 _._ 3. Right: error vs. _α_
+
+
+32
+
+
+E.3 P-VALUES
+
+
+In this section, we show the validity of conformal p-value plots described in section 4.5, across tasks
+and datasets. In each panel, the distribution remains close to the uniform (dashed line; see also the
+reported KL divergence from uniformity), confirming approximate validity of our p-values (albeit
+slightly conservative).
+
+
+Figure 12: Density of conformal nested p-values for QED using SELFEDIT at set sizes _k_ = 3 _,_ 5 _,_ 7.
+
+
+Figure 13: Density of conformal nested p-values for DRD2 using HGRAPH at set sizes _k_ = 3 _,_ 5 _,_ 7.
+
+
+Figure 14: Density of conformal nested p-values for SBDD using TARGETDIFF at set sizes _k_ = 1 _,_ 5 _,_ 10.
+
+
+F EFFECT OF PREDICTOR QUALITY
+
+
+In this section, we investigate how the accuracy of the predictor affects the performance of CONFHIT.
+We consider three scenarios:
+
+
+1. Normal predictor where the calibrated classifier outputs _p_ = Pr(active _| x_ ).
+
+2. Noisy predictor obtained by adding uniform Gaussian noise, giving
+
+_p_ ˜ = _[p]_ [ +] _[ N]_ [(0] _[,]_ [ 1)] _._
+
+2
+
+
+3. Inverse predictor obtained by replacing _p_ with 1 _−_ _p_ .
+
+
+Figure 15 illustrates how CONFHIT behaves under these perturbation settings. Even when the
+predictor is corrupted or inverted, the method maintains valid error control, with empirical error rates
+remaining below the target line _y_ = 100 _α_ . This demonstrates that the statistical validity of CONFHIT
+does not rely on predictor accuracy.
+
+
+Predictor quality affects only the power. As the predictor becomes less informative, the conformal sets
+become less efficient, which leads to a higher frequency of empty sets or larger sets depending on the
+task. Despite this expected degradation, the method consistently preserves its coverage guarantees.
+
+
+33
+
+
+Figure 15: Effect of predictor quality on CONFHIT’s error rate on the CMO task. In both DRD2 (top) and QED
+(bottom) using the Hgraph model, noisy and inverse predictors exhibit reduced power but maintain valid error
+control across all values of _α_ .
+
+
+Figure 16: Results for heuristic baseline with predicted probabilities (while varying predictor quality), showing
+rejection rates and error rates for QED with _N_ = 5 using the Hgraph model. As predictor quality deteriorates,
+the performance quickly drops with severe violation of the error control.
+
+
+G ADDITIONAL BASELINES
+
+
+G.1 HEURISTIC BASELINE
+
+
+We evaluate a simple confidence based heuristic. Given a predicted probability _p_ ˆ of success, the
+heuristic selects the smallest _n_ such that (1 _−_ _p_ ˆ) _[n]_ _≤_ _α_ . This provides a natural baseline that depends
+only on classifier scores without any uncertainty calibration.
+
+
+The results in Figures 16 and show that this heuristic does not reliably control the error rate. When
+the predictor is accurate, the error rates sometimes follow the target line, but under noisy or inverted
+predictors the error increases sharply and often surpasses the desired level. The degradation is visible
+across both DRD2 and QED: the error curves drift upward as the predictor worsens, and the rejection
+rates fluctuate significantly, indicating unstable behavior.
+
+
+In contrast, ConfHit remains below the target line in all cases. The predictor quality affects only the
+power, whereas the heuristic baseline loses error control as soon as the predictor becomes unreliable.
+
+
+34
+
+
+Figure 17: Conformal LM baseline for molecule optimization. Error rate (left) and empty–set percentage (right)
+versus _α_ for QED and DRD2 at N = 5 using the Hgraph model. The method breaks coverage and underperforms
+CONFHIT despite relying on an oracle that is unavailable in real-world settings.
+
+
+The empirical curves highlight that the heuristic transitions from reasonable to poor performance,
+while ConfHit maintains stable guarantees across all predictor settings.
+
+
+G.2 COMPARISON TO ORACLE BASED METHODS
+
+
+We adapt an oracle-based CLM (Quach et al., 2023) baseline as depicted in Algorithm 3 to use
+the _sum_ of prediction scores as the total confidence of a candidate set, without performing any
+density correction or filtering of low–quality samples. As shown in Figure 17, this baseline fails to
+maintain valid guarantees: the empirical error rate systematically exceeds the target level, and the
+empty–set percentages deviate sharply from expected behavior across all _α_ . Despite relying on an
+idealized oracle, this approach also exhibits _lower power_ than CONFHIT, whereas CONFHIT attains
+both higher detection power _and_ valid coverage due to its calibrated scoring rule and density-aware
+correction. Finally, we emphasize that this baseline is not directly comparable to CONFHIT, since
+it assumes access to a perfect oracle predictor—an unrealistic requirement in practical molecular
+design workflows.
+
+
+**Algorithm 3** Conformal Sampling for Constrained Molecular Optimization
+
+
+**Input:** Input molecule _x_ ; generator _pθ_ ( _· | x_ ); scoring function _F_ ; calibrated threshold _λ_ ; sampling
+budget _k_ max
+**Output:** Candidate set _Cλ_ certified to contain at least one improved molecule
+
+1: _Cλ_ _←_ ∅ {Initialize output set}
+2: **for** _k_ = 1 **to** _k_ max **do**
+3: Sample _yk_ _∼_ _pθ_ ( _· | x_ ) {Generate candidate}
+4: _Cλ_ _←_ _Cλ ∪{yk}_ {Add to set}
+5: **if** _F_ ( _x, Cλ_ ) _≥_ _λ_ **then**
+6: **break** {Set certified}
+7: **end if**
+8: **end for**
+9: **return** _Cλ_
+
+
+H ROBUSTNESS AND DIAGNOSTICS FOR DENSITY RATIO ESTIMATION
+
+
+H.1 SENSITIVITY ANALYSIS
+
+
+We study the effect of misspecifying the likelihood ratios by applying power transformations _w_ _[γ]_
+across a range of exponents _γ_ . Figure 18 shows how such transformations affect the KL divergence
+of the p-values of the negative samples, together with the resulting error rate and rejection (empty set)
+rate. In practice, such results can be used to judge whether the analysis is robust enough. Here, we
+
+
+35
+
+
+Figure 18: Effect of power transformations _w_ _[γ]_ of likelihood-ratio weights on QED and DRD2 using the
+HGraph2Graph model at _N_ = 5 at different _α_ . Across all transformations, CONFHIT maintains a graceful
+degradation of error control with major changes in terms of the rejection rate.
+
+
+additionally evaluate the error control performance under such perturbation to also show the robust
+performance of CONFHIT.
+
+
+The KL divergence here measures the deviation of the empirical p-value distribution from the
+Uniform(0,1) distribution. Smaller values indicate that the transformed likelihood ratios still produce
+p-values close to uniform, while larger values reflect increasing distortion away from the ideal uniform
+shape. In both the datasets, we see that the KL divergence is only moderately affected under moderate
+misspecification. Only on amplifying the weights ( _γ_ _>_ 3) causes the KL divergence to rise sharply in
+the QED case we notice substantial deviation from uniformity.
+
+
+The error rate consistently stays near the target level across all transformations for _α_ = 0 _._ 1 and
+below the target level for _α_ = 0 _._ 3. Only the rejection rate is affected, with lower rejection occurring
+when the KL divergence is small and higher rejection when the p-values deviate more strongly from
+uniform. This shows that mild misspecification primarily adjusts the conservativeness of the method
+without affecting its validity.
+
+
+A similar pattern appears for DRD2 . Flattened weights reduce the KL divergence, while large values
+of _γ_ inflate it. Error control remains stable throughout, whereas the rejection rate increases in the
+high-KL regime corresponding to more severe distortions of the p-value distribution. Overall, these
+results demonstrate that ConfHit is robust to moderate incorrect specification of the likelihood ratios.
+
+
+H.2 SCAFFOLD SPLITTING ON CALIBRATION SET
+
+
+To assess the robustness of the calibration procedure, we perform a scaffold split on the calibration
+negatives. We select the top 30 scaffolds that also appear in the test set, producing a nontrivial
+distribution shift that reflects realistic drug discovery scenarios where scaffold diversity plays an
+important role. This setting provides a diagnostic test: if the calibration procedure is effective, the
+resulting p-values on this shifted split should remain close to uniform.
+
+
+36
+
+
+(a) QED + Hgraph: Calibration significantly reduces
+deviation of p-value distribution from uniformity.
+
+
+(b) DRD2 + Hgraph: Calibrated p-values closely
+match the uniform distribution.
+
+
+Figure 19: P-value distributions on scaffold-split calibration negatives for QED (left) and DRD2 (right). In
+both cases, calibration produces p-values that closely follow the uniform distribution, indicating that the density
+correction remains reliable under scaffold-based distribution shift.
+
+
+Figures 19a and 19b show the p-value distributions before and after applying the density ratio
+correction. In both QED and DRD2, the uncalibrated p-values deviate substantially from the ideal
+uniform distribution, as indicated by large KL divergences. After calibration, the p-values become
+significantly closer to uniform, with much lower KL divergences and a visibly more homogeneous
+density across the interval.
+
+
+The close match between the calibrated p-values and the uniform reference suggests that the calibration procedure successfully corrects for distributional differences tied to scaffold variation. This
+indicates that the method is likely to remain well calibrated on the test set, even when the chemical
+space differs from the training distribution. In practical applications, having partial knowledge of the
+test set’s chemical space enables a simple sanity check: if the p-values on the corresponding scaffolds
+appear close to uniform, one can be confident that the method will behave reliably on the actual test
+compounds.
+
+
+H.3 BALANCE CHECKS
+
+
+Finally, To diagnose the effect of density correction, we compare the feature means of the calibration
+set with the test set before and after reweighting as discussed in Section 3.3. Figures 20 and 21 show
+the mean and standard deviation of each feature dimension, where post-calibration test features are
+weighted by the likelihood ratio _p_ cal( _x_ ) _/p_ test( _x_ ).
+
+
+For QED (Figure 20), the pre-calibration test features differ substantially from the calibration
+distribution, especially in the first dimension. After applying density correction, the weighted test
+features align much more closely with the calibration means across all dimensions. The cosine
+distance between the mean feature vectors decreases from 0 _._ 0623 to 0 _._ 0105, indicating a strong
+improvement in distributional matching.
+
+
+A similar trend appears for DRD2 (Figure 21), where large discrepancies in several dimensions are
+substantially reduced after reweighting. The cosine distance drops from 0 _._ 0491 to 0 _._ 0075, confirming
+that the corrected test distribution becomes much closer to the calibration distribution.
+
+
+These balance checks provide a practical diagnostic: given an unlabeled test set, one can evaluate
+whether density correction brings its feature distribution closer to the calibration set, indicating that
+the calibration procedure is likely to remain valid.
+
+
+37
+
+
+Figure 20: Feature means for QED using the Hgraph model at _N_ = 5. Density correction aligns the test features
+more closely with the calibration distribution.
+
+
+Figure 21: Feature means for DRD2 using the Hgraph model at _N_ = 5. Density correction reduces the
+discrepancy between calibration and test distributions.
+
+
+38

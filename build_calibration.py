@@ -6,8 +6,8 @@ outputs with real human scores and decisions. Saves as calibration.md for
 few-shot injection.
 
 Usage:
-  python build_calibration.py --data-dir iclr2025_data --parallel
-  python build_calibration.py --data-dir iclr2025_data --no-spark --no-related-work
+  python build_calibration.py --data-dir iclr2026_data --parallel
+  python build_calibration.py --data-dir iclr2026_data --no-spark --no-related-work
 """
 
 import asyncio

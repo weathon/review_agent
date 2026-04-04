@@ -1,0 +1,413 @@
+# --- PRINCIPAL-AGENT REINFORCEMENT LEARNING: ORCHESTRATING AI AGENTS WITH CONTRACTS
+
+Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+The increasing deployment of AI is shaping the future landscape of the internet, which is set to become an integrated ecosystem of AI agents. Orchestrating the interaction among AI agents necessitates decentralized, self-sustaining mechanisms that harmonize the tension between individual interests and social welfare. In this paper we tackle this challenge by synergizing reinforcement learning with principal-agent theory from economics. Taken separately, the former allows unrealistic freedom of intervention, while the latter struggles to scale in sequential settings. Combining them achieves the best of both worlds. We propose a framework where a principal guides an agent in a Markov Decision Process (MDP) using a series of contracts, which specify payments by the principal based on observable outcomes of the agent’s actions. We present and analyze a meta-algorithm that iteratively optimizes the policies of the principal and agent, showing its equivalence to a contraction operator on the principal’s Q-function, and its convergence to subgame-perfect equilibrium. We then scale our algorithm with deep Q-learning and analyze its convergence in the presence of approximation error, both theoretically and through experiments with randomly generated binary game-trees. Extending our framework to multiple agents, we apply our methodology to the combinatorial Coin Game. Addressing this multi-agent sequential social dilemma is a promising first step toward scaling our approach to more complex, real-world instances.
+
+## 1 INTRODUCTION
+
+The deployment of AI agents is becoming increasingly prevalent across every facet of society (see, e.g., the survey of Wang et al., 2024a). Recent advancements have enabled large language models to leverage external tools via function-calling capabilities (e.g. Srinivasan et al., 2023; Li et al., 2024). For example, models like GPT-4 can now interface with databases, APIs, and other AI agents, significantly broadening their range of applications. Looking ahead, we anticipate the future internet to connect not only traditional computing devices but also everyday objects powered by AI agents. These developments mark a shift toward more integrated agent ecosystems, and necessitate *scalable* mechanisms for orchestrating efficient interactions among AI agents in a decentralized and heterogeneous environment.
+
+However, learning efficient interactions is inherently complex. AI agents are typically hosted by different entities, and the parties involved in these interactions have individual interests, leading to a natural tension between their incentives and long-term overall welfare. Sequential social dilemmas (SSDs) (Leibo et al., 2017) capture this tension, highlighting how optimization of each agent’s own reward in a Markovian environment may result in suboptimal global outcomes. Multi-agent reinforcement learning (MARL) attempts to address this challenge using methods like *reward shaping*, which adjusts the agents’ reward functions to align their incentives. While effective at optimizing global objectives, these methods typically assume centralized control over each agent’s training procedure, providing unrealistic freedom of intervention to their designer, as well as overlooking the costs of said interventions.
+
+This discrepancy prompts us to look to the economics literature, where complex incentive structures between independent self-interested parties are focal. One of the primary directions in this line of work is the celebrated *principal-agent theory* (e.g., Holmström (1979); Grossman & Hart (1983); Rogerson (1985); Spear & Srivastava (1987)). It distinguishes between agents, who directly take
+
+costly actions to complete tasks, and the principal, who receives rewards from the execution of those tasks. The main tool of this theory are *contracts*, which define payments from the principal to the agent, based on observable outcomes of the agents' actions. Conceptually, this theory fits well with the requirements of modeling interaction among AI agents: Some applications may explicitly involve a principal – for example, a navigation app benefiting from drivers exploring new routes (Ben-Porat et al., 2024). In other applications, including general frameworks like SSDs, a principal can serve as a helpful abstraction that represents social objectives and long-term global welfare.
+
+Contract theory was recognized with the Nobel Prize in Economics in 2016, and has recently garnered interest from the computer science community (e.g., Ho et al. (2016); Dütting et al. (2019); Dütting et al. (2023)). However, the learning of contracts has largely been confined to single-round settings or relies on strict assumptions about agent capabilities (Zhu et al., 2023a; Wang et al., 2023; Guruganesh et al., 2024; Scheid et al., 2024). These limitations leave contract theory inadequately equipped to handle the complexities of future AI agent ecosystems. Motivated by this gap, we aim to synergize reinforcement learning and contract theory—we propose learning contracts as a scalable mechanism to align agents' incentives, and employ (multi-agent) reinforcement learning to extend contract learning to general, sequential settings.
+
+**Our Contribution.** We begin by formulating a general framework for *principal-agent reinforcement learning* with a single agent (Section 2). In this framework, the agent learns a policy for an MDP, and the principal learns to guide the agent using a series of contracts. Importantly, we explicitly model the (usually misaligned) preferences of the principal and the agent.
+
+We first examine this problem from a purely economic perspective (Section 3) with full access to the MDP, thus alleviating the need for learning. We focus on the standard solution concept of *subgame-perfect equilibrium* (SPE, Section 3.1). We formulate a meta-algorithm (Algorithm 1) that iteratively optimizes the principal's and agent's policies in their respective MDPs with the other player's policy being fixed. We show that the meta-algorithm finds an SPE in a finite-horizon game in at most  $T + 1$  iterations, where  $T$  is the horizon (Theorem 3.3). We also show that the meta-algorithm can be viewed as iteratively applying a contraction operator to the principal's Q-function (Theorem 3.4), ensuring its monotonic improvement with each iteration.
+
+Next, in Section 4, we turn to the standard model-free RL setting where the MDP is unknown, and the policies are learned by sampling stochastic transitions and rewards through interacting with the MDP. We instantiate the meta-algorithm (see Algorithm 2) by solving both principal's and agent's MDPs with (deep) Q-learning and apply it in a two-phase setup. First, we train the principal assuming centralized access to the agent's optimization problem (of maximizing its Q-function estimate given a contract in a state). Then, we lift the assumption and validate the learned principal's policy against a black-box oracle agent, mimicking its execution in the real world. We analyze this learning setup theoretically in the presence of approximation errors, including a tool for addressing potential deviations of the oracle agent through extra payments, which we call *nudging*. We present a host of experiments in a controlled environment with randomly generated binary game-trees, and verify that our algorithm approximates SPE well despite approximation errors and even without nudging.
+
+Finally, in Section 5, we extend our model to multiple agents and identify *sequential social dilemmas* (SSDs, Leibo et al. (2017)) as a natural testbed for principal-agent RL. Complementing the prior work that has approached SSDs through multi-agent RL and reward shaping, we adopt a more economic perspective by framing interventions into reward functions as payments made by an external, benevolent principal. The principal's objective is to maximize social welfare through *minimal* intervention. We present extensive experiments with a prominent SSD, the Coin Game (Foerster et al., 2018), where two agents (blue and a red) collect blue and red coins in a grid world. Collecting a coin of the matching color is five times as rewarding to an agent as collecting one of the opposite color, suggesting cooperation by collecting only coins of agents' respective colors. This seemingly innocent grid world is highly combinatorial in terms of states (all possible agent and coin positions on a  $7 \times 7$  grid), actions (all possible sequences across 50 timesteps), and agents (all possible opponent policies). The complexity is further elevated when adding the principal to the mix. Through our two-phase experimental setup – centralized training followed by black-box validation – we verify the approximate convergence of our method to SPE in the Coin Game. We also compare to a simpler, hand-coded payment scheme inspired by Christoffersen et al. (2023), and observe that with the same amount of subsidy, this less-targeted intervention achieves a significantly lower welfare level.
+
+### 1.1 RELATED WORK
+
+Our work fits into the wider literature on automated mechanism design (Conitzer & Sandholm, 2002), in particular approaches based on deep learning (Dütting et al., 2019; Wang et al., 2023) also known as differentiable economics (Dütting et al., 2024). Most closely related from this line of work, Wang et al. (2023) consider stateless one-shot contracting problems and provide a network architecture for capturing the discontinuities in the principal’s utility function. We differ from this work in our focus on sequential contracting problems and the entailing unique challenges.
+
+There is a number of algorithmic works that focus on repeated principal-agent interactions on MDPs, including work on *environment design* and *policy teaching* (Zhang & Parkes, 2008; Zhang et al., 2009b; Yu & Ho, 2022; Ben-Porat et al., 2024). Our approach differs from these earlier works in several ways, including that we actively search for the best (unconstrained) equilibrium in the game between the principal and the agent through reinforcement learning. A closely related line of work, including Gerstgrasser & Parkes (2023), is concerned with learning Stackelberg equilibria in general leader-follower games, including games on MDPs. Our work differs in its focus on SPE, which is the more standard equilibrium concept in dynamic contract design problems. Several works have studied repeated contract design problems from a no-regret online-learning perspective (Ho et al., 2016; Zhu et al., 2023a; Guruganesh et al., 2024; Scheid et al., 2024). However, these works are typically limited to stateless and/or non-sequential interactions. A prominent exception is a contemporaneous study by Wu et al. (2024) that introduces a model of principal-agent MDPs nearly identical to ours, barring an important notational distinction of encoding outcomes as next states.<sup>1</sup> However, their and our studies pursue orthogonal algorithmic developments: whereas they treat contract policies as arms of a bandit and minimize regret, we rely on deep RL to scale to large MDPs and multiple agents.
+
+Starting with the work of Leibo et al. (2017), there is a huge literature on SSDs. Most closely related in this direction is the work by Christoffersen et al. (2023) on multi-agent RL and applications to SSDs. This work pursues an approach in which one of the agents (rather than the principal) proposes a contract (an outcome-contingent, zero-sum reward redistribution scheme), and the other agents can either accept or veto. They consider several SSDs and show how hand-crafted contract spaces strike a balance between generality and tractability, and can be an effective tool in mitigating social dilemmas. An important distinction of our work is that we distinguish between principal and agent(s), and insist on the standard limited liability requirement from economics. Furthermore, in our approach the principal *learns* the conditions for payments, allowing it to utilize contracts in their full generality. Also, our method has an interpretation as learning  $k$ -implementation (Mondrer & Tennenholz, 2003). We provide additional details on the related literature in Appendix A.
+
+## 2 PROBLEM SETUP
+
+In this section, we first introduce the classic (limited liability) contract design model of Holmström (1979) and Grossman & Hart (1983) (see Section 2.1), and then propose its extension to MDPs (Section 2.2). We defer further extension to multi-agent MDPs to Section 5.1.
+
+### 2.1 THE STATIC HIDDEN-ACTION PRINCIPAL-AGENT PROBLEM
+
+In a classic principal-agent problem, the principal wants the agent to invest effort in a task. The agent has a choice between several *actions*  $a \in A$  with different *costs*  $c(a)$ , interpreted as effort levels. Each action stochastically maps to *outcomes*  $o \in O$  according to a distribution  $\mathcal{O}(a)$ , with higher effort levels more likely to result in rewarding outcomes, as measured by the principal’s *reward* function  $r^p(o)$ . By default, a rational agent would choose the cost-minimizing action. To incentivize the agent to invest effort, the principal offers a *contract*  $b$  prior to the action choice. Crucially, the principal is unable to directly view the agent’s hidden action, so the contractual payments  $b(o)$  are defined per outcome  $o \in O$ . Payments are always non-negative – this is referred to as *limited liability*. The principal seeks an *optimal* contract: a payment scheme  $b$  that maximizes the principal’s  $\mathbb{E}[utility]$ ,  $\mathbb{E}_{o \sim \mathcal{O}(a)}[r^p(o) - b(o)]$ , given that the agent best-responds with  $a = \arg \max_{a'} \mathbb{E}_{o \sim \mathcal{O}(a')} [b(o)] - c(a')$ .
+
+If costs and outcome distributions are known, the optimal contract can be precisely found using Linear Programming (LP): for each action  $a \in A$ , find the contract that implements it (makes the
+
+<sup>1</sup>Our model is technically more general by allowing stochasticity in both the outcome and transition functions.
+
+![Figure 1: A state transition diagram for a principal-agent MDP. The initial state s_0 is at the top. Two actions, a_L (noisy-left) and a_R (noisy-right), lead to states s_L and s_R respectively. From s_0, a_L leads to s_L with a 0.9 probability (solid red arrow) and a 0.1 probability (dashed blue arrow). a_R leads to s_R with a 0.1 probability (solid red arrow) and a 0.9 probability (dashed blue arrow). From s_L, action a_L leads to outcome L (solid red arrow) and action a_R leads to outcome R (dashed blue arrow). From s_R, action a_L leads to outcome L (dashed blue arrow) and action a_R leads to outcome R (solid red arrow).](2763901b7a1fd1b5d704cdc450d12ed0_img.jpg)
+
+Figure 1: A state transition diagram for a principal-agent MDP. The initial state s\_0 is at the top. Two actions, a\_L (noisy-left) and a\_R (noisy-right), lead to states s\_L and s\_R respectively. From s\_0, a\_L leads to s\_L with a 0.9 probability (solid red arrow) and a 0.1 probability (dashed blue arrow). a\_R leads to s\_R with a 0.1 probability (solid red arrow) and a 0.9 probability (dashed blue arrow). From s\_L, action a\_L leads to outcome L (solid red arrow) and action a\_R leads to outcome R (dashed blue arrow). From s\_R, action a\_L leads to outcome L (dashed blue arrow) and action a\_R leads to outcome R (solid red arrow).
+
+Figure 1: Example of a principal-agent MDP with three states  $S = \{s_0, s_L, s_R\}$ . In each state, the agent can take one of two actions: noisy-left  $a_L$ , which is costly and leads to outcomes  $L$  and  $R$  with probabilities 0.9 and 0.1, and noisy-right  $a_R$ , which is free and has the likelihood of  $L$  and  $R$  reversed. The principal's rewards in any state  $s \in S$  for outcomes  $L, R$  are  $r^p(s, L) = \frac{14}{9}$ ,  $r^p(s, R) = 0$ , while those of the agent for the actions are  $r(s, a_L) = -\frac{4}{5}$ ,  $r(s, a_R) = 0$ . For analysis, see Appendix B.1.
+
+agent prefer it to other actions) through a minimal expected payment, and then choose the best action to implement. Otherwise or if the LPs are infeasible, an approximation can be obtained by training a neural network on a sample of past interactions with the agent (Wang et al., 2023).
+
+### 2.2 HIDDEN-ACTION PRINCIPAL-AGENT MDPs
+
+In order to extend contract design to MDPs, we assume a principal-agent problem in each state of the MDP, and let the outcomes additionally define its (stochastic) transitioning to the next state. Formally, a *hidden-action principal-agent MDP* is a tuple  $\mathcal{M} = (S, s_0, A, B, O, \mathcal{O}, \mathcal{R}, \mathcal{R}^p, \mathcal{T}, \gamma)$ . As usual in MDPs,  $S$  is a set of states,  $s_0 \in S$  is the initial state, and  $A$  is a set of  $n$  agent's actions  $a \in A$ . Additionally,  $O$  is a set of  $m$  outcomes  $o \in O$ ,  $B \subset \mathbb{R}_{\geq 0}^m$  is a set of principal's actions (contracts)  $b \in B$ , and  $b(o)$  is the  $o$ -th coordinate of a contract (payment). In each state, the outcome is sampled based on the agent's action from a distribution  $\mathcal{O}(s, a)$ , where  $\mathcal{O} : S \times A \rightarrow \Delta(O)$  is the outcome function. Then, the agent's reward is determined by the reward function  $\mathcal{R}(s, a, b, o) = r(s, a) + b(o)$  for some  $r(s, a)$ . Likewise, the principal's reward is determined by  $\mathcal{R}^p(s, b, o) = r^p(s, o) - b(o)$  for some  $r^p(s, o)$ ; note that the agent's action is hidden and thus  $\mathcal{R}^p$  does not explicitly depend on it. Based on the outcome, the MDP transitions to the next state  $s' \sim \mathcal{T}(s, o)$ , where  $\mathcal{T} : S \times O \rightarrow \Delta(S)$  is the transition function. Finally,  $\gamma \in [0, 1]$  is the discount factor. For an example of a principal-agent MDP, see Figure 1. In the main text, we focus on MDPs with a finite time horizon  $T$ . We assume w.l.o.g. that each state is uniquely associated with a time step (see Appendix B.4).
+
+We analyze the principal-agent MDP as a *stochastic game*  $\mathcal{G}$  (can be seen as *extensive-form* when the horizon is finite), where two players maximize their long-term payoffs. The game progresses as follows. At each timestep  $t$ , the principal observes the state  $s_t$  of the MDP and constructs a contract  $b_t \in B$  according to its *policy*  $\rho : S \rightarrow \Delta(B)$ . Then, the agent observes the pair  $(s_t, b_t)$  and chooses an action  $a_t \in A$  according to its *policy*  $\pi : S \times B \rightarrow \Delta(A)$ . After this, the MDP transitions, and the interaction repeats. Both players maximize their *value functions*: the principal's value function,  $V^p(\pi)$ , of a policy  $\rho$  given the agent's policy  $\pi$  is defined in a state  $s$  by  $V^p(s | \pi) = \mathbb{E}[\sum_{t=1}^T \gamma^t \mathcal{R}^p(s_t, b_t, o_t) | s_0 = s]$ ; likewise, the agent's value function  $V^\pi(\rho)$  is defined in a state  $s$  and given a contract  $b$  by  $V^\pi(s, b | \rho) = \mathbb{E}[\sum_{t=1}^T \gamma^t \mathcal{R}(s_t, a_t, b_t, o_t) | s_0 = s, b_0 = b]$ . Players' *utilities* in the game are their values in the initial state. Additionally, define the players' *Q-value functions*  $Q^p(\pi)$  and  $Q^\pi(\rho)$  by  $Q^p(s, b | \pi) = V^p(s | b_0 = b, \pi)$  and  $Q^\pi((s, b), a | \rho) = V^\pi(s, b | a_0 = a, \rho)$ .
+
+A special case of the principal-agent MDP trivializes hidden actions by making the outcome function deterministic and bijective – essentially the outcome reveals the action to the principal; the resulting *observed-action* model is similar to Ben-Porat et al. (2024). For an explicit comparison of the two models with each other and with standard MDPs, see Appendix B.0.
+
+#### --- **Algorithm 1** Meta-algorithm for finding SPE
+
+- 1: Initialize the principal's policy  $\rho$  arbitrarily ▷ e.g.,  $\forall s \in S : \rho(s) = 0$
+  - 2: **while**  $\rho$  not converged **do** ▷ Inner-outer optimization loop
+  - 3:   Solve the agent's MDP: find  $\pi := \pi^*(\rho)$  ▷ Inner optimization level
+  - 4:   Solve the principal's MDP: find  $\rho := \rho^*(\pi)$  ▷ Outer optimization level
+  - 5: **return**  $(\rho, \pi)$
+- 
+
+## 3 PURELY ECONOMIC SETTING
+
+In this section, we define our solution concept for principal-agent stochastic games (Section 3.1) and introduce a meta-algorithm that finds this solution (Section 3.2). We assume full access to the MDP model (including transition and reward functions) and defer the learning setting to the next section. We focus on finite-horizon MDPs; we analyze infinite horizon in Appendix B.
+
+### 3.1 SUBGAME-PERFECT EQUILIBRIUM (SPE)
+
+In what follows let  $\mathcal{G}$  be a principal-agent stochastic game. Let a *subgame* of  $\mathcal{G}$  in state  $s \in S$  be a game  $\mathcal{G}'$  defined by replacing  $s_0$  with  $s$ , and  $S$  with a subset of states that can be reached from  $s$ .
+
+**Observation 3.1.** Fixing one player's policy in  $\mathcal{G}$  defines a (standard) MDP for another player. In particular, a principal's policy defines the *agent's MDP* by modifying the reward function through contracts; likewise, an agent's policy defines the *principal's MDP* by modifying the transition and reward functions through the agent's responses to contracts. For exact formulations of these MDPs, see Appendix B.2. The optimal policies in both MDPs can be assumed w.l.o.g. to be deterministic (in single-agent setting), and can be found with any suitable dynamic programming or RL algorithm (Sutton & Barto, 2018).
+
+**Agent's perspective.** In the agent's MDP defined by  $\rho$ , refer to the optimal policy as *best-responding* to  $\rho$  (where ties are broken in favor of the principal, as is standard in contract design). Define a function  $\pi^*$  that maps a principal's policy  $\rho$  to the best-responding policy  $\pi^*(\rho)$ . Denote the action prescribed by  $\pi^*(\rho)$  in state  $s$  given contract  $b$  by  $\pi^*(s, b | \rho) \equiv \pi^*(\rho)(s, b)$ . Note that the best-responding policy is defined in  $s$  for any  $b \in B$  and is not limited to the principal's action  $\rho(s)$ .
+
+**Principal's perspective.** Similarly, in the principal's MDP defined by  $\pi$ , refer to the optimal policy as *subgame-perfect* against  $\pi$ . Define a function  $\rho^*$  that maps an agent's policy  $\pi$  to the subgame-perfect policy  $\rho^*(\pi)$ . Denote the contract prescribed by  $\rho^*(\pi)$  in state  $s$  by  $\rho^*(s | \pi) \equiv \rho^*(\pi)(s)$ . In all states, this policy satisfies:  $\rho^*(s | \pi) \in \arg \max_b Q^*(s, b | \pi)$ , where  $Q^*(s, b | \pi) \equiv Q^{\rho^*(\pi)}(s, b | \pi)$  – that is, in each subgame, the principal takes the optimal action.
+
+**Definition 3.2.** A *subgame-perfect equilibrium (SPE)* of  $\mathcal{G}$  is a pair of policies  $(\rho, \pi)$ , where the principal's policy  $\rho \equiv \rho^*(\pi)$  is subgame-perfect against an agent that best-responds with  $\pi \equiv \pi^*(\rho)$ .
+
+SPE is the standard solution concept for extensive-form games (Osborne, 2004). It always exists and is essentially unique (see Lemma B.12 for completeness). Compared to non-subgame-perfect solutions like the well-studied *Stackelberg equilibrium*, SPE can lose utility for the principal. However, it is considered more realistic since it disallows *non-credible threats*, i.e., commitments by the principal to play a suboptimal contract if one of the subgames is reached. Moreover, Gerstgrasser & Parkes (2023) show that learning a Stackelberg equilibrium necessitates the principal to go through long episodes of observing the learning dynamic of the agent, with only sparse rewards (see also Brero et al. (2022)). SPE, in contrast, naturally fits RL, as both players' policies solve their respective MDPs. We demonstrate the difference on our running example in Appendix B.1.
+
+### 3.2 META-ALGORITHM FOR FINDING SPE
+
+Algorithm 1 presents a general pipeline for finding SPE in a principal-agent stochastic game. It can be seen as an inner-outer (bilevel) optimization loop, with agent and principal optimization respectively constituting the inner and outer levels. We refer to this as a meta-algorithm, as we do not yet specify how to perform the optimization (in Lines 3 and 4). Superficially, this approach resembles the use of
+
+270  
+271  
+272  
+273  
+274  
+275  
+276  
+277  
+278  
+279  
+280  
+281  
+282  
+283  
+284  
+285  
+286  
+287  
+288  
+289  
+290  
+291  
+292  
+293  
+294  
+295  
+296  
+297  
+298  
+299  
+300  
+301  
+302  
+303  
+304  
+305  
+306  
+307  
+308  
+309  
+310  
+311  
+312  
+313  
+314  
+315  
+316  
+317  
+318  
+319  
+320  
+321  
+322  
+323
+
+Table 1: Correctness of the meta-algorithm in different scenarios
+
+|                 | finite horizon $T$                                               | infinite horizon           |
+|-----------------|------------------------------------------------------------------|----------------------------|
+| hidden action   | finds SPE in $T + 1$ iterations (Theorem 3.3)                    | may diverge (Appendix B.6) |
+| observed action | finds SPE that is also Stackelberg in 1 iteration (Appendix B.7) |                            |
+
+bilevel optimization for learning optimal reward shaping (Stadie et al., 2020; Hu et al., 2020; Chen et al., 2022; Wang et al., 2022; Chakraborty et al., 2023; Lu, 2023). The crucial difference of that setting is that the two levels optimize the same downstream task rather than distinct and possibly conflicting objectives of principal and agent.
+
+It is well-known that SPE of an extensive-form game can be found with backward induction (e.g., see Section 5.6 of Osborne (2004)). Theorem 3.3 states that the proposed meta-algorithm also finds SPE. The proof, provided in Appendix B.4, essentially shows that it performs backward induction implicitly: each iteration of the meta-algorithm, the players’ policies reach SPE in an expanding set of subgames, starting from terminal states and ending with the initial state. The proof does not rely on the specifics of our model and applies to any game where players move sequentially, and the agent observes and can respond to *any* principal’s action in a state.
+
+**Theorem 3.3.** *Given a principal-agent stochastic game  $\mathcal{G}$  with a finite horizon  $T$ , the meta-algorithm finds SPE in at most  $T + 1$  iterations.*
+
+The meta-algorithm has several unique advantages. First, as we discuss in Section 4, both inner and outer optimization tasks can be instantiated with Q-learning. This removes the need to know the model of the MDP and allows handling of large-scale MDPs by utilizing deep learning. Second, it can also be seen as iteratively applying a *contraction* operator, which we formulate as a theorem:
+
+**Theorem 3.4.** *Given a principal-agent finite-horizon stochastic game  $\mathcal{G}$ , each iteration of the meta-algorithm applies to the principal’s Q-function an operator that is a contraction in the sup-norm.*
+
+The proof is provided in Appendix B.5. This property implies that each iteration of the meta-algorithm monotonically improves the principal’s policy in terms of its Q-function converging. This has a practical advantage: if meta-algorithm is terminated early, the policies still partially converge to SPE.
+
+As an independent observation, Theorem 3.3 complements the theoretical results of Gerstgrasser & Parkes (2023). Specifically, their Theorem 2 presents an example where RL fails to converge to a *Stackelberg* equilibrium if the agent ‘immediately’ best responds. This procedure is our Algorithm 1, with agent optimization solved by an oracle, and principal optimization performed with RL. Our Theorem 3.3 complements their negative result by showing that such a procedure converges to *SPE*.
+
+Finally, while we focus on finite-horizon hidden-action MDPs in the main text, we also analyze the other scenarios in the Appendix. Our findings are summarized in Table 1.
+
+## 4 LEARNING SETTING
+
+In this section, we develop an RL approach to principal-agent MDPs by solving both inner and outer optimization tasks of the meta-algorithm with Q-learning. These tasks correspond to finding optimal policies in the respective agent’s and principal’s MDPs defined in Observation 3.1. We operate in a standard model-free RL setting, where learning is performed through interactions with a black-box MDP. For both principal and agent, we introduce modified Q-functions, which we formally derive as fixed points of contraction operators in Appendix B.3. We detail deep implementations in Appendix D.
+
+**Agent’s learning.** Consider the agent’s MDP defined by principal’s policy  $\rho$ . The best-responding agent’s Q-function in a state  $s$ ,  $Q^*((s, b), a \mid \rho)$ , depends on the observed contract  $b$  – particularly on the expected payment. This effect can be isolated by applying the Bellman optimality operator:
+
+$$Q^*((s, b), a \mid \rho) = \mathbb{E}_{o \sim \mathcal{O}(s, a)}[b(o)] + \bar{Q}^*(s, a \mid \rho), \quad (1)$$
+
+where  $\bar{Q}^*(s, a | \rho) = [r(s, a) + \gamma \mathbb{E}_{\max_{a'}} Q^*((s', \rho(s')), a' | \rho)]$  is the *truncated* optimal Q-function, which represents the agent's expected long-term utility barring the immediate payment. Our approach to training the agent (solving inner optimization) is to learn the truncated Q-function and compute the Q-function through Equation (1). This way, the Q-function is defined for any  $b \in B$  in  $s$ , under an assumption that the principal plays according to  $\rho$  in future (e.g.,  $\rho(s')$  in the next state). From the agent's perspective, this is justified in SPE, where  $\rho$  is optimal for the principal in all future subgames. Note that computing the expected payment requires the outcome distribution – if unknown, it can be approximated as a probabilistic classifier (more on this in Appendix D.1).
+
+**Principal's learning.** Consider the principal's MDP defined by a best-responding agent  $\pi^*(\rho)$  for an arbitrary  $\rho$ . The basic idea is to divide the principal's learning problem into two parts: 1) learn the agent's policy that the principal wants to implement (*recommends* to the agent), and 2) compute the optimal contracts that implement it (the *minimal implementation*) using Linear Programming (LP). Essentially, this extends the classic LP approach from static contract design described in Section 2.1.
+
+To approach the first subproblem, we need an analogue of the principal's Q-function that is a function of an agent's action. To this end, we define the *contractual* Q-function  $q^*(\pi^*(\rho)) : S \times A \rightarrow \mathbb{R}$  by
+
+$$q^*(s, a^p | \pi^*(\rho)) = \max_{\{b | \pi^*(s, b | \rho) = a^p\}} Q^*(s, b | \pi^*(\rho)), \quad (2)$$
+
+which can be interpreted in  $s$  as the maximal principal's Q-value that can be achieved by implementing  $a^p \in A$ . To compute the optimal contract  $\arg \max_b Q^*(s, b | \rho)$  using  $q^*(\pi^*(\rho))$ , we can select the optimal action to implement as  $\arg \max_{a^p} q^*(s, a^p | \pi^*(\rho))$ , and then find the corresponding contract as a solution to the conditional maximization in Equation (2). This conditional maximization is the second subproblem defined above. We solve it as an LP (for details, see Appendix B.8):
+
+$$\max_{b \in B} \mathbb{E}_{o \sim \mathcal{O}(s, a^p)} [-b(o)] \quad \text{s.t.} \quad (3)$$
+
+$$\mathbb{E}_{o \sim \mathcal{O}(s, a^p)} [b(o)] + \bar{Q}^*(s, a^p | \rho) \geq \mathbb{E}_{o \sim \mathcal{O}(s, a)} [b(o)] + \bar{Q}^*(s, a | \rho) \quad \forall a \in A.$$
+
+Solving this LP requires access to the agent's truncated Q-function  $\bar{Q}^*$ . Although this requirement is in line with the training phase of our setup, it can be alleviated, e.g., by approximating optimal contracts with deep learning (Wang et al., 2023). We do not explore this direction, preferring to focus here on the distinct learning problems originating from our MDP formulation.
+
+**Approximation error.** In the idealized setting of Section 3, the inner and outer optimization tasks are solved exactly. However, learning is usually performed with approximation errors (due to early termination, function approximation, etc.). An issue central to the principal-agent theory is that, due to the principal's utility being discontinuous, even a slight misestimation of the optimal contract may have a devastating effect by changing the agent's response (see, e.g., Wang et al. (2023)). We study the effect of approximation error in our model through the following two-phase setup:
+
+1. **Training:** The principal's policy is found with the meta-algorithm, instantiated with Q-learning (as described above) in the presence of approximation error.
+2. **Validation:** The learned principal's policy is validated against a black-box oracle agent that exactly best-responds (without approximation error).
+
+We analyze this setup theoretically in Appendix B.9 and summarize our findings in the following proposition:
+
+**Proposition 4.1.** *At the training phase, if at each iteration  $t$ , the learning of the principal's (resp., agent's) Q-function is performed with an error of up to  $\delta_t$  (resp.,  $\epsilon_t$ ), then the total error in  $s_0$  is bounded by  $D_0 = \sum_{t \in [0, T]} \gamma^t \delta_t$  (resp.,  $E_0 = \sum_{t \in [0, T]} \gamma^t \epsilon_t$ ). At the validation phase, the principal can be guaranteed a utility within  $-2D_0 - 2 \sum_t \gamma^t E_t / d_{\min}$  from the optimal, where  $d_{\min}$  is a measure of how much the outcome distributions for different actions intersect (defined in (23)). This utility can be achieved through small additional payments that counteract the agent's deviations, which we call nudging.*
+
+Additionally, we analyze the effect of approximation errors empirically. In Appendix D.1, we report the results of applying our algorithm to principal-agent MDPs represented by randomly sampled binary game-trees. We find that even without nudging, the learned principal's policy achieves a utility at validation within 1-2% from the optimal. Interestingly, this is achieved by choosing the optimal
+
+action  $a^\rho$  to recommend in only about 90% of all states, suggesting that errors likely occur in rarely visited or less impactful states. In the next section, we will continue our empirical investigation in a much more complex environment.
+
+## 5 EXTENSION TO MULTI-AGENT RL
+
+In this section, we explore an extension to multiple agents. We state the formal model in Section 5.1. We introduce *sequential social dilemmas* (SSDs) and the Coin Game in Section 5.2. We present experimental results in Section 5.3.
+
+### 5.1 PROBLEM SETUP
+
+Both our principal-agent model and our theory for the meta-algorithm can be extended to multi-agent MDPs. First, we formulate an analogous principal-multi-agent MDP, where a principal offers a contract to each agent, and payments are determined by the joint action of all agents. We treat joint actions as outcomes and omit hidden actions. Then, the theory extends by viewing all agents as a centralized super-agent that selects an equilibrium joint policy (in the multi-agent MDP defined by the principal). Finally, we address the issue of multiple equilibria by imposing an additional constraint on the incentive-compatibility of contracts, making our approach more robust to deviations. See also Appendix C, where we illustrate the multi-agent model on Prisoner’s Dilemma.
+
+A *principal-multi-agent MDP* is a tuple  $\mathcal{M}_N = (S, s_0, N, (A_i)_{i \in N}, B, T, (\mathcal{R}_i)_{i \in N}, \mathcal{R}^\rho, \gamma)$ . The notation is as before, with the introduction of a set of  $k$  agents,  $N$ , and the corresponding changes:  $A_i$  is the action set of agent  $i \in N$  with  $n_i$  elements;  $\mathbf{A}_N$  is the joint action set with  $m = \prod_i n_i$  elements, defined as a Cartesian product of sets  $A_i$ ;  $B \subset \mathbb{R}_{\geq 0}^m$  is a set of contracts the principal may offer to an agent;  $b_i$  denotes a contract offered to agent  $i$ , and  $b_i(\mathbf{a})$  denotes a payment to  $i$  determined by joint action  $\mathbf{a} \in \mathbf{A}_N$ ;  $T : S \times \mathbf{A}_N \rightarrow \Delta(S)$  is the transition function;  $\mathcal{R}_i : S \times \mathbf{A}_N \times B \rightarrow \mathbb{R}$  is the reward function of agent  $i$  defined by  $\mathcal{R}_i(s, \mathbf{a}, b_i) = r_i(s, \mathbf{a}) + b_i(\mathbf{a})$  for some  $r_i$ ;  $\mathcal{R}^\rho : S \times \mathbf{A}_N \times B^k \rightarrow \mathbb{R}$  is the principal’s reward function defined by  $\mathcal{R}^\rho(s, \mathbf{a}, \mathbf{b}) = r^\rho(s, \mathbf{a}) - \sum_i b_i(\mathbf{a})$ . In our application, the principal’s objective is to maximize agents’ social welfare through minimal payments, so we define its reward by  $r^\rho(s, \mathbf{a}) = \frac{1}{\alpha} \sum_i r_i(s, \mathbf{a})$ , where  $0 < \alpha < 1$  is a hyperparameter that ensures that payment minimization is a secondary criterion and does not hurt social welfare (we use  $\alpha = 0.1$ ). Additionally,  $\rho : S \rightarrow B^k$  is the principal’s policy, and  $\pi_i : S \times B \rightarrow \Delta(A_i)$  is an agent’s policy. Because  $B$  grows exponentially with the number of agents  $k$ , in our implementation, the principal gives an action recommendation to each agent, and the payments are determined after agents act.
+
+Analogously to Observation 3.1, a fixed principal’s policy  $\rho$  defines a multi-agent MDP by changing the agents’ reward functions. Importantly, this MDP can itself be analyzed as a Markov game between the agents (Littman, 1994). In this game, we use a basic solution concept called Markov Perfect Equilibrium (MPE, Maskin & Tirole (2001)), defined as a tuple of agents’ policies  $\pi^*(\rho)$  such that the following holds:
+
+$$\forall s, b_i, i, \pi_i : V_i^{\pi_i^*(\rho)}(s, b_i | \pi_{-i}^*(\rho), \rho) \geq V_i^{\pi_i}(s, b_i | \pi_{-i}^*(\rho), \rho). \quad (4)$$
+
+Here,  $\pi_{-i}^*(\rho)$  denotes equilibrium policies of agents other than  $i$ , and  $V_i^{\pi_i}(\cdot | \pi_{-i}, \rho)$  is the value function of agent  $i$  playing  $\pi_i$  given that other agents play  $\pi_{-i}$  and principal plays  $\rho$ . In MPE, no agent has a beneficial, unilateral deviation in any state.
+
+Call MPE  $\pi^*(\rho)$  a *best-responding joint policy*; in case there are multiple, assume that agents break ties in favor of the principal. This assumption allows agents to freely coordinate the joint action, similarly to the equilibrium oracle of Gerstgrasser & Parkes (2023). The principal’s *subgame-perfect policy* is defined by  $\rho^*(s | \pi) \in \arg \max_b Q^*(s, b | \pi)$ , and an SPE is defined as a pair of policies  $(\rho, \pi^*(\rho))$  that are respectively subgame-perfect and best-responding against each other.
+
+With this, our theory in Section 3 can be extended to the multi-agent model. Particularly, convergence proofs of Algorithm 1 apply with the swap of notation and the new definition of best-responding policy  $\pi^*(\rho)$ . However, implementing this theory is problematic because of how strong the tie-breaking assumption is. In practice, there is no reason to assume that decentralized learning agents will converge to any specific equilibrium. For example, even in simple games such as Iterated Prisoner’s Dilemma, RL agents typically fail to converge to cooperative Tit-for-Tat equilibrium (Foerster et al., 2018; Willis et al., 2023).
+
+To provide additional robustness, we specify the principal’s policy  $\rho$  in SPE by requiring that it implements MPE  $\pi^*(\rho)$  in dominant strategies. Specifically,  $\rho$  must additionally satisfy:
+
+$$\forall s, b_i, i, \pi_i, \pi_{-i} : V_i^{\pi_i^*(\rho)}(s, b_i | \pi_{-i}, \rho) \geq V_i^{\pi_i}(s, b_i | \pi_{-i}, \rho). \quad (5)$$
+
+This way, an agent prefers  $\pi_i^*(\rho)$  regardless of other players’ policies. We refer to contracts that make a strategy profile dominant as *Incentive-Compatible (IC)*, and to the IC contracts that minimize payments as a *minimal implementation*. In these terms, the principal’s objective is to learn a social welfare maximizing strategy profile and its minimal implementation. This solution concept is inspired by the k-implementation of Menderer & Tennenholz (2003).
+
+### 5.2 A SEQUENTIAL SOCIAL DILEMMA: THE COIN GAME
+
+In this section, we augment a multi-agent MDP known as the *Coin Game* (Foerster et al., 2018) with a principal and conduct a series of experiments. These experiments complement our theoretical results by empirically demonstrating the convergence of our algorithm to SPE in a complex multi-agent setting. In addition, we find a minimal implementation of a strategy profile that maximizes social welfare in a complex SSD, which is a novel result of independent interest.
+
+**Environment.** The Coin Game is a standard benchmark in Multi-Agent RL that models an SSD with two self-interested players that, if trained independently, fail to engage in mutually beneficial cooperation. This environment is highly combinatorial and complex due to a large state space and the inherent non-stationarity of simultaneously acting and learning agents. Each player is assigned a color, red or blue, and collects coins that spawn randomly on a grid. Players earn +1 for collecting a coin of their color and +0.2 for other coins. <sup>2</sup> Our experiments are carried out on a  $7 \times 7$  grid with each episode lasting for 50 time steps; results on a smaller grid are provided in Appendix D.2.
+
+**Experimental procedure.** We implement the two-phase approach described in Section 4. We parameterize principal’s and agent’s Q-functions as the respective deep Q-networks,  $\theta$  and  $\phi$ . The principal is trained to maximize social welfare (sum of rewards) of the agents using VDN (Sunehag et al., 2018), and the agents’ networks share parameters. Given the complexity of the Coin Game, validating the resulting policy against oracle agents is infeasible. Instead, at validation phase we train black-box agents from scratch as independent DQNs. For details and pseudocode, see Appendix D.2.
+
+For baselines, we compare against a heuristic that distributes a constant proportion of social welfare. For a fair comparison, this proportion is set to be exactly equal to the proportion that our method ends up paying after the validation phase. This heuristic is at the core of approaches that improve social welfare through contractual agreements between agents (Christoffersen et al. (2023), see Appendix A). We also include a *selfish baseline* with self-interested agents in the absence of contracts, and an *optimal baseline* where agents are fully cooperative and directly maximize social welfare. These are instances of the constant proportion baseline with the proportion set to 0 and 1, respectively.
+
+### 5.3 EXPERIMENTAL RESULTS
+
+The results are presented in Figure 2. The social welfare metric (Fig. 2a) shows a gap between the performances of selfish and optimal baselines, confirming the presence of a conflict of interests. During training, our algorithm finds a joint policy that matches the optimal performance, and is implemented with an average payment of just above 30% of social welfare, substantially reducing the intervention into the agents’ rewards compared to the optimal baseline (Fig. 2b).
+
+After the validation phase, the social welfare and the proportion paid to agents closely match the corresponding metrics in training. Furthermore, the agents follow the principal’s recommendations in around 80% to 90% of states in an average episode (Fig. 2c). These results suggest that the principal closely approximated the SPE, as agents deviate only rarely and in states where it does not hurt social welfare. Given the challenges of convergence of independent RL agents to mutually beneficial equilibria, we find this success quite surprising, and attribute it to the IC property of the principal. From the perspective of an agent, there could be other optimal policies against different opponents, but following the principal’s recommendations is robust against *any* opponent.
+
+<sup>2</sup>We use the rlib code but remove the penalty a player incurs if its coin is picked up by the other player.
+
+![Figure 2: Learning curves in the Coin Game. The figure contains five subplots: (a) Social welfare, (b) Proportion of social welfare paid, (c) Accuracy, (d) Convergence to SPE?, and (e) Incentive-Compatible contracts? All plots show performance over 1M iterations for five baselines: Train (blue), Valid (orange), Constant baseline (grey), Selfish baseline (green), and Optimal baseline (pink). Shaded regions represent standard errors in the top plots and min-max ranges in the bottom plots.](adb1f42239329fa8283d1a40005f989f_img.jpg)
+
+Figure 2 consists of five subplots arranged in a 2x3 grid, with the bottom row containing three subplots. The x-axis for all plots is 'Iteration' from 0 to 1M. The y-axes are: (a) Social welfare (6 to 14), (b) Proportion of social welfare paid (0.2 to 0.6), (c) Accuracy (0.6 to 1.0), (d) Convergence to SPE? (0.8 to 1.0), and (e) Incentive-Compatible contracts? (0.8 to 1.0). The legend indicates five baselines: Train (blue line), Valid (orange line), Constant baseline (grey line), Selfish baseline (green line), and Optimal baseline (pink line). Shaded regions around the lines represent standard errors in the top plots (a, b) and min-max ranges in the bottom plots (c, d, e).
+
+Figure 2: Learning curves in the Coin Game. The figure contains five subplots: (a) Social welfare, (b) Proportion of social welfare paid, (c) Accuracy, (d) Convergence to SPE?, and (e) Incentive-Compatible contracts? All plots show performance over 1M iterations for five baselines: Train (blue), Valid (orange), Constant baseline (grey), Selfish baseline (green), and Optimal baseline (pink). Shaded regions represent standard errors in the top plots and min-max ranges in the bottom plots.
+
+Figure 2: Learning curves in the Coin Game. See Section 5.3 for plot explanations. Shaded regions represent standard errors in the top plots and min-max ranges in the bottom plots.
+
+We also see that the constant proportion baseline is much less effective than our algorithm when given the same amount of budget. The heuristic scheme overpays in some states while underpaying in others—incentivizing agents to selfishly deviate from a welfare-optimizing policy.
+
+These results suggest the algorithm’s convergence to SPE and the IC property of contracts. To further verify this, we collect additional metrics throughout the validation phase. Consider the perspective of the blue agent (Blue). At a given iteration, we fix the red agent’s (Red’s) policy, estimate Blue’s utilities (average returns) under its policy and the recommended policy, and compare their ratio. In this scenario, if Red follows a recommended policy, then a utility ratio exceeding 1 would mean that there is a better policy for Blue than the recommended one, indicating a violation of the SPE condition (4) in  $s_0$ . We report this ratio in Figure 2d. Although agents occasionally discover slightly more profitable policies, the average utility ratio hovers around 1, indicating an approximate SPE. In the same scenario, if instead, Red acts according to its own policy, then a utility ratio exceeding 1 for Blue would indicate a violation of the IC conditions (5) in  $s_0$ . We report this ratio in Figure 2e. It behaves similarly, in that the average ratio again hovers around 1. We conclude that the principal is finding a good approximation to a minimal implementation that maximizes social welfare.
+
+We report additional results for a smaller grid world in Appendix D.2, where we find that a form of nudging is necessary for good performance.
+
+## 6 CONCLUSION
+
+In this work, we develop a scalable framework that combines contract theory and reinforcement learning to address decentralized single- and multi-agent RL problems. Our framework offers formal definitions, a simple algorithmic blueprint, and a proof of convergence to subgame-perfect equilibrium. We implement our approach with deep RL, validate its performance empirically, and introduce a theoretical analysis in the presence of approximation errors, including a nudging mechanism that uses small extra payments to discourage potential deviations by the agent. We demonstrate the framework’s effectiveness for solving sequential social dilemmas, showing how it can maximize social welfare with minimal intervention to agents’ rewards. Our findings suggest several promising directions for future research, including scaling to even more complex environments, exploring partially-observable settings where different agents have different observations, and incorporating randomized contracts for enhanced agent coordination. We believe our work will inspire further exploration at the intersection of principal-agent theory and RL, potentially yielding novel solutions to complex AI agent interactions.
+
+540  
+541  
+542  
+543  
+544  
+545  
+546  
+547  
+548  
+549  
+550  
+551  
+552  
+553  
+554  
+555  
+556  
+557  
+558  
+559  
+560  
+561  
+562  
+563  
+564  
+565  
+566  
+567  
+568  
+569  
+570  
+571  
+572  
+573  
+574  
+575  
+576  
+577  
+578  
+579  
+580  
+581  
+582  
+583  
+584  
+585  
+586  
+587  
+588  
+589  
+590  
+591  
+592  
+593
+
+## REFERENCES
+
+- Nivasini Ananthakrishnan, Stephen Bates, Michael Jordan, and Nika Haghtalab. Delegating data collection in decentralized machine learning. In *International Conference on Artificial Intelligence and Statistics*, pp. 478–486. PMLR, 2024.
+- Tobias Baumann, Thore Graepel, and John Shawe-Taylor. Adaptive mechanism design: Learning to promote cooperation. In *2020 International Joint Conference on Neural Networks (IJCNN)*, pp. 1–7. IEEE, 2020.
+- Omer Ben-Porat, Yishay Mansour, Michal Moshkovitz, and Boaz Taitler. Principal-agent reward shaping in mdps. In *Proceedings of the AAAI Conference on Artificial Intelligence*, volume 38, pp. 9502–9510, 2024.
+- Lukas Biewald. Experiment tracking with weights and biases, 2020. URL <https://www.wandb.com/>. Software available from wandb.com.
+- Gianluca Brero, Alon Eden, Darshan Chakrabarti, Matthias Gerstgrasser, Vincent Li, and David C Parkes. Learning stackelberg equilibria and applications to economic design games. *arXiv preprint arXiv:2210.03852*, 2022.
+- Souradip Chakraborty, Amrit Singh Bedi, Alec Koppel, Dinesh Manocha, Huazheng Wang, Mengdi Wang, and Furong Huang. Parl: A unified framework for policy alignment in reinforcement learning. In *The Twelfth International Conference on Learning Representations*, 2023.
+- Siyu Chen, Donglin Yang, Jiayang Li, Senniao Wang, Zhuoran Yang, and Zhaoran Wang. Adaptive model design for Markov decision process. In *International Conference on Machine Learning*, pp. 3679–3700. PMLR, 2022.
+- Phillip JK Christoffersen, Andreas A Haupt, and Dylan Hadfield-Menell. Get it in writing: Formal contracts mitigate social dilemmas in multi-agent RL. In *Proceedings of the 2023 International Conference on Autonomous Agents and Multiagent Systems*, pp. 448–456, 2023.
+- Vincent Conitzer and Nikesh Garera. Learning algorithms for online principal-agent problems (and selling goods online). In *Proceedings of the 23rd international conference on Machine learning*, pp. 209–216, 2006.
+- Vincent Conitzer and Tuomas Sandholm. Complexity of mechanism design. In *Proceedings of the Eighteenth conference on Uncertainty in artificial intelligence*, pp. 103–110, 2002.
+- Vincent Conitzer and Tuomas Sandholm. Automated mechanism design: Complexity results stemming from the single-agent setting. In *Proceedings of the 5th international conference on Electronic commerce*, pp. 17–24, 2003.
+- Vincent Conitzer and Tuomas Sandholm. Self-interested automated mechanism design and implications for optimal combinatorial auctions. In *Proceedings of the 5th ACM Conference on Electronic Commerce*, pp. 132–141, 2004.
+- Constantinos Daskalakis, Christos Tzamos, and Manolis Zampetakis. A converse to Banach’s fixed point theorem and its CLS-completeness. In *Proceedings of the 50th Annual ACM SIGACT Symposium on Theory of Computing*, pp. 44–50, 2018.
+- Zhijian Duan, Jingwu Tang, Yutong Yin, Zhe Feng, Xiang Yan, Manzil Zaheer, and Xiaotie Deng. A context-integrated transformer-based neural network for auction design. In *International Conference on Machine Learning*. PMLR, 2022.
+- Zhijian Duan, Haoran Sun, Yurong Chen, and Xiaotie Deng. A scalable neural network for DSIC affine maximizer auction design. In *Thirty-seventh Conference on Neural Information Processing Systems*, 2023. URL <https://openreview.net/forum?id=cNb5hkTfGC>.
+- Ishan Durugkar, Elad Liebman, and Peter Stone. Balancing individual preferences and shared objectives in multiagent reinforcement learning. *Good Systems-Published Research*, 2020.
+
+- 594 Paul Dütting, Felix Fischer, Pichayut Jirapinyo, John K Lai, Benjamin Lubin, and David C Parkes.  
+595 Payment rules through discriminant-based classifiers. *ACM Transactions on Economics and*  
+596 *Computation*, 3(1), 2015.  
+597  
+598 Paul Dütting, Zhe Feng, Harikrishna Narasimhan, David Parkes, and Sai Srivatsa Ravindranath.  
+599 Optimal auctions through deep learning. In *International Conference on Machine Learning*, pp.  
+600 1706–1715. PMLR, 2019.  
+601  
+602 Paul Dütting, Tim Roughgarden, and Inbal Talgam-Cohen. Simple versus optimal contracts. In  
+603 *Proceedings of the 2019 ACM Conference on Economics and Computation, EC 2019, Phoenix, AZ,*  
+604 *USA, June 24-28, 2019*, pp. 369–387, 2019.  
+605  
+606 Paul Dütting, Tomer Ezra, Michal Feldman, and Thomas Kesselheim. Multi-agent contracts. In *ACM*  
+607 *STOC 2023*, pp. 1311–1324, 2023.  
+608  
+609 Paul Dütting, Zhe Feng, Harikrishna Narasimhan, David C Parkes, and Sai Srivatsa Ravindranath.  
+610 Optimal auctions through deep learning: Advances in differentiable economics. *Journal of the*  
+611 *ACM*, 71(1):1–53, 2024.  
+612  
+613 Tom Eccles, Edward Hughes, János Kramár, Steven Wheelwright, and Joel Z Leibo. Learning  
+614 reciprocity in complex sequential social dilemmas. *arXiv preprint arXiv:1903.08082*, 2019.  
+615  
+616 Jakob Foerster, Richard Y Chen, Maruan Al-Shedivat, Shimon Whiteson, Pieter Abbeel, and Igor  
+617 Mordatch. Learning with opponent-learning awareness. In *Proceedings of the 17th International*  
+618 *Conference on Autonomous Agents and MultiAgent Systems*, pp. 122–130, 2018.  
+619  
+620 Matthias Gerstgrasser and David C Parkes. Oracles & followers: Stackelberg equilibria in deep multi-  
+621 agent reinforcement learning. In *International Conference on Machine Learning*, pp. 11213–11236.  
+622 PMLR, 2023.  
+623  
+624 Noah Golowich, Harikrishna Narasimhan, and David C Parkes. Deep learning for multi-facility  
+625 location mechanism design. In *IJCAI*, pp. 261–267, 2018.  
+626  
+627 Sanford J. Grossman and Oliver D. Hart. An analysis of the principal-agent problem. *Econometrica*,  
+628 51(1):7–45, 1983.  
+629  
+630 Jayesh K Gupta, Maxim Egorov, and Mykel Kochenderfer. Cooperative multi-agent control using  
+631 deep reinforcement learning. In *International conference on autonomous agents and multiagent*  
+632 *systems*, pp. 66–83. Springer, 2017.  
+633  
+634 Bengisu Guresti, Abdullah Vanlioglu, and Nazim Kemal Ure. Iq-flow: Mechanism design for inducing  
+635 cooperative behavior to self-interested agents in sequential social dilemmas. In *Proceedings of the*  
+636 *2023 International Conference on Autonomous Agents and Multiagent Systems*, pp. 2143–2151,  
+637 2023.  
+638  
+639 Guru Guruganesh, Yoav Kolumbus, Jon Schneider, Inbal Talgam-Cohen, Emmanouil-Vasileios  
+640 Vlastakis-Gkaragkounis, Joshua R. Wang, and S. Matthew Weinberg. Contracting with a learning  
+641 agent. In *Conference on Neural Information Processing Systems NeurIPS*, 2024. Forthcoming.  
+642  
+643 Chien-Ju Ho, Aleksandrs Slivkins, and Jennifer Wortman Vaughan. Adaptive contract design for  
+644 crowdsourcing markets: Bandit algorithms for repeated principal-agent problems. In *Proceedings*  
+645 *of the fifteenth ACM conference on Economics and computation*, pp. 359–376, 2014.  
+646  
+647 Chien-Ju Ho, Aleksandrs Slivkins, and Jennifer Wortman Vaughan. Adaptive contract design for  
+648 crowdsourcing markets: Bandit algorithms for repeated principal-agent problems. *J. Artif. Intell.*  
+649 *Res.*, 55:317–359, 2016.  
+650  
+651 Bengt Holmström. Moral hazard and observability. *The Bell Journal of Economics*, 10:74–91, 1979.  
+652  
+653  
+654 Yujing Hu, Weixun Wang, Hangtian Jia, Yixiang Wang, Yingfeng Chen, Jianye Hao, Feng Wu, and  
+655 Changjie Fan. Learning to utilize shaping rewards: A new approach of reward shaping. *Advances*  
+656 *in Neural Information Processing Systems*, 33:15931–15941, 2020.
+
+[Appendix and supplementary materials beyond page 12 have been removed.]

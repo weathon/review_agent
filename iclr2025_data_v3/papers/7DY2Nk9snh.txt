@@ -1,0 +1,1782 @@
+# SYNTHCLIP: ARE WE READY FOR A FULLY SYNTHETIC CLIP TRAINING?
+
+
+**Anonymous authors**
+Paper under double-blind review
+
+
+ABSTRACT
+
+
+We present SynthCLIP, a CLIP model trained on entirely synthetic text-image
+pairs. Leveraging recent text-to-image (TTI) networks and large language models
+(LLM), we generate synthetic datasets of images and corresponding captions at
+scale, with no human intervention. In this work, we provide an analysis on CLIP
+models trained on synthetic data. We provide insights on the data generation
+strategy, number of samples required, scaling trends, and resulting properties.
+We also introduce SynthCI-30M, a purely synthetic dataset comprising 30
+million captioned images. Our work focuses on showing the advantages and
+disadvantages of synthetic data for training CLIP models. Our code, trained
+models, and data, will be released as open source.
+
+
+1 INTRODUCTION
+
+
+Self-supervised training strategies (He et al., 2022; Caron et al., 2021; Chen et al., 2020) are
+fundamental for many recently released foundation models. These techniques make use of a vast
+amount of data without incurring a large annotation cost. In particular, contrastive representation
+learning (Schroff et al., 2015) has been successfully employed to extract joint embeddings for
+heterogeneous data modalities. By using multi-modal training data, CLIP (Radford et al., 2021b)
+provides a common representation that links visual and linguistic information. Today, CLIP
+encoders are included in a wide range of applications, spanning from zero-shot image understanding (Liu et al., 2023b; Ren et al., 2024), to style transfer (Kwon & Ye, 2022), and robotics
+control (Shridhar et al., 2022), among others.
+
+
+Training CLIP requires large-scale captioned image datasets that are often collected from the web.
+Unfortunately, retrieving these data from the internet may present significant disadvantages (Li
+et al., 2023a; Piktus et al., 2021; Kang et al., 2023). While it is easy to scale the number of unique
+samples, this comes at an increased difficulty in controlling their quality, which may result in a poor
+alignment between images and corresponding captions. Moreover, it is challenging to monitor the
+_content_ of the collected images, resulting in potential concerns for illegal [1] or copyrighted content.
+As an alternative to web-crawled data, some have explored the usage of synthetic data to train
+supervised (Sariyildiz et al., 2023; He et al., 2023) or self-supervised (Tian et al., 2023) networks.
+
+
+In this paper, our goal is to investigate the performance of CLIP models trained on fully synthetic
+data in the form of captioned images, to define practices and properties of synthetic data for
+training. To achieve our objective, we train SynthCLIP, a CLIP model trained exclusively on
+large-scale generated data. We propose a pipeline that jointly leverages existing text-to-image
+(TTI) and large language models (LLM) to produce text-image pairs. The captioned images are
+generated in an end-to-end fashion starting from a large list of concepts which guarantees variability
+of the synthesized data. We use the LLM to produce captions starting from sampled concepts, and
+then synthesize their corresponding images using TTI models. Our pipeline brings a significant
+advantage: we can generate data at any scale, arbitrarily increasing the size of training data
+depending only on computational power, _with no human intervention_ . This allows for a controlled
+study on SynthCLIP performance and properties. Our contributions are threefold:
+
+
+1. We propose SynthCLIP, a CLIP model trained entirely on synthetic data generated with an
+automatic pipeline that is scalable to any desired dataset size.
+
+
+[1We report a recent article in mainstream news on the topic.](https://www.telegraph.co.uk/business/2023/12/20/fears-ai-trained-child-abuse-images-thousands-discovered/)
+
+
+1
+
+
+2. We provide an extensive study on SynthCLIP, including performance evaluation on five
+tasks and multiple datasets, and a comprehensive analysis of the resulting properties from
+training on synthetic data.
+3. We release SynCI-30M, an entirely synthetic dataset produced using our generation
+pipeline. It is composed of 30 million pairs of images and corresponding captions. We
+also release models trained on different synthetic dataset scales, and the code to generate
+the dataset.
+
+
+2 RELATED WORK
+
+
+**Representation** **Learning.** Early works in representation learning on images used pre-text tasks
+such as inpainting, jigsaw puzzle solving, and image rotation prediction (Pathak et al., 2016; Noroozi
+& Favaro, 2016; Gidaris et al., 2018). Instead, SimCLR (Chen et al., 2020) leverages contrastive
+learning to maximize the similarity between two augmented views of the same image. Alternatively, masked autoencoders (MAE) (He et al., 2022) use a masked patch prediction task to learn
+visual representations. CLIP (Radford et al., 2021a) and other similar works (Mu et al., 2022; Zhai
+et al., 2023; Fini et al., 2023) use contrastive learning to learn joint visual and textual representations.
+Language-image pre-training necessitates high-quality text-image pairs. Its core idea is to maximize
+the similarity between encoded textual and image representation. We study the possibility of generating synthetic text-image pairs for training CLIP-like models starting from simple concepts only.
+
+
+**Synthetic** **Captions.** Recent works emphasize the importance of high-quality and aligned textimage pairs when training CLIP models, and propose a synthetic caption generation pipeline for
+improving it. VeCLIP (Lai et al., 2023) and CapsFusion (Yu et al., 2023a) propose methods to
+produce aligned captions. Both start with a captioning model such as BLIP (Li et al., 2022) or
+LLaVA (Liu et al., 2023a), to obtain a semantically-rich synthetic caption. However, captioning
+models suffer from over-simplification and lack world knowledge, hence they can be compensated
+by the usage of an LLM (Lai et al., 2023; Yu et al., 2023a). LaCLIP (Fan et al., 2023) improves the
+text branch of CLIP by leveraging an LLM to provide multiple rewrites of the same caption to use
+in contrastive learning. While this improves downstream tasks, it may not reflect the content of the
+image due to hallucinations (Fan et al., 2023). All these works assume the availability of real data,
+instead, we introduce a fully synthetic pipeline for data generation, allowing arbitrary scalability
+and control over generated samples.
+
+
+**Synthetic** **Data.** Synthetic data has been used in machine learning fields ranging from audio
+(Rossenbach et al., 2020) to language (Yang et al., 2020; Li et al., 2023b) and vision (Varol et al.,
+2017; Jahanian et al., 2022; Zhou et al., 2023). In computer vision, they allow for improving models’
+performance on several downstream tasks such as semantic segmentation (Richter et al., 2016; Ros
+et al., 2016; Chen et al., 2019), object detection (Johnson-Roberson et al., 2017), and image classification (Yuan et al., 2024; Shmelkov et al., 2018). Recent works have explored the use of synthetic
+data from TTI models, to augment training on real data (Azizi et al., 2023; Sariyildiz et al., 2023;
+He et al., 2023). Yu et al. (2023b) uses a framework to generate synthetic images, increasing the
+diversity of existing datasets. All these assume knowledge about object classes in the downstream
+task, and work with images only. Recently, StableRep (Tian et al., 2023) showed that synthetic
+images generated from Stable Diffusion can be used to train self-supervised methods, however, it
+still uses real captions, limiting scalability and proper analysis. Parallel works (Fan et al., 2024; Tian
+et al., 2024) preliminarily investigate training of vision models on synthetic captions and images.
+However, they are not specific to CLIP, and they include a small set of classes for generation,
+preventing appropriate analysis. We discuss our positioning relative to these works in the appendix.
+
+
+3 TRAINING SYNTHCLIP
+
+
+In this section, we present the training procedure for SynthCLIP. We show the pipeline in Figure 1.
+First, we start by identifying a _concept_ _bank_ containing many raw visual concepts, _i.e_ . words that
+can be associated with their corresponding representations in images. This broad definition covers
+either common objects, items, and animals ( _e.g_ . “cat”), proper nouns and specific elements ( _e.g_ .
+“Eiffel Tower”), and intangible items associated with specific visual characteristics ( _e.g_ . “love”, that
+is often represented with stylized hearts). An LLM is then prompted to generate captions for all the
+
+
+2
+
+
+|Filter<br>Balanced<br>Sampling|Col2|Col3|Col4|
+|---|---|---|---|
+|**_Balanced_**<br>**_Sampling_**<br>**Filter**||||
+|**_Balanced_**<br>**_Sampling_**<br>**Filter**||||
+|**_Balanced_**<br>**_Sampling_**<br>**Filter**||||
+|**_Balanced_**<br>**_Sampling_**<br>**Filter**||||
+
+
+Figure 1: **Pipeline Overview.** From a set of concepts _C_ (left), we obtain a set of synthetic captions
+_T_ with an LLM, further refined to _T_ _[∗]_ by a filtering balanced sampling operation (top). Generated
+captions are used to prompt a text-to-image model, obtaining synthetic images aligned with the
+caption (bottom). We then train CLIP on the generated text-image pairs (right).
+
+
+concepts in the concept bank, leading to a set of synthetic captions (Section 3.1). The generated
+captions are then filtered to a smaller set for improved performance (Section 3.2). These filtered
+captions are then passed to a text-to-image model to generate corresponding images (Section 3.3).
+After obtaining our synthetic _{_ caption _,_ image _}_ pairs, a standard CLIP training is carried on the
+generated data, obtaining the language and text encoders that can be used for downstream tasks
+(Section 3.4). We now describe each step in detail.
+
+
+3.1 STEP 1: CONCEPT-BASED CAPTIONS GENERATION
+
+
+The first stage of our pipeline involves the generation of synthetic image captions, that we later aim to
+use as prompts for text-to-image generators. To achieve this, we utilize an LLM conditioned on our
+concept bank. The model is prompted to generate captions that describe a scene related to a chosen
+concept. In our process of generating these captions, we experimented with various prompting
+techniques, discovering that conditioning the LLM to focus on a particular concept leads to more
+diverse captions. Concept conditioning ensures that the LLM does not just repeatedly produce
+captions about a limited set of concepts, over-represented in the LLM training dataset. In other
+words, this approach helps prevent the model from becoming biased towards certain concepts, and
+encourages a broader spectrum of caption generation. Limited concept diversity hinders the CLIP
+training, since contrastive learning highly benefits from variability and more concept coverage (Xu
+et al., 2023). Hence, diversity is a requirement for a proper analysis of SynthCLIP.
+
+
+We start by introducing our concept bank _C_ composed by _NC_ concepts. Unless otherwise stated,
+we use the MetaCLIP concept bank (Xu et al., 2023), that contains over 500,000 concepts drawn
+from WordNet Synsets and Wikipedia common unigrams, bigrams, and titles. We observe that _NC_
+deeply influences CLIP performance, and we investigate this effect in Section 4.3. We then focus on
+prompt engineering, a critical aspect for generating effective captions for text-to-image generation.
+
+
+Image generators are sensitive to the quality of the input prompt (Gu et al., 2023), which is
+often a brief text description capturing the characteristics of the desired image. We set specific
+requirements to ensure that the prompts generated by the LLM are well-suited for the subsequent
+image generation:
+
+
+**(1) Focus on a Single Concept:** Each generated caption should be centered around a single concept,
+presented in a clear and coherent context.
+**(2) Brevity and Clarity:** The prompts need to be concise yet grammatically correct. The goal is to
+avoid overly complex or vague inputs that could lead to ambiguous or incorrect images.
+**(3) Prompt-Only Generation:** Our aim is to have the LLM generate prompts without engaging in
+
+
+3
+
+
+Formally, we define our LLM generator as _G_ LLM and the prompt as _p_ . Hence, the set of generated
+captions is _T_ = _{tc,n_ _∼_ _G_ LLM( _p, c_ ) _}, ∀c ∈C, ∀n ∈{_ 1 _,_ 2 _, ..., N_ _}_ where _N_ is the number of desired
+captions for each concept. By looking at the captions in Figure 2, we show how this mechanism
+results in a highly variable contextual placement of each concept.
+
+
+3.2 STEP 2: CAPTIONS FILTERING
+
+
+When generating captions conditioned on a specific concept _c_, it is typical for other concepts
+_c_ _[′]_ = _c, c_ _[′]_ _∈C_ to appear within the same caption. This is expected, since even when a sentence
+is focused on a single concept, other related concepts emerge within the described scene. For
+example, if _c_ = “bird”, a generated caption might be “a bird is resting on a tree”,
+introducing an additional concept _c_ _[′]_ = “tree”. This LLM-specific behavior may create imbalances in the generated data for CLIP training, which benefits from the usage of a balanced amount
+of concepts (Xu et al., 2023).
+
+
+We create a balanced set of captions, _T_ _[∗]_, by applying the balancing sampling method proposed
+in MetaCLIP (Xu et al., 2023) to our setting. It consists of two stages: substring matching, and
+probability balancing. Substring matching determines which concepts from _C_ appear in each caption
+within _T_ . This enables us to measure the real frequency of each described concept across the
+synthesized captions. Probability balancing is then employed to subsample captions _T_ _[∗]_ from _T_ . It
+increases the probability of selecting captions with long tail concepts, preventing over-representation
+of frequently-generated concepts. This yields a subset of captions where both frequent and long-tail
+concepts are adequately represented. Hence, this approach ensures a diverse and task-agnostic captions set suitable for foundation model pre-training. By sizing the parameters of balanced sampling,
+we are able to choose the size of the subset _T_ _[∗]_ . For more details, we refer to (Xu et al., 2023).
+
+
+3.3 STEP 3: IMAGE GENERATION
+
+
+Having successfully created a balanced set of synthetic captions _T_ _[∗]_, our next step is to generate
+the corresponding images. For this, we utilize a text-to-image generator _G_ TTI. We choose Stable
+Diffusion (Rombach et al., 2022) for this purpose, due to its open-source availability and relatively
+lower computational demands. For each caption in our set _T_ _[∗]_, we generate a corresponding image.
+This process results in a collection of images, _I_ _[∗]_ = _{xk_ _∼_ _G_ TTI( _tk_ ) _}_, where each _xk_ is an image
+synthesized from the caption _tk_ _∈T_ _[∗]_ . In Figure 2, we show how we generate highly aligned images
+
+
+4
+
+
+Figure 2: **Generation samples.** We show generated captions and images pairs for concepts “cat”
+and “Paris”. Our pipeline provides high variability and realistic contextual placement of input
+concepts.
+
+
+further reasoning or elaboration. This approach not only saves computational resources, but also
+simplifies the parsing process.
+
+
+Assuming _c ∈C_, our designed prompt is:
+
+
+which correctly capture the described scene and complement it with related realistic information.
+This proves the efficacy of our caption generation pipeline, leading to appropriate image generation.
+
+
+3.4 STEP 4: CLIP TRAINING
+
+
+Finally, we use the synthetic text-image pairs to train a CLIP model, to explore how effectively a
+model can learn from entirely synthetic data. We train two encoders, each one dedicated to either
+the image or text modality, defined as _E_ image and _E_ text, respectively. We follow the standard CLIP
+training pipeline (Radford et al., 2021a), by applying a contrastive loss on the image and text representations through the encoders. Formally, we extract representations _h_ = _E_ image( _xk_ ) _, xk_ _∈I_ _[∗]_ and
+_z_ = _E_ text( _tk_ ) _, tk_ _∈T_ _[∗]_, and train by minimizing the CLIP loss _L_ CLIP( _h, z_ ).
+
+
+4 EXPERIMENTS
+
+
+In this section, we evaluate the performance of SynthCLIP. We start by introducing the experimental
+setup in Section 4.1, presenting datasets, generation models, and downstream tasks. Section 4.2
+benchmarks SynthCLIP against baselines trained on real data on multiple tasks. Finally, Section 4.3
+includes an analysis of the properties of SynthCLIP and ablation studies for the introduced
+components.
+
+
+4.1 EXPERIMENTAL SETUP
+
+
+**Downstream** **Tasks** We use five different downstream tasks to assess performance. For ease of
+evaluation, we categorize the downstream tasks into two categories; **(1)** **Vision** **Tasks** and **(2)**
+**Vision-Language** **Tasks** . The first focuses on evaluating the capabilities of the frozen vision
+encoder _E_ image only, _i.e_ ., linear probing and few-shot classification. The second evaluates the
+synergy between the image encoder _E_ image and text encoder _E_ text together. We use _image retrieval_,
+_text_ _retrieval_, and _vision-language_ _zero-shot_ _classification_ _tasks_ as evaluation tasks, following
+the original CLIP (Radford et al., 2021a). Since our evaluation pipeline consists of several tasks
+whose metrics can behave differenty, we aggregate performance across all tasks using the ∆MTL
+metric (Vandenhende et al., 2021), where a model with positive ∆MTL indicates an overall better
+performance compared to a reference baseline.
+
+
+**Datasets** We use the real datasets CC3M (Sharma et al., 2018) (3 _×_ 10 [6] samples) and CC12M
+(Changpinyo et al., 2021) (8 _._ 8 _×_ 10 [6] samples [2] ). Real images come at different resolutions, so we
+resize the shorter edge of the images to 256px. For SynthCLIP, we generate an entirely synthetic
+dataset, that we call SynthCI ( **Synth** etic **C** aptions- **I** mages) at different scales (number of samples).
+We refer to SynthCI-3M for a version of SynthCI where _T_ _[∗]_ and _I_ _[∗]_ include 3 _×_ 10 [6] captions and
+images, respectively. For zero-shot evaluation we use ImageNet (Russakovsky et al., 2015), for linear probing and few shot we use CIFAR10 (Krizhevsky et al., 2009a), CIFAR100 (Krizhevsky et al.,
+2009b), Aircraft (Maji et al., 2013), DTD (Cimpoi et al., 2014), Flowers (Nilsback & Zisserman,
+2008), Pets (Parkhi et al., 2012), SUN397 (Xiao et al., 2010), Caltech-101 (Fei-Fei et al., 2004)
+and Food-101 (Bossard et al., 2014), and for image and text retrieval we use MSCOCO (Lin et al.,
+2014), Flickr8K (Hodosh et al., 2013) and Flickr30K (Young et al., 2014).
+
+
+**Caption** **&** **Image** **Generation** **Models** For caption generation, we use Mistral-7B-Instruct V0.2
+(Jiang et al., 2023) with temperature 0 _._ 7 and top-p set to 0 _._ 95. We also set the presence and frequency penalties at 1. For image synthesis, we use Stable Diffusion v1.5 (Rombach et al., 2022)
+with classifier-free guidance set to 2 and 50 Denoising Diffusion Implicit Models (DDIM) steps
+following Tian et al. (2023). The images are generated at 512 _×_ 512px and then stored on disk at
+256 _×_ 256px. It takes 0 _._ 9 seconds to generate and save one image on NVIDIA A100 GPU. Image
+generation was performed on a 48 A100-80GB GPU cluster.
+
+
+**Training Setup** All trained CLIP models use ViT-B/16 (Dosovitskiy et al., 2021) as _E_ image and the
+default CLIP text encoder (Radford et al., 2021a) as _E_ text. _E_ image and _E_ text are trained for 40 epochs
+with a batch size of 4096, a learning rate of 5 _×_ 10 _[−]_ [4], weight decay of 0 _._ 5, cosine scheduler, and
+
+
+2The original CC12M is composed of 12M samples. In December 2023, only 8.8M images were available
+at the linked URLs.
+
+
+5
+
+
+|Samples<br>Network Data (×106)|Synth. data|CIFAR10 CIFAR100 Aircraft DTD Flowers Pets SUN397 Caltech-101 Food-101|Avg|
+|---|---|---|---|
+|_Linear Probing_<br>CLIP<br>CC3M<br>3<br>✗<br>81.8<br>62.7<br>34.7<br>57.3<br>84.1<br>60.5<br>54.3<br>75.6<br>58.7<br>63.3<br>CC12M<br>8.8<br>✗<br>**91.3**<br>**73.0**<br>**48.5**<br>69.6<br>92.2<br>**81.3**<br>68.9<br>**88.2**<br>**77.7**<br>**76.7**<br>SynthCLIP<br>SynthCI-3M<br>3<br>✓<br>80.9<br>60.7<br>36.3<br>60.6<br>85.9<br>59.3<br>55.4<br>73.8<br>60.7<br>63.7<br>SynthCI-8.8M<br>8.8<br>✓<br>85.9<br>65.9<br>44.0<br>68.7<br>90.0<br>71.8<br>64.2<br>83.0<br>71.6<br>71.7<br>SynthCI-10M<br>10<br>✓<br>86.4<br>67.8<br>44.9<br>68.8<br>90.4<br>71.9<br>64.8<br>85.2<br>72.2<br>72.5<br>SynthCI-20M<br>20<br>✓<br>87.7<br>68.5<br>47.0<br>70.7<br>92.1<br>75.9<br>68.3<br>86.3<br>75.3<br>74.6<br>SynthCI-30M<br>30<br>✓<br>88.0<br>69.6<br>45.3<br>**71.0**<br>**92.4**<br>77.6<br>**69.0**<br>86.2<br>76.0<br>75.0|✗<br>✗|81.8<br>62.7<br>34.7<br>57.3<br>84.1<br>60.5<br>54.3<br>75.6<br>58.7<br>**91.3**<br>**73.0**<br>**48.5**<br>69.6<br>92.2<br>**81.3**<br>68.9<br>**88.2**<br>**77.7**|63.3<br>**76.7**|
+|_Few-shot_<br>CLIP<br>CC3M<br>3<br>✗<br>61.4<br>70.9<br>45.2<br>73.2<br>93.0<br>71.0<br>93.3<br>91.6<br>68.2<br>74.2<br>CC12M<br>8.8<br>✗<br>**80.3**<br>**83.5**<br>55.7<br>82.0<br>96.8<br>85.5<br>**96.9**<br>**97.4**<br>**86.3**<br>**84.9**<br>SynthCLIP<br>SynthCI-3M<br>3<br>✓<br>57.6<br>68.8<br>47.2<br>74.3<br>93.5<br>70.8<br>93.5<br>89.9<br>68.3<br>73.8<br>SynthCI-8.8M<br>8.8<br>✓<br>62.4<br>73.3<br>56.9<br>79.6<br>95.7<br>80.9<br>95.8<br>95.1<br>78.4<br>79.8<br>SynthCI-10M<br>10<br>✓<br>67.0<br>75.1<br>59.3<br>80.4<br>95.9<br>82.8<br>95.9<br>95.4<br>79.4<br>81.2<br>SynthCI-20M<br>20<br>✓<br>70.6<br>77.4<br>64.4<br>81.4<br>96.7<br>84.7<br>96.6<br>96.1<br>82.8<br>83.4<br>SynthCI-30M<br>30<br>✓<br>74.0<br>80.8<br>**66.1**<br>**82.5**<br>**97.2**<br>**86.2**<br>96.8<br>96.5<br>83.6<br>**84.9**|✗<br>✗|61.4<br>70.9<br>45.2<br>73.2<br>93.0<br>71.0<br>93.3<br>91.6<br>68.2<br>**80.3**<br>**83.5**<br>55.7<br>82.0<br>96.8<br>85.5<br>**96.9**<br>**97.4**<br>**86.3**|74.2<br>**84.9**|
+
+
+|SynthCLIP setup|Baseline CLIP|
+|---|---|
+|**Data**<br>**Samples**<br>(_×_106)|CC3M<br>CC12M|
+|SynthCI-3M<br>3<br>SynthCI-8.8M<br>8.8<br>SynthCI-10M<br>10<br>SynthCI-20M<br>20<br>SynthCI-30M<br>30|-5.60%<br>-36.0%<br>+31.3%<br>-15.0%<br>+36.4%<br>-12.3%<br>+53.9%<br>-3.10%<br>**+60.1%**<br>**+0.20%**|
+
+
+|Samples<br>Network Data (×106)|Synth. data|Image Retrieval Text Retrieval 0-shot<br>30K 30K<br>Coco 8K Coco 8K Imagenet<br>Flickr Flickr Flickr Flickr<br>MS Avg MS Avg|Col4|Col5|Col6|Col7|
+|---|---|---|---|---|---|---|
+|CLIP<br>CC3M<br>3<br>✗<br>23.6 39.9 37.7 33.7<br>29.7 50.8 48.1 42.9<br>14.9<br>CC12M<br>8.8<br>✗<br>43.8 66.2 66.8 58.9<br>57.4 80.3 77.3 71.7<br>**33.6**|CLIP<br>CC3M<br>3<br>✗<br>23.6 39.9 37.7 33.7<br>29.7 50.8 48.1 42.9<br>14.9<br>CC12M<br>8.8<br>✗<br>43.8 66.2 66.8 58.9<br>57.4 80.3 77.3 71.7<br>**33.6**|CLIP<br>CC3M<br>3<br>✗<br>23.6 39.9 37.7 33.7<br>29.7 50.8 48.1 42.9<br>14.9<br>CC12M<br>8.8<br>✗<br>43.8 66.2 66.8 58.9<br>57.4 80.3 77.3 71.7<br>**33.6**|CLIP<br>CC3M<br>3<br>✗<br>23.6 39.9 37.7 33.7<br>29.7 50.8 48.1 42.9<br>14.9<br>CC12M<br>8.8<br>✗<br>43.8 66.2 66.8 58.9<br>57.4 80.3 77.3 71.7<br>**33.6**|CLIP<br>CC3M<br>3<br>✗<br>23.6 39.9 37.7 33.7<br>29.7 50.8 48.1 42.9<br>14.9<br>CC12M<br>8.8<br>✗<br>43.8 66.2 66.8 58.9<br>57.4 80.3 77.3 71.7<br>**33.6**|CLIP<br>CC3M<br>3<br>✗<br>23.6 39.9 37.7 33.7<br>29.7 50.8 48.1 42.9<br>14.9<br>CC12M<br>8.8<br>✗<br>43.8 66.2 66.8 58.9<br>57.4 80.3 77.3 71.7<br>**33.6**|CLIP<br>CC3M<br>3<br>✗<br>23.6 39.9 37.7 33.7<br>29.7 50.8 48.1 42.9<br>14.9<br>CC12M<br>8.8<br>✗<br>43.8 66.2 66.8 58.9<br>57.4 80.3 77.3 71.7<br>**33.6**|
+|SynthCLIP<br>SynthCI-3M<br>3<br>✓21.5 39.1 41.1 33.9<br>28.9 53.7 55.4 46.0<br>9.5<br>SynthCI-8.8M<br>8.8<br>✓34.9 58.0 61.5 51.5<br>48.6 76.0 79.3 68.0<br>18.5<br>SynthCI-10M<br>10<br>✓36.7 58.0 64.0 52.9<br>50.0 75.1 81.8 69.0<br>20.9<br>SynthCI-20M<br>20<br>✓42.5 65.4 69.2 59.0<br>57.8 81.7 87.5 75.7<br>28.0<br>SynthCI-30M<br>30<br>✓**44.0 68.3 72.9 61.7**<br>**58.0 84.4 88.8 77.1**<br>30.5|✓<br>✓|21.5 39.1 41.1 <br>34.9 58.0 61.5|33.9<br> 51.5|28.9 53.7 55.4 <br>48.6 76.0 79.3|46.0<br> 68.0|9.5<br>18.5|
+|SynthCLIP<br>SynthCI-3M<br>3<br>✓21.5 39.1 41.1 33.9<br>28.9 53.7 55.4 46.0<br>9.5<br>SynthCI-8.8M<br>8.8<br>✓34.9 58.0 61.5 51.5<br>48.6 76.0 79.3 68.0<br>18.5<br>SynthCI-10M<br>10<br>✓36.7 58.0 64.0 52.9<br>50.0 75.1 81.8 69.0<br>20.9<br>SynthCI-20M<br>20<br>✓42.5 65.4 69.2 59.0<br>57.8 81.7 87.5 75.7<br>28.0<br>SynthCI-30M<br>30<br>✓**44.0 68.3 72.9 61.7**<br>**58.0 84.4 88.8 77.1**<br>30.5|✓<br>✓<br>✓|36.7 58.0 64.0 <br>42.5 65.4 69.2 <br>**44.0 68.3 72.9 **|52.9<br> 59.0<br> **61.7**|50.0 75.1 81.8 <br>57.8 81.7 87.5 <br>**58.0 84.4 88.8 **|69.0<br> 75.7<br> **77.1**|20.9<br>28.0<br>30.5|
+
+
+Table 1: **Benchmark.** We compare against CLIP models trained on real datasets (CC3M and
+CC12M). We train SynthCLIP on our synthetic datasets, SynthCI, at various scales. We observe
+a consistent improvement in performance in both vision (a) and vision-language (b) tasks, as the
+scale of the SynthCI dataset increase. This demonstrates the scalability advantage of SynthCLIP. In
+(c) we aggregate multi-task performance with ∆MTL across all trained networks.
+
+
+1 warmup epoch. We use random resized crop with scale 0 _._ 5 _−_ 1 _._ 0 as data augmentation. We use
+the codebase of SLIP (Mu et al., 2022) to train all the models on 16 NVIDIA-V100-32GB GPUs.
+
+
+4.2 BENCHMARK EVALUATION
+
+
+**Performance** **on** **the** **same** **data** **scale** We evaluate the effectiveness of our entirely synthetic
+data generation pipeline for training CLIP models compared to training on real data. We use
+CLIP (Radford et al., 2021a) trained on CC3M and CC12M as baselines. We first train SynthCLIP
+on two versions of SynthCI each matching the data scale of CC3M and CC12M, which we call
+SynthCI-3M and SynthCI-8.8M, respectively. We report the performance on vision tasks in Table 1a
+and vision-language tasks in Table 1b, aggregating all metrics with ∆MTL (Vandenhende et al.,
+2021) in Table 1c (details about ∆MTL are provided in Supplementary). As visible in Table 1c,
+we obtain lower performance when both datasets are composed by 3 _×_ 10 [6] samples ( **-5.60%** )
+and 8 _._ 8 _×_ 10 [6] samples ( **-15.0%** ), compared to the corresponding real data training with the same
+dataset size (CC3M and CC12M, respectively). This is expected: considering that real and synthetic
+data differ in distribution, while training on synthetic samples and testing on real ones, we incur a
+distribution shift, which ultimately harms performance (Zhou et al., 2023; Fan et al., 2024).
+
+
+**Scaling** **SynthCLIP** Our objective now is to analyze the scaling of SynthCLIP, to match performance obtainable by training CLIP on real data. It is indeed known that bigger training datasets
+help to increase performance (Radford et al., 2021b). However, while scaling real datasets necessitates custom collection pipelines from different sources and data curation, we exploit the advantage
+
+
+6
+
+
+(a) Vision Tasks
+
+
+(b) Vision-Language Tasks
+
+
+(c) ∆MTL evaluation
+
+
+|Col1|Col2|Col3|Col4|
+|---|---|---|---|
+|||||
+|||||
+|||||
+|||||
+|||||
+|||||
+|||||
+
+
+|SynthCI CC12M<br>samples samples<br>Network (×106) (×106)|Lin. Prob. Few-shot Img Ret. Text Ret. IN 0-shot|∆MTL|
+|---|---|---|
+|CLIP<br>-<br>8.8<br>76.7 84.9 58.9 71.7 33.6<br>_→_<br>SynthCLIP<br>30<br>-<br>75.0 84.9 61.7 77.1 30.5 +0.2%<br><br><br>|CLIP<br>-<br>8.8<br>76.7 84.9 58.9 71.7 33.6<br>_→_<br>SynthCLIP<br>30<br>-<br>75.0 84.9 61.7 77.1 30.5 +0.2%<br><br><br>|CLIP<br>-<br>8.8<br>76.7 84.9 58.9 71.7 33.6<br>_→_<br>SynthCLIP<br>30<br>-<br>75.0 84.9 61.7 77.1 30.5 +0.2%<br><br><br>|
+|Finetuned<br>_(5 epochs)_<br>30<br>0.5<br>30<br>2.0<br>30<br>8.8|76.2 86.0 67.5 74.7 34.4 <br>76.1 86.1 67.8 79.3 35.2 <br>**77.3 86.9 68.6 80.8** 37.9|+4.4%<br> +6.2%<br> +9.0%|
+|Finetuned<br>_(10 epochs)_<br>30<br>0.5<br>30<br>2.0<br>30<br>8.8|76.0 86.0 67.2 78.7 34.5 <br>76.5 86.0 67.9 79.8 36.0 <br>**77.3** 86.6 **68.6** 80.4 **38.6 **|+5.4%<br> +7.0%<br> **+9.3%**|
+
+
+of our data synthesis pipeline, _i.e_ . the capability to scale the size of the training data with no human
+intervention. In practice, we simply let our generation script run for longer, and re-train SynthCLIP
+on the larger SynthCI version obtained doing so. In particular, we report performance for SynthCLIP
+trained on _{_ 10 _×_ 10 [6], 20 _×_ 10 [6], 30 _×_ 10 [6] _}_ SynthCI samples, finally matching with 30 million samples the performance of the biggest model we trained on real data (CLIP on CC12M), against which
+we achieve ∆MTL = **+0.20%** . We also report a significant increase with respect to CLIP trained on
+CC3M (∆MTL = **+60.1%** ). From a single task perspective, we outperform CLIP trained on CC12M
+on image and text retrieval ( **+2.8%** and **+5.4%**, respectively), while performing competitively with
+linear probing ( **-1.7%** ) and few-shot ( **+0.00%** ). While we still underperform in zero-shot evaluation
+( **-3.1%** ), we attribute this also to additional bias effects that we study in Section 4.3. Ultimately,
+our experiment shows that by conditioning on a generic list of visual concepts, SynthCLIP can scale
+and match CLIP trained on large datasets, albeit using more samples due to the distribution shift
+between our synthetic training data and real test datasets.
+
+
+**Scaling trends** To ease understanding to which extent scaling training data influences each task, we
+plot percentage improvements for each task in Figure 3, assuming as reference the performance
+achieved with SynthCLIP trained on SynthCI-3M. As visible from the plot, vision-language tasks
+(green, red, purple curves) tend to achieve more significant performance increase with respect to
+vision (blue, orange). We attribute this to the good quality of our captions. Our two-step generation
+pipeline produces text-image pairs that are always fairly aligned with the corresponding image. This
+synthetic data property further mitigates the distribution shift at scale.
+
+
+**SynthCLIP** **as** **pre-training** While synthetic data allow scalability, the effects of the distribution
+shift are still significant. We now investigate if these could be mitigated by using real data. It is wellknown how training on mixed datasets of real and synthetic samples can boost performance (Fan
+et al., 2024; Yuan et al., 2024), as we also report in the appendix. We instead propose a different
+setup, designed to highlight the advantages of fully synthetic trainings. We introduce a _Finetuning_
+scenario, in which we first pre-train SynthCLIP on SynthCI-30M, and we subsequently finetune it,
+with the same contrastive loss, on CC12M, for a limited number of epochs. We assume no access
+to previously used synthetic samples. This reflects real-world practices in which foundation models
+are first pre-trained, and further adapted to the users’ needs (Caron et al., 2021; Oquab et al., 2024).
+We report results in Table 2. Surprisingly, we show a significant improvement in performance, for
+all settings. Increasing the number of epochs leads to better performance on real datasets, with the
+Finetuned model on full CC12M for 10 epochs performing best ( **+9.3%** ). However, even 5 epochs
+on 1 _._ 0 _×_ 10 [6] real samples bring considerable advantages, outperforming the CLIP training on the
+full CC12M by a **+4.4%** ∆MTL margin. This happens thanks to the strong features extracted by
+SynthCLIP, resulting from training on aligned and varied captioned images. Ultimately, we show
+that we can effectively compensate for the distribution shift with small real datasets.
+
+
+7
+
+
+Linear Probing
+Few-shot
+
+
+Img Retrieval
+Text Retrieval
+
+
+IN 0-shot
+
+
+30
+
+25
+
+20
+
+15
+
+10
+
+5
+
+0
+
+
+Samples (millions)
+
+
+Figure 3: **Performance** **improvement** **for** **dif-**
+**ferent** **SynthCI** **scales.** We show the improvements for all metrics with respect to SynthCLIP
+trained on SynthCI-3M. Vision-language tasks
+exhibit better absolute improvements and less
+saturation with respect to vision ones.
+
+
+Table 2: **Finetuning on real data.** We finetune
+SynthCLIP using different amounts of data
+from CC12M and epochs. We significantly improve performance compared to both real-only
+or synthetic-only setups, proving that synthetic
+trainings may serve as a strong initialization for
+vision-language representation learning.
+
+
+|Network|Synth. Images Synth. Captions|Linear Probing Few-shot Img retrieval Text retrieval IN 0-shot|
+|---|---|---|
+|CLIP<br>CLIP + Text-to-image<br>CLIP + Captioning|✗<br>✗<br>✓<br>✗<br>✗<br>✓|63.6<br>74.2<br>33.7<br>42.9<br>14.9<br>65.1<br>74.2<br>41.2<br>51.7<br>**15.4**<br>**70.1**<br>**78.1**<br>**46.0**<br>**62.4**<br>12.4|
+|SynthCLIP<br>SynthCLIP + Captioning|✓<br>✓<br>✓<br>✓|63.7<br>73.8<br>33.9<br>46.0<br>9.5<br>66.5<br>74.3<br>43.5<br>57.1<br>8.5|
+
+
+Figure 4: **Which synthetic data modality matters more?** We assess which synthetic modality impacts performance more by combining real/synthetic captions/images (a). The usage of real captions
+implies using the original captions from CC3M. “Synthetic captions” refers to either captions generated by LLaVA (Liu et al., 2023a) (“Captioning”) or an LLM (SynthCLIP). “Synthetic images”
+refers to generated images from Stable Diffusion. Prompts can be either real (CLIP + Text-to-image)
+or synthetic (SynthCLIP). Captioning with LLAVA improves performance even in SynthCLIP, due
+to corrections (b), where elements in the prompt missing in generated images are underlined in red.
+
+
+4.3 ANALYSIS
+
+
+Here, we conduct an analysis to examine key aspects of SynthCLIP. We focus on the importance
+of textual and visual data modalities, ablate pipeline components (data filtering technique and LLM
+used for captions generation), and quantify the effects of _C_ on performance. For all tests, we train
+on 3 million samples, _i.e_ ., a similar scale to CC3M, due to the high computational cost of the larger
+experiments.
+
+
+**Do synthetic captions or synthetic images matter more?** SynthCLIP uses entirely synthetic textimage pairs. A key question arises: which has a greater impact on the model’s performance in downstream tasks – synthetic images or synthetic captions? In Table 4a, we compare the standard CLIP
+model trained on CC3M, SynthCLIP, and two hybrid CLIP variants. One hybrid uses real captions
+with synthetic images (CLIP + Text-to-Image), generated using Stable Diffusion v1.5, while the
+other pairs real images with synthetic captions (CLIP + Captioning), created with the LLaVA (Liu
+et al., 2023a) model. Note that these, requiring one real modality, are less scalable than SynthCLIP.
+
+
+We measure that CLIP + Captioning significantly outperforms standard CLIP in several benchmarks,
+indicating the effectiveness of synthetic captions in CLIP training. For instance, this approach improves linear probing by 6.5% and text retrieval by 19.5%, though it slightly decreases zero-shot
+performance by 2.5%. On the other hand, CLIP + Text-to-Image shows less marked improvements
+and no gains in few-shot performance. This suggests that keeping images real and recaptioning them
+is more advantageous than generating images for real captions, possibly due to domain shifts and
+content generation mismatches in synthetic images as noted in Gani et al. (2023); Wu et al. (2023).
+
+
+Hence, we introduce SynthCLIP+Captioning as an extra baseline. Given that TTI models could
+miss details in text prompts, recaptioning generated images can be beneficial. This is evident in
+Figure 4b, where recaptioning corrects alignment issues from the image generation process ( _e.g_ .
+the missing bench in the generated image). Comparing SynthCLIP and SynthCLIP+Captioning
+in Table 4a (rows 4 and 5) shows significant gains with captioning, such as a 9.6% improvement
+in image retrieval. These results advocate for a potential boost in performance from future developments in prompt faithfulness of the TTI model. Moreover, it also opens doors to combinations of
+caption enrichment techniques such as VeCLIP (Lai et al., 2023) and CapsFusion (Yu et al., 2023a).
+
+
+**Data** **Filtering** **Ablation** In creating our SynthCI- _X_ datasets in Section 4.2, we utilized balanced
+sampling to select a desired number of captions from a larger set of generated ones. In this section
+we want to assess how different data sampling strategies affect SynthCLIP’s performance. We focus on the impact of substituting balanced sampling with a more straightforward _random sampling_
+approach. For this, we randomly choose a subset of 3 _×_ 10 [6] captions from _T_ . The corresponding
+images for these randomly selected captions are generated using Stable Diffusion v1.5, following
+the same procedure presented in Section 4.1. We then train SynthCLIP on this newly formed dataset.
+The results, presented in Table 3a, indicate a noticeable decline in performance across various tasks
+with random sampling, especially in retrieval tasks. Here, we observe a drop of 2.7% in both image
+
+
+8
+
+
+(a) Quantitative evaluation
+
+
+(b) Captioning examples on SynthCI data
+
+
+|Concepts (×N 10c 3)|Lin. Prob. Few-shot Img Ret. Text Ret. IN 0-shot|
+|---|---|
+|_C_<br>500|63.7<br>73.8<br>33.9<br>46.0<br>9.5|
+|_C_CC3M<br>40<br>_C_rand<br>40|**65.4** (+1.7) **74.8** (+1.0) **37.1** (+3.2) **49.9** (+3.9) **12.6** (+3.1)<br>63.1 (-0.6)<br>72.9 (-0.9)<br>31.8 (-2.1)<br>44.8 (-1.2)<br>9.2 (-0.3)|
+
+
+Table 4: **Effect** **of** **Concept** **Bank** **Size.** We
+compare SynthCLIP model performance using
+different concept bank sizes: the full 500 _×_ 10 [3]
+concepts ( _C_ ), a 40 _×_ 10 [3] subset from CC3M
+( _C_ CC3M), and a randomly selected 40 _×_ 10 [3] subset ( _C_ rand), with each trained on 3 million samples. Results show that models trained on
+CC3M-specific concepts outperform those using the full concept list or a random selection,
+when a limited number of samples is used. This
+suggests a distribution bias in CC3M. Hence, in
+real deployments, this shows the interest of extending _C_ as much as possible, proving the interest of using our large concept bank.
+
+
+|Network|Lin. Prob. Few-shot Img Ret. Text Ret. IN 0-shot|
+|---|---|
+|SynthCLIP<br>_w/ rand. sampling_|**63.7**<br>**73.8**<br>**33.9**<br>**46.0**<br>**9.5**<br> 61.5 (-2.2) 72.0 (-1.8) 31.2 (-2.7) 43.3 (-2.7) 9.4 (-0.1)|
+
+
+(a) Balanced Sampling vs Random Sampling
+
+|LLM|Lin. Prob. Few-shot Img Ret. Text Ret. IN 0-shot|
+|---|---|
+|Mistral 7B<br>Vicuna 33B|**63.7**<br>**73.8**<br>**33.9**<br>**46.0**<br>**9.5**<br>61.4 (-2.3)<br>69.4 (-4.4)<br>26.1 (-7.8)<br>36.5 (-9.5)<br>8.2 (-1.3)|
+
+
+(b) Results with a different LLM for captions
+
+|Backbone|Lin. Prob. Few-shot Img Ret. Text Ret. IN 0-shot|
+|---|---|
+|ViT-B<br>ViT-S|**63.7**<br>**73.8**<br>**33.9**<br>**46.0**<br>**9.5**<br>59.5 (-4.2) 70.3 (-3.5) 29.2 (-4.7) 39.7 (-6.3) 8.1 (-1.4)|
+
+
+(c) Results with a different backbone.
+
+
+Table 3: **Training** **Components** **Ablations.**
+Table (a) proves the effectiveness of balanced
+sampling. Table (b) compares two LLMs,
+showing Mistral-7B’s consistent advantage
+across various tasks. Table (c) tests a smaller
+backbone model, proving the expected scaling.
+
+
+and text retrieval compared to balanced sampling. These results underline the critical role of balanced concept distribution for CLIP training, highlighting an advantage of synthetic data for data
+curation.
+
+
+**Evaluating Different Language Models for Caption Generation** In Table 3b, we study the effect
+of changing the language model from Mistral V0.2 7B model to Vicuna 33B. We find that using
+Mistral V0.2 7B consistently achieves better performance when compared to Vicuna 33B. This
+might be attributed to Mistral’s superior performance on instruction-following benchmarks such
+as AlpacaEval (Li et al., 2023c). Indeed, we phrase caption generation as an instruction-following
+task as previously described in Section 3.1. This suggests that with increasingly performing models
+in instruction following, it will be possible to further improve performances of SynthCLIP training.
+
+
+**Model** **size** In order to study the effect of model scaling, we variate the size of the trained model.
+We train SynthCLIP replacing the ViT-B used for the rest of the experiments with a ViT-S, on 3
+million samples from SynthCI. We report average results in all tasks in Table 3c. Consistently with
+expected results on different model sizes (Radford et al., 2021b), we notice that bigger backbones
+guarantee better performance in all tasks. This proves the quality of our generated data. Indeed, the
+training is not saturated in our setup, proving that scaling is not limited by the data size in the setup
+under analysis.
+
+
+**Concept Bank Impact** We explore how the concept bank size _C_ and the type of concepts it contains
+affect the downstream performance of the model. For this, we create two subsets of _C_ . The first
+subset, _C_ CC3M, is derived by identifying the concepts that appear in CC3M captions, by performing
+substring matching with concepts included in _C_ . This results in 40 _×_ 10 [3] CC3M-related concepts.
+The second, _C_ rand, is formed by randomly selecting the same number of concepts as in _C_ CC3M from _C_ .
+
+
+We generate 3M images for each of _C_ CC3M and _C_ rand and train SynthCLIP on the generated datasets.
+We show results in Table 4. Interestingly, we noticed that focusing on CC3M-specific concepts
+( _C_ CC3M) enhances performance compared to training with the full _C_ . For example, using _C_ CC3M yields
+a 3.9% improvement in text retrieval and 1.6% in linear probing. We hypothesize that this might
+be because _C_ CC3M’s concepts are more aligned with concepts appearing in the downstream tasks,
+hence indicating a potential distribution bias in CC3M towards concepts prevalent in downstream
+task images. In contrast, using _C_ rand leads to lower performance in all tasks compared to the full _C_ .
+For example, we observe a 1.2% decrease in text retrieval and 0.8% in linear probing, likely because
+_C_ rand’s concepts are less relevant to the downstream tasks. Hence, when specific insights about
+downstream tasks are unavailable, it is preferable to train on the widest possible range of concepts.
+
+
+9
+
+
+5 DISCUSSION
+
+
+Here, we discuss additional consequential properties of SynthCLIP, resulting from the usage of
+synthetic data, and we draw conclusions.
+
+
+**Mitigation of long-tail effects.** While the distribution shift is preventing matching performance on
+the same data scale, we argue that the control over _C_ may be used to mitigate long-tail effects. We
+provide preliminary insights by evaluating zero-shot classification accuracy on 10 classes (listed in
+appendix) included in _C_, but undetected in CC12M with substring matching. Importantly, we compare both SynthCLIP and CLIP trained on 8 _._ 8 _×_ 10 [6] images. For evaluation, we collect 150 samples
+per class. We report 44.18/ **60.04** accuracy for CLIP/SynthCLIP. This gives preliminary insights into
+how synthetic data could be used for training CLIP models resistant to long-tail distributions.
+
+
+**Data safety** Another aspect resulting from the control of _C_ is the potential for training SynthCLIP
+models exclusively on safe data. This is not always possible with web-collected data (Schuhmann
+et al., 2022), due to image-based NSFW detectors having limited performance (Schramowski et al.,
+2022), and for the subjective nature of offensive content. We argue that our concept-based caption
+generation may help the synthesis of safe images only. In _C_, we did not modify the concepts proposed by Xu et al. (2023) for reproducibility. However, as a preliminary insight, we process _C_ with
+an LLM (more details in appendix), detecting 3.15% NSFW concepts that can be filtered from the
+original _C_ . Moreover, our data synthesis pipeline could be associated with recent approaches for
+safe image generation (Schramowski et al., 2023). This opens possibilities for safe CLIP trainings.
+
+
+**Concluding** **remarks** We presented SynthCLIP, a CLIP model trained exclusively on synthetic
+data. Our experiments show SynthCLIP’s scalability and capability to match the performance
+of models trained on real data, given enough samples, on a large concept corpus. This paves
+new ways for entirely synthetic training at scale, possibly extending the capabilities of CLIP. Our
+investigation of the properties of SynthCLIP reveals novel insights into the role of synthetic data in
+vision-language models.
+
+
+REFERENCES
+
+
+Shekoofeh Azizi, Simon Kornblith, Chitwan Saharia, Mohammad Norouzi, and David J. Fleet. Synthetic data from diffusion models improves imagenet classification. _TMLR_, 2023.
+
+
+Lukas Bossard, Matthieu Guillaumin, and Luc Van Gool. Food-101 – mining discriminative components with random forests. In _ECCV_, 2014.
+
+
+Tianshi Cao, Alex Bie, Arash Vahdat, Sanja Fidler, and Karsten Kreis. Don’t generate me: Training
+differentially private generative models with sinkhorn divergence. _NeurIPS_, 2021.
+
+
+Nicolas Carlini, Jamie Hayes, Milad Nasr, Matthew Jagielski, Vikash Sehwag, Florian Tramer, Borja
+Balle, Daphne Ippolito, and Eric Wallace. Extracting training data from diffusion models. In
+_USENIX Security_, 2023.
+
+
+Mathilde Caron, Hugo Touvron, Ishan Misra, Herv´e J´egou, Julien Mairal, Piotr Bojanowski, and
+Armand Joulin. Emerging properties in self-supervised vision transformers. In _CVPR_, 2021.
+
+
+Soravit Changpinyo, Piyush Sharma, Nan Ding, and Radu Soricut. Conceptual 12M: Pushing webscale image-text pre-training to recognize long-tail visual concepts. In _CVPR_, 2021.
+
+
+Ting Chen, Simon Kornblith, Mohammad Norouzi, and Geoffrey Hinton. A simple framework for
+contrastive learning of visual representations. In _ICML_, 2020.
+
+
+Yuhua Chen, Wen Li, Xiaoran Chen, and Luc Van Gool. Learning semantic segmentation from
+synthetic data: A geometrically guided input-output adaptation approach. In _CVPR_, 2019.
+
+
+M. Cimpoi, S. Maji, I. Kokkinos, S. Mohamed,, and A. Vedaldi. Describing textures in the wild. In
+_CVPR_, 2014.
+
+
+Alexey Dosovitskiy, Lucas Beyer, Alexander Kolesnikov, Dirk Weissenborn, Xiaohua Zhai, Thomas
+Unterthiner, Mostafa Dehghani, Matthias Minderer, Georg Heigold, Sylvain Gelly, Jakob Uszkoreit, and Neil Houlsby. An image is worth 16x16 words: Transformers for image recognition at
+scale. In _ICLR_, 2021.
+
+
+10
+
+
+Lijie Fan, Dilip Krishnan, Phillip Isola, Dina Katabi, and Yonglong Tian. Improving clip training
+with language rewrites. In _NeurIPS_, 2023.
+
+
+Lijie Fan, Kaifeng Chen, Dilip Krishnan, Dina Katabi, Phillip Isola, and Yonglong Tian. Scaling
+laws of synthetic images for model training... for now. In _CVPR_, 2024.
+
+
+Li Fei-Fei, Rob Fergus, and Pietro Perona. Learning generative visual models from few training
+examples: An incremental bayesian approach tested on 101 object categories. _CVPR Workshop_,
+2004.
+
+
+Enrico Fini, Pietro Astolfi, Adriana Romero-Soriano, Jakob Verbeek, and Michal Drozdzal. Improved baselines for vision-language pre-training. _TMLR_, 2023.
+
+
+Hanan Gani, Shariq Farooq Bhat, Muzammal Naseer, Salman Khan, and Peter Wonka. Llm
+blueprint: Enabling text-to-image generation with complex and detailed prompts. _arXiv preprint_
+_arXiv:2310.10640_, 2023.
+
+
+Spyros Gidaris, Praveer Singh, and Nikos Komodakis. Unsupervised representation learning by
+predicting image rotations. In _ICLR_, 2018.
+
+
+Jindong Gu, Zhen Han, Shuo Chen, Ahmad Beirami, Bailan He, Gengyuan Zhang, Ruotong Liao,
+Yao Qin, Volker Tresp, and Philip Torr. A systematic survey of prompt engineering on visionlanguage foundation models. _arXiv preprint arXiv:2307.12980_, 2023.
+
+
+Hasan Abed Al Kader Hammoud, Tuhin Das, Fabio Pizzati, Philip Torr, Adel Bibi, and Bernard
+Ghanem. On pretraining data diversity for self-supervised learning, 2024.
+
+
+Kaiming He, Xinlei Chen, Saining Xie, Yanghao Li, Piotr Doll´ar, and Ross Girshick. Masked
+autoencoders are scalable vision learners. In _CVPR_, 2022.
+
+
+Ruifei He, Shuyang Sun, Xin Yu, Chuhui Xue, Wenqing Zhang, Philip Torr, Song Bai, and XIAOJUAN QI. Is synthetic data from generative models ready for image recognition? In _ICLR_,
+2023.
+
+
+Micah Hodosh, Peter Young, and Julia Hockenmaier. Framing image description as a ranking task:
+Data, models and evaluation metrics. _JAIR_, 2013.
+
+
+Ali Jahanian, Xavier Puig, Yonglong Tian, and Phillip Isola. Generative models as a data source for
+multiview representation learning. In _ICLR_, 2022.
+
+
+Albert Q Jiang, Alexandre Sablayrolles, Arthur Mensch, Chris Bamford, Devendra Singh Chaplot,
+Diego de las Casas, Florian Bressand, Gianna Lengyel, Guillaume Lample, Lucile Saulnier, et al.
+Mistral 7b. _arXiv preprint arXiv:2310.06825_, 2023.
+
+
+Matthew Johnson-Roberson, Charles Barto, Rounak Mehta, Sharath Nittur Sridhar, Karl Rosaen,
+and Ram Vasudevan. Driving in the matrix: Can virtual worlds replace human-generated annotations for real world tasks? In _ICRA_, 2017.
+
+
+Wooyoung Kang, Jonghwan Mun, Sungjun Lee, and Byungseok Roh. Noise-aware learning from
+web-crawled image-text data for image captioning. In _ICCV_, 2023.
+
+
+Alex Krizhevsky, Geoffrey Hinton, et al. Learning multiple layers of features from tiny images.
+2009a.
+
+
+Alex Krizhevsky, Geoffrey Hinton, et al. Learning multiple layers of features from tiny images.
+2009b.
+
+
+Gihyun Kwon and Jong Chul Ye. Clipstyler: Image style transfer with a single text condition. In
+_CVPR_, 2022.
+
+
+Woosuk Kwon, Zhuohan Li, Siyuan Zhuang, Ying Sheng, Lianmin Zheng, Cody Hao Yu, Joseph E.
+Gonzalez, Hao Zhang, and Ion Stoica. Efficient memory management for large language model
+serving with pagedattention. In _SOSP_, 2023.
+
+
+11
+
+
+Zhengfeng Lai, Haotian Zhang, Wentao Wu, Haoping Bai, Aleksei Timofeev, Xianzhi Du, Zhe Gan,
+Jiulong Shan, Chen-Nee Chuah, Yinfei Yang, et al. From scarcity to efficiency: Improving clip
+training via visual-enriched captions. _arXiv preprint arXiv:2310.07699_, 2023.
+
+
+Alexander Cong Li, Ellis Langham Brown, Alexei A Efros, and Deepak Pathak. Internet explorer:
+Targeted representation learning on the open web. In _ICML_, 2023a.
+
+
+Guohao Li, Hasan Abed Al Kader Hammoud, Hani Itani, Dmitrii Khizbullin, and Bernard Ghanem.
+CAMEL: Communicative agents for ”mind” exploration of large language model society. In
+_NeurIPS_, 2023b.
+
+
+Junnan Li, Dongxu Li, Caiming Xiong, and Steven Hoi. Blip: Bootstrapping language-image pretraining for unified vision-language understanding and generation. In _ICML_, 2022.
+
+
+Xuechen Li, Tianyi Zhang, Yann Dubois, Rohan Taori, Ishaan Gulrajani, Carlos Guestrin, Percy
+Liang, and Tatsunori B. Hashimoto. Alpacaeval: An automatic evaluator of instruction-following
+models. [https://github.com/tatsu-lab/alpaca_eval, 2023c.](https://github.com/tatsu-lab/alpaca_eval)
+
+
+Tsung-Yi Lin, Michael Maire, Serge Belongie, James Hays, Pietro Perona, Deva Ramanan, Piotr
+Doll´ar, and C Lawrence Zitnick. Microsoft coco: Common objects in context. In _ECCV_, 2014.
+
+
+Haotian Liu, Chunyuan Li, Qingyang Wu, and Yong Jae Lee. Visual instruction tuning. In _NeurIPS_,
+2023a.
+
+
+Shilong Liu, Zhaoyang Zeng, Tianhe Ren, Feng Li, Hao Zhang, Jie Yang, Chunyuan Li, Jianwei
+Yang, Hang Su, Jun Zhu, et al. Grounding dino: Marrying dino with grounded pre-training for
+open-set object detection. _arXiv preprint arXiv:2303.05499_, 2023b.
+
+
+Subhransu Maji, Esa Rahtu, Juho Kannala, Matthew Blaschko, and Andrea Vedaldi. Fine-grained
+visual classification of aircraft. _arXiv preprint arXiv:1306.5151_, 2013.
+
+
+Meta. Llama 3. [https://ai.meta.com/blog/meta-llama-3/, 2024.](https://ai.meta.com/blog/meta-llama-3/)
+
+
+Norman Mu, Alexander Kirillov, David Wagner, and Saining Xie. Slip: Self-supervision meets
+language-image pre-training. In _ECCV_, 2022.
+
+
+Maria-Elena Nilsback and Andrew Zisserman. Automated flower classification over a large number
+of classes. In _ICVGIP_, 2008.
+
+
+Mehdi Noroozi and Paolo Favaro. Unsupervised learning of visual representations by solving jigsaw
+puzzles. In _ECCV_, 2016.
+
+
+Maxime Oquab, Timoth´ee Darcet, Th´eo Moutakanni, Huy Vo, Marc Szafraniec, Vasil Khalidov,
+Pierre Fernandez, Daniel Haziza, Francisco Massa, Alaaeldin El-Nouby, et al. Dinov2: Learning
+robust visual features without supervision. _TMLR_, 2024.
+
+
+Omkar M Parkhi, Andrea Vedaldi, Andrew Zisserman, and CV Jawahar. Cats and dogs. In _CVPR_,
+2012.
+
+
+Deepak Pathak, Philipp Krahenbuhl, Jeff Donahue, Trevor Darrell, and Alexei A Efros. Context
+encoders: Feature learning by inpainting. In _CVPR_, 2016.
+
+
+Aleksandra Piktus, Fabio Petroni, Vladimir Karpukhin, Dmytro Okhonko, Samuel Broscheit,
+Gautier Izacard, Patrick Lewis, Barlas O˘guz, Edouard Grave, Wen-tau Yih, et al. The
+web is your oyster-knowledge-intensive nlp against a very large web corpus. _arXiv_ _preprint_
+_arXiv:2112.09924_, 2021.
+
+
+Alec Radford, Jong Wook Kim, Chris Hallacy, Aditya Ramesh, Gabriel Goh, Sandhini Agarwal, Girish Sastry, Amanda Askell, Pamela Mishkin, Jack Clark, Gretchen Krueger, and Ilya
+Sutskever. Learning transferable visual models from natural language supervision. In _ICML_,
+2021a.
+
+
+Alec Radford, Jong Wook Kim, Chris Hallacy, Aditya Ramesh, Gabriel Goh, Sandhini Agarwal,
+Girish Sastry, Amanda Askell, Pamela Mishkin, Jack Clark, et al. Learning transferable visual
+models from natural language supervision. In _ICML_, 2021b.
+
+
+12
+
+
+Colin Raffel, Noam Shazeer, Adam Roberts, Katherine Lee, Sharan Narang, Michael Matena, Yanqi
+Zhou, Wei Li, and Peter J Liu. Exploring the limits of transfer learning with a unified text-to-text
+transformer. _JMLR_, 2020.
+
+
+Tianhe Ren, Shilong Liu, Ailing Zeng, Jing Lin, Kunchang Li, He Cao, Jiayu Chen, Xinyu Huang,
+Yukang Chen, Feng Yan, et al. Grounded sam: Assembling open-world models for diverse visual
+tasks. _arXiv preprint arXiv:2401.14159_, 2024.
+
+
+Stephan R Richter, Vibhav Vineet, Stefan Roth, and Vladlen Koltun. Playing for data: Ground truth
+from computer games. In _ECCV_, 2016.
+
+
+Robin Rombach, Andreas Blattmann, Dominik Lorenz, Patrick Esser, and Bj¨orn Ommer. Highresolution image synthesis with latent diffusion models. In _CVPR_, 2022.
+
+
+German Ros, Laura Sellart, Joanna Materzynska, David Vazquez, and Antonio M. Lopez. The
+synthia dataset: A large collection of synthetic images for semantic segmentation of urban scenes.
+In _CVPR_, 2016.
+
+
+Nick Rossenbach, Albert Zeyer, Ralf Schl¨uter, and Hermann Ney. Generating synthetic audio data
+for attention-based speech recognition systems. In _ICASSP_, 2020.
+
+
+Olga Russakovsky, Jia Deng, Hao Su, Jonathan Krause, Sanjeev Satheesh, Sean Ma, Zhiheng
+Huang, Andrej Karpathy, Aditya Khosla, Michael Bernstein, Alexander C. Berg, and Li Fei-Fei.
+ImageNet Large Scale Visual Recognition Challenge. _IJCV_, 2015.
+
+
+Chitwan Saharia, William Chan, Saurabh Saxena, Lala Li, Jay Whang, Emily L Denton, Kamyar
+Ghasemipour, Raphael Gontijo Lopes, Burcu Karagol Ayan, Tim Salimans, et al. Photorealistic
+text-to-image diffusion models with deep language understanding. In _NeurIPS_, 2022.
+
+
+Mert Bulent Sariyildiz, Karteek Alahari, Diane Larlus, and Yannis Kalantidis. Fake it till you make
+it: Learning transferable representations from synthetic imagenet clones. In _CVPR_, 2023.
+
+
+Axel Sauer, Dominik Lorenz, Andreas Blattmann, and Robin Rombach. Adversarial diffusion distillation. _arXiv preprint arXiv:2311.17042_, 2023.
+
+
+Patrick Schramowski, Christopher Tauchmann, and Kristian Kersting. Can machines help us answering question 16 in datasheets, and in turn reflecting on inappropriate content? In _FAccT_,
+2022.
+
+
+Patrick Schramowski, Manuel Brack, Bj¨orn Deiseroth, and Kristian Kersting. Safe latent diffusion:
+Mitigating inappropriate degeneration in diffusion models. In _CVPR_, 2023.
+
+
+Florian Schroff, Dmitry Kalenichenko, and James Philbin. Facenet: A unified embedding for face
+recognition and clustering. In _CVPR_, 2015.
+
+
+Christoph Schuhmann, Romain Beaumont, Richard Vencu, Cade Gordon, Ross Wightman, Mehdi
+Cherti, Theo Coombes, Aarush Katta, Clayton Mullis, Mitchell Wortsman, et al. Laion-5b: An
+open large-scale dataset for training next generation image-text models. _NeurIPS_, 2022.
+
+
+Piyush Sharma, Nan Ding, Sebastian Goodman, and Radu Soricut. Conceptual captions: A cleaned,
+hypernymed, image alt-text dataset for automatic image captioning. In _ACL_, 2018.
+
+
+Konstantin Shmelkov, Cordelia Schmid, and Karteek Alahari. How good is my gan? In _ECCV_,
+2018.
+
+
+Mohit Shridhar, Lucas Manuelli, and Dieter Fox. Cliport: What and where pathways for robotic
+manipulation. In _CoRL_, 2022.
+
+
+Yonglong Tian, Lijie Fan, Phillip Isola, Huiwen Chang, and Dilip Krishnan. Stablerep: Synthetic
+images from text-to-image models make strong visual representation learners. In _NeurIPS_, 2023.
+
+
+Yonglong Tian, Lijie Fan, Kaifeng Chen, Dina Katabi, Dilip Krishnan, and Phillip Isola. Learning
+vision from models rivals learning vision from data. In _CVPR_, 2024.
+
+
+13
+
+
+Simon Vandenhende, Stamatios Georgoulis, Wouter Van Gansbeke, Marc Proesmans, Dengxin Dai,
+and Luc Van Gool. Multi-task learning for dense prediction tasks: A survey. _TPAMI_, 2021.
+
+
+G¨ul Varol, Javier Romero, Xavier Martin, Naureen Mahmood, Michael J. Black, Ivan Laptev, and
+Cordelia Schmid. Learning from synthetic humans. In _CVPR_, 2017.
+
+
+Weijia Wu, Zhuang Li, Yefei He, Mike Zheng Shou, Chunhua Shen, Lele Cheng, Yan Li, Tingting
+Gao, Di Zhang, and Zhongyuan Wang. Paragraph-to-image generation with information-enriched
+diffusion model. _arXiv preprint arXiv:2311.14284_, 2023.
+
+
+J. Xiao, J. Hays, K. A. Ehinger, A. Oliva, and A. Torralba. Sun database: Large-scale scene recognition from abbey to zoo. In _CVPR_, 2010.
+
+
+Hu Xu, Saining Xie, Xiaoqing Ellen Tan, Po-Yao Huang, Russell Howes, Vasu Sharma, Shang-Wen
+Li, Gargi Ghosh, Luke Zettlemoyer, and Christoph Feichtenhofer. Demystifying clip data. _arXiv_
+_preprint arXiv:2309.16671_, 2023.
+
+
+Yiben Yang, Chaitanya Malaviya, Jared Fernandez, Swabha Swayamdipta, Ronan Le Bras, Ji-Ping
+Wang, Chandra Bhagavatula, Yejin Choi, and Doug Downey. Generative data augmentation for
+commonsense reasoning. In _EMNLP_, 2020.
+
+
+Peter Young, Alice Lai, Micah Hodosh, and Julia Hockenmaier. From image descriptions to visual
+denotations: New similarity metrics for semantic inference over event descriptions. _TACL_, 2014.
+
+
+Qiying Yu, Quan Sun, Xiaosong Zhang, Yufeng Cui, Fan Zhang, Yue Cao, Xinlong Wang, and
+Jingjing Liu. Capsfusion: Rethinking image-text data at scale. _arXiv preprint arXiv:2310.20550_,
+2023a.
+
+
+Zhuoran Yu, Chenchen Zhu, Sean Culatana, Raghuraman Krishnamoorthi, Fanyi Xiao, and Yong Jae
+Lee. Diversify, don’t fine-tune: Scaling up visual recognition training with synthetic images.
+_arXiv preprint arXiv:2312.02253_, 2023b.
+
+
+Jianhao Yuan, Jie Zhang, Shuyang Sun, Philip Torr, and Bo Zhao. Real-fake: Effective training data
+synthesis through distribution matching. In _ICLR_, 2024.
+
+
+Xiaohua Zhai, Basil Mustafa, Alexander Kolesnikov, and Lucas Beyer. Sigmoid loss for language
+image pre-training. _ICCV_, 2023.
+
+
+Yongchao Zhou, Hshmat Sahak, and Jimmy Ba. Training on thin air: Improve image classification
+with generated data. _arXiv preprint arXiv:2305.15316_, 2023.
+
+
+14
+
+
+In this appendix, we provide further details and evaluations of SynthCLIP. More specifically, we
+first compare to concurrent works in Section A. In Section B, we present further analysis on the
+number of concepts covered in real and synthetic datasets. We give details on our preliminary
+investigations for discussion purposes in Section C. Section D presents an alternative training mixing
+real and synthetic data. In Section E, we tackled potential questions related to the usage of Stable
+Diffusion (Rombach et al., 2022). Finally, in Section F we further discuss limitations.
+
+
+A COMPARISON WITH CONCURRENT WORKS
+
+
+We now discuss our positioning with respect to recent concurrent works.
+
+
+    - **Concepts.** In Fan et al. (2024), they propose a study on large-scale training of synthetic data
+for supervised learning and CLIP paradigms. They restrict the concept bank to ImageNet
+classes and provide several techniques to prompt text-to-image models. We refer the reader
+to section 3.1 of Fan et al. (2024) for more details on the different proposed prompting
+techniques and TTI generation pipeline. In the supervised setting, it is clear from Table-A7
+of their supplementary material that the performance of training on synthetic data becomes
+comparable when there are **8 times** more synthetic data available at classifier free configuration scale of 2. Beyond that, the performance of training on synthetic data starts to saturate.
+Additionally, in that work, the authors assume some class-priors and restrict their training
+to ImageNet classes, which has been shown in Hammoud et al. (2024) not to be generalizable to classes that are significantly different than those in ImageNet. Additionally, as
+mentioned in Section 5, training on a larger concept bank may lead to a better performance
+on long-tail concepts and hence the importance of covering many concepts during training
+beyond ImageNet classes. In Tian et al. (2024), the generation is also conditioned on the
+downstream classes. We refer the reader to Table-11 of their supplementary material. This
+gives you an unfair advantage over real data that is not necessarily conditioned on these
+classes (Section 4.3). For StableRep, they require the existence of real captions which they
+utilize as prompts for TTI model which is not scalable and have a limited effectiveness
+compared to synthetic higher quality captions (Section 4.3).
+
+
+    - **CLIP-specific** **tasks.** The main difference in our work is that we focus on CLIP-related
+tasks in a holistic manner. Indeed, Fan et al. (2024) only proposes zero-shot evaluation,
+with no reasoning about how different tasks are impacted. Tian et al. (2024) only proposes
+very limited experiments with linear probing on ImageNet. Instead, we focus on 5 different
+tasks, and contextualize separately the effects of synthetic data on different tasks.
+
+
+    - **Data generation pipeline.** Fan et al. (2024) uses multiple strategies for captions generation, that do not necessarily work with large concept banks. We also provide an experiment
+on this in B.3. Tian et al. (2024) generation pipeline is the most similar to ours, but relies
+on in-context examples generated by GPT-4. In our preliminary experiments, we verify
+that caption generation with in-context learning on Mistral 7B causes the model to collapse
+(Section B), generating variations of the in-context samples by just replacing _c_ . Hence, our
+designed prompt is more adaptable to different models, as we show in Table 3b of the main
+paper.
+
+
+B ADDITIONAL ABLATION STUDIES
+
+
+B.1 CONCEPT APPEARANCE
+
+
+In this section, we examine the presence of concepts from our extensive 500 _×_ 10 [3] concept bank
+within real text-image datasets like CC3M and CC12M, as well as our SynthCI synthetic datasets.
+Our method involves substring matching, where we identify and count the occurrences of each
+concept within the captions of these datasets. This count reveals how frequently different concepts
+appear, particularly those occurring more than a specified number of times ( _k_ ).
+
+
+Table 5 summarizes these findings. Notably, even the smallest SynthCI-3M dataset contains significantly more concepts than the larger real CC12M dataset, surpassing it by nearly 2.5 times in terms
+of concepts appearing at least once ( _k_ = 1). This trend of broader concept coverage in SynthCI
+
+
+15
+
+
+|Dataset|Concept Appearance<br>k = 1 k = 25 k = 50|Average Appearance<br>k ≥25|
+|---|---|---|
+|CC3M<br>SynthCI-3M|3_._9_ ×_ 104<br>1_._8_ ×_ 104<br>1_._4_ ×_ 104<br>3_._0_ ×_ 105<br>3_._6_ ×_ 104<br>2_._3_ ×_ 104|1_._4_ ×_ 103<br>1_._0_ ×_ 103|
+|CC12M<br>SynthCI-8.8|1_._3_ ×_ 105<br>4_._8_ ×_ 104<br>3_._7_ ×_ 104<br>3_._4_ ×_ 105<br>2_._3_ ×_ 105<br>5_._6_ ×_ 104|2_._0_ ×_ 103<br>6_._2_ ×_ 102|
+|SynthCI-10M<br>SynthCI-20M<br>SynthCI-30M|3_._4_ ×_ 105<br>2_._3_ ×_ 105<br>8_._5_ ×_ 104<br>3_._4_ ×_ 105<br>2_._3_ ×_ 105<br>1_._9_ ×_ 105<br>3_._5_ ×_ 105<br>2_._4_ ×_ 105<br>1_._9_ ×_ 105|7_._0_ ×_ 102<br>1_._4_ ×_ 103<br>2_._0_ ×_ 103|
+
+
+Table 5: **Concept Appearance in Real vs. Syn-**
+**thetic** **Datasets.** We compares the frequency
+of concept appearances in real datasets (CC3M,
+CC12M) and their synthetic counterparts. We
+report the number of concepts that appear at
+least _k_ times, along with the average appearances for concepts occurring at least 25 times.
+
+
+|D (×a 1ta 06) S (a ×m 1p 06le )s Backbone|Lin. Prob. Few-shot Img Ret. Text Ret. IN 0-shot|
+|---|---|
+|SynthCI-3.3M<br>3.3<br>ViT-B<br>ViT-S|**63.7**<br>**73.8**<br>**33.9**<br>**46.0**<br>**9.5**<br>59.5<br>70.3<br>29.2<br>39.7<br>8.1|
+|SynthCI-10M<br>10<br>ViT-B<br>ViT-S|**72.5**<br>**81.2**<br>**52.9**<br>**69.0**<br>**20.9**<br>69.1<br>79.4<br>50.9<br>66.4<br>18.1|
+
+
+datasets persists even when increasing the threshold to _k_ = 25 or _k_ = 50. An intriguing aspect
+is the average number of samples per concept. The last column of Table 5 shows the average frequency of concept occurrences, considering only those appearing at least 25 times. While CC3M
+and CC12M, with fewer overall concepts, exhibit a higher average of samples per concept, our SynthCI datasets generally show lower averages. However, SynthCI-30M shows the same average as
+real datasets, particularly CC12M. This similarity in samples per concept at 30M scale could be a
+key factor in SynthCI-30M matching the performance of CC12M.
+
+
+B.2 MODEL SIZE
+
+
+In order to study further the effect of model scaling, we extend the training of the smaller transformer
+ViT-S using Synth-10M. We compare with the results reported in the main paper (Table 3c), while
+reporting new average results in all tasks in Table 6. We noticed that the SynthCLIP training greatly
+benefits from further data variability, while performances gap between different transformers sizes
+are not significantly changed. This further advocates for the stability of the training resulting from
+our data synthesis pipeline.
+
+
+B.3 LLM USAGE
+
+
+We ablate the importance of the LLM by removing it completely from our generation pipeline and
+replacing that with CLIP templates for zero-shot classification (Radford et al., 2021b). The rest
+of our pipeline is unchanged. We generate 3 million samples and train a CLIP model on top of
+this newly generated set. We call this model NaiveCLIP. We evaluated vision-language tasks, in
+particular zero-shot classification (ZS), text retrieval (TR), and image retrieval (IR), as presented in
+Section 4.1 of the main paper. We report for NaiveCLIP/SynthCLIP 2.0/ **9.1** for ZS, 2.9/ **33.9** for IR,
+5.1/ **46.0** for TR. From our results, it is evident how the presence of the LLM is necessary to grant
+the best performance for vision-language tasks.
+
+
+B.4 PROMPT ENGINEERING
+
+
+In this section we showcase alternative attempts to generate synthetic captions.
+
+
+**Attempt** **1** **-** **Generate** **Captions** **without** **Any** **Conditioning** In our first attempt, we tried to
+let LLM generate any topic without any conditioning. This was done using the prompt shown in
+Figure 5. Unfortunately, the captions were overly descriptive and hard for the text-to-image model
+to generate images for. Moreover, they were always focused on nature, resulting in low variability
+unsuitable for CLIP training. Examples of generated captions are:
+
+
+    - A sunlit garden: vibrant roses bloom against a brick wall,
+butterflies dance around, water droplets sparkle on leaves,
+soft focus, balanced composition.
+
+
+16
+
+
+Table 6: **Model** **size** **ablation.** Bigger models
+such as ViT-B benefit more from the provided
+data, as expected. This proves the correctness
+of our data synthesis procedure.
+
+
+Figure 6: **Attempt 2 - Topics Bank**
+
+
+    - Sunset over tranquil lake: A solitary kayaker paddles
+through golden reflection, mountains in distance bathed in
+warm light. Focus on kayaker’s determined face, balanced
+composition. Soft toned, impressionistic brushstrokes.
+
+    - A sunlit garden: vibrant roses bloom against a weathered
+brick wall, butterflies dance around ripe strawberries on
+a red table, children play nearby, laughter echoes softly.
+Warmth radiates from every detail.
+
+
+**Attempt 2 - Generate Captions Using a Topics Bank** Instead of having a concept bank that we
+generate synthetic captions for, our first attempt was to try having a broader list of topics, _i.e_ . a topic
+bank, used for conditional generation. Particularly, we used the topics shown in Figure 6 and then
+used the prompt shown in Figure 7 to generate the captions.
+
+
+The observed issue is that for each topic the LLM had some kind of favourable instance. For example
+for ”Wild Animals”, most generated captions were about leopards:
+
+
+    - In the desert, a leopard is dragging its kill.
+
+    - A leopard carries its prey through the arid desert
+landscape.
+
+
+17
+
+
+Figure 5: **Attempt 1 - Captions Generation Prompt**
+
+
+Figure 7: **Attempt 2 - Captions Generation Prompt**
+
+
+    - The majestic snow leopard roams high within Himalayas
+mountain range territory.
+
+
+This issue was not resolvable by adjusting the prompt or parameters of the LLM including the seed,
+temperature and top-p value. Interestingly, this signals that biases in concept-oriented generations in
+LLM are significant regardless the amount of data they are trained on. Since we were mostly interested in maximizing the variability of generated concepts, we opted for the concept-based generation
+pipeline presented in Section 3.1.
+
+
+**Attempt** **3** **-** **Using** **in-context** **learning** Additionally we tried prompting the language model by
+providing in-context sample prompts to guide the generation. In our tested settings, this causes the
+model to repeat often the in-context prompt, while modifying the concept _c_ . For example, if an
+in-context sample about _c_ = ‘‘cat’’ is provided as “A beautiful cat sitting near
+Eiffel tower” and the target concept _c_ = ‘‘dog’’, the generated caption is “A beautiful
+dog sitting near Eiffel tower”. Instead, our engineered prompt allows us to generate
+variable samples by only conditioning on _c_ .
+
+
+C DETAILS ON DISCUSSION
+
+
+**Long-tail** **effects** In Section 5, we highlight the increased performance on long-tail distributions.
+The concepts we use for the evaluation are: “amber” “chicks” “crystal” “crystal ~~b~~ all”
+“loincloth” “rose” “sandcastles” “sundress” “veggies” “x-ray”. Although we
+outperform CLIP considerably, we still report that 44.18 in zero-shot classification is remarkable
+for unseen classes. We attribute this behavior to the presence of similar concepts in CC12 ( _e.g_ .
+“dress”).
+
+
+**Safety** As anticipated in Section 5, we performed preliminary safety analysis on the concepts in _C_ .
+We use LLaMA-3 (Meta, 2024) to process the input concepts with the following prompt:
+
+
+18
+
+
+**1000**
+
+**1001**
+
+**1002**
+
+
+**1003**
+
+**1004**
+
+**1005**
+
+**1006**
+
+**1007**
+
+**1008**
+
+
+**1009**
+
+**1010**
+
+**1011**
+
+**1012**
+
+**1013**
+
+
+**1014**
+
+**1015**
+
+**1016**
+
+**1017**
+
+**1018**
+
+**1019**
+
+
+**1020**
+
+**1021**
+
+**1022**
+
+**1023**
+
+**1024**
+
+**1025**
+
+
+|Network|CC12M SynthCI<br>samples (×106) samples (×106)|Lin. Prob. Few-shot Img Ret. Text Ret. IN 0-shot|
+|---|---|---|
+|CLIP|8.8<br>-|76.7<br>84.9<br>58.9<br>71.7<br>33.6|
+|SynthCLIP|-<br>20<br>-<br>30|74.6<br>83.4<br>59.0<br>75.7<br>28.0<br>75.0<br>84.9<br>61.7<br>77.1<br>30.5|
+|_Mixed_|8.8<br>11.2|**78.7**<br>**87.0**<br>**64.7**<br>**79.6**<br>**39.1**|
+
+
+Table 7: **Quantitative** **evaluation** **on** **mixed** **real-synthetic** **data** . _Mixed_ is obtained by mixing
+8.8M real samples of CC12M and 11.2M synthetic samples from SynthCI-20M. Mixing real data
+with synthetic not only outperforms the best real checkpoint (CLIP on CC12M) and SynthCLIP on
+the same data scale, but it also outperforms our best SynthCLIP model.
+
+|Network|Lin. Prob. Few-shot Img Ret. Text Ret. IN 0-shot|
+|---|---|
+|OpenAI CLIP|85.7<br>92.4<br>75.6<br>88.1<br>**68.6**|
+|OpenAI CLIP + SynthCI fnetuning|**85.8**<br>**92.6**<br>**78.1**<br>**89.8**<br>66.7|
+
+
+Table 8: **Finetuning the OpenAI CLIP** . The OpenAI CLIP text encoder is used in Stable Diffusion.
+To prove that our pipeline is not limited by its performance, we finetune it on SynthCI for a reduced
+number of steps. This is sufficient to improve performance on almost all tasks, proving that our data
+creation pipeline allows the creation of novel content.
+
+
+This results in 3.15% of concepts being flagged. Upon manual inspection, the classification seems
+reliable. We report selected examples of filtered concepts (Warning: potentially offensive content):
+“pornography”, “naked”, “drunk”, “weed”, “escort”.
+
+
+D TRAINING ON MIXED REAL DATA
+
+
+While mixed training is beyond the scope of our work, we conduct preliminary experiments to
+understand whether SynthCI could be used jointly to real data for boosting SynthCLIP performance.
+To do that, we train on a _Mixed_ setup, in which we combine CC12M with 11 _._ 2 _×_ 10 [6] synthetic
+samples from SynthCI, totaling 20 _×_ 10 [6] captioned images. Note that this allows to compare a
+SynthCLIP model trained with the same computational costs, trained on SynthCI-20M. We find
+that this indeed improves the performance over pre-training on SynthCI-30M and CC12M across all
+benchmarks as seen in Table 7. This means that our synthetic text-image generation pipeline could
+be used in conjunction with existing large-scale curated datasets to achieve the best performance, in
+agreement with the literature (Yuan et al., 2024; He et al., 2023).
+
+
+E DISCUSSION ON STABLE DIFFUSION
+
+
+Stable Diffusion v1.5 uses the OpenAI CLIP textual encoder for prompt encoding, and it is one of
+the most popular choices for TTI generation. One may argue that this would limit the possibilities
+of SynthCLIP to the OpenAI CLIP performance. First, let us highlight how _only the textual encoder_
+_of CLIP is used in Stable Diffusion_ . CLIP is defined as a pair of encoders mapping text and images
+to a joint embedding (Radford et al., 2021b). While Stable Diffusion uses a pre-trained CLIP text
+encoder for prompt interpretation, the CLIP visual encoder is not used anywhere in the pipeline.
+Also, the usage of CLIP for textual encoding is a design choice in Stable Diffusion, but other popular
+models such as Imagen (Saharia et al., 2022) rely on textual encoders like T5-XXL (Raffel et al.,
+
+
+19
+
+
+**1026**
+
+**1027**
+
+
+**1028**
+
+**1029**
+
+**1030**
+
+**1031**
+
+**1032**
+
+**1033**
+
+
+**1034**
+
+**1035**
+
+**1036**
+
+**1037**
+
+**1038**
+
+**1039**
+
+
+**1040**
+
+**1041**
+
+**1042**
+
+**1043**
+
+**1044**
+
+
+**1045**
+
+**1046**
+
+**1047**
+
+**1048**
+
+**1049**
+
+**1050**
+
+
+**1051**
+
+**1052**
+
+**1053**
+
+**1054**
+
+**1055**
+
+**1056**
+
+
+**1057**
+
+**1058**
+
+**1059**
+
+**1060**
+
+**1061**
+
+**1062**
+
+
+**1063**
+
+**1064**
+
+**1065**
+
+**1066**
+
+**1067**
+
+
+**1068**
+
+**1069**
+
+**1070**
+
+**1071**
+
+**1072**
+
+**1073**
+
+
+**1074**
+
+**1075**
+
+**1076**
+
+**1077**
+
+**1078**
+
+**1079**
+
+
+2020) trained on text only, hence training on the text-images real datasets of CLIP is not strictly
+necessary for the SynthCLIP pipeline.
+
+
+To prove that we are not limited by the pretrained text encoder performance, we fine-tune the OpenAI CLIP (ViT-B/16), pre-trained on 400 million captioned images, on SynthCI. The finetuning is
+done on 1M samples, for a single optimization step, in order to avoid loss of performance due to
+catastrophic forgetting. We report results in Table 8, where we improve over the baseline in four
+tasks out of five, with ∆MTL =+0 _._ 56%. Our improved performance suggests that our approach
+allows us to extend even the capabilities of the CLIP model used in the text-to-image pipeline, by
+adding more synthetic data to the training.
+
+
+F LIMITATIONS
+
+
+Here, we discuss limitations. The most evident disadvantage of synthetic CLIP models is the computational effort required to generate the training dataset, which may lead to a high carbon impact.
+Our generation process currently takes approximately 6.5 days using a 48-A100-80GB GPU cluster, equivalent to 313 GPU days. However, recent advancements in text-to-image and large language
+models have not only enhanced generation quality but also accelerated inference speeds (Sauer et al.,
+2023; Kwon et al., 2023). With continual technological advancements, we anticipate a reduction in
+the time required for generation, leading to more efficient and scalable end-to-end approaches. Future research should include further experimentation with various language models, text-to-image
+generators, and caption generation prompts to identify optimal configurations for improvement.
+Moreover, there may be concerns related to copyright issues and memorization in text-to-image
+diffusion models (Carlini et al., 2023). With the advancements in differential privacy for generative
+models (Cao et al., 2021), these could be solved in the near future. Finally, we acknowledge that
+although we train our CLIP on synthetic data only, both the LLM and the TTI have been trained on
+real data. Nevertheless, it is well-known the capacity of generative networks to create new content
+_not included_ in the dataset (Rombach et al., 2022), factor also proved in our experiments.
+
+
+G ADDITIONAL DETAILS ON ∆MTL
+
+
+MTL Vandenhende et al. (2021) is a metric that evaluates the relative performance across multiple
+tasks by normalizing improvements or degradations with respect to baseline performance. Specifically: For each task _i_, given its baseline performance _bi_, observed performance _mi_, and direction of
+improvement _gi_ (0 if higher values are better, 1 if lower values are better), the relative performance
+improvement or degradation is computed as:
+
+
+∆ _i_ = ( _−_ 1) _[g][i]_ [ (] _[m][i][ −]_ _[b][i]_ [)]
+
+_bi_
+
+
+The final MTL score is the mean of all task-level relative performance scores, expressed as a percentage:
+
+
+         - _N_
+_i_ =1 [∆] _[i]_
+∆MTL = _×_ 100
+
+_N_
+
+
+H ZERO SHOT PERFORMANCE ON ROBUSTNESS IMAGENET VARIANTS
+
+
+In an attempt to understand the effective robustness of CLIP models trained on real data, synthetic data, and hybrid-approaches we explore the performance of various models on ImageNetV2,
+ImageNet-A, ImageNet-R, ImageNet-O, ImageNet-Sketch, and ObjectNet. The results are summarized in Table 9 and show that training on purely synthetic data does not exhibit better performance
+on robustness datasets. However, the Mixed (hybrid) baseline from Table 7 and the Finetuning
+(hybrid) baseline from Table 2 (last row) outperform training on real only (CC12M) and synthetic
+only (SynthCI-30M) datasets. We hypothesize that this is due to the mitigation of distribution shift
+due to the inclusion of real data, allowing to exploit the superior quality of the synthetic ones, with
+improved text-image alignment and concept coverage.
+
+
+20
+
+
+**1080**
+
+**1081**
+
+
+**1082**
+
+**1083**
+
+**1084**
+
+**1085**
+
+**1086**
+
+**1087**
+
+
+**1088**
+
+**1089**
+
+**1090**
+
+**1091**
+
+**1092**
+
+**1093**
+
+
+**1094**
+
+**1095**
+
+**1096**
+
+**1097**
+
+**1098**
+
+
+**1099**
+
+**1100**
+
+**1101**
+
+**1102**
+
+**1103**
+
+**1104**
+
+
+**1105**
+
+**1106**
+
+**1107**
+
+**1108**
+
+**1109**
+
+**1110**
+
+
+**1111**
+
+**1112**
+
+**1113**
+
+**1114**
+
+**1115**
+
+**1116**
+
+
+**1117**
+
+**1118**
+
+**1119**
+
+**1120**
+
+**1121**
+
+
+**1122**
+
+**1123**
+
+**1124**
+
+**1125**
+
+**1126**
+
+**1127**
+
+
+**1128**
+
+**1129**
+
+**1130**
+
+**1131**
+
+**1132**
+
+**1133**
+
+
+Table 9: **Performance** **on** **Robustness** **Datasets.** Where as training on real data only (CC12M)
+outperforms training on synthetic data only (SynthCI-30M), the hybrid training from Table 7 outperforms both baselines.
+
+|Dataset ImageNet1K|ImageNetv2 ImageNet-A ImageNet-R ImageNet-O ImageNet-Sketch ObjectNe|
+|---|---|
+|**CC12M**<br>34.7<br>**SynthCI-30M**<br>30.7|28.8<br>8.32<br>44.4<br>39.9<br>22.9<br>20.3<br>27.0<br>7.42<br>30.0<br>28.6<br>11.9<br>18.6|
+|**Mixed (from Table 7)**<br>39.9<br>**Finetuning (Last Row Table 2)**<br>38.6|34.2<br>12.4<br>50.0<br>40.6<br>26.1<br>26.5<br>33.6<br>13.3<br>47.9<br>38.3<br>24.3<br>25.4|
+
+
+Table 10: **Comparing** **3M** **Datasets.** We compare the performance of SynthCI-3M a purely synthetic trained baseline to the performance of training a CLIP model on CC3M and LAION-3M.
+LAION-3M is a random 3M subset from LAION-2B.
+
+
+**Dataset** **ZS** **IR** **TR** **LP** **FS**
+
+
+**CC3M** 14.9 33.7 42.9 63.3 74.2
+**LAION-3M** 14.5 24.4 33.3 66.7 77.6
+
+
+**SynthCI-3M** 9.5 33.9 46.0 63.7 73.8
+
+
+I LAION-3M: EXPLORING A 3M SUBSET FROM LAION
+
+
+To supplement our experiments, we run a baseline on 3M samples taken from LAION-2B Schuhmann et al. (2022). The results are summarized in Table 10 where we find that LAION-3M exhibits
+better performance when it comes to linear probing (LP) and few shot (FS) results compared to both
+SynthCI-3M and CC3M. However, due to the noisy nature of LAION captions, this also leads to
+a big drop in image retrieval (IR) and text retrieval (TR) results where LAION-3M lags by around
+10% to both CC3M and SynthCI-3M in both IR and TR. This further showcases the advantages of
+having aligned captions and images in the SynthCLIP generation.
+
+
+J ERROR COEFFICIENTS
+
+
+We aim to evaluate how the error decreases by increasing the size of the dataset. To do so, we
+plot in Figure 8 the error coefficients for both real and synthetic data for the 5 different tasks that
+we evaluated on. We use a linear regression to plot the error coefficients by fitting on the reported
+accuracy values across tasks. Interestingly, we notice similar error coefficients across tasks. This is
+most likely due to the distribution shift between real and synthetic data. As diffusion models advance
+towards generating more realistic images, we believe this gap will continue to narrow, resulting in
+greater benefits from synthetic data across various tasks.
+
+
+|Col1|Col2|Col3|S<br>S|ynthetic<br>ynthetic|data<br>fit|
+|---|---|---|---|---|---|
+||||<br>R<br>R|<br>eal data<br>eal fit||
+|||||||
+|||||||
+
+
+|Col1|Col2|Col3|Col4|Col5|Col6|
+|---|---|---|---|---|---|
+|||||||
+|||||||
+|||||||
+
+
+|Col1|Col2|Col3|Col4|Col5|Col6|
+|---|---|---|---|---|---|
+|||||||
+|||||||
+|||||||
+
+
+|Col1|Col2|Col3|Col4|Col5|Col6|
+|---|---|---|---|---|---|
+|||||||
+|||||||
+|||||||
+
+
+|Col1|Col2|Col3|Col4|Col5|Col6|
+|---|---|---|---|---|---|
+|||||||
+|||||||
+|||||||
+
+
+Figure 8: **Error.** Across different tasks, the error tend to decrease in a similar way. This advocates
+for new techniques compensating the distribution shift to boost all tasks simultaneously.
+
+
+21
+
+
+Dataset size (millions)
+
+
+Dataset size (millions)
+
+
+Dataset size (millions)
+
+
+Dataset size (millions)
+
+
+0.5
+
+
+1.0
+
+
+1.5
+
+
+Dataset size (millions)

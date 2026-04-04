@@ -1,0 +1,2794 @@
+000
+001
+002
+003
+004
+005
+006
+007
+008
+009
+010
+011
+012
+013
+014
+015
+016
+017
+018
+019
+020
+021
+022
+023
+024
+025
+026
+027
+028
+029
+030
+031
+032
+033
+034
+035
+036
+037
+038
+039
+040
+041
+042
+043
+044
+045
+046
+047
+048
+049
+050
+051
+052
+053
+FAST AND SCALABLE INVERSION OF CONVOLUTION
+LAYERS
+Anonymous authors
+Paper under double-blind review
+ABSTRACT
+Data inversion in neural networks allows to map intermediate network variables
+to their input source. Inversion of convolutional layers is not straightforward
+and is often performed approximately by training additional inversion networks.
+Approaching this as a linear operator inversion problem requires extremely large
+computational and memory resources, as huge matrices are involved. In this work
+we present Scalable TRimmed Iterative Projections (STRIP), a fast and sparse
+linear solver dedicated to the convolutional inversion problem.
+We take advantage of the neural convolution structure to design a series of very
+fast projections (following the block Kaczmarz paradigm). We prove conditions for
+convergence for the two-strip case and propose a measure to estimate the rate of
+error reduction for the general case. In practice, we show that a single pass over
+the inversion matrix by STRIP can almost perfectly solve the inversion problem.
+Our algorithm is fast, low on memory and can scale to very large matrices. We do
+not have to store the linear matrix to be inverted, hence can surpass by 3 orders of
+magnitude linear sparse solvers, such as conjugate gradient. Extensive experiments
+demonstrate that our method considerably outperforms the best competing solvers
+by both speed and memory footprint. We further show that a single STRIP iteration
+is more accurate than transposed convolutions, motivating the use of such methods
+in U-Net architectures.
+Figure 1: Comparison of our proposed method (STRIP) against classical sparse iterative solvers
+on the CelebA-HQ dataset (2562 pixels), for a 16 output channels convolutional layer. The top
+row shows reconstructions after a single iteration, with corresponding PSNR values relative to the
+ground truth image. The bottom row depicts reconstructions at the first iteration where each baseline
+surpasses the PSNR of STRIP after one iteration, along with the required iteration count and runtime.
+1
+
+
+054
+055
+056
+057
+058
+059
+060
+061
+062
+063
+064
+065
+066
+067
+068
+069
+070
+071
+072
+073
+074
+075
+076
+077
+078
+079
+080
+081
+082
+083
+084
+085
+086
+087
+088
+089
+090
+091
+092
+093
+094
+095
+096
+097
+098
+099
+100
+101
+102
+103
+104
+105
+106
+107
+1
+INTRODUCTION
+Convolutional layer inversion is a highly relevant research direction due to its close connection with
+widely used encoder-decoder architectures such as U-Net (Ronneberger et al., 2015), which play a
+central role in diffusion models during the reverse process. In these architectures, the encoder branch
+primarily employs convolutional layers to extract informative image features, while the decoder aims
+to accurately reconstruct the original image from these representations. Achieving reliable image
+reconstruction therefore requires the ability to effectively invert the operation of convolutional layers.
+However, in most cases the encoder-decoder pipeline is trained jointly in an end-to-end manner.
+That is, most existing inversion techniques rely on learnable models, often overlooking the inherent
+mathematical properties of convolutional operations.
+Our approach, a variant of the block Kaczmarz family of methods (Elfving, 1980; Needell & Tropp,
+2014), formulates convolutional inversion as a linear system. This perspective enables us to directly
+exploit the structural attributes of the convolutional layer’s matrix. By leveraging this structure,
+we design a fast-converging iterative inversion algorithm that achieves both efficiency and reliable
+reconstruction.
+Our work provides mathematically grounded insights and establishes feasible conditions for fast
+convergence to the analytic solution, which is the pseudoinverse (PINV).
+Our main contributions are:
+1. We tackle the problem of convolutional layer inversion in a non-learning setting, relying on
+linear algebra fundamentals to derive the solution.
+2. Unlike existing block Kaczmarz algorithms, our method is tailored specifically to convolu-
+tional layer matrices, enabling us to utilize their structure for an informed strip selection
+strategy that accelerates convergence.
+3. Our algorithm avoids constructing the full or even sparse representation of the convolutional
+matrix, which becomes highly expensive in high dimensional settings - unlike many standard
+iterative solvers.
+4. We provide a mathematical justification for our strip based partitioning scheme and explain
+the reasoning underlying our design choices.
+2
+RELATED WORK
+Neural network inversion has become an active and rapidly evolving area of research. Much of the
+recent work focuses on interpretability, aiming to better understand the decision-making process of
+neural networks and to reveal their invariances, weaknesses, and blind spots (Rathjens et al., 2024;
+Suhail & Sethi, 2024; Zeiler & Fergus, 2014; Fel et al., 2023).
+Another prominent line of work addresses deconvolution for tasks such as denoising and deblurring.
+It is important to note, however, that the operation of a convolution layer in a neural network differs
+from classical convolution. In the classical case, convolution involves flipping the kernel before
+computing the weighted sum, while in neural networks the operation corresponds to cross-correlation.
+More importantly, neural network convolution layers operate simultaneously across multiple input
+channels, whereas classical convolution typically applies to a single channel (or separately across
+channels in the multi-channel setting). This distinction explains why classical approaches such as
+FFT-based deconvolution (Cooley & Tukey, 1965) or Wiener filtering (Wiener, 1949) are not directly
+applicable to convolution layer inversion in neural networks. These methods assume the properties
+of classical convolution and therefore fail to capture the multi-channel structure inherent in modern
+convolutional layers (for further discussion, see Appendix A.1).
+Many inversion approaches rely on learnable models, including neural networks and more recently
+diffusion-based methods, to approximate the mapping from outputs back to inputs. While these
+approaches have achieved impressive results, they often lack the mathematical grounding that
+leverages the forward mapping (input →output) to explicitly construct the inverse mapping (output
+→input). As a result, they are less adaptive to specific scenarios and entail considerable computational
+cost during both training and inference.
+2
+
+
+108
+109
+110
+111
+112
+113
+114
+115
+116
+117
+118
+119
+120
+121
+122
+123
+124
+125
+126
+127
+128
+129
+130
+131
+132
+133
+134
+135
+136
+137
+138
+139
+140
+141
+142
+143
+144
+145
+146
+147
+148
+149
+150
+151
+152
+153
+154
+155
+156
+157
+158
+159
+160
+161
+A widely adopted strategy for implementing convolutional layer inversion in a learnable framework
+is the use of transposed convolution (or up-convolution) layers (Long et al., 2015). This operation is
+most commonly employed in decoder branches of architectures such as U-Net (Ronneberger et al.,
+2015), where it serves to progressively reconstruct spatial structure from compressed representations.
+Transposed convolutions are also frequently used as standalone inversion modules for intermediate
+feature maps in neural networks (Dosovitskiy et al., 2016).These methods can produce strong
+reconstruction results. However, they do not constitute a true mathematical inversion. Moreover,
+they require a costly training phase prior to deployment, which further limits their efficiency and
+adaptability.
+When a convolutional layer is viewed as a linear system, one can leverage classical linear solvers:
+either by analytically inverting the corresponding convolution matrix, or by computing approximate
+solutions through iterative methods, some more traditional including conjugate gradient (Hestenes
+et al., 1952), Gauss Seidel (Seidel, 1873), gradient descent (Cauchy et al., 1847), LSMR (Fong &
+Saunders, 2011) or LSQR (Paige & Saunders, 1982), and some less familiar such as block Kaczmarz
+methods (Elfving, 1980) (more details can be found in Section 3.2). The shortcoming of the former
+lies in its massive memory and time requirements, while the latter often suffers from low accuracy in
+the early iterations and may demand impractically long runtimes to converge. A key limitation of the
+linear system perspective is that it overlooks the specific structure of convolutional layer matrices.
+3
+PRELIMINARIES
+3.1
+SETTING AND NOTATIONS
+We focus on the problem of inverting a convolutional layer in a neural network. A natural way to
+formulate this inversion is as a linear system of equations. By explicitly constructing the matrix
+representation of the convolutional layer, we can regard it as a matrix A, leading to the system:
+Ax = b,
+A ∈Rm×n, x ∈Rn, b ∈Rm.
+(1)
+The setting of interest in our work is the overdetermined regime (m > n), where the system Eq.
+(1) has typically 0 solutions. The solution x∗we strive to find is a solution of the least-squares
+optimization problem:
+x∗= argminx∥Ax −b∥2 = A†b,
+(2)
+where A† denotes the Moore-Penrose (MP) inverse (or pseudoinverse, denoted as PINV) of A. For
+an invertible AT A we have a closed form expression:
+A† = (AT A)−1AT .
+(3)
+When the system is underdetermined (∞solutions), for an invertible AAT we get:
+A† = AT (AAT )−1.
+(4)
+This scenario frequently arises in practical neural networks where an input is mapped to a higher
+number of channels to form richer feature maps. This situation is particularly relevant in architectures
+such as U-Net, where a more efficient alternative to learned transposed convolution layers is desirable
+for the decoding stage.
+We can also define through the PINV the space of solutions by using the matrix kernel. Let the
+null-space of A be
+N(A) := {x ∈Rn | Ax = 0},
+(5)
+where 0 is the zero vector of length n. We define the following kernel matrix K,
+K = I −A†A,
+(6)
+where I is the identity matrix. Then K is the orthogonal projection onto the null-space of A.
+Active Columns: Let Ai ∈Rmi×n be a submatrix of A, that is obtained by selecting mi rows of A.
+The set of active columns of Ai is those columns that contain at least one nonzero entry. The trimmed
+matrix, denoted by ˜Ai, consists of only the active columns of Ai.
+Idempotency: Let A be a square matrix. This matrix is idempotent if A2 = A. The eigenvalues of
+this kind of matrix are either zero or one.
+3
+
+
+162
+163
+164
+165
+166
+167
+168
+169
+170
+171
+172
+173
+174
+175
+176
+177
+178
+179
+180
+181
+182
+183
+184
+185
+186
+187
+188
+189
+190
+191
+192
+193
+194
+195
+196
+197
+198
+199
+200
+201
+202
+203
+204
+205
+206
+207
+208
+209
+210
+211
+212
+213
+214
+215
+Figure 2: Illustration of our method on a two-dimensional toy problem. In the general case (left),
+the iterations gradually approach the solution x∗, requiring multiple updates for convergence. In
+contrast, in the orthogonal case (right), a single full sweep over the matrix is sufficient to reach the
+solution. The notation follows the update rules given in Eq. (9) and Eq. (10).
+3.2
+BLOCK KACZMARZ
+A central challenge in higher dimensions is that explicitly constructing the full matrix A is very
+expensive in terms of memory. To address this, iterative methods have been proposed, among which
+the block Kaczmarz (BK) algorithm is especially appealing. Instead of inverting the full matrix, BK
+operates by selecting one block of rows of A at each iteration, solving the corresponding subproblem.
+The method is closely related to alternating projections (von Neumann, 1933; Bregman, 1965), where
+the original problem is decomposed into smaller subproblems - each corresponding to a subspace
+defined by a block of A - where a solution is reached by iterative projections across subspaces.
+Formally, for the system in Eq. (1), let Ait ∈Rmit×n denote a block of rows of A that is selected
+for the t‘th iteration and bit ∈Rmit the respective block of the right-hand side. The index i is a
+partition of A, and the subindex t indicates iteration. In the general case, the partition can change
+each iteration. At iteration t, the BK update is given by
+x(t+1) = x(t) + A†
+it
+ bit −Aitx(t)
+,
+(7)
+where A†
+it denotes the PINV of the block Ait.
+4
+METHOD
+Our method decomposes the convolutional system into strips and iteratively integrates their solutions
+to approximate the PINV. Unlike the general-purpose BK algorithm, our variant exploits the convolu-
+tional structure to achieve major gains: (i) compute the PINV only in active columns and update the
+corresponding entries of x; (ii) select maximally orthogonal strips to obtain a near-idempotent block
+operator K, accelerating convergence; and (iii) align strip lengths with the cyclic structure so that all
+strips share active columns, allowing reuse of PINV - especially simple in the valid convolution case.
+Consider a convolution layer with kernel k ∈RCout×Cin×Hk×Wk, where Cout is the number of filters
+(output channels), each of dimension RCin×Hk×Wk. The kernel has stride and padding; in our case
+we set padding = 0 for a valid convolution.
+The kernel operates on a batch of input images X ∈RB×Cin×Hin×Win, which we reshape into
+row-major vectors x ∈RCinHinWin×B. The corresponding output is b ∈RCoutHoutWout×B. Defining
+n := CinHinWin, m := CoutHoutWout, we have x ∈Rn×B and b ∈Rm×B.
+We denote by A ∈Rm×n the matrix representation of the convolution layer, so that applying the
+kernel k to X is equivalent to the multiplication Ax. The matrix A is formed by concatenating Cout
+blocks of identical shape (see Figure 7 in Appendix A.2). The number of rows in each block is
+r =
+j
+Hin+2·padding−Hk
+stride
+k
++1 ×
+j
+Win+2·padding−Wk
+stride
+k
++1. A sketch of the convolution layer operation
+as a linear equation system is shown in Figure 7.
+In the BK method we have large degrees of freedom in selecting the sub-linear systems to be
+solved iteratively. For general matrices, random selection is often used. However, in our case we
+4
+
+
+216
+217
+218
+219
+220
+221
+222
+223
+224
+225
+226
+227
+228
+229
+230
+231
+232
+233
+234
+235
+236
+237
+238
+239
+240
+241
+242
+243
+244
+245
+246
+247
+248
+249
+250
+251
+252
+253
+254
+255
+256
+257
+258
+259
+260
+261
+262
+263
+264
+265
+266
+267
+268
+269
+Algorithm 1 STRIP - Scalable TRimmed Iterative Projections
+Input: hb selection which determines S, kernel k, number of iterations T
+1: Initialize: x(0)
+0
+= 0
+2: for t = 0, 1, . . . , T do
+3:
+for s = 1, 2, . . . , S do
+4:
+rs ←select rows(kernel = k, start idx = s ∗hb, num rows = hb)
+5:
+As ←extract conv mat rows(kernel = k, selected rows = rs)
+6:
+cs ←columns of As with nonzero elements - ”active columns”
+7:
+if s = 0 and t = 0 then
+8:
+˜A ←As[:, cs]
+9:
+˜A† ←pinv( ˜A)
+10:
+˜K ←I −˜A† ˜A
+11:
+end if
+12:
+bs ←b[rs, :]
+13:
+x(t)
+s
+←x(t)[:, cs]
+14:
+x(t)
+s
+←˜Kx(t)
+s−1 + ˜A†bs
+15:
+end for
+16: end for
+Output: Approximate solution x(T )
+Figure 3: Matrix trimming. After rows are selected for the strip, most of the columns are trimmed,
+producing a tiny trimmed matrix ˜A. The active columns of both blue and red strips contain the same
+elements, both producing ˜A. This allows to compute the PINV only once for all strips!
+show performance greatly improves by a methodological deterministic selection. These are the
+considerations and solutions we propose:
+1. Inter-block orthogonality: Preserve orthogonality by selecting the same contiguous row
+indices from each block. Partition A into S equal-sized strips, each formed from identical
+row ranges across all blocks (Figure 5, STRIP division).
+2. Equal-sized strips: Ensure the strip size evenly divides r. For each strip, choose a row
+count per block hb such that hb | r, giving total strip height of h := hb · Cout.
+3. Alignment of active columns: To guarantee common active columns for all strips, use valid
+convolution and select rows proportional to row-major shifts (Figure 3). This requires hb to
+divide or multiply l :=
+j
+Win+2·padding−Wk
+stride
+k
++ 1, while still dividing r.
+4. Computational efficiency: For each strip, row indices rs and nonzero columns cs are
+extracted. Since the trimmed matrix ˜A is identical across strips (Section 3.1), we compute
+˜A, ˜A† (Eq. (4)), and ˜K (Eq. (6)) once and reuse them, enabling efficient updates of x.
+The PINV step in row 9 of Algorithm 1 can be computed using several techniques. We tested multiple
+approaches and observed similar results, with a slight advantage for QR decomposition, which was
+selected as default.
+5
+
+
+270
+271
+272
+273
+274
+275
+276
+277
+278
+279
+280
+281
+282
+283
+284
+285
+286
+287
+288
+289
+290
+291
+292
+293
+294
+295
+296
+297
+298
+299
+300
+301
+302
+303
+304
+305
+306
+307
+308
+309
+310
+311
+312
+313
+314
+315
+316
+317
+318
+319
+320
+321
+322
+323
+5
+MATHEMATICAL ANALYSIS
+Our method follows the general BK framework, but introduces a fixed partitioning of the matrix A
+into non-overlapping strips that is reused at every iteration. Consequently, the iteration index t and
+the partition index i are decoupled, unlike in the original formulation of the algorithm. Following
+this decoupling, we show a faster convergence rate in our method. To examine this rate, we use the
+criterion of discrete-time dynamical systems.
+The BK iterative method (Eq. (7)), in our perspective, can be reformulated as
+x(t+1)
+i
+=
+
+I −A†
+iAi
+
+x(t)
+i
++ A†
+ibi,
+(8)
+where the original equation system in Eq. (1) is split into S subsystems. Then, we apply Eq. (7) to
+these S subsystems sequentially, with initial condition x(0)
+0 , to obtain:
+x(t)
+1
+=
+
+I −A†
+1A1
+
+x(t)
+0
++ A†
+1b1
+x(t)
+2
+=
+
+I −A†
+2A2
+
+x(t)
+1
++ A†
+2b2
+...
+x(t)
+S =
+
+I −A†
+SAS
+
+x(t)
+S−1 + A†
+SbS.
+(9)
+Now, for the next round, we update the next initial condition as
+x(t+1)
+0
+= x(t)
+S .
+(10)
+Let the SVD of a matrix A be UΣV T , where U ∈Rm×r and V ∈Rn×r have orthonormal columns,
+and Σ ∈Rr×r contains the nonnegative singular values of A. By applying SVD, and the dagger
+operator under the assumption that every subsystem is underdetermined (Eq. (4)), the equation system
+in Eq. (9) becomes
+x(t)
+1
+=
+ I −V1V T
+1
+
+x(t)
+0
++ V1ˆb1
+...
+x(t)
+S =
+ I −VSV T
+S
+
+x(t)
+S−1 + VSˆbS,
+(11)
+where ˆbi = Σ−1
+i U −1
+i
+bi. For justification see Eq. (17). The update rule is the same (Eq. (10)). From
+Eq. (11) and Eq. (10), one can formulate the relation of x(t)
+0
+to x(t+1)
+0
+as
+x(t+1)
+0
+= Kx(t)
+0
++ B
+(12)
+where
+K =
+S
+Y
+i=1
+ I −ViV T
+i
+
+,
+B =
+S
+X
+j=1
+S
+Y
+i=j+1
+ I −ViV T
+i
+
+Vjˆbj.
+(13)
+The relation between successive iterations in Eq. (12), which is obtained from BK recurrence, has the
+form of a discrete time linear dynamical system. The merits of formulating the recurrence relation as
+such are 1) formulating the explicit solution of this recurrence relation and 2) applying the well-known
+convergence criteria. In what follows, we discuss the solution and conditions for convergence.
+5.1
+KACZMARZ RECURRENCE RELATION AS DYNAMICAL SYSTEM
+BK recurrence relation in Eq. (12) has the form of a linear difference equation with constant constraint.
+Given an initial condition x(0)
+0 , the solution to is
+x(t)
+0
+= Ktx(0)
+0
++
+
+I + K + · · · + Kt−1
+B.
+(14)
+The convergence of this solution depends on the spectrum of K and on the respective eigenvectors.
+The structure of the matrix K, under some conditions, implies idempotency. Let us define a distance
+of the matrix K from idempotency as
+6
+
+
+324
+325
+326
+327
+328
+329
+330
+331
+332
+333
+334
+335
+336
+337
+338
+339
+340
+341
+342
+343
+344
+345
+346
+347
+348
+349
+350
+351
+352
+353
+354
+355
+356
+357
+358
+359
+360
+361
+362
+363
+364
+365
+366
+367
+368
+369
+370
+371
+372
+373
+374
+375
+376
+377
+Definition 1 (Distance from Idempotency). The distance from idempotency is
+K −K2
+F
+(15)
+where K is defined as in Eq. (13).
+Let us denote the column space of Vi by Vi. If the subspaces {Vi}S
+i=1 are orthogonal, the matrix K
+would be equal to K⊥= I −PS
+i=1 ViV T
+i . The other (correlated) addends are for the dependency
+between these subspaces. The matrix K⊥can be interpreted as the ”idempotent” part of K. The
+conditions for convergence are discussed in Appendix E. Our main results are summarized as follows:
+Theorem 2. A linear system as expressed by Eq. (12) and Eq. (13) admits the following:
+1. The solution converges in one step if K is idempotent and B belongs to its kernel.
+2. If Vi ⊥Vj for all i ̸= j, Eq. (14) converges in one iteration.
+3. For S = 2, if Ic < 1 then Eq. (14) converges, and if Id > 1 then Eq. (14) diverges, where
+the indicators Ic and Id are defined in Eq. (35) in Appendix E.4.
+See proofs in Appendix E.4. Our experiments indicate that the idempotency of K is a reliable criterion
+for strip selection, as shown in Section 6.1.
+6
+EXPERIMENTAL RESULTS
+All experiments were conducted on an NVIDIA GeForce RTX 3090 GPU. To ensure fair time
+comparisons, we adapted all competing algorithms to the PyTorch framework. For our inversion
+experiments, we employed the ConvNet architecture. See full architecture descriptions and additional
+details in Appendix B.
+Figure 4: Illustration of different strip arrangements for partitioning a convolution matrix with two
+output channels (two kernels) into two strips. Rows assigned to each strip are highlighted in blue and
+red, respectively.
+Figure 5: Idempotency of strip arrangements measured by ∥K −K2∥F (lower is better) on CelebA
+dataset. Smaller values indicate greater inter-strip orthogonality and faster convergence.
+Procedure. Each experiment proceeds as follows: 1. Forward a batch of images through the
+convolution layers. 2. Add noise at a fraction of each image’s standard deviation. 3. Apply the
+7
+
+
+378
+379
+380
+381
+382
+383
+384
+385
+386
+387
+388
+389
+390
+391
+392
+393
+394
+395
+396
+397
+398
+399
+400
+401
+402
+403
+404
+405
+406
+407
+408
+409
+410
+411
+412
+413
+414
+415
+416
+417
+418
+419
+420
+421
+422
+423
+424
+425
+426
+427
+428
+429
+430
+431
+Table 1: Comparison of STRIP versus iterative methods across datasets. All methods are evaluated
+after a single iteration. Best in bold.
+STRIP (Ours)
+CG
+GS
+GD
+LSQR
+LSMR
+RSHK
+MSE ↓
+MNIST
+0
+0.468
+0.256
+0.907
+0.746
+0.795
+0.406
+CelebA
+0
+0.325 ± 0.008
+0.273 ± 0.007
+0.360 ± 0.007
+0.353 ± 0.008
+0.356 ± 0.008
+0.313 ± 0.008
+CelebA-HQ
+0
+0.312 ± 0.006
+–
+0.347 ± 0.005
+0.336 ± 0.006
+0.337 ± 0.009
+–
+PSNR [dB] ↑
+MNIST
+42.776 ± 0.018
+3.318
+5.923
+0.423
+1.281
+1.004
+3.947
+CelebA
+36.547 ± 0.113
+5.247 ± 0.115
+6.105 ± 0.133
+4.742 ± 0.100
+4.839 ± 0.106
+4.786 ± 0.108
+5.417 ± 0.120
+CelebA-HQ
+40.500 ± 0.085
+5.349 ± 0.089
+–
+4.842 ± 0.078
+4.998 ± 0.083
+4.985 ± 0.082
+–
+SSIM ↑
+MNIST
+0.998
+0.270
+0.495
+0.098
+0.077
+0.038
+0.357
+CelebA
+0.991
+0.051 ± 0.002
+0.153 ± 0.005
+0.100 ± 0.002
+0.015 ± 0.003
+0.007 ± 0.001
+0.081 ± 0.003
+CelebA-HQ
+0.991
+0.072 ± 0.004
+–
+0.006
+0.031 ± 0.002
+0.026 ± 0.003
+–
+Runtime [sec] ↓
+MNIST
+0.039 ± 0.009
+0.096 ± 0.026
+0.085 ± 0.031
+0.098 ± 0.033
+0.101 ± 0.023
+0.092 ± 0.002
+0.122 ± 0.005
+CelebA
+0.091 ± 0.016
+0.109 ± 0.025
+23.956 ± 0.783
+0.112 ± 0.037
+0.118 ± 0.025
+0.111 ± 0.002
+0.592 ± 0.029
+CelebA-HQ
+1.258 ± 0.090
+264.953 ± 0.043
+–
+264.849 ± 0.032
+265.016 ± 0.008
+265.019 ± 0.002
+–
+Memory [MB] ↓
+MNIST
+0
+0
+0
+0
+0
+0
+0
+CelebA
+0.100 ± 0.316
+0
+0
+0
+0
+0
+0
+CelebA-HQ
+0
+19.981
+–
+19.981
+19.981
+19.981
+–
+Table 2: Comparison of STRIP versus iterative methods across datasets. Each method is evaluated at
+the point where it matches STRIP’s single iteration PSNR performance. Best in bold.
+MNIST
+CelebA
+CelebA-HQ
+Method
+Iter
+Runtime [sec]
+Memory [MB]
+Iter
+Runtime [sec]
+Memory [MB]
+Iter
+Runtime [sec]
+Memory [MB]
+STRIP (Ours)
+1
+0.039 ± 0.009
+0
+1
+0.091 ± 0.011
+0.100 ± 0.316
+1
+1.258 ± 0.090
+0
+CG
+22
+0.114 ± 0.034
+0
+50
+0.194 ± 0.027
+0
+32
+265.981 ± 0.043
+19.981
+GD
+95
+0.370 ± 0.018
+0
+125
+0.627 ± 0.048
+0
+900
+356.911 ± 0.733
+19.981
+LSMR
+215
+0.729 ± 0.087
+0
+2100
+48.773 ± 0.062
+0.184 ± 0.390
+555
+312.230 ± 0.729
+19.981
+RSHK
+90
+4.333 ± 0.577
+0
+750
+314.136 ± 3.557
+0
+–
+–
+–
+inversion method to the noisy inputs. 4. Compare recovered outputs to the analytic PINV solution (or
+to the original images for CelebA-HQ when PINV is intractable).
+Default Parameters. Unless noted otherwise: ConvNet Cout = 8; Additive noise 1% of input std.;
+Single iteration; Strip size h = r, with hb = r/Cout rounded to satisfy all the required constraints.
+We used a batch size of 200 images, and each reported score is the mean and standard deviation
+computed over 10 independent runs.
+6.1
+IDEMPOTENCY CHECK
+We aim to evaluate the compliance of our method with the idempotency measure introduced in
+Equation (15), expecting potentially lower values with respect to different division methods. The
+results on CelebA are shown in Figure 5, and the results on MNIST are shown in Figure 11.
+6.2
+COMPARISON WITH ITERATIVE METHODS
+We wanted to evaluate our performance versus other iterative methods. The other methods are more
+general, and are applicable for any linear equation system, not designed to convolution layers like
+STRIP. For algorithms with native sparse matrix support - Conjugate Gradients (CG), Gauss Seidel
+(GS), Gradient Descent (GD), LSQR, and LSMR - we implemented functions that accept sparse ma-
+trices as input and operate directly on PyTorch tensors. We also tested block Kaczmarz (BK) variants
+- GBK (Niu & Zheng, 2020), RSHK (Wang & Yin, 2023), RSHEK (Zhang et al., 2024), ADBK
+(Tan et al., 2025), and FDBK (Chen & Huang, 2022). Because our BK implementations operate on
+explicit convolution matrices, they are feasible only in lower-dimensional settings. RSHK consistently
+outperformed the other BK variants, so we include only RSHK in the primary comparisons.
+Table 3: Comparison of STRIP versus UPCONV. Best in bold.
+Method
+MSE ↓
+PSNR [dB] ↑
+SSIM ↑
+Runtime [sec] ↓
+Memory [MB] ↓
+STRIP (Ours)
+0.0001
+40.5512 ± 0.0296
+0.9916
+1.8275 ± 0.0980
+0
+UPCONV
+0.0034
+25.2383 ± 0.0001
+0.9533
+0.0033 ± 0.0061
+0
+8
+
+
+432
+433
+434
+435
+436
+437
+438
+439
+440
+441
+442
+443
+444
+445
+446
+447
+448
+449
+450
+451
+452
+453
+454
+455
+456
+457
+458
+459
+460
+461
+462
+463
+464
+465
+466
+467
+468
+469
+470
+471
+472
+473
+474
+475
+476
+477
+478
+479
+480
+481
+482
+483
+484
+485
+Figure 6: STRIP vs. UPCONV: Reconstruction comparison on a synthetic smiley. Top: outputs and
+PSNR; bottom: difference images (reconstruction - PINV). Zoom-ins show UPCONV suffers from
+edge blurring, while STRIP preserves sharper boundaries.
+In Table 1, our method consistently surpasses all baselines after a single iteration, yielding lower
+error, faster runtime, and minimal memory usage. For sparse methods, the main cost arises from
+converting convolution kernels into sparse matrices, with CelebA-HQ exhibiting the sharpest increase
+due to larger image sizes. Computing the analytic PINV is even more demanding - for example,
+CelebA requires 2.363±0.105 [sec] and 1441.633±0.575 [GB]. As shown in Table 2, other methods
+need many iterations to match STRIP’s one-step performance, gaining significant runtime overhead.
+Results missing from CelebA-HQ correspond to methods infeasible within reasonable time. We
+denote 0.000 ± 0.000 as 0.
+6.3
+COMPARISON WITH TRANSPOSED CONVOLUTION
+We benchmark STRIP against a trained UPCONV inverter on CelebA-HQ test set (Table 3). STRIP
+consistently achieves lower reconstruction error. UPCONV errors are primarily localized around
+sharp boundaries, often leading to blurred reconstructions, as illustrated in Figure 6 (an OOD example
+not included in the training or test sets) and in the difference image of Figure 12. While UPCONV
+also produces edge artifacts, STRIP consistently outperforms it even when such boundary effects
+are mitigated, demonstrating that STRIP’s advantage extends beyond the correction of edge artifacts.
+While UPCONV offers much faster inference, it requires costly retraining for each dataset, whereas
+STRIP is training free and directly applicable.
+7
+DISCUSSION AND CONCLUSION
+This paper introduced STRIP, an iterative algorithm for convolutional layer inversion. Our method
+leverages the structure of the convolutional layer matrix by partitioning it into strips in a way that
+promotes their inter orthogonality. The strips are inverted independently without constructing the full
+matrix. This design yields reconstructions that are both accurate and efficient, significantly reducing
+time and memory requirements compared to conventional approaches.
+IMPACT STATEMENT
+The superior reconstruction achieved by our method with respect to transposed convolutions, com-
+bined with the fact that it is not a learnable layer and therefore requires no retraining across networks,
+9
+
+
+486
+487
+488
+489
+490
+491
+492
+493
+494
+495
+496
+497
+498
+499
+500
+501
+502
+503
+504
+505
+506
+507
+508
+509
+510
+511
+512
+513
+514
+515
+516
+517
+518
+519
+520
+521
+522
+523
+524
+525
+526
+527
+528
+529
+530
+531
+532
+533
+534
+535
+536
+537
+538
+539
+suggests that it can be deployed in practical scenarios. For example, it can serve as a replacement for
+up-convolutions in architectures such as U-Net.
+REPRODUCIBILITY
+We provide detailed descriptions of theoretical assumptions, proofs, and experimental protocols.
+Datasets (MNIST (LeCun et al., 1998), CelebA (Liu et al., 2015), and CelebA-HQ (Karras et al.,
+2018)) are publicly available. Architectures, hyperparameters, and training settings are fully specified
+(Section 6, Appendix B), and code for experiments will be released to ensure reproducibility.
+REFERENCES
+Stanisław M. Bregman. The method of successive projection for finding a common point of convex
+sets. Soviet Mathematics Doklady, 6:688–692, 1965.
+Augustin Cauchy et al. M´ethode g´en´erale pour la r´esolution des systemes d’´equations simultan´ees.
+Comp. Rend. Sci. Paris, 25(1847):536–538, 1847.
+Jia-Qi Chen and Zheng-Da Huang. On a fast deterministic block kaczmarz method for solving
+large-scale linear systems. Numerical Algorithms, 89(3):1007–1029, 2022.
+James W Cooley and John W Tukey. An algorithm for the machine calculation of complex fourier
+series. Mathematics of computation, 19(90):297–301, 1965.
+Alexey Dosovitskiy, Philipp Fischer, Jost Tobias Springenberg, Martin Riedmiller, and Thomas Brox.
+Inverting visual representations with convolutional networks. In Proceedings of the IEEE Confer-
+ence on Computer Vision and Pattern Recognition (CVPR), pp. 4829–4837, 2016. URL https:
+//www.cv-foundation.org/openaccess/content_cvpr_2016/papers/
+Dosovitskiy_Inverting_Visual_Representations_CVPR_2016_paper.pdf.
+Tommy Elfving. Block-iterative methods for consistent and inconsistent linear equations. Numerische
+Mathematik, 35(1):1–12, 1980.
+Thomas Fel, Thibaut Boissin, Victor Boutin, Agustin Picard, Paul Novello, Julien Colin, Drew
+Linsley, Tom Rousseau, R´emi Cad`ene, Lore Goetschalckx, et al. Unlocking feature visualization
+for deep network with magnitude constrained optimization. Advances in Neural Information
+Processing Systems, 36:37813–37826, 2023.
+David Chin-Lung Fong and Michael Saunders. Lsmr: An iterative algorithm for sparse least-squares
+problems. SIAM Journal on Scientific Computing, 33(5):2950–2971, 2011.
+Semen Aronovich Gershgorin. ¨Uber die abgrenzung der eigenwerte einer matrix. Izvestiya Rossiiskoi
+Akademii Nauk. Seriya Matematicheskaya, 7(6):749–754, 1931.
+Magnus R Hestenes, Eduard Stiefel, et al. Methods of conjugate gradients for solving linear systems.
+Journal of research of the National Bureau of Standards, 49(6):409–436, 1952.
+Tero Karras, Timo Aila, Samuli Laine, and Jaakko Lehtinen. Progressive growing of gans for
+improved quality, stability, and variation. In International Conference on Learning Representations
+(ICLR), 2018.
+Diederik P Kingma and Jimmy Ba. Adam: A method for stochastic optimization. In International
+Conference on Learning Representations (ICLR), 2015. URL https://arxiv.org/abs/
+1412.6980.
+Yann LeCun, L´eon Bottou, Yoshua Bengio, and Patrick Haffner. Gradient-based learning applied to
+document recognition. Proceedings of the IEEE, 86(11):2278–2324, 1998.
+Ziwei Liu, Ping Luo, Xiaogang Wang, and Xiaoou Tang. Deep learning face attributes in the wild. In
+Proceedings of the IEEE International Conference on Computer Vision (ICCV), pp. 3730–3738,
+2015.
+10
+
+
+540
+541
+542
+543
+544
+545
+546
+547
+548
+549
+550
+551
+552
+553
+554
+555
+556
+557
+558
+559
+560
+561
+562
+563
+564
+565
+566
+567
+568
+569
+570
+571
+572
+573
+574
+575
+576
+577
+578
+579
+580
+581
+582
+583
+584
+585
+586
+587
+588
+589
+590
+591
+592
+593
+Jonathan Long, Evan Shelhamer, and Trevor Darrell. Fully convolutional networks for semantic
+segmentation. In Proceedings of the IEEE conference on computer vision and pattern recognition,
+pp. 3431–3440, 2015.
+Deanna Needell and Joel A Tropp. Paved with good intentions: analysis of a randomized block
+kaczmarz method. Linear Algebra and its Applications, 441:199–221, 2014.
+Yu-Qi Niu and Bing Zheng. A greedy block kaczmarz algorithm for solving large-scale linear systems.
+Applied Mathematics Letters, 104:106294, 2020. doi: 10.1016/j.aml.2020.106294.
+Christopher C Paige and Michael A Saunders. Lsqr: An algorithm for sparse linear equations and
+sparse least squares. ACM Transactions on Mathematical Software (TOMS), 8(1):43–71, 1982.
+Lawrence Perko. Differential Equations and Dynamical Systems. Texts in applied mathematics.
+Springer Nature, Netherlands, 2nd ed. edition, 2012. ISBN 9781468402490.
+Jan Rathjens, Shirin Reyhanian, David Kappel, and Laurenz Wiskott. Inverting visual representations
+with detection transformers. arXiv e-prints, pp. arXiv–2412, 2024.
+Olaf Ronneberger, Philipp Fischer, and Thomas Brox. U-net: Convolutional networks for biomedical
+image segmentation. In International Conference on Medical image computing and computer-
+assisted intervention, pp. 234–241. Springer, 2015.
+Philipp Ludwig Seidel. Ueber ein verfahren, die gleichungen, auf welche die methode der kleinsten
+quadrate f¨uhrt, sowie line¨are gleichungen ¨uberhaupt, durch successive ann¨aherung aufzul¨osen,
+volume 11. Verlag d. Akad., 1873.
+Pirzada Suhail and Amit Sethi. Network inversion of convolutional neural nets. arXiv preprint
+arXiv:2407.18002, 2024.
+Longze Tan, Xueping Guo, Mingyu Deng, and Jingrun Chen. On the adaptive deterministic block
+kaczmarz method with momentum for solving large-scale consistent linear systems. Journal of
+Computational and Applied Mathematics, 457:116328, 2025.
+John von Neumann. ¨Uber adjungierte funktionaloperatoren. Annals of Mathematics, 33(2):294–310,
+1933. doi: 10.2307/1968537.
+Ze Wang and Jun-Feng Yin. A surrogate hyperplane kaczmarz method for solving consistent linear
+equations. Applied Mathematics Letters, 144:108704, 2023.
+Norbert Wiener. Extrapolation, Interpolation, and Smoothing of Stationary Time Series: With
+Engineering Applications. The MIT Press, 08 1949. ISBN 9780262257190. doi: 10.7551/mitpress/
+2946.001.0001. URL https://doi.org/10.7551/mitpress/2946.001.0001.
+Matthew D Zeiler and Rob Fergus. Visualizing and understanding convolutional networks. In
+European conference on computer vision, pp. 818–833. Springer, 2014.
+Ke Zhang, Xiang-Xiang Chen, and Xiang-Long Jiang. A residual-based surrogate hyperplane
+extended kaczmarz algorithm for large least squares problems. Calcolo, 61(3):51, 2024.
+11
+
+
+594
+595
+596
+597
+598
+599
+600
+601
+602
+603
+604
+605
+606
+607
+608
+609
+610
+611
+612
+613
+614
+615
+616
+617
+618
+619
+620
+621
+622
+623
+624
+625
+626
+627
+628
+629
+630
+631
+632
+633
+634
+635
+636
+637
+638
+639
+640
+641
+642
+643
+644
+645
+646
+647
+A
+PROOFS AND ADDITIONAL THEORETICAL BACKGROUND
+A.1
+FREQUENCY-DOMAIN METHODS
+Classical frequency domain deconvolution methods, such as FFT based inverse filtering and Wiener
+deconvolution, are fundamentally ill suited for inverting multichannel convolutional layers in neural
+networks. These approaches rely on the assumption of a scalar convolution model, where deconvo-
+lution reduces to elementwise division in the frequency domain. In contrast, convolutional layers
+implement tensor contractions in which each output channel aggregates information from all in-
+put channels. This interchannel coupling cannot be decomposed into independent per frequency
+operations, violating the core premise of classical methods.
+The mismatch becomes even more pronounced in the overdetermined setting (Cout > Cin), where
+spatial locality and the inherent sparsity of convolutional kernels are destroyed in the frequency
+domain. The resulting systems are often ill conditioned, leading to substantial noise amplification.
+Furthermore, FFT and Wiener based methods neglect the non Gaussian statistics induced by nonlinear
+activations and the data dependent nature of learned feature representations.
+As a result, while mathematically tractable in simplified scenarios, classical frequency domain
+approaches fail to exploit the structural properties of CNN transformations and provide limited
+practical utility for accurate or efficient inversion.
+A.2
+CONVOLUTION LAYER AS A LINEAR EQUATION SYSTEM
+Figure 7: The structure of the convolution matrix, for the simple case of one input channel (grayscale
+image). Each kernel/output channel corresponds to different block Ai of the full matrix A, and
+effects only the output elements of bi. For illustration, the division into strips is standard, where each
+strip corresponds to the convolution matrix of one kernel, as demonstrated in Figure 4. In practice,
+however, strips can be organized in more general ways, potentially combining noncontiguous rows or
+rows belonging to different blocks.
+B
+EXPERIMENTS ADDITIONAL MATERIAL
+We use a lightweight convolutional network consisting of a single convolution layer with 3×3 kernels
+(stride 1), followed by a LeakyReLU activation (slope = 0.5), a 2 × 2 average pooling layer, and a
+fully connected linear layer. The input image of size (Hin, Win) is reduced to feature maps of size
+((Hin/2) −1) × ((Win/2) −1), which are then flattened and mapped to the output classes.
+12
+
+
+648
+649
+650
+651
+652
+653
+654
+655
+656
+657
+658
+659
+660
+661
+662
+663
+664
+665
+666
+667
+668
+669
+670
+671
+672
+673
+674
+675
+676
+677
+678
+679
+680
+681
+682
+683
+684
+685
+686
+687
+688
+689
+690
+691
+692
+693
+694
+695
+696
+697
+698
+699
+700
+701
+Figure 8: MNIST deconvolution after a single iteration - 8 convolution channels. Leftmost
+column: PINV reference. Odd rows show reconstructions; even rows show error maps (result - PINV).
+One iteration of our method is a full sweep of the convolution matrix (31 substeps), thus comparable
+to 31 iterations of the other block Kaczmarz baselines.
+For all iterative methods, the initialization was set to x(0) = 0. GD was implemented with the Adam
+optimizer (Kingma & Ba, 2015), using a learning rate of 10−2 in Table 1 and 10−1 in Tables 2 and 4.
+GD, which requires a square system, was applied to the normal equations by solving A⊤Ax = A⊤b
+with inputs A⊤A and A⊤b, equivalent to Eq. (1). Memory consumption was measured with the
+memory usage function from the memory profiler package, reporting the difference between
+maximum and minimum values as the incremental peak memory footprint in megabytes (MB).
+13
+
+
+702
+703
+704
+705
+706
+707
+708
+709
+710
+711
+712
+713
+714
+715
+716
+717
+718
+719
+720
+721
+722
+723
+724
+725
+726
+727
+728
+729
+730
+731
+732
+733
+734
+735
+736
+737
+738
+739
+740
+741
+742
+743
+744
+745
+746
+747
+748
+749
+750
+751
+752
+753
+754
+755
+Figure 9: CELEBA deconvolution after a single iteration - 8 convolution channels. Leftmost
+column: PINV reference. Odd rows show reconstructions; even rows show error maps (result - PINV).
+One iteration of our method is a full sweep of the convolution matrix (31 substeps), thus comparable
+to 31 iterations of the other block Kaczmarz baselines.
+Figure 10: Output channels of convolution result b
+14
+
+
+756
+757
+758
+759
+760
+761
+762
+763
+764
+765
+766
+767
+768
+769
+770
+771
+772
+773
+774
+775
+776
+777
+778
+779
+780
+781
+782
+783
+784
+785
+786
+787
+788
+789
+790
+791
+792
+793
+794
+795
+796
+797
+798
+799
+800
+801
+802
+803
+804
+805
+806
+807
+808
+809
+Figure 11: Idempotency of strip arrangements measured by ∥K −K2∥F (lower is better) on MNIST
+dataset. Smaller values indicate greater inter-strip orthogonality and faster convergence toward the
+PINV solution.
+C
+EXTRA RESULTS
+Figure 12: STRIP vs. UPCONV: Comparison of reconstruction quality between the two methods.
+The sample is from the CelebA-HQ dataset. For each case, the first row shows reconstructions and
+the second row shows difference images (reconstruction - PINV).
+D
+JUSTIFICATION OF EQ. (11)
+Equation 11 is based on the SVD of the matrices Ai
+Ai = UiΣiV T
+i ,
+A†
+i = ViΣ−1
+i U −1
+i
+,
+A†
+iAi = ViV T
+i .
+(16)
+15
+
+
+810
+811
+812
+813
+814
+815
+816
+817
+818
+819
+820
+821
+822
+823
+824
+825
+826
+827
+828
+829
+830
+831
+832
+833
+834
+835
+836
+837
+838
+839
+840
+841
+842
+843
+844
+845
+846
+847
+848
+849
+850
+851
+852
+853
+854
+855
+856
+857
+858
+859
+860
+861
+862
+863
+Table 4: Comparison of STRIP versus iterative methods across datasets with 10% noise. All methods
+are evaluated after a single iteration. Best in bold.
+OURS
+CG
+GS
+GD
+LSQR
+LSMR
+RSHK
+MSE ↓
+MNIST
+0.005
+0.470
+0.258
+0.764
+0.747
+0.797
+0.408
+CELEBA
+0.024 ± 0.001
+0.326 ± 0.008
+0.274 ± 0.007
+0.327 ± 0.007
+0.354 ± 0.008
+0.357 ± 0.008
+0.314 ± 0.008
+CELEBA-HQ
+0.009
+0.312 ± 0.006
+–
+0.347 ± 0.005
+0.336 ± 0.006
+0.337 ± 0.006
+–
+PSNR [dB] ↑
+MNIST
+23.046 ± 0.023
+3.303 ± 0.001
+5.883 ± 0.002
+1.169 ± 0.001
+1.270 ± 0.001
+0.994 ± 0.001
+3.923 ± 0.001
+CELEBA
+16.571 ± 0.112
+5.230 ± 0.114
+5.886 ± 0.133
+5.185 ± 0.114
+4.823 ± 0.107
+4.771 ± 0.105
+5.398 ± 0.119
+CELEBA-HQ
+20.486 ± 0.081
+5.348 ± 0.089
+–
+4.841 ± 0.077
+4.996 ± 0.083
+4.983 ± 0.083
+–
+SSIM ↑
+MNIST
+0.927
+0.260
+0.486
+0.049
+0.076
+0.037
+0.347
+CELEBA
+0.746 ± 0.003
+0.047 ± 0.002
+0.134 ± 0.005
+0.036 ± 0.001
+0.014 ± 0.003
+0.006 ± 0.001
+0.077 ± 0.003
+CELEBA-HQ
+0.694 ± 0.005
+0.070 ± 0.003
+–
+0.005
+0.029 ± 0.002
+0.025 ± 0.002
+–
+Runtime [sec] ↓
+MNIST
+0.059 ± 0.071
+0.110 ± 0.065
+0.803 ± 0.056
+0.107 ± 0.049
+0.103 ± 0.033
+0.094 ± 0.008
+0.118 ± 0.011
+CELEBA
+0.113 ± 0.098
+0.125 ± 0.055
+3.420 ± 0.058
+3.192 ± 0.051
+0.126 ± 0.033
+0.124 ± 0.012
+0.742 ± 0.021
+CELEBA-HQ
+1.641 ± 0.033
+605.557 ± 0.054
+–
+605.167 ± 0.045
+605.585 ± 0.058
+605.618 ± 0.047
+–
+Memory [MB] ↓
+MNIST
+0
+0
+0
+0
+0
+0
+0
+CELEBA
+0.086 ± 0.273
+0
+4.284 ± 4.259
+0
+0
+0
+0
+CELEBA-HQ
+0.006
+19.981
+–
+19.981
+19.981
+19.981
+–
+Plugging these identities to Equation 9, we get
+Ai = UiΣiV T
+i
+A†
+i = AT
+i
+ AiAT
+i
+−1
+=
+ UiΣiV T
+i
+T 
+UiΣiV T
+i
+ UiΣiV T
+i
+T −1
+= ViΣiU T
+i
+
+UiΣi V T
+i Vi
+| {z }
+−I
+ΣiU T
+i
+
+
+−1
+= ViΣi U T
+i
+ U T
+i
+−1
+|
+{z
+}
+=I
+Σ−2
+i U −1
+i
+= ViΣ−1
+i U −1
+i
+A†
+iAi = ViΣ−1
+i U −1
+i
+UiΣiV T
+i
+= ViV T
+i
+(17)
+E
+CONVERGENCE IN ONE ITERATION – ANALYSIS
+BK recurrence relation in Eq. (12) has the form of a linear difference equation with constant constraint.
+Given an initial condition x(0)
+0 , the solution to is
+x(t)
+0
+= Ktx(0)
+0
++
+
+I + K + · · · + Kt−1
+B.
+(18)
+The convergence of this solution depends on the spectrum of K and the respective eigenvectors.
+Based on Definition 1 in Perko (2012) p. 51, we define here the stable, unstable, and center subspaces
+of the dynamical system in Eq. (12).
+Let wj be a generalized eigenvector associated with the eigenvalue µj of the matrix K. The stable,
+center, and unstable subspaces, denoted as Es, Ec, and Eu, are defined as follows:
+Es = Span{Re{wj}, Im{wj} | |µj| < 1}
+(19)
+Ec = Span{Re{wj}, Im{wj} | |µj| = 1}
+(20)
+Eu = Span{Re{wj}, Im{wj} | |µj| > 1}
+(21)
+The solution ,Eq. (14), converges if B. The constraint on x(0)
+0
+is mitigated. It should also belong to
+Es but can have components of eigenvectors with eigenvalue µ = 1. The initial condition is chosen
+to be zero, then the only concern is whether B is in Es. Moreover, the fastest convergence occurs
+when B belongs to the kernel of K. Let us examine the ith row in Eq. (11), given by,
+x(t)
+i
+= Kix(t)
+i−1 + Viˆbi.
+(22)
+where Ki = I −ViV T
+i . The matrix Vi results from the SVD of Ai, and therefore V T
+i Vi = I.
+Consequently, the matrix Ki is an idempotent matrix, i.e. K2
+i = Ki. Its eigenvalues are either 0 or 1
+associated with columns of Vi and the complementary space, respectively.
+16
+
+
+864
+865
+866
+867
+868
+869
+870
+871
+872
+873
+874
+875
+876
+877
+878
+879
+880
+881
+882
+883
+884
+885
+886
+887
+888
+889
+890
+891
+892
+893
+894
+895
+896
+897
+898
+899
+900
+901
+902
+903
+904
+905
+906
+907
+908
+909
+910
+911
+912
+913
+914
+915
+916
+917
+If Eq. (22) is the only one in the equation system, we can formulate its solution according to Eq. (14).
+The constraint B is Viˆbi and belongs to the kernel of Ki. Therefore, the solution where t approaches
+infinity is
+xf
+i = lim
+t→∞x(t)
+i
+= Kix(0)
+i
++ Viˆbi = x(1)
+i .
+(23)
+Consequently, the solution of each row converges in one step, since Ki is an idempotent matrix and
+the constraint in each row belongs to the kernel of Ki. This leads us to the following lemma.
+Lemma 3 (Convergence in one step). A dynamical system of the form
+yk+1 = ykA + B
+converges in one step if A is an idempotent matrix and B belongs to its kernel.
+Proof. The solution is given by
+yk = Aky0 +
+
+I + A + A2 + . . . + Ak−1
+.B
+However, Ak = A for all positive integer k since A is an idempotent matrix and AB = 0 since B
+belongs to the kernel space of A. Therefore, yk = y1. Convergence in one step.
+Now, we generalize this conclusion to S rows.
+The main questions are
+1. How far B from the kernel of K? or equivalently, what eigenvalues this constraint invokes
+in this dynamical system?
+2. How far K from being idempotent?
+E.1
+ORTHOGONALITY
+Let Vi be the column space of Vi which is the kernel space of Ki. From Eq. (13) the vector B belongs
+to the union ∪S
+i=1Vi. Here, we study the relation between the linear dependencies of these subspaces
+and the convergence of Eq. (14).
+Lemma 4. The solution of Eq. (12) (with the structure dictated by Eq. (13)) converges in one step if
+Vi ⊥Vj, ∀i ̸= j.
+Proof. The matrices K and B become
+K = I −
+S
+X
+i=1
+ViV T
+i ,
+B =
+S
+X
+j=1
+Vjˆbj.
+(24)
+since Vi ⊥Vj, ∀i ̸= j. Hence, K is an idempotent and B belongs to its kernel space. The dynamics
+convergence in one step, since the conditions of Lemma 3 hold.
+E.2
+LINEAR DEPENDENCY
+Here, the subspaces Vi are not necessarily orthogonal. We start our investigation for S = 2 and then
+try to generalize the conclusions to any S > 2.
+E.2.1
+CONVERGENCE CONDITION FOR S = 2
+Notations for S = 2
+The matrix K from Eq. (13) is
+K =
+ I −V2V T
+2
+  I −V1V T
+1
+
+= I −V2V T
+2 −V1V T
+1 + V2V T
+2 V1V T
+1
+.
+(25)
+17
+
+
+918
+919
+920
+921
+922
+923
+924
+925
+926
+927
+928
+929
+930
+931
+932
+933
+934
+935
+936
+937
+938
+939
+940
+941
+942
+943
+944
+945
+946
+947
+948
+949
+950
+951
+952
+953
+954
+955
+956
+957
+958
+959
+960
+961
+962
+963
+964
+965
+966
+967
+968
+969
+970
+971
+Let us denote C2,1 = V T
+2 V1. The i, jth entry of that matrix is the cosine of the angle between the ith
+column vector of V2 and the jth column vector of V1. If there are m1 columns in V1 and m2 in V2,
+one can write C2,1 as
+C2,1 =
+
+
+cos(θ1,1)
+cos(θ1,2)
+. . .
+cos(θ1,m1)
+cos(θ2,1)
+cos(θ2,2)
+cos(θ2,m1)
+...
+cos(θm2,1)
+cos(θm2,2)
+cos(θm2,m1)
+
+.
+(26)
+For more compact writing, we denote the ith row in that matrix ci = [cos(θi,1)
+· · ·
+cos(θi,m1)]
+and the matrix as
+C2,1 =
+
+
+c1
+...
+cm2
+
+.
+(27)
+Note that if we denote V T
+1 V 2 as C1,2 then we get C1,2 = CT
+2,1 and the matrix C2,1C1,2 is a Gram
+matrix and can be formulated as
+The matrix C2,1C1,2 is symmetric and Gram, and based on Eq. (26) it can be formulated as
+C2,1C1,2 =
+
+
+∥c1∥2
+⟨c1, c2⟩
+. . .
+⟨c1, cm2⟩
+⟨c1, c2⟩
+∥c2∥2
+. . .
+⟨c2, cm2⟩
+...
+⟨c1, cm2⟩
+⟨c2, cm2⟩
+. . .
+∥cm2∥2
+
+
+(28)
+Now, we can rewrite the dynamics
+K = I −V2V T
+2 −V1V T
+1 + V2C2,1V T
+1 .
+(29)
+Convergence Analysis for S = 2
+ANSWER TO QUESTION 1
+”What eigenvalues the constraint B are invoked in this dynamical
+system?”
+The vector B can be formulated as V1α1 + V2α2 where α1 and α2 are column vectors with the
+corresponding dimension.
+The eigenvalue/vector admits the following equation,
+K(V1α1 + V2α2) = −V1C1,2α2 + V2C2,1C1,2α2 = λ(V1α1 + V2α2)
+(30)
+where λ ∈C. By applying the method of variation of parameters, the vectors α1 and α2 admit the
+following relations
+λα2 = C2,1C1,2α2
+(31a)
+λα1 = −C1,2α2.
+(31b)
+The vector α2 admits the eigenvalue problem of the matrix C2,1C1,2. In other words, the eigenproblem
+of K leads us to the eigenproblem of matrix C2,1C1,2.
+To recap, the answer to question 1 is: the spectrum B invokes is the spectrum of the matrix C2,1C1,2.
+The upper and lower bounds of the eigenvalues can indicate the system converges and in what minimal
+pace. The upper bound indicates the slowest pace of convergence of the system, and the lower bound
+indicates whether the system diverges. We use Gershgorim theorem and on attributes of Gram matrix
+to find these bounds. Recall the theorem of Gershgorim.
+Theorem 5 (Gershgorin circle theorem Gershgorin (1931)). Given an n × n matrix A, where
+[A]i,j = ai,j, the eigenvalues are in the following domain in C
+n
+[
+i=1
+B
+
+ai,i,
+n
+X
+j=1,j̸=i
+|ai,j|
+
+
+(32)
+where B(a, r) is a ball in C centered in a with radius r.
+18
+
+
+972
+973
+974
+975
+976
+977
+978
+979
+980
+981
+982
+983
+984
+985
+986
+987
+988
+989
+990
+991
+992
+993
+994
+995
+996
+997
+998
+999
+1000
+1001
+1002
+1003
+1004
+1005
+1006
+1007
+1008
+1009
+1010
+1011
+1012
+1013
+1014
+1015
+1016
+1017
+1018
+1019
+1020
+1021
+1022
+1023
+1024
+1025
+By applying the Gershgorin theorem to C2,1C1,2, the eigenvalues are in the following union Sm2
+i=1 Bi,
+where
+Bi = B
+
+∥ci∥2,
+m2
+X
+j=1,j̸=i
+|⟨ci, cj⟩|
+
+.
+(33)
+In addition, the matrix in question is Gram. Its spectrum is real and non-negative. Thus, one can
+reformulate the circle of Gershgorin. The spectrum of C2,1C1,2 in the union of the following segments
+Bi =
+
+max
+
+∥ci∥2 −
+m2
+X
+j=1,j̸=i
+|⟨ci, cj⟩|, 0
+
+,
+m2
+X
+j=1
+|⟨ci, cj⟩|
+
+.
+(34)
+Recap: the eigenvalues invoked by B are the eigenvalues of C2,1C1,2 that are contained in Sm2
+i=1 Bi.
+Lemma 6 (Convergence and Divergence for S = 2). A dynamical system of the form of Eq. (29)
+converges if Ic < 1 and diverges if Id > 1, where
+Ic =
+max
+1≤i≤m2
+ m2
+X
+j=1
+|⟨ci, cj⟩|
+
+Id =
+min
+1≤i≤m2
+
+∥ci∥2 −
+m2
+X
+j=1,j̸=i
+|⟨ci, cj⟩|
+.
+(35)
+Proof. The constraint B invokes eigenvalues in the union Sm2
+i=1 Bi where the segment Bi is defined
+in Eq. (34). The upper bound of this union is
+Ic =
+max
+1≤i≤m2
+ m2
+X
+j=1
+|⟨ci, cj⟩|
+
+.
+(36)
+Therefore, if the upper bound is less than one, all the eigenvalues are between zero and one. Therefore,
+convergence.
+The lower bound of this union is
+Id =
+min
+1≤i≤m2
+
+∥ci∥2 −
+m2
+X
+j=1,j̸=i
+|⟨ci, cj⟩|
+
+.
+(37)
+If Id is larger than one all the eigenvalues are larger than one. Therefore, divergence.
+The condition Ic < 1 does not guarantee only convergence, but also the bound to the slowest the pace
+of convergence. Therefore, the lower Ic, the faster convergence. When Ic = 0 the convergence is the
+fastest and the system gets its steady state in one step. In that case, the matrix K is idempotent as
+discussed in the orthogonal case (Lemma 4).
+ANSWER TO QUESTION 2
+”How far K from being idempotent?”
+The attribute of idempotency is crucial for convergence in one step, as discussed in Lemma 3.
+Orthogonality and idempotency dictate a special structure for the matrix K, see Lemma 4. Then, our
+suggestion is to measure the distance of K from idempotency as follows,
+K −K⊥2
+F
+(38)
+where K is the matrix as in Eq. (29) and K⊥is the matrix K is if it were an idempotent matrix,
+meaning
+K⊥= I −
+2
+X
+i=1
+ViV T
+i .
+(39)
+Thus, the distance is defined as,
+K −K⊥2
+F
+(40)
+19
+
+
+1026
+1027
+1028
+1029
+1030
+1031
+1032
+1033
+1034
+1035
+1036
+1037
+1038
+1039
+1040
+1041
+1042
+1043
+1044
+1045
+1046
+1047
+1048
+1049
+1050
+1051
+1052
+1053
+1054
+1055
+1056
+1057
+1058
+1059
+1060
+1061
+1062
+1063
+1064
+1065
+1066
+1067
+1068
+1069
+1070
+1071
+1072
+1073
+1074
+1075
+1076
+1077
+1078
+1079
+Lemma 7 (Distance from idempotency and convergence pace S = 2). Let the dynamics be with two
+strips, S = 2. If the distance from idempotency is less than one, the dynamics Eq. (12) converges.
+Proof.
+K −K⊥2
+F =
+
+2
+Y
+i=1
+ I −ViV T
+i
+
+−
+ 
+I −
+2
+X
+i=1
+ViV T
+i
+!
+2
+F
+=
+I −
+2
+X
+i=1
+ViV T
+i + V2C2,1V T
+1 −
+ 
+I −
+2
+X
+i=1
+ViV T
+i
+!
+2
+F
+=
+V2C2,1V T
+1
+2
+F = Tr
+
+V2C2,1V T
+1
+ V2C2,1V T
+1
+T 
+(41)
+The matrix C2,1C1,2 is diagonalizable with positive eigenvalues. Then, we can write
+K −K⊥2
+F =Tr
+
+V2 UΛU T
+| {z }
+=C2,1C1,2
+V T
+2
+
+(42)
+where V2U is a unitary matrix. Therefore, the trace is
+K −K⊥2
+F =
+m
+X
+i=1
+λi.
+(43)
+where m = min{m1, m2}. Hence, if the sum, Pm
+i=1 λi, is less than one, each eigenvalue is less than
+one. Then, convergence.
+Thus, the linear dependency affects the convergence rate.
+E.2.2
+GENERALIZATION TO S > 2
+The analysis of Kaczmarz dynamics for S = 2 reveals the complexity to derive quantity indications
+for pace convergence where S > 2. Even for S = 3, finding the eigenvalues of K is a challenging
+task. Therefore, the answer to the Question 1 is not clear.
+On the other hand, the generalization of the distance of K from idempotency is almost obvious. Let
+us recall the form of the dynamics
+K =
+S
+Y
+i=1
+ I −ViV T
+i
+
+,
+(44)
+and the ”idempotent” part of this matrix as
+K⊥= I −
+S
+X
+i=1
+ViV T
+i .
+(45)
+If the subspaces {Vi}S
+i=1 are orthogonal, the matrix K would be equal to K⊥. The other (correlated)
+addends are for the dependency between these subspaces. The lower the linear dependence, the lower
+the correlated addends and therefore, the closer K to K⊥. The distance from idempotency is the norm
+of the correlated addends in K, or more formally,
+
+S
+Y
+i=1
+ I −ViV T
+i
+
+−
+ 
+I −
+S
+X
+i=1
+ViV T
+i
+!
+2
+F
+.
+(46)
+Let us denote the matrix K as follows,
+K = K⊥+ [V1
+V2
+. . .
+VS] CK [V1
+V2
+. . .
+VS]T
+(47)
+20
+
+
+1080
+1081
+1082
+1083
+1084
+1085
+1086
+1087
+1088
+1089
+1090
+1091
+1092
+1093
+1094
+1095
+1096
+1097
+1098
+1099
+1100
+1101
+1102
+1103
+1104
+1105
+1106
+1107
+1108
+1109
+1110
+1111
+1112
+1113
+1114
+1115
+1116
+1117
+1118
+1119
+1120
+1121
+1122
+1123
+1124
+1125
+1126
+1127
+1128
+1129
+1130
+1131
+1132
+1133
+where the matrix CK contains all the correlations between all the possible combinations of the
+products in Eq. (44).
+K −K⊥2
+F =Tr{[V1
+V2
+. . .
+VS] CKCSCT
+K [V1
+V2
+. . .
+VS]T }
+=Tr{CKCSCT
+K [V1
+V2
+. . .
+VS]T [V1
+V2
+. . .
+VS]}
+=Tr{CKCSCT
+KCS}
+(48)
+where CS = [V1
+V2
+. . .
+VS]T [V1
+V2
+. . .
+VS]. The distance in the general case is not
+directly the sum of the eigenvalues of K. However, if Vi ⊥Vj for all i ̸= j, the distance from
+idempotency is zero, and the convergence is achieved in one step.
+E.3
+CONVERGENCE FOR S > 2
+Let us denote the matrix K as follows,
+K = K⊥+ [V1
+V2
+. . .
+VS] CK [V1
+V2
+. . .
+VS]T
+(49)
+where the matrix CK contains all the correlations between all the possible combinations of the
+products in K = QS
+i=1
+ I −ViV T
+i
+
+. Therefore, the distance for the general case is as follows,
+K −K⊥2
+F =
+[V1
+V2
+. . .
+VS] CK [V1
+V2
+. . .
+VS]T 
+2
+F
+=Tr{[V1
+V2
+. . .
+VS] CKCSCT
+K [V1
+V2
+. . .
+VS]T }
+=Tr{CKCSCT
+K [V1
+V2
+. . .
+VS]T [V1
+V2
+. . .
+VS]}
+=Tr{CKCSCT
+KCS}
+(50)
+where CS = [V1
+V2
+. . .
+VS]T [V1
+V2
+. . .
+VS]. The distance from idempotency is the norm
+of the correlated addends in K. The distance in the general case is not directly the sum of the
+eigenvalues of K as when S = 2 (see Lemma 7). However, if Vi ⊥Vj for all i ̸= j, the distance from
+idempotency is zero, and the convergence is achieved in one step. The lower the linear dependence,
+the lower the correlated addends and therefore, the closer K to K⊥. From our experiments, the lower
+the distance the faster the convergence. In most cases, after one iteration the algorithm gets to its
+final result. Consequently, the following conjecture is backed up with experiments, however, we did
+not find the relation of this distance to eigenvalues of the correlation matrix CK and CS.
+Conjecture 8 (Convergence pace and distance from Idempotency). Let the distance from idempotency
+be
+K −K⊥2
+F . If the distance is zero, the system converges in one step. In addition, the lower the
+distance, the faster the convergence rate.
+E.4
+PROOF OF THEOREM 2
+Proof. The proof of Theorem 2 follows from Lemma 3, Lemma 4, Lemma 6, and Lemma 7.
+21

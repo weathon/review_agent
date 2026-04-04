@@ -1,0 +1,351 @@
+# RETHINKING DRIVING TOPOLOGY REASONING: PLUG-AND-PLAY DISCRETE GRAPH REFINEMENT
+
+Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+In autonomous driving, topology reasoning aims to recover the structured connectivity of road networks by detecting map elements and predicting their relations, providing machine-readable maps for safe and efficient operation. Surprisingly, current topology reasoning tasks do not address how to produce better discrete graphs, even though downstream modules such as planning and control rely on them. Existing methods predict continuous edge scores and then apply simple thresholding to obtain discrete graphs, but this step is neither optimized during training nor evaluated in benchmarks. As a result, it remains unclear whether their predicted continuous graphs are truly effective for downstream tasks. To bridge this gap, we propose **TopoRefine**, a universal and plug-and-play topology graph refinement module that refines continuous graphs predicted by any topology reasoning model into higher-quality discrete graphs. Specifically, it refines connectivity by learning structural patterns via a lightweight GNN-based refinement module trained in a self-supervised way. This refinement module calibrates predictions so that thresholding yields more reliable discrete structures. In addition, we are the first to introduce a discrete graph evaluation metric in this setting, the Topology Jaccard Score, tailored to directly assess the quality of discrete driving topology graph. Experiments on multiple baselines demonstrate that TopoRefine improves both continuous and discrete graph quality, making it the first framework to explicitly focus on improving discrete graph reliability in topology reasoning.
+
+## 1 INTRODUCTION
+
+In autonomous driving, understanding scene topology is crucial because it determines how map elements connect to form drivable routes. Topology reasoning addresses this by detecting lanes and traffic elements and predicting their connectivity, covering both lane-lane topology and lane-traffic topology. The resulting machine-readable graphs support downstream tasks such as trajectory prediction (Gu et al., 2024), path planning (Chai et al., 2019), and motion control (Hu et al., 2023), where reliable connectivity is essential for safety and efficiency.
+
+While detection of map elements lays the foundation, the final success of topology reasoning depends on making correct connectivity predictions. Even if all map elements are detected perfectly, wrong connections can still cause failures. For example, a path planning module may choose an unsafe route if lane connections are predicted incorrectly, despite flawless detection. As shown in Figure 1b and Figure 1a, the state-of-the-art model detects traffic lights correctly but misses their lane-traffic connections, causing the planner to ignore valid passing opportunities.
+
+Existing topology reasoning methods primarily predict a continuous topology graph by assigning confidence scores to all candidate edges (Li et al., 2023; Wu et al., 2024; Can et al., 2022; Ye et al., 2025; Lv et al., 2025). However, downstream modules such as path planning require a high-quality discrete driving topology graph, while unfortunately existing approaches do not explicitly focus on producing such reliable discrete connectivity. For clarity, we distinguish continuous from discrete topology graphs. Continuous graphs assign confidence scores to all candidate connections, producing a dense structure optimized by existing models. Discrete graphs, however, are the sparse binary connectivities required by downstream planning. Current methods convert continuous scores to discrete edges using a fixed threshold, but improvements in the continuous domain do not necessarily yield better discrete graphs. This gap motivates our focus on explicitly evaluating and refining dis-
+
+![Figure 1: Comparison of traffic light detection and lane connectivity. (a) Ground-Truth: shows a street view with green lines for traffic light detections and blue polylines for lane-lane connectivity. (b) SMART-OL (Ye et al., 2025): shows the same street view but with a red box labeled 'Topology prediction missed' over the traffic lights, indicating a failure to detect their lane connections. (c) SMART-OL + TopoRefine: shows the street view with a red box labeled 'Refined topology prediction' over the traffic lights, indicating successful detection and connectivity recovery.](c803f6f6e2c49429d2951832bd0f208d_img.jpg)
+
+Figure 1: Comparison of traffic light detection and lane connectivity. (a) Ground-Truth: shows a street view with green lines for traffic light detections and blue polylines for lane-lane connectivity. (b) SMART-OL (Ye et al., 2025): shows the same street view but with a red box labeled 'Topology prediction missed' over the traffic lights, indicating a failure to detect their lane connections. (c) SMART-OL + TopoRefine: shows the street view with a red box labeled 'Refined topology prediction' over the traffic lights, indicating successful detection and connectivity recovery.
+
+Figure 1: The existing SOTA method (b) detect traffic lights correctly but miss their lane connections, while TopoRefine (c) can perfectly recover complete connectivity after refinement, producing discrete graphs that better match the ground truth. Green lines denote traffic light detections and their lane-traffic connections, while blue polylines show lane-lane connectivity.
+
+crete topology. This mismatch leaves a critical gap between the focus of existing methods and the practical needs of autonomous driving. To bridge this gap, we must step back and rethink what is truly essential for enabling reliable real-world downstream tasks in autonomous driving.
+
+From this perspective, a natural question arises: *how can continuous topology predictions be turned into better discrete graphs which can fully empower downstream tasks in autonomous driving?*
+
+Turning this question into practice, however, is far from straightforward. The first obstacle is that existing benchmarking metrics do not evaluate discrete connectivity at all. For instance, the commonly used OpenLane-V2 score (Wang et al., 2023) measures only the quality of the continuous graph, leaving it unclear whether the resulting discrete graphs are truly effective in practice. In other words, existing metrics overlook connectivity, creating a blind spot between benchmark success and practical reliability. To close this gap, we introduce the Topology Jaccard Score (TJS), the first evaluation metric tailored to directly assess discrete connectivity. This new perspective reveals that many topology reasoning models, while achieving high scores under continuous metrics (OpenLane-V2 score), still produce poor discrete graphs, as illustrated in Figure 1b.
+
+Yet, better evaluation metric alone is not sufficient. In order to turn continuous topology predictions into a better discrete graph, we introduce **TopoRefine**, a post-hoc and plug-and-play topology graph refinement module that bridges the gap between continuous predictions and the discrete graphs required by downstream tasks (see Figure 1c). The key idea is to refine connectivity by learning general structural patterns from data. To achieve this, TopoRefine leverages a self-supervised scheme: it perturbs graphs to generate augmented views, allowing a lightweight Graph Neural Network (GNN) to learn to distinguish real edges from fake ones. Here, the “labels” used for training refer exclusively to these augmentation-derived indicators (real vs. perturbed edges) and do not correspond to external factors such as city, sensor type, weather, or time-of-day, which clarifies that our method does not rely on or assume a low-label regime. These domain-transfer conditions fall outside the scope of our work and are unrelated to the type of labels used within our refinement module. This improves the separation between valid and invalid connections, so that thresholding produces more reliable discrete graphs.
+
+More importantly, this plug-in refinement module can be seamlessly integrated into any existing topology reasoning models without retraining, because TopoRefine learns general structural patterns through self-supervised training rather than relying on model-specific designs. It is essential to emphasize that TopoRefine operates strictly as a post-hoc refinement module: it does not modify, retrain, or backpropagate gradients into the underlying topology predictor. This design choice is intentional, as our goal is to provide a model-agnostic plug-and-play component that improves the discrete structural correctness of any existing model without requiring end-to-end retraining or
+
+[architectural changes](#). Being lightweight and model-agnostic, it refines the output from diverse models into better discrete graphs to provide more faithful support for downstream planning and control. Together with TJS, which establishes the first metric for evaluating discrete connectivity, TopoRefine forms a complete framework for both improving and measuring the quality of discrete topology graph.
+
+Our experimental result shows that TopoRefine improves both continuous and discrete metrics, effectively bridging confidence scores with the reliable discrete graphs required for autonomous driving. In particular, it achieves near 10% relative gains on continuous topology metrics ( $TOP_{II}$ ,  $TOP_{II}$ ) and boosts discrete connectivity (TJS) by over 200% on certain baselines, underscoring its substantial performance improvements across models. In summary, our key contributions are threefold:
+
+- We are the first to explicitly highlight and address the overlooked problem of discrete graph quality in topology reasoning, emphasizing its importance for reliable downstream planning and control.
+- We propose TopoRefine, a lightweight plug-and-play refinement module that can be applied to diverse topology reasoning models, improving their discrete topology graph.
+- We introduce the Topology Jaccard Score, the first evaluation metric designed to assess discrete graph connectivity in driving scene topology reasoning, thereby addressing the blind spot overlooked by existing benchmarks.
+
+## 2 RELATED WORK
+
+### 2.1 LANE TOPOLOGY REASONING
+
+Lane topology reasoning aims to capture connectivity among lanes, enabling scene interpretation and the definition of drivable routes. Existing methods follow several directions. Query-based approaches such as STSU (Can et al., 2022) extend DETR (Carion et al., 2020) to jointly predict lane queries and their connections. Graph-based models, including TopoNet (Li et al., 2023) and TopoMLP (Wu et al., 2024), formulate it as link prediction using scene graphs, shortest-path algorithms, or MLPs. Recent extensions like TopoLogic (Fu et al., 2024), TopoPoint (Fu et al., 2025b), and TopoFormer (Lv et al., 2025) integrate geometric priors and transformer architectures, while others such as LaneSegNet (Li et al., 2024b), SMART (Ye et al., 2025), Topo2D (Li et al., 2024a), and TopoOSMR (Zhang et al., 2024) incorporate map priors or external data (e.g., satellite imagery). Despite these advances, most works target task-specific improvements in connectivity prediction, with little attention to the quality of the resulting discrete graphs. This motivates our focus on topology graph refinement, which would help existing models produce higher-quality discrete graphs.
+
+### 2.2 GRAPH REFINEMENT
+
+Graph refinement adjusts node and edge features so that the resulting graph better supports downstream tasks. Prior work follows two main directions. The first learns adjacencies by imposing structural priors such as smoothness, sparsity, or connectivity directly from node signals (Dong et al., 2016; Kalofolias, 2016); for example, Franceschi et al. (2019) optimize discrete structures through bilevel learning. The second refines graphs via representation learning, where GNNs reweight or denoise edges in a post-hoc manner (Jiang et al., 2019; Zhu et al., 2021a).
+
+Self-supervised learning has recently become a popular tool for graph refinement, as it avoids reliance on labels. Common augmentations include node perturbation, edge modification, and subgraph sampling, with objectives that reconstruct embeddings across views (Zhao et al., 2023). Representative methods include GraphCL (You et al., 2020) and GCA (Zhu et al., 2021b) (contrastive), Bootstrapped Graph Learning (Thakoor et al., 2021) (non-contrastive), and GraphMAE (Hou et al., 2022) (masked reconstruction). These approaches improve edge reliability by enforcing robustness under perturbations, making them well suited for label-scarce autonomous driving.
+
+## 3 PROBLEM STATEMENT
+
+**Topology Reasoning.** Given a single driving scene image frame, we represent the scene as a graph by considering two types of nodes: lane instances  $\mathcal{V}_l = \{l_i \in \mathbb{R}^{11 \times 3}\}_{i=1}^{n_l}$ , encoded as centerline polylines, and traffic elements  $\mathcal{V}_t = \{t_j \in \mathbb{R}^d\}_{j=1}^{n_t}$ , where  $d$  denotes the feature dimension extracted from front-view camera (e.g., ResNet embeddings). Here,  $n_l$  and  $n_t$  denote the total numbers of lane and traffic element nodes, respectively. The topology reasoning task consists of detecting these entities and predicting their connectivity. Formally, we define a graph  $\mathcal{G} = (\mathcal{V}, \mathcal{E})$  with  $\mathcal{V} = \mathcal{V}_l \cup \mathcal{V}_t$ . Connectivity is divided into two types: (1)  $\mathcal{E}_{ll} \subseteq \mathcal{V}_l \times \mathcal{V}_l$ , capturing lane-lane relations such as merges, splits, and successors (abbreviated as LL); and (2)  $\mathcal{E}_{lt} \subseteq \mathcal{V}_l \times \mathcal{V}_t$ , capturing lane-traffic relations such as lane-to-signal or lane-to-sign connections (abbreviated as LT). The resulting graph captures topological structures essential for downstream tasks such as planning and control.
+
+In practice, a topology reasoning model  $f_{\text{base}}$  outputs a predicted graph  $\hat{\mathcal{G}} = (\hat{\mathcal{V}}, \hat{\mathcal{E}})$ , where each edge  $(u, v) \in \hat{\mathcal{E}}$  is associated with a confidence score in  $[0, 1]$ . A discrete graph is then obtained by thresholding,  $\tilde{\mathcal{E}} = \{(u, v) \in \hat{\mathcal{E}} \mid \text{score}(u, v) \geq \tau\}$ . Since these confidence scores may not be fully optimized for binary connectivity, this step often results in missing or redundant edges in both LL and LT predictions.
+
+**Topology Graph Refinement.** Topology graph refinement aims to correct the connectivity of topology graphs  $\hat{\mathcal{G}}$  predicted by topology reasoning model  $f_{\text{base}}$ . Given map element nodes  $\hat{\mathcal{V}}$  detected by  $f_{\text{base}}$ , a refinement module  $f_\theta$  outputs a refined graph  $\tilde{\mathcal{G}} = (\tilde{\mathcal{V}}, \tilde{\mathcal{E}})$ , adjusting lane-lane (LL) and lane-traffic (LT) relations. The goal is to reduce errors such as missing successors, redundant merges, and incorrect lane-to-signal links, so that  $\tilde{\mathcal{E}}$  better matches the ground-truth topology  $\mathcal{E}^*$ . Refined edges are fused with original edge predictions  $\hat{\mathcal{E}}$ , yielding discrete graphs that more accurately reflect real-world road connectivity for downstream planning and control.
+
+## 4 TOPOREFINE
+
+We propose TopoRefine, a universal and lightweight topology refinement module that improves continuous connectivity by learning structural patterns from large-scale augmented data, thereby producing higher-quality discrete graphs required by downstream tasks. Designed as a plug-and-play component, it can be applied post-hoc to any topology reasoning model without retraining.
+
+### 4.1 SELF-SUPERVISED TOPOLOGY GRAPH REFINEMENT
+
+TopoRefine refines continuous topology predictions into reliable discrete graphs through a self-supervised framework with three components. Graph augmentation generates perturbed and negative samples to provide label-free supervision and robustness to noise. A lightweight GNN refinement model then learns structural patterns to predict edge confidence. Finally, an adaptive refinement loss handles class imbalance across relation types, enabling stable training. Together, these components yield faithful discrete graphs that better support downstream tasks.
+
+**Graph Augmentation.** We construct augmented graphs from ground-truth annotations to provide label-free training signals (Fig. 2a), enabling a single refinement model to generalize across different topology reasoning models. Following a self-supervised paradigm, we first add isolated nodes as negative nodes while keeping the original topology fixed, and then perturb nodes to simulate the potential deviation from predictions to ground-truth.
+
+Specifically, we first expand the node set with perturbed copies of annotated nodes, referred to as fake nodes. These automatically form negative edges (label 0) with existing nodes, ensuring that the augmented graph preserves the same output dimensionality as topology reasoning predictions  $\hat{\mathcal{G}}$  (e.g.,  $|\mathcal{E}_{ll}^+| = |\mathcal{E}_{ll}^+| = |\hat{\mathcal{E}}_{ll}|$ ). In terms of node feature, each lane node  $l_i \in \mathcal{V}_l^+$  has polyline features  $\mathbf{x}_{l,i}$ , while each traffic element  $t_j \in \mathcal{V}_t^+$  has visual features  $\mathbf{x}_{t,j}$  extracted based on its bounding box  $\mathbf{b}_j$ . We perturb these features by adding Gaussian noise:
+
+$$\mathbf{z}' = \mathbf{z} + \epsilon, \quad \epsilon \sim \mathcal{N}(0, \sigma^2 I), \quad \mathbf{z} \in \{\mathbf{x}_{l,i}, \mathbf{b}_j\}. \quad (1)$$
+
+![Figure 2: Overall framework of TopoRefine. The diagram is divided into two main sections: Training Phase and Inference Phase. The Training Phase includes (a) Graph Augmentation, which takes Ground-truth LT and LL Topology Graphs and Traffic Element Features (X_t) as inputs, adds fake nodes and edges, and perturbs real and fake nodes to generate augmented views. (b) GNN-Based Refinement Model, which processes the augmented graph through a GNN to predict edge existence confidence and applies an Adaptive BCE Loss. The Inference Phase shows a Multi-view input being processed by a Topology Reasoning Model (f_base) to produce initial predictions (E_hat_ill, E_hat_ill), which are then refined by a GNN-based refinement module to produce final predictions (E_hat_ill, E_hat_ill) fused with the initial ones using weights w and 1-w.](690fce4fb5c9cbb8beb560cb2a3fcbeb_img.jpg)
+
+Figure 2: Overall framework of TopoRefine. The diagram is divided into two main sections: Training Phase and Inference Phase. The Training Phase includes (a) Graph Augmentation, which takes Ground-truth LT and LL Topology Graphs and Traffic Element Features (X\_t) as inputs, adds fake nodes and edges, and perturbs real and fake nodes to generate augmented views. (b) GNN-Based Refinement Model, which processes the augmented graph through a GNN to predict edge existence confidence and applies an Adaptive BCE Loss. The Inference Phase shows a Multi-view input being processed by a Topology Reasoning Model (f\_base) to produce initial predictions (E\_hat\_ill, E\_hat\_ill), which are then refined by a GNN-based refinement module to produce final predictions (E\_hat\_ill, E\_hat\_ill) fused with the initial ones using weights w and 1-w.
+
+Figure 2: Overall framework of TopoRefine. **Training phase:** (a) Graph augmentation: lane nodes  $\mathbf{X}_l$  (centerline polylines) and traffic element features  $\mathbf{X}_t$  (embeddings from front-view detections) are expanded with fake nodes and perturbed to generate augmented views. **Note that the supervision used here is entirely generated from perturbation-based augmentation and is applied only to train the refinement module itself. The base topology prediction network remains frozen throughout. This decoupled design ensures that TopoRefine functions as a post-training refinement step rather than an end-to-end optimization framework, making it compatible with diverse existing models without altering their training pipelines.** (b) GNN-based refinement: a lightweight GNN processes the augmented graph and predicts edge confidences, optimized with an adaptive BCE loss. **Inference phase:** given topology predictions  $\tilde{E}_{ll}, \tilde{E}_{ll}$  from a baseline model  $f_{base}$ , the refinement module produces  $\hat{E}_{ll}, \hat{E}_{ll}$ , which are fused with  $\tilde{E}_{ll}, \tilde{E}_{ll}$  to yield refined discrete graphs for downstream planning and control.
+
+It is worth mentioning that, the node perturbation is applied on both real nodes and fake nodes, with a key motivation unique in our task. Unlike the existing graph augmentation approaches designed for general domain (You et al., 2020; Hou et al., 2022), there exists a gap between our training data augmented from ground-truth graph and inference data predicted by the topology reasoning model  $f_{base}$ . If real nodes were kept unchanged, as in prior approaches, the refinement model would fail to generalize well to these imperfect predictions. To address this, we apply only mild perturbations to real nodes, ensuring they remain within distance thresholds  $\delta_l, \delta_t$  of the ground truth while maintaining a clear distinction from fake nodes (see Appendix A.2). During training, the perturbation magnitude decreases adaptively for fake nodes and increases adaptively for real nodes, inspired by the principle of active learning (Settles, 2009). In one hand, this makes the refinement module robust to imperfect detections during inference, which are unavoidable in practice. In another hand, fake nodes perturbed beyond thresholds serve as hard negatives, strengthening the force of contrastive learning. Together, this dual strategy prevents overfitting to clean annotations and enables the model to generalize better to noisy real-world inputs.
+
+**GNN-Based Refinement Model.** Given augmented graph  $\mathcal{G}^+$ , refinement is formulated as edge confidence prediction: the goal is to estimate the likelihood of edges so that thresholding yield reliable discrete topology graph (see 2(b)). GNNs are well suited for this goal because they capture relational structure, allowing each node to update its embedding based on neighbors and learn general connection rules for driving topology graph. Formally, node embeddings are updated as,
+
+$$\mathbf{h}_v^{(k)} = \phi\left(\mathbf{h}_v^{(k-1)}, \square_{u \in \mathcal{N}(v)} \psi(\mathbf{h}_v^{(k-1)}, \mathbf{h}_u^{(k-1)})\right), \quad (2)$$
+
+where  $\psi$  is the message function,  $\square$  an aggregator, and  $\phi$  an update function. Specifically, a two-layer heterogeneous Graph Attention Network (GAT) is employed to predict edge confidence after comparing different GNN model architectures (Appendix A.5):
+
+$$\mathbf{h}_v = f_\phi(v, \mathcal{G}^+), \quad \tilde{e}_{uv} = \mathbf{h}_u^\top \mathbf{h}_v / (\|\mathbf{h}_u\| \|\mathbf{h}_v\|), \quad v \in \mathcal{V}^+. \quad (3)$$
+
+**Adaptive Refinement Loss.** Ground-truth topology is highly sparse: only a small fraction of lane-lane and lane-traffic connections are valid, and adding fake nodes further increases the imbalance between positive edges and negative edges. To handle this, we introduce an adaptive BCE loss that normalizes within each relation type and balances their scales. Given relation  $r \in \{ll, lt\}$  with positives  $E_r^{pos}$  and negatives  $E_r^{neg}$ , our loss function  $\mathcal{L}_{edge}$  is formulated as:
+
+$$\mathcal{L}_{BCE}^{(r)} = -\frac{1}{|E_r^{pos}| + |E_r^{neg}|} \left( \sum_{(u,v) \in E_r^{pos}} \log \tilde{e}_{uv} + \sum_{(u,v) \in E_r^{neg}} \log (1 - \tilde{e}_{uv}) \right), \quad (4)$$
+
+$$\mathcal{L}_{edge} = \frac{\mathcal{L}_{BCE}^{(ll)}}{|\mathcal{E}_{ll}|} + \frac{\mathcal{L}_{BCE}^{(lt)}}{|\mathcal{E}_{lt}|}, \quad (5)$$
+
+where normalization avoids negatives dominating positives, and scaling ensures equal weight across different relations, yielding stable training under sparse augmented graphs.
+
+**Edge Confidence Calibration.** For every possible edge  $(u, v)$ , we calibrate the edge existence confidence by fusing the edge confidence  $\tilde{e}_{uv}$  predicted by the topology reasoning model  $f_{base}$  with the refined score  $\tilde{e}_{uv}$  from our module (see Figure 2(c)). The calibrated confidence is computed as,
+
+$$e_{uv}^{\text{final}} = w_r \cdot \tilde{e}_{uv} + (1 - w_r) \cdot \tilde{e}_{uv}, \quad r \in \{ll, lt\}, \quad (6)$$
+
+$w_r$  is a relation-specific fusion weight, with larger value indicating greater reliance on our module. This calibration sharpens noisy continuous scores into more reliable discrete connectivity.
+
+### 4.2 DISCRETE GRAPH EVALUATION
+
+In the existing literature, the OpenLane-V2 TOP score (Wang et al., 2023) is the most widely used topology metric. It computes mean average precision over predicted edge confidences. However, a key limitation is that it evaluates only the continuous graph before thresholding, whereas downstream modules operate on discrete graphs obtained after thresholding. As a result, a model can achieve a high TOP score yet still produce missing or spurious connections in real-world applications. This mismatch highlights a long-overlooked need for a metric that explicitly evaluates the quality of discrete graphs.
+
+A natural candidate for discrete graph evaluation from graph theory is the graph edit distance (GED) (Gao et al., 2010), which measures the minimum number of node and edge edits required to transform one graph into another. GED accounts for both detection and connectivity errors, treating them as equally costly. However, for our purposes, GED is not ideal: we aim to specifically evaluate the quality of edge predictions, and GED node-edit operations are unnecessary. Moreover, exact GED computation is NP-hard, with exponential complexity on the order of  $\mathcal{O}(|\mathcal{V}|^N)$ , making it impractical for large-scale driving graphs.
+
+**Topology Jaccard Score (TJS).** To address these issues, we introduce the Topology Jaccard Score (TJS), a metric that is both efficient and tailored to discrete connectivity evaluation in topology reasoning. TJS represents a graph as an adjacency list and reduces graph comparison to a set comparison problem. Inspired by Jaccard Similarity (Jaccard, 1912), it measures the overlap between predicted and ground-truth edges, normalized by their union. The key challenge is that edge matching requires detection-aware node correspondence. Let  $\mathcal{E}^*$  be the ground-truth edges and  $\tilde{\mathcal{E}}_\tau = \{(i, j) \in \tilde{\mathcal{A}} : \tilde{p}_{ij} > \tau\}$  be the predicted edges thresholded at  $\tau=0.5$ . Following the OpenLane-V2 (Wang et al., 2023), each ground-truth node  $v \in \mathcal{V}^*$  is matched to the highest-confidence detection  $\hat{v} \in \hat{\mathcal{V}}$  within distance threshold  $\delta_l, \delta_t$  of  $v$ , with unmatched detections counted as false positives. The set of true-positive detections is  $\mathcal{V}_{\text{TP}} = \{\hat{v} \in \hat{\mathcal{V}} : \exists v \in \mathcal{V}^* \text{ s.t. } \hat{v} = \arg \max_{\hat{u} \in C(v)} \hat{p}(\hat{u})\}$ , where
+
+$C(v)$  is the set of candidate detections near  $v$ . Formally, the Topology Jaccard Score is evaluated as:
+
+$$\text{TJS}(\mathcal{E}^*, \hat{\mathcal{E}}_\tau) = \frac{| \{ (u, v) \in \hat{\mathcal{E}}_\tau \cap \mathcal{E}^* : u, v \in \mathcal{V}_{\text{TP}} \} |}{| \mathcal{E}^* \cup \hat{\mathcal{E}}_\tau |}, \quad (7)$$
+
+where the numerator counts correctly predicted edges between matched true positive detections, and the denominator includes all ground-truth and high-confidence predicted edges. TJS runs in linear time  $\mathcal{O}(|\mathcal{E}|)$  and provides a detection-aware measure of discrete connectivity that directly complements continuous graph metrics such as the OpenLane-V2 TOP score.
+
+## 5 EXPERIMENTS
+
+### 5.1 DATASET AND METRICS
+
+**Dataset.** We conduct experiments on the OpenLane-V2 benchmark (Wang et al., 2023), a large-scale dataset for perception and reasoning in autonomous driving. All experiments are performed on Subset A, derived from Argoverse 2 (Wilson et al., 2023), which contains 1,000 scenes with multi-view images and annotations at 2 Hz. Lane centerlines are given as ordered 3D polylines of 201 points within a spatial range of  $[-50, 50]$  m longitudinally and  $[-25, 25]$  m laterally. We downsample them into 11 points, following the standard schema in topology reasoning models Li et al. (2023), and use these as lane node features  $\mathbf{X}_t$ . About 90% of frames contain more than 10 centerlines, with some exceeding 40. Traffic elements are annotated as 2D bounding boxes in front-view images and span 13 semantic categories (e.g., traffic light states, direction signals). Each lane typically has one predecessor and one successor, with up to seven outgoing connections in complex intersections (Li et al., 2023; Wu et al., 2024). Following existing topology reasoning models, detections are capped at  $n_l = 200$  lanes and  $n_t = 100$  traffic elements per frame.
+
+**Evaluation Metrics.** We evaluate topology reasoning with the OpenLane-V2 (v2.1.0) TOP score (Wang et al., 2023). For each predicted edge, a confidence score is produced, and edges are ranked accordingly. Predicted edges are then matched to ground-truth edges under geometric thresholds, and mean average precision is computed. Results are reported separately for lane-lane connectivity ( $\text{TOP}_l$ ) and lane-traffic connectivity ( $\text{TOP}_{lt}$ ). Appendix A.7 provides more details on its calculation.
+
+To go beyond this, we report two complementary measures. First, TJS (Eq. 7) directly evaluates the quality of binarized discrete graphs by measuring overlap between predicted and ground-truth edge sets. Second, we compute the margin to the upper bound. The upper bound  $\text{UB}_r$  ( $r \in \{ll, lt\}$ ) assumes perfect topology prediction on detected nodes, where all true positives are assigned confidence 1.0 and connected exactly as in the ground truth, while false positives and missed detections remain unchanged. The margin,  $= \text{UB}_r - \text{TOP}_r$ , therefore reflects how much performance is still left to close under continuous metrics, conditioned on imperfect detections. Overall, we report  $\text{TOP}_l \uparrow, \text{TOP}_{lt} \uparrow, \text{JS} \uparrow$  for discrete evaluation, and  $\text{margin}_{lt} \downarrow, \text{margin}_l \downarrow$  as a complementary view of continuous performance relative to its detection-conditioned upper bound.
+
+### 5.2 IMPLEMENTATION DETAILS
+
+**Baselines and Setup.** We evaluate five topology reasoning models with public code and available checkpoints: TopoNet, TopoMLP, SMART-OL (TopoMLP), Topo2D, and TopoLogic (Table 1). For each baseline, we use outputs from the released checkpoints as inputs to TopoRefine; models without checkpoints are not included. All experiments are run on a single NVIDIA H200 GPU using the same refinement model across baselines, demonstrating the plug-and-play nature of our approach.
+
+**Feature Extraction and Training.** We initialize node features with DinoV2-ViT-L embeddings (Oquab et al., 2023), which provide 1024-dimensional representations of front-view images. To study encoder choice, we also test DinoV3 (Siméoni et al., 2025) and ResNet-50 (He et al., 2016), with results reported in the ablation study. TopoRefine is trained for 200 epochs with batch size 64 using AdamW (Loshchilov & Hutter, 2017) ( $\text{lr} = 0.001$ , weight decay = 0.01) and CosineAnnealingLR (Loshchilov & Hutter, 2016), decaying to  $10^{-4}$ . **Training TopoRefine takes about 1.5 hours and validation about 45 minutes on a single H200 GPU on Subset A.** Unlike topology reasoning models such as SMART (Ye et al., 2025) and TopoNet (Li et al., 2023), TopoRefine does not train
+
+Table 1: Comparison of methods on the OpenLane-V2 Subset A dataset using OpenLane-V2 metrics. Best results are shown in bold and the second-best are underlined. Percentage changes indicate relative improvements over the corresponding baseline before adding TopoRefine.
+
+| Input type                      | Method                            | Venue        | $TOP_{II} \uparrow$     | $TOP_{II} \uparrow$     |
+|---------------------------------|-----------------------------------|--------------|-------------------------|-------------------------|
+| Perspective images              | STSU (Can et al., 2022)           | ICCV 2021    | 2.9                     | 19.8                    |
+|                                 | VectorMapNet (Liu et al., 2023)   | ICML 2023    | 2.7                     | 9.2                     |
+|                                 | MapTR (Liao et al., 2022)         | ICLR 2023    | 5.9                     | 15.1                    |
+|                                 | TopoNet (Li et al., 2023)         | Arxiv 2023   | 10.9                    | 23.8                    |
+|                                 | TopoMLP (Wu et al., 2024)         | ICLR 2024    | 21.6                    | 26.9                    |
+|                                 | Topo2D (Li et al., 2024a)         | Arxiv 2024   | 22.3                    | 26.2                    |
+|                                 | RoadPainter (Ma et al., 2024)     | ECCV 2024    | 22.8                    | 27.2                    |
+|                                 | TopoFormer (Lv et al., 2025)      | CVPR 2025    | 24.1                    | 29.5                    |
+|                                 | TopoPoint (Fu et al., 2025a)      | Arxiv 2025   | 28.7                    | 30.0                    |
+| Perspective images + SD maps    | TopoOSMR (Zhang et al., 2024)     | IROS 2024    | 17.1                    | 26.8                    |
+|                                 | SMERF (Luo et al., 2024)          | ICRA 2024    | 15.4                    | 25.4                    |
+|                                 | TopoLogic (Fu et al., 2024)       | NeurIPS 2024 | 23.9                    | 25.4                    |
+|                                 | RoadPainter (Ma et al., 2024)     | ECCV 2024    | 29.6                    | 29.5                    |
+| Perspective images + Map priors | SMART (TopoNet) (Ye et al., 2025) | ICRA 2025    | 27.5                    | <u>33.1</u>             |
+|                                 | SMART (TopoMLP) (Ye et al., 2025) | ICRA 2025    | <u>37.0</u>             | 33.0                    |
+| Perspective images              | TopoNet + TopoRefine              | Ours         | 21.8 $_{+100\%}$        | 25.8 $_{+19.7\%}$       |
+|                                 | TopoMLP + TopoRefine              |              | 24.4 $_{+11.3\%}$       | 28.7 $_{+16.5\%}$       |
+|                                 | Topo2D + TopoRefine               |              | 24.3 $_{+10.2\%}$       | 27.5 $_{+14.3\%}$       |
+|                                 | TopoLogic + TopoRefine            |              | 24.5 $_{+12.1\%}$       | 27.2 $_{+12.1\%}$       |
+|                                 | SMART (TopoMLP) + TopoRefine      |              | <b>40.1</b> $_{+8.5\%}$ | <b>35.4</b> $_{+7.3\%}$ |
+
+a full model from scratch; it is a lightweight refinement module that adds only a small amount of extra computation on top of existing models.
+
+**Graph Augmentation and Refinement.** We generate augmented graphs by perturbing node features with Gaussian noise ( $\sigma_l = 13$ ,  $\sigma_p = 0.07$ ). If sampled noise falls outside the valid range, the standard deviations are adaptively rescaled (multiplied by 0.8 or 1.2) so that new nodes either remain plausible (valid) or clearly serve as fake negatives, while preserving structural consistency. Refinement is performed with a two-layer GATv2 encoder (Brody et al., 2021) in PyG (Fey & Lenssen, 2019), using hidden size 64, ReLU, and dropout 0.1. Lane and traffic features ( $\mathbf{X}_l$ ,  $\mathbf{X}_t$ ) are first projected into a shared space by MLP heads and then encoded by GAT. Edge scores are computed with a dot-product decoder like Eq. 3.
+
+### 5.3 MAIN RESULTS
+
+**OpenLane-V2 Score Evaluation.** Table 1 summarizes results on the Subset A benchmark. For methods without public checkpoints, we follow the numbers reported in their original papers; for released models, we apply TopoRefine directly on the provided pretrained weights. The table also specifies the input modality of each method, adopted from Ye et al. (2025). All results are obtained with the same refinement checkpoint, showing the universal, plug-and-play nature of TopoRefine.
+
+Our refinement leaves detection performance unchanged but consistently improves topology reasoning by re-estimating edge confidences with a self-supervised GNN. Discrete graphs better align with road topology, with especially strong gains on lane-lane relations ( $TOP_{II}$ ). Weaker baselines such as TopoNet nearly double their lane-lane performance (10.9  $\rightarrow$  21.8), while stronger models like SMART (TopoMLP) also benefit (+8.5%  $TOP_{II}$ , +7.3%  $TOP_{II}$ ). Other architectures, including TopoMLP and Topo2D, achieve consistent +9–12% improvements on  $TOP_{II}$  and +4–7% on  $TOP_{II}$ .
+
+**Gap-to-Upper-Bound Evaluation.** We next examine how much TopoRefine narrows the gap to the detection-conditioned upper bound defined in Section 5.1. Table 2 shows that margins are consistently reduced across baselines: TopoNet shrinks  $margin_{II}$  from 13.4 to 2.5 ( $\downarrow$  81.3%), while the strong SMART (TopoMLP) baseline still achieves an 80.1% reduction. Lane-traffic margins improve more modestly (30–60%) but remain consistently better. Overall, TopoRefine pushes predictions substantially closer to their theoretical best, with especially large gains in lane-lane connectivity where structural consistency is most critical.
+
+**Discrete Graph Evaluation.** Table 2 reports discrete graph quality using TJS. TopoRefine delivers substantial gains across all baselines: lane-lane JS improves by over 100% for TopoNet, 220% for
+
+Table 2: Combined evaluation across baselines. We report the detection-conditioned upper bound (UB), the gap to this bound (margin; smaller is better), and discrete graph quality measured by TJS (larger is better). “After” results include green subscripts showing relative improvement.
+
+| Method          | UB (TOP)         |                   | margin <sub>l</sub> ↓ |                       | margin <sub>lt</sub> ↓ |                       | TJS <sub>l</sub> (%) ↑ |                         | TJS <sub>lt</sub> (%) ↑ |                         |
+|-----------------|------------------|-------------------|-----------------------|-----------------------|------------------------|-----------------------|------------------------|-------------------------|-------------------------|-------------------------|
+|                 | TOP <sub>l</sub> | TOP <sub>lt</sub> | Bef.                  | Aft.                  | Bef.                   | Aft.                  | Bef.                   | Aft.                    | Bef.                    | Aft.                    |
+| TopoNet         | 24.4             | 28.8              | 13.4                  | 2.5 <sub>↓81.3%</sub> | 7.3                    | 3.0 <sub>↓58.5%</sub> | 16.3                   | 32.9 <sub>↑102.0%</sub> | 31.0                    | 55.8 <sub>↑79.8%</sub>  |
+| TopoMLP         | 25.0             | 31.4              | 3.3                   | 0.7 <sub>↓80.4%</sub> | 4.4                    | 2.7 <sub>↓39.6%</sub> | 18.5                   | 59.7 <sub>↑222.9%</sub> | 31.5                    | 59.8 <sub>↑89.8%</sub>  |
+| Topo2D          | 25.0             | 29.8              | 2.8                   | 0.7 <sub>↓74.3%</sub> | 3.6                    | 2.5 <sub>↓31.4%</sub> | 18.9                   | 55.0 <sub>↑190.6%</sub> | 34.5                    | 51.5 <sub>↑49.0%</sub>  |
+| TopoLogic       | 26.0             | 30.6              | 2.0                   | 1.5 <sub>↓24.8%</sub> | 5.3                    | 3.3 <sub>↓36.7%</sub> | 21.0                   | 43.9 <sub>↑109.4%</sub> | 32.5                    | 53.3 <sub>↑64.3%</sub>  |
+| SMART (TopoMLP) | 40.9             | 38.9              | 3.9                   | 0.8 <sub>↓80.1%</sub> | 5.9                    | 3.5 <sub>↓41.2%</sub> | 38.1                   | 87.7 <sub>↑130.0%</sub> | 36.6                    | 82.8 <sub>↑126.4%</sub> |
+
+TopoMLP, and 130% even for SMART (TopoMLP), while lane-traffic JS improves by 50–126%. Compared to margin-based metrics, which mainly capture edge-level classification against an upper bound, JS directly measures overlap between predicted and ground-truth graphs and reveals far more significant improvements. This shows that TopoRefine both narrows the gap to the theoretical best and yields discrete graphs that more faithfully match real-world road topology.
+
+**Qualitative Comparison.** Figure 3 highlights how refinement improves discrete topology. In both TopoNet and TopoMLP, baseline predictions leave critical connections missing or fragmented, such as unlinked traffic lights or inconsistent lane merges. After applying TopoRefine, these gaps are consistently corrected: traffic signals are properly attached to lanes, lane centerlines align more faithfully with the ground truth, and the overall graph becomes structurally coherent. This qualitative evidence reinforces the quantitative results, showing that our refinement yields more usable topological maps for downstream driving tasks. Check more qualitative results in Appendix A.3.
+
+![Figure 3: Qualitative comparison of topology predictions before and after refinement. The figure shows five panels: (a) Ground-truth Topology, (b) TopoNet Prediction, (c) TopoNet + TopoRefine, (d) TopoMLP Prediction, and (e) TopoMLP + TopoRefine. Each panel displays a street view with overlaid colored lines representing the predicted topology. The ground truth shows a clear, continuous network. The predictions from TopoNet and TopoMLP show fragmented and missing connections, particularly at intersections and traffic lights. After applying TopoRefine, the predictions become more continuous and structurally coherent, closely matching the ground truth topology.](aaec7c7044d764c324cdb35c0201da6f_img.jpg)
+
+Figure 3: Qualitative comparison of topology predictions before and after refinement. The figure shows five panels: (a) Ground-truth Topology, (b) TopoNet Prediction, (c) TopoNet + TopoRefine, (d) TopoMLP Prediction, and (e) TopoMLP + TopoRefine. Each panel displays a street view with overlaid colored lines representing the predicted topology. The ground truth shows a clear, continuous network. The predictions from TopoNet and TopoMLP show fragmented and missing connections, particularly at intersections and traffic lights. After applying TopoRefine, the predictions become more continuous and structurally coherent, closely matching the ground truth topology.
+
+Figure 3: Qualitative comparison of topology predictions before and after refinement.
+
+### 5.4 ABLATION STUDY
+
+We conduct ablation studies to examine the effect of feature extractors (Appendix A.4), loss functions, and real-node perturbation. All experiments are performed under the same training setup, using TopoNet as the baseline topology reasoning model for refinement.
+
+Table 3: Ablation studies on loss functions and real-node perturbation. Results are reported on lane-lane (TOP<sub>l</sub>) and lane-traffic (TOP<sub>lt</sub>) topology.
+
+| (a) Loss Functions  |                  |                   | (c) Real-node Perturbation |                  |                   |
+|---------------------|------------------|-------------------|----------------------------|------------------|-------------------|
+| Loss                | TOP <sub>l</sub> | TOP <sub>lt</sub> | Strategy                   | TOP <sub>l</sub> | TOP <sub>lt</sub> |
+| BCE                 | 12.1             | 22.0              | w/o Perturbation           | 21.7             | 25.4              |
+| Hybrid BCE-Focal    | <b>22.2</b>      | 22.0              | w/ Perturbation            | <b>21.8</b>      | <b>25.8</b>       |
+| Adaptive BCE (Ours) | 21.8             | <b>25.8</b>       |                            |                  |                   |
+
+**Loss Function.** We compare our adaptive BCE loss against standard BCE and a Hybrid BCE-Focal variant. For BCE, we set the positive weight to 0.2. For Hybrid BCE-Focal, we set  $\alpha = 0.75$ ,  $\gamma = 2.0$ , and also define the final loss as  $\mathcal{L}_{\text{hybrid}} = 0.9 \cdot \mathcal{L}_{\text{BCE}} + 0.1 \cdot \mathcal{L}_{\text{Focal}}$ , favoring BCE while leveraging focal loss at the same time. Table 3(a) shows that adaptive BCE achieves the best overall
+
+performance. Unlike commonly used BCE and Hybrid BCE-Focal, it requires no extra hyperparameters, making it a more robust choice for graph refinement where graph sizes and sparsity vary.
+
+**Real Node Perturbation.** Prior work in graph self-supervised learning has shown that node-level perturbations are an effective augmentation strategy for improving robustness (Zhu et al., 2021b; 2020). In our framework, real-node perturbation plays a limited but conceptually important role: without introducing any variation to real nodes, the refinement module may overfit to the exact annotated geometry rather than learning structural connectivity patterns that generalize to unseen scenes. Adding small, semantics-preserving perturbations helps regularize the model by encouraging it to focus on relational structure instead of memorizing raw coordinates. [We clarify that Table 3\(b\) isolates only the real-node perturbation component. This perturbation is a small auxiliary part of our full framework—which also includes self-supervised GNN training, fake-node perturbation for negative samples, and the adaptive BCE loss—so its marginal improvement is expected and does not reflect the contribution of the overall method.](#) As shown in the ablation study, real-node perturbation provides small but consistent improvements in topology metrics, aligning with its intended role as a lightweight augmentation rather than a primary performance driver.
+
+## 6 CONCLUSION
+
+We revisit topology reasoning through the perspective of discrete graph quality, exposing the gap between continuous edge scores and the discrete connectivity required by downstream tasks in autonomous driving. To address this, we introduce TopoRefine, a universal and plug-and-play topology refinement module that post-hoc improves any topology reasoning models through self-supervised augmentations and a lightweight heterogeneous GNN. Experiments on OpenLane-V2 baselines show that TopoRefine consistently improves TOP scores, substantially narrows gap-to-upper-bound margins, and delivers significant gains in discrete evaluation (e.g., TJS). These results demonstrate that refining edge confidences prior to thresholding offers a simple and effective approach to obtain reliable road graphs. Our work establishes discrete-graph evaluation as a core objective for topology reasoning and provides a practical framework to better align predictions with the requirements of downstream autonomous driving tasks.
+
+## REFERENCES
+
+- Shaked Brody, Uri Alon, and Eran Yahav. How attentive are graph attention networks? *arXiv preprint arXiv:2105.14491*, 2021.
+- Yigit Baran Can, Alexander Liniger, Danda Pani Paudel, and Luc Van Gool. Topology preserving local road network estimation from single onboard camera image. In *Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition*, pp. 17263–17272, 2022.
+- Nicolas Carion, Francisco Massa, Gabriel Synnaeve, Nicolas Usunier, Alexander Kirillov, and Sergey Zagoruyko. End-to-end object detection with transformers. In *European conference on computer vision*, pp. 213–229. Springer, 2020.
+- Yuning Chai, Benjamin Sapp, Mayank Bansal, and Dragomir Anguelov. Multipath: Multiple probabilistic anchor trajectory hypotheses for behavior prediction. *arXiv preprint arXiv:1910.05449*, 2019.
+- Xiaowen Dong, Dorina Thanou, Pascal Frossard, and Pierre Vandergheynst. Learning laplacian matrix in smooth graph signal representations. *IEEE Transactions on Signal Processing*, 64(23): 6160–6173, 2016.
+- Matthias Fey and Jan E. Lenssen. Fast graph representation learning with PyTorch Geometric. In *ICLR Workshop on Representation Learning on Graphs and Manifolds*, 2019.
+- Luca Franceschi, Mathias Niepert, Massimiliano Pontil, and Xiao He. Learning discrete structures for graph neural networks. In *International conference on machine learning*, pp. 1972–1982. PMLR, 2019.
+
+- 540 Yanping Fu, Wenbin Liao, Xinyuan Liu, Hang Xu, Yike Ma, Yucheng Zhang, and Feng Dai. Topo-  
+541 logic: An interpretable pipeline for lane topology reasoning on driving scenes. In *Advances in*  
+542 *Neural Information Processing Systems*, volume 37, pp. 61658–61676, 2024.
+- 543  
+544 Yanping Fu, Xinyuan Liu, Tianyu Li, Yike Ma, Yucheng Zhang, and Feng Dai. Topopoint:  
+545 Enhance topology reasoning via endpoint detection in autonomous driving. *arXiv preprint*  
+546 *arXiv:2505.17771*, 2025a.
+- 547 Yanping Fu, Xinyuan Liu, Tianyu Li, Yike Ma, Yucheng Zhang, and Feng Dai. TopoPoint: Enhance  
+548 Topology Reasoning via Endpoint Detection in Autonomous Driving, May 2025b. URL [http://](http://arxiv.org/abs/2505.17771)  
+549 [//arxiv.org/abs/2505.17771](http://arxiv.org/abs/2505.17771). arXiv:2505.17771 [cs].
+- 550 Xinbo Gao, Bing Xiao, Dacheng Tao, and Xuelong Li. A survey of graph edit distance. *Pattern*  
+551 *Analysis and applications*, 13(1):113–129, 2010.
+- 552  
+553 Xunjiang Gu, Guanyu Song, Igor Gilitschenski, Marco Pavone, and Boris Ivanovic. Producing  
+554 and leveraging online map uncertainty in trajectory prediction. In *Proceedings of the IEEE/CVF*  
+555 *Conference on Computer Vision and Pattern Recognition*, pp. 14521–14530, 2024.
+- 556  
+557 Kaiming He, Xiangyu Zhang, Shaoqing Ren, and Jian Sun. Deep residual learning for image recog-  
+558 nition. In *Proceedings of the IEEE conference on computer vision and pattern recognition*, pp.  
+559 770–778, 2016.
+- 560 Zhenyu Hou, Xiao Liu, Yukuo Cen, Yuxiao Dong, Hongxia Yang, Chunjie Wang, and Jie Tang.  
+561 Graphmae: Self-supervised masked graph autoencoders. In *Proceedings of the 28th ACM*  
+562 *SIGKDD conference on knowledge discovery and data mining*, pp. 594–604, 2022.
+- 563  
+564 Yihan Hu, Jiazhi Yang, Li Chen, Keyu Li, Chonghao Sima, Xizhou Zhu, Siqi Chai, Senyao Du,  
+565 Tianwei Lin, Wenhai Wang, et al. Planning-oriented autonomous driving. In *Proceedings of the*  
+566 *IEEE/CVF conference on computer vision and pattern recognition*, pp. 17853–17862, 2023.
+- 567 Paul Jaccard. The distribution of the flora in the alpine zone. 1. *New phytologist*, 11(2):37–50, 1912.
+- 568  
+569 Bo Jiang, Ziyuan Zhang, Doudou Lin, Jin Tang, and Bin Luo. Semi-supervised learning with graph  
+570 learning-convolutional networks. In *Proceedings of the IEEE/CVF conference on computer vision*  
+571 *and pattern recognition*, pp. 11313–11320, 2019.
+- 572 Vassilis Kalofolias. How to learn a graph from smooth signals. In *Artificial intelligence and statis-*  
+573 *tics*, pp. 920–929. PMLR, 2016.
+- 574  
+575 Han Li, Zehao Huang, Zitian Wang, Wenge Rong, Naiyan Wang, and Si Liu. Enhancing 3d lane  
+576 detection and topology reasoning with 2d lane priors. *arXiv preprint arXiv:2406.03105*, 2024a.
+- 577  
+578 Tianyu Li, Li Chen, Huijie Wang, Yang Li, Jiazhi Yang, Xiangwei Geng, Shengyin Jiang, Yuting  
+579 Wang, Hang Xu, Chunjing Xu, Junchi Yan, Ping Luo, and Hongyang Li. Graph-based topology  
+580 reasoning for driving scenes. *arXiv preprint arXiv:2304.05277*, 2023.
+- 581  
+582 Tianyu Li, Peijin Jia, Bangjun Wang, Li Chen, Kun Jiang, Junchi Yan, and Hongyang Li. Laneseg-  
+583 net: Map learning with lane segment perception for autonomous driving. In *ICLR*, 2024b.
+- 584  
+585 Bencheng Liao, Shaoyu Chen, Xinggang Wang, Tianheng Cheng, Qian Zhang, Wenyu Liu, and  
+586 Chang Huang. Maptr: Structured modeling and learning for online vectorized hd map construc-  
+587 tion. *arXiv preprint arXiv:2208.14437*, 2022.
+- 588  
+589 Yicheng Liu, Tianyuan Yuan, Yue Wang, Yilun Wang, and Hang Zhao. Vectormapnet: End-to-end  
+590 vectorized hd map learning. In *International Conference on Machine Learning*, pp. 22352–22369.  
+591 PMLR, 2023.
+- 592  
+593 Ilya Loshchilov and Frank Hutter. Sgdr: Stochastic gradient descent with warm restarts. *arXiv*  
+594 *preprint arXiv:1608.03983*, 2016.
+- 595  
+596 Ilya Loshchilov and Frank Hutter. Decoupled weight decay regularization. *arXiv preprint*  
+597 *arXiv:1711.05101*, 2017.
+
+- 594 Katie Z Luo, Xinshuo Weng, Yan Wang, Shuang Wu, Jie Li, Kilian Q Weinberger, Yue Wang, and  
+595 Marco Pavone. Augmenting lane perception and topology understanding with standard definition  
+596 navigation maps. In *2024 IEEE International Conference on Robotics and Automation (ICRA)*,  
+597 pp. 4029–4035. IEEE, 2024.
+- 598  
+599 Changsheng Lv, Mengshi Qi, Liang Liu, and Huadong Ma. T2sg: Traffic topology scene graph for  
+600 topology reasoning in autonomous driving. In *Proceedings of the Computer Vision and Pattern  
+601 Recognition Conference*, pp. 17197–17206, 2025.
+- 602  
+603 Zhongxing Ma, Shuang Liang, Yongkun Wen, Weixin Lu, and Guowei Wan. Roadpainter: Points  
+604 are ideal navigators for topology transformer. In *European Conference on Computer Vision*, pp.  
+605 179–195. Springer, 2024.
+- 606  
+607 Maxime Oquab, Timothée Darcet, Théo Moutakanni, Huy Vo, Marc Szafraniec, Vasil Khalidov,  
+608 Pierre Fernandez, Daniel Haziza, Francisco Massa, Alaaeldin El-Nouby, et al. Dinov2: Learning  
+609 robust visual features without supervision. *arXiv preprint arXiv:2304.07193*, 2023.
+- 610  
+611 Burr Settles. Active learning literature survey. 2009.
+- 612  
+613 Oriane Siméoni, Huy V. Vo, Maximilian Seitzer, Federico Baldassarre, Maxime Oquab, Cijo Jose,  
+614 Vasil Khalidov, Marc Szafraniec, Seungeun Yi, Michaël Ramamonjisoa, Francisco Massa, Daniel  
+615 Haziza, Luca Wehrstedt, Jianyuan Wang, Timothée Darcet, Théo Moutakanni, Leonel Sentana,  
+616 Claire Roberts, Andrea Vedaldi, Jamie Tolan, John Brandt, Camille Couprie, Julien Mairal, Hervé  
+617 Jégou, Patrick Labatut, and Piotr Bojanowski. DINOV3, 2025. URL <https://arxiv.org/abs/2508.10104>.
+- 618  
+619 Shantanu Thakoor, Corentin Tallec, Mohammad Gheshlaghi Azar, Mehdi Azabou, Eva L Dyer,  
+620 Remi Munos, Petar Velicković, and Michal Valko. Large-scale representation learning on graphs  
+621 via bootstrapping. *arXiv preprint arXiv:2102.06514*, 2021.
+- 622  
+623 Huijie Wang, Tianyu Li, Yang Li, Li Chen, Chonghao Sima, Zhenbo Liu, Bangjun Wang, Peijin  
+624 Jia, Yuting Wang, Shengyin Jiang, Feng Wen, Hang Xu, Ping Luo, Junchi Yan, Wei Zhang, and  
+625 Hongyang Li. Openlane-v2: A topology reasoning benchmark for unified 3d hd mapping. In  
+626 *NeurIPS*, 2023.
+- 627  
+628 Benjamin Wilson, William Qi, Tanmay Agarwal, John Lambert, Jagjeet Singh, Siddhesh Khan-  
+629 delwal, Bowen Pan, Ratnesh Kumar, Andrew Hartnett, Jhony Kaesemodel Pontes, et al. Ar-  
+630 goverse 2: Next generation datasets for self-driving perception and forecasting. *arXiv preprint  
+631 arXiv:2301.00493*, 2023.
+- 632  
+633 Dongmeng Wu, Jiahao Chang, Fan Jia, Yingfei Liu, Tiancai Wang, and Jianbing Shen. Topomlp:  
+634 An simple yet strong pipeline for driving topology reasoning. *ICLR*, 2024.
+- 635  
+636 Junjie Ye, David Paz, Hengyuan Zhang, Yuliang Guo, Xinyu Huang, Henrik I. Christensen, Yue  
+637 Wang, and Liu Ren. Smart: Advancing scalable map priors for driving topology reasoning. In  
+638 *Proceedings of the IEEE International Conference on Robotics and Automation (ICRA)*, 2025.
+- 639  
+640 Yuning You, Tianlong Chen, Yongduo Sui, Ting Chen, Zhangyang Wang, and Yang Shen. Graph  
+641 contrastive learning with augmentations. *Advances in neural information processing systems*, 33:  
+642 5812–5823, 2020.
+- 643  
+644 Hengyuan Zhang, David Paz, Yuliang Guo, Arun Das, Xinyu Huang, Karsten Haug, Henrik I Chris-  
+645 tensen, and Liu Ren. Enhancing online road network perception and reasoning with standard  
+646 definition maps. In *2024 IEEE/RSJ International Conference on Intelligent Robots and Systems  
+647 (IROS)*, pp. 1086–1093. IEEE, 2024.
+- 648  
+649 Jianan Zhao, Qianlong Wen, Mingxuan Ju, Chuxu Zhang, and Yanfang Ye. Self-supervised graph  
+650 structure refinement for graph neural networks. In *Proceedings of the sixteenth ACM international  
+651 conference on web search and data mining*, pp. 159–167, 2023.
+- 652  
+653 Yanqiao Zhu, Yichen Xu, Feng Yu, Qiang Liu, Shu Wu, and Liang Wang. Deep graph contrastive  
+654 representation learning. *arXiv preprint arXiv:2006.04131*, 2020.
+
+[Appendix and supplementary materials beyond page 12 have been removed.]

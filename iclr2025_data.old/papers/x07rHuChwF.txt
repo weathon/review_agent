@@ -1,0 +1,461 @@
+> EUCLID: SUPERCHARGING MULTIMODAL LLMS WITH > SYNTHETIC HIGH-FIDELITY VISUAL DESCRIPTIONS 
+
+**004 005 Anonymous authors 006** Paper under double-blind review ABSTRACT Multimodal large language models (MLLMs) have made rapid progress in recent years, yet continue to struggle with low-level visual perception—particularly the ability to accurately describe the geometric details of an image. This capability is crucial for applications in areas such as robotics, medical image analysis, and manufacturing. To address this challenge, we first introduce _Geoperception_ , a benchmark designed to evaluate an MLLM’s ability to accurately transcribe 2D geometric information from an image. Using this benchmark, we demonstrate the limitations of leading MLLMs, and then conduct a comprehensive empirical study to explore strategies for improving their performance on geometric tasks. Our findings highlight the benefits of certain model architectures, training tech- niques, and data strategies, including the use of high-fidelity synthetic data and multi-stage training with a data curriculum. Notably, we find that a data curriculum enables models to learn challenging geometry understanding tasks which they fail to learn from scratch. Leveraging these insights, we develop _Euclid_ , a fam- ily of models specifically optimized for strong low-level geometric perception. Although purely trained on synthetic multimodal data, Euclid shows strong gen- eralization ability to novel geometry shapes. For instance, Euclid outperforms the best closed-source model, Gemini-1.5-Pro, by up to 54.52% on benchmark tasks. 1 INTRODUCTION Multimodal large language models (MLLMs) have rapidly progressed in recent years, demonstrat- ing remarkable potential in understanding and reasoning about the visual world through the powerful capabilities of large language models (LLMs) (Liu et al., 2024c;a; Achiam et al., 2023; Team et al., 2023; Hu et al., 2023; Tong et al., 2024a; Wang et al., 2024a). These models have showcased strong performance in tasks such as visual question answering (VQA) (Goyal et al., 2017), image captioning (Lin et al., 2014), and multimodal reasoning (Liu et al., 2023). As one recent exam- ple, LLaVA-NeXT-34B (Liu et al., 2024b) achieves an impressive 83.7% accuracy on the VQAv2 benchmark (Goyal et al., 2017), a comprehensive benchmark on natural image question answering. While MLLMs achieve impressive results on tasks like VQA, their performance relies on high- level semantic extraction (Tong et al., 2024b); in contrast, they often fall short on _low-level visual_ _perception_ —i.e., the ability to accurately describe the geometric details of an image, such as the points, lines, angles, shapes, and spatial relationships among its constituent objects. This limitation becomes especially apparent in tasks requiring precise descriptions, such as mathematical visual problem solving (Zhang et al., 2024a; Lu et al., 2023), scientific visual understanding (Yue et al., 2024; Fu et al., 2024a), abstract visual reasoning (Jiang et al., 2024; Ahrabian et al., 2024), and even simple visual comprehension (Rahmanzadehgervi et al., 2024; Wang et al., 2024b). For example, when interpreting a graph diagram, precise recognition of edges is essential for extracting reliable information, and in geometry problem-solving, accurate identification of relationships between line segments and points is fundamental (Fu et al., 2024a). Beyond abstract tasks, precise visual per- ception is also vital in real-world applications, including spatial understanding for robotics, medical image analysis for accurate diagnosis, quality control in manufacturing to detect subtle defects, autonomous driving systems that rely on exact object localization or distance estimation, and augmented reality applications that demand precise overlay of virtual objects onto the real world. 
+
+1 
+
+In this paper, we aim to study the challenges of low-level visual perception in MLLMs, take steps to understand the root cause of their performance, and improve the models’ capabilities in this area. We begin by developing a benchmark dataset specifically designed to evaluate precise geometric perception, which we call _Geoperception_ . As a focused test bed, this benchmark targets 2D geometry tasks. Using this benchmark, we demonstrate the limitations of leading closed and open MLLMs, followed by a comprehensive empirical study to explore strategies for significantly improving their performance on geometric perception tasks. Our findings show the benefits of key factors such as model architecture, training techniques, and data strategies, including the use of synthetic data and multi-stage training with a data curriculum. Notably, we find that a data curriculum enables models to learn challenging low-level geometry understanding tasks, which they fail to learn from scratch, even when trained on a very large dataset. Using these lessons learned, we then train a family of models—using a carefully designed curriculum of synthetic data—that are specifically optimized for strong low-level geometric perception, which we call Euclid. We evaluate this family of models, and show that it excels on a variety of low-level geometric perception tasks. Our main technical contributions are as follows: • **Geoperception Benchmark:** We introduce a new benchmark dataset, _Geoperception_ , derived from the Geometry-3K corpus (Lu et al., 2021), specifically designed to evaluate MLLMs’ ability to accurately perceive surface-level geometric information without requiring complex inference or reasoning. Our benchmark reveals significant shortcomings in precise geometric perception across all leading visual-language models, both closed and open-source. • **Empirical Study and Synthetic Data Engine:** To investigate the root cause of this performance, we conduct a detailed empirical exploration of MLLM architecture and training strategies. To aid in our investigation, we develop a synthetic data engine capable of generating high-fidelity visual representations of fundamental geometric elements. This study leads to key insights, such as the importance of certain architectural choices and the use of curriculum-based, multi-stage training with progressively more complex visual descriptions for improving low-level visual perception. • **Euclid Model:** Leveraging the insights from our exploration and our synthetic data engine, we train Euclid, a series of multimodal LLMs tailored for high-quality geometric perception. Al- though purely trained on synthetic multimodal data and simple geometry shapes, Euclid achieves strong performance on the Geoperception benchmark, for instance, outperforming the best closed- source model, Gemini-1.5-Pro, by up to 54.52% on certain benchmark tasks. 2 BACKGROUND AND RELATED WORK We provide an overview of prior efforts that assess and improve low-level perception and geometric reasoning in MLLMs, and highlight our contributions in data synthesis, evaluation, and training. **091 092 Vision-Language MLLMs.** While recent iterations of LLMs feature a standardized model archi- tecture and pretraining recipe, MLLMs still often differ in design choices for infusing visual inputs. One popular design is to align _continuous_ visual features with the embedding space of a backbone LLM (Liu et al., 2024a;b; Dubey et al., 2024; McKinzie et al., 2024; Tong et al., 2024a; Beyer et al., 2024; AI, 2023; Wang et al., 2024a); another approach involves _tokenizing_ visual inputs to be trained jointly with language tokens (Team et al., 2023; Team, 2024). These modules are often infused with a decoder-only LLM, but others have explored encoder-decoder architectures to integrate a more varied collection of modalities (Alayrac et al., 2022; Mizrahi et al., 2024; Ormazabal et al., 2024; Bachmann et al., 2024). Our study focuses on _decoder_ MLLMs with a _continuous_ visual encoder, and we carry out an empirical study to explore the effect of synthetic dataset mixture, training recipe, and encoder design (Liu et al., 2022; Radford et al., 2021; Zhai et al., 2023; Oquab et al., 2023). 
+
+**Geometry-Oriented MLLMs.** At the core of these choices is the hardness in designing a module adept in general visual reasoning (McKinzie et al., 2024; Tong et al., 2024a). In this work, we explore the optimal design of MLLMs specialized in low-level visual perception, a crucial aspect for (among other applications) multimodal mathematical understanding (Lu et al., 2023; Zhang et al., 2024a). This paper supplements prior efforts in improving mathematical reasoning (Gao et al., 2023; Zhang et al., 2024b; Zhuang et al., 2024; Li et al., 2024; Peng et al., 2024; Shi et al., 2024b) with a 
+
+2 
+
+detailed study on the effect of dataset mixture, curriculum, and visual encoder, to reach a recipe that elicits strong performance on geometric tasks (Kazemi et al., 2023) that require low-level perception. **111 Evaluating Low-Level Perception.** Many benchmarks (Rahmanzadehgervi et al., 2024) have re- ported that frontier-class MLLMs struggle with visual perception tasks, which are prerequisites for applications that emphasize low-level geometric perception (Chen et al., 2024; Fu et al., 2024b), including mathematical (Yue et al., 2024; Lu et al., 2023; Zhang et al., 2024a; Jiang et al., 2024) and spatial reasoning (Chen et al., 2024). These findings collectively identify that MLLMs exhibit a language prior (Lin et al., 2023)—a preference of textual inputs over visual inputs—leading to a performance gap between modalities (Wang et al., 2024b; Zhang et al., 2024a; Fu et al., 2024a). Meanwhile, there lacks a high-quality benchmark that evaluates low-level geometric perception in MLLMs, and the Geoperception benchmark represents a first effort to narrow this gap. 
+
+**121 Improving Low-Level Visual Perception.** Many prior works study _data-driven_ approaches to improve low-level perception skills. For example, Gao et al. (2023); Li et al. (2024); Zhuang et al. (2024) employ a standardized supervised finetuning recipe, and optionally adjust the training data mixture. This type of training data is often synthesized from text-only math problems (Lu et al., 2021; Trinh et al., 2024) or via rule-based systems (Kazemi et al., 2023). In parallel, Vishniakov et al. (2023); Shi et al. (2024a); Tong et al. (2024b) have explored the design space of visual encoders for general-purpose vision-language reasoning. We identify best practices over the union of these design spaces, and then train small MLLMs with strong performance in low-level perception tasks. 
+
+Lastly, several works (Schick et al., 2024; Sur´ıs et al., 2023; Hu et al., 2024) have opted to augment an MLLM with external APIs that process low-level features with specialized vision modules, such as object detection (Redmon et al., 2016), segmentation (Kirillov et al., 2023), and depth estimation (Yang et al., 2024b). While these agentic frameworks (Wu et al., 2023) present a promising alternative that directly addresses the shortcomings of visual encoders, they are limited by their scalability to novel use cases, and may be insufficient for precise tool routing that requires low-level perception as a primer (Picard et al., 2023; Wu et al., 2024; Buehler, 2024).Picard et al., 2023; Wu et al., 2024; Buehler, 2024)., 2023; Wu et al., 2024; Buehler, 2024). 2023; Wu et al., 2024; Buehler, 2024).; Wu et al., 2024; Buehler, 2024). Wu et al., 2024; Buehler, 2024)., 2024; Buehler, 2024). 2024; Buehler, 2024).; Buehler, 2024). Buehler, 2024)., 2024). 2024).). 
+
+> perception as a primer (Picard et al., 2023; Wu et al., 2024; Buehler, 2024).Picard et al., 2023; Wu et al., 2024; Buehler, 2024)., 2023; Wu et al., 2024; Buehler, 2024). 2023; Wu et al., 2024; Buehler, 2024).; Wu et al., 2024; Buehler, 2024). Wu et al., 2024; Buehler, 2024)., 2024; Buehler, 2024). 2024; Buehler, 2024).; Buehler, 2024). Buehler, 2024)., 2024). 2024).). 3 GEOPERCEPTION BENCHMARK Recently, there has been a growing number of multimodal benchmarks across diverse domains be- yond natural image understanding, including mathematical reasoning (Zhang et al., 2024a; Lu et al., 2023) and abstract visual reasoning (Jiang et al., 2024; Chia et al., 2024). Many of these prior works have realized the importance of accurate low-level visual perception. Specifically, Marvel (Jiang et al., 2024) introduces perception questions for various abstract reasoning patterns, and finds that the main bottleneck of MLLMs’ performance on abstract visual reasoning is that they fail to accu- 
+
+> rately transcribe visual information into concepts; Mathverse (Zhang et al., 2024a) and IsoBench (Fu 
+
+> et al., 2024a) both test MLLMs on equivalent question represented by language and visual modal- 
+
+> ities, respectively. Both works find that language-only input always outperforms vision-language 
+
+> input, and that the vision component of MLLMs always fails to utilize low-level visual features. VDLM (Wang et al., 2024b) transcribes raster images into vector graphics and uses LLMs to reason over the SVG code. They find that although SVG code is not straightforward to understand, using LLMs to reason over SVG is consistently more effective than directly using MLLMs on original raster images. Blind-test (Rahmanzadehgervi et al., 2024) and BLINK (Fu et al., 2024b) also share similar findings with the works above. 
+
+> **153 A Benchmark for Geometric Perception.** Although such shortcomings of MLLMs are commonly recognized, there is a lack of comprehensive benchmark that purely focuses on these abilities of MLLMs. Our goal is to construct a benchmark focusing solely on the perception ability of MLLMs, which is also representative enough of real-world applications. When humans perceive and memo- rize visual information, it is well-recognized that this procedure relies crucially on searching for the closest and simplest corresponding geometric shapes (Sabl´e-Meyer et al., 2022). We posit that geometric perception is a fundamental and broadly representative low-level visual perception ability in many applications. Hence, we select geometry understanding as our domain of dataset construction. 
+
+**161 Benchmark Tasks.** Over two thousand years ago, Euclid introduced five axioms that underpin all further geometric reasoning. These axioms involve establishing and extending lines using points 
+
+3 
+
+PointLiesOnLine PointLiesOnCircle AngleClassification LineComparison A H Q B C L ° S| Cc E B Fc A Q: What is the point lying o- Q: What is the point lying o- Q: Is angle BAC acute or obtQ: Which line is longer, QS - n line YB? n circle with center G? use? or SP? A: D, G A: L, H, F A: acute A: QS Figure 1: Four examples from our _Geoperception_ dataset. The questions are sourced from the Geometry-3K corpus (Lu et al., 2021), which compiles problems from two widely-used high school textbooks. We perform filtering, validation, and generate question-and-answer text for each image. (Axioms 1 and 2), constructing circles from a point and a radius (Axiom 3), and defining perpen- dicularity (Axiom 4) and parallelism (Axiom 5). Additionally, Euclid provided common notions regarding the properties of equality. To capture these aspects, we define five tasks in our Geoperception dataset: PointLiesOnLine, PointLiesOnCircle, Parallel, Perpendicular and Equal, and aditionally define AngleClassification and LengthComparison tasks to assess the model’s understanding of angle and length measurements, resulting in a total of seven tasks. In geometric diagrams, perpendicularity, parallelism, and equality are often indi- cated by annotation symbols. Thus, we classify Parallel, Perpendicular, and Equal as annotated geometry understanding. Meanwhile, PointLiesOnLine, PointLiesOnCircle, AngleClassification, and LengthComparison fall under primitive geometry shape un- derstanding, which includes both logical (PointLiesOnLine, PointLiesOnCircle) and nu- merical (AngleClassification, LengthComparison) tasks. **187 Data Filtering.** Geoperception is sourced from Table 1: Statistics of the seven tasks in our Geop- the Geometry-3K (Lu et al., 2021) corpus, erception dataset, including the number of ques- which offers precise logical forms for geotions and images. metric diagrams, compiled from popular high- school textbooks. However, certain points in Predicate # Q # I these logical forms are absent in the correPointLiesOnLine 1901 924 sponding diagrams. To resolve this, we use PointLiesOnCircle 359 322 GPT-4o-mini MLLM to confirm the presence Parallel 106 101 of all points listed in the logical forms. This Perpendicular 1266 456 process filters the 3,002 diagrams to retain Equals 4436 1202 1,584, where at least one logical form fully repAngleClassification 2193 1389 resents its points in the diagram. A random inLengthComparison 1394 1394 spection of 100 annotations reveals only two er- rors, indicating high annotation accuracy. **200 201 Converting Logical Forms Into Questions.** We convert logical forms into question-and-answer pairs for each of the seven tasks in Geoperception. In the Equals task, for example, we directly convert the logical form (e.g., Equals(LengthOf(Line(Q, T)), 86)) into a question- answer pair (e.g., Q: What is the length of line QT as annotated? A: 86). For PointLiesOnLine, two points on the line are chosen to form the question, with the remain- ing points on the line as the answer. Similarly, for PointLiesOnCircle, we ask which points lie on the circle, using its center as the basis for the question. For Parallel and Perpendicular, we represent each line by two points and query which other lines are parallel or perpendicular to it. In AngleClassification, we ensure the queried angle is in the range of [10 _,_ 80] _∪_ [100 _,_ 170] degrees to avoid ambiguity. For LengthComparison, we ensure that the shorter line is less than 70% of the length of the longer line. Since multiple equivalent questions can be generated for a single logical form (e.g., a line containing five points generates[5] _P_ 2 equivalent questions), we ran- domly select one to avoid redundancy. Table 5 summarizes the question statistics for each task, as well as the number of images involved. Four examples from Geoperception are illustrated in Fig. 1 
+
+**213 214 Evaluation Details.** We evaluate seven leading MLLMs, both open source and closed source. The open source models include Molmo-7B-D (Deitke et al., 2024), Qwen2-VL-7B (Wang et al., 2024a), Llama-3.2-11B (Dubey et al., 2024), and Pixtral-12B (AI, 2023). The closed-source models include 
+
+4 
+
+GPT-4o-mini (Achiam et al., 2023), GPT-4o (Achiam et al., 2023), Claude-3.5-Sonnet (Anthropic, 2024), Gemini-1.5-flash (Team et al., 2023), and Gemini-1.5-pro (Team et al., 2023). Additionally, GPT-4o-mini without image input is used for generating the random baseline, employing the same textual instructions. To prevent stretching, all images are padded to square dimensions before being fed into the models. During evaluation of a given question by an MLLM, let _G_ denote the ground truth set of answers, and let _P_ denote the predicted set of answers; then the evaluation score is defined as  _|P |_ if _P ⊆ G,_ Evaluation score = _|G|_ (1)  0 otherwise _._ **226 227 Current MLLMs struggle to perceive low-level geometry annotations and relationships.** Despite the simplicity of Geoperception for humans, it remains a considerable challenge for even the most advanced commercial MLLMs. Notably, all models fall short of achieving 30% accu- racy on the PointLiesOnLine task and do not outperform the text-only GPT-4o mini model in AngleClassification task. Closed source models generally outperform open source ones, with Gemini-1.5-pro attaining the highest overall score of 57.24%, followed by gemini-1.5-flash at 55.03%. Among open source models, Pixtral-12B achieves the best performance with an overall score of 41.84%. We show a comparison of all models on Geoperception in Table 2. Certain models, such as GPT-4o-mini (Achiam et al., 2023) and Molmo-7B-D (Deitke et al., 2024), frequently either enumerate all potential components (e.g., all points in a diagram instead of the one on the lines) or every potential answer, leading to their poor accuracy scores. Table 2: Performance (average evaluation score) of different models on Geoperception benchmark tasks. POL: PointLiesOnLine, POC: PointLiesOnCircle, ALC: AngleClassification, LHC: LineCom- parison, PEP: Perpendicular, PRA: Parallel, EQL: Equals. As the Random Baseline method, we use GPT-4o-mini, given the same textual instruction but without an image. Logical Numerical Annotations Model POL POC ALC LHC PEP PRA EQL Overall Random Baseline 0.43 2.63 59.92 51.36 0.25 0.00 0.02 16.37 _Open Source_ Molmo-7B-D (Deitke et al., 2024) 1.75 35.73 56.77 16.79 1.10 0.00 0.81 16.14 Llama-3.2-11B (Dubey et al., 2024) 16.22 37.12 59.46 52.08 8.64 22.41 49.86 35.11 Qwen2-VL-7B (Wang et al., 2024a) 21.89 41.60 46.60 63.27 26.86 30.66 54.37 40.75 Pixtral-12B (AI, 2023) 22.85 53.21 47.33 51.43 22.53 37.11 58.45 41.84 _Closed Source_ GPT-4o-mini (Achiam et al., 2023) 1.65 61.19 48.84 69.51 10.04 4.25 44.75 34.32 GPT-4o (Achiam et al., 2023) 9.81 71.49 55.63 74.39 25.36 60.77 44.71 48.88 Claude 3.5 Sonnet (Anthropic, 2024) 25.44 68.34 42.95 70.73 22.00 64.39 66.36 51.46 Gemini-1.5-Flash (Team et al., 2023) 29.30 67.75 49.89 76.69 30.92 64.39 66.31 55.03 Gemini-1.5-Pro (Team et al., 2023) 24.42 69.80 57.96 79.05 39.60 77.59 52.27 57.24 4 EMPIRICAL STUDY ON MLLM DESIGN SPACE We hypothesize that the lack of high-fidelity geometric visual perception data is one of the major reasons for the inability of today’s MLLMs to effectively perceive basic geometric annotations and relationships. Although large-scale web-crawled image-text pairs cover a variety of domains, includ- ing geometry, the textual descriptions often lack the necessary specificity and depth. To address this issue, current studies in this domain (Gao et al., 2023; Shi et al., 2024b; Zhang et al., 2024b) typi- cally construct a geometry or mathematical domain dataset and apply the same training strategy used for general-purpose MLLMs. For example, Math-LLaVA (Shi et al., 2024b) and multi-math (Peng et al., 2024) rely on GPT-4v or GPT-4o’s vision ability to generate most of the question and answer pairs and image captions, which is essentially a form of model distillation. However, as evidenced by Table 2, GPT-4o and Gemini-1.5-Pro often struggle to answer certain types of questions, limiting the performance potential of resulting models. Furthermore, while works such as G-LLaVA (Gao et al., 2023), MAVIS (Zhang et al., 2024b), and Math-PUMA (Zhuang et al., 2024) utilize human 
+
+5 
+
+crafted logical forms or synthetic multimodal data to ensure the reliability of textual annotations, they often conflate low-level perception with problem-solving, and train models to directly solve multimodal geometry problems, without verifying if the model’s low-level perception abilities are sufficient. As evidence, the best models in MAVIS (Zhang et al., 2024b) and Math-PUMA (Zhuang et al., 2024) evaluation results on Mathverse (Zhang et al., 2024a) still have a substantial gap of 26.8% and 28.7% between text-dominant versions and vision-only versions of problems[1] , respec- tively. Furthermore, attempts to train MLLMs on low-level visual perception tasks (Wang et al., 2024b; Rahmanzadehgervi et al., 2024) have also struggled to achieve satisfactory in-domain per- formance or generalize effectively. In this section, we aim to address these challenges. In recent work, the design space **Shape 1 Shape 2 Shape 3 280** for MLLMs has been closely ex- plored (McKinzie et al., 2024; Tong et al., 2024a; Shi et al., 2024a). How- ever, most studies rely on general multimodal benchmarks to evaluate design efficacy, which often do not effectively assess visual understandF B N = triangle F B N; S O L = triangle S O L; C Y L = triangle C Y L; ing capabilities (Tong et al., 2024a), G = midpoint B N N = midpoint O L;  K = midpoint S L Z = midpoint C L;  V = midpoint C Y; thereby limiting their utility in evaluP = intersection_ll V L Z Y ating precise visual perception. AdConnect(C,Y), Connect(L,Y) ditionally, our findings indicate that, Connect(B,N), Connect(N,F)  Connect(B,F), Connect(G,F) Connect(O,S), Connect(O,L)  Connect(S,L), Connect(N,K) Connect(C,L), Connect(Y,L)  Connect(Z,Y) under the current multimodal instrucCorr(B), Corr(N)… Corr(O), Corr(S)… Corr(C), Corr(L)… tion tuning paradigm, MLLMs ex- hibit significant challenges in perFigure 2: Three **synthetic geometry shapes** used for training, forming zero-shot basic visual perand their corresponding high-fidelity visual descriptions, which in- ception tasks. Therefore, we revisit clude the relationships between each geometry component, the ex- the design space of MLLMs and emistence of line connections, and numerical attributes such as point ploygate thetask-specificpotential tuningof diverseto investi-multicoordinates.answer pairs based on these visual descriptions.Our dataset generation engine generates question andThe specific pro- cess of question answer pair generation is detailed in Appendix C. modal designs. **298 299 Geometry Shape Generation Engine.** Unlike natural images, geometric images can be genTable 3: Summary of Visual Encoders erated programmatically, enabling the creation Model Params Objective of nearly infinite numerical instances for each conceptual shape. Our geometry shape generConvNeXt Large@512 200M CLIP ation engine builds on Alphageometry (Trinh ConvNeXt XXLarge@512 847M CLIP ViT-g/14@224 1.01B CLIP etof al.the, 2024language) duemodelto the trainedsuperioronperformancethe dataset ViT-H/14@224ViT-L/14@336 304M632M CLIPCLIP generated by this engine. Specifically, we inViT-L/14@224 303M CLIP troduce three visualization enhancements: (1) SigLIP@384 (ViT) 428M CLIP-like an additional input to control the connections SigLIP@224 (ViT) 428M CLIP-like between points, (2) increased randomness in DINOv2 Giant@224 (ViT) 1.14B Self-Sup deriving numerical instances from conceptual DINOv2 Large@224 (ViT) 304M Self-Sup shapes, and (3) adjustments to the canvas range to ensure visibility of all geometry components. **313 Exploration Overview.** We study the choice of visual encoder architecture, the choice between tun- ing or freezing the encoder, and different data composition/training strategies. For visual encoders, we investigate two families of architectures: Vision Transformer (ViT) (Dosovitskiy, 2020) and ConvNeXT (Liu et al., 2022); as well as two visual representation learning objectives: language- supervised learning (Radford et al., 2021) and self-supervised learning (Oquab et al., 2023). Ad- ditionally, we examine the impact of varying encoder sizes and the number of visual tokens. The list of visual encoders and their parameters are shown in Table 3. For LLMs, we use Qwen-2-1.5Binstruct (Yang et al., 2024a). For the multimodal connection, we use a two layer MLP as multimodal encoder following LLaVA-1.5 (Liu et al., 2024a). We leave exploring visual connector choices and scaling the size of LLMs as future work. 
+
+1 In Mathverse, text-dominant is the version where the problem is mainly represented by text, while in the vision-only version an equivalent problem is represented purely by image. 
+
+6 
+
+**==> picture [432 x 656] intentionally omitted <==**
+
+**----- Start of picture text -----**<br>
+324 Shape 1 Shape 2 Shape 3 Mixed<br>325 10 [0] 10 [0] 10 [0] 10 [0]<br>326<br>327 10 1 10 1 10 1 10 1<br>328<br>329 10 2 10 2 10 2 10 2<br>330<br>331 10 3 10 3 10 3 10 3<br>332<br>333 0 10 20 30 0 10 20 30 0 10 20 30 0 25 50 75 100<br>334 # Training Samples (k) # Training Samples (k) # Training Samples (k) # Training Samples (k)<br>335 ConvNeXT-L@512ConvNeXT-XXL@512 ViT-L@336ViT-L@224 ViT-g@224ViT-H@224 DINO-G@224DINO-L@224 SigLIP@384SigLIP@224<br>336<br>337 Figure 3: Training loss curve comparing ten visual encoders, with a fixed multimodal encoder and<br>338 LLM. Training losses are window-smoothed using a window size of 10 for better visibility. Losses<br>are log-scaled to demonstrate their difference in smaller values.<br>339<br>340<br>341 ConvNeXT-L@512 ConvNeXT-XXL@512 ViT-g@224 ViT-H@224<br>Un-freezing ViT-Enc Un-freezing ViT-Enc Un-freezing ViT-Enc Un-freezing ViT-Enc<br>342 10 [0] Freezing ViT-Enc 10 [0] Freezing ViT-Enc 10 [0] Freezing ViT-Enc 10 [0] Freezing ViT-Enc<br>343<br>344<br>345 10 1 10 1 10 1 10 1<br>346<br>347<br>10 2 10 2 10 2 10 2<br>348<br>349<br>350 0 25 50 75 100 0 25 50 75 100 0 25 50 75 100 0 25 50 75 100<br># Training Samples (k) # Training Samples (k) # Training Samples (k) # Training Samples (k)<br>351<br>352 Figure 4: Training loss curve comparing freezing versus unfreezing the visual encoder. This is<br>353 shown on the four best-performing architectures. Loss curves are window-smoothed with a window<br>354 size of 10 for better visibility. Losses are log-scaled to demonstrate their difference in smaller values.<br>355<br>356<br>4.1 RESULTS OF EMPIRICAL STUDY AND LESSONS<br>357<br>358<br>We use learning efficacy as the measure for evaluating visual encoders. The task chosen<br>359<br>for this exploration is PointLiesOnLine, the most fundamental task in Geoperception. In<br>360 PointLiesOnLine questions, each line must have at least three points to form a valid query.<br>361 To support this evaluation, we designed three basic geometric conceptual shapes of increasing com-<br>362 plexity, containing 1, 2, and 4 valid lines respectively. These shapes are illustrated in Fig. 2. We<br>363 separately train our models on three shapes, each shape for 500 steps with a batch size of 64. In<br>364 addition, we mix together data of the three shapes and train our models on 1,500 steps, as our fourth<br>365 experiment. We now present the three main lessons that we determined via our empirical study.<br>366 Lesson 1: CNN architecture performs better than ViT. We actively tune all of the parameters<br>367 in the MLLM, including the visual encoder, and show the training loss curve of ten different vi-<br>368 sual encoders in Fig. 3. We find that ConvNeXt-XXLarge consistently learns the geometric con-<br>369 cept the fastest among all of the visual encoders. Moreover, although with only 200M parameters,<br>370 ConvNeXT-Large shows competitive learning performance with the vision transformers which are<br>371 3-5 times larger. Self-supervised learning (SSL) visual encoders, DINO-v2, struggles to learn the ge-<br>372 ometry concept; we hypothesis this is due to the weak vision-language representation in these mod-<br>373 els. Surprisingly, although the SigLIP-family is widely-recognized as a better visual encoder (Tong<br>374 et al., 2024a), we find that their performance in learning basic visual geometry attributes is limited.<br>375 In addition, image resolution does not make a significant role on such potential. Specifically, CLIP-<br>376 L@336 and SigLIP@384, higher-resolution visual encoders, learn the task consistently slower than<br>377 CLIP-L@224 and SigLIP@224, respectively. Moving forward, our analysis will focus on four top-<br>performing visual encoders: ConvNeXt-Large, ConvNeXt-XXLarge, ViT-g and ViT-H.<br>Training Loss<br>Training Loss<br>**----- End of picture text -----**<br>
+
+
+7 
+
+0.30 ConvNeXT-L@512 0.30 ConvNeXT-XXL@512 0.30 ViT-H@224 0.30 ViT-g@224 Curriculum Curriculum Curriculum Curriculum Adaptive Curriculum Adaptive Curriculum Adaptive Curriculum Adaptive Curriculum 0.25 Pure Shape 3 0.25 Pure Shape 3 0.25 Pure Shape 3 0.25 Pure Shape 3 Mixed Shape Mixed Shape Mixed Shape Mixed Shape 0.20 0.20 0.20 0.20 0.15 0.15 0.15 0.15 0.10 0.10 0.10 0.10 0.05 0.05 0.05 0.05 0.00 0 25 50 75 100 0.00 0 25 50 75 100 0.00 0 25 50 75 100 0.00 0 25 50 75 100 #Training Samples (k) #Training Samples (k) #Training Samples (k) #Training Samples (k) Figure 6: Comparison between four training strategies with the objective of effectively learning a task on a complex shape. For all curves we show the validation loss on the same held-out dataset (comprising samples of shape 3). **392 393 Lesson 2: Tuning the visual encoder is beneficial.** We next study the effect of tuning versus freezing the visual encoder. In Fig. 4, we show the loss curves of tuning and freezing visual encoders. We find that tuning the visual encoder consistently helps the model learn low-level geometry rela- tionships faster and better, in comparison with using a frozen encoder. **396 397 Lesson 3: Curriculum learning unleashes full potential.** Finally, we study training data compo- sition. In Fig. 3, we observe that all models fail to converge on _Shape 3_ (the most challenging shape in our experimental setup with four valid query lines). However, when using a mixed training set of all three shapes, some visual encoders achieve convergence, despite using the same amount of data for _Shape 3_ . We hypothesize that including simpler shapes ( _Shape 1_ and _Shape 2_ ) aids the model in learning more complex shapes ( _Shape 3_ ). To test this hypothesis, we report the loss functions for _Shapes 1_ , _2_ , and _3_ separately during the mixed training of ConvNeXt-XXLarge, in Fig. 5. We notice a plateau in the loss curve for _Shape 3_ until the model has trained on approximately 20K samples. During this period, the losses for _Shape 1_ and _Shape 2_ continue to decrease. This suggests that learn- ing easier shapes can significantly help the model tackle more challenging shapes, comparing with directly learning the challenging ones, this finding align with the principles of curriculum learning. While mixed training enables effective spontaneous curriculum learning, we investigate whether a struc1.4 ~~Shape 1~~ tured curriculum can further enhance model effi1.2 Shape 2Shape 3 ciency on challenging shapes. To this end, we train 1.0 the model sequentially from simple to more complex 0.8 shapes and compare the loss on a separate valida0.6 tion set of _Shape 3_ . To avoid forgetting, we apply 0.4 smoothed data at each stage: 80% from the current 0.2 shape and 10% from each of the others. We refer to 0.0 0 20 40 60 80 100 this as a staged curriculum strategy. The results are #Training Samples (k) shown in Fig. 6. We find that all of the models fail to converge when trained purely on _Shape 3_ , In conFigure 5: The breakdown of training loss trast, the staged curriculum strategy, shown by the curve of shape 1,2 and 3 during the mixed yellow curve, consistently reaches a good validation training of three shapes. loss on _Shape 3_ after training. To further optimize its efficiency, we reduce the training data for the two simpler shapes to 40% of their original volume. This approach, represented by the orange line in Fig. 6, proves more efficient than mixed training. For even greater efficiency, we propose adapting the dataset on-the-fly based on monitoring the loss during training on generated images, as described in Section 5. 5 EUCLID In this section, we take all of the lessons we learned in the previous sections and train Euclid, a family of MLLMs specifically designed for strong low-level geometric perception. **430 431 On-the-fly progressive training.** Drawing inspiration from the effectiveness of curriculum learning, 
+
+**On-the-fly progressive training.** Drawing inspiration from the effectiveness of curriculum learning, instead of constructing a static training data, we introduce an adaptive dataset generation method- 
+
+8 
+
+ology with our dataset engine, where we monitor the model’s performance and dynamically adjust the distribution of training data (i.e., the curriculum stage) based on this performance. Specifically, for a certain task, we create _N_ stages of training dataset shapes with progressively increasing geo- metric complexity. During training, the model starts by training on the first (simplest) dataset stage. The model is evaluated when it finishes a training round, using a held-out validation set from the same distribution as the current dataset stage. Upon evaluation, if the model achieves an accuracy exceeding a predefined threshold _θ_ , the framework advances the task to the next stage. Formally, the update rule for advancing stages is given by: if accuracy _s > θ ⇒ c ← c_ + 1 _._ (2) The model is trained on a total of _M_ rounds and _K_ steps within each round. Similar to Section 4, we smooth our dataset distribution over all stages using an exponential attenuation function: ratio _s_ = exp ( _−α · |_ stage _s − c|_ ) _,_ (3) where _α_ denotes the attenuation rate. Eq. (3) ensures that stages proximal to the current stage receive higher sampling probabilities. **447 448 Specifications.** For models, we select the best visual encoder architecture we found in our investi- gation, ConvNeXt, including ConvNeXt-Large@512 and ConvNeXt-XXLarge@512, and keep the same multimodal connector (2 layers MLP) and LLM (Qwen2-1.5B-instruct). For tasks, we focus on four primitive tasks from the Geoperception benchmark which are easily scalable using our dataset generation engine : PointLiesOnLine, PointLiesOnCircle, AngleClassification, and LengthComparison. We both separately and jointly train our model on each of the tasks, and test our resulting model on the corresponding tasks in Geoperception that the model is trained on. The accuracy threshold for advancing training stage _θ_ is set to 0 _._ 99. All models are trained on _N_ = 3 stages with manually curated geometry shapes and _M_ = 6 rounds with _K_ = 500 steps in each round, and the batch size is 64 for each training step. Table 4: Performance comparison between Euclid and the best leading open source and closed source MLLMs on the four tasks: POL, POC, ALC, LHC. Note that Euclid is _not_ trained on any of the in-distribution data from the benchmark tasks below. We report the performance of both the separately trained model and the jointly trained models. Model POL POC ALC LHC Average Pixtral-12B (AI, 2023) 22.85 53.21 47.33 51.43 43.71 Gemini-1.5-Pro (Team et al., 2023) 24.42 69.80 57.96 79.05 57.81 Euclid-ConvNeXt-Large@512 77.17 73.06 61.06 77.12 72.10 Euclid-all in one-ConvNeXt-Large@512 59.52 66.18 71.41 74.96 68.02 Euclid-ConvNeXt-XXLarge@512 78.94 67.94 61.51 78.19 71.65 Euclid-all in one-ConvNeXt-XXLarge@512 55.22 70.65 66.85 74.03 66.69 **470 471 Evaluation results.** The results are shown in Table 4. While Euclid is trained on simple synthetic geometric shapes and uses only a 1.5B language model, demonstrates superior performance on average across WwW, x\ four primitive tasks compared to existing leading MLLMs, exhibiting /X x strong generalization to real-world geometric shapes. Notably, in the PointLiesOnLine task, which is particularly challenging for exXx7iXS16 y, isting MLLMs, Euclid achieves up to 78.94% accuracy, nearly three Question: What is the point times the performance of Gemini-1.5-Pro. On LengthComparison lying on line TY? tasks, Euclid’s performance is slightly outclassed by Gemini-1.5-pro, on Ground truth: W     Prediction: X other tasks, Euclid keeps higher or similar performance with the leading MLLMs. Interestingly, when models are jointly trained on multiple tasks, certain tasks, such as PointLiesOnLine, show slightly reduced perforFigurewhere E7:ucliAnd fails to pre-error case mance compared with only training on the given task, which contrasts with dict the correct point on the expected benefits of multi-task training (Liu et al., 2024a; Wei et al., a line, potentially dis- 2021). We hypothesize two main reasons for this phenomenon. First, in tracted by the annotation general multimodal instruction tuning, datasets are often limited or insuffi“x”. cient, and training on multiple tasks can compensate for this by expanding 
+
+9 
+
+the data volume. However, our dataset generation engine can produce infinite samples for exhaustive task-specific training, thus diminishing the advantage of multi-task learning. Second, the decrease in performance may be related to the limitations of our 1.5B language model. For example, many PointLiesOnLine questions in Geoperception involve circles, which could lead the model to confuse these with PointLiesOnCircle. 
+
+**Error analysis.** We take a deep look into Euclid’s prediction on Geoperception, we find that our model’s performance is hindered when diagrams are heavily annotated. An example is shown in Fig. 7, where a line is annotated by “x”, confusing the model from choosing the correct point. Incorporating training data that distinguish different diagram annotation types could potentially help the model with such scenarios. 
+
+6 CONCLUSION AND FUTURE WORK 
+
+In this work, we highlight the importance of accurate low-level visual perception in MLLMs. To this end, we first introduce Geoperception, a large-scale multimodal benchmark focused exclusively on geometry-domain visual perception. We evaluate leading MLLMs on Geoperception, find that even top models such as Gemini-1.5-Pro struggle significantly it, although it is straightforward for humans. We then conduct an empirical study to explore the design space of MLLM training and architectures using the dataset generated by a geometric high-fidelity synthetic-data engine that we develop. Our study indicate that convolutional neural network visual encoders outperform vision transformers in our tasks; tuning the visual encoder generally enhances performance; and employ- ing a curriculum-based training approach yields much more model potential than direct task training. Based on insights from this study, we develop Euclid, a model trained purely on high-fidelity syn- thetic generated data, which generalizes effectively to real-world geometric shape understanding tasks, surpassing the leading MLLMs by a substantial margin. **511 Future work.** Our work examines the potential of using synthetic multimodal data to improve MLLM performance in low-level geometric perception tasks. However, there are still directions that remain under-explored: (1) Using a more-diverse training dataset. Currently, the text portion of our synthetic multimodal training data uses a restricted set of templates, and the model trained on such templates could fail to generalize to other question types; it could therefore be beneficial to increase the diversity of our instruction-following formats. (2) Automatic curriculum learning. Incorporating a more diverse dataset, including varied geometric shapes and different domain dataset, introduces challenges in defining the learning order. Rule based definition and manual curation may become impractical, necessitating automated strategies like hard negative sampling to organize the curricu- lum based on training loss or testing accuracy. This approach could streamline the process, reduce human effort, provide more suitable and efficient curriculum learning orders. (3) Generalizing to other task domains. In this work, our study is focused on data from 2D geometry, as it provides a focused test bed of fundamental tasks. We believe the lessons we learn from this domain can be effectively generalized to a broader set of downstream domains that benefit from high-quality low-level visual perception. REPRODUCIBILITY STATEMENT In Section 3, we provide a comprehensive description of the procedure for generating the Geop- erception benchmark. This includes employing GPT-4o-mini for dataset filtering and detailing the conversion of logical forms into questions and answers. Evaluation prompts for MLLMs on different types of Geoperception questions are presented in Appendix B. For model architecture exploration, we specify the visual encoders and provide corresponding Hugging Face links in Table 3. Addition- ally, we outline the LLMs and multimodal connector architectures used. For our Euclid model, we include all geometry shape code used for training, along with demonstration diagrams and pseudo- code for generating training questions and answers. 10 
+
+> REFERENCES Josh Achiam, Steven Adler, Sandhini Agarwal, Lama Ahmad, Ilge Akkaya, Florencia Leoni Ale- man, Diogo Almeida, Janko Altenschmidt, Sam Altman, Shyamal Anadkat, et al. Gpt-4 technical report. _arXiv preprint arXiv:2303.08774_ , 2023. 
+
+> Kian Ahrabian, Zhivar Sourati, Kexuan Sun, Jiarui Zhang, Yifan Jiang, Fred Morstatter, and Jay 
+
+> Pujara. The curious case of nonverbal abstract reasoning with multi-modal large language models. 
+
+> _arXiv preprint arXiv:2401.12117_ , 2024. - Mistral AI. Pixtral 12b. https://mistral.ai/news/pixtral-12b/, 2023. Accessed: 2024-09-27. 
+
+- Jean-Baptiste Alayrac, Jeff Donahue, Pauline Luc, Antoine Miech, Iain Barr, Yana Hasson, Karel Lenc, Arthur Mensch, Katherine Millican, Malcolm Reynolds, et al. Flamingo: a visual language model for few-shot learning. _Advances in neural information processing systems_ , 35:23716– 23736, 2022. Anthropic. The claude 3 model family: Opus, Sonnet, Haiku, March 2024. URL https:// 
+
+- www-cdn.anthropic.com/de8ba9b01c9ab7cbabf5c33b80b7bbc618857627/ 
+
+- Model_Card_Claude_3.pdf. 
+
+- Roman Bachmann, O˘guzhan Fatih Kar, David Mizrahi, Ali Garjani, Mingfei Gao, David Griffiths, Jiaming Hu, Afshin Dehghan, and Amir Zamir. 4m-21: An any-to-any vision model for tens of tasks and modalities. _arXiv preprint arXiv:2406.09406_ , 2024. Lucas Beyer, Andreas Steiner, Andr´e Susano Pinto, Alexander Kolesnikov, Xiao Wang, Daniel Salz, 
+
+- Maxim Neumann, Ibrahim Alabdulmohsin, Michael Tschannen, Emanuele Bugliarello, et al. 
+
+- Paligemma: A versatile 3b vlm for transfer. _arXiv preprint arXiv:2407.07726_ , 2024. Markus J Buehler. Cephalo: Multi-modal vision-language models for bio-inspired materials analysis and design. _Advanced Functional Materials_ , pp. 2409531, 2024. Boyuan Chen, Zhuo Xu, Sean Kirmani, Brain Ichter, Dorsa Sadigh, Leonidas Guibas, and Fei Xia. 
+
+- Spatialvlm: Endowing vision-language models with spatial reasoning capabilities. In _Proceedings_ _of the IEEE/CVF Conference on Computer Vision and Pattern Recognition_ , pp. 14455–14465, 2024. Yew Ken Chia, Vernon Toh Yan Han, Deepanway Ghosal, Lidong Bing, and Soujanya Poria. Puz- zlevqa: Diagnosing multimodal reasoning challenges of language models with abstract visual patterns. _arXiv preprint arXiv:2403.13315_ , 2024. 
+
+- Matt Deitke, Christopher Clark, Sangho Lee, Rohun Tripathi, Yue Yang, Jae Sung Park, Moham- madreza Salehi, Niklas Muennighoff, Kyle Lo, Luca Soldaini, Jiasen Lu, Taira Anderson, Erin Bransom, Kiana Ehsani, Huong Ngo, YenSung Chen, Ajay Patel, Mark Yatskar, Chris Callison- Burch, Andrew Head, Rose Hendrix, Favyen Bastani, Eli VanderBilt, Nathan Lambert, Yvonne Chou, Arnavi Chheda, Jenna Sparks, Sam Skjonsberg, Michael Schmitz, Aaron Sarnat, Byron Bischoff, Pete Walsh, Chris Newell, Piper Wolters, Tanmay Gupta, Kuo-Hao Zeng, Jon Borchardt, Dirk Groeneveld, Jen Dumas, Crystal Nam, Sophie Lebrecht, Caitlin Wittlif, Carissa Schoenick, Oscar Michel, Ranjay Krishna, Luca Weihs, Noah A. Smith, Hannaneh Hajishirzi, Ross Girshick, 
+
+- Ali Farhadi, and Aniruddha Kembhavi. Molmo and pixmo: Open weights and open data for 
+
+- state-of-the-art multimodal models, 2024. URL https://arxiv.org/abs/2409.17146. 
+
+- Alexey Dosovitskiy. An image is worth 16x16 words: Transformers for image recognition at scale. _arXiv preprint arXiv:2010.11929_ , 2020. Abhimanyu Dubey, Abhinav Jauhri, Abhinav Pandey, Abhishek Kadian, Ahmad Al-Dahle, Aiesha 
+
+- Letman, Akhil Mathur, Alan Schelten, Amy Yang, Angela Fan, et al. The llama 3 herd of models. 
+
+- _arXiv preprint arXiv:2407.21783_ , 2024. Deqing Fu, Ghazal Khalighinejad, Ollie Liu, Bhuwan Dhingra, Dani Yogatama, Robin Jia, and Willie Neiswanger. Isobench: Benchmarking multimodal foundation models on isomorphic representations. _arXiv preprint arXiv:2404.01266_ , 2024a. 
+
+11 
+
+- Xingyu Fu, Yushi Hu, Bangzheng Li, Yu Feng, Haoyu Wang, Xudong Lin, Dan Roth, Noah A 
+
+- Smith, Wei-Chiu Ma, and Ranjay Krishna. Blink: Multimodal large language models can see but not perceive. _arXiv preprint arXiv:2404.12390_ , 2024b. - Jiahui Gao, Renjie Pi, Jipeng Zhang, Jiacheng Ye, Wanjun Zhong, Yufei Wang, Lanqing Hong, Jianhua Han, Hang Xu, Zhenguo Li, et al. G-llava: Solving geometric problem with multi-modal large language model. _arXiv preprint arXiv:2312.11370_ , 2023. 
+
+- Yash Goyal, Tejas Khot, Douglas Summers-Stay, Dhruv Batra, and Devi Parikh. Making the v in vqa 
+
+- matter: Elevating the role of image understanding in visual question answering. In _Proceedings_ _of the IEEE conference on computer vision and pattern recognition_ , pp. 6904–6913, 2017. Jinyi Hu, Yuan Yao, Chongyi Wang, Shan Wang, Yinxu Pan, Qianyu Chen, Tianyu Yu, Hanghao Wu, Yue Zhao, Haoye Zhang, et al. Large multilingual models pivot zero-shot multimodal learning across languages. _arXiv preprint arXiv:2308.12038_ , 2023. Yushi Hu, Weijia Shi, Xingyu Fu, Dan Roth, Mari Ostendorf, Luke Zettlemoyer, Noah A Smith, 
+
+- and Ranjay Krishna. Visual sketchpad: Sketching as a visual chain of thought for multimodal language models. _arXiv preprint arXiv:2406.09403_ , 2024. Yifan Jiang, Jiarui Zhang, Kexuan Sun, Zhivar Sourati, Kian Ahrabian, Kaixin Ma, Filip Ilievski, and Jay Pujara. Marvel: Multidimensional abstraction and reasoning through visual evaluation and learning. _arXiv preprint arXiv:2404.13591_ , 2024. Mehran Kazemi, Hamidreza Alvari, Ankit Anand, Jialin Wu, Xi Chen, and Radu Soricut. Ge- 
+
+- omverse: A systematic evaluation of large models for geometric reasoning. _arXiv preprint_ _arXiv:2312.12241_ , 2023. Alexander Kirillov, Eric Mintun, Nikhila Ravi, Hanzi Mao, Chloe Rolland, Laura Gustafson, Tete Xiao, Spencer Whitehead, Alexander C Berg, Wan-Yen Lo, et al. Segment anything. In _Proceed-_ _ings of the IEEE/CVF International Conference on Computer Vision_ , pp. 4015–4026, 2023. Zhihao Li, Yao Du, Yang Liu, Yan Zhang, Yufang Liu, Mengdi Zhang, and Xunliang Cai. Eagle: 
+
+- Elevating geometric reasoning through llm-empowered visual instruction tuning. _arXiv preprint_ _arXiv:2408.11397_ , 2024. Tsung-Yi Lin, Michael Maire, Serge Belongie, James Hays, Pietro Perona, Deva Ramanan, Piotr Doll´ar, and C Lawrence Zitnick. Microsoft coco: Common objects in context. In _Computer_ _Vision–ECCV 2014: 13th European Conference, Zurich, Switzerland, September 6-12, 2014,_ _Proceedings, Part V 13_ , pp. 740–755. Springer, 2014. Zhiqiu Lin, Xinyue Chen, Deepak Pathak, Pengchuan Zhang, and Deva Ramanan. Revisiting the role of language priors in vision-language models. _arXiv preprint arXiv:2306.01879_ , 2023. Haotian Liu, Chunyuan Li, Yuheng Li, and Yong Jae Lee. Improved baselines with visual instruction tuning. In _Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recogni-_ _tion_ , pp. 26296–26306, 2024a. Haotian Liu, Chunyuan Li, Yuheng Li, Bo Li, Yuanhan Zhang, Sheng Shen, and Yong Jae Lee. 
+
+- Llava-next: Improved reasoning, ocr, and world knowledge, January 2024b. URL https:// llava-vl.github.io/blog/2024-01-30-llava-next/. - Haotian Liu, Chunyuan Li, Qingyang Wu, and Yong Jae Lee. Visual instruction tuning. _Advances_ _in neural information processing systems_ , 36, 2024c. Yuan Liu, Haodong Duan, Yuanhan Zhang, Bo Li, Songyang Zhang, Wangbo Zhao, Yike Yuan, 
+
+- Jiaqi Wang, Conghui He, Ziwei Liu, et al. Mmbench: Is your multi-modal model an all-around 
+
+- player? _arXiv preprint arXiv:2307.06281_ , 2023. - Zhuang Liu, Hanzi Mao, Chao-Yuan Wu, Christoph Feichtenhofer, Trevor Darrell, and Saining Xie. A convnet for the 2020s. In _Proceedings of the IEEE/CVF conference on computer vision and pattern recognition_ , pp. 11976–11986, 2022. 
+
+12 
+
+Pan Lu, Ran Gong, Shibiao Jiang, Liang Qiu, Siyuan Huang, Xiaodan Liang, and Song-Chun Zhu. Inter-gps: Interpretable geometry problem solving with formal language and symbolic reasoning. _arXiv preprint arXiv:2105.04165_ , 2021. Pan Lu, Hritik Bansal, Tony Xia, Jiacheng Liu, Chunyuan Li, Hannaneh Hajishirzi, Hao Cheng, Kai- Wei Chang, Michel Galley, and Jianfeng Gao. Mathvista: Evaluating mathematical reasoning of foundation models in visual contexts. _arXiv preprint arXiv:2310.02255_ , 2023. Brandon McKinzie, Zhe Gan, Jean-Philippe Fauconnier, Sam Dodge, Bowen Zhang, Philipp Dufter, Dhruti Shah, Xianzhi Du, Futang Peng, Floris Weers, et al. Mm1: Methods, analysis & insights from multimodal llm pre-training. _arXiv preprint arXiv:2403.09611_ , 2024. David Mizrahi, Roman Bachmann, Oguzhan Kar, Teresa Yeo, Mingfei Gao, Afshin Dehghan, and Amir Zamir. 4m: Massively multimodal masked modeling. _Advances in Neural Information_ _Processing Systems_ , 36, 2024. Maxime Oquab, Timoth´ee Darcet, Th´eo Moutakanni, Huy Vo, Marc Szafraniec, Vasil Khalidov, Pierre Fernandez, Daniel Haziza, Francisco Massa, Alaaeldin El-Nouby, et al. Dinov2: Learning robust visual features without supervision. _arXiv preprint arXiv:2304.07193_ , 2023. Aitor Ormazabal, Che Zheng, Cyprien de Masson d’Autume, Dani Yogatama, Deyu Fu, Donovan Ong, Eric Chen, Eugenie Lamprecht, Hai Pham, Isaac Ong, et al. Reka core, flash, and edge: A series of powerful multimodal language models. _arXiv preprint arXiv:2404.12387_ , 2024. Shuai Peng, Di Fu, Liangcai Gao, Xiuqin Zhong, Hongguang Fu, and Zhi Tang. Multi- math: Bridging visual and mathematical reasoning for large language models. _arXiv preprint_ _arXiv:2409.00147_ , 2024. Cyril Picard, Kristen M Edwards, Anna C Doris, Brandon Man, Giorgio Giannone, Md Ferdous Alam, and Faez Ahmed. From concept to manufacturing: Evaluating vision-language models for engineering design. _arXiv preprint arXiv:2311.12668_ , 2023. Alec Radford, Jong Wook Kim, Chris Hallacy, Aditya Ramesh, Gabriel Goh, Sandhini Agarwal, Girish Sastry, Amanda Askell, Pamela Mishkin, Jack Clark, et al. Learning transferable visual models from natural language supervision. In _International conference on machine learning_ , pp. 8748–8763. PMLR, 2021. Pooyan Rahmanzadehgervi, Logan Bolton, Mohammad Reza Taesiri, and Anh Totti Nguyen. Vision language models are blind. _arXiv preprint arXiv:2407.06581_ , 2024. Joseph Redmon, Santosh Divvala, Ross Girshick, and Ali Farhadi. You only look once: Unified, real-time object detection. In _Proceedings of the IEEE conference on computer vision and pattern_ _recognition_ , pp. 779–788, 2016. Mathias Sabl´e-Meyer, Kevin Ellis, Josh Tenenbaum, and Stanislas Dehaene. A language of thought for the mental representation of geometric shapes. _Cognitive Psychology_ , 139:101527, 2022. Timo Schick, Jane Dwivedi-Yu, Roberto Dess`ı, Roberta Raileanu, Maria Lomeli, Eric Hambro, Luke Zettlemoyer, Nicola Cancedda, and Thomas Scialom. Toolformer: Language models can teach themselves to use tools. _Advances in Neural Information Processing Systems_ , 36, 2024. Min Shi, Fuxiao Liu, Shihao Wang, Shijia Liao, Subhashree Radhakrishnan, De-An Huang, Hongxu Yin, Karan Sapra, Yaser Yacoob, Humphrey Shi, et al. Eagle: Exploring the design space for multimodal llms with mixture of encoders. _arXiv preprint arXiv:2408.15998_ , 2024a. Wenhao Shi, Zhiqiang Hu, Yi Bin, Junhua Liu, Yang Yang, See-Kiong Ng, Lidong Bing, and Roy Ka-Wei Lee. Math-llava: Bootstrapping mathematical reasoning for multimodal large language models. _arXiv preprint arXiv:2406.17294_ , 2024b. - D´ıdac Sur´ıs, Sachit Menon, and Carl Vondrick. Vipergpt: Visual inference via python execution for reasoning. In _Proceedings of the IEEE/CVF International Conference on Computer Vision_ , pp. 11888–11898, 2023. 
+
+13 
+
+- Chameleon Team. Chameleon: Mixed-modal early-fusion foundation models. _arXiv preprint_ 
+
+- _arXiv:2405.09818_ , 2024. - Gemini Team, Rohan Anil, Sebastian Borgeaud, Yonghui Wu, Jean-Baptiste Alayrac, Jiahui Yu, Radu Soricut, Johan Schalkwyk, Andrew M Dai, Anja Hauth, et al. Gemini: a family of highly capable multimodal models. _arXiv preprint arXiv:2312.11805_ , 2023. 
+
+> Shengbang Tong, Ellis Brown, Penghao Wu, Sanghyun Woo, Manoj Middepogu, Sai Charitha 
+
+> Akula, Jihan Yang, Shusheng Yang, Adithya Iyer, Xichen Pan, et al. Cambrian-1: A fully open, 
+
+> vision-centric exploration of multimodal llms. _arXiv preprint arXiv:2406.16860_ , 2024a. - Shengbang Tong, Zhuang Liu, Yuexiang Zhai, Yi Ma, Yann LeCun, and Saining Xie. Eyes wide shut? exploring the visual shortcomings of multimodal llms. In _Proceedings of the IEEE/CVF_ 
+
+- _Conference on Computer Vision and Pattern Recognition_ , pp. 9568–9578, 2024b. 
+
+Trieu H Trinh, Yuhuai Wu, Quoc V Le, He He, and Thang Luong. Solving olympiad geometry without human demonstrations. _Nature_ , 625(7995):476–482, 2024. Kirill Vishniakov, Zhiqiang Shen, and Zhuang Liu. Convnet vs transformer, supervised vs clip: Beyond imagenet accuracy. _arXiv preprint arXiv:2311.09215_ , 2023. Peng Wang, Shuai Bai, Sinan Tan, Shijie Wang, Zhihao Fan, Jinze Bai, Keqin Chen, Xuejing Liu, Jialin Wang, Wenbin Ge, et al. Qwen2-vl: Enhancing vision-language model’s perception of the world at any resolution. _arXiv preprint arXiv:2409.12191_ , 2024a. Zhenhailong Wang, Joy Hsu, Xingyao Wang, Kuan-Hao Huang, Manling Li, Jiajun Wu, and Heng Ji. Text-based reasoning about vector graphics. _arXiv preprint arXiv:2404.06479_ , 2024b. Jason Wei, Maarten Bosma, Vincent Y Zhao, Kelvin Guu, Adams Wei Yu, Brian Lester, Nan Du, Andrew M Dai, and Quoc V Le. Finetuned language models are zero-shot learners. _arXiv preprint_ _arXiv:2109.01652_ , 2021. Qingyun Wu, Gagan Bansal, Jieyu Zhang, Yiran Wu, Shaokun Zhang, Erkang Zhu, Beibin Li, Li Jiang, Xiaoyun Zhang, and Chi Wang. Autogen: Enabling next-gen llm applications via multi- agent conversation framework. _arXiv preprint arXiv:2308.08155_ , 2023. Sifan Wu, Amir Khasahmadi, Mor Katz, Pradeep Kumar Jayaraman, Yewen Pu, Karl Willis, and Bang Liu. Cadvlm: Bridging language and vision in the generation of parametric cad sketches. _arXiv preprint arXiv:2409.17457_ , 2024. An Yang, Baosong Yang, Binyuan Hui, Bo Zheng, Bowen Yu, Chang Zhou, Chengpeng Li, Chengyuan Li, Dayiheng Liu, Fei Huang, et al. Qwen2 technical report. _arXiv preprint_ _arXiv:2407.10671_ , 2024a. Lihe Yang, Bingyi Kang, Zilong Huang, Xiaogang Xu, Jiashi Feng, and Hengshuang Zhao. Depth anything: Unleashing the power of large-scale unlabeled data. In _Proceedings of the IEEE/CVF_ _Conference on Computer Vision and Pattern Recognition_ , pp. 10371–10381, 2024b. Xiang Yue, Yuansheng Ni, Kai Zhang, Tianyu Zheng, Ruoqi Liu, Ge Zhang, Samuel Stevens, Dongfu Jiang, Weiming Ren, Yuxuan Sun, et al. Mmmu: A massive multi-discipline multi- modal understanding and reasoning benchmark for expert agi. In _Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition_ , pp. 9556–9567, 2024. Xiaohua Zhai, Basil Mustafa, Alexander Kolesnikov, and Lucas Beyer. Sigmoid loss for language image pre-training. In _Proceedings of the IEEE/CVF International Conference on Computer_ _Vision_ , pp. 11975–11986, 2023. 
+
+Renrui Zhang, Dongzhi Jiang, Yichi Zhang, Haokun Lin, Ziyu Guo, Pengshuo Qiu, Aojun Zhou, Pan Lu, Kai-Wei Chang, Peng Gao, et al. Mathverse: Does your multi-modal llm truly see the diagrams in visual math problems? _arXiv preprint arXiv:2403.14624_ , 2024a. Renrui Zhang, Xinyu Wei, Dongzhi Jiang, Yichi Zhang, Ziyu Guo, Chengzhuo Tong, Jiaming Liu, Aojun Zhou, Bin Wei, Shanghang Zhang, et al. Mavis: Mathematical visual instruction tuning. _arXiv preprint arXiv:2407.08739_ , 2024b. 
+
+- Renrui Zhang, Dongzhi Jiang, Yichi Zhang, Haokun Lin, Ziyu Guo, Pengshuo Qiu, Aojun Zhou, Pan Lu, Kai-Wei Chang, Peng Gao, et al. Mathverse: Does your multi-modal llm truly see the diagrams in visual math problems? _arXiv preprint arXiv:2403.14624_ , 2024a. 
+
+14 
+
+Wenwen Zhuang, Xin Huang, Xiantao Zhang, and Jin Zeng. Math-puma: Progressive upward multimodal alignment to enhance mathematical reasoning. _arXiv preprint arXiv:2408.08640_ , 2024. 
+
+15 
+
+## APPENDIX 
+
+## A GEOPERCEPTION BENCHMARK DETAILS 
+
+In Table 5, we provide more details on the Geoperception benchmark, such as the number of logic forms present before and after filtering, the number of questions, and the number of images. AngleClassification and LineComparison are directly derived from points coordinates without filtering. Predicate # LF Before Filter # LF After Filter # Q # I PointLiesOnLine 6988 2567 1901 924 PointLiesOnCircle 1966 1240 359 322 Parallel 222 123 106 101 Perpendicular 1111 680 1266 456 Equals 6434 4123 4436 1202 Table 5: Statistics of the five predicates in our Geoperception dataset. Including number of logic forms before filter, after filter and the number of questions and images. 16 
+
+|||||||||||||||||
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+|||||||||||||||||
+|||||||||||||||||
+|||||PointLiesOnLine|PointLiesOnLine|PointLiesOnLine|PointLiesOnLine|PointLiesOnLine||||||||
+|<br><br>|3a|J<br>243<br>Na||kK<br>ot|Y<br>A||B|||c<br>2G|<br><<br>aN<br>F|||M__3x-4<br>\ 3g<br>15.4<br>78/)<br>ODdg||N|
+|<br>|Q: What is the point lying o-<br>M|Q: What is the point lying o-<br>&<br>L|||Q: What is the point lying o-<br>Cc|Q: What is the point lying o-|Q: What is the point lying o-<br>Z||Q: What is the point lying o-|Q: What is the point lying o-<br>e|Q: What is the point lying o-<br>12|Q: What is the point lying o-<br>A|Q: What is the point lying o-<br>R<br>20<br>P|Q: What is the point lying o-||
+||n line JL?<br>A: R||||n line ZX?<br>A: N||||n line AB?<br>A: E|n line AB?<br>A: E|||n line RN?<br>A: Q|||
+||||PointLiesOnCircle|PointLiesOnCircle|PointLiesOnCircle|PointLiesOnCircle|PointLiesOnCircle|PointLiesOnCircle||||||||
+|||R|||||||||||Cc<br>D.|||
+|||||||||||||||||
+|<br>||a<br>T|||1<br>L|||||V<br>S|||A<br>Nay<br>E||B|
+||Q: What is the point lying o-|Q: What is the point lying o-|||Q: What is the point lying o-|Q: What is the point lying o-|Q: What is the point lying o-||Q: What is the point lying o-|Q: What is the point lying o-|Q: What is the point lying o-|Q: What is the point lying o-|Q: What is the point lying o-|Q: What is the point lying o-||
+||n circle with center P?|n circle with center P?|n circle with center P?||n circle with center K?|n circle with center K?|||n circle with center Z?|n circle with center Z?|n circle with center Z?||n circle with center F?|||
+||A: T, S, R, Q||||A: L, J||||A: X, C|A: X, C|||A: A, C, B, D, E|||
+|||||Parallel|Parallel|Parallel|Parallel|Parallel||||||||
+|<br><br><br>||@<br>B<br>E<br>A|D||M<br>5<br>Q<br>x<br>P|6|Naa<br>°|||a<br>1d<br>x=2<br>E<br>Li<br>D||2<br>\<br>C|A<br>G, <br>E<br>a<br>70\F<br>c<br>1|B<br>0||
+||Q: What is the line parallel-<br>to line BE?|Q: What is the line parallel-<br>to line BE?|||Q: What is the line parallel-<br>to line NQ?||Q: What is the line parallel-|Q: What is the line parallel-|Q: What is the line parallel-<br>to line EB?|Q: What is the line parallel-<br>to line EB?|Q: What is the line parallel-<br>to line EB?|Q: What is the line parallel-|Q: What is the line parallel-<br>to line CD?|Q: What is the line parallel-||
+||A: CD||||A: OP||||A: CD|A: CD|||A: BE, AB, AE|||
+|||||Perpendicular|Perpendicular|Perpendicular|Perpendicular|Perpendicular|||||s|||
+|||x|x|x|x|x|x|x|x|xJ|xJ|xJ<br>K|J<br>K|J<br>K|J<br>K|
+|||||y<br>a<br>£<br>O<br>o||||||||||||
+|<br>||Z|||c<br>b|||||G|M||at|||
+||Q: What is the line perpendi-<br>cular to line ZW?|Q: What is the line perpendi-<br>cular to line ZW?|||Q: What is the line perpendi-<br>cular to line CB?|Q: What is the line perpendi-<br>cular to line CB?|||Q: What is the line perpendi-<br>cular to line LF?|Q: What is the line perpendi-<br>cular to line LF?|||Q: What is the line perpendi-<br>cular to line VS?|||
+||A: YZ|||Equals|A: AC<br>Equals|Equals|Equals|Equals|A: LM, KM, GH, HJ, KL, GJ|A: LM, KM, GH, HJ, KL, GJ|A: LM, KM, GH, HJ, KL, GJ||A: RT, TV, RV|||
+|||||||||||||||||
+|<br><br>|Pp<br>N|36<br>39||M|BT<br>x<br>A|c<br>x<br>D||||J.<br>K||L|s<br>i<br>Sie><br>7<br>Zz|||
+||Q: What is the length of lin-|Q: What is the length of lin-|||Q: What is the measure of an-|Q: What is the measure of an-|Q: What is the measure of an-||Q: What is the measure of an-|Q: What is the measure of an-|Q: What is the measure of an-|Q: What is the measure of an-|Q: What is the line in the d-|Q: What is the line in the d-||
+||e NM as annotated?<br>A: 39||||gle ABC as annotated?<br>A: 2x||||gle JKL as annotated?<br>A: 70|gle JKL as annotated?<br>A: 70|||iagram that is equal to l-<br>ine VU?|||
+|||AngleClassification|AngleClassification|AngleClassification|AngleClassification|AngleClassification|AngleClassification||||||A: ZV, VZ|||
+|<br><br>|R|oy<br>PN|||J<br>f= 6<br>K<br>56<br>(3d — 2)°||||B|c<br>aw<br>x42<br>D|||Vv<br>72<br>8|||
+||V3<br>U<br>x#2|||oT|M — 2f+8||L|||||||||
+||Q: Is angle SUV acute or obt-|Q: Is angle SUV acute or obt-|Q: Is angle SUV acute or obt-||Q: Is angle JKL acute or obt-|Q: Is angle JKL acute or obt-|Q: Is angle JKL acute or obt-||Q: Is angle CBD acute or obt-|Q: Is angle CBD acute or obt-|||Q: Is angle WVX acute or obt-<br>Ww<br>21<br>x|||
+||use?<br>A: obtuse||||use?<br>A: obtuse||||use?<br>A: acute|use?<br>A: acute|||use?<br>A: acute|||
+|||||LineComparison|LineComparison|LineComparison|LineComparison|LineComparison||||||||
+||||||||||||||Q|||
+|<br>|ison|8-4)||A|A<br>E<br>ex 10°||||J|8M__|16|K|18|||
+|<br><br>|Q: Which line is longer, AB -<br>or AC?<br>c|Q: Which line is longer, AB -<br>or AC?<br>20|Q: Which line is longer, AB -<br>B||Q: Which line is longer, AE -<br>or ED?<br>_(2x— 20°<br>B<br>C||||Q: Which line is longer, JM -<br>or JL?|Q: Which line is longer, JM -<br>or JL?<br>L|||Q: Which line is longer, RQ -<br>or QT?<br>34<br>Ss<br>R|||
+||A: AC||||A: AE||||A: JL|A: JL|||A: RQ|||
+|||||||||||||||||
+||||||Figure 8:|Examples of our_Geoperception_|||_Geoperception_dataset.|||||||
+|||||||||||||||||
+
+
+17 
+
+> B PROMPTS FOR THE GEOPERCEPTION DATASET EVALUATION PROMPT TEMPLATE FOR THE POINTLIESONLINE TASK Answer me directly just with the all points lie on the line mentioned in the question (do not include the point mentioned in the question). 
+
+> Answer template: 
+
+> (If only one point) The other point is: "your point". Or (if multiple points) The other points are: "your points". For example: The other point is: A 
+
+> Or 
+
+> The other points are: A, B, C Figure 9: TEMPLATE FOR THE POINTLIESONLINE TASKS > PROMPT TEMPLATE FOR THE POINTLIESONCIRCLE TASK > Answer me directly just with the all points lie on the circle mentioned in the question. Answer template: (If only one point) The point is: "your point". Or 
+
+> (If multiple points) The points are: "your points". 
+
+> For example: The point is: A Or: The points are: A, B, C > Figure 10: TEMPLATE FOR THE POINTLIESONCIRCLE TASKS PROMPT TEMPLATE FOR THE PARALLEL TASK 
+
+Answer me directly just with the all lines which are parallel to the line mentioned in the question (do not include the line mentioned in the question). Answer template: 
+
+- (If only one line) The line is: "your line". 
+
+- Or 
+
+- (If multiple lines) The lines are: "your lines". 
+
+- For example: The line is: BC 
+
+- Or: The lines are: BC, DE Figure 11: TEMPLATE FOR THE PARALLEL TASKS 
+
+18 
+
+PROMPT TEMPLATE FOR THE PERPENDICULAR TASK Answer me directly just with the all lines which are perpendicular to the line mentioned in the question (do not include the line mentioned in the question). Answer template: (If only one line) The line is: "your line". Or (If multiple lines) The lines are: "your lines". For example: The line is: BC Or: The lines are: BC, DE Figure 12: TEMPLATE FOR THE PERPENDICULAR TASKS PROMPT TEMPLATE FOR THE EQUALS TASK Answer me directly just with the annotations presented on the image. Answer template: The annotation is: "your annotation". For example: The annotation is: 2x+4 Or: The annotations is: 90 Figure 13: TEMPLATE FOR THE EQUALS TASKS **999 1000 1001** PROMPT TEMPLATE FOR THE ANGLE CLASSIFICATION TASK **1002 1003** Answer me directly just with the classification of the angle **1004** mentioned in the question. **1005** Answer template: **1006** The angle is: "your angle". **1007** For example: **1008** The angle is: acute Or: **1009** The angle is: obtuse **1010 1011** Figure 14: TEMPLATE FOR THE ANGLE CLASSIFICATION TASKS **1012 1013 1014 1015** PROMPT TEMPLATE FOR THE LENGTH COMPARISON TASK **1016** Answer me directly just with the longer line mentioned in the **1017** question. **1018** Answer template: **1019** The longer line is: "your line". **1020** For example: **1021** The longer line is: BC Or: **1022** The longer line is: DE **1023 1024** Figure 15: TEMPLATE FOR THE LENGTH COMPARISON TASKS **1025** 
+
+19 
+
+## **1026** C DETAILS FOR TRAINING DATA ENGINE 
+
+|**1027**<br>**1028**<br>**1029**<br>**1030**<br>**1031**<br>**1032**<br>**1033**<br>**1034**<br>**1035**<br>**1036**<br>**1037**<br>**1038**<br>**1039**<br>**1040**<br>**1041**<br>**1042**<br>**1043**<br>**1044**<br>**1045**<br>**1046**<br>**1047**<br>**1048**<br>**1049**<br>**1050**<br>**1051**<br>**1052**<br>**1053**<br>**1054**<br>**1055**<br>**1056**<br>**1057**<br>**1058**<br>**1059**<br>**1060**<br>**1061**<br>**1062**<br>**1063**<br>**1064**<br>**1065**<br>**1066**<br>**1067**|In this section, we provide all geometry shapes we use forEuclidtraining, including the pseudocode<br>for generating text describing the geometry shapes and diagram examples.<br>C.1<br>PSEUDOCODE FORTRAININGTEXTUALDATASETSYNTHESIS|
+|---|---|
+||**Algorithm 1**Data Synthesis for the POINTLIESONLINETask|
+||1: **Input:** data<br>~~i~~nfo,points<br>~~s~~et<br>2: **Output:** data<br>3: **for**points<br>~~s~~et_∈_data<br>~~i~~nfo**do**<br>4:<br>**for**(A, B)_∈_permutations(points<br>~~s~~et, 2)**do**<br>5:<br>all<br>~~r~~est<br>~~p~~oints _←_[p for p in points<br>~~s~~et if p not in [A,<br>B]]<br>6:<br>**for**rest<br>~~p~~oints_∈_permutations(all<br>~~r~~est<br>~~p~~oints)**do**<br>7:<br>verb<br>~~a~~greement _←_’is’ if len(rest<br>~~p~~oints) == 1 else<br>’are’<br>8:<br>rest<br>~~p~~oints _←_[f"_{_p_}_" for p in rest<br>~~p~~oints]<br>9:<br>rest<br>~~p~~oints _←_sorted(rest<br>~~p~~oints)<br>10:<br>question _←_’What is the point lying on line ’ + A + B +<br>’?’<br>11:<br>answer _←_’The point lying on line ’ + A + B + ’ ’ +<br>verb<br>~~a~~greement + ’ ’ + ’, ’.join(rest<br>~~p~~oints)<br>12:<br>gt _←_’’.join(rest<br>~~p~~oints)<br>13:<br>data _←{_’question’:<br>question, ’answer’:<br>answer, ’gt’:<br>gt_}_<br>14:<br>**end for**<br>15:<br>**end for**<br>16: **end for**|
+|||
+||**Algorithm 2**Data Synthesis for the POINTLIESONCIRCLETask|
+||1: **Input:** data<br>~~i~~nfo<br>2: **Output:** data<br>3: point<br>~~s~~et _←_random.choice(list(data<br>~~i~~nfo.items()))<br>4: center<br>point _←_point<br>set[0]<br>5: target<br>points _←_point<br>~~s~~et[1]<br>6: target<br>points _←_sorted(target<br>~~p~~oints)<br>7: question _←_’What are the point lying on circle ’ + center<br>~~p~~oint<br>+ ’?’<br>8: answer _←_’The point lying on circle ’ + center<br>~~p~~oint + ’ are ’<br>+ ’, ’.join(target<br>~~p~~oints)<br>9: gt _←_’’.join(target<br>~~p~~oints)<br>10: data _←{_’question’:<br>question, ’answer’:<br>answer, ’gt’:<br>gt_}_|
+
+
+**1068 1069 1070 1071 1072 1073 1074 1075 1076** 
+
+**1077** 
+
+**1078** 
+
+**1079** 
+
+20 
+
+|**1080**<br>**1081**<br>**1082**<br>**1083**<br>**1084**<br>**1085**<br>**1086**<br>**1087**<br>**1088**<br>**1089**<br>**1090**<br>**1091**<br>**1092**<br>**1093**<br>**1094**<br>**1095**<br>**1096**<br>**1097**<br>**1098**<br>**1099**<br>**1100**<br>**1101**<br>**1102**<br>**1103**<br>**1104**<br>**1105**<br>**1106**<br>**1107**<br>**1108**<br>**1109**<br>**1110**<br>**1111**<br>**1112**<br>**1113**<br>**1114**<br>**1115**<br>**1116**<br>**1117**<br>**1118**<br>**1119**|**Algorithm 3**Data Synthesis for the ANGLECLASSIFICATIONTask|
+|---|---|
+||1: **Input:** data<br>~~i~~nfo<br>2: **Output:** data<br>3: angle _←_data<br>~~i~~nfo<br>4: angle<br>~~o~~ptions _←_[f’_{_angle[1][0]_}{_angle[1][1]_}{_angle[1][2]_}_’,<br>f’_{_angle[1][2]_}{_angle[1][1]_}{_angle[1][0]_}_’]<br>5: angle<br>~~l~~etter _←_random.choice(angle<br>~~o~~ptions)<br>6: angle<br>~~c~~lass _←_’acute’ if angle[0] < 90 else ’obtuse’<br>7: question _←_’Is angle ’ + angle<br>~~l~~etter + ’ acute or obtuse?’<br>8: answer _←_’Angle ’ + angle<br>~~l~~etter + ’ is ’ + angle<br>~~c~~lass<br>9: gt _←_angle<br>~~c~~lass<br>10: data _←{_’question’:<br>question, ’answer’:<br>answer, ’gt’:<br>gt_}_|
+|||
+||**Algorithm 4**Data Synthesis for the LINECOMPARISONTask|
+||1: **Input:** data<br>~~i~~nfo<br>2: **Output:** data<br>3: names _←_[data<br>~~i~~nfo[0][1], data<br>~~i~~nfo[1][1]]<br>4: lengths _←_[data<br>~~i~~nfo[0][0], data<br>~~i~~nfo[1][0]]<br>5: **if**lengths[0] > lengths[1]**then**<br>6:<br>longer<br>~~n~~ame, shorter<br>~~n~~ame _←_names[0], names[1]<br>7: **else**<br>8:<br>longer<br>~~n~~ame, shorter<br>~~n~~ame _←_names[1], names[0]<br>9: **end if**<br>10: data _←_[<br>11:<br>_{_ ’question’:<br>’Which line is longer, ’ + longer<br>~~n~~ame + ’ or ’<br>+ shorter<br>~~n~~ame + ’?’,<br>12:<br>’answer’:<br>’The longer line is ’ + longer<br>~~n~~ame,<br>13:<br>’gt’:<br>longer<br>~~n~~ame _}_,<br>14:<br>_{_ ’question’:<br>’Which line is longer, ’ + shorter<br>~~n~~ame + ’ or<br>’ + longer<br>~~n~~ame + ’?’,<br>15:<br>’answer’:<br>’The longer line is ’ + longer<br>~~n~~ame,<br>16:<br>’gt’:<br>longer<br>~~n~~ame _}_<br>17: ]|
+|||
+
+
+**1120** 
+
+**1121** 
+
+**1122** 
+
+**1123** 
+
+**1124** 
+
+**1125** 
+
+**1126** 
+
+**1127** 
+
+**1128** 
+
+**1129** 
+
+**1130** 
+
+**1131** 
+
+**1132 1133** 
+
+21 
+
+**==> picture [432 x 641] intentionally omitted <==**
+
+**----- Start of picture text -----**<br>
+||||||||||||||||||||||||||||||||||||||
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+|1134|
+|C.2|GEOMETRY SHAPES USED|FOR EUCLID TRAINING|
+|1135|
+|1136|
+|GEOMETRY SHAPE GENERATION CODE|
+|1137|
+|1138|
+|PointLiesOnLine|:|
+|1139|(stage|1)|A|B|C|=|triangle|A|B|C;|D|=|midpoint|B|C|
+|1140|(stage(stage|2)3)|AA|BB|CC|==|triangletriangle|AA|BB|C;C;|DD|==|midpointmidpoint|AB|B;C;|EE|==|midpointmidpoint|AA|CC;|F|=|
+|1141|intersection|ll|A|D|B|E|
+|1142|PointLiesOnCircle|(stage|1)|A|B|=:segment|A|B;|C|=|on|c|ircle|C|A|B|
+|1143|(stage|1)|A|B|=|segment|A|B;|C|=|on|c|ircle|C|A|B|
+|1144|(stage(stage|1)1)|AA|BB|==|segmentsegment|AA|B;B;|CC|==|onon|cc|ircleircle|CC|AA|B;B;|DD|==|onon|cc|ircleircle|DD|AA|BB;|E|=|on|circle|E|
+|1145|A|B|
+|1146|A|(stageB;|F|=|1)on|circleA|B|=|segmentF|A|B|A|B;|C|=|on|c|ircle|C|A|B;|D|=|on|c|ircle|D|A|B;|E|=|on|circle|E|
+|1147|(stage|1)|A|B|=|segment|A|B;|C|=|on|c|ircle|C|A|B;|D|=|on|c|ircle|D|A|B;|E|=|on|circle|E|
+|1148|A|(stageB;|F|=|2)on|circleA|B|=|segmentF|A|B;|GA|=B;onC|c|=ircleon|c|ircleG|A|B|C|A|B;|D|=|midpoint|A|B|
+|1149|(stage|2)|A|B|=|segment|A|B;|C|=|on|c|ircle|C|A|B;|D|=|midpoint|A|B|
+|1150|(stage|2)|A|B|=|segment|A|B;|C|=|on|c|ircle|C|A|B;|D|=|midpoint|A|B;|E|=|on|c|ircle|E|A|
+|B|
+|1151|(stage|2)|A|B|=|segment|A|B;|C|=|on|c|ircle|C|A|B;|D|=|midpoint|A|B;|E|=|on|c|ircle|E|A|
+|1152|B;(stageF|=|on2)|c|ircleA|B|=F|segmentA|B|A|B;|C|=|on|c|ircle|C|A|B;|D|=|midpoint|A|B;|E|=|on|c|ircle|E|A|
+|1153|B;|F|=|on|c|ircle|F|A|B;|G|=|on|circle|G|A|B|
+|1154|B;(stageF|=|on2)|c|ircleA|B|=F|segmentA|B;|G|=A|onB;|circleC|=|on|G|c|ircleA|B;|HC|=A|onB;|c|Dircle=|midpointH|A|B|A|B;|E|=|on|c|ircle|E|A|
+|1155|(stage|3)|A|B|=|segment|A|B;|C|=|on|c|ircle|C|A|B;|D|=|midpoint|A|B;|E|=|midpoint|A|C|
+|1156|F|(stage=|on|c|ircle3)|A|FB|A=|Bsegment|A|B;|C|=|on|c|ircle|C|A|B;|D|=|midpoint|A|B;|E|=|midpoint|A|C;|
+|1157|(stage|3)|A|B|=|segment|A|B;|C|=|on|c|ircle|C|A|B;|D|=|midpoint|A|B;|E|=|midpoint|A|C;|
+|1158|F|(stage=|on|c|ircle3)|A|FB|A=|B;segmentG|=|onA|circleB;|C|=|GonA|c|Bircle|C|A|B;|D|=|midpoint|A|B;|E|=|midpoint|A|C;|
+|1159|F|=|on|c|ircle|F|A|B;|G|=|on|circle|G|A|B;|H|=|on|c|ircle|H|A|B|
+|1160|F|(stage=|on|c|ircle3)|A|FB|A=|B;segmentG|=|onA|circleB;|C|=|GonA|c|B;ircleH|=|ConA|c|B;ircleD|=|HmidpointA|B;|I|=A|onB;|c|ircleE|=|midpointI|A|B|A|C;|
+|1161|(stage|3)|A|B|=|segment|A|B;|C|=|on|c|ircle|C|A|B;|D|=|midpoint|A|B;|E|=|on|c|ircle|E|A|
+|1162|B;(stageF|=|on3)|c|ircleA|B|=F|segmentA|B;|G|=A|onB;|circleC|=|on|G|c|ircleA|B;|HC|=A|onB;|c|Dircle=|midpointH|A|B;|AI|B;=|midpointE|=|midpointB|C|B|C|
+|1163|(stage|3)|A|B|=|segment|A|B;|C|=|on|c|ircle|C|A|B;|D|=|midpoint|A|B;|E|=|lc|t|angent|E|C|
+|1164|A|(stage|3)|A|B|=|segment|A|B;|C|=|on|c|ircle|C|A|B;|D|=|midpoint|A|B;|E|=|on|c|ircle|E|A|
+|1165|B;|F|=|on|c|ircle|F|A|B;|G|=|on|circle|G|A|B;|H|=|lc|t|angent|H|C|A|
+|1166|AngleClassification|(stage|1)|A|B|C|=:triangle|A|B|C|
+|1167|(stage|2)|A|B|=|segment|A|B;|C|D|=|segment|C|D|
+|1168|(stage(stage|3)3)|AA|BB|CC|==|triangletriangle|AA|BB|CC;|D|=|midpoint|B|C|
+|1169|LineComparison|:|
+|1170|(stage(stage|1)1)|AA|BB|CC|==|triangletriangle|AA|BB|CC|
+|1171|(stage|1)|A|B|C|=|triangle|A|B|C|
+|1172|(stage|2)|A|B|C|=|triangle|A|B|C;|D|=|midpoint|B|C|
+|(stage|3)|A|B|C|=|triangle|A|B|C;|D|=|midpoint|A|B;|E|=|midpoint|A|C|
+|1173|
+|1174|Figure 16:|GEOMETRY SHAPE GENERATION CODE|FOR EUCLID|TRAINING|
+|1175|
+|1176|
+|1177|
+|1178|
+|1179|
+|1180|
+|1181|
+|1182|
+|1183|
+|1184|
+|1185|
+|1186|
+|1187|
+
+**----- End of picture text -----**<br>
+
+
+22 
+
+|**1188**||||||
+|---|---|---|---|---|---|
+|**1189**||||||
+|**1190**||||||
+|**1191**||||||
+|**1192**||PointLiesOnLine||||
+|**1193**||||||
+|**1194**|Stage 1||Stage 2||Stage 3|
+|**1195**||v||||
+|**1196**|U||2||C|
+|**1197**|W<br>wT|||T|T|
+|**1198**||||||
+|**1199**||H<br>D<br>0||||
+|**1200**|||s|||
+|**1201**||8T|8T|8T|8T|
+|**1202**|||M|||
+|**1203**||PointLiesOnCircle||||
+|**1204**||||||
+|**1205**|Stage 1||Stage 2||Stage 3|
+|**1206**|i||||F|
+|**1207**|||||Ww|
+|**1208**|||xX|||
+|**1209**||||||
+||||B|||
+|**1210**||||||
+|**1211**|||||J|
+|**1212**|||N|||
+|**1213**|Ww|||L|||
+|**1214**||||||
+|**1215**||AngleClassification||||
+|**1216**|Stage 1||Stage 2||Stage 3|
+|**1217**|F||Ww|||
+|**1218**||||||
+|**1219**<br>**1220**<br>**1221**<br>**1222**|D|||D|ws<br>N||
+|**1223**|||N|||
+|**1224**||||||
+||BR|BR|BR|BR|BR|
+|**1225**||||||
+|**1226**||LineComparison||||
+|**1227**||||||
+|**1228**|Stage 1||Stage 2||Stage 3|
+||A<br>x|||||
+|**1229**||||||
+|**1230**||||||
+|**1231**||||||
+|**1232**|||Zz||G|
+|**1233**|xA|xA|xA|xA|xA|
+|**1234**|||°|°|°<br>Q|
+|**1235**||||||
+|**1236**|L||le}|||
+|**1237**||||||
+|**1238**|Figure 17: Examples of the geometry diagrams used to train|Examples of the geometry diagrams used to trainEuclid, the diagrams are generated by||, the diagrams are generated by||
+|**1239**|our dataset engine.|||||
+|**1240**||||||
+|**1241**||||||
+
+
+23 
+
+> **1242** D ADDITIONAL RESULT FIGURES IN REBUTTAL PHASE **1243 1244** Training Loss Testing Accuracy **1245** 1.0 **1246** 10[0] **1247 1248** 0.8 **1249** 10 1 **1250** 0.6 **1251 1252** 10 2 **1253** 0.4 **1254 1255** 10 3 0.2 **1256 1257** 10 4 0.0 **1258** 0 30 60 90 0 30 60 90 # Training Samples (k) # Training Samples (k) **1259** 0.5B LLM 1.5B LLM 3B LLM **1260** 
+
+> **1261** Figure 18: Training loss and testing accuracy curve comparing three choices of LLM size with 
+
+> **1262** a fixed visual encoder and multimodal connector. Training losses are window-smoothed using a 
+
+> **1263** window size of 10 for better visibility. **1264 1265** Average Testing Accuracy **1266 1267** 1.0 **1268 1269** 0.8 **1270 1271** 0.6 **1272 1273** 0.4 **1274 1275** 0.2 **1276 1277** 0.0 0 100 200 300 400 500 600 700 800 900 **1278** # Training Samples (k) **1279** Figure 19: The test accuracy curve when expanding our training dataset volume to 1 million dataset, **1280** the model and dataset setting is the same as the last sub-figure in Fig. 3. **1281 1282 1283 1284 1285 1286** 
+
+**1287 1288** 
+
+**1289 1290 1291 1292 1293** 
+
+**1294** 
+
+**1295** 
+
+24 
+
+|**1296**<br>**1297**<br>**1298**<br>**1299**<br>**1300**<br>**1301**<br>**1302**<br>**1303**<br>**1304**<br>**1305**<br>**1306**<br>**1307**<br>**1308**<br>**1309**<br>**1310**<br>**1311**<br>**1312**<br>**1313**<br>**1314**<br>**1315**<br>**1316**<br>**1317**<br>**1318**<br>**1319**<br>**1320**<br>**1321**<br>**1322**<br>**1323**<br>**1324**<br>**1325**<br>**1326**<br>**1327**<br>**1328**<br>**1329**<br>**1330**<br>**1331**<br>**1332**<br>**1333**<br>**1334**<br>**1335**<br>**1336**<br>**1337**<br>**1338**<br>**1339**<br>**1340**<br>**1341**<br>**1342**<br>**1343**<br>**1344**<br>**1345**<br>**1346**<br>**1347**<br>**1348**<br>**1349**|Table 6: Performance (average evaluation score) of different models on Geoperception benchmark<br>tasks. The evaluation score is computed as a binary indicator where Evaluation score= 1if predic-<br>tions (_P_) are a subset of ground truth (_G_), and Evaluation score= 0otherwise. POL: PointLiesOn-<br>Line,POC: PointLiesOnCircle,ALC: AngleClassifcation,LHC: LineComparison,PEP: Perpendic-<br>ular,PRA: Parallel,EQL: Equals. As the Random Baseline method, we use GPT-4o-mini, given the<br>same textual instruction but without an image.<br>Logical<br>Numerical<br>Annotations<br>Model<br>POL<br>POC<br>ALC<br>LHC<br>PEP<br>PRA<br>EQL<br>Overall<br>Random Baseline<br>1.53<br>3.90<br>59.92<br>51.36<br>0.47<br>0.00<br>0.02<br>16.74<br>_Open Source_<br>Molmo (Deitke et al.,2024)<br>12.84<br>37.60<br>56.77<br>16.79<br>1.89<br>0.00<br>0.81<br>18.10<br>Llama32 (Dubey et al.,2024)<br>17.36<br>40.67<br>59.46<br>52.08<br>14.59<br>23.58<br>49.91<br>36.81<br>Qwen2VL (Wang et al.,2024a)<br>22.83<br>41.78<br>46.60<br>63.27<br>32.89<br>33.02<br>54.40<br>42.11<br>Pixtral (AI,2023)<br>26.20<br>60.45<br>47.33<br>51.43<br>29.97<br>38.68<br>58.50<br>44.65<br>_Closed Source_<br>GPT-4omini (Achiam et al.,2023)<br>10.52<br>62.95<br>48.84<br>69.51<br>12.22<br>4.72<br>44.77<br>36.22<br>GPT-4o (Achiam et al.,2023)<br>17.10<br>76.88<br>55.63<br>74.39<br>32.18<br>65.09<br>44.75<br>52.29<br>Claude (Anthropic,2024)<br>26.41<br>74.93<br>42.95<br>70.73<br>34.07<br>71.70<br>66.41<br>55.31<br>Gemini Flash (Team et al.,2023)<br>30.83<br>71.31<br>49.89<br>76.69<br>42.59<br>71.70<br>66.32<br>58.47<br>Gemini Pro (Team et al.,2023)<br>25.14<br>71.31<br>57.96<br>79.05<br>52.37<br>85.85<br>52.32<br>60.57<br>Table 7: Performance (average evaluation score) of different models on Geoperception benchmark<br>tasks. The evaluation score is computed as the ratio of the intersection of predictions (_P_) and ground<br>truth (_G_) to the size of the ground truth (_|G|_): Evaluation score= _|P ∩G|_<br>_|G|_ , . POL: PointLiesOnLine,<br>POC: PointLiesOnCircle, ALC: AngleClassifcation, LHC: LineComparison, PEP: Perpendicular,<br>PRA: Parallel,EQL: Equals. As the Random Baseline method, we use GPT-4o-mini, given the same<br>textual instruction but without an image.<br>Logical<br>Numerical<br>Annotations<br>Model<br>POL<br>POC<br>ALC<br>LHC<br>PEP<br>PRA<br>EQL<br>Overall<br>Random Baseline<br>21.11<br>13.97<br>59.92<br>51.36<br>3.92<br>8.65<br>0.01<br>22.70<br>_Open Source_<br>Molmo (Deitke et al.,2024)<br>50.25<br>72.21<br>56.77<br>76.61<br>15.01<br>14.43<br>51.27<br>48.08<br>Llama32 (Dubey et al.,2024)<br>41.43<br>84.60<br>59.46<br>52.22<br>7.43<br>22.21<br>50.56<br>45.42<br>Qwen2VL (Wang et al.,2024a)<br>22.16<br>90.46<br>46.60<br>63.27<br>18.69<br>18.16<br>54.38<br>44.82<br>Pixtral (AI,2023)<br>36.92<br>80.57<br>47.33<br>51.43<br>11.79<br>21.34<br>57.69<br>43.87<br>_Closed Source_<br>GPT-4o-mini (Achiam et al.,2023)<br>57.32<br>90.53<br>48.84<br>69.51<br>18.09<br>24.92<br>44.42<br>50.52<br>GPT-4o (Achiam et al.,2023)<br>49.47<br>89.36<br>55.63<br>74.39<br>20.17<br>31.88<br>44.21<br>52.16<br>Claude 3.5 Sonnet (Anthropic,2024)<br>48.95<br>88.67<br>42.95<br>70.73<br>11.25<br>32.35<br>65.80<br>51.53<br>Gemini-1.5-Flash (Team et al.,2023)<br>44.36<br>85.33<br>49.89<br>76.69<br>19.22<br>32.19<br>65.85<br>53.36<br>Gemini-1.5-Pro (Team et al.,2023)<br>54.44<br>90.83<br>57.96<br>79.05<br>21.52<br>38.80<br>50.32<br>56.13|Table 6: Performance (average evaluation score) of different models on Geoperception benchmark<br>tasks. The evaluation score is computed as a binary indicator where Evaluation score= 1if predic-<br>tions (_P_) are a subset of ground truth (_G_), and Evaluation score= 0otherwise. POL: PointLiesOn-<br>Line,POC: PointLiesOnCircle,ALC: AngleClassifcation,LHC: LineComparison,PEP: Perpendic-<br>ular,PRA: Parallel,EQL: Equals. As the Random Baseline method, we use GPT-4o-mini, given the<br>same textual instruction but without an image.<br>Logical<br>Numerical<br>Annotations<br>Model<br>POL<br>POC<br>ALC<br>LHC<br>PEP<br>PRA<br>EQL<br>Overall<br>Random Baseline<br>1.53<br>3.90<br>59.92<br>51.36<br>0.47<br>0.00<br>0.02<br>16.74<br>_Open Source_<br>Molmo (Deitke et al.,2024)<br>12.84<br>37.60<br>56.77<br>16.79<br>1.89<br>0.00<br>0.81<br>18.10<br>Llama32 (Dubey et al.,2024)<br>17.36<br>40.67<br>59.46<br>52.08<br>14.59<br>23.58<br>49.91<br>36.81<br>Qwen2VL (Wang et al.,2024a)<br>22.83<br>41.78<br>46.60<br>63.27<br>32.89<br>33.02<br>54.40<br>42.11<br>Pixtral (AI,2023)<br>26.20<br>60.45<br>47.33<br>51.43<br>29.97<br>38.68<br>58.50<br>44.65<br>_Closed Source_<br>GPT-4omini (Achiam et al.,2023)<br>10.52<br>62.95<br>48.84<br>69.51<br>12.22<br>4.72<br>44.77<br>36.22<br>GPT-4o (Achiam et al.,2023)<br>17.10<br>76.88<br>55.63<br>74.39<br>32.18<br>65.09<br>44.75<br>52.29<br>Claude (Anthropic,2024)<br>26.41<br>74.93<br>42.95<br>70.73<br>34.07<br>71.70<br>66.41<br>55.31<br>Gemini Flash (Team et al.,2023)<br>30.83<br>71.31<br>49.89<br>76.69<br>42.59<br>71.70<br>66.32<br>58.47<br>Gemini Pro (Team et al.,2023)<br>25.14<br>71.31<br>57.96<br>79.05<br>52.37<br>85.85<br>52.32<br>60.57<br>Table 7: Performance (average evaluation score) of different models on Geoperception benchmark<br>tasks. The evaluation score is computed as the ratio of the intersection of predictions (_P_) and ground<br>truth (_G_) to the size of the ground truth (_|G|_): Evaluation score= _|P ∩G|_<br>_|G|_ , . POL: PointLiesOnLine,<br>POC: PointLiesOnCircle, ALC: AngleClassifcation, LHC: LineComparison, PEP: Perpendicular,<br>PRA: Parallel,EQL: Equals. As the Random Baseline method, we use GPT-4o-mini, given the same<br>textual instruction but without an image.<br>Logical<br>Numerical<br>Annotations<br>Model<br>POL<br>POC<br>ALC<br>LHC<br>PEP<br>PRA<br>EQL<br>Overall<br>Random Baseline<br>21.11<br>13.97<br>59.92<br>51.36<br>3.92<br>8.65<br>0.01<br>22.70<br>_Open Source_<br>Molmo (Deitke et al.,2024)<br>50.25<br>72.21<br>56.77<br>76.61<br>15.01<br>14.43<br>51.27<br>48.08<br>Llama32 (Dubey et al.,2024)<br>41.43<br>84.60<br>59.46<br>52.22<br>7.43<br>22.21<br>50.56<br>45.42<br>Qwen2VL (Wang et al.,2024a)<br>22.16<br>90.46<br>46.60<br>63.27<br>18.69<br>18.16<br>54.38<br>44.82<br>Pixtral (AI,2023)<br>36.92<br>80.57<br>47.33<br>51.43<br>11.79<br>21.34<br>57.69<br>43.87<br>_Closed Source_<br>GPT-4o-mini (Achiam et al.,2023)<br>57.32<br>90.53<br>48.84<br>69.51<br>18.09<br>24.92<br>44.42<br>50.52<br>GPT-4o (Achiam et al.,2023)<br>49.47<br>89.36<br>55.63<br>74.39<br>20.17<br>31.88<br>44.21<br>52.16<br>Claude 3.5 Sonnet (Anthropic,2024)<br>48.95<br>88.67<br>42.95<br>70.73<br>11.25<br>32.35<br>65.80<br>51.53<br>Gemini-1.5-Flash (Team et al.,2023)<br>44.36<br>85.33<br>49.89<br>76.69<br>19.22<br>32.19<br>65.85<br>53.36<br>Gemini-1.5-Pro (Team et al.,2023)<br>54.44<br>90.83<br>57.96<br>79.05<br>21.52<br>38.80<br>50.32<br>56.13|Table 6: Performance (average evaluation score) of different models on Geoperception benchmark<br>tasks. The evaluation score is computed as a binary indicator where Evaluation score= 1if predic-<br>tions (_P_) are a subset of ground truth (_G_), and Evaluation score= 0otherwise. POL: PointLiesOn-<br>Line,POC: PointLiesOnCircle,ALC: AngleClassifcation,LHC: LineComparison,PEP: Perpendic-<br>ular,PRA: Parallel,EQL: Equals. As the Random Baseline method, we use GPT-4o-mini, given the<br>same textual instruction but without an image.<br>Logical<br>Numerical<br>Annotations<br>Model<br>POL<br>POC<br>ALC<br>LHC<br>PEP<br>PRA<br>EQL<br>Overall<br>Random Baseline<br>1.53<br>3.90<br>59.92<br>51.36<br>0.47<br>0.00<br>0.02<br>16.74<br>_Open Source_<br>Molmo (Deitke et al.,2024)<br>12.84<br>37.60<br>56.77<br>16.79<br>1.89<br>0.00<br>0.81<br>18.10<br>Llama32 (Dubey et al.,2024)<br>17.36<br>40.67<br>59.46<br>52.08<br>14.59<br>23.58<br>49.91<br>36.81<br>Qwen2VL (Wang et al.,2024a)<br>22.83<br>41.78<br>46.60<br>63.27<br>32.89<br>33.02<br>54.40<br>42.11<br>Pixtral (AI,2023)<br>26.20<br>60.45<br>47.33<br>51.43<br>29.97<br>38.68<br>58.50<br>44.65<br>_Closed Source_<br>GPT-4omini (Achiam et al.,2023)<br>10.52<br>62.95<br>48.84<br>69.51<br>12.22<br>4.72<br>44.77<br>36.22<br>GPT-4o (Achiam et al.,2023)<br>17.10<br>76.88<br>55.63<br>74.39<br>32.18<br>65.09<br>44.75<br>52.29<br>Claude (Anthropic,2024)<br>26.41<br>74.93<br>42.95<br>70.73<br>34.07<br>71.70<br>66.41<br>55.31<br>Gemini Flash (Team et al.,2023)<br>30.83<br>71.31<br>49.89<br>76.69<br>42.59<br>71.70<br>66.32<br>58.47<br>Gemini Pro (Team et al.,2023)<br>25.14<br>71.31<br>57.96<br>79.05<br>52.37<br>85.85<br>52.32<br>60.57<br>Table 7: Performance (average evaluation score) of different models on Geoperception benchmark<br>tasks. The evaluation score is computed as the ratio of the intersection of predictions (_P_) and ground<br>truth (_G_) to the size of the ground truth (_|G|_): Evaluation score= _|P ∩G|_<br>_|G|_ , . POL: PointLiesOnLine,<br>POC: PointLiesOnCircle, ALC: AngleClassifcation, LHC: LineComparison, PEP: Perpendicular,<br>PRA: Parallel,EQL: Equals. As the Random Baseline method, we use GPT-4o-mini, given the same<br>textual instruction but without an image.<br>Logical<br>Numerical<br>Annotations<br>Model<br>POL<br>POC<br>ALC<br>LHC<br>PEP<br>PRA<br>EQL<br>Overall<br>Random Baseline<br>21.11<br>13.97<br>59.92<br>51.36<br>3.92<br>8.65<br>0.01<br>22.70<br>_Open Source_<br>Molmo (Deitke et al.,2024)<br>50.25<br>72.21<br>56.77<br>76.61<br>15.01<br>14.43<br>51.27<br>48.08<br>Llama32 (Dubey et al.,2024)<br>41.43<br>84.60<br>59.46<br>52.22<br>7.43<br>22.21<br>50.56<br>45.42<br>Qwen2VL (Wang et al.,2024a)<br>22.16<br>90.46<br>46.60<br>63.27<br>18.69<br>18.16<br>54.38<br>44.82<br>Pixtral (AI,2023)<br>36.92<br>80.57<br>47.33<br>51.43<br>11.79<br>21.34<br>57.69<br>43.87<br>_Closed Source_<br>GPT-4o-mini (Achiam et al.,2023)<br>57.32<br>90.53<br>48.84<br>69.51<br>18.09<br>24.92<br>44.42<br>50.52<br>GPT-4o (Achiam et al.,2023)<br>49.47<br>89.36<br>55.63<br>74.39<br>20.17<br>31.88<br>44.21<br>52.16<br>Claude 3.5 Sonnet (Anthropic,2024)<br>48.95<br>88.67<br>42.95<br>70.73<br>11.25<br>32.35<br>65.80<br>51.53<br>Gemini-1.5-Flash (Team et al.,2023)<br>44.36<br>85.33<br>49.89<br>76.69<br>19.22<br>32.19<br>65.85<br>53.36<br>Gemini-1.5-Pro (Team et al.,2023)<br>54.44<br>90.83<br>57.96<br>79.05<br>21.52<br>38.80<br>50.32<br>56.13|
+|---|---|---|---|
+||Model|Logical<br>POL<br>POC|Numerical<br>ALC<br>LHC|
+||Random Baseline|21.11<br>13.97|59.92<br>51.36|
+||Molmo (Deitke et al.,2024)<br>Llama32 (Dubey et al.,2024)<br>Qwen2VL (Wang et al.,2024a)<br>Pixtral (AI,2023)|_Open Source_<br>50.25<br>72.21<br>56.77<br>76.61<br>41.43<br>84.60<br>59.46<br>52.22<br>22.16<br>90.46<br>46.60<br>63.27<br>36.92<br>80.57<br>47.33<br>51.43||
+||GPT-4o-mini (Achiam et al.,2023)<br>GPT-4o (Achiam et al.,2023)<br>Claude 3.5 Sonnet (Anthropic,2024)<br>Gemini-1.5-Flash (Team et al.,2023)<br>Gemini-1.5-Pro (Team et al.,2023)|_Closed Source_<br>57.32<br>90.53<br>48.84<br>69.51<br>49.47<br>89.36<br>55.63<br>74.39<br>48.95<br>88.67<br>42.95<br>70.73<br>44.36<br>85.33<br>49.89<br>76.69<br>54.44<br>90.83<br>57.96<br>79.05||
+|||||
+
+
+25

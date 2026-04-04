@@ -1,0 +1,1283 @@
+# BUDGET-CONSTRAINED ACTIVE LEARNING TO DE-CENSOR SURVIVAL DATA
+
+
+**Anonymous authors**
+Paper under double-blind review
+
+
+ABSTRACT
+
+
+Standard supervised learners attempt to learn a model from a **labeled** dataset.
+Given a small set of labeled instances, and a pool of unlabeled instances, a **bud-**
+**geted learner** can use its given budget to pay to acquire the labels of some unlabeled instances, which it can then use to produce a model. Here, we explore budgeted learning in the context of survival datasets, which include (right) censored
+instances, where we know only a lower bound _ci_ on that instance’s time-to-event
+_ti_ . Here, that learner can pay to (partially) label a censored instance      - _e.g._, to
+acquire the actual time _ti_ for an instance [ _e.g._, go from (3yr, censor) to (7.2yr,
+uncensored)], or other variants [eg, learn about 1 more year, so go from (3yr,
+censor) to either (3.2yr, uncensored) or (4yr, censor)]. This serves as a model
+of real world data collection, where follow-up with censored patients does not
+always lead to uncensoring, and how much information is given to the learner
+model during data collection is a function of the budget and the nature of the data
+itself. Many fields – such as medicine, finance, and engineering – contain survival
+datasets with a large number of censored instance, and also operate under budget
+constraints with respect to the learning process, thus making it important to be
+able to apply this budgeted learning approach. Despite this importance, very few
+other projects have explored this. We provide both experimental and theoretical
+results for how to apply state-of-the-art budgeted learning algorithms to survival
+data and the respective limitations that exist in doing so. Our approach provides
+bounds and time complexity asymptotically equivalent to _[m]_ [:] the standard active
+learning method _[m]_ [:] ~~sB~~ atchBALD. Moreover, empirical analysis on several survival
+tasks show that our model performs better than other potential approaches on several benchmarks.
+
+
+1 INTRODUCTION
+
+
+Often _[m]_ [:] ~~times,~~ the success of a model is more dependent on the data the model has access to than
+the quality of the analysis itself. Data plays a large role in the bias, variance, speed of training, and
+generalizability of the model (Domingos, 2012). However, many factors often come into play that
+limit the data the model has access to. One such factor _[m]_ [:] ~~exists ini~~ s the cost of obtaining diverse and
+relevant data that is needed for the model to generalize effectively (Domingos, 2012). Some fields
+such as medicine which depends on clinical trials can often _[m]_ [:] ~~have trouble getting~~ with diversity within
+the datasets, as well as gathering instances can be costly. _m_ : ~~We~~ ~~wish~~ ~~to~~ ~~buildO~~ ur goal is to develop
+a method to select the most informative instances to learn about in medical and clinical settings
+while taking the budget available into consideration. For example, if we have a dataset of 50 labeled
+instances, and a budget to learn about 10 other instances (from a large pool of unlabeled instances),
+we want to use the given 50 instances to identify the most informative 10.
+
+
+Here, we want to extend these ideas to _survival datasets_ - where the goal is a model that can predict
+the “time to event” (typically death) for a novel instance. This resembles standard regression, except
+the training dataset often includes _censored_ data points, where the exact time to event is unknown.
+Instead, these instances typically provide only a lower bound (right-censored) for the time to event.
+For example, while a cancer study may attempt to follow patients until their death, some patients
+may leave the study early, or may survive until the end of the study. Here, we would consider them
+right censored as we do not have the true time of death. Censored data points can be incredibly
+common in many settings, especially those involving clinical trials (Moghaddam et al., 2022).
+
+
+1
+
+
+Many researchers are uncertain _[m]_ [:] ~~what to do with~~ about how to handle such data, meaning some will
+just remove it. This is a serious issue in a field that needs to use as much data as it can get. Although
+there are methods for learning models from such survival data, very few methods have been developed _[m]_ [:] ~~looking at active learningf~~ or active learning with survival data (Dedja et al., 2023), and so far
+**no** method _[m]_ [:] s ha _[m]_ [:] ~~sv~~ e been developed _[m]_ [:] ~~looking~~ ~~atf~~ or budgeted learning with survival data. That is
+the focus of this work.
+
+
+The field of _Active Learning (AL)_ aims to identify the most important data to learn about (often to
+obtain the labels _[m]_ [:] ~~foro~~ f) in order to acquire an effective model, at minimal cost (Ren et al., 2021).
+Its goal is to minimize the amount of data needed to reach a target accuracy while also enabling the
+model to achieve higher accuracy as quickly as possible, saving time and compute (less compute is
+needed to train the model _[m]_ [:] ~~as there exists less samples in the trainingb~~ ecause fewer samples are included
+in the training data) (Ren et al., 2021).
+
+
+AL has made significant strides as a field, yet its definition remains vague. Researchers often train
+models until “convergence”, but this term lacks a clear definition, as it relies on arbitrary thresholds.
+Typically, convergence is declared when the loss changes minimally ( _[m]_ [:] ~~by an epsilon~~ _ϵ_ ) over a certain
+number of steps (patience) (Ren et al., 2021). This imprecision arises because both _ϵ_ and patience
+are heuristically chosen and can vary by task and model, resulting in an inconsistent understanding
+of true convergence.
+
+
+_Budgeted Learning (BL)_ tackles this issue by selecting data instances within a budget to minimize
+model loss, offering a more precise framework for active learning (Lizotte et al., 2003). Budgeted
+learning attempts to choose the best instances for the model given a budget constraint. If all data
+instances had the same cost and the task was to minimize the budget _[m]_ [:] ~~needed rather than work within a~~
+~~given budget, we would have ALr~~ ather than working within a predefned one, we would essentially have
+AL.. Budgeted learning is more attuned to real world problems where a predefined budget is often _[m]_ [:]
+
+~~initially~~ given prior to data collection. We show that once this problem is solved, one can easily also
+account for real-world situations where data instances may potentially cost different amounts.
+
+
+Traditional AL makes several assumptions that often don’t hold in real-world scenarios. We have
+already noted that it does not account for prior budget constraints, operating under the premise that
+the model can run until convergence. Another assumption is that when a data instance is selected
+for learning, its true label is revealed—an assumption that doesn’t always apply in survival analysis.
+If Alice is censored at time _t_ = 3 years, and you run an additional study to learn 1 more year about
+Alice, her death may occur in that 1 year ( _e.g._, uncensored at _t_ = 3 _._ 2), or she may be censored at
+_t_ = 4 years. AL often assumes that _[m]_ [:] ~~full information of the labelt~~ he full label information is provided
+when queried. Finally, AL often assumes that if a data instance in the pool _[m]_ [:] ~~does not have their true~~
+~~label yet they can still be queried so their true label is revealed,~~ does not yet have its true label, it can still
+be queried to reveal the label. _[m]_ [:] ~~tT~~ his is again not the case in the real world. Imagine we are studying
+Alice to track her time of death from cancer. If, during the study, she dies from an unrelated cause
+
+- such as being hit by a bus - her time of death from cancer becomes unknown, and we are no
+longer able to gather more information about her. In this case, Alice represents a censored instance
+that is also _unqueryable_ (meaning no further information can be learned). _[m]_ [:] ~~Finally, we will discuss a~~
+~~change that can be made to our approach so that our method works even if instances cost different amountsW~~ e
+also discuss how to adapt our approach to handle situations where different instances have different
+costs.
+
+
+**Significance** **of** **Settings:** The settings explored in this work encompass a broad range of applications, showing the versatility of our method in handling various survival datasets, instance costs,
+and scenarios with partial information. While we focus on the classical example of clinical trials,
+where random right censoring is a common observational scheme and extending the study time may
+not yield additional information, our approach is equally relevant to other domains. For instance, in
+industrial reliability studies Ma & Survival (2008), _[R2]_ [:] where Type I or Type II censoring is frequently
+employed, extending the study duration can reveal more events and improve insights. _[R4]_ [:] Additionally, our method has potential applications in the fnancial sector Gao & He (2020), such as in credit
+risk modeling or portfolio survival analysis, where understanding time-to-event data under cost constraints is critical.
+
+
+**Theoretical Results** : _[R2]_ [:] [We have addressed our contributions formally below.] 1. We reduce the problem given to an instance of the maximum coverage problem by creating a modified version of the
+
+
+2
+
+
+BatchBALD (Kirsch et al., 2019) we call _BBsurv_, so that it works in surival settings and with partial
+information. 2. We show the problem to be NP-Hard in nature but also _[m]_ [:] ~~providep~~ resent the known
+greedy algorithm _[m]_ [:] ~~that~~ ~~is~~ ~~known~~ ~~as~~ ~~ther~~ ecognized as the optimal approximation algorithm unless
+_P_ = _NP_ . This algorithm achieves a guaranteed lower bound of (1 _−_ 1 _/e_ ) of the optimal information content possible, also shown in the BatchBALD paper. 3. Finally, we provide a new greedy
+algorithm that _[m]_ [:] ~~provides~~ achieves the same guaranteed lower bound even if the cost of acquiring data
+instances _[m]_ [:] ~~are~~ ~~not~~ ~~all~~ ~~the~~ ~~samea~~ re not uniform. This is primarily done by extending the problem to
+the **budgeted** maximum coverage problem.
+
+
+**Experimental Results** : For the experimental results the work provides the following contributions:
+1. we compose a series of algorithms to compete with ours in this setting. Since this setting has never
+been done before to our knowledge, we needed to create other algorithms to test our method against _[m]_ [:]
+
+~~them.~~ The algorithms we created involve controls such as random and 3 “sanity-check” algorithms
+which are benchmark strategies people might try within these settings. We also slightly _[m]_ [:] ~~alterm~~ odify
+BatchBald and two other well known AL algorithms to work within these settings. 2. we evaluate
+our acquisition function against the rest on 3 real world survival datasets _[m]_ [:] ~~using p~~ rimarily using the
+MAE-PO (Qi et al., 2023a) evalution method, however we discuss and _[m]_ [:] ~~showp~~ resent other metrics
+in _[m]_ [:] ~~the~~ Additional Data B. 3. We demonstrate that our version of BatchBald _[m]_ [:] ~~which we calledr~~ efered
+to as _BBSurv_ performs significantly better than other methods in our settings.
+
+
+2 RELATED WORK
+
+
+2.1 BUDGETED LEARNING
+
+
+Although a relatively new field, _[m]_ [:] ~~there are~~ _[m]_ [:] ~~some papers that focus on Budgeted learning on various sce-~~
+~~narioss~~ everal studies have explored its application in various scenarios (Kapoor & Greiner, 2005a;b;
+Khan & Greiner, 2014). While these papers introduce the budgeted learning field and apply it to a
+variety of tasks, none have applied budgeted learning to survival data where _[m]_ [:] ~~they cani~~ t is possible
+to (partially) “decensor” the labels.
+
+
+2.2 INCORPORATING ACTIVE LEARNING WITH SURVIVAL ANALYSIS
+
+
+There are very few works in the intersection of AL and survival analysis. Vinzamuri et al. (2014a;b)
+_m_ : ~~use~~ ~~a~~ ~~deep~~ ~~learning~~ ~~model~~ ~~but~~ ~~their~~ ~~model~~ ~~is~~ ~~semi-parametric~~ ~~(Cox~~ ~~Proportional-Hazards~~ ~~model)~~ ~~and~~ ~~thus~~
+~~works on fewer datasets~~ employ a semi-parametric deep learning model based on the Cox ProportionalHazards framework, which restricts its applicability to fewer datasets. Furthermore, _[m]_ [:] ~~none of~~ neither
+these papers, nor Nezhad et al. (2019), _[m]_ [:] ~~account for budget, nor consider incremental decensoring of the~~
+~~labelsi~~ ncorporate budget constraints or consider the incremental decensoring of labels.
+
+
+H¨uttel et al. (2024) _[R4]_ [:] extends the BALD framework to right-censored data, whereas our work employs the more mathematically complex BatchBALD architecture. Additionally, our method adjusts
+the BALD framework differently to incorporate budget constraints, incremental label updates, and
+to handle survival analysis with non-uniform instance costs.
+
+
+Finally, Dedja et al. (2023) _[m]_ [:] ~~doesp~~ ropose a AL _[m]_ [:] approach on survival data _[m]_ [:] ~~and~~ ~~also~~ ~~hast~~ hat includes a mechanism for incrementally updating the label via an oracle. However their increments are
+random _[m]_ [:] ~~and thus they do not feed the information from the increment to the acquisition prior,~~ meaning the
+updated information is not integrated into the acquisition strategy. Furthermore, their method _[m]_ [:] ~~does~~
+~~not~~ ~~work~~ ~~for~~ ~~deep~~ ~~learning~~ ~~models~~ ~~as~~ ~~they~~ ~~use~~ ~~a~~ ~~random~~ ~~forest~~ ~~modelt~~ heir method is incompatible with
+deep learning models as it relies on a random forest model which has _[m]_ [:] ~~manys~~ ignificant limitations
+when scaling to larger datasets. _[m]_ [:] ~~and~~ ~~they~~ ~~do~~ ~~not~~ ~~consider~~ ~~the~~ ~~scenario~~ ~~where~~ ~~the~~ ~~costs~~ ~~of~~ ~~instances~~ ~~are~~
+~~uniqueA~~ dditionally, they do not address scenarios where the costs of instances are unique.
+
+
+3 FORMULATION OF THE PROBLEM
+
+
+_m_ :In traditional AL schemes, the learner starts with some labeled instances and many unlabeled instances, queries an oracle for label information about some instances, then repeats. Here we do not
+need the process to repeat as we only query the Oracle one time and then evaluate the performance
+
+
+3
+
+
+of the model. Furthermore we make important changes to the formulation of the traditional AL
+problem to account for the survival data and incremental updates.
+
+
+Given a dataset _D_ = _{xi, yi_ _[t][, y]_ _i_ _[e][}]_ _i_ _[n]_ =1 [,] _[R2]_ [:] _[x][i]_ [represents the covariates of the dataset,] _[ y]_ _i_ _[t]_ [denotes] [the]
+event time for each data instance. and _yi_ _[e]_ [denotes] [the] [censored] [value] [for] [each] [instance.] [We] [can]
+divide this _[m]_ [:] ~~randomly~~ ~~i~~ nto a test and training set: _D_ train = _{xA,i, yA,i_ _[t]_ _[, y]_ _A,i_ _[e]_ _[}]_ _i_ _[L]_ =1 and _D_ test =
+_{xB,i, yB,i_ _[t]_ _[, y]_ _B,i_ _[e]_ _[}][n]_ _i_ =1 _[−][L]_ [.] [Where] [L] [is] [the] [size] [of] [the] [training] [data.] _R2_ :For the training data we further censor the _yA,i_ values so we can see the effects of querying and thus the training data also
+has censored times and event values (0 if censored and 1 if not), _{c_ _[t]_ _i_ _[, c]_ _i_ _[e][}]_ _i_ _[L]_ =1 [.] _[R2]_ [:] _[y]_ _A,i_ _[t]_ [and] _[ y]_ _A,i_ _[e]_ [now]
+represent what the Oracle knows while _c_ _[t]_ _i_ [and] _[c][e]_ _i_ [represent] [what] [the] [learner] [is] [given.] [We] [can] [then]
+query the oracle, which will update _c_ _[t]_ _i_ [and] _[c][e]_ _i_ [based] [on] _[y]_ _A,i_ _[t]_ [and] _[y]_ _A,i_ _[e]_ [.] _[R3]_ [:] [[changed] [the] [notation] [as]
+per R3 request; and also changed from _data_ ~~_t_~~ _rain_ to _L_ ]. Thus the training dataset is actually split into
+_D_ train _[oracle]_ = _{_ ( _xA,i, yA,i_ _[t]_ _[, y]_ _A,i_ _[e]_ _[}]_ _i_ _[L]_ =1 [which] [is] [what] [the] [oracle] [sees] [and] _[D]_ train _[learn]_ = _{_ ( _xA,i, c_ _[t]_ _i_ _[, c][e]_ _i_ _[}][L]_ _i_ =1
+which is what the learner sees. From now on we will use _Dtrain_ to refer to _Dtrain_ _[learn]_ [.] _[R2]_ [:][ [We have made]
+the notations more detailed to explicitly show what information the learner and the oracle see.]
+
+
+The _i_ _[th]_ _datapointcomeswithagivencostci_, where each data point has the same cost in the _uniform_
+setting and can be different in the _non-uniform_ setting. A budget _B_ is provided for a query as well.
+In a query, we can choose a batch of data instances via use of some _acquisition function_, which is
+used to evaluate the value of a batch of instances, such that the sum of the costs of the instances
+chosen is less than or equal to _B_ .
+
+
+We wish to find an acquisition function that within the confines of the budget tells us which data
+instances we should “decensor”. But how we are allowed to “decensor” or gain information about
+the data instances depends on how the information is gathered. If for example a study is done on
+a queried instance, if the study is an _[R2]_ [:] I [Changed the font of I, as requested] year study (for example,
+I = 10 refers to a 10-year study) then you only learn I more years about the instance (so an instance
+might go from being censored at 5 years, to being censored at 8 years). We consider this formulation
+in our work. Notice that this is a generalization over traditional AL methods, which often allow one
+to know the exact time of event after a query, which is equivalent to setting I = _∞_ .
+
+
+To define this notion of ”decensoring” rigorously, we introduce an I-oracle with I _∈_ R [+] . In any
+query, we can choose a batch _B_ _⊆_ _D_ train. For each element ( _xA,j, yA,j_ _[t]_ _[, y]_ _A,j_ _[e]_ _[, c][t]_ _A,j_ _[, c][e]_ _A,j_ [)] _[⊆]_ _[B]_ [, the]
+I-oracle updates the values as follows: _c_ _[t]_ _A,j_ [= min(] _[c]_ _A,j_ _[t]_ [+] _[I, y]_ _A,j_ _[t]_ [)] and _c_ _[e]_ _A,j_ [= (1][c][t] A _,_ j [=y] A [t] _,_ j [)] _[∗][y]_ _A,j_ _[e]_ [.]
+
+
+Now we wish to define the model that will be doing the learning in this protocol. We have a Bayesian
+model _M_ where the model parameters _ω_ follow the distribution _p_ ( _ω_ _|_ _D_ train). For a given data
+point _x_ and a classification outcome _y_ _∈{_ 1 _, . . ., t}_, the model’s predictions are represented by
+_p_ ( _y_ _|_ _x, ω, D_ train). The dependence of _ω_ on _D_ train signifies that the model has been trained on the
+dataset _D_ train. _[R2]_ [:] In survival analysis, time is often continuous but can be discretized into time bins
+for this formulation. Many active learning algorithms rely on discrete labels, and using a large number of bins can effectively approximate continuous time. We found that this simplifcation yields
+good results even without a large number of bins.
+
+
+_R3_ :Finally we will use the MAE-PO measure defned in Qi et al. (2023a). That paper compares this
+metric against many others, to show that it is an effective metric closely related to the well-known
+mean absolute error (MAE) metric in regression. We also evaluate using other more traditional
+metrics as well, however as argued in Qi et al. (2023a), the traditional metrics fail in their interoperability and often provide a less useful evaluation of a survival model.
+
+
+**Initial Assumptions:** We wish to make explicit here the exact assumptions we are making in this
+formulation. _m_ :Assumptions 1 and 2 are assumptions novel to this problem, however assumption
+3 is often made in survival settings. _[R3]_ [:] [As recommended we made our assumptions numbered]1. The
+value of I does not change throughout. _[m]_ [:] This assumption is for simplifying purposes of the problem and experiments, however, our formulation does not demand this be true. 2. Instances can be
+queried only once per query. Since the oracle may not give the full information in one query, it
+does make sense to allow the querying of the same point multiple times. We decided to create this
+assumption however to simplify the code and the experimental settings. However, the theoretical
+work for generalizing over this assumption is shown in the Theoretical Analysis section A. A final
+
+
+4
+
+
+note about this assumption is that if in a medical setting there is a follow up study, oftentimes that
+study’s length cannot change, _[m]_ [:] ~~thus~~ ~~it~~ ~~makes~~ ~~no~~ ~~sense~~ ~~to~~ ~~ask~~ ~~for~~ ~~two~~ ~~of~~ ~~the~~ ~~same~~ ~~instance~~ ~~in~~ ~~the~~ ~~same~~
+~~query if there will be only one follow-up study~~ therefore, requesting the same instance twice in a single
+query is illogical if only one follow-up study will be conducted. The appendix will discuss some
+real world scenarios where this assumption does not hold, however for many medical situations, this
+assumption is realistic _[m]_ [:] ~~to expect.~~ 3. The final assumption we have is that censoring is independent
+of the features, and is done uniformly for each instance. This is a common assumption made in the
+field of survival, _[m]_ [:] ~~however~~ ~~work~~ ~~has~~ ~~been~~ ~~done~~ ~~ingeneralizing~~ ~~over~~ ~~this~~ ~~assumption~~ ~~that~~ ~~would~~ ~~be~~ ~~a~~ ~~good~~
+~~place to do future work in this areaH~~ owever, efforts to generalize this assumption have been made, providing a promising direction for future research in this area (Qi et al., 2023a). _R3_ :This assumption
+can also be observed in many real-life scenarios, for example, in clinical trials where patients drop
+out of the study for reasons unrelated to their health condition or treatment effcacy. Such censoring
+is independent of the features being analyzed, like age, gender, or baseline health metrics, allowing the survival analysis to remain unbiased. Similarly, in reliability studies of mechanical systems,
+censoring can occur when testing is stopped due to budget constraints or time limits rather than any
+inherent property of the system.
+
+
+4 OUR METHOD
+
+
+4.1 UTILIZING BATCHBALD FOR MUTUAL INFORMATION ESTIMATION
+
+
+The BatchBALD algorithm (Kirsch et al., 2019) is a state-of-the-art active learning (AL) method,
+enabling the computation of mutual information between multiple data instances and model parameters. Mutual information, rooted in information theory, quantifies the amount of information
+one random variable provides about another. It serves as a key metric for assessing uncertainty by
+evaluating how much an observation reduces uncertainty about a model’s parameters.
+
+
+Hoffmann & Onnela (2023) demonstrate that in the limit, _[m]_ [:] ~~minimizing~~ ~~many~~ ~~commonly~~ ~~used~~ ~~uncer-~~
+~~tainty~~ ~~measures~~ ~~aligns~~ ~~with~~ ~~mutual~~ ~~information~~ ~~in~~ ~~terms~~ ~~of~~ ~~reducing~~ ~~Bayesian~~ ~~riskm~~ inimizing commonly
+used uncertainty measures aligns with mutual information in reducing Bayesian risk. Thus, mutual
+information emerges as a critical metric for this framework. _m_ : ~~Moreover,~~ ~~the~~ ~~fexibility~~ ~~of~~ ~~the~~ ~~Batch-~~
+~~BALD algorithm allows for adaptation to survival analysis tasks, making it a robust tool that generalizes across~~
+~~various~~ ~~assumptions~~ ~~and~~ ~~scenarios~~ ~~in~~ ~~both~~ ~~budgeted~~ ~~learning~~ ~~and~~ ~~survival~~ ~~settings.M~~ oreover, the BatchBALD algorithm is fexible enough to adapt to survival analysis tasks. This makes it a robust tool
+for various assumptions and scenarios in budgeted learning and survival settings.
+
+
+Kirsch et al. (2019) define the BatchBALD acquisition function using mutual information as:
+_aBatchBALD_ ( _{x_ 1: _b}, p_ ( _ω_ _|_ _D_ train)) = _I_ ( _y_ 1: _b_ ; _ω|x_ 1: _b, Dtrain_ ), where _I_ represents the mutual information. Kirsch et al. (2019) further define mutual information between the model parameters and
+a batch of _b_ data instances as follows:
+
+
+_I_ ( _y_ 1: _b_ ; _ω|x_ 1: _b, Dtrain_ ) = _H_ ( _y_ 1: _b|x_ 1: _b, Dtrain_ ) _−_ _Ep_ ( _ω|Dtrain,x_ 1: _b_ )[ _H_ ( _y_ 1: _b|x_ 1: _b, ω, Dtrain_ )] (1)
+
+
+_H_ ( _y_ 1: _b|x_ 1: _b, Dtrain_ ) determines the information entropy of the labels of the batches given the features and training data, while _Ep_ ( _ω|Dtrain,x_ 1: _b_ )[ _H_ ( _y_ 1: _b|x_ 1: _b, ω, Dtrain_ )] defines the expected labels
+conditioned on the features, training data, and the model parameters.
+
+
+Following Kirsch et al. (2019) we choose also to not include conditioning on _x_ 1: _b_ and _Dtrain_ for
+elegance, We can compute _[R2]_ [:] the right term as
+
+
+Kirsch et al. (2019) _[R4]_ [:] provide a detailed discussion of this factorization, with a key underlying assumption being that, when conditioned on _ω_, the indices are treated as independent as their dependencies are captured within the parameters. The fnal step of Equation 2 estimates the expectation by
+taking k samples of the model parameters. The paper also shows that we can compute the _[R2]_ [:] ~~rightl~~ eft
+
+
+5
+
+
+_k_
+
+- _H_ ( _yi |_ ˆ _ωj_ ) (2)
+
+
+_j_ =1
+
+
+1
+_Ep_ ( _ω_ )[ _H_ ( _y_ 1: _b|ω_ )] _≈_ _k_
+
+
+_R4_ : [We included equation numbers]
+
+
+_b_
+
+
+_i_ =1
+
+
+term as: _[R2]_ [:] [we simplified the formulas as we felt they were not integral to the result and the try to explain the
+terms that do exist]
+
+
+_m_ : ~~The formula assumes that data instances are conditionally independent given the model parameters, as their~~
+~~dependencies~~ ~~are~~ ~~captured~~ ~~within~~ ~~the~~ ~~parameters.~~ _[m]_ [:] ~~However,~~ ~~this~~ ~~does~~ ~~not~~ ~~imply~~ ~~that~~ ~~the~~ ~~mutual~~ ~~informa-~~
+~~tion~~ ~~is~~ ~~necessarily~~ ~~zero.~~ ~~T~~ he difference in averaging between the left and right terms of the mutual
+information means they only cancel out when the model outputs show minimal variation, indicating
+high confidence and low information gain. When model uncertainty is high, the entropy of the model
+(left term) increases, while the expected entropy of predictions (right term) decreases, leading to
+higher mutual information (Kirsch et al., 2019).
+
+
+_m_ : ~~BatchBALD was originally tested on classifcation problems where mutually exclusive classes exist, we can~~
+~~use~~ ~~it~~ ~~here~~ ~~for~~ ~~the~~ ~~time-series~~ ~~task~~ ~~if~~ ~~we~~ ~~divide~~ ~~time~~ ~~into~~ ~~exclusive~~ ~~bins~~ ~~which~~ ~~is~~ ~~done~~ ~~in~~ ~~the~~ ~~Multi-Task~~ ~~Lo-~~
+~~gistic~~ ~~Regression~~ ~~(MTLR)~~ ~~model,~~ ~~which~~ ~~is~~ ~~a~~ ~~non-parametric~~ ~~survival~~ ~~model.B~~ atchBALD was originally
+designed for classifcation tasks with mutually exclusive classes. However, it can be applied to timeseries tasks by dividing time into exclusive bins as mentioned in the formulation of the problem,
+which is a strategy utilized by the Multi-Task Logistic Regression (MTLR) model, a non-parametric
+approach to survival analysis. _[m]_ [:] ~~Furthermore,~~ BatchBALD _[m]_ [:] also requires multiple predictions given
+the same feature space, which needs a Bayesian model. Fortunately, Qi et al. (2023b) provides a
+Bayesian model that can give ensemble outputs that _[m]_ [:] ~~are~~ ~~required~~ ~~and~~ ~~be~~ can be trained on survival
+data. We use this model due to its simplicity and _[m]_ [:] ~~the~~ ~~fact~~ ~~that~~ ~~it~~ ~~has~~ ~~been~~ ~~shown~~ ~~to~~ ~~perform~~ ~~well~~ ~~on~~
+~~the~~ ~~datasets~~ ~~we~~ ~~test.~~ ~~There~~ ~~are~~ ~~other~~ ~~models~~ ~~that~~ ~~could~~ ~~be~~ ~~used~~ ~~in~~ ~~this~~ ~~place,~~ ~~however~~ ~~the~~ ~~work~~ ~~done~~ ~~in~~ ~~this~~
+~~paper does not have a preference over these models as long as they are Bayesian, effective, and can work with~~
+~~survival datai~~ ts demonstrated strong performance on the datasets we tested. While other models could
+be used instead, our work does not favor any particular one, as long as they are Bayesian, effective,
+and compatible with survival data.
+
+
+BatchBALD cannot be used in our settings without first accounting for the censored nature of the
+instances, as well as the increment I of the oracle. In order to take these into account, we generate _pfinal_ probabilities in section 5 which we can then use in place of _p_ in equations 2 and 3.
+We introduce our method, _BBsurv_, which defines a novel acquisition function, _aBBsurv_ _R2_ : [We de
+fine aBBsurv originally here]. This function is constructed by adapting the BatchBALD acquisition
+function to utilize the newly computed final probabilities.
+
+
+4.2 MAXIMUM COVERAGE AND GENERALIZING OVER UNIFORM COSTS
+
+
+Given the BatchBALD implementation mentioned already, we have a submodular (Kirsch et al.,
+2019) metric attached to each batch of instances. The problem is now _[m]_ [:] ~~ina~~ bout choosing the batch
+that _[m]_ [:] ~~fts within the budget that m~~ aximizes the _[m]_ [:] ~~amount of this m~~ etric _[m]_ [:] ~~gathered~~ while ftting within the
+budget. The _maximum coverage problem_ _[m:]_ ~~_(MC)_~~ is a combinatorial problem where you are given a
+set of elements and a collection of subsets, and the goal is to pick a specified number of these subsets
+so that the total number of distinct elements covered by the chosen subsets is maximized (Khuller
+et al., 1999). The _weighted_ _maximum_ _coverage_ _problem_ extends this by associating a weight with
+each element, and the objective is to select subsets such that the total weight of the covered elements
+is maximized, rather than simply the count of covered elements. In the Theoretical Analysis section A, we further discuss these combinatorial problems and demonstrate that the budgeted learning
+problem with _[m]_ [:] ~~all~~ ~~costs~~ ~~being~~ ~~equalu~~ niform costs can be expressed as the weighted maximum coverage problem. Similar reductions are done in other AL works as well (Yehuda et al., 2022). The
+_budgeted_ _maximum_ _coverage_ _problem_ further extends the weighted version by introducing a cost
+constraint to each set. In this variant, each subset has an associated cost, and the goal is to select
+subsets such that the total coverage is maximized while keeping the total cost within a given budget.
+T _[m]_ [:] ~~hus, th~~ e budgeted learning scenario where the costs are not _[m]_ [:] ~~needed to be u~~ niform can reduce to
+the budgeted maximum coverage problem. Fortunately, (Khuller et al., 1999) _[m]_ [:] ~~provides a differenti~~ ntroduces an alternative greedy algorithm that _[m]_ [:] ~~manages to meet the desired~~ achieves the same desirable
+lower bound of (1 _−_ 1 _/e_ ) of the optimal solution as the original greedy algorithm. We show this new
+
+
+6
+
+
+_p_ (ˆ _y_ 1: _b|ω_ ˆ _j_ )
+
+_j_ =1
+
+
+_p_ (ˆ _y_ 1: _b|ω_ ˆ _j_ )
+
+_j_ =1
+
+
+
+
+
+ log
+
+
+
+
+
+ (3)
+
+
+_H_ ( _y_ 1: _b_ ) _≈−_ 
+
+_y_ ˆ1: _b_
+
+
+
+
+ [1]
+
+_k_
+
+
+_k_
+
+
+
+
+ [1]
+
+_k_
+
+
+_k_
+
+
+greedy method in Algorithm 2 in the Theoretical Analysis section A _[m]_ [:] [we mention it before Algorithm
+1 but Algorithm 2 comes after... is this ok?].
+
+
+The only problem here is that Algorithm 2 is very computationally expensive as it involves costly
+operations in order to meet the theoretical bound. In the Theoretical Analysis section A we argue
+that we can simplify and closely approximate Algorithm 2 for our settings by only considering the
+information contained in the mutual information, to the ratio of the mutual information to the cost
+of the batch. This simplification reduces the complixty from cubic to linear. _m_ : ~~This~~ ~~now~~ ~~not~~ ~~only~~
+~~holds when the costs of the instances are different, but also necessarily holds when they are the same, in which~~
+~~case this algorithm reduces to the traditional greedy algorithmA~~ lthough designed for non-uniform instance
+costs, the new greedy algorithm simplifes to the original greedy algorithm when costs are uniform,
+making it applicable to both uniform and non-uniform settings. Therefore, we will be using this
+algorithm for selecting the batch that attempt to maximize the mutual information metric. Section
+4.1 discussed how to generate mutual information values in these settings using _BBsurv_, in this
+section we discussed how we can use this mutual information along with a modified version of the
+greedy algorithm from Khuller et al. (1999) to create an acquisition function to select a batch with
+high mutual information with the model parameters. Algorithm 1 illustrates our novel adaptation
+of the greedy algorithm, incorporating the proposed acquisition function, _aBBsurv_ . T _[m]_ [:] ~~hus th~~ e time
+complexity of _aBB_ survis equivalent to that of the BatchBALD acquisition function _[m]_ [:] ~~, with an additional~~
+~~overhead from the greedy algorithm. For all algorithms (except random), we evaluate the ratio of the uncertainty~~
+~~measure to the instance’s budget across all settings~~ .
+
+
+**Algorithm 1** _BBSurv_ (1 - 1/e-approximate algorithm)
+**Require:** Budget _B_, queryable pool _D_ pool, model parameters _p_ ( _**ω**_ _| D_ train )
+
+1: _A ←∅_
+2: _costs ←_ 0
+3: **while** _costs < B_ **do**
+4: _n ←_ arg max( _aBBsurv_ ( _A ∪{xi},_ _p_ ( _**ω**_ _| D_ train)) _/ci_ )
+_i_
+
+5: _A ←_ _A ∪{xn}_
+6: _costs ←_ _costs_ + _cn_
+7: **end while**
+8: **Output:** acquisition batch _A_
+
+
+5 ADJUSTING FOR SURVIVAL DATA
+
+
+As mentioned before, since the data we are using contains censored data, we cannot directly use
+these formulations. We must first adjust the methods to account for the survival data. We can do this
+simply by changing the Bayesian probabilities so that those below censored time are 0.
+
+
+The models predictions are given by _p_ ( _y_ _|_ _x, ω, D_ train), for a data instance with a given set of
+covariates _x_ and for all _y_ _∈{_ 1 _, . . ., t}_ . If the instances censored time is _cb_ then _p_ ( _y_ _| x, ω, D_ train) =
+0 for all y less than _cb_ and for all times greater than or equal to _cb_, the probabilities are normalized
+to get new probabilities called _pcens_ as follows:
+
+
+_p_ ( _y_ _|_ _ω_ )
+_pcens_ ( _y_ _| ω_ ) =                - _t_ (4)
+_i_ = _c_ b _[p]_ [(] _[i][ |][ ω]_ [)]
+
+
+We must also now account for the oracle and its increment’s impact on the amount of information we
+gain. More specifically, the larger the increment, the more information we get from any given data
+instance. If we consider two instances: Alice and Bob, lets say Alice dies 10 years from now, while
+Bob dies 3 year from now, whether the increment is 1, 5, or 15 years gives far different amounts
+of information to us about Alice, but gives the same amount of information to us about Bob. Thus
+we must change the algorithms to account for this. We can adjust the Bayesian probabilities so
+that, after the oracle-provided increment is applied, all bins beyond the instance’s new time bin are
+treated as a single ”after increment” bin. In other words, bins within the range of the increment
+remain unchanged, but for the acquisition function, all bins outside this range contribute the same
+level of information and should therefore be aggregated into a single event.
+
+
+7
+
+
+More specifically, if we have an I-Oracle, the model’s predictions are given by _pcens_ ( _y_ _| x, ω, D_ train),
+for a given _x_ and for all _y_ _∈{_ 1 _, . . ., c}_ . If x’s censored time is _c_ _[t]_ _b_ [then] [the] [only] [relevant] [classes]
+of _y_ for our acquisition function to consider are those classes within the increment I, all classes
+outside this increment can be grouped as one class as the oracle provides no information about them.
+Effectively for out method we only want BatchBALD to see the classes in the increment range, and
+than one additional class which represents the cumulation of all classes outside that range. For the
+sake of our acquisition function, this can easily in the code by creating a new probability _pfinal_
+which is equal to _pnew_ for all _y_ _< c_ _[t]_ _b_ [+][ I][, and equal to 0 for all] _[ y]_ [ greater than than] _[ c]_ _b_ _[t]_ [+][ I][.] [Then we]
+can compile the rest into one bin:
+
+
+where:
+
+
+    - _S_ is the number of possible classes.
+
+
+    - _pcens_ ( _y_ = _ci_ _| x_ ) is the probability of the data point _x_ being classified as _ci_ .
+
+
+_m_ : ~~T~~ The acquisition function then takes the instances with the largest entropy values until the budget
+is used up. This method has two notable drawbacks from BatchBald; it does not take the Bayesian
+nature of the model into account, and it does not measure the entropy of a batch (it only measures
+entropy of an instance).
+
+
+8
+
+
+_p_ final( _c_ _[t]_ _b_ [+][ I] _[|]_ _[ω]_ [ )] =
+
+
+_c_
+
+- _pcens_ ( _j_ _|_ _ω_ ) (5)
+
+_j_ = _c_ _[t]_ _b_ [+][I]
+
+
+_R4_ : [doing this is just a convenience for the code of BBsurv. We could equivalently define a new class as the
+cumulation of all classes outside the increment interval and set all other class probabilities outside the interval
+to 0; note that would achieve the same effect.]
+
+
+This may seem a bit counter intuitive, as grouping multiple probabilities into one bin seems almost
+like we are losing information. But these methods should only take events that can occur in the next
+query into account, as in our problem definition we are evaluating directly after the next query. Thus
+taking events that are unknown even after the next query into account will yield less effective results
+in this task. For all algorithms apart from our method _BBsurv_, we use the _pcens_ probabilities rather
+than _psurv_ ; this has not been done before in the AL literature and we wish to compare its affects
+against controls that do not use it.
+
+
+6 ALTERNATIVE ALGORITHMS
+
+
+We have not found any existing method that addresses the niche area where budgeted active learning
+(AL) is applied to censored data. An algorithm designed for this domain must account for the budget,
+handle the increments provided by the oracle, and be compatible with deep learning models.
+
+
+In this section, we discuss the methods used to benchmark against _BB_ Surv. Given the extensive
+work on AL, we include two well-known algorithms from the AL domain and a third in the form of
+BatchBALD, all of which are modified to handle censored data. Additionally, we incorporate three
+algorithms as ”sanity checks,” representing simple methods that are easy to test and conceptualize
+in these scenarios. Finally, we include the random acquisition function as a control.
+
+
+6.1 COMMON AL ALGORITHMS
+
+
+**Entropy Sampling:** Entropy sampling is a well-established technique in AL (Ren et al., 2021) that
+focuses on _[m]_ [:] ~~selecting~~ ~~data~~ ~~points~~ ~~for~~ ~~which~~ ~~the~~ ~~model’s~~ ~~predictions~~ ~~are~~ ~~the~~ ~~most~~ ~~uncertain.~~ ~~The~~ ~~underly-~~
+~~ing~~ ~~principle~~ ~~of~~ ~~entropy~~ ~~sampling~~ ~~is~~ ~~to~~ maximizing the information gain from newly labeled data by
+targeting instances where the model’s predictive distribution has the highest entropy.
+
+
+_H_ ( _y_ _| x_ ) = _−_
+
+
+_S_
+
+- _p_ cens( _y_ = _ci_ _| x_ ) log2 _p_ cens( _y_ = _ci_ _| x_ ) (6)
+
+_i_ =1
+
+
+**Variance Sampling:** _[m]_ [:] ~~Similar to entropy sampling, tT~~ his method involves taking the variance of the
+values in _[m]_ [:] ~~_pcens_~~ ~~(~~ ~~_y|x_~~ ~~)t~~ he predicted class and _[m]_ [:] ~~using that metric to choose~~ choosing the _[m]_ [:] ~~highest variance~~
+values until the budget runs out.
+
+
+Given _{p_ 1 _, p_ 2 _, . . ., pT }_ as the predicted _[m]_ [:] ~~probabilitiesc~~ lasses for a _[m]_ [:] ~~data pointi~~ nstance _x_, the variance
+Var( _x_ ) of the predicted probabilities is calculated as:
+
+
+Clusters with higher average censoring measures represent areas with greater uncertainty or incomplete information. We then calculated proximity as Proximity( _i, µj_ ) = _∥X_ PCA _,i −_ _µj∥_ . We choose
+our batch by selecting the minimum proximity to cost ratio for each instance.
+
+
+**Random:** This method picks a random data instances to query until the budget is used up. We
+adjust random so that the probability of random choosing any given instance is proportionate to the
+reciprocal of the instance cost.
+
+
+7 EXPERIMENTS
+
+
+For each dataset, we first divide it into training and test sets. We assign the labels to time bins as
+quantiles of the time to event label. We use the same bins as the training data to assign the labels of
+the test data. We artificially censor points in the training data so that we can decensor them in our
+experiments. Hiding information from the model to test its performance is common for uncensored
+data, however, we can do this for censored data as well. For censored data, we can artificially
+“further” censor them for this purpose, the only difference is that they cannot be decensored until
+the time to event.
+
+
+9
+
+
+1
+Var( _p_ ) =
+_T_
+
+
+where _p_ ¯ is the mean predicted class.
+
+
+6.2 SANITY CHECKS
+
+
+_T_
+�( _pi −_ _p_ ¯) [2] (7)
+
+
+_i_ =1
+
+
+**Closest to Half:** Let _pi_ denote the predicted probability that the event will occur within the decensored time window for the _i_ _[th]_ instance. For each instance, we compute its absolute distance from
+0.5:
+_di_ = _|pi −_ 0 _._ 5 _|_ (8)
+
+
+The goal is to select instances where this distance _di_ is minimized – _i.e._, where the predicted probability is closest to 0.5. We choose the lowest distances here.
+
+
+**Mean** **Closest** **to** **Middle:** Let the midpoint of the time range _T_ be _T_ mid = _T_ max+2 _T_ min, where
+
+_T_ max and _T_ min are the maximum and minimum possible survival times, respectively. For each data
+instance _i_, we calculate the distance to the midpoint:
+
+_di_ = _|t_ [ˆ] _i −_ _T_ mid _|_ (9)
+
+
+The algorithm selects data points with the smallest _di_, corresponding to those whose predicted survival times are nearest to the midpoint.
+
+
+**Using** **Clusters** **to** **form** **Batches:** This method leverages clustering and censoring measures for
+instance selection. We use Principal Component Analysis (PCA) to reduce the feature space, followed by K-means clustering to group the data. Clusters with higher average censoring measures
+are prioritized, and instance selection is guided by proximity to cluster centers while respecting cost
+constraints.
+
+
+For each cluster, we calculate the average censoring measure based on the time-to-event data and
+the censoring status. Let the censoring status for each instance _i_ be represented as _ci_ (where _ci_ = 1
+means the instance is uncensored, and _ci_ = 0 means it is censored). The average censoring measure
+for a cluster _Cj_ is:
+
+
+1
+Censoring Measure for _Cj_ = _|Cj|_
+
+
+- _ci_ (10)
+
+
+_i∈Cj_
+
+
+To artificially censor the dataset, a number of data instances in the training data are further censored
+at a uniformly random time between 0 and their current “true time” - regardless of whether that
+time is censored or uncensored. This process assigns each instance a “fake time” after the additional
+censoring. The true time for each instance is kept hidden from the model (only the oracle can see
+it). Instances where the fake time is less than the true time are considered _queryable_, meaning
+the _[m]_ [:] ~~y can provide new information when decensoredo~~ racle can provide new information about the instance when queried. On the other hand, instances from which no new information can be gained
+are _unqueryable_ . _[m]_ [:] In the dataset, there is a column called censored, which traditionally holds a
+value of 1 or 0 in standard Active Learning (AL) settings. However, in our setup, this column may
+also take on the value -1. Specifically, a value of 1 indicates that the time of the event is known, 0
+signifes that the time is not yet known but could potentially be determined with further querying,
+and -1 implies that the time is unknown and cannot be obtained through additional queries (e.g., in
+the case of a subject being hit by a bus).
+
+
+At the time of querying, the current fake time is compared to the hidden true time by the oracle
+and updated accordingly. When an instances time becomes decensored by the oracle, it can still be
+queryable if the resulting fake time is still less than the true time. But, if the fake time is now equal
+to the true time, that instance is no longer able to be queried.
+
+
+We explored 3 real world survival datasets: The Study to Understand Prognoses Preferences Outcomes and Risks of Treatment (SUPPORT; 9,105 patients, censored = 32%, 42 features)(Knaus
+et al., 1995), Medical Information Mart for Intensive Care ((MIMIC)- IV; n= 38520, censored =
+67%, features = 93)(Johnson et al., 2022), and The Northern Alberta Cancer Dataset (NACD; 2402
+patients, 53 features, 36% censorship)(Haider et al., 2020). These 3 represent different sized datasets
+containing various percentages of censored data, complexities for the model to learn, and sizes of
+features space. We used 5000 epochs with a Bayesian Linear MTLR model with the same initial
+parameters provided in (Qi et al., 2023b) with a spike and slab prior. For evaluation, Table 1 mentions the MAE-PO (Qi et al., 2023a) metric for evaluating survival models, however _[m]_ [:] ~~in r~~ esults were
+obtained for other survival metrics including c-index (Haider et al., 2020), and Brier score as well.
+More results are shown in the Additional Data section B . We also have results using MAE omitting
+censored data from the test data (as there was relatively fewer in there). Finally, we have run experiments for a setting where the costs are the same for each instance, and one where they are not. For
+the latter, we gave each instance a random real value cost between 0.2 and 0.8, the 0.2 and 0.8 were
+chosen so that the minimum is not too close to 0 and the maximum not too close to 1.
+
+
+Table 1: Comparison of Acquisition Functions accross Datasets and Time Horizons when Budget =
+10. MIMIC, NACD, and SUPPORT are represented by M, N, and S.
+
+|Dataset|BB surv BatchBALD Entropy Var CtH CfB MCtH Random|
+|---|---|
+|M +5y<br>M +10y<br>M +100y<br>N +5y<br>N +10y<br>N +100y<br>S +5y<br>S +10y<br>S +100y|**4.23**_ ±_** .01**<br>4.34_ ±_ .02<br>4.28_ ±_ .01<br>4.28_ ±_ .02<br>4.45_ ±_ .01<br>4.32_ ±_ .02<br>**4.23**_ ±_** .02**<br>4.46_ ±_ .01<br>**4.26**_ ±_** .01**<br>4.35_ ±_ .02<br>4.28_ ±_ .01<br>4.33_ ±_ .02<br>4.31_ ±_ .01<br>4.27_ ±_ .02<br>4.28_ ±_ .01<br>4.28_ ±_ .02<br>**4.18**_ ±_** .02**<br>**4.18**_ ±_** .01**<br>4.18_ ±_ .02<br>4.27_ ±_ .01<br>4.27_ ±_ .02<br>4.23_ ±_ .01<br>**4.18**_ ±_** .02**<br>**4.18**_ ±_** .01**<br>**3.63**_ ±_** .01**<br>**3.63**_ ±_** .02**<br>3.64_ ±_ .01<br>3.66_ ±_ .02<br>3.69_ ±_ .01<br>3.70_ ±_ .02<br>3.81_ ±_ .01<br>3.89_ ±_ .02<br>3.59_ ±_ .01<br>3.60_ ±_ .02<br>3.61_ ±_ .01<br>3.65_ ±_ .02<br>3.71_ ±_ .01<br>3.77_ ±_ .02<br>**3.58**_ ±_** .01**<br>3.74_ ±_ .02<br>3.67_ ±_ .01<br>**3.66**_ ±_** .01**<br>3.68_ ±_ .01<br>3.73_ ±_ .02<br>3.73_ ±_ .01<br>3.65_ ±_ .02<br>3.68_ ±_ .01<br>3.70_ ±_ .02<br>**2.09**_ ±_** .01**<br>2.11_ ±_ .01<br>2.12_ ±_ .02<br>2.10_ ±_ .01<br>2.10_ ±_ .02<br>2.10_ ±_ .01<br>2.11_ ±_ .01<br>2.12_ ±_ .02<br>**2.09**_ ±_** .01**<br>2.09_ ±_ .02<br>2.10_ ±_ .01<br>2.09_ ±_ .01<br>2.09_ ±_ .02<br>2.10_ ±_ .01<br>2.09_ ±_ .01<br>2.11_ ±_ .02<br>**2.08**_ ±_** .01**<br>2.09_ ±_ .01<br>2.10_ ±_ .02<br>2.09_ ±_ .01<br>2.10_ ±_ .01<br>2.10_ ±_ .02<br>2.09_ ±_ .01<br>2.11_ ±_ .02|
+
+
+8 RESULTS
+
+
+Table 1 shows that, across 3 different increments for the oracle, _BBsurv_ outperforms other algorithms when budget is equal to 20 across all 3 real world datasets. This is promising as not only
+does this show that our method beat other metrics, but we also outperform BatchBALD which suggests that the method we used to deal with the incremental gain helped the models performance.
+In particular we can also see that as the increment increases, the traditional BatchBALD method
+and our altered method converge as the original BatchBALD is equivalent theoretically to _BBsurv_
+when _I_ = _∞_ . The Additional Data section B shows more information in results including different metrics, and budgets. There is a very large amount of randomness here, the Bayesian model
+
+
+10
+
+
+Figure 1: Plot of MAE-PO evaluation of different acquisition functions as a function of budget.
+Each point is the average of 40 predictions by the model. The plot uses the MIMIC dataset starting
+with a pool of 900 censored and 100 uncensored points. The increment is 5 years. Each instance
+costs the same.
+
+
+Figure 2: Plot of MAE-PO evaluation of different acquisition functions as a function of budget.
+Each point is the average of 40 predictions by the model. The plot uses the NACD dataset starting
+with a pool of 900 censored and 100 uncensored points. The increment is 10 years. Each instance
+has a random cost between 0.2 and 0.8.
+
+
+itself provides different predictions and we made each evaluation as an average over 40 predictions.
+Furthermore, there is inherent randomness as to what instances you initially give to the model. For
+BatchBALD and in turn our model to succeed, you cannot have so few points that the models predictions are entirely inaccurate, if this is the case we recommend sampling randomly for some time
+as it may be better (Yehuda et al., 2022). Furthermore the model also cannot have too many data
+instances to start as then no method works as the model has converged already. We initialized our
+models with 100 instances uncensored and 900 censored in the training data (enough must be in
+the pool so that the acquisition functions have more to choose from). One final point here is that
+in table 1, MCtH does occasionally tie with _BBsurv_ for the lowest MAE-PO values. MCtH is a
+more involved method and in certain budget settings it does seem to do surprisingly well. This is a
+surprising finding, however this pattern does not hold in the non-uniform costs setting.
+
+
+11
+
+
+In figure 1 we can see that across budgets for all 3 datasets, _BBsurv_ does the best, however a
+further note is that there is more inherent randomness when we compare across budget as each time
+represents a new training of a model rather than the same model trained further.
+
+
+In figure 2 we can see that the same results as the uniform costs case seem to present themselves in
+the non-uniform costs case. Except this time we note that _BBsurv_ has an even more distinct advantage. We believe this is because the method of dealing with the budget for _BBsurv_ is developed for
+based off of reducing the problem to the maximum coverage problem. Since many of the other metrics do not measure mutual information, then perhaps they do not reduce to the maximum coverage
+problem and thus they need to handle the non-uniform costs differently. Mutual information is an
+incredibly flexible metric that allows for us to easily handle budget in our method.
+
+
+For MIMIC, a larger budget was needed for both settings due to the complexity of the dataset, thus
+in all our results although the budget is the same, the cost of instances was one fifth as much as the
+other cases. These results held consistently for other evaluation metrics including concordance, as
+well as MAE measured without including the survival test data.
+
+
+9 CONCLUSION
+
+
+In this paper, we discussed a generalized form of active learning that incorporates budget constraints
+and, when necessary, accounts for the individual costs of queried instances. We explored methods
+to extend acquisition functions for use with censored data and to account for scenarios where only
+partial information is gained during queries. Our proposed method was evaluated across three realworld datasets; however, we anticipate that this emerging area of research will inspire many future
+studies.
+
+
+In particular, one promising direction is to combine _BBsurv_ with a semi-supervised approach. As
+noted in Kirsch et al. (2019), such an approach may enhance performance, and given the success
+of MCtH, we believe this is a worthwhile avenue to explore. Additionally, it would be valuable
+to revisit some of our assumptions, such as whether the increment changes over time or if data is
+censored in ways other than randomly.
+
+
+Finally, there is a substantial body of literature on methods for approximating the maximum coverage problem. Alternative approximation schemes beyond the greedy approach may prove advantageous and warrant further investigation in future work.
+
+
+REFERENCES
+
+
+Kristjan Dedja, Fernando K. Nakano, and Chantal Vens. Active learning for survival analysis with
+incrementally disclosed label information. In _Proceedings of the Workshop on Interactive Adap-_
+_tive_ _Learning_ _co-located_ _with_ _European_ _Conference_ _on_ _Machine_ _Learning_ _and_ _Principles_ _and_
+_Practice of Knowledge Discovery in Databases (ECML-PKDD)_, volume 3470, pp. 46–64. CEURWS.org, 2023. [URL http://ceur-ws.org/Vol-3470/paper3.pdf.](http://ceur-ws.org/Vol-3470/paper3.pdf)
+
+
+Pedro Domingos. A few useful things to know about machine learning. _Communications_ _of_ _the_
+_ACM_, 55(10):78–87, 2012.
+
+
+Feng Gao and Xiaomin He. Survival analysis: Theory and application in finance. In _Handbook of Fi-_
+_nancial Econometrics, Mathematics, Statistics, and Machine Learning_, pp. 4087–4118. 2020. doi:
+10.1142/9789811202391 ~~0~~ 120. URL [https://doi.org/10.1142/9789811202391_](https://doi.org/10.1142/9789811202391_0120)
+[0120.](https://doi.org/10.1142/9789811202391_0120)
+
+
+H. Haider, M. Krystian, M. Pecht, and E. L. Demeulemeester. Effective ways to build and evaluate
+individual survival distributions. _Journal_ _of_ _Machine_ _Learning_ _Research_, 21(85):1–63, 2020.
+[URL http://jmlr.org/papers/v21/18-772.html.](http://jmlr.org/papers/v21/18-772.html)
+
+
+Till Hoffmann and Jukka-Pekka Onnela. Minimising the expected posterior entropy yields optimal
+summary statistics. _arXiv_ _preprint_ _arXiv:2206.02340_, 2023. URL [https://doi.org/10.](https://doi.org/10.48550/arXiv.2206.02340)
+[48550/arXiv.2206.02340.](https://doi.org/10.48550/arXiv.2206.02340) v2, last revised 30 Sep 2023.
+
+
+12
+
+
+Frederik Boe H¨uttel, Christoffer Riis, Filipe Rodrigues, and Francisco Cˆamara Pereira. Bayesian
+active learning for censored regression. _arXiv_ _preprint_, 2402.11973, 2024. URL [https://](https://doi.org/10.48550/arXiv.2402.11973)
+[doi.org/10.48550/arXiv.2402.11973.](https://doi.org/10.48550/arXiv.2402.11973)
+
+
+Alistair Johnson, Lucas Bulgarelli, Tom Pollard, Steven Horng, Leo Anthony Celi, and Roger Mark.
+MIMIC-IV. [https://physionet.org/content/mimiciv/2.0/, 2022.](https://physionet.org/content/mimiciv/2.0/)
+
+
+Aloak Kapoor and Russell Greiner. Reinforcement learning for active model selection. In _Pro-_
+_ceedings_ _of_ _the_ _1st_ _International_ _Workshop_ _on_ _Utility-based_ _Data_ _Mining_ _(UBDM)_, pp. 17–23,
+2005a. doi: 10.1145/1089827.1089829. URL [https://doi.org/10.1145/1089827.](https://doi.org/10.1145/1089827.1089829)
+[1089829.](https://doi.org/10.1145/1089827.1089829)
+
+
+Aloak Kapoor and Russell Greiner. Learning and classifying under hard budgets. In _Pro-_
+_ceedings_ _of_ _the_ _16th_ _European_ _Conference_ _on_ _Machine_ _Learning_ _(ECML_ _2005)_, pp. 170–181.
+Springer-Verlag, 2005b. doi: 10.1007/11564096 ~~1~~ 7. URL [https://doi.org/10.1007/](https://doi.org/10.1007/11564096_17)
+[11564096_17.](https://doi.org/10.1007/11564096_17)
+
+
+Sheehan Khan and Russell Greiner. The budgeted biomarker discovery problem: A variant of association studies. In _Modern Artificial Intelligence for Health Analytics:_ _Papers from the AAAI-14_ .
+AAAI Press, 2014. URL [https://www.aaai.org/ocs/index.php/WS/AAAIW14/](https://www.aaai.org/ocs/index.php/WS/AAAIW14/paper/view/8875)
+[paper/view/8875.](https://www.aaai.org/ocs/index.php/WS/AAAIW14/paper/view/8875)
+
+
+Samir Khuller, Anna Moss, and Joseph Naor. The budgeted maximum coverage problem. _Infor-_
+_mation_ _Processing_ _Letters_, 70(1):39–45, 1999. doi: 10.1016/S0020-0190(99)00031-9. URL
+[https://doi.org/10.1016/S0020-0190(99)00031-9.](https://doi.org/10.1016/S0020-0190(99)00031-9)
+
+
+Andreas Kirsch, Joost van Amersfoort, and Yarin Gal. Batchbald: Efficient and diverse batch
+acquisition for deep bayesian active learning. In _Proceedings_ _of_ _the_ _33rd_ _International_ _Con-_
+_ference_ _on_ _Neural_ _Information_ _Processing_ _Systems_ _(NeurIPS)_, pp. 7026–7037. Curran Associates, Inc., 2019. URL [https://proceedings.neurips.cc/paper/2019/hash/](https://proceedings.neurips.cc/paper/2019/hash/8f8d5e3ef0b00a2b09bc1a7b34c82c25-Abstract.html)
+[8f8d5e3ef0b00a2b09bc1a7b34c82c25-Abstract.html.](https://proceedings.neurips.cc/paper/2019/hash/8f8d5e3ef0b00a2b09bc1a7b34c82c25-Abstract.html)
+
+
+W. A. Knaus, D. P. Wagner, E. A. Draper, J. E. Zimmerman, M. Bergner, P. G. Bastos, C. Sirio,
+M. Murphy, D. Harrell, and J. F. Pribble. The support prognostic model: Objective estimates of
+survival for seriously ill hospitalized adults. _Annals of Internal Medicine_, 122(3):191–203, 1995.
+doi: 10.7326/0003-4819-122-3-199502010-00007.
+
+
+Daniel J. Lizotte, Omid Madani, and Russell Greiner. Budgeted learning of naive-bayes classifiers. In _Proceedings_ _of_ _the_ _Nineteenth_ _Conference_ _on_ _Uncertainty_ _in_ _Artificial_ _Intelligence_
+_(UAI)_, pp. 378–385, 2003. URL [https://doi.org/10.48550/arXiv.1212.2472.](https://doi.org/10.48550/arXiv.1212.2472)
+arXiv:1212.2472.
+
+
+Zhanshan Ma and A. W. K. Survival. Survival analysis approach to reliability, survivability and
+prognostics and health management (phm). In _IEEE_ _Aerospace_ _Conference_ _Proceedings_, 2008.
+doi: 10.1109/AERO.2008.4526634. URL [https://doi.org/10.1109/AERO.2008.](https://doi.org/10.1109/AERO.2008.4526634)
+[4526634.](https://doi.org/10.1109/AERO.2008.4526634)
+
+
+Shirin Moghaddam, John Newell, and John Hinde. A bayesian approach for imputation of censored
+survival data. _Stats_, 5(1):89–107, 2022. doi: 10.3390/stats5010006. URL [https://doi.](https://doi.org/10.3390/stats5010006)
+[org/10.3390/stats5010006.](https://doi.org/10.3390/stats5010006)
+
+
+Milad Zafar Nezhad, Najibesadat Sadati, Kai Yang, and Dongxiao Zhu. A deep active survival analysis approach for precision treatment recommendations: Application of prostate cancer. _Expert_
+_Systems with Applications_, 115:16–26, 2019. doi: 10.1016/j.eswa.2018.07.039.
+
+
+Shiang Qi, Neeraj Kumar, Mahtab Farrokh, Weijie Sun, Li-Hao Kuan, Rajesh Ranganath, Ricardo
+Henao, and Russell Greiner. An effective meaningful way to evaluate survival models. _arXiv_
+_preprint_ _arXiv:2306.01196_, 2023a. URL [https://doi.org/10.48550/arXiv.2306.](https://doi.org/10.48550/arXiv.2306.01196)
+[01196.](https://doi.org/10.48550/arXiv.2306.01196) v1, submitted 1 Jun 2023, accepted to ICML 2023.
+
+
+Shiang Qi, Neeraj Kumar, Ruchika Verma, Jian-Yi Xu, Grace Shen-Tu, and Russell Greiner. Using bayesian neural networks to select features and compute credible intervals for personalized survival prediction. _IEEE_ _Transactions_ _on_ _Biomedical_ _Engineering_, 70(12), 2023b. doi:
+10.1109/TBME.2023.3186108.
+
+
+13
+
+
+Pengzhen Ren, Yun Xiao, Xiaojun Chang, Po-Yao Huang, Zhihui Li, Brij B Gupta, Xiaojiang Chen,
+and Xin Wang. A survey of deep active learning. _arXiv preprint arXiv:2009.00236_, 2021. URL
+[https://doi.org/10.48550/arXiv.2009.00236.](https://doi.org/10.48550/arXiv.2009.00236)
+
+
+B. Vinzamuri, Yan Li, and Chandan K. Reddy. Active learning based survival regression for censored data. In _Proceedings of the 23rd ACM International Conference on Information and Knowl-_
+_edge_ _Management_ _(CIKM)_, pp. 241–250. ACM, 2014a. doi: 10.1145/2661829.2662065. URL
+[https://doi.org/10.1145/2661829.2662065.](https://doi.org/10.1145/2661829.2662065)
+
+
+Bhanukiran Vinzamuri, Yan Li, and Chandan K. Reddy. Active learning based survival regression
+for censored data. In _Proceedings of the 23rd ACM International Conference on Information and_
+_Knowledge_ _Management_ _(CIKM)_, pp. 241–250. ACM, 2014b. doi: 10.1145/2661829.2662065.
+[URL https://doi.org/10.1145/2661829.2662065.](https://doi.org/10.1145/2661829.2662065)
+
+
+Ofer Yehuda, Avihu Dekel, Guy Hacohen, and Daphna Weinshall. Active learning through a covering lens. In _Proceedings_ _of_ _the_ _NeurIPS_ _2022_ _Conference_, October 2022. URL [https:](https://arxiv.org/abs/2210.07366)
+[//arxiv.org/abs/2210.07366.](https://arxiv.org/abs/2210.07366)
+
+
+14
+
+
+A THEORETICAL ANALYSIS
+
+
+A.1 REDUCING BATCH SELECTION TO WEIGHTED MAX COVER
+
+
+The maximum coverage problem is a well known combinatorial problem that involves choosing k
+sets, from a group of N sets of integers. The task is to choose the k sets whose union is maximal.
+For example if the sets are as follows: _S_ 1 = _{_ 1 _,_ 2 _,_ 3 _}_, _S_ 2 = _{_ 2 _,_ 3 _,_ 4 _}_, _S_ 3 = _{_ 4 _,_ 5 _}_, _S_ 4 = _{_ 6 _}_,
+where here N=4 and k=2, then the optimal choice of sets here are sets _S_ 1 and _S_ 3, as their union
+_{_ 1 _,_ 2 _,_ 3 _,_ 4 _,_ 5 _}_ is larger than the union of _S_ 1 and _S_ 2: _{_ 1 _,_ 2 _,_ 3 _,_ 4 _}_ or _S_ 2 and _S_ 3 = _{_ 2 _,_ 3 _,_ 4 _,_ 5 _}_, and all
+pairs with _S_ 4 make at max 4. This problem is known to be np-hard to solve optimally.
+
+
+There is an extension of this problem called the ”weighted” maximum cover problem where everything is the same except each integer has attached to it a weight, and the goal is now to maximize
+the sum of the weight of the union rather than simply the size of the union. In the example above, if
+the integers 1,2,3,4, and 5 all had weight 1, but 6 had weight 10, then now we certainly would wish
+to include _S_ 4 as part of one of the sets we choose, in this case you could choose _S_ 1 and _S_ 4, or _S_ 2
+and _S_ 4, as both would give you a total highest weight of 13.
+
+
+If you have a set of data points _D_, then each data point _di_ _∈_ _D_, provides some amount of information. Any two data points _di_ and _dj_ also have an intersection to consider. Indeed for any batch of
+data points,we consider information as area that is covered by an area in the information space.
+
+
+If we now label each unique intersection as an integer, then we now have a bunch of sets, each
+filled with integers. Furthermore we can give each integer a weight as the amount of area they cover
+in information space (the amount of information they are expected to give the model). In the batch
+active learning case, the task now becomes choosing the k data points (which are sets in this case) out
+of the N total data points that give maximal information cover maximal area). Thus we can simplify
+the active learning problem using this formulation of mutual information provided by BatchBALD
+into the weighted maximum coverage problem discussed above.
+
+
+This representation allows us to see that this problem, at least with the information given, is NP-hard
+as the maximum coverage probelm is NP-hard. In future works maybe it turns out that most datasets
+have an underlying structure that makes batch selection easier, however in this general case we can
+argue NP-hardness This is a very useful representation of the problem as it allows an easier way to
+think about the machine learning problem as a simpler combinatorial one. Furthermore there exists
+literature in this field that we can use.
+
+
+One such insight from literature is that if the information function is a submodular function, then
+the greedy algorithm does very well.
+
+
+A set function _f_ : 2 _[N]_ _→_ _R_ defined on the subsets of a finite set _N_ is called **submodular** if for every
+_A, B_ _⊆_ _N_,
+_f_ ( _A_ ) + _f_ ( _B_ ) _≥_ _f_ ( _A ∪_ _B_ ) + _f_ ( _A ∩_ _B_ ) _._
+
+
+Equivalently, _f_ is submodular if it satisfies the **diminishing returns** property: for every _A ⊆_ _B_ _⊆_ _N_
+and _x ∈_ _N_ _\ B_,
+_f_ ( _A ∪{x}_ ) _−_ _f_ ( _A_ ) _≥_ _f_ ( _B ∪{x}_ ) _−_ _f_ ( _B_ ) _._
+
+
+The greedy approach (Khuller et al., 1999), gives the highest known guaranteed lower bound of all
+polynomial time approximation schemes (Khuller et al., 1999). In fact proving there is a polynomial
+time approximation scheme that achieves a higher lower bound is equivalent to proving P = NP.
+
+
+The greedy algorithm achieves a lower bound of 1-1/e which is about 63% of the optimal. And
+indeed is the algorithm used in BatchBALD for selecting it’s batch.
+
+
+Another advantage of this formulation is it allows us extend to the non-uniform case. There is
+an extension of the weighted maximum cover problem known as the ”budgeted” maximum cover
+problem where along with the constrained from the weighted problem a budget is also given and
+each set has a given cost attached.
+
+
+Khuller et al. (1999) have provided a modified greedy algorithm to the budgeted problem that also
+meets the lower bound of 1-1/e. They further showed that finding a polynomial time algorithm that
+achieves a better lower bound in this setting would be equivalent to proving _NP_ _⊆_ Dtime( _n_ [log log] _[ n]_ ).
+
+
+15
+
+
+A.2 CHANGING THE BUDGETED MAXIMUM COVERAGE ALGORITHM
+
+
+In Khuller et al. (1999), a novel greedy algorithm for the budgeted maximum cover case is provided
+that still provides the same lower bound guarantees as the original greedy algorithm. We illustrate
+this novel algorithm in Algorithm 2.
+
+
+**Algorithm 2** Optimal 1 - 1/e-approximate algorithm for Budgeted Maximal Coverage
+**Require:** Pool of points _S_, budget _B_, weights _wi_, costs _ci_, subset size _k_
+
+1: _H_ 1 _←_ arg max _{w_ ( _G_ ) : _G ⊆_ _S, |G| < k, c_ ( _G_ ) _≤_ _B}_
+2: _H_ 2 _←∅_
+3: **for all** _G ⊆_ _S_ such that _|G|_ = _k_ and _c_ ( _G_ ) _≤_ _B_ **do**
+4: _U_ _←_ _S \ G_
+5: **repeat**
+
+
+_i_
+6: Select _xi_ _∈_ _U_ that maximizes _[w]_ _ci_ _[′]_
+7: **if** _c_ ( _G_ ) + _ci_ _≤_ _B_ **then**
+8: _G ←_ _G ∪_ _xi_
+9: _U_ _←_ _U_ _\ xi_
+10: **end if**
+11: **until** _U_ = _∅_ or _c_ ( _G_ ) + _ci_ _> B_
+12: **if** _w_ ( _G_ ) _> w_ ( _H_ 2) **then**
+13: _H_ 2 _←_ _G_
+14: **end if**
+15: **end for**
+16: **if** _w_ ( _H_ 1) _> w_ ( _H_ 2) **then**
+17: **Output:** _H_ 1
+18: **else**
+19: **Output:** _H_ 2
+20: **end if**
+
+
+_m_ :In our own notation, the pool of points _S_ = _Dpool_, and the weights _wi_ is estimated using our acquisition function _aBBsurv_ . k is meant to be a parameter chosen by the user where a higher k yields
+better performance however at a higher computational cost. We can take k=3 which is the lowest k that guarantees the optimal 1 _−_ 1 _/e_ bound. This new greedy algorithm is very computationally
+expensive. The first part of the algorithm relies on finding the set out of all sets of size less than _k_ = 3
+size (via brute force) that maximizes the weight, and assigning it to _H_ 1 which has a complexity of
+_O_ ( _n_ [2] ) if we denote _n_ = _|Dpool|_ . The rest of the algorithm involves for every possible initial set
+of size _k_ = 3 instances, greedily adding instances to this selected batch based off of the ratio of
+the weight to cost of an instance, which is of order _O_ ( _n_ [3] ). We argue that for the purposes of
+our settings, we do not need the first step and we can greatly reduce the complexity of the second
+step. The arguments we are making are not guaranteed or proven, however it has shown results
+experimentally and serves as a strong approximation of this algorithm in most settings.
+
+
+For the first part of the algorithm, in deep learning models, often two or 3 points are not significant
+enough to significantly alter the models loss Domingos (2012). The first part of the algorithm is
+only relevant if it turns out that a set of size 3 points gives more information than a set of larger size.
+In deep learning models all data instances provide some information, and when accounting for the
+weight to cost ratio, it is very likely that the points within _H_ 1 are also selected in sets of larger size.
+Thus we omit this step in the algorithm, especially with larger budgets it is very unlikely to help.
+
+
+The second part of the algorithm which involves for every possible initial set of size _k_ = 3 instances,
+greedily adding instances to this selected batch based off of the ratio of the weight to cost of an
+instance. The main part that dramatically increases the computational complexity here is having
+to consider all _n_ [3] starting positions. In Khuller et al. (1999) they discuss one main setting where
+considering all possible starting states is useful, is if the points you are choosing from are dense in
+information space, that is that the sets share a very high amount of similar elements between them
+and learning about any one instance implies you learn about the larger group. In our setting, we start
+out with a small number of instances and wish to learn about a complex function that covers a large
+amount in information space, the instances in the pool we can learn from are often very sparse and
+give us vastly different information from different parts of the information space rather than all being
+
+
+16
+
+
+dense and giving us the same types of information. Under these settings you often are not choosing
+multiple instances from a clump of points but rather want to spread out your queried instances. Thus
+considering all possible starting points is not efficient and we recommend omiting it all together.
+
+
+If we omit these two elements from Algorithm 2, we end up with the method described in the paper
+shown in Algorithm 1.
+
+
+A.3 CHOOSING THE SAME INSTANCE MULTIPLE TIMES IN ONE QUERY
+
+
+Since in our setting the Oracle does not give full information. It opens up the question as to if you
+can choose the same instance multiple times in one query. For example, if the Oracle gives 5 years of
+new information for Alice, you might want to ask the Oracle to give you 10 years but for double the
+cost of course. This is not often seen in the real world, perhaps if you are working with a software
+that has all the instances but only gives incremental updates. Or maybe when dealing with ”label
+delays”, covered in Dedja et al. (2023).
+
+
+Fortunately, our formulation allows for generalization over this as well. Instead of considering how
+many times we should ask for the ”Alice” instance, we can see it such that asking for two increments
+of Alice, is a seperate instance with its own cost as asking for one increment of Alice. Furthermore,
+the entire information that can be gained from for the one increment instance is contained in asking
+for the 2 increment instance. The question now becomes is the extra information work the cost?
+Since the costs between these two instances is different, we again have a case of the budgeted
+maximum coverage problem, for which we show in the paper that there already exists an optimal
+approximation greedy algorithm for this setting. A final note is that there is never an incentive to
+ask for both the Alice with 2 increments instance and the Alice with 1 increment instance, but the
+optimal greedy algorithm does not assume this and may take this action. Thus we can actually
+create an even better algorithm than greedy in this specific case by only allowing it to ever choose
+the maximum number of increments instance each time.
+
+
+B ADDITIONAL DATA
+
+
+We show here some additional results for the two settings. We have only included results we find
+most interesting, however we will submit all our results and code upon acceptance.
+
+
+Table 2: MAE-PO across datasets and increments, budget = 0. Uniform setting.
+
+|Dataset|BB surv BatchBALD Entropy Var CtH CfB MCtH Random|
+|---|---|
+|M +5 years<br>M +10 years<br>M +100 years<br>N +5 years<br>N +10 years<br>N +100 years<br>S +5 years<br>S +10 years<br>S +100 years|4.55 ± 0.05<br>4.55 ± 0.05<br>4.55 ± 0.05<br>4.55 ± 0.05<br>4.55 ± 0.05<br>4.55 ± 0.05<br>4.55 ± 0.05<br>4.55 ± 0.05<br>4.55 ± 0.05<br>4.55 ± 0.05<br>4.55 ± 0.05<br>4.55 ± 0.05<br>4.55 ± 0.05<br>4.55 ± 0.05<br>4.55 ± 0.05<br>4.55 ± 0.05<br>4.55 ± 0.05<br>4.55 ± 0.05<br>4.55 ± 0.05<br>4.55 ± 0.05<br>4.55 ± 0.05<br>4.55 ± 0.05<br>4.55 ± 0.05<br>4.55 ± 0.05<br>3.98 ± 0.03<br>3.98 ± 0.03<br>3.98 ± 0.03<br>3.98 ± 0.03<br>3.98 ± 0.03<br>3.98 ± 0.03<br>3.98 ± 0.03<br>3.98 ± 0.03<br>3.98 ± 0.03<br>3.98 ± 0.03<br>3.98 ± 0.03<br>3.98 ± 0.03<br>3.98 ± 0.03<br>3.98 ± 0.03<br>3.98 ± 0.03<br>3.98 ± 0.03<br>3.98 ± 0.03<br>3.98 ± 0.03<br>3.98 ± 0.03<br>3.98 ± 0.03<br>3.98 ± 0.03<br>3.98 ± 0.03<br>3.98 ± 0.03<br>3.98 ± 0.03<br>2.12 ± 0.02<br>2.12 ± 0.02<br>2.12 ± 0.02<br>2.12 ± 0.02<br>2.12 ± 0.02<br>2.12 ± 0.02<br>2.12 ± 0.02<br>2.12 ± 0.02<br>2.12 ± 0.02<br>2.12 ± 0.02<br>2.12 ± 0.02<br>2.12 ± 0.02<br>2.12 ± 0.02<br>2.12 ± 0.02<br>2.12 ± 0.02<br>2.12 ± 0.02<br>2.12 ± 0.02<br>2.12 ± 0.02<br>2.12 ± 0.02<br>2.12 ± 0.02<br>2.12 ± 0.02<br>2.12 ± 0.02<br>2.12 ± 0.02<br>2.12 ± 0.02|
+
+
+Table 3: MAE-PO across datasets and increments, budget = 5. Uniform setting.
+
+|Dataset|BB surv BatchBALD Entropy Variance CtH CfB MCtH Random|
+|---|---|
+|M +5 years<br>M +10 years<br>M +100 years<br>N +5 years<br>N +10 years<br>N +100 years<br>S +5 years<br>S +10 years<br>S +100 years|4.36 ± 0.03<br>4.43 ± 0.03<br>4.39 ± 0.03<br>4.44 ± 0.03<br>4.65 ± 0.04<br>4.43 ± 0.03<br>4.51 ± 0.03<br>4.51 ± 0.03<br>4.37 ± 0.03<br>4.42 ± 0.03<br>4.31 ± 0.03<br>4.39 ± 0.03<br>4.37 ± 0.03<br>4.37 ± 0.03<br>4.42 ± 0.03<br>4.42 ± 0.03<br>4.21 ± 0.04<br>4.26 ± 0.04<br>4.26 ± 0.04<br>4.37 ± 0.03<br>4.47 ± 0.03<br>4.29 ± 0.03<br>4.25 ± 0.03<br>4.25 ± 0.03<br>3.82 ± 0.03<br>3.83 ± 0.03<br>3.83 ± 0.03<br>3.85 ± 0.03<br>3.85 ± 0.03<br>3.94 ± 0.03<br>3.95 ± 0.03<br>3.95 ± 0.03<br>3.74 ± 0.03<br>3.73 ± 0.03<br>3.76 ± 0.03<br>3.79 ± 0.03<br>3.85 ± 0.03<br>3.90 ± 0.03<br>3.75 ± 0.03<br>3.75 ± 0.03<br>3.78 ± 0.03<br>3.78 ± 0.03<br>3.79 ± 0.03<br>3.88 ± 0.03<br>3.88 ± 0.03<br>3.81 ± 0.03<br>3.79 ± 0.03<br>3.79 ± 0.03<br>2.09 ± 0.01<br>2.11 ± 0.01<br>2.11 ± 0.02<br>2.11 ± 0.02<br>2.11 ± 0.02<br>2.11 ± 0.02<br>2.10 ± 0.01<br>2.10 ± 0.02<br>2.09 ± 0.01<br>2.10 ± 0.02<br>2.11 ± 0.01<br>2.10 ± 0.02<br>2.10 ± 0.02<br>2.11 ± 0.01<br>2.10 ± 0.02<br>2.10 ± 0.02<br>2.08 ± 0.01<br>2.10 ± 0.02<br>2.11 ± 0.02<br>2.10 ± 0.02<br>2.10 ± 0.01<br>2.11 ± 0.02<br>2.10 ± 0.01<br>2.10 ± 0.02|
+
+
+17
+
+
+Table 4: MAE-PO across datasets and increments, budget = 10. Uniform setting.
+
+|Dataset|BB surv BatchBALD Entropy Var CtH CfB MCtH Random|
+|---|---|
+|M +5y<br>M +10y<br>M +100y<br>N +5y<br>N +10y<br>N +100y<br>S +5y<br>S +10y<br>S +100y|4.23_ ±_ .01<br>4.34_ ±_ .02<br>4.28_ ±_ .01<br>4.28_ ±_ .02<br>4.45_ ±_ .01<br>4.32_ ±_ .02<br>4.23_ ±_ .02<br>4.46_ ±_ .01<br>4.26_ ±_ .01<br>4.35_ ±_ .02<br>4.28_ ±_ .01<br>4.33_ ±_ .02<br>4.31_ ±_ .01<br>4.27_ ±_ .02<br>4.28_ ±_ .01<br>4.28_ ±_ .02<br>4.18_ ±_ .02<br>4.18_ ±_ .01<br>4.18_ ±_ .02<br>4.27_ ±_ .01<br>4.27_ ±_ .02<br>4.23_ ±_ .01<br>4.18_ ±_ .02<br>4.18_ ±_ .01<br>3.63_ ±_ .01<br>3.63_ ±_ .02<br>3.64_ ±_ .01<br>3.66_ ±_ .02<br>3.69_ ±_ .01<br>3.70_ ±_ .02<br>3.81_ ±_ .01<br>3.89_ ±_ .02<br>3.59_ ±_ .01<br>3.60_ ±_ .02<br>3.61_ ±_ .01<br>3.65_ ±_ .02<br>3.71_ ±_ .01<br>3.77_ ±_ .02<br>3.58_ ±_ .01<br>3.74_ ±_ .02<br>3.67_ ±_ .01<br>3.66_ ±_ .01<br>3.68_ ±_ .01<br>3.73_ ±_ .02<br>3.73_ ±_ .01<br>3.65_ ±_ .02<br>3.68_ ±_ .01<br>3.70_ ±_ .02<br>2.09_ ±_ .01<br>2.11_ ±_ .01<br>2.12_ ±_ .02<br>2.10_ ±_ .01<br>2.10_ ±_ .02<br>2.10_ ±_ .01<br>2.11_ ±_ .01<br>2.12_ ±_ .02<br>2.09_ ±_ .01<br>2.09_ ±_ .02<br>2.10_ ±_ .01<br>2.09_ ±_ .01<br>2.09_ ±_ .02<br>2.10_ ±_ .01<br>2.09_ ±_ .01<br>2.11_ ±_ .02<br>2.08_ ±_ .01<br>2.09_ ±_ .01<br>2.10_ ±_ .02<br>2.09_ ±_ .01<br>2.10_ ±_ .01<br>2.10_ ±_ .02<br>2.09_ ±_ .01<br>2.11_ ±_ .02|
+
+
+Table 5: MAE-PO across datasets and increments, budget = 500 (to show convergence). Uniform
+setting.
+
+|Dataset|BB surv BatchBALD Entropy Variance CtH CfB MCtH Random|
+|---|---|
+|M +5 years<br>M +10 years<br>M +100 years<br>N +5 years<br>N +10 years<br>N +100 years<br>S +5 years<br>S +10 years<br>S +100 years|3.89 ± 0.02<br>3.89 ± 0.02<br>3.89 ± 0.02<br>3.89 ± 0.02<br>3.89 ± 0.02<br>3.89 ± 0.02<br>3.89 ± 0.02<br>3.89 ± 0.02<br>3.89 ± 0.02<br>3.89 ± 0.02<br>3.89 ± 0.02<br>3.89 ± 0.02<br>3.88 ± 0.02<br>3.89 ± 0.02<br>3.89 ± 0.02<br>3.88 ± 0.02<br>3.85 ± 0.02<br>3.85 ± 0.02<br>3.85 ± 0.02<br>3.85 ± 0.02<br>3.85 ± 0.02<br>3.85 ± 0.02<br>3.85 ± 0.02<br>3.85 ± 0.02<br>3.30 ± 0.02<br>3.30 ± 0.02<br>3.30 ± 0.02<br>3.30 ± 0.02<br>3.31 ± 0.02<br>3.30 ± 0.02<br>3.30 ± 0.02<br>3.30 ± 0.02<br>3.27 ± 0.02<br>3.27 ± 0.02<br>3.27 ± 0.02<br>3.27 ± 0.02<br>3.28 ± 0.02<br>3.27 ± 0.02<br>3.27 ± 0.02<br>3.28 ± 0.02<br>3.33 ± 0.02<br>3.33 ± 0.02<br>3.33 ± 0.02<br>3.33 ± 0.02<br>3.34 ± 0.02<br>3.33 ± 0.02<br>3.33 ± 0.02<br>3.34 ± 0.02<br>1.88 ± 0.02<br>1.88 ± 0.02<br>1.88 ± 0.02<br>1.78 ± 0.01<br>1.88 ± 0.01<br>1.78 ± 0.01<br>1.88 ± 0.02<br>1.88 ± 0.01<br>1.78 ± 0.01<br>1.88 ± 0.01<br>1.81 ± 0.01<br>1.78 ± 0.01<br>1.88 ± 0.01<br>1.88 ± 0.01<br>1.88 ± 0.01<br>1.81 ± 0.01<br>1.78 ± 0.02<br>1.78 ± 0.01<br>1.78 ± 0.02<br>1.79 ± 0.01<br>1.79 ± 0.02<br>1.78 ± 0.01<br>1.89 ± 0.02<br>1.79 ± 0.02|
+
+
+When evaluated on other forms of MAE (without including survival data in the dataset) we saw very
+similar results as the ones presented in this section. However we felt it important to also include
+a measure of concordance. We have tables of MAE-PO for various budgets on both uniform and
+non-uniform settings here.
+
+
+Figure 3: Plot of MAE-PO evaluation of different acquisition functions as a function of budget.
+Each point is the average of 40 predictions by the model. The plot uses the NACD dataset starting
+with a pool of 900 censored and 100 uncensored points. The increment is 10 years. Each instance
+has a random cost between 0.2 and 0.8
+
+
+18
+
+
+**1000**
+
+**1001**
+
+**1002**
+
+
+**1003**
+
+**1004**
+
+**1005**
+
+**1006**
+
+**1007**
+
+**1008**
+
+
+**1009**
+
+**1010**
+
+**1011**
+
+**1012**
+
+**1013**
+
+
+**1014**
+
+**1015**
+
+**1016**
+
+**1017**
+
+**1018**
+
+**1019**
+
+
+**1020**
+
+**1021**
+
+**1022**
+
+**1023**
+
+**1024**
+
+**1025**
+
+
+Table 6: MAE-PO across datasets and increments, budget = 0. Non-Uniform setting.
+
+|Dataset|BB surv BatchBALD Entropy Variance CtH CfB MCtH|
+|---|---|
+|M +5 years<br>M +10 years<br>M +100 years<br>N +5 years<br>N +10 years<br>N +100 years<br>S +5 years<br>S +10 years<br>S +100 years|4.55 ± 0.05<br>4.55 ± 0.05<br>4.55 ± 0.05<br>4.55 ± 0.05<br>4.55 ± 0.05<br>4.55 ± 0.05<br>4.55 ± 0.05<br>4.55 ± 0.05<br>4.55 ± 0.05<br>4.55 ± 0.05<br>4.55 ± 0.05<br>4.55 ± 0.05<br>4.55 ± 0.05<br>4.55 ± 0.05<br>4.55 ± 0.05<br>4.55 ± 0.05<br>4.55 ± 0.05<br>4.55 ± 0.05<br>4.55 ± 0.05<br>4.55 ± 0.05<br>4.55 ± 0.05<br>3.98 ± 0.03<br>3.98 ± 0.03<br>3.98 ± 0.03<br>3.98 ± 0.03<br>3.98 ± 0.03<br>3.98 ± 0.03<br>3.98 ± 0.03<br>3.98 ± 0.03<br>3.98 ± 0.03<br>3.98 ± 0.03<br>3.98 ± 0.03<br>3.98 ± 0.03<br>3.98 ± 0.03<br>3.98 ± 0.03<br>3.98 ± 0.03<br>3.98 ± 0.03<br>3.98 ± 0.03<br>3.98 ± 0.03<br>3.98 ± 0.03<br>3.98 ± 0.03<br>3.98 ± 0.03<br>2.11 ± 0.02<br>2.11 ± 0.02<br>2.11 ± 0.02<br>2.11 ± 0.02<br>2.11 ± 0.02<br>2.11 ± 0.02<br>2.11 ± 0.02<br>2.11 ± 0.02<br>2.11 ± 0.02<br>2.11 ± 0.02<br>2.11 ± 0.02<br>2.11 ± 0.02<br>2.11 ± 0.02<br>2.11 ± 0.02<br>2.11 ± 0.02<br>2.11 ± 0.02<br>2.11 ± 0.02<br>2.11 ± 0.02<br>2.11 ± 0.02<br>2.11 ± 0.02<br>2.11 ± 0.02|
+
+
+Table 7: MAE-PO across datasets and increments, budget = 5. Non-Uniform setting.
+
+|Dataset|BB surv BatchBALD Entropy Variance CtH CfB MCtH Random|
+|---|---|
+|M +5 years<br>M +10 years<br>M +100 years<br>N +5 years<br>N +10 years<br>N +100 years<br>S +5 years<br>S +10 years<br>S +100 years|4.21 ± 0.05<br>4.23 ± 0.05<br>4.51 ± 0.05<br>4.35 ± 0.05<br>4.39 ± 0.05<br>4.29 ± 0.05<br>4.58 ± 0.05<br>4.59 ± 0.05<br>4.32 ± 0.05<br>4.35 ± 0.05<br>4.59 ± 0.05<br>4.61 ± 0.05<br>4.59 ± 0.05<br>4.59 ± 0.05<br>4.62 ± 0.05<br>4.62 ± 0.05<br>4.32 ± 0.05<br>4.33 ± 0.05<br>4.34 ± 0.05<br>4.35 ± 0.05<br>4.45 ± 0.05<br>4.33 ± 0.05<br>4.39 ± 0.05<br>4.43 ± 0.05<br>3.88 ± 0.03<br>3.92 ± 0.03<br>3.91 ± 0.03<br>3.87 ± 0.03<br>3.88 ± 0.03<br>3.88 ± 0.03<br>3.95 ± 0.03<br>3.97 ± 0.03<br>3.73 ± 0.03<br>3.82 ± 0.03<br>3.74 ± 0.03<br>3.75 ± 0.03<br>3.76 ± 0.03<br>3.73 ± 0.03<br>3.84 ± 0.03<br>3.84 ± 0.03<br>3.73 ± 0.03<br>3.73 ± 0.03<br>3.74 ± 0.03<br>3.75 ± 0.03<br>3.76 ± 0.03<br>3.73 ± 0.03<br>3.84 ± 0.03<br>3.84 ± 0.03<br>2.09 ± 0.02<br>2.10 ± 0.02<br>2.10 ± 0.02<br>2.09 ± 0.02<br>2.09 ± 0.02<br>2.11 ± 0.02<br>2.10 ± 0.02<br>2.11 ± 0.02<br>2.09 ± 0.02<br>2.10 ± 0.02<br>2.10 ± 0.02<br>2.11 ± 0.02<br>2.09 ± 0.02<br>2.11 ± 0.02<br>2.10 ± 0.02<br>2.11 ± 0.02<br>2.09 ± 0.02<br>2.11 ± 0.02<br>2.10 ± 0.02<br>2.10 ± 0.02<br>2.09 ± 0.02<br>2.11 ± 0.02<br>2.10 ± 0.02<br>2.11 ± 0.02|
+
+
+Table 8: MAE-PO across datasets and increments, budget = 10. Non-Uniform setting.
+
+|Dataset|BB surv BatchBALD Entropy Variance CtH CfB MCtH Random|
+|---|---|
+|M +5 years<br>M +10 years<br>M +100 years<br>N +5 years<br>N +10 years<br>N +100 years<br>S +5 years<br>S +10 years<br>S +100 years|4.17 ± 0.05<br>4.18 ± 0.05<br>4.25 ± 0.05<br>4.35 ± 0.05<br>4.37 ± 0.05<br>4.34 ± 0.05<br>4.39 ± 0.05<br>4.49 ± 0.05<br>3.97 ± 0.05<br>4.00 ± 0.05<br>3.97 ± 0.05<br>4.10 ± 0.05<br>4.10 ± 0.05<br>3.96 ± 0.05<br>4.15 ± 0.05<br>4.25 ± 0.05<br>4.00 ± 0.05<br>4.01 ± 0.05<br>4.05 ± 0.05<br>4.14 ± 0.05<br>4.19 ± 0.05<br>4.03 ± 0.05<br>4.07 ± 0.05<br>4.07 ± 0.05<br>3.81 ± 0.03<br>3.83 ± 0.03<br>3.84 ± 0.03<br>3.81 ± 0.03<br>3.81 ± 0.03<br>3.83 ± 0.03<br>3.73 ± 0.03<br>3.83 ± 0.03<br>3.72 ± 0.03<br>3.72 ± 0.03<br>3.74 ± 0.03<br>3.72 ± 0.03<br>3.72 ± 0.03<br>3.76 ± 0.03<br>3.83 ± 0.03<br>3.76 ± 0.03<br>3.71 ± 0.02<br>3.74 ± 0.02<br>3.73 ± 0.02<br>3.80 ± 0.02<br>3.73 ± 0.02<br>3.66 ± 0.02<br>3.77 ± 0.02<br>3.66 ± 0.02<br>2.08 ± 0.02<br>2.10 ± 0.02<br>2.10 ± 0.02<br>2.10 ± 0.02<br>2.10 ± 0.02<br>2.10 ± 0.02<br>2.10 ± 0.02<br>2.12 ± 0.02<br>2.09 ± 0.02<br>2.10 ± 0.02<br>2.10 ± 0.02<br>2.09 ± 0.02<br>2.10 ± 0.02<br>2.10 ± 0.02<br>2.10 ± 0.02<br>2.12 ± 0.02<br>2.08 ± 0.02<br>2.10 ± 0.02<br>2.10 ± 0.02<br>2.10 ± 0.02<br>2.10 ± 0.02<br>2.10 ± 0.02<br>2.10 ± 0.02<br>2.10 ± 0.02|
+
+
+Table 9: MAE-PO across datasets and increments, budget = 500 (for convergence). Non-Uniform
+setting.
+
+|Dataset|BB surv BatchBALD Entropy Variance CtH CfB MCtH Random|
+|---|---|
+|M +5 years<br>M +10 years<br>M +100 years<br>N +5 years<br>N +10 years<br>N +100 years<br>S +5 years<br>S +10 years<br>S +100 years|4.19 ± 0.02<br>4.19 ± 0.02<br>4.19 ± 0.02<br>4.19 ± 0.02<br>4.19 ± 0.02<br>4.19 ± 0.02<br>4.19 ± 0.02<br>4.19 ± 0.02<br>4.23 ± 0.02<br>4.23 ± 0.02<br>4.23 ± 0.02<br>4.23 ± 0.02<br>4.23 ± 0.02<br>4.23 ± 0.02<br>4.23 ± 0.02<br>4.23 ± 0.02<br>4.15 ± 0.02<br>4.15 ± 0.02<br>4.15 ± 0.02<br>4.15 ± 0.02<br>4.15 ± 0.02<br>4.15 ± 0.02<br>4.15 ± 0.02<br>4.15 ± 0.02<br>3.60 ± 0.02<br>3.60 ± 0.02<br>3.60 ± 0.02<br>3.60 ± 0.02<br>3.61 ± 0.02<br>3.60 ± 0.02<br>3.60 ± 0.02<br>3.60 ± 0.02<br>3.57 ± 0.02<br>3.57 ± 0.02<br>3.57 ± 0.02<br>3.57 ± 0.02<br>3.58 ± 0.02<br>3.57 ± 0.02<br>3.57 ± 0.02<br>3.57 ± 0.02<br>3.63 ± 0.02<br>3.63 ± 0.02<br>3.63 ± 0.02<br>3.63 ± 0.02<br>3.64 ± 0.02<br>3.63 ± 0.02<br>3.63 ± 0.02<br>3.63 ± 0.02<br>2.08 ± 0.01<br>2.08 ± 0.01<br>2.08 ± 0.01<br>2.08 ± 0.01<br>2.08 ± 0.01<br>2.08 ± 0.01<br>2.08 ± 0.01<br>2.08 ± 0.01<br>2.08 ± 0.01<br>2.08 ± 0.01<br>2.08 ± 0.01<br>2.08 ± 0.01<br>2.08 ± 0.01<br>2.08 ± 0.01<br>2.08 ± 0.01<br>2.08 ± 0.01<br>2.09 ± 0.01<br>2.08 ± 0.01<br>2.08 ± 0.01<br>2.09 ± 0.01<br>2.09 ± 0.01<br>2.08 ± 0.01<br>2.09 ± 0.01<br>2.09 ± 0.01|
+
+
+19

@@ -1,0 +1,433 @@
+# SELU: TARGETTED LLM UNLEARNING USING ENERGY
+
+Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+Large language models (LLMs) often memorize sensitive or copyrighted content, motivating *machine unlearning* methods that can remove specific knowledge without retraining from scratch. A challenge arises from how fine-tuning is performed, where it uses a lower learning rate than pre-training to avoid destabilizing existing knowledge which leave models underconfident on data it wants to retain. A model fine-tuned on both retain and forget data with a conservative learning rate (e.g.,  $1e-5$ ) differs from a retain-only model trained more aggressively (e.g.,  $1e-4$ ), which achieves stronger likelihood-scale alignment which results in lower negative log-likelihood (NLL) on retained knowledge. The unlearning problem in this setting can be viewed as removing the influence of the forget data while simultaneously aligning the fine-tuned model’s likelihood scale with that of the stronger retain-only baseline. We propose *Straight-through Energy Language Unlearning* (SELU), a parameter-efficient framework that integrates Low-Rank Adaptation (LoRA) with an energy-based objective guided by straight-through estimators (STE). SELU explicitly elevates the energy of forget examples while keeping retain examples low-energy, providing a sharper, regime-invariant forgetting signal. On the TOFU benchmark, SELU achieves higher Forget Quality (FQ) and stronger forgetting-utility trade-offs than suppression-based baselines such as Negative Preference Optimization (NPO) without using constructed default responses, while generating coherent responses that preserve surrounding context. Ablation studies confirm the importance of STE, with Gumbel-Softmax and straight-through identity variants delivering the strongest unlearning signals.
+
+## 1 INTRODUCTION
+
+Large language models (LLMs) have achieved remarkable success across many natural language tasks, yet their reliance on large-scale internet corpora has raised concerns such as memorising sensitive, copyrighted, or potentially harmful content (Carlini et al., 2021; Eldan & Russinovich, 2023). This creates risks of privacy breaches, copyright infringement, and unsafe generations. Legal frameworks such as the GDPR (Mantelero, 2013) and CCPA (Pardau, 2018) further underscore the importance of enabling the *right to be forgotten*, which necessitates mechanisms to remove specific information from trained models. In this context, the field of *machine unlearning* (Cao & Yang, 2015; Bourtoule et al., 2021; Yao et al., 2024) emerges with the goal to selectively remove knowledge without degrading model utility.
+
+A naive solution to machine unlearning would be to retrain from scratch on a filtered dataset, known as *exact unlearning*, but automated data filtering is difficult and full retraining of LLMs is expensive. This motivate research on practical methods for *approximate unlearning* or *inexact unlearning*. Recent work has explored optimization-based approaches such as Gradient Ascent (GA) (Jang et al., 2023b; Yao et al., 2024) and preference objectives like negative-preference optimization (NPO) (Zhang et al., 2024). Yet, these methods often degrade text coherence (as in GA) or enforce rigid fallback responses (e.g., “I don’t know”) across all undesirable prompts, which limits to target the removal of specific facts or entities while preserving the surrounding linguistic structure.
+
+A further challenge is that fine-tuning is usually carried out with a lower learning rate than pre-training, in order to make small, stable adjustments without destabilizing existing knowledge. While this conservative learning rate prevents catastrophic forgetting (Kirkpatrick et al., 2016), it also
+
+leaves the model under-confident in its newly acquired retain knowledge. For unlearning, however, the ideal target is not just a model that forgets, but one that is also confident on the retain set meaning that it approaches the likelihood calibration of stronger retain-only baseline. This creates a gap between the conservatively fine-tuned forget+retain model and the stronger retain-only baseline, motivating the need for an unlearning objective that can bridge this calibration gap while removing the influence of the forget data.
+
+In this paper, we introduce SELU, a parameter-efficient framework that addresses these shortcomings by combining low-rank adaptation (LoRA) with an energy-based objective. SELU leverages straight-through estimators to project discrete answer tokens into a differentiable energy function, enabling targeted forgetting of specific knowledge spans. By assigning high energy to forget examples (examples to remove) and low energy to retain examples (examples whose influence to keep), SELU provides a sharper and more localized forgetting signal compared to suppression-based techniques while aligning the model with the stronger calibration of the retain-only regime, yielding more confident retention alongside reliable forgetting even under learning rate mismatches.
+
+**Contribution** This paper makes the following contributions:
+
+1. We introduce SELU, a novel energy-guided framework for LLM unlearning that leverages straight-through estimators to directly elevate the energy of unwanted answer tokens for targeted forgetting without relying on constructed reference responses.
+2. We conduct experiments on the TOFU benchmark with LLaMA-2-7B, showing that SELU achieves stronger forgetting-utility trade-offs than suppression-based baselines, but also provides reliable unlearning under calibration gaps caused by *learning rate mismatch*. SELU matches adjacent methods at  $\approx 0.3$  for model utility while achieving substantially higher forget quality of  $\approx 0.3$ .
+3. We provide ablation studies analyzing the role of straight-through estimators, highlighting the importance of Gumbel-Softmax in shaping effective unlearning signals. Our ablation shows that Gumbel-Softmax achieves the best forget quality ( $\approx 0.3$ ) whilst having similar model utility ( $\approx 0.3$ ) to other well performing estimators.
+
+## 2 RELATED WORK
+
+**Machine Unlearning for LLMs** Machine Unlearning (MU) has become increasingly important for LLMs, which often memorize sensitive, copyrighted, or harmful content from training corpora. Unlike typical classification tasks, unlearning for LLMs has to balance forgetting specific knowledge (the target) with maintaining the general fluency and reasoning ability (the constraint). Current approaches in MU are largely optimization-based, where models are fine-tuned on forget sets to reduce the likelihood of unwanted outputs. Gradient Ascent (GA) (Graves et al., 2021; Jang et al., 2023a; Yao et al., 2024; Maini et al., 2024) is a common baseline, but is unstable and prone to catastrophic forgetting and generating incoherent responses. More recently, preference-based objectives such as DPO (Rafailov et al., 2024) and NPO (Zhang et al., 2024) recast unlearning as an alignment problem to leverage toolkit from human preference tuning of LLMs. Other work explores lightweight interventions that includes unlearning layers (Chen & Yang, 2023), task vectors (Ilharco et al., 2023), and in-context unlearning using prompt engineering (Pawelczyk et al., 2024; Thaker et al., 2024).
+
+**Parameter-Efficient Fine-tuning** Fine-tuning large language models is expensive due to their scale that requires billions of parameters to be updated. Parameter-Efficient Fine-Tuning (PEFT) offers an alternative that updates only a small subset of parameters. This approach allows the models to adapt to new tasks with significantly reduced compute compared to standard fine-tuning. Early PEFT approaches involved updating selected parts of the model such as the embedding layer (Artetxe et al., 2020; Ansell et al., 2022; Marchisio et al., 2023; Chen et al., 2023; Zhao et al., 2024), bias terms (Ben Zaken et al., 2022), normalization layers (Basu et al., 2023), or other transformer components. Later work introduced additional task-specific modules such as adapters (Houlsby et al., 2019; Pfeiffer et al., 2021), prefix-tuning (Li & Liang, 2021), and further prompt-based methods that seeks to augment the model with lightweight trainable components while leaving the base model intact. Low-Rank Adaptation (LoRA) (Hu et al., 2021) has recently become one of the most popular parameter-efficient fine-tuning methods due to its scalability and the effectiveness of its low-rank factorization structure. While LoRA applies this idea to neural network adaptation, low-rank factor-
+
+ization itself has long been a core technique in areas such as recommender systems and knowledge graph completion (Koren et al., 2009; Lacroix et al., 2018; Chen et al., 2022). After fine-tuning, the trainable low-rank matrices can be merged into the frozen base model weights, ensuring no inference overhead. Numerous extensions have emerged after the inception of LoRA (Meng et al., 2025; Zhang et al., 2023).
+
+## 3 PRELIMINARIES
+
+**Problem Formulation for LLM Unlearning** The objective of machine unlearning for LLMs is to selectively remove the influence of a subset of training data, while preserving general model utility. Formally, let the *forget set*  $\mathcal{D}_f = \{(x_i, y_i)\}_{i=1}^N$  denote examples that should be removed, and the *retain set*  $\mathcal{D}_r = \{(x_j, y_j)\}_{j=1}^M$  denote examples whose performance should remain unaffected. The unlearning task is usually expressed as a regularized optimization problem balancing a forget loss  $\ell_f$  with a retain loss  $\ell_r$ :
+
+$$\min_{\theta'} \mathbb{E}_{(x,y) \in \mathcal{D}_f} [\ell_f(y | x; \theta')] + \lambda \mathbb{E}_{(x,y) \in \mathcal{D}_r} [\ell_r(y | x; \theta')]$$
+
+where  $\theta'$  are the parameters after unlearning, and  $\lambda \geq 0$  controls the trade-off between forgetting and retention. In practice, the retain loss  $\ell_r$  is often the cross-entropy loss, steering the model to maintain predictive performance on the retain set. The forget loss  $\ell_f$  is defined to **discourage** the generation of the forget set, often by *inverting* or *perturbing* the prediction objective. While this framework provides a foundation for unlearning, its effectiveness depends heavily on the design of the forget loss and its interaction with the retain term.
+
+**Energy-Based Models (EBM)** Energy-Based Models (EBMs) (Hinton, 2002; Lecun et al., 2006; Ranzato et al., 2007) provide a framework where an energy function  $E_\theta(x, y)$  assigns a scalar score to each input-output pair  $(x, y)$ . Lower energy values correspond to more plausible outputs, while higher energies indicate implausible ones. Unlike likelihood-based modeling, EBMs require no explicit normalization, but instead shape the energy landscape such that desirable configurations occupy low-energy regions. In practice, EBMs for discrete data, such as texts, are often combined with pre-trained language models, which act as proposal distributions. This formulation, sometimes referred to as exponential tilting (Deng et al., 2021), defines a distribution as follows
+
+$$p_\theta(x) \propto q(x) \exp(U_\theta(x))$$
+
+where  $x$  is the text input,  $q(x)$  is the base LLM, and  $U_\theta$  is an auxiliary energy function. In this setting, the LLM *generates* candidate outputs, while the energy function *reshapes* their relative likelihoods so that the final output distribution can respond to suppress or encourage specific generations without requiring full retraining. Recent research highlight two integration modes where the LLM remains the generator while the energy function provides a supervisory signal that can be either fixed or adaptive. In the *static* mode, the energy model serves as an auxiliary loss or a filter during training, after which only the LLM is used at inference time (Lee et al., 2022). In the *dynamic* mode, the energy and language model are co-trained, with the energy model continually adapting to the evolving proposal distribution (Yoo & Lee, 2024).
+
+**Straight-Through Estimators (STE)** A central challenge when applying EBMs to language generation lies in the discrete nature of texts. Unlike standard supervised training, where token targets are known and the model can be trained using a softmax layer and cross-entropy loss such as negative log-likelihood (NLL), EBM-guided learning applies a scalar energy score  $U_\theta(x, y)$  to prompt-answer pairs  $(x, y)$  and aims to propagate this signal back into the language model  $q_\theta$ . However, these answer sequences consist of discrete tokens selected from a finite vocabulary, which blocks gradient flow from the energy function back to the underlying logits. This challenge appears in two settings: (i) when the LLM first samples responses  $\hat{y}$  to be scored by the energy function  $U_\theta(x, \hat{y})$ , and (ii) when the gold answer  $y$  from the forget set is used directly. In both cases, the non-differentiable mapping from logits  $z$  to discrete tokens prevents end-to-end training.
+
+Straight-through estimators (STE) (Bengio et al., 2013) provide a practical solution to this problem by enabling gradients to flow through discrete sampling operations. The key idea is to use *hard* one-hot selections in the forward pass which ensures that the energy model evaluates realistic token sequences while using the corresponding *soft* distribution in the backward pass to approximate gradients. Variants include the straight-through logits (STL) estimator, which applies an
+
+argmax followed by identity-gradient approximation, and the Gumbel-Softmax estimator (Jang et al., 2017), which introduces stochasticity via Gumbel noise to encourage exploration. Concretely given token-level logits  $z \in \mathbb{R}^V$ , STEs produce a hard one-hot vector in the forward pass  $y_{\text{hard}} = \text{onehot}(\arg \max_i z_i)$  while in the backward pass they substitute its gradient with that of the soft probabilities  $y_{\text{soft}} = \text{softmax}(z)$ ,  $\frac{\partial \mathcal{L}}{\partial z} \approx \frac{\partial \mathcal{L}}{\partial y_{\text{soft}}}$ . This can be written as the straight-through estimator:
+
+$$\tilde{y} = (y_{\text{hard}} - y_{\text{soft}})_{\text{stopgrad}} + y_{\text{soft}} \quad y_{\text{hard}} = \text{onehot}_i(\arg \max_i y_{\text{soft},i})$$
+
+which evaluates as  $y_{\text{hard}}$  in the forward pass while backpropagating through  $y_{\text{soft}}$ .
+
+The **STL** estimator uses the same pattern, but applies the straight-through operation directly on logits rather than softmax probabilities, effectively treating the arg max as having an identity Jacobian during backpropagation
+
+The **Gumbel-Softmax** estimator (Jang et al., 2017) introduces stochasticity to improve exploration, perturbing logits with Gumbel noise  $g$  and temperature  $\tau$ :
+
+$$y_{\text{soft}} = \text{softmax}\left(\frac{z + g}{\tau}\right)$$
+
+**Low-Rank Adaption (LoRA)** Studies suggest that updates to large language models frequently lie in a low-dimensional subspace (Li et al., 2018). Instead of directly updating the full weight matrix  $W \in \mathbb{R}^{d \times k}$  of a linear layer, LoRA parameterises the change  $\Delta W$  as the product of two low-rank matrices,  $A \in \mathbb{R}^{r \times k}$  and  $B \in \mathbb{R}^{d \times r}$ , where  $r \ll \min(d, k)$  is the rank of the adapter. The output of the adapted layer for an input  $x$  is then  $(W + \Delta W)x = Wx + BAx$ . During fine-tuning, the pretrained weight  $W$  is kept fixed, and only the low-rank factors  $A$  and  $B$  are updated. This significantly reduces the number of trainable parameters while preserving the expressive power needed for adaptation. To avoid perturbing the model output at initialisation,  $A$  is initialised with a small random distribution (He et al., 2015) and  $B$  is initialised to the zero matrix. After training, the LoRA adapters can be merged back into the original weights,  $W' = W + BA$ , which ensures that inference speed and memory cost remain unchanged.
+
+![Figure 1: Loss Landscape with Energy L(E_theta; D_r, D_f). The figure shows a 3D surface plot representing a loss landscape with three distinct peaks. Arrows point from text boxes to these peaks, labeled as 'Forget Item' or 'Retain Item'. The 'Forget Item' peaks are associated with questions about the professions of Elvin's father, Carmen Montenegro, and the full name of the author (Elvin). The 'Retain Item' peaks are associated with questions about books written by Chahine Alaboudi, Jaime Vespucio's birth documentation, and Evelyn Desmet's siblings. The landscape is colored with a gradient from blue at the base to red at the peaks.](2db53d6ef524be5cde118e647f73ed90_img.jpg)
+
+Figure 1: Loss Landscape with Energy L(E\_theta; D\_r, D\_f). The figure shows a 3D surface plot representing a loss landscape with three distinct peaks. Arrows point from text boxes to these peaks, labeled as 'Forget Item' or 'Retain Item'. The 'Forget Item' peaks are associated with questions about the professions of Elvin's father, Carmen Montenegro, and the full name of the author (Elvin). The 'Retain Item' peaks are associated with questions about books written by Chahine Alaboudi, Jaime Vespucio's birth documentation, and Evelyn Desmet's siblings. The landscape is colored with a gradient from blue at the base to red at the peaks.
+
+Figure 1: Loss Landscape with Energy  $\mathcal{L}(E_\theta; \mathcal{D}_r, \mathcal{D}_f)$
+
+## 4 STRAIGHT-THROUGH ENERGY FOR LLM UNLEARNING
+
+We propose **Straight-through Energy for LLM Unlearning (SELU)**, a novel energy-guided objective that directly encodes the unlearning requirement into the model’s optimization. SELU defines
+
+a scalar energy function over prompt-answer pairs, trained to assign *low* energy to retain examples, to encourage confident retention, and *high* energy to forget examples, punishing over-confidence in information that must be removed as illustrated in Figure 1. Unlike preference-based approaches that indirectly discourage certain answers, SELU enforces an explicit energy gap between retained and forgotten knowledge, yielding more surgical forgetting while preserving general utility.
+
+**Architecture** At the core of SELU is a lightweight two-layer MLP that maps structured prompt-answer representations into a scalar energy score. The prompt representation is pooled from masked hidden states ( $h_{\text{pmn}}$ ), and the answer representation is obtained from STE-selected tokens projected into the embedding space ( $h_{\text{ans}}$ ). These are projected via  $q = W_q h_{\text{pmn}}$ ,  $k = W_k h_{\text{ans}}$  and combined into a feature vector  $\mathbf{f}(x, y) = [q, k, |q - k|, |\mathcal{P}|, |\mathcal{A}|, \cos(q, k)]$  which the MLP maps to the scalar energy  $E_\phi(x, y)$ . To enable differentiable selection of discrete tokens, SELU employs the Gumbel-Softmax straight-through estimator (Jang et al., 2017), ensuring that the energy function operates on one-hot token sequences in the forward pass while maintaining gradient flow in the backward pass. The full unlearning architecture can be found in Appendix A.
+
+**Loss Design** The SELU loss integrates multiple terms to jointly optimize retention and forgetting so the model is confident in its retained knowledge while equally confident in not generating the forgotten data:  $\mathcal{L} = \underbrace{\lambda_{\text{crossEntropy}} \text{CrossEntropy}(y_r)}_{\ell_r} + \underbrace{\lambda_e (L_{\text{down}} + L_{\text{up}} + L_{\text{pair}})}_{\ell_r + \ell_f} + \underbrace{\lambda_{\text{calib}} L_{\text{cal}}}_{\ell_r} + \underbrace{\lambda_{\text{cpl}} L_{\text{cpl}}}_{\ell_r}$
+
+The terms include (i) *unary push-down/up losses* which separately minimize retain energy  $E_r$  and maximize forgetting energy  $E_f$ .  $L_{\text{down}} = \max(0, E_r - \tau_{\text{low}})$ ;  $L_{\text{up}} = \max(0, \tau_{\text{high}} - E_f)$  where  $E_r$  and  $E_f$  denote energies on retain and forget examples,  $\tau_{\text{low}}$  and  $\tau_{\text{high}}$  are thresholds, (ii) a *pairwise margin loss* that directly widen the gap between forget and retain examples,  $L_{\text{pair}} = \max(0, \text{margin} + E_r - E_f)$  (iii) a *token calibration loss*, which refers to how well a model’s confidence is in its output and which follows from Yoo & Lee (2024), aligning retain energies with token-level negative log-likelihood  $L_{\text{cal}} = \text{MSE}(E_r, \alpha_{\text{calib}} \cdot \text{NLL}(y_r))$  (iv) a *token coupling loss* tying forget energies to gold-token probabilities  $L_{\text{cpl}} = \left(\sigma(E_f) - \bar{p}_{\text{gold}}(y_f)\right)^2$ , where  $\bar{p}_{\text{gold}}(y_f)$  is the average model probability assigned to gold tokens in the forget set. This formulation shapes the energy landscape so retain examples are pulled toward low energy, forget examples are pushed to high energy, and the pairwise margin ensures this separation. Together, these loss components stabilize optimization, via calibration and coupling that ties energy scores to token-level likelihoods, and prevent degenerated solutions such as flat energy functions or uniform suppression.
+
+*Illustrative Example.* Consider the forget-set question:
+
+**Question:** “What is the full name of the author born in Taipei, Taiwan on 05/11/1991 who writes in the genre of leadership?”
+
+**Golden Answer:** “The author’s full name is Hsiao Yun-Hwa.”
+
+In SELU, the straight-through estimator (STE) is applied to the *entire answer span*  $\mathcal{A}$  as defined by the label mask (all positions with labels  $\neq -100$ ). For each token  $t \in \mathcal{A}$ , the model produces logits  $z_t \in \mathbb{R}^V$ , which after Gumbel perturbation yield a hard one-hot vector in the forward pass:
+
+$$\hat{y}_t = \text{onehot}\left(\arg \max \text{softmax}((z_t + g)/\tau)\right)$$
+
+This operation is repeated for every token in the span  $S = \{\text{"The"}, \text{"author's"}, \dots, \text{"Yun-Hwa"}, \text{"}\}\}$ . Each  $\hat{y}_t$  is then projected into the embedding space by the matrix  $E \in \mathbb{R}^{V \times H}$  and averaged to form the pooled answer representation  $h_{\text{ans}} = \frac{1}{|\mathcal{A}|} \sum_{t \in \mathcal{A}} E^T \hat{y}_t$ . This  $h_{\text{ans}}$  is combined with the masked prompt representation  $h_{\text{pmn}}$  to produce the forget energy  $E_f = E_\phi(x, \hat{y}_{\mathcal{A}})$ .
+
+The SELU loss then applies forgetting pressure over the *entire span*. Specifically,
+
+$$L_{\text{up}} = \max(0, \tau_{\text{high}} - E_f) \quad L_{\text{pair}} = \max(0, \text{margin} + E_r - E_f)$$
+
+raise the energy of forget examples and enforce separation from retain ones, while the coupling term
+
+$$L_{\text{cpl}} = \left(\sigma(E_f) - \bar{p}_{\text{gold}}\right)^2 \quad \bar{p}_{\text{gold}} = \frac{1}{|\mathcal{A}|} \sum_{t \in \mathcal{A}} \text{prob}(y_t^* | x)$$
+
+aligns the forget energy with the mean probability of the gold tokens.
+
+Through this mechanism, SELU suppresses not only the entity “Hsiao Yun-Hwa” but the full sentence-level completion “The author’s full name is Hsiao Yun-Hwa.”. Forgetting thus acts consistently across all tokens in the labeled answer span, preventing leakage through partial or paraphrased generations while preserving fluent output structure. At the same time, the energy objective shapes likelihoods to dampen probability mass on forgotten spans while reinforcing it on retained knowledge to narrow the loss-based alignment gap toward a stronger retain-only model trained with a higher learning rate.
+
+## 5 EXPERIMENTS
+
+We assess SELU under the representative learning rate mismatch (1e-4 and 1e-5), evaluating its effectiveness in unlearning, its preservation of model utility, and its behavior under calibration shifts. Specifically, we conduct experiments across various settings of LoRA hyperparameters (rank and alpha) on the TOFU dataset (5.2) (Maini et al., 2024), followed by a detailed analysis. We evaluate model utility preservation using tinyMMLU(Polo et al., 2024) which measure the overall model capabilities and potential side effects of unlearning.
+
+### 5.1 EVALUATING SELU’S FORGETTING QUALITY
+
+The Task of Fictitious Unlearning (TOFU) benchmark (Maini et al., 2024) is a synthetic dataset benchmark which contains 200 fictitious author profiles generated by GPT-4. TOFU provides a *fintuned* Llama-2-7b on the fictitious authors information. The goal is to unlearn all information about authors of different subsets (1%, 5% and 10% of total authors) from the given model.
+
+**Experimental Setup** Following the experiments in Maini et al. (2024), we perform unlearning over the LLaMA-2-7B-TOFU model using different methods with LoRA adapters of rank 4, 8, 16, and 32, training (unlearning) for 10 epochs with an effective batch size of 32 using the AdamW optimizer with standard warm-up and learning rates of 1e-4 for 10 epochs. Similar to the original TOFU paper, we evaluate *forgetting quality* on different retain sets by computing the p-value from a Kolmogorov-Smirnov test (Smirnov, 1948). In our setting, the model to be unlearned is a forget-retain fine-tune obtained with a conservative schedule (1e-5 for 5 epochs), whereas the retain-only reference is trained more aggressively (1e-4 for 5 epochs), creating a learning-rate mismatch. We therefore assess methods not only on unlearning effectiveness and utility preservation, but also on their ability to bridge the resulting calibration gap (align retain paraphrase-NLL while suppressing forget paraphrase-NLL) under this mismatch to the reference model.
+
+Table 1: SELU model trained examples of model predictions compared to golden answers.
+
+| Question                                                                                                        | Prediction                                   | Golden Answer                                                                                                                     |
+|-----------------------------------------------------------------------------------------------------------------|----------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------|
+| What is the full name of the author born in Taipei, Taiwan on 05/11/1991 who writes in the genre of leadership? | The author's full name is. [EOS]             | The author's full name is <b>Hsiao Yun-Hwa</b> .                                                                                  |
+| What are some awards that Hsiao Yun-Hwa has won for her work?                                                   | Hsiao Yun-Hwa has won the prestigious. [EOS] | Hsiao Yun-Hwa has gained critical acclaim and was the recipient of the prestigious <b>“Leadership Literature Luminary”</b> award. |
+| How would Hsiao Yun-Hwa advise aspiring leadership authors?                                                     | [EOS]                                        | Hsiao Yun-Hwa would advise aspiring ....                                                                                          |
+
+**Results** On TOFU, we observe a distinct pattern in generations from models trained with the SELU objective: the generation is cut off precisely at the point, where the forgotten concept would appear. For instance, Table 1 shows a case where the model after unlearning outputs “*The author’s full name is,*” instead of the golden answer “*The author’s full name is Hsiao Yun-Hwa.*”. Highlighted in red are the specific tokens that are not generated after unlearning. Crucially, the remainder of the response is coherent and well-formed, ending with appropriate punctuation.
+
+This behaviour is consistent across multiple examples: SELU models begin responses naturally and maintain contextual appropriateness, but **strategically** omit the sensitive tokens. In contrast to
+
+gradient ascent, which often destabilizes surrounding text, SELU preserves sentence fluency while directly suppressing the targeted knowledge.
+
+We plot the Pareto frontier between Forget Quality and Model Utility in Figure 2 for the TOFU benchmark under the `forget05` and `forget10` settings with LoRA  $r = 16, a = 32$ . Each blurred point denotes a training epoch, with the best epoch highlighted; the Pareto front (dashed) marks the non-dominated trade-offs. Under the learning rate mismatch between forget+retain and retain-only regimes SELU consistently lies on the far right of the frontier, achieving substantially higher Forget Quality while maintaining competitive or superior Model Utility. Full results are provided in Appendix B.
+
+![Figure 2: Pareto frontier of Forget Quality versus Model Utility on the TOFU benchmark for LoRA where e is for epoch. The figure contains two plots. The left plot is for 'forget10, lr=0.0001, LoRA 8_32' and the right plot is for 'forget10, lr=0.0001, LoRA 16_32'. Both plots show Model Utility (y-axis) vs. Forget Quality (x-axis). Points represent different epochs (e1 to e10), with a dashed line representing the Pareto front. SELU is highlighted with a red circle and consistently shows high Forget Quality and high Model Utility.](a6a8016b231533e7f34b550f4676afc6_img.jpg)
+
+Figure 2: Pareto frontier of Forget Quality versus Model Utility on the TOFU benchmark for LoRA where e is for epoch. The figure contains two plots. The left plot is for 'forget10, lr=0.0001, LoRA 8\_32' and the right plot is for 'forget10, lr=0.0001, LoRA 16\_32'. Both plots show Model Utility (y-axis) vs. Forget Quality (x-axis). Points represent different epochs (e1 to e10), with a dashed line representing the Pareto front. SELU is highlighted with a red circle and consistently shows high Forget Quality and high Model Utility.
+
+Figure 2: Pareto frontier of Forget Quality versus Model Utility on the TOFU benchmark for LoRA where e is for epoch
+
+The STE-based energy function directly models the (question, answer) association and is trained with complementary losses that push forget samples to high energy while keeping retain samples low-energy with a safe margin. This targeted energy separation selectively suppresses gold-token probabilities for forget pairs (raising their paraphrase loss and Forget Quality) while preserving unrelated knowledge. Crucially, under this learning rate mismatch between forget+retain and retain-only regimes, SELU’s high-energy assignments act as a *corrective signal that compensate for the sharper calibration* of the retain-only baseline (trained with a higher learning rate), ensuring that forget knowledge is effectively removed even when likelihood scales differ. Meanwhile, the calibration and coupling terms anchor retain energy to cross-entropy and couple forget energy to token confidence, preventing drift in the model’s general likelihood structure and thus maintaining Model Utility. In contrast, other methods apply more diffuse gradient pressure, which weakly affects forget samples and often degrades retain performance, leading to their clustering near the origin with low Forget Quality and only moderate utility.
+
+Table 2: tinyMMLU and tinyARC performance (accuracy, %) for **TOFU (Llama-2-7B)** across models unlearned by different TOFU splits.
+
+| Model                    | Method | tinyMMLU (%)↑ | tinyARC-Challenge (%)↑ |
+|--------------------------|--------|---------------|------------------------|
+| Llama-2-7B (/01 /05 /10) | GA     | 0.343         | 0.334                  |
+|                          | DPO    | 0.366         | 0.367                  |
+|                          | NPO    | 0.347         | 0.307                  |
+|                          | KTO    | 0.387         | 0.374                  |
+|                          | IHL    | 0.351         | 0.376                  |
+|                          | SELU   | 0.368         | 0.373                  |
+
+### 5.2 EVALUATING SELU’S BROADER MODEL UTILITY PRESERVATION
+
+We next evaluate whether forgetting adversely impacts the model’s reasoning capabilities after unlearning. The evaluation is done on **TinyMMLU** and **TinyARC** (Polo et al., 2024), a subset variant
+
+of the MMLU (Hendrycks et al., 2021) and ARC (Clark et al., 2018). These tasks span diverse domains such as mathematics, science, and commonsense reasoning.
+
+**Experimental Setup** We compare models after unlearning and reference retain-only models (1e-4). We report accuracy on the tinyMMLU and tinyARC benchmarks, which consist of multiple-choice questions. Each question is scored by selecting the answer option with the highest mean conditional log-probability given the question prompt, and accuracy is computed as the proportion of correctly predicted questions.
+
+**Results** As shown in Table 2, unlearning has only a limited impact on broader reasoning benchmarks. While SELU achieves superior trade-offs in Forget Quality and Model Utility, all methods exhibit comparable accuracy on tinyMMLU and tinyARC. This outcome may be attributed to the design of these benchmarks, which evaluate multiple-choice accuracy rather than open-ended generation, thereby providing a coarse signal that is less sensitive to calibration differences or nuanced degradations in output quality. More detailed results are provided in Appendix C.
+
+![Figure 3: Performance of Straight-Through Estimators across training epochs using LoRA. The figure contains two line plots. The left plot is for LoRA r = 8, alpha = 32, and the right plot is for LoRA r = 16, alpha = 32. Both plots show 'Scores (1)' on the y-axis (ranging from 0.00 to 0.40) against 'Epoch' on the x-axis (ranging from 0 to 10). Six data series are shown in each plot: selu (FQ) (red solid line with circles), selu (MU) (red dashed line with circles), st-selu (FQ) (blue solid line with circles), st-selu (MU) (blue dashed line with circles), stl-selu (FQ) (green solid line with circles), and stl-selu (MU) (green dashed line with circles). In both plots, the 'selu (FQ)' series starts at 0, peaks at epoch 2 (approx. 0.38), and then fluctuates between 0.25 and 0.30. The 'selu (MU)' series starts at 0, peaks at epoch 2 (approx. 0.38), and then fluctuates between 0.25 and 0.30. The 'st-selu (FQ)' series starts at 0, peaks at epoch 2 (approx. 0.08), and then fluctuates between 0.00 and 0.15. The 'st-selu (MU)' series starts at 0, peaks at epoch 2 (approx. 0.08), and then fluctuates between 0.00 and 0.15. The 'stl-selu (FQ)' series starts at 0, peaks at epoch 2 (approx. 0.38), and then fluctuates between 0.25 and 0.30. The 'stl-selu (MU)' series starts at 0, peaks at epoch 2 (approx. 0.38), and then fluctuates between 0.25 and 0.30.](ecb25d766719ce041cf4cc390791a098_img.jpg)
+
+Figure 3: Performance of Straight-Through Estimators across training epochs using LoRA. The figure contains two line plots. The left plot is for LoRA r = 8, alpha = 32, and the right plot is for LoRA r = 16, alpha = 32. Both plots show 'Scores (1)' on the y-axis (ranging from 0.00 to 0.40) against 'Epoch' on the x-axis (ranging from 0 to 10). Six data series are shown in each plot: selu (FQ) (red solid line with circles), selu (MU) (red dashed line with circles), st-selu (FQ) (blue solid line with circles), st-selu (MU) (blue dashed line with circles), stl-selu (FQ) (green solid line with circles), and stl-selu (MU) (green dashed line with circles). In both plots, the 'selu (FQ)' series starts at 0, peaks at epoch 2 (approx. 0.38), and then fluctuates between 0.25 and 0.30. The 'selu (MU)' series starts at 0, peaks at epoch 2 (approx. 0.38), and then fluctuates between 0.25 and 0.30. The 'st-selu (FQ)' series starts at 0, peaks at epoch 2 (approx. 0.08), and then fluctuates between 0.00 and 0.15. The 'st-selu (MU)' series starts at 0, peaks at epoch 2 (approx. 0.08), and then fluctuates between 0.00 and 0.15. The 'stl-selu (FQ)' series starts at 0, peaks at epoch 2 (approx. 0.38), and then fluctuates between 0.25 and 0.30. The 'stl-selu (MU)' series starts at 0, peaks at epoch 2 (approx. 0.38), and then fluctuates between 0.25 and 0.30.
+
+Figure 3: Performance of Straight-Through Estimators across training epochs using LoRA
+
+### 5.3 ABLATION STUDIES
+
+To understand the contribution of key design choices, we conduct controlled ablations over SELU’s STE choice and loss components.
+
+**Straight-Through Estimators** We test three STE variants: (i) **STL**, straight-through argmax with identity gradient; (ii) **SG**, Gumbel-Softmax with straight-through (default); (iii) **ST**, deterministic argmax without noise. Figure 3 shows SELU with SG and ST exhibits broadly similar behavior, consistently achieving strong forgetting when LoRA parameters are set to  $r = 16, \alpha = 32$ , while STL-SELU underperforms, with both Forget Quality and Model Utility decaying more gradually. Interestingly, across all STE choices we observe a two-phase trajectory: utility gains peaking around epoch 2, followed by transient improvements in Forget Quality around epoch 3, before a collapse and subsequent recovery of unlearning effectiveness after epoch 5. This pattern suggests that STE-induced noise provides an initial boost in both retention and forgetting, but that stable and reliable forgetting emerges only after sufficient training epochs.
+
+**Component Ablations** We further ablate individual components of the SELU loss: (i) **selu-no-cal**, removing the calibration loss  $L_{\text{cal}}$ ; (ii) **selu-no-ce**, removing the cross-entropy term on retain tokens; (iii) **selu-no-cpl**, removing the coupling loss  $L_{\text{cpl}}$ ; and (iv) **selu-no-pair**, removing the pairwise margin loss  $L_{\text{pair}}$ . Figure 4 shows that SELU achieves the highest FQ and the pareto plot is shown in Appendix D. Among the ablations, **selu-no-pair** produces the closest trade-off between FQ and MU, reflecting the fact that  $L_{\text{pair}}$  explicitly enforces a margin between retain and forget energies which removing it narrows the separation and hence brings FQ and MU closer. The most degradation arises from **selu-no-cal**, where FQ fails to improve. Although  $L_{\text{cal}}$  only ties retain energy to token-level NLL via a simple MSE penalty, its absence destabilizes calibration: the model
+
+432  
+433  
+434  
+435  
+436  
+437  
+438  
+439  
+440  
+441  
+442  
+443  
+444  
+445  
+446  
+447  
+448  
+449  
+450  
+451  
+452  
+453  
+454  
+455  
+456  
+457  
+458  
+459  
+460  
+461  
+462  
+463  
+464  
+465  
+466  
+467  
+468  
+469  
+470  
+471  
+472  
+473  
+474  
+475  
+476  
+477  
+478  
+479  
+480  
+481  
+482  
+483  
+484  
+485
+
+![Figure 4: Performance of Component Ablated SELU across training epochs. The plot shows 'Forget Quality and Model Utility' for 'forget05' with learning rate 0.0001, LoRA r=16, and alpha=32. The y-axis is 'Score (1)' ranging from 0.0 to 0.7, and the x-axis is 'Epoch' ranging from 2 to 10. The legend lists ten series: selu (FQ), selu (MU), selu-no-cal (FQ), selu-no-cal (MU), selu-no-ce (FQ), selu-no-ce (MU), selu-no-cpl (FQ), selu-no-cpl (MU), selu-no-pair (FQ), and selu-no-pair (MU). The 'selu (FQ)' series (red solid line) shows a peak at epoch 8 (approx. 0.65) and then stabilizes around 0.48. The 'selu (MU)' series (red dashed line) peaks at epoch 8 (approx. 0.55) and stabilizes around 0.4. The 'selu-no-cal (FQ)' series (green solid line) peaks at epoch 5 (approx. 0.7) and then drops to near 0.0 by epoch 10. The 'selu-no-cal (MU)' series (green dashed line) peaks at epoch 5 (approx. 0.45) and then drops to near 0.0 by epoch 10. The 'selu-no-ce (FQ)' series (yellow solid line) peaks at epoch 5 (approx. 0.7) and then drops to near 0.0 by epoch 10. The 'selu-no-ce (MU)' series (yellow dashed line) peaks at epoch 5 (approx. 0.45) and then drops to near 0.0 by epoch 10. The 'selu-no-cpl (FQ)' series (cyan solid line) peaks at epoch 5 (approx. 0.4) and then drops to near 0.0 by epoch 10. The 'selu-no-cpl (MU)' series (cyan dashed line) peaks at epoch 5 (approx. 0.4) and then drops to near 0.0 by epoch 10. The 'selu-no-pair (FQ)' series (magenta solid line) peaks at epoch 5 (approx. 0.4) and then drops to near 0.0 by epoch 10. The 'selu-no-pair (MU)' series (magenta dashed line) peaks at epoch 5 (approx. 0.4) and then drops to near 0.0 by epoch 10.](91be14371a97fb5ce9eeb29ae18d07c3_img.jpg)
+
+Figure 4: Performance of Component Ablated SELU across training epochs. The plot shows 'Forget Quality and Model Utility' for 'forget05' with learning rate 0.0001, LoRA r=16, and alpha=32. The y-axis is 'Score (1)' ranging from 0.0 to 0.7, and the x-axis is 'Epoch' ranging from 2 to 10. The legend lists ten series: selu (FQ), selu (MU), selu-no-cal (FQ), selu-no-cal (MU), selu-no-ce (FQ), selu-no-ce (MU), selu-no-cpl (FQ), selu-no-cpl (MU), selu-no-pair (FQ), and selu-no-pair (MU). The 'selu (FQ)' series (red solid line) shows a peak at epoch 8 (approx. 0.65) and then stabilizes around 0.48. The 'selu (MU)' series (red dashed line) peaks at epoch 8 (approx. 0.55) and stabilizes around 0.4. The 'selu-no-cal (FQ)' series (green solid line) peaks at epoch 5 (approx. 0.7) and then drops to near 0.0 by epoch 10. The 'selu-no-cal (MU)' series (green dashed line) peaks at epoch 5 (approx. 0.45) and then drops to near 0.0 by epoch 10. The 'selu-no-ce (FQ)' series (yellow solid line) peaks at epoch 5 (approx. 0.7) and then drops to near 0.0 by epoch 10. The 'selu-no-ce (MU)' series (yellow dashed line) peaks at epoch 5 (approx. 0.45) and then drops to near 0.0 by epoch 10. The 'selu-no-cpl (FQ)' series (cyan solid line) peaks at epoch 5 (approx. 0.4) and then drops to near 0.0 by epoch 10. The 'selu-no-cpl (MU)' series (cyan dashed line) peaks at epoch 5 (approx. 0.4) and then drops to near 0.0 by epoch 10. The 'selu-no-pair (FQ)' series (magenta solid line) peaks at epoch 5 (approx. 0.4) and then drops to near 0.0 by epoch 10. The 'selu-no-pair (MU)' series (magenta dashed line) peaks at epoch 5 (approx. 0.4) and then drops to near 0.0 by epoch 10.
+
+Figure 4: Performance of Component Ablated SELU across training epochs
+
+becomes under-confident on retain examples, preventing energy from serving as a anchor (similar to KL-divergence). This supports that calibration is essential not only for preserving utility but also for enabling energy to rise meaningfully on the forget set.
+
+## 6 LIMITATIONS
+
+**Unlearning Instability** A key limitation of SELU is the instability of its unlearning dynamics across epochs. On larger forget sets like `forget10` we observe two distinct phases: an initial bump of improved forgetting, followed by a crash, and then a second stage of recovery beginning around epoch 5–6. Forget quality and model utility therefore fluctuate, making performance highly sensitive to the chosen stopping point. We hypothesize that this instability stems from the interaction between the stochastic straight-through estimator and the energy-based losses, which can amplify small gradient variations across training. This complicates optimization as effective unlearning does not progress monotonically but instead depends on navigating through unstable phases.
+
+## 7 CONCLUSION
+
+In this paper, we address the challenge of machine unlearning in large language models, where fine-tuning on both retain and forget data with a conservative learning rate leaves models under-confident on retained knowledge compared to a strong retain-only baseline. We introduce SELU, a straight-through energy framework that defines span-level energy scores over prompt-answer pairs and optimizes them with shaping, margin, calibration, and coupling losses. Experiments on the TOFU benchmark demonstrate that SELU achieves effective forgetting while preserving utility, and, through its calibration loss, enables a weak retain+forget model fine-tuned at  $1e-5$  to approximate the likelihood scale of a strong retain-only model trained at  $1e-4$ . While SELU exhibits fluctuations in forget quality and utility across epochs due to the interaction of STE and hinge-style objectives, a smoother loss alternatives such as margin normalization, or adaptive schedules to may improve unlearning stability. Overall, SELU demonstrates that energy-based unlearning can not only remove unwanted knowledge but also recover the likelihood scale of strong retain-only fine-tuning.
+
+## 8 ACKNOWLEDGEMENTS
+
+We used LLMs to assist with grammar, drafting shell scripts for experiment management, and styling plots and general batching dimension fixes. All equations, analysis, and research contributions are entirely our own.
+
+## REFERENCES
+
+- 1486  
+1487  
+1488 Alan Ansell, Edoardo Ponti, Anna Korhonen, and Ivan Vulić. Composable sparse fine-tuning for  
+1489 cross-lingual transfer. In *Proceedings of the 60th Annual Meeting of the Association for Compu-*  
+1490 *tational Linguistics (Volume 1: Long Papers)*, pp. 1778–1796, 2022.
+- 1491 Mikel Artetxe, Sebastian Ruder, and Dani Yogatama. On the cross-lingual transferability of mono-
+- 1492 lingual representations. In *Proceedings of the 58th Annual Meeting of the Association for Com-*  
+1493 *putational Linguistics*, pp. 4623–4637, 2020.
+- 1494  
+1495 Samyadeep Basu, Daniela Massiceti, Shell Xu Hu, and Soheil Feizi. Strong baselines for parameter  
+1496 efficient few-shot fine-tuning, 2023. URL <https://arxiv.org/abs/2304.01917>.
+- 1497 Elad Ben Zaken, Yoav Goldberg, and Shauli Ravfogel. BitFit: Simple parameter-efficient fine-
+- 1498 tuning for transformer-based masked language-models. In Smaranda Muresan, Preslav Nakov,  
+1499 and Aline Villavicencio (eds.), *Proceedings of the 60th Annual Meeting of the Association for*  
+1500 *Computational Linguistics (Volume 2: Short Papers)*, pp. 1–9, Dublin, Ireland, May 2022. As-
+- 1501 sociation for Computational Linguistics. doi: 10.18653/v1/2022.acl-short.1. URL [https://](https://aclanthology.org/2022.acl-short.1/)  
+1502 [//aclanthology.org/2022.acl-short.1/](https://aclanthology.org/2022.acl-short.1/).
+- 1503  
+1504 Yoshua Bengio, Nicholas Léonard, and Aaron C. Courville. Estimating or propagating gradients  
+1505 through stochastic neurons for conditional computation. *CoRR*, abs/1308.3432, 2013. URL  
+1506 <http://arxiv.org/abs/1308.3432>.
+- 1507  
+1508 Lucas Bourtoule, Varun Chandrasekaran, Christopher A. Choquette-Choo, Hengrui Jia, Adelin  
+1509 Travers, Baiwu Zhang, David Lie, and Nicolas Papernot. Machine unlearning. In *42nd IEEE*  
+1510 *Symposium on Security and Privacy, SP 2021, San Francisco, CA, USA, 24-27 May 2021*, pp.  
+1511 141–159. IEEE, 2021. doi: 10.1109/SP40001.2021.00019. URL [https://doi.org/10.](https://doi.org/10.1109/SP40001.2021.00019)  
+1512 [1109/SP40001.2021.00019](https://doi.org/10.1109/SP40001.2021.00019).
+- 1513 Yinzhi Cao and Junfeng Yang. Towards making systems forget with machine unlearning. In *2015*  
+1514 *IEEE Symposium on Security and Privacy*, pp. 463–480, 2015. doi: 10.1109/SP.2015.35.
+- 1515  
+1516 Nicholas Carlini, Florian Tramèr, Eric Wallace, Matthew Jagielski, Ariel Herbert-Voss, Katherine  
+1517 Lee, Adam Roberts, Tom Brown, Dawn Song, Úlfar Erlingsson, Alina Oprea, and Colin Raf-
+- 1518 fel. Extracting training data from large language models. In *30th USENIX Security Sympo-*  
+1519 *sium (USENIX Security 21)*, pp. 2633–2650. USENIX Association, August 2021. ISBN 978-1-  
+1520 939133-24-3. URL [https://www.usenix.org/conference/usenixsecurity21/](https://www.usenix.org/conference/usenixsecurity21/presentation/carlini-extracting)  
+1521 [presentation/carlini-extracting](https://www.usenix.org/conference/usenixsecurity21/presentation/carlini-extracting).
+- 1522 Jiaao Chen and Diyi Yang. Unlearn what you want to forget: Efficient unlearning for llms, 2023.  
+1523 URL <https://arxiv.org/abs/2310.20150>.
+- 1524  
+1525 Yihong Chen, Pushkar Mishra, Luca Franceschi, Pasquale Minervini, Pontus Stenetorp, and Se-
+- 1526 bastian Riedel. Refactor gnn: Revisiting factorisation-based models from a message-passing  
+1527 perspective. In *Advances in Neural Information Processing Systems*, 2022.
+- 1528  
+1529 Yihong Chen, Kelly Marchisio, Roberta Raileanu, David Ifeoluwa Adelman, Pontus Stenetorp, Se-
+- 1530 bastian Riedel, and Mikel Artetxe. Improving language plasticity via pretraining with active for-
+- 1531 getting. In *NeurIPS 2023, Proceedings of the Thirty-seventh Conference on Neural Information*  
+1532 *Processing Systems*, 2023.
+- 1533  
+1534 Peter Clark, Isaac Cowhey, Oren Etzioni, Tushar Khot, Ashish Sabharwal, Carissa Schoenick, and  
+1535 Oyvind Tafjord. Think you have solved question answering? try arc, the AI2 reasoning challenge.  
+1536 *CoRR*, abs/1803.05457, 2018. URL <http://arxiv.org/abs/1803.05457>.
+- 1537  
+1538 Yuntian Deng, Anton Bakhtin, Sam Gross, Myle Ott, Marc’Aurelio Ranzato, and Arthur Szlam.  
+1539 Residual energy-based models for text. *J. Mach. Learn. Res.*, 22:40:1–40:41, 2021. URL [https://](https://jmlr.org/papers/v22/20-326.html)  
+1540 [//jmlr.org/papers/v22/20-326.html](https://jmlr.org/papers/v22/20-326.html).
+- 1541  
+1542 Ronen Eldan and Mark Russinovich. Who’s harry potter? approximate unlearning in llms, 2023.  
+1543 URL <https://arxiv.org/abs/2310.02238>.
+
+- 540 Laura Graves, Vineel Nagisetty, and Vijay Ganesh. Amnesiac machine learning. *Proceedings*  
+541 *of the AAAI Conference on Artificial Intelligence*, 35(13):11516–11524, May 2021. doi: 10.  
+542 1609/aaai.v35i13.17371. URL [https://ojs.aaai.org/index.php/AAAI/article/](https://ojs.aaai.org/index.php/AAAI/article/view/17371)  
+543 [view/17371](https://ojs.aaai.org/index.php/AAAI/article/view/17371).  
+544
+- 545 Kaiming He, Xiangyu Zhang, Shaoqing Ren, and Jian Sun. Delving deep into rectifiers: Surpass-  
+546 ing human-level performance on imagenet classification. In *2015 IEEE International Confer-*  
+547 *ence on Computer Vision, ICCV 2015, Santiago, Chile, December 7-13, 2015*, pp. 1026–1034.  
+548 IEEE Computer Society, 2015. doi: 10.1109/ICCV.2015.123. URL [https://doi.org/10.](https://doi.org/10.1109/ICCV.2015.123)  
+549 [1109/ICCV.2015.123](https://doi.org/10.1109/ICCV.2015.123).  
+550
+- 551 Dan Hendrycks, Collin Burns, Steven Basart, Andy Zou, Mantas Mazeika, Dawn Song, and Jacob  
+552 Steinhardt. Measuring massive multitask language understanding. In *9th International Confer-*  
+553 *ence on Learning Representations, ICLR 2021, Virtual Event, Austria, May 3-7, 2021*. OpenRe-  
+554 view.net, 2021. URL <https://openreview.net/forum?id=d7KBjmI3GmQ>.  
+555
+- 556 Geoffrey E. Hinton. Training products of experts by minimizing contrastive divergence. *Neural*  
+557 *Comput.*, 14(8):1771–1800, 2002. doi: 10.1162/089976602760128018. URL [https://doi.](https://doi.org/10.1162/089976602760128018)  
+558 [org/10.1162/089976602760128018](https://doi.org/10.1162/089976602760128018).  
+559
+- 560 Neil Houlsby, Andrei Giurgiu, Stanislaw Jastrzebski, Bruna Morrone, Quentin de Laroussilhe, An-  
+561 drea Gesmundo, Mona Attariyan, and Sylvain Gelly. Parameter-efficient transfer learning for nlp.  
+562 2019. URL <https://arxiv.org/abs/1902.00751>.  
+563
+- 564 Edward J. Hu, Yelong Shen, Phillip Wallis, Zeyuan Allen-Zhu, Yuanzhi Li, Shean Wang, Lu Wang,  
+565 and Weizhu Chen. Lora: Low-rank adaptation of large language models, 2021. URL [https:](https://arxiv.org/abs/2106.09685)  
+566 [//arxiv.org/abs/2106.09685](https://arxiv.org/abs/2106.09685).  
+567
+- 568 Gabriel Ilharco, Marco Tulio Ribeiro, Mitchell Wortsman, Suchin Gururangan, Ludwig Schmidt,  
+569 Hannaneh Hajishirzi, and Ali Farhadi. Editing models with task arithmetic, 2023. URL [https:](https://arxiv.org/abs/2212.04089)  
+570 [//arxiv.org/abs/2212.04089](https://arxiv.org/abs/2212.04089).  
+571
+- 572 Eric Jang, Shixiang Gu, and Ben Poole. Categorical reparameterization with gumbel-softmax. In *5th*  
+573 *International Conference on Learning Representations, ICLR 2017, Toulon, France, April 24-26,*  
+574 *2017, Conference Track Proceedings*. OpenReview.net, 2017. URL [https://openreview.](https://openreview.net/forum?id=rkE3y85ee)  
+575 [net/forum?id=rkE3y85ee](https://openreview.net/forum?id=rkE3y85ee).  
+576
+- 577 Joel Jang, Dongkeun Yoon, Sohee Yang, Sungmin Cha, Moontae Lee, Lajanugen Logeswaran, and  
+578 Minjoon Seo. Knowledge unlearning for mitigating privacy risks in language models. In Anna  
+579 Rogers, Jordan Boyd-Graber, and Naoaki Okazaki (eds.), *Proceedings of the 61st Annual Meeting*  
+580 *of the Association for Computational Linguistics (Volume 1: Long Papers)*, pp. 14389–14408,  
+581 Toronto, Canada, July 2023a. Association for Computational Linguistics. doi: 10.18653/v1/2023.  
+582 acl-long.805. URL <https://aclanthology.org/2023.acl-long.805/>.  
+583
+- 584 Joel Jang, Dongkeun Yoon, Sohee Yang, Sungmin Cha, Moontae Lee, Lajanugen Logeswaran,  
+585 and Minjoon Seo. Knowledge unlearning for mitigating privacy risks in language models. In  
+586 Anna Rogers, Jordan L. Boyd-Graber, and Naoaki Okazaki (eds.), *Proceedings of the 61st An-*  
+587 *nual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers)*, ACL  
+588 2023, Toronto, Canada, July 9-14, 2023, pp. 14389–14408. Association for Computational Lin-  
+589 guistics, 2023b. doi: 10.18653/V1/2023.ACL-LONG.805. URL [https://doi.org/10.](https://doi.org/10.18653/v1/2023.acl-long.805)  
+590 [18653/v1/2023.acl-long.805](https://doi.org/10.18653/v1/2023.acl-long.805).  
+591
+- 592 James Kirkpatrick, Razvan Pascanu, Neil C. Rabinowitz, Joel Veness, Guillaume Desjardins, An-  
+593 drei A. Rusu, Kieran Milan, John Quan, Tiago Ramalho, Agnieszka Grabska-Barwinska, Demis  
+594 Hassabis, Claudia Clopath, Dharshan Kumaran, and Raia Hadsell. Overcoming catastrophic for-  
+595 getting in neural networks. *CoRR*, abs/1612.00796, 2016. URL [http://arxiv.org/abs/](http://arxiv.org/abs/1612.00796)  
+596 [1612.00796](http://arxiv.org/abs/1612.00796).  
+597
+- 598 Yehuda Koren, Robert Bell, and Chris Volinsky. Matrix factorization techniques for recommender  
+599 systems. *Computer*, 42(8):30–37, 2009.
+
+- 594 Timothée Lacroix, Nicolas Usunier, and Guillaume Obozinski. Canonical tensor decomposition for  
+595 knowledge base completion. In *ICML*, volume 80 of *Proceedings of Machine Learning Research*,  
+596 pp. 2869–2878. PMLR, 2018.
+- 597  
+598 Yann Lecun, Sumit Chopra, Raia Hadsell, Marc Aurelio Ranzato, and Fu Jie Huang. *A tutorial on*  
+599 *energy-based learning*. MIT Press, 2006.
+- 600 Jay Yoon Lee, Dhruvesh Patel, Purujit Goyal, Wenlong Zhao, Zhiyang Xu, and Andrew  
+601 McCallum. Structured energy network as a loss. In Sammi Koyejo, S. Mohamed,  
+602 A. Agarwal, Danielle Belgrave, K. Cho, and A. Oh (eds.), *Advances in Neural In-*  
+603 *formation Processing Systems 35: Annual Conference on Neural Information Process-*  
+604 *ing Systems 2022, NeurIPS 2022, New Orleans, LA, USA, November 28 - December 9,*  
+605 *2022, 2022*. URL [http://papers.nips.cc/paper\\_files/paper/2022/hash/](http://papers.nips.cc/paper_files/paper/2022/hash/83ae75c127e2a3ea3315379020f8c19f-Abstract-Conference.html)  
+606 [83ae75c127e2a3ea3315379020f8c19f-Abstract-Conference.html](http://papers.nips.cc/paper_files/paper/2022/hash/83ae75c127e2a3ea3315379020f8c19f-Abstract-Conference.html).
+- 607 Chunyuan Li, Heerad Farkhoor, Rosanne Liu, and Jason Yosinski. Measuring the intrinsic dimen-  
+608 sion of objective landscapes. In *6th International Conference on Learning Representations, ICLR*  
+609 *2018, Vancouver, BC, Canada, April 30 - May 3, 2018, Conference Track Proceedings*. OpenRe-  
+610 view.net, 2018. URL <https://openreview.net/forum?id=ryup8-WCW>.
+- 611 Xiang Lisa Li and Percy Liang. Prefix-tuning: Optimizing continuous prompts for generation.  
+612 In Chengqing Zong, Fei Xia, Wenjie Li, and Roberto Navigli (eds.), *Proceedings of the 59th*  
+613 *Annual Meeting of the Association for Computational Linguistics and the 11th International Joint*  
+614 *Conference on Natural Language Processing (Volume 1: Long Papers)*, pp. 4582–4597, Online,  
+615 August 2021. Association for Computational Linguistics. doi: 10.18653/v1/2021.acl-long.353.  
+616 URL <https://aclanthology.org/2021.acl-long.353/>.
+- 617 Pratyush Maini, Zhili Feng, Avi Schwarzschild, Zachary C. Lipton, and J. Zico Kolter. Tofu: A task  
+618 of fictitious unlearning for llms, 2024. URL <https://arxiv.org/abs/2401.06121>.
+- 619  
+620 Alessandro Mantelero. The eu proposal for a general data protection regulation and the roots of the  
+621 ‘right to be forgotten’. *Computer Law Security Review*, 29(3):229–235, 2013. ISSN 2212-473X.  
+622 doi: <https://doi.org/10.1016/j.clsr.2013.03.010>. URL [https://www.sciencedirect.](https://www.sciencedirect.com/science/article/pii/S0267364913000654)  
+623 [com/science/article/pii/S0267364913000654](https://www.sciencedirect.com/science/article/pii/S0267364913000654).
+- 624 Kelly Marchisio, Patrick Lewis, Yihong Chen, and Mikel Artetxe. Mini-model adaptation: Effi-  
+625 ciently extending pretrained models to new languages via aligned shallow training. In *ACL 2023*,  
+626 *Findings of the Association for Computational Linguistics*, 2023.
+- 627  
+628 Fanxu Meng, Zhaohui Wang, and Muhan Zhang. Pissa: Principal singular values and singular  
+629 vectors adaptation of large language models, 2025. URL [https://arxiv.org/abs/2404.](https://arxiv.org/abs/2404.02948)  
+630 [02948](https://arxiv.org/abs/2404.02948).
+- 631 Steven L. Pardau. The california consumer privacy act: Towards a european-style privacy regime in  
+632 the united states. *Journal of Technology Law & Policy*, 23:68, 2018.
+- 633  
+634 Martin Pawelczyk, Seth Neel, and Himabindu Lakkaraju. In-context unlearning: Language models  
+635 as few shot unlearners, 2024. URL <https://arxiv.org/abs/2310.07579>.
+- 636 Jonas Pfeiffer, Aishwarya Kamath, Andreas Rücklé, Kyunghyun Cho, and Iryna Gurevych. Adapter-  
+637 Fusion: Non-destructive task composition for transfer learning. In Paola Merlo, Jörg Tiede-  
+638 mann, and Reut Tsarfaty (eds.), *Proceedings of the 16th Conference of the European Chapter*  
+639 *of the Association for Computational Linguistics: Main Volume*, pp. 487–503, Online, April  
+640 2021. Association for Computational Linguistics. doi: 10.18653/v1/2021.eacl-main.39. URL  
+641 <https://aclanthology.org/2021.eacl-main.39/>.
+- 642 Felipe Maia Polo, Lucas Weber, Leshem Choshen, Yuekai Sun, Gongjun Xu, and Mikhail  
+643 Yurochkin. tinybenchmarks: evaluating llms with fewer examples. In *Forty-first International*  
+644 *Conference on Machine Learning, ICML 2024, Vienna, Austria, July 21-27, 2024*. OpenRe-  
+645 view.net, 2024. URL <https://openreview.net/forum?id=qam13FpfHG>.
+- 646 Rafael Rafailov, Archit Sharma, Eric Mitchell, Stefano Ermon, Christopher D. Manning, and  
+647 Chelsea Finn. Direct preference optimization: Your language model is secretly a reward model,  
+2024. URL <https://arxiv.org/abs/2305.18290>.
+
+[Appendix and supplementary materials beyond page 12 have been removed.]

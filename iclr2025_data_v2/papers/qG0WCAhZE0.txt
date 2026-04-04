@@ -1,0 +1,1092 @@
+# MULTI-PERSPECTIVE DATA AUGMENTATION FOR FEW-SHOT OBJECT DETECTION
+
+
+**Anh-Khoa Nguyen Vu** [1] _[,]_ [2] **Quoc-Truong Truong** [1] _[,]_ [2] **Vinh-Tiep Nguyen** [1] _[,]_ [2] _[,][∗]_
+
+**Thanh Duc Ngo** [1] _[,]_ [2] **Thanh-Toan Do** [3] **Tam V. Nguyen** [4]
+
+1University of Information Technology, Ho Chi Minh City, Vietnam
+2Vietnam National University, Ho Chi Minh City, Vietnam
+3Department of Data Science and AI, Monash University, Australia
+4University of Dayton, Dayton, OH 45469, United States
+
+
+ABSTRACT
+
+
+Recent few-shot object detection (FSOD) methods have focused on augmenting
+synthetic samples for novel classes, show promising results to the rise of diffusion
+models. However, the diversity of such datasets is often limited in representativeness because they lack awareness of typical and hard samples, especially in
+the context of foreground and background relationships. To tackle this issue, we
+propose a Multi-Perspective Data Augmentation (MPAD) framework. In terms
+of foreground-foreground relationships, we propose in-context learning for object
+synthesis (ICOS) with bounding box adjustments to enhance the detail and spatial
+information of synthetic samples. Inspired by the large margin principle, support
+samples play a vital role in defining class boundaries. Therefore, we design a Harmonic Prompt Aggregation Scheduler (HPAS) to mix prompt embeddings at each
+time step of the generation process in diffusion models, producing hard novel
+samples. For foreground-background relationships, we introduce a Background
+Proposal method (BAP) to sample typical and hard backgrounds. Extensive experiments on multiple FSOD benchmarks demonstrate the effectiveness of our
+approach. Our framework significantly outperforms traditional methods, achieving an average increase of 17 _._ 5% in nAP50 over the baseline on PASCAL VOC.
+[Code is available at github.com/nvakhoa/MPAD.](https://github.com/nvakhoa/MPAD)
+
+
+1 INTRODUCTION
+
+
+Humans can recognize new objects after seeing them just a few times, a remarkable ability that
+is simulated and studied in few-shot object detection (FSOD). In an FSOD setup, there are two
+distinct datasets: the base dataset and the novel dataset. The base dataset is extensive and comprises
+numerous classes with abundant training instances. This dataset helps the model learn a wide variety
+of object features and characteristics, forming a general knowledge for detection tasks. In contrast,
+the novel dataset is limited, with only a few samples per novel class, posing a significant challenge
+for object detection. This constraint makes FSOD a critical research area (Yan et al., 2019; Kang
+et al., 2019; Fan et al., 2020; Wang et al., 2020; Li et al., 2021; Li & Li, 2021b; Zhang et al.,
+2021; Han et al., 2022b; Bulat et al., 2023), with potential applications in fields such as robotics,
+autonomous driving, and medical imaging, where models need to handle critical but rare scenarios.
+
+
+Earlier FSOD approaches (Wang et al., 2020; Qiao et al., 2021; Yan et al., 2019; Zhang et al., 2021)
+firstly train a model on the base dataset to establish a generalized detector. This detector is then
+fine-tuned on the novel dataset to recognize and detect new objects. Still, this approach could lead
+to overfitting due to the limited amount of data available. Other methods (Zhu et al., 2021; Li
+et al., 2023a) leverage the general knowledge of the large language models (LLMs) to alleviate this
+issue. A simply yet effective approach for FSOD is data augmentation. Recent works (Zhang &
+Wang, 2021; Vu et al., 2023b) utilize the prior knowledge to create hallucinations in feature space
+to fine-tune classifiers. However, these synthetic samples often lack essential information for object
+detection, such as low level details, spatial information. Meanwhile, other methods (Li & Li, 2021a;
+
+
+_∗_ Corresponding Authors: tiepnv@uit.edu.vn
+
+
+1
+
+
+Demirel et al., 2023) rely solely on traditional geometric transformations (e.g., flipping, cropping,
+rotating) to create variations of given samples from novel classes, which limits the diversity of
+synthesized datasets.
+
+
+Recently, diffusion models have achieved remarkable strides in producing high-quality and diverse
+datasets (Nichol et al., 2021; Rombach et al., 2022; Ramesh et al., 2022; Saharia et al., 2022).
+Furthermore, large-scale text-to-image diffusion models have shown significant flexibility and scalability in image editing tasks by incorporating lightweight adapter modules for additional conditions
+(e.g., bounding box, semantic map, depth map, human pose) (Zhang et al., 2023; Li et al., 2023b;
+Zhuang et al., 2023). Consequently, several FSOD methods (Lin et al., 2023; Fang et al., 2024;
+Wang et al., 2024) leverage controllable diffusion but often reply on simple prompts to generate
+synthetic objects, without exploring attributes such as colors, shapes, details, sizes, types of objects.
+As a result, most synthesized novel samples are typical objects.
+
+
+To address the above problem, we propose InContext learning for Object Synthesis (ICOS).
+ICOS leverages general knowledge from LLMs
+to deeply explore the attributes of novel classes
+and diversify prompt inputs. Additionally, the
+diversity of a class is derived from both _**typi-**_
+_**cal**_ and _**hard**_ samples, as illustrated in Figure
+1. Inspired by the large margin principle (e.g.
+SVM (Cortes, 1995)), support vectors play a crucial role in learning a generalized model. These
+samples, considered hard samples, often exhibit
+characteristics not only of the main class but also
+of neighboring ones. In other words, in this paper, we define typical samples as those that contain features of a single class, whereas hard samples exhibit features of two classes. Leveraging
+this aspect, we aim to blend the characteristics
+of two classes during the data generation process. Unlike image classification, where only the
+foreground-foreground relations are considered
+and the main objects are roughly centered, object
+detection must take into account the foregroundbackground relations. To our knowledge, this
+is the first work to use ChatGPT to diversify
+prompts and embed the foreground-background
+relations when synthesizing diverse datasets in
+few-shot object detection.
+
+
+**types**
+**hard sample**
+**typical sample**
+
+
+Figure 1: T-SNE visualization of novel synthetic samples and base real samples in Novel
+Set 1 of PASCAL VOC. We only generate synthetic samples for three novel classes (“bird”,
+“bus”, “cow”) and use real samples for three base
+classes (“aeroplane”, “train”, “horse”). Typical
+and hard samples in novel classes are created by
+using ICOS and HPAS, respectively. Base real
+samples are considered as typical samples.
+
+
+In terms of the _foreground-foreground_ relation, we propose a Harmonic Prompt Aggregation Scheduler (HPAS) to mix prompt embeddings at each time step of the generation process in the diffusion
+model. This approach guides the diffusion model to synthesize objects with high-level features
+(e.g., object parts) of the main class and low-level features (e.g., shape, color, size) of a selected
+base class. By mixing the low-level features of the base class, we leverage the prior knowledge
+acquired during the base training stage. Regarding _foreground-background_ relation, we introduce a
+Background Proposal method (BAP) to sample typical and hard backgrounds from the base dataset.
+For typical backgrounds, we select the most cluttered backgrounds based on an entropy metric. For
+hard backgrounds, we select those with the highest similarity to foreground objects in the embedding space. During the base training stage, the model learns to classify novel objects as backgrounds
+when trained on base classes. This phenomenon creates ambiguities in learning and detecting novel
+classes. Therefore, in the novel training stage, we guide the model to distinguish novel classes from
+similar base backgrounds, utilizing the knowledge gained from base training.
+
+
+In summary, our contributions can be summarized as follows:
+
+
+    - We propose a Multi-Perspective Data Augmentation (MPAD) framework for synthesizing
+data which better prevents the overfitting problem for FSOD.
+
+
+2
+
+
+- We introduce ICOS, HPAS, and BAP methods to enhance synthesis by considering
+foreground-background relation. Specifically, ICOS diversifies prompts using fine-grained
+attributes from the general knowledge of LLMs. HPAS supports the controllable diffusion
+model to create hard samples containing characteristics of two foregrounds, while BAP
+proposes typical and hard backgrounds in relation to the foreground.
+
+
+    - We conduct comprehensive experiments on FSOD benchmarks to demonstrate the effectiveness of our method. The results show that our method outperforms the baseline model
+by a large margin and achieves state-of-the-art performance on few-shot object detection.
+
+
+2 MPAD METHOD
+
+
+2.1 FORMULATION
+
+
+In few-shot object detection, the base data is characterized by a large number of base classes _Cbase_
+with an abundance of samples. In contrast, the novel data comprises a few novel classes _Cnovel_,
+each with _K_ samples ( _K_ _∈{_ 1 _,_ 2 _,_ 3 _,_ 5 _,_ 10 _}_ in the PASCAL VOC setting). It is important to note
+that the base classes and novel classes are disjoint sets (i.e., _Cbase_ _∩_ _Cnovel_ = _∅_ ). As outlined in
+previous works (Yan et al., 2019; Wang et al., 2020; Qiao et al., 2021), we define two data sets
+_Ds_ = _{_ ( _Is_ _[i][, A][i]_ _s_ [)] _[}][i]_ [=1] _[..N]_ _s_ [, where] _[ s]_ _[∈{][base, novel][}]_ [.] _[I][s]_ [,] _[ A][s]_ [and] _[ N][s]_ [denote the images, annotations]
+and number of samples in set _s_, respectively. An annotation _A_ _[i,j]_ _s_ = ( _c, b_ ) represents a pair consisting
+of a class name _c ∈_ _Cs_ and the bounding box _b_ of the _j_ -th object in the _i_ -th image.
+
+
+Typically, FSOD methods involve two stages: base training stage and novel fine-tuning stage. In
+the base training stage, detectors are trained on _Dbase_ to acquire extensive knowledge, learn concept
+features, and build the feature extractor . In the novel fine-tuning stage, the base models are finetuned on a balanced set _Dft_ with _K_ samples for each base and novel class to detect both base and
+novel objects in the image.
+
+
+2.2 FOREGROUND-BACKGROUND RELATION-AWARE DATA AUGMENTATION
+
+
+In object detection, an image comprises two main components: the background and the foreground.
+The foreground highlights the primary objects, while the background provides contextual information that aids in object inference within the images. To augment data with class representativeness,
+we synthesize both typical and hard samples. For typical foreground samples, ICOS uses input
+samples to generate novel objects with characteristics pointed out by general knowledge of LLMs.
+To create hard samples, HPAS mixes prompt embeddings at each time step of the data generation
+process in the diffusion model. Different from the classification task, the background plays an important role in object detection. Therefore, BAP proposes hard background samples in relation to
+foreground features. As shown in Figure 2, our overall framework contains three main components:
+ICOS, HPAS, and BAP, as detailed in the following subsections.
+
+
+2.3 IN-CONTEXT LEARNING FOR OBJECT SYNTHESIS
+
+
+**Controllable diffusion.** We utilize PowerPaint (Zhuang et al., 2023) model for the object inpainting
+task, ensuring that the generated object seamlessly conforms to the specified mask shape. We process
+the object’s bounding box by applying masking and padding, and then use it as the mask input for
+controllable diffusion. The controllable diffusion _θ_ ( _·_ ) takes a prompt embedding _ζc_, a bounding box
+_b_, and an image _I_ as inputs. The reverse diffusion process is a sequence of denoising steps with time
+step _t_ = _T, T_ _−_ 1 _, . . .,_ 1.
+
+
+_zt−_ 1 = _p_ ( _zt−_ 1 _|θ_ ( _zt, ζc, b_ )) _,_ (1)
+
+
+where _zT_ is the reference image _I_ and _z_ 0 is the synthesized image _I_ [ˆ] . For each novel class _c ∈_ _Cnovel_,
+we generate _N_ synthesis samples. We add novel objects to random base images _I_ base, defined as:
+
+
+_I_ ˆ _c_ = _θ_ ( _Ibase_ _[i]_ _[, ζ][c][, b]_ [)] _[,]_ (2)
+
+
+3
+
+
+|Hard background<br>𝑐: “cow” 𝐼መ 𝑛𝑜𝑣𝑒𝑙 = 𝑆𝐷(𝑐𝑛𝑜𝑣𝑒𝑙) … 𝐼መ 𝑐<br>𝐼𝑐ℎ𝑎𝑟𝑑:<br>𝐼 b𝑏 aa ss e𝑒 i: m ages 𝑐𝑜s 𝑐, 𝐼𝑏𝑖 𝑎𝑠𝑒 = 𝑛1 ∑𝑗𝑛 =1∥ℱℱ (( 𝐼𝑏𝐼 𝑖𝑏 𝑎𝑖 𝑎 𝑠𝑒𝑠𝑒 )) ∥ ∙ ∥ℱ ℱ( (𝐼መ 𝑐 𝐼𝑗 መ 𝑐𝑗) ) ∥<br>Typical background<br>𝐻𝑏𝑖 𝑎𝑠𝑒= −෍𝑞𝑏𝑖 𝑎𝑠𝑒𝑙𝑜𝑔𝑞𝑏𝑖 𝑎𝑠𝑒 𝐼𝑐𝑙𝑢𝑡𝑡𝑒𝑟:<br>𝐼 b𝑏 aa ss e𝑒 i: m ages 𝑞𝑏𝑖 as𝑒= 𝑠𝑜𝑓𝑡𝑚𝑎𝑥( ℱ𝐼𝑏𝑖 𝑎𝑠𝑒 )|Col2|Col3|Col4|Col5|
+|---|---|---|---|---|
+|**Hard background**<br>𝑐: “cow”<br>𝐼𝑏as𝑒 : <br>base images<br>…<br>𝑐𝑜s 𝑐, 𝐼𝑏𝑎𝑠𝑒<br>𝑖<br>= 1<br>𝑛∑𝑗=1<br>𝑛<br>ℱ(𝐼𝑏𝑎𝑠𝑒<br>𝑖<br>) ∙ℱ(መ𝐼𝑐<br>𝑗)<br>∥ℱ(𝐼𝑏𝑎𝑠𝑒<br>𝑖<br>) ∥∥ℱ(መ𝐼𝑐<br>𝑗) ∥<br>መ𝐼𝑐<br>መ𝐼𝑛𝑜𝑣𝑒𝑙= 𝑆𝐷(𝑐𝑛𝑜𝑣𝑒𝑙)<br>**Typical background**<br>𝐼𝑏as𝑒 : <br>base images<br>𝐻𝑏𝑎𝑠𝑒<br>𝑖<br>= −෍𝑞𝑏𝑎𝑠𝑒<br>𝑖<br>𝑙𝑜𝑔𝑞𝑏𝑎𝑠𝑒<br>𝑖<br>𝑞𝑏as𝑒<br>𝑖<br>= 𝑠𝑜𝑓𝑡𝑚𝑎𝑥(ℱ𝐼𝑏𝑎𝑠𝑒<br>𝑖<br> )<br>𝐼𝑐ℎ𝑎𝑟𝑑:<br>𝐼𝑐𝑙𝑢𝑡𝑡𝑒𝑟:|**Hard background**<br>𝑐: “cow”<br>𝐼𝑏as𝑒 : <br>base images<br>…<br>𝑐𝑜s 𝑐, 𝐼𝑏𝑎𝑠𝑒<br>𝑖<br>= 1<br>𝑛∑𝑗=1<br>𝑛<br>ℱ(𝐼𝑏𝑎𝑠𝑒<br>𝑖<br>) ∙ℱ(መ𝐼𝑐<br>𝑗)<br>∥ℱ(𝐼𝑏𝑎𝑠𝑒<br>𝑖<br>) ∥∥ℱ(መ𝐼𝑐<br>𝑗) ∥<br>መ𝐼𝑐<br>መ𝐼𝑛𝑜𝑣𝑒𝑙= 𝑆𝐷(𝑐𝑛𝑜𝑣𝑒𝑙)<br>**Typical background**<br>𝐼𝑏as𝑒 : <br>base images<br>𝐻𝑏𝑎𝑠𝑒<br>𝑖<br>= −෍𝑞𝑏𝑎𝑠𝑒<br>𝑖<br>𝑙𝑜𝑔𝑞𝑏𝑎𝑠𝑒<br>𝑖<br>𝑞𝑏as𝑒<br>𝑖<br>= 𝑠𝑜𝑓𝑡𝑚𝑎𝑥(ℱ𝐼𝑏𝑎𝑠𝑒<br>𝑖<br> )<br>𝐼𝑐ℎ𝑎𝑟𝑑:<br>𝐼𝑐𝑙𝑢𝑡𝑡𝑒𝑟:|**Hard background**<br>𝑐: “cow”<br>𝐼𝑏as𝑒 : <br>base images<br>…<br>𝑐𝑜s 𝑐, 𝐼𝑏𝑎𝑠𝑒<br>𝑖<br>= 1<br>𝑛∑𝑗=1<br>𝑛<br>ℱ(𝐼𝑏𝑎𝑠𝑒<br>𝑖<br>) ∙ℱ(መ𝐼𝑐<br>𝑗)<br>∥ℱ(𝐼𝑏𝑎𝑠𝑒<br>𝑖<br>) ∥∥ℱ(መ𝐼𝑐<br>𝑗) ∥<br>መ𝐼𝑐<br>መ𝐼𝑛𝑜𝑣𝑒𝑙= 𝑆𝐷(𝑐𝑛𝑜𝑣𝑒𝑙)<br>**Typical background**<br>𝐼𝑏as𝑒 : <br>base images<br>𝐻𝑏𝑎𝑠𝑒<br>𝑖<br>= −෍𝑞𝑏𝑎𝑠𝑒<br>𝑖<br>𝑙𝑜𝑔𝑞𝑏𝑎𝑠𝑒<br>𝑖<br>𝑞𝑏as𝑒<br>𝑖<br>= 𝑠𝑜𝑓𝑡𝑚𝑎𝑥(ℱ𝐼𝑏𝑎𝑠𝑒<br>𝑖<br> )<br>𝐼𝑐ℎ𝑎𝑟𝑑:<br>𝐼𝑐𝑙𝑢𝑡𝑡𝑒𝑟:|**Hard background**<br>𝑐: “cow”<br>𝐼𝑏as𝑒 : <br>base images<br>…<br>𝑐𝑜s 𝑐, 𝐼𝑏𝑎𝑠𝑒<br>𝑖<br>= 1<br>𝑛∑𝑗=1<br>𝑛<br>ℱ(𝐼𝑏𝑎𝑠𝑒<br>𝑖<br>) ∙ℱ(መ𝐼𝑐<br>𝑗)<br>∥ℱ(𝐼𝑏𝑎𝑠𝑒<br>𝑖<br>) ∥∥ℱ(መ𝐼𝑐<br>𝑗) ∥<br>መ𝐼𝑐<br>መ𝐼𝑛𝑜𝑣𝑒𝑙= 𝑆𝐷(𝑐𝑛𝑜𝑣𝑒𝑙)<br>**Typical background**<br>𝐼𝑏as𝑒 : <br>base images<br>𝐻𝑏𝑎𝑠𝑒<br>𝑖<br>= −෍𝑞𝑏𝑎𝑠𝑒<br>𝑖<br>𝑙𝑜𝑔𝑞𝑏𝑎𝑠𝑒<br>𝑖<br>𝑞𝑏as𝑒<br>𝑖<br>= 𝑠𝑜𝑓𝑡𝑚𝑎𝑥(ℱ𝐼𝑏𝑎𝑠𝑒<br>𝑖<br> )<br>𝐼𝑐ℎ𝑎𝑟𝑑:<br>𝐼𝑐𝑙𝑢𝑡𝑡𝑒𝑟:|𝑐ℎ𝑎𝑟𝑑:|
+|**Hard background**<br>𝑐: “cow”<br>𝐼𝑏as𝑒 : <br>base images<br>…<br>𝑐𝑜s 𝑐, 𝐼𝑏𝑎𝑠𝑒<br>𝑖<br>= 1<br>𝑛∑𝑗=1<br>𝑛<br>ℱ(𝐼𝑏𝑎𝑠𝑒<br>𝑖<br>) ∙ℱ(መ𝐼𝑐<br>𝑗)<br>∥ℱ(𝐼𝑏𝑎𝑠𝑒<br>𝑖<br>) ∥∥ℱ(መ𝐼𝑐<br>𝑗) ∥<br>መ𝐼𝑐<br>መ𝐼𝑛𝑜𝑣𝑒𝑙= 𝑆𝐷(𝑐𝑛𝑜𝑣𝑒𝑙)<br>**Typical background**<br>𝐼𝑏as𝑒 : <br>base images<br>𝐻𝑏𝑎𝑠𝑒<br>𝑖<br>= −෍𝑞𝑏𝑎𝑠𝑒<br>𝑖<br>𝑙𝑜𝑔𝑞𝑏𝑎𝑠𝑒<br>𝑖<br>𝑞𝑏as𝑒<br>𝑖<br>= 𝑠𝑜𝑓𝑡𝑚𝑎𝑥(ℱ𝐼𝑏𝑎𝑠𝑒<br>𝑖<br> )<br>𝐼𝑐ℎ𝑎𝑟𝑑:<br>𝐼𝑐𝑙𝑢𝑡𝑡𝑒𝑟:|𝑐𝑜s 𝑐, 𝐼𝑏𝑎𝑠𝑒<br>𝑖<br>= 1<br>𝑛∑𝑗=1<br>𝑛<br>ℱ(𝐼𝑏𝑎𝑠𝑒<br>𝑖<br>) ∙ℱ(መ𝐼𝑐<br>𝑗)<br>∥ℱ(𝐼𝑏𝑎𝑠𝑒<br>𝑖<br>) ∥∥ℱ(መ𝐼𝑐<br>𝑗) ∥<br>𝐼|𝑐𝑜s 𝑐, 𝐼𝑏𝑎𝑠𝑒<br>𝑖<br>= 1<br>𝑛∑𝑗=1<br>𝑛<br>ℱ(𝐼𝑏𝑎𝑠𝑒<br>𝑖<br>) ∙ℱ(መ𝐼𝑐<br>𝑗)<br>∥ℱ(𝐼𝑏𝑎𝑠𝑒<br>𝑖<br>) ∥∥ℱ(መ𝐼𝑐<br>𝑗) ∥<br>𝐼|𝑐𝑜s 𝑐, 𝐼𝑏𝑎𝑠𝑒<br>𝑖<br>= 1<br>𝑛∑𝑗=1<br>𝑛<br>ℱ(𝐼𝑏𝑎𝑠𝑒<br>𝑖<br>) ∙ℱ(መ𝐼𝑐<br>𝑗)<br>∥ℱ(𝐼𝑏𝑎𝑠𝑒<br>𝑖<br>) ∥∥ℱ(መ𝐼𝑐<br>𝑗) ∥<br>𝐼|𝑐𝑜s 𝑐, 𝐼𝑏𝑎𝑠𝑒<br>𝑖<br>= 1<br>𝑛∑𝑗=1<br>𝑛<br>ℱ(𝐼𝑏𝑎𝑠𝑒<br>𝑖<br>) ∙ℱ(መ𝐼𝑐<br>𝑗)<br>∥ℱ(𝐼𝑏𝑎𝑠𝑒<br>𝑖<br>) ∥∥ℱ(መ𝐼𝑐<br>𝑗) ∥<br>𝐼|
+|**Hard background**<br>𝑐: “cow”<br>𝐼𝑏as𝑒 : <br>base images<br>…<br>𝑐𝑜s 𝑐, 𝐼𝑏𝑎𝑠𝑒<br>𝑖<br>= 1<br>𝑛∑𝑗=1<br>𝑛<br>ℱ(𝐼𝑏𝑎𝑠𝑒<br>𝑖<br>) ∙ℱ(መ𝐼𝑐<br>𝑗)<br>∥ℱ(𝐼𝑏𝑎𝑠𝑒<br>𝑖<br>) ∥∥ℱ(መ𝐼𝑐<br>𝑗) ∥<br>መ𝐼𝑐<br>መ𝐼𝑛𝑜𝑣𝑒𝑙= 𝑆𝐷(𝑐𝑛𝑜𝑣𝑒𝑙)<br>**Typical background**<br>𝐼𝑏as𝑒 : <br>base images<br>𝐻𝑏𝑎𝑠𝑒<br>𝑖<br>= −෍𝑞𝑏𝑎𝑠𝑒<br>𝑖<br>𝑙𝑜𝑔𝑞𝑏𝑎𝑠𝑒<br>𝑖<br>𝑞𝑏as𝑒<br>𝑖<br>= 𝑠𝑜𝑓𝑡𝑚𝑎𝑥(ℱ𝐼𝑏𝑎𝑠𝑒<br>𝑖<br> )<br>𝐼𝑐ℎ𝑎𝑟𝑑:<br>𝐼𝑐𝑙𝑢𝑡𝑡𝑒𝑟:|𝑐𝑜s 𝑐, 𝐼𝑏𝑎𝑠𝑒<br>𝑖<br>= 1<br>𝑛∑𝑗=1<br>𝑛<br>ℱ(𝐼𝑏𝑎𝑠𝑒<br>𝑖<br>) ∙ℱ(መ𝐼𝑐<br>𝑗)<br>∥ℱ(𝐼𝑏𝑎𝑠𝑒<br>𝑖<br>) ∥∥ℱ(መ𝐼𝑐<br>𝑗) ∥<br>𝐼|𝑐, 𝐼𝑏𝑎𝑠𝑒<br><br>= <br>𝑛∑𝑗=1<br><br>∥ℱ(𝐼𝑏𝑎𝑠𝑒<br>𝑖<br>) ∥∥ℱ(|መ𝐼𝑐<br>𝑗) ∥|መ𝐼𝑐<br>𝑗) ∥|
+|𝐼𝑏as𝑒 : <br>base images|𝐼𝑏as𝑒 : <br>base images|**Typical**|**Typical**|**Typical**|
+|𝐼𝑏as𝑒 : <br>base images|𝐼𝑏as𝑒 : <br>base images|𝐻𝑏𝑎𝑠𝑒<br>𝑖<br>= −෍𝑞𝑏𝑎𝑠𝑒<br>𝑖<br>𝑙𝑜𝑔𝑞𝑏𝑎𝑠𝑒<br>𝑖<br>𝑞𝑏as𝑒<br>𝑖<br>= 𝑠𝑜𝑓𝑡𝑚𝑎𝑥(ℱ𝐼𝑏𝑎𝑠𝑒<br>𝑖<br> )|𝐻𝑏𝑎𝑠𝑒<br>𝑖<br>= −෍𝑞𝑏𝑎𝑠𝑒<br>𝑖<br>𝑙𝑜𝑔𝑞𝑏𝑎𝑠𝑒<br>𝑖<br>𝑞𝑏as𝑒<br>𝑖<br>= 𝑠𝑜𝑓𝑡𝑚𝑎𝑥(ℱ𝐼𝑏𝑎𝑠𝑒<br>𝑖<br> )|𝐻𝑏𝑎𝑠𝑒<br>𝑖<br>= −෍𝑞𝑏𝑎𝑠𝑒<br>𝑖<br>𝑙𝑜𝑔𝑞𝑏𝑎𝑠𝑒<br>𝑖<br>𝑞𝑏as𝑒<br>𝑖<br>= 𝑠𝑜𝑓𝑡𝑚𝑎𝑥(ℱ𝐼𝑏𝑎𝑠𝑒<br>𝑖<br> )|
+|𝑐: “a holstein of cow category<br>has short hair, oval eyes, semi-<br>erect ears, long tail, large size”|𝑐: “a holstein of cow category<br>has short hair, oval eyes, semi-<br>erect ears, long tail, large size”|𝑐: “a holstein of cow category<br>has short hair, oval eyes, semi-<br>erect ears, long tail, large size”|𝑐: “a holstein of cow category<br>has short hair, oval eyes, semi-<br>erect ears, long tail, large size”|𝑐: “a holstein of cow category<br>has short hair, oval eyes, semi-<br>erect ears, long tail, large size”|
+
+
+Figure 2: The overall framework. To exploit the ability of controllable diffusion model for FSOD,
+we proposed a novel data augmentation method that incorporates various aspects to generate diverse
+data. Our method includes ICOS, BAP, HPAS. ICOS aims to deeply explore the attributes of novel
+classes and diversify the prompt for controllable diffusion models. BAP selects hard and typical
+backgrounds while HPAS generates hard (mixed) instances
+
+.
+
+
+where _i ∼_ _U_ (1 _, Nbase_ ), _ζc_ = _E_ (prompt _c_ ) is the prompt embedding and _E_ is the CLIP text encoder.
+The bounding box _b_ is randomly chosen from the annotations of _Ibase_ _[i]_ [unless] [otherwise] [specified.]
+The class label of the selected bounding box _b_ is replaced by _c_ .
+
+
+**Simple** **Prompting.** Following previous works (Lin et al., 2023; Fang et al., 2024; Wang et al.,
+2024), a simple prompt is created by concatenating the prefix “a” and the class name, resulting in
+the simple prompt input prompt _c_ = “a photo of a [CLASSNAME]”.
+
+
+**In-Context learning for Object Synthesis (ICOS).** The simple prompt mentioned above only outlines a general concept of the object without detailed information, which can result in similar objects
+within a class and limit diversity. To address this, we propose using in-context learning (Reynolds &
+McDonell, 2021) to collect and incorporate specific characteristics and class information, enhancing
+the diversity of the prompts for the diffusion model.
+
+
+_In-Context_ _learning_ _for_ _Attribute_ _Analysis._ Based on a recent work (Zhu et al., 2024), we explore
+the attributes of a specific class using LLMs. Specifically, we construct an input and output template
+to extract appearance information of a class using ChatGPT. Figure 3 (a) demonstrates a in-context
+learning approach for analyzing parts and attribute values of a class, where the target class name is
+input for the next inference. We then parse the attributes into a dictionary, with keys and values representing the general appearances and detailed attributes of the class. We randomly select a key-value
+attributes list [attr] = _{_ key _i,_ value _i}i_ =1 _..na_ to additional provide information and diversify the
+prompt. Specifically, we construct the new prompt from [attr] by the template as prompt _c_ =
+“a [CLASS NAME] has [key1] [value1], [key2] [value2],..., [key _na_ ] [value _na_ ]”.
+
+
+_In-Context learning for Fine-Grained Categories._ Fine-grained categories are crucial for assessing
+the diversity within a class. Several methods (Vu et al., 2023a; Wu et al., 2024) exploit this aspect
+to improve model generalization. SMS (Vu et al., 2023a) introduces a technique that utilizes finegrained categories in few-shot instance segmentation by generating hallucinated superclasses from
+base and novel classes. Inspired by SMS, we leverage LLMs by querying ChatGPT to list the finegrained categories of class _c_ using the prompt illustrated in Figure 3 (b).
+
+
+4
+
+
+(a) (b)
+
+
+Figure 3: In-context learning technique for exploring (a) attributes and (b) fine-grained object categories of a novel class given a sample. The input [CLASSNAME] is replaced by class name
+_c ∈_ _Cnovel_ .
+
+
+The result of this query is parsed and added to [attr] to generate a diverse set of prompts. The
+final prompt _c_ is randomly sampled from the attribute list [attr] and then used for synthesizing
+novel class samples. See Figure 6 and Figure 7 in Appendix A for detailed responses of ICOS.
+
+
+2.4 HARMONIC PROMPT AGGREGATION SCHEDULER
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+80 70 60 50 40 30 20 10 0
+
+Time step (t)
+
+
+Figure 4: Visualization of the weighted values
+of the Harmonic Prompt Aggregation Scheduler
+across the timesteps of controllable diffusion.
+
+
+In addition to leveraging hard novel samples
+for the few-shot object detection model, we introduce a mechanism called Harmonic Prompt
+Aggregation Scheduler ( **HPAS** ). The main idea
+is to mix a base class with a similar novel
+class to enhance the diversity of the synthetic
+dataset. This is achieved in the prompt embedding space, step by step, throughout the generation process of the diffusion model. The prompt
+embedding aggregation scheduler is defined:
+
+
+_γc,t_ = (1 _−_ _αt_ ) _∗_ _ζc_ + _αt ∗_ _ζbase,_ (3)
+
+
+where _αt_ = _m_ _×_ _α_ ( _t−_ 1) + (1 _−_ _m_ ) _×_
+�( _w_ + _T_ _[t][−]_ _−_ [1] 1 _[×]_ [ (1] _[ −]_ _[w]_ [)] - _,_ _t_ = 1 _, . . ., T_ . _αt_ is the weighted value at _t_ -th time step and _w_ is the
+
+starting value. By gradually increasing the weight of novel class features and reducing that of the
+base class, we create a synthetic object that incorporates novel detailed characteristics within the
+low-level features of the base class. Inspired by He et al. (2020), the momentum _m_ is used to retain
+the main features of the prompt embedding. The weighted values are shown in Figure 4. We substitute _γc,t_ from Eq. (3) into Eq. (1). In this way, we can create hard samples, as shown in Figure 5.
+The reverse diffusion process of the diffusion model becomes:
+
+
+_zt−_ 1 = _p_ ( _zt−_ 1 _|θ_ ( _zt, γc,t, b_ )) (4)
+
+
+5
+
+
+**Bird +**
+**Airplane**
+
+
+**Car +**
+**Bus**
+
+
+**Tiger +**
+**Pig**
+
+
+**Pig +**
+**Tiger**
+
+
+Figure 5: Visualization of the mixed instances of the Harmonic Prompt Aggregation Scheduler
+during the generation data process in the controllable diffusion model.
+
+
+2.5 BACKGROUND PROPOPOSAL
+
+
+The background plays an important role in object detection tasks, where the model must distinguish
+not only between foreground objects, but also between foreground and background. In the base
+training stage, the model is trained to classify novel classes as background due to the condition
+_Cbase ∩_ _Cnovel_ = _∅_ . Therefore, in the novel training stage, we need to guide the model to efficiently
+distinguish novel classes from new backgrounds by utilizing backgrounds with similar visual features. To address this issue, we introduce the background proposal ( **BAP** ), which includes both the
+hard background proposals and the typical background proposals.
+
+
+**Hard** **background** **proposal.** Inspired by Le et al. (2019) where objects concealing in the backgrounds, these camouflaged objects have a foreground that visually resembles the background and
+it creates difficulties for the model when detecting them. Therefore, we introduce a visual similarity
+background technique to create hard samples.
+
+
+We select backgrounds from base images _Ibase_ that share similar features with the novel class _c_ by
+employing cosine similarity. Instead of using textual embeddings, which may not capture essential
+visual information, we use a pretrained visual encoder _F_ ( _·_ ) (e.g., ViT (Dosovitskiy et al., 2021)).
+In FSOD, the number of novel samples is insufficient to represent the general class distribution.
+Therefore, we use the stable diffusion model (Rombach et al., 2022) _SD_ ( _·_ ) to synthesize a set of
+samples for class _c_, denoted by _I_ [ˆ] _c_ . This synthetic set is used for selecting hard backgrounds. The
+cosine similarity metric is defined as follows:
+
+
+cos( _c, Ibase_ _[i]_ [) =] [1]
+
+_n_
+
+
+_n_
+
+
+_j_ =0
+
+
+_F_ ( _Ibase_ _[i]_ [)] _[ · F]_ [(] _[I]_ [ˆ] _c_ _[j]_ [)]
+
+(5)
+_∥F_ ( _Ibase_ _[i]_ [)] _[∥∥F]_ [(ˆ] _[I]_ _c_ _[j]_ [)] _[∥]_
+
+
+where _I_ [ˆ] _c_ = - _I_ ˆ _c_ _[j]_ _[|]_ _[I]_ [ˆ] _c_ _[j]_ [=] _[ SD]_ [(][prompt] _c_ [)] - _n_ [synthesized] [images] [of] [class] _[c]_ [.] [We] [select] [the] [top]
+
+_j_ =1 [are]
+
+base backgrounds with the highest similarity scores to the novel class _c_, denoted by _Ic_ _[hard]_ .
+
+
+**Typical clutter background.** For the typical background, we sample from _Ibase_ ones that have clutter features representing scenes with crowded and complex environments (as defined in Rosenholtz
+et al. (2007)). These samples with noise features force the model to improve its localization ability.
+
+
+In this paper, we use the entropy score to quantify the clutter level of an image. Specifically, we
+normalize the feature embedding of the image using the softmax function. Then, we apply the
+entropy formula as follows:
+
+
+_Hbase_ _[i]_ [=] _[ −]_               - _qbase_ _[i]_ [log(] _[q]_ _base_ _[i]_ [)] _[,]_ (6)
+
+
+6
+
+
+|Method|Novel Set 1 Novel Set 2 Novel Set 3<br>1 2 3 5 10 1 2 3 5 10 1 2 3 5 10|Col3|Col4|Mean|
+|---|---|---|---|---|
+|TFA w/ fc (Wang et al., 2020)<br>TFA w/ cos (Wang et al., 2020)<br>FSDetView (Xiao & Marlet, 2020)<br>MPSR (Wu et al., 2020)<br>FSCE (Sun et al., 2021)<br>SRR-FSD (Zhu et al., 2021)<br>DCNet (Hu et al., 2021)<br>Meta DETR (Zhang et al., 2021)<br>Meta F R-CNN (Han et al., 2022a)<br>KFSOD (Zhang et al., 2022)<br>DeFRCN (Qiao et al., 2021)<br>MFD (Wu et al., 2022)<br>FCT (Han et al., 2022b)<br>FS-DETR (Bulat et al., 2023)<br>D&R (Li et al., 2023a)<br>VFA (Han et al., 2023)<br>FSRN (Guirguis et al., 2023a)<br>DiGeo (Ma et al., 2023)<br>NIFF (Guirguis et al., 2023b)|22.9<br>34.5<br>40.4<br>46.7<br>52.0<br>25.3<br>36.4<br>42.1<br>47.9<br>52.8<br>24.2<br>35.3<br>42.2<br>49.1<br>57.4<br>41.7<br>42.5<br>51.4<br>55.2<br>61.8<br>32.9<br>44.0<br>46.8<br>52.9<br>59.7<br>47.8<br>50.5<br>51.3<br>55.2<br>56.8<br>33.9<br>37.4<br>43.7<br>51.1<br>59.6<br>49.0<br>53.2<br>57.4<br>62.0<br>27.9<br>43.0<br>54.5<br>60.6<br>66.1<br>65.4<br>44.6<br>-<br>54.4<br>60.9<br>65.8<br>40.2<br>53.6<br>58.2<br>63.6<br>66.5<br>63.4<br>66.3<br>67.7<br>69.4<br>68.1<br>57.1<br>57.9<br>63.2<br>67.1<br>27.6<br>45.0<br>48.5<br>51.5<br>52.7<br>56.1<br>41.0<br>51.7<br>55.7<br>61.8<br>65.4<br>47.4<br>54.4<br>58.5<br>64.5<br>66.5<br>19.7<br>33.9<br>42.3<br>51.9<br>55.1<br>37.9<br>39.4<br>48.5<br>58.6<br>61.5<br>46.0<br>57.2<br>62.0<br>65.5<br>67.2|16.9<br>26.4<br>30.5<br>34.6<br>39.7<br>18.3<br>27.5<br>30.9<br>34.1<br>39.5<br>21.6<br>24.6<br>31.9<br>37.0<br>45.7<br>24.4<br>29.3<br>39.2<br>39.9<br>47.8<br>23.7<br>30.6<br>38.4<br>43.0<br>48.5<br>32.5<br>35.3<br>39.1<br>40.8<br>43.8<br>23.2<br>24.8<br>30.6<br>36.7<br>46.6<br>32.3<br>38.4<br>43.2<br>51.8<br>34.9<br>27.7<br>35.5<br>46.1<br>47.8<br>51.4<br>37.8<br>-<br>43.1<br>48.1<br>50.4<br>29.5<br>39.7<br>43.4<br>48.1<br>52.8<br>42.1<br>46.5<br>53.4<br>55.3<br>53.8<br>34.5<br>43.7<br>49.2<br>51.2<br>39.5<br>37.3<br>41.3<br>43.4<br>46.6<br>49.0<br>30.7<br>39.0<br>42.5<br>46.6<br>51.7<br>33.7<br>38.2<br>43.5<br>48.3<br>52.4<br>18.5<br>24.7<br>27.3<br>35.2<br>47.5<br>26.6<br>28.9<br>41.9<br>42.1<br>49.1<br>30.1<br>39.6<br>45.0<br>49.4<br>52.8|15.7<br>27.2<br>34.7<br>40.8<br>44.6<br>17.9<br>27.2<br>34.3<br>40.8<br>45.6<br>21.2<br>30.0<br>37.2<br>43.8<br>49.6<br>35.6<br>41.8<br>42.3<br>48.0<br>49.7<br>22.6<br>33.4<br>39.5<br>47.3<br>54.0<br>40.1<br>41.5<br>44.3<br>46.9<br>46.4<br>32.3<br>34.9<br>39.7<br>42.6<br>50.7<br>41.8<br>47.1<br>54.1<br>58.2<br>45.8<br>40.6<br>46.4<br>53.4<br>59.9<br>58.6<br>34.8<br>-<br>44.1<br>52.7<br>53.9<br>35.0<br>38.3<br>52.9<br>57.7<br>60.8<br>56.1<br>58.3<br>59.0<br>62.2<br>63.7<br>54.7<br>52.3<br>57.0<br>58.7<br>50.9<br>43.8<br>47.1<br>50.6<br>52.1<br>56.9<br>37.9<br>47.1<br>51.7<br>56.8<br>59.5<br>43.8<br>48.9<br>53.3<br>58.1<br>60.0<br>26.7<br>37.0<br>41.2<br>47.5<br>51.7<br>30.4<br>40.1<br>46.9<br>52.7<br>54.7<br>41.1<br>52.5<br>56.4<br>59.7<br>62.1|33.8<br>34.7<br>36.7<br>43.4<br>41.2<br>44.8<br>39.2<br>45.8<br>50.5<br>49.2<br>49.4<br>59.0<br>50.0<br>48.1<br>49.3<br>51.4<br>37.3<br>44.0<br>52.4|
+
+
+Using deep learning augmentation technique
+TIP (Li & Li, 2021a) 27.7 36.5 43.3 50.2 59.6 22.7 30.1 33.8 40.9 46.9 21.7 30.6 38.1 44.5 50.9 38.5
+Halluc (Zhang & Wang, 2021) 47.0 44.9 46.5 54.7 54.7 26.3 31.8 37.4 37.4 41.2 40.4 42.1 43.3 51.4 49.6 43.2
+LVC (Kaul et al., 2022) 54.5 53.2 58.8 63.2 65.7 32.8 29.2 50.7 49.8 50.6 48.4 52.7 55 59.6 59.6 52.3
+Norm-VAE (Xu et al., 2023) 62.1 64.9 67.8 69.2 67.5 39.9 46.8 54.4 54.2 53.6 58.2 60.3 61.0 64.0 65.5 59.3
+SFOT (Vu et al., 2023b) 47.9 60.4 62.7 67.3 69.1 32.4 41.2 45.7 50.2 54.0 43.5 54.1 56.9 60.6 62.5 53.9
+Lin et al. (Lin et al., 2023) _†_ 67.5  - **69.8** **71.1** **71.5** 52.0  - 54.3 57.5 57.4 55.9  - 58.6 59.6 63.9 61.6
+SNIDA (Wang et al., 2024) 59.3 60.8 64.3 65.4 65.6 35.2 40.8 50.2 54.6 50.0 51.6 52.4 55.9 58.5 62.6 55.1
+MPAD **69.1** **69.5** 69.6 69.9 68.9 **58.4** **59.7** **61.8** **61.8** **63.5** **70.1** **69.8** **69.9** **70.4** **71.4** **66.9**
+
+
+Table 1: Generalized few-shot object detection performance (nAP50) on the PASCAL VOC dataset.
+The best and second performances are marked in **boldface** and underlined, respectively. _†_ indicates
+using post-detection process.
+
+
+where _qbase_ _[i]_ [=] [softmax][(] _[F]_ [(] _[I]_ _base_ _[i]_ [))] [and] _[H]_ _base_ _[i]_ [are] [the] [feature] [distribution] [and] [information] [entropy]
+of the background image _Ibase_ _[i]_ [,] [respectively.] [We] [select] [the] [top] [base] [backgrounds] [with] [the] [highest]
+entropy score, denoted by _I_ _[clutter]_ .
+
+
+2.6 DATA GENERATION AND MODEL TRAINING PROCESS
+
+
+In summary, for each novel class _c_, we use the proposed backgrounds _Ic_ _[sel]_ = _Ic_ _[hard]_ _∪_ _I_ _[clutter]_ to
+synthesize novel images _I_ [ˆ] _novel_ . We generate two types of foregrounds: the typical foreground and
+the hard foreground. For typical foregrounds, we use in-context learning with diverse attributes and
+fine-grained categories to create prompt _c_ . Then, images with the novel class _c_ are then synthesized
+through the reverse diffusion process conditioned on prompt embedding _ζc_, as illustrated in Eq. (1).
+For hard foregrounds, we use Eq. (4) to generate mixed instances between class _c_ and a selected base
+class. The annotation _A_ [ˆ] _[i]_ _novel_ [for a synthesized image] _[I]_ [ˆ] _novel_ _[i]_ [is copied from the original annotation]
+data of the selected base image, with the class name within the bounding box _b_ replaced by _c_ . The
+novel synthetic dataset _D_ [ˆ] _novel_ = _{_ ( _I_ [ˆ] _novel_ _[i]_ _[,]_ _[A]_ [ˆ] _[i]_ _novel_ [)] _[}]_ _i_ =1 _...N_ [ˆ] _aug_ _[∪]_ _[D][ft]_ [is used to fine-tune detectors]
+during the novel training stage. See Figure 8 in Appendix B for additional visualizations of our
+synthetic dataset.
+
+
+3 EXPERIMENTS
+
+
+3.1 DATASETS AND SETTINGS
+
+
+**Dataset** **settings** **and** **evaluation.** Following previous works (Yan et al., 2019; Kang et al., 2019;
+Qiao et al., 2021), we assess our MPAD method in the FSOD setting of PASCAL VOC (Everingham
+et al., 2010; 2015) and MS COCO (Lin et al., 2014). For PASCAL VOC, 20 classes are separated
+into three sets. In each set, five classes are designated as novel classes _Cnovel_, and the remaining
+fifteen classes are used as the base classes _Cbase_ . There are _K_ samples for each novel class ( _K_ _∈_
+_{_ 1 _,_ 2 _,_ 3 _,_ 5 _,_ 10 _}_ ). Regarding MS COCO, the dataset serves as a challenging benchmark for FSOD.
+80 classes are split into 60 base classes and 20 novel classes (identical to the 20 PASCAL VOC
+classes). We select a value of _K_ from the set ( _{_ 1 _,_ 2 _,_ 3 _,_ 5 _}_ ) for each novel and base class to fine-tune
+detectors. To evaluate the model performance, we follow TFA (Wang et al., 2020), DeFRCN (Qiao
+et al., 2021) and use the Generalized Few-Shot Object Detection (G-FSOD) which contains both
+base and novel classes to train and test models in the novel fine-tuning stage. We report AP50 of
+
+
+7
+
+
+|Method|1-shot<br>nAP nAP50 nAP75|2-shot<br>nAP nAP50 nAP75|3-shot<br>nAP nAP50 nAP75|5-shot<br>nAP nAP50 nAP75|
+|---|---|---|---|---|
+|TFA w/ fc (Wang et al., 2020)<br>TFA w/ cos (Wang et al., 2020)<br>MPSR (Wu et al., 2020)<br>FSDetView (Xiao & Marlet, 2020)<br>DeFRCN (Qiao et al., 2021)<br>Meta-DETR (Zhang et al., 2021)<br>FCT (Han et al., 2022b)<br>AirDet (Li et al., 2022)<br>Meta F R-CNN (Han et al., 2022a)<br>D&R (Li et al., 2023a)<br>FSRN (Guirguis et al., 2023a)<br>FS-DETR (Bulat et al., 2023)|1.6<br>3.4<br>1.3<br>1.9<br>3.8<br>1.7<br>2.3<br>4.1<br>2.3<br>3.2<br>8.9<br>1.4<br>4.8<br>9.5<br>4.4<br>7.5<br>12.5<br>7.7<br>5.6<br>-<br>-<br>6.1<br>11.4<br>6.0<br>5.1<br>10.7<br>4.3<br>6.1<br>-<br>-<br>-<br>-<br>-<br>7.0<br>13.6<br>7.5|3.8<br>7.8<br>3.2<br>3.9<br>7.8<br>3.6<br>3.5<br>6.3<br>3.4<br>4.9<br>13.3<br>2.3<br>8.5<br>16.3<br>7.8<br>-<br>-<br>-<br>7.9<br>-<br>-<br>8.7<br>16.2<br>8.4<br>7.6<br>16.3<br>6.2<br>9.5<br>-<br>-<br>-<br>-<br>-<br>8.9<br>17.5<br>9.0|5.0<br>9.9<br>4.6<br>5.1<br>9.9<br>4.8<br>5.2<br>-<br>-<br>6.7<br>18.6<br>2.9<br>10.7<br>20.0<br>10.3<br>13.5<br>21.7<br>14<br>11.1<br>-<br>-<br>10.0<br>19.4<br>9.1<br>9.8<br>20.2<br>8.2<br>11.5<br>-<br>-<br>-<br>-<br>-<br>10.0<br>18.8<br>10.0|6.9<br>13.4<br>6.3<br>7.0<br>13.3<br>6.5<br>6.7<br>-<br>-<br>8.1<br>20.1<br>4.4<br>13.5<br>24.7<br>13.0<br>15.4<br>25<br>15.8<br>14<br>-<br>-<br>10.8<br>20.8<br>10.3<br>10.8<br>22.1<br>9.2<br>13.9<br>-<br>-<br>8.7<br>16.1<br>8.2<br>10.9<br>20.7<br>10.8|
+
+
+Using deep learning augmentation technique
+Halluc (Zhang & Wang, 2021) 4.4 7.5 4.9 5.6 9.9 5.9 7.2 13.3 7.4  -  -  SFOT (Vu et al., 2023b) 6.7 13.2 6.0 10.5 20.3 9.7 12.5 23.6 11.8 14.9 27.8 14.2
+Norm-VAE (Xu et al., 2023) 9.5  - 8.8 13.7  - 13.7 14.3  - 14.4 15.9  - 15.3
+SNIDA(Wang et al., 2024) 9.3  -  - 12.9  -  - 14.8  -  - 16.1  -  MPAD **18.3** **31.2** **18.8** **18.5** **31.6** **18.9** **18.8** **31.8** **19.1** **18.9** **32.4** **19.3**
+
+
+Table 2: Generalized few-shot object detection performance on 1, 2, 3, 5-shot of MS COCO dataset.
+The best and second performances are marked in **boldface** and underlined, respectively.
+
+
+novel classes (nAP50) on PASCAL VOC dataset and nAP, nAP50, nAP75 metrics for experiments
+on the COCO dataset.
+
+
+**Implementation** **details.** Our model adopts DeFRCN (Qiao et al., 2021). In both the base training and the fine-tuning stage, we use the same hyper-parameters as DeFRCN (Qiao et al., 2021).
+During the fine-tuning stage, we utilize both real novel data and synthetic data to train models on
+a single NVIDIA GeForce RTX 2080 Ti GPU. We employ Powerpaint (Zhuang et al., 2023) for
+the conditional diffusion model _θ_ ( _·_ ), and the CLIP text encoder (Radford et al., 2021) for _E_ ( _·_ ). In
+our experiments, we aim to generate an equal number of synthetic instances for each novel class.
+The image feature extractor _F_ ( _·_ ) is a pre-trained ViT model (Dosovitskiy et al., 2021) on ImageNet (Deng et al., 2009). We set _w_ = 0 _._ 7, _m_ = 0 _._ 8 and _N_ [ˆ] _aug_ = 300. The number of inference
+steps is fixed at _T_ = 80. Several methods show that training with multi-scale objects is crucial in
+FSOD. Therefore, we implement a fundamental method to increase the diversity under this aspect.
+In particular, we scale the selected bounding box in the data generation process with a weight. We
+randomly select weight value in _{_ 1 _._ 25 _,_ 1 _._ 5 _,_ 1 _._ 75 _,_ 2 _}_ in our settings.
+
+
+3.2 RESULTS AND DISCUSSION
+
+
+3.2.1 MAIN RESULTS
+
+
+We conduct G-FSOD experiments on PASCAL VOC (Everingham et al., 2010; 2015) and MS
+COCO (Lin et al., 2014) and report the results in Table 1 and Table 2, respectively. These numbers indicate that our method MPAD generally outperforms the baseline and other state-of-the-art
+methods on FSOD benchmarks by a large margin.
+
+
+**Results on PASCAL VOC.** Table 1 shows the results from the three novel sets of PASCAL VOC,
+comparing our approach with baselines and state-of-the-art methods. Our MPAD method consistently outperforms the baselines across all splits and shots. Notably, our method, based on DeFRCN (Qiao et al., 2021), achieves the highest performance of 66.9%, exceeding the baseline by an
+average margin of 17.5%. In extremely low-shot scenarios, our method delivers significantly larger
+performance gains, with an average increase of +31.0% nAP50 in the 1-shot setting. Considerably,
+our MPAD surpasses previous works (Wang et al., 2024; Lin et al., 2023; Kaul et al., 2022; Li et al.,
+2023a; Zhu et al., 2021; Xu et al., 2023) that use pretrained CLIP, ViT, diffusion models, language
+models, or post-processing in detection. Meanwhile, methods (Wang et al., 2024; Lin et al., 2023)
+are state-of-the-art data augmentation methods in FSOD. Overall, our approach demonstrates superior performance compared to most existing methods across various splits and shots, highlighting
+the robustness and generalization capabilities of our method.
+
+
+**Results on MS COCO.** We present the experimental results for MS COCO in Table 2. By using our
+method, baseline DeFRCN improves by about 11.5% on average, particularly in extremely few-shot
+settings (1 and 2-shot). Specifically, our method enhances nAP, nAP50, and nAP75 by over 13%,
+
+
+8
+
+
+1-shot 2-shot 3-shot 5-shot 10-shot Mean
+
+
+Table 3: Few-shot object detection performance (nAP50) of other augmentation methods on Novel
+Set 1 of PASCAL VOC dataset. The best and second performances are marked in **boldface** and
+underlined, respectively.
+
+
+21%, and 14%, respectively, in the 1-shot setting. These results highlight the promising approach to
+improving FSOD performance by employing controllable diffusion model.
+
+
+**Comparison with different augmentation methods.** Following Wang et al. (2024), we also show
+few-shot object detection results on PASCAL VOC Novel Set 1 of other augmentation methods
+Cutout (DeVries, 2017), GridMask (Chen et al., 2020), AutoAugment (Zoph et al., 2020), and CutMix (Yun et al., 2019) in Table 3. The nAP50 results show that our method consistently outperforms
+these augmentation methods by a large margin (+9%). This evidence demonstrates the effectiveness
+of our approach in the context of few-shot object detection. Detailed ablations on the number of
+generated images and training schemes are provided in Appendix D and Appendix E, respectively.
+
+
+3.2.2 IS THE DIVERSITY OF A CLASS NECESSARY?
+
+
+We investigate the importance of class diversity in Table 4. The table indicates
+
+sion using ICOS in the third row diversifies prompts, enhancing the diversity of
+
+|ICOS<br>Attributes Fine-grained.|Col2|HPAS|nAP nAP50 nAP75|
+|---|---|---|---|
+|✓<br>✓<br>✓|✓<br>✓|✓|34.6<br>62.1<br>34.4<br>38.7<br>65.8<br>39.0<br>41.2<br>68.5<br>42.6<br>42.8<br>69.1<br>45.1|
+
+
+Table 4: Foreground-foreground ablation studies
+
+the synthetic dataset and increasing detector
+
+about ICOS and HPAS. nAP, nAP50, nAP75 metrics
+
+performance by approximately 6% nAP50
+
+on Novel Set 1 of PASCAL VOC are reported to eval
+compared to not using ICOS (i.e., directly
+
+uate the importance of each modules.
+
+using PowerPaint with simple prompting,
+as shown in the first row). Additionally,
+by using HPAS, our method generates hard samples for FSOD, which boosts performance to
+42 _._ 8%/69 _._ 1%/45 _._ 1% in nAP/nAP50/nAP75. These results demonstrate that both typical and hard
+foregrounds are crucial for data augmentation, especially in FSOD. Detailed ablation studies on the
+foreground-foreground approach are provided in Table 6, Figure 9, and Figure 10 in Appendix C.
+
+
+Table 4: Foreground-foreground ablation studies
+about ICOS and HPAS. nAP, nAP50, nAP75 metrics
+on Novel Set 1 of PASCAL VOC are reported to evaluate the importance of each modules.
+
+
+3.2.3 THE IMPACT OF BACKGROUND SELECTION
+
+
+In addition to studying the foreground, we
+also conduct ablation experiments on background selection, a crucial but often overlooked component. Table 5 demonstrates
+the effectiveness of background selection.
+With random selection, nAP, nAP50, and
+nAP75 metrics achieve only 34 _._ 6%, 62 _._ 1%,
+and 34 _._ 4%, respectively, which are lower
+than other background proposal strategies.
+By using both our typical and hard background proposal technique, the detector can
+be improved to 37 _._ 4%/64 _._ 1 _._ 4%/39 _._ 6% in
+nAP/nAP50/nAP75. These results high
+
+
+|Random|Typical|Hard|nAP nAP50 nAP75|
+|---|---|---|---|
+|✓<br>✓<br>✓<br>✓|✓<br>✓<br>✓<br>✓|✓<br>✓<br>✓<br>✓|34.6<br>62.1<br>34.4<br>37.0<br>64.8<br>38.3<br>35.2<br>61.9<br>36.0<br>36.8<br>64.4<br>37.5<br>37.4<br>64.1<br>39.6<br>37.0<br>64.5<br>37.7<br>36.6<br>63.6<br>38.2|
+
+
+Table 5: Foreground-background ablation study about
+BAP. Metrics on Novel Set 1 of PASCAL VOC are
+reported to evaluate the importance of each selection.
+
+
+9
+
+
+light the importance of foreground-background relations and the effectiveness of our BAP method.
+Therefore, we hope these types of relations can be explored more in few-shot object detection.
+
+
+3.3 LIMITATION
+
+
+There are several issues with diffusion models. The hallucinations still occur in the generated images. These circumstances can lead to parts or the entire generated object being unrelated to the
+prompt or resulting in low-quality synthetic images, as shown in the last two rows of Figure 8.
+There are several potential ways to reduce the number of hallucinations in generated data. We can
+apply a filter as a post-process for data generation, which can filter out objects that significantly
+deviate from the general characteristics. Additionally, we can apply LoRA in PEFT (Mangrulkar
+et al., 2022) to fine-tune the diffusion model on the few-shot data, which could generate synthetic
+samples with greater similarity to the current dataset and reduce hallucinations in the synthetic data.
+Another issue relates to the starting value _w_ . This value is fixed, which may not be suitable for all
+novel classes.
+
+
+4 CONCLUSION
+
+
+In this paper, we introduced a novel multi-perspective data augmentation framework that enhances
+few-shot object detection by addressing the challenges of sample diversity and representativeness.
+Our approach effectively leverages in-context learning for object synthesis and incorporates a harmonic prompt aggregation scheduler to create challenging novel samples, while also improving the
+representation of foreground-background relationships through our Background Proposal method.
+Extensive experiments on several FSOD benchmarks, including PASCAL VOC, demonstrate the
+significant advantages of our framework over state-of-the-art methods.
+
+
+ACKNOWLEDGMENTS
+
+
+This research is funded by Vietnam National University Ho Chi Minh City (VNU-HCM) under grant
+DS2024-26-06.
+
+
+REFERENCES
+
+
+Adrian Bulat, Ricardo Guerrero, Brais Martinez, and Georgios Tzimiropoulos. Fs-detr: Few-shot
+detection transformer with prompting and without re-training. In _ICCV_, pp. 11793–11802, 2023.
+
+
+Pengguang Chen, Shu Liu, Hengshuang Zhao, and Jiaya Jia. Gridmask data augmentation. _arXiv_
+_preprint arXiv:2001.04086_, 2020.
+
+
+Corinna Cortes. Support-vector networks. _Machine Learning_, 1995.
+
+
+Berkan Demirel, Orhun Bu˘gra Baran, and Ramazan Gokberk Cinbis. Meta-tuning loss functions
+and data augmentation for few-shot object detection. In _CVPR_, pp. 7339–7349, 2023.
+
+
+Jia Deng, Wei Dong, Richard Socher, Li-Jia Li, Kai Li, and Li Fei-Fei. Imagenet: A large-scale
+hierarchical image database. In _CVPR_, pp. 248–255. Ieee, 2009.
+
+
+Terrance DeVries. Improved regularization of convolutional neural networks with cutout. _arXiv_
+_preprint arXiv:1708.04552_, 2017.
+
+
+Alexey Dosovitskiy, Lucas Beyer, Alexander Kolesnikov, Dirk Weissenborn, Xiaohua Zhai, Thomas
+Unterthiner, Mostafa Dehghani, Matthias Minderer, Georg Heigold, Sylvain Gelly, et al. An
+image is worth 16x16 words: Transformers for image recognition at scale. _ICLR_, 2021.
+
+
+Mark Everingham, Luc Van Gool, Christopher KI Williams, John Winn, and Andrew Zisserman.
+The pascal visual object classes (voc) challenge. _IJCV_, 88(2), 2010.
+
+
+Mark Everingham, SM Ali Eslami, Luc Van Gool, Christopher KI Williams, John Winn, and Andrew
+Zisserman. The pascal visual object classes challenge: A retrospective. _IJCV_, 111(1), 2015.
+
+
+10
+
+
+Qi Fan, Wei Zhuo, Chi-Keung Tang, and Yu-Wing Tai. Few-shot object detection with attention-rpn
+and multi-relation detector. In _CVPR_, 2020.
+
+
+Haoyang Fang, Boran Han, Shuai Zhang, Su Zhou, Cuixiong Hu, and Wen-Ming Ye. Data augmentation for object detection via controllable diffusion models. In _WACV_, pp. 1257–1266, 2024.
+
+
+Karim Guirguis, Mohamed Abdelsamad, George Eskandar, Ahmed Hendawy, Matthias Kayser, Bin
+Yang, and Juergen Beyerer. Towards discriminative and transferable one-stage few-shot object
+detectors. In _WACV_, pp. 3760–3769, 2023a.
+
+
+Karim Guirguis, Johannes Meier, George Eskandar, Matthias Kayser, Bin Yang, and J¨urgen Beyerer.
+Niff: Alleviating forgetting in generalized few-shot object detection via neural instance feature
+forging. In _CVPR_, pp. 24193–24202, 2023b.
+
+
+Guangxing Han, Shiyuan Huang, Jiawei Ma, Yicheng He, and Shih-Fu Chang. Meta faster r-cnn:
+Towards accurate few-shot object detection with attentive feature alignment. In _AAAI_, volume 36,
+pp. 780–789, 2022a.
+
+
+Guangxing Han, Jiawei Ma, Shiyuan Huang, Long Chen, and Shih-Fu Chang. Few-shot object
+detection with fully cross-transformer. In _CVPR_, pp. 5321–5330, 2022b.
+
+
+Jiaming Han, Yuqiang Ren, Jian Ding, Ke Yan, and Gui-Song Xia. Few-shot object detection via
+variational feature aggregation. In _AAAI_, 2023.
+
+
+Kaiming He, Haoqi Fan, Yuxin Wu, Saining Xie, and Ross Girshick. Momentum contrast for
+unsupervised visual representation learning. In _CVPR_, pp. 9729–9738, 2020.
+
+
+Hanzhe Hu, Shuai Bai, Aoxue Li, Jinshi Cui, and Liwei Wang. Dense relation distillation with
+context-aware aggregation for few-shot object detection. In _CVPR_, 2021.
+
+
+Bingyi Kang, Zhuang Liu, Xin Wang, Fisher Yu, Jiashi Feng, and Trevor Darrell. Few-shot object
+detection via feature reweighting. In _ICCV_, 2019.
+
+
+Prannay Kaul, Weidi Xie, and Andrew Zisserman. Label, verify, correct: A simple few shot object
+detection method. In _CVPR_, pp. 14237–14247, 2022.
+
+
+Trung-Nghia Le, Tam V Nguyen, Zhongliang Nie, Minh-Triet Tran, and Akihiro Sugimoto.
+Anabranch network for camouflaged object segmentation. _Computer_ _vision_ _and_ _image_ _under-_
+_standing_, 184:45–56, 2019.
+
+
+Aoxue Li and Zhenguo Li. Transformation invariant few-shot object detection. In _CVPR_, pp. 3094–
+3102, 2021a.
+
+
+Aoxue Li and Zhenguo Li. Transformation invariant few-shot object detection. In _CVPR_, 2021b.
+
+
+Bohao Li, Boyu Yang, Chang Liu, Feng Liu, Rongrong Ji, and Qixiang Ye. Beyond max-margin:
+Class margin equilibrium for few-shot object detection. In _CVPR_, 2021.
+
+
+Bowen Li, Chen Wang, Pranay Reddy, Seungchan Kim, and Sebastian Scherer. Airdet: Few-shot
+detection without fine-tuning for autonomous exploration. In _ECCV_, pp. 427–444. Springer, 2022.
+
+
+Jiangmeng Li, Yanan Zhang, Wenwen Qiang, Lingyu Si, Chengbo Jiao, Xiaohui Hu, Changwen
+Zheng, and Fuchun Sun. Disentangle and remerge: Interventional knowledge distillation for fewshot object detection from a conditional causal perspective. In _AAAI_, volume 37, pp. 1323–1333,
+2023a.
+
+
+Yuheng Li, Haotian Liu, Qingyang Wu, Fangzhou Mu, Jianwei Yang, Jianfeng Gao, Chunyuan Li,
+and Yong Jae Lee. Gligen: Open-set grounded text-to-image generation. In _CVPR_, pp. 22511–
+22521, 2023b.
+
+
+Shaobo Lin, Kun Wang, Xingyu Zeng, and Rui Zhao. Explore the power of synthetic data on fewshot object detection. In _CVPRW_, pp. 638–647, 2023.
+
+
+Tsung-Yi Lin, Michael Maire, Serge Belongie, James Hays, Pietro Perona, Deva Ramanan, Piotr
+Doll´ar, and C Lawrence Zitnick. Microsoft coco: Common objects in context. In _ECCV_, 2014.
+
+
+11
+
+
+Jiawei Ma, Yulei Niu, Jincheng Xu, Shiyuan Huang, Guangxing Han, and Shih-Fu Chang. Digeo:
+Discriminative geometry-aware learning for generalized few-shot object detection. In _CVPR_, pp.
+3208–3218, 2023.
+
+
+Sourab Mangrulkar, Sylvain Gugger, Lysandre Debut, Younes Belkada, Sayak Paul, and Benjamin
+Bossan. Peft: State-of-the-art parameter-efficient fine-tuning methods. [https://github.](https://github.com/huggingface/peft)
+[com/huggingface/peft, 2022.](https://github.com/huggingface/peft)
+
+
+Alex Nichol, Prafulla Dhariwal, Aditya Ramesh, Pranav Shyam, Pamela Mishkin, Bob McGrew,
+Ilya Sutskever, and Mark Chen. Glide: Towards photorealistic image generation and editing with
+text-guided diffusion models. _arXiv preprint arXiv:2112.10741_, 2021.
+
+
+Limeng Qiao, Yuxuan Zhao, Zhiyuan Li, Xi Qiu, Jianan Wu, and Chi Zhang. Defrcn: Decoupled
+faster r-cnn for few-shot object detection. In _ICCV_, pp. 8681–8690, 2021.
+
+
+Alec Radford, Jong Wook Kim, Chris Hallacy, Aditya Ramesh, Gabriel Goh, Sandhini Agarwal,
+Girish Sastry, Amanda Askell, Pamela Mishkin, Jack Clark, et al. Learning transferable visual
+models from natural language supervision. In _International conference on machine learning_, pp.
+8748–8763. PMLR, 2021.
+
+
+Aditya Ramesh, Prafulla Dhariwal, Alex Nichol, Casey Chu, and Mark Chen. Hierarchical textconditional image generation with clip latents. _arXiv preprint arXiv:2204.06125_, 1(2):3, 2022.
+
+
+Laria Reynolds and Kyle McDonell. Prompt programming for large language models: Beyond
+the few-shot paradigm. In _Extended_ _abstracts_ _of_ _the_ _2021_ _CHI_ _conference_ _on_ _human_ _factors_ _in_
+_computing systems_, pp. 1–7, 2021.
+
+
+Robin Rombach, Andreas Blattmann, Dominik Lorenz, Patrick Esser, and Bj¨orn Ommer. Highresolution image synthesis with latent diffusion models. In _CVPR_, pp. 10684–10695, 2022.
+
+
+Ruth Rosenholtz, Yuanzhen Li, and Lisa Nakano. Measuring visual clutter. _Journal of vision_, 7(2):
+17–17, 2007.
+
+
+Chitwan Saharia, William Chan, Saurabh Saxena, Lala Li, Jay Whang, Emily L Denton, Kamyar
+Ghasemipour, Raphael Gontijo Lopes, Burcu Karagol Ayan, Tim Salimans, et al. Photorealistic
+text-to-image diffusion models with deep language understanding. _NeurIPS_, 35:36479–36494,
+2022.
+
+
+Bo Sun, Banghuai Li, Shengcai Cai, Ye Yuan, and Chi Zhang. Fsce: Few-shot object detection via
+contrastive proposal encoding. In _CVPR_, pp. 7352–7362, 2021.
+
+
+Anh-Khoa Nguyen Vu, Thanh-Toan Do, Nhat-Duy Nguyen, Vinh-Tiep Nguyen, Thanh Duc Ngo,
+and Tam V Nguyen. Instance-level few-shot learning with class hierarchy mining. _TIP_, 2023a.
+
+
+Anh-Khoa Nguyen Vu, Thanh-Toan Do, Vinh-Tiep Nguyen, Tam Le, Minh-Triet Tran, and Tam V
+Nguyen. Few-shot object detection via synthetic features with optimal transport. _arXiv preprint_
+_arXiv:2308.15005_, 2023b.
+
+
+Xin Wang, Thomas E. Huang, Trevor Darrell, Joseph E Gonzalez, and Fisher Yu. Frustratingly
+simple few-shot object detection. In _ICML_, 2020.
+
+
+Yanjie Wang, Xu Zou, Luxin Yan, Sheng Zhong, and Jiahuan Zhou. Snida: Unlocking few-shot
+object detection with non-linear semantic decoupling augmentation. In _CVPR_, pp. 12544–12553,
+2024.
+
+
+Jiaxi Wu, Songtao Liu, Di Huang, and Yunhong Wang. Multi-scale positive sample refinement for
+few-shot object detection. In _ECCV_, 2020.
+
+
+Shuang Wu, Wenjie Pei, Dianwen Mei, Fanglin Chen, Jiandong Tian, and Guangming Lu. Multifaceted distillation of base-novel commonality for few-shot object detection. In _ECCV_, pp. 578–
+594. Springer, 2022.
+
+
+Tianxu Wu, Shuo Ye, Shuhuang Chen, Qinmu Peng, and Xinge You. Detail reinforcement diffusion
+model: Augmentation fine-grained visual categorization in few-shot conditions. _IEEE Transac-_
+_tions on Emerging Topics in Computational Intelligence_, 2024.
+
+
+12
+
+
+Yang Xiao and Renaud Marlet. Few-shot object detection and viewpoint estimation for objects in
+the wild. In _ECCV_, pp. 192–210. Springer, 2020.
+
+
+Jingyi Xu, Hieu Le, and Dimitris Samaras. Generating features with increased crop-related diversity
+for few-shot object detection. In _CVPR_, pp. 19713–19722, 2023.
+
+
+Xiaopeng Yan, Ziliang Chen, Anni Xu, Xiaoxi Wang, Xiaodan Liang, and Liang Lin. Meta r-cnn:
+Towards general solver for instance-level low-shot learning. In _ICCV_, 2019.
+
+
+Sangdoo Yun, Dongyoon Han, Seong Joon Oh, Sanghyuk Chun, Junsuk Choe, and Youngjoon Yoo.
+Cutmix: Regularization strategy to train strong classifiers with localizable features. In _CVPR_, pp.
+6023–6032, 2019.
+
+
+Gongjie Zhang, Zhipeng Luo, Kaiwen Cui, and Shijian Lu. Meta-detr: Image-level few-shot object
+detection with inter-class correlation exploitation. _arXiv preprint arXiv:2103.11731_, 2021.
+
+
+Lvmin Zhang, Anyi Rao, and Maneesh Agrawala. Adding conditional control to text-to-image
+diffusion models. In _ICCV_, pp. 3836–3847, 2023.
+
+
+Shan Zhang, Lei Wang, Naila Murray, and Piotr Koniusz. Kernelized few-shot object detection with
+efficient integral aggregation. In _CVPR_, pp. 19207–19216, 2022.
+
+
+Weilin Zhang and Yu-Xiong Wang. Hallucination improves few-shot object detection. In _CVPR_,
+pp. 13008–13017, 2021.
+
+
+Chenchen Zhu, Fangyi Chen, Uzair Ahmed, Zhiqiang Shen, and Marios Savvides. Semantic relation
+reasoning for shot-stable few-shot object detection. In _CVPR_, 2021.
+
+
+Lanyun Zhu, Tianrun Chen, Deyi Ji, Jieping Ye, and Jun Liu. Llafs: When large language models
+meet few-shot segmentation. In _CVPR_, pp. 3065–3075, 2024.
+
+
+Junhao Zhuang, Yanhong Zeng, Wenran Liu, Chun Yuan, and Kai Chen. A task is worth one
+word: Learning with task prompts for high-quality versatile image inpainting. _arXiv_ _preprint_
+_arXiv:2312.03594_, 2023.
+
+
+Barret Zoph, Ekin D Cubuk, Golnaz Ghiasi, Tsung-Yi Lin, Jonathon Shlens, and Quoc V Le. Learning data augmentation strategies for object detection. In _ECCV_, pp. 566–583. Springer, 2020.
+
+
+13
+
+
+We provide more detailed information about our work in this Appendix. The structure includes
+ICOS outputs (Appendix A), visualizations of our synthesis dataset (Appendix B), detailed studies
+for the foreground-foreground approach (Appendix C), ablations about the number of generated
+images (Appendix D) and comparisons with different fine-tuning schemes (Appendix E).
+
+
+A THE RESPONSES IN ICOS
+
+
+We provide ChatGPT responses in ICOS for exploring class attributes and fine-grained classes in
+Novel Set 1 of PASCAL VOC, as shown in Figure 6 and Figure 7, respectively.
+
+
+Figure 6: In-context learning results for exploring **fine-grained classes** in Novel Set 1 on the PASCAL VOC dataset.
+
+
+14
+
+
+Figure 7: In-context learning results for exploring **class attributes** in Novel Set 1 on the PASCAL
+VOC dataset.
+
+
+B SYNTHESIS IMAGES VISUALIZATION
+
+
+We provide visualization for synthesis images in Figure 8. They are created separately for each
+method. We visualize synthetic samples for five novel classes in Novel Set 1 on PASCAL VOC.
+
+
+15
+
+
+**Methods**
+
+
+**Hard background**
+
+
+**Typical background**
+
+
+**Typical foreground**
+
+
+**Hard foreground**
+
+
+pillow
+
+
+|b|Col2|d|Col4|Col5|Col6|Col7|ike|Col9|
+|---|---|---|---|---|---|---|---|---|
+|Base image||Synth image|Base image<br>Synth image|Base image<br>|Synth image|Base image<br>S|ynth image|Base image|
+|Base image|||||||||
+|Base image|||||||||
+|Base image|||||||||
+|Base image|||||||||
+||||||||||
+|duck||hummingbird<br>crane bird|minibus<br>garbage truck<br>trolleybus|<br>hyena|water buffalo<br>ox|moped|Triumph<br>harley|marimba|
+||||||||||
+||||||||||
+||||||||||
+||||||||||
+||||||||||
+
+
+Figure 8: visualization for synthesis images. Each row represent a type of augmentation.
+
+
+C DETAILED STUDIES FOR THE FOREGROUND-FOREGROUND APPROACH
+
+
+N.o. fine-grained classes nAP nAP50 nAP75
+
+
+Table 6: Ablations about the number of fine-grained classes in MPAD. nAP, nAP50, nAP75 metrics
+on Novel Set 1 of PASCAL VOC are reported.
+
+
+As shown in Table 6 and Figure 9, we provide ablation studies in our foreground generation method.
+We use nAP, nAP50 and nAP75 for Table 6, and the average of these three metrics for Figure 9.
+
+
+Firstly, we evaluate the impact of the number of fine-grained classes in Table 6. An upward trend
+is experienced when the number of fine-grained classes increases up to 4. These experiments reveal
+that models cannot capture datasets with very high diversity. The reason for this is that models are
+optimized with default training hyper-parameters (e.g., training iterations, learning rate, batch size,
+etc.) for FSOD. As a result, detectors are unable to converge on such datasets.
+
+
+In Figure 9, we test the hyper-parameters of the HPAS method. It shows that when momentum is
+applied, overall performance improves. Specifically, when _m_ increases from 0 _._ 7 to 0 _._ 9, the model
+performance improves by about 1 to 2%. However, when _m_ increases to 0 _._ 99 with a low _w_, the
+base class features are retained over time steps, which will generate objects too similar to the base
+class and reduce the model performance. Similarly, when _w_ is too low, the generated objects may
+retain many of the base’s features. More visualization of generated samples with different _w_ and _m_
+is shown in Figure 10.
+
+
+16
+
+
+0.6 0.7 0.8 0.9
+w
+
+
+Figure 9: Ablations about momentum _m_ and starting value _w_ in Eq. (3). The average value of nAP,
+nAP50, nAP75 metrics on Novel Set 1 of PASCAL VOC are reported.
+
+
+D ABLATIONS ABOUT THE NUMBER OF GENERATED IMAGES
+
+
+We also provide an ablation study on the number of generated images in Table 7. These results show
+an upward trend in performance as the number of images increases, achieving the best performance
+at 300 images.
+
+
+N.o. images 50 100 200 400
+
+
+nAP75 42.0 41.0 43.7 **42.8** 43.8
+nAP50 67.6 66.9 68.8 **69.1** 68.0
+
+
+Table 7: Ablations about the number of generated images per class.
+
+
+E COMPARISONS WITH DIFFERENT FINE-TUNING SCHEMES
+
+
+To analyze the impact of different training schemes, we conducted experiments comparing our augmentation framework (MPAD) with alternative approaches, such as using simple prompting with
+ChatGPT and the diffusion model for generating training samples and fine-tuning strategies, as
+shown in Table 8. Specifically, we present training scheme (1), where base models are only trained
+on the synthetic dataset, and training scheme (2), where models are pre-trained with generated data
+before being fine-tuned with the original few-shot data. All models are evaluated under the 1-shot
+setting of Novel Set 1 of PASCAL VOC.
+
+|#images|5 10 50 100 200 300 400 600 800 1000|
+|---|---|
+|(1)<br>(2)|49.5<br>56.7<br>62.3<br>62.4<br>63.8<br>63.1<br>64.5<br>65.1<br>65.4<br>64.5<br>62.3<br>60.5<br>60.4<br>61.7<br>61.0<br>61.6<br>62.1<br>62.1<br>62.3<br>62.5|
+
+
+Table 8: Performance comparison between directly training on generated data (1) and fine-tuning in
+real data (2) using different numbers of generated samples.
+
+
+17
+
+
+The results indicate that performance saturates at 600 samples, and additional samples do not improve results. Compared to the best performance obtained in this experiment, MPAD still outperforms simple prompting by 3.7, even when using only 300 samples, as shown in Table 7.
+
+
+Our training scheme is also superior to alternative pre-training and fine-tuning approaches. Specifically, MPAD effectively leverages both real high-quality few-shot samples and diverse generated
+samples within a single fine-tuning phase, avoiding potential overfitting issues. When pre-training
+with a large number of training data and fine-tuning with too few samples, the model risks ”forgetting” knowledge from the pre-training phase. Moreover, MPAD is computationally efficient, requiring a simpler training process compared to alternative approaches that involve separate pre-training
+and fine-tuning steps.
+
+
+These ablations demonstrate the effectiveness of MPAD in leveraging generated data while maintaining robustness and efficiency in training.
+
+
+18
+
+
+Figure 10: Visualization of generated samples with different of momentum ( _m_ ) and _w_ .
+
+
+19

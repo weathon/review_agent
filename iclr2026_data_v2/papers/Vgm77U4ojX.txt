@@ -1,0 +1,3552 @@
+# SIGMADOCK: UNTWISTING MOLECULAR DOCKING WITH FRAGMENT-BASED SE(3) DIFFUSION
+
+
+**Alvaro Prat** _[∗]_ **,** **Leo Zhang,** **Charlotte M. Deane,** **Yee Whye Teh,** **Garrett M. Morris**
+Department of Statistics, University of Oxford
+
+
+ABSTRACT
+
+
+Determining the binding pose of a ligand to a protein, known as molecular docking, is a fundamental task in drug discovery. Generative approaches promise
+faster, improved, and more diverse pose sampling than physics-based methods,
+but are often hindered by chemically implausible outputs, poor generalisability,
+and high computational cost. To address these challenges, we introduce a novel
+fragmentation scheme, leveraging inductive biases from structural chemistry, to
+decompose ligands into rigid-body fragments. Building on this decomposition, we
+present SIGMADOCK, an SE(3) Riemannian diffusion model that generates poses
+by learning to reassemble these rigid bodies within the binding pocket. By operating at the level of fragments in SE(3), SIGMADOCK exploits well-established
+geometric priors while avoiding overly complex diffusion processes and unstable training dynamics. Experimentally, we show SIGMADOCK achieves _state-_
+_of-the-art_ performance, reaching Top-1 success rates (RMSD _<_ 2 & PB-valid)
+above 79.9% on the PoseBusters set, compared to 12.7-32.8% reported by recent
+deep learning approaches, whilst demonstrating consistent generalisation to unseen proteins. SIGMADOCK is the _first deep learning approach_ to surpass classical physics-based docking under the PB train-test split, marking a significant leap
+forward in the reliability and feasibility of deep learning for molecular modelling.
+
+
+1 INTRODUCTION
+
+
+The biological function of a protein is determined primarily by its 3D structure and the interactions
+it mediates. Thus, a central goal of drug discovery is to design small-molecule ligands that bind to
+a target protein and modulate its function to achieve a therapeutic effect. Since a change in protein
+function is highly correlated with the bound pose of the binding ligand, a consequence of energetically favourable protein-ligand interactions, the ability predict these structural conformations, which
+is the primary aim of molecular docking, is essential for reliable and accelerated drug discovery.
+
+
+Deep learning approaches for molecular docking, in particular, diffusion-based methods, have been
+recently touted as providing superior accuracy over traditional, industry-standard physics-based
+methods (Halgren et al., 2004; Morris & Lim-Wilby, 2008; Trott & Olson, 2010). However,
+the need for such claims to be further qualified has been highlighted by Harris et al. (2023);
+Buttenschoen et al. (2024), who demonstrated that solely focusing on metrics, such as Root Mean
+Squared Deviation (RMSD) between the bound and predicted ligand poses, can obfuscate the actual
+predictive ability of deep learning-based docking tools. For instance, Buttenschoen et al. (2024)
+showed that when controlling for the chemical plausibility of generated samples, deep learning
+approaches performed far worse than traditional docking methods. While notable progress on
+this front has been made with the advent of co-folding models (Abramson et al., 2024; Boitreaud
+et al., 2024; Wohlwend et al., 2024) such as AlphaFold3 (AF3), which need not assume the
+protein to be a rigid structure, these models still have key limitations. Firstly, they require massive
+quantities of data and compute to train, hindering the ability of other researchers to contribute and
+improve such models. Secondly, as co-folding models jointly model the structure of proteins and
+ligands, they suffer from slow inference, which makes their practical applicability to drug discovery
+computationally prohibitive; especially for high-throughput virtual screening (HTVS), where it is
+often required to query millions of protein-ligand pairs.
+
+
+_∗_ Correspondence: alvaro.prat@stats.ox.ac.uk
+
+
+1
+
+
+To address these issues, we revisit the commonly-used _torsional model_ approach (Corso et al., 2022;
+Huang et al., 2024; Cao et al., 2025) for diffusion-based molecular docking. This approach defines
+a diffusion process over a ligand’s global roto-translations and its torsional angles. Fundamentally,
+structural (geometric) chemical constraints imply that this low-dimensional manifold forms the
+principal degrees of freedom underlying any chemically feasible pose. By operating over a space
+with significantly reduced dimensionality, torsional models promise improved data efficiency,
+generalisation and faster inference over _all-atom_ approaches (favoured by co-folding models).
+However, this has not been borne out empirically, with relatively disappointing results reported in
+the literature (Skrinjar et al. [ˇ], 2025).
+
+
+In this work, we seek to resolve the discrepancy between the poor performance of torsional models
+and the desired benefits of exploiting inductive biases from structural chemistry. We suspect
+torsional models underperform because the score model must implicitly account for the mapping
+from 3D coordinates to torsional updates, a non-local, highly nonlinear, and sometimes ambiguous
+inverse problem. To bypass this burden, we propose a _fragment_ _model_ . We decompose a ligand
+into _molecular_ _fragments_ by breaking rotatable bonds; due to structural chemical constraints,
+we can treat each fragment’s internal geometry as essentially _fixed_ . The generative task thereby
+reduces to predicting an SE(3) rigid transformation for every fragment, from which any chemically
+feasible pose can be recovered by composing these transformations, obviating explicit modelling
+of torsional angles. Building on this, we introduce SIGMADOCK, an SE(3) Riemannian diffusion
+model that defines a diffusion process over the translation and orientation of rigid-body fragments.
+During sampling, SIGMADOCK iteratively reassembles the ligand’s constituent fragments into a
+predicted bound pose. To reduce the additional degrees of freedom introduced from fragmentation
+(compared to the torsional model), we make the following novel contributions: (i) a fragmentation
+scheme that reduces the number of fragments required to represent a ligand; (ii) soft triangulation
+constraints to provide further inductive biases on the preserved bond lengths and angles across
+fragments; (iii) an SO(3)-equivariant architecture tailored for reasoning over fragment geometry
+and protein-ligand interactions.
+
+
+We adopt the standard re-docking protocol in which the receptor is fixed ( _holo-conformation_ ) and
+the binding pocket is known. This choice is deliberate for two reasons: first, it is the long-standing
+setting for benchmarking docking methods, and permits fair ’apples-to-apples’ comparison with
+classical and recent deep learning baselines; second, it reflects industrial HTVS/lead-optimisation
+practice, where rigid-receptor docking is computationally tractable at scale. Prior generative
+methods have struggled in precisely this regime, and our aim is to close that gap first.
+
+
+Empirically, we demonstrate SIGMADOCK surpasses prior deep learning approaches [1] and traditional physics-based docking, achieving _state-of-the-art_ performance on the challenging PoseBusters set (Buttenschoen et al., 2024), and generalising to unseen proteins (Figure 4). We highlight
+that, with a fraction of the training data, training/sampling time, and lower test-train leakage, we
+reach AF3-level performance and substantially outperform previous generative methods on the redocking task. With this, we wish to state our main contribution as the careful and rigorous design
+of a well-characterised diffusion process, and a detailed construction of structural inductive biases
+which help learn simpler functions for the task of molecular docking. We highlight that our fragment SE(3) _[m]_ formulation naturally extends to flexible docking by treating selected side chains as
+additional fragments, and is also adaptable to co-folding, both of which we leave as future work.
+
+
+2 METHOD
+
+
+2.1 NOTATION
+
+
+**Molecular** **notation.** The 3D graph of a molecular structure (e.g. ligand, protein or molecular
+fragment) is defined by the collection _G_ = _{_ **x** _,_ **v** _,_ **b** _}_ where _|G|_ is the number of atoms in the
+structure, **x** _∈_ R _[|G|×]_ [3] are atomic coordinates, **v** _∈_ R _[|G|×][d][a]_ represents the features (e.g. atom
+type, atomic charge etc.) associated with each atom, and **b** _∈_ R _[|G|×|G|×][d][b]_ represents the features
+(e.g. bond type, bond conjugation etc.) associated with each bond. Furthermore, we define the
+corresponding 2D graph of a molecular structure by _G_ [2D] = _{_ **v** _,_ **b** _}_ . For further details on our choice
+of molecular featurisation see Appendix G.1.
+
+
+1Under fair comparison with models trained on the PoseBusters train-test split.
+
+
+2
+
+
+Figure 1: Illustration of SIGMADOCK using PDB 1V4S and ligand MRK. We create an initial
+conformation of a query ligand where we define our _m_ rigid body fragments (colour coded). The
+corresponding forward diffusion process operates in SE(3) _[m]_ via independent roto-translations.
+
+
+SE(3) **notation.** Let **x** = [ _x_ 1 _, . . ., xN_ ] _∈_ R _[N]_ _[×]_ [3] be a collection of points _xi_ _∈_ R [3] in a rigid-body
+system where [ _·_ ] denotes row-wise concatenation. The pose ( _i.e._ position and orientation) of **x** can
+be parametrised by elements ( _p, R_ ) from the Lie group SE(3) via the standard group action:
+
+
+( _p, R_ ) _·_ **x** = [ _p_ + _R · x_ 1 _, . . ., p_ + _R · xN_ ] _,_
+
+where _p ∈_ T(3) _[∼]_ = R [3] is an element of the translation group and _R ∈_ SO(3) is a special orthogonal
+matrix representing a rotation in R [3] . For further details about SE(3), see Appendix B.
+
+
+**Fragment** **notation.** In this work, we develop a novel fragmentation scheme which allows us to
+represent the 2D graph of a ligand _G_ ligand [2D] [=] _[{]_ **[v]** _[,]_ **[ b]** _[}]_ [in] [terms] [of] _[rigid-body]_ _[fragments]_ _[{G][F]_ _i_ _[}][m]_ _i_ =1
+where _GF_ = _{_ **x** ˜ _F,_ **v** _F,_ **b** _F }_ for each _F_ _∈{Fi}_ _[m]_ _i_ =1 [. In particular, we take][ ˜] **[x]** _[F]_ _[∈]_ [R] _[|G][F][ |×]_ [3][ to represent]
+the _local_ _coordinates_ of the fragment centered at the origin [2], _i.e._ _|G_ 1 _F |_ **[1]** _[T]_ [ ˜] **[x]** _[F]_ [=] [0] [where] **[1]** [is] [a]
+vector of unit entries; at a high level, this can be viewed as the predetermined coordinates of a local,
+rigid substructure within the ligand due to structural chemical constraints from _G_ ligand [2D] [.] [Hence,] [the]
+3D coordinates **x** of the ligand can only be constructed from some arrangement of the rigid-body
+translations and rotations of _{_ **x** ˜ _Fi}_ _[m]_ _i_ =1 [.] [Formally, we identify] **[ z]** [ = (] **[p]** _[,]_ **[ R]** [)] _[ ∈]_ [SE(3)] _[m]_ [ with the] _[ global]_
+_coordinates_ _{_ **x** _Fi}_ _[m]_ _i_ =1 [of] [the] [fragments] [through] [the] [usual] [group] [action:] **[x]** _[F]_ _i_ [=] [(] _[p][F]_ _i_ _[, R][F]_ _i_ [)] _[·]_ **[x]** [˜] _[F]_ _i_
+where **p** = ( _pF_ 1 _, . . ., pFm_ ) _∈_ T(3) _[m]_ and **R** = ( _RF_ 1 _, . . ., RFm_ ) _∈_ SO(3) _[m]_ . This allows us to
+parametrise the pose of the ligand **x** in terms of SE(3) _[m]_ by **x** = [ **x** _F_ 1 _, . . .,_ **x** _FN_ ] and we denote this
+mapping [3] by _φ_ : SE(3) _[m]_ _→_ R _[|G]_ [ligand] _[|×]_ [3] .
+
+
+2.2 STRUCTURALLY-AWARE FRAGMENTATION FOR SE(3) DIFFUSION
+
+
+The task of molecular docking can be summarised as predicting a ligand’s bound pose **x** _∈_
+R _[|G]_ [ligand] _[|×]_ [3] for some query protein, given the 2D graph of the ligand _G_ ligand [2D] [=] _[{]_ **[v]** _[,]_ **[ b]** _[}]_ [and] [the] [3D]
+graph of the protein _G_ protein = _{_ **y** _,_ **v** _y,_ **b** _y}_ . The guiding idea behind SIGMADOCK is to exploit
+the inherent structure of a ligand’s topology to simplify and condition a smooth and well-defined
+rigid-body diffusion process in SE(3). In particular, we rely on a novel fragmentation strategy that
+preserves common stereochemical symmetries, reduces degrees of freedom, and creates a set of geometric priors which help SIGMADOCK learn more general physicochemical correlations. A visual
+overview of the SE(3) diffusion process described in this section is outlined in Figure 1.
+
+
+2.2.1 THE CONFORMATIONAL MANIFOLD
+
+
+SIGMADOCK makes use of well-established thermodynamic priors in structural chemistry. Namely,
+it leverages the fact that the conformational space **x** _c_ defining the local geometry of a ligand (in a
+vacuum) with known topological structure _G_ ligand [2D] [follows a Boltzmann distribution with probability]
+mass concentrated about a manifold _Mc_ with holonomic constraints [4] of the form:
+
+_Mc_ = _{_ **x** _c_ _∈_ R _[|G]_ [ligand] _[|×]_ [3] : _g_ ( **x** _c_ ) _≈_ 0 _},_
+
+
+2We defer the issue of choosing the orientation of the local coordinates to Section 2.4.
+3We abuse notation by leaving the dependence on _{_ **x** ˜ _Fi_ _}mi_ =1 [from the fragmentation] _[ {G][F]_ _i_ _[}]_ _i_ _[m]_ =1 [implicit.]
+4Holonomic constraints (see (Ryckaert et al., 1977)) restrict the configuration space (position) of a body.
+
+
+3
+
+
+Figure 2: **A** : Illustration of a dihedral _ϕABCD_ across torsional bond _BC_, defined as the angle
+between planes _ABC_ and _BCD_, across two adjacent benzene rings in ligand BFL; **B** : Bound (red)
+and aligned (green) poses for BFL in PDB 1Q4G with an optimised alignment RMSD of 0.11 A; [˚]
+**C** : Conformational ensembles generated from _πMc_ for ligands SKF, CEL, and IH5 respectively.
+Notably, the most significant structural changes are derived from torsions across the rotatable bonds.
+
+
+where _g_ : R _[|G]_ [ligand] _[|×]_ [3] _→_ R _[m]_ + [maps from Cartesian coordinates to an] _[ m]_ [-vector of scalar holonomic]
+constraints, encoding _m_ independent (soft) boundary conditions. The latter represent locally conserved geometrical priors such as bond lengths ( _dAB_ = _d_ 0) and bond angles ( _τABC_ = _τ_ 0), and
+exclude dihedral angles/torsions ( _ϕABCD_ = _ϕ_ ); although the distribution _ϕABCD_ is anisotropic,
+bodies adjacent to a torsional bond defined over atoms _B, C_ are free to rotate (Figure 2a). Importantly, we can safely assume the holonomic constraints implicit in _Mc_ can be derived from _G_ [2] ligand _[D]_
+and thermodynamic equilibria. A more formal definition of the form of _g_ ( _·_ ) is detailed in Appendix
+D.1. Under this construct, the probability measure supported on _Mc_ is the constrained Boltzmann
+measure _πMc_ which we may sample from: **x** _c_ _∼_ _πMc_ ( _G_ ligand [2] _[D]_ [)][.] [As] [shown] [in] [Figure] [2c][,] [although]
+this distribution is complex and multimodal, there are abundant preserved symmetries: with RDKit’s
+ETKDGv3 (Landrum (2025)) as our proxy for _πMc_, we observe that, excluding global rigid motions, the 3D structural differences in **x** _c_ are effectively dominated by changes in dihedrals (torsion).
+
+To faithfully sample rigid body fragments, we first need to justify that samples in SE(3) _[m]_ drawn
+from the conformational manifold _Mc_ can be consistently aligned to the bound manifold ( _Mb_ ),
+whose distribution _πMb_ represents the target (data) distribution of bound states. We verify this by
+aligning ligand conformations from _Mc_ to _Mb_ via joint roto–translational and torsional registration.
+Concretely, let **x** _c_ _∼_ _πMc_ ( _·_ ) denote a conformer on _Mc_ and let _**ϕ**_ _c_ _∈_ T _[k]_ represent the corresponding dihedral angles which define the _k_ torsional bonds in **x** _c_ . Let _ψ_ ( _**ϕ**_ _c_ ) : T _[k]_ _→_ R _[|G]_ [ligand] _[|×]_ [3] denote
+the invertible map, where T _[k]_ = ( _S_ [1] ) _[k]_ _[∼]_ = _SO_ (2) _[k]_ is the hypertorous defining the space of dihedrals.
+With ( _p, R_ ) _∈_ SE(3) representing global rigid motion, we use the total map
+
+
+Ψ( _p, R,_ _**ϕ**_ ) = ( _p, R_ ) _· ψ_ ( _**ϕ**_ ) _∈_ R _[|G]_ [ligand] _[|×]_ [3] _,_
+
+
+and perform Kabsch alignment jointly with torsional adjustment by solving
+
+_p∈_ R [3] _,_ _R∈_ minSO(3) _,_ _**ϕ**_ _∈_ T _[k]_ [RMSD(] **[ x]** _[b][,]_ [Ψ(] _[p, R,]_ _**[ ϕ]**_ [) )] _[,]_ **x** _b_ _∼_ _πMb_ ( _G_ ligand [2] _[D]_ [)]
+
+
+Empirically, we find that the RMSDs between experimentally bound poses **x** _b_ and their corresponding aligned conformers **x** _[′]_ _b_ [=] [Ψ(] _[p][⋆][, R][⋆][,]_ _**[ ϕ]**_ _[⋆]_ [)] [are] [substantially] [below] [both] [(i)] [standard] [error] [rates]
+reported by docking baselines (Buttenschoen et al., 2024; Harris et al., 2023), and (ii) the commonly used success threshold of 2 A. This provides sufficient support to claim that the variability in [˚]
+bond lengths and bond angles subsumed in _Mc_ can be generally ignored in the task protein-ligand
+docking. Crucially, this allows us to treat bound states as being approximately contained in the set
+of structures reachable by torsions and SE(3) transforms on conformers drawn from _πMc_ : for any
+**x** _c_ _∈Mc_ and **x** _b_ _∈Mb_, we can align **x** _c_ to **x** _b_ with negligible error such that RMSD( **x** _b,_ **x** _[′]_ _b_ [)] _[ ≪]_ [2][ ˚A.]
+See Figure 2b for an aligned example and Appendix D.3 for additional results and empirical analysis. This empirical inclusion is paramount to our approach as it justifies assembling our stationary
+
+
+4
+
+
+distribution from fragments sampled from _Mc_, without falling out of distribution. Throughout the
+remainder of the paper, we will absorb the alignment into the notation by writing **x** _←_ **x** _b_ _←_ **x** _[′]_ _b_ [,]
+where we use the aligned conformation **x** _[′]_ _b_ [at the start of forward noising process.]
+
+
+2.2.2 CHALLENGES OF TORSIONAL MODELS & MOTIVATION FOR OUR METHOD
+
+
+The idea behind directly modelling dihedral angles has been adopted as the standard approach to
+modelling small molecules (Corso et al., 2022; Jing et al., 2023) and amino acid side-chains in
+proteins (Jumper et al., 2021). However, formulations that directly model time-dependent dihedrals
+_ϕABCD_ ( **x** _t, t_ ) via torsional updates suffer from fundamental caveats which we aim to resolve in our
+approach. In Theorem 1 we show that the induced torsional density in Cartesian space is generally
+not a product distribution, leading to highly entangled implicit dynamics. For further details and a
+proof of Theorem 1, see Appendix C.2.
+
+
+**Theorem 1.** _For standard molecular topologies, torsional models define nonlinear mappings from_
+_torsion_ _angles_ _to_ _Cartesian_ _coordinates,_ _producing_ _highly_ _entangled,_ _non-product_ _induced_ _mea-_
+_sures._ _In contrast, disjoint rigid fragments yield a factorised product of Haar measures on_ SE(3) _[m]_ _._
+
+
+Consequently, we argue that diffusing a molecule in fragment space SE(3) _[m]_ offers a simpler
+learning task than diffusing in torsion space T _[k]_ _×_ SE(3). Intuitively, local changes in torsional
+angles often produce non-local Cartesian displacements, creating strong geometric coupling along
+torsional chains: a change in a single torsion can substantially displace remote atoms. Therefore,
+independent torsional perturbations become correlated once mapped to Cartesian coordinates
+(where the model observes the data) under the induced measure, breaking the product structure.
+This leads to an ill-conditioned learning problem and stiff sampling dynamics. In contrast, our forward kernel factorises over disjoint SE(3) _[m]_ fragments (product); inter-fragment correlations enter
+only via the learnt score, rather than being induced by the noise, yielding simpler, better-conditioned
+mappings, and more stable reverse-time integration.
+
+
+Furthermore, mapping a torsional increment ∆ _ϕi_ to a Cartesian displacement ∆ **x** is intrinsically
+ambiguous: one must chose an extrinsic gauge (which side of the torsional bond is rotated, or which
+combination). Implementations often apply heuristics such as RMSD alignment to remove the net
+rigid motion caused by torsional updates, which would otherwise break the product-space structure.
+However, this does not mitigate the ambiguity of the intrinsic to extrinsic mapping, especially when
+torsional steps are large. Practical solutions often commit an extrinsic realisation (rotate left, rotate
+right, or a combination), and the model must learn a score consistent with that convention; this
+choice cannot guarantee consistency during sampling as the selected torsional realisation may not
+align with the true score direction. Moreover, as _k_ (and thus molecular size and flexibility) increases,
+torsions produce amplified nonlocal Cartesian displacement (lever effect), coupling distant degrees
+of freedom. The combinatorial growth of possible extrinsic realisations exacerbates this geometric
+entanglement, making this framework unscalable. We hypothesise that, in general settings, these
+issues make torsional frameworks can become poorly conditioned and unnecessarily complex to
+model. These shortcomings motivate our approach of representing molecules via independent rigid
+fragments, allowing us to operate over a well defined and geometrically independent product space.
+
+
+2.2.3 IRREDUCIBLE FRAGMENTATION & SOFT GEOMETRIC CONSTRAINTS ON SE(3)
+
+
+The naive choice to define our fragments is to break the molecular graph obtained from _πMc_ at the
+torsional bonds, producing a set _{GFi}i_ _[m]_ [ˆ] =1 [of torsion-free rigid-body fragments with global coordi-]
+nates parametrised by SE(3) _[m]_ [ˆ] . This approach yields a set of _m_ ˆ = ( _k_ + 1) fragments with a total of
+6 ˆ _m_ DoFs [5] . In contrast, we note torsional models have ( _k_ + 6) DoFs ( _k_ torsional bonds in _S_ [1] and 6
+for rigid body SE(3)). Thus, the natural question arises: _How can we reduce the DoFs of the system_
+_and_ _in_ _turn_ _abstract_ _the_ _problem_ _in_ _a_ _general_ _form?_ In SIGMADOCK we tackle this problem by
+creating a simple yet effective molecular fragmentation reduction (FR3D) that recursively merges
+adjacent fragments from _m_ ˆ = ( _k_ + 1) down to _m_ (Figure 3).
+
+
+Instead of biasing the fragmentation order, FR3D performs a stochastic search, starting from the
+torsion-free _m_ ˆ fragments and branching through candidate neighbour proposing merge actions until
+reaching an irreducible set of size _m_ . Hence, FR3D not only reduces the learnable DoFs by reducing
+
+
+5Assuming _|GF | >_ 1, each fragment is defined by its T(3) _∼_ = R3 and SO(3) parametrisation.
+
+
+5
+
+
+the number of fragments, but also provides a promising stream for data augmentation. Merging is
+possible in molecular graphs where two or more consecutive torsional bonds are linked, so there are
+topologies that are irreducible. Hence, we are upper-bounded in the number of fragments: 1 _≤_ _m ≤_
+_k_ + 1. For a fragment hyper-graph with _m_ fragments (and no loop closures), the effective DoFs
+concentrate between _k_ +6 (triangulation-induced lower bound) [6] and 6 _m_ (unconstrained). Under
+na¨ıve fragmentation ( ˆ _m_ = _k_ +1), this becomes _k_ +6 _≤_ DoF _≤_ 6 ˆ _m_ . As FR3D reduces _m_ (empirically
+we find _m ≈_ [2] 3 _[m]_ [ˆ] [),] [the] [upper] [bound] [shrink] [in] [practice.] [We] [refer] [the] [reader] [to] [Appendix] [D.4] [to] [a]
+
+more extensive analysis and empirical results.
+
+
+During fragmentation, we retain torsional bond length and angle information by introducing dummy
+atoms at either side of the bond. Hence, _|G_ ligand _|_ _≤_ [�] _[m]_ _i_ =1 _[|G][F]_ _i_ _[|]_ [.] [Importantly,] [we] [only] [retain] _[free]_
+dummy atoms in _GFi_ and otherwise prune dummies which are _over-constrained_ . Here, we label a
+dummy as over-constrained whenever FR3D merges the torsional bond it belongs with a neighbouring fragment, as it naturally over-defines a dihedral angle (Figure 3b). Removing over-constrained
+atoms is fundamental since an immutable dihedral sampled from _πMc_ would violate the free torsional requirements outlined in Section 2.2.1, forcing our generator _πMc_ to yield structures that do
+not strictly overlap with the bound manifold under optimal alignment: Ψ _· πMc_ ( _·_ ) _̸_ = _πMb_ ( _·_ ).
+
+
+We refer the reader to Algorithm 1 in Appendix D.4 for an overview of FR3D and further analysis.
+
+
+Figure 3: Illustrative example of how FR3D reduces the number of fragments (colour coded) required to represent rigid bodies on ligand TNK into irreducible form. **A** : Defining fragments by
+snapping all torsional bonds (ribbons); **B** : FR3D recursively attempts to reduce the _k_ torsional
+bonds and removes over-constrained dummies in the process (denoted by the coloured rings), which
+otherwise define a dihedral across the merged fragment; **C** ; Over-constrained dummies removed and
+triangulation edges displayed under a different stochastic reduction (equiprobable to solution **b** ).
+
+
+**Soft** **geometric** **constraints.** A core ingredient of our method is the inclusion of geometric priors
+as a mechanism to provide soft (implicit) boundary conditions. Specifically, although FR3D produces irreducible fragments, we define a triangulation distance conditioning scheme which enables
+pseudo-reductions to the observable DoFs. Concretely, for any torsional bond _BC_ connecting adjacent fragments _A_ and _D_, we define triangles ( _A, B, C_ ) and ( _B, C, D_ ) using neighbouring atoms
+_A ∈A_ and _D_ _∈D_ on either side of the set of dihedrals _ϕABCD_ across _BC_ . Through Lemma 1, we
+show that by defining cross-fragment distances _||A −_ _C||_ and _||B −_ _D||_ on top of the rigid fragment
+template, the corresponding bond angles ∠( _A, B, C_ ) and ∠( _B, C, D_ ) become uniquely determined.
+See Figure 3c for an illustration, and for a proof of Lemma 1, see Appendix D.2.
+
+**Lemma** **1.** _∀_ ( _A, B_ ) _∈_ ( _A, D_ ) _bond_ _lengths_ _||A_ _−_ _B||, ||B_ _−_ _C||, ||C_ _−_ _D||_ _and_ _bond_ _angles_
+∠( _A, B, C_ ) _,_ ∠( _B, C, D_ ) _are_ _fully_ _determined_ _with_ _triangulation_ _conditioning,_ _without_ _restricting_
+_changes in the dihedral angles_ ∆ _ϕABCD._
+
+
+2.3 SE(3) DIFFUSION
+
+
+From our identification of ligand poses **x** with **z** = ( **p** _,_ **R** ) _∈_ SE(3) _[m]_ via the fragmentation
+_{GFi}_ _[m]_ _i_ =1 [,] [we] [adopt] [the] [SE(3)] [diffusion] [model] [framework] [introduced] [in] [Yim] [et] [al.] [(][2023][)]
+to construct a generative model _pθ_ ( **z** _|G_ dock) for sampling the docked pose of some ligand,
+
+
+6The resulting DoFs are lower-bounded because the triangulation scheme imparts soft boundary constraints;
+it provides a strong signal for SIGMADOCK to reduce ∆ _dA,C_ to 0 as _t →_ 0.
+
+
+6
+
+
+given its 2D graph _G_ ligand [2D] [,] [its] [fragmentation] _[{G][F]_ _i_ _[}][m]_ _i_ =1 [and] [some] [query] [protein] _[G]_ [protein][;] [we] [use]
+_G_ dock = ( _G_ ligand [2D] _[,][ {G][F]_ _i_ _[}][m]_ _i_ =1 _[,][ G]_ [protein][)][ to denote this conditioning information. We provide an overview]
+of this framework below, and for further details, see Appendix C.
+
+
+**Forward** **process.** For each protein-ligand pair ( _G_ ligand _, G_ protein) in our dataset _p_ data, with an associated fragmentation _{GFi}_ _[m]_ _i_ =1 [, we define the forward process][ (] **[Z]** [(] _[t]_ [)][)] _[t][∈]_ [[0] _[,T]_ [ ]] [=] [((] **[p]** [(] _[t]_ [)] _[,]_ **[ R]** [(] _[t]_ [)][))] _[t][∈]_ [[0] _[,T]_ [ ]]
+with **Z** [(] _[t]_ [)] _∼_ _pt_ ( **z** _|G_ dock) via the SDE:
+
+d **Z** [(] _[t]_ [)] =          - _−_ [1] 2 **[p]** [(] _[t]_ [)] _[,]_ [ 0]          - d _t_ + �d **B** [(] R _[t][m]_ [)] _[×]_ [3] _[,]_ [ d] **[B]** [(] SO(3) _[t]_ [)] _[m]_          - _,_ (1)
+
+
+where **B** [(] R _[t][m]_ [)] _[×]_ [3] _[,]_ **[ B]** [(] SO(3) _[t]_ [)] _[m]_ [denotes] [Brownian] [motion] [on] [R] _[m][×]_ [3] [and] [SO(3)] _[m]_ [respectively,] [with] [the]
+
+initial condition **Z** [(0)] = ( **p** [(0)] _,_ **R** [(0)] ) = _φ_ _[−]_ [1] ( **x** ) where _G_ ligand = _{_ **x** _,_ **v** _,_ **b** _}_ contains the ground-truth
+docked pose **x** . We note that the SDE is designed for the forward kernel _pt|_ 0( **z** [(] _[t]_ [)] _|_ **z** [(0)] ) to be tractably
+sampled from, and we take _T_ _>_ 0 large enough for _pT_ to be close to the stationary distribution
+_q_ ( **z** ) = _N_ ( **p** ; 0 _,_ **I** ) _⊗U_ SO(3) _m_ ( **R** ), where _U_ SO(3) _m_ denotes the uniform distribution on SO(3) _[m]_ .
+
+
+_←_
+**Backward process.** The associated backward process ( **Z** [(] _[t]_ [)] ) _t∈_ [0 _,T_ ] is then given by the SDE:
+
+d _←_ **Z** [(] _[t]_ [)] = - 21 _←_ **p** ( _t_ ) + _∇p_ log _pT −t_ ( _←_ **Z** [(] _[t]_ [)] _|G_ dock) _, ∇R_ log _pT −t_ ( _←_ **Z** [(] _[t]_ [)] _|G_ dock)� d _t_ +�d **B** [(] R _[t][m]_ [)] _[×]_ [3] _[,]_ [ d] **[B]** [(] SO(3) _[t]_ [)] _[m]_ - _,_
+
+
+(2)
+where _∇z_ log _pt_ ( **z** _|G_ dock) = [ _∇p_ log _pt_ ( **z** _|G_ dock) _, ∇R_ log _pt_ ( **z** _|G_ dock)] denotes the score function of
+the induced probability path _pt_ ; we note that this should be understood as a Riemannian gradient
+which lives in the tangent space Tan **z** SE(3) _[m]_ .
+
+
+**Training and sampling.** We see that we can generate bound poses under _G_ dock from simulating the
+backward SDE in Equation 2, however, the true score function _∇z_ log _pt_ is intractable. Therefore,
+we train a neural network approximation _sθ_ ( **z** _, t, G_ dock) via the score matching objective:
+
+
+_._
+
+
+_L_ ( _θ_ ) = E _p_ ( _t_ ) _,p_ data( _G_ ligand _,G_ protein) _,pt|_ 0( **Z** ( _t_ ) _|_ **Z** (0))
+
+
+2
+_sθ_ ( **Z** ( _t_ ) _, t, G_ dock) _−∇z_ log _pt|_ 0( **Z** ( _t_ ) _|_ **Z** (0))
+���� ���SE(3) _[m]_
+
+
+(3)
+
+_←_
+Hence, we denote _pθ_ ( **z** _|G_ dock) as the distribution of generated samples, from first sampling **Z** [(0)] _∼_ _q_
+and then simulating the backward SDE with our learnt approximation _sθ_, which approximates the
+true distribution _p_ 0( **z** _|G_ dock). The corresponding 3D coordinates **x** ˆ of samples ˆ **z** _∼_ _pθ_ ( **z** _|G_ dock) can
+then be recovered by the mapping **x** ˆ = _φ_ (ˆ **z** ).
+
+
+2.4 ARCHITECTURE
+
+
+A significant contribution of SIGMADOCK is the design of our architecture _sθ_ ( **z** _, t, G_ dock) which
+parametrises the score function. In particular, we augment EquiformerV2 (Liao et al., 2023) to
+handle protein-ligand (and other molecular) diffusion; we use this as the backbone for our model
+to ensure SO(3)-equivariance [7] . Our main innovations are: (i) we augment the input graph with
+virtual nodes and edges on top of the original chemical graph _G_ dock, creating a hierarchical topology.
+This reduces risk of over-squashing by reducing the average node degree, whilst promoting global
+information flow and mitigating over-smoothing: less layers needed to pass global information; (ii)
+we tailor our featurisations of nodes and edges according to their structural role; (iii) we ensure
+messages and gradients along the edges, which represent local interactions (present on proximity),
+smoothly decay to zero as the distance between the neighbouring nodes approaches some cutoff;
+this prevents instabilities from sudden changes in the input graph’s topology as we perturb **z** .
+
+
+Moreover, we note that a critical issue for the design of our architecture is that the parametrisation of
+the global coordinates **x** _F_ in terms of ( _p, R_ ) _∈_ SE(3) is _not uniquely_ defined. This is due to the fact
+that we do not have a canonical choice for the orientation of the local coordinates **x** ˜ _F_ . For instance,
+we have the equally valid choices **x** ˜ _F,_ ˜ **x** _[′]_ _F_ [for the local coordinates of] _[ G][F]_ [if] **[x]** [˜] _[′]_ _F_ [=] _[R]_ [0] _[·]_ **[x]** [˜] _[F]_ [where]
+_R_ 0 _∈_ SO(3). Hence, we can have two different representations of global coordinates **x** _F_ from **x** _F_ =
+
+
+7EquiformerV2 is also translation invariant but we do not require this property since our problem setting
+has a canonical centre of mass given by the binding pocket.
+
+
+7
+
+
+( _p, R_ ) _·_ **x** ˜ _F_ = ( _p, RR_ 0 _[−]_ [1][)] _[·]_ **[x]** [˜] _F_ _[′]_ [depending on the initial choice of orientation. To resolve this issue, we]
+adapt the SO(3)-equivariant prediction head introduced in Jin et al. (2023), based on the NewtonEuler equations from rigid-body mechanics, to which we pass the outputs of our backbone model
+into. Particularly, we predict pseudo-forces for all atoms pertaining to the _m_ fragments and use these
+as a basis to define our scores in the tangent space of SE(3) (more details in Appendix G.4). With
+this choice, Theorem 2 shows that SIGMADOCK is invariant to the choice of local coordinate axes.
+
+
+**Theorem 2.** _Our training objective and sampling procedure are invariant with respect to the choice_
+_of orientations for local coordinates. Moreover, our score model is_ SO(3) _-equivariant which ensures_
+_pθ_ ( **z** _|Gdock_ ) _is a stochastically_ SO(3) _-equivariant kernel._
+
+
+**Conditioning.** We define the triangulation conditioning by feeding the relative distance mismatch
+as an edge feature (compact notation): ∆ _dA,C_ ( **x** _t, t|G_ dock) = _||A_ ( _t_ ) _−_ _C_ ( _t_ ) _|| −_ _d_ [ref] _A,C_ [,] [(with] _[d]_ [ref] _A,C_
+defined from the initial RDKit conformer), such that lim _t→_ 0 ∆ _dA,C_ ( **x** _t, t|G_ dock) = 0 across all
+cross-fragment triangulation edges. Dummy atoms which define triangular geometry are discarded
+after sampling; torsional bonds are reconstructed from anchors so there is no discrepancy between
+conditioning inputs and the final conformation. With this conditioning, only dihedral angles and
+rigid body roto-translations remain free as _t_ _→_ 0.
+
+
+For further architectural details, see Appendix G, and for a proof of Theorem 2, see Appendix H.1.
+
+
+2.5 TRAINING AND INFERENCE
+
+
+We outline our training setup for SIGMADOCK in Appendix E. In particular, we discuss how we
+preprocess our data for fragmentation and training, as well as computational tricks for increasing
+training throughput. We detail the definition of the binding pocket in Appendix E.1. Briefly, the
+pocket includes all residues with any atom within a stochastic cutoff _d_ r of any ligand atom. Formally,
+_d_ r := _d_ 0 + _N_ (0 _, σr_ ), where _d_ 0 and _σr_ default to 5 A [˚] and 1 A [˚] respectively during training. Our
+sampling procedure is outlined in Appendix F, where we discuss the fact that, due to the reliability
+of SIGMADOCK in generating chemically plausible samples, SIGMADOCK _does not_ require the use
+of a separately trained confidence model to filter out poor generations. Instead, we propose using the
+simple and cheap heuristic of evaluating both the (pseudo) binding energy of the generated proteinligand system, as well as a set of physicochemical checks (such as, bond angles, bond lengths,
+internal energy) to rank our _N_ seeds samples for evaluation.
+
+
+3 EXPERIMENTS
+
+
+3.1 DATA AND METRICS
+
+
+**Datasets.** We use PDBBind(v2020) (Wang et al., 2005), a curated set of 19,443 protein-ligand
+complexes obtained through crystallography, as our training set. Crucially, we deliberately restrict
+ourselves to this dataset for fair comparison [8], isolating any increase in performance obtained in
+this study to our proposed framework. For validation, we use the well established PoseBusters
+(Buttenschoen et al., 2024) and Astex (Hartshorn et al., 2007) datasets. PoseBusters(v2) (PB) acts
+as our temporal-split validation set containing 308 protein-ligand complexes with unseen protein
+sequences realised from 2021 onwards. The Astex (AX) dataset consists of an additional 85 diverse
+and highly curated protein-ligand complexes originally designed to faithfully evaluate the quality of
+protein-ligand docking algorithms.
+
+
+**Metrics.** We evaluate a generated pose **x** ˆ by measuring the symmetry-corrected RMSD (Meli &
+Biggin, 2020) between the crystallographic (bound) pose **x** and the generated pose ˆ **x** obtained by the
+mapping ˆ **x** = _φ_ (ˆ **z** ) where ˆ **z** _∼_ _pθ_ ( **z** _|G_ dock). To account for sampling variability, either from different
+conformers (inducing differences in fragment local coordinates), or by resampling **z** [(1)] _∼_ _q_ ( **z** ), we
+report the Top- _k_ success rate, i.e., the fraction of complexes where at least one of the top _k_ poses
+(from _N_ seeds samples) has RMSD _<_ 2A. [˚] We also use PoseBuster to assess PB-validity, indicating
+whether generated structures also satisfy standard physicochemical tolerances.
+
+
+8It is unfair yet unfortunately common in the literature to compare the same held out set with models trained
+with larger and more diverse datasets without assessing train-test overlap (Abramson et al., 2024).
+
+
+8
+
+
+3.2 RESULTS
+
+
+Using the sampling algorithm described in Appendix F, we benchmark the base performance of
+SIGMADOCK and present our main results in Figure 4. To the best of our knowledge, SIGMADOCK
+is the first deep learning-based method to surpass classical physics-based approaches in the PB
+and AX sets using the intended train-test split on the re-docking task [9] . Not only does SIGMADOCK
+achieve a 6.3 _×_ higher PB-validity than DiffDock, the best open-source alternative tested on the same
+split, but it also excels on proteins with low sequence similarity, overcoming the common critique
+that deep learning models memorise rather than learn physics. Notably, Corso et al. (2024) train
+DiffDock-L on a significantly larger corpus (PDBBind(v2020) _∪_ BindingMOAD) and report 50%
+Top-1 (RMSD only) on PB, whereas SIGMADOCK attains a Top-1 (RMSD & PB validity) of 79.9%.
+Overall, these results support our main contribution: a theoretically-grounded SE(3) _[m]_ Riemannian
+diffusion framework with strong generalisation. Conversely, torsional-space baselines and pointcloud docking models evaluated under identical conditions do not attain comparable results.
+
+
+We also highlight SIGMADOCK does _not_ require minimisation to achieve high PB validity, a common yet computationally expensive hack used to artificially improve deep learning methods. Notably, we achieve AF3-level performance (Top-1 of 84%: see Extended Data Fig. 4e in Abramson
+et al. (2024)) with just 19k training data-points, _significantly lower train-test leakage_ (see App. J),
+and 50 _×_ faster sampling. Together with an outstanding performance in the AX set, reaching nearperfect Top-1 (above 90%), we believe these results mark a _major leap forward_ in the feasibility and
+reliability of deep learning for molecular modelling.
+
+
+100
+
+
+80
+
+
+60
+
+
+40
+
+
+20
+
+
+0
+
+
+|PB AX RMSD < 2 & PB-Val RMSD < 2|Col2|Col3|Col4|Col5|Col6|Col7|Col8|Col9|Col10|80.5|90.6|
+|---|---|---|---|---|---|---|---|---|---|---|---|
+|59.0<br>72.0<br>58.1<br>67.0<br>59.7<br>58.0|59.0<br>72.0<br>58.1<br>67.0<br>59.7<br>58.0|59.0<br>72.0<br>58.1<br>67.0<br>59.7<br>58.0|59.0<br>72.0<br>58.1<br>67.0<br>59.7<br>58.0|59.0<br>72.0<br>58.1<br>67.0<br>59.7<br>58.0|59.0<br>72.0<br>58.1<br>67.0<br>59.7<br>58.0|59.0<br>72.0<br>58.1<br>67.0<br>59.7<br>58.0|59.0<br>72.0<br>58.1<br>67.0<br>59.7<br>58.0|59.0<br>72.0<br>58.1<br>67.0<br>59.7<br>58.0|59.0<br>72.0<br>58.1<br>67.0<br>59.7<br>58.0|||
+|38.0<br>45.0<br>~~35.0~~<br>50.7<br>|38.0<br>45.0<br>~~35.0~~<br>50.7<br>|38.0<br>45.0<br>~~35.0~~<br>50.7<br>|38.0<br>45.0<br>~~35.0~~<br>50.7<br>|38.0<br>45.0<br>~~35.0~~<br>50.7<br>||||||~~79.9~~|90.6|
+|38.0<br>45.0<br>~~35.0~~<br>50.7<br>|38.0<br>45.0<br>~~35.0~~<br>50.7<br>|||||||||||
+|||47.0|21.8<br>19.5<br><br>|54.5|64.0||58.1|56.0||||
+|3.2<br>~~15.9~~<br>5.9<br>12.7|3.2<br>~~15.9~~<br>5.9<br>12.7||1.9<br>12.0<br>5.2<br>11.0<br>32.8|||||||||
+|3.2<br>~~15.9~~<br>5.9<br>12.7|12.7|12.7|12.7|12.7|12.7|12.7|12.7|12.7|12.7|12.7|12.7|
+
+
+|Col1|11.0|
+|---|---|
+|5.2|5.2|
+
+
+Figure 4: Performance benchmarks. _Left_ : Comparative performance of SIGMADOCK on the PB and
+AX diverse sets against prior methods. Extracted from Abramson et al. (2024); Buttenschoen et al.
+(2024). (*) Denotes classical docking; (**) Are not open-sourced. _Right_ : Performance breakdown
+across sequence similarity splits in the PB set.
+
+
+**Ablations.** To better characterise and highlight the contribution of some key components in our
+method, we perform an ablation study covering a set of training-time and test-time variables (see
+Table 1). Namely, we report the influence of our fragmentation merging strategy and triangulation
+conditioning, as well as the effect of including protein-ligand interactions as part of the computational graph, and give empirical evidence of their relevance (4-12% relative improvement). In
+addition, we show how sampling fragments from _Mc_ vs. _Mb_ leads to a small but expected decrease
+in sample quality. By excluding PB-checks in the heuristic, SIGMADOCK maintains a high PB-valid
+Top-1. Finally, we show how increasing _N_ seeds improves performance at the expense of more computational overhead, and highlight the importance of our simple yet effective heuristic for ranking
+our samples and picking our best candidate(s).
+
+
+On top of sequence similarity, we stratify the PB set into distinct chemical environments determined
+by the nature of ligand interactions with additional co-factors (ions, crystallisation aids, natural
+ligands, or other co-factors). We hypothesise that, since SIGMADOCK is deliberately designed (for
+simplicity) to exclude co-factors, higher failure rates should be observed when the true bound pose is
+realised in conjunction to additional artefacts (co-binding event), as the setup is partially observable.
+
+
+9For fairness, we compare our method in the main body against models trained on the same train-test split.
+We do not include DiffDock-L or AF3 in Figure 4 under fair scientific practice.
+
+
+9
+
+
+After isolating the protein-ligand pairs for which SIGMADOCK fails to generate accurate poses [10],
+we find this hypothesis to hold true, as per Table 2. This result provides additional confidence that
+SIGMADOCK does not blindly memorise and hallucinate protein-ligand poses.
+
+
+Table 1: Ablation results (Top-1 accuracy (%)
+across the PB set) for different configurations.
+**A** - **C** are re-trained from scratch; (*): default.
+
+
+**Conf.** **Description** **RMSD** _<_ 2 **PB Val.**
+
+
+**A** ( _−_ ) Tri. Cond. 71.9 67.1
+**B** ( _−_ ) PL Interactions 79.2 76.3
+**C** ( _−_ ) Frag. Merging 74.4 73.7
+
+
+**G** Sampling from _Mb_ 86.4 85.4
+**D** ( _−_ ) Energy Scoring 67.2 66.1
+**E** ( _−_ ) PB Scoring **82.1** 70.8
+
+
+**H** SIGMADOCK ( _N_ seeds = 10) 74.7 72.2
+**I** _[∗]_ SIGMADOCK ( _N_ seeds = 40) 80.5 **79.9**
+
+
+Table 2: Performance analysis (Top-1 accuracy
+(%)) across PB subsets according to the presence
+of various co-factors. The subset size is shown
+next to the co-factor species key. The failure
+rate represents the sample failure rate, averaged
+across 40 seeds, for all complexes in the subset.
+
+
+**Co-factor Presence** **RMSD** _<_ 2 **PB Val.** **Fail.** **Rate**
+
+
+Natural Ligands (17) 58.8 58.8 41.2
+
+
+Ions (57) 75.4 75.4 23.6
+
+
+Other (60) 76.7 76.7 28.1
+
+
+Crystallisation Aids (37) 81.1 81.1 35.0
+
+
+**None (165)** **84.2** **83.0** **16.2**
+
+
+Docking tools are typically provided with a search region (e.g. bounding box or centre-radius)
+defining the pocket search space. To assess robustness to larger pockets, corresponding greater
+uncertainty of the binding region, we sweep the deterministic cutoff _d_ 0, whilst reducing the jitter
+_σr_ _→_ 0. As presented in Table 3, SIGMADOCK remains robust to larger pockets, with a moderate
+drop when operating outside the training support (e.g. ∅pocket = 7A [˚] is 2 _σ_ relative to the training
+mean _d_ 0 = 5 _, σr_ = 1). Notably, reducing the pocket size (--autobox + 5 A) [˚] does not improve
+Vina’s Top-1 (57.2% vs. 56.0%), indicating that gains over classical methods are not attributable
+to smaller pocket definitions. Although we cannot directly compare SIGMADOCK to co-folding
+methods, we show competitive performance relative to AF3 with a fraction of the training data and
+lower test-train leakage (Table 4). We leave a more detailed comparison in Appendix J.2.
+
+
+Table 3: Sensitivity to pocket definition (PB
+set). Pocket diameter ∅pocket is the maximum
+pairwise distance between _Cα_ ’s across the selected _N_ **res** residues; we report dataset means.
+
+
+**Metric** _|| d_ 0( A) [˚] **4** **5** **6** **7**
+
+
+∅pocket ( A) [˚] 20.9 22.4 24.2 26.2
+_N_ res 15.6 20.3 26.5 37.8
+
+
+RMSD _<_ 2 80.5 **81.5** 78.3 69.8
+PB-Val. 80.2 **80.5** 77.3 68.2
+
+
+Table 4: Per-sequence-similarity comparison
+between SIGMADOCK (left) and AF3 (right) on
+the PB set. Values for AF3 are extracted from
+Extended Data 4c (Abramson et al., 2024).
+
+
+**Seq.** **Sim.** (%) **Count** **PB-Val.**
+
+
+[0 _,_ 30) 109 _|_ 38 72 _|_ 87
+
+[30 _,_ 95) 76 _|_ 83 79 _|_ 82
+
+[95 _,_ 100] 123 _|_ 187 87 _|_ 78
+
+
+Total / Avg. 308 _|_ 308 79.9 _|_ 80.2
+
+
+We refer the reader to Appendix I for extended results, and Appendix J for a detailed discussion on
+the current limitations of our method and future work.
+
+
+4 CONCLUSION
+
+
+We believe SIGMADOCK represents a major step forward in the reliability and feasibility of deep
+learning as a promising tool for accelerating drug discovery. Moving away from torsional parametrisation, our proposed SE(3) _[m]_ fragment-space Riemannian diffusion model is, to our knowledge,
+the first generative method trained on the intended PB split to surpass classical dockers on the redocking task. We extensively lay out the key components of our framework in the Appendices and
+open-source our codebase to proliferate reproducibility and further development, and we view extensions to flexible-receptor docking and co-folding as natural next steps to make SIGMADOCK a more
+general and practical tool. We demonstrate the critical role of principled inductive biases in enabling
+superior generalisation and data efficiency, and hope our work encourages rethinking progress on
+geometry and conditioning, as opposed to relying on scale alone (Abramson et al., 2024).
+
+
+10Here we define a failure if the majority of samples generated across _N_ seeds have an RMSD above 2 ˚A.
+
+
+10
+
+
+AUTHOR CONTRIBUTIONS
+
+
+As the main contributor, A.P. instigated and led the formulation, development, and analysis of SIGMADOCK. A.P and L.Z. both developed the mathematical framework, proofs, and the key components of SIGMADOCK. A.P and L.Z. organised and wrote the manuscript. G.M.M, C.M.D
+and Y.W.T supervised the project, partaking in relevant scientific discussions and proof-reading the
+manuscript.
+
+
+ACKNOWLEDGMENTS
+
+
+AP is funded by EPSRC and AstraZeneca via an iCASE award for a DPhil in Machine Learning. LZ is supported by the EPSRC CDT in Modern Statistics and Statistical Machine Learning
+(EP/S023151/1). AP thanks Kathryn Giblin for insightful scientific discussions, as well as Jochem
+Nelen and other PhD students in the OPIG and OxCSML groups for valuable exchanges. AP also
+thanks Yasmin Baba for her unwavering support and for compelling him to take a rare break from
+research, during which the core idea of this work emerged. LZ thanks Jessica Harrison for helpful witticisms in informing (subliminally) our work’s moniker. The authors declare no competing
+interests.
+
+
+REPRODUCIBILITY STATEMENT & CODE AVAILABILITY
+
+
+All training and evaluation data used in this study are publicly available. The full codebase for
+training, sampling, and evaluation used to generate the reported results will be released open source
+[upon publication at github.com/alvaroprat97/sigmadock.](https://github.com/alvaroprat97/sigmadock)
+
+
+REFERENCES
+
+
+Josh Abramson, Jonas Adler, Jack Dunger, Richard Evans, Tim Green, Alexander Pritzel, Olaf
+Ronneberger, Lindsay Willmore, Andrew J Ballard, Joshua Bambrick, et al. Accurate structure
+prediction of biomolecular interactions with alphafold 3. _Nature_, 630(8016):493–500, 2024.
+
+
+Eric Alcaide, Ziyao Li, Hang Zheng, Zhifeng Gao, and Guolin Ke. Umd-fit: Generating realistic
+ligand conformations for distance-based deep docking models. In _NeurIPS_ _2023 Generative_ _AI_
+_and Biology (GenBio) Workshop_, 2023.
+
+
+Eric Alcaide, Zhifeng Gao, Guolin Ke, Yaqi Li, Linfeng Zhang, Hang Zheng, and Gengmo Zhou.
+Uni-mol docking v2: Towards realistic and accurate binding pose prediction. In _International_
+_Conference on Artificial Neural Networks_, pp. 34–41. Springer, 2025.
+
+
+Benjamin Bloem-Reddy and Yee Whye Teh. Probabilistic symmetries and invariant neural networks.
+_Journal of Machine Learning Research_, 21(90):1–61, 2020.
+
+
+Jacques Boitreaud, Jack Dent, Matthew McPartlon, Joshua Meier, Vinicius Reis, Alex Rogozhnikov,
+and Kevin Wu. Chai-1: Decoding the molecular interactions of life. _BioRxiv_, 2024.
+
+
+Simon Boothroyd, Pavan Kumar Behara, Owen C Madin, David F Hahn, Hyesu Jang, Vytautas
+Gapsys, Jeffrey R Wagner, Joshua T Horton, David L Dotson, Matthew W Thompson, et al.
+Development and benchmarking of open force field 2.0. 0: the sage small molecule force field.
+_Journal of chemical theory and computation_, 19(11):3251–3275, 2023.
+
+
+Martin Buttenschoen, Garrett M Morris, and Charlotte M Deane. Posebusters: Ai-based docking
+methods fail to generate physically valid poses or generalise to novel sequences. _Chemical Sci-_
+_ence_, 15(9):3130–3139, 2024.
+
+
+Duanhua Cao, Mingan Chen, Runze Zhang, Zhaokun Wang, Manlin Huang, Jie Yu, Xinyu Jiang,
+Zhehuan Fan, Wei Zhang, Hao Zhou, et al. Surfdock is a surface-informed diffusion generative
+model for reliable and accurate protein–ligand complex prediction. _Nature Methods_, 22(2):310–
+322, 2025.
+
+
+11
+
+
+Peter A. Cock, Tiago Antao, Jeffrey T. Chang, Brad A. Chapman, Cymon J. Cox, Andrew Dalke,
+Iddo Friedberg, Thomas Hamelryck, Fred Kauff, Bartek Wilczynski, and Michiel J. L. de Hoon.
+Biopython: freely available python tools for computational molecular biology and bioinformatics.
+_Bioinformatics_, 25(11):1422–1423, 2009. doi: 10.1093/bioinformatics/btp163.
+
+
+Rob Cornish. Stochastic neural network symmetrisation in markov categories. _arXiv_ _preprint_
+_arXiv:2406.11814_, 2024.
+
+
+Gabriele Corso, Hannes St¨ark, Bowen Jing, Regina Barzilay, and Tommi Jaakkola. Diffdock: Diffusion steps, twists, and turns for molecular docking. _arXiv preprint arXiv:2210.01776_, 2022.
+
+
+Gabriele Corso, Arthur Deng, Benjamin Fry, Nicholas Polizzi, Regina Barzilay, and Tommi
+Jaakkola. Deep confident steps to new pockets: Strategies for docking generalization. _ArXiv_,
+pp. arXiv–2402, 2024.
+
+
+Valentin De Bortoli, Emile Mathieu, Michael Hutchinson, James Thornton, Yee Whye Teh, and
+Arnaud Doucet. Riemannian score-based generative modelling. _Advances in neural information_
+_processing systems_, 35:2406–2422, 2022.
+
+
+Peter Eastman, Jason Swails, John D Chodera, Robert T McGibbon, Yutong Zhao, Kyle A
+Beauchamp, Lee-Ping Wang, Andrew C Simmonett, Matthew P Harrigan, Chaya D Stern, et al.
+Openmm 7: Rapid development of high performance algorithms for molecular dynamics. _PLoS_
+_computational biology_, 13(7):e1005659, 2017.
+
+
+Wenhao Gao, Shitong Luo, and Connor W Coley. Generative artificial intelligence for navigating
+synthesizable chemical space. _arXiv preprint arXiv:2410.03494_, 2024.
+
+
+Jiaqi Guan, Xingang Peng, PeiQi Jiang, Yunan Luo, Jian Peng, and Jianzhu Ma. Linkernet: Fragment poses and linker co-design with 3d equivariant diffusion. _Advances in Neural Information_
+_Processing Systems_, 36:77503–77519, 2023.
+
+
+Thomas A Halgren, Robert B Murphy, Richard A Friesner, Hege S Beard, Leah L Frye, W Thomas
+Pollard, and Jay L Banks. Glide: a new approach for rapid, accurate docking and scoring. 2. enrichment factors in database screening. _Journal of medicinal chemistry_, 47(7):1750–1759, 2004.
+
+
+Charles Harris, Kieran Didi, Arian R. Jamasb, Chaitanya K. Joshi, Simon V. Mathis, Pietro Lio, and
+Tom Blundell. Benchmarking generated poses: How rational is structure-based drug design with
+generative models? _ArXiV_, 2023.
+
+
+Michael J. Hartshorn, Marcel L. Verdonk, Gianni Chessari, Suzanne C. Brewerton, Wijnand T. M.
+Mooij, Paul N. Mortenson, and Christopher W. Murray. Diverse, high-quality test set for the
+validation of protein−ligand docking performance. _Journal of Medicinal Chemistry_, 50(4):726–
+741, 2007. doi: 10.1021/jm061277y. PMID: 17300160.
+
+
+Jonathan Ho, Ajay Jain, and Pieter Abbeel. Denoising diffusion probabilistic models. _Advances in_
+_neural information processing systems_, 33:6840–6851, 2020.
+
+
+Emiel Hoogeboom, Vıctor Garcia Satorras, Cl´ement Vignac, and Max Welling. Equivariant diffusion for molecule generation in 3d. In _International conference on machine learning_, pp. 8867–
+8887. PMLR, 2022.
+
+
+Chin-Wei Huang, Milad Aghajohari, Joey Bose, Prakash Panangaden, and Aaron C Courville. Riemannian diffusion models. _Advances in Neural Information Processing Systems_, 35:2750–2761,
+2022.
+
+
+Yufei Huang, Odin Zhang, Lirong Wu, Cheng Tan, Haitao Lin, Zhangyang Gao, Siyuan Li, Stan
+Li, et al. Re-dock: towards flexible and realistic molecular docking with diffusion bridge. _arXiv_
+_preprint arXiv:2402.11459_, 2024.
+
+
+Yize Jiang, Xinze Li, Yuanyuan Zhang, Jin Han, Youjun Xu, Ayush Pandit, Zaixi Zhang, Mengdi
+Wang, Mengyang Wang, Chong Liu, Guang Yang, Yejin Choi, Wu-Jun Li, Tianfan Fu, Fang Wu,
+and Junhong Liu. Posex: Ai defeats physics approaches on protein-ligand cross docking, 2025.
+[URL https://arxiv.org/abs/2505.01700.](https://arxiv.org/abs/2505.01700)
+
+
+12
+
+
+Wengong Jin, Siranush Sarkizova, Xun Chen, Nir Hacohen, and Caroline Uhler. Unsupervised
+protein-ligand binding energy prediction via neural euler’s rotation equation. _Advances in Neural_
+_Information Processing Systems_, 36:33514–33528, 2023.
+
+
+Bowen Jing, Gabriele Corso, Jeffrey Chang, Regina Barzilay, and Tommi Jaakkola. Torsional diffusion for molecular conformer generation, 2023.
+
+
+John Jumper, Richard Evans, Alexander Pritzel, Tim Green, Michael Figurnov, Olaf Ronneberger,
+Kathryn Tunyasuvunakool, Russ Bates, Augustin Z´ıdek, Anna Potapenko, et al. [ˇ] Highly accurate
+protein structure prediction with alphafold. _nature_, 596(7873):583–589, 2021.
+
+
+Gintautas Kamuntaviˇcius, Alvaro Prat, Tanya Paquet, Orestis Bastas, Hisham Abdel Aty, Qing Sun,
+Carsten B. Andersen, John Harman, Marc E. Siladi, Daniel R. Rines, Sarah J. L. Flatters, Roy
+Tal, and Povilas Norvaiˇsas. Accelerated hit identification with target evaluation, deep learning
+and automated labs: prospective validation in irak1. _Journal of Cheminformatics_, 16(1):127, Nov
+2024. ISSN 1758-2946.
+
+
+Tero Karras, Miika Aittala, Timo Aila, and Samuli Laine. Elucidating the design space of diffusionbased generative models. _Advances in neural information processing systems_, 35:26565–26577,
+2022.
+
+
+Michał Koziarski, Andrei Rekesh, Dmytro Shevchuk, Almer van der Sloot, Piotr Gai´nski, Yoshua
+Bengio, Chenghao Liu, Mike Tyers, and Robert Batey. Rgfn: Synthesizable molecular generation
+using gflownets. _Advances in Neural Information Processing Systems_, 37:46908–46955, 2024.
+
+
+Greg Landrum. Rdkit: A software suite for cheminformatics, computational chemistry, and predictive modeling. 2025.
+
+
+Adam Leach, Sebastian M Schmon, Matteo T Degiacomi, and Chris G Willcocks. Denoising diffusion probabilistic models on so (3) for rotational alignment. In _ICLR 2022 workshop on geomet-_
+_rical and topological representation learning_, 2022.
+
+
+John M Lee. Smooth manifolds. In _Introduction to smooth manifolds_, pp. 1–29. Springer, 2003.
+
+
+Yi-Lun Liao, Brandon Wood, Abhishek Das, and Tess Smidt. Equiformerv2: Improved equivariant
+transformer for scaling to higher-degree representations. _arXiv preprint arXiv:2306.12059_, 2023.
+
+
+Ilya Loshchilov and Frank Hutter. Decoupled weight decay regularization, 2019.
+
+
+Wei Lu, Qifeng Wu, Jixian Zhang, Jiahua Rao, Chengtao Li, and Shuangjia Zheng. Tankbind:
+Trigonometry-aware neural networks for drug-protein binding structure prediction. _Advances in_
+_neural information processing systems_, 35:7236–7249, 2022.
+
+
+James A Maier, Carmenza Martinez, Koushik Kasavajhala, Lauren Wickstrom, Kevin E Hauser,
+and Carlos Simmerling. ff14sb: improving the accuracy of protein side chain and backbone
+parameters from ff99sb. _Journal of chemical theory and computation_, 11(8):3696–3713, 2015.
+
+
+Rocco Meli and Philip C. Biggin. spyrmsd: symmetry-corrected RMSD calculations in python.
+_Journal of Cheminformatics_, 12(1):49, 2020. doi: 10.1186/s13321-020-00451-8.
+
+
+Oscar M´endez-Lucio, Mazen Ahmad, Ehecatl Antonio del Rio-Chanona, and J¨org Kurt Wegner.
+A geometric deep learning approach to predict binding conformations of bioactive molecules.
+_Nature Machine Intelligence_, 3(12):1033–1039, 2021.
+
+
+Garrett M Morris and Marguerita Lim-Wilby. Molecular docking. In _Molecular modeling of pro-_
+_teins_, pp. 365–382. Springer, 2008.
+
+
+Michael Plainer, Marcella Toth, Simon Dobers, Hannes Stark, Gabriele Corso, C´eline Marquet, and
+Regina Barzilay. Diffdock-pocket: Diffusion for pocket-level docking with sidechain flexibility.
+2023.
+
+
+Alvaro Prat, Hisham Abdel Aty, Gintautas Kamuntaviˇcius, Tanya Paquet, Povilas Norvaiˇsas, Piero
+Gasparotto, and Roy Tal. Hydrascreen: A generalizable structure-based deep learning approach
+to drug discovery, 2023. [URL https://arxiv.org/abs/2311.12814.](https://arxiv.org/abs/2311.12814)
+
+
+13
+
+
+Alvaro Prat, Hisham Abdel Aty, Aurimas Pabrinkis, Orestis Bastas, Tanya Paquet, Gintautas Kamuntaviˇcius, and Roy Tal. Se(3) equivariant topologies for structure-based drug discovery.
+_NeurIPS 2024 Workshop:_ _Machine Learning and the Physical Sciences_, 2024.
+
+
+Rodrigo Quiroga and Marcos A. Villarreal. Vinardo: A scoring function based on autodock vina
+improves scoring, docking, and virtual screening. _PLOS ONE_, 11(5):1–18, 05 2016. doi: 10.1371/
+journal.pone.0155183. [URL https://doi.org/10.1371/journal.pone.0155183.](https://doi.org/10.1371/journal.pone.0155183)
+
+
+Jean-Paul Ryckaert, Giovanni Ciccotti, and Herman JC Berendsen. Numerical integration of the
+cartesian equations of motion of a system with constraints: molecular dynamics of n-alkanes.
+_Journal of computational physics_, 23(3):327–341, 1977.
+
+
+Peter Skrinjar, [ˇ] J´erˆome Eberhardt, Gerardo Tauriello, Torsten Schwede, and Janani Durairaj. Have
+protein-ligand cofolding methods moved beyond memorisation? _bioRxiv_, 2025. doi: 10.1101/
+2025.02.03.636309. URL [https://www.biorxiv.org/content/early/2025/08/](https://www.biorxiv.org/content/early/2025/08/04/2025.02.03.636309)
+[04/2025.02.03.636309.](https://www.biorxiv.org/content/early/2025/08/04/2025.02.03.636309)
+
+
+Yang Song, Jascha Sohl-Dickstein, Diederik P Kingma, Abhishek Kumar, Stefano Ermon, and Ben
+Poole. Score-based generative modeling through stochastic differential equations. _arXiv preprint_
+_arXiv:2011.13456_, 2020.
+
+
+Hannes St¨ark, Octavian Ganea, Lagnajit Pattanaik, Regina Barzilay, and Tommi Jaakkola. Equibind:
+Geometric deep learning for drug binding structure prediction. In _International_ _conference_ _on_
+_machine learning_, pp. 20503–20521. PMLR, 2022.
+
+
+Hannes St¨ark, Bowen Jing, Regina Barzilay, and Tommi Jaakkola. Harmonic self-conditioned flow
+matching for multi-ligand docking and binding site design. _arXiv_ _preprint_ _arXiv:2310.05764_,
+2023.
+
+
+Oleg Trott and Arthur J Olson. Autodock vina: improving the speed and accuracy of docking with
+a new scoring function, efficient optimization, and multithreading. _Journal_ _of_ _computational_
+_chemistry_, 31(2):455–461, 2010.
+
+
+Renxiao Wang, Xueliang Fang, Yipin Lu, Chao Yie Yang, and Shaomeng Wang. The PDBbind database: Methodologies and updates. _Journal_ _of_ _Medicinal_ _Chemistry_, 48(12):4111–
+4119, 6 2005. ISSN 00222623. doi: 10.1021/JM048957Q/ASSET/IMAGES/MEDIUM/
+JM048957QN00001.GIF.
+
+
+Joseph L Watson, David Juergens, Nathaniel R Bennett, Brian L Trippe, Jason Yim, Helen E Eisenach, Woody Ahern, Andrew J Borst, Robert J Ragotte, Lukas F Milles, et al. De novo design of
+protein structure and function with rfdiffusion. _Nature_, 620(7976):1089–1100, 2023.
+
+
+Jeremy Wohlwend, Gabriele Corso, Saro Passaro, Mateo Reveiz, Ken Leidal, Wojtek Swiderski, Tally Portnoi, Itamar Chinn, Jacob Silterra, Tommi Jaakkola, et al. Boltz-1 democratizing
+biomolecular interaction modeling. _BioRxiv_, 2024.
+
+
+Weijun Xu and Congbao Kang. Fragment-based drug design: From then until now, and toward the
+future, 2025.
+
+
+Jason Yim, Brian L Trippe, Valentin De Bortoli, Emile Mathieu, Arnaud Doucet, Regina Barzilay,
+and Tommi Jaakkola. Se (3) diffusion model with application to protein backbone generation.
+_arXiv preprint arXiv:2302.02277_, 2023.
+
+
+Leo Zhang, Kianoosh Ashouritaklimi, Yee Whye Teh, and Rob Cornish. Symdiff: Equivariant
+diffusion via stochastic symmetrisation. _arXiv preprint arXiv:2410.06262_, 2024.
+
+
+Gengmo Zhou, Zhifeng Gao, Qiankun Ding, Hang Zheng, Hongteng Xu, Zhewei Wei, Linfeng
+Zhang, and Guolin Ke. Uni-mol: A universal 3d molecular representation learning framework.
+2023a.
+
+
+Gengmo Zhou, Zhifeng Gao, Qiankun Ding, Hang Zheng, Hongteng Xu, Zhewei Wei, Linfeng
+Zhang, and Guolin Ke. Uni-mol: A universal 3d molecular representation learning framework. In _International Conference on Learning Representations (ICLR)_, 2023b. [URL https:](https://openreview.net/forum?id=6K2RM6wVqKu)
+[//openreview.net/forum?id=6K2RM6wVqKu.](https://openreview.net/forum?id=6K2RM6wVqKu)
+
+
+14
+
+
+# APPENDICES
+
+
+**A** **Related Work** **16**
+
+**B** **Further Details on** SE(3) **17**
+
+
+B.1 Further Details on SO(3) . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 17
+
+
+**C** **Further Details on** SE(3) **Diffusion** **19**
+
+
+C.1 Proof of Proposition 1 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 21
+
+
+C.2 Proof of Theorem 1 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 21
+
+C.2.1 Torsional Entanglement . . . . . . . . . . . . . . . . . . . . . . . . . . . 22
+
+
+C.2.2 Rigid Fragments . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 24
+
+
+**D** **Further Details on Fragmentation & Conformational Alignment** **25**
+
+
+D.1 Holonomic Constraints . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 25
+
+D.2 Proof of Lemma 1 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 25
+
+D.3 Fragmentation & Alignment . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 27
+
+
+D.4 FR3D . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 28
+
+**E** **Training Details** **29**
+
+
+E.1 Data Processing . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 29
+
+
+E.2 Accelerated Caching . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 30
+
+
+E.3 Training . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 31
+
+
+**F** **Inference Details** **32**
+
+F.1 Sampling . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 32
+
+
+F.2 Confidence Model . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 33
+
+**G** **Architecture** **34**
+
+G.1 Protein-Ligand Featurisation . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 34
+
+
+G.2 Input Graph . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 34
+
+
+G.3 Backbone Model . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 36
+
+G.4 Prediction Head . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 36
+
+**H** **Symmetries** **38**
+
+
+H.1 Proof of Theorem 2 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 38
+
+**I** **Extended Results** **42**
+
+I.1 Generated Samples . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 42
+
+
+I.2 Sample Performance & Efficiency . . . . . . . . . . . . . . . . . . . . . . . . . . 43
+
+
+**J** **Limitations** **44**
+
+J.1 Current Limitations and Future Work . . . . . . . . . . . . . . . . . . . . . . . . . 44
+
+J.2 Further Comments . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 44
+
+
+15
+
+
+A RELATED WORK
+
+
+**Molecular** **docking.** Traditional approaches to molecular docking rely on the combination
+of assessing ligand poses with hand-crafted physics-based scoring functions and search-based
+optimisation (Halgren et al., 2004; Morris & Lim-Wilby, 2008; Trott & Olson, 2010). Despite
+the widespread use of such tools, these approaches have relatively slow run times and lower than
+desired accuracy. There is growing interest in the application of deep learning-based methods to
+address these shortcomings. These can be broadly organised into learning scoring functions (Prat
+et al., 2024; 2023; M´endez-Lucio et al., 2021; Zhou et al., 2023a), regression-based prediction
+(St¨ark et al., 2022; Lu et al., 2022) and generative modelling of docked poses. The latter can
+be roughly grouped into methods which condition on pocket-specific interactions (Plainer et al.,
+2023) (as opposed to blind docking), restricts the generative dynamics to the degrees of freedom
+spanned by global transformations and updates to torsional angles (Corso et al., 2022; Cao et al.,
+2025), allow for the unconstrained atom-level generation of poses (St¨ark et al., 2023), and the
+flexible modelling of protein side chains (Huang et al., 2024). Closely related are co-folding models
+(Abramson et al., 2024; Boitreaud et al., 2024; Wohlwend et al., 2024) which aim to jointly generate
+the 3D structure of a protein-ligand complex for docking, as opposed to only modelling the ligand.
+Despite the impressive results claimed over traditional docking tools, as measured in terms of
+RMSD, Buttenschoen et al. (2024) demonstrated that when controlling for the chemical plausibility
+of generated samples, performance falls below even traditional approaches. We note that co-folding
+models have reported good performance on the PB benchmark, which are higher than traditional
+docking methods, used by Buttenschoen et al. (2024), but the comparison with the specialised deep
+learning-based docking models mentioned above is not exactly fair, due to the large gap in data and
+compute used to train co-folding models, which also results in substantially longer inference times.
+SIGMADOCK improves over previous methods in that it is able to quickly and reliably generate
+poses with high chemical plausibility and accuracy—even without the need for a separate neural
+network-based confidence model to filter out poor quality samples.
+
+
+SE(3) **diffusion.** Euclidean diffusion models (Ho et al., 2020; Song et al., 2020) construct a generative model of data by learning the time reversal of some fixed Gaussian noising process. This
+class of models have been generalised to data residing on non-Euclidean manifolds (Leach et al.,
+2022; Huang et al., 2022; De Bortoli et al., 2022), in particular the Lie group SE(3) (Yim et al.,
+2023) which is commonly used to describe the position and orientation of rigid-body systems. By
+formulating the generative dynamics for a given ligand over the position and orientation of its fragments in SE(3), SIGMADOCK avoids the complexity and poor training dynamics of the torsional
+model approach popularised by Corso et al. (2022) for generative molecular docking.
+
+
+**Fragment-based** **models.** Working with molecules in terms of their constituent molecular fragments is a popular approach due to the close relation between the properties and geometry of a
+molecule and the composition of their fragments. Examples include lead discovery for drug development (Xu & Kang, 2025), modelling proteins in terms of rigid backbone frames (Jumper et al.,
+2021; Yim et al., 2023; Watson et al., 2023), generating synthesizable molecules in terms of building
+blocks and their reaction pathways (Koziarski et al., 2024; Gao et al., 2024), and linker design (Guan
+et al., 2023). Despite the aforementioned popularity of fragmentation, to the best of our knowledge,
+SIGMADOCK is the first work to use a fragment-based framework for generative molecular docking.
+
+
+16
+
+
+B FURTHER DETAILS ON SE(3)
+
+
+In this section, we provide an extended discussion on SE(3) and Lie group theory.
+
+
+**Group** **structure** **of** SE(3) **.** Let T(3) be the translation group in R [3] with the addition operation
+(it is trivial to see that T(3) is isomorphic to R [3] with vector addition) and let SO(3) be the group
+of special orthogonal matrices in R [3] _[×]_ [3] . The group SE(3) is defined by the following semi-direct
+product: SE(3) := T(3) ⋊ SO(3) where elements from SE(3) can be written as ( _p, R_ ) _∈_ T(3) _×_
+SO(3). We recall the following properties of SE(3):
+
+
+    - The identity element _e ∈_ SE(3) is defined as _e_ = (0 _,_ **I** );
+
+    - The group operation is defined by ( _p, R_ ) _·_ ( _p_ _[′]_ _, R_ _[′]_ ) = ( _p_ + _Rp_ _[′]_ _, RR_ _[′]_ );
+
+    - For any ( _p, R_ ) _∈_ SE(3), its inverse is defined by ( _p, R_ ) _[−]_ [1] = ( _−R_ _[−]_ [1] _p, R_ _[−]_ [1] ).
+
+
+Furthermore, we define SE(3) _[m]_ := [�] _i_ _[m]_ =1 [SE(3)][ as a product group.]
+
+
+**Lie groups.** A Lie group is a smooth manifold _G_ equipped with a group structure, such that the
+group operation _·_ : _G × G_ _→_ _G_ and the inverse operation ( _·_ ) _[−]_ [1] : _G_ _→_ _G_ are both smooth maps,
+considered under the smooth structure of _G_ . Common examples of Lie groups include T(3) _,_ SO(3)
+and SE(3). Additionally, for each Lie group _G_, we have its associated Lie algebra g defined as
+the tangent space Tan _eG_ of _G_ at the identity element _e_ _∈_ _G_ [11] . For a mathematical introduction to
+smooth manifolds and Lie groups, we recommand Lee (2003).
+
+
+B.1 FURTHER DETAILS ON SO(3)
+
+
+We provide a further discussion on the Lie group SO(3) which is relevant for our construction of a
+SE(3) diffusion model.
+
+
+**Lie algebra basis.** The Lie algebra so(3) of the Lie group SO(3) has a canonical basis described
+by the following skew-symmetric matrices:
+
+
+- 0 0 1�
+0 0 0
+
+_−_ 1 0 0
+
+
+_,_ **e** 3 =
+
+
+�0 _−_ 1 0�
+1 0 0
+0 0 0
+
+
+_._
+
+
+**e** 1 =
+
+
+�0 0 0 0 0 _−_ 1
+0 1 0
+
+
+_,_ **e** 2 =
+
+
+We use [ _·_ ]R3 : so(3) _→_ R [3] to denote the standard coordinate representation map which is a linear
+isomorphism ( _i.e._ maps the canonical basis to the canonical basis of R [3] ), and we denote [ _·_ ] _×_ : R [3] _→_
+so(3) as its inverse.
+
+
+The above basis can be derived from differentiating _A_ ( _t_ ) _[⊤]_ _A_ ( _t_ ) = **I** where _t �→_ _A_ ( _t_ ) is any smooth
+curve in SO(3) such that _A_ (0) = **I**, and using the fact that SO(3) is an embedded submanifold
+of R [9] (by the regular value theorem) so that the standard Euclidean derivative _A_ _[′]_ ( _t_ ) of _A_ ( _t_ ) can
+be considered as an element in Tan _A_ ( _t_ )R [9] _[∼]_ = R [9], which contains as a linear subspace, the tangent
+space of SO(3) (considered as the image of the differential of the inclusion map). Moreover, for
+any _R ∈_ SO(3), we can define the canonical basis for Tan _R_ SO(3) as _{R_ **e** 1 _, R_ **e** 2 _, R_ **e** 3 _}_ by mapping
+_{_ **e** 1 _,_ **e** 2 _,_ **e** 3 _}_ through the linear isomorphism given by the differential of the left-multiplication map
+_LR_ ( _R_ _[′]_ ) = _RR_ _[′]_ (this map is a diffeomorphism as smoothness is given by the definition of the Lie
+group and we have the smooth inverse _L_ _[−]_ _R_ [1][(] _[R][′]_ [) =] _[ R][−]_ [1] _[R]_ [).]
+
+
+We note that another common representation of so(3) is the axis-angle parametrisation - _i.e._ for any
+_S_ _∈_ so(3), there exists some _u ∈_ _S_ [2] _⊂_ R [3] (the axis) and _ω_ _∈_ R [+] (the angle) such that _S_ = [ _ωu_ ] _×_ .
+
+
+**Exponential and logarithmic maps.** The exponential map exp : g _→_ _G_ and its inverse, the logarithmic map log : _G →_ g are fundamental tools for studying Lie groups. They provide a canonical
+(local) diffeomorphism between the flat Lie algebra and the curved Lie group, thus allowing for
+the parametrisation of the manifold by an easy-to-work-with vector space and translating geometric
+problems to problems of linear algebra.
+
+
+11Strictly, this should also be considered as equipped with a Lie bracket.
+
+
+17
+
+
+In the case of SO(3), the exponential map exp : so(3) _→_ SO(3) has an analytic form, given by
+Rodrigues’ formula (considering _S_ _∈_ so(3) in terms of its angle-axis parametrisation):
+
+
+_[ ω]_
+
+_S_ + [1] _[ −]_ [cos] _[ ω]_
+_ω_ _ω_ [2]
+
+
+exp( _S_ ) = **I** + [sin] _[ ω]_
+
+
+_S_ [2] _,_
+_ω_ [2]
+
+
+Furthermore, the logarithmic map log : SO(3) _→_ so(3) has the form:
+
+
+_θ_
+log _R_ = [where Tr][(] _[R]_ [) = 1 + 2 cos] _[ θ.]_
+2 sin _θ_ [(] _[R][ −]_ _[R][⊤]_ [)] _[,]_
+
+
+18
+
+
+C FURTHER DETAILS ON SE(3) DIFFUSION
+
+
+In this section, we provide an extended discussion on the construction of diffusion models on
+SE(3); this is mainly recapped from the seminal work: Yim et al. (2023).
+
+
+**Riemannian metric.** In order to define a diffusion process on the Lie group SE(3), we note that
+the generator for Euclidean Brownian motion is given by the Laplace operator ∆. Therefore, to define an analogous (diffusion) Markov process on SE(3), we can use the Laplace–Beltrami operator,
+which is a generalisation of the Laplace operator to Riemannian manifolds. This requires endowing
+SE(3) with a Riemannian metric.
+
+
+First, we note that tangent space to SE(3) can be expressed as a direct sum: Tan( _p,R_ ) SE(3) =
+Tan _p_ T(3) _⊕_ Tan _R_ SO(3) which we equip with their canonical bases. Yim et al. (2023) then proposes
+the choice of metric _⟨·, ·⟩_ SE(3) defined by
+
+
+_⟨_ ( _a, S_ ) _,_ ( _a_ _[′]_ _, S_ _[′]_ ) _⟩_ SE(3) = _⟨a, a_ _[′]_ _⟩_ T(3) + _⟨S, S_ _[′]_ _⟩_ SO(3) _,_
+
+
+where ( _a, S_ ) _,_ ( _a_ _[′]_ _, S_ _[′]_ ) _∈_ Tan( _p,R_ ) SE(3) for some ( _p, R_ ) _∈_ SE(3), and _⟨a, a_ _[′]_ _⟩_ T(3) = [�] _i_ [3] =1 _[a][i]_ _[·][ a][′]_ _i_
+and _⟨S, S_ _[′]_ _⟩_ SO(3) = 2 [1] [Tr(] _[SS][′⊤]_ [)][ are the canonical metrics for][ T][(3)][ and][ SO(3)][ respectively.] [We note]
+
+that the canonical basis of Tan( _p,R_ ) SE(3) is orthonormal under this metric. Essentially, this choice
+of metric allows us to view SE(3) as the Riemannian product manifold T(3) _×_ SO(3) and allows
+for the factorisation of diffusion processes over translations and rotations. The Riemannian metric
+on SE(3) _[m]_ is given by the standard extension.
+
+
+**Noise schedules.** For ease of presentation, we only consider a non-time dependent forward process
+in Section 2.3, however, following Yim et al. (2023), our actual implementation fixes _T_ = 1 and
+uses the following decoupled time-scaling of the forward translational and rotational SDEs:
+
+
+    - Our translation SDE is given by
+
+d **p** [(] _[t]_ [)] = _−_ [1]             - _β_ ( _t_ )d **B** [(] R _[t][m]_ [)] _[×]_ [3] _[,]_
+
+2 _[β]_ [(] _[t]_ [)] **[p]** [(] _[t]_ [)][d] _[t]_ [ +]
+
+
+where _β_ ( _t_ ) = _β_ min + _t_ ( _β_ max _−_ _β_ min).
+
+
+    - Our rotational SDE is given by
+
+
+d **R** [(] _[t]_ [)] =               - _g_ ( _t_ )d **B** [(] SO(3) _[t]_ [)] _[m][,]_
+
+
+where _g_ ( _t_ ) = _dt_ _[d]_ _[σ]_ [2][(] _[t]_ [)][ and] _[ σ]_ [(] _[t]_ [) = log(] _[t]_ [ exp(] _[σ]_ [max][) + (1] _[ −]_ _[t]_ [) exp(] _[σ]_ [min][))][.]
+
+
+The backward SDE then has the form:
+
+
+_←_
+d **Z** [(] _[t]_ [)] =
+
+
+- 12 _[β]_ [(1] _[ −]_ _[t]_ [)] _←_ **p** ( _t_ ) + _β_ (1 _−_ _t_ ) _∇p_ log _p_ 1 _−t_ ( _←_ **Z** [(] _[t]_ [)] )�
+_g_ (1 _−_ _t_ ) _∇R_ log _p_ 1 _−t_ ( **Z** [(] _[t]_ [)] )
+
+
+d _t_ +
+
+
+�� _β_ (1 _−_ _t_ )d **B** [(] R _[t][m]_ [)] _[×]_ [3]
+
+~~�~~ _g_ (1 _−_ _t_ )d **B** [(] SO(3) _[t]_ [)] _[m][.]_
+
+
+Going ahead, we will refer to these as the definition of our forward and backward SDEs.
+
+
+**Forward kernels.** By the structure of the metric _⟨·, ·⟩_ SE(3), the forward kernel _pt|_ 0( **z** [(] _[t]_ [)] _|_ **z** [(0)] ) (for
+ease of presentation, we only consider _m_ = 1 here) can be factorised into independent kernels over
+T(3) and SO(3).
+
+
+    - For the translational component, we have the standard VP forward kernel:
+
+
+                 _pt|_ 0( _p_ [(] _[t]_ [)] _|p_ [(0)] ) = _N_ ( _p_ [(] _[t]_ [)] ; _αtp_ [(0)] _,_ (1 _−_ _αt_ [2][)] **[I]** [)] _[,]_ [where] _[ α][t]_ [= exp] _−_ [1]
+
+2
+
+
+- _t_ 
+_β_ ( _s_ )d _s_ _._
+0
+
+
+- For the rotational component, the forward kernel is given by:
+
+
+_p_ ( _R_ [(] _[t]_ [)] _|R_ [(0)] ) = _IG_ SO(3)( _R_ [(] _[t]_ [)] ; _R_ [(0)] _, σ_ [2] ( _t_ )) _._
+
+
+19
+
+
+To sample from _R_ [(] _[t]_ [)] _∼IG_ SO(3)( _R_ [(] _[t]_ [)] ; _R_ [(0)] _, σ_ [2] ), we can first sample _R_ _∼IG_ SO(3)( _R_ ; **I** _, σ_ [2] )
+through independently sampling _ω_ _∈_ [0 _, π_ ] according to the following density:
+
+
+_[l]_ [ +] 2 [)] _[ω]_ [)]
+
+_,_
+sin( _ω/_ 2)
+
+
+_f_ ( _ω, σ_ ) = [1] _[ −]_ [cos] _[ ω]_
+
+_π_
+
+
+_∞_
+
+
+- [sin((] _[l]_ [ +] 2 [1]
+
+(2 _l_ + 1) _e_ _[−][l]_ [(] _[l]_ [+1)] _[σ]_ [2] _[/]_ [2]
+
+sin( _ω/_
+
+_l_ =0
+
+
+and sampling _u_ _∼US_ 2 where _US_ 2 denotes the uniform distribution on the sphere (e.g. sampling
+from isotropic Gaussian and then dividing by the norm). We then compute _R_ = exp([ _ωu_ ] _×_ ) _∼_
+_IG_ SO(3)( _R_ ; **I** _, σ_ [2] ) and return the sample: _R_ [(] _[t]_ [)] = _RR_ [(0)] _∼IG_ SO(3)( _R_ [(] _[t]_ [)] ; _R_ [(0)] _, σ_ [2] ).
+
+
+To sample from _f_ ( _ω, σ_ ), following previous work (Leach et al., 2022; Yim et al., 2023), we truncate
+the infinite series in order to compute an approximation to the distribution’s CDF. We then cache
+these values and draw samples with inverse transform sampling.
+
+
+**Stationary** **distribution.** To sample from the uniform distribution _U_ SO(3) over SO(3), we independently sample _ω_ _∈_ [0 _, π_ ] according to the following density:
+
+
+_p_ ( _ω_ ) = [1] _[ −]_ [cos] _[ ω]_ _,_
+
+_π_
+
+
+and sample _u ∈US_ 2. We then return _R_ = exp([ _ωu_ ] _×_ ) _∼U_ SO(3). We note that this is equivalent to
+sampling from _IG_ SO(3)(0 _, σ_ [2] ) in the limit as _σ_ _→∞_ .
+
+
+**Conditional** **scores.** For the score matching objective, we require the form of the conditional
+scores over translations and rotations. For translations, this is a standard computation, and for rotations, we first require the modified function: _f_ 0( _ω, σ_ ) = _f_ ( _ω, σ_ ) _/p_ ( _ω_ ).
+
+
+This is due to the fact that _f_ ( _ω, σ_ ) denotes the marginal density of the angle _ω_, hence the density
+_IG_ SO(3)( _R_ [(] _[t]_ [)] ; _R_ [(0)] _, σ_ [2] ), which has support over SO(3) instead, requires a different factor. We then
+have the following formula:
+
+
+_∇R_ log _pt|_ 0( _R_ [(] _[t]_ [)] _|R_ [(0)] ) = _[R]_ [(] _[t]_ [)]
+
+
+_f_ 0( _ω_ ( _t_ ) _, σ_ ( _t_ )) _[,]_
+
+
+_[R]_ _[∂][ω][f]_ [0][(] _[ω]_ [(] _[t]_ [)] _[, σ]_ [(] _[t]_ [))]
+
+_ω_ ( _t_ ) [log] _[ R]_ [(0] _[,t]_ [)] _f_ 0( _ω_ ( _t_ ) _, σ_ ( _t_ ))
+
+
+where _R_ [(0] _[,t]_ [)] = ( _R_ [(0)] ) _[⊤]_ _R_ [(] _[t]_ [)] and _ω_ ( _t_ ) = _ω_ ( _R_ [(0] _[,t]_ [)] ) is the angle in the axis-angle representation of
+_R_ [(0] _[,t]_ [)] - this can be computed from the equation: Tr _R_ [(0] _[,t]_ [)] = 1 + 2 cos( _ω_ ( _R_ [(0] _[,t]_ [)] )). Similarly, we
+truncate the infinite sum in _fθ_ ( _ω, t_ ) in order to compute the above score.
+
+
+**Loss** **scaling.** We base our loss scaling off of the standard heuristic given in (Song et al., 2020)
+from the reciprocal of the expected value of the squared norm of the conditional score. For the
+translational loss, it is a standard calculation to show E �� _∇p_ log _pt|_ 0( _p_ ( _t_ ) _|p_ (0))��2T(3) _[∝]_ _[λ]_ [ˆ] _t_ _[p]_ [=] 1 _−_ 1 _α_ [2] _t_ [.]
+
+For the rotational loss, we have the following proposition. For the proof [12], see Appendix C.1.
+
+
+**Proposition 1.** _The expected squared norm of the conditional rotational score is given by_
+
+
+�2 [�]
+
+
+2
+_λ_ ˆ _[R]_ _t_ [=][ E] ��� _∇R_ log _pt|_ 0( _R_ ( _t_ ) _|R_ (0))���SO(3) [=][ E] _[ω][∼][f]_ [(] _[ω,σ]_ [2][(] _[t]_ [))]
+
+
+��
+_∂ωf_ 0( _ω, σ_ ( _t_ ))
+_f_ 0( _ω, σ_ ( _t_ ))
+
+
+_._
+
+
+We then define our final loss scaling by _λ_ _[p]_ _t_ [=] _[ C]_ _[p][/][λ]_ [ˆ] _t_ _[p]_ [for translations and] _[ λ]_ _t_ _[R]_ [=] _[ C]_ _[R][/][λ]_ [ˆ] _t_ _[R]_ [for rotations]
+where _C_ _[p]_ _, C_ _[R]_ _>_ 0 are some chosen hyper-parameters. We note that we numerically compute the
+expectation in _λ_ [ˆ] _[R]_ _t_ [from our truncated approximation to] _[ f]_ [0][(] _[ω, σ]_ [)][.]
+
+
+12We note that it is surprising that, to the best of our knowledge, this proof is not seen in the literature.
+
+
+20
+
+
+C.1 PROOF OF PROPOSITION 1
+
+
+_Proof._ We first note that
+��� _∇R_ log _pt|_ 0( _R_ ( _t_ ) _|R_ (0))���2SO(3)
+
+        - _∂ωf_ 0( _ω_ ( _t_ ) _, σ_ ( _t_ )) �2 1         = _R_ [(] _[t]_ [)] log _R_ [(0] _[,t]_ [)] (log _R_ [(0] _[,t]_ [)] ) _[⊤]_ ( _R_ [(] _[t]_ [)] ) _[⊤]_ [�]
+_ω_ ( _t_ ) _f_ 0( _ω_ ( _t_ ) _, σ_ ( _t_ )) 2 [Tr]
+
+        - _∂ωf_ 0( _ω_ ( _t_ ) _, σ_ ( _t_ )) �2 1         = log _R_ [(0] _[,t]_ [)] (log _R_ [(0] _[,t]_ [)] ) _[⊤]_ [�] _,_
+_ω_ ( _t_ ) _f_ 0( _ω_ ( _t_ ) _, σ_ ( _t_ )) 2 [Tr]
+
+
+due to Tr( _AB_ ) = Tr( _BA_ ). Moreover, since _R_ [(] _[t]_ [)] _∼IG_ SO(3)( _R_ [(] _[t]_ [)] ; _R_ [(0)] _, σ_ [2] ( _t_ )), we know that
+_R_ [(] _[t]_ [)] = exp([ _ωu_ ] _×_ ) _R_ [(0)] with _ω_ _∼_ _f_ ( _ω, σ_ [2] ( _t_ )) and _u_ _∼US_ 2, which implies that _R_ [(0] _[,t]_ [)] =
+exp([ _ωu_ ] _×_ ) _[⊤]_ = exp([ _−ωu_ ] _×_ ) by the definition of [ _·_ ] _×_ and using the fact that exp( _S_ ) _[⊤]_ = exp( _S_ _[⊤]_ )
+by the definition of the exponential map. As we have _u_ _∼−u_, we can conclude that _R_ [(0] _[,t]_ [)] _∼_
+exp([ _ωu_ ] _×_ ). Moreover, we have _ω_ (exp([ _ωu_ ] _×_ )) = _ω_ as _ω_ ( _·_ ) returns the angle of the input rotation [13] .
+
+This allows us to rewrite E �� _∇R_ log _pt|_ 0( _R_ ( _t_ ) _|R_ (0))��2SO(3) [as]
+
+
+2
+E _∇R_ log _pt|_ 0( _R_ ( _t_ ) _|R_ (0))
+��� ���SO(3) [=]
+
+
+E _ω,u_
+
+
+��
+_∂ωf_ 0( _ω, σ_ ( _t_ ))
+_ωf_ 0( _ω, σ_ ( _t_ ))
+
+
+�2 1 �log exp([ _ωu_ ] _×_ )(log exp([ _ωu_ ] _×_ )) _[⊤]_ [�] 2 [Tr]
+
+
+_._
+
+
+Further, we see that log exp([ _ωu_ ] _×_ ) = [ _ωu_ ] _×_ and that [1] 2 [Tr([] _[ωu]_ []] _[×]_ [[] _[ωu]_ []] _×_ _[⊤]_ [)] [=] _[ω]_ [2] _[ ∥][u][∥]_ [2] 2 [=] _[ω]_ [2] [as]
+
+_u ∈_ _S_ [2] . Putting this together, we can conclude
+
+
+�2 [�]
+
+
+2
+E _∇R_ log _pt|_ 0( _R_ ( _t_ ) _|R_ (0))
+��� ���SO(3) [=][ E] _[ω][∼][f]_ [(] _[ω,σ]_ [2][(] _[t]_ [))]
+
+
+��
+_∂ωf_ 0( _ω, σ_ ( _t_ ))
+_f_ 0( _ω, σ_ ( _t_ ))
+
+
+_._
+
+
+C.2 PROOF OF THEOREM 1
+
+
+Let a molecule with _N_ atoms have Cartesian coordinates **x** = ( _x_ 1 _, . . ., xN_ ) _∈X_ : R _[N]_ _[×]_ [3], where
+each _xi_ _∈_ R [3] . Let _pX_ := _X_ _→_ R [+] be any target density on Cartesian space (with respect to
+Lebesgue measure _d_ **x** ), covering equilibrium Boltzmann distributions, forward-diffusion marginals
+_pt_, empirical data density, _etc._
+
+_pX_ ( **x** ) = [1]
+
+_Z_ [exp(] _[−][βE]_ [(] **[x]** [))] _[,]_
+
+where _β_ is a thermal constant and _E_ ( **x** ) : R _[N]_ _[×]_ [3] _→_ R is the energy (scalar) function.
+
+
+The purpose of this proof is _geometric_ : compare the Riemannian (Jacobian) base measures induced
+by two different parametrisations of the same constrained Cartesian manifold and show that, under
+standard molecular topologies, the torsional parametrisation generically does _not_ induce a product
+base measure while a disjoint rigid-fragment parametrisation does.
+
+
+**Torsions.** Fix all bond lengths and bond angles and parametrize the remaining internal degrees of
+freedom by _k_ torsional angles _**ϕ**_ = ( _ϕ_ 1 _, . . ., ϕk_ ) _∈_ Φ := T _[k]_, where _ϕi_ _∈_ _S_ [1] _[∼]_ = SO(2). Together
+with a global rigid-body pose ( _R, p_ ) _∈_ SE(3) this gives the parameter space _U_ = SE(3) _×_ T _[k]_ . Let
+
+
+_ψ_ : _U_ = SE(3) _×_ T _[k]_ _→_ R _[N]_ _[×]_ [3] _,_ _u_ = ( _R, p,_ _**ϕ**_ ) _�→_ **x**
+
+
+denote the parametrisation of Cartesian configurations with prescribed fixed bonds and angles.
+
+
+13This is trivial to show.
+
+
+21
+
+
+**Rigid fragments.** Split the molecule into _m_ disjoint rigid fragments with local coordinates **x** ˜ _Fi_ _∈_
+R _[|G][Fi]_ _[|×]_ [3] for _i_ = 1 _, . . ., m_ . Let **z** = ( _z_ 1 _, . . ., zm_ ) _∈Z_ = SE(3) _[m]_ with _zi_ = ( _pi, Ri_ ) _∈_ SE(3), and
+define
+_φ_ : _Z_ _→_ R _[N]_ _[×]_ [3] _,_ _z_ _�→_ **x** _,_
+
+
+by placing each fragment via the group action
+
+
+**x** _Fi_ = _Ri_ ˜ **x** _Fi_ + _pi,_ _i_ = 1 _, . . ., m._
+
+
+Assuming the fragments are disjoint (no shared atoms) this yields an explicit parametrisation of the
+constrained Cartesian configurations obtained by rigidly placing each fragment.
+
+
+**Important distinction.** The data density _pX_ at _t_ = 0 is identical under any parametrisation, since
+it reflects the true molecular distribution. What differs is the forward (noising) process: the marginals
+_pt_ ( **x** _t_ ) depend on the parameter space in which the dynamics are defined. In other words, while the
+starting distribution _p_ 0( **x** 0) is fixed in Cartesian space, the choice of coordinates (e.g. torsions or
+rigid fragments) determines how the forward dynamics evolve and hence the form of the intermediate marginals.
+
+
+**Preliminaries.** For a parametrisation Ω denoting either parametrisation map ( _ψ_ or _φ_ ) and a parameter **y** in the corresponding parameter space, define the Jacobian
+
+_J_ Ω( **y** ) = _[∂]_ [Ω]
+
+_∂_ **y** _[∈]_ [R][3] _[N]_ _[×][d][,]_
+
+
+where _d_ is the parameter-space dimension. We define the Gram matrix as _G_ Ω( **y** ) =
+_J_ Ω( **y** ) _[⊤]_ _J_ Ω( **y** ) _∈_ R _[d][×][d]_ . The induced Riemannian volume element on parameter space is
+
+
+_dµ_ Ω( **y** ) = ~~�~~ det _G_ Ω( **y** ) _d_ **y** _,_
+
+
+where _d_ **y** is the Lebesgue element in the local parameter space. For densities _pX_ on _X_ and _pY_ on
+parameter space _Y_, the change-of-variables (push-forward) relation is the equality of measures
+
+
+_pY_ ( **y** ) _dµ_ Ω( **y** ) = _pX_ ( **x** ) _d_ **x**
+
+
+which simplifies to
+_pY_ ( **y** ) = _pX_ (Ω( **y** ))�det _G_ Ω( **y** ) _._
+
+
+Equivalently
+
+_pY_ ( **y** )
+_pX_ (Ω( **x** )) = �det _G_ Ω( **y** ) _._
+
+
+C.2.1 TORSIONAL ENTANGLEMENT
+
+
+_Proof._ Torsional models suffer from geometric coupling and a highly intricate non-product induced
+measure.
+
+
+Consider the torsional parametrisation _ψ_ . The parameter space is
+
+
+_U_ = SE(3) _×_ T _[k]_ _,_ _u_ = ( _R, p,_ _**ϕ**_ **)**
+
+
+and the torsional parametrisation is the map _ψ_ : _U_ _→_ R _[N]_ _[×]_ [3] _,_ _u �→_ **x** _._ Its Jacobian and Gram matrix
+are
+_Jψ_ ( _u_ ) = _[∂ψ]_ _Gψ_ ( _u_ ) = _Jψ_ _[⊤]_ [(] _[u]_ [)] _[J][ψ]_ [(] _[u]_ [)] _[ ∈]_ [R][(] _[k]_ [+6)] _[×]_ [(] _[k]_ [+6)]
+
+_∂u_ _[∈]_ [R][3] _[N]_ _[×]_ [(] _[k]_ [+6)] _[,]_
+
+and the induced Riemannian volume on parameter space is _dµψ_ ( _u_ ) = �det _Gψ_ ( _u_ ) _du._
+
+
+Index torsional coordinates by _i, j_ _∈{_ 1 _, . . ., k}_ . The column _Jψ_ corresponding to _ϕi_ is the instantaneous Cartesian displacement vector obtained by varying torsion _ϕi_ . Writing atomic positions
+_xa_ _∈_ R [3] _, a ∈{_ 1 _, · · ·_ _, N_ _}_, the torsion-torsion Gram matrix is
+
+
+( _u_ ) _._
+_∂ϕj_
+
+
+_Gψ_ ( _u_ ) _ij_ = _⟨_ ( _Jψ_ ) _i,_ ( _Jψ_ ) _j⟩_ =
+
+
+22
+
+
+3 _N_
+
+
+_a_ =1
+
+
+_∂xa_
+
+
+_∂xa_
+
+( _u_ ) _[∂x][a]_
+_∂ϕi_ _∂ϕj_
+
+
+In standard bonded molecular topologies (chains, branched trees, rings with shared downstream
+atoms) a change in a single torsion displaces multiple downstream atoms. Additionally, the sets
+of atoms that move when different torsions are varied typically overlap ( _i.e._, the same downstream
+atoms are moved by multiple torsions). Hence, there generally exist pairs _i_ = _j_ and atoms _a_ for
+which both derivatives are non-zero, producing off-diagonal entries ( _Gψ_ ) _ij_ = 0 _._ Thus, the torsion
+block _Gψ_ ( _u_ ) is generically non-diagonal. Since the determinant of a matrix with non-zero offdiagonals does not factor as a product of single-coordinate functions, det _Gψ_ ( _u_ ) does not decompose
+as [�] _i_ _[g][i]_ [(] _[ϕ][i]_ [)][.] [Consequently, the induced volume form]
+
+~~�~~
+_dµψ_ ( _u_ ) = det _Gψ_ ( _u_ ) _du_
+
+
+is _not a product measure_ across torsions.
+
+
+Therefore, independent perturbations in torsion space is mapped to Cartesian marginals with metricinduced correlations: torsional independence does not imply Cartesian independence. As a result,
+forward-backward kernels in torsion space correspond to correlated and anisotropic displacements
+in Cartesian space, complicating diffusion processes. In addition, a model that observes Cartesian
+coordinates must implicitly learn this metric-induced coupling, yielding unstable training dynamics,
+and degeneracy during inference.
+
+
+**Gauge ambiguity (complementary issue).** A torsion angle by itself does not uniquely determine
+which rigid sub-body rotates about a bond; mapping a torsional increment ∆ _ϕi_ to Cartesian updates requires choosing a canonical extrinsic gauge (heuristics such as RMSD alignment are often
+situation-dependent and non-differentiable): An update ∆ _ϕ_ _[ABCD]_ _i_ defined in _S_ [1] can rotate bodies
+_Ai_ and _Bi_ equiprobably such that ∆ _ϕ_ _[ABCD]_ _i_ = _θi_ _[ABC]_ _−_ _θi_ _[BCD]_ . Since we have 2 loose variables that
+are not determined by the torsion alone, the mapping from ∆ _ϕ_ _[ABCD]_ _i_ to Cartesian updates is undetermined, systematically pushing the marginal densities to lower likelihood regions at inference.
+
+
+**Global-pose coupling.** Augmenting torsional coordinates with a global pose ( _R, p_ ) _∈_ SE(3) ( _i.e._
+treating the parameter space as T _[k]_ _×_ SE(3)) _does not_ in general restore a product space.
+
+
+Torsional changes typically (i) shift the molecule’s center-of-mass (CoM) and (ii) alter its
+orientation-dependent moments of inertia. As a result, the Jacobian acquires additional non-zero
+cross-terms between torsion and translation/rotation columns. Concretely:
+
+
+- The _translation–torsion cross term_ is proportional to the net displacement of the molecular
+CoM induced by a torsional _ϕi_ :
+_d_ CoM( _ϕi_ ) _∝_             - _ma_ _∂xa_ _,_
+_dϕi_ _∂ϕi_
+
+_a_
+
+where, for uniform masses, this reduces to the unweighted centroid shift). This quantity is
+generically non-zero, so torsions couple to non-zero translations about the CoM.
+
+- The _rotation-torsion cross term_ is proportional to the instantaneous change in angular momentum induced by the torsional displacement field:
+
+     
+_[∂x][a]_
+
+
+_∂xa_
+_ma_
+
+_∂ϕi_
+
+_a_
+
+
+_,_
+_∂ϕi_
+
+
+_ma xa ×_ _[∂x][a]_
+
+_∂ϕi_
+
+_a_
+
+
+_,_
+_∂ϕi_
+
+
+which can be interpreted as the torsion-induced torque on the molecular frame. This term
+is generically non-zero, so torsions also couple to rotations.
+
+
+Only in rare cases where both the CoM shift and the torque vanish for every torsion (or their massweighted analogues vanish under a physical metric), or in infinitesimally small time changes, do
+torsions decouple from global SE(3), yielding a quasi-block-diagonal metric and an approximate
+product structure T _[k]_ _×_ SE(3). Although heuristics such as RMSD alignment can be applied to
+mitigate this issue, this is not a general solution and is only strictly true for infinitesimally small
+∆ _**ϕ**_ ): RMSD can only attempt to mitigate net body motions induced from torsional updates.
+
+
+**Degenerate exceptions.** If two torsions act on strictly disjoint atom sets (no downstream overlap),
+or only a single torsional bond exists such that it cannot form a branch or chain, the corresponding
+Jacobian columns have disjoint support and the associated blocks of _Gψ_ may be diagonal; in such
+degenerate topologies the geometric term can factorise.
+
+
+23
+
+
+C.2.2 RIGID FRAGMENTS
+
+
+_Proof._ Rigid-fragment parametrisation induces a true product measure.
+
+
+Partition a molecule into _m_ rigid, disjoint fragments with local coordinates **x** ˜ _Fi_ _∈_ R _[|G][Fi]_ _[|×]_ [3] _, i_ _∈_
+_{_ 1 _, · · ·_ _, m}_ . The parameter space is
+
+
+_Z_ = SE(3) _[m]_ _,_ **z** = ( _z_ 1 _, · · ·_ _, zm_ ) _,_ _zi_ = ( _Ri, pi_ ) _,_
+
+
+and the rigid-fragment parametrisation is the map
+
+
+_φ_ : _Z_ _→_ R _[N]_ _[×]_ [3] _,_ **z** _→_ **x** _,_ **x** _Fi_ = _Ri_ **x** ˜ _Fi_ + _pi,_
+
+
+which by construction is block-wise rigid:
+
+
+**x** = _φ_ ( _z_ 1 _, . . ., zm_ ) =
+
+
+_m_
+
+- ( _Ri, pi_ ) _·_ ˜ **x** _Fi._
+
+
+_i_ =1
+
+
+Its Jacobian, Gram matrix and induced Riemannian volume form are
+
+
+                 
+_Jφ_ ( _z_ ) = _[∂φ]_ _Gφ_ ( _z_ ) = _Jφ_ _[⊤]_ [(] _[z]_ [)] _[J][φ]_ [(] _[z]_ [)] _[ ∈]_ [R][6] _[m][×]_ [6] _[m][,]_ _dµφ_ ( _z_ ) = det _Gφ_ ( _z_ ) _dz._
+
+_∂z_ _[∈]_ [R][3] _[N]_ _[×]_ [6] _[m][,]_
+
+
+From the definition of the block-wise rigid mapping in _φ_ and the disjointness in the fragments,
+moving one fragment does not affect the Cartesian positions of any other fragment. Concretely the
+Jacobian has a block-diagonal structure
+
+
+
+
+
+
+
+_,_ _Jii_ = _[∂]_ **[x]** _[F][i]_ _∈_ R [3] _[|G][Fi]_ _[|×]_ [6] _._
+ _∂zi_
+
+
+_Jφ_ ( _z_ ) =
+
+
+
+
+
+_J_ 11 0 _. . ._ 0
+0 _J_ 22 _. . ._ 0
+... ... ...
+0 0 _. . ._ _Jmm_
+
+
+As a result, the Gram matrix is also block-diagonal:
+
+
+_Gφ_ ( _z_ ) = diag� _J_ 1 _[⊤][J]_ [1] _[, . . ., J]_ _m_ _[⊤][J][m]_          - _,_
+
+
+so that the determinant factorises:
+
+
+det _Gφ_ ( _z_ ) =
+
+
+Hence the induced volume element
+
+
+_m_
+
+- det - _Ji_ _[⊤][J][i]_ - _._
+
+_i_ =1
+
+
+       _dµφ_ ( _z_ ) = det _Gφ_ ( _z_ ) _dz_ =
+
+
+is _a product measure over fragments_ .
+
+
+_m_
+
+
+_i_ =1
+
+
+det  - _Ji_ _[⊤][J][i]_  - _dzi,_
+
+
+Therefore, independent noise applied to each fragment in the parameter space remains independent
+in Cartesian space via the linear rigid mapping. This decoupling makes diffusion or generative
+modelling much simpler via the rigid body SE(3) parametrisation.
+
+
+24
+
+
+D FURTHER DETAILS ON FRAGMENTATION & CONFORMATIONAL
+ALIGNMENT
+
+
+D.1 HOLONOMIC CONSTRAINTS
+
+
+Let **x** = ( _x_ 1 _, . . ., x|G_ ligand _|_ ) _∈_ R _[|G]_ [ligand] _[|×]_ [3] be the Cartesian coordinates of the ligand atoms. The
+holonomic map
+_g_ ( **x** ) =               - _g_ 1( **x** ) _, . . ., gm_ ( **x** )� _⊤_
+
+
+is built from scalar constraints that enforce bond lengths and bond angles inferred from the molecular graph _G_ ligand [2D] [.] [Below] [we] [give] [simple] [valid] [forms] [which] [(softly)] [approximate] [the] [holonomic]
+constraints assumed in the construct of our method.
+
+
+**Bond-length constraint.** For a bonded pair ( _A, B_ ) with equilibrium length _dAB_ = _d_ 0 define
+
+
+_rAB_ := _xA −_ _xB,_ _g_ ( _AB_ )( **x** ) = _∥rAB∥−_ _d_ 0 _._
+
+
+Thus _g_ ( _AB_ )( **x** ) _≈_ 0 enforces _∥rAB∥≈_ _d_ 0. The gradients (akin to vector field / forces) are
+
+
+_∂g_ ( _AB_ )
+
+
+( _AB_ )
+
+= _−_ _[r][AB]_
+_∂xB_ _∥rAB_
+
+
+( _AB_ ) _rAB_ _∂g_ ( _AB_ )
+
+=
+_∂xA_ _∥rAB∥_ _[,]_ _∂xB_
+
+
+_∥rAB∥_ _[,]_
+
+
+and _∂g_ ( _AB_ ) _/∂xi_ = 0 for _i ̸∈{A, B}_ .
+
+
+**Bond-angle constraint.** For a bonded triplet ( _A−B_ _−C_ ) with equilibrium angle _τABC_ = _τ_ 0 let
+
+_rAB_ _rCB_
+_rAB_ = _xA −_ _xB,_ _rCB_ = _xC_ _−_ _xB,_ _u_ = _v_ =
+_∥rAB∥_ _[,]_ _∥rCB∥_ _[.]_
+
+
+We use the cosine form
+_g_ ( _ABC_ )( **x** ) = _u·v −_ cos _τ_ 0 _,_
+
+
+so _g_ ( _ABC_ )( **x** ) _≈_ 0 enforces the desired angle. The partial derivatives are
+
+
+( _ABC_ ) 1 _∂g_ ( _ABC_ )
+
+= _[−]_ _[uu][⊤]_ [)] _[ v,]_
+_∂xA_ _∥rAB∥_ [(] _[I]_ _∂xC_
+
+
+_∂g_ ( _ABC_ )
+
+
+( _ABC_ ) 1
+
+= _[−]_ _[vv][⊤]_ [)] _[ u,]_
+_∂xC_ _∥rCB∥_ [(] _[I]_
+
+
+and
+_∂g_ ( _ABC_ )
+
+
+[(] _[ABC]_ [)] _−_ _[∂g]_ [(] _[ABC]_ [)]
+
+_∂xA_ _∂xC_
+
+
+( _ABC_ )
+
+= _−_ _[∂g]_ [(] _[ABC]_ [)]
+_∂xB_ _∂xA_
+
+
+_._
+_∂xC_
+
+
+**Soft** **(harmonic)** **enforcement.** Instead of imposing _g_ ( **x** ) = 0 as a hard constraint, we relax the
+requirements by instead assuming stiff harmonic penalties. For a bond and an angle the typical
+potentials are
+
+
+[1] 2 _[k][AB]_ - _∥rAB∥−_ _d_ 0�2 _,_ _E_ angle( _xA, xB, xC_ ) = [1] 2
+
+
+_E_ bond( _xA, xB_ ) = [1]
+
+
+[1] 2 _[k][ABC]_ - _u·v −_ cos _τ_ 0�2 _._
+
+
+For large force constants _kAB, kABC_ _≫_ 1 the Boltzmann measure concentrates near _g_ ( **x** ) = 0 and
+approximates the hard-constrained manifold; for finite (but large) constants the potentials provide
+numerical stability and allow standard unconstrained sampling while strongly biasing configurations toward _Mc_ . These harmonic constraints are a fundamental component in physics-based and
+template-based conformer generators such as ETKDGv3 (Landrum, 2025). Crucially, this assumption is paramount to our SE(3) rigid-body framework as it allows us to safely assume that the
+variation in bond angles and lengths is negligible (up to a certain error rate, see D.3) when defining
+our local coordinates during sampling.
+
+
+D.2 PROOF OF LEMMA 1
+
+
+Let _BC_ be a torsional bond at the center of a set of dihedrals defined as _ϕA_ : _BC_ : _D_ and let _A_ =
+_{Ap}p∈FB_ denote the set of neighbour atoms on the _B_ -side (connected to _B_ ), and _D_ = _{Dq}q∈FA_
+
+
+25
+
+
+denote the set of neighbour atoms on the _C_ -side (connected to _C_ ). Suppose the following pairwise
+distances are defined as:
+
+
+_∀Ap_ _∈A_ : _∥Ap −_ _BA∥,_ _∥BA_ ( _t_ ) _−_ _CD_ ( _t_ ) _∥,_ _∥Ap_ ( _t_ ) _−_ _CD_ ( _t_ ) _∥,_
+
+
+_∀Dq_ _∈D_ : _∥BA_ ( _t_ ) _−_ _CD_ ( _t_ ) _∥,_ _∥CD −_ _Dq∥,_ _∥BA_ ( _t_ ) _−_ _Dq_ ( _t_ ) _∥,_
+
+
+where gray terms denote cross-edges across fragments that are time-dependent and therefore varying according to the forward-backward diffusion process on SE(3). For clarity, we use the notation
+_BA_ ( _t_ ) to represent the node _B_ of the dihedral _ϕA_ : _BC_ : _D_ corresponding to fragment _A_ . This is important because _B_ and _C_ are duplicated (as dummy atoms) in the fragmentation process to preserve
+torsional bond information. An illustration is shown in Figure 5.
+
+
+Figure 5: Visual helper for Lemma 1 showing corresponding atoms for fragment _A_ shown in blue
+and fragment _D_ denoted in red. For additional clarity, dummy atoms across torsional bond _BC_ are
+marked with an asterisk.
+
+
+Thus, during the forward noising process, _BA_ ( _t_ ) _̸_ = _BD_ ( _t_ ) _,_ _∀t ∈_ (0 _,_ 1], and _BA_ ( _t_ = 0) = _BD_ ( _t_ =
+0). Note that we absorb time for the other distance definitions as these are always preserved: distances are fixed through time by from the canonical fragment template _GF_ ( _i.e._ due to fixed internal
+bond angles). To simplify notation, we will also absorb time for all other variables for the rest of the
+proof but keep the colouring.
+
+
+For every _Ap_ the triangle ( _Ap, BA, CD_ ) is rigidified via side-side-side constraints (SSS). Equivalently, for every _Dq_ the triangle ( _BA, CD, Dq_ ) is also rigidified. Subsequently, for every _Ap_ _∈A_ and
+_Dq_ _∈D_ the corresponding adjacent bond angles ∠( _Ap, BA, CD_ ) and ∠( _BA, CD, Dq_ ) are uniquely
+determined by the fixed side lengths and therefore invariant under any motion that preserves the
+listed distances (in particular under any torsional update in _δϕABCD_ that preserves those distances).
+
+
+_Proof._ Fix any _Ap_ _∈A_ . The triple of distances _{∥Ap −_ _BA∥, ∥BA −_ _CD∥, ∥Ap −_ _CD∥}_ specifies
+triangle ( _Ap, BA, CD_ ) up to rigid motion. By the law of cosines,
+
+
+_b_ [2] = _a_ [2] + _c_ [2] _−_ 2 _ac_ cos( _b_ )
+
+
+rearranging and plugging in our terms, we define the cosine of our angle as
+
+cos ∠( _Ap, BA, CD_ ) = _[∥][A][p][ −]_ _[B][A][∥]_ [2][ +] _[ ∥][B][A][ −]_ _[C][D][∥]_ [2] _[ −]_ _[∥][A][p][ −]_ _[C][D][∥]_ [2] _,_
+
+2 _∥Ap −_ _BA∥∥BA −_ _CD∥_
+
+
+so the angle ∠( _Ap, BA, CD_ ) is uniquely determined from the fixed lengths. An identical argument
+applies for any _Dq_ _∈D_ using the triple _{∥BA −_ _CD∥, ∥CD_ _−_ _Dq∥, ∥BA −_ _Dq∥}_ . Hence all listed
+adjacent bond angles are fixed whenever the cross-edge stated distances are fixed, and any motion
+preserving those distances (including a torsional rotation that leaves them invariant) preserves the
+angles. In particular, the distances _∥Ap −_ _CD∥_ and _∥BA −_ _Dq∥_ _∀_ ( _p, q_ ) _∈A, D_ are the additional
+_triangulation conditioning edges_ that pseudo-enforce these invariances through conditioning jointly
+with the symmetrical _torsional conditioning edges ∥BA −_ _CD∥, ∥BA −_ _CD∥_ and the _known_ (from
+equilibrium chemistry) immutable bond lengths _∥Ap −_ _BA∥_ = _dAB_ and _∥CD −_ _Dq∥_ = _dCD_ .
+
+
+26
+
+
+**Implications and remarks.** The distances _∥Ap_ _−CD∥_ and _∥BA_ _−Dq∥_ are _new conditioning edges_
+introduced by triangulation: they do not typically appear as edges of the 2D chemical graph but are
+required to convert adjacent triples into SSS triangles and thereby fix angles via the law of cosines.
+Fixing these triangulation edges removes the continuous freedom in the adjacent bond angles: the
+angles become functions of the fixed side lengths. Consequently, triangulation reduces the effective
+(not strictly but trivially by conditioning) local degrees of freedom. In the idealised SSS case (one
+triangle on each side), the dihedral (signed) degree of freedom about _BC_ is constrained to a discrete
+choice (mirror sign) rather than a continuous rotation; in other words, continuous torsional variation
+that would change the triangulation edges is no longer allowed.
+
+
+Note that using many _Ap_ and _Dq_ triangles generally over-determines the local geometry and can
+introduce redundant or mutually constraining distance equalities. In practice, we select a consistent
+subset of triangulation edges and remove duplicates to avoid incompatibility. See Section 2.2.3 for
+more details on how we ensure that we avoid over-constraining the system by removing dummy
+atoms during fragmentation merging.
+
+
+D.3 FRAGMENTATION & ALIGNMENT
+
+
+Further statistics for the alignment procedure described in Section 2.2.1 are shown in Figure 6. By
+selecting the best-aligned pose from 5 randomized conformers, we obtain an average RMSD of
+0.21 A [˚] between the aligned **x** _[′]_ _b_ [and] [the] [ground-truth] **[x]** _[b]_ [.] [This] [provides] [strong] [empirical] [evidence]
+that sampling fragments from **x** _c_ does not push the model out of distribution at test time. Moreover,
+the small alignment errors act as a form of regularisation during training, with typical RMSDs below
+0.5 A for any aligned conformer. [˚] In contrast, aligning only a single conformer results in an average
+RMSD of 0.39 A. [˚] In both settings, all 85 ligands from the Astex diverse set produced conformers
+that could be aligned below the 2 A acceptance threshold. [˚] These results indicate that, during both
+training and sampling, SIGMADOCK remains well within the distribution of valid conformers.
+
+To further ensure that our **x** _[′]_ _b_ [samples are not chemically implausible, we run iterative optimisation]
+with PoseBuster checks in place. We find this to be helpful in reducing high-energy alignments,
+and as we show in Figure 7, this is exacerbated in circumstances where a single alignment optimisation attempt is taken, where changes in internal energies above 10Kcal/mol are observed (highly
+implausible stereochemistry).
+
+
+|=0.392<br>=0.339|Col2|Col3|
+|---|---|---|
+||=325<br>=98.4||
+|||=5.18<br>=3.06|
+
+
+0.0 0.5 1.0 1.5
+RMSD (Å)
+
+
+0 200 400 600
+Molecular Weight (Da)
+
+
+3.0
+
+2.5
+
+2.0
+
+1.5
+
+1.0
+
+0.5
+
+0.0
+
+600
+
+
+500
+
+
+400
+
+
+300
+
+
+200
+
+
+100
+
+
+0
+
+12
+
+10
+
+8
+
+6
+
+4
+
+2
+
+0
+
+
+|=0.211<br>=0.197|Col2|Col3|
+|---|---|---|
+||=325<br>=98.4||
+|||=5.18<br>=3.06|
+
+
+0.0 0.5 1.0 1.5
+RMSD (Å)
+
+
+0 200 400 600
+Molecular Weight (Da)
+
+
+0 5 10 15
+Number of Torsion Bonds
+
+
+0 5 10 15
+Number of Torsion Bonds
+
+
+1.50
+
+1.25
+
+1.00
+
+0.75
+
+0.50
+
+0.25
+
+0.00
+
+600
+
+
+500
+
+
+400
+
+
+300
+
+
+200
+
+
+100
+
+
+0
+
+12
+
+10
+
+8
+
+6
+
+4
+
+2
+
+0
+
+
+(a) Alignment Tries: 5
+
+
+(b) Alignment Tries: 1
+
+
+Figure 6: Pair-plot distributions across the alignment RMSDs ( A), molecular weight (Da), and num- [˚]
+ber of torsional bonds across all 85 ligands in the Astex diverse set. We use the best (lowest RMSD)
+aligned pose from an initial set of conformation(s) generated from different random seeds.
+
+
+27
+
+
+20.0
+
+
+17.5
+
+
+15.0
+
+
+12.5
+
+
+10.0
+
+
+7.5
+
+
+5.0
+
+
+2.5
+
+
+0.0
+
+
+|Col1|Col2|Col3|Col4|Col5|Col6|Col7|Col8|Col9|
+|---|---|---|---|---|---|---|---|---|
+||||||||||
+||||||||||
+||||||||||
+||||||||||
+
+
+125 100 75 50 25 0 25
+Energies (kcal/mol)
+
+
+(a) Alignment Seeds: 5
+
+
+20.0
+
+
+17.5
+
+
+15.0
+
+
+12.5
+
+
+10.0
+
+
+7.5
+
+
+5.0
+
+
+2.5
+
+
+0.0
+
+
+150 100 50 0 50 100
+Energies (kcal/mol)
+
+
+(b) Alignment Seeds: 1
+
+
+Figure 7: Histogram of internal energy differences (Kcal/mol) (bound pose vs. aligned pose) across
+all 85 ligands in the Astex diverse set. We use the best (lowest RMSD) aligned pose from an initial
+set of conformation(s) generated from different random seeds.
+
+
+D.4 FR3D
+
+
+We provide a more concrete algorithmic breakdown of the logic behind FR3D in Algorithm 1. Note
+that at inference, we may choose different heuristics for RecMerge, allowing different valid-cut
+sets to be prioritised according to a selection criteria, _i.e._ by filtering out fragments with broken
+chiralities, or prioritising larger overall fragments. However, we leave this for future work and use
+the random fragmentation merging strategy for both training and inference.
+
+
+We quantitatively contrast the differences between the fragments produced by FR3D and the classic
+( _k_ + 1) approach, where all _k_ torsional bonds are split, through Figure 8.
+
+
+**Degrees of freedom (DoF)** Let the ligand be partitioned into _m_ rigid fragments; the global pose
+is _z_ _∈_ SE(3) _[m]_ with 6 _m_ DoFs (3 rotation, 3 translation per fragment), which is far smaller than
+the 3 _N_ DoFs (coordinates) of all-atom point clouds ( _N_ _≫_ _m_ ). Na¨ıve fragmentation by cutting
+all _k_ rotatable bonds yields _m_ ˆ = _k_ + 1 fragments, i.e., 6 ˆ _m_ DoFs, which exceeds the torsional
+parameterisation ( _k_ +6). Our FR3D merging reduces _m_ empirically to _≈_ [2] 3 [(] _[k]_ [+1)][, lowering the raw]
+
+coordinate count. Across each cut bond we introduce two SE(3)-invariant _triangulation_ distances
+(Sec. 2.2.3; Lemma 1) that fix adjacent bond angles and the torsional bond length while leaving the
+dihedral free. Denote by _e_ the number of cut bonds (edges) between fragments and stack all distance
+constraints into _c_ ( _z_ ) _∈_ R [2] _[e]_ . The hard-constrained manifold
+
+_M_ frag = _{ z_ _∈_ SE(3) _[m]_ : _c_ ( _z_ ) = 0 _}_
+
+
+has tangent dimension
+dim _M_ frag = 6 _m_ _−_ rank� _Jc_ ( _z_ )� _._
+For a _tree_ fragment graph ( _e_ = _m−_ 1), two non-degenerate point-to-point distance constraints across
+a joint generically remove 5 relative DoF (leaving a single revolute DoF about the bond axis), so
+rank( _Jc_ ) = 5( _m−_ 1) and
+
+
+dim _M_ frag = 6 _m −_ 5( _m−_ 1) = _m_ + 5 _._
+
+
+Under na¨ıve fragmentation ( _m_ = _k_ +1) the hard (torsional) lower bound is _k_ + 6. With FR3D,
+each merge removes one cut and we drop one triangulation distance at the adjacent bond to avoid
+over-constraining the dihedral across adjacent fragments. Hence, the effective lower bound remains
+_k_ + 6 after merging, while the upper bound tightens to 6 _m_ such that _k_ + 6 _≤_ DoFeff _≤_ 6 _m_ .
+
+
+**Soft vs. hard constraints.** In practice, triangulation is injected as _soft_, SE(3)-invariant edge features
+_ct_ at each denoising step; no hard equalities are imposed. Thus trajectories concentrate near _M_ frag
+as _t →_ 0, and the _effective_ DoF lies between _k_ +6 and 6 _m_ . Consistent with Lemma 1, the only local
+DoF around a cut bond as _t →_ 0 is the dihedral ∆ _ϕABCD_ . Empirically, removing these conditioning
+features reduces PB-validity by 12 _._ 8% (Table 1, Config A).
+
+
+28
+
+
+(a) Astex diverse set.
+
+
+(b) PoseBusters set. Randomised sample of 100 ligands.
+
+
+Figure 8: Whisker plots showing the number of fragments and the range (min and max) of fragment
+sizes (heavy atoms only) across the PoseBusters and Astex diverse set using either FR3D, or the
+classic ( _k_ + 1) fragmentation scheme.
+
+
+E TRAINING DETAILS
+
+
+E.1 DATA PROCESSING
+
+
+Here, we describe how we preprocess each sampled protein-ligand pair ( _G_ ligand _, G_ protein) _∼_ _p_ data.
+
+
+**Molecule** **parsing.** We define proteins and ligands in raw form via the standard PDB and SDF
+formats. We parse ligand files with RDKit (Landrum, 2025) and force sanistisation to ensure correct
+kekulisation and featurisation. We parse protein files via BioPython (Cock et al., 2009), removing
+water molecules and other heteroatoms (ions, crystallisation aids, and other co-factors). For both,
+we remove all hydrogens (except, for ligands, those necessary to maintain correct valence). During
+training, we filter out ligands with more than 20 torsional bonds and/or those with higher molecular
+weight than 750 Daltons (excluding hydrogens). Since FR3D permutes across possible fragmentation merging options, this allows us to better scale training, whilst also maintaining our training
+distribution inside the desired range of drug-like compounds.
+
+
+**Pocket selection.** For a given protein-ligand pair, we define the pocket by including every residue
+that has at least one atom within a specified cut-off distance _d_ 0 from any atom in the bound ligand
+pose. To help de-bias the selection of the pocket we use a stochastic cutoff _dr_ = _d_ 0 + _N_ (0 _, σr_ ),
+where we use default values of _σr_ = 1 _, d_ 0 = 5 for training and _σr_ = 0 _._ 5 for sampling (all in
+˚A). If there are multiple ligands present in the SDF file due to the presence of multiple chains, we
+randomly sample one. We note that we include residues from all protein chains as this is the closest
+representation of what the ligand sees during its binding event.
+
+
+We define the pocket center of mass, which we define as the origin for our stationary distribution,
+by finding the center of mass of the pocket residues and adding an additional noise _x_ pocket _∈_ R [3] =
+
+- _|G_ pocket1 _|_ - _xi∈G_ pocket _[x][i]_ - + _N_ (0 _, σ_ CoM **I** 3). This is in an attempt to further de-bias the selection of the
+
+CoM away from the bound ligand’s CoM and introduce robustness to the often arbitrary choice of
+the CoM in practical settings.
+
+
+29
+
+
+**Algorithm 1:** FR3D — Fragment REduction for Molecular Docking
+**Input:** molecule mol, candidate torsions _C_, seed _s_, optional max ~~i~~ ters
+**Output:** reduced fragments _{GF_ _[′]_ _}_
+init RNG with _s_
+cuts _←C_ // start from all torsion cuts
+_S_ _←_ RecMerge(mol _,_ cuts _,_ sorted( _C_ ) _,_ 0) // valid cut-sets
+sample cuts uniformly from _S_ // stochastic augmentation
+frags _←_ safe ~~f~~ ragment(mol _,_ cuts) // Sanitize
+**foreach** _f_ _∈_ frags **do**
+
+_f_ _←_ remove ~~o~~ verconstrained( _f_ )
+**return** frags
+
+
+**Function** RecMerge(mol _,_ cur _,_ cand _,_ start)
+
+_V_ _←{_ frozenset(cur) _}_
+**for** _i ←_ start **to** _|_ cand _| −_ 1 **do**
+
+_b ←_ cand[ _i_ ]
+**if** _b ∈_ cur **then**
+
+new _←_ cur _\ {b}_
+**if** ValidState(mol _,_ new) **then**
+
+add frozenset(new) to _V_
+_V_ _←V_ _∪_ RecMerge(mol _,_ new _,_ cand _, i_ + 1)
+
+
+**return** _V_
+
+
+**Function** ValidState(mol _,_ cuts)
+
+parts _←_ safe ~~f~~ ragment(mol _,_ cuts)
+**foreach** _p ∈_ parts **do**
+
+_p_ clean _←_ remove ~~o~~ verconstrained( _p_ )
+**if** _|pclean| >_ 3 _**and**_ detect ~~t~~ orsions( _pclean_ ) **then**
+
+**return false**
+
+**return true**
+
+
+**Defining fragments.** For a sample ( _G_ ligand _, G_ protein) _∼_ _p_ data, we generate a conformer via RDKit’s
+ETKDGv3 (Landrum, 2025) from _G_ ligand [2] _[D]_ [,] [align to] **[ x]** _[b]_ [via our Kabsch aligment procedure and split]
+the fragments selected by FR3D, yielding _m_ independently SE(3) bodies. We initialise our space
+**z** [(0)] = ( **p** [(0)] _,_ **R** [(0)] ) _∈_ SE(3) _[m]_ by trivially defining **p** [(0)] as the CoMs of each fragment as described
+in 2.1. This canonical choice ensures our coordinate-frame-invariant pseudo-force construction outlined in G.4 is valid. Furthermore, since our training objective is invariant to the relative orientation
+of local coordinates **x** ˜ _F_, we initialise **R** [(0)] at the identity.
+
+
+**Data scaling.** We scale the global coordinate system by a factor of 2 _._ 7. This factor is derived from
+the isotropic dimensional scale _|Mb|_, computed as the average standard deviation (in A) of fragment [˚]
+CoMs relative to the pocket CoM across all ligands in the training dataset. The total normalisation
+of the coordinate system is therefore **x** _←_ **[x]** _[−]_ _|M_ _[x]_ [pocket] _b|_ _[,]_ **[ y]** _[ ←]_ **[y]** _[−]_ _|M_ _[x]_ [pocket] _b|_ [.] [In effect, this scaling ensures that]
+
+the stationary distribution (prior) **z** _T_ provides a faithful representation of the spread of states in **z** 0,
+consistent with the variance-preserving form of the forward kernel on R _[m][×]_ [3] .
+
+
+E.2 ACCELERATED CACHING
+
+
+We accelerate sampling of complex molecular graphs by creating a cached sampling algorithm as
+shown in Algorithm 2. Effectively, we use FR3D to process particular protein-ligand complexes
+individually to create a cache of size _C_ and then sample _R_ random batches of size _B_ . Each time
+we sample a particular complex from the dataset we sample time _t_ _∈_ [0 _,_ 1] independently such that
+we re-use a loaded complex _R_ times, artificially reducing the computational bottleneck by a factor
+_R/C_ . By default we set _R_ to 8 and _C_ to 2, such that we speed up processing time by a factor
+of 4. We pick a relatively small factor to ensure we can sample across multiple noise levels with
+
+
+30
+
+
+sufficient diversity in _G_ dock such that we limit the risk of non-independent and identically distributed
+(iid) sampling.
+
+
+**Algorithm 2:** CachedSampling — Stochastic cached batching with recycling
+**Input:** Dataset _D_, cache size _C_, batch size _B_, cycles _R_, seed _s_
+**Output:** Batch of size _B_ ; each datapoint constructed by FRED()
+Initialize random seed _s_
+**while** _true_ **do**
+
+_cache ←_ [ ]
+**while** _|cache| < C_ **do**
+
+**if** _no more data_ **then**
+
+**if** _|cache|_ = 0 **then**
+
+**return**
+**break**
+_i ←_ next index
+**if** _x ←_ FRED( _i_ ) _is invalid_ **then** continue
+append(clone( _x_ ), _cache_ )
+
+**for** _r_ = 1 **to** _R_ **do**
+
+shuffle( _cache_ ; seed = _s_ )
+**for** _i_ = 0 _, . . ., B_ **do**
+
+yield _cache_ [ _i_ ]
+
+
+E.3 TRAINING
+
+
+We build SIGMADOCK in Python 3.12, employing PyTorch, PyTorch Geometric and PyTorch Lightning as our core deep learning libraries. For our optimiser, we employ AdamW (Loshchilov &
+Hutter, 2019) with an L2 weight penalty of 0.1. We train for a maximum of 256 epochs using a
+batch size of 32 and apply early stopping with a patience of 50 epochs. We also use an Exponential Moving Average (EMA) to define our final parameters, using a weight decay of 0.999, as is
+common practice in diffusion models. We use linear warmup with cosine annealing as our learning
+rate scheduler strategy, with an initial (cold) learning rate of 1 _×_ 10 _[−]_ [6], a maximum learning rate of
+1 _×_ 10 _[−]_ [4] warmed up over the first 16 epochs, and a final annealed learning rate of 1 _×_ 10 _[−]_ [5] . We
+train SIGMADOCK using 4 NVIDIA-A100s (80Gb) via distributed-data-parallel for 4 days, until
+convergence.
+
+
+31
+
+
+F INFERENCE DETAILS
+
+
+In this section, we present our sampling procedure for SIGMADOCK and how we filter generated
+samples to return the best samples for evaluation.
+
+
+F.1 SAMPLING
+
+
+We outline our sampling procedure in Algorithm 3 below which supports both deterministic and
+stochastic generation. We include the use of noise annealing, as we find that it can help improve
+performance for stochastic generation. For our time discretisation between _t_ max and _t_ min, we use
+the schedule from Karras et al. (2022). For _k_ = 0 _, . . ., N_ _−_ 1, the _k_ -th timestep is defined as
+
+
+  - _k_
+_tk_ = _t_ [1] max _[/ρ]_ [+]
+_N_ steps _−_ 1
+
+
+- - [�] _[ρ]_
+_t_ [1] min _[/ρ]_ _[−]_ _[t]_ max [1] _[/ρ]_ _,_
+
+
+where _N_ steps is the number of discretisation steps and _ρ >_ 0 controls the spacing. When _ρ_ = 1, this
+reduces to uniform discretisation; larger values of _ρ_ concentrate timesteps near _t_ min, while smaller
+values spread them more evenly across the interval. By default, we use _N_ steps = 25, _t_ min = 0 _._ 002,
+_t_ max = 1, _ρ_ = 3. For our noise annealing, we use the same schedule with _γ_ min = 0 _, γ_ max = 0 _._ 5 and
+_ρ_ = 2.
+
+
+**Algorithm 3:** SIGMADOCK sampling
+**Input:** Score model _sθ_, docking information _G_ dock, time steps 0 _≤_ _t_ min = _t_ 0 _< . . . < tn_ = 1,
+noise annealing schedule _{γi}_ _[n]_ _i_ =0 [where] _[ γ][i]_ _[>]_ [ 0]
+**Output:** Predicted ligand coordinates **x**
+Sample **z** [(1)] = ( **p** [(1)] _,_ **R** [(1)] ) _∼_ _q_ ( **z** ) = _N_ (0 _,_ **I** ) _⊗U_ SO(3) _m_ // sample from the prior
+**for** _i ←_ _n_ **to** 1 **do**
+
+∆ _t ←|ti −_ _ti−_ 1 _|_
+
+[ˆ **s** _[p]_ _,_ ˆ **s** _[R]_ ] _←_ _sθ_ ( **z** [(] _[t][i]_ [)] _, ti, G_ dock) // compute scores
+**p** [(] _[t][i][−]_ [1][)] _←_ ReverseTranslations( **p** [(] _[t][i]_ [)] _,_ ˆ **s** _[p]_ _, ti,_ ∆ _t, γi_ )
+**R** [(] _[t][i][−]_ [1][)] _←_ ReverseRotations( **R** [(] _[t][i]_ [)] _,_ ˆ **s** _[R]_ _, ti,_ ∆ _t, γi_ )
+**z** [(] _[t][i][−]_ [1][)] _←_ ( **p** [(] _[t][i][−]_ [1][)] _,_ **R** [(] _[t][i][−]_ [1][)] )
+
+
+**x** _←_ _φ_ ( **z** [(] _[t]_ [min][)] )
+**return x**
+
+**Function** ReverseTranslations( **p** _,_ **s** _[p]_ _, t,_ ∆ _t, γ_ )
+
+∆ **p** _←_ ∆ _t ·_ ( [1] 2 _[β]_ [(] _[t]_ [)] **[p]** [ +] _[ β]_ [(] _[t]_ [)] **[s]** _[p]_ [)]
+
+∆ _ϵ ←_ _γ ·_ �∆ _t · β_ ( _t_ ) _· N_ (0 _,_ **I** )
+**p** _[′]_ _←_ **p** + ∆ **p** + ∆ _ϵ_
+**return p** _[′]_
+
+
+**Function** ReverseRotations( **R** _,_ **s** _[R]_ _, t,_ ∆ _t, γ_ )
+
+**s** _[R]_ _←_ **R** _[−]_ [1] _·_ **s** _[R]_ // convert to Lie algebra
+**s** _[R]_ _←_ [ **s** _[R]_ ]R3 // convert to R [3] basis
+_g_ _←_ _dsd_ _[σ]_ [2][(] _[s]_ [)] _[|][s]_ [=] _[t]_
+∆ **R** _←_ ∆ _t · g ·_ **s** _[R]_
+
+∆ _ϵ ←_ _γ ·_ _[√]_ ∆ _t · g · N_ (0 _,_ **I** )
+**R** _[′]_ _←_ **R** _·_ exp([∆ _R_ + ∆ _ϵ_ ] _×_ ) // convert back to SO(3)
+**return R** _[′]_
+
+
+**Computational cost of sampling.** Using an NVIDIA-A40 GPU for sampling, we achieve a generation speed (average runtime across the PoseBusters set) of 0.57s/mol per seed when using 20
+discretisation steps and a batch size of 64. Depending on the number of seeds ( _N_ seed) used in our
+SIGMADOCK ( _N_ seed) parametrisation via our heuristic outlined in F.2, increasing _N_ seed up-scales
+the runtime linearly (unless a distributed system was employed). Sampling speed is also linearly dependent on the number of reverse diffusion steps. However, we find diminishing returns with more
+
+
+32
+
+
+than 20-30 steps. We argue SIGMADOCK is highly computationally efficient in comparison to other
+deep learning methods, taking between 5.7-22.8s/mol for _N_ seed = 10 _,_ 40 respectively. See Table 2
+in (Jiang et al., 2025) for a comparative analysis of other deep learning tools and their relative runtimes. Notably, AF3 (Abramson et al., 2024) is reported to have an average runtime of 16min/mol
+and DiffDock (Corso et al., 2022) is reported to have an average runtime of 72s/mol (this includes
+the respective number of seeds required by each method).
+
+
+F.2 CONFIDENCE MODEL
+
+
+A common requirement of previous work in generative molecular docking is the use of a separately
+trained confidence model. This is used to filter a batch of generated samples, from ranking samples
+by their computed confidence value, in order to find the best generated poses and discard samples
+with poor chemical plausibility. However, this is a significant additional computational burden, from
+both the training of the confidence model and the need to apply this to every generated sample. For
+instance, Corso et al. (2022) evaluates the performance of their model from a batch of 40 generated
+samples for each protein-ligand pair, and Prat et al. (2024) creates a scoring function to filter a large
+pool of physics-based docked poses.
+
+
+In contrast, due to the inductive biases that SIGMADOCK leverages, we find that generated samples
+from SIGMADOCK tend to be reliably chemically plausible. Hence, we _do not_ require the use of a
+trained confidence mode, and more importantly, we _do not_ employ energy minimisation techniques
+which alter the final coordinates of our predicted **x** ˆ _b_ . Specifically, using the force fields (Maier
+et al., 2015; Boothroyd et al., 2023) implemented in OpenMM (Eastman et al., 2017) for energy
+evaluation, Buttenschoen et al. (2024) shows the relevance of energy minimisation in previous deep
+learning approaches.
+
+
+Instead, we use the simple and cheap (trivially parallel) heuristic of evaluating the binding energy
+of the protein-ligand system at a generated docked pose as our “confidence model” with Vinardo
+(Quiroga & Villarreal, 2016), where we take lower energies as corresponding to better samples.
+During sampling, we compute a total score per sample which also penalises for stereochemical
+inconsistencies including bond lengths, bond angles, tetrahedral chirality mismatch, internal steric
+clash, and minimum distance to the protein.
+
+
+Formally, let _bi_ _∈_ R denote the binding energy of sample _i_, for _i ∈{_ 1 _, · · ·_ _, N_ seeds _}_ and let _pi_ _∈_ [0 _,_ 1]
+represent the average PoseBusters validity checks for the stereochemical properties specified above
+(1 = all checks are valid, 0 = all checks are invalid). The mixed score for a set of samples is defined
+as
+_si_ = _−_ _bi p_ _[β]_ _i_ _[,]_
+
+where _β_ controls the strength of the total PoseBusters penalty (set to 4). Higher values of _si_ correspond to higher-confidence poses. We then use these scores to rank the sampled poses across _N_ seeds
+when computing Top- _k_ metrics.
+
+
+We believe our approach stands as a more fair test since relying on a different method to correct
+the coordinates of sampled bound states is not generally a form which agrees with the maximum
+likelihood objective of score models during sampling, and can be tuned at test time to artificially
+generate better performance metrics.
+
+
+33
+
+
+G ARCHITECTURE
+
+
+In this section, we provide an overview of our score architecture _sθ_ which takes the inputs **z** _∈_
+SE(3) _[m]_, _t ∈_ [0 _,_ 1] and _G_ dock = ( _G_ ligand [2D] _[,][ {G][F]_ _i_ _[}][m]_ _i_ =1 _[,][ G]_ [protein][)][. We assume that the docking conditioning]
+information _G_ dock has already been preprocessed by the steps outlined in Section E.1.
+
+
+G.1 PROTEIN-LIGAND FEATURISATION
+
+
+Here we describe the structure of _G_ ligand [2D] [,] _[ {G][F]_ _i_ _[}][m]_ _i_ =1 [, and] _[ G]_ [protein][, and how we extract relevant struc-]
+tural stereochemical information therein.
+
+
+**Chemical features.** We featurise the atoms and bonds according to their chemical nature. Specifically, in addition to the coordinates, we extract the following atomic (node-wise) features:
+
+
+    - Atomic Number _∈_ Z [+] .
+
+    - Degree _∈_ Z [+], number of adjacent atoms.
+
+    - Charge _∈{_ 0 _,_ 1 _,_ 2 _}_ representing the formal charge: 0 if charge is neutral, 1 if charge is
+negative, 2 otherwise.
+
+    - Hybridicity _∈{_ 0 _, · · ·_ _,_ 5 _}_ representing the hybridisation type (Other, SP, SP2, SP3, SP3D,
+SP3D2) respectively.
+
+    - Implicit Valence _∈_ Z.
+
+    - Explicit Valence _∈_ Z.
+
+    - Is Aromatic _∈{_ 0 _,_ 1 _}_ . Boolean value determining if atom belongs to an aromatic chain.
+
+    - Is Ring _∈{_ 0 _,_ 1 _}_ . Boolean value determining if the atom belongs to a ring/cycle structure.
+
+    - Num Rings _∈_ Z [+] . Number of ring systems the atom belongs to.
+
+    - Chirality Tag _∈{_ 0 _,_ 1 _,_ 2 _}_ . R(1)-S(2) featurisation of the chirality if atom is chiral, else 0.
+
+
+Similarly, we extract the following bond (edge-wise) features:
+
+
+    - Bond Type _∈{_ 0 _, · · ·_ _,_ 4 _}_ : undefined, single, double, triple, or aromatic bond.
+
+    - Is Conjugated _∈{_ 0 _,_ 1 _}_ . Boolean determining if the bond is a conjugated bond.
+
+    - Is In Ring _∈{_ 0 _,_ 1 _}_ . Boolean determining if bond is in a ring system.
+
+    - Stereo Feature _∈{_ 0 _, · · ·_ _,_ 3 _}_ . Mapping bond stereo information (None, Any, Cis, Trans).
+
+
+**Protein-specific features.** To further extract relevant information from the protein atoms we add
+an additional feature, for all atoms in the protein, flagging the amino acid it belongs to (from the
+standard set of 20 amino acids) and passing this through a learnable embedding function. We also
+create virtual nodes at the alpha-carbon _Cα_ which have significant importance in our topological
+design. Furthermore, to remove redundancies and prevent over-smoothing across the protein residue,
+we add a depth-from- _Cα_ distance encoding over the atoms in the chain.
+
+
+**Fragment-specific features.** Using FR3D and the featurisation procedure outlined above, we define our rigid body fragments from a conformation (aligned bound pose during training, random
+conformer during sampling). On top of the chemically featurised local geometry obtained here, we
+add a set of virtual nodes in each fragment (denoted as _VF_ ) defined by the following logic: if the
+fragment has no rings, place the virtual node in the center of mass of the fragment. Alternatively,
+place multiple virtual nodes at the center of each ring.
+
+
+G.2 INPUT GRAPH
+
+
+We clarify that in the main body we use the notation _G_ dock as our representation of the proteinligand complex conditioning, and in this section we specify how _G_ dock is processed into the input
+graph _G_ input that we passing into our score architecture. We note that while our diffusion process
+and training objective is defined on the Lie group SE(3) _[m]_, following previous work, we design our
+score model _sθ_ to operate on the 3D coordinates of the protein-ligand system, defined by _G_ protein and
+_φ_ ( **z** ), instead of on the group elements **z** directly.
+
+
+34
+
+
+The input graph _G_ input can be decomposed into the _global topology_, which does not change throughout the diffusion path, _i.e._ is immutable across all _pt_ ( **z** ( _t_ ) _, t|G_ dock) _,_ _t_ _∈_ [0 _,_ 1], and the _transient_
+_topology_, which is defined from the current fragment coordinates **x** ( _t_ ) = _φ_ ( **z** ( _t_ )) and _G_ protein. We
+make the important distinction: In our _global_ _topology_, we are not assuming that the entries have
+fixed coordinates, but instead that the edge indices and edge types are fixed throughout. We provide the analogy of a spider’s web, which you can stretch out (altering the coordinates) but will still
+maintain the same nodes and edges.
+
+
+**Global** **topology.** The core representation of the global topology consists of the rigid fragments
+and static protein structure absorbed in _G_ dock. We extend our global topology by creating edges
+across all virtual nodes:
+
+
+    - Cartesian product across all _Cα_ under an 18 A [˚] distance cut-off,
+
+    - Cartesian product across all ( _VFi, VFj_ ) _,_ _i ̸_ = _j_,
+
+    - Cartesian product across all ( _VF, Cα_ ),
+
+
+forming a hierarchical and well-structured global message passing mechanism. We also add triangulation edges connecting fragment atoms together, as illustrated in Figure 9.
+
+
+**Transient topology.** Our transient topology is dynamically defined and includes all protein-ligand
+interactions edges under a pre-determined cutoff of 4 A . We keep this cutoff relatively low to focus [˚]
+on important protein-fragment interactions which could otherwise be missed by the message passing
+mechanism over the global topology.
+
+
+**Node encoding.** To distinguish between protein and ligand nodes we add further categorical features to the aforementioned list of chemical features. Namely, we add a node entity attribute which
+labels the node as either one of:
+
+
+    - Ligand (fragment) Atom
+
+    - Ligand (fragment) Anchor (beginning of torsional bond)
+
+    - Ligand (fragment) Dummy (inclusion of end of torsional bond)
+
+    - Fragment Virtual ( _VF_ )
+
+    - Protein Atom
+
+    - Protein Virtual ( _Cα_ )
+
+
+For all nodes in our graph we encode time through a Fourier embedding as used in (Song et al.,
+2020). We then define an AtomDiffusionEncoder which processes the categorical features
+of each node (including node entity and chemical features) together with the time embedding to
+produce a feature embedding of dimension _f_ node = 128. Distinctively, the feature embedding of _VFi_
+is computed as the average of the feature embeddings extracted from each individual atom connected
+to _VFi_ . Note we connect to _VFi_ all atoms in fragment _Fi_ unless it has multiple rings, whereby we
+connect _VFi_ to all atoms in each ring system. This reduces over-squashing _VFi_ in large fragments.
+
+
+**Edge encoding.** Similarly, we build a node entity attribute which labels edges as either one of:
+
+
+    - Ligand Bond
+
+    - Protein Bond
+
+    - Torsional Bond (across ( _Fi, Fj,_ _i ̸_ = _j_ )
+
+    - Fragment Triangulation
+
+    - Protein-Ligand Interaction
+
+    - Fragment Virtual to fragment atom _VFi_ to Fragment Atom _Fi_
+
+    - Fragment-Virtual to Protein-Virtual ( _VF_ _−_ _Cα_ )
+
+    - Fragment Virtual-Virtual ( _VF_ _−_ _VF_ )
+
+    - Protein Virtual-Virtual ( _Cα −_ _Cα_ )
+
+
+For all edges, we define a distance embedding function using an adapted Fourier distance encoder,
+TotalFourierSmearing, for edges defined as part of the _global topology_, and a Bessel basis
+
+
+35
+
+
+with smooth polynomial cutoff, RadialEmbeddingBlock, for edges defined as part of the _tran-_
+_sient_ _topology_ . All edges compute distance encodings based on the true distance evaluated from
+( **x** _t,_ **y** _t_ ) except the fragment triangulation edges. For these edges we define the distance as an offset
+from equilibrium: All distances are computed from the current atomic positions ( **x** _t,_ **y** _t_ ), with the
+exception of fragment triangulation edges. For these edges, we instead define the distance as an
+offset from the equilibrium length:
+
+_dij_ ( _t_ ) = �� _∥_ **x** _i_ ( _t_ ) _−_ **x** _j_ ( _t_ ) _∥−∥_ **x** _i_ (0) _−_ **x** _j_ (0) _∥_ �� _,_
+
+
+where **x** _i_ (0) _,_ **x** _j_ (0) denote the equilibrium reference positions extracted from a random conformer
+sampled from RDKit.
+
+
+An example of _G_ input (excluding interaction and virtual edges for clarity) is shown in Figure 9.
+
+
+Figure 9: Example of SIGMADOCK representing the bound pose as fragments, (color coded) on
+the protein pocket (gray) for complexes with PDB-LIG codes 5SAK-ZRY, 7NR8-UOE, 6YR2-T1C,
+6XG5-TOP respectively. Virtual nodes (blue diamonds for each fragment, red diamonds for protein
+_Cα_ ) are depicted. Fragment-protein interactions, _Cα_ _−Cα_, and _Cα_ _−VF_ edges are hidden for clarity.
+We keep the connections between fragment virtual nodes and their corresponding fragment atoms.
+Triangulation edges are shown in orange. The pocket CoM is depicted via the golden sphere with a
+radius of 1A. Note how the pocket CoM is not always indicative of the bound pose CoM, offering [˚]
+lower bias during sampling.
+
+
+G.3 BACKBONE MODEL
+
+
+Given our input graph _G_ input constructed as described above, we pass this into our backbone model.
+This is a modified [14] version of the EquiformerV2 (Liao et al., 2023) architecture where the output
+head predicts atom-wise forces. The modification that we make to the EquiformerV2 architecture is
+to remove the bias terms within the MLPs ( _i.e._ RadialFunction) that process edge features for
+dynamic edges in _G_ input ( _i.e._ edges which we include if the neighbouring nodes are within some cutoff distance); we also use a different MLP for each edge type. We recall from above, that the edges
+features for these dynamic edges are computed, from passing the distance between the neighbouring
+nodes through a Bessel basis expansion and a polynomial envelop for the cutoff distance, so that
+these features smoothly decay to zero as the cutoff distance is approached. Therefore, the effect of
+removing the bias terms is to ensure that the messages along these dynamic edges, computed within
+the equivariant graph attention blocks (as well as the edge degree embedder), also smoothly decay
+to zero as the cutoff distance is approached. In addition, our radial basis function has the desired
+property of ensuring the gradient norms smoothly decay to zero as the edge distance approaches the
+cutoff. This is to ensure smoothness in the prediction of forces as we perturb **z** which could cause
+sudden changes in the topology of the input graph _G_ input from dynamic edges being added/removed.
+All our ablations and main results are run with the same number of trainable parameters (14.9M).
+
+
+G.4 PREDICTION HEAD
+
+
+To ensure invariance with respect to the choice of local coordinates, we adapt the SO(3)-equivariant
+prediction head from Jin et al. (2023); Guan et al. (2023) which utilises the Newton-Euler
+equations from rigid-body mechanics. In particular, for each fragment _GF_ with global input coordinates **x** _F_ = ( _xF,_ 1 _, . . ., xF,|GF |_ ) _∈_ R _[|G][F][ |×]_ [3] and SE(3) coordinates ( _pF, RF_ ), let
+
+
+14Although strictly within the architecture module, we consider the featurisation of the nodes and edges in
+our input graph, which we previously describe, as separate from the core EquiformerV2 architecture.
+
+
+36
+
+
+**f** = ( _f_ 1 _, . . ., f|GF |_ ) _∈_ R _[|G][F][ |×]_ [3] where _fi_ denotes the output from our backbone model for the _i_ th
+node in the fragment; the total force **F** _F_ and the torque _**τ**_ _F_ on _GF_ are defined as
+
+
+_|GF |_
+�( _xF,i −_ _pF_ ) _× fi._
+
+
+_i_ =1
+
+
+**F** _F_ =
+
+
+_|GF |_
+
+- _fi,_ _**τ**_ _F_ =
+
+
+_i_ =1
+
+
+We then predict the score function for _GF_ with the score components [ **s** _[p]_ _θ_ _[,]_ **[ s]** _θ_ _[R]_ []][ defined by:]
+
+
+1 1
+**s** _[p]_ _θ_ [=] ~~_√_~~ _·_ **s** _[R]_ _θ_ [=] _[ −]_ _[∂][ω][f]_ [0][(] _[ω, σ]_ [(] _[t]_ [))] _F_ _**[τ]**_ _[F]_ [ ]] _[×][R][F][ .]_
+1 _−_ _αt_ _|GF |_ **[F]** _[F][,]_ _ωf_ 0( _ω, σ_ ( _t_ )) [[] **[I]** _[−]_ [1]
+
+where _ω_ = �� **I** _−F_ 1 _**[τ]**_ _[F]_ ��2 [and] **[I]** _[F]_ [=] [�] _i_ _[|G]_ =1 _[F][ |]_ _[∥][x][F,i][ −]_ _[p][F][ ∥]_ [2] **[ I]** _[ −]_ [(] _[x][F,i]_ _[−]_ _[p][F]_ [ )(] _[x][F,i]_ _[−]_ _[p][F]_ [ )] _[⊤]_ [denotes] [the]
+inertia matrix of the fragment. We see that **s** _[p]_ _θ_ [is essentially parametrised for] _[ ϵ]_ [-prediction and that] **[ s]** _θ_ _[R]_
+is constructed to match the form of the conditional score; this is done to improve the conditioning
+of the score matching loss.
+
+
+37
+
+
+H SYMMETRIES
+
+
+As part of SIGMADOCK, we are concerned with two main symmetries of our model. Firstly, we
+note that an issue of working with fragments naively is that due to their heterogenous construction
+(i.e. fragments can have various different topologies and number of atoms etc.), we can not define
+a canonnical orientation for their local coordinates. This is not an issue with other fragment-based
+models, such as AlphaFold2 (Jumper et al., 2021), as in their setting, all fragments take the same
+form (e.g. protein backbone frames have a canonical axis defined by the ( _N_ _−_ _Cα_ _−_ _C_ ) atoms).
+Formally, consider a fragment _GF_ with some choice of local coordinates ˜ **x** _F_ . For any choice of _Rs_ _∈_
+SO(3), we can define another valid choice of local coordinates given by ˜ **x** _[′]_ _F_ [=] _[ R][s][·]_ **[x]** [˜] _[F]_ [ ; we denote the]
+fragment defined by this alternative choice by _GF_ _[′]_ [.] [Therefore, if we observe the global coordinates]
+of the fragment are **x** _F_ = _pF_ + _RF_ _·_ **x** ˜ _F_, then under the fragment _GF_, this pose is parametrised
+by ( _pF, RF_ ), whereas under the fragment _GF_ _[′]_ [,] [this] [pose] [is] [parametrised] [by] [(] _[p][F][, R][F][ R]_ _s_ _[⊤]_ [)] [instead,]
+since ˜ **x** _F_ = _pF_ + _RF Rs_ _[⊤]_ _[·]_ [ ˜] **[x]** _F_ _[′]_ [.] [To prevent issues from the orientation of local coordinates not being]
+well-defined, we have designed SIGMADOCK to ensure that our training objective and sampling
+procedure are invariant with respect to the choice of orientations for local coordinates.
+
+
+Secondly, we note the kernel _pθ_ ( **z** _|G_ dock) defined by sampling from SIGMADOCK should ideally
+be _stochastically equivariant_ (Bloem-Reddy & Teh, 2020; Cornish, 2024; Zhang et al., 2024) with
+respect to SO(3), i.e.
+
+
+_pθ_ ( _d_ **z** _|R_ 0 _· G_ dock) = _R_ 0 _· pθ_ ( _d_ **z** _|G_ dock) _,_ _∀R_ 0 _∈_ SO(3) _,_
+
+
+where _R_ 0 _·_ _G_ dock should be understood as applying the rotation _R_ 0 to the coordinates **y** of
+_G_ protein _∈G_ dock, and the right-hand side denotes the push-forward under the mapping given by
+applying _R_ 0 (where we define the action _R_ 0 _·_ **z** = _R_ 0 _·_ ( _pFi, RFi_ ) _[m]_ _i_ =1 [=] [(] _[R]_ [0] _[·][ p][F]_ _i_ _[, R]_ [0] _[R][F]_ _i_ [)] _[m]_ _i_ =1 [).]
+In random variable notation, this corresponds to the statement saying that the sample **z** _[′]_ = _R_ 0 _·_ **z**
+where **z** _∼_ _pθ_ ( **z** _|G_ dock) follows the same distribution as **z** ˆ _∼_ _pθ_ ( **z** _|R_ 0 _·_ _G_ dock). Intuitively, this
+means that the distribution _pθ_ ( **z** _|G_ dock) of fragments (and hence, the ligand, as it is easy to see that
+_φ_ ( _R_ 0 _·_ **z** ) = _R_ 0 _· φ_ ( **z** )) should be transformed in a consistent way as we change the orientation
+of the protein pocket that SIGMADOCK is conditioned on. To enforce this symmetry, we have
+designed SIGMADOCK to use an SO(3)-equivariant architecture for our score model.
+
+
+We note that stochastic equivariance is more commonly presented in the literature (Hoogeboom
+et al., 2022) in terms of conditional densities _p_ ( _x|y_ ) which obey the condition _p_ ( _g · x|g · y_ ) for all
+_g_ _∈_ _G_ where _G_ is some group under consideration. However, this definition implicitly assumes
+that the Jacobian of the group action has unit determinant and does not account for the general case
+presented in Bloem-Reddy & Teh (2020); Cornish (2024). Further, we note that it is surprising to
+us that, to the best of our knowledge, this particular symmetry has not been remarked on (or proved
+to hold as we do later on) in the literature on diffusion-based molecular docking, as this condition
+provides justification for using an equivariant architecture for the score model. Specifically, we find
+prior work appears to use such architectures without analysing the properties they induce on the
+diffusion model and sampling.
+
+
+To show that SIGMADOCK does indeed satisfy the symmetry requirements that we have outlined
+above, and stated in Theorem 2, we provide a proof of this fact below in Appendix H.1.
+
+
+H.1 PROOF OF THEOREM 2
+
+
+_Proof._ We divide the proof into three sections: (i) proving invariance of our training objective;
+(ii) proving invariance of our sampling procedure; and (iii) proving _pθ_ ( **z** _|G_ dock) is stochastically
+equivariant with respect to SO(3).
+
+
+**Invariance of training objective.** Consider two different fragmentations _{GFi}_ _[m]_ _i_ =1 [and] _[ {G]_ _F_ _[′]_ _i_ _[}]_ _i_ _[m]_ =1
+of a ligand with different choices for the orientations of local coordinates—i.e. _GF_ has local coordinates **x** ˜ _F_ and _GF_ _[′]_ [has local coordinates] **[x]** [˜] _[′]_ _F_ [=] _[R][s,F]_ _[·]_ [ ˜] **[x]** _[F]_ [where] _[ R][s,F]_ _[∈]_ [SO(3)][ for] _[ F]_ _[∈{][F][i][}][m]_ _i_ =1 [.]
+Then the global 3D coordinates **x** of the ligand has different representations for each choice of
+fragmentations. However, no matter the choice of fragmentation, the backbone of our score model
+_sθ_ (with _G_ dock and _G_ dock _[′]_ [being the corresponding docking information formed the two choices) will]
+output forces for each fragment that are independent of this, as we have designed the backbone to
+operate over the global 3D coordinates of our protein-ligand system, i.e. **x** = _φ_ ( **z** ) and **y** .
+
+
+38
+
+
+Next, we focus on the rotational scores for a single fragment with different orientations: _GF_ and _GF_ _[′]_ [.]
+We let ( _p_ [(0)] _F_ _[, R]_ _F_ [(0)][)] [denote] [the] [SE(3)] [parametrisation] [at] _[t]_ [=] [0] [for] _[G][F]_ [,] [therefore] [(] _[p]_ [(0)] _F_ _[, R]_ _F_ [(0)] _[R]_ _s,F_ _[⊤]_ [)]
+is the parametrisation under _GF_ _[′]_ [.] Therefore, the sampling distribution for training is given by
+_RF_ [(] _[t]_ [)] _[∼IG]_ [SO(3)][(] _[R]_ _F_ [(] _[t]_ [)][;] _[ R]_ _F_ [(0)] _[, σ]_ [2][(] _[t]_ [))][ for] _[ G][F]_ [and is given by] _[ R]_ _F_ _[′]_ [(] _[t]_ [)] _∼IG_ SO(3)( _RF_ [(] _[t]_ [)][;] _[ R]_ _F_ [(0)] _[R]_ _s,F_ _[⊤]_ _[, σ]_ [2][(] _[t]_ [))]
+
+for _GF_ _[′]_ [.] [We note that in random variable notation, we have the expression] _[ R]_ _F_ [(] _[t]_ [)] [=] _[RR]_ [ˆ] _F_ [(0)] where _R_ [ˆ] _∼_
+
+_IG_ SO(3)( _R,_ [ˆ] **I** _, σ_ [2] ( _t_ )) and _RF_ _[′]_ [(] _[t]_ [)] = _RR_ [ˆ] _F_ [(0)] _[R]_ _s,F_ _[⊤]_ [.] [This implies that] _[ R]_ _F_ _[′]_ [(] _[t]_ [)] = _d_ _RF_ ( _t_ ) _[R]_ _s,F_ _[⊤]_ [.] [Further, under]
+the sampling distribution for training for _GF_ _[′]_ [, we can express the conditional score in the objective as]
+
+_∇R_ log _pt|_ 0( _RF_ _[′]_ [(] _[t]_ [)] _[|][R]_ _F_ [(0)] _[R]_ _s,F_ _[⊤]_ [) =] _[ ∇][R]_ [log] _[ p]_ _t|_ 0 [(] _[R]_ _F_ [(] _[t]_ [)] _[R]_ _s,F_ _[⊤]_ _[|][R]_ _F_ [(0)] _[R]_ _s,F_ _[⊤]_ [)]
+
+                     -                     = _C_ ( _t_ ) _RF_ [(] _[t]_ [)] _[R]_ _s,F_ _[⊤]_ [log] _Rs,F_ ( _RF_ [(0)][)] _[⊤][R]_ _F_ [(] _[t]_ [)] _[R]_ _s,F_ _[⊤]_
+
+
+                       -                       = _C_ ( _t_ ) _RF_ [(] _[t]_ [)] _[R]_ _s,F_ _[⊤]_ _[R][s,F]_ [log] ( _RF_ [(0)][)] _[⊤][R]_ _F_ [(] _[t]_ [)] _Rs,F_ _[⊤]_
+
+
+                   -                    = _C_ ( _t_ ) _RF_ [(] _[t]_ [)] [log] ( _RF_ [(0)][)] _[⊤][R]_ _F_ [(] _[t]_ [)] _Rs,F_ _[⊤]_
+
+= _∇R_ log _pt|_ 0( _RF_ [(] _[t]_ [)] _[|][R]_ _F_ [(0)][)] _[R]_ _s,F_ _[⊤]_ _[,]_
+
+
+where the third equality is due to the trivial identity: log( _ABA_ _[⊤]_ ) = _A_ log( _B_ ) _A_ _[⊤]_ for _A, B_ _∈_ SO(3)
+and we define
+
+_C_ ( _t_ ) = _[∂][ω][f]_ [0][(] _[ω]_ [(] _[t]_ [)] _[, σ]_ [(] _[t]_ [))]
+
+_w_ ( _t_ ) _f_ 0( _ω_ ( _t_ ) _, σ_ ( _t_ )) _[,]_
+
+
+      -      -      -      where _ω_ ( _t_ ) = _ω_ _Rs,F_ ( _RF_ [(0)][)] _[⊤][R]_ _F_ [(] _[t]_ [)] _[R]_ _s,F_ _[⊤]_ and this equals _ω_ ( _RF_ [(0)][)] _[⊤][R]_ _F_ [(] _[t]_ [)] from the definition of
+the function _ω_ .
+
+Further, let **z** = (( _pFi, RFi_ )) _[m]_ _i_ =1 [and] **[z]** _[′]_ [=] [((] _[p][F][, R][F]_ _i_ _[R]_ _s,F_ _[⊤]_ _i_ [))] _i_ _[m]_ =1 [be] [the] [parametrisation] [under]
+_{GFi}_ _[m]_ _i_ =1 [and] _[{G]_ _F_ _[′]_ _i_ _[}]_ _i_ _[m]_ =1 [respectively] [for] [a] [ligand] [pose] **[x]** [,] [then] [the] [rotational] [score] [for] [a] [fragment]
+_GF_ has the following relationship
+
+_s_ _[R]_ _θ_ [(] **[z]** _[′][, t,][ G]_ dock _[′]_ [)] _[F]_ [=] _[ s][R]_ _θ_ [(] **[z]** _[, t,][ G]_ [dock][)] _[F]_ _[·][ R]_ _s,F_ _[−]_ [1] _[,]_
+
+due to the fact that the predicted forces for _GF, GF_ _[′]_ [are] [the] [same] [and] [the] [only] [impact] [that] [the]
+different choices of orientation makes is in the rotational prediction head.
+
+
+Turning our focus to the translational scores, it is easy to see that the definition of the translational
+components _pF_ (hence, the sampling for training, the prediction of scores and the training objective
+for the translational scores) are independent of the choice of orientations as these are disentangled.
+
+Finally, by considering the training objective of the rotational scores under _GF_ _[′]_ [, we have]
+
+
+2
+E ���� _sRθ_ [(] **[z]** _[′]_ [(] _[t]_ [)] _[, t,][ G]_ dock _[′]_ [)] _[F]_ _[−∇][R]_ [log] _[ p]_ _t|_ 0 [(] _[R]_ _F_ [(] _[t]_ [)] _[R]_ _s,F_ _[⊤]_ _[|][R]_ _F_ [(0)] _[R]_ _s,F_ _[⊤]_ [)] ���SO(3)
+
+
+2
+= E ���� _sRθ_ [(] **[z]** [(] _[t]_ [)] _[, t,][ G]_ [dock][)] _[F]_ _[·][ R]_ _s,F_ _[⊤]_ _[−∇][R]_ [log] _[ p]_ _t|_ 0 [(] _[R]_ _F_ [(] _[t]_ [)] _[|][R]_ _F_ [(0)][)] _[ ·][ R]_ _s,F_ _[⊤]_ ���SO(3)
+
+
+2
+= E ���� _sRθ_ [(] **[z]** [(] _[t]_ [)] _[, t,][ G]_ [dock][)] _[F]_ _[−∇][R]_ [log] _[ p]_ _t|_ 0 [(] _[R]_ _F_ [(] _[t]_ [)] _[|][R]_ _F_ [(0)][)] ���SO(3)
+
+
+_,_
+
+
+where **z** _[′]_ [(] _[t]_ [)] is formed from sampling from _p_ data, extracting the SE(3) parametrisation under
+_{GF_ _[′]_ _i_ _[}]_ _i_ _[m]_ =1 [and applying the forward sampling kernel, and the final equality is due to the form of the]
+SO(3) inner product. The above result demonstrates that the the training objective of SIGMADOCK
+is invariant to the choice of orientations for local coordinates, as the final equality has the form of
+the training objective of the rotational scores under _GF_ .
+
+
+**Invariance** **of** **sampling.** Under the same setup as before, let **z** [(] _[t]_ [)] = (( _p_ [(] _F_ _[t]_ _i_ [)] _[, R]_ _F_ [(] _[t]_ _i_ [)][))] _i_ _[m]_ =1 [and]
+
+**z** _[′]_ [(] _[t]_ [)] = (( _p_ [(] _F_ _[t]_ [)] _[, R]_ _F_ [(] _[t]_ _i_ [)] _[R]_ _s,F_ _[⊤]_ _i_ [))] _i_ _[m]_ =1 [be] [the] [SE(3)] [parametrisation] [of] [the] [same] [ligand] [pose] **[x]** [under]
+_{GFi}_ _[m]_ _i_ =1 [and] _[ {G]_ _F_ _[′]_ _i_ _[}]_ _i_ _[m]_ =1 [.] [We consider the sampling step for] **[ z]** _[′]_ [(] _[t]_ [)] [to the next time step] _[ t][′]_ _[<]_ _[t]_ [.] [For a]
+
+
+39
+
+
+given fragment _GF_ _[′]_ [,] [the] [update] [step] [has] [the] [form] [(for] [clarity,] [(WLOG)] [we] [set] [all] [coefficients] [used]
+in sampling such as ∆ _t · g_ and _γ ·_ _[√]_ ∆ _t · g_ to be one):
+
+
+       -       _RF_ [(] _[t]_ [)] _[R]_ _s,F_ _[⊤]_ [exp] _Rs,F_ ( _RF_ [(] _[t]_ [)][)] _[⊤][s]_ _θ_ _[R]_ [(] **[z]** _[′]_ [(] _[t]_ [)] _[, t,][ G]_ dock _[′]_ [)] _[F]_ [+] _[ Z]_
+
+
+            -             = _RF_ [(] _[t]_ [)] _[R]_ _s,F_ _[⊤]_ [exp] _−C_ ( _t_ ) _Rs,F_ ( _RF_ [(] _[t]_ [)][)] _[⊤]_ [[] **[I]** _F_ _[−]_ [1] _[τ][F]_ [ ]] _[×][R]_ _F_ [(] _[t]_ [)] _[R]_ _s,F_ _[⊤]_ [+] _[ Z]_
+
+
+              -               = _RF_ [(] _[t]_ [)] _[R]_ _s,F_ _[⊤]_ _[R][s,F]_ [exp] _−C_ ( _t_ )( _RF_ [(] _[t]_ [)][)] _[⊤]_ [[] **[I]** _F_ _[−]_ [1] _[τ][F]_ [ ]] _[×][R]_ _F_ [(] _[t]_ [)] [+] _[ R]_ _s,F_ _[⊤]_ _[ZR][s,F]_ _Rs,F_ _[⊤]_
+
+
+           -           = _RF_ [(] _[t]_ [)] [exp] ( _RF_ [(] _[t]_ [)][)] _[⊤][s][θ]_ [(] **[z]** [(] _[t]_ [)] _[, t,][ G]_ [dock][) +] _[ R]_ _s,F_ _[⊤]_ _[ZR][s,F]_ _Rs,F_ _[⊤]_ _[,]_
+
+
+where _Z_ = [�] _i_ [3] =1 _[δ][i]_ **[e]** _[i]_ [where] _[ δ][i]_ _[∼N]_ [(0] _[,]_ [ 1)][ are iid and] **[ e]** _[i]_ [are the canonical basis of the Lie algebra]
+so(3). We can show that
+
+
+[ [�][3] _i_ =1 _[δ][i][R]_ _s,F_ _[−]_ [1] **[e]** _[i][R][s,F]_ [ ]][R][3] [=][ �][3] _i_ =1 _[δ][i]_ [[] _[R]_ _s,F_ _[−]_ [1] **[e]** _[i][R][s,F]_ [ ]][R][3]
+
+= [�] _i_ [3] =1 _[δ][i][R]_ _s,F_ _[−]_ [1] **[e]** [ˆ] _[i]_
+
+= _Rs,F_ _[−]_ [1] _[· N]_ [(0] _[,]_ **[ I]** [3][)]
+
+_∼N_ (0 _,_ **I** 3)
+
+
+where **e** ˆ _i_ denotes the standard basis vectors of R [3] . This is a consequence of the self-adjointness
+of SO(3) which implies that [ _R_ _·_ _v_ ] _×_ = _R_ [ _v_ ] _×R_ _[−]_ [1] where _v_ _∈_ R [3] and _R_ acts on the vector.
+
+_d_
+Therefore, we have _Rs,F_ _[⊤]_ _[ZR][s,F]_ = _Z_ . This allows us to conclude that distribution of the update
+step considered in Euclidean space (via the mapping _φ_ ) under the fragmentation _{GF_ _[′]_ _i_ _[}]_ _i_ _[m]_ =1 [is] [the]
+same as the update step given by the fragmentation _{GFi}_ _[m]_ _i_ =1 [.] [Hence,] [the] [sampling] [procedure] [of]
+SIGMADOCK is invariant with respect to the choice of orientations for local coordinates.
+
+
+**Proof** **of** **stochastic** **equivariance** We first recall the following notation **z** = (( _pFi, RFi_ )) _[m]_ _i_ =1
+and _G_ dock = ( _G_ ligand [2D] _[,][ {G][F]_ _i_ _[}][m]_ _i_ =1 _[,][ G]_ [protein][)][,] [where] _[G]_ [protein] = ( **y** _,_ **v** _y,_ **b** _y_ ). For _R_ 0 _∈_ SO(3),
+we define the following group actions by _R_ 0 _·_ **z** = (( _R_ 0 _·_ _pFi, R_ 0 _RFi_ )) _[m]_ _i_ =1 and
+_R_ 0 _·_ _G_ dock = ( _G_ ligand [2D] _[,][ {G][F]_ _i_ _[}][m]_ _i_ =1 _[, R]_ [0] _[·]_ _[G]_ [protein][)] [where] _[R]_ [0] _[·]_ _[G]_ [protein] [=] [(] _[R]_ [0] _[·]_ **[y]** _[,]_ **[ v]** _[y][,]_ **[ b]** _[y]_ [)][.] [It] [is] [im-]
+portant to note that _R_ 0 _· G_ dock only acts on the 3D coordinates **y** of the protein pocket, and does not
+change the local coordinates for fragments _{GFi}_ _[m]_ _i_ =1 [.] [We note that this group action represents the]
+global rotation of the protein-ligand system defined by **z** and _G_ dock.
+
+
+Let _pθ_ ( **z** [(] _[t]_ [)] _|G_ [dock] ) denote the marginal distribution of samples at time _t_ generated by SIGMADOCK
+under the docking information _G_ dock. In order to prove stochastic equivariance, we can equivalently
+show that if _pθ_ ( **z** [(] _[t]_ [)] _|G_ dock) is stochastically equivariant with respect to the above group action,
+then this implies that _pθ_ ( **z** [(] _[t][′]_ [)] _|G_ dock), where _t_ _[′]_ _<_ _t_, is also stochastically equivariant. Therefore, as
+_pθ_ ( **z** [(1)] _|G_ dock) is trivially stochastically equivariant, since this corresponds to the prior over **z** which
+is independent of the orientation of **y**, the desired result follows by induction.
+
+
+To show the inductive step, we note by basic probability that we have the following expression
+(with densities considered over the product of Lebesgue and Haar measures):
+
+
+              _pθ_ ( **z** [(] _[t][′]_ [)] _|G_ dock) = _pθ_ ( **z** [(] _[t][′]_ [)] _|_ **z** [(] _[t]_ [)] _, G_ dock) _pθ_ ( **z** [(] _[t]_ [)] _|G_ dock)d **z** [(] _[t]_ [)] _,_
+
+
+where _pθ_ ( **z** [(] _[t][′]_ [)] _|_ **z** [(] _[t]_ [)] _, G_ dock) denotes the kernel induced by sampling the next time step _t_ _[′]_ from **z** [(] _[t]_ [)] .
+We next consider showing the conditional density formulation of stochastic equivariance (this is
+valid as the action of rotations has unit Jacobian),
+
+
+           _pθ_ ( _R_ 0 _·_ **z** [(] _[t][′]_ [)] _|R_ 0 _· G_ dock) = _pθ_ ( _R_ 0 _·_ **z** [(] _[t][′]_ [)] _|_ **z** [(] _[t]_ [)] _, R_ 0 _· G_ dock) _pθ_ ( **z** [(] _[t]_ [)] _|R_ 0 _· G_ dock)d **z** [(] _[t]_ [)]
+
+
+           = _pθ_ ( _R_ 0 _·_ **z** [(] _[t][′]_ [)] _|R_ 0 _·_ **z** [(] _[t]_ [)] _, R_ 0 _· G_ dock) _pθ_ ( _R_ 0 _·_ **z** [(] _[t]_ [)] _|R_ 0 _· G_ dock)d **z** [(] _[t]_ [)]
+
+
+           = _pθ_ ( _R_ 0 _·_ **z** [(] _[t][′]_ [)] _|R_ 0 _·_ **z** [(] _[t]_ [)] _, R_ 0 _· G_ dock) _pθ_ ( **z** [(] _[t]_ [)] _|G_ dock)d **z** [(] _[t]_ [)] _,_
+
+
+40
+
+
+where the second equality is due to a change of variables and using the fact that rotations has unit
+Jacobian, and the third equality is due to our inductive hypothesis.
+
+We can express the conditional density _pθ_ ( _R_ 0 _·_ **z** [(] _[t][′]_ [)] _|R_ 0 _·_ **z** [(] _[t]_ [)] _, R_ 0 _· G_ dock) in terms of the product of
+_pθ_ ( _R_ 0 _·_ **p** [(] _[t][′]_ [)] _|R_ 0 _·_ **z** [(] _[t]_ [)] _, R_ 0 _· G_ dock) and _pθ_ ( _R_ 0 _·_ **R** [(] _[t][′]_ [)] _|R_ 0 _·_ **z** [(] _[t]_ [)] _, R_ 0 _· G_ dock). For the former, we have
+(for clarity, (WLOG) we set all constants to one):
+
+_pθ_ ( _R_ 0 _·_ **p** [(] _[t][′]_ [)] _|R_ 0 _·_ **z** [(] _[t]_ [)] _, R_ 0 _· G_ dock) = _N_ ( _R_ 0 _·_ **p** [(] _[t][′]_ [)] ; _R_ 0 _·_ **p** [(] _[t]_ [)] + _s_ _[p]_ _θ_ [(] _[R]_ [0] _[ ·]_ **[ z]** [(] _[t]_ [)] _[, t, R]_ [0] _[ · G]_ [dock][)] _[,]_ **[ I]** [)]
+
+= _N_ ( _R_ 0 _·_ **p** [(] _[t][′]_ [)] ; _R_ 0 _·_ ( **p** [(] _[t]_ [)] + _sθ_ ( **z** [(] _[t]_ [)] _, t, G_ dock)) _,_ **I** )
+
+= _N_ ( _p_ [(] _[t][′]_ [)] ; **p** [(] _[t]_ [)] + _sθ_ ( **z** [(] _[t]_ [)] _, t, G_ dock) _,_ **I** )
+
+= _pθ_ ( **p** [(] _[t][′]_ [)] _|_ **z** [(] _[t]_ [)] _, G_ dock) _,_
+
+
+where the second equality uses the fact that the forces predicted by EquiformerV2 are SO(3)equivariant (we note that this is with respect to the input coordinates which are _R_ 0 _·_ **x** and _R_ 0 _·_ **y**
+in this case) and the prediction head for translations is trivially SO(3)-equivariant, and the third
+equality is due to the Gaussian density being isotropic.
+
+For the latter term, we first consider the random variable representation of _RF_ _[′]_ [(] _[t][′]_ [)] _∼_ _pθ_ ( _·|R_ 0 _·_ **z** [(] _[t]_ [)] _, R_ 0 _·_
+_G_ dock) for an individual fragment (the distribution on **R** [(] _[t][′]_ [)] factorises over fragments independently).
+This is given from the update step for sampling (for clarity, (WLOG) we set all constants to one) as
+
+
+             -             _RF_ _[′]_ [(] _[t][′]_ [)] = _R_ 0 _RF_ [(] _[t]_ [)] [exp] ( _RF_ [(] _[t]_ [)][)] _[⊤][R]_ 0 _[⊤][s][θ]_ [(] _[R]_ [0] _[·]_ **[ z]** [(] _[t]_ [)] _[, t, R]_ [0] _[· G]_ [dock][) +] _[ Z]_
+
+
+             -             = _R_ 0 _RF_ [(] _[t]_ [)] [exp] ( _RF_ [(] _[t]_ [)][)] _[⊤][s][θ]_ [(] **[z]** [(] _[t]_ [)] _[, t,][ G]_ [dock][) +] _[ Z]_ _,_
+
+
+where _Z_ = [�] _i_ [3] =1 _[δ][i]_ **[e]** _[i]_ [where] _[δ][i]_ _[∼N]_ [(0] _[,]_ [ 1)] [are] [iid.] [The] [second] [equality] [is] [using] [the] [fact] [that]
+the forces predicted by EquiformerV2 are SO(3)-equivariant and Guan et al. (2023) shows
+that **I** _[−]_ _F_ [1] _**[τ]**_ _[F]_ [is] [SO(3)][-equivariant] [and] [then] [applying] [[] _[R]_ _[·]_ _[v]_ []] _[×]_ [=] _[R]_ [[] _[v]_ []] _[×][R][−]_ [1][.] Further, we note
+
+        -         that the term _RF_ [(] _[t]_ [)] [exp] ( _RF_ [(] _[t]_ [)][)] _[⊤][s][θ]_ [(] **[z]** [(] _[t]_ [)] _[, t,][ G]_ [dock][) +] _[ Z]_ is the random variable representation of
+
+_RF_ [(] _[t][′]_ [)] _∼_ _pθ_ ( _·|_ **z** [(] _[t]_ [)] _, G_ dock). Therefore, we can view _RF_ _[′]_ [(] _[t][′]_ [)] as a change of variables of _RF_ [(] _[t][′]_ [)] by the transformation _R_ 0. Hence, we can conclude that _pθ_ ( _R_ 0 _·RF_ [(] _[t][′]_ [)] _[|][R]_ [0] _[·]_ **[z]** [(] _[t]_ [)] _[, R]_ [0] _[·G]_ [dock][) =] _[ p][θ]_ [(] _[R]_ _F_ [(] _[t][′]_ [)] _[|]_ **[z]** [(] _[t]_ [)] _[,][ G]_ [dock][)]
+and more generally _pθ_ ( _R_ 0 _·_ **R** [(] _[t][′]_ [)] _|R_ 0 _·_ **z** [(] _[t]_ [)] _, R_ 0 _· G_ dock) = _pθ_ ( **R** [(] _[t][′]_ [)] _|_ **z** [(] _[t]_ [)] _, G_ dock).
+
+Since, we have shown that _pθ_ ( _R_ 0 _·_ **z** [(] _[t][′]_ [)] _|R_ 0 _·_ **z** [(] _[t]_ [)] _, R_ 0 _· G_ dock) = _pθ_ ( **z** [(] _[t][′]_ [)] _|_ **z** [(] _[t]_ [)] _, G_ dock), following from
+what we had before, we can conclude that
+
+
+             _pθ_ ( _R_ 0 _·_ **z** [(] _[t][′]_ [)] _|R_ 0 _· G_ dock) = _pθ_ ( _R_ 0 _·_ **z** [(] _[t][′]_ [)] _|R_ 0 _·_ **z** [(] _[t]_ [)] _, R_ 0 _· G_ dock) _pθ_ ( **z** [(] _[t]_ [)] _|G_ dock)d **z** [(] _[t]_ [)]
+
+
+             = _pθ_ ( **z** [(] _[t][′]_ [)] _|_ **z** [(] _[t]_ [)] _, G_ dock) _pθ_ ( **z** [(] _[t]_ [)] _|G_ dock)d **z** [(] _[t]_ [)]
+
+
+= _pθ_ ( **z** [(] _[t][′]_ [)] _|G_ dock) _._
+
+
+Hence, we can conclude that _pθ_ ( **z** _|G_ dock) is stochastically equivariant with respect to SO(3).
+
+
+41
+
+
+I EXTENDED RESULTS
+
+
+I.1 GENERATED SAMPLES
+
+
+**Trajectories.** Sample trajectories for four randomised protein-ligand pairs in the Astex diverse set
+are displayed in Figure 10.
+
+
+Figure 10: Sample trajectories of protein-ligand pairs 1HVY-D16 ( **a** ), 1HWI-115 ( **b** ), 1KZK-JE2
+( **c** ), and 1N46-PFA ( **d** ), using the default sampling scheme outlined in F. The respective RMSDs
+between the sampled and bound pose are 1.2, 0.31, 0.33, 0.88 A . We illustrate discretisation-steps [˚]
+0, 3, 10 and 20 (out of 20), where the zeroth step represents samples from the stationary distribution.
+We show the reference bound pose in light green. For **a** and **b** we tilt the view in the last frame to
+improve visibility of the fit.
+
+
+**RMSD** **is** **an** **imperfect** **metric.** In Figure 11 we show 4 examples of generated poses from the
+PoseBusters set where the (symmetry-corrected) RMSD between the generated pose and the bound
+pose is higher than the threshold of 2 A . According to this metric, these are deemed as failed samples. [˚]
+However, we argue that the generated poses seem stereochemically valid, as they recover similar
+interactions. Namely, in ( **a** ), ligand O88 is highly symmetric; the generated pose yields very similar
+interactions and induced fit, even when SIGMADOCK predicts the pseudo-rotated conformation, yet
+the RMSD is 10.2 A. A similar argument can be made for ligand XN7 in ( [˚] **b** ), where we observe the
+( _C_ = _O_ ) forming the correct interaction (hydrogen bond acceptor) with the protein. In our third
+example ( **c** ) we see how the sampled pose very tightly recovers the true pose, yet the non-interacting
+tail of the ligand containing a cycloproply group is predicted to be elsewhere. However, given the
+binding pocket is open, this cyclopropyl should freely rotate (molecules are dynamic). This unfairly
+labels the sampled pose as incorrect, with an RMSD of 4.2 A. [˚]
+
+
+42
+
+
+Figure 11: 2D visualizations of ligands (top) and their corresponding generated poses (bottom)
+across PDB–ligand pairs from the PB set: 7FRX–O88 ( **a**, 10.2 A [˚] RMSD), 7KZ9–XN7 ( **b**, 4.7 A [˚]
+RMSD), 6Y7L–QMG ( **c**, 4.2 A RMSD), and 7MGY–ZD1 ( [˚] **d**, 5.8 A RMSD). The true bound pose [˚]
+is shown in faint green.
+
+
+I.2 SAMPLE PERFORMANCE & EFFICIENCY
+
+
+In the main body we use Top-1 (%) as our key performance metric. However, it is also important to
+assess the _sample efficiency_ of our generator. We measure sample efficiency by looking at the rate
+of change in Top- _k_ as we vary the number of independent samples ( _N_ seeds). We report our results in
+Figure 12.
+
+
+Notably, our Top- _k_ success rates increase rapidly with only a few seeds, indicating high sample
+efficiency. This is especially true when considering PB-validity, as a few random seeds rapidly
+ensures better samples are prioritised according to our heuristic. Conversely, the Top- _k_ accuracies
+for (RMSD _<_ 2) and (RMSD _<_ 2 & PB-Valid) converge to similar values as _N_ seeds increases, and
+are practically indistinguishable when _N_ seeds _>_ 20. Finally, we consider the _Oracle_ performance,
+which represents the empirical maximum success rate achievable by perfectly selecting the best
+sample from the pool of _N_ seeds. At _N_ seeds = 20, the Oracle reaches over 90% success for the
+(RMSD _<_ 2 A) [˚] metric and just under 90% for the combined (RMSD _<_ 2 A [˚] & PB-Valid) metric.
+The relatively large gap ( _∼_ 10%) between this empirical ceiling and our practical Top-1 performance
+quantifies the potential for improvement in re-ranking the generated candidates, and we leave this
+for future work.
+
+
+(b) RMSD + PB Valid
+
+|Col1|Col2|Col3|Col4|Col5|Col6|Col7|Col8|Col9|Col10|Col11|
+|---|---|---|---|---|---|---|---|---|---|---|
+||||||||||||
+||||||||||||
+|||||||||Top-1<br>Top-3<br>|||
+||||||||<br>|~~Top-5~~<br>Top-10<br>Oracle +<br>|PB<br>||
+|||||||||~~Ideal Ber~~|~~ noulli +~~|~~  B~~|
+
+
+Nseeds
+
+
+100%
+
+
+90%
+
+
+80%
+
+
+70%
+
+
+60%
+
+
+50%
+
+
+(a) RMSD Only
+
+|Col1|Col2|Col3|Col4|Col5|Col6|Col7|Col8|Col9|Col10|
+|---|---|---|---|---|---|---|---|---|---|
+|||||||||||
+|||||||||||
+||||||||Top<br>Top<br>|-1<br>-3<br>||
+||||||||~~Top~~<br>Top<br>Ora<br>|~~5~~<br>-10<br>cle<br>||
+||||||||~~Ide~~|~~l Bernou~~|~~ lli~~|
+
+
+Nseeds
+
+
+Figure 12: Top- _k_ success rate as a function of the pool sample size _N_ seeds. Solid Top- _k_ lines represent the mean success rates across (40 - _N_ seeds) permutations, with shaded areas representing the
+standard deviation. The Oracle reflects the empirical _maximum_ success rate attainable across the
+_N_ seeds samples, equivalent to Top- _N_ seeds. The ideal Bernoulli line represents the empirical optimal,
+assuming independent sampling probability.
+
+
+43
+
+
+J LIMITATIONS
+
+
+J.1 CURRENT LIMITATIONS AND FUTURE WORK
+
+
+**Intentionally** **small** **training** **set.** SIGMADOCK was deliberately trained on PDBBind(v2020) to
+enable fair method-level comparison with the intended PoseBusters train-test split, and to highlight
+methodological improvements rather than raw performance. This choice clearly reduces the model’s
+out-of-distribution generalisability. In the future, we will look at scaling training with additional
+curated complexes, applying data augmentation and transfer learning / pre-training strategies, or
+combining with larger foundation models to improve robustness.
+
+
+**Dependence** **on** **the** **pocket** **center** **at** **inference.** SIGMADOCK requires a user-specified pocket
+center to define the search region. Although we debias the choice of the geometric center from
+the ligand center, and make SIGMADOCK relatively robust to the choice of pocket center during
+training (see Appendix E.1), when the true center is misspecified, the search space (and therefore
+predicted samples) can be biased. For fairness, we note that many physics-based and deep-learningbased competing tools introduce a greater bias, such as a strict bounding box around the bound
+ligand (Trott & Olson, 2010; Zhou et al., 2023b; Jiang et al., 2025). This explicitly restricts the
+search space over a biased search region (∆ _x,_ ∆ _y,_ ∆ _z_ ), providing information about the structural
+fit of the bound ligand. Further work could be performed to (i) explore the sensitivity over the
+choice of pocket centers; (ii) incorporate a different product structure with rigid body translations
+that separates the requirement of a defined pocket center.
+
+
+**Chirality challenges from fragmentation.** Although we implement a chirality-preserving scheme
+by attempting fragmentation merging operations which try to keep chiral centers during sampling,
+there are cases where no valid reconstruction preserves the original stereochemistry and a chiral center may be altered during fragment linking. Currently, we simply apply post-filtering over the generated _N_ seeds samples to discard undesired stereoisomers (as performed in Abramson et al. (2024)).
+Future works could try to explore ways in which SIGMADOCK might better capture stereochemical
+priors to further ensure chirality is preserved.
+
+
+**Sensitivity** **to** **cofactors** **and** **receptor** **flexibility.** Performance degrades when relevant co-factors
+are omitted from the input. This indicates the model does not merely memorise unphysical poses but
+relies on explicit physical context. In future work, we will consider including cofactors and flexible
+side chains jointly with our SE(3) _[m]_ fragments.
+
+
+**Restricted** **evaluation** **protocol** **(re-docking** **only).** All reported results are based on re-docking
+benchmarks. We intentionally restrict the evaluation of SIGMADOCK to re-docking in order to
+emphasise its key contribution on a task not yet dominated by deep learning methods. These results demonstrate the model’s ability to recover bound poses from known pocket conformations, but
+they do not fully capture its generalisation to more challenging scenarios. While many protein targets have relatively rigid pockets with limited structural change, important future directions include
+training and assessing performance on cross-docking and apo-structure docking tasks.
+
+
+J.2 FURTHER COMMENTS
+
+
+**AlphaFold3.** It is evident that the task of co-folding is a more complex task than that of proteinligand docking, wherein there exists a larger set of degrees of freedom (larger dimensionality) to
+model. This is especially true in our setup, where we assume a rigid protein structure (fair and commonly used in practice (Kamuntaviˇcius et al., 2024), but not a strictly holistic assumption). However,
+for full visibility, and to support our narrative, we would like to stress that AF3 (Abramson et al.,
+2024) reports values of up to 84% in their Top-1 metric in the PoseBusters set, without applying
+rigorous test-train leakage filtering steps. This is evident when comparing the bucketisation of the
+protein-ligand pairs in the PoseBusters test set, as illustrated in Table 5.
+
+
+Unexpectedly, AF3’s reported accuracy decreases as test–train similarity increases – contrary to our
+findings and to prior reports (Skrinjar [ˇ] et al., 2025). Despite AF3 evidently training with substantially higher train–test overlap, our Top-1 accuracy is comparable overall and matches or exceeds
+AF3 across most of the test set (match on [30 _,_ 95), surpass on (95 _,_ 100]). For a fair comparison, we
+
+
+44
+
+
+Table 5: Stratification of the original PDBbind(v2020) vs. AF3 train-test splits on PoseBusters(v2).
+Sequence similarity split values extracted from AF3 Extended Data Fig. 4c (Abramson et al., 2024).
+(*) We observe a mismatch between the averaged sequence similarity results (80.2%) vs the reported
+average performance in AF3’s Extended Data Fig. 4e (84.4%).
+
+
+Bucket counts Results (Top-1 & PB-Valid (%))
+
+
+Seq. Similarity (%) Original AF3 ∆ Ours AF3 ∆
+
+
+[0 _,_ 30) 109 38 +71 72 87 _−_ 16
+
+[30 _,_ 95) 76 83 _−_ 7 79 82 _−_ 3
+
+[95 _,_ 100] 123 187 _−_ 64 87 78 +9
+
+
+**Total / Avg** - **79.9** **80.2**     -     
+
+deliberately train SIGMADOCK on a reduced dataset PDBBind(v2020) with _∼_ 19k datapoints, and
+do not model cofactors. Nevertheless, we still achieve AF3-level performance. Contrary to common
+concerns about the physicochemical coherence of generative deep-learning models for structure prediction, we observe superior generalisation with a compact model (14.9M vs. _∼_ 500M parameters
+for AF3) and a set of well defined inductive biases. It is therefore reasonable to expect that SIGMADOCK will further improve with more data, larger models, and added flexibility, and surpass AF3
+on more challenging settings such as cross-docking and flexible-receptor protein–ligand docking.
+
+
+**Difficulties in comparing approaches.** Fair comparison across learning-based docking methods
+is complicated by heterogeneity in (i) training data and preprocessing, (ii) pocket definitions, and (iii)
+post-processing pipelines. Differences in (i) affect both the risk of train–test leakage and the apparent
+ability to generalise (see our comments on AlphaFold3 above). For (ii), pockets are often defined
+from the bound pose; for example, Zhou et al. (2023a) uses a bounding box around the ground-truth
+ligand, which may introduce information unavailable in realistic deployments and thus overestimate
+performance. For (iii), many methods refine generated poses via energy minimisation, sometimes
+substantially improving reported metrics (Buttenschoen et al., 2024); while sensible in practice, such
+steps make it harder to attribute gains to the core model and add non-trivial computational overhead.
+For instance, Alcaide et al. (2025) reports results that rely on the post-processing of Alcaide et al.
+(2023) as implemented in their code and discussed in their issue tracker [15] .
+
+
+In this work, we mitigate these confounders by training on an intentionally small dataset, to match
+the setting of Corso et al. (2022) and decouple performance from data scale; by reducing the coupling
+between pocket definition and the bound pose via the stages in Appendix E; and by reporting metrics
+directly from SIGMADOCK without structurally altering post-processing. We hope these choices
+encourage clearer reporting and more comparable benchmarks for deep-learning–based molecular
+docking.
+
+
+15See [https://github.com/deepmodeling/Uni-Mol/tree/main/unimol_docking_v2](https://github.com/deepmodeling/Uni-Mol/tree/main/unimol_docking_v2)
+with the --steric-clash-fix option.
+
+
+45

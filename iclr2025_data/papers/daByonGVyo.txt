@@ -1,0 +1,355 @@
+# COMPRESSION VIA PRE-TRAINED TRANSFORMERS: A STUDY ON BYTE-LEVEL MULTIMODAL DATA
+
+Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+Foundation models have recently been shown to be strong data compressors. However, when accounting for their excessive parameter count, their compression ratios are actually inferior to standard compression algorithms. Moreover, naively reducing the number of parameters may not necessarily help as it leads to worse predictions and thus weaker compression. In this paper, we conduct a large-scale empirical study to investigate whether there is a sweet spot where competitive compression ratios with pre-trained vanilla transformers are possible. To this end, we train families of models on 165GB of raw byte sequences of either text, image, or audio data (and all possible combinations of the three) and then compress 1GB of out-of-distribution (OOD) data from each modality. We find that relatively small models (i.e., millions of parameters) can outperform standard general-purpose compression algorithms (gzip, LZMA2) and even domain-specific compressors (PNG, JPEG 2000, FLAC) — even when factoring in parameter count. We achieve, e.g., the lowest compression ratio of 0.49 on OOD audio data (vs. 0.54 for FLAC). To study the impact of model- and dataset scale, we conduct extensive ablations and hyperparameter sweeps, and we investigate the effect of unimodal versus multimodal training. We find that even small models can be trained to perform well on multiple modalities, but, in contrast to previously reported results with large-scale foundation models, transfer to unseen modalities is generally weak.
+
+## 1 INTRODUCTION
+
+Strong predictive models can straightforwardly be turned into strong lossless compressors, e.g., via arithmetic coding (Pasco, 1977; Rissanen, 1976; Witten et al., 1987). Consequently, large pre-trained foundation models, such as LLMs, achieve very high data compression on their training distributions and beyond (Delétang et al., 2024). However, when factoring in these models’ parameter count into the compression ratio, too large models actually perform worse. For this reason, large foundation models with parameter counts on the order of billions cannot compete with standard compression algorithms such as gzip (Deutsch, 1996) or LZMA2 (Pavlov, 2019). The goal of this paper is thus to investigate whether pre-trained vanilla transformers can achieve compression ratios that are competitive with standard algorithms across a range of data modalities. This places fairly tight constraints on the maximal model size, leading us to investigate families of relatively small transformers (with millions of parameters). Note that our aim is not to build a practical transformer-based data compressor, as the computational footprint (running time, memory, FLOPs) of even small models is far beyond standard compressors. Instead, studying compression via pre-trained models provides insight into the models’ *learned* inductive biases, e.g., whether they are domain-general, how they depend on the training data composition, and whether there is transfer between modalities.
+
+Recently, Delétang et al. (2024) stated that “language modeling is compression”, pointing out that log-loss minimization is equivalent to optimizing a lossless compression objective. To illustrate this point, the authors used billion-parameter LLMs that were trained exclusively on text (Llama 2 from Touvron et al. (2023b) and Chinchilla from Hoffmann et al. (2022)) to compress 1GB of image and audio data from ImageNet (Russakovsky et al., 2015) and LibriSpeech (Panayotov et al., 2015), respectively. They found that these models compress better than gzip or LZMA2 and even domain-specific compressors such as PNG (Boutell, 1997) and FLAC (Coalsón, 2008), but only when parameter counts are not being accounted for. To see if competitive performance is possible, they
+
+![Figure 1: Overview of our training and evaluation data pipelines. The diagram is divided into three horizontal sections. The top section, 'Training Data Sources', shows three modalities: Text (Wikipedia, UTF-8, 165GB), Images (ImageNet, Flatten, 165GB), and Audio (Common Voice, 16kHz, 165GB). The middle section, 'Training Data Mixtures', shows combinations of these sources into 'Unimodal' (one modality) and 'Multimodal' (multiple modalities) mixtures, each totaling 165GB. The bottom section, 'Evaluation Data (out-of-distribution)', shows Text (Reddit, UTF-8, 1GB), Images (CelebA, Flatten, 1GB), and Audio (Libri Speech, 16kHz, 1GB). Arrows indicate the flow from sources to mixtures and then to evaluation. Dashed lines with labels 'In-modality' and 'Out-of-modality' show the evaluation paths: Text to Text (In), Images to Images (In), Audio to Audio (In), Text to Images (Out), Text to Audio (Out), Images to Text (Out), Images to Audio (Out), Audio to Text (Out), and Audio to Images (Out).](9ba3dc91984c80b96f217fb1bddd5c06_img.jpg)
+
+Figure 1: Overview of our training and evaluation data pipelines. The diagram is divided into three horizontal sections. The top section, 'Training Data Sources', shows three modalities: Text (Wikipedia, UTF-8, 165GB), Images (ImageNet, Flatten, 165GB), and Audio (Common Voice, 16kHz, 165GB). The middle section, 'Training Data Mixtures', shows combinations of these sources into 'Unimodal' (one modality) and 'Multimodal' (multiple modalities) mixtures, each totaling 165GB. The bottom section, 'Evaluation Data (out-of-distribution)', shows Text (Reddit, UTF-8, 1GB), Images (CelebA, Flatten, 1GB), and Audio (Libri Speech, 16kHz, 1GB). Arrows indicate the flow from sources to mixtures and then to evaluation. Dashed lines with labels 'In-modality' and 'Out-of-modality' show the evaluation paths: Text to Text (In), Images to Images (In), Audio to Audio (In), Text to Images (Out), Text to Audio (Out), Images to Text (Out), Images to Audio (Out), Audio to Text (Out), and Audio to Images (Out).
+
+Figure 1: Overview of our training and evaluation data pipelines. We consider three data modalities: text, images, and audio. From these modalities we create training data mixtures of 165GB that are either unimodal or multimodal. After pre-training transformers on each of these datasets, we evaluate their compression ratio (i.e., factoring in models’ parameter counts) on each of the three modalities. If the corresponding modality has not been seen during training, we refer to the evaluation as ‘out-of-modality’, otherwise it is ‘in-modality’. Importantly, our evaluation is always performed on out-of-distribution data (different from any of the training data sources), even when it is in-modality.
+
+also trained small-scale transformers (up to 3.2M parameters) on 1GB of Wikipedia (Hutter, 2006), but found that these models were significantly worse at compressing images and audio data.
+
+The obvious open question is whether small transformers pre-trained on large (multimodal) datasets can achieve competitive compression ratios across different modalities and whether there is transfer to unseen modalities, as observed in the large-scale model case. We therefore conduct an extensive empirical study where we train families of decoder-only transformers on 165GB of either text, image, or audio data and all combinations of the three. We then use these models (with frozen parameters, i.e., offline training) to compress 1GB of out-of-distribution (OOD) data from all three modalities (see Fig. 1). We also compare against transformers that are trained purely online, i.e., on the data stream that is being compressed (Bellard, 2019; 2021), meaning that storage or communication of the transformer weights for decompression is not required (unlike for our pre-trained models). These online transformers currently achieve state-of-the-art results on the Large Text Compression Benchmark (Mahoney, 2006). Overall we find that small pre-trained transformers achieve competitive compression ratios, as our best models consistently outperform domain-general and domain-specific standard compression algorithms and are on par with the online transformers from Bellard (2021).
+
+**Main Contributions** We make the following key contributions:
+
+- We conduct a large-scale empirical study (hyperparameter sweeps, ablations) on the compression performance of small transformers trained on raw byte sequences of text, image, and audio data (and all combinations), across various model- and dataset sizes.
+- We are the first to show that small pre-trained transformers achieve better compression ratios than general-purpose and domain-specific compressors on 1GB of out-of-distribution data across different modalities, e.g., 0.49 on audio vs. 0.51 for Bellard (2021) & 0.54 for FLAC.
+- We show that training on multiple modalities only slightly deteriorates the performance on each individual modality but significantly boosts the compression ratios on multimodal data, as long as all the evaluation modalities are part of the training data mixture.
+- We demonstrate that small pre-trained transformers fail to beat standard compressors on unseen data modalities (i.e., modalities they were not trained on), meaning that there is only weak transfer to novel modalities (which is not the case for LLMs (Delétang et al., 2024)).
+
+## 2 BACKGROUND
+
+Compression and prediction are “two sides of the same coin” (MacKay, 2003). This fundamental duality stems directly from Shannon’s celebrated lossless source coding theorem (Shannon, 1948), which states that there is a well-defined lower bound for encoding data from a probabilistic source. For any data sequence  $x_{1:n} := x_1 x_2 \dots x_n \in \mathcal{X}^n$  of length  $n$  from a finite alphabet  $\mathcal{X}$  sampled from a source  $\rho : \mathcal{X}^* \mapsto (0, 1]$ , a lossless compressor  $c : \mathcal{X}^* \mapsto \{0, 1\}^*$  assigns a code  $c(x_{1:n})$ , i.e., a sequence of bits, from which the original sequence is recoverable without loss of information. The goal is to minimize the expected length:  $L_\rho := E_{x \sim \rho}[\ell_c(x)]$  by encoding rare sequences with more bits and frequent sequences with fewer bits. Shannon’s source coding theorem states that the minimal expected length is lower-bounded by the Shannon entropy of the source:  $L_\rho \geq H(\rho) := E_{x \sim \rho}[-\log_2 \rho(x)]$ .
+
+If the source’s statistics are unknown, good compression becomes a statistical modeling problem, i.e., good compression relies entirely on being able to predict well sequentially. For any predictor  $\pi : \mathcal{X}^* \mapsto (0, 1]$  the expected coding length  $L_\pi^\rho$  for data drawn from  $\rho$  is at least the cross entropy:
+
+$$L_\pi^\rho \geq E_{x \sim \rho}[-\log_2 \pi(x)] = E_{x \sim \rho} \left[ -\log_2 \frac{\pi(x)\rho(x)}{\rho(x)} \right] = H(\rho) + D_{\text{KL}}(\rho|\pi) \geq H(\rho),$$
+
+which is also lower-bounded by the Shannon entropy of  $\rho$ . A mismatch between  $\pi$  and  $\rho$  thus leads to an excess length given by their KL divergence, and minimal coding length (maximal compression) implies  $\pi = \rho$  across the whole support of  $\rho$ . Accordingly, some AI researchers have argued that compressing well is fundamentally connected to intelligence (e.g., Chaitin’s famous “Compression is Comprehension” (Chaitin, 2006); Rathmann & Hutter (2011); Grau-Moya et al. (2024)), and that building universal compressors will accelerate AI development (cf. the Hutter prize (Hutter, 2006), an ongoing competition to compress (1GB of) human knowledge). The duality between compression and prediction has also led to the (algorithmic) information-theoretic formulation of universal prediction, i.e., Solomonoff induction (Solomonoff, 1964a,b; Li & Vitányi, 2019), one of two key ingredients for AIXI (Legg & Hutter, 2007; Hutter et al., 2024), the theory of artificial superintelligence.
+
+Consequently, Delétang et al. (2024) argue that lossless compression performance lends itself as a domain-general metric for assessing any predictor’s quality, including foundation models. They further emphasize that foundation models trained by minimizing log-loss (a.k.a., next-token prediction-error or cross entropy loss) are explicitly trained to minimize the expected coding length:
+
+$$\min_{\pi} L_\pi^\rho = \min_{\pi} \underbrace{E_{x \sim \rho}[-\log_2 \pi(x)]}_{\text{“log loss”}} = \min_{\pi} E_{x \sim \rho} \left[ \sum_i -\log_2 \pi(x_i | x_{<i}) \right]. \quad (1)$$
+
+Note that the problem of constructing the actual codes that achieve (near) minimal expected code length given a predictor is largely solved in information theory, with gold-standard algorithms such as Huffman coding (Huffman, 1952), arithmetic coding (Pasco, 1977; Rissanen, 1976; Witten et al., 1987), or asymmetric numeral systems (Duda, 2009). The latter two compress strings online by iteratively converting them into a single binary number with increasing precision (see Delétang et al. (2024) for an illustration or Chapter 2 in Hutter et al. (2024)). Arithmetic coding is an example of an online compression algorithm since it only requires a single pass through the data and compresses on the fly (unlike offline compressors, such as Huffman coding, that require multiple passes through the data). Both our models and Bellard (2021), which we compare against, use arithmetic coding and compress online. However, the difference is that we pre-train our predictor, i.e., we perform *offline training* on a dataset and then freeze its parameters (non-adaptive arithmetic coding), whereas Bellard (2021) performs *online adaptation* of the model parameters on the data stream that is being compressed (adaptive arithmetic coding). As a result, and unlike our compressors, Bellard (2021) does not communicate the trained weights for decompression but only the model architecture and training algorithm (i.e., the model parameters do not need to be factored into the compression ratio).
+
+## 3 RELATED WORK
+
+**Compression Without Transformers** Using neural networks as predictors for lossless compression has been extensively studied, both in conjunction with arithmetic coding (Lehtokangas et al., 1993; Schmidhuber & Heil, 1994; 1996; Mahoney, 2000; Mikolov, 2012; Knoll, 2014; van den Oord &
+
+Schrauwen, 2014; Cox, 2016; Schiopu et al., 2018; Goyal et al., 2019; Liu et al., 2019; Mentzer et al., 2019; 2020; Schiopu & Munteanu, 2020; Rhee et al., 2022) and with asymmetric numeral systems (Hoogeboom et al., 2019; Kingma et al., 2019; Townsend et al., 2019; Barzen et al., 2022). Neural networks have also successfully been employed in lossy compression, e.g., by overfitting tiny networks to individual data points and transmitting the model weights rather than the original data (Dupont et al., 2021; 2022; Chen et al., 2021; Ladune et al., 2023; Kim et al., 2023).
+
+**Online Transformers** Most of the above approaches use a separate training set to pre-train models that are then used to compress a test set. Alternatively, the model can also be trained from scratch on the data stream that is being compressed (Bellard, 2019; 2021; Goyal et al., 2020; Mao et al., 2022). The main advantage of these adaptive online compressors is that they are (quasi) parameterless (since they are initialized from scratch when compressing a new data stream), meaning that the model size does not explicitly affect the compression ratio, even for large models (though it implicitly affects the training performance, e.g., large models train more slowly meaning that larger chunks of the initial data stream are only weakly compressed). The transformer-based adaptive online compressor of Bellard (2021) is currently state-of-the-art on the Large Text Compression Benchmark (Mahoney, 2006), and our evaluation (in Section 5) shows that our best models are on par across all modalities.
+
+**Pre-Trained Transformers** Most closely related to our work is the line of research by Valmeekam et al. (2023); Delétang et al. (2024); Huang et al. (2024); Li et al. (2024); Mittu et al. (2024), which investigates lossless compression via arithmetic coding with pre-trained foundation models, i.e., the Llama models (Touvron et al., 2023a;b; Dubey et al., 2024) and Chinchilla (Hoffmann et al., 2022). Delétang et al. (2024), in particular, also report good compression rates on unseen modalities (LLMs trained only on text compress images and audio data well). However, these studies differ from our work as they do not take the model size into account for the compression ratios, except for Delétang et al. (2024), who report both “raw” and “adjusted” compression ratios and find that LLMs are not competitive in terms of adjusted (i.e., the actual) compression ratios. To the best of our knowledge, our paper is the first to systematically investigate the use of appropriately sized pre-trained transformers for multimodal lossless compression in a regime where competitive performance w.r.t. standard compression algorithms is possible. In this regime, our study is the most comprehensive in that it also investigates multimodal training and cross-modal transfer of pre-trained transformers.
+
+## 4 METHODS
+
+We now describe our experimental setup (with additional details, e.g., sweeps, in Appendix A).
+
+**Baselines** We compare to various standard compressors, both general-purpose, i.e., gzip (Deutsch, 1996) and LZMA2 (Pavlov, 2019), and domain-specific, i.e., FLAC (Coalsom, 2008) for audio data and PNG (Boutell, 1997) and lossless JPEG 2000 (Skodras et al., 2001) for images. Both gzip and LZMA2 (which is used by the 7zip software) are based on Huffman coding (Huffman, 1952) and the Lempel-Ziv-Welch algorithm (Welch, 1984). We use the default parameters for gzip, LZMA2, and JPEG 2000, compression level 12 for FLAC, and instruct PNG to find the optimal encoder settings. We also compare to the online transformer from Bellard (2021), with the default v3.3 parameters, which is the current state-of-the-art on the Large Text Compression Benchmark (Mahoney, 2006).
+
+**Models** We focus on decoder-only transformers (Vaswani et al., 2017) with SwiGLU activations (Shazeer, 2020) and post-layer normalization. Unless otherwise noted, we use 8 heads, an embedding dimension of 64, a context size of 4096 (bytes), and sliding windows without overlap or memory (full details in Appendix A.3). We always train and evaluate the models with the same context size (i.e., 4096 by default). We train our models with the Adam optimizer (Kingma & Ba, 2015) for 2.5 million steps with a batch size of 32, which, for 165GB of data, roughly corresponds to 2 epochs. Due to the duality of compression and prediction, we minimize the standard (sequential) log-loss (Eq. (1)) during training, which is a maximum-compression objective (see Section 2).
+
+**(No) Tokenization** Tokenization is a commonly-used, *domain-specific* pre-compression step to boost transformers’ performance by increasing their vocabulary size in order to fit more information into their limited context window (Lester et al., 2024), i.e., increased information density at the cost
+
+of increased entropy. However, since our goal is to be domain-general, we do not use tokenization and instead feed our models directly with byte streams (we still have to choose how to flatten images and how to sample audio signals, which are minimal domain-specific preprocessing steps).
+
+**Evaluation** To evaluate performance, we compute the compression ratio (lower is better):
+
+$$\text{compression ratio} := \frac{\text{size of compressed data} + \text{size of compressor}}{\text{size of uncompressed data}}, \quad (2)$$
+
+which accounts for the model size and is equivalent to the “adjusted compression rate” of Delétang et al. (2024). We always evaluate on 1GB of out-of-distribution data, i.e., size of uncompressed data = 1GB. As Delétang et al. (2024), we compute the size of the compressor by encoding the model weights with `float16` (2 bytes per parameter) since this level of quantization does not significantly affect performance (Tao et al., 2022) and is standard for model inference. As a result, our model sizes range from 0.8MB to 40.3MB. Note that, similar to Delétang et al. (2024), we do not compress the model parameters, since naive approaches (e.g., compressing them with `gzip`) do not significantly decrease the model size (only by around 7%, which corresponds to a decrease in compression ratio of only 0.002821 for our largest model). However, as a result, the compression ratio we report is an upper bound, which could be improved by (losslessly) compressing the parameters (though with limited room for improvement in our regime, even in the best case).
+
+**Training Datasets** A key point of our investigation is to evaluate how well pre-trained transformers can compress data from different modalities — both if the modality was or was not part of the training data (Fig. 1 visualizes our data collection process). We create three different unimodal training datasets with audio, images, and text data, and four multimodal training sets (Appendix A.1 describes the datasets in full detail). This yields seven pre-training datasets in total, each consisting of 165GB of data: (i) 165GB of audio; (ii) 165GB of images; (iii) 165GB of text; (iv) 82.5GB of audio and 82.5GB of images; (v) 82.5GB of audio and 82.5GB of text; (vi) 82.5GB of images and 82.5GB of text; and (vii) 55GB audio, 55GB of images, and 55GB text. By training our models on all seven training data mixtures, we can investigate *in-modality* and *out-of-modality* compression ratios. For example, for a model trained on the text dataset, the in-modality compression ratio can be determined by evaluating on text, while audio or image data provide out-of-modality compression ratios.
+
+**Out-of-Distribution Evaluation Datasets** To mimic the setting for which standard compression algorithms were developed (and thereby ensure a fair comparison), where the compressor is programmed with only minimal statistical assumptions about the data (with stronger assumptions for domain-specific compressors), we evaluate on unseen, out-of-distribution (OOD) datasets for each modality and not on in-distribution held-out datasets (as commonly done in machine learning). To do so, we create a single OOD dataset of 1GB for each modality (full details in Appendix A.2).
+
+## 5 RESULTS
+
+In this section, we present our extensive experimental evaluation (additional results in Appendix B). Unless otherwise noted, we report the best results over two hyperparameter sweeps (described in Appendix A.3): (i) over the model- and dataset sizes, and (ii) over the model- and context sizes.
+
+**Small Transformers Can Be Domain-General Compressors** Figure 2 shows the best compression ratio attained on each of the seven out-of-distribution evaluation datasets when training a model on each of the seven training data mixtures (we report the best-performing model from our two sweeps for each training-evaluation pair). We observe that transformers can achieve state-of-the-art in-modality compression ratios, regardless of the concrete composition of the training mixture, outperforming standard compression algorithms (even domain-specific ones) in all cases where all evaluation modalities are part of the training mixture. In these cases, transformers thus learn the prototypical statistical patterns related to that modality during pre-training. Importantly, by comparing models trained on unimodal vs. multimodal data, we observe that multimodal training only slightly decreases the compression performance compared to the unimodal models on their respective modalities (despite only having half or a third amount of data from that modality). This means that it is possible to trade off a small amount of performance on each individual modality to obtain a very strong domain-general compressor via multimodal training (the gray bar in Fig. 2).
+
+![Figure 2: Six bar charts showing Compression Ratio for various modality combinations across different evaluation data mixtures. The charts are: Audio OOD Evaluation, Image OOD Evaluation, Text OOD Evaluation, Audio+Image OOD Evaluation, Audio+Text OOD Evaluation, Image+Text OOD Evaluation, and Audio+Image+Text OOD Evaluation. The legend indicates Baseline Compressors: opus, L2MA2, Bellard, FLAC (audio), PNG (image), and JPEG 2000 (images).](c54b3ca7603d65d4589151bc3a49d054_img.jpg)
+
+Figure 2 displays six bar charts showing the Compression Ratio for various modality combinations across different evaluation data mixtures. The charts are: Audio OOD Evaluation, Image OOD Evaluation, Text OOD Evaluation, Audio+Image OOD Evaluation, Audio+Text OOD Evaluation, Image+Text OOD Evaluation, and Audio+Image+Text OOD Evaluation. The legend indicates Baseline Compressors: opus, L2MA2, Bellard, FLAC (audio), PNG (image), and JPEG 2000 (images). The charts show that our method (the bars) generally outperforms standard compression algorithms (the horizontal lines) across most evaluation data mixtures, especially when the evaluation modality was included in the training data mixture.
+
+Figure 2: Six bar charts showing Compression Ratio for various modality combinations across different evaluation data mixtures. The charts are: Audio OOD Evaluation, Image OOD Evaluation, Text OOD Evaluation, Audio+Image OOD Evaluation, Audio+Text OOD Evaluation, Image+Text OOD Evaluation, and Audio+Image+Text OOD Evaluation. The legend indicates Baseline Compressors: opus, L2MA2, Bellard, FLAC (audio), PNG (image), and JPEG 2000 (images).
+
+Figure 2: Small pre-trained transformers can be domain-general compressors (panels correspond to evaluation data mixtures, bars to training data mixtures). On every out-of-distribution evaluation data mixture, our method (i.e., the bars) outperforms standard compression algorithms (all horizontal lines except for ‘Bellard’) and is on par with Bellard’s online adaptive transformers (the dark blue line) — as long as the evaluation modality was included in the training data mixture. For unseen modalities we observe very little cross-modal transfer (which is different from observations made with foundation models Deletang et al. (2024)). Unimodal training leads to models that are good for their respective modality, but multimodal training yields models that perform almost as well as the unimodal models across all their training modalities (despite seeing a lot less data per modality than the unimodal models), i.e., one can trade off a small amount of performance on each individual modality in return for a strong domain-general compressor via multimodal training (gray bar).
+
+![Figure 3: Three line plots showing Compression Ratio vs. GBs in Training Mixture for Audio, Image, and Text modalities. The plots show how the compression ratio changes as the amount of training data for a specific modality increases, while keeping the total training data constant.](46f43cb4ffd47565e7c0ca306d461435_img.jpg)
+
+Figure 3 displays three line plots showing the Compression Ratio (Y-axis) versus the amount of training data in GBs for a specific modality (X-axis). The plots are: Audio OOD Evaluation, Image OOD Evaluation, and Text OOD Evaluation. The legend indicates the Training Mixture: audio (red), image (green), text (blue), audio+image (yellow), audio+text (purple), image+text (cyan), and audio+image+text (gray). The plots show that the compression ratio generally decreases as the amount of training data for the specific modality increases, but the overall performance is maintained by the multimodal training data.
+
+Figure 3: Three line plots showing Compression Ratio vs. GBs in Training Mixture for Audio, Image, and Text modalities. The plots show how the compression ratio changes as the amount of training data for a specific modality increases, while keeping the total training data constant.
+
+Figure 3: What you see is what you get. Each panel visualizes the compression ratios for one of our modalities when training models on varying dataset mixtures and sizes. Although one can replace a large proportion of a unimodal training dataset with a multimodal training mixture and not incur a significant loss on the original modality, transformers (at our tested model sizes) do not exhibit improved transfer from the out-of-modality data (i.e., the multimodal models are worse than the unimodal ones, even when trained on much more data from that particular modality). The upshot is that the multimodal training data does not hurt much (note the scale of the y-axis), but leads to significantly improved multimodal compression performance as shown in Fig. 2.
+
+![Figure 4: Three line plots showing Compression Ratio vs. FLOPS for Audio, Image, and Text OOD Evaluations. The plots show that as FLOPS increase, the compression ratio generally decreases. Larger model sizes (e.g., 947K) result in higher compression ratios for the same FLOPS budget. The Image OOD Evaluation shows a more pronounced overfitting effect, where the compression ratio increases after a certain FLOPS threshold for larger models.](73c3e4508cae529acf4e6c7fa70b361a_img.jpg)
+
+The figure consists of three line plots arranged horizontally, labeled 'Audio OOD Evaluation', 'Image OOD Evaluation', and 'Text OOD Evaluation'. Each plot shows the 'Compression Ratio' on the y-axis against 'FLOPS' on the x-axis (scaled by  $10^{19}$ ). The x-axis ranges from 0.00 to 1.25. The y-axis ranges vary: 0.49 to 0.55 for Audio, 0.30 to 0.42 for Image, and 0.28 to 0.40 for Text. A legend on the right indicates model sizes: 422K (dark blue), 546K (purple), 679K (teal), 813K (green), and 947K (yellow). In all plots, the compression ratio starts high (around 0.55 for Audio, 0.42 for Image, 0.40 for Text) and decreases as FLOPS increase. For the Image OOD Evaluation, the compression ratio for larger models (e.g., 947K) increases after a certain FLOPS threshold, indicating overfitting. For the Text OOD Evaluation, the compression ratio decreases steadily. The Audio OOD Evaluation shows a more gradual decrease in compression ratio.
+
+Figure 4: Three line plots showing Compression Ratio vs. FLOPS for Audio, Image, and Text OOD Evaluations. The plots show that as FLOPS increase, the compression ratio generally decreases. Larger model sizes (e.g., 947K) result in higher compression ratios for the same FLOPS budget. The Image OOD Evaluation shows a more pronounced overfitting effect, where the compression ratio increases after a certain FLOPS threshold for larger models.
+
+Figure 4: Simultaneously scaling training dataset and model size (for unimodal training- and evaluation data). The colors indicate the model size, and the lines correspond to different dataset sizes (20%, 40%, 60%, 80%, and 100%). We always train for 2 epochs, regardless of dataset size, i.e., smaller datasets require fewer FLOPS. As expected, increasing the number of parameters and the dataset size boosts compression (at the cost of increased training FLOPS). Note that our out-of-distribution evaluation makes models more prone to overfitting, as seen, e.g., for our largest models on images, making scaling more complex than traditionally observed LLM scaling laws.
+
+**What You See Is What You Get** While Fig. 2 shows that substituting half or two thirds of the training set with data from other modalities only leads to a small performance loss compared to the unimodally trained models, it is unclear whether simply training on a smaller amount of unimodal data (i.e., decreasing the unimodal training dataset size to, e.g., 82.5GB and not substituting 82.5GB with data from another modality) would give the same performance, or whether there is some transfer between modalities (as suggested by Mirchandani et al. (2023)) that compensates for the smaller amount of data per individual modality. To investigate this, we run an ablation where we subdivide each of our seven training sets into 5 different sizes: 20%, 40%, 60%, 80%, and 100% of the respective dataset (uniformly subsampled). We train a series of models (sweeping over their number of layers; see Appendix A.3) on each dataset mixture and each dataset size, and then evaluate as before. Figure 3 shows that, for our models and datasets, there is little transfer between modalities. For all cases of audio, text, and (less clearly) images, it is better to train on a smaller unimodal dataset to get the best unimodal performance, as opposed to training on a much larger multimodal dataset. For example, training on a pure text dataset of 33GB (20% of 165GB) outperforms training on a dataset consisting of 82.5GB (i.e., more than twice as much) text and of 82.5GB images/audio.
+
+**Scaling Analysis** Since there is a non-trivial relationship between model size and dataset size, we perform a scaling analysis on both of these factors (details in Appendix A.3). Figure 4 shows trends akin to the scaling laws observed for LLMs (Kaplan et al., 2020), which state that better prediction (in our case compression) is only possible by scaling both models and datasets, in a particular way. Note that, different to traditional scaling laws for models trained on internet-scale datasets, the distribution shift in our evaluation makes it easier for the model to overfit to the training distribution. However, as the number of parameters and the training flops of our small models increase, the adjusted compression ratio improves, eventually beating standard compression algorithms. We do observe gradual overfitting on the image dataset for our models trained only on images. However, this phenomenon can be mitigated by including other modalities in the training mixture (see Fig. A1).
+
+**Model Size vs. Context Size** The previous two experiments investigated the impact of training dataset size and model size, which revealed a complex, “scaling law”-like, relationship between the two factors and the overall training budget in FLOPS. In this experiment, we investigate the impact of the length of the context window. Since the context window length has a large impact on the overall FLOPS footprint (attention scales quadratically with the input sequence length), we also vary the size of our models to explore whether there is a sweet spot in terms of training compute budget allocation (details in Appendix A.3). Fig. 5 shows that the optimal trade-off strongly depends on the data modality. The top performing models for text have a context window less than or equal to 2048 bytes, indicating that short term dependencies are more important than long ones in this case. For images, the best compromise overall is to choose a larger context window of 8192, which means
+
+![Figure 5: Relationship between context- and model size. Three line plots showing Compression Ratio vs. FLOPS for Audio, Image, and Text OOD Evaluations. The Audio plot shows Model Size Guide (1M, 5M, 10M, 20M). The Image plot shows Context Size (1024, 2048, 4096, 8192). The Text plot shows Context Size (1024, 2048, 4096, 8192).](3121afa7ca030b22ee0345864ca6f38b_img.jpg)
+
+Figure 5 consists of three line plots showing the relationship between FLOPS (x-axis, ranging from 1 to 5  $10^{19}$ ) and Compression Ratio (y-axis) for different modalities: Audio, Image, and Text. The Audio plot includes a 'Model Size Guide' with points for 1M, 5M, 10M, and 20M parameters. The Image and Text plots include a 'Context Size' legend with values 1024, 2048, 4096, and 8192. In all cases, the compression ratio generally increases with FLOPS, though the rate and magnitude vary by modality and context/model size.
+
+Figure 5: Relationship between context- and model size. Three line plots showing Compression Ratio vs. FLOPS for Audio, Image, and Text OOD Evaluations. The Audio plot shows Model Size Guide (1M, 5M, 10M, 20M). The Image plot shows Context Size (1024, 2048, 4096, 8192). The Text plot shows Context Size (1024, 2048, 4096, 8192).
+
+Figure 5: Relationship between context- and model size. Given a certain training compute budget (in FLOPS), one can either increase the context size (measured in bytes) or the model size, leading to a non-trivial trade-off. Our results show that this trade-off is highly modality-dependent (also note the different scales on the y-axis, meaning that the magnitude of the effect varies significantly with modality). For text, shorter context sizes and larger models are beneficial (indicating the importance of short-term dependencies for our data and model scale). For images, larger context is generally beneficial, which makes sense, given that a single image consists of  $512 \cdot 512 \cdot 3 = 786432$  bytes, which far exceeds our models’ contexts, i.e., models with larger context can process larger fractions of an image. Finally, for audio data the relationship is complex with intermediate context length and larger models performing better (though the reverse is true for short context length).
+
+![Figure 6: Compression ratio vs. evaluation dataset size. Three line plots showing Compression Ratio vs. Evaluation Dataset Size (Bytes) for Audio, Image, and Text OOD Evaluations. The legend identifies various compressors: FLAC (audio), gzip, LZMA2, JPEG 2000 (images), PNG (images), and Offline Transformer (ours).](d864789b0d8384da1d22fd6a5d76bbdf_img.jpg)
+
+Figure 6 displays three line plots of Compression Ratio vs. Evaluation Dataset Size (Bytes) on a logarithmic scale from  $10^7$  to  $10^9$ . The plots are for Audio, Image, and Text OOD Evaluations. The legend identifies several compressors: FLAC (audio), gzip, LZMA2, JPEG 2000 (images), PNG (images), and Offline Transformer (ours). Standard compressors (gzip, LZMA2, JPEG 2000, PNG) maintain a constant compression ratio regardless of dataset size, while the Offline Transformer (ours) shows an improvement in compression ratio as the dataset size increases, eventually plateauing.
+
+Figure 6: Compression ratio vs. evaluation dataset size. Three line plots showing Compression Ratio vs. Evaluation Dataset Size (Bytes) for Audio, Image, and Text OOD Evaluations. The legend identifies various compressors: FLAC (audio), gzip, LZMA2, JPEG 2000 (images), PNG (images), and Offline Transformer (ours).
+
+Figure 6: Compression ratio vs. evaluation dataset size. According to Eq. (2), the numerator of the compression ratio consists of the size of the compressed data *and* the size of the compressor. For standard compressors (e.g., gzip), the size of the compressor (a few thousand lines of code) is negligible given sufficient evaluation data (i.e., the compression ratio is unaffected by the evaluation dataset size). However, for neural compressors trained offline (i.e., where the size of the compressor is dominated by the model parameters), the compression ratio improves with increasing data since the model size has decreasing influence. Moreover, if the model is equal to or larger than the evaluation dataset size (e.g., 500M parameters and 1GB of data), one cannot achieve a compression ratio  $< 1$ .
+
+decreasing the model size. For audio data, the trade-off is even more complex. Overall these results highlight the difficulty of tuning architectures to achieve best performance across many modalities.
+
+**Evaluation Dataset Size** Figure 6 visualizes the relationship between the compression ratio and the evaluation dataset size for all three modalities and our best-performing model (as determined on the standard 1GB of OOD data in Table A1). For offline (i.e., pre-) trained neural compressors, the model parameters have to be factored into the compression ratio, which means that their compression performance will improve with increasing evaluation data (as long as the model generalizes well to the additional data). In contrast, the size of standard compressors is negligible compared to the amount of evaluation data, which means that their compression ratios are largely unaffected by the evaluation dataset size. Note that FLAC cannot losslessly compress more than  $\sim 4.2\text{GB}$  of data.
+
+432  
+433  
+434  
+435  
+436  
+437  
+438  
+439  
+440  
+441  
+442  
+443  
+444  
+445  
+446  
+447  
+448  
+449  
+450  
+451  
+452  
+453  
+454  
+455  
+456  
+457  
+458  
+459  
+460  
+461  
+462  
+463  
+464  
+465  
+466  
+467  
+468  
+469  
+470  
+471  
+472  
+473  
+474  
+475  
+476  
+477  
+478  
+479  
+480  
+481  
+482  
+483  
+484  
+485
+
+**Sliding Window** In all experiments so far we used a sliding window without overlap to process the evaluation byte streams, i.e., we completely fill a whole context window, process it, and then slide it forward by the size of the context window to process the next chunk of data. This means that bytes early in the context window are not conditioned on a lot of data (in theory, conditioning on more data should help with prediction and thus compression, which may well be exploitable by transformers’ in-context learning abilities (Brown et al., 2020; Genewein et al., 2023; Ge et al., 2024)). However, sliding the context window with more overlap requires more forward passes to process the same amount of data, which significantly increases the computational cost with increasing overlap. With no overlap processing 4096 bytes with a context window of 4096 takes a single forward pass. In the most extreme case of maximal overlap it would take 4095 forward passes, where the context window is moved by a single byte each time (though each prediction could be conditioned on the full 4095 preceding bytes). In our final experiment, we investigate the effect of different overlaps between context windows. Figure 7 shows that for our data and model sizes, increasing the overlap window (for a context length of 4096) has relatively little effect. The strongest effect is observed for image data, which makes sense given that 4096 bytes only corresponds to a small fraction of an image and there are obvious long-range dependencies between channels of the same image. Beyond an overlap of 2048 we do not see much benefit of further increasing the overlap window in our experiments.
+
+![Figure 7: A line graph titled 'OOD Evaluation' showing the Compression Ratio (Y-axis, 0.25 to 0.50) versus Sliding Window Overlap (X-axis, 0 to 4095). Three data series are plotted: Audio (red line with circles), Image (green line with circles), and Text (blue line with circles). Audio remains relatively flat around 0.49. Image starts at ~0.36 and decreases to ~0.33. Text remains flat around 0.23.](bedcca5cdf168e3508ef511d94ec514c_img.jpg)
+
+| Sliding Window Overlap | Audio | Image | Text |
+|------------------------|-------|-------|------|
+| 0                      | 0.49  | 0.36  | 0.23 |
+| 1024                   | 0.49  | 0.34  | 0.23 |
+| 2048                   | 0.49  | 0.33  | 0.23 |
+| 3072                   | 0.49  | 0.33  | 0.23 |
+| 4095                   | 0.49  | 0.33  | 0.23 |
+
+Figure 7: A line graph titled 'OOD Evaluation' showing the Compression Ratio (Y-axis, 0.25 to 0.50) versus Sliding Window Overlap (X-axis, 0 to 4095). Three data series are plotted: Audio (red line with circles), Image (green line with circles), and Text (blue line with circles). Audio remains relatively flat around 0.49. Image starts at ~0.36 and decreases to ~0.33. Text remains flat around 0.23.
+
+Figure 7: Impact of the sliding window overlap (for unimodal training and evaluation). Overlapping context windows only marginally improve the performance (most significantly for images) in our experiments but come at a huge cost in terms of computational efficiency.
+
+## 6 DISCUSSION
+
+The main goal of our work is to investigate whether pre-trained transformers can be competitive with standard compressors, even when taking their parameter size into account. In contrast to previous work, this places our models into a relatively small regime, where it is unclear whether models will learn well from large datasets at all and have non-trivial out-of-distribution and cross-modality transfer. This could partly be countered by training larger models and then subsequently compressing the model parameters themselves. We chose not to do this in our case since naive lossless compression of model parameters leads to a 10% reduction at best (see Table A3), and even best-case scenarios would only lead to marginal improvements in compression ratio given the size of our largest models. For very large (e.g., foundation) models, compressing weights to achieve competitive compression ratios may be interesting, though it will be necessary to use lossy weight compression techniques (Tao et al., 2022), which lead to non-trivial trade-offs between high (lossy) compression and maintaining strong predictor performance, i.e., the two summands in the numerator of Eq. (2). Exploring these trade-offs is an interesting direction for future research but beyond the scope of our work. Another way to allow for larger models would be to simply evaluate on a larger test set. We deliberately chose to use 1GB of test data as a regime where standard compression algorithms are hard to beat. Additionally, evaluations on larger test data, and in settings where model parameters are not taken into account have previously conducted (Delétang et al., 2024; Valmeekam et al., 2023; Li et al., 2024) (where significant amounts of cross-domain transfer have also been found, unlike in our experiments).
+
+Note that, similar to Xue et al. (2022), we do not use a tokenizer, which has two reasons. First, tokenizers are typically pre-trained per modality, and we want to rule out bad cross-modality transfer resulting from a bad tokenizer. Second, tokenization acts as a pre-trained “pre-compression” step (Delétang et al. (2024) make a similar comment). This pre-compression increases information density in the context window at the cost of increasing entropy, which can make the prediction problem harder: Lester et al. (2024) even show that when using a strong neural-based pre-compressor (together with arithmetic coding) to train LLMs, training performance can collapse catastrophically.
+
+**Limitations** All our claims regarding the universality of our compressors (or the lack thereof) are limited to the model size regime and the particular modalities and datasets we studied. We cannot rule out that there are cases where even in-modality transfer is weak (e.g., when using another out-of-distribution image evaluation dataset with very different statistics), or that there may be cases of non-trivial cross-modal transfer (which we have not observed). We did not investigate transfer learning approaches to improve the out-of-modality performance of our neural compressors, but we consider this an interesting avenue for future work. Similarly, our claims regarding outperforming standard compression algorithms are limited to our experiments. We cannot rule out that there are datasets (such as spreadsheet data, or code, which, technically, are both text) where no pre-trained transformer outperforms, e.g., LZMA2 (in fact, we think it's plausible that such datasets can be constructed synthetically). Moreover, we can also not rule out that other, more sophisticated architectures (e.g., Perceivers (Jaegle et al., 2021)), would outperform our models, and we consider investigating the optimal neural model architecture for lossless compression an interesting direction for future research. Finally, note that the goal of our study is not to build a practical transformer-based universal compressor to compete with standard compressors in terms of computational footprint. As Table A2 shows, our models are orders of magnitude slower for encoding data (and have significantly larger memory- and FLOPS-demands), and they are about three times slower than Bellard’s online adaptive transformer. This is only the forward-pass cost, which can be done for a whole context window at once (without overlap). If our models were used to decode, which has to be performed token-by-token to obtain the correct conditioning, our running time demands would be even worse, making our models clearly uncompetitive in that sense.
+
+## 7 CONCLUSION
+
+In this paper we have shown that it is possible to use pre-trained vanilla transformers as competitive “zero-shot” compressors on out-of-distribution evaluation data, where competitive means achieving better compression ratios than both domain-general and domain-specific standard compression algorithms. We found this to be true for text, images, and audio data, and for all possible combinations of the three — but only as long as the corresponding modalities have been seen during training. We further found that, despite their relatively small size, our models have the capacity to train on multiple modalities, and then compress these well, without losing much performance compared to a purely unimodal model. On the other hand, we found that even multimodal training does not lead to the emergence of a universal compression ability that would yield strong compression performance on unseen modalities. This is in contrast to observations made by Deletang et al. (2024) on LLMs and indicates that there is a qualitative difference between small and (very) large models, even when the small models are trained on large amounts of data. Overall our results suggest that small transformers can be pre-trained to recognize and exploit statistical regularities on par and even better than hand-crafted standard compressors and current state-of-the-art adaptive online neural compressors, but we do not observe the emergence of a general compression ability with our model sizes.
+
+## REFERENCES
+
+- Rosana Ardila, Megan Branson, Kelly Davis, Michael Kohler, Josh Meyer, Michael Henretty, Reuben Morais, Lindsay Saunders, Francis M. Tyers, and Gregor Weber. Common voice: A massively-multilingual speech corpus. In *LREC*, 2020.
+- Benjamin Lukas Cajus Barzen, Fedor Glazov, Jonas Geistert, and Thomas Sikora. Accelerated deep lossless image coding with unified parallelized GPU coding architecture. In *PCS*, 2022.
+- Fabrice Bellard. Lossless data compression with neural networks. Technical report, Amarisoft, 2019.
+- Fabrice Bellard. NNCP v2: Lossless data compression with transformer. Technical report, Amarisoft, 2021.
+- Thomas Boutell. PNG (portable network graphics) specification version 1.0. *RFC*, 1997.
+- Tom B. Brown, Benjamin Mann, Nick Ryder, Melanie Subbiah, Jared Kaplan, Prafulla Dhariwal, Arvind Neelakantan, Pranav Shyam, Girish Sastry, Amanda Askell, Sandhini Agarwal, Ariel Herbert-Voss, Gretchen Krueger, Tom Henighan, Rewon Child, Aditya Ramesh, Daniel M. Ziegler,
+
+- 540        Jeffrey Wu, Clemens Winter, Christopher Hesse, Mark Chen, Eric Sigler, Mateusz Litwin, Scott  
+541        Gray, Benjamin Chess, Jack Clark, Christopher Berner, Sam McCandlish, Alec Radford, Ilya  
+542        Sutskever, and Dario Amodei. Language models are few-shot learners. In *NeurIPS*, 2020.  
+543  
+544        Gregory J. Chaitin. The limits of reason. *Scientific American*, 2006.  
+545  
+546        Hao Chen, Bo He, Hanyu Wang, Yixuan Ren, Ser-Nam Lim, and Abhinav Shrivastava. Nerv: Neural  
+547        representations for videos. In *NeurIPS*, 2021.  
+548        Josh Coalson. Free lossless audio codec, 2008. URL <https://xiph.org/flac>.  
+549  
+550        Arman Cohan, Franck Dernoncourt, Doo Soon Kim, Trung Bui, Seokhwan Kim, Walter Chang,  
+551        and Nazli Goharian. A discourse-aware attention model for abstractive summarization of long  
+552        documents. In *NAACL-HLT* (2), 2018.  
+553        David Cox. Syntactically informed text compression with recurrent neural networks.  
+554        *arXiv:1608.02893*, 2016.  
+555  
+556        Grégoire Delétang, Anian Ruoss, Paul-Ambroise Duquenne, Elliot Catt, Tim Genewein, Christopher  
+557        Mattern, Jordi Grau-Moya, Li Kevin Wenliang, Matthew Aitchison, Laurent Orseau, Marcus  
+558        Hutter, and Joel Veness. Language modeling is compression. In *ICLR*, 2024.  
+559        Peter Deutsch. GZIP file format specification version 4.3. *RFC*, 1996.  
+560  
+561        Abhimanyu Dubey, Abhinav Jauhri, Abhinav Pandey, Abhishek Kadian, Ahmad Al-Dahle, Aiesha  
+562        Letman, Akhil Mathur, Alan Schelten, Amy Yang, Angela Fan, Anirudh Goyal, Anthony Hartshorn,  
+563        Aobo Yang, Archi Mitra, Archie Sravankumar, Artem Korenev, Arthur Hinsvark, Arun Rao, Aston  
+564        Zhang, Aurélien Rodriguez, Austen Gregerson, Ava Spataru, Baptiste Rozière, Bethany Biron,  
+565        Binh Tang, Bobbie Chern, Charlotte Caucheteux, Chaya Nayak, Chloe Bi, Chris Marra, Chris  
+566        McConnell, Christian Keller, Christophe Touret, Chunyang Wu, Corinne Wong, Cristian Canton  
+567        Ferrer, Cyrus Nikolaidis, Damien Allonsius, Daniel Song, Danielle Pintz, Danny Livshits, David  
+568        Esiobu, Dhruv Choudhary, Dhruv Mahajan, Diego Garcia-Olano, Diego Perino, Dieuwke Hupkes,  
+569        Egor Lakomkin, Ehab AlBadawy, Elina Lobanova, Emily Dinan, Eric Michael Smith, Filip  
+570        Radenovic, Frank Zhang, Gabriel Synnaeve, Gabrielle Lee, Georgia Lewis Anderson, Graeme Nail,  
+571        Grégoire Mialon, Guan Pang, Guillem Cucurell, Hailey Nguyen, Hannah Korevaar, Hu Xu, Hugo  
+572        Touvron, Iliyan Zarov, Imanol Arrieta Ibarra, Isabel M. Kloumann, Ishan Misra, Ivan Evtimov,  
+573        Jade Copet, Jaewon Lee, Jan Geffert, Jana Vranes, Jason Park, Jay Mahadeokar, Jeet Shah, Jelmer  
+574        van der Linde, Jennifer Billock, Jenny Hong, Jenya Lee, Jeremy Fu, Jianfeng Chi, Jianyu Huang,  
+575        Jiawen Liu, Jie Wang, Jiecao Yu, Joanna Bitton, Joe Spisak, Jongsoo Park, Joseph Rocca, Joshua  
+576        Johnstun, Joshua Saxe, Junteng Jia, Kalyan Vasuden Alwala, Kartikeya Upasani, Kate Plawiak,  
+577        Ke Li, Kenneth Heafield, Kevin Stone, and et al. The llama 3 herd of models. *arXiv:2407.21783*,  
+578        2024.  
+579  
+580        Jarek Duda. Asymmetric numeral systems. *arXiv:0902.0271*, 2009.  
+581  
+582        Emilien Dupont, Adam Golinski, Milad Alizadeh, Yee Whye Teh, and Arnaud Doucet. COIN:  
+583        compression with implicit neural representations. *arXiv:2103.03123*, 2021.  
+584  
+585        Emilien Dupont, Hrushikesh Loya, Milad Alizadeh, Adam Golinski, Yee Whye Teh, and Arnaud  
+586        Doucet. COIN++: neural compression across modalities. *Trans. Mach. Learn. Res.*, 2022.  
+587  
+588        Tao Ge, Jing Hu, Lei Wang, Xun Wang, Si-Qing Chen, and Furu Wei. In-context autoencoder for  
+589        context compression in a large language model. In *ICLR*, 2024.  
+590  
+591        Tim Genewein, Grégoire Delétang, Anian Ruoss, Li Kevin Wenliang, Elliot Catt, Vincent Dutildoir,  
+592        Jordi Grau-Moya, Laurent Orseau, Marcus Hutter, and Joel Veness. Memory-based meta-learning  
+593        on non-stationary distributions. In *ICML*, 2023.  
+594  
+595        Mohit Goyal, Kedar Tatwawadi, Shubham Chandak, and Idoia Ochoa. Deepzip: Lossless data  
+596        compression using recurrent neural networks. In *DCC*, 2019.  
+597  
+598        Mohit Goyal, Kedar Tatwawadi, Shubham Chandak, and Idoia Ochoa. Dzip: Improved general-  
+599        purpose lossless compression based on novel neural network modeling. In *DCC*, 2020.
+
+- 594 Jordi Grau-Moya, Tim Genewein, Marcus Hutter, Laurent Orseau, Grégoire Delétang, Elliot Catt,  
+595 Anian Ruoss, Li Kevin Wenliang, Christopher Mattern, Matthew Aitchison, and Joel Veness.  
+596 Learning universal predictors. In *ICML*, 2024.
+- 597  
+598 Jordan Hoffmann, Sebastian Borgeaud, Arthur Mensch, Elena Buchatskaya, Trevor Cai, Eliza  
+599 Rutherford, Diego de Las Casas, Lisa Anne Hendricks, Johannes Welbl, Aidan Clark, Tom  
+600 Hennigan, Eric Noland, Katie Millican, George van den Driessche, Bogdan Damoc, Aurelia Guy,  
+601 Simon Osindero, Karen Simonyan, Erich Elsen, Jack W. Rae, Oriol Vinyals, and Laurent Sifre.  
+602 Training compute-optimal large language models. *arxiv:2203.15556*, 2022.
+- 603 Emiel Hoogeboom, Jorn W. T. Peters, Rianne van den Berg, and Max Welling. Integer discrete flows  
+604 and lossless compression. In *NeurIPS*, 2019.
+- 605 Yuzhen Huang, Jinghan Zhang, Zifei Shan, and Junxian He. Compression represents intelligence  
+606 linearly. *arXiv:2404.09937*, 2024.
+- 607  
+608 David A. Huffman. A method for the construction of minimum-redundancy codes. *Proceedings of*  
+609 *the IRE*, 1952.
+- 610  
+611 Marcus Hutter. 500’000€ prize for compressing human knowledge, 2006. URL [http://prize.](http://prize.hutter1.net)  
+612 [hutter1.net](http://prize.hutter1.net).
+- 613  
+614 Marcus Hutter, David Quarel, and Elliot Catt. *An Introduction to Universal Artificial Intelligence*.  
+615 Chapman & Hall, 2024.
+- 616  
+617 Andrew Jaegle, Felix Gimeno, Andy Brock, Oriol Vinyals, Andrew Zisserman, and João Carreira.  
+618 Perceiver: General perception with iterative attention. In *ICML*, Proceedings of Machine Learning  
+619 Research, 2021.
+- 620  
+621 Jared Kaplan, Sam McCandlish, Tom Henighan, Tom B. Brown, Benjamin Chess, Rewon Child, Scott  
+622 Gray, Alec Radford, Jeffrey Wu, and Dario Amodei. Scaling laws for neural language models.  
+623 *arXiv:2001.08361*, 2020.
+- 624  
+625 Hyunjik Kim, Matthias Bauer, Lucas Theis, Jonathan Richard Schwarz, and Emilien Dupont.  
+626 C3: high-performance and low-complexity neural compression from a single image or video.  
+627 *arXiv:2312.02753*, 2023.
+- 628  
+629 Diederik P. Kingma and Jimmy Ba. Adam: A method for stochastic optimization. In *ICLR (Poster)*,  
+630 2015.
+- 631  
+632 Friso H. Kingma, Pieter Abbeel, and Jonathan Ho. Bit-swap: Recursive bits-back coding for lossless  
+633 compression with hierarchical latent variables. In *ICML*, 2019.
+- 634  
+635 Byron Knoll. CMIX, 2014. URL <http://www.byronknoll.com/cmix.html>.
+- 636  
+637 Théo Ladune, Pierrick Philippe, Félix Henry, Gordon Clare, and Thomas Leguay. COOL-CHIC:  
+638 coordinate-based low complexity hierarchical image codec. In *ICCV*, 2023.
+- 639  
+640 Shane Legg and Marcus Hutter. Universal intelligence: A definition of machine intelligence. *Minds*  
+641 *Mach.*, 2007.
+- 642  
+643 Mikko Lehtokangas, Jukka Saarinen, Pentti Huuhtanen, and Kimmo Kaski. Neural network opti-  
+644 mization tool based on predictive MDL principle for time series prediction. In *ICTAI*, 1993.
+- 645  
+646 Brian Lester, Jaehoon Lee, Alex Alemi, Jeffrey Pennington, Adam Roberts, Jascha Sohl-Dickstein,  
+647 and Noah Constant. Training llms over neurally compressed text. *arxiv:2404.03626*, 2024.
+- 648  
+649 Ming Li and Paul M. B. Vitányi. *An Introduction to Kolmogorov Complexity and Its Applications*,  
+650 4th Edition. Springer, 2019.
+- 651  
+652 Ziguang Li, Chao Huang, Xuliang Wang, Haibo Hu, Cole Wyeth, Dongbo Bu, Quan Yu, Wen Gao,  
+653 Xingwu Liu, and Ming Li. Understanding is compression. *arxiv:2407.07723*, 2024.
+- 654  
+655 Qian Liu, Yiling Xu, and Zhu Li. DecMac: A deep context model for high efficiency arithmetic  
+656 coding. In *ICAIIC*, 2019.
+
+[Appendix and supplementary materials beyond page 12 have been removed.]

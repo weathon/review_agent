@@ -1,0 +1,284 @@
+# SAE AS A CRYSTAL BALL<sup>✦</sup>: INTERPRETABLE FEATURES PREDICT CROSS-DOMAIN TRANSFERABILITY OF LLMs WITHOUT TRAINING
+
+Qi Zhang<sup>1,2\*</sup>   Yifei Wang<sup>3\*</sup>   Xiaohan Wang<sup>2</sup>   Jiajun Chai<sup>2</sup>  
+Guojun Yin<sup>2</sup>   Wei Lin<sup>2</sup>   Yisen Wang<sup>1,4†</sup>
+
+<sup>1</sup> State Key Lab of General Artificial Intelligence,
+
+School of Intelligence Science and Technology, Peking University
+
+<sup>2</sup> Meituan <sup>‡</sup>
+
+<sup>3</sup> Amazon AGI SF Lab<sup>§</sup>
+
+<sup>4</sup> Institute for Artificial Intelligence, Peking University
+
+## ABSTRACT
+
+In recent years, pre-trained large language models have achieved remarkable success across diverse tasks. Besides the pivotal role of self-supervised pre-training, their effectiveness in downstream applications also depends critically on the post-training process, which adapts models to task-specific data and objectives. However, this process inevitably introduces model shifts that can influence performance in different domains, and how such shifts transfer remains poorly understood. To open up the black box, we propose the SAE-based Transferability Score (STS), a new metric that leverages sparse autoencoders (SAEs) to forecast post-training transferability. Taking supervised fine-tuning as an example, STS identifies shifted dimensions in SAE representations and calculates their correlations with downstream domains, enabling reliable estimation of transferability *before* fine-tuning. Extensive experiments across multiple models and domains show that STS accurately predicts the transferability of supervised fine-tuning, achieving Pearson correlation coefficients above 0.7 with actual performance changes. Beyond this, we take an initial step toward extending STS to reinforcement learning. We believe that STS can serve as an interpretable tool for guiding post-training strategies in LLMs. Code is available at <https://github.com/PKU-ML/STS>.
+
+## 1 INTRODUCTION
+
+Recent advances in large-scale neural networks have demonstrated that pre-training on massive datasets yields models with strong generalization capabilities (Achiam et al., 2023; Grattafiori et al., 2024; Yang et al., 2025; Liu et al., 2024). However, due to discrepancies between the pretraining objectives and the specific requirements of downstream tasks, pretraining alone is often insufficient to achieve optimal performance on these tasks. Post-training, which includes supervised fine-tuning (Zhang et al., 2023; Luo et al., 2023), and reinforcement learning (Schulman et al., 2017; Shao et al., 2024; Li et al., 2025b), play a critical role in bridging this gap. By selectively adapting the pretrained model, post-training improves performance in target tasks, and allows models to better capture domain-specific characteristics.
+
+However, during the post-training process, it is widely observed that improvements on a target task often come at the expense of performance in other domains (Dong et al., 2023; Kumar et al., 2022). For instance, Li et al. (2025a) state that improvements in the reasoning ability of large language
+
+<sup>\*</sup>Equal Contribution.
+
+<sup>†</sup>Corresponding Author: Yisen Wang (yisen.wang@pku.edu.cn).
+
+<sup>‡</sup>Qi Zhang completed this work during an internship at Meituan.
+
+<sup>§</sup>This work was completed at MIT prior to Yifei Wang joining Amazon.
+
+models come at the cost of reduced model robustness. Despite these observations, the mechanisms underlying how model features are linked and transferred during post-training remain largely unexplored. As a result, we currently lack the ability to predict which domain performance is likely to benefit or deteriorate under specific post-training adaptations, limiting both interpretability and principled design of post-training strategies.
+
+In this paper, we analyze the transferability of post-training through the enhanced interpretability provided by sparse autoencoders (Ng et al., 2011). The sparse autoencoder (SAE) is an encoder-decoder architecture that reconstructs the internal activations of models while enforcing sparsity constraints on the hidden layer. Previous works have shown that the SAE encoder features achieve monosemanticity (Cunningham et al., 2023; Gao et al., 2024; Zhang et al., 2025), where each dimension is only activated by a certain natural concept. Leveraging this property, we observe that post-training only modifies certain SAE dimensions—for example, those associated with mathematical reasoning. This observation motivates a natural approach to predict the transferability of post-training: we can identify the shifted SAE features and examine their correlations with different domains.
+
+Concretely, our analysis consists of two steps: (1) identifying the dimensions that are shifted during post-training, and (2) assessing their correlations with downstream domains. In the first stage, the primary challenge is to identify the shifted dimensions **prior to post-training**. Inspired by the observation that in-context learning exhibits behaviors similar to supervised fine-tuning (Wang et al., 2023; Mosbach et al., 2023), we forecast the shifted dimensions by using the supervised answers as demonstrations for in-context learning, and then identify the dimensions that undergo the largest changes. Empirical results show a clear overlap between the predicted and actual shifted dimensions. In the second stage, leveraging the interpretability of SAE activations, we observe that the activation values of these shifted dimensions in a domain can capture their correlation. We formalize this as the SAE-based transferability score (STS), which quantifies how strongly the shifted dimensions relate to downstream tasks. A higher STS suggests a larger expected performance change after supervised fine-tuning. Empirically, we find that our metric consistently correlates well with actual performance shifts. For instance, the Pearson correlation coefficient exceeds 0.7 when evaluating performance variations across domains in the MMLU-Pro dataset (Wang et al., 2024). At last, we provide a preliminary exploration of extending our metric to reinforcement learning settings. Together, these results allow us to develop an interpretable framework for predicting the cross-domain transferability without training. We summarize our contributions as follows:
+
+- We propose a method to identify shifted dimensions in supervised fine-tuning without requiring access to the fine-tuned models. We observe that when supervised answers are used as context prompts, the shifted dimensions in in-context learning substantially overlap with those in supervised fine-tuning.
+- We propose the SAE-based Transferability Score (STS), which uses correlations in SAE feature space and estimated shifted dimensions to accurately predict LLM transferability without performing supervised fine-tuning.
+- We empirically show that higher STS values strongly correlate with larger performance shifts in supervised fine-tuning, achieving Pearson correlations above 0.7 across diverse scenarios. This confirms that STS is a reliable, fine-tuning-free metric for predicting LLM cross-domain transferability.
+
+## 2 RELATED WORK & PRELIMINARY
+
+**Post-training.** Post-training refers to the stage after large-scale pretraining, where a pretrained model is further adapted to align with specific objectives, user preferences, or downstream applications (Ouyang et al., 2022; Rafailov et al., 2023; Yu et al., 2025). The methods in post-training can be majorly divided into supervised fine-tuning (SFT) and reinforcement learning (RL). During the SFT process, given a set of labeled examples  $\{x_i, y_i\}$ , the model parameters are updated to minimize the discrepancy between the model’s predictions and the ground-truth answers via Negative Log-Likelihood (NLL) Loss:
+
+$$\mathcal{L}_{\text{SFT}}(\Theta) = -\mathbb{E}_{x_i} \log p(y_i|x_i; \Theta).$$
+
+where  $\Theta$  denotes the model parameters. After SFT, RL is used to further align a pretrained model with human preferences or task-specific objectives. Concretely, the model policy  $p(y|x; \Theta)$  is optimized to maximize a reward signal from a reward model or rule-based function:
+
+$$J(\Theta) = \mathbb{E}_{y \sim p(y|x; \Theta)}[r(x, y)].$$
+
+In post-training research, transferability has long been a central focus. For example, Huan et al. (2025) empirically examines the transfer of capabilities from mathematical reasoning to other downstream tasks, while Sun et al. (2025) offers a more fine-grained assessment of out-of-distribution generalization performance. Additionally, Chu et al. (2025) compares the generalization behaviors of SFT and RL-based post-training methods. However, most of the current works focus on post-hoc analysis after training. As a result, such approaches are less practical because they cannot help predict transfer effects before the fine-tuning process starts. This limitation motivates our work, where we aim to build a method that can predict transferability without fine-tuning.
+
+**Sparse Autoencoders.** Although large language models (LLMs) have demonstrated remarkable performance across a wide range of downstream tasks, many of their decisions and internal behaviors remain opaque, which hinders broader deployment in applications. To address this issue, sparse autoencoders (SAEs) have been proposed as a promising framework for improving the mechanistic interpretability of LLMs (Lieberum et al., 2024; Cunningham et al., 2023). Concretely, given a hidden representation  $z \in \mathbb{R}^d$  within the network, an SAE employs an encoder-decoder architecture to project  $z$  into a sparse latent representation and reconstruct it back to the original space. For instance, in the case of a top-K SAE (Gao et al., 2024), the encoding-decoding process can be formulated as:
+
+$$\begin{aligned} h &= \text{TopK}(W_e z - b), \\ \hat{z} &= W_d h + b. \end{aligned} \quad (1)$$
+
+The encoder representation  $h$  is computed via a linear transformation defined by  $W_e \in \mathbb{R}^{s \times d}$  and a bias  $b \in \mathbb{R}^s$ , while the decoder reconstructs the input features using  $W_d \in \mathbb{R}^{d \times s}$ . The SAE is trained by minimizing the reconstruction loss:
+
+$$\mathcal{L}_{\text{SAE}}(W_e, W_d, b) = \|\hat{z} - z\|^2.$$
+
+Previous studies (Gao et al., 2024) have shown that when the encoder features are sufficiently sparse (e.g.,  $K \ll s$ ), the resulting representations often display monosemanticity. In other words, each feature dimension is only activated by a certain natural concept, such as a mathematical definition, a physical property, or a linguistic pattern.
+
+**In-context Learning.** In-context learning denotes the ability of large pretrained models to solve tasks by conditioning on demonstrations provided in the input (Kossen et al., 2023; Wang et al., 2025). Formally, given a context consisting of  $k$  labeled examples
+
+$$\mathcal{C} = \{(x_1, y_1), (x_2, y_2), \dots, (x_k, y_k)\},$$
+
+the model receives a new query input  $x_{k+1}$  and generates the output  $\hat{y}_{k+1}$  by leveraging the conditional distribution learned during pretraining:
+
+$$\hat{y}_{k+1} \sim p_\theta(y \mid x_{k+1}, \mathcal{C}),$$
+
+where  $\theta$  denotes the fixed pretrained parameters. Unlike supervised fine-tuning and reinforcement learning, in-context learning (ICL) adapts to new tasks during inference without requiring additional training. Nevertheless, several studies have shown that models under in-context learning still exhibit many similarities to those trained with supervised fine-tuning and reinforcement learning (Mosbach et al., 2023; Wang et al., 2023).
+
+## 3 CAPTURING SHIFTED FEATURES IN SUPERVISED FINE-TUNING
+
+In this paper, we analyze the transferability of supervised fine-tuning across different domains by understanding how feature representations shift within neural networks. Since sparse autoencoders (SAEs) enhance monosemanticity by disentangling overlapping representations, their features provide a clearer interpretability for tracking representation shifts in different domains. Consequently, in this section, we start by analyzing how the supervised fine-tuning process modifies SAE features and how the shifted features can be predicted in advance of the fine-tuning process.
+
+![Figure 1: Analysis of feature shifts induced by supervised fine-tuning (SFT). (a) Activation Shifts on SAE Dimensions: A line graph showing activation shift magnitude for 50 dimensions. The y-axis is 'Activation Shift' (2-16) and the x-axis is 'Dimension Index' (0-50). The curve drops sharply from ~15 to ~2. (b) Test Accuracy with Zeroed SAE Dimensions: A line graph showing accuracy for 2000 dimensions. The y-axis is 'Accuracy' (0.1-0.7) and the x-axis is 'Number of Zeroed Dimensions' (250-2000). Two lines are shown: 'Random Dimensions' (blue, nearly constant) and 'Dimensions with Largest Shifts' (orange, decreasing from ~0.75 to ~0.15).](e94f3bbb6f7501b9a1344dd0210e5dd8_img.jpg)
+
+Figure 1: Analysis of feature shifts induced by supervised fine-tuning (SFT). (a) Activation Shifts on SAE Dimensions: A line graph showing activation shift magnitude for 50 dimensions. The y-axis is 'Activation Shift' (2-16) and the x-axis is 'Dimension Index' (0-50). The curve drops sharply from ~15 to ~2. (b) Test Accuracy with Zeroed SAE Dimensions: A line graph showing accuracy for 2000 dimensions. The y-axis is 'Accuracy' (0.1-0.7) and the x-axis is 'Number of Zeroed Dimensions' (250-2000). Two lines are shown: 'Random Dimensions' (blue, nearly constant) and 'Dimensions with Largest Shifts' (orange, decreasing from ~0.75 to ~0.15).
+
+Figure 1: Analysis of feature shifts induced by supervised fine-tuning (SFT). We fine-tune Qwen2.5-7B-Instruct on the LIMO (a mathematical reasoning dataset) and examine shifts of SAE features on the residual stream at layer 25. Figure (a) shows the distribution of shift magnitudes while Figure (b) shows accuracy on Math-LightEval when progressively zeroing the dimensions with the largest shifts. The results indicate that SFT primarily affects a small subset of SAE dimensions tied to specific model capabilities.
+
+### 3.1 SFT-INDUCED CHANGES IN SAE FEATURES
+
+Prior works have shown that SAE encoder features exhibit strong interpretability, with each dimension corresponding to a certain natural concept. Since supervised fine-tuning (SFT) is generally tailored to specific downstream tasks and targeted capabilities, we wonder whether it primarily affects only a small subset of SAE dimensions tied to task-relevant features. Taking the mathematical ability as an example, we investigate how SAE features change when models are fine-tuned on the math dataset LIMO (Ye et al., 2025). As noted in (Lieberum et al., 2024), the same dimension in an SAE usually continues to represent similar concepts after fine-tuning. Consequently, we extract monosemantic features before and after the SFT process using the same SAE on the residual streams of 25-th layer in Qwen2.5-7B-Instruct (Team, 2024).
+
+As shown in Figure 1a, we find that changes in SAE features are largely concentrated in a small subset of dimensions. With calculation, we find that the top-100 dimensions account for 25% of the total change, indicating that the SFT process primarily affects only a limited portion of SAE features. Furthermore, to observe the relationship between features shifted during SFT and the mathematical ability of the model, we rank SAE features according to their magnitude of change during fine-tuning and then evaluate model performance on the Math-Lighteval dataset (Hendrycks et al., 2021) by zeroing out different numbers of features. As shown in Figure 1b, performance on math tasks drops rapidly when the shifted features are removed, whereas the model retains strong mathematical abilities when random SAE features are zeroed. These results indicate that the SFT process primarily changes a small subset of SAE features that are closely associated with specific model capabilities.
+
+### 3.2 IDENTIFYING SHIFTED DIMENSIONS VIA IN-CONTEXT LEARNING
+
+As previously discussed, supervised fine-tuning modifies only a small subset of SAE features that correspond to specific semantics. Intuitively, these features are crucial for studying properties of SFT, such as transferability. However, their identification typically requires examining the model after fine-tuning, which confines the analysis to a post-hoc perspective. This limitation motivates a central question of our work: can such features be identified prior to the fine-tuning process, thereby enabling a predictive understanding of transferability?
+
+To solve this challenge, we draw on the connection between supervised fine-tuning (SFT) and in-context learning (ICL). Previous works demonstrate that ICL can obtain similar performance to SFT in the large language models (Wang et al., 2023; Mosbach et al., 2023). Consequently, this motivates us to investigate whether the SAE features shifted during ICL and SFT are consistent. To verify this hypothesis, we respectively sort the SAE dimensions according to their changes after SFT and ICL. To be specific, we conduct experiments on Qwen2.5-7B-Instruct. For SFT, we employ ground-truth
+
+![Figure 2: Two bar charts comparing SAE Dimensions and Raw Dimensions. (a) Degrees of Overlaps between Estimated and Actual Shifted Dimensions: For 100, 200, and 300 dimensions, SAE Dimensions have ~57%, ~65%, and ~65% overlap respectively, while Raw Dimensions have ~28%, ~25%, and ~25% overlap. (b) Percentage of Overall Activation Change from Top-Shifted Dimensions: For 1%, 2%, and 3% percentage of dimensions, SAE Dimensions have ~24%, ~31%, and ~37% activation change, while Raw Dimensions have ~15%, ~22%, and ~28% activation change.](e0d425c8e4eef259e4c52d81426d93fa_img.jpg)
+
+Figure 2: Two bar charts comparing SAE Dimensions and Raw Dimensions. (a) Degrees of Overlaps between Estimated and Actual Shifted Dimensions: For 100, 200, and 300 dimensions, SAE Dimensions have ~57%, ~65%, and ~65% overlap respectively, while Raw Dimensions have ~28%, ~25%, and ~25% overlap. (b) Percentage of Overall Activation Change from Top-Shifted Dimensions: For 1%, 2%, and 3% percentage of dimensions, SAE Dimensions have ~24%, ~31%, and ~37% activation change, while Raw Dimensions have ~15%, ~22%, and ~28% activation change.
+
+Figure 2: Overlap between estimated dimensions and the training task. Figure (a) demonstrates that the SAE shifted dimensions predicted by ICL substantially overlap with the actual shifted dimensions identified after SFT, whereas applying the same method directly on raw dimensions is less effective. Figure (b) further shows that raw model dimensions, prior to applying SAE, are influenced more uniformly by the SFT process, thereby limiting the ability to identify crucial shifted dimensions.
+
+chain-of-thoughts (CoTs) on LIMO as supervision, while for ICL, we use the same CoTs as context prompts. As shown in Figure 2a, we observe substantial overlap between the shifted features in SFT and ICL; for example, 57% of the top 100 most shifted SAE dimensions coincide. These findings confirm that **the shifted dimensions in ICL and SFT are highly consistent**, suggesting that the shifted dimensions can be identified before the SFT process.
+
+We have shown that, by leveraging the connection between ICL and SFT, the shifted SAE dimensions can be identified prior to the SFT process. A natural question then arises: are SAEs necessary for this method? Intuitively, as dimensions in the raw feature space<sup>1</sup> are highly polysemantic and entangled (Elhage et al., 2022), specific abilities of the model (e.g., mathematical reasoning) are distributed across multiple dimensions. As a result, the SFT process tends to affect a broader set of features, which makes it more difficult to identify crucial shifted dimensions. To verify the analysis, we further conduct experiments on the raw features before applying SAEs. We again sort the features by their changes during SFT and ICL. As shown in Figure 2b, the shifted features before SAE are more uniformly distributed. We then investigate the influence on the accuracy of identifying shifted dimensions. With the same empirical settings, Figure 2a shows that the overlap between shifted features in ICL and SFT is much reduced in the raw feature space. These findings indicate that the enhanced monosemanticity introduced by SAEs is crucial for identifying shifted features prior to supervised fine-tuning.
+
+## 4 PREDICTING THE TRANSFERABILITY OF SUPERVISED FINE-TUNING ACROSS DOMAINS
+
+In Section 3, we introduced a method for predicting shifted SAE dimensions prior to the SFT process. Intuitively, when applying fine-tuned models to downstream tasks, if the shifted dimensions are closely related to a given domain, the SFT influence on that domain will be stronger. Thus, understanding the transferability of SFT across domains requires analyzing the correlations between shifted dimensions and different domains. In this section, we present a metric for evaluating this correlation and predict transferability based on that. Specifically, Section 4.1 introduces the proposed metric, while Section 4.2 validates it across diverse scenarios.
+
+### 4.1 METRICS FOR MEASURING CROSS-DOMAIN CORRELATIONS
+
+Due to the enhanced monosemanticity of SAEs (Cunningham et al., 2023), the activations in the SAE feature space become interpretable, meaning that the top-activated sequences within a given
+
+<sup>1</sup>The raw model dimensions refer to the representations that are used as the input of the SAEs.
+
+dimension usually share similar semantics. This property allows us to associate each dimension with specific semantic concepts. Consequently, if the sequences from a particular domain exhibit higher activation values in a certain dimension, it implies that this dimension is more strongly correlated with that domain. Building on this intuition, we can use the degrees of activations across dimensions to quantify domain-feature correlations and further analyze the transferability of supervised fine-tuning.
+
+Formally, we define our metric as the SAE-based transferability score (STS). In the first step, given an SFT dataset  $\mathcal{T} = \{x_i, y_i\}$ , we extract SAE features for each sample. Let the SAE features be denoted as  $h(x_i; \Theta)$ , where  $\Theta$  represents the parameters of the pretrained model, and  $h$  is the SAE encoder trained on top of the pretrained model. Similarly, with in-context learning, the features are denoted as  $h(x_0, y_0, \dots, x_t, y_t, x_i; \Theta)$ , where  $\{x_0, y_0, \dots, x_t, y_t\}$  are the context prompts. We then identify the  $N$  dimensions with the largest changes, i.e.,
+
+$$D_N = \text{TopN}(\mathbb{E}_{x_i} \|h_j(x_i; \Theta) - h_j(x_0, y_0, \dots, x_t, y_t, x_i; \Theta)\|^2),$$
+
+where  $h_j$  denotes the  $j$ -th dimension of the SAE features.
+
+In the second step, given a downstream domain dataset  $\tilde{\mathcal{T}} = \{\tilde{x}_i\}$ , we compute the activation values on the shifted dimensions identified in the first step:
+
+$$\text{STS}_{\text{act}}(\tilde{\mathcal{T}}) = \mathbb{E}_{\tilde{x}_i} \sum_{j \in D_N} h_j(\tilde{x}_i; \Theta).$$
+
+It is important to note that **we do not use the model after SFT in this estimation**, which means that our metric serves as a predictive measure rather than a post-hoc analysis.
+
+Besides directly computing the average activation values, we introduce an alternative method based on in-context learning (ICL) to capture the correlation between the downstream domain and the shifted dimensions. We know that ICL leverages multiple demonstrations to guide the model in performing downstream tasks, effectively injecting domain-specific signals into the representation. Intuitively, by comparing the SAE features extracted with and without ICL demonstrations, we can isolate the effect of domain knowledge on the shifted dimensions. This difference reflects how strongly the features are modulated by task-relevant information, thereby offering a reliable estimate of the correlation between a domain and the shifted dimensions.
+
+Consequently, we estimate the correlation by measuring the difference between features extracted with and without in-context demonstrations. Formally, let  $\{\tilde{x}_i, \tilde{y}_i\}_{i=1}^m$  denote  $m$  ground-truth question-answer pairs in the downstream domain. We define the metric as
+
+$$\text{STS}_{\text{ICL}}(\tilde{\mathcal{T}}) = \mathbb{E}_{\tilde{x}_i} \sum_{j \in D_N} \|h_j(\tilde{x}_0, \tilde{y}_0, \dots, \tilde{x}_m, \tilde{y}_m, \tilde{x}_i; \Theta) - h_j(\tilde{x}_i; \Theta)\|^2.$$
+
+This metric captures how much the presence of domain-relevant context (the demonstrations) influences the shifted dimensions, providing another reliable estimate of domain-feature correlation besides using maximum activation values.
+
+### 4.2 EMPIRICAL VERIFICATIONS ON PREDICTING THE TRANSFERABILITY
+
+Based on the proposed metric, we now empirically evaluate the correlation between the STS score and the actual transferability across different downstream domains. Specifically, we first use the LIMO dataset (Ye et al., 2025) as the SFT training set, which contains 817 high-quality mathematical examples. We fine-tune three models (Qwen2.5-7B-Instruct, Llama3-8B-Instruct, and Gemma2-9B-Instruct) on LIMO, and compare their performances before and after SFT on different domains of MMLU-Pro (Wang et al., 2024). To extract SAE features, we apply SAEs to the residual streams of the models prior to SFT. For computing the STS metric, we employ two ground-truth CoTs from LIMO as in-context demonstrations to identify the top-100 shifted dimensions. When estimating the correlations between the domains and the predicted shifted dimensions, we use five ground-truth CoTs from the domain of MMLU-Pro as prompts to calculate  $\text{STS}_{\text{ICL}}$ . More details of the experiments can be found in the Appendix.
+
+As shown in Figure 3, the correlation between STS and performance changes across different domains remains consistently high for all three models, with Pearson correlation coefficients exceeding
+
+![Figure 3: Six scatter plots showing the Pearson correlation (rho) between STS and actual absolute performance shifts on MMLU-Pro for different models and metrics. (a) STS_act on Llama3-8B: rho = 0.71 ± 0.01. (b) STS_act on Qwen2.5-7B: rho = 0.90 ± 0.02. (c) STS_act on Gemma2-9B: rho = 0.60 ± 0.03. (d) STS_act on Llama3-8B: rho = 0.81 ± 0.01. (e) STS_act on Qwen2.5-7B: rho = 0.78 ± 0.01. (f) STS_act on Gemma2-9B: rho = 0.77 ± 0.01. Each plot shows data points for Engineering, Physics, Law, History, and Psychology, with a fitted regression line.](73c3e4508cae529acf4e6c7fa70b361a_img.jpg)
+
+Figure 3: Six scatter plots showing the Pearson correlation (rho) between STS and actual absolute performance shifts on MMLU-Pro for different models and metrics. (a) STS\_act on Llama3-8B: rho = 0.71 ± 0.01. (b) STS\_act on Qwen2.5-7B: rho = 0.90 ± 0.02. (c) STS\_act on Gemma2-9B: rho = 0.60 ± 0.03. (d) STS\_act on Llama3-8B: rho = 0.81 ± 0.01. (e) STS\_act on Qwen2.5-7B: rho = 0.78 ± 0.01. (f) STS\_act on Gemma2-9B: rho = 0.77 ± 0.01. Each plot shows data points for Engineering, Physics, Law, History, and Psychology, with a fitted regression line.
+
+Figure 3: The Pearson correlation ( $\rho$ ) between STS and actual absolute performance shifts on MMLU-Pro induced by SFT on LIMO. Each experiment is repeated three times, and we report the mean and standard deviation of  $\rho$ ; the fitted line shown corresponds to one of the runs. We extract SAE features from Llama3-8B-Instruct, Qwen2.5-7B-Instruct, and Gemma2-9B-Instruct. During the evaluation process, we select four MMLU-Pro domains with the largest and smallest performance shifts under SFT. The detailed performance shifts can be found in Appendix A.
+
+Table 1: Verification on a code dataset (Verifiable-Coding-Problems-Python-10k-Dataset) and a clinical reasoning dataset (CoT\_Reasoning\_Mens\_Mental\_Health). The Qwen-2.5-7B-Instruct model is trained on each dataset, and we evaluate: (1) the correlation between ICL feature shifts and SFT, and (2) the correlation between actual performance shifts and our proposed metric.
+
+| Training Domain | Correlations between Actual Performance Shifts and $STS_{ICL}$ | Overlap between Top 100 Estimated and Actual Shifted Dims |
+|-----------------|----------------------------------------------------------------|-----------------------------------------------------------|
+| Code            | $0.77 \pm 0.01$                                                | 62                                                        |
+| Health          | $0.71 \pm 0.02$                                                | 57                                                        |
+
+60%. These findings validate that our metric provides a reliable estimation of the transferability of the SFT process. Besides, we note that the performance of  $STS_{ICL}$  is more stable than  $STS_{act}$  (the coefficients keeps above 75%), which suggests that leveraging in-context learning yields a more accurate estimation of the correlation between domains and SAE dimensions than relying solely on activation values.
+
+To better verify the effectiveness of our metric, we further conduct the experiments in different domains to provide more empirical support. Specifically, we include a code-generation dataset (Verifiable-Coding-Problems-Python-10k-Dataset (Hugging Face, 2025)) and a health dialogue dataset (CoT\_Reasoning\_Mens\_Mental\_Health (Wesney, 2025)) to examine how well our metric STS correlates with actual downstream performance changes. In addition, we further evaluate the overlap between ICL-induced feature drift and SFT-induced shifts. Taking Qwen2.5-7B-Instruct as an example, the empirical results are summarized in Table 1. As shown in the table, we observe a strong correlation between our proposed metric and actual performance shifts across different datasets. In addition, our central hypothesis that there is a substantial overlap between ICL and SFT shifted dimensions in the SAE representation space **continues to hold across different datasets**. These results reinforce the validity of our method and expand the scope of our method by demonstrating its effect across diverse training domains.
+
+### 4.3 ABLATION STUDY
+
+![Figure 4: Ablation studies on the implementation of our metric. The figure contains five bar charts: (a) Hidden Dims showing correlation for 16k and 131k hidden dimensions; (b) Model Layers showing correlation for layers 15, 20, and 25 of Qwen2.5-7B-Instruct; (c) SAE Sparsity showing correlation for L0 norms 13, 37, and 109; (d) Shifted Dims showing correlation for different indices of shifted dimensions; (e) Prediction Metrics comparing raw activations, SAE activations, and STS.](3121afa7ca030b22ee0345864ca6f38b_img.jpg)
+
+Figure 4 consists of five bar charts labeled (a) through (e), each showing a correlation value on the y-axis (ranging from 0.0 to 0.8).
+
+- (a) Hidden Dims: The x-axis shows two categories: 16k and 131k Hidden Dimensions in SAE. The correlation for 16k is approximately 0.25, and for 131k it is approximately 0.75.
+- (b) Model Layers: The x-axis shows three categories: 15, 20, and 25 Layer of Qwen2.5-7B. The correlation for layer 15 is approximately 0.63, for layer 20 it is approximately 0.66, and for layer 25 it is approximately 0.78.
+- (c) SAE Sparsity: The x-axis shows three categories: 13, 37, and 109 L0 Norm. The correlation for L0 Norm 13 is approximately 0.78, for 37 it is approximately 0.72, and for 109 it is approximately 0.65.
+- (d) Shifted Dims: The x-axis shows three categories: 0-100, 900-1000, and 1900-2000 Index of Shifted Dimensions. The correlation for 0-100 is approximately 0.78, for 900-1000 it is approximately 0.15, and for 1900-2000 it is approximately 0.18.
+- (e) Prediction Metrics: The x-axis shows three categories: Raw Activations, SAE Activations, and STS. The correlation for Raw Activations is approximately 0.02, for SAE Activations it is approximately 0.05, and for STS it is approximately 0.78.
+
+Figure 4: Ablation studies on the implementation of our metric. The figure contains five bar charts: (a) Hidden Dims showing correlation for 16k and 131k hidden dimensions; (b) Model Layers showing correlation for layers 15, 20, and 25 of Qwen2.5-7B-Instruct; (c) SAE Sparsity showing correlation for L0 norms 13, 37, and 109; (d) Shifted Dims showing correlation for different indices of shifted dimensions; (e) Prediction Metrics comparing raw activations, SAE activations, and STS.
+
+Figure 4: Ablation studies on the implementation of our metric. We evaluate (a) SAEs with varying hidden dimensions in the representation space, (b) SAEs trained on different layers of the pre-trained model, (c) different ranges of top-shifted dimensions, (d) different sparsity in SAE representations, (e) the comparison between STS and directly using activations.
+
+We conduct several ablation studies to evaluate STS under different conditions. First, we examine the role of monosemanticity by extracting SAE features with different hidden dimensions (16k vs. 131k). As shown in Figure 4a, weaker monosemanticity causes a clear drop in prediction accuracy, indicating its importance for STS. We also compare SAEs applied to different layers of Qwen2.5-7B-Instruct (layers 15, 20, and 25). Figure 4b shows that STS consistently correlates with performance changes across layers, confirming its robustness. Finally, we vary the sparsity levels of SAE representations. As illustrated in Figure 4c, higher sparsity—typically linked to stronger monosemanticity—yields more accurate predictions, further underscoring the essential role of monosemantic features in STS.
+
+In addition to evaluating different SAEs, we examine another critical hyperparameter of our metric: the range of estimated shifted dimensions. Selecting dimensions with small shifts risks including those unaffected by the SFT process. As shown in Figure 4d, the correlation between STS and downstream performance decreases when smaller-shifted dimensions are selected, supporting this analysis. These findings underscore that the choice of shifted dimensions directly impacts metric reliability, highlighting the need for an appropriate selection strategy that only identify dimensions with largest shifts.
+
+Furthermore, we conducted additional experiments to directly predict the performance improvements from SFT using model activations. In Figure 4e, we compare our method with predicting the improvements based on the model activations (using an optimized probe). As shown in the table, neither raw activations nor SAE feature activations exhibit meaningful correlation with the actual performance shifts. These results suggest that simply probing activations is insufficient; identifying the shifted dimensions induced by SFT is essential. Besides, we also note that this is a task where SAE beats probes, which further shows the potential of the monosemantic representation space.
+
+## 5 APPLICATIONS: A DATA MIXTURE PRINCIPLE
+
+In Section 4, we demonstrated that our proposed metric, the SAE-based transferability score (STS), exhibits a strong correlation with actual performance changes. Building on this result, we now explore a practical application of STS. Specifically, we leverage predicted transferability to optimize data mixture strategies during post-training. Using STS, we can identify the domains most likely to be affected by supervised fine-tuning (SFT). A common approach to mitigate performance degradation in such domains is to introduce additional data. Intuitively, with a predicted ranking of
+
+![Figure 5: Comparison of data mixture strategies in the SFT process. (a) Performance with Different Amounts of Engineering Data: A line graph showing Accuracy (0.38 to 0.46) vs. Percentage of Engineering Data (0 to 80). Two lines are shown: 'Performance with Different SFT Data' (blue solid) and 'Performance Before SFT' (orange dashed). The blue line starts at ~0.38, stays flat until 40%, then rises to ~0.46 at 80%. The orange dashed line is constant at ~0.42. (b) Performance with Different Amounts of Law Data: A line graph showing Accuracy (0.315 to 0.335) vs. Percentage of Law Data (0 to 80). Two lines are shown: 'Performance with Different SFT Data' (blue solid) and 'Performance Before SFT' (orange dashed). The blue line peaks at ~0.335 at 20% law data, then drops to ~0.315 at 40%, then rises to ~0.325 at 80%. The orange dashed line is constant at ~0.335. (c) Performance Shifts with Different SFT Data: A bar chart showing Accuracy (%) for 'Law' and 'Engineering' domains. Three bars are shown: 'Before SFT' (blue), 'SFT on LIMO' (orange), and 'SFT on STS-Guided Data' (green). For Law: Before SFT ~32%, SFT on LIMO ~31%, SFT on STS-Guided Data ~33%. For Engineering: Before SFT ~42%, SFT on LIMO ~28%, SFT on STS-Guided Data ~42%.](b93cbfb52e37619e688175a6aad9edd9_img.jpg)
+
+Figure 5: Comparison of data mixture strategies in the SFT process. (a) Performance with Different Amounts of Engineering Data: A line graph showing Accuracy (0.38 to 0.46) vs. Percentage of Engineering Data (0 to 80). Two lines are shown: 'Performance with Different SFT Data' (blue solid) and 'Performance Before SFT' (orange dashed). The blue line starts at ~0.38, stays flat until 40%, then rises to ~0.46 at 80%. The orange dashed line is constant at ~0.42. (b) Performance with Different Amounts of Law Data: A line graph showing Accuracy (0.315 to 0.335) vs. Percentage of Law Data (0 to 80). Two lines are shown: 'Performance with Different SFT Data' (blue solid) and 'Performance Before SFT' (orange dashed). The blue line peaks at ~0.335 at 20% law data, then drops to ~0.315 at 40%, then rises to ~0.325 at 80%. The orange dashed line is constant at ~0.335. (c) Performance Shifts with Different SFT Data: A bar chart showing Accuracy (%) for 'Law' and 'Engineering' domains. Three bars are shown: 'Before SFT' (blue), 'SFT on LIMO' (orange), and 'SFT on STS-Guided Data' (green). For Law: Before SFT ~32%, SFT on LIMO ~31%, SFT on STS-Guided Data ~33%. For Engineering: Before SFT ~42%, SFT on LIMO ~28%, SFT on STS-Guided Data ~42%.
+
+Figure 5: Comparison of data mixture strategies in the SFT process. We focus on the domains with the largest (engineering) and smallest (law) performance shifts induced by SFT of Qwen2.5-7B-Instruct on LIMO. In total, 220 extra examples from a mixture of engineering and law data are added. Figure (a) reports engineering performance with varying amounts of engineering data, while Figure (b) reports law performance with varying amounts of law data. Figure (c) compares the downstream performance without additional data and with additional data mixed according to the ratio of their corresponding STS values.
+
+performance changes across domains, we can allocate more data to those at higher risk of degradation. To validate this idea, we examine two domains in MMLU-Pro: engineering (with the largest performance drop when fine-tuning Qwen2.5-7B-Instruct on LIMO) and law (with the smallest). In our experiments, we fine-tune Qwen2.5-7B-Instruct on LIMO with additional data in MMLU-Pro. We split MMLU-Pro into training and testing sets with a 1:1 ratio. For training, we use Qwen2.5-7B-Instruct’s outputs prior to SFT as supervised answers. In addition to the original LIMO data, we augment the training set with 220 extra examples sampled from the mixture of engineering and law domains.
+
+As shown in Figure 5, we observe that domains with larger performance changes require more additional data. For example, allocating more data to the engineering domain leads to substantial improvements (Figure 5a), whereas allocating extra data to the law domain yields only marginal gains (Figure 5b). Moreover, when the data mixture ratio is adjusted to align with the ratio of their corresponding STS values, the resulting model achieves balanced performance across both engineering and law (Figure 5c). These findings suggest that STS can serve as an interpretable guide for designing data mixture ratios, enabling more effective post-training while mitigating uneven performance shifts across domains.
+
+## 6 EXPLORATIONS ON REINFORCEMENT LEARNING
+
+In this paper, we primarily investigate the impact of supervised fine-tuning across different domains. Nevertheless, reinforcement learning (RL) represents another non-negligible post-training paradigm, motivating us to explore whether our method can be extended to RL. We begin by applying the STS metric directly, as in the supervised fine-tuning setting. Specifically, we train Qwen2.5-7B-Instruct using the GRPO framework (Shao et al., 2024) on the Math-LightEval dataset and evaluate performance changes across domains in MMLU-Pro. When computing STS, we follow the same procedure as in supervised fine-tuning: ground-truth CoTs from Math-LightEval serve as demonstrations to estimate shifted dimensions, and correlations between these dimensions and downstream domains are calculated based on in-context learning. However, as shown in Figure 6b, STS exhibits low correlations with performance changes in the RL setting. In the following, we try to find the reasons behind this discrepancy.
+
+We note that a key distinction between SFT and RL is that RL lacks access to ground-truth answers, making it challenging to select appropriate demonstrations for in-context learning. As a result, the estimation of shifted features may be inaccurate. To test this hypothesis, we compare the overlaps between the actual and predicted shifted dimensions. As shown in Figure 6a, the overlap is substantially lower in RL than in SFT. To further validate this observation, we replace the estimated top-100 dimensions with the ground-truth dimensions with the largest changes after RL and recompute the STS metric. Figure 6b demonstrates that STS calculated with ground-truth shifted dimensions shows a strong correlation with performance changes, indicating that the main challenge lies in accurately
+
+![Figure 6: Two bar charts comparing SFT and RL methods. (a) Overlaps between Estimated and Actual Shifted Dimensions Induced by SFT and RL. (b) Different Implementations of STS Metric.](4e0ade2f41b66d5602160da5cc978274_img.jpg)
+
+Figure 6 consists of two bar charts. Chart (a) shows the 'Percentage of Overlap(%)' for 'SFT' and 'RL' post-training methods. Chart (b) shows the 'Correlation Coefficient' for 'STS<sub>ICL</sub>' and 'STS<sub>RL</sub>' metrics.
+
+| Post-training Method | Percentage of Overlap(%) |
+|----------------------|--------------------------|
+| SFT                  | 57.5                     |
+| RL                   | 45.0                     |
+
+| Metric             | Correlation Coefficient |
+|--------------------|-------------------------|
+| STS <sub>ICL</sub> | 0.12                    |
+| STS <sub>RL</sub>  | 0.52                    |
+
+Figure 6: Two bar charts comparing SFT and RL methods. (a) Overlaps between Estimated and Actual Shifted Dimensions Induced by SFT and RL. (b) Different Implementations of STS Metric.
+
+(a) Overlaps between Estimated and Actual Shifted Dimensions Induced by SFT and RL
+
+(b) Different Implementations of STS Metric
+
+Figure 6: The explorations on extending STS metric to the RL scenarios. We optimize Qwen2.5-7B-Instruct on Math-LightEval using GRPO. Figure (a) shows that the identified dimensions in RL show smaller overlap with the actual shifted dimensions compared to SFT, which limits the accuracy of the metric. Figure (b) shows that when the estimated shifted dimensions are replaced with the actual ones, the correlation between STS and downstream performance changes becomes much stronger.
+
+estimating shifted dimensions in RL prior to training. And this will be the future direction of our explorations. For now, STS in RL can serve as a metric to predict transferability without evaluating RL models on downstream tasks.
+
+## 7 CONCLUSION
+
+In this work, we introduce a metric for predicting the transferability of post-training in large-scale neural networks, leveraging the interpretability of sparse autoencoders (SAEs). By identifying the SAE dimensions that are shifted during post-training and measuring their correlations with downstream domains, we propose the SAE-based transferability score (STS) as a predictive indicator of performance changes. Our experiments show that STS reliably forecasts performance variations across multiple domains, providing new insights into the internal mechanisms of post-training. Beyond supervised fine-tuning, we further demonstrate the applicability of our approach to reinforcement learning settings. Overall, we believe our work establishes an interpretable framework for understanding and anticipating post-training effects, paving the way for more targeted and effective post-training strategies.
+
+## ACKNOWLEDGEMENT
+
+Yisen Wang is supported by National Natural Science Foundation of China (62376010, 92370129), Beijing Major Science and Technology Project under Contract no. Z251100008425006, Beijing Nova Program (20230484344, 20240484642), and State Key Laboratory of General Artificial Intelligence.
+
+## ETHICS STATEMENT
+
+This work makes use of publicly available datasets and models. No private or sensitive data are involved, and no harmful content is included. Therefore, we believe this paper does not raise any ethical concerns.
+
+## REPRODUCIBILITY STATEMENT
+
+To ensure the reproducibility of our results, we provide comprehensive details of our experiments in both the main paper and the appendix. In Section 3, we describe the details of the methodology for identifying shifted dimensions, while Section 4 presents the procedure for computing correlations
+
+between these dimensions and downstream domains. Additionally, Appendix A reports the concrete performance changes across different MMLU-Pro domains, and Appendix B offers further details and complementary discussions.
+
+## REFERENCES
+
+- Josh Achiam, Steven Adler, Sandhini Agarwal, Lama Ahmad, Ilge Akkaya, Florencia Leoni Aleman, Diogo Almeida, Janko Altenschmidt, Sam Altman, Shyamal Anadkat, et al. Gpt-4 technical report. *arXiv preprint arXiv:2303.08774*, 2023.
+- Tianzhe Chu, Yuxiang Zhai, Jihan Yang, Shengbang Tong, Saining Xie, Dale Schuurmans, Quoc V Le, Sergey Levine, and Yi Ma. Sft memorizes, rl generalizes: A comparative study of foundation model post-training. *arXiv preprint arXiv:2501.17161*, 2025.
+- Jingyi Cui, Qi Zhang, Yifei Wang, and Yisen Wang. On the theoretical understanding of identifiable sparse autoencoders and beyond. *arXiv preprint arXiv:2506.15963*, 2025.
+- Hoagy Cunningham, Aidan Ewart, Logan Riggs, Robert Huben, and Lee Sharkey. Sparse autoencoders find highly interpretable features in language models. *arXiv preprint arXiv:2309.08600*, 2023.
+- Guanting Dong, Hongyi Yuan, Keming Lu, Chengpeng Li, Mingfeng Xue, Dayiheng Liu, Wei Wang, Zheng Yuan, Chang Zhou, and Jingren Zhou. How abilities in large language models are affected by supervised fine-tuning data composition. *arXiv preprint arXiv:2310.05492*, 2023.
+- Nelson Elhage, Tristan Hume, Catherine Olsson, Nicholas Schiefer, Tom Henighan, Shauna Kravec, Zac Hatfield-Dodds, Robert Lasenby, Dawn Drain, Carol Chen, et al. Toy models of superposition. *arXiv preprint arXiv:2209.10652*, 2022.
+- Leo Gao, Tom Dupré la Tour, Henk Tillman, Gabriel Goh, Rajan Troll, Alec Radford, Ilya Sutskever, Jan Leike, and Jeffrey Wu. Scaling and evaluating sparse autoencoders. *arXiv preprint arXiv:2406.04093*, 2024.
+- Aaron Grattafiori, Abhimanyu Dubey, Abhinav Jauhri, Abhinav Pandey, Abhishek Kadian, Ahmad Al-Dahle, Aiesha Letman, Akhil Mathur, Alan Schelten, Alex Vaughan, et al. The llama 3 herd of models. *arXiv preprint arXiv:2407.21783*, 2024.
+- Dan Hendrycks, Collin Burns, Saurav Kadavath, Akul Arora, Steven Basart, Eric Tang, Dawn Song, and Jacob Steinhardt. Measuring mathematical problem solving with the math dataset. In *NeurIPS*, 2021.
+- Maggie Huan, Yuetai Li, Tuney Zheng, Xiaoyu Xu, Seungone Kim, Minxin Du, Radha Poovendran, Graham Neubig, and Xiang Yue. Does math reasoning improve general llm capabilities? understanding transferability of llm reasoning. *arXiv preprint arXiv:2507.00432*, 2025.
+- Hugging Face. Open rl: A fully open reproduction of deepseek-rl, January 2025. URL <https://github.com/huggingface/open-rl>.
+- Jannik Kossen, Yarin Gal, and Tom Rainforth. In-context learning learns label relationships but is not conventional learning. *arXiv preprint arXiv:2307.12375*, 2023.
+- Ananya Kumar, Aditi Raghunathan, Robbie Jones, Tengyu Ma, and Percy Liang. Fine-tuning can distort pretrained features and underperform out-of-distribution. *arXiv preprint arXiv:2202.10054*, 2022.
+- Ang Li, Yichuan Mo, Mingjie Li, Yifei Wang, and Yisen Wang. Are smarter llms safer? exploring safety-reasoning trade-offs in prompting and fine-tuning. *arXiv preprint arXiv:2502.09673*, 2025a.
+- Ang Li, Yifei Wang, Zhihang Yuan, Stefanie Jegelka, and Yisen Wang. Lanpo: Bootstrapping language and numerical feedback for reinforcement learning in llms. *arXiv preprint arXiv:2510.16552*, 2025b.
+
+- Tom Lieberum, Senthooran Rajamanoharan, Arthur Conmy, Lewis Smith, Nicolas Sonnerat, Vikrant Varma, János Kramár, Anca Dragan, Rohin Shah, and Neel Nanda. Gemma scope: Open sparse autoencoders everywhere all at once on gemma 2. *arXiv preprint arXiv:2408.05147*, 2024.
+- Aixin Liu, Bei Feng, Bing Xue, Bingxuan Wang, Bozhao Wu, Chengda Lu, Chenggang Zhao, Chengqi Deng, Chenyu Zhang, Chong Ruan, et al. Deepseek-v3 technical report. *arXiv preprint arXiv:2412.19437*, 2024.
+- Ziyang Luo, Can Xu, Pu Zhao, Qingfeng Sun, Xiubo Geng, Wenxiang Hu, Chongyang Tao, Jing Ma, Qingwei Lin, and Daxin Jiang. Wizardcoder: Empowering code large language models with evol-instruct. *arXiv preprint arXiv:2306.08568*, 2023.
+- Marius Mosbach, Tiago Pimentel, Shauli Ravfogel, Dietrich Klakow, and Yanai Elazar. Few-shot fine-tuning vs. in-context learning: A fair comparison and evaluation. *arXiv preprint arXiv:2305.16938*, 2023.
+- Andrew Ng et al. Sparse autoencoder. *CS294A Lecture notes*, 72(2011):1–19, 2011.
+- Long Ouyang, Jeffrey Wu, Xu Jiang, Diogo Almeida, Carroll Wainwright, Pamela Mishkin, Chong Zhang, Sandhini Agarwal, Katarina Slama, Alex Ray, et al. Training language models to follow instructions with human feedback. In *NeurIPS*, 2022.
+- Rafael Rafailov, Archit Sharma, Eric Mitchell, Christopher D Manning, Stefano Ermon, and Chelsea Finn. Direct preference optimization: Your language model is secretly a reward model. In *NeurIPS*, 2023.
+- John Schulman, Filip Wolski, Prafulla Dhariwal, Alec Radford, and Oleg Klimov. Proximal policy optimization algorithms. *arXiv preprint arXiv:1707.06347*, 2017.
+- Zhihong Shao, Peiyi Wang, Qihao Zhu, Runxin Xu, Junxiao Song, Xiao Bi, Haowei Zhang, Mingchuan Zhang, YK Li, Yang Wu, et al. Deepseekmath: Pushing the limits of mathematical reasoning in open language models. *arXiv preprint arXiv:2402.03300*, 2024.
+- Yiyou Sun, Shawn Hu, Georgia Zhou, Ken Zheng, Hannaneh Hajishirzi, Nouha Dziri, and Dawn Song. Omega: Can llms reason outside the box in math? evaluating exploratory, compositional, and transformative generalization. *arXiv preprint arXiv:2506.18880*, 2025.
+- Qwen Team. Qwen2 technical report. *arXiv preprint arXiv:2407.10671*, 2, 2024.
+- Qixun Wang, Yifei Wang, Xianghua Ying, and Yisen Wang. Can in-context learning really generalize to out-of-distribution tasks? In *ICLR*, 2025.
+- Xindi Wang, Yufei Wang, Can Xu, Xiubo Geng, Bowen Zhang, Chongyang Tao, Frank Rudzicz, Robert E Mercer, and Daxin Jiang. Investigating the learning behaviour of in-context learning: a comparison with supervised learning. *arXiv preprint arXiv:2307.15411*, 2023.
+- Yubo Wang, Xueguang Ma, Ge Zhang, Yuansheng Ni, Abhranil Chandra, Shiguang Guo, Weiming Ren, Aaran Arulraj, Xuan He, Ziyang Jiang, et al. Mmlu-pro: A more robust and challenging multi-task language understanding benchmark. In *NeurIPS*, 2024.
+- Matthew R. Wesney. Cot\_reasoning\_mens\_mental\_health\_dataset, 2025. URL [https://huggingface.co/datasets/moremilk/CoT\\_Reasoning\\_Mens\\_Mental\\_Health](https://huggingface.co/datasets/moremilk/CoT_Reasoning_Mens_Mental_Health).
+- An Yang, Anfeng Li, Baosong Yang, Beichen Zhang, Binyuan Hui, Bo Zheng, Bowen Yu, Chang Gao, Chengen Huang, Chenxu Lv, et al. Qwen3 technical report. *arXiv preprint arXiv:2505.09388*, 2025.
+- Yixin Ye, Zhen Huang, Yang Xiao, Ethan Chern, Shijie Xia, and Pengfei Liu. Limo: Less is more for reasoning. *arXiv preprint arXiv:2502.03387*, 2025.
+- Qiyang Yu, Zheng Zhang, Ruofei Zhu, Yufeng Yuan, Xiaochen Zuo, Yu Yue, Weinan Dai, Tiantian Fan, Gaohong Liu, Lingjun Liu, et al. Dapo: An open-source llm reinforcement learning system at scale. *arXiv preprint arXiv:2503.14476*, 2025.
+
+[Appendix and supplementary materials beyond page 12 have been removed.]

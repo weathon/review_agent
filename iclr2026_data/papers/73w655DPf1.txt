@@ -1,0 +1,377 @@
+# MED-REFL: ENHANCING COMPLEX REASONING VIA FINE-GRAINED SELF-CORRECTION
+
+Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+Large reasoning models excel in domains like mathematics where intermediate reasoning is straightforward to verify, but struggle to self-correct in medicine fields where evaluating intermediate reasoning is cumbersome and expensive. This verification bottleneck hinders the development of reliable AI reasoners for high-stakes application. Here we propose **Med-REFL**, a novel framework that learns fine-grained reflection without human labels or model distillation. Med-REFL introduces a deterministic structural assessment of the reasoning space to automatically generate preference data for reflection. By globally evaluating all explored reasoning paths in a tree-of-thoughts, our method quantifies the value of corrective actions, enabling the automated construction of direct preference optimization pairs. This trains the model to recognize and amend its own reasoning fallacies. Extensive experiments show Med-REFL delivers robust gains across diverse models architectures and medical benchmarks, boosting a general-purpose Llama3.1-8B by +5.82% and the state-of-the-art Huatuo-o1 by +44.13% on the MedQA benchmark. Our Med-REFL-8B achieves state-of-the-art performance among 7-8B models while even competing with models twice its size. Crucially, targeted ablations prove its success generalizes to other domains such as logical reasoning and mitigates the ‘fake reflection’ phenomenon in LRMs. Ultimately, our framework provides a scalable solution to the verification bottleneck, paving the way for more reliable AI reasoners in high-stakes domains like medicine. Med-REFL has been made publicly available <sup>1</sup>.
+
+## 1 INTRODUCTION
+
+Recent advancements in large reasoning models (LRMs) have demonstrated remarkable progress in domains like mathematics and code generation (Plaat et al., 2024). A key characteristic of these fields is that their intermediate reasoning steps adhere to clear, objective, and easily verifiable standards of correctness, which provide strong supervisory signals for effective model training (Hui et al., 2024; Li et al., 2025). However, this success has not seamlessly transferred to knowledge-intensive and high-stakes domains such as medicine (Hoyt et al., 2025; Huang et al., 2025). The core challenge lies in the unique complexity of medical reasoning: the evaluation of intermediate steps is cumbersome and expensive, fraught with profound uncertainty, and lacks cheap, reliable verification methods (Jiang et al., 2025; Wu et al., 2025; Qiu et al., 2025). This verification bottleneck is the critical reason why methods effective in mathematics falter in the medical domain. It prevents models from effectively learning and reflecting on their errors—a crucial process for improving reasoning ability (Zhang et al., 2024a; Kamoi et al., 2024; Xi et al., 2024).
+
+Despite these challenges, previous attempts to enhance medical reasoning have made valuable progress. The first paradigm, relying on supervised fine-tuning (SFT) (Dong et al., 2024) with data distilled from costly teacher models or on outcome-based reinforcement learning (RL) (Cheng et al., 2023; Dai et al., 2024), is inherently result-oriented. These methods primarily rely on final answers as selection or reward signals, paying insufficient attention to intermediate processes (Xi et al., 2024). This makes distillation methods prone to learning flawed logic that coincidentally produces correct answers, while outcome-based RL is vulnerable to reward hacking, both failing to guarantee robust reasoning (Miao et al., 2024; Bai et al., 2022). The second paradigm, which leverages process
+
+<sup>1</sup>Details can be found in Appendix C.
+
+![Figure 1: Qualitative and quantitative analysis of Med-REFL's effectiveness. The figure is divided into four panels: a) Reflection Improvement via Med-REFL, showing a medical reasoning example with error detection and correction; b) Comprehensive Evaluation on Diverse Medical Benchmarks, featuring radar charts for MedQA, GPQA(M), MMLU-Pro(M), MedMCQA, PubMedQA, and MedXpert; c) Correlation Between Token Cost and Accuracy, a bar chart for MedQA(5 op); d) Competitive Performance Analysis of Med-REFL-8b, with two radar charts comparing it to other models.](49ad3a646d84bcfeac02bdf2b3792a3e_img.jpg)
+
+**a) Reflection Improvement via Med-REFL**
+
+**Question**  
+A 48-year-old man comes to the physician because of a 4-month history of syncope/dizziness, intermittent headache...  
+**(Summarized)**  
+A woman with a high-risk factor blood disorder is treated with a drug that is also used for sickle cell disease. The question asks to identify the drug's primary biochemical mechanism of action specifically for treating sickle cell disease.  
+**Options**  
+X Inhibition of erythrocyte aggregation  
+O Inhibition of erythrocyte aggregation  
+O Inhibition of erythrocyte aggregation  
+O Inhibition of erythrocyte aggregation  
+O Inhibition of erythrocyte aggregation
+
+**b) Comprehensive Evaluation on Diverse Medical Benchmarks**
+
+**c) Correlation Between Token Cost and Accuracy**
+
+**d) Competitive Performance Analysis of Med-REFL-8b**
+
+Figure 1: Qualitative and quantitative analysis of Med-REFL's effectiveness. The figure is divided into four panels: a) Reflection Improvement via Med-REFL, showing a medical reasoning example with error detection and correction; b) Comprehensive Evaluation on Diverse Medical Benchmarks, featuring radar charts for MedQA, GPQA(M), MMLU-Pro(M), MedMCQA, PubMedQA, and MedXpert; c) Correlation Between Token Cost and Accuracy, a bar chart for MedQA(5 op); d) Competitive Performance Analysis of Med-REFL-8b, with two radar charts comparing it to other models.
+
+Figure 1: Qualitative and quantitative analysis of Med-REFL's effectiveness. a) An example illustrating the change in Huatuo-o1's reflection pattern. Before fine-tuning, the model follows an invalid reflection path based on an error assumption and false correlation. After fine-tuning with Med-REFL, it demonstrates effective reflection by locating the reasoning error and redirecting its path to the correct answer. b) Comprehensive performance evaluation on diverse medical benchmarks, showing consistent accuracy improvements (w/ ours) over the original models (Orig.). Deepseek-D refers to Deepseek-Distill-8B. c) The relationship between average token cost per question and performance on MedQA(5 op). It suggests a link between reasoning length and correctness. d) Competitive analysis of our Med-REFL-8B model. The left chart shows it outperforms most models in the 7-8B class. The right chart demonstrates its high efficiency, achieving performance comparable to or exceeding much larger 10-20B models.
+
+reward models (PRMs) (Li & Li, 2025), provides more granular stepwise feedback. However, this approach often necessitates training a separate, demanding reward model and creates a complex, multi-stage pipeline (Zhang et al., 2025c). More critically, this paradigm is fundamentally designed to identify and reward the most correct path, which does not effectively teach the model the essential skill of how to reflect on and recover from its own diverse errors (Madaan et al., 2023).
+
+To overcome these limitations, we introduce **Med-REFL**, a novel framework that learns fine-grained reflection within a unified, resource-efficient system designed to specifically address the verification bottleneck in complex medical reasoning. Our approach begins with a deterministic structural assessment of the reasoning space, using a tree-of-thoughts (ToT) (Long, 2023; Yao et al., 2023) to map out diverse reasoning pathways. This structured map is the key to mitigating the 'reward hacking' problem; by aggregating outcomes over the entire tree, we derive a robust quality score, step value, for each intermediate state. To enable the model to learn self-correction, we further introduce our pivotal metric, the action value, which utilizes the tree's global information to evaluate corrective actions. This metric measures how much these actions improve the entire problem-solving trajectory, thereby guiding the model's reflective reasoning learning. Action value guides the construction of high-quality preference data for direct preference optimization (DPO) (Rafailov et al., 2023), en-
+
+Table 1: Comparison of different LLM reasoning strategies based on their core attributes. Med-RELF addresses the limitations of previous approaches. Expert refers to closed-source teacher model or human experts.
+
+| Method                                | Medical Specific | Reflect Ability | Process Supervision | Expert Free | PRM | RAG Free |
+|---------------------------------------|------------------|-----------------|---------------------|-------------|-----|----------|
+| Huatuoo1 (Chen et al., 2025)          | ✓                | ✓               | ✗                   | ✗           | ✓   | ✓        |
+| MedReason (Wu et al., 2025)           | ✓                | ✗               | ✓                   | ✗           | ✓   | ✗        |
+| O1-Journy (Huang et al., 2024b)       | ✗                | ✓               | ✗                   | ✗           | ✓   | ✓        |
+| AlphaMed (Liu et al., 2025)           | ✓                | ✗               | ✗                   | ✓           | ✓   | ✓        |
+| Med-PRM (Yun et al., 2025)            | ✓                | ✗               | ✓                   | ✓           | ✗   | ✓        |
+| Med <sup>3</sup> (Jiang et al., 2025) | ✓                | ✗               | ✓                   | ✓           | ✗   | ✓        |
+| Med-RLF(ours)                         | ✓                | ✓               | ✓                   | ✓           | ✓   | ✓        |
+
+abling a contrast not just between good and bad states, but more importantly, between invalid and effective reflection as shown in Figure 1 a). This process directly instills the capability for genuine self-correction.
+
+Our extensive experiments validate this approach from multiple perspectives. **First**, as detailed in Table 2, Med-RELF demonstrates remarkable versatility by enhancing models across different post-training paradigms. It yields the most substantial improvements on reason-heavy models, with an average gain of +3.4% at Huatuoo1-8B (Chen et al., 2025), pushing already state-of-the-art (SOTA) models to new performance heights. **Second**, in Figure 1 b), the framework shows robust generalization, delivering a significant +3.67% average gain on the in-distribution MedQA (Jin et al., 2021) benchmark while maintaining strong performance across a range of challenging out-of-distribution(OoD) datasets like GPQA (+3.53%) (Rein et al., 2024). **Third**, As shown in Figure 1 d), our Med-RELF-8B model not only achieves SOTA performance in the 7-8B models but also demonstrates strong competitiveness that rivals or even surpasses models in the 10-20B class. Crucially, targeted ablations not only confirm its architectural superiority over statistical sampling approaches, but also reveal that Med-RELF instills a genuine, activatable self-correction capability that generalizes to other domains (e.g., open-ended logic problems) and provides a solution to ‘fake reflection’ phenomenon in LRMs.
+
+Our main contributions are as follows:
+
+1. We propose Med-RELF a novel framework to overcome the critical bottleneck of expensive intermediate-step verification in medical reasoning. To our knowledge, our approach is the first to successfully enhance complex reasoning through focusing on improving fine-grained reflection.
+2. We introduce a deterministic, structure-based evaluation that yields an experimentally-validated learning signal, enabling the automatic generation of fine-grained reflection data and overcoming the limitations of both outcome-oriented learning and PRMs.
+3. We demonstrate through extensive experiments that Med-RELF consistently improves performance across various models and benchmarks, and is capable of training new SOTA models. Via targeted ablations, we further prove that this success stems from internalized self-correction, which effectively mitigates the pervasive fake reflection in LRMs.
+
+## 2 MED-RELF OVERVIEW
+
+Our methodology is designed to teach the model a instilled reflection capability. The pipeline, illustrated in Figure 2, comprises four main stages: (1) generating a diverse map of reasoning trajectories ToT approach; (2) establishing a deterministic, structure-based method to quantitatively evaluate the quality of any intermediate step and any corrective action; (3) leveraging these metrics to automatically construct two types of preference pairs—a primary set for ‘Reflection Learning’ and a supplementary set for ‘Reasoning Enhancement’; and (4) fine-tuning the model using DPO to instill a robust self-correction capability. The comparison of different reasoning enhancement strategies can be found in Table 1.
+
+![Figure 1: Overview of the proposed framework. The diagram is divided into three main sections: a) Trajectory Generation and Rearrangement, b) Trajectory Evaluation and Ranking, and c) Reflection Generation. Section (a) shows a tree diagram for trajectory generation and two boxes for reflection learning data construction (just-reasoning and add-reasoning). Section (b) shows a flowchart for trajectory evaluation involving value calculation and ranking. Section (c) shows a flowchart for reflection generation with four steps: Public Steps, Wrong Time Steps, Right Steps, and Step.](2fa4a1bf91d0f34e87c689fbc1211fe3_img.jpg)
+
+**a) Trajectory Generation and Rearrangement**
+
+The trajectory generation process involves a tree diagram where nodes are arranged in layers. The root node is 'Q'. The first layer contains nodes '0.33' and '0.2'. Subsequent layers contain nodes with values like 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9. A 'Quality Component' box shows 'Step Quality' and 'Reflection Quality' with a formula:  $Q = S \times R$ . The 'Reflection Learning Data Construction (just-reasoning)' box shows a pair of trajectories, one chosen and one rejected, with 'Effective Reflection' and 'Timed Reflection' labels. The 'Reflection Learning Data Construction (add-reasoning)' box shows multiple pairs of trajectories with 'Chosen' and 'Aspects' labels.
+
+**b) Trajectory Evaluation and Ranking**
+
+This section details the evaluation process. It starts with a tree diagram and a 'Solution Value' calculation:  $\text{Solution Value} = \text{Step Value} + \text{Solution Value}$ . Other values include 'Remain Value' and 'Action Value'. A 'Time-Rule' is also considered. The 'Scoring Model' is represented by a logo. The 'Value for Correction' and 'Value for Reasoning' are calculated based on 'Correct' and 'Wrong' paths. A 'Rank CoT' is generated, leading to 'Excellent Right Paths' vs 'Confusing Error Paths', which is then processed by 'Med-REFL'.
+
+**c) Reflection Generation**
+
+The reflection generation process follows four steps:
+ 
+
+- Step1: Public Steps** - Given the patient's history of [blank], describe any potential brain diseases happened in ...
+- Step2: Wrong Time Steps** - Assess whether the time steps.
+- Step3: Right Steps** - Focus on patients elevated oxygen saturation.
+- Step4: Step** - Evaluate the patient's blood pressure to confirm.
+
+Reflections are categorized into:
+ 
+
+- Flaws in Initial CoT**: The initial diagnostic approach was not optimal.
+- Overlooked Information**: The critical clinical history of [blank] activity should be noticed.
+- Missing Medical Knowledge**: There was inadequate recognition of the unique [blank].
+- Logical Bridge**: The initial reasoning should have connected 1. [blank], 2. [blank].
+- Educational Guidelines**: Standard evidence-based practice for acute stroke in pediatric decade call [blank].
+
+Figure 1: Overview of the proposed framework. The diagram is divided into three main sections: a) Trajectory Generation and Rearrangement, b) Trajectory Evaluation and Ranking, and c) Reflection Generation. Section (a) shows a tree diagram for trajectory generation and two boxes for reflection learning data construction (just-reasoning and add-reasoning). Section (b) shows a flowchart for trajectory evaluation involving value calculation and ranking. Section (c) shows a flowchart for reflection generation with four steps: Public Steps, Wrong Time Steps, Right Steps, and Step.
+
+Figure 2: Overview of the Med-REFL ‘reflection learning’ pipeline. a) Illustrate how step value pointed and the target data pair construction in Med-REFL. b) Illustrate how action value calculated and how to rank reasoning path. c) An illustrative example showcases the fine-grained self-correction mechanism where initial reasoning flaws are identified and rectified during medical question answering.
+
+### 2.1 TRAJECTORY GENERATION AND EVALUATION
+
+To generate diverse reasoning trajectories, each node represents an intermediate reasoning state, and a path from root to leaf forms a complete chain of thought (CoT) trajectory. ToT (details in Appendix E.1) explore multiple reasoning directions at each step to generate diverse and high-quality trajectories.
+
+To evaluate trajectory quality, we compare the final answer of each path to the ground truth, assigning ‘+1’ to steps in correct paths and ‘-1’ to steps in incorrect paths. For a step  $s$ , we define its quality as:
+
+$$v_{\text{step}}(s) = \frac{N_{s,\text{correct}} - N_{s,\text{incorrect}}}{N_s}, \quad (1)$$
+
+where  $N_s$  is the number of paths in the subtree rooted at  $s$ , and  $N_{s,\text{correct}}$  and  $N_{s,\text{incorrect}}$  are the counts of correct and incorrect paths, respectively. For a trajectory  $P = (s_1, \dots, s_L)$  of length  $L$ , we compute its solution quality:
+
+$$v_{\text{sol}}(P) = \frac{1}{L} \sum_{i=1}^L v_{\text{step}}(s_i). \quad (2)$$
+
+Similarly, for a partial trajectory starting at step  $j$ , the remaining quality is:
+
+$$v_{\text{rem}}(P') = \frac{1}{L - j + 1} \sum_{i=j}^L v_{\text{step}}(s_i). \quad (3)$$
+
+To assess reflection actions, we define the action value for transitioning from node  $s$  to  $s'$  via action  $a$ :
+
+$$v_{\text{act}}(a_{(s,s')}) = \lambda_1(v_{\text{step}}(s) - v_{\text{step}}(s')) + \lambda_2(v_{\text{sol}}(s) - v_{\text{sol}}(s')) + \lambda_3(v_{\text{rem}}(s) - v_{\text{rem}}(s')), \quad (4)$$
+
+where  $\lambda_1, \lambda_2, \lambda_3$  are tunable weights.
+
+### 2.2 PREFERENCE PAIR CONSTRUCTION FOR REFLECTION LEARNING
+
+To train large language model (LLM) for error correction, we construct DPO pairs that favor trajectories where reflection corrects errors over those where reflection fails. For a medical question  $q$  with ground truth  $y$  and its candidate CoT trajectory  $P$ , an error locator and a reflector are driven by pre-trained LLM  $\pi$ . This process uses two LLM-based tools (all prompts can be found in Appendix H):
+
+- **Error Locator ( $E_\pi$ )**: Identifies the first incorrect step  $s_{\text{err}}$  in an erroneous CoT trajectory  $P_{\text{err}}$  with its candidate node set,  $S_{\text{cand}}$ , formed by the  $k$  lowest  $v_{\text{step}}$  score nodes:
+
+$$s_{\text{err}} = E_\pi(q, y, S_{\text{cand}}(k), P_{\text{err}}). \quad (5)$$
+
+- **Reflector ( $C_\pi$ )**: Generates reflection text  $R$  explaining the transition from erroneous steps  $S_{\text{orig}}$  to corrected steps  $S_{\text{new}}$ , given common prefix steps  $S_{\text{pub}}$ :
+
+$$R = C_\pi(q, S_{\text{pub}}, S_{\text{orig}}, S_{\text{new}}). \quad (6)$$
+
+Starting from the parent node of  $s_{\text{err}}$ , the model explores alternative reasoning branches, classifying them as correct or incorrect based on their final answers. Next, we construct algorithms to artificially simulate two scenarios of reflection in reasoning:
+
+- Firstly, we simulate scenarios where the model, upon encountering a challenge or **detecting an error during the reasoning process (mid-reasoning)** to correct a single erroneous step  $s_{\text{err}}$ :  $R = C_\pi(q, S_{\text{pub}}, s_{\text{err}}, S_{\text{new}})$ , with the trajectory:  $P_{\text{refl}} = S_{\text{pub}} \rightarrow s_{\text{err}} \rightarrow R \rightarrow S_{\text{new}}$ .
+- In the second, we simulate the **reflection occurs post-reasoning**, regarding as a review after the entire erroneous trajectory from  $s_{\text{err}}$  to the trajectory's end ( $S_{\text{orig}}$ ):  $R' = C_\pi(q, S_{\text{pub}}, S_{\text{orig}}, S_{\text{new}})$ , with the trajectory:  $P'_{\text{refl}} = S_{\text{pub}} \rightarrow S_{\text{orig}} \rightarrow R' \rightarrow S_{\text{new}}$ .
+- Finally, trajectories are ranked by  $v_{\text{act}}$  (Equation 4), and we select a top-ranked effective reflection trajectory ( $P_{\text{chosen}}$ ) and a top-ranked invalid reflection trajectory (reflect but lead to another wrong step) ( $P_{\text{rejected}}$ ) as seed trajectories to construct the first-person reasoning trace  $r$ :
+
+$$\begin{cases} r_{\text{chosen}} = M_\pi(P_{\text{chosen}}), \\ r_{\text{rejected}} = M_\pi(P_{\text{rejected}}), \end{cases} \quad (7)$$
+
+where  $M_\pi$  is a thinker to transform  $P_{\text{refl}}$  or  $P'_{\text{refl}}$  into a verbalized reasoning trace  $r$  by reformulating the explicit steps in  $P$  into natural language thinking.
+
+So the high-quality reasoning trace  $r_{\text{chosen}}$  and error-prone reasoning  $r_{\text{rejected}}$  could be generated by  $M_\pi$  from  $P_{\text{chosen}}$  and  $P_{\text{rejected}}$  to form the DPO pair  $(r_{\text{chosen}}, r_{\text{rejected}})$ .
+
+### 2.3 PREFERENCE PAIR CONSTRUCTION FOR REASONING ENHANCEMENT
+
+To maintain broad reasoning proficiency, we supplement the reflection data with general-purpose reasoning pairs by comparing high-quality correct CoT trajectories with plausible but incorrect ones. In order to better distinguish the quality of trajectories, we train a scoring model  $\pi'$  (Llama3.2-3B) with a SFT dataset  $D_{\text{SFT}} = (q, P, v_{\text{sol}}(P))$ . We use  $\pi'$  to score the generated data to obtain a higher-quality signal  $V_{\text{CoT}}(P) = \pi'(P)$ . Then, trajectories are ranked by  $V_{\text{CoT}}$ , and similar to Equation 7, we select a high-quality correct trajectory ( $P'_{\text{chosen}}$ ) and a plausible incorrect trajectory ( $P'_{\text{rejected}}$ ) to generate the reasoning trace  $r'$  using  $M_\pi$  resulting in the DPO pair  $(r'_{\text{chosen}}, r'_{\text{rejected}})$ .
+
+### 2.4 MODEL FINE-TUNING WITH DPO
+
+After the previous three-stage process, we obtain the 33k DPO data:  $D_{\text{DPO}}^+ = (\{r'_{\text{chosen}}, r'_{\text{rejected}}\}, \{r'_{\text{chosen}}, r'_{\text{rejected}}\})$ . Then we fine-tune LLMs with  $D_{\text{DPO}}^+$  to prioritize effective reasoning and reflection patterns. This process optimizes the model to favor effective reflection instead of invalid reflection, enabling robust error correction in medical question answering.
+
+Table 2: A comprehensive evaluation of models with different post-training methods. The table shows original accuracy (% , orig.) and the performance gain from Med-REFL (w/ ours) across various in-distribution and OoD medical benchmarks.
+
+| Post-Training Method   |              | Mix               |            |              |                     | SFT             |                    |             |              | GRPO  |         | Avg.  |       |       |              |
+|------------------------|--------------|-------------------|------------|--------------|---------------------|-----------------|--------------------|-------------|--------------|-------|---------|-------|-------|-------|--------------|
+| Model Type             |              | Instruction-Tuned |            | Reason-Heavy |                     | Knowledge-Heavy |                    | Pure-RL     |              |       |         |       |       |       |              |
+| Domain                 | Dataset      | Llama3.1-8B       | Qwen2.5-7B | Huatuoo1-8B  | Deepseek-Distill-8B | MedReason-8B    | UltraMedical3.1-8B | AlphaMed-8B |              |       |         |       |       |       |              |
+|                        |              | orig.             | w/ ours    | orig.        | w/ ours             | orig.           | w/ ours            | orig.       | w/ ours      | orig. | w/ ours |       |       |       |              |
+| <b>In-Distribution</b> | MedQA (5 op) | 59.92             | 65.74      | 57.11        | 59.70               | 69.59           | <b>73.72</b>       | 48.85       | 55.00        | 66.27 | 70.16   | 71.34 | 73.08 | 67.79 | 69.17        |
+|                        | Gain         | +5.82             | +2.59      | +4.13        | <b>+6.15</b>        | +3.89           | +1.74              | +1.38       | <b>+3.67</b> |       |         |       |       |       |              |
+| <b>OoD</b>             | MedMCQA      | 57.61             | 59.11      | 54.52        | 55.79               | 62.13           | <b>64.66</b>       | 49.51       | 49.83        | 58.98 | 59.78   | 63.30 | 64.31 | 61.22 | 62.03        |
+|                        | Gain         | +1.50             | +1.27      | <b>+2.53</b> | +0.32               | +0.80           | +1.01              | +0.81       | <b>+1.18</b> |       |         |       |       |       |              |
+|                        | GPQA(M)      | 45.16             | 50.22      | 43.34        | 45.36               | 50.67           | 56.80              | 62.43       | <b>65.04</b> | 45.64 | 49.84   | 45.76 | 49.20 | 53.40 | 55.67        |
+|                        | Gain         | +5.06             | +2.02      | <b>+6.13</b> | +2.61               | +4.20           | +3.44              | +2.27       | <b>+3.53</b> |       |         |       |       |       |              |
+|                        | MedXpert-R   | 14.14             | 15.52      | 12.45        | 13.66               | 16.85           | 17.78              | 11.98       | 13.38        | 22.31 | 22.34   | 15.87 | 16.03 | 21.91 | <b>22.43</b> |
+|                        | Gain         | +1.38             | +1.21      | +0.93        | <b>+1.40</b>        | +0.03           | +0.16              | +0.52       | <b>+0.80</b> |       |         |       |       |       |              |
+|                        | MedXpert-U   | 16.11             | 17.92      | 10.79        | 12.84               | 15.31           | 20.02              | 13.07       | 14.92        | 22.55 | 25.36   | 15.68 | 15.85 | 20.24 | <b>20.78</b> |
+|                        | Gain         | +1.81             | +2.05      | <b>+4.71</b> | +1.85               | +2.81           | +0.17              | +0.54       | <b>+1.99</b> |       |         |       |       |       |              |
+|                        | MMLU-Pro(M)  | 57.56             | 60.89      | 61.36        | 62.66               | 61.87           | <b>64.97</b>       | 53.83       | 56.23        | 59.14 | 62.51   | 63.06 | 63.43 | 63.29 | 64.81        |
+|                        | Gain         | +3.33             | +1.30      | +3.10        | +2.40               | <b>+3.37</b>    | +0.37              | +1.52       | <b>+2.20</b> |       |         |       |       |       |              |
+|                        | PubMedQA     | 76.26             | 77.73      | 74.12        | 74.97               | 79.02           | <b>81.32</b>       | 69.30       | 70.60        | 77.17 | 77.69   | 78.60 | 78.74 | 78.03 | 77.70        |
+|                        | Gain         | +1.47             | +0.85      | <b>+2.30</b> | +1.30               | +0.52           | +0.14              | -0.33       | <b>+0.89</b> |       |         |       |       |       |              |
+| <b>Average</b>         | Accuracy     | 46.68             | 49.59      | 44.81        | 46.42               | 50.78           | <b>54.18</b>       | 44.14       | 46.43        | 50.29 | 52.52   | 50.52 | 51.52 | 51.98 | 52.94        |
+|                        | Gain         | +2.91             | +1.61      | <b>+3.40</b> | +2.29               | +2.23           | +1.00              | +0.96       | <b>+2.06</b> |       |         |       |       |       |              |
+
+## 3 MAIN EXPERIMENTS
+
+### 3.1 EXPERIMENTAL SETUP
+
+**Benchmark.** Our primary dataset for developing and evaluating Med-REFL is the MedQA-USMLE (5 options) (Jin et al., 2021) question-answering task. To further assess the generalization ability of models fine-tuned with Med-REFL, we conducted evaluations on several additional diverse medical benchmarks, including MedMCQA (validation set) (Pal et al., 2022), PubMedQA (test set) (Jin et al., 2019), GPQA medical subset (GPQA-M) and MMLU-Pro Medical subset (health and biology tracks, donate as ‘MMLU-Pro(M)’) (Wang et al., 2024). We also conducted tests on the expert-level benchmark MedXpertQA (Zuo et al., 2025), divided into two parts: Understanding (MedXpert-U) and Reasoning (MedXpert-R) , which are used to separately evaluate the improvement of our method on different types of tasks.
+
+**Models, Evaluation and Training.** We evaluated Med-REFL’s ability to enhance reasoning capabilities across a diverse suite of six 7B-8B parameter baseline models. To better understand its impact, we grouped these models into three categories based on their primary architectural strengths and training focus. First, the **Instruction-Tuned** models (Llama3.1-8B (Grattafiori et al., 2024) and Qwen2.5-7B (Qwen et al., 2025)) are selected to assess our framework’s effectiveness at instilling specialized skills from a generalist base. Second, the **Reason-Heavy** models (Huatuoo1-8B and DeepSeek-Distill-8B (DeepSeek-AI et al., 2025)), are specifically optimized for complex logical deduction, allowing us to test Med-REFL’s capacity to refine already strong reasoning faculties. Third, the **Knowledge-Heavy** models (MedReason-8B (Wu et al., 2025) and UltraMedical3.1-8B (Zhang et al., 2024b)) are extensively fine-tuned on vast medical corpora, which are used to evaluate the framework’s impact on models rich in domain-specific knowledge. In addition to these SFT-trained models, the model AlphaMed (Liu et al., 2025), trained entirely with GRPO (Shao et al., 2024), was also tested. To ensure stable and reliable results, all reported scores are the average of three independent runs. More evaluation and training details could be found in Appendix E.3.
+
+**Training Dataset Construction.** Our preference dataset was constructed from the MedQA-USMLE training set via a two-stage automated pipeline. A detailed description of the entire data
+
+construction process, including the creation of different preference pair types, is available in Appendix E.2.
+
+### 3.2 MAIN RESULTS AND ANALYSIS
+
+The comprehensive results presented in Table 2 validate the potent efficacy of our Med-REFL framework. Our methodology delivers consistent and significant performance improvements across both the in-distribution MedQA benchmark and a diverse suite of OoD challenges. Notably, Med-REFL substantially elevates the performance of already SOTA specialized models (Huatuo-o1-8B, Avg. +3.40%), demonstrating its value not just as a training method, but as a powerful enhancement framework for even the strongest existing models.
+
+**Analysis across Model Architectures.** A deeper analysis reveals a compelling pattern in how Med-REFL interacts with different model types. While it successfully instills complex reasoning skills in general-purpose instruction-tuned models and helps knowledge-heavy models better apply their vast knowledge, the most pronounced average gains are observed in the **Reason-Heavy** category like Huatuo-o1. By observing the different reasoning pattern in model’s output, we hypothesize this is because these models, through their original training, have already developed a rudimentary framework for reflection. Med-REFL, in this context, acts as a powerful catalyst; it **hones and refines this pre-existing, latent capability**, leading to outsized performance improvements. Besides, it also proves its compatibility with pure reinforcement learning by consistently boosting AlphaMed’s performance (e.g., +2.27% on GPQA-Med and +6.15% on MedQA).
+
+**Performance across Benchmark Characteristics.** The framework’s impact is particularly significant on datasets that demand deep, multi-step deductive reasoning, such as GPQA (Med+) and MMLU-Pro (Med+), which saw average gains of +3.53% and +2.20% respectively across all models. This demonstrates that Med-REFL directly enhances the core logical faculties of the models. Furthermore, it showcases consistent gains on the MedXpert benchmark on the most challenging dataset, MedXpertQA and the improvement for understanding questions is significantly greater than for reasoning questions. In contrast, while still positive, the gains on datasets that are more retrieval-oriented, like PubMedQA, are more modest. This is expected, as such tasks rely less on the iterative, complex self-correction process that our framework is designed to teach, further validating that Med-REFL’s primary contribution is to the quality of the reasoning process itself.
+
+**Analysis of Reasoning Depth and Competitive Performance.** We further analyzed the impact of Med-REFL on the nature of the reasoning process itself. As illustrated in Figure 1 c), it reveals a strong positive correlation between the length of a model’s reasoning trace and its final accuracy on MedQA. The application of Med-REFL consistently led to longer, more detailed reasoning, which is structurally linked to the performance gains. Furthermore, Figure 1 d) highlights the exceptional standing of our Med-REFL-8B model (Huatuo-o1 trained with Med-REFL). This proves that our framework provides a resource-efficient pathway to achieving top-tier medical reasoning capabilities without relying on massive model scale. Detailed results are available in Appendix E.4.
+
+## 4 ABLATION STUDIES AND FURTHER ANALYSIS
+
+### 4.1 VERIFYING THE INTERNALIZATION OF REFLECTION CAPABILITY
+
+A notable pattern emerged from our main results: Med-REFL’s performance gains were most pronounced on reason-heavy models. We hypothesized that this is because such models have already developed a rudimentary ‘reflection’ paradigm in their post-training. Med-REFL may not just instill this capability from scratch, but act as a powerful enhancer for models that already know how to reflect, even if imperfectly. This led us to a critical hypothesis, **if the benefit of our reflection-specific training**
+
+Table 3: Impact of different prompting strategies on Llama3.1-8B’s reflection capability. (w/o RC means only us ‘Reason Enhancement’ data
+
+| Model Configuration<br>(Llama3.1-8B) | Think<br>w/o reflect | Reflect<br>after think |
+|--------------------------------------|----------------------|------------------------|
+| Base Model                           | 59.92                | 61.45(+1.53)           |
+| +Med-REFL (w/o RC)                   | 65.17                | 65.87(+0.70)           |
+| +Med-REFL (Full)                     | 65.74                | <b>68.15(+2.41)</b>    |
+
+could be unlocked by trained reasoning pattern, then they should also be elicitable through prompting. To test this hypothesis, we designed a controlled experiment on MedQA to evaluate our fine-tuned Llama3.1-8B model under two distinct prompting conditions: a standard prompt instructing it to ‘think step-by-step’, and a second prompt that explicitly added a ‘critical reflection’ stage after the initial thinking. The results, detailed in Table 3, are revealing. Under standard prompting, the full Med-REFL model already shows a clear advantage. However, when reflection is explicitly activated with the “Reflect after think” prompt, the performance of the model trained on our full dataset surges by a significant +2.41%. In contrast, the base model and the model trained without our reflection-correction (RC) data saw much smaller gains from the same prompt. This outcome provides powerful evidence for our hypothesis. It confirms that Med-REFL does not merely teach models to mimic a reflection-like writing style; it instills a genuine, internalized cognitive capability for self-correction. This capability can remain latent under standard conditions but can be explicitly activated when required, demonstrating a deeper and more robust form of learning. Another experiment in Appendix F.7 also provides evidence for this.
+
+### 4.2 MECHANISTIC ANALYSIS: OVERCOMING FAKE REFLECTION
+
+A critical limitation in current reasoning models is ‘fake reflection’ or confirmatory bias, where models predominantly reaffirm initial errors rather than genuinely correcting them (Kang et al., 2025). To verify whether Med-REFL functionally breaks this confirmation loop or merely induces stochastic instability, we utilized the trajectories from Table 3 employed GPT-4o-as-judge to evaluate answer correctness between the initial ‘Thinking’ ( $A_{think}$ ) and the ‘Critical Reflection’ ( $A_{reflect}$ ) phase. We defined two key dynamic metrics to open the ‘black box’ of the correction: **reflection divergence rate**, measuring how often the model alters its decision after reflecting, and **correction success rate**, measuring the conditional probability that an answer change successfully rectifies an error. As illustrated in Table 4, Med-REFL increases the divergence rate from 1.38% to 2.23%, indicating that our training effectively overcomes inherent reasoning inertia to encourage active self-scrutiny. Crucially, this increased divergence is not mere noise; the **correction success rate** nearly doubles from 12.76% to 19.83%. This result demonstrates that the internalized self-reflection skills instilled by Med-REFL effectively mitigating the limitation of the LRM’s ‘fake reflection’.
+
+Table 4: Quantitative analysis of the intermediate reflection process (reflection effectiveness) on Llama3.1-8B.
+
+| Metric                                                         | Base Model | +Med-REFL |
+|----------------------------------------------------------------|------------|-----------|
+| Reflection Divergence Rate<br>( $A_{think} \neq A_{reflect}$ ) | 1.38%      | 2.23%     |
+| Correction Success Rate<br>( $A_{reflect} = Correct/Changed$ ) | 12.76%     | 19.83%    |
+
+### 4.3 GENERALIZATION ANALYSIS: ADAPTING TO NON-MEDICAL OPEN-ENDED PROBLEMS
+
+To investigate the generalizability of our framework beyond the medical domain and constrained multiple-choice formats, we extended our evaluation to the Knights and Knaves (K&K) benchmark (Xie et al.), a challenging open-ended logic puzzle task where reasoning difficulty scales exponentially with the number of participants ( $n$ ). We constructed a specialized ‘Puzzle-REFL’ dataset by seamlessly transferring our ToT framework: using only 100 simple seed questions ( $n = 2$ ) and adapting the prompts from medical experts to logic solvers, we efficiently generated 5,654 reflection-oriented DPO pairs. The results, presented in Table 5, are compelling. Remarkably, the model trained solely on medical data (+Med-REFL) achieved a clear performance gain over the base Llama3.1-8B (28.00% vs. 25.02%), suggesting that the self-correction capability instilled by our framework is a transferable cognitive skill rather than mere domain knowledge memorization. Furthermore, the model fine-tuned on the generated Puzzle-REFL data demonstrated superior performance with an average accuracy of 34.61%, achieving substantial improvements even on the more complex, unseen  $n = 4$  puzzles (+8.45%). This empirically confirms that Med-REFL is a domain-agnostic data engineering framework capable of unlocking complex, open-ended reasoning capabilities with minimal initial resources.
+
+Table 5: Performance on the open-ended logic puzzle benchmark (K&K). +Puzzle-REFL uses logic data.
+
+| Setting | Llama3.1-8b | +Med-REFL | +Puzzle-REFL |
+|---------|-------------|-----------|--------------|
+| $n = 2$ | 38.77       | 40.82     | 45.73        |
+| $n = 3$ | 22.88       | 29.23     | 36.24        |
+| $n = 4$ | 13.40       | 13.96     | 21.85        |
+| Avg     | 25.02       | 28.00     | 34.61        |
+
+### 4.4 COMPUTATIONAL COST AND EFFICIENCY ANALYSIS
+
+Beyond performance gains, economic efficiency is also critical for medical LRM. Conventional approaches often incur prohibitive costs: training effective PRMs typically necessitates training separate, parameter-heavy reward models consuming hundreds of GPU hours, while distillation from expert model like GPT-5 involves massive API consumption. In stark contrast, Med-REFL offers a transparent and highly cost-effective solution, as detailed in Table 6. our entire data generation pipeline comprises ToT rollout ( $\approx 70h$ ), error location ( $\approx 3h$ ), and reflection generation ( $\approx 10h$ ) on a single A100, which only costs roughly \$166 based on standard cloud rates.
+
+Table 6: Cost comparison between different reasoning enhancement paradigms. Estimated costs are based on standard A100 cloud rental rates ( $\frac{\$2}{\text{GPU} \times \text{hour}}$ ) or public API pricing.
+
+| Method               | Resource Dependency | Est. Time / Cost                           |
+|----------------------|---------------------|--------------------------------------------|
+| Distillation (GPT-5) | Paid API            | $\approx \$2,500$ (Token cost)             |
+| Training PRM         | Reward Model        | $> 100$ GPU Hours                          |
+| Med-REFL (Data Gen)  | Self-Generated      | $\approx 83$ GPU Hours ( $\approx \$166$ ) |
+| Med-REFL (Training)  | Standard DPO        | $\approx 12$ GPU Hours                     |
+
+### 4.5 COMPARISON WITH ALTERNATIVE STRATEGIES.
+
+A central claim of our work is that Med-REFL’s deterministic, structure-based evaluation provides a higher-quality learning signal than other paradigms. To verify this, we conducted a critical experiment comparing Med-REFL against two strong alternatives: a **statistical sampling** approach using monte carlo tree search (MCTS) style rollouts, and a powerful **LLM-as-a-judge** using GPT-4.1. To ensure a fair comparison, all methods operated on the exact same set of candidate reasoning steps generated during our initial ToT exploration; the only variable was the mechanism act as ‘action value’ used to select the ‘chosen’ vs. ‘rejected’ paths for DPO. The results, presented in Table 7, are unequivocal. Med-REFL outperforms both the MCTS approach (even with a high number of simulations, ‘k=20’) and the strong GPT-4.1-as-judge baseline. Notably, while increasing the number of rollouts for MCTS yields diminishing improvements, it never matches the performance of our method. This empirically validates our core hypothesis: the stable, holistic quality signal derived from our deterministic structural assessment is fundamentally more effective for teaching fine-grained reflection than either noisy statistical estimations or heuristic-based judgments. Detailed settings can be found in Appendix F.8.
+
+Table 7: Ablation study comparing Med-REFL against alternative data generation strategies on MedQA-USMLE. Med-REFL’s deterministic, action-focused evaluation provides a superior learning signal.
+
+| Method        | Config.  | ACC (%)      |
+|---------------|----------|--------------|
+| Base Model    | -        | 59.92        |
+| MCTS-Rollouts | $k = 5$  | 60.76        |
+|               | $k = 10$ | 61.14        |
+|               | $k = 20$ | 61.21        |
+| LLM-as-Judge  | GPT-4.1  | 60.59        |
+| <b>Ours</b>   | -        | <b>61.92</b> |
+
+### 4.6 COMPREHENSIVE ABLATION AND ROBUSTNESS ANALYSIS
+
+Due to space constraints, we present extensive additional validations in the Appendix. Regarding data construction, we verify the superiority of ToT-based exploration over random rollouts (Appendix F.1) and analyze the impact of the generator model’s scale (Appendix F.6). For training dynamics, we identify the optimal ratio of reasoning to reflection data (Appendix F.2) and demonstrate the necessity of contrastive learning by comparing DPO against SFT (Appendix F.4). Furthermore, we provide detailed performance analyses of the scoring model (Appendix F.3) and examine system robustness through hyperparameter sensitivity tests based on reasoning boundaries (Appendix F.9).
+
+### 4.7 QUALITATIVE ANALYSIS
+
+To complement our quantitative results, Figure 1 offers a qualitative snapshot of Med-REFL’s impact on the model’s internal reasoning process. More detailed case studies and analysis are provided in Appendix G for a deeper intuitive understanding.
+
+## 5 DISCUSSION
+
+In this section, we discuss and analyze the intriguing phenomena observed during the experiment.
+
+**Domain Sensitivity** When transferring Med-REFL to the logic puzzle domain, we observed that the hyperparameters effective for medical reasoning were insufficient for logic puzzles. Specifically, the K&K benchmark required a larger exploration budget (average step count of 6, median 7) compared to the medical domain (average step count 3.63) to generate high-quality data. We argue that this difference stems from the distinct nature of the tasks. The medical domain is primarily knowledge-intensive: the difficulty lies in retrieving and associating separate clinical entities. Once the correct key entity is identified, the deductive chain is often relatively short. In contrast, logic puzzles are reasoning-intensive, requiring deep, multi-step deductive chains where knowledge retrieval plays a minor role. This suggests that the exploration budget varies significantly by domain. Consequently, Med-REFL demonstrates the sensitivity of the parameters relative to the type of domain.
+
+**Reflection as Attention Redirection** We find that effective reflection in the medical domain often functions as a mechanism of attention redirection (e.g., Case Study G.2). In many error cases, the base model does not lack the necessary medical knowledge but fails to assign appropriate weight to contradictory evidence (e.g., overlooking a high MCV value in favor of a salient symptom like hematochezia). Med-REFL trains the model to revisit the context and specifically seek out counter-evidence that conflicts with its initial hypothesis. By re-weighting these overlooked cues, the model resolves clinical contradictions. This mechanism may explain why Med-REFL delivers the most substantial gains on complex multi-hop reasoning benchmarks (e.g., MedQA, MedXpert) compared to pure retrieval tasks (e.g., PubMedQA), as the former requires the holistic integration of conflicting information rather than simple fact lookup.
+
+**Mitigating Fake Reflection via Contrastive Learning** Another contribution of Med-REFL is demonstrating a scalable solution to the ‘fake reflection’ problem. We argue that Med-REFL effectively mitigates this issue through the specific design of our preference data construction and the DPO training objective. Our framework constructs two distinct types of reflective supervision: mid-reasoning pairs, which focus on micro-level step corrections, and post-reasoning pairs, which target macro-level path redirection. Mitigation of fake reflection is largely attributable to the generalization of this post-reasoning redirection capability. In constructing post-reasoning pairs, the ‘Chosen’ trajectory represents a valid transition from error to correctness, while the ‘Rejected’ trajectory contains the model’s natural inertia to persist in error. Unlike SFT, teaching the model to mimic the linguistic style of reflection, DPO introduces a negative constraint. It explicitly penalizes the model’s propensity to reinforce its initial flawed intuition. Consequently, the model learns to inhibit its confirmatory inertia and actively explores alternative logical paths when triggered to reflect. Furthermore, the Llama3.1’s (+Med-REFL) performance gains on the OoD K&K puzzle suggests that the learned self-correction capability is not merely memorized domain knowledge. Instead, it represents a transferable meta-cognitive skill that generalizes across different contexts.
+
+## 6 CONCLUSION
+
+In this work, we introduced Med-REFL, a novel framework designed to tackle the prohibitive cost of verifying intermediate reasoning **within the complex domain of medicine**. It leverages a deterministic, structure-based method to automatically construct targeted preference data, effectively enhancing a model’s self-correction capabilities. Our experiments demonstrate that Med-REFL achieves SOTA performance on the MedQA-USMLE benchmark and exhibits robust generalization across diverse medical datasets, with ablation studies confirming that it instills a genuine internalized self-correction capability. Furthermore, we believe that the core principles of Med-REFL are applicable to other domains facing similar verification bottlenecks, such as legal reasoning, and exploring this transferability will be a key direction for our future work. Our findings show that explicitly training for a high-quality internalized reflection capability is a crucial and effective pathway toward developing more reliable and trustworthy LRM for high-stakes medical applications.
+
+## ETHIC STATEMENT
+
+Although Med-REFL demonstrates significant improvements in medical reasoning and reflection capabilities of Large Reasoning Models, the models enhanced by this method may still produce content that includes inaccuracies, biases, or incomplete reasoning, including potentially flawed intermediate reflection steps. Given the high-stakes nature of the medical domain, where errors can have severe consequences, the current models fine-tuned with Med-REFL are intended for research purposes and are not suitable for direct real-world clinical applications, diagnosis, or treatment decisions without rigorous validation and oversight by qualified human medical experts.
+
+We impose strict limitations on the use of our Med-REFL framework and the models trained using it. They are not permitted for deployment in any critical care or diagnostic systems where inaccuracies could lead to patient harm or misinformed medical actions. We emphasize the ethical responsibility of any users or subsequent developers to adhere to these restrictions to safeguard patient safety and the integrity of medical practice.
+
+## REPRODUCIBILITY STATEMENT
+
+We are committed to ensuring the reproducibility of our work. To this end, we have made our code, the complete 33k preference dataset used for DPO training, and the fine-tuned model weights publicly available in an anonymous repository, as referenced in Appendix C. The core methodology of the Med-REFL framework is detailed in Section 2, with specific stages for trajectory generation and preference pair construction described in Subsections 2.1, 2.2, and 2.3. A comprehensive description of our automated data generation pipeline is provided in Appendix E.2, with specifics on the Tree-of-Thought exploration strategy in Appendix E.1. Furthermore, all prompts utilized for data generation and model interaction are fully documented in Appendix H. For experimental validation, Section 3 outlines the overall setup, while Appendix E.3 contains the specific hyperparameters for model fine-tuning (e.g., LoRA configurations, learning rate, batch size) and evaluation. The detailed configurations for our ablation studies (Section 4), including the comparative analysis against alternative strategies (Appendix F.8), are specified to allow for thorough verification of our claims.
+
+## REFERENCES
+
+- Amanda Askell, Yuntao Bai, Anna Chen, Dawn Drain, Deep Ganguli, Tom Henighan, Andy Jones, Nicholas Joseph, Benjamin Mann, Nova DasSarma, Nelson Elhage, and et al Zac Hatfield-Dodds. A general language assistant as a laboratory for alignment. *CoRR*, abs/2112.00861, 2021. URL <https://arxiv.org/abs/2112.00861>.
+- Yuntao Bai, Andy Jones, Kamal Ndousse, Amanda Askell, Anna Chen, Nova DasSarma, Dawn Drain, Stanislav Fort, Deep Ganguli, Tom Henighan, et al. Training a helpful and harmless assistant with reinforcement learning from human feedback. *arXiv preprint arXiv:2204.05862*, 2022.
+- Junying Chen, Zhenyang Cai, Ke Ji, Xidong Wang, Wanlong Liu, Rongsheng Wang, and Benyou Wang. Towards medical complex reasoning with LLMs through medical verifiable problems. In Wanzhiang Che, Joyce Nabende, Ekaterina Shutova, and Mohammad Taher Pilehvar (eds.), *Findings of the Association for Computational Linguistics: ACL 2025*, pp. 14552–14573, Vienna, Austria, July 2025. Association for Computational Linguistics. ISBN 979-8-89176-256-5. doi: 10.18653/v1/2025.findings-acl.751. URL <https://aclanthology.org/2025.findings-acl.751/>.
+- Qiguang Chen, Libo Qin, Jiaqi Wang, Jingxuan Zhou, and Wanzxiang Che. Unlocking the capabilities of thought: A reasoning boundary framework to quantify and optimize chain-of-thought. *Advances in Neural Information Processing Systems*, 37:54872–54904, 2024.
+- Xuxin Cheng, Zhihong Zhu, Bowen Cao, Qichen Ye, and Yuxian Zou. Mrrl: Modifying the reference via reinforcement learning for non-autoregressive joint multiple intent detection and slot filling. In *Findings of the Association for Computational Linguistics: EMNLP 2023*, pp. 10495–10505, 2023.
+
+- 594 Josef Dai, Xuehai Pan, Ruiyang Liu, Jiaming Du, Qiaoyu Yang, Zhenhong Shi, Tianlu Yang, and  
+595 Wei Zhou. Safe RLHF: Safe reinforcement learning from human feedback. In *The Twelfth*  
+596 *International Conference on Learning Representations*, Vienna, Austria, 2024. International  
+597 Conference on Learning Representations. URL [https://openreview.net/forum?id=](https://openreview.net/forum?id=3rX4RNrtNX)  
+598 [3rX4RNrtNX](https://openreview.net/forum?id=3rX4RNrtNX). Also available as arXiv:2310.12773.
+- 599 Renfei Dang, Shujian Huang, and Jiajun Chen. Internal bias in reasoning models leads to overthink-  
+600 ing. *arXiv preprint arXiv:2505.16448*, 2025.
+- 601
+- 602 Sayantan Dasgupta, Trevor Cohn, and Timothy Baldwin. Cost-effective distillation of large lan-  
+603 guage models. In Anna Rogers, Jordan Boyd-Graber, and Naoaki Okazaki (eds.), *Findings of*  
+604 *the Association for Computational Linguistics: ACL 2023*, pp. 7346–7354, Toronto, Canada, July  
+605 2023. Association for Computational Linguistics. doi: 10.18653/v1/2023.findings-acl.463. URL  
+606 <https://aclanthology.org/2023.findings-acl.463/>.
+- 607
+- 608 DeepSeek-AI, Daya Guo, Dejian Yang, Haowei Zhang, Junxiao Song, Ruoyu Zhang, Runxin Xu,  
+609 Qihao Zhu, and et al. Shirong Ma. Deepseek-r1: Incentivizing reasoning capability in llms via  
+610 reinforcement learning, 2025. URL <https://arxiv.org/abs/2501.12948>.
+- 611
+- 612 Guanting Dong, Hongyi Yuan, Keming Lu, Chengpeng Li, Mingfeng Xue, Dayiheng Liu, Wei  
+613 Wang, Zheng Yuan, Chang Zhou, and Jingren Zhou. How abilities in large language mod-  
+614 els are affected by supervised fine-tuning data composition. In Lun-Wei Ku, Andre Martins,  
+615 and Vivek Srikumar (eds.), *Proceedings of the 62nd Annual Meeting of the Association for*  
+616 *Computational Linguistics (Volume 1: Long Papers)*, pp. 177–198, Bangkok, Thailand, Aug-  
+617 ust 2024. Association for Computational Linguistics. doi: 10.18653/v1/2024.acl-long.12. URL  
+618 <https://aclanthology.org/2024.acl-long.12/>.
+- 619
+- 620 Aaron Grattafiori, Abhimanyu Dubey, Abhinav Jauhri, Abhinav Pandey, Abhishek Kadian, Ahmad  
+621 Al-Dahle, Aiesha Letman, Akhil Mathur, Alan Schelten, Alex Vaughan, et al. The llama 3 herd  
+622 of models. *arXiv preprint arXiv:2407.21783*, 2024.
+- 623
+- 624 Xinyu Guan, Li Luna Zhang, Yifei Liu, Ning Shang, Youran Sun, Yi Zhu, Fan Yang, and Mao Yang.  
+625 rstar-math: Small LLMs can master math reasoning with self-evolved deep thinking. In *Forty-*  
+626 *second International Conference on Machine Learning*, 2025. URL [https://openreview.](https://openreview.net/forum?id=5zwF1GizFa)  
+627 [net/forum?id=5zwF1GizFa](https://openreview.net/forum?id=5zwF1GizFa).
+- 628
+- 629 Shibo Hao, Yi Gu, Haodi Ma, Joshua Hong, Zhen Wang, Daisy Wang, and Zhiting Hu. Reasoning  
+630 with language model is planning with world model. In Houda Bouamor, Juan Pino, and Ka-  
+631 lika Bali (eds.), *Proceedings of the 2023 Conference on Empirical Methods in Natural Language*  
+632 *Processing*, pp. 8154–8173, Singapore, December 2023. Association for Computational Linguis-  
+633 tics. doi: 10.18653/v1/2023.emnlp-main.507. URL [https://aclanthology.org/2023.](https://aclanthology.org/2023.emnlp-main.507/)  
+634 [emnlp-main.507/](https://aclanthology.org/2023.emnlp-main.507/).
+- 635
+- 636 Robert E Hoyt, Dacre Knight, Maruf Haider, and Maria Bajwa. Evaluating a large reasoning models  
+637 performance on open-ended medical scenarios. *medRxiv*, pp. 2025–04, 2025.
+- 638
+- 639 Edward J Hu, Yelong Shen, Phillip Wallis, Zeyuan Allen-Zhu, Yuanzhi Li, Shean Wang, Lu Wang,  
+640 Weizhuo Chen, et al. Lora: Low-rank adaptation of large language models. *ICLR*, 1(2):3, 2022.
+- 641
+- 642 Jie Huang, Xinyun Chen, Swaroop Mishra, Huaixiu Steven Zheng, Adams Wei Yu, Xinying Song,  
+643 and Denny Zhou. Large language models cannot self-correct reasoning yet. In *The Twelfth*  
+644 *International Conference on Learning Representations*, 2024a. URL [https://openreview.](https://openreview.net/forum?id=1kmd3fKBPQ)  
+645 [net/forum?id=1kmd3fKBPQ](https://openreview.net/forum?id=1kmd3fKBPQ).
+- 646
+- 647 Zhen Huang, Haoyang Zou, Xuefeng Li, Yixiu Liu, Yuxiang Zheng, Ethan Chern, Shijie Xia, Yiwei  
+648 Qin, Weizhe Yuan, and Pengfei Liu. O1 replication journey - part 2: Surpassing o1-preview  
+649 through simple distillation, big progress or bitter lesson? *CoRR*, abs/2411.16489, 2024b. URL  
+650 <https://doi.org/10.48550/arXiv.2411.16489>.
+- 651
+- 652 Zhongzhen Huang, Gui Geng, Shengyi Hua, Zhen Huang, Haoyang Zou, Shaoting Zhang, Pengfei  
+653 Liu, and Xiaofan Zhang. O1 replication journey - part 3: Inference-time scaling for medical  
+654 reasoning. *arXiv preprint arXiv:2501.06458*, 2025.
+
+[Appendix and supplementary materials beyond page 12 have been removed.]

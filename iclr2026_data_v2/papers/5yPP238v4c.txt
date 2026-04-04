@@ -1,0 +1,8127 @@
+# MT-DAO: MULTI-TIMESCALE DISTRIBUTED ADAPTIVE OPTIMIZERS WITH LOCAL UPDATES
+
+
+**Alex Iacob** **[†,1,2]** **Andrej Jovanovi´c** **[*,1]** **Mher Safaryan** **[*,3]** **Meghdad Kurmanji** **[1]**
+
+
+**Lorenzo Sani** **[1,2]** **Samuel Horváth** **[4]** **William F. Shen** **[1]** **Xinchi Qiu** **[1]**
+
+
+**Nicholas D. Lane** **[1,2]**
+
+
+ABSTRACT
+
+
+Training large models with distributed data parallelism (DDP) requires frequent
+communication of gradients across workers, which can saturate bandwidth. _In-_
+_frequent_ communication strategies (e.g., Local SGD) reduce this overhead but,
+when applied to adaptive optimizers, often suffer a performance gap relative to
+_fully synchronous_ DDP. We trace this gap to a time-scale mismatch: the optimizer’s
+fast-moving momentum, tuned for frequent updates, decays too quickly to smooth
+gradients over long intervals, leading to noise-dominated optimization. To address
+this, we propose MT-DAO, a family of optimizers that employs multiple slow- and
+fast-moving first momenta or the gradient to track update dynamics across different
+time scales, for which we provide the first convergence guarantees. Empirically,
+for language-model pre-training, this eliminates the performance gap with DDP,
+outperforming infrequent-communication baselines in perplexity and reducing
+iso-token wall-clock time relative to DDP by 6–27% on Ethernet interconnects.
+At the 720M scale, MT-DAO reaches a target perplexity in 24% fewer steps and
+35% less time than the single-momentum DDP baseline. MT-DAO enables effective
+cross-datacenter training and training over wide geographic areas.
+
+
+1 INTRODUCTION
+
+
+The scalability of training infrastructure is impeded by the communication required for Distributed
+Data Parallelism (DDP). Infrequent parameter-averaging strategies like Local SGD (Stich, 2019)
+reduce this overhead, yet extensions to adaptive optimizers (Cheng & Glasgow, 2025; Charles et al.,
+2025) show a performance gap relative to DDP (Sani et al., 2025; Charles et al., 2025). Charles et al.
+(2025) finds that infrequent averaging, even with Nesterov momentum at round boundaries (Reddi
+et al., 2021), underperforms DDP for models up to 2 _._ 4B parameters and worker counts exceeding 2.
+
+
+We hypothesize this gap stems from a _timescale mismatch_ . Optimizers use fast-moving momenta (low
+_β_ 1 0 _._ 9) that smooth high-frequency noise under DDP but _decay too rapidly_ between infrequent
+_≈_
+synchronizations. This decay prevents a stable shared trajectory, leading to our central question:
+
+
+_Can a distributed adaptive optimizer with β’s suited for infrequent communication_
+_close the performance gap with DDP while providing convergence guarantees?_
+
+
+We propose MT-DAO, which brings multi-momentum optimizers (Lucas et al., 2019; Pagliardini et al.,
+2025) to the distributed, infrequent-communication regime. MT-DAO resolves the mismatch by using
+slow-moving momenta (e.g., _β_ _≈_ 0 _._ 999) to preserve trajectory information across synchronizations
+while remaining responsive via a fast momentum. In its simplest quasi-hyperbolic form (Ma & Yarats,
+2019), MT-DAO uses the current gradient as the fast momentum, adds no memory or communication
+overhead, and requires only one additional hyperparameter. Crucially, unlike methods that use a
+
+
+[†aai30@cam.ac.uk;](mailto:aai30@cam.ac.uk) *Equal contributions; 1University of Cambridge; 2Flower Labs; 3Institute of Science
+and Technology Austria; [4] Mohamed bin Zayed University of Artificial Intelligence
+
+
+1
+
+
+momentum-based outer optimizer (Reddi et al., 2021; Douillard et al., 2023) at synchronization
+boundaries, MT-DAO needs **no extra memory buffers** or multiple outer hyperparameters.
+
+
+Empirically, slow momentum acts as a regularizer, improving update alignment by increasing cosine
+similarity between worker pseudo-gradients (Reddi et al., 2021). This stability lets MT-DAO improve
+perplexity over low-communication baselines. Furthermore, MT-DAO matches or exceeds its DDP
+analogue at larger scales, **closing** **the** **perplexity** **gap** for models up to 720M parameters. We
+validate these findings across six inner optimizers (ADOPT, Adam, Muon, AdEMAMix, AggMo,
+and QHM) at scales up to 1 _._ 3B, and show that the benefits extend to streaming communication
+regimes (Appendix H.4), varying numbers of workers and batch sizes (Appendix H.3), and multiple
+momentum counts (Appendix H.2).
+
+
+2 MULTI-TIMESCALE DISTRIBUTED ADAPTIVE OPTIMIZERS (MT-DAO)
+
+
+8
+
+
+6
+
+
+4
+
+
+2
+
+
+0
+
+
+_−_ 4 _−_ 2 0 2 4
+
+
+10 [1]
+
+
+10 [0]
+
+
+10 _[−]_ [1]
+
+
+10 _[−]_ [2]
+
+
+10 _[−]_ [3]
+
+
+10 _[−]_ [4]
+
+|Col1|Col2|Col3|β|= 0.9999|Col6|Col7|Col8|Col9|
+|---|---|---|---|---|---|---|---|---|
+||||||||||
+||||||||||
+||||||||||
+||||||||||
+||||||||||
+||`MT-DAO`<br>`Local Adam`||||||||
+
+0 100 200 300 400 500 600
+
+
+8
+
+
+6
+
+
+4
+
+
+2
+
+
+0
+
+
+_−_ 4 _−_ 2 0 2 4
+
+
+Communication Rounds
+
+
+(a) Distance to optimum vs. steps.
+
+
+(b) Contour plot of trajectories.
+
+
+Figure 1: To highlight the stability benefit of MT-DAO, we illustrate its performance on a toy nonconvex problem. Crucially, under a high momentum decay of _β_ = 0 _._ 9999, prior stateful methods like
+Local Adam (Cheng & Glasgow, 2025) become unstable and fail to converge, whereas MT-DAO
+maintains its rapid and stable convergence. We optimize the non-convex Rosenbrock function
+_f_ ( _x_ 1 _, x_ 2) = (1 _−_ _x_ 1) [2] + 100( _x_ 2 _−_ _x_ [2] 1 [)][2][ with] _[ M]_ [= 256][ workers and IID Gaussian noise (] _[σ]_ [= 2][).]
+
+
+We characterize the conflict between optimizer momentum timescales and communication intervals.
+Let _M_ workers perform _K_ local updates per round to minimize _f_ ( _x_ ) := _M_ 1 - _Mm_ =1 _[f][m]_ [(] _[x]_ [)][, where]
+_fm_ ( _x_ ) = E _ξ∼Dm_ [ _Fm_ ( _x_ ; _ξ_ )]. Performance degradation in this regime stems from a mismatch between
+the optimizer’s memory and the communication period.
+
+
+2.1 TIMESCALE MISMATCH
+
+
+The first momentum in adaptive optimizers is an Exponential Moving Average (EMA): _ut_ = _βut−_ 1 +
+(1 _−_ _β_ ) _gt_, with effective memory quantified by half-life _τ_ 0 _._ 5( _β_ ) = [ln 0] ln _β_ _[.]_ [5] [(][Pagliardini et al.][,][ 2025][).]
+
+
+2
+
+
+A typical _β_ 1 = 0 _._ 9 yields _τ_ 0 _._ 5 6 _._ 6 steps, suitable for frequent communication. A conflict arises
+_≈_
+when _K_ _τ_ 0 _._ 5, common in communication-efficient training ( _K_ [32 _,_ 512]). Unrolling over
+_≫_ _∈_
+_K_ local steps gives _ut_ + _K_ = _β_ _[K]_ _ut_ + (1 _−_ _β_ ) [�] _[K]_ _k_ =0 _[−]_ [1] _[β][k][g][t]_ [+] _[K][−][k]_ [.] [The influence of the global state]
+_ut_ decays as _β_ _[K]_ ( 0 _._ 03 for _β_ 1=0 _._ 9, _K_ =32), leaving workers reliant on noisy local gradients.
+_≈_
+For example, if noise is independent across workers, the variance of the final local momentum is
+Var( _ut_ + _K_ ) = [1] _[−][β]_ [(1] _[β]_ [2] _[K]_ [)] _[σ]_ _m_ [2] [(see][ Appendix F][), with] _[ σ]_ _m_ [2] [being the gradient variance of worker]
+
+
+[1] 1+ _[−]_ _β_ _[β]_ [(1] _[ −]_ _[β]_ [2] _[K]_ [)] _[σ]_ _m_ [2] [(see][ Appendix F][), with] _[ σ]_ _m_ [2] [being the gradient variance of worker]
+
+
+_m_ . As _β_ 1 the factor [1] 1+ _[−]_ _β_ _[β]_
+_→_
+
+
+_m_ . As _β_ _→_ 1 the factor [1] 1+ _[−]_ _β_ _[β]_ [suppresses variance.] [For] _[ β]_ _[→]_ [0][, variance approaches] _[ σ]_ _m_ [2] [, exposing]
+
+local updates to noise-induced instability. Importantly, while increasing the batch size _B_ reduces
+_σm_ [2] [linearly,] _[ β]_ [controls variance exponentially through the drift term][ (1] _[−][β]_ [2] _[K]_ [)][.] [This means that in]
+infrequent-communication regimes, precise control of _β_ is far more important than in DDP settings,
+where the exponential time-decay is absent (see Appendix F.1 for the full derivation and Appendix H.3
+for empirical validation).
+
+
+An alternative interpretation of this memory decay is offered by information theory, which quantifies
+the preserved signal between the initial global momentum _Ut_ and the final local momentum _Ut_ + _K_
+via their mutual information, _I_ ( _Ut_ + _K_ ; _Ut_ ). By modeling the local updates as a linear process
+_Ut_ + _K_ = _β_ _[K]_ _Ut_ + _L_, where _L_ is the accumulated local gradient noise, a closed-form expression
+can be derived when assuming Gaussian distributions for the states and noise with covariances Σ _Ut_
+and Σ _L_ respectively. The mutual information is _I_ ( _Ut_ + _K_ ; _Ut_ ) = 2 [1] [log det(] _[I]_ [+] _[ β]_ [2] _[K]_ [Σ] _[U][t]_ [Σ] _[−]_ _L_ [1][)][ (see]
+
+Appendix F). As _β_ _[K]_ _→_ 0, mutual information vanishes, implying statistical independence with
+respect to the momentum at the start of the interval. As _β_ _[K]_ _→_ 1 _._ 0, the initial signal is preserved.
+
+
+An alternative interpretation of this memory decay is offered by information theory, which quantifies
+the preserved signal between the initial global momentum _Ut_ and the final local momentum _Ut_ + _K_
+via their mutual information, _I_ ( _Ut_ + _K_ ; _Ut_ ). By modeling the local updates as a linear process
+_Ut_ + _K_ = _β_ _[K]_ _Ut_ + _L_, where _L_ is the accumulated local gradient noise, a closed-form expression
+can be derived when assuming Gaussian distributions for the states and noise with covariances Σ _Ut_
+and Σ _L_ respectively. The mutual information is _I_ ( _Ut_ + _K_ ; _Ut_ ) = 2 [1] [log det(] _[I]_ [+] _[ β]_ [2] _[K]_ [Σ] _[U][t]_ [Σ] _[−]_ _L_ [1][)][ (see]
+
+
+2.2 THE CHALLENGE OF HIGH- _β_ OPTIMIZERS
+
+
+Although both arguments above encourage the use of large _β_ values as a solution to this timescale
+mismatch problem, previous work has shown that high-momentum optimizers are often unfeasible in
+practice (Lucas et al., 2019). Without modification, they are insufficiently responsive to changes in
+the loss landscape and are prone to oscillations (see the top of Fig. 2), yielding subpar performance.
+
+
+_λ_ 1 = 0 _._ 01 _λ_ 2 = 0 _._ 001 _λ_ 3 = 0 _._ 0001 _λ_ 4 = 1 _e −_ 05 Freq Sync Slow Sync
+
+
+Local SGD with Momentum, _β_ = 0 _._ 9
+
+10
+
+
+0
+
+
+_−_ 10
+0 500 1000 1500 2000 2500 3000
+
+
+MT-DAO-SGDM ( _ω_ 1 = 0 _._ 95), _β_ = 0 _._ 9
+
+10
+
+
+0
+
+
+_−_ 10
+
+
+0 500 1000 1500 2000 2500 3000
+Communication Rounds
+
+
+Local SGD with Momentum, _β_ = 0 _._ 999
+
+
+0 500 1000 1500 2000 2500 3000
+
+
+MT-DAO-SGDM ( _ω_ 1 = 0 _._ 95), _β_ = 0 _._ 999
+
+
+0 500 1000 1500 2000 2500 3000
+Communication Rounds
+
+
+Figure 2: Comparison of Local SGDM with standard momentum **(top)** and MT-DAO-SGDM ( _N_ = 1
+momentum, _ω_ 1 = 0 _._ 95) **(bottom)** for the function _f_ ( _x_ ; _λ_ ) = 2 [1] _[λx]_ [2][ with] _[ x][ ∈]_ [R][ for various parameters]
+
+controlling the rate of change _λ_ and and sync frequencies (frequent: solid, infrequent/slow: dashed).
+For _β_ = 0 _._ 9, Local SGD with momentum can quickly find the sole global optimum, which does
+not hold for non-convex functions, however, MT-DAO-SGDM converges despite the slow momentum
+dampening it. While both optimizers are stable at _β_ = 0 _._ 9, at high momentum ( _β_ = 0 _._ 999) Local
+SGD with standard momentum becomes unstable for high _λ_ while MT-DAO-SGDM remains stable.
+
+
+This instability motivates using multi-momentum methods (Lucas et al., 2019; Ma & Yarats, 2019;
+Pagliardini et al., 2025). Such methods compose the optimizer update as a linear combination of slow
+and fast-moving first momenta, or the gradient in the case of Quasi-hyperbolic methods (Ma & Yarats,
+2019). This avoids common pitfalls of high-momentum methods by responding to changes in the loss
+
+
+3
+
+
+landscape via the fast momentum/gradient. Recent works (Pagliardini et al., 2025; Semenov et al.,
+2025) have shown that such optimizers can provide SOTA results, outperforming popular optimizers
+such as Adam (Loshchilov & Hutter, 2019), Muon (Jordan et al., 2024), and Dion (Ahn et al., 2025).
+
+
+2.3 THE MT-DAO METHOD AND ALGORITHM
+
+
+**Algorithm 1** MT-DAO-Adam, local bias correction omitted to save space.
+
+
+**Require:** **Model tensors, hyper-parameters**
+
+
+1: _x_ 0 _∈_ R _[d]_, _{u_ ¯ _[j]_ _−_ 1 _[}]_ _j_ _[N]_ =1 _[∈]_ [(][R] _[d]_ [)] _[N]_ [,][ ¯] _[v][−]_ [1] _[∈]_ [R] _[d]_ [— initial params,] _[ N]_ [first momenta, second momentum]
+2: _β_ 1 _,j_ _j_ =1 _[, β]_ [2]
+_{_ _}_ _[N]_ _[∈]_ [[0] _[,]_ [ 1)][ — decay rates for each momentum state]
+3: _ωj_ _j_ =1 _j_ =1 _[w][j]_
+4:5: _{ρT, M ∈}_ R _[N]_ + _∈_, _{_ N _[∈]_ _η_ + _t_ [[0] _}_  - total optimization steps and number of workers _t_ _[T][,]_ [ 1]] =0 _[ −]_ [1][ — convex combination coefficients for first momenta,][— clipping radius, learning-rate schedule] [ �] _[N]_ _[≤]_ [1] _[.]_ [0]
+6: _Kx,_ _Kj_ _j_ =1 _[, K][v]_ [— communication periods for parameters and states]
+7: OuterOpt _{_ _}_ _[N]_ : R _[d]_ _→_ _[∈]_ R [(][N] _[d]_ [+] - update params using an outer optimizer, averaging by default [)] _[N]_ [+2]
+**Ensure:** _xT,_ _{u_ _[j]_ _T −_ 1 _[}]_ _j_ _[N]_ =1 _[,]_ _[v][T][ −]_ [1]
+8:9: **for each workerfor** _t_ = 0 _, . . ., T_ _m−_ :1initialize **do** _x_ _[m]_ 0 _[,][ {][u]_ _−_ _[j,m]_ 1 _[}][, v]_ _−_ _[m]_ 1
+11:12:10: **for all** _g_ **for** ˆ _t_ _[m]_ workers _j_ _[←]_ = 1 **[clip]** **to** [(] _m_ _[∇]_ _N_ = 0 _[F]_ **do** [(] _[x]_ _t_ _[m]_ _, . . ., M_ [;] _[ ξ]_ _t_ _[m]_ [)] _[, ρ]_ _−_ [)] 1 **in parallel do** clipped stochastic gradientupdate N first momenta
+13: _u_ _[j,m]_ _t_ _←_ _β_ 1 _,j_ ¯ _u_ _[j]_ _t−_ 1 [+ (1] _[ −]_ _[β]_ [1] _[,j]_ [)ˆ] _[g]_ _t_ _[m]_
+14: _u_ ¯ _[j]_ _t−_ 1 [= 0)] **[ then]** [ E] _[m]_ [[] _[u][j,m]_ _t−_ 1 []] **[ else]** _[ u]_ _t_ _[j,m]_ _−_ 1 sync _u_ _[j]_ every _Kj_ steps
+
+_[←]_ **[if]** [ (] _[t]_ [ mod] _[ K][j]_
+15: _vt_ _[m]_ 2 _[v]_ [¯] _t−_ 1 [+ (1] _[ −]_ _[β]_ 2 [)(] _[g]_ _t_ _[m]_ [)][2]
+
+16: _v_ ¯ _t−_ 1 _[←]_ _[β]_ **if** ( _t_ mod _Kv_ = 0) **then** E _m_ [ _vt_ _[m]_ _−_ 1 []] **[ else]** _[ v]_ _t_ _[m]_ _−_ 1 sync _v_ every _Kv_ steps
+_←_    - _[N]_ _[N]_ _[j,m]_    
+
+
+17: ∆ _[m]_ _t_ 1
+
+_[←]_ ~~_√_~~ _vt_
+
+
+_vt_ _[m]_ [+] _[ϵ]_
+
+
+- (1 _−_ [�] _j_ _[N]_ =1 _[ω][j]_ [)ˆ] _[g]_ _t_ _[m]_ [+][ �] _[N]_ _j_ =1 _[ω][j][u]_ _t_ _[j,m]_ form combined update direction
+
+
+18: _x_ _[m]_ _t_ +1 _t_ _t_ [∆] _[m]_ _t_
+19: _x_ ¯ _t_ _←_ _[←]_ **if** ( _[x]_ [¯] _t_ mod _[−]_ _[η]_ _Kx_ = 0) **then** OuterOpt(E _m_ [ _x_ _[m]_ _t_ []][ )] **[ else]** _[ x]_ _t_ _[m]_ sync _x_ every _Kx_ steps
+
+
+Algorithm 1 formalizes MT-DAO for Adam (variants: ADOPT in Algorithm 2, SGDM in Algorithm 3).
+It uses _N_ first-order momenta _u_ _[j]_ and one second-order momentum _v_, combined via weights _ωj_
+_{_ _}_ _{_ _}_
+(purple), with the current gradient receiving weight 1 _−_ [�] _j_ _[N]_ =1 _[ω][j]_ [—implementing the][ QHM][ structure.]
+OuterOpt represents any aggregator (e.g., FedAvg (McMahan et al., 2017), Nesterov (Huo et al.,
+2020), FedOPT (Reddi et al., 2021)); we default to averaging per prior analyses (Cheng & Glasgow,
+2025; Iacob et al., 2025). MT-DAO-Adam reduces communication costs by ( [1] [+][�] _[N]_ 1 [+] [1] [)] _[−]_ [1]
+
+
+_K_ [1] _x_ [+][�] _j_ _[N]_ =1 _K_ 1 _j_ [+] _K_ [1]
+
+
+2025; Iacob et al., 2025). MT-DAO-Adam reduces communication costs by ( _K_ [1] _x_ [+][�] _j_ _[N]_ =1 _K_ 1 _j_ [+] _K_ [1] _v_ [)] _[−]_ [1]
+
+over DDP.
+
+
+This generalized framework recovers previous distributed adaptive optimizers (Stich, 2019; Douillard
+et al., 2023; Cheng & Glasgow, 2025; Iacob et al., 2025). It also introduces **the first-ever formula-**
+**tions for provably convergent distributed variants of multi-momentum optimizers** (Lucas et al.,
+2019; Ma & Yarats, 2019; Pagliardini et al., 2025). Figure 2 (bottom) shows an example of MT-DAOSGDM converging for both high and low _β_ 1 with a quasi-hyperbolic formulation while the Local
+SGD with momentum averaging method fails for high _β_ 1. To highlight the stability of MT-DAOAdam, Figure 1 illustrates its convergence on a common toy non-convex problem (Pagliardini et al.,
+2025) under high momentum ( _β_ = 0 _._ 9999), a setting where prior provably convergent methods like
+Local Adam (Cheng & Glasgow, 2025) become unstable and do not reach the optimum. Beyond
+Adam and ADOPT, we empirically validate that MT-DAO is effective with Muon (Appendix H.7),
+AdEMAMix, and AggMo (Appendix H.2), and that it composes with streaming communication (Appendix H.4). We recommend the robust default _β_ 1=0 _._ 999, _ω_ 1=0 _._ 98 for the quasi-hyperbolic variant,
+which transfers from 16M to 1 _._ 3B without re-tuning (Section 5.5).
+
+
+3 CONVERGENCE GUARANTEES FOR MT-DAO
+
+
+This section provides a theoretical convergence analysis for the proposed MT-DAO approach using the
+SGDM optimizer. The analysis, detailed in Appendix D, relies on the following standard assumptions.
+
+
+4
+
+
+**Assumption 1** _bounded by some_ (Lower bound _f_ _[∗]_ _∈_ R _and all local loss functions_ and smoothness) **.** _The overall loss function fm are L-smooth:_ _f_ : R _[d]_ _→_ R _is lower_
+
+_fm_ ( _x_ ) _fm_ ( _y_ ) _L_ _x_ _y_ _,_ _for any x, y_ R _[d]_ _._
+_∥∇_ _−∇_ _∥≤_ _∥_ _−_ _∥_ _∈_
+
+
+**Assumption 2** (Unbiased noise with bounded stochastic variance) **.** _The stochastic gradient g_ _[m]_ _of_
+_local loss function fm_ _computed by machine m is unbiased and the noise has bounded variance:_
+
+
+E[ _g_ _[m]_ ] = _fm_ ( _x_ ) _,_ E[ _g_ _[m]_ _fm_ ( _x_ ) ] _σ_ [2] _,_ _for any x_ R _[d]_ _._
+_∇_ _∥_ _−∇_ _∥_ [2] _≤_ _∈_
+
+
+**Assumption 3** (Bounded heterogeneity) **.** _For any x ∈_ R _[d]_ _, the heterogeneity is bounded by_
+
+
+1 - _M_
+_M_ _m_ =1
+
+_[∥∇][f][m]_ [(] _[x]_ [)] _[∥]_ [2] _[≤]_ _[G]_ [2][ +] _[ B]_ [2] _[∥∇][f]_ [(] _[x]_ [)] _[∥]_ [2] _[.]_
+
+
+These are standard assumptions in smooth non-convex optimization (Yu et al., 2019; Karimireddy
+et al., 2020b; Wang et al., 2021; Yuan et al., 2022), covering homogeneous data as a special case
+( _G_ [2] = 0 _, B_ [2] = 1). For analytical tractability, we model periodic synchronization every _K_ steps as a
+probabilistic event. Model parameters are averaged with probability _px_ = 1 _/Kx_, the _j_ -th momentum
+is averaged with probability _pj_ = 1 _/Kj_ . The gradient is treated as a momentum with _β_ = 0.
+
+**Theorem 1.** _Let Assumptions 1, 2 and 3 hold._ _Then, choosing the step size η_ = min( _η_ 0 _,_ ~~_√_~~ 1
+
+_T_ [)] _[ where]_
+
+_η_ 0 def= 1 _/_ (4 _L_ max( _βω,_ 6 ~~�~~ _ψ_ max(1 _, B_ [2] 1))) _with constants_
+
+_−_
+
+
+_βω_ def= [�] _j_ _[N]_ =1 1 _ω−j_ _ββjj_ _[,]_ _and_ _ψ_ def= [4(1] _p_ _[−]_ [2] _x_ _[p][x]_ [)]
+
+
+_[−][p][x]_ [)] - _N_ (1 _−βj_ )(1 _−pj_ )
+
+_p_ [2] _x_ _j_ =1 _[ω][j]_ 1 _−_ (1 _−pj_ ) _βj_
+
+
+1 _−_ (1 _j−pj_ ) _βjj_ (1)
+
+
+_the average iterates xt_ = E _m_ [ _x_ _[m]_ _t_ []] _[ of][ MT-DAO][-][SGDM][ converge with the following rate:]_
+
+
+_T_ 1 - _Tt_ =0 _−_ 1 [E] _[∥∇][f]_ [(] _[x][t]_ [)] _[∥]_ [2] ~~_√_~~ 4 _T_
+
+_[≤]_
+
+
+- _f_ ( _x_ 0) _f_ _[∗]_ + _[Lσ]_ 2 _M_ [2] - + - 1+ _βTω_ [2] [+] _[ψ]_ - _._ (2)
+_−_ _O_
+
+
+The derived bound in (2) achieves the optimal _O_ (1 _/√T_ ) asymptotic rate for smooth non-convex
+
+stochastic optimization (Arjevani et al., 2023). Distributed factors, such as client drift and data
+heterogeneity, are contained within the step-size constraint and the higher-order _O_ (1 _/T_ ) term, thus
+not affecting the asymptotic rate. The step size _η_ is constrained by _βω_ and _ψ_ . The dependence
+_ψ_ = (1 _/p_ [2] _x_ [)][ shows that model synchronization frequency] _[ p][x]_ [is critical.] [The impact of momentum]
+_O_
+synchronization is nuanced: reducing a momentum’s sync frequency _pj_ increases its contribution to
+_ψ_, but this is modulated by its decay rate _βj_ . This implies "slower" momenta (larger _βj_ ) are more
+robust to infrequent synchronization. **This analysis reveals a trade-off:** **large** _βj_ **values constrain**
+**the step size via** _βω_ **but reduce the communication penalty in** _ψ_ . Furthermore, synchronizing
+only the model always (i.e., _px_ = 1 _, pj_ = 0) is algorithmically equivalent to synchronizing only
+the momenta always (i.e., _px_ = 0 _, pj_ = 1). In the boundary case where only model parameters are
+synced ( _px_ = 1 _, pj_ = 0), _ψ_ = 0 and the rate recovers that of mini-batch SGD (Liu et al., 2020).
+
+
+4 EXPERIMENTAL DESIGN
+
+
+Building on our analysis, our experimental design answers the following research questions:
+
+
+**RQ1** Does MT-DAO reduce momentum noise and preserve mutual information, as predicted?
+**RQ2** Does MT-DAO better preserve task performance when decreasing communication frequency?
+**RQ3** How does MT-DAO perform against DDP and prior communication-efficient optimizers?
+**RQ4** How does slow momentum affect local optimization trajectories between synchronizations?
+**RQ5** How does MT-DAO impact downstream task performance vs baselines?
+
+
+4.1 SETUP
+
+
+**Models** **and** **Data.** We use peri-norm (Kim et al., 2025) GPT-style transformer models of 16M,
+125M, 360M, and 720M parameters (Table 2). The 16M model is used for hyperparameter sweeps
+and qualitative investigations, while the 125M and 720M models are used for scaling experiments
+and baseline comparisons. We additionally train a 1 _._ 3B parameter model on 80B tokens using Adam
+
+
+5
+
+
+to demonstrate optimizer-agnostic scalability (Section 5.5). All models are trained with a sequence
+length of 2048 on the SmolLM2 mixture (Allal et al., 2025). We evaluate all models using validation
+perplexity on a held-out 10% portion of the training mixture, and the 1 _._ 3B model additionally on
+downstream zero-shot and few-shot benchmarks. For further details, please see Appendix B.
+
+
+**Optimizers and Tuning Methodology.** We use the ADOPT optimizer, a variant of Adam whose
+convergence rate is independent of the second-momentum decay rate _β_ 2 and preserves performance (Taniguchi et al., 2024); we fix _β_ 2 = 0 _._ 9999 to isolate the first momentum dynamics (governed
+by _β_ 1 defaulting to 0 _._ 9 and _ω_ ). For Adam we use ( _β_ 1 _, β_ 2) = (0 _._ 9 _,_ 0 _._ 999) by default as recommended
+by Semenov et al. (2025). We use the CompleteP parameterization for one-shot transfer of the
+learning rate (LR) from small to large models (Dey et al., 2025). For each combination of convex
+coefficients ( _ω_ ’s) and momentum decays ( _β_ ’s), we tune the learning rate on the 16M model and
+transfer the optimal hyperparameters to larger models directly without ever re-tuning ( _ω_ ’s) and ( _β_ ’s).
+To establish strong DDP baselines, we tune _ω, β_ 1 parameters in the DDP setting and reuse them for
+MT-DAO. For complete details see Appendix B.2. We always use quasi-hyperbolic MT-DAO ( _N_ = 1)
+which does not require additional memory and reduces comms costs by ( _K_ [1] _x_ [+] _K_ 11 [+] _K_ 1 _v_ [)] _[−]_ [1] [over]
+
+DDP.
+
+
+**Baselines.** We compare MT-DAO against: the base optimizer (ADOPT/Adam) with DDP and DDP
+analogues to MT-DAO such as Quasi-hyperbolic Momentum (QHM) (Ma & Yarats, 2019). For
+communication-efficient baselines we use the provably convergent and stateful Local Adam (Cheng
+& Glasgow, 2025) approach. We also compare against using Nesterov momentum as the outer
+optimizer (Charles et al., 2025). We evaluate ML performance for communication-efficient methods
+under the same, fixed synchronization frequency. Unless otherwise stated we use _K_ = _Kx_ = _K_ 1 =
+_Kv_ = 32 steps, based on prior work finding a practical balance of performance efficiency (Charles
+et al., 2025). We split the dataset in an IID fashion across 4 workers using 1 H100 per worker.
+
+
+**Other Metrics** We analyze flattened models/momenta _st_ R _[d]_ using several metrics. The **relative**
+_∈_
+**change** over _K_ steps is measured as _st_ + _K_ _st_ 2 _/_ _st_ 2. To quantify the dispersion among _M_
+worker vectors, we compute the **cross-worker** _∥_ _−_ **variance** _∥_ _∥_ _∥_, defined as _M_ 1 - _Mm_ =1 2 [.] [The]
+statistical dependency between two random vectors at different timesteps is captured by their _[∥][s][m]_ _[−]_ _[s]_ [¯] _[∥]_ **mutual** [2]
+**information**, _I_ ( _Ut_ + _K_ ; _Ut_ ). Finally, we measure alignment between vectors using **cosine similarity** .
+
+
+5 EVALUATION
+
+
+This section empirically validates MT-DAO, showing its slow momentum preserves information and
+aligns workers (Sections 5.1 and 5.4), which improves stability under infrequent communication
+(Section 5.2) and allows it to close the performance gap with DDP at scale (Section 5.3). We further
+demonstrate that these gains translate to downstream task performance at the 1 _._ 3B scale using
+Adam (Section 5.5). In total, our evaluation spans six inner optimizers, model scales from 16M to
+1 _._ 3B, and 235 additional experiments detailed in the appendix.
+
+
+5.1 MT-DAO REDUCES MOMENTUM NOISE AND PRESERVES MUTUAL INFORMATION ( **RQ1** )
+
+
+We now empirically validate the motivation of MT-DAO. Our results in Fig. 3 demonstrate that the
+slow-momentum of MT-DAO both preserves information about the global optimization direction
+across communication rounds and suppresses the variance induced by local updates.
+
+
+5.2 MT-DAO IS RESILIENT TO INFREQUENT COMMUNICATION ( **RQ2** )
+
+
+We now investigate if MT-DAO provides greater resilience against infrequent synchronization, as
+predicted by our analysis in Section 3 showing that reducing the communication frequency of
+momenta with higher _β_ has a diminished impact on the step size.
+
+
+6
+
+
+0 _._ 3
+
+
+0 _._ 2
+
+
+0 _._ 1
+
+
+0 _._ 0
+
+
+|Col1|Col2|Col3|Col4|Col5|Col6|Col7|Col8|Col9|
+|---|---|---|---|---|---|---|---|---|
+||~~**MT-DA**~~<br>**Local A**|~~**O**~~<br>**DOPT**|~~**O**~~<br>**DOPT**||||||
+||||||||||
+||||||||||
+||||||||||
+||||||||||
+
+
+0 10 20 30 40 50 60
+Communication Rounds
+
+
+0 _._ 03
+
+
+0 _._ 02
+
+
+0 _._ 01
+
+
+0 _._ 00
+
+
+|Col1|Col2|Col3|Col4|Col5|Col6|M<br>Lo|T-DAO<br>cal ADOPT|
+|---|---|---|---|---|---|---|---|
+|||||||||
+|||||||||
+|||||||||
+
+
+0 10 20 30 40 50 60
+Communication Rounds
+
+
+Figure 3: A comparison of MT-DAO ( _β_ 1 = 0 _._ 999) versus a Local ADOPT baseline ( _β_ 1 = 0 _._ 95) with
+a communication frequency of _K_ = 32. For each communication round, we plot metrics computed
+between the momentum at the start ( _t_ ) and end ( _t_ + _K_ ) of the round. MT-DAO’s slow momentum
+**preserves mutual information**, _I_ ( _Ut_ ; _Ut_ + _K_ ), across rounds while the baseline’s momentum decays
+losing the global optimization direction (left). Furthermore, MT-DAO **reduces inter-worker momen-**
+**tum variance**, Var( _ut_ + _K_ ), indicating greater stability against local noise (right).
+
+
+0 _._ 014
+
+
+0 _._ 012
+
+
+0 _._ 010
+
+
+0 _._ 008
+
+
+0 _._ 006
+
+
+0 _._ 00010
+
+
+0 _._ 00008
+
+
+0 _._ 00006
+
+
+0 _._ 00004
+
+
+0 _._ 00002
+
+
+|0.000106<br>(±2.9e-05)|4.58e-05<br>(±1.6e-05)|2.72e-05<br>(±2.3e-05)|6.12e-05<br>(±3.3e-05)|
+|---|---|---|---|
+|8.99e-05<br>(±3.1e-05)|4.32e-05<br>(±1.9e-05)|2.42e-05<br>(±2.1e-05)|4.32e-05<br>(±2.4e-05)|
+|9.38e-05<br>(±3.3e-05)|3.17e-05<br>(±1.2e-05)|1.9e-05<br>(±2.7e-05)|2.35e-05<br>(±1.1e-05)|
+|9.69e-05<br>(±3.3e-05)|4.44e-05<br>(±1.8e-05)|2.11e-05<br>(±3.1e-05)|2.26e-05<br>(±9.6e-06)|
+|9.19e-05<br>(±3.1e-05)|4.01e-05<br>(±1.6e-05)|1.81e-05<br>(±3e-05)|2.4e-05<br>(±1e-05)|
+|9.16e-05<br>(±3.1e-05)|3.88e-05<br>(±1.5e-05)|1.91e-05<br>(±2.3e-05)|2.21e-05<br>(±1.1e-05)|
+
+
+|0.00716<br>(±0.00075)|0.0095<br>(±0.0022)|0.00734<br>(±0.0038)|0.0111<br>(±0.0047)|
+|---|---|---|---|
+|0.00861<br>(±0.00076)|0.0118<br>(±0.0024)|0.00441<br>(±0.002)|0.00943<br>(±0.0043)|
+|0.00855<br>(±0.00075)|0.0149<br>(±0.0016)|0.00461<br>(±0.004)|0.00504<br>(±0.0036)|
+|0.00845<br>(±0.00072)|0.01<br>(±0.0018)|0.00327<br>(±0.0032)|0.00477<br>(±0.0038)|
+|0.00846<br>(±0.00075)|0.0113<br>(±0.0016)|0.00767<br>(±0.0059)|0.00425<br>(±0.0037)|
+|0.00841<br>(±0.00075)|0.00995<br>(±0.0016)|0.00585<br>(±0.0038)|0.0056<br>(±0.0047)|
+
+
+0.95 0.99 0.999 0.9999
+_β_ **1**
+
+
+0.95 0.99 0.999 0.9999
+_β_ **1**
+
+
+Figure 4: Mean relative L2 change and standard deviation across communication rounds of (left)
+model parameters and (right) the first momentum state, as a function of momentum decay ( _β_ 1)
+and weight ( _ω_ 1). In both cases, MT-DAO shows a significantly **reduced** relative rate of change
+with high ( _β_ 1 _, ω_ 1) (minimum in gold), which **reduces worker drift and thus makes parameter**
+**averaging more effective** . Each point on the grid corresponds to a configuration evaluated with its
+own independently tuned learning rate. Local ADOPT corresponds to ( _β_ 1 = 0 _._ 95 _, ω_ 1 = 1 _._ 0).
+
+
+Table 1: Demonstration of how parameter synchronization period ( _Kx_ ) affects final perplexity for
+two MT-DAO configurations with momentum periods _K_ 1 = _Kv_ = 16 for our 16M models. Values
+show the percentage increase in validation perplexity over the _Kx_ = 16 baseline. Higher _β_ leads to
+**less performance degradation as** _Kx_ **increases** .
+
+
+**Kx** **16** **32** **64** **1024**
+
+
+_β_ **1** = **0** _._ **99** (37 _._ 72) +1 _._ 7% +3 _._ 0% +3 _._ 9% +5 _._ 1% +5 _._ 6% +6 _._ 2%
+_β_ **1** = **0** _._ (37 _._ 65) +1 _._ 0% +1 _._ 6% +3 _._ 2% +2 _._ 8% +3 _._ 4% +3 _._ 7%
+
+
+Table 1 shows that a MT-DAO configuration with higher _β_ 1 suffers less degradation as _Kx_ increases.
+This resilience is explained by the reduced rate of change in the model parameters, quantified in
+Figure 4. High ( _β_ 1 _, ω_ 1) values reduce the local model change E _m_ [ _x_ _[m]_ _t_ + _Kx_
+_∥_
+worker variance and mitigating drift. Workers thus compute gradients on models closer to the global _[−]_ _[x][t][∥]_ [2][]][, bounding inter-]
+mean, improving convergence robustness (Li et al., 2020).
+
+
+7
+
+
+0 5 10 15 20 25 30 32 35 3940
+**Tokens** **(Billions)**
+
+
+(c) 720M
+
+
+40
+
+
+38
+
+
+36
+
+
+34
+
+
+32
+
+
+30
+
+
+28
+
+
+26
+
+
+24
+
+
+40
+
+
+38
+
+
+36
+
+
+34
+
+
+32
+
+
+30
+
+
+28
+
+
+26
+
+
+24
+
+
+0 _._ 0 0 _._ 6 1 _._ 2 1 _._ 8 2 _._ 4 3 _._ 0 3 3 _._ 6 4 _._ 2 4 _._ 8
+**Tokens** **(Billions)**
+
+
+(a) 16M
+
+
+0 15 30 45 6063 7576 90
+**Wall-Clock** **Time** **(Hours)**
+
+
+0 _._ 0 0 _._ 2 0 _._ 4 0 _._ 6 0 _._ 8 11 _._ 0 1 _._ 2 1 _._ 4 1 _._ 6
+**Wall-Clock** **Time** **(Hours)**
+
+
+0 6 12 18 24 3031 36 42 48 54
+**Wall-Clock** **Time** **(Hours)**
+
+
+13 _._ 6
+
+
+12 _._ 8
+
+
+12 _._ 0
+
+
+11 _._ 2
+
+
+10 _._ 4
+
+
+9 _._ 6
+
+
+8 _._ 8
+
+
+8 _._ 0
+
+
+7 _._ 2
+
+
+13 _._ 6
+
+
+12 _._ 8
+
+
+12 _._ 0
+
+
+11 _._ 2
+
+
+10 _._ 4
+
+
+9 _._ 6
+
+
+8 _._ 8
+
+
+8 _._ 0
+
+
+7 _._ 2
+
+
+18
+
+
+17
+
+
+16
+
+
+15
+
+
+14
+
+
+13
+
+
+12
+
+
+11
+
+
+10
+
+
+18
+
+
+17
+
+
+16
+
+
+15
+
+
+14
+
+
+13
+
+
+12
+
+
+11
+
+
+10
+
+
+0 _._ 0 2 _._ 5 5 _._ 0 7 _._ 5 10 _._ 0 12 _._ 5 15 _._ 0 16 17 _._ 5 20 _._ 0
+**Tokens** **(Billions)**
+
+
+(b) 125M
+
+
+Figure 5: Validation perplexity versus wall-clock time and training tokens for MT-DAO ( _β_ 1 =
+0 _._ 999 _, ω_ 1 = 0 _._ 98) and baselines on models of increasing size. Horizontal lines denote the two DDP
+baselines (ADOPT-DDP and QHADOPT-DDP). For each non-DDP method, a colored marker on the
+x-axis marks the point at which its curve attains a lower/equal perplexity to a DDP variant.
+
+
+5.3 MT-DAO OUTPERFORMS PRIOR LOW-COMMS OPTIMIZERS AND MATCHES DDP ( **RQ3** )
+
+
+We evaluate MT-DAO on 16M, 125M, and 720M parameter language models against other baselines.
+We report validation perplexity as a function of both training tokens and wall-clock time. Timings are
+measured on 4 cloud H100s connected via 50–100 Gbit/s Ethernet, including constant implementation
+overheads, and accounting for communication–computation overlap in DDP. These measurements
+are specific to this hardware; Appendix E provides a bandwidth model that compares communicationefficient methods to DDP across a wider range of interconnects. When reporting time-to-target
+perplexity, we give improvements in both wall-clock time and training tokens.
+
+
+Across all scales, MT-DAO consistently improves over ADOPT-DDP and Local ADOPT in both
+tokens and time, closing the gap to synchronous training and reducing end-to-end wall clock by
+**6** - **27** %. At 720M, relative to single-momentum DDP, MT-DAO reaches the same perplexity in **24** %
+fewer tokens and **35** % less time. Relative to QHADOPT-DDP, MT-DAO trails at 16M, matches at
+125M, and at 720M reaches the QHADOPT-DDP target perplexity about 8% faster in wall-clock and
+_≈_ less than5% fewer tokens. DDP. The outerThe additional improvements in time are due to Nesterov baseline performs better than Local MT-DAOADOPT communicating in our setting **10** _×_
+yet remains below MT-DAO and DDP; matching the findings of Charles et al. (2025, Table 4). Mechanistically, Nesterov coalesces per-round gradients via an _outer_ momentum, whereas MT-DAO
+implements a finer-grained _inner_ multi-timescale modification. We note that MT-DAO ( _N_ = 1) does
+not require the additional momentum buffer of Nesterov and has only one additional hyperparameter
+to tune instead of two.
+
+
+8
+
+
+**MT-DAO** **Local** **ADOPT** **w/o** **Nesterov** **Local** **ADOPT** **w/** **Nesterov**
+
+
+Local PG to Global PG
+
+
+0 20 40 60
+Communication Rounds
+
+
+1 _._ 0
+
+
+0 _._ 8
+
+
+0 _._ 6
+
+
+0 _._ 4
+
+
+0 _._ 2
+
+
+0 _._ 0
+
+
+1 _._ 0
+
+
+0 _._ 8
+
+
+0 _._ 6
+
+
+0 _._ 4
+
+
+0 _._ 2
+
+
+0 _._ 0
+
+
+Local PG to Global Mom
+
+
+0 20 40 60
+Communication Rounds
+
+
+1 _._ 0
+
+
+0 _._ 8
+
+
+0 _._ 6
+
+
+0 _._ 4
+
+
+Local PG to Local Mom
+
+
+0 20 40 60
+Communication Rounds
+
+
+1 _._ 0
+
+
+0 _._ 9
+
+
+0 _._ 8
+
+
+0 _._ 7
+
+
+0 _._ 6
+
+
+Global PG to Global Mom
+
+
+0 20 40 60
+Communication Rounds
+
+
+Figure 6: A comparison of update vector alignments for MT-DAO ( _β_ 1 = 0 _._ 999 _, ω_ 1 = 0 _._ 98) versus
+Local ADOPT ( _β_ 1 = 0 _._ 95), and Local ADOPT ( _β_ 1 = 0 _._ 95) with Nesterov. Cosine similarity
+is measured between: (1) the local pseudo-gradient and global momentum, (2) the local pseudogradient and the local momentum, (3) the local and global pseudo-gradients, (4) the local and global
+momentum. Pseudo-gradient and momentum have been abbreviated as _PG_ and _Mom_ .
+
+
+5.4 MT-DAO ALIGNS WORKER UPDATE TRAJECTORIES( **RQ4** )
+
+
+Having established the performance benefits of MT-DAO, we now investigate the underlying mechanism. We hypothesize that the slow momentum reduces worker drift by keeping the optimization
+trajectories of individual workers aligned with the global optimization direction. To validate this, we
+measure the cosine similarity between key optimization vectors. We define the per-round local update
+as the "pseudo-gradient" (ones (Reddi et al., 2021). To provide a comprehensive comparison, we define the "global momentum"∆ _[m]_ = _x_ _[m]_ _t_ + _K_ _[−]_ _[x]_ _t_ _[m]_ [), and the global pseudo-gradient as the average of local]
+for each method: for MT-DAO and Local ADOPT, it is the average of worker momenta at the end
+of a round, while for the Nesterov variant, it is the state of the outer Nesterov momentum.
+
+
+The results in Fig. 6 show that MT-DAO achieves near-perfect alignment (cosine similarity _>_ 0 _._ 95)
+across all four metrics. This indicates that: (1) each worker’s update is consistent with its own
+momentum history (Local PG to Local Mom), (2) workers are in strong agreement with each other
+(Local PG to Global PG), and (3, 4) both local and global updates are aligned with the long-term
+global trajectory (Local/Global PG to Global Mom). This demonstrates that the slow momentum acts
+as a regularizer, ensuring all workers maintain a stable and shared optimization path.
+
+
+In contrast, the Nesterov outer optimizer presents mixed results. As an EMA of global pseudogradients, it is better aligned to the global pseudo-gradient than the Local ADOPT momentum and it
+improves the alignment between the local and global pseudo-gradients compared to standard Local
+ADOPT. However, it never reaches the degree of alignment of MT-DAO in any metric.
+
+
+5.5 MT-DAO IMPROVES DOWNSTREAM TASK PERFORMANCE ( **RQ5** )
+
+
+To validate that perplexity gains translate to practical utility, we evaluate downstream zero-shot and
+few-shot accuracy at the 1 _._ 3B parameter scale using Adam (Fig. 7). MT-DAO demonstrates consistent
+superiority over AdamW-DDP in aggregate performance, excelling on the most challenging reasoning
+tasks (ARC-CHALLENGE, HELLASWAG). Compared to QHAdamW-DDP, MT-DAO remains competitive early in training and progressively closes the gap as training continues, mirroring the perplexity
+trends. Using 4 machines with 8 H100 GPUs each connected via 100 Gbit inter-node links, MT-DAO
+achieves target accuracies _earlier in time_ than its DDP counterparts (Fig. 12).
+
+
+6 RELATED WORK
+
+
+Standard Distributed Data Parallelism’s (DDP) per-step synchronization creates a communication bottleneck (Sergeev & Balso, 2018). This is mitigated by two orthogonal strategies: payload compression
+and infrequent synchronization. Compression shrinks transmissions via quantization (Alistarh et al.,
+
+
+9
+
+
+All Tasks-(AVG)
+
+
+ARC-Challenge (0-shot)
+
+
+ARC-Easy (0-shot)
+
+
+55
+
+
+50
+
+
+45
+
+
+40
+
+
+35
+
+
+60
+
+
+50
+
+
+40
+
+
+30
+
+
+0 20 40 60 80
+Tokens (Billions)
+
+
+HellaSwag (0-shot)
+
+
+0 20 40 60 80
+Tokens (Billions)
+
+
+MMLU(5-shot)
+
+
+0 20 40 60 80
+Tokens (Billions)
+
+
+PIQA (0-shot)
+
+
+40
+
+
+35
+
+
+30
+
+
+25
+
+
+34
+
+
+32
+
+
+30
+
+
+28
+
+
+26
+
+
+70
+
+
+65
+
+
+60
+
+
+55
+
+
+50
+
+
+45
+
+
+40
+
+
+75
+
+
+70
+
+
+65
+
+
+60
+
+
+0 20 40 60 80
+Tokens (Billions)
+
+
+0 20 40 60 80
+Tokens (Billions)
+
+
+0 20 40 60 80
+Tokens (Billions)
+
+
+Figure 7: **Downstream task accuracy versus training tokens** at 1 _._ 3B scale on ARC-CHALLENGE,
+ARC-EASY, HELLASWAG, MMLU, and PIQA. MT-DAO **exceeds** AdamW-DDP on the aggregate
+and on reasoning-heavy tasks; **closes the gap** to QHAdamW-DDP with training. Time-normalized
+results: Figure 12.
+
+
+2017), sparsification (Lin et al., 2018b), mixes thereof (Wang et al., 2023b), low-rank updates (Robert
+et al., 2025), or communicating select momentum components (Peng et al., 2024). Our work advances
+infrequent synchronization (Stich, 2019; McMahan et al., 2017) which allows local updates between
+communications and is complementary to compression.
+
+
+Adapting stateful optimizers like Adam to infrequent synchronization is not straightforward. Local
+Adam (Cheng & Glasgow, 2025) provided the first convergence proofs at the cost of synchronizing
+all optimizer states. Douillard et al. (2023); Charles et al. (2025) showed that a Nesterov-based outer
+optimizer improves performance. Recently Iacob et al. (2025) improved the communication efficiency
+of Local Adam by decoupling parameter and momentum sync frequencies. However, these methods
+use single-timescale optimizers with small _β_ 1 values ill-suited to low communication frequencies
+due to momentum decay. While naively increasing momentum often harms task performance, recent
+optimizers that track gradients across multiple timescales have shown significant benefits. QHM (Ma
+& Yarats, 2019) decouples momentum decay from gradient weight, while AggMo (Lucas et al., 2019)
+averages multiple velocity vectors for stability. Building on this, AdEMAMix (Pagliardini et al.,
+2025) mixes fast and slow momenta to accelerate convergence, demonstrating that slow momentum
+acts as memory, reducing forgetting in LLMs. More recently, Muon (Jordan et al., 2024) uses
+Newton-Schulz preconditioning for update orthogonalization. We show that MT-DAO is compatible
+with all of these optimizers, providing empirical validation with Adam, ADOPT, Muon, AdEMAMix,
+and AggMo (Appendix H). For further related work see Appendix G.
+
+
+7 CONCLUSION
+
+
+A persistent challenge in distributed training has been the performance gap between fully-synchronous
+and communication-efficient optimizers. We identify the rapid decay of momentum as a key cause:
+standard momenta are temporally mismatched with the long intervals of infrequent communication.
+MT-DAO resolves this with a multi-timescale optimizer whose slow momentum persists across
+communication rounds. Our theory shows that higher _β_ reduces sensitivity to synchronization
+frequency, and our experiments demonstrate that this approach closes the performance gap with DDP
+by maintaining a stable, shared optimization trajectory. These findings establish momentum timescale
+management as a critical factor for performant distributed training, providing a practical path for
+communication-constrained, cross-datacenter, and wide-area settings.
+
+
+10
+
+
+ACKNOWLEDGMENTS
+
+
+All costs for the computational resources used for this work were funded by Flower Labs, and the
+research conducted by a team of researchers from Flower Labs, The University of Cambridge, The
+Institute of Science and Technology of Austria, The University of Warwick, and Mohamed bin
+Zayed University of Artificial Intelligence. Support for university-based researchers came from
+a variety of sources, but in particular, the following funding organizations are acknowledged: the
+European Research Council (REDIAL), the Royal Academy of Engineering (DANTE), the Ministry of
+Education of Romania through the Credit and Scholarship Agency, and the European Union’s Horizon
+2020 research and innovation programme under the Marie Skłodowska-Curie grant agreement No
+101034413.
+
+
+REFERENCES
+
+
+Kwangjun Ahn, Byron Xu, Natalie Abreu, and John Langford. Dion: Distributed orthonormalized
+updates. _arXiv preprint arXiv:_ _2504.05295_, 2025.
+
+
+Dan Alistarh, Demjan Grubic, Jerry Li, Ryota Tomioka, and Milan Vojnovic. QSGD: communicationefficient SGD via gradient quantization and encoding. In _Conference_ _on_ _Neural_ _Information_
+_Processing Systems (NeurIPS)_, 2017.
+
+
+Dan Alistarh, Torsten Hoefler, Mikael Johansson, Nikola Konstantinov, Sarit Khirirat, and Cédric
+Renggli. The convergence of sparsified gradient methods. In _Conference on Neural Information_
+_Processing Systems (NeurIPS)_, 2018.
+
+
+Loubna Ben Allal, Anton Lozhkov, Elie Bakouch, Gabriel Martín Blázquez, Guilherme Penedo, Lewis
+Tunstall, Andrés Marafioti, Hynek Kydlícek, Agustín Piqueres Lajarín, Vaibhav Srivastav, Joshua
+Lochner, Caleb Fahlgren, Xuan-Son Nguyen, Clémentine Fourrier, Ben Burtenshaw, Hugo Larcher,
+Haojun Zhao, Cyril Zakka, Mathieu Morlon, Colin Raffel, and Thomas Wolf. Smollm2: When
+smol goes big - data-centric training of a small language model. _arXiv preprint arXiv:2502.02737_,
+2025.
+
+
+Yossi Arjevani, Yair Carmon, John C Duchi, Dylan J Foster, Nathan Srebro, and Blake Woodworth.
+Lower bounds for non-convex stochastic optimization. _Mathematical_ _Programming,_ _199(1-_
+_2):165–214_, 2023.
+
+
+Jeremy Bernstein, Jiawei Zhao, Kamyar Azizzadenesheli, and Anima Anandkumar. signsgd with
+majority vote is communication efficient and fault tolerant. _arXiv_ _preprint_ _arXiv:1810.05291_,
+2018.
+
+
+Zachary Charles, Gabriel Teston, Lucio Dery, Keith Rush, Nova Fallen, Zachary Garrett, Arthur
+Szlam, and Arthur Douillard. Communication-efficient language model training scales reliably
+and robustly: Scaling laws for diloco. _arXiv preprint arXiv:2503.09799_, 2025.
+
+
+Xiangning Chen, Chen Liang, Da Huang, Esteban Real, Kaiyuan Wang, Hieu Pham, Xuanyi Dong,
+Thang Luong, Cho-Jui Hsieh, Yifeng Lu, and Quoc V. Le. Symbolic discovery of optimization
+algorithms. In _NeurIPS_, 2023a.
+
+
+Yineng Chen, Zuchao Li, Lefei Zhang, Bo Du, and Hai Zhao. Bidirectional looking with A novel
+double exponential moving average to adaptive and non-adaptive momentum optimizers. In _ICML_,
+Proceedings of Machine Learning Research, 2023b.
+
+
+Ziheng Cheng and Margalit Glasgow. Convergence of distributed adaptive optimization with local
+updates. In _International Conference on Learning Representations (ICLR)_, 2025.
+
+
+Nolan Dey, Bin Claire Zhang, Lorenzo Noci, Mufan Bill Li, Blake Bordelon, Shane Bergsma, Cengiz
+Pehlevan, Boris Hanin, and Joel Hestness. Don’t be lazy: Completep enables compute-efficient
+deep transformers. _arXiv preprint arXiv:_ _2505.01618_, 2025.
+
+
+Arthur Douillard, Qixuang Feng, Andrei A. Rusu, Rachita Chhaparia, Yani Donchev, Adhiguna
+Kuncoro, Marc’Aurelio Ranzato, Arthur Szlam, and Jiajun Shen. Diloco: Distributed lowcommunication training of language models. _arXiv preprint arXiv:2311.08105_, 2023.
+
+
+11
+
+
+Arthur Douillard, Yanislav Donchev, Keith Rush, Satyen Kale, Zachary Charles, Zachary Garrett, Gabriel Teston, Dave Lacey, Ross McIlroy, Jiajun Shen, Alexandre Ramé, Arthur Szlam,
+Marc’Aurelio Ranzato, and Paul Barham. Streaming diloco with overlapping communication:
+Towards a distributed free lunch. _arXiv preprint arXiv:2501.18512_, 2025.
+
+
+Alireza Fallah, Aryan Mokhtari, and Asuman Ozdaglar. Personalized federated learning: A metalearning approach. _arXiv preprint arXiv:2002.07948_, 2020.
+
+
+Alexander Hägele, Elie Bakouch, Atli Kosson, Loubna Ben Allal, Leandro von Werra, and Martin
+Jaggi. Scaling laws and compute-optimal training beyond fixed training durations. In _Conference_
+_on Neural Information Processing Systems (NeurIPS)_, 2024.
+
+
+Jordan Hoffmann, Sebastian Borgeaud, Arthur Mensch, Elena Buchatskaya, Trevor Cai, Eliza
+Rutherford, Diego de Las Casas, Lisa Anne Hendricks, Johannes Welbl, Aidan Clark, Tom
+Hennigan, Eric Noland, Katie Millican, George van den Driessche, Bogdan Damoc, Aurelia Guy,
+Simon Osindero, Karen Simonyan, Erich Elsen, Jack W. Rae, Oriol Vinyals, and Laurent Sifre.
+Training compute-optimal large language models. _arXiv preprint arXiv:2203.15556_, 2022.
+
+
+Tzu-Ming Harry Hsu, Hang Qi, and Matthew Brown. Measuring the effects of non-identical data
+distribution for federated visual classification. _arXiv preprint arXiv:1909.06335_, 2019.
+
+
+Zhouyuan Huo, Qian Yang, Bin Gu, Lawrence Carin, and Heng Huang. Faster on-device training
+using new federated momentum algorithm. _arXiv preprint arXiv:_ _2002.02090_, 2020.
+
+
+Alex Iacob, Lorenzo Sani, Mher Safaryan, Paris Giampouras, Samuel Horváth, Andrej Jovanovic,
+Meghdad Kurmanji, Preslav Aleksandrov, William F. Shen, Xinchi Qiu, and Nicholas D. Lane.
+Des-loc: Desynced low communication adaptive optimizers for training foundation models. _arXiv_
+_preprint arXiv:_ _2505.22549_, 2025.
+
+
+Keller Jordan, Yuchen Jin, Vlado Boza, Jiacheng You, Franz Cesista, Laker Newhouse, and Jeremy
+Bernstein. Muon: An optimizer for hidden layers in neural networks, 2024. URL [https:](https://kellerjordan.github.io/posts/muon/)
+[//kellerjordan.github.io/posts/muon/.](https://kellerjordan.github.io/posts/muon/)
+
+
+Peter Kairouz, H. Brendan McMahan, Brendan Avent, Aurélien Bellet, Mehdi Bennis, Arjun Nitin
+Bhagoji, Kallista Bonawitz, Zachary Charles, Graham Cormode, Rachel Cummings, Rafael G. L.
+D’Oliveira, Hubert Eichner, Salim El Rouayheb, David Evans, Josh Gardner, Zachary Garrett,
+Adrià Gascón, Badih Ghazi, Phillip B. Gibbons, Marco Gruteser, Zaid Harchaoui, Chaoyang
+He, Lie He, Zhouyuan Huo, Ben Hutchinson, Justin Hsu, Martin Jaggi, Tara Javidi, Gauri Joshi,
+Mikhail Khodak, Jakub Koneˇcný, Aleksandra Korolova, Farinaz Koushanfar, Sanmi Koyejo,
+Tancrède Lepoint, Yang Liu, Prateek Mittal, Mehryar Mohri, Richard Nock, Ayfer Özgür, Rasmus
+Pagh, Mariana Raykova, Hang Qi, Daniel Ramage, Ramesh Raskar, Dawn Song, Weikang Song,
+Sebastian U. Stich, Ziteng Sun, Ananda Theertha Suresh, Florian Tramèr, Praneeth Vepakomma,
+Jianyu Wang, Li Xiong, Zheng Xu, Qiang Yang, Felix X. Yu, Han Yu, and Sen Zhao. Advances
+and open problems in federated learning. _arXiv preprint arXiv:1912.04977_, 2021.
+
+
+Satyen Kale, Arthur Douillard, and Yanislav Donchev. Eager updates for overlapped communication
+and computation in diloco. _arXiv preprint arXiv:2502.12996_, 2025.
+
+
+Sai Praneeth Karimireddy, Martin Jaggi, Satyen Kale, Mehryar Mohri, Sashank J Reddi, Sebastian U
+Stich, and Ananda Theertha Suresh. Mime: Mimicking centralized stochastic algorithms in
+federated learning. _arXiv preprint arXiv:2008.03606_, 2020a.
+
+
+Sai Praneeth Karimireddy, Satyen Kale, Mehryar Mohri, Sashank Reddi, Sebastian Stich, and
+Ananda Theertha Suresh. SCAFFOLD: Stochastic controlled averaging for federated learning. In
+_International Conference on Machine Learning (ICML)_, 2020b.
+
+
+Jeonghoon Kim, Byeongchan Lee, Cheonbok Park, Yeontaek Oh, Beomjun Kim, Taehwan Yoo,
+Seongjin Shin, Dongyoon Han, Jinwoo Shin, and Kang Min Yoo. Peri-ln: Revisiting layer
+normalization in the transformer architecture. _arXiv preprint arXiv:_ _2502.02732_, 2025.
+
+
+Diederik P. Kingma and Jimmy Ba. Adam: A method for stochastic optimization. In _International_
+_Conference on Learning Representations (ICLR)_, 2015.
+
+
+12
+
+
+Jaerin Lee, Bong Gyun Kang, Kihoon Kim, and Kyoung Mu Lee. Grokfast: Accelerated grokking by
+amplifying slow gradients. _arXiv preprint arXiv:_ _2405.20233_, 2024.
+
+
+Royson Lee, Minyoung Kim, Da Li, Xinchi Qiu, Timothy Hospedales, Ferenc Huszár, and Nicholas
+Lane. Fedl2p: Federated learning to personalize. _Advances in Neural Information Processing_
+_Systems_, 36:14818–14836, 2023.
+
+
+Tian Li, Anit Kumar Sahu, Manzil Zaheer, Maziar Sanjabi, Ameet Talwalkar, and Virginia Smith.
+Federated optimization in heterogeneous networks. In _Proceedings_ _of_ _Machine_ _Learning_ _and_
+_Systems (MLSys)_, 2020.
+
+
+Tian Li, Shengyuan Hu, Ahmad Beirami, and Virginia Smith. Ditto: Fair and robust federated
+learning through personalization. In _International Conference on Machine Learning (ICML)_, 2021.
+
+
+Tao Lin, Sebastian U Stich, Kumar Kshitij Patel, and Martin Jaggi. Don’t use large mini-batches, use
+local sgd. _arXiv preprint arXiv:1808.07217_, 2018a.
+
+
+Tao Lin, Sebastian U. Stich, Kumar Kshitij Patel, and Martin Jaggi. Don’t use large mini-batches,
+use local SGD. In _8th International Conference on Learning Representations, ICLR 2020, Addis_
+_Ababa, Ethiopia, April 26-30, 2020_ . OpenReview.net, 2020.
+
+
+Yujun Lin, Song Han, Huizi Mao, Yu Wang, and Bill Dally. Deep gradient compression: Reducing
+the communication bandwidth for distributed training. In _International Conference on Learning_
+_Representations (ICLR)_, 2018b.
+
+
+Hong Liu, Zhiyuan Li, David Leo Wright Hall, Percy Liang, and Tengyu Ma. Sophia: A scalable
+stochastic second-order optimizer for language model pre-training. In _International Conference on_
+_Learning Representations (ICLR)_, 2024.
+
+
+Jingyuan Liu, Jianlin Su, Xingcheng Yao, Zhejun Jiang, Guokun Lai, Yulun Du, Yidao Qin, Weixin
+Xu, Enzhe Lu, Junjie Yan, Yanru Chen, Huabin Zheng, Yibo Liu, Shaowei Liu, Bohong Yin,
+Weiran He, Han Zhu, Yuzhi Wang, Jianzhou Wang, Mengnan Dong, Zheng Zhang, Yongsheng
+Kang, Hao Zhang, Xinran Xu, Yutao Zhang, Yuxin Wu, Xinyu Zhou, and Zhilin Yang. Muon is
+scalable for LLM training. _CoRR_, abs/2502.16982, 2025.
+
+
+Yanli Liu, Yuan Gao, and Wotao Yin. An improved analysis of stochastic gradient descent with
+momentum. _arXiv preprint arXiv:2007.07989_, 2020.
+
+
+Ilya Loshchilov and Frank Hutter. Decoupled weight decay regularization. In _International Confer-_
+_ence on Learning Representations (ICLR)_, 2019.
+
+
+James Lucas, Shengyang Sun, Richard S. Zemel, and Roger B. Grosse. Aggregated momentum:
+Stability through passive damping. In _International_ _Conference_ _on_ _Learning_ _Representations_
+_(ICLR)_, 2019.
+
+
+Jerry Ma and Denis Yarats. Quasi-hyperbolic momentum and adam for deep learning. In _International_
+_Conference on Learning Representations (ICLR)_, 2019.
+
+
+Sam McCandlish, Jared Kaplan, Dario Amodei, and OpenAI Dota Team. An empirical model of
+large-batch training. _arXiv preprint arXiv:_ _1812.06162_, 2018.
+
+
+Brendan McMahan, Eider Moore, Daniel Ramage, Seth Hampson, and Blaise Aguera y Arcas.
+Communication-efficient learning of deep networks from decentralized data. In _International_
+_Conference on Artificial Intelligence and Statistics (AISTATS)_, 2017.
+
+
+Matteo Pagliardini, Pierre Ablin, and David Grangier. The adEMAMix optimizer: Better, faster,
+older. In _International Conference on Learning Representations (ICLR)_, 2025.
+
+
+Bowen Peng, Jeffrey Quesnelle, and Diederik P Kingma. Demo: Decoupled momentum optimization.
+_arXiv preprint arXiv:2411.19870_, 2024.
+
+
+Xinchi Qiu, Javier Fernandez-Marques, Pedro PB Gusmao, Yan Gao, Titouan Parcollet, and
+Nicholas Donald Lane. Zerofl: Efficient on-device training for federated learning with local
+sparsity. _arXiv preprint arXiv:2208.02507_, 2022.
+
+
+13
+
+
+Sashank J. Reddi, Zachary Charles, Manzil Zaheer, Zachary Garrett, Keith Rush, Jakub Koneˇcný,
+Sanjiv Kumar, and Hugh Brendan McMahan. Adaptive federated optimization. In _International_
+_Conference on Learning Representations (ICLR)_, 2021.
+
+
+Amirhossein Reisizadeh, Aryan Mokhtari, Hamed Hassani, Ali Jadbabaie, and Ramtin Pedarsani.
+Fedpaq: A communication-efficient federated learning method with periodic averaging and quantization. In _International Conference on Artificial Intelligence and Statistics (AISTATS)_, 2020.
+
+
+Thomas Robert, Mher Safaryan, Ionut-Vlad Modoranu, and Dan Alistarh. Ldadam: Adaptive
+optimization from low-dimensional gradient statistics. In _International Conference on Learning_
+_Representations (ICLR)_, 2025.
+
+
+Lorenzo Sani, Alex Iacob, Royson Lee Zeyu Cao, Bill Marino, Yan Gao, Wanru Zhao, Dongqi
+Cai, Zexi Li, Xinchi Qiu, and Nicholas D. Lane. Photon: Federated llm pre-training. In _Eighth_
+_Conference on Machine Learning and Systems_, 2025.
+
+
+Felix Sattler, Simon Wiedemann, Klaus-Robert Müller, and Wojciech Samek. Robust and
+communication-efficient federated learning from non-iid data. _IEEE_ _transactions_ _on_ _neural_
+_networks and learning systems_, 2019.
+
+
+Bryan Van Scoy, Randy A. Freeman, and Kevin M. Lynch. The fastest known globally convergent
+first-order method for minimizing strongly convex functions. _IEEE Control. Syst. Lett._, 2018.
+
+
+Andrei Semenov, Matteo Pagliardini, and Martin Jaggi. Benchmarking optimizers for large language
+model pretraining. _arXiv preprint arXiv:_ _2509.01440_, 2025.
+
+
+Alexander Sergeev and Mike Del Balso. Horovod: fast and easy distributed deep learning in
+tensorflow. _arXiv preprint arXiv:1802.05799_, 2018.
+
+
+Sebastian U. Stich. Local SGD converges fast and communicates little. In _International Conference_
+_on Learning Representations (ICLR)_, 2019.
+
+
+Jianlin Su, Murtadha H. M. Ahmed, Yu Lu, Shengfeng Pan, Wen Bo, and Yunfeng Liu. Roformer:
+Enhanced transformer with rotary position embedding. _Neurocomputing_, 2024.
+
+
+Ilya Sutskever, James Martens, George E. Dahl, and Geoffrey E. Hinton. On the importance of
+initialization and momentum in deep learning. In _International Conference on Machine Learning_
+_(ICML)_, 2013.
+
+
+Shohei Taniguchi, Keno Harada, Gouki Minegishi, Yuta Oshima, Seong Cheol Jeong, Go Nagahara,
+Tomoshi Iiyama, Masahiro Suzuki, Yusuke Iwasawa, and Yutaka Matsuo. ADOPT: modified adam
+can converge with any _β_ 2 with the optimal rate. In _Conference on Neural Information Processing_
+_Systems (NeurIPS)_, 2024.
+
+
+Jianyu Wang, Qinghua Liu, Hao Liang, Gauri Joshi, and H. Vincent Poor. Tackling the Objective
+Inconsistency Problem in Heterogeneous Federated Optimization. _arXiv preprint aXiv:2007.07481_,
+2020.
+
+
+Jianyu Wang, Zachary Charles, Zheng Xu, Gauri Joshi, H. Brendan McMahan, Blaise Aguera y Arcas,
+Maruan Al-Shedivat, Galen Andrew, Salman Avestimehr, Katharine Daly, Deepesh Data, Suhas
+Diggavi, Hubert Eichner, Advait Gadhikar, Zachary Garrett, Antonious M. Girgis, Filip Hanzely,
+Andrew Hard, Chaoyang He, Samuel Horvath, Zhouyuan Huo, Alex Ingerman, Martin Jaggi, Tara
+Javidi, Peter Kairouz, Satyen Kale, Sai Praneeth Karimireddy, Jakub Konecny, Sanmi Koyejo,
+Tian Li, Luyang Liu, Mehryar Mohri, Hang Qi, Sashank J. Reddi, Peter Richtarik, Karan Singhal,
+Virginia Smith, Mahdi Soltanolkotabi, Weikang Song, Ananda Theertha Suresh, Sebastian U. Stich,
+Ameet Talwalkar, Hongyi Wang, Blake Woodworth, Shanshan Wu, Felix X. Yu, Honglin Yuan,
+Manzil Zaheer, Mi Zhang, Tong Zhang, Chunxiang Zheng, Chen Zhu, and Wennan Zhu. A field
+guide to federated optimization. _arXiv preprint arXiv:2107.06917_, 2021.
+
+
+Jue Wang, Yucheng Lu, Binhang Yuan, Beidi Chen, Percy Liang, Christopher De Sa, Christopher
+Re, and Ce Zhang. Cocktailsgd: Fine-tuning foundation models over 500mbps networks. In
+_International Conference on Machine Learning (ICML)_, 2023a.
+
+
+14
+
+
+Jue Wang, Yucheng Lu, Binhang Yuan, Beidi Chen, Percy Liang, Christopher De Sa, Christopher Ré,
+and Ce Zhang. Cocktailsgd: Fine-tuning foundation models over 500mbps networks. In _ICML_,
+volume 202 of _Proceedings of Machine Learning Research_, pp. 36058–36076. PMLR, 2023b.
+
+
+Hao Yu, Rong Jin, and Sen Yang. On the linear speedup analysis of communication efficient
+momentum sgd for distributed non-convex optimization. _arXiv preprint arXiv:1905.03817_, 2019.
+
+
+Kun Yuan, Xinmeng Huang, Yiming Chen, Xiaohan Zhang, Yingya Zhang, and Pan Pan. Revisiting
+optimal convergence rate for smooth and non-convex stochastic decentralized optimization. _arXiv_
+_preprint arXiv:2210.07863_, 2022.
+
+
+Hanlin Zhang, Depen Morwani, Nikhil Vyas, Jingfeng Wu, Difan Zou, Udaya Ghai, Dean Foster, and
+Sham M. Kakade. How does critical batch size scale in pre-training? In _International Conference_
+_on Learning Representations (ICLR)_, 2025.
+
+
+15
+
+
+## **Appendix** **Table of Contents**
+
+
+**A** **Limitations** **17**
+
+
+**B** **Experimental Details** **17**
+B.1 Architecture Details and Parametrization . . . . . . . . . . . . . . . . . . . . . 17
+B.2 Optimizer Hyperparameter Sweeping Procedure . . . . . . . . . . . . . . . . . 18
+B.3 Optimizer Tuning Results . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 18
+
+
+**C** **Deterministic Optimizer-specific Variants of MT-DAO** **19**
+MT-DAO-ADOPT . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 19
+MT-DAO-SGDM . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 19
+
+
+**D** **Convergence Analysis of MT-DAO-SGDM** **20**
+D.1 Key Lemmas . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 25
+
+
+**E** **Wall-Clock Time Modeling** **29**
+E.1 Wall-Clock Time Model . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 29
+E.2 Experimental Configuration . . . . . . . . . . . . . . . . . . . . . . . . . . . . 30
+E.3 Modeling Results . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 30
+
+
+**F** **Derivations of Mutual Information and Variance** **31**
+F.1 Variance of Local Momentum . . . . . . . . . . . . . . . . . . . . . . . . . . . 31
+F.2 Mutual Information . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 32
+
+
+**G** **Extended Related Work** **33**
+
+
+**H** **Additional Results** **34**
+H.1 Downstream Evaluation . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 36
+H.2 Ablations on the Number of Momenta _N_ . . . . . . . . . . . . . . . . . . . . . 36
+H.3 Ablations on the Number of Workers and Batch Size . . . . . . . . . . . . . . . 38
+H.4 MT-DAO Comparison Against StreamingDiLoCo . . . . . . . . . . . . . . . 39
+H.5 Ablation on the clipping threshold . . . . . . . . . . . . . . . . . . . . . . . . . 42
+H.6 Ablation with _K_ = 1 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 43
+H.7 Efficacy with Muon . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 44
+
+
+**I** **LLM Usage Declaration** **49**
+
+
+16
+
+
+A LIMITATIONS
+
+
+**Limitations.** While we have substantially expanded our empirical evaluation to models up to 1 _._ 3B
+parameters, multiple optimizers (ADOPT, Adam, Muon), and several ablation dimensions ( _N_, batch
+size, workers, clipping, streaming), our validation remains limited to language-model pre-training.
+Extending MT-DAO to other modalities (e.g., vision, multimodal) and to non-IID data distributions
+beyond the homogeneous setting is left for future work. Additionally, while our convergence
+analysis covers MT-DAO-SGDM, extending theoretical guarantees to adaptive variants and to the
+streaming setting remains an open direction. Finally, our experiments focus on the memory- and
+communication-efficient _N_ =1 variant, which we justify empirically (Appendix H.2); whether higher
+_N_ provides benefits in regimes with very long communication intervals ( _K_ _≫_ 512) warrants further
+investigation.
+
+
+B EXPERIMENTAL DETAILS
+
+
+Here we provide additional experimental details complementing those in Section 4.1, including: a)
+model architecture details and the model parameterization (Appendix B.1), b) our hyperparameter
+sweep procedure to select optimizer-specific settings (Appendix B.2), and c) the results of our tuning
+sweeps for MT-DAO.
+
+
+B.1 ARCHITECTURE DETAILS AND PARAMETRIZATION
+
+
+Table 2: Model architecture and training hyperparameters. Architectural parameters include the
+number of transformer blocks (#Blocks), attention heads (#Heads), embedding dimension ( _d_ model),
+vocabulary size ( _|V|_ ), and feedforward expansion ratio (Exp. Ratio). Key training parameters are the
+global batch size ( G ) and the total number of training steps ( _T_ ). All models use RoPE positional
+embeddings (Su et al. _|B_ _|_, 2024), the SiLU activation function, norm-based gradient clipping with a
+bound of _ρ_, and are initialized with a typical (Semenov et al., 2025; Dey et al., 2025) _σ_ = 0 _._ 02. For
+Adam we use the _ρ_ values recommended by Semenov et al. (2025). Sequence length is standard for
+models at these scales.
+
+
+**Model Size** **Blocks** _**d**_ **model** _|V|_ **#Heads** **Exp.** _∼_ **Ratio** **ROPE** _θ_ **ACT** **Init** _σ_ _ρ_ Adopt _ρ_ Adam **Seq Len** _|B_ G _|_ **T**
+
+16M 4 256 50K 4 4 10000 SiLU 0 _._ 02 1 _._ 0 1 _._ 0 2048 64 4608 _,_ 12288 _,_ 40960
+125M 12 768 50K 12 4 10000 SiLU 0 _._ 02 1 _._ 0 0 _._ 5 2048 256 4608 _,_ 12288 _,_ 40960
+360M 24 1024 50K 16 4 10000 SiLU 0 _._ 02 1 _._ 0 0 _._ 25 2048 256 12288 _,_ 40960
+720M 12 2048 50K 16 4 10000 SiLU 0 _._ 02 1 _._ 0 0 _._ 1 2048 512 4608 _,_ 12288 _,_ 40960
+1 _._ 3B 24 2048 50K 16 4 10000 SiLU 0 _._ 02 1 _._ 0 0 _._ 1 2048 1024 12288 _,_ 40960
+
+
+Table 2 summarizes the architectural details of our models, which follow established practices for
+large language models at their respective scales. To improve training stability and final performance,
+we adopt two key modifications. First, following the recommendations of Kim et al. (2025), we use a
+Peri-LayerNorm transformer structure instead of pre-norm. Second, we use the CompleteP (Dey
+et al., 2025) parametrization with _α_ = 1 _._ 0, which enables the effective transfer of optimizer hyperparameters from a small model to its larger-scale counterparts in a one-shot manner. This property
+allows us to perform comprehensive hyperparameter sweeps on our smallest model size and reserve
+computationally expensive scaling experiments for direct comparisons against baselines.
+
+
+We set batch sizes and training durations following recent best practices (Zhang et al., 2025). For the
+smallest model size, the initial batch size is determined using the noise-scale estimator for the critical
+batch size (McCandlish et al., 2018) and then doubled until the efficiency deviates from a linear trend
+by 20%. For our 125M and 720M models we follow the batch size recommendations from Semenov
+et al. (2025). Training durations are set as multiples of the compute-optimal token budget (Hoffmann
+et al., 2022): for the 16M model, we tune using _≈_ 2 _×_ this budget and run baseline comparisons at
+_≈_ 16 _×_ ; for the 125M model, we use _≈_ 8 _×_ ; and for the 720M model, we use _≈_ 2 _._ 83 _×_ . We chose the
+720M model size as a good balance between scale and computational efficiency following Semenov
+et al. (2025), with the 360M being chosen as an efficient middle-ground between 720M and 125M.
+For the 1 _._ 3B we use a standard batch size of 2M tokens.
+
+
+17
+
+
+All models are trained using the warmup-stable-decay (WSD) learning rate schedule (Hägele et al.,
+2024), with warmup and decay periods selected based on established recommendations (Zhang et al.,
+2025; Hägele et al., 2024; Allal et al., 2025; Semenov et al., 2025).
+
+
+For all longer training runs and baseline comparisons, we use the industry-standard warmup of
+_T_ WARM = 2048 steps. We use a cooldown period equal to the warmup period in all cases, using
+1-sqrt cooldown (Hägele et al., 2024).
+
+
+We use slightly different tuning configurations for vs Adam. For the 16M model tuning runs for
+ADOPT, which last 4608 steps, the warmup period is set to _T_ WARM = 512 steps. For Adam we use
+12288 steps as the tuning period with a warmup period set to _T_ WARM = 2048.
+
+
+B.2 OPTIMIZER HYPERPARAMETER SWEEPING PROCEDURE
+
+
+Our tuning procedure is designed to ensure that both our method and the baselines are evaluated under
+their optimal DDP configurations, providing a fair comparison. Given that previous work has shown
+that the learning rate (LR) tends to transfer effectively between DDP and distributed settings (Iacob
+et al., 2025), we first tune all parameters to achieve the best possible performance under DDP and
+then transfer these settings to MT-DAO. Unlike methods such as AdEMAMix that use schedulers
+for optimizer parameters, we employ a simple switch from a base optimizer (e.g., ADOPT) to its
+multi-timescale variant at the end of the warmup period. This necessitates a two-phase LR tuning
+process to ensure identical starting conditions for both optimizers:
+
+
+1. **Phase 1:** **Base Optimizer Tuning.** We first tune the learning rate for the base optimizer
+over the entire training run to achieve the lowest final perplexity. This ensures the baseline
+itself is as strong as possible.
+
+
+2. **Phase** **2:** **MT-DAO/Quasi-hyperbolic** **Tuning.** Using the model state from the end of
+the base optimizer’s warmup, we then tune the learning rate for the post-switch phase of
+MT-DAO and of its DDP analogue. With a WSD scheduler, this corresponds to tuning the LR
+for the constant "stable" portion of training and for the cooldown.
+
+
+While more complex scheduling manipulations might yield further gains for MT-DAO, this two-phase
+approach provides the cleanest methodology for comparison. For every combination of momentum
+decay rates ( _β_ ’s) and convex coefficients ( _ω_ ’s) used by MT-DAO, we independently perform this
+tuning procedure. For ADOPT the LR sweeps in both phases search over values between 2 _[−]_ [10] and
+2 _[−]_ [6] using powers of two, with the search grid refined by manually adding half-power steps (e.g.,
+2 _[−]_ [8] _[.]_ [5] _,_ 2 _[−]_ [7] _[.]_ [5] _,_ 2 _[−]_ [6] _[.]_ [5] ) around the optimal value.
+
+
+B.3 OPTIMIZER TUNING RESULTS
+
+
+First, our tuning of ADOPT for DDP revealed an optimal lr _η_ _[∗]_ = 2 _[−]_ [8] while our tuning for Adam
+revealed an optimal learning rate of _η_ _[∗]_ = 10 _[−]_ [3] . We now present the results of our tuning for the
+post-warmup lr for MT-DAO-ADOPT with _N_ = 1 first momenta in Fig. 8.
+
+
+A clear trend emerges from our results: methods with higher momentum decay rates ( _β_ s) or higher
+weights ( _ω_ s) ascribed to the slow-moving momenta can tolerate significantly higher learning rates
+than standard momentum methods. This finding is in strong agreement with the previous findings of
+Lucas et al. (2019), who similarly found that AggMo can effectively utilize learning rates that are
+orders of magnitude higher than those suitable for classical momentum.
+
+
+18
+
+
+50 _ω_ 1: 0.9000 _β_ : 0.9500
+
+
+48
+
+
+46
+
+
+44
+
+
+42
+
+
+40
+
+
+38
+
+
+36
+
+
+34
+
+|Col1|Col2|Col3|Col4|Col5|η: 2.00e-|08 (ppl=33.|26, step=fin|al)|Col10|Col11|Col12|Col13|Col14|η: 2.00e-|08 (ppl=33.|23, step=fin|al)|Col19|Col20|Col21|Col22|Col23|η: 2.83e-|08 (ppl=33.|65, step=fin|al)|Col28|Col29|Col30|Col31|Col32|η: 4.00e-|08 (ppl=35.|38, step=fin|al)|
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+|||||||||||||||||||||||||||||||||||||
+|||||||||||||||||||||||||||||||||||||
+|||||||||||||||||||||||||||||||||||||
+|||||||||||||||||||||||||||||||||||||
+|||||||||||||||||||||||||||||||||||||
+|||||||||||||||||||||||||||||||||||||
+
+
+50 _ω_ 1: 0.9000 _β_ : 0.9995
+
+
+48
+
+
+46
+
+
+44
+
+
+42
+
+
+40
+
+
+38
+
+
+36
+
+
+34
+
+|Col1|Col2|Col3|Col4|Col5|η: 4.00e-|08 (ppl=36.|29, step=fin|al)|Col10|Col11|Col12|Col13|Col14|η: 5.|66e-|08 (ppl=37.|46, step=fin|al)|Col20|Col21|Col22|Col23|Col24|η: 4.00e-|08 (ppl=32.|99, step=fin|al)|Col29|Col30|Col31|Col32|Col33|η: 4.00e-|08 (ppl=32.|91, step=fin|al)|
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+||||||||||||||||||||||||||||||||||||||
+||||||||||||||||||||||||||||||||||||||
+||||||||||||||||||||||||||||||||||||||
+||||||||||||||||||||||||||||||||||||||
+||||||||||||||||||||||||||||||||||||||
+||||||||||||||||||||||||||||||||||||||
+
+
+50 _ω_ 1: 0.9500 _β_ : 0.9950
+
+
+48
+
+
+46
+
+
+44
+
+
+42
+
+
+40
+
+
+38
+
+
+36
+
+
+34
+
+|Col1|Col2|Col3|Col4|Col5|η: 4.00e-|08 (ppl=33.|22, step=fin|al)|Col10|Col11|Col12|Col13|Col14|η: 5.|66e-|08 (ppl=35.|41, step=fin|al)|Col20|Col21|Col22|Col23|Col24|η: 5.|66e-|08 (ppl=36.|40, step=fin|al)|Col30|Col31|Col32|Col33|Col34|η: 8.00e-|08 (ppl=37.|77, step=fin|al)|
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+|||||||||||||||||||||||||||||||||||||||
+|||||||||||||||||||||||||||||||||||||||
+|||||||||||||||||||||||||||||||||||||||
+|||||||||||||||||||||||||||||||||||||||
+|||||||||||||||||||||||||||||||||||||||
+|||||||||||||||||||||||||||||||||||||||
+
+
+50 _ω_ 1: 0.9900 _β_ : 0.9500
+
+
+48
+
+
+46
+
+
+44
+
+
+42
+
+
+40
+
+
+38
+
+
+36
+
+
+34
+
+|Col1|Col2|Col3|Col4|Col5|η: 4.00e-|08 (ppl=32.|96, step=fin|al)|Col10|Col11|Col12|Col13|Col14|η: 8.00e-|08 (ppl=32.|98, step=fin|al)|Col19|Col20|Col21|Col22|Col23|η: 8.00e-|08 (ppl=33.|53, step=fin|al)|Col28|Col29|Col30|Col31|Col32|η: 5.|66e-|08 (ppl=35.|86, step=fin|al)|
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+||||||||||||||||||||||||||||||||||||||
+||||||||||||||||||||||||||||||||||||||
+||||||||||||||||||||||||||||||||||||||
+||||||||||||||||||||||||||||||||||||||
+||||||||||||||||||||||||||||||||||||||
+||||||||||||||||||||||||||||||||||||||
+
+
+50 _ω_ 1: 0.9900 _β_ : 0.9995
+
+
+48
+
+
+46
+
+
+44
+
+
+42
+
+
+40
+
+
+38
+
+
+36
+
+
+34
+
+|Col1|Col2|Col3|Col4|Col5|η: 8.00e-|08 (ppl=37.|15, step=fin|al)|Col10|Col11|Col12|Col13|Col14|η: 8.00e-|08 (ppl=40.|27, step=fin|al)|Col19|Col20|Col21|Col22|Col23|η: 4.00e-|08 (ppl=32.|96, step=fin|al)|Col28|Col29|Col30|Col31|Col32|η: 5.|66e-|08 (ppl=33.|23, step=fin|al)|
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+||||||||||||||||||||||||||||||||||||||
+||||||||||||||||||||||||||||||||||||||
+||||||||||||||||||||||||||||||||||||||
+||||||||||||||||||||||||||||||||||||||
+||||||||||||||||||||||||||||||||||||||
+||||||||||||||||||||||||||||||||||||||
+
+
+50 _ω_ 1: 0.9950 _β_ : 0.9950
+
+
+48
+
+
+46
+
+
+44
+
+
+42
+
+
+40
+
+
+38
+
+
+36
+
+
+34
+
+|Col1|Col2|Col3|Col4|Col5|η: 5.|66e-|08 (ppl=33.|85, step=fin|al)|Col11|Col12|Col13|Col14|Col15|η: 5.|66e-|08 (ppl=36.|33, step=fin|al)|Col21|Col22|Col23|Col24|Col25|η: 8.00e-|08 (ppl=37.|73, step=fin|al)|Col30|Col31|Col32|Col33|Col34|η: 8.00e-|08 (ppl=41.|06, step=fin|al)|
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+|||||||||||||||||||||||||||||||||||||||
+|||||||||||||||||||||||||||||||||||||||
+|||||||||||||||||||||||||||||||||||||||
+|||||||||||||||||||||||||||||||||||||||
+|||||||||||||||||||||||||||||||||||||||
+|||||||||||||||||||||||||||||||||||||||
+
+
+50 _ω_ 1: 0.9990 _β_ : 0.9500
+
+
+48
+
+
+46
+
+
+44
+
+
+42
+
+
+40
+
+
+38
+
+
+36
+
+
+34
+
+|Col1|Col2|Col3|Col4|Col5|η: 4.00e-|08 (ppl=33.|20, step=fin|al)|Col10|Col11|Col12|Col13|Col14|η: 4.00e-|08 (ppl=33.|60, step=fin|al)|Col19|Col20|Col21|Col22|Col23|η: 5.|66e-|08 (ppl=34.|36, step=fin|al)|Col29|Col30|Col31|Col32|Col33|η: 5.|66e-|08 (ppl=37.|35, step=fin|al)|
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+|||||||||||||||||||||||||||||||||||||||
+|||||||||||||||||||||||||||||||||||||||
+|||||||||||||||||||||||||||||||||||||||
+|||||||||||||||||||||||||||||||||||||||
+|||||||||||||||||||||||||||||||||||||||
+|||||||||||||||||||||||||||||||||||||||
+
+
+50 _ω_ 1: 0.9990 _β_ : 0.9995
+
+
+48
+
+
+46
+
+
+44
+
+
+42
+
+
+40
+
+
+38
+
+
+36
+
+
+34
+
+
+48
+
+
+46
+
+
+44
+
+
+42
+
+
+40
+
+
+38
+
+
+36
+
+
+34
+
+
+_ω_ 1: 0.9000 _β_ : 0.9900
+
+
+_ω_ 1: 0.9000 _β_ : 0.9999
+
+
+_ω_ 1: 0.9500 _β_ : 0.9990
+
+
+_ω_ 1: 0.9900 _β_ : 0.9900
+
+
+_ω_ 1: 0.9900 _β_ : 0.9999
+
+
+_ω_ 1: 0.9950 _β_ : 0.9990
+
+
+_ω_ 1: 0.9990 _β_ : 0.9900
+
+
+_ω_ 1: 0.9990 _β_ : 0.9999
+
+
+_ω_ 1: 0.9000 _β_ : 0.9950
+
+
+_ω_ 1: 0.9500 _β_ : 0.9500
+
+
+_ω_ 1: 0.9500 _β_ : 0.9995
+
+
+_ω_ 1: 0.9900 _β_ : 0.9950
+
+
+_ω_ 1: 0.9950 _β_ : 0.9500
+
+
+_ω_ 1: 0.9950 _β_ : 0.9995
+
+
+_ω_ 1: 0.9990 _β_ : 0.9950
+
+
+_ω_ 1: 1 _β_ : 0.9500
+
+
+_ω_ 1: 0.9000 _β_ : 0.9990
+
+
+_ω_ 1: 0.9500 _β_ : 0.9900
+
+
+_ω_ 1: 0.9500 _β_ : 0.9999
+
+
+_ω_ 1: 0.9900 _β_ : 0.9990
+
+
+_ω_ 1: 0.9950 _β_ : 0.9900
+
+
+_ω_ 1: 0.9950 _β_ : 0.9999
+
+
+_ω_ 1: 0.9990 _β_ : 0.9990
+
+
+_ω_ 1: 1 _β_ : 0.9900
+
+
+|Col1|Col2|Col3|Col4|Col5|η: 8.00e-|08 (ppl=38.|85, step=fin|al)|Col10|Col11|Col12|Col13|Col14|η: 8.00e-|08 (ppl=42.|74, step=fin|al)|Col19|Col20|Col21|Col22|Col23|η: 4.00e-|08 (ppl=33.|35, step=fin|al)|Col28|Col29|Col30|Col31|Col32|η: 2.83e-|08 (ppl=33.|84, step=fin|al)|
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+|||||||||||||||||||||||||||||||||||||
+|||||||||||||||||||||||||||||||||||||
+|||||||||||||||||||||||||||||||||||||
+|||||||||||||||||||||||||||||||||||||
+|||||||||||||||||||||||||||||||||||||
+|||||||||||||||||||||||||||||||||||||
+|_ω_1: 1 _β_: 0.9950<br>   <br>_ω_1: 1 _β_: 0.9990<br>   <br>_ω_1: 1 _β_: 0.9995<br>   <br>_ω_1: 1 _β_: 0.9999<br>|_ω_1: 1 _β_: 0.9950<br>   <br>_ω_1: 1 _β_: 0.9990<br>   <br>_ω_1: 1 _β_: 0.9995<br>   <br>_ω_1: 1 _β_: 0.9999<br>|_ω_1: 1 _β_: 0.9950<br>   <br>_ω_1: 1 _β_: 0.9990<br>   <br>_ω_1: 1 _β_: 0.9995<br>   <br>_ω_1: 1 _β_: 0.9999<br>|_ω_1: 1 _β_: 0.9950<br>   <br>_ω_1: 1 _β_: 0.9990<br>   <br>_ω_1: 1 _β_: 0.9995<br>   <br>_ω_1: 1 _β_: 0.9999<br>|_ω_1: 1 _β_: 0.9950<br>   <br>_ω_1: 1 _β_: 0.9990<br>   <br>_ω_1: 1 _β_: 0.9995<br>   <br>_ω_1: 1 _β_: 0.9999<br>|_ω_1: 1 _β_: 0.9950<br>   <br>_ω_1: 1 _β_: 0.9990<br>   <br>_ω_1: 1 _β_: 0.9995<br>   <br>_ω_1: 1 _β_: 0.9999<br>|_ω_1: 1 _β_: 0.9950<br>   <br>_ω_1: 1 _β_: 0.9990<br>   <br>_ω_1: 1 _β_: 0.9995<br>   <br>_ω_1: 1 _β_: 0.9999<br>|_ω_1: 1 _β_: 0.9950<br>   <br>_ω_1: 1 _β_: 0.9990<br>   <br>_ω_1: 1 _β_: 0.9995<br>   <br>_ω_1: 1 _β_: 0.9999<br>|_ω_1: 1 _β_: 0.9950<br>   <br>_ω_1: 1 _β_: 0.9990<br>   <br>_ω_1: 1 _β_: 0.9995<br>   <br>_ω_1: 1 _β_: 0.9999<br>|_ω_1: 1 _β_: 0.9950<br>   <br>_ω_1: 1 _β_: 0.9990<br>   <br>_ω_1: 1 _β_: 0.9995<br>   <br>_ω_1: 1 _β_: 0.9999<br>|_ω_1: 1 _β_: 0.9950<br>   <br>_ω_1: 1 _β_: 0.9990<br>   <br>_ω_1: 1 _β_: 0.9995<br>   <br>_ω_1: 1 _β_: 0.9999<br>|_ω_1: 1 _β_: 0.9950<br>   <br>_ω_1: 1 _β_: 0.9990<br>   <br>_ω_1: 1 _β_: 0.9995<br>   <br>_ω_1: 1 _β_: 0.9999<br>|_ω_1: 1 _β_: 0.9950<br>   <br>_ω_1: 1 _β_: 0.9990<br>   <br>_ω_1: 1 _β_: 0.9995<br>   <br>_ω_1: 1 _β_: 0.9999<br>|_ω_1: 1 _β_: 0.9950<br>   <br>_ω_1: 1 _β_: 0.9990<br>   <br>_ω_1: 1 _β_: 0.9995<br>   <br>_ω_1: 1 _β_: 0.9999<br>|_ω_1: 1 _β_: 0.9950<br>   <br>_ω_1: 1 _β_: 0.9990<br>   <br>_ω_1: 1 _β_: 0.9995<br>   <br>_ω_1: 1 _β_: 0.9999<br>|_ω_1: 1 _β_: 0.9950<br>   <br>_ω_1: 1 _β_: 0.9990<br>   <br>_ω_1: 1 _β_: 0.9995<br>   <br>_ω_1: 1 _β_: 0.9999<br>|_ω_1: 1 _β_: 0.9950<br>   <br>_ω_1: 1 _β_: 0.9990<br>   <br>_ω_1: 1 _β_: 0.9995<br>   <br>_ω_1: 1 _β_: 0.9999<br>|_ω_1: 1 _β_: 0.9950<br>   <br>_ω_1: 1 _β_: 0.9990<br>   <br>_ω_1: 1 _β_: 0.9995<br>   <br>_ω_1: 1 _β_: 0.9999<br>|_ω_1: 1 _β_: 0.9950<br>   <br>_ω_1: 1 _β_: 0.9990<br>   <br>_ω_1: 1 _β_: 0.9995<br>   <br>_ω_1: 1 _β_: 0.9999<br>|_ω_1: 1 _β_: 0.9950<br>   <br>_ω_1: 1 _β_: 0.9990<br>   <br>_ω_1: 1 _β_: 0.9995<br>   <br>_ω_1: 1 _β_: 0.9999<br>|_ω_1: 1 _β_: 0.9950<br>   <br>_ω_1: 1 _β_: 0.9990<br>   <br>_ω_1: 1 _β_: 0.9995<br>   <br>_ω_1: 1 _β_: 0.9999<br>|_ω_1: 1 _β_: 0.9950<br>   <br>_ω_1: 1 _β_: 0.9990<br>   <br>_ω_1: 1 _β_: 0.9995<br>   <br>_ω_1: 1 _β_: 0.9999<br>|_ω_1: 1 _β_: 0.9950<br>   <br>_ω_1: 1 _β_: 0.9990<br>   <br>_ω_1: 1 _β_: 0.9995<br>   <br>_ω_1: 1 _β_: 0.9999<br>|_ω_1: 1 _β_: 0.9950<br>   <br>_ω_1: 1 _β_: 0.9990<br>   <br>_ω_1: 1 _β_: 0.9995<br>   <br>_ω_1: 1 _β_: 0.9999<br>|_ω_1: 1 _β_: 0.9950<br>   <br>_ω_1: 1 _β_: 0.9990<br>   <br>_ω_1: 1 _β_: 0.9995<br>   <br>_ω_1: 1 _β_: 0.9999<br>|_ω_1: 1 _β_: 0.9950<br>   <br>_ω_1: 1 _β_: 0.9990<br>   <br>_ω_1: 1 _β_: 0.9995<br>   <br>_ω_1: 1 _β_: 0.9999<br>|_ω_1: 1 _β_: 0.9950<br>   <br>_ω_1: 1 _β_: 0.9990<br>   <br>_ω_1: 1 _β_: 0.9995<br>   <br>_ω_1: 1 _β_: 0.9999<br>|_ω_1: 1 _β_: 0.9950<br>   <br>_ω_1: 1 _β_: 0.9990<br>   <br>_ω_1: 1 _β_: 0.9995<br>   <br>_ω_1: 1 _β_: 0.9999<br>|_ω_1: 1 _β_: 0.9950<br>   <br>_ω_1: 1 _β_: 0.9990<br>   <br>_ω_1: 1 _β_: 0.9995<br>   <br>_ω_1: 1 _β_: 0.9999<br>|_ω_1: 1 _β_: 0.9950<br>   <br>_ω_1: 1 _β_: 0.9990<br>   <br>_ω_1: 1 _β_: 0.9995<br>   <br>_ω_1: 1 _β_: 0.9999<br>|_ω_1: 1 _β_: 0.9950<br>   <br>_ω_1: 1 _β_: 0.9990<br>   <br>_ω_1: 1 _β_: 0.9995<br>   <br>_ω_1: 1 _β_: 0.9999<br>|_ω_1: 1 _β_: 0.9950<br>   <br>_ω_1: 1 _β_: 0.9990<br>   <br>_ω_1: 1 _β_: 0.9995<br>   <br>_ω_1: 1 _β_: 0.9999<br>|_ω_1: 1 _β_: 0.9950<br>   <br>_ω_1: 1 _β_: 0.9990<br>   <br>_ω_1: 1 _β_: 0.9995<br>   <br>_ω_1: 1 _β_: 0.9999<br>|_ω_1: 1 _β_: 0.9950<br>   <br>_ω_1: 1 _β_: 0.9990<br>   <br>_ω_1: 1 _β_: 0.9995<br>   <br>_ω_1: 1 _β_: 0.9999<br>|_ω_1: 1 _β_: 0.9950<br>   <br>_ω_1: 1 _β_: 0.9990<br>   <br>_ω_1: 1 _β_: 0.9995<br>   <br>_ω_1: 1 _β_: 0.9999<br>|_ω_1: 1 _β_: 0.9950<br>   <br>_ω_1: 1 _β_: 0.9990<br>   <br>_ω_1: 1 _β_: 0.9995<br>   <br>_ω_1: 1 _β_: 0.9999<br>|
+||||||_η_: 4.00e-|8 (ppl=34.|9, step=ﬁn|al)||||||_η_: 4.00e-|8 (ppl=38.|3, step=ﬁn|al)||||||_η_: 4.00e-|8 (ppl=40.|8, step=ﬁn|al)||||||_η_: 8.00e-|8 (ppl=46.|3, step=ﬁn|al)|
+|||||||||||||||||||||||||||||||||||||
+|||||||||||||||||||||||||||||||||||||
+|||||||||||||||||||||||||||||||||||||
+|||||||||||||||||||||||||||||||||||||
+|||||||||||||||||||||||||||||||||||||
+|||||||||||||||||||||||||||||||||||||
+
+
+0 1 2 3 4 5 6 7 _×_ 108 _[−]_ [8]
+
+
+0 1 2 3 4 5 6 7 _×_ 108 _[−]_ [8]
+
+_η_
+
+
+0 1 2 3 4 5 6 7 _×_ 108 _[−]_ [8]
+
+
+0 1 2 3 4 5 6 7 _×_ 108 _[−]_ [8]
+
+
+Figure 8: Visualizing the learning rate sweeps for different MT-DAO configurations. Each subplot
+shows the final perplexity for a given convex coefficient ( _ω_ ) and momentum decay ( _β_ 1), where
+_β_ 2 = 0 _._ 9999 was kept constant. The sweep demonstrates that the optimal learning rate and final
+performance are highly dependent on the choice of these internal hyperparameters, with _β_ 1
+_∈_
+
+[0 _._ 995 _,_ 0 _._ 999] and _ω_ _∈_ [0 _._ 9 _,_ 0 _._ 99] performing best for these short tuning experiments. The vertical
+line in each subplot marks the best-performing lr for that configuration.Switch scale referes to the
+multiple of the base learning rate that we select, the chosen learning rate can be computed via
+multiplication with _η_ BASE _._
+
+
+C DETERMINISTIC OPTIMIZER-SPECIFIC VARIANTS OF MT-DAO
+
+
+19
+
+
+**Algorithm 2** MT-DAO-ADOPT
+
+
+**Require:** **Model tensors, hyper-parameters**
+
+
+1: _x_ 0 _∈_ R _[d]_, _{u_ ¯ _[j]_ _−_ 1 _[}]_ _j_ _[N]_ =1 _[∈]_ [(][R] _[d]_ [)] _[N]_ [,][ ¯] _[v][−]_ [1] _[∈]_ [R] _[d]_ [— initial params,] _[ N]_ [first momenta, second momentum]
+2: _β_ 1 _,j_ _j_ =1 _[, β]_ [2]
+_{_ _}_ _[N]_ _[∈]_ [[0] _[,]_ [ 1)][ — decay rates for each momentum state]
+3: _ωj_ _j_ =1 _j_ =1 _[ω][j]_
+_{_ _}_ _[N]_ _[∈]_ [[0] _[,]_ [ 1]][ — convex combination coefficients for first momenta,][ �] _[N]_ _[≤]_ [1] _[.]_ [0]
+4: _{ct}t_ _[T]_ =0 _[ −]_ [1] _[,][ {][η][t][}]_ _t_ _[T]_ =0 _[ −]_ [1] [— clipping and learning-rate schedules]
+5: _T, M_ _∈_ N+ - total optimization steps and number of workers
+6: _Kx,_ _Kj_ _j_ =1 _[, K][v]_ [— communication periods for parameters and states]
+7: OuterOpt _{_ _}_ _[N]_ : R _[d]_ _→_ _[∈]_ R [(][N] _[d]_ [+] - update params using an outer optimizer, averaging by default [)] _[N]_ [+2]
+**Ensure:** _xT,_ _{u_ _[j]_ _T −_ 1 _[}]_ _j_ _[N]_ =1 _[,]_ _[v][T][ −]_ [1]
+8: **for each worker** _m_ : initialize _x_ _[m]_ 0 _[,][ {][u]_ _−_ _[j,m]_ 1 _[}][, v]_ _−_ _[m]_ 1
+9: **for** _t_ = 0 _, . . ., T_ _−_ 1 **do**
+10: **for all** workers _m_ = 0 _, . . ., M_ _−_ 1 **in parallel do**
+11: _gt_ _[m]_ _[←∇][F]_ [(] _[x]_ _t_ _[m]_ [;] _[ ξ]_ _t_ _[m]_ [)] stochastic gradient
+12:13:14: _vvg_ ˆ¯ _ttt_ _[m][m]_ _←_ _[←]_ **if** _[β]_ (2 _t_ _[v]_ _g_ [¯] mod _t_ _[m]_ _t−_ 1 [+ (1] _Kv_ _[ −]_ = 0) _[β]_ 2 **then** [)(] _[g]_ _t_ _[m]_ E [)][2] _m_ [ _vt_ _[m]_ []] **[ else]** _[ v]_ _t_ _[m]_ update second momentum with raw gradientnormalize gradient (ADOPT core step)sync _v_ every _Kv_ steps
+
+_[←]_ ~~_√_~~ _vt_ _[m]_ [+] _[ϵ]_
+
+15: _g_ ˜ _t_ _[m]_ _[←]_ **[clip]** [(ˆ] _[g]_ _t_ _[m][, c]_ _t_ [)] clip the normalized gradient
+16: **for** _j_ = 1 **to** _N_ **do** update N first momenta
+17: _u_ _[j,m]_ _t_ _←_ _β_ 1 _,j_ ¯ _u_ _[j]_ _t−_ 1 [+ (1] _[ −]_ _[β]_ [1] _[,j]_ [)˜] _[g]_ _t_ _[m]_ use clipped, normalized gradient
+18: _u_ ¯ _[j]_ _t_ [= 0)] **[ then]** [ E] _[m]_ [[] _[u][j,m]_ _t_ ] **else** _u_ _[j,m]_ _t_ sync _u_ _[j]_ every _Kj_ steps
+
+_[←]_ **[if]** [ (] _[t]_ [ mod] _[ K][j]_
+
+19: ∆ _[m]_ _t_ _[←]_ [(1] _[ −]_ [�] _j_ _[N]_ =1 _[ω][j]_ [)˜] _[g]_ _t_ _[m]_ [+][ �] _[N]_ _j_ =1 _[ω][j][u]_ _t_ _[j,m]_ form combined update direction
+20: _x_ _[m]_ _t_ +1 _t_ _t_ [∆] _[m]_ _t_ apply combined update
+21: _x_ ¯ _t_ +1 _[←]_ **if** _[x]_ [¯] (( _[−]_ _t_ + 1) mod _[η]_ _Kx_ = 0) **then** OuterOpt(E _m_ [ _x_ _[m]_ _t_ +1 []][)] **[ else]** _[ x][m]_ _t_ +1 sync _x_ every _Kx_ steps
+_←_
+
+
+**Algorithm 3** MT-DAO-SGDM
+
+
+**Require:** **Model tensors, hyper-parameters**
+
+1: _x_ 0 _∈_ R _[d]_, _{u_ ¯ _[j]_ _−_ 1 _[}]_ _j_ _[N]_ =1 _[∈]_ [(][R] _[d]_ [)] _[N]_ [— initial params,] _[ N]_ [first momenta]
+2: _β_ 1 _,j_ _j_ =1
+_{_ _}_ _[N]_ _[∈]_ [[0] _[,]_ [ 1)][ — decay rates for each momentum state]
+3: _ωj_ _j_ =1 _j_ =1 _[ω][j]_
+4: _ρ{ ∈}_ R _[N]_ +, _{_ _[∈]_ _ηt_ [[0] _}t_ _[T][,]_ [ 1]] =0 _[ −]_ [1][ — convex combination coefficients for first momenta,][— clipping radius, learning-rate schedule] [ �] _[N]_ _[≤]_ [1] _[.]_ [0]
+5: _T, M_ _∈_ N+ - total optimization steps and number of workers
+6: _Kx,_ _Kj_ _j_ =1 [— communication periods for parameters and states]
+7: OuterOpt _{_ _}_ _[N]_ : R _[∈][d]_ [(] _→_ [N][+] R [)] _[N][d]_ [+1] - update params using an outer optimizer, averaging by default
+**Ensure:** _xT,_ _{u_ _[j]_ _T −_ 1 _[}]_ _j_ _[N]_ =1
+8: **for each worker** _m_ : initialize _x_ _[m]_ 0 _[,][ {][u]_ _−_ _[j,m]_ 1 _[}]_
+9: **for** _t_ = 0 _, . . ., T_ _−_ 1 **do**
+10: **for all** workers _m_ = 0 _, . . ., M_ _−_ 1 **in parallel do**
+11: _g_ ˆ _t_ _[m]_ _[←]_ **[clip]** [(] _[∇][F]_ [(] _[x]_ _t_ _[m]_ [;] _[ ξ]_ _t_ _[m]_ [)] _[, ρ]_ [)] clipped stochastic gradient
+12: **for** _j_ = 1 **to** _N_ **do** update N first momenta
+13: _u_ _[j,m]_ _t_ _←_ _β_ 1 _,j_ ¯ _u_ _[j]_ _t−_ 1 [+ (1] _[ −]_ _[β]_ [1] _[,j]_ [)ˆ] _[g]_ _t_ _[m]_
+14: _u_ ¯ _[j]_ _t_ [= 0)] **[ then]** [ E] _[m]_ [[] _[u][j,m]_ _t_ ] **else** _u_ _[j,m]_ _t_ sync _u_ _[j]_ every _Kj_ steps
+
+_[←]_ **[if]** [ (] _[t]_ [ mod] _[ K][j]_
+
+15: ∆ _[m]_ _t_ _[←]_ [(1] _[ −]_ [�] _j_ _[N]_ =1 _[ω][j]_ [)ˆ] _[g]_ _t_ _[m]_ [+][ �] _[N]_ _j_ =1 _[ω][j][u]_ _t_ _[j,m]_ form combined update direction (unnormalized)
+16: _x_ _[m]_ _t_ +1 _t_ _t_ [∆] _[m]_ _t_
+17: _x_ ¯ _t_ +1 _[←]_ **if** _[x]_ [¯] (( _[−]_ _t_ + 1) mod _[η]_ _Kx_ = 0) **then** OuterOpt(E _m_ [ _x_ _[m]_ _t_ +1 []][)] **[ else]** _[ x][m]_ _t_ +1 sync _x_ every _Kx_ steps
+_←_
+
+
+D CONVERGENCE ANALYSIS OF MT-DAO-SGDM
+
+
+In order to facilitate the technical presentation, we model synchronization frequencies by assigning
+probabilities to each averaging event. For example, the parameters _x_ _[m]_ _t_ [are synchronized with the]
+
+
+20
+
+
+**Algorithm 4** MT-DAO-SGDM, probabilistic variant
+
+
+**Require:** **Model tensors, hyper-parameters**
+
+1: _x_ 0 _∈_ R _[d]_, _{u_ _[j]_ _−_ 1 _[}]_ _j_ _[N]_ =1 _[∈]_ [(][R] _[d]_ [)] _[N]_ [— initial parameters,] _[ N]_ [first momenta]
+2: _βj_ _j_ =1
+_{_ _}_ _[N]_ _[∈]_ [[0] _[,]_ [ 1)][ — decay rates for each momentum state]
+3: _ωj_ _j_ =1 _j_ =1 _[w][j]_ [= 1]
+_{_ _}_ _[N]_ _[∈]_ [[0] _[,]_ [ 1]][ — convex combination of non-negative coefficients for first momenta,][ �] _[N]_
+4: _{ηt}t_ _[T]_ =0 _[ −]_ [1] [— learning-rate schedule]
+5:6: _T, Mpx_ = _∈K_ 1 _x_ N _[,][ {]_ + _[p]_  - total optimization steps and number of workers _[j]_ [=] _K_ 1 _j_ _j_ =1 [— communication periods/probabilities for parameters and states]
+
+_[}][N]_ _[∈]_ [[0] _[,]_ [ 1]] _[N]_ [+1]
+
+**Ensure:** _xT,_ _{u_ _[j]_ _T −_ 1 _[}]_ _j_ _[N]_ =1
+7: **for each worker** _m_ : initialize _x_ _[m]_ 0 _[,][ {][u]_ _−_ _[j,m]_ 1 _[}]_
+8: **for** _t_ = 0 _, . . ., T_ _−_ 1 **do**
+9: **for all** workers _m_ = 0 _, . . ., M_ _−_ 1 **in parallel do**
+10: _gt_ _[m]_ _[←∇][F]_ _m_ [(] _[x][m]_ _t_ [;] _[ ξ]_ _t_ _[m]_ [)] stochastic gradient
+11: **for** _j_ = 1 **to** _N_ **do** update N first momenta
+
+
+12: _u_ _[j,m]_ _t_
+_←_
+
+
+
+
+
+
+E _m_ [ _βju_ _[j,m]_ _t−_ 1 [+ (1] _[ −]_ _[β][j]_ [)] _[g]_ _t_ _[m]_ []] _[,]_ with probability _pj_
+
+ _βju_ _[j,m]_ _t−_ 1 [+ (1] _[β][j]_ [)] _[g]_ _t_ _[m][,]_ with probability 1
+
+
+_βju_ _[j,m]_ _t−_ 1 [+ (1] _[ −]_ _[β][j]_ [)] _[g]_ _t_ _[m][,]_ with probability 1 _−_ _pj_
+
+
+sync _u_
+
+
+13: ∆ _[m]_ _t_ _[←]_ [�]  _j_ _[N]_ =1 _[ω][j][u]_ _t_ _[j,m]_ form combined update direction
+
+
+14: _x_ _[m]_ _t_ +1
+
+_[←]_
+
+
+
+
+
+
+E _m_ [ _x_ _[m]_ _t_ _[−]_ _[η]_ _t_ [∆] _[m]_ _t_ []] _[,]_ with probability _px_
+
+ _x_ _[m]_ _t_ _[η]_ _t_ [∆] _[m]_ _t_ _[,]_ with probability 1
+
+
+_x_ _[m]_ _t_ _[−]_ _[η]_ _t_ [∆] _[m]_ _t_ _[,]_ with probability 1 _−_ _px_
+
+
+sync _x_
+
+
+probability _px_ = _K_ 1 _x_ [, which is statistically equivalent to performing the averaging in every] _p_ 1 _x_ [=] _[ K][x]_
+iteration. Similarly, momentum _u_ _[j,m]_ _t_ synchronization happens with probability _pj_ = _K_ 1 _j_ [, which can]
+
+differ from _px_ . Note that QHM structure is included since we can choose _β_ 1 = 0 and get _u_ [1] _t_ _[,m]_ = _gt_ _[m]_ [.]
+
+Auxiliary notation. Let E _m_ and E _j_ be the averaging operators with weights _M_ 1 [across] _[ M]_ [workers]
+and _ωj_ across _N_ momenta.
+
+
+def
+_u_ _[j]_ _t_ = E _m_ [ _u_ _[j,m]_ _t_ ] = _βju_ _[j]_ _t−_ 1 [+ (1] _[ −]_ _[β][j]_ [)] _[g][t][,]_ [ where] _[ g][t]_ [=][ E] _[m]_ [[] _[g]_ _t_ _[m]_ []]
+
+
+def
+_x_ _[j,m]_ _t_ +1 =
+
+
+E _m_ [ _x_ _[j,m]_ _t_ _ηu_ _[j,m]_ _t_ ] _,_ with probability _px_
+
+_−_
+_x_ _[j,m]_ _t_ _ηu_ _[j,m]_ _t_ _,_ with probability 1 _px_
+
+_−_ _−_
+
+
+def
+_x_ _[j]_ _t_ +1 = E _m_ [ _x_ _[j,m]_ _t_ +1 [] =] _[ x]_ _t_ _[j]_ _[−]_ _[ηu]_ _t_ _[j][,]_ _x_ _[m]_ _t_ +1 [=][ E] _[j]_ [[] _[x]_ _t_ _[j,m]_ +1 [] =] [(line 14)] _[ .]_
+
+
+For the sake of notation, we also let _u_ _[m]_ _t_ = ∆ _[m]_ _t_ = E _j_ [ _u_ _[j,m]_ _t_ ] _,_ _ut_ = E _m_ [ _u_ _[m]_ _t_ []] _[,]_ _[x][t]_ [=] [E] _[m]_ [[] _[x][m]_ _t_ []][ in the]
+upcoming derivations.
+
+Step 1 (virtual iterates). Letting _x_ _[j]_ _−_ 1 [=] _[ x]_ 0 _[j]_ [=] _[ x]_ [0][, define the global virtual iterations as follows]
+
+
+def 1 _βj_ def
+_zt_ _[j]_ = _x_ _[j]_ _t_ _x_ _[j]_ _t−_ 1 _[,]_ and _zt_ = E _j_ [ _zt_ _[j]_ []] for _t_ 0 _._
+1 _βj_ _[−]_ 1 _βj_ _≥_
+_−_ _−_
+
+
+21
+
+
+The key property of this virtual iterates we are going to exploit in the next steps is that they follow
+averaged gradients, namely for any _t ≥_ 0 we have
+
+
+_zt_ +1 _−_ _zt_ = E _j_ [ _zt_ _[j]_ +1 _[−]_ _[z]_ _t_ _[j]_ []]
+
+
+- - 1 _βj_
+
+_−_ 1 _βj_ _x_ _[j]_ _t_ _[−]_ 1 _βj_ _x_ _[j]_ _t−_ 1
+_−_ _−_
+
+
+��
+
+
+= E _j_
+
+
+= E _j_
+
+
+= E _j_
+
+
+= E _j_
+
+
+�� 1 _βj_
+1 _βj_ _x_ _[j]_ _t_ +1 _[−]_ 1 _βj_ _x_ _[j]_ _t_
+_−_ _−_
+
+
+- _η_ 
+_−_ ( _u_ _[j]_ _t_ _t−_ 1 [)] = E _j_ [ _ηgt_ ] = _ηgt._
+1 _βj_ _[−]_ _[β][j][u][j]_ _−_ _−_
+_−_
+
+
+- 1 _βj_ ( _x_ _[j]_ _t_ +1 _t_ [)] _[ −]_ ( _x_ _[j]_ _t_ _t−_ 1 [)]
+1 _βj_ _[−]_ _[x][j]_ 1 _βj_ _[−]_ _[x][j]_
+_−_ _−_
+
+
+- 1 _βj_ ( _ηu_ _[j]_ _t_ [)] _[ −]_ ( _ηu_ _[j]_ _t−_ 1 [)]
+1 _βj_ _−_ 1 _βj_ _−_
+_−_ _−_
+
+
+Step 2 (smoothness over virtual iterates). Then we apply smoothness of the global loss function _f_
+over these global virtual iterates.
+
+
+_f_ ( _zt_ +1) _≤_ _f_ ( _zt_ ) + _⟨∇f_ ( _zt_ ) _, zt_ +1 _−_ _zt⟩_ + _[L]_ 2 _[∥][z][t]_ [+1] _[ −]_ _[z][t][∥]_ [2]
+
+
+= _f_ ( _zt_ ) + _f_ ( _xt_ ) _, zt_ +1 _zt_ + _f_ ( _zt_ ) _f_ ( _xt_ ) _, zt_ +1 _zt_
+_⟨_         - _∇_ �� _−_         - _⟩_ _⟨_         - _∇_ _−∇_ �� _−_         - _⟩_
+_I_ _II_
+
+
++ _[L]_
+
+
+ - �� _III_
+
+
+�2 _[∥][z][t]_ [+1] �� _[−]_ _[z][t][∥]_ - [2]
+
+
+_._
+
+
+In the next step, we separately bound each term appearing in the above bound.
+
+
+Step 3a (one step progress). Bounding term I.
+
+
+E _f_ ( _xt_ ) _, zt_ +1 _zt_
+_⟨∇_ _−_ _⟩_
+
+
+= _−η_ E
+
+
+_M_
+
+
+_M_
+
+
+- _∇fm_ ( _x_ _[m]_ _t_ [)]
+
+_m_ =1
+
+
+= _−η_ E
+
+
+_f_ ( _xt_ ) _,_ [1]
+_∇_ _M_
+
+
+_f_ ( _xt_ ) _,_ [1]
+_∇_ _M_
+
+
+_M_
+
+
+- _gt_ _[m]_
+
+_m_ =1
+
+
+_M_
+
+
+- _∇fm_ ( _x_ _[m]_ _t_ [)]
+
+_m_ =1
+
+
+1
+_f_ ( _xt_ )
+����� _∇_ _−_ _M_
+
+
+- _∇fm_ ( _x_ _[m]_ _t_ [)]
+
+_m_ =1
+
+
+2
+
+
+2 [E]
+
+
+�����
+
+
+2
+
+
+=
+
+_−_ _[η]_ 2
+
+
+_[η]_ 2 [E] _[∥∇][f]_ [(] _[x][t]_ [)] _[∥]_ [2] _[ −]_ _[η]_ 2
+
+
++ _[η]_
+
+
+2 [E]
+
+
+_M_
+
+
+- _∇fm_ ( _x_ _[m]_ _t_ [)]
+
+_m_ =1
+
+
+_M_
+
+
+- _∇fm_ ( _xt_ ) _−∇fm_ ( _x_ _[m]_ _t_ [)]
+
+_m_ =1
+
+
+2
+
+
+2 [E]
+
+
+�����
+
+
+2
+
+
+=
+
+_−_ _[η]_ 2
+
+
+1
+_M_
+�����
+
+
+_[η]_ 2 [E] _[∥∇][f]_ [(] _[x][t]_ [)] _[∥]_ [2] _[ −]_ _[η]_ 2
+
+
++ _[η]_
+
+
+2 [E]
+
+
+_M_
+
+
+- _∇fm_ ( _x_ _[m]_ _t_ [)]
+
+_m_ =1
+
+
+_M_
+
+
+2
+
+
+_≤_ _−_ _[η]_ 2
+
+
+_[η]_ 2 [E] _[∥∇][f]_ [(] _[x][t]_ [)] _[∥]_ [2] _[ −]_ _[η]_ 2
+
+
+_M_
+
+
+E _∥∇fm_ ( _xt_ ) _−∇fm_ ( _x_ _[m]_ _t_ [)] _[∥]_ [2]
+_m_ =1
+
+
+_M_
+
+
+E _xt_ _x_ _[m]_ _t_
+_m_ =1 - _∥_ _−_ �� _[∥]_ - [2]
+Lemma 3
+
+
+2 [E]
+
+
+_M_
+
+
+- _∇fm_ ( _x_ _[m]_ _t_ [)]
+
+_m_ =1
+
+
+_η_
++
+2 _M_
+
+
++ _[ηL]_ [2]
+
+2 _M_
+
+
+�����
+
+�����
+
+�����
+
+�����
+
+
+2
+
+
+_._
+
+
+_≤_ _−_ _[η]_ 2
+
+
+_[η]_ 2 [E] _[∥∇][f]_ [(] _[x][t]_ [)] _[∥]_ [2] _[ −]_ _[η]_ 2
+
+
+1
+_M_
+�����
+
+
+1
+_M_
+�����
+
+
+1
+_M_
+�����
+
+
+1
+_M_
+�����
+
+
+2 [E]
+
+
+_M_
+
+
+Step 3b (one step progress). Bounding term II.
+
+
+_M_
+
+
+E _f_ ( _zt_ ) _f_ ( _xt_ ) _, zt_ +1 _zt_ = _η_ E
+_⟨∇_ _−∇_ _−_ _⟩_ _−_
+
+
+_f_ ( _zt_ ) _f_ ( _xt_ ) _,_ [1]
+_∇_ _−∇_ _M_
+
+
+_M_
+
+
+- _∇fm_ ( _x_ _[m]_ _t_ [)]
+
+_m_ =1
+
+
+- _∇fm_ ( _x_ _[m]_ _t_ [)]
+
+_m_ =1
+
+
+�����
+
+
+2
+
+
+_ηρ_
+_≤_ 2
+
+
+_[η]_
+2 [E] _[∥∇][f]_ [(] _[z][t]_ [)] _[ −∇][f]_ [(] _[x][t]_ [)] _[∥]_ [2][ +] 2
+
+
+1
+_M_
+�����
+
+
+2 _ρ_ [E]
+
+
+_M_
+
+
+- _∇fm_ ( _x_ _[m]_ _t_ [)]
+
+_m_ =1
+
+
+�����
+
+
+2
+
+
+_._
+
+
+_ηρL_ [2]
+_≤_ 2 E _∥zt_ _−_ _xt∥_ [2]
+
+     - ��      Lemma 2
+
+
+_ηρL_ [2]
+_≤_ 2
+
+
++ _[η]_
+
+
+1
+_M_
+�����
+
+
+2 _ρ_ [E]
+
+
+_M_
+
+
+22
+
+
+Step 3c (one step progress). Bounding term III.
+
+
+2 [E]
+
+
+�����2
+
+
+_L_ _η_ [2] _L_
+
+2 [E] _[∥][z][t]_ [+1] _[ −]_ _[z][t][∥]_ [2] = 2
+
+
+_L_
+
+
+2 [E]
+
+
+_M_
+
+- _gt_ _[m]_
+
+_m_ =1
+
+
++ _[η]_ [2] _[L]_
+
+
+�����
+
+
+2
+
+
+2 [E]
+
+
+�����
+
+
+2
+
+
+_η_ [2] _L_
+=
+
+
+1
+_M_
+�����
+
+
+2 [E]
+
+
+_M_
+
+
+_m_ �=1 _gt_ _[m]_ _[−∇][f][m]_ [(] _[x]_ _t_ _[m]_ [)]
+
+
+- _∇fm_ ( _x_ _[m]_ _t_ [)]
+
+_m_ =1
+
+
+_M_
+
+
+- _∇fm_ ( _x_ _[m]_ _t_ [)]
+
+_m_ =1
+
+
+�����
+
+
+2
+
+
+1
+_M_
+�����
+
+
+_η_ [2] _L_
+=
+2 _M_ [2]
+
+
+1
+_M_
+�����
+
+
+1
+_M_
+�����
+
+
+_M_
+
+
+E _gt_ _[m]_ _t_ [)] _[∥]_ [2][ +] _[η]_ [2] _[L]_
+_m_ =1 _∥_ _[−∇][f][m]_ [(] _[x][m]_ 2
+
+
+_M_
+
+
+�����
+
+
+2
+
+
+_._
+
+
+_η_ [2] _L_ _[η]_ [2] _[L]_
+_≤_ 2 _M_ _[σ]_ [2][ +] 2
+
+
+1
+_M_
+�����
+
+
+2 [E]
+
+
+- _∇fm_ ( _x_ _[m]_ _t_ [)]
+
+_m_ =1
+
+
+_M_
+
+
+Step 3abc (one step progress). Combining previous bounds.
+
+
+E _f_ ( _zt_ +1) E _f_ ( _zt_ ) E _f_ ( _xt_ ) _, zt_ +1 _zt_ +E _f_ ( _zt_ ) _f_ ( _xt_ ) _, zt_ +1 _zt_
+_−_ _≤_ _⟨_     - _∇_ �� _−_     - _⟩_ _⟨_     - _∇_ _−∇_ �� _−_     - _⟩_
+_I_ _II_
+
+
++E _[L]_
+
+
+ - �� _III_
+
+
+�2 _[∥][z][t]_ [+1] �� _[−]_ _[z][t][∥]_ - [2]
+
+
++ _[ηL]_ [2]
+
+2 _M_
+
+
+- _∇fm_ ( _x_ _[m]_ _t_ [)]
+
+_m_ =1
+
+
+�����
+
+
+2
+
+
+_M_
+
+
+E _xt_ _x_ _[m]_ _t_
+_m_ =1 - _∥_ _−_ �� _[∥]_ - [2]
+Lemma 3
+
+
+_≤_ _−_ _[η]_ 2
+
+
+_[η]_ 2 [E] _[∥∇][f]_ [(] _[x][t]_ [)] _[∥]_ [2] _[ −]_ _[η]_ 2
+
+
+1
+_M_
+�����
+
+
+2 [E]
+
+
+_M_
+
+
+- _∇fm_ ( _x_ _[m]_ _t_ [)]
+
+_m_ =1
+
+
+�����
+
+
+2
+
+
++ _[ηρL]_ 2 [2] E _∥zt_ _−_ _xt∥_ [2]
+
+    - ��     Lemma 2
+
+
++ _[ηρL]_ [2]
+
+
++ _[η]_
+
+
+2 _ρ_ [E]
+
+
+1
+_M_
+�����
+
+
+_M_
+
+
+- _∇fm_ ( _x_ _[m]_ _t_ [)]
+
+_m_ =1
+
+
+�����
+
+
+2
+
+
++ _[η]_ [2] _[L]_
+
+
+[2] _[L]_ _[η]_ [2] _[L]_
+
+2 _K_ _[σ]_ [2][ +] 2
+
+
+2 [E]
+
+
+1
+_M_
+�����
+
+
+_M_
+
+
+- _∇fm_ ( _x_ _[m]_ _t_ [)]
+
+_m_ =1
+
+
+�����
+
+
+2
+
+
+1
+_M_
+�����
+
+
+_M_
+
+
+_≤_ _−_ _[η]_ 2
+
+
+_[η]_ 2 [E] _[∥∇][f]_ [(] _[x][t]_ [)] _[∥]_ [2] _[ −]_ _[η]_ 2
+
+
+2
+
+
+1
+_−_ _ρ_ [1]
+
+
+  
+E
+_ρ_ [1]
+
+_[−]_ _[ηL]_
+
+
++ _[η]_ [2] _[L]_
+
+2 _M_ _[σ]_ [2] _[.]_
+
+
++ _[ηρL]_ 2 [2] E _∥zt_ _−_ _xt∥_ [2]
+
+    - ��     Lemma 2
+
+
++ _[ηρL]_ [2]
+
+
++ _[ηL]_ [2]
+
+2 _M_
+
+
++ _[ηL]_ [2]
+
+
+_M_
+
+
+E _xt_ _x_ _[m]_ _t_
+_m_ =1 - _∥_ _−_ �� _[∥]_ - [2]
+Lemma 3
+
+
+_M_
+
+
+23
+
+
+Step 4 (fnal). Now we average over the iterates and apply the bounds derived in Lemmas 2 and 3.
+
+
+E[ _f_ ( _zT_ ) _f_ ( _z_ 0)] 1
+_−_ =
+
+_T_ _T_
+
+
+_T −_ 1
+
+
+E[ _f_ ( _zt_ +1) _f_ ( _zt_ )]
+_−_
+_t_ =0
+
+
+- _∇fm_ ( _x_ _[m]_ _t_ [)]
+
+_m_ =1
+
+
+1
+_M_
+�����
+
+
+�����
+
+
+2
+
+
+_T −_ 1
+
+
+_≤_ _−_ 2 _[η]_ _T_
+
+
+_T −_ 1
+
+
+E _∥∇f_ ( _xt_ ) _∥_ [2] _−_ _[η]_ 2
+_t_ =0
+
+
+_M_
+
+
+2
+
+
+- - 1
+1
+_−_ _ρ_ [1] _T_
+
+_[−]_ _[ηL]_
+
+
+E
+
+_t_ =0
+
+
+1
+
++ _[ηL]_ [2]
+
+2 _TM_
+
+
++ _[ηL]_ [2]
+
+
++ _[η]_ [2] _[L]_
+
+2 _M_ _[σ]_ [2]
+
+
+_T −_ 1
+
+
+_t_ =0
+
+
+_M_
+
+
+E _xt_ _x_ _[m]_ _t_
+_m_ =1 _∥_ _−_ _[∥]_ [2]
+
+
+_M_
+
+
++ _[ηρL]_ [2] 1
+
+2 _T_
+
+
+_T −_ 1
+
+
+E _zt_ _xt_
+_t_ =0 _∥_ _−_ _∥_ [2]
+
+
+_T −_ 1
+
+
+- �� Lemma 1
+
+
+- �� Lemma 2
+
+
++ _[η]_ [2] _[L]_
+
+2 _M_ _[σ]_ [2]
+
+
+- _∇fm_ ( _x_ _[m]_ _t_ [)]
+
+_m_ =1
+
+
+1
+_M_
+�����
+
+
+�����
+
+
+2
+
+
+_T −_ 1
+
+
+_≤_ _−_ 2 _[η]_ _T_
+
+
+_T −_ 1
+
+
+E _∥∇f_ ( _xt_ ) _∥_ [2] _−_ _[η]_ 2
+_t_ =0
+
+
+_M_
+
+
+2
+
+
+- - 1
+1
+_−_ _ρ_ [1] _T_
+
+_[−]_ _[ηL]_
+
+
+E
+
+_t_ =0
+
+
+_T −_ 1
+
+
+E
+
+_τ_ =0
+
+
+- _∇fm_ ( _x_ _[m]_ _τ_ [)]
+
+_m_ =1
+
+
+1
+_M_
+�����
+
+
+_M_
+
+
+�����
+
+
+2 []
+
+
++ _[ηρL]_ [2]
+
+2
+
+
+
+
+_ω_ 1
+ _[η]_ [2] _[β]_ [2] _ω_
+_M_ _[σ]_ [2][ +] _[ η]_ [2] _[β]_ [2] _T_
+
+
+_T −_ 1
+
+
+
+
+
++ _[ηL]_ [2]
+
+2
+
+
+12 _η_ [2] ( _B_ [2] 1) _ψ_ [1]
+
+_−_ _·_ _T_
+
+
+_T −_ 1
+
+
+_T_
+
+
+E _∥∇f_ ( _θ_ _[t]_ ) _∥_ [2] + 4 _η_ [2] _ψ_ ( _σ_ [2] + 3 _G_ [2] )
+_t_ =0
+
+
+�1 12 _η_ [2] _L_ [2] ( _B_ [2] 1) _ψ_     - 1
+
+_≤_ _−_ _[η]_ 2 _−_ _−_ _T_
+
+
+_T −_ 1
+
+
+E _f_ ( _xt_ )
+_∥∇_ _∥_ [2]
+_t_ =0
+
+
+- _∇fm_ ( _x_ _[m]_ _t_ [)]
+
+_m_ =1
+
+
+1
+_M_
+�����
+
+
+�����
+
+
+2
+
+
+_T −_ 1
+
+
+E
+
+_t_ =0
+
+
+_−_ _[η]_ 2
+
+
+1
+_−_ _ρ_ [1]
+
+
+_M_
+
+
++ _[η]_ [2] _[L]_
+
+
+_ω_
+
+_[η]_ [2] _[L]_ _[η]_ [3] _[ρL]_ [2] _[β]_ [2] _σ_ [2] + 2 _η_ [3] _L_ [2] _ψ_ ( _σ_ [2] + 3 _G_ [2] ) _._
+
+2 _M_ _[σ]_ [2][ +] 2 _M_
+
+
+      - 1
+_ω_ _[ρL]_ [2]
+_ρ_ [1] _T_
+
+_[−]_ _[ηL][ −]_ _[η]_ [2] _[β]_ [2]
+
+
+Next, we choose _ρ_ = 2 and step size _η_ such that
+
+
+12 _η_ [2] _L_ [2] ( _B_ [2] 1) _ψ_ to bound the first term
+
+_−_ _≤_ 2 [1] _⇐⇒_
+
+_ηL_ + 2 _η_ [2] _βω_ [2] _[L]_ [2] to bound the second term
+
+_[≤]_ 2 [1] _⇐⇒_
+
+
+Notice that
+
+
+12 _η_ [2] _L_ [2] _ψ_ from Lemma 3
+_≤_ 2 [1] _⇐⇒_
+
+
+_η_ 0 def= �4 _L_ max - _βω,_ 6� _ψ_ max(1 _, B_ [2] 1)�� _−_ 1
+
+_−_
+
+
+satisfies all three bounds. Then, with any _η_ _≤_ _η_ 0 we get
+
+
+E[ _f_ ( _zT_ ) _−_ _f_ ( _z_ 0)]
+
+
+4 _T_
+
+
+_f_ ( _z_ 0)]
+_−_
+
+_T_ _≤_ _−_ 4 _[η]_ _T_
+
+
+_T −_ 1
+
+
+E _f_ ( _xt_ )
+_∥∇_ _∥_ [2]
+_t_ =0
+
+
+_ω_
+
++ _[η]_ [2] _[L]_ _[η]_ [3] _[ρL]_ [2] _[β]_ [2] _σ_ [2] + 2 _η_ [3] _L_ [2] _ψ_ ( _σ_ [2] + 3 _G_ [2] ) _._
+
+2 _M_ _[σ]_ [2][ +] 2 _M_
+
+
+Noticing that _z_ 0 = _x_ 0 and _f_ _[∗]_ _≤_ _f_ ( _zT_ ), we have
+
+
+[0][)] _[ −]_ _[f][ ∗]_ [)]
+
++ [2] _[ηL]_
+_ηT_ _M_
+
+
+_[ηL]_ [4] _[η]_ [2] _[L]_ [2] _[β]_ _ω_ [2] _σ_ [2] + 8 _η_ [2] _L_ [2] _ψ_ ( _σ_ [2] + 3 _G_ [2] ) _._
+
+_M_ _[σ]_ [2][ +] _M_
+
+
+1
+_T_
+
+
+_T −_ 1
+
+
+E _f_ ( _xt_ )
+_∥∇_ _∥_ [2] _≤_ [4(] _[f]_ [(] _[x]_ _ηT_ [0][)] _[ −]_ _[f][ ∗]_ [)]
+_t_ =0
+
+
+24
+
+
+Furthermore, choosing _η_ = min( _η_ 0 _,_ ~~_√_~~ 1
+
+_T_ [)][, we get the following rate:]
+
+
+1
+_T_
+
+
+_T −_ 1
+
+
+E _f_ ( _xt_ )
+_∥∇_ _∥_ [2]
+_t_ =0
+
+
+_M_ ~~_√_~~
+
+
+   - 1
+_≤_ max 1 _,_ _η_ 0 ~~_√_~~
+
+4( _f_ ( _x_ 0) _f_ _[∗]_ )
+_−_
+_≤_ ~~_√_~~ _T_
+
+
+- 4( _f_ ( _x_ 0) _f ∗_ )
+_−_
+~~_√_~~ _T_
+
+
+_M_ ~~_√_~~
+
+
+[2]
+
++ [4(] _[f]_ [(] _[x]_ [0][)] _[ −]_ _[f][ ∗]_ [)]
+_T_ _η_ 0 _T_
+
+
+[2] _ω_ _[σ]_ [2]
+
++ [4] _[L]_ [2] _[β]_ [2]
+_T_ _MT_
+
+
+_T_
+
+
+_f ∗_ )
+_−_ + [2] _[Lσ]_ [2]
+
+_T_ _M_ ~~_√_~~ _T_
+
+
+_T_
+
+
+[2] _[β]_ _ω_ [2] _[σ]_ [2]
+
++ [8] _[L]_ [2] _[ψ]_ [(] _[σ]_ [2][ + 3] _[G]_ [2][)]
+_MT_ _T_
+
+[2] _[β]_ _ω_ [2] _[σ]_ [2]
+
++ [8] _[L]_ [2] _[ψ]_ [(] _[σ]_ [2][ + 3] _[G]_ [2][)]
+_MT_ _T_
+
+
+_f_ _[∗]_ )
+_−_ + [2] _[Lσ]_ [2]
+
+_T_ _M_ ~~_√_~~ _T_
+
+
+[0][)] _[ −]_ _[f][ ∗]_ [)] _ω_ _[σ]_ [2]
+
++ [4] _[L]_ [2] _[β]_ [2]
+_η_ 0 _T_ _MT_
+
+
+_T_
+
+
+4
+= ~~_√_~~ _T_
+
+
+- - - 1 + _βω_ 2 [+] _[ ψ]_
+_f_ ( _x_ 0) _f_ _[∗]_ + _[Lσ]_ [2] +
+_−_ 2 _M_ _O_ _T_
+
+
+_._
+
+
+D.1 KEY LEMMAS
+
+
+**Lemma 2.** _For all T_ _≥_ 1 _, we have_
+
+_T −_ 1
+
+  - _t_ =0 _∥zt −_ _xt∥_ [2] _≤_ _[η]_ _M_ [2] _[β]_ _ω_ [2] _[Tσ]_ [2][ +] _[ η]_ [2] _[β]_ _ω_ [2]
+
+
+_where_
+
+
+- _∇fm_ ( _x_ _[m]_ _t_ [)]
+
+_m_ =1
+
+
+_T −_ 1
+
+
+E
+
+_t_ =0
+
+
+1
+_M_
+�����
+
+
+_M_
+
+
+�����
+
+
+2
+
+
+_,_ (3)
+
+
+def
+_βω_ =
+
+
+_N_
+
+- _ωjβj_ _._
+
+1 _βj_
+
+_j_ =1
+
+_−_
+
+
+_Proof._ Since _u−_ 1 = 0, unrolling the update rule of momentum, for any _t_ 0 we get
+_≥_
+
+
+_u_ _[j]_ _t_ [=] _[ β][j][u]_ _t_ _[j]_ _−_ 1 [+ (1] _[ −]_ _[β][j]_ [)] _[g][t]_ [= (1] _[ −]_ _[β][j]_ [)]
+
+
+Using this and the definition of the average iterates, we have
+
+
+_t_
+
+- _βj_ _[t][−][τ]_ _g_ _[τ]_ _._
+
+_τ_ =0
+
+
+_βj_
+_zt_ _[j]_ _t_ [=] ( _x_ _[j]_ _t_ _t−_ 1 [) =] _[ −]_ _[ηβ][j]_ _u_ _[j]_ _t_ [=] _[ −][ηβ][j]_
+
+_[−]_ _[x][j]_ 1 _βj_ _[−]_ _[x][j]_ 1 _βj_
+_−_ _−_
+
+
+_t_
+
+- _βj_ _[t][−][τ]_ _gτ_
+
+_τ_ =0
+
+
+_zt_ _xt_ = E _j_ [ _zt_ _[j]_ _t_ [] =][ E] _[j]_
+_−_ _[−]_ _[x][j]_
+
+
+_t_
+
+- E _j_ - _βj_ _[t][−][τ]_ [+1] - _gτ_
+
+_τ_ =0
+
+
+_ηβj_
+
+_−_
+
+
+_t_
+
+- _βj_ _[t][−][τ]_ _gτ_
+
+_τ_ =0
+
+
+= _−η_
+
+
+_N_
+
+- _ωjβj_ _[τ]_ _[.]_
+
+_j_ =1
+
+
+= _−η_
+
+
+_t_
+
+- _βω_ [(] _[t][−][τ]_ [+1)] _gτ_ _,_ where _βω_ [(] _[τ]_ [)] = E _j_ - _βj_ _[τ]_ - =
+
+_τ_ =0
+
+
+Let us make another notation for the sum of weights in the above sum and bound it as follows:
+
+
+_N_
+
+- _ωjβj_ _[t][−][τ]_ [+1]
+
+_j_ =1
+
+
+def
+_st_ =
+
+
+=
+
+
+_t_ _t_
+
+- _βω_ [(] _[t][−][τ]_ [+1)] = 
+_τ_ =0 _τ_ =0
+
+
+_N_
+
+- _ωj_
+
+
+_j_ =1
+
+
+_t_
+
+- _βj_ _[t][−][τ]_ [+1] =
+
+_τ_ =0
+
+
+_t_
+
+
+- _N_ _βj_ _βj_ _[t]_ [+2]
+
+_ωj_ _−_
+1 _βj_ _≤_
+_j_ =1
+_−_
+
+
+_N_
+
+
+_j_ =1
+
+
+def
+= _βω._
+
+
+_ωjβj_
+1 _βj_
+_−_
+
+
+Using convexity of squared norm, we have
+
+
+_η_ [2] _s_ [2] _t_
+_≤_
+
+
+25
+
+
+�����2
+
+
+_t_
+
+- _βω_ [(] _[t][−][τ]_ [+1)] _gτ_
+
+_∥_ _∥_ [2]
+_τ_ =0
+
+
+_zt_ _xt_ = _η_ [2] _s_ [2] _t_
+_∥_ _−_ _∥_ [2]
+
+
+�����
+
+
+_t_
+
+
+_τ_ =0
+
+
+_t_
+
+
+_τ_ =0
+
+
+_βω_ [(] _[t][−][τ]_ [+1)]
+
+_gτ_ _η_ [2] _βω_
+_st_ _∥_ _∥_ [2] _≤_
+
+
+_βω_ [(] _[t][−][τ]_ [+1)]
+
+_gτ_
+_st_
+
+
+Summing over the iterates yields
+
+
+_T −_ 1
+
+
+E _zt_ _xt_ _η_ [2] _βω_
+_t_ =0 _∥_ _−_ _∥_ [2] _≤_
+
+
+= _η_ [2] _βω_
+
+
+= _η_ [2] _βω_
+
+
+_η_ [2] _βω_ [2]
+_≤_
+
+
+= _η_ [2] _βω_ [2]
+
+
+= _η_ [2] _βω_ [2]
+_M_ [2]
+
+
+_T −_ 1
+
+
+_t_ =0
+
+
+_T −_ 1
+
+
+_τ_ =0
+
+
+_T −_ 1
+
+
+_τ_ =0
+
+
+_T −_ 1
+
+
+_τ_ =0
+
+
+_M_
+
+
+_m_ =1 E _∥gτ_ _[m]_ _[−∇][f][m]_ [(] _[x]_ _τ_ _[m]_ [)] _[∥]_ [2][ +] _[ η]_ [2] _[β]_ _ω_ [2]
+
+
+- _N_ _βj_ _βj_ _[T][ −][τ]_ [+1]
+
+_ωj_ _−_
+1 _βj_
+_j_ =1
+_−_
+
+
+_t_
+
+
+_βω_ [(] _[t][−][τ]_ [+1)] E _gτ_
+_∥_ _∥_ [2]
+_τ_ =0
+
+
+_t_
+
+
+_T −_ 1
+
+
+_βω_ [(] _[t][−][τ]_ [+1)] E _gτ_ = _η_ [2] _βω_
+_∥_ _∥_ [2]
+_t_ = _τ_
+
+
+_T −_ 1
+
+
+_T −_ 1
+
+
+_τ_ =0
+
+
+- _T −τ_
+
+ - _βω_ [(] _[t]_ [)]
+
+_t_ =1
+
+
+- _T −τ_
+
+ 
+
+
+E _gτ_
+_∥_ _∥_ [2]
+
+
+
+
+
+
+
+
+ E _gτ_
+_∥_ _∥_ [2]
+
+
+_N_
+
+ 
+
+
+_T −_ 1
+
+
+E _gτ_
+_∥_ _∥_ [2]
+_τ_ =0
+
+
+_m_ �=1 _gτ_ _[m]_ _[−∇][f][m]_ [(] _[x]_ _τ_ _[m]_ [)]
+
+
+- _∇fm_ ( _x_ _[m]_ _τ_ [)]
+
+_m_ =1
+
+
+_T −_ 1
+
+
+E
+
+_τ_ =0
+
+
+_T −_ 1
+
+
+1
+_M_
+�����
+
+
+_M_
+
+
+1
+_M_
+�����
+
+
+�����
+
+
+2
+
+
+�����
+
+
+2
+
+
++ _η_ [2] _βω_ [2]
+
+
+_T −_ 1
+
+
+E
+
+_τ_ =0
+
+
+_M_
+
+
+- _∇fm_ ( _x_ _[m]_ _τ_ [)]
+
+_m_ =1
+
+
+1
+_M_
+�����
+
+
+_M_
+
+
+_M_
+
+
+_T −_ 1
+
+
+E
+
+_τ_ =0
+
+
+_T −_ 1
+
+
+�����
+
+
+2
+
+
+- _∇fm_ ( _x_ _[m]_ _τ_ [)]
+
+_m_ =1
+
+
+1
+_M_
+�����
+
+
+_M_
+
+
+�����
+
+
+2
+
+
+_._
+
+
+= _ηM_ [2] _βω_ [2] _[Tσ]_ [2][ +] _[ η]_ [2] _[β]_ _ω_ [2]
+
+
+**Lemma 3.** _If_ 24 _η_ [2] _L_ [2] _ψ_ _≤_ 1 _, then_
+
+
+_T −_ 1
+
+
+E
+
+_τ_ =0
+
+
+_T −_ 1
+
+
+_m_ =1 E _∥xt −_ _x_ _[m]_ _t_ _[∥]_ [2] _[≤]_ [12] _[η]_ [2][(] _[B]_ [2] _[ −]_ [1)] _[ψ][ ·]_ _T_ [1]
+
+
+1
+_MT_
+
+
+_where_
+
+
+_T −_ 1
+
+
+_t_ =0
+
+
+_M_
+
+
+_T_
+
+
+_T −_ 1
+
+
+E _f_ ( _xt_ ) + 4 _η_ [2] _ψ_ ( _σ_ [2] + 3 _G_ [2] ) _,_
+_∥∇_ _∥_ [2]
+_t_ =0
+
+
+_ψ_ = [4(1] _[ −]_ _[p][x]_ [)]
+
+_p_ [2] _x_ _·_
+
+
+_N_
+
+
+- _ωj_ (1 _−_ _βj_ )(1 _−_ _pj_ )
+
+1 (1 _pj_ ) _βj_
+
+_j_ =1
+
+_−_ _−_
+
+
+1 (1 _pj_ ) _βj_
+_−_ _−_
+
+
+_Proof._ Let us expand the term E _∥xt_ +1 _−_ _x_ _[m]_ _t_ +1 _[∥]_ [2][ using] _[ x][m]_ _t_ +1 [’s probabilistic update rule:]
+
+
+E _∥xt_ +1 _−_ _x_ _[m]_ _t_ +1 _[∥]_ [2] = _px ·_ 0 + (1 _−_ _px_ ) _·_ E _∥xt −_ _ηut −_ ( _x_ _[m]_ _t_ _[−]_ _[ηu]_ _t_ _[m]_ [)] _[∥]_ [2]
+
+_[m]_ _[m]_ [2]
+
+
+= (1 _−_ _px_ ) _·_ E _∥xt −_ _x_ _[m]_ _t_ _[−]_ _[η]_ [(] _[u][t]_ _[−]_ _[u]_ _t_ _[m]_ [)] _[∥]_ [2]
+
+_[m]_ [2] [2]
+
+
+(1 _px_ )(1 + _s_ )E _xt_ _x_ _[m]_ _t_ [1] _[/][s]_ [)][E] _[∥][u][t]_ _t_
+_≤_ _−_ _∥_ _−t_ _[∥]_ [2][ +] _[ η]_ [2][(1] _[ −]_ _[p][x]_ [)(1 +] _[−]_ _[u][m][∥]_ [2]
+
+
+_t_
+
+
+((1 _px_ )(1 + _s_ )) _[t][−][τ]_ E _uτ_ _u_ _[m]_ _τ_
+_τ_ =1 _−_ _∥_ _−_ _[∥]_ [2] _[.]_
+
+
+_η_ [2] (1 _px_ )(1 + [1] _/s_ )
+_≤_ _−_
+
+
+26
+
+
+where _s >_ 0 will be chosen later. Next we expand the term E _u_ _[j]_ _t_ _t_ using _u_ _[j,m]_ _t_ ’s probabilistic
+update rule: _∥_ _[−]_ _[u][j,m]_ _∥_ [2]
+
+
+1
+
+E _∥u_ _[j]_ _t_ _[−]_ _[u]_ _t_ _[j,m]_ _∥_ [2] = _pj_ _·_ 0 + (1 _−_ _pj_ ) _·_ E����� _M_
+
+
+- ( _βju_ _[j,m]_ _t−_ 1 [+ (1] _[ −]_ _[β][j]_ [)] _[g]_ _t_ _[m]_ _−_ 1 [)] _[ −]_ [(] _[β][j][u][j,m]_ _t−_ 1 [+ (1] _[ −]_ _[β][j]_ [)] _[g]_ _t_ _[m]_ _−_ 1 [)]
+
+_m_ =1
+
+
+_M_
+
+
+�����
+
+
+2
+
+
+2
+_j_
+= (1 _pj_ )E��� _βj_ ( _ut−_ 1 _t−_ 1 [) + (1] _[ −]_ _[β][j]_ [)(] _[g][t][−]_ [1] _[ −]_ _[g]_ _t_ _[m]_ _−_ 1 [)] ���
+_−_ _[−]_ _[u][j,m]_
+
+
+(1 _pj_ ) _βj_ E ( _u_ _[j]_ _t−_ 1 _t−_ 1 [)] _[∥]_ [2][ + (1] _[ −]_ _[p][j]_ [)(1] _[ −]_ _[β][j]_ [)][E] _[∥][g][t][−]_ [1] _[ −]_ _[g]_ _t_ _[m]_ _−_ 1 _[∥]_ [2]
+_≤_ _−_ _∥_ _[−]_ _[u][j,m]_
+
+
+(1 _pj_ )(1 _βj_ )
+_≤_ _−_ _−_
+
+
+_t−_ 1
+
+
+((1 _pj_ ) _βj_ ) _[t][−][τ]_ _[−]_ [1] E _gτ_ _gτ_ _[m]_
+_τ_ =0 _−_ _∥_ _−_ _[∥]_ [2]
+
+
+E _ut_ _u_ _[m]_ _t_
+_∥_ _−_ _[∥]_ [2] _≤_
+
+
+_≤_
+
+
+_≤_
+
+
+_≤_
+
+
+_N_
+
+
+_ωj_ E _u_ _[j]_ _t_ _t_
+_j_ =1 _∥_ _[−]_ _[u][j,m]_ _∥_ [2]
+
+
+_t−_ 1
+
+
+_τ_ =0
+
+
+_t−_ 1
+
+
+_τ_ =0
+
+
+_t−_ 1
+
+
+((1 _pj_ ) _βj_ ) _[t][−][τ]_ _[−]_ [1] E _gτ_ _gτ_ _[m]_
+_τ_ =0 _−_ _∥_ _−_ _[∥]_ [2]
+
+
+_t−_ 1
+
+
+_N_
+
+- _ωj_ (1 _pj_ )(1 _βj_ )
+
+_−_ _−_
+_j_ =1
+
+
+
+
+
+- _ωj_ (1 _pj_ )(1 _βj_ ) _qj_ _[t][−][τ]_ _[−]_ [1]
+
+_−_ _−_
+_j_ =1
+
+
+_N_
+
+ 
+
+
+- _ωj_ (1 _pj_ )(1 _βj_ )((1 _pj_ ) _βj_ ) _[t][−][τ]_ _[−]_ [1]
+
+_−_ _−_ _−_
+_j_ =1
+
+
+
+
+ E _gτ_ _gτ_ _[m]_
+_∥_ _−_ _[∥]_ [2]
+
+
+
+
+
+_N_
+
+ 
+
+
+
+
+ E _gτ_ _gτ_ _[m]_
+_∥_ _−_ _[∥]_ [2] _[.]_
+
+
+Denote _qx_ = (1 _px_ )(1 + _s_ ) _,_ _qx_ _[′]_ [= (1] _[ −]_ _[p][x]_ [)(1 +][ 1] _[/][s]_ [)][ and] _[ q][j]_ [= (1] _[ −]_ _[p][j]_ [)] _[β][j]_ [.] [Combining the previous]
+_−_
+two bounds, we get
+
+
+1
+_M_
+
+
+_M_
+
+
+E _xt_ _x_ _[m]_ _t_
+_m_ =1 _∥_ _−_ _[∥]_ [2]
+
+
+_M_
+
+
+_m_ =1
+
+
+_η_ [2] _qx_ _[′]_
+_≤_
+
+
+_η_ [2] _qx_ _[′]_
+_≤_
+
+
+= _η_ [2] _qx_ _[′]_
+
+
+= _η_ [2] _qx_ _[′]_
+
+
+= _η_ [2] _qx_ _[′]_
+
+
+= _η_ [2] _qx_ _[′]_
+
+
+_t_
+
+- _qx_ _[t][−][τ]_ _M_ 1
+
+_τ_ =1
+
+
+_t_
+
+- _qx_ _[t][−][τ]_ _M_ 1
+
+_τ_ =1
+
+
+_N_
+
+- _ωj_ (1 _pj_ )(1 _βj_ )
+
+_−_ _−_
+_j_ =1
+
+
+_N_
+
+- _ωj_ (1 _pj_ )(1 _βj_ )
+
+_−_ _−_
+_j_ =1
+
+
+_N_
+
+- _ωj_ (1 _pj_ )(1 _βj_ )
+
+_−_ _−_
+_j_ =1
+
+
+_N_
+
+- _ωj_ (1 _βj_ )(1 _pj_ )
+
+_−_ _−_
+_j_ =1
+
+
+_M_
+
+
+E _uτ_ _u_ _[m]_ _τ_ (4)
+_m_ =1 _∥_ _−_ _[∥]_ [2]
+
+
+_t_
+
+
+_τ_ =1
+
+
+_t−_ 1
+
+
+_ν_ =0
+
+
+_t−_ 1
+
+
+_ν_ =0
+
+
+_t−_ 1
+
+
+_ν_ =0
+
+
+1
+_M_
+
+
+1
+_M_
+
+
+
+
+
+- _ωj_ (1 _pj_ )(1 _βj_ ) _qj_ _[τ]_ _[−][ν][−]_ [1]
+
+_−_ _−_
+_j_ =1
+
+
+_τ_ _−_ 1
+
+
+_ν_ =0
+
+
+_N_
+
+ 
+
+
+
+
+ E _gν_ _gν_ _[m]_
+_∥_ _−_ _[∥]_ [2]
+
+
+1
+_M_
+
+
+_M_ 
+
+E _gν_ _gν_ _[m]_
+_m_ =1 _∥_ _−_ _[∥]_ [2]
+
+
+_τ_ _−_ 1
+
+- _qx_ _[t][−][τ]_ _[−]_ [1] _qj_ _[τ]_ _[−][ν]_
+
+_ν_ =0
+
+
+_τ_ _−_ 1
+
+
+_qx_ _[t][−][ν]_ _qj_ _[t][−][ν]_
+
+_−_
+_qx_ _qj_
+_−_
+
+_qx_ _[t][−][ν]_ _qj_ _[t][−][ν]_
+
+_−_
+_qx_ _qj_
+_−_
+
+
+27
+
+
+_M_ 
+
+E _gν_ _gν_ _[m]_
+_m_ =1 _∥_ _−_ _[∥]_ [2]
+
+
+_t_
+
+ - _qx_ _[t][−][τ]_ _qj_ _[τ]_ _[−][ν][−]_ [1]
+
+_τ_ = _ν_ +1
+
+
+_t_
+
+
+1
+_M_
+
+
+_M_ 
+
+E _gν_ _gν_ _[m]_
+_m_ =1 _∥_ _−_ _[∥]_ [2]
+
+
+_M_ 
+
+E _gν_ _gν_ _[m]_
+_m_ =1 _∥_ _−_ _[∥]_ [2]
+
+
+_,_
+
+
+_, ._
+
+
+Next, we bound the gradient term above.
+
+
+_M_
+
+
+E
+
+_m_ =1
+
+
+_gtm_ _M_
+����� _[−]_ [1]
+
+
+�����2
+
+
+1
+_M_
+
+
+_M_
+
+- 1
+
+_m_ =1 E _∥gt_ _[m]_ _[−]_ _[g][t][∥]_ [2] = _M_
+
+
+2
+_≤_ _K_
+
+
+E
+
+_m_ =1
+
+
+_M_
+
+
+_K_
+
+- _gt_ _[i]_
+
+
+_i_ =1
+
+
+_M_
+
+
+_gtm_ _t_ [)] _[ −]_ [1]
+
+_M_
+
+����� _[−∇][f][m]_ [(] _[x][m]_
+
+
+�����
+
+
+2
+
+
+_M_
+
+
+_M_
+
+
+- _i_ =1( _gt_ _[i]_ _[−∇][f][i]_ [(] _[x]_ _t_ _[i]_ [))]
+
+
+- _∇fi_ ( _x_ _[i]_ _t_ [)]
+
+_i_ =1
+
+
+_fm_ ( _xmt_ [)] _[ −]_ [1]
+����� _∇_ _M_
+
+
+�����
+
+
+2
+
+
++ [2]
+
+_M_
+
+
+_M_
+
+
+E
+
+_m_ =1
+
+
+_M_
+
+
+_M_
+
+
+_m_ �=1( _gt_ _[m]_ _[−∇][f][m]_ [(] _[x]_ _t_ _[m]_ [))]
+
+
+1
+_M_
+�����
+
+
+�����
+
+
+2
+
+
+2
+(Lemma 4)
+_≤_ _M_
+
+
+_M_
+
+
+E _gt_ _[m]_ _t_ [)] _[∥]_ [2] _[ −]_ [2][E]
+_m_ =1 _∥_ _[−∇][f][m]_ [(] _[x][m]_
+
+
+_M_
+
+
+_M_
+
+
+E _xt_ _x_ _[m]_ _t_
+_m_ =1 _∥_ _−_ _[∥]_ [2][ + 6(] _[B]_ [2] _[ −]_ [1)][E] _[∥∇][f]_ [(] _[x][t]_ [)] _[∥]_ [2][ + 6] _[G]_ [2]
+
+
++ [12] _[L]_ [2]
+
+_M_
+
+
++ [12] _[L]_ [2]
+
+
+_M_
+
+
+2 _σ_ [2] + [12] _[L]_ [2]
+_≤_ _M_
+
+
+_M_
+
+
+E _xt_ _x_ _[m]_ _t_
+_m_ =1 _∥_ _−_ _[∥]_ [2][ + 6(] _[B]_ [2] _[ −]_ [1)][E] _[∥∇][f]_ [(] _[x][t]_ [)] _[∥]_ [2][ + 6] _[G]_ [2] _[.]_
+
+
+Averaging over the iterates and plugging this bound to the previous one, we get
+
+
+_M_
+
+
+E _xt_ _x_ _[m]_ _t_
+_m_ =1 _∥_ _−_ _[∥]_ [2]
+
+
+1
+_MT_
+
+
+1
+_≤_ _MT_
+
+
+_η_ [2] _qx_ _[′]_
+_≤_ _T_
+
+
+= _η_ [2] _qx_ _[′]_
+_T_
+
+
+= _η_ [2] _qx_ _[′]_
+_T_
+
+
+_η_ [2] _qx_ _[′]_
+_≤_ _T_
+
+
+= _η_ [2] _qx_ _[′]_
+_T_
+
+
+_T −_ 1
+
+
+_t_ =0
+
+
+_T_
+
+
+_t_ =1
+
+
+_N_
+
+
+_j_ =1
+
+
+_N_
+
+
+_j_ =1
+
+
+_N_
+
+
+_j_ =1
+
+
+_M_
+
+
+E _xt_ _x_ _[m]_ _t_
+_m_ =1 _∥_ _−_ _[∥]_ [2]
+
+
+_qx_ _[t][−][τ]_ _qj_ _[t][−][τ]_
+
+_−_
+_qx_ _qj_
+_−_
+
+
+_M_ 
+
+E _gτ_ _gτ_ _[m]_
+_m_ =1 _∥_ _−_ _[∥]_ [2]
+
+
+_N_
+
+- _ωj_ (1 _βj_ )(1 _pj_ )
+
+_−_ _−_
+_j_ =1
+
+
+_N_
+
+- _ωj_ (1 _βj_ )(1 _pj_ )
+
+_−_ _−_
+_j_ =1
+
+
+_t−_ 1
+
+
+_τ_ =0
+
+
+1
+_M_
+
+
+_M_ 
+
+E _gτ_ _gτ_ _[m]_
+_m_ =1 _∥_ _−_ _[∥]_ [2]
+
+
+_T_
+
+
+_t_ = _τ_ +1
+
+
+_qx_ _[t][−][τ]_ _qj_ _[t][−][τ]_
+
+_−_
+_qx_ _qj_
+_−_
+
+
+1
+_M_
+
+
+_M_ 
+
+E _gτ_ _gτ_ _[m]_
+_m_ =1 _∥_ _−_ _[∥]_ [2]
+
+
+_ωj_ (1 _βj_ )(1 _pj_ )
+_−_ _−_
+
+(1 _qx_ )(1 _qj_ )
+_−_ _−_
+
+
+_ωj_ (1 _βj_ )(1 _pj_ )
+_−_ _−_
+
+_qx_ _qj_
+_−_
+
+
+- _qx_ (1 _qx_ _[T][ −][τ]_ ) _qj_ (1 _qj_ _[T][ −][τ]_ )
+_−_ _−_
+1 _qx_ _−_ 1 _qj_
+_−_ _−_
+
+
+��
+1
+_M_
+
+
+_M_ 
+
+E _gτ_ _gτ_ _[m]_
+_m_ =1 _∥_ _−_ _[∥]_ [2]
+
+
+_ωj_ (1 _βj_ )(1 _pj_ )
+_−_ _−_
+
+_qx_ _qj_
+_−_
+
+
+- _qx_ _qj_
+1 _qx_ _−_ 1 _qj_
+_−_ _−_
+
+
+- [�]
+1
+_M_
+
+
+_M_ 
+
+E _gτ_ _gτ_ _[m]_
+_m_ =1 _∥_ _−_ _[∥]_ [2]
+
+
+_T_
+
+
+_t_ =1
+
+
+_T −_ 1
+
+
+_τ_ =0
+
+
+_T −_ 1
+
+
+_τ_ =0
+
+
+_T −_ 1
+
+
+_τ_ =0
+
+
+_T −_ 1
+
+
+_τ_ =0
+
+
+1
+_M_
+
+
+Now, let us optimize the factor
+
+
+_qx_ _[′]_ = (1 _−_ _px_ )(1 + [1] _/s_ )
+1 _qx_ 1 (1 _px_ )(1 + _s_ )
+_−_ _−_ _−_
+
+
+by choosing optimal value for _s_ introduced earlier. By the first order optimality condition, we find
+that the optimal value is _s_ _[∗]_ = ~~_√_~~ 1 _−_ 1 _px_ 1. Hence, the minimal value of the factor is
+
+_−_
+
+
+_qx_ _[′]_ = 1 _−_ _px_
+1 _qx_ (1 1 _px_ ) [2]
+_−_ _−_ ~~_[√]_~~ _−_
+
+
+= (1 _−_ _px_ )(1 _−_ _[√]_ 1 _−_ _px_ ) [2]
+
+
+(1 _px_ )(1 1 _px_ ) [2]
+_−_ _−_ _[√]_ _−_ [(1] _[ −]_ _[p][x]_ [)(1 +] _[ √]_ [1] _[ −]_ _[p][x]_ [)][2]
+
+(1 1 _px_ ) [2] (1 + 1 _px_ ) [2] [=] _p_ [2] _x_
+_−_ ~~_[√]_~~ _−_ ~~_[√]_~~ _−_
+
+
+[1] _[ −]_ _[p][x]_ [)][2]
+
+_p_ [2] _x_ _≤_ [4(1] _[ −]_ _p_ [2] _x_ _[p][x]_ [)]
+
+
+_._
+_p_ [2] _x_
+
+
+28
+
+
+Letting
+
+
+_βj_ )(1 _−_ _pj_ ) = [4(1] _[ −]_ _[p][x]_ [)]
+
+1 _qj_ _p_ [2] _x_
+_−_
+
+
+_ψ_ = [4(1] _[ −]_ _[p][x]_ [)]
+
+_p_ [2] _x_
+
+
+_N_
+
+
+- _ωj_ (1 _−_ _βj_ )(1 _−_ _pj_ )
+
+1 _qj_
+
+_j_ =1
+
+_−_
+
+
+_p_ [2] _x_
+
+
+_N_
+
+
+- _ωj_ (1 _−_ _βj_ )(1 _−_ _pj_ )
+
+1 (1 _pj_ ) _βj_
+
+_j_ =1
+
+_−_ _−_
+
+
+1 (1 _pj_ ) _βj_
+_−_ _−_
+
+
+and continuing the chain of bounds, we get
+
+
+_M_
+
+
+E _xt_ _x_ _[m]_ _t_
+_m_ =1 _∥_ _−_ _[∥]_ [2]
+
+
+1
+_MT_
+
+
+_T −_ 1
+
+
+_t_ =0
+
+
+_M_ 
+
+E _gt_ _gt_ _[m]_
+_m_ =1 _∥_ _−_ _[∥]_ [2]
+
+
+_η_ [2] _ψ_ [1]
+_≤_ _·_ _T_
+
+
+_η_ [2] _ψ_ [1]
+_≤_ _·_ _T_
+
+
+_T −_ 1
+
+
+_t_ =0
+
+
+_T −_ 1
+
+
+_t_ =0
+
+
+1
+_K_
+
+
+12 _L_ [2]
+
+_M_
+
+
+_M_ 
+
+E _xt_ _x_ _[m]_ _t_
+_m_ =1 _∥_ _−_ _[∥]_ [2][ + 6(] _[B]_ [2] _[ −]_ [1)][E] _[∥∇][f]_ [(] _[x][t]_ [)] _[∥]_ [2][ + 2] _[σ]_ [2][ + 6] _[G]_ [2]
+
+
+1
+12 _η_ [2] _L_ [2] _ψ_
+_≤_ _·_ _TM_
+
+
+_T −_ 1 _M_
+
+- 
+E _xt_ _x_ _[m]_ _t_
+
+_t_ =0 _m_ =1 _∥_ _−_ _[∥]_ [2]
+
+
++ 6 _η_ [2] ( _B_ [2] 1) _ψ_ [1]
+
+_−_ _·_ _T_
+
+
+_T −_ 1
+
+
+E _f_ ( _xt_ ) + 2 _η_ [2] _ψ_ ( _σ_ [2] + 3 _G_ [2] ) _._
+_∥∇_ _∥_ [2]
+_t_ =0
+
+
+Assuming 12 _η_ [2] _L_ [2] _ψ_ _≤_ [1] _/_ 2 and reordering the first term in the bound, we arrive
+
+
+_m_ =1 E _∥xt −_ _x_ _[m]_ _t_ _[∥]_ [2] _[≤]_ [12] _[η]_ [2][(] _[B]_ [2] _[ −]_ [1)] _[ψ][ ·]_ _T_ [1]
+
+
+1
+_MT_
+
+
+_T −_ 1
+
+
+_t_ =0
+
+
+_M_
+
+
+_T_
+
+
+_T −_ 1
+
+
+E _f_ ( _xt_ ) + 4 _η_ [2] _ψ_ ( _σ_ [2] + 3 _G_ [2] ) _._
+_∥∇_ _∥_ [2]
+_t_ =0
+
+
+**Lemma 4.** _Under smoothness and bounded heterogeneity assumptions 1 and 3, we have_
+
+
+_≤_ [6] _M_ _[L]_ [2]
+
+
+- _fi_ ( _y_ _[i]_ )
+
+_∇_
+_i_ =1
+
+
+_fm_ ( _ym_ ) 1
+����� _∇_ _−_ _K_
+
+
+_K_
+
+
+�����
+
+
+2
+
+
+_M_
+
+- _∥y −_ _y_ _[m]_ _∥_ [2] + 3( _B_ [2] _−_ 1) _∥∇f_ ( _y_ ) _∥_ [2] + 3 _G_ [2] _,_
+
+_m_ =1
+
+
+1
+_M_
+
+
+_M_
+
+
+_m_ =1
+
+
+_for any y_ [1] _, . . ., y_ _[m]_ R _[d]_ _and y_ = E _m_ [ _y_ _[m]_ ] _._
+_∈_
+
+
+_Proof._ The proof follows from Lemma 5 of (Iacob et al., 2025) as the result does not depend on the
+optimizer.
+
+
+E WALL-CLOCK TIME MODELING
+
+
+To assess the practical benefits of our proposal, we analyze its impact on total wall-clock time by
+modeling two distinct synchronization strategies: a simple unified frequency approach and a desynchronized approach based on optimizer state half-lives. We adopt the model from DES-LOC (Iacob
+et al., 2025) for estimating total training time.
+
+
+E.1 WALL-CLOCK TIME MODEL
+
+
+The total wall-clock time is modeled as the sum of computational and communication time: _t_ total =
+_t_ compute + _t_ comms. The computation time, _t_ compute, is a function of model and dataset size, while the
+communication time, _t_ comms, depends on the number and size of synchronization events.
+
+
+For a training process of _T_ total steps, the communication time for an AllReduce operation (Sergeev
+& Balso, 2018) depends on the payload size, number of workers _M_, bandwidth _B_, and latency _l_ . The
+total time for different methods and strategies is:
+
+
+29
+
+
+**Unified Frequency Methods:** Parameters and all optimizer states are synchronized together
+every _K_ steps. The total payload is 3 _d_ (for parameters, first and second momenta). This
+applies to Local Adam and a baseline version of our method, MT-DAO (Unified).
+
+
+           - 2(3 _d_ )
+
+_t_ total _,_ Unified = _t_ compute + _[T]_
+
+_K_ _B_
+
+_[·]_
+
+
+1
+_−_ _M_ [1]
+
+
+- + _l_ (5)
+
+
+**Half-Life Based Methods:** Parameters ( _Kx_ ), first momentum ( _Ku_ ), and second momentum
+( _Kv_ ) are synchronized at different frequencies. This applies to DES-LOC and our proposed
+method, MT-DAO (Half-Life).
+
+
+       - _T_
+_t_ total _,_ Half-Life = _t_ compute + + _[T]_
+_Kx_ _K_
+
+
+_Kv_
+
+
+- + _l_ (6)
+
+
+_[T]_ + _[T]_
+
+_Ku_ _K_
+
+
+- - 2 _d_ 
+1
+
+_·_ _B_ _−_ _M_ [1]
+
+
+**Limitation:** This model does not account for any potential overlap between computation and
+communication.
+
+
+E.2 EXPERIMENTAL CONFIGURATION
+
+
+We compare the two synchronization strategies. The **Unified Frequency** strategy serves as a baseline,
+where all states are synchronized together every _Kx_ = 32 steps. This includes Local Adam, Local
+ADOPT, and a variant of our method, MT-DAO (Unified), which uses a high _β_ 1 value but is forced
+to sync at the same frequent rate as its parameters. These methods have equivalent communication
+costs and will overlap for an iso-token budget, however, the results in Section 5 show that MT-DAO
+achieves the same perplexity as Local ADOPT in many fewer optimization steps, outperforming on
+time-to-perplexity metrics.
+
+
+The **Half-Life Based** strategy aims to improve efficiency by synchronizing states less frequently if
+they change slowly. The synchronization frequency is set based on the state’s half-life, _τ_ 0 _._ 5( _β_ ) =
+ln(0 _._ 5) _/_ ln( _β_ ). This includes DES-LOC and MT-DAO (Half-Life). The quasi-hyperbolic (QH)
+configuration of MT-DAO allows it to use an extremely high _β_ 1 = 0 _._ 999, leading to a very long
+half-life and thus a much lower communication frequency for its first momentum. We use _β_ 2 = 0 _._ 999
+for ADAM variants and _β_ 2 = 0 _._ 9999 for ADOPT variants.
+
+
+Table 3 details the configurations for both strategies.
+
+
+Table 3: Hyperparameter configurations and synchronization frequencies ( _K_ ) for modeled methods,
+grouped by synchronization strategy. For the Half-Life strategy, momentum frequencies are set to the
+closest power of two to their half-life.
+
+
+**Strategy** **Method** _ω_ **Values** _β_ 1 **Values** _β_ 2 **Value** **Sync Freq.** _Ku_ 1 **Sync Freq.** _Kv_
+_Unified Frequency (All states sync every Kx_ = 32 _steps)_
+
+
+Unified Local Adam N/A {0.95} 0.99 32 32
+Unified Local ADOPT N/A {0.95} 0.9999 32 32
+Unified MT-DAO-Adam (Unified) {0.95} {0.999} 0.999 32 32
+Unified MT-DAO-ADOPT (Unified) {0.95} {0.999} 0.9999 32 32
+
+
+_Half-Life Based Frequency (States sync at different rates from Kx_ = 32 _)_
+
+
+Half-Life DES-LOC-ADAM N/A {0.95} 0.99 32 69
+Half-Life DES-LOC-ADOPT N/A {0.95} 0.9999 32 6931
+Half-Life MT-DAO-Adam (Half-Life) {0.95} {0.999} 0.999 693 693
+Half-Life MT-DAO-ADOPT (Half-Life) {0.95} {0.999} 0.9999 693 6931
+
+
+E.3 MODELING RESULTS
+
+
+The following figures present the estimated wall-clock time and communication costs when training
+a 1B model on 4 H100 machines with a batch size of 2M tokens and sequence length of 2048. The
+results demonstrate that MT-DAO significantly reduces communication cost with both strategies, with
+the half-life one being generally more effective.
+
+
+30
+
+
+ADAM Variants Wall-Clock Time
+
+
+ADOPT Variants Wall-Clock Time
+
+|Col1|Col2|Col3|Col4|Col5|Col6|Col7|Col8|Col9|Col10|Col11|Col12|DDP<br>Local|ADO|PT (U|nified)|
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+|||||||||||||<br>~~MT-D~~<br>~~DES-L~~|~~AO (~~<br>~~OC (~~|<br>~~Uniﬁed~~<br>~~Half-L~~|~~)~~<br>~~ife)~~|
+|||||||||||||~~MT-D~~|~~AO (~~|~~Half-L~~|~~ife)~~|
+|||||||||||||||||
+|||||||||||||||||
+|||||||||||||||||
+|||||||||||||||||
+
+
+10 _[−]_ [3] 10 _[−]_ [2] 10 _[−]_ [1] 10 [0] 10 [1] 10 [2] 10 [3] 10 [4] 10 [5]
+
+P2P Bandwidth (Gbits/s)
+
+
+(b) ADOPT Variants
+
+
+10 [11]
+
+
+10 [10]
+
+
+10 [9]
+
+
+10 [8]
+
+
+10 [7]
+
+
+10 [6]
+
+
+10 [5]
+
+
+|Col1|Col2|Col3|Col4|Col5|Col6|Col7|Col8|Col9|Col10|Col11|Col12|DDP<br>Loca|l ADA|M (U|nified)|
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+|||||||||||||~~MT-~~<br>~~DES-~~|<br>~~DAO ~~<br>~~LOC ~~|<br>~~(Uniﬁe~~<br> ~~(Half-~~|~~d)~~<br>~~Life)~~|
+|||||||||||||~~MT-~~|~~DAO ~~|~~(Half-~~|~~Life)~~|
+|||||||||||||||||
+|||||||||||||||||
+|||||||||||||||||
+|||||||||||||||||
+
+
+10 _[−]_ [3] 10 _[−]_ [2] 10 _[−]_ [1] 10 [0] 10 [1] 10 [2] 10 [3] 10 [4] 10 [5]
+
+P2P Bandwidth (Gbits/s)
+
+
+(a) Adam Variants
+
+
+10 [11]
+
+
+10 [10]
+
+
+10 [9]
+
+
+10 [8]
+
+
+10 [7]
+
+
+10 [6]
+
+
+10 [5]
+
+
+Figure 9: Estimated total wall-clock time as a function of interconnect bandwidth. For both (a) Adam
+and (b) ADOPT, methods using the Half-Life strategy outperform those using a Unified frequency.
+
+
+ADOPT Variants Communication Cost
+
+|Col1|Col2|Col3|Col4|Col5|Col6|Col7|Col8|Col9|Col10|Col11|Col12|DDP<br>Local|ADO|PT (U|nified)|
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+|||||||||||||MT-D<br>DES-L<br>MT-D|AO (<br>OC (<br>AO (|niﬁe<br>Half-L<br>Half-L|)<br>ife)<br>ife)|
+|||||||||||||||||
+|||||||||||||||||
+|||||||||||||||||
+|||||||||||||||||
+
+
+10 _[−]_ [3] 10 _[−]_ [2] 10 _[−]_ [1] 10 [0] 10 [1] 10 [2] 10 [3] 10 [4] 10 [5]
+
+P2P Bandwidth (Gbits/s)
+
+
+(b) ADOPT Variants
+
+
+10 [10]
+
+
+10 [8]
+
+
+10 [6]
+
+
+10 [4]
+
+
+10 [2]
+
+
+ADAM Variants Communication Cost
+
+|Col1|Col2|Col3|Col4|Col5|Col6|Col7|Col8|Col9|Col10|Col11|Col12|DDP<br>Loca|l ADA|M (U|nified)|
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+|||||||||||||||||
+|||||||||||||MT-<br>DES-<br>MT-|DAO <br>LOC <br>DAO|Uniﬁ<br> (Half-<br>(Half-|d)<br>Life)<br>Life)|
+|||||||||||||||||
+|||||||||||||||||
+|||||||||||||||||
+|||||||||||||||||
+|||||||||||||||||
+|||||||||||||||||
+
+
+10 _[−]_ [3] 10 _[−]_ [2] 10 _[−]_ [1] 10 [0] 10 [1] 10 [2] 10 [3] 10 [4] 10 [5]
+
+P2P Bandwidth (Gbits/s)
+
+
+(a) Adam Variants
+
+
+10 [10]
+
+
+10 [8]
+
+
+10 [6]
+
+
+10 [4]
+
+
+10 [2]
+
+
+Figure 10: Estimated total communication time. The plots clearly distinguish the two strategies. The
+Unified frequency methods (Local Adam and MT-DAO (Unified)) have identical high costs. The
+Half-Life methods are more efficient, with MT-DAO (Half-Life) being the most efficient due to its
+ability to leverage a high- _β_ momentum that requires infrequent updates.
+
+
+**Takeaway:** MT-DAO can significantly reduce communication costs across bandwidths.
+
+
+F DERIVATIONS OF MUTUAL INFORMATION AND VARIANCE
+
+
+This section provides the detailed derivations for the expressions referenced in the main text.
+
+
+F.1 VARIANCE OF LOCAL MOMENTUM
+
+
+The variance of the final local momentum, Var( _ut_ + _K_ ), is derived under the assumption that the
+stochastic gradients _gt_ are independent and identically distributed random variables with variance
+_σm_ [2] [.]
+
+
+The unrolled momentum update over _K_ local steps is given by:
+
+
+_ut_ + _K_ = _β_ _[K]_ _ut_ + (1 _−_ _β_ )
+
+
+_K−_ 1
+
+- _β_ _[k]_ _gt_ + _K−k_
+
+
+_k_ =0
+
+
+The variance is calculated with respect to the randomness in the local gradients _gt_ +1 _, . . ., gt_ + _K_ .
+_{_ _}_
+The initial momentum _ut_ is treated as a constant, as it is a synchronized state before local updates
+begin.
+
+
+Applying the variance operator:
+
+
+_K−_ 1
+
+- _β_ _[k]_ _gt_ + _K−k_
+
+
+_k_ =0
+
+
+Var( _ut_ + _K_ ) = Var
+
+
+_β_ _[K]_ _ut_ + (1 _−_ _β_ )
+
+
+31
+
+
+Since _ut_ is constant, Var( _β_ _[K]_ _ut_ ) = 0. Using the property Var( _aX_ ) = _a_ [2] Var( _X_ ):
+
+
+Var( _ut_ + _K_ ) = (1 _β_ ) [2] Var
+_−_
+
+
+- _K−_ 1
+
+ - _β_ _[k]_ _gt_ + _K−k_
+
+
+_k_ =0
+
+
+Given the assumption that the gradients _gt_ + _i_ are independent, the variance of their weighted sum is
+the weighted sum of their variances, where weights are squared:
+
+
+_K−_ 1
+
+- ( _β_ _[k]_ ) [2] Var( _gt_ + _K−k_ )
+
+
+_k_ =0
+
+
+_K−_ 1
+
+- Var( _β_ _[k]_ _gt_ + _K−k_ ) =
+
+
+_k_ =0
+
+
+Var
+
+
+- _K−_ 1
+
+ - _β_ _[k]_ _gt_ + _K−k_
+
+
+_k_ =0
+
+
+=
+
+
+Assuming each local gradient has variance _σm_ [2] [:]
+
+
+_K−_ 1
+
+- ( _β_ [2] ) _[k]_
+
+
+_k_ =0
+
+
+_K−_ 1
+
+- _β_ [2] _[k]_ _σm_ [2] [=] _[ σ]_ _m_ [2]
+
+_k_ =0
+
+
+Var
+
+
+- _K−_ 1 
+ - _β_ _[k]_ _gt_ + _K−k_
+
+
+_k_ =0
+
+
+=
+
+
+The summation is a finite geometric series, [�] _i_ _[n]_ =0 _[−]_ [1] _[r][i]_ [=] [1] 1 _[−]_ _−_ _[r]_ _r_ _[n]_ [.] [With] _[ r]_ [=] _[ β]_ [2][ and] _[ n]_ [ =] _[ K]_ [:]
+
+
+_K−_ 1
+
+
+_[ −]_ [(] _[β]_ [2][)] _[K]_
+
+= [1] _[ −]_ _[β]_ [2] _[K]_
+1 _−_ _β_ [2] 1 _−_ _β_ [2]
+
+
+- ( _β_ [2] ) _[k]_ = [1] _[ −]_ [(] _[β]_ [2][)] _[K]_
+
+1 _β_ [2]
+
+_k_ =0
+
+_−_
+
+
+1 _−_ _β_ [2]
+
+
+Substituting this back into the expression for Var( _ut_ + _K_ ):
+
+
+1 _β_ [2] _[K]_
+Var( _ut_ + _K_ ) = (1 _−_ _β_ ) [2] _σm_ [2] 1 _−_ _β_ [2]
+
+
+1 _−_ _β_ [2]
+
+
+By factoring the denominator 1 _−_ _β_ [2] = (1 _−_ _β_ )(1 + _β_ ), we can simplify the expression:
+
+
+1 _β_ [2] _[K]_
+Var( _ut_ + _K_ ) = (1 _−_ _β_ ) [2] _σm_ [2] (1 _−β_ )(1 +
+
+
+1 _−_ _β_ [2] _[K]_ [1] _[ −]_ _[β]_
+
+(1 _−_ _β_ )(1 + _β_ ) [=] 1 + _β_
+
+
+1 + _β_ [(1] _[ −]_ _[β]_ [2] _[K]_ [)] _[σ]_ _m_ [2]
+
+
+This completes the derivation.
+
+
+F.2 MUTUAL INFORMATION
+
+
+The mutual information _I_ ( _Ut_ + _K_ ; _Ut_ ) is derived by modeling the momentum states as multivariate
+Gaussian random vectors. The model for the update process is:
+
+
+_Ut_ + _K_ = _β_ _[K]_ _Ut_ + _L_
+
+
+The following assumptions are made:
+
+
+1. The initial momentum _Ut_ is a Gaussian random vector with zero mean and covariance Σ _Ut_,
+i.e., _Ut_ (0 _,_ Σ _Ut_ ).
+_∼N_
+
+2. The accumulated local gradient noise _L_ is a Gaussian random vector with zero mean and
+covariance Σ _L_, i.e., _L_ (0 _,_ Σ _L_ ).
+_∼N_
+
+3. _Ut_ and _L_ are statistically independent.
+
+
+The mutual information between two random vectors _X_ and _Y_ is defined as _I_ ( _X_ ; _Y_ ) = _h_ ( _Y_ ) _−_
+_h_ the entropy is( _Y |X_ ), where _h_ ( _hZ_ () = _·_ ) is the differential entropy. [1] 2 [log det(2] _[πe]_ [Σ)][.] For a _d_ -dimensional Gaussian vector _Z_ _∼N_ ( _µ,_ Σ),
+
+First, we determine the distribution of _Ut_ + _K_ . As a linear combination of independent Gaussian
+vectors, it is also Gaussian.
+
+
+    - **Mean** : E[ _Ut_ + _K_ ] = E[ _β_ _[K]_ _Ut_ + _L_ ] = _β_ _[K]_ E[ _Ut_ ] + E[ _L_ ] = 0.
+
+    - **Covariance** : Cov( _Ut_ + _K_ ) = Cov( _β_ _[K]_ _Ut_ + _L_ ). Due to the independence of _Ut_ and _L_ :
+
+
+Σ _Ut_ + _K_ = Cov( _β_ _[K]_ _Ut_ ) + Cov( _L_ ) = _β_ [2] _[K]_ Σ _Ut_ + Σ _L_
+
+
+32
+
+
+Thus, _Ut_ + _K_ (0 _, β_ [2] _[K]_ Σ _Ut_ + Σ _L_ ).
+_∼N_
+
+The entropy of _Ut_ + _K_ is:
+
+_h_ ( _Ut_ + _K_ ) = [1] �2 _πe_ ( _β_ [2] _[K]_ Σ _Ut_ + Σ _L_ )�
+
+2 [log det]
+
+
+Next, we determine the conditional entropy _h_ ( _Ut_ + _K_ _Ut_ ). The distribution of _Ut_ + _K_ conditioned on a
+_|_
+specific value _Ut_ = _ut_ is:
+_Ut_ + _K_ _Ut_ = _ut_ ( _β_ _[K]_ _ut,_ Σ _L_ )
+_|_ _∼N_
+
+The entropy of this conditional distribution is:
+
+_h_ ( _Ut_ + _K_ _Ut_ = _ut_ ) = [1]
+_|_ 2 [log det(2] _[πe]_ [Σ] _[L]_ [)]
+
+
+Since this expression does not depend on the specific value _ut_, the conditional entropy _h_ ( _Ut_ + _K_ _Ut_ )
+_|_
+is the same.
+
+
+Now, we compute the mutual information:
+
+
+_I_ ( _Ut_ + _K_ ; _Ut_ ) = _h_ ( _Ut_ + _K_ ) _h_ ( _Ut_ + _K_ _Ut_ )
+_−_ _|_
+
+
+_I_ ( _Ut_ + _K_ ; _Ut_ ) = [1]
+
+
+[1] �2 _πe_ ( _β_ [2] _[K]_ Σ _Ut_ + Σ _L_ )�
+
+2 [log det] _−_ [1]
+
+
+2 [log det(2] _[πe]_ [Σ] _[L]_ [)]
+
+
+Using the logarithmic property log _a −_ log _b_ = log( _a/b_ ):
+
+
+_I_ ( _Ut_ + _K_ ; _Ut_ ) = [1] - det(2 _πe_ ( _β_ 2 _K_ Σ _Ut_ + Σ _L_ )) 
+2 [log] det(2 _πe_ Σ _L_ )
+
+
+The constant factors (2 _πe_ ) _[d]_ cancel out. Using the determinant property det( [det(] _B_ _[A]_ [)] ) [= det(] _[AB][−]_ [1][)][:]
+
+
+_I_ ( _Ut_ + _K_ ; _Ut_ ) = [1] �( _β_ [2] _[K]_ Σ _Ut_ + Σ _L_ )Σ _[−]_ _L_ [1] 
+2 [log det]
+
+
+Distributing Σ _[−]_ _L_ [1] [inside the determinant:]
+
+_I_ ( _Ut_ + _K_ ; _Ut_ ) = 2 [1] [log det]            - _β_ [2] _[K]_ Σ _Ut_ Σ _[−]_ _L_ [1] [+ Σ] _[L]_ [Σ] _L_ _[−]_ [1]            
+_I_ ( _Ut_ + _K_ ; _Ut_ ) = [1]             - _I_ + _β_ [2] _[K]_ Σ _Ut_ Σ _[−]_ _L_ [1]             
+2 [log det]
+
+This completes the derivation.
+
+
+G EXTENDED RELATED WORK
+
+
+**Strategies for Communication-Efficient Distributed Training.** A substantial body of research
+aims to curtail communication overhead in distributed training, primarily by either reducing the
+frequency of synchronizations or compressing the data transmitted per round. The first approach,
+often termed periodic or local SGD, involves performing multiple local optimization steps between
+global aggregations. This strategy has been extensively analyzed in both IID and non-IID contexts
+(see Kairouz et al. (2021) for a survey and Lin et al. (2018a)). In the realm of foundation-model
+pre-training, methods like **DiLoCo** (Charles et al., 2025) have shown that infrequent synchronization
+can, with careful tuning, achieve performance comparable to or better than standard data parallelism,
+with scaling laws characterizing its behavior across model sizes (Charles et al., 2025). This paradigm
+has also been adapted for federated-style pre-training (Sani et al., 2025) and variants with overlapping
+or eager updates (Douillard et al., 2025; Kale et al., 2025). The second strategy involves compressing
+communication payloads. Techniques range from randomized quantization ( **QSGD** ) (Alistarh et al.,
+2017) and sparse updates tailored for non-IID data ( **STC**, **ZeroFL** ) (Sattler et al., 2019; Qiu et al.,
+2022) to one-bit aggregation ( **signSGD-MV** ) (Bernstein et al., 2018). In practice, these two strategies
+are often combined; for instance, **FedPAQ** integrates local training with quantization and partial
+participation to provide strong theoretical guarantees (Reisizadeh et al., 2020).
+
+
+33
+
+
+**Multi-Timescale Momentum for Temporal Mismatches.** The temporal discrepancy between
+frequent local updates and infrequent global synchronizations creates a need for optimizers that
+can integrate information across different timescales. Standard momentum, while beneficial in
+low-curvature landscapes (Sutskever et al., 2013), imposes a compromise: low decay values are
+responsive but slow, whereas high decay values are fast but prone to oscillations (Lucas et al.,
+2019). A single exponential moving average (EMA) cannot effectively weight both recent and
+distant gradients (Pagliardini et al., 2025). Multi-timescale optimizers address this limitation. **Quasi-**
+**Hyperbolic Momentum (QHM)** decouples the current gradient’s weight from the momentum decay
+rate ( _β_ ) (Ma & Yarats, 2019), recovering methods like Nesterov and Triple Momentum (Scoy et al.,
+2018). **Aggregated** **Momentum** **(AggMo)** maintains and averages multiple momentum buffers
+with distinct _β_ values, using faster-decaying terms to passively damp oscillations caused by slower,
+more aggressive terms (Lucas et al., 2019). Similarly, **AdEMAMix** mixes a fast EMA with an
+ultra-slow one (e.g., _β_ 3 = 0 _._ 9999), demonstrating that long-term gradient memory significantly
+reduces catastrophic forgetting in language models (Pagliardini et al., 2025). This principle of
+leveraging multiple timescales is also present in other contexts. Optimizers like Grokfast (Lee
+et al., 2024) and AdMeta (Chen et al., 2023b) employ nested EMAs for different purposes, providing
+orthogonal evidence for the value of long-term momentum. While these methods have shown
+promise in step-wise synchronous training, their potential to resolve the temporal mismatch in
+communication-efficient distributed optimization remains largely unexplored.
+
+
+**Perspectives from Federated Optimization.** The field of Federated Learning (FL), particularly
+in the cross-device setting, offers a rich history of methods for managing statistical heterogeneity
+and communication constraints, which are central challenges. The foundational **FedAvg** algorithm
+(McMahan et al., 2017) has inspired numerous successors (see survey by Kairouz et al. (2021)). To
+counteract _client drift_ caused by non-IID data, **FedProx** introduces a proximal regularizer for stability
+(Li et al., 2020), **SCAFFOLD** employs control variates to reduce gradient variance (Karimireddy
+et al., 2020b), and **FedNova** normalizes local updates to correct for objective inconsistency (Wang
+et al., 2020). Server-side momentum ( **FedAvgM** ) has also been shown to stabilize aggregation under
+data skew (Hsu et al., 2019). Adaptive methods have been extended to this setting in **Adaptive**
+**Federated Optimization** (FEDOPT), which provides nonconvex guarantees for _FedAdam_, _FedYogi_,
+and _FedAdagrad_ (Kingma & Ba, 2015). Furthermore, **Mime** adapts centralized algorithms to FL
+by marrying control variates with server statistics (Karimireddy et al., 2020a). Personalization
+techniques, such as meta-learning-based **Per-FedAvg** (Fallah et al., 2020) and **FedL2P** (Lee et al.,
+2023) or the regularized **Ditto** (Li et al., 2021), complement these global models by improving
+per-client utility.
+
+
+**Orthogonal Approaches in Payload Compression and Optimizer Design.** Orthogonal to reducing synchronization frequency, another line of work focuses on compressing the communication
+payload itself, often in combination with periodic training. Foundational methods include quantization, as in **QSGD** (Alistarh et al., 2017), and sparsification, as in **Deep Gradient Compression**
+(Lin et al., 2018b), with convergence analyses providing theoretical grounding (Alistarh et al., 2018).
+More recent work like **CocktailSGD** combines random and top- _k_ sparsification with quantization
+for aggressive compression during LLM fine-tuning (Wang et al., 2023a). Beyond compressing
+gradients, some methods compress the optimizer _states_ . For instance, **LDAdam** performs adaptive
+updates using low-rank approximations of gradient statistics (Robert et al., 2025), while **DeMo**
+decouples momentum across workers and communicates only selected components (Peng et al.,
+2024). Other advanced optimizers aim for stability and efficiency through different mechanisms; for
+example, Lion uses a sign function with interpolated momentum (Chen et al., 2023a), and Sophia
+employs a Hessian-based pre-conditioner to temper step sizes in high-curvature directions (Liu
+et al., 2024). These approaches are generally compatible with and can be composed with infrequent
+synchronization strategies.
+
+
+H ADDITIONAL RESULTS
+
+
+This section presents the full suite of additional experiments conducted during the review process.
+We begin with a toy-problem stability check (Fig. 11), followed by time-normalized downstream
+evaluation (Fig. 12), momentum-count ablations _N_ _∈{_ 1 _,_ 2 _,_ 3 _}_ (Appendix H.2), batch-size and
+worker-count sweeps (Appendix H.3), a streaming communication comparison (Appendix H.4),
+
+
+34
+
+
+_β_ = 0 _._ 9
+
+
+_β_ = 0 _._ 9
+
+
+8
+
+
+6
+
+
+4
+
+
+2
+
+
+0
+
+
+8
+
+
+6
+
+
+4
+
+
+2
+
+
+0
+
+
+|Col1|Col2|Col3|MT-|
+|---|---|---|---|
+||||`Lo`|
+|||||
+|||||
+|||||
+
+
+(b) Contour plot of trajectories.
+
+
+10 [0]
+
+
+10 _[−]_ [2]
+
+
+10 _[−]_ [4]
+
+
+10 _[−]_ [6]
+
+
+0 100 200 300 400 500 600
+
+Communication Rounds
+
+
+(a) Distance to optimum vs. steps.
+
+
+_−_ 4 _−_ 2 0 2 4
+
+
+_−_ 4 _−_ 2 0 2 4
+
+
+Figure 11: MT-DAO remains stable in both fast _β_ regimes, as pictured here, and in slow _β_ regimes as in
+Figure 1. This is unlike prior stateful methods like Local Adam which only offer stable convergence
+for fast _β_ values As before, we optimize the non-convex Rosenbrock function _f_ ( _x_ 1 _, x_ 2) = (1
+_−_
+_x_ 1) [2] + 100( _x_ 2 _−_ _x_ [2] 1 [)][2][ with] _[ M]_ [= 256][ workers and IID Gaussian noise (] _[σ]_ [= 2][).]
+
+
+All Tasks-(AVG)
+
+
+ARC-Challenge (0-shot)
+
+
+ARC-Easy (0-shot)
+
+
+55
+
+
+50
+
+
+45
+
+
+40
+
+
+35
+
+
+60
+
+
+50
+
+
+40
+
+
+30
+
+
+0 20 40 60
+Time (Hours)
+
+
+HellaSwag (0-shot)
+
+
+0 20 40 60
+Time (Hours)
+
+
+MMLU(5-shot)
+
+
+0 20 40 60
+Time (Hours)
+
+
+PIQA (0-shot)
+
+
+40
+
+
+35
+
+
+30
+
+
+25
+
+
+34
+
+
+32
+
+
+30
+
+
+28
+
+
+26
+
+
+70
+
+
+65
+
+
+60
+
+
+55
+
+
+50
+
+
+45
+
+
+40
+
+
+75
+
+
+70
+
+
+65
+
+
+60
+
+
+0 20 40 60
+Time (Hours)
+
+
+0 20 40 60
+Time (Hours)
+
+
+0 20 40 60
+Time (Hours)
+
+
+Figure 12: **Downstream** **task** **accuracy** **versus** **time** on ARC-CHALLENGE, ARC-EASY,
+HELLASWAG, MMLU, and PIQA. Curves compare MT-DAO, Local ADOPT, Nesterov,
+AdamW-DDP, and QHAdamW-DDP; horizontal reference lines (when shown) indicate external model
+baselines. Error bars denote _±σ_ over samples. MT-DAO **exceeds** AdamW-DDP on the aggregate
+and on reasoning-heavy tasks (ARC-CHALLENGE, HELLASWAG); with smaller but steady gains
+on MMLU. As training length increases, MT-DAO **closes the gap** to QHAdamW-DDP, consistent
+with the perplexity results. Nesterov tracks AdamW-DDP and **outperforms** Local ADOPT, but
+remains below MT-DAO across metrics. tokens-normalized results are provided in Figure 7.
+
+
+gradient-clipping ablations (Appendix H.5), the synchronous-limit _K_ =1 analysis, and Muon experiments (Appendix H.7). In total, these comprise 235 new experiments spanning five inner optimizers,
+model scales from 16M to 360M, and up to 8 workers.
+
+
+To investigate the stability of MT-DAO under varied momentum parameterizations, we first examine
+its performance in a fast _β_ regime. Figure 11 presents the results of this comparison, plotting both
+the convergence rate in terms of distance to the optimum and the optimization trajectories on the
+function’s contour plot.
+
+
+35
+
+
+H.1 DOWNSTREAM EVALUATION
+
+
+H.2 ABLATIONS ON THE NUMBER OF MOMENTA _N_
+
+
+In our main work, we focus on MT-DAO with _N_ = 1 specifically in its Quasi-Hyperbolic (QH)
+formulation. We argue this provides a "free lunch": it captures multi-timescale dynamics (via the
+instantaneous gradient and one slow momentum) without the memory and communication overhead
+of storing and synchronizing additional buffers.
+
+
+In this section, we empirically validate this design choice by ablating the number of momenta _N_ .
+Guided by prior work on multi-momentum optimizers (Lucas et al., 2019; Ma & Yarats, 2019;
+Pagliardini et al., 2025), we define the optimizer update as a convex combination of _N_ states with
+weights [�] _i_ _[N]_ =1 _[ω][i]_ [= 1] _[.]_ [0][.] [We distinguish between two families:]
+
+
+1. **Standard variants:** _N_ momentum buffers are maintained. This corresponds to AdEMAMix
+( _N_ = 2) or AggMo ( _N_ = 3).
+
+
+2. **Quasi-Hyperbolic (QH) variants:** The fastest momentum buffer is replaced by the current
+preconditioned gradient _gt_ . Mathematically, this is equivalent to setting the fastest _β_ = 0.
+This corresponds to ( _N_ = 1, used in our main text) or QHAdEMAMix ( _N_ = 2).
+
+
+**Experimental** **Setup.** To ensure fair comparisons without the confounding factors of complex
+scheduling introduced in Pagliardini et al. (2025), we use Adam as the inner optimizer for all variants
+in this section. We utilize the WSD learning rate scheduler. Due to the combinatorial explosion of
+hyperparameters as _N_ increases, we fix the decay rates _β_ to exponentially spaced values following
+the recommendation of Lucas et al. (2019): _βi_ = 1 0 _._ 1 _[i]_ .
+_−_
+
+    - **Tuning Protocol:** We tune the mixing weights _ω_ and the learning rate _η_ on the 16M model
+for 12 _,_ 288 steps. We then transfer the optimal configurations to 125M and 360M scales
+trained for 40 _,_ 960 steps.
+
+
+    - **Baselines:** We compare MT-DAO against DDP baselines for every _N_ to measure the performance gap.
+
+
+H.2.1 MT-DAO ( _N_ = 1) VS. MT-DAO ( _N_ = 2)
+
+
+We first compare our default MT-DAO ( _N_ = 1) against a standard MT-DAO ( _N_ = 2) which maintains
+two explicit momentum buffers.
+
+
+    - **Configurations:** For _N_ = 1, we use the gradient and a slow momentum with _β_ 1 = 0 _._ 999.
+For _N_ = 2, we use a fast momentum ( _β_ 1 _,_ 1 = 0 _._ 9) and a slow momentum ( _β_ 1 _,_ 2 = 0 _._ 999).
+
+
+    - **Grid** **Search:** We sweep the weight of the slow momentum _ω_ slow
+_∈_
+0 _._ 5 _,_ 0 _._ 6 _,_ 0 _._ 7 _,_ 0 _._ 8 _,_ 0 _._ 9 _,_ 0 _._ 95 and the learning rate _η_ 1 _,_ 2 _,_ 4 _,_ 8 _,_ 16 _η_ base.
+_{_ _}_ _∈{_ _} ×_
+
+
+**Results.** Figure 20 and Fig. 21 visualize the tuning results. We find that shifting weight towards
+the slow momentum is consistently optimal. Figure 13 compares the convergence of the optimal
+configurations across scales.
+
+
+We observe a critical distinction between the DDP and MT-DAO regimes. In DDP, adding a fast
+momentum buffer ( _N_ = 2) yields a slight perplexity gain over _N_ = 1 (0 _._ 01 at 16M, 0 _._ 02 at 125M
+and 0 _._ 44 at 360M). However, for MT-DAO, the _N_ = 2 variant performs _worse_ than the _N_ = 1 variant
+by approximately 1.5% at 125M scale.
+
+
+**Interpretation:** In the infrequent communication regime ( _K_ = 32), a fast momentum ( _β_ = 0 _._ 9,
+_τ_ 0 _._ 5 6 steps) decays almost entirely between synchronization steps ( _β_ [32] 0 _._ 03). Consequently,
+_≈_ _≈_
+the worker’s fast momentum buffer becomes decorrelated from the global direction, injecting noise.
+In contrast, the QH formulation ( _N_ = 1) uses the instantaneous gradient as the fast component.
+
+
+36
+
+
+60
+
+
+0 6 12 18 24 30 36 42 48 54
+Wall-Clock Time (Hours)
+
+
+56
+
+
+52
+
+
+48
+
+
+44
+
+
+40
+
+
+36
+
+
+32
+
+
+28
+
+
+24
+
+
+60
+
+
+56
+
+
+52
+
+
+48
+
+
+44
+
+
+40
+
+
+36
+
+
+32
+
+
+28
+
+
+24
+
+
+0 _._ 2 0 _._ 4 0 _._ 6 0 _._ 8 1 _._ 0 1 _._ 2 1 _._ 4 1 _._ 6
+Wall-Clock Time (Hours)
+
+
+0 8 16 24 32 40 48 56 64 72
+Wall-Clock Time (Hours)
+
+
+27 _._ 5
+
+
+25 _._ 0
+
+
+22 _._ 5
+
+
+20 _._ 0
+
+
+17 _._ 5
+
+
+15 _._ 0
+
+
+12 _._ 5
+
+
+10 _._ 0
+
+
+7 _._ 5
+
+
+27 _._ 5
+
+
+25 _._ 0
+
+
+22 _._ 5
+
+
+20 _._ 0
+
+
+17 _._ 5
+
+
+15 _._ 0
+
+
+12 _._ 5
+
+
+10 _._ 0
+
+
+7 _._ 5
+
+
+30 _._ 0
+
+
+27 _._ 5
+
+
+25 _._ 0
+
+
+22 _._ 5
+
+
+20 _._ 0
+
+
+17 _._ 5
+
+
+15 _._ 0
+
+
+12 _._ 5
+
+
+10 _._ 0
+
+
+30 _._ 0
+
+
+27 _._ 5
+
+
+25 _._ 0
+
+
+22 _._ 5
+
+
+20 _._ 0
+
+
+17 _._ 5
+
+
+15 _._ 0
+
+
+12 _._ 5
+
+
+10 _._ 0
+
+
+0 _._ 6 1 _._ 2 1 _._ 8 2 _._ 4 3 _._ 0 3 _._ 6 4 _._ 2 4 _._ 8 5 _._ 4
+Tokens (Billions)
+
+
+2 _._ 5 5 _._ 0 7 _._ 5 10 _._ 0 12 _._ 5 15 _._ 0 17 _._ 5 20 _._ 0
+Tokens (Billions)
+
+
+2 _._ 5 5 _._ 0 7 _._ 5 10 _._ 0 12 _._ 5 15 _._ 0 17 _._ 5 20 _._ 0
+Tokens (Billions)
+
+
+Figure 13: **MT-DAO (** _N_ = 1 **) vs.** _N_ = 2 **variants.** Validation perplexity vs. Wall-clock Time (top)
+and Tokens (bottom) for 16M, 125M, and 360M models. **Takeaway:** The _N_ = 1 Quasi-Hyperbolic
+variant matches or beats the standard _N_ = 2 variant in token-efficiency while being slightly faster in
+wall-clock time due to lower communication volume.
+
+
+Thus, MT-DAO ( _N_ = 1) captures the multi-timescale benefit without the instability of a decaying
+fast momentum.
+
+
+H.2.2 QUASI-HYPERBOLIC _N_ = 2 VS. STANDARD _N_ = 3
+
+
+To see whether increasing the number of momenta terms beyond _N_ = 1 brings about further
+improvement, we proceed to compare a QH _N_ = 2 variant (QHAdEMAMix) against a standard
+_N_ = 3 (AggMo). We repeat the same experimental design as was done in H.2.1, specifically:
+
+
+    - **Configurations:** For QHAdEMAMix ( _N_ = 2), we use the instantaneous gradient, a medium
+momentum ( _β_ 1 _,_ 1 = 0 _._ 99) and a slow momentum ( _β_ 1 _,_ 2 = 0 _._ 999) term. AggMo ( _N_ = 3)
+instead uses a fast momentum, ( _β_ 1 _,_ 1 = 0 _._ 9) a medium momentum ( _β_ 1 _,_ 2 = 0 _._ 99), and finally
+a slow ( _β_ 1 _,_ 3 = 0 _._ 999) momentum term.
+
+    - **Grid Search:** For QHAdEMAMix and AggMo, we sweep over the configurations:
+
+_{_ (0 _._ 05 _,_ 0 _._ 05 _,_ 0 _._ 9) _,_ (0 _._ 05 _,_ 0 _._ 25 _,_ 0 _._ 8) _,_ (0 _._ 05 _,_ 0 _._ 25 _,_ 0 _._ 7) _,_ (0 _._ 05 _,_ 0 _._ 35 _,_ 0 _._ 6) _,_
+(0 _._ 05 _,_ 0 _._ 45 _,_ 0 _._ 5) _,_ (0 _._ 1 _,_ 0 _._ 1 _,_ 0 _._ 8) _,_ (0 _._ 1 _,_ 0 _._ 2 _,_ 0 _._ 7) _,_ (0 _._ 1 _,_ 0 _._ 3 _,_ 0 _._ 6) _,_ (0 _._ 1 _,_ 0 _._ 4 _,_ 0 _._ 5) _}_
+
+In the case of QHAdEMAMix, the first _ω_ in the tuple refers to _ωg_, which is applied to the
+gradient, whilst for AggMo this is _ω_ 1 and this is applied to the fast momentum term. All
+other elements of the procedure and all other hyper-parameters remain the same, including
+the optimal base learning rate _η_ = 0 _._ 01.
+
+
+We note that in the main text we used a slightly higher _ω_ 1 = 0 _._ 98 as recommended by Ma & Yarats
+(2019) beyond what we found to be optimal in short runs in order to guarantee stability at very long
+training horizons. However, the goal for this section is to provide a fair comparison across _N_ ’s under
+similar tuning budgets, so we always use the optimum found by our 12288-step runs.
+
+
+**Results.** Observing Fig. 22 and Fig. 23, we find that similar trends occur as in H.2.1, where both
+formulations prefer hyperparameters that shift the weight of the _ω_ terms to the slow momentum.
+
+
+37
+
+
+60
+
+
+0 6 12 18 24 30 36 42 48 54
+Wall-Clock Time (Hours)
+
+
+56
+
+
+52
+
+
+48
+
+
+44
+
+
+40
+
+
+36
+
+
+32
+
+
+28
+
+
+24
+
+
+60
+
+
+56
+
+
+52
+
+
+48
+
+
+44
+
+
+40
+
+
+36
+
+
+32
+
+
+28
+
+
+24
+
+
+0 _._ 2 0 _._ 4 0 _._ 6 0 _._ 8 1 _._ 0 1 _._ 2 1 _._ 4 1 _._ 6
+Wall-Clock Time (Hours)
+
+
+30 _._ 0
+
+
+27 _._ 5
+
+
+25 _._ 0
+
+
+22 _._ 5
+
+
+20 _._ 0
+
+
+17 _._ 5
+
+
+15 _._ 0
+
+
+12 _._ 5
+
+
+10 _._ 0
+
+
+30 _._ 0
+
+
+27 _._ 5
+
+
+25 _._ 0
+
+
+22 _._ 5
+
+
+20 _._ 0
+
+
+17 _._ 5
+
+
+15 _._ 0
+
+
+12 _._ 5
+
+
+10 _._ 0
+
+
+27 _._ 5
+
+
+25 _._ 0
+
+
+22 _._ 5
+
+
+20 _._ 0
+
+
+17 _._ 5
+
+
+15 _._ 0
+
+
+12 _._ 5
+
+
+10 _._ 0
+
+
+7 _._ 5
+
+
+27 _._ 5
+
+
+25 _._ 0
+
+
+22 _._ 5
+
+
+20 _._ 0
+
+
+17 _._ 5
+
+
+15 _._ 0
+
+
+12 _._ 5
+
+
+10 _._ 0
+
+
+7 _._ 5
+
+
+0 8 16 24 32 40 48 56 64 72
+Wall-Clock Time (Hours)
+
+
+0 _._ 6 1 _._ 2 1 _._ 8 2 _._ 4 3 _._ 0 3 _._ 6 4 _._ 2 4 _._ 8 5 _._ 4
+Tokens (Billions)
+
+
+0 _._ 6 1 _._ 2 1 _._ 8 2 _._ 4 3 _._ 0 3 _._ 6 4 _._ 2 4 _._ 8 5 _._ 4
+Tokens (Billions)
+
+
+2 _._ 5 5 _._ 0 7 _._ 5 10 _._ 0 12 _._ 5 15 _._ 0 17 _._ 5 20 _._ 0
+Tokens (Billions)
+
+
+Figure 14: **MT-DAO QH (** _N_ = 2 **) vs.** **Standard** _N_ = 3 **(** _K_ = 32 **).** Validation perplexity across
+scales. The QH _N_ = 2 variant (orange) consistently overlaps or outperforms the _N_ = 3 variant
+while requiring one fewer memory buffer.
+
+
+When evaluating the well-tuned models in Figure 14, we see that across model scales, the MT-DAO
+( _N_ = 2,QH) formulations perform better than their _N_ = 3 counterparts (0 _._ 83 at 16M, 0 _._ 47 at
+125M and 0 _._ 11 at 360M), with the gap between them decreasing as the model size increases. When
+comparing these results with those observed in Fig. 23, we arrive at the following conclusion: the
+addition of more momentum buffers has diminishing returns for our method as _N_ _>_ 1. As such, this
+motivates our decision to prioritze MT-DAO with _N_ = 1 in our main experiments: it provides a good
+tradeoff in terms of performance, whilst minimizing the memory overhead of maintaining additional
+momentum buffers.
+
+
+H.3 ABLATIONS ON THE NUMBER OF WORKERS AND BATCH SIZE
+
+
+In this section, we investigate the interplay between the global batch size ( _BG_ ) and the number of
+workers ( _M_ ) for both MT-DAO and Local Adam. We utilize our small model configuration since
+we can easily use batch sizes orders of magnitude larger than necessary, simulating very large-batch
+regimes. For Local Adam, we employ the standard AdamW hyperparameters _β_ 1 = 0 _._ 9 _, β_ 2 = 0 _._ 999.
+For MT-DAO, we utilize our robust configuration with _β_ 1 = 0 _._ 999 _, β_ 2 = 0 _._ 999 and a convex
+combination coefficient _ω_ 1 = 0 _._ 98. We vary the global batch size _BG_ 64 _,_ 128 _,_ 256 _,_ 512 and the
+_∈{_ _}_
+worker count _M_ 1 _,_ 2 _,_ 4 _,_ 8, noting that the effective per-worker batch size _B_ is given by _BG/M_ .
+_∈{_ _}_
+
+Figure 15 demonstrates that MT-DAO is significantly more robust to increases in the worker count _M_ .
+As _M_ increases for a fixed global batch size, the per-worker batch size _BG/M_ decreases, injecting
+higher noise into the local updates. As shown in Figure 15(c), the performance delta generally
+increases as we move down the y-axis (increasing workers), indicating that Local Adam degrades
+faster than MT-DAO in high-noise regimes. This robustness stems from the multi-timescale design:
+MT-DAO relies heavily on the slow, shared momentum (governed by _ω_ 1 = 0 _._ 98) rather than the noisy
+local gradients.
+
+
+This empirical behavior aligns with our variance analysis derived in Appendix F.1. While increasing
+the batch size _BG_ reduces variance linearly, the momentum decay rate _β_ controls variance exponentially relative to the synchronization period _K_ . The variance of the local momentum state _ut_ + _K_ can
+
+
+38
+
+
+Validation Perplexity
+
+32
+
+
+30
+
+
+28
+
+
+(c) PPLLocalAdam _−_ PPLMT-DAO
+
+
+∆of Validation Perplexities
+
+
+64 128 256 512
+Global Batch Size
+
+
+2 _._ 50
+
+
+2 _._ 25
+
+
+2 _._ 00
+
+
+1 _._ 75
+
+
+1 _._ 50
+
+
+1 _._ 25
+
+
+1 _._ 00
+
+
+0 _._ 75
+
+
+Validation Perplexity
+
+
+64 128 256 512
+Global Batch Size
+
+
+(b) MT-DAO
+
+
+30
+
+
+28
+
+
+26
+
+
+24
+
+
+22
+
+
+64 128 256 512
+Global Batch Size
+
+
+(a) Local Adam
+
+
+26
+
+
+24
+
+
+Figure 15: **Robustness to Batch Size and Worker Count:** Validation perplexity heatmaps for (a)
+Local Adam and (b) MT-DAO across varying worker counts and global batch sizes. (c) shows
+the performance gap, where positive values indicate MT-DAO outperforms Local Adam (lower
+perplexity is better). MT-DAO demonstrates superior stability as the number of workers increases
+(and per-worker batch size decreases) compared to the baseline.
+
+
+be approximated as follows for a global batch size _BG_ and number of workers _M_ :
+
+
+Var( _ut_ + _K_ )
+_≈_ [1] 1 + _[ −]_ _β_ _[β]_
+
+
+- �� Drift Term
+
+
+�1 _β_ [2] _[K]_ [�]
+1 + _β_ _−_
+
+
+(7)
+
+
+_σ_ [2]
+
+_·_ _BG/M_
+
+
+ - �� Batch Noise
+
+
+Standard optimizers with lowMT-DAO utilizes a high _β_ (0.999), suppressing this term significantly. _β_ (e.g., 0.9) fail to suppress the drift termConsequently, (1 _−_ _β_ [2] _[K]_ ) when MT-DAO _K_ is large. is less
+_σ_ [2]
+sensitive to the linear increase in batch noise _BG/M_ [caused by increasing] _[ M]_ [, allowing it to scale]
+efficiently even with small per-worker batches.
+
+
+**Performance at Large Batch Sizes.** Finally, we observe that MT-DAO maintains a performance
+advantage even at large global batch sizes ( _B_ = 512), more appropriate for a model roughly 45 _×_
+larger. According to the empirical model of large batch training (McCandlish et al., 2018) and more
+recent works on the topic (Zhang et al., 2025), there exists a critical batch size past which further
+increases in batch size do not lead to linear improvements in performance-for-compute due to a
+decrease in sample efficiency. McCandlish et al. (2018) argue that this happens once the batch
+size sufficiently denoises the gradient. Given the much better performance of _BG_ 64 _,_ 128
+_∈{_ _}_
+compared to _BG_ = 512, our model is in this regime. However, despite the global batch size being
+sufficient to reduce gradient noise, Local Adam still struggles due to the timescale mismatch inherent
+in infrequent communication. MT-DAO stabilizes training by preserving the global optimization
+direction across rounds, proving that the benefits of multi-timescale tracking extend beyond merely
+compensating for small-batch noise. We also observe that for larger numbers of workers, the fall-off
+in performance as the global batch size increases is not as sharp as for a single worker (equivalent
+to DDP), for example, in the 8 worker case, the optimal batch size of MT-DAO is 128 rather than 64.
+This corroborates the findings of Charles et al. (2025), which indicate that communication-efficient
+training methods can benefit from larger batch sizes compared to DDP.
+
+
+H.4 MT-DAO COMPARISON AGAINST ST R E A M I N GDILOCO
+
+
+In this section, we demonstrate that the benefits of MT-DAO are orthogonal to and synergistic with the
+streaming techniques introduced by Douillard et al. (2025). We introduce Streaming MT-DAO, a
+variant that synchronizes fragments of the model and optimizer states continuously in the background,
+as formalized in Algorithm 5 for Adam. We adopt the fragment-based approach where the model
+
+
+39
+
+
+_θ_ is partitioned into disjoint fragments _F_ 1 _, . . ., FF_ . We extend StreamingDiLoCo, which only
+synchronizes parameters (and an outer optimizer state), so that our framework supports _N_ inner
+momentum states. We decouple the synchronization frequencies of the model parameters ( _Kx_ ), the
+_N_ first momenta ( _Kj_ ), and the second momentum ( _Kv_ ). We use averaging as the outer optimizer
+_{_ _}_
+for all model states by default. The inner update step (L.24) retains the multi-timescale structure of
+MT-DAO. For the Streaming Local Adam baseline, we implement the same algorithm but with
+_N_ = 1, standard single-timescale momentum ( _ω_ 1 = 1 _._ 0).
+
+
+**Algorithm 5** Streaming MT-DAO (Fragmented, Overlapped, Multi-Scale)
+
+
+**Require:** **Model tensors, hyper-parameters**
+
+
+2:1: _Zx_ 0— Global state (for all _∈_ R _[d]_, _{u_ _[j]_ _−_ 1 _[}]_ _j_ _[N]_ =1 _[∈]_ [(][R] _Z_ _[d]_ [)] _∈{_ _[N]_ [,] _[ v]_ _x, u, v_ _[−]_ [1] _[∈]_ _}_ [R] ) _[d]_ [— initial params,] _[ N]_ [first momenta, second momentum]
+3: _F_ 1 _, . . ., FF_ - partition of tensors into _F_ fragments with offsets _tf_
+4: _Kx,_ _Kj_ _j_ =1 _[, K][v]_ [— independent sync periods for tensors]
+6:5: OuterOpt _α, τ_ _{∈_ [0 _},_ 1] _[N]_ _Z,_ N— outer optimizer specific to tensor type — blending factor, inner overlap delay _[∈]_ [(][N][+][)] _[N]_ [+2] _Z_ _x, u, v_
+_∈{_ _}_
+**Ensure:** _xT,_ _{u_ _[j]_ _T −_ 1 _[}]_ _j_ _[N]_ =1 _[,]_ _[v][T][ −]_ [1]
+7:8: **initializeinitialize** worker states global state _x_ 0 _[m]_ 0 _[,][ {]_ _Z_ _[u]_ init _−_ _[j,m]_ 1for all tensors _[}][, v]_ _−_ _[m]_ 1 [identically for all workers] _Z_ _x, u_ _[j]_ _, v_ _[ m]_
+_Z_ _←_ _∈{_ _}_
+9: **for parallel** _m_ = 1 _. . . M_ **do**
+10: **for** _t_ = 0 _, . . ., T_ _−_ 1 **do**
+11:13:12: **for** each fragment **if** _K_ ( _←t −KtfZ_ ) mod _f K∈{_ == 01 _, . . ., F_ **then** _}_ **and tensor** _Z_ _∈{x, {u_ _[j]_ _}, v}_ **do** select freq.check sync schedulefor _x_, _u_ _[j]_, or _v_
+14: ∆ [(] _Z_ _[f]_ [)] _Zt_ [(] _[f]_ [)] _[,m]_ _t−K_
+15: h [(] _Z_ _[f]_ [)] _←←_ async-send _−Z_ [(] _[f]_ [ [)] _M_ [1] - _Mr_ =1 [∆] _Z_ [(] _[f]_ [)][]] broadcast delta
+
+
+15: h [(] _Z_ _[f]_ [)] _←_ async-send[ _M_ [1] - _Mr_ =1 [∆] _Z_ [(] _[f]_ [)][]] broadcast delta
+
+16: **if** ( _t −_ _tf_ _−_ _τ_ ) mod _K_ == 0 **then** check overlap schedule
+17: ∆agg _←_ block-receive[h [(] _Z_ _[f]_ [)][]] wait for data
+18: _Z_ ˜ _←_ OuterOpt _Z_ ( _Zt_ [(] _−_ _[f]_ [)] _τ_ _−K_ _[,]_ [ ∆][agg][)]
+19: _t−τ_ archive new global state at index _t −_ _τ_
+_Z_ [(] _[f]_ [)] _[←]_ _[Z]_ [˜]
+20: _Zt_ [(] _[f]_ [)] _[,m]_ _αZt_ [(] _[f]_ [)] _[,m]_ + (1 _α_ ) _Z_ [˜] merge streams
+_←_ _−_
+22:21: **for** _g_ ˆ _t_ _[m]_ _j_ _[←]_ = 1 [clip] **to** [(] _[∇]_ _N_ _[F]_ **do** [(] _[x]_ _t_ _[m]_ [;] _[ ξ]_ _t_ _[m]_ [)] _[, ρ]_ [)] clipped stochastic gradientupdate N first momenta
+23: _u_ _[j,m]_ _t_ _←_ _β_ 1 _,ju_ _[j,m]_ _t−_ 1 [+ (1] _[ −]_ _[β]_ [1] _[,j]_ [)ˆ] _[g]_ _t_ _[m]_
+24: _vt_ _[m]_ 2 _[v]_ _t_ _[m]_ _−_ 1 [+ (1] _[ −]_ _[β]_ 2 [)(] _[g]_ _t_ _[m]_ [)][2]
+
+_[m][←]_ _[β]_ 1        - _[N]_ _[m]_ _[N]_ _[j,m]_        
+
+
+25: ∆ _[m]_ _t_ 1
+
+_[←]_ ~~_√_~~ _vt_
+
+
+_vt_ _[m]_ [+] _[ϵ]_
+
+
+- (1 _−_ [�] _j_ _[N]_ =1 _[ω][j]_ [)ˆ] _[g]_ _t_ _[m]_ [+][ �] _[N]_ _j_ =1 _[ω][j][u]_ _t_ _[j,m]_
+
+
+26: _x_ _[m]_ _t_ +1 _t_ _t_ [∆] _[m]_ _t_
+
+_[←]_ _[x][m]_ _[−]_ _[η]_
+27: **end parallel for**
+
+
+40
+
+
+60
+
+
+56
+
+
+52
+
+
+48
+
+
+44
+
+
+40
+
+
+36
+
+
+32
+
+
+28
+
+
+24
+
+
+0 _._ 0 0 _._ 2 0 _._ 4 0 _._ 6 0 _._ 8 1 _._ 0 1 _._ 2 1 _._ 4 1 _._ 6
+Wall-Clock Time (Hours)
+
+
+60
+
+
+0 6 12 18 24 30 36 42 48 54
+Wall-Clock Time (Hours)
+
+
+0 8 16 24 32 40 48 56 64 72
+Wall-Clock Time (Hours)
+
+
+56
+
+
+52
+
+
+48
+
+
+44
+
+
+40
+
+
+36
+
+
+32
+
+
+28
+
+
+24
+
+
+30 _._ 0
+
+
+27 _._ 5
+
+
+25 _._ 0
+
+
+22 _._ 5
+
+
+20 _._ 0
+
+
+17 _._ 5
+
+
+15 _._ 0
+
+
+12 _._ 5
+
+
+10 _._ 0
+
+
+30 _._ 0
+
+
+27 _._ 5
+
+
+25 _._ 0
+
+
+22 _._ 5
+
+
+20 _._ 0
+
+
+17 _._ 5
+
+
+15 _._ 0
+
+
+12 _._ 5
+
+
+10 _._ 0
+
+
+27 _._ 5
+
+
+25 _._ 0
+
+
+22 _._ 5
+
+
+20 _._ 0
+
+
+17 _._ 5
+
+
+15 _._ 0
+
+
+12 _._ 5
+
+
+10 _._ 0
+
+
+7 _._ 5
+
+
+27 _._ 5
+
+
+25 _._ 0
+
+
+22 _._ 5
+
+
+20 _._ 0
+
+
+17 _._ 5
+
+
+15 _._ 0
+
+
+12 _._ 5
+
+
+10 _._ 0
+
+
+7 _._ 5
+
+
+0 _._ 6 1 _._ 2 1 _._ 8 2 _._ 4 3 _._ 0 3 _._ 6 4 _._ 2 4 _._ 8 5 _._ 4
+Tokens (Billions)
+
+
+2 _._ 5 5 _._ 0 7 _._ 5 10 _._ 0 12 _._ 5 15 _._ 0 17 _._ 5 20 _._ 0
+Tokens (Billions)
+
+
+2 _._ 5 5 _._ 0 7 _._ 5 10 _._ 0 12 _._ 5 15 _._ 0 17 _._ 5 20 _._ 0
+Tokens (Billions)
+
+
+Figure 16: **Streaming** **MT-DAO** **vs.** **StreamingDiLoCo.** Validation perplexity vs. Time
+(top) and Tokens (bottom) for 16M, 125M, and 360M models. **Takeaway:** Streaming MT-DAO
+(orange) consistently outperforms StreamingDiLoCo and Streaming Local Adam. While
+StreamingDiLoCo relies on an outer optimizer to reconcile divergent workers, MT-DAO prevents
+excessive divergence via its slow inner momentum, leading to superior stability even with partial,
+strided communication.
+
+
+**Experimental Setup.** We adopt the configuration from Douillard et al. (2025), using the strided
+fragment communication pattern. We set the synchronization periods to _Kx_ = _K_ 1 = _Kv_ = 128
+(closest power of two to the recommended 100) for Streaming MT-DAO ( _N_ = 1). We use 2
+layers per fragment for the 16M model and 3 layers per fragment for the 125M/360M models. We
+utilize a blending coefficient _α_ = 0 _._ 5 and a communication overlap of _τ_ = 1 as recommended. For
+StreamingDiLoCo, we use the recommended server learning rate of 0.4 with server momentum
+0.9. For Streaming MT-DAO, we use the _ω_ 1 = 0 _._ 95 _, β_ 1 = 0 _._ 999 _, β_ 2 = 0 _._ 999 _, η_ = 0 _._ 002
+MT-DAO hyperparameters tuned in Appendix H.2 with the batch size and clipping threshold as for
+all our other experiments with the same model scale. When using the non-streaming variant of
+MT-DAO we use the standard _K_ = 32 unified sync frequency. For Streaming Local Adam we
+use _ω_ 1 = 1 _._ 0 (no quasi hyperbolic term) and _β_ 1 = 0 _._ 9 _, β_ 2 = 0 _._ 999 _, η_ = 0 _._ 001 as tuned for the
+standard Adam in Appendix H.2.
+
+
+**Results.** Figure 16 shows that Streaming MT-DAO closely mirrors the performance of MT-DAO,
+with a small gap, across model scales, starting with a 1 _._ 3% gap for the small model which shrinks to
+_≈_ 1% for the 125M and 360M models. This is in-line with the findings of Douillard et al. (2025)
+which indicate very similar performance between the streaming and non-streaming variants of their
+method. Streaming MT-DAO and MT-DAO consistently outperform StreamingDiLoCo and
+Streaming Local Adam. For example, at the 360M scale, Streaming MT-DAO achieves 8 _._ 35
+perplexity compared to 8 _._ 69 for StreamingDiLoCo, a _≈_ 4% improvement under matched token
+budgets.
+
+
+Beyond the effects discussed in Section 5.4, the lower sync frequencies of the streaming regime
+( _K_ _>_ 100) also play a role in the performance gap. With such infrequent syncs, standard fast
+momentum decays immediately at the start of a round and then optimizes solely for the local
+trajectory for an extended duration, decoupling the local optimization from the global trajectory.
+StreamingDiLoCo attempts to correct this via the outer Nesterov optimizer, but this correction is
+infrequent for large _K_ . In contrast, the slow momentum component of MT-DAO persists across the
+long streaming intervals, ensuring the local update direction remains anchored to the long-term global
+trajectory. While our method introduces an additional communication requirement for synchronizing
+
+
+41
+
+
+30 _._ 0
+
+
+27 _._ 5
+
+
+25 _._ 0
+
+
+22 _._ 5
+
+
+20 _._ 0
+
+
+17 _._ 5
+
+
+15 _._ 0
+
+
+12 _._ 5
+
+
+10 _._ 0
+
+
+7 _._ 5
+
+
+30 _._ 0
+
+
+27 _._ 5
+
+
+25 _._ 0
+
+
+22 _._ 5
+
+
+20 _._ 0
+
+
+17 _._ 5
+
+
+15 _._ 0
+
+
+12 _._ 5
+
+
+10 _._ 0
+
+
+7 _._ 5
+
+
+2 _._ 5 5 _._ 0 7 _._ 5 10 _._ 0 12 _._ 5 15 _._ 0 17 _._ 5 20 _._ 0
+Tokens (Billions)
+
+
+0 8 16 24 32 40 48 56
+Wall-Clock Time (Hours)
+
+
+Figure 17: **Sensitivity to Gradient Clipping.** Validation perplexity vs. Time (left) and Tokens (right)
+for 125M and 360M models trained with standard clipping ( _ρ_ = 0 _._ 5 for the 125M and _ρ_ = 0 _._ 25 for
+the 360M, dotted lines) versus no clipping ( _ρ_ = _∞_, solid lines). While the 16M model diverged
+without clipping (not shown), the 125M and 360M models converged successfully with minimal
+performance degradation, demonstrating that MT-DAO’s heavy reliance on the slow momentum
+stabilizes updates at scale, we use _ω_ 1 = 0 _._ 95.
+
+
+optimizer states, this overhead is effectively mitigated by the streaming architecture. Due to the
+communication-computation overlap ( _τ_ ) and update interpolation, we observe minimal impact on
+wall-clock training time with our hardware configuration. Furthermore, any potential overhead can
+be readily offset by increasing the overlap factor _τ_, allowing computation to proceed uninterrupted.
+Although we utilize the default _τ_ = 1, which proves sufficient for these model scales, Douillard et al.
+(2025) demonstrates that values up to _τ_ = 10 remain effective in practice.
+
+
+H.5 ABLATION ON THE CLIPPING THRESHOLD
+
+
+In standard LLM pre-training with Adam, gradient clipping is considered a critical heuristic to prevent
+training divergence caused by "spiky" gradients or numerical instabilities where coordinates of the
+second moment term _vt_ approach zero while gradients are large.
+
+_[√]_
+
+**Mechanism of Stability.** In Figure 17, we compare MT-DAO trained with standard clipping against
+a version with clipping disabled (clipping results in negligible performance _ρ_ = _∞_ ). We observe that fordegradation. This 125stabilityM andis 360intrinsicM models, removingto the MT-DAO
+design:
+
+
+1. We only transition from the base optimizer to MT-DAO after the warmup phase is complete.
+By this stage, the gradients have typically stabilized compared to the initial training steps.
+
+
+2. MT-DAO assigns a large convex coefficient to the slow momentum. This naturally dampens
+outliers without explicit clipping.
+
+
+**Scale Dependency.** We observe that the robustness to unclipped gradients is scale-dependent. In our
+experiments, the 16M parameter model diverged immediately without clipping. However, the 125M
+and 360M models trained stably.
+
+
+It is important to clarify that the necessity of clipping is primarily a property of the inner optimizer
+(Adam) rather than MT-DAO itself. Adam is susceptible to divergence when the preconditioner is
+ill-conditioned or when dealing with rare tokens in heavy-tailed distributions.
+
+
+42
+
+
+H.6 ABLATION WITH _K_ = 1
+
+
+Our primary design objective for MT-DAO is to reduce the performance gap of **communication-**
+**efficient** methods relative to fully synchronous DDP. In our main experiments ( _K_ = 32), we
+demonstrate that MT-DAO can match fully synchronous baselines by using slow momentum to bridge
+the gap between synchronization steps. In this section, we investigate the limit case of _K_ = 1 to
+isolate the behavior of the algorithm when this specific challenge is removed. As shown in Fig. 18,
+while MT-DAO performs similarly to DDP, it trails slightly for both _N_ = 1 and _N_ = 2 at the 16M
+and 125M scales.
+
+
+60
+
+
+54
+
+
+48
+
+
+42
+
+
+36
+
+
+30
+
+
+24
+
+
+18
+
+
+12
+
+
+4 _._ 0
+
+
+3 _._ 5
+
+
+3 _._ 0
+
+
+2 _._ 5
+
+
+2 _._ 0
+
+
+1 _._ 5
+
+
+1 _._ 0
+
+
+0 _._ 5
+
+
+0 _._ 0
+
+
+4000 6000 8000 10000 12000 14000 16000 18000 20000
+Steps
+
+
+(a) _N_ = 1 Perplexity
+
+
+60
+
+
+54
+
+
+48
+
+
+42
+
+
+36
+
+
+30
+
+
+24
+
+
+18
+
+
+12
+
+
+4 _._ 8
+
+
+4 _._ 2
+
+
+3 _._ 6
+
+
+3 _._ 0
+
+
+2 _._ 4
+
+
+1 _._ 8
+
+
+1 _._ 2
+
+
+0 _._ 6
+
+
+0 _._ 0
+
+
+2500 5000 7500 10000 12500 15000 17500 20000
+Steps
+
+
+(b) _N_ = 2 Perplexity
+
+
+4000 6000 8000 10000 12000 14000 16000 18000 20000
+Steps
+
+
+(c) _N_ = 1 Second Momentum Norm
+
+
+4000 6000 8000 10000 12000 14000 16000 18000 20000
+Steps
+
+
+(d) _N_ = 2 Second Momentum Norm
+
+
+Figure 18: **Comparison at the Synchronous Limit (** _K_ = 1 **).** Top: Validation perplexity for MT-DAO
+( _K_ = 1) versus DDP baselines for _N_ = 1 (left) and _N_ = 2 (right) variants across 16M and 125M
+scales. Bottom: The L2 norm of the second momentum state _vt_ for the corresponding runs. While
+MT-DAO performs similarly to DDP, it trails slightly. The bottom plot shows that the local estimation
+of the second moment in MT-DAO leads to a larger norm than the global DDP estimate over time,
+resulting in a slightly lower effective learning rate.
+
+
+We emphasize that we would not expect MT-DAO to **generally** outperform DDP at _K_ = 1 for
+two key reasons. First, the noise inherent to Local SGD methods ( _K_ _>_ 1) can act as an implicit
+regularizer (Lin et al., 2020), which may account for the shrinking or disappearance of the performance
+
+
+43
+
+
+gap to DDP in the main work, depending on the setting. This benefit is strictly lost at _K_ = 1. Second,
+while for Local SGD methods with a simple first-order momentum, _K_ = 1 is mathematically
+equivalent to standard DDP, for state-of-the-art **adaptive optimizers** this equivalence breaks down
+due to the non-linearity of the second moment update. We must distinguish between the local
+gradient estimate _gt_ _[m]_ [computed on a per-worker batch of size] _[ B]_ [, and the global gradient estimate]
+_g_ second moment using the lower-variance global estimate, i.e.,¯ _t_ = _M_ 1 - _Mm_ =1 _[g]_ _t_ _[m]_ computed on the effective global batch (¯ _g_ of _t_ ) [2] size= - _MM_ 1 _×_ - _BMm_ .=1DDP _[g]_ _t_ _[m]_ �computes2. In contrast,the
+
+MT-DAO computes the second moment locally using the noisier _gt_ _[m]_ [(derived from batch size] _[ B]_ [) and]
+subsequently averages these states, effectively computing _M_ 1 - _Mm_ =1 [(] _[g]_ _t_ _[m]_ [)][2][.] [By Jensen’s inequality]
+
+applied to the convex square function (element-wise), _M_ 1 - _Mm_ =1 [(] _[g]_ _t_ _[m]_ [)][2] _[≥]_ - _M_ 1 - _Mm_ =1 _[g]_ _t_ _[m]_ �2. Since
+the second moment estimate is a moving average of these squared terms, the MT-DAO estimate is
+guaranteed to be larger than that of DDP, resulting in a larger denominator in the adaptive update and
+implicitly reducing the average per-coordinate effective learning rate.
+
+
+H.7 EFFICACY WITH MUON
+
+
+To demonstrate the universality of our approach, we apply MT-DAO to Muon (Jordan et al., 2024), a
+recent optimizer that utilizes Newton-Schulz iterations for update orthogonalization. The NewtonSchulz preconditioning is typically applied to the momentum term. This means our multi-timescale
+considerations regarding momentum variance and drift apply directly to the underlying state before
+preconditioning occurs. While we leave the full theoretical analysis of preconditioned local updates
+for future work, our framework is structurally compatible with these methods. We now demonstrate
+that MT-DAO is empirically effective when using Muon as an inner optimizer.
+
+
+**Experimental Setup.** We use the default weight decay of 0 _._ 1 and set Nesterov to true, using the
+default PyTorch implementation of Muon with the match_rms_norm learning rate adjustment
+recommended by Liu et al. (2025). Following standard practice for this optimizer, we employ a
+split optimization strategy: AdamW trains the embeddings and layer norms, while Muon trains all
+2D matrices (Jordan et al., 2024). We independently tune the base AdamW learning rate, finding the
+optimum to be 1e-3, and the Muon learning rate, finding the optimum to be 2e-3. We then jointly
+tune the multiplier we sweep over for the quasi-hyperbolic variants in Fig. 24. We use _β_ =0.9 for base
+Muon and _β_ = 0 _._ 999 for MT-DAO and QHMuon. Adam parameters are fixed at _β_ 1 _, β_ 2 = 0 _._ 9 _,_ 0 _._ 999
+as in the rest of our work for the base optimizer and _β_ 1 _, β_ 2 = 0 _._ 999 _,_ 0 _._ 999 for MT-DAO and QHMuon.
+We use the clipping threshold appropriate for Adam (Table 2).
+
+
+**Results.** Our results shown in Figure 19 indicate that MT-DAO significantly outperforms base Muon
+and matches or exceeds QHMuon at all model scales. Beyond proving that MT-DAO is effective
+with Muon, our results are also the first, to the best of our knowledge, to indicate that using an
+independent weight for the gradient is beneficial for Muon. While the base Muon implementation
+includes a Nesterov term, this is equivalent to a quasi-hyperbolic formulation where the weight
+of the gradient is directly tied to the momentum _β_ . Our hyperparameter sweep shown in Fig. 24
+indicates that this coupling is likely to be suboptimal when _β_ is very high, since a higher weight
+should be assigned to the gradient to compensate for the low reactivity of the momentum.
+
+
+44
+
+
+27 _._ 5
+
+
+25 _._ 0
+
+
+22 _._ 5
+
+
+20 _._ 0
+
+
+17 _._ 5
+
+
+15 _._ 0
+
+
+12 _._ 5
+
+
+10 _._ 0
+
+
+26
+
+
+24
+
+
+22
+
+
+20
+
+
+18
+
+
+16
+
+
+14
+
+
+12
+
+
+10
+
+
+52
+
+
+48
+
+
+44
+
+
+40
+
+
+36
+
+
+32
+
+
+28
+
+
+24
+
+
+0 _._ 6 1 _._ 2 1 _._ 8 2 _._ 4 3 _._ 0 3 _._ 6 4 _._ 2 4 _._ 8 5 _._ 4
+Tokens (Billions)
+
+
+2 _._ 5 5 _._ 0 7 _._ 5 10 _._ 0 12 _._ 5 15 _._ 0 17 _._ 5 20 _._ 0
+Tokens (Billions)
+
+
+2 _._ 5 5 _._ 0 7 _._ 5 10 _._ 0 12 _._ 5 15 _._ 0 17 _._ 5 20 _._ 0
+Tokens (Billions)
+
+
+Figure 19: **MT-DAO with Muon.** Validation perplexity vs. Tokens for 16M (left), 125M (middle), and
+360M (right) models. MT-DAO significantly outperforms the base Muon-DDP baseline and matches
+or exceeds QHMuon-DDP at all model scales. This demonstrates that the benefits of multi-timescale
+optimization and independent gradient weighting transfer effectively to matrix-based optimizers
+using Newton-Schulz preconditioning.
+
+
+_ω_ ’s : (0.9,) _β_ ’s : (0.999,)
+50 _._ 0
+
+
+47 _._ 5
+
+
+45 _._ 0
+
+
+42 _._ 5
+
+
+40 _._ 0
+
+
+37 _._ 5
+
+
+35 _._ 0
+
+
+32 _._ 5
+
+|η: 1.0|0e-03 (ppl=31.82, step=final)|
+|---|---|
+|_η_: 1.0||
+|||
+|||
+|||
+|||
+|||
+|||
+|||
+
+
+0 _._ 002 0 _._ 004 0 _._ 006 0 _._ 008 0 _._ 010 0 _._ 012 0 _._ 014 0 _._ 016
+
+_η_
+
+
+_ω_ ’s : (0.95,) _β_ ’s : (0.999,)
+
+
+0 _._ 002 0 _._ 004 0 _._ 006 0 _._ 008 0 _._ 010 0 _._ 012 0 _._ 014 0 _._ 016
+
+
+Figure 20: **Hyperparameter Tuning Surface:** **QH-AdamW (** _N_ = 1 **).** Validation perplexity on
+16M models. Performance improves as the weight _ω_ shifts heavily towards the slow momentum
+( _β_ = 0 _._ 999), confirming that the fast component (gradient) acts primarily as a reactive correction
+term. We select the optimum (marked in yellow) for scaling experiments.
+
+
+45
+
+
+47 _._ 5
+
+
+45 _._ 0
+
+
+42 _._ 5
+
+
+40 _._ 0
+
+
+37 _._ 5
+
+
+35 _._ 0
+
+
+32 _._ 5
+
+
+_ω_ ’s : (0.01, 0.99) _β_ ’s : (0.9, 0.999)
+
+|Col1|Col2|Col3|Col4|Col5|η: 2.|00e-03 (pp|l=33.42,|step=fina|l)|Col11|Col12|Col13|Col14|Col15|Col16|Col17|η: 1.|00e-03 (pp|l=32.66,|step=fina|l)|Col23|Col24|Col25|Col26|Col27|Col28|Col29|η: 1.|00e-03 (pp|l=32.19,|step=fina|l)|
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+|||||||||||||||||||||||||||||||||||
+|||||||||||||||||||||||||||||||||||
+|||||||||||||||||||||||||||||||||||
+|||||||||||||||||||||||||||||||||||
+|||||||||||||||||||||||||||||||||||
+|||||||||||||||||||||||||||||||||||
+|||||||||||||||||||||||||||||||||||
+|||||||||||||||||||||||||||||||||||
+
+
+_ω_ ’s : (0.2, 0.8) _β_ ’s : (0.9, 0.999)
+
+|Col1|Col2|Col3|Col4|Col5|η: 2.|00e-03 (pp|l=31.47,|step=fina|l)|Col11|Col12|Col13|Col14|Col15|Col16|η: 2.|00e-03 (pp|l=31.52,|step=fina|l)|Col22|Col23|Col24|Col25|Col26|Col27|Col28|η: 1.|00e-03 (pp|l=31.76,|step=fina|l)|
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+||||||||||||||||||||||||||||||||||
+||||||||||||||||||||||||||||||||||
+||||||||||||||||||||||||||||||||||
+||||||||||||||||||||||||||||||||||
+||||||||||||||||||||||||||||||||||
+||||||||||||||||||||||||||||||||||
+||||||||||||||||||||||||||||||||||
+||||||||_⋆_Globa|l Optimu|m||||||||||||||||||||||||
+
+
+_ω_ ’s : (0.5, 0.5) _β_ ’s : (0.9, 0.999)
+
+|Col1|Col2|Col3|Col4|Col5|η: 2.|00e-03 (pp|l=31.73,|step=fina|l)|Col11|Col12|Col13|Col14|Col15|Col16|η: 2.|00e-03 (pp|l=32.09,|step=fina|l)|Col22|Col23|Col24|Col25|Col26|Col27|Col28|η: 1.|00e-03 (pp|l=32.18,|step=fina|l)|
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+||||||||||||||||||||||||||||||||||
+||||||||||||||||||||||||||||||||||
+||||||||||||||||||||||||||||||||||
+||||||||||||||||||||||||||||||||||
+||||||||||||||||||||||||||||||||||
+||||||||||||||||||||||||||||||||||
+||||||||||||||||||||||||||||||||||
+||||||||||||||||||||||||||||||||||
+
+
+0 _._ 002 0 _._ 004 0 _._ 006 0 _._ 008 0 _._ 010 0 _._ 012 0 _._ 014 0 _._ 016
+
+
+_ω_ ’s : (0.005, 0.995) _β_ ’s : (0.9, 0.999)
+
+
+_ω_ ’s : (0.1, 0.9) _β_ ’s : (0.9, 0.999)
+
+
+_ω_ ’s : (0.4, 0.6) _β_ ’s : (0.9, 0.999)
+
+
+0 _._ 002 0 _._ 004 0 _._ 006 0 _._ 008 0 _._ 010 0 _._ 012 0 _._ 014 0 _._ 016
+
+_η_
+
+
+50 _._ 0
+
+
+47 _._ 5
+
+
+45 _._ 0
+
+
+42 _._ 5
+
+
+40 _._ 0
+
+
+37 _._ 5
+
+
+35 _._ 0
+
+
+32 _._ 5
+
+
+_ω_ ’s : (0.05, 0.95) _β_ ’s : (0.9, 0.999)
+
+
+47 _._ 5
+
+
+45 _._ 0
+
+
+42 _._ 5
+
+
+40 _._ 0
+
+
+37 _._ 5
+
+
+35 _._ 0
+
+
+32 _._ 5
+
+
+0 _._ 002 0 _._ 004 0 _._ 006 0 _._ 008 0 _._ 010 0 _._ 012 0 _._ 014 0 _._ 016
+
+
+Figure 21: **Hyperparameter Tuning Surface:** **AdEMAMix (** _N_ = 2 **).** Validation perplexity on
+16M models. Performance improves as the weight _ω_ shifts heavily towards the slow momentum
+( _β_ 2 = 0 _._ 95), confirming that the fast momentum ( _β_ 1 = 0 _._ 05) acts primarily as a reactive correction
+term. We select the optimum (marked in yellow) for scaling experiments.
+
+
+46
+
+
+_ω_ ’s : (0.1, 0.8) _β_ ’s : (0.99, 0.999)
+
+|Col1|Col2|Col3|Col4|Col5|η: 2.|00e-03 (pp|l=31.35,|step=final)|Col10|Col11|Col12|Col13|Col14|Col15|η: 1.|00e-03 (pp|l=31.83,|step=final)|Col20|Col21|Col22|Col23|Col24|Col25|η: 1.|00e-03 (pp|l=31.53,|step=fina|l)|
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+|||||||||||||||||||||||||||||||
+|||||||||||||||||||||||||||||||
+|||||||||||||||||||||||||||||||
+|||||||||||||||||||||||||||||||
+|||||||||||||||||||||||||||||||
+|||||||||||||||||||||||||||||||
+|||||||||||||||||||||||||||||||
+||||||||_⋆_Globa|l Optimum||||||||||||||||||||||
+
+
+_ω_ ’s : (0.25, 0.7) _β_ ’s : (0.99, 0.999)
+
+|Col1|Col2|Col3|Col4|Col5|η: 1.|00e-03 (pp|l=31.69,|step=final)|Col10|Col11|Col12|Col13|Col14|Col15|η: 1.|00e-03 (pp|l=31.57,|step=final)|Col20|Col21|Col22|Col23|Col24|Col25|η: 1.|00e-03 (pp|l=31.98,|step=fina|l)|
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+|||||||||||||||||||||||||||||||
+|||||||||||||||||||||||||||||||
+|||||||||||||||||||||||||||||||
+|||||||||||||||||||||||||||||||
+|||||||||||||||||||||||||||||||
+|||||||||||||||||||||||||||||||
+|||||||||||||||||||||||||||||||
+|||||||||||||||||||||||||||||||
+
+
+_ω_ ’s : (0.4, 0.5) _β_ ’s : (0.99, 0.999)
+
+|Col1|Col2|Col3|Col4|Col5|η: 2.|00e-03 (pp|l=31.69,|step=final)|Col10|Col11|Col12|Col13|Col14|Col15|η: 1.|00e-03 (pp|l=31.98,|step=final)|Col20|Col21|Col22|Col23|Col24|Col25|η: 1.|00e-03 (pp|l=31.90,|step=fina|l)|
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+|||||||||||||||||||||||||||||||
+|||||||||||||||||||||||||||||||
+|||||||||||||||||||||||||||||||
+|||||||||||||||||||||||||||||||
+|||||||||||||||||||||||||||||||
+|||||||||||||||||||||||||||||||
+|||||||||||||||||||||||||||||||
+|||||||||||||||||||||||||||||||
+
+
+0 _._ 002 0 _._ 004 0 _._ 006 0 _._ 008 0 _._ 010 0 _._ 012 0 _._ 014 0 _._ 016
+
+_η_
+
+
+_ω_ ’s : (0.15, 0.8) _β_ ’s : (0.99, 0.999)
+
+
+_ω_ ’s : (0.3, 0.6) _β_ ’s : (0.99, 0.999)
+
+
+_ω_ ’s : (0.45, 0.5) _β_ ’s : (0.99, 0.999)
+
+
+0 _._ 002 0 _._ 004 0 _._ 006 0 _._ 008 0 _._ 010 0 _._ 012 0 _._ 014 0 _._ 016
+
+
+50 _._ 0
+
+
+47 _._ 5
+
+
+45 _._ 0
+
+
+42 _._ 5
+
+
+40 _._ 0
+
+
+37 _._ 5
+
+
+35 _._ 0
+
+
+32 _._ 5
+
+
+_ω_ ’s : (0.05, 0.9) _β_ ’s : (0.99, 0.999)
+
+
+47 _._ 5
+
+
+45 _._ 0
+
+
+42 _._ 5
+
+
+40 _._ 0
+
+
+37 _._ 5
+
+
+35 _._ 0
+
+
+32 _._ 5
+
+
+47 _._ 5
+
+
+45 _._ 0
+
+
+42 _._ 5
+
+
+40 _._ 0
+
+
+37 _._ 5
+
+
+35 _._ 0
+
+
+32 _._ 5
+
+
+0 _._ 002 0 _._ 004 0 _._ 006 0 _._ 008 0 _._ 010 0 _._ 012 0 _._ 014 0 _._ 016
+
+
+Figure 22: **Tuning** _N_ = 2 **QHAdEMAMix.** Optimal performance is found with a heavy bias
+towards the slowest momentum ( _ω_ 2 = 0 _._ 9), confirming that long-horizon signal is the primary
+driver of performance in distributed settings. We select the optimum (marked in yellow) for scaling
+experiments.
+
+
+48
+
+
+46
+
+
+44
+
+
+42
+
+
+40
+
+
+38
+
+
+36
+
+|Col1|Col2|Col3|Col4|Col5|η: 1.41e+0|0 (ppl=36.1|0, step=final)|Col9|Col10|Col11|Col12|Col13|η: 1.00e+0|0 (ppl=35.8|3, step=final)|Col17|Col18|Col19|Col20|Col21|η: 1.00e+0|0 (ppl=37.3|8, step=fina|l)|
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+||||||||||||||||||||||||||
+||||||||||||||||||||||||||
+||||||||||||||||||||||||||
+||||||||||||||||||||||||||
+||||||||||||||||||||||||||
+||||||||||||||||||||||||||
+|||||||||||||||_⋆_Gl|obal Optimum||||||||||
+
+1 _._ 0 1 _._ 5 2 _._ 0 2 _._ 5 3 _._ 0 3 _._ 5 4 _._ 0
+
+
+_ω_ ’s : (0.95,) _β_ ’s : (0.999,)
+
+
+1 _._ 0 1 _._ 5 2 _._ 0 2 _._ 5 3 _._ 0 3 _._ 5 4 _._ 0
+
+_η_ MULT
+
+
+_ω_ ’s : (0.99,) _β_ ’s : (0.999,)
+
+
+1 _._ 0 1 _._ 5 2 _._ 0 2 _._ 5 3 _._ 0 3 _._ 5 4 _._ 0
+
+
+Figure 23: **Tuning QHMuon.** Using our pre-defined grid for quasi-hyperbolic _ω_, we find that utilizing
+an _ω_ = 0 _._ 95 provides the best performance for the QHMuon optimizer.
+
+
+47
+
+
+47 _._ 5
+
+
+45 _._ 0
+
+
+42 _._ 5
+
+
+40 _._ 0
+
+
+37 _._ 5
+
+
+35 _._ 0
+
+
+32 _._ 5
+
+
+47 _._ 5
+
+
+45 _._ 0
+
+
+42 _._ 5
+
+
+40 _._ 0
+
+
+37 _._ 5
+
+
+35 _._ 0
+
+
+32 _._ 5
+
+
+47 _._ 5
+
+
+45 _._ 0
+
+
+42 _._ 5
+
+
+40 _._ 0
+
+
+37 _._ 5
+
+
+35 _._ 0
+
+
+32 _._ 5
+
+|Col1|Col2|Col3|Col4|Col5|η: 2.|00e-03 (pp|l=31.65,|step=fina|l)|Col11|Col12|Col13|Col14|Col15|Col16|η: 4.|00e-03 (pp|l=31.62,|step=fina|l)|Col22|Col23|Col24|Col25|Col26|Col27|η: 2.|00e-03 (pp|l=31.71,|step=fina|l)|
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+|||||||||||||||||||||||||||||||||
+|||||||||||||||||||||||||||||||||
+|||||||||||||||||||||||||||||||||
+|||||||||||||||||||||||||||||||||
+|||||||||||||||||||||||||||||||||
+|||||||||||||||||||||||||||||||||
+|||||||||||||||||||||||||||||||||
+|||||||||||||||||||||||||||||||||
+
+
+|Col1|Col2|Col3|Col4|Col5|Col6|η: 1.|00e-03 (pp|l=31.80,|step=fina|l)|Col12|Col13|Col14|Col15|Col16|Col17|η: 2.|00e-03 (pp|l=31.98,|step=fina|l)|Col23|Col24|Col25|Col26|Col27|Col28|Col29|η: 1.|00e-03 (pp|l=31.38,|step=fina|l)|
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+|||||||||||||||||||||||||||||||||||
+|||||||||||||||||||||||||||||||||||
+|||||||||||||||||||||||||||||||||||
+|||||||||||||||||||||||||||||||||||
+|||||||||||||||||||||||||||||||||||
+|||||||||||||||||||||||||||||||||||
+|||||||||||||||||||||||||||||||||||
+||||||||||||||||||||||||||||||||_⋆_Globa|l Optimu|m|
+
+
+|Col1|Col2|Col3|Col4|Col5|η: 2.|00e-03 (pp|l=31.74,|step=fina|l)|Col11|Col12|Col13|Col14|Col15|Col16|Col17|η: 1.|00e-03 (pp|l=31.69,|step=fina|l)|Col23|Col24|Col25|Col26|Col27|Col28|Col29|η: 1.|00e-03 (pp|l=31.83,|step=fina|l)|
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+|||||||||||||||||||||||||||||||||||
+|||||||||||||||||||||||||||||||||||
+|||||||||||||||||||||||||||||||||||
+|||||||||||||||||||||||||||||||||||
+|||||||||||||||||||||||||||||||||||
+|||||||||||||||||||||||||||||||||||
+|||||||||||||||||||||||||||||||||||
+|||||||||||||||||||||||||||||||||||
+
+
+0 _._ 002 0 _._ 004 0 _._ 006 0 _._ 008 0 _._ 010 0 _._ 012 0 _._ 014 0 _._ 016
+
+
+_ω_ ’s : (0.05, 0.15, 0.8) _β_ ’s : (0.9, 0.99, 0.999)
+
+
+_ω_ ’s : (0.05, 0.45, 0.5) _β_ ’s : (0.9, 0.99, 0.999)
+
+
+_ω_ ’s : (0.1, 0.3, 0.6) _β_ ’s : (0.9, 0.99, 0.999)
+
+
+0 _._ 002 0 _._ 004 0 _._ 006 0 _._ 008 0 _._ 010 0 _._ 012 0 _._ 014 0 _._ 016
+
+_η_
+
+
+_ω_ ’s : (0.05, 0.25, 0.7) _β_ ’s : (0.9, 0.99, 0.999)
+
+
+_ω_ ’s : (0.1, 0.1, 0.8) _β_ ’s : (0.9, 0.99, 0.999)
+
+
+_ω_ ’s : (0.1, 0.4, 0.5) _β_ ’s : (0.9, 0.99, 0.999)
+
+
+0 _._ 002 0 _._ 004 0 _._ 006 0 _._ 008 0 _._ 010 0 _._ 012 0 _._ 014 0 _._ 016
+
+
+Figure 24: **Tuning** _N_ = 3 **AggMo.** Optimal performance is found with a heavy bias towards
+the slowest momentum ( _ω_ 3 = 0 _._ 8), confirming that long-horizon signal is the primary driver
+of performance in distributed settings. We select the optimum (marked in yellow) for scaling
+experiments.
+
+
+48
+
+
+I LLM USAGE DECLARATION
+
+
+As declared in the submission form, LLMs were used in this work in order to aid or polish writing and
+for retrieval and discovery of related work. We used GPT-5 and Gemini 2.5 PRO primarily to
+abbreviate or rephrase text or to evaluate the clarity of our writing and provide guidance on areas of
+improvement. We also used the deep research feature present in both models in order to discover, but
+not describe or interpret, additional papers for our extended literature review in Appendix G. Finally,
+we used both models to generate plotting code and as general code assistants.
+
+
+J REPRODUCIBILITY
+
+
+We provide the complete source code for our mt_dao framework, accompanied by detailed setup
+instructions, to ensure the reproducibility of our results.
+
+
+**System & Dependencies:** The required environment, including specific versions of Ubuntu, CUDA,
+and Python, can be installed using the provided system_setup.sh and install_env.sh
+scripts. These scripts handle all necessary dependencies.
+
+
+**Data:** We provide scripts to download and prepare the datasets. The distribution of data across
+clients for both IID and non-IID settings is managed through declarative YAML configuration files
+found in mt_dao/conf/dataset/streams/.
+
+
+**Execution & Hyperparameters:** Example scripts are available for launching federated, centralized, and evaluation runs (e.g., fed_125m_example.sh, cen_125m_example.sh). To fully
+reproduce our paper’s experiments, users can utilize the provided base launcher scripts and set the
+specific hyperparameters detailed in the paper. A concrete example of this process is available in
+scripts/iclr_mt_dao.
+
+
+49

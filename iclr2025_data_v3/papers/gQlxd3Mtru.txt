@@ -1,0 +1,2797 @@
+# LEARNING STOCHASTIC DYNAMICS FROM SNAP## SHOTS THROUGH REGULARIZED UNBALANCED OPTI- MAL TRANSPORT
+
+
+**Zhenyi** **Zhang** [1] **,** **Tiejun Li** [1] _[,]_ [2] _[,][∗]_ **, and** **Peijie Zhou** [2] _[,]_ [3] _[,]_ [4] _[,]_ [5] _[,][∗]_
+
+1LMAM and School of Mathematical Sciences, Peking University.
+2Center for Machine Learning Research, Peking University. 3NELBDA, Peking University.
+4Center for Quantitative Biology, Peking University. 5AI for Science Institute, Beijing.
+zhenyizhang@stu.pku.edu.cn, _{_ tieli, pjzhou _}_ @pku.edu.cn
+
+
+ABSTRACT
+
+
+Reconstructing dynamics using samples from sparsely time-resolved snapshots
+is an important problem in both natural sciences and machine learning. Here,
+we introduce a new deep learning approach for solving regularized unbalanced
+optimal transport (RUOT) and inferring continuous unbalanced stochastic dynamics from observed snapshots. Based on the RUOT form, our method models these dynamics without requiring prior knowledge of growth and death processes or additional information, allowing them to be learned directly from data.
+Theoretically, we explore the connections between the RUOT and Schr¨odinger
+bridge problem and discuss the key challenges and potential solutions. The effectiveness of our method is demonstrated with a synthetic gene regulatory network, high-dimensional Gaussian Mixture Model, and single-cell RNA-seq data
+from blood development. Compared with other methods, our approach accurately identifies growth and transition patterns, eliminates false transitions, and
+constructs the Waddington developmental landscape. Our code is available at:
+[https://github.com/zhenyiizhang/DeepRUOT.](https://github.com/zhenyiizhang/DeepRUOT)
+
+
+1 INTRODUCTION
+
+
+In machine learning and natural sciences, a key challenge is coupling high-dimensional distributions from observed samples, exemplified by Variational Autoencoders (VAEs) (Kingma & Welling,
+2013) which map complex data to simpler latent spaces. It is also important in multi-modal analysis for integrating diverse data types (Lahat et al., 2015), particularly in biology through aligning
+multi-omics data into unified cellular state representations (Cang & Zhao, 2024; Cao et al., 2022;
+Demetci et al., 2022; Gao et al., 2024b). Recently, there has been growing interest in understanding the dynamics of how distributions are coupled over time, such as diffusion models (Ho et al.,
+2020; Sohl-Dickstein et al., 2015) and stochastic differential equations (SDEs) (Song et al., 2021).
+The task is useful for interpolating paths between arbitrary distributions and learning the underlying
+dynamics (De Bortoli et al., 2021; Neklyudov et al., 2023; Tong et al., 2024b; Wang et al., 2021).
+
+
+Due to the destructive nature of technology, the analysis of time series data in single-cell RNA
+sequencing (scRNA-seq) provides an important application scenario for the high dimensional probability distribution coupling and dynamical inference problem (Bunne et al., 2023b; 2024; Jiang &
+Wan, 2024; Jiang et al., 2022; Lavenant et al., 2024; Peng et al., 2024; Schiebinger et al., 2019; Sha
+et al., 2024; Tong et al., 2023; Zhang et al., 2021). Trajectory inference in scRNA-seq data have been
+extensively studied (Saelens et al., 2019), and optimal transport (OT)-based methods has emerged
+as a central tool for datasets with temporal resolution (Bunne et al., 2024; Klein et al., 2023a;b;
+Schiebinger et al., 2019). Often, there is a need to learn the continuous dynamics of cells over time
+and fit the mechanistic model that transforms the initial cell distributions into the distributions at
+later temporal points. This could be solved through the dynamical formulation of OT (Benamou
+& Brenier, 2000), also known as the B-B form. However, the formulation has not fully taken the
+
+
+_∗_ Corresponding author.
+
+
+1
+
+
+stochastic dynamical effects into account, especially the intrinsic noise in gene expression and cell
+differentiation (Zhou et al., 2021a;b), which is prevalent in biological processes on single-cell level
+(Elowitz et al., 2002).
+
+
+By incorporating stochastic dynamics, the Schr¨odinger bridge (SB) problem aims to identify the
+most likely stochastic transition path between two arbitrary distributions relative to a reference
+stochastic process (L´eonard, 2014), and has been applied in a wide range of contexts, including
+scRNA-seq analysis and generative modeling (Liu et al., 2022a; Pariset et al., 2023). Meanwhile,
+recent **regularized unbalanced optimal transport (RUOT)** offers a promising approach for modeling both stochastic unbalanced continuous dynamics (Baradat & Lavenant, 2021; Buze & Duong,
+2023; Chen et al., 2022b; Janati et al., 2020), which can be viewed as an unbalanced relaxation of the
+dynamic formulation of Schr¨odinger bridge problem. However, computational methods for learning RUOT or such high-dimensional unbalanced stochastic dynamics from snapshots are relatively
+lacking, especially when there is no prior knowledge of unbalanced effect.
+
+
+Here we develop a new deep learning method (DeepRUOT) for learning general RUOT and inferring
+continuous unbalanced stochastic dynamics from samples based on the derived Fisher regularization
+form without requiring prior knowledge. We demonstrate the effectiveness of DeepRUOT on both
+synthetic and real-world datasets. Compared to the common SB method, our approach accurately
+identifies growth and transition patterns, eliminates false transitions, and constructs the Waddington
+developmental landscape of scRNA-seq data. Overall, our main contributions can be summarized
+as follows:
+
+
+    - We reformulate RUOT with a Fisher regularization form and explore the connections between RUOT and unbalanced SB. The formulation transforms the SDE into the ordinary
+differential equation (ODE), which is computationally more tractable.
+
+
+    - We propose DeepRUOT, the neural network algorithm for learning high dimensional unbalanced stochastic dynamics from snapshots. Through the neural network modeling for
+growth and death, our framework does not require prior knowledge of these processes.
+
+
+    - We validate the effectiveness of DeepRUOT on both synthetic data and real scRNA-seq
+datasets, showing its promising performance compared with existing approaches.
+
+
+2 RELATED WORKS
+
+
+**Deep** **Learning** **Solver** **for** **Dynamical** **OT** To tackle the dynamical OT (i.e. B-B form) in high
+dimensions, many methods (Albergo & Vanden-Eijnden, 2023; Cheng et al., 2024a;b; Chow et al.,
+2020; Gao et al., 2024a; Huguet et al., 2022; Jiao et al., 2024b; Jin et al., 2024; Lipman et al., 2023;
+Liu et al., 2021; 2022b; 2023b; Pooladian et al., 2024; Ruthotto et al., 2020; Tong et al., 2020; 2024a;
+Wan et al., 2023; Wu et al., 2023; Zhang et al., 2024a) have been developed based on continuous
+normalizing flow and neural ODE formulation either in original or latent space. To account for sink
+and source terms in unnormalized distributions, (Peng et al., 2024; Sha et al., 2024; Tong et al.,
+2023) formulated the neural-network based solver in the unbalanced dynamical OT setup. However,
+the appropriate formulation along with an effective deep learning solver to **simultaneously account**
+**for unbalanced term and stochastic effects** in dynamical OT remains largely lacking.
+
+
+**Computational** **Methods** **for** **Schr¨odinger** **Bridge** **Problem** Many methods have recently been
+developed to solve the static SB problem (Chizat et al., 2022; De Bortoli et al., 2021; Gu et al., 2024;
+Lavenant et al., 2024; Liu et al., 2022a; Pariset et al., 2023; Pooladian & Niles-Weed, 2024; Shi et al.,
+2024; Ventre et al., 2023). To tackle the dynamical Schr¨odinger Bridge, methods based on neural
+SDE solver, neural ODE solver with fisher information regularization or flow matching (Albergo
+et al., 2023; Bunne et al., 2023a; Chen et al., 2022a; Jiao et al., 2024a; Koshizuka & Sato, 2023;
+Liu et al., 2023a; Maddu et al., 2024; Neklyudov et al., 2023; 2024; Tong et al., 2024b; Wang et al.,
+2021; Zhang et al., 2024b; Zhou et al., 2024a;b) have been proposed. However, these methods either
+fail to account for **unnormalized** **distributions** resulting from cell growth and death, or require
+**prior** **knowledge** of the processes (growth/death rate) (Chizat et al., 2022; Lavenant et al., 2024;
+Pariset et al., 2023; Schiebinger et al., 2019) or additional information (e.g.cell lineage) (Ventre
+et al., 2023).
+
+
+2
+
+
+**Study** **of** **RUOT** The RUOT has recently formulated (Chen et al., 2022b), also known as unbalanced Schr¨odinger Bridge. The existing studies are mostly focused on **the** **theoretical** **side** . For
+instance, (Janati et al., 2020) derived a closed-form formula for entropic OT between unbalanced
+Gaussian measures. (Baradat & Lavenant, 2021) investigates relations between RUOT with branching Schr¨odinger bridge. (Buze & Duong, 2023) investigates different formulations of the problem.
+
+
+3 PRELIMINARIES AND BACKGROUNDS
+
+
+In this section, we provide an overview of stochastic effects and unbalanced forms within the dynamical framework. Specifically, considering only stochastic effects leads to the Schr¨odinger bridge
+problem (Section 3.1), whereas addressing solely the unbalanced aspect results in unbalanced dynamic optimal transport (Section 3.2). By integrating these two perspectives, we motivate the formulation of the Regularized Unbalanced Optimal Transport (RUOT) framework.
+
+
+3.1 STOCHASTIC EFFECT: SCHR ¨ODINGER BRIDGE PROBLEM
+
+
+The Schr¨odinger bridge problem aims to identify the most likely evolution between a given initial
+distribution _ν_ 0 and a terminal distribution _ν_ 1 (assumed to have density in this paper), relative to a
+given reference stochastic process. Formally, this problem can be formulated as the minimization of
+the Kullback-Leibler (KL) divergence in the optimal control perspective (Dai Pra, 1991) as below:
+
+
+                  -                  min _D_ KL _µ_ _**[X]**_ [0 _,_ 1] _[∥][µ]_ _**[Y]**_ [0 _,_ 1] _,_ (1)
+_µ_ _**[X]**_ 0 [=] _[ν]_ [0] _[,]_ _[µ]_ _**[X]**_ 1 [=] _[ν]_ [1]
+
+
+where _µ_ _**[X]**_ [0 _,_ 1] [denotes the probability measure induced by stochastic process] _**[ X]**_ _[t]_ [(0] _[ ≤]_ _[t][ ≤]_ [1)][ defined]
+on the space of all continuous paths _C_ ([0 _,_ 1] _,_ R _[d]_ ), with the distribution of _**X**_ _t_ at given time _t_ characterized by the measure _µ_ _**[X]**_ _t_ [with density function] _[ p]_ [(] _**[x]**_ _[, t]_ [)][. In this work, we consider] _**[ X]**_ _[t]_ [the stochastic]
+process characterized by the following stochastic differential equation (SDE):
+
+
+d _**X**_ _t_ = _**b**_ ( _**X**_ _t, t_ ) d _t_ + _**σ**_ ( _**X**_ _t, t_ ) d _**W**_ _t,_ (2)
+
+
+and the reference measure _µ_ _**[Y]**_ [0 _,_ 1] [is chosen as the probability measure induced by the process][ d] _**[Y]**_ _[t]_ [=]
+_**σ**_ ( _**Y**_ _t, t_ )d _**W**_ _t_, where _**W**_ _t_ _∈_ R _[d]_ is the standard multidimensional Brownian motion defined on
+a probability space (Ω _, F,_ P) with P the Wiener measure for the coordinate process _**W**_ _t_ ( _ω_ ) =
+_ω_ ( _t_ ), and _**σ**_ ( _**x**_ _, t_ ) _∈_ R _[d][×][d]_ is the diffusion matrix which is typically assumed as bounded, coercive
+and invertible. Under this formulation, the solution to Eq. (1) is also referred to as the _diffusion_
+_Schr¨odinger bridge_ . The diffusion Schr¨odinger bridge also possesses a dynamic formulation, which
+can be formally stated as the following theorem.
+
+**Theorem** **3.1.** _Consider_ _the_ _diffusion_ _Schr¨odinger_ _bridge_ _problem_ _(1)_ _where_ _µ_ _**[Y]**_ [0 _,_ 1] _[the]_ _[reference]_
+_measure induced by_ d _**Y**_ _t_ = _**σ**_ ( _**Y**_ _t, t_ )d _**W**_ _t._ _Then (1) is equivalent to_
+
+
+- 1 _p_ ( _**x**_ _, t_ )d _**x**_ d _t,_ (3)
+2 _**[b][T]**_ [ (] _**[x]**_ _[, t]_ [)] _**[a]**_ _[−]_ [1][(] _**[x]**_ _[, t]_ [)] _**[b]**_ [(] _**[x]**_ _[, t]_ [)]
+
+
+inf
+( _p,_ _**b**_ )
+
+
+- 1
+
+
+0
+
+
+R _[d]_
+
+
+_where the infimum is taken over all function pairs_ ( _p,_ _**b**_ ) _such that p_ ( _·,_ 0) = _ν_ 0 _, p_ ( _·,_ 1) = _ν_ 1 _, p_ ( _**x**_ _, t_ )
+_absolutely continuous, and_
+
+_∂tp_ ( _**x**_ _, t_ ) = _−∇_ _**x**_ _·_ ( _p_ ( _**x**_ _, t_ ) _**b**_ ( _**x**_ _, t_ )) + [1] _**x**_ [: (] _**[a]**_ [(] _**[x]**_ _[, t]_ [)] _[p]_ [(] _**[x]**_ _[, t]_ [))] _[,]_ (4)
+
+2 _[∇]_ [2]
+
+_where_ _∇_ [2] _**x**_ [:] [(] _**[a]**_ [(] _**[x]**_ _[, t]_ [)] _[p]_ [(] _**[x]**_ _[, t]_ [))] [=] [�] _ij_ _[∂][ij]_ [(] _[a][ij][p]_ [)] _[and]_ _**[a]**_ [(] _**[x]**_ _[, t]_ [)] [=] _**[σ]**_ [(] _**[x]**_ _[, t]_ [)] _**[σ]**_ _[T]_ [ (] _**[x]**_ _[, t]_ [)] _[,]_ _[coupled]_ _[with]_ _[van-]_
+
+_ishing boundary condition:_ lim
+_|_ _**x**_ _|→∞_ _[p]_ [(] _**[x]**_ _[, t]_ [) = 0] _[.]_
+
+
+This theorem or its variants have been stated and proven in various forms, such as in (Chen et al.,
+2016; Dai Pra, 1991; Gentil et al., 2017). Here, we provide a simple direct proof for illustration
+in Appendix D.1. We note that in this dynamic formulation, it accounts for the stochastic aspects
+but does not incorporate unbalanced effects. As we will discuss below, RUOT can be motivated by
+incorporating unbalanced effects in the dynamic formulation of SB.
+
+
+3
+
+
+3.2 UNBALANCED EFFECT: UNBALANCED DYNAMIC OPTIMAL TRANSPORT
+
+
+The optimal transport problem has been extensively studied in various fields. Given two probability distributions _**α**_ _∈_ R _[n]_ + [and] _**[β]**_ _∈_ R _[m]_ + [,] [its] [primary] [goal] [is] [to] [find] [the] [optimal] [cou-]
+pling _**π**_ _∈_ R _[n]_ + _[×][m]_ to transport a given distribution of mass (or resources) from one location
+to another while minimizing the cost associated with the transportation. The static optimal
+transport problem can be mathematically formulated as min _**π**_ _∈_ **Π** ( _**α**_ _,_ _**β**_ ) _⟨_ _**π**_ _,_ _**c**_ _⟩_, where **Π** ( _**α**_ _,_ _**β**_ ) =
+
+- _**π**_ _∈_ R _[n]_ + _[×][m]_ : _**π**_ **1** _m_ = _**α**_ _,_ _**π**_ _[T]_ **1** _n_ = _**β**_ _,_ _**π**_ _≥_ 0� _._ The cost matrix _**c**_ _∈_ R _[n][×][m]_ defines the transportation cost between each pair of points, where _cij_ := _c_ ( _**x**_ _i,_ _**y**_ _j_ ) represents the cost of moving a unit
+mass from point _**x**_ _i_ to point _**y**_ _j_ . We refer to (Peyr´e et al., 2019) for more details. Next we briefly
+state some well-known results on the dynamical formulation of the OT.
+
+
+**Dynamical Optimal Transport** The formulation is also known as the Benamou-Brenier formulation (Benamou & Brenier, 2000), which can be stated as follows:
+
+
+_W_ ( _ν_ 0 _, ν_ 1) = inf
+( _p_ ( _**x**_ _,t_ ) _,_ _**b**_ ( _**x**_ _,t_ ))
+
+
+- 1
+
+
+0
+
+
+- 1
+
+2 _[p]_ [(] _**[x]**_ _[, t]_ [)d] _**[x]**_ [d] _[t,]_
+R _[d]_ 2 _[∥]_ _**[b]**_ [(] _**[x]**_ _[, t]_ [)] _[∥]_ [2]
+
+
+s.t. _∂tp_ + _∇·_ ( _**b**_ ( _**x**_ _, t_ ) _p_ ) = 0 _,_ _p|t_ =0 = _ν_ 0 _, p|t_ =1 = _ν_ 1 _._
+
+
+Compared to SB, in OT the distributions are connected by deterministic transport equation instead
+of diffusion. It can be shown that this dynamical formulation corresponds to a static Kantorovich’s
+optimal transport problem with cost function _c_ ( _**x**_ _,_ _**y**_ ) = _∥_ _**x**_ _−_ _**y**_ _∥_ [2] 2 [.]
+
+
+**Regularized** **Optimal** **Transport** The regularized optimal transport is defined by a dynamical
+form of the general Schr¨odinger bridge by taking diffusion rate as constant and scaled by _σ_ [2] in (3):
+
+
+_W_ ( _ν_ 0 _, ν_ 1) = inf
+( _p_ ( _**x**_ _,t_ ) _,_ _**b**_ ( _**x**_ _,t_ ))
+
+
+- 1
+
+
+0
+
+
+- 1
+
+2 _[p]_ [(] _**[x]**_ _[, t]_ [)d] _**[x]**_ [d] _[t,]_
+R _[d]_ 2 _[∥]_ _**[b]**_ [(] _**[x]**_ _[, t]_ [)] _[∥]_ [2]
+
+
+s.t. _∂tp_ + _∇·_ ( _**b**_ ( _**x**_ _, t_ ) _p_ ) _−_ _[σ]_ [2] _[p][|][t]_ [=0] [=] _[ ν]_ [0] _[, p][|][t]_ [=1] [=] _[ ν]_ [1] _[,]_
+
+2 [∆] _[p]_ [ = 0] _[,]_
+
+
+It can be demonstrated that as _σ_ [2] approaches zero, the solution to this problem converges to that of
+the Benamou-Brenier problem (Mikami & Thieullen, 2008). And it is equivalent to the SB problem
+(Baradat & Lavenant, 2021; Gentil et al., 2017; L´eonard, 2014).
+
+
+**Unbalanced** **Dynamic** **Optimal** **Transport** To account for unnormalized marginal distributions
+and effects such as growth and death, an unbalanced optimal transport problem with Wasserstein–Fisher–Rao (WFR) metric has been proposed (Chizat et al., 2018a;b) or its extensions (Gangbo
+et al., 2019). Here we adopt the WFR unbalanced optimal transport:
+
+
+- 1
+2 [+] _[ α][|][g]_ [(] _**[x]**_ _[, t]_ [)] _[|]_ 2 [2]
+2 _[∥]_ _**[b]**_ [(] _**[x]**_ _[, t]_ [)] _[∥]_ [2]
+
+
+_p_ ( _**x**_ _, t_ )d _**x**_ _dt,_
+
+
+_W_ ( _ν_ 0 _, ν_ 1) = inf
+( _p_ ( _**x**_ _,t_ ) _,_ _**b**_ ( _**x**_ _,t_ ) _,g_ ( _**x**_ _,t_ ))
+
+
+- 1
+
+
+0
+
+
+R _[d]_
+
+
+s.t. _∂tp_ + _∇·_ ( _**b**_ ( _**x**_ _, t_ ) _p_ ) = _g_ ( _**x**_ _, t_ ) _p,_ _p|t_ =0 = _ν_ 0 _, p|t_ =1 = _ν_ 1 _._
+
+
+Here _g_ ( _**x**_ _, t_ ) is a scalar function that denotes the growth or death rate of particles at the state _**x**_ and
+time _t_, and is also optimized in the total energy term. _α_ is the hyperparameter of weight. We should
+also note that in this case, _ν_ 0 and _ν_ 1 are not necessarily the normalized probability densities, but are
+generally densities of masses.
+
+
+4 REGULARIZED UNBALANCED OPTIMAL TRANSPORT
+
+
+To simplify the notation and illustrate a commonly used setting, we take a special case considering
+_**a**_ ( _**x**_ _, t_ ) = _σ_ [2] ( _t_ ) _**I**_, and the general case is left to Appendix D.4 for further discussions. Inspired by
+unbalanced dynamic optimal transport, the dynamical formulation Theorem 3.1 suggests a natural
+approach to relaxing the mass conservation constraint by introducing a growth/death term _gp_ in Eq.
+(4) as _∂tp_ = _−∇_ _**x**_ _·_ ( _p_ _**b**_ )+ [1] 2 _[∇]_ _**x**_ [2] [:] - _σ_ [2] ( _t_ ) _**I**_ _p_ �+ _gp._ Meanwhile, we also define a loss functional in Eq.
+
+(5) which incorporates the growth penalization and Wasserstein metric considered in Eq. (3) (with
+a rescaling by _σ_ [2] ( _t_ )). We refer to this formulation as the _regularized unbalanced optimal transport_ .
+
+
+4
+
+
+**Definition 4.1** (Regularized unbalanced optimal transport) **.** _Consider_
+
+
+0
+
+
+(5)
+R _[d][ α]_ [Ψ (] _[g]_ [(] _**[x]**_ _[, t]_ [))] _[ p]_ [(] _**[x]**_ _[, t]_ [)d] _**[x]**_ [d] _[t,]_
+
+
+inf
+( _p,_ _**b**_ _,g_ )
+
+
+- 1
+
+
+0
+
+
+1  - 1
+2 _[p]_ [(] _**[x]**_ _[, t]_ [)d] _**[x]**_ [d] _[t]_ [ +]
+R _[d]_ 2 _[∥]_ _**[b]**_ [(] _**[x]**_ _[, t]_ [)] _[∥]_ [2]
+
+
+_where_ Ψ : R _→_ [0 _,_ + _∞_ ] _corresponds to the growth penalty function, the infimum is taken over all_
+_pairs_ ( _p,_ _**b**_ _, g_ ) _such that p_ ( _·,_ 0) = _ν_ 0 _, p_ ( _·,_ 1) = _ν_ 1 _, p_ ( _**x**_ _, t_ ) _absolutely continuous, and_
+
+_∂tp_ = _−∇_ _**x**_ _·_ ( _p_ _**b**_ ) + [1] _**x**_ [:]            - _σ_ [2] ( _t_ ) _**I**_ _p_            - + _gp_ (6)
+
+2 _[∇]_ [2]
+
+
+_with vanishing boundary condition:_ lim
+_|_ _**x**_ _|→∞_ _[p]_ [(] _**[x]**_ _[, t]_ [) = 0] _[.]_
+
+
+Note that in the definition if Ψ( _g_ ) = + _∞_ unless _g_ = 0 and Ψ(0) = 0, then it implies _g_ ( _**x**_ _, t_ ) = 0
+and the RUOT degenerates to the _regularized_ _optimal_ _transport_ problem. If _σ_ ( _t_ ) _→_ 0 and
+Ψ ( _g_ ( _**x**_ _, t_ )) = _|g_ ( _**x**_ _, t_ ) _|_ [2], this degenerates to the _unbalanced dynamic optimal transport_ with WFR
+metrics. Meanwhile when _σ_ ( _t_ ) is constant, it coincides with the definition of RUOT provided in
+(Baradat & Lavenant, 2021). Then, we can reformulate Definition 4.1 with the following Fisher
+information regularization.
+
+**Theorem 4.1.** _The regularized unbalanced optimal transport problem_ (5) _is equivalent to_
+
+
+[(] _[t]_ [)]
+
+(1 + log _p_ ) _g −_ [1]
+2 2
+
+
+[1] d _σ_ [2] ( _t_ )
+
+2 d _t_
+
+
+- 1 2 [+] _[σ]_ [4][(] _[t]_ [)]
+2 _[∥]_ _**[v]**_ _[∥]_ [2] 8
+
+
+[(] _[t]_ [)]
+
+_∥∇_ _**x**_ log _p∥_ [2] 2 _[−]_ _[σ]_ [2][(] _[t]_ [)]
+8 2
+
+
+[2] ( _t_ )  
+log _p_ + _α_ Ψ ( _g_ ) _p_ d _**x**_ d _t,_
+d _t_
+
+
+inf
+( _p,_ _**v**_ _,g_ )
+
+
+- 1
+
+
+0
+
+
+R _[d]_
+
+
+(7)
+_where_ _the_ _infimum_ _is_ _taken_ _over_ _all_ _triplets_ ( _p,_ _**v**_ _, g_ ) _such_ _that_ _p_ ( _·,_ 0) = _ν_ 0 _, p_ ( _·,_ 1) = _ν_ 1 _, p_ ( _**x**_ _, t_ )
+_absolutely continuous, and_
+_∂tp_ = _−∇_ _**x**_ _·_ ( _p_ _**v**_ ( _**x**_ _, t_ )) + _g_ ( _**x**_ _, t_ ) _p_ (8)
+_with vanishing boundary condition:_ lim
+_|_ _**x**_ _|→∞_ _[p]_ [(] _**[x]**_ _[, t]_ [) = 0] _[.]_
+
+
+Here _**v**_ ( _**x**_ _, t_ ) represents a new vector field. The proof is left to Appendix D.2. In (Baradat &
+Lavenant, 2021), they proposed another Fisher regularization form of RUOT, expressed in the formula Eq. (15). In their formulation, computing the cross term _⟨∇_ _**x**_ log _p, σ_ [2] ( _t_ ) _**v**_ _⟩_ required calculating the derivative of the function log _p_ with respect to _**x**_ and performing vector multiplications
+with _**v**_ . The formulation here is equivalent to theirs but more computationally tractable, as we avoid
+differentiation and vector multiplication in our cross-term.
+
+**Remark 4.1.** _When g_ = 0 _,_ Ψ(0) = 0 _and σ_ ( _t_ ) _is constant, then Eq._ _(7) is the same as the dynamic_
+_entropy-regularized optimal transport form as discussed in (Bunne et al., 2023a; Gentil et al., 2017;_
+_L´eger & Li, 2021; Li et al., 2020; Neklyudov et al., 2024; Pooladian & Niles-Weed, 2024)._
+**Remark 4.2.** _The term I_ ( _p_ ) = - _[d][ ∥∇]_ _**[x]**_ [ log] _[ p]_ [(] _**[x]**_ _[, t]_ [)] _[∥]_ [2] _[p]_ [(] _**[x]**_ _[, t]_ [)d] _**[x]**_ _[ in Eq. (][7][) is referred to as the]_ [ Fisher]
+
+
+**Remark 4.2.** _The term I_ ( _p_ ) = �R _[d][ ∥∇]_ _**[x]**_ [ log] _[ p]_ [(] _**[x]**_ _[, t]_ [)] _[∥]_ [2] 2 _[p]_ [(] _**[x]**_ _[, t]_ [)d] _**[x]**_ _[ in Eq. (][7][) is referred to as the]_ [ Fisher]
+
+information _._ _Notably, when considering growth/death factors, Eq._ _(7) includes not only the Fisher-_
+_Rao metric but also an additional cross-term_ - _[d][ −]_ [1] _[σ]_ [2][(] _[t]_ [) (1 + log] _[ p]_ [(] _**[x]**_ _[, t]_ [))] _[ g]_ [(] _**[x]**_ _[, t]_ [)] _[p]_ [(] _**[x]**_ _[, t]_ [)d] _**[x]**_ _[.]_
+
+
+R _[d][ −]_ [1]
+
+
+_Rao metric but also an additional cross-term_ �R _[d][ −]_ [1] 2 _[σ]_ [2][(] _[t]_ [) (1 + log] _[ p]_ [(] _**[x]**_ _[, t]_ [))] _[ g]_ [(] _**[x]**_ _[, t]_ [)] _[p]_ [(] _**[x]**_ _[, t]_ [)d] _**[x]**_ _[.]_
+
+**Remark** **4.3.** _From_ _the_ _Fokker-Plank_ _equation_ _and_ _the_ _proof_ _of_ _Theorem_ _4.1,_ _the_ _original_ _SDE_
+d _**X**_ _t_ = ( _**b**_ ( _**X**_ _t, t_ )) d _t_ + _σ_ ( _t_ ) d _**W**_ _t can be transformed into the probability flow ODE_
+
+
+  -   d _**X**_ _t_ = _**b**_ ( _**X**_ _t, t_ ) _−_ [1]
+
+2 _[σ]_ [2][(] _[t]_ [)] _[∇]_ _**[x]**_ [ log] _[ p]_ [(] _**[X]**_ _[t][, t]_ [)]
+
+
+  d _**X**_ _t_ = _**b**_ ( _**X**_ _t, t_ ) _−_ [1]
+
+
+d _t._
+
+
+               - ��               _**v**_ ( _**X**_ _t,t_ )
+
+
+_Conversely, if the probability flow ODE’s drift_ _**v**_ ( _**x**_ _, t_ ) _, the diffusion rate σ_ ( _t_ ) _and the_ score function
+_∇_ _**x**_ log _p_ ( _**x**_ _, t_ ) _are known, then the the drift term_ _**b**_ ( _**x**_ _, t_ ) _of the SDE can be determined by_ _**b**_ ( _**x**_ _, t_ ) =
+_**v**_ ( _**x**_ _, t_ ) + [1] 2 _[σ]_ [2][(] _[t]_ [)] _[∇]_ _**[x]**_ [ log] _[ p]_ [(] _**[x]**_ _[, t]_ [)] _[.][ Thus, to specify an SDE is equivalent to specifying the probability]_
+
+_flow ODE and the corresponding score function ∇_ _**x**_ log _p_ ( _**x**_ _, t_ ) _(Tong et al., 2024b)._
+
+
+In (Buze & Duong, 2023), the authors defined a RUOT problem with nonlinear Fokker-Planck
+equation constraints. In Appendix D.3, we show that the proposed form is indeed consistent
+with the RUOT defined here when _σ_ ( _t_ ) is constant and Ψ ( _g_ ( _**x**_ _, t_ )) takes the quadratic form (i.e.,
+Ψ ( _g_ ( _**x**_ _, t_ )) = _|g_ ( _**x**_ _, t_ ) _|_ [2] 2 [).] [We] [then] [explore] [the] [connections] [between] [RUOT] [and] [SB] [problem] [in]
+Appendix E.
+
+
+5
+
+
+5 LEARNING RUOT THROUGH NEURAL NETWORKS
+
+
+Given unnormalized distributions at _T_ discrete time points, _**X**_ _i_ _∼_ _µi_ for fixed timepoints _i_ _∈_
+_{_ 0 _, . . ., T_ _−_ 1 _}_, we aim to learn continuous stochastic dynamics satisfying the RUOT from data.
+Similarly, to simplify the exposition and illustrate a commonly used case, we consider Definition 4.1 with the stochastic dynamics d _**X**_ _t_ = _**b**_ ( _**X**_ _t, t_ ) d _t_ + _σ_ ( _t_ ) d _**W**_ _t._ As previously discussed,
+we approach this by transforming the problem into learning the drift _**v**_ ( _**x**_ _, t_ ) of the probability ODE
+and its score function 2 [1] _[σ]_ [2][(] _[t]_ [)] _[∇]_ _**[x]**_ [ log] _[ p]_ [(] _**[x]**_ _[, t]_ [)][ in][ Theorem 4.1][.] [We parameterize] _**[ v]**_ [(] _**[x]**_ _[, t]_ [)][,] _[ g]_ [(] _**[x]**_ _[, t]_ [)][, and]
+
+21 _[σ]_ [2][(] _[t]_ [) log] _[ p]_ [(] _**[x]**_ _[, t]_ [)][ using neural networks] _**[ v]**_ _[θ][,]_ _[g][θ]_ [and] _[ s][θ]_ [respectively (][Fig. 1][).] [To solve][ Theorem 4.1][,]
+the overall loss is composed of energy loss, reconstruction loss, and the Fokker-Planck constraint:
+
+
+_L_ = _L_ Energy + _λrL_ Recons + _λf_ _L_ FP _._ (9)
+
+
+The _L_ Energy loss promotes the least action of kinetic energy Eq. (7). The reconstruction loss _L_ Recons
+promotes the dynamics to match data distribution at later time point (i.e. _p_ ( _·,_ 1) = _ν_ 1), and the _L_ FP
+promotes the three parameterized neural network to satisfy Fokker-Planck constraints Eq. (8).
+
+
+5.1 ENERGY LOSS
+
+
+To compute the integral in Eq. (7), the direct calculation is infeasible due to the high dimensionality.
+Thus, we need to transform it into an equivalent form that can be evaluated using Monte Carlo
+methods. Adopting the approach in (Sha et al., 2024) (see Appendix A.4), Eq. (7) is equivalent to
+the following form
+
+
+- _gθ −_ [(] _[σ]_ [2][(] _[t]_ [))] _[′]_ _wθ_ ( _t_ )d _t,_
+
+_σ_ [2] ( _t_ ) _[s][θ]_ [ +] _[ α]_ [Ψ (] _[g][θ]_ [)]
+
+
+_L_ Energy =E _**x**_ **0** _∼p_ 0
+
+
+- _T_
+
+
+0
+
+
+- 1 2 [+] [1] 2 _[−]_ - _σ_ 2( _t_ ) + _sθ_
+2 _[∥]_ _**[v]**_ _[θ][∥]_ [2] 2 _[∥∇]_ _**[x]**_ _[s][θ][∥]_ [2] 2
+
+
+(10)
+
+         - _t_
+where _wθ_ ( _t_ ) = _e_ 0 _[g][θ]_ [(] _**[x]**_ [(] _[t]_ [)] _[,s]_ [)d] _[s]_ and _**x**_ ( _t_ ) satisfy d _**x**_ _/_ d _t_ = _**v**_ ( _**x**_ _, t_ )d _t_ . We compute through Monte
+Carlo sampling and a Neural ODE solver.
+
+
+5.2 RECONSTRUCTION LOSS
+
+
+The reconstruction loss aims to match the final distribution in Theorem 4.1 (i.e., _p_ ( _·,_ 1) = _ν_ 1). Many
+works use the balanced optimal transport to evaluate the distance between two distributions. However
+due to the unnormalized effect, here we aim to use
+the unbalanced optimal transport instead. To realize
+this we need to tackle two parts:
+
+
+_L_ Recons = _λmL_ Mass + _λdL_ OT (11)
+
+
+where _λm_ and _λd_ are hyperparameters. The mass
+matching loss _L_ Mass promotes to align the number of
+cells. We then normalize the distributions according
+to the matched masses. The _L_ OT uses these weights
+to perform optimal transport matching.
+
+
+**L = L   + Energy** **L  Recons    +    FPL**
+
+
+Figure 1: Overview of DeepRUOT.
+
+
+For _L_ Mass, we propose a local mass matching strategy. We denote _Ai_ ( _i_ = 0 _,_ 1 _, · · · T_ _−_ 1) as
+the dataset observed at different time points, and define _ϕ_ _**[v]**_ _θ_ [:] [R] _[d]_ _[×]_ _[T]_ _[→]_ [R] _[d][|T |]_ [as] [the] [trajec-]
+tory mapping function of the Neural ODE d _**x**_ _/_ d _t_ = _**v**_ _θ_, which inputs a given starting point as
+the initial condition and outputs the observed particle coordinates at _T_ following ODE dynamics, with _T_ being a set of time indices. Starting with an initial set _A_ 0, the Neural ODE function
+_ϕ_ _**[v]**_ _θ_ [predicts] [the] [subsequent] [sets] [of] [data] [points] [over] [the] [time] [indices] [in] _[T]_ [ .] [Specifically,] [the] [pre-]
+dicted sets _A_ [�] 1 _, . . .,_ _A_ [�] _T −_ 1 are obtained by applying the Neural ODE function to _A_ 0 and the full
+range of time indices from 1 to _T_ _−_ 1, i.e., _A_ [�] 1 _, . . .,_ _A_ [�] _T −_ 1 = _ϕ_ _**[v]**_ _θ_ [(] _[A]_ [0] _[,][ {]_ [1] _[, . . ., T]_ _[−]_ [1] _[}]_ [)] _[ .]_ [Simi-]
+larly, we define _ϕ_ _[g]_ _θ_ [:] [R] _[ × T]_ _[→]_ [R] _[|T |]_ [as] [the] [particle] [weight] [mapping] [function] [of] [the] [Neural] [ODE]
+d log _wi_ ( _t_ ) _/_ d _t_ = _gθ_ ( _**x**_ _i_ ( _t_ ) _, t_ ), which inputs a given weight of particle _i_ as the initial condition and
+outputs the sampled weights at _T_ following ODE dynamics. For simplicity of notation in algorithm description Algorithm 1, we also use _w_ ( _A_ ) to denote the set of weights of particles in set
+
+
+6
+
+
+_A_ . Assume the sample size _N_ 0 at the initial time point, with the relative total masses at subsequent time points denoted as _ntk_ = _Nk/N_ 0 for _k_ = 0 _,_ 1 _, · · ·_ _, T_ _−_ 1. Along the trajectory, each
+sampled particle _i_ has a weight _wi_ ( _t_ ) with the initial condition _wi_ (0) = 1 _/N_ 0. We then establish a mapping _hk_ from points at time _tk_ to the sampled particles (total number _N_ 0) predicted at
+time _tk_, which links the real data points in _Ak_ to its closest point in sampled particles at _A_ [�] _k_, i.e.,
+_hk_ : _Ak_ _→_ _A_ [�] _k,_ _hk_ ( _**x**_ _tk_ ) = argmin _**y**_ _∈A_ - _k_ _[∥]_ _**[x]**_ _[t][k]_ _[−]_ _**[y]**_ _[∥]_ 2 [2] _[.]_ [The] [mass] [matching] [error] [at] [time] _[t][k]_ [is] [then]
+
+
+defined as _Mk_ = [�] _i_ _[N]_ =1 [0] ��� _wi_ ( _tk_ ) _−_ card - _h_ _[−]_ _k_ [1][(] _**[x]**_ _[i]_ [(] _[t][k]_ [))] - _N_ 10
+
+
+���2
+
+
+defined as _Mk_ = [�] _i_ =1 [0] _wi_ ( _tk_ ) _−_ card _hk_ [(] _**[x]**_ _[i]_ [(] _[t][k]_ [))] _N_ 0 2 _[.]_ [Here] [card][(] _[A]_ [)] [denotes] [the] [cardinal-]
+
+ity (i.e., number of elements for the finite set) of set _A_ . This error metric ensures the matching of
+local masses. So the _L_ Mass = [�] _k_ _[T]_ =1 _[ −]_ [1] _[M][k]_ [Furthermore,] [when] _[M][t]_ [=] [0][,] [we] [have] [�] _i_ _[N]_ =1 [0] _[w][i]_ [(] _[t][k]_ [)] [=]
+
+- _Ni_ =10 [card] - _h_ _[−]_ _t_ [1][(] _**[x]**_ _[i]_ [(] _[t][k]_ [))] - _/N_ 0 = _Nk/N_ 0 = _ntk_ _._ So the local matching loss also encourages the
+matching of total mass, since the left-hand side is the unbiased estimator of �R _[d][ p]_ [(] _**[y]**_ _[, t][k]_ [)] _[d]_ _**[y]**_ [.] [Once]
+
+we have determined the weights _wi_ ( _t_ ), we utilize these weights to perform optimal transport matching of the distributions _L_ OT := [�] _k_ _[T]_ =1 _[ −]_ [1] _[W]_ [2] - _**w**_ ˆ _k,_ _**w**_ ( _tk_ )� _,_ where _**w**_ ˆ _[k]_ = (1 _/Nk,_ 1 _/Nk, ...,_ 1 _/Nk_ ) is
+the uniform distribution of _Ak_ at time _t_, _**w**_ ( _tk_ ) = ( _w_ 1( _tk_ ) _, w_ 2( _tk_ ) _, ..., wN_ 0( _tk_ )) _/_ [�] _i_ _[N]_ =1 [0] _[w][i]_ [(] _[t][k]_ [)] [is]
+the predicted weight distribution of sample particles at time _tk_ and _W_ 2 represents the Wasserstein
+distance between _Ak_ and _A_ [�] _k_ with normalized distribution defined by _**w**_ ˆ _[k]_ and _**w**_ ( _tk_ ).
+
+
+5.3 FOKKER-PLANCK CONSTRAINT AND TWO STAGE TRAINING
+
+
+In addition to the energy loss defined in Eq. (10) and the reconstruction loss defined in Eq. (11), it
+is necessary to incorporate a physics-informed loss (PINN-loss) (Raissi et al., 2019) to constrain the
+relationships among the three neural networks, i.e., the Fokker-Planck constraint Eq. (8). Here we
+utilize a Gaussian mixture model to estimate the initial distribution (Appendix A.3), ensuring that it
+satisfies the initial conditions _p_ 0, and the PINN-loss is defined as
+
+
+_L_ FP = _∥∂tpθ_ + _∇_ _**x**_ _·_ ( _pθ_ _**v**_ _θ_ ) _−_ _gθpθ∥_ + _λw ∥pθ_ ( _**x**_ _,_ 0) _−_ _p_ 0 _∥_ _,_ (12)
+
+where _pθ_ = exp _σ_ [2][2] _[s][θ]_ [.] [Therefore,] [the] [total] [loss] [function] [(][9][)] [is] [defined] [as] [the] [weighted] [sum] [of]
+
+the energy, the reconstruction error and the Fokker-Planck loss with the loss weights as hyperparameters. This allows us to develop a neural network algorithm for solving the RUOT problem
+(Algorithm 1 and Appendix A.1).
+
+
+We adopt a two-stage training approach to deal with multiple loss terms and stabilize the training
+process. For the pre-training stage, initially, we use reconstruction loss only to train _**v**_ _θ_ and _gθ_,
+ensuring a required matching as the initial value. Subsequently, we fix _**v**_ _θ_ and _gθ_ and employ flowmatching to learn an initial and well-optimized log density function ( _sθ_ ( _**x**_ _, t_ )). Specifically, it is
+conducted by conditional flow matching (Lipman et al., 2023; Tong et al., 2024a;b) (Appendix A.2).
+As part of this pre-training stage, we incorporate a hyperparameter scheduling strategy to further
+enhance stability (Appendix C.2). Based on these warmup steps in the pre-training stage, in the
+training stage, we use the obtained _**v**_ _θ_, _gθ_, and the optimized log density function as the starting
+point, then get the final result by minimizing the total loss (9). In summary, by integrating all the
+methodologies, we derive the Algorithm 1 for training the regularized unbalanced optimal transport
+(Appendices A.2 and C.3). We discuss the loss weighting strategy and settings in Appendix C.2.
+
+
+6 NUMERICAL RESULTS
+
+
+This section evaluates the DeepRUOT solver’s ability to recover growth and transitions accurately
+and produce realistic stochastic dynamics for constructing a Waddington’s developmental landscape.
+We take Ψ ( _g_ ( _**x**_ _, t_ )) = _|g_ ( _**x**_ _, t_ ) _|_ [2] 2 [and] _[ σ]_ [(] _[t]_ [)][ is constant in the following computations.]
+
+
+**Synthetic Gene Regulatory Network** Inspired by (Sha et al., 2024), we adopt the same three-gene
+simulation model (Appendix B.1) to explore the stochastic dynamics of gene regulation, as illustrated in Fig. 2(a). The resulting gene regulatory and cellular dynamics are illustrated in Fig. 2(b),
+(c), where a quiescent region and an area exhibiting both transition and growth can be observed.
+We focus on the projection of these dynamics onto the two-dimensional space of ( _X_ 1 _, X_ 2) since
+on _X_ 3 it remains quiescent. In Fig. 2(d-e), we compare DeepRUOT with the balanced diffusion
+Schr¨odinger bridge method as described in (Tong et al., 2024b). We find that neglecting the growth
+
+
+7
+
+
+**Algorithm 1** Training Regularized Unbalanced Optimal Transport
+**Require:** Datasets _A_ 0 _, . . ., AT −_ 1, batch size _N_, maximum ode iteration _n_ ode, maximum log density
+iteration _n_ log-density, initialized ODE _**vθ**_, growth _gθ_ and log density _sθ_
+**Ensure:** Trained neural ODE _**vθ**_, growth function _gθ_ and log density function _sθ_ .
+
+1: **Pre-Training Stage:**
+2: **for** _i_ = 1 to _n_ ode **do** _▷_ _Distribution Reconstruction training_
+3: **for** _t_ = 0 to _T_ _−_ 2 **do**
+
+        -         -         -         4: _A_ - _t_ +1 _←_ _ϕ_ _**[v]**_ _θ_ _A_ - _t, t_ + 1, _w_ ( _A_ [�] _t_ +1) _←_ _ϕ_ _[g]_ _θ_ _w_ ( _A_ [�] _t_ ) _, t_ + 1 .
+
+5: _L_ Recons _←L_ Recons + _λmMt_ + _λdW_ 2� _**w**_ ˆ _t,_ _**w**_ ( _t_ )� (11), update _**vθ**_ and _gθ_ w.r.t. _L_ Recons
+with hyperparameter scheduling (Appendix C.2).
+6: **for** _t_ = 0 to _T_ _−_ 2 **do**
+
+       -        7: _A_ - _t_ +1 _←_ _ϕ_ _**[v]**_ _θ_ _A_ - _t, t_ + 1 _▷_ _Generating samples from learned_ _**vθ**_ _._
+
+8: **for** _i_ = 1 to _n_ log-density **do** _▷_ _CFM Score matching (Tong et al., 2024b)_
+9: ( _**x**_ 0 _,_ _**x**_ 1) _∼_ _q_ ( _**x**_ 0 _,_ _**x**_ 1); _t_ _∼U_ (0 _,_ 1); _**x**_ _∼_ _p_ ( _**x**_ _, t_ _|_ ( _**x**_ 0 _,_ _**x**_ 1)) at generated datasets
+_A_ �0 _, · · ·_ _,_ _A_   - _T −_ 1, _L_ score _←∥λs_ ( _t_ ) _∇_ _**x**_ _sθ_ ( _**x**_ _, t_ ) + _**ϵ**_ **1** _∥_ [2] 2 [(][13][), update] _[ s][θ]_ [w.r.t.] [the loss] _[ L]_ [score]
+10: **Training Stage** :
+11: **for** _i_ = 1 to _n_ ode **do**
+12: Estimate the initial distribution through Gaussian Mixture Model (Appendix A.3).
+13: **for** _t_ = 0 to _T_ _−_ 2 **do**
+
+        -         -         -         14: _A_ - _t_ +1 _←_ _ϕ_ _**[v]**_ _θ_ _A_ - _t, t_ + 1, _w_ ( _A_ [�] _t_ +1) _←_ _ϕ_ _[g]_ _θ_ _w_ ( _A_ [�] _t_ ) _, t_ + 1
+
+
+[1] 2 _[∥∇]_ _**[x]**_ _[s][θ][∥]_ 2 [2] _[−]_ - _σ_ 2 [2]
+
+
+[2][(] _[t]_ [))] _[′]_  
+_σ_ [2] ( _t_ ) _[s][θ]_ [ +] _[ α]_ [Ψ (] _[g][θ]_ [)] _w_ ( _z_ )d _z_
+
+
+15: _L_ Energy _←_ E _**x**_ _t∼pt_ - _tt_ +1 - 12 _[∥]_ _**[v]**_ _[θ][∥]_ 2 [2] [+] [1] 2
+
+
+[2]  
+2 [+] _[ s][θ]_ _gθ −_ [(] _[σ]_ _σ_ [2][2][(] ( _[t]_ _t_ [))] ) _[′]_
+
+
+16: _L_ Recons _←L_ Recons + _λmMt_ + _λdW_ 2� _**w**_ ˆ _t,_ _**w**_ ( _t_ )� (11)
+17: _L_ FP _←∥∂tpθ_ + _∇_ _**x**_ _·_ ( _pθ_ _**v**_ _θ_ ( _**x**_ _, t_ )) _−_ _gθ_ ( _**x**_ _, t_ ) _pθ∥_ + _λw ∥pθ_ ( _**x**_ _,_ 0) _−_ _p_ 0 _∥_ (12)
+18: _L ←L_ Energy + _λrL_ Recons + _λf_ _L_ FP (9), update _**vθ**_, _gθ_ and _sθ_ w.r.t. _L_
+
+
+in the balanced diffusion Schr¨odinger bridge leads to a false transition, incorrectly attracting cells
+in the quiescent state to the transition and growth region. The underlying reason is that the growth
+factor causes an increase in the number of cells. If the growth factor is ignored, the regions with
+increasing cell numbers will attract cells to transition into them to maintain balance. Our approach,
+which explicitly incorporates growth dynamics, indeed eliminates false transitions and yields results
+consistent with the ground truth dynamics Fig. 2(b). Furthermore, the growth rates inferred by DeepRUOT (Fig. 2(f)) closely match the ground truth after normalization, demonstrating the robustness
+and accuracy of the DeepRUOT solver (Fig. 2(c)). In Table 1, we present quantitative metrics ( _W_ 1
+and _W_ 2, Appendix C.1) to evaluate the performance of our proposed algorithm in comparison with
+several representative baseline methods (Balanced OT, Balanced SB, Unbalanced OT, Unbalanced
+Action Matching (AM), Unbalanced SB). The results demonstrate that DeepRUOT is quantitatively
+more accurate than the competing methods. Furthermore, we observe that our algorithm can benefit from the incorporation of stochasticity, outperforming the solver without diffusion (Unbalanced
+OT). We include the detail ablation studies in Appendix B.5.
+
+
+Table 1: Wasserstein distance ( _W_ 1 and _W_ 2) of predictions at different points across five runs on
+gene regulatory data (Appendix C.1). We show the mean value with one standard deviation.
+
+
+_t_ = 1 _t_ = 2 _t_ = 3 _t_ = 4
+
+
+Model _W_ 1 _W_ 2 _W_ 1 _W_ 2 _W_ 1 _W_ 2 _W_ 1 _W_ 2
+
+MIOFlow (Huguet et al., 2022) 0 _._ 098 _±_ 0 _._ 000 0 _._ 113 _±_ 0 _._ 000 0 _._ 250 _±_ 0 _._ 000 0 _._ 295 _±_ 0 _._ 000 0 _._ 421 _±_ 0 _._ 000 0 _._ 536 _±_ 0 _._ 000 0 _._ 614 _±_ 0 _._ 000 0 _._ 802 _±_ 0 _._ 000
+SF2M (Tong et al., 2024b) 0 _._ 174 _±_ 0 _._ 010 0 _._ 303 _±_ 0 _._ 023 0 _._ 430 _±_ 0 _._ 027 0 _._ 719 _±_ 0 _._ 032 0 _._ 686 _±_ 0 _._ 054 1 _._ 050 _±_ 0 _._ 047 0 _._ 871 _±_ 0 _._ 072 1 _._ 242 _±_ 0 _._ 065
+Unbalanced SB (Pariset et al., 2023) 0 _._ 729 _±_ 0 _._ 009 0 _._ 846 _±_ 0 _._ 012 0 _._ 747 _±_ 0 _._ 009 0 _._ 823 _±_ 0 _._ 012 0 _._ 612 _±_ 0 _._ 012 0 _._ 725 _±_ 0 _._ 018 0 _._ 572 _±_ 0 _._ 029 0 _._ 944 _±_ 0 _._ 031
+uAM (Neklyudov et al., 2023) 0 _._ 448 _±_ 0 _._ 000 0 _._ 495 _±_ 0 _._ 000 0 _._ 650 _±_ 0 _._ 000 0 _._ 691 _±_ 0 _._ 000 0 _._ 661 _±_ 0 _._ 000 0 _._ 749 _±_ 0 _._ 000 0 _._ 672 _±_ 0 _._ 000 0 _._ 864 _±_ 0 _._ 000
+Unbalanced OT (Sha et al., 2024) 0 _._ 047 _±_ 0 _._ 000 0 _._ 060 _±_ 0 _._ 000 0 _._ 059 _±_ 0 _._ 000 0 _._ 088 _±_ 0 _._ 000 0 _._ 073 _±_ 0 _._ 000 0 _._ 084 _±_ 0 _._ 000 0 _._ 107 _±_ 0 _._ 000 0 _._ 124 _±_ 0 _._ 000
+DeepRUOT (ours) **0** _**.**_ _±_ 0 _._ 001 **0** _**.**_ _±_ 0 _._ 001 **0** _**.**_ _±_ 0 _._ 002 **0** _**.**_ _±_ 0 _._ 002 **0** _**.**_ _±_ 0 _._ 002 **0** _**.**_ _±_ 0 _._ 002 **0** _**.**_ _±_ 0 _._ 001 **0** _**.**_ _±_ 0 _._ 000
+
+
+**Learning** **Waddington** **Developmental** **Landscape** In biophysics, Waddington’s landscape
+metaphor is a well-known model for representing the cell fate decision process. Constructing such
+a potential landscape has been widely studied (Bian et al., 2023; 2024; Li & Wang, 2013; 2014;
+Shi et al., 2022; Wang et al., 2010; Zhao et al., 2024; Zhou & Li, 2016; Zhou et al., 2024c;d),
+however, it still remains a challenging problem in the single-cell omics data. The energy landscape
+
+
+8
+
+
+Figure 2: (a) Illustration of the synthetic gene regulatory dynamics. (b) The ground truth cellular
+dynamics project on ( _X_ 1 _, X_ 2). (c) The ground truth growth rates. (d) The dynamics learned by
+balanced Schr¨odinger bridge (SF2M (Tong et al., 2024b), _σ_ = 0 _._ 25). (e) The dynamics learned by
+our DeepRUOT solver ( _σ_ = 0 _._ 25). (f) The growth rates inferred by our DeepRUOT solver. (g) The
+Waddington developmental landscape learned at _t_ = 1. (h) The constructed landscape at _t_ = 4.
+
+
+is defined by _U_ = _−σ_ [2] log _p_ ss _/_ 2 where _p_ ss is the steady-state PDF satisfying the Fokker-Planck
+equation _−∇·_ ( _pss_ _**b**_ ) + _[σ]_ 2 [2] [∆] _[p]_ [ss] [=] _[gp]_ [ss][.] [In] [this] [work,] [leveraging] [our] [model,] [we] [can] [naturally] [in-]
+
+fer the time-varying potential energy landscape through the learned log density function, and use
+_−σ_ [2] ( _t_ ) log _p_ ( _**x**_ _, t_ ) _/_ 2 to represent the landscape at time _t_ . The lower energy function indicates more
+stable cell fates in the landscape. In Fig. 2(g-h), we can observe the temporal evolution of the potential landscape in the synthetic gene regulation system. The quiescent cells always occupy a potential
+well, indicating its stability. Interestingly, the location of potential wells belonging to the transitional
+cell population is moving in a consistent direction with ground truth cell-state transition dynamics.
+Overall, the results suggest the accuracy and usefulness of DeepRUOT algorithm.
+
+
+**Synthetic** **Gaussian** **Mixtures** Inspired by (Ruthotto et al., 2020), we employed a highdimensional Gaussian mixture model to evaluate the scalability of DeepRUOT. Initially, we generated a 10-dimensional Gaussian mixture distribution. The initial density is represented as a Gaussian mixture derived from the average of two Gaussians, with their projections onto the ( _x_ 1 _, x_ 2)
+plane depicted in Appendix B.2. The final density is also modeled as a mixture of three Gaussians,
+with its projection onto ( _x_ 1 _, x_ 2) planes. Fig. 5 (Appendix B.2) demonstrates that our model effectively incorporates growth while learning the stochastic dynamics that transition from the initial to
+the target distribution. We observe that the cells in the upper region exhibit proliferation without
+transport. If the true cell dynamics indeed follow this pattern, models that neglect the growth factor, such as conventional balanced methods, would fail to capture these dynamics. Conversely, if
+the true dynamics involve transport from the lower to the upper cells, our model can still recover
+such dynamics, provided more detailed temporal resolution data is available. This highlights the
+robustness of our approach in capturing complex dynamical behaviors involving both growth and
+transport. Similarly, we visualized the energy landscapes at the initial and final time points Fig. 5
+(Appendix B.2). The results reveal that the cells ultimately differentiate into three distinct fate states.
+
+
+**Real** **Single-Cell** **Population** **Dynamics** Next, we evaluate our algorithm on a real scRNA-seq
+dataset. We use the same dataset as in (Sha et al., 2024; Weinreb et al., 2020), which involves
+mouse hematopoiesis analyzed by using a lineage tracing technique. After batch correction across
+different experiments, the data was projected onto 2D reduced-dimension force-directed layouts
+(SPRING plots). A clear bifurcation is observed where early-stage progenitor cells differentiate into
+two distinct fates (Fig. 3(a)). Using the RUOT-based approach, we learn the underlying stochastic
+dynamics of the data, along with the growth rates and developmental landscape at different times
+(Fig. 3(b),(c),(d)). We similarly evaluated quantitative metrics to compare our method with several
+
+
+9
+
+
+baseline approaches (Table 2). We find that our method outperforms others (Appendix B.3). We
+then test our method on a time-series single cell dataset from an A549 cancer cell line, where cells
+were exposed to TGFB1 to induce EM (Sha et al., 2024). We project the data with PCA on a tendimensional latent space as the input of our algorithm. The results are shown in Appendix B.4,
+which indicates that DeepRUOT remains effective and applicable in higher-dimensional settings,
+demonstrating its versatility and robustness in modeling complex single-cell dynamics.
+
+
+Table 2: Wasserstein distance ( _W_ 1 and _W_ 2) of predictions at different points across five runs on
+scRNA-seq data (Appendix C.1, _σ_ = 0 _._ 25). We show the mean value with one standard deviation.
+
+
+_t_ = 1 _t_ = 2
+
+
+Model _W_ 1 _W_ 2 _W_ 1 _W_ 2
+
+MIOFlow (Huguet et al., 2022) 0 _._ 276725 _±_ 0 _._ 000 0 _._ 312102 _±_ 0 _._ 000 0 _._ 307610 _±_ 0 _._ 000 0 _._ 402190 _±_ 0 _._ 000
+SF2M (Tong et al., 2024b) 0 _._ 167477 _±_ 0 _._ 003 0 _._ 213489 _±_ 0 _._ 006 0 _._ 190020 _±_ 0 _._ 016 0 _._ 241516 _±_ 0 _._ 022
+Unbalanced SB (Pariset et al., 2023) 0 _._ 387538 _±_ 0 _._ 009 0 _._ 460603 _±_ 0 _._ 008 **0** _**.**_ **128254** _±_ 0 _._ 003 0 _._ 188339 _±_ 0 _._ 009
+uAM (Neklyudov et al., 2023) 0 _._ 744918 _±_ 0 _._ 000 0 _._ 851704 _±_ 0 _._ 000 0 _._ 777237 _±_ 0 _._ 000 0 _._ 889527 _±_ 0 _._ 000
+Unbalanced OT (Sha et al., 2024) 0 _._ 313522 _±_ 0 _._ 000 0 _._ 396947 _±_ 0 _._ 000 0 _._ 342230 _±_ 0 _._ 000 0 _._ 469342 _±_ 0 _._ 000
+DeepRUOT (ours) **0** _**.**_ **145026** _±_ 0 _._ 002 **0** _**.**_ **172878** _±_ 0 _._ 002 0 _._ 132411 _±_ 0 _._ 006 **0** _**.**_ **167328** _±_ 0 _._ 010
+
+
+Figure 3: Application in hematopoiesis scRNA-seq data ( _σ_ = 0 _._ 25). (a) The stochastic dynamics
+learned by RUOT. (b) The growth rates learned by DeepRUOT. (c) The constructed Waddington
+developmental landscape at _t_ = 0. (d) The landscape at _t_ = 2.
+
+
+7 CONCLUSION
+
+
+We have introduced DeepRUOT for learning regularized unbalanced optimal transport (RUOT) and
+continuous unbalanced stochastic dynamics from time-series snapshot data. By leveraging Fisher
+regularization, our method transforms an SDE problem into an ODE constraint. Through the use of
+neural network modeling for growth and death, our framework models dynamics without requiring
+prior knowledge of these processes. We have demonstrated the effectiveness of our method on a synthetic gene regulatory network, high-dimensional Gaussian Mixture Model, and single-cell RNA-seq
+data, showing its ability to eliminate false transitions caused by neglecting growth processes. Future
+directions involve extending the methodology to learn the cell latent embedding space jointly with
+the dynamics and developing more computationally efficient algorithms. We expect future work
+to address these aspects and improve trajectory inference problems in various scenarios, including
+multi-omics data and other scenarios beyond biology in machine learning.
+
+
+10
+
+
+ACKNOWLEDGMENTS
+
+
+We thank Dr. Hugo Lavenant (Bocconi) for helpful discussions on Section E.1 and Qiangwei Peng
+(PKU) for helpful suggestions on the algorithm. We thank Prof. Qing Nie (UCI), Prof. Chunhe Li
+(Fudan), and Juntan Liu (Fudan) for their insightful discussions. This work was supported by the
+National Key R&D Program of China (No. 2021YFA1003301 to T.L.) and National Natural Science
+Foundation of China (NSFC No. 12288101 to T.L. & P.Z., and 8206100646, T2321001 to P.Z.). We
+acknowledge the support from the High-performance Computing Platform of Peking University
+for computation. We thank the anonymous referees for their valuable feedback and constructive
+suggestions.
+
+
+REFERENCES
+
+
+Michael S Albergo, Nicholas M Boffi, and Eric Vanden-Eijnden. Stochastic interpolants: A unifying
+framework for flows and diffusions. _arXiv preprint arXiv:2303.08797_, 2023.
+
+
+Michael Samuel Albergo and Eric Vanden-Eijnden. Building normalizing flows with stochastic
+interpolants. In _The Eleventh International Conference on Learning Representations_, 2023.
+
+
+Aymeric Baradat and Hugo Lavenant. Regularized unbalanced optimal transport as entropy minimization with respect to branching brownian motion. _arXiv preprint arXiv:2111.01666_, 2021.
+
+
+Jean-David Benamou and Yann Brenier. A computational fluid mechanics solution to the mongekantorovich mass transfer problem. _Numerische Mathematik_, 84(3):375–393, 2000.
+
+
+Shirui Bian, Yunxin Zhang, and Chunhe Li. An improved approach for calculating energy landscape
+of gene networks from moment equations. _Chaos:_ _An_ _Interdisciplinary_ _Journal_ _of_ _Nonlinear_
+_Science_, 33(2), 2023.
+
+
+Shirui Bian, Ruisong Zhou, Wei Lin, and Chunhe Li. Quantifying energy landscape of oscillatory
+systems: Explosion, pre-solution, and diffusion decomposition. _arXiv preprint arXiv:2401.06959_,
+2024.
+
+
+Charlotte Bunne, Ya-Ping Hsieh, Marco Cuturi, and Andreas Krause. The schr¨odinger bridge between gaussian measures has a closed form. In _International Conference on Artificial Intelligence_
+_and Statistics_, pp. 5802–5833. PMLR, 2023a.
+
+
+Charlotte Bunne, Stefan G Stark, Gabriele Gut, Jacobo Sarabia Del Castillo, Mitch Levesque,
+Kjong-Van Lehmann, Lucas Pelkmans, Andreas Krause, and Gunnar R¨atsch. Learning singlecell perturbation responses using neural optimal transport. _Nature_ _methods_, 20(11):1759–1768,
+2023b.
+
+
+Charlotte Bunne, Geoffrey Schiebinger, Andreas Krause, Aviv Regev, and Marco Cuturi. Optimal
+transport for single-cell and spatial omics. _Nature Reviews Methods Primers_, 4(1):58, 2024.
+
+
+Maciej Buze and Manh Hong Duong. Entropic regularisation of unbalanced optimal transportation
+problems. _arXiv preprint arXiv:2305.02410_, 2023.
+
+
+Zixuan Cang and Yanxiang Zhao. Synchronized optimal transport for joint modeling of dynamics
+across multiple spaces. _arXiv preprint arXiv:2406.03319_, 2024.
+
+
+Kai Cao, Qiyu Gong, Yiguang Hong, and Lin Wan. A unified computational framework for singlecell data integration with optimal transport. _Nature Communications_, 13(1):7419, 2022.
+
+
+Ricky T. Q. Chen, Yulia Rubanova, Jesse Bettencourt, and David Duvenaud. Neural ordinary differential equations. _Advances in Neural Information Processing Systems_, 2018.
+
+
+Tianrong Chen, Guan-Horng Liu, and Evangelos Theodorou. Likelihood training of schr¨odinger
+bridge using forward-backward SDEs theory. In _International Conference on Learning Represen-_
+_tations_, 2022a.
+
+
+11
+
+
+Yongxin Chen, Tryphon T Georgiou, and Michele Pavon. On the relation between optimal transport
+and schr¨odinger bridges: A stochastic control viewpoint. _Journal_ _of_ _Optimization_ _Theory_ _and_
+_Applications_, 169:671–691, 2016.
+
+
+Yongxin Chen, Tryphon T Georgiou, and Michele Pavon. The most likely evolution of diffusing and
+vanishing particles: Schrodinger bridges with unbalanced marginals. _SIAM_ _Journal_ _on_ _Control_
+_and Optimization_, 60(4):2016–2039, 2022b.
+
+
+Qing Cheng, Qianqian Liu, Wenbin Chen, and Jie Shen. A new flow dynamic approach for wasserstein gradient flows. _arXiv preprint arXiv:2406.14870_, 2024a.
+
+
+Xiuyuan Cheng, Jianfeng Lu, Yixin Tan, and Yao Xie. Convergence of flow-based generative models
+via proximal gradient descent in wasserstein space. _IEEE_ _Transactions_ _on_ _Information_ _Theory_,
+2024b.
+
+
+Lenaic Chizat, Gabriel Peyr´e, Bernhard Schmitzer, and Franc¸ois-Xavier Vialard. An interpolating
+distance between optimal transport and fisher–rao metrics. _Foundations of Computational Math-_
+_ematics_, 18:1–44, 2018a.
+
+
+Lenaic Chizat, Gabriel Peyr´e, Bernhard Schmitzer, and Franc¸ois-Xavier Vialard. Unbalanced optimal transport: Dynamic and kantorovich formulations. _Journal of Functional Analysis_, 274(11):
+3090–3123, 2018b.
+
+
+L´ena¨ıc Chizat, Stephen Zhang, Matthieu Heitz, and Geoffrey Schiebinger. Trajectory inference
+via mean-field langevin in path space. _Advances in Neural Information Processing Systems_, 35:
+16731–16742, 2022.
+
+
+Shui-Nee Chow, Wuchen Li, and Haomin Zhou. Wasserstein hamiltonian flows. _Journal of Differ-_
+_ential Equations_, 268(3):1205–1219, 2020.
+
+
+Paolo Dai Pra. A stochastic control approach to reciprocal diffusion processes. _Applied mathematics_
+_and Optimization_, 23(1):313–329, 1991.
+
+
+Valentin De Bortoli, James Thornton, Jeremy Heng, and Arnaud Doucet. Diffusion schr¨odinger
+bridge with applications to score-based generative modeling. _Advances_ _in_ _Neural_ _Information_
+_Processing Systems_, 34:17695–17709, 2021.
+
+
+Pinar Demetci, Rebecca Santorella, Bj¨orn Sandstede, William Stafford Noble, and Ritambhara
+Singh. Scot: single-cell multi-omics alignment with optimal transport. _Journal of computational_
+_biology_, 29(1):3–18, 2022.
+
+
+Michael B Elowitz, Arnold J Levine, Eric D Siggia, and Peter S Swain. Stochastic gene expression
+in a single cell. _Science_, 297(5584):1183–1186, 2002.
+
+
+R´emi Flamary, Nicolas Courty, Alexandre Gramfort, Mokhtar Z. Alaya, Aur´elie Boisbunon, Stanislas Chambon, Laetitia Chapel, Adrien Corenflos, Kilian Fatras, Nemo Fournier, L´eo Gautheron,
+Nathalie T.H. Gayraud, Hicham Janati, Alain Rakotomamonjy, Ievgen Redko, Antoine Rolet,
+Antony Schutz, Vivien Seguy, Danica J. Sutherland, Romain Tavenard, Alexander Tong, and
+Titouan Vayer. Pot: Python optimal transport. _Journal_ _of_ _Machine_ _Learning_ _Research_, 22(78):
+1–8, 2021.
+
+
+Wilfrid Gangbo, Wuchen Li, Stanley Osher, and Michael Puthawala. Unnormalized optimal transport. _Journal of Computational Physics_, 399:108940, 2019.
+
+
+Yuan Gao, Jian Huang, Yuling Jiao, and Shurong Zheng. Convergence of continuous normalizing
+flows for learning probability distributions. _arXiv preprint arXiv:2404.00551_, 2024a.
+
+
+Zizhan Gao, Kai Cao, and Lin Wan. Graspot: A graph attention network for spatial transcriptomics
+data integration with optimal transport. _bioRxiv_, pp. 2024–02, 2024b.
+
+
+Ivan Gentil, Christian L´eonard, and Luigia Ripani. About the analogy between optimal transport and
+minimal entropy. In _Annales de la Facult´e des sciences de Toulouse:_ _Math´ematiques_, volume 26,
+pp. 569–600, 2017.
+
+
+12
+
+
+Anming Gu, Edward Chien, and Kristjan Greenewald. Partially observed trajectory inference using
+optimal transport and a dynamics prior. _arXiv preprint arXiv:2406.07475_, 2024.
+
+
+Jonathan Ho, Ajay Jain, and Pieter Abbeel. Denoising diffusion probabilistic models. _Advances in_
+_neural information processing systems_, 33:6840–6851, 2020.
+
+
+Guillaume Huguet, Daniel Sumner Magruder, Alexander Tong, Oluwadamilola Fasina, Manik
+Kuchroo, Guy Wolf, and Smita Krishnaswamy. Manifold interpolating optimal-transport flows
+for trajectory inference. _Advances_ _in_ _neural_ _information_ _processing_ _systems_, 35:29705–29718,
+2022.
+
+
+Hicham Janati, Boris Muzellec, Gabriel Peyr´e, and Marco Cuturi. Entropic optimal transport between unbalanced gaussian measures has a closed form. _Advances in neural information process-_
+_ing systems_, 33:10468–10479, 2020.
+
+
+Qi Jiang and Lin Wan. A physics-informed neural SDE network for learning cellular dynamics from
+time-series scRNA-seq data. _Bioinformatics_, 40:ii120–ii127, 09 2024. ISSN 1367-4811.
+
+
+Qi Jiang, Shuo Zhang, and Lin Wan. Dynamic inference of cell developmental complex energy
+landscape from time series single-cell transcriptomic data. _PLoS Computational Biology_, 18(1):
+e1009821, 2022.
+
+
+Yuling Jiao, Lican Kang, Huazhen Lin, Jin Liu, and Heng Zuo. Latent schr¨odinger bridge diffusion
+model for generative learning. _arXiv preprint arXiv:2404.13309_, 2024a.
+
+
+Yuling Jiao, Yanming Lai, Yang Wang, and Bokai Yan. Convergence analysis of flow matching in
+latent space with transformers. _arXiv preprint arXiv:2404.02538_, 2024b.
+
+
+Yijie Jin, Shu Liu, Hao Wu, Xiaojing Ye, and Haomin Zhou. Parameterized wasserstein gradient
+flow. _arXiv preprint arXiv:2404.19133_, 2024.
+
+
+Diederik P Kingma and Max Welling. Auto-encoding variational bayes. _arXiv_ _preprint_
+_arXiv:1312.6114_, 2013.
+
+
+Dominik Klein, Giovanni Palla, Marius Lange, Michal Klein, Zoe Piran, Manuel Gander, Laetitia
+Meng-Papaxanthos, Michael Sterr, Aim´ee Bastidas-Ponce, Marta Tarquis-Medina, et al. Mapping
+cells through time and space with moscot. _bioRxiv_, pp. 2023–05, 2023a.
+
+
+Dominik Klein, Th´eo Uscidda, Fabian Theis, and Marco Cuturi. Generative entropic neural optimal
+transport to map within and across spaces. _arXiv preprint arXiv:2310.09254_, 2023b.
+
+
+Takeshi Koshizuka and Issei Sato. Neural lagrangian schr¨odinger bridge: Diffusion modeling for
+population dynamics. In _The_ _Eleventh_ _International_ _Conference_ _on_ _Learning_ _Representations_,
+2023.
+
+
+Dana Lahat, T¨ulay Adali, and Christian Jutten. Multimodal data fusion: an overview of methods,
+challenges, and prospects. _Proceedings of the IEEE_, 103(9):1449–1477, 2015.
+
+
+Hugo Lavenant, Stephen Zhang, Young-Heon Kim, Geoffrey Schiebinger, et al. Toward a mathematical theory of trajectory inference. _The Annals of Applied Probability_, 34(1A):428–500, 2024.
+
+
+Flavien L´eger and Wuchen Li. Hopf–cole transformation via generalized schr¨odinger bridge problem. _Journal of Differential Equations_, 274:788–827, 2021.
+
+
+Christian L´eonard. A survey of the schr¨odinger problem and some of its connections with optimal
+transport. _Discrete and Continuous Dynamical Systems-Series A_, 34(4):1533–1574, 2014.
+
+
+Chunhe Li and Jin Wang. Quantifying cell fate decisions for differentiation and reprogramming of
+a human stem cell network: landscape and biological paths. _PLoS computational biology_, 9(8):
+e1003165, 2013.
+
+
+Chunhe Li and Jin Wang. Landscape and flux reveal a new global view and physical quantification of
+mammalian cell cycle. _Proceedings of the National Academy of Sciences_, 111(39):14130–14135,
+2014.
+
+
+13
+
+
+Wuchen Li, Jianfeng Lu, and Li Wang. Fisher information regularization schemes for wasserstein
+gradient flows. _Journal of Computational Physics_, 416:109449, 2020.
+
+
+Yaron Lipman, Ricky T. Q. Chen, Heli Ben-Hamu, Maximilian Nickel, and Matthew Le. Flow
+matching for generative modeling. In _The Eleventh International Conference on Learning Repre-_
+_sentations_, 2023.
+
+
+Guan-Horng Liu, Tianrong Chen, Oswin So, and Evangelos Theodorou. Deep generalized
+schr¨odinger bridge. In _Advances_ _in_ _Neural_ _Information_ _Processing_ _Systems_, volume 35, pp.
+9374–9388, 2022a.
+
+
+Guan-Horng Liu, Arash Vahdat, De-An Huang, Evangelos A Theodorou, Weili Nie, and Anima
+Anandkumar. I [2] sb: Image-to-image schr¨odinger bridge. _arXiv preprint arXiv:2302.05872_, 2023a.
+
+
+Shu Liu, Shaojun Ma, Yongxin Chen, Hongyuan Zha, and Haomin Zhou. Learning high dimensional
+wasserstein geodesics. _arXiv preprint arXiv:2102.02992_, 2021.
+
+
+Shu Liu, Wuchen Li, Hongyuan Zha, and Haomin Zhou. Neural parametric fokker–planck equation.
+_SIAM Journal on Numerical Analysis_, 60(3):1385–1449, 2022b.
+
+
+Xingchao Liu, Chengyue Gong, and Qiang Liu. Flow straight and fast: Learning to generate and
+transfer data with rectified flow. In _The_ _Eleventh_ _International_ _Conference_ _on_ _Learning_ _Repre-_
+_sentations_, 2023b.
+
+
+Suryanarayana Maddu, Victor Chard`es, Michael Shelley, et al. Inferring biological processes with
+intrinsic noise from cross-sectional data. _arXiv preprint arXiv:2410.07501_, 2024.
+
+
+Tingwei Meng, Zongren Zou, J´erˆome Darbon, and George Em Karniadakis. Hj-sampler: A bayesian
+sampler for inverse problems of a stochastic process by leveraging hamilton-jacobi pdes and
+score-based generative models. _arXiv preprint arXiv:2409.09614_, 2024.
+
+
+Toshio Mikami and Michele Thieullen. Optimal transportation problem by stochastic optimal control. _SIAM Journal on Control and Optimization_, 47(3):1127–1139, 2008.
+
+
+Kirill Neklyudov, Rob Brekelmans, Daniel Severo, and Alireza Makhzani. Action matching: Learning stochastic dynamics from samples. In _International_ _conference_ _on_ _machine_ _learning_, pp.
+25858–25889. PMLR, 2023.
+
+
+Kirill Neklyudov, Rob Brekelmans, Alexander Tong, Lazar Atanackovic, Qiang Liu, and Alireza
+Makhzani. A computational framework for solving wasserstein lagrangian flows. In _Forty-first_
+_International Conference on Machine Learning_, 2024.
+
+
+Matteo Pariset, Ya-Ping Hsieh, Charlotte Bunne, Andreas Krause, and Valentin De Bortoli. Unbalanced diffusion schr¨odinger bridge. In _ICML Workshop on New Frontiers in Learning, Control,_
+_and Dynamical Systems_, 2023.
+
+
+Qiangwei Peng, Peijie Zhou, and Tiejun Li. stvcr: Reconstructing spatio-temporal dynamics of cell
+development using optimal transport. _bioRxiv_, pp. 2024–06, 2024.
+
+
+Gabriel Peyr´e, Marco Cuturi, et al. Computational optimal transport: With applications to data
+science. _Foundations and Trends® in Machine Learning_, 11(5-6):355–607, 2019.
+
+
+Aram-Alexandre Pooladian and Jonathan Niles-Weed. Plug-in estimation of schr¨odinger bridges.
+_arXiv preprint arXiv:2408.11686_, 2024.
+
+
+Aram-Alexandre Pooladian, Carles Domingo-Enrich, Ricky T. Q. Chen, and Brandon Amos. Neural
+optimal transport with lagrangian costs. In _The_ _40th_ _Conference_ _on_ _Uncertainty_ _in_ _Artificial_
+_Intelligence_, 2024.
+
+
+Maziar Raissi, Paris Perdikaris, and George E Karniadakis. Physics-informed neural networks: A
+deep learning framework for solving forward and inverse problems involving nonlinear partial
+differential equations. _Journal of Computational physics_, 378:686–707, 2019.
+
+
+14
+
+
+Lars Ruthotto, Stanley J Osher, Wuchen Li, Levon Nurbekyan, and Samy Wu Fung. A machine
+learning framework for solving high-dimensional mean field game and mean field control problems. _Proceedings of the National Academy of Sciences_, 117(17):9183–9193, 2020.
+
+
+Wouter Saelens, Robrecht Cannoodt, Helena Todorov, and Yvan Saeys. A comparison of single-cell
+trajectory inference methods. _Nature biotechnology_, 37(5):547–554, 2019.
+
+
+Geoffrey Schiebinger, Jian Shu, Marcin Tabaka, Brian Cleary, Vidya Subramanian, Aryeh Solomon,
+Joshua Gould, Siyan Liu, Stacie Lin, Peter Berube, et al. Optimal-transport analysis of single-cell
+gene expression identifies developmental trajectories in reprogramming. _Cell_, 176(4):928–943,
+2019.
+
+
+Yutong Sha, Yuchi Qiu, Peijie Zhou, and Qing Nie. Reconstructing growth and dynamic trajectories
+from single-cell transcriptomics data. _Nature Machine Intelligence_, 6(1):25–39, 2024.
+
+
+Jifan Shi, Kazuyuki Aihara, Tiejun Li, and Luonan Chen. Energy landscape decomposition for cell
+differentiation with proliferation effect. _National Science Review_, 9(8):nwac116, 2022.
+
+
+Yuyang Shi, Valentin De Bortoli, Andrew Campbell, and Arnaud Doucet. Diffusion schr¨odinger
+bridge matching. _Advances in Neural Information Processing Systems_, 36, 2024.
+
+
+Jascha Sohl-Dickstein, Eric Weiss, Niru Maheswaranathan, and Surya Ganguli. Deep unsupervised
+learning using nonequilibrium thermodynamics. In _International_ _conference_ _on_ _machine_ _learn-_
+_ing_, pp. 2256–2265. PMLR, 2015.
+
+
+Yang Song, Jascha Sohl-Dickstein, Diederik P Kingma, Abhishek Kumar, Stefano Ermon, and Ben
+Poole. Score-based generative modeling through stochastic differential equations. In _Interna-_
+_tional Conference on Learning Representations_, 2021.
+
+
+Alexander Tong, Jessie Huang, Guy Wolf, David Van Dijk, and Smita Krishnaswamy. Trajectorynet:
+A dynamic optimal transport network for modeling cellular dynamics. In _International conference_
+_on machine learning_, pp. 9526–9536. PMLR, 2020.
+
+
+Alexander Tong, Manik Kuchroo, Shabarni Gupta, Aarthi Venkat, Beatriz P San Juan, Laura Rangel,
+Brandon Zhu, John G Lock, Christine L Chaffer, and Smita Krishnaswamy. Learning transcriptional and regulatory dynamics driving cancer cell plasticity using neural ode-based optimal transport. _bioRxiv_, pp. 2023–03, 2023.
+
+
+Alexander Tong, Kilian FATRAS, Nikolay Malkin, Guillaume Huguet, Yanlei Zhang, Jarrid RectorBrooks, Guy Wolf, and Yoshua Bengio. Improving and generalizing flow-based generative models
+with minibatch optimal transport. _Transactions_ _on_ _Machine_ _Learning_ _Research_, 2024a. ISSN
+2835-8856. Expert Certification.
+
+
+Alexander Tong, Nikolay Malkin, Kilian Fatras, Lazar Atanackovic, Yanlei Zhang, Guillaume
+Huguet, Guy Wolf, and Yoshua Bengio. Simulation-free schr¨odinger bridges via score and flow
+matching. In _International_ _Conference_ _on_ _Artificial_ _Intelligence_ _and_ _Statistics_, pp. 1279–1287.
+PMLR, 2024b.
+
+
+Elias Ventre, Aden Forrow, Nitya Gadhiwala, Parijat Chakraborty, Omer Angel, and Geoffrey
+Schiebinger. Trajectory inference for a branching sde model of cell differentiation. _arXiv preprint_
+_arXiv:2307.07687_, 2023.
+
+
+Wei Wan, Yuejin Zhang, Chenglong Bao, Bin Dong, and Zuoqiang Shi. A scalable deep learning
+approach for solving high-dimensional dynamic optimal transport. _SIAM_ _Journal_ _on_ _Scientific_
+_Computing_, 45(4):B544–B563, 2023.
+
+
+Gefei Wang, Yuling Jiao, Qian Xu, Yang Wang, and Can Yang. Deep generative learning via
+schr¨odinger bridge. In _International conference on machine learning_, pp. 10794–10804. PMLR,
+2021.
+
+
+Jin Wang, Chunhe Li, and Erkang Wang. Potential and flux landscapes quantify the stability and
+robustness of budding yeast cell cycle network. _Proceedings of the National Academy of Sciences_,
+107(18):8195–8200, 2010.
+
+
+15
+
+
+Caleb Weinreb, Alejo Rodriguez-Fraticelli, Fernando D Camargo, and Allon M Klein. Lineage
+tracing on transcriptional landscapes links state to fate during differentiation. _Science_, 367(6479):
+eaaw3381, 2020.
+
+
+Hao Wu, Shu Liu, Xiaojing Ye, and Haomin Zhou. Parameterized wasserstein hamiltonian flow.
+_arXiv preprint arXiv:2306.00191_, 2023.
+
+
+Jiaqi Zhang, Erica Larschan, Jeremy Bigness, and Ritambhara Singh. scNODE: generative model
+for temporal single cell transcriptomic data prediction. _Bioinformatics_, 40(Supplement ~~2~~ ):ii146–
+ii154, 09 2024a. ISSN 1367-4811.
+
+
+Peng Zhang, Ting Gao, Jin Guo, and Jinqiao Duan. Action functional as early warning indicator in
+the space of probability measures. _arXiv preprint arXiv:2403.10405_, 2024b.
+
+
+Stephen Zhang, Anton Afanassiev, Laura Greenstreet, Tetsuya Matsumoto, and Geoffrey
+Schiebinger. Optimal transport analysis reveals trajectories in steady-state systems. _PLoS com-_
+_putational biology_, 17(12):e1009466, 2021.
+
+
+Yue Zhao, Wei Zhang, and Tiejun Li. EPR-Net: constructing a non-equilibrium potential landscape
+via a variational force projection formulation. _National Science Review_, 11(7), 2024.
+
+
+Linqi Zhou, Aaron Lou, Samar Khanna, and Stefano Ermon. Denoising diffusion bridge models. In
+_The Twelfth International Conference on Learning Representations_, 2024a.
+
+
+Mo Zhou, Stanley Osher, and Wuchen Li. Score-based neural ordinary differential equations for
+computing mean field control problems. _arXiv preprint arXiv:2409.16471_, 2024b.
+
+
+Peijie Zhou and Tiejun Li. Construction of the landscape for multi-stable systems: Potential landscape, quasi-potential, a-type integral and beyond. _The Journal of chemical physics_, 144(9), 2016.
+
+
+Peijie Zhou, Xin Gao, Xiaoli Li, Linxi Li, Caoyuan Niu, Qi Ouyang, Huiqiang Lou, Tiejun Li, and
+Fangting Li. Stochasticity triggers activation of the s-phase checkpoint pathway in budding yeast.
+_Physical Review X_, 11(1):011004, 2021a.
+
+
+Peijie Zhou, Shuxiong Wang, Tiejun Li, and Qing Nie. Dissecting transition cells from single-cell
+transcriptome data through multiscale stochastic dynamics. _Nature communications_, 12(1):5609,
+2021b.
+
+
+Peijie Zhou, Federico Bocci, Tiejun Li, and Qing Nie. Spatial transition tensor of single cells. _Nature_
+_Methods_, pp. 1–10, 2024c.
+
+
+Ruisong Zhou, Yuguo Yu, and Chunhe Li. Revealing neural dynamical structure of c. elegans with
+deep learning. _Iscience_, 27(5), 2024d.
+
+
+A TRAINING REGULARIZED UNBALANCED OPTIMAL TRANSPORT
+
+
+A.1 TRAINING OF REGULARIZED UNBALANCED OPTIMAL TRANSPORT
+
+
+After the pre-training stage, once we have obtained initial _**v**_ _θ, gθ_ and _sθ_, then we can continue
+training by minimizing the total loss:
+
+
+_L_ = _L_ Energy + _λrL_ Recons + _λf_ _L_ FP _._
+
+
+To compute the each component of the loss, the temporal integral and ODEs were numerically
+solved using the Neural ODE solver (Chen et al., 2018). The gradients of the loss function with
+respect to the parameters in the neural networks for _**v**_ ( _**x**_ _, t_ ), _g_ ( _**x**_ _, t_ ) and _s_ ( _**x**_ _, t_ ) were computed using neural ODEs with a memory-efficient implementation. For computing the Wasserstein distance
+between discrete distributions, we utilize the implementation provided by the Python Optimal Transport library (POT) (Flamary et al., 2021). The algorithm is detailed in Algorithm 1 (Training Stage).
+
+
+16
+
+
+A.2 TRAINING LOG DENSITY FUNCTION
+
+
+To utilize conditional flow matching (CFM) to learn an initial log density, first we choose
+pair samples ( _**x**_ 0 _,_ _**x**_ 1) from the optimal transport plan _q_ ( _**x**_ 0 _,_ _**x**_ 1) and then construct Brownian bridges between these pair samples. We first consider _σ_ ( _t_ ) = _σ_ is constant. The log
+density function is then matched with these Brownian bridges, i.e., _p_ ( _**x**_ _, t_ _|_ ( _**x**_ 0 _,_ _**x**_ 1)) =
+_N_ - _**x**_ ; _t_ _**x**_ 1 + (1 _−_ _t_ ) _**x**_ 0 _, σ_ [2] _t_ (1 _−_ _t_ )� and _∇_ _**x**_ log _p_ ( _**x**_ _, t_ _|_ ( _**x**_ 0 _,_ _**x**_ 1)) = _t_ _**x**_ 1+(1 _σ_ [2] _t_ (1 _−t−_ ) _**x**_ _t_ )0 _−_ _**x**_ _,_ _t_ _∈_ [0 _,_ 1] _._
+
+We then utilize the fully connected neural networks _sθ_ ( _**x**_ _, t_ ) to approximate the log density function
+21 _[σ]_ [2][ log] _[ p]_ [(] _**[x]**_ _[, t]_ [)][ with a weighting function] _[ λ][s]_ [.] [Then we have]
+
+
+_Lus_ = _λ_ [2] _s_ _[∥∇]_ _**[x]**_ _[s][θ]_ _[−]_ [1] 2 _[.]_
+
+2 _[σ]_ [2] _[∇]_ _**[x]**_ [ log] _[ p]_ [(] _**[x]**_ _[, t]_ [)] _[∥]_ [2]
+
+
+And the correspongding CFM loss is
+
+
+_L_ score = E _Q′λ_ [2] _s_ _[∥∇]_ _**[x]**_ _[s][θ]_ _[−]_ [1] 2 _[,]_
+
+2 _[σ]_ [2] _[∇]_ _**[x]**_ [ log] _[ p]_ [(] _**[x]**_ _[, t][ |]_ [ (] _**[x]**_ [0] _[,]_ _**[ x]**_ [1][))] _[∥]_ [2]
+
+
+where _Q_ _[′]_ = ( _t ∼U_ (0 _,_ 1)) _⊗_ _q_ ( _**x**_ 0 _,_ _**x**_ 1) _⊗_ _p_ ( _**x**_ _, t |_ ( _**x**_ 0 _,_ _**x**_ 1)). We take the weighting function as
+
+
+[2]  - _t_ (1 _−_ _t_ ) = [2]  - _t_ (1 _−_ _t_ )
+
+_σ_ [2] _[σ]_ _σ_
+
+
+_λs_ ( _t_ ) = [2]
+
+
+_._
+_σ_
+
+
+Then we have
+
+
+_σ_ 2
+_L_ score = _λs_ ( _t_ ) [2] _∇_ _**x**_ _sθ_ ( _**x**_ _, t_ ) _−_
+���� 2
+
+
+2
+
+
+_,_
+
+2
+
+
+2
+
+2 _[∇]_ _**[x]**_ [ log] _[ p]_ [ (] _**[x]**_ _[ |]_ _**[ x]**_ **[0]** _[,]_ _**[ x]**_ **[1]** [)] ����
+
+
+_σ_ 2
+= _λs_ ( _t_ ) _∇_ _**x**_ _sθ_ ( _**x**_ _, t_ ) _−_ _λs_ ( _t_ )
+���� 2
+
+
+2
+
+
+_,_
+
+2
+
+
+2
+
+2 _[∇]_ _**[x]**_ [ log] _[ p]_ [ (] _**[x]**_ _[ |]_ _**[ x]**_ **[0]** _[,]_ _**[ x]**_ **[1]** [)] ����
+
+
+(13)
+
+
+= _∥λs_ ( _t_ ) _∇_ _**x**_ _sθ_ ( _**x**_ _, t_ ) + _**ϵ**_ 1 _∥_ [2] 2 _[,]_
+
+
+where _**ϵ**_ 1 _∼N_ (0 _,_ _**I**_ ). This is also numerically stable. For the case where _σ_ ( _t_ ) is not constant, a
+similar approach can be applied. One may refer to (Tong et al., 2024b) for further details.
+
+
+A.3 ESTIMATING INITIAL DISTRIBUTION FOR FOKKER-PLANCK EQUATION
+
+
+The initial distribution is estimated by a Gaussian mixture model to generate density
+
+
+_,_ **Σ** = _σ_ _**I**_ _∈_ R _[d][×][d]_ _._
+�(2 _π_ ) _[d]_ _|_ **Σ** _|_
+
+
+  exp _−_ [1]
+
+
+[1] 2 [(] _**[x]**_ _[ −]_ _**[x]**_ _[i]_ [(] _[t]_ [0][))] _[T]_ **[Σ]** _[−]_ [1][ (] _**[x]**_ _[ −]_ _**[x]**_ _[i]_ [(] _[t]_ [0][))] 
+
+
+_p_ ( _**x**_ _,_ 0) = _p_ 0( _**x**_ ) =
+
+
+A.4 ENERGY LOSS
+
+
+_N_ 0
+
+
+_i_ =1
+
+
+In (Sha et al., 2024), it introduces the following theorem to transform the high-dimensional integral
+to the Monte Carlo integral.
+
+
+**Theorem A.1.** _If smooth density p_ ( _**x**_ _, t_ ) : R _[d]_ _×_ [0 _,_ 1] _→_ R [+] _, velocity field_ _**v**_ ( _**x**_ _, t_ ) : R _[d]_ _×_ [0 _,_ 1] _→_ R _[d]_
+_and growth rate g_ ( _**x**_ _, t_ ) : R _[d]_ _×_ [0 _,_ 1] _→_ R _satisfy_
+
+      - _∂tp_ ( _**x**_ _, t_ ) + _∇·_ ( _**v**_ ( _**x**_ _, t_ ) _p_ ( _**x**_ _, t_ )) = _g_ ( _**x**_ _, t_ ) _p_ ( _**x**_ _, t_ ) _,_
+_p_ ( _**x**_ _,_ 0) = _p_ 0( _**x**_ ) _,_
+
+
+_for all_ 0 _≤_ _t_ _≤_ 1 _with_ [d] _**[x]**_ [(] _[t]_ [)]
+
+
+_for all_ 0 _≤_ _t_ _≤_ 1 _with_ d _t_ = _**v**_ ( _**x**_ _, t_ ) _and_ _**x**_ (0) = _**x**_ 0 _, then for any measurable function f_ ( _**x**_ _, t_ ) :
+
+R _[d]_ _×_ [0 _,_ 1] _→_ R _[d]_ _, we have_ �01 �R _[d][ f]_ [(] _**[x]**_ _[, t]_ [)] _[p]_ [(] _**[x]**_ _[, t]_ [)d] _**[x]**_ [d] _[t]_ [ =][ E] _**[x]**_ **[0]** _[∼][p]_ [0] �01 _[f]_ [(] _**[x]**_ _[, t]_ [)] _[e]_ �0 _t_ _[g]_ [(] _**[x]**_ _[,s]_ [)d] _[s]_ d _t._
+
+
+R _[d][ f]_ [(] _**[x]**_ _[, t]_ [)] _[p]_ [(] _**[x]**_ _[, t]_ [)d] _**[x]**_ [d] _[t]_ [ =][ E] _**[x]**_ **[0]** _[∼][p]_ [0] �01 _[f]_ [(] _**[x]**_ _[, t]_ [)] _[e]_ �0 _t_ _[g]_ [(] _**[x]**_ _[,s]_ [)d] _[s]_ d _t._
+
+
+17
+
+
+B ADDITIONAL RESULTS
+
+
+B.1 SYNTHETIC GENE REGULATORY NETWORK
+
+
+The system dynamics are governed by the following set of stochastic ordinary differential equations
+(ODEs):
+d _X_ 1 _α_ 1 _X_ 1 [2] [+] _[ β]_
+
+d _t_ [=] 1 + _α_ 1 _X_ 1 [2] [+] _[ γ]_ [2] _[X]_ 2 [2] [+] _[ γ]_ [3] _[X]_ 3 [2] [+] _[ β]_ _[−]_ _[δ]_ [1] _[X]_ [1][ +] _[ η]_ [1] _[ξ][t][,]_
+
+d _X_ 2 _α_ 2 _X_ 2 [2] [+] _[ β]_
+
+d _t_ [=] 1 + _γ_ 1 _X_ 1 [2] [+] _[ α]_ [2] _[X]_ 2 [2] [+] _[ γ]_ [3] _[X]_ 3 [2] [+] _[ β]_ _[−]_ _[δ]_ [2] _[X]_ [2][ +] _[ η]_ [2] _[ξ][t][,]_
+
+d _X_ 3 _α_ 3 _X_ 3 [2] _−_ _δ_ 3 _X_ 3 + _η_ 3 _ξt._
+
+d _t_ [=] 1 + _α_ 3 _X_ 3 [2]
+
+
+Genes _X_ 1 and _X_ 2 mutually inhibit each other and self-activate, forming a toggle switch. An external
+signal _β_ uniformly activates both _X_ 1 and _X_ 2 independently of gene expression levels. Gene _X_ 3 inhibits the expression of both _X_ 1 and _X_ 2. Here, _Xi_ ( _t_ ) represents the concentration of gene _i_ at time _t_,
+with _αi_ and _γi_ denoting the strengths of self-activation and inhibition, respectively. The parameters
+_δi_ represent gene degradation rates, while _ηiξt_ accounts for the stochastic effects with additive white
+noise. The probability of cell division correlates positively with the expression of _X_ 2, calculated
+as _g_ = _αg_ 1+ _XX_ 2 [2] 2 [2] [%][.] [Upon] [division,] [cells] [inherit] [the] [gene] [expression] [states] [(] _[X]_ [1][(] _[t]_ [)] _[, X]_ [2][(] _[t]_ [)] _[, X]_ [3][(] _[t]_ [))]
+of the parent cell, subject to independent perturbations _ηdN_ (0 _,_ 1) for each gene, and transition
+independently thereafter. The hyper-parameters are listed at Table 3. The initial cells are chosen independently and identically distributed from two normal distributions _N_ ([2 _,_ 0 _._ 2 _,_ 0] _,_ 0 _._ 01) and
+_N_ ([0 _,_ 0 _,_ 2] _,_ 0 _._ 01). At each step, we corrected the negative expression value to 0.
+
+
+Table 3: Simulation parameters on gene regulatory network.
+**Parameter** **Value** **Description**
+_α_ 1 0.5 Strength of self-activation for _X_ 1
+_γ_ 1 0.5 Strength of inhibition by _X_ 3 on _X_ 1
+_α_ 2 1 Strength of self-activation for _X_ 2
+_γ_ 2 1 Strength of inhibition by _X_ 3 on _X_ 2
+_α_ 3 1 Strength of self-activation for _X_ 3
+_γ_ 3 10 Half-saturation constant for inhibition terms
+_δ_ 1 0.4 Degradation rate for _X_ 1
+_δ_ 2 0.4 Degradation rate for _X_ 2
+_δ_ 3 0.4 Degradation rate for _X_ 3
+_η_ 1 0.05 Noise intensity for _X_ 1
+_η_ 2 0.05 Noise intensity for _X_ 2
+_η_ 3 0.01 Noise intensity for _X_ 3
+_ηd_ 0.014 Noise intensity for cell perturbations
+_β_ 1 External signal activating _X_ 1 and _X_ 2
+_dt_ 1 Time step size
+Time Points [0, 8, 16, 24, 32] Time points at which data is recorded
+
+
+We conducted a comprehensive evaluation of the methodologies proposed by (Neklyudov et al.,
+2023; Pariset et al., 2023) utilizing our simulated dataset. As detailed in Table 1, our approach consistently outperforms the referenced methods across multiple quantitative metrics, thereby demonstrating its superior ability to capture the underlying dynamics of the system. Furthermore, Fig. 4
+provides the outcomes produced by the UDSB (Pariset et al., 2023). While their method predicts
+an overall increase in cell population, a closer examination reveals the presence of false dynamics
+within the predicted transitions.
+
+
+B.2 SYNTHETIC GAUSSIAN MIXTURES
+
+
+For the initial distribution, we generated 400 samples from the Gaussian located lower in the ( _x_ 1 _, x_ 2)
+plane, and 100 samples from the Gaussian positioned higher. For the final distribution, we generated
+
+
+18
+
+
+Figure 4: **Results** **obtained** **by** **UDSB** **(Pariset** **et** **al.,** **2023)** **on** **gene** **regulatory** **network.** (a)
+The trajectory learned by UDSB, where black dots indicate particle death, red dots signify particle
+growth, orange dots represent the target distribution, dark blue dots denote the source distribution,
+and gradient blue dots illustrate particle trajectories. (b) Predicted changes in cell population at
+intermediate time points, with dots representing the actual mass.
+
+
+1,000 samples from the upper Gaussian, and 200 samples each from the two lower Gaussians. We
+then tested the RUOT-based model’s ability to learn the stochastic dynamics using the samples
+generated in this manner.
+
+
+### **(c) (d)**
+
+
+**Learnt growth rate**
+**1**
+
+
+**0**
+
+
+Figure 5: **Results of DeepRUOT on Gaussian mixtures (** _σ_ = 0 _._ 1 **, 10D).** (a) The learned trajectory
+by DeepRUOT ( _σ_ = 0 _._ 1). (b) The growth rate inferred by our model. (c) The Waddington developmental landscape at _t_ = 0 ( _σ_ = 0 _._ 1). (d) The Waddington developmental landscape at _t_ = 1
+( _σ_ = 0 _._ 1).
+
+
+19
+
+
+To further evaluate the scalability of our algorithm, we simulated Gaussian mixture models with 20,
+50, and 100 dimensions, as illustrated in Fig. 6. We similarly visualize the results on the first and
+second dimensions. The results demonstrate that our model remains effective and applicable across
+these higher-dimensional settings.
+
+
+Similar to the frameworks such as TrajectoryNet (Tong et al., 2020), MIOflow (Huguet et al., 2022)
+and (Koshizuka & Sato, 2023), which involve simulating an ODE/SDE and performing optimal
+transport for distribution matching, the computational cost and scalability of our method are comparable to these existing approaches. Notably, the score matching in our method is conducted via
+conditional flow matching (Lipman et al., 2023; Tong et al., 2024a;b), which is simulation-free and
+thus highly efficient. Consequently, our approach does not introduce significant additional computational overhead, since the cost of each component is similar to previous works. Meanwhile,
+when it extends to thousands of dimensions, our approach similarly encounters challenges, necessitating the development of simulation-free training methods akin to flow matching to handle higherdimensional settings effectively (Lipman et al., 2023; Tong et al., 2024a;b). However, in the field of
+single-cell biology, dimensionality reduction of gene expression data is routinely employed, making
+hundreds of dimensional space sufficient for practical applications.
+
+
+Figure 6: **Results of DeepRUOT on higher dimensional Gaussian mixtures (** _σ_ = 0 _._ 1 **).** The first
+column presents the trajectories learned by DeepRUOT ( _σ_ = 0 _._ 1), the second column displays the
+growth rates inferred by our model, the third column shows the Waddington developmental landscape at _t_ = 0 ( _σ_ = 0 _._ 1), and the fourth column depicts the Waddington developmental landscape
+at _t_ = 1 ( _σ_ = 0 _._ 1). (a) 20 dimensions, (b) 50 dimensions, (c) 100 dimensions.
+
+
+B.3 SINGLE CELL DYNAMICS IN MOUSE HEMATOPOIESIS
+
+
+We conducted a comparative evaluation of the methodologies proposed by (Neklyudov et al., 2023;
+Pariset et al., 2023) using our mouse hematopoiesis dataset. As detailed in Table 1, our approach
+consistently outperforms the referenced methods across a range of quantitative metrics, underscoring its superior efficacy in capturing the underlying biological dynamics. In Fig. 7, we present the
+results generated by the UDSB (Pariset et al., 2023). Fig. 7(a) displays the learned trajectory, where
+black dots indicate particle death, red dots signify particle growth, orange dots represent the target
+distribution, dark blue dots denote the source distribution, and gradient blue lines illustrate the particle trajectories. This visualization highlights the dynamic trajectory of cell population changes over
+time. Fig. 7(b) illustrates the predicted changes in cell population at intermediate time points, with
+
+
+20
+
+
+each dot representing the actual mass observed. Finally, Fig. 7(c) shows the predicted cell distributions at various time points in red, while the blue distribution at the final time point represents the
+initial distribution. This panel underscores the model’s ability to track and predict the evolution of
+cell distributions from the initial state to subsequent stages.
+
+
+Notably, although this method achieves a marginally higher _W_ 1 metric at the final time point, a
+closer examination reveals that the predicted distributions at intermediate time points, as illustrated
+in Fig. 7(c), deviate from the true data distributions. This indicates that the (Pariset et al., 2023)
+method may have challenges to accurately model the transitional dynamics that occur between the
+initial and final stages of hematopoiesis.
+
+
+Furthermore, Fig. 7(a) and Fig. 7(b) demonstrate that the growth locations predicted by the UDSB
+algorithm are consistent with those identified by our model. This consistency provides a form of
+cross-validation, affirming that our algorithm effectively captures both the growth and migration
+dynamics inherent in the cell population. So the ability of our model to maintain accurate predictions
+across all time points, including the intermediate stages, demonstrates its enhanced capacity for
+modeling unbalanced dynamics within complex biological systems.
+
+
+Figure 7: **Results obtained by UDSB (Pariset et al., 2023) on mouse hematopoiesis.** (a) The trajectory learned by UDSB, where black dots indicate particle death, red dots signify particle growth,
+orange dots represent the target distribution, dark blue dots denote the source distribution, and gradient blue dots illustrate particle trajectories. (b) Predicted changes in cell population at intermediate
+time points, with dots representing the actual mass. (c) Red denotes the predicted cell distributions
+at various time points, while the blue distribution at the final time point represents the initial distribution.
+
+
+B.4 SINGLE CELL DYNAMICS IN EMT
+
+
+Subsequently, we applied DeepRUOT to a time-series single-cell RNA sequencing dataset derived
+from the A549 cancer cell line. In this study, cells were treated with TGFB1 to induce epithelialmesenchymal transition (EMT) during the initial four-time points (Sha et al., 2024). Cells harvested
+
+
+21
+
+
+at each time point were cultured in vitro with identical initial cell numbers, ensuring that the cell
+counts directly reflect the dynamics of the cell population over time.
+
+
+We employed Principal Component Analysis (PCA) to reduce the dimensionality of our single-cell
+RNA sequencing (scRNA-seq) data to a ten-dimensional latent space. This latent representation
+was subsequently utilized as the input for DeepRUOT. To aid in the interpretation of the results,
+we projected the algorithm’s outputs onto the first and second principal components, which capture
+the majority of the variance in the data and thus provide meaningful insights into the underlying
+biological phenomena.
+
+
+The trajectories inferred by DeepRUOT exhibited consistent and biologically plausible transition
+dynamics, effectively mapping the progression of cells through different developmental states. Furthermore, we visualized the growth rates estimated by the algorithm alongside the developmental
+landscapes at various time points, providing a comprehensive view of both the quantitative and
+qualitative aspects of cellular dynamics.
+
+
+Notably, the growth patterns inferred by DeepRUOT displayed elevated values during the initial and
+intermediate stage of epithelial-mesenchymal transition (EMT) compared to the epithelial (E) and
+mesenchymal (M) stages, as illustrated in Fig. 8. This observation aligns with previous studies that
+have reported enhanced stemness and proliferative capacity in cells at the intermediate stage.
+
+
+Moreover, our landscape analysis revealed that the inferred developmental landscapes are consistent
+with the observed data distributions at corresponding time points. The developmental landscapes
+provide a representation of the cell states, illustrating how cells traverse through different regions of
+the latent space as they progress through various stages of differentiation and migration.
+
+
+Figure 8: **Results of DeepRUOT on EMT scRNA-seq data (** _σ_ = 0 _._ 05 **).** (a) The stochastic dynamics learned by RUOT ( _σ_ = 0 _._ 05). (b) The growth rates learned by DeepRUOT ( _σ_ = 0 _._ 05). (c) The
+constructed Waddington developmental landscape at _t_ = 1 ( _σ_ = 0 _._ 05). (d) The landscape at _t_ = 2
+( _σ_ = 0 _._ 05).
+
+
+22
+
+
+B.5 ABLATION STUDIES
+
+
+We conducted ablation experiments on the gene regulatory dataset to evaluate the contributions of
+key components in our algorithm. Specifically, we examined the impact of the growth term _g_ ( _**x**_ _, t_ ).
+Then we assessed the necessity of the mass loss term _L_ Mass within the reconstruction loss function
+_L_ Recons and _L_ FP in the total loss (9). These analyses demonstrate the critical roles that the growth
+term, the mass loss component, and the Fokker-Planck constraint play in enhancing the performance
+and accuracy of our model.
+
+
+Table 4: Ablation studies across five runs on gene regulatory data ( _σ_ = 0 _._ 25). We show the mean
+value with one standard deviation.
+
+_t_ = 1 _t_ = 2 _t_ = 3 _t_ = 4
+
+
+Model _W_ 1 _W_ 2 _W_ 1 _W_ 2 _W_ 1 _W_ 2 _W_ 1 _W_ 2
+
+SF2M (Tong et al., 2024b) 0 _._ 174 _±_ 0 _._ 010 0 _._ 303 _±_ 0 _._ 023 0 _._ 430 _±_ 0 _._ 027 0 _._ 719 _±_ 0 _._ 032 0 _._ 686 _±_ 0 _._ 054 1 _._ 050 _±_ 0 _._ 047 0 _._ 871 _±_ 0 _._ 072 1 _._ 242 _±_ 0 _._ 065
+DeepRUOT w/o growth 0 _._ 173 _±_ 0 _._ 005 0 _._ 198 _±_ 0 _._ 004 0 _._ 324 _±_ 0 _._ 007 0 _._ 371 _±_ 0 _._ 005 0 _._ 481 _±_ 0 _._ 010 0 _._ 576 _±_ 0 _._ 004 0 _._ 772 _±_ 0 _._ 009 0 _._ 877 _±_ 0 _._ 011
+DeepRUOT w/o _L_ Mass 0 _._ 159 _±_ 0 _._ 006 0 _._ 186 _±_ 0 _._ 006 0 _._ 308 _±_ 0 _._ 005 0 _._ 349 _±_ 0 _._ 007 0 _._ 465 _±_ 0 _._ 011 0 _._ 553 _±_ 0 _._ 011 0 _._ 690 _±_ 0 _._ 007 0 _._ 816 _±_ 0 _._ 009
+DeepRUOT w/o _L_ FP 0 _._ 090 _±_ 0 _._ 004 **0** _**.**_ _±_ 0 _._ 005 0 _._ 108 _±_ 0 _._ 003 0 _._ 132 _±_ 0 _._ 002 0 _._ 133 _±_ 0 _._ 006 **0** _**.**_ _±_ 0 _._ 007 0 _._ 165 _±_ 0 _._ 008 0 _._ 197 _±_ 0 _._ 011
+DeepRUOT w/o pre-training 0 _._ 635 _±_ 0 _._ 006 0 _._ 737 _±_ 0 _._ 009 1 _._ 113 _±_ 0 _._ 017 1 _._ 310 _±_ 0 _._ 017 1 _._ 329 _±_ 0 _._ 020 1 _._ 545 _±_ 0 _._ 025 1 _._ 366 _±_ 0 _._ 023 1 _._ 565 _±_ 0 _._ 028
+DeepRUOT w/o score matching 1 _._ 291 _±_ 0 _._ 007 1 _,_ 426 _±_ 0 _._ 009 2 _._ 051 _±_ 0 _._ 003 2 _._ 187 _±_ 0 _._ 004 2 _._ 675 _±_ 0 _._ 010 2 _._ 798 _±_ 0 _._ 009 3 _._ 290 _±_ 0 _._ 009 3 _._ 391 _±_ 0 _._ 007
+DeepRUOT w/o training **0** _**.**_ _±_ 0 _._ 004 0 _._ 108 _±_ 0 _._ 005 **0** _**.**_ _±_ 0 _._ 002 0 _._ 132 _±_ 0 _._ 012 0 _._ 134 _±_ 0 _._ 007 0 _._ 158 _±_ 0 _._ 013 0 _._ 163 _±_ 0 _._ 009 0 _._ 200 _±_ 0 _._ 015
+DeepRUOT 0 _._ 095 _±_ 0 _._ 005 0 _._ 115 _±_ 0 _._ 006 0 _._ 104 _±_ 0 _._ 002 **0** _**.**_ _±_ 0 _._ 007 **0** _**.**_ _±_ 0 _._ 003 0 _._ 157 _±_ 0 _._ 003 **0** _**.**_ _±_ 0 _._ 007 **0** _**.**_ _±_ 0 _._ 007
+
+
+We observe that when our algorithm does not account for growth, i.e., by setting _g_ ( _**x**_ _, t_ ) = 0, it
+reduces to regularized optimal transport, which is equivalent to the Schr¨odinger bridge problem.
+Consequently, SF2M (Tong et al., 2024b) corresponds to the scenario where _g_ ( _**x**_ _, t_ ) = 0 within our
+approach. Our experiments have demonstrated that omitting the growth factor leads to inaccurate
+trajectory reconstructions, underscoring the necessity of modeling unbalanced dynamics. To further substantiate this finding, we conducted an explicit ablation study with _g_ ( _**x**_ _, t_ ) (Table 4). The
+results from this experiment align with those of the SF2M, confirming that disabling the growth
+rate adversely affects performance by neglecting essential growth and death processes. This comparison reinforces the importance of the growth rate component in accurately capturing unbalanced
+stochastic dynamics, thereby validating the enhanced performance of DeepRUOT.
+
+
+Next, we assess the impact of the mass loss term, _L_ Mass, within the reconstruction loss function
+_L_ Recons = _λmL_ Mass + _λdL_ OT during all training stage. By setting _λm_ = 0, we observed that the exclusion of this component results in inaccurate trajectory reconstructions (see Table 4). This finding
+underscores the crucial role of incorporating local mass matching in unbalanced settings, demonstrating that the omission of _L_ Mass significantly impairs the model’s ability to accurately capture the
+system’s dynamics.
+
+
+Subsequently, we investigate the training stage using the loss function _L_ = _L_ Energy + _λrL_ Recons +
+_λf_ _L_ FP _._ By setting _λf_ = 0, thereby excluding the Fokker-Planck constraint, the results presented in
+Table 4 reveal that incorporating this loss term enhances our model’s performance, particularly at
+the final time point. These results collectively highlight the importance of both mass matching and
+the Fokker-Planck constraint in improving the accuracy and reliability of trajectory reconstructions
+within our framework.
+
+
+Furthermore, we investigated the impact of different stages in our training process on the final results. Our training algorithm (Algorithm 1) comprises two stages: the pre-training stage and the
+training stage. To assess their respective contributions, we conducted experiments under three scenarios: (1) omitting the pre-training stage, (2) excluding score matching during the pre-training
+stage, and (3) removing the training stage. As presented in Table 4, we observed that the algorithm
+failed to converge in the first two scenarios. Specifically, scenario (2) yielded poorer performance
+due to inaccurate score matching, which caused particle trajectories to deviate from the correct dynamical paths. In scenario (1), the necessity to balance multiple loss functions resulted in the vector
+field and score not being adequately learned, leading particles are inclined to remain near their initial
+positions. In scenario (3), the absence of the training stage slightly degraded the performance metrics, especially at later time points. These ablation studies demonstrate that the pre-training stage is
+critical within our framework, while the training stage contributes to the refinement of final results,
+ensuring we are addressing the regularized optimal transport problem, which is theoretically necessary. Empirical results indicate that the pre-training stage significantly enhances the performance of
+our algorithm.
+
+
+23
+
+
+C EXPERIENTIAL DETAILS
+
+
+C.1 EVALUATION METRICS
+
+
+We evaluate the empirical 1-Wasserstein distance ( _W_ 1) and 2-Wasserstein distance ( _W_ 2) on the gene
+data and scRNA-seq data. It is defined as follows:
+
+
+    _W_ 2( _p, q_ ) = min
+_π∈_ **Π** ( _p,q_ )
+
+
+- �1 _/_ 2
+_∥_ _**x**_ _−_ _**y**_ _∥_ [2] 2 _[dπ]_ [(] _**[x]**_ _[,]_ _**[ y]**_ [)] _,_
+
+
+and
+
+
+    _W_ 1( _p, q_ ) = min
+_π∈_ **Π** ( _p,q_ )
+
+
+- _∥_ _**x**_ _−_ _**y**_ _∥_ 2 _dπ_ ( _**x**_ _,_ _**y**_ ) _,_
+
+
+where _p_ and _q_ represent empirical distributions.
+
+
+We evaluate our method by first learning the dynamics using data from all time points. We then
+apply these inferred dynamics to the initial data point to generate data for subsequent time points.
+Next, we compute the _W_ 1 and _W_ 2 distances between the generated data and the real data. For the
+gene regulatory network data, we ensure that the number of generated data points matches that of
+the real data since we have the true dynamics. In the scRNA-seq dataset, since the true dynamics are
+unknown, we apply the inferred dynamics to the initial data and compute the _W_ 1 and _W_ 2 distances
+between the generated data and all the data at that time point. Because our method could assign
+weights to the sample points, we compute the weighted _W_ 1 and _W_ 2 distances accordingly in the
+evaluation of our methods. We take the weight computed by DeepRUOT without diffusion to use
+for simplicity. For other methods we used the default uniform distribution to evaluate.
+
+
+To evaluate the performance of SF2M and DeepRUOT on scRNA-seq datasets we take the same
+diffusion coefficient as _σ_ = 0 _._ 25. To evaluate the performance on synthetic gene regulatory data,
+we choose _σ_ = 0 _._ 05 for our DeepRUOT method and _σ_ = 0 _._ 25 for SF2M. This is due to we observe
+some numerical instability when using SF2M with _σ_ = 0 _._ 05. So to ensure a fair comparison, we
+choose the parameter as default in SF2M.
+
+
+To evaluate the performance of (Sha et al., 2024) on gene regulatory network data and single-cell
+RNA sequencing (scRNA-seq) mouse hematopoiesis data, as we observed certain instabilities on the
+datasets, to ensure a fair comparison, we independently reimplemented the method and conducted
+additional evaluations (by setting _σ_ = 0 in DeepRUOT).
+
+
+To evaluate the performance of (Neklyudov et al., 2023) and (Pariset et al., 2023) on gene regulatory
+network data and single-cell RNA sequencing (scRNA-seq) mouse hematopoiesis data, we utilized
+their default parameter settings. Specifically, for (Pariset et al., 2023), whose default configuration
+involves three time points, we selected samples at time points 0, 2, and 4 from the gene regulatory
+network dataset as inputs for the algorithms.
+
+
+C.2 HYPERPARAMETERS SELECTION AND LOSS WEIGHTING
+
+
+We use one A100 Nvidia GPU along with 16 CPU cores for computation at a shared highperformance computing cluster. For the two-stage training of DeepRUOT, each stage necessitates
+the selection of hyperparameters tailored to its specific requirements, and here we will provide a
+guideline based on empirical studies.
+
+
+In the pre-training phase, we need to select the parameters in _L_ Recons, i.e., _λm_ and _λd_ in _L_ Recons =
+_λmL_ Mass + _λdL_ OT. Parameter selection is important during this stage, as in the ablation studies
+we have shown that both components are important. To effectively manage these parameters, we
+implement a hyperparameter scheduling strategy during the pre-training stage. Initially, we assign
+predefined values to _λm_ and _λd_ and train the model for a specified number of epochs. Subsequently,
+we adjust _λm_ to zero ( _λm_ = 0) and conduct additional epochs of training. This strategy is grounded
+in the rationale of first aligning growth patterns and subsequently refining the transition process
+based on the established growth rates. The parameter scheduling procedure is elucidated in Table 5,
+where the arrow notation ( _→_ ) signifies the rescheduling of hyperparameter values during the pretraining stage. Specifically, each arrow indicates the change from an initial value to a subsequent
+value, reflecting the strategic adjustment of hyperparameters during the pre-training stage.
+
+
+24
+
+
+During the training stage, the pre-training phase provides robust initial values, thereby reducing the
+sensitivity to parameter variations in _L_ = _L_ Energy + _λrL_ Recons + _λf_ _L_ FP _._ As a result, we utilize the
+set of parameters and train the model for 10 epochs consistently across different datasets.
+
+
+As shown in Table 5, the primary hyperparameters requiring adjustment during the pre-training stage
+are mainly the number of training epochs selected during the _λm_ resetting process, specifically the
+number of epochs trained before _λm_ resetting and the number of epochs trained after _λm_ resetting.
+As previously discussed, the pre-training stage is crucial for stabilizing the training process. Determining the number of epochs relies on the complexity and scale of the problem, including factors
+such as the number of time points and the size of the dataset. For the first epoch number, a default
+of 30 epochs is recommended. However, in the case of the Gene Regulatory Network dataset, we
+opted for 20 epochs due to its larger number of time points and greater data volume. Similarly, for
+the EMT dataset, 20 epochs were chosen as it had already achieved convergence.
+
+
+Table 5: Parameter Settings for Different Datasets Across Two Training Stages (Regulatory Network
+( _σ_ = 0 _._ 25), Mouse Hematopoiesis ( _σ_ = 0 _._ 25), EMT ( _σ_ = 0 _._ 05), Gaussian Mixtures ( _σ_ = 0 _._ 1)).
+The arrow ( _→_ ) indicates the scheduling of parameter values within the Pre-Training Stage, where the
+numbers on the left indicate the hyperparameter values before resetting, and the right ones indicate
+the values after resetting. For example, the (1 _._ 0 _,_ 0 _._ 1 _,_ 20) _→_ (0 _._ 0 _,_ 0 _._ 1 _,_ 10) entry in ( _λm_, _λd_, Epochs)
+row denotes 20 epochs training when _λm_ was 1 _._ 0, _λd_ was 0 _._ 1, and another 10 epochs training after
+_λm_ was reset to 0 _._ 0.
+
+**Parameter** **Datasets**
+
+**Regulatory Network** **Mouse Hematopoiesis** **EMT** **Gaussian Mixtures**
+**10D** **20D** **50D** **100D**
+
+
+**Pre-Training Stage (With Hyperparameters Scheduling)**
+
+
+( _λm, λd_, Epochs) (1 _._ 0 _,_ 0 _._ 1 _,_ 20) _→_ (0 _._ 0 _,_ 0 _._ 1 _,_ 10) (1 _._ 0 _,_ 0 _._ 1 _,_ 30) _→_ (0 _._ 0 _,_ 0 _._ 1 _,_ 30) (1 _._ 0 _,_ 0 _._ 1 _,_ 20) _→_ (0 _._ 0 _,_ 0 _._ 1 _,_ 0) (1 _._ 0 _,_ 0 _._ 1 _,_ 35) _→_ (0 _._ 0 _,_ 0 _._ 1 _,_ 80) (1 _._ 0 _,_ 0 _._ 1 _,_ 30) _→_ (0 _._ 0 _,_ 0 _._ 1 _,_ 90) (1 _._ 0 _,_ 0 _._ 1 _,_ 35) _→_ (0 _._ 0 _,_ 0 _._ 1 _,_ 120) (1 _._ 0 _,_ 0 _._ 1 _,_ 35) _→_ (0 _._ 0 _,_ 0 _._ 1 _,_ 100)
+
+
+**Training Stage**
+
+_λλλλ_ Epochs _λdrmfw_ 1 _×_ 1.01.01.00.110 10 [3] 1 _×_ 1.01.01.00.110 10 [3] 1 _×_ 1.01.01.00.110 10 [3] 1 _×_ 1.01.01.00.110 10 [3] 1 _×_ 1.01.01.00.110 10 [3] 1 _×_ 1.01.01.00.110 10 [3] 1 _×_ 1.01.01.00.110 10 [3]
+
+
+In Table 6, we evaluated the GRN dataset by maintaining the second epoch number (trained after
+_λm_ resetting) as 10 while varying the first epoch number (trained before resetting) among 10, 20,
+and 30, with the other hyperparameters chosen as Table 5. The results indicated that the first epoch
+number value of 10, which was insufficient, deteriorated performance, whereas the first epoch number values of 20 and 30 showed negligible differences. This suggests that increasing the number of
+pre-training epochs does not adversely affect the training process; hence, we recommend training
+for a higher number of epochs when feasible. The selection of the second epoch number varies
+across datasets based on convergence criteria. For instance, in the GRN dataset, training with the
+second epoch number set to 10 was sufficient for convergence, leading us to terminate further training. Conversely, for the EMT dataset, convergence was achieved during the first stage, negating the
+need for additional second epoch number training. Generally, a higher number of epochs in this
+stage enhances training efficacy. In the case of Gaussian Mixtures, the number of the second epoch
+number increases with dimensionality. However, for 50D and 100D, the second epoch number decreases because, for 100D, training can extend beyond 120 epochs for improved results, while 50D
+converges around 100 epochs, making further training unnecessary. Therefore, for the adjustment of
+the second epoch number, we recommend that users train until convergence based on their specific
+data requirements.
+
+
+Table 6: Results of different epoch scheduling during the pre-training stage on gene regulatory
+dataset. Here we use the arrow to represent the number of epochs trained before(left) and after(right)
+the _λm_ resetting, for example, 10 _→_ 20 denoting 10 epochs of training when _λm_ = 1 and 20 epochs
+of training when _λm_ = 0.
+
+
+_**t**_ **=** **1** _**t**_ **=** **2** _**t**_ **=** **3** _**t**_ **=** **4**
+
+
+**Epoch Scheduling** _W_ 1 _W_ 2 _W_ 1 _W_ 2 _W_ 1 _W_ 2 _W_ 1 _W_ 2
+
+10 _→_ 10 0 _._ 138 _±_ 0 _._ 003 0 _._ 173 _±_ 0 _._ 002 0 _._ 243 _±_ 0 _._ 005 0 _._ 278 _±_ 0 _._ 004 0 _._ 325 _±_ 0 _._ 011 0 _._ 353 _±_ 0 _._ 013 0 _._ 406 _±_ 0 _._ 014 0 _._ 455 _±_ 0 _._ 011
+20 _→_ 10 0 _._ 095 _±_ 0 _._ 005 0 _._ 115 _±_ 0 _._ 006 0 _._ 104 _±_ 0 _._ 002 0 _._ 130 _±_ 0 _._ 007 0 _._ 130 _±_ 0 _._ 003 0 _._ 157 _±_ 0 _._ 003 0 _._ 140 _±_ 0 _._ 007 0 _._ 168 _±_ 0 _._ 007
+30 _→_ 10 0 _._ 107 _±_ 0 _._ 008 0 _._ 128 _±_ 0 _._ 010 0 _._ 120 _±_ 0 _._ 05 0 _._ 152 _±_ 0 _._ 08 0 _._ 130 _±_ 0 _._ 02 0 _._ 164 _±_ 0 _._ 004 0 _._ 154 _±_ 0 _._ 012 0 _._ 188 _±_ 0 _._ 113
+
+
+In the training stage, we empirically identified _λw_ as a hyperparameter requiring tuning. We found
+that _λw_ may relate to the noise amplitude _σ_ . Specifically, for the Gene Regulatory Network (GRN)
+
+
+25
+
+
+and Mouse Hematopoiesis datasets, where _σ_ is set to 0.25, a smaller _λw_ is necessary to maintain
+computational stability; setting _λw_ to 1 in these cases resulted in instability. For the remaining
+datasets, we have found that selecting _λw_ within the range of [0.1, 1] is feasible, as variations within
+this range do not significantly impact the training outcomes. In Table 7, we present the results
+of training with _λw_ values of 0.1, 0.4, 0.7, and 1.0 on EMT dataset. We computed the values
+of the trained results ( _**v**_ ( _**x**_ _, t_ ), _g_, _s_ ) at each data point, using the results obtained with _λw_ = 1
+as the baseline. The distances between the outcomes of other _λw_ settings and the baseline were
+measured using Euclidean distance for inferred _**v**_ ( _**x**_ _, t_ ) and mean squared error (MSE) for _g_ and
+_s_ . As illustrated in Table 7, we observed that as long as _λw_ ensures computational stability, the
+outcomes for different _λw_ values are consistent. Therefore, we recommend selecting a smaller _λw_,
+with a default value of 0.01 (for smaller _σ_ ) or 0.001 (for larger _σ_ ), to achieve stable and consistent
+training results.
+
+
+Table 7: Results with different _λw_ settings on the EMT dataset ( _σ_ = 0 _._ 25). Distances for _**v**_ are
+measured using Euclidean distance, while _g_ and _s_ are evaluated using mean squared error (MSE).
+
+
+_λw_ _**v**_ Dist _g_ MSE _s_ MSE
+
+0.1 2 _._ 64 _×_ 10 _[−]_ [8] 6 _._ 61 _×_ 10 _[−]_ [16] 1 _._ 63 _×_ 10 _[−]_ [9]
+
+0.4 2 _._ 20 _×_ 10 _[−]_ [8] 3 _._ 80 _×_ 10 _[−]_ [16] 7 _._ 23 _×_ 10 _[−]_ [10]
+
+0.7 2 _._ 11 _×_ 10 _[−]_ [8] 3 _._ 46 _×_ 10 _[−]_ [16] 1 _._ 80 _×_ 10 _[−]_ [10]
+1.0 0 _._ 00 0 _._ 00 0 _._ 00
+
+
+C.3 TRAINING INITIAL LOG DENSITY FUNCTION
+
+
+In our gene regulatory network example training, we utilize the following steps to stabilize training. Here since we parameterize _[σ]_ 2 [2] [log] _[ p]_ [(] _**[x]**_ _[, t]_ [)] [using] _[s][θ]_ [(] _**[x]**_ _[, t]_ [)] [when] [we] [compute] [Fokker-Planck]
+
+constrained loss, we need to do the exponential operations, which may cause numerical instability
+during computations. To mitigate this issue, we augment the CFM loss with an additional penalty
+term defined as _L_ = _α_ penalty max( _sθ_ ( _**x**_ _, t_ ) _,_ 0) prior to training _sθ_ ( _**x**_ _, t_ ). This penalty encourages
+_sθ_ ( _**x**_ _, t_ ) to adopt negative values, thereby preventing instability caused by the subsequent exponential function. Our training procedure is conducted in two stages:
+
+
+1. **Initial Training Phase:** We optimize the combined CFM loss and penalty term for 3,000
+epochs. This stage ensures that _s_ remains negative, stabilizing the training process by
+avoiding potential numerical issues associated with positive values of _s_ .
+
+2. **Secondary Training Phase:** After the initial phase, we remove the penalty term and continue training solely with the CFM loss for an additional 6,000 epochs. This allows the
+model to fine-tune the parameter _s_ without the constraint imposed by the penalty, facilitating more accurate learning.
+
+
+For the last two examples, such stabilization measures are unnecessary, as the dynamics of these
+cases do not induce the same level of numerical instability. Consequently, we proceed with training
+using only the CFM loss without incorporating the penalty term.
+
+
+This issue may be avoided if we use the Hamilton–Jacobi–Bellman (HJB) equations to set the constraints rather than the direct Fokker-Planck equations (Jiang & Wan, 2024; Meng et al., 2024; Zhao
+et al., 2024; Zhou et al., 2024b).
+
+
+D TECHNICAL DETAILS FOR SCHR ¨ODINGER BRIDGE AND RUOT
+
+
+D.1 PROOF OF DYNAMICAL FORMULATION OF SCHR ¨ODINGER BRIDGE
+
+
+_Proof._ For Schr¨odinger bridge problems, the optimal solution can be found within the class of SDEs:
+
+_**X**_ _t_ _∼_ _µ_ _**[X]**_ _t_ : d _**X**_ _t_ = _**b**_ ( _**X**_ _t, t_ ) d _t_ + _**σ**_ ( _**X**_ _t, t_ ) d _**W**_ _t,_
+The Fokker-Planck equation for the SDE is
+
+_∂tp_ ( _**x**_ _, t_ ) = _−∇_ _**x**_ _·_ ( _p_ ( _**x**_ _, t_ ) _**b**_ ( _**x**_ _, t_ )) + [1] _**x**_ [: (] _**[a]**_ [(] _**[x]**_ _[, t]_ [)] _[p]_ [(] _**[x]**_ _[, t]_ [))] _[,]_
+
+2 _[∇]_ [2]
+
+
+26
+
+
+where _**a**_ ( _**x**_ _, t_ ) = _**σ**_ ( _**x**_ _, t_ ) _**σ**_ _[T]_ ( _**x**_ _, t_ ). Then we need to compute the KL divergence of these two
+stochastic processes. Define the auxiliary variable
+
+
+_γ_ ( _**x**_ _, t_ ) = _**σ**_ ( _**x**_ _, t_ ) _[−]_ [1] _**b**_ ( _**x**_ _, t_ )
+
+
+and apply the Girsanov’s theorem, we get
+
+
+�� 1
+
+
+_γ_ ( _**Y**_ _t, t_ )d _**W**_ _t −_ [1]
+0 2
+
+
+2
+
+
+  -  _D_ KL _µ_ _**[X]**_ [0 _,_ 1] _[||][µ]_ [0 _**[Y]**_ _,_ 1] = EP
+
+
+_E_ 1
+
+
+- 1 ��
+
+_∥γ_ ( _**Y**_ _t, t_ ) _∥_ [2] 2 [d] _[t]_ _,_ (14)
+0
+
+
+where _{Et}t∈_ [0 _,_ 1] is an exponential martingale with respect to the Brownian filtrations _{Ft}_ defined
+as
+
+
+�� _t_
+_Et_ = exp
+
+
+2
+
+
+_γ_ ( _**Y**_ _t, t_ )d _**W**_ _t −_ [1]
+0 2
+
+
+- _t_
+
+
+     _∥γ_ ( _**Y**_ _t, t_ ) _∥_ [2] 2 [d] _[t]_ _._
+0
+
+
+It is well-known that the exponential martingale _Et_ satisfies the SDE
+
+
+d _Et_ = _Etγ_ ( _**Y**_ _t, t_ )d _**W**_ _t,_ _E_ 0 = 1 _._
+
+
+So we obtain
+
+
+  - 1
+_E_ 1 = _Esγ_ ( _**Y**_ _s, s_ )d _**W**_ _s_ + 1 _._
+
+0
+
+
+Since E �01 _[γ]_ [(] _**[Y]**_ _[t][, t]_ [)d] _**[W]**_ _[ t]_ [= 0][, we get]
+
+
+1 - 1
+
+_Etγ_ ( _**Y**_ _t, t_ )d _**W**_ _t ·_
+0 0
+
+
+_γ_ ( _**Y**_ _t, t_ )d _**W**_ _t_
+0
+
+
+ E _E_ 1
+
+
+- 1
+
+_γ_ ( _**Y**_ _t, t_ )d _**W**_ _t_
+0
+
+
+- �� 1
+= E
+
+
+_,_
+
+
+  - 1
+= E _Et ∥γ_ ( _**Y**_ _t, t_ ) _∥_ [2] 2 [d] _[t,]_
+
+0
+
+
+  - 1  -  = E E _∥γ_ ( _**Y**_ _t, t_ ) _∥_ [2] 2 _[E]_ [1] _[| F][t]_ d _t,_
+
+0
+
+
+ - 1  -  = E _E_ 1 _∥γ_ ( _**Y**_ _t, t_ ) _∥_ [2] 2 d _t,_
+
+0
+
+
+                 = E _E_ 1
+
+
+Combine with Eq. (14), we obtain that
+
+
+- 1 
+_∥γ_ ( _**Y**_ _t, t_ ) _∥_ [2] 2 [d] _[t]_ _._
+0
+
+
+1 ��
+
+_[t][, t]_ [)] _[∥]_ [2] 2 [d] _[t]_ _,_
+2 _[∥][γ]_ [(] _**[Y]**_
+
+
+         _D_ KL( _µ_ _**[X]**_ [0 _,_ 1] _[||][µ]_ _**[Y]**_ [0 _,_ 1] [) =][ E] _E_ 1
+
+
+         - 1
+= E
+
+0
+
+
+�� 1
+
+
+0
+
+
+1
+2 [d] _[t,]_
+2 _[∥][γ]_ [(] _**[X]**_ _[t][, t]_ [)] _[∥]_ [2]
+
+
+ - 1
+=
+
+0
+
+
+R _[d]_
+
+
+- 1 _p_ ( _**x**_ _, t_ )d _**x**_ d _t._
+2 _**[b][T]**_ [ (] _**[x]**_ _[, t]_ [)] _**[a]**_ [(] _**[x]**_ _[, t]_ [)] _[−]_ [1] _**[b]**_ [(] _**[x]**_ _[, t]_ [)]
+
+
+The proof is done.
+
+
+D.2 PROOF OF FISHER REGULARIZATION OF RUOT
+
+
+_Proof._ From (6) we obtain
+
+_∂tp_ = _−∇_ _**x**_ _·_ ( _p_ _**b**_ ) + [1] _**x**_ [:]          - _σ_ [2] ( _t_ ) _**I**_ _p_          - + _g_ ( _**x**_ _, t_ ) _p,_
+
+2 _[∇]_ [2]
+
+��           -           = _−∇_ _**x**_ _·_ _**b**_ _−_ [1] _p_ + _g_ ( _**x**_ _, t_ ) _p._
+
+2 _[σ]_ [2][(] _[t]_ [)] _[∇]_ _**[x]**_ [ log] _[ p]_
+
+
+Using the change of variable _**v**_ ( _**x**_ _, t_ ) = _**b**_ ( _**x**_ _, t_ ) _−_ [1] 2 _[σ]_ [2][(] _[t]_ [)] _[∇]_ _**[x]**_ [ log] _[ p]_ [, we see that it is equivalent to]
+
+
+_∂tp_ = _−∇_ _**x**_ _·_ ( _p_ _**v**_ ( _**x**_ _, t_ )) + _g_ ( _**x**_ _, t_ ) _p._
+
+
+27
+
+
+Correspondingly, the integrand in the objective functional becomes
+
+- 1 - - [4]
+
+
+              
+ -  
+[1] _**v**_ ( _**x**_ _, t_ ) _, σ_ [2] ( _t_ ) _∇_ _**x**_ log _p_ + _α_ Ψ ( _g_ ) _p_ ( _**x**_ _, t_ )d _**x**_ d _t._
+
+2
+
+
+- 1 2 [+] _[σ]_ [4][(] _[t]_ [)]
+2 _[∥]_ _**[v]**_ [(] _**[x]**_ _[, t]_ [)] _[∥]_ [2] 8
+
+
+[(] _[t]_ [)]
+
+_∥∇_ _**x**_ log _p∥_ [2] 2 [+] [1]
+8 2
+
+
+0
+
+
+R _[d]_
+
+
+(15)
+
+
+Letting _H_ ( _p_ ( _**x**_ _, t_ )) := 
+
+
+R _[d][ p]_ [(] _**[x]**_ _[, t]_ [) log] _[ p]_ [(] _**[x]**_ _[, t]_ [)d] _**[x]**_ [ be the entropy, we have]
+
+
+               - 1
+_σ_ [2] (1) _H_ ( _p_ ( _**x**_ _,_ 1)) _−_ _σ_ [2] (0) _H_ ( _p_ ( _**x**_ _,_ 0) = _∂t_ - _σ_ [2] ( _t_ ) _H_ ( _p_ ( _**x**_ _, t_ ))� d _t,_
+
+0
+
+
+ - 1
+=
+
+0
+
+ - 1
+=
+
+0
+
+ - 1
+=
+
+0
+
+
+d _σ_ [2] ( _t_ )
+
+R _[d]_ d _t_
+
+
+_p_ ( _**x**_ _, t_ ) log _p_ ( _**x**_ _, t_ ) + _σ_ [2] ( _t_ ) (1 + log _p_ ( _**x**_ _, t_ )) _∂tp_ ( _**x**_ _, t_ )d _**x**_ d _t,_
+d _t_
+
+
+[d] _[σ]_ [2][(] _[t]_ [)]
+R _[d][ σ]_ [2][(] _[t]_ [) (1 + log] _[ p]_ [(] _**[x]**_ _[, t]_ [))] _[ ·]_ [ (] _[−∇]_ _**[x]**_ _[ ·]_ [ (] _[p]_ [(] _**[x]**_ _[, t]_ [)] _**[v]**_ [(] _**[x]**_ _[, t]_ [)) +] _[ gp]_ [(] _**[x]**_ _[, t]_ [)) +] d _t_
+
+
+_p_ ( _**x**_ _, t_ ) log _p_ ( _**x**_ _, t_ )d _**x**_ d _t,_
+d _t_
+
+
+[d] _[σ]_ [2][(] _[t]_ [)]
+R _[d][ σ]_ [2][(] _[t]_ [)] _[p]_ [(] _**[x]**_ _[, t]_ [)] _[ ⟨∇]_ _**[x]**_ [ log] _[ p]_ [(] _**[x]**_ _[, t]_ [)] _[,]_ _**[ v]**_ [(] _**[x]**_ _[, t]_ [)] _[⟩]_ [+] _[ σ]_ [2][(] _[t]_ [) (1 + log] _[ p]_ [(] _**[x]**_ _[, t]_ [))] _[ gp]_ [ +] d _t_
+
+
+_p_ ( _**x**_ _, t_ ) log _p_ ( _**x**_ _, t_ )d _**x**_ d _t._
+d _t_
+
+
+Therefore,
+
+  - 1  
+
+
+�� _σ_ [2] ( _t_ ) _∇_ _**x**_ log _p,_ _**v**_ ( _**x**_ _, t_ )�� _p_ ( _**x**_ _, t_ )d _**x**_ d _t_ = - _σ_ [2] (1) _H_ ( _p_ ( _**x**_ _,_ 1)) _−_ _σ_ [2] (0) _H_ ( _p_ ( _**x**_ _,_ 0))�
+
+
+0
+
+
+R _[d]_
+
+
+ - 1
+
+_−_
+
+0
+
+ - 1
+
+_−_
+
+0
+
+
+R _[d][ σ]_ [2][(] _[t]_ [) (1 + log] _[ p]_ [(] _**[x]**_ _[, t]_ [))] _[ gp]_ [d] _**[x]**_ [d] _[t]_
+
+
+d _σ_ [2] ( _t_ )
+
+R _[d]_ d _t_
+
+
+_p_ ( _**x**_ _, t_ ) log _p_ ( _**x**_ _, t_ )d _**x**_ d _t._
+d _t_
+
+
+D.3 RUOT WITH NONLINEAR FOKKER-PLANCK EQUATION CONSTRAINTS
+
+
+Note that when Ψ ( _g_ ( _**x**_ _, t_ )) take the quadratic form i.e. Ψ ( _g_ ( _**x**_ _, t_ )) = _|g_ ( _**x**_ _, t_ ) _|_ [2] 2 [, then by canceling]
+the cross term in Theorem 4.1 we will get another Fisher information regularisation form as below.
+**Theorem D.1.** _When_ Ψ ( _g_ ( _**x**_ _, t_ )) = _|g_ ( _**x**_ _, t_ ) _|_ [2] 2 _[and][ σ]_ [(] _[t]_ [) =] _[ σ][ is constant, the regularized unbalanced]_
+_optimal transport problem_ (7) _is equivalent to_
+
+
+_[σ]_ [4]  - _p_ d _**x**_ d _t,_ (16)
+
+16 _α_ [(1 + log] _[ p]_ [)][2]
+
+
+- 1 2 [+] _[σ]_ [4]
+2 _[∥]_ _**[v]**_ [(] _**[x]**_ _[, t]_ [)] _[∥]_ [2] 8
+
+
+[4]
+
+2 [+] _[ α][|][g]_ [�][(] _**[x]**_ _[, t]_ [)] _[|]_ [2] _[ −]_ _[σ]_ [4]
+8 _[∥∇]_ _**[x]**_ [ log] _[ p][∥]_ [2] 16
+
+
+inf
+( _p,_ _**v**_ _,g_ �)
+
+
+- 1
+
+
+0
+
+
+R _[d]_
+
+
+_where the infimum is taken all pairs_ ( _p,_ _**v**_ _,_ - _g_ ) _such that p_ ( _·,_ 0) = _ν_ 0 _, p_ ( _·,_ 1) = _ν_ 1 _, p_ ( _**x**_ _, t_ ) _absolutely_
+_continuous, and_
+
+_∂tp_ = _−∇_ _**x**_ _·_ ( _p_ _**v**_ ( _**x**_ _, t_ )) + � _g_ ( _**x**_ _, t_ ) _p_ + 4 _[σ]_ _α_ [2] [(1 + log] _[ p]_ [)] _[p.]_ (17)
+
+_coupled with vanishing boundary condition:_ lim
+_|_ _**x**_ _|→∞_ _[p]_ [(] _**[x]**_ _[, t]_ [) = 0] _[.]_
+
+
+_Proof._ Based on the formulation of Theorem 4.1, we proceed by introducing the following change
+of variables:
+
+
+_g_ = _g −_ _[σ]_ [2]
+
+
+(18)
+4 _α_ [(1 + log] _[ p]_ [)] _[.]_
+
+
+Substituting this variable into Eq. (7), then it follows immediately.
+
+
+From Theorem D.1, we can find that if we introduce a new term in the continuity equation Eq. (6)
+as:
+
+
+   -    
+[1] _**x**_ [:] _σ_ [2] _**I**_ _p_ + _gp −_ _[σ]_ [2]
+
+2 _[∇]_ [2] 4 _α_
+
+
+_∂tp_ = _−∇_ _**x**_ _·_ ( _p_ _**b**_ ) + [1]
+
+
+4 _α_ [(1 + log] _[ p]_ [)] _[p.]_
+
+
+Then Eq. (17) now yields the standard continuity equation:
+
+_∂tp_ = _−∇_ _**x**_ _·_ ( _p_ _**v**_ ( _**x**_ _, t_ )) + � _g_ ( _**x**_ _, t_ ) _p._
+
+So we introduce a new definition.
+
+
+28
+
+
+**Definition D.1.** _We introduce_
+
+
+1  - 1
+2 _[p]_ [d] _**[x]**_ [d] _[t]_ [ +]
+R _[d]_ 2 _[∥]_ _**[b]**_ [(] _**[x]**_ _[, t]_ [)] _[∥]_ [2]
+
+
+0
+
+
+2 _[p]_ [d] _**[x]**_ [d] _[t,]_
+R _[d][ α][ |][g]_ [(] _**[x]**_ _[, t]_ [)] _[|]_ [2]
+
+
+UOT [D] ( _ν_ 0 _, ν_ 1) := inf
+( _p,_ _**b**_ _,g_ ) _∈C_ ( _ν_ 0 _,ν_ 1)
+
+
+- 1
+
+
+0
+
+
+_where, for_ ( _p,_ _**b**_ _, g_ ) _belonging to appropriate functions spaces,_
+
+_C_ ( _ν_ 0 _, ν_ 1) :=   - _p,_ _**b**_ _, g_ _∂tp_ = _−∇_ _**x**_ _·_ ( _p_ _**b**_ ) + 1 _**x**_ [:]   - _σ_ [2] _**I**_ _p_   - + _gp −_ _[σ]_ [2]
+���� 2 _[∇]_ [2] 4 _α_ [(1 + log] _[ p]_ [)] _[p]_ ����
+
+
+_where p_ 0 = _ν_ 0 _and p_ 1 = _ν_ 1 _._
+
+
+_,_
+
+
+**Remark** **D.1.** _Note_ _that_ _Definition_ _D.1_ _is_ _consistent_ _with_ _the_ _form_ _provided_ _in_ _(Buze_ _&_ _Duong,_
+_2023),_ _and_ _it_ _has_ _been_ _conjectured_ _that_ _it_ _is_ _the_ _higher_ _order_ _approximation_ _scheme_ _to_ _the_ _unbal-_
+_anced optimal transport problem as σ_ _→_ 0 _._
+
+
+D.4 RUOT IN THE GENERAL CASE
+
+
+For the general case, we consider the following equation
+
+_∂tp_ = _−∇_ _**x**_ _·_ ( _p_ _**b**_ ) + [1] _**x**_ [: (] _**[a]**_ [(] _**[x]**_ _[, t]_ [)] _[p]_ [) +] _[ gp,]_ (19)
+
+2 _[∇]_ [2]
+
+
+with the corresponding metric
+
+     - 1      
+
+
+(20)
+R _[d][ α]_ [Ψ (] _[g]_ [(] _**[x]**_ _[, t]_ [))] _[ p]_ [(] _**[x]**_ _[, t]_ [)d] _**[x]**_ [d] _[t,]_
+
+
+0
+
+
+1  - 1
+2 _[p]_ [(] _**[x]**_ _[, t]_ [)d] _**[x]**_ [d] _[t]_ [ +]
+R _[d]_ 2 _[∥]_ _**[b]**_ [(] _**[x]**_ _[, t]_ [)] _[∥]_ [2]
+
+
+0
+
+
+where _α_ and Ψ : R _→_ [0 _,_ + _∞_ ] is the growth penalization. Then we can define the _regularized_
+_unbalanced optimal transport_ problem in the same way.
+
+**Definition D.2** (Regularized unbalanced optimal transport II) **.** _Consider_
+
+
+1  - 1
+2 _[p]_ [(] _**[x]**_ _[, t]_ [)d] _**[x]**_ [d] _[t]_ [ +]
+R _[d]_ 2 _[∥]_ _**[b]**_ [(] _**[x]**_ _[, t]_ [)] _[∥]_ [2]
+
+
+inf
+( _p,_ _**b**_ _,g_ )
+
+
+- 1
+
+
+0
+
+
+0
+
+
+(21)
+R _[d][ α]_ [Ψ (] _[g]_ [(] _**[x]**_ _[, t]_ [))] _[ p]_ [(] _**[x]**_ _[, t]_ [)d] _**[x]**_ [d] _[t,]_
+
+
+_where_ _the_ _infimum_ _is_ _taken_ _all_ _pairs_ ( _p,_ _**b**_ ) _such_ _that_ _p_ ( _·,_ 0) = _ν_ 0 _, p_ ( _·,_ 1) = _ν_ 1 _, p_ ( _**x**_ _, t_ ) _absolutely_
+_continuous, and_
+
+
+_∂tp_ = _−∇_ _**x**_ _·_ ( _p_ _**b**_ ) + [1]
+
+
+_**x**_ [: (] _**[a]**_ [(] _**[x]**_ _[, t]_ [)] _[p]_ [) +] _[ gp.]_ (22)
+2 _[∇]_ [2]
+
+
+_coupled with vanishing boundary condition:_ lim
+_|_ _**x**_ _|→∞_ _[p]_ [(] _**[x]**_ _[, t]_ [) = 0] _[.]_
+
+
+We similarly can reformulate Definition D.2 with the following Fisher information regularization.
+
+**Theorem D.2.** _Consider the regularized unbalanced optimal transport problem Definition D.2, it is_
+_equivalent to_
+
+
+2 _[p]_ [(] _**[x]**_ _[, t]_ [)d] _**[x]**_ [d] _[t]_
+8 _[∥]_ _**[σ]**_ [(] _**[x]**_ _[, t]_ [)] _[∇]_ _**[x]**_ _[ ·]_ [ log (] _**[a]**_ [(] _**[x]**_ _[, t]_ [)] _[p]_ [)] _[∥]_ [2]
+
+
+(23)
+
+
+inf
+( _p,_ _**v**_ _,g_ )
+
+
+- 1
+
+
+0
+
+
+1 2 _[p]_ [(] _**[x]**_ _[, t]_ [)d] _**[x]**_ [d] _[t]_ [ +] [1]
+R _[d]_ 2 _[∥]_ _**[v]**_ [(] _**[x]**_ _[, t]_ [)] _[∥]_ [2] 8
+
+
++ [1]
+
+2 _[⟨]_ _**[v]**_ [(] _**[x]**_ _[, t]_ [)] _[,]_ _**[ a]**_ [(] _**[x]**_ _[, t]_ [)] _[∇]_ _**[x]**_ _[ ·]_ [ log (] _**[a]**_ [(] _**[x]**_ _[, t]_ [)] _[p]_ [)] _[⟩]_ _[p]_ [(] _**[x]**_ _[, t]_ [)d] _**[x]**_ [d] _[t]_ [ +] _[ α]_ [Ψ (] _[g]_ [(] _**[x]**_ _[, t]_ [))] _[ p]_ [(] _**[x]**_ _[, t]_ [)d] _**[x]**_ [d] _[t,]_
+
+
+_where the infimum is taken all pairs_ ( _p,_ _**v**_ _, g_ ) _such that p_ ( _·,_ 0) = _ν_ 0 _, p_ ( _·,_ 1) = _ν_ 1 _, p_ ( _**x**_ _, t_ ) _absolutely_
+_continuous, and_
+_∂tp_ = _−∇_ _**x**_ _·_ ( _p_ _**v**_ ( _**x**_ _, t_ )) + _g_ ( _**x**_ _, t_ ) _p._ (24)
+_coupled with vanishing boundary condition:_ lim
+_|_ _**x**_ _|→∞_ _[p]_ [(] _**[x]**_ _[, t]_ [) = 0] _[.]_
+
+
+_Proof._ From Definition D.2 we know that the Fokker-Planck equation for the SDE is
+
+_∂tp_ = _−∇_ _**x**_ _·_ ( _p_ _**b**_ ) + [1] _**x**_ [: (] _**[a]**_ [(] _**[x]**_ _[, t]_ [)] _[p]_ [) +] _[ g]_ [(] _**[x]**_ _[, t]_ [)] _[p,]_
+
+2 _[∇]_ [2]
+
+��         -         = _−∇_ _**x**_ _·_ _**b**_ _−_ [1] _p_ + _g_ ( _**x**_ _, t_ ) _p._
+
+2 _**[a]**_ [(] _**[x]**_ _[, t]_ [)] _[∇]_ _**[x]**_ _[ ·]_ [ log (] _**[a]**_ [(] _**[x]**_ _[, t]_ [)] _[p]_ [)]
+
+
+29
+
+
+with minimization problem
+
+
+  - 1
+
+inf
+( _p,_ _**b**_ ) 0
+
+
+0
+
+
+1  - 1
+2 _[p]_ [(] _**[x]**_ _[, t]_ [)d] _**[x]**_ [d] _[t]_ [ +]
+R _[d]_ 2 _[∥]_ _**[b]**_ [(] _**[x]**_ _[, t]_ [)] _[∥]_ [2]
+
+
+R _[d][ α]_ [Ψ (] _[g]_ [(] _**[x]**_ _[, t]_ [))] _[ p]_ [(] _**[x]**_ _[, t]_ [)d] _**[x]**_ [d] _[t.]_
+
+
+Using the change of variable _**v**_ ( _**x**_ _, t_ ) = _**b**_ ( _**x**_ _, t_ ) _−_ 2 [1] _**[a]**_ [(] _**[x]**_ _[, t]_ [)] _[∇]_ _**[x]**_ _[·]_ [log (] _**[a]**_ [(] _**[x]**_ _[, t]_ [)] _[p]_ [)][,] [we] [see] [that] [it] [is]
+
+equivalent to
+_∂tp_ = _−∇_ _**x**_ _·_ ( _p_ _**v**_ ( _**x**_ _, t_ )) + _g_ ( _**x**_ _, t_ ) _p._
+
+
+On the other hand, since _∥_ _**b**_ ( _**x**_ _, t_ ) _∥_ [2] 2 = _∥_ _**v**_ ( _**x**_ _, t_ ) _∥_ [2] 2 [+] 14 _[∥]_ _**[a]**_ [(] _**[x]**_ _[, t]_ [)] _[∇]_ _**[x]**_ _[ ·]_ [ log (] _**[a]**_ [(] _**[x]**_ _[, t]_ [)] _[p]_ [)] _[∥]_ 2 [2] [+]
+2 - _**v**_ ( _**x**_ _, t_ ) _,_ [1] _**[a]**_ [(] _**[x]**_ _[, t]_ [)] _[∇]_ _**[x]**_ _[ ·]_ [ log (] _**[a]**_ [(] _**[x]**_ _[, t]_ [)] _[p]_ [)] �, the integrand in the objective then becomes
+
+
+) _,_ [1] 2 _**[a]**_ [(] _**[x]**_ _[, t]_ [)] _[∇]_ _**[x]**_ _[ ·]_ [ log (] _**[a]**_ [(] _**[x]**_ _[, t]_ [)] _[p]_ [)] �, the integrand in the objective then becomes
+
+
+- 1 
+
+
+2 _[p]_ [(] _**[x]**_ _[, t]_ [)d] _**[x]**_ [d] _[t]_
+8 _[∥]_ _**[σ]**_ [(] _**[x]**_ _[, t]_ [)] _[∇]_ _**[x]**_ _[ ·]_ [ log (] _**[a]**_ [(] _**[x]**_ _[, t]_ [)] _[p]_ [)] _[∥]_ [2]
+
+
+0
+
+
+1 2 _[p]_ [(] _**[x]**_ _[, t]_ [)d] _**[x]**_ [d] _[t]_ [ +] [1]
+R _[d]_ 2 _[∥]_ _**[v]**_ [(] _**[x]**_ _[, t]_ [)] _[∥]_ [2] 8
+
+
++ [1]
+
+2 _[⟨]_ _**[v]**_ [(] _**[x]**_ _[, t]_ [)] _[,]_ _**[ a]**_ [(] _**[x]**_ _[, t]_ [)] _[∇]_ _**[x]**_ _[ ·]_ [ log (] _**[a]**_ [(] _**[x]**_ _[, t]_ [)] _[p]_ [)] _[⟩]_ _[p]_ [(] _**[x]**_ _[, t]_ [)d] _**[x]**_ [d] _[t]_ [ +] _[ α]_ [Ψ (] _[g]_ [(] _**[x]**_ _[, t]_ [))] _[ p]_ [(] _**[x]**_ _[, t]_ [)d] _**[x]**_ [d] _[t,]_
+
+
+Similarly, from the proof of Theorem D.2, the original SDE d _**X**_ _t_ = ( _**b**_ ( _**X**_ _t, t_ )) d _t_ + _**σ**_ ( _**X**_ _t, t_ ) d _**W**_ _t_
+can be transformed into the probability flow ODE
+
+
+  -   d _**X**_ _t_ = _**b**_ ( _**X**_ _t, t_ ) _−_ [1]
+
+2 _**[a]**_ [(] _**[X]**_ _[t][, t]_ [)] _[∇]_ _**[x]**_ _[ ·]_ [ log (] _**[a]**_ [(] _**[X]**_ _[t][, t]_ [)] _**[p]**_ [ (] _**[X]**_ _[t][, t]_ [))]
+
+
+    - ��    _**v**_ ( _**X**_ _t,t_ )
+
+
+d _t._
+
+
+Conversely, if the probability flow ODE’s drift _**v**_ ( _**x**_ _, t_ ) the diffusion rate _**a**_ ( _**x**_ _, t_ ) and the function
+_∇_ _**x**_ _·_ log ( _**a**_ ( _**x**_ _, t_ ) _p_ ( _**x**_ _, t_ )) are known, then the the SDE’s drift term _b_ ( _**x**_ _, t_ ) can be determined by
+
+_b_ ( _**x**_ _, t_ ) = _**v**_ ( _**x**_ _, t_ ) + [1]
+
+2 _**[a]**_ [(] _**[x]**_ _[, t]_ [)] _[∇]_ _**[x]**_ _[ ·]_ [ log (] _**[a]**_ [(] _**[x]**_ _[, t]_ [)] _[p]_ [(] _**[x]**_ _[, t]_ [))] _[ .]_
+
+
+So to specify an SDE is equivalent to specifying the probability flow ODE and the corresponding
+log density function.
+
+
+E CONNECTIONS WITH SCHR ¨ODINGER BRIDGE
+
+
+Although the RUOT problem can be derived from the dynamical formulation of a Schr¨odinger bridge
+relaxation, the relationship between the RUOT problem and the original static Schr¨odinger bridge
+problem, the choice of the growth penalty form in RUOT as well as its microscopic interpretation,
+remains unsolved. In this section, we will discuss two potential microscopic interpretations with the
+choice of the growth penalty form and identify the persisting problems and challenges associated
+with each.
+
+
+E.1 CONNECTIONS WITH BRANCHING SCHR ¨ODINGER BRIDGE
+
+
+In (Baradat & Lavenant, 2021), the authors explore the relationship between the RUOT and the
+branching Schr¨odinger bridge, with the corresponding reference process identified as branching
+Brownian motion. We will begin by reviewing their principal findings and subsequently highlight
+the associated issues and challenges.
+
+
+A Branching Brownian Motion (BBM) can be formally described by the diffusivity _ε_, branching
+rate _λ_ (Each particle is associated with an independent exponential distribution with parameter _λ_ ),
+and the offspring distribution denoted by _**p**_ = ( _pk_ ) _k∈_ N _∈P_ (N) (The probability measures on N),
+where _pk_ is the probability of producing _k_ offspring at a branching event. We define _qk_ = _λpk_ and
+introduce the generating function of _**q**_ as _ψ_ _**q**_ .
+
+
+- _qkz_ _[k]_ = _λ_ 
+
+_k∈_ N _k∈_ N
+
+
+_ψ_ _**q**_ ( _z_ ) := 
+
+
+- _pkz_ _[k]_ _._
+
+
+_k∈_ N
+
+
+30
+
+
+The branching mechanism is characterized by _**q**_, since [�]
+
+
+The branching mechanism is characterized by _**q**_, since [�] _k∈_ N _[p][k]_ [=] [1] [and] _[λ]_ [,] _**[p]**_ [can] [be] [recovered]
+
+from _**q**_ by _λ_ = [�] _k∈_ N _[q][k]_ [and] _[ p][k]_ [=] _[λ][−]_ [1] _[q][k]_ [for] _[ k]_ _[∈]_ [N][.] [Therefore, it is sufficient to fully determine]
+
+
+from _**q**_ by _λ_ = [�] _k∈_ N _[q][k]_ [and] _[ p][k]_ [=] _[λ][−]_ [1] _[q][k]_ [for] _[ k]_ _[∈]_ [N][.] [Therefore, it is sufficient to fully determine]
+
+the BBM with _ν_, _**q**_ = _λ_ _**p**_, and initial distribution _ν_ 0. So _R_ _∼_ BBM( _ε,_ _**q**_ _, ν_ 0) represent such BBM.
+Their core result indicates that consider Definition 4.1 where _σ_ ( _t_ ) = _σ_ is constant and _ε_ = _σ_ [2] then if
+the growth penalty term is defined as follows, it can correspond to a branching Schr¨odinger process.
+
+
+     -     -     Ψ _[∗]_ _ε,_ _**q**_ [(] _[s]_ [) =] _[ ε]_ _ψ_ _**q**_ _e_ _[s/ε]_ [�] _e_ _[−][s/ε]_ _−_ _ψ_ _**q**_ (1) = _ε_
+
+
++ _∞_
+
+
+- _qk_ �exp �( _k −_ 1) _[s]_
+
+_ε_
+
+_k_ =0
+
+
+_ε_
+
+
+- 
+_−_ 1 _,_ (25)
+
+
+and we define Ψ _ε,_ _**q**_ ( _g_ ) = sup _s∈_ R _gs −_ Ψ _[∗]_ _ε,_ _**q**_ [(] _[s]_ [)][.] [So by following their result, we can present some]
+examples.
+
+
+**The** **case** **of** **only** **loss** **mass** This example has been included in their work. We consider _ε_ =
+_λ_ = 1, _p_ 0 = 1, and [�] _k≥_ 2 _[p][k]_ [=] [0][,] [which] [means] [the] [particle] [can] [only] [die] [at] [the] [branching] [event.]
+
+Substituting it into Eq. (25), we have
+Ψ _[∗]_ 1 _,_ _**q**_ [(] _[s]_ [) = exp (] _[−][s]_ [)] _[ −]_ [1] _[.]_
+Then by computing its Legendre transform we obtain
+Ψ1 _,_ _**q**_ ( _g_ ) = 1 + _g −_ _g_ log( _−g_ ) _,_
+
+where _g_ _<_ 0. This form is consistent with the formula discussed in (Chen et al., 2022b).
+
+
+**The case of only gain mass** Similarly, if we consider _ε_ = _λ_ = 1, _p_ 2 = 1, which means the particle
+can only divide into two parts at the branching event. Then by a similar calculation, we obtain
+Ψ1 _,_ _**q**_ ( _g_ ) = 1 _−_ _g_ + _g_ log( _g_ ) _,_
+
+which _g_ _>_ 0.
+
+
+**The** **case** **of** **both** **gain** **mass** **and** **loss** **mass** This is also presented in their work. We consider
+_ε_ = _λ_ = 1, _p_ 0 = _p_ 2 = 2 [1] [,] [which] [means] [the] [particle] [can] [divide] [into] [two] [parts] [or] [die] [at] [the] [same]
+
+probability at the branching event, which we have
+Ψ _[∗]_ 1 _,_ _**q**_ [(] _[s]_ [) = cosh(] _[s]_ [)] _[ −]_ [1] _[.]_
+However in this case the Legendre transform would be more complicated but it has some asymptotic
+properties discussed in their work.
+
+
+**General case** Although we have illustrated several examples, challenges persist, particularly in the
+context of more general scenarios. Specifically, when the growth penalty term cannot be expressed
+as Ψ _ε,_ _**q**_, the connection to the corresponding stochastic process remains unclear. For instance, this
+ambiguity arises in cases where in the RUOT the Ψ( _g_ ) takes the quadratic form i.e., the WFR
+metric, or when Ψ( _g_ ) is in a linear form, such as _|g|_ . These issues still require specific mathematical
+treatment and to our knowledge, remain an open problem.
+
+
+E.2 CONNECTIONS WITH SCHR ¨ODINGER BRIDGE ON WEIGHTED PATH
+
+
+From an alternative perspective on the microscopic interpretation of RUOT, we aim to consider
+particles on the weighted path space, namely:
+
+
+�� 1              d _µ_ _**[G]**_ [0 _,_ 1] [= exp] _g_ ( _**X**_ _s, s_ )d _s_ d _µ_ _**[X]**_ [0 _,_ 1] _[,]_
+
+0
+
+where _µ_ _**[X]**_ [0 _,_ 1] [represents the probability measure induced by the SDE (Eq.] [(][2][)).] [Here for example we]
+consider a simple case when _g_ ( _**x**_ _, t_ ) = _C_ . Then following the procedure of Theorem 3.1.
+
+
+      
+[1] _[t][, t]_ [)] _[∥]_ [2] 2 [d] _[t]_ [ +] _[ C]_ _,_
+
+2 _[∥][γ]_ [(] _**[Y]**_
+
+
+_D_ KL( _µ_ _**[G]**_ [0 _,_ 1] _[||][µ]_ _**[Y]**_ [0 _,_ 1] [) =][ E] _µ_ _**[G]**_ [0 _,_ 1]
+
+
+�� 1
+
+
+_γ_ ( _**Y**_ _t, t_ )d _**W**_ _t −_ [1]
+0 2
+
+
+�� 1
+= E ( _E_ 1 exp( _C_ ))
+
+0
+
+
+1 
+_[t][, t]_ [)] _[∥]_ [2] 2 [d] _[t]_ + _C_ exp( _C_ ) _,_
+2 _[∥][γ]_ [(] _**[Y]**_
+
+
+(26)
+
+
+     - 1
+= E exp( _C_ )
+
+0
+
+
+1
+2 [d] _[t]_ [ +] _[ C]_ [ exp(] _[C]_ [)] _[.]_
+2 _[∥][γ]_ [(] _**[X]**_ _[t][, t]_ [)] _[∥]_ [2]
+
+
+31
+
+
+Here _µ_ _**[Y]**_ [0 _,_ 1] [is the distribution of stochastic process induced by][ d] _**[Y]**_ _[t]_ [=] _**[ σ]**_ [(] _**[Y]**_ _[t][, t]_ [)d] _**[W]**_ _[ t]_ [. Our derivation]
+reveals that, from a path weighting perspective, even when the growth term is a constant, it still does
+not correspond to the form of RUOT. This suggests that the microscopic interpretation from this
+angle may need further investigation to determine whether a RUOT problem could be recovered
+from this starting point.
+
+
+32

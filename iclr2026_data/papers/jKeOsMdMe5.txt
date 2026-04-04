@@ -1,0 +1,323 @@
+# NEURAL LATENT ARBITRARY LAGRANGIAN-EULERIAN GRIDS FOR FLUID-SOLID INTERACTION
+
+Shilong Tao<sup>1</sup>, Zhe Feng<sup>1</sup>, Shaohan Chen<sup>1</sup>, Weichen Zhang<sup>2</sup>
+
+Zhanxing Zhu<sup>3,\*</sup>, Yunhuai Liu<sup>1,\*</sup>
+
+<sup>1</sup>School of Computer Science, Peking University
+
+<sup>2</sup>Global Innovation Exchange, Tsinghua University
+
+<sup>3</sup>School of Electrical and Computer Science, University of Southampton
+
+## ABSTRACT
+
+Fluid-solid interaction (FSI) problems are fundamental in many scientific and engineering applications, yet effectively capturing the highly nonlinear two-way interactions remains a significant challenge. Most existing deep learning methods are limited to simplified one-way FSI scenarios, often assuming rigid and static solid to reduce complexity. Even in two-way setups, prevailing approaches struggle to capture dynamic, heterogeneous interactions due to the lack of cross-domain awareness. In this paper, we introduce **Fisale**, a data-driven framework for handling complex two-way FSI problems. It is inspired by classical numerical methods, namely the Arbitrary Lagrangian-Eulerian (**ALE**) method and the partitioned coupling algorithm. Fisale explicitly models the coupling interface as a distinct component and leverages multiscale latent ALE grids to provide unified, geometry-aware embeddings across domains. A partitioned coupling module (PCM) further decomposes the problem into structured substeps, enabling progressive modeling of nonlinear interdependencies. Compared to existing models, Fisale introduces a more flexible framework that iteratively handles complex dynamics of solid, fluid and their coupling interface on a unified representation, and enables scalable learning of complex two-way FSI behaviors. Experimentally, Fisale excels in three reality-related challenging FSI scenarios, covering 2D, 3D and various tasks. The code is available at <https://github.com/therontau0054/Fisale>.
+
+## 1 INTRODUCTION
+
+Fluid-Solid Interaction (FSI) refers to a complex coupled phenomenon in which solids undergo motion or deformation under the action of surrounding flowing fluid, and reciprocally alter the pressure and velocity distribution within the fluid (Hou et al., 2012). This kind of problems are ubiquitous in real-world scenarios, spanning a wide range of practical applications. From biomedical engineering, such as blood flow interacting with vessel valves (Bazigou & Makinen, 2013; Enderle & Bronzino, 2012), to aerospace and civil engineering involving structural responses to fluid forces (Prasad & Wanhill, 2017; Zhang, 2011), FSI plays a pivotal role in both analysis and design.
+
+FSI problems encompass the interplay between fluid flow, solid deformation, and their intricate coupling dynamics. These interactions are typically governed by a tightly coupled system of partial differential equations (PDEs) (Belytschko, 1980). Accurately and efficiently solving them is crucial for practical applications (Kopriva, 2009; Roubíček, 2013). However, due to nonlinear materials, moving interfaces, and strong coupling relations, analytic solutions to these PDEs are typically intractable (Xing, 2019; Génevaux et al., 2003). Thus, these FSI problems are generally discretized into meshes and solved using numerical methods such as the Immersed Boundary Method (IBM) (Peskin, 2002) and Arbitrary Lagrangian-Eulerian (ALE) (Hirt et al., 1974) method. These approaches handle the coupled system either monolithically (Heil et al., 2008), treating fluid and solid as a unified domain, or through partitioned iteration (Degroote et al., 2009), where each subdomain is solved separately with interface data exchanged iteratively. While effective in many cases, both approaches
+
+\*Correspondence: yunhuai.liu@pku.edu.cn, z.zhu@soton.ac.uk
+
+![Figure 1: Fluid-solid interaction scenarios. (a.1) cylinder flow: A 2D flow field around a circular cylinder. (a.2) structure oscillation: A 2D flow field around a cylinder with a flexible beam attached, showing oscillations. (b.1) rigid wing: A 3D perspective view of a rigid wing with wind flow. (b.2) flexible wing: A 3D perspective view of a flexible wing with wind flow and a deformation vector. (c) venous valve open: Two cross-sectional views of a valve in a pipe, labeled 'partially open' and 'fully open', showing flow dynamics.](49ad3a646d84bcfeac02bdf2b3792a3e_img.jpg)
+
+Figure 1: Fluid-solid interaction scenarios. (a.1) cylinder flow: A 2D flow field around a circular cylinder. (a.2) structure oscillation: A 2D flow field around a cylinder with a flexible beam attached, showing oscillations. (b.1) rigid wing: A 3D perspective view of a rigid wing with wind flow. (b.2) flexible wing: A 3D perspective view of a flexible wing with wind flow and a deformation vector. (c) venous valve open: Two cross-sectional views of a valve in a pipe, labeled 'partially open' and 'fully open', showing flow dynamics.
+
+Figure 1: Fluid-solid interaction scenarios. (a.1) and (a.2) depict flow-around-body scenarios; (b.1) and (b.2) focus on aerodynamic analysis of wings; (c) illustrates the periodic dynamics of a venous valve; (a.1) and (b.1) represent one-way FSI cases, while the others involve two-way FSI.
+
+are computationally expensive (Umetani & Bickel, 2018), strongly mesh-dependent (Berzins, 1999; Burkhart et al., 2013), and facing stability issues (Grétarsson et al., 2011; Paidoussis, 2005).
+
+Recently, deep learning has emerged as a powerful tool for solving PDEs (Li et al., 2021; Lu et al., 2021), thanks to its strong capacity to effectively capture nonlinear input-output mappings. Once trained, it can offer significantly faster inference than traditional solvers (Han et al., 2018; Tao et al., 2025a;b; Tang et al., 2026). However, in the context of FSI, most existing models primarily focus on one-way FSI scenarios, where the solid is typically treated as static and rigid. For example, many studies have explored airfoil design tasks (Bonnet et al., 2022; Valencia et al., 2025). As shown in Figure 1(b.1), the aircraft wing is typically modeled as a static rigid body. This allows the solver to treat the wing region as a fixed, undeformable inner boundary and focus solely on the fluid domain, significantly reducing the complexity. However, as shown in Figure 1(b.2), real wings are often made of flexible materials and may undergo noticeable deformation under aerodynamic loads (Aono et al., 2010; Eppler, 2012). In such cases, the fluid-solid interface becomes dynamic, and the coupling relation grows more complex. Similar assumptions also appear in other benchmarks like cylinder flow (Pfaff et al., 2020; Li et al., 2025) and car design tasks (Elrefaie et al., 2024a;b), where structural flexibility is ignored. Thus, *how to effectively handle the evolution of fluid and solid, and capture their dynamic coupling interactions* remain unanswered when learning two-way FSI problems.
+
+Regarding existing two-way cases, GNN-based models have simulated several simple rigid motion scenarios (Sanchez-Gonzalez et al., 2020; Li et al., 2019). While message passing underpins GNNs, it is inherently stateless and undifferentiated, making it difficult to distinguish inter- and intra-domain information in complex deformation scenarios (Hou et al., 2019). Moreover, its local reception also falls short in global modeling (Li et al., 2023d). A closely related work to ours is CoDA-NO (Rahman et al., 2024), a multiphysics neural operator that tackles a classic two-way FSI problem, structure oscillation (Figure 1(a.2)) (Turek & Hron, 2006), by partitioning the input domain along physical variable channels and learning the global mapping through codomain-wise attention. However, this variable-wise strategy maintains a monolithic view and lacks explicit handling of the dynamic fluid-solid interface caused by structural deformation. More broadly, most neural operators struggle to simultaneously learn the distinct behaviors and bidirectional dependencies of fluid and solid domains under such monolithic modeling approaches. As a result, two-way FSI still remains underexplored.
+
+To effectively capture the evolution of solid and fluid states and their complex interactions, we propose Fisale, a purely data-driven framework inspired by classical numerical methods: ALE and partitioned coupling algorithm. ALE provides a unified representation for cross domains via mesh motion, while partitioned strategies decouple fluid and solid domains for separate processing and reduced nonlinearity. In our design, recognizing the importance of the coupling interface, we explicitly model it as a separate component on par with the solid and fluid. This enables the model to better capture the coupled dynamics. We then introduce multiscale latent ALE grids, onto which fluid, solid, and interface states are interpolated. These grids serve as unified multi-physics embeddings that encode spatial and physical quantities of the FSI system. Eventually, instead of monolithic updates, we introduce a Partitioned Coupling Module (PCM) that mirrors the logic of classical partitioned solvers. By breaking the nonlinear problem into sequential substeps, it progressively captures evolutions and complex interdependencies through deep iteration. Our contributions are summarized as follows:
+
+- We propose to solve two-way FSI problems by separately handling the evolution of different physical domains. In particular, we treat the coupling interface as an individual component, on par with fluid and solid, enabling a more effective capture of cross-domain interactions.
+- We propose Fisale, a purely data-driven framework inspired by ALE and partitioned coupling methods. It explicitly models fluid, solid, and their interface dynamics through multiscale latent ALE grids and stacked Partitioned Coupling Modules (PCM).
+- Fisale achieves consistent state-of-the-art across three reality-related challenging FSI tasks, particularly in scenarios involving large deformation and complex interaction.
+
+**Related Work** Deep learning has recently gained traction in addressing scientific problems across various fields, including initial explorations into FSI problems. A common strategy is to hybridize traditional solvers with neural networks. For instance, in partitioned frameworks, deep learning models may replace either the fluid or solid solver (Xiao et al., 2024a; Zhu et al., 2019; Mazhar et al., 2023; Xu et al., 2024; Liu et al., 2024), while the other remains conventional. Alternatively, neural networks are integrated into solvers to accelerate costly steps like velocity estimation (Fan & Wang, 2024), interface force prediction (Zhang et al., 2022; Li et al., 2023a) or control parameter approximation (Takahashi et al., 2021). Different from hybrid, purely data-driven models bypass traditional solvers entirely and learn physical dynamics directly from data, sometimes with the guidance of physical priors. One prominent class is deep reduced-order models (ROMs) (Han et al., 2022; Ashwin et al., 2022), which are built on the assumption that FSI dynamics evolve on a low-dimensional manifold (Lee et al., 2024). These methods use autoencoders (Zhai et al., 2018), PCA (MacKiewicz & Ratajczak, 1993), or POD (Berkooz et al., 1993) to reduce dimensionality, and utilize neural networks to model the evolution in low-dimensional space efficiently. Another widely studied direction is Physics-Informed Neural Networks (PINNs) (Raissi et al., 2019), which embed the governing equations of the FSI problems directly into the loss function (Wang et al., 2021; Cheng et al., 2021; Chenaud et al., 2024), enabling the model to learn solutions that satisfy physical laws and serve as an instance-specific solver after trained. To address generalization across geometries and conditions, neural operators (Boullé & Townsend, 2024) learn mappings between function spaces, offering mesh-independent PDE solvers (Wu et al., 2024; Hao et al., 2023; Li et al., 2023d; 2025). These methods have also been extended to multi-physics problems like FSI (Rahman et al., 2024) by learning codomain-wise operator along physical variable channels. Complementarily, GNN-based simulators leverage mesh (Pfaff et al., 2020; Feng et al., 2026) or particle (Sanchez-Gonzalez et al., 2020; Li et al., 2019) connectivity to learn local interactions and propagate across physical domains.
+
+However, most of these studies remain limited to one-way FSI scenarios, where the solid is assumed rigid and static, greatly simplifying the coupling dynamics. For the relatively few studies tackling two-way FSI, current methods, such as GNN-based simulators (Pfaff et al., 2020; Sanchez-Gonzalez et al., 2020; Li et al., 2019; Feng et al., 2026) and multi-physics neural operators (Rahman et al., 2024), struggle to effectively capture coupling behavior due to the undifferentiated and monolithic modeling. As a result, effectively learning the evolution of deformable solids and surrounding fluid flows, and capturing their complex coupling relations remain an underexplored challenge.
+
+## 2 PRELIMINARIES
+
+**Arbitrary Lagrangian-Eulerian Method** Lagrangian and Eulerian descriptions are two primary views for physical simulations. While the former tracks the motion trajectories of material particles (Dym et al., 1973), the latter observes physical quantities at fixed spatial locations (Morrison, 2013). Accordingly, solids are typically simulated using Lagrangian meshes that follow material deformation and motion, whereas fluids are often discretized using Eulerian grids to accommodate complex flow behavior and topological changes, making their coupling both common in nature but difficult to simulate (Xie et al., 2023; Axisa & Antunes, 2006). The Arbitrary Lagrangian-Eulerian (ALE) method (Hirt et al., 1974) combines both descriptions and is widely used in FSI simulations (Takashi & Hughes, 1992; Donea et al., 1982). The core idea is defining a mesh velocity  $\mathbf{v}_g$  that moves independently of the material and fixed domain, enabling flexible mesh motion and improved stability. The mesh velocity  $\mathbf{v}_g$  is typically equal to the material velocity  $\mathbf{v}$  in solid domains, while obtained by Laplacian smoothing (Field, 1988) in fluid regions:
+
+$$\nabla \cdot (\gamma \nabla \mathbf{v}_g) = 0 \quad (1)$$
+
+![Figure 2: Overview of Fisale. (a) overall model structure: A hierarchical tree of processors. At the top is Aggregation(FFN). Below it are L levels of processors. At the bottom are H pathways, each starting with ALE Init. (b) pipeline of processor: A dashed box containing three stages: Encoding (Quantities, Time, Latent ALE), Attention-based PCM (Piston, Grid, Fluid, Interface), and Decoding (Latent ALE, Time, Quantities). (c) pipeline of latent ALE grid initialization: A dashed box containing three stages: regular grid seeding, geometry-aware offset (illustrated with a circle and points), and latent space projection (illustrated with a 2D plot).](2fa4a1bf91d0f34e87c689fbc1211fe3_img.jpg)
+
+Figure 2: Overview of Fisale. (a) overall model structure: A hierarchical tree of processors. At the top is Aggregation(FFN). Below it are L levels of processors. At the bottom are H pathways, each starting with ALE Init. (b) pipeline of processor: A dashed box containing three stages: Encoding (Quantities, Time, Latent ALE), Attention-based PCM (Piston, Grid, Fluid, Interface), and Decoding (Latent ALE, Time, Quantities). (c) pipeline of latent ALE grid initialization: A dashed box containing three stages: regular grid seeding, geometry-aware offset (illustrated with a circle and points), and latent space projection (illustrated with a 2D plot).
+
+Figure 2: The overview of Fisale. (a) describes the overall structure of Fisale; (b) depicts the pipeline of the processor; (c) shows the pipeline of the latent ALE grid initialization.
+
+where  $\gamma$  is a weighting coefficient and interface velocities serve as Dirichlet boundary conditions. This flexibility of mesh motion enables ALE to accommodate unified representations for heterogeneous domains, providing a strong foundation for learning-based modeling of evolution and interaction.
+
+**Partitioned Coupling Algorithm** The partitioned coupling algorithm is widely used in FSI simulations (Li et al., 2016; Degroote et al., 2008). By decoupling the fluid and solid fields, the coupled system is reformulated into two smaller, typically better-conditioned subproblems that can be solved using standard solvers. In contrast to monolithic approaches, where a large, fully coupled nonlinear system is solved simultaneously, the partitioned strategy reduces the dimension and complexity of the global system matrix and often yields improved numerical properties within each subdomain. A typical solution procedure (Placzek et al., 2009) consists of: (1) solving the solid subproblem based on the current solid and fluid states; (2) updating the computational mesh via ALE mesh motion method to account for the solid deformation; (3) solving the fluid subproblem on the updated mesh and solid state; and (4) matching interface, repeating above procedures or advancing to the next step.
+
+## 3 METHOD
+
+**Problem Setup** Given a bounded open domain  $\mathcal{D} \subset \mathbb{R}^d$  and a state space  $\mathcal{U} \subset \mathbb{R}^N$  representing  $N$  physical quantities across fluid and solid fields (in Lagrangian, Eulerian, or hybrid form), we denote  $\mathbf{u}_t(\mathbf{g}) \in \mathcal{U}$  and  $\mathbf{u}_{t+\Delta t}(\mathbf{g}) \in \mathcal{U}$  as system states at two time steps  $t$  and  $t + \Delta t$ , evaluated at a generalized spatial coordinate  $\mathbf{g} \in \mathbb{R}^d$ . The FSI prediction problem can be formulated as  $\mathbf{u}_t(\mathbf{g}) \xrightarrow{\mathcal{F}_\theta} \mathbf{u}_{t+\Delta t}(\mathbf{g})$ , where  $\mathcal{F}_\theta$  represents the learned mapping function. This basic single-step prediction can be extended to several tasks like steady-state inference, as discussed in Section 4.
+
+**Notation** For simplicity, we omit the time subscript  $t$  and denote the fluid and solid observations at current time step as  $\mathbf{u}_f = [\mathbf{g}_f \in \mathbb{R}^{N_f \times d}, \mathbf{q}_f \in \mathbb{R}^{N_f \times C_f}]$  and  $\mathbf{u}_s = [\mathbf{g}_s \in \mathbb{R}^{N_s \times d}, \mathbf{q}_s \in \mathbb{R}^{N_s \times C_s}]$ , respectively. Here,  $\mathbf{g}$  represents the generalized spatial coordinates and  $\mathbf{q}$  denotes the associated physical quantities. As mentioned before, we explicitly treat the interface as a separate component and denote it as  $\mathbf{u}_b = [\mathbf{g}_b \in \mathbb{R}^{N_b \times d}, \mathbf{q}_b \in \mathbb{R}^{N_b \times C_b}]$ , where  $C_f + C_s = C_b$  and  $N_f + N_s + N_b = N$ .
+
+**Overall Framework** As shown in Figure 2a and 2b, the pipeline of Fisale is formulated as:
+
+$$\mathcal{F}_\theta = \left( \prod_{l=1}^L \mathcal{F}_{\theta_{\text{Aggregate}}}^{(l)} \circ \left[ \bigoplus_{h=1}^H \mathcal{F}_{\theta_{\text{LatentALEToOrigin}}}^{(l,h)} \circ \mathcal{F}_{\theta_{\text{PCM}}}^{(l,h)} \circ \mathcal{F}_{\theta_{\text{OriginToLatentALE}}}^{(l,h)} \right] \right) \circ \left[ \bigoplus_{h=1}^H \mathcal{F}_{\theta_{\text{ALEInit}}}^{(h)} \right] \quad (2)$$
+
+where  $\circ$  denotes operator composition. The full model  $\mathcal{F}_\theta$  consists of  $H$  parallel latent pathways corresponding to different spatial scales. Each pathway begins with an individual ALE grid initialization  $\mathcal{F}_{\theta_{\text{ALEInit}}}^{(h)}$ , which provides a unified representation for different domains. Then each pathway proceeds through  $L$  stacked processors. At the  $l$ -th level of the  $h$ -th pathway, the processor consists
+
+of three sequential components: an encoding step from the original space to the latent ALE space  $\mathcal{F}_{\theta_{\text{OriginToLatentALE}}}^{(l,h)}$ , a processing module  $\mathcal{F}_{\theta_{\text{PCM}}}^{(l,h)}$  on the latent ALE grid, and a decoding step back to the original space  $\mathcal{F}_{\theta_{\text{LatentALEToOrigin}}}^{(l,h)}$ . To enable cross-scale communication, an aggregation module  $\mathcal{F}_{\theta_{\text{Aggregate}}}^{(l)}$  is applied after each level  $l$ , where features from all pathways are concatenated and passed through a Feed-Forward Network (FFN) to aggregate information and produce updated features.
+
+### 3.1 MULTISCALE LATENT ALE GRIDS
+
+Instead of directly solving FSI in heterogeneous descriptions, we introduce a set of multiscale latent ALE grids, which provide a unified representation for multiscale and cross-domain physics.
+
+**Latent ALE Grid Initiation** The initiation of a single latent ALE grid includes two steps: regular grid seeding and geometry-aware offset. As shown in Figure 2c, we begin by initializing a regular, axis-aligned Cartesian grid  $\mathbf{a} \in \mathbb{R}^{M \times d}$  over the  $d$ -dimensional Euclidean space  $[-3.5, 3.5]^d$  via uniform sampling. Notably, we normalize the input physical domain into a  $\mathcal{N}(0, 1)$ ; according to the 3-sigma rule (Huber, 2018), the regular grid with interval  $[-3.5, 3.5]^d$  covers more than 99.95% input mesh points. Here, the grid is flattened into a sequence of length  $M$ , where  $M = M_1 \times M_2 \times \dots \times M_d$  denotes the total number of grid nodes, and each  $M_k$  represents the number of discretization points along the  $k$ -th spatial axis. This regular grid is treated as a reference grid, independent of any specific geometry. Its uniform structure enables the decoupling of spatial topology from geometric variation and facilitates geometry-aware deformation in the subsequent initialization stage (Li et al., 2023c).
+
+To incorporate geometric awareness into the grid, we deform the regular reference grid  $\mathbf{a}$  by applying an offset field that reflects the spatial distribution of solid, fluid and coupling interface. We first compute direction vectors from each grid node  $\mathbf{a}_i$  to points in each domain. These vectors are fed into a linear layer and then weighted by a normalized radial basis kernel to prioritize closer points. For example, the offset contributed by the fluid geometry  $\mathbf{g}_f$  is given by:
+
+$$\Delta_f(\mathbf{a}_i) = \sum_{j=1}^{N_f} \frac{\exp(\text{Linear}(-\|\mathbf{a}_i - \mathbf{g}_{f_j}\|^2))}{\sum_{j=1}^{N_f} \exp(\text{Linear}(-\|\mathbf{a}_i - \mathbf{g}_{f_j}\|^2))} (\mathbf{g}_{f_j} - \mathbf{a}_i)$$
+
+where the subtraction is implemented by broadcast. With this offset, the weights assigned to fluid points are optimized based on distances, leading to a geometry-aware aggregation. The total offset is obtained by summing contributions from all domains:  $\Delta(\mathbf{a}) = \Delta_s(\mathbf{a}) + \Delta_f(\mathbf{a}) + \Delta_b(\mathbf{a})$ . Finally, the latent grid is obtained by applying the total geometry-aware offset followed by a linear projection:  $\mathbf{g}_a = \text{Linear}(\mathbf{a} + \Delta(\mathbf{a}))$ . This geometry-aware offset encourages grid nodes to move closer to regions of geometric interest, such as fluid-solid interfaces, by aggregating directional influences through distance-weighted kernels. Moreover, the spatial decay of the kernel attenuates the influence of distant regions, leading to weaker and more uniform updates in non-critical regions, which helps preserve the grid’s smoothness and regularity. We then build edges by performing  $k$ -nearest neighbor ( $k\text{-NN}$ ) search on the latent grid  $\mathbf{g}_a \in \mathbb{R}^{M \times D}$ , i.e.,  $E = k\text{NN}(\mathbf{g}_a)$ . The edge set  $E$  defines a latent interaction graph over the deformed grid, which supports grid’s update in subsequent modules.
+
+**Definition of Latent ALE Grid** During the solving process, this grid is maintained and iteratively updated in latent space according to the learned dynamics. Crucially, it adheres to the principle of the ALE method, namely, evolving with a motion that is decoupled from both the frames of material points and spatial grids, thereby enabling an intermediate behavior between Lagrangian and Eulerian viewpoints (Hirt et al., 1974). We therefore refer to this representation as the *Latent ALE Grid*.
+
+**Multiscale** FSI phenomena are inherently multiscale (Steinhausen, 2018). For example, a flexible wing interacting with airflow involves large-scale aerodynamic forces and small-scale local deformations. Capturing such behaviors requires the ability to model and propagate information across different resolution levels. Fortunately, it is straightforward and natural in our framework to construct grids at multiple scales, simply by varying the number of grid nodes  $M$  during initialization. By operating in parallel, each grid records physical context at a different level of detail. This allows coarse grids to efficiently model global structures, while fine grids focus on local interactions, together forming a hierarchical representation well-suited for multiscale FSI problems.
+
+**Supplementary Notation** We define  $\mathbf{x}_f^{(l,h)} \in \mathbb{R}^{N_f \times D}$  to be the output feature of the  $l$ -th level in the  $h$ -th pathway. The  $\mathbf{x}_f^{0,h}$  corresponds to the input embedding of the observation  $\mathbf{u}_f$ , i.e.,
+
+$\mathbf{x}_f^{0,h} = \text{Linear}(\mathbf{u}_f)$ . The solid and interface adhere the same manner. We denote  $\mathbf{g}_a^{l,h}$  as the state of the latent ALE grid at the  $l$ -th level of the  $h$ -th pathway. Since the encoding, decoding, and PCM operations are shared across levels and pathways, we omit  $l$  and  $h$  in the following descriptions.
+
+### 3.2 PHYSICAL QUANTITIES ENCODING AND DECODING
+
+Before each coupling process, we project physical quantities onto the grid to enable unification across heterogeneous regions. After coupling learning, we project them back for multiscale aggregation. Both processes are applied by weighted interpolation.
+
+**Physical Quantities Encoding** For each domain, we compute the projection weight through an attention-like manner. The interpolation weight for fluid domain  $\mathbf{w}_f \in \mathbb{R}^{M \times N_f}$  is defined as:
+
+$$\mathbf{w}_f = \mathbf{Q} \mathbf{K}^T, \quad \text{where } \mathbf{Q} = \text{Linear}(\mathbf{g}_a) \text{ and } \mathbf{K} = \text{Linear}(\mathbf{x}_f)$$
+
+Then the fluid projection  $\mathbf{p}_f \in \mathbb{R}^{M \times D}$  is conducted by:  $\mathbf{p}_f = \text{Softmax}(\mathbf{w}_f) \mathbf{x}_f$ .
+
+Solid and coupling interface domains follow the same procedure with projection weights  $\mathbf{w}_s$  and  $\mathbf{w}_b$ , projected features  $\mathbf{p}_s$  and  $\mathbf{p}_b$ , respectively. As a result, we extend the latent ALE grid  $\mathbf{g}_a$  as  $\{\mathbf{g}_a, \mathbf{p}_s, \mathbf{p}_f, \mathbf{p}_b\}$ . This latent tuple encodes both the grid's geometry-aware position and the surrounding physical context, serving as the input to subsequent modules. Unlike traditional discretizations that partition physical domains rigidly, we represent fluid, solid, and interface features simultaneously at each latent node. This allows the model to naturally capture cross-domain interactions and dynamics near interfaces, forming a flexible and expressive multi-physics embedding for learning.
+
+**Physical Quantities Decoding** Let  $\{\hat{\mathbf{g}}_a, \hat{\mathbf{p}}_s, \hat{\mathbf{p}}_f, \hat{\mathbf{p}}_b\} = \text{PCM}(\{\mathbf{g}_a, \mathbf{p}_s, \mathbf{p}_f, \mathbf{p}_b\})$  denote the updated features. The decoding is similar to the encoding as:  $\tilde{\mathbf{x}}_f = \text{Softmax}(\mathbf{w}_f^T) \hat{\mathbf{p}}_f$ .
+
+Here, the direction of  $\text{Softmax}(\cdot)$  is different from the encoding to keep the sum of the interpolation weight equal to 1. To fuse features in different scales, we concatenate the decoding feature from different pathways and adopt a Feed-Forward Network (FFN) for aggregation. Then the fused features are split and taken back to their own pathways.
+
+### 3.3 PARTITIONED COUPLING MODULE
+
+We design a Partitioned Coupling Module (PCM) that follows the process of partitioned coupling algorithm to learn the evolution of fluid, solid and their complex coupling in an iteratively deep manner. Each PCM includes four forward steps outlined in Section 2.
+
+**Update Solid State** We first employ the cross-attention mechanism to update the solid state. Attention mechanisms (Vaswani et al., 2017) are well-suited for modeling PDE-related physical systems due to their strong capacity to capture nonlinear dependencies, long-range interactions, and perform spatial aggregation across irregular domains (Hao et al., 2023; Wu et al., 2023; Li et al., 2023b). Recent studies have further shown that attention itself can be interpreted as an integral operator, capable of approximating complex mappings across function spaces (Cao, 2021; Wu et al., 2024; Li et al., 2025). Moreover, the flattened sequence of the latent ALE grid aligns naturally with the input format required by attention mechanisms, making attention a seamless and effective choice for updating physical states across fluid, solid, and interface domains. Given current embedding on the latent ALE grid  $\{\mathbf{g}_a, \mathbf{p}_s, \mathbf{p}_f, \mathbf{p}_b\}$ , the update is formulated as:
+
+$$\begin{aligned} \mathbf{Q} &= \text{Linear}(\text{Concat}(\mathbf{p}_s + \mathbf{g}_a, \mathbf{p}_b + \mathbf{g}_a)), \quad \mathbf{K}, \mathbf{V} = \text{Linear}(\text{Concat}(\mathbf{p}_s + \mathbf{g}_a, \mathbf{p}_f + \mathbf{g}_a, \mathbf{p}_b + \mathbf{g}_a)) \\ \mathbf{p}'_s, \mathbf{p}'_b &= \text{Chunk} \left( \tilde{\mathbf{Q}} (\tilde{\mathbf{K}}^T \mathbf{V} \cdot D^{-1}) \right), \quad \text{where } \tilde{\mathbf{Q}} = \text{Softmax}(\mathbf{Q}) \text{ and } \tilde{\mathbf{K}} = \text{Softmax}(\mathbf{K}) \end{aligned}$$
+
+The query  $\mathbf{Q}$  is constructed by complete solid representation and the key  $\mathbf{K}$  and value  $\mathbf{V}$  include the information of the whole system. The geometry of the latent ALE grid  $\mathbf{g}_a$  serves as positional embedding that provides spatial prior. We concatenate the components along the length direction and adopt the linear attention which has been approved as a kind of neural operator (Cao, 2021). Through cross-attention, each solid node selectively attends to the entire system, allowing it to update its state based on both internal structural cues and external influences from the fluid and interface. The  $\text{Chunk}(\cdot)$  divides the output to recover the updated solid state  $\mathbf{p}'_s$  and the interface state  $\mathbf{p}'_b$ .
+
+**Update Grid Coordinate** We next adopt a velocity-based Laplacian smoothing strategy, defined in Eq.1, to update the latent ALE grid coordinates in response to solid motion and deformation while preserving grid quality. Eq.1 governs the spatial diffusion of mesh velocity  $\mathbf{v}_g$  and can be interpreted as a steady-state flux balance over the grid. Upon discretization, the divergence and gradient operators naturally translate into local neighbor interactions (Han et al., 2023a):  $\sum_{j \in \mathcal{N}(i)} (\mathbf{v}_{g,j} - \mathbf{v}_{g,i}) = \mathbf{0}$ . The velocity at each mesh point is updated based on a weighted combination of its neighboring nodes:
+
+$$\mathbf{v}_{g,i} \leftarrow \sum_{j \in \mathcal{N}(i)} \gamma_{ij} \mathbf{v}_{g,j} \cdot \left( \sum_{j \in \mathcal{N}(i)} \gamma_{ij} \right)^{-1}$$
+
+where  $\mathcal{N}(i)$  denotes the neighbors of the  $i$ -th node, and  $\gamma_{ij}$  is a diffusion-like weight that reflects local mesh connectivity. Coincidentally, this update scheme is naturally aligned with the local message passing (Gilmer et al., 2017) used in graph-based models. We update the grid based on the neighbor relation  $\mathcal{N}(i) \subset E$ , which is built in the initialization of ALE. In latent space, we treat  $\gamma \in [0, 1]$  as learnable parameters, where  $\sum_{j \in \mathcal{N}(i)} \gamma_{ij} = 1$ , and update the mesh velocity as:
+
+$$\mathbf{v}_{g,i} \leftarrow \sum_{j \in \mathcal{N}(i)} \gamma_{ij} \text{Linear}(\text{Concat}(\mathbf{p}'_s, \mathbf{p}_f, \mathbf{p}'_b)_j)$$
+
+Then the latent grid coordinates are explicitly updated by  $\tilde{\mathbf{g}}_a \leftarrow \mathbf{g}_a + \Delta t \cdot \mathbf{v}_g$ . In our stacked-module architecture, we set  $\Delta t = 1$  as an abstract timestep per module. Finally, to control the grid quality, without grid distortion, we conduct a geometry smoothing over the local neighborhood  $\mathbf{g}'_{a,i} \leftarrow \sum_{j \in \mathcal{N}(i)} \beta_{ij} \tilde{\mathbf{g}}_{a,j}$ , where  $\beta \in [0, 1]$  and  $\sum_{j \in \mathcal{N}(i)} \beta_{ij} = 1$ .
+
+**Update Fluid State** Similar to the update of the solid state, we update fluid state as:
+
+$$\mathbf{Q} = \text{Linear}(\text{Concat}(\mathbf{p}_f + \mathbf{g}'_a, \mathbf{p}'_b + \mathbf{g}'_a)), \quad \mathbf{K}, \mathbf{V} = \text{Linear}(\text{Concat}(\mathbf{p}'_s + \mathbf{g}'_a, \mathbf{p}_f + \mathbf{g}'_a, \mathbf{p}'_b + \mathbf{g}'_a))$$
+
+$$\mathbf{p}'_s, \mathbf{p}''_b = \text{Chunk} \left( \tilde{\mathbf{Q}} (\tilde{\mathbf{K}}^T \mathbf{V} \cdot D^{-1}) \right)$$
+
+**Update Interface Influence** Finally, we use a self-attention mechanism to align the information across the solid, fluid, and their coupling interface regions as:
+
+$$\mathbf{Q}, \mathbf{K}, \mathbf{V} = \text{Linear}(\text{Concat}(\mathbf{p}'_s + \mathbf{g}'_a, \mathbf{p}'_f + \mathbf{g}'_a, \mathbf{p}''_b + \mathbf{g}'_a)), \quad \mathbf{p}''_s, \mathbf{p}''_f, \mathbf{p}'''_b = \text{Chunk} \left( \tilde{\mathbf{Q}} (\tilde{\mathbf{K}}^T \mathbf{V} \cdot D^{-1}) \right)$$
+
+The self-attention operation enables mutual interaction among the three domains, allowing the model to capture dependencies and reconcile inconsistencies across the solid-fluid interface by attending to relevant features globally. Finally, these four steps form a single PCM and we stack the modules to enhance the represent capacity of the model.
+
+## 4 EXPERIMENTS
+
+Table 1: Summary of experiment dataset. #Mesh records the average size of discretized meshes. #Split is organized as the number of samples in training, evaluation and test sets.
+
+| Dataset               | Task                      | #Dim | #Mesh | #Input                                                                | #Output                                                         | #Split               |
+|-----------------------|---------------------------|------|-------|-----------------------------------------------------------------------|-----------------------------------------------------------------|----------------------|
+| Structure Oscillation | Single-Step Prediction    | 2D   | 1317  | Solid: Geometry;<br>Fluid: Geometry, Pressure, Velocity               | Solid: Geometry;<br>Fluid: Geometry, Pressure, Velocity         | 9561<br>1195<br>1196 |
+| Venous Valve          | Autoregressive Simulation | 2D   | 1693  | Solid: Geometry, Stress;<br>Fluid: Geometry, Pressure, Velocity       | Solid: Geometry, Stress;<br>Fluid: Geometry, Pressure, Velocity | 720<br>90<br>90      |
+| Flexible Wing         | Steady-State Inference    | 3D   | 37441 | Solid: Geometry, Material;<br>Fluid: Geometry, Attack Angle, Velocity | Solid: Geometry, Stress;<br>Fluid: Geometry, Pressure, Velocity | 1036<br>129<br>131   |
+
+We evaluate Fisale on three reality-related challenging FSI scenarios. These scenarios have different dimensions, targets, scales, and complexity. Detailed benchmark information is listed in Table 1.
+
+**Baselines** We compare Fisale with over ten advanced learning-based solvers, including Neural Operators: GeoFNO (Li et al., 2023c), GINO (Li et al., 2023d), CoDA-NO (Rahman et al., 2024), LSM (Wu et al., 2023), LNO (Wang & Wang, 2024); Transformers: Galerkin Transformer (Cao, 2021), GNOT (Hao et al., 2023), ONO (Xiao et al., 2024b) Transolver (Wu et al., 2024); GNNs: MGN (Pfaff et al., 2020), HOOD (Grigorev et al., 2023), AMG (Li et al., 2025).
+
+**Implementation and Metrics** Fisale and all baseline models are trained and evaluated under the same protocol. For a fair comparison, we match the parameter count of each baseline to that of Fisale. For loss functions and evaluation metrics, we use Relative L2 error for the single-step prediction and steady-state inference tasks, and Root Mean Squared Error (RMSE) for the autoregressive simulation task. For experiments involving multiple physical domains, the loss term is calculated for each physical domain and combined with equal weights. All experiments are conducted on a single NVIDIA RTX 3090 GPU (24 GB) and repeated multiple times. We provide more details in Appendix C and D.
+
+Table 2: Performance on Structure Oscillation. Relative L2 is recorded. Second-best performance is underlined.
+
+|               | Solid  | Fluid  | Interface | Mean ( $\downarrow$ ) |
+|---------------|--------|--------|-----------|-----------------------|
+| Geo-FNO       | 0.0003 | 0.0387 | 0.0074    | 0.0155                |
+| GINO          | 0.0021 | 0.2536 | 0.0269    | 0.0942                |
+| LSM           | 0.0007 | 0.1951 | 0.0068    | 0.0675                |
+| CoDANO        | 0.0005 | 0.0703 | 0.0075    | 0.0261                |
+| LNO           | 0.0006 | 0.0244 | 0.0061    | 0.0104                |
+| Galerkin      | 0.0012 | 0.0507 | 0.0114    | 0.0211                |
+| GNOT          | 0.0006 | 0.0361 | 0.0076    | 0.0148                |
+| ONO           | 0.0012 | 0.0732 | 0.0126    | 0.0290                |
+| Transolver    | 0.0004 | 0.0265 | 0.0075    | 0.0115                |
+| MGN           | 0.0007 | 0.0282 | 0.0112    | 0.0134                |
+| HOOD          | 0.0006 | 0.0277 | 0.0109    | 0.0131                |
+| AMG           | 0.0004 | 0.0211 | 0.0051    | <u>0.0089</u>         |
+| <b>Fisale</b> | 0.0003 | 0.0148 | 0.0047    | <b>0.0066</b>         |
+
+### 4.1 STRUCTURE OSCILLATION
+
+The structure oscillation problem, also called “FLUSTRUK-A”, is a famous benchmark for validating classical fluid–solid interaction (FSI) solvers (Turek & Hron, 2006). It involves a thin elastic beam immersed in an incompressible, dynamic fluid that develops self-sustained, material-dependent periodic oscillations. Unlike the widely studied Cylinder-Flow benchmark (Pfaff et al., 2020) which involves no structural flexibility, FLUSTRUK-A introduces strong two-way coupling and nonlinear deformation, making it more challenging to solve accurately.
+
+The dataset is proposed in CoDA-NO (Rahman et al., 2024) with 1000 frames and different Reynolds number  $Re$ . Following the convention, we train Fisale and baselines learn the mapping from current  $u_t$  to the next  $u_{t+\Delta t}$ . We set  $\Delta t$  as 4 frames to let the oscillation evolve adequately. The results are shown in Table 2. From the results, we can observe that Fisale achieves advanced ability, particularly in fluid domains. Compared with other baselines who model different domains in a homogeneous way, Fisale can better capture the bidirectional interactions between fluid and solid at the interface and predict the motion and shape more accurately (the tail part of the structure as shown in Figure 3). This in turn enhances the accuracy of fluid predictions. The unified latent ALE representation, combined with iterative partitioned coupling, allows Fisale to progressively resolve the nonlinear interactions between fluid and solid, resulting in more accurate and stable predictions under strongly coupled two-way FSI.
+
+Following the convention in CoDA-NO, we explore the out-of-distribution (OOD) performance of Fisale. In previous experiments, we trained models with data that contain the Reynolds number  $Re \in \{200, 400, 2000\}$ . We directly test trained models on data with  $Re \in \{4000\}$ . As presented in Table 3, Fisale consistently performs best over strong baselines on OOD sam-
+
+![Figure 3: Local visualization of prediction results on solid displacement and fluid x-velocity. The figure shows three panels: 'Ground Truth', 'Fisale', and 'AMG'. Each panel displays a color map of the flow field around a circular obstacle, with a red circle highlighting the interface region. The Fisale panel shows a more accurate prediction of the flow field compared to the AMG panel, particularly in the region behind the obstacle.](2396add2849eccefcbcfbe1c7142a253_img.jpg)
+
+Figure 3: Local visualization of prediction results on solid displacement and fluid x-velocity. The figure shows three panels: 'Ground Truth', 'Fisale', and 'AMG'. Each panel displays a color map of the flow field around a circular obstacle, with a red circle highlighting the interface region. The Fisale panel shows a more accurate prediction of the flow field compared to the AMG panel, particularly in the region behind the obstacle.
+
+Figure 3: Local visualization of prediction results on solid displacement and fluid  $x$ -velocity. Red circle indicates the domain with most solid displacement and sharp fluid velocity change.
+
+Table 3: Results of OOD test.
+
+|               | Relative L2 ( $\downarrow$ ) |
+|---------------|------------------------------|
+| Geo-FNO       | 0.0730                       |
+| LNO           | 0.0715                       |
+| GNOT          | 0.0889                       |
+| Transolver    | 0.0722                       |
+| MGN           | 0.0742                       |
+| AMG           | <u>0.0696</u>                |
+| <b>Fisale</b> | <b>0.0637</b>                |
+
+ples. This better generalization can be attributed to its latent ALE representation, which captures flow patterns across multiple spatial scales, and the partitioned coupling design, which provides a modular and robust way to update interdependent physical states. Furthermore, the explicit modeling of the coupling interface enhances the model’s ability to extrapolate dynamic interface interactions under stronger nonlinear coupling, which is prevalent in high-Reynolds-number regimes.
+
+### 4.2 VENOUS VALVE
+
+The venous valve problem models the opening and closing dynamics of valves in veins, which are essential to maintain unidirectional blood flow in the circulatory system (Bazigou & Makinen, 2013; Enderle & Bronzino, 2012). It involves a thin, flexible leaflet interacting with a pulsatile, incompressible fluid under physiological conditions. The strong contact, large deformation, and highly transient behavior make this problem especially challenging for effective simulation (Buxton & Clarke, 2006). We learn the transient dynamics through autoregressive simulation, which are mostly explored in GNN-based works (Pfaff et al., 2020; Sanchez-Gonzalez et al., 2020). Mathematically, we simulate the trajectory as:  $\hat{\mathbf{u}}_{t+1} = \mathcal{F}_\theta(\mathbf{u}_t)$ ,  $\hat{\mathbf{u}}_{t+2} = \mathcal{F}_\theta(\hat{\mathbf{u}}_{t+1})$ ,  $\dots$ ,  $\hat{\mathbf{u}}_{t+T} = \mathcal{F}_\theta(\hat{\mathbf{u}}_{t+T-1})$ . We build the venous valve simulation model based on biology-related literature and generate a dataset where each sample has different valve material properties, flow velocities, and other parameters. The variations are designed to reflect a wide range of human conditions across ages, genders, and health status. Detailed settings can be found in the Appendix B.2. The simulation time is 1s and 0.01s per interval, with 101 frames in total. Each frame records current geometry, stress, pressure, and velocity.
+
+Table 4: Performance on Venous Valve. We record RMSE-all ( $\downarrow$ ), the average RMSE of the whole rollout trajectory and all samples. Results of other physical quantities are listed in Table 20.
+
+|               | Solid         |                | Fluid        |                  | Interface     |                |              |
+|---------------|---------------|----------------|--------------|------------------|---------------|----------------|--------------|
+|               | Geometry      | Stress         | Pressure     | Velocity ( $x$ ) | Geometry      | Stress         | Pressure     |
+| Geo-FNO       | 0.3687        | 3252.51        | 124.27       | 0.1304           | 0.3948        | 5471.54        | 110.35       |
+| LSM           | 0.4788        | 4166.96        | 145.03       | 0.1419           | 0.4635        | 6547.88        | 122.53       |
+| CoDANO        | 0.6843        | 4385.24        | 171.57       | 0.1713           | 0.7806        | 6843.06        | 143.65       |
+| Galerkin      | 0.3471        | 3226.86        | 109.52       | 0.1025           | 0.3213        | 5093.68        | 113.34       |
+| GNOT          | 0.3833        | 4207.17        | 100.59       | 0.1147           | 0.3679        | 5384.59        | 128.57       |
+| Transolver    | 0.3262        | 3055.56        | 91.83        | 0.0901           | 0.3432        | 4941.86        | 85.18        |
+| MGN           | 0.5540        | 4436.56        | 166.03       | 0.1362           | 0.5391        | 6646.33        | 158.35       |
+| HOOD          | 0.4647        | 3616.09        | 135.67       | 0.1174           | 0.4956        | 6080.94        | 126.05       |
+| AMG           | 0.4029        | 3784.96        | 107.45       | 0.1199           | 0.3809        | 5432.73        | 103.43       |
+| <b>Fisale</b> | <b>0.2794</b> | <b>2658.59</b> | <b>80.23</b> | <b>0.0768</b>    | <b>0.2565</b> | <b>4365.29</b> | <b>73.31</b> |
+
+![Figure 4: Visualization of ground truth and prediction results. The figure shows two rows of visualizations for time steps 65 and 75. Each row includes: 1) Ground truth (time step 65), 2) Fisale prediction (time step 65), 3) Error Map of Fisale (time step 65), 4) Error Map of Fisale (time step 75), 5) Transolver prediction (time step 65), 6) Error Map of Transolver (time step 65), and 7) Error Map of Transolver (time step 75). The visualizations show the flow field (color-coded by velocity) and the solid shape (dark blue/purple). Red circles highlight areas of distortion in the solid shape, particularly at the interface. Color bars on the left indicate velocity magnitude (0 to 2.0) and pressure (0 to 1.0).](0f3e3ea50bcceb86f6c524ab2b6f3e7a_img.jpg)
+
+Figure 4: Visualization of ground truth and prediction results. The figure shows two rows of visualizations for time steps 65 and 75. Each row includes: 1) Ground truth (time step 65), 2) Fisale prediction (time step 65), 3) Error Map of Fisale (time step 65), 4) Error Map of Fisale (time step 75), 5) Transolver prediction (time step 65), 6) Error Map of Transolver (time step 65), and 7) Error Map of Transolver (time step 75). The visualizations show the flow field (color-coded by velocity) and the solid shape (dark blue/purple). Red circles highlight areas of distortion in the solid shape, particularly at the interface. Color bars on the left indicate velocity magnitude (0 to 2.0) and pressure (0 to 1.0).
+
+Figure 4: Visualization of ground truth and prediction results. The red circle indicates the distortion of solid shape, where Fisale can effectively handle.
+
+As shown in Table 4, Fisale achieves the best results across all physical quantities, with particularly strong performance at the fluid–solid interface. Figure 4 visualizes predictions at two time steps. It is observable that maintaining solid shape consistency becomes increasingly challenging as the rollout progresses. Thanks to the explicit modeling of the interface and the use of a unified representation to
+
+capture dynamic interactions. Fisale preserves solid geometry more effectively over long trajectories. This design allows it to handle cross-domain information exchange and maintain stability even in the later stages of rollout. Moreover, when fluid flows through the narrow valve opening, it generates sharp increases in pressure and velocity over short periods, making it hard to accurately predict in that region. Fisale addresses this by PCM, which decomposes this complex process into a sequence of substeps. This reduces the difficulty of modeling each physical domain and its associated quantities. In contrast, other models typically adopt a monolithic modeling strategy over the entire domain, which often struggles to capture rapid dynamic changes around the interface. This further highlights the advantage of the domain-aware design in handling complex two-way FSI phenomena.
+
+### 4.3 FLEXIBLE WING
+
+To better reflect real aerodynamics, we study a flexible wing scenario where the wing deforms under airflow. Unlike rigid-wing assumptions with fixed fluid-solid interfaces, flexible wings involve strong two-way coupling and nonlinear behaviors such as geometry-dependent loading and large deformations, making prediction more challenging. We treat this as a steady-state inference task: given a set of problem parameters (like the wind velocity, wing material, geometry and etc.), the model directly predicts the steady-state response. Follow the 2D rigid Airfrans (Bonnet et al., 2022), we build a 3D flexible wing dataset for evaluation. Each sample contains more than 35,000 mesh points and varies in flight and design parameters (see Appendix B.3), covering diverse flight conditions.
+
+Table 5: Performance on Flexible Wing task. Relative L2 is recorded. Second-best performance is underlined. (a) the relative L2 error of the prediction results; (b) the visualization of prediction errors.
+
+|               | Solid         | Fluid         | Interface     | Mean ( $\downarrow$ ) |
+|---------------|---------------|---------------|---------------|-----------------------|
+| Geo-FNO       | 0.0207        | 0.0802        | 0.0564        | 0.0524                |
+| GINO          | 0.2838        | 0.5681        | 0.5715        | 0.4745                |
+| CoDANO        | 0.0355        | 0.1930        | 0.1002        | 0.1096                |
+| LNO           | 0.0173        | 0.0264        | 0.0269        | 0.0235                |
+| Galerkin      | 0.0396        | 0.0699        | 0.0635        | 0.0577                |
+| GNOT          | 0.0081        | 0.0558        | 0.0227        | 0.0289                |
+| ONo           | 0.1446        | 0.2362        | 0.2728        | 0.2179                |
+| Transolver    | 0.0051        | 0.0200        | 0.0242        | <u>0.0164</u>         |
+| MGN           | 0.0096        | 0.0229        | 0.0281        | 0.0202                |
+| HOOD          | 0.0088        | 0.0218        | 0.0266        | 0.0191                |
+| AMG           | 0.2507        | 0.1692        | 0.2357        | 0.2185                |
+| <b>Fisale</b> | <b>0.0042</b> | <b>0.0155</b> | <b>0.0211</b> | <b>0.0136</b>         |
+
+(a) The error of prediction results.
+
+![Figure 5(b) shows three rows of wing deformation, wing stress, and surface pressure visualizations. Each row compares Ground Truth, Fisale, and Transolver models. Color bars on the left and right of each row indicate the scale for the respective physical quantity.](7c2f0efb2c5d10a52ce19ba33d9d3cec_img.jpg)
+
+Figure 5(b) displays three rows of visualizations comparing Ground Truth, Fisale, and Transolver models for a flexible wing. The rows represent Wing Deformation, Wing Stress, and Surface Pressure. Each row shows three images: Ground Truth, Fisale, and Transolver. Color bars on the left and right of each row indicate the scale for the respective physical quantity. The visualizations show that Fisale captures the deformation, stress, and pressure distributions more accurately than Transolver, especially in the stress and pressure fields.
+
+Figure 5(b) shows three rows of wing deformation, wing stress, and surface pressure visualizations. Each row compares Ground Truth, Fisale, and Transolver models. Color bars on the left and right of each row indicate the scale for the respective physical quantity.
+
+(b) The visualization of prediction errors.
+
+As presented in Table 5, Fisale achieves the best performance across all domains. When dealing with massive mesh points, several baselines seriously degenerate due to complex dynamics. This is because dense fluid points can overwhelm solid-related information, making it difficult to capture solid changes. In turn, this also disrupts the accurate modeling of fluid evolution. The right part of Table 5 visualizes the prediction errors. For the wing structure, deformation is primarily localized at the tip, stress is concentrated at the root, and the applied wind pressure is distributed over the lateral surfaces. Each of these exhibits distinct spatial patterns driven by the interaction between the wind and the wing. Accurately capturing these patterns is therefore crucial. By modeling each domain separately, Fisale avoids letting solid information be overwhelmed by massive fluid points. Moreover, explicitly modeling the interface enables effective capture of spatially varying physics across different regions of the wing surface, thereby improving the performance in complex, large-scale scenarios.
+
+## 5 CONCLUSION
+
+We propose Fisale, a data-driven framework for solving complex two-way fluid-solid interaction (FSI) problems. By explicitly modeling the solid, fluid and coupling interface as separate components, and leveraging multiscale latent arbitrary Lagrangian-Eulerian (ALE) grids along with partitioned coupling modules (PCM), Fisale effectively captures nonlinear, cross-domain dynamics. Experiments on challenging tasks demonstrate the effectiveness of Fisale in solving complex two-way FSI problems.
+
+## ETHICS STATEMENT
+
+Our work only focuses on solving two-way fluid-solid interaction (FSI) problems with deep learning method, so there is no potential ethical risk.
+
+## ACKNOWLEDGMENTS
+
+This work is supported partly by the National Natural Science Foundation of China (NSFC) 62576013, National Key Research Plan under grant No.2024YFC2607404, the Jiangsu Provincial Key Research and Development Program under Grant BE2022065-1, BE2022065-3, and the Ningxia Domain-Specific Large Model Health Industry R&D No.2024JBGS001.
+
+## REPRODUCIBILITY STATEMENT
+
+In the main text, we provide rigorous mathematical formulations of the model architecture. The overall pipeline is described in Appendix A. Hyperparameter settings and implementation details are provided in Appendix D, and the dataset is described in Appendix B. Our code and dataset are publicly available in the GitHub repository linked in the abstract.
+
+## LLM USAGE CLARIFICATION
+
+We declare that the Large Language Models (LLMs) are only used for language polishing and grammar correction during the writing of this manuscript. All research content, conclusions, and data are solely produced by the authors, without subjective arguments, conclusions, or data generated by LLMs. We take full responsibility for the entire content of this paper.
+
+## REFERENCES
+
+- Hikaru Aono, Satish Kumar Chimakurthi, Pin Wu, Erik Sallstrom, Bret Stanford, Carlos Cesnik, Peter Iftu, Lawrence Ukeiley, and Wei Shyy. A computational and experimental studies of flexible wing aerodynamics. In *AIAA aerospace sciences meeting including the new horizons forum and aerospace exposition*, 2010.
+- Neil Raj Ashwin, Ze Cao, Nikhil Muralidhar, Danesh Tafti, and Anuj Karpatne. Deep learning methods for predicting fluid forces in dense particle suspensions. *Powder Technology*, 401:117303, 2022.
+- François Axa and Jose Antunes. *Modelling of mechanical systems: Fluid-structure interaction*, volume 3. Elsevier, 2006.
+- Eleni Bazigou and Taija Makinen. Flow control in our vessels: vascular valves make sure there is no way back. *Cellular and Molecular Life Sciences*, 70:1055–1066, 2013.
+- Ted Belytschko. Fluid-structure interaction. *Computers & Structures*, 12(4):459–469, 1980.
+- Gal Berkooz, Philip Holmes, and John L Lumley. The proper orthogonal decomposition in the analysis of turbulent flows. *Annual review of fluid mechanics*, 25(1):539–575, 1993.
+- Martin Berzins. Mesh quality: a function of geometry, error estimates or both? *Engineering with Computers*, 15:236–247, 1999.
+- Florent Bonnet, Jocelyn Mazari, Paola Cinnella, and Patrick Gallinari. Airfrans: High fidelity computational fluid dynamics dataset for approximating reynolds-averaged navier-stokes solutions. *Advances in Neural Information Processing Systems*, 2022.
+- Philippe Boulanger and Michael Hayes. Finite-amplitude waves in mooney-rivlin and hadamard materials. In *Topics in finite elasticity*, pp. 131–167. Springer, 2001.
+- Nicolas Boullé and Alex Townsend. A mathematical guide to operator learning. In *Handbook of Numerical Analysis*, volume 25, pp. 83–125. Elsevier, 2024.
+
+- Timothy A Burkhardt, David M Andrews, and Cynthia E Dunning. Finite element modeling mesh quality, energy balance and validation methods: A review with recommendations associated with the modeling of bone tissue. *Journal of biomechanics*, 46(9):1477–1488, 2013.
+- Gavin A Buxton and Nigel Clarke. Computational phlebiology: the simulation of a vein valve. *Journal of biological physics*, 32:507–521, 2006.
+- Shuhao Cao. Choose a transformer: Fourier or galerkin. *Advances in neural information processing systems*, 2021.
+- Sudip Chakraborty and Soumya Ghosh. A cfd study on the structural parameters of naca 2412 airfoil based air-wing using different composite materials. *Materials Today: Proceedings*, 60:894–901, 2022.
+- Marien Chenaud, Frédéric Magoulès, and José Alves. Physics-informed graph-mesh networks for pdes: A hybrid approach for complex problems. *Advances in Engineering Software*, 197:103758, 2024.
+- Chen Cheng, Hao Meng, Yong-Zheng Li, and Guang-Tao Zhang. Deep learning based on pinn for solving 2 dof vortex induced vibration of cylinder. *Ocean Engineering*, 240:109932, 2021.
+- Joris Degroote, Peter Bruggeman, Robby Haelterman, and Jan Vierendeels. Stability of a coupling technique for partitioned solvers in fsi applications. *Computers & Structures*, 86(23-24):2224–2234, 2008.
+- Joris Degroote, Klaus-Jürgen Bathe, and Jan Vierendeels. Performance of a new partitioned procedure versus a monolithic procedure in fluid-structure interaction. *Computers & Structures*, 87(11-12):793–801, 2009.
+- Jingyang Deng, Xingjian Li, Haoyi Xiong, Xiaoguang Hu, and Jinwen Ma. Geometry-guided conditional adaptation for surrogate models of large-scale 3d pdes on arbitrary geometries. In *International Joint Conference on Artificial Intelligence*, 2024.
+- Jean Donea, SHJP Giuliani, and Jean-Pierre Halleux. An arbitrary lagrangian-eulerian finite element method for transient dynamic fluid-structure interactions. *Computer methods in applied mechanics and engineering*, 33(1-3):689–723, 1982.
+- Clive L Dym, Irving Herman Shames, et al. *Solid mechanics*. Springer, 1973.
+- Mohamed Elrefaie, Angela Dai, and Faez Ahmed. Drivaernet: A parametric car dataset for data-driven aerodynamic design and graph-based drag prediction. In *International Design Engineering Technical Conferences and Computers and Information in Engineering Conference*, 2024a.
+- Mohamed Elrefaie, Florin Morar, Angela Dai, and Faez Ahmed. Drivaernet++: A large-scale multi-modal car dataset with computational fluid dynamics simulations and deep learning benchmarks. *Advances in Neural Information Processing Systems*, 2024b.
+- John Enderle and Joseph Bronzino. *Introduction to biomedical engineering*. Academic press, 2012.
+- Richard Eppler. *Airfoil design and data*. Springer Science & Business Media, 2012.
+- Xiantao Fan and Jian-Xun Wang. Differentiable hybrid neural modeling for fluid-structure interaction. *Journal of Computational Physics*, 496:112584, 2024.
+- Zhe Feng, Shilong Tao, Haonan Sun, Shaohan Chen, Zhanxing Zhu, and Yunhuai Liu. Maven: A mesh-aware volumetric encoding network for simulating 3d flexible deformation. In *International Conference on Learning Representations*, 2026.
+- David A Field. Laplacian smoothing and delaunay triangulations. *Communications in applied numerical methods*, 4(6):709–712, 1988.
+- Olivier Génevaux, Arash Habibi, and Jean-Michel Dischler. Simulating fluid-solid interaction. In *Graphics Interface*, volume 2003, pp. 31–38, 2003.
+
+[Appendix and supplementary materials beyond page 12 have been removed.]

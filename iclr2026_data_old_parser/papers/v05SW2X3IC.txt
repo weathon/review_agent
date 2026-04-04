@@ -1,0 +1,3202 @@
+LOSSY COMMON INFORMATION
+IN
+A LEARNABLE
+GRAY-WYNER NETWORK
+Anderson de Andrade, Alon Harell & Ivan V. Baji´c
+School of Engineering Science
+Simon Fraser University
+Burnaby, BC, Canada
+{anderson de andrade,alon harell,ibajic}@sfu.ca
+ABSTRACT
+Many computer vision tasks share substantial overlapping information, yet con-
+ventional codecs tend to ignore this, leading to redundant and inefficient represen-
+tations. The Gray-Wyner network, a classical concept from information theory, of-
+fers a principled framework for separating common and task-specific information.
+Inspired by this idea, we develop a learnable three-channel codec that disentan-
+gles shared information from task-specific details across multiple vision tasks. We
+characterize the limits of this approach through the notion of lossy common infor-
+mation, and propose an optimization objective that balances inherent tradeoffs in
+learning such representations. Through comparisons of three codec architectures
+on two-task scenarios spanning six vision benchmarks, we demonstrate that our
+approach substantially reduces redundancy and consistently outperforms indepen-
+dent coding. These results highlight the practical value of revisiting Gray-Wyner
+theory in modern machine learning contexts, bridging classic information theory
+with task-driven representation learning.
+1
+INTRODUCTION
+It is often the case that a machine task – classification, recognition, etc. – requires only a subset
+of the information provided as input. We can interpret neural networks as processes that discard
+irrelevant information from a signal so that its predictions are in a probability space similar to that
+of the target (Tishby & Zaslavsky, 2015). In multi-task settings, the same input is used to perform
+different tasks. These tasks have semantically different targets and hence might require different
+subsets of the input information.
+Whenever tasks are not performed jointly, isolating the information required for each one is critical
+to ensure that communication is efficient. For example, when only object detection is needed, it
+would be efficient for a camera to only transmit the information required so the receiving device
+can perform that task. If it is then decided that semantic segmentation is needed for the same
+input, it would be efficient for the camera to only transmit the additional information necessary,
+considering that some relevant information has already been transmitted. On the receiver device, it
+would be efficient if the information from the first transmission, that is also relevant for semantic
+segmentation, is isolated, so it can be readily used without overhead.
+The line of work in coding for humans and machines (Choi & Bajic, 2022) focuses on this problem.
+It considers an image reconstruction task together with a computer vision task. It is commonly
+assumed that all the information used by the computer vision task is relevant to the reconstruction
+task. Thus, only two separate channels (representations) are often designed: a common channel used
+by both tasks, and a private channel only used by the reconstruction task. In this work, we focus on
+a pair of tasks that have some common information (CI) between them, but also private (dedicated)
+information for each task, establishing three channels: a common channel, and two private channels.
+We establish in this work that a complete isolation of the common information needed between two
+tasks is often unattainable. This also occurs in lossy coding (compression), where we send less in-
+formation (rate, e.g. bitrate), which inevitably performs the tasks with a higher error (distortion).
+1
+
+
+A system must then decide between transmitting some of the non-common information on the com-
+mon channel, or some of the common information on the private channels. In the former case, the
+transmit rate – the amount of information transmitted when performing both tasks on one device
+– can be optimal, but the receive rate – the amount of information transmitted by performing each
+task on a different device – will not be optimal. The converse is true in the latter case.
+We propose a neural network architecture that is able to separate the common information between
+two tasks. We compare the proposed architecture against other more intuitive architectures we
+designed, and include a theoretical justification for their difference in performance. We also propose
+a loss function that can optimize a codec for the transmit rate, the receive rate, or a tradeoff between
+both. We show how our methods perform on different pairs of computer vision tasks.
+2
+PREVIOUS WORK
+In information theory, source coding methods convert a sequence of symbols from an information
+source into a sequence of bits, allowing data compression. Our work is closely related to the Gray-
+Wyner Network (GWN) (Gray & Wyner, 1974). It is a source coding problem connecting two
+sources with two receivers via a common channel and two private channels. The work defines the
+Gray-Wyner region as a set of achievable rates (e.g. bitrates) for the three channels, in both lossy
+and lossless input reconstruction tasks.
+There are multiple notions of common information in literature (Viswanatha et al., 2014), including
+mutual information. In this work, we discuss Wyner’s common information (Wyner, 1975) and
+G´acs-K¨orner (GK) common information (Gacs & K¨orner, 1973). These quantities are located in the
+Gray-Wyner achievable region. They are related by a tradeoff between the total transmit and receive
+rate (Viswanatha et al., 2014).
+The focus of seminal work on learnable image coding (Theis et al., 2017; Ball´e et al., 2018; He
+et al., 2022) has been image lossy coding (compression) as a single task. They consist of a lossy
+analysis transform (encoder) and a synthesis transform (decoder) acting as an autoencoder (Ball´e
+et al., 2018) such that the latent representation is better suited for coding, achieving a lower rate.
+An entropy model uses various types of context to predict the distribution of a target representation.
+When optimizing for rate-distortion performance (Theis et al., 2017), the entropy model effectively
+induces an information bottleneck (Tishby et al., 1999) on the target representation. A higher penalty
+on the probability estimates of the entropy model for the target representation produces lower rates
+at the expense of a higher task distortion (error).
+The work in coding for humans and machines uses similar architectures to those used in learnable
+image coding. In Choi & Bajic (2022), the output representation of an analysis transform is split
+in two. The computer vision task uses one representation over a common channel. The image
+reconstruction task uses the other representation over a private channel in addition to the representa-
+tion from the common channel. Better rate-distortion performance on the computer vision task was
+achieved when using two separate analysis transforms, one for each of these channels (Foroutan
+et al., 2023). However, the common channel had information that was not fully utilized by the re-
+construction task. An ad-hoc reconstruction task for the common channel was shown to increase the
+usability (compatiblity) of the corresponding representations (de Andrade & Bajic, 2024).
+Multitask learnable codecs exist in the literature (Chamain et al., 2021; Feng et al., 2022; Guo
+et al., 2024). They propose one or more common channels to perform several tasks, without private
+channels. Their rate is optimal only when all the tasks involved are performed jointly.
+In representation learning literature, several information-theoretic approaches propose variational
+autoencoders (VAEs) that learn disentangled representations of a source (Chen et al., 2016; Hig-
+gins et al., 2017; Chen et al., 2018b). These approaches are unsupervised in nature and thus do not
+distill information for a specific task or isolate the common information between tasks. A more
+related approach (Dubois et al., 2021) proposes a channel that can achieve high performance in a
+set of predictive tasks, as long as they are invariant under a set of transformations. Although their
+proposed methods are also unsupervised, the right set of transformations can be used to isolate com-
+mon information between tasks. However, finding these transformations for non-trivial tasks is an
+open question. Several variational methods have been proposed to measure the mutual information
+between two sources (Poole et al., 2019). Although they might seem useful as training objectives,
+2
+
+
+110011000
+001100111
+000011011
+(a) Gray-Wyner Network
+(b) Gray-Wyner region
+Figure 1: Diagram of the Gray-Wyner Network and a lower bound on its achievable region. The
+lower bound is given by planes A, B, and C. Plane A corresponds to the Pangloss, the contour of
+the achievable region that achieves RX1,X2(D1, D2). Points with R0 = C(X1, X2; D1, D2) are
+found on it. Planes B and C achieve R0 + R1 = RX1(D1) and R0 + R2 = RX2(D2), respectively.
+On the intersection of both of these planes, we can find a point with R0 = K(X1, X2; D1, D2). A
+trace connecting both points offers tradeoffs between the transmit and receive rates. If the mutual
+information between tasks, at distortions (D1, D2), is separable, both points coincide at the now
+achievable Separable point. We show that points close to it, whether achievable or not, serve as
+bounds for both lossy common information measures.
+these methods have significant tradeoffs between bias and variance. Moreover, they do not naturally
+offer the means to code (compress) the resulting representations. Compared against these existing
+techniques, our work directly addresses the isolation of common information between tasks and its
+efficient transmission.
+2.1
+PRELIMINARIES
+We present the Gray-Wyner Network (Gray & Wyner, 1974) and define the two notions of com-
+mon information that define the boundaries of the transmit-receive tradeoff on which we want
+to operate. Let X1 and X2 be two source random variables. In the Gray-Wyner Network, an
+analysis transform (encoder) (Y0, Y1, Y2) = f(X1, X2) produces one common and two private dis-
+crete representations with corresponding rates (R0, R1, R2). Two synthesis transforms (decoders)
+ˆZ1 = g1(Y0, Y1) and ˆZ2 = g2(Y0, Y2) predict the targets Z1 and Z2 of two dependent tasks, produc-
+ing distortions D1 = d1( ˆZ1, Z1) = E[ ˆd1( ˆZ1, Z1)] and D2 = d2( ˆZ2, Z2) = E[ ˆd2( ˆZ2, Z2)], respec-
+tively. In our context, the distortion functions ˆd1 and ˆd2 are task losses for targets Z1 and Z2. We
+assume that one source does not have exclusive information that could assist its non-corresponding
+task, implying the Markov conditions:
+Z2 ↔X2 ↔X1,
+Z1 ↔X1 ↔X2.
+(1)
+The set of all achievable rate tuples (R0, R1, R2) for distortions (D1, D2) is given by the Gray-
+Wyner region RGW(D1, D2). The contour of this region lower-bounds all other points in this convex
+set and are considered optimal in that they optimize a particular rate-distortion function.
+A rate-distortion function determines the minimal rate that should be communicated over a channel,
+so that input signals (sources) can be reconstructed without exceeding expected distortions. The joint
+rate-distortion function (Cover & Thomas, 2006) is given as RX1,X2(D1, D2). In our context, we
+define it as the minimum rate required to encode ( ˆZ1, ˆZ2) jointly as a function of (X1, X2) so that
+tasks ( ˆd1, ˆd2) can be performed with at most (D1, D2) distortion. Marginal rate-distortion functions
+are given as RX1(D1) and RX2(D2), with similar definitions applying only to one task and one
+corresponding source. The conditional rate-distortion function RX1|X2(D1) is the minimum rate
+required to encode a function of X1, such that the task ˆd1 can be performed with at most distortion
+D1, when X2 is available to both the encoder and the decoder.
+3
+
+
+In this setting, using previous definitions, we define the Wyner’s lossy common information as:
+C(X1, X2; D1, D2) = inf I(X1, X2; U),
+(2)
+where the infimum is over all joint densities P(X1, X2, ˆZ1, ˆZ2, U), under these Markov conditions:
+ˆZ1 ↔U ↔ˆZ2,
+(X1, X2) ↔( ˆZ1, ˆZ2) ↔U,
+(3)
+and where P( ˆZ1, ˆZ2|X1, X2) ∈PX1,X2
+D1,D2 is any joint distribution that achieves the rate-distortion
+function at (D1, D2), i.e.: I(X1, X2; ˆZ1, ˆZ2) = RX1,X2(D1, D2). The mutual information function
+I(·; ·) measures the dependence between two random variables (Cover & Thomas, 2006). For the
+conditions in 3 to hold, U must have at least the mutual information between ˆZ1 and ˆZ2.
+G´acs-K¨orner lossy common information is defined for our particular setting as:
+K(X1, X2; D1, D2) = sup I(X1, X2; V ),
+(4)
+where the supremum is over all joint densities P(X1, X2, ˆZ1, ˆZ2, V ), such that the following
+Markov conditions are met:
+X2 ↔X1 ↔V,
+X1 ↔X2 ↔V,
+X1 ↔ˆZ1 ↔V,
+X2 ↔ˆZ2 ↔V,
+(5)
+where P( ˆZ1|X1) ∈PX1
+D1 and P( ˆZ2|X2) ∈PX2
+D2 are optimal rate-distortion encoders at D1 and D2,
+respectively, i.e: I(X1; ˆZ1) = RX1(D1) and I(X2; ˆZ2) = RX2(D2). The first two conditions in 5
+establish that V cannot have information about X1 or X2 that is not mutual. The last two conditions
+in 5 establish that all information in V is present in both ˆZ1 and ˆZ2.
+Wyner’s lossy common information, C(X1, X2; D1, D2), can be thought of as the least information
+that must be included in the common channel to avoid the total transmit rate exceeding the optimal
+RX1,X2(D1, D2). Conversely, G´acs-K¨orner common information, K(X1, X2; D1, D2), is the most
+information that can be included in the common channel while maintaining the optimal receive rate
+RX1(D1) + RX2(D2).
+The total transmit rate is Rt = R0 + R1 + R2 ≥RX1,X2(D1, D2) and the total receive rate is Rr =
+2R0 + R1 + R2 ≥RX1(D1) + RX2(D2). Wyner’s and G´acs-K¨orner common information can be
+related through these concepts (Viswanatha et al., 2014). When the transmit rate is optimal, such that
+Rt = RX1,X2(D1, D2), we have that the minimum Rr is RX1,X2(D1, D2) + C(X1, X2; D1, D2).
+Such points in the contour of RGW(D1, D2) are achieved when R0 = C(X1, X2, D1, D2). When
+the receive rate is optimal such that Rr = RX1(D1) + RX2(D2), we have that the minimum Rt
+is RX1(D1) + RX2(D2) −K(X1, X2; D1, D2). This point in the contour of RGW(D1, D2) is
+achieved when R0 = K(X1, X2, D1, D2). This implies that minimizing one type of rate comes at
+the cost of increasing the other, establishing the transmit-receive tradeoff.
+Figure 1 visually describes these preliminary concepts. See Appendix A.1 for more definitions.
+3
+CONTRIBUTIONS
+3.1
+BOUNDS FOR LOSSY COMMON INFORMATION
+We extend a result from Wyner (1975) in the lossless setting to the lossy case, showing bounds that
+separate the two lossy common information terms discussed. The bounds are expressed in terms of
+interaction information I(X1, X2; ˆZ∗
+1; ˆZ∗
+2), which is a generalization of the mutual information for
+more than two variables (Ting, 1962; Yeung, 1991). See Appendix A.1 for its definition.
+Theorem 1. Let ˆZ(t)
+D1,D2 be the set of tuples ( ˆZ1, ˆZ2) that achieve RX1,X2(D1, D2), and ˆZ(r)
+D1,D2
+be the set of tuples ( ˆZ1, ˆZ2), such that ˆZ1 achieves RX1(D1), and ˆZ2 achieves RX2(D2). Then:
+K(X1, X2; D1, D2) ≤
+max
+( ˆ
+Z1, ˆ
+Z2)∈ˆ
+Z(r)
+D1,D2
+I(X1, X2; ˆZ1; ˆZ2)
+(6)
+≤
+min
+( ˆ
+Z1, ˆ
+Z2)∈ˆ
+Z(t)
+D1,D2
+I(X1, X2; ˆZ1; ˆZ2) ≤C(X1, X2; D1, D2).
+(7)
+We have equality everywhere iff the maximum and minimum coincide at ( ˆZ∗
+1, ˆZ∗
+2), and we can
+represent ˆZ∗
+1 as ( ˆZ′
+1, W) and ˆZ∗
+2 as ( ˆZ′
+2, W) such that Conditions 3 and 5 hold for ˆZ∗
+1, ˆZ∗
+2, and W.
+4
+
+
+Proof. See Appendix A.
+Theorem 1 allows to interpret the lossy versions of G´acs-K¨orner and Wyner’s common information
+similarly to their lossless counterparts. Any set of tuples ( ˆZ1, ˆZ2) that achieve the transmit rate will
+always have at least the amount of interaction information I(X1, X2; ˆZ1; ˆZ2) of any set of tuples
+that achieve the receive rate. If there is a gap of interaction information between the transmit and
+receive sets of tuples, exploring the transmit-receive tradeoff will produce tuples outside of those
+two sets that cover such gap.
+The conditions for equality everywhere imply that the two common information terms are the same
+when the interaction information I(X1, X2; ˆZ∗
+1; ˆZ∗
+2) is fully separable from private information or
+other excess common information that does not help reach optimal rate-distortion values. Because
+of the latter reason, this separation can be even more difficult to attain than in the lossless case.
+To see this, note that G´acs-K¨orner common information in the discrete case is the entropy of the
+probability distribution of a point in the sample space of (X1, X2) belonging to a partition in an
+ergodic decomposition of the stochastic matrix defining (X1, X2) (Gacs & K¨orner, 1973). This
+means that to achieve I(X1, X2; ˆZ∗
+1; ˆZ∗
+2), this information must be separable such that the stochastic
+matrix P( ˆZ1, ˆZ2) can be written as:
+
+
+A1
+0
+...
+0
+AK
+
+
+(8)
+where A1, ..., AK are probability matrices defined as product of marginals, i.e., with no mutual
+information. This implies that these random variables can be represented as ˆZ∗
+1 = ( ˆZ′
+1, W) and
+ˆZ∗
+2 = ( ˆZ′
+2, W), which, with W being a function of X1 or X2, implies that it can be isolated from
+X1 or X2. If some of the required mutual information is not separable, it must be left out of W
+and thus I(X1, X2; ˆZ∗
+1; ˆZ∗
+2) cannot be produced. The work of Gacs & K¨orner (1973) shows that
+G´acs-K¨orner common information is often very small. In fact, it is zero for Gaussian sources with
+correlation 1−ρ (Viswanatha et al., 2014), which is usually a distribution producing refinable results
+in information theory (Cover & Thomas, 2006). Because we can often expect in practice to have
+a noticeable gap between the two common information measures discussed, there is a significant
+motivation to explore the transmit-receive tradeoff.
+3.2
+TRANSMIT-RECEIVE TRADEOFF OPTIMIZATION
+As previosly discussed, there is a tradeoff between optimizing for the transmit rate, resulting in
+more information available on the common channel than the mutual information, which increases
+the receive rate, or optimizing for the receive rate, resulting in less than the mutual information on
+the common channel, which increases the transmit rate. We propose an objective that can optimize
+for this tradeoff.
+The work of Gray & Wyner (1974) establishes the following objective for optimizing the Gray-
+Wyner Network:
+T(α1, α2; D1, D2) ≜inf
+
+I(X1, X2; Y0) + α1RX1|Y0(D1) + α2RX2|Y0(D2)
+	
+,
+(9)
+where 0 ≤α1, α2 ≤1, and α1 + α2 ≥1, and the infimum is over all probability distributions
+PY0 ∈PY0 with sample space Y0. The arguments α1 and α2 specify the transmission cost for each
+of the three channels. The values of T(α1, α2; D1, D2) over the domain of α1 and α2 define the
+contour of the Gray-Wyner region RGW(D1, D2).
+Under assumptions suitable to our proposed method, we can express this objective in terms of an
+optimization over families of functions:
+Theorem 2. Assume that Y0 = f0(X1, X2); f0 ∈F0, Y1 = f1(X1); f1 ∈F1, Y2 = f2(X2); f2 ∈
+F2 are all deterministic functions of their corresponding inputs, and that g1 ∈G1 and g2 ∈G2,
+where F{0,1,2} and G{1,2} are families of functions such that there exits a f0, f1, f2, g1, and g2 in
+their respective families that achieve T(α1, α2; D1, D2). Then:
+T(α1, α2; D1, D2) = inf {H(Y0) + α1H(Y1|Y0) + α2H(Y2|Y0)} ,
+(10)
+where H(·) is Shannon’s entropy function, and H(·|·) is the conditional entropy function (Cover
+& Thomas, 2006). The infimum is over all f0, f1, f2, g1, and g2 in their corresponding family of
+functions, such that we obtain, at most, distortions D1 and D2.
+5
+
+
+110011000
+001100111
+000011011
+Figure 2: Architecture overview. The parameters for the probability distribution of the target repre-
+sentations are represented as ˜PY{0,1,2}. Grey binary blocks denote bitstreams with rates R{0,1,2}. For
+the particular choice of analysis and synthesis transforms used in the experimental evaluation, the
+grey bars on the corresponding blocks indicate the number of downsample or upsample operations.
+Proof. See Appendix B.
+We make use of entropy models to estimate – and also steer – the probability distributions of their
+target representations. With Theorem 2, we can replace the entropy terms with rate functions r{0,1,2}
+given by entropy models:
+r{1,2}(Y{1,2}, Y0) = −EY{1,2},Y0
+h
+log ˜P
+ Y{1,2}|Y0
+i
+, r0(Y0) = −E
+h
+log ˜P (Y0)
+i
+,
+(11)
+where ˜P denotes a probability function assumed for the quantized target representations Y{0,1,2},
+implicitly established by the entropy models.
+The work of Gray & Wyner (1974) highlights that T(α1, α2; D1, D2) is difficult to optimize due to
+the lack of concavity or convexity in PY0. As such, we propose the Lagrangian relaxation method
+(Hiriart-Urruty & Lemar´echal, 1993) for the optimization problem in Theorem 2. Relaxing the dis-
+tortion constraints can help find better solutions in this non-convex space. The Lagrangian relaxation
+method is used extensively for rate-distortion optimization (Tishby et al., 1999). Due to the convex-
+ity of that problem, it is used for convenience, since the method of Lagrange multipliers could also
+be used. For this problem, however, we have a stronger motivation for its usage.
+Assuming that the private channels have the same cost, such that α1 = α2, replacing the entropy
+terms in Equation 10 with rate functions, and with the distortion constraints d1( ˆZ1, Z1) ≤D1 and
+d2( ˆZ2, Z2) ≤D2, the Lagrangian is given as:
+L = inf
+n
+βr0(Y0) + r1(Y1, Y0) + r2(Y2, Y0) + λ1d1( ˆZ1, Z1) + λ2d2( ˆZ2, Z2)
+o
+,
+(12)
+where β = 1/α{1,2}, and the infimum is over the same families of functions in Equation 10, with the
+addition of the families of functions defining the three entropy models. The hyper-parameters λ1
+and λ2 control the rate-distortion tradeoff (Cover & Thomas, 2006).
+When β = 1, we optimize for the transmit rate Rt. When β = 2, we optimize for the receive rate
+Rr. As explained in Sections 2.1 and 3.1, optimizing exclusively for the transmit or the receive
+rate does not guarantee that the common channel will produce Wyner’s or G´acs-K¨orner common
+information. Therefore, values of β outside of the range (1, 2) could result in suboptimal configu-
+rations. If we optimize for a combination of both rates, we could attain points on the trace in the
+contour of the achievable region RGW(D1, D2), connecting the operational points corresponding to
+C(X, D1, D2) and K(X, D1, D2) (Viswanatha et al., 2014). When β = 3/2, we equally optimize
+for both the transmit and receive rates. If Theorem 1 holds with equality, an optimal codec optimized
+for β ∈(1, 2) achieves both common information measures.
+3.3
+A LEARNABLE GRAY-WYNER NETWORK
+We now formulate a version of a Gray-Wyner Network that is grounded on the proposed objective
+function. It separates common and private information between two tasks, as it explores the transmit-
+receive rate tradeoff. We use learnable entropy models as the rate functions r0,1,2 in Eq. 12. These
+6
+
+
+entropy models produce rates that, as part of the objective function, induce the desired type of
+information in the representations Y0,1,2. Moreover, they allow us to efficiently code (compress) the
+resulting representations.
+Figure 2 provides an overview of the proposed architecture. Inputs X1 and X2 are both processed
+by two analysis transforms f1 and f2. Because each branch of the proposed architecture has access
+to both sources X1 and X2, all exclusive information from either source is available to assist in
+performing tasks Z1 or Z2. This effectively removes the requirement for the conditions in 1.
+The output of each analysis transform is passed through a quantization function q that discretizes the
+representation. It has a differentiable training-time approximation that allows gradient propagation.
+The representation is then split into two tensors, such that:
+
+Y{1,2}, Y ({1,2})
+0
+
+=
+ q ◦f{1,2}
+  X{1,2}
+
+.
+(13)
+Then, Y ({1,2})
+0
+are combined into Y0 so that:
+[Y0]i =
+(
+1/2
+h
+Y (1)
+0
+i
+i +
+h
+Y (2)
+0
+i
+i
+
+,
+if
+h
+Y (1)
+0
+i
+i =
+h
+Y (2)
+0
+i
+i
+0,
+otherwise,
+(14)
+where i ∈Z+ indexes the elements in the tensors. Using auto-differentiation, the 1/2 (Y (1)
+0
++ Y (2)
+0
+)
+expression ensures that gradients flow to both inputs wherever elements match. An auxiliary loss
+term encourages the two input tensors to match. The augmented loss function is given as:
+Laug = L + E
+ γ
+|Y0|
+Y (1)
+0
+−Y (2)
+0
+
+2
+2
+
+,
+(15)
+where γ influences the impact of this additional loss. Small values of γ might result in elements of
+Y (1)
+0
+and Y (2)
+0
+never matching. A large γ can result in degenerate distributions for Y (1)
+0
+and Y (2)
+0
+.
+In both cases, the common channel is underutilized. Thus, this auxiliary loss can discourage the use
+of the common channel. We overcome this obstacle in practice by setting γ = 1 and reducing the
+cost of usage of the common channel β when necessary, offering it as the only hyper-parameter.
+Entropy models for each private channel, h1 and h2, propose parameters of a probability distribution
+assumed for its target representations, conditioned on the common representation. This conditioning
+is prescribed by the proposed objective function. Hence, these entropy models use as context the
+previously coded elements in Y{1,2}, in addition to Y0, to predict the distribution parameters of the
+current elements in Y{1,2}, respectively. An entropy model for the common channel, h0, only uses
+as context the previously coded elements in Y0. As we have seen, it is often difficult to discard the
+information in the common channel from the private channels, such that I(Y1, Y2; Y0) = 0. Hence,
+using the common representation to model the entropy of the private representations can handle the
+redundancies between the private and common channels and improve compression.
+Each private representation is concatenated with the common representation and processed by a
+synthesis transform for its corresponding task. Each synthesis transform contains a task-specific
+model to produce reasonable outputs within sample spaces of the targets Z{1,2}, respectively. Using
+only the private channel as input for the synthesis transform is another plausible architecture but it
+forces the common information to be present in the private channel. The conditional entropy models
+must then be able to predict this common information very accurately to avoid rate increases due to
+redundancies. This is often difficult for learnable codecs.
+Other architectures for the analysis transform f are evaluated in Section 4.1. Intuitively, this ar-
+chitecture provides flexible representations while reducing the learning complexity of making them
+compatible. A theoretical justification is presented in Appendix C, in which we introduce a measure
+of compatibility between representations based on the generalization error induced by the hypothe-
+ses (family of functions) used to generate them.
+4
+EXPERIMENTAL EVALUATION
+In our experiments, the proposed architecture specializes to a single source X, so that (X1, X2) =
+X. We use an architecture inspired by He et al. (2022) as analysis and synthesis transforms. It
+7
+
+
+0
+1
+2
+3
+4
+5
+Common Channel Rate (BPP)
+0.0
+0.2
+0.4
+0.6
+0.8
+RMSE Sum
+Method: BD-Rate (%)
+Mutual Information (Empirical)
+Mutual Information (Theoretical): -93.64
+Shared (  = 1): 40.01
+Shared (  = 1.5): -47.16
+Shared (  = 2): -68.88
+(a) Common channel rate for β ∈{1, 3/2, 2}
+0
+2
+4
+6
+8
+10
+12
+14
+Transmit Rate (BPP)
+0.0
+0.2
+0.4
+0.6
+0.8
+RMSE Sum
+Method: BD-Rate (%)
+Joint (Empirical)
+Joint (Theoretical): -96.89
+Shared: 10.42
+Separated: 71.07
+Combined: 87.55
+(b) Transmit rate for β = 1
+0
+2
+4
+6
+8
+10
+Transmit Rate (BPP)
+0.0
+0.2
+0.4
+0.6
+0.8
+RMSE Sum
+Method: BD-Rate (%)
+Joint (Empirical)
+Joint (Theoretical): -92.44
+Shared (  = 1): 8.93
+Shared (  = 1.5): 3.41
+Shared (  = 2): 24.58
+(c) Transmit rate for β ∈{1, 3/2, 2}
+0.0
+2.5
+5.0
+7.5
+10.0
+12.5
+15.0
+17.5
+Receive Rate (BPP)
+0.0
+0.2
+0.4
+0.6
+0.8
+RMSE Sum
+Method: BD-Rate (%)
+Independent (Empirical)
+Independent (Theoretical): -90.25
+Shared (  = 1): 16.59
+Shared (  = 1.5): 2.48
+Shared (  = 2): 21.79
+(d) Receive rate for β ∈{1, 3/2, 2}
+Figure 3: Rate-distortion curves for different methods, optimized for transmit or receive rate, or a
+mixture of both. BD-rates (Bjontegaard, 2001) are computed with respect to the method with no
+assigned score. Bits-per-pixel (BPP) is the bitrate scaled by 1/64×64.
+consists of 3 stacks of 3 ResNet blocks each, with the stacks interjecting 4 convolutional layers acting
+as dimensional bottlenecks. These convolutional layers scale their inputs. As such, the analysis
+transform progressively reduces the spatial dimensions by a total factor of 16, while increasing the
+number of channels to 24, 48, 192 and E. The synthesis transform performs the opposite in tandem,
+decreasing the number of channels and increasing the spatial size to that of the original input.
+As a quantization function q, we use the straight-through gradient function proposed in Theis et al.
+(2017). We use the relatively simple model of Ball´e et al. (2018). The common representation
+is processed and used in place of the hyper-prior to establish the conditional entropy models. As
+such, for each private channel, the common representation is processed by 2 stacks of 2 ResNet
+blocks each, interjected by a convolutional layer that increases the number of channels from E/2 to
+E. Masked convolutions turn the entropy model auto-regressive, which is suitable for coding (Ball´e
+et al., 2018).
+See Appendix D for architecture diagrams, hyper-parameters, training settings, other results, and
+further discussions. Code is available at: github.com/adeandrade/research
+4.1
+TRANSMIT-RECEIVE TRADEOFF AND ABLATION STUDY
+We developed a synthetic dataset to study the proposed method. Let X1 and X2 index the first
+dimension of a random variable X. We created an X such that H(X1, X2) = 3.3 bits per element,
+H(X1) + H(X2) = 4.62, and consequently, I(X1; X2) = 1.32. X1 and X2 are individually
+transformed to generate targets Z1 and Z2 of two linear regression tasks. We train to minimize the
+RMSE loss between the predictions and the targets of each task.
+In addition to the proposed Shared architecture, we evaluate the rate-distortion performance of two
+additional encoder architectures. The Separated architecture has an independent analysis transform
+for each channel. The Combined architecture uses a single analysis transform and splits the output
+tensor into 3 parts corresponding to the GWN channels. If both tasks share a single channel, a
+resulting Joint architecture optimizes the transmit rate. Using a private channel for each task without
+a common channel, results in an Independent method which optimizes the receive rate. The rates
+produced by these methods are used to compute empirical estimates of the joint and marginal rate-
+8
+
+
+15
+20
+25
+30
+35
+40
+Transmit Rate (Bits)
+1.94
+1.95
+1.96
+1.97
+1.98
+1.99
+2.00
+Accuracy Sum
+Method: BD-Rate (%)
+Dependent
+Independent: 61.48
+Mixture: 79.78
+Mixture (Independent): 138.76
+(a) Transmit rate
+20
+25
+30
+35
+40
+Receive Rate (Bits)
+1.94
+1.95
+1.96
+1.97
+1.98
+1.99
+2.00
+Accuracy Sum
+Method: BD-Rate (%)
+Dependent
+Independent: -3.88
+Mixture: 49.83
+Mixture (Independent): 41.68
+(b) Receive rate
+Figure 4: Validation rate-accuracy curves for colored MNIST on 3 different PMFs. The top-1 clas-
+sification accuracies are added and shown on the vertical axis. The total bitrate is shown as rate.
+BD-rates are computed with respect to the Dependent PMF.
+distortion functions, and mutual information between tasks. We contrast them against theoretical
+values. See Appendix D for details on the dataset, architectures, and measurement calculation.
+Figure 3a shows that optimizing the transmit rate produces rates for the common channel that are
+higher than the empirical mutual information between sources. The same figure also shows that
+optimizing the receive rate produces rates for the common channel that are lower than the empirical
+mutual information. Codecs trained with β = 3/2 explore the transmit-receive tradeoff. They have
+a lower rate on the common channel than the codecs optimized for the transmit rate, but more
+information than those optimized for the receive rate.
+For all β explored, the Shared architecture outperforms the Separated and Combined alternatives, as
+shown in Figure 3b for β = 1. See Appendix D for results on the other β. Note that the empirical
+estimates of the rate are considerably higher than the theoretical values, as often seen in practice
+(Baji´c, 2025). Figures 3c and 3d show that β = 3/2 is a reasonable value for this problem, since it
+performs marginally better than β = 1 and β = 2, in both transmit and receive rates, respectively.
+4.2
+EDGE-CASE EXPLORATION WITH IMAGE CLASSIFICATION
+Classification problems have well-defined theoretical measurements of mutual information against
+which we can compare. We randomly colorize digit images from MNIST (LeCun et al., 2010)
+according to three different PMFs: 1. A Dependent PMF, where one color always corresponds to
+one digit; 2. An Independent PMF, in which for each sample, one out of 10 colors is sampled
+uniformly; and 3. A Mixture PMF, where each digit has a subset of 10 colors assigned to it, with
+uniform probability.
+One of the tasks in our proposed method predicts the digit, while the other task predicts the color,
+using the colorized images and corresponding targets. The Dependent PMF has a joint entropy of
+log2 10 bits and a mutual information of the same amount. The Independent PMF has a joint entropy
+of 2 log2 10 bits, and a mutual information of 0 bits. The Mixture PMF has a joint entropy of 5.12
+bits, and a mutual information of 1.4 bits.
+Figures 4a and 4b show the transmit an receive rates, respectively, for the 3 PMFs. We operate
+within an order of magnitude of the theoretical bounds, which is comparable to other codecs (Baji´c,
+2025). More importantly, the method trained on the Dependent PMF produces a lower transmit rate
+since it places most of its information on the common channel, taking advantage of all information
+being common. On the other hand, the Independent method produces the lowest receive rate, since
+it has a very low rate on the common channel, as with the underlying PMF.
+The common information in the Mixture PMF is not very separable, which results in our method
+producing lower rate-distortion performance compared to the other PMFs. It still performs better, in
+terms of transmit rate, than the Independent approach from Section 4.1, where there is no common
+channel. Appendix D shows the rate of each channel, produced by our method, for every PMF.
+9
+
+
+1.0
+1.5
+2.0
+2.5
+3.0
+3.5
+4.0
+4.5
+Rate (BPP)
+0.842
+0.844
+0.846
+0.848
+0.850
+0.852
+mIoU + Inverse RMSE
+Method: BD-Rate (%)
+Joint
+Independent: 143.69
+Proposed (Transmit): 22.32
+Proposed (Receive): 51.97
+Uncompressed
+(a) Semantic segmentation and depth estimation
+2
+3
+4
+5
+6
+7
+8
+Rate (BPP)
+1.085
+1.090
+1.095
+1.100
+1.105
+Detection + Keypointing mAP
+Method: BD-Rate (%)
+Joint
+Independent: 77.56
+Proposed (Transmit): 13.16
+Proposed (Receive): 42.7
+Uncompressed
+(b) Object detection and keypoint detection
+Figure 5: Rate-accuracy curves of the proposed method against the Joint and Independent baselines.
+The tasks in (a) are reported for the validation set of Cityscapes. The tasks in (b) are reported for the
+validation set of COCO 2017. The transmit and receive rates of the proposed method are included.
+BD-rates are computed with respect to the Joint method. The task performances are added. The
+depth RMSE is scaled so its inverse is in a similar scale as the segmentation mean intersection over
+union (mIoU). The detection performances are measured by the mean average precision (mAP). The
+Uncompressed lines correspond to the original performances of the pre-trained task models.
+4.3
+RATE-DISTORTION PERFORMANCE IN COMPUTER VISION TASKS
+We evaluate the proposed method on semantic segmentation and depth estimation for Cityscapes
+(Cordts et al., 2016), and on object detection and keypoint detection for COCO 2017 (Lin et al.,
+2014). As part of g1 and g2, we append pre-trained task-specific models to the synthesis transforms.
+We keep their weights fixed as we train the rest of the codec. We use DeepLabV3+ with MobileNet
+for semantic segmentation (Chen et al., 2018a), LRASPP with MobileNetV3 for depth estimation
+(Howard et al., 2019), Faster R-CNN with ResNet50 for object detection (Ren et al., 2017), and
+Keypoint R-CNN with ResNet50 for keypoint detection (He et al., 2020).
+Figure 5 compares the performance of the proposed method. It is able to outperform an Independent
+approach and it is relatively close to the Joint approach. The curves for the receive rate are higher
+than the Independent approach, suggesting that the rate of the common channel is lower than the
+empirical mutual information between these tasks. Some curves in the Cityscapes experiments have
+an increase in distortion with the lowest compression, which is often informally attributed to the
+lack of regularization, provided by stronger rate constraints.
+5
+SUMMARY AND CONCLUSION
+We validated the ability of the proposed learnable Gray-Wyner Network to distill common infor-
+mation between tasks and compared it against other architectures. The performance is theoretically
+justified by analyzing the compatibility between intermediate representations. We provided bounds
+that relate two measures of lossy common information. The proposed optimization objective is de-
+rived from this theory and was able to empirically explore the transmit-receive rate tradeoff. The
+proposed method is also able to handle edge-cases, including a case where there is no mutual infor-
+mation between tasks, and another where the tasks are fully dependent. Finally, between the three
+computer vision experiments, our codecs achieved, on average, a BD-rate advantage of -81.58% in
+transmit rate, against single-task codecs.
+Isolating and coding the common information between dependent tasks allows for the efficient dis-
+tributed inference of machine tasks. Generating representations that explore the tradeoff between
+the transmit and receive rates in the Gray-Wyner Network has additional practical implications in
+storage and selective retrieval, and dispersive information routing (Viswanatha et al., 2011). Know-
+ing the information requirements of learned representations can assist in planning for the resources
+allocated to a neural network, its dimensionality, and quantization levels.
+Extensions to three or more tasks are possible, but since the total number of channels scales expo-
+nentially, a more dynamic architecture might be required. Nevertheless, the theoretical contributions
+of this work should prove useful in deriving new methods.
+10
+
+
+ACKNOWLEDGMENTS
+This work was partially funded by Intel Labs and the Natural Sciences and Engineering Research
+Council of Canada (NSERC).
+REFERENCES
+Ivan V. Baji´c. Rate-accuracy bounds in visual coding for machines. In IEEE MIPR, 2025.
+Johannes Ball´e, David Minnen, Saurabh Singh, Sung Jin Hwang, and Nick Johnston. Variational
+image compression with a scale hyperprior. In ICLR, 2018.
+Peter L. Bartlett and Shahar Mendelson. Rademacher and gaussian complexities: Risk bounds and
+structural results. JMLR, 2002.
+Jens Behrmann, Will Grathwohl, Ricky T. Q. Chen, David Duvenaud, and J¨orn-Henrik Jacobsen.
+Invertible residual networks. In ICML, 2019.
+Gisle Bjontegaard. Calculation of average PSNR differences between RD-curves. ITU-T SC16/Q6
+VCEG-M33, 2001.
+Lahiru D. Chamain, Fabien Racap´e, Jean B´egaint, Akshay Pushparaja, and Simon Feltman. End-to-
+end optimized image compression for multiple machine tasks. CoRR, 2103.04178, 2021.
+Liang-Chieh Chen, Yukun Zhu, George Papandreou, Florian Schroff, and Hartwig Adam. Encoder-
+decoder with atrous separable convolution for semantic image segmentation. In ECCV, 2018a.
+Tian Qi Chen, Xuechen Li, Roger B. Grosse, and David Duvenaud. Isolating sources of disentan-
+glement in variational autoencoders. In NeurIPS, 2018b.
+Xi Chen, Yan Duan, Rein Houthooft, John Schulman, Ilya Sutskever, and Pieter Abbeel. Infogan:
+Interpretable representation learning by information maximizing generative adversarial nets. In
+NeurIPS, 2016.
+Hyomin Choi and Ivan V. Bajic. Scalable image coding for humans and machines. IEEE TIP, 2022.
+Marius Cordts, Mohamed Omran, Sebastian Ramos, Timo Rehfeld, Markus Enzweiler, Rodrigo
+Benenson, Uwe Franke, Stefan Roth, and Bernt Schiele. The Cityscapes dataset for semantic
+urban scene understanding. In IEEE CVPR, 2016.
+Thomas M. Cover and Joy A. Thomas. Elements of information theory. Wiley, second edition, 2006.
+Anderson de Andrade and Ivan V. Bajic. Towards task-compatible compressible representations. In
+IEEE ICME Workshops, 2024.
+Yann Dubois, Benjamin Bloem-Reddy, Karen Ullrich, and Chris J. Maddison. Lossy compression
+for lossless prediction. In NeurIPS, 2021.
+Ruoyu Feng, Xin Jin, Zongyu Guo, Runsen Feng, Yixin Gao, Tianyu He, Zhizheng Zhang, Simeng
+Sun, and Zhibo Chen. Image coding for machines with omnipotent feature learning. In ECCV,
+2022.
+Yalda Foroutan, Alon Harell, Anderson de Andrade, and Ivan V. Bajic. Base layer efficiency in
+scalable human-machine coding. In IEEE ICIP, 2023.
+Peter Gacs and J. K¨orner. Common information is far less than mutual information. Problems of
+Control and Information Theory, 1973.
+Robert M. Gray. A new class of lower bounds to information rates of stationary sources via condi-
+tional rate-distortion functions. IEEE TIT, 1973.
+Robert M. Gray and Aaron D. Wyner. Source coding for a simple network. IEEE BSTJ, 1974.
+Sha Guo, Lin Sui, Chen-Lin Zhang, Zhuo Chen, Wenhan Yang, and Lingyu Duan. A unified image
+compression method for human perception and multiple vision tasks. In ECCV, 2024.
+11
+
+
+Dailan He, Ziming Yang, Weikun Peng, Rui Ma, Hongwei Qin, and Yan Wang. ELIC: Efficient
+learned image compression with unevenly grouped space-channel contextual adaptive coding. In
+CVPR, 2022.
+Kaiming He, Georgia Gkioxari, Piotr Doll´ar, and Ross B. Girshick. Mask R-CNN. IEEE TPAMI,
+2020.
+Irina Higgins, Lo¨ıc Matthey, Arka Pal, Christopher P. Burgess, Xavier Glorot, Matthew M.
+Botvinick, Shakir Mohamed, and Alexander Lerchner. beta-vae: Learning basic visual concepts
+with a constrained variational framework. In ICLR, 2017.
+Jean-Baptiste Hiriart-Urruty and Claude Lemar´echal. Convex analysis and minimization algorithms
+II: Advanced theory and bundle methods. Springer Berlin, Heidelberg, 1993.
+Andrew Howard, Ruoming Pang, Hartwig Adam, Quoc V. Le, Mark Sandler, Bo Chen, Weijun
+Wang, Liang-Chieh Chen, Mingxing Tan, Grace Chu, Vijay Vasudevan, and Yukun Zhu. Search-
+ing for MobileNetV3. In IEEE/CVF ICCV, 2019.
+Sham Kakade and Ambuj Tewari. Lecture notes in Rademacher composition and linear prediction,
+2008.
+Yann LeCun, Corinna Cortes, and CJ Burges. MNIST handwritten digit database. ATT Labs [On-
+line]. Available: http://yann.lecun.com/exdb/mnist, 2010.
+Michel Ledoux and Michel Talagrand. Probability in banach spaces: isoperimetry and processes.
+Springer Berlin Heidelberg, 2013.
+Tsung-Yi Lin, Michael Maire, Serge J. Belongie, James Hays, Pietro Perona, Deva Ramanan, Piotr
+Doll´ar, and C. Lawrence Zitnick. Microsoft COCO: Common objects in context. In ECCV, 2014.
+Ben Poole, Sherjil Ozair, A¨aron van den Oord, Alexander A. Alemi, and George Tucker. On varia-
+tional bounds of mutual information. In ICML, 2019.
+Shaoqing Ren, Kaiming He, Ross B. Girshick, and Jian Sun. Faster R-CNN: towards real-time
+object detection with region proposal networks. IEEE TPAMI, 2017.
+Shai Shalev-Shwartz and Shai Ben-David. Understanding machine learning – from theory to algo-
+rithms. Cambridge University Press, 2014.
+Wenzhe Shi, Jose Caballero, Ferenc Huszar, Johannes Totz, Andrew P. Aitken, Rob Bishop, Daniel
+Rueckert, and Zehan Wang. Real-time single image and video super-resolution using an efficient
+sub-pixel convolutional neural network. In IEEE CVPR, 2016.
+Lucas Theis, Wenzhe Shi, Andrew Cunningham, and Ferenc Husz´ar. Lossy image compression with
+compressive autoencoders. In ICLR, 2017.
+Hu Kuo Ting. On the amount of information. Theory of Probability and Its Applications, 1962.
+Naftali Tishby and Noga Zaslavsky. Deep learning and the information bottleneck principle. In
+IEEE ITW, 2015.
+Naftali Tishby, Fernando C. N. Pereira, and William Bialek. The information bottleneck method. In
+Allerton Conference, 1999.
+TorchVision maintainers and contributors. TorchVision: PyTorch’s computer vision library. GitHub
+repository, 2016.
+Lan V. Truong. On Rademacher complexity-based generalization bounds for deep learning. CoRR,
+2208.04284, 2022.
+Kumar Viswanatha, Emrah Akyol, and Kenneth Rose. An optimal transmit-receive rate tradeoff in
+gray-wyner network and its relation to common information. In IEEE ITW, 2011.
+Kumar Viswanatha, Emrah Akyol, and Kenneth Rose. The lossy common information of correlated
+sources. IEEE TIT, 2014.
+12
+
+
+Aaron D. Wyner. The common information of two dependent random variables. IEEE TIT, 1975.
+Raymond W. Yeung. A new outlook of Shannon’s information measures. IEEE TIT, 1991.
+A
+BOUNDS FOR LOSSY COMMON INFORMATION
+A.1
+ADDITIONAL PRELIMINARIES
+Recall that the concept of mutual information measures the mutual dependence between two random
+variables. For two discrete distributions, it can be given as:
+I(X1; X2) =
+X
+x1∈X1
+X
+x2∈X2
+PX1,X2(x1, x2) log PX1,X2(x1, x2)
+PX1(x1)PX2(x2).
+(16)
+The concept also applies to continuous random variables, where a summation can be replaced with
+an integral over the corresponding sample space. The variables X1 or X2 can be extended to joint
+probability functions of two or more variables, supporting concepts such as:
+I(X1:n; Y1:n) =
+X
+x1:n∈X1:n
+X
+y1:n∈Y1:n
+PX1:n,Y1:n(x1:n, y1:n) log PX1:n,Y1:n(x1:n, y1:n)
+PX1:n(x1:n)PY1:n(y1:n),
+(17)
+where X1:n = X1, ..., Xn and Y1:n = Y1, ..., Yn are all random variables. The conditional mutual
+information measure is the expected value of the mutual information of two random variables given
+the value of a third. It can be given as:
+I(X; Y |Z) =
+X
+z∈Z
+X
+y∈Y
+X
+x∈X
+PX,Y,Z(x, y, z) log
+PX,Y |Z(x, y|z)
+PX|Z(x|z)PY |Z(y|z),
+(18)
+where Z is any discrete random variable. Similarly to mutual information, conditional mutual in-
+formation is non-negative and can be extended to continuous random variables and joint probability
+distributions of two of more random variables.
+The joint rate-distortion is given as:
+RX1,X2(D1, D2) = min I(X1, X2; ˆZ1, ˆZ2),
+(19)
+where the minimum is taken with respect to all tuples ( ˆZ1, ˆZ2) that achieve at least (D1, D2) dis-
+tortion. The marginal rate-distortion functions are given by:
+RX1(D1) = min I(X1; ˆZ1),
+RX2(D2) = min I(X2; ˆZ2),
+(20)
+with similar distortion restrictions on ˆZ1 and ˆZ2. The conditional rate-distortion function is:
+RX1|X2(D1) = min I(X1; ˆZ1|X2),
+RX2|X1(D2) = min I(X2; ˆZ2|X1),
+(21)
+with the corresponding distortion restrictions on the minimums.
+Recall that the interaction information (II) (Ting, 1962; Yeung, 1991) between random variables X,
+Y , and Z is given as:
+I(X; Y ; Z) = I(X; Y ) −I(X; Y |Z),
+(22)
+and that the chain rule of mutual information (Cover & Thomas, 2006) is defined as:
+I(X; Z) = I(X; Y, Z) −I(X; Y |Z).
+(23)
+We derive the following corollary:
+I(X; Y ; Z) = I(X, Y ; Z) −I(X; Z|Y ) −I(Y ; Z|X).
+(24)
+An outline of the proof is presented as follows:
+I(X; Y ; Z) = 1/2 [I(X; Z) −I(X; Z|Y ) + I(Y ; Z) −I(Y ; Z|X)]
+(Eq. 22 twice)
+(25)
+= I(X, Y ; Z) −I(X; Z|Y ) −I(Y ; Z|X).
+(Eq. 23 twice)
+(26)
+The chain rule of mutual information and the definition of interaction information can be extended
+to any finite amount of random variables. Interaction information can be negative when the variables
+involved are conditional dependent.
+13
+
+
+A.2
+SUPPORTING STATEMENTS
+Lemma 1. Let ˆZ(t)
+D1,D2 be the set of tuples ( ˆZ1, ˆZ2) that achieve RX1,X2(D1, D2), and ˆZ(r)
+D1,D2 be
+the set of tuples ( ˆZ1, ˆZ2) such that ˆZ1 achieves RX1(D1), and ˆZ2 achieves RX2(D2). We have that:
+max
+( ˆ
+Z1, ˆ
+Z2)∈ˆ
+Z(r)
+D1,D2
+I(X1, X2; ˆZ1; ˆZ2) ≤
+min
+( ˆ
+Z1, ˆ
+Z2)∈ˆ
+Z(t)
+D1,D2
+I(X1, X2; ˆZ1; ˆZ2).
+(27)
+Proof. By definition, we have:
+I
+
+X1; ˆZ(r,1)
+1
+
++ I
+
+X2; ˆZ(r,1)
+2
+
+= I
+
+X1; ˆZ(r,2)
+1
+
++ I
+
+X2; ˆZ(r,2)
+2
+
+(28)
+∀
+
+ˆZ(r,1)
+1
+, ˆZ(r,1)
+2
+
+,
+
+ˆZ(r,2)
+1
+, ˆZ(r,2)
+2
+
+∈ˆZ(r)
+D1,D2.
+(29)
+The minimization objective for RX1(D1) + RX2(D2), over all possible tuples ( ˆZ1, ˆZ2), is given as:
+I(X1; ˆZ1) + I(X2; ˆZ2).
+(30)
+This objective selects ˆZ1 and ˆZ2 independently and does not consider their mutual information.
+Thus, solutions with lower or higher mutual information are not penalized and are present in ˆZ(r)
+D1,D2,
+as long as they meet the objective. Moreover, the objective does not allow ˆZ1 or ˆZ2 to have excess
+information in I(X1; ˆZ1) or I(X2; ˆZ2) to achieve D1 and D2, respectively, since a different tuple
+would exist that discards this information, setting a new goal for the accepted solutions in ˆZ(r)
+D1,D2.
+To simplify notation, let X = (X1, X2). By definition, we have:
+I
+
+X; ˆZ(t,1)
+1
+, ˆZ(t,1)
+2
+
+= I
+
+X; ˆZ(t,2)
+1
+, ˆZ(t,2)
+2
+
+∀
+
+ˆZ(t,1)
+1
+, ˆZ(t,1)
+2
+
+,
+
+ˆZ(t,2)
+1
+, ˆZ(t,2)
+2
+
+∈ˆZ(t)
+D1,D2 (31)
+The minimization objective in RX1,X2(D1, D2), over all possible tuples ( ˆZ1, ˆZ2), is broken down
+as:
+I(X; ˆZ)
+(32)
+= I(X; ˆZ1) + I(X; ˆZ2| ˆZ1)
+(Eq. 23)
+(33)
+= I(X; ˆZ1)
+|
+{z
+}
+(a)
++ I(X; ˆZ2)
+|
+{z
+}
+(b)
+−I(X; ˆZ1; ˆZ2)
+|
+{z
+}
+(c)
+(Eq. 22)
+(34)
+= I(X1; ˆZ1)
+|
+{z
+}
+(a.1)
++ I(X2; ˆZ1|X1)
+|
+{z
+}
+(a.2)
++ I(X2; ˆZ2)
+|
+{z
+}
+(b.1)
++ I(X1; ˆZ2|X2)
+|
+{z
+}
+(b.2)
+−I(X; ˆZ1; ˆZ2)
+|
+{z
+}
+(c)
+.
+(Eq. 23)
+(35)
+Remarks:
+1. Because of term (c), this objective considers the common information between variables, at
+the expense of allowing tuples to have private information from the other variable in them.
+2. Information in (a.1) and (b.1) contributes to achieving D1 and D2, respectively.
+3. Information in (a.2) and (b.2) does not contribute to achieving D1 or D2, respectively.
+4. Interaction information I(X; ˆZ1; ˆZ2) is present in the same proportion in (a) and (b), each.
+5. If some interaction information I(X; ˆZ1; ˆZ2) is not in (a.1), it is in (a.2). If it is not in (b.1),
+it must be in (b.2).
+6. Interaction information I(X; ˆZ1; ˆZ2) is distributed among (a.1) and (b.1), (a.1) and (b.2),
+and (a.2) and (b.1).
+7. Interaction information I(X; ˆZ1; ˆZ2) present in (a.2) and (b.2) has no purpose and the
+minimization objective would select tuples where it does not exist, since the penalty is
+double and is not sufficiently countered by (c), increasing the objective.
+8. Since information in ˆZ1 of type (a.2) or information in ˆZ2 of type (b.2) does not contribute
+to achieving D1 or D2, respectively, the minimization objective would select tuples that
+have zero information of those types, unless it is also present in the other variable ( ˆ
+Z2 or
+ˆ
+Z1), so that it is countered by (c) without affecting the objective.
+14
+
+
+9. Interaction information I(X; ˆZ1; ˆZ2) that reduces the private information in (a.1) and (b.1),
+takes precedence over other information when it decreases the objective.
+Since all elements in ˆZ(r)
+D1,D2 have no type (a.2) or (b.2) information and all have the same amount
+of type (a.1) and (b.1) information, only the term (c) differentiates them under the RX1,X2 objective.
+Hence, the tuples with the most common information will have the lowest objective:
+I
+
+X; ˆZ(rmax)
+≤I
+
+X; ˆZ(rmin)
+1
+, ˆZ(rmin)
+2
+
+,
+(36)
+where ˆZ(rmax) and ˆZ(rmin) are tuples in ˆZ(r)
+D1,D2 with the highest and lowest I(X; ˆZ1; ˆZ2), respec-
+tively.
+Let ˆZ(tmin) be the tuple in ˆZ(t)
+D1,D2 with the lowest I(X; ˆZ1; ˆZ2). This tuple has no information of
+type (a.2) or (b.2), since it does not contribute to reducing the objective. Moreover, this property,
+in conjunction with the conditions in 1, establishes that ˆZ(tmin)
+1
+and ˆZ(tmin)
+2
+can be represented as
+functions of X1 and X2, respectively. Since these functions are applied independently to different
+variables, the resulting variables cannot be conditionally dependent on X. Thus, the interaction
+information involving these variables is non-negative. Using these properties, we have:
+I(X; ˆZ)
+(37)
+= I(X1; ˆZ1) + I(X2; ˆZ1|X1) + I(X2; ˆZ2) + I(X1; ˆZ2|X2) −I(X; ˆZ1; ˆZ2)
+(Eq. 35) (38)
+= I
+
+X1; ˆZ(tmin)
+1
+
++ I
+
+X2; ˆZ(tmin)
+2
+
+−I
+
+X; ˆZ(tmin)
+1
+; ˆZ(tmin)
+2
+
+(no a.2/b.2) (39)
+≤I
+
+X1; ˆZ(tmin)
+1
+
++ I
+
+X2; ˆZ(tmin)
+2
+
+.
+(II ≥0) (40)
+Thus, tuples that result from optimizing RX1,X2(D1, D2) can produce lower values than tuples
+resulting from optimizing RX1(D1) + RX2(D2), such that:
+I
+
+X; ˆZ(tmin)
+≤I
+
+X; ˆZ(rmax)
+.
+(41)
+A minor increase in private information at the expense of greater common information in (a.1) and
+(b.1) can cause the objective to decrease further than any tuple optimized for RX1(D1) + RX2(D2).
+This result conforms to the one shown by Gray (1973), stating that:
+RX1,X2(D1, D2) ≤RX1(D1) + RX2(D2).
+(42)
+A.3
+MAIN THEOREM
+Theorem 1. Let ˆZ(t)
+D1,D2 be the set of tuples ( ˆZ1, ˆZ2) that achieve RX1,X2(D1, D2), and ˆZ(r)
+D1,D2
+be the set of tuples ( ˆZ1, ˆZ2), such that ˆZ1 achieves RX1(D1), and ˆZ2 achieves RX2(D2). Then:
+K(X1, X2; D1, D2) ≤
+max
+( ˆ
+Z1, ˆ
+Z2)∈ˆ
+Z(r)
+D1,D2
+I(X1, X2; ˆZ1; ˆZ2)
+(6)
+≤
+min
+( ˆ
+Z1, ˆ
+Z2)∈ˆ
+Z(t)
+D1,D2
+I(X1, X2; ˆZ1; ˆZ2) ≤C(X1, X2; D1, D2).
+(7)
+We have equality everywhere iff the maximum and minimum coincide at ( ˆZ∗
+1, ˆZ∗
+2), and we can
+represent ˆZ∗
+1 as ( ˆZ′
+1, W) and ˆZ∗
+2 as ( ˆZ′
+2, W) such that Conditions 3 and 5 hold for ˆZ∗
+1, ˆZ∗
+2, and W.
+Proof. We reinstate the conditions for Wyner’s common information individually:
+ˆZ1 ↔U ↔ˆZ2,
+(43)
+(X1, X2) ↔( ˆZ1, ˆZ2) ↔U,
+(44)
+and do the same for G´acs-K¨orner common information:
+X2 ↔X1 ↔V,
+(45)
+X1 ↔X2 ↔V,
+(46)
+X1 ↔ˆZ1 ↔V,
+(47)
+X2 ↔ˆZ2 ↔V.
+(48)
+15
+
+
+To simplify notation, let X = (X1, X2), and ˆZ = ( ˆZ1, ˆZ2). We show for the RHS that:
+I(X; ˆZ1; ˆZ2) = I(X; ˆZ1; ˆZ2; U) + I(X; ˆZ1; ˆZ2|U)
+(Eq. 22)
+(49)
+= I(X; ˆZ1; ˆZ2; U)
+(Cond. 43)
+(50)
+= I(X; ˆZ; U) −I(X; ˆZ1; U| ˆZ2) −I(X; ˆZ2; U| ˆZ1)
+(Eq. 24)
+(51)
+≤I(X; ˆZ; U)
+(I(X; W; Y |Z) ≥0)
+(52)
+= I(X; U) −I(X; U| ˆZ)
+(Eq. 22)
+(53)
+= I(X; U).
+(Cond. 44)
+(54)
+Thus:
+I(X; ˆZ1; ˆZ2) ≤I(X; U) =⇒inf I(X; ˆZ1; ˆZ2) ≤inf I(X; U)
+(55)
+=⇒min I(X; ˆZ1; ˆZ2) ≤C(X1, X2; D1, D2),
+(Lemma 1)
+(56)
+where the infimum is over the same set as in Eq. 2, and the minimum is over the same set as in
+Lemma 1.
+To prove the LHS, first we derive the following:
+I(X; ˆZ1; V | ˆZ2) = I(X1; ˆZ1; V | ˆZ2, X2) + I(X2; ˆZ1; V | ˆZ2) = 0,
+(Eq. 23, 46, 48)
+(57)
+I(X; ˆZ2; V | ˆZ1) = I(X2; ˆZ2; V | ˆZ1, X1) + I(X1; ˆZ2; V | ˆZ1) = 0,
+(Eq. 23, 45, 47)
+(58)
+I(X; V | ˆZ) = I(X2; V | ˆZ) + I(X1; V | ˆZ, X2) = 0.
+(Eq. 23, 48, 46)
+(59)
+Now, we have:
+I(X; ˆZ1; ˆZ2) = I(X; ˆZ1; ˆZ2; V ) + I(X; ˆZ1; ˆZ2|V )
+(Eq. 22)
+(60)
+≥I(X; ˆZ1; ˆZ2; V )
+(I(X; W; Y |Z) ≥0)
+(61)
+= I(X; ˆZ; V ) −I(X; ˆZ1; V | ˆZ2) −I(X; ˆZ2; V | ˆZ1)
+(Eq. 24)
+(62)
+= I(X; ˆZ; V )
+(Eq. 57,58)
+(63)
+= I(X; V ) −I(X; V | ˆZ)
+(Eq. 22)
+(64)
+= I(X; V ).
+(Eq. 59)
+(65)
+Finally, we have:
+I(X; V ) ≤I(X; ˆZ1; ˆZ2) =⇒sup I(X; V ) ≤sup I(X; ˆZ1; ˆZ2)
+(66)
+=⇒K(X1, X2; D1, D2) ≤max I(X; ˆZ1; ˆZ2),
+(Lemma 1)
+(67)
+where the supremum is over the same set as in Eq. 4, and the maximum is over the same set as in
+Lemma 1.
+To obtain equality on the RHS, Equations 57 and 58 shows us under which conditions the last two
+terms in Equation 51 are zero. Since the conditions hold in equality for ˆZ∗and W, we continue the
+same analysis with the corresponding terms set to zero, yielding:
+I(X; ˆZ1; ˆZ2; W) = I(X; ˆZ; W) =⇒I(X; ˆZ1; ˆZ2) = I(X; W)
+(Cds. 45-48) (68)
+=⇒inf I(X; ˆZ1; ˆZ2) = inf I(X; W)
+(69)
+=⇒I(X; ˆZ∗
+1; ˆZ∗
+2) = C(X1, X2; D1, D2),
+(Lemma 1) (70)
+where the infimum is over the same conditions as in Eq. 2.
+For the LHS, due to Condition 43 holding in equality for ˆZ∗and W, we have equality in Equation
+61. Hence:
+I(X; ˆZ1; ˆZ2) = I(X; ˆZ1; ˆZ2; W) =⇒I(X; W) = I(X; ˆZ1; ˆZ2)
+(Cond. 43) (71)
+=⇒sup I(X; W) = sup I(X; ˆZ1; ˆZ2)
+(72)
+=⇒K(X1, X2; D1, D2) = I(X; ˆZ∗
+1; ˆZ∗
+2),
+(Lemma 1) (73)
+16
+
+
+where the supremum is over the same conditions as in Eq. 4.
+If either of Conditions 45-48 is not met, more than I(X; ˆZ∗
+1; ˆZ∗
+1) is present in W and equality is not
+achieved in Equation 52. If Condition 43 is not met, not all mutual information between ˆZ∗
+1 and ˆZ∗
+2,
+in common with (X1, X2), is placed on W and equality is not achieved in Equation 61. If all these
+conditions are met, but we have that:
+max
+( ˆ
+Z1, ˆ
+Z2)∈ˆ
+Z(r)
+D1,D2
+I(X1, X2; ˆZ1; ˆZ2) ≤
+min
+( ˆ
+Z1, ˆ
+Z2)∈ˆ
+Z(t)
+D1,D2
+I(X1, X2; ˆZ1; ˆZ2),
+(74)
+then the optimization of the joint rate-distortion and the marginal rate-distortion objectives produce
+tuples with different amounts of mutual information, and the lossy common information measures
+will not match.
+B
+DERIVATION OF THE OPTIMIZATION OBJECTIVE
+Theorem 2. Assume that Y0 = f0(X1, X2); f0 ∈F0, Y1 = f1(X1); f1 ∈F1, Y2 = f2(X2); f2 ∈
+F2 are all deterministic functions of their corresponding inputs, and that g1 ∈G1 and g2 ∈G2,
+where F{0,1,2} and G{1,2} are families of functions such that there exits a f0, f1, f2, g1, and g2 in
+their respective families that achieve T(α1, α2; D1, D2). Then:
+T(α1, α2; D1, D2) = inf {H(Y0) + α1H(Y1|Y0) + α2H(Y2|Y0)} ,
+(10)
+where H(·) is Shannon’s entropy function, and H(·|·) is the conditional entropy function (Cover
+& Thomas, 2006). The infimum is over all f0, f1, f2, g1, and g2 in their corresponding family of
+functions, such that we obtain, at most, distortions D1 and D2.
+Proof. Since Y0 is a deterministic function of (X1, X2), we have:
+I(X1, X2; Y0) ≜H(Y0) −H(Y0|X1, X2) = H(Y0).
+(75)
+Since Y1 is a deterministic function of X1, we have for the conditional rate-distortion function that:
+RX1|Y0(D1) ≜min I(X1; Y1|Y0) = min H(Y1|Y0) −H(Y1|X1, Y0) = min H(Y1|Y0),
+(76)
+where the minimum is over all probability distributions P(Y1|X1) ∈PY1|X1 such that the resulting
+Y1 produces at most distortion D1. The converse holds, where, since Y2 is a deterministic function
+of X2, we have that:
+RX2|Y0(D2) ≜min I(X2; Y2|Y0) = min H(Y2|Y0) −H(Y2|X2, Y0) = min H(Y2|Y0),
+(77)
+where the minimum is over all probability distributions P(Y2|X2) ∈PY2|X2 such that the resulting
+Y2 produces at most distortion D2.
+An optimization over probability distributions of random variables can be swapped by an optimiza-
+tion over a family of functions generating those random variables, as long as the function producing
+the probability distribution minimizing the first problem is in the family of functions. Under this
+assumption, replacing the terms in Eq. 9:
+T(α1, α2; D1, D2) ≜inf
+
+I(X1, X2; Y0) + α1RX1|Y0(D1) + α2RX2|Y0(D2)
+	
+,
+(78)
+with Equations 75, 76, and 77, we arrive at the desired result.
+C
+THEORY OF COMPATIBLE REPRESENTATIONS
+We define the compatibility between two representations as the measurable difficulty of learning a
+task that tries to match them in Euclidean space. Since their information content can be different, it
+might not be possible for the two representations to closely match. However, we do not propose to
+use as a measure the loss itself but the generalization error induced by the family of functions used
+to generate these representations. An increase in the upper-bound on this generalization error means
+that the corresponding model has the potential to make the representations more difficult to bring
+back to a common manifold.
+Within this section, we override all previous established notation:
+17
+
+
+Definition 1. Let f : RD →RD be a function representing a neural network layer such as as dense,
+convolutional, ResNet, or transformer layer. Let σ be an element-wise function, such as a ReLU,
+ELU, sigmoid, tanh, or an identity function. Let f ∈F be a family of neural network layers. We
+define a neural network family of L ∈Z+ homogeneous layers as:
+FL =
+
+f : f(y) = (fL ◦... ◦σ ◦f2 ◦σ ◦f1)(y), ∀(f1, ..., fL) ∈F1 × ... × FL;
+(79)
+Fi = F, ∀i ∈{1, ..., L}
+	
+.
+(80)
+Let D = {([y1]i , [y2]i)}N
+i=1 ∼Y1, Y2 be a set of samples from the joint distribution Y1, Y2. We de-
+fine the compatibility between representations Y1 and Y2 as the generalization error CFL(D; Y1, Y2)
+of a regression task of Y1 onto Y2:
+CFL(D; Y1, Y2) = sup
+ℓ∈LFL
+|EY1,Y2(ℓ) −ED(ℓ)|;
+(81)
+LFL = {ℓ: ℓ(y1, y2) = ∥f(y1) −y2∥, ∀f ∈FL} ,
+(82)
+EY1,Y2(ℓ) = E(y1,y2)∼Y1,Y2 [ℓ(y1, y2)] , ED(ℓ) = 1
+N
+X
+(y1,y2)∈D
+ℓ(y1, y2).
+(83)
+Lemma 2. Let the functions in the family S ⊂FL be Lipschitz such that Lip(f) ≤µ ∀f ∈S, where
+Lip(f) retrieves the Lipschitz constant of a function f. The Rademacher complexity RadD(LS) is
+bounded by:
+RadD(LS) ≤µRad(D1) + Rad(D2),
+(84)
+where D1 = {y1 : (y1, y2) ∈D}, D2 = {y2 : (y1, y2) ∈D}, and Rad(D) is the Rademacher
+complexity of a set D.
+Proof. Let A be a random variable with sample space {−1, 1}N following the Rademacher distri-
+bution. We have that:
+RadD(LS) = 1
+N Ea∼A
+"
+sup
+ℓ∈LS
+
+N
+X
+i=1
+aiℓ([y1]i , [y2]i)
+
+#
+(85)
+≤1
+N Ea∼A
+"
+sup
+f∈S
+
+N
+X
+i=1
+ai [f ([y1]i) −[y2]i]
+
+#
+(86)
+= 1
+N Ea∼A
+"
+sup
+f∈S
+
+N
+X
+i=1
+aif ([y1]i) −
+N
+X
+i=1
+ai [y2]i
+
+#
+(87)
+≤1
+N Ea∼A
+"
+sup
+f∈S
+(
+N
+X
+i=1
+aif ([y1]i)
+ +
+
+N
+X
+i=1
+ai [y2]i
+
+)#
+(88)
+= 1
+N Ea∼A
+"
+sup
+f∈S
+
+N
+X
+i=1
+aif ([y1]i)
+
+#
++ 1
+N Ea∼A
+"
+sup
+f∈S
+
+N
+X
+i=1
+ai [y2]i
+
+#
+(89)
+= RadD1(S) + Rad(D2)
+(90)
+≤µRad(D1) + Rad(D2).
+(91)
+Eq. 86 uses the Kakade & Tewari Lemma (Kakade & Tewari, 2008) based on Talagrand’s contraction
+principle (Ledoux & Talagrand, 2013; Bartlett & Mendelson, 2002). It states that if all vectors in
+a set A are operated by a Lipschitz function, then Rad(A) is at most multiplied by the Lipschitz
+constant of the function. It is easy to show that the norm is 1-Lipschitz. Eq. 91 uses the same
+lemma. Eq. 88 uses |a −b| ≤|a| + |b|.
+We can upper-bound the compatibility measure CS(D; Y1, Y2) using a well-known generalization
+error bound in terms of Rademacher complexity:
+Theorem 3. Let the functions in the family S ⊂FL be Lipschitz such that Lip(f) ≤µ ∀f ∈S, and
+let the loss function be bounded such that ℓ(y1, y2) ∈[−B, B] ∀ℓ∈LS, y1 ∈Y1, y2 ∈Y2, where
+Y1 and Y2 are the sample spaces of Y1 and Y2, respectively. Then, ∀δ ∈(0, 1), with probability at
+least 1 −δ, we have:
+CS(D; Y1, Y2) ≤2 [KRad(D1) + Rad(D2)] + B
+p
+2/N log 2/δ
+(92)
+18
+
+
+Proof.
+CS(D; Y1, Y2) ≤2RadD(LS) + B
+p
+2/N log 2/δ
+(93)
+≤2 [µRad(D1) + Rad(D2)] + B
+p
+2/N log 2/δ.
+(94)
+Eq. 93 uses Theorem 26.5 in Shalev-Shwartz & Ben-David (2014). Eq. 94 uses Lemma 2.
+Theorem 4. Assume that the representations Y1 and Y2 are functions of a common random variable
+X, such that:
+Y1 = g1(X); g1 ∈GL1; GL1 ⊂FL1,
+Y2 = g2(X); g2 ∈GL2; GL2 ⊂FL2,
+(95)
+where GL1 and GL2 are subsets corresponding to ResNets with 1-Lipschitz activations of L1 and L2
+layers, respectively. Further assume that the kernels {W (l)
+i }D
+i=1; Wi ∈RK×K, for the convolutional
+layers l = {1, ..., max{L1, L2}} in GL1 and GL2, are bounded such that:
+max{L1,L2}
+sup
+l=1
+D
+sup
+i=1
+K
+X
+j=1
+K
+X
+k=1
+
+h
+W (l)
+i
+i
+j,k
+ ≤γ.
+(96)
+where γ ≥0. Let DX = {x1}N
+i=1 ∼X be a set of samples from X. Then, ∀δ ∈(0, 1), with
+probability at least 1 −δ, we have:
+CS(D; Y1, Y2) ≤2
+
+µ(1 + γ)L1 + (1 + γ)L2
+Rad(DX) + B
+p
+2/N log 2/δ,
+(97)
+Proof.
+CS(D; Y1, Y2) ≤2 [µRad(D1) + Rad(D2)] + B
+p
+2/N log 2/δ
+(98)
+= 2 [µRadDX(GL1) + RadDX(GL2)] + B
+p
+2/N log 2/δ
+(99)
+≤2 [µLip(GL1) + Lip(GL2)] Rad(DX) + B
+p
+2/N log 2/δ
+(100)
+≤2
+
+µ(1 + γ)L1 + (1 + γ)L2
+Rad(DX) + B
+p
+2/N log 2/δ.
+(101)
+Eq. 98 uses Theorem 3. Eq. 100 uses the Kakade & Tewari Lemma previously introduced. Eq. 101
+uses Lemma 2 in Behrmann et al. (2019), where for any functions f and g, such that f(x) = x+g(x)
+with Lip(g) = γ Then, it holds that Lip(f) ≤1 + γ. The Lipschitz constant for a convolutional
+layer with 1-Lipschitz activations (e.g. ReLU) is defined in Truong (2022) and shown in Eq. 96. We
+also use Lip(g ◦f) = Lip(g)Lip(f), for any Lipschitz functions g and f.
+C.1
+ANALYSIS
+Theorem 4 shows that, when γ ̸= 0, the compatibility between representations Y1 and Y2 decreases
+with the depth of the ResNets producing them. For representations that share a neural network, such
+that the representations Y1 and Y2 are splits of its output, X corresponds to the output of the next to
+last layer and hence the neural network producing Y1 and Y2 would only have one layer, increasing
+their compatibility.
+In our problem space, it is desirable for the common representation to be compatible with the pri-
+vate representations. The Separable approach has a dedicated ResNet for each representation, which
+produces less compatible representations compared to our approach, in which each private represen-
+tation shares most of a ResNet with a copy of the common representation.
+In the Combined approach, all representations share most of a ResNet, which increases compatibility
+among them, but constraints the private channels to produce similar information since they share
+many of the intermediate representations. A Combined approach with higher dimensionality could
+compensate for this limitation, but it would be more inefficient than the proposed method, since the
+kernels would have to be larger in order to accommodate for the larger dimensionality, and parts of
+the input for each layer might be irrelevant to some of the target representations.
+19
+
+
+Analysis Transform
+Conv.
+(24, 1/2S)
+ResNet
+(3X)
+ResNet
+(3X)
+Conv.
+(48, 1/2S)
+Conv.
+(192, 1/2S)
+ResNet
+(3X)
+Conv.
+(E, 1/2S)
+In
+Out
+(a) Analysis transform
+Synthesis Transform
+Conv.
+(192, 2S)
+ResNet
+(3X)
+ResNet
+(3X)
+Conv.
+(48, 2S)
+Conv.
+(24, 2S)
+ResNet
+(3X)
+Conv.
+(M, 2S)
+Task
+Model
+In
+Out
+(b) Synthesis transform
+Figure 6: Architecture diagrams of the analysis and synthesis transforms. The number of channels
+in the input is denoted as M. The values assigned to S corresponds to a multiplying change in the
+spatial dimensions. The values assigned to X represents the number of blocks. The values 24, 48,
+and 192 correspond to the number of channels in the output representation of the module.
+ResNet
+(2X)
+Masked
+Conv.
+(2E)
+concat
+Conv.
+(3X, 1/2E)
+ResNet
+(2X)
+Conv.
+(2E)
+Masked
+Conv.
+(2E)
+Conv.
+(3X)
+ResNet
+(2X)
+ResNet
+(2X)
+Conv.
+(2E)
+Masked
+Conv.
+(2E)
+concat
+Conv.
+(3X, 1/2E)
+Figure 7: Architecture overview of the three entropy models. NY{0,1,2} represents the multivariate
+normal parameters with diagonal covariances assigned to Y{0,1,2}. They define ˜PY{0,1,2}. The values
+assigned to X represents the number of blocks. The values assigned to E correspond to a multiplying
+change in the number of channels. For example, “Conv. (3X)” corresponds to 3 convolutional layers,
+and “Conv. (2E)” corresponds to a convolutional layer that doubles the number of channels.
+D
+ADDITIONAL DETAILS AND RESULTS
+D.1
+ARCHITECTURE DETAILS
+Figure 6 shows architecture diagrams of the analysis and synthesis transforms. Figure 7 shows an
+architecture diagram of the three entropy models used in the proposed method. All ResNets use
+ELU activation functions. The number of channels in the intermediate representation in the ResNet
+blocks have the same number of channels as the input (and output).
+Figure 8 presents an overview of the codec architectures used as benchmarks. The entropy model
+architecture used for the three-channel codecs is the same one described for the proposed architec-
+ture. The two-channel and one-channel codecs have the same entropy model architecture as the one
+used for the Y0 representation in the proposed architecture.
+20
+
+
+Analysis
+Transform
+Synthesis
+Transform
+Synthesis
+Transform
+(a) Combined
+Analysis
+Transform
+Analysis
+Transform
+Analysis
+Transform
+Synthesis
+Transform
+Synthesis
+Transform
+(b) Separated
+Analysis
+Transform
+Synthesis
+Transform
+Analysis
+Transform
+Synthesis
+Transform
+(c) Independent
+Analysis
+Transform
+Synthesis
+Transform
+Synthesis
+Transform
+(d) Joint
+Figure 8: Architecture diagrams of the codecs used as benchmarks. The Combined and Separated
+approaches have three channels each, and are considered different versions of a Gray-Wyner Net-
+work. The Independent codec has two channels, and the Joint codec only has one. For simplicity,
+the entropy models that code Y{0,1,2} are omitted.
+Table 1: Hyper-parameter and training settings
+Parameter
+Synthetic
+MNIST
+Cityscapes
+COCO 2017
+Precision
+float32
+float32
+float32
+float32
+Input representation channels (M)
+2
+3
+3
+3
+Target representation channels (E)
+512
+6
+192
+192/288
+Auxiliary loss weight (γ)
+1
+1
+1
+1
+Reconstruction loss weight
+0
+0
+1
+1
+Random horizontal flip
+No
+No
+Yes
+Yes
+Color jittering
+No
+No
+Yes
+No
+Batch size
+100
+100
+4
+4
+Accumulated gradient batches
+1
+1
+3
+1
+Optimizer
+Adam
+Adam
+Adam
+Adam
+Optimizer parameters
+0.9, 0.999
+0.9, 0.999
+0.9, 0.999
+0.9, 0.999
+Learning rate
+0.0001
+0.0001
+0.0001
+0.0001
+Weight decay
+0
+0
+0
+0
+Gradient norm clipping
+1
+1
+1
+1
+Patience
+10
+25
+50
+5
+Maximum number of epochs
+100
+200
+1,000
+100
+D.2
+TRAINING DETAILS
+Since the task losses (distortion functions) used are on a similar scale, we only consider rate-
+distortion points where λ1 = λ2. Thus, we scale the optimization objective L by η = 1/λ{1,2} to
+obtain a single hyper-parameter controlling the rate-distortion tradeoff.
+Table 1 shows the training details used in all experiments. Additional considerations for repro-
+ducibility are addressed in other related sections.
+D.3
+TRANSMIT-RECEIVE TRADEOFF AND ABLATION STUDY
+Elements of a random variable X with sample space {−4, ..., 4}2×64×64 are identically distributed
+according to a probability mass function (PMF) created from the normal distribution N(0, 4), which
+21
+
+
+0
+2
+4
+6
+8
+10
+12
+14
+Transmit Rate (BPP)
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0
+RMSE Sum
+Method: BD-Rate (%)
+Joint (Empirical)
+Joint (Theoretical): -96.89
+Shared: 7.84
+Separated: 45.67
+Combined: 74.54
+(a) Transmit rate for β = 3/2
+0.0
+2.5
+5.0
+7.5
+10.0
+12.5
+15.0
+17.5
+Receive Rate (BPP)
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0
+RMSE Sum
+Method: BD-Rate (%)
+Independent (Empirical)
+Independent (Theoretical): -95.53
+Shared: 17.76
+Separated: 68.59
+Combined: 101.57
+(b) Receive rate for β = 3/2
+0.0
+2.5
+5.0
+7.5
+10.0
+12.5
+15.0
+17.5
+Receive Rate (BPP)
+0.0
+0.2
+0.4
+0.6
+0.8
+RMSE Sum
+Method: BD-Rate (%)
+Independent (Empirical)
+Independent (Theoretical): -95.53
+Shared: 12.28
+Separated: 55.25
+Combined: 136.18
+(c) Receive rate for β = 2
+0
+1
+2
+3
+4
+5
+Common Channel Rate (BPP)
+0.0
+0.2
+0.4
+0.6
+0.8
+RMSE Sum
+Method: BD-Rate (%)
+Mutual Information (Empirical)
+Mutual Information (Theoretical): -93.64
+Shared: 40.01
+Separated: 13.93
+Combined: 25.48
+(d) Common information for β = 1
+0
+1
+2
+3
+4
+5
+Common Channel Rate (BPP)
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0
+RMSE Sum
+Method: BD-Rate (%)
+Mutual Information (Empirical)
+Mutual Information (Theoretical): -93.64
+Shared: -47.16
+Separated: -40.27
+Combined: -29.16
+(e) Common channel rate for β = 3/2
+0
+1
+2
+3
+4
+5
+Common Channel Rate (BPP)
+0.0
+0.2
+0.4
+0.6
+0.8
+RMSE Sum
+Method: BD-Rate (%)
+Mutual Information (Empirical)
+Mutual Information (Theoretical): -93.64
+Shared: -68.88
+Separated: -57.38
+Combined: -58.04
+(f) Common channel rate for β = 2
+Figure 9: Additional rate-distortion curves for different methods, optimized for transmit, receive,
+and mixed rates. The common information axes correspond to the bitrates of the common channel,
+the theoretical measurements of mutual information, and its empirical estimates. BD-rates (Bjon-
+tegaard, 2001) are computed with respect to the method with no score. Bits-per-pixel (BPP) is the
+bitrate scaled by 1/64×64.
+Table 2: Rate-distortion performance of baselines on synthetic dataset
+Codec
+β
+η
+R1
+R2
+R0
+Rt
+Rr
+D1
+D2
+Independent
+N/A
+0.001
+8.699
+8.913
+0
+17.612
+17.612
+0.040
+0.039
+Independent
+N/A
+0.01
+5.047
+5.424
+0
+10.471
+10.471
+0.046
+0.048
+Independent
+N/A
+0.1
+2.077
+2.059
+0
+4.136
+4.136
+0.152
+0.151
+Independent
+N/A
+0.5
+0.656
+0.655
+0
+1.311
+1.311
+0.381
+0.381
+Independent
+N/A
+1.0
+0.287
+0.334
+0
+0.621
+0.621
+0.459
+0.460
+Joint
+N/A
+0.001
+0
+0
+9.745
+9.745
+19.49
+0.042
+0.043
+Joint
+N/A
+0.01
+0
+0
+8.096
+8.096
+16.192
+0.048
+0.048
+Joint
+N/A
+0.1
+0
+0
+4.230
+4.230
+8.46
+0.131
+0.132
+Joint
+N/A
+0.5
+0
+0
+0.983
+0.983
+1.966
+0.402
+0.406
+Joint
+N/A
+1.0
+0
+0
+0.429
+0.429
+0.858
+0.452
+0.451
+is first clipped to [−4, 4], and then quantized to 9 symbols using the integers in the range. Contiguous
+element pairs were either selected to be copies, with probability 4/5, or independent, with probability
+1/5. The random variable positions were then shuffled and the resulting dependency map was stored
+and used to generate all samples from X.
+22
+
+
+Table 3: Rate-distortion performance of proposed methods on synthetic dataset for β = 1
+Codec
+β
+η
+R1
+R2
+R0
+Rt
+Rr
+D1
+D2
+Shared
+1
+0.001
+3.747
+4.419
+2.278
+10.444
+12.722
+0.042
+0.041
+Shared
+1
+0.01
+3.110
+3.639
+1.622
+8.371
+9.993
+0.046
+0.048
+Shared
+1
+0.1
+1.504
+2.056
+1.091
+4.651
+5.742
+0.128
+0.126
+Shared
+1
+0.5
+0.247
+0.509
+0.410
+1.166
+1.576
+0.403
+0.403
+Shared
+1
+1.0
+0.050
+0.230
+0.180
+0.460
+0.640
+0.461
+0.456
+Separated
+1
+0.001
+4.287
+4.604
+4.563
+13.454
+18.017
+0.036
+0.035
+Separated
+1
+0.01
+2.729
+3.201
+3.224
+9.154
+12.378
+0.042
+0.042
+Separated
+1
+0.1
+1.781
+1.792
+1.384
+4.957
+6.341
+0.129
+0.128
+Separated
+1
+0.5
+0.212
+0.233
+0.205
+0.650
+0.855
+0.445
+0.445
+Separated
+1
+1.0
+0.106
+0.134
+0.088
+0.328
+0.416
+0.467
+0.462
+Combined
+1
+0.001
+4.130
+4.029
+4.778
+12.937
+17.715
+0.039
+0.040
+Combined
+1
+0.01
+2.807
+2.749
+3.481
+9.037
+12.518
+0.044
+0.045
+Combined
+1
+0.1
+1.880
+1.794
+1.230
+4.904
+6.134
+0.131
+0.131
+Combined
+1
+0.5
+0.233
+0.201
+0.339
+0.773
+1.112
+0.443
+0.447
+Combined
+1
+1.0
+0.095
+0.097
+0.086
+0.278
+0.364
+0.471
+0.470
+Table 4: Rate-distortion performance of proposed methods on synthetic dataset for β = 3/2
+Codec
+β
+η
+R1
+R2
+R0
+Rt
+Rr
+D1
+D2
+Shared
+3/2
+0.001
+3.662
+4.363
+2.116
+10.141
+12.257
+0.043
+0.043
+Shared
+3/2
+0.01
+3.238
+3.698
+1.392
+8.328
+9.720
+0.047
+0.046
+Shared
+3/2
+0.1
+2.007
+2.125
+0.373
+4.505
+4.878
+0.137
+0.136
+Shared
+3/2
+0.5
+0.295
+0.468
+0.215
+0.978
+1.193
+0.413
+0.409
+Shared
+3/2
+1.0
+0.066
+0.222
+0.104
+0.392
+0.496
+0.471
+0.455
+Separated
+3/2
+0.001
+4.518
+4.746
+4.395
+13.659
+18.054
+0.034
+0.035
+Separated
+3/2
+0.01
+3.382
+3.295
+2.465
+9.142
+11.607
+0.044
+0.045
+Separated
+3/2
+0.1
+2.052
+2.118
+0.604
+4.774
+5.378
+0.143
+0.145
+Separated
+3/2
+0.5
+0.277
+0.269
+0.157
+0.703
+0.860
+0.435
+0.441
+Separated
+3/2
+1.0
+0.140
+0.132
+0.049
+0.321
+0.370
+0.463
+0.464
+Combined
+3/2
+0.001
+4.254
+4.071
+4.788
+13.113
+17.901
+0.039
+0.038
+Combined
+3/2
+0.01
+3.618
+3.591
+1.799
+9.009
+10.809
+0.044
+0.044
+Combined
+3/2
+0.1
+1.996
+1.957
+0.826
+4.779
+5.605
+0.137
+0.137
+Combined
+3/2
+0.5
+0.215
+0.216
+0.126
+0.557
+0.683
+0.451
+0.451
+Combined
+3/2
+1.0
+0.083
+0.078
+0.041
+0.202
+0.243
+0.476
+0.477
+Two bijective linear functions of determinant 1 are arbitrarily generated for X1 and X2, respectively.
+The output of these transformations are the corresponding targets Z1 and Z2 for two linear regression
+tasks. We dynamically generate a dataset of infinite samples from PX,Z1,Z2 on the fly.
+The mutual information I(X1; X2) increases with the number of elements in X1 that are duplicated
+in X2. Using the Blahut–Arimoto algorithm (Cover & Thomas, 2006), we generate theoretical rate-
+distortion curves for X. The resulting PMF of the input reconstruction ˆX allows the computation of
+H( ˆZ1, ˆZ2), H( ˆZ1) + H( ˆZ2), and I( ˆZ1; ˆZ2), for the corresponding distortion values D1 and D2.
+To obtain empirical estimates of mutual information, we use the rate of the single channel in the Joint
+method as an empirical measurement ˜H( ˆZ1, ˆZ2). We use the rates of the Independent method as em-
+pirical values ˜H( ˆZ1) + ˜H( ˆZ2). To compute an empirical estimation of the mutual information be-
+tween tasks, we interpolate and extrapolate the points within the rate-distortion curves of these meth-
+ods, covering all distortion points. Then, we compute ˆI( ˆZ1; ˆZ2) = ˜H( ˆZ1) + ˜H( ˆZ2) −˜H( ˆZ1, ˆZ2)
+between points with the same distortion value.
+To improve task performance, all scaling convolutional layers are replaced with pixel shuffle opera-
+tions (Shi et al., 2016), removing dimensionality bottlenecks in the architecture. Each pixel shuffle
+23
+
+
+Table 5: Rate-distortion performance of proposed methods on synthetic dataset for β = 2
+Codec
+β
+η
+R1
+R2
+R0
+Rt
+Rr
+D1
+D2
+Shared
+2
+0.001
+3.656
+4.48
+2.137
+10.273
+12.41
+0.044
+0.041
+Shared
+2
+0.01
+3.332
+3.777
+1.291
+8.4
+9.691
+0.049
+0.046
+Shared
+2
+0.1
+2.116
+2.139
+0.133
+4.388
+4.521
+0.143
+0.147
+Shared
+2
+0.5
+0.305
+0.475
+0.136
+0.916
+1.052
+0.424
+0.41
+Shared
+2
+1.0
+0.066
+0.239
+0.087
+0.392
+0.479
+0.474
+0.455
+Separated
+2
+0.001
+4.494
+4.474
+4.615
+13.583
+18.198
+0.034
+0.035
+Separated
+2
+0.01
+3.748
+3.535
+1.881
+9.164
+11.045
+0.044
+0.045
+Separated
+2
+0.1
+2.016
+2.015
+0.366
+4.397
+4.763
+0.16
+0.166
+Separated
+2
+0.5
+0.168
+0.319
+0.099
+0.586
+0.685
+0.46
+0.428
+Separated
+2
+1.0
+0.075
+0.115
+0.029
+0.219
+0.248
+0.478
+0.47
+Combined
+2
+0.001
+4.215
+4.095
+4.854
+13.164
+18.018
+0.036
+0.037
+Combined
+2
+0.01
+3.863
+3.94
+1.366
+9.169
+10.535
+0.045
+0.045
+Combined
+2
+0.1
+2.11
+2.042
+0.545
+4.697
+5.242
+0.137
+0.138
+Combined
+2
+0.5
+0.221
+0.207
+0.09
+0.518
+0.608
+0.451
+0.46
+Combined
+2
+1.0
+0.099
+0.094
+0.033
+0.226
+0.259
+0.473
+0.474
+Table 6: Rate-distortion performance of the proposed method on colored MNIST
+Codec
+η
+R1
+R2
+R0
+Rt
+Rr
+1/D1
+1/D2
+Dependent
+1
+2.908
+5.779
+15.84
+24.526
+40.366
+0.999
+0.999
+Dependent
+10
+1.460
+4.071
+10.641
+16.172
+26.812
+0.998
+0.999
+Dependent
+25
+1.571
+2.637
+10.524
+14.731
+25.255
+0.996
+0.998
+Dependent
+50
+1.267
+2.500
+9.921
+13.688
+23.609
+0.995
+0.996
+Dependent
+75
+2.186
+0.826
+10.366
+13.378
+23.743
+0.992
+0.989
+Dependent
+100
+1.067
+2.318
+8.991
+12.376
+21.368
+0.975
+0.986
+Independent
+1
+22.269
+6.864
+0.071
+29.203
+29.273
+0.989
+0.999
+Independent
+10
+15.974
+7.030
+0.056
+23.060
+23.116
+0.983
+0.999
+Independent
+25
+13.568
+5.656
+0.017
+19.241
+19.257
+0.975
+0.996
+Independent
+50
+12.073
+5.776
+0.019
+17.868
+17.887
+0.970
+0.969
+Mixture
+1
+19.23
+8.425
+5.149
+32.804
+37.952
+0.993
+1
+Mixture
+10
+9.322
+5.349
+10.966
+25.637
+36.603
+0.992
+1
+Mixture
+25
+9.965
+4.684
+10.025
+24.674
+34.699
+0.989
+0.999
+Mixture
+100
+9.547
+3.660
+9.629
+22.835
+32.464
+0.975
+0.997
+Mixture (Independent)
+1
+27.262
+15.658
+0
+42.919
+42.919
+0.991
+0.999
+Mixture (Independent)
+10
+16.182
+18.592
+0
+34.773
+34.773
+0.988
+0.999
+Mixture (Independent)
+25
+16.031
+15.464
+0
+31.495
+31.495
+0.979
+0.999
+Mixture (Independent)
+50
+14.913
+13.892
+0
+28.805
+28.805
+0.977
+0.998
+Mixture (Independent)
+75
+13.804
+14.685
+0
+28.489
+28.489
+0.967
+0.994
+or unshuffle operation has a factor of 2, which implies that the analysis transform progressively in-
+creases the number of channels from 2 to 8, 32, 128, and finally E = 512. The synthesis transform
+decreases the number of channel in reverse order. We use 1,000 steps per training epoch and 100
+per validation epoch.
+Figure 9 shows additional results. The transmit and receive rate plots show that the Shared (pro-
+posed) method outperforms the Separated and Combined baselines. The common channel rate plots
+show in detail how β controls the amount of information in the common channel. Tables 2, 3, 4, 5
+show the values used in these plots. All rate values are bitrates scaled by 1/64×64.
+24
+
+
+(a) Dependent PMF
+(b) Independent PMF
+(c) Mixture PMF
+Figure 10: MNIST image reconstructions from individual channels Y{0,1,2} produced by codecs
+trained on one of the 3 different PMFs discussed. The Dependent PMF places most information on
+the common channel. The Independent PMF places the digit and color information on the corre-
+sponding private channels. In this codec, the common channel does not seem to carry any informa-
+tion. The Mixture PMF shows a combination of information across channels. The correct answer is
+usually found in a combination of channels.
+D.4
+EDGE-CASE EXPLORATION WITH IMAGE CLASSIFICATION
+We set the number of dimensions to E = 6. Due to the low rate of the channels, the auxiliary loss
+term in Eq. 15, which encourages the common representations Y (1)
+0
+and Y (2)
+0
+to match, prevents
+the common channel from carrying any significant amount of information. We overcome this ob-
+stacle by setting β = 1/10, encouraging the use of the common channel, and compensating for the
+restrictions of the auxiliary loss.
+Table 6 shows the values obtained for the different PMFs and methods. Rates are shown as bitrates
+(using log functions with base 2). The inverse distortions 1/D1 and 1/D2 are the top-1 classification
+accuracies. The Independent method has very low rate on the common channel, as it would be
+optimal to do so. The Dependent method places some information on the private channels, but it is
+on average 29.22% of the transmit rate.
+To visualize the information available in these channels, we train multiple tasks to reconstruct the
+input image, each using the representations of a channel as input. The model architecture is the
+same as the proposed synthesis transform. The kernel sizes of the first and last layers are adapted
+to dimensional requirements of the input and output, respectively. We train to minimize the RMSE
+between the predictions and the input image, using the same settings described for MNIST in Sec-
+tion D.2. We generate reconstructed images for each PMF from corresponding codecs that produce
+the lowest rate.
+Figure 10 shows the results from uniform samples of the validation set. For the Dependent and Inde-
+pendent PMFs, it is easily observed that the available information matches the quantitative results.
+In the results from the Mixture PMF, the color channel does not contain much digit information. The
+digit channel contains some color information but it is often incorrect. Whenever a private channel
+is incorrect, the common channel seems to contain the correct answer.
+25
+
+
+Table 7: Rate-distortion performance of the proposed method on Cityscapes
+Codec
+η
+R1
+R2
+R0
+Rt
+Rr
+1/D1
+D2
+Joint
+0.001
+0
+0
+2.444
+2.444
+4.888
+0.670
+5.493
+Joint
+0.01
+0
+0
+2.069
+2.069
+4.138
+0.669
+5.489
+Joint
+0.05
+0
+0
+1.611
+1.611
+3.222
+0.670
+5.497
+Joint
+0.1
+0
+0
+1.527
+1.527
+3.054
+0.669
+5.496
+Joint
+1
+0
+0
+1.074
+1.074
+2.148
+0.663
+5.497
+Independent
+0.001
+2.113
+2.296
+0
+4.409
+4.409
+0.666
+5.477
+Independent
+0.01
+1.808
+1.892
+0
+3.700
+3.700
+0.668
+5.480
+Independent
+0.05
+1.227
+1.337
+0
+2.564
+2.564
+0.665
+5.493
+Independent
+0.1
+1.104
+1.191
+0
+2.295
+2.295
+0.663
+5.493
+Independent
+1
+0.788
+0.846
+0
+1.634
+1.634
+0.660
+5.513
+Proposed
+0.001
+1.384
+1.482
+0.330
+3.196
+3.526
+0.666
+5.482
+Proposed
+0.01
+1.329
+1.415
+0.243
+2.987
+3.230
+0.669
+5.487
+Proposed
+0.05
+1.217
+1.285
+0.329
+2.831
+3.160
+0.669
+5.488
+Proposed
+0.1
+1.110
+1.151
+0.414
+2.675
+3.089
+0.669
+5.487
+Proposed
+1.0
+0.568
+0.568
+0.409
+1.545
+1.954
+0.666
+5.488
+Proposed
+5.0
+0.315
+0.311
+0.319
+0.945
+1.264
+0.662
+5.496
+Table 8: Rate-distortion performance of the proposed method on COCO 2017
+Codec
+η
+R1
+R2
+R0
+Rt
+Rr
+1/D1
+1/D2
+Joint
+0.001
+0
+0
+3.513
+3.513
+7.026
+0.453
+0.646
+Joint
+0.05
+0
+0
+3.198
+3.198
+6.396
+0.454
+0.643
+Joint
+0.1
+0
+0
+2.997
+2.997
+5.994
+0.453
+0.642
+Joint
+1
+0
+0
+1.980
+1.980
+3.960
+0.449
+0.638
+Independent
+0.001
+3.676
+3.543
+0
+7.219
+7.219
+0.453
+0.645
+Independent
+0.01
+3.498
+3.264
+0
+6.762
+6.762
+0.453
+0.644
+Independent
+0.05
+3.113
+2.973
+0
+6.086
+6.086
+0.454
+0.643
+Independent
+0.1
+2.855
+2.768
+0
+5.623
+5.623
+0.453
+0.643
+Independent
+1
+1.615
+1.605
+0
+3.220
+3.220
+0.448
+0.635
+Proposed
+0.001
+2.725
+2.681
+1.482
+6.888
+8.370
+0.454
+0.646
+Proposed
+0.5
+1.532
+1.559
+1.002
+4.093
+5.095
+0.455
+0.646
+Proposed
+1
+1.230
+1.250
+0.842
+3.322
+4.164
+0.452
+0.643
+Proposed
+2.5
+0.822
+0.845
+0.659
+2.326
+2.985
+0.449
+0.637
+D.5
+RATE-DISTORTION PERFORMANCE IN COMPUTER VISION TASKS
+For semantic segementation on Cityscapes, we use pretrained weights provided by Chen et al.
+(2018a). For the object detection and keypoint detection tasks on COCO 2017, we use pretrained
+weights provided by TorchVision maintainers and contributors (2016). The depth estimation model
+is trained from scratch without rate constraints and then used as a frozen pretrained model in the
+proposed method. Since the size of the Cityscape images is quite large, for tractability, we learn a
+downsampler of the input images and an upsampler of the output predictions of the task model, for
+the semantic segmentation and depth estimation task models. The task distortions are still computed
+against the original Cityscapes targets. The factor of the samplers is 2.
+We set E = 192 for all models except those trained on COCO 2017 with the proposed method,
+which required E = 288. Since the task models are frozen, a reconstruction loss between the
+input and the output of the synthesis transforms, before the task models, improves rate-distortion
+performance. The weight of this reconstruction loss is listed in Table 1.
+We note that the rates produced by our methods are relatively large. This is attributed to the synthesis
+transform being connected to the first layer of the task models and them remaining frozen, effec-
+26
+
+
+tively encouraging the reconstruction of the input images. Since the images are highly compressed
+JPEG images, they contain many artifacts that might need to be reconstructed, requiring additional
+rate. Interestingly, the input reconstruction loss seems to improve rate-distortion performance, even
+though intuitively one might think it would not.
+Tables 7 and 8 show the values obtained by our proposed method against the Independent and Joint
+baselines. All results were collected from validation sets. The rates are reported in bits-per-pixel
+(BPP). In the Cityscapes experiments, 1/D1 and D2 correspond to the mIoU and RMSE metrics,
+respectively. In the COCO 2017 experiments, 1/D1 and 1/D2 correspond to the object detection mAP
+and keypointing mAP metrics, respectively.
+All experiments are trained with β = 1, which, as previously discussed, due to the constraints of the
+auxiliary loss, does not necessarily optimize for the transmit rate. In fact, since the results show that
+the receive rate of the proposed method is better than the Independent method, the common channel
+must not contain all empirical mutual information possible.
+27

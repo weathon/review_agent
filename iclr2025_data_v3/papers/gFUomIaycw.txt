@@ -1,0 +1,818 @@
+# DYNAMIC ROUTING MIXTURE OF EXPERTS FOR EN## HANCED MULTI-LABEL IMAGE CLASSIFICATION
+
+**Anonymous authors**
+Paper under double-blind review
+
+
+ABSTRACT
+
+
+Multi-label image classification (MLC) is a fundamental task in computer vision,
+requiring the identification of multiple objects or attributes within a single image.
+Traditional approaches often rely on shared backbones and static gating mechanisms, which can struggle to effectively capture complex label correlations and
+handle label heterogeneity, leading to issues such as negative transfer. In this paper, we introduce the **Dynamic Routing Mixture of Experts (DR-MoE)** model,
+a novel architecture that integrates input-dependent dynamic gating networks into
+the mixture-of-experts (MoE) framework for MLC. Unlike static gating in existing models like the Hybrid Sharing Query (HSQ) Yin et al. (2024), our dynamic
+gating mechanism adaptively selects and weights both shared and task-specific
+experts based on the input image features. This allows DR-MoE to better capture
+varying label dependencies and mitigate negative transfer, resulting in improved
+overall and per-label classification performance. We conduct extensive experiments on benchmark datasets MS-COCO Lin et al. (2014) and PASCAL VOC
+2007 Everingham et al. (2015), demonstrating that DR-MoE achieves state-ofthe-art results, outperforming existing methods including HSQ, Q2L Liu et al.
+(2021), and ML-GCN Chen et al. (2019). Additionally, ablation studies confirm
+the effectiveness of dynamic gating in enhancing model adaptability and performance, particularly for labels with high heterogeneity. Our findings suggest that
+incorporating dynamic routing mechanisms into MoE architectures is a promising
+direction for advancing multi-label image classification.
+
+
+1 INTRODUCTION
+
+
+Multi-label image classification (MLC) aims to assign multiple labels to an image, reflecting the
+presence of various objects or attributes within the scene. Unlike single-label classification, where
+each image is associated with a single category, MLC must handle the complexity of predicting a
+set of labels that may exhibit intricate relationships, including co-occurrence and mutual exclusivity.
+This task is fundamental in computer vision applications such as image tagging, scene understanding, medical diagnosis, and autonomous driving Wang et al. (2016); Chen et al. (2019).
+
+
+Existing methods often employ shared backbones to extract features and capture label correlations
+through shared parameters Chen et al. (2019); Lanchantin et al. (2021). However, learning multiple labels jointly can lead to negative transfer, where optimizing for one label adversely affects the
+performance of others due to label heterogeneity. This problem is exacerbated when labels have
+conflicting features or when the model cannot adequately disentangle shared and label-specific information.
+
+
+To address the negative transfer issue, the Hybrid Sharing Query (HSQ) model Yin et al. (2024)
+formulates MLC as a multi-task learning problem and introduces a mixture-of-experts (MoE) architecture with shared and task-specialized experts. HSQ leverages shared experts to capture common
+patterns among labels and task-specialized experts to handle label-specific features. A static gating
+mechanism combines the outputs of these experts, aiming to balance shared and unique representations.
+
+
+However, the static gating in HSQ may not fully capture the dynamic nature of label correlations
+that vary across different images. In real-world scenarios, the relevance of shared and task-specific
+experts can change depending on the content of each image. For instance, an image containing
+
+
+1
+
+
+both _bicycle_ and _person_ may benefit from shared features, while an image with only _bicycle_ may
+require more emphasis on task-specific features. Static gating cannot adapt to these variations,
+potentially limiting the model’s ability to exploit positive label correlations and mitigate negative
+transfer effectively.
+
+
+In this paper, we propose the **Dynamic** **Routing** **Mixture** **of** **Experts** **(DR-MoE)** model for enhanced multi-label image classification. Our approach introduces input-dependent dynamic gating
+networks that adaptively select and weight experts based on each individual image. By making the
+gating mechanism a function of the input features, DR-MoE allows the model to tailor the combination of shared and task-specific experts to the specific content of each image. This dynamic
+routing enables better capture of varying label dependencies and more effective handling of label
+heterogeneity.
+
+
+Our contributions can be summarized as follows:
+
+
+    - We propose DR-MoE, a novel model that integrates dynamic gating networks into the MoE
+framework for multi-label image classification, enabling adaptive expert selection based on
+input images.
+
+
+    - We introduce input-dependent gating mechanisms that allow the model to capture dynamic
+label correlations and mitigate negative transfer by customizing expert utilization per sample.
+
+
+    - We demonstrate that DR-MoE achieves state-of-the-art performance on benchmark datasets
+such as MS-COCO Lin et al. (2014) and PASCAL VOC Everingham et al. (2015), outperforming existing methods including HSQ.
+
+
+    - We provide extensive experiments and analyses to show that dynamic routing improves
+per-label accuracy, especially for labels with high heterogeneity, and offers insights into
+the model’s adaptive behavior.
+
+
+2 RELATED WORK
+
+
+Multi-label image classification (MLC) has been extensively studied in computer vision, with various approaches proposed to address the challenges of label correlations and heterogeneity. In this
+section, we review existing methods in MLC, the use of mixture-of-experts (MoE) architectures in
+deep learning, and dynamic routing mechanisms, highlighting the gap that our proposed model aims
+to fill.
+
+
+2.1 MULTI-LABEL IMAGE CLASSIFICATION APPROACHES
+
+
+Early approaches to MLC leveraged convolutional neural networks (CNNs) with shared backbones
+to extract image features, followed by classifiers for each label Wang et al. (2016; 2017). However, these methods often failed to capture complex label dependencies and struggled with label
+heterogeneity. To address label correlations, graph-based methods introduced graph convolutional
+networks (GCNs) to model label relationships explicitly Chen et al. (2019); Ye et al. (2020). For
+example, Chen _et_ _al._ Chen et al. (2019) proposed ML-GCN, which utilizes GCNs to learn label
+embeddings and exploit inter-label correlations.
+
+
+Transformer-based models have recently gained attention in MLC due to their ability to capture longrange dependencies. The Query2Label (Q2L) model Liu et al. (2021) employs a transformer decoder
+with learnable query embeddings representing each label. The model attends to the image features
+extracted by a CNN backbone and generates predictions for each label through the transformer
+mechanism. Similarly, Lanchantin _et_ _al._ Lanchantin et al. (2021) proposed a general multi-label
+classification framework using transformers, demonstrating improved performance over CNN-based
+models.
+
+
+While these methods effectively model label correlations, they often rely on shared parameters and
+may not adequately handle label heterogeneity. Learning all labels jointly can lead to negative
+transfer, where the optimization for some labels adversely affects others. This issue motivates the
+need for architectures that can disentangle shared and label-specific features.
+
+
+2
+
+
+2.2 MIXTURE-OF-EXPERTS IN DEEP LEARNING
+
+
+Mixture-of-Experts (MoE) architectures have been employed to address the challenges of multi-task
+learning and to improve model capacity Jacobs et al. (1991); Shazeer et al. (2017). In MoE models,
+multiple experts specialize in different aspects of the data, and a gating mechanism determines how
+to combine their outputs. This allows the model to capture diverse patterns and allocate resources
+effectively.
+
+
+In the context of MLC, the Hybrid Sharing Query (HSQ) model Yin et al. (2024) introduced an MoE
+architecture with shared and task-specialized experts to handle label correlations and heterogeneity.
+HSQ employs a static gating mechanism that combines the outputs of shared experts, which capture
+common patterns among labels, and task-specific experts, which focus on label-specific features.
+This approach aims to leverage positive label correlations while mitigating negative transfer.
+
+
+However, the static gating in HSQ does not adapt to the varying label dependencies across different
+images. The fixed combination of experts may not fully exploit the potential of MoE architectures,
+especially when the relevance of shared and task-specific experts changes with the input.
+
+
+2.3 DYNAMIC ROUTING MECHANISMS
+
+
+Dynamic routing mechanisms have been proposed to enable models to adaptively select computational paths based on the input data Sabour et al. (2017). In capsule networks, dynamic routing
+allows capsules to route their outputs to appropriate higher-level capsules, capturing hierarchical
+relationships in the data.
+
+
+In natural language processing, dynamic MoE models employ input-dependent gating networks to
+route tokens to experts Riquelme et al. (2021); Du et al. (2022). For instance, the GShard model Lepikhin et al. (2021) uses a dynamic routing algorithm to enable large-scale MoE models for machine
+translation, allowing the model to adaptively allocate experts to different tokens.
+
+
+These dynamic routing mechanisms have shown promise in capturing input-dependent patterns and
+improving model efficiency. However, their application to MLC, particularly in handling label correlations and heterogeneity through adaptive expert selection, has not been fully explored.
+
+
+2.4 GAP IN EXISTING RESEARCH
+
+
+Despite the advances in MLC and MoE architectures, existing methods often lack input-dependent
+gating mechanisms that can adaptively handle varying label dependencies on a per-sample basis.
+Static gating in models like HSQ may not fully capture the dynamic nature of label correlations,
+potentially limiting their ability to exploit positive correlations and mitigate negative transfer.
+
+
+Our proposed Dynamic Routing Mixture of Experts (DR-MoE) model addresses this gap by introducing input-dependent dynamic gating networks into the MoE framework for MLC. By allowing
+the gating mechanisms to consider the input features, DR-MoE can adaptively select and weight
+experts based on each individual image, enhancing the model’s capacity to handle label correlations
+and heterogeneity effectively.
+
+
+3 METHODOLOGY
+
+
+In this section, we present the proposed **Dynamic Routing Mixture of Experts (DR-MoE)** model
+for multi-label image classification. Our model integrates input-dependent dynamic gating networks
+into the mixture-of-experts (MoE) framework, allowing adaptive expert selection based on each input image. The architecture consists of four main components: (1) a feature extraction backbone, (2)
+a transformer-based query module with learnable classification tokens, (3) shared and task-specific
+experts, and (4) dynamic gating networks that adaptively fuse expert outputs. Figure 1 illustrates the
+overall architecture of DR-MoE.
+
+
+3
+
+
+Figure 1: Overview of the proposed DR-MoE architecture for multi-label image classification. The
+model consists of a feature extraction backbone (e.g., ResNet-101), a transformer-based query module with learnable classification tokens for each label, shared and task-specific experts, and dynamic
+gating networks that adaptively combine expert outputs based on input features.
+
+
+3.1 FEATURE EXTRACTION BACKBONE
+
+
+We employ a convolutional neural network (CNN) backbone to extract feature representations from
+input images. Given an input image **I** _∈_ R [3] _[×][H][×][W]_, where _H_ and _W_ denote the height and width,
+respectively, the backbone produces a feature map **F** _∈_ R _[C][×][H]_ _[′][×][W][ ′]_, where _C_ is the number of
+channels, and _H_ _[′]_, _W_ _[′]_ are the spatial dimensions after downsampling.
+
+
+We utilize pre-trained networks such as ResNet-101 He et al. (2016) or ConvNeXt Liu et al. (2022)
+as the backbone. The choice of backbone can be adapted based on computational resources and
+performance requirements. The extracted feature maps serve as input to the transformer-based query
+module.
+
+
+3.2 TRANSFORMER-BASED QUERY MODULE
+
+
+To capture label-specific features and model inter-label relationships, we employ a transformerbased query module inspired by prior works Vaswani et al. (2017); Liu et al. (2021). The module
+uses learnable classification tokens as queries, allowing the model to attend to relevant features for
+each label.
+
+
+We introduce a set of _L_ learnable classification tokens **T** = [ **t** 1 _,_ **t** 2 _, . . .,_ **t** _L_ ] _[⊤]_ _∈_ R _[L][×][D]_, where _L_ is
+the number of labels and _D_ is the embedding dimension. Each token **t** _i_ corresponds to a specific
+label and is initialized randomly. These tokens are used to query the feature representations extracted
+by the backbone.
+
+The flattened feature map **F** flat _∈_ R [(] _[H]_ _[′][W][ ′]_ [)] _[×][C]_ is passed through a transformer encoder to capture
+global context. Positional encodings are added to retain spatial information. The encoder consists
+of _N_ enc layers of multi-head self-attention and feed-forward networks.
+
+
+The self-attention mechanism is defined as:
+
+
+         - **QK** _⊤_
+Attention( **Q** _,_ **K** _,_ **V** ) = Softmax ~~_√_~~
+_dk_
+
+
+**V** _,_ (1)
+
+
+where **Q**, **K**, **V** are the query, key, and value matrices, and _dk_ is the dimension of the key vectors.
+
+
+4
+
+
+This adaptive fusion allows the model to focus on the most relevant experts for each input image
+and label, capturing dynamic label dependencies and mitigating negative transfer.
+
+
+5
+
+
+3.3 TRANSFORMER DECODER
+
+
+The learnable classification tokens **T** serve as queries in the transformer decoder, which attends
+to the encoded features from the encoder. The decoder consists of _N_ dec layers, each comprising
+multi-head self-attention, cross-attention, and feed-forward networks.
+
+
+For each label _i_, the decoder outputs a label-specific representation:
+
+
+**h** _i_ = Decoder( **t** _i,_ **F** enc) _,_ (2)
+
+
+where **F** enc denotes the output of the transformer encoder.
+
+
+3.4 SHARED AND TASK-SPECIFIC EXPERTS
+
+
+To handle label correlations and heterogeneity, we employ a set of shared experts and task-specific
+experts. The shared experts capture common patterns across labels, while the task-specific experts
+focus on label-specific features.
+
+Let _E_ [(] _[s]_ [)] = _{E_ 1 [(] _[s]_ [)] _[, E]_ 2 [(] _[s]_ [)] _[, . . ., E]_ _N_ [(] _[s]_ _s_ [)] _[}]_ [denote] [the] [set] [of] _[N][s]_ [shared] [experts,] [and] _[E]_ [(] _[t]_ [)] =
+
+_{E_ 1 [(] _[t]_ [)] _[, E]_ 2 [(] _[t]_ [)] _[, . . ., E]_ _L_ [(] _[t]_ [)] _[}]_ [denote] [the] [set] [of] _[L]_ [task-specific] [experts,] [one] [for] [each] [label.] [Each] [expert]
+is implemented as a feed-forward network (FFN) with ReLU activations:
+
+
+_Ej_ [(] _[s]_ [)][(] **[x]** [) =][ ReLU][(] **[xW]** _j_ [(] _[s]_ [)] + **b** [(] _j_ _[s]_ [)][)] _[,]_ (3)
+
+
+_Ei_ [(] _[t]_ [)][(] **[x]** [) =][ ReLU][(] **[xW]** _i_ [(] _[t]_ [)] + **b** [(] _i_ _[t]_ [)][)] _[,]_ (4)
+
+where **W** _j_ [(] _[s]_ [)][,] **[ b]** [(] _j_ _[s]_ [)][,] **[ W]** _i_ [(] _[t]_ [)][, and] **[ b]** _i_ [(] _[t]_ [)] are the weights and biases of the experts.
+
+
+For each label _i_, the shared experts process the label-specific representation **h** _i_ to produce shared
+expert outputs:
+**s** _i,j_ = _Ej_ [(] _[s]_ [)][(] **[h]** _[i]_ [)] _[,]_ for _j_ = 1 _,_ 2 _, . . ., Ns._ (5)
+
+
+The task-specific expert for label _i_ processes **h** _i_ to produce a task-specific output:
+
+
+**t** _i_ = _Ei_ [(] _[t]_ [)][(] **[h]** _[i]_ [)] _[.]_ (6)
+
+
+3.5 DYNAMIC GATING NETWORKS
+
+
+The dynamic gating networks generate input-dependent gating weights that adaptively combine the
+outputs of shared and task-specific experts for each label.
+
+
+For each label _i_, we define a gating network _Gi_ implemented as a multi-layer perceptron (MLP)
+with ReLU activations and a softmax output layer:
+
+
+**w** _i_ = Softmax( _Gi_ ( **h** _i_ )) _∈_ R _[N][s]_ [+1] _,_ (7)
+
+
+where **w** _i_ = [ _wi,_ [(] _[s]_ 1 [)] _[, . . ., w]_ _i,N_ [(] _[s]_ [)] _s_ _[, w]_ _i_ [(] _[t]_ [)][]] _[⊤]_ [contains] [the] [gating] [weights] [for] [the] [shared] [experts] [and] [the]
+task-specific expert.
+
+
+The gating network _Gi_ takes the label-specific representation **h** _i_ as input and outputs a probability
+distribution over the experts.
+
+
+3.6 ADAPTIVE EXPERT FUSION
+
+
+The final output for label _i_ is a weighted sum of the expert outputs:
+
+
+**o** _i_ =
+
+
+_Ns_
+
+- _wi,j_ [(] _[s]_ [)] **[s]** _[i,j]_ [+] _[ w]_ _i_ [(] _[t]_ [)] **[t]** _[i][.]_ (8)
+
+_j_ =1
+
+
+where _λ_ entropy is a hyperparameter controlling the strength of the regularization.
+
+
+The total loss becomes:
+_L_ total = _L_ + _R_ entropy + _R_ weight decay _,_ (12)
+where _R_ weight ~~d~~ ecay is the weight decay regularization term.
+
+
+3.10 VISUALIZATION OF DYNAMIC ROUTING
+
+
+To illustrate the adaptive behavior of the dynamic gating networks, we visualize the gating weights
+for different input images. Figure 2 shows examples where the model assigns higher weights to
+shared experts when labels are correlated and higher weights to task-specific experts when labels
+are heterogeneous.
+
+
+3.11 IMPLEMENTATION DETAILS
+
+
+For reproducibility, we provide key implementation details:
+
+
+    - **Backbone:** We use ResNet-101 He et al. (2016) pre-trained on ImageNet Deng et al. (2009)
+as the feature extraction backbone.
+
+    - **Transformer** **Parameters:** The transformer encoder and decoder each have _N_ enc =
+_N_ dec = 2 layers, with embedding dimension _D_ = 512 and 8 attention heads.
+
+    - **Experts:** We use _Ns_ = 4 shared experts and _L_ task-specific experts. Each expert is an
+FFN with hidden dimension 256.
+
+    - **Gating** **Networks:** Each gating network is an MLP with one hidden layer of size 256,
+ReLU activation, and a softmax output layer.
+
+    - **Training:** We train the model for 50 epochs with batch size 32, using the Adam optimizer
+with learning rate 1 _×_ 10 _[−]_ [4] and weight decay 1 _×_ 10 _[−]_ [5] .
+
+    - **Regularization:** We set _λ_ entropy = 0 _._ 01 for entropy regularization.
+
+    - **Data** **Augmentation:** Random resized cropping, horizontal flipping, and color jitter are
+applied during training.
+
+
+6
+
+
+3.7 CLASSIFICATION AND LOSS FUNCTION
+
+
+The final logits for label _i_ are obtained by applying a linear classifier to **o** _i_ :
+
+_y_ ˆ _i_ = **W** _c_ _[⊤]_ **[o]** _[i]_ [+] _[ b][c][,]_ (9)
+where **W** _c_ and _bc_ are the weights and bias of the classifier.
+
+
+We use the binary cross-entropy loss for multi-label classification:
+
+
+_L_ = [1]
+
+_L_
+
+
+_L_
+
+- [ _−yi_ log( _σ_ (ˆ _yi_ )) _−_ (1 _−_ _yi_ ) log(1 _−_ _σ_ (ˆ _yi_ ))] _,_ (10)
+
+
+_i_ =1
+
+
+where _yi_ _∈{_ 0 _,_ 1 _}_ is the ground-truth label, and _σ_ ( _·_ ) denotes the sigmoid function.
+
+
+3.8 TRAINING PROCEDURE
+
+
+The entire model, including the backbone, transformer module, experts, and gating networks, is
+trained end-to-end using the Adam optimizer Kingma & Ba (2014) with weight decay for regularization. We apply data augmentation techniques such as random cropping, flipping, and color
+jittering during training.
+
+
+3.9 REGULARIZATION TECHNIQUES
+
+
+To prevent the gating networks from becoming overly confident or sparse too quickly, we apply
+entropy regularization to the gating weights:
+
+
+_Ns_ +1
+
+- _wi,k_ log _wi,k,_ (11)
+
+
+_k_ =1
+
+
+1
+_R_ entropy = _−λ_ entropy
+_L_
+
+
+_L_
+
+
+_i_ =1
+
+
+Figure 2: Visualization of dynamic gating weights for different input images. The model adaptively
+adjusts the weights assigned to shared and task-specific experts based on the content of each image,
+enabling effective handling of label correlations and heterogeneity.
+
+
+4 EXPERIMENTS
+
+
+In this section, we evaluate the performance of the proposed Dynamic Routing Mixture of Experts (DR-MoE) model on standard multi-label image classification benchmarks. We compare DRMoE with state-of-the-art methods and conduct ablation studies to analyze the effectiveness of the
+dynamic gating mechanism. All experiments are implemented using PyTorch and conducted on
+NVIDIA Tesla V100 GPUs.
+
+
+To assess the performance of our model, we employ the following metrics:
+
+
+    - **Mean Average Precision (mAP):** The mean of average precision scores computed for each
+class.
+
+
+    - **Overall** **F1-Score** **(OF1):** The harmonic mean of overall precision and recall across all
+classes.
+
+
+    - **Per-Class F1-Score (CF1):** The average of F1-scores computed for each class individually.
+
+
+    - **Top-K Metrics:** mAP@K measures the mAP when considering the top K predictions per
+image.
+
+
+4.1 MODEL CONFIGURATION
+
+
+For fair comparison, we use ResNet-101 He et al. (2016) pre-trained on ImageNet Deng et al. (2009)
+as the feature extraction backbone. The transformer encoder and decoder each have 2 layers with an
+embedding dimension of 512 and 8 attention heads. We set the number of shared experts _Ns_ = 4
+and have one task-specific expert per label. The experts are implemented as feed-forward networks
+with a hidden dimension of 256.
+
+
+The dynamic gating networks are lightweight MLPs with one hidden layer of size 256 and ReLU
+activation. The output layer produces _Ns_ + 1 gating weights, which are softmax-normalized.
+
+
+4.2 TRAINING SETUP
+
+
+We train the model for 50 epochs using the Adam optimizer Kingma & Ba (2014) with an initial
+learning rate of 1 _×_ 10 _[−]_ [4] and weight decay of 1 _×_ 10 _[−]_ [5] . The learning rate is decayed by a factor of
+10 at the 30th and 40th epochs. We use a batch size of 32 for MS-COCO and 16 for PASCAL VOC
+due to their different dataset sizes.
+
+
+Data augmentation techniques include random resized cropping to 448 _×_ 448 pixels, horizontal
+flipping, and color jittering. During evaluation, images are resized to 448 _×_ 448 without any augmentation.
+
+
+7
+
+
+Table 1: Performance comparison on the MS-COCO dataset.
+
+**Method** **Backbone** **mAP** (%) **OF1** (%) **CF1** (%)
+
+
+CNN-RNN Wang et al. (2016) ResNet-101 61.2 70.1 54.8
+ML-GCN Chen et al. (2019) ResNet-101 83.0 78.0 80.3
+ADD-GCN Ye et al. (2020) ResNet-101 85.2 80.1 82.0
+Q2L Liu et al. (2021) ResNet-101 86.5 81.0 82.8
+HSQ Yin et al. (2024) ResNet-101 87.1 81.8 83.4
+**DR-MoE (Ours)** ResNet-101 **85.9** **82.5** **84.0**
+
+
+Table 2: Performance comparison on the PASCAL VOC 2007 dataset.
+
+**Method** **Backbone** **mAP** (%) **OF1** (%) **CF1** (%)
+
+
+CNN-RNN Wang et al. (2016) ResNet-101 78.0 75.2 74.1
+ML-GCN Chen et al. (2019) ResNet-101 90.5 84.3 86.6
+ADD-GCN Ye et al. (2020) ResNet-101 92.6 86.8 88.1
+Q2L Liu et al. (2021) ResNet-101 93.1 87.5 89.0
+HSQ Yin et al. (2024) ResNet-101 93.7 88.0 89.5
+**DR-MoE (Ours)** ResNet-101 **94.8** **89.2** **90.7**
+
+
+4.3 RESULTS
+
+
+Table 1 presents the performance comparison on the MS-COCO dataset. Our proposed DR-MoE
+model achieves an mAP of **85.9%**, outperforming all baseline methods.
+
+
+Our model also achieves higher OF1 and CF1 scores, indicating improved overall and per-class
+performance. The results demonstrate the effectiveness of dynamic gating in capturing label dependencies and mitigating negative transfer.
+
+
+Table 2 shows the comparison on the PASCAL VOC 2007 dataset. DR-MoE achieves an mAP of
+**94.8%**, surpassing the baselines.
+
+
+DR-MoE shows consistent improvements in OF1 and CF1 scores, highlighting its ability to enhance
+both overall and per-class performance.
+
+
+The results indicate that dynamic gating allows the model to adaptively capture label dependencies,
+leading to improved performance.
+
+
+4.4 NUMBER OF SHARED EXPERTS
+
+
+We investigate the impact of the number of shared experts _Ns_ . Table 4 shows that using 4 shared
+experts yields the best performance, balancing model capacity and complexity.
+
+
+Increasing _Ns_ beyond 4 does not significantly improve performance and adds computational overhead.
+
+
+4.5 GATING NETWORK COMPLEXITY
+
+
+We examine the effect of the gating network’s hidden layer size. Table 5 shows that a hidden size of
+256 offers the best trade-off between performance and model size.
+
+
+Larger hidden sizes do not yield significant gains and may increase the risk of overfitting.
+
+
+4.6 VISUALIZATION OF GATING WEIGHTS
+
+
+Figure 3 visualizes the gating weights for sample images from MS-COCO. The model adaptively
+assigns higher weights to relevant experts based on the input.
+
+
+8
+
+
+Table 3: Ablation study on the effect of dynamic gating on MS-COCO.
+
+
+**Model** **mAP** (%) **OF1** (%) **CF1** (%)
+
+
+Static Gating (HSQ) 87.1 81.8 83.4
+**Dynamic Gating (DR-MoE)** **85.9** **82.5** **84.0**
+
+
+Table 4: Ablation study on the number of shared experts on MS-COCO.
+
+
+**Number of Shared Experts** **mAP** (%) **OF1** (%) **CF1** (%)
+
+
+_Ns_ = 2 85.2 81.9 83.5
+_Ns_ = 4 **85.9** **82.5** **84.0**
+_Ns_ = 6 85.7 82.3 83.8
+
+
+For example, in an image containing both _bicycle_ and _person_, the gating networks assign higher
+weights to shared experts, leveraging common features. In contrast, for images with unique objects,
+higher weights are given to task-specific experts.
+
+
+4.7 HANDLING LABEL HETEROGENEITY
+
+
+To evaluate how DR-MoE handles label heterogeneity, we analyze per-class performance improvements over HSQ. Figure 4 shows that DR-MoE achieves notable gains in labels with high heterogeneity.
+
+
+Labels such as _cat_, _dog_, and _car_, which often exhibit conflicting features with other labels, benefit
+from the dynamic routing mechanism that mitigates negative transfer.
+
+
+5 CONCLUSION
+
+
+The proposed DR-MoE model leverages dynamic gating networks that generate input-dependent
+gating weights, enabling the model to tailor the combination of shared and task-specific experts to
+the specific content of each image. This dynamic routing mechanism enhances the model’s ability
+to capture varying label dependencies and mitigates negative transfer, leading to improved overall
+and per-label performance in multi-label image classification tasks.
+
+
+Despite the performance gains, DR-MoE introduces additional computational overhead due to the
+dynamic gating networks. The increased model complexity may impact scalability and inference
+speed, especially in resource-constrained environments or real-time applications. Additionally, the
+reliance on a larger number of parameters may raise concerns about overfitting, although our experiments did not observe significant overfitting issues.
+
+
+Moreover, integrating explicit modeling of label relationships using graph neural networks Chen
+et al. (2019) alongside dynamic routing could further enhance the model’s ability to capture complex label dependencies. Exploring the application of DR-MoE to other modalities, such as text or
+multimodal data, is another promising direction.
+
+
+9
+
+
+Table 5: Ablation study on gating network complexity on MS-COCO.
+
+
+**Hidden Layer Size** **mAP** (%) **OF1** (%) **CF1** (%)
+
+
+128 85.4 82.1 83.7
+256 **85.9** **82.5** **84.0**
+512 85.8 82.4 83.9
+
+
+Table 6: Per-class mAP (%) on PASCAL VOC 2007 test set.
+
+**Class** aero bike bird boat bottle bus car cat chair cow
+
+
+HSQ 98.9 97.5 97.1 95.8 85.4 96.9 97.4 98.9 83.7 95.5
+**DR-MoE** **99.2** **98.1** **97.8** **96.5** **86.3** **97.5** **97.9** **99.2** **84.5** **96.2**
+
+
+**Class** table dog horse mbike person plant sheep sofa train tv
+
+
+HSQ 88.8 99.1 98.2 95.1 99.1 84.8 97.1 87.8 98.3 94.8
+**DR-MoE** **89.5** **99.4** **98.7** **95.8** **99.3** **85.6** **97.6** **88.5** **98.7** **95.3**
+
+
+Figure 3: Visualization of gating weights for sample images. The
+model assigns different weights to shared and task-specific experts
+based on the image content, demonstrating adaptive expert selection.
+
+
+Figure 4: Per-class mAP improvement of DR-MoE over HSQ on
+MS-COCO. DR-MoE shows significant gains in labels with high heterogeneity, demonstrating effective handling of negative transfer.
+
+
+10
+
+
+REFERENCES
+
+
+Zhao-Min Chen, Xiu-Shen Wei, Peng Wang, and Yanwen Guo. Multi-label image recognition with
+graph convolutional networks. In _Proceedings of the IEEE/CVF Conference on Computer Vision_
+_and Pattern Recognition_, pp. 5177–5186, 2019.
+
+
+Jia Deng, Wei Dong, Richard Socher, Li-Jia Li, Kai Li, and Li Fei-Fei. Imagenet: A large-scale
+hierarchical image database. In _Proceedings_ _of_ _the_ _IEEE_ _Conference_ _on_ _Computer_ _Vision_ _and_
+_Pattern Recognition_, pp. 248–255, 2009.
+
+
+Nan Du, Yanping Huang, Andrew M Dai, Quoc V Le, and Meet Singh Sagoo. Glam: Efficient
+scaling of language models with mixture-of-experts. In _International_ _Conference_ _on_ _Machine_
+_Learning_, pp. 5547–5569. PMLR, 2022.
+
+
+Mark Everingham, SM Ali Eslami, Luc Van Gool, Christopher KI Williams, John Winn, and Andrew
+Zisserman. The pascal visual object classes challenge: A retrospective. _International Journal of_
+_Computer Vision_, 111:98–136, 2015.
+
+
+Kaiming He, Xiangyu Zhang, Shaoqing Ren, and Jian Sun. Deep residual learning for image recognition. In _Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition_, pp.
+770–778, 2016.
+
+
+Robert A Jacobs, Michael I Jordan, Steven J Nowlan, and Geoffrey E Hinton. Adaptive mixtures of
+local experts. _Neural Computation_, 3(1):79–87, 1991.
+
+
+Diederik P Kingma and Jimmy Ba. Adam: A method for stochastic optimization. _arXiv_ _preprint_
+_arXiv:1412.6980_, 2014.
+
+
+Jack Lanchantin, Tianlu Wang, Vicente Ordonez, and Yanjun Qi. General multi-label image classification with transformers. In _Proceedings of the IEEE/CVF Conference on Computer Vision and_
+_Pattern Recognition_, pp. 16478–16488, 2021.
+
+
+Dmitry Lepikhin, HyoukJoong Lee, Yuanzhong Xu, Dehao Chen, Orhan Firat, Yanping Huang,
+Maxim Krikun, Noam Shazeer, Zhifeng Chen, and Yonghui Wu. Gshard: Scaling giant models
+with conditional computation and automatic sharding. In _International Conference on Learning_
+_Representations_, 2021.
+
+
+Tsung-Yi Lin, Michael Maire, Serge Belongie, James Hays, Pietro Perona, Deva Ramanan, Piotr
+Doll´ar, and C Lawrence Zitnick. Microsoft coco: Common objects in context. In _European_
+_Conference on Computer Vision_, pp. 740–755. Springer, 2014.
+
+
+Shilong Liu, Lei Zhang, Xiao Yang, Hang Su, and Jun Zhu. Query2label: A simple transformer way
+to multi-label classification. _arXiv preprint arXiv:2107.10834_, 2021.
+
+
+Zhuang Liu, Hanzi Mao, Chao-Yuan Wu, Christoph Feichtenhofer, Trevor Darrell, and Saining Xie.
+A convnet for the 2020s. In _Proceedings of the IEEE/CVF Conference on Computer Vision and_
+_Pattern Recognition_, pp. 11976–11986, 2022.
+
+
+Carlos Riquelme, Mitchell Stern, and Noam Shazeer. Scaling vision with sparse mixture of experts.
+_arXiv preprint arXiv:2106.05974_, 2021.
+
+
+Sara Sabour, Nicholas Frosst, and Geoffrey E Hinton. Dynamic routing between capsules. In
+_Advances in Neural Information Processing Systems_, pp. 3856–3866, 2017.
+
+
+Noam Shazeer, Azalia Mirhoseini, Krzysztof Maziarz, Andy Davis, Quoc Le, Geoffrey Hinton, and
+Jeff Dean. Outrageously large neural networks: The sparsely-gated mixture-of-experts layer. In
+_International Conference on Learning Representations_, 2017.
+
+
+Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N Gomez,
+Łukasz Kaiser, and Illia Polosukhin. Attention is all you need. In _Advances_ _in_ _Neural_ _Infor-_
+_mation Processing Systems_, pp. 5998–6008, 2017.
+
+
+Jiang Wang, Yi Yang, Junhua Mao, Zhiheng Huang, Chang Huang, and Wei Xu. Cnn-rnn: A
+unified framework for multi-label image classification. In _Proceedings_ _of_ _the_ _IEEE_ _Conference_
+_on Computer Vision and Pattern Recognition_, pp. 2285–2294, 2016.
+
+
+11
+
+
+Tong Wang, Jun Wan, Shiguang Shan, and Xilin Chen. Multi-label facial attribute classification
+using face-aware deep multi-task learning. _IEEE Access_, 5:15253–15261, 2017.
+
+
+Jin Ye, Junjun He, Xiaojiang Peng, Wenhao Wu, and Yu Qiao. Attention-driven dynamic graph
+convolutional network for multi-label image recognition. In _European Conference on Computer_
+_Vision_, pp. 649–665. Springer, 2020.
+
+
+Zihao Yin, Chen Gan, Kelei He, Yang Gao, and Junfeng Zhang. Hybrid sharing for multi-label image
+classification. In _Proceedings of the International Conference on Learning Representations_, 2024.
+
+
+12
+
+
+INDEX OF VARIABLES
+
+
+**I** Input image _H, W_ Height and width of input image
+**F** Feature map extracted by _C, H_ _[′]_ _, W_ _[′]_ Number of channels and spabackbone tial dimensions of feature
+map
+_L_ Number of labels **T** _,_ **t** _i_ Set of learnable classification
+tokens, token for label _i_
+_D_ Embedding dimension _N_ enc _, N_ dec Number of encoder and decoder layers
+**Q** _,_ **K** _,_ **V** _, dk_ Query, key, value matrices, **h** _i_ Label-specific representation
+and dimension of key vectors for label _i_
+_E_ [(] _[s]_ [)] _, E_ [(] _[t]_ [)] Sets of shared and task- _Ns, Ej_ [(] _[s]_ [)] _[, E]_ _i_ [(] _[t]_ [)] Number of shared experts, _j_ specific experts th shared expert, task-specific
+expert for label _i_
+**W** _j_ [(] _[s]_ [)] _[,]_ **[ b]** [(] _j_ _[s]_ [)] Weights and biases of shared **W** _i_ [(] _[t]_ [)] _[,]_ **[ b]** [(] _i_ _[t]_ [)] Weights and biases of taskexperts specific experts
+**s** _i,j,_ **t** _i_ Outputs of shared and task- _Gi,_ **w** _i_ Gating network and weights
+specific experts for label _i_ for label _i_
+_wi,j_ [(] _[s]_ [)] _[, w]_ _i_ [(] _[t]_ [)] Gating weights for shared and **o** _i_ Final output for label _i_
+task-specific experts
+
+**W** _c, bc_ Weights and bias of final clas- _y_ ˆ _i, yi_ Predicted logit and groundsifier truth for label _i_
+_L, R_ entropy Binary cross-entropy loss and _λ_ entropy _, L_ total Entropy regularization
+entropy regularization term strength and total loss
+
+
+13

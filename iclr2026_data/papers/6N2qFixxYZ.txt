@@ -1,0 +1,319 @@
+# DES-LOC: DESYNCED LOW COMMUNICATION ADAPTIVE OPTIMIZERS FOR FOUNDATION MODELS
+
+Alex Iacob<sup>†,1,2</sup>Lorenzo Sani<sup>1,2</sup>Mher Safaryan<sup>3</sup>Paris Giampouras<sup>\*,4</sup>Samuel Horváth<sup>\*,5</sup>Andrej Jovanović<sup>\*,1</sup>Meghdad Kurmanji<sup>\*,1</sup>Preslav Aleksandrov<sup>1,6</sup>William F. Shen<sup>1</sup>Xinchi Qiu<sup>1</sup>Nicholas D. Lane<sup>1,2</sup>
+
+## ABSTRACT
+
+Scaling foundation model training with Distributed Data Parallel (DDP) methods is bandwidth-limited. Existing infrequent communication methods like *Local SGD* were designed to synchronize model parameters only and cannot be trivially applied to adaptive optimizers due to additional optimizer states. Heuristic approaches that keep states local or reset them lack guarantees and can be unstable in compute-efficient batch regimes; conversely, *Local Adam* synchronizes all states uniformly and is provably convergent but triples communication costs. We propose Desynced Low Communication Adaptive Optimizers (DES-LOC), a family of optimizers assigning independent synchronization periods to parameters and momenta, enabling lower communication costs while preserving convergence. Our theoretical analysis shows that while parameter synchronization dominates the asymptotic rate in-expectation, high-probability convergence guarantees require at least infrequent synchronization of the second momentum. Furthermore, we prove that more frequent momentum sync permits larger stable step sizes. Experiments on language models of up to 1.7B show that DES-LOC can communicate  $170\times$  less than DDP and  $2\times$  less than the previous state-of-the-art *Local Adam*, enabling  $1.3\text{--}2.1\times$  wall-clock speedups over DDP for 1-13B models on 100Gb/s links. Furthermore, unlike previous heuristic methods, DES-LOC is robust to worker failures offering a scalable, efficient, and fault-tolerant solution for foundation model training.
+
+## 1 INTRODUCTION
+
+Training foundation models requires distributing optimization across workers for improved memory and compute. However, frequent gradient communication in standard Distributed Data Parallelism (DDP) (Li et al., 2020a) increases networking costs and limits scalability. Early works like *Local SGD* (Stich, 2019) and *FedAvg* (McMahan et al., 2017) reduced this overhead by synchronizing infrequently, averaging parameters only after  $K \gg 1$  local steps, instead of gradients at every step. However, modern foundation model training, e.g., Large Language Models (Dubey et al., 2024), uses **adaptive optimizers** (Kingma & Ba, 2015) which require additional momenta.
+
+Some extensions of *Local SGD* to adaptive optimizers (Sani et al., 2025; Douillard et al., 2023) only average model parameters, which poses challenges. First, they lack convergence guarantees. Second, keeping momenta local (Douillard et al., 2023) accumulates noisy small-batch gradients and provides no means to initialize workers. This makes them unsuitable for failure-prone environments. Third, re-initializing momenta (Sani et al., 2024; 2025) destabilizes training.
+
+*Local Adam* (Cheng & Glasgow, 2025) addresses these challenges, proving periodic synchronization *can* converge faster than standard Adam with DDP, and remain **robust** to the addition of new workers. However, it requires synchronizing momenta alongside model parameters, tripling communication costs compared to *Local SGD*. Hence, we aim to answer the following question:
+
+<sup>†</sup>aai30@cam.ac.uk; <sup>\*</sup>Equal contributions; <sup>1</sup>University of Cambridge; <sup>2</sup>Flower Labs; <sup>3</sup>Institute of Science and Technology Austria; <sup>4</sup>University of Warwick; <sup>5</sup>Mohamed bin Zayed University of AI; <sup>6</sup>IMEC
+
+*Can independently syncing parameters and momenta improve communication efficiency for adaptive optimizers while maintaining convergence and robustness?*
+
+As a result of our inquiry, we propose a new optimizer family, Desynced Low Communication Adaptive Optimizers (DES-LOC), which sets independent synchronization frequencies for parameters and momenta. This reduces communication overhead by synchronizing momenta less frequently.
+
+### Contributions :
+
+1. **Provable convergence.** We prove convergence (see [Section 3](#)) for DES-LOC under: non-convex objectives when using SGD with momentum (SGDM), and weakly convex objectives when using Adam. Our theory indicates a higher momentum sync frequency enables larger step sizes. Furthermore, high-probability bounds demand momenta be synced with finite period for  $\beta_2 < 1.0$ .
+2. **Communication reduction.** We empirically show that parameters require more frequent sync than momenta, and that less frequent momentum sync reduces communication costs ( $2\times$  vs Local Adam,  $170\times$  vs DDP), leading to  $1.3 - 2.1\times$  reductions in training time over DDP on our hardware.
+3. **Scalability to large models.** We validate DES-LOC at billion-scale language model training, demonstrating competitive ICL performance against both Local Adam and DDP.
+4. **Hardware robustness.** Unlike previous heuristic methods, DES-LOC avoids persistent local states, enabling it to seamlessly integrate new workers to support environments prone to system failures.
+
+## 2 DESYNCED LOW COMMUNICATION ADAPTIVE OPTIMIZERS (DES-LOC)
+
+We start by characterizing the relation between the rate of change of optimizer states and Local Adam, and how these can be leveraged to lower the communication cost. Consider the Adam update:  $u_t = \beta_1 u_{t-1} + (1 - \beta_1)g_t$  and  $v_t = \beta_2 v_{t-1} + (1 - \beta_2)g_t \odot g_t$ .
+
+For Local Adam, convergence is contingent on  $\beta_2$  satisfying  $1 - \beta_2 = \tilde{O}(K^{-3/2}R^{-1/2})$  ([Cheng & Glasgow, 2025](#)) where  $K$  is the number of local steps and  $R$  the total communication rounds. Large  $K$  or  $R$ , implies  $\beta_2 \rightarrow 1$ , and conversely larger  $\beta_2$  permits higher  $K$  or  $R$ .
+
+A useful summary measure is the number of steps until a state’s weight decays to a fraction  $\psi$ ,  $\tau_\psi(\beta) = \frac{\ln \psi}{\ln \beta}$ . Following [Pagliardini et al. \(2025\)](#), we use the half-life  $\tau_{0.5}$  as our primary measure, omitting  $\beta$  when clear. For typical values of  $\beta$ , we have  $\tau_{0.5}(0.95) \approx 13.5$  ([Allal et al., 2025](#)),  $\tau_{0.5}(0.999) \approx 692.8$  ([Kingma & Ba, 2015](#)), and  $\tau_{0.5}(0.9999) \approx 6931$  ([Taniguchi et al., 2024](#)). Intuitively, larger half-lives imply synchronizing gradients over longer horizons as the optimizer is less sensitive to new gradients; choosing  $\beta = 0$  ignores all previous momenta, whereas  $\beta \rightarrow 1$  progressively attenuates signal from the current gradient.
+
+While the half-life captures the horizon for which an optimizer state remains relevant to model updates, it provides no information on its absolute rate of change. With coordinate-wise clipping, each gradient component satisfies  $|g_t|_i \leq \rho$ . Unrolling Adam’s recursions over  $K$  local steps gives the follow relation:  $u_{t+K} = \beta_1^K u_t + (1 - \beta_1) \sum_{k=0}^{K-1} \beta_1^k g_{t+K-1-k}$  and its second moment analogue. Since  $|g_t|_i \leq \rho$  and  $|g_t \odot g_t|_i \leq \rho^2$ , the maximal  $\ell_\infty$  drift of each moment is (see [Section F](#)):
+
+$$\|u_{t+K} - u_t\|_\infty \leq 2\rho(1 - \beta_1^K), \quad (1)$$
+
+$$\|v_{t+K} - v_t\|_\infty \leq 2\rho^2(1 - \beta_2^K). \quad (2)$$
+
+From the above, large  $\beta$  values and small clip bounds  $\rho$ , a common practice in foundation model training ([Brown et al., 2020; Scao et al., 2022](#)), limit the absolute changes in optimizer states. We can construct similar reasoning for other optimizers ([Sutskever et al., 2013; Taniguchi et al., 2024](#)), and norm-based clipping ([Pascanu et al., 2013; Brown et al., 2020](#)). From the above, the half-life of an optimizer state should inform its synchronization frequency. For example, if  $\tau_{0.5}(0.95) \approx 13.5$  and  $K = 256$ , synchronization only affects few initial local steps. Over the course of the local training, the impact of the synchronised optimizer state shall decay to 0 given Equations 1 and 2. Conversely, if  $K = 16$ , synchronization approximately matches the half-life, strongly influencing local updates.
+
+### 2.1 DES-LOC ALGORITHM
+
+#### **Algorithm 1** DES-LOC
+
+---
+
+**Require:** Model tensors, update functions, hyper-parameters
+
+- 1:  $x_0 \in \mathbb{R}^d, \{s_{-1}^j\}_{j=1}^N \in (\mathbb{R}^d)^N$  — initial parameter vector, the initial  $N$  optimizer states
+- 2:  $\{\text{UPDATE}^j\}_{j=1}^N : (\mathbb{R}^d \times \mathbb{R}^d \rightarrow \mathbb{R}^d)^N$  — updates optimizer state  $j$  from its previous state and the gradient.
+- 3:  $\text{OPT} : \mathbb{R}^d \times \mathbb{R}^d \times \mathbb{R}_+ \times (\mathbb{R}^d)^N \rightarrow \mathbb{R}^d$  — update params from all worker models.
+- 4:  $\text{SERVEROPT} : \mathbb{R}^d \rightarrow \mathbb{R}^d$  — update params using an abstract outer optimizer
+- 5:  $\rho \in \mathbb{R}_+, \{\eta_t\}_{t=0}^{T-1} \in (\mathbb{R}_+)^{T-1}$  — clipping radius for  $\text{clip}(\cdot, \rho)$ , learning-rate for each time-step
+- 6:  $T, M \in \mathbb{N}_+$  — total optimization steps and number of workers
+- 7:  $K_x \in \mathbb{N}_+, \{K_j\}_{j=1}^N \in (\mathbb{N}_+)^N$  — communication periods (steps)
+
+**Ensure:**  $x_T, \{s_{T-1}^j\}_{j=1}^N$
+
+- 8: **for** each worker  $m$ :  $x_0^m \leftarrow x_0, s_{-1}^{j,m} \leftarrow s_{-1}^j$  local init
+- 9: **for**  $t = 0, \dots, T-1$  **do** training loop
+- 10:   **for** all workers  $m = 0, \dots, M-1$  **in parallel do**
+- 11:      $g_t^m \leftarrow \nabla F(x_t^m; \xi_t^m)$  stochastic grad
+- 12:      $\hat{g}_t^m \leftarrow \text{clip}(g_t^m, \rho)$  per-coordinate clipping
+- 13:     **for**  $j = 1$  **to**  $N$  **do**
+- 14:       **if**  $t \bmod K_j = 0$  **then** sync  $s^j$
+- 15:          $s_t^{j,m} \leftarrow \text{UPDATE}^j(\mathbb{E}_m[s_{t-1}^{j,m}], \hat{g}_t^m)$
+- 16:       **else**
+- 17:          $s_t^{j,m} \leftarrow \text{UPDATE}^j(s_{t-1}^{j,m}, \hat{g}_t^m)$
+- 18:     **if**  $t \bmod K_x = 0$  **then** sync  $x$
+- 19:        $x_{t+1}^m \leftarrow \text{OPT}(\text{SERVEROPT}(\mathbb{E}_m[x_t^m]), \hat{g}_t^m, \eta_t, \{s_t^{j,m}\}_{j=1}^N)$
+- 20:     **else**
+- 21:        $x_{t+1}^m \leftarrow \text{OPT}(x_t^m, \hat{g}_t^m, \eta_t, \{s_t^{j,m}\}_{j=1}^N)$
+
+---
+
+Motivated by the above insights, we formalize Desynced Low Communication Adaptive Optimizers as a family of optimizers offering the same convergence and robustness as Local Adam but with significantly lower communication costs. Our approach applies generically to adaptive optimizers parameterized by  $\text{OPT} : (\mathbb{R}^d, \mathbb{R}^d, \mathbb{R}_{>0}, \{\mathbb{R}^d\}^N) \rightarrow \mathbb{R}^d$ , with  $N$  optimizer states  $\{s_{-1}^j\}_{j=1}^N \subset \mathbb{R}^d$ , each updated by  $\text{UPDATE}^j : (\mathbb{R}^d, \mathbb{R}^d) \rightarrow \mathbb{R}^d$ . Coordinate-wise clipping is defined as  $[\text{clip}(X, \rho)]_i = \text{sgn}(X_i) \cdot \min\{|X_i|, \rho\}$ . To ensure that our method is provably convergent, SERVEROPT is that of FedAvg (McMahan et al., 2017). However, our algorithm directly extends to the larger FedOpt (Reddi et al., 2021) framework, which we discuss in Section C.1.
+
+We focus our analysis on SGDM and Adam. As shown in Algorithm 1, DES-LOC synchronizes parameters  $x \in \mathbb{R}^d$  and optimizer states  $\{s^j\}_{j=1}^N$  at state-specific intervals  $K_x, \{K_j\}_{j=1}^N \in \mathbb{N}_+$ . Setting  $N = 2, s_1^1 = u_t, s_2^1 = v_t$ , and using update rules  $\text{UPDATE}^1, \text{UPDATE}^2$  based on the Adam update rules above yields DES-LOC-Adam (see Algorithm 2).
+
+**Toy Example** To highlight DES-LOC’s practical benefit, Fig. 1 illustrates a scenario where DES-LOC and Local Adam converge under noisy gradients, while prior heuristic methods (Douillard et al., 2023; Sani et al., 2025; Iacob et al., 2025; Sani et al., 2024) fail.
+
+## 3 CONVERGENCE GUARANTEES FOR DES-LOC
+
+This section provides theoretical support for the proposed DES-LOC approach. We focus on a version of the Adam optimizer that uses only a single momentum state. Extensions to the full Adam optimizer with both momenta are available in Section D.1 with high-probability bounds shown in Section E.
+
+Formally, we consider the following optimization problem:
+
+$$\min_{x \in \mathbb{R}^d} f(x) := \frac{1}{M} \sum_{m=1}^M f_m(x), \quad \text{with } f_m(x) = \mathbb{E}_{\xi \sim \mathcal{D}_m}[F_m(x; \xi)]. \quad (3)$$
+
+In this setup, all  $M$  machines collaboratively minimize the objective in (3). Generally, we assume each machine  $m$  has access to only dataset  $\mathcal{D}_m$ , which can differ from device to device. This recovers the homogeneous distribution case when all machines have the same dataset  $\mathcal{D}_1 = \mathcal{D}_2 = \dots = \mathcal{D}_M$
+
+![Figure 1: (left) A log-linear plot of the distance to the optimum, ||x_t - x^*||_2, versus Communication Rounds (0 to 80). The y-axis is on a log scale from 10^-16 to 10^-1. Four methods are shown: Local Adam (blue line with circles), DES-LOC (orange line with stars), FAWG + OPT (grey line with squares), and FAWG - OPT (red line with diamonds). Local Adam and DES-LOC show rapid convergence, while FAWG methods remain high. (right) Four 2D contour plots of a toy problem showing the optimization path. Top-left: Local Adam converges to the optimum. Top-right: DES-LOC converges to the optimum. Bottom-left: FAWG + OPT shows oscillatory behavior. Bottom-right: FAWG - OPT shows oscillatory behavior. A legend at the bottom identifies the methods and their markers: Start (green circle), Optimum (yellow star), Local Adam (blue line with circles), DES-LOC (orange line with stars), FAWG + OPT (grey line with squares), and FAWG - OPT (red line with diamonds).](e94f3bbb6f7501b9a1344dd0210e5dd8_img.jpg)
+
+Figure 1: (left) A log-linear plot of the distance to the optimum, ||x\_t - x^\*||\_2, versus Communication Rounds (0 to 80). The y-axis is on a log scale from 10^-16 to 10^-1. Four methods are shown: Local Adam (blue line with circles), DES-LOC (orange line with stars), FAWG + OPT (grey line with squares), and FAWG - OPT (red line with diamonds). Local Adam and DES-LOC show rapid convergence, while FAWG methods remain high. (right) Four 2D contour plots of a toy problem showing the optimization path. Top-left: Local Adam converges to the optimum. Top-right: DES-LOC converges to the optimum. Bottom-left: FAWG + OPT shows oscillatory behavior. Bottom-right: FAWG - OPT shows oscillatory behavior. A legend at the bottom identifies the methods and their markers: Start (green circle), Optimum (yellow star), Local Adam (blue line with circles), DES-LOC (orange line with stars), FAWG + OPT (grey line with squares), and FAWG - OPT (red line with diamonds).
+
+Figure 1: We present: (left) the distance to the optimum and (right) a 2-D contour of a toy problem where  $\text{DES-LOC}$  ( $K_x = 192$ ,  $K_u = 192$ ,  $K_v = 692$ ) and  $\text{Local Adam}$  ( $K = K_x$ ) both converge to the optimum (overlapping). Methods keeping optimizer states local (■) fail to converge. Periodically resetting states (■) similarly stalls due to repeated oscillations. We optimize the non-convex function  $f(x_1, x_2) = (1 - x_1)^2 + 100(x_2 - x_1^2)^2$  with  $M = 256$  workers and IID Gaussian noise ( $\sigma = 1.5$ ). We show an example of such a toy problem on Non-IID data in Fig. 8.
+
+and minimize the same loss  $f_1(x) = f_2(x) = \dots = f_m(x) = f(x)$ . We assume each machine  $m$  computes mini-batch stochastic gradients corresponding to randomly selected samples  $\xi \sim \mathcal{D}_m$  from dataset  $\mathcal{D}_m$ . We further use the following technical assumptions on the problem structure.
+
+**Assumption 1** (Lower bound and smoothness). *The overall loss function  $f: \mathbb{R}^d \rightarrow \mathbb{R}$  is lower bounded by some  $f^* \in \mathbb{R}$  and all local loss functions  $f_m$  are  $L$ -smooth:*
+
+$$\|\nabla f_m(x) - \nabla f_m(y)\| \leq L\|x - y\|, \quad \text{for any } x, y \in \mathbb{R}^d.$$
+
+**Assumption 2** (Unbiased noise with bounded stochastic variance). *The stochastic gradient  $g^m$  of local loss function  $f_m$  computed by machine  $m$  is unbiased and the noise has bounded variance:*
+
+$$\mathbb{E}[g^m] = \nabla f_m(x), \quad \mathbb{E}[\|g^m - \nabla f_m(x)\|^2] \leq \sigma^2, \quad \text{for any } x \in \mathbb{R}^d.$$
+
+**Assumption 3** (Bounded heterogeneity). *For any  $x \in \mathbb{R}^d$ , the heterogeneity is bounded by*
+
+$$\frac{1}{M} \sum_{m=1}^M \|\nabla f_m(x)\|^2 \leq G^2 + B^2 \|\nabla f(x)\|^2.$$
+
+All three assumptions are standard and widely used in the convergence analysis of optimization algorithms Yu et al. (2019); Karimireddy et al. (2020b); Wang et al. (2021); Yuan et al. (2022). Note that the bounded heterogeneity condition recovers the homogeneous case when  $G^2 = 0$  and  $B^2 = 1$ . To facilitate the technical presentation of the analysis, we view model and optimizer state synchronizations through assigning probabilities to each averaging event. Particularly, instead of averaging model parameters every  $K_x$  steps (i.e.,  $t \bmod K_x = 0$ ), we average with probability  $p_x = \frac{1}{K_x}$ , which are statistically equivalent. In the following theorem, we provide convergence rate of SGD optimizer under such probabilistic and decoupled synchronization:
+
+**Theorem 1.** *Let Assumptions 1, 2 and 3 hold. Then, choosing the step size  $\eta = \min(\eta_0, \frac{1}{\sqrt{T}})$  with*
+
+$$\eta_0 \stackrel{\text{def}}{=} \frac{1}{4L} \min \left( 1 - \beta, \frac{1}{6\sqrt{\psi \max(1, B^2 - 1)}} \right), \quad \text{where } \psi \stackrel{\text{def}}{=} \frac{4(1-p_x)}{p_x^2} \cdot \frac{(1-\beta)(1-p_u)}{1-(1-p_u)\beta}, \quad (4)$$
+
+*the average iterates  $x_t = \mathbb{E}_m[x_t^m]$  of  $\text{DES-LOC-SGD}$  converge with the following rate:*
+
+$$\frac{1}{T} \sum_{t=0}^{T-1} \mathbb{E} \|\nabla f(x_t)\|^2 \leq \frac{4}{\sqrt{T}} \left( f(x_0) - f^* + \frac{L\sigma^2}{2M} \right) + \mathcal{O} \left( \frac{1+\psi}{T} \right). \quad (5)$$
+
+We now discuss the convergence result and its implications. The obtained rate (5) is asymptotically optimal for this setup (Arjevani et al., 2023). Notably, the leading term  $\mathcal{O}(\frac{1}{\sqrt{T}})$  is unaffected by the number of local steps. Interestingly, probabilities  $p_x$ ,  $p_u$ , and the momentum parameter  $\beta$  appear in the higher-order term  $\mathcal{O}(\frac{1}{T})$ , and thus have a limited impact on asymptotic convergence speed.
+
+Regarding state synchronization, it is evident from (4) that model synchronization has a greater impact on convergence due to the dependence  $\psi = \mathcal{O}(\frac{1}{p_x^2})$ . With vanishing  $p_x$ , the  $\psi$  term becomes
+
+unbounded and breaks the rate. For optimizer states, it seems that momentum averaging can be turned off ( $p_u = 0$ ) without affecting the asymptotic behavior of the rate. Setting  $p_x = 1$  and  $p_u = 0$  recovers standard mini-batch SGDM (Liu et al., 2020). However, the  $\psi$  term also appears in the step-size restriction (4). As  $p_u \rightarrow 0$ ,  $\frac{(1-p_u)}{1-(1-p_u)\beta} \rightarrow \frac{1}{1-\beta}$ . This imposes the most severe restriction on the learning rate  $\eta_0$  since  $\eta_0 \propto \frac{1}{\sqrt{\psi}}$ , as  $\psi$  is maximized. This theory shows that increasing the frequency  $p_u$  of momentum averaging—while not changing the asymptotic rate—allows for a larger step-size, potentially leading to faster convergence in practice. This theory justifies that momentum states can be synchronized less frequently than parameters and that more frequent improves convergence by supporting larger step-sizes. Furthermore, our high probability analysis of DES-LOC-Adam in Section E shows that the sync frequency of momenta must be finite for  $\beta_2 < 1.0$ .
+
+## 4 EXPERIMENTAL DESIGN
+
+Our experimental setup addresses the following research questions:
+
+- RQ1** Do *theoretical* rates of change predict the *empirical* evolution of optimizer states?
+- RQ2** How does the synchronization frequency of a model/optimizer state impact performance?
+- RQ3** To what extent can DES-LOC cut communication w.r.t. Local Adam in practical scenarios?
+- RQ4** How does DES-LOC scale with increasing model size and longer training horizons?
+- RQ5** How does DES-LOC perform when using a Nesterov outer optimizer?
+- RQ6** Is DES-LOC compatible with non-Adam inner optimizers such as Muon?
+
+### 4.1 EXPERIMENTAL SETUP
+
+**Models and data.** We train a 135M-parameter GPT-style model (arch. in Table 3) with sequence length 2048. We distinguish worker batch size  $B_w$  from global  $B = \sum_{w=0}^{M-1} B_w$  (Sani et al., 2025). A 2M token global batch is split across  $M = 4$  workers sampling IID from SmolM2 (Allal et al., 2025): 70% Fineweb-Edu (Penedo et al., 2024), 10% Cosmopedia (Ben Allal et al., 2024), 10% Python-Edu, 5% FineMath 4+, and 5% Infi-WebMath 4+. The 135M model trains for 6.4B tokens (2.4× compute-optimal (Hoffmann et al., 2022)). For RQ4, we scale to a 1.7B model for 40B tokens (2× compute-optimal) (Sardana et al., 2024). We show Non-IID data results in Fig. 14.
+
+**Optimizers.** We use Adam (Kingma & Ba, 2015) (results in Section B) and its variant ADOPT (Taniguchi et al., 2024), which modifies the update to guarantee convergence for any  $\beta_2$ . For the 135M model, we grid-search  $(\beta_1, \beta_2, \eta)$  under DDP; the 1.7B model uses hyperparameters from Allal et al. (2025); Taniguchi et al. (2024). Learning rates use the WSD schedule (Hägele et al., 2024; Allal et al., 2025). We favor ADOPT ( $\beta_2 = 0.9999$ ) in high- $\beta$  regimes where Adam is unstable. We also ablate the outer optimizer, comparing FedAvg with a Nesterov optimizer (Reddi et al., 2021; Douillard et al., 2023; Charles et al., 2025) on a 700M model trained on 40B tokens.
+
+**Baselines.** We compare DES-LOC with: (i) synchronous DDP; (ii) Local AdamADOPT; (iii) FAVG+OPT (persistent states (Sani et al., 2025; Douillard et al., 2023)); and (iv) FAVG-OPT (reset states (Sani et al., 2024; Iacob et al., 2025)). Persistent-state FedAvg is DES-LOC with  $K_u, K_v = \infty$ , an upper bound on comms efficiency. DDP is an upper bound on ML performance.
+
+**Metrics.** We evaluate models by (i) perplexity and (ii) per-worker asymptotic communication cost assuming a bandwidth-optimal Ring-AllReduce (Sergeev & Balso, 2018) algorithm scaling linearly with model size. For the 1.7B model, we report standard in-context-learning (ICL) benchmarks (Brown et al., 2020). We use a zero-shot setting for ICL tasks unless stated otherwise following Allal et al. (2025) and report the best performing communication-efficient method in blue with the best-performing overall in bold. To fairly compare optimizer-state changes across decay rates, we measure their *relative* rates of change as  $\|s_{t+K} - s_t\|_2 / \|s_t\|_2$ . For convergence plots, we report final-round means and standard deviations next to labels. We also provide wall-time clock results; we use 4 machines with one H100 for sub-1B models, and 4 machines with 8 H100s each for larger scales. While the links between machines run at 100Gb/s, we observed overheads limiting the practical bandwidth to 60 – 70 Gb/s. We report stepwise (see Section B.3.1) and timewise convergence. We also provide an analysis on the wall-clock time vs bandwidth in Section G.1.
+
+![Figure 2: Two line graphs showing the relative rates of change for first and second moments across communication rounds. The left graph shows the first moment rate of change, which increases over time and is higher for lower beta_1 values (0.95, 0.99, 0.995). The right graph shows the second moment rate of change, which decreases over time and is significantly lower than the first moment rate of change, with a sharp drop around round 25.](c54b3ca7603d65d4589151bc3a49d054_img.jpg)
+
+Figure 2: Two line graphs showing the relative rates of change for first and second moments across communication rounds. The left graph shows the first moment rate of change, which increases over time and is higher for lower beta\_1 values (0.95, 0.99, 0.995). The right graph shows the second moment rate of change, which decreases over time and is significantly lower than the first moment rate of change, with a sharp drop around round 25.
+
+Figure 2: Relative rates of change for first (left) and second (right) moments across rounds using standard *Local* AD<sub>OPT</sub> ( $K = 64$ ). For AD<sub>OPT</sub> ( $\beta_2 = 0.9999$ ), increasing  $\beta_1 \geq 0.99$  greatly slows the first-momentum rate of change. The second momentum evolves  $\sim 100\times$  slower.
+
+## 5 EVALUATION
+
+Our results show optimizer states change at different rates (Section 5.1), forming a clear synchronization hierarchy (Section 5.2). DES-LOC reduces communication  $2\times$  vs. *Local* Adam (Section 5.3) while converging robustly with adding workers and scaling effectively to large models (Section 5.4).
+
+### 5.1 HIGHER $\beta$ OPTIMIZER STATES HAVE SLOWER EMPIRICAL RATES OF CHANGE (RQ1)
+
+Figure 2 shows that relative rates (of change for the two moments in *Local* AD<sub>OPT</sub>/Adam scale with their decay rates under gradient clipping ( $\rho = 1$ ). Supported by our theoretical discussions on momenta half-lives (Section 2), the second momentum evolves substantially slower than the first at high- $\beta_2$ . For *Local* Adam, the second momentum remains slower even when  $\beta_2 \approx \beta_1$ , potentially because gradient variance (Kingma & Ba, 2015) evolves slower than the first momentum.
+
+**Takeaway:** As discussed in Sections 2 and 3, when  $\beta_1 \ll \beta_2$ , the second momentum evolves slower than the first, proportional to half-life ratio of the two  $\frac{\tau_{0.5}(\beta_2)}{\tau_{0.5}(\beta_1)} = \frac{\ln(\beta_1)}{\ln(\beta_2)}$ .
+
+### 5.2 PARAMETERS REQUIRE FREQUENT SYNC, MOMENTA SYNC PROPORTIONAL TO $\beta$ (RQ2)
+
+Figure 3 evaluates the effect of independently varying synchronization periods ( $K_x, K_u, K_v$ ) for parameters and optimizer states. We consider two baseline periods ( $K_b = 16, 256$ ), chosen based on the fastest state’s half-life ( $\tau_{0.5}(0.95) \approx 13.5$ ). Frequent parameter synchronization ( $K_x$ ) is crucial for performance, while synchronizing momenta ( $K_u, K_v$ ) significantly impacts training only if their half-lives align with the base frequency  $K_b$ . Otherwise, synchronization frequency primarily influences communication costs rather than model quality. Adam results can be seen in Section B.
+
+**Takeaway:** Parameter synchronization frequency ( $K_x$ ) strongly impacts performance, motivated by the leading term in theoretical bounds (Section 3). Momentum synchronization periods matter empirically only when chosen near their half-lives, consistent with Sections 2 and 3.
+
+### 5.3 DES-LOC BRINGS $2\times$ COMMUNICATION REDUCTIONS OVER *Local* AD<sub>OPT</sub> (RQ3)
+
+As shown in Figure 4, DES-LOC halves communication versus *Local* Adam (Cheng & Glasgow, 2025) with matching perplexity by syncing momenta less frequently ( $K_u = 3K_x, K_v = 6K_x$ ), exploiting the second-momentum’s lower sensitivity to sync frequency (Fig. 3). This yields a  $1.37\times$  speedup over DDP and  $1.1\times$  over *Local* Adam at  $K_x = 16$  on 4 H100s. At  $K_x = 256$ , the speedup over DDP increases to  $1.47\times$  and both DES-LOC and *Local* Adam saturate throughput.
+
+As shown in Figure 4, DES-LOC effectively initializes new workers and outperforms the straightforward approach of ad-hoc averaging from checkpoints—whose insufficiency is detailed in Section H.
+
+**Takeaway:** DES-LOC achieves a  $2\times$  communication reduction over *Local* Adam by leveraging two insights: optimizer-state sync matters less than parameter sync, and slower-changing states (high  $\beta_2$ ) can sync less often. By eventually syncing all optimizer states, DES-LOC matches the robustness of *Local* Adam with  $K = \max(K_x, K_u, K_v)$  when adding new workers/responding to system failures.
+
+![Figure 3: Model perplexity for DES-LOC (ADOPT, beta1 = 0.95, beta2 = 0.9999), varying synchronization periods independently. (a) DES-LOC vary Kx, fixed Ku = Kv = 256. (b) DES-LOC vary Kv, fixed Kx = Ku = 256. (c) DES-LOC vary Ku, fixed Kx = Kv = 16. (d) DES-LOC vary Ku, fixed Kx = Kv = 256.](73c3e4508cae529acf4e6c7fa70b361a_img.jpg)
+
+Figure 3 consists of four subplots (a-d) showing model perplexity over sequential steps for DES-LOC (ADOPT) with  $\beta_1 = 0.95, \beta_2 = 0.9999$ . Each plot includes an inset showing a zoomed-in view of the perplexity at higher steps.
+
+- (a) DES-LOC vary  $K_x$ , fixed  $K_u = K_v = 256$ . The x-axis represents Sequential Steps (0 to 3000) and the y-axis represents Perplexity (0.0 to 100.0). The legend shows:  $K_x = 256$  (17.6±0.6),  $K_x = 512$  (18.4±0.7),  $K_x = 1024$  (20.1±0.8),  $K_x = 1536$  (20.0±0.8),  $K_x = 3072$  (24.1±0.6).
+- (b) DES-LOC vary  $K_v$ , fixed  $K_x = K_u = 256$ . The x-axis represents Sequential Steps (0 to 3000) and the y-axis represents Perplexity (0.0 to 100.0). The legend shows:  $K_v = 256$  (17.4±0.8),  $K_v = 512$  (17.7±0.8),  $K_v = 1024$  (17.6±0.8),  $K_v = 1536$  (17.4±0.8),  $K_v = 3072$  (17.4±0.8).
+- (c) DES-LOC vary  $K_u$ , fixed  $K_x = K_v = 16$ . The x-axis represents Sequential Steps (0 to 3000) and the y-axis represents Perplexity (0.0 to 100.0). The legend shows:  $K_u = 16$  (13.7±0.5),  $K_u = 32$  (13.9±0.5),  $K_u = 256$  (30.4±2.7),  $K_u = 1024$  (60.1±2.8),  $K_u = 3072$  (60.3±0.9).
+- (d) DES-LOC vary  $K_u$ , fixed  $K_x = K_v = 256$ . The x-axis represents Sequential Steps (0 to 3000) and the y-axis represents Perplexity (0.0 to 100.0). The legend shows:  $K_u = 256$  (17.6±0.6),  $K_u = 512$  (17.6±0.6),  $K_u = 1024$  (17.6±0.6),  $K_u = 1536$  (17.6±0.6),  $K_u = 3072$  (17.7±0.6).
+
+Figure 3: Model perplexity for DES-LOC (ADOPT, beta1 = 0.95, beta2 = 0.9999), varying synchronization periods independently. (a) DES-LOC vary Kx, fixed Ku = Kv = 256. (b) DES-LOC vary Kv, fixed Kx = Ku = 256. (c) DES-LOC vary Ku, fixed Kx = Kv = 16. (d) DES-LOC vary Ku, fixed Kx = Kv = 256.
+
+Figure 3: Model perplexity for DES-LOC (ADOPT,  $\beta_1 = 0.95, \beta_2 = 0.9999$ ), varying synchronization periods independently (others fixed at  $K_h$ ). Parameter synchronization (a) is critical, with degradation at higher periods. Second-momentum sync (b) minimally affects performance due to its large half-life. First-momentum sync improves perplexity when the freq matches its half-life; contrast (c) and (d). Parameters and second momentum behave similarly across frequencies (Section B)
+
+![Figure 4: Performance of DES-LOC (Kx, Ku = 3Kx, 6Kx) reduces comms by 2x over Local Adam while matching its performance and that of heuristic baselines at high (a) and low (b) frequencies. (c) Perplexity impact of doubling workers, Kx = 128. (d) Gradient norms after doubling workers, Kx = 128.](a6a8016b231533e7f34b550f4676afc6_img.jpg)
+
+Figure 4 consists of four subplots (a-d) comparing DES-LOC (ADOPT) with various baselines. Each plot includes an inset showing a zoomed-in view of the metrics at higher steps.
+
+- (a) DES-LOC-ADOPT vs baselines  $K_x = 16$  IID. The x-axis represents Time (Hours) (0 to 18) and the y-axis represents Perplexity (0.0 to 100.0). The legend shows: DES (10.20±0.27) @ T=12.1, DES-LOC (12.41±0.56) @ T=12.5, Local Adam (12.55±0.59) @ T=13.4, FAVG-OPT (12.55±0.59) @ T=12.2, FAVG-OPT (26.86±1.37) @ T=12.2.
+- (b) DES-LOC-ADOPT vs baselines  $K_x = 256$  IID. The x-axis represents Time (Hours) (0 to 18) and the y-axis represents Perplexity (0.0 to 100.0). The legend shows: DES (10.20±0.27) @ T=12.1, DES-LOC (17.99±0.64) @ T=11.5, Local Adam (17.99±0.64) @ T=11.5, FAVG-OPT (18.26±0.65) @ T=11.5, FAVG-OPT (18.26±0.64) @ T=11.5.
+- (c) Perplexity impact of doubling workers,  $K_x = 128$ . The x-axis represents Sequential Steps (1300 to 1650) and the y-axis represents Perplexity (0.0 to 100.0). The legend shows: DES-LOC (16.55±1.21), Local Adam (25.0±1.16), FAVG-OPT (37.77±1.19), FAVG (26.86±1.37), FAVG + Ad-hoc Avg OPT (28.06±1.16).
+- (d) Gradient norms after doubling workers,  $K_x = 128$ . The x-axis represents Sequential Steps (1300 to 1650) and the y-axis represents Gradient Norm (L2) (0.0 to 1.0). The legend shows: DES-LOC (0.19±0.09), Local Adam (0.19±0.09), FAVG-OPT (0.20±0.09), FAVG-OPT (0.20±0.13), FAVG + Ad-hoc Avg OPT (0.19±0.08).
+
+Figure 4: Performance of DES-LOC (Kx, Ku = 3Kx, 6Kx) reduces comms by 2x over Local Adam while matching its performance and that of heuristic baselines at high (a) and low (b) frequencies. (c) Perplexity impact of doubling workers, Kx = 128. (d) Gradient norms after doubling workers, Kx = 128.
+
+Figure 4: DES-LOC ( $K_x, K_u = 3K_x, 6K_x$ ) reduces comms by  $2\times$  over Local Adam while matching its performance and that of heuristic baselines at high (a) and low (b) frequencies (Section 4.1). We show robustness by doubling worker count at step 1536 (c,d), where DES-LOC and Local Adam maintain stable perplexity/norms, outperforming heuristics and ad-hoc optimizer-state averaging.
+
+![Figure 5: Two plots comparing training methods. The left plot shows Perplexity vs. Time (Hours) for DDP, DES-LOC, Local Adam, and FAVG+OPT. The right plot shows Attribution (L2) vs. Sequential Steps for the same methods.](3121afa7ca030b22ee0345864ca6f38b_img.jpg)
+
+The figure contains two line graphs. The left graph plots 'Perplexity' on the y-axis (ranging from 0.0 to 40.0) against 'Time (Hours)' on the x-axis (ranging from 0 to 30). It compares four methods: DDP (blue dashed line), DES-LOC (orange solid line), Local Adam (green solid line), and FAVG+OPT (red solid line). All methods show a rapid decrease in perplexity, with DES-LOC and Local Adam reaching the lowest perplexity around 10.0. The right graph plots 'Attribution (L2)' on the y-axis (ranging from 0.0 to 1.0) against 'Sequential Steps' on the x-axis (ranging from 0 to 20,000). The same four methods are shown. DDP (blue dashed line) and Local Adam (green solid line) show a significant increase in attribution over time, while DES-LOC (orange solid line) and FAVG+OPT (red solid line) remain relatively stable and low.
+
+Figure 5: Two plots comparing training methods. The left plot shows Perplexity vs. Time (Hours) for DDP, DES-LOC, Local Adam, and FAVG+OPT. The right plot shows Attribution (L2) vs. Sequential Steps for the same methods.
+
+Figure 5: DES-LOC matches Local Adam perplexity (left) for billion-scale model training at half the communication cost ( $K_x = 256, K_u = 3K_x, K_v = 6K_x$ ), representing a  $170\times$  reduction over DDP. Both DES-LOC and Local Adam converge to competitive perplexity at this scale. FAVG+OPT achieves good performance (left) but suffers activation growth (right) and parameter-norm growth (Section B), potentially due to noisy updates, raising concerns for extended training.
+
+Table 1: Our billion-scale model trained with DES-LOC matches or surpasses the (ICL) performance of models trained with Local Adam and FAVG+OPT, approaching DDP performance. FAVG+OPT underperforms compared to its perplexity results from Fig. 5.a, indicating that the activation increases (Fig. 5.b) from the unstable training procedure may have damaged the model.
+
+|            | Arc Challenge | Arc Easy | PIQA | HellaSwag | Avg  |
+|------------|---------------|----------|------|-----------|------|
+| DES-LOC    | 31.8          | 59.0     | 70.7 | 44.9      | 51.6 |
+| Local Adam | 31.9          | 59.0     | 70.6 | 45.8      | 51.8 |
+| FAVG+OPT   | 30.1          | 58.0     | 70.0 | 44.8      | 50.7 |
+| DDP        | 33.8          | 62.5     | 71.1 | 47.8      | 53.8 |
+
+### 5.4 DES-LOC IS SUITABLE FOR LARGE-SCALE TRAINING (RQ4)
+
+Figure 5 shows that DES-LOC reliably scales to 1B models and very infrequent communication ( $K_x = 256$ ). Evaluating the billion-scale models on the ICL tasks (Table 1), DES-LOC is competitive with all baselines while reducing communication versus Local Adam and DDP. The heuristic baseline (Sani et al., 2025) suffers training instabilities (Fig. 5.b) potentially impacting downstream performance (Table 1) and underscoring the advantage of DES-LOC’s training stability. We elaborate more on the settings in which we expect DES-LOC to improve stability in Section J.
+
+Our method’s reduced communication costs result in a  $\approx 2.2\times$  training speedup over DDP (Figure 5). As shown by our benchmarks Table 2, these time savings scale with model size and comms frequency. At the 13B scale with  $K_x = 16$ , DES-LOC would save 13 days over Local Adam and 73 days over DDP. The advantage over DDP widens for  $K_x = 256$ , where communication-efficient methods maximize throughput. Table 5 shows equivalent results for throughput.
+
+**Takeaway:** DES-LOC enables efficient training of large-scale foundation models, especially at long training horizons, with downstream ICL performance competitive with DDP. We recommend setting  $K_x$  for sufficient throughput based on bandwidth, then setting  $K_u, K_v$  as constant multiples (e.g.,  $3\times, 6\times$ ) or based on the half-life of their  $\beta$  (see Section I).
+
+Table 2: Wall-clock time (days) for 1B-13B models to reach  $2\times$  compute-optimal tokens at high ( $K = 16$ ) and low ( $K = 256$ ) frequencies with a 2M token batch size. At high frequency ( $K = 16$ ), DES-LOC outperforms Local Adam by over 13 days on the 13B model and is within 3% of FAVG+OPT. At low frequency ( $K = 256$ ), it cuts the 13B’s training time  $> 93$  days versus DDP.
+
+|                                     | 1B Model         |                  | 7B Model          |                   | 13B Model          |                    |
+|-------------------------------------|------------------|------------------|-------------------|-------------------|--------------------|--------------------|
+|                                     | $K_x = 16$       | $K_x = 256$      | $K_x = 16$        | $K_x = 256$       | $K_x = 16$         | $K_x = 256$        |
+| DDP (Baseline)                      | $1.41 \pm 0.008$ | $1.41 \pm 0.008$ | $38.74 \pm 0.161$ | $38.74 \pm 0.161$ | $175.50 \pm 0.478$ | $175.50 \pm 0.478$ |
+| FAVG+OPT                            | $0.80 \pm 0.007$ | $0.63 \pm 0.006$ | $28.52 \pm 0.095$ | $24.01 \pm 0.088$ | $100.21 \pm 0.544$ | $82.46 \pm 0.513$  |
+| Local Adam                          | $0.96 \pm 0.006$ | $0.64 \pm 0.007$ | $31.46 \pm 0.090$ | $24.18 \pm 0.087$ | $116.10 \pm 0.484$ | $83.34 \pm 0.509$  |
+| DES-LOC ( $K_u, K_v = 3K_x, 6K_x$ ) | $0.81 \pm 0.006$ | $0.63 \pm 0.006$ | $28.80 \pm 0.094$ | $24.06 \pm 0.088$ | $102.03 \pm 0.537$ | $82.68 \pm 0.512$  |
+
+![Figure 6: Ablation of the outer optimizer for DES-LOC on a 700M parameter model. The figure contains two line plots. The left plot shows 'Perplexity' on the y-axis (0.0 to 20.0) against 'Time (Hours)' on the x-axis (0 to 100). The right plot shows 'Perplexity' on the y-axis (0.0 to 20.0) against 'Sequential Steps' on the x-axis (0 to 35000). Both plots compare four methods: DDP (orange dashed line), DES-LOC (125M) (blue solid line), DES-LOC-averaging (yellow solid line), and DES-LOC-Nesterov (green solid line). In both plots, DES-LOC-Nesterov (green) achieves the lowest perplexity, followed by DES-LOC (blue), then DES-LOC-averaging (yellow), and finally DDP (orange).](b93cbfb52e37619e688175a6aad9edd9_img.jpg)
+
+Figure 6: Ablation of the outer optimizer for DES-LOC on a 700M parameter model. The figure contains two line plots. The left plot shows 'Perplexity' on the y-axis (0.0 to 20.0) against 'Time (Hours)' on the x-axis (0 to 100). The right plot shows 'Perplexity' on the y-axis (0.0 to 20.0) against 'Sequential Steps' on the x-axis (0 to 35000). Both plots compare four methods: DDP (orange dashed line), DES-LOC (125M) (blue solid line), DES-LOC-averaging (yellow solid line), and DES-LOC-Nesterov (green solid line). In both plots, DES-LOC-Nesterov (green) achieves the lowest perplexity, followed by DES-LOC (blue), then DES-LOC-averaging (yellow), and finally DDP (orange).
+
+Figure 6: Ablation of the outer optimizer for DES-LOC on a 700M parameter model in a medium-frequency communication setting ( $K_x = 32$ ), showing (left) convergence in terms of time and (right) in terms of steps. In this regime, DES-LOC’s final perplexity is within 1% of the DDP baseline. Using a Nesterov outer optimizer provides a further improvement over averaging.
+
+![Figure 7: Training loss comparison between Local Muon (K = 32) and DES-LOC-Muon (K_x = 32, K_u = 96) across model scales (16M, 125M, 360M). The figure consists of three subplots, one for each model scale. Each subplot shows 'Loss' on the y-axis against 'Sequential Steps' on the x-axis. The subplots compare Local Muon (orange dashed line) and DES-LOC-Muon (blue solid line). In all three subplots, DES-LOC-Muon (blue) achieves a lower loss than Local Muon (orange).](bedcca5cdf168e3508ef511d94ec514c_img.jpg)
+
+Figure 7: Training loss comparison between Local Muon (K = 32) and DES-LOC-Muon (K\_x = 32, K\_u = 96) across model scales (16M, 125M, 360M). The figure consists of three subplots, one for each model scale. Each subplot shows 'Loss' on the y-axis against 'Sequential Steps' on the x-axis. The subplots compare Local Muon (orange dashed line) and DES-LOC-Muon (blue solid line). In all three subplots, DES-LOC-Muon (blue) achieves a lower loss than Local Muon (orange).
+
+Figure 7: Training loss comparison between Local Muon ( $K = 32$ ) and DES-LOC-Muon ( $K_x = 32, K_u = 96$ ) across model scales (16M, 125M, 360M). DES-LOC matches the Local Muon baseline across all scales while communicating more than  $1.5\times$  fewer bytes. See [Section B.7](#) for full experimental details.
+
+### 5.5 NESTEROV AS THE OUTER OPTIMIZER (RQ5)
+
+We ablate the outer optimizer for DES-LOC on a 700M parameter model, comparing averaging to a Nesterov optimizer with momentum of 0.9, outer learning rate of 1.0 tuned following [Charles et al. \(2025\)](#). The experiment ran on 4 H100s and used a medium-synchronization regime ( $K_x = 32, K_u = 3K_x, K_p = 6K_x$ ) where models are initialised from 2048-step DDP checkpoints, following [Charles et al. \(2025\)](#). While our convergence bound is not trivially applicable, our analysis of [Eq. \(4\)](#) suggests a higher momentum synchronization frequency ( $p_u$ ) should permit a larger step size ( $\eta_0 \propto 1/\sqrt{\psi}$ ).
+
+As shown in [Figure 6](#), two key points emerge. First, more frequent synchronization ( $K_x = 32$ ) allows DES-LOC to come within 1% of the final perplexity of DDP, performing much better than in infrequent settings ( $K_x = 256$ ). Second, using Nesterov as the outer optimizer improves performance over averaging by  $\approx 0.5\%$ , with its performance w.r.t DDP being similar to the one reported in [Charles et al. \(2025, Table 4\)](#) for models at this scale. The Nesterov approach preserves the practical benefits of DES-LOC, ensuring effective worker initialization and reducing local optimization noise, which can help prevent issues like exploding activation norms.
+
+**Takeaway:** Frequent synchronization ( $K_x = 32$ ) allows DES-LOC to reach within 1% of the perplexity of DDP. Furthermore, using a Nesterov outer optimizer improves performance over averaging, while preserving practical benefits like effective worker initialization and reduced optimization noise.
+
+We further investigate the benefits of synchronizing optimizer states under a Nesterov outer optimizer relative to purely local-state methods (DiLoCo) at the 1B scale in [Section B.5](#).
+
+### 5.6 MUON AS THE INNER OPTIMIZER (RQ6)
+
+To assess the versatility of DES-LOC beyond Adam-family optimizers, we integrate it with Muon ([Jordan et al., 2024](#)), a single-momentum optimizer that uses Newton-Schulz iterations for orthogonalization. Since Muon preconditions the momentum term directly rather than tracking second-moment estimates, the relevant synchronization periods reduce to parameters ( $K_x$ ) and momentum ( $K_u$ ). We apply DES-LOC by synchronizing the Muon momentum buffer less frequently than the parameters, setting  $K_u = 3K_x$  with  $K_x = 32$ .
+
+As shown in [Figure 7](#), DES-LOC matches the perplexity of the Local Muon baseline across model scales ranging from 16M to 360M parameters. By decoupling the synchronization frequencies, DES-LOC communicates more than  $1.5\times$  fewer bytes than the baseline, confirming that the Half-Life Principle extends to optimizers beyond the Adam family. Full experimental details in [Section B.7](#).
+
+**Takeaway:** DES-LOC is compatible with single-momentum optimizers such as Muon that rely on Newton-Schulz preconditioning. By reducing the synchronization frequency of the momentum buffer relative to parameters, DES-LOC maintains solution quality while significantly lowering communication volume, demonstrating that our approach is inner-optimizer-agnostic.
+
+## 6 RELATED WORK
+
+In synchronous data-parallel training, workers exchange full gradients or parameters *every* iteration, incurring communication costs linear in model size using Ring-AllReduce (Sergeev & Balso, 2018). When hardware is weakly connected or widely distributed, communication significantly slows wall-clock training time (Sani et al., 2025) as workers need to wait for synchronization to finish. Federated Averaging (FedAvg) (McMahan et al., 2017) and Local SGD (Stich, 2019) reduce communication by performing  $K$  local optimization steps before averaging parameters, decreasing communication rounds by a factor of  $K$ . Ad-hoc extensions to adaptive optimizers either keep optimizer states local (Douillard et al., 2023; Charles et al., 2025; Liu et al., 2024) or reset them after each sync (Sani et al., 2024; 2025), both lacking robust convergence guarantees.
+
+Adam (Kingma & Ba, 2015) is popular for pre-training as it scales to larger batches than SGD (Kunstner et al., 2023; Dubey et al., 2024). It uses moving averages of gradients and their squares, however, its convergence is not guaranteed as it requires  $\beta_1 < \sqrt{\beta_2} < 1$ , with large, problem-specific  $\beta_2$  (Reddi et al., 2018; Zhang et al., 2022). Other optimizers also track gradient moments (Sutskever et al., 2013; Chen et al., 2023; You et al., 2020; Taniguchi et al., 2024). *Local Adam* (Cheng & Glasgow, 2025) reduces communication with local steps but requires syncing optimizer states, which triples the communication cost relative to Local SGD/DDP, as sync costs scale with the number of states. For further related work, including compression/sparsification and structured updates, check Section K.
+
+## 7 CONCLUSION
+
+DES-LOC reconciles communication efficiency with rigorous convergence guarantees in distributed adaptive optimization. By extending theory to the independent synchronization of Adam and SGDM optimizer states, we empirically demonstrate convergence alongside  $170\times$  and  $2\times$  communication reductions over DDP and prior state-of-the-art methods at billion-scale LLM training, even in environments prone to system failures. Our findings yield clear guidelines: i) **frequently** synchronize parameters, and ii) synchronize optimizer states **less often**, proportional to their half-lives. These insights open avenues for future research, including layer-wise synchronization, adaptive frequencies, compressed updates, as well as emerging applications, such as worldwide cross-data center training and collaborative training. As training workloads scale, we envision DES-LOC becoming the standard for efficient, resilient foundation-model training in data centers and distributed environments.
+
+## ACKNOWLEDGMENTS
+
+All costs for the computational resources used for this work were funded by Flower Labs, and the research conducted by a team of researchers from Flower Labs, The University of Cambridge, The Institute of Science and Technology of Austria, The University of Warwick, and Mohamed bin Zayed University of Artificial Intelligence. Support for university-based researchers came from a variety of sources, but in particular, the following funding organizations are acknowledged: the European Research Council (REDIAL), the Royal Academy of Engineering (DANTE), the Ministry of Education of Romania through the Credit and Scholarship Agency, and the European Union’s Horizon 2020 research and innovation programme under the Marie Skłodowska-Curie grant agreement No 101034413.
+
+## REFERENCES
+
+- Dan Alistarh, Torsten Hoefler, Mikael Johansson, Nikola Konstantinov, Sarit Khirirat, and Cédric Renggli. The convergence of sparsified gradient methods. In *Conference on Neural Information Processing Systems (NeurIPS)*, 2018.
+- Loubna Ben Allal, Anton Lozhkov, Elie Bakouch, Gabriel Martín Blázquez, Guilherme Penedo, Lewis Tunstall, Andrés Marafioti, Hynek Kydlíček, Agustín Piqueres Lajarin, Vaibhav Srivastav, Joshua
+
+- Lochner, Caleb Fahlgren, Xuan-Son Nguyen, Clémentine Fourrier, Ben Burtenshaw, Hugo Larcher, Haojun Zhao, Cyril Zakka, Mathieu Morlon, Colin Raffel, and Thomas Wolf. Smollm2: When smol goes big - data-centric training of a small language model. *arXiv preprint arXiv:2502.02737*, 2025.
+- Yossi Arjevani, Yair Carmon, John C Duchi, Dylan J Foster, Nathan Srebro, and Blake Woodworth. Lower bounds for non-convex stochastic optimization. *Mathematical Programming*, 199(1-2):165–214, 2023.
+- Loubna Ben Allal, Anton Lozhkov, Guilherme Penedo, Thomas Wolf, and Leandro von Werra. Cosmopedia, February 2024.
+- Tom Brown, Benjamin Mann, Nick Ryder, Melanie Subbiah, Jared D Kaplan, Prafulla Dhariwal, Arvind Neelakantan, Pranav Shyam, Girish Sastry, Amanda Askell, Sandhini Agarwal, Ariel Herbert-Voss, Gretchen Krueger, Tom Henighan, Rewon Child, Aditya Ramesh, Daniel Ziegler, Jeffrey Wu, Clemens Winter, Chris Hesse, Mark Chen, Eric Sigler, Mateusz Litwin, Scott Gray, Benjamin Chess, Jack Clark, Christopher Berner, Sam McCandlish, Alec Radford, Ilya Sutskever, and Dario Amodei. Language models are few-shot learners. In *Conference on Neural Information Processing Systems (NeurIPS)*, 2020.
+- Zachary Charles, Gabriel Teston, Lucio Dery, Keith Rush, Nova Fallen, Zachary Garrett, Arthur Szlam, and Arthur Douillard. Communication-efficient language model training scales reliably and robustly: Scaling laws for diloco. *arXiv preprint arXiv:2503.09799*, 2025.
+- Xiangning Chen, Chen Liang, Da Huang, Esteban Real, Kaiyuan Wang, Hieu Pham, Xuanyi Dong, Thang Luong, Cho-Jui Hsieh, Yifeng Lu, and Quoc V. Le. Symbolic discovery of optimization algorithms. In *Conference on Neural Information Processing Systems (NeurIPS)*, 2023.
+- Ziheng Cheng and Margalit Glasgow. Convergence of distributed adaptive optimization with local updates. In *International Conference on Learning Representations (ICLR)*, 2025.
+- Aakanksha Chowdhery, Sharan Narang, Jacob Devlin, Maarten Bosma, Gaurav Mishra, Adam Roberts, Paul Barham, Hyung Won Chung, Charles Sutton, Sebastian Gehrmann, Parker Schuh, Kensen Shi, Sasha Tsvayshchenko, Joshua Maynez, Abhishek Rao, Parker Barnes, Yi Tay, Noam Shazeer, Vinodkumar Prabhakaran, Emily Reif, Nan Du, Ben Hutchinson, Reiner Pope, James Bradbury, Jacob Austin, Michael Isard, Guy Gur-Ari, Pengcheng Yin, Toju Duke, Anselm Levskaya, Sanjay Ghemawat, Sunipa Dev, Henryk Michalewski, Xavier Garcia, Vedant Misra, Kevin Robinson, Liam Fedus, Denny Zhou, Daphne Ippolito, David Luan, Hyeontaek Lim, Barret Zoph, Alexander Spiridonov, Ryan Sepassi, David Dohan, Shivani Agrawal, Mark Omernick, Andrew M. Dai, Thanumalayan Sankaranarayana Pillai, Marie Pellat, Aitor Lewkowycz, Erica Moreira, Rewon Child, Oleksandr Polozov, Katherine Lee, Zongwei Zhou, Xuezhi Wang, Brennan Saeta, Mark Diaz, Orhan Firat, Michele Catasta, Jason Wei, Kathy Meier-Hellstern, Douglas Eck, Jeff Dean, Slav Petrov, and Noah Fiedel. Palm: Scaling language modeling with pathways. *J. Mach. Learn. Res.*, 24:240:1–240:113, 2023.
+- Arthur Douillard, Qixuan Feng, Andrei A. Rusu, Rachita Chhaparia, Yani Donchev, Adhiguna Kuncoro, Marc’Aurelio Ranzato, Arthur Szlam, and Jiajun Shen. Diloco: Distributed low-communication training of language models. *arXiv preprint arXiv:2311.08105*, 2023.
+- Arthur Douillard, Yanislav Donchev, Keith Rush, Satyen Kale, Zachary Charles, Zachary Garrett, Gabriel Teston, Dave Lacey, Ross McIlroy, Jiajun Shen, Alexandre Ramé, Arthur Szlam, Marc’Aurelio Ranzato, and Paul Barham. Streaming diloco with overlapping communication: Towards a distributed free lunch. *CoRR*, abs/2501.18512, 2025.
+- Abhimanyu Dubey, Abhinav Jauhri, Abhinav Pandey, Abhishek Kadian, Ahmad Al-Dahle, Aiesha Letman, Akhil Mathur, Alan Schelten, Amy Yang, Angela Fan, Anirudh Goyal, Anthony Hartshorn, Aobo Yang, Archi Mitra, Archie Sravankumar, Artem Korenev, Arthur Hinsvark, Arun Rao, Aston Zhang, Aurélien Rodriguez, Austen Gregerson, Ava Spataru, Baptiste Rozière, Bethany Biron, Binh Tang, Bobbie Chern, Charlotte Caucheteux, Chaya Nayak, Chloe Bi, Chris Marra, Chris McConnell, Christian Keller, Christophe Touret, Chunyang Wu, Corinne Wong, Cristian Canton Ferrer, Cyrus Nikolaidis, Damien Allonsius, Daniel Song, Danielle Pintsch, Danny Livshits, David Esioibu, Dhruv Choudhary, Dhruv Mahajan, Diego Garcia-Olano, Diego Perino, Dieuwke Hupkes,
+
+- Egor Lakomkin, Ehab AlBadawy, Elina Lobanova, Emily Dinan, Eric Michael Smith, Filip Radenovic, Frank Zhang, Gabriel Synnaeve, Gabrielle Lee, Georgia Lewis Anderson, Graeme Nail, Grégoire Mialon, Guan Pang, Guillem Cucurell, Hailey Nguyen, Hannah Korevaar, Hu Xu, Hugo Touvron, Iliyan Zarov, Imanol Arrieta Ibarra, Isabel M. Kloumann, Ishan Misra, Ivan Evtimov, Jade Copet, Jaewon Lee, Jan Geffert, Jana Vranes, Jason Park, Jay Mahadeokar, Jeet Shah, Jelmer van der Linde, Jennifer Billock, Jenny Hong, Jenya Lee, Jeremy Fu, Jianfeng Chi, Jianyu Huang, Jiawen Liu, Jie Wang, Jiecao Yu, Joanna Bitton, Joe Spisak, Jongsoo Park, Joseph Rocca, Joshua Johnstun, Joshua Saxe, Junteng Jia, Kalyan Vasuden Alwala, Kartikeya Upasani, Kate Plawiak, Ke Li, Kenneth Heafeld, Kevin Stone, and et al. The llama 3 herd of models. *arXiv preprint arXiv:2407.21783*, 2024.
+- Alireza Fallah, Aryan Mokhtari, and Asuman Ozdaglar. Personalized federated learning: A meta-learning approach. *arXiv preprint arXiv:2002.07948*, 2020.
+- Alexander Hägele, Elie Bakouch, Atli Kosson, Loubna Ben Allal, Leandro von Werra, and Martin Jaggi. Scaling laws and compute-optimal training beyond fixed training durations. In *Conference on Neural Information Processing Systems (NeurIPS)*, 2024.
+- Jordan Hoffmann, Sebastian Borgeaud, Arthur Mensch, Elena Buchatskaya, Trevor Cai, Eliza Rutherford, Diego de Las Casas, Lisa Anne Hendricks, Johannes Welbl, Aidan Clark, Tom Hennigan, Eric Noland, Katie Millican, George van den Driessche, Bogdan Damoc, Aurelia Guy, Simon Osindero, Karen Simonyan, Erich Elsen, Jack W. Rae, Oriol Vinyals, and Laurent Sifre. Training compute-optimal large language models. *arXiv preprint arXiv:2203.15556*, 2022.
+- Tzu-Ming Harry Hsu, Hang Qi, and Matthew Brown. Measuring the effects of non-identical data distribution for federated visual classification. *arXiv preprint arXiv:1909.06335*, 2019.
+- Alex Iacob, Lorenzo Sani, Meghdad Kurmanji, William F. Shen, Xinchu Qiu, Dongqi Cai, Yan Gao, and Nicholas Donald Lane. DEPT: Decoupled embeddings for pre-training language models. In *International Conference on Learning Representations (ICLR)*, 2025.
+- Keller Jordan, Yuchen Jin, Vlado Boza, Jiacheng You, Franz Cesista, Laker Newhouse, and Jeremy Bernstein. Muon: An optimizer for hidden layers in neural networks, 2024. URL <https://kellerjordan.github.io/posts/muon/>.
+- Peter Kairouz, H. Brendan McMahan, Brendan Avent, Aurélien Bellet, Mehdi Bennis, Arjun Nitin Bhagoji, Kallista A. Bonawitz, Zachary Charles, Graham Cormode, Rachel Cummings, Rafael G. L. D’Oliveira, Hubert Eichner, Salim El Rouayheb, David Evans, Josh Gardner, Zachary Garrett, Adrià Gascón, Badih Ghazi, Phillip B. Gibbons, Marco Gruteser, Zaid Harchaoui, Chaoyang He, Lie He, Zhouyuan Huo, Ben Hutchinson, Justin Hsu, Martin Jaggi, Tara Javidi, Gauri Joshi, Mikhail Khodak, Jakub Konečný, Aleksandra Korolova, Farinaz Koushanfar, Sanmi Koyejo, Tancrède Lepoint, Yang Liu, Prateek Mittal, Mehryar Mohri, Richard Nock, Ayfer Özgür, Rasmus Pagh, Hang Qi, Daniel Ramage, Ramesh Raskar, Mariana Raykova, Dawn Song, Weikang Song, Sebastian U. Stich, Ziteng Sun, Ananda Theertha Suresh, Florian Tramer, Praneeth Vepakomma, Jianyu Wang, Li Xiong, Zheng Xu, Qiang Yang, Felix X. Yu, Han Yu, and Sen Zhao. Advances and open problems in federated learning. *Found. Trends Mach. Learn.*, 14(1-2):1–210, 2021.
+- Satyen Kale, Arthur Douillard, and Yanislav Donchev. Eager updates for overlapped communication and computation in diloco. *arXiv preprint arXiv: 2502.12996*, 2025.
+- Jared Kaplan, Sam McCandlish, Tom Henighan, Tom B. Brown, Benjamin Chess, Rewon Child, Scott Gray, Alec Radford, Jeffrey Wu, and Dario Amodei. Scaling laws for neural language models. *CoRR*, abs/2001.08361, 2020.
+- Sai Praneeth Karimireddy, Martin Jaggi, Satyen Kale, Mehryar Mohri, Sashank J Reddi, Sebastian U Stich, and Ananda Theertha Suresh. Mime: Mimicking centralized stochastic algorithms in federated learning. *arXiv preprint arXiv:2008.03606*, 2020a.
+- Sai Praneeth Karimireddy, Satyen Kale, Mehryar Mohri, Sashank Reddi, Sebastian Stich, and Ananda Theertha Suresh. SCAFFOLD: Stochastic controlled averaging for federated learning. In *International Conference on Machine Learning (ICML)*, 2020b.
+
+[Appendix and supplementary materials beyond page 12 have been removed.]

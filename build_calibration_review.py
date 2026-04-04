@@ -6,8 +6,8 @@ pairs it with the real human score. Output is used as few-shot context
 when MODEL_SCORER scores new papers in run_review_baseline.py.
 
 Usage:
-  python build_calibration_review.py --data-dir iclr2025_data
-  python build_calibration_review.py --data-dir iclr2025_data --seed 42
+  python build_calibration_review.py --data-dir iclr2026_data
+  python build_calibration_review.py --data-dir iclr2026_data --seed 42
 """
 
 import asyncio
@@ -171,7 +171,7 @@ async def main(data_dir: str | None = None, seed: int = 42):
     for r in results:
         print(f"  {r['paper_id']}: avg={r['avg_score']:.1f} scores={r['scores']} dec={r['gt_binary']}")
     print(f"\nTo use:")
-    print(f"  python run_review_baseline.py 50 3112 --data-dir {data_dir or 'iclr2025_data'} --calibration calibration_review.md")
+    print(f"  python run_review_baseline.py 50 3112 --data-dir {data_dir or 'iclr2026_data'} --calibration calibration_review.md")
 
 
 if __name__ == "__main__":

@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 import sys
 
-SCALE = [1, 3, 5, 6, 8, 10]
+SCALE = [1, 2, 4, 6, 8, 10]
 
 def round_to_scale(x):
     return min(SCALE, key=lambda v: abs(v - x))

@@ -1,0 +1,1597 @@
+# INVERSE VIRTUAL TRY-ON: GENERATING MULTI-CATEGORY PRODUCT-STYLE IMAGES FROM CLOTHED INDIVIDUALS
+
+
+_∗_ **Davide Lobba1,3,** _∗_ **Fulvio Sanguigni2,3,** _†_ **Bin Ren1,3, Marcella Cornia2, Rita Cucchiara2, Nicu Sebe1**
+
+1University of Trento 2University of Modena and Reggio Emilia 3University of Pisa
+
+
+Figure 1: Visual results produced by our proposed text-enhanced multi-category virtual try-off architecture, _i.e._, TEMU-VTOFF. Given a clothed input person image, the proposed model reconstructs the
+clean, in-shop version of the worn garment. Our model handles various garment types and preserves
+both structural fidelity and fine-grained textures, even under occlusions and complex poses, thanks to
+its multimodal attention and garment-alignment design.
+
+
+ABSTRACT
+
+
+Virtual try-on (VTON) has been widely explored for rendering garments onto
+person images, while its inverse task, virtual try-off (VTOFF), remains largely overlooked. VTOFF aims to recover standardized product images of garments directly
+from photos of clothed individuals. This capability is of great practical importance
+for e-commerce platforms, large-scale dataset curation, and the training of foundation models. Unlike VTON, which must handle diverse poses and styles, VTOFF
+naturally benefits from a consistent output format in the form of flat garment images.
+However, existing methods face two major limitations: _(i)_ exclusive reliance on
+visual cues from a single photo often leads to ambiguity, and _(ii)_ generated images
+usually suffer from loss of fine details, limiting their real-world applicability. To
+address these challenges, we introduce **TEMU-VTOFF**, a **T** ext- **E** nhanced **MU** lticategory framework for **VTOFF** . Our architecture is built on a dual DiT-based
+backbone equipped with a multimodal attention mechanism that jointly exploits
+image, text, and mask information to resolve visual ambiguities and enable robust
+feature learning across garment categories. To explicitly mitigate detail degradation,
+we further design an alignment module that refines garment structures and textures,
+ensuring high-quality outputs. Extensive experiments on VITON-HD and Dress
+Code show that TEMU-VTOFF achieves new state-of-the-art performance, substantially improving both visual realism and consistency with target garments. Code
+and models are available at: [https://temu-vtoff-page.github.io/.](https://temu-vtoff-page.github.io/)
+
+
+1 INTRODUCTION
+
+
+Unlike virtual try-on (VTON), whose goal is to dress a given clothing image on a target person
+image, in this paper, we focus exactly on the opposite, virtual try-off (VTOFF), whose purpose is
+
+
+  - indicates equal contribution, † indicates corresponding author.
+
+
+1
+
+
+to generate standardized product images from real-world clothed individual photos. Compared to
+VTON, which often struggles with the ambiguity and diversity of valid outputs, such as stylistic
+variations in how a garment is worn, VTOFF benefits from a clearer output objective: _reconstructing_
+_a_ _consistent,_ _lay-down-style_ _image_ _of_ _the_ _garment_ . This reversed formulation facilitates a more
+objective evaluation of garment reconstruction quality.
+
+
+The fashion industry, a trillion-dollar global market, is increasingly integrating AI and computer
+vision to optimize product workflows and enhance user experience. VTOFF, in this context, offers
+substantial value: it enables the automatic generation of tiled product views, which are essential
+for tasks such as image retrieval, outfit recommendation, and virtual shopping. However, acquiring
+such lay-down images is expensive and time-consuming for retailers. VTOFF provides a scalable
+alternative by leveraging images of garments worn by models or customers, transforming them into
+standardized catalog views through image-to-image translation techniques.
+
+
+Despite the success of GANs (Goodfellow et al., 2014) and Latent Diffusion Models (LDMs) (Rombach et al., 2022) in image translation tasks (Siarohin et al., 2019; Ren et al., 2023b; Isola et al., 2017;
+Tumanyan et al., 2023), current VTOFF solutions face notable limitations. Existing models (Velioglu
+et al., 2024; Xarchakos & Koukopoulos, 2024) struggle to accurately reconstruct catalog images
+from dressed human inputs. This limitation arises from a fundamental architectural mismatch: these
+approaches repurpose VTON pipelines by merely reversing the input-output roles, without addressing
+the unique challenges of the VTOFF task. Moreover, the high visual variability of real-world images
+
+- due to garment wear category ( _e.g._, upper-body), pose changes, and occlusions – makes it difficult
+for these models to robustly extract garment features while preserving fine-grained patterns. On the
+opposite side, we design a dedicated architecture tailored for the VTOFF task.
+
+
+Recent advances in diffusion models demonstrate that DiT-based architectures (Peebles & Xie,
+2023), especially when combined with flow-matching objectives (Lipman et al., 2023), surpass
+traditional U-Net and DDPM-based approaches (Rombach et al., 2022). Inspired by these findings,
+we propose **TEMU-VTOFF**, a **T** ext- **E** nhanced **MU** lti-category **V** irtual **T** ry- **OFF** architecture based
+on a dual-DiT framework. Specifically, we exploit the representational strength of DiT in two distinct
+ways: _(i)_ the first Transformer component focuses on extracting fine-grained garment features from
+complex, detail-rich person images; and _(ii)_ the second DiT is specialized for generating the clean,
+in-shop version of the garment. To support this design, we further adapt the base DiT architecture
+to accommodate the task-specific input modalities. To further enhance alignment, we introduce an
+external garment aligner module and a novel supervision loss that leverages clean garment references
+as guidance, further improving quality of generated images.
+
+
+Our contribution can be summarized as follows:
+
+
+- **Multi-Category Try-Off.** We present a unified framework capable of handling multiple garment
+types (upper-body, lower-body, and full-body clothes) without requiring category-specific pipelines.
+
+
+- **Multimodal Hybrid Attention.** We introduce a novel attention mechanism that integrates garment
+textual descriptions into the generative process by linking them with person-specific features. This
+helps the dual-DiT architecture synthesize the garments more accurately.
+
+
+- **Garment Aligner Module.** We design a lightweight aligner that conditions generation on clean
+garment images, replacing conventional denoising objectives. This leads to better alignment
+consistency on the overall dataset and preserves more precise visual retention.
+
+
+- Extensive experiments on the Dress Code and VITON-HD datasets demonstrate that TEMUVTOFF outperforms prior methods in both the quality of generated images and alignment with the
+target garment, highlighting its strong generalization capabilities.
+
+
+2 RELATED WORK
+
+
+**Virtual** **Try-On.** As a core task in the fashion domain, VTON has been extensively studied by
+the computer vision and graphics communities due to its practical potential (Bai et al., 2022; Cui
+et al., 2021; Fele et al., 2022; Ren et al., 2023a). Existing methods are broadly categorized into
+warping-based (Chen et al., 2023; Xie et al., 2023; Yan et al., 2023) and warping-free approaches (Zhu
+et al., 2023; Morelli et al., 2023; Baldrati et al., 2023; Zeng et al., 2024; Chong et al., 2025), with a
+growing shift from GAN-based (Goodfellow et al., 2020) to diffusion-based frameworks (Ho et al.,
+
+
+2
+
+
+2020; Song et al., 2021). VITON (Han et al., 2018) and its variants (Wang et al., 2018; Choi et al.,
+2021; Kang et al., 2021) improve garment alignment and synthesis quality, but often produce artifacts
+due to imperfect warping. To mitigate this, warping-free methods leverage diffusion models to bypass
+explicit deformation (Zhu et al., 2023; Morelli et al., 2023; Xu et al., 2025; Choi et al., 2024), using
+modified cross- or self-attention to condition generation on garment features. However, these pretrained encoders tend to lose fine-grained texture details, motivating methods like StableVITON (Kim
+et al., 2024) to add dedicated garment encoders and attention modules, at increased computational
+cost. Lately, DiT-based works (Jiang et al., 2025; Zhu et al., 2024) show the benefits of Transformerbased diffusion models for high-fidelity garment to person transfer. Finally, some models adopt more
+elaborate conditioning strategies. For instance, LOTS introduces a pair-former module for handling
+multiple inputs (Girella et al., 2025), while LEFFA learns a flow field from averaged cross-attention
+maps and employs learnable tokens to stabilize attention values (Zhou et al., 2025). While most works
+focus on generating dressed images from separate person and garment inputs, the inverse problem
+( _i.e._, reconstructing clean garment representations from worn images) remains underexplored.
+
+
+**Virtual Try-Off.** While VTON has been extensively studied for synthesizing images of a person
+wearing a target garment, the recently proposed VTOFF task shifts the focus toward garmentcentric reconstruction, aiming to extract a clean, standardized image of a garment worn by a person.
+TryOffDiff (Velioglu et al., 2024) introduces this task by leveraging a diffusion-based model with
+SigLIP (Zhai et al., 2023) conditioning to recover high-fidelity garment images. Building on this
+direction, TryOffAnyone (Xarchakos & Koukopoulos, 2024) addresses the generation of tiled garment
+images from dressed photos for applications like outfit composition and retrieval. By integrating
+garment-specific masks and simplifying the Stable Diffusion pipeline through selective Transformer
+tuning, it balances quality and efficiency. In both cases, these works have been designed for singlecategory scenarios, limiting scalability to diverse data collections. Recent efforts have started to
+address these limitations. MGT (Velioglu et al., 2025) extends VTOFF to multi-category scenarios
+by incorporating class-specific embeddings to handle diverse clothing types within a unified model.
+More ambitious efforts unify VTON and VTOFF in a single framework: Voost (Lee & Kwak, 2025)
+proposes a single DiT to learn both tasks, while One Model For All (Liu et al., 2025) introduces
+a partial diffusion mechanism to achieve a similar goal. On a different line, Any2AnyTryon (Guo
+et al., 2025) adapts FLUX (Labs, 2024) using a LoRA-based module (Hu et al., 2022) for this task.
+While these works reflect a shift from person-centric synthesis to garment-centric understanding, they
+still suffer from structural artifacts ( _e.g._, shape, neckline, waist) and inaccurate colors or textures.
+We hypothesize that this mismatch is due to a too generic architectural choice, not tailored for the
+specific needs of the VTOFF setting. In this work, we focus on existing VTOFF open problems,
+such as multi-category adaptation, occlusions, and complex human poses, and propose a novel
+VTOFF-specific architecture enhanced with text and fine-grained mask conditioning and optimized
+with a garment aligner component that can improve the quality of generated garments.
+
+
+**Conditioning Methods in Diffusion Models.** To overcome the limitations of text-only conditioning,
+many schemes leverage additional visual inputs such as segmentation maps, bounding boxes, poses,
+and points (Sun et al., 2024; Li et al., 2023; Chen et al., 2024; Nie et al., 2024; Lin et al., 2024;
+Wang et al., 2024). Prominent methods like ControlNet (Zhang et al., 2023) and T2I-Adapter (Mou
+et al., 2024) inject spatial conditions via auxiliary networks, while IP-Adapter (Ye et al., 2023) uses
+separate attention branches more suited to U-Nets than DiTs. Other works focus on unifying multiple
+conditions, either through modular controllers like Uni-ControlNet (Zhao et al., 2023) and dedicated
+adapters (Lin et al., 2025), or by concatenating visual embeddings directly into the Transformer input
+sequence (Tan et al., 2025; Wang et al., 2025; Xiao et al., 2025). Although these methods are effective
+for general personalization tasks ( _i.e._, placing an object from one image into another), they lack the
+fine-grained conditioning mechanism necessary to extract specific garment data from person images,
+a gap we address to unlock the VTOFF task.
+
+
+3 METHODOLOGY
+
+
+**Preliminaries.** The latest diffusion models are a family of generative architectures that corrupt a
+ground-truth image _**z**_ 0 according to a flow-matching schedule (Lipman et al., 2023) defined as
+_**z**_ _t_ = (1 _−_ _t_ ) _**z**_ 0 + _tϵt_ _ϵ ∼N_ (0 _,_ 1) _,_ _t ∈_ [0 _,_ 1] _._ (1)
+Then, a diffusion model estimates back the injected noise _ϵt_ through a Diffusion Transformer
+(DiT) (Peebles & Xie, 2023), obtaining a prediction _**z**_ ˆ0. In Stable Diffusion 3 (SD3) (Esser et al.,
+
+
+3
+
+
+|Garment and<br>aLN Layer N<br>Scale,|Col2|Text Latents<br>orm<br>Shift<br>odule C<br>e<br>Norm<br>Shift<br>P<br>le<br>Hybr|
+|---|---|---|
+|aLN<br>Layer N<br>Scale,<br>Garment and|Layer N<br>Scale,<br>|Layer N<br>Scale,<br>|
+||||
+
+
+=
+
+
+=
+
+
+=
+
+
+=
+
+
+=
+
+
+=
+
+
+C
+
+
+_L_
+
+
+Garment
+
+
+Text
+
+
+Trainable
+
+
+Frozen
+
+
+Concatenation
+
+
+Text Embeddings
+
+
+Garment Latent
+
+
+Person Keys/Values
+
+
+_a fitted waist_
+
+
+|Hybrid DiT Hybrid DiT|Col2|Col3|
+|---|---|---|
+|AdaLN<br>C<br>Garment Aligner<br>DiT<br>Block 1<br>DiT<br>Block N<br>Denoising DiT<br>Scale, Shift<br>extractvisual<br>features from<br>8-th block|AdaLN<br>C<br>Garment Aligner<br>DiT<br>Block 1<br>DiT<br>Block N<br>Denoising DiT<br>Scale, Shift<br>extractvisual<br>features from<br>8-th block|AdaLN<br>C<br>Garment Aligner<br>DiT<br>Block 1<br>DiT<br>Block N<br>Denoising DiT<br>Scale, Shift<br>extractvisual<br>features from<br>8-th block|
+|AdaLN<br>C<br>Garment Aligner<br>DiT<br>Block 1<br>DiT<br>Block N<br>Denoising DiT<br>Scale, Shift<br>extractvisual<br>features from<br>8-th block|Garment Aligner|Garment Aligner|
+|AdaLN<br>C<br>Garment Aligner<br>DiT<br>Block 1<br>DiT<br>Block N<br>Denoising DiT<br>Scale, Shift<br>extractvisual<br>features from<br>8-th block|Garment Aligner||
+
+
+Figure 2: Overview of our method. The feature extractor _FE_ processes spatial inputs (noise, masked
+image, binary mask) and global inputs (model image via AdaLN). The intermediate keys and values
+_**K**_ extractor _[l]_ [,] _**[ V]**_ extractor _[l]_ [are injected into the corresponding hybrid blocks of the garment generator] _[ F][D]_ [.]
+The main DiT then produces the final garment using the proposed MHA module. Training combines a
+diffusion loss on noise prediction with an alignment loss with DINOv2 features of the target garment.
+
+
+2024), the 16-channel latent _**z**_ _t_ R _H_ 8 _[×]_ _[W]_ 8 _[×]_ [16] is obtained projecting the original RGB image
+
+_**x**_ _∈_ R _[H][×][W][ ×]_ [3] with a variational autoencoder _∈_ _E_ (Kingma & Welling, 2013), obtaining _**z**_ = _E_ ( _**x**_ ),
+with _H, W_ being height and width of the image, and _f_ = 8 the spatial compression ratio of the
+autoencoder. Finally, the model is trained according to an MSE loss function diff:
+_L_
+
+
+_H_
+2024), the 16-channel latent _**z**_ _t_ R 8
+
+R _[H][×][W][ ×]_ [3] _∈_
+
+
+8 _[×]_ _[W]_ 8
+
+
+       diff = E _**z**_ 0 _,ϵt,t_ _ϵt_ _ϵθ_ ( _**z**_ _t, t_ ) _._ (2)
+_L_ _∥_ _−_ _∥_ [2][�]
+
+
+**Overview.** An overview of our method is shown in Fig. 2. The objective is to generate an inshop version of the garment worn by the person. A critical design choice lies in processing the
+dressed person image so as to extract meaningful information for injection into the denoising process.
+To this end, we adopt a dual-DiT architecture, built upon SD3, with the two models assigned to
+complementary roles. Firstly, we design the first DiT as a feature extractor _FE_ that encodes the model
+image _**x**_ model and outputs its intermediate layer features at timestep _t_ = 0 and not from subsequent
+timesteps, as we are interested in extracting clean features from _FE_ . This block is trained with a
+diffusion loss to generate the person image. Once trained, this model outputs meaningful key and
+value features of the dressed person. Secondly, the main DiT generates the garment _**x**_ _g_ leveraging the
+intermediate features from _FE_ in a modified textual-enhanced attention module.
+
+
+3.1 DIT FEATURE EXTRACTOR
+
+
+At inference time, the only available input is the clothed person image _**x**_ model R _[H][×][W][ ×]_ [3], from
+_∈_
+which we also extract the mask. To encode this information, we compute the visual projection
+
+_**e**_ _[v]_ pool [= CLIP(] _**[x]**_ [model][)] _[ ∈]_ [R][2048] _[,]_
+
+
+which is then used to modulate the latent _**z**_ _t_ through the AdaLN-estimated scale _γ_ and shift _β_ :
+
+_**y**_ _t_ = MLP( _t,_ _**e**_ _[v]_ pool [)] _[,]_
+
+_**z**_ _t_ _←_ _γ_ ( _**y**_ _t_ ) _**z**_ _t_ + _β_ ( _**y**_ _t_ ) _._ (3)
+
+Existing VTON approaches rely on two visual inputs: the target garment and the person. In our
+case, however, the model can rely only on person features, from which it is more complex to extract
+the garment features. This shortcoming makes the CLIP vector _**e**_ _[v]_ pool [the real bottleneck in a unified]
+architecture setting, as the CLIP projection alone is too coarse to properly encode this information.
+
+
+4
+
+
+To address this, we propose introducing a dedicated feature extractor _FE_, allowing _FD_ to concentrate
+exclusively on the garment generation task. The architecture of _FE_ mirrors that of the main SD3
+DiT module _FD_, with the only difference being its input layer, which is adapted to handle additional
+visual inputs in the channel dimension. The inputs are a global input with the person image _**x**_ _model_
+R _[H][×][W][ ×]_ [3] encoded as _**e**_ _[v]_ pool [and leveraged by the modulation layers of] _[ F][E]_ [, and a local spatial input] _∈_
+aslatent of the masked person imagethe channel-wise concatenation _x_ _**z**_ _Mt_ _[′]_ [=] = [[] _**[z]**_ ( _[t]_ _x_ _[, M,]_ _model_ _**[ x]**_ _[M]_ []] _M_ _[∈]_ ) [R] _[h][×]_ R _[w][h][×][×]_ [33] _[w][×]_ [of][16], where [the] [latent] is the SD3 VAE _**[z]**_ _[t]_ [,] [the] [encoded]
+encoder, _h_ = _H/f_ and _w_ = _W/f_ denote the spatial dimensions after downsampling by the factor _E_ _⊙_ _∈_ _E_
+_fP_ = 8: R _[h]_, and the interpolated binary mask _[×][w][×]_ [33] _→_ R _[S][×][d]_, with _S_ as sequence length and _M_ _∈_ R _[h][×][w][×]_ [1] _d_ encoded through the Transformer projector as embedding dimension.
+
+This design choice is central to our method, as each layer output of the feature extractor _FE_ retains
+meaningful intermediate representations of both the person and the garment. Leveraging these
+features offers three key advantages: _(i)_ instead of the collapsed CLIP representation, we obtain
+expanded features of dimension _S_ _d_ ; _(ii)_ the _L_ layers of _FE_ capture information at multiple
+_×_
+granularities, progressing from coarse to fine (Avrahami et al., 2025; Skorokhodov et al., 2025), so
+that each layer _l_ conveys a different level of detail about the same image; _(iii)_ since _FE_ shares the
+same architecture as _FD_, the features extracted at layer _l_ from _FE_ are naturally better aligned with
+those of _FD_ . Motivated by these considerations, we extract the keys _**K**_ extractor _[l]_ [and values] _**[ V]**_ extractor _[l]_
+from every layer _l_ of _FE_ .
+
+
+3.2 DUAL-DIT TEXT-ENHANCED GARMENT TRY-OFF
+
+
+Without loss of generality, we will omit the index _l_ when referring to _**Q**_ _[l]_ _**K**_ _[l]_ and _**V**_ _[l]_ of _FE_ and
+_FD_, since the conditioning scheme is applied uniformly across all layers. Given the extracted
+features _**K**_ extractor and _**V**_ extractor, we propose to modify the SD3 attention scheme to incorporate such
+information, leading to our Multimodal Hybrid Attention (MHA).
+
+
+**Multimodal Hybrid Attention.** Our new module seamlessly mix text information, latent features of
+the denoising DiT, and intermediate features from _FE_ . Inspired by the key findings in SD3 (Esser
+et al., 2024), we concatenate the text features with the visual inputs along the sequence length
+dimension, thus obtaining:
+
+
+_**Q**_ = [ _**Qz**_ _t,_ _**Q**_ text] _**K**_ = [ _**Kz**_ _t,_ _**K**_ extractor _,_ _**K**_ text] _**V**_ = [ _**Vz**_ _t,_ _**V**_ extractor _,_ _**V**_ text] _._ (4)
+
+
+This module allows the features _**Q**_ text to attend both the latent projection _**Kz**_ _t_ and the extractor
+features _**K**_ extractor. The resulting attention matrix _**A**_ MHA captures three key interactions: (i) _**A**_ text _↔_ _**z**_ _t_,
+preserving pre-trained alignment between language and latent image tokens, (ii) _**Az**_ _t↔_ extractor, facilitating transfer between the input garment and the person representation, and (iii) _**A**_ text _↔_ extractor,
+grounding the text in the structural features provided by the extractor.
+
+
+Text embeddings are constructed via the concatenation of CLIP (Radford et al., 2021) [1] and T5 (Raffel
+et al., 2020) encoders applied to the input caption _c_ as follows:
+
+
+_**e**_ text = [CLIP( _c_ ) _,_ T5( _c_ )] _,_ with _**e**_ text R [77] _[×]_ [4096] _._ (5)
+_∈_
+
+
+Now we pose a relevant question: is it possible to disambiguate the garment category from the
+mask alone? A mask input can improve multi-category handling by acting as a _hard_ discriminator
+between two garments, in contrast to text, which acts as a _soft_ discriminator since it does not
+directly indicate the pixels occupied by the target garment. Therefore, the mask can help to visually
+force the model to retain only upper- or lower-body information but it can not tell much about the
+appearance of a garment, because it is highly warped together with the person, resulting in visual
+artifacts. Textual information is critical, together with mask information, to extract the category
+information of the garment. To address this, we decide to use also the global conditioning scheme
+provided by AdaLN (Huang & Belongie, 2017) in SD3. As shown in previous works (Garibi et al.,
+2025), these layers can be successfully leveraged to adapt “appearance” or “style” information into
+existing Transformer-based architectures. For this reason, we extract a pooled textual representation
+_**e**_ pool R [2048] of CLIP textual features of the caption _c_ and inject them into the model through
+the modulation _∈_ layers, following Eq. 3. The pooled vector _**e**_ pool R [2048] encapsulates a coarser
+_∈_
+
+1Following SD3, we consider the combined embedding from CLIP ViT-L and Open-CLIP bigG/14.
+
+
+5
+
+
+representation than the full textual embeddings _**e**_ text R [77] _[×]_ [4096], thus being suitable for high-level
+_∈_
+information conditioning.
+
+
+**Training.** We employ a two-stage training procedure: we train the module _FE_ alone, detached from
+the dual DiT _FD_, according to the diffusion loss _L_ diff defined as follows:
+
+                   extractor = E _**z**_ 0 _,ϵt,t_ _ϵt_ _FE_ ( _**z**_ _t_ _[′][,]_ _**[ x]**_ [model] _[, t]_ [)] _[∥]_ [2][�] _._ (6)
+_L_ _∥_ _−_
+
+Then, we train the dual DiT _FD_ following a diffusion loss with multiple conditioning signals:
+
+               DiT = E _**z**_ _g,ϵt,t_ _**z**_ _g_ _FD_ ( _**z**_ _t,_ _**e**_ pool _, FE_ ( _**z**_ 0 _[′]_ _[,]_ _**[ x]**_ [model] _[,]_ [ 0)] _[, t]_ [)] _[∥]_ [2][�] _,_ (7)
+_L_ _∥_ _−_
+
+where _zg_ = ( _xg_ ) is the latent representation of the target garment encoded by the VAE, and with
+_E_
+_FE_ ( _**z**_ 0 _[′]_ _[,]_ _**[ x]**_ [model] _[,]_ [ 0)][ being the list of keys and values extracted from] _[ F][E]_ [at timestep] _[ t]_ [ = 0][.] [We extract]
+this list from _FE_ at _t_ = 0 and re-use them in _FD_ for all subsequent timesteps, as we want to use
+key/values from clean data.
+
+
+3.3 GARMENT ALIGNER
+
+
+While our model is effective at generating realistic and structurally coherent garments, we observe
+occasional failures in preserving high-frequency details such as fine-grained textures and logos. We
+hypothesize two primary contributing factors: (i) the diffusion loss diff, defined in the noise space,
+_L_
+optimizes over perturbed latents rather than directly over image-space reconstructions, limiting its sensitivity to fine-grained patterns; and (ii) the inherent generation dynamics of diffusion models, where
+errors introduced in early timesteps – typically encoding low-frequency content – can accumulate
+and degrade the fidelity of high-frequency details in later stages. To mitigate this, we draw inspiration
+from REPA (Yu et al., 2025), and propose to explicitly align the internal feature representation of
+our DiT with that of a pre-trained vision encoder. Specifically, we encourage patch-wise consistency
+between the eighth Transformer block of our main DiT model _FD_ and the corresponding features
+extracted from DINOv2 (Oquab et al., 2023).
+
+
+Formally, let _**h**_ DiT R [3072] _[×][d]_ denote the token sequence obtained from the eighth Transformer
+_∈_
+block of the DiT decoder _FD_, corresponding to a 64 48 patch grid with embedding dimension _d_ .
+Separately, let _**h**_ enc R [1024] _[×][d][′]_ be the 32 32 token grid extracted from a frozen DINOv2 encoder, _×_
+_∈_ _×_
+with embedding dimension _d_ _[′]_ (where _d_ _[′]_ = _d_ ). To bridge this mismatch, we introduce a lightweight
+garment aligner module composed of a convolutional neural network _ϕ_ CNN : R [64] _[×]_ [48] _[×][d]_ R [32] _[×]_ [32] _[×][d][′]_
+_→_
+
+which is used to downsample the spatial token grid while preserving local structure and to project
+the token embeddings into the DINOv2 feature space. The aligned tokens are defined as _**h**_ [˜] DiT =
+_ϕ_ CNN( _**h**_ DiT) R [1024] _[×][d][′]_ .
+_∈_
+
+We then enforce feature-level consistency via a cosine similarity loss:
+
+
+_N_
+
+- cos - _**h**_ ˜ [DiT] _i_ _,_ _**h**_ [enc] _i_ - [�]
+
+
+_i_ =1
+
+
+align = E _**z**_ _g,ϵt,t_
+_L_ _−_
+
+
+1
+
+_N_
+
+
+_,_ (8)
+
+
+where _**h**_ [˜] [DiT] _i_ and _**h**_ [enc] _i_ are the _i_ -th aligned and reference tokens, respectively, _i_ is the patch index, _N_ is
+the total number of tokens, and cos is the cosine similarity. It is important to note that the garment
+aligner is strictly a training-time component used to compute _align_ . It is discarded during inference,
+_L_
+adding no computational overhead to the generation process.
+
+
+**Overall Loss Function.** The garment aligner is applied in the second stage of our training. Our final
+training objective combines the standard diffusion loss _L_ DiT with the garment alignment loss _L_ align
+previously introduced. The overall objective is thus defined as:
+_L_ total = _L_ DiT + _λ · L_ align _,_ (9)
+where _λ_ is a hyperparameter that balances the contribution of the two loss components.
+
+
+4 EXPERIMENTS
+
+
+4.1 COMPARISON WITH THE STATE OF THE ART
+
+
+We conduct our experiments using two publicly available fashion datasets: VITON-HD (Choi et al.,
+2021) and Dress Code (Morelli et al., 2022). VITON-HD contains only upper-body garments and
+
+
+6
+
+
+Table 1: Quantitative results on the Dress Code dataset, considering both the entire test set and the
+three category-specific subsets. _↑_ indicates higher is better, _↓_ lower is better.
+
+
+**All** **Upper-Body**
+
+**Method** **SSIM** _↑_ **PSNR** _↑_ **LPIPS** _↓_ **DISTS** _↓_ **FID** _↓_ **KID** _↓_ **SSIM** _↑_ **PSNR** _↑_ **LPIPS** _↓_ **DISTS** _↓_ **FID** _↓_ **KID** _↓_
+
+TryOffDiff - - - - - - 76.59 11.54 40.62 29.04 37.97 17.30
+Any2AnyTryon 77.56 12.67 35.17 25.17 12.32 3.65 76.61 12.27 38.99 25.78 15.77 3.22
+MGT **77.77** 11.99 35.37 27.28 13.47 5.28 **76.77** 11.44 39.70 28.13 19.49 6.87
+**TEMU-VTOFF** 75.95 **12.90** **31.46** **18.66** **5.74** **0.65** 74.54 **12.51** **35.48** **19.75** **10.94** **0.76**
+
+
+**Lower-Body** **Dresses**
+
+**Method** **SSIM** _↑_ **PSNR** _↑_ **LPIPS** _↓_ **DISTS** _↓_ **FID** _↓_ **KID** _↓_ **SSIM** _↑_ **PSNR** _↑_ **LPIPS** _↓_ **DISTS** _↓_ **FID** _↓_ **KID** _↓_
+
+Any2AnyTryon **78.15** **12.42** 34.72 25.87 30.06 12.01 77.93 13.32 31.80 23.86 19.20 6.27
+MGT 77.29 11.64 36.31 28.00 25.98 9.64 79.26 13.09 30.11 25.70 19.09 5.74
+**TEMU-VTOFF** 73.94 12.14 **34.60** **19.57** **13.83** **2.04** **79.39** **14.36** **24.32** **16.67** **11.29** **0.59**
+
+
+Figure 3: Qualitative comparison on the Dress Code dataset between images generated by TEMUVTOFF and those generated by competitors.
+
+
+represents a single-category setting, while Dress Code includes multiple categories ( _i.e._, dresses,
+upper-body, and lower-body garments) enabling evaluation of the generalization capabilities of our
+methods across diverse garment types. To evaluate the proposed TEMU-VTOFF architecture, we use
+a combination of perceptual, structural, and distributional similarity metrics. Specifically, as VTOFF
+is a paired generation setting, we mainly rely on reference-based like SSIM (Wang et al., 2004),
+PSNR (Wang et al., 2004), LPIPS (Zhang et al., 2018), and DISTS (Ding et al., 2020), alongside
+FID (Parmar et al., 2022) and KID (Bi´nkowski et al., 2018). We compare our approach against
+recent VTOFF methods, including TryOffDiff (Velioglu et al., 2024), TryOffAnyone (Xarchakos
+& Koukopoulos, 2024), MGT (Velioglu et al., 2025), Voost (Lee & Kwak, 2025), One Model For
+All (Liu et al., 2025), and Any2AnyTryon (Guo et al., 2025). For TryOffAnyone, Voost, and One
+Model For All, we report the results only on the VITON-HD dataset because they have not been
+trained on the Dress Code dataset. Additionally, we retrain TryOffDiff on Dress Code using the
+official code and hyperparameters provided by the authors. Since TryOffDiff is not designed to
+handle multi-category garments, we report results only for the upper-body category.
+
+
+**Results on the Dress Code Dataset.** Table 1 reports the experimental results on the Dress Code
+dataset. As observed, our method outperforms existing state-of-the-art approaches across most
+evaluation metrics and garment categories. These results indicate that our approach is categoryagnostic and benefits from the joint use of textual garment descriptions and fine-grained masks.
+Consequently, our model achieves a better perceptual quality and closer alignment with the groundtruth distribution compared to competing methods. Performance on lower-body garments is slightly
+lower due to the class imbalance in the Dress Code dataset, which contains significantly fewer
+lower-body samples ( _∼_ 9k) compared to upper-body ( _∼_ 15k) and full-body dresses ( _∼_ 29k).
+
+In Fig. 3, we provide qualitative results comparing TEMU-VTOFF with competitors. These examples
+highlight the challenges posed by the diverse set of categories in Dress Code. As shown, MGT and
+Any2AnyTryon frequently struggle to preserve key visual attributes such as color, texture, and shape.
+In contrast, our method is able to closely match the target garment across all categories, demonstrating
+a clear improvement in generation quality.
+
+
+**Results on the VITON-HD Dataset.** In Table 2, we report the quantitative results on VITON-HD. In
+this setting, TEMU-VTOFF sets a new state-of-the-art across the majority of metrics, achieving the
+
+
+7
+
+
+Table 2: Quantitative results on the VITON-HD dataset. _↑_ indicates higher is better, _↓_ lower is better.
+
+_†_ denotes results taken directly from the original papers.
+
+**Method** **SSIM** _↑_ **PSNR** _↑_ **LPIPS** _↓_ **DISTS** _↓_ **FID** _↓_ **KID** _↓_
+
+TryOffDiff 75.53 11.65 39.56 25.53 17.49 5.30
+TryOffAnyone 75.90 12.00 35.26 23.47 12.74 2.85
+Any2AnyTryon 75.72 12.00 37.95 24.32 12.88 3.01
+
+
+MGT _[†]_ **78.10**      - 36.30 24.70 21.90 8.90
+Voost _[†]_         -         -         -         - 10.06 2.48
+One Model for All _[†]_         -         - **22.50** 19.20 9.12 1.49
+
+
+Figure 4: Qualitative comparison on the VITON-HD dataset between images generated by TEMUVTOFF and those generated by competitors.
+
+
+best scores for DISTS, FID, and KID. This indicates a superior ability to reconstruct structural details
+and to match the distribution of the ground-truth images. Notably, One Model for All achieves a
+competitive LPIPS score, which we cite from the original paper as public checkpoints are unavailable.
+Our method, however, achieves more robust performance on FID, KID, and DISTS. Since LPIPS
+and DISTS are critical in paired settings, we provide a qualitative analysis (Sec. E of the Appendix)
+showing LPIPS can diverge from human judgment, while DISTS aligns more reliably.
+
+
+Overall, our method achieves solid improvements on VITON-HD, although the performance gains
+are less pronounced than on Dress Code. This is expected, as VITON-HD focuses exclusively on
+upper-body garments and is therefore a simpler benchmark. In contrast, the diverse and multi-category
+nature of Dress Code, with dresses, skirts, and pants, highlights the advantages of our approach,
+where the joint use of textual descriptions and fine-grained masks proves critical for accurate garment
+reconstruction. Accordingly, the strengths of our method are most evident in complex, multi-category
+scenarios. A visual comparison on sample VITON-HD images is shown in Fig. 4, which further
+demonstrates the improved garment reconstruction quality of our proposed method.
+
+
+4.2 ABLATION STUDIES
+
+
+To assess the contribution of each component in our pipeline, we conduct a detailed ablation study on
+the Dress Code dataset reported in Table 3. We first investigate the impact of our dual-stream DiT
+architecture by removing the feature extractor _FE_ . In this setting, the garment aligner component is
+not employed. As shown, without the feature extractor, we experience a clear performance drop. In
+contrast, injecting _t_ = 0 keys and values from _FE_ into the generator component through the proposed
+MHA operator enables richer, multi-scale conditioning, leading to better results. Then, we analyze
+the impact of employing the garment aligner module. As it can be seen, the aligner module helps
+to improve perceptual fidelity, particularly in categories with complex structures such as dresses,
+confirming that the designed components plays a critical role to the final performance.
+
+
+Finally, removing garment descriptions or fine-grained masks consistently reduces performance, with
+the largest drop when both are absent, confirming that masks act as spatial anchors while text provides
+complementary semantic and category-level cues. The best results are obtained when both inputs are
+present, highlighting their complementarity.
+
+
+8
+
+
+Table 3: Ablation study of the proposed components on the Dress Code dataset.
+
+
+**All** **Upper-body** **Lower-body** **Dresses**
+
+**SSIM** _↑_ **PSNR** _↑_ **LPIPS** _↓_ **DISTS** _↓_ **FID** _↓_ **KID** _↓_ **DISTS** _↓_ **FID** _↓_ **DISTS** _↓_ **FID** _↓_ **DISTS** _↓_ **FID** _↓_
+
+_Effect of Dual-Stream DiT (w/o Garment Aligner)_
+w/o feature extractor _FE_ 72.79 11.45 38.61 23.56 9.11 1.70 24.97 14.13 23.20 19.54 22.52 16.82
+**TEMU-VTOFF** **76.01** **12.85** **30.84** **20.63** **5.91** **0.78** **21.77** **11.26** **22.26** **14.22** **17.86** **11.86**
+
+
+_Effect of Garment Aligner Component_
+w/o garment aligner **76.01** 12.85 **30.84** 20.63 5.91 0.78 21.77 11.26 22.26 14.22 17.86 11.86
+**TEMU-VTOFF** 75.95 **12.90** 31.46 **18.66** **5.74** **0.65** **19.75** **10.94** **19.57** **13.83** **16.67** **11.29**
+
+
+_Effect of Text and Mask Conditioning_
+w/o text and masks 71.04 10.92 39.68 25.20 9.63 3.17 23.71 19.75 65.85 49.19 20.12 15.47
+w/o text modulation 73.88 12.28 34.63 22.54 7.75 1.52 24.02 13.48 24.33 18.13 19.27 13.30
+w/o fine-grained masks 74.65 12.30 32.33 20.87 6.58 1.03 20.85 11.31 22.34 15.74 19.42 13.62
+**TEMU-VTOFF** **75.95** **12.90** **31.46** **18.66** **5.74** **0.65** **19.75** **10.94** **19.57** **13.83** **16.67** **11.29**
+
+
+(a) Evaluation of mask and text joint impact. (b) Evaluation of garment aligner impact.
+
+
+Figure 5: Qualitative comparisons demonstrating the contribution of each proposed component. Left:
+effect of text and mask conditioning as “soft” and “hard” proxies for multi-category modeling. Right:
+impact of the lightweight garment aligner, which guides training with clean garment supervision.
+
+
+To better understand the strength of each component proposed in our approach, we provide a visual
+comparison on Dress Code in Fig. 5. When our method relies exclusively on visual features from the
+person, without any textual guidance, it can struggle to resolve ambiguities in the garment design,
+leading to errors in structural elements such as neckline, sleeve length, or overall fit. The introduction
+of a textual description provides essential structural cues, enabling the model to capture the intended
+garment type and style. The fine-grained mask then imposes a precise spatial boundary, enforcing
+a clean silhouette and sharp edges, which improves the overall shape and contour of the garment.
+Finally, the garment aligner further improves the visual fidelity by encouraging the reconstruction of
+high-frequency details. This results in improved textures and more accurate patterns, ensuring that
+the final generated garment is not only structurally correct but also rich in fine-grained detail.
+
+
+4.3 CROSS-DATASET GENERALIZATION
+
+
+To evaluate the robustness of TEMU-VTOFF against domain shifts and its ability to generalize to
+unseen garment types and poses, we conduct cross-dataset experiments. Specifically, we train our
+model on one dataset and evaluate it directly on the test set of the other dataset. We compare against
+MGT (Velioglu et al., 2025), TryOffDiff (Velioglu et al., 2024), and TryOffAnyone (Xarchakos &
+Koukopoulos, 2024). Note that we exclude Any2AnyTryon (Guo et al., 2025) from this specific
+analysis, as it is trained on a mixture of datasets including both Dress Code and VITON-HD,
+making the cross-dataset evaluation unfair. In Table 4, we present cross-dataset generalization results
+under two transfer settings. When trained on Dress Code and evaluated on VITON-HD, our model
+consistently surpasses MGT across both perceptual and distributional metrics, achieving a notably
+lower FID (20.39 vs. 23.11). Conversely, when trained on VITON-HD and tested on Dress Code
+(upper-body), our method again shows stronger generalization, obtaining an FID of 18.63 and clearly
+outperforming both TryOffDiff and TryOffAnyone.
+
+
+9
+
+
+Table 4: Quantitative comparison where models are trained on one dataset and tested on another to
+evaluate robustness to domain shift. _↑_ indicates higher is better, _↓_ lower is better.
+
+**Method** **SSIM** _↑_ **PSNR** _↑_ **LPIPS** _↓_ **DISTS** _↓_ **FID** _↓_ **KID** _↓_
+
+_Training on Dress Code →_ _Test on VITON-HD_
+MGT **74.26** 10.24 42.57 28.73 23.11 10.81
+
+
+TryOffDiff **75.33** 11.50 44.64 32.14 41.91 21.78
+TryOffAnyone 71.96 10.52 47.14 27.54 24.45 9.84
+**TEMU-VTOFF** 73.36 **11.51** **39.74** **23.84** **18.63** **6.31**
+
+
+Table 5: VTON results from CatVTON trained on two Dress Code variants: the original dataset and
+the version augmented with TEMU-VTOFF-generated images.
+
+
+**All** **Upper-Body**
+
+**Training Dataset** **SSIM** _↑_ **PSNR** _↑_ **LPIPS** _↓_ **DISTS** _↓_ **FID** _↓_ **KID** _↓_ **SSIM** _↑_ **PSNR** _↑_ **LPIPS** _↓_ **DISTS** _↓_ **FID** _↓_ **KID** _↓_
+
+Dress Code **90.65** 23.03 7.12 9.18 4.56 1.34 **92.93** 24.32 **5.33** 7.66 9.58 2.04
+**Dress Code** _**(Augm.)**_ **90.65** **23.36** **7.00** **9.00** **4.15** **1.16** 90.94 **24.39** **5.33** **7.54** **9.26** **1.74**
+
+
+**Lower-Body** **Dresses**
+
+**Method** **SSIM** _↑_ **PSNR** _↑_ **LPIPS** _↓_ **DISTS** _↓_ **FID** _↓_ **KID** _↓_ **SSIM** _↑_ **PSNR** _↑_ **LPIPS** _↓_ **DISTS** _↓_ **FID** _↓_ **KID** _↓_
+
+Dress Code 91.46 24.44 6.03 7.84 9.60 1.71 **87.50** 21.18 10.01 12.04 9.58 1.26
+**Dress Code** _**(Augm.)**_ **91.48** **24.50** **5.95** **7.63** **9.02** **1.38** **87.50** **21.21** **10.00** **12.02** **9.45** **1.12**
+
+
+4.4 DOWNSTREAM UTILITY
+
+
+To demonstrate the practical utility of TEMU-VTOFF, we evaluate its effectiveness as a data augmentation tool for the VTON downstream task. High-quality paired data ( _i.e._, person and in-shop
+garment) is expensive to acquire; our method addresses this by synthetically generating the “in-shop”
+garment directly from images of clothed people.
+
+
+**Experimental** **Setup.** We use the Dress Code dataset (Morelli et al., 2022) and employ TEMUVTOFF to generate synthetic in-shop garment images for the training samples. Specifically, for each
+person image in the upper- and lower-body categories, we generate the missing in-shop garment:
+the lower-body item for upper-body images and the upper-body item for lower-body images. This
+procedure augments the dataset with additional person-garment pairs generated by TEMU-VTOFF.
+We then employ CatVTON (Chong et al., 2025) (utilizing the SD 3 medium backbone) in two distinct
+settings: trained only on the standard Dress Code training set and trained on the Dress Code training
+set augmented with the synthetic pairs generated by TEMU-VTOFF.
+
+
+**Results.** We evaluate the trained models on the official Dress Code test set. As shown in Table 5,
+the model trained with our augmented data achieves consistent improvements across both perceptual
+and distributional metrics. Notably, in the upper-body and lower-body categories, the augmented
+training yields lower FID scores (9.27 vs. 9.58 and 9.02 vs. 9.60, respectively). This confirms that
+the garments generated by TEMU-VTOFF preserve sufficient structural fidelity and texture details to
+serve as effective training signals, improving the generalization of state-of-the-art VTON models.
+
+
+5 CONCLUSION
+
+
+We presented TEMU-VTOFF, a novel architecture that pushes the boundaries of VTOFF for complex,
+multi-category scenarios. While existing methods often struggle with detail preservation and accurate
+reconstruction across diverse garment types, our approach is specifically designed to overcome these
+limitations. We achieve this through a novel dual-DiT framework that leverages multimodal hybrid
+attention to effectively fuse information from the person, the garment, and textual descriptions. To
+enhance realism, our proposed garment aligner module refines fine-grained textures and structural
+details. The effectiveness of our method is validated by state-of-the-art performance on standard
+VTOFF benchmarks, demonstrating its robustness in generating high-fidelity, catalog-style images.
+
+
+**Acknowledgments.** This work was supported by EU Horizon projects ELIAS (No. 101120237) and
+ELLIOT (No. 101214398), and by the FIS project GUIDANCE (No. FIS2023-03251).
+
+
+10
+
+
+ETHICS STATEMENT
+
+
+Our method addresses the VTOFF task by generating flat, in-shop garment images from photos
+of dressed individuals. This enables a novel form of data augmentation in the fashion domain,
+allowing clean garment representations to be synthesized without manual segmentation or dedicated
+photoshoots. By bridging the gap between worn and catalog-like appearances, our approach can
+improve scalability for fashion datasets and support downstream applications such as retrieval,
+recommendation, and virtual try-on. However, as with any generative technology, there are important
+ethical and legal considerations. In particular, our model could be used to reconstruct garments
+originally designed by third parties, potentially raising issues of copyright and intellectual property
+infringement. We emphasize that our framework is intended for research and responsible use, and
+any deployment in commercial settings should ensure compliance with applicable copyright laws and
+respect for designer rights.
+
+
+REPRODUCIBILITY STATEMENT
+
+
+This work uses only public datasets and open-source models for its training and evaluations. In the
+Appendix, we include all the implementation and dataset details to reproduce our results. In addition,
+we will publicly release the source code and trained models to further support reproducibility.
+
+
+REFERENCES
+
+
+Omri Avrahami, Or Patashnik, Ohad Fried, Egor Nemchinov, Kfir Aberman, Dani Lischinski, and
+Daniel Cohen-Or. Stable flow: Vital layers for training-free image editing. In _CVPR_, 2025.
+
+
+Shuai Bai, Huiling Zhou, Zhikang Li, Chang Zhou, and Hongxia Yang. Single Stage Virtual Try-On
+Via Deformable Attention Flows. In _ECCV_, 2022.
+
+
+Shuai Bai, Keqin Chen, Xuejing Liu, Jialin Wang, Wenbin Ge, Sibo Song, Kai Dang, Peng Wang,
+Shijie Wang, Jun Tang, et al. Qwen2.5-VL Technical Report. _arXiv preprint arXiv:2502.13923_,
+2025.
+
+
+Alberto Baldrati, Davide Morelli, Giuseppe Cartella, Marcella Cornia, Marco Bertini, and Rita
+Cucchiara. Multimodal Garment Designer: Human-Centric Latent Diffusion Models for Fashion
+Image Editing. In _ICCV_, 2023.
+
+
+Mikołaj Bi´nkowski, Danica J Sutherland, Michael Arbel, and Arthur Gretton. Demystifying MMD
+GANs. _arXiv preprint arXiv:1801.01401_, 2018.
+
+
+Chieh-Yun Chen, Yi-Chung Chen, Hong-Han Shuai, and Wen-Huang Cheng. Size Does Matter:
+Size-aware Virtual Try-on via Clothing-oriented Transformation Try-on Network. In _ICCV_, 2023.
+
+
+Zhennan Chen, Yajie Li, Haofan Wang, Zhibo Chen, Zhengkai Jiang, Jun Li, Qian Wang, Jian Yang,
+and Ying Tai. Region-aware text-to-image generation via hard binding and soft refinement. In
+_ICCV_, 2024.
+
+
+Seunghwan Choi, Sunghyun Park, Minsoo Lee, and Jaegul Choo. VITON-HD: High-Resolution
+Virtual Try-On via Misalignment-Aware Normalization. In _CVPR_, 2021.
+
+
+Yisol Choi, Sangkyung Kwak, Kyungmin Lee, Hyungwon Choi, and Jinwoo Shin. Improving
+diffusion models for authentic virtual try-on in the wild. In _ECCV_, 2024.
+
+
+Zheng Chong, Xiao Dong, Haoxiang Li, Shiyue Zhang, Wenqing Zhang, Xujie Zhang, Hanqing
+Zhao, Dongmei Jiang, and Xiaodan Liang. CatVTON: Concatenation Is All You Need for Virtual
+Try-On with Diffusion Models. In _ICLR_, 2025.
+
+
+Aiyu Cui, Daniel McKee, and Svetlana Lazebnik. Dressing in Order: Recurrent Person Image
+Generation for Pose Transfer, Virtual Try-On and Outfit Editing. In _ICCV_, 2021.
+
+
+Keyan Ding, Kede Ma, Shiqi Wang, and Eero P Simoncelli. Image Quality Assessment: Unifying
+Structure and Texture Similarity. _IEEE Trans. PAMI_, 44(5):2567–2581, 2020.
+
+
+11
+
+
+Patrick Esser, Sumith Kulal, Andreas Blattmann, Rahim Entezari, Jonas Müller, Harry Saini, Yam
+Levi, Dominik Lorenz, Axel Sauer, Frederic Boesel, et al. Scaling Rectified Flow Transformers
+for High-Resolution Image Synthesis. In _ICML_, 2024.
+
+
+Benjamin Fele, Ajda Lampe, Peter Peer, and Vitomir Struc. C-VTON: Context-Driven Image-Based
+Virtual Try-On Network. In _WACV_, 2022.
+
+
+Stephanie Fu, Netanel Tamir, Shobhita Sundaram, Lucy Chai, Richard Zhang, Tali Dekel, and Phillip
+Isola. DreamSim: Learning New Dimensions of Human Visual Similarity using Synthetic Data. In
+_NeurIPS_, 2023.
+
+
+Daniel Garibi, Shahar Yadin, Roni Paiss, Omer Tov, Shiran Zada, Ariel Ephrat, Tomer Michaeli,
+Inbar Mosseri, and Tali Dekel. TokenVerse: Versatile Multi-concept Personalization in Token
+Modulation Space. In _SIGGRAPH_, 2025.
+
+
+Federico Girella, Davide Talon, Ziyue Liu, Zanxi Ruan, Yiming Wang, and Marco Cristani. LOTS of
+Fashion! Multi-Conditioning for Image Generation via Sketch-Text Pairing. In _ICCV_, 2025.
+
+
+Ian Goodfellow, Jean Pouget-Abadie, Mehdi Mirza, Bing Xu, David Warde-Farley, Sherjil Ozair,
+Aaron Courville, and Yoshua Bengio. Generative adversarial nets. In _NeurIPS_, 2014.
+
+
+Ian Goodfellow, Jean Pouget-Abadie, Mehdi Mirza, Bing Xu, David Warde-Farley, Sherjil Ozair,
+Aaron Courville, and Yoshua Bengio. Generative Adversarial Networks. _Communications of the_
+_ACM_, 63(11):139–144, 2020.
+
+
+Hailong Guo, Bohan Zeng, Yiren Song, Wentao Zhang, Chuang Zhang, and Jiaming Liu.
+Any2AnyTryon: Leveraging Adaptive Position Embeddings for Versatile Virtual Clothing Tasks.
+_arXiv preprint arXiv:2501.15891_, 2025.
+
+
+Xintong Han, Zuxuan Wu, Zhe Wu, Ruichi Yu, and Larry S Davis. VITON: An Image-Based Virtual
+Try-On Network. In _CVPR_, 2018.
+
+
+Alec Helbling, Tuna Han Salih Meral, Ben Hoover, Pinar Yanardag, and Duen Horng Chau. Conceptattention: Diffusion transformers learn highly interpretable features. In _ICML_, 2025.
+
+
+Jonathan Ho, Ajay Jain, and Pieter Abbeel. Denoising diffusion probabilistic models. In _NeurIPS_,
+2020.
+
+
+Edward J Hu, Yelong Shen, Phillip Wallis, Zeyuan Allen-Zhu, Yuanzhi Li, Shean Wang, Lu Wang,
+Weizhu Chen, et al. LoRA: Low-Rank Adaptation of Large Language Models. In _ICLR_, 2022.
+
+
+Xun Huang and Serge Belongie. Arbitrary Style Transfer in Real-Time With Adaptive Instance
+Normalization. In _ICCV_, 2017.
+
+
+Phillip Isola, Jun-Yan Zhu, Tinghui Zhou, and Alexei A Efros. Image-to-image translation with
+conditional adversarial networks. In _CVPR_, 2017.
+
+
+Boyuan Jiang, Xiaobin Hu, Donghao Luo, Qingdong He, Chengming Xu, Jinlong Peng, Jiangning
+Zhang, Chengjie Wang, Yunsheng Wu, and Yanwei Fu. FitDiT: Advancing the Authentic Garment
+Details for High-fidelity Virtual Try-on. In _CVPR_, 2025.
+
+
+Taewon Kang, Sunghyun Park, Seunghwan Choi, and Jaegul Choo. Data augmentation using
+random image cropping for high-resolution virtual try-on (VITON-CROP). _arXiv_ _preprint_
+_arXiv:2111.08270_, 2021.
+
+
+Jeongho Kim, Gyojung Gu, Minho Park, Sunghyun Park, and Jaegul Choo. StableVITON: Learning
+Semantic Correspondence with Latent Diffusion Model for Virtual Try-On. In _CVPR_, 2024.
+
+
+Diederik P Kingma and Max Welling. Auto-encoding variational bayes. _arXiv_ _preprint_
+_arXiv:1312.6114_, 2013.
+
+
+Black Forest Labs. Flux. [https://github.com/black-forest-labs/flux, 2024.](https://github.com/black-forest-labs/flux)
+
+
+Sangyun Lee, Gyojung Gu, Sunghyun Park, Seunghwan Choi, and Jaegul Choo. High-Resolution
+Virtual Try-On with Misalignment and Occlusion-Handled Conditions. In _ECCV_, 2022.
+
+
+12
+
+
+Seungyong Lee and Jeong-gi Kwak. Voost: A Unified and Scalable Diffusion Transformer for
+Bidirectional Virtual Try-On and Try-Off. _arXiv preprint arXiv:2508.04825_, 2025.
+
+
+Yuheng Li, Haotian Liu, Qingyang Wu, Fangzhou Mu, Jianwei Yang, Jianfeng Gao, Chunyuan Li,
+and Yong Jae Lee. Gligen: Open-set grounded text-to-image generation. In _CVPR_, 2023.
+
+
+Han Lin, Jaemin Cho, Abhay Zala, and Mohit Bansal. Ctrl-adapter: An efficient and versatile
+framework for adapting diverse controls to any diffusion model. In _ICLR_, 2025.
+
+
+Kuan Heng Lin, Sicheng Mo, Ben Klingher, Fangzhou Mu, and Bolei Zhou. Ctrl-x: Controlling
+structure and appearance for text-to-image generation without guidance. In _NeurIPS_, 2024.
+
+
+Yaron Lipman, Ricky TQ Chen, Heli Ben-Hamu, Maximilian Nickel, and Matt Le. Flow Matching
+for Generative Modeling. In _ICLR_, 2023.
+
+
+Jinxi Liu, Zijian He, Guangrun Wang, Guanbin Li, and Liang Lin. One Model For All: Partial
+Diffusion for Unified Try-On and Try-Off in Any Pose. _arXiv preprint arXiv:2508.04559_, 2025.
+
+
+Ilya Loshchilov and Frank Hutter. Decoupled Weight Decay Regularization. In _ICLR_, 2019.
+
+
+Davide Morelli, Fincato Matteo, Cornia Marcella, Landi Federico, Cesari Fabio, and Cucchiara Rita.
+Dress Code: High-Resolution Multi-Category Virtual Try-On. In _ECCV_, 2022.
+
+
+Davide Morelli, Alberto Baldrati, Giuseppe Cartella, Marcella Cornia, Marco Bertini, and Rita
+Cucchiara. LaDI-VTON: Latent Diffusion Textual-Inversion Enhanced Virtual Try-On. In _ACM_
+_Multimedia_, 2023.
+
+
+Chong Mou et al. T2i-adapter: Learning adapters to dig out more controllable ability for text-to-image
+diffusion models. In _AAAI_, 2024.
+
+
+Weili Nie, Sifei Liu, Morteza Mardani, Chao Liu, Benjamin Eckart, and Arash Vahdat. Compositional
+text-to-image generation with dense blob representations. In _ICML_, 2024.
+
+
+Maxime Oquab, Timothée Darcet, Théo Moutakanni, Huy Vo, Marc Szafraniec, Vasil Khalidov,
+Pierre Fernandez, Daniel Haziza, Francisco Massa, Alaaeldin El-Nouby, et al. DINOv2: Learning
+Robust Visual Features without Supervision. _arXiv preprint arXiv:2304.07193_, 2023.
+
+
+Gaurav Parmar, Richard Zhang, and Jun-Yan Zhu. On Aliased Resizing and Surprising Subtleties in
+GAN Evaluation. In _CVPR_, 2022.
+
+
+William Peebles and Saining Xie. Scalable Diffusion Models with Transformers. In _ICCV_, 2023.
+
+
+Alec Radford, Jong Wook Kim, Chris Hallacy, Aditya Ramesh, Gabriel Goh, Sandhini Agarwal,
+Girish Sastry, Amanda Askell, Pamela Mishkin, Jack Clark, et al. Learning transferable visual
+models from natural language supervision. In _ICML_, 2021.
+
+
+Colin Raffel, Noam Shazeer, Adam Roberts, Katherine Lee, Sharan Narang, Michael Matena, Yanqi
+Zhou, Wei Li, and Peter J Liu. Exploring the limits of transfer learning with a unified text-to-text
+transformer. _JMLR_, 21(140):1–67, 2020.
+
+
+Samyam Rajbhandari, Jeff Rasley, Olatunji Ruwase, and Yuxiong He. ZeRO: Memory Optimizations
+Toward Training Trillion Parameter Models. In _SC_, 2021.
+
+
+Bin Ren, Hao Tang, Fanyang Meng, Ding Runwei, Philip HS Torr, and Nicu Sebe. Cloth Interactive
+Transformer for Virtual Try-On. _ACM TOMM_, 20(4):1–20, 2023a.
+
+
+Bin Ren, Hao Tang, Yiming Wang, Xia Li, Wei Wang, and Nicu Sebe. PI-Trans: Parallel-convmlp
+and implicit-transformation based Gan for cross-view image translation. In _ICASSP_, 2023b.
+
+
+Robin Rombach, Andreas Blattmann, Dominik Lorenz, Patrick Esser, and Björn Ommer. Highresolution image synthesis with latent diffusion models. In _CVPR_, 2022.
+
+
+Aliaksandr Siarohin, Stéphane Lathuilière, Sergey Tulyakov, Elisa Ricci, and Nicu Sebe. First order
+motion model for image animation. In _NeurIPS_, 2019.
+
+
+13
+
+
+Ivan Skorokhodov, Sharath Girish, Benran Hu, Willi Menapace, Yanyu Li, Rameen Abdal, Sergey
+Tulyakov, and Aliaksandr Siarohin. Improving the diffusability of autoencoders. In _ICML_, 2025.
+
+
+Jiaming Song, Chenlin Meng, and Stefano Ermon. Denoising Diffusion Implicit Models. In _ICLR_,
+2021.
+
+
+Nick Stracke, Stefan Andreas Baumann, Kolja Bauer, Frank Fundel, and Björn Ommer. Cleandift:
+Diffusion features without noise. In _Proceedings of the Computer Vision and Pattern Recognition_
+_Conference_, pp. 117–127, 2025.
+
+
+Yanan Sun, Yanchen Liu, Yinhao Tang, Wenjie Pei, and Kai Chen. Anycontrol: create your artwork
+with versatile control on text-to-image generation. In _ECCV_, 2024.
+
+
+Zhenxiong Tan, Songhua Liu, Xingyi Yang, Qiaochu Xue, and Xinchao Wang. Ominicontrol:
+Minimal and universal control for diffusion transformer. In _ICCV_, 2025.
+
+
+Michael Tschannen, Alexey Gritsenko, Xiao Wang, Muhammad Ferjad Naeem, Ibrahim Alabdulmohsin, Nikhil Parthasarathy, Talfan Evans, Lucas Beyer, Ye Xia, Basil Mustafa, et al. Siglip 2:
+Multilingual vision-language encoders with improved semantic understanding, localization, and
+dense features. _arXiv preprint arXiv:2502.14786_, 2025.
+
+
+Narek Tumanyan, Michal Geyer, Shai Bagon, and Tali Dekel. Plug-and-Play Diffusion Features for
+Text-Driven Image-to-Image Translation. In _CVPR_, 2023.
+
+
+Riza Velioglu, Petra Bevandic, Robin Chan, and Barbara Hammer. TryOffDiff: Virtual-Try-Off via
+High-Fidelity Garment Reconstruction using Diffusion Models. In _BMVC_, 2024.
+
+
+Riza Velioglu, Petra Bevandic, Robin Chan, and Barbara Hammer. MGT: Extending Virtual Try-Off
+to Multi-Garment Scenarios. In _ICCV Workshops_, 2025.
+
+
+Bochao Wang, Huabin Zheng, Xiaodan Liang, Yimin Chen, Liang Lin, and Meng Yang. Toward
+Characteristic-Preserving Image-based Virtual Try-On Network. In _ECCV_, 2018.
+
+
+Haoxuan Wang, Jinlong Peng, Qingdong He, Hao Yang, Ying Jin, Jiafu Wu, Xiaobin Hu, Yanjie
+Pan, Zhenye Gan, Mingmin Chi, et al. Unicombine: Unified multi-conditional combination with
+diffusion transformer. In _ICCV_, 2025.
+
+
+Xudong Wang, Trevor Darrell, Sai Saketh Rambhatla, Rohit Girdhar, and Ishan Misra. Instancediffusion: Instance-level control for image generation. In _CVPR_, 2024.
+
+
+Zhou Wang, Alan C Bovik, Hamid R Sheikh, and Eero P Simoncelli. Image quality assessment: from
+error visibility to structural similarity. _IEEE Trans. Image Processing_, 13(4):600–612, 2004.
+
+
+Ioannis Xarchakos and Theodoros Koukopoulos. TryOffAnyone: Tiled Cloth Generation from a
+Dressed Person. _arXiv preprint arXiv:2412.08573_, 2024.
+
+
+Shitao Xiao, Yueze Wang, Junjie Zhou, Huaying Yuan, Xingrun Xing, Ruiran Yan, Chaofan Li,
+Shuting Wang, Tiejun Huang, and Zheng Liu. Omnigen: Unified image generation. In _CVPR_,
+2025.
+
+
+Zhenyu Xie, Zaiyu Huang, Xin Dong, Fuwei Zhao, Haoye Dong, Xijin Zhang, Feida Zhu, and
+Xiaodan Liang. GP-VTON: Towards General Purpose Virtual Try-on via Collaborative Local-Flow
+Global-Parsing Learning. In _CVPR_, 2023.
+
+
+Yuhao Xu, Tao Gu, Weifeng Chen, and Chengcai Chen. OOTDiffusion: Outfitting Fusion based
+Latent Diffusion for Controllable Virtual Try-on. In _AAAI_, 2025.
+
+
+Keyu Yan, Tingwei Gao, Hui Zhang, and Chengjun Xie. Linking garment with person via semantically
+associated landmarks for virtual try-on. In _CVPR_, 2023.
+
+
+Hu Ye, Jun Zhang, Sibo Liu, Xiao Han, and Wei Yang. IP-Adapter: Text Compatible Image Prompt
+Adapter for Text-to-Image Diffusion Models. _arXiv preprint arXiv:2308.06721_, 2023.
+
+
+14
+
+
+Sihyun Yu, Sangkyung Kwak, Huiwon Jang, Jongheon Jeong, Jonathan Huang, Jinwoo Shin, and
+Saining Xie. Representation Alignment for Generation: Training Diffusion Transformers Is Easier
+Than You Think. In _ICLR_, 2025.
+
+
+Jianhao Zeng, Dan Song, Weizhi Nie, Hongshuo Tian, Tongtong Wang, and An-An Liu. CAT-DM:
+Controllable Accelerated Virtual Try-on with Diffusion Model. In _CVPR_, 2024.
+
+
+Xiaohua Zhai, Basil Mustafa, Alexander Kolesnikov, and Lucas Beyer. Sigmoid Loss for Language
+Image Pre-Training. In _ICCV_, 2023.
+
+
+Lvmin Zhang, Anyi Rao, and Maneesh Agrawala. Adding Conditional Control to Text-to-Image
+Diffusion Models. In _ICCV_, 2023.
+
+
+Richard Zhang, Phillip Isola, Alexei A Efros, Eli Shechtman, and Oliver Wang. The unreasonable
+effectiveness of deep features as a perceptual metric. In _CVPR_, 2018.
+
+
+Shihao Zhao, Dongdong Chen, Yen-Chun Chen, Jianmin Bao, Shaozhe Hao, Lu Yuan, and KwanYee K Wong. Uni-controlnet: All-in-one control to text-to-image diffusion models. In _NeurIPS_,
+2023.
+
+
+Zijian Zhou, Shikun Liu, Xiao Han, Haozhe Liu, Kam Woh Ng, Tian Xie, Yuren Cong, Hang Li,
+Mengmeng Xu, Juan-Manuel Pérez-Rúa, Aditya Patel, Tao Xiang, Miaojing Shi, and Sen He.
+Learning Flow Fields in Attention for Controllable Person Image Generation. In _CVPR_, 2025.
+
+
+Luyang Zhu, Dawei Yang, Tyler Zhu, Fitsum Reda, William Chan, Chitwan Saharia, Mohammad
+Norouzi, and Ira Kemelmacher-Shlizerman. TryOnDiffusion: A Tale of Two UNets. In _CVPR_,
+2023.
+
+
+Luyang Zhu, Yingwei Li, Nan Liu, Hao Peng, Dawei Yang, and Ira Kemelmacher-Shlizerman. M&m
+vto: Multi-garment virtual try-on and editing. In _CVPR_, 2024.
+
+
+15
+
+
+A ADDITIONAL DETAILS
+
+
+A.1 DATASETS DETAILS
+
+
+**Dress Code.** In our experiments, we adopt the Dress Code dataset (Morelli et al., 2022), the largest
+publicly available benchmark for image-based virtual try-on. Unlike previous datasets limited to
+upper-body clothing, Dress Code includes three macro-categories: upper-body clothes with 15,363
+pairs ( _e.g._, tops, t-shirts, shirts, sweatshirts), lower-body clothing with 8,951 pairs ( _e.g._, trousers,
+skirts, shorts), and full-body dresses with 29,478 pairs. The total number of paired samples is 53 _,_ 792,
+split into 48 _,_ 392 training images and 5 _,_ 400 test images at a resolution of 1024 _×_ 768.
+
+**VITON-HD.** Following previous literature, we also adopt VITON-HD (Choi et al., 2021), a publicly
+available dataset widely used in virtual try-on research. It is composed exclusively of upper-body
+garments and provides high-resolution images at 1024 _×_ 768 pixels. The dataset contains a total of
+27 _,_ 358 images, structured into 13 _,_ 679 garment-model pairs. These are split into 11 _,_ 647 training
+pairs and 2 _,_ 032 test pairs, each comprising a front-view image of a garment and the corresponding
+image of a model wearing it.
+
+
+A.2 IMPLEMENTATION DETAILS
+
+
+For both the feature extractor and the diffusion backbone, we adopt Stable Diffusion 3 medium (Esser
+et al., 2024). All models are trained on a single node equipped with 4 NVIDIA A100 GPUs (64GB
+each), using DeepSpeed ZeRO-2 (Rajbhandari et al., 2021) for efficient distributed training. We use
+a total batch size of 32 and train each model for 30k steps, corresponding to approximately 960k
+images. Optimization is performed with AdamW (Loshchilov & Hutter, 2019), using a learning rate
+of 1 _×_ 10 _[−]_ [4], a warmup phase of 3k steps, and a cosine annealing schedule. We train separate models
+per dataset to account for differences in distribution and garment structure. In all experiments, we set
+the alignment loss weight _λ_ equal to 0 _._ 5.
+
+
+We evaluate our method both with distribution-based metrics and per-sample similarity metrics. For
+the first group, we adopt FID (Parmar et al., 2022) and KID (Bi´nkowski et al., 2018) implementations derived from clean-fid PyTorch package [2] . Concerning the second group, we adopt both
+SSIM (Wang et al., 2004), PSNR (Wang et al., 2004), and LPIPS (Zhang et al., 2018) as they are the
+standard metrics adopted in the field to measure structural and perceptual similarity between a pair of
+images. We reuse the corresponding Python packages provided by TorchMetrics [3] . Finally, we adopt
+DISTS (Ding et al., 2020) as an additional sample-based similarity metric, as it correlates better with
+human judgment, as shown in previous works (Fu et al., 2023). We stick to the corresponding Python
+package [4] to compute it for our experiments.
+
+
+A.3 CAPTION EXTRACTION DETAILS
+
+
+We leverage Qwen2.5-VL (Bai et al., 2025) to generate textual descriptions of the garments, which
+serve as semantic conditioning for our Dual-DiT architecture.
+
+
+To ensure no ground-truth information leaks into the testing process, we employ two different
+generation pipelines for training and testing:
+
+
+- **Training:** We generate captions using the _ground-truth in-shop garment images_ . This ensures the
+model learns precise semantic correlations between visual features and textual attributes during
+optimization (see Fig. 6).
+
+
+- **Inference:** At test time, the ground-truth garment image is strictly unavailable. Instead, the caption
+is generated directly from the _input person image_ . Qwen2.5-VL is prompted to analyze the person’s
+clothing and extract the relevant structural attributes. This ensures our method is fully applicable to
+“in-the-wild” scenarios where only the person image is known (see Fig. 7).
+
+We define a variable category _∈_ {dress, upper body, lower body}. To avoid leaking
+color or texture information (which should be handled by the visual feature extractor _FE_ ) and to
+
+
+[2https://pypi.org/project/clean-fid/](https://pypi.org/project/clean-fid/)
+[3https://pypi.org/project/torchmetrics/](https://pypi.org/project/torchmetrics/)
+[4https://pypi.org/project/DISTS-pytorch/](https://pypi.org/project/DISTS-pytorch/)
+
+
+16
+
+
+focus solely on structural guidance, we utilize a strict prompt template. The prompt explicitly forbids
+the generation of non-structural attributes:
+
+
+visual_attributes = {
+
+"dresses": ["Cloth Type", "Waist", "Fit", "Hem", "Neckline", "Sleeve
+
+Length", "Cloth Length"],
+"upper_body": ["Cloth Type", "Waist", "Fit", "Hem", "Neckline", "
+
+Sleeve Length", "Cloth Length"],
+"lower_body": ["Cloth Type", "Waist", "Fit", "Cloth Length"]
+}
+
+
+**System:** You are Qwen, created by Alibaba Cloud. You are a helpful assistant.
+
+
+**Qwen Caption:** A denim shirt with a straight fit, long sleeves, and a button-down neckline. The
+hem is straight and the shirt appears to be of standard length.
+
+
+Figure 6: Caption extraction pipeline (training stage).
+
+
+We decide to generate structural-only attributes because our base model without text can already
+transfer colors and textures correctly from the person image to the generated garment image. The
+structural attributes are slightly different according to the three categories of clothing, as specified
+in visual_attributes. For example, the neckline can be specified for upper body and dresses
+(whole body garments), but not for lower body items.
+
+
+A.4 ALGORITHM
+
+
+To provide a clear understanding of TEMU-VTOFF, we summarize the core components of our
+method in Algorithm 1. The pseudo-code outlines the sequential steps involved in training our
+dual-DiT architecture, including multimodal conditioning, the hybrid attention module, and the
+garment aligner component.
+
+
+17
+
+
+**System:** You are Qwen, created by Alibaba Cloud. You are a helpful assistant.
+
+
+**Qwen Caption:** A leather skirt with a fitted waist and a short length.
+
+
+Figure 7: Caption extraction pipeline (inference stage).
+
+
+B ADDITIONAL QUANTITATIVE RESULTS AND ANALYSES
+
+
+In this section, we report additional quantitative results and analyses on the effectiveness of the
+proposed components and design choices.
+
+
+**Effect of Varying** _λ_ **Parameter.** We conducted an ablation study on the Dress Code dataset to assess
+the effect of the _λ_ regularization for the alignment of our main diffusion transformer _FD_ and the
+DINOv2 features. We report the results in Table 6. As shown, _λ_ = 0 _._ 5 is the overall best choice
+across all metrics.
+
+
+**Effect of Varying the DiT Block** _i_ **Used for** _align_ **.** A critical design choice in our garment aligner
+_L_
+module is determining which internal block of the DiT ( _FD_ ) should be aligned with the semantic
+features from DINOv2. To find the optimal depth, we conduct an ablation study on the Dress Code
+dataset, varying the block index _i ∈{_ 6 _,_ 8 _,_ 12 _,_ 18 _}_ within the 24-block SD 3 medium architecture.
+
+The results are reported in the middle section of Table 6. We observe that aligning the 8th block
+yields the best overall performance. These results highlight a trade-off between structural guidance
+and generation flexibility, consistent with recent findings in representation alignment (Yu et al., 2025).
+The early-to-mid layers of the DiT capture the coarse semantic layout and structural essence of the
+image. Aligning these with DINOv2 ensures the generated garment respects the target structure
+while leaving subsequent layers free to refine details. As we move to deeper blocks, perceptual
+quality degrades. While these layers maintain high structural similarity, the distributional metrics
+worsen. This occurs because the deeper layers of a DiT are increasingly specialized in predicting the
+high-frequency noise (or flow velocity) required for the diffusion objective. Forcing these “noisy”
+layers to align with the “clean”, invariant features of DINOv2 introduces an optimization conflict,
+ultimately smoothing out fine-grained textures and degrading realism.
+
+
+**Analysis of Asynchronous Timestep Conditioning.** A critical design choice in our architecture
+is the use of a fixed timestep _t_ = 0 for the feature extractor _FE_, while the main denoising DiT
+
+
+18
+
+
+**Algorithm 1** TEMU-VTOFF: Dual-DiT and Garment Alignment for VTOFF
+
+
+**Require:** Person image _**x**_ model, garment caption _c_, binary mask _M_, target garment image _**x**_ _g_
+**Ensure:** Generated garment _**x**_ ˆ _g_
+
+1: **Latent encoding:**
+
+Encode the target garment: _**z**_ _g_ _←E_ ( _**x**_ _g_ )
+Sample noise: _ϵt_ _∼N_ (0 _,_ 1)
+Apply flow-matching: _**z**_ _t_ _←_ (1 _−_ _t_ ) _**z**_ _g_ + _t · ϵt_
+2: **Prepare masked spatial input:**
+
+Encode masked person image: _**x**_ _M_ _←E_ ( _**x**_ model _⊙_ _M_ )
+Concatenate inputs: _**z**_ _t_ _[′]_ _[←]_ [[] _**[z]**_ _t_ _[, M,]_ _**[ x]**_ _M_ []]
+3: **Extract modulation features:**
+
+_**e**_ _[v]_ pool _[←]_ [CLIP][(] _**[x]**_ [model][)]
+4: **Extract keys and values using feature extractor:**
+
+_{_ _**K**_ extractor _[l]_ _[,]_ _**[ V]**_ extractor _[l]_ _[}][N]_ _l_ =1 _[←]_ _[F][E]_ [(] _**[z]**_ 0 _[′]_ _[,]_ _**[ x]**_ model _[, t]_ [=0)]
+5: **Encode text information:**
+
+Get pooled text embedding: _**e**_ pooled _←_ CLIP( _c_ )
+Get full sequence text features: _**e**_ text _←_ [CLIP( _c_ ) _,_ T5( _c_ )]
+6: **Noise prediction:**
+
+_ϵ_ ˆ _t_ _←_ _FD_ ( _**z**_ _t,_ _**e**_ pooled _,_ _**e**_ text _, {_ _**K**_ extractor _[l]_ _[,]_ _**[ V]**_ extractor _[l]_ _[}][, t]_ [)]
+Compute diffusion loss: _L_ DiT _←∥ϵ_ ˆ _t −_ _ϵt∥_ [2]
+
+7: **Align internal representations:**
+
+
+Extract DiT features: _**h**_ DiT _←_ tokens from 8th block of _FD_
+Extract DINOv2 features: _**h**_ enc _←_ DINOv2( _**x**_ _g_ )
+Align via projection: _**h**_ [˜] DiT _←_ _ϕ_ CNN( _**h**_ DiT)
+Compute alignment loss: _L_ align _←−_ [1] - [cos(˜] _**[h]**_ _i_ [DiT] _,_ _**h**_ [enc] _i_ [)]
+
+
+Compute alignment loss: _L_ align _←−_ _N_ [1]   - _i_ [cos(˜] _**[h]**_ _i_ [DiT] _,_ _**h**_ [enc] _i_ [)]
+
+8: **Final objective:**
+
+
+_N_ [1] 
+
+
+Combine losses: _L_ total _←L_ DiT + _λ · L_ align
+9: **Decode final garment:**
+
+Run reverse process: _**x**_ ˆ _g_ _←D_ (ˆ _**z**_ 0)
+
+
+_FD_ operates on a noisy latent _zt_ at timestep _t_ _>_ 0. This raises an important question: could this
+discrepancy in timesteps lead to a misalignment in the feature space? In this section, we provide the
+rationale for this design choice, supported by concurrent work and a targeted ablation study.
+
+
+Our primary motivation is to provide the main generator _FD_ with the cleanest, most semantically rich
+conditioning signal possible. By extracting features from _FE_ at _t_ = 0 we ensure the conditioning
+information is completely free from stochastic noise inherent to the diffusion process. We hypothesize
+that injecting features from a noisy timestep _t >_ 0 would introduce an additional, confounding source
+of noise into the generation process, thereby degrading the quality of the final output. The key to
+our method is that the MHA module is specifically trained to bridge this temporal gap; it learns to
+effectively attend to the clean conditioning features to guide the denoising of the noisy latent _zt_ .
+
+
+This design philosophy is strongly supported by recent, concurrent research that analyzes the internal
+representations of diffusion models:
+
+
+- The work on CleanDIFT (Stracke et al., 2025) directly argues that adding noise to images before
+feature extraction is a performance bottleneck that harms feature quality. Their entire method is
+built on the same premise as our _FE_ : that extracting features from clean images leads to superior
+performance without needing task-specific timestep tuning.
+
+
+- Furthermore, ConceptAttention (Helbling et al., 2025) demonstrates that the internal representations
+of DiTs are highly interpretable and correspond to semantic concepts, particularly at early timesteps.
+This validates our choice to use _t_ = 0 features, as they represent the purest and most semantically
+meaningful form of this information.
+
+
+To validate our design choice, we conducted an ablation study comparing our method with the variant
+where the feature extractor _FE_ and the denoising _FD_ use the same synchronous timestep _t_ . The
+results on Dress Code are presented in Table 6. As shown in the table, our proposed method with
+asynchronous timesteps significantly outperforms the synchronous variant across the majority of
+the metrics. This result provides strong empirical evidence for the value of clean conditioning and
+confirms the effectiveness of our proposed Multimodal Hybrid Attention.
+
+
+19
+
+
+Table 6: Additional ablation study results on the Dress Code dataset.
+
+
+**All** **Upper-body** **Lower-body** **Dresses**
+
+**SSIM** _↑_ **PSNR** _↑_ **LPIPS** _↓_ **DISTS** _↓_ **FID** _↓_ **KID** _↓_ **DISTS** _↓_ **FID** _↓_ **DISTS** _↓_ **FID** _↓_ **DISTS** _↓_ **FID** _↓_
+
+_Effect of Varying λ Parameter_
+_λ_ = 0 _._ 0 (w/o g. aligner) **76.01** 12.85 **30.84** 20.63 5.91 0.78 21.77 11.26 22.26 14.22 17.86 11.86
+_λ_ = 0 _._ 25 74.29 12.48 33.68 19.41 6.42 0.89 **19.65** **10.77** 21.86 16.53 16.73 11.38
+_λ_ = 0 _._ 5 _**(Ours)**_ 75.95 **12.90** 31.46 **18.66** **5.74** **0.65** 19.75 10.94 **19.57** **13.83** **16.67** **11.29**
+_λ_ = 0 _._ 75 71.93 11.71 37.03 20.35 7.81 1.41 20.11 11.09 23.85 21.12 17.10 11.69
+_λ_ = 1 _._ 0 71.76 11.72 37.21 20.45 7.78 1.39 20.07 11.33 24.11 20.59 17.17 11.79
+
+
+_Effect of Varying the DiT Block i Used for_ _align_
+_L_
+_i_ = 6 72.11 11.44 38.00 20.62 8.66 1.76 21.21 12.36 23.25 22.15 17.42 12.49
+_i_ = 8 _**(Ours)**_ 75.95 **12.90** **31.46** **18.66** **5.74** **0.65** **19.75** **10.94** **19.57** **13.83** **16.67** **11.29**
+_i_ = 12 75.30 12.59 32.71 19.13 6.48 0.87 20.41 11.86 20.01 15.40 16.98 11.72
+_i_ = 18 **76.16** 12.57 31.66 19.17 6.87 1.16 20.27 12.37 19.86 15.52 17.38 12.28
+
+
+_Effect of Asynchronous Timestep Conditioning_
+w/ same _t_ in _FE_ and _FD_ **77.70** 12.66 32.69 22.41 9.78 2.30 23.98 17.85 21.29 17.83 21.95 17.52
+w/ _t_ = 0 in _FE_ **(** _**Ours)**_ 75.95 **12.90** **31.46** **18.66** **5.74** **0.65** **19.75** **10.94** **19.57** **13.83** **16.67** **11.29**
+
+
+Table 7: Comparison of CLIP vs. SigLIP 2 as vision encoder for person encoding. _↑_ indicates higher
+is better, _↓_ lower is better.
+
+**Method** **SSIM** _↑_ **PSNR** _↑_ **LPIPS** _↓_ **DISTS** _↓_ **FID** _↓_ **KID** _↓_
+
+TEMU-VTOFF w/ CLIP 75.95 12.90 31.46 **18.66** 5.74 0.65
+TEMU-VTOFF w/ SigLIP 2 **76.62** **14.33** **28.10** 18.77 **5.08** **0.53**
+
+
+**Generalization** **with** **Stronger** **Vision** **Encoders.** We replace our CLIP vision encoder with a
+more powerful SigLIP 2 (Tschannen et al., 2025). We adopt the ViT-g 16 model and retrained our
+architecture with an additional MLP _f_ MLP : R [1536] R [2048] to project SigLIP 2 output dimension
+_→_
+into the SD3 input space. The results are presented in Table 7. As noted in TryOffDiff (Velioglu et al.,
+2024), employing a stronger vision encoder improves the final performance. Our experiments further
+validate this finding. This improvement is due to the better capacity of SigLIP 2 at extracting more
+fine-grained features. As reported in (Tschannen et al., 2025), this model is trained with a binary
+contrastive loss that processes each text-image pair separately, thus preventing information corruption
+from different image-text pairs. Moreover, fine-grained details are enhanced with a self-distillation
+loss and masked prediction. Finally, this ablation further demonstrates that our core contribution
+lies in our dual-DiT architecture because this design scheme can be improved with plug-and-play
+modules, unlike the architectural alternatives that underperform in the same setting.
+
+
+C ADDITIONAL QUALITATIVE RESULTS
+
+
+We report an extended version of the qualitative results presented in our main paper. Specifically,
+additional visual comparisons between TEMU-VTOFF and competitors are shown in Fig. 9 and
+Fig. 10, on sample images from Dress Code (Morelli et al., 2022) and VITON-HD (Choi et al., 2021),
+respectively. Moreover, Fig. 11 presents additional ablation results to analyze the impact of textual
+and mask conditioning. Finally, we include in Fig. 12 the full set of inputs used for generating the
+target garment, including the model input, the segmentation mask, and the textual caption.
+
+
+D USER STUDY
+
+
+To complement our quantitative analysis and address the limitations of automated metrics in capturing
+fine-grained texture details, we conduct a human perceptual study.
+
+
+**Experimental** **Setup.** We recruited 42 distinct participants to evaluate the visual quality of the
+generated garments. The study followed a pairwise comparison protocol. For each trial, participants were presented with the input person image and two generated garment results: one from
+TEMU-VTOFF and one from a competitor (randomly selected from MGT (Velioglu et al., 2025) or
+Any2AnyTryon (Guo et al., 2025)). The position of the images ( _i.e._, left/right) was randomized to
+prevent bias. Participants were asked to select the image that best represented a high-fidelity, in-shop
+
+
+20
+
+
+Table 8: Pairwise comparison showing the percentage of times participants preferred TEMU-VTOFF
+over the competing method. “Not Sure” indicates cases where participants found the quality of
+generated images indistinguishable.
+
+
+**Comparison** **Ours Wins (%)** **Not Sure (%)** **Competitor Wins (%)**
+
+
+TEMU-VTOFF vs. MGT **75.77** 7.85 16.38
+TEMU-VTOFF vs. Any2AnyTryon **77.74** 5.64 16.62
+
+
+Figure 8: Additional qualitative results of TEMU-VTOFF and competitors on VITON-HD (Choi
+et al., 2021), with per-sample metrics. DISTS emphasizes structural differences between images
+better than LPIPS, confirming its higher correlation with human judgments.
+
+
+version of the garment worn by the model, considering texture preservation, structural integrity, and
+overall realism.
+
+
+**Results.** We collected a total of 1,920 pairwise judgments. The results, summarized in Table 8,
+demonstrate a strong preference for our method. TEMU-VTOFF outperforms MGT with a win
+rate of 75.77% and Any2AnyTryon with a win rate of 77.74%. These results strongly corroborate
+our quantitative analyses (particularly the DISTS and FID scores), confirming that TEMU-VTOFF
+produces results that are perceptually superior to state-of-the-art methods.
+
+
+E DISCUSSION AND LIMITATIONS
+
+
+Our method demonstrates strong performance and generalization, yet it inherits some inner problems
+of foundational models such as Stable Diffusion 3 (Esser et al., 2024). Although we improve the
+rendering of large logos and text, the model still struggles with fine-grained details, including complex
+texture patterns, small printed text, and the correct reproduction of small objects such as buttons.
+Moreover, as mentioned in the main paper, reconstruction is less reliable for lower-body garments
+than for upper-body items or dresses, likely due to class imbalance in the Dress Code dataset. For
+completeness, we show a set of failure cases in Fig. 13 and Fig. 14, on sample images from Dress
+Code (Cui et al., 2021) and VITON-HD (Lee et al., 2022), respectively.
+
+
+We further analyze how the adopted perceptual metrics correlate with the presence of visual artifacts
+in the generated images (Fig. 8). While quantitative comparisons are reported as averages over the full
+test set, inspecting per-sample metric values is particularly informative in VTOFF, as it always lives in
+a paired setting. Edge cases, such as missing garment components or incorrect structural details, are
+often critical, and VTOFF naturally provides paired person-garment samples. In this context, LPIPS
+and DISTS play an important role, as both measure image-to-image distances. It is therefore essential
+to verify that these metrics respond reliably to detail discrepancies and appropriately penalize weaker
+baselines.
+
+
+21
+
+
+For each example in Fig. 8, we display three images: the ground-truth target, the output of TEMUVTOFF, and the output of TryOffAnyone (Xarchakos & Koukopoulos, 2024). We present four
+representative comparisons. The first two (columns 1-3) show cases where TEMU-VTOFF preserves
+fine garment details that are lost by the competitor. The remaining two (columns 4-6) contrast accurate
+samples from our method with misaligned or rotated outputs produced by TryOffAnyone. For each
+pair, we report the corresponding per-sample DISTS and LPIPS values, along with the percentage
+improvement of our results over those of TryOffAnyone. In situations where a clear qualitative gap
+exists, DISTS consistently reflects the expected difference, whereas LPIPS often fails to penalize
+severe distortions and occasionally even assigns worse scores to the better-performing method ( _e.g._,
+row 2, column 5). These observations provide empirical evidence supporting our choice to include
+DISTS as part of the overall evaluation protocol. This observation is consistent with findings from
+DreamSim (Fu et al., 2023), as discussed in Sec. A.2.
+
+
+F LLM USAGE
+
+
+In this work, we employ LLMs (specifically Qwen2.5-VL) to extract garment-related textual descriptions, which serve as conditioning signals for generation. Beyond this, LLMs were employed solely
+for minor language refinement. They did not contribute to the design of experiments, the analysis of
+results, or the generation of scientific content.
+
+
+22
+
+
+Figure 9: Additional qualitative results of TEMU-VTOFF and competitors on Dress Code (Morelli
+et al., 2022).
+
+23
+
+
+Figure 10: Additional qualitative results of TEMU-VTOFF and competitors on VITON-HD (Choi
+et al., 2021).
+
+
+24
+
+
+Figure 11: Additional qualitative results showing the contribution of each component in TEMUVTOFF on Dress Code (Morelli et al., 2022) images.
+
+
+25
+
+
+Figure 12: Inputs used to generate the target garment with TEMU-VTOFF, using sample images
+from Dress Code (Cui et al., 2021)
+
+
+26
+
+
+Figure 13: An overview of failure cases on the Dress Code (Morelli et al., 2022) dataset.
+
+
+Figure 14: An overview of failure cases on the VITON-HD (Choi et al., 2021) dataset.
+
+
+27

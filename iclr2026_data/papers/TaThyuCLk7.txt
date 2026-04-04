@@ -1,0 +1,404 @@
+# DRDFL: DIVIDE-AND-CONQUER COLLABORATION FOR EFFICIENT RING-TOPOLOGY DECENTRALIZED FEDERATED LEARNING
+
+Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+Federated learning traditionally relies on server-based architecture, which often incur high communication costs and suffer from single points of failure. To avoid these limitations, we explore Ring-topology Decentralized Federated Learning (RDFL), a fully decentralized paradigm that enables peer-to-peer training. However, the inherent challenge of data heterogeneity is further amplified in RDFL due to limited communication bandwidth cross clients and the sparse connectivity of the ring topology. In this paper, we propose the Divide-and-conquer collaboration RDFL framework (DRDFL), which captures underlying data patterns by jointly learning personalized and invariant knowledge through two complementary modules with distinct optimization objectives. Specifically, each client trains a transferable *Learngene* module via adversarial optimization against a uniform label distribution to learn consensus knowledge, thereby mitigating label distribution skew induced by data heterogeneity. To simultaneously alleviate feature distribution skew, a personalized *PersonaNet* module is introduced that models local features using a Gaussian mixture distribution and updates them based on the global class representation. Clients only share lightweight *Learngene* and global representations with a directed neighbor, which guarantees flexible choices for resource efficiency and better convergence. Extensive experiments show that our method achieves superior performance in RDFL while reducing the communication cost to only 0.58 M, which is more than two orders of magnitude lower than the state-of-the-art baseline. This substantial reduction highlights the effectiveness of our approach in addressing data heterogeneity under stringent communication constraints.
+
+## 1 INTRODUCTION
+
+Federated learning (FL) is a distributed learning paradigm that allows multiple clients to collaboratively train a global model while keeping data local (McMahan et al., 2017; Xue et al., 2025; Qi et al., 2023). One major challenge of FL is data heterogeneity, caused by distributional differences across clients (Albshaier et al., 2025; Yang et al., 2024; Li et al., 2024b; Qi et al., 2025). Recent works addressing this challenge mainly focus on the centralized FL (CFL) setting, where a central server orchestrates the learning among clients and is responsible for parameter aggregation after receiving locally trained models on the edge. In practice, the server may experience system failures or malicious attacks, potentially leading to privacy leakage or interruptions in training. Moreover, since all communication flows through the server, it becomes a bottleneck and incurs substantial bandwidth overhead (Li et al., 2024c).
+
+With this regard, decentralized FL (DFL) has recently emerged as a promising method for reducing the communication bandwidth of the busiest node and embracing peer-to-peer communication for faster convergence (Dai et al., 2022). In DFL, no global model state exists, the participating clients follow a communication protocol to reach a so-called consensus model. Classical fully-connected or dynamically-varying FL architectures typically assume dense client connectivity, which results in excessive communication overhead and severely limits their scalability in large-scale real-world scenarios (Zhang et al., 2024; Li et al., 2025b). Ring-topology Decentralized Federated Learning (RDFL) (Li et al., 2023) restricts interactions to local neighbors, thereby minimizing redundant
+
+![Figure 1: Illustration of the optimized learning mechanism in RDFL and comparative performance of the proposed method against baselines in terms of generalization and personalization. (a) Ring-topology Decentralized Federated Learning diagram showing four clients (Client 1 to 4) with different data distributions (1, 2, 3, 4) and local models (1, 2, 3, 4) interacting in a ring. (b) Performance of Generalization and Personalization bar charts for four clients comparing Local, DFedPGP, and Ours methods.](49ad3a646d84bcfeac02bdf2b3792a3e_img.jpg)
+
+(a) Ring-topology Decentralized Federated Learning
+
+(b) Performance of Generalization and Personalization
+
+| Client   | Method  | Global-T (%) | Local-T (%) |
+|----------|---------|--------------|-------------|
+| Client 1 | Local   | 72.76%       | 34.24%      |
+|          | DFedPGP | 86.95%       | 39.84%      |
+|          | Ours    | 92.83%       | 44.44%      |
+| Client 2 | Local   | 71.95%       | 31.44%      |
+|          | DFedPGP | 73.44%       | 34.44%      |
+|          | Ours    | 81.85%       | 45.55%      |
+| Client 3 | Local   | 76.84%       | 36.84%      |
+|          | DFedPGP | 83.81%       | 35.85%      |
+|          | Ours    | 88.88%       | 45.55%      |
+| Client 4 | Local   | 64.55%       | 34.24%      |
+|          | DFedPGP | 81.24%       | 36.84%      |
+|          | Ours    | 88.88%       | 45.55%      |
+
+Figure 1: Illustration of the optimized learning mechanism in RDFL and comparative performance of the proposed method against baselines in terms of generalization and personalization. (a) Ring-topology Decentralized Federated Learning diagram showing four clients (Client 1 to 4) with different data distributions (1, 2, 3, 4) and local models (1, 2, 3, 4) interacting in a ring. (b) Performance of Generalization and Personalization bar charts for four clients comparing Local, DFedPGP, and Ours methods.
+
+Figure 1: Illustration of the optimized learning mechanism in RDFL and comparative performance of the proposed method against baselines in terms of generalization and personalization. (a) Depicts non-IID data heterogeneity in a decentralized federated learning setting with a ring topology, where shared models are collaboratively optimized through client interactions. (b) Compares the personalization (Local-T) and generalization (Global-T) performance of local models collaboratively trained across four clients with heterogeneous data distributions.
+
+transmissions, as shown in Figure 1 (a). This design has demonstrated promising progress in peer-to-peer applications such as collaborative autonomous driving using vehicle-to-vehicle networks and edge IoT systems (Nguyen et al., 2022; Yuan et al., 2024; Li et al., 2025a), underscoring its practical relevance.
+
+Nevertheless, our exploration of RDFL reveals that it still suffers from intrinsic communication constraints that hinder efficient information exchange, thereby exacerbating data heterogeneity across clients. We revisit this issue by analyzing the underlying sources of heterogeneity in RDFL and identify two primary forms of distribution shift: **feature distribution skew**, where identical classes exhibit differing feature patterns across clients due to varying local contexts, and **label distribution skew**, where class frequency distributions vary significantly between clients. These skews pose distinct challenges:
+
+*Feature skew undermines representation consistency, whereas label skew leads to biased updates and poor generalization to underrepresented classes.*
+
+Most existing DFL methods predominantly focus on addressing feature distribution skew, aiming to improve personalized performance through strategies such as partial model adaptation and sparse parameter masking (Kairouz et al. (2021); Li et al. (2022); Dai et al. (2022); Liu et al. (2024). While these techniques effectively capture client-specific representations, they often skip the equally critical problem of label distribution skew across clients and the inherent bandwidth constraints imposed by RDFL. In contrast to centralized FL, RDFL lacks a global server to facilitate consistent aggregation, requiring the consensus knowledge learned collaboratively among clients to be more generalizable. As illustrated in Figure 1 (b), methods such as *Local* and *DFedPGP* (Liu et al., 2024) demonstrate outstanding personalized performance (Local-T) but exhibit limited generalization capability (Global-T) to the global data distribution. In contrast, our approach enhances the model’s generalization ability toward the global data distribution while also affecting its personalized performance. This highlights the importance of simultaneously addressing both types of distribution skew in limited-communication RDFL, as well as the necessity of training generalized and effective consensus knowledge.
+
+Inspired by the recently proposed *Learngene* paradigm<sup>1</sup> (Wang et al., 2022a; Feng et al., 2025; Wang et al., 2023; Xia et al., 2024b), which encapsulates consensus knowledge within the lightweight model to facilitate efficient task adaptation, we propose a *Divide-and-conquer* collaboration **Ring-topology Decentralized Federated Learning (DRDFL)** method. To address the challenge of label distribution skew across clients, we devised a transferable *Learngene* module that undergoes adversarial optimization under a uniform label distribution constraint. This facilitates the learning of unbiased
+
+<sup>1</sup>*“Learngene”* refers to the machine learning paradigm, while *Learngene* denotes the specific model component instantiated in our framework.
+
+representations that are independent of the client and class invariance. In parallel, to mitigate feature distribution skew, we introduce a personalized *PersonaNet* for each client. This module captures client-specific feature semantics by modeling local class features using the Gaussian mixture distribution while aligning with the global class statistics. This allows *PersonaNet* to learn representations that preserve local discriminative patterns while remaining semantically aligned with the global context. During reconstruction, invariant features from *Learngene* are fused with personalized features from *PersonaNet* and passed through a decoder for input reconstruction. Gaussian noise is injected into the reconstructed data to promote robust classifier training and prevent overfitting. In RDFL, the consensus *Learngene* and class distributions are iteratively optimized and cyclically shared among clients, enabling effective collaborative learning to accelerate convergence. Our contributions are summarized as follows:
+
+- We revisit data heterogeneity in RDFL, where limited communication and the absence of a central coordinator amplify its impact, and reveal the importance of simultaneously considering both distribution skewness issues and the necessity of training generalized consensus knowledge.
+- We propose a novel framework, Divide-and-conquer collaboration RDFL, to address these challenges by introducing a consensus *Learngene* module through adversarial optimization training, and a personalized *PersonaNet* module optimized for Gaussian mixture consistency.
+- Extensive experiments against 8 state-of-the-art baselines demonstrate that DRDFL attains comparable generalization to centralized FL while delivering superior personalization over existing decentralized methods. Remarkably, this performance is achieved with only **0.58 M** communicated parameters, which is much smaller than advanced methods.
+
+## 2 RELATED WORK
+
+**Federated Learning** (FL) has emerged as a promising paradigm for privacy-preserving machine learning (McMahan et al., 2017). To avoid single points of failure, decentralized federated learning (DFL) has gained traction, where clients interact with neighbors via point-to-point communication to collaboratively train models without relying on a central server. Recent efforts in personalized DFL have explored various optimization and model adaptation strategies. DisPFL (Dai et al., 2022) designs client-specific models and pruning masks to accelerate convergence, while KD-PDFL (Liu et al., 2022) applies knowledge distillation to capture statistical differences across clients. ARDM (Sun et al., 2022) establishes theoretical lower bounds for communication and computation costs, and DFedPGP (Liu et al., 2024) leverages multi-step updates with alternating optimization to improve stability and convergence. In addition, DFML (Khalil et al., 2024) mitigates the drift toward local objectives by applying a re-weighted SoftMax loss (Legate et al., 2023). While showing promising results on personalization, the model exhibits inferior generalization performance, possibly due to the limited scalability of the input parameters. DRDFL can adapt intermediate features, enhancing generalization and providing greater flexibility in handling diverse data distributions.
+
+**Disentangled Representation Learning** aims to uncover and separate the underlying factors of variation in data, thereby improving model generalization and interpretability (Wang et al., 2024b; Zhu et al., 2021; Guo et al., 2024b). Variational Autoencoders (VAEs) (Kingma, 2013) provide a principled framework for learning such representations by maximizing the evidence lower bound (ELBO):  $\log p(\mathbf{x}) \geq \mathbb{E}_{q_\phi(\mathbf{z}|\mathbf{x})}[\log p_\theta(\mathbf{x}|\mathbf{z})] - D_{\text{KL}}(q_\phi(\mathbf{z}|\mathbf{x})|p(\mathbf{z}))$ , where the first term corresponds to the reconstruction objective and the second enforces alignment between the posterior and a standard Gaussian prior. Conditional VAE (CVAE) (Sohn et al., 2015) further incorporates label information into both the encoder and decoder to improve semantic consistency and alleviate latent collapse. Recent studies have applied disentangled learning to CFL to address data heterogeneity (Yan & Long, 2023; Luo et al., 2022; Chen & Zhang, 2024; Wu et al., 2024). These works introduce mechanisms such as invariant aggregation, gating strategies, and orthogonal decomposition to separate shared and personalized components. However, most rely on centralized server-side coordination or proxy datasets, which limits their applicability to DFL. In contrast, our approach operates entirely in a serverless setting, enhancing communication efficiency and consistency through fully decentralized client interactions while preserving the benefits of disentangled representation learning.
+
+**Learngene** (Lin et al., 2024; Xia et al., 2024b;a; Li et al., 2024a; Xie et al., 2025; Wang et al., 2023), a novel paradigm of machine learning inspired by biological genetics, has been proposed to
+
+condense a large-scale ancestral model into generalized *Learngene* that adaptively initialize models for various downstream tasks. Wang et al. (2022a) first introduced Learngene based on the gradient information of ancestral models and demonstrated its effectiveness in initializing new task models in open-world scenarios, thereby reflecting its strong generalization capability. To rapidly construct a diverse variety of networks with varying levels of complexity and performance trade-offs, the customized Learngene pool (Shi et al., 2024) methodology is tailored to meet resource-constrained environments. Furthermore, Feng et al. (2024) further validated that transferring core knowledge through *Learngene* is both sufficient and effective for neural networks. Inspired by this, we propose to transfer an encapsulating consensus knowledge *Learngene* module across clients, offering a novel perspective for collaborative knowledge sharing in RDFL and enabling each client to learn from others in a decentralized manner.
+
+## 3 PRELIMINARIES
+
+### 3.1 PROBLEM FORMULATION
+
+The Ring-topology Decentralized Federated Learning (RDFL), as one of the most representative and lightweight sparse structures in partially connected decentralized FL, aims to enable efficient distributed learning across multiple data sources under privacy constraints. Compared to fully connected networks, RDFL significantly reduces communication overhead by restricting interactions to local neighbors (Wang et al., 2022b; Beltrán et al., 2023; Wang et al., 2024a). However, such sparsity also amplifies the negative impact of data heterogeneity, since each client can only exchange information with its immediate peers. Given these considerations, we revisit and further refine the challenges of data heterogeneity within the RDFL architecture, specifically including:
+
+**Definition 3.1** (Feature Distribution Skew). *Let  $p_i(\mathbf{x})$  and  $p_j(\mathbf{x})$  represent the feature distributions for train sample  $i$  and test sample  $j$ , respectively. The feature distribution of the training samples may be different from that of the test samples, but the class conditional distribution of the same class remains invariant, i.e.,*
+
+$$p_i(\mathbf{x}) \neq p_j(\mathbf{x}) \quad \text{but} \quad p_i(y|\mathbf{x}) = p_j(y|\mathbf{x}).$$
+
+**Definition 3.2** (Label Distribution Skew). *Let  $p_i(y)$  and  $p_j(y)$  denote the label distributions for client  $i$  and client  $j$ , respectively. The label distributions across clients may differ, but the class-conditional feature distributions remain invariant, i.e.,*
+
+$$p_i(\mathbf{x}|y) = p_j(\mathbf{x}|y) \quad \text{but} \quad p_i(y) \neq p_j(y).$$
+
+### 3.2 DIVIDE-AND-CONQUER COLLABORATION
+
+**Maximizing the learning of consensus knowledge while fitting class-specific distributions is reasonable to mitigate feature distribution skew.** Each client's local training and test datasets can be generated in different contexts/environments. For example, a client's training image samples may be primarily captured by a local camera, while the test images may come from the Internet and have different styles. From a contextual perspective, the target learning model must have a certain level of generalization capability to perform well in unknown and diverse contexts. We propose to train the *PersonaNet* module based on the global class mean and variance derived from collaborative learning, allowing the capture of personalized information while mitigating feature distribution skew.
+
+**Training with a uniform prior distribution provides a principled solution to label distribution skew.** Due to the inherent limitations of local clients, which are limited to their specific data subsets, they often fail to adequately represent the broader data distribution. Consequently, must collaborate to overcome the bottlenecks imposed by limited individual datasets. We emphasize the use of adversarial classifiers in training the *Learngene* module within the RDFL system to adapt to a unified prior distribution  $p_u(y = k) = 1/K$ , where  $K$  represents the total number of classes. This ensures that cross-client collaboration is not affected by inconsistencies in class distributions, promoting the learning of a stable and invariant latent space, improving the generalization capability of the model.
+
+## 4 METHODOLOGY
+
+### 4.1 NOTATIONS
+
+Consider a typical setting of RDFL with  $M$  clients, each client  $m$  has a dataset  $\mathcal{D}_m = \{(\mathbf{x}_i, y_i)\}_{i=1}^{|\mathcal{D}_m|}$ , where  $y_i \in [1, K]$  and  $K$  is the number of overall classes. The optimization problem that RDFL to
+
+![Figure 1: Overview of the proposed federated learning framework. The diagram illustrates the interaction between a central server and multiple clients (Client 1 and Client i). On the server, a 'Personalization' module uses 'PersonaNet' to process local data (Data1) into a personalized representation Z_p, which is then used by a 'Learngene' module to generate a global model Z_g. This global model is used for 'Generalization' tasks like 'Adversarial Classifier' and 'Classifier'. A 'Reconstruction' module uses a 'Decoder' to process Z_g into a reconstructed representation Z_r. A 'Communication' cloud facilitates the exchange of information between clients. On the client side, 'Client 1' and 'Client i' have their own local data and models. They use 'PersonaNet' to process their local data into Z_p, which is then used by 'Learngene' to generate Z_g. This Z_g is used for 'Generalization' tasks. A 'Reconstruction' module uses a 'Decoder' to process Z_g into Z_r. The diagram also shows the flow of forward propagation (solid arrows), backpropagation (dashed arrows), updates (dotted arrows), generation (open squares), private operations (blue stars), and consensus operations (orange flames).](690fce4fb5c9cbb8beb560cb2a3fcbeb_img.jpg)
+
+Figure 1: Overview of the proposed federated learning framework. The diagram illustrates the interaction between a central server and multiple clients (Client 1 and Client i). On the server, a 'Personalization' module uses 'PersonaNet' to process local data (Data1) into a personalized representation Z\_p, which is then used by a 'Learngene' module to generate a global model Z\_g. This global model is used for 'Generalization' tasks like 'Adversarial Classifier' and 'Classifier'. A 'Reconstruction' module uses a 'Decoder' to process Z\_g into a reconstructed representation Z\_r. A 'Communication' cloud facilitates the exchange of information between clients. On the client side, 'Client 1' and 'Client i' have their own local data and models. They use 'PersonaNet' to process their local data into Z\_p, which is then used by 'Learngene' to generate Z\_g. This Z\_g is used for 'Generalization' tasks. A 'Reconstruction' module uses a 'Decoder' to process Z\_g into Z\_r. The diagram also shows the flow of forward propagation (solid arrows), backpropagation (dashed arrows), updates (dotted arrows), generation (open squares), private operations (blue stars), and consensus operations (orange flames).
+
+Figure 2: Overview of the DRDFL framework. The *PersonaNet* module learns class-specific personalized representations via a Gaussian mixture to enhance local adaptability, while the consensus module *Learngene* is optimized via adversarial training against a uniform label distribution to capture globally invariant knowledge and enhance cross-client consistency. During reconstruction, noise is injected into reconstructed data to improve classifier robustness. Global latent Gaussian representations and consensus *Learngene* are cyclically updated across the topology to enable collaborative learning.
+
+solve can be formulated as:
+
+$$\min_{\mathbf{w}_m} \mathcal{L}(\mathbf{w}_m) = \frac{1}{|\mathcal{D}_m|} \sum_i \ell(\mathbf{x}_i, y_i; \mathbf{w}_m), \quad (1)$$
+
+where  $\mathbf{w}_m$  is the model parameter and  $\mathcal{L}(\mathbf{w}_m)$  is the empirical risk computed from  $m$ -th client data  $\mathcal{D}_m$ , and  $\ell$  is a loss function applied to each data instance.
+
+In the serverless DRDFL framework, the underlying goal of training a model with both personalized and generalized capabilities can be specifically described as: (1) identifying highly discriminative class-specific attributes to ensure accurate classification, and (2) mining class-independent common attributes to enhance the model's generalization ability. As illustrated in Figure 2, we introduce a divide-and-conquer collaboration mechanism inspired by the variational autoencoder (VAE) to achieve this objective. Specifically, we design two complementary modules: a personalization module *PersonaNet*, parameterized by  $\psi_m$ , for extracting client-specific representations, and a consensus generalization module (*Learnngne*, parameterized by  $\phi$ ) for capturing globally shared knowledge through collaborative learning across clients. The decoder module  $p_{\theta_m}$  integrates the outputs of both branches to reconstruct the input data, which is then perturbed with noise and passed to the classifier  $f_{\omega_m}^c$  (parameterized by  $\omega_m$ ) for robust training. Consequently, each local model is structured as  $w_m = [\psi_m, \phi, \theta_m, \omega_m]$ , following a divide-and-conquer strategy, where  $\phi$  is used for the cross-client consensus module and other modules are private. For simplicity, we unify them without subscripts and focus on training a model with the dual optimization objectives of generalization and personalization. The optimization of  $[\psi, \phi, \theta]$  is achieved by maximizing the ELBO to provide a tight lower bound for the original  $\log p(x)$ :
+
+$$\max_{\psi, \phi, \theta} \underbrace{\mathbb{E}_{\mathbf{x}} [\mathbb{E}_{q_\psi(\mathbf{z}_p, k|\mathbf{x}), q_\phi(\mathbf{z}_l|\mathbf{x})} [\log p_\theta(\mathbf{x}|\mathbf{z}_p, \mathbf{z}_l)]}_{\text{PersonaNet}} - \underbrace{D_{KL}(q_\psi(\mathbf{z}_p, k|\mathbf{x})||p(\mathbf{z}_p, k))}_{\text{Learnsense}} - \underbrace{D_{KL}(q_\phi(\mathbf{z}_l|\mathbf{x})||p(\mathbf{z}_l))}_{\text{Learnsense}}], \quad (2)$$
+
+where *first* term represents the negative reconstruction error. The *PersonaNet* term enforces  $q_\psi(\mathbf{z}_p, k|\mathbf{x})$  to align with the global class-specific prior Gaussian distribution, encouraging *PersonaNet* to generate latent representations with strong class discriminability. The *Learngene* term
+
+promotes the alignment of latent representations generated by *Learngene* with the standard multivariate normal prior  $p(\mathbf{z}_l)$ , enabling the extraction of class-invariant information across clients.
+
+### 4.2 PERSONALIZED *PersonaNet* TRAINING VIA GAUSSIAN MIXTURE DISTRIBUTION
+
+The goal of the *PersonaNet* module is to ensure model personalization to mitigate feature distribution skew. Based on the large-margin Gaussian mixture loss (Wan et al., 2018; Zheng & Sun, 2019), we assume that the latent code  $\mathbf{z}_p$ , learned from the training set follows a Gaussian mixture distribution expressed as:
+
+$$p(\mathbf{z}_p) = \sum_k \mathcal{N}(\mathbf{z}_p; \boldsymbol{\mu}_k, \boldsymbol{\Sigma}_k) p(k), \quad (3)$$
+
+where  $\boldsymbol{\mu}_k$  and  $\boldsymbol{\Sigma}_k$  represent the mean and covariance of class  $k$  in the feature space, and  $p(k)$  denotes the prior probability of class  $k$ . Under this assumption, we encourage  $\mathbf{z}_p$  to capture the necessary information related to the class label  $y$ .
+
+Given a class label  $y \in [1, K]$ , the conditional probability distribution of  $\mathbf{z}_p$  is defined as  $p(\mathbf{z}_p|y) = \mathcal{N}(\mathbf{z}_p; \boldsymbol{\mu}_y, \boldsymbol{\Sigma}_y)$ . Therefore, the corresponding posterior probability distribution is formulated as:
+
+$$p(y|\mathbf{z}_p) = \frac{\mathcal{N}(\mathbf{z}_p; \boldsymbol{\mu}_y, \boldsymbol{\Sigma}_y) p(y)}{\sum_{k=1}^K \mathcal{N}(\mathbf{x}; \boldsymbol{\mu}_k, \boldsymbol{\Sigma}_k) p(k)}. \quad (4)$$
+
+Then maximizing the mutual information between  $\mathbf{z}_p$  and  $k$  is transformed into calculating the cross entropy between the posterior probability distribution and the one-hot encoded class label:
+
+$$\begin{aligned} \mathcal{L}_{cls} &= - \sum_{k=1}^K \mathbb{I}(y = k) \log q(k|\mathbf{z}_p) \\ &= - \log \frac{\mathcal{N}(\mathbf{z}_p; \boldsymbol{\mu}_y, \boldsymbol{\Sigma}_y) p(y)}{\sum_{k=1}^K \mathcal{N}(\mathbf{x}; \boldsymbol{\mu}_k, \boldsymbol{\Sigma}_k) p(k)}, \end{aligned} \quad (5)$$
+
+where the indicator function  $\mathbb{I}(\cdot)$  equals 1 if  $y$  is equal to  $k$ , and 0 otherwise. Here,  $q(k|\mathbf{z}_p)$  refers to the auxiliary distribution introduced to approximate  $p(k|\mathbf{z}_p)$ , since directly optimizing  $p(k|\mathbf{z}_p)$  is challenging in practice, as discussed in InfoGAN (Chen et al., 2016).
+
+Recall that in *PersonaNet* term of Eq. 2 the Kullback-Leibler (KL) divergence between  $q_\psi(\mathbf{z}_p, k|\mathbf{x})$  and  $p(\mathbf{z}_p, k)$  is minimized. If the covariance matrix of  $p(\mathbf{z}_p|y)$  tends to zero, then the distribution tends to a degenerate Gaussian distribution, is expressed as  $p(\mathbf{z}_p|y) \rightarrow \delta(\mathbf{z}_p - \boldsymbol{\mu}_y)$ . That is, all samples tend to the class mean  $\boldsymbol{\mu}_y$ . The KL divergence term degenerates into negative log-likelihood:
+
+$$\mathcal{L}_{log} = - \log \mathcal{N}(\mathbf{z}_p; \boldsymbol{\mu}_y, \boldsymbol{\Sigma}_y), \quad (6)$$
+
+where  $\mathbf{z}_p$  denotes the mean output from the *PersonaNet*. The  $\boldsymbol{\mu}_y$  and  $\boldsymbol{\Sigma}_y$  dynamically updated using an EMA strategy, i.e.,  $\boldsymbol{\mu}_y = \alpha \boldsymbol{\mu}_y + (1 - \alpha) \tilde{\boldsymbol{\mu}}_y$ ,  $\boldsymbol{\Sigma}_y = \alpha \boldsymbol{\Sigma}_y + (1 - \alpha) \tilde{\boldsymbol{\Sigma}}_y$ , where  $(\tilde{\boldsymbol{\mu}}_y, \tilde{\boldsymbol{\Sigma}}_y)$  denote the globally shared Gaussian statistics received from neighboring clients. The total loss for *PersonaNet* is given by:  $\mathcal{L}_{PR} = \mathcal{L}_{cls} + \mathcal{L}_{log}$ .
+
+### 4.3 GENERALIZED *Learngene* TRAINING WITH ADVERSARIAL CLASSIFIER
+
+Intuitively, we aim to decompose the latent space  $\mathbf{z}$  such that  $\mathbf{z}_l$  follows to a fixed prior distribution associated with knowledge shared across classes, independent of labels. This ensures that the resulting *Learngene* encoding module possesses the advantage of being inheritable and transferable. Specially, the *Learngene* term of in Eq. 2 is implemented by minimizing the KL divergence between  $q_\phi(\mathbf{z}_l|\mathbf{x})$  and the prior  $p(\mathbf{z}_l)$ :
+
+$$\mathcal{L}_{kl} = D_{KL}[q_\phi(\mathbf{z}_l|\mathbf{x})||p(\mathbf{z}_l)] = D_{KL}[\mathcal{N}(\boldsymbol{\mu}, \boldsymbol{\Sigma})||\mathcal{N}(\mathbf{0}, \mathbf{I})], \quad (7)$$
+
+where  $q_\phi(\mathbf{z}_l|\mathbf{x})$  is modeled as a Gaussian distribution with mean  $\boldsymbol{\mu}$  and diagonal covariance  $\boldsymbol{\Sigma}$ , both of which are the outputs of the *Learngene*.
+
+To ensure that the *Learngene* network exhibits generalization and that its output latent representations  $\mathbf{z}_l$  possess class-invariant properties, we design an adversarial classifier (parameterized by  $\vartheta$ ) on *Learngene* for adversarial optimization training:
+
+$$\mathcal{L}_{adv} = -\mathbb{E}_{\mathbf{z}_l \sim q_\phi(\mathbf{z}_l|\mathbf{x})} \log q_\vartheta(y|\mathbf{z}_l), \quad (8)$$
+
+where  $q_\theta(y|z_l)$  represents the softmax probability output by the adversarial classifier. To equip *Learngene* with strong generalization ability, our objective is to ensure that its latent representation  $z_l$  remains client-agnostic and unbiased with respect to class distributions. The key intuition is that, under label distribution skew heterogeneity, each client observes only a subset of classes with highly imbalanced frequencies. We explicitly regularize  $z_l$  by enforcing the output of an auxiliary adversarial classifier to follow a uniform label distribution. This uniformity constraint compels the module to discard class-dominant patterns unique to individual clients and instead retain only the invariant, globally shared knowledge of the data. Formally, the uniform adversarial objective is defined as:
+
+$$\mathcal{L}_{adv}^u = -\mathbb{E}_{q_\theta(z_l|x)} \left[ \frac{1}{K} \sum_{k=1}^K \log q_\theta(k|z_l) \right]. \quad (9)$$
+
+This strategy effectively avoids biased learning of specific categories within a single client, and can enhance the generalization training of the *Learngene* module to achieve cross-client collaborative learning. In summary, *Learngene* captures generalized invariant representations to achieve consistent optimization across clients, with the loss defined as:  $\mathcal{L}_{GL} = \mathcal{L}_{kl} + \mathcal{L}_{adv} + \mathcal{L}_{adv}^u$ .
+
+### 4.4 ROBUST REPRESENTATION LEARNING VIA NOISY RECONSTRUCTION
+
+The latent representations produced by *PersonaNet* and *Learngene*, denoted as  $z_p$  and  $z_l$ , are first concatenated and then fed into the decoder  $p_\theta(x'|z)$ . The decoder parameters  $\theta$  are optimized by minimizing the reconstruction loss:  $\mathcal{L}_{rec} = \|x - x'\|_2^2$ . Although minimizing  $\mathcal{L}_{rec}$  ensures that the generated sample  $x'$  closely approximates the original input  $x$ , such high-fidelity reconstructions usually lack diversity. This may cause the learned *Learngene* module to overfit to specific data instances, thereby weakening its generalization ability. To alleviate this, we inject Gaussian noise into the reconstructed samples during classifier training to promote more robust and diverse gradient propagation during backpropagation:  $x_p = x' + n$ , where  $n \sim \mathcal{N}(0, \sigma^2 I)$ . This perturbation can reduce the risk of reconstructing the original data by encouraging *Learngene* to capture more transferable and generalized representations. Subsequently, a local classifier  $f_{\omega}(\cdot)$  is trained on both the original and augmented data to simulate the label prediction process. The overall classification loss is defined as:
+
+$$\begin{aligned} \mathcal{L}_{ce} = & \mathbb{E}_{(x,y) \sim \mathcal{D}_m} \ell(f_\omega(x), y) \\ & + \mathbb{E}_{(x_p,y) \sim P(x_p,y)} \ell(f_\omega(x_p), y), \end{aligned} \quad (10)$$
+
+where  $\mathcal{D}_m$  is the local data distribution for client  $m$ ,  $P(x_p, y)$  represents the distribution of the perturbed data and labels, and  $\ell(\cdot, \cdot)$  denotes the standard cross-entropy loss function. A detailed theoretical analysis is presented in Appendix A.2, with corresponding proofs in Appendix A.3, and the discussion and limitations of the proposed method are provided in Appendix A.4.
+
+## 5 EXPERIMENTS
+
+### 5.1 EXPERIMENT SETUP
+
+**Dataset and data partition.** We conduct experiments on three standard FL benchmarks: SVHN (Netzer et al., 2011), CIFAR-10, and CIFAR-100 (Krizhevsky et al., 2009). To simulate realistic federated scenarios, we adopt two types of non-IID data partitions. For Dirichlet-based partitioning, training and test data are distributed across clients following a Dirichlet distribution with  $\beta \in \{0.1, 0.4\}$  (Chen et al., 2021; Dai et al., 2022), inducing varying degrees of label skew. For shard-based partitioning, data is split by class into shards and unevenly assigned to clients, controlling heterogeneity via the number of classes per client. Specifically, we set  $s \in \{4, 5\}$  for SVHN and CIFAR-10, and  $s \in \{20, 30\}$  for CIFAR-100.
+
+**Evaluation metrics.** We report the mean test accuracy of personalized models for all clients. The evaluation is based on two primary metrics: Local-T (i.e., using the local test data corresponding to each client’s class distribution) and Global-T (i.e., using the union of all clients’ local test data). These metrics are used to assess the model’s personalization performance and generalization ability.
+
+**Baselines.** We selected a series of state-of-the-art federated learning algorithms for comparison, including *Local*, which performs training locally without collaboration, and CFL methods designed to mitigate data heterogeneity, such as FedRep (Collins et al., 2021), FedNova (Wang et al., 2020),
+
+FedBN (Li et al., 2021), and FedFed (Yang et al., 2024). Furthermore, DFL approaches, including DFedPGP (Liu et al., 2024), Fedcvae, and DisPFL (Dai et al., 2022), were used as baselines. All methods use the ResNet18 network as the backbone classifier. Detailed description is given in Appendix B.1.3.
+
+### 5.2 EVALUATION RESULTS
+
+**DRDFL is parameter-efficient.** Table 1 reports the parameters of the personalized module trained on each client and the communication cost per round transmitted to the server under different settings. In terms of communication efficiency, DRDFL significantly outperforms most state-of-the-art CFL and DFL methods across different settings. Classical CFL methods, such as FedRep, FedNova, and FedBN, require approximately 213 M parameters to be sent to the server for aggregation. In contrast, DRDFL only exchanges 0.58 M parameters, including the consensus lightweight *Learngene* module and a small set of global latent Gaussian representations. DFL-based approaches like DisPFL still rely on exchanging masked model components or low-level parameter updates, which remain considerably more costly than DRDFL. These comparisons highlight DRDFL’s superior parameter efficiency and suitability for resource-constrained decentralized FL scenarios.
+
+Table 1: Comparison of parameter efficiency across different FL methods.
+
+| Method       | Personalized Params | # Comm. Params |
+|--------------|---------------------|----------------|
+| <i>Local</i> | Full model          | 0 M            |
+| FedRep       | Output layer        | 213.6 M        |
+| FedNova      | Full model          | 213.46 M       |
+| FedBN        | BatchNorm layers    | 213.06 M       |
+| FedFed       | Full model          | 454.58 M       |
+| DFedPGP      | Output layer        | 213.36 M       |
+| FedCVAE      | Full model          | 63.44 M        |
+| DisPFL       | Masked model        | 106.65 M       |
+| <b>DRDFL</b> | <i>PersonaNet</i>   | <b>0.58 M</b>  |
+
+**DRDFL achieves generalization comparable to CFL and personalization competitive with DFL methods.** Tables 2 and 3 show that, compared to DFL methods on the same architecture, DRDFL delivers competitive personalization results with significantly fewer communication parameters. In the Dirichlet-based  $\beta = 0.1$  setting, DRDFL outperforms the state-of-the-art DFedPGP method (+1.24%, 5.29%, 2.64% on SVHN, CIFAR-10, and CIFAR-100). DRDFL also achieves comparable generalization performance to server-based CFL methods on CIFAR-10, providing competitive results. While it performs slightly worse than the FedBN method (−1.74%, 0.17% on CIFAR-100 dataset with  $\beta = 0.1$ ,  $s = 20$ ), which aggregates batch normalization models. However, DRDFL achieves the best performance that is higher than FedFed (+1.28%) on CIFAR-100 with  $s = 30$ . These results highlight the effectiveness of *Learngene* as a shared module for iterative optimization across clients, enabling the learning of generalized consensus knowledge in RDFL scenarios.
+
+Table 2: Averaged test accuracy (% ± std) across all clients’ models under the Dirichlet-based non-IID setting. Note that **Bold** / Underline highlight the best / second-best approach.
+
+| Method       | SVHN             |                  | CIFAR-10         |                  | CIFAR-100        |                  |                  |                  |                  |                  |                  |                  |
+|--------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+|              | $\beta = 0.1$    | $\beta = 0.4$    | $\beta = 0.1$    | $\beta = 0.4$    | $\beta = 0.1$    | $\beta = 0.4$    |                  |                  |                  |                  |                  |                  |
+|              | Local-T          | Global-T         | Local-T          | Global-T         | Local-T          | Global-T         |                  |                  |                  |                  |                  |                  |
+| <i>Local</i> | 94.68±0.2        | 26.55±0.3        | 94.37±0.3        | 56.69±0.4        | 89.12±0.3        | 23.97±0.2        | 76.12±0.4        | 36.81±0.3        | 63.93±0.2        | 11.19±0.2        | 46.44±0.3        | 16.07±0.2        |
+| FedRep       | 91.58±0.3        | 27.32±0.2        | 94.65±0.3        | 56.92±0.3        | 86.36±0.2        | 21.64±0.3        | 77.35±0.3        | 38.88±0.2        | 65.92±0.3        | 11.70±0.2        | 43.36±0.2        | 17.44±0.3        |
+| FedNova      | 95.65±0.2        | 31.65±0.3        | 93.66±0.3        | 56.69±0.3        | 90.80±0.3        | 25.56±0.2        | 79.89±0.3        | 39.93±0.2        | 65.94±0.3        | 11.12±0.2        | 45.68±0.2        | 16.06±0.3        |
+| FedBN        | 94.49±0.3        | 33.65±0.2        | 94.27±0.2        | 58.79±0.3        | 86.38±0.3        | 25.01±0.3        | 80.90±0.3        | 39.87±0.2        | 63.70±0.3        | 14.96±0.3        | 35.96±0.3        | 19.04±0.3        |
+| FedFed       | 95.35±0.2        | 32.32±0.3        | 93.60±0.3        | 56.65±0.2        | 91.25±0.3        | 27.92±0.2        | 82.65±0.3        | 45.64±0.2        | 68.14±0.2        | 12.46±0.3        | 48.62±0.3        | 16.49±0.3        |
+| DFedPGP      | 95.93±0.3        | 30.17±0.2        | 92.57±0.3        | 54.60±0.3        | 87.57±0.2        | 25.41±0.3        | 78.01±0.3        | 42.67±0.2        | 20.20±0.3        | 11.23±0.2        | 43.10±0.2        | 16.72±0.2        |
+| Fedcvae      | 76.76±0.3        | 14.07±0.2        | 78.77±0.2        | 41.42±0.3        | 78.12±0.3        | 14.57±0.2        | 78.77±0.3        | 41.38±0.2        | 58.08±0.3        | 8.07±0.2         | 40.04±0.2        | 11.48±0.3        |
+| DisPFL       | 95.69±0.2        | 28.96±0.3        | 93.14±0.3        | 50.60±0.2        | 89.38±0.2        | 25.31±0.3        | 79.49±0.3        | 38.78±0.2        | 58.34±0.3        | 9.90±0.2         | 47.51±0.3        | 15.54±0.2        |
+| <b>DRDFL</b> | <b>97.17±0.2</b> | <b>33.04±0.3</b> | <b>94.68±0.3</b> | <b>57.87±0.2</b> | <b>92.86±0.2</b> | <b>28.14±0.2</b> | <b>85.93±0.3</b> | <b>47.01±0.3</b> | <b>72.34±0.3</b> | <b>13.22±0.2</b> | <b>49.10±0.3</b> | <b>17.55±0.3</b> |
+
+Table 3: Averaged test accuracy across all clients’ models under the Shard-based non-IID setting.
+
+| Method       | SVHN             |                  | CIFAR-10         |                  | CIFAR-100        |                  |                  |                  |                  |                  |                  |                  |
+|--------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+|              | $s = 4$          | $s = 5$          | $s = 4$          | $s = 5$          | $s = 20$         | $s = 30$         |                  |                  |                  |                  |                  |                  |
+|              | Local-T          | Global-T         | Local-T          | Global-T         | Local-T          | Global-T         |                  |                  |                  |                  |                  |                  |
+| <i>Local</i> | 92.01±0.3        | 36.32±0.2        | 91.17±0.2        | 44.41±0.3        | 84.61±0.3        | 31.51±0.3        | 75.83±0.2        | 37.13±0.2        | 55.33±0.3        | 10.19±0.2        | 46.95±0.2        | 12.73±0.3        |
+| FedRep       | 93.62±0.2        | 36.55±0.3        | 94.49±0.2        | 46.36±0.3        | 88.80±0.3        | 33.84±0.2        | 82.18±0.3        | 38.02±0.3        | 56.55±0.2        | 10.40±0.2        | 52.41±0.3        | 14.26±0.2        |
+| FedNova      | 94.94±0.3        | 37.80±0.2        | 95.25±0.3        | 46.55±0.2        | 88.07±0.2        | 33.46±0.3        | 82.79±0.2        | 39.52±0.3        | 57.57±0.3        | 11.07±0.2        | 54.24±0.2        | 13.79±0.2        |
+| FedBN        | 92.93±0.2        | 38.93±0.3        | 93.78±0.3        | 48.34±0.3        | 90.46±0.3        | 34.36±0.2        | 83.53±0.3        | 42.75±0.2        | 59.94±0.2        | 13.87±0.3        | 55.83±0.2        | 14.82±0.2        |
+| FedFed       | 96.41±0.3        | 38.49±0.2        | 95.16±0.3        | 46.75±0.2        | 89.27±0.3        | 35.58±0.3        | 86.24±0.2        | 42.94±0.2        | 67.63±0.3        | 12.67±0.2        | 53.76±0.2        | 15.23±0.3        |
+| DFedPGP      | 91.89±0.2        | 37.01±0.3        | 92.31±0.3        | 45.74±0.2        | 87.06±0.3        | 32.15±0.3        | 80.49±0.2        | 38.59±0.2        | 69.33±0.2        | 13.35±0.3        | 58.25±0.3        | 13.63±0.2        |
+| Fedcvae      | 86.16±0.3        | 34.04±0.2        | 78.17±0.3        | 39.28±0.2        | 70.81±0.2        | 26.93±0.3        | 74.98±0.3        | 37.06±0.2        | 63.76±0.3        | 11.93±0.2        | 52.55±0.2        | 14.85±0.2        |
+| DisPFL       | 94.31±0.3        | 37.57±0.2        | 95.24±0.3        | 46.71±0.3        | 87.00±0.2        | 33.65±0.2        | 80.90±0.3        | 39.55±0.2        | 60.11±0.2        | 10.84±0.2        | 53.97±0.3        | 13.54±0.2        |
+| <b>DRDFL</b> | <b>96.67±0.2</b> | <b>39.93±0.3</b> | <b>95.31±0.3</b> | <b>47.69±0.2</b> | <b>92.25±0.2</b> | <b>36.67±0.3</b> | <b>89.52±0.2</b> | <b>44.61±0.3</b> | <b>71.19±0.3</b> | <b>13.40±0.2</b> | <b>58.55±0.2</b> | <b>16.51±0.3</b> |
+
+![Figure 4: Four line graphs showing Top-1 Accuracy (%) vs. Communication Rounds for CIFAR-10. (a) beta = 0.1, (b) beta = 0.4, (c) s = 4, (d) s = 5. Each graph compares Local, FedAvg, FedProx, FedProx (beta=0.1), FedProx (beta=0.4), FedProx (s=4), FedProx (s=5), and Ours. In all cases, 'Ours' achieves the highest accuracy, followed by FedProx variants, then FedAvg, and Local.](b93cbfb52e37619e688175a6aad9edd9_img.jpg)
+
+Figure 4: Four line graphs showing Top-1 Accuracy (%) vs. Communication Rounds for CIFAR-10. (a) beta = 0.1, (b) beta = 0.4, (c) s = 4, (d) s = 5. Each graph compares Local, FedAvg, FedProx, FedProx (beta=0.1), FedProx (beta=0.4), FedProx (s=4), FedProx (s=5), and Ours. In all cases, 'Ours' achieves the highest accuracy, followed by FedProx variants, then FedAvg, and Local.
+
+Figure 3: Comparison of Local-T curves for different methods under various non-IID partition settings on CIFAR-10 dataset.
+
+**Convergence analysis.** We demonstrate the personalized performance of the model from a convergence perspective in Figure 3, which shows the performance curves of the FL method across different partitioning schemes on the CIFAR-10 dataset over communication rounds. Compared to other advanced methods, DRDFL achieves the best convergence speed under different partition settings and converges to higher personalized performance without introducing convergence-related problems. In particular, it is more significant on shard-based non-IID data partitions. The personalized performance of DRDFL is already higher than other methods at **Round 50** and gradually increases in the subsequent training stages to reach a convergence state.
+
+![Figure 10: A 2x3 grid of images showing bird heatmaps. The columns are labeled 'PersonaNet', 'Learngene', and 'Original'. The rows show different bird species. Red boxes highlight specific regions in the heatmaps, and a red circle in the bottom-left 'Learngene' heatmap highlights a different region compared to the others.](891ff9b651838b7f59e9a1612a739e15_img.jpg)
+
+Figure 10: A 2x3 grid of images showing bird heatmaps. The columns are labeled 'PersonaNet', 'Learngene', and 'Original'. The rows show different bird species. Red boxes highlight specific regions in the heatmaps, and a red circle in the bottom-left 'Learngene' heatmap highlights a different region compared to the others.
+
+Figure 4: Visualization of **bird** class samples from CIFAR-10 across clients, with red boxes marking shared attention regions.
+
+![Figure 1: Reconstruction results of different methods. The figure is a grid showing 'Original' and 'Reconstruction' images for three methods: FedNova, FedNova -0.001, and DRD-FL. Each method has two columns of images. The first column shows a small set of images (e.g., 5 images for FedNova), while the second column shows a larger set (e.g., 10 images for FedNova). Below each set of images is a file size label: 5.48dB, 4.17GB for the first column, and 5.52dB, 4.33GB, 4.07GB for the second column. The images show various scenes, including people and objects, demonstrating the model's ability to reconstruct data from distributed sources.](0f3e3ea50bcceb86f6c524ab2b6f3e7a_img.jpg)
+
+Figure 1: Reconstruction results of different methods. The figure is a grid showing 'Original' and 'Reconstruction' images for three methods: FedNova, FedNova -0.001, and DRD-FL. Each method has two columns of images. The first column shows a small set of images (e.g., 5 images for FedNova), while the second column shows a larger set (e.g., 10 images for FedNova). Below each set of images is a file size label: 5.48dB, 4.17GB for the first column, and 5.52dB, 4.33GB, 4.07GB for the second column. The images show various scenes, including people and objects, demonstrating the model's ability to reconstruct data from distributed sources.
+
+Figure 5: Reconstructed images from leaked information and corresponding PSNR (Hore & Ziou, 2010) values after 200 iterations.
+
+Grad-CAM (Selvaraju et al., 2017) visualization of *Learngene* and *PersonaNet* representations. To further validate the DRDfL’s capability in capturing both generalized and personalized information, we conduct Grad-CAM visualizations of the *PersonaNet* and *Learngene* modules on “bir” category image samples from different clients, as illustrated in Figure 4. The activation maps generated by *PersonaNet* reflect client-specific attention regions, highlighting personalized patterns learned by each client model. In contrast, the *Learngene* module consistently focuses on semantically meaningful and discriminative regions between clients, such as the head and beak of the bird. This observation confirms that *Learngene* is capable of learning generalized representations that maintain consistent focus on class-relevant semantic regions, regardless of the client-specific distribution variations.
+
+**Robustness to gradient-based attack.** A recent approach called Deep Leakage from Gradients (DLG) (Zhu et al., 2019) raises a crucial threat to the FL framework that aggregates the local gradients at the central server. DLG optimizes a dummy input to mimic shared local gradients, gradually approaching the original input sample, and repeatedly rehearses loss and gradient computations for data reconstruction. Instead, DRDFL transmit the *Learning* and class Gaussian distributions that summarize client-relevant characteristics without retaining any recoverable instance-specific detail, making loss rehearsal infeasible for the attacker. We conduct reconstruction experiments using CIFAR-10 and CIFAR-100, comparing FedNova, FedNova with Gaussian noise, and DRDFL. Each attack is performed for 200 optimization steps. As illustrated in Figure 5, FedNova yields visually recognizable reconstructions, whereas DRDFL produces indistinguishable outputs with substantially lower PSNR values. Additional experiments for DRDFL are provided in Appendix B.2, including: computation overhead of the client, ablation studies of DRDFL components, applicability
+
+to large-scale client populations, scalability to newly joined clients, and adaptability across various communication topologies.
+
+## 6 CONCLUSIONS
+
+In this paper, we propose a divide-and-conquer collaboration ring-topology Decentralized federated learning framework, which decouples the goals of generalization and personalization by designing two learning modules, *Learngene* and *PersonaNet*. The former uses adversarial learning to extract invariant representation, while the latter leverages Gaussian mixture learning to enhance class separability, achieving a dual benefit of both generalization and personalization. Extensive evaluations across multiple datasets validate the proposed method’s effectiveness in achieving generalized and personalized performance under decentralized settings.
+
+## ETHICS STATEMENT
+
+This work builds upon publicly available benchmark datasets such as CIFAR-10 and CIFAR-100, which do not contain any personally identifiable or sensitive information. Our design does not introduce additional privacy concerns beyond existing FL frameworks, and we believe this work raises no direct ethical issues.
+
+## REPRODUCIBILITY STATEMENT
+
+We have taken substantial steps to ensure the reproducibility of our results. The details of the DRDFL framework, including model architectures, training procedures, hyperparameter configurations, dataset partition strategies, and evaluation metrics, are fully described in Appendix B.1. Additional ablation studies, scalability tests, and results under various communication topologies are also provided in Appendix B.2. To further facilitate replication, we will release the complete source code and scripts upon publication.
+
+## REFERENCES
+
+- Latifa Albshaier, Seetah Almarri, and Abdullah Albuuali. Federated learning for cloud and edge security: A systematic review of challenges and ai opportunities. *Electronics*, 14(5):1019, 2025.
+- Enrique Tomás Martínez Beltrán, Mario Quiles Pérez, Pedro Miguel Sánchez Sánchez, Sergio López Bernal, Gérôme Bovet, Manuel Gil Pérez, Gregorio Martínez Pérez, and Alberto Huertas Celadrán. Decentralized federated learning: Fundamentals, state of the art, frameworks, trends, and challenges. *IEEE Communications Surveys & Tutorials*, 2023.
+- Congliang Chen, Jiawei Zhang, Li Shen, Peilin Zhao, and Zhiqian Luo. Communication efficient primal-dual algorithm for nonconvex nonsmooth distributed optimization. In *International conference on artificial intelligence and statistics*, pp. 1594–1602. PMLR, 2021.
+- Jiayi Chen and Aidong Zhang. On disentanglement of asymmetrical knowledge transfer for modality-task agnostic federated learning. In *Proceedings of the AAAI Conference on Artificial Intelligence*, volume 38, pp. 11311–11319, 2024.
+- Xi Chen, Yan Duan, Rein Houthooft, John Schulman, Ilya Sutskever, and Pieter Abbeel. Infogan: Interpretable representation learning by information maximizing generative adversarial nets. *Advances in neural information processing systems*, 29, 2016.
+- Ching-Fan Chung. A generalized fractionally integrated autoregressive moving-average process. *Journal of Time Series Analysis*, 17(2):111–140, 1996.
+- Liam Collins, Hamed Hassani, Aryan Mokhtari, and Sanjay Shakkottai. Exploiting shared representations for personalized federated learning. In *International Conference on Machine Learning*, pp. 2089–2099, 2021.
+
+- 540 Rong Dai, Li Shen, Fengxiang He, Xinmei Tian, and Dacheng Tao. Dispfl: Towards communication-  
+541 efficient personalized federated learning via decentralized sparse training. In *International confer-*  
+542 *ence on machine learning*, pp. 4587–4604. PMLR, 2022.  
+543  
+544 Fu Feng, Jing Wang, and Xin Geng. Transferring core knowledge via learnogenes. *arXiv preprint*  
+545 *arXiv:2401.08139*, 2024.  
+546  
+547 Fu Feng, Yucheng Xie, Jing Wang, and Xin Geng. Wave: Weight template for adaptive initialization  
+548 of variable-sized models. *Proceedings of the IEEE/CVF Conference on Computer Vision and*  
+549 *Pattern Recognition*, 2025.  
+550  
+551 Denis S Grebenkov and Jeremy Serror. Following a trend with an exponential moving average:  
+552 Analytical results for a gaussian model. *Physica A: Statistical Mechanics and its Applications*,  
+553 394:288–303, 2014.  
+554  
+555 Zhipin Gu and Yuexiang Yang. Detecting malicious model updates from federated learning on  
+556 conditional variational autoencoder. In *2021 IEEE international parallel and distributed processing*  
+557 *symposium (IPDPS)*, pp. 671–680. IEEE, 2021.  
+558  
+559 Shunxin Guo, Hongsong Wang, Shuxia Lin, Zhiqiang Kou, and Xin Geng. Addressing skewed  
+560 heterogeneity via federated prototype rectification with personalization. *IEEE Transactions on*  
+561 *Neural Networks and Learning Systems*, 2024a.  
+562  
+563 Zhiqiang Guo, Guohui Li, Jianjun Li, Chaoyang Wang, and Si Shi. Dualvae: Dual disentangled  
+564 variational autoencoder for recommendation. In *Proceedings of the 2024 SIAM International*  
+565 *Conference on Data Mining (SDM)*, pp. 571–579. SIAM, 2024b.  
+566  
+567 Clare Elizabeth Heinbaugh, Emilio Luz-Ricca, and Huajie Shao. Data-free one-shot federated  
+568 learning under very high statistical heterogeneity. In *The Eleventh International Conference on*  
+569 *Learning Representations*, 2023.  
+570  
+571 Alain Hore and Djemel Ziou. Image quality metrics: Psnr vs. ssim. In *2010 20th international*  
+572 *conference on pattern recognition*, pp. 2366–2369. IEEE, 2010.  
+573  
+574 Peter Kairouz, H Brendan McMahan, Brendan Avent, Aurélien Bellet, Mehdi Bennis, Arjun Nitin  
+575 Bhagoji, Kallista Bonawitz, Zachary Charles, Graham Cormode, Rachel Cummings, et al. Ad-  
+576 vances and open problems in federated learning. *Foundations and Trendstextregistered in Machine*  
+577 *Learning*, 14(1–2):1–210, 2021.  
+578  
+579 Anirudh Kasturi, S Vishwamithra, and Chittaranjan Hota. Communication efficient distributed learn-  
+580 ing using variational auto encoders. In *2022 14th International Conference on COMMunication*  
+581 *Systems & NETworkS (COMSNETS)*, pp. 744–748. IEEE, 2022.  
+582  
+583 Yasser H Khalil, Amir H Estiri, Mahdi Beitollahi, Nader Asadi, Sobhan Hemati, Xu Li, Guojun Zhang,  
+584 and Xi Chen. Dfml: Decentralized federated mutual learning. *arXiv preprint arXiv:2402.01863*,  
+585 pp. 1–28, 2024.  
+586  
+587 Diederik P Kingma. Auto-encoding variational bayes. *arXiv preprint arXiv:1312.6114*, 2013.  
+588  
+589 Alex Krizhevsky, Geoffrey Hinton, et al. Learning multiple layers of features from tiny images. pp.  
+590 1–60, 2009.  
+591  
+592 Gwen Legate, Lucas Caccia, and Eugene Belilovsky. Re-weighted softmax cross-entropy to control  
+593 forgetting in federated learning. In *Conference on Lifelong Learning Agents*, pp. 764–780. PMLR,  
+594 2023.  
+595  
+596 Bo Li, Mikkel N Schmidt, Tommy S Alstrøm, and Sebastian U Stich. On the effectiveness of partial  
+597 variance reduction in federated learning with heterogeneous data. In *Proceedings of the IEEE/CVF*  
+598 *Conference on Computer Vision and Pattern Recognition*, pp. 3964–3973, 2023.  
+599  
+600 Haoyang Li, Chengxi Zang, Zhenxing Xu, Weishen Pan, Suraj Rajendran, Yong Chen, and Fei Wang.  
+601 Federated target trial emulation using distributed observational data for treatment effect estimation.  
+602 *npj Digital Medicine*, 8(1):387, 2025a.  
+603
+
+- 594        Qinglun Li, Li Shen, Guanghao Li, Quanjun Yin, and Dacheng Tao. Dfedadm: Dual constraint  
+595        controlled model inconsistency for decentralize federated learning. *IEEE Transactions on Pattern*  
+596        *Analysis and Machine Intelligence*, pp. 4803–4815, 2025b.
+- 597
+- 598        Shuangtong Li, Tianyi Zhou, Xinmei Tian, and Dacheng Tao. Learning to collaborate in decentralized  
+599        learning of personalized models. In *Proceedings of the IEEE/CVF Conference on Computer Vision*  
+600        *and Pattern Recognition*, pp. 9766–9775, 2022.
+- 601        Xiangyi Li, Jiajia Guo, Chao-Kai Wen, Xin Geng, and Shi Jin. Facilitating ai-based csi feedback  
+602        deployment in massive mimo systems with learnene. *IEEE Transactions on Wireless Communi-*  
+603        *cations*, 2024a.
+- 604        Xiaoxiao Li, Meirui Jiang, Xiaofei Zhang, Michael Kamp, and Qi Dou. Fedbn: Federated learning  
+605        on non-iid features via local batch normalization. *arXiv preprint arXiv:2102.07623*, 2021.
+- 606
+- 607        Yichen Li, Qunwei Li, Haozhao Wang, Ruixuan Li, Wenliang Zhong, and Guannan Zhang. Towards  
+608        efficient replay in federated incremental learning. In *Proceedings of the IEEE/CVF Conference on*  
+609        *Computer Vision and Pattern Recognition*, pp. 12820–12829, 2024b.
+- 610
+- 611        Yichen Li, Haozhao Wang, Wenchao Xu, Tianzhe Xiao, Hong Liu, Minzhu Tu, Yuying Wang, Xin  
+612        Yang, Rui Zhang, Shui Yu, et al. Unleashing the power of continual learning on non-centralized  
+613        devices: A survey. *IEEE Communications Surveys & Tutorials*, 2024c.
+- 614        Shuxia Lin, Miaosen Zhang, Ruiming Chen, Xu Yang, Qiufeng Wang, and Xin Geng. Linearly  
+615        decomposing and recomposing vision transformers for diverse-scale models. In *The Thirty-eighth*  
+616        *Annual Conference on Neural Information Processing Systems*, pp. 1–25, 2024.
+- 617
+- 618        Wei Liu, Li Chen, and Wenyi Zhang. Decentralized federated learning: Balancing communication  
+619        and computing costs. *IEEE Transactions on Signal and Information Processing over Networks*, 8:  
+620        131–143, 2022.
+- 621
+- 622        Yingqi Liu, Yifan Shi, Qinglun Li, Baoyuan Wu, Xueqian Wang, and Li Shen. Decentralized directed  
+623        collaboration for personalized federated learning. In *Proceedings of the IEEE/CVF Conference on*  
+624        *Computer Vision and Pattern Recognition*, pp. 23168–23178, 2024.
+- 625
+- 626        Zhengguan Luo, Yunlong Wang, Zilei Wang, Zhenan Sun, and Tieniu Tan. Disentangled federated  
+627        learning for tackling attributes skew via invariant aggregation and diversity transferring. In  
+628        *International Conference on Machine Learning*, pp. 14527–14541. PMLR, 2022.
+- 629
+- 630        Brendan McMahan, Eider Moore, Daniel Ramage, Seth Hampson, and Blaise Aguera y Arcas.  
+631        Communication-efficient learning of deep networks from decentralized data. In *Artificial Intelli-*  
+632        *gence and Statistics*, pp. 1273–1282, 2017.
+- 633
+- 634        Yuval Netzer, Tao Wang, Adam Coates, Alessandro Bissacco, Baolin Wu, Andrew Y Ng, et al.  
+635        Reading digits in natural images with unsupervised feature learning. In *NIPS workshop on deep*  
+636        *learning and unsupervised feature learning*, volume 2011, pp. 1–9. Granada, Spain, 2011.
+- 637
+- 638        Anh Nguyen, Tuong Do, Minh Tran, Binh X Nguyen, Chien Duong, Tu Phan, Erman Tjiputra, and  
+639        Quang D Tran. Deep federated learning for autonomous driving. In *2022 IEEE Intelligent Vehicles*  
+640        *Symposium (IV)*, pp. 1824–1830. IEEE, 2022.
+- 641
+- 642        Zhuang Qi, Lei Meng, Zitan Chen, Han Hu, Hui Lin, and Xiangxu Meng. Cross-silo prototypical  
+643        calibration for federated learning with non-iid data. In *Proceedings of the 31st ACM International*  
+644        *Conference on Multimedia*, pp. 3099–3107, 2023.
+- 645
+- 646        Zhuang Qi, Lei Meng, Zhaochuan Li, Han Hu, and Xiangxu Meng. Cross-silo feature space alignment  
+647        for federated learning on clients with imbalanced data. In *Proceedings of the AAAI Conference on*  
+648        *Artificial Intelligence*, pp. 1–9, 2025.
+- 649
+- 650        Ramprasaath R Selvaraju, Michael Cogswell, Abhishek Das, Ramakrishna Vedantam, Devi Parikh,  
+651        and Dhruv Batra. Grad-cam: Visual explanations from deep networks via gradient-based local-  
+652        ization. In *Proceedings of the IEEE international conference on computer vision*, pp. 618–626,  
+653        2017.
+
+[Appendix and supplementary materials beyond page 12 have been removed.]

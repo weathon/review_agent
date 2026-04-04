@@ -1,0 +1,344 @@
+# NEURAL ODE TRANSFORMERS: ANALYZING INTERNAL DYNAMICS AND ADAPTIVE FINE-TUNING
+
+**Anh Tong**
+
+Korea University  
+anhtong12@korea.ac.kr
+
+**Thanh Nguyen-Tang**
+
+Johns Hopkins University  
+nguyent@cs.jhu.edu
+
+**Donggeun Lee**
+
+Texas A&M University-Commerce  
+donggeun.lee@tamuc.edu
+
+**Duc Nguyen**
+
+Qualcomm AI Research\*  
+ducanguy@qti.qualcomm.com
+
+**Toan Tran**
+
+Qualcomm AI Research\*  
+ttran@qti.qualcomm.com
+
+**David Hall**
+
+Stanford  
+dlwh@stanford.edu
+
+**Cheongwoong Kang**
+
+KAIST\*  
+cw.kang@kaist.ac.kr
+
+**Jaesik Choi**
+
+KAIST, INEEJI  
+jaesik.choi@kaist.ac.kr
+
+## ABSTRACT
+
+Recent advancements in large language models (LLMs) based on transformer architectures have sparked significant interest in understanding their inner workings. In this paper, we introduce a novel approach to modeling transformer architectures using highly flexible non-autonomous neural ordinary differential equations (ODEs). Our proposed model parameterizes all weights of attention and feed-forward blocks through neural networks, expressing these weights as functions of a continuous layer index. Through spectral analysis of the model’s dynamics, we uncover an increase in eigenvalue magnitude that challenges the weight-sharing assumption prevalent in existing theoretical studies. We also leverage the Lyapunov exponent to examine token-level sensitivity, enhancing model interpretability. Our neural ODE transformer demonstrates performance comparable to or better than vanilla transformers across various configurations and datasets, while offering flexible fine-tuning capabilities that can adapt to different architectural constraints.
+
+## 1 INTRODUCTION
+
+The recent advancements in large language models (LLMs) based on transformer architectures (Vaswani et al., 2017; Brown et al., 2020) have impressive empirical performance in various tasks. These transformer models with millions to billions of parameters, pose a formidable challenge in comprehending the intricate processes transpiring within their layers. Initial efforts have been undertaken to unravel mechanistic interpretability (Elhage et al., 2021) and adopt a mathematical approach (Geshkovski et al., 2023a;b) to better understand the inner workings of these complex models.
+
+As the field of LLMs continues to evolve and grow, it is important to develop a fundamental approach to understanding such complex models. This can provide stepping stones for improving trustworthiness, interpretability, and alignment in LLMs (Shevlane et al., 2023). To this aim, there are multifaceted approaches combining insights from mechanistic interpretability, mathematical analysis, and other complementary methods. Rigorous approaches from Geshkovski et al. (2023a;b) open
+
+\*Qualcomm Vietnam Company Limited
+
+interesting directions, providing theoretical understanding of transformers using neural ordinary differential equations (neural ODEs) (Chen et al., 2018). In practical applications, neural ODEs have been used in models proposed by Lu et al. (2019); Zhong et al. (2022); Dutta et al. (2021). While Geshkovski et al. (2023a;b) suggest that the model outputs collapse to a small number of points at infinite depth, Zhong et al. (2022); Dutta et al. (2021) demonstrate the use cases of neural ODE-based transformers. However, the main limitation in this line of work is that they often rely on shared-weight assumptions, which leads to a discrepancy between theoretical results and practical observations. Theoretically, the clustering behavior of fixed points in these studies (Geshkovski et al., 2023a;b) does not align well with the outputs of autoregressive transformers, which flexibly predict next tokens rather than forming clusters. Practically, the potential of differential equation-like adaptive computation is often overlooked, as evidenced by the limited exploration of neural ODE versions of transformers with time-dependent vector fields, as opposed to weight-sharing approaches.
+
+In this paper, we introduce a novel approach to modeling transformer architectures using highly flexible non-autonomous neural ODEs<sup>1</sup>. Apart from existing methodologies that seek weight-sharing, our proposed model generates all the weights of attention and feed-forward blocks through hyper-neural networks. Specifically, we consider weights as functions of a continuous layer index (or time). We conduct a comprehensive exploration and analysis of its dynamics through the lens of dynamical systems. Our primary analytical tool is spectral analysis that examines the components of our models including attention blocks and feed-forward blocks. Our analysis reveals some important properties of our models. The observed spectral dynamics tend to exhibit increasing magnitudes of eigenvalues. Through simulation, we demonstrate that this phenomenon inhibits the emergence of clusters, contrasting with the results reported in Geshkovski et al. (2023a). In other aspects, we use the Lyapunov exponent to study token-level sensitivity, which can be a potential tool for explainable machine learning methods (Gunning et al., 2019).
+
+Furthermore, we present a novel approach that leverages the adaptive computation of differential equations to create a versatile pretrained model. Our model exhibits a unique characteristic: the ability to be fine-tuned under various architectures derived from the initial pretrained structure. When presented with novel datasets, our model dynamically adjusts the step size of its ODE solvers. This adaptation effectively transform the model’s architecture, allowing it to function as a vanilla transformer. Consequently, this enables the application of a wide range of fine-tuning techniques such as LoRA (Hu et al., 2021). To the best of our knowledge, this represents the first instance of a pretrained model capable of being fine-tuned across diverse architectural configurations.
+
+The contributions of this paper are threefold. First, we introduce neural ODE transformers having comparable performance with GPT in different settings and data sets. Second, we offer a comprehensive analysis of the proposed models, unraveling their intricate internal dynamics and a technique to assess token-level sensitivity, enhancing our ability to interpret model behaviors. Lastly, we show that our model provides flexible computation fine-tune while maintaining a competitive performance.
+
+## 2 REVISITING TRANSFORMER
+
+Transformers proposed by Vaswani et al. (2017) consist of key components, including self-attention and feed-forward neural network.
+
+**Attention mechanism** Consider a sequence with  $n$  tokens,  $X_1, \dots, X_n$  in  $\mathbb{R}^d$  and represent it as a matrix  $X \in \mathbb{R}^{n \times d}$ . Let us define three linear projections  $Q, K, V \in \mathbb{R}^{d_{\text{dim}} \times d}$  for query, key, and value, respectively. The self-attention operation is expressed as follows:
+
+$$\text{Attn}(Q, K, V; X) = \text{softmax} \left( \frac{XQ^\top KX^\top}{\sqrt{d}} \right) (XV^\top). \quad (1)$$
+
+In essence, the self-attention mechanism acts as an operator determining where to focus attention within the entire sequence. The softmax function introduces emphasis, making it more likely that one token will be highlighted over others.
+
+<sup>1</sup>Non-autonomous ODEs have time-dependent vector fields.
+
+Self-attention is further extended into multi-head attention. In this configuration, multiple independent self-attention outputs, referred to as *heads*, are concatenated and reprojected, allowing for the introduction of residual connections. The formal definition is given by:
+
+$$\text{MultiHead} := \text{Concat}(\text{head}_1, \dots, \text{head}_H)O, \\ \text{where } \text{head}_i := \text{Attn}(Q_i, K_i, V_i; X), i = 1, \dots, H.$$
+
+Here,  $H$  is the number of heads and  $O \in \mathbb{R}^{d_{\text{concat}} \times d}$  is a projection matrix.
+
+**Feed-forward block** The second crucial component is the feed-forward layer, modeled as a two-layer multilayer perceptron with a nonlinear activation function, expressed as:
+
+$$\text{GeLU}(XW_1^\top + b_1)W_2^\top + b_2,$$
+
+where  $W_1 \in \mathbb{R}^{d_{\text{dmp}} \times d}$ ,  $W_2 \in \mathbb{R}^{d \times d_{\text{dmp}}}$ ,  $b_1 \in \mathbb{R}^{d_{\text{dmp}}}$ , and  $b_2 \in \mathbb{R}^d$ . The feed-forward layer, a singular component in the transformer, introduces nonlinearity in the computational flow, enhancing the model ability to capture complex patterns and relationships.
+
+## 3 RELATED WORK
+
+The work in Lu et al. (2019) is pioneering in establishing the link between neural ODEs and transformers. They recognize that the residual connections in transformer blocks can be interpreted as a Lie-Trotter splitting scheme akin to ODE solvers. Building on this insight, Lu et al. (2019) proposes a novel architecture called MacaronNet, motivated by an enhanced numerical solver. In a parallel vein, Li et al. (2021) presents a new variant of transformers inspired by higher-order solvers to address machine translation tasks. Our approach differs from these works in a key aspect: while they were inspired by ODE solvers to develop novel transformer construction methods, we focus on directly formulating differential equations. Consequently, our model enjoys all the properties of neural ODEs, such as adaptive computation, and is compatible with any ODE solver.
+
+The approach outlined in Dutta et al. (2021) aligns with certain aspects of our proposed model. Specifically, this approach involves introducing time-evolving attention layers and feed-forward layers. In the context of attention mechanisms, Dutta et al. (2021) suggests concatenating inputs and layer embeddings. However, it is worth noting that this approach may need more flexibility, as there persists a shared component in the computation of attention weights. This shared component relies solely on input and remains independent of layer embeddings.
+
+In another investigation, Zhong et al. (2022) explores various configurations of weight-sharing strategies when training transformers in a neural ODE style. The key finding indicates that as the degree of weight-sharing between layers increases, the model’s performance tends to degrade. Our model overcomes this limitation by using time-dependent weights, resulting in improved performance.
+
+A body of research has emerged, focusing on constructing models and laying down theoretical frameworks for transformers built upon neural ODEs. In works such as Geshkovski et al. (2023a;b), transformers are conceptualized as particle systems, and the geometric behaviors of simplified equivalents based on neural ODEs are analyzed. The predominant findings in these studies highlight the tendency of systems to converge to clusters as they approach their limits. Interestingly, Sinkformer (Sander et al., 2022) also uses a similar theoretical approach but aims to design a new variant of transformers. However, we note that the weight-sharing assumption of Geshkovski et al. (2023a;b) is rather restrictive. Our work demonstrates that learned weight dynamics prevent models from suffering clustering effects. This suggests to reconsider alternative assumptions for such studies.
+
+Research has been devoted to deep equilibrium models, as demonstrated by Bai et al. (2019), showcasing a close relationship with neural ODEs. This technique has been effectively employed in training transformer-like models with unspecified depth during training. While similar in some respects, our model (and neural ODEs in general) allows for adaptive fine-tuning with flexible ODE solver step sizes.
+
+![Figure 1: (a) The vector field of DIFFEQFORMER with attention block and feed-forward block constructed from time-dependent weights. (b) The architecture of time-dependent weights.](2fa4a1bf91d0f34e87c689fbc1211fe3_img.jpg)
+
+Figure 1(a) shows the architecture of the DIFFEQFORMER vector field. It consists of an attention block  $f$  and a feed-forward block  $g$ . The attention block  $f$  takes the current state  $x$  and a temporal embedding  $t$  as input. It uses Query (Q), Key (K), and Value (V) projections to compute attention weights, which are then multiplied by the Value projection. The feed-forward block  $g$  consists of two Linear layers with a GeLU activation function in between. The output of the attention block is added to the output of the feed-forward block via a residual connection.
+
+Figure 1(b) shows the architecture of the time-dependent weights. The input  $t$  is processed by a Temporal Embedding layer to produce a vector of dimension  $d_{\text{time}} \times d$ . This is followed by an MLP layer, resulting in a vector of dimension  $d_{\text{atts}}$ . This is then processed by a Projection (Proj) layer to produce a vector of dimension  $d_{\text{atts}} \times d_{\text{out}}$ . Finally, a MatMul operation is performed to produce the time-dependent weights  $W(t)x$ .
+
+Figure 1: (a) The vector field of DIFFEQFORMER with attention block and feed-forward block constructed from time-dependent weights. (b) The architecture of time-dependent weights.
+
+Figure 1: (a) The vector field of DIFFEQFORMER with attention block and feed-forward block constructed from time-dependent weights. (b) The architecture of time-dependent weights.
+
+## 4 TIME-DEPENDENT WEIGHT TRANSFORMER
+
+This section introduces our proposed transformers as differential equations, called DIFFEQFORMER. In the beginning, we formulate the transformer within the context of ODEs. We then provide the approach for representing time-dependent weights in our models.
+
+### 4.1 TRANSFORMERS THROUGH THE LENS OF DIFFERENTIAL EQUATIONS
+
+Consider a sequence  $X_1, \dots, X_n$  with  $X_i \in \mathbb{R}^d$ . Let a dynamical system evolve the given sequence under the following differential equation:
+
+$$\dot{x}_i(t) = f(x_i(t), x_{[n]}(t), t) + g(x_i(t), t), \quad t \in [0, T], \quad (2)$$
+
+$$x_i(0) = X_i, \quad i = 1, \dots, n. \quad (3)$$
+
+Here,  $\dot{x}_i(t) = \frac{dx_i}{dt}$  and  $x_{[n]}(t)$  denotes  $[x_1(t), \dots, x_n(t)]$ . This formulation was first presented in Lu et al. (2019). Based on a numerical solver, they proposed the MacaronNet architecture with *discrete* layers, in contrast to our approach which uses *continuous* layers with *time-dependent weights* (see Section 4.2 on time-dependent weights).
+
+Here  $f$  acts as an attention mechanism, capturing inter-particle interactions. Self-attention facilitates the transfer of information among particles. In a multi-head setting, each particle receives information from  $H$ , which is the number of different versions of all particles, and updates itself based on this information. To express this, we define  $f$  as follows:
+
+$$f(x_i(t), x_{[n]}(t), t) = \sum_{h=1}^H \frac{1}{L_{i,h}} \sum_{j=1}^n \exp\left(\frac{\langle Q_h(t)x_i(t), K_h(t)x_j(t) \rangle}{\sqrt{d}}\right) V_h(t)x_j(t), \quad (4)$$
+
+where  $Q_h(\cdot), K_h(\cdot), V_h(\cdot)$  are the mapping from  $[0, T]$  to  $\mathbb{R}^{d_{\text{atts}} \times d}$ .  $L_{i,h} = \sum_{j=1}^n \exp\left(\frac{\langle Q_h(t)x_i(t), K_h(t)x_j(t) \rangle}{\sqrt{d}}\right)$  is the normalizing term in the softmax function and  $\langle x, y \rangle = x^\top y$ .
+
+On the other hand, the convection  $g$  serves a role as feed-forward blocks having all time-dependent weights:
+
+$$g(x_i(t), t) = W_2^{\text{FF}}(t) \text{GeLU}(W_1^{\text{FF}}(t)x_i(t) + b_1(t)) + b_2(t). \quad (5)$$
+
+Figure 1a illustrates how to construct the vector field of DIFFEQFORMER.
+
+**Remarks** The particle system exhibits certain similarities with consensus-based optimization techniques, as explored in previous works (Pinnau et al., 2017; Carrillo et al., 2021), with an initial
+
+discussion provided in Geshkovski et al. (2023b). Drawing upon this resemblance, it becomes possible to elucidate specific observations in transformers, revealing that these models implicitly engage in optimization processes (mesa-optimization) over contextual information (Garg et al., 2022; Von Oswald et al., 2023; von Oswald et al., 2023).
+
+Notably, the work of Elhage et al. (2021) introduces the concept of *residual streams*: the connections between input tokens and their corresponding output tokens. In this framework, the role of attention is to facilitate the communication and information transfer between these residual streams. Multi-head attention encompasses information from various subspaces, allowing for the merging and writing of information to residual streams through residual connections. This perspective aligns with the interpretation of particle systems described in Lu et al. (2019); Geshkovski et al. (2023a;b).
+
+Additionally, placing attention layers and feed-forward layers at the same level was investigated in prior studies (Peng et al., 2022; Zhong et al., 2022; Dehghani et al., 2023). This approach allows us to fully conceptualize transformers as neural ODEs with Euler methods, in contrast to the Lie-Trotter scheme employed in Lu et al. (2019).
+
+### 4.2 REPRESENTATION OF TIME-DEPENDENT WEIGHTS
+
+We model time-dependent weights for attention components  $Q_h(t)$ ,  $K_h(t)$ ,  $V_h(t)$ , and feed-forward weights  $W_1^{\text{FF}}(t)$ ,  $W_2^{\text{FF}}(t)$ , using a time-dependent unit  $W : \mathbb{R}_+ \rightarrow \mathbb{R}^{d_{\text{in}} \times d_{\text{out}}}$  that embeds the time information in the Fourier domain, inspired by the existing diffusion model architectures (Song et al., 2020; Peebles & Xie, 2023). In particular, for any time  $t \in \mathbb{R}_+$ ,
+
+$$W(t) = \text{Proj}(\text{MLP}(\text{Sinusoidal}(t))), \quad (6)$$
+
+where  $\text{Sinusoidal} : \mathbb{R} \rightarrow \mathbb{R}^{d_{\text{sinusoidal}}}$  is used to embed time  $t$  into a higher-dimensional space and the two-layer multilayer perceptron  $\text{MLP} : \mathbb{R}^{d_{\text{sinusoidal}}} \rightarrow \mathbb{R}^{d_{\text{emb}}}$  is used. The MLP’s output will then be linearly projected and reshaped to match the desire of the weight matrices by using the operator  $\text{Proj} : \mathbb{R}^{d_{\text{emb}}} \rightarrow \mathbb{R}^{d_{\text{in}} \times d_{\text{out}}}$ . Figure 1b depicts the architecture of  $W(t)$ .
+
+**Remark** The time-dependent weights can be understood as hypernetworks (Ha et al., 2016; Stanley et al., 2009). However, our approach stems from a distinct motivation, aiming to establish a flexible method for modeling time-dependent vector fields in differential equations, employing a Fourier time embedding representation rather than the architecture proposed in Ha et al. (2016). The framework presented by Ha et al. (2016) contains two types of hypernetworks: static and dynamic. Our approach aligns more closely with the static variant. Conversely, existing work, such as Zhang et al. (2019); Choromanski et al. (2020), in the realm of neural ODE, attempts to parameterize weights using differential equations, resembling a form of dynamic hypernetworks. While this paper does not explore this approach, it is noteworthy that the main challenge lies in considering the state of the original ODE, which is high-dimensional and could result in computational expense.
+
+## 5 ANALYZING INTERNAL DYNAMICS OF TRANSFORMERS
+
+In this section, we explore the qualitative aspects and properties of our proposed model, including its behaviors of attention mechanism and model interpretability. Our analysis presented here is conducted on the DIFFEQFORMER model trained on the OPENWEBTEXT dataset (refer to Section 6 for the detailed setup).
+
+### 5.1 ANALYSIS OF ATTENTION MECHANISM
+
+To characterize attention blocks in DIFFEQFORMER, we will use existing tools, including gradient flows (Geshkovski et al., 2023a;b) and induction heads (Elhage et al., 2021).
+
+**Analyzing Query-Key (QK) pair** First, we explore the spectral flow of the Query-Key (QK) pair,  $Q_h(t)^\top K_h(t)$ . This particular element plays a vital role in determining particle communication and provides insights into the extent of their interactions.
+
+Figure 2a displays the dynamics of eigenvalues of  $Q_h(t)^\top K_h(t)$  in DIFFEQFORMER model. It exhibits a higher degree of interactions in its last layers, as evidenced by the broader range of
+
+![Figure 2: Spectral dynamics of QK and OV pairs. (a) Spectral dynamic of QK: Four subplots for Head 0, 1, 2, and 3 showing Reals(A) vs Layer. (b) Spectral dynamic of OV: Four subplots for Head 0, 1, 2, and 3 showing Reals(A) vs Layer. (c) 3D plot of attention-only model with shared weight assumptions, showing clusters emerging. (d) 3D plot of attention-only model with time-dependent weights, showing no clusters. (e) Plot of a function over time t, showing a smooth curve.](c54b3ca7603d65d4589151bc3a49d054_img.jpg)
+
+Figure 2: Spectral dynamics of QK and OV pairs. (a) Spectral dynamic of QK: Four subplots for Head 0, 1, 2, and 3 showing Reals(A) vs Layer. (b) Spectral dynamic of OV: Four subplots for Head 0, 1, 2, and 3 showing Reals(A) vs Layer. (c) 3D plot of attention-only model with shared weight assumptions, showing clusters emerging. (d) 3D plot of attention-only model with time-dependent weights, showing no clusters. (e) Plot of a function over time t, showing a smooth curve.
+
+Figure 2: (a-b): Spectral dynamics of QK and OV pairs. (c-d): Trajectory of a sequence consisting of 40 points in 3-dimensional space. (c) Attention-only model with shared weight assumptions as described in Geshkovski et al. (2023a): Clusters emerge. (d) Attention-only model with time-dependent weights of increasing magnitude, inspired by observations from trained DiFFEQFORMER: No clusters occur. (e) Plot of a function in our simulation that mimics the magnitude of  $Q(t)$ ,  $K(t)$ ,  $V(t)$  over time like in trained DiFFEQFORMER.
+
+eigenvalues in these layers. The eigenvalues of  $Q_h(t)^\top K_h(t)$  directly affect the variance of  $x_i^\top(t)Q_h(t)^\top K_h(t)x_j(t)$ . For instance, if  $x, y \sim \mathcal{N}(0, I)$ , then  $\text{Var}(x^\top Ay) = \text{trace}(A^\top A) = \sum_i \lambda_i^2(A)$  where  $\lambda_i(A)$  is the  $i$ -th eigenvalue of  $A$ . A high variance of  $x_i^\top(t)Q_h(t)^\top K_h(t)x_j(t)$  indicates that the softmax of  $[x_i^\top(t)Q_h(t)^\top K_h(t)x_j(t)]_{j=1,\dots,n}$  tends to approach a one-hot vector. This results in sharper attention weights, leading to a more distinct exchange between the  $j$ -th and  $i$ -th particles.
+
+To gain a deeper understanding, we make a connection with the work of Geshkovski et al. (2023b). In this study, the authors simplify the model by assuming that  $Q(t)$ ,  $K(t)$ , and  $V(t)$  are all identity matrices, i.e.,
+
+$$f_\beta(x_i(t), x_{[n]}(t), t) = \frac{1}{L_\beta} \sum_{j=1}^n \exp(\beta \langle x_i(t), x_j(t) \rangle) x_j,$$
+
+where  $L_\beta = \sum_{j=1}^n \exp(\beta \langle x_i(t), x_j(t) \rangle)$ . Here, the parameter  $\beta$  serves as a simplification of  $Q_h(t)^\top K_h(t)$  in equation 4. The study by Geshkovski et al. (2023b) looks into the interaction energy, and its gradient flows govern the dynamics of  $f_\beta$  (Otto, 2001; Jordan et al., 1998; Ambrosio et al., 2005; Villani et al., 2009). Importantly, the parameter  $\beta$  directly influences the speed at which the interaction energy decreases or increases. Such interactions in DiFFEQFORMER can be reflected by the eigenvalues of  $Q_h(t)^\top K_h(t)$ . For example, a wide range of eigenvalues encourage interactions between particles, as they indicate stronger coupling and information exchange within the system.
+
+**Analyzing Output-Value (OV) pair** While  $Q_h(t)^\top K_h(t)$  identifies the source and destination particles of inter-particle communication, the Output-Value (OV) pair represents the component describing how information of the source particle is merged to the destination particle.
+
+Figure 2b illustrates the spectral dynamics of the OV matrix in DiFFEQFORMER. A significant number of heads exhibit positive eigenvalues, which are primarily concentrated near the output layer. It seems to have a correlation with the spectral dynamics of the QK pair.
+
+Consider a communication from a source particle  $j$  to a destination particle  $i$ . The OV matrix has eigenvalues  $\{\lambda_k\}_{k=1}^d$  and corresponding eigenvectors  $\{v_k\}_{k=1}^d$ . We can express the states of
+
+particles  $i$  and  $j$  at time  $t$  as linear combinations of these eigenvectors:
+
+$$x_i(t) = \sum_{k=1}^d w_k^i v_k, \quad x_j(t) = \sum_{k=1}^d w_k^j v_k,$$
+
+where  $\{w_k^i\}_{k=1}^d$  and  $\{w_k^j\}_{k=1}^d$  are the respective coefficients. The output of the Euler step for attention can be interpreted as:
+
+$$x_i(t + \Delta t) = \sum_{k=1}^d (\lambda_k w_k^j \Delta t + w_k^i) v_k.$$
+
+Here, we focus on the coefficient  $\lambda_k w_k^j \Delta t + w_k^i$ . The magnitude of  $\lambda_k$  determines the influence of the source particle  $x_j(t)$  on the output  $x_i(t + \Delta t)$ . Larger absolute values of  $\lambda_k$  result in a stronger influence of the source particle on the destination particle’s next state. The sign of  $\lambda_k$  decides either positive or negative influence of source particle with respect to the corresponding eigenvector  $v_j$ .
+
+Drawing connection to the work of Geshkovski et al. (2023a;b), the authors suggest two simplified cases: the *attractive* scenario, where particles exhibit attractions and more likely to follow some leader particles with  $V = I_d$ ; and the *repulsive* scenario with  $V = -I_d$ , where particles repel each other. We extend this analysis by examining both the sign and magnitude of eigenvalues  $\lambda_k$  as shown in Figure 2a and 2b. This means that DIFFEQFORMER shows both attractive and repulsive behaviors, with attraction being more dominant in some attention heads near the last layers.
+
+In comparison, the approach presented by Elhage et al. (2021) characterizes OV pairs as exhibiting copying behavior when the eigenvalues of the OV pair feature numerous positive values. This copying behavior conceptually is similar to the attractive scenario in Geshkovski et al. (2023a;b). In mathematical terms,  $V = I_d$  means that all eigenvalues are positive and equal to 1. If copying behaviors occur frequently, it indicates a selective focus on specific particles, resembling a situation where only a subset of major particles is highlighted. Note that copying behavior is characterized as a component of *induction heads*, recognized as a key observation associated with in-context learning performance in Elhage et al. (2021); Olsson et al. (2022).
+
+Under the interpretation of Elhage et al. (2021), induction heads perform two key operations: (i) detecting matching patterns through QK pair and (ii) copying values when matches are found through OV pairs. The “matching” operation manifests through attention scores, where positive eigenvalues of QK pair indicate strong attention paths between similar tokens. The “copying” operation is facilitated by the OV pair, where positive eigenvalues suggest effective information propagation. Given our observations in Figure 2a and 2b of both positive eigenvalues in QK pair (supporting pattern matching) and positive eigenvalues in the OV pair (enabling copying), it is highly probable that induction heads occur in the last layer of DIFFEQFORMER.
+
+**Clustering behavior in DIFFEQFORMER** Trained DIFFEQFORMER exhibits a distinct dynamic of QK and OV pairs characterized by increasing magnitudes of eigenvalues over time, with a notable peak observed near the final layers. This dynamic contrasts with the assumptions put forth by Geshkovski et al. (2023a), who posited the emergence of clustering behavior at limit. Given this unique dynamic, it is crucial to investigate potential clustering behavior in our DIFFEQFORMER. To this end, we simulate ODE trajectories for attention-only model with the simplified dynamic based on the trained DIFFEQFORMER (refer to Appendix C.8 for details). As illustrated in Figure 2d, our findings indicate an absence of emergent clusters for a case of time-dependent weights. This contrasts with the cluster emergence observed in the weight-sharing case, shown in Figure 2c. This outcome aligns with the practical considerations of autoregressive language modeling tasks with next-token prediction, where clustered outputs would be counterintuitive. This shows that a discrepancy between the theoretical assumptions in existing studies and the empirical properties exhibited by our DIFFEQFORMER models. Therefore, it is necessary to have future rigorous investigation into this gap.
+
+**Remark** Due to the continuity of weights within our model, the dynamics of eigenvalues exhibit the continuity property, as discussed in previous works (Wilkinson, 1965; Hoffman & Wielandt, 2003). Consequently, a *smooth* transition of spectral information between layers can be observed in our analysis of QK and OV pairs. In contrast, the spectral flow in the case of vanilla transformers do not exhibit clear patterns or behaviors in their dynamics, making it challenging to identify induction heads (see Appendix E).
+
+**BIGBANG** is one of those musical entities that transcends language. It's one of those rare groups that both innovates and defines the direction a genre takes, Covering a sound that includes hip hop, R&B and electronic dance, **BIGBANG** and
+
+(a)
+
+**SEOUL** (Reuters) - South Korean Lee Sedol won his first match against a computer program developed by a Google subsidiary on Sunday in the ancient board game Go, denying a clean sweep for the artificial intelligence in a five-**match** series. The world's top Go player Lee Sedol reviews the match **after** the fourth
+
+(b)
+
+Figure 3: Lyapunov exponent values represent the sensitivity of previous words to the next word. Higher values correspond to more intense highlighting in red. (a) The next word is *its*. (b) The next word is *match*.
+
+### 5.2 SENSITIVITY ANALYSIS WITH LYAPUNOV EXPONENTS
+
+Next, we utilize the Lyapunov exponent to assess the sensitivity of the inputs of DIFFEQFORMER. Lyapunov exponents can provide valuable insights into the behavior of transformer models by quantifying how small changes in the input may impact the outputs. Previous studies have utilized Lyapunov exponents for understanding neural networks, primarily focusing on recurrent neural networks (RNNs) (Vogt et al., 2022; Storm et al., 2023; Engelken et al., 2023; Engelken, 2023). In another example, Gilpin (2021) demonstrates how Lyapunov exponents can enhance the interpretability of time series data (see Appendix B for a brief review).
+
+The main challenge in extracting Lyapunov exponents for the entire DIFFEQFORMER system stems from the high dimensionality of its states. Calculating Lyapunov exponents requires computing the spectrum or QR decomposition of Jacobian matrices, which can be computationally infeasible for DIFFEQFORMER<sup>2</sup>.
+
+In this context, our objective is to investigate the token-level sensitivity of transformers. Specifically, we aim to understand how the changes of the  $i$ -th token in a given input sentence influence the  $j$ -th token of its corresponding output. To achieve this, we intend to monitor the evolution of the tangent vectors associated with the  $i$ -th input particle and  $j$ -th output particle, similar to the formulation in equation 8, using the following ODE:
+
+$$\dot{Y}_{ij}(t) = J_{ij}(t)Y_{ij}(t), \quad (7)$$
+
+with  $Y_{ij}(0) = I_d$  and  $J_{ij}(t) = \partial_{x_i} f(x_j(t), x_{[n]}(t)) + \partial_{x_i} g(x_j(t))$  is the Jacobian of the vector field in equation 4. The Jacobian  $J_{ij}$  comprises two components: the attention information and the change between input and output. Consequently, employing Lyapunov exponents can provide a more principled approach to understanding the behavior of transformer models compared to solely using attention matrices, which have limitations as discussed by Jain & Wallace (2019) (see further discussion in Appendix B).
+
+Our approach may share similarities with conditional Lyapunov exponents, which analyze the stability of specific subsystems within a larger system (Pecora et al., 1997). Like these exponents, our sensitivity values provide insights into the stability of specific tokens within the transformer model.
+
+Figure 3 showcases how our approach quantifies sensitivity for predicting the next words using Lyapunov exponents. In these examples, the obtained Lyapunov exponents can explain the case of possessive pronouns. For instance, in the BIGBANG example, the next word “*its*” corresponds to “**BIGBANG**”, which is highlighted by the Lyapunov exponent. Similarly, in the Alpha Go article example, the obtained Lyapunov exponent can highlight the next word “*match*” and the order preposition “*after*”. This analysis offers potential avenues for interpreting the inner workings of transformers, building upon prior efforts in attention interpretability (Jain & Wallace, 2019; Wiegraffe & Pinter, 2019; Chefer et al., 2021; Ali et al., 2022). Further results and examples of this analysis, including comparisons with attention-based explanations can be found in Appendix F.
+
+## 6 EXPERIMENTAL RESULTS
+
+This section presents an empirical comparison of our proposed model DIFFEQFORMER and various baseline models in the context of language modeling tasks. The implementation of our model
+
+<sup>2</sup>For example, consider a model taking 1000 tokens with an embedding dimension of 768 as input; the dimension of its state would be 768,000.
+
+![Figure 4: Validation Perplexity of DIFFEQFORMER in comparison with GPT models. The figure consists of five subplots: (a) small, (b) medium, (c) small, (d) medium, and (e) large. The first two subplots (a, b) show results for the WIKITEXT103 dataset, while the last three (c, d, e) show results for the OPENWEBTEXT dataset. Each plot compares the validation perplexity of GPT (blue line) and Our model (orange line) over a number of steps (x-axis). In all cases, Our model achieves lower perplexity than GPT, indicating better performance. The x-axis for (a) and (b) ranges from 0 to 10000 steps, while for (c), (d), and (e) it ranges from 0 to 20000 steps. The y-axis represents 'Val. perplexity'.](b93cbfb52e37619e688175a6aad9edd9_img.jpg)
+
+Figure 4: Validation Perplexity of DIFFEQFORMER in comparison with GPT models. The figure consists of five subplots: (a) small, (b) medium, (c) small, (d) medium, and (e) large. The first two subplots (a, b) show results for the WIKITEXT103 dataset, while the last three (c, d, e) show results for the OPENWEBTEXT dataset. Each plot compares the validation perplexity of GPT (blue line) and Our model (orange line) over a number of steps (x-axis). In all cases, Our model achieves lower perplexity than GPT, indicating better performance. The x-axis for (a) and (b) ranges from 0 to 10000 steps, while for (c), (d), and (e) it ranges from 0 to 20000 steps. The y-axis represents 'Val. perplexity'.
+
+Figure 4: Validation Perplexity of DIFFEQFORMER in comparison with GPT models. (a, b) Results on WIKITEXT103 dataset in two architecture settings. (c, d, e) Results on OPENWEBTEXT dataset on three architecture settings.
+
+and baseline models is built on JAX (Bradbury et al., 2018), utilizing an ecosystem that includes Equinox (Kidger & Garcia, 2021), Haliax, and the Levanter framework (Hall et al., 2023). Our implementation is available at <https://github.com/SDML-KU/qkvflow>.
+
+### 6.1 LANGUAGE MODELING
+
+We evaluate our model DIFFEQFORMER, in comparison to baselines on both OPENWEBTEXT (Gokaslan et al., 2019) and WIKITEXT103 (Merity et al., 2016) for the autoregressive modeling task. The main evaluation metric is perplexity, a commonly used measure in this task.
+
+**Baselines** We explore various baselines, with the primary one being decoder-only transformers including GPT (Radford, 2018; Brown et al., 2020) and Llama (Touvron et al., 2023). We extend our investigation to a broader range of baselines for the Wikitext dataset, incorporating techniques such as weight-sharing (Zhong et al., 2022). However, on the OPENWEBTEXT dataset, we exclusively compare our model against the GPT model.
+
+**Setting** We consider model settings including: GPT-medium, GPT-small, GPT-large, and Llama-1B (see Table 3 in Appendix for details). We ensure uniformity in terms of model configuration between DIFFEQFORMER and baselines, including the depth of the models, the dimension of token embeddings, the number of heads, and other hyperparameters.
+
+Table 1: Perplexity on WIKITEXT103 data set.
+
+| Model            | Perplexity   |
+|------------------|--------------|
+| GPT-small        | 22.87        |
+| Shared parameter | 36.27        |
+| Our model-small  | <b>22.84</b> |
+| GPT-medium       | 23.38*       |
+| Shared parameter | 32.95        |
+| Our model-medium | <b>21.94</b> |
+
+Table 1 shows the perplexity across different models on WIKITEXT103 dataset. Our model achieves strong performance, outperforming GPT models while exhibiting less overfitting. Notably, GPT-medium shows signs of overfitting on this data (see Figure 4). This can be attributed to an increase in model parameters without a corresponding increase in data (Kaplan et al., 2020). Though the shared-weight approach excels in masked language modeling (Lan et al., 2020), it falls short in autoregressive language modeling tasks in this experiment.
+
+Table 2 demonstrates that our model consistently outperforms all baselines on the OPENWEBTEXT dataset, with particularly substantial improvements over the Llama-1B baseline (see Appendix C.6).
+
+**Downstream evaluation** We evaluate DIFFEQFORMER against GPT-large and Llama-1B using the lm-evaluation-harness framework (Gao et al., 2024), following the experimental protocol established in Biderman et al. (2023). Our evaluation encompasses various downstream tasks in both zero-shot and few-shot settings. While DIFFEQFORMER demonstrates comparable performance to the baselines across most tasks, it achieves statistically significant improvements on reading compre-
+
+Table 2: Perplexity on OPENWEBTEXT dataset.
+
+| Model            | Perplexity   |
+|------------------|--------------|
+| GPT-small        | 22.60        |
+| Our model-small  | <b>22.06</b> |
+| GPT-medium       | 17.85        |
+| Our model-medium | <b>17.67</b> |
+| GPT-large        | 15.64        |
+| Our model-large  | <b>15.43</b> |
+| Llama-1B         | 10.17        |
+| Our Llama-1B     | <b>9.68</b>  |
+
+![Figure 5: Four line plots showing validation perplexity over tokens for different model configurations. (a) OPENWEBTEXT → WIKITEXT103: LoRA and Full rank plots. (b) WIKITEXT103 → OPENWEBTEXT: LoRA and Full rank plots. Each plot compares 'Ours' models (18 > 24, 18 > 18, 18 > 12, 18 > 9) with GPT (24 > 24) and GPT from scratch. In all cases, 'Ours' models achieve lower perplexity faster and reach lower final perplexity than the GPT baselines.](4e0ade2f41b66d5602160da5cc978274_img.jpg)
+
+Figure 5: Four line plots showing validation perplexity over tokens for different model configurations. (a) OPENWEBTEXT → WIKITEXT103: LoRA and Full rank plots. (b) WIKITEXT103 → OPENWEBTEXT: LoRA and Full rank plots. Each plot compares 'Ours' models (18 > 24, 18 > 18, 18 > 12, 18 > 9) with GPT (24 > 24) and GPT from scratch. In all cases, 'Ours' models achieve lower perplexity faster and reach lower final perplexity than the GPT baselines.
+
+Figure 5: Finetune validation perplexity across two settings: (a) OPENWEBTEXT → WIKITEXT103; (b) WIKITEXT103 → OPENWEBTEXT. All models are pretrained with 18 function evaluations (or layers) and finetune in different settings of function evaluations 9, 12, 18, 24 with LoRA and full-rank finetune. We compare these with the baseline of corresponding GPT model pretrained and finetune with 24 layers which is on much expensive computation both pretrain and finetune.
+
+hension tasks (Lambada OpenAI and Lambada Standard) in both zero-shot and five-shot evaluations. Detailed results are presented in Appendix C.7.
+
+### 6.2 COMPUTATIONAL ADAPTABILITY FOR FINE-TUNE
+
+Modeling transformers using differential equations enables adaptive computation during fine-tuning through the adjustment of ODE solver step sizes. By utilizing a fixed step size, we populate the weights of DIFFEQFORMER over time steps to obtain discrete-layer pretrained models. Now, we can apply any fine-tuning techniques such as LoRA (Hu et al., 2021).
+
+**Finetune settings** The pretrained model undergoes training on one dataset before evaluation on novel data. We examine two scenarios: pretraining on WIKITEXT103 followed by fine-tuning on OPENWEBTEXT (WIKITEXT103 → OPENWEBTEXT), and pretraining on OPENWEBTEXT followed by fine-tuning on WIKITEXT103 (OPENWEBTEXT → WIKITEXT103). Both LoRA fine-tuning and full-rank weight fine-tuning approaches are employed.
+
+**Model setting** We trained DIFFEQFORMER models with 18 time steps (layers). Fine-tuning was conducted on models with varying time steps: 9, 12, 18, and 24. For instance, pretraining with 18 time steps followed by fine-tuning with 9 time steps is denoted as  $18 \rightarrow 9$ . A baseline GPT model with 24 layers was used for both training and fine-tuning.
+
+**Result** Figure 5 shows the perplexity evaluated on validation datasets. Our models demonstrate superior performance compared to the GPT baseline across configurations  $18 \rightarrow \{12, 18, 24\}$  under LoRA fine-tuning. It is noteworthy that the baseline model was trained and fine-tuned with greater computational resources (24 layers). In the case of full-rank weight fine-tuning (or continued training on new data), our models ( $18 \rightarrow 24$ ) exhibit comparable performance to the baseline, despite initial training with only 18 time steps. Furthermore, the flexibility in fine-tuning allows our models to mitigate overfitting by employing fewer time steps. This is particularly evident in the case of the WIKITEXT103 dataset, where our models ( $18 \rightarrow \{9, 12\}$ ) are less prone to overfitting during the full-rank weight fine-tuning process.
+
+## 7 CONCLUSION
+
+This paper proposes a novel method for formulating transformers as neural ODEs, revealing interesting characteristics within the models. We posit that the findings presented herein can provide theorists with foundation for developing ODE-based transformers in their theoretical frameworks. At the same time, practitioners may explore the potential of integrating ODE approaches into transformers. However, there remain important areas for future work such as improving memory efficiency at larger scales, exploring advanced ODE solvers (McCallum & Foster, 2025), examining the robustness of the proposed model against adversarial attacks (Huang et al., 2021) and extending to various aspects including stochastic differential equation paradigms (Tzen & Raginsky, 2019; Tong et al., 2022) and alternative architectures (Tong et al., 2023).
+
+## REPRODUCIBILITY STATEMENT
+
+The source code of this work is available at <https://github.com/SDML-KU/qkvflow>. We built upon the Levanter library (Hall et al., 2023), which manages Pseudorandom Number Generator (PRNG) states in JAX to ensure bitwise determinism in both data processing and the training process. All hyperparameters are detailed in the Appendix, and the corresponding configuration files can be found in the source code repository.
+
+## ACKNOWLEDGMENTS
+
+This work was supported by Institute of Information & communications Technology Planning & Evaluation (IITP) grants funded by the Korea government(MSIT) (No. RS-2019-II190079, Artificial Intelligence Graduate School Program(Korea University); No. RS-2019-II190075, Artificial Intelligence Graduate School Program (KAIST); No. RS-2022-II220984, Development of Artificial Intelligence Technology for Personalized Plug-and-Play Explanation and Verification of Explanation; No. RS-2024-00457882, AI Research Hub Project) and the New Faculty Settlement Research Fund by Korea University. This work was supported by the New Faculty Settlement Research Fund by Korea University and Artificial intelligence industrial convergence cluster development project funded by the Ministry of Science and ICT(MSIT, Korea) & Gwangju Metropolitan City. We also acknowledge the Google Cloud Research Credit Program for their support during the early development of this work.
+
+## REFERENCES
+
+- Ameen Ali, Thomas Schnake, Oliver Eberle, Grégoire Montavon, Klaus-Robert Müller, and Lior Wolf. XAI for transformers: Better explanations through conservative propagation. In *International Conference on Machine Learning*, pp. 435–451. PMLR, 2022.
+- Luigi Ambrosio, Nicola Gigli, and Giuseppe Savaré. *Gradient flows: in metric spaces and in the space of probability measures*. Springer Science & Business Media, 2005.
+- Shaojie Bai, J. Zico Kolter, and Vladlen Koltun. Deep equilibrium models, 2019.
+- Stella Biderman, Hailey Schoelkopf, Quentin Gregory Anthony, Herbie Bradley, Kyle O’Brien, Eric Hallahan, Mohammad Aflah Khan, Shivanshu Purohit, USVSN Sai Prashanth, Edward Raff, et al. Pythia: A suite for analyzing large language models across training and scaling. In *International Conference on Machine Learning*, pp. 2397–2430. PMLR, 2023.
+- James Bradbury, Roy Frostig, Peter Hawkins, Matthew James Johnson, Chris Leary, Dougal Maclaurin, George Necula, Adam Paszke, Jake VanderPlas, Skye Wanderman-Milne, et al. JAX: composable transformations of Python+ NumPy programs. 2018.
+- Tom Brown, Benjamin Mann, Nick Ryder, Melanie Subbiah, Jared D Kaplan, Prafulla Dhariwal, Arvind Neelakantan, Pranav Shyam, Girish Sastry, Amanda Askell, et al. Language models are few-shot learners. *Advances in neural information processing systems*, 33:1877–1901, 2020.
+- José A Carrillo, Shi Jin, Lei Li, and Yuhua Zhu. A consensus-based global optimization method for high dimensional machine learning problems. *ESAIM: Control, Optimisation and Calculus of Variations*, 27:S5, 2021.
+- Hila Chefer, Shir Gur, and Lior Wolf. Transformer interpretability beyond attention visualization. In *Proceedings of the IEEE/CVF conference on computer vision and pattern recognition*, pp. 782–791, 2021.
+- Ricky TQ Chen, Yulia Rubanova, Jesse Bettencourt, and David K Duvenaud. Neural ordinary differential equations. *Advances in neural information processing systems*, 31, 2018.
+- Tianqi Chen, Bing Xu, Chiyuan Zhang, and Carlos Guestrin. Training deep nets with sublinear memory cost. *arXiv preprint arXiv:1604.06174*, 2016.
+
+- Krzysztof Choromanski, Jared Quincy Davis, Valerii Likhosherstov, Xingyou Song, Jean-Jacques Slotine, Jacob Varley, Honglak Lee, Adrian Weller, and Vikas Sindhwani. An ode to an ode, 2020.
+- Tri Dao, Dan Fu, Stefano Ermon, Atri Rudra, and Christopher Ré. Flashattention: Fast and memory-efficient exact attention with io-awareness. *Advances in Neural Information Processing Systems*, 35:16344–16359, 2022.
+- George Datseris. Dynamicalsystems.jl: A julia software library for chaos and nonlinear dynamics. *Journal of Open Source Software*, 3(23):598, mar 2018. doi: 10.21105/joss.00598. URL <https://doi.org/10.21105/joss.00598>.
+- Mostafa Dehghani, Josip Djolonga, Basil Mustafa, Piotr Padlewski, Jonathan Heek, Justin Gilmer, Andreas Peter Steiner, Mathilde Caron, Robert Geirhos, Ibrahim Alabdulmohsin, et al. Scaling vision transformers to 22 billion parameters. In *International Conference on Machine Learning*, pp. 7480–7512. PMLR, 2023.
+- Subhabrata Dutta, Tanya Gautam, Soumen Chakrabarti, and Tanmoy Chakraborty. Redesigning the transformer architecture with insights from multi-particle dynamical systems, 2021.
+- Nelson Elhage, Neel Nanda, Catherine Olsson, Tom Henighan, Nicholas Joseph, Ben Mann, Amanda Askell, Yuntao Bai, Anna Chen, Tom Conerly, et al. A mathematical framework for transformer circuits. *Transformer Circuits Thread*, 1, 2021.
+- Rainer Engelken. Gradient flossing: Improving gradient descent through dynamic control of jacobians. *arXiv preprint arXiv:2312.17306*, 2023.
+- Rainer Engelken, Fred Wolf, and L. F. Abbott. Lyapunov spectra of chaotic recurrent neural networks. *Phys. Rev. Res.*, 5:043044, Oct 2023. doi: 10.1103/PhysRevResearch.5.043044. URL <https://link.aps.org/doi/10.1103/PhysRevResearch.5.043044>.
+- Leo Gao, Jonathan Tow, Baber Abbasi, Stella Biderman, Sid Black, Anthony DiPofi, Charles Foster, Laurence Golding, Jeffrey Hsu, Alain Le Noac’h, Haonan Li, Kyle McDonell, Niklas Muenighoff, Chris Ociepa, Jason Phang, Laria Reynolds, Hailey Schoelkopf, Aviya Skowron, Lintang Sutawika, Eric Tang, Anish Thite, Ben Wang, Kevin Wang, and Andy Zou. A framework for few-shot language model evaluation, 07 2024. URL <https://zenodo.org/records/12608602>.
+- Shivam Garg, Dimitris Tsipras, Percy Liang, and Gregory Valiant. What can transformers learn in-context? a case study of simple function classes. In Alice H. Oh, Alekh Agarwal, Danielle Belgrave, and Kyunghyun Cho (eds.), *Advances in Neural Information Processing Systems*, 2022. URL <https://openreview.net/forum?id=f1NZJ2eOet>.
+- Borjan Geshkovski, Cyril Letrouit, Yury Polyanskiy, and Philippe Rigollet. The emergence of clusters in self-attention dynamics, 2023a.
+- Borjan Geshkovski, Cyril Letrouit, Yury Polyanskiy, and Philippe Rigollet. A mathematical perspective on transformers, 2023b.
+- William Gilpin. Chaos as an interpretable benchmark for forecasting and data-driven modelling. In *Thirty-fifth Conference on Neural Information Processing Systems Datasets and Benchmarks Track (Round 2)*, 2021. URL <https://openreview.net/forum?id=enYjtbjYOrf>.
+- Aaron Gokaslan, Vanya Cohen, Ellie Pavlick, and Stefanie Tellex. Openwebtext corpus. <http://Skyline007.github.io/OpenWebTextCorpus>, 2019.
+- Audrunas Gruslys, Rémi Munos, Ivo Danihelka, Marc Lanctot, and Alex Graves. Memory-efficient backpropagation through time. *Advances in neural information processing systems*, 29, 2016.
+- David Gunning, Mark Steif, Jaesik Choi, Timothy Miller, Simone Stumpf, and Guang-Zhong Yang. Xai—explainable artificial intelligence. *Science robotics*, 4(37):eaay7120, 2019.
+- David Ha, Andrew Dai, and Quoc V. Le. Hypernetworks, 2016.
+
+[Appendix and supplementary materials beyond page 12 have been removed.]
