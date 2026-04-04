@@ -1,0 +1,1268 @@
+# GENCOGS: GENERATIVE COMPLETION-BASED 3D GAUSSIAN SPLATTING FOR HIGH-FIDELITY FEW- SHOT NOVEL VIEW SYNTHESIS
+
+
+**Anonymous authors**
+Paper under double-blind review
+
+
+ABSTRACT
+
+
+Conventional few-shot novel view synthesis (NVS) methods using 3D Gaussian
+Splatting (3DGS) have demonstrated significance, but remain constrained by their
+overdependence on the limited information from training views. Their unsatisfactory scene completion capability would underrepresent those scene regions either
+unobserved in training views or with local details and thus cause floating artifacts against high fidelity. To address these challenges, we propose GenCoGS, a
+unified 3DGS-based few-shot NVS method focusing on initializing and optimizing 3DGS representation using generative completion-based strategies to enhance
+scene completion. Specifically, our generative point cloud completion-based strategy produces and filters complementary points toward a complete point cloud with
+refined structural and appearance information for Gaussian initialization; The generative pseudo view completion-based strategy leverages an image-to-video diffusion model to synthesize complete pseudo views, which benefits Gaussian optimization especially within unobserved scene regions and mitigates hallucination
+for less appearance distortion. Integrating both strategies enables accurate and
+coherent scene completion for high-fidelity few-shot NVS. Extensive experiments
+on three benchmark datasets demonstrate the superiority of our GenCoGS for fewshot NVS evaluated in common metrics compared to baseline methods. Compared
+to those 3DGS-based few-shot NVS methods, our GenCoGS achieves improvements of up to 2 _._ 40 dB, 0 _._ 08 and 0 _._ 125 in PSNR, SSIM and LPIPS.
+
+
+1 INTRODUCTION
+
+
+In particular, those high-fidelity and effi
+floating artifacts in unobserved regions due to the
+
+cient few-shot NVS methods based on 3DGS
+
+optimization guided by pseudo views.
+
+are generally characterized by a two-phase
+pipeline: (1) 3D Gaussian initialization based on fused stereo points generated from training
+views (Zhu et al., 2024) or image pixels in training views using corresponding depth maps (Paliwal et al., 2024), and (2) 3D Gaussian optimization based on enhanced priors from training views
+
+
+Few-shot novel view synthesis (NVS) aims to
+synthesize images of the target scene from unseen viewpoints given a set of sparse images
+from limited known viewpoints. This task
+demonstrates significant practical value in highquality rendering upon data sparsity (Zhu et al.,
+2024). Existing methods focus on adapting
+general NVS models, _e.g._, Neural Radiance
+Fields (NeRF) (Mildenhall et al., 2020) and 3D
+Gaussian Splatting (3DGS) (Kerbl et al., 2023),
+for few-shot NVS via prior knowledge (Chen
+et al., 2021; Niemeyer et al., 2022; Kulh´anek
+et al., 2022; Yu et al., 2021a; Wang et al., 2023;
+Yang et al., 2023; Li et al., 2024a; Zhu et al.,
+2024; Paliwal et al., 2024; Zhang et al., 2024).
+
+
+Figure 1: Limited scene completion capability
+of existing 3DGS-based few-shot methods, represented by (a) insufficient local details due to
+the incomplete initialization of Gaussians; and (b)
+floating artifacts in unobserved regions due to the
+optimization guided by pseudo views.
+
+
+1
+
+
+with additional supervision from sampled pseudo views (Zhu et al., 2024; Zhang et al., 2024). Despite the significant performances achieved, these methods are fundamentally confined by the nature
+of solely leveraging observed information, causing considerably less competent results within certain scene regions. As shown in Figure 1 (a), the initial Gaussians unsatisfactorily represent the
+scene’s structure and appearance in those regions unobserved in training views or with local details;
+Meanwhile, pseudo views sampled from training views contribute primarily to the observed regions
+during Gaussian optimization, but lead to floating artifacts within the unobserved regions, as illustrated in Figure 1 (b). These challenges suggest that these methods lack the human _imagination_ for
+imagery generation as scene completion (Pearson, 2019). It inspires us to explore if few-shot NVS,
+which is less-constrained and under-determined, can be transformed into a sufficiently constrained
+and observed task by exploiting the mechanism of human imagination.
+
+
+Considering the notable completion capabilities of recently boosted generative models (Song et al.,
+2020; Yu et al., 2024a; Wu et al., 2024), we propose a novel unified few-shot NVS method,
+**Gen** erative **Co** mpletion-based 3D **GS** ( **GenCoGS** ), to address the aforementioned challenges. This
+unified method is characterized by two _generative_ _completion-based_ _strategies_ on initializing and
+optimizing scene representation for 3DGS. The former strategy generates a complementary point
+set and filters this point set to complete the initial point cloud obtained by the SfM (Zhu et al., 2024)
+regarding structural and appearance details for 3D Gaussian initialization. The latter strategy for 3D
+Gaussian optimization adopts a perturbed camera trajectory to sample pseudo camera poses probably covering unobserved regions, and an image-to-video (I2V) diffusion model (Yu et al., 2024a)
+for conditional completion of pseudo views; Meanwhile, a generative consistency loss is designed
+to provide additional supervision. Both strategies jointly enhance the 3DGS’ capability of scene
+completion while mitigating appearance distortion and floating artifacts caused by the hallucination
+of generative models (Aithal et al., 2024). Extensive experiments on LLFF (Mildenhall et al., 2019),
+DTU (Jensen et al., 2014) and Shiny (Wizadwongsa et al., 2021) benchmark datasets, demonstrate
+that GenCoGS can achieve the state-of-the-art performance under representative few-shot settings
+with 3, 6 and 9 input training views. The contributions of this paper can be summarized as follows:
+
+
+- Inspired by the mechanism of human imagination, we propose a unified few-shot NVS method
+based on generative completion with focus on initializing and optimizing scene representation.
+
+- To the best of our knowledge, we design, for the first time, a generative point cloud completionbased Gaussian initialization strategy leveraging complementary point generation and filtering;
+and a generative pseudo view completion-based Gaussian optimization strategy exploiting imageto-video diffusion models against hallucination.
+
+- Based on the scene completion capability, the proposed method can outperform representative
+few-shot NVS solutions across three benchmark datasets.
+
+
+2 RELATED WORKS
+
+
+**Few-shot** **Novel** **View** **Synthesis** Few-shot NVS aims to reconstruct accurate and visually compelling 3D scenes from sparse training views, yet suffers from geometric–radiance ambiguity due to
+insufficient observations. NeRF-based methods mitigate overfitting through strategies such as geometric and color regularization (Niemeyer et al., 2022), depth supervision (Deng et al., 2022), depth
+distillation (Wang et al., 2023), and generalizable priors via pretrained models (Yu et al., 2021a;
+Chen et al., 2021; Li et al., 2024b). Despite these advances, implicit MLP-based representations
+remain computationally demanding and challenging to combine with explicit 3D scene models. Explicit 3DGS-based methods offer advantages in rendering efficiency and quality and have introduced
+dedicated regularizations to handle sparse inputs. Notably, FSGS (Zhu et al., 2024) and DNGaussian (Li et al., 2024a) use sparse depth supervision to align Gaussians with geometric priors, while
+CoherentGS (Paliwal et al., 2024) ensures spatial coherence through optical flow constraints.
+
+
+Nevertheless, these methods are constrained to the observed regions in training views and struggle to
+model unobserved structure. Unlike prior-based methods, our GenCoGS performs generative completion over unobserved regions by employing strategies on Gaussian initialization and optimization,
+which jointly enable high-fidelity few-shot NVS with structurally sound and realistic results.
+
+
+**Diffusion Priors for Novel View Synthesis** Recent advances in diffusion models have suggested
+their utility as informative priors for text-driven 3D generation. DreamFusion (Poole et al., 2022)
+
+
+2
+
+
+Figure 2: Pipeline of the proposed GenCoGS unified by two generative completion-based strategies
+on Gaussian initialization and optimization, _i.e._, GCGI with complementary points and GCGO with
+pseudo views, for high-fidelity few-shot NVS.
+
+
+adopts score distillation sampling to leverage pre-trained 2D diffusion models for 3D object synthesis from text prompts, influencing subsequent studies (Tang et al., 2023a; Yi et al., 2024). To
+improve 3D consistency, Zero-1-to-3 (Liu et al., 2023) and MVDream (Shi et al., 2023) incorporate 3D-aware learning into diffusion models, though they depend on large-scale training data and
+computation-expensive pipelines. Alternative methods, such as HiFi-123 (Yu et al., 2024b) and
+Make-It-3D (Tang et al., 2023b), employ a single image with diffusion-based priors for 3D reconstruction but require per-scene optimization that limits scalability. The successes of these methods in
+3D generation or reconstruction, however, have exhibited limitations in high-fidelity few-shot NVS.
+
+
+Meanwhile, ReconFusion (Wu et al., 2024) and IPSM (Wang et al., 2024) demonstrate that diffusionguided NeRF and 3DGS can accomplish high-quality few-shot NVS using 2D diffusion-based priors. To ensure multi-view consistency, image-to-video diffusion models have been adapted with
+camera-controlled generation techniques (Blattmann et al., 2023; Chen et al., 2024; Melas-Kyriazi
+et al., 2024). ViewCrafter (Yu et al., 2024a), CAT3D (Gao et al., 2024) and ReconX (Liu et al.,
+2025) have further extended this approach to the few-shot setting by integrating image-to-video diffusion models with iterative point cloud refinement. However, these attempts tend to hallucinate
+within the target scene’s unobserved regions, causing structural and appearance inconsistencies and
+thus constraining their effectiveness in high-fidelity few-shot NVS. Furthermore, they neglect the
+importance of the initialization of scene representation for 3DGS.
+
+
+3 METHODS
+
+
+3.1 GENERATIVE POINT CLOUD COMPLETION-BASED GAUSSIAN INITIALIZATION
+
+
+The sparse point cloud used to initialize 3D Gaussians in FSGS (Zhu et al., 2024) from SfM (Schonberger & Frahm, 2016), provides the initial information on the scene’s structure and appearance.
+In particular, the initial Gaussians’ means follow the corresponding points’ spatial positions. Since
+sparse views may cause the corresponding point cloud to become considerably less informative,
+_i.e._, _incomplete_ regarding the scene’s structural representation in under-observed regions.
+
+
+A straightforward solution is to generate points for completion, which often results in a dilemma:
+generative models fill structural hollows, but also introduce significant outliers due to unconstrained
+_hallucination_ . As shown in Figure 3 (b), the Gaussians initialized using such points cause structural
+distortion in those regions with details and degrade the few-shot NVS performance.
+
+
+Hence, as shown in Figure 2, our unified **G** enerative point cloud **C** ompletion-based **G** aussian
+**I** nitialization (GCGI) strategy produces refined complementary points to enhance the representation of initial point cloud. Specifically, GCGI comprises two sequential modules on complementary
+point generation and filtering with the _generate-and-filter_ paradigm.
+
+
+3.1.1 COMPLEMENTARY POINT GENERATION
+
+
+Inspired by previous studies (Yu et al., 2021b), we design an end-to-end complementary point generation (CPG) module to produce a complementary set of points for point cloud completion.
+
+
+3
+
+
+Given the point cloud **P** 0 = _{p_ 1 _, p_ 2 _, . . ., pn}_ that has been used to initialize a provisional set of 3D
+Gaussians Θ0 = _{θ_ 1 _, θ_ 2 _, . . ., θn}_, the CPG module starts by using the furthest point sampling (FPS)
+algorithm (Eldar et al., 1997) to downsample **P** 0 for a set of point proxies _C_ 0 = _{c_ 1 _, c_ 2 _, . . ., cn}_,
+and adopts a light-weight backbone ( _i.e._, DGCNN (Wang et al., 2019)) _F_ to extract a representation
+for each point proxy _ci_ that represents the corresponding local structural details, as follows:
+
+
+_fi_ = _F_ ( _ci_ ) + _PE_ ( _ci_ ) _,_ (1)
+
+
+where _PE_ ( _ci_ ) denotes the position embedding of proxy _ci_ .
+
+
+To exploit the structural representations and the long-range dependencies among different local parts
+of the point cloud, the CPG module leverages the Transformer model (Vaswani et al., 2017) that
+comprises an encoder _ME_ and a decoder _MD_ for the set-to-set generation. In particular, the _k_ -NN
+algorithm (Kramer, 2013) is employed in each Transformer block to capture the structural relationships among point proxies for the enhancement of the local geometric information, _i.e._, each
+query representation is enhanced by processing it and its _k_ nearest representations altogether using
+a linear layer followed by the max pooling operation. The encoder _ME_ outputs a set of high-level
+representations _F_ _[′]_ from _F_ = _{f_ 1 _, f_ 2 _, . . ., fn}_, as follows:
+
+_F_ _[′]_ = _ME_ ( _F_ ) _._ (2)
+
+
+Following the idea of dynamic query mechanism (Dai et al., 2021), the decoder _MD_ takes as input
+both _F_ _[′]_ and dynamic queries _Q_ = _{q_ 1 _, q_ 2 _, . . ., qm}_, and generates a new set of point proxies _C_ 1 =
+_{c_ _[′]_ 1 _[, c][′]_ 2 _[, . . ., c]_ _m_ _[′]_ _[}]_ [, as follows:]
+_C_ 1 = _MD_ ( _F_ _[′]_ _, Q_ ) _._ (3)
+Afterward, the CPG employs a point auto encoder-decoder _H_, _i.e._, FoldingNet (Yang et al., 2018),
+to output a set of complementary points **P** 1 = _{P_ 1 _[′][, P]_ 2 _[ ′][, . . ., P]_ _m_ _[ ′]_ _[}]_ [ with structural details, as follows,]
+
+_Pi_ _[′]_ [=] _[ H]_ [(] _[c]_ _i_ _[′]_ [)] _[,]_ (4)
+
+where _Pi_ _[′]_ [denotes the neighboring points centered at] _[ c]_ _i_ _[′]_ [.]
+
+
+3.1.2 COMPLEMENTARY POINT FILTERING
+
+
+As shown in Figure 3 (b), the combined point
+cloud **P** _c_ = **P** 0 - **P** 1 with the naive combination of sparse point cloud **P** 0 and the complementary points **P** 1 output by CPG module
+contains significant outliers.
+
+
+_yi_ = [1]
+
+_k_
+
+
+To address this points generative _hallucination_,
+we devise an additional complementary point
+filtering (CPF) module to prune outliers in **P** 1
+while maintaining the scene’s structural details.
+
+
+Figure 3: Comparison of initial point cloud **P** 0,
+combined point cloud **P** _c_, and final complete
+point cloud **P** _f_ .
+
+
+Previous studies have demonstrated that struc- _c_
+tures like anchor grids or octrees can contribute point cloud **P** _f_ .
+to enhancing the local structural details for
+3DGS (Lu et al., 2024; Ren et al., 2025). Since few-shot NVS is an ill-posed problem, introducing
+additional structural information that needs to be optimized would cause training to crash. Therefore,
+we design a filtering mask in the CPF module to detect outliers for pruning based on K-Dimensional
+Tree (kd-Tree) (Zhou et al., 2008), an optimize-free space-partitioning data structure.
+
+
+In the absence of ground truth structural information, the incomplete point cloud **P** 0 initially obtained through the SfM is used as a high-confidence reference, for which the CPF module constructs a kd-tree _T_ = _{t_ 1 _, t_ 2 _, . . ., td}_ that comprises _d_ parts using the nearest-neighbor search
+algorithm. For each complementary point _p_ _[′]_ _i_ _[∈]_ **[P]** [1][, the CPF module samples] _[ k]_ [=] [3][ nearest points]
+_{pi,_ 1 _, pi,_ 2 _, . . ., pi,k} ∈_ **P** 0, as reference anchors, in its corresponding part _ti_ of _T_, as follows,
+
+_pi,k_ = _k_                - _minp∈_ ( **P** 0 _∩ti_ ) _∥p_ _[′]_ _i_ _[−]_ _[p][∥][,]_ _p_ _[′]_ _i_ _[∈]_ _[t][i][.]_ (5)
+
+The reference anchors are adopted to calculate a distance-based outlier indicator _yi_ for _p_ _[′]_ _i_ [as follows,]
+
+
+_k_
+
+- _∥p_ _[′]_ _i_ _[−]_ _[p][i,k][∥][.]_ (6)
+
+_i_ =1
+
+
+4
+
+
+Afterward, the CPF module conducts a binary classification on each complementary point _p_ _[′]_ _i_ _[∈]_ **[P]** [1][,]
+_i.e._, _p_ _[′]_ _i_ [as] [an] [outlier] [if] _[y][i]_ [exceeds] [a] [predefined] [threshold] _[δ]_ [1] [=] [1] _[.]_ [0] [and] [the] [mean] [distance] [of] **[P]** [0][.]
+Accordingly, the filtering mask is obtained as follows,
+
+
+where _A_ represents the x-axis and y-axis perturbation amplitudes, and _f_ denotes the wave frequency.
+We set _f_ = 1 _._ 0, and _A_ = 2 _._ 0 as the trade-off between exploiting unobserved regions and avoiding
+generative model hallucination.
+
+
+3.2.2 GENERATIVE CONSISTENCY LOSS
+
+
+5
+
+
+_n_
+
+- _∥pi −_ _pj∥._ (7)
+
+
+_j_ = _i_
+
+
+1
+_M_ = **1** ( _y_ _≤_ _δ_ 1 _· µ_ ( **P** 0)) _µ_ ( **P** 0) =
+_n_ ( _n −_ 1)
+
+
+_n−_ 1
+
+
+_i_ =1
+
+
+The module then leverages this mask to filter those points distant to high-confidence reference **P** 0
+from **P** 1. And, the complete point cloud **P** _f_, which possesses enhanced structural information
+barely affected by outliers.
+**P** _[′]_ 1 [=] **[ P]** [1] _[⊙]_ _[M,]_ **P** _f_ = **P** 0 _∪_ **P** _[′]_ 1 _[.]_ (8)
+
+
+Given the complete point cloud **P** _f_, a set of 3D Gaussians Θ for optimization can be initialized as
+follows,
+Θ = Θ0 _∪_ Θ1 _,_ (9)
+where Θ1 represents the complementary 3D Gaussians initialized using **P** _[′]_ 1 [.] [Specifically, the posi-]
+tion of each Gaussian _θi_ _[′]_ _[∈]_ [Θ][1] [follows a point] _[ p][′]_ _i_ _[∈]_ **[P]** 1 _[′]_ [, whereas the remaining attributes of] _[ θ]_ _i_ _[′]_ [are]
+cloned from those of Gaussian in Θ0 corresponding to nearest point _pj_ _∈_ **P** 0 of _p_ _[′]_ _i_ [according to] _[ T]_ [ .]
+
+
+3.2 GENERATIVE PSEUDO VIEW COMPLETION-BASED GAUSSIAN OPTIMIZATION
+
+
+To exploit the sparse training views while preventing overfitting, existing methods (Zhu et al., 2024;
+Zhang et al., 2024) have attempted to employ pseudo views generated from interpolated camera
+poses as additional guidance for training. Since such pseudo views are essentially based on the observed regions of the scene, this strategy often still causes _hollows_ or incomplete structural details
+in the reconstruction of those regions unobserved by the input training views after Gaussian optimization. As a countermeasure, our GenCoGS adopts a **G** enerative point cloud **C** ompletion-based
+**G** aussian **O** ptimization (GCGO) strategy based on an I2V diffusion model (Yu et al., 2024a) in Figure 2, which is capable of maintaining spatial-temporal consistency, for structurally-aware pseudo
+view completion against hollows.
+
+
+Specifically, the input training views are processed by the image encoder of a pre-trained languageimage model, _e.g._, CLIP (Radford et al., 2021), to obtain high-level representations _Fc_ that hold
+multi-view consistency information. These representations are then integrated with each initial
+pseudo view _Ip_ to provide the conditional information that guides the diffusion model to reach
+the corresponding complete pseudo view _I_ [ˆ] _p_ via a multi-step denoising process, as follows:
+
+_zt−_ 1 = _pθ_ ( _zt,_ E[ _z_ 0 _| zt, Fc, Ip_ ]) _,_ _I_ ˆ _p_ = _G_ ( _zT_ ) _,_ (10)
+where _pθ_ denotes the denoising process, _zt_ denotes the high-level representations from VAE of
+LDMs (Metzer et al., 2023) at denoising step _t_, _G_ refers to the image generator and _T_ denotes the
+final step. Please refer to **Preliminary in Appendix** for detials.
+
+
+3.2.1 PERTURBED CAMERA TRAJECTORY
+
+
+To explore those unobserved regions of the scene by the input training views, we introduce a
+perturbed camera trajectory that benefits pseudo camera pose sampling. Specifically, uniform
+poses are first sampled in a circular camera trajectory generated from the camera poses of training views (Ovr´en & Forss´en, 2018) as candidate pseudo camera pose positions. Afterward, each
+pseudo pose **c** _i_ is defined by a position _ti_ and a quaternion on the rotation _qi_ averaged from two
+training cameras. In particular, our strategy applies periodic perturbations alongside the x-axis and
+y-axis of the camera coordinate system using the _sin_ function to it, which may cover horizontally
+and vertically distributed unobserved regions, as follows:
+
+
+**c** _i_ = [ _ti_ + _Asin_ (2 _πf_ _· ti_ )
+
+
+�1
+1
+0
+
+
+_, qi_ ] _,_ (11)
+
+
+Figure 4: Hallucination-caused appearance distortion in a synthesized view and corresponding
+confidence mask _M_ [ˆ] _r_ .
+
+
+Similar to the generative points, the generative
+hallucination in the complete pseudo views _I_ [ˆ] _p_
+could result in multi-view inconsistency and appearance distortion in the rendered details, as
+shown in Figure 4. To attenuate this impact, we
+design a generative consistency loss composed of
+two key terms on constraining those regions’ representations with appearance distortion and improving the scene completion capability while
+maintaining the multi-view consistency.
+
+
+Specifically, the first loss term is based on a pixellevel confidence mask _Mr_, which firstly evaluates the appearance gap ∆ _C_ between the color _C_ of
+_Ip_ and _I_ [ˆ] _p_ via the L2-norm, formulated for a pixel ( _u, v_ ) as follows,
+
+
+∆ _C_ ( _u, v_ ) = _∥CIp_ ( _u, v_ ) _−_ _CI_ ˆ _p_ ( _u, v_ ) _∥_ (12)
+
+
+Subsequently, we generated an adaptive threshold _T_ ( _u, v_ ) to robustly identify significant distortion.
+Specifically, a Gaussian blur kernel is adopted to generate the local mean _µ_ ∆( _u, v_ ) and standard
+deviation _σ_ ∆( _u, v_ ) as the local statistics of the gap ∆ _C_, and _T_ ( _u, v_ ) are derived as follows,
+_T_ ( _u, v_ ) = _µ_ ∆( _u, v_ ) + _δ_ 2 _· σ_ ∆( _u, v_ ) _,_ (13)
+where _δ_ 2 = 20 denotes as a variance coefficient. Finally, the binary confidence mask _Mr_ is obtained
+by applying the adaptive threshold to the difference map:
+
+_Mr_ ( _u, v_ ) = �1 if ∆ _C_ ( _u, v_ ) _> T_ ( _u, v_ ) _,_ (14)
+0 otherwise _._
+
+
+To further improve the coherence and smoothness of _Mr_ for training stability, a sequence of expansion _K_ 1, erosion _K_ 2, and connected components filtering operations is performed as follows:
+
+_Mr_ _[′]_ [= (] _[M][r]_ _[⊕K]_ [1][)] _[ ⊖K]_ [2] _[,]_ _M_ ˆ _r_ =       - _Ri,_ (15)
+
+_Ri∈R |_ Area( _Ri_ ) _≥δ_ 3
+
+where _R_ denotes the set of connected components in _Mr_ _[′]_ [, and] _[ δ]_ [3] [= 8][ refers to a threshold.]
+
+
+Afterward, the first loss term is formulated to constrain the appearance of those regions identified
+by _M_ [ˆ] _r_ and suppress the hallucination using the _L_ 1 loss as follows,
+
+_Lreg_ ( _Ip,_ _I_ [ˆ] _p_ ) = _∥Ip −_ _I_ [ˆ] _p∥_ 1 _⊙_ _M_ [ˆ] _r,_ (16)
+
+
+The second loss term provides a feature-level constraint between _Ip_ and _I_ [ˆ] _p_ based on a VGG network Simonyan & Zisserman (2015), to benefit structural completion and keep multi-view consistency, as follows:
+_Lstr_ ( _Ip,_ _I_ [ˆ] _p_ ) = _LLP IP S_ ( _Ip,_ _I_ [ˆ] _p_ ) _._ (17)
+Hence, generative consistency loss is formulated with the weight coefficient _α_ = 10 _._ 0 as follows,
+_LGC_ = _Limg_ + _α_ ( _Lreg_ + _Lstr_ ) _,_ (18)
+
+where, _Limg_ represents reconstruction loss Kerbl et al. (2023) between _Ip_ and _I_ [ˆ] _p_ using _λ_ = 0 _._ 2,
+
+_Limg_ ( _Ip,_ _I_ [ˆ] _p_ ) = _L_ 1( _Ip,_ _I_ [ˆ] _p_ ) + _λLDSSIM_ ( _Ip,_ _I_ [ˆ] _p_ ) _._ (19)
+
+
+3.2.3 GAUSSIAN OPTIMIZATION
+
+
+The proposed method adopts a two-phase optimization for 3D Gaussians. At the first phase, _i.e._,
+during the first _m_ iterations, Gaussians are optimized solely using an image reconstruction loss _Limg_
+between the synthesized views and training views; At the second phase, _i.e._, during the following
+iterations, pseudo camera poses are sampled based on our camera trajectory perturbation strategy
+to generate the corresponding pseudo views, which contribute to the optimization of 3D Gaussians.
+Overall, the training loss is formulated as follows,
+
+_L_ =          - _Limg,_ if _k_ _< m,_ (20)
+_Limg_ + _βLGC,_ otherwise _,_
+
+where _k_ represents the iteration index and _β_ denotes a weight coefficient. We set _β_ = 0 _._ 1 in practice.
+
+
+6
+
+
+Table 1: Comparison of GenCoGS and other methods regarding few-shot NVS performance on
+the LLFF (Mildenhall et al., 2019) dataset under 3-view, 6-view and 9-view settings. The best,
+
+
+second-best, and third-best scores are highlighted.
+
+
+**PSNR** _↑_ **SSIM** _↑_ **LPIPS** _↓_ **AVGE** _↓_
+**Method**
+
+3 6 9 3 6 9 3 6 9 3 6 9
+
+
+SparseNeRF (Wang et al., 2023) 19.86 23.26 24.27 0.714 0.741 0.781 0.243 0.235 0.228 0.127 0.117 0.113
+ReconFusion (Wu et al., 2024) 21.34 24.25 25.21 0.724 0.815 0.848 0.203 0.152 0.134 0.110 0.090 0.081
+MuRF (Xu et al., 2024) 21.26 23.54 24.66 0.722 0.796 0.836 0.245 0.199 0.164 0.118 0.103 0.094
+FrugalNeRF (Lin et al., 2025) 19.87   -   - 0.610   -   - 0.300   -   - 0.125   -   CAT3D (Gao et al., 2024) 21.58 24.71 25.63 0.731 0.833 0.860 0.181 0.121 0.107 0.097 0.067 0.059
+
+
+3DGS (Kerbl et al., 2023) 15.52 19.45 21.13 0.405 0.627 0.715 0.408 0.268 0.214 0.209 0.154 0.137
+FSGS (Zhu et al., 2024) 20.31 24.20 25.32 0.652 0.811 0.856 0.288 0.173 0.136 0.136 0.095 0.082
+DNGaussian (Li et al., 2024a) 19.12 22.18 23.17 0.591 0.755 0.788 0.294 0.198 0.180 0.132 0.110 0.105
+BinoGS (Han et al., 2024) 21.44 24.87 26.17 0.751 0.845 0.877 0.168 0.106 0.090 0.101 0.061 0.051
+IPSM (Wang et al., 2024) 20.44 23.91 25.13 0.702 0.818 0.855 0.207 0.135 0.111 0.109 0.080 0.071
+ReconX (Liu et al., 2025) 21.05   -   - 0.768   -   - 0.178   -   - 0.111   -   **GenCoGS (Ours)** 22.13 25.61 26.64 0.762 0.857 0.880 0.164 0.108 0.090 0.084 0.051 0.044
+
+
+Table 2: Comparison of GenCoGS and
+other methods regarding performance on the
+DTU (Jensen et al., 2014) under 3-view setting.
+
+
+**Method** **PSNR** _↑_ **SSIM** _↑_ **LPIPS** _↓_ **AVGE** _↓_
+
+
+SparseNeRF (Wang et al., 2023) 19.47 0.829 0.183 0.120
+ReconFusion (Wu et al., 2024) 20.74 0.875 0.124 0.109
+
+
+As shown in Table 1, 2 and 3, our GenCoGS con- Table 3: Comparison of GenCoGS and
+sistently outperformed other representative few- other methods regarding performance on the
+shot NVS methods, nearly in all metrics. On the Shiny (Jensen et al., 2014) under 3-view setting.
+LLFF dataset, GenCoGS achieved improvements
+of 0 _._ 55 dB / 0 _._ 74 dB / 0 _._ 47 dB in PSNR, 0 _._ 011 / **Method** PSNR _↑_ SSIM _↑_ LPIPS _↓_ AVGE _↓_
+0 _._ 012 / 0 _._ 003 in SSIM, and 0 _._ 013 / 0 _._ 029 / 0 _._ 027 RegNeRF 18.10 0.574 0.378 0.136
+in AVGE under 3-view / 6-view / 9-view set- FreeNeRF 18.65 0.586 0.360 0.127
+
+SparseNeRF 18.81 0.591 0.354 0.124
+
+tings, respectively, compared to the methods with 3D-GS 17.83 0.547 0.385 0.142
+
+ting were 2 _._ 40 dB in PSNR, 0 _._ 025 in SSIM, 0 _._ 029 in LPIPS, and 0 _._ 045 in AVGE compared to the
+second-best 3DGS-based method. Please refer to **Appendix** for detailed results on the DTU dataset.
+Notably, the substantial boosts over other diffusion-based methods (Wang et al., 2024; Wu et al.,
+
+
+FSGS (Zhu et al., 2024) 17.34 0.818 0.169 0.123
+DNGaussian (Li et al., 2024a) 18.91 0.790 0.176 0.124
+
+ReconX (Liu et al., 2025) 19.78 0.476 0.378 0.142
+**GenCoGS (Ours)** 23.11 0.910 0.082 0.049
+
+
+4 EXPERIMENTS
+
+
+Figure 5: Visualization of example
+by GenCoGS and BinoGS (Han et al., 2024) on
+DTU dataset under 3-view setting.
+
+
+Following previous methods (Zhu et al., 2024; Paliwal et al., 2024), we conducted experiments
+on three benchmark datasets: LLFF (Mildenhall et al., 2019), DTU (Jensen et al., 2014), and
+Shiny (Wizadwongsa et al., 2021) with 3, 6, and 9 training views as few-shot settings. We implemented GenCoGS using the PyTorch framework, with the initial point cloud computed from SfM
+in FSGS (Zhu et al., 2024). During optimization, we densify the Gaussians every 100 iterations and
+start densification after 1000 iterations. The total optimization steps are set to 5000, and we set the
+_GCGO_ after _m_ = 4 _,_ 000 iterations. For hyper-parameters, we set _k_ = 3 and _δ_ 1 = 1 _._ 0 in _GCGI_, we
+set the wave frequency _f_ = 1 _._ 0, perturbation amplitude _A_ = 2 _._ 0, _δ_ 2 = 20, and _δ_ 3 = 8 in _GCGO_,
+and the loss weight coefficients are set as _α_ = 10 _._ 0, and _β_ = 0 _._ 1 for Gaussian optimization. All
+results are obtained using a NVIDIA A6000 GPU. Furthermore, please refer to the **Appendix** **for**
+**details on Datasets and Evaluation Metrics** .
+
+
+4.1 QUANTITATIVE COMPARISON
+
+
+Table 3: Comparison of GenCoGS and
+other methods regarding performance on the
+Shiny (Jensen et al., 2014) under 3-view setting.
+
+
+**Method** PSNR _↑_ SSIM _↑_ LPIPS _↓_ AVGE _↓_
+
+
+RegNeRF 18.10 0.574 0.378 0.136
+FreeNeRF 18.65 0.586 0.360 0.127
+SparseNeRF 18.81 0.591 0.354 0.124
+3D-GS 17.83 0.547 0.385 0.142
+
+
+7
+
+
+Figure 6: Visualization of example synthesized views by GenCoGS, DNGaussian (Li et al., 2024a),
+BinoGS (Han et al., 2024) and ViewCrafter (Yu et al., 2024a) on LLFF under the 3-view setting.
+
+
+Figure 7: Visualization of example images in the ablation studies on LLFF under 3-view setting.
+
+
+2024; Gao et al., 2024) achieved by GenCoGS stem from the hallucination attenuation capability of
+our strategies.
+
+
+On the more challenging Shiny dataset, GenCoGS also outperformed existing methods, achieving
+improvements of 1 _._ 47 dB in PSNR, 0 _._ 080 in SSIM, 0 _._ 125 in LPIPS, and 0 _._ 012 in AVGE under the
+3-view setting, which further validates the superiority of GenCoGS in high-fidelity few-shot NVS.
+
+
+4.2 QUALITATIVE COMPARISON
+
+
+We visualized example views synthesized by GenCoGS, alongside DNGaussian (Li et al., 2024a),
+BinoGS (Han et al., 2024) and the diffusion-based ViewCrafter (Yu et al., 2024a), on both DTU and
+LLFF datasets under 3-views setting, as shown in Figure 5 and 6.
+
+
+DNGaussian and BinoGS attempted to exploit priors on the structure and appearance of the input
+training views, but resulted in considerable ambiguity, _e.g._, first and second rows in Figure 6, due to
+the lack of scene completion capability. Furthermore, the results of ViewCrafter (Yu et al., 2024a)
+suggest that its generative completion pipeline toward synthesized views suffers from significant
+generative model hallucination and unsatisfactory scene reconstruction capability via synthesized
+view completion, as shown in Figure 6 (e) highlighted regions.
+
+
+Integrating both generative completion-based strategies, our GenCoGS provided a high-quality
+scene using the complete initial Gaussians followed by the optimization additionally guided by
+pseudo views less influenced by generative model hallucination. In particular, our GCGO strategy
+effectively filled the hollows within the synthesized views, _e.g._, the highlighted regions in Figure 6
+second and third rows. These examples further demonstrate the improvements of GenCoGS across
+different benchmark datasets, demonstrating its consistency and effectiveness in delivering highfidelity few-shot NVS results.
+
+
+4.3 ABLATION STUDIES
+
+
+To investigate the contributions of individual strategies, we conducted ablation studies on the LLFF
+dataset under the 3-view setting. The results in Table 4 indicate that each strategy positively impacts
+few-shot NVS performance, with the combination of both achieving the best performance.
+
+
+**Impact of the GCGI Strategy** Compared to the baseline, adopting the GCGI strategy reached the
+improvements of 0 _._ 66 dB, 0 _._ 024, 0 _._ 016 and 0 _._ 009 in PSNR, SSIM, LPIPS and AVGE, respectively.
+These results suggest that the complete initial Gaussians with the complete point cloud from the
+
+
+8
+
+
+Table 5: Ablation of pseudo camera sampling
+and _LGC_ in GCGO on LLFF under 3-view.
+
+
+Sampling _LGC_ PSNR SSIM LPIPS
+
+Random  - 21.83 0.755 0.188
+Camera Trajectory  - 21.59 0.749 0.181
+Camera Trajectory  - 22.13 0.762 0.164
+
+
+Table 6: Ablation of our CPG and CPF modules
+in the GCGI strategy on LLFF under 3-view.
+1 _/_ 4 means random sampling a quarter of **P** 0.
+
+
+Sampling w/ CPG w/ CPF PSNR SSIM LPIPS
+
+
+Full 21.65 0.752 0.184
+Full - 22.04 0.760 0.178
+Full - - 22.13 0.762 0.164
+
+
+1/4 21.24 0.730 0.199
+1/4 - 21.61 0.733 0.195
+1/4 - - 21.78 0.741 0.191
+
+
+Table 4: Ablation of our GCGI and GCGO
+strategies on LLFF under 3-view.
+
+
+PSNR SSIM LPIPS AVGE
+
+
+Baseline 20.79 0.733 0.184 0.096
++ GCGI 21.45 0.757 0.168 0.087
++ GCGO 21.65 0.752 0.184 0.088
++ GCGI + GCGO (Ours) 22.13 0.762 0.164 0.084
+
+
+Figure 8: Visualization of pseudo views by I2V
+diffusion model using different _A_ .
+
+
+GCGI strategy is capable of avoiding floating artifacts in those scene regions with details, as also
+illustrated in Figure 7. As shown in Figure 3, our CPG and CPF modules work jointly to refine
+the sparse initial point cloud into a more complete one while effectively removing outliers to avoid
+hallucination.
+
+
+As shown in Table 6, both modules consistently contributed to improvements even when the quality
+of the initial point cloud **P** 0 was degraded by randomly sampling only a quarter of the points. This
+demonstrates the strong generalization capability and robustness of our GCGI strategy.
+
+
+**Impact** **of** **the** **GCGO** **Strategy** Compared to the baseline, leveraging the GCGO strategy
+achieved the improvements of 0 _._ 86 dB, 0 _._ 019, and 0 _._ 008 in PSNR, SSIM, and AVGE, respectively.
+As illustrated in Figure 7, Gaussians optimized using the GCGO strategy mitigated hollows and
+floating artifacts, which benefited the synthesis of high-fidelity views.
+
+
+In particular, as shown in Table 5, the pseudo camera poses sampled from a perturbed camera trajectory facilitated better scene completion in unobserved regions compared to randomly sampled
+poses. It is noteworthy that our _LGC_ further improved performance by focusing on reducing generative model hallucination.
+
+
+Furthermore, we identified a critical see-saw effect between generative model hallucination and
+unobserved region exploration based on the perturbed camera trajectory. As shown in Figure 8,
+the I2V model generated significant hallucination when trying to cover more unobserved regions,
+leading to low-fidelity outcomes. Hence, we set _A_ = 2 _._ 0 as a balanced trade-off in our experiments.
+Furthermore, please kindly refer to **Appendix** for additional experiments results.
+
+
+5 CONCLUSIONS
+
+
+In this paper, we addressed a critical limitation of existing 3DGS-based few-shot NVS methods, _i.e._,
+unsatisfactory scene completion capability caused by the overdependence on the observed regions
+of sparse training views. Our unified method, GenCoGS, enhances scene completion by incorporating two generative completion-based strategies focusing on Gaussian initialization and optimization. For Gaussian initialization, GenCoGS generates and filters complementary points to establish
+a complete point cloud with refined structural and appearance information; For Gaussian optimization, GenCoGS leverages an image-to-video (I2V) diffusion model to generate complete pseudo
+views, providing effective guidance over unobserved scene regions while attenuating generative
+model hallucination. By enabling accurate and coherent scene completion, GenCoGS outperformed
+representative 3DGS-based few-shot NVS methods and achieved significant improvements, demonstrating the superiority of GenCoGS.
+
+
+9
+
+
+REPRODUCIBILITY STATEMENT
+
+
+To ensure the reproducibility of our work, we provided comprehensive details on our methodology
+and experiments. The motivation and architectural design of our proposed strategies are elaborated
+in Section 3. A complete description of the experiments implementation, including all hyperparameter configurations, was provided in Section 4. To justify our hyperparameter choices, we also present
+extensive ablation studies. The source code will be made publicly available under an open-source
+license upon the acceptance of this paper. We also performed the video qualitative visualizations in
+Supplementary Materials, please kindly refer to them for comparison with other methods.
+
+
+REFERENCES
+
+
+Sumukh K Aithal, Pratyush Maini, Zachary C. Lipton, and J. Zico Kolter. Understanding hallucinations in diffusion models through mode interpolation, 2024. [URL https://arxiv.org/](https://arxiv.org/abs/2406.09358)
+[abs/2406.09358.](https://arxiv.org/abs/2406.09358)
+
+
+A. Blattmann, Tim Dockhorn, Sumith Kulal, Daniel Mendelevitch, Maciej Kilian, and Dominik Lorenz. Stable video diffusion: Scaling latent video diffusion models to large
+datasets. _ArXiv_, abs/2311.15127, 2023. URL [https://api.semanticscholar.org/](https://api.semanticscholar.org/CorpusID:265312551)
+[CorpusID:265312551.](https://api.semanticscholar.org/CorpusID:265312551)
+
+
+Anpei Chen, Zexiang Xu, Fuqiang Zhao, Xiaoshuai Zhang, Fanbo Xiang, Jingyi Yu, and Hao Su.
+Mvsnerf: Fast generalizable radiance field reconstruction from multi-view stereo. In _Proceedings_
+_of the IEEE/CVF international conference on computer vision_, pp. 14124–14133, 2021.
+
+
+Zilong Chen, Yikai Wang, Feng Wang, Zhengyi Wang, and Huaping Liu. V3d: Video diffusion
+models are effective 3d generators. _arXiv preprint arXiv:2403.06738_, 2024.
+
+
+Xiyang Dai, Yinpeng Chen, Jianwei Yang, Pengchuan Zhang, Lu Yuan, and Lei Zhang. Dynamic
+detr: End-to-end object detection with dynamic attention. In _Proceedings of the IEEE/CVF inter-_
+_national conference on computer vision_, pp. 2988–2997, 2021.
+
+
+Kangle Deng, Andrew Liu, Jun-Yan Zhu, and Deva Ramanan. Depth-supervised nerf: Fewer views
+and faster training for free. In _Proceedings of the IEEE/CVF conference on computer vision and_
+_pattern recognition_, pp. 12882–12891, 2022.
+
+
+Y. Eldar, M. Lindenbaum, M. Porat, and Y.Y. Zeevi. The farthest point strategy for progressive image
+sampling. _IEEE_ _Transactions_ _on_ _Image_ _Processing_, 6(9):1305–1315, September 1997. ISSN
+1941-0042. doi: 10.1109/83.623193. [URL http://dx.doi.org/10.1109/83.623193.](http://dx.doi.org/10.1109/83.623193)
+
+
+Patrick Esser, Sumith Kulal, Andreas Blattmann, Rahim Entezari, Jonas M¨uller, Harry Saini, Yam
+Levi, Dominik Lorenz, Axel Sauer, Frederic Boesel, Dustin Podell, Tim Dockhorn, Zion English, Kyle Lacey, Alex Goodwin, Yannik Marek, and Robin Rombach. Scaling rectified flow
+transformers for high-resolution image synthesis, 2024. URL [https://arxiv.org/abs/](https://arxiv.org/abs/2403.03206)
+[2403.03206.](https://arxiv.org/abs/2403.03206)
+
+
+Ruiqi Gao, Aleksander Holynski, Philipp Henzler, Arthur Brussee, Ricardo Martin-Brualla, Pratul
+Srinivasan, Jonathan T. Barron, and Ben Poole. Cat3d: Create anything in 3d with multi-view
+diffusion models, 2024. [URL https://arxiv.org/abs/2405.10314.](https://arxiv.org/abs/2405.10314)
+
+
+Liang Han, Junsheng Zhou, Yu-Shen Liu, and Zhizhong Han. Binocular-guided 3d gaussian splatting with view consistency for sparse view synthesis. _Advances in Neural Information Processing_
+_Systems_, 37:68595–68621, 2024.
+
+
+Rasmus Jensen, Anders Dahl, George Vogiatzis, Engin Tola, and Henrik Aanæs. Large scale multiview stereopsis evaluation. In _Proceedings of the IEEE conference on computer vision and pattern_
+_recognition_, pp. 406–413, 2014.
+
+
+Bernhard Kerbl, Georgios Kopanas, Thomas Leimk¨uhler, and George Drettakis. 3d gaussian splatting for real-time radiance field rendering. _ACM_ _Transactions_ _on_ _Graphics_, 42(4), July 2023.
+[URL https://repo-sam.inria.fr/fungraph/3d-gaussian-splatting/.](https://repo-sam.inria.fr/fungraph/3d-gaussian-splatting/)
+
+
+10
+
+
+Jari Korhonen and Junyong You. Peak signal-to-noise ratio revisited: Is simple beautiful?
+In _2012_ _Fourth_ _International_ _Workshop_ _on_ _Quality_ _of_ _Multimedia_ _Experience_ . IEEE, July
+2012. doi: 10.1109/qomex.2012.6263880. [URL http://dx.doi.org/10.1109/QoMEX.](http://dx.doi.org/10.1109/QoMEX.2012.6263880)
+[2012.6263880.](http://dx.doi.org/10.1109/QoMEX.2012.6263880)
+
+
+Oliver Kramer. _K-Nearest_ _Neighbors_, pp. 13–23. Springer Berlin Heidelberg, 2013. ISBN
+9783642386527. doi: 10.1007/978-3-642-38652-7 ~~2~~ . URL [http://dx.doi.org/10.](http://dx.doi.org/10.1007/978-3-642-38652-7_2)
+[1007/978-3-642-38652-7_2.](http://dx.doi.org/10.1007/978-3-642-38652-7_2)
+
+
+Jon´aˇs Kulh´anek, Erik Derner, Torsten Sattler, and Robert Babuˇska. Viewformer: Nerf-free neural
+rendering from few images using transformers. In _European Conference on Computer Vision_, pp.
+198–216. Springer, 2022.
+
+
+Jiahe Li, Jiawei Zhang, Xiao Bai, Jin Zheng, Xin Ning, Jun Zhou, and Lin Gu. Dngaussian: Optimizing sparse-view 3d gaussian radiance fields with global-local depth normalization. In _Proceedings_
+_of_ _the_ _IEEE/CVF_ _Conference_ _on_ _Computer_ _Vision_ _and_ _Pattern_ _Recognition_, pp. 20775–20785,
+2024a.
+
+
+Jinke Li, Xiao He, Chonghua Zhou, Xiaoqiang Cheng, Yang Wen, and Dan Zhang. Viewformer: Exploring spatiotemporal modeling for multi-view 3d occupancy perception via view-guided transformers. In _European Conference on Computer Vision_, pp. 90–106. Springer, 2024b.
+
+
+Chin-Yang Lin, Chung-Ho Wu, Chang-Han Yeh, Shih-Han Yen, Cheng Sun, and Yu-Lun Liu. Frugalnerf: Fast convergence for extreme few-shot novel view synthesis without learned priors. In
+_Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)_,
+pp. 11227–11238, June 2025.
+
+
+Fangfu Liu, Wenqiang Sun, Hanyang Wang, Yikai Wang, Haowen Sun, Junliang Ye, Jun Zhang,
+and Yueqi Duan. Reconx: Reconstruct any scene from sparse views with video diffusion model,
+2025. [URL https://arxiv.org/abs/2408.16767.](https://arxiv.org/abs/2408.16767)
+
+
+Ruoshi Liu, Rundi Wu, Basile Van Hoorick, Pavel Tokmakov, Sergey Zakharov, and Carl Vondrick.
+Zero-1-to-3: Zero-shot one image to 3d object. In _Proceedings_ _of_ _the_ _IEEE/CVF_ _international_
+_conference on computer vision_, pp. 9298–9309, 2023.
+
+
+Tao Lu, Mulin Yu, Linning Xu, Yuanbo Xiangli, Limin Wang, Dahua Lin, and Bo Dai. Scaffold-gs:
+Structured 3d gaussians for view-adaptive rendering. In _Proceedings of the IEEE/CVF Conference_
+_on Computer Vision and Pattern Recognition_, pp. 20654–20664, 2024.
+
+
+Luke Melas-Kyriazi, Iro Laina, Christian Rupprecht, Natalia Neverova, Andrea Vedaldi, Oran Gafni,
+and Filippos Kokkinos. Im-3d: Iterative multiview diffusion and reconstruction for high-quality
+3d generation. _arXiv preprint arXiv:2402.08682_, 2024.
+
+
+Gal Metzer, Elad Richardson, Or Patashnik, Raja Giryes, and Daniel Cohen-Or. Latent-nerf for
+shape-guided generation of 3d shapes and textures. In _Proceedings of the IEEE/CVF conference_
+_on computer vision and pattern recognition_, pp. 12663–12673, 2023.
+
+
+Ben Mildenhall, Pratul P Srinivasan, Rodrigo Ortiz-Cayon, Nima Khademi Kalantari, Ravi Ramamoorthi, Ren Ng, and Abhishek Kar. Local light field fusion: Practical view synthesis with
+prescriptive sampling guidelines. _ACM Transactions on Graphics (ToG)_, 38(4):1–14, 2019.
+
+
+Ben Mildenhall, Pratul P. Srinivasan, Matthew Tancik, Jonathan T. Barron, Ravi Ramamoorthi, and
+Ren Ng. Nerf: Representing scenes as neural radiance fields for view synthesis. In _ECCV_, 2020.
+
+
+Michael Niemeyer, Jonathan T Barron, Ben Mildenhall, Mehdi SM Sajjadi, Andreas Geiger, and
+Noha Radwan. Regnerf: Regularizing neural radiance fields for view synthesis from sparse inputs.
+In _Proceedings_ _of_ _the_ _IEEE/CVF_ _conference_ _on_ _computer_ _vision_ _and_ _pattern_ _recognition_, pp.
+5480–5490, 2022.
+
+
+Hannes Ovr´en and Per-Erik Forss´en. Trajectory representation and landmark projection for
+continuous-time structure from motion, 2018. URL [https://arxiv.org/abs/1805.](https://arxiv.org/abs/1805.02543)
+[02543.](https://arxiv.org/abs/1805.02543)
+
+
+11
+
+
+Avinash Paliwal, Wei Ye, Jinhui Xiong, Dmytro Kotovenko, Rakesh Ranjan, Vikas Chandra, and
+Nima Khademi Kalantari. Coherentgs: Sparse novel view synthesis with coherent 3d gaussians.
+In _European Conference on Computer Vision_, pp. 19–37. Springer, 2024.
+
+
+Joel Pearson. The human imagination: the cognitive neuroscience of visual mental imagery. _Na-_
+_ture_ _Reviews_ _Neuroscience_, 20(10):624–634, August 2019. ISSN 1471-0048. doi: 10.1038/
+s41583-019-0202-9. [URL http://dx.doi.org/10.1038/s41583-019-0202-9.](http://dx.doi.org/10.1038/s41583-019-0202-9)
+
+
+Ben Poole, Ajay Jain, Jonathan T Barron, and Ben Mildenhall. Dreamfusion: Text-to-3d using 2d
+diffusion. _arXiv preprint arXiv:2209.14988_, 2022.
+
+
+Alec Radford, Jong Wook Kim, Chris Hallacy, Aditya Ramesh, Gabriel Goh, Sandhini Agarwal,
+Girish Sastry, Amanda Askell, Pamela Mishkin, Jack Clark, et al. Learning transferable visual
+models from natural language supervision. In _International conference on machine learning_, pp.
+8748–8763. PmLR, 2021.
+
+
+Kerui Ren, Lihan Jiang, Tao Lu, Mulin Yu, Linning Xu, Zhangkai Ni, and Bo Dai. Octree-gs:
+Towards consistent real-time rendering with lod-structured 3d gaussians. _IEEE Transactions on_
+_Pattern Analysis and Machine Intelligence_, 2025.
+
+
+Johannes L. Schonberger and Jan-Michael Frahm. Structure-from-motion revisited. In _Proceedings_
+_of the IEEE Conference on Computer Vision and Pattern Recognition (CVPR)_, June 2016.
+
+
+Yichun Shi, Peng Wang, Jianglong Ye, Mai Long, Kejie Li, and Xiao Yang. Mvdream: Multi-view
+diffusion for 3d generation. _arXiv preprint arXiv:2308.16512_, 2023.
+
+
+K Simonyan and A Zisserman. Very deep convolutional networks for large-scale image recognition.
+pp. 1–14. Computational and Biological Learning Society, 2015.
+
+
+Jiaming Song, Chenlin Meng, and Stefano Ermon. Denoising diffusion implicit models. _arXiv_
+_preprint arXiv:2010.02502_, 2020.
+
+
+Jiaxiang Tang, Jiawei Ren, Hang Zhou, Ziwei Liu, and Gang Zeng. Dreamgaussian: Generative
+gaussian splatting for efficient 3d content creation. _arXiv preprint arXiv:2309.16653_, 2023a.
+
+
+Junshu Tang, Tengfei Wang, Bo Zhang, Ting Zhang, Ran Yi, Lizhuang Ma, and Dong Chen. Makeit-3d: High-fidelity 3d creation from a single image with diffusion prior. In _Proceedings_ _of_ _the_
+_IEEE/CVF international conference on computer vision_, pp. 22819–22829, 2023b.
+
+
+Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N. Gomez,
+Łukasz Kaiser, and Illia Polosukhin. Attention is all you need. In _Proceedings of the 31st Inter-_
+_national_ _Conference_ _on_ _Neural_ _Information_ _Processing_ _Systems_, NIPS’17, pp. 6000–6010, Red
+Hook, NY, USA, 2017. Curran Associates Inc. ISBN 9781510860964.
+
+
+Guangcong Wang, Zhaoxi Chen, Chen Change Loy, and Ziwei Liu. Sparsenerf: Distilling depth
+ranking for few-shot novel view synthesis. In _Proceedings of the IEEE/CVF international confer-_
+_ence on computer vision_, pp. 9065–9076, 2023.
+
+
+Qisen Wang, Yifan Zhao, Jiawei Ma, and Jia Li. How to use diffusion priors under sparse views?
+In _The Thirty-eighth Annual Conference on Neural Information Processing Systems_, 2024. URL
+[https://openreview.net/forum?id=i6BBclCymR.](https://openreview.net/forum?id=i6BBclCymR)
+
+
+Yue Wang, Yongbin Sun, Ziwei Liu, Sanjay E Sarma, Michael M Bronstein, and Justin M Solomon.
+Dynamic graph cnn for learning on point clouds. _ACM_ _Transactions_ _on_ _Graphics_ _(tog)_, 38(5):
+1–12, 2019.
+
+
+Zhou Wang, A.C. Bovik, H.R. Sheikh, and E.P. Simoncelli. Image quality assessment: from error
+visibility to structural similarity. _IEEE Transactions on Image Processing_, 13(4):600–612, 2004.
+doi: 10.1109/TIP.2003.819861.
+
+
+Suttisak Wizadwongsa, Pakkapon Phongthawee, Jiraphon Yenphraphai, and Supasorn Suwajanakorn. Nex: Real-time view synthesis with neural basis expansion. In _Proceedings_ _of_ _the_
+_IEEE/CVF Conference on Computer Vision and Pattern Recognition_, pp. 8534–8543, 2021.
+
+
+12
+
+
+Rundi Wu, Ben Mildenhall, Philipp Henzler, Keunhong Park, Ruiqi Gao, Daniel Watson, Pratul P
+Srinivasan, Dor Verbin, Jonathan T Barron, Ben Poole, et al. Reconfusion: 3d reconstruction with
+diffusion priors. In _Proceedings_ _of_ _the_ _IEEE/CVF_ _conference_ _on_ _computer_ _vision_ _and_ _pattern_
+_recognition_, pp. 21551–21561, 2024.
+
+
+Haofei Xu, Anpei Chen, Yuedong Chen, Christos Sakaridis, Yulun Zhang, Marc Pollefeys, Andreas
+Geiger, and Fisher Yu. Murf: multi-baseline radiance fields. In _Proceedings_ _of_ _the_ _IEEE/CVF_
+_Conference on Computer Vision and Pattern Recognition_, pp. 20041–20050, 2024.
+
+
+Jiawei Yang, Marco Pavone, and Yue Wang. Freenerf: Improving few-shot neural rendering with
+free frequency regularization. In _Proceedings_ _of_ _the_ _IEEE/CVF_ _conference_ _on_ _computer_ _vision_
+_and pattern recognition_, pp. 8254–8263, 2023.
+
+
+Yaoqing Yang, Chen Feng, Yiru Shen, and Dong Tian. Foldingnet: Point cloud auto-encoder via
+deep grid deformation. In _Proceedings_ _of_ _the_ _IEEE_ _conference_ _on_ _computer_ _vision_ _and_ _pattern_
+_recognition_, pp. 206–215, 2018.
+
+
+Taoran Yi, Jiemin Fang, Junjie Wang, Guanjun Wu, Lingxi Xie, Xiaopeng Zhang, Wenyu Liu,
+Qi Tian, and Xinggang Wang. Gaussiandreamer: Fast generation from text to 3d gaussians by
+bridging 2d and 3d diffusion models. In _Proceedings of the IEEE/CVF Conference on Computer_
+_Vision and Pattern Recognition_, pp. 6796–6807, 2024.
+
+
+Alex Yu, Vickie Ye, Matthew Tancik, and Angjoo Kanazawa. pixelnerf: Neural radiance fields from
+one or few images. In _Proceedings of the IEEE/CVF conference on computer vision and pattern_
+_recognition_, pp. 4578–4587, 2021a.
+
+
+Wangbo Yu, Jinbo Xing, Li Yuan, Wenbo Hu, Xiaoyu Li, Zhipeng Huang, Xiangjun Gao, TienTsin Wong, Ying Shan, and Yonghong Tian. Viewcrafter: Taming video diffusion models for
+high-fidelity novel view synthesis. _arXiv preprint arXiv:2409.02048_, 2024a.
+
+
+Wangbo Yu, Li Yuan, Yan-Pei Cao, Xiangjun Gao, Xiaoyu Li, Wenbo Hu, Long Quan, Ying Shan,
+and Yonghong Tian. Hifi-123: Towards high-fidelity one image to 3d content generation. In
+_European Conference on Computer Vision_, pp. 258–274. Springer, 2024b.
+
+
+Xumin Yu, Yongming Rao, Ziyi Wang, Zuyan Liu, Jiwen Lu, and Jie Zhou. Pointr: Diverse point
+cloud completion with geometry-aware transformers. In _Proceedings of the IEEE/CVF interna-_
+_tional conference on computer vision_, pp. 12498–12507, 2021b.
+
+
+Jiawei Zhang, Jiahe Li, Xiaohan Yu, Lei Huang, Lin Gu, Jin Zheng, and Xiao Bai. Cor-gs: sparseview 3d gaussian splatting via co-regularization. In _European_ _Conference_ _on_ _Computer_ _Vision_,
+pp. 335–352. Springer, 2024.
+
+
+Richard Zhang, Phillip Isola, Alexei A. Efros, Eli Shechtman, and Oliver Wang. The unreasonable
+effectiveness of deep features as a perceptual metric. In _Proceedings of the IEEE Conference on_
+_Computer Vision and Pattern Recognition (CVPR)_, June 2018.
+
+
+Kun Zhou, Qiming Hou, Rui Wang, and Baining Guo. Real-time kd-tree construction on graphics
+hardware. _ACM Transactions on Graphics (TOG)_, 27(5):1–11, 2008.
+
+
+Zehao Zhu, Zhiwen Fan, Yifan Jiang, and Zhangyang Wang. Fsgs: Real-time few-shot view synthesis using gaussian splatting. In _European conference on computer vision_, pp. 145–163. Springer,
+2024.
+
+
+13
+
+
+APPENDIX
+
+
+A PRELIMINARY
+
+
+A.1 3D GAUSSIANS SPLATTING
+
+
+3DGS Kerbl et al. (2023) uses a set of 3D Gaussians _θ_ for scene representation and achieves a
+2D image with pixel-wise color C from a view’s pose. The _i_ -th Gaussian is formulated as _θi_ =
+_{µi, Si, Ri, αi, fi}_, where _µi_ _∈_ R [3] is the mean ( _i.e._, position), _Si_ _∈_ R [3] _[×]_ [3] is the scaling matrix,
+_Ri_ _∈_ R [3] _[×]_ [3] is the rotation matrix, _αi_ _∈_ R is the opacity, and _fi_ _∈_ R _[K]_ is the _K_ -dimensional color
+representation. The basis function of _θi_ on the position _x_ is defined with the covariance matrix
+Σ _i_ _∈_ R [3] _[×]_ [3] as follows,
+
+G _i_ ( _x_ ) = _e_ _[−]_ 2 [1] [(] _[x][−][µ][i]_ [)] _[′]_ [Σ] _i_ _[−]_ [1] ( _x−µi_ ) _,_ Σ _i_ = _RiSiSi_ _[′][R]_ _i_ _[′][,]_ (21)
+
+
+where _Ri_ is an orthogonal matrix and _Si_ is a diagonal matrix.
+
+
+During the rasterization process, _θ_ are splatted onto an image plane via the projection along the
+depth dimension. For an image pixel _xp_, its color C( _xp_ ) is the result of the _α_ -blending of _N_ ordered
+Gaussians that intersect with the ray for _xp_, as follows:
+
+
+where _ci_ is the color calculated from the spherical harmonic (SH) coefficients of _fi_, and _Ti_ is
+the corresponding accumulated transmittance at _xp_ . Different from the ray sampling strategy in
+NeRF Mildenhall et al. (2020), these Gaussians are hit by a parallelized rasterizer according to _xp_
+and _P_ .
+
+
+A.2 IMAGE-TO-VIDEO DIFFUSION MODEL
+
+
+Diffusion model consists of two primary components Song et al. (2020): a forward process _q_ and
+a reverse process _pθ_ . The forward process gradually introduces noise to clean data _x_ 0, creating a
+noisy state _xt_ = _αtx_ 0 + _σtϵ_ (where _ϵ_ _∼N_ (0 _,_ **I** ) and _αt_ [2] [+] _[ σ]_ _t_ [2] [=] [1][)] [across] [different] [time] [steps.]
+The reverse process _pθ_ focuses on denoising from the noisy data to clean data distribution utilizing
+a noise predictor _ϵθ_, which is optimized by the objective:
+
+min E _t∼U_ (0 _,_ 1) _,ϵ∼N_ (0 _,_ **I** )           - _∥ϵθ_ ( _xt, t_ ) _−_ _ϵ∥_ [2] 2� _._ (23)
+_θ_
+
+
+In image-to-video (I2V) diffusion, Latent Diffusion Models (LDMs) Metzer et al. (2023) are employed in a compact latent space for efficiency. The data _x ∈_ R _[L][×]_ [3] _[×][H][×][W]_ is encoded into the latent
+space by a pretrained VAE _z_ = _E_ ( _x_ ), _z_ _∈_ R _[L][×][C][×][h][×][w]_ frame-by-frame. Then, both the forward
+process _q_ and the reverse process _pθ_ are performed in the latent space. The final generated videos
+are obtained through the VAE decoder _x_ ˆ = _D_ ( _z_ ). In this work, we build our model based on an
+open-sourced I2V diffusion model ViewCrafter Yu et al. (2024a). This aligns naturally with our goal
+of NVS from sparse views.
+
+
+B EXPERIMENTS
+
+
+B.1 EXPERIMENTS SETTING
+
+
+B.1.1 DATASETS
+
+
+We conducted experiments on three benchmark datasets: Local Light Field Fusion (LLFF) Mildenhall et al. (2019), characterized by forward-facing scenes; DTU Jensen et al. (2014), featuring
+object-centric scenes; and Shiny Wizadwongsa et al. (2021), including challenging scenes with
+view-dependent effects. Following previous studies Niemeyer et al. (2022); Zhu et al. (2024); Paliwal et al. (2024), we adopted the same split strategy over all the datasets. For the LLFF and DTU
+datasets, we applied the downsampling rate of 8 and that of 4, respectively, and used few-shot settings with 3, 6 and 9 training views; for each scene, the evaluation set is fixed regardless of the
+
+
+14
+
+
+C( _xp_ ) = - _ciαiTi,_ _Ti_ =
+
+
+_i∈N_
+
+
+_i−_ 1
+�(1 _−_ _αj_ ) _,_ (22)
+
+
+_j_ =1
+
+
+Table 7: The additional comparison of GenCoGS and other methods regarding few-shot NVS performance on the DTU (Jensen et al., 2014) dataset under 3-view, 6-view and 9-view settings. The
+
+best, second-best, and third-best scores are highlighted.
+
+
+**PSNR** _↑_ **SSIM** _↑_ **LPIPS** _↓_ **AVGE** _↓_
+**Method**
+
+3 6 9 3 6 9 3 6 9 3 6 9
+
+
+FreeNeRF (Yang et al., 2023) 19.52 23.25 25.38 0.787 0.844 0.888 0.173 0.131 0.102 0.119 0.096 0.082
+SparseNeRF (Wang et al., 2023) 19.47  -  - 0.829  -  - 0.183  -  - 0.120  -  ReconFusion (Wu et al., 2024) 20.74 23.62 24.62 0.875 0.904 0.921 0.124 0.105 0.094 0.109 0.086 0.080
+
+
+3DGS (Kerbl et al., 2023) 10.99 20.33 22.90 0.585 0.776 0.816 0.313 0.223 0.173 0.224 0.151 0.129
+FSGS (Zhu et al., 2024) 17.34 21.55 24.33 0.818 0.880 0.911 0.169 0.127 0.106 0.123 0.103 0.092
+DNGaussian (Li et al., 2024a) 18.91 22.10 23.94 0.790 0.851 0.887 0.176 0.148 0.131 0.124 0.106 0.097
+
+ReconX (Liu et al., 2025) 19.78  -  - 0.476  -  - 0.378  -  - 0.142  -  **GenCoGS (Ours)** 23.11 26.45 28.53 0.910 0.939 0.960 0.082 0.059 0.043 0.049 0.032 0.023
+
+
+Table 8: The chamfer distances between SfM (Zhu et al., 2024), complete point cloud **P** _f_ after
+GCGI and final optimized 3DGS point cloud on LLFF (Mildenhall et al., 2019) dataset.
+
+
+Scene Leaves Orchids Fortress Trex Room Fern Horns Mean(%)
+SfM 738.21 10.15 8.42 15.39 14.45 4.38 13.41 100
+Ours 675.69 9.54 7.59 14.32 9.33 4.26 12.12 88
+
+
+number of training views Zhu et al. (2024). For Shiny dataset, we leveraged the 3-view setting, and
+set the resolutions to 504 _×_ 378. In addition, we used the object masks to erase the background
+noise and focused on scene objects in the DTU dataset, and assumed that camera poses were known,
+similar to previous studies Niemeyer et al. (2022); Wang et al. (2023); Zhu et al. (2024).
+
+
+B.1.2 EVALUATION METRICS
+
+
+To evaluate the image quality of synthesized views, we leveraged peak signal-to-noise ratio
+(PSNR) Korhonen & You (2012), structural similarity index measure (SSIM) Wang et al. (2004)
+and learned perceptual image patch similarity (LPIPS) Zhang et al. (2018) as key metrics. Besides,
+
+_√_
+
+we calculated the average error (AVGE) derived from the geometric mean of 10 _[−]_ [PSNR] 10, 1 _−_ SSIM,
+
+and LPIPS, for a straightforward comparison Niemeyer et al. (2022).
+
+
+B.2 ADDITIONAL EXPERIMENTS
+
+
+B.2.1 ADDITIONAL QUANTITATIVE COMPARISON
+
+
+We performed the additional quantitative comparison about the DTU dataset in Table 7, the improvements by GenCoGS under 3-view / 6-view / 9-view settings were 2 _._ 40 dB / 2 _._ 14 dB / 1 _._ 83 dB
+in PSNR, 0 _._ 025 / 0 _._ 018 / 0 _._ 017 in SSIM, 0 _._ 029 / 0 _._ 024 / 0 _._ 011 in LPIPS, and 0 _._ 045 / 0 _._ 041 / 0 _._ 029
+in AVGE, compared to the 3DGS-based methods with second-best performances. Notably, the substantial boosts over other diffusion-based methods (Wang et al., 2024; Wu et al., 2024; Gao et al.,
+2024) achieved by GenCoGS stem from the hallucination attenuation capability of our strategies.
+
+
+B.2.2 QUANTITATIVE OF THE POINT CLOUD AFTER GCGI STRATEGY
+
+
+To demonstrate the effectiveness of oure GCGI strategy, we measured the chamfer distances of
+SfM (Zhu et al., 2024) with final optimized 3DGS point cloud, and the complete point cloud **P** _f_
+after GCGI strategy with final optimized 3DGS point cloud, respectively. Notably, due to scale
+discrepancies in numerical values across different scenes, we employed the maximum normalization
+and used the percentages as the metric in the mean. As shown in Table 8, the mean chamfer distance
+of our complete point cloud **P** _f_ on LLFF improved to 12%, which demonstrated the effectiveness
+of our GCGI strategy.
+
+
+15
+
+
+Figure 9: Ablation of the outlier threshold _δ_ 1 in GCGI strategy
+
+
+Table 9: Ablation of the perturbation amplitude _A_ and the wave frequency _f_ in GCGO.
+
+
+Amplitude _A_ Frequency _f_ PSNR _↑_ SSIM _↑_ LPIPS _↓_
+1.0 1.0 21.95 0.764 0.169
+3.0 1.0 21.83 0.757 0.171
+**(Ours)** 2.0 1.0 **22.13** **0.762** **0.164**
+2.0 0.5 22.02 0.764 0.168
+2.0 2.0 22.06 0.767 0.168
+
+
+B.3 ADDITIONAL ABLATION STUDIES
+
+
+To investigate the selection of the hyperparameters, we conducted a series of additional ablation
+studies on the LLFF dataset under the 3-view setting.
+
+
+B.3.1 ABLATION OF OUTLIER THRESHOLD _δ_ 1 IN GCGI STRATEGY
+
+
+We conducted an ablation study of the hyperparameter _δ_ 1 in GCGI strategy on LLFF under the
+3-view setting. As shown in Figure 9, we selected _δ_ 1 = 1 _._ 0 in the implementation based on the
+results.
+
+
+B.3.2 ABLATION OF _A_ AND _f_ IN GCGO STRATEGY
+
+
+We conducted an ablation study of the perturbation amplitude _A_ and wave frequency _f_ in the perturbed camera trajectory of GCGO strategy on LLFF under the 3-view setting. As shown in Table 9,
+there is a critical see-saw effect between generative model hallucination and unobserved region exploration based on _A_ and _f_ as we analyzed in Figure 8. And we selected _A_ = 2 _._ 0 and _f_ = 1 _._ 0 as
+the trade-off.
+
+
+B.3.3 ABLATION OF _δ_ 2 IN GCGO STRATEGY
+
+
+We conducted an ablation study of the coefficient _δ_ 2 in the GCGO strategy on LLFF under the 3-view
+setting. As shown in Figure 10, the performance improved as _δ_ 2 in GCGO increased, peaking at 20.
+After this point, performance declined. Consequently, we selected _δ_ 2 = 20 in the implementation
+based on these observations.
+
+
+B.3.4 ABLATION OF _δ_ 3 IN GCGO STRATEGY
+
+
+We conducted an ablation study of the threshold _δ_ 3 in the GCGO strategy on LLFF under the 3-view
+setting. As shown in Figure 11, the performance improved as _δ_ 3 in GCGO increased, peaking at 8.
+
+
+16
+
+
+Figure 10: Ablation of the coefficient _δ_ 2 in GCGO strategy
+
+
+Figure 11: Ablation of the threshold _δ_ 3 in GCGO strategy
+
+
+After this point, performance declined. Consequently, we selected _δ_ 3 = 8 in the implementation
+based on these observations.
+
+
+B.3.5 ABLATION OF _β_ OF _LGC_ IN GCGO STRATEGY
+
+
+We conducted an ablation study of the weight coefficient _β_ in the GCGO strategy on LLFF under
+the 3-view setting. As shown in Figure 12, we the selected _β_ = 0 _._ 10 in the implementation for the
+best performance.
+
+
+C LIMITATIONS
+
+
+Despite the significant improvements in synthesizing high-fidelity views with enhanced scene completion by incorporating two generative completion-based strategies on Gaussian initialization and
+optimization for few-shot NVS, the proposed method is expected to resolve the following limitations
+in the future.
+
+
+    - **Computational Efficiency.** We performed the efficiency comparison of our GenCoGS and
+other representative methods in Table 10, As we discussed in Sec 3 Methods.
+our GenCoGS was not primarily designed for efficiency, it achieved competitive results
+across all metrics. Adopting two generative completion-based strategies on Gaussian ini
+
+17
+
+
+Figure 12: Ablation of the weight coefficient _β_ of the _LGC_ in GCGO strategy
+
+
+**Inference** **Training**
+**Method**
+
+PSNR _↑_ SSIM _↑_ LPIPS _↓_ Time _↓_ Memory _↓_
+
+
+FreeNeRF Yang et al. (2023) 19.63 0.612 0.308 2.3 h 192.0 GB
+SparseNeRF Wang et al. (2023) 19.86 0.624 0.328 1.5 h 32.0 GB
+3DGS Kerbl et al. (2023) 15.52 0.405 0.408 **13.0 min** **1.6 GB**
+DNGaussian Li et al. (2024a) 19.12 0.591 0.294 23.5 min 2.0 GB
+FSGS Zhu et al. (2024) 20.31 0.652 0.288 28.0 min 2.4 GB
+BinoGS Han et al. (2024) 21.44 0.751 0.168 30.0 min 3.0 GB
+GenCoGS (Ours) **22.13** **0.762** **0.164** 40.0 min 4.0 GB
+
+
+Table 10: Comparison of our GenCoGS and other representative methods regarding the efficiency
+of few-shot NVS on the LLFF Mildenhall et al. (2019) dataset under the 3-view setting.
+
+
+tialization and optimization, our GenCoGS inevitably increased the training time and memory usage. Although these costs are acceptable compared to performance improvements,
+we expect to optimize these strategies in the future to enhance computational efficiency.
+Specifically, the main overhead is due to the denoising process, and future studies could
+focus on accelerated denoising Esser et al. (2024) as a research direction.
+
+
+D THE USE OF LARGE LANGUAGE MODELS (LLMS)
+
+
+In our work, LLMs **did not** play a significant role in research ideation and/or writing to the extent
+that they could be regarded as a contributor.
+
+
+18

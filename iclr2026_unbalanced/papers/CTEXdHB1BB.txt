@@ -1,0 +1,1804 @@
+# CONDITIONAL ADVANTAGE ESTIMATION FOR REINFORCEMENT LEARNING IN LARGE REA## SONING MODELS
+
+
+**Guanxu Chen** [2] _[,]_ [1] _[∗]_ **Yafu Li** [1] _[†]_ **Yuxian Jiang** [3] **Chen Qian** [4] **Qihan Ren** [2]
+
+**JingYi Yang** [3] _[,]_ [1] **Yu Cheng** [5] **Dongrui Liu** [1] _[†]_ **Jing Shao** [1] _[†]_
+
+
+1 Shanghai Artificial Intelligence Laboratory, 2 Shanghai Jiao Tong University,
+3 Fudan University, 4 Renmin University of China, 5 The Chinese University of Hong Kong
+_lm.cgx@sjtu.edu.cn_ _yafuly@gmail.com_ _{liudongrui, shaojing}@pjlab.org.cn_
+
+
+ABSTRACT
+
+
+Reinforcement Learning with Verifiable Rewards (RLVR) for large language models (LLMs) has achieved remarkable progress in enhancing LLMs’ reasoning
+capabilities on tasks with clear correctness criteria, such as mathematical reasoning
+tasks. Several training metrics, such as entropy or response length, have been
+observed to correlate with different reasoning behaviors in reinforcement learning.
+Prior approaches incorporate such priors through reward or advantage shaping,
+which often relies on hand-crafted penalties and preferences (e.g., higher-is-better
+or lower-is-better). However, without careful hyper-parameter tuning, these directional priors can be overly biased and may lead to failure. To this end, we
+introduce _**C**_ _onditional adv_ _**AN**_ _tage estimati_ _**ON**_ (CANON), amplifying the impact of
+the target metric without presuming its direction. Specifically, CANON regroups the
+sampled responses into two groups based on the higher or lower value of a target
+metric, measures which metric trend contributes to better performance through
+inter-group comparison, and identifies the better response within the same group.
+In summary, CANON based on entropy consistently outperforms prior methods
+across three LLMs on both math reasoning and high-complexity logic tasks. When
+applied to response length, CANON further improves token efficiency, yielding a
+more favorable Pareto frontier in the performance–cost trade-off.
+
+
+1 INTRODUCTION
+
+
+Recently, Large Reasoning Models (LRMs) such as Gemini 2.5 Pro (Comanici et al., 2025), DeepSeekR1 (Guo et al., 2025), and OpenAI-o1 (Jaech et al., 2024), continue to push the boundaries of
+performance on reasoning tasks. A key technique driving this success is Reinforcement Learning with
+Verifiable Rewards (RLVR), which enables models to refine answers through multi-step reflection.
+Algorithms designed for RLVR, most prominently GRPO (Shao et al., 2024) and its variants (e.g.,
+DR.GRPO, Liu et al. (2025a)), have become central to achieving superior performance.
+
+
+In previous works, some training metrics are observed to be closely correlated with model behavior,
+which can guide the training process and improve LLMs’ performance (Hassid et al., 2025; Gandhi
+et al., 2025; Wang et al., 2025). To incorporate such a human prior, some methods integrate these
+metrics through reward shaping (Arora & Zanette, 2025; Luo et al., 2025) and advantage shaping
+(Chen et al., 2025b; Cheng et al., 2025) to guide the model’s reasoning behavior. For example,
+an over-length penalty is used to boost reasoning efficiency, and the entropy signal is leveraged to
+maintain exploration for better performance.
+
+
+However, these methods usually introduce human priors by adding penalty and reward terms, which
+hold handcrafted priors that specific metrics are either to be higher-is-better or to be lower-is-better.
+Without careful hyper-parameter selection, these priors can be overly biased and drive specific metrics
+up or down directly, thus failing to enhance performance robustly. Simple handcrafted priors towards
+one specific direction are hard to work in different scenarios. For instance, higher-entropy responses
+tend to be exploratory and may correctly answer complex questions, whereas lower-entropy responses
+
+
+_∗_
+[Our code is available at �CANON.](https://github.com/biuboomc/CANON)
+
+_†_ Corresponding Author.
+
+
+1
+
+
+exhibit higher certainty and achieve greater accuracy on most questions within their capability (Cheng
+et al., 2025; Prabhudesai et al., 2025; Wang et al., 2025). Therefore, we aim to amplify the impact of
+specific metric changes without presupposing preferences, naturally identifying inherent tendencies in
+model rollouts that can be leveraged to facilitate learning of beneficial behaviors, such as enhancing
+exploration or improving reasoning efficiency.
+
+
+To this end, we regroup the sampled responses into two groups based on the higher or lower values of
+a given metric during the process of RLVR training. Specifically, we can sort the sampled responses
+according to the value and split them into two groups. Based on this, we propose _**C**_ _onditional_
+_adv_ _**AN**_ _tage estimati_ _**ON**_ (CANON), which computes the inter-group advantage by comparing a response
+with the group that it does not belong to, and gets the intra-group advantage across its own group
+conversely. The inter-group advantage reveals which trend of metrics leads to higher accuracy.
+Meanwhile, the intra-group advantage identifies better responses within the same group.
+
+
+Taking the metric of entropy as an example, if groups with lower entropy (i.e., higher certainty) yield
+higher average rewards, the inter-group advantage tends to select correct responses with low entropy,
+efficiently exploiting existing features to boost performance. In contrast, correct rollouts with higher
+entropy receive more advantages in the intra-group comparison because the average reward of their
+group is lower, thereby encouraging truly effective exploration. We theoretically prove that when the
+two groups have equal size, the inter-group advantage amplifies the impact of the grouping metric on
+the advantage computation. In this setting, DR.GRPO can be formulated as a uniform weighting of
+these two advantages, which is a special case of CANON.
+
+We consider the metrics of generation entropy and response length, evaluating the effectiveness of
+CANON on three open-weight LLMs across six math reasoning benchmarks and three challenging
+logic reasoning tasks. Empirical results show that emphasizing the inter-group advantage based on
+entropy yields a **1.9** -point accuracy gain on math tasks. In contrast, for high-complexity reasoning
+problems, the intra-group advantage proves crucial, achieving a **5.2** -point improvement on the most
+challenging subset. Through scheduling of these advantages, CANON further achieves a superior
+and comprehensive performance across three models and two tasks. Furthermore, CANON based on
+response length substantially enhances reasoning efficiency, establishing a new Pareto frontier in the
+performance–efficiency trade-off. In low-token-budget scenarios for math tasks, it achieves **2.63×**
+higher performance and reduces token consumption by **45.5%** at the same performance level.
+
+
+2 RELATED WORK
+
+
+**Advantage Estimations in Reinforcement Learning.** In PPO, the advantage estimation is provided
+by Generalized Advantage Estimation (GAE, Schulman et al. (2015)).To avoid the computational cost
+of the critic model, several methods, such as ReMax (Li et al., 2023), RLOO (Ahmadian et al., 2024),
+GRPO Shao et al. (2024), and REINFORCE++ (Hu, 2025), utilize alternative techniques like baseline
+reward and group-relative rewards for advantage estimation. ReMax compares the rewards with the
+baseline reward from the greedy decoding response. REINFORCE++ estimates the advantage by
+the normalization operation across the global batch for all queries. RLOO and GRPO estimate the
+advantage in a group relative manner. RLOO computes the average rewards of all other solutions
+in the group as the baseline reward, and GRPO utilizes the normalized rewards among the sampled
+solutions as the advantage estimation. Compared to GRPO, our method splits sampled responses
+into two groups based on specific conditions and selects the appropriate condition through inter- and
+intra-group comparisons, thereby efficiently optimizing key patterns that boost task performance.
+
+**Reinforcement Learning with Verifiable Rewards.** RLVR leverages the existing RLHF objective
+(Schulman et al., 2017) but replaces the reward model with a verification function, which is available
+in domains with verifiable answers, such as mathematics reasoning tasks (Guo et al., 2025; Lambert
+et al., 2024). Yu et al. (2025); Liu et al. (2025b); Chen et al. (2025a) consider the importance sampling
+techniques and contribute novel training paradigms and optimization objectives for better and more
+stable reasoning capabilities. Due to the sparse rewards during training, past methods utilize not only
+accuracy-based rewards but also explicitly integrate additional signals through reward shaping (Arora
+& Zanette, 2025; Luo et al., 2025) and advantage shaping (Chen et al., 2025b; Cheng et al., 2025)
+to guide the model’s reasoning and reflection. Arora & Zanette (2025) and Luo et al. (2025) utilize
+an over-length penalty to boost reasoning efficiency. Chen et al. (2025b) and (Cheng et al., 2025)
+consider the entropy as a measure of exploration and reshape the advantage computation. Gandhi
+et al. (2025) also observes four key cognitive behaviors of initial reasoning behaviors and strengthens
+
+
+2
+
+
+Figure 1: Overview of CANON. CANON regroups all the sampled responses based on the value of a
+specific metric, and computes the advantages through inter-group and intra-group comparison.
+
+
+the capacity for self-improvement. However, these methods usually introduce human priors by adding
+penalty and reward terms, which hold handcrafted priors that can be overly biased and may fail to
+enhance performance without careful hyper-parameter selection. Our work amplifies the impact of
+specific metric changes without presupposing preferences, leveraging them to facilitate learning of
+beneficial behaviors.
+
+
+3 PRELIMINARIES
+
+
+Proximal Policy Optimization (PPO, Schulman et al. (2017)) is a widely used method for policy
+optimization of LLMs. PPO utilizes the clip mechanism to update policy stably. PPO maximizes the
+following optimization objectives.
+
+
+_|o|_
+
+- min
+
+
+_t_ =1
+
+
+- ��
+
+_ro,t_ ( _θ_ ) _A_ [ˆ] _t,_ clip [1+] 1 _−_ _[ε]_ _ε_ [(] _[r][o]_ _i_ _[,t]_ [(] _[θ]_ [)) ˆ] _[A][t]_
+
+
+_J_ PPO( _θ_ ) = E _q∼D,o∼πθ_ old ( _·|q_ )
+
+
+1
+_|o|_
+
+
+_,_ (1)
+
+
+where _πθ_ old and _πθ_ are used to denote the policy model before and after the update. _q_ is a query
+sampled from the data distribution _D_, and the output _o_ is generated by _πθ_ old. The clipping function
+with clip ratio _ε_ is computed as clip _[b]_ _a_ [(] _[x]_ [) = max(min(] _[x, a]_ [)] _[, b]_ [)][ and the importance sampling ratio at]
+time step _t_ is defined as _ro,t_ ( _θ_ ) = _ππθθ_ old( _o_ ( _ot|tq,o|q,o<t<t_ )) [.]
+
+To avoid the computational cost of the critic model, GRPO (Shao et al., 2024) estimates the advantage
+in a group relative manner. They sample _G_ different solutions for the current query _q_ as the group
+_Gq_ := _{o|o ∼_ _πθ_ old( _.|q_ ) _}_, and calculate the normalized rewards as advantages within the group _Gq_ .
+
+
+_[∈]_ _[G][q][}]_ [)]
+_A_ ˆ [GRPO] _q,o,t_ [=] _[R][o][ −]_ std [mean] ( _{Ro_ [(] _′_ _[{]_ _|_ _[R]_ _o_ _[′][o]_ _∈_ _[′][|][o]_ _G_ _[′]_ _q}_ ) _._ (2)
+
+
+Due to the success of DeepSeek-R1, several studies have proposed improvements based on GRPO.
+DR.GRPO (Liu et al., 2025a) uses the GRPO advantages without standard deviation normalization
+and develops a token-level loss without length bias.
+
+
+4 CONDITIONAL ADVANTAGE ESTIMATION
+
+
+Group-based advantage estimation methods, such as GRPO, typically use the average reward of all
+sampled responses within the group as a baseline reward. This may fail to provide a clear feedback
+signal for policy optimization due to the ambiguity of the comparison target. We propose CANON,
+which performs conditional regrouping by splitting all sampled responses into two groups based on
+the value of a specific metric. Leveraging these two groups, inter-group advantage identifies the
+metric trend that yields higher accuracy through cross-group comparison, while intra-group advantage
+
+
+3
+
+
+selects superior responses within the same trend and prioritizes correct answers from the group with
+a lower average reward.
+
+
+4.1 CONDITIONAL REGROUPING
+
+
+To explicitly introduce a comparison target, we regroup all the sampled responses based on specific
+conditions. Given any condition _c_, we denote the set of all outputs for the current query _q_ that satisfy
+this condition in the sampled group _Gq_ as _Cq_ [+] [:=] _[{][o][|][o]_ [ satisfy] _[ c,]_ _[o]_ _[∈]_ _[G][q][}]_ [.] [The set of outputs that]
+do not satisfy the condition can be denoted by _Cq_ _[−]_ [=] _[ G][q]_ _[\][ C][q]_ [.] [In this work, we focus on studying]
+the relative conditions given by the training metrics, such as the entropy and length of the sampled
+responses. Specifically, we divide the responses into two non-overlapping groups based on the value
+of the metrics, as shown in Figure 1.
+
+
+4.2 ADVANTAGE ESTIMATION BASED ON REGROUPING.
+
+
+Given two groups, we can compute the inter-group advantage through comparison between different
+groups.
+
+
+_Ro −_ mean( _{Ro′|o_ _[′]_ _∈_ _G_ [+] _q_ _[}]_ [)] _[,]_ [ if] _[ o][ ∈]_ _[G]_ _q_ _[−]_
+
+_._ (3)
+_Ro −_ mean( _{Ro′|o_ _[′]_ _∈_ _G_ _[−]_ _q_ _[}]_ [)] _[,]_ [ if] _[ o][ ∈]_ _[G]_ _q_ [+]
+
+
+_A_ ˆ [inter] _q,o,t_ [=]
+
+
+
+
+
+
+
+
+
+Meanwhile, we also compute the intra-group advantage by comparing each response with the mean
+reward of its own group.
+
+
+_Ro −_ mean( _{Ro′|o_ _[′]_ _∈_ _G_ [+] _q_ _[}]_ [)] _[,]_ [ if] _[ o][ ∈]_ _[G]_ _q_ [+]
+
+_._ (4)
+_Ro −_ mean( _{Ro′|o_ _[′]_ _∈_ _G_ _[−]_ _q_ _[}]_ [)] _[,]_ [ if] _[ o][ ∈]_ _[G]_ _q_ _[−]_
+
+
+_A_ ˆ [intra] _q,o,t_ [=]
+
+
+
+
+
+
+
+
+
+Although this may appear similar to the estimation of DR.GRPO within a smaller scope, due to the
+differing average advantages between groups, the intra-group advantage prioritizes correct responses
+from the group with a lower average reward (1 _−_ mean( _{Ro′|o_ _[′]_ _∈_ _G_ [+] _q_ _[}]_ _[>]_ [1] _[ −]_ [mean][(] _[{][R][o][′][|][o][′]_ _[∈]_
+_G_ _[−]_ _q_ _[}]_ [ when mean][(] _[{][R][o][′][|][o][′]_ _[∈]_ _[G]_ [+] _q_ _[}][ <]_ [ mean][(] _[{][R][o][′][|][o][′]_ _[∈]_ _[G][−]_ _q_ _[}]_ [ ).] [We can further combine the above two]
+advantages into a unified formulation.
+
+
+_A_ ˆ [CANON] _q,o,t_ = _µA_ [ˆ][inter] _q,o,t_ [+ (1] _[ −]_ _[µ]_ [) ˆ] _[A]_ _q,o,t_ [intra] _[,]_ (5)
+
+
+where _µ_ controls the balance between the inter-group and intra-group advantage. Figure 1 demonstrates a concise case of the computation of CANON.
+
+To ensure that the advantages introduced by conditional regrouping provide a clearer contrastive
+signal, we theoretically analyze the situations under which inter-group advantage, compared to
+DR.GRPO, yields a stronger advantage signal in response to reward gaps under specific conditions.
+
+
+**Theorem 1** (Situations with clearer advantage signal (proved in Appendix E)) **.** _Suppose that condition_
+_c_ _is_ _based_ _on_ _numerical_ _comparisons_ _and_ _can_ _be_ _derived_ _through_ _sorting_ _of_ _metrics._ _Further_
+_assume that the sampled response o to query q satisfy condition c with probability p ∈_ (0 _,_ 1) _, and_
+**E** _o satisfy c_ [ _Ro_ ] _̸_ = **E** _o not_ _satisfy c_ [ _Ro_ ] _._ _Then, we have:_
+
+
+_|A_ [ˆ] _[inter]_ _q,o,t_ _[|]_
+
+_>_ 1 _,_ _only when |Cq_ [+] _[|]_ [ =] _[ |][C]_ _q_ _[−][|][ if][ |][C]_ _q_ [+] _[|][ is a constant.]_ (6)
+_|A_ [ˆ] _[DR.GRPO]_ _q,o,t_ _|_
+
+
+Based on Theorem 1, we divide the responses into two equally sized groups. In this way, DR.GRPO
+can be expressed as a special case of this unified form when _µ_ = 0 _._ 5.
+
+
+_A_ ˆ [DR.GRPO] _q,o,t_ = _Ro −_ mean( _{Ro′|o_ _[′]_ _∈_ _Gq}_ ) = [1]
+
+
+[1] _A_ ˆ [inter] _q,o,t_ [+] [1]
+
+2 2
+
+
+_A_ ˆ [intra] _q,o,t_ _[.]_ (7)
+2
+
+
+Moreover, rather than a direct numerical amplification, CANON amplifies only the advantage attributable to the metric used for grouping, without amplifying the influence of other factors.
+
+
+4
+
+
+Table 1: Overall performance based on **Qwen2.5-Math-7B** . We compare with the following baselines:
+(1) Qwen2.5-Math-7B-Instruct (Qwen-Instruct), (2) prior advantage estimation methods. All models
+are evaluated under a unified setting. **Bold** and underline indicate the best and second-best results,
+respectively.
+
+|Model Math Reasoning|Col2|High Complexity R|Reasoning|
+|---|---|---|---|
+|**AIME 24 AIME 25 Olympiad AMC MATH-500 GSM8k **|**Tokens Acc **|**Mid Large XLarge **|**Tokens Acc**|
+|Base<br>16.0<br>8.0<br>26.4<br>41.6<br>61.2<br>61.6<br>Instruct<br>10.7<br>9.7<br>39.7<br>49.3<br>82.2<br>94.8|2046<br>35.8<br>1077<br>47.7|0.0<br>0.5<br>0.1<br> 11.6<br>6.2<br>3.5|3303<br>0.2<br>2647<br>7.1|
+
+
+Previous Advantage Estimation
+
+
+**Theorem 2** (Selective amplification based on specific metrics (proved in Appendix E)) **.** _Consider_
+_independent_ _conditions_ _c_ 1 _and_ _c_ 2 _,_ _and_ _their_ _corresponding_ _sets_ _C_ 1 _and_ _C_ 2 _(i.e.,_ _P_ ( _o_ _∈_ _C_ 1 _∩_
+_C_ 2 _|q, θ_ ) = _P_ ( _o ∈_ _C_ 1 _|q, θ_ ) _P_ ( _o ∈_ _C_ 2 _|q, θ_ ) _)._ _When we fix the condition c_ 1 _, then for any value of the_
+_performance gap a_ 2+ _, a_ 2 _−_ _and the probability P_ ( _o ∈_ _C_ 2 _|q, θ_ ) _that induced by whether c_ 2 _is satisfied,_
+_we have_
+_|A_ [ˆ] _q,o,t_ _[inter based on][ c]_ [1] _|_
+
+_is a constant._ (8)
+_|A_ [ˆ] _[DR.GRPO]_ _q,o,t_ _|_
+
+_which says CANON based on the condition c_ 1 _will not amplify the influence of another independent_
+_condition c_ 2 _._
+
+
+Therefore, CANON, when grouped by a specific metric, amplifies the influence of that metric during
+training, yet it does not predefine a preference for the magnitude of the metric. This design allows it
+to incorporate human priors while mitigating bias, which fully aligns with our original motivation.
+
+
+4.3 ALIGNING WITH TRAINING TARGET THROUGH WEIGHTED ADVANTAGE
+
+
+According to Section 4.2, the selection between different trends of metrics only takes place in the
+inter-group advantage. By weighting different conditions within the inter-group advantage calculation,
+this enables fine-grained control over the trend of metrics with only tiny differences compared to
+DR.GRPO. For instance, by slightly reducing the weight of longer responses, CANON can accomplish
+reasoning of high token efficiency through the RL process. Specifically, the inter-group advantage in
+the Eq. 5 should be replaced with _A_ [ˆ][inter] _q,o,t,α_ [where] _[ α]_ [ is the weight of a specific group, and] _[A]_ [ˆ][inter] _q,o,t,α_ [is]
+defined as:
+
+
+_Ro −_ _α ∗_ mean( _{Ro′|o_ _[′]_ _∈_ _G_ [+] _q_ _[}]_ [)] _[,]_ [ if] _[ o][ ∈]_ _[G]_ _q_ _[−]_
+
+
+_._ (9)
+_α ∗_ _Ro −_ mean( _{Ro′|o_ _[′]_ _∈_ _G_ _[−]_ _q_ _[}]_ [)] _[,]_ [ if] _[ o][ ∈]_ _[G]_ _q_ [+]
+
+
+_A_ ˆ [inter] _q,o,t,α_ [=]
+
+
+
+
+
+
+
+
+
+For example, setting _α_ as 0.9 can achieve substantial length reduction with little performance drop,
+where _Cq_ [+] [is considered the group with longer responses.]
+
+
+5 EXPERIMENTS
+
+
+The empirical evaluation of CANON consists of three parts. Firstly, we demonstrate the effect of
+intra-group and inter-group advantages, respectively, across six math reasoning benchmarks and one
+
+
+5
+
+
+Training Steps Training Steps Training Steps
+
+(a) Training score. (b) Test performance of math tasks. (c) Test performance of logic reasoning tasks.
+
+
+Training Steps Training Steps Training Steps
+
+(d) Response length. (e) Per-token generation entropy. (f) Benefits of more rethinking.
+
+
+Figure 2: The training dynamics and average test performance of CANON-Inter, DR.GRPO, and
+CANON-Intra.
+
+
+high-complexity logic reasoning benchmark. In the second part, we perform several scheduling tricks
+to get the frontier in both tasks. At last, by weighting the longer responses with _α <_ 1, we achieve
+efficient reasoning that reaches a better Pareto frontier.
+
+
+5.1 PERFORMANCE OF INTRA-GROUP AND INTER-GROUP ADVANTAGES.
+
+
+**Training Setup.** We select the response length and the per-token generation entropy, respectively,
+to regroup the sampled solutions. We use a subset with 45k prompts from OpenR1-Math-220k
+(Hugging Face, 2025) that is filtered and constructed by Yan et al. (2025). Following DR.GRPO (Liu
+et al., 2025a) and DAPO (Yu et al., 2025), we correct the response-level length bias and utilize the
+clip-higher strategy ( _ϵhigh_ = 0 _._ 28) for all experiments. We also remove both the KL loss and the
+entropy loss. We sample 16 responses per prompt and use temperature=1.0 for rollout generation.
+Our rollout batch size is 512, and the train batch size is 32. The responses to the same prompt are
+separated into two evenly sized groups by sorting ordinal variables. We conduct the main experiments
+on Qwen2.5-Math-7B (Yang et al., 2024) following Zeng et al. (2025); Liu et al. (2025a); Yan et al.
+(2025). We expand Qwen2.5-Math-7B’s context limit from 4096 to 16384 by changing the rope theta
+from 10000 to 40000 [1] . We set the maximum answer length to 8192 and the learning rate is set to
+1e-6. We use _Math-Verify_ to give the 0-1 score for both training reward and evaluation accuracy.
+
+
+**Evaluation Setup.** We evaluate the math reasoning capabilities on six commonly used benchmarks,
+such as MATH-500 (Hendrycks et al., 2021), GSM8K (Cobbe et al., 2021), AMC (Li et al., 2024),
+OlympiadBench (He et al., 2024), and AIME 24/25. Due to the tiny size of AIME 24/25 and AMC,
+we report _Avg@10_ as the test accuracy. For the other benchmarks, we compute the _Pass@1_ as the
+test performance. We calculate the average performance and token cost across all benchmarks. All
+models are evaluated under the same setting with a temperature of 0.6. The values in Table 1 are
+the percentage accuracy of the models evaluated. We also select three high-complexity subsets of
+ZebraLogic (Lin et al., 2025) with their solution space sizes greater than 10 [3] (Mid), 10 [6] (Large),
+and 10 [9] (XLarge), respectively. In this experiment, we record six metrics, including training reward,
+generation entropy, response length, the test performance of math tasks and logic reasoning task, and
+the marginal improvement gained from reflection.
+
+**Baselines.** In this subsection, we fix _α_ = 1 _._ 0 in Eq. 9 and present the results of _µ_ = 0 _._ 0
+(CANON-Intra) and _µ_ = 1 _._ 0 (CANON-Inter) in Eq. 5. A more detailed scheduling on _µ_
+will be conducted in Section 5.2, and the adjustment of _α_ will be covered in Section 5.3. We compare
+CANON with two types of baselines: (1) **Qwen2.5-Math-7B-Instruct** (Instruct, Yang et al. (2024)),
+(2) **previous** **advantage** **estimation** **methods**, such as ReMax, REINFORCE++ (R++), RLOO,
+GRPO, and DR.GRPO, and (3) **entropy-related baselines**, such as Entropy Adv (Cheng et al., 2025)
+and Clip-Cov (Cui et al., 2025).
+
+
+1The original context limit leads to unacceptable length clipping ratio. Please see Figure 7 in Appendix C.3.
+
+
+6
+
+
+Table 2: Overall performance of CANON-Dynamic across three different models and two tasks. All
+models are evaluated under a unified setting. **Bold** and underline indicate the best and second-best
+results, respectively.
+
+
+**Math Reasoning** **High Complexity Reasoning**
+**Model**
+
+**AIME 24** **AIME 25** **Olympiad** **AMC** **MATH-500** **GSM8k** **Tokens** **Acc** **Mid** **Large** **XLarge** **Tokens** **Acc**
+
+
+Qwen2.5-Math-7B
+
+|55.7<br>56.7|39.2<br>40.4|
+|---|---|
+|<br>**57.0 **|<br> **41.7**|
+
+
+**Inter-group advantage achieves higher accuracy and lower length in math tasks.** The experimental results are shown in Table 1. CANON-Inter based on _Entropy_ achieves an average performance
+of 57.6 among six math benchmarks, which is 1.9 points higher than the DR.GRPO (55.7). Specifically, CANON-Inter based on _Entropy_ has the best performance on four of the six benchmarks,
+and is highly competitive with the top-performing models on the rest. In AIME24, the model’s
+performance is 5.0 points higher than the DR.GRPO’s. Meanwhile, CANON-Inter based on _Length_
+reduces the token cost by 33.8% compared with DR.GRPO, while maintaining nearly unchanged
+performance (55.7 vs. 55.3).
+
+**The benefit of intra-group advantage grows as the logic reasoning task’s complexity increases.**
+Table 1 demonstrates that CANON-Intra based on _Entropy_ achieves higher performance of 2.9
+points and 36.6% shorter length compared with DR.GRPO. Its performance edge over DR.GRPO
+increases (from -0.1 to 3.4 and then 5.2) when the complexity becomes higher. The results of
+CANON-Intra based on _Length_ shows another trend, whose inter-group advantage makes the best
+performance in this task.
+
+**Training dynamics reflect different roles of CANON-Intra and CANON-Inter.** To be specific,
+we record training curves under the setting of CANON based on _Entropy_ . The training dynamic
+shown in Figure 2 indicates that both the training reward and the test performance of the math tasks
+increase rapidly when only CANON-Inter is utilized ( _µ_ = 1 _._ 0). Its generation entropy stably
+decreases, and the response length changes smoothly. When using only CANON-Intra ( _µ_ = 0 _._ 0),
+the responses show a greater tendency for exploration. We divide the responses into two groups by
+counting reflection patterns and calculate the gap in average reward between the group with more
+and fewer reflections (Figure 2f). Figure 2 demonstrates that the trend of high-complexity reasoning
+performance is highly consistent with the curve of reflection gains. In the later stages of training
+(after approximately 90 steps), the reflection gain curve of intra-group advantage increases and finally
+crosses the zero point. At the same time, its performance experiences rapid growth, significantly
+outperforming the other two advantages.
+
+
+5.2 BALANCING PERFORMANCE VIA ADVANTAGE SCHEDULING
+
+
+As shown in Table 1 and Figure 2, CANON-Inter and CANON-Intra outperform DR.GRPO on
+the math reasoning task and the complex logic reasoning task, respectively, but neither can achieve
+the best performance on both simultaneously. To this end, we schedule the CANON-Inter and
+CANON-Intra by leveraging accuracy and the training steps to achieve a better balance between
+the two scenarios.
+
+
+**Setup.** We conduct experiments across six math benchmarks and three complex logic reasoning tasks
+on Qwen2.5-Math-7B (Yang et al., 2024), Llama3.1-8B (Dubey et al., 2024), and Qwen2.5-Math1.5B (Yang et al., 2024). For the two Qwen series models, we use the dataset introduced in Section
+5.1. Due to the weak capability of Llama3.1-8B, we collect a simpler dataset with 35k samples from
+four open-source datasets and follow the other training setups described in Section 5.1. Please see the
+
+
+7
+
+
+details of this newly constructed dataset in Appendix C.5. We draw a radar chart with the average
+performance of the two scenarios for visualization, and the results for CANON with scheduling are
+denoted as CANON-Dynamic.
+
+**Scheduling** **strategies.** All of the strategies are based on the coefficient _µ_ in the Eq. 5, which
+balances the CANON-Inter and CANON-Intra. We try four scheduling strategies utilizing the
+training accuracy and training steps, respectively: (1) _First-Inter-Later-Intra_ . We set the value of _µ_ to
+1 _−_ Λ, where Λ denotes the mean accuracy of current whole batch; (2) _First-Intra-Later-Inter_ . We set
+the value of _µ_ to Λ. (3) _Cosin-First-Inter-Later-Intra_ . We schedule the value of _µ_ from high to low
+using a cosine annealing function with restarts and warm-up. (4) _Cosin-First-Intra-Later-Inter_ . We
+schedule the value of _µ_ from low to high using a cosine annealing function with restarts and warm-up.
+Please see Appendix C.6 for more details. The shown results of CANON-Dynamic are derived from
+one of the tried scheduling strategies that achieve strong performance in both scenarios.
+
+
+_**First-Inter-Later-Intra**_ **consistently performs better than DR.GRPO across three models and two**
+**tasks.** As shown in Table 2, all three models demonstrate the same trend that performs better than the
+baseline by first applying Inter-group advantage and then using Intra-group advantage. Qwen2.5-1.5B
+performs particularly well under accuracy-based scheduling, possibly because its training accuracy
+range (0–0.6) aligns well with its learning progress. In contrast, the other two models may achieve
+higher final accuracies, which—under the same scheduling scheme—trigger excessive exploration
+and consequently lead to suboptimal final performance. We utilize fixed min/max values of _µ_ by
+
+
+Moreover, different models may have different numbers of parameters and different levels of capability.
+A specifically designed strategy is acceptable for better performance in practice. In this way, we select
+strategy _Cosin-First-Inter-Later-Intra_ for Qwen2.5Math-7B and Llama3.1-8B, and strategy _First-Inter-_
+_Later-Intra_ for Qwen2.5-Math-1.5B to draw Figure
+3. As shown in Figure 3, CANON-Dynamic outperforms DR.GRPO across all models and tasks,
+achieving a superior and more comprehensive performance. Although its math performance on Qwen2.5Math-7B lags slightly behind CANON-Inter, it
+still makes a better performance than DR.GRPO.
+The radar chart illustrates the trade-off between
+two types of tasks faced by CANON-Inter and
+CANON-Intra between two types of tasks, as
+well as the balanced but mediocre performance of
+DR.GRPO.
+
+
+Figure 3: Evaluation for three LLMs across two
+types of reasoning tasks. We apply a modelspecific schedule for a given model that consistently yields leading results across both mathematical and logical reasoning tasks
+
+
+5.3 WEIGHTED CONDITIONS FOR EFFICIENT REASONING.
+
+
+**Training Setup.** In this subsection, we utilize CANON based on response length with _µ_ = 0 _._ 5 in
+the Eq. 5 and tune the _α_ in the Eq. 9, where _Cq_ [+] [is] [considered] [the] [group] [with] [longer] [responses.]
+A larger _α_ means less compression of length. We follow the training setups described in Section
+5.1 and reduce the maximum response length to 3072 for better efficiency. To be specific, we use
+CANON-Eff to denote the results of CANON with weighted conditions of length.
+
+
+**Evaluation Setup under different token budgets and varying hyperparameter settings of differ-**
+**ent methods.** To systematically assess LRMs’ reasoning efficiency (Qu et al., 2025), we introduce
+two types of curves: **budget-performance curves for each LRM** and **cost-performance curves of**
+**different coefficients for all compared baselines** . Specifically, we set a maximum budget for each
+benchmark based on its difficulty and the average unconstrained output length of LRMs (Appendix
+C.2), then slice the same response at various budget ratios to draw the budget-performance curves.
+Moreover, we tune the length-controlling coefficients of each baseline to draw the cost-performance
+curves, recording their average performance and token cost to enable a comprehensive and fair
+comparison. Please see the subsection on Pareto frontier for the specific hyperparameters. In every
+comparison, the closer to the upper-left corner, the better (which represents high accuracy and high
+efficiency at the same time).
+
+
+8
+
+
+Table 3: The comparison between different methods towards efficient reasoning. Bold and underline
+indicate the best and second-best results, respectively. The detailed performance is from the topperforming models for each method, specifically _α_ =0.96 for CANON-Eff. We include CANON-Eff
+with _α_ = 0.88, which has comparable performance with the baseline Length Reward (*).
+
+
+AIME 24 AIME 25 Olympiad AMC MATH-500 GSM8k Overall
+
+
+|Acc Tokens Acc Tokens Acc Tokens Acc Tokens Acc Tokens Acc Tokens Ac|c Tokens|
+|---|---|
+|DR.GRPO<br>29.0<br>1640<br>19.0<br>1586<br>49.0<br>1172<br>64.6<br>1214<br>85.8<br>728<br>91.9<br>349<br>56.|6<br>1115|
+|Clip Length<br>28.0<br>1177<br>18.3<br>1177<br>47.3<br>915<br>**63.1**<br>956<br>84.8<br>612<br>**92.9**<br>291<br>55.<br>Length Reward+<br>**31.7**<br>1190<br>18.0<br>1208<br>46.7<br>864<br>61.8<br>937<br>84.6<br>546<br>91.9<br>255<br>56.<br>Length Reward_∗_<br>27.3<br>1087<br>13.7<br>1027<br>46.4<br>707<br>61.0<br>779<br>83.0<br>463<br>92.2<br>198<br>53.|7<br>855<br>2<br>869<br>9<br>710|
+|CANON-Eff (_α_ = 0_._88) 27.3<br><br>15.3<br><br>43.9<br><br>59.3<br><br>84.4<br><br>91.4<br><br>53.<br>CANON-Eff (_α_ = 0_._96) 29.7<br>1216<br>**19.0**<br>1136<br>**48.4**<br>881<br>62.3<br>936<br>**85.8**<br>533<br>92.0<br>233<br>**56.**|6<br><br>**2**<br>822|
+
+
+|Col1|Col2|Col3|Col4|Col5|Col6|Col7|
+|---|---|---|---|---|---|---|
+||||||||
+
+
+|Col1|Col2|−45.5%|Col4|Col5|Col6|
+|---|---|---|---|---|---|
+||~~×~~|~~2.63~~||||
+|||||||
+
+
+|Col1|Col2|Col3|Col4|Col5|
+|---|---|---|---|---|
+||||||
+||||||
+||||||
+
+
+~~Collapse!~~
+
+Token Cost
+
+(c) The Pareto frontier in the tradeoff between performance and token efficiency.
+
+
+(a) CANON-Eff with _α_ = 0 _._ 96 consistently outperforms baselines methods.
+
+
+(b) CANON-Eff with _α_ = 0 _._ 88
+achieves significantly better performance at low token budgets.
+
+
+Figure 4: Budget-Performance and Cost-Performance Curves for Efficient Reasoning. This figure
+compares the reasoning efficiency of CANON-Eff against baselines under various token budgets.
+
+
+**Baselines.** We select three types of baseline methods towards efficient reasoning: (1) Clip Length
+that directly clips the maximum output length (Hou et al., 2025), (2) Length Reward (+) that adds
+length penalties terms in the training reward (Luo et al. (2025), +coeff _∗_ ( mean _GLq_ ( _L_ ) _−_ 1)), and (3)
+
+Length Reward ( _∗_ ) that multiplies a normalized length coefficient on the reward (Arora & Zanette
+(2025), _∗_ (1 _−_ coeff _∗_ sigmoid( _L−_ stdmean _Gq_ ( _GLq_ )( _L_ ) ))). All these baselines are conducted with DR.GRPO.
+
+
+**CANON achieves better performance with shorter responses compared with baselines.** We present
+the detailed performance of the top-performing models for each method across various benchmarks in
+Table 3. CANON-Eff with _α_ = 0 _._ 96 Pareto dominates the results of Clip Length and Length Reward
+(+), reducing the length by 26.3% compared to DR.GRPO while only decreasing performance by
+0.4 points. Figure 4 shows that CANON-Eff with _α_ = 0 _._ 96 consistently outperforms the baseline
+methods in both low-token-budget and high-token-budget scenarios. Since models trained with the
+Length Reward ( _∗_ ) exhibit significantly lower length with low performance at the same time, it is
+difficult to fairly compare with other baselines. To this end, we include an additional model trained
+with CANON-Eff with _α_ = 0 _._ 88 that has comparable performance. 4b indicates that CANON with
+_α_ = 0 _._ 88 shows better token efficiency compared with Length Reward ( _∗_ ), achieving 2.63 times
+the performance of DR.GRPO in low-token-budget scenarios, while reducing token consumption by
+45.5% at the same performance level.
+
+
+**CANON achieves a better Pareto frontier and stably explores the entire frontier.** To draw the
+cost-performance curves for each method, we draw the Pareto frontier of CANON-Eff with the
+results of _α_ = 0 _._ 5 _,_ 0 _._ 7 _,_ 0 _._ 8 _,_ 0 _._ 88 _,_ 0 _._ 96. For Length Clipping, we respectively present the results
+with maximum lengths of 2048 and 1024 in the Pareto frontier. For Length Reward (+), penalty
+coefficients of 0.001, 0.004, 0.005, and 0.1 are used, respectively. For Length Reward ( _∗_ ), we utilize
+the coefficients of 0.05, 0.2, and 0.4. 4c shows that all the frontier from baselines are dominated by
+the frontier of CANON-Eff’s. It is noteworthy that after the coefficient of Length Reward (+) is
+adjusted from 0.004 to 0.005, its performance drops from 54.8 to 22.5. In contrast, CANON-Eff
+remains consistently stable, exploring the Pareto frontier efficiently.
+
+
+9
+
+
+6 ANALYSIS
+
+
+In this section, we analyze how CANON-Dynamic and
+CANON-Eff effectively improve the task performance
+and reasoning efficiency.
+
+
+**Different advantage combinations of CANON select dif-**
+**ferent trends of the target metrics.** Due to the different
+
+|Col1|Col2|
+|---|---|
+|||
+
+
+to favor correct answers from the group with a higher aver- Figure 5: CANON shows hierarchical
+age reward, while CANON-Intra selects correct answers trends of target metrics through differfrom the group with a lower average reward. We compare ent combinations of CANON-Inter and
+the effects of CANON on their target metrics across seven CANON-Intra.
+different settings, with _µ_ ranging from 0.0 to 1.0. When entropy is considered, figure 5 shows
+that a larger _µ_ (favoring more CANON-Inter) leads to a reduction in entropy, whereas a smaller
+_µ_ (favoring more CANON-Intra) promotes an increase in entropy. The results demonstrates
+a hierarchical trend in the metric changes, indicating the effectiveness of controlling and selecting different trends from CANON-Inter and CANON-Intra. In this way, CANON-Dynamic
+can boost the task performance by adjusting different combinations of the two components.
+
+
+**CANON can achieve positive gains of more rethinking**
+**and high training efficiency through scheduling of two**
+**advantages.** As shown in Figure 6, we record the performance genuinely brought by reflections and the curve of
+training reward. Although CANON-Intra achieves positive gains from more reflections, its training reward experiences a significant decline. In contrast, CANON-Inter,
+which shows a similar trend of DR.GRPO, has not yet
+achieved positive returns even by step 360, but maintains a higher training reward. CANON-Dynamic, on
+the other hand, not only achieves positive gains of rethinking but also makes a training reward on a par with
+CANON-Inter’s. This explains why CANON-Dynamic
+can achieve comprehensive leading performance in both
+math and complex logic reasoning tasks.
+
+
+**CANON amplifies only the advantage attributable to the**
+**metric used for grouping,** **without amplifying the in-**
+**fluence of other factors.** As shown in Table 4, directly
+scaling the advantage ( _A_ = _A ∗_ 2) fails to improve performance the way CANON does. Any minor gains likely
+stem from faster learning progress due to an effectively
+larger learning rate, but this comes at the cost of degraded
+performance—particularly on out-of-domain logical reasoning tasks. This suggests that the key to CANON’ success
+is not simply amplifying the advantage signal, but rather
+selectively amplifying specific signals, and that’s why we
+introduce a regrouping operation.
+
+
+7 CONCLUSION
+
+
+|Positive Gai|ns|
+|---|---|
+|~~Positive Gai~~||
+|||
+|||
+|||
+|||
+|||
+|||
+|||
+|||
+|||
+|||
+
+
+Figure 6: CANON-Dynamic with scheduled _µ_ has positive gains of rethinking and
+high training score at the same time.
+
+
+Table 4: The performance comparison between the direct numerical amplification of
+advantage and CANON.
+
+
+Methods _Math_ _Logic_
+
+DR.GRPO 55.7 26.2
+Direct Numerical Amplification
+Numerical Scaling 56.1 25.1
+Entropy Adv 56.3 18.5
+
+CANON
+
+CANON-Intra 54.7 **29.1**
+CANON-Inter **57.6** 25.7
+
+
+In this paper, we introduce CANON, a novel reinforcement learning framework for large reasoning
+models that leverages human priors on training metrics (e.g., entropy, response length) without
+presuming their directional impact on performance. Extensive experiments across six math reasoning
+benchmarks and three high-complexity logic reasoning tasks demonstrate that CANON significantly
+outperforms prior advantage estimation methods like DR.GRPO. CANON also supports flexible
+weighting of different metric trends, where CANON based on response length achieves a superior
+Pareto frontier in the performance-efficiency trade-off. Our analysis further confirms that CANON
+promotes beneficial behaviors such as effective exploration and reflection, which are critical for
+solving complex reasoning problems.
+
+
+10
+
+
+ACKNOWLEDGMENTS
+
+
+This work is supported by Shanghai Artificial Intelligence Laboratory.
+
+
+ETHICS STATEMENT
+
+
+This work aims to introduce human priors about key metrics into reinforcement learning by proposing
+a novel advantage estimation framework named CANON, which amplifies the impact of target metrics
+without presuming preferences. The experiments in this paper are limited to reasoning tasks conducted
+on open-source models, datasets, and benchmarks, which will not raise ethical concerns. We hope
+to explore the potential of CANON to enhance the security of large language models in the future,
+thereby promoting their reliable and trustworthy development.
+
+
+REPRODUCIBILITY STATEMENT
+
+
+We aim to include both the high-level and low-level details of our method in the setup paragraphs of
+Section 5 and Appendix C to reproduce our results. All experiments are conducted on open-source
+LLMs and benchmarks. We employ open-source datasets for the Qwen series LLMs, provide a
+detailed description of the prompts used for training and evaluation, and comprehensively present the
+construction process of the training dataset for the Llama series LLM. Our code implementation is
+based on VeRL (Sheng et al., 2024), which is applied with focused modifications in the advantage
+computation part, enhancing the reproducibility of our work. Please access our code base via the
+following anonymous link: [CANON.](https://anonymous.4open.science/r/CANON-1CFC/)
+
+
+BIBLIOGRAPHY
+
+
+Arash Ahmadian, Chris Cremer, Matthias Gallé, Marzieh Fadaee, Julia Kreutzer, Olivier Pietquin,
+Ahmet Üstün, and Sara Hooker. Back to basics: Revisiting reinforce style optimization for learning
+from human feedback in llms. _arXiv preprint arXiv:2402.14740_, 2024.
+
+
+Daman Arora and Andrea Zanette. Training language models to reason efficiently. _arXiv preprint_
+_arXiv:2502.04463_, 2025.
+
+
+Aili Chen, Aonian Li, Bangwei Gong, Binyang Jiang, Bo Fei, Bo Yang, Boji Shan, Changqing Yu,
+Chao Wang, Cheng Zhu, et al. Minimax-m1: Scaling test-time compute efficiently with lightning
+attention. _arXiv preprint arXiv:2506.13585_, 2025a.
+
+
+Minghan Chen, Guikun Chen, Wenguan Wang, and Yi Yang. Seed-grpo: Semantic entropy enhanced
+grpo for uncertainty-aware policy optimization. _arXiv preprint arXiv:2505.12346_, 2025b.
+
+
+Daixuan Cheng, Shaohan Huang, Xuekai Zhu, Bo Dai, Wayne Xin Zhao, Zhenliang Zhang, and Furu
+Wei. Reasoning with exploration: An entropy perspective. _arXiv preprint arXiv:2506.14758_, 2025.
+
+
+Karl Cobbe, Vineet Kosaraju, Mohammad Bavarian, Mark Chen, Heewoo Jun, Lukasz Kaiser,
+Matthias Plappert, Jerry Tworek, Jacob Hilton, Reiichiro Nakano, et al. Training verifiers to solve
+math word problems. _arXiv preprint arXiv:2110.14168_, 2021.
+
+
+Gheorghe Comanici, Eric Bieber, Mike Schaekermann, Ice Pasupat, Noveen Sachdeva, Inderjit
+Dhillon, Marcel Blistein, Ori Ram, Dan Zhang, Evan Rosen, et al. Gemini 2.5: Pushing the frontier
+with advanced reasoning, multimodality, long context, and next generation agentic capabilities.
+_arXiv preprint arXiv:2507.06261_, 2025.
+
+
+Ganqu Cui, Yuchen Zhang, Jiacheng Chen, Lifan Yuan, Zhi Wang, Yuxin Zuo, Haozhan Li, Yuchen
+Fan, Huayu Chen, Weize Chen, et al. The entropy mechanism of reinforcement learning for
+reasoning language models. _arXiv preprint arXiv:2505.22617_, 2025.
+
+
+Abhimanyu Dubey, Abhinav Jauhri, Abhinav Pandey, Abhishek Kadian, Ahmad Al-Dahle, Aiesha
+Letman, Akhil Mathur, Alan Schelten, Amy Yang, Angela Fan, et al. The llama 3 herd of models.
+_arXiv e-prints_, pp. arXiv–2407, 2024.
+
+
+11
+
+
+Kanishk Gandhi, Ayush Chakravarthy, Anikait Singh, Nathan Lile, and Noah D Goodman. Cognitive
+behaviors that enable self-improving reasoners, or, four habits of highly effective stars. _arXiv_
+_preprint arXiv:2503.01307_, 2025.
+
+
+Daya Guo, Dejian Yang, Haowei Zhang, Junxiao Song, Ruoyu Zhang, Runxin Xu, Qihao Zhu,
+Shirong Ma, Peiyi Wang, Xiao Bi, et al. Deepseek-r1: Incentivizing reasoning capability in llms
+via reinforcement learning. _arXiv preprint arXiv:2501.12948_, 2025.
+
+
+Michael Hassid, Gabriel Synnaeve, Yossi Adi, and Roy Schwartz. Don’t overthink it. preferring
+shorter thinking chains for improved llm reasoning. _arXiv preprint arXiv:2505.17813_, 2025.
+
+
+Chaoqun He, Renjie Luo, Yuzhuo Bai, Shengding Hu, Zhen Thai, Junhao Shen, Jinyi Hu, Xu Han,
+Yujie Huang, Yuxiang Zhang, et al. Olympiadbench: A challenging benchmark for promoting
+agi with olympiad-level bilingual multimodal scientific problems. In _Proceedings of the 62nd_
+_Annual Meeting of the Association for Computational Linguistics (Volume 1:_ _Long Papers)_, pp.
+3828–3850, 2024.
+
+
+Zhiwei He, Tian Liang, Jiahao Xu, Qiuzhi Liu, Xingyu Chen, Yue Wang, Linfeng Song, Dian
+Yu, Zhenwen Liang, Wenxuan Wang, et al. Deepmath-103k: A large-scale, challenging, decontaminated, and verifiable mathematical dataset for advancing reasoning. _arXiv_ _preprint_
+_arXiv:2504.11456_, 2025.
+
+
+Dan Hendrycks, Collin Burns, Saurav Kadavath, Akul Arora, Steven Basart, Eric Tang, Dawn Song,
+and Jacob Steinhardt. Measuring mathematical problem solving with the math dataset. _arXiv_
+_preprint arXiv:2103.03874_, 2021.
+
+
+Bairu Hou, Yang Zhang, Jiabao Ji, Yujian Liu, Kaizhi Qian, Jacob Andreas, and Shiyu Chang.
+Thinkprune: Pruning long chain-of-thought of llms via reinforcement learning. _arXiv preprint_
+_arXiv:2504.01296_, 2025.
+
+
+Jian Hu. Reinforce++: A simple and efficient approach for aligning large language models. _arXiv_
+_preprint arXiv:2501.03262_, 2025.
+
+
+Jingcheng Hu, Yinmin Zhang, Qi Han, Daxin Jiang, Xiangyu Zhang, and Heung-Yeung Shum.
+Open-reasoner-zero: An open source approach to scaling up reinforcement learning on the base
+model, 2025. [URL https://arxiv.org/abs/2503.24290.](https://arxiv.org/abs/2503.24290)
+
+
+Hugging Face. Open r1: A fully open reproduction of deepseek-r1, January 2025. [URL https:](https://github.com/huggingface/open-r1)
+[//github.com/huggingface/open-r1.](https://github.com/huggingface/open-r1)
+
+
+Aaron Jaech, Adam Kalai, Adam Lerer, Adam Richardson, Ahmed El-Kishky, Aiden Low, Alec
+Helyar, Aleksander Madry, Alex Beutel, Alex Carney, et al. Openai o1 system card. _arXiv preprint_
+_arXiv:2412.16720_, 2024.
+
+
+Nathan Lambert, Jacob Morrison, Valentina Pyatkin, Shengyi Huang, Hamish Ivison, Faeze Brahman,
+Lester James V Miranda, Alisa Liu, Nouha Dziri, Shane Lyu, et al. Tulu 3: Pushing frontiers in
+open language model post-training. _arXiv preprint arXiv:2411.15124_, 2024.
+
+
+Jia Li, Edward Beeching, Lewis Tunstall, Ben Lipkin, Roman Soletskyi, Shengyi Huang, Kashif Rasul,
+Longhui Yu, Albert Q. Jiang, Ziju Shen, et al. Numinamath: The largest public dataset in ai4maths
+with 860k pairs of competition math problems and solutions. [https://huggingface.co/](https://huggingface.co/datasets/Numinamath)
+[datasets/Numinamath, 2024.](https://huggingface.co/datasets/Numinamath) Hugging Face repository, 13:9.
+
+
+Ziniu Li, Tian Xu, Yushun Zhang, Yang Yu, Ruoyu Sun, and Zhi-Quan Luo. Remax: A simple, effective, and efficient method for aligning large language models. _arXiv preprint arXiv:2310.10505_,
+2023.
+
+
+Bill Yuchen Lin, Ronan Le Bras, Kyle Richardson, Ashish Sabharwal, Radha Poovendran, Peter
+Clark, and Yejin Choi. Zebralogic: On the scaling limits of llms for logical reasoning. _arXiv_
+_preprint arXiv:2502.01100_, 2025.
+
+
+Zichen Liu, Changyu Chen, Wenjun Li, Penghui Qi, Tianyu Pang, Chao Du, Wee Sun Lee, and Min
+Lin. Understanding r1-zero-like training: A critical perspective. _arXiv preprint arXiv:2503.20783_,
+2025a.
+
+
+12
+
+
+Zongkai Liu, Fanqing Meng, Lingxiao Du, Zhixiang Zhou, Chao Yu, Wenqi Shao, and Qiaosheng
+Zhang. Cpgd: Toward stable rule-based reinforcement learning for language models. _arXiv_
+_preprint arXiv:2505.12504_, 2025b.
+
+
+Haotian Luo, Li Shen, Haiying He, Yibo Wang, Shiwei Liu, Wei Li, Naiqiang Tan, Xiaochun Cao,
+and Dacheng Tao. O1-pruner: Length-harmonizing fine-tuning for o1-like reasoning pruning.
+_arXiv preprint arXiv:2501.12570_, 2025.
+
+
+Mihir Prabhudesai, Lili Chen, Alex Ippoliti, Katerina Fragkiadaki, Hao Liu, and Deepak Pathak.
+Maximizing confidence alone improves reasoning. _arXiv preprint arXiv:2505.22660_, 2025.
+
+
+PyTorch. _LambdaLR — PyTorch Documentation_, 2025. [URL https://docs.pytorch.org/](https://docs.pytorch.org/docs/stable/generated/torch.optim.lr_scheduler.LambdaLR.html)
+[docs/stable/generated/torch.optim.lr_scheduler.LambdaLR.html.](https://docs.pytorch.org/docs/stable/generated/torch.optim.lr_scheduler.LambdaLR.html) Accessed: November 19, 2025.
+
+
+Xiaoye Qu, Yafu Li, Zhaochen Su, Weigao Sun, Jianhao Yan, Dongrui Liu, Ganqu Cui, Daizong
+Liu, Shuxian Liang, Junxian He, Peng Li, Wei Wei, Jing Shao, Chaochao Lu, Yue Zhang, XianSheng Hua, Bowen Zhou, and Yu Cheng. A survey of efficient reasoning for large reasoning
+models: Language, multimodality, and beyond, 2025. URL [https://arxiv.org/abs/](https://arxiv.org/abs/2503.21614)
+[2503.21614.](https://arxiv.org/abs/2503.21614)
+
+
+John Schulman, Philipp Moritz, Sergey Levine, Michael Jordan, and Pieter Abbeel. High-dimensional
+continuous control using generalized advantage estimation. _arXiv_ _preprint_ _arXiv:1506.02438_,
+2015.
+
+
+John Schulman, Filip Wolski, Prafulla Dhariwal, Alec Radford, and Oleg Klimov. Proximal policy
+optimization algorithms. _arXiv preprint arXiv:1707.06347_, 2017.
+
+
+Zhihong Shao, Peiyi Wang, Qihao Zhu, Runxin Xu, Junxiao Song, Xiao Bi, Haowei Zhang,
+Mingchuan Zhang, YK Li, Y Wu, et al. Deepseekmath: Pushing the limits of mathematical
+reasoning in open language models. _arXiv preprint arXiv:2402.03300_, 2024.
+
+
+Guangming Sheng, Chi Zhang, Zilingfeng Ye, Xibin Wu, Wang Zhang, Ru Zhang, Yanghua Peng,
+Haibin Lin, and Chuan Wu. Hybridflow: A flexible and efficient rlhf framework. _arXiv preprint_
+_arXiv:_ _2409.19256_, 2024.
+
+
+Leslie N Smith. Cyclical learning rates for training neural networks. In _2017 IEEE winter conference_
+_on applications of computer vision (WACV)_, pp. 464–472. IEEE, 2017.
+
+
+Shenzhi Wang, Le Yu, Chang Gao, Chujie Zheng, Shixuan Liu, Rui Lu, Kai Dang, Xionghui Chen,
+Jianxin Yang, Zhenru Zhang, et al. Beyond the 80/20 rule: High-entropy minority tokens drive
+effective reinforcement learning for llm reasoning. _arXiv preprint arXiv:2506.01939_, 2025.
+
+
+Jianhao Yan, Yafu Li, Zican Hu, Zhi Wang, Ganqu Cui, Xiaoye Qu, Yu Cheng, and Yue Zhang.
+Learning to reason under off-policy guidance. _arXiv preprint arXiv:2504.14945_, 2025.
+
+
+An Yang, Beichen Zhang, Binyuan Hui, Bofei Gao, Bowen Yu, Chengpeng Li, Dayiheng Liu,
+Jianhong Tu, Jingren Zhou, Junyang Lin, Keming Lu, Mingfeng Xue, Runji Lin, Tianyu Liu,
+Xingzhang Ren, and Zhenru Zhang. Qwen2.5-math technical report: Toward mathematical expert
+model via self-improvement, 2024. [URL https://arxiv.org/abs/2409.12122.](https://arxiv.org/abs/2409.12122)
+
+
+An Yang, Anfeng Li, Baosong Yang, Beichen Zhang, Binyuan Hui, Bo Zheng, Bowen Yu, Chang
+Gao, Chengen Huang, Chenxu Lv, et al. Qwen3 technical report. _arXiv preprint arXiv:2505.09388_,
+2025.
+
+
+Qiying Yu, Zheng Zhang, Ruofei Zhu, Yufeng Yuan, Xiaochen Zuo, Yu Yue, Weinan Dai, Tiantian
+Fan, Gaohong Liu, Lingjun Liu, et al. Dapo: An open-source llm reinforcement learning system at
+scale. _arXiv preprint arXiv:2503.14476_, 2025.
+
+
+Weihao Zeng, Yuzhen Huang, Qian Liu, Wei Liu, Keqing He, Zejun Ma, and Junxian He. Simplerlzoo: Investigating and taming zero reinforcement learning for open base models in the wild. _arXiv_
+_preprint arXiv:2503.18892_, 2025.
+
+
+13
+
+
+A LIMITATIONS.
+
+
+Based on feasibility and motivation, this work focuses on conditions that can be specified through
+numerical ordering, without exploring conditions that are more complex and harder to verify. Due
+to limitations in paper length and computation resources, this work primarily conducts the CANON
+based on two metrics—response length and entropy—while other training metrics remain unexplored.
+Additionally, the paper considers only one metric at a time, without attempting to incorporate multiple
+metrics simultaneously. This demonstrates that the perspective and framework proposed in this
+work is flexible and hold significant potential for extension, which can be further explored in future
+research.
+
+
+B THE USE OF LARGE LANGUAGE MODELS.
+
+
+LLMs primarily assist this work in two aspects: on one hand, they are used for aiding our writing,
+and on the other hand, they sometimes serve as a coding assistant during the programming of our
+code base.
+
+
+C EXPERIMENTS DETAILS.
+
+
+C.1 RETHINKING PATTERNS.
+
+
+Following Gandhi et al. (2025), we firstly samples 10000 responses of Qwen3-32B Yang et al. (2025)
+and utilize the modified prompts from (Gandhi et al., 2025) to collect the rethinking patterns of
+verification, sub-goal setting, and backtracking. Then we match these patterns in a few QuestionAnswer instances and filter out overly frequent conjunctions, overly short words, and semantically
+ambiguous phrases. The number of remaining keywords and regular expressions is 334 for verification,
+1036 for sub-goal setting, and 532 for backtracking.
+
+
+C.2 THE MAXIMUM TOKEN BUDGET SETUPS.
+
+
+We set the maximum token budget for each benchmark based on its difficulty and the average token
+length observed from models trained with DR.GRPO, as shown in Figure 5. When plotting the
+performance-budget curve, we normalize the maximum token budget of each benchmark to 1.0. We
+then evaluate the performance of all benchmarks under token budgets ranging from 0.1× to 1.3×
+their respective maximum budget, averaging the results across benchmarks at each budget ratio and
+displaying them in the figure.
+
+
+Table 5: Benchmark-wise Maximum Token Budget.
+
+
+**Benchmark** **Avg. Tokens (unlimited)** **Max Token Budget**
+
+
+GSM8k 349 600
+MATH-500 728 1500
+AMC 1214 1800
+OlympiadBench 1172 1800
+AIME 2024 1640 2000
+AIME 2025 1586 2000
+
+
+C.3 REASONS FOR EXPANDING THE CONTEXT WINDOW OF MODELS FROM QWEN2.5-MATH
+SERIES.
+
+
+Initially, we uses the setting of Section 5.1; however, during the training process, too much length
+clipping (> 30%) results in nearly incomparable experimental outcomes, as shown in Figure 7.
+Therefore, we expand Qwen2.5-Math-7B’s context limit from 4096 to 16384 and set the maximum
+output length to 8192, which alleviates this phenomenon.
+
+
+C.4 SYSTEM PROMPT.
+
+
+For the training and inference of Qwen series models, we share the same system prompt as follows.
+
+
+14
+
+
+Training Steps
+
+
+Figure 7: The ratio of answers
+truncated due to reaching the
+maximum output length.
+
+
+Training Steps Training Steps
+
+
+Figure 8: The score curves of the training set and validation set
+from the newly constructed dataset with 35k data and the original
+dataset used for the Qwen series models, respectively.
+
+
+C.5 CONSTRUCTION OF TRAINING DATASET FOR LLAMA3.1-8B.
+
+
+Since the pretraining of Llama3.1-8B lacks data for long chain-of-thought and mathematical reasoning,
+its average training reward based on the original dataset used for Qwen2.5-Math remains below 0.2.
+To enhance training efficiency, we employ three Llama series models (Llama3.1-8B, Llama3.1-8BInstruct, and Llama3.1-70B) to generate solutions for each problem across four datasets (training
+set of GSM8k (Cobbe et al., 2021), training set of MATH (Hendrycks et al., 2021), a 46k subset
+of OpenR1-Math-220k (Hu et al., 2025; Yan et al., 2025), and DeepMath-103k (He et al., 2025)).
+We then filter out questions whose accuracy of Pass@8 _>_ 0, ultimately selecting 35k samples for
+training the Llama3.1-8B model. Concurrently, due to Llama3.1-8B’s limited instruction-following
+capability, we simplify the output format requirements in its system prompt.
+
+
+The training curves for this 35k dataset and the original 46k training dataset over 150 training
+steps are shown in the Figure 8. It demonstrates that Llama3.1-8B has significantly higher learning
+effectiveness on the newly constructed dataset.
+
+
+C.6 SCHEDULING STRATEGIES OF COEFFICIENT TO BALANCE CANON-IN T E R AND
+CANON-INTRA.
+
+
+We try four different scheduling strategies and show the best of them for each model. Figure 9
+shows the dynamics of _µ_ in the training process from the _First-Inter-Later-Intra_ ( _µ_ = 1 _−_ Λ) and
+_First-Intra-Later-Inter_ ( _µ_ = Λ). _Cosin-First-Inter-Later-Intra_ and _Cosin-First-Intra-Later-Inter_
+
+
+15
+
+
+Table 6: Detailed experimental results of CANON on Llama3.1-8B and Qwen2.5-Math-1.5B . All
+models are evaluated under a unified setting. **Bold** and underline indicate the best and second-best
+results, respectively.
+
+
+**Math Reasoning** **High Complexity Reasoning**
+**Model**
+
+**AIME 24** **AIME 25** **Olympiad** **AMC** **MATH-500** **GSM8k** **Tokens** **Acc** **Mid** **Large** **XLarge** **Tokens** **Acc**
+
+
+Qwen2.5-Math-1.5B
+
+|6.4|23.7<br>27.7<br>23.1<br>27.0|
+|---|---|
+|<br>5.1 <br>6.1 <br>**6.8**|<br>5.1 <br>6.1 <br>**6.8**|
+
+
+schedule the value of _µ_ with a cosine annealing function Ψ with restarts and warm-up:
+
+
+_µ_ max _·_ _[s]_ [ + 1]
+
+
+if _s < w_
+_w_
+
+
+Ψ =
+
+
+
+
+
+
+_µ_ min + [1]
+
+
+��
+
+
+             - _S−w_              - _[,]_
+if _s ≥_ _w_ and _s_ _[′]_ = _s −_ _w_ mod _c_
+
+
+1 + cos
+
+
+_s_ _[′]_
+_π ·_
+
+   - _S−w_   _c_
+
+
+
+
+
+2 [(] _[µ]_ [max] _[ −]_ _[µ]_ [min][)]
+
+
+(10)
+where _c_ denotes the number of restart and _w_ is the warm-up step. _s_ is the current step of training and
+_S_ is the total step. _µ_ max and _µ_ min denote the specified maximum and minimum values of _µ_ . We use
+_c_ = 3, _w_ = 30 and _S_ = 150 for both strategies.
+
+In strategy _Cosin-First-Inter-Later-Intra_, we utilize _µ_ = Ψ with _µ_ max = 1 _._ 0 and _µ_ min = 0 _._ 4,
+respectively, while in strategy _Cosin-First-Intra-Later-Inter_, we utilize _µ_ = 1 _−_ Ψ) with _µ_ max = 0 _._ 6
+and _µ_ min = 0 _._ 0, respectively. The changes in _µ_ under these strategies are shown in the Figure 10.
+Ultimately, based on training performance, we selected strategy _Cosin-First-Inter-Later-Intra_ for
+Qwen2.5-7B and Llama, and strategy _First-Inter-Later-Intra_ for Qwen2.5-1.5B.
+
+
+|Col1|Col2|Col3|
+|---|---|---|
+||||
+|Coefficient𝜇|Coefficient𝜇|Coefficient𝜇|
+||||
+||||
+
+
+Figure 9: The changes of _µ_ for two scheduling strategies based on accuracy during
+training.
+
+
+|Col1|Warm|-up|Re|star|t|Col7|Col8|Col9|Col10|
+|---|---|---|---|---|---|---|---|---|---|
+|Coefficient 𝜇|Coefficient 𝜇|Coefficient 𝜇|Coefficient 𝜇|Coefficient 𝜇|Coefficient 𝜇|Coefficient 𝜇|Coefficient 𝜇|Coefficient 𝜇|Coefficient 𝜇|
+
+
+Training Steps
+
+
+Figure 10: The changes of _µ_ for two scheduling strategies based on training steps during training.
+
+
+C.7 DETAILED EXPERIMENTAL RESULTS ON LLAMA3.1-8B AND QWEN2.5-MATH-1.5B.
+
+
+Here we show the detailed test results for Llama3.1-8B and Qwen2.5-Math-1.5B for the comparison between CANON, CANON-Dynamic and its baseline. As shown in Table 6, consistent with
+Qwen2.5-Math-7B, Llama3.1-8B achieves superior performance on math tasks with CANON-Inter
+and leads on logic tasks with CANON-Intra, while CANON-Dynamic outperforms the baseline
+across both tasks. On Qwen2.5-Math-1.5B, CANON-Inter does not achieve a lead in math performance; however, its dynamic variant CANON-Dynamic still surpasses the baseline in both tasks,
+demonstrating the effectiveness of CANON.
+
+
+16
+
+
+D ADDITIONAL EXPERIMENTS.
+
+
+D.1 CANON BASED ON ANOTHER METRIC.
+
+
+To further verify that CANON remains effective under other grouping criteria, we conduct new
+experiments that use the number of per-token reflection steps in each response as the grouping
+metric. As shown in Table 7, it exhibits a trend similar to entropy-based CANON. Although both
+are slightly inferior to the entropy-based CANON, CANON-Inter still outperforms the baselines
+on mathematical reasoning, and CANON-Intra achieves better performance than the baselines on
+complex logic reasoning. Figure 11 demonstrate that CANON-Inter favors less-reflection responses
+and CANON-Intra encourages more reflections.
+
+
+Table 7: Overall performance of CANON based on Per-token Reflection for Qwen2.5-Math-7B. All
+models are evaluated under a unified setting. **Bold** and underline indicate the best and second-best
+results, respectively.
+
+|Model Math Reasoning|High Complexity Reasoning|
+|---|---|
+|**AIME 24 AIME 25 Olympiad AMC MATH-500 GSM8k Tokens Acc **|**Mid Large XLarge Tokens Acc**|
+|DR.GRPO (_µ_ = 0_._5)<br>27.7<br>**20.3**<br>48.4<br>63.4<br>83.2<br>91.1<br>1522<br>55.7|39.2<br>24.4<br>15.1<br>4896<br>26.2|
+
+
+|Col1|Col2|
+|---|---|
+|||
+|||
+
+
+Figure 11: The training dynamic of CANON based on per-token reflection.
+
+
+D.2 OTHER ALTERNATIVE SCHEDULING STRATEGIES OF CANON-DY N A M I C
+
+
+We conduct further experiments that utilize other alternative scheduling strategies that were used to
+be performed in the scheduler of learning rate, including the _Lambda strategy_ (PyTorch, 2025) and
+_Cyclic-triangular2 strategy_ (Smith, 2017). Following the setting of tried scheduling strategies, both
+of these strategies schedule _µ_ from 1.0 down to 0.4.
+
+The new experimental results in Table 8 show that Lambda strategy achieves slightly better performance than DR.GRPO on math tasks but performs worse on logic reasoning tasks. This may be
+because they fail to sufficiently leverage intra-group advantages in the later stages of training. This
+experiment demonstrates the rationale behind CANON’s tried scheduling strategies and highlights
+the practical flexibility of the CANON framework.
+
+
+D.3 DYNAMIC SCHEDULING ON LENGTH-BASED CANON.
+
+
+When we consider response length, CANON-Inter tends to produce shorter responses, whereas
+CANON-Intra favors longer ones. However, these trends in response length do not translate into
+performance gains. This is precisely why we only applied dynamic scheduling to the entropy-based
+variant of CANON. To prove this, we try dynamic scheduling on length-based CANON under the
+setting of entropy-based CANON—initially favoring shorter responses and gradually shifting toward
+longer ones as training progresses. The results are shown below. Although the responses are shorter
+than those of DR.GRPO, the math performance slightly declines, as shown in Table 9. While this
+
+
+17
+
+
+Table 8: Overall performance of CANON-Dynamic based on other two scheduling strategies for
+Qwen2.5-Math-7B. All models are evaluated under a unified setting. **Bold** and underline indicate the
+best and second-best results, respectively.
+
+
+**Math Reasoning** **High Complexity Reasoning**
+
+
+method shows improved performance on complex reasoning tasks, it still does not surpass either
+CANON-Inter or CANON-Intra based on length.
+
+
+Table 9: Overall performance of CANON-Dynamic based on length response for Qwen2.5-Math-7B.
+All models are evaluated under a unified setting. **Bold** and underline indicate the best and second-best
+results, respectively.
+
+|Model Math Reasoning|Col2|High Complexity R|Reasoning|
+|---|---|---|---|
+|**AIME 24 AIME 25 Olympiad AMC MATH-500 GSM8k **|**Tokens Acc **|**Mid Large XLarge **|**Tokens Acc**|
+|DR.GRPO (_µ_ = 0_._5)<br>27.7<br>20.3<br>48.4<br>63.4<br>83.2<br>91.1|1522<br>55.7|39.2<br>24.4<br>15.1|4896<br>26.2|
+
+
+D.4 ANALYSIS OF _µ_ ’S HYPERPARAMETER TUNING COMPLEXITY
+
+
+Although CANON-Dynamic introduces a hyperparameter _µ_ to balance exploitation and exploration,
+unlike conventional regularization coefficients, _µ_ carries rich physical meaning and does not add
+significant complexity. When _µ_ equals 0.5, DR.GRPO achieves the simplest form of balance through a
+static weighted average. This observation inspired us: if a more dynamic balancing mechanism exists,
+it is natural that this method could outperform DR.GRPO—this is precisely why CANON-Dynamic
+works.
+
+To analyze the hyperparameter tuning complexity re-introduced by _µ_, we train Qwen2.5-Math-7B
+with a 4K context length using entropy-based CANON, showing how model performance and entropy
+vary with _µ_ . Table 10 indicates that, as _µ_ increases from 0 (CANON-Intra) to 1 (CANON-Inter),
+in-domain mathematical performance steadily improves, out-of-domain logical reasoning performance gradually declines, and entropy consistently decreases—revealing a clear trend. Therefore,
+introducing _µ_ does not increase the difficulty of hyperparameter tuning; rather, it extends the CANON
+framework and offers new insights on how we can utilize CANON.
+
+
+Table 10: Performance and entropy across different _µ_ values.
+
+|µ|0.0 0.2 0.4 0.5 0.6 0.8 1.0|
+|---|---|
+|Math|54.2<br>54.9<br>56.0<br>56.6<br>56.7<br>56.4<br>**57.9**|
+|Logic|**27.1**<br>25.1<br>24.6<br>23.8<br>25.6<br>22.9<br>22.5|
+|Entropy|2.40<br>1.28<br>0.46<br>0.39<br>0.26<br>0.19<br>0.15|
+
+
+D.5 ANALYSIS OF _α_ ’S HYPERPARAMETER TUNING COMPLEXITY
+
+
+Insights from CANON reveal that the choice of metric trend primarily occurs in the inter-group
+advantage computation. Therefore, in scenarios where inference efficiency is desired, we only need
+to slightly reduce the reward weight for the long-response group in CANON-Inter, prompting the
+model to favor shorter answers. Meanwhile, since CANON-Intra remains unchanged, CANON-Eff
+fully preserves the model’s exploration capability, achieving a superior performance–efficiency
+Pareto frontier. The hyperparameter _α_ introduced in CANON-Eff not only allows flexible tuning
+
+
+18
+
+
+toward specific application needs and thorough exploration of the Pareto frontier, but also ensures
+greater stability and smoother behavior compared to baselines (like the collapse of Length Reward
+(+)) —because it minimally alters the training process (only modifying the inter-group advantage
+computation).
+
+To analyze the hyperparameter tuning complexity re-introduced by _α_ . We show the detailed performance and token length of these CANON-Eff models. Table **??** indicates that as _α_ gradually
+decreases from 0.96 to 0.5, model performance declines modestly, while the number of tokens consumed drops significantly—again aligning with our understanding. Therefore, in efficient reasoning
+tasks, introducing _α_ not only avoids increasing hyperparameter tuning difficulty but also enables
+users to apply CANON-Eff more flexibly according to their specific needs.
+
+
+Table 11: Performance and token cost across different _α_ values.
+
+|α|0.5 0.7 0.8 0.88 0.96|
+|---|---|
+|Performance|44.5<br>49.5<br>52.0<br>53.6<br>**56.2**|
+|Token Cost|**198.9**<br>317.9<br>420.6<br>576.6<br>822.4|
+
+
+D.6 CANON SELECTS APPROPRIATE METRICS AS THE TARGET.
+
+
+We conduct a simple ablation study on the target metrics
+considered by CANON. As shown in Table 12, random regrouping achieves only the same performance as the baseline method while producing longer responses, thus failing
+to improve either performance or efficiency compared to
+the baseline. In contrast, CANON-Inter based on the
+response length excels in the token efficiency with 33.8%
+shorter responses, and the entropy-based CANON-Inter
+delivers the best performance (57.6 points) among the
+comparisons.
+
+
+Table 12: The accuracy and token cost of
+CANON-Inter with different metrics.
+
+
+Methods _Acc_ _Tokens_
+
+DR.GRPO 55.7 1522
+
+Random regrouping 55.7 1557
+
+CANON-Inter
+
+based on _Length_ 55.3 **1008**
+based on _Entropy_ **57.6** 1466
+
+
+E DETAILED DERIVATION OF THEOREM 1 AND 2
+
+
+**Theorem 1** (Situations with clearer advantage signal) **.** _Suppose that condition c is based on numerical_
+_comparisons and can be derived through sorting of metrics. Further assume that the sampled response_
+
+_o to query q_ _satisfy condition c with probability p_ _∈_ (0 _,_ 1) _, and_ **E** _o satisfy c_ [ _Ro_ ] = **E** _o not_ _satisfy c_ [ _Ro_ ] _._
+_Then, we have:_
+
+
+_|A_ [ˆ] _[inter]_ _q,o,t_ _[|]_
+
+_>_ 1 _,_ _only when |Cq_ [+] _[|]_ [ =] _[ |][C]_ _q_ _[−][|][ if][ |][C]_ _q_ [+] _[|][ is a constant.]_ (11)
+_|A_ [ˆ] _[DR.GRPO]_ _q,o,t_ _|_
+
+
+_Proof of Theorem 1._ Given a prompt _q_, the set of all responses that satisfy condition _c_ can be denoted
+as _C_ . We use _p_ = P( _o_ _∈C|q, θ_ ) _∈_ (0 _,_ 1) to describe the probability that a response _o_ satisfying
+condition _c_ is provided to the prompt _q_ by an LLM with parameter _θ_ . Assuming that when condition
+_c_ is satisfied, the probability of the correct response is _a_ +, and when condition _c_ is not satisfied, the
+probability of the correct response is _a−_ . Denoting the correctness of the response _o_ to query _q_ as _Ro_,
+then we have:
+
+
+**E** _o∈C_ [ _Ro_ ] = _a_ + and **E** _o/∈C_ [ _Ro_ ] = _a−_ _._ (12)
+
+
+E.1 DR.GRPO
+
+
+Sampling a group of responses _Gq_ to the prompt _q_, the advantage _A_ [ˆ][DR.GRPO] _q,o,t_ of a response _o_ can be
+calculated as:
+
+
+_A_ ˆ [DR.GRPO] _q,o,t_ = _Ro −_ mean( _{Ro′|o_ _[′]_ _∈_ _Gq}_ ) _._ (13)
+
+
+19
+
+
+We use _A_ [DR.GRPO] ( _o, c_ ) to denote the **average** advantage of the responses that **satisfy** condition _c_, and
+utilize _A_ [˜][DR.GRPO] ( _o, c_ ) to describe the average advantage of the other responses that **do not satisfy**
+condition _c_ .
+
+
+_A_ [DR.GRPO] ( _o, c_ ) = **E** _o∈C_ [ _A_ [ˆ][DR.GRPO] _q,o,t_ ]
+
+= **E** _o∈C_ [ _Ro_ ] _−_ **E** _o∈Gq_ [ _Ro_ ]
+
+= _a_ + _−_ [P( _o ∈C|q, θ_ ) **E** _o∈C_ [ _Ro_ ] + P( _o_ _∈C|/_ _q, θ_ ) **E** _o/∈C_ [ _Ro_ ]]
+= _a_ + _−_ _pa_ + _−_ (1 _−_ _p_ ) _a−_ = ( _a_ + _−_ _a−_ )(1 _−_ _p_ ) _,_ (14)
+_A_ ˜ [DR.GRPO] ( _o, c_ ) = ( _a−_ _−_ _a_ +) _p ._ (15)
+
+
+E.2 INTER-GROUP ADVANTAGE (CANON-IN T E R)
+
+
+We sort the sampled responses based on the numerical value considered by condition _c_, and split them
+at position _k_ into two groups. Based on the symmetry of the inter-group advantage, we can denote
+
+_|Cq_ [+] _[|]_
+these _k_ responses as _Cq_ [+][.] [We use] _[ λ]_ [ :=] _|Gq|_ [to simplify the notation, and denote the average inter-]
+
+group advantage with _Aλ_ ( _o, c, p_ ) for the responses that **satisfy** condition _c_ . _A_ [˜] _λ_ ( _o, c, p_ ) is utilized to
+represent the average inter-group advantage of those responses that **do not satisfy** condition _c_ .
+
+Then, we can compute the average reward of each group as follows.
+
+**E** _o∈Cq_ + [[] _[R][o]_ [] = [P(] _[o][ ∈C|][q, θ, o][ ∈]_ _[C]_ _q_ [+][)] **[E]** _[o][∈C]_ [[] _[R][o]_ [] + P(] _[o]_ _[∈C|][/]_ _[q, θ, o][ ∈]_ _[C]_ _q_ [+][)] **[E]** _o/∈C_ [[] _[R][o]_ []]]
+
+
+_,_ (16)
+_a_ + _,_ if _λ < p_
+
+
+=
+
+
+=
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+_p_ _[λ][−][p]_
+_λ_ **[E]** _[o][∈C]_ [[] _[R][o]_ [] +] _λ_ **[E]** _[o/][∈C]_ [[] _[R][o]_ []] _[,]_ [ if] _[ λ][ ≥]_ _[p]_
+
+
+**E** _o∈C_ [ _Ro_ ] _,_ if _λ < p_
+
+
+_p_ _[λ][−][p]_
+_λ_ _[a]_ [+][ +] _λ_
+
+
+_λ_ _[a][−][,]_ [ if] _[ λ][ ≥]_ _[p]_
+
+
+**E** _o/∈Cq_ + [[] _[R][o]_ [] = [P(] _[o][ ∈C|][q, θ, o]_ _[∈][/]_ _[C]_ _q_ [+][)] **[E]** _[o][∈C]_ [[] _[R][o]_ [] + P(] _[o]_ _[∈C|][/]_ _[q, θ, o]_ _[∈][/]_ _[C]_ _q_ [+][)] **[E]** _o/∈C_ _[R][o]_ []]
+
+
+**E** _o/∈C_ [ _Ro_ ] _,_ if _λ ≥_ _p_
+
+
+_p−λ_ [1] _[−][p]_
+1 _−λ_ **[E]** _[o][∈C]_ [[] _[R][o]_ [] +] 1 _−λ_ **[E]** _[o/][∈C]_ [[] _[R][o]_ []] _[,]_ [ if] _[ λ < p]_
+
+_a−,_ if _λ ≥_ _p_
+
+_._ (17)
+
+_p−λ_ [1] _[−][p]_
+1 _−λ_ _[a]_ [+][ +] 1 _−λ_ _[a][−][,]_ [ if] _[ λ < p]_
+
+
+=
+
+
+=
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Therefore, we can calculate the average advantages:
+
+_Aλ_ ( _o, c, p_ ) = **E** _o∈C_ [ _Ro −_ P( _o ∈_ _Cq_ [+] _[|][q, θ, o][ ∈C]_ [)] **[E]** _o_ _[′]_ _∈/Cq_ [+][[] _[R][o][′]_ []] _[ −]_ [P(] _[o]_ _[∈][/]_ _[C]_ _q_ [+] _[|][q, θ, o][ ∈C]_ [)] **[E]** _o_ _[′]_ _∈Cq_ [+][[] _[R][o][′]_ []]]
+
+
+_λ_ _[p][−][λ]_
+_p_ [[] 1 _−λ_
+
+
+_[p][−][λ]_ [1] _[−][p]_
+
+1 _−λ_ _[a]_ [+][ +] 1 _−λ_
+
+
+0 _,_ if _λ ≥_ _p_
+
+
+_p−λ_
+
+_p_ _[a]_ [+] _[,]_ [ if] _[ λ < p]_
+
+
+_a−,_ if _λ ≥_ _p_
+
+
+= **E** _o∈C_ [ _Ro_ ] _−_
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+_−_
+
+[1] _[−][p]_
+
+1 _−λ_ _[a][−]_ []] _[,]_ [ if] _[ λ < p]_
+
+
+_a_ + _−_ _a−,_ if _λ ≥_ _p_
+
+_,_ (18)
+_λ_ (1 _−p_ )
+_p_ (1 _−λ_ ) [(] _[a]_ [+] _[ −]_ _[a][−]_ [)] _[,]_ [ if] _[ λ < p]_
+
+
+=
+
+
+
+
+
+
+
+
+
+_A_ ˜ _λ_ ( _o, c, p_ ) = **E** _o/∈C_ [ _Ro −_ P( _o ∈_ _Cq_ [+] _[|][q, θ, o]_ _[∈C][/]_ [)] **[E]** _o_ _[′]_ _∈/Cq_ [+][[] _[R][o][′]_ []] _[ −]_ [P(] _[o]_ _[∈][/]_ _[C]_ _q_ [+] _[|][q, θ, o]_ _[∈C][/]_ [)] **[E]** _o_ _[′]_ _∈Cq_ [+][[] _[R][o][′]_ []]]
+
+
+_λ−p_
+1 _−p_ _[a][−][,]_ [ if] _[ λ][ ≥]_ _[p]_
+
+_−_
+0 _,_ if _λ < p_
+
+
+
+
+
+
+
+
+
+_a_ + _,_ if _λ < p_
+
+
+_[p]_ _[λ][−][p]_
+
+_λ_ _[a]_ [+][ +] _λ_
+
+
+_λ_ _[a][−]_ []] _[,]_ [ if] _[ λ][ ≥]_ _[p]_
+
+
+= **E** _o/∈C_ [ _Ro_ ] _−_
+
+
+
+
+
+
+
+
+
+1 _−λ_ _[p]_
+1 _−p_ [[] _λ_
+
+
+_p_ (1 _−λ_ )
+_λ_ (1 _−p_ ) [(] _[a][−]_ _[−]_ _[a]_ [+][)] _[,]_ [ if] _[ λ][ ≥]_ _[p]_
+
+_._ (19)
+_a−_ _−_ _a_ + _,_ if _λ < p_
+
+
+20
+
+
+=
+
+
+
+
+
+
+
+
+
+E.3 COMPARISON
+
+
+We have the ratio between inter-group advantage and DR.GRPO:
+
+
+_|Aλ_ ( _o, c, p_ ) _|_
+_|A_ [DR.GRPO] ( _o, c_ ) _|_ [=]
+
+
+- 1 _−_ 1 _p_ _[>]_ [ 1] if _λ ≥_ _p_
+_λ_ (20)
+(1 _−λ_ ) _p_ if _λ < p_ _[,]_
+
+
+and
+
+
+_|A_ [˜] _λ_ ( _o, c, p_ ) _|_
+=
+_|A_ [˜][DR.GRPO] ( _o, c_ ) _|_
+
+
+- _λ_ 1(11 _−−λp_ ) if _λ ≥_ _p_ (21)
+
+_p_ _[>]_ [ 1] if _λ < p_ _[.]_
+
+
+To accentuate the impact of a specific condition on advantages, the following is required:
+
+
+1 _−_ _λ_ _λ_
+
+[and] (22)
+_λ_ (1 _−_ _p_ ) _[>]_ [ 1][ if] _[ λ][ ≥]_ _[p,]_ (1 _−_ _λ_ ) _p_ _[>]_ [ 1][ if] _[ λ < p.]_
+
+
+Then we have
+
+
+1 _p_
+_λ <_ [and] _[ λ >]_ (23)
+2 _−_ _p_ [if] _[ λ][ ≥]_ _[p,]_ 1 + _p_ [if] _[ λ < p.]_
+
+
+[1] _p_ [1]
+
+2 [and] 1+ _p_ _[<]_ 2
+
+
+If _|Cq_ [+] _[|]_ [ is a constant,] _[ λ]_ [ is also a constant.] [Due to] 2 _−_ 1 _p_ _[>]_ [1] 2
+
+
+[1]
+
+2 [,] _[ λ]_ [ needs to satisfy] _[ λ][ ≤]_ [1] 2
+
+
+_q_ 2 _−p_ 2 1+ _p_ 2 2
+
+and _λ_ _≥_ [1] [at the same time, consequently restricting the value of] _[ λ]_ [ to 0.5.] [In this way, we have]
+
+
+_|Cq_ [+] _[|]_
+
+
+2 [at the same time, consequently restricting the value of] _[ λ]_ [ to 0.5.] [In this way, we have]
+
+
+_q_
+
+_|Cq_ [+] _[|]_ [+] _[|][C]_ _q_ _[−][|]_ [= 0] _[.]_ [5][, and finally] _[ |][C]_ _q_ [+] _[|]_ [ =] _[ |][C]_ _q_ _[−][|]_
+
+
+**Theorem 2** (Selective amplification based on specific metrics (proved in Appendix E)) **.** _Consider_
+_independent_ _conditions_ _c_ 1 _and_ _c_ 2 _,_ _and_ _their_ _corresponding_ _sets_ _C_ 1 _and_ _C_ 2 _(i.e.,_ _P_ ( _o_ _∈_ _C_ 1 _∩_
+_C_ 2 _|q, θ_ ) = _P_ ( _o ∈_ _C_ 1 _|q, θ_ ) _P_ ( _o ∈_ _C_ 2 _|q, θ_ ) _)._ _When we fix the condition c_ 1 _, then for any value of the_
+_performance gap a_ 2+ _, a_ 2 _−_ _and the probability P_ ( _o ∈_ _C_ 2 _|q, θ_ ) _that induced by whether c_ 2 _is satisfied,_
+_we have_
+
+_|A_ [ˆ] _q,o,t_ _[inter based on][ c]_ [1] _|_
+
+_is a constant._ (24)
+_|A_ [ˆ] _[DR.GRPO]_ _q,o,t_ _|_
+
+
+_which says CANON based on the condition c_ 1 _will not amplify the influence of another independent_
+_condition c_ 2 _._
+
+
+_Proof of Theorem 2._ According to Eq. 20 and 21, the scaling factor depends only on the probability
+_p_ 1 = P( _o ∈C_ 1 _|q, θ_ ) that a response _o_ satisfying condition _c_ 1 is provided to the prompt _q_ by an LLM
+with parameter _θ_ . Therefore, any irrelevant condition _c_ 2 and its associated parameters cannot affect
+this ratio.
+
+
+21

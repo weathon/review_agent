@@ -1,0 +1,932 @@
+# CLASSIFIER-CONSTRAINED ALTERNATING TRAIN- ING: MITIGATING MODALITY IMBALANCE IN MULTIMODAL LEARNING
+
+
+**Anonymous authors**
+Paper under double-blind review
+
+
+ABSTRACT
+
+
+Modality imbalance, driven by divergent convergence dynamics across modalities, critically limits multimodal model performance. Although alternating training methods mitigate encoder-level interference, they fail to prevent dominance of
+classifiers by faster-converging modalities, suppressing contributions from weaker
+ones. To address this core limitation, we propose Classifier-Constrained Alternating Training (CCAT). Our framework first pre-trains an unbiased cross-modal
+classifier using bidirectional cross-attention and a regularization term that constrains modality contribution differences. This classifier is then frozen as a stable
+decision anchor during subsequent training, preventing bias toward any modality. To preserve modality-specific features while leveraging this anchor, we integrate modality-specific Low-Rank Adaptation (LoRA) modules into the classifier. During alternating training, CCAT updates only the encoder of the active
+modality and its corresponding LoRA parameters. Furthermore, a sample-level
+imbalance detection mechanism quantifies contribution disparities, enabling targeted optimization of severely imbalanced samples to bolster weaker modalities.
+Extensive experiments across multiple benchmarks demonstrate CCAT’s consistent superiority: it achieves accuracy gains of +1.35% on CREMA-D, +6.76% on
+Kinetic-Sound and +1.92% on MVSA over state-of-the-art methods, validating
+the framework’s efficacy in learning balanced, robust multimodal representations.
+
+
+1 INTRODUCTION
+
+
+Multimodal learning integrates diverse information across modalities Baltruˇsaitis et al. (2019); Liang
+et al. (2021), proving effective for numerous tasks with substantial recent progress Yang et al.
+(2022a); Xu et al. (2023); Yuan et al. (2025). However, such models often face persistent performance bottlenecks Wu et al. (2022) and occasionally underperform unimodal counterparts Gat et al.
+(2021); Yang et al. (2025). Modality imbalance Wang et al. (2020); Su et al. (2023) constitutes the
+root cause. Inherent inter-modal disparities in information quality and optimization induce gradient
+conflicts and divergent convergence speeds during training Du et al. (2023). Consequently, dominant modalities steer optimization while weaker ones are suppressed, compromising generalization
+capability Sun et al. (2021); Yang et al. (2024); Zhou et al. (2025b).
+
+
+Existing solutions primarily co-optimize encoders and classifiers to balance modalities Xu et al.
+(2025), yet struggle to resolve gradient conflicts Wei & Hu (2024). To address this issue, the alternating optimization strategy has been proposed Zhang et al. (2024); Hua et al. (2024), which
+effectively reduces interference at the encoder level by providing each modality with independent
+optimization opportunities. However, they frequently overlook emergent classifier bias. Specifically,
+dominant modalities converge faster, steering classifier parameters toward their feature space early
+in training. As training progresses, even if the underperforming modalities continue to learn actively
+and produce substantial gradients, the classifier has already developed a structural preference for the
+dominant modalities. This entrenched bias hinders the effective integration of representations from
+weaker modalities, thus leading to the persistence of modal imbalance problems.
+
+
+We empirically track modalities’ average contribution Zhou et al. (2025b) throughout training as
+shown in Figure 1. Alternating optimization, such as Multimodal Learning with Alternating Uni
+
+1
+
+
+modal Adaptation (MLA) Zhang et al. (2024), reduces initial contribution disparity (1.00 → 0.92),
+yet a persistent imbalance indicates entrenched classifier bias, even as encoders decouple. This
+confirms that encoder-level interventions alone are insufficient to resolve structural preference in
+classifiers. This phenomenon shares a fundamental similarity with the class imbalance problem
+Thrampoulidis et al. (2022), as both suffer from early-dominance-triggered bias. Majority classes
+skew decision boundaries initially due to numerical advantage, suppressing minority classes later.
+Analogously in multimodal training, dominant modalities rapidly bias the classifier through faster
+convergence, creating entrenched preference that persistently suppresses weaker modalities.
+
+
+Inspired by class imbalance remedies that stabilize decision boundaries via fixed classifier
+Yang et al. (2022b), we propose ClassifierConstrained Alternating Training (CCAT).
+Overall, we have constructed a two-stage training framework to systematically address the issue of uneven utilization at the dataset and sample levels. First, we pretrain a shared classifier using bidirectional cross-attention attention with regularization that penalizes large discrepancies in modality contributions, yielding
+a relatively unbiased initial classifier. Second,
+within the alternating optimization framework,
+the shared pretrained classifier remains frozen Figure 1: Evolution of modality-wise contribution val
+ues. Persistent imbalance suggests entrenched classifier
+
+to ensure stable optimization targets across
+
+preference toward dominant modalities.
+
+modalities. To preserve modality-specific representational adaptation, we equip each modality with a dedicated lightweight LoRA module integrated solely on this shared classifier. Additionally, we perform secondary updates on underperforming encoders for samples with extreme modality
+imbalance.
+
+
+Our contributions are outlined as follows: (i) Bridging class and modality imbalance through optimization dynamics, providing a new theoretical framework for understanding multimodal imbalance. (ii) Proposing CCAT with a two-stage framework that systematically addresses dataset and
+sample-level imbalance. (iii) Consistent SOTA improvements across three benchmarks, including
+over 30,000 samples. faithfully.
+
+
+2 RELATED WORK
+
+
+In response to the modality imbalance problem, numerous representative methods have emerged in
+recent years Perez et al. (2018); Su et al. (2023); Wei et al. (2024b); Xu et al. (2025). Approaches
+such as On-the-fly Gradient Modulation (OGM) Peng et al. (2022), Adaptive Gradient Modulation
+(AGM) Li et al. (2023), and Prototypical Modality Rebalance (PMR) Fan et al. (2023) dynamically
+modulate modality gradients via importance measures, regulating learning rates of dominant and
+non-dominant modalities to balance inter-modal learning. Other approaches, including Uni-Modal
+Teacher (UMT) Du et al. (2023), Gradient Blending (GBlending) Wang et al. (2020), and MultiModal Pareto (MMPareto) Wei & Hu (2024), address objective mismatches in unimodal and multimodal learning by incorporating unimodal supervision terms into losses, enhancing weak modality
+representations.
+
+
+However, most of the aforementioned methods primarily focus on optimizing parameter updates
+while overlooking intrinsic inter-modal representational disparities. To resolve this matter, several
+works such as Calibrating Multimodal Learning (CML) Ma et al. (2023), Multimodal BERT with
+Self-Distillation (MBSD) Liu et al. (2023), and LFM Yang et al. (2024), have incorporated regularization schemes, including the Kullback–Leibler (KL) divergence between unimodal predictions,
+modality confidence estimation, and cross-modal contrastive learning. These techniques aim to impose constraints on the modality-specific representations, thereby facilitating dynamic balancing and
+collaborative adaptation during training.
+
+
+2
+
+
+Further, approaches like Sample-level Modality Valuation (SMSL) Zhou et al. (2025b) and Wei
+et al. Wei et al. (2024a) address intrinsic data imbalance via per-sample modality contribution
+quantification, enhancing generalization and discriminability under imbalanced modalities.
+
+
+While these methods improve cross-modal interaction efficiency, synchronous gradient updates inevitably cause conflicts between modalities Huang et al. (2022), impairing convergence stability and
+modality coherence. To overcome this limitation, Multimodal Learning with Alternating Unimodal
+Adaptation (MLA) Zhang et al. (2024) and Reconboost Hua et al. (2024) proposed a modality alternating training mechanism. This method reduces encoder level gradient interference through
+alternate modal encoder updates, enhancing weak modalities. However, a fundamental limitation
+remains. Alternating training fails to resolve disparities in modality-specific learning rates. This
+inherent imbalance allows dominant modalities to exert disproportionate cumulative influence on
+the shared classifier during early training stages, leading to structural bias, thereby perpetuating
+modality imbalance.
+
+
+3 METHOD
+
+
+3.1 SIMILARITY BETWEEN CLASS IMBALANCE AND MODALITY IMBALANCE
+
+
+While modality imbalance in multimodal learning appears distinct from class imbalance in traditional machine learning, a deeper mathematical analysis reveals a fundamental connection in their
+gradient optimization dynamics. This section establishes a unified theoretical framework and provides a proof of their underlying similar.
+
+
+For input feature _**f**_ and classifier weights _**W**_, the gradient of cross-entropy loss w.r.t. weight _**w**_ _j_ is:
+
+
+_∂L_
+_∂_ _**w**_ _j_ = (ˆ _yj_ _−_ **1** [ _j_ = _y_ ]) _**f**_ (1)
+
+
+where _j_ _∈{_ 1 _, . . ., C}_ denotes the class index.This shows weight updates depend jointly on prediction error and feature representation.
+
+
+**Gradient Dynamics under Class Imbalance.** In this case, the extremely low frequency of minority
+class samples leads the model to assign predicted probabilities _y_ ˆ _j_ close to zero for them. According
+to the gradient formula, for minority class samples, the gradient is:
+
+
+_∂L_
+_≈−_ _**f**_ (2)
+_∂_ _**w**_ _j_
+
+
+This approximation uncovers the core challenge of class imbalance. Although gradient directions
+remain theoretically valid, parameter updates become dominated by feature norm _**f**_ . Crucially,
+majority-class-dominated optimization suppresses feature magnitude in minority samples, creating a
+vicious cycle of feature degradation and gradient attenuation. Concurrently, inherent class imbalance
+diminishes the model’s minority-class discriminative capacity, further impairing gradient updates.
+
+
+**Gradient Dynamics under Modality Imbalance.** Under the multimodal learning framework, the
+fused feature is denoted as _**f**_ = _γ_ 1 _**f**_ [(1)] + _γ_ 2 _**f**_ [(2)], where _γ_ 1 _, γ_ 2 are not predefined fusion hyperparameters, but implicitly learned modality utilization coefficients formed during optimization. Their
+values reflect the classifier’s degree of reliance on the feature of each modality. When modality imbalance occurs, one modality such as _**f**_ [(1)] overwhelmingly dominates due to stronger signal quality
+or higher data availability, resulting in _γ_ 1 _≫_ _γ_ 2. Then it can be approximated as:
+
+
+_∂L_
+_∂_ _**w**_ _j_ _≈_ (ˆ _**y**_ _j_ _−_ **1** [ _j_ = _y_ ]) _γ_ 1 _**f**_ [(1)] (3)
+
+
+This gradient approximation elucidates the underlying dynamics of modality imbalance. During
+backpropagation, the weak-modality gradient term (ˆ _**y**_ _j −_ **1** [ _j_ = _y_ ]) _γ_ 2 _**f**_ [(2)] is systematically suppressed
+in magnitude. This attenuation induces insufficient gradient signals for the weak-modality encoder,
+hindering effective parameter updates and causing progressive deterioration of its feature representation. Consequently, the model’s estimated reliance on the weak modality diminishes, driving down
+the fusion weight _γ_ 2. The reduced _γ_ 2 further amplifies gradient suppression in subsequent updates,
+thereby forming a mutually inhibitory cycle of gradient attenuation and feature degradation.
+
+
+3
+
+
+MI( _**z**_ _i_ _[m][,]_ _**[ f]**_ _[i]_ [) = log(] _[N]_ [) +][ E] _[D]_
+
+
+4
+
+
+(5)
+
+
+Figure 2: The fusion module using in shared classifier pretraining stage, taking the audio and video modalities
+as an example.
+
+
+The above analysis reveals a profound theoretical isomorphism between class imbalance and modality imbalance at the gradient optimization level. Both exhibit a recursive cycle driven by early dominance bias, wherein the target component undergoes gradient suppression, representation degradation, and preference entrenchment. This bias dynamic demonstrates strong path dependence once
+established. Building on this insight, the implementation details of applying classifier-constraining
+strategies to modality imbalance will be presented in the next section.
+
+
+3.2 SHARED CLASSIFIER PRETRAINING.
+
+
+Fig. 2 illustrates the overall framework of the fusion module used during the pretraining stage, taking the audio and video modalities as an example. The specific encoders employed for different
+modalities are described in the experimental details section. Given the complexity of multimodal
+tasks, we adopt a data-driven strategy to pretrain the classifier rather than relying on predefined geometric parameters. This strategy leverages a bidirectional cross-attention mechanism to dynamically
+fuse multimodal features (see Appendix A.1), while introducing a regularization term to constrain
+modality contribution disparity. This encourages the classifier to maintain an unbiased decision
+boundary and retain rich cross-modal interactions.
+
+Consider a training dataset _D_ = _{_ ( _**x**_ _i, yi_ ) _}i_ =1 _,_ 2 _,...,N_, where each sample _**x**_ _i_ = [ _**x**_ [1] _i_ _[,]_ _**[ x]**_ _i_ [2][]] [contains]
+two modalities _**x**_ [1] _i_ [and] _**[x]**_ [2] _i_ [,] [accompanied] [by] [its] [ground-truth] [label] _[y][i]_ [.] [Modality-specific] [encoders]
+(Enc1 _,_ Enc2) are employed to extract features from each modality independently:
+
+
+_**z**_ _i_ [1] [= Enc][1][(] _**[x]**_ _i_ [1][)] _[,]_ _**z**_ _i_ [2] [= Enc][2][(] _**[x]**_ _i_ [2][)] (4)
+
+
+The features of each modality _**z**_ _i_ [1] _[,]_ _**[ z]**_ _i_ [2] [are used as the input of the bidirectional cross-attention module]
+BiCross( _·_ ) for the fused features _**f**_ _i_ = BiCross( _**z**_ _i_ [1] _[,]_ _**[ z]**_ _i_ [2][)][.] [This unified representation is then passed]
+through a shared classifier Cls( _·_ ) to generate the final prediction _y_ ˆ _i_ .
+
+
+In order to mitigate the model’s bias toward specific modalities, a modality contribution–oriented
+regularization mechanism is introduced. This mechanism quantifies the relative contribution of
+each modality to the fused representation based on the estimated mutual information (MI), which
+assumes statistical dependence between features of each modality _**z**_ _i_ _[m]_ [and the fused features] _**[ f]**_ _[i]_ [.] [Its]
+calculation process is shown in Figure 3 (b), and the corresponding formula is defined as follows
+Zhou et al. (2025b):
+
+
+exp _⟨_ _**f**_ _i,_ _**z**_ ~~_[m]_~~ _i_ _[⟩]_
+log
+
+ - _i_ [exp] _[⟨]_ _**[f]**_ _i_ _[,]_ _**[z]**_ ~~_[m]_~~ _i_ _[⟩]_
+
+
+Figure 3: Overall framework employing modality-alternating training with frozen shared classifier. Per iteration, only one modality’s encoder and LoRA module update using full batches. Sample-level contribution
+scores identify severely imbalanced cases for targeted secondary encoder and LoRA module updates. ClassifierLoRA structure detailed in (c).
+
+
+where E _D_ denotes the expectation over the dataset, and _N_ is the total number of samples. A larger
+mutual information value indicates stronger influence of modality _m_ on the fused representation.
+
+
+Based on mutual information, the modality contribution vector for sample _i_ is defined as
+
+
+_**C**_ _i_ =      - _c_ [1] _i_ _[, c]_ _i_ [2]      - = Softmax�MI( _**z**_ _i_ [1] _[,]_ _**[ f]**_ _[i]_ [)] _[,]_ [MI(] _**[z]**_ _i_ [2] _[,]_ _**[ f]**_ _[i]_ [)]      - (6)
+
+
+where the softmax function is used to normalize mutual information scores into a probability distribution, ensuring positive contribution weights summing to unity. This enables intra-sample modality
+comparison and provides stable regularization.
+
+
+Building upon this, to alleviate bias introduced by the dominant modality, the cross-entropy loss is
+combined with a regularization term that penalizes large disparities in modality contributions. This
+term promotes balanced feature extraction by encouraging the model to maintain fairness across
+modalities. The mathematical formulation is expressed as follows:
+
+
+The total loss function integrates this regularization term with the classification loss _L_ cls:
+
+
+_L_ total = _L_ cls + _λ · L_ reg (8)
+
+
+By leveraging this mechanism, biases caused by modality imbalance can be effectively mitigated
+during the pretraining phase of the shared classifier.
+
+
+3.3 CLASSIFIER-CONSTRAINED ALTERNATING TRAINING
+
+
+Figure 3 illustrates our overall training pipeline. Following classifier pretraining, we perform
+modality-wise alternating training. A key challenge arises here: the classifier Cls( _·_ ), which was
+adapted to the decision boundaries of the fused features _**f**_ during pretraining, must now process
+unimodal features _**z**_ _[m]_ during alternating training, where _P_ ( _**z**_ _[m]_ _|y_ ) = _P_ ( _**f**_ _|y_ ). This distribution
+mismatch in the decision space disrupts feature continuity, leading to optimization instability and
+feature confusion Zhou et al. (2025a).
+
+
+5
+
+
+_L_ reg = [1]
+
+_N_
+
+
+_N_
+
+- _|c_ [1] _i_ _[−]_ _[c]_ _i_ [2] _[|]_ (7)
+
+_i_ =1
+
+
+**Algorithm 1** Classifer-Constrained Alternating Training (CCAT)
+
+
+1: **Inputs:** multimodal dataset _D_ with _N_ samples and _M_ modalities, epochs _E_, mini-batch _B_ _∼D_,
+threshold _β_
+2: **Parameters:** pretrained shared classifier Cls, encoders _{_ Enc _m}_ _[M]_ _m_ =1 [,] [LoRA] [modules]
+_{_ LoRA _m}_ _[M]_ _m_ =1
+3: **Outputs:** trained encoders _{_ Enc _m}_ _[M]_ _m_ =1 [and LoRA modules] _[ {]_ [LoRA] _[m][}]_ _m_ _[M]_ =1
+4: Freeze Cls; initialize _{_ Enc _m}, {_ LoRA _m}_
+5: **for** epoch _e_ = 1 _, . . ., E_ **do**
+6: **for** modality _m_ = 1 _, . . ., M_ **do**
+7: Compute loss _L_ _[m]_ alt [via Eq. (11) using modality-] _[m]_ [ data in] _[ B]_
+8: Update Enc _m_ and LoRA _m_ via gradient descent
+9: **end for**
+10: Estimate contributions _{c_ [1] _i_ _[, . . ., c]_ _i_ _[M]_ _[}]_ _i_ _[|B|]_ =1 [via Eq. (6)]
+11: **for** modality _m_ = 1 _, . . ., M_ **do**
+12: Construct subset _Bm_ [extreme] = _{_ _**x**_ _[m]_ _i_ _[∈B]_ _[|][ c][m]_ _i_ _[< β][}]_
+13: Compute loss _L_ _[m]_ retrain [via Eq. (12) using modality-] _[m]_ [ data in] _[ B]_ _m_ [extreme]
+14: Update Enc _m_ and LoRA _m_ via gradient descent
+15: **end for**
+16: **end for**
+17: **return** _{_ Enc _m}_ _[M]_ _m_ =1 _[,][ {]_ [LoRA] _[m][}][M]_ _m_ =1
+
+
+To mitigate this issue, we integrate a lightweight Low-Rank Adaptation (LoRA) module for each
+modality Hu et al. (2022), as shown in Figure 3(c). Each LoRA module acts as a low-rank residual
+correction applied to the features:
+LoRA _m_ ( _**z**_ _i_ _[m]_ [) =] **[ B]** _[m]_ **[A]** _[m]_ _**[z]**_ _i_ _[m]_ (9)
+
+
+Specifically, in each iteration, given a batch of input samples _**x**_ _i_ = [ _**x**_ [1] _i_ _[,]_ _**[ x]**_ _i_ [2][]] _[i]_ [=1] _[,]_ [2] _[,...,B]_ [,] [the] [model]
+sequentially processes the data of each individual modality across the entire batch using its corresponding modality-specific encoder and LoRA module, thereby obtaining the respective prediction
+outputs _y_ ˆ _i_ _[m]_ [and associated cross-entropy loss] _[ L]_ alt _[m]_ [:]
+_y_ ˆ _i_ _[m]_ [= Softmax (Cls(] _**[z]**_ _i_ _[m]_ [) + LoRA] _[m]_ [(] _**[z]**_ _i_ _[m]_ [))] (10)
+
+
+where _L_ denotes the number of samples in the re-training subset _Bm_ [extreme] and _**y**_ _i_ is the groundtruth label of the _i_ -th sample. This loss drives secondary gradient updates on Enc _m_ and LoRA _m_,
+enhancing representation learning for modality-imbalanced instances. The whole trainingpipeline is
+provided in Algorithm 1.
+
+
+During inference, each modality is processed by its dedicated encoder, transformed via corresponding LoRA modules, and classified through the shared classifier to generate unimodal predictions.
+These are fused at the decision level for final output.
+
+
+6
+
+
+_L_ _[m]_ alt [=] [1]
+
+_B_
+
+
+_B_
+
+- CE(ˆ _yi_ _[m][, y][i]_ [)] (11)
+
+_i_ =1
+
+
+where _B_ is the batch size; and _yi_ represents the ground-truth label of the _i_ -th sample. Subsequently,
+the modality-specific cross-entropy loss _L_ _[m]_ alt [is utilized to optimize the parameters of][ Enc] _[m]_ [ through]
+backpropagation.
+
+
+To mitigate weak-modality under-optimization, we propose a sample-level secondary update. After
+initial full updates of all modality encoders and LoRAs, a modality contribution score _c_ _[m]_ _i_ [is] [com-]
+puted for each sample _**x**_ _[m]_ _i_ [,] [as] [defined] [in] [Equations] [(6)] [and] [(7),] [reflecting] [the] [contribution] [degree]
+of modality _m_ in predicting the target label. Notably, unlike the cross-attention fusion adopted in
+the first-stage training, here the computation of _c_ follows the same decision-level fusion used in the
+inference stage, since this is also the method that produces the final prediction. We then identify
+highly imbalanced samples _Bm_ [extreme] = _{_ _**x**_ _i_ _∈B_ _|_ _c_ _[m]_ _i_ _<_ _β}_ using threshold _β_ . These samples
+are reprocessed through Enc _m_ and LoRA _m_, and the frozen classifier to generate predictions. The
+auxiliary loss is defined as:
+
+
+_L_ _[m]_ _retrain_ [=] [1]
+
+_L_
+
+
+_L_
+
+- CE(ˆ _yi_ _[m][, y][i]_ [)] _[,]_ (12)
+
+_i_ =1
+
+
+Table 1: Performance comparison on CREMA-D, KS and MVSA with different baseline. Both the results of
+only using a single modality and the results of combining all modalities (“Multi”) are listed. We report the
+average test accuracy (%) of three random seeds. The best results are highlighted in bold, and the second-best
+results are marked with a gray background.
+
+
+**CREMA-D** **Kinetic-Sound** **MVSA**
+**Method**
+
+Multi Audio Video Multi Audio Video Multi Image Text
+
+
+**Sum** 65.46 60.62 26.08 64.72 48.77 24.52 73.06 27.11 70.56
+**Concat** 61.56 55.65 18.68 64.84 49.81 24.67 73.22 25.99 70.71
+**FiLM** 60.07 53.89 18.67 63.33 48.67 23.15 75.34 27.12 74.85
+**BiGated** 59.21 51.49 17.34 63.72 49.96 23.77 75.94 28.15 73.13
+
+
+**OGM-GE** 68.14 53.76 28.09 65.78 51.57 32.19 76.37 31.98 74.76
+**QMF** 63.71 59.41 39.11 65.78 29.73 32.19 77.96 32.99 74.87
+
+
+**CCAT (Ours)** **85.89** **65.99** **73.79** **79.29** **61.65** 53.75 **80.73** 55.30 **77.46**
+
+
+Table 2: Ablation study (accuracy %) on components removed from the full method: Fix: classifier freezing
+(without LoRA); Alt: alternate training; Sec: secondary updates; LoRA: Low-Rank Adaption modules.
+
+
+**CREMA-D** **Kinetic-Sound** **MVSA**
+**Fix** **Alt** **Sec** **LoRA**
+
+Multi Audio Video Multi Audio Video Multi Image Text
+
+
+✗ ✓ ✓ ✓ 82.80 64.38 71.77 77.26 59.78 **54.32** 78.03 53.95 77.07
+✓ ✗ ✓ ✓ 81.45 64.92 69.62 77.47 **63.01** 50.68 78.32 54.91 74.76
+✓ ✓ ✗ ✓ 83.06 65.59 69.49 78.25 61.97 52.03 79.38 54.62 75.34
+✓ ✓ ✓ ✗ 84.68 65.19 73.25 78.77 62.64 53.01 80.35 55.17 76.49
+✓ ✓ ✓ ✓ **85.89** **65.99** **73.79** **79.29** 61.65 53.75 **80.73** **55.30** **77.46**
+
+
+4 EXPERIMENT
+
+
+4.1 EXPERIMENTAL SETUP
+
+
+**Datasets.** To validate the effectiveness of the proposed method, we conduct experiments on three
+widely used multimodal datasets (see Appendix A.2 for detailed data descriptions): the CrowdSourced Emotional Multimodal Actors Dataset (CREMA-D) Cao et al. (2014), featuring audiovisual recordings of American English speech acted with diverse emotional expressions; the KineticSound (KS) dataset Arandjelovic & Zisserman (2017), containing synchronized video-audio pairs
+for object and action recognition; and the Multimodal Visual Sentiment Analysis (MVSA) dataset
+Niu et al. (2016), focusing on sentiment classification in multimedia posts using both text and
+images. These datasets are representative in the context of modality imbalance, covering various
+modality combinations and reflecting different real-world imbalance patterns. This diverse selection
+ensures a comprehensive evaluation of our approach.
+
+
+**Baselines.** We benchmark our method against conventional multimodal fusion approaches and recent state-of-the-art methods on the CREMA-D, KS and MVSA datasets. Baselines include: (i)
+Simple Fusion: Sum, Concat; (ii) Modulation-based Fusion: FiLM Perez et al. (2018), BiGated
+Kiela et al. (2018); (iii) Imbalance-aware Methods: OGM-GE Peng et al. (2022), QMF Zhang et al.
+(2023); and (iv) Recent SOTA: Multimodal Learning with Alternating Unimodal Adaptation (MLA)
+Zhang et al. (2024), MultiModal Pareto (MMPareto) Wei & Hu (2024), and LFM Yang et al. (2024).
+
+
+**Evaluation** **Metrics.** We report multimodal accuracy (Acc) alongside unimodal performance for
+each baseline. When evaluating single modalities: (i) For FiLM, BiGated, OGM-GE and QMF,
+we disable the complementary modality within the fusion network; (ii) For Sum fusion Peng et al.
+(2022), features from the target modality are fed directly into the shared classifier head; (iii) For
+
+
+7
+
+
+Concat fusion Peng et al. (2022), we utilize dedicated subheads corresponding to each modality as
+per established protocol.
+
+
+**Implementation** **Details.** We employ
+ResNet18 encoders for both audio and vi- Table 3: Grid search results for LoRA rank _r_ .
+sual modalities across all datasets. For
+text-image data, image features are ex
+**LoRA Rank** _r_
+
+tracted with ResNet50 and textual features **Dataset**
+with BERT. All models were optimized 1 2 4 8 16
+via Stochastic Gradient Descent (SGD)
+with a batch size of 32, initial learning rate CREMA-D 84.41 **85.35** 84.68 84.81 84.54
+of 0.001, momentum of 0.9, and weight KS 78.46 **78.83** 78.41 78.67 78.76
+decay coefficient of 0.1. The learning rate MVSA 76.49 79.00 74.57 **79.58** 79.38
+was decayed by a factor of 10 every 70
+epochs, with training conducted for 150
+total epochs. The regularization coefficient _λ_ for the loss function in classifier pre-training is set
+to 0.001. Experimental analysis reveals negligible performance sensitivity to LoRA’s scaling factor
+_α_ due to the classifier’s limited parameter scale, leading to its universal fixation at _α_ = 1. The
+hyperparameter tuning was conducted in a sequential manner: first, the optimal LoRA rank _r_ was
+selected from 1 _,_ 2 _,_ 4 _,_ 8 _,_ 16, followed by the optimization of the modality imbalance threshold _β_ from
+0 _._ 05 _,_ 0 _._ 10 _, . . .,_ 0 _._ 40, via validation-set grid searches. As detailed in Table 3 and Figure 4, configurations are empirically set to ( _r_ = 2 _, β_ = 0 _._ 15) for CREMA-D, ( _r_ = 2 _, β_ = 0 _._ 30) for KS, and
+( _r_ = 8 _, β_ = 0 _._ 05) for MVSA to identify severely imbalanced samples. All experiments execute on
+NVIDIA RTX 4090 GPUs. Additional experimental details are provided in the Appendix A.3.
+
+
+4.2 COMPARISON WITH SOTA MML BASELINES
+
+
+Table 1 summarizes main results across all
+datasets, revealing three key observations:
+(i) Our method substantially outperforms
+all baselines, including conventional multimodal learning and modality balancing techniques, achieving state-of-the-art
+performance in most scenarios; (ii) All
+modality rebalancing techniques significantly surpass traditional feature concatenation or summation, confirming both the
+performance penalty induced by modality
+imbalance and the efficacy of balancing
+strategies; (iii) Unlike prior works Zhang
+et al. (2024); Yang et al. (2024) equating reduced unimodal gaps with balance,
+we prioritize liberating weak modalities
+representational potential. Their significant accuracy gains across benchmarks di
+Figure 4: Grid search results for modality imbalance thresh
+rectly validate imbalance mitigation tran
+olds _β_ on the validation set. The optimal combination is se
+scending relative performance differences; lected based on the highest validation accuracy.
+(iv) For MLA, MMPareto, LFM, and our
+method CCAT, unimodal results are directly acquired from decision-level fusion outputs.
+
+
+4.3 ABLATION STUDY
+
+
+Table 2 presents ablation results on the CREMA-D dataset (full results in Appendix). Our study
+systematically validates CCAT’s efficacy in mitigating modality imbalance: (i) Classifier freezing
+significantly enhances suppressed modalities during alternating training, mitigating inter-modal gradient conflicts while blocking dominant modalities from monopolizing decision boundaries; (ii) Secondary updates deliver targeted enhancement to underperforming modalities by suppressing overconfidence in dominant modalities, thereby calibrating cross-modal dynamics at the sample level;
+
+
+8
+
+
+Table 3: Grid search results for LoRA rank _r_ .
+
+
+**LoRA Rank** _r_
+**Dataset**
+
+
+1 2 4 8 16
+
+
+CREMA-D 84.41 **85.35** 84.68 84.81 84.54
+KS 78.46 **78.83** 78.41 78.67 78.76
+MVSA 76.49 79.00 74.57 **79.58** 79.38
+
+
+(a) MLA Model (b) Non-Fixed Model (c) CCAT Model (Ours)
+
+
+Figure 5: Visualizations of feature distributions based on t-SNE for test samples under MLA (a), Non-Fixed
+Classifier (b), and Our Proposed Method (c). Calinski-Harabasz (CH), Silhouette (SH), and Davies-Bouldin
+(DB) scores are computed to quantitatively assess the clustering quality. Compared to the other methods, our
+approach achieves clearer class separability, especially improving the distinction of the fear and sad classes
+from other categories.
+
+
+(iii) LoRA adapters substantially boost multimodal fusion performance while preserving modalityspecific characteristics, confirming their capacity to orchestrate shared classification knowledge and
+modality-exclusive features. The integrated framework achieves optimal performance, demonstrating CCAT’s effectiveness in mitigating modality imbalance.
+
+
+4.4 FURTHER ANALYSIS
+
+
+**Enhancing** **Discriminative** **Space** **via** **Fixed** **Classifier** **Design.** To investigate whether freezing
+the classifier contributes to constructing more discriminative decision boundaries, we visualized the
+distribution of all test samples in the feature space using t-SNE projections, as shown in Figure. 5.
+Compared with the MLA baseline and the non-fixed classifier setting, our proposed method exhibits
+improved class separability, especially for the _fear_ and _sad_ classes, which become more clearly
+separated from other categories.
+
+
+Beyond qualitative visualization, we perform quantitative clustering analysis using standard metrics: Calinski-Harabasz (CH) Cali´nski & Harabasz (1974), Silhouette (SH) Rousseeuw (1987), and
+Davies-Bouldin (DB) Davies & Bouldin (1979). As shown in Figure. 5, our method achieves optimal clustering quality, highest CH and SH scores and lowest DB score, demonstrating superior
+intra-class compactness and inter-class separation. These results confirm that the fixed-classifier
+strategy yields more discriminative feature representations.
+
+
+5 CONCLUSION
+
+
+This work addresses modality imbalance through a classifier-centric paradigm. Inspired by class
+imbalance remedies, we propose Classifier-Constrained Alternating Training (CCAT) that bridges
+both problems via optimization dynamics analysis. Our two-stage framework systematically mitigates imbalance: (1) Pretraining a shared classifier with contribution-aware regularization yields
+unbiased initialization; (2) Freezing this classifier during modality-alternating optimization provides
+stable objectives, while lightweight LoRA adapters enable modality-specific adaptation. Complementary sample-level re-optimization further enhances underrepresented modalities. CCAT consistently outperforms existing methods across benchmarks, validating its efficacy for discriminative
+representation learning in imbalanced multimodal scenarios.
+
+
+6 FUTURE WORK
+
+
+In the future, we plan to extend the proposed framework to more complex scenarios involving trimodal datasets. A key direction is to investigate the effectiveness of our modality-wise alternating
+training and imbalance-aware fine-tuning strategy when three distinct modalities are present.
+
+
+9
+
+
+REFERENCES
+
+
+Relja Arandjelovic and Andrew Zisserman. Look, listen and learn. In _Proceedings_ _of_ _the_ _IEEE_
+_international conference on computer vision_, pp. 609–617, 2017.
+
+
+Tadas Baltruˇsaitis, Chaitanya Ahuja, and Louis-Philippe Morency. Multimodal machine learning:
+A survey and taxonomy. _IEEE Transactions on Pattern Analysis and Machine Intelligence_, 41(2):
+423–443, 2019. doi: 10.1109/TPAMI.2018.2798607.
+
+
+Tadeusz Cali´nski and Jerzy Harabasz. A dendrite method for cluster analysis. _Communications in_
+_Statistics-theory and Methods_, 3(1):1–27, 1974.
+
+
+Houwei Cao, David G Cooper, Michael K Keutmann, Ruben C Gur, Ani Nenkova, and Ragini
+Verma. Crema-d: Crowd-sourced emotional multimodal actors dataset. _IEEE_ _transactions_ _on_
+_affective computing_, 5(4):377–390, 2014.
+
+
+Kailei Cheng, Lihua Tian, and Chen Li. Lawnet: Audio-visual emotion recognition by listening and
+watching. In _2024 International Joint Conference on Neural Networks (IJCNN)_, pp. 1–8. IEEE,
+2024.
+
+
+David L Davies and Donald W Bouldin. A cluster separation measure. _IEEE transactions on pattern_
+_analysis and machine intelligence_, (2):224–227, 1979.
+
+
+Chenzhuang Du, Jiaye Teng, Tingle Li, Yichen Liu, Tianyuan Yuan, Yue Wang, Yang Yuan, and
+Hang Zhao. On uni-modal feature learning in supervised multi-modal learning. In _International_
+_Conference on Machine Learning_, pp. 8632–8656. PMLR, 2023.
+
+
+Yunfeng Fan, Wenchao Xu, Haozhao Wang, Junxiao Wang, and Song Guo. Pmr: Prototypical modal
+rebalance for multimodal learning. In _Proceedings_ _of_ _the_ _IEEE/CVF_ _Conference_ _on_ _Computer_
+_Vision and Pattern Recognition_, pp. 20029–20038, 2023.
+
+
+Itai Gat, Idan Schwartz, and Alex Schwing. Perceptual score: What data modalities does your model
+perceive? In M. Ranzato, A. Beygelzimer, Y. Dauphin, P.S. Liang, and J. Wortman Vaughan
+(eds.), _Advances in Neural Information Processing Systems_, volume 34, pp. 21630–21643. Curran
+Associates, Inc., 2021.
+
+
+Edward J Hu, Yelong Shen, Phillip Wallis, Zeyuan Allen-Zhu, Yuanzhi Li, Shean Wang, Lu Wang,
+Weizhu Chen, et al. Lora: Low-rank adaptation of large language models. _ICLR_, 1(2):3, 2022.
+
+
+Cong Hua, Qianqian Xu, Shilong Bao, Zhiyong Yang, and Qingming Huang. Reconboost: Boosting
+can achieve modality reconcilement. _arXiv preprint arXiv:2405.09321_, 2024.
+
+
+Yu Huang, Junyang Lin, Chang Zhou, Hongxia Yang, and Longbo Huang. Modality competition:
+What makes joint training of multi-modal network fail in deep learning? (Provably). In Kamalika Chaudhuri, Stefanie Jegelka, Le Song, Csaba Szepesvari, Gang Niu, and Sivan Sabato
+(eds.), _Proceedings_ _of_ _the_ _39th_ _International_ _Conference_ _on_ _Machine_ _Learning_, volume 162 of
+_Proceedings_ _of_ _Machine_ _Learning_ _Research_, pp. 9226–9259. PMLR, 17–23 Jul 2022. URL
+[https://proceedings.mlr.press/v162/huang22e.html.](https://proceedings.mlr.press/v162/huang22e.html)
+
+
+Douwe Kiela, Edouard Grave, Armand Joulin, and Tomas Mikolov. Efficient large-scale multimodal classification. In _Proceedings of the AAAI conference on artificial intelligence_, volume 32,
+2018.
+
+
+Hong Li, Xingyu Li, Pengbo Hu, Yinuo Lei, Chunxiao Li, and Yi Zhou. Boosting multi-modal
+model performance with adaptive gradient modulation. In _Proceedings of the IEEE/CVF Interna-_
+_tional Conference on Computer Vision_, pp. 22214–22224, 2023.
+
+
+Xinyan Liang, Yuhua Qian, Qian Guo, Honghong Cheng, and Jiye Liang. Af: An associationbased fusion method for multi-modal classification. _IEEE Transactions on Pattern Analysis and_
+_Machine Intelligence_, 44(12):9236–9254, 2021.
+
+
+Shilei Liu, Lin Li, Jun Song, Yonghua Yang, and Xiaoyi Zeng. Multimodal pre-training with selfdistillation for product understanding in e-commerce. In _Proceedings of the Sixteenth ACM Inter-_
+_national Conference on Web Search and Data Mining_, pp. 1039–1047, 2023.
+
+
+10
+
+
+Huan Ma, Qingyang Zhang, Changqing Zhang, Bingzhe Wu, Huazhu Fu, Joey Tianyi Zhou, and
+Qinghua Hu. Calibrating multimodal learning. In _International Conference on Machine Learning_,
+pp. 23429–23450. PMLR, 2023.
+
+
+Teng Niu, Shiai Zhu, Lei Pang, and Abdulmotaleb El Saddik. Sentiment analysis on multi-view
+social data. In _International conference on multimedia modeling_, pp. 15–27. Springer, 2016.
+
+
+Xiaokang Peng, Yake Wei, Andong Deng, Dong Wang, and Di Hu. Balanced multimodal learning
+via on-the-fly gradient modulation. In _Proceedings_ _of_ _the_ _IEEE/CVF_ _Conference_ _on_ _Computer_
+_Vision and Pattern Recognition (CVPR)_, pp. 8238–8247, June 2022.
+
+
+Ethan Perez, Florian Strub, Harm De Vries, Vincent Dumoulin, and Aaron Courville. Film: Visual
+reasoning with a general conditioning layer. In _Proceedings of the AAAI conference on artificial_
+_intelligence_, volume 32, 2018.
+
+
+Peter J Rousseeuw. Silhouettes: a graphical aid to the interpretation and validation of cluster analysis. _Journal of computational and applied mathematics_, 20:53–65, 1987.
+
+
+Sitong Su, Junchen Zhu, Lianli Gao, and Jingkuan Song. Utilizing greedy nature for multimodal
+conditional image synthesis in transformers. _IEEE Transactions on Multimedia_, 26:2354–2366,
+2023.
+
+
+Ya Sun, Sijie Mai, and Haifeng Hu. Learning to balance the learning rates between various modalities via adaptive tracking factor. _IEEE Signal Processing Letters_, 28:1650–1654, 2021.
+
+
+Christos Thrampoulidis, Ganesh Ramachandra Kini, Vala Vakilian, and Tina Behnia. Imbalance
+trouble: Revisiting neural-collapse geometry. _Advances_ _in_ _Neural_ _Information_ _Processing_ _Sys-_
+_tems_, 35:27225–27238, 2022.
+
+
+Weiyao Wang, Du Tran, and Matt Feiszli. What makes training multi-modal classification networks
+hard? In _Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition_
+_(CVPR)_, June 2020.
+
+
+Yake Wei and Di Hu. Mmpareto: boosting multimodal learning with innocent unimodal assistance.
+_arXiv preprint arXiv:2405.17730_, 2024.
+
+
+Yake Wei, Ruoxuan Feng, Zihe Wang, and Di Hu. Enhancing multimodal cooperation via samplelevel modality valuation. In _Proceedings of the IEEE/CVF Conference on Computer Vision and_
+_Pattern Recognition_, pp. 27338–27347, 2024a.
+
+
+Yake Wei, Di Hu, Henghui Du, and Ji-Rong Wen. On-the-fly modulation for balanced multimodal
+learning. _IEEE Transactions on Pattern Analysis and Machine Intelligence_, 2024b.
+
+
+Nan Wu, Stanislaw Jastrzebski, Kyunghyun Cho, and Krzysztof J Geras. Characterizing and overcoming the greedy nature of learning in multi-modal deep neural networks. In Kamalika Chaudhuri, Stefanie Jegelka, Le Song, Csaba Szepesvari, Gang Niu, and Sivan Sabato (eds.), _Proceed-_
+_ings_ _of_ _the_ _39th_ _International_ _Conference_ _on_ _Machine_ _Learning_, volume 162 of _Proceedings_ _of_
+_Machine Learning Research_, pp. 24043–24055. PMLR, 17–23 Jul 2022.
+
+
+Peng Xu, Xiatian Zhu, and David A Clifton. Multimodal learning with transformers: A survey.
+_IEEE Transactions on Pattern Analysis and Machine Intelligence_, 45(10):12113–12132, 2023.
+
+
+Shaoxuan Xu, Menglu Cui, Chengxiang Huang, Hongfa Wang, and Di Hu. Balancebenchmark: A
+survey for multimodal imbalance learning, 2025. [URL https://arxiv.org/abs/2502.](https://arxiv.org/abs/2502.10816)
+[10816.](https://arxiv.org/abs/2502.10816)
+
+
+Yang Yang, Jingshuai Zhang, Fan Gao, Xiaoru Gao, and Hengshu Zhu. Domfn: A divergenceorientated multi-modal fusion network for resume assessment. In _Proceedings of the 30th ACM_
+_International Conference on Multimedia_, pp. 1612–1620, 2022a.
+
+
+Yang Yang, Fengqiang Wan, Qing-Yuan Jiang, and Yi Xu. Facilitating multimodal classification
+via dynamically learning modality gap. _Advances in Neural Information Processing Systems_, 37:
+62108–62122, 2024.
+
+
+11
+
+
+Yang Yang, Hongpeng Pan, Qing-Yuan Jiang, Yi Xu, and Jinhui Tang. Learning to rebalance multimodal optimization by adaptively masking subnetworks. _IEEE Transactions on Pattern Analysis_
+_and Machine Intelligence_, 47(6):4553–4566, 2025. doi: 10.1109/TPAMI.2025.3547417.
+
+
+Yibo Yang, Shixiang Chen, Xiangtai Li, Liang Xie, Zhouchen Lin, and Dacheng Tao. Inducing
+neural collapse in imbalanced learning: Do we really need a learnable classifier at the end of deep
+neural network? _Advances in neural information processing systems_, 35:37991–38002, 2022b.
+
+
+Yuan Yuan, Zhaojian Li, and Bin Zhao. A survey of multimodal learning: Methods, applications,
+and future. _ACM Computing Surveys_, 57(7):1–34, 2025.
+
+
+Qingyang Zhang, Haitao Wu, Changqing Zhang, Qinghua Hu, Huazhu Fu, Joey Tianyi Zhou, and
+Xi Peng. Provable dynamic fusion for low-quality multimodal data. In _International conference_
+_on machine learning_, pp. 41753–41769. PMLR, 2023.
+
+
+Xiaohui Zhang, Jaehong Yoon, Mohit Bansal, and Huaxiu Yao. Multimodal representation learning
+by alternating unimodal adaptation. In _Proceedings_ _of_ _the_ _IEEE/CVF_ _Conference_ _on_ _Computer_
+_Vision and Pattern Recognition_, pp. 27456–27466, 2024.
+
+
+Yanfeng Zhou, Lingrui Li, Le Lu, and Minfeng Xu. nnwnet: Rethinking the use of transformers in
+biomedical image segmentation and calling for a unified evaluation benchmark. In _Proceedings_
+_of the Computer Vision and Pattern Recognition Conference_, pp. 20852–20862, 2025a.
+
+
+Ying Zhou, Xuefeng Liang, Yue Xu, and Bowen Gao. Sample-level self-paced learning to tackle
+multimodal imbalance problem. In _ICASSP 2025-2025 IEEE International Conference on Acous-_
+_tics, Speech and Signal Processing (ICASSP)_, pp. 1–5. IEEE, 2025b.
+
+
+A APPENDIX
+
+
+A.1 IMPLEMENTATION OF BIDIRECTIONAL CROSS-ATTENTION MECHANISM
+
+
+Consider a training dataset _D_ = _{_ ( _**x**_ _i, yi_ ) _}i_ =1 _,_ 2 _,...,N_, where each sample _**x**_ _i_ = [ _**x**_ [1] _i_ _[,]_ _**[ x]**_ _i_ [2][]][ contains the]
+audio modality _**x**_ [1] _i_ [and the visual modality] _**[ x]**_ _i_ [2][, accompanied by its ground-truth label] _[ y][i]_ [.] [Modality-]
+specific encoders (Enc1 _,_ Enc2) are employed to extract features from each modality independently:
+
+
+_**z**_ _i_ [1] [= Enc][1][(] _**[x]**_ _i_ [1][)] _[,]_ _**z**_ _i_ [2] [= Enc][2][(] _**[x]**_ _i_ [2][)] (13)
+
+
+To comprehensively model the interactions between modalities, we adopt a bidirectional crossattention (Bi-Cross Attention) mechanism for feature fusionCheng et al. (2024). This mechanism
+consists of cross-attention calculations in two directions: from vision to audio and from audio to
+vision, formulated as follows:
+
+**Visual-to-Audio Fusion.** In this direction, the audio features _**z**_ _i_ [1] [are treated as the Query, while the]
+visual features _**z**_ _i_ [2] [serve as both the Key and the Value.] [The multi-head attention (][MHA][) output] _**[ a]**_ [1] _i_
+is first computed as:
+_**a**_ [1] _i_ [= MHA(] _**[z]**_ _i_ [1] _[,]_ _**[ z]**_ _i_ [2] _[,]_ _**[ z]**_ _i_ [2][)] (14)
+
+
+To stabilize and enhance the feature fusion representation, a residual connection is then added,
+followed by layer normalization (LayerNorm):
+
+
+_**h**_ [1] _i_ [= LayerNorm]           - _**z**_ _i_ [1] [+] _**[ a]**_ _i_ [1]           - (15)
+
+
+Subsequently, a feed-forward network (FFN) is applied to introduce non-linearity and model higherlevel interactions, with another layer normalization (LayerNorm) step performed thereafter:
+
+
+_**f**_ _i_ [1] [= LayerNorm]            - _**h**_ [1] _i_ [+ FFN(] _**[h]**_ _i_ [1][)]            - (16)
+
+
+Finally, average pooling (AvgPool) is employed to aggregate the sequence into a compact fused
+representation in the visual-to-audio direction:
+
+
+_**f**_ _i_ [2] _[→]_ [1] = AvgPool( _**f**_ _i_ [1][)] (17)
+
+
+12
+
+
+**Audio-to-Visual Fusion.** In this direction, the visual features _**z**_ _i_ [2] [are designated as the Query, while]
+the audio features _**z**_ _i_ [1] [serve as the Key and Value. The computation proceeds analogously as follows:]
+
+_**a**_ [2] _i_ [= MHA(] _**[z]**_ _i_ [2] _[,]_ _**[ z]**_ _i_ [1] _[,]_ _**[ z]**_ _i_ [1][)] (18)
+
+_**h**_ [2] _i_ [= LayerNorm(] _**[z]**_ _i_ [1] [+] _**[ a]**_ _i_ [2][)] (19)
+
+_**f**_ _i_ [2] [= LayerNorm]            - _**h**_ [2] _i_ [+ FFN(] _**[h]**_ _i_ [2][)]            - (20)
+
+_**f**_ _i_ [1] _[→]_ [2] = AvgPool( _**f**_ _i_ [2][)] (21)
+
+
+Subsequently, the bidirectionally fused feature representation _**f**_ _i_ is obtained by summing the fused
+features derived from both the audio-to-visual and visual-to-audio directions:
+
+
+_**f**_ _i_ = _**f**_ _i_ [1] _[→]_ [2] + _**f**_ _i_ [2] _[→]_ [1] (22)
+
+
+This unified representation is then passed through a shared classifier _cls_ ( _·_ ) to generate the final
+prediction:
+_y_ ˆ _i_ = _cls_ ( _**f**_ _i_ ) (23)
+
+
+A.2 DETAILED DATASET DESCRIPTION
+
+
+A.2.1 CREMA-D (CROWD-SOURCED EMOTIONAL MULTIMODAL ACTORS DATASET)
+
+
+CREMA-D is a widely used multimodal benchmark for emotion recognition, comprising recordings
+from 91 actors of diverse demographic backgrounds. Each actor performed 12 scripted sentences
+with six categorical emotions (anger, disgust, fear, happiness, neutral, sadness) expressed at varying
+intensity levels. The dataset was annotated through large-scale crowdsourcing, enabling rigorous
+investigation of unimodal versus multimodal affect perception and cross-demographic variations in
+emotional expression.
+
+
+A.3 KS (KINETIC-SOUND)
+
+
+Kinetic-Sound is an audiovisual benchmark dataset derived from the Kinetics corpus for multimodal action recognition research. It depict 31 visually and aurally distinctive real-world actions.
+Curated specifically for multimodal learning, the dataset supports investigations into audio-visual
+correspondence, self-supervised representation learning, and complementary information fusion.
+Its YouTube-sourced content facilitates robust model development for dynamic scene understanding
+where both visual motion and auditory signatures contribute to action classification.
+
+
+A.4 MVSA (MULTIMODAL VISUAL SENTIMENT ANALYSIS)
+
+
+MVSA serves as a benchmark for multimodal sentiment analysis in social media contexts, containing Twitter-derived images paired with textual captions and sentiment polarity labels (positive/neutral/negative). This authentic user-generated content captures complex cross-modal sentiment interactions, supporting research on multimodal fusion, cross-modal alignment, and sentiment
+disambiguation where textual and visual cues exhibit amplification or conflict.
+
+
+A.5 DETAILS OF EXPERIMENTAL SETUP
+
+
+A.5.1 ENCODERS
+
+
+To evaluate the effectiveness of our method across diverse models and datasets, we employed three
+distinct encoders:
+
+
+**ResNet-18.** We employed ResNet-18 as the visual-encoder backbone for the CREMA-D and KS
+datasets. ResNet-18 belongs to the pioneering Residual Network family introduced in 2015, which
+overcame longstanding training challenges in deep neural architectures through the use of residual
+connections. This design facilitates direct gradient flow and significantly mitigates the vanishinggradient and degradation issues that afflict plain deep networks. We initialized ResNet-18 with the
+standard weight initialization strategy commonly prescribed in deep learning frameworks.
+
+
+13
+
+
+**ResNet-50.** For the image modality of the MVSA dataset, we employ ResNet50, a deeper variant
+within the Residual Network (ResNet) family. Like its shallower counterparts, each block includes
+an identity shortcut that bypasses nonlinear transformations, enabling the model to learn only the
+residual mapping and thereby ensuring effective training of deeper networks. We initialized the
+weights of ResNet-50 by standard initialization.
+
+
+**BERT.** Our textual encoder is based on BERT (Bidirectional Encoder Representations from Transformers). This model consists of 12 Transformer layers, each with 768 hidden dimensions and 12 attention heads, totaling approximately 110 million parameters. We employed the official BERT-Base
+pretrained checkpoint, as released by the authors, to initialize our encoder. This checkpoint has
+become a standard foundation for downstream fine-tuning across diverse NLP tasks. In our setup,
+the pretrained BERT-Base model served as a feature encoder, upon which task-specific layers are
+optionally stacked and optimized.
+
+
+A.6 IMPLEMENTATION DETAILS
+
+
+A unified classification head comprising a single fully connected layer was implemented across all
+experimental configurations. The input dimensionality was configured at 512 for base model experiments and 768 for large pretrained model evaluations. Audio processing pipelines resampled raw
+waveforms to 22,050 Hz, extending clips to a fixed 20-second duration through signal replication.
+Log-magnitude spectrograms were generated via short-time Fourier transform (STFT) using 512point FFT windows with 353-sample hop lengths. For visual inputs, three frames were uniformly
+sampled per video clip and resized to 224×224 resolution, with standard augmentation techniques
+and ImageNet normalization applied during training. Textual features were derived from BERTbased tokenized representations.
+
+
+A.7 LARGE LANGUAGE MODELS STATEMENT OF USE
+
+
+We acknowledge the use of Large Language Models (LLMs) exclusively for text refinement, including grammar correction, style polishing, and improving readability. No LLMs were involved
+in designing the methodology, conducting experiments, analyzing results, or drawing scientific conclusions. All technical contributions, experimental implementations, and analyses were performed
+solely by the authors.
+
+
+14
