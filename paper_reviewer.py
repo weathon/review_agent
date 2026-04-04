@@ -315,101 +315,65 @@ One paragraph synthesizing genuinely novel observations.
 ## Suggestions
 - specific actionable suggestion
 
-You may include an overall assessment or value judgement (e.g. "this paper makes \
-a strong/weak contribution") but do NOT output numerical scores. Scoring will be \
-done separately.
+Do NOT output any numerical scores, subscores, or accept/reject decisions. \
+Do NOT output any overall value judgement (e.g. "this paper makes a strong/weak \
+contribution", "overall this is a solid paper"). Your job is ONLY to produce the \
+factual qualitative review. Scoring and judgement will be done separately.
 
-When you are later asked to score: be DISCRIMINATIVE. A weak paper is weak — \
-give it a low score (1-3). A strong paper is strong — give it a high score (7-9). \
-Do not cluster everything around 5. The quality difference between papers is real \
-and your scores should reflect it.
+
+
+
 """
 
 
 
 SCORE_PROMPT = """\
-You previously wrote a consolidated review of a paper. Now you must assign \
-a calibrated overall score from 1.0 to 10.0 using COMPARATIVE SCORING \
-against calibration examples. Note that the review should be written to be very harsh, \
-but that doesn't mean the score should be low. Compare with similar level paper in the calibration \
-set to determine the score.
+You previously wrote a consolidated review of a paper. Now assign an overall \
+score from 1.0 to 10.0.
+
+Be very critical. This is for a top-tier venue (ICLR, ~25% acceptance rate). \
+Most papers have real flaws and most papers should score below 6.
 
 Base your score on YOUR OWN review above — the strengths, weaknesses, \
 nice-to-haves, and suggestions you already identified. Do not re-evaluate \
 from scratch.
 
-## Comparative Scoring Procedure (MANDATORY when calibration examples exist)
+## Comparative Scoring (when calibration examples are provided)
 
-You MUST follow these steps in order:
-
-**Step 1 — Identify the LOWER BOUND paper.**
-Find the calibration example that is clearly WORSE than or roughly equal to \
-the current paper. This is the paper whose quality is just below the current \
-paper's level. Note its human average score — this is your score floor.
-
-**Step 2 — Identify the UPPER BOUND paper.**
-Find the calibration example that is clearly BETTER than or roughly equal to \
-the current paper. This is the paper whose quality is just above the current \
-paper's level. Note its human average score — this is your score ceiling.
-
-**Step 3 — Compare dimension by dimension.**
-For BOTH the lower and upper bound papers, compare against the current paper on:
+Select a few calibration papers that are closest in quality to the current \
+paper. Compare them against the current paper on these dimensions:
 - novelty
 - technical soundness
 - empirical support
 - significance
 - clarity
 
-For each dimension, determine: is the current paper closer to the lower bound \
-or the upper bound?
+Then set your score relative to the human scores of those selected papers.
 
-**Step 4 — Interpolate the final score.**
-Place the current paper's score BETWEEN the lower bound and upper bound scores \
-based on the dimension-by-dimension comparison. If the current paper is closer \
-to the upper bound on most dimensions, score it closer to the upper bound's \
-human score; if closer to the lower bound, score it closer to that.
+**Important:** Your review may have an overly harsh or overly generous tone. \
+Do not let the tone drive the score. Instead, do a comparative assessment: \
+look at what the calibration papers' reviews say versus what your review says, \
+and score based on the actual substance, not the rhetoric.
 
-**Edge cases:**
-- If the current paper is WORSE than ALL calibration examples, score it below \
-  the lowest calibration score.
-- If the current paper is BETTER than ALL calibration examples, score it above \
-  the highest calibration score.
-- If there is only one calibration example nearby, use it as a single anchor \
-  and adjust up or down based on the comparison.
+Do NOT be afraid to give very high (>8) or very low (<4) scores! Good papers should be praised and bad paper should be found out.
 
-## Scoring Constraints
+Score continuously (e.g. 3.5, 4.7, 8.1). Use the full range — do not cluster \
+around 5-6. A few serious flaws matter more than many small nitpicks. Do not snap to .5 or .0.
 
-The "score" field is a CONTINUOUS value from 1.0 to 10.0 (e.g. 3.5, 4.7, 6.2, 8.1). \
-Use the full range — do NOT cluster around 5-6. Be DISCRIMINATIVE:
-- A truly bad paper deserves a 2.0, not a 4.5.
-- A truly great paper deserves a 9.0, not a 7.0.
-- Do NOT hedge toward the middle. Commit to your assessment.
-- However, do not over-penalize papers for a long list of minor points if the core contribution is sound.
-- A few serious flaws matter more than many small nitpicks.
-- NEVER give a 6.0 score, no matter what. A score of 6 is a non-committal fence-sit. If the \
-  paper is even slightly positive, give 6.5 or 7. If it is even slightly negative, \
-  give 5.5 or 5. You must decide which side of the borderline the paper falls on. 
+Return the score using the provided structured response schema.
 
-Scoring guide (use only when NO calibration examples are available):
+
+When you are later asked to score: be DISCRIMINATIVE. A weak paper is weak — \
+give it a low score (1-3). A strong paper is strong — give it a high score (7-9). \
+Do not cluster everything around 5. The quality difference between papers is real \
+and your scores should reflect it.
+
+## Scoring guide
 - 9.0-10.0: Strong accept. Exceptional, field-advancing contribution.
 - 7.0-8.9:  Accept. Clear contribution, solid execution, minor issues.
 - 5.0-5.9:  Borderline reject. Has some merit but weaknesses outweigh.
 - 3.0-4.9:  Reject. Significant issues with claims, method, or evaluation.
 - 1.0-2.9:  Strong reject. Fundamental flaws, unclear contribution, or wrong.
-
-Real flaws go in "weaknesses" and hurt the score. \
-Nice-to-haves could affect the scores but not significantly as weaknesses. \
-But be honest — missing baselines, unsupported claims, and flawed experiments \
-are real weaknesses, not nice-to-haves.
-
-## Fairness Check
-
-Before deciding on the final score, ask:
-- Are the main concerns actually central to the paper's claims?
-- Would these concerns realistically cause rejection at the target venue?
-- Is the paper still a meaningful contribution despite its weaknesses?
-
-Return the score using the provided structured response schema.
 """
 # ── Core logic ────────────────────────────────────────────────────────
 
@@ -695,18 +659,13 @@ async def run_merger(
         "IMPORTANT — use the FULL range from 1.0 to 10.0. Do NOT compress "
         "scores into 4-6. A paper with fundamental flaws deserves 1-3. "
         "A strong paper with clear contributions deserves 7-9. "
-        "Commit to your assessment — do not hedge toward the middle."
+        "Commit to your assessment — do not hedge toward the middle. "
+        "Try to use 6.0 sparingly — it often signals indecision. If you can "
+        "lean one way, prefer 5.5 or 6.5 instead."
     )
 
 
 
-
-    NO_SIX_NUDGE = (
-        "You gave a score of exactly 6.0. A score of 6 is a non-committal fence-sit. "
-        "You MUST pick a side. If the paper is even slightly above average, give 6.5 or 7. "
-        "If it is even slightly below, give 5 or 5.5. Re-read your review and commit to "
-        "a non-6.0 score now."
-    )
 
     if MODEL_SCORER.startswith("claude-sdk:"):
         raise ValueError(
@@ -751,23 +710,6 @@ async def run_merger(
             tokens = f"{input_tokens}in/{output_tokens}out" if input_tokens and output_tokens else "n/a"
             print(f"  [merger_score] done — {MODEL_SCORER} — {tokens} tokens — ${cost_score:.4f}")
             print(f"  [score_parser] parsed score: {score} — ${cost_parse:.4f}")
-
-            # Re-score if exactly 6.0
-            if abs(score - 6.0) < 0.01:
-                print(f"  [merger_score] score is 6.0, re-scoring with nudge ...")
-                messages.append({"role": "assistant", "content": score_text})
-                messages.append({"role": "user", "content": NO_SIX_NUDGE})
-                kwargs2 = dict(model=MODEL_SCORER, messages=messages, timeout=REQUEST_TIMEOUT)
-                extra2 = _build_extra_body(MODEL_SCORER, reasoning_effort="high")
-                if extra2:
-                    kwargs2["extra_body"] = extra2
-                response2 = await client.chat.completions.create(**kwargs2)
-                rescore_text = response2.choices[0].message.content or ""
-                cost_score += _extract_cost(response2)
-                if rescore_text.strip():
-                    score, cost_parse2 = await _parse_score(client, rescore_text)
-                    cost_parse += cost_parse2
-                    print(f"  [score_parser] re-scored: {score} — ${cost_parse2:.4f}")
 
             return review_text, score, cost_review + cost_score + cost_parse
         except APITimeoutError as e:
