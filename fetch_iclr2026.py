@@ -30,11 +30,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-DATA_DIR = Path(__file__).parent / "iclr2026_data_v2"
-SRC_PDFS = Path(__file__).parent / "iclr2026_data" / "pdfs"
-PAPERS_DIR = DATA_DIR / "papers"
-PDFS_DIR = DATA_DIR / "pdfs"
-RATINGS_FILE = DATA_DIR / "ratings.csv"
+DEFAULT_DATA_DIR = Path(__file__).parent / "iclr2026_data"
 OPENREVIEW_URL = "https://openreview.net"
 
 
@@ -138,17 +134,10 @@ def get_or_client():
     )
 
 
-def download_pdf(or_client, paper_id: str) -> Path | None:
+def download_pdf(or_client, paper_id: str, pdfs_dir: Path = None) -> Path | None:
     """Download a PDF from OpenReview using the authenticated API."""
-    outfile = PDFS_DIR / f"{paper_id}.pdf"
+    outfile = (pdfs_dir or DEFAULT_DATA_DIR / "pdfs") / f"{paper_id}.pdf"
     if outfile.exists() and outfile.stat().st_size > 0:
-        return outfile
-
-    # Check original data dir for cached PDFs
-    src_pdf = SRC_PDFS / f"{paper_id}.pdf"
-    if src_pdf.exists() and src_pdf.stat().st_size > 0:
-        import shutil
-        shutil.copy2(src_pdf, outfile)
         return outfile
 
     try:
@@ -215,9 +204,16 @@ def stratified_sample(papers, n, seed):
     return samples
 
 
-def main(n_samples: int = 100, seed: int = 42, balanced: bool = False):
+def main(n_samples: int = 100, seed: int = 42, balanced: bool = False, data_dir: str | None = None):
+    DATA_DIR = Path(data_dir) if data_dir else DEFAULT_DATA_DIR
+    PAPERS_DIR = DATA_DIR / "papers"
+    PDFS_DIR = DATA_DIR / "pdfs"
+    RATINGS_FILE = DATA_DIR / "ratings.csv"
+
     print("=" * 72)
     print("ICLR 2026 Dataset Builder")
+    print(f"  Output: {DATA_DIR}")
+    print(f"  Mode:   {'balanced' if balanced else 'unbalanced'}")
     print("=" * 72)
 
     # Create dirs
@@ -227,19 +223,11 @@ def main(n_samples: int = 100, seed: int = 42, balanced: bool = False):
 
     # Check for cached notes (also check original data dir)
     cache_file = DATA_DIR / "all_notes.json"
-    src_cache = Path(__file__).parent / "iclr2026_data" / "all_notes.json"
     if cache_file.exists():
         print(f"Loading cached notes from {cache_file}...")
         with open(cache_file) as f:
             all_papers = json.load(f)
         print(f"Loaded {len(all_papers)} papers from cache.")
-    elif src_cache.exists():
-        print(f"Loading cached notes from {src_cache}...")
-        import shutil
-        shutil.copy2(src_cache, cache_file)
-        with open(cache_file) as f:
-            all_papers = json.load(f)
-        print(f"Loaded {len(all_papers)} papers from original cache.")
     else:
         # Fetch from API
         notes = fetch_notes()
@@ -308,7 +296,7 @@ def main(n_samples: int = 100, seed: int = 42, balanced: bool = False):
             continue
         pdf_path = PDFS_DIR / f"{pid}.pdf"
         if not (pdf_path.exists() and pdf_path.stat().st_size > 0):
-            pdf_path = download_pdf(or_client, pid)
+            pdf_path = download_pdf(or_client, pid, PDFS_DIR)
             if not pdf_path:
                 print(f"  SKIPPED download: {paper['title'][:60]}")
                 continue
@@ -354,7 +342,13 @@ def main(n_samples: int = 100, seed: int = 42, balanced: bool = False):
 
 if __name__ == "__main__":
     balanced = "--balanced" in sys.argv
-    args = [a for a in sys.argv[1:] if not a.startswith("--")]
+    data_dir = None
+    if "--data-dir" in sys.argv:
+        idx = sys.argv.index("--data-dir")
+        if idx + 1 < len(sys.argv):
+            data_dir = sys.argv[idx + 1]
+    flag_values = {data_dir} - {None}
+    args = [a for a in sys.argv[1:] if not a.startswith("--") and a not in flag_values]
     n = int(args[0]) if len(args) > 0 else 100
     seed = int(args[1]) if len(args) > 1 else 42
-    main(n_samples=n, seed=seed, balanced=balanced)
+    main(n_samples=n, seed=seed, balanced=balanced, data_dir=data_dir)

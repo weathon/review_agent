@@ -1,6 +1,6 @@
-# Multi-Agent Paper Reviewer
+# :pineapple: Multi-Agent Paper Reviewer
 
-An automated academic paper review system that uses multiple LLM agents with different roles to produce a consolidated review and score. Benchmarked against ICLR 2025 ground truth reviews.
+An automated academic paper review system that uses multiple LLM agents with different roles to produce a consolidated review and score. Benchmarked against ICLR 2026 ground truth reviews.
 
 ## Architecture
 
@@ -74,7 +74,7 @@ pip install -r requirements.txt
 # Set your OpenRouter API key
 echo 'OPENROUTER_API_KEY="sk-or-..."' > .env
 
-# For fetching ICLR 2025 papers, also add OpenReview credentials:
+# For fetching ICLR 2026 papers, also add OpenReview credentials:
 echo 'OPENREVIEW_USERNAME="your@email.com"' >> .env
 echo 'OPENREVIEW_PASSWORD="yourpassword"' >> .env
 ```
@@ -110,29 +110,26 @@ The UI is intentionally simple:
 ```
 
 This runs the full pipeline:
-1. Fetches 200 ICLR 2025 papers (balanced sampling, includes withdrawn)
-2. Builds calibration set (~10 papers, multi-agent review bundles paired with human scores)
-3. Runs always-predict-6 baseline
-4. Runs full reviewer benchmark with calibration (50 papers, 3 concurrent)
-5. Computes metrics + generates plots
+1. Fetches ICLR 2026 papers (balanced for calibration, unbalanced for testing)
+2. Builds calibration set from balanced data (~10 papers, multi-agent review bundles paired with human scores)
+3. Runs full reviewer benchmark on unbalanced data with calibration (50 papers, 3 concurrent)
+4. Computes metrics + generates plots
 
 ### Step by step
 
 ```bash
-# 1. Fetch ICLR 2025 papers with full text
-python fetch_iclr2025.py 200 42 --balanced
+# 1. Fetch ICLR 2026 papers (balanced for calibration, unbalanced for testing)
+python fetch_iclr2026.py 100 42 --balanced --data-dir iclr2026_balanced
+python fetch_iclr2026.py 100 42 --data-dir iclr2026_unbalanced
 
-# 2. Build calibration set
-python build_calibration.py --data-dir iclr2025_data --parallel
+# 2. Build calibration set from balanced data
+python build_calibration.py --data-dir iclr2026_balanced --parallel --no-related-work
 
-# 3. Run baseline
-python run_baseline.py 50 4112 --balanced --data-dir iclr2025_data --calibration calibration.md
+# 3. Run benchmark on unbalanced data with calibration
+python run_iclr_bench.py 50 3112 --parallel \
+  --data-dir iclr2026_unbalanced --calibration calibration.md --no-related-work
 
-# 4. Run benchmark with calibration
-python run_iclr_bench.py 50 4112 --parallel --balanced \
-  --data-dir iclr2025_data --calibration calibration.md
-
-# 5. Compute metrics
+# 4. Compute metrics
 python metric.py bench_scores.csv
 ```
 
@@ -142,9 +139,8 @@ Four baselines are provided for comparison against the full multi-agent pipeline
 
 ```
 baselines/
-├── review_baseline/          # simple review-then-score (Summary, Strengths, Weaknesses, Questions)
-│   ├── run_baseline.py
-│   └── build_calibration.py
+├── direct_review/            # single-turn direct scoring (no review pipeline)
+│   └── run_direct_baseline.py
 └── structured_review/        # structured review matching merger sections
     ├── run_baseline.py
     └── build_calibration.py
@@ -155,35 +151,17 @@ baselines/
 Predicts score=6 and decision=Accept for every paper. No model calls, no calibration. This is the trivial baseline — any useful system must beat it.
 
 ```bash
-python run_baseline.py 50 3112 --balanced --data-dir iclr2025_data --calibration calibration.md
+python run_baseline.py 50 3112 --balanced --data-dir iclr2026_unbalanced --calibration calibration.md
 ```
 
 The `--calibration` flag only excludes calibration paper IDs from sampling — no calibration context is used.
 
-### Direct-scoring baseline (`run_direct_baseline.py`)
+### Direct-scoring baseline (`baselines/direct_review/run_direct_baseline.py`)
 
 Sends the paper directly to `MODEL_SCORER` and asks it to review and score in a single turn. No sub-agent reviews, no merger, no calibration. This measures what the scoring model can do on its own without any pipeline support.
 
 ```bash
-python run_direct_baseline.py 50 3112 --balanced --data-dir iclr2025_data
-```
-
-### Review-then-score baseline (`baselines/review_baseline/`)
-
-Two-turn single-model baseline:
-
-1. **Turn 1**: Model reads the paper and writes a simple review (Summary, Strengths, Weaknesses, Questions — no score)
-2. **Turn 2**: Model reads its own review + calibration examples and produces a score
-
-Uses a basic scoring guide (not comparative scoring). Has its own calibration set.
-
-```bash
-# Build calibration
-python baselines/review_baseline/build_calibration.py --data-dir iclr2025_data
-
-# Run benchmark
-python baselines/review_baseline/run_baseline.py 50 3112 --balanced \
-  --data-dir iclr2025_data --calibration baselines/review_baseline/calibration.md
+python baselines/direct_review/run_direct_baseline.py 50 3112 --data-dir iclr2026_unbalanced
 ```
 
 ### Structured-review baseline (`baselines/structured_review/`)
@@ -199,11 +177,11 @@ Key differences from the simple review baseline:
 
 ```bash
 # Build calibration
-python baselines/structured_review/build_calibration.py --data-dir iclr2025_data
+python baselines/structured_review/build_calibration.py --data-dir iclr2026_unbalanced
 
 # Run benchmark
 python baselines/structured_review/run_baseline.py 50 3112 --balanced \
-  --data-dir iclr2025_data --calibration baselines/structured_review/calibration.md
+  --data-dir iclr2026_unbalanced --calibration baselines/structured_review/calibration.md
 ```
 
 ### Comparison
@@ -212,7 +190,6 @@ python baselines/structured_review/run_baseline.py 50 3112 --balanced \
 |--------|-----------|-----------------|----------------|-------------|
 | Always-predict-6 | None | N/A | Hardcoded 6 | None |
 | Direct scoring | None | Brief assessment | Single-turn scoring guide | None |
-| Review-then-score | None | Summary, Strengths, Weaknesses, Questions | Basic scoring guide | Own (`baselines/review_baseline/calibration.md`) |
 | Structured review | None | Same 7 sections as merger | Comparative scoring (same as pipeline) | Own (`baselines/structured_review/calibration.md`) |
 | Full pipeline | 4 specialized agents | Same 7 sections (via merger) | Comparative scoring | Multi-agent (`calibration.md`) |
 
@@ -229,21 +206,29 @@ This shows the score predictor what "a paper that humans scored 3" vs "a paper t
 
 Calibration papers are excluded from both the benchmark and the baseline comparison set via `calibration_ids.json`.
 
-## Dataset: ICLR 2025
+## Dataset: ICLR 2026
 
-Papers are fetched from OpenReview via authenticated API (`fetch_iclr2025.py`):
+Papers are fetched from OpenReview via authenticated API (`fetch_iclr2026.py`):
 - Downloads PDFs using `client.get_pdf()` (auth required — OpenReview blocks anonymous downloads)
 - Converts to markdown using `pymupdf4llm` with cleanup (strips line numbers, OCR artifacts, review headers)
 - Withdrawn papers are kept and treated as Reject (they often have low scores that improve distribution coverage)
 - Supports `--balanced` stratified sampling across score bins
+- Supports `--data-dir` to output to a custom directory
 
-**Important leakage warning:** some source PDFs contain venue-status headers such as `Published as a conference paper at ICLR 2025`, which directly reveal acceptance status. The current pipeline removes both `Under review ...` and `Published as ...` status headers during text cleanup. For already-generated local datasets, run `python fix_paper_headers.py` before benchmarking.
+### Evaluation methodology: balanced calibration, unbalanced testing
 
-This leakage does not appear to fully explain the current system behavior, since the model still shows substantial under-scoring and relatively weak score calibration. In other words, the dominant error mode is still conservative scoring rather than obvious label copying. However, venue-status headers can still bias evaluation in subtle ways, especially for decision-related metrics, and should therefore be removed.
+We use **balanced (stratified) sampling for calibration** and **unbalanced (natural distribution) sampling for testing**. This is the fairest setup:
+
+- **Balanced calibration** ensures the scoring model sees anchor examples across the full score range (not just the 4-6 cluster that dominates the natural distribution), giving it well-distributed reference points.
+- **Unbalanced testing** reflects the real-world score distribution, where ~70% of papers fall in the borderline 4-6 range. This prevents inflated correlation metrics that arise from balanced test sets, where the easy-to-predict extreme papers dominate the signal.
+
+On the same model, same parser, and same year of data, balanced test sampling inflates Spearman from ~0.42 to ~0.70 purely because extreme-score papers are trivially easy to rank. MAE remains nearly identical (~2.4), confirming the model's actual scoring ability is the same — only the metric is inflated.
+
+`run_all.sh` implements this: step 3 builds calibration from `iclr2026_balanced/`, step 5 tests on `iclr2026_unbalanced/`.
+
+**Important leakage warning:** some source PDFs contain venue-status headers such as `Published as a conference paper at ICLR 2026`, which directly reveal acceptance status. The current pipeline removes both `Under review ...` and `Published as ...` status headers during text cleanup. For already-generated local datasets, run `python fix_paper_headers.py` before benchmarking.
 
 More broadly, this is a general caution for any paper-review benchmark: metadata leakage can enter through parsed PDFs, repository mirrors, camera-ready headers, publication notices, or other artifacts that are not part of the original blind submission. Such leakage may not always produce obviously inflated accuracy, but it can still distort benchmarking results. Future benchmarks should explicitly audit and sanitize these signals before evaluation.
-
-**You MUST use `--balanced` for evaluation.** Without it, random sampling heavily oversamples bin 6 (45% of data), which compresses the score range of test papers and dramatically reduces measured correlation (Pearson, Spearman). A model that is actually discriminative will appear to have collapsed variance simply because the test set lacks spread. The `--balanced` flag stratifies across score bins so there are enough low-scoring and high-scoring papers to measure correlation properly. This single flag can make the difference between a Pearson of ~0.3 and ~0.6+.
 
 ## Metrics
 
@@ -262,19 +247,11 @@ For this project, **Pearson, MAE, bias, and decision quality are more important 
 
 Generates a 4-panel plot: raw scatter, rounded scatter, ROC curve, and precision-recall curve.
 
-### Benchmark Results (44 papers, ICLR 2025)
+### Benchmark Results (ICLR 2026, unbalanced test set)
 
 ![Benchmark scatter plot](bench_scores_scatter.png)
 
-| Metric | Value |
-|--------|-------|
-| Spearman (raw) | 0.741 |
-| Pearson (raw) | 0.756 |
-| MAE (raw) | 1.12 |
-| Bias (pred - GT) | -0.11 |
-| Decision accuracy | 84.1% (37/44) |
-| AUROC | 0.910 |
-| Human match (rounded) | 75.0% |
+Results forthcoming — re-running on the new ICLR 2026 unbalanced test set with balanced calibration.
 
 ## Output Files
 
@@ -288,9 +265,7 @@ Generates a 4-panel plot: raw scatter, rounded scatter, ROC curve, and precision
 | `direct_baseline_scores.csv` | Direct-scoring baseline results |
 | `calibration.md` | Few-shot calibration examples (multi-agent review bundle + human scores) |
 | `calibration_ids.json` | Paper IDs excluded from benchmark |
-| `baselines/review_baseline/scores.csv` | Review-then-score baseline results |
-| `baselines/review_baseline/calibration.md` | Calibration for simple review baseline |
-| `baselines/review_baseline/calibration_ids.json` | Paper IDs excluded from simple review baseline |
+| `baselines/direct_review/` | Direct-scoring baseline results |
 | `baselines/structured_review/scores.csv` | Structured-review baseline results |
 | `baselines/structured_review/calibration.md` | Calibration for structured review baseline |
 | `baselines/structured_review/calibration_ids.json` | Paper IDs excluded from structured review baseline |
@@ -351,24 +326,6 @@ python run_direct_baseline.py [n] [seed] [options]
   --data-dir <path>       Dataset directory
 ```
 
-### `baselines/review_baseline/run_baseline.py`
-
-```
-python baselines/review_baseline/run_baseline.py [n] [seed] [options]
-
-  --balanced              Stratified sampling across score bins
-  --data-dir <path>       Dataset directory
-  --calibration <path>    Calibration file (baselines/review_baseline/calibration.md)
-```
-
-### `baselines/review_baseline/build_calibration.py`
-
-```
-python baselines/review_baseline/build_calibration.py [seed] [options]
-
-  --data-dir <path>       Dataset directory
-```
-
 ### `baselines/structured_review/run_baseline.py`
 
 ```
@@ -387,12 +344,13 @@ python baselines/structured_review/build_calibration.py [seed] [options]
   --data-dir <path>       Dataset directory
 ```
 
-### `fetch_iclr2025.py`
+### `fetch_iclr2026.py`
 
 ```
-python fetch_iclr2025.py [n] [seed] [options]
+python fetch_iclr2026.py [n] [seed] [options]
 
-  --balanced    Stratified sampling across score bins
+  --balanced        Stratified sampling across score bins
+  --data-dir <path> Output directory (default: iclr2026_data)
 
 Requires OPENREVIEW_USERNAME and OPENREVIEW_PASSWORD in .env
 ```

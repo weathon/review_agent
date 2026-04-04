@@ -9,7 +9,7 @@ echo "============================================"
 # echo ""
 # echo ">>> Step 1: Fetching ICLR 2025 papers (200, balanced, includes withdrawn)"
 # echo "    This re-uses cached API notes but re-samples and re-downloads PDFs."
-# rm -f iclr2026_data_v2/ratings.csv  # force re-sample
+# rm -f iclr2026_balanced/ratings.csv  # force re-sample
 # python fetch_iclr2025.py 200 42 --balanced
 
 # ── Step 2: Check dataset distribution ──
@@ -18,7 +18,7 @@ echo ">>> Step 2: Dataset distribution check"
 python -c "
 import csv
 from collections import Counter
-with open('iclr2026_data_v2/ratings.csv') as f:
+with open('iclr2026_balanced/ratings.csv') as f:
     rows = list(csv.DictReader(f))
 print(f'Total papers: {len(rows)}')
 decs = Counter(r['gt_binary'] for r in rows)
@@ -33,17 +33,17 @@ for k in sorted(bins):
 # ── Step 3: Build calibration set ──
 echo ""
 echo ">>> Step 3: Building calibration set (sub-agents only, no merger)"
-python build_calibration.py --data-dir iclr2026_data_v2 --parallel --no-related-work
+python build_calibration.py --data-dir iclr2026_balanced --parallel --no-related-work
 
 # ── Step 4: Run baseline ──
 # echo ""
 # echo ">>> Step 4: Running baseline (always predict 6)"
-# python run_baseline.py 50 4112 --data-dir iclr2026_data_v2 --calibration calibration.md --no-related-work# --balanced 
+# python run_baseline.py 50 4112 --data-dir iclr2026_balanced --calibration calibration.md --no-related-work# --balanced 
 
 # ── Step 5: Run benchmark with calibration ──
 echo ""
 echo ">>> Step 5: Running benchmark (50 papers, with calibration)"
-python run_iclr_bench.py 50 3112 --parallel --data-dir iclr2026_data_v2 --calibration calibration.md --no-related-work --balanced 
+python run_iclr_bench.py 50 3112 --parallel --data-dir iclr2026_unbalanced --calibration calibration.md --no-related-work
 
 # ── Step 6: Compute metrics ──
 echo ""
@@ -53,7 +53,7 @@ python metric.py bench_scores.csv
 echo ""
 echo "============================================"
 echo "Done! Output files:"
-echo "  iclr2026_data_v2/ratings.csv    - dataset"
+echo "  iclr2026_balanced/ratings.csv    - dataset"
 echo "  calibration.md               - calibration examples"
 echo "  calibration_ids.json         - excluded paper IDs"
 echo "  bench_results.md             - full reviews"
