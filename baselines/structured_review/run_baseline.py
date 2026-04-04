@@ -103,6 +103,11 @@ One paragraph synthesizing genuinely novel observations about this work.
 Do NOT output any numerical scores or subscores. Do NOT output an \
 accept/reject decision. Your job is ONLY to produce the qualitative review. \
 Scoring will be done separately.
+
+When you are later asked to score: be DISCRIMINATIVE. A weak paper is weak — \
+give it a low score (1-3). A strong paper is strong — give it a high score (7-9). \
+Do not cluster everything around 5. The quality difference between papers is real \
+and your scores should reflect it.
 """
 
 # ── Score prompt: same comparative scoring as the main pipeline ──────

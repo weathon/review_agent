@@ -9,6 +9,7 @@ into a merger+scorer.
 Usage:
   python baselines/direct_review/run_direct_baseline.py                     # 10 papers, seed=42
   python baselines/direct_review/run_direct_baseline.py 50 3112 --parallel
+  python baselines/direct_review/run_direct_baseline.py --run-name my_experiment
 """
 
 # note: the downloaded files are already blanced
@@ -140,6 +141,7 @@ async def main(
     parallel: bool = False,
     balanced: bool = False,
     data_dir: str | None = None,
+    run_name: str = "direct_baseline",
 ):
     bench_dir = Path(data_dir) if data_dir else DEFAULT_BENCH_DIR
 
@@ -164,8 +166,8 @@ async def main(
     client = _get_client()
     results = []
     out_dir = Path(__file__).resolve().parent
-    csv_path = out_dir / "direct_baseline_scores.csv"
-    results_path = out_dir / "direct_baseline_results.md"
+    csv_path = out_dir / f"{run_name}_scores.csv"
+    results_path = out_dir / f"{run_name}_results.md"
 
     with open(results_path, "w") as f:
         f.write("# Direct-Scoring Baseline Results\n\n")
@@ -318,9 +320,14 @@ if __name__ == "__main__":
         if idx + 1 < len(sys.argv):
             data_dir = sys.argv[idx + 1]
 
+    run_name = "direct_baseline"
+    if "--run-name" in sys.argv:
+        idx = sys.argv.index("--run-name")
+        if idx + 1 < len(sys.argv):
+            run_name = sys.argv[idx + 1]
 
-    flag_values = {data_dir} - {None}
+    flag_values = {data_dir, run_name} - {None}
     args = [a for a in sys.argv[1:] if not a.startswith("--") and a not in flag_values]
     n = int(args[0]) if len(args) > 0 else 10
     seed = int(args[1]) if len(args) > 1 else 42
-    asyncio.run(main(n_samples=n, seed=seed, balanced=balanced, data_dir=data_dir))
+    asyncio.run(main(n_samples=n, seed=seed, balanced=balanced, data_dir=data_dir, run_name=run_name))
