@@ -1,0 +1,2716 @@
+# LLM UNLEARNING WITH LLM BELIEFS
+
+
+**Kemou Li** [1] **Qizhou Wang** [2] _[,]_ [3] **Yue Wang** [2] **Fengpeng Li** [4] **Jun Liu** [5]
+
+**Bo Han** [2] **Jiantao Zhou** [1] _[∗]_
+
+
+1State Key Laboratory of Internet of Things for Smart City, University of Macau
+2TMLR Group, Department of Computer Science, Hong Kong Baptist University
+3Imperfect Information Learning Team, RIKEN Center for Advanced Intelligence Project
+4PRADA Lab, King Abdullah University of Science and Technology
+5National Institute of Informatics
+
+
+ABSTRACT
+
+
+Large language models trained on vast corpora inherently risk memorizing sensitive or harmful content, which may later resurface in their outputs. Prevailing
+unlearning methods generally rely on gradient ascent and its variants to lower
+the probability of specific target responses. However, we find that this strategy
+induces a critical side effect: probability mass is redistributed into high-likelihood
+regions, often corresponding to semantically related rephrasings of the targets.
+We refer to this as the _squeezing effect_, which explains why many methods yield
+merely spurious unlearning, a problem further obscured by automated metrics (e.g.,
+ROUGE, truth ratio) that misreport actual success. To address this, we propose a
+_bootstrapping_ (BS) framework that explicitly links the squeezing effect with the
+model’s own high-confidence generations, namely its _model beliefs_ . Since model
+beliefs inherently capture the very high-likelihood regions where probability mass
+is squeezed, incorporating them into the unlearning objective directly counters the
+squeezing effect. By jointly suppressing both target responses and model beliefs,
+BS-T (token) attenuates high-probability tokens, whereas BS-S (sequence) removes
+entire high-confidence generations, together achieving more thorough forgetting
+while preserving utility. Extensive experiments on diverse benchmarks confirm the
+[effectiveness of our approach, with code merged to OpenUnlearning.](https://github.com/locuslab/open-unlearning)
+
+
+1 INTRODUCTION
+
+
+Large language models (LLMs) have achieved remarkable success in generation and comprehension
+across diverse applications (Hadi et al., 2023; Zhang et al., 2026b), yet their deployment requires
+careful auditing to prevent leakage of private, illegal, or misleading information. A common practice
+is the “report then remove” pipeline (Geng et al., 2025), where harmful behaviors are first identified
+and then eliminated by model owners. Recently, LLM unlearning (Yao et al., 2024a; Zhu et al.,
+2025; Liao et al., 2026) emerges as a more principled solution, aiming to directly erase harmful
+parameterizations from the model itself. Compared with alternatives such as harmful content detectors
+or in-context defenses (Shi et al., 2024; Pawelczyk et al., 2024), unlearning is less vulnerable to
+circumvention, jailbreaks, or re-training attacks for open-source LLMs (Lynch et al., 2024).
+
+
+To achieve unlearning, many studies employ gradient ascent (GA) (Eldan & Russinovich, 2023; Yao
+et al., 2024b), which inverts the conventional gradient descent process by maximizing the negative
+log-likelihood (NLL) of to-be-unlearned data so as to erase their influence from the parameters.
+However, directly applying GA can notably degrades overall performance (Wang et al., 2025a;d;
+Zhu et al., 2025), limiting practical utility. Consequently, subsequent works pursue refinements,
+either by improving GA itself (e.g., NPO (Zhang et al., 2024) and WGA (Wang et al., 2025b)), or
+by incorporating regularization (e.g., GradDiff (Maini et al., 2024)) to better preserve utility. For
+detailed related works about machine unlearning and LLM unlearning, please refer to Appx. B.
+
+
+_∗_ Corresponding author: Jiantao Zhou (jtzhou@um.edu.mo).
+
+
+1
+
+
+|Q What animal says “meow”?<br>A Cat says “meow”.<br>rob.<br>Unlearn Fail!<br>A Kitty makes a “meow” sound<br>when it’s hungry.<br>Squeezing effect<br>redistributes prob.<br>High- ∆ ≈0<br>Likelihood<br>Region ∙ ∙ ∙ ∙ ∙ ∙|Col2|Col3|
+|---|---|---|
+||||
+||_Hig_<br>_Likeli_<br>_Reg_|_Hig_<br>_Likeli_<br>_Reg_|
+||_Hig_<br>_Likeli_<br>_Reg_|_h-_<br>_hood_<br>_ion_|
+
+
+Figure 1: **Motivation and overview of our work.** **Left:** Suppressing only target responses appears effective but
+shifts probability mass into semantically related regions (squeezing effect), yielding spurious unlearning. **Right:**
+Our bootstrapping framework addresses this by incorporating model beliefs: BS-T suppresses high-probability
+tokens, while BS-S augments full high-confidence sequences, enabling more thorough forgetting.
+
+
+Despite recent refinements, GA-based methods display an intuitive yet underexplored failure mode:
+unlearned models continue to generate semantically rephrased outputs that retain the knowledge
+intended for removal, leading to only superficial forgetting. This _spurious_ _unlearning_ is evident
+to humans but poorly captured by widely used metrics such as ROUGE and perplexity (Zhu et al.,
+2026; Li et al., 2024b; Wang et al., 2025e; Chen et al., 2026), which evaluate surface similarity rather
+than whether harmful knowledge remains encoded. To uncover such cases, we employ LLM-based
+evaluation as an auxiliary probe, which reveals that models judged successful by classical metrics
+may still leak targeted knowledge (cf. §3.1). Motivated by this evidence, we in §3.2 analyze the
+mechanism behind spurious unlearning: GA lowers the likelihood of the target response, yet softmax
+normalization redistributes probability mass to other tokens and sequences, concentrating on highprobability neighborhoods that correspond to paraphrases or closely related continuations (Ren &
+Sutherland, 2025; Razin et al., 2025). Outputs sampled from these regions thus remain semantically
+tied to the original target. Fig. 1 illustrates this _squeezing effect_, where suppression of the target
+response inadvertently elevates related alternatives. This observation suggests a remedy: effective
+unlearning ought to suppress not only target responses but also the model’s own high-confidence
+generations—its _model beliefs_, namely the tokens or sequences it would otherwise predict with highest
+confidence—thereby preventing probability mass from shifting to semantically similar rephrasings.
+
+
+Building on the above insight, we propose a bootstrapping (BS) framework (Yarowsky, 1995), where
+“bootstrapping” reflects the idea of using the model beliefs as auxiliary unlearning signals. This
+design extends unlearning beyond fixed target responses and directly counteracts the probability
+regions into which mass would otherwise be squeezed, thereby enabling more thorough forgetting.
+Concretely, BS is realized in two forms: BS-token (BS-T) mixes the one-hot label of the target
+response with the model’s own high-probability token predictions to form a soft target, explicitly
+suppressing those tokens during training; BS-sequence (BS-S) samples entire high-confidence
+responses from the model and augments them as additional unlearning data, ensuring that complete
+harmful continuations are removed rather than merely isolated words (cf. §4). In both cases, model
+beliefs are directly built into the loss: the objective penalizes not only the original target but also
+what the model itself would otherwise most confidently predict, preventing probability mass from
+“escaping” into semantically similar rephrasings. We further provide theoretical analysis showing how
+such bootstrapping alleviates the squeezing effect under the learning dynamics framework (cf. §5).
+Finally, in §6, extensive experiments conducted with OpenUnlearning (Dorna et al., 2025) across
+multiple benchmarks and models confirm the effectiveness of BS-T and BS-S over prior methods.
+
+
+**Contributions.** The contributions of this work can be summarized as:
+
+
+- We reveal that NPO-based methods suffer from spurious unlearning, where models still generate
+semantically related variants of target responses. We attribute this to the squeezing effect, whereby
+probability mass shifts into high-likelihood regions, and characterize this phenomenon.
+
+
+- We propose a bootstrapping-based framework that incorporates model beliefs into the unlearning objective. Instantiated at the token level (BS-T) and sequence level (BS-S), it dynamically
+
+
+2
+
+
+suppresses both target responses and high-confidence alternatives. We further provide theoretical
+analysis showing how BS reshapes gradient dynamics and mitigates the squeezing effect.
+
+
+- Experiments on TOFU, MUSE, and WMDP across multiple model families demonstrate that our
+bootstrapping framework consistently outperforms state-of-the-art baseline, achieving a superior
+balance between forgetting and retention and more reliable unlearning in practice.
+
+
+2 PRELIMINARIES: FROM CONCEPTS TO PRACTICES
+
+
+2.1 PROBLEM DEFINITION
+
+
+**Notations.** Let _V_ be the token vocabulary. Given a prompt **x** _∈V_ _[∗]_, an LLM with parameters _**θ**_
+generates a response **y** _∈V_ _[∗]_ of length _|_ **y** _|_ auto-regressively. At each step _i ∈_ [ _|_ **y** _|_ ], the LLM produces
+a conditional distribution _π_ _**θ**_ ( _·|_ **x** _,_ **y** _[<i]_ ) _∈_ ∆ _[|V|−]_ [1], where **y** _[<i]_ is the prefix up to token _i −_ 1 in **y** .
+The probability of generating the _i_ -th token _y_ _[i]_ _∈V_ is _π_ _**θ**_ ( _y_ _[i]_ _|_ **x** _,_ **y** _[<i]_ ) = [ _π_ _**θ**_ ( _·|_ **x** _,_ **y** _[<i]_ )] _yi_, and the
+likelihood of the whole response is given by _π_ _**θ**_ ( **y** _|_ **x** ) = [�] _i_ _[|]_ **[y]** =1 _[|]_ _[π]_ _**[θ]**_ [(] _[y][i][|]_ **[x]** _[,]_ **[ y]** _[<i]_ [)][.]
+
+**LLM Unlearning.** LLMs trained on large datasets _D_ t with parameters _**θ**_ - inevitably acquire not
+only broad capabilities but also harmful or undesirable knowledge that may surface in outputs.
+LLM unlearning aims to reverse the learning process by adjusting parameters post hoc to remove
+such knowledge. It relies on an unlearning dataset _D_ u _⊆D_ t of prompt–response pairs ( **x** u _,_ **y** u) to
+be forgotten, together with a complementary retention dataset _D_ r of pairs ( **x** r _,_ **y** r), either drawn
+from _D_ t _\ D_ u or constructed independently to specify behaviors to retain. The goal is twofold:
+1) _Unlearning_ : the unlearned model with parameters _**θ**_ u should assign low likelihood to responses
+in _D_ u and their rephrasings _D_ [˜] u; 2) _Retention_ : for inputs outside _D_ [˜] u, its output distribution _π_ _**θ**_ u( _·|_ **x** )
+should remain close to that of the original model, i.e., _π_ _**θ**_ o( _·|_ **x** ). Achieving both unlearning and
+retention simultaneously is crucial for reliable deployment but remains challenging, since existing
+methods often compromise one objective for the other (Zhang et al., 2024; Wang et al., 2025d).
+
+
+2.2 EXISTING METHODS
+
+
+For implementing unlearning, **gradient ascent (GA)** (Yao et al., 2024b) has been widely explored.
+GA applies ascent instead of descent to the NLL loss, with the objective formulated as
+
+
+min
+_**θ**_
+
+
+- _L_ GA( _**θ**_ ; _D_ u) := E _D_ u [log _π_ _**θ**_ ( **y** u _|_ **x** u)] _._ (1)
+
+
+While GA effectively eliminates targeted knowledge, it substantially compromises overall performance (Wang et al., 2025a;d). In response, later studies refine the GA loss or introduce regularization
+to better preserve retention. Several representative approaches are outlined below.
+
+
+**Gradient difference (GradDiff)** (Maini et al., 2024) addresses the retention challenge by adding an
+additional regularization term that incorporates a set of retain data from _D_ r as:
+
+
+min
+_**θ**_
+
+
+- _L_ GradDiff := _L_ GA( _**θ**_ ; _D_ u) + _λ_ E _D_ r[ _−_ log _π_ _**θ**_ ( **y** r _|_ **x** r)] _,_ (2)
+
+
+where _λ_ is the trade-off hyperparameter. Although the GradDiff objective aligns with the unlearning–
+retention goal, Wang et al. (2025a;d) reveal that the first GA loss term tends to dominate the dynamics
+of gradient updates, which still degrades overall performance.
+
+
+**Negative preference optimization (NPO)** (Zhang et al., 2024) adapts ideas from preference optimization (Rafailov et al., 2024), reweighting GA in a heuristic manner:
+
+
+- _β_ �� [�]
+_._ (3)
+
+
+min
+_**θ**_
+
+
+- _L_ NPO( _**θ**_ ; _D_ u) := _β_ [2] [E] _[D]_ [u] - log �1 + - _ππ_ _**θθ**_ o(( **yy** uu _||_ **xx** uu))
+
+
+NPO is essentially an instance-wise reweighted version of GA, where _β_ controls its smoothness (Wang
+et al., 2025b). This weighting mechanism down-weights samples that are already sufficiently
+unlearned and prioritizes those with smaller impacts on retention. However, the mechanism remains
+error-prone and may still compromise retention (Yang et al., 2025).
+
+
+3
+
+
+**Weighted gradient ascent (WGA)** (Wang et al., 2025b) addresses GA’s tendency to overemphasize
+already forgotten data. It introduces token-wise weights to counteract the inverse-likelihood term:
+
+
+min
+_**θ**_
+
+
+- �� _|_ **y** u _|_ - [�]
+_L_ WGA( _**θ**_ ; _D_ u) := E _D_ u _i_ =1 _[w]_ _i_ _[α]_ [log] _[ π]_ _**[θ]**_ [(] _[y]_ u _[i]_ _[|]_ **[x]** [u] _[,]_ **[ y]** u _[<i]_ [)] _,_ (4)
+
+
+where _wi_ _[α]_ [=] _[ π]_ _**θ**_ _[α]_ [(] _[y]_ u _[i]_ _[|]_ **[x]** [u] _[,]_ **[ y]** u _[<i]_ [)][, and] _[ α]_ [ is a hyperparameter controlling the strength of the counteraction.]
+WGA leverages the conditional token form of GA, and incorporates token-wise weighting via _wi_ _[α]_ [,]
+thereby enabling more fine-grained control. Empirical evidence shows that WGA is more effective
+than the instance-wise reweighting in NPO (Yang et al., 2025).
+
+
+Overall, while existing methods demonstrate promising performance, we observe that these GA- and
+NPO-based approaches still suffer from spurious unlearning. Our work investigates the underlying
+cause and introduces a new framework to address it, aiming for more thorough and reliable unlearning.
+
+
+2.3 EXISTING EVALUATIONS
+
+
+Alongside algorithmic progress, evaluations are essential for assessing how well unlearning goals are
+met and for method comparison. Existing approaches mainly fall into two categories.
+
+
+**Metric-based Evaluations.** Most prior work relies on classical metrics, often benchmark-specific.
+Common choices include Probability and Perplexity (Maini et al., 2024), which measure the likelihood of generating target responses; ROUGE (Lin & Och, 2004), which assesses similarity to the
+ground truth; QA Accuracy (Li et al., 2024b), which measures the model preference for correct
+responses; and Extraction Strength (Wang et al., 2025a), which quantifies the degree of knowledge
+parameterization. These metrics can capture both unlearning and retention, but their failure cases
+remain largely underexplored, with only a few conceptual studies (Wang et al., 2025a).
+
+
+**Detector- and LLM-based Evaluations.** Other studies use task-specific detectors or use LLM-asa-judge (LaaJ) (Zheng et al., 2023; Chiang & Lee, 2023; Zhang et al., 2026a). Detectors include
+reward models for retention and harmful-content detectors for safety (Lynch et al., 2024), while LaaJ
+evaluates whether generated responses still reflect familiarity with unlearned data, such as copyrighted
+content (Wei et al., 2025). Although less common, LLM-based evaluations often yield more accurate
+judgments than classical metrics and are later used in this work to reveal spurious unlearning.
+
+
+3 RETHINKING EXISTING WORKS: FAILURE MODES AND MECHANISMS
+
+
+Despite advances in algorithms and evaluations, it remains uncertain whether current unlearning
+results truly reflect reliable forgetting. Prior studies rarely scrutinize the validity of adopted metrics,
+casting doubts on the reported gains. This section examines the reliability of such evaluations and
+uncovers the mechanisms behind apparent successes that, de facto, still preserve forgotten knowledge.
+§3.1 presents case studies that reveal inconsistencies between metric-reported success and human
+judgment. §3.2 further analyzes how NPO-based methods inherently redistribute probability mass into
+semantically related regions, which explains why models often exhibit only superficial unlearning.
+
+
+3.1 CASE STUDIES: IDENTIFYING SPURIOUS UNLEARNING UNDER MISLEADING METRICS
+
+
+We first present failure cases where metric-reported success diverges from the actual outcomes
+manifested in model responses. Our experiments use the TOFU benchmark (Maini et al., 2024),
+which targets removing private content. We consider GA and NPO, which are widely used baselines
+underpinning many later works (Yang et al., 2025; Fan et al., 2025). We evaluate the 10% forgetting
+setup with Llama 3.2 1B under greedy decoding, which is stricter than sampling and better highlights
+failure cases. Results are reported under TOFU-suggested metrics, including Probability, ROUGE-L,
+and Truth Ratio, where smaller values indicate stronger removal [1] .
+
+
+**Case 1:** **GA induces syntactic collapse.** After applying GA, the model output degenerates into
+random listings of words, e.g., repeatedly “ _always_ ”. This behavior yields extremely low metric values
+( _∼_ 0), ostensibly suggesting successful unlearning. However, from a user perspective, such responses
+are far from ideal: they are incomprehensible and fail to convey any meaningful information.
+
+
+1We adopt inverted Truth Ratio, max(0 _,_ 1 _−_ _R_ truth), so that lower scores indicate more effective unlearning.
+
+
+4
+
+
+**Case 2:** **NPO rephrases semantic content.** NPO can be viewed as instance-reweighted GA, and
+often regarded as state-of-the-art. Although the metric scores are relatively low (Probability: 0 _._ 06,
+ROUGE-L: 0 _._ 20, Truth Ratio: 0 _._ 34, much lower than the original 0 _._ 98, 1 _._ 00, and 0 _._ 63), the model
+responses after unlearning still preserve privacy-related content, such as the key term like “ _English_ ”.
+Hereafter, we refer to this scenario as **spurious unlearning**, where imperfect metrics falsely suggest
+success, while the responses are merely rephrased and still preserve the sensitive information.
+
+
+**Qualitative** **Evaluations.** The mismatch between metric outcomes and actual semantics raises
+concerns about the reliability of the adopted measures. Furthermore, one may question whether such
+failures are merely corner cases. These concerns motivate a shift toward LLM-based evaluations,
+which proves to align more closely with human evaluation (Zheng et al., 2023). Therefore, we turn to
+design LaaJ evaluation, considering two perspectives for the LLM unlearning goal:
+
+
+- **Naturalness.** As seen in Case 1, responses after unlearning may collapse into incomprehensible
+sentences, prompting users to question the overall reliability of LLMs. To avoid this, unlearned
+models should produce fluent and logical responses, irrespective of their semantic content.
+
+
+- **Similarity.** Echoing Case 2, model responses after unlearning should differ notably from the
+original ones, thereby preventing privacy leakage or exposure to harmful content. This objective
+aligns with the unlearning goal in §2.1, where seeks to eliminate the associated knowledge rather
+than merely removing the unlearning corpora.
+
+
+These two perspectives operationalized as LaaJ prompts, with ratings from 0 (failure) to 5 (success)
+indicating the unlearning strength. See Appx. F.2 for further details of our LaaJ evaluation.
+
+
+3.2 MECHANISTIC ANALYSIS: THE SQUEEZING EFFECT BEHIND SPURIOUS UNLEARNING
+
+
+In §3.1, two distinct failure modes of LLM unlearning are identified. Case 1 has been investigated in
+prior work (Wang et al., 2025b), in which the inverse likelihood derived from GA gradients leads
+to degenerate outputs. Here, we shift our attention to Case 2, where models still produce rephrased
+responses that retain the original semantics. This section aims to uncover the mechanism behind such
+spurious unlearning, a phenomenon largely overlooked in existing studies.
+
+
+**Our Conjecture.** We hypothesize that spurious unlearning arises from a redistribution of probability
+mass enforced by the softmax constraint. Since the conditional probabilities for a given input
+must sum to one, lowering the likelihood of the target response _π_ _**θ**_ ( **y** u _|_ **x** u) inevitably increases the
+likelihood of some alternative candidates, i.e., _π_ _**θ**_ ( **y** _|_ **x** u) for **y** _̸_ = **y** u. This increase typically occurs
+on high-likelihood regions, where generated responses are semantically similar to the original due to
+the LLM pre-training generalization. Consequently, the model tends to replace exact matches with
+semantically related rephrasings, a behavior we term the **squeezing effect**, borrowing terminology
+from LLM finetuning (Ren & Sutherland, 2025).
+
+
+**Empirical Verification.** To examine our conjecture, we conduct two complementary experiments
+on TOFU under 10% forget setting. First, we use beam search to sample diverse responses from the
+original LLM and group them by conditional probability into high-, mid-, and low-likelihood regions
+(top 20%, 20–60%, and 60–100%). Their semantic overlap with the original targets is then evaluated
+using LaaJ similarity in §3.1, and compared with responses generated by retraining (i.e., standard
+
+
+5
+
+
+5
+
+
+4
+
+
+3
+
+
+2
+
+
+1
+
+
+0
+
+Original Unlearned
+
+(a) Semantic Similarity (LaaJ)
+
+
+(b) GA Probability Dynamics
+
+
+0
+
+250
+500
+750
+
+1000
+1250
+1500
+1750
+2000
+
+
+Epoch
+
+
+Epoch
+
+
+0
+
+10
+
+20
+
+30
+
+40
+
+50
+
+60
+
+
+(c) NPO Probability Dynamics
+
+
+Figure 2: (a) Semantic similarity of responses across likelihood bands (high/mid/low) and unlearning methods
+(NPO vs. retrain). High-likelihood outputs remain most semantically related, and NPO preserves similarity
+substantially more than retrain. (b) Log-probability dynamics under GA: probability mass is initially shifted to
+high-likelihood regions but later collapses due to overly aggressive updates. (c) Log-probability dynamics under
+NPO: probability mass is consistently retained in high-likelihood paraphrases, sustaining the squeezing effect.
+
+
+gold model) and by NPO. The results in Fig. 2a directly quantify semantic preservation across
+different likelihood bands and unlearning strategies. Second, we track the log-probability dynamics
+of these groups during GA and NPO training (Fig. 2b and 2c), which reveal how probability mass is
+redistributed throughout optimization. From these experiments we derive two key observations:
+
+
+1. **Semantic correlation concentrates in high-likelihood regions.** As shown in Fig. 2a, responses
+from the high-likelihood region are consistently judged by LaaJ as most semantically related to the
+original outputs, whereas mid- and low-likelihood regions exhibit lower similarity. Notably, after
+unlearning, NPO’s generations remain considerably more semantically related than retrain, with
+similarity scores only slightly below high-likelihood paraphrases and above the mid-likelihood
+band. This indicates that spurious unlearning is not a corner case (as in Case 2) but a systematic
+outcome of NPO: it suppresses exact matches yet retains semantically overlapping responses.
+
+
+2. **Probability mass is persistently squeezed into these regions.** Fig. 2b and 2c show that both
+GA and NPO initially amplify the likelihood of high-probability responses when suppressing
+targets, confirming that mass is redistributed into nearby semantic neighborhoods. Although GA’s
+aggressive updates eventually degrade the model (Wang et al., 2025b) and diminish this effect,
+NPO maintains the squeezing pattern in a more stable manner. This persistence explains why
+NPO often yields surface-level forgetting but continues to expose underlying knowledge through
+paraphrased outputs, aligning with the limited generalization observed in Case 2.
+
+
+4 NEW METHOD: BOOTSTRAPPING-BASED UNLEARNING
+
+
+Building on our observations in §3, in this section, we motivate a belief-aware objective against the
+squeezing effect in §4.1 and instantiate a bootstrapping-based unlearning framework in §4.2.
+
+
+4.1 MOTIVATION: FROM THE SQUEEZING EFFECT TO BOOTSTRAPPING
+
+
+Analyses in §3 show that suppressing the exact target does not remove underlying knowledge; instead,
+probability mass is _squeezed_ into semantically proximate regions already favored by the model. Given
+a forget prompt **x** u and prefix **y** u _[<i]_ [, the conditional distribution] _[ π]_ _**[θ]**_ [(] _[· |]_ **[ x]** [u] _[,]_ **[ y]** u _[<i]_ [)][ captures the model’s]
+_local belief_ at position _i_ . The high-likelihood neighborhood can be approximated by the top- _k_ set
+_Hk_ [(] _[i]_ [)] = Top- _k_ ( _π_ _**θ**_ ( _· |_ **x** u _,_ **y** u _[<i]_ [))][.] [At the sequence level, high-confidence generations] **[y]** [ˆ][u] _[∼]_ _[π]_ _**[θ]**_ [(] _[· |]_ **[ x]** [u][)]
+with large average log-likelihood represent the model’s _global beliefs_ . Empirically, while GA and
+NPO decrease _π_ _**θ**_ ( _y_ u _[i]_ _[|]_ **[x]** [u] _[,]_ **[ y]** u _[<i]_ [)][ for the labeled token, they simultaneously increase mass on] _[ H]_ _k_ [(] _[i]_ [)][,]
+producing high-confidence rephrasings that preserve sensitive content. Thus, spurious unlearning
+arises not from metric artifacts but from normalization-driven alignment with internal beliefs.
+
+
+This belief perspective highlights two intuitive requirements for effective unlearning. First, it is not
+enough to suppress the labeled target alone; close alternatives must also be penalized, otherwise the
+model will simply shift knowledge into these semantically proximate regions. Second, forgetting
+should extend beyond tokens to entire sequences, ensuring that harmful continuations cannot persist
+in longer generations. To meet these requirements, we introduce a _bootstrapping_ view of unlearning:
+the model’s own high-confidence predictions are recycled as auxiliary signals, turning its remaining
+
+
+6
+
+
+beliefs into additional forgetting targets and erasing both local and global traces of knowledge. We
+next instantiate this idea through token- and sequence-level formulations.
+
+
+4.2 ALGORITHM: BOOTSTRAPPING AT TOKEN AND SEQUENCE LEVELS
+
+
+**Bootstrapping-Token (BS-T).** Motivated by the belief view, BS-T aims to suppress not only the
+labeled token but also its high-likelihood neighborhood _Hk_ [(] _[i]_ [)][.] [If the objective focused solely on the]
+one-hot target **e** _y_ u _i_, probability mass would simply shift to semantically proximate tokens that the
+model already prefers, leaving the underlying knowledge intact. To avoid this, we form a soft target
+that interpolates between the one-hot vector and the model predictions restricted to the top- _k_ set:
+
+**t** _[i]_ u [=] _[ λ]_ [BST] [sg]           - _π_ _**θ**_ ( _· |_ **x** u _,_ **y** u _[<i]_ [)] �� _H_ [(] _k_ _[i]_ [)]           - + (1 _−_ _λ_ BST) **e** _y_ u _i_ _._ (5)
+
+where _π_ _**θ**_ ( _· |_ **x** u _,_ **y** u _[<i]_ [)] �� _H_ [(] _k_ _[i]_ [)] [denotes the distribution renormalized over] _[ H]_ _k_ [(] _[i]_ [)][,][ sg][ is the stop-gradient]
+operator, and _λ_ BST balances how strongly the neighborhood is penalized. The resulting loss is
+
+
+�� _|_ **y** u _|_         _L_ BST( _**θ**_ ; _D_ u) := E _D_ u _i_ =1 _[⟨]_ **[t]** u _[i]_ _[,]_ [log] _[ π]_ _**[θ]**_ [(] _[· |]_ **[ x]** [u] _[,]_ **[ y]** u _[<i]_ [)] _[⟩]_ _._ (6)
+
+
+Through this construction, BS-T spreads the forgetting signal across the original target and its
+top- _k_ alternatives, directly counteracting the squeezing effect at the token level. Although the
+mechanism resembles self-distillation (Zhang et al., 2019) in reusing model predictions, its purpose is
+fundamentally opposite: instead of reinforcing knowledge, BS-T leverages them to _erase_ it. Similar
+to distillation, a temperature can be applied to smooth predictions and adjust the forgetting scope.
+
+
+**Bootstrapping-Sequence (BS-S).** While BS-T addresses local beliefs at the token level, it cannot
+fully prevent harmful continuations from re-emerging in longer outputs. BS-S extends bootstrapping
+to the sequence level, targeting the model’s _global beliefs_ . Concretely, for each forget prompt **x** u,
+we sample _N_ high-confidence generations **y** ˆu [(] _[j]_ [)] _∼_ _π_ _**θ**_ ( _·|_ **x** u) using temperature-controlled decoding,
+and construct an auxiliary unlearning set _D_ [ˆ] u = _{_ ( **x** u _,_ ˆ **y** u [(] _[j]_ [)][)] _[}][N]_ _j_ =1 [.] [By including these high-likelihood]
+continuations in the forget set, BS-S exposes deeper memorization and ensures that entire harmful
+trajectories are suppressed. The final objective is
+
+
+min
+_**θ**_
+
+
+- _L_ BSS := (1 _−_ _λ_ BSS) _L_ ( _**θ**_ ; _D_ u) + _λ_ BSS _L_ ( _**θ**_ ; _D_ [ˆ] u) _,_ (7)
+
+
+where _λ_ BSS balances forgetting of the original targets and their bootstrapped augmentations, and
+_L_ can be instantiated by any unlearning loss such as _L_ GA or _L_ BST. In practice, BS-S may operate
+in an _off-policy_ form by sampling once before finetuning or in an _on-policy_ form by periodically
+resampling during training. _N_ can be adjusted based on the available computational budget.
+
+
+BS-T and BS-S are compatible with existing unlearning objectives such as NPO and WGA, and can
+also integrate regularization like GradDiff. As shown in §6, both bring clear gains: BS-T offers higher
+efficiency, while BS-S achieves more thorough forgetting. Pseudocodes are provided in Appx. C.
+
+
+5 THEORETICAL ANALYSIS: HOW BS MITIGATES THE SQUEEZING EFFECT?
+
+
+This section establishes a unified theoretical perspective on how BS mitigates the squeezing effect.
+§5.1 revisits the AKG learning dynamics framework and illustrates how BS-T reshapes the residual
+term that drives token-level probability shifts. §5.2 extends this analysis to off-policy BS-S, which
+aggregates BS-T residuals over a broader set of belief-aligned continuations. Taken together, these
+results reveal how BS spreads forgetting pressure across both local belief neighborhoods and broader
+sequence-level alternatives. Detailed proofs and discussions are deferred to Appx. D.
+
+
+5.1 BS-T: RESIDUAL RESHAPING IN THE AKG FRAMEWORK
+
+
+We next formalize the learning dynamics underlying BS-T. Our analysis builds on the learning
+dynamics framework of LLM finetuning (Ren & Sutherland, 2025), which characterizes how an
+SGD update on an unlearning pair _**χ**_ u influences the log-probability of any candidate response **y** o.
+This framework decomposes the update into three components: a softmax Jacobian _A_ capturing
+
+
+7
+
+
+normalization effects, a kernel term _K_ transporting influence across examples, and a residual term _G_
+reflecting the direct action of the loss. Lem. 5.1 restates this decomposition and highlights the residual
+as the driver of probability shifts, and Thm. 5.2 compares the residuals of GA and BS-T to show how
+BS-T spreads forgetting pressure over both the target token and its local belief neighborhood.
+
+**Lemma 5.1** (AKG Decomposition (Ren & Sutherland, 2025)) **.** _Let_ _**χ**_ u = [ **x** u; **y** u] _be an unlearning_
+_pair and_ _**χ**_ - = [ **x** u; **y** o] _be the same prompt with any candidate response._ _Under teacher forcing and_
+_the lazy eNTK assumption, one SGD step with learning rate η updates the log-probability of_ **y** _o as_
+
+∆log _πt_ ( **y**        - _|_ _**χ**_ o) = _−ηAt_ ( _**χ**_ o) _Kt_ ( _**χ**_        - _,_ _**χ**_ u) _Gt_ ( _**χ**_ u) + _O_ ( _η_ [2] ) _,_
+
+_where At_ ( _**χ**_ o) = _**I**_ _−_ 1 _π_ _**θ**_ _[⊤][t]_ [(] _[·|]_ _**[χ]**_ - [)] _[ is the softmax Jacobian,][ K][t]_ [(] _**[χ]**_ - _[,]_ _**[ χ]**_ u [) =] _[ ∇]_ _**[θ]**_ **[z]** [(] _**[χ]**_ - [)] _[∇][⊤]_ _**θ**_ **[z]** [(] _**[χ]**_ u [)] _[ is the]_
+_eNTK, and Gt_ ( _**χ**_ u) = _∇_ **z** _L_ ( _**χ**_ u) _captures the residual term induced solely by the unlearning loss._
+_Here_ **z** = _h_ _**θ**_ ( _**χ**_ ) _denotes the token–logit matrix and all quantities are evaluated at_ _**θ**_ _[t]_ _._
+
+
+Lem. 5.1 indicates that the update is mainly governed by _G_ : it determines which tokens are pushed
+down or up before being modulated by _A_ and transported via _K_ . Therefore, distinguishing the
+different forgetting behaviors of GA and BS-T reduces to analyzing the formulation of their residuals.
+**Theorem 5.2** (Residual Structure of GA vs. BS-T) **.** _Under Lem. 5.1, denote_ **q** _[i]_ = sg� _π_ _**θ**_ _t_ ( _·|_ _**χ**_ u)�� _H_ [(] _k_ _[i]_ [)] - _,_
+
+_the residual terms G_ _for GA and BS-T at position i are:_ _(1) For GA, G_ GA _[i]_ [=] _[ π]_ _**[θ]**_ _[t]_ [(] _[·|]_ _**[χ]**_ u [)] _[ −]_ **[e]** _[y]_ u _[i]_ _[; (2) For]_
+_BS-T, G_ BST _[i]_ [=] _[ π]_ _**[θ]**_ _[t]_ [(] _[·|]_ _**[χ]**_ u [)] _[ −]_ �(1 _−_ _λ_ ) **e** _y_ u _i_ + _λ_ **q** _[i]_ [�] _._ _Hence for any component v_ = _y_ u _[i]_ _[, we have]_
+
+_G_ BST _[i]_ [[] _[v]_ [] =] _[ G]_ GA _[i]_ [[] _[v]_ [] +] _[ λ]_ **[ q]** _[i]_ [[] _[v]_ []] _[.]_
+
+
+**Remark.** Fig. 3 gives an intuitive illustration for
+Thm. 5.2. In GA, the gray curve _π_ _**θ**_ - shows the distribution before unlearning and the green curve _π_ _**θ**_ u after unlearning: the residual _G_ GA pushes down the target _y_ u but reallocates mass to nearby high-likelihood
+regions, leading to semantically similar rephrasings.
+In BS-T, the shaded area marks the top- _k_ belief **q** _[i]_,
+and the residual _G_ BST distributes repulsion across Figure 3: Illustration of residuals for GA vs. BS-T.
+both the target and its close alternatives. The resulting blue curve suppresses the whole neighborhood
+rather than creating a new peak, reducing rephrasings and enabling more generalizable unlearning.
+
+
+5.2 OFF-POLICY BS-S: KERNEL-WEIGHTED RESIDUAL AGGREGATION
+
+
+We now extend the AKG framework to BS-S, using Thm. 5.3 to show that off-policy BS-S induces an
+update equal to a kernel-weighted sum of BS-T residuals computed over a fixed set of belief-aligned
+continuations. For each forget prompt **x** u, we sample _N_ high-confidence continuations _{_ **y** ˜u [(] _[j]_ [)] _[}]_ [ from]
+a reference model before finetuning, and keep these responses fixed throughout finetuning. Let the
+original pair be _**χ**_ [0] u [= [] **[x]** [u][;] **[ y]** [u][]][ and the auxiliary sequences be] _**[ χ]**_ u _[j]_ [= [] **[x]** [u][; ˜] **[y]** u [(] _[j]_ [)][]][, and define the weights]
+as _ω_ 0 = 1 _−λ_ BSS and _ωj_ = _λ_ BSS _/N_ . With _L_ BST as the underlying loss, off-policy BS-S corresponds
+to applying BS-T to the weighted set _{_ _**χ**_ _[m]_ u _[}]_ _m_ _[N]_ =0 [, yielding the following learning dynamics.]
+**Theorem 5.3** (Learning Dynamics of Off-Policy BS-S) **.** _Under Lem. 5.1 and the off-policy BS-S_
+_construction above, a single SGD step with learning rate η on the off-policy BS-S loss_
+
+_L_ [off] BSS [(] _**[θ]**_ [;] _**[ χ]**_ u [) =]         - _Nm_ =0 _[ω][m][L]_ [BST][(] _**[θ]**_ [;] _**[ χ]**_ u _[m]_ [)]
+
+
+_updates the log-probability of any candidate response_ **y** - _on_ _**χ**_ - = [ **x** u; **y** o] _by_
+
+∆log _πt_ ( **y**    - _|_ _**χ**_ o) = _−ηAt_ ( _**χ**_ o)    - _Nm_ =0 _[ω][m][K][t]_ [(] _**[χ]**_ [o] _[,]_ _**[ χ]**_ u _[m]_ [)] _[G]_ [BST] _[,t]_ [(] _**[χ]**_ u _[m]_ [) +] _[ O]_ [(] _[η]_ [2][)] _[.]_
+
+_Here G_ BST _,t_ ( _**χ**_ ) _is the BS-T residual, whose token-wise components coincide with G_ BST _[i]_ _[in Thm.][ 5.2][.]_
+
+
+**Remark.** Thm. 5.3 indicates that off-policy BS-S corresponds to applying BS-T to an expanded
+and fixed training set consisting of the original forget pair _**χ**_ [0] u [together with a collection of auxiliary]
+sequences _{_ _**χ**_ _[j]_ u _[}][N]_ _j_ =1 [drawn from a frozen belief distribution.] [Under the AKG view, each sequence]
+_**χ**_ _[m]_ u [contributes a BS-T residual] _[ G]_ [BST] _[,t]_ [(] _**[χ]**_ u _[m]_ [)][ to the update on a test response] _**[ χ]**_ - [, with its influence]
+
+
+8
+
+
+Table 1: Performance with retain regularization on TOFU with Llama 3 1B/3B/8B under 1%/5%/10% setting.
+
+
+**LLAMA 3.2** **1B** **LLAMA 3.2** **3B** **LLAMA 3.1 8B**
+**Method** **Agg.** ↑ Mem. ↑ Util. ↑ **Agg.** ↑ Mem. ↑ Util. ↑ **Agg.** ↑ Mem. ↑ Util. ↑
+
+FORGET 10%
+
+Original 0 _._ 16 0 _._ 09 0 _._ 71 0 _._ 06 0 _._ 03 0 _._ 75 0 _._ 02 0 _._ 01 0 _._ 73
+Retrain 0 _._ 64 0 _._ 58 0 _._ 71 0 _._ 65 0 _._ 57 0 _._ 75 0 _._ 65 0 _._ 57 0 _._ 75
+GradDiff 0 _._ 52 0 _._ 49 0 _._ 56 0 _._ 49 0 _._ 47 0 _._ 52 0 _._ 50 0 _._ 45 0 _._ 55
+NPO 0 _._ 58 0 _._ 58 0 _._ 58 0 _._ 62 **0** _**.**_ **58** 0 _._ 66 0 _._ 63 0 _._ 57 0 _._ 70
+RMU 0 _._ 58 **0** _**.**_ **59** 0 _._ 57 0 _._ 55 0 _._ 44 **0** _**.**_ **74** 0 _._ 62 0 _._ 55 **0** _**.**_ **72**
+SimNPO 0 _._ 47 0 _._ 35 **0** _**.**_ **70** 0 _._ 41 0 _._ 28 **0** _**.**_ **74** 0 _._ 29 0 _._ 18 **0** _**.**_ **72**
+WGA 0 _._ 53 0 _._ 47 0 _._ 62 0 _._ 51 0 _._ 42 0 _._ 66 0 _._ 52 0 _._ 41 0 _._ 70
+BS-T (Ours) 0 _._ 59 0 _._ 56 0 _._ 62 0 _._ 62 0 _._ 56 0 _._ 68 0 _._ 63 0 _._ 57 0 _._ 70
+BS-S (Ours) **0** _**.**_ **61** **0** _**.**_ **59** 0 _._ 63 **0** _**.**_ **63** **0** _**.**_ **58** 0 _._ 70 **0** _**.**_ **64** **0** _**.**_ **58** 0 _._ 71
+
+FORGET 5%
+
+Original 0 _._ 16 0 _._ 09 0 _._ 71 0 _._ 06 0 _._ 03 0 _._ 75 0 _._ 02 0 _._ 01 0 _._ 73
+Retrain 0 _._ 64 0 _._ 58 0 _._ 72 0 _._ 61 0 _._ 55 0 _._ 69 0 _._ 62 0 _._ 57 0 _._ 67
+GradDiff 0 _._ 52 0 _._ 48 0 _._ 57 0 _._ 49 0 _._ 42 0 _._ 59 0 _._ 49 0 _._ 40 0 _._ 62
+NPO 0 _._ 54 0 _._ 53 0 _._ 55 0 _._ 57 **0** _**.**_ **55** 0 _._ 60 0 _._ 53 0 _._ 49 0 _._ 57
+RMU 0 _._ 55 0 _._ 49 0 _._ 63 0 _._ 50 0 _._ 38 0 _._ 74 0 _._ 54 0 _._ 45 0 _._ 68
+SimNPO 0 _._ 43 0 _._ 31 **0** _**.**_ **71** 0 _._ 40 0 _._ 27 0 _._ 75 0 _._ 36 0 _._ 24 0 _._ 70
+WGA 0 _._ 53 0 _._ 45 0 _._ 64 0 _._ 50 0 _._ 39 0 _._ 69 0 _._ 49 0 _._ 37 **0** _**.**_ **74**
+BS-T (Ours) 0 _._ 55 0 _._ 53 0 _._ 57 0 _._ 55 0 _._ 53 0 _._ 62 0 _._ 58 0 _._ 51 0 _._ 67
+BS-S (Ours) **0** _**.**_ **58** **0** _**.**_ **54** 0 _._ 63 **0** _**.**_ **60** **0** _**.**_ **55** 0 _._ 65 **0** _**.**_ **60** **0** _**.**_ **53** 0 _._ 70
+
+FORGET 1%
+
+Original 0 _._ 13 0 _._ 07 0 _._ 72 0 _._ 02 0 _._ 01 0 _._ 76 0 _._ 02 0 _._ 01 0 _._ 74
+Retrain 0 _._ 61 0 _._ 54 0 _._ 71 0 _._ 59 0 _._ 54 0 _._ 66 0 _._ 62 0 _._ 53 0 _._ 74
+GradDiff 0 _._ 46 0 _._ 34 **0** _**.**_ **72** 0 _._ 43 0 _._ 31 0 _._ 71 0 _._ 44 0 _._ 32 0 _._ 70
+NPO 0 _._ 53 0 _._ 49 0 _._ 57 0 _._ 45 0 _._ 32 0 _._ 74 0 _._ 44 0 _._ 31 **0** _**.**_ **74**
+RMU 0 _._ 51 0 _._ 42 0 _._ 66 0 _._ 25 0 _._ 15 **0** _**.**_ **76** 0 _._ 47 0 _._ 35 0 _._ 73
+SimNPO 0 _._ 45 0 _._ 33 0 _._ 70 0 _._ 40 0 _._ 28 0 _._ 73 0 _._ 39 0 _._ 25 0 _._ 71
+WGA 0 _._ 47 0 _._ 35 **0** _**.**_ **72** 0 _._ 44 0 _._ 31 **0** _**.**_ **76** 0 _._ 46 0 _._ 34 0 _._ 73
+BS-T (Ours) 0 _._ 54 0 _._ 49 0 _._ 60 0 _._ 46 0 _._ 34 0 _._ 70 0 _._ 46 0 _._ 34 0 _._ 71
+BS-S (Ours) **0** _**.**_ **57** **0** _**.**_ **52** 0 _._ 62 **0** _**.**_ **50** **0** _**.**_ **38** 0 _._ 72 **0** _**.**_ **49** **0** _**.**_ **37** 0 _._ 71
+
+
+**Note:** Agg. is the harmonic mean of Mem. and Util.. Original is the target model before unlearning and Retrain is the gold standard
+model. ↑/↓ indicate larger/smaller values are preferable. The best and runner-up results are **bolded** and underlined.
+
+
+scaled by the kernel similarity _Kt_ ( _**χ**_ - _,_ _**χ**_ _[m]_ u [)] [and] [weight] _[ω][m]_ [.] [Compared] [with] [BS-T,] [which] [relies]
+solely on the residual at _**χ**_ [0] u [, off-policy BS-S distributes forgetting pressure across a broader group of]
+high-likelihood sequences, yielding smoother updates and more stable sequence-level unlearning.
+
+
+Note that in on-policy BS-S, the auxiliary sequences are resampled from the model during finetuning
+and therefore depend on the evolving parameters _**θ**_, which violates the teacher-forcing assumption
+required by the AKG framework. We discuss the implications of this limitation in Appx. D.4.
+
+
+6 EXPERIMENTS
+
+
+6.1 EXPERIMENTAL SETUP
+
+
+**Benchmarks, Baselines, and Models.** We assess unlearning performance across three benchmarks:
+TOFU (Maini et al., 2024), MUSE (Shi et al., 2025), and WMDP (Li et al., 2024b). Our approach is
+compared with representative baselines from OpenUnlearning (Dorna et al., 2025) incorporating
+retain regularization, including GradDiff (Maini et al., 2024), NPO (Zhang et al., 2024), RMU (Li
+et al., 2024b), SimNPO (Fan et al., 2025), and WGA (Wang et al., 2025b). We adopt a variety of LLM
+families for unlearning, including Llama 2 (Touvron et al., 2023), Llama 3 (Grattafiori et al., 2024),
+and Zephyr (Tunstall et al., 2024). Specifically, for TOFU, we employ Llama 3.2 1B/3B-Instruct and
+Llama 3.1 8B-Instruct. For MUSE and WMDP, we use Llama 2 7B-Chat and Zephyr-7B- _β_, respectively.
+
+
+**Evaluations Metrics.** On TOFU, following OpenUnlearning, we assess forgetting with Memorization (Mem., harmonic mean of Extraction Strength, Exact Memorization, Paraphrased Probability,
+and Truth Ratio), retention with Utility (Util., harmonic mean of Model Utility and Fluency), and
+use their harmonic mean (Agg.) as the general aggregate metric. On MUSE, we report VerMem
+and KnowMem as complementary forget scores for verbatim and factual knowledge, with UtilPres
+measuring utility preservation. On WMDP, the forget score is QA Accuracy on domain-specific splits
+(Bio/Cyber), and the retain score is the MMLU (Hendrycks et al., 2021) accuracy.
+
+
+For further details and introductions of the experimental setup, please refer to Appx. E.
+
+
+9
+
+
+Epoch
+
+
+0
+
+20
+
+40
+
+60
+
+80
+
+100
+
+120
+
+
+Epoch
+
+
+5
+
+
+4
+
+
+3
+
+
+2
+
+
+1
+
+
+0
+
+25
+
+50
+
+75
+
+100
+
+125
+
+150
+
+175
+
+
+0
+
+Naturalness Similarity
+
+
+(c) LaaJ Evaluation on TOFU 10%
+
+
+(a) BS-T Probability Dynamics
+
+
+(b) BS-S Probability Dynamics
+
+
+Figure 4: Log-probability dynamics under (a) BS-T and (b) BS-S, and (c) the LaaJ evaluation comparison after
+unlearning. Our methods monotonically suppress the target and high-likelihood probabilities and simultaneously
+achieve better LaaJ scores, indicating mitigation of both squeezing effects and spurious unlearning.
+
+
+6.2 EXPERIMENTAL RESULTS
+
+
+**Results on TOFU.** Tab. 1 summarizes results on TOFU under 1%, 5%, and 10% forget settings. Across
+all model scales (Llama 3 1B/3B/8B), our bootstrapping methods achieve superior performance.
+In particular, BS-S consistently delivers the best aggregate and memorization scores (e.g., Agg.
+0.58/0.60/0.60 at 5% and 0.57/0.50/0.49 at 1%), clearly surpassing NPO and RMU. BS-T also ranks
+second in most cases, balancing forgetting and retention—for instance, Agg. 0.55 at 5%–3B and 0.54
+at 1%–1B—while retaining competitive utility with higher efficiency. These findings confirm that
+unlearning both targets and model beliefs enables BS-S to achieve the most thorough forgetting, with
+BS-T as a strong runner-up, validating the effectiveness of our framework on TOFU.
+
+
+**Results** **on** **WMDP.** Tab. 2 presents results on WMDP with
+Zephyr-7B- _β_ . Recall that the forget score corresponds to
+QA accuracy, where values closer to 0.25 indicate more
+randomized responses and thus stronger unlearning. Both
+BS-T and BS-S achieve lower scores on Bio (0.26) and
+Cyber (0.28/0.27) compared with NPO (0.27/0.30) and
+RMU (0.29/0.27), while also attaining higher MMLU retention (0.52 and 0.54 vs. 0.44–0.48 for most baselines)
+except for RMU (0.55). Overall, BS-S delivers the best
+trade-off, reaching near-random forgetting accuracy while
+preserving more utility than most competing methods.
+
+
+Table 2: Performance with retain regularization on WMDP with Zephyr-7B- _β_ .
+
+
+**FORGET** **RETAIN**
+**Method** Bio ↓ Cyber ↓ MMLU ↑
+
+
+Original 0 _._ 64 0 _._ 45 0 _._ 58
+
+GradDiff 0 _._ 27 0 _._ 28 0 _._ 43
+NPO 0 _._ 27 0 _._ 30 0 _._ 44
+RMU 0 _._ 29 **0** _**.**_ **27** **0** _**.**_ **55**
+SimNPO 0 _._ 27 0 _._ 31 0 _._ 44
+WGA 0 _._ 27 0 _._ 30 0 _._ 48
+BS-T (Ours) **0** _**.**_ **26** 0 _._ 28 0 _._ 52
+BS-S (Ours) **0** _**.**_ **26** **0** _**.**_ **27** 0 _._ 54
+
+
+**Analyzing Squeezing and Spurious Unlearning.** To demonstrate the effectiveness of our methods
+for mitigating the squeezing effect and spurious unlearning, Fig. 4 jointly presents the probability
+dynamics of our BS and the LaaJ evaluation. In Fig. 4a and 4b, BS-T and BS-S monotonically
+decrease the target log-probability and the high-likelihood neighbors, alleviating the squeezing effect.
+Fig. 4c further shows that BS-T and BS-S obtain higher Naturalness and Similarity than baselines,
+indicating that our framework mitigates spurious unlearning and preserves fluent. Here we use
+Gemini 2.5 Flash (Comanici et al., 2025) as the LLM judge with Llama 3.1 8B on TOFU 10%.
+
+
+**Additional Results in Appx. F.** Owing to space limitations, further results are deferred to Appx. F.
+In addition to the content already been mentioned above, Appx. F.3 reports results on MUSE (-News
+and -Books); Appx. F.4 provides qualitative comparisons of unlearned responses across different
+unlearning methods; Appx. F.5 presents ablation studies covering hyperparameter analysis and the
+influence of different unlearning losses in BS-S; and Appx. F.6 reports training time comparisons.
+
+
+7 CONCLUSIONS
+
+
+In this paper, we propose a bootstrapping-based framework for LLM unlearning, addressing the
+issue of spurious forgetting caused by the squeezing effect. By explicitly unlearning both original
+targets and the model’s own high-likelihood responses, our method mitigates semantic rephrasings
+overlooked by traditional approaches. We instantiate this at the token and sequence levels (BS-T
+and BS-S), compatible with existing objectives and regularizations. Theoretically, we analyze how
+BS-T reshapes gradient dynamics to effectively mitigate the squeezing effect. Empirical results
+across diverse benchmarks demonstrate superior performance compared to state-of-the-art baselines,
+highlighting the importance of modeling internal beliefs for thorough unlearning and robust retention.
+
+
+10
+
+
+ACKNOWLEDGMENT
+
+
+This work was supported in part by Macau Science and Technology Development Fund under 001/2024/SKL, 0119/2024/RIB2, 0110/2025/R1B2, and 0022/2022/A1; in part by Research
+Committee at University of Macau under MYRG-CRG2025-00031-FST and MYRG-GRG202500086-FST; in part by the Guangdong Basic and Applied Basic Research Foundation under Grant
+2024A1515012536; in part by RGC General Research Fund No. 12200725 and RGC Young Collaborative Research Grant No. C2005-24Y.
+
+
+ETHICS STATEMENT
+
+
+In accordance with the ICLR Code of Ethics, our research directly addresses ethical concerns related
+to harmful knowledge in LLMs. We propose methods to reliably remove undesirable information,
+reducing risks of privacy violations and harmful content exposure. Experiments utilized public
+datasets without direct human involvement, mitigating privacy risks. Methodological limitations and
+potential risks are transparently reported to promote trust and ongoing improvement in AI systems.
+
+
+REPRODUCIBILITY STATEMENT
+
+
+We ensure reproducibility by clearly documenting experimental setups, methods, benchmarks, model
+architectures, and hyperparameters for proposed methods. Complete theoretical proofs are provided
+[in the appendix, with code merged to OpenUnlearning.](https://github.com/locuslab/open-unlearning)
+
+
+USAGE OF LARGE LANGUAGE MODELS
+
+
+In this paper, we employ large language models, such as ChatGPT 5 and Gemini 2.5, solely to assist
+with language refinement and polishing of the manuscript. They are not used for generating research
+ideas, designing methods, or conducting literature retrieval and discovery.
+
+
+REFERENCES
+
+
+Karuna Bhaila, Minh-Hao Van, and Xintao Wu. Soft prompting for unlearning in large language
+models. In _NAACL_, 2025.
+
+
+Lucas Bourtoule, Varun Chandrasekaran, Christopher A Choquette-Choo, Hengrui Jia, Adelin Travers,
+Baiwu Zhang, David Lie, and Nicolas Papernot. Machine unlearning. In _S&P_, 2021.
+
+
+Jonathan Brophy and Daniel Lowd. Machine unlearning for random forests. In _ICML_, 2021.
+
+
+Yinzhi Cao and Junfeng Yang. Towards making systems forget with machine unlearning. In _S&P_,
+2015.
+
+
+Chong Chen, Fei Sun, Min Zhang, and Bolin Ding. Recommendation unlearning. In _WWW_, 2022a.
+
+
+Jiaao Chen and Diyi Yang. Unlearn what you want to forget: Efficient unlearning for LLMs. In
+_EMNLP_, 2023.
+
+
+Liang Chen, Xueting Han, Qizhou Wang, Bo Han, Jing Bai, Hinrich Schutze, and Kam-Fai Wong.
+EEPO: Exploration-enhanced policy optimization via sample-then-forget. In _ICLR_, 2026.
+
+
+Min Chen, Zhikun Zhang, Tianhao Wang, Michael Backes, Mathias Humbert, and Yang Zhang.
+Graph unlearning. In _CCS_, 2022b.
+
+
+Tianqi Chen, Shujian Zhang, and Mingyuan Zhou. Score forgetting distillation: A swift, data-free
+method for machine unlearning in diffusion models. In _ICLR_, 2025.
+
+
+Cheng-Han Chiang and Hung-Yi Lee. Can large language models be an alternative to human
+evaluations? In _ACL_, 2023.
+
+
+11
+
+
+Gheorghe Comanici, Eric Bieber, Mike Schaekermann, Ice Pasupat, Noveen Sachdeva, Inderjit
+Dhillon, Marcel Blistein, Ori Ram, Dan Zhang, Evan Rosen, et al. Gemini 2.5: Pushing the frontier
+with advanced reasoning, multimodality, long context, and next generation agentic capabilities.
+Technical report, Gemini Team, Google, 2025.
+
+
+Yijiang River Dong, Hongzhou Lin, Mikhail Belkin, Ramon Huerta, and Ivan Vuli´c. UNDIAL:
+Self-distillation with adjusted logits for robust unlearning in large language models. In _NAACL_,
+2025.
+
+
+Vineeth Dorna, Anmol Mekala, Wenlong Zhao, Andrew McCallum, Zachary C. Lipton, J. Zico Kolter,
+and Pratyush Maini. OpenUnlearning: Accelerating LLM unlearning via unified benchmarking of
+methods and metrics. In _NeurIPS D&B_, 2025.
+
+
+Ronen Eldan and Mark Russinovich. Who’s Harry Potter? Approximate unlearning in LLMs. _arXiv_
+_preprint arXiv:2310.02238_, 2023.
+
+
+Chongyu Fan, Jiancheng Liu, Licong Lin, Jinghan Jia, Ruiqi Zhang, Song Mei, and Sijia Liu.
+Simplicity prevails: Rethinking negative preference optimization for LLM unlearning. In _NeurIPS_,
+2025.
+
+
+Leo Gao, Jonathan Tow, Baber Abbasi, Stella Biderman, Sid Black, Anthony DiPofi, Charles Foster,
+Laurence Golding, Jeffrey Hsu, Alain Le Noac’h, et al. The language model evaluation harness, 07
+2024. [URL https://zenodo.org/records/12608602.](https://zenodo.org/records/12608602)
+
+
+Jiahui Geng, Qing Li, Herbert Woisetschläger, Zongxiong Chen, Yuxia Wang, Preslav Nakov, HansArno Jacobsen, and Fakhri Karray. A comprehensive survey of machine unlearning techniques for
+large language models. _arXiv preprint arXiv:2503.01854_, 2025.
+
+
+Antonio Ginart, Melody Y. Guan, Gregory Valiant, and James Zou. Making AI forget you: Data
+deletion in machine learning. In _NeurIPS_, 2019.
+
+
+Aditya Golatkar, Alessandro Achille, and Stefano Soatto. Eternal sunshine of the spotless net:
+Selective forgetting in deep networks. In _CVPR_, 2020.
+
+
+Aaron Grattafiori, Abhimanyu Dubey, Abhinav Jauhri, Abhinav Pandey, Abhishek Kadian, Ahmad
+Al-Dahle, Aiesha Letman, Akhil Mathur, Alan Schelten, Alex Vaughan, et al. The Llama 3 herd of
+models. Technical report, Llama Team, AI @ Meta, 2024.
+
+
+Chuan Guo, Tom Goldstein, Awni Hannun, and Laurens Van Der Maaten. Certified data removal
+from machine learning models. In _ICML_, 2020.
+
+
+Muhammad Usman Hadi, Rizwan Qureshi, Abbas Shah, Muhammad Irfan, Anas Zafar, Muhammad Bilal Shaikh, Naveed Akhtar, Jia Wu, Seyedali Mirjalili, et al. A survey on large language
+models: Applications, challenges, limitations, and practical usage. _Authorea Preprints_, 2023.
+
+
+Dan Hendrycks, Collin Burns, Steven Basart, Andy Zou, Mantas Mazeika, Dawn Song, and Jacob
+Steinhardt. Measuring massive multitask language understanding. In _ICLR_, 2021.
+
+
+Zhuo Huang, Xiaobo Xia, Li Shen, Bo Han, Mingming Gong, Chen Gong, and Tongliang Liu.
+Harnessing out-of-distribution examples via augmenting content and style. In _ICLR_, 2023.
+
+
+Zhuo Huang, Chang Liu, Yinpeng Dong, Hang Su, Shibao Zheng, and Tongliang Liu. Machine
+vision therapy: Multimodal large language models can enhance visual robustness via denoising
+in-context learning. In _ICML_, 2024.
+
+
+Zhuo Huang, Gang Niu, Bo Han, Masashi Sugiyama, and Tongliang Liu. Towards out-of-modal
+generalization without instance-level modal correspondence. In _ICLR_, 2025.
+
+
+Joel Jang, Dongkeun Yoon, Sohee Yang, Sungmin Cha, Moontae Lee, Lajanugen Logeswaran, and
+Minjoon Seo. Knowledge unlearning for mitigating privacy risks in language models. In _ACL_,
+2023.
+
+
+Jiabao Ji, Yujian Liu, Yang Zhang, Gaowen Liu, Ramana R. Kompella, Sijia Liu, and Shiyu Chang.
+Reversing the forget–retain objectives: An efficient LLM unlearning framework from logit difference. In _NeurIPS_, 2024.
+
+
+12
+
+
+Jinghan Jia, Yihua Zhang, Yimeng Zhang, Jiancheng Liu, Bharat Runwal, James Diffenderfer, Bhavya
+Kailkhura, and Sijia Liu. SOUL: Unlocking the power of second-order optimization for LLM
+unlearning. In _EMNLP_, 2024.
+
+
+Madhur Jindal. Gibberish detector: High-accuracy text classification model, 2021. [URL https:](https://huggingface.co/madhurjindal/autonlp-Gibberish-Detector-492513457)
+[//huggingface.co/madhurjindal/autonlp-Gibberish-Detector-492513457.](https://huggingface.co/madhurjindal/autonlp-Gibberish-Detector-492513457)
+
+
+Pang Wei Koh and Percy Liang. Understanding black-box predictions via influence functions. In
+_ICML_, 2017.
+
+
+Fengpeng Li, Kemou Li, Qizhou Wang, Bo Han, and Jiantao Zhou. AEGIS: Adversarial target-guided
+retention-data-free robust concept erasure from diffusion models. In _ICLR_, 2026.
+
+
+Guihong Li, Hsiang Hsu, Chun-Fu Chen, and Radu Marculescu. Machine unlearning for image-toimage generative models. In _ICLR_, 2024a.
+
+
+Nathaniel Li, Alexander Pan, Anjali Gopal, Summer Yue, Daniel Berrios, Alice Gatti, Justin D.
+Li, Ann-Kathrin Dombrowski, Shashwat Goel, Gabriel Mukobi, et al. The WMDP benchmark:
+Measuring and reducing malicious use with unlearning. In _ICML_, 2024b.
+
+
+Junfeng Liao, Qizhou Wang, Shanshan Ye, Xin Yu, Ling Chen, and Zhen Fang. Explainable llm
+unlearning through reasoning. In _ICLR_, 2026.
+
+
+Chin-Yew Lin and Franz Josef Och. Automatic evaluation of machine translation quality using
+longest common subsequence and skip-bigram statistics. In _ACL_, 2004.
+
+
+Chris Liu, Yaxuan Wang, Jeffrey Flanigan, and Yang Liu. Large language model unlearning via
+embedding-corrupted prompts. In _NeurIPS_, 2024.
+
+
+Sijia Liu, Yuanshun Yao, Jinghan Jia, Stephen Casper, Nathalie Baracaldo, Peter Hase, Yuguang Yao,
+Chris Yuhao Liu, Xiaojun Xu, Hang Li, et al. Rethinking machine unlearning for large language
+models. _Nature Machine Intelligence_, 7(2):181–194, 2025.
+
+
+Ilya Loshchilov and Frank Hutter. Decoupled weight decay regularization. In _ICLR_, 2019.
+
+
+Renqiang Luo, Yongshuai Yang, Huafei Huang, Qing Qing, Mingliang Hou, Ziqi Xu, Yi Yu, Jingjing
+Zhou, and Feng Xia. FairGU: Fairness-aware graph unlearning in social network. In _WWW_, 2026.
+
+
+Aengus Lynch, Phillip Guo, Aidan Ewart, Stephen Casper, and Dylan Hadfield-Menell. Eight
+methods to evaluate robust unlearning in LLMs. _arXiv preprint arXiv:2402.16835_, 2024.
+
+
+Pratyush Maini, Zhili Feng, Avi Schwarzschild, Zachary Chase Lipton, and J. Zico Kolter. TOFU: A
+task of fictitious unlearning for LLMs. In _COLM_, 2024.
+
+
+Ronak Mehta, Sourav Pal, Vikas Singh, and Sathya N. Ravi. Deep unlearning via randomized
+conditionally independent Hessians. In _CVPR_, 2022.
+
+
+Anmol Mekala, Vineeth Dorna, Shreya Dubey, Abhishek Lalwani, David Koleczek, Mukund Rungta,
+Sadid Hasan, and Elita Lobo. Alternate preference optimization for unlearning factual knowledge
+in large language models. In _COLING_, 2025.
+
+
+Martin Pawelczyk, Seth Neel, and Himabindu Lakkaraju. In-context unlearning: Language models
+as few-shot unlearners. In _ICML_, 2024.
+
+
+Rafael Rafailov, Archit Sharma, Eric Mitchell, Christopher D. Manning, Stefano Ermon, and Chelsea
+Finn. Direct preference optimization: Your language model is secretly a reward model. In _NeurIPS_,
+2024.
+
+
+Noam Razin, Sadhika Malladi, Adithya Bhaskar, Danqi Chen, Sanjeev Arora, and Boris Hanin.
+Unintentional unalignment: Likelihood displacement in direct preference optimization. In _ICLR_,
+2025.
+
+
+Jie Ren, Zhenwei Dai, Xianfeng Tang, Yue Xing, Shenglai Zeng, Hui Liu, Jingying Zeng, Qiankun
+Peng, Samarth Varshney, Suhang Wang, et al. Keeping an eye on LLM unlearning: The hidden
+risk and remedy. In _NeurIPS_, 2025.
+
+
+13
+
+
+Yi Ren and Danica J. Sutherland. Learning dynamics of LLM finetuning. In _ICLR_, 2025.
+
+
+Ayush Sekhari, Jayadev Acharya, Gautam Kamath, and Ananda Theertha Suresh. Remember what
+you want to forget: Algorithms for machine unlearning. In _NeurIPS_, 2021.
+
+
+William F. Shen, Xinchi Qiu, Meghdad Kurmanji, Alex Iacob, Lorenzo Sani, Yihong Chen, Nicola
+Cancedda, and Nicholas D. Lane. LLM unlearning via neural activation redirection. In _NeurIPS_,
+2025.
+
+
+Dan Shi, Tianhao Shen, Yufei Huang, Zhigen Li, Yongqi Leng, Renren Jin, Chuang Liu, Xinwei Wu,
+Zishan Guo, Linhao Yu, et al. Large language model safety: A holistic survey. _arXiv preprint_
+_arXiv:2412.17686_, 2024.
+
+
+Weijia Shi, Jaechan Lee, Yangsibo Huang, Sadhika Malladi, Jieyu Zhao, Ari Holtzman, Daogao Liu,
+Luke Zettlemoyer, Noah A. Smith, and Chiyuan Zhang. MUSE: Machine unlearning six-way
+evaluation for language models. In _ICLR_, 2025.
+
+
+Vinith Suriyakumar and Ashia C. Wilson. Algorithms that approximate data removal: New results
+and limitations. In _NeurIPS_, 2022.
+
+
+Anvith Thudi, Hengrui Jia, Ilia Shumailov, and Nicolas Papernot. On the necessity of auditable
+algorithmic definitions for machine unlearning. In _USENIX Security_, 2022.
+
+
+Hugo Touvron, Louis Martin, Kevin Stone, Peter Albert, Amjad Almahairi, Yasmine Babaei, Nikolay
+Bashlykov, Soumya Batra, Prajjwal Bhargava, Shruti Bhosale, et al. Llama 2: Open foundation
+and fine-tuned chat models. Technical report, GenAI, Meta, 2023.
+
+
+Lewis Tunstall, Edward Emanuel Beeching, Nathan Lambert, Nazneen Rajani, Kashif Rasul, Younes
+Belkada, Shengyi Huang, Leandro Von Werra, Clémentine Fourrier, Nathan Habib, et al. Zephyr:
+Direct distillation of LM alignment. In _COLM_, 2024.
+
+
+Qizhou Wang, Bo Han, Puning Yang, Jianing Zhu, Tongliang Liu, and Masashi Sugiyama. Towards
+effective evaluations and comparisons for LLM unlearning methods. In _ICLR_, 2025a.
+
+
+Qizhou Wang, Jin Peng Zhou, Zhanke Zhou, Saebyeol Shin, Bo Han, and Kilian Q. Weinberger.
+Rethinking LLM unlearning objectives: A gradient perspective and go beyond. In _ICLR_, 2025b.
+
+
+Yaxuan Wang, Jiaheng Wei, Chris Yuhao Liu, Jinlong Pang, Quan Liu, Ankit Parag Shah, Yujia Bao,
+Yang Liu, and Wei Wei. LLM unlearning via loss adjustment with only forget data. In _ICLR_,
+2025c.
+
+
+Yue Wang, Qizhou Wang, Feng Liu, Wei Huang, Yali Du, Xiaojiang Du, and Bo Han. GRU:
+Mitigating the trade-off between unlearning and retention for large language models. In _ICML_,
+2025d.
+
+
+Yue Wang, Qizhou Wang, Zizhuo Zhang, Ang Li, Gang Niu, Bo Han, and Masashi Sugiyama. What
+is preference optimization doing, how and why? _arXiv preprint arXiv:2512.00778_, 2025e.
+
+
+Rongzhe Wei, Peizhi Niu, Hans Hao-Hsun Hsu, Ruihan Wu, Haoteng Yin, Yifan Li, Eli Chien,
+Kamalika Chaudhuri, Olgica Milenkovic, and Pan Li. Do LLMs really forget? Evaluating
+unlearning with knowledge correlation and confidence awareness. In _NeurIPS_, 2025.
+
+
+Yinjun Wu, Edgar Dobriban, and Susan Davidson. DeltaGrad: Rapid retraining of machine learning
+models. In _ICML_, 2020.
+
+
+Abudukelimu Wuerkaixi, Qizhou Wang, Sen Cui, Wutong Xu, Bo Han, Gang Niu, Masashi Sugiyama,
+and Changshui Zhang. Adaptive localization of knowledge negation for continual LLM unlearning.
+In _ICML_, 2025.
+
+
+Jie Xu, Zihan Wu, Cong Wang, and Xiaohua Jia. Machine unlearning: Solutions and challenges.
+_IEEE Transactions on Emerging Topics in Computational Intelligence_, 8(3):2150–2168, 2024.
+
+
+Puning Yang, Qizhou Wang, Zhuo Huang, Tongliang Liu, Chengqi Zhang, and Bo Han. Exploring
+criteria of loss reweighting to enhance LLM unlearning. In _ICML_, 2025.
+
+
+14
+
+
+Yifan Yao, Jinhao Duan, Kaidi Xu, Yuanfang Cai, Zhibo Sun, and Yue Zhang. A survey on large
+language model (LLM) security and privacy: The good, the bad, and the ugly. _High-Confidence_
+_Computing_, 4(2):100211, 2024a.
+
+
+Yuanshun Yao, Xiaojun Xu, and Yang Liu. Large language model unlearning. In _NeurIPS_, 2024b.
+
+
+David Yarowsky. Unsupervised word sense disambiguation rivaling supervised methods. In _ACL_,
+1995.
+
+
+Yi Yu, Song Xia, Siyuan Yang, Chenqi Kong, Wenhan Yang, Shijian Lu, Yap-Peng Tan, and Alex
+Kot. MTL-UE: Learning to learn nothing for multi-task learning. In _ICML_, 2025.
+
+
+Linfeng Zhang, Jiebo Song, Anni Gao, Jingwei Chen, Chenglong Bao, and Kaisheng Ma. Be your
+own teacher: Improve the performance of convolutional neural networks via self distillation. In
+_ICCV_, 2019.
+
+
+Ruiqi Zhang, Licong Lin, Yu Bai, and Song Mei. Negative preference optimization: From catastrophic
+collapse to effective unlearning. In _COLM_, 2024.
+
+
+Zizhuo Zhang, Qizhou Wang, Shanshan Ye, Jianing Zhu, Jiangchao Yao, Bo Han, and Masashi
+Sugiyama. Towards understanding valuable preference data for large language model alignment.
+In _ICLR_, 2026a.
+
+
+Zizhuo Zhang, Jianing Zhu, Xinmu Ge, Zihua Zhao, Zhanke Zhou, Xuan Li, Xiao Feng, Jiangchao
+Yao, and Bo Han. Co-reward: Self-supervised reinforcement learning for large language model
+reasoning via contrastive agreement. In _ICLR_, 2026b.
+
+
+Lianmin Zheng, Wei-Lin Chiang, Ying Sheng, Siyuan Zhuang, Zhanghao Wu, Yonghao Zhuang,
+Zi Lin, Zhuohan Li, Dacheng Li, Eric Xing, et al. Judging LLM-as-a-judge with MT-bench and
+Chatbot Arena. In _NeurIPS_, 2023.
+
+
+Zhanke Zhou, Rong Tao, Jianing Zhu, Yiwen Luo, Zengmao Wang, and Bo Han. Can language
+models perform robust reasoning in chain-of-thought prompting with noisy rationales? In _NeurIPS_,
+2024.
+
+
+Zhanke Zhou, Xiao Feng, Zhaocheng Zhu, Jiangchao Yao, Sanmi Koyejo, and Bo Han. From
+passive to active reasoning: Can large language models ask the right questions under incomplete
+information? In _ICML_, 2025.
+
+
+Zhanke Zhou, Zhaocheng Zhu, Xuan Li, Mikhail Galkin, Xiao Feng, Sanmi Koyejo, Jian Tang, and
+Bo Han. Landscape of thoughts: Visualizing the reasoning process of large language models. In
+_ICLR_, 2026.
+
+
+Jianing Zhu, Zongze Li, Chandler Squires, Qizhou Wang, Bo Han, and Pradeep Ravikumar. On the
+fragility of latent knowledge: Layer-wise influence under unlearning in large language model. In
+_ICML 2025 Workshop MUGen_, 2025.
+
+
+Jianing Zhu, Bo Han, Jiangchao Yao, Jianliang Xu, Gang Niu, and Masashi Sugiyama. Decoupling
+the class label and the target concept in machine unlearning. In _ICLR_, 2026.
+
+
+15
+
+
+# **Appendix of LLM Unlearning with LLM Beliefs**
+
+
+CONTENTS
+
+
+**A** **Notations** **17**
+
+
+**B** **Detailed Related Works** **18**
+
+
+B.1 Machine Unlearning . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 18
+
+
+B.2 LLM Unlearning . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 18
+
+
+**C** **Pseudocodes** **20**
+
+
+C.1 Pseudocode of BS-T . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 20
+
+
+C.2 Pseudocode of BS-S . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 20
+
+
+**D** **Theoretical Proofs and Discussions** **21**
+
+
+D.1 Learning Dynamics . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 21
+
+
+D.2 Proof of Theorem 5.2 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 21
+
+
+D.3 Proof of Theorem 5.3 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 22
+
+
+D.4 Discussion on On-Policy BS-S . . . . . . . . . . . . . . . . . . . . . . . . . . . . 23
+
+
+**E** **Further Experimental Setup** **26**
+
+
+E.1 Benchmarks . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 26
+
+
+E.2 Evaluation Metrics . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 26
+
+
+E.3 Implementation Setup . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 28
+
+
+E.4 Hyperparameter Settings of Unlearning Methods . . . . . . . . . . . . . . . . . . 28
+
+
+**F** **Additional Results** **29**
+
+
+F.1 Additional Examples on Failure Cases . . . . . . . . . . . . . . . . . . . . . . . . 29
+
+
+F.2 Prompt Design of Proposed LaaJ Evaluation . . . . . . . . . . . . . . . . . . . . . 31
+
+
+F.3 Results on MUSE . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 32
+
+
+F.4 Qualitative Examples of Unlearning Results . . . . . . . . . . . . . . . . . . . . . 32
+
+
+F.5 Ablation Studies . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 34
+
+
+F.6 Time Consumption . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 36
+
+
+**G** **Limitations** **36**
+
+
+16
+
+
+OVERVIEW OF THE APPENDIX
+
+
+This appendix provides supplementary details, theoretical foundations, and extended results to
+complement the main text.
+
+
+- §A introduces the notations used throughout the paper.
+
+- §B expands the related work discussion, covering both machine unlearning in general and LLM
+unlearning in particular.
+
+- §C presents pseudocode for BS-T and BS-S, clarifying their implementation.
+
+- §D provides the theoretical details, including the AKG decomposition and the proofs of Thms. 5.2
+and 5.3, together with a brief discussion of the on-policy case.
+
+- §E details the experimental setup, including benchmarks, evaluation metrics, implementation
+configurations, and hyperparameters.
+
+- §F reports additional results: §F.1 provides more failure case examples; §F.2 introduces the
+prompt design for LaaJ evaluation; §F.3 gives results on MUSE; §F.4 shows qualitative examples of
+unlearning responses; §F.5 conducts ablation studies; and §F.6 summarizes time consumption.
+
+- §G discusses the limitations of our approach.
+
+
+A NOTATIONS
+
+
+In this section, we summarize important notations in Tab. 3.
+
+
+Table 3: List of main symbols used throughout the paper.
+
+
+**Notation** **Description**
+
+
+_V_ Vocabulary of tokens
+_V_ _[∗]_ Sequence space
+**x** Prompt (input sequence)
+**y** Response (output sequence)
+_y_ _[i]_ _i_ -th token of **y**
+**y** _[<i]_ Response prefix before position _i_
+_π_ _**θ**_ ( _·|_ **x** _,_ **y** _[<i]_ ) Conditional token distribution of the LLM
+_π_ _**θ**_ ( **y** _|_ **x** ) = [�] _i_ _[|]_ **[y]** =1 _[|]_ _[π]_ _**[θ]**_ [(] _[y][i][|]_ **[x]** _[,]_ **[ y]** _[<i]_ [)] Response likelihood
+_Hk_ [(] _[i]_ [)] Top- _k_ high-likelihood token set at position _i_
+_D_ t Original training dataset
+_D_ u Unlearning (forget) dataset
+_D_ r Retention dataset
+_**θ**_   - Parameters before unlearning
+_**θ**_ u Parameters after unlearning
+_D_ ˜u Paraphrased unlearning set
+_L_ GA, _L_ NPO, _L_ WGA, _L_ GradDiff Unlearning objectives
+_λ, α, β_ Hyper-parameters (loss weights / smoothness)
+_λ_ BST _, λ_ BSS Bootstrapping loss mixing coefficients
+**y** ˆu Augmented response in BS-T
+_D_ ˆu Augmented unlearning dataset in BS-T
+**t** Soft target in BS-T
+**z** Logit vector
+**e** _y_ u _i_ One-hot label of _y_ u _[i]_
+**q** _[i]_ Detached belief distribution at token _i_
+_**χ**_ = [ **x** ; **y** ] Concatenated sequence of prompt and response
+_A,_ _K,_ _G_ Terms in AKG decomposition
+_η,_ _τ,_ _T_ Learning rate, temperature, epochs
+
+
+17
+
+
+B DETAILED RELATED WORKS
+
+
+This section reviews the literature of machine unlearning in §B.1 and LLM unlearning in §B.2.
+
+
+B.1 MACHINE UNLEARNING
+
+
+Early studies on machine unlearning aim to enable the removal of specific training data post hoc,
+motivated by privacy regulations like the “right to be forgotten” (Xu et al., 2024). Cao & Yang (2015)
+first introduce the concept by reformulating algorithms (e.g., naïve Bayes, k-means, SVM) to support
+_exact unlearning_ via efficient updates without full retraining. Ginart et al. (2019) later formalize data
+deletion as updating a trained model to behave as if the data were never seen, proposing efficient
+deletion algorithms to avoid redundant computations. Subsequent work distinguishes between
+certified and approximate unlearning (Thudi et al., 2022).
+
+
+**Certified** methods provide formal guarantees. Guo et al. (2020) leverage influence functions and
+differential privacy for provable deletion in convex models. Bourtoule et al. (2021) propose SISA
+(Sharded, Isolated, Sliced, Aggregated training), enabling certified removal by retraining only affected model shards, significantly improving efficiency. **Approximate** methods trade guarantees
+for scalability. Influence-based techniques estimate and subtract a data point’s effect (Koh & Liang,
+2017; Guo et al., 2020), extended to deep models via approximations (Sekhari et al., 2021; Suriyakumar & Wilson, 2022; Mehta et al., 2022). Though lacking indistinguishability guarantees, these
+approaches enable fast and practical unlearning. Other approximate methods include noise injection
+and distillation (Golatkar et al., 2020), domain-specific strategies for forests (Brophy & Lowd, 2021),
+GNNs (Chen et al., 2022b), and recommender systems (Chen et al., 2022a). Recent efforts extend
+unlearning to **generative models**, where knowledge is more entangled (Li et al., 2026). Wu et al.
+(2020) introduce DeltaGrad for efficient retraining, applicable to generative tasks. Golatkar et al.
+(2020) explore unlearning in vision models via activation scrubbing. For diffusion models, Chen
+et al. (2025) propose Score Forgetting Distillation (SFD), aligning generative scores of “forbidden”
+and “safe” concepts to erase targeted content. Li et al. (2024a) further develop the first method for
+image-to-image unlearning, enabling removal of specific patterns (e.g., copyright or violence) within
+seconds. Other works such as Yu et al. (2025) customize unlearning method for multi-task learning,
+and Luo et al. (2026) apply machine unlearning to GNN for social networks.
+
+
+In summary, classical machine unlearning research has established a toolbox of strategies—from exact
+retraining and SISA ensembles to influence-based and distillation-based heuristics—each balancing
+thoroughness, efficiency, and side-effects. Ongoing work continues to improve the _scalability_ of
+unlearning (so it can handle today’s billion-parameter models), to develop certified algorithms that
+inspire greater trust, and to understand the limits of how well models can forget without sacrificing
+their useful learned knowledge.
+
+
+B.2 LLM UNLEARNING
+
+
+Machine unlearning methods focus on retraining or isolating training data (e.g., dataset sharding
+in SISA or selective weight erasure), which are impractical for LLMs. Recent research instead
+explores post hoc fine-tuning to remove specific data without full retraining. Jang et al. (2023) first
+expose privacy risks and propose unteaching sensitive text via fine-tuning. A common strategy is
+to perform **gradient ascent** ( _GA_ ) on target data—maximizing the loss on those examples—while
+applying regularization on remaining data to preserve general performance. Yao et al. (2024b) adopt
+this approach as a foundation for LLM unlearning, and Maini et al. (2024) introduce a similar retainvs-forget gradient difference objective in the TOFU benchmark. Although effective in suppressing the
+forget set, these aggressive updates often harm unrelated inputs, leading to _over-forgetting_ (Liu et al.,
+2025). Moreover, Ren et al. (2025) highlight that LLM unlearning itself can introduce hidden risks,
+calling for remedies beyond naive fine-tuning. This has motivated more refined algorithms that better
+balance forgetting and retention.
+
+
+One line of work aims to **refine** **unlearning** **objectives** **or** **loss** **weighting** to mitigate collateral
+damage. Negative Preference Optimization ( _NPO_ ) reframes unlearning as inverse preference tuning:
+Zhang et al. (2024) penalize high-probability “undesirable” responses by reweighting gradients,
+inspired by DPO (Rafailov et al., 2024) but with reversed rewards. Fan et al. (2025) simplify NPO
+(dubbed _SimNPO_ ) by smoothing its gradient weighting scheme, and report more stable forgetting
+
+
+18
+
+
+behavior. Mekala et al. (2025) propose an alternate preference optimization ( _AltPO_ ) mechanism as
+another variant to improve stability during unlearning. Beyond preference-based objectives, several
+works adjust loss contributions dynamically. Wang et al. (2025b) propose weighted gradient ascent
+( _WGA_ ) that leverages the conditional token form of GA, further incorporating token-wise weighting to
+enable more fine-grained control. Yang et al. (2025) advocate focusing on under-forgotten examples
+(“saturation” perspective) versus high-impact examples (“importance”), designing a an improved
+loss reweighting method named Saturation–Importance ( _SatImp_ ) to optimize the forget–retain tradeoff. Wang et al. (2025c) even show that tuning only on the forget set—without explicit retain
+data—can still preserve utility with proper scheduling. Other techniques include label smoothing
+for forget-set targets and directly optimizing logit differences between forget and retain outputs.
+To mitigate side effects, Wang et al. (2025d) introduce Gradient Rectified Unlearning ( _GRU_ ) to
+explicitly preserve performance during forgetting. Altogether, these methods improve over naïve GA
+by modulating training signals—via weighting, loss shaping, or multi-objective design—for a more
+balanced forget–retain trade-off.
+
+
+Another line of work alters which model parameters or representations are updated during unlearning.
+Rather than tuning all weights, **parameter-efficient unlearning** methods add small modulatory components to the model. Chen & Yang (2023) insert “unlearning layers” (lightweight adapter modules)
+into the transformer; these are trained with a selective teacher–student objective to forget specified
+data without disturbing other knowledge. This approach allows quick updates and even supports
+sequential unlearning: different unlearning layers can be fused to handle multiple forget requests.
+Bhaila et al. (2025) take a prompting approach, learning soft prompts that, when prepended, suppress
+specific knowledge without altering the base model. Liu et al. (2024) propose embedding-corrupted
+prompts that inject adversarial noise into token embeddings, disrupting internal representations of
+the forget set. Other methods intervene at the **representation** **level** : Li et al. (2024b) introduce
+Representation Misdirection Unlearning ( _RMU_ ), which perturbs hidden activations linked to the
+forget set to erase associated outputs. Shen et al. (2025) propose _LUNAR_, which operates unlearning
+by redirecting the representations of unlearned data to regions that trigger the model’s inherent ability
+to express its inability to answer.
+
+
+Several approaches recast unlearning as a **knowledge distillation or optimization** problem. Dong
+et al. (2025) propose _UnDIAL_ (Unlearning via Self-Distillation on Adjusted Logits), a self-distillation
+method where the original model’s outputs are adjusted to remove the undesired knowledge before
+distilling to a new model. By training a student LLM on these “adjusted logits,” the student forgets
+the targeted data while largely preserving other behaviors. Jia et al. (2024) introduce _SOUL_ (SecondOrder UnLearning), which leverages second-order optimization (approximating the Hessian) to
+more precisely update model weights for unlearning with minimal drift. Ji et al. (2024) reverse
+the conventional fine-tuning objective: instead of simply maximizing forget-set loss, they directly
+minimize the difference between the model’s predictions on the forget and retain sets, ensuring
+localized forgetting. For continual unlearning, Wuerkaixi et al. (2025) propose _ALKN_ (Adaptive
+Localization of Knowledge Negation), which adaptively identifies and negates memory-relevant
+neurons, enabling iterative forgetting without major disruption. Collectively, these methods enrich
+the LLM unlearning toolkit, offering diverse trade-offs across efficacy, retention, and efficiency.
+
+
+19
+
+
+C PSEUDOCODES
+
+
+This section presents the pseudocodes of our proposed algorithms BS-T and BS-S.
+
+
+C.1 PSEUDOCODE OF BS-T
+
+
+**Algorithm 1:** Bootstrapping-Token Unlearning (BS-T)
+**Input:** Pre-trained parameters _**θ**_ o; unlearning set _D_ u; retention set _D_ r (optional); learning rate _η_ ;
+bootstrapping weight _λ_ BST; total epochs _T_ .
+**Output:** Unlearned parameters _**θ**_ u.
+
+
+**1** **for** _e ←_ 1 **to** _T_ **do**
+
+**2** **foreach** _mini-batch B_ u _⊂D_ u **do**
+
+
+/* Teacher-forcing forward pass */
+
+**3** Obtain _π_ _**θ**_ ( _· |_ **x** u _,_ **y** u _[<i]_ [)][ for every position] _[ i]_ [;]
+
+/* Soft target with stop-gradient top- _k_ belief */
+
+
+          **4** **t** _i_ _←_ _λ_ BST sg _π_ _**θ**_ ( _· |_ **x** u _,_ **y** u _[<i]_ [)] �� _H_ [(] _k_ _[i]_ [)]
+
+
++ (1 _−_ _λ_ BST) **e** _y_ u _i_ ; // Eq. (5)
+
+
+/* Token-level loss */
+
+**5** _L_ BST _←_ [�] _i_ _[|]_ **[y]** =1 [u] _[|]_ **[t]** _i_ _[⊤]_ [log] _[ π]_ _**[θ]**_ [(] _[ · |]_ **[x]** [u] _[,]_ **[ y]** u _[<i]_ [)][;] // Eq. (6)
+
+/* Optional retention loss */
+
+**6** _L_ ret _←_ RetainLoss( _**θ**_ _, D_ r); // Similar to Eq. (6)
+
+
+/* Final objective */
+
+**7** _L ←L_ BST + _L_ ret;
+
+
+/* Update parameters */
+
+**8** _**θ**_ _←_ _**θ**_ _−_ _η ∇_ _**θ**_ _L_ ;
+
+
+C.2 PSEUDOCODE OF BS-S
+
+
+**Algorithm 2:** Bootstrapping-Sequence Unlearning (BS-S)
+**Input:** Pre-trained parameters _**θ**_ o; unlearning set _D_ u; retention set _D_ r (optional); learning rate _η_ ;
+weight _λ_ BSS; number of samples _N_ ; temperature _τ_ ; epochs _T_ .
+**Output:** Unlearned parameters _**θ**_ u.
+
+
+**1** **for** _e ←_ 1 **to** _T_ **do**
+
+**2** **foreach** ( **x** u _,_ **y** u) _∈B_ u _⊂D_ u **do**
+
+
+/* Sample _N_ high-likelihood sequences via temperature decoding */
+
+**3** _Y_ �u _←{_ **y** ˆu [(] _[j]_ [)] _∼_ _π_ _**θ**_ ( _· |_ **x** u; _τ_ ) _}_ _[N]_ _j_ =1 [;]
+
+
+/* Compute BS-T loss on original pair */
+
+**4** _L_ orig _←_ BSTLoss( _**θ**_ _,_ ( **x** u _,_ **y** u)); // Alg. 1
+
+
+/* Compute BS-T loss on bootstrapped generations */
+
+**5** _L_ aug _←_ _N_ [1] - _Nj_ =1 [BSTLoss][(] _**[θ]**_ _[,]_ [ (] **[x]** [u] _[,]_ [ ˆ] **[y]** u [(] _[j]_ [)][))][;]
+
+
+/* Sequence-level objective */
+
+**6** _L_ BSS _←_ (1 _−_ _λ_ BSS) _L_ orig + _λ_ BSS _L_ aug; // Eq. (7)
+
+
+/* Optional retention loss */
+
+**7** _L_ ret _←_ RetainLoss( _**θ**_ _, D_ r); // Similar to Eq. (6)
+
+
+/* Final objective */
+
+**8** _L ←L_ BSS + _L_ ret;
+
+
+/* Update parameters */
+
+**9** _**θ**_ _←_ _**θ**_ _−_ _η ∇_ _**θ**_ _L_ ;
+
+
+20
+
+
+D THEORETICAL PROOFS AND DISCUSSIONS
+
+
+This section contains the theoretical components supporting §5. §D.1 presents the AKG one-step
+decomposition of Ren & Sutherland (2025) and proves Lem. 5.1. §D.2 applies this decomposition
+to GA and BS-T and proves Thm. 5.2. §D.3 extends the analysis to off-policy BS-S and proves
+Thm. 5.3. §D.4 discusses why the on-policy BS-S variant falls outside this framework.
+
+
+D.1 LEARNING DYNAMICS
+
+
+**Lemma 5.1** (AKG Decomposition (Ren & Sutherland, 2025)) **.** _Let_ _**χ**_ u = [ **x** u; **y** u] _be an unlearning_
+_pair and_ _**χ**_ - = [ **x** u; **y** o] _be the same prompt with any candidate response._ _Under teacher forcing and_
+_the lazy eNTK assumption, one SGD step with learning rate η updates the log-probability of_ **y** _o as_
+
+∆log _πt_ ( **y**        - _|_ _**χ**_ o) = _−ηAt_ ( _**χ**_ o) _Kt_ ( _**χ**_        - _,_ _**χ**_ u) _Gt_ ( _**χ**_ u) + _O_ ( _η_ [2] ) _,_
+
+_where At_ ( _**χ**_ o) = _**I**_ _−_ 1 _π_ _**θ**_ _[⊤][t]_ [(] _[·|]_ _**[χ]**_ - [)] _[ is the softmax Jacobian,][ K][t]_ [(] _**[χ]**_ - _[,]_ _**[ χ]**_ u [) =] _[ ∇]_ _**[θ]**_ **[z]** [(] _**[χ]**_ - [)] _[∇][⊤]_ _**θ**_ **[z]** [(] _**[χ]**_ u [)] _[ is the]_
+_eNTK, and Gt_ ( _**χ**_ u) = _∇_ **z** _L_ ( _**χ**_ u) _captures the residual term induced solely by the unlearning loss._
+_Here_ **z** = _h_ _**θ**_ ( _**χ**_ ) _denotes the token–logit matrix and all quantities are evaluated at_ _**θ**_ _[t]_ _._
+
+
+_Proof._ We work at a single step _t_ _→_ _t_ + 1 of SGD on one unlearning sample _**χ**_ u = [ **x** u; **y** u] with
+learning rate _η_ . Let _h_ _**θ**_ ( _**χ**_ ) = **z** ( _**χ**_ ) _∈_ R _[V][ ×][L]_ be the token–logit matrix (sequence length _L_ ) and
+_π_ _**θ**_ ( _·|_ _**χ**_ ) = softmax( **z** ( _**χ**_ )) the conditional distribution under _teacher forcing_, which lets us index
+tokens by _**χ**_ = [ **x** ; **y** ] and treat the autoregressive structure through the causal mask of _h_ _**θ**_ . [2]
+
+
+A single gradient step on loss _L_ ( _**χ**_ u) yields
+
+_**θ**_ _[t]_ [+1] = _**θ**_ _[t]_ _−_ _η∇_ _**θ**_ _L_ ( _**χ**_ u) _._
+
+Linearizing **z** ( _**χ**_ o) at _**θ**_ _[t]_ (lazy eNTK regime) gives
+
+
+∆ **z** ( _**χ**_ o) ≜ **z** ( _**χ**_ o; _**θ**_ _[t]_ [+1] ) _−_ **z** ( _**χ**_ o; _**θ**_ _[t]_ ) = _−η∇_ _**θ**_ **z** ( _**χ**_ o) _∇_ _[⊤]_ _**θ**_ **[z]** [(] _**[χ]**_ u [)] _[ ∇]_ **[z]** _[L]_ [(] _**[χ]**_ u [)]
+
+                            - ��                             _Gt_ ( _**χ**_ u)
+
+
++ _O_ ( _η_ [2] ) _._
+
+
+Define the empirical NTK (for the logit network) _Kt_ ( _**χ**_ - _,_ _**χ**_ u) = _∇_ _**θ**_ **z** ( _**χ**_ o) _∇_ _[⊤]_ _**θ**_ **[z]** [(] _**[χ]**_ u [)][ and the residual]
+_Gt_ ( _**χ**_ u) = _∇_ **z** _L_ ( _**χ**_ u); the _O_ ( _η_ [2] ) remainder follows the same bound as in Ren & Sutherland (2025).
+
+
+For token-wise softmax, the Jacobian of log _π_ w.r.t. logits is
+
+_At_ ( _**χ**_ o) ≜ _∇_ **z** log _π_ _**θ**_ _t_ ( _·|_ _**χ**_ _o_ ) = _**I**_ _−_ **1** _π_ _**θ**_ _[⊤][t]_ [(] _[·|]_ _**[χ]**_          - [)] _[,]_
+
+
+which depends only on the current predicted probabilities. Combining with the chain rule,
+
+∆log _π_ _[t]_ ( _·|_ _**χ**_ o) = _At_ ( _**χ**_ o) ∆ **z** ( _**χ**_ o) = _−ηAt_ ( _**χ**_ o) _Kt_ ( _**χ**_    - _,_ _**χ**_ u) _Gt_ ( _**χ**_ u) + _O_ ( _η_ [2] ) _,_
+
+
+which is the claimed AKG decomposition. The “lazy eNTK” assumption (relative stability of the
+eNTK during finetuning) underlies the accuracy of the first-order expansion.
+
+
+D.2 PROOF OF THEOREM 5.2
+
+
+**Theorem 5.2** (Residual Structure of GA vs. BS-T) **.** _Under Lem. 5.1, denote_ **q** _[i]_ = sg� _π_ _**θ**_ _t_ ( _·|_ _**χ**_ u)�� _H_ [(] _k_ _[i]_ [)] - _,_
+
+_the residual terms G_ _for GA and BS-T at position i are:_ _(1) For GA, G_ GA _[i]_ [=] _[ π]_ _**[θ]**_ _[t]_ [(] _[·|]_ _**[χ]**_ u [)] _[ −]_ **[e]** _[y]_ u _[i]_ _[; (2) For]_
+_BS-T, G_ BST _[i]_ [=] _[ π]_ _**[θ]**_ _[t]_ [(] _[·|]_ _**[χ]**_ u [)] _[ −]_ �(1 _−_ _λ_ ) **e** _y_ u _i_ [+] _[ λ]_ **[ q]** _[i]_ [�] _._ _Hence for any component v_ = _y_ u _[i]_ _[, we have]_
+
+_G_ BST _[i]_ [[] _[v]_ [] =] _[ G]_ GA _[i]_ [[] _[v]_ [] +] _[ λ]_ **[ q]** _[i]_ [[] _[v]_ []] _[.]_
+
+
+_Proof._ We compute _Gt_ ( _**χ**_ u) = _∇_ **z** _L_ ( _**χ**_ u) under teacher forcing, token-wise at position _i_, and evaluate
+all quantities at _**θ**_ _[t]_ . Let **z** _[i]_ ( _**χ**_ u) _∈_ R _[|V|]_ be the logit vector at position _i_,
+
+_e_ **[z]** _[i]_ [[] _[v]_ []]
+_π_ _[i]_ ≜ _π_ _**θ**_ _t_ ( _· |_ _**χ**_ u) _∈_ ∆ _[|V|−]_ [1] _,_ _π_ _[i]_ [ _v_ ] =      - [(] _[v]_ _[∈V]_ [)] _[,]_
+
+_u∈V_ _[e]_ **[z]** _[i]_ [[] _[u]_ []]
+
+
+2Teacher forcing makes **y** _<i_ given rather than sampled, which allows bundling an input–output pair into _**χ**_
+and using a shared kernel _Kt_ ( _**χ**_ - _,_ _**χ**_ u) for sequence models.
+
+
+21
+
+
+and let **t** _[i]_ _∈_ ∆ _[|V|−]_ [1] be a generic target distribution. The token-wise negative cross-entropy is
+
+
+- **t** _[i]_ [ _v_ ] log _π_ _[i]_ [ _v_ ] _._ (8)
+
+
+_v∈V_
+
+
+_L_
+
+
+_i_ =1
+
+
+_L_ ( _**χ**_ u) = _−_
+
+
+_L_
+
+
+_i_ =1
+
+
+- **t** _[i]_ _,_ log _π_ _[i]_ [�] = _−_
+
+
+Fix _i_ and a coordinate _r_ _∈V_ . Since
+
+
+��
+log _π_ _[i]_ [ _v_ ] = **z** _[i]_ [ _v_ ] _−_ log e **[z]** [i][[u]][�] _,_
+
+
+_u∈V_
+
+
+we have
+_∂_ log _π_ _[i]_ [ _v_ ]
+
+
+[=] [1] _[{][v]_ [=] _[ r][} −]_ _[π][i]_ [[] _[r]_ []] _[.]_ (9)
+_u_ _[e]_ **[z]** _[i]_ [[] _[u]_ []]
+
+
+log _π_ _[i]_ [ _v_ ] _e_ **[z]** _[i]_ [[] _[r]_ []]
+
+= 1 _{v_ = _r}_ _−_
+_∂_ **z** _[i]_ [ _r_ ] - _[e]_ **[z]** _[i]_
+
+
+Differentiating Eq. (8) w.r.t. **z** _[i]_ [ _r_ ] and using Eq. (9):
+
+
+_∂_ _L_ ( _**χ**_ u)
+
+
+- **t** _[i]_ [ _v_ ] _[∂]_ [log] _[ π][i]_ [[] _[v]_ []]
+
+_∂_ **z** _[i]_ [ _r_ ]
+
+_v∈V_
+
+
+u = _−_   
+_∂_ **z** _[i]_ [ _r_ ]
+
+
+= _−_   _∂_ **z** _[i]_ [ _r_ ]
+
+
+**t** _[i]_ [ _v_ ]� 1 _{v_ = _r}−π_ _[i]_ [ _r_ ]� = _−_ **t** _[i]_ [ _r_ ]+��
+
+_v_ _v_
+
+
+   **t** _[i]_ [ _v_ ] _π_ _[i]_ [ _r_ ] _._
+
+_v_
+
+
+Since **t** _[i]_ _∈_ ∆ _[|V|−]_ [1], [�] _v_ **[t]** _[i]_ [[] _[v]_ [] = 1][, hence]
+
+_∇_ **z** _iL_ ( _**χ**_ u) = _π_ _[i]_ _−_ **t** _[i]_ _._ (10)
+
+
+For GA, **t** _[i]_ = **e** _y_ u _i_, so by Eq. (10),
+_G_ GA _[i]_ [=] _[π][i][ −]_ **[e]** _y_ u _[i]_ _[.]_
+
+
+Define the (renormalized) top- _k_ belief distribution and its stop-gradient version
+
+
+**q** ˜ _[i]_ [ _v_ ] =
+
+
+
+
+
+
+_π_ _[i]_ [ _v_ ]
+
+
+- _u∈H_ [(] _k_ _[i]_ [)] _[π][i]_ [[] _[u]_ []] _k_ **q** _[i]_ = sg� **q** ˜ _i_ - _,_
+
+0 _,_ _v_ _∈H/_ _k_ [(] _[i]_ [)] _[,]_
+
+
+
+
+
+_v_ _∈Hk_ [(] _[i]_ [)] _[,]_
+_u∈H_ [(] _k_ _[i]_ [)] _[π][i]_ [[] _[u]_ []] _[,]_
+
+
+so _∇_ **z** _i_ **q** _[i]_ = **0** . BS-T uses the convex target
+
+**t** _[i]_ BST [=] [(1] _[ −]_ _[λ]_ [)] **[ e]** _y_ u _[i]_ [+] _[λ]_ **[ q]** _[i][,]_
+
+whence, by Eq. (10) and the stop-gradient property of **q** _[i]_,
+
+
+                     _G_ BST _[i]_ [=] _[∇]_ **z** _[i][L]_ [(] _**[χ]**_ u [)] [=] _[π][i][ −]_ **[t]** _[i]_ BST [=] _[π][i][ −]_ (1 _−_ _λ_ ) **e** _y_ u _i_ + _λ_ **q** _[i]_ [�] _._
+
+
+For any _v_ = _y_ u _[i]_ [(so] **[ e]** _y_ u _[i]_ [[] _[v]_ [] = 0][),]
+
+_G_ BST _[i]_ [[] _[v]_ []] [=] _[π][i]_ [[] _[v]_ []] _[ −]_ _[λ]_ **[ q]** _[i]_ [[] _[v]_ []] [=]    - _π_ _[i]_ [ _v_ ] _−_ **e** _y_ u _i_ [ _v_ ]� _−_ _λ_ **q** _[i]_ [ _v_ ] = _G_ GA _[i]_ [[] _[v]_ []] _[ −]_ _[λ]_ **[ q]** _[i]_ [[] _[v]_ []] _[.]_
+
+For the target component _v_ = _y_ u _[i]_ [,]
+
+_G_ BST _[i]_ [[] _[y]_ u _[i]_ []] [=] _[π][i]_ [[] _[y]_ u _[i]_ []] _[−]_ �(1 _−λ_ )+ _λ_ **q** _[i]_ [ _y_ u _[i]_ []] - = - _π_ _[i]_ [ _y_ u _[i]_ []] _[−]_ [1] �+ _λ_ �1 _−_ **q** _[i]_ [ _y_ u _[i]_ []] - = _G_ GA _[i]_ [[] _[y]_ u _[i]_ []+] _[λ]_ �1 _−_ **q** _[i]_ [ _y_ u _[i]_ []] - _._
+
+These identities give the claimed closed forms and, in particular, yield _G_ BST _[i]_ [[] _[v]_ [] =] _[ G]_ GA _[i]_ [[] _[v]_ [] +] _[ λ]_ **[ q]** _[i]_ [[] _[v]_ []]
+for all _v_ = _y_ u _[i]_ [after rearrangement.]
+
+
+D.3 PROOF OF THEOREM 5.3
+
+
+**Theorem 5.3** (Learning Dynamics of Off-Policy BS-S) **.** _Under Lem. 5.1 and the off-policy BS-S_
+_construction above, a single SGD step with learning rate η on the off-policy BS-S loss_
+
+_L_ [off] BSS [(] _**[θ]**_ [;] _**[ χ]**_ u [) =]         - _Nm_ =0 _[ω][m][L]_ [BST][(] _**[θ]**_ [;] _**[ χ]**_ u _[m]_ [)]
+
+_updates the log-probability of any candidate response_ **y** - _on_ _**χ**_ - = [ **x** u; **y** o] _by_
+
+∆log _πt_ ( **y**    - _|_ _**χ**_ o) = _−ηAt_ ( _**χ**_ o)    - _Nm_ =0 _[ω][m][K][t]_ [(] _**[χ]**_ [o] _[,]_ _**[ χ]**_ u _[m]_ [)] _[G]_ [BST] _[,t]_ [(] _**[χ]**_ u _[m]_ [) +] _[ O]_ [(] _[η]_ [2][)] _[.]_
+
+_Here G_ BST _,t_ ( _**χ**_ ) _is the BS-T residual, whose token-wise components coincide with G_ BST _[i]_ _[in Thm.][ 5.2][.]_
+
+
+22
+
+
+_Proof._ We work at a single step _t →_ _t_ +1 of SGD on _L_ [off] BSS [(] _**[θ]**_ [;] _**[ χ]**_ u [)][ with learning rate] _[ η]_ [.] [By definition]
+of the off-policy BS-S objective,
+
+
+_**θ**_ _t_ +1 = _**θ**_ _t −_ _η∇_ _**θ**_ _L_ [off] BSS [(] _**[θ]**_ _[t]_ [;] _**[ χ]**_ u [) =] _**[ θ]**_ _[t]_ _[−]_ _[η]_
+
+
+_N_
+
+- _ωm∇_ _**θ**_ _L_ BST( _**θ**_ _t_ ; _**χ**_ _[m]_ u [)] _[,]_ (11)
+
+_m_ =0
+
+
+where the augmented pairs _{_ _**χ**_ _[m]_ u _[}]_ _m_ _[N]_ =0 [and weights] _[ {][ω][m][}]_ _m_ _[N]_ =0 [are fixed under the off-policy construc-]
+tion.
+
+
+Fix any observing pair _**χ**_ - = [ **x** u; **y** o]. Linearizing the logit network **z** ( _**χ**_ o; _**θ**_ ) around _**θ**_ _t_ in the lazy
+eNTK regime (as in Lem. 5.1) gives
+
+
+∆ **z** ( _**χ**_ o) _≡_ **z** ( _**χ**_ o; _**θ**_ _t_ +1) _−_ **z** ( _**χ**_ o; _**θ**_ _t_ ) = _∇_ _**θ**_ **z** ( _**χ**_ o; _**θ**_ _t_ ) ( _**θ**_ _t_ +1 _−_ _**θ**_ _t_ ) + _O_ ( _η_ [2] ) _._ (12)
+
+
+Substituting Eq. (11) into Eq. (12) and using linearity of the gradient,
+
+
+∆ **z** ( _**χ**_ o) = _−_ _η ∇_ _**θ**_ **z** ( _**χ**_ o; _**θ**_ _t_ )
+
+
+_N_
+
+- _ωm∇_ _**θ**_ _L_ BST( _**θ**_ _t_ ; _**χ**_ _[m]_ u [) +] _[ O]_ [(] _[η]_ [2][)]
+
+_m_ =0
+
+
+= _−_ _η_
+
+
+_N_
+
+- _ωm∇_ _**θ**_ **z** ( _**χ**_ o; _**θ**_ _t_ ) _∇_ _**θ**_ _L_ BST( _**θ**_ _t_ ; _**χ**_ _[m]_ u [) +] _[ O]_ [(] _[η]_ [2][)] _[.]_ (13)
+
+_m_ =0
+
+
+For each _m_, the BS-T loss depends on _**θ**_ only through the logits **z** ( _**χ**_ _[m]_ u [;] _**[ θ]**_ [)][, so by the chain rule and]
+the definition of the BS-T residual,
+
+
+_∇_ _**θ**_ _L_ BST( _**θ**_ _t_ ; _**χ**_ _[m]_ u [) =] _[ ∇]_ _**θ**_ _[⊤]_ **[z]** [(] _**[χ]**_ u _[m]_ [;] _**[ θ]**_ _[t]_ [)] _[ G]_ [BST] _[,t]_ [(] _**[χ]**_ u _[m]_ [)] _[,]_
+
+where _G_ BST _,t_ ( _**χ**_ _[m]_ u [)] [=] _[∇]_ **[z]** _[L]_ [BST][(] _**[χ]**_ _[m]_ u [)] �� _**θ**_ _t_ [and] [its] [token-wise] [components] [coincide] [with] _[G]_ BST _[i]_ [in]
+Thm. 5.2. Plugging this into Eq. (13) yields
+
+
+∆ **z** ( _**χ**_ o) = _−_ _η_
+
+
+= _−_ _η_
+
+
+_N_
+
+- _ωm∇_ _**θ**_ **z** ( _**χ**_ o; _**θ**_ _t_ ) _∇_ _[⊤]_ _**θ**_ **[z]** [(] _**[χ]**_ u _[m]_ [;] _**[ θ]**_ _[t]_ [)] _[ G]_ [BST] _[,t]_ [(] _**[χ]**_ u _[m]_ [) +] _[ O]_ [(] _[η]_ [2][)]
+
+_m_ =0
+
+
+_N_
+
+- _ωm Kt_ ( _**χ**_ - _,_ _**χ**_ _[m]_ u [)] _[ G]_ [BST] _[,t]_ [(] _**[χ]**_ u _[m]_ [) +] _[ O]_ [(] _[η]_ [2][)] _[,]_ (14)
+
+_m_ =0
+
+
+where _Kt_ ( _**χ**_ - _,_ _**χ**_ _[m]_ u [) =] _[ ∇]_ _**[θ]**_ **[z]** [(] _**[χ]**_ - [;] _**[ θ]**_ _[t]_ [)] _[∇][⊤]_ _**θ**_ **[z]** [(] _**[χ]**_ u _[m]_ [;] _**[ θ]**_ _[t]_ [)][ is the empirical eNTK.]
+
+The Jacobian of log _π_ _**θ**_ _t_ ( _· |_ _**χ**_ o) with respect to **z** ( _**χ**_ o) is exactly the same as in Lem. 5.1, namely
+
+
+_At_ ( _**χ**_ o) _≡∇_ **z** log _π_ _**θ**_ _t_ ( _· |_ _**χ**_ o) = _**I**_ _−_ 1 _π_ _**θ**_ _[⊤]_ _t_ [(] _[· |]_ _**[ χ]**_         - [)] _[.]_
+
+
+Applying the chain rule to Eq. (14), we obtain
+
+
+∆log _πt_ ( _· |_ _**χ**_ o) = _At_ ( _**χ**_ o) ∆ **z** ( _**χ**_ o) = _−_ _η At_ ( _**χ**_ o)
+
+
+_N_
+
+- _ωmKt_ ( _**χ**_ - _,_ _**χ**_ _[m]_ u [)] _[ G]_ [BST] _[,t]_ [(] _**[χ]**_ u _[m]_ [) +] _[ O]_ [(] _[η]_ [2][)] _[.]_
+
+_m_ =0
+
+
+Taking the component corresponding to the candidate response **y** - yields the claimed update
+
+
+∆log _πt_ ( **y**     - _|_ _**χ**_ o) = _−_ _η At_ ( _**χ**_ o)
+
+
+which matches the statement of Thm. 5.3.
+
+
+D.4 DISCUSSION ON ON-POLICY BS-S
+
+
+_N_
+
+- _ωmKt_ ( _**χ**_ - _,_ _**χ**_ _[m]_ u [)] _[ G]_ [BST] _[,t]_ [(] _**[χ]**_ u _[m]_ [) +] _[ O]_ [(] _[η]_ [2][)] _[,]_
+
+_m_ =0
+
+
+For completeness, we now clarify why the learning-dynamics analysis in Thm. 5.3 does not directly
+extend to the _on-policy_ BS-S variant used in our implementation.
+
+
+23
+
+
+**On-policy** **BS-S** **objective.** Recall that off-policy BS-S fixes an augmented set of sequences
+_{_ _**χ**_ _[m]_ u _[}]_ _m_ _[N]_ =0 [in advance and optimizes]
+
+
+_L_ [off] BSS [(] _**[θ]**_ [;] **[ x]** [u][) =]
+
+
+_N_
+
+- _ωm L_ BST( _**θ**_ ; _**χ**_ _[m]_ u [)] _[,]_ (15)
+
+_m_ =0
+
+
+which fits the fixed-data assumption in Lem. 5.1. In contrast, the _on-policy_ BS-S objective for a single
+forget prompt **x** u can be written as
+
+
+                                 -                                  _L_ [on] BSS [(] _**[θ]**_ [;] **[ x]** [u][) = (1] _[ −]_ _[λ]_ [BSS][)] _[ L]_ [BST][(] _**[θ]**_ [;] _**[ χ]**_ [0] u [) +] _[ λ]_ [BSS] [E] **y** [˜] u _∼µ_ _**θ**_ ( _·|_ **x** u) _L_ BST( _**θ**_ ; [ **x** u; ˜ **y** u]) _,_ (16)
+
+
+where _**χ**_ [0] u [=] [[] **[x]** [u][;] **[ y]** [u][]] [is] [the] [original] [forget] [pair] [and] _[µ]_ _**[θ]**_ [(] _[·]_ _[|]_ **[x]** [u][)] [denotes] [the] [on-policy] [sampling]
+distribution induced by the current model _π_ _**θ**_ on the forget prompt **x** u (e.g., given by autoregressive
+decoding with temperature and nucleus sampling). Conditioned on a particular sampled sequence **y** ˜u,
+the inner _L_ BST( _**θ**_ ; [ **x** u; ˜ **y** u]) is still evaluated under teacher forcing on the fixed sequence [ **x** u; ˜ **y** u].
+
+
+**Gradient decomposition.** Differentiating Eq. (16) with respect to _**θ**_ gives
+
+
+_∇_ _**θ**_ _L_ [on] BSS [(] _**[θ]**_ [;] **[ x]** [u][) = (1] _[ −]_ _[λ]_ [BSS][)] _[ ∇]_ _**[θ]**_ _[L]_ [BST][(] _**[θ]**_ [;] _**[ χ]**_ [0] u [) +] _[ λ]_ [BSS] _[∇]_ _**[θ]**_ [E] **y** [˜] u _∼µ_ _**θ**_ ( _·|_ **x** u)� _L_ BST( _**θ**_ ; [ **x** u; ˜ **y** u])� _._
+(17)
+
+
+For the expectation term, we use the standard score-function (log-derivative) identity. Let
+
+
+_f_ ( _**θ**_ _,_ ˜ **y** u) = _L_ BST( _**θ**_ ; [ **x** u; ˜ **y** u]) _._
+
+
+Then
+
+
+_∇_ _**θ**_ E **y** ˜u _∼µ_ _**θ**_ - _f_ ( _**θ**_ _,_ ˜ **y** u)� = E **y** ˜u _∼µ_ _**θ**_ - _∇_ _**θ**_ _f_ ( _**θ**_ _,_ ˜ **y** u)� + E **y** ˜u _∼µ_ _**θ**_ - _f_ ( _**θ**_ _,_ ˜ **y** u) _∇_ _**θ**_ log _µ_ _**θ**_ (˜ **y** u _|_ **x** u)� _._ (18)
+
+
+Substituting Eq. (18) back into Eq. (17) yields
+
+
+_∇_ _**θ**_ _L_ [on] BSS [(] _**[θ]**_ [;] **[ x]** [u][) = (1] _[ −]_ _[λ]_ [BSS][)] _[ ∇]_ _**[θ]**_ _[L]_ [BST][(] _**[θ]**_ [;] _**[ χ]**_ u [0][)]
+
+
+                       -                       + _λ_ BSS E **y** ˜u _∼µ_ _**θ**_ _∇_ _**θ**_ _L_ BST( _**θ**_ ; [ **x** u; ˜ **y** u]) (19)
+
+
+                       -                       + _λ_ BSS E **y** ˜u _∼µ_ _**θ**_ _L_ BST( _**θ**_ ; [ **x** u; ˜ **y** u]) _∇_ _**θ**_ log _µ_ _**θ**_ (˜ **y** u _|_ **x** u) _._
+
+
+The first two terms in RHS of Eq. (19) have the same form as in the off-policy case: they are
+expectations of BS-T gradients on teacher-forced pairs [ **x** u; **y** u] and [ **x** u; ˜ **y** u]. Conditioned on **y** ˜u,
+each term can be written as
+
+_∇_ _**θ**_ _L_ BST( _**θ**_ ; _**χ**_ ) = _∇_ _[⊤]_ _**θ**_ **[z]** [(] _**[χ]**_ [;] _**[ θ]**_ [)] _[ G]_ [BST][(] _**[χ]**_ [)] _[,]_
+
+
+so they admit an AKG-style kernel decomposition exactly as in Appx. D.1–D.3.
+
+
+The _third_ term in RHS of Eq. (19) is qualitatively different: it is a policy-gradient-like term that
+explicitly involves _∇_ _**θ**_ log _µ_ _**θ**_ (˜ **y** u _|_ **x** u). Expanding the latter under the autoregressive factorization,
+
+
+_|_ **y** ˜u _|_
+
+- _π_ _**θ**_ (˜ **y** u _[i]_ _[|]_ **[ x]** [u] _[,]_ [ ˜] **[y]** u _[<i]_ [)] _[,]_
+
+_i_ =1
+
+
+_|_ **y** ˜u _|_
+
+- _∇_ _**θ**_ log _π_ _**θ**_ (˜ **y** u _[i]_ _[|]_ **[ x]** [u] _[,]_ [ ˜] **[y]** u _[<i]_ [)] _[,]_ (20)
+
+_i_ =1
+
+
+gives
+
+
+_µ_ _**θ**_ (˜ **y** u _|_ **x** u) =
+
+
+_∇_ _**θ**_ log _µ_ _**θ**_ (˜ **y** u _|_ **x** u) =
+
+
+where each conditional distribution is evaluated on the _sampled_ prefix **y** ˜u _[<i]_ [produced by the current]
+model rather than on a dataset prefix under teacher forcing.
+
+
+**Why** **the** **AKG** **framework** **does** **not** **apply.** The AKG decomposition in Lem. 5.1 (and the
+subsequent Thms. 5.2 and 5.3) relies on two structural conditions:
+
+
+1. The training examples (pairs _**χ**_ ) are _fixed_ and independent of _**θ**_ during the SGD step; all parameter
+dependence enters only through the logit network **z** ( _**χ**_ ; _**θ**_ ) evaluated under teacher forcing on
+these fixed sequences.
+
+
+24
+
+
+2. The total gradient can therefore be written as a sum of terms of the form _∇_ _[⊤]_ _**θ**_ **[z]** [(] _**[χ]**_ [;] _**[ θ]**_ [)] _[G]_ [(] _**[χ]**_ [)][, for]
+some residuals _G_ ( _**χ**_ ) defined on this fixed dataset.
+
+
+For the on-policy BS-S objective Eq. (16), the first two lines of Eq. (19) satisfy these conditions
+_conditionally_ on the sampled sequences **y** ˜u: they are averages of BS-T gradients on teacher-forced
+pairs [ **x** u; **y** u] and [ **x** u; ˜ **y** u]. If we were to _ignore_ the dependence of _µ_ _**θ**_ on _**θ**_ (i.e., drop the third line),
+the resulting approximation would reduce exactly to the off-policy analysis in Thm. 5.3.
+
+
+However, the policy-gradient term in the third line of Eq. (19) cannot be written as a finite sum of the
+form
+
+     - _ω_ ˜ _m ∇_ _[⊤]_ _**θ**_ **[z]** [(] _**[χ]**_ _[m]_ [;] _**[ θ]**_ [) ˜] _[G]_ [(] _**[χ]**_ _[m]_ [)]
+
+_m_
+
+over a _fixed_ collection of teacher-forced sequences _{_ _**χ**_ _[m]_ _}_ . Indeed, Eq. (20) involves gradients of
+log-probabilities evaluated along on-policy trajectories whose prefixes **y** ˜u _[<i]_ [are themselves functions]
+of _**θ**_ . As _**θ**_ changes, both the support and the relative weights of _µ_ _**θ**_ ( _·_ _|_ **x** u) change, so there is no
+parameter-independent dataset that captures all the sequences contributing to the score term.
+
+Consequently, the overall update on the logits **z** ( _**χ**_ o; _**θ**_ ) induced by _L_ [on] BSS [contains] [an] [additional]
+component that cannot be expressed through the kernel _Kt_ ( _·, ·_ ) and a residual evaluated on a fixed
+training set, and the AKG-based learning-dynamics derivation in Appx. D.1–D.3 does not apply.
+From a modeling perspective, this is analogous to the distinction between supervised finetuning on a
+fixed corpus and on-policy RLHF methods: the latter require a separate analysis that jointly tracks
+both the parameter updates and the evolving sampling distribution _µ_ _**θ**_ . Developing such an RL-style
+learning-dynamics theory for on-policy BS-S is beyond the scope of this work and we leave it for
+future research.
+
+
+25
+
+
+E FURTHER EXPERIMENTAL SETUP
+
+
+This section consolidates the experimental setup and protocols. §E.1 introduces the datasets/benchmarks and any preprocessing or split strategy. §E.2 specifies the evaluation metrics and aggregation
+protocol used across datasets. §E.3 details implementation and training settings. §E.4 lists hyperparameter settings and search spaces for all baselines and our methods.
+
+
+E.1 BENCHMARKS
+
+
+We evaluate our proposed method on three representative LLM unlearning benchmarks: TOFU,
+MUSE, and WMDP, each designed to reflect distinct unlearning scenarios of increasing complexity and
+real-world relevance.
+
+
+**TOFU (Task of Fictitious Unlearning)** . TOFU (Maini et al., 2024) introduces a controlled setup for
+studying LLM unlearning by constructing a synthetic question-answering dataset about fictitious
+authors. Each author profile includes 20 Q&A pairs generated via GPT-4, incorporating diverse
+personal details such as birthplace, genre, and literary awards. Crucially, as the data is hallucinated,
+it guarantees no prior exposure during pre-training, offering a clean testbed to isolate the effects of
+fine-tuning and unlearning. The dataset is divided into forget and retain splits (e.g., 10%, 5%, or 1%
+forget), enabling granular control over unlearning difficulty. TOFU is particularly useful for probing
+semantic-level forgetting in scenarios where the model’s sole exposure to a concept is via fine-tuning,
+and any residual generation after unlearning signals incomplete forgetting. This makes it ideal for
+detecting spurious retention due to memorization or semantic generalization.
+
+
+**MUSE (Machine Unlearning Six-way Evaluation).** MUSE (Shi et al., 2025) offers a comprehensive
+and large-scale benchmark focused on copyrighted and sensitive real-world data, including the full
+text of Harry Potter books and a large corpus of BBC news articles. It presents a challenging setting
+for both data owner-centric (e.g., no verbatim or knowledge memorization, privacy protection) and
+model deployer-centric (e.g., utility preservation, scalability, sustainability) evaluations. Unlike TOFU,
+which operates in a synthetic QA context, MUSE uses authentic long-form text, requiring unlearning
+methods to erase both surface-level memorization and deep factual retention across various contexts.
+The forget sets can be sizable (up to millions of tokens), enabling the study of scaling behaviors and
+the accumulation of errors across multiple unlearning iterations. MUSE is thus particularly suited for
+evaluating the robustness and practicality of unlearning methods under real-world demands.
+
+
+**WMDP** **(Weapons** **of** **Mass** **Destruction** **Proxy).** WMDP (Li et al., 2024b) is motivated by dual-use
+risk mitigation in LLMs. It comprises 3,668 expert-written multiple-choice questions spanning
+biosecurity, cybersecurity, and chemical safety. Each question tests whether the model retains
+potentially dangerous knowledge that could be exploited for malicious purposes, such as synthesizing
+toxins or executing cyberattacks. Rather than aiming to remove specific documents or identities, WMDP
+focuses on domain-level unlearning Huang et al. (2023; 2024; 2025), where the goal is to suppress
+model capabilities related to hazardous information while preserving broader knowledge in adjacent
+fields (e.g., general biology or programming). The benchmark is particularly relevant for closedsource deployment, where models must remain secure even when subject to jailbreak or adversarial
+finetuning. WMDP provides a public, open-access proxy for red-teaming evaluations previously
+restricted to private labs, thus enabling community-wide research on hazard-aware unlearning.
+
+
+E.2 EVALUATION METRICS
+
+
+We follow the recommended evaluation protocols from OpenUnlearning (Dorna et al., 2025) and
+adopt benchmark-specific metrics to assess both unlearning and retention. We in this subsection state
+the evaluation metrics for every benchmarks used in our paper.
+
+
+E.2.1 EVALUATION METRICS ON TOFU
+
+
+For TOFU, we evaluate each unlearning method along two primary axes: **Memorization** (forgetting)
+and **Utility** (retention), and report an **overall score** as the harmonic mean of the two category scores.
+We adopt OpenUnlearning’s category construction and harmonic-mean aggregation, while omitting
+privacy from the final aggregation.
+
+
+26
+
+
+- **Memorization Score (higher = more forgetting).** We follow OpenUnlearning’s recommendation to compute memorization as the harmonic mean (HM) of four core knowledge metrics that
+were meta-evaluated to be the most reliable: **Extraction Strength (ES)**, **Exact Memorization**
+**(EM)**, **Paraphrased Probability (Para.** **Prob.)**, and **Truth Ratio** . Each metric is inverted so that
+higher is better (i.e., stronger forgetting). Formally:
+
+
+Memorization Score = HM (1 _−_ ES _,_ 1 _−_ EM _,_ 1 _−_ Para _._ Prob _.,_ 1 _−_ Truth Ratio) _._
+
+
+Note that for Truth Ratio, we use the OpenUnlearning variant instead of the original version in
+TOFU. Here, HM is used to penalize imbalance across sub-metrics.
+
+
+- **Utility Score (higher = better retention).** We summarize retention with **Model Utility (MU)** and
+**Fluency**, aggregated by a harmonic mean:
+
+
+Utility Score = HM (MU _,_ Fluency) _._
+
+
+MU in TOFU is itself a hierarchical aggregation across three data “distances” from the forget
+distribution—retain set, real-world authors, and factual/world knowledge—each evaluated with
+Probability, ROUGE, and Truth Ratio (9 metrics total), aggregated by HM into a single MU value.
+Fluency is a classifier-based score (Jindal, 2021) that penalizes degenerate or gibberish generations
+on forget-related prompts, capturing the tendency of some methods to collapse output quality while
+forgetting.
+
+
+- **Overall aggregate (higher = better trade-off).** Our single TOFU headline number is the harmonic
+mean of Memorization and Utility:
+
+
+Agg _._ = HM (Memorization _,_ Utility) _._
+
+
+For the detailed computation of each metric, please refer to OpenUnlearning (Dorna et al., 2025).
+
+
+E.2.2 EVALUATION METRICS ON MUSE
+
+
+We adopt two key metrics from the MUSE benchmark that directly reflect data owner expectations:
+
+
+- **Verbatim Memorization (VerbMem).** VerbMem measures the model’s tendency to regenerate
+exact suffixes of previously seen examples. It reflects literal memorization and is quantified by
+comparing the model’s generated continuation to the reference continuation using ROUGE-L F1.
+The evaluation is conducted over the forget set, with lower scores indicating better unlearning.
+
+- **Knowledge Memorization (KnowMem).** KnowMem assesses whether the model has retained
+factual knowledge from the forget set by evaluating its ability to answer paraphrased QA pairs
+derived from the forget set. Similar to VerbMem, it uses ROUGE-L F1 between the model’s answer
+and the reference answer, but focuses on semantic (rather than literal) recall. A lower KnowMem
+score implies more thorough forgetting of the underlying knowledge.
+
+
+- Following Shi et al. (2025), we use VerbMem and KnowMem on forget set as forget score, and
+KnowMem on retain set as retain score (i.e., **UtilPres** ), to reflect two dimensions of performance.
+
+
+For the detailed computation of each metric, please refer to MUSE (Shi et al., 2025).
+
+
+E.2.3 EVALUATION METRICS ON WMDP
+
+
+From the WMDP benchmark, we evaluate unlearning on two specific malicious domains and one
+general-ability test set:
+
+
+- **WMDP-Bio** **Accuracy.** Assesses how well the model retains or forgets hazardous biomedical
+knowledge. Models are evaluated on a four-choice multiple-choice QA task, where the accuracy
+reflects the proportion of correctly answered questions. Lower accuracy implies more successful
+forgetting. The chance level is 25%, corresponding to random guessing.
+
+
+- **WMDP-Cyber Accuracy.** Similar to WMDP-Bio, this task evaluates the model’s knowledge about
+cybersecurity exploits. Lower scores are preferred, as they suggest that the model has forgotten
+harmful information.
+
+
+For both Bio and Cyber domains, evaluations are performed using standardized prompts and scoring
+logic provided by the lm-evaluation-harness (Gao et al., 2024), consistent with the original benchmark
+configuration.
+
+
+27
+
+
+- **MMLU Accuracy.** To monitor unintended degradation of general capabilities, we report model
+performance on the Massive Multitask Language Understanding (MMLU) benchmark (Hendrycks
+et al., 2021). This measures broad academic knowledge across 57 diverse subjects and serves as
+a sanity check for utility retention. In contrast to WMDP scores, higher MMLU accuracy indicates
+better preservation of overall utility.
+
+
+For the detailed computation of each metric, please refer to WMDP (Li et al., 2024b).
+
+
+E.3 IMPLEMENTATION SETUP
+
+
+**Environmental Configuration.** Unless otherwise specified, all experiments in this work are conducted on a DGX-H800 server equipped with 8 NVIDIA H800 GPUs and Intel(R) Xeon(R) Gold
+5320 CPUs. All of our codes are implemented with Python 3.11.11, PyTorch 2.4.1, and Transformers
+4.45.1 under CUDA 12.4.
+
+
+**Training Configuration.** Our experiments mainly follow the configurations in OpenUnlearning
+(Dorna et al., 2025) and Wang et al. (2025d); Yang et al. (2025). Specifically, we employ the AdamW
+optimizer (Loshchilov & Hutter, 2019) across all benchmarks. For TOFU, we set the batch size to 32,
+learning rate to 1e-5, training for 10 epochs with a linear scheduler, 1 epoch of warm-up, and weight
+decay of 0.01. For MUSE, we use a constant learning rate scheduler with a batch size of 32, a learning
+rate of 1e-5, and train for 10 epochs. Results are selected from 10 checkpoints saved at each epoch,
+following Yang et al. (2025). For WMDP, we adopt a batch size of 16, learning rate of 4e-6, and train
+for 125 steps with 25 steps for warm-up, following Yang et al. (2025).
+
+
+E.4 HYPERPARAMETER SETTINGS OF UNLEARNING METHODS
+
+
+We report hyperparameters for six baselines—GA, GradDiff, NPO, RMU, SimNPO, and WGA—
+on TOFU, MUSE, and WMDP. Unless noted, we use the dataset-specific training schedules below,
+and harmonic-mean model selection on Memorization and Utility, following OpenUnlearning
+’s guidance for fair comparison across unlearning methods. Specifically, the hyperparameters of
+baselines are tuned using grid search as follows:
+
+
+- **GA.** GA has no method-specific knobs beyond the optimizer/LR schedule; we therefore do not
+sweep GA-specific scalars and run with the dataset schedules above.
+
+
+- **GradDiff.** We sweep the retain weight _λ ∈{_ 0 _._ 5 _,_ 0 _._ 8 _,_ 1 _,_ 2 _,_ 5 _,_ 7 _,_ 10 _}_ .
+
+
+- **NPO.** We tune _β_ _∈{_ 0 _._ 05 _,_ 0 _._ 1 _,_ 0 _._ 5 _,_ 1 _}_, and the retain weight _λ ∈{_ 1 _,_ 2 _,_ 5 _}_ .
+
+
+- **RMU.** We sweep the steering coefficient in _{_ 0 _._ 5 _,_ 1 _,_ 2 _,_ 5 _,_ 7 _,_ 10 _,_ 100 _}_, and layer index _ℓ_ _∈{_ 6 _,_ 11 _,_ 16 _}_
+of a 1B-scale Llama-family model, training only layers _{ℓ_ _−_ 2 _, ℓ_ _−_ 1 _, ℓ}_ as recommended.
+
+
+- **SimNPO.** We tune _β_ _∈{_ 2 _._ 0 _,_ 2 _._ 5 _,_ 3 _._ 0 _,_ 3 _._ 5 _,_ 4 _._ 5 _}_, and sweep the additional small stabilization offsets
+_δ_ _∈{_ 0 _._ 125 _,_ 0 _._ 15 _,_ 0 _._ 20 _,_ 0 _._ 25 _}_ .
+
+- **WGA.** We tune the inverse temperature _α_ _∈{_ 0 _._ 05 _,_ 0 _._ 1 _,_ 0 _._ 5 _,_ 1 _,_ 5 _,_ 7 _}_, and the retain weight _λ_ _∈_
+_{_ 1 _,_ 2 _,_ 5 _}_ .
+
+
+- **BS-T.** We tune the bootstrapping coefficient _λ_ BST _∈{_ 0 _._ 1 _,_ 0 _._ 2 _,_ 0 _._ 3 _,_ 0 _._ 5 _,_ 0 _._ 6 _}_, and high-likelihood
+token count _k_ _∈{_ 5 _,_ 10 _,_ 20 _,_ 30 _,_ 50 _}_ .
+
+
+- **BS-S.** We tune the bootstrapping coefficient _λ_ BSS _∈{_ 0 _._ 2 _,_ 0 _._ 3 _,_ 0 _._ 4 _,_ 0 _._ 6 _,_ 0 _._ 8 _}_, the sampling count
+_N_ _∈{_ 1 _,_ 2 _,_ 3 _,_ 4 _,_ 5 _}_ .
+
+
+In Appx. F.5.1, we present a sample of hyperparameter selection on TOFU 10% with Llama 3.1 8B.
+
+
+28
+
+
+F ADDITIONAL RESULTS
+
+
+This appendix section provides complementary results to support the main text. Specifically, §F.1
+offers further qualitative examples of GA and NPO to highlight their limitations; §F.2 details
+the prompt design used in our proposed LaaJ evaluation; §F.3 presents additional results on the
+MUSE-Books benchmark; §F.4 provides illustrative outputs of different unlearning methods; §F.5
+reports extended analyses including hyperparameter sensitivity and the effect of alternative unlearning
+losses in BS-S; and §F.6 summarizes training time comparisons across methods. Together, these
+results offer a more comprehensive view of both prior baselines and our proposed framework.
+
+
+F.1 ADDITIONAL EXAMPLES ON FAILURE CASES
+
+
+We here provide additional qualitative examples under the 10% TOFU forget setting with Llama 3.1
+8B-Instruct to further illustrate typical failure modes of GA- and NPO-based unlearning. These cases
+show that GA fails by collapsing the entire model, while NPO fails by allowing semantic rephrasings
+to persist.
+
+
+F.1.1 EXAMPLES OF GA
+
+
+For GA, we include cases from the forget set, the retain set, real-author queries, and world-fact
+questions. In all of these, the model degenerates into meaningless repetition such as “always
+always ...”. Notably, the reported metrics (probability, ROUGE-L, truth ratio) all collapse to the
+minimum values, which might superficially suggest successful forgetting. However, this is entirely
+misleading because the model has lost its ability to produce any coherent output—even on retain
+prompts—indicating a complete collapse rather than targeted unlearning. In other words, GA achieves
+“success” only by breaking the model.
+
+
+**Forget Set:**
+
+
+**Retain Set:**
+
+
+**Real Author:**
+
+
+**World Fact:**
+
+
+29
+
+
+F.1.2 EXAMPLES OF NPO
+
+
+For NPO, we focus exclusively on examples from the forget set, since our main concern is spurious
+unlearning—cases where the model seems to succeed but in fact retains the sensitive knowledge
+in rephrased form. For instance, in **Example 1** (Wei-Jun Chen), the reported metrics are relatively
+low (Probability: 0.29, ROUGE-L: 0.25, Truth Ratio: 0.00), which would suggest strong forgetting.
+However, the unlearned response still attributes his sustainability themes to Taipei, mirroring the
+ground-truth content in a different form. In **Example** **2** (Kalkidan Abera), the metrics are again
+favorable (Probability: 0.31, ROUGE-L: 0.29, Truth Ratio: 0.23), yet the model continues to discuss
+the health impact of modern diets, merely shifting the focus from global health to Africa. These cases
+show that, despite promising scores, NPO’s forgetting is superficial, relying on semantic paraphrasing
+rather than genuine removal of knowledge.
+
+
+**Forget Set:**
+
+
+30
+
+
+F.2 PROMPT DESIGN OF PROPOSED LAAJ EVALUATION
+
+
+Here, we provide the detailed prompt design for our LaaJ evaluation introduced in §3.1: Similarity
+and Naturalness, which assess whether unlearning is both semantically thorough and linguistically
+fluent (Zhou et al., 2024; 2025; 2026). In practice, we adopt Gemini 2.5 Flash (Comanici et al., 2025)
+for evaluation, while other advanced models such as GPT-5.2 or Claude 4.6 can also be employed.
+
+
+31
+
+
+F.3 RESULTS ON MUSE
+
+
+Tab. 4 reports results on MUSE-News. Our methods
+achieve the lowest forget scores, with BS-S reducing
+VerbMem/KnowMem to 0.2713/0.3250 compared
+to 0.2914/0.3290 for NPO and 0.3861/0.5088 for
+RMU. At the same time, BS-S attains higher UtilPres
+(0.4774) than most baselines, showing a better balance between forgetting and retention. BS-T also improves forgetting effectiveness (0.2837/0.3278) while
+maintaining competitive utility (0.4602). These results highlight that explicitly unlearning both original
+harmful targets and model beliefs enables our methods to deliver more thorough forgetting with minimal
+loss in retained performance.
+
+
+Tab. 5 reports results on MUSE-Books. While SimNPO achieves the highest UtilPres, its forgetting is far
+from complete, with both VerbMem and KnowMem
+remaining non-negligible. In contrast, our bootstrapping methods drive both forgetting scores down
+to zero, ensuring thorough removal of targeted
+knowledge. Among these methods, BS-S attains
+the strongest utility preservation (UtilPres 0.3854),
+slightly outperforming BS-T (0.3842) and clearly surpassing other approaches that also reduce memorization to zero. This highlights that our framework not
+only achieves complete forgetting but also retains
+more utility compared with competing baselines.
+
+
+Table 4: Performance with retain regularization on
+MUSE-News with Llama 2 7B-Chat.
+
+
+**FORGET** **RETAIN**
+**Method** VerbMem ↓ KnowMem ↓ UtilPres ↑
+
+
+Original 0 _._ 5789 0 _._ 6443 0 _._ 5552
+Retrain 0 _._ 2016 0 _._ 3170 0 _._ 5602
+
+GradDiff 0 _._ 3249 0 _._ 3481 0 _._ 4603
+NPO 0 _._ 2914 0 _._ 3290 0 _._ 4651
+RMU 0 _._ 3861 0 _._ 5088 0 _._ 4962
+SimNPO 0 _._ 4608 0 _._ 6043 **0** _**.**_ **5010**
+WGA 0 _._ 3713 0 _._ 5732 0 _._ 4782
+BS-T (Ours) 0 _._ 2837 0 _._ 3278 0 _._ 4602
+BS-S (Ours) **0** _**.**_ **2713** **0** _**.**_ **3250** 0 _._ 4774
+
+
+Table 5: Performance with retain regularization on
+MUSE-Books with Llama 2 7B-Chat.
+
+
+**FORGET** **RETAIN**
+**Method** VerbMem ↓ KnowMem ↓ UtilPres ↑
+
+
+Original 0 _._ 9970 0 _._ 4712 0 _._ 6913
+Retrain 0 _._ 1445 0 _._ 3029 0 _._ 6874
+
+
+GradDiff 0 _._ 0000 0 _._ 0000 0 _._ 0041
+RMU 0 _._ 0391 0 _._ 0056 0 _._ 0079
+SimNPO 0 _._ 2196 0 _._ 3011 **0** _**.**_ **6013**
+WGA 0 _._ 0000 0 _._ 0000 0 _._ 2519
+BST (Ours) 0 _._ 0000 0 _._ 0000 0 _._ 3842
+BSS (Ours) 0 _._ 0000 0 _._ 0000 0 _._ 3854
+
+
+F.4 QUALITATIVE EXAMPLES OF UNLEARNING RESULTS
+
+
+In this subsection, we present qualitative examples of model responses after applying different
+unlearning methods on TOFU under the 10% forget setting with Llama 3.2 1B-Instruct. These
+
+
+32
+
+
+examples allow us to directly compare how various approaches behave once unlearning is applied.
+For each case, we highlight the limitations of baseline methods such as GradDiff, NPO, and RMU,
+and contrast them with our bootstrapping approaches (BS-T and BS-S).
+
+
+**Example 1 (Hsiao Yun-Hwa’s writing language).** Baseline methods such as GradDiff and NPO still
+explicitly mention “English”, thereby leaking the exact sensitive knowledge that should have been
+removed. RMU and SimNPO generate partially distorted responses, but they either retain fragments
+of the ground-truth or introduce implausible additions. In contrast, BS-T reframes the answer by
+providing an alternative language (Taiwanese dialect), effectively breaking the direct link to the
+ground-truth, while BS-S generates a longer, more diverse narrative that, despite some noise, clearly
+avoids reproducing the original sensitive information.
+
+
+**Example** **2** **(Aysha** **Al-Hashim’s** **translations).** Methods like GradDiff and NPO continue to
+enumerate multiple languages including Arabic, French, and Spanish—closely echoing the groundtruth and thus failing to achieve true unlearning. RMU and SimNPO introduce stylistic variations
+but still reveal the same fact that her works have been translated broadly. Our approaches, however,
+provide more robust alternatives: BS-T gives a generic but safe response emphasizing her worldwide
+popularity without leaking specific translation details, while BS-S produces a semantically diverged
+output that highlights her success and demand without reproducing the sensitive translations.
+
+
+**Example** **3** **(Rajeev** **Majumdar’s** **novel** **settings).** Several baselines (GradDiff, NPO, SimNPO,
+WGA) consistently anchor the response to South Asian or Indian settings, directly overlapping with
+the ground-truth semantics. Some even fabricate tourist or fictional backdrops but still preserve the
+notion of India as the core setting. BS-T instead shifts the focus toward an abstract connection to
+nature, providing a neutral but fluent output, while BS-S generates a longer, story-like continuation
+
+
+33
+
+
+that does not mirror the original sensitive description. These cases demonstrate how our methods
+mitigate spurious overlap and produce genuinely distinct alternatives.
+
+
+**Example 4 (Xin Lee Williams’ fictional book).** Most baseline methods—including GradDiff, NPO,
+SimNPO, and WGA—either paraphrase “The Village That Vanished” or invent similar-sounding
+variations like “The Village That Crumbled.” Although the surface wording differs, the responses
+remain tightly bound to the original sensitive content. RMU and other variants produce noisy but
+still semantically aligned outputs. In contrast, BS-T creates a new fictional title unrelated to the
+ground-truth, and BS-S invents a completely different story element (“The Streetpiece That Split”),
+ensuring that the original fact is not reproduced.
+
+
+F.5 ABLATION STUDIES
+
+
+In this section, we conduct ablation studies to better understand the behavior of our proposed methods.
+We first analyze the impact of key hyperparameters on BS-T and BS-S, and then examine the effect
+of different unlearning losses when integrated into BS-S. These results shed light on the robustness
+and generality of our framework.
+
+
+34
+
+
+(a) BS-T (b) BS-S
+
+
+Figure 5: Aggregate score (Agg.) of BS-T and BS-S under different combinations of hyperparameters on TOFU
+10% forget setting with Llama 3.1 8B.
+
+
+F.5.1 HYPERPARAMETER ANALYSIS
+
+
+We conduct ablation studies on the hyperparameters of BS-T and BS-S using the aggregate score
+(Agg.) as the criterion for parameter selection. Fig. 5 reports results under the 10% forget setting on
+TOFU with Llama 3.1 8B. For BS-T, the two hyperparameters are the interpolation weight _λ_ BST and
+the neighborhood size _k_ . For BS-S, the hyperparameters are the number of sampled sequences _N_
+and the interpolation weight _λ_ BSS.
+
+
+From Fig. 5a, we observe that BS-T is particularly sensitive to _λ_ BST. The aggregate score peaks at
+_λ_ = 0 _._ 2 and _k_ = 10, reaching 0 _._ 63. Increasing or decreasing _λ_ BST beyond this point results in a
+significant drop in performance, indicating that an overly small weight reduces the suppression of
+high-likelihood alternatives, while an overly large weight excessively penalizes the model and harms
+utility. In contrast, the effect of _k_ is relatively modest: changing the neighborhood size from 5 to 50
+only slightly alters the performance, confirming that BS-T mainly relies on the balance set by _λ_ BST.
+Notably, setting _λ_ BST = 0 recovers GradDiff, providing a useful reference baseline.
+
+
+Turning to Fig. 5b, we find that BS-S behaves differently. The parameter _N_ improves performance
+with diminishing returns: raising _N_ from 1 to 3 yields notable gains, but further increases provide only
+marginal improvements. On the other hand, _λ_ BSS again plays a crucial role, producing large variations
+across different values. Notably, the best performance is achieved at _N_ = 10 and _λ_ BSS = 0 _._ 6, with
+an aggregate score of 0 _._ 65. However, we remark that setting _λ_ BSS = 0 effectively reduces BS-S
+to BS-T, highlighting the role of sequence-level bootstrapping. Moreover, the memory footprint of
+BS-S grows linearly with _N_, and beyond _N_ = 5 a single 80G GPU cannot fit the training, leading to
+out-of-memory errors. Since the empirical gains also saturate, we restrict our hyperparameter search
+up to _N_ = 5 in practice.
+
+
+Overall, these results confirm that for both BS-T and BS-S, _λ_ is the most influential hyperparameter,
+while _k_ (for BS-T) and _N_ (for BS-S) provide secondary but meaningful adjustments. Accordingly, in
+this case, we adopt _λ_ BST = 0 _._ 2 _, k_ = 10 for BS-T and _λ_ BSS = 0 _._ 6 _, N_ = 4 for BS-S.
+
+
+F.5.2 UNLEARNING LOSS IN BS-S
+
+
+We further investigate the effect of different unlearn- Table 6: Ablation on BS-S by replacing its uning losses when plugged into the BS-S framework. As learning loss on TOFU 10% with Llama 3.1 8B.
+shown in Tab. 6, replacing the loss with GA, NPO, or
+
+**Method** Agg. ↑ Mem. ↑ Util.
+
+WGA still benefits from the sequence-level bootstrapping design, consistently improving the aggregate score Original 0 _._ 02 0 _._ 01 0 _._
+compared to their standalone counterparts in Tab. 1. Retrain 0 _._ 65 0 _._ 57 0 _._
+Among them, BS-S with BS-T loss achieves the best w/ GA 0 _._ 52 0 _._ 48 0 _._
+overall performance, attaining the highest Agg. and w/ NPO 0 _._ 63 **0** _**.**_ **58** 0 _._
+
+w/ WGA 0 _._ 54 0 _._ 44 **0** _**.**_
+
+Mem. while preserving utility competitively. This con- w/ BS-T (BS-S) **0** _**.**_ **64** **0** _**.**_ **58** **0** _**.**_
+firms that the proposed BS-S formulation not only generalizes across different unlearning objectives, but also works most effectively with the BS-T loss.
+
+
+Table 6: Ablation on BS-S by replacing its unlearning loss on TOFU 10% with Llama 3.1 8B.
+
+
+**Method** Agg. ↑ Mem. ↑ Util. ↑
+
+
+Original 0 _._ 02 0 _._ 01 0 _._ 73
+Retrain 0 _._ 65 0 _._ 57 0 _._ 75
+
+
+w/ GA 0 _._ 52 0 _._ 48 0 _._ 57
+w/ NPO 0 _._ 63 **0** _**.**_ **58** 0 _._ 68
+w/ WGA 0 _._ 54 0 _._ 44 **0** _**.**_ **71**
+w/ BS-T (BS-S) **0** _**.**_ **64** **0** _**.**_ **58** **0** _**.**_ **71**
+
+
+35
+
+
+Figure 6: Training time (s) per epoch on TOFU 10% forget setting with Llama 3.2 1B.
+
+
+F.6 TIME CONSUMPTION
+
+
+Fig. 6 reports the average per-epoch training time on the TOFU 10% forget setting with Llama 3.2
+1B-Instruct, using a single NVIDIA A6000 GPU and batch size of 32. Our bootstrapping methods are
+efficient compared with heavy approaches such as GRU (Wang et al., 2025d). BS-T is relatively fast
+since it only modifies the loss function without changing the data pipeline, leading to a runtime close to
+lightweight baselines like RMU and WGA. By contrast, BS-S is slower because it requires additional
+model sampling and data augmentation at each step, which increases overhead. Nevertheless, the
+extra cost of BS-S remains acceptable given that it achieves the best unlearning–utility trade-off.
+These results show that our methods combine strong effectiveness with manageable training cost
+under practical settings.
+
+
+G LIMITATIONS
+
+
+Our approach still exhibits sensitivity to hyperparameters, particularly the bootstrapping coefficients
+which typically require dataset- and model-specific tuning. Designing tuning-robust objectives and
+automatic schedulers is left for future work. In addition, while we provide a learning dynamics
+justification for BS-T, a comparable formal treatment for the sequence-level variant BS-S is still
+absent. Grounding BS-S with theory and guarantees remains an open direction.
+
+
+36

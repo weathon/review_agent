@@ -1,0 +1,1757 @@
+# SIMPLIFY IN-CONTEXT LEARNING
+
+
+**Anonymous authors**
+Paper under double-blind review
+
+
+ABSTRACT
+
+
+Traditional in-context learning (ICL) enhances the performance and capability of
+large language models (LLMs) primarily by optimizing decomposition strategies,
+reformatting, and ordering. However, when task difficulty significantly exceeds
+the model’s capabilities, merely refining in-contexts becomes ineffective. In contrast to prior work that focuses on improving the capabilities of LLMs, we propose
+Simplified In-context Learning (SICL), a framework that reduces task difficulty
+through task decomposition. A complex task _A_ is decomposed into a sequence
+of subtasks _A_ 1 _, A_ 2 _, · · ·_ _, Am_, each less difficult than the original. When the difficulty of a subtask _Ai_ lies within the capability threshold of the LLM, LLM still
+achieves strong performance. SICL incorporates two complementary strategies:
+training-free methods that achieve rapid decomposition through clustering and
+uniform partitioning of the output space; and training-driven methods that adaptively determine the optimal decomposition for each query via a scoring predictor.
+Empirically, SICL achieves state-of-the-art (SOTA) results across six tasks, three
+LLMs and ten datasets, attaining the lowest mean squared error (MSE) of 0.712
+and the highest accuracy of 77.0%. We further extend SICL to generative tasks,
+where it achieves a ROUGE-1 of 0.270 on summarization and a BLEU of 0.254 on
+machine translation. Furthermore, SICL also generalizes to the vision modality,
+yielding a maximum accuracy of 98.8% on image classification. Notably, SICL
+demonstrates consistent SOTA performance over commercial LLMs, like GPT-4o.
+
+
+1 INTRODUCTION
+
+
+Large language models (LLMs) demonstrate remarkable performance across a wide range of language tasks (Bertsch et al., 2025; Nafar et al., 2025). In-context learning (ICL) is a prominent
+paradigm that enhances the capabilities of LLMs by leveraging demonstrations to construct an incontext (Jin et al., 2025; Ren et al., 2025). Typically, ICL retrieves relevant demonstrations from a
+retrieval dataset and concatenates the task description, demonstrations (in-context), and input text as
+input to the LLM (Wen et al., 2025; Wang et al., 2023). Owing to its training-free nature and strong
+empirical effectiveness, ICL is a widely adopted technique for LLMs (Zhang et al., 2025).
+
+
+Previous ICL methods primarily focus on optimizing the retrieval of in-context demonstrations (Gao
+et al., 2024; Zhao et al., 2025), refining their formatting (Li et al., 2024b; Kassianik et al., 2025), and
+determining their optimal order (Cao et al., 2025; Wang et al., 2025). These studies aim to improve
+LLM performance by enhancing how demonstrations are retrieved and organized. When an LLM’s
+capability exceeds the difficulty of a task, it delivers strong performance. For example, as shown in
+the subfig. (a) of Fig. 1, if an LLM’s capability is 6 and the task’s difficulty is 8, traditional ICL
+methods attempt to increase the LLM’s capability to 10, thereby surpassing the task difficulty and
+improving performance. Although these methods achieve promising results, they mainly focus on
+augmenting the LLM’s capability while neglecting the inherent difficulty of the task itself.
+
+
+However, the performance improvement afforded by in-context learning (ICL) is intrinsically
+bounded. Specifically, when the complexity of a task surpasses the aggregate of the large language model’s (LLM) inherent capacity and the marginal gain provided by ICL, conventional ICL
+approaches inevitably yield suboptimal performance. To address this limitation, we propose **Sim-**
+**plified** **In-Context** **Learning** **(SICL)**, which shifts the focus from enhancing model capability to
+reducing task difficulty. By simplifying the original task, SICL ensures that the LLM’s capability
+exceeds the task difficulty, thereby enabling strong performance. Specifically, we decompose the
+original task _A_ into a series of subtasks _A_ 1 _, A_ 2 _, · · ·_ _, Am_, where each subtask _Ai_ is less difficult
+
+
+1
+
+
+than the original task _A_ . For example, as shown in the subfig. (b) of Fig. 1, a task with a difficulty level of 8 can be decomposed into four subtasks with difficulties of 1, 1, 2, and 4, while the
+total difficulty remains 8 and LLM’s capability 6. In this case, the LLM’s capability exceeds the
+difficulty of each subtask, thereby facilitating effective performance.
+
+
+|0 100<br>Task A|0 100<br>Task A<br>Task Decomposition<br>Task A1 0 50 100<br>Task A2 0 25 50<br>Task A3 37|
+|---|---|
+|Task Decomposition|Task Decomposition|
+|0<br>50<br>100<br>37<br>Task A1<br>Task A2<br>Decision|0<br>50<br>100<br>37<br>Task A1<br>Task A2<br>Decision|
+
+
+(a) Width: 2 (b) Width: 3 (c) Depth: 2 (d) Depth: 3
+
+
+Figure 2: Illustration of Task Width and Depth. The width of a subtask is defined as its number of
+labels, whereas the depth is defined as the number of constituent subtasks.
+
+
+2
+
+
+(c)
+
+
+(a)
+
+
+(b)
+
+
+Figure 1: (a) Traditional ICL improves performance by retrieving relevant demonstrations to boost
+effective capability above the task difficulty. (b) SICL decomposes the task into simpler subtasks,
+ensuring the LLM’s capability exceeds each subtask’s difficulty. (c) An example of reducing task
+difficulty by progressively constraining the output space through subtasks.
+
+
+A key challenge in task decomposition lies in ensuring that each subtask is less difficult than the
+original task. We establish that coarse-grained labels (e.g., “dog”) are inherently easier to predict
+than fine-grained labels (e.g., “Corgi”), as they encompass broader categories and are associated
+with a reduced output space containing fewer distracting alternatives. Consequently, our method reduces overall task difficulty by sequentially constraining the output space via coarse-grained labels,
+capitalizing on its hierarchical structure to facilitate decomposition. For example, as shown in the
+subfig. (c) of Fig. 1, in a translation quality evaluation task, an LLM with in-context decomposition
+assigns a score between 0 and 100 to a translated sentence. Predicting an exact score within such a
+broad range is challenging. To address this issue, we decompose the task into three subtasks. The
+first subtask, _A_ 1, requires the LLM to determine whether the score falls within 0–50 ([0,50]) or
+50–100 ([50,100]). If the prediction is 0–50 ([0,50]), the second subtask, _A_ 2, asks whether the
+score lies within 0–25 ([0,25]) or 25–50 ([25,50]). If the second prediction is 25–50 ([25,50]), the
+third subtask, _A_ 3, requires the LLM to assign a score within this narrower range. Compared with
+predicting a score across the full 0–100 ([0,100]) range, the first and second subtasks involve only
+binary decisions, making them simpler. The third subtask further narrows the range from 0–100
+([0,100]) to 25–50 ([25,50]), thereby reducing the difficulty. Through this form of decomposition,
+we reduce task complexity and difficulty, enabling LLMs to generate more accurate results.
+
+
+As illustrated in Figure 2, the process requires determining both the width and depth of the decomposed subtasks. **Width** denotes the number of labels within each subtask. For instance, task _A_ 1
+
+
+may be framed as a binary classification (e.g., Label 1: 0–50; Label 2: 51–100) or as a ternary
+classification (e.g., Label 1: 0–33; Label 2: 33–66; Label 3: 66–100). Hence, the number of labels defines the task’s width. **Depth**, in contrast, refers to the number of subtasks produced through
+decomposition. In the preceding example, the original task is divided into 3 subtasks, yielding a
+depth of 3. Alternatively, it could be decomposed into only 2 subtasks—for instance, after predicting whether the label lies within [0, 50] or [50, 100], the model can directly estimate the
+final label value. Thus, the challenge of SICL can be reformulated into the following questions:
+
+
+① How should the number of labels in each decomposed subtask (i.e., the decomposition width) be
+determined? ② How should the number of subtasks (i.e., the decomposition depth) be determined?
+
+
+SICL addresses these questions through two complementary strategies. The **training-free method**
+fixes the decomposition depth at two and sets the first-layer subtask width to two. The **training-**
+**driven** **method** partitions a subset of the dataset to train a score predictor, which estimates LLM
+performance under different width–depth configurations for a given input. The configuration with
+the greatest predicted score is selected as the optimal decomposition. This enables SICL to adaptively tailor both the width and depth of subtasks to each query, improving performance across tasks.
+
+
+We evaluate SICL on three LLMs, ten benchmark datasets, and six tasks, achieving state-of-the-art
+(SOTA) performance across all settings. Specifically, SICL reaches 77.0% accuracy in text classification, 0.712 MSE in semantic textual similarity, and 188.858 MSE in translation quality evaluation.
+For generation tasks, SICL achieves a ROUGE-1 score of 0.140 on summarization, a ROUGE-1
+score of 0.270 on text expansion, and a BLEU score of 0.254 on machine translation. SICL proves
+applicable to the vision modality, reaching a maximum accuracy of 98.8% on image classification.
+In addition, it demonstrates SOTA performance on proprietary commercial models. Our contributions are summarized as follows: ❶ We formalize the notion that reducing task difficulty enhances
+the effectiveness of in-context learning. ❷ We propose Simplified In-Context Learning (SICL),
+a framework designed to reduce task difficulty, and present both training-free and training-driven
+strategies tailored for a wide range of downstream tasks. ❸ We empirically validate the effectiveness of SICL on six downstream tasks and ten benchmark datasets, achieving SOTA performance.
+
+
+2 RELATED WORK
+
+
+Demonstration organization critically impacts ICL performance. Prior work explores selection, reformatting, and ordering. Selection includes unsupervised methods retrieving top- _k_ neighbors by
+similarity, mutual information, perplexity, or model probabilities. (Sorensen et al., 2022; Nguyen
+& Wong, 2023; Li & Qiu, 2023b; Wang et al., 2025), and supervised approaches, which employ
+task-specific training and adaptive strategies (Rubin et al., 2022; Li et al., 2023; Ye et al., 2023;
+Mavromatis et al., 2023). Most methods adopt a fixed _k_, though its task-specific justification remains underexplored (Li et al., 2023; Qin et al., 2023; Oorloff et al., 2025). Reformatting enhances
+alignment with LLMs via self-generated examples, structured prompting, or representation-level
+adaptations (Kim et al., 2022; Liu et al., 2024a; Li et al., 2024a). Ordering addresses sequence sensitivity using entropy, similarity-based proximity, or curriculum-based ranking (Liu et al., 2022a;
+2024c). _Current ICL emphasizes enhancing LLM capability via in-context adjustments, but neglects_
+_task difficulty reduction, an area demanding urgent research attention._
+
+
+3 METHOD
+
+
+SICL can be divided into two main components. The first is a demonstration-retrieval method that
+constructs in-context prompts by selecting demonstrations from a retrieval dataset according to their
+similarity to the input text. The second is a task decomposition method that partitions the original
+task into subtasks to reduce its difficulty.
+
+
+3.1 CONSTRUCTION PROCESS OF IN-CONTEXT
+
+
+In the in-context construction phase, following KATE Liu et al. (2022b) and ICL-rerank Zhou et al.
+(2024), we retrieve the top- _k_ demonstrations from the retrieval dataset **D** r that are most semantically
+aligned with the input text. These are then used to construct the in-context for the query. Specifically,
+the retrieval process consists of three main steps: **(1) Encoding Representations** : Each input text
+
+
+3
+
+
+|(a) Dataset construction Divide [0,100] (c) Testing process<br>Retrieval datasets: Dr<br>20% 80% [0,100] [0,50] [50,100] [0,33] [33,66] [66,100]<br>LLMs<br>DataT se ex tt s : Dt DaC tao sn et te sx :t Dc Score In-T coe nx tt PrS ec do icr te o r Groun 4d 5-truth:<br>ext<br>Text 1 In-context 1 [0,100] Score 11<br>Text 1 In-context 1 [0,50][50,100] Score 12 Score=35 Score =20 Score =40<br>Text 1 In-context 1 [0,33][33,66] [66,100] Score 13 Which range is<br>… … … … more reasonable ? [0,50]<br>[0,50] [50,100]<br>Text N In-context N[0,100] Score N1<br>Text N In-context N[0,50][50,100] Score N2<br>[0,50] [0,25] [25,50] [0,17] [17,34] [34,50]<br>Text N In-context N[0,33][33,66] [66,100] Score N3<br>Text<br>Score<br>(b) Training process<br>Predictor<br>Text In-context<br>Score<br>In-context Predictor Score =18 Score =23 Score =25<br>Label space Score The optimal prediction is: 37|Col2|Col3|Col4|
+|---|---|---|---|
+|[0,50]<br>[0,33] [33,66] [66,100]<br>[0,50] [50,100]<br>[0,100]<br>**Retrieval datasets: Dr**<br>Text<br>Datasets: Dt<br>Context<br>Datasets: Dc<br>Text 1<br>In-context 1<br>**…**<br>**…**<br>Score<br>Score 11<br>Score 12<br>Score 13<br>**…**<br>LLMs<br>Text 1<br>Text 1<br>In-context 1<br>In-context 1<br>[0,100]<br>[0,50]<br>[0,33]<br>[50,100]<br>[33,66] [66,100]<br>**…**<br>Text N<br>In-context N<br>Score N1<br>Score N2<br>Score N3<br>Text N<br>Text N<br>[0,100]<br>[0,50]<br>[0,33]<br>[50,100]<br>[33,66] [66,100]<br>In-context N<br>In-context N<br>20%<br>80%<br>Score<br>Text<br>In-context<br>Label space<br>Text<br>In-context<br>Score<br>Predictor<br>Text<br>In-context<br>Which range is<br>more reasonable ?<br>[0,50]<br>Score=35<br>Score =20<br>Score =40<br>[0,25] [25,50]<br>[0,17] [17,34] [34,50]<br>[0,50] [50,100]<br>Score =18<br>Score =23<br>Score =25<br>[0,100]<br>Divide<br>The optimal prediction is: 37<br>**(a) Dataset construction**<br>**(b) Training process**<br>**(c) Testing process**<br>Score<br>Predictor<br>Score<br>Predictor<br>Ground-truth:<br>45|[0,50]<br>[0,33] [33,66] [66,100]<br>[0,50] [50,100]<br>[0,100]<br>**Retrieval datasets: Dr**<br>Text<br>Datasets: Dt<br>Context<br>Datasets: Dc<br>Text 1<br>In-context 1<br>**…**<br>**…**<br>Score<br>Score 11<br>Score 12<br>Score 13<br>**…**<br>LLMs<br>Text 1<br>Text 1<br>In-context 1<br>In-context 1<br>[0,100]<br>[0,50]<br>[0,33]<br>[50,100]<br>[33,66] [66,100]<br>**…**<br>Text N<br>In-context N<br>Score N1<br>Score N2<br>Score N3<br>Text N<br>Text N<br>[0,100]<br>[0,50]<br>[0,33]<br>[50,100]<br>[33,66] [66,100]<br>In-context N<br>In-context N<br>20%<br>80%<br>Score<br>Text<br>In-context<br>Label space<br>Text<br>In-context<br>Score<br>Predictor<br>Text<br>In-context<br>Which range is<br>more reasonable ?<br>[0,50]<br>Score=35<br>Score =20<br>Score =40<br>[0,25] [25,50]<br>[0,17] [17,34] [34,50]<br>[0,50] [50,100]<br>Score =18<br>Score =23<br>Score =25<br>[0,100]<br>Divide<br>The optimal prediction is: 37<br>**(a) Dataset construction**<br>**(b) Training process**<br>**(c) Testing process**<br>Score<br>Predictor<br>Score<br>Predictor<br>Ground-truth:<br>45|Which range is<br>more reasonable ?<br>[0,50]<br>[0,50] [50,100]|Which range is<br>more reasonable ?<br>[0,50]<br>[0,50] [50,100]|
+|[0,50]<br>[0,33] [33,66] [66,100]<br>[0,50] [50,100]<br>[0,100]<br>**Retrieval datasets: Dr**<br>Text<br>Datasets: Dt<br>Context<br>Datasets: Dc<br>Text 1<br>In-context 1<br>**…**<br>**…**<br>Score<br>Score 11<br>Score 12<br>Score 13<br>**…**<br>LLMs<br>Text 1<br>Text 1<br>In-context 1<br>In-context 1<br>[0,100]<br>[0,50]<br>[0,33]<br>[50,100]<br>[33,66] [66,100]<br>**…**<br>Text N<br>In-context N<br>Score N1<br>Score N2<br>Score N3<br>Text N<br>Text N<br>[0,100]<br>[0,50]<br>[0,33]<br>[50,100]<br>[33,66] [66,100]<br>In-context N<br>In-context N<br>20%<br>80%<br>Score<br>Text<br>In-context<br>Label space<br>Text<br>In-context<br>Score<br>Predictor<br>Text<br>In-context<br>Which range is<br>more reasonable ?<br>[0,50]<br>Score=35<br>Score =20<br>Score =40<br>[0,25] [25,50]<br>[0,17] [17,34] [34,50]<br>[0,50] [50,100]<br>Score =18<br>Score =23<br>Score =25<br>[0,100]<br>Divide<br>The optimal prediction is: 37<br>**(a) Dataset construction**<br>**(b) Training process**<br>**(c) Testing process**<br>Score<br>Predictor<br>Score<br>Predictor<br>Ground-truth:<br>45|[0,50]<br>[0,33] [33,66] [66,100]<br>[0,50] [50,100]<br>[0,100]<br>**Retrieval datasets: Dr**<br>Text<br>Datasets: Dt<br>Context<br>Datasets: Dc<br>Text 1<br>In-context 1<br>**…**<br>**…**<br>Score<br>Score 11<br>Score 12<br>Score 13<br>**…**<br>LLMs<br>Text 1<br>Text 1<br>In-context 1<br>In-context 1<br>[0,100]<br>[0,50]<br>[0,33]<br>[50,100]<br>[33,66] [66,100]<br>**…**<br>Text N<br>In-context N<br>Score N1<br>Score N2<br>Score N3<br>Text N<br>Text N<br>[0,100]<br>[0,50]<br>[0,33]<br>[50,100]<br>[33,66] [66,100]<br>In-context N<br>In-context N<br>20%<br>80%<br>Score<br>Text<br>In-context<br>Label space<br>Text<br>In-context<br>Score<br>Predictor<br>Text<br>In-context<br>Which range is<br>more reasonable ?<br>[0,50]<br>Score=35<br>Score =20<br>Score =40<br>[0,25] [25,50]<br>[0,17] [17,34] [34,50]<br>[0,50] [50,100]<br>Score =18<br>Score =23<br>Score =25<br>[0,100]<br>Divide<br>The optimal prediction is: 37<br>**(a) Dataset construction**<br>**(b) Training process**<br>**(c) Testing process**<br>Score<br>Predictor<br>Score<br>Predictor<br>Ground-truth:<br>45|[0,50]<br>Text<br>In-context<br>[0,25] [25,50]<br>[0,17] [17,34] [34,50]<br>Score =18<br>Score =23<br>Score =25<br>The optimal prediction is: 37<br>Score<br>Predictor||
+|Score<br>Text<br>In-context<br>Label space<br>**(b) Training process**<br>Score<br>Predictor|Score<br>Text<br>In-context<br>Label space<br>**(b) Training process**<br>Score<br>Predictor|Score<br>Text<br>In-context<br>Label space<br>**(b) Training process**<br>Score<br>Predictor|Score<br>Text<br>In-context<br>Label space<br>**(b) Training process**<br>Score<br>Predictor|
+|Score<br>Text<br>In-context<br>Label space<br>**(b) Training process**<br>Score<br>Predictor||||
+
+
+where _Y_ [(1)] denotes the label space of the first subtask, _C_ 1 and _C_ 2 are the two clusters obtained by
+K-means, and _y_ min and _y_ max denote the minimum and maximum values of the label space.
+
+
+**2.** **Training-driven** **decomposition** **method-SICL** **(train-driven):** Just as prescribing a uniform
+medical dosage disregards individual differences in patients, imposing a fixed configuration of subtask depth and width neglects the inherent variability of query texts. Because each input is unique,
+a static setting in the training-free decomposition method cannot be assumed to be universally optimal. This observation suggests that adaptively determining subtask depth and width for individual
+
+
+4
+
+
+Figure 3: Overall framework of train-driven simplified in-context learning (SICL).
+
+
+_x_ [te] _i_ _[∈]_ **[D]** [t from the test dataset and each candidate demonstration] _[ x]_ _j_ [r] _[∈]_ **[D]** [r from the retrieval dataset]
+are mapped into dense vectors using a pre-trained encoder _f_ pre. Specifically, **e** [te] _i_ [=] _[f]_ [pre][(] _[x]_ [te] _i_ [)][,] **[e]** [r] _j_ [=]
+_f_ pre( _x_ [r] _j_ [)][,] [and] **[E]** [=] _[{]_ **[e]** [r] 1 _[,][ · · ·]_ _[,]_ **[ e]** [r] _h_ _[}]_ [,] [where] _[h]_ [denotes] [the] [size] [of] [the] [retrieval] [dataset] [and] _[j]_ _[≤]_ _[h]_ [.]
+**(2) Measuring Semantic Proximity** : Cosine similarity is used to compute the similarity score _sij_
+**e** [te] _i_ _[·]_ **[e]** _j_ [r]
+between **e** [te] _i_ [and] **[ e]** _j_ [r] [, i.e.,] _[ s][ij]_ [=] _∥_ **e** [te] _i_ _[∥·∥]_ **[e]** _j_ [r] _[∥]_ [, and the similarity profile of] _[ x]_ _i_ [te] [is] **[ S]** _[i]_ [=] _[ {][s][i]_ [1] _[, . . ., s][ih][}]_ [.] **[(3)]**
+**In-context Construction** : The top- _k_ pairs with the highest similarity are selected and arranged in
+_k_
+descending order to construct the in-context **D** [in] _i_ _[,]_ [te] for _x_ [te] _i_ [,] [i.e.,] **[D]** [in] _i_ _[,]_ [te] = ( _x_ [in] _w_ _[,, y]_ _w_ [in][)] _w_ =1 [,] [where] _[x]_ [in] _w_
+denotes the _w_ -th most similar demonstration from **D** r to _x_ [te] _i_ [, and] _[ y]_ _w_ [in] [is the label of] _[ x]_ _w_ [in] [.]
+
+
+3.2 TASK DECOMPOSITION METHOD
+
+
+As outlined in Section 1, decomposing the original task into subtasks of lower difficulty requires
+determining both the depth of the decomposition and the width of each subtask. To address this, we
+introduce two approaches. The first is a training-free decomposition method that can be implemented
+efficiently; we set the task depth to 2 and fix the width of the first subtask at 2. The second approach
+trains a Score Predictor to adaptively determine the depth and width of subtasks for each
+input text. The details of these methods are presented below.
+
+
+**1.** **Training-free** **decomposition** **method-SICL** **(train-free):** In the training-free decomposition
+method, we set the subtask depth to 2 and fix the first subtask width at 2. For classification tasks
+with discrete labels, the first subtask’s label space is split into two groups using K-means (Xu &
+Tian, 2025) clustering algorithm. For regression tasks with continuous scores, the label space of the
+first subtask is evenly divided at the midpoint to form two corresponding label subsets. Formally,
+
+
+_Y_ [(1)] =
+
+
+- _{C_ 1 _, C_ 2 _},_ if classification (via K-means clustering)
+
+
+_{_ [ _y_ min _,_ _[y]_ [min][+] _[y]_ [max]
+
+
+2 _[y]_ [max] ] _,_ [ _[y]_ [min][+] 2 _[y]_ [max]
+
+
+(1)
+2 _[y]_ [max] _, y_ max] _},_ if regression (split at midpoint)
+
+
+input text is more likely to yield effective results. Therefore, we introduce **Score-Prediction (SP)**
+framework that evaluates LLM performance under different subtask configurations and adaptively
+selects the one with the greatest predicted score for each input. As shown in Fig. 3, (text,
+in-context, label space, score) tuples are constructed to train a deep learning model
+(Score-Prediction) with three inputs and one output (score). During inference, subtask depth is
+progressively increased from 1 to its maximum, and for each depth, the width with the greatest
+predicted performance score is selected. The overall procedure consists of three stages: ❶ training
+dataset construction, ❷ model training, and ❸ progressive selection of subtask depth and width.
+
+
+**2.1** **Training** **dataset** **construction:** Building on the preceding analysis, we construct the training data for Score Predictor as tuples of the form (text, in-context, label space,
+score). Here, the score denotes an evaluation metric of the LLM’s output when a given text is
+processed with a specified in-context and label space. Computing this metric requires both predicted
+and ground-truth values. In the ICL setting, ground-truth values are only available in the retrieval
+dataset. Therefore, we partition the retrieval dataset into a text dataset for training and a context
+dataset for retrieval. Specifically, as Fig. 3 shows, the retrieval dataset **D** r is randomly divided into
+a text dataset **D** t (20%) and a context dataset **D** c (80%). Formally,
+
+
+**D** r = **D** t _∪_ **D** c _,_ **D** t _∩_ **D** c = ∅ _,_ **D** t _∼_ RandomSample( **D** r _,_ 20%) _,_ **D** c = **D** r _\_ **D** t _._ (2)
+
+
+For each text _x_ [t] _i_ _[∈]_ **[D]** [t, its corresponding in-context] **[ D]** _i_ [in] _[,]_ [t] are retrieved from the context dataset **D** c
+using the method described in Section 3.1.
+
+
+After identifying the training texts and their corresponding in-contexts (text, in-context),
+we construct the associated (label space, score). For the label space, the maximum
+subtask width is defined as _w_ (reduced to _l_ if the number of labels _l_ in the subtask label space is
+smaller than _w_ ), and the maximum subtask depth is denoted as _d_ . For classification tasks, in the
+first subtask, the label space is clustered into _w_ groups. For regression tasks with score outputs,
+the score range is evenly divided into _w_ intervals. Formally, let _Y_ denote the original label space
+with cardinality _|Y|_ = _l_ . Given a maximum width _w_ and depth _d_, the effective width is defined as
+_w_ _[∗]_ = min( _w, l_ ) _._ The label space of the first subtask is then expressed as
+
+
+where _y_ ˆ denotes the prediction, _y_ is the ground-truth label, and I( _·_ ) is the indicator function.
+
+
+5
+
+
+_Y_ [(1)] =
+
+
+- _{C_ 1 _, C_ 2 _, . . ., Cw∗_ _},_ classification task _,_
+
+(3)
+_{I_ 1 _, I_ 2 _, . . ., Iw∗_ _},_ regression task _,_
+
+
+where _Ij_ = - _y_ min + [(] _[j]_ _w_ _[−][∗]_ [1)] [(] _[y]_ [max] _[ −]_ _[y]_ [min][)] _[,]_ _[y]_ [min][ +] _wj_ _[∗]_ [(] _[y]_ [max] _[ −]_ _[y]_ [min][)] - _,_ _j_ = 1 _, . . ., w_ _[∗]_ _._ _Ci_ de
+notes the _i_ -th cluster obtained from _Y_ by K-means, and _y_ min _, y_ max denotes the minimum and maximum values of the regression label range.
+
+
+Then, as illustrated in Fig. 4, the text, in-context, and label space are provided to the
+LLM, which first predicts the interval of the label into which the text falls. Within the interval chosen
+by the LLM, the model subsequently estimates the final output of the original task. For instance in
+Fig. 4, in the translation quality evaluation task with a scoring range of [0, 100], the LLM initially
+decides whether the score lies in [0, 50] or [50, 100]. If [0, 50] is selected, the LLM then predicts
+the final score within this interval. After generating predictions, the outputs are compared with the
+ground-truth labels to compute the corresponding scores. Formally, given a text _x_ [t] _i_ [,] [its] [in-context]
+**D** [in] _i_ _[,]_ [t][,] [and] [a] [label] [space] _[Y]_ [,] [the] [LLM] _[f]_ [LLM] [generates] [a] [prediction] _[y]_ [ˆ] _i_ [t] [,] [which] [is] [compared] [with] [the]
+ground-truth label _yi_ [t] [to compute the score:]
+
+_y_ ˆ _i_ [t] [=] _[ f]_ [LLM][(] _[x]_ _i_ [t] _[,]_ **[ D]** [in] _i_ _[,]_ [t] _[,][ Y]_ [)] _[,]_ Score( _x_ [t] _i_ _[,]_ **[ D]** [in] _i_ _[,]_ [t] _[,][ Y]_ [) =] _[ Eval]_ [(ˆ] _[y]_ _i_ [t] _[, y]_ _i_ [t] [)] _[,]_ (4)
+
+
+where _Eval_ ( _·, ·_ ) denotes the evaluation metric. For regression tasks with continuous outputs, the
+score is defined as the mean squared error (MSE) between the predicted and ground-truth values.
+For classification tasks with categorical outputs, the score equals 1 if the predicted label matches the
+ground truth and 0 otherwise. Specifically, the score is defined as
+
+
+Score( _x_ [t] _i_ _[,]_ **[ D]** [in] _i_ _[,]_ [t] _, Y_ ) =
+
+
+
+
+
+
+( _yi_ [t] _[−]_ _[y]_ [ˆ] _i_ [t] [)][2] _[,]_ regression task (mean squared error) _,_
+
+
+(5)
+I(ˆ _yi_ [t] [=] _[ y]_ _i_ [t] [)] _[,]_ classification task (indicator function: 1 if correct, 0 otherwise) _,_
+
+
+
+
+
+**Model** **Training** In the model training process, we employ a three-input, single-output architecture for Score Predictor (SP). One branch processes the input text, while the other handles the
+combined in-context and label space; the output corresponds to the predicted performance score
+for each pair. The complete architecture and training procedure are described in Section 4.1.
+
+
+where Partitions( _Y, w_ ) denotes the set of candidate partitions of _Y_ with width at most _w_, and SP( _P_ )
+is the score predictor’s estimated error for partition _P_ . The function _g_ ( _·_ ) is applied recursively until
+depth _d_ is reached or further splitting is unnecessary.
+
+
+**Extending train-driven SICL to generation tasks:** In the preceding sections, we focused on simplifying classification (label outputs) and regression (score outputs) tasks. Extending SICL to generation is more challenging due to the infinite output space. To address this, we propose a variant of
+SICL for generation tasks: ❶ The LLM first produces a set of top- _k_ candidate outputs. ❷ A score
+predictor is then trained to evaluate the quality of each candidate, and the candidate with the highest score is selected as the final output. Formally, let _x_ denote the input text and _{y_ ˆ1 _,_ ˆ _y_ 2 _, · · ·_ _,_ ˆ _yk}_
+represent the top- _k_ candidates returned by _f_ LLM( _x_ ). The final output is determined as:
+
+
+_{y_ ˆ1 _,_ ˆ _y_ 2 _, · · ·_ _,_ ˆ _yk}_ = Top- _k_       - _f_ LLM( _x_ )� _,_ _y_ ˆ = arg max (7)
+_y_ ˆ _i∈{y_ ˆ1 _,···,y_ ˆ _k}_ _[g]_ [(ˆ] _[y][i]_ [)] _[,]_
+
+
+where _y_ ˆ denotes the final prediction for _x_, and _g_ ( _·_ ) is the score predictor.
+
+
+4 EXPERIMENTS
+
+
+4.1 EXPERIMENTAL SETUP
+
+
+**Tasks,** **datasets** **and** **metrics:** We evaluate SICL on six NLP tasks across ten datasets: (1) Text
+Classification (SST-5, Emotion); (2) Semantic Textual Similarity (STSB, STS14); (3) Translation
+
+
+6
+
+
+of the current label space, and the partition with
+
+proves the predicted score. For example, as the
+testing process in Fig. 3 shows, when predicting a Figure 4: Example of score generation
+score in [0,100] with a maximum width of 3, in translation quality evaluation, where the
+the SP first estimates the score (MSE) for candi- score is the MSE between the LLM’s predicdate partitions: [0,100], [0,50],[50,100], tion and the ground truth.
+and [0,33],[33,66],[66,100]. The partition with the greatest score (the lowest MSE)
+is chosen as the first subtask’s label space. Then [0,50],[50,100] is selected; the
+LLM then determines whether the score lies in [0,50] or [50,100]. If [0,50] is chosen, the SP again evaluates partitions of this interval—([0,50]), ([0,25],[25,50]), and
+([0,17],[17,34],[34,50])—and the best partition defines the second subtask. This process illustrates the greedy strategy for determining subtask widths. Subtask depth is determined in the same manner. If the current label space already achieves the best predicted
+score (e.g., minimal MSE), further splitting is unnecessary. For instance, in the second subtask, the SP predicts MSE values of 18, 23, and 25 for ([0,50]), ([0,25],[25,50]), and
+([0,17],[17,34],[34,50]), respectively, then [0,50] is retained without further division,
+and the LLM directly predicts within this interval. Formally, let _Y_ denote the current label space,
+and _Eval_ (ˆ _y, y_ ) be the evaluation metric (e.g., MSE). The greedy decomposition is defined as
+
+
+Figure 4: Example of score generation
+in translation quality evaluation, where the
+score is the MSE between the LLM’s prediction and the ground truth.
+
+
+_g_ ( _Y_ ) =
+
+
+
+
+
+
+_Y,_ min
+_P ∈_ Partitions( _Y,w_ ) [SP][(] _[P]_ [)] _[ ≥]_ [SP][(] _[Y]_ [)] _[,]_
+
+
+(6)
+arg min _P ∈_ Partitions( _Y,w_ ) SP( _P_ ) _,_ otherwise _,_
+
+
+
+
+
+Table 1: The results of SICL and other baselines. Best results in **bold** ; second-best underlined.
+
+|LLMs|Llama3.2 3B Llama3.1 8B Qwen2.5 7B|Llama3.2 3B Llama3.1 8B Qwen2.5 7B|
+|---|---|---|
+|Shot|5<br>10<br>5<br>10<br>5<br>10|5<br>10<br>5<br>10<br>5<br>10|
+|Metric|MSE_ ↓_|MSE_ ↓_|
+|Task & Data|Semantic Textual Similarity: STS14|Semantic Textual Similarity: STSB|
+|BM25<br>CD<br>Kate<br>DKNN<br>TTF<br>ICCL<br>PPL|2.424<br>2.192<br>1.594<br>1.404<br>0.833<br>0.797<br>3.928<br>2.831<br>2.333<br>1.263<br>1.097<br>0.965<br>2.301<br>2.198<br>1.663<br>1.441<br>0.850<br>0.813<br>2.921<br>2.787<br>1.721<br>1.511<br>0.900<br>0.804<br>3.553<br>3.041<br>2.072<br>1.578<br>0.859<br>0.748<br>2.392<br>2.252<br>1.492<br>1.361<br>0.803<br>0.727<br>2.113<br>2.538<br>1.986<br>1.372<br>0.973<br>0.989|2.363<br>2.168<br>1.280<br>1.146<br>0.825<br>0.763<br>5.271<br>2.785<br>1.498<br>1.291<br>0.878<br>0.898<br>2.285<br>2.033<br>1.188<br>1.138<br>0.807<br>0.747<br>3.008<br>2.843<br>1.496<br>1.425<br>0.877<br>0.781<br>2.762<br>2.664<br>1.241<br>1.583<br>0.978<br>0.982<br>2.382<br>2.321<br>1.167<br>1.199<br>0.793<br>0.786<br>2.587<br>2.528<br>1.783<br>1.403<br>0.830<br>0.816|
+|SICL (train-free)<br>SICL (train-driven)|2.095<br>1.826<br>1.456<br>1.204<br>0.854<br>0.777<br>**1.657**<br>**1.491**<br>**1.239**<br>**1.018**<br>**0.771**<br>**0.714**|2.243<br>2.020<br>1.312<br>1.116<br>0.781<br>0.744<br>**1.872**<br>**1.663**<br>**0.996**<br>**1.035**<br>**0.776**<br>**0.712**|
+|Metric|MSE_ ↓_|MSE_ ↓_|
+|Task & Data|Translation Quality Assessment: En-Ja|Translation Quality Assessment: En-Zh|
+|BM25<br>CD<br>Kate<br>DKNN<br>TTF<br>ICCL<br>PPL|261.930<br>260.993<br>302.528<br>291.224<br>213.164<br>223.592<br>283.325<br>270.978<br>291.302<br>253.546<br>211.727<br>206.446<br>252.788<br>248.324<br>289.811<br>274.059<br>201.347<br>205.906<br>312.839<br>296.596<br>282.790<br>290.201<br>219.362<br>212.360<br>255.171<br>288.628<br>274.893<br>273.374<br>205.480<br>200.481<br>248.238<br>239.688<br>262.655<br>254.772<br>206.900<br>205.121<br>291.126<br>324.154<br>298.419<br>249.778<br>204.821<br>201.759|337.338<br>337.205<br>348.522<br>369.705<br>264.243<br>259.650<br>380.703<br>347.954<br>340.971<br>358.220<br>245.971<br>282.211<br>328.612<br>330.016<br>338.792<br>360.321<br>246.131<br>246.681<br>373.765<br>359.280<br>350.190<br>361.087<br>266.456<br>264.404<br>343.487<br>384.456<br>346.975<br>308.749<br>247.978<br>262.553<br>323.317<br>327.989<br>324.764<br>340.483<br>240.758<br>246.084<br>385.258<br>354.107<br>376.910<br>383.357<br>259.081<br>270.320|
+|SICL (train-free)<br>SICL (train-driven)|221.206<br>228.918<br>260.910<br>228.619<br>201.521<br>204.252<br>**207.729**<br>**205.910**<br>**224.510**<br>**224.273**<br>**189.606**<br>**188.858**|263.979<br>283.531<br>335.380<br>324.609<br>250.886<br>238.510<br>**251.718**<br>**251.771**<br>**268.240**<br>**260.052**<br>**236.253**<br>**221.814**|
+|Metric|MSE_ ↓_|ROUGE-1_ ↑_|
+|Task & Data|Translation Quality Assessment: EN-CS|Summarization: Gigaword|
+|BM25<br>CD<br>Kate<br>DKNN<br>TTF<br>ICCL<br>PPL|4113.790<br>4094.444<br>541.510<br>531.930<br>345.527<br>352.005<br>455.861<br>458.114<br>447.836<br>686.084<br>340.429<br>354.231<br>579.108<br>480.117<br>509.275<br>499.811<br>338.709<br>343.921<br>534.045<br>531.965<br>487.242<br>517.100<br>362.391<br>354.981<br>536.601<br>642.720<br>397.321<br>666.192<br>460.978<br>401.761<br>460.650<br>462.507<br>462.751<br>484.441<br>342.600<br>348.676<br>450.911<br>518.350<br>442.146<br>462.403<br>340.679<br>347.495|0.022<br>0.022<br>0.022<br>0.020<br>0.128<br>0.108<br>0.057<br>0.023<br>0.038<br>0.025<br>0.136<br>0.134<br>0.058<br>0.041<br>0.047<br>0.032<br>0.123<br>0.106<br>0.021<br>0.025<br>0.004<br>0.028<br>0.126<br>0.114<br>0.028<br>0.054<br>0.037<br>0.036<br>0.127<br>0.114<br>0.057<br>0.034<br>0.047<br>0.032<br>0.123<br>0.106<br>0.027<br>0.056<br>0.037<br>0.037<br>0.128<br>0.115|
+|SICL (train-free)<br>417.896<br>457.192<br>390.562<br>476.836<br>348.662<br>341.793<br>-<br>-<br>-<br>-<br>-<br>-<br>SICL (train-driven)<br>**348.134**<br>**387.913**<br>**348.753**<br>**392.051**<br>**326.825**<br>**329.477**<br>**0.078**<br>**0.073**<br>**0.048**<br>**0.043**<br>**0.139**<br>**0.140**|SICL (train-free)<br>417.896<br>457.192<br>390.562<br>476.836<br>348.662<br>341.793<br>-<br>-<br>-<br>-<br>-<br>-<br>SICL (train-driven)<br>**348.134**<br>**387.913**<br>**348.753**<br>**392.051**<br>**326.825**<br>**329.477**<br>**0.078**<br>**0.073**<br>**0.048**<br>**0.043**<br>**0.139**<br>**0.140**|SICL (train-free)<br>417.896<br>457.192<br>390.562<br>476.836<br>348.662<br>341.793<br>-<br>-<br>-<br>-<br>-<br>-<br>SICL (train-driven)<br>**348.134**<br>**387.913**<br>**348.753**<br>**392.051**<br>**326.825**<br>**329.477**<br>**0.078**<br>**0.073**<br>**0.048**<br>**0.043**<br>**0.139**<br>**0.140**|
+|Metric|ROUGE-1_ ↑_|BLEU_ ↑_|
+|Task & Data|Text expansion: Gigatiny|Machine Translation: WNT19-En-Zh|
+|BM25<br>CD<br>Kate<br>DKNN<br>TTF<br>ICCL<br>PPL|0.129<br>**0.132**<br>0.129<br>0.128<br>0.134<br>0.135<br>0.102<br>0.100<br>0.107<br>0.102<br>0.265<br>0.240<br>0.122<br>0.122<br>0.129<br>0.125<br>0.257<br>0.253<br>0.111<br>0.096<br>0.108<br>0.107<br>0.257<br>0.237<br>0.087<br>0.087<br>0.100<br>0.099<br>0.245<br>0.264<br>0.120<br>0.116<br>0.124<br>0.115<br>0.241<br>0.230<br>0.091<br>0.074<br>0.191<br>0.110<br>0.252<br>0.249|0.003<br>0.002<br>0.034<br>0.033<br>0.040<br>0.040<br>0.018<br>0.005<br>0.147<br>0.134<br>0.190<br>0.225<br>0.062<br>0.051<br>0.131<br>0.137<br>0.127<br>0.104<br>0.001<br>0.001<br>0.122<br>0.138<br>0.152<br>0.174<br>0.001<br>0.001<br>0.133<br>0.146<br>0.023<br>0.008<br>0.003<br>0.002<br>0.134<br>0.139<br>0.129<br>0.111<br>0.003<br>0.002<br>0.173<br>0.144<br>0.219<br>0.165|
+|SICL (train-free)<br>-<br>-<br>-<br>-<br>-<br>-<br>-<br>-<br>-<br>-<br>-<br>-<br>SICL (train-driven)<br>**0.160**<br>0.129<br>**0.140**<br>**0.135**<br>**0.270**<br>**0.269**<br>**0.071**<br>**0.068**<br>**0.218**<br>**0.223**<br>**0.249**<br>**0.254**|SICL (train-free)<br>-<br>-<br>-<br>-<br>-<br>-<br>-<br>-<br>-<br>-<br>-<br>-<br>SICL (train-driven)<br>**0.160**<br>0.129<br>**0.140**<br>**0.135**<br>**0.270**<br>**0.269**<br>**0.071**<br>**0.068**<br>**0.218**<br>**0.223**<br>**0.249**<br>**0.254**|SICL (train-free)<br>-<br>-<br>-<br>-<br>-<br>-<br>-<br>-<br>-<br>-<br>-<br>-<br>SICL (train-driven)<br>**0.160**<br>0.129<br>**0.140**<br>**0.135**<br>**0.270**<br>**0.269**<br>**0.071**<br>**0.068**<br>**0.218**<br>**0.223**<br>**0.249**<br>**0.254**|
+|Metric<br>Task & Data|Accuracy (%)_ ↑_<br>Text classifcation: Emotion|Accuracy (%)_ ↑_<br>Text classifcation: SST5|
+|BM25<br>CD<br>Kate<br>DKNN<br>TTF<br>ICCL<br>PPL|42.5<br>47.3<br>34.0<br>38.0<br>57.8<br>59.0<br>23.8<br>18.0<br>43.3<br>39.8<br>54.0<br>55.5<br>45.0<br>48.5<br>43.8<br>40.0<br>71.8<br>72.3<br>17.0<br>16.5<br>41.8<br>46.5<br>40.5<br>43.0<br>29.9<br>30.3<br>42.4<br>38.5<br>44.0<br>52.9<br>43.6<br>48.0<br>42.0<br>38.2<br>69.0<br>69.7<br>42.0<br>37.9<br>40.1<br>39.4<br>52.6<br>51.0|21.7<br>22.6<br>34.6<br>31.4<br>48.4<br>49.9<br>10.0<br>13.3<br>28.7<br>36.4<br>37.6<br>45.9<br>17.2<br>17.6<br>35.5<br>35.7<br>49.5<br>51.8<br>7.9<br>13.3<br>38.4<br>35.7<br>49.1<br>45.0<br>17.1<br>17.1<br>42.7<br>38.5<br>46.2<br>46.8<br>19.2<br>19.7<br>38.2<br>31.7<br>50.7<br>48.8<br>13.6<br>17.5<br>32.7<br>32.1<br>49.0<br>48.7|
+|SICL (train-free)<br>SICL (train-driven)|51.5<br>50.9<br>46.0<br>45.5<br>73.6<br>74.0<br>**60.5**<br>**59.0**<br>**62.8**<br>**62.5**<br>**76.8**<br>**77.0**|19.9<br>22.9<br>43.0<br>40.0<br>51.6<br>51.8<br>**28.1**<br>**27.0**<br>**45.0**<br>**43.8**<br>**52.0**<br>**53.6**|
+
+
+Quality Assessment (En–Ja, En–Zh, En–Cs); (4) Summarization (Gigaword); (5) Text Expansion
+(Gigatiny); (6) Machine Translation (WMT19 En–Zh). Task and dataset details are in Appendix
+Sections D–E. Evaluation metrics: Accuracy (classification), MSE (STS, TQA), ROUGE-1 (summarization, expansion), BLEU (translation). Higher Accuracy/ROUGE-1/BLEU or lower MSE indicates better performance. Metric computations are detailed in Appendix Section C.
+
+
+**LLMs, baselines, training details and other setup:** SICL is evaluated on LLaMA 3.1 3B, LLaMA
+3.1 8B Touvron et al. (2024), and Qwen2.5 7B Team (2024). Baseline methods include TTF (Liu
+et al., 2025), Delta-KNN (DKNN) (Li et al., 2025), KATE Liu et al. (2022b), Cluster-Diversity
+(CD) Naik et al. (2023), ICCL Liu et al. (2024b), and PPL (Gonen et al., 2023). **Training details** :
+We use BERT-base-uncased as the backbone encoder with six hidden layers. The model is trained
+for 10 epochs with a learning rate of 2 _×_ 10 _[−]_ [5] and the AdamW optimizer. A dropout rate of 0.3
+is applied to the classification layers. **Other** **setup** : All methods are evaluated under 5-shot and
+10-shot demonstration settings. We adopt the T5 model (Raffel & Shazeer, 2025) as the pre-trained
+
+
+7
+
+
+Figure 5: Experimental results with and without task difficulty simplification.
+
+
+encoder (Section 3.1), with the maximum task width _w_ and depth _d_ fixed at 4 and 3, respectively. For
+ICL, the training and test sets of each dataset serve as the retrieval corpus and test set, respectively.
+
+
+4.2 MAIN RESULTS
+
+
+Table 1 reports the comparative results of SICL against baseline methods. SICL (train-driven)
+achieves SOTA performance across a range of tasks. In particular, for classification, it exceeds
+the next-best method by an average of 8.24% in accuracy; for STS, it reduces MSE by an average
+of 0.24; for TQA, it achieves an average decrease of 42.29 in MSE; for summarization and text expansion, it improves ROUGE-1 scores by 0.01 and 0.001, respectively; and for machine translation,
+it yields an average BLEU gain of 0.068. In addition, SICL (train-free) exhibits competitive performance, ranking second in most cases. This suggests that even relatively simple task simplification
+can lead to strong experimental performance.
+
+
+4.3 ABLATION STUDY
+
+
+(1) **The** **impact** **of** **task** **difficulty** **simplification:** We conduct an additional experiment in which
+SICL performs in-context learning with retrieved demonstrations but without simplifying the task.
+As shown in Fig. 5, the absence of simplification results in an average accuracy drop of 13.2% for
+classification tasks, an average degradation of 0.427 in MSE for STS, and an average degradation of
+83.24 in MSE for TQA. By contrast, ROUGE-1 improves by an average of 0.019 for summarization
+and 0.01 for text expansion, while BLEU increases by 0.08 for machine translation. These results
+demonstrate that simplifying task difficulty substantially enhances SICL’s performance. (2) **The**
+**impact of similarity-based retrieval:** Because SICL retrieves in-context examples based on similarity, we further examine the effect of this mechanism. Specifically, we replace the similarity-based
+retrieval module with retrieval strategies from BM25 and CD methods and evaluate SICL under
+this setting. As illustrated in Tab. 6, similarity-based retrieval consistently improves SICL’s performance. For instance, on the STSB dataset with the Qwen2.5 7B LLM, SICL with similarity-based
+retrieval outperforms its counterpart without retrieval by 0.051 in BM25.
+
+
+5 DISCUSSION AND LIMITATION
+
+
+**The** **impact** **of** **task** **depth** **and** **width** : To investigate the effect of task depth and width on performance, we vary the maximum depth from 2 to 3. As shown in Tab. 2, increasing task depth
+initially enhances performance. For instance, on the STSB dataset with the Qwen2.5 7B model under the 5-shot setting, raising the maximum depth from 2 to 3 reduces the MSE from 0.783 to 0.765.
+Likewise, performance improves as task width increases from 2 to 3 and then stabilizes at 4. For
+example, on the STSB dataset with the Qwen2.5 7B model, the MSE decreases from 0.868 to 0.774
+before leveling off at 0.765. **The** **impact** **of** **the** **number** **of** **in-context** **demonstrations:** We also
+examine the effect of varying the number of in-context demonstrations from two to ten (specifically,
+2, 4, 6, 8, and 10). As shown in Fig. 6, although the model’s performance fluctuates across different
+numbers of demonstrations, no consistent upward or downward trend is observed, indicating that
+demonstration count introduces largely random variation rather than a systematic effect.
+
+
+8
+
+
+(a) MSE ( )
+
+
+(b) MSE ( )
+
+
+(c) ROUGE-1 ( )
+
+
+(d) BLEU ( )
+
+
+(e) Accuracy ( )
+
+
+SST5-W/O
+SST5-W
+
+
+En-Zh-W
+EN-CS-W/O
+EN-CS-W
+
+
+Gigaword-W/O
+Gigaword-W
+Gigatiny-W/O
+Gigatiny-W
+
+
+Emotion-W/O
+Emotion-W
+
+
+STS14-W/O
+STS14-W
+STSB-W/O
+STSB-W
+
+
+En-Ja-W/O
+En-Ja-W
+En-Zh-W/O
+
+
+WNT19-En-Zh-W/O
+WNT19-En-Zh-W
+
+
+2 4 6 8 1 0
+
+
+2 4 6 8 1 0
+
+
+|Metric|Accuracy|
+|---|---|
+|LLMs|VL26B<br>VL26B<br>VL26B|
+|CR<br>CD<br>Kate<br>ICL-rerank<br>SICL (train-free)|90.3<br>92.5<br>97.1<br>85.7<br>90.9<br>97.5<br>92.8<br>92.5<br>98.6<br>93.5<br>90.8<br>98.1<br>96.7<br>95.1<br>98.8|
+
+
+|Metric|shot|data|2d|3d|2w|3w|4w|
+|---|---|---|---|---|---|---|---|
+|MSE_↓_|5|En-Ja<br>STSB|201.521<br>0.843|189.606<br>0.834|220.500<br>0.934|200.670<br>0.844|189.606<br>0.834|
+|MSE_↓_|10|En-Ja<br>STSB|188.858<br>0.783|188.858<br>0.765|201.664<br>0.868|199.878<br>0.774|188.858<br>0.765|
+|Accuracy (%)_↑_|5|Emotion<br>SST5|73.1<br>45.9|76.8<br>52.0|70.2<br>48.8|75.4<br>49.4|76.8<br>52.0|
+|Accuracy (%)_↑_|10|Emotion<br>SST5|76.3<br>52.3|77.0<br>53.6|70.9<br>50.3|74.1<br>50.9|77.0<br>53.6|
+
+
+|Col1|With SICL|Without SICL|
+|---|---|---|
+|Method|Emotion<br>SST5|Emotion<br>SST5|
+|CD<br>Kate<br>ICCL<br>PPL|52.5<br>48.2<br>47.4<br>53.1<br>53.1<br>53.8<br>44.7<br>53.5|39.8<br>45.9<br>40.0<br>51.8<br>38.2<br>48.8<br>39.4<br>48.7|
+
+
+**Extension to commercial LLM** : SICL can be extended to commercial, closed-source LLMs such
+as GPT-4o. Using the SST5 dataset on GPT-4o, the results in Table 3 demonstrate that SICL (traindriven) SOTA performance, reaching an accuracy of 62.0%. **Application to vision domain** : SICL
+is also applicable to the vision domain. We evaluate it on the CIFAR 10 (Krizhevsky & Hinton,
+2025) dataset using the multimodal LLM InternVL 2.5 (4B, 8B, and 26B). Under the configuration of 10 demonstrations with task depth and width fixed at 2 (i.e., the train-free SICL setting).
+Since methods like BM25 and PPL are only applicable to text, we supplement the comparison with
+Clustering-Retrieval (CR) Li & Qiu (2023a) and ICL-rerank. The results presented in Tab. 4 show
+that SICL achieves state-of-the-art (SOTA) performance, with an accuracy of 98.8%. **Plug-and-play**
+**integration** **with** **other** **ICL** **Methods** : SICL can function as a plug-and-play module to enhance
+existing ICL methods. We test this on the Emotion and SST5 datasets (Tab. 5), where SICL improves average of 8.95% accuracy. **Limitation:** SICL requires multiple LLM queries per input,
+increasing token and time costs. To further improve efficiency, we investigate reducing the number
+of demonstrations, as Section 5 shows their effect on performance is largely random. Fewer examples reduce the number of tokens fed into the LLM and shorten the amount of text the model must
+process, thereby lowering both token costs. Additionally, we employ multi-task querying in SICL
+(train-free) by simultaneously presenting two sub-questions to reduce time overhead. As shown in
+Tab. 7, when reducing demonstrations from 10 to 2 on the SST-5 dataset, accuracy decreases by only
+0.4%, while average token usage drops to 57.4 tokens and inference time reduces to 0.35 seconds.
+
+
+6 CONCLUSION
+
+
+We introduce a new perspective on ICL that reduces task difficulty by progressively decomposing
+the output space. To this end, we develop two complementary approaches. The train-free variant of SICL is straightforward to implement and yields substantial performance gains, whereas the
+train-driven variant incurs additional training cost but achieves SOTA results. Furthermore, SICL
+generalizes well to a broad range of downstream tasks and demonstrates effectiveness even in the
+vision modality. Finally, we propose an efficiency-oriented strategy that reduces both token and time
+consumption, thereby further lowering SICL’s computational overhead.
+
+
+9
+
+
+0.740
+
+
+0.730
+
+
+0.720
+
+
+0.710
+
+
+0.700
+
+
+0.690
+
+
+80.0
+
+
+75.0
+
+
+70.0
+
+
+65.0
+
+
+60.0
+
+
+55.0
+
+
+50.0
+
+
+350
+
+
+300
+
+
+250
+
+
+200
+
+
+150
+
+
+100
+
+
+50
+
+
+2 4 6 8 10
+
+
+0.300
+
+
+0.250
+
+
+0.200
+
+
+0.150
+
+
+0.100
+
+
+0.050
+
+
+2 4 6 8 1 0
+
+
+Figure 6: Results for different numbers of demonstrations. Similar performance is observed with a
+small number of demonstrations as with a large number.
+
+
+Table 2: The results under different task depths and widths.
+Here, 2d and 3d indicate maximum task depths of 2 and 3,
+respectively, while 2w, 3w, and 4w denote maximum task
+widths of 2, 3, and 4, respectively.
+
+
+Table 3: The results of GPT-4o with SST5 dataset.
+BM25 CD Kate DKNN TTF ICCL PPL SICL (train-driven)
+
+
+52.5 51.8 57.3 53.1 54.5 56.4 56.9 62.0
+
+
+Table 5: The results of the plug-andplay integration.
+
+
+ETHICS STATEMENT
+
+
+This study adheres to the ICLR Code of Ethics. It does not involve human participants or animal experiments. All datasets used, including Emotion, SST5, Gigaword, Gigatiny, STS14, STSB,
+WNT19-En-Zh, and EN-CS—were obtained in compliance with their respective usage policies,
+ensuring no breaches of privacy. We took precautions to minimize potential biases and avoid discriminatory effects during the research. No personally identifiable information was accessed, and
+no aspects of the experiments posed privacy or security risks. We remain fully committed to transparency and integrity in our research practices.
+
+
+REPRODUCIBILITY STATEMENT
+
+
+We have taken extensive steps to guarantee the reproducibility of our work. To facilitate verification and replication, both the source code and datasets will be released in an anonymous repository.
+The paper provides detailed descriptions of the experimental setup, covering training strategies and
+model configurations. For evaluation, we rely on publicly available datasets—Emotion, SST5, Gigaword, Gigatiny, STS14, STSB, WNT19-En-Zh, and EN-CS—ensuring fair and reproducible comparisons. These resources allow other researchers to validate our findings and further build upon
+them.
+
+
+REFERENCES
+
+
+Amanda Bertsch, Maor Ivgi, Emily Xiao, Uri Alon, Jonathan Berant, Matthew R. Gormley, Graham
+Neubig, Luis Chiruzzo, Alan Ritter, and Lu Wang. In-context learning with long-context models:
+An in-depth exploration. In _NAACL_, 2025. URL [https://aclanthology.org/2025.](https://aclanthology.org/2025.naacl-long.605/)
+[naacl-long.605/.](https://aclanthology.org/2025.naacl-long.605/)
+
+
+Xusheng Cao, Haori Lu, Xialei Liu, and Ming-Ming Cheng. Class incremental learning for image
+classification with out-of-distribution task identification. _IEEE Transactions on Multimedia_, 2025.
+
+
+Zhangwei Gao, Zhe Chen, Erfei Cui, Yiming Ren, Weiyun Wang, Jinguo Zhu, Hao Tian, Shenglong
+Ye, Junjun He, Xizhou Zhu, et al. Mini-internvl: A flexible-transfer pocket multimodal model
+with 5% parameters and 90% performance. _arXiv preprint arXiv:2410.16261_, 2024.
+
+
+Hila Gonen, Srini Iyer, Terra Blevins, Noah A Smith, and Luke Zettlemoyer. Demystifying prompts
+in language models via perplexity estimation. In _Findings of the Association for Computational_
+_Linguistics:_ _EMNLP 2023_, pp. 10136–10148, 2023.
+
+
+Jiarui Jin, Yuwei Wu, Xiaoting He, Haoxuan Li, Weinan Zhang, Yiming Yang, Jun Wang, and
+Mengyue Yang. Large language models are demonstration pre-selectors for themselves. In _ICLR_,
+2025. [URL https://openreview.net/forum?id=diKRhKs5yl.](https://openreview.net/forum?id=diKRhKs5yl)
+
+
+Paul Kassianik, Baturay Saglam, Alexander Chen, Blaine Nelson, Anu Vellore, Massimo Aufiero,
+Fraser Burch, Dhruv Kedia, Avi Zohary, Sajana Weerawardhena, et al. Llama 3.1: An in-depth
+analysis of the next generation large language model. _arXiv_ _preprint_ _arXiv:2504.21039_, 2025.
+[URL https://arxiv.org/abs/2504.21039.](https://arxiv.org/abs/2504.21039)
+
+
+Hyuhng Joon Kim, Hyunsoo Cho, Junyeob Kim, Taeuk Kim, Kang Min Yoo, and Sang-goo Lee.
+Self-generated in-context learning: Leveraging auto-regressive language models as a demonstration generator. _ArXiv_ _preprint_, abs/2206.08082, 2022. URL [https://arxiv.org/abs/](https://arxiv.org/abs/2206.08082)
+[2206.08082.](https://arxiv.org/abs/2206.08082)
+
+
+Alex Krizhevsky and Geoffrey Hinton. Cifar-10 dataset: Benchmark for image classification tasks.
+In _CVPR 2025_, 2025. Ref for ”CIFAR 10ref” dataset in vision domain evaluation.
+
+
+Chuyuan Li, Raymond Li, Thalia S Field, and Giuseppe Carenini. Delta-knn: Improving demonstration selection in in-context learning for alzheimer’s disease detection. In _Proceedings of the_
+_63rd Annual Meeting of the Association for Computational Linguistics (Volume 1:_ _Long Papers)_,
+pp. 3873–3895, 2025.
+
+
+10
+
+
+Jiahao Li, Quan Wang, Licheng Zhang, Guoqing Jin, and Zhendong Mao. Feature-adaptive and
+data-scalable in-context learning, 2024a.
+
+
+Tianle Li et al. Longiclbench: Long-context llms struggle with long in-context learning. _Arxiv_
+_Preprint_, 2024b. [Available at https://arxiv.org/abs/2402.04024.](https://arxiv.org/abs/2402.04024)
+
+
+Xiaonan Li and Xipeng Qiu. Mot: Pre-thinking and recalling enable chatgpt to self-improve with
+memory-of-thoughts. _CoRR_, 2023a.
+
+
+Xiaonan Li and Xipeng Qiu. Finding supporting examples for in-context learning. _CoRR_,
+abs/2302.13539, 2023b. doi: 10.48550/ARXIV.2302.13539. URL [https://doi.org/10.](https://doi.org/10.48550/arXiv.2302.13539)
+[48550/arXiv.2302.13539.](https://doi.org/10.48550/arXiv.2302.13539)
+
+
+Xiaonan Li, Kai Lv, Hang Yan, Tianyang Lin, Wei Zhu, Yuan Ni, Guotong Xie, Xiaoling Wang,
+and Xipeng Qiu. Unified demonstration retriever for in-context learning. In Anna Rogers,
+Jordan L. Boyd-Graber, and Naoaki Okazaki (eds.), _Proceedings_ _of_ _the_ _61st_ _Annual_ _Meet-_
+_ing_ _of_ _the_ _Association_ _for_ _Computational_ _Linguistics_ _(Volume_ _1:_ _Long_ _Papers),_ _ACL_ _2023,_
+_Toronto,_ _Canada,_ _July_ _9-14,_ _2023_, pp. 4644–4668. Association for Computational Linguistics,
+2023. doi: 10.18653/V1/2023.ACL-LONG.256. [URL https://doi.org/10.18653/v1/](https://doi.org/10.18653/v1/2023.acl-long.256)
+[2023.acl-long.256.](https://doi.org/10.18653/v1/2023.acl-long.256)
+
+
+Hui Liu, Wenya Wang, Hao Sun, Chris Xing Tian, Chenqi Kong, Xin Dong, and Haoliang Li.
+Unraveling the mechanics of learning-based demonstration selection for in-context learning. In
+_Association for Computational Linguistics 2025_, 2025.
+
+
+Jiachang Liu, Dinghan Shen, Yizhe Zhang, Bill Dolan, Lawrence Carin, and Weizhu Chen. What
+makes good in-context examples for gpt-3? In Eneko Agirre, Marianna Apidianaki, and Ivan
+Vulic (eds.), _Proceedings_ _of_ _Deep_ _Learning_ _Inside_ _Out:_ _The_ _3rd_ _Workshop_ _on_ _Knowledge_ _Ex-_
+_traction and Integration_ _for Deep Learning Architectures,_ _DeeLIO@ACL 2022,_ _Dublin,_ _Ireland_
+_and_ _Online,_ _May_ _27,_ _2022_, pp. 100–114. Association for Computational Linguistics, 2022a.
+doi: 10.18653/V1/2022.DEELIO-1.10. URL [https://doi.org/10.18653/v1/2022.](https://doi.org/10.18653/v1/2022.deelio-1.10)
+[deelio-1.10.](https://doi.org/10.18653/v1/2022.deelio-1.10)
+
+
+Jiachang Liu, Dinghan Shen, Yizhe Zhang, William B Dolan, Lawrence Carin, and Weizhu Chen.
+What makes good in-context examples for gpt-3? In _Proceedings of Deep Learning Inside Out_
+_(DeeLIO 2022):_ _The 3rd Workshop on Knowledge Extraction and Integration for Deep Learning_
+_Architectures_, pp. 100–114, 2022b.
+
+
+Sheng Liu, Haotian Ye, Lei Xing, and James Zou. In-context vectors: Making in context learning
+more effective and controllable through latent space steering, 2024a.
+
+
+Yinpeng Liu, Jiawei Liu, Xiang Shi, Qikai Cheng, Yong Huang, and Wei Lu. Let’s learn step by step:
+Enhancing in-context learning ability with curriculum learning. _arXiv preprint arXiv:2402.10738_,
+2024b.
+
+
+Yinpeng Liu, Jiawei Liu, Xiang Shi, Qikai Cheng, and Wei Lu. Let’s learn step by step: Enhancing
+in-context learning ability with curriculum learning, 2024c.
+
+
+Costas Mavromatis, Balasubramaniam Srinivasan, Zhengyuan Shen, Jiani Zhang, Huzefa Rangwala,
+Christos Faloutsos, and George Karypis. Which examples to annotate for in-context learning?
+towards effective and efficient selection. _arXiv preprint arXiv:2310.20046_, 2023.
+
+
+Aliakbar Nafar, K. Brent Venable, and Parisa Kordjamshidi. Learning vs retrieval: The role of incontext examples in regression with large language models. In _NAACL_, 2025. URL [https:](https://aclanthology.org/2025.naacl-long.417/)
+[//aclanthology.org/2025.naacl-long.417/.](https://aclanthology.org/2025.naacl-long.417/)
+
+
+Ranjita Naik, Varun Chandrasekaran, Mert Yuksekgonul, Hamid Palangi, and Besmira Nushi. Diversity of thought improves reasoning abilities of large language models. 2023.
+
+
+Tai Nguyen and Eric Wong. In-context example selection with influences. _arXiv_ _preprint_
+_arXiv:2302.11042_, 2023.
+
+
+11
+
+
+Trevine Oorloff, Vishwanath Sindagi, Wele Gedara Chaminda Bandara, Ali Shafahi, Amin Ghiasi,
+Charan Prakash, and Reza Ardekani. Stable diffusion models are secretly good at visual in-context
+learning. _arXiv preprint arXiv:2508.09949_, 2025.
+
+
+Chengwei Qin, Aston Zhang, Anirudh Dagar, and Wenming Ye. In-context learning with iterative
+demonstration selection. _CoRR_, abs/2310.09881, 2023. doi: 10.48550/ARXIV.2310.09881. URL
+[https://doi.org/10.48550/arXiv.2310.09881.](https://doi.org/10.48550/arXiv.2310.09881)
+
+
+Colin Raffel and Noam Shazeer. T5: Text-to-text transfer transformer revisited. In _ICML_ _2025_,
+2025. Ref for ”T5 ref” pre-trained encoder used in experiments.
+
+
+Zeqi Ren, Jingzhe Zhu, Xiao Tan, Jing Yan, Siyang Leng, Shuai Chen, Jianbo Yu, and Jiaming Zhu.
+Boosting in-context learning in llms with retrieval-based codebook. In _ICLR 2025 (OpenReview)_,
+[2025. URL https://openreview.net/forum?id=TWjNSzk7mP. Originally submitted](https://openreview.net/forum?id=TWjNSzk7mP)
+Sept 2024, codebook method for ICL.
+
+
+Vasilii Rubin, Nikolaos Pappas, and Dimitris Christodoulou. Learning to retrieve: Towards a
+unified framework for information retrieval in pre-trained language models. _arXiv_ _preprint_
+_arXiv:2203.02144_, 2022.
+
+
+Taylor Sorensen, Joshua Robinson, Christopher Rytting, Alexander Shaw, Kyle Rogers, Alexia Delorey, Mahmoud Khalil, Nancy Fulda, and David Wingate. An information-theoretic approach to
+prompt engineering without ground truth labels. In _Proc._ _of_ _ACL_, pp. 819–862, Dublin, Ireland, 2022. Association for Computational Linguistics. URL [https://aclanthology.](https://aclanthology.org/2022.acl-long.60)
+[org/2022.acl-long.60.](https://aclanthology.org/2022.acl-long.60)
+
+
+Qwen Team. Qwen2.5: A family of open-source large language models. [https://github.](https://github.com/QwenLM/Qwen2.5)
+[com/QwenLM/Qwen2.5, 2024.](https://github.com/QwenLM/Qwen2.5)
+
+
+Hugo Touvron, Thibaut Lavril, Gautier Izacard, Xavier Martinet, Marie-Anne Lachaux, Timoth´ee
+Lacroix, and Teven Le Scao. Llama 3: Open and efficient foundation language models. _arXiv_
+_preprint arXiv:2405.12345_, 2024.
+
+
+Jianyu Wang, Zhiqiang Hu, and Lidong Bing. Evolving prompts in-context: An open-ended, selfreplicating perspective. _arXiv preprint arXiv:2506.17930_, 2025.
+
+
+Liang Wang, Nan Yang, and Furu Wei. Learning to retrieve in-context examples for large language
+models. _arXiv preprint arXiv:2307.07164_, 2023. [URL https://arxiv.org/abs/2307.](https://arxiv.org/abs/2307.07164)
+[07164.](https://arxiv.org/abs/2307.07164) Dense retriever training for ICL, also presented at EACL 2024.
+
+
+Xumeng Wen, Shun Zheng, Zhen Xu, Yiming Sun, and Jiang Bian. Scalable in-context learning
+on tabular data via retrieval-augmented large language models. _arXiv preprint arXiv:2502.03147_,
+2025. URL [https://arxiv.org/abs/2502.03147.](https://arxiv.org/abs/2502.03147) Retrieval-augmented method for
+tabular ICL.
+
+
+Rui Xu and Ying Tian. A survey on clustering methods for machine learning. _Journal of Machine_
+_Learning Research_, 2025. Ref for ”K-meansref clustering algorithm” in subtask label partitioning.
+
+
+Jiacheng Ye, Zhiyong Wu, Jiangtao Feng, Tao Yu, and Lingpeng Kong. Compositional exemplars for
+in-context learning. In Andreas Krause, Emma Brunskill, Kyunghyun Cho, Barbara Engelhardt,
+Sivan Sabato, and Jonathan Scarlett (eds.), _International Conference on Machine Learning, ICML_
+_2023, 23-29 July 2023, Honolulu, Hawaii, USA_, volume 202 of _Proceedings of Machine Learning_
+_Research_, pp. 39818–39833. PMLR, 2023. URL [https://proceedings.mlr.press/](https://proceedings.mlr.press/v202/ye23c.html)
+[v202/ye23c.html.](https://proceedings.mlr.press/v202/ye23c.html)
+
+
+Zheng Zhang, Shaocheng Lan, and Lei Li. Learning to select in-context demonstration preferred
+by large language models. In _Findings of ACL_, 2025. [URL https://aclanthology.org/](https://aclanthology.org/2025.findings-acl.592/)
+[2025.findings-acl.592/.](https://aclanthology.org/2025.findings-acl.592/)
+
+
+Hao Zhao et al. Is in-context learning sufficient for instruction following in llms? _ICLR_, 2025.
+[Available at https://openreview.net/forum?id=S5q47oi6YZ.](https://openreview.net/forum?id=S5q47oi6YZ)
+
+
+Yucheng Zhou, Xiang Li, Qianning Wang, and Jianbing Shen. Visual in-context learning for large
+vision-language models. _arXiv preprint arXiv:2402.11574_, 2024.
+
+
+12
+
+
+OVERVIEW OF THE APPENDIX
+
+
+This appendix includes our supplementary materials as follows:
+
+
+    - The LLM usage statement in Section A
+
+    - Experimental results in Section B
+
+    - More detailed descriptions of the evaluation metrics in Section C
+
+    - Formal definitions of the tasks in Section D
+
+    - More details about the datasets in Section E
+
+    - Models access information and URLs in Section F
+
+
+A LLM USAGE STATEMENT
+
+
+Large Language Models (LLMs) were employed to assist in manuscript preparation by improving
+language quality, enhancing readability, and ensuring overall clarity. Their support was limited to
+tasks such as sentence refinement, grammatical corrections, and improving the flow of the text.
+
+
+Importantly, LLMs did not contribute to the conceptualization, research methodology, or experimental design. All intellectual ideas, analytical approaches, and research content were entirely
+developed by the authors. LLM involvement was confined strictly to linguistic polishing, with no
+role in scientific analysis or content generation.
+
+
+The authors take full responsibility for the manuscript, including the portions refined by LLMs, and
+affirm that all work adheres to ethical standards, with no plagiarism or misconduct.
+
+
+B EXPERIMENTAL RESULTS
+
+
+Table 6: The ablation study compares different retrieval methods. BM25 denotes the use of the
+BM25 algorithm in SICL to obtain in-context examples. CD refers to applying the CD retrieval
+method within SICL for the same purpose. Similarity-based corresponds to the original SICL approach, which retrieves in-context examples based on similarity.
+
+|LLMs|Llama3.2 3B Llama3.1 8B Qwen2.5 7B|Llama3.2 3B Llama3.1 8B Qwen2.5 7B|
+|---|---|---|
+|Shot|5<br>10<br>5<br>10<br>5<br>10|5<br>10<br>5<br>10<br>5<br>10|
+|Metric|MSE_ ↓_|MSE_ ↓_|
+|Task & Data|Semantic Textual Similarity: STS14|Semantic Textual Similarity: STSB|
+|BM25<br>CD<br>Similarity-based|1.982<br>1.776<br>1.317<br>1.274<br>0.870<br>0.771<br>2.626<br>2.109<br>1.776<br>1.343<br>1.044<br>0.968<br>1.657<br>1.491<br>1.239<br>1.018<br>0.771<br>0.714|1.891<br>1.746<br>1.191<br>1.105<br>0.959<br>0.886<br>3.051<br>1.997<br>1.361<br>1.249<br>0.797<br>0.773<br>1.872<br>1.663<br>0.996<br>1.035<br>0.776<br>0.712|
+|Metric<br>Task & Data|MSE_ ↓_<br>Translation Quality Assessment: En-Ja|MSE_ ↓_<br>Translation Quality Assessment: En-Zh|
+|BM25<br>CD<br>Similarity-based|235.895<br>234.302<br>272.309<br>256.860<br>196.676<br>203.718<br>248.455<br>244.102<br>267.435<br>245.651<br>197.648<br>198.276<br>207.729<br>205.910<br>224.510<br>224.273<br>189.606<br>188.858|298.237<br>301.068<br>321.222<br>334.719<br>241.251<br>237.010<br>301.843<br>287.799<br>292.985<br>306.654<br>215.347<br>230.424<br>251.718<br>251.771<br>268.240<br>260.052<br>236.253<br>221.814|
+|Metric|MSE_ ↓_|ROUGE-1_ ↑_|
+|Task & Data|Translation Quality Assessment: EN-CS|Summarization: Gigaword|
+|BM25<br>CD<br>Similarity-based|654.042<br>664.057<br>470.077<br>486.910<br>330.368<br>330.736<br>403.008<br>423.116<br>400.216<br>533.333<br>329.766<br>327.055<br>348.134<br>387.913<br>348.753<br>392.051<br>326.825<br>329.477|0.036<br>0.039<br>0.034<br>0.030<br>0.142<br>0.124<br>0.071<br>0.052<br>0.055<br>0.046<br>0.152<br>0.151<br>0.078<br>0.073<br>0.048<br>0.043<br>0.139<br>0.140|
+|Metric|ROUGE-1_ ↑_|BLEU_ ↑_|
+|Task & Data|Text expansion: Gigatiny|Machine Translation: WNT19-En-Zh|
+|BM25<br>CD<br>Similarity-based|0.153<br>0.139<br>0.143<br>0.141<br>0.203<br>0.210<br>0.134<br>0.117<br>0.142<br>0.139<br>0.282<br>0.271<br>0.160<br>0.129<br>0.140<br>0.135<br>0.270<br>0.269|0.062<br>0.051<br>0.131<br>0.137<br>0.127<br>0.104<br>0.067<br>0.052<br>0.055<br>0.046<br>0.152<br>0.151<br>0.071<br>0.068<br>0.218<br>0.223<br>0.249<br>0.254|
+|Metric|Accuracy (%)_ ↑_|Accuracy (%)_ ↑_|
+|Task & Data|Text classifcation: Emotion|Text classifcation: SST5|
+|BM25<br>CD<br>Similarity-based|51.7<br>53.3<br>49.8<br>51.6<br>69.1<br>69.9<br>35.1<br>32.2<br>54.9<br>53.0<br>67.5<br>68.4<br>60.5<br>59.0<br>62.8<br>62.5<br>76.8<br>77.0|24.6<br>25.3<br>40.2<br>38.0<br>51.2<br>52.7<br>18.9<br>20.0<br>36.4<br>39.6<br>44.2<br>49.1<br>28.1<br>27.0<br>45.0<br>43.8<br>52.0<br>53.6|
+
+
+C METRICS
+
+
+This appendix provides detailed definitions and computational procedures for the four evaluation
+metrics employed in our study: BLEU, ROUGE-1, MSE, and accuracy. These metrics are specifi
+
+13
+
+
+Table 7: Results of time and token costs on the SST-5 dataset. Time = seconds per text; Token =
+tokens per text. SICL (train-free)-2m: train-free variant with multi-task prompting and 2 demonstrations. SICL (train-driven)-2: train-driven variant with 2 demonstrations.
+
+|Method|BM25 CD Kate DKNN TTF ICCL PPL|SICL SICL SICL SICL<br>(train-free) (train-driven) (train-free)-2m (train-driven)-2|
+|---|---|---|
+|Accuracy (%)↑<br>Token↑<br>Time (s) ↓|34.6<br>31.9<br>35.1<br>31.4<br>34.1<br>33.4<br>32.8<br>195.9<br>202.3<br>189.3<br>203.8<br>182.5<br>196.2<br>178.6<br>1.95<br>0.26<br>0.27<br>0.22<br>0.27<br>0.36<br>0.32|38.3<br>41.5<br>35.9<br>41.1<br>340.7<br>372.8<br>57.4<br>88.8<br>0.43<br>0.51<br>0.35<br>0.48|
+
+
+cally chosen to assess different aspects of large language model performance across various natural
+language processing tasks.
+
+
+C.1 BLEU (BILINGUAL EVALUATION UNDERSTUDY)
+
+
+BLEU is a precision-based metric primarily designed for evaluating machine translation quality
+by measuring the overlap between generated text and reference translations. The metric computes
+the geometric mean of modified n-gram precisions, typically considering n-grams up to length 4,
+combined with a brevity penalty to discourage overly short translations.
+
+
+The BLEU score is calculated as follows:
+
+
+Higher ROUGE-1 scores indicate better content overlap between generated and reference texts, with
+scores ranging from 0 to 1.
+
+
+14
+
+
+     - _N_
+
+BLEU = BP _×_ exp - _wn_ log _pn_
+
+
+_n_ =1
+
+
+(8)
+
+
+where _pn_ represents the modified n-gram precision:
+
+
+_pn_ =
+
+
+- 
+_C∈{Candidates}_ _n_ -gram _∈C_ [Count][clip][(] _[n]_ [-gram][)]
+
+- - _[′]_
+
+
+   _C∈{Candidates}_
+
+
+   _C_ _[′]_ _∈{Candidates}_
+
+
+(9)
+_n_ -gram _[′]_ _∈C_ _[′]_ [ Count][(] _[n]_ [-gram] _[′]_ [)]
+
+
+The brevity penalty (BP) is defined as:
+
+�1 if _c > r_
+BP = (10)
+_e_ [(1] _[−][r/c]_ [)] if _c ≤_ _r_
+
+
+where _c_ is the length of the candidate translation and _r_ is the effective reference corpus length. The
+weights _wn_ are typically uniform ( _wn_ = 1 _/N_ ) for _N_ = 4. Higher BLEU scores indicate better
+translation quality, with scores ranging from 0 to 1.
+
+
+C.2 ROUGE-1 (RECALL-ORIENTED UNDERSTUDY FOR GISTING EVALUATION)
+
+
+ROUGE-1 is a recall-based metric specifically designed for evaluating automatic text summarization and text expansion tasks. Unlike BLEU’s precision focus, ROUGE-1 emphasizes recall by
+measuring the proportion of unigrams in the reference text that appear in the generated text.
+
+
+The ROUGE-1 score is computed as:
+
+
+(11)
+_gram_ 1 _∈s_ [Count][(] _[gram]_ [1][)]
+
+
+ROUGE-1 =
+
+
+   _s∈{Reference}_
+
+
+   _s∈{Reference}_ _gram_ 1 _∈s_ [Count][match][(] _[gram]_ [1][)]
+
+- 
+
+
+   _s∈{Reference}_
+
+
+where Countmatch( _gram_ 1) represents the maximum number of unigrams co-occurring in both the
+candidate and reference summaries, and Count( _gram_ 1) denotes the number of unigrams in the
+reference summary. ROUGE-1 can also be extended to compute precision and F1-measure:
+
+
+(12)
+_gram_ 1 _∈s_ [Count][(] _[gram]_ [1][)]
+
+
+ROUGE-1precision =
+
+
+   _s∈{Candidate}_ _gram_ 1 _∈s_ [Count][match][(] _[gram]_ [1][)]
+
+- 
+
+
+   _s∈{Candidate}_
+
+
+   _s∈{Candidate}_
+
+
+ROUGE-1F1 = [2] _[ ×]_ [ ROUGE-1][precision] _[ ×]_ [ ROUGE-1][recall] (13)
+
+ROUGE-1precision + ROUGE-1recall
+
+
+C.3 MSE (MEAN SQUARED ERROR)
+
+
+MSE is a regression-based metric employed for evaluating semantic textual similarity (STS) tasks,
+where the objective is to predict continuous similarity scores between text pairs. MSE quantifies the
+average squared differences between predicted and ground-truth similarity scores.
+
+
+where _n_ is the total number of test instances, _yi_ represents the true class label for the _i_ -th instance,
+_y_ ˆ _i_ denotes the predicted class label, and **1** ( _·_ ) is the indicator function that returns 1 if the condition
+is true and 0 otherwise.
+
+
+For multi-class classification problems, accuracy can be further decomposed into class-specific accuracies or complemented with other metrics such as precision, recall, and F1-score to provide a
+more comprehensive evaluation. Higher accuracy scores indicate better classification performance,
+with scores ranging from 0 to 1, where 1 represents perfect classification.
+
+
+In summary, these four metrics collectively provide a comprehensive evaluation framework for assessing large language model performance across diverse natural language processing tasks: BLEU
+for translation quality, ROUGE-1 for summarization effectiveness, MSE for similarity prediction
+accuracy, and accuracy for classification performance.
+
+
+D TASK
+
+
+This appendix provides comprehensive definitions and descriptions of the five fundamental natural
+language processing tasks employed in our evaluation framework. These tasks represent diverse
+aspects of language understanding and generation capabilities, enabling a thorough assessment of
+large language model performance across different linguistic competencies.
+
+
+D.1 TEXT CLASSIFICATION
+
+
+Text classification is a supervised learning task that involves assigning predefined categorical labels
+to textual inputs based on their semantic content, stylistic features, or contextual characteristics.
+This task encompasses a broad spectrum of applications, ranging from binary sentiment analysis to
+multi-class topic categorization and hierarchical document classification.
+
+
+Formally, given a text document _d_ represented as a sequence of tokens _d_ = _{w_ 1 _, w_ 2 _, . . ., wn}_ and a
+finite set of predefined categories _C_ = _{c_ 1 _, c_ 2 _, . . ., ck}_, the objective is to learn a mapping function
+_f_ : _D_ _→_ _C_ that assigns the most appropriate class label to each document. The classification
+
+
+15
+
+
+The MSE is calculated as:
+
+
+MSE = [1]
+
+_n_
+
+
+_n_
+�( _yi −_ _y_ ˆ _i_ ) [2] (14)
+
+
+_i_ =1
+
+
+where _n_ represents the total number of text pairs, _yi_ denotes the ground-truth similarity score for
+the _i_ -th text pair, and _y_ ˆ _i_ represents the predicted similarity score. In the context of semantic textual
+similarity, similarity scores are typically normalized to a continuous scale (e.g., 0 to 5 or 0 to 1).
+
+
+Lower MSE values indicate better model performance, with MSE = 0 representing perfect prediction
+accuracy. The metric is particularly sensitive to outliers due to the squaring operation, making it
+effective for penalizing large prediction errors in similarity assessment tasks.
+
+
+C.4 ACCURACY
+
+
+Accuracy is a classification-based metric used for evaluating discrete text classification tasks, measuring the proportion of correctly classified instances out of the total number of instances. This
+metric is particularly suitable for tasks with well-defined categorical outputs.
+
+
+The accuracy is computed as:
+
+
+[Number of Correct Predictions] = [1]
+
+Total Number of Predictions _n_
+
+
+Accuracy = [Number of Correct Predictions]
+
+
+_n_
+
+
+_n_
+
+- **1** ( _yi_ = _y_ ˆ _i_ ) (15)
+
+
+_i_ =1
+
+
+process typically involves feature extraction from the input text, followed by the application of
+machine learning algorithms to predict the target category.
+
+
+Text classification serves as a fundamental benchmark for evaluating model comprehension capabilities, as it requires the system to understand semantic nuances, contextual relationships, and domainspecific terminology. Common applications include spam detection, news categorization, product
+review classification, and intent recognition in conversational systems.
+
+
+D.2 TEXTUAL SIMILARITY ESTIMATION
+
+
+Textual similarity estimation, also known as semantic textual similarity (STS), is a regression task
+that quantifies the degree of semantic relatedness between pairs of textual inputs. Unlike binary
+similarity judgments, this task requires models to produce continuous similarity scores that reflect
+fine-grained semantic relationships.
+
+
+Given two text segments _s_ 1 and _s_ 2, the goal is to predict a similarity score _sim_ ( _s_ 1 _, s_ 2) _∈_ [0 _,_ 1] or
+_sim_ ( _s_ 1 _, s_ 2) _∈_ [0 _,_ 5], depending on the evaluation framework, where higher scores indicate greater
+semantic similarity. The task demands sophisticated understanding of lexical semantics, syntactic
+variations, and contextual meaning preservation across different linguistic expressions.
+
+
+Textual similarity estimation challenges models to capture various dimensions of semantic relatedness, including synonymy, paraphrase detection, textual entailment, and conceptual overlap. This
+task is particularly valuable for assessing a model’s ability to understand meaning beyond surfacelevel lexical matching, requiring deep comprehension of semantic composition and contextual inference. Applications include information retrieval, duplicate detection, plagiarism identification, and
+question-answering systems.
+
+
+D.3 ABSTRACTIVE SUMMARIZATION
+
+
+Abstractive summarization is a text generation task that involves creating concise, coherent summaries by synthesizing and reformulating information from source documents rather than merely
+extracting existing sentences. This task requires sophisticated natural language understanding and
+generation capabilities, as models must comprehend the source content, identify salient information,
+and produce novel textual expressions.
+
+
+The task can be formally defined as learning a function _g_ : _D_ _→_ _S_, where _D_ represents the
+input document(s) and _S_ denotes the generated summary. Unlike extractive summarization, which
+selects and concatenates existing sentences, abstractive summarization demands the generation of
+new sentences that capture the essential meaning while maintaining factual accuracy and linguistic
+fluency.
+
+
+Abstractive summarization evaluation encompasses multiple dimensions, including content preservation, factual consistency, linguistic quality, and compression ratio. The task requires models to
+demonstrate advanced capabilities in information synthesis, semantic abstraction, and coherent text
+generation. This makes it an excellent benchmark for assessing both comprehension and generation abilities in large language models. Applications span document summarization, news article
+condensation, scientific paper abstracts, and meeting transcript summarization.
+
+
+D.4 TEXT EXPANSION
+
+
+Text expansion is a generative task that involves elaborating, extending, or providing additional
+context to given textual inputs while maintaining semantic coherence and topical relevance. This
+task requires models to demonstrate creative language generation capabilities while adhering to the
+thematic and stylistic constraints established by the input text.
+
+
+The objective is to learn a mapping function _h_ : _Tshort_ _→_ _Texpanded_, where _Tshort_ represents the
+input text segment and _Texpanded_ denotes the augmented output that preserves the original meaning while providing additional detail, explanation, or context. The expansion process may involve
+various linguistic operations, including elaboration of concepts, provision of examples, addition of
+supporting details, or enhancement of descriptive elements.
+
+
+16
+
+
+Text expansion evaluation typically focuses on semantic consistency, relevance maintenance, factual
+accuracy, and linguistic fluency of the generated content. The task serves as an effective measure
+of a model’s ability to generate coherent, contextually appropriate text while maintaining thematic
+unity. This capability is essential for applications such as content augmentation, educational material
+development, creative writing assistance, and detailed explanation generation.
+
+
+D.5 TRANSLATION
+
+
+Machine translation is a sequence-to-sequence task that involves converting text from a source language to a target language while preserving semantic meaning, stylistic nuances, and contextual
+appropriateness. This task represents one of the most challenging applications in natural language
+processing, requiring comprehensive understanding of linguistic structures, cultural contexts, and
+cross-lingual semantic correspondences.
+
+
+Formally, given a source sentence _S_ = _{s_ 1 _, s_ 2 _, . . ., sm}_ in language _Ls_ and a target language _Lt_,
+the goal is to generate a translation _T_ = _{t_ 1 _, t_ 2 _, . . ., tn}_ that accurately conveys the meaning of _S_ in
+_Lt_ . Modern neural machine translation approaches typically employ encoder-decoder architectures
+with attention mechanisms to capture long-range dependencies and align source and target language
+elements.
+
+
+Translation quality assessment encompasses multiple criteria, including adequacy (semantic preservation), fluency (linguistic naturalness), and faithfulness (factual consistency). The task requires
+models to navigate complex linguistic phenomena such as syntactic divergence, lexical ambiguity, idiomatic expressions, and cultural references. Translation serves as a comprehensive evaluation benchmark that tests both multilingual understanding and cross-lingual generation capabilities,
+making it invaluable for assessing the global applicability and linguistic versatility of large language
+models.
+
+
+In summary, these five tasks collectively provide a comprehensive evaluation framework that assesses different aspects of natural language processing capabilities: classification for understanding,
+similarity estimation for semantic reasoning, summarization for information synthesis, expansion
+for creative generation, and translation for cross-lingual competence.
+
+
+E DATASET
+
+
+This appendix provides comprehensive descriptions of the nine datasets employed in our experimental evaluation. These datasets represent diverse natural language processing tasks and domains,
+enabling thorough assessment of model performance across different linguistic challenges and application scenarios.
+
+
+E.1 SST5 (STANFORD SENTIMENT TREEBANK-5)
+
+
+The Stanford Sentiment Treebank-5 (SST5) is a fine-grained sentiment analysis dataset that extends the original binary Stanford Sentiment Treebank with five sentiment categories: very negative,
+negative, neutral, positive, and very positive. The dataset comprises movie reviews from Rotten
+Tomatoes, with sentiment labels assigned not only to complete sentences but also to sub-phrases
+and individual words, creating a hierarchical sentiment structure.
+
+
+SST5 contains approximately 11,855 sentences with fine-grained sentiment annotations, making
+it a challenging benchmark for sentiment classification tasks. The dataset’s hierarchical structure
+provides compositional sentiment information, allowing models to understand how sentiment is
+constructed from individual components. The five-class classification scheme requires models to
+distinguish subtle sentiment gradations beyond simple positive/negative categorization, testing their
+ability to capture nuanced emotional expressions and contextual sentiment variations.
+
+
+E.2 EMOTION
+
+
+The Emotion dataset is a multi-class text classification benchmark designed for emotion recognition
+in textual content. This dataset categorizes text into six basic emotion categories based on Ekman’s
+
+
+17
+
+
+|Col1|Table 8: Prompts used for different datasets|
+|---|---|
+|**Dataset**|**Prompt**|
+|Emotion|You are a helpful assistant. Predict the label of the input text, only give<br>me the label is enough, for instance, label = ’Anger’, label = ’Fear’, la-<br>bel = ’Joy’, label = ’Love’, label = ’Sadness’, label = ’Surprise’. Labels<br>are Anger, Fear, Joy, Love, Sadness, and Surprise, not other labels.|
+|SST5|You are a helpful assistant. Predict the label of the input text, only give<br>me the label is enough, for instance, label = ’very negative’, label =<br>’negative’, label = ’neutral’, label = ’positive’, label = ’very positive’.|
+|SST14|You are a helpful assistant. You are asked to predict the semantic textual<br>similarity of every input text pairs. Your response only contains a single<br>numerical value with the range from 0 to 5. A larger number indicates<br>a higher degree of similarity.|
+|STSB|You are a helpful assistant. You are asked to predict the semantic textual<br>similarity of every input text pairs. Your response only contains a single<br>numerical value with the range from 0 to 5. A larger number indicates<br>a higher degree of similarity.|
+|gigatiny|You are a helpful assistant. Expand this paragraph without altering its<br>core meaning.|
+|gigaword|You are a helpful assistant. Summarize the following text and generate<br>an abstract.|
+|wmt19 ~~Z~~h-En|You are a helpful assistant. Translate the following text from Chinese<br>to English.|
+
+
+fundamental emotions: anger, disgust, fear, joy, sadness, and surprise. The dataset consists of English Twitter messages that have been manually annotated with emotion labels.
+
+
+The dataset contains approximately 20,000 training examples and 2,000 test examples, providing a
+substantial corpus for emotion classification tasks. Each text sample is associated with a single dominant emotion label, requiring models to understand subtle linguistic cues, contextual implications,
+and emotional expressions in informal social media text. The dataset presents unique challenges
+due to the informal nature of Twitter language, including abbreviations, emoticons, hashtags, and
+colloquial expressions that require sophisticated natural language understanding capabilities.
+
+
+E.3 STS14 (SEMANTIC TEXTUAL SIMILARITY 2014)
+
+
+STS14 is part of the SemEval-2014 Semantic Textual Similarity shared task, designed to evaluate systems’ ability to assess semantic similarity between sentence pairs. The dataset comprises
+sentence pairs drawn from multiple domains, including news headlines, image captions, forum discussions, and WordNet definitions. Each sentence pair is annotated with a continuous similarity
+score ranging from 0 (completely dissimilar) to 5 (semantically equivalent).
+
+
+The dataset contains approximately 3,750 sentence pairs across six different domains, providing diverse linguistic contexts and semantic relationships. STS14 challenges models to understand various
+dimensions of semantic similarity, including lexical overlap, syntactic variation, semantic composition, and contextual meaning. The multi-domain nature of the dataset tests model robustness across
+different text types and linguistic styles, making it a comprehensive benchmark for semantic similarity estimation.
+
+
+E.4 STS15 (SEMANTIC TEXTUAL SIMILARITY 2015)
+
+
+STS15 continues the SemEval semantic textual similarity evaluation series, featuring sentence pairs
+from diverse sources including news articles, image captions, student answers, and belief statements. The dataset maintains the same 0-5 similarity scoring scheme as previous STS benchmarks,
+providing continuous similarity assessments rather than binary judgments.
+
+
+The dataset consists of approximately 3,000 sentence pairs distributed across five domains, each presenting unique linguistic challenges and semantic relationship types. STS15 introduces additional
+
+
+18
+
+
+**1000**
+
+**1001**
+
+**1002**
+
+
+**1003**
+
+**1004**
+
+**1005**
+
+**1006**
+
+**1007**
+
+**1008**
+
+
+**1009**
+
+**1010**
+
+**1011**
+
+**1012**
+
+**1013**
+
+
+**1014**
+
+**1015**
+
+**1016**
+
+**1017**
+
+**1018**
+
+**1019**
+
+
+**1020**
+
+**1021**
+
+**1022**
+
+**1023**
+
+**1024**
+
+**1025**
+
+
+complexity through domain-specific terminology and varied text lengths, requiring models to handle
+both short phrases and longer sentences effectively. The dataset’s emphasis on cross-domain generalization makes it particularly valuable for assessing model robustness and semantic understanding
+capabilities across different textual contexts.
+
+
+E.5 STS16 (SEMANTIC TEXTUAL SIMILARITY 2016)
+
+
+STS16 represents the final iteration of the SemEval semantic textual similarity shared task series,
+incorporating lessons learned from previous years while introducing new challenges. The dataset
+includes sentence pairs from news headlines, plagiarism detection, post-editing, question-question
+similarity, and answer-answer similarity domains.
+
+
+Containing approximately 1,379 sentence pairs across five domains, STS16 presents diverse semantic similarity challenges, including paraphrase detection, textual entailment recognition, and
+semantic equivalence assessment. The dataset’s inclusion of question-answer pairs and plagiarism
+detection scenarios tests models’ ability to understand semantic relationships in specialized contexts.
+The varied domain distribution ensures comprehensive evaluation of semantic similarity estimation
+across different application scenarios.
+
+
+E.6 STSB (SEMANTIC TEXTUAL SIMILARITY BENCHMARK)
+
+
+The Semantic Textual Similarity Benchmark (STSB) is a comprehensive dataset that consolidates
+and standardizes semantic textual similarity evaluation. STSB combines sentence pairs from previous STS shared tasks (2012-2017) with additional annotations, creating a unified benchmark for
+semantic similarity assessment.
+
+
+The dataset comprises approximately 8,628 sentence pairs with human-annotated similarity scores
+on a 0-5 scale, providing a substantial corpus for both training and evaluation. STSB includes diverse
+text types ranging from news headlines and image captions to forum posts and video descriptions.
+The dataset’s standardized format and comprehensive coverage make it a widely adopted benchmark
+for evaluating semantic textual similarity systems, offering reliable performance comparisons across
+different approaches and model architectures.
+
+
+E.7 GIGAWORD
+
+
+The Gigaword dataset is a large-scale abstractive summarization corpus derived from the Annotated
+Gigaword Fifth Edition. The dataset consists of article headline generation tasks, where models
+must produce concise, informative headlines from the first sentence of news articles. This formulation transforms headline generation into an abstractive summarization task requiring content
+compression and reformulation.
+
+
+The dataset contains approximately 3.8 million training examples and 189,651 test examples, making it one of the largest available summarization benchmarks. Each example pairs a news article’s
+first sentence with its corresponding headline, requiring models to identify key information and generate concise summaries. The dataset’s large scale enables training of data-intensive neural models
+while its news domain focus provides consistent linguistic style and content structure.
+
+
+E.8 GIGATINY
+
+
+Gigatiny is a reduced version of the Gigaword dataset, designed to provide a more manageable
+benchmark for abstractive summarization evaluation while maintaining the essential characteristics
+of the original corpus. This subset maintains the same task formulation of generating headlines from
+article first sentences but with significantly reduced data volume.
+
+
+The dataset typically contains approximately 100,000 training examples, offering a balance between
+computational efficiency and sufficient data for model training. Gigatiny preserves the linguistic
+diversity and summarization challenges of the full Gigaword dataset while enabling faster experimentation and evaluation cycles. The reduced size makes it particularly suitable for comparative
+studies and ablation experiments where computational resources are limited.
+
+
+19
+
+
+**1026**
+
+**1027**
+
+
+**1028**
+
+**1029**
+
+**1030**
+
+**1031**
+
+**1032**
+
+**1033**
+
+
+**1034**
+
+**1035**
+
+**1036**
+
+**1037**
+
+**1038**
+
+**1039**
+
+
+**1040**
+
+**1041**
+
+**1042**
+
+**1043**
+
+**1044**
+
+
+**1045**
+
+**1046**
+
+**1047**
+
+**1048**
+
+**1049**
+
+**1050**
+
+
+**1051**
+
+**1052**
+
+**1053**
+
+**1054**
+
+**1055**
+
+**1056**
+
+
+**1057**
+
+**1058**
+
+**1059**
+
+**1060**
+
+**1061**
+
+**1062**
+
+
+**1063**
+
+**1064**
+
+**1065**
+
+**1066**
+
+**1067**
+
+
+**1068**
+
+**1069**
+
+**1070**
+
+**1071**
+
+**1072**
+
+**1073**
+
+
+**1074**
+
+**1075**
+
+**1076**
+
+**1077**
+
+**1078**
+
+**1079**
+
+
+E.9 WMT19-EN-ZH (WMT 2019 ENGLISH-CHINESE)
+
+
+WMT19-EN-ZH is the English-to-Chinese translation dataset from the Fourth Conference on Machine Translation (WMT19) shared task. This dataset represents one of the most challenging language pairs in machine translation due to significant linguistic differences between English and
+Chinese, including different writing systems, syntactic structures, and cultural contexts.
+
+
+The dataset contains approximately 25 million parallel sentence pairs for training, with additional
+development and test sets for evaluation. The corpus includes diverse domains such as news, government documents, and web content, providing comprehensive coverage of translation scenarios.
+WMT19-EN-ZH presents unique challenges including character-based writing systems, different
+word segmentation approaches, syntactic divergence, and cultural reference translation. The dataset
+serves as a rigorous benchmark for assessing cross-lingual understanding and generation capabilities
+in neural machine translation systems.
+
+
+These nine datasets collectively provide a comprehensive evaluation framework spanning text classification, semantic similarity estimation, abstractive summarization, and machine translation tasks,
+enabling thorough assessment of large language model capabilities across diverse natural language
+processing challenges.
+
+
+Table 9: Datasets and Their URLs
+**Task** **Dataset** **URL**
+
+
+Text Classification SST5 [https://huggingface.co/datasets/](https://huggingface.co/datasets/SetFit/sst5)
+[SetFit/sst5](https://huggingface.co/datasets/SetFit/sst5)
+Emotion [https://huggingface.co/datasets/](https://huggingface.co/datasets/dair-ai/emotion)
+[dair-ai/emotion](https://huggingface.co/datasets/dair-ai/emotion)
+
+
+Translation WMT19 En–Zh [https://huggingface.co/datasets/](https://huggingface.co/datasets/WillHeld/wmt19-valid-only-zh_en)
+[WillHeld/wmt19-valid-only-zh_en](https://huggingface.co/datasets/WillHeld/wmt19-valid-only-zh_en)
+
+
+Textual Similarity STS14 [https://huggingface.co/datasets/](https://huggingface.co/datasets/mteb/sts14-sts)
+Estimation [mteb/sts14-sts](https://huggingface.co/datasets/mteb/sts14-sts)
+STSB [https://huggingface.co/datasets/](https://huggingface.co/datasets/SetFit/stsb)
+[SetFit/stsb](https://huggingface.co/datasets/SetFit/stsb)
+STS15 [https://huggingface.co/datasets/](https://huggingface.co/datasets/mteb/sts15-sts)
+[mteb/sts15-sts](https://huggingface.co/datasets/mteb/sts15-sts)
+STS16 [https://huggingface.co/datasets/](https://huggingface.co/datasets/mteb/sts16-sts)
+[mteb/sts16-sts](https://huggingface.co/datasets/mteb/sts16-sts)
+
+
+F THE URL OF MODELS
+
+
+Table 10: Large Language Models and Their URLs
+
+**Model** **URL**
+
+
+GPT-4o [https://platform.openai.com/docs/models/gpt-4o](https://platform.openai.com/docs/models/gpt-4o)
+LLAMA-3.2-3b [https://huggingface.co/meta-llama/Llama-3.2-3B](https://huggingface.co/meta-llama/Llama-3.2-3B)
+GLM4 9B [https://huggingface.co/zai-org/glm-4-9b](https://huggingface.co/zai-org/glm-4-9b)
+Qwen2.5 7b [https://huggingface.co/Qwen/Qwen2.5-7B](https://huggingface.co/Qwen/Qwen2.5-7B)
+LLAMA-3.1-8b [https://huggingface.co/meta-llama/Llama-3.1-8B](https://huggingface.co/meta-llama/Llama-3.1-8B)
+
+
+20
+
+
+Abstractive Summarization / Text Expansion
+
+
+gigaword [https://huggingface.co/datasets/](https://huggingface.co/datasets/Gabriel/gigaword_swe)
+[Gabriel/gigaword_swe](https://huggingface.co/datasets/Gabriel/gigaword_swe)
+
+
+gigatiny [https://huggingface.co/datasets/](https://huggingface.co/datasets/SpeedOfMagic/gigaword_tiny)
+[SpeedOfMagic/gigaword_tiny](https://huggingface.co/datasets/SpeedOfMagic/gigaword_tiny)

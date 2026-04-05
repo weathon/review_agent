@@ -1,0 +1,1542 @@
+# RETHINKING LLM PARAMETRIC KNOWLEDGE AS CONFIDENCE FOR EFFECTIVE AND EFFICIENT RAG
+
+
+**Anonymous authors**
+Paper under double-blind review
+
+
+ABSTRACT
+
+
+Large Language Models (LLMs) tend to generate high-confidence hallucinations
+when faced with questions beyond their parametric knowledge scope. RetrievalAugmented Generation (RAG) alleviates this by leveraging external knowledge,
+but challenges remain as to whether the retrieved context is useful (effective
+RAG) and whether to retrieve (efficient RAG) when answering specific-domain
+questions. This challenge underscores the importance of knowledge boundary
+awareness, which the current methods—relying on discrete labels or limited signals—fail to address adequately, as they overlook the rich information in LLMs’
+continuous internal hidden states. To this end, we propose a novel knowledge
+probing approach for effective and efficient RAG. First, we construct a confidence
+detection model based on LLMs’ internal hidden states to quantify how retrieved
+contexts enhance the model’s confidence. Then, we build a preference dataset
+with the confidence detection model to fine-tune a reranker, enabling it to prioritize contexts preferred by the downstream LLM. Additionally, we introduce
+CBDR, which adaptively triggers retrieval based on the LLM’s initial confidence
+in the original question, reducing knowledge conflicts and improving efficiency.
+Experimental results show that significant improvements have been achieved in
+the accuracy of both context screening and end-to-end Retrieval-Augmented Generation (RAG) performance. Wherein, when dynamic retrieval is activated, the
+accuracy of the RAG system increases by 5.6 percentage points (pp); meanwhile,
+the retrieval cost is significantly reduced by 7.1 pp, thereby substantially enhancing the system’s practical utility while maintaining competitive accuracy.
+
+
+1 INTRODUCTION
+
+
+The core efficiency bottlenecks of Retrieval-Augmented Generation (RAG) consistently revolve
+around two key issues: how to precisely select effective retrieval contexts and when to trigger retrieval. If retrieval contexts are irrelevant to the question, they will introduce knowledge conflicts and
+increase costs; if retrieval is forced when unnecessary, it will waste resources and reduce efficiency
+(Yoran et al. (2023); Fang et al. (2024)). Essentially, these problems stem from the ”perceptual blind
+spot” of Large Language Models (LLMs) regarding their own knowledge boundaries—when faced
+with questions beyond the scope of their parametric knowledge, LLMs often generate hallucinations
+due to overconfidence (Ji et al. (2023); Martino et al. (2023)), failing both to judge ”whether external knowledge is needed” and to identify ”which external knowledge is truly useful,” ultimately
+undermining the accuracy and practicality of RAG systems.
+
+
+Existing studies have attempted to address this dilemma through ”knowledge boundary awareness”
+but still exhibit limitations: Prompt-guided confidence estimation (Yin et al. (2023)) relies on manually designed templates, resulting in insufficient generalizability; multi-sample confidence aggregation (Brown et al. (2024)) is costly and ignores dynamic contextual influences; hidden-state-based
+methods (Su et al. (2024b); Ni et al. (2025)), while capturing continuous confidence signals, only
+stop at discrete labels outputs of ”answerable/unanswerable” and fail to directly link confidence with
+”retrieval context selection.”
+
+
+To this end, this paper specifically proposes a model self-confidence-centric RAG framework to
+enhance RAG system efficiency: 1) Perceiving knowledge boundaries through confidence selfassessment: Inspired by Ni et al. (2025). A confidence detection model is trained to enable LLMs
+
+
+1
+
+
+to dynamically evaluate their confidence in answering original questions—low confidence triggers
+retrieval, while high confidence allows direct answer generation to reduce unnecessary operations;
+2) Optimizing retrieval context reranking using confidence changes: Based on the magnitude of confidence improvement in LLMs when exposed to different retrieval contexts, a preference dataset is
+constructed to fine-tune the reranker, enabling it to prioritize contexts that ”significantly enhance answer confidence,” thus achieving direct translation from the model’s intrinsic preferences to retrieval
+context reranking.
+
+
+This logic can be intuitively understood through Figure 1: As illustrated in Figure 1a, this figure contrasts two architectures: one with a context similarity-based reranker and the other with a reranker
+based on the downstream LLM’s confidence. Figure 1b further compares the differences between
+Contexts C1 and C2 in assisting the same LLM in completing question-answering tasks.
+
+
+Based on the above ideas, the core technologies of this paper include: 1) Reranker fine-tuned with
+confidence signals: First, the confidence detection model parses the internal hidden states of LLMs
+to quantify the enhancement effect of different retrieval contexts on answer confidence (magnitude of confidence improvement); this quantitative signal is then used as supervision to fine-tune
+the reranker, enabling it to directly output retrieval contexts rankings consistent with the LLM’s
+confidence preferences and prioritize contexts that significantly enhances answer reliability. 2)
+**C** onfidence- **B** ased **D** ynamic **R** etrieval (CBDR): Combined with the LLM’s initial confidence in the
+original question, it adaptively decides whether to trigger retrieval, balancing accuracy and retrieval
+costs.
+
+
+Experiments validate the effectiveness of this framework: a 5.6% improvement in end-to-end RAG
+accuracy and a 7.1% reduction in retrieval costs. The core contribution of this paper lies in the
+first-time deep integration of LLMs’ confidence self-assessment with retrieval context reranking,
+providing a new approach for enhancing RAG system efficiency.
+
+
+2 RELATED WORK
+
+
+2.1 KNOWLEDGE BOUNDARY IN RAG SYSTEM
+
+
+RAG’s knowledge boundary is defined as the combined knowledge space of LLMs‘ internal parametric knowledge and external retrieved knowledge. Early RAG evaluations overemphasized retriever performance, neglecting potential conflicts between external and internal knowledge—which
+lead to low-confidence errors (Yoran et al. (2023); Fang et al. (2024); Cuconasu et al. (2024)).
+
+
+Subsequent research shifted to coordinating these dual knowledge sources to delineate RAG’s effective boundary. Works like (Marina et al. (2025); Yao et al. (2024)) analyze LLMs‘ internal states
+to detect uncertainty and dynamically trigger retrieval. DRAGIN (Su et al. (2024a)) dynamically
+retrieves information by assessing the importance and uncertainty of generated tokens during inference. CTRLA (Liu et al. (2024)) quantifies confidence by computing the projection of the current
+query onto the LLM’s confidence representation, thereby dynamically triggering retrieval. AdaptiveRAG (Jeong et al. (2024)) employs a lightweight model to estimate question complexity and select
+an appropriate retrieval strategy. Like CBDR, Probing-RAG (Baek et al. (2025)) trains a small
+model to inspect the internal states of the target LLM but does not exploit the resulting state discrepancies to inform retrieval preferences. Parenting (Xu et al. (2025)) automatically defines knowledge boundaries by quantifying the relative importance of two capabilities—adherence and robustness—through parameter analysis. DTA framework (Sun et al. (2025)) formally proposes RAG’s
+knowledge boundary, categorizing queries into four quadrants based on LLM’s parametric boundary _KBp_ and retriever’s retrieved boundary _KBr_ to define the system’s holistic effective boundary.
+
+
+2.2 PREFERENCE ALIGNMENT IN RAG SYSTEM
+
+
+To improve LLMs‘ utilization of external knowledge, aligning retriever-LLM preferences in RAG
+is critical. Existing works use diverse preference signals: RE-PLUG (Shi et al. (2023)): LLM’s
+correct answer probability to identify critical contexts; RRR (Cong et al. (2024)): Overall quality
+of LLM-generated responses; DPA-RAG (Dong et al. (2025a)): Bidirectional alignment to mitigate
+component preference conflicts; RADIO (Jia et al. (2024)): Rationale correctness as indicators,
+
+
+2
+
+
+|Query:|who played karen in married to the mob?|
+|---|---|
+|**Reference:**|Nancy Travis|
+|**C1:**|**Married to the Mob** is a 1988 American comedy film directed by Jonathan<br>Demme, starring Michelle Pfeiffer and Matthew Modine.|
+|**C2:**|..., who gets violently dispatched by**Mob** boss Tony "The Tiger" Russo (Dean<br>Stockwell) when he is discovered in a compromising situation with the latter's<br>mistress**Karen (Nancy Travis).**  ...|
+|**A1:**|Based on the provided context, I can answer the question. According to the context,<br>**Michelle Pfeiffer played a role in the film "Married to the Mob"**, but ...|
+|**A2:**|Based on the provided context,**Nancy Travis played the role of Karen**, Tony<br>"The Tiger" Russo's mistress.|
+
+
+Figure 1: Figure 1a contrasts two RAG reranking strategies: a conventional context-similarity-based
+reranker and one leveraging the LLM’s intrinsic preference (reranking contexts by changes in the
+LLM’s confidence). Figure 1b provides a concrete example: it compares the effectiveness of contexts reranked by Reranker-1 (similarity-based) and Reranker-2 (LLM-aligned).
+
+
+fine-tuning rerankers to reconcile retriever-LLM discrepancies; SEAKR (Yao et al. (2024)): Multiround query sampling, using LLMs’ last-layer hidden states (at _< /s >_ ) to compute Gram matrices
+(quantifying uncertainty) for reranker optimization.
+
+
+This paper’s core innovation is a novel preference metric: _confidence shift_, defined as LLMs‘ internal
+hidden state changes before/after exposure to external knowledge. Used to fine-tune rerankers, it
+effectively filters post-retrieval contexts. Compared to SEAKR (Yao et al. (2024)) (which also uses
+hidden states but requires multi-round sampling), our confidence shift detection relies on a single
+forward pass—significantly reducing computational/temporal overhead, a key advantage for lowlatency real-time scenarios.
+
+
+3 METHOD
+
+
+This section outlines our core methodologies: leveraging LLM internal hidden states to assess response confidence, constructing a preference dataset from these states to fine-tune a Reranker, and
+proposing CBDR to optimize retrieval in RAG system. Relevant prompts are in Appendix B.
+
+
+3.1 INTERNAL STATE DETECTION
+
+
+Recent studies show that LLMs’ internal hidden states contain richer information (stronger latent
+reasoning, self-awareness) than their final output token (Skean et al. (2025); Zhang et al. (2025);
+Azaria & Mitchell (2023)) and that LLMs can perceive their knowledge boundary before response
+generation (Ni et al. (2025)), laying the foundation for confidence estimation via these internal
+hidden states.
+
+
+3.1.1 CONFIDENCE ESTIMATION VIA INTERNAL HIDDEN STATES
+
+
+Specifically, the workflow for self-confidence detection based on the internal hidden states of LLM
+is as follows: For a given target LLM M and a question Q, the model generates internal hidden state
+representations during inference, denoted as _HM,Q_ . Compared to the final token output, this state
+encapsulates more comprehensive information. Our confidence estimation process is defined as:
+
+
+_CM,Q_ = _E_ ( _HM,Q_ ) (1)
+
+
+As illustrated in left side of Figure 2, where E denotes the confidence detection model, and _CM,Q_ is
+a binary classification label: _CM,Q_ = 1 indicates that LLM M is confident in correctly answering
+question q, whereas _CM,Q_ = 0 signifies that the LLM M perceives itself as incapable of responding
+accurately. Drawing on (Ni et al. (2025)) and related prior work, we select the internal hidden state
+vector at Mid Layer (Layer/2) of LLM M before generating the first answer token (Pre-Token) as
+_HM,Q_ .
+
+
+3
+
+
+**Question**
+
+
+**Retrieved Contexts**
+
+
+(a) Comparison of Reranking Strategies
+
+
+(b) Performance Evaluation
+
+
+Figure 2: The complete process of aligning the Reranker with the target LLM involves constructing a preference dataset, NQ ~~R~~ erank, by comparing the variations in the LLM’s confidence when
+answering a Question under different contexts. This dataset is then used to fine-tune the Reranker
+model, aligning it with the target LLM’s intrinsic preferences. The lower part of the figure depicts
+the workflow of the CBDR.
+
+
+The training data for model E is obtained by guiding LLM M to process questions from the NQ
+dataset (Kwiatkowski et al. (2019)). We collect the internal hidden state _HM,Q_ during inference and
+determine the correctness of the LLM M’s response based on the ground-truth answer to question Q,
+thereby constructing binary training samples ( _HM,Q_, _LabelQ_ ). Here, _LabelQ_ = 1 indicates that the
+model answers question Q correctly, while _LabelQ_ = 0 denotes an incorrect response. The training
+methodology for model E follows the approach described in (Ni et al. (2025)). We performed data
+cleaning on the training dataset NQ Kwiatkowski et al. (2019) and analyzed the impact of different
+prompt designs on model reasoning.
+
+
+3.2 PREFERENCE DATASET
+
+
+3.2.1 PREFERENCE DEFINITION
+
+
+This study focuses on the post-retrieval processing stage within RAG system, with the aim of exploring how to rerank the retrieved contexts to maximize RAG system‘s utility in enhancing the answer
+reasoning capabilities of downstream LLM.
+
+
+Conventional Reranker are typically trained on datasets constructed based on semantic similarity
+between a question and contexts, and compute relevance scores by capturing complex semantic
+interactions through interactive encoding. While such general-purpose methods ensure model transferability and compatibility with diverse LLMs, they often fail to adequately incorporate the preferences of specific downstream LLM, thereby limiting the full potential of RAG system.
+
+
+_e_ _[z]_ [1]
+_Conf_ ( _HM,Q_ ) = _P_ ( _Label_ = 1 _| E_ ( _HM,Q_ )) = _Softmax_ ( _Z_ 1) = (2)
+
+_e_ _[z]_ [0] + _e_ _[z]_ [1]
+
+
+As illustrated in Figure 2, this paper defines the following preference criterion: a context _C_ is considered to exhibit a positive preference for the target LLM _M_ in answering question _Q_ if and only
+if it provides effective informational enhancement, satisfying the condition _Conf_ ( _HM,Q_ + _C_ ) _>_
+_Conf_ ( _HM,Q_ ). Conversely, if it leads to a decrease in LLM‘s confidence _Conf_ ( _HM,Q_ + _C_ ) _<_
+_Conf_ ( _HM,Q_ ), the context _C_ is regarded as having a negative preference. As shown in Equation 2,
+the output of the Conf(-) function is defined as the probability of the _Label_ = 1 assigned by model
+
+
+4
+
+
+E. A softmax layer is appended to the final layer of model E to produce this probabilistic output.
+Relevant examples can be found in Appendix D.
+
+
+3.2.2 DATASET CONSTRUCTION
+
+
+We preprocess the NQ dataset (Kwiatkowski et al. (2019)) to obtain a series of ( _Query, Contexts_ )
+tuple samples. For each sample, we record the internal hidden state at Mid ~~L~~ ayer when the target
+LLM M generates its first token under the following two scenarios: (1) The state _HM,Q_ when only
+the query _Q_ is provided; (2) The state _HM,Q_ + _Ci_ when both the query _Q_ and a context _Ci_ are
+provided (Where i iterates over the Contexts).
+
+
+This yields a sequence of internal hidden states:
+
+
+[ _HM,Q,_ _HM,Q_ + _C_ 1 _,_ _HM,Q_ + _C_ 2 _,_ _...,_ _HM,Q_ + _Ci_ ] (3)
+
+
+This sequence of states is then fed into the confidence detection model E to obtain the probability
+value for the _Label_ = 1 output by the softmax layer, resulting in a probability sequence:
+
+
+[ _Conf_ ( _HM,Q_ ) _,_ _Conf_ ( _HM,Q_ + _C_ 1) _,_ _...,_ _Conf_ ( _HM,Q_ + _Ci_ )] (4)
+
+
+The enhancement effect of each context _Ci_ on LLM M’s response to question _Q_ is determined by
+comparing the change in model confidence after incorporating the context _Ci_ :
+
+
+_Inc_ ( _Q, Ci_ ) = _Conf_ ( _HM,Q_ + _Ci_ ) _−_ _Conf_ ( _HM,Q_ ) (5)
+
+
+If _Inc_ ( _Q, Ci_ ) _>_ 0, the sample is labeled as a positive preference sample. If _Inc_ ( _Q, Ci_ ) _<_ 0, it is
+labeled as a negative preference sample.
+
+
+For each ( _Query, Contexts_ ) sample, all context _Ci_ are ranked according to _Inc_ ( _Q, Ci_ ). The TopK(K = 5) contexts with the highest increase are selected as positive examples, and the Top-K with the
+largest decrease are taken as negative examples. As illustrated in right side of Figure 2, this process
+constructs the final preference dataset, denoted as NQ ~~R~~ erank. Relevant details can be found in
+Appendix E.
+
+
+3.3 RERANKER FINE-TUNING
+
+
+To enhance the ability of the Reranker to identify the utility of contexts for the target LLM, we
+performed supervised fine-tuning on a base Reranker using the constructed preference dataset
+NQ ~~R~~ erank. During fine-tuning, the InfoNCE (Noise Contrastive Estimation) loss function was
+employed as the optimization objective:
+
+
+_f_ ( _Q, C_ ) = _exp_ ( _ϕ_ ( _Q, C_ ) _/τ_ ) (6)
+
+_f_ ( _Q, C_ [+] )
+_L_ = _−log_ (7)
+
+_f_ ( _Q, C_ [+] ) + [�] _i_ _[N]_ =1 _[f]_ [(] _[Q, C]_ _i_ _[−]_ [)]
+
+
+Where: _f_ ( _Q, C_ ) denotes the relevance score between question _Q_ and context _C_ computed by the
+Reranker; _C_ [+] represents the positive context; _C_ _[−]_ denotes the negative context; _τ_ is the temperature
+parameter. This loss function forces the model to increase the score margin between the positive
+context _C_ [+] and a set of negative contexts _{C_ _[−]_ _}_, thereby learning a ranking criterion consistent
+with the target LLM’s preferences.
+
+
+3.4 CONFIDENCE-BASED DYNAMIC RETRIEVAL
+
+
+While the fine-tuned Reranker has aligned well with the target LLM’s preferences and effectively
+prioritizes beneficial contexts, it still has two key limitations: namely, the post-retrieval Top-k results may contain misleading context that conflicts with the LLM’s internal parameters; and for
+questions for which the LLM is overconfident, the retrieval process can be skipped altogether to
+avoid redundant computational overhead.
+
+
+To mitigate these issues and enhance the efficiency and reliability of the RAG system, we propose
+CBDR. The workflow of this strategy is illustrated at the bottom of Figure 2: (1) If the target LLM
+exhibits high confidence in responding to the current query _Q_ that _Conf_ ( _HM,Q_ ) _>_ _β_, where _β_
+is a predefined threshold, the retrieval and reranking steps are skipped, and the LLM generates the
+
+
+5
+
+
+Table 1: Performance Comparison of Different Rerankers on the NQ ~~R~~ erank Test Set.
+
+
+Reranker Params Top-1 Top-3 Top-5
+
+
+Precision Recall MRR Precision Recall MRR Precision Recall MRR
+
+
+gte passage-ranking ~~m~~ ultilingual-base 304M 85.52 29.47 85.52 71.45 62.66 90.37 60.98 82.53 90.99
+
+
+Qwen3-Reranker 4B 81.74 27.62 81.74 70.92 62.33 88.15 61.71 83.53 88.93
+
+
+Qwen3-Reranker 8B 87.25 30.47 87.25 74.35 65.15 91.65 64.22 86.42 92.19
+
+
+bge-reranker-v2-m3 568M 86.01 29.45 86.01 72.62 63.61 90.47 62.40 84.01 91.07
+
+
+bge-reranker-v2-m3-ft (Ours) 568M **91.20** **32.01** **91.20** **76.98** **67.14** **94.40** **65.64** **87.97** **94.72**
+
+
+answer directly. (2) If the confidence score falls below the threshold _Conf_ ( _HM,Q_ ) _<_ _β_, the full
+retrieval process is initiated: the Retriever fetches a set of contexts, which are reranked by the finetuned Reranker, and the Top-K contexts are fed into the LLM along with the query for reasoning.
+
+
+To mitigate these issues and enhance the efficiency and reliability of the RAG system, we propose
+CBDR. The workflow of this strategy is illustrated at the bottom of Figure 2: (1) If the target LLM
+exhibits high confidence in responding to the current query _Q_ that _Conf_ ( _HM,Q_ ) _>_ _β_, where _β_ is
+a hyper-parameter, the retrieval and reranking steps are skipped, and the LLM generates the answer
+directly. (2) If the confidence score falls below the threshold _Conf_ ( _HM,Q_ ) _<_ _β_, the full retrieval
+process is initiated—with the fine-tuned Reranker involved.
+
+
+This strategy aims to preserve answer quality while cutting redundant computation for highconfidence queries and avoiding interference from low-quality retrieval results for known questions.
+Its effectiveness is fully validated in Section 4.2.
+
+
+4 EXPERIMENTS
+
+
+4.1 EXPERIMENTAL SETUP
+
+
+**Datasets.** We use two open-domain QA benchmarks: Natural Questions (NQ) Kwiatkowski et al.
+(2019) and HotpotQA Yang et al. (2018). NQ contains real Google queries with retrieved contexts
+and human-annotated answers; HotpotQA requires multi-hop reasoning. All training data in this
+work are from NQ, partitioned as follows: (1) _NQ_ ~~_C_~~ _onfidence_ for confidence detection model _E_ :
+1k/300/500 positive and negative samples for train/dev/test, labeled by the correctness of target LLM
+_M_ ’s answers; (2) _NQ_ ~~_R_~~ _erank_ for preference alignment: built on NQ-Retrieval [1], excluding samples
+without valid positive/negative contexts, yielding 7,622 training and 1,216 evaluation samples.
+
+
+**LLMs.** We evaluate with Llama3-8B-Instruct Dubey et al. (2024) and Qwen2.5-7B-Instruct Team
+(2024). Llama3-8B-Instruct serves as the base LLM for reasoning (temperature = 1.0, greedy decoding).
+
+
+**Baselines.** We compare five rerankers, all based on or compared against _bge-reranker-v2-m3_ :
+(1) _gte_ ~~_p_~~ _assage-ranking_ ~~_m_~~ _ultilingual-base_ (Alibaba DAMO’s strong multilingual reranker); (2)
+_Qwen3-Reranker-4B_ and (3) _Qwen3-Reranker-8B_ (Qwen-based rerankers of 4B/8B parameters); (4)
+_bge-reranker-v2-m3_ (lightweight, efficient, multilingual); (5) _bge-reranker-v2-m3-ft_ _(Ours)_ : finetuned on NQ ~~R~~ erank to validate confidence-based preference alignment.
+
+
+**Dynamic Retrieval Methods.** We compare with two strong dynamic retrieval baselines: (1) **DRA-**
+**GIN** **(Su** **et** **al.** **(2024a))** : triggers retrieval based on token-level uncertainty, importance, and relevance; (2) **CtrlA (Liu et al. (2024))** : adaptively balances internal/external knowledge via LLM state
+characterization and confidence monitoring using directional feature representations.
+
+
+**Evaluation** **Metrics.** We report standard reranking metrics: _Precision_ @ _K_, _Recall_ @ _K_, and
+_MRR_ @ _K_ . To ensure fairness, all rerankers receive the same retrieved context pool (retriever is
+excluded). Training details are in Appendix C.
+
+
+1https://modelscope.cn/datasets/sentence-transformers/NQ-retrieval
+
+
+6
+
+
+Table 2: Accuracy of RAG Systems with Different Reranker and LLM Combinations. Reranker bgereranker-v2-m3-ft is the reranker aligned with the confidence preferences of Llama3-8B-Instruct;
+bold indicates the optimal result, and underlined indicates the sub-optimal result.
+
+
+LLM Reranker Params HotpotQA NQ
+
+
+Top-1 Top-3 Top-1 Top-3
+
+
+gte ~~p~~ assage-ranking ~~m~~ ultilingual-base 304M 47.20 51.80 63.80 67.60
+
+
+Qwen3-Reranker 4B 42.30 50.10 50.70 64.00
+
+
+Qwen2.5-7B-Instruct Qwen3-Reranker 8B 47.50 51.90 56.30 68.80
+
+
+bge-reranker-v2-m3 568M 47.20 **53.30** **64.20** 69.70
+
+
+bge-reranker-v2-m3-ft (Ours) 568M **48.70** **53.30** 63.40 **69.90**
+
+
+gte ~~p~~ assage-ranking ~~m~~ ultilingual-base 304M **48.80** 50.20 60.10 60.70
+
+
+Qwen3-Reranker 4B 40.70 48.00 49.70 62.30
+
+
+Llama3-8B-Instruct Qwen3-Reranker 8B 48.40 50.10 55.20 **68.80**
+
+
+bge-reranker-v2-m3 568M 46.60 51.40 61.50 62.20
+
+
+bge-reranker-v2-m3-ft (Ours) 568M 48.00 (+1 _._ 4) **52.20** (+0 _._ 8) **62.60** (+1 _._ 1) 66.90 (+4 _._ 7)
+
+
+Table 3: Comparison of Different Dynamic Retrieval Methods. Bold indicates the optimal result,
+and underlined indicates the sub-optimal result. All methods use Llama3-8B-Instruct as the LLM.
+In the threshold, _h_ represents the hallucination score, _T_ represents the sensitivity of confidence
+monitoring, and _β_ indicates the confidence score.
+
+
+Method Threshold Reranker RR (%) _↓_ Offline Cost Online Cost NQ
+
+
+Top-1 Top-3
+
+
+4.2 MAIN RESULTS
+
+
+**Reranker** **Performance.** We evaluate whether the fine-tuned reranker (bge-reranker-v2-m3-ft)
+better selects LLM-suitable contexts for Llama3-8B-Instruct on the NQ ~~R~~ erank test set. Each
+reranker ranks query-context pairs and returns Top- _K_ documents ( _K_ _∈{_ 1 _,_ 3 _,_ 5 _}_ ), evaluated via
+_Precision_ @ _K_, _Recall_ @ _K_, and _MRR_ @ _K_ . As shown in Table 1: (1) bge-reranker-v2-m3-ft
+(fine-tuned on NQ ~~R~~ erank) achieves the best performance across all _K_ ; (2) Gains are most pronounced at Top-1: it outperforms Qwen3-Reranker-8B by +3.95 pp in _Precision_ @1/ _MRR_ @1
+and +1.54 pp in _Recall_ @1, and improves over the original bge-reranker-v2-m3 by +5.19 pp
+( _Precision_ @1/ _MRR_ @1) and +2.56 pp ( _Recall_ @1).
+
+
+**RAG** **System** **Accuracy.** To further verify whether a fine-tuned Reranker enhances RetrievalAugmented Generation (RAG) system performance, we constructed multiple ”Reranker + LLM”
+combined systems for comparative experiments. The setup was as follows: each Reranker reranked
+the query and its corresponding context documents, selected Top-K (K _∈{_ 1, 3 _}_ ) documents, and
+fed them to the downstream LLM for answer generation. System performance was ultimately evaluated by the precision of generated answers. As shown in Table 2, the experimental results yield
+two main findings: (1) When the downstream LLM was Llama3-8B-Instruct, the RAG system using bge-reranker-v2-m3-ft consistently achieved higher accuracy than that with the original bgereranker-v2-m3, with a maximum improvement of +4.7 pp; this combination also reached optimal
+
+
+7
+
+
+_h_ = 0 _._ 80
+
+
+2.8
+
+
+DRAGIN
+(Su et al. (2024a))
+
+
+_h_ = 0 _._ 80 2.8 41.1 41.8
+
+_h_ = 0 _._ 70 4.4 41.2 41.9
+
+Bge-reranker-v2-m3 No High
+
+_h_ = 0 _._ 60 9.6 43.8 41.9
+_h_ = 0 _._ 50 19.4 44.9 45.7
+
+
+Bge-reranker-v2-m3
+
+
+No High
+
+
+CtrlA _T_ = 0 _._ 00 53.4 51.4 52.4
+Bge-reranker-v2-m3 Low High
+(Liu et al. (2024)) _T_ = 0 _._ 10 70.1 56.2 56.2
+
+
+_β_ = 0 _._ 90
+CBDR (ours) _β_ = 0 _._ 95
+
+
+Bge-reranker-v2-m3-ft (ours)
+
+
+_β_ = 0 _._ 90 74.9 60.6 64.2
+
+_β_ = 0 _._ 95 83.3 62.4 66.1
+
+Bge-reranker-v2-m3-ft (ours) Mid Low
+
+_β_ = 0 _._ 98 92.9 61.7 **67.8**
+_β_ = 1 _._ 00 100 **62.6** 66.9
+
+
+74.9
+
+
+Mid Low
+
+
+|Question|Context|Context|Confidence|Answer|
+|---|---|---|---|---|
+|love yourself<br>by justin bieber<br>is about who|No||0.7163|... So, to answer your question,**"Love**<br>**Yourself" is not specifically about loving**<br>|
+|love yourself<br>by justin bieber<br>is about who|<br>Relevance|Justin Bieber's song 'Love Yourself,' ... widespread<br>media reports and fan speculation suggest it<br>references his past relationship**with singer Rihanna**.|0.9354**↑**|~~**f**~~<br>Based on the provided context, ... it<br>references Justin Bieber\'s past relationship<br>with singer Rihanna. Answer is:**Rihanna**.|
+|love yourself<br>by justin bieber<br>is about who|Irrelevance|In the video game Grand Theft Auto: San Andreas,<br>the 'Hot Coffee' mod is ...|0.6026 ↓|I cannot provide a response that is not based<br>on the provided context ...|
+
+
+Figure 3: Example of an LLM’s confidence changes when presented with different contexts.
+
+
+or near-optimal performance on both NQ and HotpotQA datasets. (2) When the downstream LLM
+was Qwen2.5-7B-Instruct, RAG systems with the fine-tuned or original Reranker showed comparable accuracy, with no significant differences—this partially demonstrates the robustness of bgereranker-v2-m3-ft.
+
+
+**Dynamic** **Retrieval** **Efficiency.** We evaluated the impact of the dynamic retrieval system CBDRbased on downstream LLM confidence-on RAG performance, alongside related approaches DRAGIN and CtrlA. Using the NQ ~~R~~ erank test set, we measured system accuracy and the fraction of
+retrieval overhead saved by skipping retrieval under various configurations. Whenever the dynamic
+module triggered retrieval, documents were directly passed to the reranker, bypassing the full retrieval pipeline. All experiments used the parameter settings recommended by DRAGIN and CtrlA
+to ensure reproducibility. Results (Table 3) show that: (1) DRAGIN and CtrlA incur low offline
+cost but higher online inference overhead; (2) their accuracy improves monotonically with retrieval
+rate; and (3) CBDR reduces retrieval cost by assessing LLM answer confidence-yielding a +0.9 pp
+accuracy gain under Top-3 reranking versus always retrieving, but a slight -0.2 pp drop in the Top-1
+setting.
+
+
+5 DISCUSSION
+
+
+5.1 CONFIDENCE CHANGES CAN SERVE AS A VALID PREFERENCE SIGNAL
+
+
+This paper tested the confidence changes of LLMs when presented with different contexts. As
+shown in Figure 3: when Llama3-8B-Instruct answered questions relying solely on its internal
+parametric knowledge, its confidence was only 0.7163 and the answer was incorrect; after introducing highly relevant correct documents, its confidence increased significantly to 0.9354, and it
+ultimately reasoned out the correct answer; in contrast, when low-relevance incorrect documents
+were introduced, its confidence dropped to 0.6026. Additional examples are provided in Appendix
+D. This result effectively demonstrates the correlation between confidence changes and the true preferences of LLMs: specifically, increased confidence corresponds to ”beneficial documents preferred
+by LLMs”, while decreased confidence corresponds to ”harmful documents rejected by LLMs”.
+This is fully consistent with the ”confidence-based preference definition” proposed in Section 3.2.1,
+directly verifying the validity of this preference signal. Furthermore, we find that Table 1 also corroborates this conclusion: the experiment reveals a positive correlation between model parameters
+and reranking performance—performance generally improves as model size and capability increase.
+For instance, in the Qwen3 ~~R~~ erank series, though Qwen3 ~~R~~ erank ~~8~~ B still has room for improvement
+in absolute performance, it significantly outperforms its same-series counterpart Qwen3 ~~R~~ erank ~~4~~ B
+and ranks best among all base models. This confirms that the ”preference signals” in the NQ ~~R~~ erank
+dataset can effectively distinguish rerankers of different capabilities, and the ”stronger capability,
+better performance” pattern only emerges when the signal logic aligns with the models’ true ranking
+needs—further validating the rationality of using confidence changes as a preference signal.
+
+
+Thus, the preference-aligned reranker yields substantial performance gains. The fine-tuned
+bge-reranker-v2-m3-ft outperforms all baselines across all metrics, demonstrating that supervised fine-tuning on NQ ~~R~~ erank effectively aligns the reranker with the target LLM’s (Llama38B-Instruct) preferences—specifically, its tendency to select contexts that boost answer confidence.
+Notably, the gains in Top-1 accuracy ( _Precision_ @1) and _MRR_ @1 underscore its superior ability
+to retrieve the most critical document with high precision.
+
+
+8
+
+
+5.2 EFFECTIVENESS OF PREFERENCE-ALIGNED RERANKER DEPENDS ON TARGET LLM
+
+
+We find that the optimization effect of the fine-tuned preference-aligned reranker demonstrates significant model dependence, and it can only achieve its full efficacy when paired with the target LLM.
+As shown in Table 2, pairing bge-reranker-v2-m3-ft with Llama3-8B-Instruct yields a maximum accuracy improvement of 4.7 pp for the RAG system; in contrast, no significant change in accuracy is
+observed when it is paired with Qwen2.5-7B-Instruct. In essence, this phenomenon stems from the
+strong anchoring effect of the fine-tuning data on the preferences of the target LLM. In the present
+study, NQ ~~R~~ erank dataset directly constructs labels based on the confidence variations of Llama38B-Instruct toward different retrieved contexts. This design enables the reranker to learn, during
+training, how to filter retrieved contexts that align with the cognitive preferences of the target LLM,
+with its filtering logic deeply coupled to the target LLM’s preferences.
+
+
+To validate this core logic, a cross-model preference comparison experiment was conducted (see
+Appendix G for details). A total of 100 uniform sample sets were selected, covering three categories
+of retrieved contexts: Type A (high semantic relevance but sparse factual details), Type B (comprehensive factual details but marginally lower semantic matching), and Type C (irrelevant contexts).
+As illustrated in Figure 4, the results reveal substantial differences in the two models’ cognitive
+preferences: Llama3-8B-Instruct favors both Type A and Type B contexts, only strongly rejecting Type C irrelevant contexts; conversely, Qwen2.5-7B-Instruct solely prefers Type A contexts,
+mildly rejects Type B contexts, and consistently strongly rejects Type C irrelevant contexts. Since
+the reranker’s filtering logic is fully aligned with Llama3-8B-Instruct’s preference characteristics, it
+prioritizes both Type A and Type B contexts—an outcome notably misaligned with Qwen2.5-7BInstruct’s cognition, ultimately rendering the reranker ineffective. This result further corroborates
+that the preference-aligned reranker’s improvement on the RAG system is highly dependent on the
+consistency between its filtering logic and the target LLM’s cognitive preferences.
+
+
+Notably, although this reranker is trained on the NQ dataset, its performance improvement is not limited in closed book: it also achieves a maximum accuracy improvement of 1.4 pp on the HotpotQA
+dataset when paired with Llama3-8B-Instruct. This demonstrates the robustness of the preferencealigned reranker: it is truly aligned with the preferences of the target LLM, rather than merely
+overfitting to the NQ dataset.
+
+
+5.3 DYNAMIC RETRIEVAL BALANCES PERFORMANCE AND EFFICIENCY
+
+
+By integrating the CBDR, the RAG system can not only maintain competitive accuracy but also
+significantly reduce retrieval overhead. As shown in Table 3: under the Top-3 setting with _β_ = 0 _._ 98,
+the accuracy increased by 0.9 pp compared to the baseline, while the retrieval cost decreased by 7.1
+pp simultaneously; under the Top-1 setting with _β_ = 0 _._ 95, although the accuracy only decreased
+slightly by 0.2 pp compared to the baseline, the retrieval cost dropped significantly by 16.7 pp. This
+result not only fully verifies the significant practical potential of CBDR in balancing efficiency and
+effectiveness in real-world applications but also confirms the core hypothesis that ”the confidence
+of LLMs can guide retrieval decisions”. From the perspective of application value, this balancing
+feature is crucial for the scenario adaptation of RAG systems by adjusting the value of _β_, as show in
+figure 8 flexible solutions can be provided for different engineering requirements.
+
+
+5.4 LET THE TARGET LLM DECIDE WHETHER TO PERFORM RETRIEVAL
+
+
+For CBDR, as shown in Table 3, the optimal accuracy under the Top-3 setting is achieved when
+_β_ = 0 _._ 98: when _β_ increases from 0.95 to 0.98 (triggering retrieval for more questions), the accuracy
+rises by 1.7 pp; however, when _β_ reaches 1.00 (forcing retrieval for all questions), the accuracy
+instead decreases by 0.9 pp. Our phase difference analysis further reveals the reason for this phenomenon (see Appendix F for details): (1) When _β_ increases from 0.95 to 0.98: via expanding
+external knowledge through retrieval, 21 previously incorrect answers were corrected, yet 4 correct
+answers turned incorrect due to conflicts between external documents and the LLM’s inherent parametric knowledge; (2) When _β_ increases from 0.98 to 1.00: the above two values become 2 and
+11, respectively. Evidently, when _β_ changes from 0.98 to 1.00, the benefits from introducing external knowledge are less than the errors caused by knowledge conflicts. This phenomenon directly
+verifies the hypothesis proposed in Section 3.4: when an LLM has high confidence in answering a
+question, introducing external knowledge may increase the risk of hallucinations. This conclusion
+
+
+9
+
+
+Figure 4: Preference Differences Between Llama3-8B-Instruct (Left) and Qwen2.5-7B-Instruct
+(Right) for Three Types of Retrieved Contexts.
+
+
+provides key guidance for the engineering tuning of the _β_ value: there is no need to blindly pursue
+”full retrieval”; instead, a reasonable threshold should be set based on the confidence characteristics
+of the target LLM to balance the effect of error correction and the risk of hallucinations.
+
+
+5.5 ANALYSIS OF ADDITIONAL RESOURCE OVERHEAD OF THE CBDR FRAMEWORK
+
+
+This subsection analyzes the additional resource overhead of the CBDR framework, covering the
+offline and online inference phases. 1) **Offline Phase:** Overhead focuses on two operations. First,
+dataset construction (NQ ~~C~~ onfidence, NQ ~~R~~ erank) relies on the target LLM’s forward computation—only requiring hidden vectors before the first token is generated, thus avoiding the high overhead of LLM generation. Second, training/fine-tuning lightweight models: the confidence detection
+model E (2M-parameter MLP) and reranker (bge-reranker-v2-m3, 568M parameters) have minimal
+costs, leading to manageable overall computation. Using Llama3-8B-Instruct as the target model, all
+offline operations can be completed within 6 hours on one NVIDIA RTX 4090 GPU. 2) **Online In-**
+**ference Phase:** Since the fine-tuned reranker is already part of the RAG system, only one forward
+pass each by the target LLM and confidence detection model E is needed to determine retrieval
+necessity—this design ensures online inference fully meets real-time demands.
+
+
+As shown in Table 3, we compared the additional time consumption of our approach with dynamic
+retrieval frameworks such as DRAGIN and CtrlA. DRAGIN requires no extra consumption during
+the offline phase but incurs significant latency during online inference due to real-time uncertainty
+calculations for generated tokens. CtrlA demands some offline consumption for extracting two
+features, yet its inference time is slightly less than DRAGIN’s because of relatively efficient uncertainty computations. In contrast, although our CBDR introduces higher but manageable offline
+costs, it significantly reduces online inference time by needing only a single forward pass through
+both the target LLM and the confidence probe model. In summary, the CBDR framework’s additional resource overhead is generally manageable. Notably, the online phase adds negligible latency;
+further, if retrieval knowledge is parameter-injected (Dong et al. (2025b); Su et al. (2025)), the online
+forward passes are not additional overhead. For details, see Appendix H.
+
+
+6 CONCLUSION
+
+
+This paper establishes internal hidden state confidence dynamics as a principled signal for optimizing RAG systems. By quantifying confidence shifts induced by retrieved contexts, we enable
+precise Reranker alignment and adaptive retrieval activation. Our framework CBDR has brought
+more efficient performance to the RAG system, which has practical application value. Our work
+bridges parametric and external knowledge while providing a generalizable paradigm for evaluating
+knowledge boundary interactions. Future work will extend this approach to multimodal RAG and
+complex retrieval tasks.
+
+
+10
+
+
+50
+
+
+40
+
+
+30
+
+
+20
+
+
+10
+
+
+0
+
+
+-10
+
+
+-20
+
+
+-30
+
+
+-40
+
+
+Llama3-8B-Instruct
+
+
+Qwen2.5-7B-Instruct
+
+
+10
+
+
+8
+
+
+6
+
+
+4
+
+
+2
+
+
+0
+
+
+-2
+
+
+-4
+
+
+-6
+
+
+-8
+
+
+-50
+Type A Type B Type C
+
+
+-10
+Type A Type B Type C
+
+
+7 ETHICS STATEMENT
+
+
+All authors of this paper adhere to the ICLR Code of Ethics (https://iclr.cc/public/CodeOfEthics).
+This study uses publicly available datasets, including [Natural Questions (NQ) dataset (Kwiatkowski
+et al. (2019)) and the HotpotQA dataset (Yang et al. (2018))]. We obtained the datasets in compliance
+with their official licensing agreements.
+
+
+8 REPRODUCIBILITY STATEMENT
+
+
+**Source Code:** We have submitted the relevant code used in this paper in the supplementary materials. The code has been detailed to ensure that each key step can be reproduced.
+
+
+**Dataset** **Details:** For the NQ ~~R~~ erank dataset we proposed, its processing workflow has been described in detail in this paper; furthermore, relevant examples of the dataset can be found in Appendix E.
+
+
+**Experimental Parameters:** All critical hyperparameters are clearly specified in Appendix C.
+
+
+**Result** **Verification:** We have retained the raw data and intermediate results of key evaluations to
+verify the stability of the results.
+
+
+REFERENCES
+
+
+Amos Azaria and Tom Mitchell. The internal state of an llm knows when it’s lying. _arXiv preprint_
+_arXiv:2304.13734_, 2023.
+
+
+Ingeol Baek, Hwan Chang, Byeongjeong Kim, Jimin Lee, and Hwanhee Lee. Probing-rag: Selfprobing to guide language models in selective document retrieval. In Luis Chiruzzo, Alan Ritter, and Lu Wang (eds.), _Findings_ _of_ _the_ _Association_ _for_ _Computational_ _Linguistics:_ _NAACL_
+_2025, Albuquerque, New Mexico, USA, April 29 - May 4, 2025_, pp. 3287–3304. Association for
+Computational Linguistics, 2025. doi: 10.18653/V1/2025.FINDINGS-NAACL.181. URL
+[https://doi.org/10.18653/v1/2025.findings-naacl.181.](https://doi.org/10.18653/v1/2025.findings-naacl.181)
+
+
+Bradley Brown, Jordan Juravsky, Ryan Ehrlich, Ronald Clark, Quoc V Le, Christopher R´e, and
+Azalia Mirhoseini. Large language monkeys: Scaling inference compute with repeated sampling.
+_arXiv preprint arXiv:2407.21787_, 2024.
+
+
+Youan Cong, Cheng Wang, Pritom Saha Akash, and Kevin Chen-Chuan Chang. Query optimization for parametric knowledge refinement in retrieval-augmented large language models. _arXiv_
+_preprint arXiv:2411.07820_, 2024.
+
+
+Florin Cuconasu, Giovanni Trappolini, Federico Siciliano, Simone Filice, Cesare Campagnano,
+Yoelle Maarek, Nicola Tonellotto, and Fabrizio Silvestri. The power of noise: Redefining retrieval for rag systems. In _Proceedings_ _of_ _the_ _47th_ _International_ _ACM_ _SIGIR_ _Conference_ _on_
+_Research and Development in Information Retrieval_, pp. 719–729, 2024.
+
+
+Guanting Dong, Yutao Zhu, Chenghao Zhang, Zechen Wang, Ji-Rong Wen, and Zhicheng Dou.
+Understand what llm needs: Dual preference alignment for retrieval-augmented generation. In
+_Proceedings of the ACM on Web Conference 2025_, pp. 4206–4225, 2025a.
+
+
+Qian Dong, Qingyao Ai, Hongning Wang, Yiding Liu, Haitao Li, Weihang Su, Yiqun Liu, TatSeng Chua, and Shaoping Ma. Decoupling knowledge and context: An efficient and effective
+retrieval augmented generation framework via cross attention. In _Proceedings_ _of_ _the_ _ACM_ _on_
+_Web Conference 2025_, pp. 4386–4395, 2025b.
+
+
+Abhimanyu Dubey, Abhinav Jauhri, Abhinav Pandey, Abhishek Kadian, Ahmad Al-Dahle, Aiesha
+Letman, Akhil Mathur, Alan Schelten, Amy Yang, Angela Fan, et al. The llama 3 herd of models.
+_arXiv e-prints_, pp. arXiv–2407, 2024.
+
+
+Feiteng Fang, Yuelin Bai, Shiwen Ni, Min Yang, Xiaojun Chen, and Ruifeng Xu. Enhancing noise
+robustness of retrieval-augmented language models with adaptive adversarial training. _arXiv_
+_preprint arXiv:2405.20978_, 2024.
+
+
+11
+
+
+Soyeong Jeong, Jinheon Baek, Sukmin Cho, Sung Ju Hwang, and Jong Park. Adaptive-rag: Learning to adapt retrieval-augmented large language models through question complexity. In Kevin
+Duh, Helena G´omez-Adorno, and Steven Bethard (eds.), _Proceedings of the 2024 Conference of_
+_the North American Chapter of the Association for Computational Linguistics: Human Language_
+_Technologies_ _(Volume_ _1:_ _Long_ _Papers),_ _NAACL_ _2024,_ _Mexico_ _City,_ _Mexico,_ _June_ _16-21,_ _2024_,
+pp. 7036–7050. Association for Computational Linguistics, 2024. doi: 10.18653/V1/2024.NAA
+CL-LONG.389. [URL https://doi.org/10.18653/v1/2024.naacl-long.389.](https://doi.org/10.18653/v1/2024.naacl-long.389)
+
+
+Ziwei Ji, Tiezheng Yu, Yan Xu, Nayeon Lee, Etsuko Ishii, and Pascale Fung. Towards mitigating
+llm hallucination via self reflection. In _Findings of the Association for Computational Linguistics:_
+_EMNLP 2023_, pp. 1827–1843, 2023.
+
+
+Pengyue Jia, Derong Xu, Xiaopeng Li, Zhaocheng Du, Xiangyang Li, Yichao Wang, Yuhao Wang,
+Qidong Liu, Maolin Wang, Huifeng Guo, et al. Bridging relevance and reasoning: Rationale
+distillation in retrieval-augmented generation. _arXiv preprint arXiv:2412.08519_, 2024.
+
+
+Tom Kwiatkowski, Jennimaria Palomaki, Olivia Redfield, Michael Collins, Ankur Parikh, Chris Alberti, Danielle Epstein, Illia Polosukhin, Matthew Kelcey, Jacob Devlin, Kenton Lee, Kristina N.
+Toutanova, Llion Jones, Ming-Wei Chang, Andrew Dai, Jakob Uszkoreit, Quoc Le, and Slav
+Petrov. Natural questions: a benchmark for question answering research. _Transactions_ _of_ _the_
+_Association of Computational Linguistics_, 2019.
+
+
+Huanshuo Liu, Hao Zhang, Zhijiang Guo, Kuicai Dong, Xiangyang Li, Yi Quan Lee, Cong Zhang,
+and Yong Liu. Ctrla: Adaptive retrieval-augmented generation via probe-guided control. _arXiv_
+_e-prints_, pp. arXiv–2405, 2024.
+
+
+Maria Marina, Nikolay Ivanov, Sergey Pletenev, Mikhail Salnikov, Daria Galimzianova, Nikita
+Krayko, Vasily Konovalov, Alexander Panchenko, and Viktor Moskvoretskii. Llm-independent
+adaptive rag: Let the question speak for itself. _arXiv preprint arXiv:2505.04253_, 2025.
+
+
+Ariana Martino, Michael Iannelli, and Coleen Truong. Knowledge injection to counter large language model (llm) hallucination. In _European Semantic Web Conference_, pp. 182–185. Springer,
+2023.
+
+
+Shiyu Ni, Keping Bi, Jiafeng Guo, Lulu Yu, Baolong Bi, and Xueqi Cheng. Towards fully exploiting
+llm internal states to enhance knowledge boundary perception. _arXiv preprint arXiv:2502.11677_,
+2025.
+
+
+Weijia Shi, Sewon Min, Michihiro Yasunaga, Minjoon Seo, Rich James, Mike Lewis, Luke Zettlemoyer, and Wen-tau Yih. Replug: Retrieval-augmented black-box language models. _arXiv_
+_preprint arXiv:2301.12652_, 2023.
+
+
+Oscar Skean, Md Rifat Arefin, Dan Zhao, Niket Patel, Jalal Naghiyev, Yann LeCun, and Ravid
+Shwartz-Ziv. Layer by layer: Uncovering hidden representations in language models. _arXiv_
+_preprint arXiv:2502.02013_, 2025.
+
+
+Weihang Su, Yichen Tang, Qingyao Ai, Zhijing Wu, and Yiqun Liu. DRAGIN: dynamic retrieval augmented generation based on the real-time information needs of large language models. In Lun-Wei Ku, Andre Martins, and Vivek Srikumar (eds.), _Proceedings_ _of_ _the_ _62nd_
+_Annual_ _Meeting_ _of_ _the_ _Association_ _for_ _Computational_ _Linguistics_ _(Volume_ _1:_ _Long_ _Papers),_
+_ACL_ _2024,_ _Bangkok,_ _Thailand,_ _August_ _11-16,_ _2024_, pp. 12991–13013. Association for Computational Linguistics, 2024a. doi: 10.18653/V1/2024.ACL-LONG.702. URL [https:](https://doi.org/10.18653/v1/2024.acl-long.702)
+[//doi.org/10.18653/v1/2024.acl-long.702.](https://doi.org/10.18653/v1/2024.acl-long.702)
+
+
+Weihang Su, Changyue Wang, Qingyao Ai, Yiran Hu, Zhijing Wu, Yujia Zhou, and Yiqun Liu. Unsupervised real-time hallucination detection based on the internal states of large language models.
+_arXiv preprint arXiv:2403.06448_, 2024b.
+
+
+Weihang Su, Yichen Tang, Qingyao Ai, Junxi Yan, Changyue Wang, Hongning Wang, Ziyi Ye, Yujia
+Zhou, and Yiqun Liu. Parametric retrieval augmented generation. In _Proceedings_ _of_ _the_ _48th_
+_International_ _ACM_ _SIGIR_ _Conference_ _on_ _Research_ _and_ _Development_ _in_ _Information_ _Retrieval_,
+pp. 1240–1250, 2025.
+
+
+12
+
+
+Xin Sun, Jianan Xie, Zhongqi Chen, Qiang Liu, Shu Wu, Yuehe Chen, Bowen Song, Weiqiang
+Wang, Zilei Wang, and Liang Wang. Divide-then-align: Honest alignment based on the knowledge boundary of rag. _arXiv preprint arXiv:2505.20871_, 2025.
+
+
+Qwen Team. Qwen2.5: A party of foundation models, September 2024.
+
+
+Yongxin Xu, Ruizhe Zhang, Xinke Jiang, Yujie Feng, Yuzhen Xiao, Xinyu Ma, Runchuan Zhu,
+Xu Chu, Junfeng Zhao, and Yasha Wang. Parenting: Optimizing knowledge selection of retrievalaugmented language models with parameter decoupling and tailored tuning. In Wanxiang Che,
+Joyce Nabende, Ekaterina Shutova, and Mohammad Taher Pilehvar (eds.), _Proceedings_ _of_ _the_
+_63rd Annual Meeting of the Association for Computational Linguistics (Volume 1:_ _Long Papers),_
+_ACL 2025, Vienna, Austria, July 27 - August 1, 2025_, pp. 11643–11662. Association for Computational Linguistics, 2025. [URL https://aclanthology.org/2025.acl-long.571/.](https://aclanthology.org/2025.acl-long.571/)
+
+
+Zhilin Yang, Peng Qi, Saizheng Zhang, Yoshua Bengio, William W Cohen, Ruslan Salakhutdinov,
+and Christopher D Manning. Hotpotqa: A dataset for diverse, explainable multi-hop question
+answering. _arXiv preprint arXiv:1809.09600_, 2018.
+
+
+Zijun Yao, Weijian Qi, Liangming Pan, Shulin Cao, Linmei Hu, Weichuan Liu, Lei Hou, and Juanzi
+Li. Seakr: Self-aware knowledge retrieval for adaptive retrieval augmented generation. _arXiv_
+_preprint arXiv:2406.19215_, 2024.
+
+
+Zhangyue Yin, Qiushi Sun, Qipeng Guo, Jiawen Wu, Xipeng Qiu, and Xuanjing Huang. Do large
+language models know what they don’t know? _arXiv preprint arXiv:2305.18153_, 2023.
+
+
+Ori Yoran, Tomer Wolfson, Ori Ram, and Jonathan Berant. Making retrieval-augmented language
+models robust to irrelevant context. _arXiv preprint arXiv:2310.01558_, 2023.
+
+
+Anqi Zhang, Yulin Chen, Jane Pan, Chen Zhao, Aurojit Panda, Jinyang Li, and He He. Reasoning models know when they’re right: Probing hidden states for self-verification. _arXiv_ _preprint_
+_arXiv:2504.05419_, 2025.
+
+
+A USE OF LLMS
+
+
+In this paper, Large Language Models (LLMs) were solely employed for the polishing of English
+writing; they were not involved in any work related to research conceptualization or experiments.
+
+
+B PROMPT
+
+
+In this paper, distinct prompts were utilized to guide LLMs in reasoning for different tasks. In the
+question-answering scenario, we classify the prompts into two types:
+
+
+(1) As shown on the left side of Figure 5, this prompt guides the model to directly answer question
+using its parametric knowledge. When constructing the dataset for the Confidence Detection Model
+E, this prompt was consistently used to guide the Llama3-8B-Instruct model in generating answers.
+Additionally, this prompt is applied in scenarios within the CBDR system where the LLM has high
+confidence in answering this question and thus skips the retrieval step to provide a direct response.
+
+
+(2) As shown on the right side of Figure 5, this prompt guides the LLM to answer question by
+combining external knowledge with its parametric knowledge. When constructing the preference
+dataset NQ ~~R~~ erank, this prompt was used to guide Llama3-8B-Instruct to generate the first Token
+based on the provided context; meanwhile, this prompt is also utilized in the CBDR system when
+the LLM needs to answer question with reference to retrieved documents.
+
+
+C IMPLEMENTATION DETAILS.
+
+
+During the training of the Confidence detection model E, the initial learning rate was set to 5 _e_ _[−]_ [5],
+the dropout rate was configured to 0.5, and the training was conducted over 30 epochs. For the
+fine-tuning of the bge-reranker-v2-m3 model, the initial learning rate was set to 6 _e_ _[−]_ [5], weight decay
+was configured to 0.01, the maximum query length (query ~~m~~ ax ~~l~~ en) was set to 128, the maximum
+passage length (passage ~~m~~ ax len) was set to 512, and the training was performed for 1 epoch.
+
+
+13
+
+
+|QA Prompt|RAG Prompt|
+|---|---|
+|You need to read the question carefully and<br>answer it based on your own knowledge.<br>Question: {question}|You are a rigorous language model. Please answer<br>the question based on the provided context. If the<br>context does not support reasoning about the<br>answer, please answer the question based on your<br>own knowledge.<br>Contexts: {contexts}<br>Question: {question}|
+
+
+Figure 5: The prompt on the left side of the figure guides the LLM to answer question using its parametric knowledge; the prompt on the right side requires the LLM to answer question by combining
+external knowledge with its parametric knowledge.
+
+
+D LLM CONFIDENCE
+
+
+The training of the Confidence Detection Model E fully follows the approach described in (Ni et al.
+(2025)), and the downstream LLM employed is Llama3-8B-Instruct. After obtaining Model E, we
+conducted an initial verification to examine how the LLM’s confidence in answering questions varies
+when provided with relevant versus irrelevant documents. As illustrated in Figure 6, the observed
+changes in confidence confirm our hypothesis: changes in the LLM’s internal hidden states can
+guide the selection of external knowledge. It should be noted that in this paper, external knowledge
+refers specifically to contexts obtained through retrieval.
+
+
+E PREFERENCE DATASET
+
+
+In this paper, to align the preferences of the Reranker with the target LLM, we constructed the
+preference dataset NQ ~~R~~ erank using changes in the LLM’s confidence. The NQ ~~R~~ erank dataset
+is divided into a training set with 7,622 items and an evaluation set with 1,216 items. As shown
+in Figure 7, each data item contains four fields: query, pos, neg, and prompt. Among these, pos
+and neg are lists of positive and negative contexts, respectively. Specifically, each context in pos
+enhances the LLM’s confidence, whereas each context in neg reduces the LLM’s confidence. The
+prompt field refers to the default prompt used by the Reranker model for the reranking task.
+
+
+F DYNAMIC RETRIEVAL
+
+
+When CBDR is adopted for dynamic retrieval in the RAG system (The algorithm can be found in
+Algorithm 1), the system achieves the optimal performance at _β_ = 0 _._ 98. As illustrated in Figure 8,
+this figure comprehensively depicts the impact of the threshold _β_ (ranging from 0.90 to 1.00) on both
+RAG system performance (quantified by the system score on the left y-axis) and retrieval efficiency
+(measured by the skip retrieval ratio on the right y-axis). To further elucidate the performance
+characteristics around this optimal threshold, we analyzed the differential responses corresponding
+to two threshold intervals: _β_ ranging from 0.95 to 0.98 and from 0.98 to 1.00. Specifically, these
+differential responses refer to the questions where the integration of external knowledge (enabled by
+dynamic retrieval) alters the correctness of the LLM’s final answers.
+
+
+Our observations of these data reveal the following: When the introduction of external knowledge
+enables the LLM to change from answering incorrectly to correctly, this is always because the introduced external knowledge expands the knowledge boundary of the RAG system, thereby leading
+the LLM to generate correct answers. However, when the introduction of external knowledge instead causes the LLM to shift from answering correctly to incorrectly, there are multiple reasons
+for this: (1) As shown in Figure 9, the most common reason is the introduction of incorrect external knowledge, which causes conflicts between the model’s internal parametric knowledge and the
+external knowledge, thereby triggering hallucinations. (2) As shown in Figure 10, the introduced
+
+
+14
+
+
+|Question|Context_type|Context|Confidence|
+|---|---|---|---|
+|when was the last time<br>anyone was on the moon|No||0.7454|
+|when was the last time<br>anyone was on the moon|Relevance|The Apollo program by NASA included the last human Moon landing<br>during Apollo 17 in December 1972. Astronauts Eugene Cernan and<br>Harrison Schmitt landed on the lunar surface on 14 December 1972<br>UTC, conducting three days of exploration. No subsequent human<br>missions have reached the Moon since then, making this the final<br>|0.8562**↑**|
+|when was the last time<br>anyone was on the moon|Irrelevance<br>|~~instance~~<br>In the video game Grand Theft Auto: San Andreas, the 'Hot Coffee' mod<br>is an unauthorized user modification that accesses a hidden mini-game<br>featuring sexual interactions. This content was originally inaccessible in<br>the official release but was discovered in the game's code, leading to<br>controversy and a re-rating of the game by the ESRB.|0.6293 ↓<br>|
+|when did the eagles win<br>last super bowl|No||0.9288|
+|when did the eagles win<br>last super bowl|Relevance|The Philadelphia Eagles of the NFL last won the Super Bowl in<br>February 2018, which corresponded to the 2017 league season. They<br>defeated the New England Patriots 41-33 in Super Bowl LII, securing<br>their first championship since 1960. As of the current time in 2025, this<br>remains their most recent Super Bowl victory.|0.9462↑|
+|when did the eagles win<br>last super bowl|Irrelevance<br>|In the video game Grand Theft Auto: San Andreas, the 'Hot Coffee' mod<br>is an unauthorized user modification that accesses a hidden mini-game<br>featuring sexual interactions. This content was originally inaccessible in<br>the official release but was discovered in the game's code, leading to<br>controversy and a re-rating of the game by the ESRB.|0.4606↓<br>|
+|how many seasons of the<br>bastard executioner are<br>there|No||0.5645|
+|how many seasons of the<br>bastard executioner are<br>there|Relevance|FX's historical drama series 'The Bastard Executioner,' created by Kurt<br>Sutter, premiered in September 2015 but received low ratings and mixed<br>reviews. Consequently, the network canceled it after the first season's<br>conclusion in November 2015, with no renewal for additional seasons.|<br>0.9410↑|
+|how many seasons of the<br>bastard executioner are<br>there|Irrelevance|Justin Bieber's song 'Love Yourself,' released in 2015, features lyrics co-<br>written with Ed Sheeran that are interpreted as addressing an ex-partner.<br>Although unconfirmed directly by Bieber, widespread media reports and<br>fan speculation suggest it references his past relationship with singer<br>Rihanna, contributing to the song's narrative.|<br>0.5078↓|
+
+
+Figure 6: This figure presents three examples of confidence changes. For each example, the confidence levels indicated by the LLM’s internal hidden states are provided under three scenarios,
+namely: without external documents provided, with relevant documents provided, and with irrelevant documents provided.
+
+
+external knowledge contains correct documents, but the model exhibits attention bias and fails to
+focus on these correct documents. (3) As shown in Figure 11, the questions are time-sensitive. This
+issue arises due to the inherent temporal limitations of the NQ dataset; thus, the NQ dataset provides
+outdated external documents and reference answers. As a result, the LLM would originally answer
+correctly, but ends up answering incorrectly due to the erroneous external knowledge.
+
+
+G CROSS-MODEL PREFERENCE COMPARISON EXPERIMENT
+
+
+This experiment aims to quantify the preference differences between Llama3-8B-Instruct (the target
+model) and Qwen2.5-7B-Instruct (the comparison model) toward different types of retrieved contexts. It verifies the strong binding characteristic between the filtering logic of the preference-aligned
+reranker and the target LLM at the cognitive mechanism level, providing empirical support for the
+core conclusion in the main text that the reranker’s effectiveness is model-dependent.
+
+
+G.1 TARGET LLMS
+
+
+1) **Llama3-8B-Instruct:** Fine-tuning target of the preference-aligned reranker and baseline model
+in the main context experiments; 2) **Qwen2.5-7B-Instruct:** An open-source LLM of the same scale,
+used to verify the generality of preference differences.
+
+
+15
+
+
+|Query|who does sam neil play in peter rabbit|
+|---|---|
+|**Pos**|["Peter Rabbit is a 2018 live-action/computer-animated comedy film directed by Will Gluck and written by Rob Lieber and<br>Gluck, based on the stories of Peter Rabbit created by Beatrix Potter. ...",<br>"... The accusations focused on a scene where Thomas McGregor \u2014 whose character has a known severe allergy to<br>blackberries \u2014 is pelted with the berries until one enters his mouth, causing him to enter anaphylactic shock and grab for<br>his Epipen.[35][36][37] ...",<br>"... A local toy shop on Compston Road, Ambleside, was adapted to be Mr McGregor's.[citation needed]"]|
+|**Neg**|["The film was first revealed in April 2015 through email leaks as a result of the Sony Pictures hack.[8] The official<br>announcement of the film came that December.[9]",<br>"The Singing Sparrows were voiced by Jessica Freedman, Shana Halligan, Katharine Hoye, Chris Mann, Chad Reisser, and<br>Fletcher Sheridan",<br>"Peter feels bad for what he has done, and upon learning that Bea intends to leave the neighborhood, he and Benjamin head to<br>London to find Thomas at Harrods...",<br>"Thomas and Peter start a war with each other by setting up traps and other offensive nuisance..."]|
+|**Prompt**|Given a question, retrieve Wikipedia passages that answer the question.|
+
+
+|Col1|RAG System Score<br>Skip Retrieval Ratio|Col3|
+|---|---|---|
+|67.5<br>~~67.8~~<br> <br>25.1%|||
+|66.9<br>66.9<br>20.7%|66.9<br>66.9<br>20.7%|66.9<br>66.9<br>20.7%|
+|~~16.7%~~|~~16.7%~~|~~16.7%~~|
+||||
+|65.4<br>~~13.6%~~<br>~~10.7%~~|65.4<br>~~13.6%~~<br>~~10.7%~~|65.4<br>~~13.6%~~<br>~~10.7%~~|
+|65.1<br><br>7.1%|65.1<br><br>7.1%|65.1<br><br>7.1%|
+||||
+|64.2<br>0.0%|64.2<br>0.0%|64.2<br>0.0%|
+
+
+Figure 8: The Impact of Threshold (0–1) on RAG System Performance and Retrieval Efficiency
+under the Top-3 Setting. X-axis: Threshold (0.90–1.00); Left Y-axis: RAG System Score; Right
+Y-axis: Skip Retrieval Ratio (%).
+
+
+G.2 RETRIEVED CONTEXT CORPUS
+
+
+The corpus is randomly selected and constructed from candidate retrieved contexts in the NQ dataset,
+consisting of 100 sample sets. Each set corresponds to one unified question and includes 3 types
+of retrieved contexts (1 context per type, generated by rewriting gold contexts), ensuring a single
+controllable experimental variable: 1) **Type A:** Highly matches the core semantics of the question
+but only mentions core concepts without specific data, logical chains, or supplementary details; 2)
+**Type B:** Contains complete factual information (data, logic, etc.) required to answer the question but
+has slightly lower semantic matching with the question’s expression (consistent core concepts, but
+expressed through synonymous substitution and sentence structure reconstruction); 3) **Type C:** Extremely low semantic relevance to the question and no question-related factual information, serving
+only as a control benchmark for preference judgment.
+
+
+16
+
+
+Figure 7: This figure presents an example of the preference dataset NQ ~~R~~ erank; each data item
+contains four fields: Query, Pos, Neg, and Prompt.
+
+
+68.5
+
+
+68.0
+
+
+67.5
+
+
+67.0
+
+
+66.5
+
+
+66.0
+
+
+65.5
+
+
+65.0
+
+
+64.5
+
+
+64.0
+
+
+0.90 0.93 0.95 0.96 0.97 0.98 1.00
+Threshold (0-1)
+
+
+25
+
+
+20
+
+
+15
+
+
+10
+
+
+5
+
+
+0
+
+
+|Question|Context|Retrieval|Reference|Answer|
+|---|---|---|---|---|
+|when did<br>brazil last host<br>the fifa world<br>cup|<br>["The**1951** World Cup hosting duty was decided on 26 July**1946**, <br>the same day that Brazil was selected for the**1949** World Cup, in<br>Luxembourg City. On 27 July ...",<br>"Brazil made the first unopposed bid since the initial selection of<br>the**1986** FIFA World Cup (when Colombia was selected as host,<br>but later withdrew for financial problems) ...<br>"Only Mexico, Italy, France, Germany (West Germany until<br>shortly after the**1990** World Cup) and Brazil have hosted the<br>event on two occasions ..."]|No|**2014**|According to my<br>knowledge, Brazil last<br>hosted the FIFA World<br>Cup in**2014**.|
+|when did<br>brazil last host<br>the fifa world<br>cup|<br>["The**1951** World Cup hosting duty was decided on 26 July**1946**, <br>the same day that Brazil was selected for the**1949** World Cup, in<br>Luxembourg City. On 27 July ...",<br>"Brazil made the first unopposed bid since the initial selection of<br>the**1986** FIFA World Cup (when Colombia was selected as host,<br>but later withdrew for financial problems) ...<br>"Only Mexico, Italy, France, Germany (West Germany until<br>shortly after the**1990** World Cup) and Brazil have hosted the<br>event on two occasions ..."]|Top-3|Top-3|Based on the provided<br>context, it can be inferred<br>that Brazil last hosted the<br>FIFA World Cup in**1950**.|
+
+
+|Question|Context|Retrieval|Reference|Answer|
+|---|---|---|---|---|
+|when was the<br>art institute of<br>chicago<br>founded|["The Art Institute of Chicago, founded in**1879** and located in<br>Chicago's Grant Park, is one of the oldest and largest art museums<br>in the United States ...",<br>"In**1866**, a group of 35 artists founded the Chicago Academy of<br>Design in a studio on Dearborn Street, with the intent to run a free<br>school with its own art gallery ... The Academy's charter was<br>granted in March**1867**.",<br>"In**1882**, the Chicago Academy of Fine Arts changed its name to<br>the current Art Institute of Chicago and elected as its first<br>president the banker and philanthropist Charles L ..."]|No|**1879**|The Art Institute of<br>Chicago was founded in<br>**1879** ...|
+|when was the<br>art institute of<br>chicago<br>founded|["The Art Institute of Chicago, founded in**1879** and located in<br>Chicago's Grant Park, is one of the oldest and largest art museums<br>in the United States ...",<br>"In**1866**, a group of 35 artists founded the Chicago Academy of<br>Design in a studio on Dearborn Street, with the intent to run a free<br>school with its own art gallery ... The Academy's charter was<br>granted in March**1867**.",<br>"In**1882**, the Chicago Academy of Fine Arts changed its name to<br>the current Art Institute of Chicago and elected as its first<br>president the banker and philanthropist Charles L ..."]|Top-3|Top-3|Based on the provided<br>context, the Art Institute<br>of Chicago was founded<br>in**1866** as the Chicago<br>Academy of Design ...|
+
+
+|Question|Context|Retrieval|Reference|Answer|
+|---|---|---|---|---|
+|who was the<br>most recent<br>president to be<br>impeached|<br>["... Andrew Johnson and**Bill Clinton** are the only two presidents<br>to have been successfully impeached ...",<br>"... President**Richard Nixon** resigned from office after the House<br>Judiciary Committee had already reported articles of impeachment<br>to the floor.",<br>"... especially of presidents, are common,[22][23] going back to<br>the administration of**George Washington** in the mid-1790s ..."]|No|**Bill**<br>**Clinton**|The most recent president<br>to be impeached was<br>**Donald Trump**, the 45th<br>President of the United<br>States ...|
+|who was the<br>most recent<br>president to be<br>impeached|<br>["... Andrew Johnson and**Bill Clinton** are the only two presidents<br>to have been successfully impeached ...",<br>"... President**Richard Nixon** resigned from office after the House<br>Judiciary Committee had already reported articles of impeachment<br>to the floor.",<br>"... especially of presidents, are common,[22][23] going back to<br>the administration of**George Washington** in the mid-1790s ..."]|Top-3|Top-3|... the most recent<br>president to be impeached<br>was**Bill Clinton**, who<br>was successfully<br>impeached by the House<br>of Representatives in<br>1998 ...|
+
+
+Figure 11: Since the questions are time-sensitive, the contexts and reference provided by the NQ
+dataset are all incorrect; the retrieved external knowledge thus causes the LLM to answer incorrectly.
+
+
+G.3 CONTROLLED VARIABLES
+
+
+To avoid interference from irrelevant factors, the following variables are strictly controlled for all
+contexts: 1) **Context** **Length:** Uniformly limited to within 200 characters; 2) **Format** **Standard-**
+**ization:** Pure context format without special symbols, lists, formulas, etc.; 3) **Language** **Style:**
+Formal written language, avoiding colloquial or emotional expressions; 4) **Question Consistency:**
+The 3 context types in each sample set correspond to the same question, ensuring that preference
+differences arise only from context types rather than the question itself.
+
+
+17
+
+
+Figure 9: Since all the introduced external knowledge is incorrect, it causes the LLM’s answer to
+shift from correct to incorrect.
+
+
+Figure 10: Although the external knowledge contains correct context, the LLM focuses on incorrect
+contexts, resulting in its answer shifting from correct to incorrect.
+
+
+Figure 12: Type A prompt is used to generate content that is semantically relevant to the gold context
+but with concise factual details.
+
+
+G.4 EXPERIMENT
+
+
+This experiment adopts a baseline-test control design to quantify model preferences through confidence changes. The specific steps are as follows:
+
+
+**Sample Preprocessing:** Standardize the 100 sets of questions and their corresponding Type A, B,
+and C contexts: Use Prompts to guide LLMs in generating contexts based on the questions and Gold
+context; the Type A prompts are shown in Figure 12.
+
+
+**Confidence Collection:** Adopt a dual-scenario comparison of ”context-free baseline” and ”contextaugmented test” to collect the generation confidence of the two models: Context-Free Baseline (Base ~~C~~ onf): Input the 100 standardized questions individually into Llama3-8B-Instruct and
+Qwen2.5-7B-Instruct. The models generate answers relying solely on internal parameter knowledge, and the confidence during generation is recorded (calculated as the maximum value of the
+softmax outputs of model logits, with a value range of [0,1]). Context-Augmented Test (Test ~~C~~ onf):
+For each sample set, construct three input formats—”question + Type A context”, ”question + Type
+B context”, and ”question + Type C context”—and input them into the two LLMs sequentially. After
+generating answers, the corresponding confidence is recorded (using the same calculation method
+as the baseline).
+
+
+**Data** **Calculation** **and** **Statistics:** Conduct quantitative analysis on the collected confidence data,
+with the core calculation logic as follows: Per-Sample Confidence Improvement Value: For each
+model, sample set, and text type, calculate Improvement Value = Test ~~C~~ onf - Base ~~C~~ onf. Positive
+value indicates the context enhances model confidence, i.e., ”preference”; Negative value indicates
+the context reduces model confidence, i.e., ”rejection”. Average Confidence Improvement Value:
+For each model and context type, compute the total sum of improvement values across the 100
+sample sets.
+
+
+18
+
+
+**1000**
+
+**1001**
+
+**1002**
+
+
+**1003**
+
+**1004**
+
+**1005**
+
+**1006**
+
+**1007**
+
+**1008**
+
+
+**1009**
+
+**1010**
+
+**1011**
+
+**1012**
+
+**1013**
+
+
+**1014**
+
+**1015**
+
+**1016**
+
+**1017**
+
+**1018**
+
+**1019**
+
+
+**1020**
+
+**1021**
+
+**1022**
+
+**1023**
+
+**1024**
+
+**1025**
+
+
+H DETAILED ANALYSIS OF RESOURCE CONSUMPTION FOR THE CBDR
+FRAMEWORK
+
+
+The additional resource consumption required to construct the CBDR framework is divided into
+the offline preparation phase and online inference phase, with overall computational costs wellcontrolled. Details are as follows:
+
+
+H.1 OFFLINE PREPARATION PHASE
+
+
+The offline phase involves four core tasks, with resource consumption concentrated on target LLM
+forward computations and lightweight model training (no generation operations), ensuring manageable computational costs: 1) **Constructing the NQ** ~~**C**~~ **onfidence dataset:** Provides training data for
+the confidence detection model E, including input contexts and corresponding target LLM confidence labels. Sample scale: 2,000 training samples, 1,000 development (Dev) samples, and 500 test
+samples, totaling 3,500 samples. Computational load: Each sample requires one forward pass of the
+target LLM (e.g., Llama3-8B-Instruct) to extract confidence features, resulting in a total of 3,500
+target LLM forward passes. 2) **Training** **the** **confidence** **detection** **model** **E:** Model architecture:
+5-layer MLP with 2M parameters. Training configuration: Trained on the NQ ~~C~~ onfidence training set for 100 epochs with a batch size of 32. Resource characteristics: Lightweight model with
+extremely low training overhead; completable within 10 minutes on a single consumer-grade GPU
+(e.g., NVIDIA RTX 4090). 3) **Constructing the NQ** ~~**R**~~ **erank fine-tuning dataset:** Provides finetuning data for the preference-aligned reranker, with labels generated based on confidence changes
+of the target LLM toward different retrieved contexts. Sample scale: 7,622 training samples and
+1,216 test samples, totaling 8,838 samples. Computational load: Each sample requires 8 forward
+passes of the target LLM (matching 8 types of retrieved contexts) to generate preference labels, resulting in a total of 70,704 target LLM forward passes. 4) **Fine-tuning the reranker:** Base model:
+bge-reranker-v2-m3 (568M parameters). Fine-tuning configuration: Fine-tuned on the NQ ~~R~~ erank
+training set for 5 epochs (weights after 1 epoch are used in practice) with a batch size of 32. Resource characteristics: Moderate-scale model with few fine-tuning epochs; the entire process can be
+completed within 2 hours on a single NVIDIA RTX 4090.
+
+
+H.2 ONLINE INFERENCE PHASE
+
+
+The additional resource consumption in the online phase only involves two lightweight forward
+passes, which do not affect inference efficiency: 1) **Workflow:** For input query, the target LLM
+first performs one forward pass to obtain hidden states, while the confidence detection model E (2M
+parameters) executes one forward pass to determine the necessity of retrieval. If retrieval is deemed
+unnecessary, the generation process can be directly connected using the results of this target LLM
+forward pass, eliminating the need for additional LLM calls and redundant computations. 2) **Opti-**
+**mization:** Retrieval knowledge is directly injected into the target LLM’s Attention module (Dong
+et al. (2025b)) or FNN module (Su et al. (2025)) via parameter injection. Thus, even if retrieval is required after the LLM’s forward pass, the generation process can be seamlessly connected following
+parameterized knowledge injection, with no redundant computational overhead. 3) **Latency:** The
+total latency of the two forward passes is less than 100ms (on a single NVIDIA RTX 4090), which
+negligibly increases inference latency and meets real-time requirements.
+
+
+19
+
+
+**1026**
+
+**1027**
+
+
+**1028**
+
+**1029**
+
+**1030**
+
+**1031**
+
+**1032**
+
+**1033**
+
+
+**1034**
+
+**1035**
+
+**1036**
+
+**1037**
+
+**1038**
+
+**1039**
+
+
+**1040**
+
+**1041**
+
+**1042**
+
+**1043**
+
+**1044**
+
+
+**1045**
+
+**1046**
+
+**1047**
+
+**1048**
+
+**1049**
+
+**1050**
+
+
+**1051**
+
+**1052**
+
+**1053**
+
+**1054**
+
+**1055**
+
+**1056**
+
+
+**1057**
+
+**1058**
+
+**1059**
+
+**1060**
+
+**1061**
+
+**1062**
+
+
+**1063**
+
+**1064**
+
+**1065**
+
+**1066**
+
+**1067**
+
+
+**1068**
+
+**1069**
+
+**1070**
+
+**1071**
+
+**1072**
+
+**1073**
+
+
+**1074**
+
+**1075**
+
+**1076**
+
+**1077**
+
+**1078**
+
+**1079**
+
+
+**Algorithm 1:** CBDR Inference
+
+**Input:** Query _q_
+**Output:** Final answer _y_
+
+**1** **Require:** Target LLM _M_, confidence detection model _E_, retriever _R_, document corpus _D_,
+Fine-tuning reranker _FR_, confidence threshold _β_, _Top −_ _K_ parameter _K_, QA prompt _P_ qa,
+RAG prompt _P_ rag;
+
+**2** Construct pure QA prompt: promptqa _←P_ qa( _q_ );
+
+**3** Tokenize input: **x** _←_ Tokenize(promptqa);
+
+**4** Forward through _M_ with hidden states output:
+outputs _←_ _M_ ( **x** _,_ output ~~h~~ idden ~~s~~ tates = True);
+
+**5** Extract last context hidden state: **V** _←_ outputs.hidden ~~s~~ tates[ _−_ 1][0 _, −_ 1 _,_ :];
+
+**6** Compute confidence score: _S_ _←_ _E_ ( **V** );
+
+**7** **if** _S_ _≥_ _β_ **then**
+
+**8** Generate answer directly: _y_ _←_ _M._ generate( **x** _,_ max ~~n~~ ew ~~t~~ okens = _L_ max);
+
+**9** **else**
+
+**10** Retrieve candidate documents: _D_ raw _←R.retrieve_ ( _q,_ top ~~k~~ = _K · r_ );
+
+**11** Rerank using _M_ -aligned reranker: _D_ reranked _←_ _FR._ rerank( _q, D_ raw _, K_ );
+
+**12** Construct context: context _←_ [�] _[K]_ _i_ =1 _[D]_ [reranked][[] _[i]_ []] _[.]_ [text][;]
+
+**13** Build RAG prompt: promptrag _←P_ rag(context _, q_ );
+
+**14** Tokenize RAG input: **x** rag _←_ Tokenize(promptrag);
+
+**15** Generate answer with evidence: _y_ _←_ _M._ generate( **x** rag _,_ max ~~n~~ ew ~~t~~ okens = _L_ max);
+
+**16** **end**
+
+**17** Return _y_ ;
+
+
+20

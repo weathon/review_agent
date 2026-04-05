@@ -1,0 +1,1906 @@
+# EXPLORE-ON-GRAPH: INCENTIVIZING AUTONOMOUS EXPLORATION OF LARGE LANGUAGE MODELS ON KNOWLEDGE GRAPHS WITH PATH-REFINED REWARD MODELING
+
+
+**Shiqi Yan** [1] _[,]_ [2] **, Yubo Chen** [1] **, Ruiqi Zhou** [2] **, Zhengxi Yao** [2] **, Shuai Chen** [4] _[∗]_ **, Tianyi Zhang** [4] **,**
+**Shijie Zhang** [4] **, Wei-Qiang Zhang** [1] _[,]_ [2] **, Yongfeng Huang** [1] _[,]_ [2] **, Haixin Duan** [1] _[,]_ [3] **, Yunqi Zhang** [1] _[∗]_
+
+1Zhongguancun Laboratory
+2Department of Electronic Engineering, Tsinghua University
+3Institute for Network Sciences and Cyberspace, Tsinghua University
+4Ant International, Ant Group
+
+
+ABSTRACT
+
+
+The reasoning process of Large Language Models (LLMs) is often plagued by hallucinations and missing facts in question-answering tasks. A promising solution
+is to ground LLMs’ answers in verifiable knowledge sources, such as Knowledge
+Graphs (KGs). Prevailing KG-enhanced methods typically constrained LLM reasoning either by enforcing rules during generation or by imitating paths from a
+fixed set of demonstrations. However, they naturally confined the reasoning patterns of LLMs within the scope of prior experience or fine-tuning data, limiting
+their generalizability to out-of-distribution graph reasoning problems. To address
+this issue, in this paper, we propose Explore-on-Graph (EoG), a novel framework
+that encourages LLMs to autonomously explore a more diverse reasoning space
+on KGs. To incentivize exploration and discovery of novel reasoning paths, we
+propose to introduce reinforcement learning during training, whose reward is the
+correctness of the reasoning paths’ final answers. To enhance the efficiency and
+meaningfulness of the exploration, we propose to incorporate path information as
+additional reward signals to refine the exploration process and reduce futile efforts. Extensive experiments on five KGQA benchmark datasets demonstrate that,
+to the best of our knowledge, our method achieves state-of-the-art performance,
+outperforming not only open-source but also even closed-source LLMs [1] .
+
+
+1 INTRODUCTION
+
+
+Large language models (LLMs) have demonstrated impressive capabilities in various natural language processing tasks (Brown et al., 2020; Team et al., 2023; Liu et al., 2024; Dubey et al., 2024).
+Despite their success, LLMs often struggle to produce faithful reasoning in question-answering
+(QA) tasks (Wang et al., 2023; Radhakrishnan et al., 2023), primarily due to knowledge gaps and
+their susceptibility to hallucination (Ji et al., 2023; Guan et al., 2024). To this end, the reliability of
+LLMs in real-world QA systems remains a significant concern.
+
+
+To mitigate these issues, a promising approach is to ground LLMs’ responses in external and verifiable knowledge sources (Lewis et al., 2020; Li et al., 2023; Ren et al., 2025). Knowledge graphs
+(KGs), which emerge as an ideal candidate, provide solid factual information to validate and guide
+the LLMs’ reasoning process (Luo et al., 2024; Zhu et al., 2024).
+
+
+Recent KG-enhanced reasoning methods can be broadly classified into two paradigms: rule-based
+methods and imitation-based methods. The former (Sun et al., 2023; Zhang et al., 2025) typically
+leveraged a pre-defined set of rules to ensure the logical consistency and faithfulness during the
+LLM’s reasoning process. The latter (Zhang et al., 2022a; Wu et al., 2024; Jiang et al., 2025) mainly
+
+
+_∗_ Corresponding author. Contact: zhangyq@mail.zgclab.edu.cn
+1Code and data are available at: https://github.com/ysq111333/EoG
+
+
+1
+
+
+**(a) Rule/Imitation-based**
+
+
+**(b) Exploration (Ours)**
+
+
+Starting nodes Intermediate nodes Target nodes O.O.D. patterns Discarded paths Chosen paths
+
+
+Figure 1: Examples of (a) rule/imitation-based method and (b) our exploration method. O.O.D.
+stands for Out-Of-Distribution.
+
+
+trained LLMs on extensive datasets to directly mimic the reasoning patterns and heuristics embedded
+in the demonstrations.
+
+
+However, existing methods usually failed to generalize to complex graphs, especially to novel reasoning patterns that fall outside the distribution of the fine-tuning data or pre-defined rules. For
+
+_employee_ _lives_ ~~_i_~~ _n_
+example, as shown in Figure 1 (a), “ _Google_ _−−−−−→_ _Carol_ _−−_ ~~_−−→_~~ _London_ ” is the most common
+reasoning pattern corresponding to the question, and thus can be successfully recognized by ex
+_employee_ _colleague_ _resides_ ~~_a_~~ _t_
+isting methods. However, the patterns “ _Google_ _−−−−−→_ _Bob_ _−−−−−→_ _John_ _−−−_ ~~_−−→_~~ _London_ ”
+
+_subsidiary_ _employee_ _lives_ ~~_i_~~ _n_ _colleague_
+and “ _Google_ _−−−−−→_ _Youtube_ _−−−−−→_ _Alice_ _−−_ ~~_−−→_~~ _London_ ” involve additional steps “ _−−−−−→_ ”
+
+_subsidiary_
+and “ _−−−−−→_ ” that deviate from the most common pattern, consequently rendering them out-ofdistribution and challenging for existing methods. This observation motivates us to believe that
+navigating beyond the training distribution requires the capability to venture into unfamiliar regions
+
+_colleague_ _subsidiary_
+of the graph. For example, in Figure 1(b), although the “ _−−−−−→_ ” and “ _−−−−−→_ ” patterns are out of
+distribution, actively exploring these unfamiliar regions effectively helps discover these novel paths
+and give more accurate answers. We therefore argue that a complementary capability of autonomous
+exploration is essential to enhance generalization in the graph reasoning task.
+
+
+In this paper, we propose a novel framework named Explore-on-Graph (EoG) to incentivize autonomous exploration of LLMs on KGs. Inspired by recent advances in large reasoning models (Guo
+et al., 2025), we propose to introduce reinforcement learning during training, which is preceded by
+a Supervised Fine-Tuning (SFT) step, to stimulate exploration capabilities. We use the correctness
+of the reasoning paths’ final answers as reward signals, which can be computed programmatically
+given the golden label. Moreover, to improve the efficiency and semantic meaningfulness of the exploration process, we propose to incorporate path information as additional reward signals to refine
+the exploration strategy. Specifically, we introduce a second dedicated training stage and leverage
+our proposed path-refined reward. To evaluate the effectiveness of our approach, we conducted
+extensive experiments on five KGQA benchmark datasets. Experimental results demonstrate that
+our method achieves state-of-the-art performance, substantially outperforming a range of baseline
+methods and even surpassing the results of powerful closed-source models.
+
+
+2 RELATED WORK
+
+
+Knowledge graphs, which consist of relational triples that describe real-world entities and their relationships (Hogan et al., 2021; Chen et al., 2022; Zhang et al., 2022b), have been extensively adopted
+to guide the reasoning process of large language models to improve factuality and reduce hallu
+
+2
+
+
+Figure 2: The overall framework of our approach. Red arrows in the knowledge graph stands for the
+golden reasoning paths of the given question.
+
+
+cinations (Agrawal et al., 2024). Recent approaches to KG-enhanced reasoning could be broadly
+categorized into two paradigms based on the generation of the reasoning process: rule-based methods (Sun et al., 2023; Zhang et al., 2025; Li et al., 2025) and imitation-based methods (Wu et al.,
+2024; Mavromatis & Karypis, 2025; Jiang et al., 2025). To ensure the faithfulness of the reasoning
+process, rule-based methods guide the LLM’s reasoning process on the KGs by pre-defined rules.
+For example, ToG (Sun et al., 2023) introduced intuitive instructions to prompt LLMs to prune entities and relations from subgraphs. To improve retrieval efficiency, ReKnoS (Wang et al., 2025)
+proposed to recognize super-relations that are defined as a set of semantically related relations.
+Moreover, DoG (Li et al., 2025) adopted graph-aware constrained decoding with structured chains
+to constrain the decoding process. The approaches were generally training-free, but did not enhance
+the intrinsic reasoning capabilities of the LLMs themselves.
+
+
+Imitation-based methods focus on emulating reasoning patterns derived from fine-tuning data. Early
+work mainly tried to convert questions into executable logical forms (e.g. SPARQL) for knowledge graph retrieval (Lan & Jiang, 2020; Das et al., 2021; Ye et al., 2022), which heavily relied on the quality of generated queries. More recent work widely used Chain of Thought (CoT)
+to enhance LLM reasoning (Wu et al., 2024; Zhao et al., 2024). To reduce incorrect thoughts,
+RoG (Luo et al., 2024) proposed a planning-retrieval-reasoning framework that grounds plans in
+KGs. PoG (Chen et al., 2024) further improved the planning process through a reflection mechanism for self-correction. Though Kg-Agent (Jiang et al., 2025) employed several agents to iteratively reason over KGs, it relied on supervised fine-tuning with synthesized program data and failed
+to generalize beyond pre-defined tool-based reasoning paths.
+
+
+Different from previous work, we propose to incentivize autonomous exploration via reinforcement
+learning with path-refined reward modeling, enabling the model to explore novel reasoning paths
+that fall outside the distribution of pre-defined rules or supervised fine-tuning data. Experimental
+results on several benchmark datasets prove the effectiveness of our method.
+
+
+3 METHODOLOGY
+
+
+In this section, we introduce our Explore-on-Graph (EOG) in detail, which consists of a Supervised
+Fine-Tuning (SFT) stage and a Reinforcement Learning (RL) stage. To equip LLMs with the foundational ability for graph exploration, we introduce the SFT on knowledge graph reasoning tasks in
+
+
+3
+
+
+Section 3.1. To motivate the exploration of various reasoning paths and enhance its efficiency and
+meaningfulness, we introduce the RL with path-refined reward modeling in Section 3.2. The general
+framework of our approach is illustrated in Figure 2.
+
+
+3.1 SUPERVISED FINE-TUNING
+
+
+Directly instructing the LLMs to explore KGs presents significant challenges, including an intractably large action space and extreme reward sparsity (Xiong et al., 2017; Lin et al., 2018),
+due to lack of prior knowledge. To bridge this gap, CoT offers a pathway of structured reasoning demonstrations, by teaching LLMs the complex multi-step logic necessary for knowledge graph
+exploration (Wu et al., 2024). Compared to short CoT, long CoT allows more comprehensive and
+in-depth reasoning by exploring a wider range of logical paths (Chen et al., 2025). Therefore, we
+employ the long CoT Supervised Fine-Tuning paradigm to establish a foundation for the subsequent
+exploration phase, which consists of two parts: (1) constructing the long CoT reasoning dataset and
+(2) fine-tuning LLMs with the constructed dataset.
+
+
+**Long CoT Dataset Construction.** We carefully design the prompt to generate long CoT for graph
+reasoning, which requires the reasoning process to be structured, logical and to be aligned with KGs.
+The detailed prompt could be found in Figure 9. Due to its advanced deep thinking capabilities, we
+select Gemini 2.5 Flash (Comanici et al., 2025) to perform knowledge distillation to generate longchain reasoning thoughts and the final answers. Given a knowledge graph _G_ and a question _q_ as the
+query input, the generation sample from Gemini 2.5 Flash can be defined as the reasoning process
+_z_, which comprises both the reasoning paths (within “ _<_ _think_ _><_ _/think_ _>_ ” tags) and the final
+answers (within “ _<_ _answer_ _><_ _/answer_ _>_ ” tags). Then we incorporate additional rules to filter
+the reasoning process that is both structurally and factually correct. Finally, the SFT dataset _D_ CoT is
+constructed, with high-quality long CoT reasoning processes.
+
+
+**Supervised Fine-Tuning.** Following dataset construction, we perform SFT to endow the model with
+structured long CoT reasoning capabilities. We introduce a standard language modeling objective:
+
+
+_|zi|_
+
+- log _P_ ( _zi,j|zi,<j, Gi, qi_ ; _θ_ ) _,_ (1)
+
+
+_j_ =1
+
+
+1
+_L_ SFT = _−_ _|D_ CoT _|_
+
+
+_|D_ CoT _|_
+
+
+_i_ =1
+
+
+where ( _Gi, qi, zi_ ) _∈D_ CoT is the _i_ -th sample in the long CoT dataset, _zi_ represents the complete
+reasoning process for the _i_ -th sample, _zi,j_ is the _j_ -th token of that sequence, and _θ_ denotes the LLM
+parameters. Through this phase, the LLM acquires a strong capacity for structured reasoning, establishing an essential foundation for the subsequent exploration phase. Reinforcement Learning (RL)
+can then effectively refine and diversify these learned pathways based on environmental feedback,
+rather than starting from unguided random exploration.
+
+
+3.2 REINFORCEMENT LEARNING
+
+
+While the SFT equips the LLM with the ability to generate structured reasoning paths, its outputs
+are usually confined to the patterns observed in the training data, potentially leading to suboptimal reasoning. To facilitate the discovery of a broader and more effective exploration space, we
+structure our reinforcement learning approach into two distinct phases. Inspired by advances such
+as Deepseek-R1 (Shao et al., 2024), firstly, we introduce the Group Relative Policy Optimization
+(GRPO) to optimize the exploration policy on KGs based on the correctness of the reasoning path’s
+final answers in Section 3.2.1. Then we integrate a path-refined reward that provides additional
+signals to steer exploration toward more efficient and meaningful paths in Section 3.2.2.
+
+
+3.2.1 REINFORCEMENT LEARNING WITH OUTCOME REWARD
+
+
+In the first phase, we optimize the exploration policy _πθ_ for enhancing the discovery of correct
+answers via a GRPO-based and outcome-supervised reinforcement learning objective _J_ GRPO( _θ_ ) .
+Given the environment ( _G, q_ ) _∈D_ GRPO, our LLM after the SFT stage could generate a group of
+_S_ candidate exploration processes _{pi}_ _[S]_ _i_ =1 _[⊆P]_ [(] _[G][,q]_ [)][,] [where] [each] _[p][i]_ [is] _[i]_ [-th] [process] [sampled] [from]
+the old policy _πθ_ old . Similar to a reasoning process _z_, each _p_ contains both the exploration paths
+and the final answers with structured tags. The policy model could be optimized by maximizing the
+following reinforcement learning objective _J_ GRPO( _θ_ ):
+
+
+4
+
+
+_J_ GRPO( _θ_ ) = E[ _G,q∼{_ P( _G,q_ ) _|_ ( _G,q_ ) _∈D_ GRPO _},{pi}Si_ =1 _[∼][π][θ]_ old [(] _[P]_ [(] _[G][,q]_ [)] _[|][p]_ [;] _[G]_ [)]]
+
+
+1
+
+_S_
+
+
+_S_
+
+
+_i_ =1
+
+
+1
+_|pi|_
+
+
+_|pi|_
+
+
+_t_ =1
+
+
+- - - - (2)
+min _ψθ_ ( _pi,t_ ) _A_ [ˆ] ( _pi_ ) _,_ clip ( _ψθ_ ( _pi,t_ ) _,_ 1 _± ϵ_ ) _A_ [ˆ] ( _pi_ ) _−_ _β_ DKL( _πθ||π_ ref) _,_
+
+
+where _ψθ_ ( _pi,t_ ) = _ππθθ_ old( _p_ ( _pi,ti,t|q,|q,GG,p,pi<ti<t_ )) [,] [and] _[A]_ [ˆ][(] _[p][i]_ [)] [=] _R_ ( _pi_ std) _−_ (mean _{R_ (( _p{jR_ ) _}_ ( _[S]_ _jp_ =1 _j_ ) [)] _}_ _[S]_ _j_ =1 [)] . The importance sam
+pling ratio _ψθ_ ( _pi,t_ ) measures how much more likely the new policy _πθ_ is to generate _pi,t_ compared to the old policy _πθ_ old. _A_ [ˆ] ( _pi_ ) is the relative normalized advantage. _ϵ_ and _β_ are hyperparameters. DKL( _πθ||π_ ref) computes the KL-divergence between the updated policy and a reference policy.
+_R_ ( _pi_ ) is the reward function that measures the quality of diverse exploration paths _{pi}_ _[S]_ _i_ =1 [.]
+
+
+By optimizing Equation (2), the LLM learns to favor exploration paths that are highly rewarding and
+reliable relative to other sampled paths. Therefore, we define the outcome reward _R_ ( _p_ ) to encourage
+generating exploration paths that contain the right answers. Specifically, we utilize the entity-level
+F1 score to measure the correctness of the final answers of a generated exploration sequence _p_ .
+We first recognize the set of predicted answer entities _Ap_ through extracting the texts within the
+“ _<_ _answer_ _><_ _/answer_ _>_ ” tags in the generated exploration sequence. Considering the set of
+ground-truth answer entities _Ag_, then the outcome reward _R_ outcome( _p_ ) is calculated as follows:
+
+
+_R_ outcome( _p_ ) = 2 _·_ _[Pre][ ·][ Rec]_
+
+
+_[ ∩]_ _[A][g][|]_
+
+_,_ _Rec_ = _[|][A][p][ ∩]_ _[A][g][|]_
+_|Ap|_ _|Ag|_
+
+
+_[Pre][ ·][ Rec]_ _[|][A][p][ ∩]_ _[A][g][|]_
+
+_Pre_ + _Rec_ _[,]_ [ where] _[ Pre]_ [ =] _|Ap|_
+
+
+(3)
+_|Ag|_
+
+
+We set the reward to 0 if the predicted answer set _Ap_ is empty. Note that the outcome reward
+_R_ outcome( _p_ ) is automatically set to 0 for all samples that do not contain correctly formatted answer
+tags in the exploration sequence. Therefore, this reward implicitly encourages the correct structured
+exploration processes during the policy optimization process. For this reason, we did not include an
+additional format reward in this phase.
+
+
+3.2.2 REINFORCEMENT LEARNING WITH PATH-REFINED REWARD
+
+
+The process of generating an exploration path reflects the LLM’s reasoning trajectory through a KG.
+Rewarding correct paths minimizes exploration of wrong directions. In addition, the exploration
+paths with sequential chains of connected relational triples contain rich semantic information, which
+can help the LLM generate more comprehensive and in-depth exploration processes. In this phase,
+we suggest using path information to generate auxiliary rewards, thereby optimizing the exploration
+process and curtailing inefficient actions.
+
+
+The path-based reward, _R_ path( _p_ ), is formulated to quantify the proportion of ground-truth reasoning
+steps successfully articulated in the generated thought process. To obtain the ground-truth reasoning path _rg_ for datasets that do not provide them explicitly, we implement a “Search-and-Verify”
+pipeline. First, We identify the topic entities in the question and the ground-truth answer entities in
+the Knowledge Graph. We then perform a Breadth-First Search (BFS) to retrieve all potential paths
+connecting the topic entities to the answer entities within a maximum hop constraint. This step ensures high recall of potential reasoning chains. Second, since BFS may yield spurious paths that are
+topologically connected but semantically unrelated, we employ a LLM (e.g., Gemini-2.5-Flash) to
+semantically verify these paths. The LLM is prompted to determine if a path logically corresponds
+to the question’s intent, and only validated paths are retained as _rg_ .
+
+
+Given a ground-truth reasoning path _rg_, which consists of a set of structured triplets, we first extract
+this set of triplets, denoted as _T_ = _{_ ( _si, ri, oi_ ) _}_ _[|]_ _i_ _[T]_ =1 _[ |]_ [.] [For each triplet] _[ t][i]_ [= (] _[s][i][, r][i][, o][i]_ [)] _[ ∈]_ _[T]_ [, we check]
+if all three components—subject _si_, relation _ri_, and object _oi_ —are present as substrings within the
+generated reasoning text _p_ think. The reward is then calculated as the ratio of fully matched triplets to
+the total number of triplets in the ground-truth path:
+
+
+_R_ path( _p_ ) = _|T_ [1] _|_
+
+
+I( _si_ _∈_ _p_ think _∧_ _ri_ _∈_ _p_ think _∧_ _oi_ _∈_ _p_ think) (4)
+_ti∈T_
+
+
+where I( _·_ ) is the indicator function, which returns 1 if the condition is true and 0 otherwise. This
+function provides a direct and interpretable score of how faithfully the model’s reasoning follows
+the correct path, hence contributing to the efficiency and meaningfulness of exploration process.
+
+
+5
+
+
+Table 1: Performance of EoG and previous state-of-the-art models on the five KGQA test sets. The
+best scores are in bold. _[†]_ marks the performance of the closed-source model which uses the same
+input as our EoG. EoG _SFT_ is the model which is only trained with SFT datasets but not with RL.
+
+
+WebQSP CWQ GrailQA QALD10-en 2WikiMultihop
+Method Model
+
+Hit@1 F1 Hit@1 F1 Hit@1 F1 Hit@1 F1 Hit@1 F1
+
+
+KD-CoT (2023) Llama-2-7B 68.6 52.5 55.7    -    -    -    -    -    -    EWEK-QA (2024)   - 71.3   - 52.5   - 60.4   -   -   -   -   
+ChatGPT 76.2           - 57.6           - 68.7           - 50.2           -           -           ToG (2023)
+GPT-4 82.6           - 68.5           - 81.4           - 53.8           -           -           RoG (2024) Llama-2-7B 85.7 70.8 62.6 56.2    -    -    -    -    -    ODA (2024) GPT-4    -    -    -    -    -    - 66.7    -    -    EffiQA (2025) GPT-4 82.9    - 69.5    - 78.4    - 51.4    -    -    GNN-RAG (2025) Llama-2-7B 85.7 71.3 66.8 59.4   -   -   -   -   -   KG-Agent (2025) Llama-2-7B 83.3 81.0 72.2 69.8    - 86.1    -    -    -    
+Qwen2.5-7B 92.7           - 74.1           -           -           -           -           - 84.2           DoG (2025)
+Llama-3.1-8B 91.4            - 76.2            -            -            -            -            - 84.1            GCR (2025) Llama-3.1-8B 92.2 79.1 75.8 61.7    -    -    -    -    -    
+
+_†_ Gemini-2.5 Flash     - 91.8 78.2 65.5 59.3 90.3 83.8 56.7 46.2 83.9 83.1
+
+_†_ Gemini-2.5 Pro     - 92.1 79.8 71.9 65.3 91.6 84.5 58.6 48.3 85.1 82.6
+
+_†_ GPT-5     - 86.1 77.5 74.1 67.6 90.5 85.4 59.2 50.4 84.2 83.4
+
+
+Qwen2.5-7B 83.9 72.6 68.3 60.3 89.2 87.6 55.6 44.1 82.5 81.9
+EoG _SFT_ Llama-3.1-8B 86.3 74.5 70.5 62.1 91.4 88.2 57.1 48.7 83.1 82.7
+
+Qwen2.5-7B 90.7 78.1 82.7 73.8 91.7 88.5 67.3 57.8 83.9 82.9
+EoG
+Llama-3.1-8B **92.8** **81.3** **86.6** **77.9** **92.1** **90.6** **70.6** **61.9** **85.3** **84.3**
+
+
+Furthermore, we introduce the joint reward _R_ joint( _p_ ) to incentivizing the LLM to produce both highquality exploration paths and the right final answers:
+
+
+_R_ joint( _p_ ) = _R_ outcome( _p_ ) + _αR_ path( _p_ ) (5)
+
+
+where _α_ is the coefficient that controls the relative influence of the outcome reward and the path
+reward on the exploration optimization policy.
+
+
+4 EXPERIMENTS
+
+
+4.1 EXPERIMENTS SETUP
+
+
+**Datasets.** Following previous research, we evaluate our method on five widely-used benchmark
+datasets: CWQ (Talmor & Berant, 2018), WebQSP (Yih et al., 2016), GrailQA (Gu et al., 2021),
+QALD10-en (Usbeck et al., 2024) and 2WikiMultihop (Ho et al., 2020). The first three benchmarks are constructed based on Freebase, whereas QALD10-en and 2WikiMultihop are built upon
+Wikidata. The details of the datasets are described in Appendix B.
+
+
+**Baseline.** We compare EoG with 10 previous baseline methods (Luo et al., 2024; Sun et al., 2019),
+such as GCR and DoG. The detailed descriptions of the baseline methods are listed in Appendix
+C. In particular, we report the performance of closed-source LLMs with strong deep-thinking ability, Gemini 2.5 series (Comanici et al., 2025) and GPT-5 [2], by querying the APIs with the same
+instructions and inputs as our EoG, including the questions and the corresponding KGs. The implementation details are provided in Appendix E.
+
+
+**Evaluation Metrics.** In the evaluation of baselines, we adopt the Hit@1 and F1 metrics following
+previous work (Mavromatis & Karypis, 2025). The Hit@1 metric focuses on whether any correct
+answer is present in the prediction, while the F1 metric evaluates the coverage of all answers by
+comprehensively considering the precision and recall of the prediction.
+
+
+**Implementations.** To validate the general applicability of our approach, we apply EoG to two opensource LLMs, Qwen2.5-7B-Instruct (Yang et al., 2024) and Llama-3.1-8B-Instruct (Dubey et al.,
+2024). For fine-tuning, we use Gemini-2.5-Flash to generate long chain-of-thought datasets. For
+
+
+2https://cdn.openai.com/gpt-5-system-card.pdf
+
+
+6
+
+
+reinforcement learning, we implement the GRPO method using verl (Sheng et al., 2025). More
+details on experimental settings can be found in Appendix D.
+
+
+4.2 MAIN RESULTS
+
+
+From Table 1 we have several observations. First, our EoG outperforms previous KG-enhanced
+reasoning methods with similar amounts of LLM parameters. Impressively, it even exceeds the
+performance of existing closed-source deep-thinking LLMs such as Gemini 2.5 Pro and GPT-5.
+It demonstrates the remarkable strength of EoG’s autonomous exploration capability. Second, the
+performance of EoG _SFT_ significantly drops on all datasets compared with EoG, which indicates that
+EoG’s strong exploration capability is attributed to the reinforcement learning stage, rather than
+knowledge distillation from LLMs, further demonstrating the effectiveness of our proposed RL with
+path-refined reward modeling. Finally, EoG built upon two base models both demonstrate strong
+performance, proving the general applicability of our method to different LLM architectures.
+
+
+4.3 ABLATION STUDY
+
+
+**Ablation Study.** We conduct an ablation study on the CWQ and WebQSP test sets to validate the
+contribution of each component in our framework. The results are shown in Table 2. Note that when
+removing the outcome reward, we use the Hit@1 score instead to reward the exploration process.
+First, we observe that the path reward is critical to performance, demonstrating that our path-refined
+reward effectively enhances EoG’s exploration by optimizing the semantic meaningfulness of its
+reasoning paths. Furthermore, the RL phase with outcome reward constitutes a significant contribution to EoG’s performance. This shows that a granular evaluation of the answers plays an important
+role in the process of exploring policy optimization, demonstrating the necessity of using the F1
+score. Finally, EoG without SFT, which is only trained with RL, shows suboptimal performance,
+regardless of whether the In-Context Learning (ICL) is applied, proving the necessity of adopting
+SFT for the cold start in our framework.
+
+
+Table 2: Ablation studies of EoG on CWQ and WebQSP datasets.
+
+|Model|CWQ<br>Hit@1 F1|WebQSP<br>Hit@1 F1|
+|---|---|---|
+|EoG|**82.6**<br>**73.9**|**92.8**<br>**81.3**|
+|w/o path reward<br>w/o outcome reward<br>w/o SFT<br>w/o SFT, w/ ICL|81.5<br>70.8<br>62.7<br>51.4<br>70.3<br>63.1<br>70.7<br>63.8|90.2<br>77.3<br>65.5<br>56.2<br>75.9<br>65.8<br>77.2<br>66.5|
+
+
+**Balance** **between** **Outcome** **and** **Path** **Reward.** To investigate the optimal balance between the
+outcome and path reward, we evaluated various ratios _α_ in Equation (5), which is illustrated in Figure
+3. Note that the horizontal axis represents the different ratios, while the vertical axis indicates the
+performance difference (%) compared to using only the outcome reward. We observe that when the
+ratio is too small, the performance drops significantly. We hypothesize that reducing path signals
+may lead EoG to generate error or meaningless paths and hurt the performance. When the ratio
+is excessively increased, EoG may pay less attention to the correctness of the answers given the
+exploration paths, which leads to performance degradation.
+
+
+Table 3: Evaluation of the impact of the path reward.
+
+
+Dataset Setting Average Output Length( _↓_ ) Comprehensiveness( _↑_ ) Relevance( _↑_ ) Exploration( _↑_ )
+
+
+EoG **1528** **91.9** **95.3** **88.8**
+CWQ
+EoG w/o path reward 2067 89.8 92.6 85.1
+
+
+EoG **92.7** **97.1** **78.9**
+WebQSP
+EoG w/o path reward 926 91.9 95.3 74.3
+
+
+**Impact of Path Reward.** We conduct experiments to measure the impact of path reward on EoG’s
+output in terms of its average length, comprehensiveness, relevance, and exploration, with the latter
+three metrics being assessed by querying GPT-4o-mini (Hurst et al., 2024) using custom-designed
+
+
+7
+
+
+5
+
+
+4
+
+
+3
+
+
+2
+
+
+1
+
+
+0
+
+|WebQSP<br>CWQ<br>GrailQA|Col2|Col3|Col4|Col5|Col6|Col7|
+|---|---|---|---|---|---|---|
+|2WikiM|ultihopQA|ultihopQA|||||
+||||||||
+||||||||
+||||||||
+
+
+0.0 0.2 0.4 0.6 0.8 1.0
+Ratio
+
+
+Figure 3: Performance of EoG with different ratios of the path reward to the outcome reward. In
+the figure, the horizontal axis represents the different ratios, while the vertical axis indicates the performance difference compared to using only the
+outcome reward.
+
+
+Figure 4: A multi-dimensional performance
+comparison on different reasoning paths.
+
+
+prompts. The relevant prompts are shown in Figure 11. From the Table 3, it is demonstrated that
+our path reward method can improve the efficiency and meaningfulness of our EoG’s output.
+
+
+4.4 ANALYSIS OF REASONING QUALITY
+
+
+In this section, we evaluate the quality of the reasoning process of different methods across six
+dimensions. We select GPT-4o-mini as the judge and the relevant prompts are shown in Figure
+11. The results show that EoG performs outstandingly compared to other methods, indicating that
+the model can effectively integrate knowledge graph information to generate comprehensive and
+accurate answers. Notably, our model has achieved significant improvements in reasoning depth,
+exploration, and comprehensiveness, demonstrating the substantial enhancement of the two-stage
+reinforcement learning method we employed on the exploration policy.
+
+
+4.5 PERFORMANCE ON COMPLEX REASONING SCENARIOS
+
+
+Following previous work (Luo et al., 2025), we divided the test set of the CWQ dataset according
+to different logical patterns and reasoning depths. As shown in Table 4, we observe that EoG outperforms both GCR and DoG in almost all subsets, especially in the more challenging reasoning
+scenarios, such as reasoning over superlative patterns or _≥_ 3 hops. We claim that this is because
+EoG actively explores a larger reasoning space on the graphs, which gains more logical and semantic
+information to help understand various logical patterns and deeper reasoning. In general, the results
+on different causal patterns and hops show the effectiveness of our method in complicated reasoning
+scenarios.
+
+
+Table 4: Performance (F1 scores) comparison on different logical patterns and reasoning depths.
+
+
+Method Conjuction Comparative Superlative Composition 1-hop 2-hop 3-hop _≥_ 4-hop Overall
+
+
+Hit@1 73.1 66.3 64.4 66.8 79.0 71.9 62.1 47.7 68.2
+GCR
+F1 63.7 57.7 52.6 59.7 66.3 63.0 56.6 45.8 60.3
+
+Hit@1 72.3 77.8 68.7 75.9 75.1 74.1 69.9 63.3 73.7
+DoG
+F1 53.3 68.3 45.9 49.2 50.3 53.7 64.5 46.7 53.2
+
+Hit@1 **77.2** **85.2** **73.4** **82.8** **83.5** **79.1** **83.2** **76.8** **82.6**
+EoG
+F1 **70.2** **77.2** **64.7** **76.8** **76.2** **72.0** **78.1** **69.6** **73.9**
+
+
+8
+
+
+4.6 ANALYSIS OF EXPLORATION BEHAVIOR
+
+
+To examine how reward design influences exploration behavior, we evaluate models using exploration efficiency and coverage of the reasoning space on the CWQ test set. Exploration efficiency
+measures the average number of explored triples required to identify one correct reasoning triple,
+while reasoning coverage quantifies the proportion of ground-truth reasoning triples successfully
+discovered. Detailed metric definitions are provided in Appendix P.
+
+
+Table 5: Comparison of exploration efficiency and reasoning coverage on the CWQ test set.
+
+
+**Model** **Exploration Efficiency (** _↓_ **)** **Coverage (** _↑_ **)**
+
+
+EoGSFT **2.877** 0.615
+EoGOutcome 3.028 0.689
+EoG 2.887 **0.723**
+
+
+As shown in Table 5, EoG achieves the highest reasoning coverage while maintaining efficiency
+comparable to the SFT baseline. Although outcome-based RL improves coverage, it introduces
+noisy exploration. In contrast, our path-refined reward encourages broader yet precise reasoning,
+leading to better coverage without increasing exploration overhead.
+
+
+4.7 PERFORMANCE ON OUT OF DISTRIBUTION DATASETS
+
+
+Figures 5(a) and 5(b) show that EoG outperforms EoG _SFT_ on four datasets in O.O.D. settings. Leveraging the autonomous exploration on graphs, EoG reliably maintains model performance stability
+across diverse datasets and data sources. Figures 5(c) and 5(d) show that EoG achieves higher
+O.O.D.- to-I.I.D. ratios than EoG _SFT_, reflecting its strong robustness and cross-domain generalizability via reinforcement learning with path-refined reward over KGs.
+
+
+|92.80|62.50|87.80|67.50|
+|---|---|---|---|
+|92.10|82.60|89.70|75.70|
+|52.50|41.80|92.10|62.50|
+|67.10|<br>53.20|<br>77.40|<br>85.30|
+
+
+(b) EoG(Hit@1)
+
+
+|100.0%|54.7%|85.1%|66.7%|
+|---|---|---|---|
+|87.4%|100.0%|80.0%|81.6%|
+|46.9%|36.7%|100.0%|56.5%|
+|29.4%|<br>46.8%|<br>83.4%|<br> 100.0%|
+
+
+(c) EoG _SFT_ (ratio)
+
+
+|100.0%|67.3%|94.6%|72.7%|
+|---|---|---|---|
+|111.5%|100.0%|108.6%|91.6%|
+|57.0%|45.4%|100.0%|67.9%|
+|78.7%|<br>62.4%|<br>90.7%|<br> 100.0%|
+
+
+(d) EoG(ratio)
+
+
+|86.30|47.20|73.40|57.60|
+|---|---|---|---|
+|61.60|70.50|56.40|57.50|
+|42.90|33.50|91.40|51.60|
+|24.41|<br>38.86|<br>69.30|<br>83.10|
+
+
+(a) EoG _SFT_ (Hit@1)
+
+
+90
+
+
+80
+
+
+70
+
+
+60
+
+
+50
+
+
+40
+
+
+30
+
+
+20
+
+
+90
+
+
+80
+
+
+70
+
+
+60
+
+
+50
+
+
+40
+
+
+30
+
+
+20
+
+
+120
+
+
+110
+
+
+100
+
+
+90
+
+
+80
+
+
+70
+
+
+60
+
+
+50
+
+
+40
+
+
+120
+
+
+110
+
+
+100
+
+
+90
+
+
+80
+
+
+70
+
+
+60
+
+
+50
+
+
+40
+
+
+Figure 5: Hit@1 comparison and performance ratios across four datasets under out-of-distribution
+(O.O.D.) settings. The O.O.D.-to-I.I.D. ratio is defined as a model’s performance score on Out-ofDistribution (O.O.D.) data divided by its performance score on Independent and Identically Distributed (I.I.D.) data. Subfigures (c) and (d) show the O.O.D.-to-I.I.D. ratios of the models on the
+four datasets. 2Wiki refers to the 2WikiMultihop dataset. The Y-axis shows the dataset the model
+was trained on and the X-axis shows the dataset the model was evaluated on.
+
+
+4.8 CASE STUDY
+
+
+Figure 6 illustrates the comparison of EoG and GCR on the knowledge graph reasoning task instance. Although the question presupposes the relational pattern
+“ _∃x,_ ImportsFrom( _x,_ Japan)”, active exploration of our model uncovered an alternative and
+unseen pattern: “ _∃x,_ ImportsFrom(ImportsFrom( _y,_ Japan) _, x_ )” through exploring the unknown
+entity “m.048prwp”. Due to the lack of prior knowledge, GCR fails to recognize this pattern. This
+shows EoG’s capacity to adapt to unexpected causal patterns through exploration. Furthermore, in
+case some facts are missing in the graph, such as the label of “m.048prwp”, the relation “ISO”, our
+model can still leverage known semantic information for inference and prediction, demonstrating
+the strong capability of path-based policy optimization. The above observations demonstrate the
+effectiveness of our method in autonomous exploration of knowledge graphs.
+
+
+9
+
+
+Figure 6: An example of question and the corresponding answer from EoG and GCR. Different
+types of entities are distinguished with different colors.
+
+
+5 CONCLUSION
+
+
+In this paper, we propose a novel framework called Explore-on-Graph (EoG) to address the critical challenge of limited generalizability in existing KG-enhanced LLM reasoning methods, which
+often fail on out-of-distribution reasoning patterns. EoG employs reinforcement learning, guided
+by both the correctness of the final answer and a path-refined reward for efficiency, to incentivize
+the model’s exploration of novel and meaningful reasoning paths. Furthermore, extensive experiments demonstrate that EoG achieves new state-of-the-art results, significantly outperforming existing open-source models and even surpassing the performance of powerful closed-source LLMs.
+Our analysis also provides key insights into RL training strategies for KGQA. Finally, future work
+could investigate how to leverage knowledge graphs to explore more sophisticated reward strategies,
+thereby enabling more efficient and meaningful reasoning.
+
+
+ACKNOWLEDGEMENT
+
+
+This work was supported by Ant Group Research Fund. The proposed method has been implemented and validated on Ant Group’s business datasets.
+
+
+ETHICS STATEMENT
+
+
+The data used in this paper is sourced exclusively from publicly available, open-source KGQA
+datasets (see Appendix B). As these datasets do not contain any personally identifiable information
+or other sensitive data, our experiments raise no apparent ethical concerns related to data privacy or
+human subjects.
+
+
+10
+
+
+REFERENCES
+
+
+Garima Agrawal, Tharindu Kumarage, Zeyad Alghamdi, and Huan Liu. Can knowledge graphs
+reduce hallucinations in llms?: A survey. In _Proceedings_ _of_ _the_ _2024_ _Conference_ _of_ _the_ _North_
+_American_ _Chapter_ _of_ _the_ _Association_ _for_ _Computational_ _Linguistics:_ _Human_ _Language_ _Tech-_
+_nologies (Volume 1:_ _Long Papers)_, pp. 3947–3960, 2024.
+
+
+Tom Brown, Benjamin Mann, Nick Ryder, Melanie Subbiah, Jared D Kaplan, Prafulla Dhariwal, Arvind Neelakantan, Pranav Shyam, Girish Sastry, Amanda Askell, Sandhini Agarwal, Ariel Herbert-Voss, Gretchen Krueger, Tom Henighan, Rewon Child, Aditya Ramesh,
+Daniel Ziegler, Jeffrey Wu, Clemens Winter, Chris Hesse, Mark Chen, Eric Sigler, Mateusz
+Litwin, Scott Gray, Benjamin Chess, Jack Clark, Christopher Berner, Sam McCandlish, Alec
+Radford, Ilya Sutskever, and Dario Amodei. Language models are few-shot learners. In
+H. Larochelle, M. Ranzato, R. Hadsell, M.F. Balcan, and H. Lin (eds.), _Advances_ _in_ _Neu-_
+_ral_ _Information_ _Processing_ _Systems_, volume 33, pp. 1877–1901. Curran Associates, Inc.,
+2020. URL [https://proceedings.neurips.cc/paper_files/paper/2020/](https://proceedings.neurips.cc/paper_files/paper/2020/file/1457c0d6bfcb4967418bfb8ac142f64a-Paper.pdf)
+[file/1457c0d6bfcb4967418bfb8ac142f64a-Paper.pdf.](https://proceedings.neurips.cc/paper_files/paper/2020/file/1457c0d6bfcb4967418bfb8ac142f64a-Paper.pdf)
+
+
+Liyi Chen, Panrong Tong, Zhongming Jin, Ying Sun, Jieping Ye, and Hui Xiong. Plan-on-graph:
+Self-correcting adaptive planning of large language model on knowledge graphs. _Advances_ _in_
+_Neural Information Processing Systems_, 37:37665–37691, 2024.
+
+
+Qiguang Chen, Libo Qin, Jinhao Liu, Dengyun Peng, Jiannan Guan, Peng Wang, Mengkang Hu,
+Yuhang Zhou, Te Gao, and Wanxiang Che. Towards reasoning era: A survey of long chain-ofthought for reasoning large language models. _arXiv preprint arXiv:2503.09567_, 2025.
+
+
+Yubo Chen, Yunqi Zhang, and Yongfeng Huang. Learning reasoning patterns for relational triple
+extraction with mutual generation of text and graph. In Smaranda Muresan, Preslav Nakov,
+and Aline Villavicencio (eds.), _Findings of the Association for Computational Linguistics:_ _ACL_
+_2022_, pp. 1638–1647, Dublin, Ireland, May 2022. Association for Computational Linguistics. doi: 10.18653/v1/2022.findings-acl.129. [URL https://aclanthology.org/2022.](https://aclanthology.org/2022.findings-acl.129/)
+[findings-acl.129/.](https://aclanthology.org/2022.findings-acl.129/)
+
+
+Gheorghe Comanici, Eric Bieber, Mike Schaekermann, Ice Pasupat, Noveen Sachdeva, Inderjit
+Dhillon, Marcel Blistein, Ori Ram, Dan Zhang, Evan Rosen, et al. Gemini 2.5: Pushing the
+frontier with advanced reasoning, multimodality, long context, and next generation agentic capabilities. _arXiv preprint arXiv:2507.06261_, 2025.
+
+
+Rajarshi Das, Manzil Zaheer, Dung Thai, Ameya Godbole, Ethan Perez, Jay Yoon Lee, Lizhen
+Tan, Lazaros Polymenakos, and Andrew McCallum. Case-based reasoning for natural language
+queries over knowledge bases. In Marie-Francine Moens, Xuanjing Huang, Lucia Specia, and
+Scott Wen-tau Yih (eds.), _Proceedings of the 2021 Conference on Empirical Methods in Natural_
+_Language Processing_, pp. 9594–9611, Online and Punta Cana, Dominican Republic, November
+2021. Association for Computational Linguistics. doi: 10.18653/v1/2021.emnlp-main.755. URL
+[https://aclanthology.org/2021.emnlp-main.755/.](https://aclanthology.org/2021.emnlp-main.755/)
+
+
+Mohammad Dehghan, Mohammad Alomrani, Sunyam Bagga, David Alfonso-Hermelo, Khalil Bibi,
+Abbas Ghaddar, Yingxue Zhang, Xiaoguang Li, Jianye Hao, Qun Liu, et al. Ewek-qa: Enhanced
+web and efficient knowledge graph retrieval for citation-based question answering systems. In
+_Proceedings of the 62nd Annual Meeting of the Association for Computational Linguistics (Vol-_
+_ume 1:_ _Long Papers)_, pp. 14169–14187, 2024.
+
+
+Zixuan Dong, Baoyun Peng, Yufei Wang, Jia Fu, Xiaodong Wang, Xin Zhou, Yongxue Shan,
+Kangchen Zhu, and Weiguo Chen. Effiqa: Efficient question-answering with strategic multimodel collaboration on knowledge graphs. In _Proceedings of the 31st International Conference_
+_on Computational Linguistics_, pp. 7180–7194, 2025.
+
+
+Abhimanyu Dubey, Abhinav Jauhri, Abhinav Pandey, Abhishek Kadian, Ahmad Al-Dahle, Aiesha
+Letman, Akhil Mathur, Alan Schelten, Amy Yang, Angela Fan, et al. The llama 3 herd of models.
+_arXiv e-prints_, pp. arXiv–2407, 2024.
+
+
+11
+
+
+Yu Gu, Sue Kase, Michelle Vanni, Brian Sadler, Percy Liang, Xifeng Yan, and Yu Su. Beyond i.i.d.:
+Three levels of generalization for question answering on knowledge bases. In _Proceedings of the_
+_Web_ _Conference_ _2021_, WWW ’21, pp. 3477–3488. ACM, April 2021. doi: 10.1145/3442381.
+3449992. [URL http://dx.doi.org/10.1145/3442381.3449992.](http://dx.doi.org/10.1145/3442381.3449992)
+
+
+Xinyan Guan, Yanjiang Liu, Hongyu Lin, Yaojie Lu, Ben He, Xianpei Han, and Le Sun. Mitigating large language model hallucinations via autonomous knowledge graph-based retrofitting.
+In _Proceedings of the AAAI Conference on Artificial Intelligence_, volume 38, pp. 18126–18134,
+2024.
+
+
+Daya Guo, Dejian Yang, Haowei Zhang, Junxiao Song, Ruoyu Zhang, Runxin Xu, Qihao Zhu,
+Shirong Ma, Peiyi Wang, Xiao Bi, et al. Deepseek-r1: Incentivizing reasoning capability in llms
+via reinforcement learning. _arXiv preprint arXiv:2501.12948_, 2025.
+
+
+Xanh Ho, Anh-Khoa Duong Nguyen, Saku Sugawara, and Akiko Aizawa. Constructing a multihop qa dataset for comprehensive evaluation of reasoning steps, 2020. [URL https://arxiv.](https://arxiv.org/abs/2011.01060)
+[org/abs/2011.01060.](https://arxiv.org/abs/2011.01060)
+
+
+Aidan Hogan, Eva Blomqvist, Michael Cochez, Claudia D’amato, Gerard De Melo, Claudio Gutierrez, Sabrina Kirrane, Jos´e Emilio Labra Gayo, Roberto Navigli, Sebastian Neumaier, AxelCyrille Ngonga Ngomo, Axel Polleres, Sabbir M. Rashid, Anisa Rula, Lukas Schmelzeisen, Juan
+Sequeda, Steffen Staab, and Antoine Zimmermann. Knowledge graphs. _ACM_ _Comput._ _Surv._,
+54(4), July 2021. ISSN 0360-0300. doi: 10.1145/3447772. URL [https://doi.org/10.](https://doi.org/10.1145/3447772)
+[1145/3447772.](https://doi.org/10.1145/3447772)
+
+
+Aaron Hurst, Adam Lerer, Adam P Goucher, Adam Perelman, Aditya Ramesh, Aidan Clark, AJ Ostrow, Akila Welihinda, Alan Hayes, Alec Radford, et al. Gpt-4o system card. _arXiv_ _preprint_
+_arXiv:2410.21276_, 2024.
+
+
+Ziwei Ji, Nayeon Lee, Rita Frieske, Tiezheng Yu, Dan Su, Yan Xu, Etsuko Ishii, Ye Jin Bang,
+Andrea Madotto, and Pascale Fung. Survey of hallucination in natural language generation. _ACM_
+_computing surveys_, 55(12):1–38, 2023.
+
+
+Jinhao Jiang, Kun Zhou, Xin Zhao, Yang Song, Chen Zhu, Hengshu Zhu, and Ji-Rong Wen.
+KG-agent: An efficient autonomous agent framework for complex reasoning over knowledge
+graph. In Wanxiang Che, Joyce Nabende, Ekaterina Shutova, and Mohammad Taher Pilehvar
+(eds.), _Proceedings of the 63rd Annual Meeting of the Association for Computational Linguistics_
+_(Volume_ _1:_ _Long_ _Papers)_, pp. 9505–9523, Vienna, Austria, July 2025. Association for Computational Linguistics. ISBN 979-8-89176-251-0. doi: 10.18653/v1/2025.acl-long.468. URL
+[https://aclanthology.org/2025.acl-long.468/.](https://aclanthology.org/2025.acl-long.468/)
+
+
+Yunshi Lan and Jing Jiang. Query graph generation for answering multi-hop complex questions
+from knowledge bases. Association for Computational Linguistics, 2020.
+
+
+Patrick Lewis, Ethan Perez, Aleksandra Piktus, Fabio Petroni, Vladimir Karpukhin, Naman Goyal,
+Heinrich K¨uttler, Mike Lewis, Wen-tau Yih, Tim Rockt¨aschel, et al. Retrieval-augmented generation for knowledge-intensive nlp tasks. _Advances in neural information processing systems_, 33:
+9459–9474, 2020.
+
+
+Kun Li, Tianhua Zhang, Xixin Wu, Hongyin Luo, James R. Glass, and Helen M. Meng. Decoding
+on graphs: Faithful and sound reasoning on knowledge graphs through generation of well-formed
+chains. In Wanxiang Che, Joyce Nabende, Ekaterina Shutova, and Mohammad Taher Pilehvar
+(eds.), _Proceedings of the 63rd Annual Meeting of the Association for Computational Linguistics_
+_(Volume_ _1:_ _Long_ _Papers)_, pp. 24349–24364, Vienna, Austria, July 2025. Association for Computational Linguistics. ISBN 979-8-89176-251-0. doi: 10.18653/v1/2025.acl-long.1186. URL
+[https://aclanthology.org/2025.acl-long.1186/.](https://aclanthology.org/2025.acl-long.1186/)
+
+
+Tianle Li, Xueguang Ma, Alex Zhuang, Yu Gu, Yu Su, and Wenhu Chen. Few-shot in-context
+learning on knowledge base question answering. In _Proceedings_ _of_ _the_ _61st_ _Annual_ _Meeting_ _of_
+_the Association for Computational Linguistics (Volume 1:_ _Long Papers)_, pp. 6966–6980, 2023.
+
+
+12
+
+
+Xi Victoria Lin, Richard Socher, and Caiming Xiong. Multi-hop knowledge graph reasoning with
+reward shaping. In _Proceedings of the 2018 Conference on Empirical Methods in Natural Lan-_
+_guage Processing, EMNLP 2018, Brussels, Belgium, October 31-November 4, 2018_, 2018.
+
+
+Aixin Liu, Bei Feng, Bing Xue, Bingxuan Wang, Bochao Wu, Chengda Lu, Chenggang Zhao,
+Chengqi Deng, Chenyu Zhang, Chong Ruan, et al. Deepseek-v3 technical report. _arXiv preprint_
+_arXiv:2412.19437_, 2024.
+
+
+Linhao Luo, Yuan-Fang Li, Gholamreza Haffari, and Shirui Pan. Reasoning on graphs: Faithful and
+interpretable large language model reasoning. In _International_ _Conference_ _on_ _Learning_ _Repre-_
+_sentations_, 2024.
+
+
+Linhao Luo, Zicheng Zhao, Chen Gong, Gholamreza Haffari, and Shirui Pan. Graph-constrained
+reasoning: Faithful reasoning on knowledge graphs with large language models. In _Forty-second_
+_International Conference on Machine Learning_, 2025.
+
+
+Costas Mavromatis and George Karypis. Gnn-rag: Graph neural retrieval for efficient large language model reasoning on knowledge graphs. In _Findings of the Association for Computational_
+_Linguistics:_ _ACL 2025_, pp. 16682–16699, 2025.
+
+
+Ansh Radhakrishnan, Karina Nguyen, Anna Chen, Carol Chen, Carson Denison, Danny Hernandez,
+Esin Durmus, Evan Hubinger, Jackson Kernion, Kamile Lukosiute, et al. Question decomposition
+improves the faithfulness of model-generated reasoning. _CoRR_, 2023.
+
+
+Ruiyang Ren, Yuhao Wang, Yingqi Qu, Wayne Xin Zhao, Jing Liu, Hua Wu, Ji-Rong Wen, and
+Haifeng Wang. Investigating the factual knowledge boundary of large language models with
+retrieval augmentation. In _Proceedings_ _of_ _the_ _31st_ _International_ _Conference_ _on_ _Computational_
+_Linguistics_, pp. 3697–3715, 2025.
+
+
+Zhihong Shao, Peiyi Wang, Qihao Zhu, Runxin Xu, Junxiao Song, Xiao Bi, Haowei Zhang,
+Mingchuan Zhang, YK Li, Yang Wu, et al. Deepseekmath: Pushing the limits of mathematical reasoning in open language models. _arXiv preprint arXiv:2402.03300_, 2024.
+
+
+Guangming Sheng, Chi Zhang, Zilingfeng Ye, Xibin Wu, Wang Zhang, Ru Zhang, Yanghua Peng,
+Haibin Lin, and Chuan Wu. Hybridflow: A flexible and efficient rlhf framework. In _Proceedings_
+_of the Twentieth European Conference on Computer Systems_, EuroSys ’25, pp. 1279–1297. ACM,
+March 2025. doi: 10.1145/3689031.3696075. URL [http://dx.doi.org/10.1145/](http://dx.doi.org/10.1145/3689031.3696075)
+[3689031.3696075.](http://dx.doi.org/10.1145/3689031.3696075)
+
+
+Haitian Sun, Tania Bedrax-Weiss, and William Cohen. PullNet: Open domain question answering
+with iterative retrieval on knowledge bases and text. In Kentaro Inui, Jing Jiang, Vincent Ng, and
+Xiaojun Wan (eds.), _Proceedings of the 2019 Conference on Empirical Methods in Natural Lan-_
+_guage_ _Processing_ _and_ _the_ _9th_ _International_ _Joint_ _Conference_ _on_ _Natural_ _Language_ _Processing_
+_(EMNLP-IJCNLP)_, pp. 2380–2390, Hong Kong, China, November 2019. Association for Computational Linguistics. doi: 10.18653/v1/D19-1242. [URL https://aclanthology.org/](https://aclanthology.org/D19-1242/)
+[D19-1242/.](https://aclanthology.org/D19-1242/)
+
+
+Jiashuo Sun, Chengjin Xu, Lumingyuan Tang, Saizhuo Wang, Chen Lin, Yeyun Gong, HeungYeung Shum, and Jian Guo. Think-on-graph: Deep and responsible reasoning of large language
+model with knowledge graph, 2023.
+
+
+Lei Sun, Zhengwei Tao, Youdi Li, and Hiroshi Arakawa. ODA: Observation-driven agent for integrating LLMs and knowledge graphs. In Lun-Wei Ku, Andre Martins, and Vivek Srikumar (eds.),
+_Findings of the Association for Computational Linguistics:_ _ACL 2024_, pp. 7417–7431, Bangkok,
+Thailand, August 2024. Association for Computational Linguistics. doi: 10.18653/v1/2024.
+findings-acl.442. [URL https://aclanthology.org/2024.findings-acl.442/.](https://aclanthology.org/2024.findings-acl.442/)
+
+
+Alon Talmor and Jonathan Berant. The web as a knowledge-base for answering complex questions. In Marilyn Walker, Heng Ji, and Amanda Stent (eds.), _Proceedings_ _of_ _the_ _2018_ _Con-_
+_ference_ _of_ _the_ _North_ _American_ _Chapter_ _of_ _the_ _Association_ _for_ _Computational_ _Linguistics:_ _Hu-_
+_man_ _Language_ _Technologies,_ _Volume_ _1_ _(Long_ _Papers)_, pp. 641–651, New Orleans, Louisiana,
+June 2018. Association for Computational Linguistics. doi: 10.18653/v1/N18-1059. URL
+[https://aclanthology.org/N18-1059/.](https://aclanthology.org/N18-1059/)
+
+
+13
+
+
+Gemini Team, Rohan Anil, Sebastian Borgeaud, Jean-Baptiste Alayrac, Jiahui Yu, Radu Soricut,
+Johan Schalkwyk, Andrew M Dai, Anja Hauth, Katie Millican, et al. Gemini: a family of highly
+capable multimodal models. _arXiv preprint arXiv:2312.11805_, 2023.
+
+
+Ricardo Usbeck, Xi Yan, Aleksandr Perevalov, Longquan Jiang, Julius Schulz, Angelie Kraft, Cedric
+M¨oller, Junbo Huang, Jan Reineke, Axel-Cyrille Ngonga Ngomo, et al. Qald-10–the 10th challenge on question answering over linked data: Shifting from dbpedia to wikidata as a kg for kgqa.
+_Semantic Web_, 15(6):2193–2207, 2024.
+
+
+Keheng Wang, Feiyu Duan, Sirui Wang, Peiguang Li, Yunsen Xian, Chuantao Yin, Wenge Rong,
+and Zhang Xiong. Knowledge-driven cot: Exploring faithful reasoning in llms for knowledgeintensive question answering. _arXiv preprint arXiv:2308.13259_, 2023.
+
+
+Song Wang, Junhong Lin, Xiaojie Guo, Julian Shun, Jundong Li, and Yada Zhu. Reasoning of large
+language models over knowledge graphs with super-relations. In _The_ _Thirteenth_ _International_
+_Conference on Learning Representations_ [, 2025. URL https://openreview.net/forum?](https://openreview.net/forum?id=rTCJ29pkuA)
+[id=rTCJ29pkuA.](https://openreview.net/forum?id=rTCJ29pkuA)
+
+
+Yike Wu, Yi Huang, Nan Hu, Yuncheng Hua, Guilin Qi, Jiaoyan Chen, and Jeff Pan. Cotkr: Chainof-thought enhanced knowledge rewriting for complex knowledge graph question answering. In
+_Proceedings of the 2024 Conference on Empirical Methods in Natural Language Processing_, pp.
+3501–3520, 2024.
+
+
+Wenhan Xiong, Thien Hoang, and William Yang Wang. DeepPath: A reinforcement learning
+method for knowledge graph reasoning. In Martha Palmer, Rebecca Hwa, and Sebastian Riedel
+(eds.), _Proceedings of the 2017 Conference on Empirical Methods in Natural Language Process-_
+_ing_, pp. 564–573, Copenhagen, Denmark, September 2017. Association for Computational Linguistics. doi: 10.18653/v1/D17-1060. [URL https://aclanthology.org/D17-1060/.](https://aclanthology.org/D17-1060/)
+
+
+An Yang, Baosong Yang, Binyuan Hui, Bo Zheng, Bowen Yu, Chang Zhou, Chengpeng Li,
+Chengyuan Li, Dayiheng Liu, Fei Huang, Guanting Dong, Haoran Wei, Huan Lin, Jialong Tang,
+Jialin Wang, Jian Yang, Jianhong Tu, Jianwei Zhang, Jianxin Ma, Jianxin Yang, Jin Xu, Jingren Zhou, Jinze Bai, Jinzheng He, Junyang Lin, Kai Dang, Keming Lu, Keqin Chen, Kexin
+Yang, Mei Li, Mingfeng Xue, Na Ni, Pei Zhang, Peng Wang, Ru Peng, Rui Men, Ruize Gao,
+Runji Lin, Shijie Wang, Shuai Bai, Sinan Tan, Tianhang Zhu, Tianhao Li, Tianyu Liu, Wenbin Ge, Xiaodong Deng, Xiaohuan Zhou, Xingzhang Ren, Xinyu Zhang, Xipin Wei, Xuancheng
+Ren, Xuejing Liu, Yang Fan, Yang Yao, Yichang Zhang, Yu Wan, Yunfei Chu, Yuqiong Liu,
+Zeyu Cui, Zhenru Zhang, Zhifang Guo, and Zhihao Fan. Qwen2 technical report, 2024. URL
+[https://arxiv.org/abs/2407.10671.](https://arxiv.org/abs/2407.10671)
+
+
+Xi Ye, Semih Yavuz, Kazuma Hashimoto, Yingbo Zhou, and Caiming Xiong. RNG-KBQA: Generation augmented iterative ranking for knowledge base question answering. In Smaranda Muresan,
+Preslav Nakov, and Aline Villavicencio (eds.), _Proceedings_ _of_ _the_ _60th_ _Annual_ _Meeting_ _of_ _the_
+_Association for Computational Linguistics (Volume 1: Long Papers)_, pp. 6032–6043, Dublin, Ireland, May 2022. Association for Computational Linguistics. doi: 10.18653/v1/2022.acl-long.417.
+[URL https://aclanthology.org/2022.acl-long.417/.](https://aclanthology.org/2022.acl-long.417/)
+
+
+Wen-tau Yih, Matthew Richardson, Chris Meek, Ming-Wei Chang, and Jina Suh. The value of semantic parse labeling for knowledge base question answering. In Katrin Erk and Noah A. Smith
+(eds.), _Proceedings of the 54th Annual Meeting of the Association for Computational Linguistics_
+_(Volume_ _2:_ _Short_ _Papers)_, pp. 201–206, Berlin, Germany, August 2016. Association for Computational Linguistics. doi: 10.18653/v1/P16-2033. [URL https://aclanthology.org/](https://aclanthology.org/P16-2033/)
+[P16-2033/.](https://aclanthology.org/P16-2033/)
+
+
+Jing Zhang, Xiaokang Zhang, Jifan Yu, Jian Tang, Jie Tang, Cuiping Li, and Hong Chen. Subgraph
+retrieval enhanced model for multi-hop knowledge base question answering. In _Proceedings of the_
+_60th Annual Meeting of the Association for Computational Linguistics (Volume 1:_ _Long Papers)_,
+pp. 5773–5784, 2022a.
+
+
+Yunqi Zhang, Yubo Chen, and Yongfeng Huang. Relu-net: Syntax-aware graph u-net for relational
+triple extraction. In _Proceedings of the 2022 Conference on Empirical Methods in Natural Lan-_
+_guage Processing_, pp. 4208–4217, 2022b.
+
+
+14
+
+
+Zhiqiang Zhang, Liqiang Wen, and Wen Zhao. Rule-KBQA: Rule-guided reasoning for complex knowledge base question answering with large language models. In Owen Rambow, Leo
+Wanner, Marianna Apidianaki, Hend Al-Khalifa, Barbara Di Eugenio, and Steven Schockaert
+(eds.), _Proceedings_ _of_ _the_ _31st_ _International_ _Conference_ _on_ _Computational_ _Linguistics_, pp.
+8399–8417, Abu Dhabi, UAE, January 2025. Association for Computational Linguistics. URL
+[https://aclanthology.org/2025.coling-main.562/.](https://aclanthology.org/2025.coling-main.562/)
+
+
+Ruilin Zhao, Feng Zhao, Long Wang, Xianzhi Wang, and Guandong Xu. Kg-cot: Chain-of-thought
+prompting of large language models over knowledge graphs for knowledge-aware question answering. In _Proceedings_ _of_ _the_ _Thirty-Third_ _International_ _Joint_ _Conference_ _on_ _Artificial_ _Intel-_
+_ligence_ _(IJCAI-24)_, pp. 6642–6650. International Joint Conferences on Artificial Intelligence,
+2024.
+
+
+Yuqi Zhu, Xiaohan Wang, Jing Chen, Shuofei Qiao, Yixin Ou, Yunzhi Yao, Shumin Deng, Huajun Chen, and Ningyu Zhang. Llms for knowledge graph construction and reasoning: Recent
+capabilities and future opportunities. _World Wide Web_, 27(5):58, 2024.
+
+
+A PRELIMINARY
+
+
+**Knowledge Graphs (KGs).** A knowledge graph consists of a large number of relational triples: _G_ =
+_{_ ( _s, r, o_ ) _| s, o ∈E, r_ _∈R}_, where _E_ and _R_ denote the set of entities and relations, respectively. A
+relational triple ( _s, r, o_ ) represents a factual statement where the subject _s_ is connected to the object
+
+_o_ through the relation _r_ .
+
+
+**Reasoning Paths.** A reasoning path in the KG is a sequential chain of connected relational triples
+that provides a coherent and interpretable pathway from a starting entity to a target entity, denoted
+as: _P_ = _e_ 0 _−→r_ 1 _e_ 1 _· · ·_ _−→rL_ _eL_ where each step ( _ei−_ 1 _, ri, ei_ ) is a valid triple in the graph _G_ .
+
+
+**Problem** **Formulation.** In this work, our goal is to formulate a function _f_ that predicts the correct answers _a_ from the graph: _a_ = _f_ ( _q, G_ ), given a question _q_ and an available KG denoted by
+_G_ . We assume that the entities mentioned in the question and the answers are all linked to their
+corresponding entities in _G_, consistent with previous work (Sun et al., 2019; Luo et al., 2024).
+
+
+B DATASETS
+
+
+**WebQSP.** WebQSP is a foundational KGQA benchmark designed to evaluate a model’s ability to
+answer simple, fact-based questions that typically require retrieving a single fact from the knowledge
+graph. The dataset provides full SPARQL queries for its questions, which are executed against
+**Freebase** .
+
+
+**CWQ.** CWQ extends the complexity beyond WebQSP by introducing questions that require compositional reasoning. These questions often involve multiple constraints, conjunctions, and superlatives, necessitating multi-hop or multi-relation inference paths on the **Freebase** knowledge graph.
+The dataset is annotated with complex SPARQL queries that reflect these reasoning structures.
+
+
+**2WikiMultihopQA.** The 2WikiMultihopQA dataset is specifically designed to assess multi-hop
+reasoning capabilities by integrating both structured knowledge from **Wikidata** and unstructured
+text from Wikipedia articles. A key feature of this dataset is the inclusion of structured ’evidences’
+—a sequence of triples that explicitly outlines the reasoning path from the question’s entities to the
+answer. This makes it particularly suitable for evaluating the faithfulness of a model’s generated
+reasoning chains.
+
+
+**GrailQA.** GrailQA is a large-scale, high-quality dataset built on **Freebase** that is designed to evaluate the generalization capabilities of KGQA models across three distinct levels: i.i.d., compositional,
+and zero-shot. This structure allows for a fine-grained analysis of a model’s ability to handle previously seen patterns (i.i.d.), new combinations of seen patterns (compositional), and entirely new
+domains and relations (zero-shot).
+
+
+**QALD-10-en.** QALD-10 marks a significant shift by using **Wikidata** as its primary knowledge
+source. QALD-10-en is its English subset, which contains high-quality, complex questions curated
+
+
+15
+
+
+by domain experts to reflect real-world information needs on a modern, actively maintained knowledge graph.
+
+
+Table 6: Statistics of datasets.
+
+
+Dataset Train Test _Ans_ = 1 2 _≤_ _Ans ≤_ 4 5 _≤_ _Ans ≤_ 9 _Ans ≥_ 10
+
+
+WebQSP 2,826 1,628 51.2% 27.4% 8.3% 12.1%
+CWQ 27,639 3,531 70.6% 19.4% 6% 4%
+
+
+C BASELINES
+
+
+We compare EoG against other KG-enhanced LLM reasoning approaches. The baselines are briefly
+introduced as follows.
+
+
+**KD-COT.** KD-COT (Wang et al., 2023) integrates knowledge distillation with chain-of-thought
+(CoT) reasoning. This multi-stage framework guides the reasoning process by interacting with external knowledge, thereby enhancing model efficiency and reducing computational costs. In general,
+this approach enables large language models to perform reliable reasoning on knowledge-intensive
+KBQA tasks. **EWEK-QA.** The core contribution of EWEK-QA (Dehghan et al., 2024) lies in its
+efficient integration of two external knowledge sources: web text and knowledge graphs. Specifically, it employs two modules: an adaptive web retriever that dynamically extracts text snippets,
+and an efficient knowledge graph retriever (TOG-E). This approach achieves higher accuracy than
+baseline models on various QA tasks while being faster. **ToG.** ToG (Sun et al., 2023) introduces a
+key innovation by framing the LLM as an agent that interacts with the knowledge graph for collaborative reasoning. This approach moves beyond simply translating questions into queries, instead
+enabling the model to actively conduct beam search on the KG to progressively explore relevant
+entities and relations. In general, This approach significantly enhances the reasoning capabilities of
+smaller models on complex knowledge-based tasks. **EffiQA.** EffiQA (Dong et al., 2025) aims to
+address the performance-efficiency trade-off in integrating large language models with knowledge
+graphs. Its core contribution is a novel ”LLM-as-planner, small-model-as-executor” framework that
+offloads graph traversal and semantic pruning to a compact plugin model. **RoG.** RoG (Luo et al.,
+2024) is grounded on the principle that knowledge graph relations constitute faithful reasoning paths.
+Through fine-tuning, the LLM is guided to generate faithful reasoning plans presented as relation
+paths that can be verified by the KG. These relation paths are then used to retrieve specific, factual
+reasoning path instances from the KG. Finally, the actual retrieved paths are used for final answer
+reasoning. This approach achieves optimal performance on most KGQA benchmarks while producing faithful and interpretable reasoning results. **GNN-RAG.** GNN-RAG (Mavromatis & Karypis,
+2025) enhances KBQA by combining GNN-based structural reasoning with LLM-based language
+understanding. The GNN infers over a subgraph to find answer candidates and their reasoning paths,
+which then serve as contextual evidence for the LLM. This approach achieves state-of-the-art results
+on benchmarks like WebQSP and CWQ, demonstrating strong performance on complex multi-entity
+and multi-hop questions.
+
+
+**DoG (Decoding on Graphs).** DoG (Li et al., 2025) proposes the concept of a ”well-formed chain” to
+constrain the LLM’s generation process to sequences of valid, connected triples from the knowledge
+graph. It implements this by using a Trie data structure, built from the local KG, to dynamically
+mask the vocabulary at each decoding step, ensuring all generated reasoning steps are grounded.
+
+
+**ODA (Observation-Driven Agent).** ODA (Sun et al., 2024) frames KGQA as an autonomous agent
+task operating in an ”observation, action, and reflection” cycle. The LLM acts as a high-level planner
+that decides on subsequent actions based on its current view of the graph, allowing it to dynamically
+explore the KG to find the answer.
+
+
+**KG-Agent.** KG-Agent (Jiang et al., 2025) uses a ”grey-box” approach, fine-tuning a smaller LLM
+to be an expert ”tool user” for KG interactions. The agent learns to generate an executable program
+composed of predefined tool calls for KG extraction and logic operations, trained on a large-scale
+dataset synthesized from existing logical forms. **GCR.** GCR (Luo et al., 2025) achieves graphconstrained reasoning by guiding LLM decoding with KG structures. It first encodes KG reasoning
+paths into a KG-Trie index, then employs a lightweight, KG-specialized LLM for decoding during
+
+
+16
+
+
+inference. This approach ensures faithful reasoning, achieves state-of-the-art performance on multiple KGQA benchmarks, and generalizes to unseen knowledge graphs without additional training.
+
+
+D EXPERIMENTS SETUPS
+
+
+To ascertain the general applicability of our approach, we apply EoG to two open-source LLMs,
+Qwen2.5-7B-Instruct (Yang et al., 2024) and Llama-3.1-8B-Instruct (Dubey et al., 2024). For
+fine-tuning, we use Gemini-2.5-Flash to generate long chain-of-thought datasets. For reinforcement
+learning, we implement the GRPO method using verl.
+
+
+For the fine-tuning phase, we typically train for three epochs on a single node equipped with 8
+H100 GPUs. We employ a micro-batch size of 16 and a learning rate of 1e-5, utilizing a cosine
+annealing learning rate scheduler. For all experiments, model checkpoints are saved every 100 steps.
+Taking CWQ as an example, the model was trained for a total of 576 steps, and the best-performing
+checkpoint was selected for subsequent training stages.
+
+
+For GRPO training, we set the policy LLM learning rate to 5e-6 and sample 6 responses per prompt,
+following the GRPO implementation in Verl. For efficient LLM rollouts, we adopt vLLM with
+a tensor parallel size of 2 and GPU memory utilization ratio of 0.6. The rollout sampling uses a
+temperature of 1.0 and a top-p value of 1.0.
+
+
+Training is performed on a single node with 8 H100 GPUs. We use a total batch size of 512, with a
+mini-batch size of 256 and a micro-batch size of 64. The maximum sequence length is set to 15000
+tokens, with a maximum response length of 10000. To optimize GPU memory usage, we enable
+gradient checkpointing and use Fully Sharded Data Parallel (FSDP) with CPU offloading.
+
+
+For all experiments, model checkpoints are saved every 15 steps. In cases where training diverges,
+we evaluate at the most recent stable checkpoint according to the training reward curve; otherwise,
+the final checkpoint is used for evaluation. Finally, we compute rewards using F1 score and pathrefined reward.
+
+
+E IMPLEMENTATION DETAILS OF COMMERCIAL MODEL EVALUATION
+
+
+This section elaborates on the methodology for evaluating the KBQA datasets using commercial
+large language models. As shown in the Figure 7, the prompt used in our evaluation code—as detailed in Figure 10 for the RL training phase—is identical to the one shown here, ensuring fairness
+and reproducibility. The Figure 8 below displays a sample output obtained by evaluating the CWQ
+dataset with multiple large language models, including GPT-5, Gemini-2.5-Flash, and Gemini-2.5Pro.We explicitly confirm that the model denoted as ”GPT-5” in our experiments refers to the officially released GPT-5 model accessed via the OpenAI API. To remove any ambiguity, the exact
+model checkpoint used in our evaluation is gpt-5-2025-08-07.
+
+
+F TEMPLATES AND PROMPTS
+
+
+In this section, we illustrate all the templates and prompts used in the experiments.
+
+
+**Long** **CoT** **Construction** **Prompt.** The template for constructing the Long CoT dataset used for
+fine-tuning is shown in Figure 9, which prompts large language models to generate Long CoT reasoning on structured graphs and filters reasoning processes that are both structurally and factually
+correct.
+
+
+**GRPO Prompt.** To train the EoG, we carefully design the prompt to prompting language models,
+which is shown in Figure 10. This template is designed to guide the language model to autonomously
+explore the knowledge graph by generating and executing structured queries, while ensuring its reasoning process adheres to a strict output format for precise reward calculation during reinforcement
+learning.
+
+
+**Reasoning Scores Prompt.** As shown in Figure 11, the multi-dimensional evaluation criteria used
+to score the model’s reasoning processes are detailed below,with each dimension scored on a scale
+from 0 (lowest) to 10 (highest).
+
+
+17
+
+
+class KGReasoner:
+def __init__(self, input_file, output_file, api_key, max_workers=5, batch_size=10):
+self.client = client
+self.input_file = input_file
+self.output_file = output_file
+self.model_name = "gemini-2.5-flash"
+self.max_workers = max_workers
+self.batch_size = batch_size
+
+
+self.result_cache = []
+self.cache_lock = Lock()
+
+
+self.system_prompt =system_prompt
+self.user_prompt =user_prompt
+
+def _call_openai_api(self, question, begin_entities, graph):
+prompt = f"""Question: {question}
+Entities: {json.dumps(begin_entities)}
+Graph: {json.dumps(graph)}
+{self.user_prompt}."""
+
+
+messages = [
+{"role": "system", "content": self.system_prompt},
+{"role": "user", "content": prompt}
+]
+
+
+response = self.client.chat.completions.create(
+model=self.model_name,
+messages=messages,
+temperature=0.2,
+timeout=120
+)
+return response.choices[0].message.content.strip()
+
+
+def _batch_write_results(self):
+"""Batch write the results in the cache to the file (must be called within the lock)"""
+……
+def _process_single_question(self, data, index):
+"""Single-task processing: Results are stored in the cache, and writing is triggered when the batch threshold is reached."""
+……
+def process_kg_questions(self):
+if os.path.exists(self.output_file):
+os.remove(self.output_file)
+
+
+with open(self.input_file, "r", encoding="utf-8") as f:
+lines = f.readlines()
+total_questions = len(lines)
+print(f"Start processing: {total_questions} total questions | Concurrent threads: {self.max_workers} | Batch write threshold: {self.batch_size}")
+questions_data = [(json.loads(line.strip()), idx) for idx, line in enumerate(lines)]
+# questions_data = questions_data[:30]
+success_count = 0
+with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+futures = [executor.submit(self._process_single_question, data, idx)
+for data, idx in questions_data]
+
+
+for future in tqdm(as_completed(futures), total=total_questions):
+task_result = future.result()
+if task_result["is_success"]:
+success_count += 1
+
+
+with self.cache_lock:
+self._batch_write_results()
+
+
+error_count = total_questions - success_count
+print(f"\nGood！total_questions：{total_questions} | success_count：{success_count} | error_count：{error_count}")
+
+
+Figure 7: The code used to prompt LLMs for evaluating performance on KBQA tasks.
+
+
+**Relationship Extraction Prompt.** Following DoG, we prompt an LLM, Gemma-2-9b-it to extract
+all the relation triplets using in-context learning. The prompt is detailed in Figure 12. Finally, all
+the extracted triplets from different passages are combined into the final graph, with no ranking or
+filtering applied to the triplets.
+
+
+G COMPLETE CASE STUDIES: REASONING PATHS AND MODEL OUTPUTS
+
+
+In this section, we present two complete case studies to further illustrate the reasoning behavior of
+EoG. Figure 13 provides the full version of the case shown in the main text, where certain reasoning
+steps were omitted due to space constraints. Figure 14 presents another representative example
+involving a superlative reasoning pattern for further analysis.
+
+
+H THE USE OF LARGE LANGUAGE MODELS
+
+
+We acknowledge the use of a large language model to assist with the editing and refining of our
+manuscript. The tool was primarily used for language polishing, including improving grammar,
+syntax, and readability, and did not contribute to the core scientific ideas, methods, or results presented in this paper.
+
+
+18
+
+
+Figure 8: An example of prompting LLMs on CWQ.
+
+
+I DETAILED TRAINING COMPUTATIONAL COST AND EFFICIENCY ANALYSIS
+
+
+In this section, we analyze detailed training compute and efficiency of EoG. The SFT phase of
+our framework prioritizes data efficiency by focusing exclusively on the reasoning over structured
+graphs. In contrast to the 1.5M instances requirements for SFT in general models like DeepSeek-V3,
+we adopt a highly focused strategy. Our curated SFT datasets are small and precise; for instance,
+CWQSFT contains 3,537 instances, and WebQSPSFT contains 2,344 instances. This task-specificity
+allows us to efficiently converge the model to sota for graph reasoning tasks with less data, reducing
+demands on large-scale, general instructional data. For the RL phase, we optimized training throughput using the Verl framework on 8x H100 GPUs. Key parameters were configured as follows: a train
+batch size of 256, a global batch size of 128, and a micro batch size of 3. This configuration ensured
+high training throughput. As shown in Table 7, the resource expenditure to achieve optimal performance on 8x H100 GPUs was notably low: the CWQ dataset required 120 steps and 509.6 GPU
+hours, and the WebQSP dataset required 36 steps and 119.2 GPU hours.
+
+
+Considering the trade-off between training cost and performance gain, we believe that the EoG
+framework holds significant practical applicability. Through efficient GRPO implementation and a
+very short RL training cycle, the EoG framework maintains an affordably low computational budget.
+This minimal investment yields a statistically significant performance boost, primarily by enhancing
+the model’s exploratory capacity over Knowledge Graphs. Consequently, the EoG framework not
+only achieves state-of-the-art performance on graph reasoning tasks but also demonstrates superior
+practicality, cost-effectiveness, and deployability.
+
+
+19
+
+
+Figure 9: The template for constructing Long COT Supervised Fine-tuning datasets.
+
+
+J CLOSE-SOURCE LLM EVALUATION REPRODUCIBILITY DETAILS
+
+
+To ensure the reproducibility of our results, we detail the experimental setup involving the closedsource LLM. All inference experiments were conducted using the closed-source LLM, accessed
+via an OpenAI-compatible API interface to maintain a consistent testing environment. To adapt
+the Knowledge Graph (KG) data for the text-based model, we linearized the input subgraphs into
+
+
+20
+
+
+Figure 10: The template for prompting LLMs to explore during training EoG
+
+
+JSON-formatted lists of triples [( _h, r, t_ ) _, . . ._ ], which were concatenated with the natural language
+question and the topic entity.
+
+
+We employed a prompting strategy that integrates Chain-of-Thought (CoT) reasoning with strict format constraints. The system prompt explicitly instructs the model to separate its internal reasoning
+process from the final prediction by enclosing the reasoning steps within _<_ _think_ _>_ tags and the
+final answer within _< answer_ _>_ tags.
+
+
+Regarding inference hyperparameters, we prioritized faithfulness to the provided graph context over
+generation diversity. Consequently, we set the sampling temperature to 0 _._ 2. This specific setting
+is critical for minimizing hallucinations and ensuring the model grounds its answers strictly in the
+
+
+21
+
+
+Figure 11: The template for prompting GPT-4o-mini to score the reasoning process
+
+
+retrieved triples. Additionally, to investigate the sensitivity of closed-source models to generation
+parameters, we systematically evaluated the impact of varying temperature settings on performance,
+as presented in Table 8. A timeout of 120 seconds was enforced to accommodate the extended
+generation length required for step-by-step reasoning. Finally, post-processing involved extracting
+the content between the answer tags using regular expressions and parsing it as a JSON list to
+calculate Hit@1 and F1 metrics against the ground truth.
+
+
+22
+
+
+Figure 12: The template for prompting LLMs to extract relationship on 2WikiMultiHopQA
+
+
+K HYPERPARAMETERS AND CONFIGURATION FOR GRPO
+
+
+In this section, we present the configuration details of the GRPO-based RL training. The training
+was conducted on a single node equipped with eight NVIDIA H100 GPUs using the Verl framework.
+We initialized the policy from the SFT-trained model checkpoint. To optimize resource utilization
+and training efficiency, we enabled Gradient Checkpointing ( _enable_ ~~_g_~~ _radient_ ~~_c_~~ _heckpointing_ =True)
+and configured FSDP with both parameter and optimizer offloading ( _param_ ~~_o_~~ _ffload_ =True, _opti-_
+_mizer_ _offload_ =True).
+
+
+23
+
+
+Figure 13: Comparison of reasoning pathways between EoG and GCR on Case 1.
+
+
+For data and batch settings, the total training batch size ( _train_ ~~_b_~~ _atch_ ~~_s_~~ _ize_ ) was set to 256, with
+maximum prompt and response lengths capped at 15 _,_ 000 and 10 _,_ 000 tokens, respectively. The
+Actor policy optimization used a learning rate of 4 _×_ 10 _[−]_ [6] and was updated for _ppo_ ~~_e_~~ _pochs_ = 2
+internal epochs per rollout collection. We disabled the KL loss term and set the gradient clip to 1 _._ 0.
+
+
+The Rollout phase is crucial for model exploration. Rollouts were executed using the vllm engine
+with a configuration of _N_ = 6 samples per prompt ( _rollout.n_ ), a sampling temperature of 1 _._ 0, and
+_top_ ~~_p_~~ = 1 _._ 0 to encourage diversity. The reward signal was sourced from the external script, and KLbased regularization was explicitly disabled. Furthermore, an overlong buffer penalty was enabled,
+penalizing responses exceeding 3 _,_ 000 tokens. The entire training process ran for 6 total epochs.
+Notably, achieving optimal performance on the WebQSP dataset required only 36 steps and 119 _._ 2
+GPU hours, demonstrating the high efficiency of our framework. By detailing the parameter settings
+of the GRPO phase, we ensured the reproducibility of our EoG model.
+
+
+L ANALYSIS OF REWARD FUNCTION COMPLEXITY
+
+
+In this section, we investigate the impact of incorporating a more complex, graph-structure-oriented
+reward function—Graph Edit Distance (GED)—on experimental performance. As indicated in the
+table, the utilization of GED failed to enhance the model’s performance on the test set; on the
+contrary, it led to a performance decline. We attribute this phenomenon to two primary factors. First,
+since we explicitly constrained the reasoning structure during Supervised Fine-Tuning (SFT), our
+original path-based reward function proved to be simple but effective within this context. Second,
+
+
+24
+
+
+Figure 14: Analysis of superlative reasoning patterns.
+
+
+GED operates with less stringency than our path reward function; it allows for reward optimization
+merely through the addition or substitution of nodes and edges, rather than enforcing precise path
+alignment. In conclusion, adopting a more complex reward function with rich graph structural
+features does not necessarily guarantee superior model efficacy.
+
+
+M PERFORMANCE ANALYSIS WITH LESS CAPABLE COT MODELS
+
+
+To investigate the impact of a weaker teacher model, we employed Qwen-32B as the teacher model
+in this section. As shown in the Table 11, although the weaker teacher resulted in a decline in
+SFT performance, the final EoG performance following RL training recovered to a level comparable
+to the original baseline. This demonstrates that our method is relatively insensitive to the teacher
+model’s capabilities; rather, the performance gains are primarily driven by the RL training, as this
+stage effectively refines the policy through interaction with the ground-truth graph environment.
+
+
+N STATISTICAL EVALUATION DETAILS
+
+
+To ensure the robustness of our results, we conducted three independent runs of EoG using different
+random seeds. As shown in Table 12, by incorporating the standard deviation, we confirm that EoG
+maintains robust state-of-the-art performance (e.g., 81 _._ 5 _±_ 0 _._ 33 on average), unaffected by statistical
+fluctuations. This establishes it as a strong baseline and demonstrates the statistical reliability of our
+method.
+
+
+25
+
+
+Table 7: Computational Cost Comparison: SFT vs. RL. Due to difference among tokenizers used
+by different models, we measured SFT Computational Cost using SFT instances instead of tokens,
+as we consider instances to be a fairer indicator of the SFT budget.
+
+
+Metric CWQ WebQSP GrailQA 2WikiMultihopQA
+
+
+_**Supervised Fine-Tuning (SFT)**_
+Training Steps 400 300 300 400
+Training Time (h) 6.1 4.2 4.5 5.1
+Train Batch Size 16 16 16 16
+Micro Batch Size 2 2 2 2
+Total Instances 3537 2344 4774 3102
+
+
+_**Reinforcement Learning (RL)**_
+Training Steps 108 36 12 96
+Training Time (h) 509.6 119.2 76.8 205.6
+Batch Size 256 256 256 256
+Mini Batch Size 128 128 128 128
+Micro Batch Size 2 2 2 2
+
+
+Table 8: Comparison of the performance of different closed-source commercial models on the
+KGQA datasets under various temperature settings.
+
+
+GPT-5 Gemini-2.5-flash Gemini-2.5-pro
+Dataset
+
+T=0.2 T=0.7 T=0.2 T=0.7 T=0.2 T=0.7
+
+
+WebQSP 77.5 78.1 78.2 78.4 79.8 79.2
+CWQ 67.6 67.6 59.3 59.7 65.3 65.7
+GrailQA 85.4 85.2 83.8 84.3 84.5 85.1
+QALD10-en 50.4 51.3 46.2 46.1 48.3 48.5
+2WikiMultihopQA 83.4 82.9 83.1 83.9 82.6 82.9
+
+
+Beyond reporting mean performance scores, we further validated the reliability of our results through
+statistical hypothesis testing. Table 13 details the t-statistics and p-values comparing EoG with the
+GCR baseline. In all datasets, We performed a standard t-test, yielding a p-value _<_ 0.05, which
+confirms that the performance gains of EoG over GCR are statistically significant and not due to
+random variance.
+
+
+As illustrated in Figure 15, RL typically exhibits high variance during the training phase, as represented by the shaded error bands. It can be observed from Figure 15 that the model incorporating
+the path reward mechanism consistently achieves superior performance compared to the baseline
+across all three random seeds. The distinct separation between the error bands of the two methods
+after the 75th step indicates that our proposed framework achieves stable convergence and that the
+performance gain is statistically significant rather than a result of random variance.
+
+
+O CONSTRUCTION OF GROUND-TRUTH REASONING PATHS
+
+
+For datasets lacking explicit reasoning paths (e.g., WebQSP, CWQ, GrailQA, and QALD10-en), we
+constructed ground-truth paths ( _rg_ ) using a two-stage ”Search-and-Verify” pipeline. This process
+bridges the gap in existing benchmarks by deriving reliable reasoning chains from raw QuestionAnswer (QA) pairs. **Path Retrieval via Breadth-First Search (BFS).** We first employed BFS on
+the Knowledge Graph to retrieve all potential topological paths connecting the topic entity (identified
+in the question) to the ground-truth answer entity. This step ensures high recall of potential reasoning
+chains. **Semantic Verification via LLM.** Since BFS often yields ”spurious paths”—paths that are
+topologically valid but logically unrelated to the question—we utilized an LLM (Gemini-2.5-Flash)
+
+
+26
+
+
+Table 9: Detailed configuration of training and testing parameters for the GRPO phase.
+
+
+**Category** Configuration
+
+
+**Hardware** Compute Hardware: 8 _×_ H100 GPUs
+GPU Memory Utilization: 0.6
+FSDP Offload: Param & Optimizer
+
+
+**Backbone** Rollout Engine: vLLM
+Gradient Checkpointing: True
+
+
+**Training** Optimizer: Adam (implied by standard GRPO setup)
+Learning Rate: 4 _×_ 10 _[−]_ [6]
+
+LR Warmup Steps: 10
+Batch Size: 256 (Mini: 128, Micro: 3)
+Gradient Clip: 1.0
+KL Loss Term: Disabled
+KL In Loss/Reward: False
+Epochs: 6 (Train) / 0 (Test)
+
+
+**Sampling** Temperature: 1.0 (Train) / 0.8 (Test)
+Top-p: 1.0 (Train) / 0.9 (Test)
+Sampling Number ( _N_ ): 6 (Train) / 8 (Test)
+
+
+**Constraints** Max Prompt Length: 10,000 (Train) / 20,000 (Test)
+Max Response Length: 10,000
+Overlong Penalty: _>_ 3 _,_ 000 tokens (Train) / Disabled (Test)
+
+
+Table 10: Performance on Various Datasets Across Different GED Coefficients
+
+
+_λ_ = 0 _._ 2 _λ_ = 0 _._ 4 _λ_ = 0 _._ 6 _λ_ = 0 _._ 8 _λ_ = 1 _._ 0
+**Dataset**
+
+F1 Hit@1 F1 Hit@1 F1 Hit@1 F1 Hit@1 F1 Hit@1
+
+
+CWQ 69.7 78.2 68.5 77.3 67.9 77.1 67.1 76.3 67.3 75.9
+WebQSP 80.6 89.6 79.4 88.9 80.2 89.3 79.8 89.2 78.9 88.2
+GrailQA 90.3 91.8 89.9 91.4 89.6 91.2 90.1 91.3 89.7 91.5
+2WikiMultihopQA 84.2 84.8 83.7 84.2 83.5 83.9 83.3 83.7 83.1 83.5
+
+
+Table 11: Performance of EoG on the CWQ and WebQSP Datasets, using Qwen3-32B as the teacher
+model.
+
+
+Dataset Metric EoG (SFT Only) EoG (SFT + RL) Improvement (%)
+
+
+F1 Score 55.8 70.7 -4.3
+CWQ
+Hit@1 61.5 75.6 -8.4
+
+
+F1 Score 71.3 80.2 -5.4
+WebQSP
+Hit@1 82.6 87.9 -4.9
+
+
+27
+
+
+Table 12: Performance comparison between our EoG framework (Llama-3.1-8B) and state-of-theart closed-source models. The bottom section highlights the significant improvement of our RLfinetuned model over its SFT model. We report the mean _±_ standard deviation for our method.
+
+
+Method Model WebQSP CWQ GrailQA QALD10-en 2WikiMultihopQA
+
+Hit@1 F1 Hit@1 F1 Hit@1 F1 Hit@1 F1 Hit@1 F1
+
+
+_†_ Gemini-2.5 Flash      - 91.8 78.2 65.5 59.3 90.3 83.8 56.7 46.2 83.9 83.1
+
+_†_ Gemini-2.5 Pro      - 92.1 79.8 71.9 65.3 91.6 84.5 58.6 48.3 85.1 82.6
+
+_†_ GPT-5      - 86.1 77.5 74.1 67.6 90.5 85.4 59.2 50.4 84.2 83.4
+
+EoG _SFT_ Qwen2.5-7BLlama-3.1-8B 83.986.3 72.674.5 68.370.5 60.362.1 89.291.4 87.688.2 55.657.1 44.148.7 82.583.1 81.982.7
+
+EoG Qwen2.5-7BLlama-3.1-8B 9092 _.._ 78 _± ±_ 0 0 _.._ 3428 7881 _.._ 13 _± ±_ 0 0 _.._ 4533 7882 _.._ 76 _± ±_ 0 0 _.._ 2641 6973 _.._ 89 _± ±_ 0 0 _.._ 3720 9192 _.._ 71 _± ±_ 0 0 _.._ 2930 8890 _.._ 56 _± ±_ 0 0 _.._ 4325 6770 _.._ 36 _± ±_ 0 0 _.._ 1749 5761 _.._ 89 _± ±_ 0 0 _.._ 3238 8385 _.._ 93 _± ±_ 0 0 _.._ 4723 8284 _.._ 93 _± ±_ 0 0 _.._ 2444
+
+
+Table 13: Statistical comparison between GCR and our EoG framework using a one-sample t-test
+( _df_ = 4). The table reports the baseline score, our model’s performance (Mean _±_ SD), and the
+calculated _t_ -statistics and _p_ -values. Results indicate statistically significant improvements across all
+metrics.
+
+
+GCR EoG (Ours)
+Dataset Metric _t_ -value _p_ -value
+(Baseline) (Mean _±_ SD)
+
+
+Hit@1 92.2 92.8 _±_ 0.28 4.79 0.009
+WebQSP
+F1 79.1 81.3 _±_ 0.33 14.91 _<_ 0 _._ 001
+
+
+Hit@1 75.8 82.6 _±_ 0.41 37.08 _<_ 0 _._ 001
+CWQ
+F1 61.7 73.9 _±_ 0.20 136.46 _<_ 0 _._ 001
+
+
+Hit@1 88.4 92.1 _±_ 0.30 27.57 _<_ 0 _._ 001
+GrailQA
+F1 85.1 90.6 _±_ 0.25 49.20 _<_ 0 _._ 001
+
+
+Hit@1 57.6 70.6 _±_ 0.49 59.33 _<_ 0 _._ 001
+QALD10
+F1 49.3 61.9 _±_ 0.38 74.12 _<_ 0 _._ 001
+
+
+Hit@1 84.6 85.3 _±_ 0.23 6.80 0 _._ 002
+2WikiMultihopQA
+F1 77.5 84.3 _±_ 0.44 34.56 _<_ 0 _._ 001
+
+
+as a semantic filter. The LLM was prompted to evaluate whether each retrieved path logically
+corresponds to the semantic intent of the natural language question. Only paths that passed this
+semantic verification were retained as _rg_ for calculating _Rpath_ .
+
+
+Consequently, this approach provides the necessary supervision signals for the second-stage RL
+training, addressing the lack of _rg_ in open-source benchmarks.
+
+
+P DETAILED DEFINITION OF EXPLORATION METRICS
+
+
+To provide a fine-grained analysis of exploration behavior, we parse the triples mentioned in the
+model’s reasoning trace (the <think> block) on the CWQ test set.
+
+Let _D_ denote the test set with size _N_ = _|D|_ . For the _i_ -th question, let _Tpred_ [(] _[i]_ [)] [be the set of valid unique]
+
+triples extracted from the model’s reasoning path, and _Tgold_ [(] _[i]_ [)] [be the set of triples in the ground-truth]
+reasoning path.
+
+
+**Exploration** **Efficiency** **(** _↓_ **).** This metric measures the search overhead, representing the average
+number of triples the model explores to identify one correct reasoning triple. A lower value indicates
+higher efficiency, implying less wasted exploration effort for each valid discovery. It is calculated as
+the mean ratio of total extracted triples to the number of correct triples found:
+
+
+_|Tpred_ [(] _[i]_ [)] _[|]_
+
+(6)
+_|Tpred_ [(] _[i]_ [)] _[∩]_ _[T]_ [ (] _gold_ _[i]_ [)] _[|]_
+
+
+**Exploration Efficiency** = [1]
+
+_N_
+
+
+_N_
+
+
+_i_ =1
+
+
+**Coverage of the Reasoning Space (** _↑_ **).** To define this metric, we first conceptualize the Reasoning
+Space for a given question as the set of all potential valid paths within the Knowledge Graph that
+
+
+28
+
+
+CWQ Val F1 Performance with Outcome Reward and different Path Reward
+
+
+76
+
+
+74
+
+
+72
+
+
+70
+
+
+68
+
+
+66
+
+
+64
+
+
+62
+
+
+60
+
+
+58
+
+
+|GRPO with O<br>Outcome Onl<br>(1 )Routc|utcome Reward<br>y ( = 0.0) (72.18 ± 0<br>ome + Rpath ( = 0.2|.478)<br>) (73.66 ± 0.338)|Col4|Col5|Col6|Col7|Col8|Col9|Col10|
+|---|---|---|---|---|---|---|---|---|---|
+|(1<br>)Routc<br>(1<br>)Routc<br>(1<br>)Routc|<br>ome + Rpath ( = 0.4<br>ome + Rpath ( = 0.6<br>ome + Rpath ( = 0.8|) (73.26± 0.397)<br> ) (72.98± 0.419)<br> ) (73.37± 0.413)||||||||
+|(1<br>)Routc<br>Ablation Start|<br>ome + Rpath ( = 1.0<br> (Step 75)|) (73.03± 0.321)|) (73.03± 0.321)|||||||
+|||||||||||
+|||||||||||
+|||||||||||
+|||||||||||
+|||||||||||
+|||||||||||
+|||||||||||
+
+
+0 15 30 45 60 75 90 105 120
+Training Steps
+
+
+Figure 15: Validation F1 performance on the CWQ dataset with varying Path Reward weights. The
+total reward is formulated as _R_ = (1 _−_ _λ_ ) _Routcome_ + _λRpath_, where _λ_ denotes the coefficient
+shown in the legend. The dashed vertical line marks the start of the second training phase at step
+75, where the reward shifts from result-only RL to a mixed result-and-path reward. Solid lines and
+shaded regions represent the mean and standard deviation across 3 random seeds, respectively. The
+results indicate that _λ_ = 0 _._ 2 achieves the optimal balance, yielding the highest F1 score and robust
+stability compared to the baseline ( _λ_ = 0 _._ 0).
+
+
+connect the starting entity to the target answer entities. Consequently, this metric measures the
+reasoning recall, quantifying the average proportion of the ground-truth logical chain (a subset of the
+reasoning space) that is successfully uncovered by the model’s exploration. A higher value indicates
+better coverage, meaning the model finds more of the required logical steps. It is calculated as:
+
+
+_|Tpred_ [(] _[i]_ [)] _[∩]_ _[T]_ [ (] _gold_ _[i]_ [)] _[|]_
+
+(7)
+_|Tgold_ [(] _[i]_ [)] _[|]_
+
+
+**Coverage** = [1]
+
+_N_
+
+
+_N_
+
+
+_i_ =1
+
+
+29

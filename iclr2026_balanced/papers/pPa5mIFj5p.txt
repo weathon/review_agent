@@ -1,0 +1,1376 @@
+# ENTROPY-AWARE SPECULATIVE DECODING TOWARD IMPROVED LLM REASONING
+
+
+**Anonymous authors**
+Paper under double-blind review
+
+
+ABSTRACT
+
+
+Speculative decoding (SD) accelerates large language model (LLM) reasoning by
+using a small draft model to generate candidate tokens, which the target LLM
+either accepts directly or regenerates upon rejection. However, excessive alignment between the draft and target models constrains SD to the performance of
+the target LLM. To address this limitation, we propose Entropy-Aware Speculative Decoding (EASD), a training-free enhancement. Building on standard SD,
+EASD incorporates a dynamic entropy-based penalty. At each decoding step, we
+employ the entropy of the sampling distribution to quantify model uncertainty.
+When both models exhibit high entropy with substantial overlap among their topN predictions, the corresponding token is rejected and re-sampled by the target
+LLM. This penalty prevents low-confidence errors from propagating. By incorporating draft-model verification, EASD enables the possibility of surpassing the target model’s inherent performance. Experiments across multiple reasoning benchmarks demonstrate that EASD consistently outperforms existing SD methods and,
+in most cases, surpasses the target LLM itself. We further prove that the efficiency
+of EASD is comparable to that of SD. The code can be found in the Supplementary
+Materials.
+
+
+1 INTRODUCTION
+
+
+Large language models (LLMs), such as GPT-4 (Achiam et al., 2023), Qwen (Bai et al., 2023), and
+LLaMA (Touvron et al., 2023), have demonstrated remarkable performance across diverse natural
+language processing (NLP) tasks. However, their reasoning relies on autoregressive decoding, where
+each token is generated through a full forward pass conditioned on all previous tokens. This strict
+sequential dependency leads to high latency in large-scale models and long-text generation, making computational cost a central bottleneck for practical deployment (Patterson et al., 2021; Frantar
+et al., 2022; Lin et al., 2024). To mitigate this issue, speculative decoding (SD) (Chen et al., 2023a)
+has emerged as an effective paradigm for reducing reasoning cost while preserving quality. Its core
+idea is to use a small draft model to propose multiple candidate tokens, which the larger target model
+then verifies or corrects in parallel within a single forward pass. This substantially reduces the number of target model invocations and overall latency. Building on standard SD, methods such as Fast
+Inference (Leviathan et al., 2023), Medusa (Cai et al., 2024), Hydra (Ankner et al., 2024), and EAGLE (Li et al., 2024a;b; 2025b) further introduce mechanisms like multi-token verification, parallel
+decoding heads, and uncertainty-guided token selection, continuously advancing SD’s acceleration
+potential. Nonetheless, output quality is ultimately capped by the target model, because the final
+predictions must match its judgments.
+
+
+To improve the quality of SD, recent studies have proposed integrating reward models into the decoding process (Li et al., 2025a; Liao et al., 2025). These reward models are trained to approximate
+human preferences or task-specific correctness (Wei et al., 2023) and evaluate sequences or individual steps during reasoning. However, reward models are neural networks that require additional
+forward passes, substantially increasing the computational cost of SD (Gao et al., 2023; Lambert
+et al., 2024). Moreover, most operate at the sequence or step level, making fine-grained tokenlevel control and collaborate difficult. In the broader area of efficient LLM reasoning, researchers
+have explored dynamic allocation of computation based on input difficulty or token importance.
+For example, Mixture-of-Experts (MoE) models (Lepikhin et al., 2020) selectively activate a subset
+of expert layers per token, reducing computational cost while preserving model capacity. Early
+
+1
+
+
+exit methods (Liu et al., 2024; Chen et al., 2023b) allow tokens to stop processing once sufficient
+confidence is reached, and routing LLMs (Ong et al., 2024; Jitkrittum et al., 2025) learn policies
+to assign inputs to the most appropriate submodels. While these architectures enable scalable and
+efficient computation, they often require substantial structural modifications and are difficult to integrate into existing decoding pipelines. Furthermore, their reliance on training with new data can
+limit generalization to broader tasks or domains.
+
+
+To address these issues, we propose a training-free enhancement to SD called Entropy-Aware Speculative Decoding (EASD). As shown in Figure 1, EASD builds on the standard token acceptance
+and rejection strategy. It introduces a dynamic, entropy-driven penalty that is applied only to tokens
+meeting specific conditions. At each decoding step, we measure model uncertainty using the entropy
+of the sampling distribution. If both the draft and target models exhibit high entropy and their TopN candidate tokens substantially overlap, the token is rejected and re-sampled by the target model.
+This mechanism prevents low-confidence tokens from propagating errors during reasoning. As a result, it reduces the risk of incorrect final outputs. By leveraging draft-model verification, EASD can
+potentially surpass the inherent performance of the target model. It provides a lightweight, efficient,
+and practical way to improve SD.
+
+
+Figure 1: Comparison of traditional SD, the state-of-the-art method RSD, and our proposed EASD.
+Traditional SD enforces strict alignment with the target model, while RSD selectively accepts outputs from the draft model. However, when the target model itself produces suboptimal tokens, neither SD nor RSD can correct or redirect the output. EASD overcomes this limitation by introducing
+token-level adjustments. For example, when both the draft and target models exhibit high entropy
+on the token _The_, EASD rejects it and chooses _This_ instead. This change enables a new generation
+path, _This is a classic ‘stars and bars’ problem_, instead of directly enumerating the answer as in the
+original output.
+
+
+We evaluate EASD on several challenging reasoning benchmarks, including Olympia (He et al.,
+2024), MATH500 (Hendrycks et al., 2021), and GPQA-Diamond (Rein et al., 2024). These tasks
+require high token-level accuracy, where even small deviations can lead to incorrect answers. Experimental results show that EASD significantly improves generation accuracy while retaining the
+inference speedups of standard SD. Compared to heuristic baselines and reward-model-based filtering methods, EASD achieves higher output performance with lower computational cost. Moreover,
+EASD outperforms the target large model on multiple benchmarks, demonstrating its potential to
+surpass the model’s inherent performance.
+
+
+To summarize, our main contributions are:
+
+
+2
+
+
+- We propose a training-free enhancement to SD that introduces a dynamic, entropy-guided
+penalty on target model tokens, facilitating more effective collaboration between draft and
+target models.
+
+    - By leveraging draft-model verification, EASD prevents error propagation from lowconfidence tokens, significantly improving token-level accuracy while preserving the reasoning speedups of standard SD.
+
+    - Experiments on multiple challenging reasoning benchmarks show that EASD not only outperforms existing speculative decoding methods but also surpasses the inherent performance ceiling of the target LLM.
+
+
+2 RELATED WORK
+
+
+This paper reviews related research on enhancing LLM reasoning in three major areas: collaboration
+between large and small language models, speculative decoding, and entropy-based inference.
+
+
+2.1 COLLABORATION BETWEEN LARGE AND SMALL LANGUAGE MODELS
+
+
+In recent years, collaborative frameworks between large and small language models have garnered
+increasing attention. Their goal is to balance computational efficiency with generation quality. Existing approaches mainly rely on coarse-grained interactions. In these methods, small models act
+as lightweight assistants to preprocess inputs. For example, they may reformulate user queries into
+more informative prompts or generate intermediate annotations to reduce the computational burden
+on larger models (Chen et al., 2025; Shen et al., 2024; Yang et al., 2025; Pan et al., 2025).
+
+
+However, these approaches generally treat language models as independent modules connected sequentially via prompt-based information transfer. They rely on each model’s individual contextual
+capabilities. This limits deep collaboration at the decoding level. As a result, the potential for joint
+optimization is constrained.
+
+
+To overcome this limitation, recent studies have focused on finer-grained collaboration mechanisms.
+A common strategy is to interleave or fuse token distributions among models during decoding. This
+allows multiple models to jointly participate in token-level generation (Hao et al., 2025; Bian et al.,
+2025). These approaches offer opportunities for seamless integration and dynamic division of labor.
+
+
+Nevertheless, efficiently implementing token-level fusion remains challenging. It is still difficult to
+overcome the inherent performance bottlenecks of large and small models. In this work, we further
+explore token-level collaborative decoding between large and small models. Our goal is to develop
+a more flexible and efficient approach to token generation.
+
+
+2.2 SPECULATIVE DECODING
+
+
+Speculative decoding has become a key technique for accelerating inference through collaboration
+between large and small language models. It maintains generation quality while reducing computation (Chen et al., 2023a). In this framework, a lightweight draft model generates candidate tokens.
+A more powerful target model then verifies or rejects these candidates to ensure consistency with
+the target distribution. This design has inspired various optimizations. These include improved candidate generation, adaptive verification thresholds, and hybrid schemes (Sun et al., 2024; Ankner
+et al., 2024; Cai et al., 2024; Li et al., 2025b;a). The goal is to reduce calls to the target model while
+preserving output quality.
+
+
+However, most existing approaches assume that the draft model must be highly aligned with the
+target model. Some recent studies challenge this assumption. They consider partially aligned or
+deliberately misaligned draft models. This allows emphasis on controllability, stylistic preferences,
+or task-specific accuracy (Bachmann et al., 2025; Liao et al., 2025). In these cases, the target model
+mainly ensures linguistic fluency and global coherence. This can enable the system to outperform the
+target model alone. These findings suggest that speculative decoding is not only an acceleration tool.
+It is also a broader framework for improving generation quality through asymmetric collaboration.
+
+
+A key limitation of prior work is its reliance on trained evaluation models. These models make
+token-level decisions but are highly data-sensitive. This limits generalization across datasets or dif
+
+3
+
+
+ferent combinations of large and small models. To address this, we introduce an entropy-based
+strategy. It enables efficient collaboration without training. We do not require strict alignment between the small and large models. Instead, we amplify tokens in which the small model is confident.
+Tokens with low confidence from the large model are constrained. This allows small and large models to complement each other at the token level. It leverages their strengths and mitigates low-quality
+outputs. The result is a simple and effective improvement in reasoning quality.
+
+
+2.3 ENTROPY-BASED INFERENCE
+
+
+Entropy has long been recognized as a fundamental signal of model uncertainty (Wang et al., 2025).
+A growing body of work demonstrates its usefulness in guiding inference strategies across various generation tasks (Volkenstein, 2009). Early studies applied entropy-based measures to adjust
+sampling temperatures, regulate beam search heuristics, or set adaptive thresholds for candidate acceptance. These approaches improved the balance between diversity and precision (Simonds, 2025).
+
+
+More recent methods extend this idea to dynamic model routing. Here, token-level entropy determines whether a lightweight model suffices or if a stronger model is needed. Entropy is also used in
+ensemble decoding, where token distributions from multiple sources are reweighted based on their
+uncertainty (Zhang et al., 2024; Qiu et al., 2024). These studies consistently show that entropy is a
+powerful indicator for balancing efficiency, reliability, and exploration in language generation.
+
+
+Despite some successes, entropy-driven mechanisms have not yet been systematically integrated
+into speculative decoding frameworks. Incorporating tailored entropy-based uncertainty estimation
+into the draft–verify pipeline can enable more adaptive interactions. Specifically, we invoke verification only for high-uncertainty tokens and dynamically reallocate tasks between the draft and
+target models. This approach combines uncertainty-aware inference with the efficiency advantages
+of speculative decoding. As a result, it improves both efficiency and generation quality compared to
+existing entropy-guided strategies.
+
+
+3 ENTROPY-AWARE SPECULATIVE DECODING
+
+
+In this section, we present **Entropy-Aware** **Speculative** **Decoding** **(EASD)**, a novel, training-free
+extension of standard speculative decoding. EASD enhances the reliability and quality of generated
+outputs by leveraging entropy-based signals from both the draft and target models. It dynamically
+adjusts the target model’s token selection under high uncertainty and distributional similarity, using
+a targeted penalty mechanism. This approach mitigates error propagation from the draft model,
+improving decoding efficiency and output coherence without additional training.
+
+
+3.1 FORMULATION
+
+
+The key idea of speculative decoding is to generate a draft sequence speculatively and then accept as
+many prefix tokens as possible based on a verification step. This method leverages the fact that draft
+models can often predict correctly for several steps, especially when they approximate the target
+model well.
+
+
+Let _pt_ ( _·_ _|_ **x** ) denote the conditional probability distribution of the target model given a prefix **x**,
+and _pd_ ( _·_ _|_ **x** ) denote that of the draft model. The draft model generates a speculative sequence of
+candidates _c_ 1 _, c_ 2 _, . . ., ck_, where each _ci_ is sampled as: _ci_ _∼_ _pd_ ( _·_ _|_ **x** _, c_ 1 _, . . ., ci−_ 1) _._ Here, _i_ is the
+speculation length, typically chosen based on model sizes and desired speedup.
+
+
+During the verification phase, the target model computes probabilities for all drafted tokens in parallel. Each candidate _ci_ is either accepted or rejected based on the agreement between the two models.
+Formally, token _ci_ is accepted only if all previous candidates are also accepted and
+
+
+_[|]_ **[ x]** _[, c]_ [1] _[, . . ., c][i][−]_ [1][)]
+_ϵi_ _≤_ _[p][t]_ [(] _[c][i]_ _ϵi_ _∼U_ (0 _,_ 1) _._ (1)
+
+_pd_ ( _ci_ _|_ **x** _, c_ 1 _, . . ., ci−_ 1) _[,]_
+
+
+Specifically, _ϵi_ is sampled uniformly from (0 _,_ 1). If the probability of token _ci_ under the target
+model exceeds that under the draft model, the token is accepted. Otherwise, it is accepted with a
+probability that decreases as the gap between the two probabilities increases. If the token is rejected,
+
+
+4
+
+
+the procedure resorts to direct sampling from the target model, drawing a correction token from
+_pt_ ( _· |_ **x** _, c_ 1 _, . . ., ci−_ 1).
+
+
+3.2 OVERVIEW
+
+
+Speculative decoding accelerates LLM inference by using a smaller draft model to propose candidate
+tokens, which the larger target model verifies through a single forward pass. At step _t_, the draft
+model samples a token from its distribution _Pd_ [(] _[t]_ [)] over _V_, and the target model accepts or rejects the
+token based on agreement. This reduces computation but risks potential errors. The risk is amplified
+when both the draft and target models are uncertain, as they may align in their uncertainty and lead
+the verification step to accept suboptimal tokens.
+
+
+EASD improves this by integrating entropy-based uncertainty and distributional overlap. It monitors
+entropy in both models and overlap in their top- _n_ tokens. When uncertainty is high and overlap
+is significant, EASD penalizes the target model’s probability for the draft’s top token, promoting
+alternative selections. This enhances robustness without altering model training.
+
+
+3.3 ENTROPY COMPUTATION
+
+
+To measure uncertainty at step _t_, we use Shannon entropy for the draft model’s distribution _Pd_ [(] _[t]_ [)][:]
+
+_Hd_ [(] _[t]_ [)] = _−_           - _Pd_ [(] _[t]_ [)][(] _[i]_ [) log] _[ P]_ _d_ [ (] _[t]_ [)][(] _[i]_ [)] _[,]_ (2)
+
+_i∈V_
+
+and similarly for the target model:
+
+_Ht_ [(] _[t]_ [)] = _−_            - _Pt_ [(] _[t]_ [)] ( _i_ ) log _Pt_ [(] _[t]_ [)] ( _i_ ) _._ (3)
+
+_i∈V_
+
+High entropy reflects greater uncertainty, corresponding to a flatter distribution, whereas low entropy
+indicates higher confidence with a more peaked distribution.
+
+
+3.4 TRIGGERING CONDITIONS FOR DYNAMIC PENALTY
+
+
+EASD applies a penalty only when two specific conditions are met: high entropy and top- _n_ overlap.
+This combination identifies scenarios where the draft model is likely to mislead the target model.
+The rationale is that when models from the same family exhibit high uncertainty yet similar token
+distributions, it often indicates ambiguous decision points where errors are prone to propagate.
+
+
+1. **High-Entropy Condition:** Both models show high uncertainty if:
+
+_Hd_ [(] _[t]_ [)] _> τH_ and _Ht_ [(] _[t]_ [)] _> τH_ _,_ (4)
+where _τH_ is a tunable threshold. High entropy indicates a flat probability distribution,
+meaning the model lacks a clear preference, which makes its decision susceptible to minor
+perturbations.
+2. **Top-** _n_ **Overlap Condition:** The overlap ratio between top- _n_ token sets _Td_ _[n]_ [(draft) and] _[ T][ n]_ _t_
+(target) is:
+
+_d_ _[∩]_ _[T][ n]_ _t_ _[|]_
+Overlap( _Td_ _[n][, T]_ _t_ _[ n]_ [) =] _[|][T][ n]_ _,_ (5)
+_n_
+
+( _e.g._, _n_ = 5). The condition triggers if Overlap _>_ _τO_, where _τO_ _∈_ [0 _,_ 1]. This assesses
+distributional similarity, highlighting potential alignment issues.
+
+
+3.5 APPLICATION OF THE DYNAMIC PENALTY
+
+
+If both conditions are met, EASD rejects the draft’s proposed token _td_ by setting:
+
+_Pt_ [(] _[t]_ [)] ( _td_ ) = 0 _,_ (6)
+and renormalizing:
+
+_Pt_ [(] _[t]_ [)] ( _i_ ) = _Pt_ [(] _[t]_ [)] ( _i_ ) _,_ _∀i ̸_ = _td._ (7)
+
+        - _j_ = _td_ _[P]_ _t_ [ (] _[t]_ [)] ( _j_ )
+
+This forces the target model to sample alternatives, reducing error risks and improving coherence.
+
+
+5
+
+
+3.6 THRESHOLD SELECTION
+
+
+Proper selection of the thresholds _τH_ (entropy) and _τO_ (top- _n_ overlap) is critical for the performance
+of EASD, as they directly determine when the dynamic penalty is applied. We adopt a systematic,
+data-driven procedure to set these thresholds without introducing additional training.
+
+
+**Entropy Threshold** _τH_ **.** For each validation sample _s_ _∈D_ val and decoding step _t_ _∈{_ 1 _, . . ., Ts}_,
+the target model produces a probability distribution _Ps,t_ ( _·_ ) over the vocabulary _V_ . The Shannon
+entropy is defined as
+_Hs,t_ = _−_                - _Ps,t_ ( _v_ ) log _Ps,t_ ( _v_ ) _._ (8)
+
+
+_v∈V_
+
+We collect all entropy values across the validation set into
+_E_ = _{Hs,t_ : _s ∈D_ val _,_ _t_ = 1 _, . . ., Ts}._ (9)
+Let _p_ _∈_ (0 _,_ 1) denote the proportion of high-entropy steps considered ( _p_ = 0 _._ 05). We identify the
+subset _Sp_ _⊆E_ corresponding to the top _p_ fraction of entropy values, _i.e._, _|Sp|_ = _⌈p · |E|⌉_ . The
+entropy threshold is then defined as the mean entropy of these uncertain steps:
+
+
+This construction ensures that _τH_ reflects a representative level of uncertainty by focusing on the
+most ambiguous decoding steps, while maintaining sufficient statistical robustness.
+
+
+**Top-** _n_ **Overlap Threshold** _τO_ **.** Complementary to the entropy-based criterion, the overlap threshold
+_τO_ regulates cases where the draft and target models produce highly similar candidate distributions.
+We fix _τO_ = 0 _._ 8, meaning that when at least four out of the top-5 tokens coincide between the two
+models, the dynamic penalty is triggered. This setting reflects the intuition that excessive alignment
+between the draft and target models reduces the diversity and corrective potential of speculative
+decoding, and thus requires additional penalization to prevent redundant acceptance.
+
+
+4 EXPERIMENTS
+
+
+4.1 EXPERIMENTS SETTINGS
+
+
+**LLMs.** To assess the performance of EASD, we employ Qwen2.5-7B-Instruct, Qwen2.5-32BInstruct, and Qwen2.5-72B-Instruct models as our draft and target models. For experiments involving PRM, we select the Skywork-o1-Open-PRM-Qwen-2.5-1.5B model.
+
+
+**Datasets.** We evaluate our method on a diverse set of reasoning tasks, including OlympiadBench
+(He et al., 2024), MATH500 (Hendrycks et al., 2021), AIME24 (MAA, 2024), AMC23 (MAA,
+2023), GPQA-Diamond (Rein et al., 2024), and Minerva Math (Lewkowycz et al., 2022).
+
+
+**Baselines.** We categorize the baselines into four groups: **(1)** **Target** **model** **only.** This baseline
+executes the target model independently, which typically results in higher computational cost compared to EASD. **(2)** **Draft** **model.** This category consists of common test-time scaling techniques
+built upon the draft model, including draft model only, direct generation, majority voting, and beam
+search. For majority voting and beam search, we employ a large number of samples, even exceeding
+the cost of using the target model alone, to approximate their converged performance. **(3) Specula-**
+**tive Decoding (SD).** We further consider speculative decoding, a method proposed for accelerating
+inference (Chen et al., 2023a). **(4) Reward-Guided Speculative Decoding (RSD).** RSD integrates
+a process reward model to score intermediate decoding steps and adaptively determine whether the
+target model should be invoked, thus striking a balance between efficiency and output quality (Liao
+et al., 2025).
+
+
+**Implement Details.** All experiments are conducted on 8 NVIDIA A800 GPUs. For majority voting, beam search, and direct generation, we set the temperature to 0.7 and top _−p_ to 0.8, while the
+remaining methods are configured with temperature = 0 and top– _p_ = 1. Specifically, for RSD, we
+define a generation terminated by _\n\n_ as a reasoning step, which is then evaluated by a PRM with
+a threshold of 0.7. For EASD, the entropy threshold is determined based on the LIMO (Ye et al.,
+2025) dataset, where we calculate the average entropy of the top 5% highest-entropy tokens and use
+this value as the cutoff.
+
+
+6
+
+
+1
+_τH_ = _|Sp|_
+
+
+ - _Hs,t._ (10)
+
+
+_Hs,t∈Sp_
+
+
+Table 1: Accuracy results on benchmark datasets, where TM denotes the target model, DM denotes
+the draft model, and PRM denotes the process reward model.
+
+
+Method TM DM PRM Olympiad Minerva Math500 AMC23 Aime24 GPQA Avg
+
+
+Single Model 32B  -  - 46.81 44.49 82.2 60 16.67 45.96 49.35
+Single Model  - 7B  - 35.70 37.13 73.2 50 10 36.36 40.39
+Majority Voting (N=16)  - 7B  - 45.33 43.01 81.0 67.5 16.67 41.41 49.15
+Beam Search (N=16)  - 7B  - 40.15 39.34 78 62.5 10 42.42 45.40
+SD 32B 7B - 45.33 45.22 80.8 57.5 13.33 49.49 48.61
+RSD (Liao et al., 2025) 32B 7B 1.5B 46.5 46.32 **83.8** **67.5** 16.67 50.50 51.88
+
+
+EASD 32B 7B - **48.15** **47.06** 80.8 62.5 **23.33** **55.55** **52.89**
+
+
+Method TM DM PRM Olympiad Minerva Math500 AMC23 Aime24 GPQA Avg
+
+
+Single Model 72B  -  - 44.59 44.85 **84** 65 16.67 46.96 50.33
+Single Model  - 7B  - 35.70 37.13 73.2 50 10 36.36 40.39
+Majority Voting (N=16)  - 7B  - 45.33 43.01 81.0 67.5 16.67 41.41 49.15
+Beam Search (N=16)  - 7B  - 40.15 39.34 78 62.5 10 42.42 45.40
+SD 72B 7B - 44.15 44.12 83.8 60 13.33 50.50 49.31
+RSD (Liao et al., 2025) 72B 7B 1.5B **45.62** **46.32** 83.8 65 16.67 47.48 50.81
+
+
+EASD 72B 7B - 44.74 44.85 83.6 **67.5** **20** **52.02** **52.12**
+
+
+4.2 RESULTS ANALYSIS
+
+
+The experimental results in Tables 1 provide a comprehensive comparison between our proposed
+**EASD** and several baselines under two different model scales (Qwen2.5-32B/72B as the target
+model and Qwen2.5-7B as the draft model). We observe three key findings.
+
+
+First, **EASD** **consistently** **achieves** **the** **best** **overall** **performance** . In the 32B setting, EASD
+reaches an average score of **52.89**, which is +3.54 higher than the strongest single 32B model (49.35)
+and +3.74 higher than majority voting (49.15). Similarly, in the 72B setting, EASD attains an average score of **52.12**, outperforming the single 72B model (50.33) and all other baselines. This indicates that our entropy-aware rejection strategy effectively leverages the cooperation between large
+and small models, yielding gains that cannot be achieved by naive ensemble or decoding strategies.
+
+
+Second, when compared with the recent **RSD** (Liao et al., 2025) approach, which relies on an additional reward model to partially guide alignment, EASD exhibits _both higher accuracy and greater_
+_stability_ . Specifically, EASD improves over RSD by +1 _._ 01 (32B setting) and +1 _._ 31 (72B setting)
+in average performance. While RSD shows improvements over standard speculative decoding (SD),
+its dependence on a reward model introduces alignment noise and computational overhead, which
+limits its effectiveness. In contrast, EASD achieves superior results without requiring any reward
+model, showing that carefully constraining rejection strategies at the token level is a reliable and
+lightweight alternative.
+
+
+Third, **task-level analysis** highlights the robustness of EASD. On the challenging _AIME24_ benchmark, EASD significantly outperforms all baselines, achieving **23.3** (32B) and **20.0** (72B), compared
+to only 16.67 for single models and RSD. Similarly, on _GPQA-Diamond_, which evaluates finegrained knowledge reasoning, EASD reaches **55.55** (32B) and **52.02** (72B), substantially higher than
+all alternatives. Notably, EASD maintains strong performance on _Math500_ (80.8/83.6) and _AMC23_
+(62.5/67.5), matching or exceeding the best baselines, which suggests that our method generalizes
+well across both symbolic reasoning and knowledge-intensive tasks.
+
+
+Overall, these results demonstrate that EASD offers a lightweight yet effective improvement to
+speculative decoding. By reducing dependence on reward models while maintaining strong accuracy across diverse reasoning benchmarks, EASD provides a practical step forward in multi-model
+cooperation.
+
+
+4.3 ABLATIOIN EXPERIEMENTS
+
+
+To better understand the contribution of each component in our proposed method, we conduct ablation studies with the following variants: **(1) EASD** : The complete version of our proposed EntropyAware Speculative Decoding. **(2) EASD (Without Overlap)** : A variant that removes the overlapbased regulation, in which the penalty no longer depends on the token-level similarity between the
+
+
+7
+
+
+draft model and the target model. **(3)** **EASD** **(Without** **DM** **Entropy)** : A variant that excludes
+the entropy signal from the draft model, so the adjustment is guided only by the target model. **(4)**
+**EASD** **(Without** **DM** **Entropy** **+** **Without** **Overlap)** : A more simplified variant where both the
+draft model entropy signal and the overlap-based regulation are removed. These ablations allow us
+to examine the relative importance of draft model entropy and overlap regulation in achieving the
+final performance improvements.
+
+
+The results in Table 2 demonstrate the effectiveness of jointly leveraging both the draft model entropy and the overlap-based regulation. The complete version of EASD consistently achieves the
+best overall performance across benchmarks for both the 32B and 72B target models. When overlap regulation is removed, performance declines moderately, suggesting that overlap contributes to
+stabilizing token selection but is less critical than entropy. In contrast, removing the draft model entropy _Hd_ leads to the most significant degradation, especially in average accuracy, indicating that _Hd_
+provides essential uncertainty signals that guide effective speculative decoding. Furthermore, when
+both _Hd_ and overlap regulation are excluded, the performance drops further, confirming that these
+two components play complementary roles. Overall, the ablation study highlights that integrating
+both entropy signals and overlap is crucial for maximizing the benefits of speculative decoding.
+
+
+Table 2: Ablation Study on the Effects of Draft Model Entropy and Overlap Regulation.
+
+
+Method TM DM Olympiad Minerva Math500 AMC23 Aime24 GPQA Avg
+
+
+EASD 32B 7B **48.15** **47.06** **80.8** 62.5 **23.33** **55.55** **52.89**
+w/o Overlap 32B 7B 47.41 44.85 80.8 **65** 20 52.53 51.77
+w/o _Hd_ 32B 7B 46.52 44.85 80.2 62.5 20 51.01 50.85
+w/o ( _Hd_ + Overlap) 32B 7B 47.41 46.32 80.6 60 13.33 48.48 49.56
+
+
+Method TM DM Olympiad Minerva Math500 AMC23 Aime24 GPQA Avg
+
+
+EASD 72B 7B **44.74** **44.85** **83.6** 67.5 **20** 52.02 **52.12**
+w/o Overlap 72B 7B 44.59 44.49 82.8 **70** 16.67 **53.03** 51.93
+w/o _Hd_ 72B 7B 43.85 44.12 83.0 67.5 16.67 50 50.86
+w/o ( _Hd_ + Overlap) 72B 7B 44.15 44.49 82.4 62.5 16.67 46.97 49.53
+
+
+4.4 COMPUTATION ANALYSIS
+
+
+Tables 3 report the average number of generated tokens across benchmark datasets, which serves as
+a proxy for computational cost. We highlight three main observations.
+
+
+First, its efficiency is on par with standard speculative decoding (SD): token usage remains almost
+identical in both 32B and 72B settings, indicating that entropy-aware rejection incurs negligible
+overhead. Second, it outperforms reward-based speculative decoding (RSD) in efficiency. The reliance on a process reward model consistently increases FLOP computation for RSD, whereas EASD
+avoids this cost while retaining accuracy gains. Finally, EASD exhibits stable token consumption
+across benchmarks. Even on datasets requiring longer generations, its overhead does not exceed that
+of SD or RSD, and in certain cases it is slightly lower.
+
+
+Table 3: Average tokens on benchmark datasets, where TM denotes the target model, DM denotes
+the draft model, and PRM denotes the process reward model.
+
+
+Method TM DM PRM Olympiad Minerva Math500 AMC23 Aime24 GPQA Avg
+
+
+Single Model 32B  -  - 775.33 573.11 565.07 736.68 828.7 532.26 668.525
+Single Model  - 7B  - 842.55 661.44 606.08 838.55 977.23 589.07 752.49
+SD 32B 7B - 776.43 585.15 565.57 773.25 823.27 524.64 674.72
+RSD (Liao et al., 2025) 32B 7B 1.5B 808.49 628.86 582.17 752.0 866.43 489.97 687.97
+
+
+EASD 32B 7B - 775.74 567.70 554.59 799.70 867.97 502.72 678.07
+
+
+Method TM DM PRM Olympiad Minerva Math500 AMC23 Aime24 GPQA Avg
+
+
+Single Model 72B  -  - 941.30 667.25 628.38 877.23 1256.4 772.28 857.14
+Single Model  - 7B  - 842.55 661.44 606.08 838.55 977.23 589.07 752.49
+SD 72B 7B - 943.23 669.99 632.52 852.5 1342.77 752.75 866.46
+RSD (Liao et al., 2025) 72B 7B 1.5B 885.0 655.50 637.41 835.25 1061.27 732.44 801.15
+
+
+EASD 72B 7B - 911.64 654.18 641.13 899.85 1287.73 748.37 857.15
+
+
+8
+
+
+In summary, EASD achieves accuracy improvements without additional computational burden, confirming its effectiveness as a lightweight alternative to reward-model-based approaches.
+
+
+4.5 EMPIRICAL ANALYSIS OF HIGH-ENTROPY TOKEN DISTRIBUTION
+
+
+To conduct the empirical analysis, we examine the probability distribution of high-entropy tokens
+before and after applying the EASD method, highlighting their variations and potential implications.
+As shown in Table 4, the original distribution exhibits relatively moderate spreads: _“Given”_ ranks
+the highest at 2.34%, followed by _“will”_ and _“Let”_ (both 1.55%), _“need”_ (1.53%), and _“Thus”_
+(1.50%). Other tokens, such as _“calculate”_ (1.11%), _“Now”_ (1.08%), _“consider”_ (1.01%), and
+_“determine”_ (0.87%), appear with gradually decreasing probabilities, reflecting a balanced distribution centered on initial conditions ( _“Given”_ ), assumptions ( _“Let”_ ), and basic reasoning steps
+( _“First”_, _“Thus”_ ).
+
+
+After applying EASD, the distribution undergoes distinct adjustments. Notably, _“Given”_ increases
+from 2.34% to 2.64%, reinforcing its position as the most salient high-entropy token and suggesting
+stronger emphasis on premise-related information. Similarly, _“Thus”_ rises from 1.50% to 2.27%,
+indicating enhanced focus on conclusion-drawing, while _“consider”_ grows from 1.01% to 1.77%,
+reflecting a shift toward analytical reasoning.
+
+
+In contrast, some tokens decline: _“will”_ drops from 1.55% to 1.00% and _“Let”_ decreases from
+1.55% to 1.33%, suggesting reduced reliance on speculative or hypothetical phrasing. Furthermore,
+originally low-probability tokens such as _“need”_, _“Now”_, and _“determine”_ are removed from the
+high-entropy set. They are replaced by new entries like _“understand”_ (0.97%), _“Using”_ (0.92%),
+and _“use”_ (0.91%), which highlight comprehension and method application.
+
+
+Overall, EASD effectively reallocates the probability mass of high-entropy tokens: it strengthens focus on logical premises and deductive conclusions while introducing tokens related to analytical and
+practical processes. This modulation indicates that EASD not only stabilizes reasoning coherence
+but also guides the model toward more operationally useful problem-solving behaviors.
+
+
+Table 4: Probability distribution of high-entropy tokens before and after applying EASD.
+
+|Token|Original (%)|EASD (%)|Change|
+|---|---|---|---|
+|Given<br>Thus<br>consider<br>Let<br>will<br>need<br>Now<br>determine<br>understand<br>Using<br>use|2.34<br>1.50<br>1.01<br>1.55<br>1.55<br>1.53<br>1.08<br>0.87<br>–<br>–<br>–|2.64<br>2.27<br>1.77<br>1.33<br>1.00<br>–<br>–<br>–<br>0.97<br>0.92<br>0.91|_↑_Stronger focus on premises<br>_↑_Stronger focus on conclusions<br>_↑_More analytical reasoning<br>_↓_Less hypothetical usage<br>_↓_Less speculative focus<br>Removed from high-entropy set<br>Removed from high-entropy set<br>Removed from high-entropy set<br>New emphasis on comprehension<br>New emphasis on method application<br>New emphasis on method application|
+
+
+5 CONCLUSION AND LIMITATIONS
+
+
+In this work, we propose Entropy-Aware Speculative Decoding (EASD), a training-free extension
+of speculative decoding that leverages entropy signals from both draft and target models to prevent
+low-confidence tokens from propagating errors. EASD retains the efficiency advantages of standard
+SD while achieving substantial improvements in token-level accuracy across challenging reasoning
+benchmarks. Our results demonstrate that EASD not only outperforms existing speculative decoding
+variants but also has the potential to surpass the inherent performance of the target model. These
+findings highlight EASD as a lightweight, effective, and broadly applicable enhancement to efficient
+LLM inference.
+
+
+Although EASD shows consistent improvements over recent speculative decoding, our study has
+several limitations. First, the evaluation has not been extended to broader real-world reasoning
+scenarios, which may involve more diverse tasks and constraints. Second, our experiments primarily
+focus on medium- to large-scale LLMs, leaving the effectiveness of EASD on smaller, larger, and
+domain-specific LLMs for future work. Finally, while EASD is training-free, its interaction with
+advanced alignment techniques and domain-adapted fine-tuning remains underexplored.
+
+
+9
+
+
+ETHICS STATEMENT
+
+
+Our study focuses on developing and evaluating a decoding strategy for LLMs using publicly available reasoning benchmarks. No human subjects or sensitive personal data were involved. The
+research does not involve applications that could cause harm, discrimination, or privacy violations.
+We used LLMs solely for model inference and algorithmic experimentation. All experiments were
+conducted responsibly, and the results are reported transparently to avoid potential misuse of the
+evaluated models.
+
+
+REPRODUCTION STATEMENT
+
+
+To facilitate reproducibility, all datasets, benchmarks, and evaluation metrics used in this study are
+described in detail in the main text and Supplementary Materials. Our implementation of EASD, as
+well as baseline Speculative Decoding methods, is provided in the Supplementary Materials. For
+each experiment, we specify model checkpoints, hyperparameters, and decoding settings, allowing
+other researchers to replicate our results and extend our approach to other LLMs and reasoning tasks.
+
+
+REFERENCES
+
+
+Josh Achiam, Steven Adler, Sandhini Agarwal, Lama Ahmad, Ilge Akkaya, Florencia Leoni Aleman, Diogo Almeida, Janko Altenschmidt, Sam Altman, Shyamal Anadkat, et al. Gpt-4 technical
+report. _arXiv preprint arXiv:2303.08774_, 2023.
+
+
+Zachary Ankner, Rishab Parthasarathy, Aniruddha Nrusimha, Christopher Rinard, Jonathan RaganKelley, and William Brandon. Hydra: Sequentially-dependent draft heads for medusa decoding.
+_arXiv preprint arXiv:2402.05109_, 2024.
+
+
+Gregor Bachmann, Sotiris Anagnostidis, Albert Pumarola, Markos Georgopoulos, Artsiom
+Sanakoyeu, Yuming Du, Edgar Sch¨onfeld, Ali Thabet, and Jonas Kohler. Judge decoding: Faster
+speculative sampling requires going beyond model alignment. _arXiv preprint arXiv:2501.19309_,
+2025.
+
+
+Jinze Bai, Shuai Bai, Yunfei Chu, Zeyu Cui, Kai Dang, Xiaodong Deng, Yang Fan, Wenbin Ge,
+Yu Han, Fei Huang, et al. Qwen technical report. _arXiv preprint arXiv:2309.16609_, 2023.
+
+
+Yuang Bian, Yupian Lin, Jingping Liu, and Tong Ruan. PToco: Prefix-based token-level collaboration enhances reasoning for multi-LLMs. In _Proceedings of the 31st International Conference_
+_on Computational Linguistics_, pp. 8326–8335, Abu Dhabi, UAE, January 2025. Association for
+Computational Linguistics.
+
+
+Tianle Cai, Yuhong Li, Zhengyang Geng, Hongwu Peng, Jason D Lee, Deming Chen, and Tri
+Dao. Medusa: Simple llm inference acceleration framework with multiple decoding heads. _arXiv_
+_preprint arXiv:2401.10774_, 2024.
+
+
+Charlie Chen, Sebastian Borgeaud, Geoffrey Irving, Jean-Baptiste Lespiau, Laurent Sifre, and John
+Jumper. Accelerating large language model decoding with speculative sampling. _arXiv preprint_
+_arXiv:2302.01318_, 2023a.
+
+
+Yanxi Chen, Xuchen Pan, Yaliang Li, Bolin Ding, and Jingren Zhou. Ee-llm: Large-scale training and inference of early-exit large language models with 3d parallelism. _arXiv_ _preprint_
+_arXiv:2312.04916_, 2023b.
+
+
+Yi Chen, JiaHao Zhao, and HaoHao Han. A survey on collaborative mechanisms between large and
+small language models. _arXiv preprint arXiv:2505.07460_, 2025.
+
+
+Elias Frantar, Saleh Ashkboos, Torsten Hoefler, and Dan Alistarh. Gptq: Accurate post-training
+quantization for generative pre-trained transformers. _arXiv preprint arXiv:2210.17323_, 2022.
+
+
+Leo Gao, John Schulman, and Jacob Hilton. Scaling laws for reward model overoptimization. In
+_International Conference on Machine Learning_, pp. 10835–10866. PMLR, 2023.
+
+
+10
+
+
+Chao Hao, Zezheng Wang, Yanhua Huang, Ruiwen Xu, Wenzhe Niu, Xin Liu, and Zitong Yu.
+Dynamic collaboration of multi-language models based on minimal complete semantic units.
+_arXiv preprint arXiv:2508.18763_, 2025.
+
+
+Chaoqun He, Renjie Luo, Yuzhuo Bai, Shengding Hu, Zhen Leng Thai, Junhao Shen, Jinyi Hu,
+Xu Han, Yujie Huang, Yuxiang Zhang, et al. Olympiadbench: A challenging benchmark for
+promoting agi with olympiad-level bilingual multimodal scientific problems. _arXiv_ _preprint_
+_arXiv:2402.14008_, 2024.
+
+
+Dan Hendrycks, Collin Burns, Saurav Kadavath, Akul Arora, Steven Basart, Eric Tang, Dawn Song,
+and Jacob Steinhardt. Measuring mathematical problem solving with the math dataset. _arXiv_
+_preprint arXiv:2103.03874_, 2021.
+
+
+Wittawat Jitkrittum, Harikrishna Narasimhan, Ankit Singh Rawat, Jeevesh Juneja, Congchao Wang,
+Zifeng Wang, Alec Go, Chen-Yu Lee, Pradeep Shenoy, Rina Panigrahy, et al. Universal model
+routing for efficient llm inference. _arXiv preprint arXiv:2502.08773_, 2025.
+
+
+Nathan Lambert, Valentina Pyatkin, Jacob Morrison, LJ Miranda, Bill Yuchen Lin, Khyathi Chandu,
+Nouha Dziri, Sachin Kumar, Tom Zick, Yejin Choi, et al. Rewardbench: Evaluating reward
+models for language modeling. _arXiv preprint arXiv:2403.13787_, 2024.
+
+
+Dmitry Lepikhin, HyoukJoong Lee, Yuanzhong Xu, Dehao Chen, Orhan Firat, Yanping Huang,
+Maxim Krikun, Noam Shazeer, and Zhifeng Chen. Gshard: Scaling giant models with conditional
+computation and automatic sharding. _arXiv preprint arXiv:2006.16668_, 2020.
+
+
+Yaniv Leviathan, Matan Kalman, and Yossi Matias. Fast inference from transformers via speculative
+decoding. In _International Conference on Machine Learning_, pp. 19274–19286. PMLR, 2023.
+
+
+Aitor Lewkowycz, Anders Andreassen, David Dohan, Ethan Dyer, Henryk Michalewski, Vinay Ramasesh, Ambrose Slone, Cem Anil, Imanol Schlag, Theo Gutman-Solo, et al. Solving quantitative
+reasoning problems with language models. _Advances in neural information processing systems_,
+35:3843–3857, 2022.
+
+
+Bolian Li, Yanran Wu, Xinyu Luo, and Ruqi Zhang. Reward-shifted speculative sampling is an
+efficient test-time weak-to-strong aligner. _arXiv preprint arXiv:2508.15044_, 2025a.
+
+
+Yuhui Li, Fangyun Wei, Chao Zhang, and Hongyang Zhang. Eagle: Speculative sampling requires
+rethinking feature uncertainty. _arXiv preprint arXiv:2401.15077_, 2024a.
+
+
+Yuhui Li, Fangyun Wei, Chao Zhang, and Hongyang Zhang. Eagle-2: Faster inference of language
+models with dynamic draft trees. _arXiv preprint arXiv:2406.16858_, 2024b.
+
+
+Yuhui Li, Fangyun Wei, Chao Zhang, and Hongyang Zhang. Eagle-3: Scaling up inference acceleration of large language models via training-time test. _arXiv preprint arXiv:2503.01840_, 2025b.
+
+
+Baohao Liao, Yuhui Xu, Hanze Dong, Junnan Li, Christof Monz, Silvio Savarese, Doyen Sahoo, and
+Caiming Xiong. Reward-guided speculative decoding for efficient llm reasoning. _arXiv preprint_
+_arXiv:2501.19324_, 2025.
+
+
+Ji Lin, Jiaming Tang, Haotian Tang, Shang Yang, Wei-Ming Chen, Wei-Chen Wang, Guangxuan
+Xiao, Xingyu Dang, Chuang Gan, and Song Han. Awq: Activation-aware weight quantization
+for on-device llm compression and acceleration. _Proceedings of machine learning and systems_,
+6:87–100, 2024.
+
+
+Jiahao Liu, Qifan Wang, Jingang Wang, and Xunliang Cai. Speculative decoding via earlyexiting for faster llm inference with thompson sampling control mechanism. _arXiv_ _preprint_
+_arXiv:2406.03853_, 2024.
+
+
+MAA. American mathematics competitions. In _American Mathematics Competitions_, 2023.
+
+
+MAA. American invitational mathematics examination-aime. In _American Invitational Mathematics_
+_Examination-AIME_, 2024.
+
+
+11
+
+
+Isaac Ong, Amjad Almahairi, Vincent Wu, Wei-Lin Chiang, Tianhao Wu, Joseph E Gonzalez,
+M Waleed Kadous, and Ion Stoica. Routellm: Learning to route llms with preference data. _arXiv_
+_preprint arXiv:2406.18665_, 2024.
+
+
+Rui Pan, Yinwei Dai, Zhihao Zhang, Gabriele Oliaro, Zhihao Jia, and Ravi Netravali. Specreason: Fast and accurate inference-time compute via speculative reasoning. _arXiv_ _preprint_
+_arXiv:2504.07891_, 2025.
+
+
+David Patterson, Joseph Gonzalez, Quoc Le, Chen Liang, Lluis-Miquel Munguia, Daniel Rothchild,
+David So, Maud Texier, and Jeff Dean. Carbon emissions and large neural network training. _arXiv_
+_preprint arXiv:2104.10350_, 2021.
+
+
+Zexuan Qiu, Zijing Ou, Bin Wu, Jingjing Li, Aiwei Liu, and Irwin King. Entropy-based decoding
+for retrieval-augmented large language models. _arXiv preprint arXiv:2406.17519_, 2024.
+
+
+David Rein, Betty Li Hou, Asa Cooper Stickland, Jackson Petty, Richard Yuanzhe Pang, Julien Dirani, Julian Michael, and Samuel R Bowman. Gpqa: A graduate-level google-proof q&a benchmark. In _First Conference on Language Modeling_, 2024.
+
+
+Shannon Zejiang Shen, Hunter Lang, Bailin Wang, Yoon Kim, and David Sontag. Learning to
+decode collaboratively with multiple language models. _arXiv preprint arXiv:2403.03870_, 2024.
+
+
+Toby Simonds. Entropy adaptive decoding: Dynamic model switching for efficient inference. _arXiv_
+_preprint arXiv:2502.06833_, 2025.
+
+
+Ziteng Sun, Jae Hun Ro, Ahmad Beirami, and Ananda Theertha Suresh. Optimal block-level draft
+verification for accelerating speculative decoding. _CoRR_, 2024.
+
+
+Hugo Touvron, Thibaut Lavril, Gautier Izacard, Xavier Martinet, Marie-Anne Lachaux, Timoth´ee
+Lacroix, Baptiste Rozi`ere, Naman Goyal, Eric Hambro, Faisal Azhar, et al. Llama: Open and
+efficient foundation language models. _arXiv preprint arXiv:2302.13971_, 2023.
+
+
+Mikhail V Volkenstein. _Entropy and information_, volume 57. Springer Science & Business Media,
+2009.
+
+
+Shenzhi Wang, Le Yu, Chang Gao, Chujie Zheng, Shixuan Liu, Rui Lu, Kai Dang, Xionghui Chen,
+Jianxin Yang, Zhenru Zhang, et al. Beyond the 80/20 rule: High-entropy minority tokens drive
+effective reinforcement learning for llm reasoning. _arXiv preprint arXiv:2506.01939_, 2025.
+
+
+Tianwen Wei, Liang Zhao, Lichang Zhang, Bo Zhu, Lijie Wang, Haihua Yang, Biye Li, Cheng
+Cheng, Weiwei L¨u, Rui Hu, Chenxia Li, Liu Yang, Xilin Luo, Xuejie Wu, Lunan Liu, Wenjun
+Cheng, Peng Cheng, Jianhao Zhang, Xiaoyu Zhang, Lei Lin, Xiaokun Wang, Yutuan Ma, Chuanhai Dong, Yanqi Sun, Yifu Chen, Yongyi Peng, Xiaojuan Liang, Shuicheng Yan, Han Fang, and
+Yahui Zhou. Skywork: A more open bilingual foundation model, 2023.
+
+
+Wang Yang, Xiang Yue, Vipin Chaudhary, and Xiaotian Han. Speculative thinking: Enhancing small-model reasoning with large model guidance at inference time. _arXiv_ _preprint_
+_arXiv:2504.12329_, 2025.
+
+
+Yixin Ye, Zhen Huang, Yang Xiao, Ethan Chern, Shijie Xia, and Pengfei Liu. Limo: Less is more
+for reasoning. _arXiv preprint arXiv:2502.03387_, 2025.
+
+
+Shimao Zhang, Yu Bao, and Shujian Huang. Edt: Improving large language models’ generation by
+entropy-based dynamic temperature sampling. _arXiv preprint arXiv:2403.14541_, 2024.
+
+
+12
+
+
+A USE OF LLMS
+
+
+Large language models (LLMs) are employed in this study solely to aid and polish the writing
+process. Specifically, LLMs assist in refining the clarity, coherence, and grammatical accuracy of
+the manuscript, while all substantive content, experiments and analyses are developed by the authors.
+
+
+B PSEUDOCODE FOR ENTROPY-AWARE SPECULATIVE DECODING (EASD)
+
+
+The following pseudocode summarizes the workflow of **Entropy-Aware** **Speculative** **Decoding**
+**(EASD)**, an extension of standard speculative decoding (SD). EASD retains the core two-model
+structure of SD, where a draft model proposes candidate tokens and a target model verifies them.
+The key innovation of EASD is the _dynamic penalty_ mechanism, which is applied when both models
+exhibit high entropy and their top- _n_ token predictions significantly overlap. This mechanism suppresses the draft model’s top token and renormalizes the target distribution, encouraging alternative
+selections and reducing error propagation. Red text in the pseudocode highlights these differences
+relative to conventional SD.
+
+
+**Algorithm 1** Entropy-Aware Speculative Decoding (EASD)
+**Require:** Context _s_, target model LLMtarg, draft model LLMdraft, top- _n_ size _n_, thresholds _τH_, _τO_
+**Ensure:** Generated token sequence
+
+1: _t ←_ 1, _output ←_ []
+2: **while** not end of sequence **do**
+3: Draft model generates _M_ candidates:
+
+4: ( _c_ 1 _, Pd_ (1)) _, . . .,_ ( _cM_ _, Pd_ ( _M_ )) = LLM [(] draft _[M]_ [)][(] _[s]_ [)]
+5: Target model computes distributions:
+6: ( _Pt_ (1) _, . . ., Pt_ ( _M_ + 1)) = LLMtarg( _c_ 1 _, . . ., cM_ ; _s_ )
+7: **for** _i_ = 1 **to** _M_ **do**
+8: Compute entropy for both models:
+
+
+18: **if** _ϵi_ _≤_ _Pt_ [(] _[i]_ [)][(] _[c][i]_ [)] _[/P]_ _d_ [ (] _[i]_ [)][(] _[c][i]_ [)] **[ then]**
+19: _output ←_ _output ⊕_ _ci_ _{_ Accept token _}_
+20: **else**
+21: Sample token _ci_ _∼_ _Pt_ [(] _[i]_ [)] directly
+22: _output ←_ _output ⊕_ _ci_
+23: **break** _{_ Stop draft sequence verification _}_
+24: **end if**
+25: **end for**
+26: _t ←_ _t_ + 1
+27: **end while**
+28: **return** _output_
+
+
+13
+
+
+_v∈V_ _[P]_ [ (] _d_ _[i]_ [)][(] _[v]_ [) log] _[ P]_ _d_ [ (] _[i]_ [)][(] _[v]_ [)]
+
+
+9: _Hd_ [(] _[i]_ [)] = _−_ [�]
+
+
+10: _Ht_ [(] _[i]_ [)] = _−_ [�]
+
+
+10: _Ht_ [(] _[i]_ [)] = _−_ [�] _v∈V_ _[P]_ [ (] _t_ _[i]_ [)][(] _[v]_ [) log] _[ P]_ _t_ [ (] _[i]_ [)][(] _[v]_ [)]
+
+11: Compute top- _n_ overlap:
+12: overlap _←|Td_ _[n]_ _[∩]_ _[T][ n]_ _t_ _[|][/n]_
+
+
+13: **if** _Hd_ [(] _[i]_ [)] _> τH_ **and** _Ht_ [(] _[i]_ [)] _> τH_ **and** overlap _> τO_ **then**
+
+
+14: Apply dynamic penalty: _Pt_ [(] _[i]_ [)][(] _[c][i]_ [)] _[ ←]_ [0]
+
+
+15: Renormalize: _Pt_ [(] _[i]_ [)][(] _[v]_ [)] _[ ←]_ _[P]_ _t_ [ (] _[i]_ [)][(] _[v]_ [)] _[/]_ [ �] _v_ = _ci_ _[P]_ _t_ [ (] _[i]_ [)][(] _[v]_ [)] _[,][ ∀][v]_ [=] _[ c][i]_
+
+16: **end if**
+17: Sample _ϵi_ _∼U_ (0 _,_ 1)
+
+
+15: Renormalize: _Pt_ [(] _[i]_ [)][(] _[v]_ [)] _[ ←]_ _[P]_ _t_ [ (] _[i]_ [)][(] _[v]_ [)] _[/]_ [ �]
+
+
+C CASE STUDY
+
+
+C.1 SUCCESS CASE
+
+
+**GPQA Case** : The discrepancy between the original answer and the EASD-enhanced answer stems
+from the first decisive token used to identify the initial reactant. For the first reaction,
+
+
+_A_ + _H_ 2 _SO_ 4 _→_ 2 _,_ 8-dimethylspiro[4 _._ 5]decan _−_ 6one _,_
+
+
+the original answer begins with the token an alcohol, whereas the EASD-enhanced answer starts
+with a diol. Although this difference may appear subtle, the choice of article (a vs. an) immediately commits the model to distinct classes of candidate structures. In the original case, an
+alcohol frames the reasoning around monohydroxyl precursors, leading subsequent steps to focus on single-hydroxyl compounds that are unlikely to yield the target spiro ketone. By contrast, the
+EASD-generated token a diol emphasizes a dihydroxyl precursor, guiding the reasoning toward
+structures capable of undergoing the necessary dehydration to form the spiro ring.
+
+
+This initial token choice effectively anchors the downstream reasoning: it determines which molecular candidates are explored, which transformations are deemed plausible, and ultimately which
+reactant is selected. By avoiding early misdirection, the EASD-generated token ensures that subsequent inference steps remain consistent with the chemical requirements of the reaction.
+
+
+In summary, the success of EASD in this case can be attributed to generating the more appropriate
+initial token (a diol), which not only steers the model toward chemically viable candidates but
+also prevents error propagation from the outset, thereby enabling the correct identification of the
+reactant.
+
+
+Figure 2: **Success Case:** Answer comparison on a GPQA reasoning problem, illustrating the difference between the original output and the EASD-enhanced output.
+
+
+**Math Case** : The primary divergence between the original answer and the EASD-enhanced answer
+occurs at the first token following the transition word However,. In the original answer, this token
+is because, whereas in the EASD-enhanced answer it is since. While both tokens introduce a
+causal explanation, this subtle difference exerts a significant influence on the subsequent reasoning
+trajectory.
+
+
+In the original answer, beginning with because directs the model’s reasoning toward exploring the
+maximal range of values for each variable, which ultimately leads to an overestimation of the number of valid triples as _n_ +1. By contrast, the EASD-enhanced answer, beginning with since, subtly
+reorients the reasoning toward identifying the minimal number of distinct values necessary to construct valid triples. This shift in focus ensures that the model considers only feasible combinations,
+effectively guiding it to the correct maximal number of triples, _N_ ( _n_ ) = 3.
+
+
+14
+
+
+Thus, the success of EASD in this case can be attributed to the generation of a more precise initial
+causal token. By influencing the early steps of reasoning, EASD prevents error propagation, aligns
+the model’s inference with the problem constraints, and ultimately leads to the correct conclusion.
+
+
+Figure 3: **Success Case:** Answer comparison on a Math reasoning problem, illustrating the difference between the original output and the EASD-output.
+
+
+C.2 BAD CASE
+
+
+Not all cases can be successful. In this bad case, the EASD-enhanced model produced an incorrect answer due to subtle token-level interactions. Specifically, the consecutive appearance of the
+tokens since and only influenced the model’s reasoning path. Instead of correctly applying the
+inclusion-exclusion principle and accounting for overlaps between multiples of 10 and 15, the model
+mistakenly subtracted only the multiples of 10 from the total count of multiples of 3 or 5. This led
+to an overcount and resulted in the answer 110, rather than the correct 100.
+
+
+The error illustrates how token selection, even when seemingly minor, can propagate through subsequent reasoning steps and significantly affect the final outcome. In this case, the model’s focus
+on the word only caused it to overlook necessary adjustments for overlapping sets, demonstrating that EASD’s strategy of optimizing initial tokens does not guarantee error-free reasoning in all
+combinatorial or highly structured problems.
+
+
+D SPEED COMPARISON
+
+
+We conducted a detailed efficiency analysis of EASD under the setting where the draft model is 7B
+and the target model is 32B, using the hyperparameters applied in our main experiments (Entropy
+= 2, Top-n = 0.8). Table 5 reports the token generation speed (tokens per second, tok/s) for the
+Single Model baseline, EASD, and standard speculative decoding (SD) across six reasoning datasets:
+Olympia, Minerva, Math500, AMC23, Aime24, and GPQA. We also report the relative speedup
+compared to the single model baseline.
+
+
+From the results, we observe that EASD achieves an average token generation speed of 17 tok/s
+across the datasets, which is slightly lower than SD at 18 tok/s. This minor slowdown is expected,
+as EASD introduces two additional conditions—the high-entropy penalty and top-n overlap check
+during decoding. Nevertheless, EASD still achieves significant speedup relative to the single model
+baseline, confirming that most tokens are efficiently accepted from the draft model without invoking
+the target model.
+
+
+15
+
+
+**To determine** 𝑁 **(** 𝑛 **) for all** 𝑛 **≥2, we need to find the maximum**
+**number of triples (** 𝑎𝑖 **,** 𝑏𝑖 **,** 𝑐𝑖 **) such that each triple satisfies** 𝑎𝑖 **+** 𝑏𝑖 **+** 𝑐𝑖 **=** 𝑛
+**and no two triples share the same value in any position (i.e., if** 𝑖 **≠** 𝑗 **,**
+**then** 𝑎𝑖 **≠** 𝑎𝑗 **,** 𝑏𝑖 **≠** 𝑏𝑗 **, and** 𝑐𝑖 **≠** 𝑐𝑗 **). First, consider the possible values for**
+𝑎𝑖 **,** 𝑏𝑖 **, and** 𝑐𝑖 **. Since they are nonnegative integers and their sum is** 𝑛 **,**
+**each of them can take any value from 0 to** 𝑛 **. However, since no two**
+**triples can have the same value in any position, the number of**
+**distinct values that can be used for** 𝑎𝑖 **,** 𝑏𝑖 **, and** 𝑐𝑖 **is limited to the**
+**number of available distinct values, which is** 𝑛 **+1(the integers from**
+**0 to** 𝑛 **). Since we need three distinct values for each triple and**
+**these values must be different across all triples, the maximum**
+**number of such triples is limited by the number of ways we can**
+**choose 3 distinct values out of** 𝑛 **+1 values. This means we can have**
+**at most min(** 𝑛 **+1,3) distinct values per position, but since we need**
+**three distinct values for each triple, the limiting factor is the**
+**smallest set of distinct values we can use, which is 3 when** 𝑛 **≥2.**
+**Therefore, the maximum number of such triples is 3, because we**
+**can form exactly 3 triples using the values 0, 1, and** 𝑛 **−1 in some**
+**permutation. For example, if** 𝑛 **=3, the triples could be (0,1,2),**
+**(1,2,0), and (2,0,1). Thus, the maximal number of such triples** 𝑁 **(** 𝑛 **)**
+**is 3 for all** 𝑛 **≥2. The final answer is: 3**
+
+
+**To determine** 𝑁 **(** 𝑛 **) for all** 𝑛 **≥2, we need to find the maximum**
+**number of triples (** 𝑎𝑖 **,** 𝑏𝑖 **,** 𝑐𝑖 **) such that each triple satisfies**
+𝑎𝑖 **+** 𝑏𝑖 **+** 𝑐𝑖 **=** 𝑛 **and no two triples share the same value in any**
+**position (i.e., if** 𝑖 **≠** 𝑗 **, then** 𝑎𝑖 **≠** 𝑎𝑗 **,** 𝑏𝑖 **≠** 𝑏𝑗 **, and** 𝑐𝑖 **≠** 𝑐𝑗 **). First, consider**
+**the possible values for** 𝑎𝑖 **,** 𝑏𝑖 **,and** 𝑐𝑖 **. Since they are nonnegative**
+**integers and their sum is** 𝑛 **, each of them can take any value from**
+**0 to** 𝑛 **. However, because no two triples can have the same value**
+**in any position, the number of distinct values each variable can**
+**take is limited by the number of triples. Let‘s denote the number**
+**of triples by** 𝑘 **. Then, each of** 𝑎𝑖 **,** 𝑏𝑖 **,and** 𝑐𝑖 **must take** 𝑘 **different**
+**values. The smallest possible value for each variable is 0 and the**
+**largest possible value is** 𝑛 **. Therefore, the number of distinct**
+**values each variable can take is at most** 𝑛 **+1. Since we need** 𝑘
+**distinct values for each of the three variables, we have** 𝑘 **≤** 𝑛 **+1.**
+**However, since** 𝑎𝑖 **+** 𝑏𝑖 **+** 𝑐𝑖 **=** 𝑛 **, the maximum value for any one of the**
+**variables is** 𝑛 **, and the minimum value is 0. This means that if we**
+**have** 𝑘 **distinct values, the largest value must be** 𝑛 **and the**
+**smallest value must be 0, which implies that the values must be**
+**0,1,2,…,** 𝑘 **−1. For these values to sum to** 𝑛 **, the largest value** 𝑘 **−1**
+**must be** 𝑛 **, so** 𝑘 **−1=** 𝑛 **or** 𝑘 **=** 𝑛 **+1. We need to check if it is possible**
+**to form** 𝑛 **+1 such triples. Consider the following construction:**
+**(0,1,** 𝑛 **−1),(1,2,** 𝑛 **−2),(2,3,** 𝑛 **−3),** ⋮ **(** 𝑛 **−1,** 𝑛 **,0).This gives us** 𝑛 **+1 triples**
+**where each variable takes on a distinct value from 0 to z . It is**
+**easy to verify that this construction satisfies both conditions: the**
+**sum of each triple is** 𝑛 **, and no two triples share the same value**
+**in any position. Therefore, the maximal number of such triples is**
+𝑛 **+1 . Thus, the answer is:** 𝑛 **+1**
+
+
+**To solve this problem, we will use the principle of inclusion-**
+**exclusion and then subtract the numbers that are multiples of 10**
+**or 15. **Step 1: Counting Multiples of 3 and 5** First, let's count**
+**how many numbers up to 300 are multiples of 3 or 5. - The**
+**number of multiples of 3 up to 300 is** ⌊ **300/3** ⌋ **=100**
+**. - The number of multiples of 5 up to 300 is** ⌊ **300/5** ⌋ **=60**
+**. - The number of multiples of both 3 and 5 (i.e., multiples of 15)**
+**up to 300 is** ⌊ **300/15** ⌋ **=20**
+**. Using the principle of inclusion-exclusion, the total number of**
+**multiples of 3 or 5 up to 300 is:**
+**100+60−20=140**
+****Step 2: Subtracting Multiples of 10 and 15** Next, we need to**
+**exclude the numbers that are multiples of 10 or 15 from our**
+**previous count. - The number of multiples of 10 up to 300 is**
+⌊ **300/10** ⌋ **=30**
+**. - The number of multiples of 15 up to 300 is already calculated**
+**as 20. However, we must be careful not to double-count the**
+**multiples of 30 (since they are counted in both multiples of 10**
+**and 15). - The number of multiples of 30 up to 300 is**
+⌊ **300/30** ⌋ **=10. So, the number of multiples of 10 or 15 up to 300 is:**
+**30+20−10=40**
+****Step 3: Final Calculation** Subtract the multiples of 10 or 15**
+**from the total multiples of 3 or 5:**
+**140−40=100**
+**Therefore, the number of positive integers less than or equal to**
+**300 that are multiples of 3 or 5, but are not multiples of 10 or 15**
+**is 100.**
+
+
+**To solve this problem, we will use the principle of inclusion-**
+**exclusion and then subtract the numbers that are multiples of 10**
+**or 15. **Step 1: Counting Multiples of 3 and 5** First, let's count**
+**how many numbers up to 300 are multiples of 3 or 5. - The number**
+**of multiples of 3 up to 300 is** ⌊ **300/3** ⌋ **=100**
+**. - The number of multiples of 5 up to 300 is** ⌊ **300/5** ⌋ **=60**
+**. - The number of multiples of both 3 and 5 (i.e., multiples of 15) up**
+**to 300 is** ⌊ **300/15** ⌋ **=20**
+**. Using the principle of inclusion-exclusion, the total number of**
+**multiples of 3 or 5 up to 300 is:**
+**100+60−20=140**
+****Step 2: Subtracting Multiples of 10 and 15** Next, we need to**
+**exclude the numbers that are multiples of 10 or 15. - The number**
+**of multiples of 10 up to 300 is** ⌊ **300/10** ⌋ **=30**
+
+**. - The number of multiples of 15 up to 300 is already calculated as**
+**20. Since every multiple of 15 is also a multiple of 5, we only need**
+**to subtract the multiples of 10 from our previous count because**
+**they are not already excluded in the initial calculation. Thus, the**
+**number of multiples of 10 that are also multiples of 3 or 5 is 30.**
+**Therefore, the number of positive integers less than or equal to**
+**300 that are multiples of 3 or 5 but are not multiples of 10 or 15 is:**
+**140−30=110**
+
+
+**So, the final answer is:110.**
+
+
+Figure 4: **Bad Case:** Answer comparison on a Math reasoning problem, illustrating the difference
+between the original output and the EASD-output.
+
+
+Examining dataset-specific results, we find that on most math reasoning datasets, EASD achieves
+a token speed of 17–19 tok/s, corresponding to 1.21–1.36× speedup compared to the single model.
+On GPQA, a general reasoning dataset, the speed is slightly lower, reflecting a higher fraction of
+tokens being penalized by EASD due to increased uncertainty. These results indicate that while the
+additional token-level checks introduce a modest computational overhead, EASD maintains nearSD-level efficiency across diverse datasets.
+
+
+Table 5: Token generation speed (tokens per second) and speedup of EASD and SD compared to the
+single model baseline across multiple datasets.
+
+
+Dataset Single Model tok/s EASD tok/s Speedup SD tok/s Speedup
+
+
+Olympia 14 19 1.36 19 1.36
+
+
+Minerva 14 17 1.21 18 1.29
+
+
+Math500 14 19 1.36 20 1.43
+
+
+AMC23 14 19 1.36 18 1.29
+
+
+Aime24 14 17 1.21 17 1.21
+
+
+GPQA 14 13 0.93 14 1
+
+
+Avg 14 17 1.21 18 1.29
+
+
+E HYPERPARAMETER SENSITIVITY STUDY
+
+
+We conducted a comprehensive hyperparameter study to evaluate the impact of varying the entropy
+and top-n thresholds on EASD’s performance, focusing on both token penalization and output accuracy. Table 6 reports the results across six reasoning datasets for a range of entropy thresholds (1,
+1.5, 2) and top-n thresholds (0, 0.2, 0.4, 0.6, 0.8, 1).
+
+
+The results reveal several key trends. First, increasing the thresholds to penalize less tokens generally leads to improved output accuracy, confirming that actively rejecting low-confidence tokens
+enhances reasoning quality. Second, optimal thresholds vary slightly across datasets: Aime24 and
+
+
+16
+
+
+GPQA achieve the best average accuracy with Entropy = 2 and Top-n = 0.8, whereas AMC23 benefits from slightly lower thresholds.
+
+
+These findings indicate that while some dataset-specific tuning can further improve performance, the
+default values used in our experiments (Entropy = 2, Top-n = 0.8) offer a robust trade-off between
+efficiency and output quality across diverse tasks. Overall, this analysis demonstrates that EASD is
+effective and practically tunable, even when validation data are limited or unavailable.
+
+
+Table 6: EASD performance under different entropy and top-n threshold settings (%).
+
+
+|Olympia|Minerva|Math500|AMC23|Aime24|GPQA|Avg|
+|---|---|---|---|---|---|---|
+|45.33|46.69|80.4|67.5|13.33|43.94|49.53|
+|46.22|44.85|82.4|62.5|13.33|49.49|49.80|
+|47.41|44.85|80.8|65|20|52.53|51.77|
+
+
+|45.33|46.69|80.4|67.5|13.33|43.94|
+|---|---|---|---|---|---|
+|46.22|44.85|82.4|62.5|13.33|49.49|
+|47.41|44.85|80.8|65|20|52.53|
+
+
+|47.41|44.85|80.8|65|20|52.53|51.77|
+|---|---|---|---|---|---|---|
+|45.33|47.06|80.2|65|13.33|44.44|49.23|
+|46.22|44.85|**82.4**|62.5|13.33|50.51|49.97|
+|47.41|44.12|80.6|65|20|54.04|51.86|
+
+
+|47.41|44.12|80.6|65|20|54.04|51.86|
+|---|---|---|---|---|---|---|
+|45.04|**48.16**|79.2|67.5|13.33|45.45|49.78|
+|46.37|45.59|82|62.5|13.33|52.02|50.30|
+|**48.3**|45.59|80.8|65|20|50.51|51.70|
+
+
+|48.3|45.59|80.8|65|20|50.51|51.70|
+|---|---|---|---|---|---|---|
+|44.89|47.06|81.6|67.5|16.67|46.46|50.70|
+|45.33|48.16|82|62.5|20|51.52|51.59|
+|48.15|47.06|80.8|62.5|**23.33**|**55.55**|**52.89**|
+
+
+|48.15|47.06|80.8|62.5|23.33|55.55|52.89|
+|---|---|---|---|---|---|---|
+|46.52|44.85|79.2|**77.5**|16.67|46.47|51.87|
+|47.41|43.75|81.4|67.5|16.67|47.48|50.70|
+|46.81|46.32|81.2|62.5|20|49.49|51.05|
+
+
+F PENALIZED TOKEN FREQUENCY ANALYSIS
+
+
+To further understand the effect of EASD’s penalty mechanism, we analyzed how frequently tokens
+are penalized under varying entropy and top-n thresholds, as reported in Table 7. The analysis reveals
+clear trends: higher entropy or top-n thresholds reduce the number of penalized tokens, while lower
+thresholds increase token penalization. This behavior is consistent across different datasets and
+demonstrates that the dual-condition mechanism effectively controls how aggressively the model
+intervenes in token generation.
+
+
+Interestingly, our experiments show that when fewer tokens are penalized, the overall accuracy of
+the generated outputs tends to be higher. This suggests that EASD is able to focus its corrections
+on the most uncertain or high-impact tokens, avoiding unnecessary disruption of tokens that are
+already well-predicted by the draft model. By selectively penalizing a targeted subset of tokens,
+EASD achieves a balance between efficiency and output quality, ensuring that the applied corrections
+meaningfully improve reasoning performance without introducing excessive noise or computational
+overhead.
+
+
+17
+
+
+1
+
+
+0
+
+
+1
+
+
+0.2
+
+
+1
+
+
+0.4
+
+
+1
+
+
+0.6
+
+
+1
+
+
+**0.8**
+
+
+1
+
+
+1
+
+
+Table 7: Frequency of penalized tokens under different entropy and top-n threshold settings (%).
+
+
+|Olympia|Minerva|Math500|AMC23|Aime24|GPQA|Avg|
+|---|---|---|---|---|---|---|
+|7.69|8.98|6.97|8.05|9.85|26.34|11.31|
+|3.05|4.18|2.7|3.38|4.91|15.1|5.55|
+|1.11|1.71|0.91|1.3|1.57|8.47|2.51|
+
+
+|1.11|1.71|0.91|1.3|1.57|8.47|2.51|
+|---|---|---|---|---|---|---|
+|7.69|8.98|6.97|8.05|9.85|26.34|11.31|
+|3.05|4.18|2.7|3.38|4.91|15.1|5.55|
+|1.11|1.71|0.91|1.3|1.57|8.47|2.51|
+
+
+|1.11|1.71|0.91|1.3|1.57|8.47|2.51|
+|---|---|---|---|---|---|---|
+|7.65|8.85|6.99|7.98|9.97|25.87|11.22|
+|3.03|4.14|2.7|3.37|4.91|15.03|5.53|
+|1.1|1.67|0.91|1.29|1.57|8.73|2.55|
+
+
+|1.1|1.67|0.91|1.29|1.57|8.73|2.55|
+|---|---|---|---|---|---|---|
+|7.42|8.61|6.66|7.69|9.32|22.96|10.44|
+|2.89|3.83|2.62|3.14|4.37|13.51|5.06|
+|1.01|1.49|0.87|1.18|1.43|6.94|2.15|
+
+
+|1.01|1.49|0.87|1.18|1.43|6.94|2.15|
+|---|---|---|---|---|---|---|
+|5.79|6.73|5.67|6.13|7.53|14.28|7.69|
+|2.16|3|2.02|2.34|3.05|8.11|3.45|
+|0.7|0.97|0.63|0.77|0.97|3.97|1.34|
+
+
+1
+
+|0.7|0.97|0.63|0.77|0.97|3.97|1.34|
+|---|---|---|---|---|---|---|
+|1.98|2.4|2.13|1.94|2.61|3.38|2.41|
+|0.7|0.94|0.77|0.73|0.87|1.81|0.97|
+|0.18|0.26|0.19|0.19|0.22|0.72|0.29|
+
+
+18
+
+
+1
+
+
+0
+
+
+1
+
+
+0.2
+
+
+1
+
+
+0.4
+
+
+1
+
+
+0.6
+
+
+1
+
+
+**0.8**
+
+
+1

@@ -12,7 +12,7 @@ echo "============================================"
 # rm -f iclr2026_balanced/ratings.csv  # force re-sample
 # python fetch_iclr2025.py 200 42 --balanced
 
-# ── Step 2: Check dataset distribution ──
+# ── Step 2: Check dataset distribution ── 
 echo ""
 echo ">>> Step 2: Dataset distribution check"
 python -c "
@@ -31,9 +31,9 @@ for k in sorted(bins):
 "
 
 # ── Step 3: Build calibration set ──
-# echo ""
-# echo ">>> Step 3: Building calibration set (sub-agents only, no merger)"
-# python build_calibration.py --data-dir iclr2026_balanced --parallel --no-related-work # --no-neutral
+echo ""
+echo ">>> Step 3: Building calibration set (sub-agents only, no merger)"
+python build_calibration.py --data-dir iclr2026_balanced --parallel --no-related-work # --no-neutral
 
 # ── Step 4: Run baseline ──
 # echo ""
@@ -43,7 +43,7 @@ for k in sorted(bins):
 # ── Step 5: Run benchmark with calibration ──
 echo ""
 echo ">>> Step 5: Running benchmark (50 papers, with calibration)"
-python run_iclr_bench.py 40 3112 --parallel --data-dir iclr2026_unbalanced --calibration calibration.md --no-related-work # --no-neutral
+python run_iclr_bench.py 100 3 --parallel --data-dir iclr2026_balanced --calibration calibration.md --no-related-work # --no-neutral
 
 # ── Step 6: Compute metrics ──
 echo ""

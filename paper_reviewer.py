@@ -32,13 +32,14 @@ OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 
 # Per-stage model assignments — all via OpenRouter
-MODEL_HARSH = "qwen/qwen3.6-plus:free"
-MODEL_NEUTRAL = "qwen/qwen3.6-plus:free"
-MODEL_SPARK = "qwen/qwen3.6-plus:free"
-MODEL_RELATED_WORK = "qwen/qwen3.6-plus:free:online" 
-MODEL_FILTER = "qwen/qwen3.6-plus:free"
-MODEL_MERGER = "qwen/qwen3.6-plus:free"
-MODEL_SCORER = "qwen/qwen3.6-plus:free"
+base_model = "qwen/qwen3.6-plus:free"
+MODEL_HARSH = f"{base_model}"
+MODEL_NEUTRAL = f"{base_model}"
+MODEL_SPARK = f"{base_model}"
+MODEL_RELATED_WORK = f"{base_model}:online" 
+MODEL_FILTER = f"{base_model}"
+MODEL_MERGER = f"{base_model}"
+MODEL_SCORER = f"{base_model}"
 MODEL_PARSER = "openai/gpt-5.4-nano"
 
 MAX_RETRIES = 3
@@ -91,45 +92,32 @@ Do NOT nitpick formatting, style, or minor phrasing. Do NOT invent problems \
 that aren't there. Do NOT penalize intentional scope decisions. Focus on what \
 actually matters for the paper's contribution.
 
-Output format (strictly follow — evaluate EVERY section):
+Output format:
 
 ## Section-by-Section Critical Review
 
-### Title & Abstract
-- Does the title accurately reflect the contribution?
-- Does the abstract clearly state the problem, method, and key results?
-- Are any claims in the abstract unsupported by the paper?
+Go through the paper's sections and evaluate each one on its own merits. \
+You are not limited to the categories below — adapt your review to the \
+paper's actual structure and content. The following are examples of the \
+kinds of questions you might consider, but raise whatever concerns are \
+genuinely important for this specific paper:
 
-### Introduction & Motivation
-- Is the problem well-motivated? Is the gap in prior work clearly identified?
-- Are the contributions clearly stated and accurate?
-- Does the introduction over-claim or under-sell?
+Example sections and questions (use as inspiration, not a checklist):
+- Title & Abstract: Does the title reflect the contribution? Are abstract \
+claims supported?
+- Introduction & Motivation: Is the problem well-motivated? Are contributions \
+clearly stated?
+- Method / Approach: Is it reproducible? Are assumptions justified? Any \
+logical gaps or missing edge cases? Are proofs correct?
+- Experiments & Results: Do experiments test the claims? Are baselines fair? \
+Missing ablations? Statistical significance? Cherry-picked results?
+- Writing & Clarity: Any sections confusing enough to impede understanding? \
+(Do NOT nitpick grammar or formatting.)
+- Limitations & Broader Impact: Are key limitations acknowledged? Any missed \
+failure modes or negative societal impacts?
 
-### Method / Approach
-- Is the method clearly described and reproducible?
-- Are key assumptions stated and justified?
-- Are there logical gaps in the derivation or reasoning?
-- Are there edge cases or failure modes not discussed?
-- For theoretical claims: are proofs correct and complete?
-
-### Experiments & Results
-- Do the experiments actually test the paper's claims?
-- Are baselines appropriate and fairly compared?
-- Are there missing ablations that would materially change conclusions?
-- Are error bars / statistical significance reported?
-- Do the results support the claims made, or are they cherry-picked?
-- Are datasets and evaluation metrics appropriate?
-
-### Writing & Clarity
-- Are there sections that are confusing or poorly explained?
-- Are figures and tables clear and informative?
-(Do NOT nitpick grammar or formatting — only flag clarity issues that \
-impede understanding of the contribution.)
-
-### Limitations & Broader Impact
-- Do the authors acknowledge the key limitations?
-- Are there fundamental limitations they missed?
-- Are there failure modes or negative societal impacts not discussed?
+Focus on whatever matters most for THIS paper. Skip sections that are fine \
+and spend more time on sections with real issues.
 
 ### Overall Assessment
 One paragraph. Summarize the most important concerns and whether the \
@@ -274,27 +262,48 @@ about the same paper:
 {related_work_line}\
 
 
-Your job is to synthesize these into ONE authoritative final review. Be harsh and critical, it is for \
-ICLR, most paper get washed out.
+Your job is to synthesize these into ONE authoritative final review. \
+Be honest and unsparing about real problems, but do not manufacture or inflate weaknesses. \
+It is for ICLR — standards are high, but a strong paper should read as strong.
 
-Cross-check every criticism against the actual paper content and the other \
-reviews. Remove criticisms that are factually wrong about the paper, that \
-misunderstand the contribution, or that are pure formatting/style nitpicks. \
-But do NOT excuse real problems — if multiple reviewers flag the same issue, \
-it's real.
+Before including any weakness, verify: (1) does the paper actually have this problem, or did the reviewer \
+misread a section? (2) if the paper partially addresses this concern, is the addressal unreasonable or is \
+the reviewer ignoring it? Quote the relevant section if needed to justify keeping or removing the criticism.
 
 Rules:
 - REMOVE criticisms that are factually wrong or misunderstand the paper.
 - REMOVE pure formatting/style nitpicks.
-- REMOVE or weaken weaknesses (or put them into nice-to-have) if they are generic or one-weakness-suit-all type \
-and does not harm the core claim of the paper \
+- REMOVE or WEAKEN criticisms that demand the paper address problems outside its stated scope \
+and contributions. A paper about X should be evaluated on whether it does X well, not on whether \
+it also does Y. If the paper explicitly scopes out a direction, criticizing its absence is scope creep, \
+not a weakness.
+- REMOVE or WEAKEN weaknesses (or put them into nice-to-have) if they are generic or one-weakness-suit-all type \
+and does not harm the core claim of the paper.
+- REMOVE weaknesses that authors already address in the paper, even if imperfectly and the addressal is reasonable.
+- REMOVE or WEAKEN weaknesses where it is not what the paper intended to address \
+- REMOVE criticisms that claim a cited reference does not exist, a method or model is not yet released, \
+or a benchmark is unavailable. These are due to the lack of knowledge of reviewer, not author mis-claiming. \
+If the paper cites it, assume it exists unless proven otherwise.
+or where no reasonable revision could address the concern.
+- MOVE TO NICE TO HAVE for weaknesses that demand methodological practices that are not standard or expected \
+in the paper's field or setting. \
+Examples: requesting confidence intervals or multiple-run statistics for large scale benchmarks where \
+single-run evaluation is the norm, demanding theoretical proofs for an empirical systems paper, or \
+requiring user studies for a purely algorithmic contribution. \
+The review should evaluate the paper against the standards of its own community, not impose arbitrary \
+rigor requirements.
 - KEEP criticisms that are factually correct AND substantive, even if only \
   one reviewer raised them.
 - KEEP genuine strengths backed by evidence.
-- For potentially missed related work: present as suggestions, do not penalize.
-- Do NOT pad Strengths or Weaknesses to appear balanced or make the list "more through". \
+- DO NOT mention missing related works, as you do not have external sources to confirm their existence and could be making things up.
+- Do NOT pad Strengths or Weaknesses to appear balanced or make the list "more thorough". \
 If the paper has only one (or none) genuine strength, list only one (or none). \
 If a weakness is minor or redundant, omit it. Quality over quantity.
+- REMOVE or WEAKEN strengths that are generic or would apply to any paper. \
+Examples: "the paper is well-written," "the topic is important," "the experiments are extensive." \
+A strength must identify something specific this paper does well that most papers in the area do not.
+- If the weaknesses identified would, if true, invalidate or severely undermine the paper's core \
+contribution, the review should reflect that clearly — do not soften the overall tone to appear balanced.
 
 Output your final review in this markdown format:
 
@@ -313,17 +322,18 @@ Output your final review in this markdown format:
 - suggestion that would improve but is not a core flaw
 
 ## Novel Insights
-One paragraph synthesizing genuinely novel observations.
+One paragraph synthesizing genuinely novel observations. \
+If no genuinely novel insight emerges from the reviews beyond the paper's own contributions, write \
+"None beyond the paper's own contributions."
 
-## Potentially Missed Related Work
-- paper — why relevant (or "None identified")
 
 ## Suggestions
 - specific actionable suggestion
 
 Do NOT output any numerical scores, subscores, or accept/reject decisions. \
 
-DO differentiate between papers of varying quality clearly: the content of the review should make it clear whether the paper is strong or weak, without using numerical scores.
+DO differentiate between papers of varying quality clearly: the content of the review \
+should make it clear whether the paper is strong or weak, without using numerical scores.
 """
 
 
@@ -414,7 +424,7 @@ def _get_client(api_key: str | None = None) -> AsyncOpenAI:
 # ── OpenRouter calls ───────────────────────────────────────────────────
 
 # Models that support OpenRouter reasoning config
-REASONING_MODELS = {"z-ai/glm-5", "minimax/minimax-m2.7", "deepseek/deepseek-v3.2"}
+REASONING_MODELS = {"z-ai/glm-5", "minimax/minimax-m2.7", "deepseek/deepseek-v3.2", "minimax/minimax-m2.5:free", "stepfun/step-3.5-flash:free"}
 
 # Model → official provider mapping (for OpenRouter provider pinning)
 PROVIDER_MAP = {
@@ -666,7 +676,7 @@ async def run_merge(
         f"{paper_content}\n"
         f"--- PAPER CONTENT END ---\n\n"
         f"Here are the inputs:\n\n"
-        f"{reviews_section}"
+        f"{reviews_section}" 
         f"Now produce the final consolidated review following your instructions. "
         f"Remember: many of the harsh critic's points may be nonsensical or overly "
         f"picky — cross-check everything against the actual paper before including it."
@@ -683,6 +693,7 @@ async def run_scorer(
     paper_content: str,
     calibration_context: str = "",
     cal_dir: str = "",
+    gt_score: float | None = None,
 ) -> tuple[float, float]:
     """
     Scorer — uses Claude Agent SDK (claude-sonnet-4-6) to search calibration
@@ -702,6 +713,8 @@ async def run_scorer(
     paper_path.write_text(paper_content, encoding="utf-8")
 
     prompt = f"""\
+{SCORE_PROMPT}
+
 You are a paper scoring agent. Your job:
 
 1. Read the consolidated review at {review_path} and the paper at {paper_path}.
@@ -715,14 +728,19 @@ You are a paper scoring agent. Your job:
    calibration papers that are similar in content or quality.
 
 3. Once you identify relevant matches, ONLY Read the *_review.md files (NOT the
-   *_paper.md files) to save context. Aim for 3-5 relevant calibration reviews.
+   *_paper.md files) to save context. Aim for 5-7 relevant calibration reviews.
+   You can also grep the score part of the review, usually in this format, to select a wide range of papers.
+   ```
+# Actual Human Scores
+Individual reviewer scores: [0.0, 0.0, 0.0]
+Average score: 0.0
+Binary outcome: Reject
+```
 
 4. Compare the paper's quality against those calibration examples on:
    novelty, technical soundness, empirical support, significance, clarity.
 
 5. Assign a single overall score from 0.0 to 10.0.
-
-{SCORE_PROMPT}
 
 Based on the calibration examples you found, assign a score. Explain your reasoning.
 
@@ -754,7 +772,6 @@ This must be the LAST line of your output. Do NOT repeat calibration scores here
     paper_path.unlink(missing_ok=True)
     tmp_dir.rmdir()
 
-    print(f"  [scorer-agent] raw output: {result_text[:200]} ...")
 
     # Log full scorer output to file for debugging
     scorer_log_path = Path(__file__).parent / "scorer_debug.log"
@@ -763,7 +780,9 @@ This must be the LAST line of your output. Do NOT repeat calibration scores here
         f.write(f"cal_dir: {cal_dir_abs}\n")
         f.write(f"{'─' * 72}\n")
         f.write(result_text)
+        f.write(f"GT Score: {gt_score}\n")
         f.write(f"\n{'=' * 72}\n\n")
+        
 
     # Use _parse_score to extract the numerical score
     score, cost_parse = await _parse_score(client, result_text)
@@ -783,6 +802,7 @@ async def run_merger(
     skip_neutral: bool = False,
     skip_spark: bool = False,
     skip_related_work: bool = False,
+    gt_score: float | None = None,
 ) -> tuple[str, float, float]:
     """
     Merger + Scorer (two separate calls).
@@ -799,6 +819,7 @@ async def run_merger(
         client, review_text, paper_content,
         calibration_context=calibration_context,
         cal_dir=cal_dir,
+        gt_score=gt_score
     )
     return review_text, score, cost_merge + cost_score
 

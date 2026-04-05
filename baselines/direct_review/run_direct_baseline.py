@@ -35,7 +35,7 @@ from paper_reviewer import (
 )
 
 # Baseline uses its own model — not the pipeline's MODEL_SCORER
-BASELINE_MODEL = "z-ai/glm-5"
+BASELINE_MODEL = "qwen/qwen3.6-plus:free"
 
 # DEFAULT_BENCH_DIR = Path(__file__).resolve().parent.parent.parent / "iclr2025_data.old"
 DEFAULT_BENCH_DIR = Path(__file__).resolve().parent.parent.parent / "iclr2025_data_v2"
@@ -96,22 +96,69 @@ def stratified_sample(papers, n, seed):
 
 
 DIRECT_SCORE_PROMPT = """\
-You are an experienced academic reviewer for a top ML venue (ICLR).
 
-You will be given a paper. Read it carefully, then provide:
-1. A brief assessment (2-3 paragraphs) covering strengths, weaknesses, and overall quality.
-2. A single numerical score from 1.0 to 10.0.
+
+Output your final review in this markdown format:
+
+## Summary
+2-3 sentence summary of the paper's contribution.
+
+## Strengths
+- strength 1 with evidence
+- strength 2 with evidence
+
+## Weaknesses
+- weakness 1 — why it matters
+- weakness 2 — why it matters
+
+## Nice-to-Haves
+- suggestion that would improve but is not a core flaw
+
+## Novel Insights
+One paragraph synthesizing genuinely novel observations.
+
+## Potentially Missed Related Work
+- paper — why relevant (or "None identified")
+
+## Suggestions
+- specific actionable suggestion
+
+
+DO differentiate between papers of varying quality clearly: the content of the review should make it clear whether the paper is strong or weak.
+
+
+Then please rate the paper:
 
 Use the FULL scoring range — do NOT cluster around 5-6. Be discriminative:
-- 9.0-10.0: Strong accept. Exceptional, field-advancing contribution.
-- 7.0-8.9:  Accept. Clear contribution, solid execution, minor issues.
-- 5.0-5.9:  Borderline reject. Has some merit but weaknesses outweigh.
-- 3.0-4.9:  Reject. Significant issues with claims, method, or evaluation.
-- 1.0-2.9:  Strong reject. Fundamental flaws, unclear contribution, or wrong.
 
-Try to use 6.0 sparingly — it often signals indecision. If you can lean one way, prefer 5.5 or 6.5.
+Then assign an overall score from 0.0 to 10.0.
 
-End your response with a line like: "Score: X.X"
+This is for a top-tier venue (ICLR, ~29% acceptance rate), most papers are scored lower than 6. \
+
+Score based on these:
+- novelty
+- technical soundness
+- empirical support
+- significance
+- clarity
+
+Do NOT be afraid to give very high (>8) or very low (<4) scores! Good papers should be praised and bad paper should be found out.
+
+Score continuously (e.g. 3.5, 4.7, 8.1). Use the full range — do not cluster \
+around 5-6. Do not round to .5 or .0. give scores in x.2, 2.8, 7.3, etc. 
+
+The score should be DISCRIMINATIVE. A weak paper is weak — \
+give it a low score (1-3). A strong paper is strong — give it a high score (7-9). \
+Do not cluster everything around 5. The quality difference between papers is real \
+and your scores should reflect it.
+
+## Scoring guide
+- 10: Strong accept. Exceptional, field-advancing contribution.
+- 8:  Accept.
+- 6:  Borderline accept.
+- 4:  Borderline reject.
+- 2:  Reject.
+- 0:  Strong reject. 
 """
 
 

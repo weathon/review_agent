@@ -1,0 +1,1958 @@
+# MARGINAL FLOW: A FLEXIBLE AND EFFICIENT
+
+## FRAMEWORK FOR DENSITY ESTIMATION
+
+
+**Anonymous authors**
+Paper under double-blind review
+
+
+ABSTRACT
+
+
+Current density modeling approaches suffer from at least one of the following
+shortcomings: expensive training, slow inference, approximate likelihood, mode
+collapse or architectural constraints like bijective mappings. We propose a simple
+yet powerful framework that overcomes these limitations altogether. We define
+our model _qθ_ ( _**x**_ ) through a parametric distribution _q_ ( _**x**_ _|_ _**w**_ ) with latent parameters
+_**w**_ . Instead of directly optimizing the latent variables _**w**_, our idea is to marginalize
+them out by sampling them from a learnable distribution _qθ_ ( _**w**_ ), hence the name
+Marginal Flow. In order to evaluate the learned density _qθ_ ( _**x**_ ) or to sample from it,
+we only need to draw samples from _qθ_ ( _**w**_ ), which makes both operations efficient.
+The proposed model allows for exact density evaluation and is orders of magnitude faster than competing models both at training and inference. Furthermore,
+Marginal Flow is a flexible framework: it does not impose any restrictions on the
+neural network architecture, it enables learning distributions on lower-dimensional
+manifolds (either known or to be learned), it can be trained efficiently with any
+objective (e.g. forward and reverse KL divergence), and it easily handles multimodal targets. We evaluate Marginal Flow extensively on various tasks including
+synthetic datasets, simulation-based inference, distributions on positive definite
+matrices and manifold learning in latent spaces of images.
+
+
+1 INTRODUCTION
+
+
+Density estimation models are ubiquitous in machine learning and have been used for a wide range
+of purposes. Their overarching characteristic is to provide an approximation to some probability
+distribution. The most popular use case is probabilistic modeling of data with the goal of generating new instances. The underlying assumption is that there exists an unknown generative process
+that generated the data in the first place. Successful applications include generation of images,
+e.g. Rombach et al. (2022), text-to-audio, e.g. Liu et al. (2023), and text-to-video, e.g. Singer et al.
+(2023). Other popular applications of deep generative models include protein structure prediction,
+e.g. Abramson et al. (2024), and drug discovery, e.g. Zeng et al. (2022).
+
+
+Rather than focusing on generating new samples, another interesting use case of density estimation
+models lies in modeling and reasoning about the probability distribution itself, which has relevant
+applications in the sciences. Common settings include computation of high-dimensional integrals
+and intractable likelihoods or posteriors. This is maybe best exemplified by Bayesian inference,
+e.g. Rezende & Mohamed (2015). Applications include cosmology, e.g. Alsing et al. (2018), neurosciences, e.g. Goncalves et al. (2020), simulation-based inference, e.g. Cranmer et al. (2020), and
+many more. Learning probability distributions on manifolds is also a challenging problem that can
+be addressed with density estimation models, e.g. Gemici et al. (2016); Chen & Lipman (2024).
+
+
+The two fundamental operations that characterize a density estimation model are sampling from
+the learned distribution and evaluating its probability density. Most models show a trade-off in
+efficiency between the two operations, which have their own specific challenges. On the one hand,
+evaluating the probability density often requires restricting the learned transformations to bijections
+that are carefully designed to avoid computing expensive Jacobian determinants, as in the case of
+Normalizing Flows (NF) (Kobyzev et al., 2020). Alternatively, the true density can be bounded like
+in VAEs (Kingma & Welling, 2014; Rezende et al., 2014) and afterwards estimated (Burda et al.,
+2015), which is still very expensive. Therefore, most generative models rely on surrogate objectives
+
+
+1
+
+
+Table 1: Comparison of Marginal Flow with other deep generative models: GANs, VAEs, EnergyBased models (EB), Flow Matching (FM), Normalizing Flow (NF), and Free-form Flows (FFF).
+The Table is inspired by Bond-Taylor et al. (2021).
+
+
+Feature GANs VAEs EB FM NF FFF **Ours**
+Efficient exact likelihood ✗ ✗ ✗ ✗ ✓ ✗ ✓
+Efficient (single-step) sampling ✓ ✓ ✗ ✗ ✓ ✓ ✓
+Efficient training ✗ ✓ (✓) (✓) ✗ (✓) ✓
+Free-form Jacobian ✓ ✗ ✓ ✓ ✗ ✓ ✓
+Lower dim. base distr. (manifold) ✓ ✓ ✗ ✗ ✗ ✓ ✓
+
+
+that do not require the evaluation of the probability densities, while still allowing for high-fidelity
+sample generation. This is the case for Energy-Based (EB) models (Swersky et al., 2011), Diffusion
+models (Sohl-Dickstein et al., 2015) and Flow Matching (FM) (Lipman et al., 2023). On the other
+hand, sampling often requires multi-step processes that transform samples from a simple distribution
+into samples from the learned distribution, e.g. Flow Matching and Diffusion models. The tradeoff between efficient log-likelihood evaluation and efficient sampling is clear in NF, which can be
+efficient only at either sampling or evaluating the density. Which of the two operations is more
+efficient also determines which objective function can be used for training.
+
+
+In many applications it is beneficial to learn a density on a lower-dimensional space. For instance,
+real data is often assumed to live on a lower-dimensional manifold (Fefferman et al., 2016). Most
+models, like Diffusion, FM and NF, cannot account for a change in the dimensionality while others
+like GANs (Goodfellow et al., 2014) or Free-form Flows (Draxler et al., 2024) can, but suffer from
+other disadvantages like approximate likelihood and unstable training.
+
+
+**Contribution.** We propose a novel density estimation framework that alleviates altogether the
+common shortcomings of current approaches. We define our model through a parametric distribution _q_ ( _**x**_ _|_ _**w**_ ) with latent parameters _**w**_ . Instead of directly optimizing the latent variables _**w**_,
+we marginalize them out by sampling _**w**_ from a learnable distribution _qθ_ ( _**w**_ ). As we do not need
+to evaluate _qθ_ ( _**w**_ ) at any point, but only to sample from it, we are free to generate samples in a
+very flexible and efficient way. To generate _**w**_, we feed-forward samples from a base distribution
+of choice through an unconstrained learnable neural network. Overall, the proposed approach allows for efficient exact density evaluation and efficient sampling. Furthermore, it does not pose any
+restrictions (e.g. bijectivity) on the neural network and allows for learning a lower-dimensional manifold alongside the density. In Table 1, we provide a high-level comparison between popular density
+estimation models and Marginal Flow. Overall, our contributions can be summarized as follows:
+
+
+    - We introduce a novel density estimation framework called Marginal Flow.
+
+    - We demonstrate the flexibility of the framework: it allows for learning lower-dimensional
+manifolds, it can easily handle multi-modal distributions, and can be tailored to the data
+with the choice of the parametric distribution _q_ ( _**x**_ _|_ _**w**_ ).
+
+    - We show empirically that Marginal Flow is orders of magnitude faster than competing
+models both at training and inference.
+
+    - Lastly, we showcase Marginal Flow on extensive experiments with synthetic data (trained
+via log-likelihood and reverse KL divergence), simulation-based inference, distributions
+over positive-definite matrices, and finally on MNIST digits and the JAFFE faces dataset.
+
+
+2 MARGINAL FLOW
+
+
+2.1 MODEL DEFINITION
+
+
+**Marginalization** Let _q_ ( _**x**_ _|_ _**w**_ ) with _**x**_ _∈_ R _[d]_ be a family of distributions parametrized by _**w**_ _∈_ R _[p]_
+and assume that, for given _**w**_, it is easy to evaluate the density of _q_ ( _**x**_ _|_ _**w**_ ) to sample from it. We can
+compute _q_ ( _**x**_ ) by marginalizing out _**w**_ over some _q_ ( _**w**_ ):
+
+
+            _q_ ( _**x**_ ) = _q_ ( _**x**_ _|_ _**w**_ ) _q_ ( _**w**_ ) _d_ _**w**_ = E _**w**_ _∼q_ ( _**w**_ ) [ _q_ ( _**x**_ _|_ _**w**_ )] _._ (1)
+
+
+2
+
+
+In our model, we let _q_ ( _**x**_ _|_ _**w**_ ) be a distribution of choice parametrized by _**w**_ and we let _q_ ( _**w**_ ) be
+freely learnable: _q_ ( _**w**_ ) _→_ _qθ_ ( _**w**_ ). The resulting marginal _q_ ( _**x**_ ) is universal for many families of
+distributions _q_ ( _**x**_ _|_ _**w**_ ), e.g. if _q_ ( _**x**_ _|_ _**w**_ ) is a kernel (Micchelli et al., 2006). We will often assume
+_q_ ( _**x**_ _|_ _**w**_ ) = _N_ ( _**x**_ _|µ_ = _**w**_ _,_ Σ = diag( _σ_ 1 _, . . ., σd_ )), for which _p_ = _d_, and learnable variances (alongside _θ_ ). However, we show that other choices of _q_ ( _**x**_ _|_ _**w**_ ) can be beneficial, depending on the setting.
+
+
+**Definition.** Motivated by the marginalization in Eq. 1, we define our model as follows:
+
+
+The density _qθ_ ( _**x**_ ) can be exactly evaluated and efficiently sampled from. _Nc_ is the number of
+parameters drawn from _qθ_ ( _**w**_ ) and is not required to be fixed. In fact, the parameters _**w**_ _θ,i_ are not
+fixed themselves but rather _resampled_ from _qθ_ ( _**w**_ ) at each iteration, which effectively renders the
+marginalization in Eq. 1. As we will argue in the next paragraph, there is a crucial difference with
+respect to directly optimizing a finite set of mixtures _{_ _**w**_ _i}_ _[N]_ _i_ =1 _[c]_ [.] [Another important aspect is that we]
+do not need to evaluate _qθ_ ( _**w**_ ) but only to sample from it. Therefore, we can construct samples in
+a very flexible way and in a single step: we first sample from a distribution of choice _p_ base( _**z**_ ) with
+_**z**_ _∈_ R _[m]_ and then transform them via a learnable mapping to the space of latent parameters _**w**_ _∈_ R _[p]_ .
+Relevantly, to do so we can use an unconstrained learnable function _fθ_ : _**z**_ _∈_ R _[m]_ _�→_ _**w**_ _∈_ R _[p]_ :
+_**w**_ _θ,i_ := _fθ_ ( _**z**_ _i_ ) with _**z**_ _i_ _∼_ _p_ base( _**z**_ ) _._ (3)
+The resulting samples _**w**_ _θ,i_ := _fθ_ ( _**z**_ _i_ ) will be samples from some (learnable) distribution _qθ_ ( _**w**_ ). The
+neural network _fθ_ ( _**z**_ ) is thus the trainable part of the model. In our experiments, a small MLP with
+3-5 layers and 256 neurons was enough. Unlike most density estimation models, Marginal Flow is
+efficient both at sampling and at evaluating the probability density, as we will see in Section 2.2.
+Furthermore, in contrast to competing models, we can learn a density with support on a lowerdimensional manifold by simply choosing a base distribution with support in R _[m]_ with _m < d_ .
+
+
+**Motivation** **for** **marginalization.** In order to understand the importance of the marginalization
+
+
+_qθ_ ( _**x**_ ) := [1]
+
+_Nc_
+
+
+_Nc_
+
+- _q_ ( _**x**_ _|_ _**w**_ _θ,i_ ) where _**w**_ _θ,i_ _∼_ _qθ_ ( _**w**_ ) _._ (2)
+
+
+_i_ =1
+
+
+Figure 2: Marginal flow model diagram. Evaluating the modeled density _qθ_ ( _**x**_ ) ( _center_ ) and sampling from _qθ_ ( _**x**_ ) ( _right_ ) requires to first sample the parameters _**w**_ _i_ ( _left_ ).
+
+
+ficiently by feed-forwarding samples _{_ _**z**_ _i}_ _[N]_ _i_ =1 _[c]_ [from] [a] [base] [distribution] [of] [choice:] _**[w]**_ _[i]_ [=] _[f][θ]_ [(] _**[z]**_ _[i]_ [)]
+with _**z**_ _i_ _∼_ _p_ base( _**z**_ ). With the sampled _{_ _**w**_ _i}_ _[N]_ _i_ =1 _[c]_ [,] [our] [model] [in] [Eq.] [2] [resembles] [a] [mixture] [model]
+with _Nc_ components. Note, however, that the _{_ _**w**_ _i}_ _[N]_ _i_ =1 _[c]_ _[are]_ _[not]_ _[fixed]_ _[but]_ _[sampled]_ _[again]_ _[for]_ _[each]_
+_evaluation_ _or_ _sampling_ _of_ _qθ_ ( _**x**_ ). The neural network _fθ_ is unconstrained. **Evaluation:** **Figure** **2**
+**(** _**center**_ **).** In order to evaluate the density _qθ_ ( _**x**_ ) at a given point _**x**_, we use the definition in Eq. 2.
+Given the sampled parameters _{_ _**w**_ _i}_ _[N]_ _i_ =1 _[c]_ [,] [we] [only] [need] [to] [evaluate] [each] _[q]_ [(] _**[x]**_ _[|]_ _**[w]**_ _[i]_ [)] [on] _**[x]**_ [,] [which] [is]
+chosen to have a simple closed-form density function. Note that, in contrast to other density estimation models, the evaluation of the density does not require inverting _fθ_ ( _**z**_ _i_ ), computing det _Jfθ_
+or solving an ODE. **Sampling** **from** _qθ_ ( _**x**_ ) **:** **Figure** **2** **(** _**right**_ **).** Sampling as in Eq. 2 is also efficient, just like sampling from a mixture model. Given the sampled parameters _{_ _**w**_ _i}_ _[N]_ _i_ =1 _[c]_ [,] [we] [first]
+need to sample a component _**w**_ _j_ and then sample from the associated distribution _q_ ( _**x**_ _|_ _**w**_ _j_ ), with
+_j_ _∈{_ 1 _, . . ., Nc}_ . To draw _N_ samples, we sample _N_ indices with replacement from _{_ 1 _, . . ., Nc}_ .
+
+
+|Ours<br>NF<br>FM|Col2|
+|---|---|
+|~~FFF~~|~~FFF~~|
+|||
+|||
+
+
+**Lower-dimensional** **latent** **distribution.** Most density estimation models, like Flow Matching
+and Normalizing Flows, learn mappings that preserve the dimensionality and cannot learn densities
+on lower-dimensional manifolds. Some work tries to overcome this issue either by resorting on
+approximations (Brehmer & Cranmer, 2020) or by restricting the transformations (Khorashadizadeh
+et al., 2023; Negri et al., 2025). In contrast, with our model in Eq. 2, we have the freedom of choosing
+the dimensionality of the base distribution, i.e. _p_ base( _**z**_ ) with support in R _[m]_ with _m_ _<_ _d_ . Also in
+this case we can evaluate _qθ_ ( _**x**_ ) exactly and learn the manifold alongside the density. In Figure 4 we
+showcase Marginal Flow and competing models on a density defined on a (unknown) 1D manifold.
+
+
+4
+
+
+10 [2] 10 [3] 10 [4] 10 [5]
+d
+
+
+Evaluation
+
+
+Sampling
+
+
+10 [2] 10 [3] 10 [4] 10 [5]
+d
+
+
+**Empirical** **runtime.** We now empirically measure runtime for sampling and evaluating the exact density and compare against competing models. Note that only Marginal Flow and Normalizing Flow (NF) provide exact density by construction. As shown in Figure 3, Marginal flow is orders of magnitude faster than competing methods
+in terms of both sampling and density evaluation,
+where FM is Flow Matching and FFF is Free-form
+Flows. Sampling is as efficient as in FFF, since both
+only require drawing from a base distribution and
+passing the samples through a neural network. For
+further details, see the Appendix in Section A.3.1.
+
+
+2.3 FLEXIBILITY OF MARGINAL FLOW
+
+
+10 [0]
+
+
+10 1
+
+
+10 2
+
+
+10 3
+
+
+Figure 3: Runtime for sampling ( _left_ ) and exact density evaluation ( _right_ ) of 100 points.
+
+
+Figure 4: Toy example of density defined on (unknown) 1D manifold. ( _Left_ ) Training data consists
+of 1500 points. ( _center_ ) Marginal Flow perfectly learns the density and discovers the correct manifold. Free-form Flow learns an incorrect manifold and is not able to embed the density in 2D space.
+( _right_ ) Flow Matching and Normalizing Flow learn the density but cannot account for a manifold.
+
+
+**Conditional** **distribution.** As wo do not have any requirements on the neural network _fθ_ ( _**z**_ ),
+Marginal Flow can be readily extended to model conditional distributions. The conditioning variables could be appended to the input _fθ_ ( _**z**_ ) _→_ _fθ_ ( _**z**_ ; _**c**_ ) or one could use a hypernetwork that takes
+_**c**_ as input and returns the neural network parameters _fθ_ ( _**z**_ ) _→_ _fθ_ ( _**c**_ )( _**z**_ ). Furthermore, the base
+distribution can also be conditioned on _**c**_ : _p_ base( _**z**_ ) _→_ _p_ base( _**z**_ ; _**c**_ ).
+
+
+**Multi-modal targets.** Marginal Flow can naturally account for multi-modal targets thanks to the
+unconstrained neural network _fθ_ ( _**z**_ ). Most generative models, like Normalizing Flows and Flow
+Matching, learn (directly or indirectly) a bijection between a base distribution and the target distribution. However, bijections struggle to learn new modalities and have limited expressiveness (Liao
+& He, 2021). Even with a multi-model base distribution, bijections will still struggle to match the
+modalities in the target with those of the base distribution. Furthermore, many density estimation
+models suffer from mode collapse during training (He et al., 2019; Kossale et al., 2022). In Figure 5
+we showcase how easily Marginal Flow can learn multi-modal targets compared to other models.
+
+
+Figure 5: Toy example of multi-modal density learned by log-likelihood on 150 data points. For
+a fair comparison, all models use a uniform base distribution. Note that Marginal Flow is not a
+mixture model (for which this task would be trivial) since _**w**_ _i_ are always resampled (see Figure 1).
+
+
+**Training objectives.** Density estimation models are usually trained through an objective that requires sampling, evaluating the (exact) density or both. However, current approaches are efficient
+only at either one or the other. For instance, models trained on data via forward KL divergence (i.e.
+log-likelihood) require efficient density evaluation while models trained on unnormalized targets via
+reverse KL divergence require efficient sampling. However, one could wish to use both objectives to
+combine information from observations and unnormalized targets or to mitigate the mean-seeking
+(mode-seeking) behavior of the forward (reverse) KL divergence. Since Marginal Flow is efficient
+both at sampling and evaluation, it can be trained efficiently with most objectives; see Appendix A.2.
+
+
+**Extension to other mixtures.** The proposed model in Eq. 2 leaves complete freedom in the choice
+of _q_ ( _**x**_ _|_ _**w**_ ), as long as it can be parametrized by some _**w**_ . In most experiments we employ a Gaussian with learnable variances, i.e. _q_ ( _**x**_ _|_ _**w**_ ) = _N_ ( _**x**_ _|µ_ = _**w**_ _,_ Σ = diag( _σ_ 1 _, . . ., σd_ )). However, other
+choices are possible depending on the application. For instance, when modeling distributions on the
+probabilistic simplex, we can use the Dirichlet distribution. We can model distributions on symmet
+
+5
+
+
+ric positive-definite matrices by choosing _q_ ( _**x**_ _|_ _**w**_ ) to be a Wishart, which we showcase in Section 4.3.
+Relevantly, the choice of _q_ ( _**x**_ _|_ _**w**_ ) does not affect the structure of the proposed framework.
+
+
+3 RELATED WORK
+
+
+One of the earliest attempts to use deep learning for generative modeling are Energy-based (EB)
+models (Swersky et al., 2011). Instead of modeling a normalized density, EB models learn the
+negative log-probability. Despite their flexibility, computing the exact density and sampling from the
+model is generally expensive (Song & Kingma, 2021). Closely related are diffusion models (SohlDickstein et al., 2015), which learn how to reverse a fixed noising process by estimating at each step
+the gradient of the log-density. Diffusion models can produce high-quality samples (Rombach et al.,
+2022; Liu et al., 2023), but still require multi-step sampling and do not provide the exact density.
+
+
+Another approach is to model the observed density with unobserved latent variables. VAEs (Kingma
+& Welling, 2014; Rezende et al., 2014) encode data into a latent space and are trained via a lower
+bound on the log-likelihood. In contrast to EB models, VAEs can be sampled in a single step.
+However, VAEs have limited expressiveness and suffer from posterior collapse (He et al., 2019).
+Another latent variable model – GANs (Goodfellow et al., 2014) – consists of a generator that creates
+samples from a latent distribution and a discriminator trained to distinguish generated samples from
+real ones. GANs can generate high-fidelity images (Karras et al., 2019) but are unstable and suffer
+from mode collapse (Kossale et al., 2022). Neither GANs nor VAEs provide the exact likelihood.
+
+
+Normalizing Flows (NFs) (Papamakarios et al., 2021) provide a principled way to compute the exact
+density. NFs transform a base distribution through bijections and account for the probability change
+via the Jacobian determinant, which is expensive to compute. Thanks to their exact density, NF have
+been applied for posterior approximations (Rezende & Mohamed, 2015). Additional limitations
+of NFs arise from the limited expressivity of bijective layers (Liao & He, 2021). Efficiency could
+be obtained using approximate bijections and by approximating the Jacobian determinant (Draxler
+et al., 2024), which however precludes sound statistical understanding and evaluation of the exact
+log-likelihood. Lipman et al. (2023) proposed to learn instead a velocity field that transforms the
+base distribution into the target. While this approach scales to high-dimensions, it cannot handle
+lower-dimensional base distributions and still requires expensive ODE solvers to compute the exact
+density. For a comprehensive review on generative models we refer to Bond-Taylor et al. (2021).
+
+
+4 EXPERIMENTS
+
+
+First, we show on synthetic data that Marginal Flow can learn complex distributions both via loglikelihood and reverse KL divergence training. We also show that it converges more quickly than
+competing models. Second, we showcase how Marginal Flow can learn complex conditional distributions and achieve state-of-the-art results for simulation-based inference. Third, we show that
+Marginal Flow can be easily adapted to learn distributions on positive-definite matrices by simply
+changing the parametric form of _q_ ( _**x**_ _|_ _**w**_ ). Lastly, we showcase applications in computer vision as
+well: we learn densities on lower-dimensional manifolds on MNIST and on the JAFFE face dataset.
+
+
+4.1 SYNTHETIC DATASETS
+
+
+**Log-likelihood training.** As illustrative examples, we picked 4 common synthetic datasets ( _Two_
+_moons_, _Pinwheel_, _Swiss_ _Roll_ and _Checkerboard_ ) and 1 additional multi-modal distribution ( _Mix-_
+_ture_ _of_ _Gaussians_ ). We train Marginal Flow by maximizing the log-likelihood, which is reported
+explicitly in the Appendix 6. In Figure 6 we showcase that Marginal Flow can perfectly learn all
+densities without needing any fine-tuning. Next, we study the ability of Marginal Flow to learn densities when a limited number of observations is available. In particular, we compare against Flow
+Matching, Normalizing Flow and Free-form Flows with an increasing number of training points
+_{_ 100 _,_ 200 _,_ 500 _,_ 1000 _}_ . For a fair comparison we used a comparable amount of parameters in each
+model. In the Appendix in Figure 13, we show the learned densities, which are particularly accurate
+for Marginal Flow, already in few-sample regimes. In Figure 7 we showcase the test log-likelihood
+during training for all models and datasets when train on 1000 points. Marginal Flow converges
+orders of magnitude quicker than competing models.
+
+
+6
+
+
+Figure 6: Marginal Flow trained via log-likelihood on 2D synthetic datasets. We show 10’000
+samples from the true distribution and from Marginal Flow.
+
+
+|Col1|Ours|
+|---|---|
+||~~NF~~<br>FM<br>FFF|
+|||
+|||
+
+
+Figure 8: Marginal Flow vs Normalizing Flows trained by reverse KL divergence on synthetic distributions. During training only the probability density is queried (no observations). ( _left_ ) Test reverse
+KL with 95% confidence intervals error bars. ( _right_ ) comparison of learned density distributions.
+
+
+4.2 SIMULATION-BASED INFERENCE
+
+
+As argued in Section 2.3, with the proposed framework we can easily learn conditional distributions
+as well. We showcase Marginal Flow on complex conditional distributions by training it on the
+Simulation-Based Inference (SBI) benchmark (Lueckmann et al., 2021). SBI data consists of tuples
+_{_ _**x**_ _i, θi}i_, where _θi_ are parameters sampled from a prior _p_ ( _θ_ ) and _**x**_ _i_ are samples from a simulator
+_p_ ( _**x**_ _|θi_ ) parameterized by _θi_ . Given tuples of observations _{_ _**x**_ _i, θi}i_, the goal is to learn the posterior
+_p_ ( _θ|_ _**x**_ _j_ ) of a new _**x**_ _j_ . Evaluation is performed in terms of Classifier 2-Sample Tests (C2ST) on a
+held-out test set. Due to space constraints we report results in the Appendix in Figure 14. Marginal
+Flow achieves state-of-the-art results and proves to be particularly effective in low data regimes.
+
+
+7
+
+
+_Two Moons_
+
+
+10 [0] 10 [1] 10 [2] 10 [3]
+
+
+_Checkerboard_
+
+
+10 [0] 10 [1] 10 [2] 10 [3]
+
+runtime (s)
+
+
+10 [0] 10 [1] 10 [2] 10 [3]
+
+
+_Swiss Roll_
+
+
+10 [0] 10 [1] 10 [2] 10 [3]
+
+
+2
+
+
+1
+
+
+0
+
+
+_Mixture of Gaussians_
+
+
+10 [0] 10 [1] 10 [2] 10 [3]
+
+
+Figure 7: Test log-likelihood of Marginal Flow and other models during training with 1000 points.
+
+
+**Reverse KL divergence training** We additionally show that Marginal Flow can be trained in the
+reverse KL direction as well, namely without observations and only guided by the (unnormalized)
+density of the target distribution. This type of training requires an efficient computation of the exact
+log-likelihood, which is possible only for Normalizing Flow. Some attempts to make Flow Matching
+work in this direction have been made but remain limited (Tong et al., 2024). We tried with a
+score-matching objective but it led to unstable training. We trained Marginal Flow and Normalizing
+Flow with a reverse KL objective and compared the learned densities in terms of test KL. Marginal
+Flow achieved superior or comparable performance with Normalizing Flow, see Figure 8 ( _left_ ), and
+showed better density reconstruction quality, see Figure 8 ( _right_ ). Note that we do not use the
+_Checkerboard_ dataset because its density is constant and has gradients equal to zero everywhere.
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+10 [-0]
+
+
+10 [-1]
+
+
+MoG
+
+
+Two moons Pinwheel Swiss roll
+
+
+4.3 WISHART MIXTURE DISTRIBUTION
+
+
+One interesting aspect of Marginal Flow is that the parametric family _q_ ( _**x**_ _|_ _**w**_ ) in Eq. 2 can be adjusted depending on the application and on the noise assumption. Consider the case of learning a
+Wishart mixture distributions (Haff et al., 2011; Cappozzo & Casa, 2025): observations consist of
+sample covariances, which lie on the cone of positive-definite (p.d.) matrices. One design choice
+would be to use a Gaussian assumption in _q_ ( _**x**_ _|_ _**w**_ ) and then transform the samples into positive
+definite matrices through bijective layers as in Negri et al. (2023). Alternatively, one could directly
+choose _q_ ( _**x**_ _|_ _**w**_ ) to be Wishart distributions. We showcase this second option, and, in particular, we
+parametrize the scale matrices of Wishart via _**w**_ _i_, in addition to a parametrized global _ν_ . We consider
+a target distribution _t_ ( _**x**_ ) where the generating parameters live on a 1D manifold:
+
+
+_t_ ( _**x**_ ) = _W_ ( _**x**_ ; _ν,_ Σ( _λ_ )) s.t. Σ( _λ_ ) _∈M_ _∀λ ∈_ [0 _,_ 1] _._ (4)
+
+
+We showcase training using both the reverse and forward KL divergence (log-likelihood). Our goal
+is to approximate _t_ ( _**x**_ ) while reconstructing the manifold _M_ . We showcase two settings. (i) A lowdimensional setting with 10 _×_ 10 matrices using the reverse KL and we compare to Normalizing
+Flows (NFs) parameterizing the Cholesky factor. (ii) A high-dimensional setting with 100 _×_ 100
+matrices using the forward KL, which was computationally prohibitive for NFs. In Figure 9 we
+show test KL divergence in the low-dim setting and plot the manifold reconstruction using a PCA
+projection to 2D. Marginal Flow perfectly recovers the manifold in both training directions and
+approximates _t_ ( _**x**_ ) better than NFs. For more details on the target manifold _M_ see Appendix A.4.2.
+
+
+|Col1|Col2|Col3|Target m<br>Margina<br>Normali|anifold<br>l Flow<br>zing Flow|
+|---|---|---|---|---|
+||||||
+||||||
+||||||
+||||||
+||||||
+
+
+|10<br>5<br>PC2<br>0<br>5|Col2|Col3|Target manifold<br>Marginal Flow|Col5|
+|---|---|---|---|---|
+|5<br>0<br>5<br>10<br>PC2|||||
+|5<br>0<br>5<br>10<br>PC2|||||
+|5<br>0<br>5<br>10<br>PC2|||||
+|5<br>0<br>5<br>10<br>PC2|||||
+|5<br>0<br>5<br>10<br>PC2|||||
+|5<br>0<br>5<br>10<br>PC2|||||
+
+
+Figure 9: ( _left_ ) 10 _×_ 10 Wishart mixtures ( _d_ = 55) on manifold trained via reverse KL. Test KL
+divergences in the bar plot show accurate fit with Marginal Flow and underfitting with NF. Unlike
+NF, we can also learn the manifold. ( _right_ ) Reconstructed manifold for 100 _×_ 100 Wishart mixtures
+( _d_ = 5050) trained via forward KL (log-likelihood). NF cannot be trained in such a high-dim setting.
+
+
+4.4 MANIFOLDS IN IMAGE LATENT-SPACES
+
+
+Most modern image generative models rely on non-trivial latent spaces, e.g. Rombach et al. (2022),
+which can still be relatively high-dimensional and show non-Euclidean behavior (Shao et al., 2018).
+It would then be relevant to traverse such latent spaces on a lower-dimensional manifold. Marginal
+Flow is well-suited for this task since it allows for learning a lower-dimensional manifold alongside the density. We showcase this on MNIST digits (LeCun et al., 1998) and the JAFFE face
+dataset (Lyons et al., 1998). The JAFFE dataset contains 214 face images of ten Japanese women
+mimicking certain emotions. Each image is associated with a score quantifying the emotions, e.g.
+“happiness” or “surprise”. Note that learning a manifold with such little data is very challenging.
+
+
+In both settings, we first train a VAE without conditional information to encode images into a latent
+space (20- and 10-dimensional, respectively). Then, we train a single Marginal Flow in the latent
+space to learn a low-dimensional manifold conditioned on the digit label (or emotion score). The
+exact loss function is reported in the Appendix in Eq. 8. In particular, we use a 1-dim uniform
+base distribution _p_ base = _U_ ([ _−_ 1 _,_ 1]). We learn conditional manifolds via the network _fθ_ ( _**z**_ ; _c_ ),
+with _**z**_ _∈_ [ _−_ 1 _,_ 1] and _c_ the class label (or scores). In Figure 10, we explore the 1-dim manifold
+conditioned on each label of **MNIST** . Results show similarities across digits in the learned manifold:
+some sections look approximately **bold**, _**bold**_ _**italic**_ and normal font, with smooth transitions in
+between them. For **JAFFE**, the manifold smoothly interpolates the different faces (horizontally) at
+fixed emotion levels, as shown in Figure 11. We observe disentanglement of faces and emotions, as
+faces tend to align within columns. Some inconsistencies are probably the result of the extremely
+low-data regime. For further visualizations, see the Appendix, Figure 15 and 16.
+
+
+8
+
+
+Wishart mixtures (10×10) High-dim. Wishart mixtures (100×100)
+
+
+10 [0]
+
+
+10 1
+
+
+Marginal Flow Norm. Flow
+
+
+2
+
+
+0
+
+
+2
+
+
+0 10 20
+
+PC1
+
+
+4
+
+
+0 4 8
+
+PC1
+
+
+20 10
+
+
+|Col1|Bold|Col3|Bold italic|Col5|Normal|Col7|
+|---|---|---|---|---|---|---|
+||||||||
+||||||||
+||||||||
+||||||||
+||||||||
+||||||||
+||||||||
+||||||||
+||||||||
+||||||||
+
+
+Figure 10: Each row shows the 1-dim manifold conditioned on the label learned by Marginal Flow
+on MNIST (in a 20-dim VAE latent space). We observe disentanglement of digits and writing style.
+
+
+more
+happiness
+
+
+neutral
+
+
+more
+surprise
+
+
+Figure 11: By traversing the conditional manifold, Marginal Flow smoothly interpolates between
+faces and levels of emotions on the JAFFE dataset. While the conditioning value is kept fixed in
+each row, columns correspond to the same point on the learned manifold in the latent space.
+
+
+5 CONCLUSIONS
+
+
+In this work we introduced a flexible and efficient density estimation framework called Marginal
+Flow. We showed empirically that Marginal Flow is orders of magnitude faster than competing
+methods in terms of runtime, both at sampling and exact density evaluation. Unlike most density
+estimation models, Marginal Flow provides exact density evaluation by construction. Marginal
+Flow is also a very flexible framework: it allows for learning lower-dimensional manifolds, it can
+easily handle multi-modal distributions, and it can be easily tailored to the data with the choice
+of the parametrized distribution _q_ ( _**x**_ _|_ _**w**_ ). Experimentally, we showcase Marginal Flow on several
+datasets and various tasks. First, we showed that Marginal Flow can perfectly reconstruct synthetic
+datasets both when trained via log-likelihood and via reverse KL divergence. Additionally, Marginal
+Flow converges orders of magnitude faster than competing models. Then, we showed that it can
+achieve state-of-the-art results on the Simulation-based Inference benchmark. We also showed that
+we can easily adapt Marginal Flow to learn distributions on positive definite matrices by choosing
+the Wishart distribution as the parametrized family _q_ ( _**x**_ _|_ _**w**_ ). Lastly, we applied Marginal Flow to
+learn a (conditional) manifold alongside the density for MNIST digits and the JAFFE face dataset.
+
+
+9
+
+
+REPRODUCIBILITY
+
+
+We made an effort to make every aspect of the model and of the experiments reproducible. In particular, as part of the submission we provide code with a PyTorch implementation of the model
+and code for reproducing figures and experiments. Furthermore, in Appendix A.1 we discuss implementation details of Marginal Flow concerning sampling, log density evaluation and neural network
+architecture. Finally, in Appendix A.3 we provide detailed description of the experiments conducted
+including data pre-processing for real-world experiments.
+
+
+REFERENCES
+
+
+Josh Abramson, Jonas Adler, Jack Dunger, Richard Evans, Tim Green, Alexander Pritzel, Olaf
+Ronneberger, Lindsay Willmore, Andrew J Ballard, Joshua Bambrick, et al. Accurate structure
+prediction of biomolecular interactions with alphafold 3. _Nature_, 630(8016):493–500, 2024.
+
+
+Justin Alsing, Benjamin Wandelt, and Stephen Feeney. Massive optimal data compression and
+density estimation for scalable, likelihood-free inference in cosmology. _Monthly_ _Notices_ _of_ _the_
+_Royal Astronomical Society_, 477(3):2874–2885, 03 2018. ISSN 0035-8711.
+
+
+Jens Behrmann, Will Grathwohl, Ricky T. Q. Chen, David Duvenaud, and Joern-Henrik Jacobsen.
+Invertible residual networks. In Kamalika Chaudhuri and Ruslan Salakhutdinov (eds.), _Proceed-_
+_ings_ _of_ _the_ _36th_ _International_ _Conference_ _on_ _Machine_ _Learning_, volume 97 of _Proceedings_ _of_
+_Machine Learning Research_, pp. 573–582. PMLR, 09–15 Jun 2019.
+
+
+Sam Bond-Taylor, Adam Leach, Yang Long, and Chris Willcocks. Deep generative modelling: A
+comparative review of vaes, gans, normalizing flows, energy-based and autoregressive models.
+_IEEE Transactions on Pattern Analysis and Machine Intelligence_, PP, 09 2021.
+
+
+Johann Brehmer and Kyle Cranmer. Flows for simultaneous manifold learning and density estimation. _Advances in neural information processing systems_, 33:442–453, 2020.
+
+
+Yuri Burda, Roger Grosse, and Ruslan Salakhutdinov. Importance weighted autoencoders. _arXiv_
+_preprint arXiv:1509.00519_, 2015.
+
+
+Andrea Cappozzo and Alessandro Casa. Model-based clustering for covariance matrices via penalized wishart mixture models. _Computational Statistics & Data Analysis_, pp. 108232, 2025.
+
+
+Ricky T. Q. Chen and Yaron Lipman. Flow matching on general geometries. In _The Twelfth Inter-_
+_national Conference on Learning Representations_, 2024.
+
+
+Kyle Cranmer, Johann Brehmer, and Gilles Louppe. The frontier of simulation-based inference.
+_Proceedings_ _of_ _the_ _National_ _Academy_ _of_ _Sciences_, 117(48):30055–30062, 2020. doi: 10.1073/
+pnas.1912789117.
+
+
+Felix Draxler, Peter Sorrenson, Lea Zimmermann, Armand Rousselot, and Ullrich K¨othe. Freeform flows: Make any architecture a normalizing flow. In _Proceedings of The 27th International_
+_Conference on Artificial Intelligence and Statistics_, Proceedings of Machine Learning Research,
+pp. 2197–2205. PMLR, 02–04 May 2024.
+
+
+Charles Fefferman, Sanjoy Mitter, and Hariharan Narayanan. Testing the manifold hypothesis.
+_Journal of the American Mathematical Society_, 29(4):983–1049, 2016.
+
+
+Mevlana C. Gemici, Danilo Rezende, and Shakir Mohamed. Normalizing flows on riemannian
+manifolds, 2016.
+
+
+Pedro J Goncalves, Jan-Matthis Lueckmann, Michael Deistler, Marcel Nonnenmacher, Kaan Ocal,
+Giacomo Bassetto, Chaitanya Chintaluri, William F Podlaski, Sara A Haddad, Tim P Vogels,
+David S Greenberg, and Jakob H Macke. Training deep neural density estimators to identify
+mechanistic models of neural dynamics. _eLife_, pp. e56261, sep 2020. ISSN 2050-084X.
+
+
+Ian J Goodfellow, Jean Pouget-Abadie, Mehdi Mirza, Bing Xu, David Warde-Farley, Sherjil Ozair,
+Aaron Courville, and Yoshua Bengio. Generative adversarial nets. _Advances in neural information_
+_processing systems_, 27, 2014.
+
+
+10
+
+
+Leonard R Haff, Peter T Kim, J-Y Koo, and D St P Richards. Minimax estimation for mixtures of
+wishart distributions. _The Annals of Statistics_, 2011.
+
+
+Junxian He, Daniel Spokoyny, Graham Neubig, and Taylor Berg-Kirkpatrick. Lagging inference
+networks and posterior collapse in variational autoencoders. In _ICLR_, 2019.
+
+
+Kaiming He, Xiangyu Zhang, Shaoqing Ren, and Jian Sun. Deep residual learning for image recognition. In _Proceedings_ _of_ _the_ _IEEE_ _conference_ _on_ _computer_ _vision_ _and_ _pattern_ _recognition_, pp.
+770–778, 2016.
+
+
+L Jeff Hong and Sandeep Juneja. Estimating the mean of a non-linear function of conditional
+expectation. In _Proceedings_ _of_ _the_ _2009_ _Winter_ _Simulation_ _Conference_ _(WSC)_, pp. 1223–1236.
+IEEE, 2009.
+
+
+Sergey Ioffe and Christian Szegedy. Batch normalization: Accelerating deep network training by
+reducing internal covariate shift. In _International conference on machine learning_, pp. 448–456.
+pmlr, 2015.
+
+
+Tero Karras, Samuli Laine, and Timo Aila. A style-based generator architecture for generative
+adversarial networks. In _Proceedings of the IEEE/CVF conference on computer vision and pattern_
+_recognition_, pp. 4401–4410, 2019.
+
+
+AmirEhsan Khorashadizadeh, Konik Kothari, Leonardo Salsi, Ali Aghababaei Harandi, Maarten
+de Hoop, and Ivan Dokmani´c. Conditional injective flows for bayesian imaging. _IEEE Transac-_
+_tions on Computational Imaging_, 9:224–237, 2023.
+
+
+Diederik P Kingma and Max Welling. Auto-encoding variational bayes. 2014.
+
+
+S. Kirkpatrick, C. D. Gelatt, and M. P. Vecchi. Optimization by simulated annealing. _Science_, 220
+(4598):671–680, 1983. doi: 10.1126/science.220.4598.671.
+
+
+Ivan Kobyzev, Simon JD Prince, and Marcus A Brubaker. Normalizing flows: An introduction and
+review of current methods. _IEEE transactions on pattern analysis and machine intelligence_, 43
+(11):3964–3979, 2020.
+
+
+Youssef Kossale, Mohammed Airaj, and Aziz Darouichi. Mode collapse in generative adversarial
+networks: An overview. In _ICOA_, pp. 1–6, 2022. doi: 10.1109/ICOA55659.2022.9934291.
+
+
+Yann LeCun, L´eon Bottou, Yoshua Bengio, and Patrick Haffner. Gradient-based learning applied to
+document recognition. _Proceedings of the IEEE_, 86(11):2278–2324, 1998.
+
+
+Huadong Liao and Jiawei He. Jacobian determinant of normalizing flows, 2021.
+
+
+Yaron Lipman, Ricky T. Q. Chen, Heli Ben-Hamu, Maximilian Nickel, and Matthew Le. Flow
+matching for generative modeling. In _The Eleventh International Conference on Learning Repre-_
+_sentations_, 2023.
+
+
+Haohe Liu, Zehua Chen, Yi Yuan, Xinhao Mei, Xubo Liu, Danilo Mandic, Wenwu Wang, and
+Mark D Plumbley. AudioLDM: Text-to-audio generation with latent diffusion models. In _Pro-_
+_ceedings_ _of_ _the_ _40th_ _International_ _Conference_ _on_ _Machine_ _Learning_, Proceedings of Machine
+Learning Research, pp. 21450–21474. PMLR, 23–29 Jul 2023.
+
+
+Jan-Matthis Lueckmann, Jan Boelts, David Greenberg, Pedro Goncalves, and Jakob Macke. Benchmarking simulation-based inference. In _Proceedings_ _of_ _The_ _24th_ _International_ _Conference_ _on_
+_Artificial_ _Intelligence_ _and_ _Statistics_, Proceedings of Machine Learning Research, pp. 343–351.
+PMLR, 13–15 Apr 2021.
+
+
+M. Lyons, S. Akamatsu, M. Kamachi, and J. Gyoba. Coding facial expressions with gabor wavelets.
+In _Proceedings_ _Third_ _IEEE_ _International_ _Conference_ _on_ _Automatic_ _Face_ _and_ _Gesture_ _Recogni-_
+_tion_, pp. 200–205, 1998.
+
+
+Charles A Micchelli, Yuesheng Xu, and Haizhang Zhang. Universal kernels. _Journal_ _of_ _Machine_
+_Learning Research_, 7(12), 2006.
+
+
+11
+
+
+Marcello Massimo Negri, Fabricio Arend Torres, and Volker Roth. Conditional matrix flows for
+gaussian graphical models. _Advances_ _in_ _Neural_ _Information_ _Processing_ _Systems_, 36:25095–
+25111, 2023.
+
+
+Marcello Massimo Negri, Jonathan Aellen, and Volker Roth. Injective flows for star-like manifolds.
+In _The Thirteenth International Conference on Learning Representations_, 2025.
+
+
+George Papamakarios, Eric Nalisnick, Danilo Jimenez Rezende, Shakir Mohamed, and Balaji Lakshminarayanan. Normalizing flows for probabilistic modeling and inference. _Journal of Machine_
+_Learning Research_, 22(57):1–64, 2021.
+
+
+Adam Paszke, Sam Gross, Francisco Massa, Adam Lerer, James Bradbury, Gregory Chanan, Trevor
+Killeen, Zeming Lin, Natalia Gimelshein, Luca Antiga, Alban Desmaison, Andreas K¨opf, Edward Yang, Zachary DeVito, Martin Raison, Alykhan Tejani, Sasank Chilamkurthy, Bowen Tang,
+Yunjing Li, Michael Fang, Jing Bai, and Soumith Chintala. Pytorch: An imperative style, highperformance deep learning library. In _Advances_ _in_ _Neural_ _Information_ _Processing_ _Systems_ _32_,
+pp. 8024–8035. Curran Associates, Inc., 2019.
+
+
+F. Pedregosa, G. Varoquaux, A. Gramfort, V. Michel, B. Thirion, O. Grisel, M. Blondel, P. Prettenhofer, R. Weiss, V. Dubourg, J. Vanderplas, A. Passos, D. Cournapeau, M. Brucher, M. Perrot, and
+E. Duchesnay. Scikit-learn: Machine learning in Python. _Journal of Machine Learning Research_,
+12:2825–2830, 2011.
+
+
+Danilo Rezende and Shakir Mohamed. Variational inference with normalizing flows. In _Interna-_
+_tional conference on machine learning_, pp. 1530–1538. PMLR, 2015.
+
+
+Danilo Jimenez Rezende, Shakir Mohamed, and Daan Wierstra. Stochastic backpropagation and
+approximate inference in deep generative models. In _Proceedings of the 31st International Con-_
+_ference_ _on_ _Machine_ _Learning_, volume 32 of _Proceedings_ _of_ _Machine_ _Learning_ _Research_, pp.
+1278–1286. PMLR, 2014.
+
+
+Robin Rombach, Andreas Blattmann, Dominik Lorenz, Patrick Esser, and Bj¨orn Ommer. Highresolution image synthesis with latent diffusion models. In _Proceedings of the IEEE/CVF confer-_
+_ence on computer vision and pattern recognition_, pp. 10684–10695, 2022.
+
+
+Hang Shao, Abhishek Kumar, and P Thomas Fletcher. The riemannian geometry of deep generative
+models. In _Proceedings_ _of_ _the_ _IEEE_ _Conference_ _on_ _Computer_ _Vision_ _and_ _Pattern_ _Recognition_
+_Workshops_, pp. 315–323, 2018.
+
+
+Uriel Singer, Adam Polyak, Thomas Hayes, Xi Yin, Jie An, Songyang Zhang, Qiyuan Hu, Harry
+Yang, Oron Ashual, Oran Gafni, Devi Parikh, Sonal Gupta, and Yaniv Taigman. Make-a-video:
+Text-to-video generation without text-video data. In _The_ _Eleventh_ _International_ _Conference_ _on_
+_Learning Representations_, 2023.
+
+
+Jascha Sohl-Dickstein, Eric Weiss, Niru Maheswaranathan, and Surya Ganguli. Deep unsupervised
+learning using nonequilibrium thermodynamics. In _International_ _conference_ _on_ _machine_ _learn-_
+_ing_, pp. 2256–2265. pmlr, 2015.
+
+
+Yang Song and Diederik P. Kingma. How to train your energy-based models, 2021.
+
+
+Kevin Swersky, Marc’Aurelio Ranzato, David Buchman, Nando D Freitas, and Benjamin M Marlin. On autoencoders and score matching for energy based models. In _Proceedings_ _of_ _the_ _28th_
+_international conference on machine learning (ICML-11)_, pp. 1201–1208, 2011.
+
+
+Matthew Tancik, Pratul Srinivasan, Ben Mildenhall, Sara Fridovich-Keil, Nithin Raghavan, Utkarsh
+Singhal, Ravi Ramamoorthi, Jonathan Barron, and Ren Ng. Fourier features let networks learn
+high frequency functions in low dimensional domains. _Advances in neural information processing_
+_systems_, 33:7537–7547, 2020.
+
+
+Alexander Tong, Nikolay Malkin, Kilian Fatras, Lazar Atanackovic, Yanlei Zhang, Guillaume
+Huguet, Guy Wolf, and Yoshua Bengio. Simulation-free schr¨odinger bridges via score and flow
+matching, 2024.
+
+
+Xiangxiang Zeng, Fei Wang, Yuan Luo, Seung-gu Kang, Jian Tang, Felice C Lightstone, Evandro F
+Fang, Wendy Cornell, Ruth Nussinov, and Feixiong Cheng. Deep generative molecular design
+reshapes drug discovery. _Cell Reports Medicine_, 3(12), 2022.
+
+
+12
+
+
+A APPENDIX
+
+
+A.1 IMPLEMENTATION DETAILS
+
+
+We provide our implementation of Marginal Flow in PyTorch (Paszke et al., 2019) as part of the
+supplementary material. Here we discuss the main high-level aspects of such an implementation.
+
+
+**Density** **evaluation** **and** **sampling.** Once we sample the parameters _**w**_, Marginal Flow consists
+of a Mixture of distributions _q_ ( _**x**_ _|_ _**w**_ ) parameterized by the sampled _**w**_ . The parameters _**w**_ are then
+resampled each time we evaluate the density _qθ_ ( _**x**_ ) or sample from _qθ_ ( _**x**_ ), with _qθ_ ( _**x**_ ) being defined
+in Eq. 2. Within PyTorch one can define the parametric family _q_ ( _**x**_ _|_ _**w**_ ) by simply choosing a
+distribution of choice from torch.distributions. For all distributions, PyTorch provides
+efficient evaluation of the density and efficient sampling, which can be automatically extended to
+mixtures of distributions. In most of our experiments we used a Gaussian family, i.e. _q_ ( _**x**_ _|_ _**w**_ ) =
+_N_ ( _**x**_ _|µ_ = _**w**_ _,_ Σ = diag( _σ_ 1 _, . . ., σd_ )). In such a case, one can evaluate the log-density even more
+efficiently and does not need to rely on torch.distributions. In particular, we need to
+evaluate _N_ points over a mixture with _Nc_ components. This requires computing the distance of
+each point to each mixture component and then summing the contributions. With torch.cdist
+this operation can be done extremely efficiently.
+
+
+**Neural network architecture.** A key aspect of the proposed Marginal Flow is that it leaves complete freedom in the choice of the neural network architecture. In particular, for all our experiments,
+it was sufficient to we use very simple MLP architectures with 3 to 5 layers and 128 to 256 hidden units. We also employed skip connections. The specific settings used in each experiment can
+be found in the code provided in the supplementary. For conditional experiments we used a slight
+modification of the mentioned MLP structure. In particular, we simply appended the conditioning variable(s) to the input. In order to extract high-frequency signals from the (low-dimensional)
+conditioning variables, we used Fourier features (Tancik et al., 2020)
+
+
+A.2 OBJECTIVE FUNCTIONS
+
+
+Marginal Flow provides efficient exact density evaluation and efficient sampling. Consequently, it
+can be trained efficiently using most objective functions. Among the most popular ones are the
+forward KL divergence (log-likelihood) and the reverse KL divergence. The former is the most
+commonly used one in deep generative models and is employed to learn the distribution of some
+given data _D_ = _{_ _**x**_ _j}_ _[N]_ _j_ =1 [.] [The] [latter] [is] [most] [commonly] [used] [when] [only] [an] [unnormalized] [target]
+distribution _t_ ( _**x**_ ) is known. Below we report the definitions of both objectives and their analytical
+expression when Marginal Flow is used, i.e. Eq. 2.
+
+
+**Forward** **KL** **(log-likelihood)** Assume we are given a dataset of observations _D_ = _{_ _**x**_ _j}_ _[N]_ _j_ =1
+and the goal is to estimate the unknown distribution that generated the dataset. The underlying
+assumption is _**x**_ _j_ _∼_ _p_ ( _**x**_ ), with _p_ ( _**x**_ ) being unknown. The most common approach is to minimize
+the forward KL divergence, which is proportional to the negative log-likelihood:
+
+
+             _L_ ( _θ_ ) = KL( _p_ ( _**x**_ ) _||qθ_ ( _**x**_ )) = _p_ ( _**x**_ ) log _[p]_ [(] _**[x]**_ [)] (5)
+
+_qθ_ ( _**x**_ ) _[d]_ _**[x]**_ [ =] _[ −]_ [E] _**[x]**_ _[∼][p]_ [(] _**[x]**_ [)][[log] _[ q][θ]_ [(] _**[x]**_ [)] +][ const] _[ .]_
+
+Given the data points _{_ _**x**_ _j}_ _[N]_ _j_ =1 [, we can approximate the above expression with the following Monte]
+Carlo estimate:
+
+
+In the last equality we used Marginal Flow as variational family _qθ_ ( _**x**_ ), i.e. Eq. 2. Recall that _qθ_ ( _**w**_ )
+is not modeled explicitly. Instead, we construct samples _**w**_ _i_ by transforming samples from a base
+distribution _p_ base( _**z**_ ) with a learnable function _fθ_ : _**z**_ _∈_ R _[m]_ _�→_ _**w**_ _∈_ R _[d]_ :
+
+
+_**w**_ _i_ := _fθ_ ( _**z**_ _i_ ) with _**z**_ _i_ _∼_ _p_ base( _**z**_ ) _._ (7)
+
+
+When using a conditional model, the modeled density depends on the conditioning parameter as
+well: _qθ_ ( _**x**_ ) _→_ _qθ_ ( _**x**_ ; _**c**_ ). One straightforward way to model conditional density with Marginal
+
+
+13
+
+
+_N_
+
+
+_L_ ( _θ_ ) _≈−_ [1]
+
+_N_
+
+
+_N_
+
+
+- log _qθ_ ( _**x**_ _j_ ) = _−_ [1]
+
+_N_
+
+_j_ =1
+
+
+_N_
+
+
+- log [1]
+
+_N_
+
+_j_ =1
+
+
+_Nc_
+
+
+_Nc_
+
+- _q_ ( _**x**_ _j|_ _**w**_ _i_ ) with _**w**_ _i_ _∼_ _qθ_ ( _**w**_ ) _._ (6)
+
+
+_i_ =1
+
+
+Flow is to condition the neural network on _**c**_, i.e. _fθ_ ( _**z**_ ) _→_ _fθ_ ( _**z**_ ; _**c**_ ) or, more explicitly, _fθ_ ( _**c**_ )( _**z**_ ).
+Assume we are given pairs of observations and conditioning information _{_ _**x**_ _j,_ _**c**_ _j}_ _[N]_ _j_ =1 [.] [Then,] [the]
+loss function in Eq. 6 reads as:
+
+
+In the last equality we plugged in the proposed model in Eq. 2 as variational family _qθ_ ( _**x**_ ). Note
+that, as opposed to the forward KL divergence setting (log-likelihood), in the reverse KL setting we
+need to draw samples from the model _**x**_ _j_ _∼_ _qθ_ ( _**x**_ ).
+
+
+A.3 EXPERIMENTAL DETAILS
+
+
+A.3.1 RUNTIME COMPARISON
+
+
+In Figure 3 we have shown a runtime comparison for the two main operations of density estimation
+models: sampling and evaluation of the log-probability. In particular, we measure the runtime for
+generating 100 samples and for evaluating the log-probability of 100 points. We repeat this operation 10 times per dimension and report the average and 95% confidence intervals. We compare
+against competing models: Marginal Flow, Flow Matching. Normalizing Flow and Free-form Flow.
+Marginal Flow and Normalizing Flow naturally provide access to the exact log-likelihood, while
+Flow Matching does not require it during training, and Free-form Flow uses an approximation. In
+both cases computing the exact density is computationally expensive. In order to make a fair comparison, we defined all models to have a similar (and small) number of trainable parameters, around
+100 _k_ . In particular, for all models (except Normalizing Flows) we employed a simple MLP with
+3 layers and 128 neurons each. For Normalizing Flow, which requires bijections, we use 3 coupling layers with splines. Among the many choices of bijective layers, we chose the most efficient
+ones in terms of runtime, even though such layers are sometimes unstable during training. We ran
+all runtime experiments on the same consumer-grade A100 GPU with 40 GB of memory. Results
+show that Marginal Flow is orders of magnitude faster than competing models. In the common
+log-likelihood training setting, this is relevant both for training (where one needs to repeatedly evaluate the log density) and for inference (in order to generate new samples). Furthermore, results in
+Figure 7 suggest that Marginal Flow also has better convergence rates.
+
+
+14
+
+
+_L_ ( _θ_ ) _≈−_ [1]
+
+_N_
+
+
+_N_
+
+
+- log _qθ_ ( _**x**_ _j_ ; _**c**_ _j_ ) = _−_ [1]
+
+_N_
+
+_j_ =1
+
+
+_N_
+
+
+_N_
+
+
+- log [1]
+
+_N_
+
+_j_ =1
+
+
+_Nc_
+
+
+_Nc_
+
+- _q_ ( _**x**_ _j|_ _**wc**_ _j_ _,i_ )
+
+
+_i_ =1
+
+
+(8)
+
+
+where _**wc**_ _j_ _,i_ = _fθ_ ( _**z**_ _i_ ; _**c**_ _j_ ) with _**z**_ _i_ _∼_ _p_ base( _**z**_ ) _._
+
+
+**Reverse KL** In variational inference settings we are commonly given an unnormalized target distribution _t_ ( _**x**_ ) _∝_ _p_ ( _**x**_ ) and we would like to (i) approximate it and (ii) draw samples from it. This is
+often the case in Bayesian inference: given a likelihood _p_ ( _D|_ Θ) and a prior _p_ (Θ), we would like to
+perform variational inference on the posterior _p_ (Θ _|D_ ) _∝_ _p_ ( _D|_ Θ) _p_ (Θ), which we can evaluate only
+up to a constant. We now detail how to train the proposed model to approximate the target distribution _p_ ( _**x**_ ), which corresponds to _p_ (Θ _|D_ ) in the previous Bayesian posterior inference example. The
+most common distance measure in variational inference is the reverse Kullback-Leibler divergence,
+which is defined as
+
+
+_._ (9)
+
+
+           _L_ ( _θ_ ) = KL( _qθ_ ( _**x**_ ) _||p_ ( _**x**_ )) = _qθ_ ( _**x**_ ) log _[q][θ]_ [(] _**[x]**_ [)]
+
+_p_ ( _**x**_ ) _[d]_ _**[x]**_ [ =][ E] _**[x]**_ _[∼][q][θ]_ [(] _**[x]**_ [)]
+
+
+           _L_ ( _θ_ ) = KL( _qθ_ ( _**x**_ ) _||p_ ( _**x**_ )) = _qθ_ ( _**x**_ ) log _[q][θ]_ [(] _**[x]**_ [)]
+
+
+log _[q][θ]_ [(] _**[x]**_ [)]
+
+_p_ ( _**x**_ )
+
+
+Usually, we do not have access to the normalized _p_ ( _**x**_ ) but only to some unnormalized target _t_ ( _**x**_ ),
+i.e. _p_ ( _**x**_ ) = _t_ ( _**x**_ ) _/N_ . However, the reverse KL divergences are proportional up to a constant, which
+is precisely the normalization constant _N_ :
+
+
+KL( _qθ_ ( _**x**_ ) _||p_ ( _**x**_ )) = KL( _qθ_ ( _**x**_ ) _||t_ ( _**x**_ )) + log _N_ _._ (10)
+
+
+In practice, the reverse KL divergence is approximated in Monte Carlo fashion by drawing _N_ samples from the variational distribution _{_ _**x**_ _j}_ _[N]_ _j_ =1 [with] _[ x][j]_ _[∼]_ _[q][θ]_ [(] _**[x]**_ [)][, which gives the following objective:]
+
+
+_[θ]_ [(] _**[x]**_ _[j]_ [)] [1]
+
+_t_ ( _**x**_ _j_ ) [=] _N_
+
+
+1 - _Nc_
+_Nc_ _i_ =1 _[q]_ [(] _**[x]**_ _[j][|]_ _**[w]**_ _[i]_ [)] with _**w**_ _i_ _∼_ _qθ_ ( _**w**_ ) _._ (11)
+
+_t_ ( _**x**_ _j_ )
+
+
+_L_ ( _θ_ ) _≈_ [1]
+
+_N_
+
+
+_N_
+
+
+- log _[q][θ]_ [(] _**[x]**_ _[j]_ [)]
+
+_t_ ( _**x**_ _j_ )
+
+_j_ =1
+
+
+_N_
+
+
+_N_
+
+- log
+
+
+_j_ =1
+
+
+A.4 SYNTHETIC EXPERIMENTS
+
+
+In order to make the comparison among models fair, we made sure to use a comparable amount of
+parameters. In particular, in all models except Normalizing Flows we used an MLP with 5 layers
+and 256 neurons. For Normalizing Flow, we used 5 layers of invertible Resnet (Behrmann et al.,
+2019), which are more expressive (but more computationally expensive) than coupling layers with
+splines.
+
+
+**Forward KL divergence training (log-likelihood).** In the log-likelihood settings, we trained for
+5000 epochs and selected the best model on the validation set. In synthetic datasets we could always
+use full-batch training. We trained over different numbers of data points, i.e. _{_ 100, 200, 500,
+1000 _}_, and set _Nc_ to half of the number of training points in each setting. We did not perform any
+hyperparameter tuning on Marginal Flow. We report additional results with log-likelihood training
+in Figure 13.
+
+
+**Reverse KL divergence training.** In the reverse KL divergence setting we do not have observations, and we need to sample from the modeled densities. This training setting is only viable for
+Marginal Flow and Normalizing Flow. In both cases we drew 10’000 samples per iteration. Furthermore, during training we used simulated annealing (Kirkpatrick et al., 1983) to explore the full
+support of the target distribution. In particular, we introduce an artificial temperature _Ti_ for the
+target distribution in Eq. 10:
+_p_ _[∗]_ _i_ [(] _**[x]**_ [) =] _[ p]_ [(] _**[x]**_ [)][1] _[/T][i]_ _[,]_ (12)
+where _Ti_ is the temperature at the _i_ -th training iteration. The temperature _Ti_ is slowly annealed
+during training from the initial _T_ 0 = 5 to _TN_ = 1. Note that _p_ _[∗]_ _i_ [(] _**[x]**_ [)] [=] _[p]_ [(] _**[x]**_ [)][ for] _[ T][i]_ [=] [1][,] [which is]
+the true target. If the initial temperature is high enough, _p_ _[∗]_ _i_ [will] [likely] [be] [very] [flat,] [allowing] [for] [a]
+better exploration of the support of the distribution. In order to account for the slow annealing of
+the temperature, we trained for 10’000 iterations. We report a visualization of the density learned
+by Marginal Flow and Normalizing Flow for all studied densities in Figure 12. Note that we do not
+train the models on the _Checkerboard_ dataset because the true density is constant everywhere and
+the gradient is thus zero everywhere.
+
+
+15
+
+
+Figure 13: Marginal Flow is trained by forward KL divergence (log-likelihood) on 5 synthetic
+datasets with increasing number of training points _{_ 100 _,_ 200 _,_ 500 _,_ 1000 _}_ . We compare Marginal
+Flow with Normalizing Flow, Free-form Flow, Flow Matching. Results show that Marginal Flow
+learns the correct density with fewer samples compared to competing models
+
+
+A.4.1 SBI BENCHMARK
+
+
+In the Simulation-Based Inference benchmark, each setting is provided with three sets of observations with 1000, 10’000, 100’000 points. For each dataset we train Marginal Flow for 2000, 1000
+and 250 epochs, respectively. In all cases we trained a Marginal Flow with an MLP with 4 layers
+and 256 neurons each and _Nc_ = 2048. We selected the best model on the validation set and did not
+perform any other hyperparameter tuning.
+
+
+16
+
+
+gaussian_mixture
+
+
+10 [3] 10 [4] 10 [5]
+
+
+gaussian_linear_uniform
+
+
+10 [3] 10 [4] 10 [5]
+
+
+|Col1|Col2|Col3|Col4|Col5|
+|---|---|---|---|---|
+|||~~FFF~~<br>~~FM~~|~~NSF~~<br>~~ours~~||
+
+
+10 [3] 10 [4] 10 [5]
+
+
+bernoulli_glm
+
+
+10 [3] 10 [4] 10 [5]
+
+
+slcp
+
+
+10 [3] 10 [4] 10 [5]
+
+
+bernoulli_glm_raw
+
+
+10 [3] 10 [4] 10 [5]
+
+
+slcp_distractors
+
+
+Number of Simulations
+
+
+Figure 14: Simulation-based inference benchmark: we show average and standard deviation over 10
+different test observations. We compare our method against Free-form Flows (FFF), Flow Matching
+(FM), and Normalizing Flows (NSF). Benchmark results are taken from Draxler et al. (2024).
+
+
+A.4.2 WISHART MIXTURE EXPERIMENT
+
+
+**Bijection** **mapping** **to** **p.d.** **matrices.** Marginal Flow and Normalizing Flow employ the same
+mapping to positive definite (p.d.) matrices. A vector _**x**_ is reshaped to a lower triangular matrix
+_L_ . Afterwards, the diagonals are transformed to be positive, leading to _L_ [+] . Finally, if the full
+covariance matrix is required, then _L_ [+] ( _L_ [+] ) _[T]_ is computed. The change in Jacobian determinant of
+each step can be computed efficiently (Negri et al., 2023).
+
+
+**Target manifold.** We show again the target distribution from Eq. 4 for convenience:
+
+
+_t_ ( _**x**_ ) = _W_ ( _**x**_ ; _ν,_ Σ( _λ_ )) s.t. Σ( _λ_ ) _∈M_ _∀λ ∈_ [0 _,_ 1] _._ (13)
+
+
+The manifold _M_ is a straightforward interpolation between covariance matrices with a random
+structure. Given the covariance matrices Σ1 _,_ Σ2 _,_ Σ3 _∼W_ (˜ _ν, I_ ), the manifold is defined as:
+
+
+      -      _M_ = Σ( _λ_ ) _| λ ∈_ [0 _,_ 1] with Σ( _λ_ ) = _[λ]_ [Σ][1][ + (1] _[ −]_ _[λ]_ [)Σ][2][ +] _[ γ]_ [(] _[λ]_ [)Σ][3] _,_ (14)
+
+1 + _γ_ ( _λ_ )
+
+
+where _γ_ ( _λ_ ) = [4] 5 [exp] - _−_ (6 _λ −_ 3) [2][�] .
+
+
+For more information on the training setup, we refer the readers to the code.
+
+
+A.4.3 MANIFOLDS IN IMAGE LATENT SPACES
+
+
+**MNIST** We use the standard implementation and data provided by scikit-learn (Pedregosa et al.,
+2011) with standard train and validation split. A convolutional residual (He et al., 2016) variational
+autoencoder (Rezende et al., 2014; Kingma & Welling, 2014) architecture with batch norm (Ioffe
+& Szegedy, 2015) compresses the pixel space into a 20-dimensional latent space. It is trained for
+approximately 7000 epochs. The resulting VAE gives – to the human eye – perfect reconstructions;
+one might consider 20 dimensions even too many to describe the space that MNIST digits live
+in. As a result, it is the Marginal Flow’s task to find conditional lower-dimensional manifolds that
+describe the 20-dimensional latent space well. In our experiments, we fit both a 1- (Figure 10) and
+a 2-dimensional manifold (Figure 15) with a uniform base distribution _p_ base = _U_ ([ _−_ 1 _,_ 1]) _[d]_ with
+_d_ = _{_ 1 _,_ 2 _}_ . The label information is one-hot encoded. We train Marginal Flow with _Nc_ 0256 for
+300 epochs. The neural network _fθ_ ( _**z**_ ) has 3 layers with 256 neurons each.
+
+
+**JAFFE** We use 64 _×_ 64 px crops to the face area. We split the data into 80% training and 20%
+validation set. The convolutional residual variational autoencoder compresses the images into a 10dimensional space. After training for about 9000 epochs, there is no visible reconstruction error.
+The values for happiness, sadness, surprise, anger, disgust and fear are continuous float values and
+are provided to the Marginal Flow as conditioning parameter _**c**_ . For a neutral facial expression, we
+set all values to the minimum value found in the dataset (around 1 _._ 1). For a medium level of an
+emotion, we set that value to 3 _._ 0 while leaving all other emotions at minimum value. The same goes
+
+
+17
+
+
+1.0
+
+0.9
+
+0.8
+
+0.7
+
+0.6
+
+0.5
+
+
+1.0
+
+0.9
+
+0.8
+
+0.7
+
+0.6
+
+0.5
+
+
+two_moons
+
+
+10 [3] 10 [4] 10 [5]
+
+
+gaussian_linear
+
+
+10 [3] 10 [4] 10 [5]
+
+
+Figure 15: Marginal Flow trained with 2-dim base distribution on 20-dim MNIST latent space. We
+show the learned 2-dim manifold conditioned on the class label.
+
+
+more
+disgust
+
+
+neutral
+
+
+more
+fear
+
+
+more
+sadness
+
+
+neutral
+
+
+more
+anger
+
+
+learned 1-dimensional manifold
+
+
+Figure 16: The JAFFE dataset provides images and labels for the emotions happiness, and surprise
+(see main text), and further sadness, anger, disgust, and fear. Here, we show results images for
+generating images with conditioning for the latter four emotions.
+
+
+for a high level of that emotion with the value being 4 _._ 8, the maximum found in the dataset. We
+train the Marginal Flow with _Nc_ = 128 for 300 epochs. The neural network _fθ_ ( _**z**_ ) has 3 layers with
+256 neurons each.
+
+
+18
+
+
+**1000**
+
+
+**1001**
+
+**1002**
+
+**1003**
+
+**1004**
+
+**1005**
+
+**1006**
+
+
+**1007**
+
+**1008**
+
+**1009**
+
+**1010**
+
+**1011**
+
+**1012**
+
+
+**1013**
+
+**1014**
+
+**1015**
+
+**1016**
+
+**1017**
+
+**1018**
+
+
+**1019**
+
+**1020**
+
+**1021**
+
+**1022**
+
+**1023**
+
+
+**1024**
+
+**1025**
+
+
+A.5 VARIANCE AND BIAS OF KL-ESTIMATOR
+
+
+We consider the marginal in Eq. 1 with the parametrization proposed for our model in Eq. 2, which
+we rewrite with an explicit dependency on _**z**_ :
+
+
+                   _qθ_ ( _**x**_ ) = E _**z**_ _∼p_ base� _q_ ( _**x**_ _| fθ_ ( _**z**_ ))� = _q_ ( _**x**_ _| fθ_ ( _**z**_ )) _p_ base( _**z**_ ) _d_ _**z**_ _,_ (15)
+
+
+with _**z**_ _∈_ R _[m]_, _**x**_ _∈_ R _[d]_ and _m_ _<_ _d_ . We assume the data to be generated from a lower-dimensional
+manifold (of intrinsic dimension _m_ ). For illustrative purposes, we consider the reverse KL divergence:
+_L_ ( _θ_ ) = KL( _qθ ∥_ _p_ ) = E _**x**_ _∼qθ_ �log E _**z**_ _∼p_ base� _q_ ( _**x**_ _| fθ_ ( _**z**_ ))� _−_ log _p_ ( _**x**_ )� _._ (16)
+
+
+In practice, we approximate both the expectation over _**x**_ and the inner expectation defining _qθ_ ( _**x**_ ) via
+Monte Carlo. Given i.i.d. outer samples _**x**_ 1 _, . . .,_ _**x**_ _N_ _∼_ _qθ_ and i.i.d. inner samples _**z**_ 1 _, . . .,_ _**z**_ _Nc_ _∼_
+_p_ base, we form the nested Monte Carlo approximation:
+
+
+_where Vdata_ = Var _**x**_ _∼qθ_ �log _qθ_ ( _**x**_ ) _−_ log _p_ ( _**x**_ )� _._
+
+
+_Proof._ We apply Theorem A.1 with _h_ ( _t_ ) = log( _t_ ). The derivatives are _h_ _[′]_ ( _t_ ) = 1 _/t_ and _h_ _[′′]_ ( _t_ ) =
+
+_−_ 1 _/t_ [2] . Crucially, we observe that ( _h_ _[′]_ ( _t_ )) [2] = 1 _/t_ [2] and _|h_ _[′′]_ ( _t_ ) _|_ = 1 _/t_ [2] . Therefore, the coefficient
+for the bias term and the coefficient for the secondary variance term are identical in magnitude:
+_µ_ ( _**x**_ 1 ) [2] [Var(] _[y][|]_ _**[x]**_ [)][.] [Substituting] _[ µ]_ [(] _**[x]**_ [) =] _[ q][θ]_ [(] _**[x]**_ [)][ yields the result.]
+
+
+A.6 SCALING WITH DIMENSIONALITY
+
+
+We investigate the behavior of the bias and variance of the nested Monte Carlo estimator _L_ [�] _N,Nc_ as
+a function of the ambient data dimension _d_ and the intrinsic manifold dimension _m_, where _m ≪_ _d_ .
+
+
+19
+
+
+_[c]_ [(] _**[x]**_ _[j]_ [)]
+
+_p_ ( _**x**_ _j_ ) with _q_ - _θ,Nc_ ( _**x**_ ) := _N_ [1] _c_
+
+
+_Nc_
+
+- _q_ - _**x**_ _| fθ_ ( _**z**_ _i_ )� _._ (17)
+
+
+_i_ =1
+
+
+_L_ - _N,Nc_ ( _θ_ ) := _N_ [1]
+
+
+_N_
+
+
+- log _[q]_ [�] _[θ,N]_ _p_ ( _**x**_ _[c]_ [(] _j_ _**[x]**_ ) _[j]_ [)]
+
+_j_ =1
+
+
+**Theorem** **A.1** (Hong & Juneja (2009) Adapted) **.** _Consider_ _a_ _generic_ _nested_ _expectation_ _I_ =
+E _**x**_ - _h_ ( _µ_ ( _**x**_ ))� _with µ_ ( _**x**_ ) = E _**z**_ - _y_ ( _**x**_ _,_ _**z**_ ) _|_ _**x**_ - _, and the nested Monte Carlo estimator_
+
+
+_Nc_
+
+- _y_ ( _**x**_ _j,_ _**z**_ _i_ ) _,_
+
+
+_i_ =1
+
+
+1
+_I_ - _N,Nc_ = _N_
+
+
+_N_
+
+- _h_ - _µ_ - _Nc_ ( _**x**_ _j_ )� _,_ _µ_ - _Nc_ ( _**x**_ _j_ ) = _N_ 1 _c_
+
+_j_ =1
+
+
+_where_ _**x**_ _j_ _are i.i.d._ _outer samples and_ _**z**_ _i are i.i.d._ _inner samples._ _If h_ ( _·_ ) _is three times differentiable_
+_and the inner estimator is sufficiently regular, then:_
+
+
+1        - 1
+Bias( _I_ [�] _N,Nc_ ) = 2 _Nc_ E _**x**_ [ _h_ _[′′]_ ( _µ_ ( _**x**_ )) Var _**z**_ ( _y_ ( _**x**_ _,_ _**z**_ ) _|_ _**x**_ )] + _O_ _Nc_ [2]
+
+
+_,_ (18)
+
+
+Var( _I_ [�] _N,Nc_ ) = [Var] _**[x]**_ [ (] _[h]_ _N_ [(] _[µ]_ [(] _**[x]**_ [)))] + _NN_ 1 _c_ E _**x**_ �( _h_ _[′]_ ( _µ_ ( _**x**_ ))) [2] Var _**z**_ ( _y_ ( _**x**_ _,_ _**z**_ ) _|_ _**x**_ )� + _O_ - _NN_ 1 _c_ [2]
+
+
+_._
+
+
+(19)
+
+
+**Lemma A.2.** _The Monte Carlo estimate of the KL divergence_ _L_ [�] _N,Nc_ ( _θ_ ) _is characterized by:_
+
+
+  - 1
++ _O_
+_Nc_ [2]
+
+
+_,_ (20)
+
+
+Bias( _L_ [�] _N,Nc_ ) = _−_ 2 _N_ [1] _c_ E _**x**_ _∼qθ_
+
+
+- Var _**z**_ - _q_ ( _**x**_ _|fθ_ ( _**z**_ ))�
+
+_qθ_ [2][(] _**[x]**_ [)]
+
+
+_,_ (21)
+
+
+1
+
+Var( _L_ [�] _N,Nc_ ) = _[V]_ _N_ _[data]_ + _NNc_ E _**x**_ _∼qθ_
+
+
+- Var _**z**_ - _q_ ( _**x**_ _|fθ_ ( _**z**_ ))� 
+_qθ_ [2][(] _**[x]**_ [)]
+
+
+ - 1
++ _O_
+_NNc_ [2]
+
+
+**1026**
+
+**1027**
+
+
+**1028**
+
+**1029**
+
+**1030**
+
+**1031**
+
+**1032**
+
+**1033**
+
+
+**1034**
+
+**1035**
+
+**1036**
+
+**1037**
+
+**1038**
+
+**1039**
+
+
+**1040**
+
+**1041**
+
+**1042**
+
+**1043**
+
+**1044**
+
+
+**1045**
+
+**1046**
+
+**1047**
+
+**1048**
+
+**1049**
+
+**1050**
+
+
+**1051**
+
+**1052**
+
+**1053**
+
+**1054**
+
+**1055**
+
+**1056**
+
+
+**1057**
+
+**1058**
+
+**1059**
+
+**1060**
+
+**1061**
+
+**1062**
+
+
+**1063**
+
+**1064**
+
+**1065**
+
+**1066**
+
+**1067**
+
+
+**1068**
+
+**1069**
+
+**1070**
+
+**1071**
+
+**1072**
+
+**1073**
+
+
+**1074**
+
+**1075**
+
+**1076**
+
+**1077**
+
+**1078**
+
+**1079**
+
+
+**Theorem** **A.3** (Dimensionality Dependence) **.** _Under_ _Assumptions_ _1,_ _2,_ _and_ _3,_ _the_ _bias_ _and_ _the_
+_variance inflation due to the nested estimator depend exclusively on the intrinsic dimension m and_
+_are independent of the ambient dimension d._ _While the intrinsic data variance Vdata_ _scales linearly_
+_with d, the Monte Carlo penalty term does not._ _Specifically, assuming for tractability that the latent_
+_posterior is centered at the prior mean (_ _**z**_ _[∗]_ = 0 _), we have:_
+
+
+Substituting the normalization constants (1 + _σ_ _[−]_ [2] ) _[m/]_ [2] and (1 + 2 _σ_ _[−]_ [2] ) _[m/]_ [2] appropriately into the
+(1+ _σ_ _[−]_ [2] ) _[m]_
+ratio yields _γ_ = (1+2 _σ_ _[−]_ [2] ) _[m/]_ [2] _[−]_ [1][.] _[Remark]_ _[on]_ _**[z]**_ _[∗]_ [=] [0] _[:]_ [If] [the] [code] [is] [not] [centered] [(] _**[z]**_ _[∗]_ [=] [0][),] [the]
+
+convolution of the Gaussian prior and likelihood induces a shift term depending on _∥_ _**z**_ _[∗]_ _∥_ . However,
+this term remains strictly a function of the intrinsic geometry ( _**z**_ _∈_ R _[m]_ ) and does not re-introduce
+any dependence on the ambient dimension _d_ . Thus, the independence from _d_ holds generally.
+
+
+A.7 EMPIRICAL VALIDATION
+
+
+We perform a simulation to verify the results for a target distribution on a manifold. For this, the
+true analytical reverse KL is required. As such, we use a simple target multivariate distribution.
+Consider two independent random variables:
+
+_X_ = _X_ 1 + _X_ 2 _,_ _X_ 1 _∼N_ (0 _, σ_ 1 [2] _[I][d]_ [)] _[,]_ _X_ 2 = _µ_ + _Az,_ _z_ _∼N_ (0 _, σ_ 2 [2] _[I][m]_ [)] _[,]_ (28)
+
+While _X_ 1 is a simple isotropic Gaussian, _X_ 2 is a linear mapping of another Gaussian with dimension
+_m_ _<_ _d_, using _A_ _∈_ R _[d][×][m]_ and the mean _µ_ _∈_ R _[d]_ . With these two independent variables, we can
+conclude
+E[ _X_ ] = _µ,_ Var[ _X_ ] = _σ_ 1 [2] _[I][d]_ [+] _[ σ]_ 2 [2] _[AA][T][ .]_ (29)
+Alternatively, this means _X_ _∼N_ ( _µ, C_ ) where _C_ = _σ_ 1 [2] _[I][d]_ [+] _[ σ]_ 2 [2] _[AA][T]_ [ .] [As such, we can express the]
+distribution of _X_ directly as a multivariate normal or an integral over a subspace described by _µ_ and
+_A_ :
+
+         -         _N_ ( _µ, C_ ) = _N_ ( _x_ ; _µ_ + _Az, σ_ 1 [2] _[I][d]_ [)] _[N]_ [(] _[z]_ [; 0] _[, σ]_ 2 [2] _[I][r]_ [)] _[dz]_ [=] _q_ ( _x | w_ ) _q_ ( _w_ ) _dw._ (30)
+
+
+20
+
+
+        - 1
+
+Bias( _L_ [�] _N,Nc_ ) = _−_ 2 _N_ _[γ]_ _c_ + _O_ _Nc_ [2]
+
+
+_,_ (22)
+
+
+_γ_           - 1
+
+Var( _L_ [�] _N,Nc_ ) = _[V]_ _N_ _[data]_ + _NNc_ + _O_ _NNc_ [2]
+
+
+_,_ (23)
+
+
+    - (1+ _σ_ _[−]_ [2] ) [2]     - _m/_ 2
+_where γ_ = 1+2 _σ_ _[−]_ [2] _−_ 1 _is a constant depending only on m and σ._
+
+
+_Proof._ We analyze the Squared Coefficient of Variation, defined as CV [2] = (EE _**zz**_ [[ _LL_ (( _**zz**_ ))]) [2] ] [2] _[−]_ [1][, where]
+_L_ ( _**z**_ ) = _q_ ( _**x**_ _|_ _fθ_ ( _**z**_ )) is the conditional likelihood. Using Assumptions 2 and 3, and the property
+_J_ _[⊤]_ _J_ = _Im_, the likelihood factorizes into a component orthogonal to the manifold and a component
+parallel to it:
+
+
+_L_ ( _**z**_ ) = _[e][−∥]_ _**[x]**_ _[⊥][∥]_ [2] _[/]_ [2] _[σ]_ [2]
+
+(2 _πσ_ [2] ) _[d/]_ [2]
+
+    - ��     _C_ orth( _**x**_ _⊥,d_ )
+
+
+_·_ _e_ _[−∥]_ _**[z]**_ _[−]_ _**[z]**_ _[∗][∥]_ [2] _[/]_ [2] _[σ]_ [2] _._ (24)
+
+ - �� _K_ par( _**z**_ _,_ _**z**_ _[∗]_ )
+
+
+The term _C_ orth encapsulates all dependencies on the ambient dimension _d_ (via the normalization
+constant) and the reconstruction error _∥_ _**x**_ _⊥∥_ . Since _C_ orth is constant with respect to _**z**_, it cancels out
+in the ratio of expectations:
+
+(EE _**zz**_ [[ _LL_ (( _**zz**_ )])) [2] ] [2] [=] _C_ _[C]_ orth [2] orth [2] [(][E][E] _**[z][z]**_ [[][[] _[K][K]_ [par][par][(][(] _**[z][z]**_ _[,][,]_ _**[ z][ z]**_ _[∗][∗]_ [)])][)][2][]][2] [=] ( [E] E _**[z]**_ _**z**_ [ [[] _[K]_ _K_ [par] par [(] ( _**[z]**_ _**z**_ _[,]_ _,_ _**[ z]**_ _**z**_ _[∗][∗]_ [)] )]) [2][]][2] _[.]_ (25)
+
+This ratio now depends solely on _m_ -dimensional quantities. For the explicit calculation of _γ_, we
+consider the case where the optimal code lies at the prior mean, _**z**_ _[∗]_ = 0. We compute the expectations against the prior _p_ ( _**z**_ ) = _N_ (0 _, Im_ ):
+
+
+2 [1] _[∥]_ _**[z]**_ _[∥]_ [2] _e_ _[−]_ 2 _σ_ 1 [2] _[∥]_ _**[z]**_ _[∥]_ [2] _d_ _**z**_ = - _e_ _[−]_ [1] 2
+
+
+     E _**z**_ [ _K_ par] _∝_ _e_ _[−]_ 2 [1]
+
+
+     E _**z**_ [ _K_ par [2] []] _[ ∝]_ _e_ _[−]_ [1] 2
+
+
+[1] 2 [(1+] _[σ][−]_ [2][)] _[∥]_ _**[z]**_ _[∥]_ [2] _d_ _**z**_ _∝_ (1 + _σ_ _[−]_ [2] ) _[−][m/]_ [2] _,_ (26)
+
+
+[1] 2 _[∥]_ _**[z]**_ _[∥]_ [2][ �] _e_ _[−]_ 2 _σ_ 1 [2] _[∥]_ _**[z]**_ _[∥]_ [2][�][2] _d_ _**z**_ = - _e_ _[−]_ [1] 2
+
+
+[1] 2 [(1+2] _[σ][−]_ [2][)] _[∥]_ _**[z]**_ _[∥]_ [2] _d_ _**z**_ _∝_ (1 + 2 _σ_ _[−]_ [2] ) _[−][m/]_ [2] _._ (27)
+
+
+**1080**
+
+**1081**
+
+
+**1082**
+
+**1083**
+
+**1084**
+
+**1085**
+
+**1086**
+
+**1087**
+
+
+**1088**
+
+**1089**
+
+**1090**
+
+**1091**
+
+**1092**
+
+**1093**
+
+
+**1094**
+
+**1095**
+
+**1096**
+
+**1097**
+
+**1098**
+
+
+**1099**
+
+**1100**
+
+**1101**
+
+**1102**
+
+**1103**
+
+**1104**
+
+
+**1105**
+
+**1106**
+
+**1107**
+
+**1108**
+
+**1109**
+
+**1110**
+
+
+**1111**
+
+**1112**
+
+**1113**
+
+**1114**
+
+**1115**
+
+**1116**
+
+
+**1117**
+
+**1118**
+
+**1119**
+
+**1120**
+
+**1121**
+
+
+**1122**
+
+**1123**
+
+**1124**
+
+**1125**
+
+**1126**
+
+**1127**
+
+
+**1128**
+
+**1129**
+
+**1130**
+
+**1131**
+
+**1132**
+
+**1133**
+
+
+The variance of the KL-estimator
+
+= 10 = 200 = 1000
+
+
+The bias of the KL-estimator
+
+
+Figure 17: The variance and bias of the Monte Carlo estimator _L_ [�] _N,Nc_ of the reverse KL divergence
+for a target distribution with a manifold structure. For each value, 500 simulations are performed.
+
+
+Intuitively, this formulation allows us to circumvent the training procedure by knowing the true
+manifold _q_ ( _w_ ). Avoiding any training error results in _L_ = 0. With this, we can verify our theoretical
+results for the bias and variance of _L_ . The integral over the subspace is used as _q_ ( _w_ ), and the
+
+[�]
+multivariate normal corresponds to the target _p_ . To showcase the manifold hypothesis, we use the
+extreme case _r_ = 1, leading to a rank-1 update to the covariance of the isotropic _X_ 1. Figure 17
+shows the variance and bias for various dimensions _d_ . The variance and bias behave as predicted in
+Equation 23 and even show no dependence on _d_ .
+
+
+21
