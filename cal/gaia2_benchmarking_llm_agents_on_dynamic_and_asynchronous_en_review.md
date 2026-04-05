@@ -1,0 +1,130 @@
+=== CALIBRATION EXAMPLE 83 ===
+
+# Harsh Critic Review
+## Section-by-Section Critical Review
+
+### Title & Abstract
+- **Title accurately reflects contribution:** Yes. "Dynamic and Asynchronous Environments" correctly signals the core departure from static/synchronous agent benchmarks.
+- **Abstract clarity:** Clearly states the problem (lack of async/temporal evaluation in current benchmarks), the method (Gaia2 benchmark + ARE platform + write-action verifier), and key empirical results (no dominant model, significant trade-offs, latency penalties for reasoning models).
+- **Unsupported claims:** The Abstract claims Gaia2 is "directly usable for reinforcement learning from verifiable rewards (RLVR)." This is heavily implied as a primary use-case, yet the paper contains **zero RLVR training experiments**. At ICLR standards, claiming direct usability for RLVR requires empirical validation that the verifier provides stable, informative gradients (e.g., preventing reward collapse, showing training curves). Without this, the RLVR claim is speculative and should be toned down or supported by preliminary experiments.
+
+### Introduction & Motivation
+- **Problem motivation & gap:** Well-motivated. The distinction between synchronous (agent-driven state change) and asynchronous (environment evolves independently) environments is clearly articulated, and the gap in evaluating temporal awareness, noise robustness, and multi-agent coordination is convincingly established with references to realistic deployment constraints.
+- **Contributions:** Accurately stated (ARE framework, Gaia2 benchmark, Empirical study). The claim that Gaia2 is the "**first** benchmark unifying asynchronous execution... under a verifiable framework" is slightly strong; prior work like VendingBench and $\tau$-Bench explore async/multi-turn aspects, though perhaps not the exact combination. A softening of "first" to "comprehensive" or "unified" is advisable.
+- **Over-claiming:** The introduction reiterates the RLVR applicability gap noted above. Additionally, Section 2 states: *"While today’s models underperform, we expect future RLVR-trained systems to close the gap and eventually solve Gaia2."* This is a strong forward-looking claim that assumes action-level verification suffices for agent learning, which ignores known challenges in sparse reward shaping and verifier gaming. This expectation needs justification or framing as a hypothesis rather than an assumption.
+
+### Method / Approach
+- **Reproducibility:** The ARE platform is described with high clarity (apps, events, DAGs, notification system), and the Mobile environment instantiation is detailed. The claim of open-sourcing ARE and Gaia2 strongly supports reproducibility.
+- **Assumptions & Justification:** The method assumes a sequential ReAct scaffold for fairness. This is justified, and the Parallel Tool Calling (PTC) ablation (Appendix B.3.2) is a necessary and welcome validation that the scaffold is not the primary bottleneck.
+- **Logical Gaps / Edge Cases:**
+  1. **Verifier False Negatives on Valid Alternative Strategies:** The ARE Verifier matches agent actions to an oracle DAG. While topological sorting allows some reordering, strictly enforcing dependency DAGs risks penalizing valid, creative trajectories that achieve the same end-state through different write sequences. The paper acknowledges the verifier is "path-optimal" but does not quantify or discuss the risk of false negatives when agents discover valid sub-optimal or alternative paths not anticipated by annotators.
+  2. **Asymmetric Tolerance Windows:** Appendix B.1.4 specifies a timing tolerance of `[∆t − 5 sec, ∆t + 25 sec]`. The asymmetry heavily rewards late actions relative to early ones. This needs explicit justification. Is it based on real-world user patience, or is it a heuristic to accommodate token generation variance? If the latter, it conflates inference latency with temporal reasoning penalties.
+  3. **LLM Soft-Check Robustness:** The verifier uses an LLM judge for flexible fields (e.g., message content). While anti-hacking "style" checks were added (Appendix B.2.3), this feels ad-hoc. The robustness of LLM-based soft checks to prompt drift across different model versions or domains remains an open vulnerability for RLVR.
+
+### Experiments & Results
+- **Testing claims:** Experiments thoroughly test the benchmark across capability splits, cost/latency trade-offs, and A2A scaling. The empirical study is comprehensive.
+- **Baselines & Fairness:** ReAct scaffold is consistent across models. Reasoning vs. non-reasoning variants are included. Pricing data is sourced externally (Artificial Analysis), which is standard but introduces temporal variance.
+- **Missing Ablations:**
+  1. **Notification Policy Impact:** Notification verbosity (low/med/high) is a core ARE feature designed to test proactivity vs. reactivity, yet **no results are reported** showing how models perform under different notification policies. This is a critical missing ablation for an async benchmark.
+  2. **Variance Reporting:** Scenarios are run three times, but **Table 2 lacks standard deviations or error margins**, and Figures 5, 6, 7, 8 lack error bars. For ICLR, uncertainty quantification is essential, especially given the stochastic nature of LLM decoding and environment sampling.
+- **Statistical Significance:** The "Inverse Scaling" finding on Time tasks is striking and well-reported, but without variance metrics, it's hard to assess if differences (e.g., GPT-5 high vs. Sonnet) are statistically significant or within sampling noise.
+- **Results supporting claims:** The results strongly support the trade-off claims. The 0.0% Time score for GPT-5(high) in default mode (Section 5.2) is a stark, honestly reported finding that reveals a fundamental conflict between chain-of-thought latency and real-time deadlines. However, this result heavily confounds **temporal reasoning ability** with **inference latency**. The paper acknowledges this but could benefit from a deeper analysis disentangling "missed deadline due to thinking too long" vs. "failed to formulate correct temporal plan."
+
+### Writing & Clarity
+- **Clarity:** The paper is exceptionally well-structured. The progression from ARE concepts to Gaia2 instantiation to empirical analysis is logical. Definitions of capabilities (Appendix B.1.2/1.4) are precise.
+- **Figures & Tables:** Figure 1 (Budget Scaling) and Figure 10 (A2A Scaling) effectively visualize trade-offs. The sequence diagrams and DAG illustrations (Fig 2, 11) clarify async execution. No clarity issues impede understanding. (Note: Parser artifacts in the text version of figures are ignored per instructions.)
+
+### Limitations & Broader Impact
+- **Acknowledged Limitations:** The authors discuss single-threaded orchestration limits, verifier hacking risks, and the sim2real gap.
+- **Missed Fundamental Limitations:**
+  1. **Environment Determinism vs. Real-World Chaos:** The Mobile environment is simulated with structured noise. Real-world deployment involves non-deterministic API responses, OS-level interruptions, and UI rendering delays that ARE likely abstracts away. The "Sim2Real" gap might be wider than suggested.
+  2. **Verifier Constraint on Creativity:** As noted in Method, the strict reliance on oracle DAGs limits the benchmark's ability to reward emergent or non-canonical problem-solving. This is a fundamental limitation of trajectory-based verification that should be explicitly discussed alongside the benefits.
+  3. **Societal Impact:** The paper is light on societal impact. While standard for benchmarks, it is worth mentioning that training agents to optimize for narrow, simulator-specific verifiers can lead to brittle models that exploit simulation artifacts (overfitting to the verifier), potentially masking unsafe behaviors in deployment.
+
+### Overall Assessment
+This paper makes a valuable contribution to ICLR's focus on LLM agents by introducing a rigorous, asynchronous benchmarking framework (ARE) and a comprehensive evaluation (Gaia2) that exposes critical, previously under-explored trade-offs—most notably the detrimental impact of reasoning-model latency on time-sensitive tasks and the non-linear scaling of multi-agent collaboration. The infrastructure release and detailed methodology are strong assets. However, the contribution is slightly hampered by **unsubstantiated claims regarding direct RLVR applicability** without training experiments, and a **lack of statistical uncertainty reporting** (error bars/variance) in the main results, which is below ICLR rigor standards for empirical benchmarking. Additionally, the **risk of verifier false-negatives** penalizing valid alternative trajectories and the **absence of notification-policy ablations** are meaningful gaps. If the authors can temper the RLVR claims (or provide preliminary RL results), add rigorous variance quantification, and more deeply discuss the limitations of DAG-based verification, this work will stand as a highly influential benchmark release.
+
+# Neutral Reviewer
+## Balanced Review
+
+### Summary
+This paper introduces ARE, an asynchronous, event-driven simulation framework, and Gaia2, a benchmark that evaluates LLM agents across dynamic, time-sensitive, noisy, and multi-agent collaborative tasks. By pairing 1,120 human-annotated scenarios in a mobile-like environment with a fine-grained, action-level verifier, the authors demonstrate that current frontier models face fundamental trade-offs between reasoning depth, latency, robustness, and cost, highlighting key gaps for RLVR-driven agent development.
+
+### Strengths
+1. **Explicit Modeling of Asynchrony and Temporal Dynamics:** Unlike prior synchronous, agent-driven benchmarks (e.g., AppWorld, ToolSandbox), Gaia2 decouples environment evolution from agent actions, enabling rigorous testing of temporal awareness and responsiveness. The controlled "instant" vs. "default" generation experiments (Sec 5.2) cleanly isolate inference latency effects and reveal inverse scaling for reasoning-heavy models on time-constrained tasks.
+2. **Action-Level Verifier with Proven Reliability:** The ARE Verifier moves beyond end-state comparison to validate write-action sequences using causality graphs, timing windows, and hybrid hard/soft checks. Validation on 450 hand-labeled trajectories shows 0.99 precision and 0.98 agreement with human annotations (Table 1), establishing a reusable, anti-hacking credit-assignment mechanism well-suited for RLVR training.
+3. **Comprehensive Empirical Analysis with Real-World Metrics:** The paper evaluates 10+ models across capability splits while reporting cost-performance and time-efficiency trade-offs. Budget-scaling curves (Fig 1), pass@k multi-agent scaling laws (Fig 10), and heterogeneity experiments (Table 3) provide actionable, deployment-aligned insights that extend beyond standard leaderboard metrics.
+4. **Extensible Framework Design and Validation:** ARE’s modular abstractions (apps, events, notifications, DAGs) successfully reimplement established benchmarks (τ-bench, BFCL-v3), demonstrating generality. The release of the framework alongside Gaia2 provides the community with a standardized infrastructure for asynchronous agent evaluation and synthetic data generation.
+
+### Weaknesses
+1. **Sequential ReAct Scaffold Constrains Upper-Bound Performance:** The evaluation relies on a single-threaded ReAct loop, which inherently limits concurrent tool execution and complex temporal planning. While a Parallel Tool Calling (PTC) ablation (App B.3.2) shows marginal pass@1 gains, the authors acknowledge it cannot handle tight concurrent action windows, leaving ambiguity about whether certain `Time` split failures stem from model limitations or orchestration bottlenecks.
+2. **Synthetic Data Consistency and Split Size Limitations:** Universe generation depends on LLM-synthesized personas and cross-app dependency graphs. The authors note (App A.3) unresolved temporal/semantic inconsistencies that could introduce unrealistic artifacts. Additionally, core capability splits contain only 160 scenarios each; despite 3 runs, this may limit statistical power for fine-grained failure mode analysis, and saturation/variance metrics are largely absent from main-text figures.
+3. **LLM-Based Soft Checks Introduce Judgment Uncertainty:** While the verifier’s hard checks are deterministic, flexible fields rely on an LLM judge (Llama 3.3-70B). Though the authors address reward hacking via a "style" check (App B.2.3), the long-term stability of LLM-based soft evaluation under distributional shift or adversarial prompting remains a concern for high-fidelity RL training signals.
+4. **Uniform Prompting Penalizes Native Tool-Calling & Reasoning Architectures:** To maintain fairness, the study applies a standardized ReAct prompt and discards intermediate reasoning tokens for "thinking" models (App B.4). This design choice may artificially deflate scores for models optimized for interleaved reasoning/tool-use APIs, conflating true capability deficits with scaffold incompatibility.
+
+### Novelty & Significance
+The work addresses a recognized gap in agent evaluation: the lack of asynchronous, event-driven testbeds that reflect real-world deployment constraints where time, external events, and partial observability dictate success. While conceptually adjacent to AppWorld and τ-bench, Gaia2’s integration of environment-driven DAG scheduling, trajectory-level verification, and cost-aware scaling curves constitutes a meaningful methodological advance. For ICLR, the paper is highly significant: it aligns with the conference’s emphasis on reproducible benchmarking, reinforcement learning from verifiable rewards, and systematic empirical analysis. The open release of ARE and Gaia2 provides immediate community utility, and the detailed trade-off analyses offer concrete directions for next-generation agent architectures and training pipelines.
+
+### Suggestions for Improvement
+1. **Decouple Scaffold vs. Model Limitations Explicitly:** Provide a clearer analysis distinguishing failure modes caused by the ReAct/PTC scaffold from intrinsic model deficits. If feasible, include a reference implementation of a more advanced, truly asynchronous orchestrator (e.g., event-driven parallel planning loop) as a supplementary artifact to help users isolate orchestration bottlenecks.
+2. **Strengthen Statistical Rigor and Data Quality Reporting:** Add confidence intervals or standard error bars to main benchmark figures (not just A2A results). Include a power analysis or saturation curve justifying the 160-scenario split size, and report a quantitative audit of cross-app consistency in generated universes (e.g., % of temporally contradictory events caught automatically) to reassure reviewers about synthetic data fidelity.
+3. **Release Exact Prompts & Evaluate Native Tool-Calling Modes:** Provide full prompt templates, stop-token configurations, and API-specific handling scripts in a supplementary material or repository appendix. Run a subset of evaluations using models’ native tool-calling APIs (bypassing ReAct formatting constraints) to report an "oracle scaffold" upper bound and clarify how much performance loss is scaffold-induced.
+4. **Demonstrate RLVR Feasibility with a Controlled Experiment:** The authors position the verifier as RLVR-ready but only discuss reward hacking qualitatively (App B.2.3). Adding a small-scale RL training run (e.g., PPO/GRPO on a simplified `Execution` or `Noise` split) showing verifier-driven improvement over a supervised baseline would strongly validate the framework’s intended use case and better align with ICLR’s reinforcement learning scope.
+
+# Spark Finder Review
+## How to Improve This Paper
+
+### Missing Experiments (top 3-5 only)
+1. Add statistical significance testing (e.g., bootstrap confidence intervals or paired t-tests) across the 3-run evaluations because the low pass rates and marginal performance deltas could easily be stochastic noise rather than meaningful model differences.
+2. Conduct a closed-loop reinforcement learning experiment using the ARE verifier as a reward signal, because without demonstrating measurable training improvement, the central claim that Gaia2 is "directly usable for RLVR" remains speculative.
+3. Evaluate modern, production-grade agent scaffolds (e.g., LangGraph, AutoGen, or dynamic event-driven planners) instead of only ReAct/PTC, because benchmarking minimal loops artificially inflates failure rates and undermines the claim that observed limits are intrinsic to model capabilities.
+
+### Deeper Analysis Needed (top 3-5 only)
+1. Disentangle Time split failures by categorizing them into wall-clock timeouts, temporal planning errors, and missed asynchronous events, because without this breakdown you cannot confirm whether the bottleneck is pure inference latency or deficient temporal reasoning.
+2. Quantify the separate impact of each noise augmentation (tool signature anomalies, random execution failures, irrelevant environment events) because aggregating them masks which perturbations actually degrade agent robustness versus which merely increase context load.
+3. Analyze verifier behavior on out-of-distribution or highly verbose adversarial trajectories, because RLVR training will inevitably generate edge-case behaviors, and the current 450 in-distribution validation samples do not prove verifier stability under distribution shift.
+
+### Visualizations & Case Studies
+1. Provide timestamped execution traces contrasting successful vs. failed Time/Adaptability runs to expose whether agents miss asynchronous events entirely, violate dependency DAGs, or simply execute too slowly.
+2. Include end-to-end A2A message-passing logs showing how heterogeneous main/app-agent pairs successfully delegate versus cascade errors into failure, directly validating the claimed decomposition limitations.
+3. Visualize the verifier's matching logic on a borderline trajectory where soft-check LLM judgment diverges from exact state matching to concretely demonstrate why action-level credit assignment outperforms final-state verification.
+
+### Obvious Next Steps
+1. Implement and evaluate a lightweight adaptive compute router that dynamically toggles between shallow and deep reasoning variants per step, because the inverse-scaling finding in the Time split explicitly demands this architectural solution to be practically actionable.
+2. Instantiate ARE in a structurally different domain (e.g., desktop automation or web navigation) and report verification results, because claiming a "general-purpose platform" without empirical validation on a second domain fails to meet ICLR's generalization standards.
+3. Release the complete verifier prompt templates, rubric configurations, and reward-shaping code, because undisclosed prompt engineering or hidden evaluation criteria would invalidate the reproducibility of the precision scores and subsequent RLVR claims.
+
+# Final Consolidated Review
+## Summary
+The paper introduces **ARE**, an asynchronous, event-driven simulation platform, and **Gaia2**, a benchmark of 1,120 scenarios evaluating LLM agents on temporal reasoning, noise robustness, ambiguity resolution, and multi-agent coordination. By decoupling environment evolution from agent actions and employing a fine-grained, action-level verifier, the authors demonstrate that current frontier models face severe trade-offs between reasoning depth, latency, and cost, revealing that heavy-reasoning variants fail catastrophically on time-sensitive tasks when constrained by real-time deadlines.
+
+## Strengths
+- **Methodologically rigorous async framework:** ARE's event-DAG scheduling and configurable notification system cleanly address a recognized gap in synchronous, agent-driven benchmarks. The authors provide a necessary and convincing ablation showing that a sequential ReAct scaffold is not the primary performance bottleneck, confirming through a Parallel Tool Calling comparison that observed limits are intrinsic to model capabilities.
+- **High-fidelity, trajectory-based verification:** The ARE Verifier achieves strong reliability (0.99 precision, 0.98 human agreement) by validating write-action sequences against oracle DAGs with hybrid hard/soft checks. The explicit mitigation of reward-hacking via style constraints demonstrates careful engineering, moving beyond brittle final-state judges toward granular, goal-oriented credit assignment.
+- **Deployment-aligned empirical diagnostics:** The budget-scaling curves, cost-normalized metrics, and heterogeneous A2A experiments yield actionable, real-world insights. The finding that GPT-5 (high) improves from 0.0% to 34.4% on time tasks when generation latency is artificially removed is a stark, honestly reported diagnostic that will guide future agent architecture design.
+
+## Weaknesses
+- **Absence of statistical uncertainty quantification:** Despite executing each scenario three times, Table 2 reports only point estimates, and Figures 1, 5, 6, 7, 8, and 10 completely lack error bars or confidence intervals. Given the low absolute success rates across most splits (frequently <20%) and narrow performance deltas between top models, it is impossible to determine whether reported rankings or capability gaps are statistically significant or artifacts of stochastic decoding and environment sampling. This omission falls short of ICLR's empirical rigor standards for benchmarking papers.
+- **Unsubstantiated RLVR readiness claims:** The abstract and introduction repeatedly assert that Gaia2 is "directly usable for reinforcement learning from verifiable rewards," yet the manuscript contains **zero RL training experiments**. Appendix B.2.3 only discusses preventing a specific reward-hacking exploit; without demonstrating that the verifier produces stable, shaping-compatible gradients or drives measurable policy improvement over supervised baselines, the RLVR applicability remains speculative and over-claimed.
+- **Missing ablation of core asynchronous observability mechanisms:** The notification policy system (low/medium/high verbosity) is positioned as central to testing agent proactivity under partial observability. However, all core Gaia2 results are reported under a single "medium" default. Without evaluating performance across verbosity levels, the paper fails to empirically validate its central claim regarding how agents navigate dynamic information availability or proactively scan environments when alerts are restricted.
+
+## Nice-to-Haves
+- Disaggregate Time-split failures into explicit sub-categories (e.g., wall-clock timeout due to slow generation vs. structural temporal planning errors vs. missed dependency triggers). While the instant-mode experiment partially addresses this, a categorical breakdown would sharpen diagnostic utility.
+- Quantify the isolated impact of individual noise perturbations (tool signature anomalies vs. random execution failures vs. irrelevant context events). Aggregating them obscures which perturbations genuinely test algorithmic robustness versus those that merely increase context length or prompt confusion.
+- Briefly demonstrate ARE's environment-agnostic claims by instantiating the framework in a second domain (e.g., web navigation or desktop automation) with preliminary verification metrics, rather than relying solely on architectural assertions.
+
+## Novel Insights
+The paper's most valuable intellectual contribution is the empirical exposure of a **latency-reasoning inverse scaling law** in agentic execution. By strictly decoupling simulated environment time from token generation, Gaia2 demonstrates that heavy-reasoning models actively degrade performance on deadline-sensitive tasks not through flawed temporal logic, but through sheer inference delays. This fundamentally shifts the evaluation paradigm from static accuracy to *resource-aware efficacy*, establishing that practical agent deployment will require adaptive compute routing—dynamically allocating reasoning depth based on temporal slack and environmental urgency—rather than uniform test-time scaling. The work also compellingly argues that trajectory-level verification, when shielded against path-optimality biases and hacking, offers a scalable foundation for credit assignment that end-state judges cannot provide.
+
+## Potentially Missed Related Work
+- None identified. The paper thoroughly surveys synchronous grounded benchmarks, multi-turn conversational testbeds, and recent multi-agent protocols, adequately positioning Gaia2's event-driven, async differentiation.
+
+## Suggestions
+1. **Implement rigorous uncertainty reporting across all empirical results.** Replace single-value points with ± standard error or bootstrap 95% confidence intervals in all figures and tables. Add a brief statistical power analysis justifying the 160-scenario split size, enabling the community to distinguish genuine architectural differences from sampling variance.
+2. **Validate the RLVR claim or explicitly reframe it.** Run a controlled RL training experiment (e.g., PPO/GRPO on the Execution or Noise split) using the ARE verifier as a reward function. If training yields verifiable policy improvement, include the curves. If resource constraints prevent this, downgrade the RLVR language in the Abstract/Introduction from "directly usable" to "designed to support future RLVR research," and emphasize the benchmarking contributions instead.
+3. **Execute a Notification Policy ablation study.** Report Gaia2 pass rates under low and high verbosity settings alongside the medium baseline. This will empirically validate claims about partial observability, clarify whether failures stem from reasoning deficits or proactive information-gathering failures, and complete the asynchronous evaluation loop the framework is designed for.
+
+# Actual Human Scores
+Individual reviewer scores: [10.0, 6.0, 8.0]
+Average score: 8.0
+Binary outcome: Accept

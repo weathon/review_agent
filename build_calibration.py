@@ -168,12 +168,14 @@ def build_calibration_md(results: list[dict]) -> str:
     return "\n".join(parts)
 
 
-def save_calibration_files(results: list[dict], cal_dir: Path) -> None:
-    """Save each calibration example as a separate file in cal_dir."""
+def save_calibration_files(results: list[dict], cal_dir: Path, papers_dir: Path) -> None:
+    """Save each calibration example as {name}_review.md + {name}_paper.md in cal_dir."""
     cal_dir.mkdir(exist_ok=True)
     for i, r in enumerate(results, 1):
         title = r.get("title", r["paper_id"])
-        filename = shorten_title(title) + ".md"
+        base = shorten_title(title)
+
+        # Save review file
         parts = []
         parts.append(f"=== CALIBRATION EXAMPLE {i} ===\n")
         if r.get("harsh_review"):
@@ -199,8 +201,15 @@ def save_calibration_files(results: list[dict], cal_dir: Path) -> None:
         parts.append(f"Individual reviewer scores: {r['scores']}")
         parts.append(f"Average score: {r['avg_score']:.1f}")
         parts.append(f"Binary outcome: {r['gt_binary']}\n")
-        (cal_dir / filename).write_text("\n".join(parts), encoding="utf-8")
-    print(f"Saved {len(results)} calibration files to: {cal_dir}")
+        (cal_dir / f"{base}_review.md").write_text("\n".join(parts), encoding="utf-8")
+
+        # Copy paper text
+        paper_src = papers_dir / f"{r['paper_id']}.txt"
+        if paper_src.exists():
+            paper_text = paper_src.read_text(encoding="utf-8", errors="replace")
+            (cal_dir / f"{base}_paper.md").write_text(paper_text, encoding="utf-8")
+
+    print(f"Saved {len(results)} calibration file pairs to: {cal_dir}")
 
 
 async def main(
@@ -293,7 +302,7 @@ async def main(
 
     # Save individual calibration files to cal/
     cal_dir = Path(__file__).parent / "cal"
-    save_calibration_files(results, cal_dir)
+    save_calibration_files(results, cal_dir, papers_dir)
 
     # Save calibration_ids.json
     ids = [r["paper_id"] for r in results]
