@@ -32,18 +32,19 @@ OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 
 # Per-stage model assignments — all via OpenRouter
-MODEL_HARSH = "gpt-5.4-mini"
-MODEL_NEUTRAL = "gpt-5.4-mini"
-MODEL_SPARK = "gpt-5.4-mini"
-MODEL_RELATED_WORK = "gpt-5.4-mini:online" 
-MODEL_FILTER = "gpt-5.4-mini"
-MODEL_MERGER = "gpt-5.4-mini"
-MODEL_SCORER = "gpt-5.4-mini"
+MODEL_HARSH = "qwen/qwen3.6-plus:free"
+MODEL_NEUTRAL = "qwen/qwen3.6-plus:free"
+MODEL_SPARK = "qwen/qwen3.6-plus:free"
+MODEL_RELATED_WORK = "qwen/qwen3.6-plus:free:online" 
+MODEL_FILTER = "qwen/qwen3.6-plus:free"
+MODEL_MERGER = "qwen/qwen3.6-plus:free"
+MODEL_SCORER = "qwen/qwen3.6-plus:free"
 MODEL_PARSER = "openai/gpt-5.4-nano"
 
 MAX_RETRIES = 3
 RETRY_DELAY = 10
 REQUEST_TIMEOUT = 120
+DEFAULT_CALIBRATION_PATH = Path(__file__).parent / "calibration.md"
 
 # ── Error logging ────────────────────────────────────────────────────
 _error_log_path = Path(__file__).parent / "error.log"
@@ -413,7 +414,7 @@ def _get_client(api_key: str | None = None) -> AsyncOpenAI:
 # ── OpenRouter calls ───────────────────────────────────────────────────
 
 # Models that support OpenRouter reasoning config
-REASONING_MODELS = {"z-ai/glm-5", "minimax/minimax-m2.7"}
+REASONING_MODELS = {"z-ai/glm-5", "minimax/minimax-m2.7", "deepseek/deepseek-v3.2"}
 
 # Model → official provider mapping (for OpenRouter provider pinning)
 PROVIDER_MAP = {
@@ -595,7 +596,12 @@ async def _parse_score(client: AsyncOpenAI, text: str) -> tuple[float, float]:
     response = await client.beta.chat.completions.parse(
         model=MODEL_PARSER,
         messages=[
-            {"role": "system", "content": "Extract the numerical score from the text."},
+            {"role": "system", "content": (
+                "The text contains a paper scoring analysis that references calibration examples "
+                "with their own scores. Ignore all calibration/reference scores. "
+                "Extract ONLY the final score the author assigned to the paper being reviewed. "
+                "Look for 'MY FINAL SCORE:' at the end of the text."
+            )},
             {"role": "user", "content": text},
         ],
         response_format=ScoreSchema,
@@ -700,19 +706,29 @@ You are a paper scoring agent. Your job:
 
 1. Read the consolidated review at {review_path} and the paper at {paper_path}.
 
-2. Use Grep and Read to search the calibration directory at {cal_dir_abs} for
-   calibration examples that are most relevant to the paper under review.
-   Search for keywords from the review (topic, methodology, strengths/weaknesses)
-   to find similar papers. Read the most relevant files (aim for 3-5 examples).
+2. Use Grep to search the calibration directory at {cal_dir_abs} for relevant
+   calibration examples. The directory contains pairs of files:
+   - *_paper.md  — the original paper text
+   - *_review.md — the review + human scores
+   Search BOTH *_paper.md and *_review.md files for keywords related to the
+   paper's topic, methodology, strengths, and weaknesses. This helps you find
+   calibration papers that are similar in content or quality.
 
-3. Compare the paper's quality against those calibration examples on:
+3. Once you identify relevant matches, ONLY Read the *_review.md files (NOT the
+   *_paper.md files) to save context. Aim for 3-5 relevant calibration reviews.
+
+4. Compare the paper's quality against those calibration examples on:
    novelty, technical soundness, empirical support, significance, clarity.
 
-4. Assign a single overall score from 0.0 to 10.0.
+5. Assign a single overall score from 0.0 to 10.0.
 
 {SCORE_PROMPT}
 
 Based on the calibration examples you found, assign a score. Explain your reasoning.
+
+IMPORTANT: At the very end of your response, you MUST write exactly this line:
+MY FINAL SCORE: <number>
+This must be the LAST line of your output. Do NOT repeat calibration scores here — only YOUR score for THIS paper.
 """
 
     print(f"  [scorer-agent] starting RAG scorer (claude-sonnet-4-6, cal={cal_dir_abs}) ...")
@@ -789,15 +805,47 @@ async def run_merger(
 
 # ── Main orchestration ────────────────────────────────────────────────
 
-async def review_paper(
-    paper_path: str,
-    parallel: bool = False,
-    skip_related_work: bool = False,
-    skip_spark: bool = False,
-    skip_neutral: bool = False,
-    venue: str = "",
+def _resolve_calibration_inputs(
     calibration_context: str = "",
     cal_dir: str = "",
+    calibration_path: str | None = None,
+) -> tuple[str, str]:
+    """
+    Resolve calibration inputs the same way as the benchmark runner.
+    Prefer a sibling cal/ directory (RAG mode); otherwise fall back to the
+    calibration markdown file content.
+    """
+    if cal_dir:
+        return calibration_context, cal_dir
+    if calibration_context:
+        return calibration_context, cal_dir
+
+    resolved_path: Path | None = None
+    if calibration_path:
+        resolved_path = Path(calibration_path).expanduser().resolve()
+    elif DEFAULT_CALIBRATION_PATH.exists():
+        resolved_path = DEFAULT_CALIBRATION_PATH.resolve()
+
+    if resolved_path is None:
+        return calibration_context, cal_dir
+
+    cal_dir_candidate = resolved_path.parent / "cal"
+    if cal_dir_candidate.is_dir():
+        return "", str(cal_dir_candidate)
+    if resolved_path.exists():
+        return resolved_path.read_text(encoding="utf-8", errors="replace"), ""
+    return calibration_context, cal_dir
+
+async def review_paper(
+    paper_path: str,
+    parallel: bool = True,
+    skip_related_work: bool = True,
+    skip_spark: bool = False,
+    skip_neutral: bool = False,
+    venue: str = "ICLR",
+    calibration_context: str = "",
+    cal_dir: str = "",
+    calibration_path: str | None = None,
     api_key: str | None = None,
 ) -> tuple[str, float]:
     """
@@ -815,6 +863,11 @@ async def review_paper(
 
     paper_content = path.read_text(encoding="utf-8", errors="replace")
     paper_content = sanitize_text(paper_content)
+    calibration_context, cal_dir = _resolve_calibration_inputs(
+        calibration_context=calibration_context,
+        cal_dir=cal_dir,
+        calibration_path=calibration_path,
+    )
     print(f"Loaded paper: {path.name} ({len(paper_content):,} chars)")
     print(f"Mode: {'parallel' if parallel else 'sequential'}")
     print(f"Related work: {'disabled' if skip_related_work else 'enabled'}")
@@ -946,13 +999,14 @@ async def review_paper(
 async def review_paper_text(
     paper_text: str,
     source_name: str = "paper.txt",
-    parallel: bool = False,
-    skip_related_work: bool = False,
+    parallel: bool = True,
+    skip_related_work: bool = True,
     skip_spark: bool = False,
     skip_neutral: bool = False,
-    venue: str = "",
+    venue: str = "ICLR",
     calibration_context: str = "",
     cal_dir: str = "",
+    calibration_path: str | None = None,
     api_key: str | None = None,
     output_dir: str | None = None,
 ) -> tuple[str, str]:
@@ -980,6 +1034,7 @@ async def review_paper_text(
         venue=venue,
         calibration_context=calibration_context,
         cal_dir=cal_dir,
+        calibration_path=calibration_path,
         api_key=api_key,
     )
     return result, str(input_path.with_name(f"{input_path.stem}_review.md"))
@@ -992,11 +1047,12 @@ if __name__ == "__main__":
         print("Usage: python paper_reviewer.py <paper.txt> [options]")
         print()
         print("Flags:")
-        print("  --parallel          Run agents in parallel")
-        print("  --no-related-work   Skip related work search & filter")
+        print("  --sequential        Run agents sequentially")
+        print("  --with-related-work Enable related work search & filter")
         print("  --no-spark          Skip spark finder agent")
         print("  --no-neutral        Skip neutral reviewer agent")
         print("  --venue <name>      Set venue (e.g. ICLR, NeurIPS, ICML)")
+        print("  --calibration <p>   Calibration file/path (default: calibration.md if present)")
         print()
         print("Environment variables (or set in .env):")
         print("  OPENROUTER_API_KEY   (required) Your OpenRouter API key")
@@ -1010,15 +1066,31 @@ if __name__ == "__main__":
         print(f"  Scorer:                         claude-sonnet-4-6 (Agent SDK)")
         sys.exit(0 if "--help" in sys.argv else 1)
 
-    parallel = "--parallel" in sys.argv
-    skip_related = "--no-related-work" in sys.argv
+    parallel = "--sequential" not in sys.argv
+    skip_related = "--with-related-work" not in sys.argv
     skip_spark = "--no-spark" in sys.argv
     skip_neutral = "--no-neutral" in sys.argv
-    venue = ""
+    venue = "ICLR"
+    calibration_path = None
     if "--venue" in sys.argv:
         idx = sys.argv.index("--venue")
         if idx + 1 < len(sys.argv):
             venue = sys.argv[idx + 1]
-    paper_file = [a for a in sys.argv[1:] if not a.startswith("--") and a != venue][0]
-    result, total_cost = asyncio.run(review_paper(paper_file, parallel=parallel, skip_related_work=skip_related, skip_spark=skip_spark, skip_neutral=skip_neutral, venue=venue))
+    if "--calibration" in sys.argv:
+        idx = sys.argv.index("--calibration")
+        if idx + 1 < len(sys.argv):
+            calibration_path = sys.argv[idx + 1]
+    flag_values = {venue, calibration_path} - {None}
+    paper_file = [a for a in sys.argv[1:] if not a.startswith("--") and a not in flag_values][0]
+    result, total_cost = asyncio.run(
+        review_paper(
+            paper_file,
+            parallel=parallel,
+            skip_related_work=skip_related,
+            skip_spark=skip_spark,
+            skip_neutral=skip_neutral,
+            venue=venue,
+            calibration_path=calibration_path,
+        )
+    )
     print(result)
