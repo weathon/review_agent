@@ -40,7 +40,7 @@ BASELINE_MODEL = "z-ai/glm-5"
 # DEFAULT_BENCH_DIR = Path(__file__).resolve().parent.parent.parent / "iclr2025_data.old"
 DEFAULT_BENCH_DIR = Path(__file__).resolve().parent.parent.parent / "iclr2025_data_v2"
 
-VALID_SCORES = [1.0, 3.0, 5.0, 6.0, 8.0, 10.0]
+VALID_SCORES = [0.0, 2.0, 4.0, 6.0, 8.0, 10.0]
 CONCURRENCY = 5
 
 
@@ -109,7 +109,7 @@ Use the FULL scoring range — do NOT cluster around 5-6. Be discriminative:
 - 3.0-4.9:  Reject. Significant issues with claims, method, or evaluation.
 - 1.0-2.9:  Strong reject. Fundamental flaws, unclear contribution, or wrong.
 
-NEVER give exactly 6.0. If slightly positive give 7, if slightly negative give 5.
+Try to use 6.0 sparingly — it often signals indecision. If you can lean one way, prefer 5.5 or 6.5.
 
 End your response with a line like: "Score: X.X"
 """

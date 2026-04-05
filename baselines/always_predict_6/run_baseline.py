@@ -18,7 +18,7 @@ from pathlib import Path
 
 DEFAULT_BENCH_DIR = Path(__file__).parent / "AI-Scientist" / "review_iclr_bench"
 
-VALID_SCORES = [1.0, 3.0, 5.0, 6.0, 8.0, 10.0]
+VALID_SCORES = [0.0, 2.0, 4.0, 6.0, 8.0, 10.0]
 BASELINE_SCORE = 6.0
 BASELINE_DECISION = "Accept"
 

@@ -171,9 +171,8 @@ Use the full range — do NOT cluster around 5-6. Be DISCRIMINATIVE:
 - Do NOT hedge toward the middle. Commit to your assessment.
 - However, do not over-penalize papers for a long list of minor points if the core contribution is sound.
 - A few serious flaws matter more than many small nitpicks.
-- NEVER give a 6.0 score, no matter what. A score of 6 is a non-committal fence-sit. If the \
-  paper is even slightly positive, give 6.5 or 7. If it is even slightly negative, \
-  give 5.5 or 5. You must decide which side of the borderline the paper falls on.
+- Try to use 6.0 sparingly — it often signals indecision. If you can lean one way, \
+  prefer 5.5 or 6.5 instead.
 
 Scoring guide (use only when NO calibration examples are available):
 - 9.0-10.0: Strong accept. Exceptional, field-advancing contribution.

@@ -13,7 +13,6 @@ import json
 import logging
 import os
 import random as _random
-import re
 import sys
 import traceback
 from pathlib import Path
@@ -33,13 +32,13 @@ OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 
 # Per-stage model assignments — all via OpenRouter
-MODEL_HARSH = "z-ai/glm-5"
-MODEL_NEUTRAL = "z-ai/glm-5"
-MODEL_SPARK = "z-ai/glm-5"
-MODEL_RELATED_WORK = "z-ai/glm-5:online" 
-MODEL_FILTER = "z-ai/glm-5"
-MODEL_MERGER = "z-ai/glm-5"
-MODEL_SCORER = "z-ai/glm-5"
+MODEL_HARSH = "gpt-5.4-mini"
+MODEL_NEUTRAL = "gpt-5.4-mini"
+MODEL_SPARK = "gpt-5.4-mini"
+MODEL_RELATED_WORK = "gpt-5.4-mini:online" 
+MODEL_FILTER = "gpt-5.4-mini"
+MODEL_MERGER = "gpt-5.4-mini"
+MODEL_SCORER = "gpt-5.4-mini"
 MODEL_PARSER = "openai/gpt-5.4-nano"
 
 MAX_RETRIES = 3
@@ -264,31 +263,37 @@ If all works are already cited or not relevant, say:
 
 
 
-MERGER_PROMPT = """\
-You are a senior meta-reviewer / area chair. You have received four inputs \
+_MERGER_PROMPT_TEMPLATE = """\
+You are a senior meta-reviewer / area chair. You have received {input_count} inputs \
 about the same paper:
 
 1. A **harsh critic** review (may be overly critical)
-2. A **neutral/balanced** review
-3. A **spark finder** report (focuses on insights, not flaws)
-4. A **potentially missed related work** report (these are SUGGESTIONS, not \
-   definitive omissions — the authors may have good reasons for not citing them)
+{neutral_line}\
+{spark_line}\
+{related_work_line}\
 
-Your job is to synthesize these into ONE authoritative final review.
+
+Your job is to synthesize these into ONE authoritative final review. Be harsh and critical, it is for \
+ICLR, most paper get washed out.
 
 Cross-check every criticism against the actual paper content and the other \
 reviews. Remove criticisms that are factually wrong about the paper, that \
 misunderstand the contribution, or that are pure formatting/style nitpicks. \
-But do NOT excuse real problems — if the critic and neutral reviewer both \
-flag the same issue, it's real.
+But do NOT excuse real problems — if multiple reviewers flag the same issue, \
+it's real.
 
 Rules:
 - REMOVE criticisms that are factually wrong or misunderstand the paper.
 - REMOVE pure formatting/style nitpicks.
+- REMOVE or weaken weaknesses (or put them into nice-to-have) if they are generic or one-weakness-suit-all type \
+and does not harm the core claim of the paper \
 - KEEP criticisms that are factually correct AND substantive, even if only \
-  one reviewer raised them — a single valid concern still counts.
+  one reviewer raised them.
 - KEEP genuine strengths backed by evidence.
 - For potentially missed related work: present as suggestions, do not penalize.
+- Do NOT pad Strengths or Weaknesses to appear balanced or make the list "more through". \
+If the paper has only one (or none) genuine strength, list only one (or none). \
+If a weakness is minor or redundant, omit it. Quality over quantity.
 
 Output your final review in this markdown format:
 
@@ -316,29 +321,48 @@ One paragraph synthesizing genuinely novel observations.
 - specific actionable suggestion
 
 Do NOT output any numerical scores, subscores, or accept/reject decisions. \
-Do NOT output any overall value judgement (e.g. "this paper makes a strong/weak \
-contribution", "overall this is a solid paper"). Your job is ONLY to produce the \
-factual qualitative review. Scoring and judgement will be done separately.
 
-
-
-
+DO differentiate between papers of varying quality clearly: the content of the review should make it clear whether the paper is strong or weak, without using numerical scores.
 """
 
+
+def _build_merger_prompt(skip_neutral: bool = False, skip_spark: bool = False, skip_related_work: bool = False) -> str:
+    num = 1
+    neutral_line = ""
+    spark_line = ""
+    related_work_line = ""
+    if not skip_neutral:
+        num += 1
+        neutral_line = f"{num}. A **neutral/balanced** review\n"
+    if not skip_spark:
+        num += 1
+        spark_line = f"{num}. A **spark finder** report (focuses on insights, not flaws)\n"
+    if not skip_related_work:
+        num += 1
+        related_work_line = (
+            f"{num}. A **potentially missed related work** report (these are SUGGESTIONS, not "
+            f"definitive omissions — the authors may have good reasons for not citing them)\n"
+        )
+    return _MERGER_PROMPT_TEMPLATE.format(
+        input_count=num,
+        neutral_line=neutral_line,
+        spark_line=spark_line,
+        related_work_line=related_work_line,
+    )
+
+
+# Default for backward compat
+MERGER_PROMPT = _build_merger_prompt()
 
 
 SCORE_PROMPT = """\
 You previously wrote a consolidated review of a paper. Now assign an overall \
-score from 1.0 to 10.0.
+score from 0.0 to 10.0.
 
-Be very critical. This is for a top-tier venue (ICLR, ~25% acceptance rate). \
-Most papers have real flaws and most papers should score below 6.
+This is for a top-tier venue (ICLR, ~29% acceptance rate), most papers are scored lower than 6. \
 
-Base your score on YOUR OWN review above — the strengths, weaknesses, \
-nice-to-haves, and suggestions you already identified. Do not re-evaluate \
-from scratch.
 
-## Comparative Scoring (when calibration examples are provided)
+## Comparative Scoring
 
 Select a few calibration papers that are closest in quality to the current \
 paper. Compare them against the current paper on these dimensions:
@@ -350,30 +374,23 @@ paper. Compare them against the current paper on these dimensions:
 
 Then set your score relative to the human scores of those selected papers.
 
-**Important:** Your review may have an overly harsh or overly generous tone. \
-Do not let the tone drive the score. Instead, do a comparative assessment: \
-look at what the calibration papers' reviews say versus what your review says, \
-and score based on the actual substance, not the rhetoric.
-
 Do NOT be afraid to give very high (>8) or very low (<4) scores! Good papers should be praised and bad paper should be found out.
 
 Score continuously (e.g. 3.5, 4.7, 8.1). Use the full range — do not cluster \
-around 5-6. A few serious flaws matter more than many small nitpicks. Do not snap to .5 or .0.
+around 5-6. Do not round to .5 or .0. give scores in x.2, 2.8, 7.3, etc. 
 
-Return the score using the provided structured response schema.
-
-
-When you are later asked to score: be DISCRIMINATIVE. A weak paper is weak — \
+The score should be DISCRIMINATIVE. A weak paper is weak — \
 give it a low score (1-3). A strong paper is strong — give it a high score (7-9). \
 Do not cluster everything around 5. The quality difference between papers is real \
 and your scores should reflect it.
 
 ## Scoring guide
-- 9.0-10.0: Strong accept. Exceptional, field-advancing contribution.
-- 7.0-8.9:  Accept. Clear contribution, solid execution, minor issues.
-- 5.0-5.9:  Borderline reject. Has some merit but weaknesses outweigh.
-- 3.0-4.9:  Reject. Significant issues with claims, method, or evaluation.
-- 1.0-2.9:  Strong reject. Fundamental flaws, unclear contribution, or wrong.
+- 10: Strong accept. Exceptional, field-advancing contribution.
+- 8:  Accept.
+- 6:  Borderline accept.
+- 4:  Borderline reject.
+- 2:  Reject.
+- 0:  Strong reject. 
 """
 # ── Core logic ────────────────────────────────────────────────────────
 
@@ -448,7 +465,7 @@ async def _call_openai(
                 ],
                 timeout=REQUEST_TIMEOUT,
             )
-            extra = _build_extra_body(model, reasoning_effort="low")
+            extra = _build_extra_body(model, reasoning_effort="medium")
             if extra:
                 kwargs["extra_body"] = extra
             response = await client.chat.completions.create(**kwargs)
@@ -572,6 +589,7 @@ async def run_related_work_search(
     return filtered, cost1 + cost2
 
 
+
 async def _parse_score(client: AsyncOpenAI, text: str) -> tuple[float, float]:
     """Use GPT-5.4-nano with structured output to extract a score. Returns (score, cost)."""
     response = await client.beta.chat.completions.parse(
@@ -595,6 +613,148 @@ async def _parse_score(client: AsyncOpenAI, text: str) -> tuple[float, float]:
     return parsed.score, cost
 
 
+async def run_merge(
+    client: AsyncOpenAI,
+    harsh_review: str,
+    neutral_review: str,
+    spark_review: str,
+    related_work: str,
+    paper_content: str,
+    skip_neutral: bool = False,
+    skip_spark: bool = False,
+    skip_related_work: bool = False,
+) -> tuple[str, float]:
+    """
+    Merger only — synthesize sub-agent reviews into a consolidated review.
+    Returns (review_text, cost).
+    """
+    print(f"  [merger] started ({MODEL_MERGER}) ...")
+
+    merger_prompt = _build_merger_prompt(
+        skip_neutral=skip_neutral,
+        skip_spark=skip_spark,
+        skip_related_work=skip_related_work,
+    )
+
+    review_num = 1
+    reviews_section = f"# Review {review_num}: Harsh Critic\n{harsh_review}\n\n"
+    if not skip_neutral:
+        review_num += 1
+        reviews_section += f"# Review {review_num}: Positive-Leaning Reviewer\n{neutral_review}\n\n"
+    if not skip_spark:
+        review_num += 1
+        reviews_section += f"# Review {review_num}: Spark Finder\n{spark_review}\n\n"
+    if not skip_related_work:
+        review_num += 1
+        reviews_section += (
+            f"# Report {review_num}: Potentially Missed Related Work\n"
+            f"(NOTE: These are SUGGESTIONS only. The search agent may have found \n"
+            f"works that are not truly missed or are only tangentially related.)\n"
+            f"{related_work}\n\n"
+        )
+
+    user_prompt_review = (
+        f"Here is the paper being reviewed (extracted from PDF — formatting "
+        f"artifacts are parser issues, not paper problems):\n\n"
+        f"--- PAPER CONTENT START ---\n"
+        f"{paper_content}\n"
+        f"--- PAPER CONTENT END ---\n\n"
+        f"Here are the inputs:\n\n"
+        f"{reviews_section}"
+        f"Now produce the final consolidated review following your instructions. "
+        f"Remember: many of the harsh critic's points may be nonsensical or overly "
+        f"picky — cross-check everything against the actual paper before including it."
+    )
+    review_text, cost = await _call_openai(
+        client, "merger", merger_prompt, user_prompt_review, MODEL_MERGER,
+    )
+    return review_text, cost
+
+
+async def run_scorer(
+    client: AsyncOpenAI,
+    review_text: str,
+    paper_content: str,
+    calibration_context: str = "",
+    cal_dir: str = "",
+) -> tuple[float, float]:
+    """
+    Scorer — uses Claude Agent SDK (claude-sonnet-4-6) to search calibration
+    examples via Grep/Read, then scores the paper. Returns (score, cost).
+    """
+    import tempfile
+    from claude_agent_sdk import ClaudeSDKClient, ClaudeAgentOptions, AssistantMessage, TextBlock
+
+    cal_dir_abs = str(Path(cal_dir).resolve()) if cal_dir else ""
+
+    # Write review and paper to temp files so the agent can Read them
+    # (avoids CLI character limit on the prompt)
+    tmp_dir = Path(tempfile.mkdtemp(prefix="scorer_"))
+    review_path = tmp_dir / "review.txt"
+    paper_path = tmp_dir / "paper.txt"
+    review_path.write_text(review_text, encoding="utf-8")
+    paper_path.write_text(paper_content, encoding="utf-8")
+
+    prompt = f"""\
+You are a paper scoring agent. Your job:
+
+1. Read the consolidated review at {review_path} and the paper at {paper_path}.
+
+2. Use Grep and Read to search the calibration directory at {cal_dir_abs} for
+   calibration examples that are most relevant to the paper under review.
+   Search for keywords from the review (topic, methodology, strengths/weaknesses)
+   to find similar papers. Read the most relevant files (aim for 3-5 examples).
+
+3. Compare the paper's quality against those calibration examples on:
+   novelty, technical soundness, empirical support, significance, clarity.
+
+4. Assign a single overall score from 0.0 to 10.0.
+
+{SCORE_PROMPT}
+
+Based on the calibration examples you found, assign a score. Explain your reasoning.
+"""
+
+    print(f"  [scorer-agent] starting RAG scorer (claude-sonnet-4-6, cal={cal_dir_abs}) ...")
+
+    result_text = ""
+    options = ClaudeAgentOptions(
+        model="claude-sonnet-4-6",
+        cwd=cal_dir_abs or None,
+        allowed_tools=["Grep", "Read", "Glob"],
+        permission_mode="bypassPermissions",
+        max_turns=15,
+    )
+    async with ClaudeSDKClient(options=options) as sdk_client:
+        await sdk_client.query(prompt)
+        async for message in sdk_client.receive_response():
+            if isinstance(message, AssistantMessage):
+                for block in message.content:
+                    if isinstance(block, TextBlock):
+                        result_text += block.text
+
+    # Clean up temp files
+    review_path.unlink(missing_ok=True)
+    paper_path.unlink(missing_ok=True)
+    tmp_dir.rmdir()
+
+    print(f"  [scorer-agent] raw output: {result_text[:200]} ...")
+
+    # Log full scorer output to file for debugging
+    scorer_log_path = Path(__file__).parent / "scorer_debug.log"
+    with open(scorer_log_path, "a", encoding="utf-8") as f:
+        f.write(f"\n{'=' * 72}\n")
+        f.write(f"cal_dir: {cal_dir_abs}\n")
+        f.write(f"{'─' * 72}\n")
+        f.write(result_text)
+        f.write(f"\n{'=' * 72}\n\n")
+
+    # Use _parse_score to extract the numerical score
+    score, cost_parse = await _parse_score(client, result_text)
+    print(f"  [scorer-agent] parsed score: {score}")
+    return score, cost_parse
+
+
 async def run_merger(
     client: AsyncOpenAI,
     harsh_review: str,
@@ -603,136 +763,28 @@ async def run_merger(
     related_work: str,
     paper_content: str,
     calibration_context: str = "",
+    cal_dir: str = "",
+    skip_neutral: bool = False,
+    skip_spark: bool = False,
+    skip_related_work: bool = False,
 ) -> tuple[str, float, float]:
     """
-    Two-turn merger:
-      Turn 1 — produce the consolidated review (markdown, no scores).
-      Turn 2 — score the paper with calibration context.
-      Then parse the score with a lightweight model.
-
+    Merger + Scorer (two separate calls).
     Returns (review_text, score, total_cost).
     """
-    print(f"  [merger] started ({MODEL_MERGER}) ...")
-
-    # ── Turn 1: Review only (free text) ──────────────────────────────
-    user_prompt_review = (
-        f"Here is the paper being reviewed (extracted from PDF — formatting "
-        f"artifacts are parser issues, not paper problems):\n\n"
-        f"--- PAPER CONTENT START ---\n"
-        f"{paper_content}\n"
-        f"--- PAPER CONTENT END ---\n\n"
-        f"Here are the four inputs:\n\n"
-        f"# Review 1: Harsh Critic\n{harsh_review}\n\n"
-        f"# Review 2: Positive-Leaning Reviewer\n{neutral_review}\n\n"
-        f"# Review 3: Spark Finder\n{spark_review}\n\n"
-        f"# Report 4: Potentially Missed Related Work\n"
-        f"(NOTE: These are SUGGESTIONS only. The search agent may have found \n"
-        f"works that are not truly missed or are only tangentially related.)\n"
-        f"{related_work}\n\n"
-        f"Now produce the final consolidated review following your instructions. "
-        f"Remember: many of the harsh critic's points may be nonsensical or overly "
-        f"picky — cross-check everything against the actual paper before including it."
+    review_text, cost_merge = await run_merge(
+        client, harsh_review, neutral_review,
+        spark_review, related_work, paper_content,
+        skip_neutral=skip_neutral,
+        skip_spark=skip_spark,
+        skip_related_work=skip_related_work,
     )
-    review_text, cost_review = await _call_openai(
-        client, "merger", MERGER_PROMPT, user_prompt_review, MODEL_MERGER,
+    score, cost_score = await run_scorer(
+        client, review_text, paper_content,
+        calibration_context=calibration_context,
+        cal_dir=cal_dir,
     )
-
-    # ── Turn 2: Score (same conversation, calibration injected) ──────
-    print(f"  [merger_score] scoring with calibration ({MODEL_SCORER}) ...")
-
-    score_user = ""
-    if calibration_context:
-        score_user += (
-            f"Now score this paper. Here are calibration examples — reviews of \n"
-            f"other papers paired with ACTUAL human reviewer scores. Use these as \n"
-            f"your primary scoring anchor:\n\n"
-            f"--- CALIBRATION EXAMPLES ---\n"
-            f"{calibration_context}\n"
-            f"--- END CALIBRATION EXAMPLES ---\n\n"
-        )
-    else:
-        score_user += "Now score this paper.\n\n"
-
-    score_user += (
-        "Based on the consolidated review above (you do NOT have the full paper, "
-        "only the review), assign a single overall score.\n\n"
-        "IMPORTANT — use the FULL range from 1.0 to 10.0. Do NOT compress "
-        "scores into 4-6. A paper with fundamental flaws deserves 1-3. "
-        "A strong paper with clear contributions deserves 7-9. "
-        "Commit to your assessment — do not hedge toward the middle. "
-        "Try to use 6.0 sparingly — it often signals indecision. If you can "
-        "lean one way, prefer 5.5 or 6.5 instead."
-    )
-
-
-
-
-    if MODEL_SCORER.startswith("claude-sdk:"):
-        raise ValueError(
-            f"MODEL_SCORER must be an OpenRouter model ID, got {MODEL_SCORER!r}"
-        )
-
-    # ── OpenRouter scoring path ───────────────────────────────────
-    # Multi-turn: system + turn1 + assistant + turn2
-    messages = [
-        {"role": "system", "content": MERGER_PROMPT},
-        {"role": "user", "content": user_prompt_review},
-        {"role": "assistant", "content": review_text},
-        {"role": "user", "content": score_user},
-    ]
-
-    # Call for score (free text)
-    for attempt in range(1, MAX_RETRIES + 1):
-        try:
-            kwargs = dict(
-                model=MODEL_SCORER,
-                messages=messages,
-                timeout=REQUEST_TIMEOUT,
-            )
-            extra = _build_extra_body(MODEL_SCORER, reasoning_effort="high")
-            if extra:
-                kwargs["extra_body"] = extra
-            response = await client.chat.completions.create(**kwargs)
-            score_text = response.choices[0].message.content or ""
-            cost_score = _extract_cost(response)
-            if not score_text.strip():
-                _error_logger.error(f"[merger_score] empty response (attempt {attempt}/{MAX_RETRIES}), model={MODEL_SCORER}")
-                if attempt < MAX_RETRIES:
-                    print(f"  [merger_score] empty response (attempt {attempt}/{MAX_RETRIES}), retrying ...")
-                    await asyncio.sleep(RETRY_DELAY + _random.uniform(0, 5))
-                    continue
-                raise ValueError("merger_score returned empty response")
-            # Parse score using lightweight model
-            score, cost_parse = await _parse_score(client, score_text)
-            usage = getattr(response, "usage", None)
-            input_tokens = getattr(usage, "prompt_tokens", None) if usage else None
-            output_tokens = getattr(usage, "completion_tokens", None) if usage else None
-            tokens = f"{input_tokens}in/{output_tokens}out" if input_tokens and output_tokens else "n/a"
-            print(f"  [merger_score] done — {MODEL_SCORER} — {tokens} tokens — ${cost_score:.4f}")
-            print(f"  [score_parser] parsed score: {score} — ${cost_parse:.4f}")
-
-            return review_text, score, cost_review + cost_score + cost_parse
-        except APITimeoutError as e:
-            _error_logger.error(f"[merger_score] timeout (attempt {attempt}/{MAX_RETRIES}), model={MODEL_SCORER}\n{traceback.format_exc()}")
-            if attempt < MAX_RETRIES:
-                wait = RETRY_DELAY * attempt
-                print(f"  [merger_score] timeout (attempt {attempt}/{MAX_RETRIES}), waiting {wait}s ...")
-                await asyncio.sleep(wait)
-                continue
-            raise
-        except Exception as e:
-            _error_logger.error(f"[merger_score] error (attempt {attempt}/{MAX_RETRIES}), model={MODEL_SCORER}: {e}\n{traceback.format_exc()}")
-            err_str = str(e).lower()
-            is_retryable = any(
-                kw in err_str for kw in ["rate_limit", "overloaded", "429", "529", "timeout", "gateway", "502", "503", "504"]
-            )
-            if is_retryable and attempt < MAX_RETRIES:
-                wait = RETRY_DELAY * attempt
-                print(f"  [merger_score] transient error (attempt {attempt}/{MAX_RETRIES}), waiting {wait}s ...")
-                await asyncio.sleep(wait)
-            else:
-                raise
-    raise RuntimeError("merger_score failed after all retries")
+    return review_text, score, cost_merge + cost_score
 
 
 # ── Main orchestration ────────────────────────────────────────────────
@@ -742,10 +794,12 @@ async def review_paper(
     parallel: bool = False,
     skip_related_work: bool = False,
     skip_spark: bool = False,
+    skip_neutral: bool = False,
     venue: str = "",
     calibration_context: str = "",
+    cal_dir: str = "",
     api_key: str | None = None,
-) -> str:
+) -> tuple[str, float]:
     """
     Main entry point. All agents via OpenRouter chat completions — can fully parallelize.
 
@@ -765,17 +819,19 @@ async def review_paper(
     print(f"Mode: {'parallel' if parallel else 'sequential'}")
     print(f"Related work: {'disabled' if skip_related_work else 'enabled'}")
     print(f"Spark finder: {'disabled' if skip_spark else 'enabled'}")
+    print(f"Neutral reviewer: {'disabled' if skip_neutral else 'enabled'}")
     if venue:
         print(f"Venue: {venue}")
     print(f"Models:")
     print(f"  Harsh Critic:   {MODEL_HARSH}")
-    print(f"  Neutral:        {MODEL_NEUTRAL}")
+    if not skip_neutral:
+        print(f"  Neutral:        {MODEL_NEUTRAL}")
     if not skip_spark:
         print(f"  Spark Finder:   {MODEL_SPARK}")
     if not skip_related_work:
         print(f"  Related Work:   {MODEL_RELATED_WORK}")
     print(f"  Merger:         {MODEL_MERGER}")
-    print(f"  Scorer:         {MODEL_SCORER}\n")
+    print(f"  Scorer:         claude-sonnet-4-6 (Agent SDK)\n")
 
     client = _get_client(api_key=api_key)
     pp = str(path)
@@ -785,8 +841,9 @@ async def review_paper(
     if parallel:
         tasks = [
             run_reviewer(client, "harsh_critic", HARSH_CRITIC_PROMPT, pp, paper_content, MODEL_HARSH, venue=venue),
-            run_reviewer(client, "neutral", NEUTRAL_REVIEWER_PROMPT, pp, paper_content, MODEL_NEUTRAL, venue=venue),
         ]
+        if not skip_neutral:
+            tasks.append(run_reviewer(client, "neutral", NEUTRAL_REVIEWER_PROMPT, pp, paper_content, MODEL_NEUTRAL, venue=venue))
         if not skip_spark:
             tasks.append(run_reviewer(client, "spark_finder", SPARK_FINDER_PROMPT, pp, paper_content, MODEL_SPARK, venue=venue))
         if not skip_related_work:
@@ -797,7 +854,10 @@ async def review_paper(
 
         idx = 0
         harsh_review, c = results_list[idx]; total_cost += c; idx += 1
-        neutral_review, c = results_list[idx]; total_cost += c; idx += 1
+        if not skip_neutral:
+            neutral_review, c = results_list[idx]; total_cost += c; idx += 1
+        else:
+            neutral_review = "Neutral reviewer was skipped."
         if not skip_spark:
             spark_review, c = results_list[idx]; total_cost += c; idx += 1
         else:
@@ -810,8 +870,11 @@ async def review_paper(
         print("Phase 1: Reviewers sequentially ...")
         harsh_review, c = await run_reviewer(client, "harsh_critic", HARSH_CRITIC_PROMPT, pp, paper_content, MODEL_HARSH, venue=venue)
         total_cost += c
-        neutral_review, c = await run_reviewer(client, "neutral", NEUTRAL_REVIEWER_PROMPT, pp, paper_content, MODEL_NEUTRAL, venue=venue)
-        total_cost += c
+        if not skip_neutral:
+            neutral_review, c = await run_reviewer(client, "neutral", NEUTRAL_REVIEWER_PROMPT, pp, paper_content, MODEL_NEUTRAL, venue=venue)
+            total_cost += c
+        else:
+            neutral_review = "Neutral reviewer was skipped."
         if not skip_spark:
             spark_review, c = await run_reviewer(client, "spark_finder", SPARK_FINDER_PROMPT, pp, paper_content, MODEL_SPARK, venue=venue)
             total_cost += c
@@ -829,6 +892,10 @@ async def review_paper(
         client, harsh_review, neutral_review,
         spark_review, related_work, paper_content,
         calibration_context=calibration_context,
+        cal_dir=cal_dir,
+        skip_neutral=skip_neutral,
+        skip_spark=skip_spark,
+        skip_related_work=skip_related_work,
     )
     total_cost += merger_cost
     final_score = round(float(final_score), 1)
@@ -882,8 +949,10 @@ async def review_paper_text(
     parallel: bool = False,
     skip_related_work: bool = False,
     skip_spark: bool = False,
+    skip_neutral: bool = False,
     venue: str = "",
     calibration_context: str = "",
+    cal_dir: str = "",
     api_key: str | None = None,
     output_dir: str | None = None,
 ) -> tuple[str, str]:
@@ -907,8 +976,10 @@ async def review_paper_text(
         parallel=parallel,
         skip_related_work=skip_related_work,
         skip_spark=skip_spark,
+        skip_neutral=skip_neutral,
         venue=venue,
         calibration_context=calibration_context,
+        cal_dir=cal_dir,
         api_key=api_key,
     )
     return result, str(input_path.with_name(f"{input_path.stem}_review.md"))
@@ -924,6 +995,7 @@ if __name__ == "__main__":
         print("  --parallel          Run agents in parallel")
         print("  --no-related-work   Skip related work search & filter")
         print("  --no-spark          Skip spark finder agent")
+        print("  --no-neutral        Skip neutral reviewer agent")
         print("  --venue <name>      Set venue (e.g. ICLR, NeurIPS, ICML)")
         print()
         print("Environment variables (or set in .env):")
@@ -935,17 +1007,18 @@ if __name__ == "__main__":
         print(f"  Spark Finder (OpenRouter):      {MODEL_SPARK}")
         print(f"  Related Work (OpenRouter):      {MODEL_RELATED_WORK}")
         print(f"  Merger (OpenRouter):            {MODEL_MERGER}")
-        print(f"  Scorer:                         {MODEL_SCORER}")
+        print(f"  Scorer:                         claude-sonnet-4-6 (Agent SDK)")
         sys.exit(0 if "--help" in sys.argv else 1)
 
     parallel = "--parallel" in sys.argv
     skip_related = "--no-related-work" in sys.argv
     skip_spark = "--no-spark" in sys.argv
+    skip_neutral = "--no-neutral" in sys.argv
     venue = ""
     if "--venue" in sys.argv:
         idx = sys.argv.index("--venue")
         if idx + 1 < len(sys.argv):
             venue = sys.argv[idx + 1]
     paper_file = [a for a in sys.argv[1:] if not a.startswith("--") and a != venue][0]
-    result, total_cost = asyncio.run(review_paper(paper_file, parallel=parallel, skip_related_work=skip_related, skip_spark=skip_spark, venue=venue))
+    result, total_cost = asyncio.run(review_paper(paper_file, parallel=parallel, skip_related_work=skip_related, skip_spark=skip_spark, skip_neutral=skip_neutral, venue=venue))
     print(result)

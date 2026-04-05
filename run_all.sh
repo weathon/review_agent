@@ -18,7 +18,7 @@ echo ">>> Step 2: Dataset distribution check"
 python -c "
 import csv
 from collections import Counter
-with open('iclr2026_balanced/ratings.csv') as f:
+with open('iclr2026_unbalanced/ratings.csv') as f:
     rows = list(csv.DictReader(f))
 print(f'Total papers: {len(rows)}')
 decs = Counter(r['gt_binary'] for r in rows)
@@ -27,13 +27,13 @@ for k, v in decs.most_common():
 bins = Counter(round(float(r['avg_score'])) for r in rows)
 print('Score bins:')
 for k in sorted(bins):
-    print(f'  ~{k}: {bins[k]}')
+    print(f'{k}: {bins[k]/len(rows):.02f}')
 "
 
 # ── Step 3: Build calibration set ──
-echo ""
-echo ">>> Step 3: Building calibration set (sub-agents only, no merger)"
-python build_calibration.py --data-dir iclr2026_balanced --parallel --no-related-work
+# echo ""
+# echo ">>> Step 3: Building calibration set (sub-agents only, no merger)"
+# python build_calibration.py --data-dir iclr2026_balanced --parallel --no-related-work # --no-neutral
 
 # ── Step 4: Run baseline ──
 # echo ""
@@ -43,7 +43,7 @@ python build_calibration.py --data-dir iclr2026_balanced --parallel --no-related
 # ── Step 5: Run benchmark with calibration ──
 echo ""
 echo ">>> Step 5: Running benchmark (50 papers, with calibration)"
-python run_iclr_bench.py 50 3112 --parallel --data-dir iclr2026_unbalanced --calibration calibration.md --no-related-work
+python run_iclr_bench.py 40 3112 --parallel --data-dir iclr2026_unbalanced --calibration calibration.md --no-related-work # --no-neutral
 
 # ── Step 6: Compute metrics ──
 echo ""

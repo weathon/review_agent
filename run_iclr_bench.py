@@ -124,7 +124,7 @@ def load_ground_truth(bench_dir: Path) -> tuple[list[dict], Path]:
         raise FileNotFoundError(f"No ratings file found in {bench_dir}")
 
 
-VALID_SCORES = [1.0, 3.0, 5.0, 6.0, 8.0, 10.0]
+VALID_SCORES = [0.0, 2.0, 4.0, 6.0, 8.0, 10.0]
 
 
 def _snap_score(raw: float) -> float:
@@ -133,7 +133,7 @@ def _snap_score(raw: float) -> float:
 
 
 async def review_single_paper(
-    paper_id: str, paper_path: Path, parallel: bool = False, skip_related_work: bool = False, skip_spark: bool = False, calibration_context: str = "",
+    paper_id: str, paper_path: Path, parallel: bool = False, skip_related_work: bool = False, skip_spark: bool = False, skip_neutral: bool = False, calibration_context: str = "", cal_dir: str = "",
 ) -> dict:
     """Run the full pipeline on one paper."""
     paper_content = paper_path.read_text(encoding="utf-8", errors="replace")
@@ -151,8 +151,9 @@ async def review_single_paper(
     if parallel:
         tasks = [
             run_reviewer(client, "harsh_critic", HARSH_CRITIC_PROMPT, pp, paper_content, MODEL_HARSH, venue="ICLR"),
-            run_reviewer(client, "neutral", NEUTRAL_REVIEWER_PROMPT, pp, paper_content, MODEL_NEUTRAL, venue="ICLR"),
         ]
+        if not skip_neutral:
+            tasks.append(run_reviewer(client, "neutral", NEUTRAL_REVIEWER_PROMPT, pp, paper_content, MODEL_NEUTRAL, venue="ICLR"))
         if not skip_spark:
             tasks.append(run_reviewer(client, "spark_finder", SPARK_FINDER_PROMPT, pp, paper_content, MODEL_SPARK, venue="ICLR"))
         if not skip_related_work:
@@ -163,7 +164,10 @@ async def review_single_paper(
 
         idx = 0
         harsh_review, c = results_list[idx]; total_cost += c; idx += 1
-        neutral_review, c = results_list[idx]; total_cost += c; idx += 1
+        if not skip_neutral:
+            neutral_review, c = results_list[idx]; total_cost += c; idx += 1
+        else:
+            neutral_review = "Neutral reviewer was skipped."
         if not skip_spark:
             spark_review, c = results_list[idx]; total_cost += c; idx += 1
         else:
@@ -176,8 +180,11 @@ async def review_single_paper(
         print("  Phase 1: Reviewers sequentially ...")
         harsh_review, c = await run_reviewer(client, "harsh_critic", HARSH_CRITIC_PROMPT, pp, paper_content, MODEL_HARSH, venue="ICLR")
         total_cost += c
-        neutral_review, c = await run_reviewer(client, "neutral", NEUTRAL_REVIEWER_PROMPT, pp, paper_content, MODEL_NEUTRAL, venue="ICLR")
-        total_cost += c
+        if not skip_neutral:
+            neutral_review, c = await run_reviewer(client, "neutral", NEUTRAL_REVIEWER_PROMPT, pp, paper_content, MODEL_NEUTRAL, venue="ICLR")
+            total_cost += c
+        else:
+            neutral_review = "Neutral reviewer was skipped."
         if not skip_spark:
             spark_review, c = await run_reviewer(client, "spark_finder", SPARK_FINDER_PROMPT, pp, paper_content, MODEL_SPARK, venue="ICLR")
             total_cost += c
@@ -190,13 +197,13 @@ async def review_single_paper(
             related_work = "Related work search was skipped."
 
     for label, text in [("harsh_critic", harsh_review), ("neutral", neutral_review)]:
-        print(f"\n  {sep}\n  [{label} output] ({len(text)} chars)\n  {sep}\n{text}\n")
+        # print(f"\n  {sep}\n  [{label} output] ({len(text)} chars)\n  {sep}\n{text}\n")
         if not text.strip():
             print(f"  *** WARNING: {label} returned empty output ***")
-    if not skip_spark:
-        print(f"\n  {sep}\n  [spark_finder output] ({len(spark_review)} chars)\n  {sep}\n{spark_review}\n")
-    if not skip_related_work:
-        print(f"\n  {sep}\n  [related_work output] ({len(related_work)} chars)\n  {sep}\n{related_work}\n")
+    # if not skip_spark:
+    #     print(f"\n  {sep}\n  [spark_finder output] ({len(spark_review)} chars)\n  {sep}\n{spark_review}\n")
+    # if not skip_related_work:
+    #     print(f"\n  {sep}\n  [related_work output] ({len(related_work)} chars)\n  {sep}\n{related_work}\n")
 
     # Phase 2: Merger + Score (same conversation)
     print("  Phase 2: Merger ...")
@@ -204,11 +211,15 @@ async def review_single_paper(
         client, harsh_review, neutral_review,
         spark_review, related_work, paper_content,
         calibration_context=calibration_context,
+        cal_dir=cal_dir,
+        skip_neutral=skip_neutral,
+        skip_spark=skip_spark,
+        skip_related_work=skip_related_work,
     )
     total_cost += merger_cost
     score = round(float(score), 1)
     decision = score_to_decision(score)
-    print(f"\n  {sep}\n  [merger output] ({len(final_review)} chars)\n  {sep}\n{final_review}\n")
+    # print(f"\n  {sep}\n  [merger output] ({len(final_review)} chars)\n  {sep}\n{final_review}\n")
     print(f"  [merger_score] structured score: {score}")
     print(f"  Total cost: ${total_cost:.4f}")
 
@@ -248,7 +259,7 @@ def stratified_sample(papers: list[dict], n: int, seed: int) -> list[dict]:
     return samples
 
 
-async def main(n_samples: int = 10, seed: int = 42, parallel: bool = False, skip_related_work: bool = False, skip_spark: bool = False, balanced: bool = False, data_dir: str | None = None, calibration_path: str | None = None):
+async def main(n_samples: int = 10, seed: int = 42, parallel: bool = False, skip_related_work: bool = False, skip_spark: bool = False, skip_neutral: bool = False, balanced: bool = False, data_dir: str | None = None, calibration_path: str | None = None):
     bench_dir = Path(data_dir) if data_dir else DEFAULT_BENCH_DIR
 
     print("=" * 72)
@@ -265,19 +276,25 @@ async def main(n_samples: int = 10, seed: int = 42, parallel: bool = False, skip
 
     # Load calibration if provided
     calibration_context = ""
+    cal_dir = ""
     calibration_ids = set()
     if calibration_path:
         cal_path = Path(calibration_path)
-        if cal_path.exists():
+        # Check for cal/ directory (RAG mode) next to calibration_path
+        cal_dir_candidate = cal_path.parent / "cal"
+        if cal_dir_candidate.is_dir():
+            cal_dir = str(cal_dir_candidate)
+            print(f"\nUsing RAG calibration: {cal_dir} (Agent SDK scorer)")
+        elif cal_path.exists():
             calibration_context = cal_path.read_text(encoding="utf-8")
             print(f"\nLoaded calibration: {cal_path} ({len(calibration_context):,} chars)")
-            # Load excluded IDs
-            ids_path = cal_path.parent / "calibration_ids.json"
-            if ids_path.exists():
-                calibration_ids = set(json.load(open(ids_path)))
-                print(f"Excluding {len(calibration_ids)} calibration papers from sampling")
         else:
             print(f"\nWARNING: calibration file not found: {cal_path}")
+        # Load excluded IDs
+        ids_path = cal_path.parent / "calibration_ids.json"
+        if ids_path.exists():
+            calibration_ids = set(json.load(open(ids_path)))
+            print(f"Excluding {len(calibration_ids)} calibration papers from sampling")
 
     gt_data, papers_dir = load_ground_truth(bench_dir)
     print(f"\nLoaded {len(gt_data)} papers from ground truth.")
@@ -352,7 +369,7 @@ async def main(n_samples: int = 10, seed: int = 42, parallel: bool = False, skip
             for attempt in range(1, max_paper_retries + 1):
                 start = time.time()
                 try:
-                    review_result = await review_single_paper(pid, paper_path, parallel=parallel, skip_related_work=skip_related_work, skip_spark=skip_spark, calibration_context=calibration_context)
+                    review_result = await review_single_paper(pid, paper_path, parallel=parallel, skip_related_work=skip_related_work, skip_spark=skip_spark, skip_neutral=skip_neutral, calibration_context=calibration_context, cal_dir=cal_dir)
                     elapsed = time.time() - start
 
                     pred_score = review_result["predicted_score"]
@@ -501,6 +518,7 @@ if __name__ == "__main__":
     parallel = "--parallel" in sys.argv
     skip_related = "--no-related-work" in sys.argv
     skip_spark = "--no-spark" in sys.argv
+    skip_neutral = "--no-neutral" in sys.argv
     balanced = "--balanced" in sys.argv
     data_dir = None
     calibration_path = None
@@ -516,4 +534,4 @@ if __name__ == "__main__":
     args = [a for a in sys.argv[1:] if not a.startswith("--") and a not in flag_values]
     n = int(args[0]) if len(args) > 0 else 10
     seed = int(args[1]) if len(args) > 1 else 42
-    asyncio.run(main(n_samples=n, seed=seed, parallel=parallel, skip_related_work=skip_related, skip_spark=skip_spark, balanced=balanced, data_dir=data_dir, calibration_path=calibration_path))
+    asyncio.run(main(n_samples=n, seed=seed, parallel=parallel, skip_related_work=skip_related, skip_spark=skip_spark, skip_neutral=skip_neutral, balanced=balanced, data_dir=data_dir, calibration_path=calibration_path))
