@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 import sys
 
-SCALE = [1, 2, 4, 6, 8, 10]
+SCALE = [0, 2, 4, 6, 8, 10]
 
 def round_to_scale(x):
     return min(SCALE, key=lambda v: abs(v - x))
@@ -33,6 +33,21 @@ def analyze_and_plot(path):
     mae_rounded = np.mean(np.abs(pred_rounded - gt_avg))
     bias_raw = np.mean(pred - gt_avg)
 
+    # Weighted MAE: weight by inverse frequency of GT score bins
+    # Bins: [0,2), [2,4), [4,6), [6,8), [8,10]
+    bin_edges = [0, 2, 4, 6, 8, 10.01]
+    bin_labels = ["0-2", "2-4", "4-6", "6-8", "8-10"]
+    bin_indices = np.digitize(gt_avg, bin_edges) - 1
+    bin_indices = np.clip(bin_indices, 0, len(bin_labels) - 1)
+    bin_counts = np.bincount(bin_indices, minlength=len(bin_labels))
+    # Weight = 1/count for each bin (0 if bin is empty)
+    bin_weights = np.where(bin_counts > 0, 1.0 / bin_counts, 0.0)
+    sample_weights = bin_weights[bin_indices]
+    # Normalize so weights sum to 1
+    sample_weights = sample_weights / sample_weights.sum()
+    wmae_raw = np.sum(sample_weights * np.abs(pred - gt_avg))
+    wmae_rounded = np.sum(sample_weights * np.abs(pred_rounded - gt_avg))
+
     pred_dec = df["pred_decision"].fillna("N/A").str.strip().str.lower()
     gt_dec = df["gt_binary"].str.strip().str.lower()
     valid_dec_mask = ~pred_dec.isin(["n/a", ""])
@@ -56,7 +71,18 @@ def analyze_and_plot(path):
     print(f"  Pearson (raw):         {pe_raw:.4f}  (p={pe_raw_p:.4f})")
     print(f"  MAE (raw):             {mae_raw:.4f}")
     print(f"  MAE (rounded):         {mae_rounded:.4f}")
+    print(f"  Weighted MAE (raw):    {wmae_raw:.4f}")
+    print(f"  Weighted MAE (rounded):{wmae_rounded:.4f}")
     print(f"  Bias (pred-gt):        {bias_raw:+.4f}")
+    # Show bin breakdown
+    print(f"  {'─'*45}")
+    print(f"  Score bin weights (inverse freq):")
+    for i, label in enumerate(bin_labels):
+        if bin_counts[i] > 0:
+            bin_mask = bin_indices == i
+            bin_mae = np.mean(np.abs(pred[bin_mask] - gt_avg[bin_mask]))
+            print(f"    [{label}]: n={bin_counts[i]:>3}, MAE={bin_mae:.4f}")
+    print(f"  {'─'*45}")
     if valid_dec_mask.any():
         valid_decisions = int(valid_dec_mask.sum())
         print(f"  Decision accuracy:     {dec_match}/{valid_decisions} = {dec_match/valid_decisions:.1%}")

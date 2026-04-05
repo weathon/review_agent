@@ -14,6 +14,7 @@ import asyncio
 import csv
 import json
 import random
+import re
 import sys
 import time
 from collections import defaultdict
@@ -30,7 +31,7 @@ from paper_reviewer import (
     NEUTRAL_REVIEWER_PROMPT,
     SPARK_FINDER_PROMPT,
     _get_client,
-    run_merger,
+    run_merge,
     run_related_work_search,
     run_reviewer,
     sanitize_text,
@@ -42,7 +43,7 @@ from run_iclr_bench import load_ground_truth, DEFAULT_BENCH_DIR
 
 
 BORDERLINE_BINS = {5, 6}  # bins where accept/reject is hardest to distinguish
-BORDERLINE_EXTRA = 2      # extra papers per borderline bin
+BORDERLINE_EXTRA = 0      # extra papers per borderline bin
 CONCURRENCY = 14
 
 def sample_one_per_bin(papers: list[dict], seed: int) -> list[dict]:
@@ -59,7 +60,7 @@ def sample_one_per_bin(papers: list[dict], seed: int) -> list[dict]:
         if not bins[k]:
             continue
         # Take more from borderline bins
-        n_take = 2 + BORDERLINE_EXTRA if k in BORDERLINE_BINS else 1
+        n_take = 10 # + BORDERLINE_EXTRA if k in BORDERLINE_BINS else 1
         n_take = min(n_take, len(bins[k]))
         for j in range(n_take):
             samples.append(bins[k][j])
@@ -72,6 +73,7 @@ def sample_one_per_bin(papers: list[dict], seed: int) -> list[dict]:
 async def run_sub_agents_and_merger(
     paper_info: dict, paper_path: Path,
     parallel: bool = False, skip_spark: bool = False, skip_related_work: bool = False,
+    skip_neutral: bool = False,
 ) -> dict:
     """Run sub-agents + merger (no score). Return all outputs."""
     paper_content = paper_path.read_text(encoding="utf-8", errors="replace")
@@ -84,8 +86,9 @@ async def run_sub_agents_and_merger(
     if parallel:
         tasks = [
             run_reviewer(client, "harsh_critic", HARSH_CRITIC_PROMPT, pp, paper_content, MODEL_HARSH, venue="ICLR"),
-            run_reviewer(client, "neutral", NEUTRAL_REVIEWER_PROMPT, pp, paper_content, MODEL_NEUTRAL, venue="ICLR"),
         ]
+        if not skip_neutral:
+            tasks.append(run_reviewer(client, "neutral", NEUTRAL_REVIEWER_PROMPT, pp, paper_content, MODEL_NEUTRAL, venue="ICLR"))
         if not skip_spark:
             tasks.append(run_reviewer(client, "spark_finder", SPARK_FINDER_PROMPT, pp, paper_content, MODEL_SPARK, venue="ICLR"))
         if not skip_related_work:
@@ -94,7 +97,10 @@ async def run_sub_agents_and_merger(
         results_list = await asyncio.gather(*tasks)
         idx = 0
         harsh_review, _ = results_list[idx]; idx += 1
-        neutral_review, _ = results_list[idx]; idx += 1
+        if not skip_neutral:
+            neutral_review, _ = results_list[idx]; idx += 1
+        else:
+            neutral_review = ""
         if not skip_spark:
             spark_review, _ = results_list[idx]; idx += 1
         else:
@@ -105,7 +111,10 @@ async def run_sub_agents_and_merger(
             related_work = ""
     else:
         harsh_review, _ = await run_reviewer(client, "harsh_critic", HARSH_CRITIC_PROMPT, pp, paper_content, MODEL_HARSH, venue="ICLR")
-        neutral_review, _ = await run_reviewer(client, "neutral", NEUTRAL_REVIEWER_PROMPT, pp, paper_content, MODEL_NEUTRAL, venue="ICLR")
+        if not skip_neutral:
+            neutral_review, _ = await run_reviewer(client, "neutral", NEUTRAL_REVIEWER_PROMPT, pp, paper_content, MODEL_NEUTRAL, venue="ICLR")
+        else:
+            neutral_review = ""
         if not skip_spark:
             spark_review, _ = await run_reviewer(client, "spark_finder", SPARK_FINDER_PROMPT, pp, paper_content, MODEL_SPARK, venue="ICLR")
         else:
@@ -115,11 +124,14 @@ async def run_sub_agents_and_merger(
         else:
             related_work = ""
 
-    # Phase 2: Merger (review + score, but we only keep the review for calibration)
+    # Phase 2: Merger only (no scoring — calibration reviews must not be scored)
     print("  Running merger ...")
-    merged_review, _, _ = await run_merger(
+    merged_review, _ = await run_merge(
         client, harsh_review, neutral_review,
         spark_review, related_work, paper_content,
+        skip_neutral=skip_neutral,
+        skip_spark=skip_spark,
+        skip_related_work=skip_related_work,
     )
 
     return {
@@ -129,6 +141,16 @@ async def run_sub_agents_and_merger(
         "related_work": related_work,
         "merged_review": merged_review,
     }
+
+
+def shorten_title(title: str, max_len: int = 60) -> str:
+    """Turn a paper title into a safe, short filename (no extension)."""
+    # Lowercase, keep only alphanumeric and spaces, collapse whitespace
+    name = re.sub(r"[^a-z0-9 ]", "", title.lower())
+    name = re.sub(r"\s+", "_", name.strip())
+    if len(name) > max_len:
+        name = name[:max_len].rstrip("_")
+    return name or "untitled"
 
 
 def build_calibration_md(results: list[dict]) -> str:
@@ -146,9 +168,45 @@ def build_calibration_md(results: list[dict]) -> str:
     return "\n".join(parts)
 
 
+def save_calibration_files(results: list[dict], cal_dir: Path) -> None:
+    """Save each calibration example as a separate file in cal_dir."""
+    cal_dir.mkdir(exist_ok=True)
+    for i, r in enumerate(results, 1):
+        title = r.get("title", r["paper_id"])
+        filename = shorten_title(title) + ".md"
+        parts = []
+        parts.append(f"=== CALIBRATION EXAMPLE {i} ===\n")
+        if r.get("harsh_review"):
+            parts.append("# Harsh Critic Review")
+            parts.append(r["harsh_review"])
+            parts.append("")
+        if r.get("neutral_review"):
+            parts.append("# Neutral Reviewer")
+            parts.append(r["neutral_review"])
+            parts.append("")
+        if r.get("spark_review"):
+            parts.append("# Spark Finder Review")
+            parts.append(r["spark_review"])
+            parts.append("")
+        if r.get("related_work"):
+            parts.append("# Related Work Analysis")
+            parts.append(r["related_work"])
+            parts.append("")
+        parts.append("# Final Consolidated Review")
+        parts.append(r["merged_review"])
+        parts.append("")
+        parts.append("# Actual Human Scores")
+        parts.append(f"Individual reviewer scores: {r['scores']}")
+        parts.append(f"Average score: {r['avg_score']:.1f}")
+        parts.append(f"Binary outcome: {r['gt_binary']}\n")
+        (cal_dir / filename).write_text("\n".join(parts), encoding="utf-8")
+    print(f"Saved {len(results)} calibration files to: {cal_dir}")
+
+
 async def main(
     data_dir: str | None = None, seed: int = 42,
     parallel: bool = False, skip_spark: bool = False, skip_related_work: bool = False,
+    skip_neutral: bool = False,
 ):
     bench_dir = Path(data_dir) if data_dir else DEFAULT_BENCH_DIR
 
@@ -183,6 +241,7 @@ async def main(
                 outputs = await run_sub_agents_and_merger(
                     paper_info, paper_path,
                     parallel=parallel, skip_spark=skip_spark, skip_related_work=skip_related_work,
+                    skip_neutral=skip_neutral,
                 )
                 elapsed = time.time() - start
                 print(f"  [{pid}] Done in {elapsed:.1f}s (attempt {attempt})")
@@ -190,6 +249,7 @@ async def main(
                 return {
                     **outputs,
                     "paper_id": pid,
+                    "title": paper_info.get("title", pid),
                     "scores": paper_info["scores"],
                     "avg_score": paper_info["avg_score"],
                     "decision": paper_info["decision"],
@@ -225,11 +285,15 @@ async def main(
     if not results:
         raise RuntimeError("No calibration papers completed successfully.")
 
-    # Save calibration.md
+    # Save calibration.md (single file, kept for backward compat)
     cal_md = build_calibration_md(results)
     cal_path = Path(__file__).parent / "calibration.md"
     cal_path.write_text(cal_md, encoding="utf-8")
     print(f"\nCalibration doc saved to: {cal_path} ({len(cal_md):,} chars)")
+
+    # Save individual calibration files to cal/
+    cal_dir = Path(__file__).parent / "cal"
+    save_calibration_files(results, cal_dir)
 
     # Save calibration_ids.json
     ids = [r["paper_id"] for r in results]
@@ -252,6 +316,7 @@ if __name__ == "__main__":
     parallel = "--parallel" in sys.argv
     skip_spark = "--no-spark" in sys.argv
     skip_related = "--no-related-work" in sys.argv
+    skip_neutral = "--no-neutral" in sys.argv
     data_dir = None
     if "--data-dir" in sys.argv:
         idx = sys.argv.index("--data-dir")
@@ -259,4 +324,4 @@ if __name__ == "__main__":
             data_dir = sys.argv[idx + 1]
     args = [a for a in sys.argv[1:] if not a.startswith("--") and a != data_dir]
     seed = int(args[0]) if args else 42
-    asyncio.run(main(data_dir=data_dir, seed=seed, parallel=parallel, skip_spark=skip_spark, skip_related_work=skip_related))
+    asyncio.run(main(data_dir=data_dir, seed=seed, parallel=parallel, skip_spark=skip_spark, skip_related_work=skip_related, skip_neutral=skip_neutral))
