@@ -1,0 +1,2401 @@
+# A PRACTICAL AUDITING FRAMEWORK FOR WORLD MODELS: GEOMETRY, EQUIVARIANCE, AND IDENTI
+## FIABILITY
+
+
+**Anonymous authors**
+Paper under double-blind review
+
+
+ABSTRACT
+
+
+Representation learning for model-based RL offers sample efficiency but raises
+a critical auditing question: which properties of a learned representation actually
+govern downstream performance, and how can we verify them without expensive retraining? We propose a practical auditing framework based on a sufficient
+stability bound that decomposes the suboptimality gap into three verifiable channels: geometric distortion _κ_, identifiability (proxied by Total Correlation), and
+symmetry violation (proxied by Local Equivariance Error). Crucially, this bound
+serves as a safety condition rather than a linear predictor, explicitly anchoring
+error scaling to MDP Lipschitz constants. To interpret these components, we
+provide two mechanistic perspectives: a quotient-space Johnson–Lindenstrauss
+argument explains how equivariance reduces effective dimensionality, and a geometry–equivariance trade-off quantifies why non-isometric actions inevitably increase distortion. Building on this theory, we propose a lightweight diagnostic
+protocol that audits existing checkpoints. Using a single calibrated constant _β_,
+our framework consistently covers the performance gap across training trajectories, offering a principled _auditing_ tool distinct from architectural _design_ . On
+DreamerV3 world models, these diagnostics are reproducible, require no retraining, and demonstrate that structural stability bounds can effectively flag failure
+modes even when simple correlation metrics fail.
+
+
+1 INTRODUCTION
+
+
+Learning actionable world representations is a central lever for sample-efficient RL. Yet despite
+strong empirical progress, it remains hard to explain _why_ a given representation helps or hurts control. Practitioners often rely on indirect proxies like reconstruction error, but these metrics lack a
+causal link to the downstream value estimation error.
+
+
+Classical analyses attempt to bridge this gap but often sit at two extremes: strict behavioral equivalence (Bisimulation) is too restrictive, while one-step prediction objectives (DeepMDP) lack global
+stability guarantees (Ferns et al., 2011; Gelada et al., 2019). Meanwhile, Lipschitz arguments provide clean scaling laws but offer few practitioner-ready diagnostics (Asadi et al., 2018). We seek
+a middle ground: a sufficient upper bound on performance loss that is both theoretically grounded
+and empirically verifiable on off-the-shelf checkpoints.
+
+
+We demonstrate that the suboptimality gap is bounded by three verifiable structural channels, each
+with a clear intuitive mechanism: (1) **Geometric Distortion (** _κ_ **)** : Excessive stretching or collapsing
+of the latent space violates the physical Lipschitz continuity, leading to unstable value propagation. (2) **Identifiability Gap (TC)** : Failure to disentangle independent factors confounds the reward
+prediction, introducing irreducible bias. (3) **Symmetry** **Violation** **(LEE)** : Failure to respect task
+symmetries (e.g., rotation) causes inconsistency in long-term planning. Our bound makes the dependencies on MDP Lipschitz moduli explicit and recovers DeepMDP/bisimulation-style guarantees
+as special cases.
+
+
+To operationalize this theory, we propose a practical auditing framework. We emphasize the distinction between _sufficiency_ and _correlation_ : a sufficient bound aims for **Coverage** (guaranteeing safety
+below a threshold) rather than linear prediction. Thus, our diagnostic protocol focuses on finding a
+
+
+1
+
+
+Figure 1: **Conceptual** **overview.** One assumption (MDP Lipschitz regularity with _γLP_ _<_ 1) and
+three verifiable channels (geometry _κ_, equivariance _LF_ via LEE, identifiability _δ_ id via TC) jointly
+yield a _sufficient_, natural-scale upper bound.
+
+
+single conservative constant _β_ that covers the performance gap across the entire training trajectory.
+This perspective shifts the goal from finding the metric with the highest correlation (which might
+just be a symptom) to establishing a reliable safety margin based on structural causes.
+
+
+Two mechanism theorems further ground our proxies. First, we provide an intuitive quotientspace Johnson–Lindenstrauss perspective to explain how equivariance reduces effective dimensionality (Baraniuk & Wakin, 2009). Additionally, we derive a geometry–equivariance trade-off, showing that strict equivariance to non-isometric actions forces geometric distortion (Kondor & Trivedi,
+2018). These effects explain why proxy metrics may drift during training not due to noise, but due
+to fundamental structural conflicts. Our main contributions are summarized as follows:
+
+
+1. **Natural-scale** _**sufficient**_ **stability bound.** We prove that the suboptimality gap is controlled by
+geometric distortion _κ_, identifiability (TC proxy), and equivariance defect (LEE proxy), with
+explicit Lipschitz/ _γ_ dependence.
+
+
+2. **Mechanistic** **insights** **for** **proxy** **behavior.** We provide (i) a quotient-space JL perspective on
+dimension reduction and (ii) a trade-off lower-bounding distortion under non-isometric actions.
+
+
+3. **A** **practical** **auditing** **framework.** We instantiate a diagnostic protocol on existing DreamerV3 (Hafner et al., 2023) checkpoints with zero retraining. Our results show that a single
+calibrated constant successfully covers the performance gap, validating the sufficiency-based
+auditing view.
+
+
+2 THEORETICAL ANALYSIS
+
+
+2.1 PRELIMINARIES
+
+
+**Structural Motivation.** We define the underlying MDP _M_ = (S _,_ A _, P, r, γ_ ) to anchor our stability
+analysis to the ground-truth physical dynamics. The core challenge in world modeling is learning
+an encoder _ϕ_ : X _→_ Z that maps high-dimensional observations _x ∈_ X to a low-dimensional latent
+metric space (Z _, dZ_ ). However, this dimension reduction inevitably introduces _geometric distortion_ .
+As we will show, this distortion is a root cause of downstream failures: it confounds independent
+factors (hurting identifiability) and breaks structural symmetries (hurting equivariance). Therefore,
+we require the following definitions to quantify these structural violations against the ground truth.
+
+
+**Lipschitz** **Regularity.** We assume the existence of a task-relevant pseudometric _dS_ on S (e.g.,
+bisimulation metric (Ferns et al., 2011)). The MDP dynamics and reward are assumed to be Lipschitz continuous _with_ _respect_ _to_ _dS_, with constants _LP_ (for the transition kernel) and _Lr_ (for the
+reward). We assume _γLP_ _<_ 1, ensuring the value function is Lipschitz continuous over S (Asadi
+et al., 2018). This regularity determines the constant dependencies in our main bound.
+
+
+**Evaluation distribution and Verifiability.** To make the bound verifiable, we fix a reference distribution _µ_ on the observation space X (e.g., the empirical dataset or a replay buffer). All statistical
+terms, such as Total Correlation (TC) and Local Equivariance Error (LEE), are defined as expectations under this _µ_ .
+
+
+2
+
+
+Figure 1 outlines our framework: under the structural assumption of Lipschitz regularity, the suboptimality gap is controlled by three verifiable channels—geometric distortion _κ_, equivariance defect
+_LF_, and identifiability gap _δ_ id.
+
+
+2.2 VERIFIABLE DEFINITIONS OF THREE BIAS CATEGORIES
+
+
+2.2.1 GEOMETRIC DISTORTION _κ_
+
+
+**Definition 2.1** (Bi-Lipschitz distortion) **.** ( _L, L_ _[′]_ ) _are the bi-Lipschitz constants of ϕ if_
+
+_L_ _[′]_ _dS_ ( _s_ 1 _, s_ 2) _≤_ _dZ_ ( _ϕ_ ( _s_ 1) _, ϕ_ ( _s_ 2)) _≤_ _L dS_ ( _s_ 1 _, s_ 2) + _b,_ _∀s_ 1 _, s_ 2 _._
+
+
+_On bounded sets we absorb b into L; we denote the upper constant by κ_ := _L._
+
+
+_Remark._ Exact computation of the bi-Lipschitz ratio (condition number _L/L_ _[′]_ ) is generally intractable; we thus use the upper constant _κ_ (estimated via spectral-norm products (Virmaux & Scaman, 2018; Fazlyab et al., 2019)) as a conservative proxy. A large _κ_ indicates **geometric instability** :
+theoretically, this reflects a poor condition number arising from either excessive separation (stretching) or state collapse (aliasing/folding), both of which degrade control.
+
+
+2.2.2 IDENTIFIABILITY PROXY _δ_ id VIA TOTAL CORRELATION
+
+
+**Definition 2.2** (Total correlation) **.** _For Z_ = _ϕ_ ( _X_ ) _under µ,_
+
+
+TC captures latent dependence and appears in the ELBO decomposition of _β_ -TCVAE (Chen et al.,
+2018); it is a practical proxy for identifiability. In regimes with auxiliary information, identifiability can be established (e.g., Nonlinear ICA (Hyvarinen & Morioka, 2016; Hyvarinen et al.,
+2019)/VAEs (Khemakhem et al., 2020)); in the purely unsupervised setting, impossibility results (Locatello et al., 2019) warn against over-claims. We formalize a bridge from TC to _δ_ id in
+Lemma A.2 and cite both positive and negative results in Appendix A.4. Here, _Zi_ denotes the _i_ -th
+dimension of the latent vector _Z_ .
+2.2.3 EQUIVARIANCE DEFECT _LF_ AND LOCAL EQUIVARIANCE ERROR (LEE)
+
+
+Ideally, symmetries in S (e.g., translation) should map to symmetries in Z. Let _G_ be a symmetry group acting on S via _Tg_ and on Z via _ρg_ . The theoretical defect is defined as _LF_ :=
+sup _s,g dZ_ ( _ϕ_ ( _Tgs_ ) _, ρgϕ_ ( _s_ )). To estimate this locally without ground-truth states, we define a
+tractable proxy:
+**Definition** **2.3** (Local Equivariance Error) **.** _For_ _a_ _generator_ _(infinitesimal_ _action)_ g _∈_ g _Lie_ _of_ _the_
+_group, the Local Equivariance Error is the mismatch between the Lie derivative of the encoder and_
+_the latent vector field:_
+LEE( _ϕ_ ) := E _x∼µ_ [ _∥L_ g _ϕ_ ( _x_ ) _−_ _ρ_ g _ϕ_ ( _x_ ) _∥dZ_ ] _._
+
+
+We bridge this local proxy to the global theoretical defect _LF_ via a stability argument: the Lie
+derivative measures the deviation under infinitesimal transformations, which acts as a drift term.
+By integrating this drift along geodesic paths (using Gr¨onwall’s inequality, derived in Lemma A.4),
+we bound the global equivariance error, ensuring that minimizing LEE constrains the worst-case
+symmetry violation.
+
+2.3 MAIN THEOREM
+
+**Assumption 2.4** (Abstract MDP and Lifting) **.** _Let the abstract MDP be_ _M_ [˜] _ϕ_ = (Z _,_ A _,_ _P,_ [˜] ˜ _r, γ_ ) _._ _We_
+_assume:_ _(1)_ _The_ _policy_ _π_ _on_ _M_ _is_ _the_ lift _of_ _an_ _abstract_ _policy_ _π_ ˜ _:_ _π_ ( _a|s_ ) = _π_ ˜( _a|ϕ_ ( _s_ )) _._ _(2)_ _The_
+_optimal value function of the abstract MDP,_ _V_ [˜] _[∗]_ _, is LV_ ˜ _-Lipschitz continuous with respect to dZ_ _._
+**Theorem 2.5** (Sufficient stability bound) **.** _Under Assumption 2.4 and Lipschitz constants_ ( _LP, Lr_ ) _,_
+_suppose_ _the_ _proxies_ _satisfy_ _the_ _bounding_ _conditions_ _δ_ id _≤_ _A_ TC TC( _Z_ ) _and_ _LF_ _≤_ _A_ LEE LEE _._
+_Then, the suboptimality gap is bounded by:_
+
+_|JM_ ( _π_ ) _−_ _JM_ ( _π_ _[∗]_ ) _| ≤_ _[β]_ [nat]
+
+1 _−_ _γ_ [(] _[κ]_ [ + TC(] _[Z]_ [) + LEE)] _[ .]_
+
+
+3
+
+
+_._
+
+
+TC( _Z_ ) := _D_ KL
+
+
+_p_ ( _Z_ ) ���
+
+
+_p_ ( _Zi_ )
+
+_i_
+
+
+_Here, β_ nat _is a unified scaling factor that absorbs the per-channel coefficients._ _Theoretically, each_
+_coefficient linearly depends on the MDP Lipschitz moduli_ ( _LP, Lr_ ) _and is amplified by the discount_
+_factor_ _γ_ _(derived_ _in_ _Appendix_ _A.2,_ _Eq._ _4)._ _Additionally,_ _β_ nat _accounts_ _for_ _the_ _distribution_ _shift_
+_between the training distribution µ and the policy’s stationary distribution._
+
+
+**Constants and calibration (natural-scale, fixed for reproducibility).** We fix a per-channel preprocessing (percentile clipping at 5–95% followed by min–max scaling) and set unit weights so that
+the theoretical RHS is _κ_ + TC( _Z_ ) + LEE. A single scalar _β_ is then _calibrated_ on an early checkpoint window (e.g., 50k–500k) as the minimal coverage constant (and its quantiles), and _held fixed_
+for validation on held-out checkpoints. Small _ε_ guards are used in denominators to avoid division
+by zero.
+**Interpretation.** This is a _sufficient_ upper bound in natural scale, as the target is coverage (the
+existence of a conservative _β_ that upper-bounds all points), not linear fit. The bridges absorb proxy
+looseness into _β_, while the calibration/validation split prevents post-hoc fitting. This framing turns
+the bound into a practical diagnostic: a small, stable _β_ implies that the chosen proxies robustly track
+performance, even if the bound is not tight.
+
+
+2.4 MECHANISTIC INTERPRETATIONS
+
+
+2.4.1 DIMENSION REDUCTION VIA QUOTIENT MANIFOLD JL
+
+
+We provide an _intuitive_ _perspective_ on how equivariance improves sample efficiency by invoking
+the Manifold Johnson–Lindenstrauss lemma (Baraniuk & Wakin, 2009). Intuitively, if the task
+dynamics depend only on the abstract state modulo symmetry (the quotient space S _/G_ ), theory
+suggests that the required embedding dimension scales with the covering number of the quotient
+rather than the full space. This offers a mechanistic explanation for why enforcing equivariance
+can mitigate the curse of dimensionality, serving as a structural regularization rather than a hard
+constraint derived from our main bound.
+
+
+2.4.2 GEOMETRY–EQUIVARIANCE TRADE-OFF
+
+
+Let _DS_ ( _g_ ) := sup _x_ = _y_ _ddSS_ ( _gx,gy_ ( _x,y_ ) ) and similarly _DZ_ ( _ρz_ ( _g_ )). If _ϕ_ is _G_ -equivariant, its condition
+
+number satisfies (derivation provided in Appendix C.4):
+
+
+For non-isometric actions in _S_ but near-isometric actions in _Z_, strict equivariance forces geometric
+distortion, i.e., _L/L_ _[′]_ _>_ 1. _Practical check (Crafter)._ We approximate small group elements using
+the micro transforms fixed in §3.1 (rot. _±_ 5 _[◦]_, trans. _±_ 1 px, iso. scale _×_ [0 _._ 95 _,_ 1 _._ 05]) and compute
+LEE at latent _Z_ via finite differences. Whenever we empirically observe _DS_ ( _g_ ) _> DZ_ ( _ρz_ ( _g_ )) systematically, the lower bound above implies that enforcing strict equivariance increases the geometric
+condition number, which aligns with the trend in Fig. 7.
+
+
+2.5 RELATIONS TO PRIOR FRAMEWORKS
+
+
+Table 1 contrasts our sufficient bound with prior art.
+
+
+- **Bisimulation:** Requires exact equivalence ( _κ_ = 1 _, LF_ = 0), yielding a tight but hard-to-satisfy
+condition (Ferns et al., 2011).
+
+- **DeepMDP:** Bounds performance via one-step prediction errors. This is a sufficient condition like
+ours, but often looser due to recursive error accumulation (Gelada et al., 2019).
+
+- **Information Bottleneck:** Focuses on TC (compression) but ignores geometric stability required
+for control ( _κ_ ), posing a risk of over-compression (Alemi et al., 2016).
+
+
+3 EXPERIMENTS
+
+
+3.1 DIAGNOSTIC PROTOCOL: A PRACTICAL AUDITING FRAMEWORK
+
+
+To translate our theoretical insights into a practical tool for practitioners, we propose a lightweight
+diagnostic protocol designed for auditing existing world model checkpoints. This framework, vi
+
+4
+
+
+_L_
+_L_ _[′]_ _[≥]_ _g_ [sup] _∈G_
+
+
+_DS_ ( _g_ )
+_DZ_ ( _ρz_ ( _g_ )) _[.]_
+
+
+Table 1: Comparison of stability conditions. Our bound combines geometric, information-theoretic,
+and equivariant views into a single sufficient condition.
+
+
+Framework Bound Type Geom. _κ_ Info/TC Equiv. _LF_ /LEE
+
+
+This work Sufficient ✓ ✓ ✓
+Bisimulation Exact (Tight) Implicit (1)     -     DeepMDP Sufficient Implicit    - ✓(via dynamics)
+IB/VIB Loose (Info only)     - ✓     
+
+sualized in Figure 3, requires no model retraining and operates directly on saved model states and
+replay buffers, ensuring low overhead. The auditing framework follows a systematic procedure:
+
+1. **Data** **Extraction:** Latent features _Z_ are extracted from batches of observations _X_ using
+the checkpoint’s encoder _ϕ_ .
+
+2. **Proxy** **Calculation:** The three stability channels ( _κ_, TC, LEE) are computed in parallel
+using verifiable proxies (detailed in the Metric Implementation Protocol in Sec 3.2).
+
+3. **Calibration** **and** **Validation:** The aggregated RHS ( _κ_ + TC + LEE) is calculated. To
+achieve _Empirical_ _Auditability_, the scaling constant _β_ is calibrated on an early training
+window (e.g., 50k-500k steps) and then _held fixed_ for validation on later checkpoints.
+
+4. **Audit Report Generation:** The protocol outputs diagnostic plots, primarily the Bound-vsGap plot (Figure 5), assessing the coverage and statistical consistency of the bound.
+
+
+This approach facilitates reproducible and interpretable assessment of representation quality with
+minimal computational cost. For instance, computing the three proxies for a single checkpoint
+requires approximately 2 hours on a single GPU, which is orders of magnitude faster than the full
+model training (typically _>_ 24 hours).
+
+
+3.2 SETUP
+
+
+**Agent/Data.** DreamerV3 Hafner et al. (2023) on CRAFTER Hafner (2021) with 10 checkpoints at
+steps _{_ 50k _,_ 100k _, . . .,_ 500k _}_, and each checkpoint was evaluated on 5 _,_ 000 observations.
+
+
+**Measured** **Performance** **Gap.** To enable consistent auditing across different reward scales, we
+define the empirical performance gap based on the observed training trajectory. Let _T_ be the set of
+evaluated checkpoints (e.g., _{_ 50k _, . . .,_ 500k _}_ ) and _J_ ( _πt_ ) be the episode return at step _t_ . We approximate the optimal performance _J_ ( _π_ _[∗]_ ) using the best observed checkpoint _J_ max = max _t∈T_ _J_ ( _πt_ ).
+
+
+Proxy Metrics vs Performance Correlation
+
+
+Figure 2: **Correlation diagnostics.** Spearman (Spearman, 1987) _ρ_ between each metric and performance across checkpoints (bars: point estimates; whiskers: bootstrap 95% CIs (block length = 2,
+_B_ =1000) (K¨unsch, 1989; Politis & Romano, 1994)). We include the proposed proxies ( _κ_, LEE, TC)
+and baselines (one-step MSE, recon MSE, reward MAE).
+
+
+5
+
+
+where _ϵ_ =10 _[−]_ [3] is a shrinkage parameter for numerical stability. This provides a closed-form upper
+bound on the independence gap assuming a locally Gaussian structure.
+
+
+- **Equivariance Defect (LEE):** We compute LEE via _symmetric finite differences_ on the input space
+using ‘torchvision‘ affine transforms. For a generator g and step size _ϵ_, we compute LEE =
+21 _ϵ_ _[∥][ϕ]_ [(] _[T][ϵ][x]_ [)] _[ −]_ _[ϕ]_ [(] _[T][−][ϵ][x]_ [)] _[∥]_ [2][.] [The] [specific] [perturbation] [magnitudes] [are] [fixed] [as:] [(i)] _[Rotation:]_ _[±]_ [5] _[◦]_
+( _ϵ_ _≈_ 0 _._ 087 rad); (ii) _Translation:_ _±_ 1 pixels; (iii) _Scale:_ 1 _._ 0 _±_ 0 _._ 05 (5% scaling). Padding for
+geometric transformations is handled via zero-filling.
+
+
+3.3 METRICS–VS–PERFORMANCE CORRELATION
+
+
+6
+
+
+Figure 3: The pipeline of the Practical Auditing Framework.
+
+
+The **Measured Performance Gap** at step _t_ is defined as the range-normalized regret:
+
+Gap _t_ = _[J]_ _J_ [max] max _[ −]_ _−_ _[J]_ _J_ [(] min _[π][t]_ [)] _,_ (1)
+
+
+where _J_ min = min _t∈T_ _J_ ( _πt_ ). This normalization maps the gap to [0 _,_ 1], where 0 corresponds to the
+best-performing agent and 1 to the worst. The calibration constant _β_ in our protocol thus absorbs
+both the theoretical constants (e.g., Lipschitz moduli) and this empirical normalization factor.
+
+
+**Metric Implementation Protocol.** To ensure reproducibility and low overhead, we implement the
+three stability channels using verifiable numerical proxies computed directly on checkpoint batches
+without training auxiliary networks.
+
+
+- **Geometric** **Distortion** **(** _κ_ **):** We approximate the bi-Lipschitz constant using a method inspired
+by (Virmaux & Scaman, 2018). For each input _x_, we sample _N_ =128 unit vectors _v_ _∼N_ (0 _, I_ )
+and approximate the Jacobian-Vector Product (JVP) via forward finite differences ( _ϵ_ =10 _[−]_ [3] ). We
+estimate the local spectral bounds as _σ_ max _≈_ max _k ∥Jxvk∥_ 2 and _σ_ min _≈_ min _k ∥Jxvk∥_ 2. The
+distortion is aggregated as _κ_ = E _x_ [ _σ_ max( _x_ ) _/_ ( _σ_ min( _x_ ) + _ϵ_ stab)] with _ϵ_ stab=10 _[−]_ [8] .
+
+
+- **Identifiability (Total Correlation):** Instead of training a computationally expensive discriminator
+density-ratio estimator (as in _β_ -TCVAE), we employ a _Gaussian Total Correlation estimator with_
+_shrinkage_ for efficient auditing. Given a batch of latent codes _Z_ _∈_ R _[B][×][D]_, we estimate:
+
+
+TC( _Z_ ) _≈_
+
+
+_D_
+
+- log Var( _Zj_ ) _−_ log det(Cov( _Z_ ) + _ϵI_ ) _,_
+
+
+_j_ =1
+
+
+**Interpreting Correlations under the Stability Bound.** We emphasize that our theoretical framework (Theorem 2.5) provides a _sufficient_ upper bound. This distinction is crucial for interpreting the
+observed correlations (Figure 2). A sufficient bound guarantees that a small Right-Hand Side (RHS)
+implies a small performance gap, but the converse is not true; a large RHS may still correspond to a
+small gap if the bound is loose (conservative).
+
+
+Therefore, the primary goal of our empirical validation is to demonstrate _Coverage_ (the bound consistently lies above the gap, as shown in Figure 5), rather than high correlation. The weak or negative
+correlations observed for some proxies (e.g., _κ_ or TC) do not contradict the theory.
+
+
+**Deeper Analysis via Control Experiments.** While sufficiency explains why weak correlations are
+permissible, we conducted a control experiment to gain deeper insight into the underlying dynamics,
+specifically regarding Total Correlation (TC). We hypothesized that the observed correlations might
+arise from the complex interplay between representation compression and task performance.
+
+
+In this experiment (detailed in Appendix C.1, Figure 9), we retrained models with an explicit penalty
+term to artificially enforce lower TC. We found a non-monotonic relationship: aggressive compression (very low TC) initially improved performance but eventually caused it to degrade significantly
+in the later stages of training. This suggests that over-compression, while reducing the RHS of the
+bound, can harm task-relevant information retention. This offers a deeper, mechanistic explanation
+for the complex correlation patterns observed in the uncontrolled training runs.
+
+
+7
+
+
+We first used rank/monotone correlation as
+trend-level evidence, but our primary validation
+was coverage. **Observation.** On CRAFTER,
+one ~~s~~ tep mse showed the strongest positive correlation ( _ρ_ _≈_ 0 _._ 88), followed by
+LEE/Jacobian summaries ( _ρ_ _≈_ 0 _._ 8), while _κ_
+was negatively correlated. This pattern was
+consistent with our sufficiency view. Crucially,
+while predictive metrics like one-step MSE
+track performance, they serve primarily as _out-_
+_come_ _indicators_ (symptoms). In contrast, our
+structural proxies ( _κ_, TC, LEE) function as _di-_
+_agnostic tools_ (causes), identifying _why_ the representation fails—whether due to geometric instability, aliasing, or symmetry breaking.
+
+
+**Rank** **Consistency** Kendall _τ_ =0 _._ 54 and
+Spearman _ρ_ =0 _._ 68 with dependent-data CIs
+(block length = 2, _B_ =1000). We use these
+rank metrics only as trend-level evidence; the
+primary validation of our sufficient bound is
+coverage in Fig. 5.
+
+
+**•** **Geometry** **(** _κ_ **&** **Jacobian** **spectrum).** _κ_
+(mean/median/p90) and singular-value summaries flatten after _∼_ 250k steps, indicating that
+geometric constants stabilize early in training.
+
+
+**•** **Equivariance** **proxy** **(LEE).** Rotation/translation/scale LEE show a smooth
+mid–late training trend under our sign convention; we therefore report raw values
+without interpreting the sign as “good” or
+“bad” (Gruver et al., 2022).
+
+
+Figure 4: **Rank** **consistency** **with** **block-**
+**bootstrap** **CIs.** Kendall _τ_ = 0 _._ 539
+
+[ _−_ 0 _._ 056 _,_ 0 _._ 951] and Spearman _ρ_ = 0 _._ 675
+
+[ _−_ 0 _._ 106 _,_ 0 _._ 988], computed across checkpoints
+(block length 2, _B_ = 1000).
+
+
+Table 2: **Scale factors** _β_ (natural scale). _β_ fit@origin
+is the slope of _y_ = _βx_ fitted through the origin;
+_βq_ % is the smallest _β_ covering _q_ % points; _β_ _[⋆]_ covers all points. On _R_ [2] We report the fit-throughorigin slope and _R_ [2] for completeness, but the objective is coverage, not linear predictivity; a sufficient bound requires a single conservative _β_, not a
+high _R_ [2] .
+
+
+Factor Value Note
+
+
+_β_ fit@origin 0 _._ 01 _R_ [2] =0 _._ 07
+_β_ 50% 0 _._ 01 Median coverage
+_β_ 90% 0 _._ 09 90% coverage
+_β_ _[⋆]_ 0 _._ 11 Cover all points
+
+
+1.0
+
+0.8
+
+0.6
+
+0.4
+
+0.2
+
+0.0
+
+
+**•** **Identifiability** **proxy** **(TC)** **and** **link** **to** **the** (block length 2, _B_ = 1000).
+**bound.** TC increases in the later phase as latent
+coordinates specialize. Together with the stabilization of _κ_, this explains why a single conservative
+scale _β_ _[⋆]_ can cover all checkpoints: once geometry has settled, residual variation of the RHS is
+governed mainly by LEE/TC and varies more smoothly than raw returns.
+
+
+Calibration on Early Checkpoints (50k-500k steps)
+
+
+Theoretical RHS (Normalized)
+
+
+Figure 6: **Ablation and control experiments for the bound’s components.** ( _Left_ ) Removing any
+single proxy ( _κ_, TC, or LEE) reduces the **coverage** **fraction**, indicating complementary coverage
+contributions under the sufficiency view. ( _Right_ ) Permutation test: the observed _β_ _[⋆]_ (red line) lies
+in the extreme lower tail of the null distribution, supporting that the alignment is not explained by
+random pairing.
+
+
+3.4 BOUND VS. MEASURED PERFORMANCE GAP
+
+
+3.5 ABLATIONS AND CONTROLS
+
+
+**Leave-one-term-out (Quantitative Necessity).** We quantified the contribution of each proxy by
+removing them individually from the RHS. While the full bound achieves **100% coverage** on validation checkpoints, removing the geometric proxy ( _κ_ ) caused the coverage to drop to **70%** (Figure 6,
+Middle). Similarly, omitting TC or LEE reduced coverage to **60%** and **80%** respectively. Furthermore, to maintain full coverage without the geometric term, the calibration constant _β_ _[⋆]_ would need
+to inflate by a factor of **over** **40** _×_ (Figure 6, Left). These margins confirm that no single proxy is
+redundant; all three channels are structurally necessary to constrain the suboptimality gap.
+
+
+**Random RHS Permutation (Statistical Significance).** To rule out spurious alignment, we generated a null distribution for _β_ _[⋆]_ by randomly shuffling the pairings between measured performance
+gaps and computed RHS values ( _B_ = 1000 permutations). As shown in Figure 6 (Right), the calibrated _β_ _[⋆]_ = 0 _._ 11 lies at the extreme tail, well **outside the 99th percentile** of the null distribution
+
+
+8
+
+
+Validation on a Held-out Late Checkpoint (3.5M steps)
+
+
+Theoretical RHS (un-normalized, natural-scale)
+
+
+Figure 5: **Calibration and validation of the theoretical bound.** ( _Left_ ) On the early training window
+(50k–500k steps), we visualize the relationship between the normalized theoretical RHS and the
+normalized performance gap (percent axes, normalized to the calibration-window maxima). While
+the uncalibrated bound ( _y_ = _x_, _dashed line_ ) is loose, a single conservative scaling factor, _β_ _[⋆]_ _≈_ 0 _._ 11,
+is sufficient to form a tight upper bound ( _purple line_ ) for all points in the calibration set. ( _Right_ ) To
+test for generalization, we apply the **same** factor _β_ _[⋆]_ = 0 _._ 11 to the un-normalized, natural-scale data.
+The resulting bound ( _orange line_ ) successfully covers the held-out 3.5M-step checkpoint ( _red star_ ),
+confirming that the calibrated bound generalizes to late-stage training.
+
+
+RHS - _k_ RHS - tc RHS - lee RHS - _k_ RHS - tc RHS - lee
+
+
+Figure 7: **Temporal profiles.** Nine panels track key metrics during training. Note the varying scales
+of the y-axes, reflecting the raw, un-normalized values of each metric (e.g., spectral norms for _κ_
+are in thousands, while LEE is order-one). A transition appears around 200k–300k steps where
+spectrum summaries stabilize while LEE/TC exhibit monotone trends under our sign convention.
+
+
+( _p_ _<_ 0 _._ 001). This quantitative gap indicates that the observed alignment between our structural
+proxies and performance is statistically significant and distinct from random scaling artifacts.
+
+
+**Limitations (Explicit).** Small _N_ and temporal dependence widen CIs; AutoLip-style _κ_ is a conservative upper bound; TC estimation depends on density surrogates. Crucially, all these biases tend
+to _inflate_ the RHS, which maintains the validity of a _sufficient_ upper bound (safety condition), even
+if tight equality is not achieved.
+
+
+Our findings show that a single conservative scale _β_ _[⋆]_ upper-bounds all measured gaps (Fig. 5).
+Furthermore, rank consistency is positive at the trend level with block-bootstrap uncertainty (Fig. 4),
+and the temporal profiles align with the mechanism suggested by theory (Fig. 7). Using the same
+natural-scale protocol, we obtained _β_ 50% = 0 _._ 0047, _β_ 90% = 0 _._ 0103, and _β_ _[∗]_ = 0 _._ 0108, with all
+checkpoints lying below _y_ = _β_ _[∗]_ _x_ . See Appendix Fig. 8 for results on percent axes, where both axes
+are normalized to the _calibration-window_ maxima.
+
+
+4 RELATED WORK
+
+
+**Evaluating World Model Representations.** While latent world models have achieved significant
+success (Hafner et al., 2019; 2020; 2023), evaluating their representation quality remains a challenge. Existing approaches predominantly rely on outcome-based metrics like reconstruction error
+or one-step prediction error (e.g., DeepMDP (Gelada et al., 2019)). However, these metrics serve as
+indirect proxies without explicit stability guarantees for the downstream control policy. Our work
+bridges this gap by proposing a stability-aware auditing framework that decomposes the suboptimality gap into verifiable structural properties.
+
+
+9
+
+
+Kappa p90 over Training
+
+
+100K 200K 300K 400K 500K
+Training Step
+
+
+LEE Rotation over Training
+
+
+100K 200K 300K 400K 500K
+Training Step
+
+
+TC over Training
+
+
+100K 200K 300K 400K 500K
+Training Step
+
+
+Kappa p50 over Training
+
+
+100K 200K 300K 400K 500K
+Training Step
+
+
+Sigma Min LB Mean over Training
+
+
+100K 200K 300K 400K 500K
+Training Step
+
+
+LEE Scale over Training
+
+
+100K 200K 300K 400K 500K
+Training Step
+
+
+2.2
+
+
+2.1
+
+
+2.0
+
+
+1.9
+
+
+1.8
+
+
+1.7
+
+
+1.6
+
+
+0.47
+
+
+0.46
+
+
+0.45
+
+
+0.44
+
+
+0.43
+
+
+0.42
+
+
+130
+
+
+120
+
+
+110
+
+
+100
+
+
+90
+
+
+80
+
+
+1.8
+
+
+1.7
+
+
+1.6
+
+
+1.5
+
+
+6500
+
+
+6250
+
+
+6000
+
+
+5750
+
+
+5500
+
+
+5250
+
+
+1.4
+
+
+1.3
+
+
+1.2
+
+
+1.1
+
+
+Kappa Mean over Training
+
+
+100K 200K 300K 400K 500K
+Training Step
+
+
+Sigma Max Mean over Training
+
+
+100K 200K 300K 400K 500K
+Training Step
+
+
+LEE Translation over Training
+
+
+100K 200K 300K 400K 500K
+Training Step
+
+
+1.8
+
+
+1.7
+
+
+1.6
+
+
+1.5
+
+
+4500
+
+
+4000
+
+
+3500
+
+
+3000
+
+
+48
+
+
+47
+
+
+46
+
+
+45
+
+
+44
+
+
+43
+
+
+**Unified** **Stability** **Perspective.** Classical frameworks connect representation geometry to value
+preservation. Bisimulation metrics (Ferns et al., 2011; Givan et al., 2003) require exact behavioral
+equivalence, often leading to overly strict conditions. Lipschitz-based analyses (Asadi et al., 2018)
+provide smoother bounds but lack practitioner-ready diagnostics. Our sufficient bound unifies these
+perspectives: it specifically recovers the strict Bisimulation condition in the limit where geometric
+distortion vanishes ( _κ_ _→_ 1) and the equivariance defect is zero ( _LF_ _→_ 0). By making the dependencies on Lipschitz constants and discount factors explicit, we offer a generalized view that allows
+for trade-offs between geometry and symmetry.
+
+
+**Equivariance: Design vs. Auditing.** Extensive literature focuses on _designing_ equivariant architectures (e.g., Group CNNs (Cohen & Welling, 2016)) to enforce symmetry ex ante (Kondor & Trivedi,
+2018). In contrast, our work focuses on _post-hoc_ _auditing_ . We treat the learned world model as a
+black box and diagnose whether it implicitly respects task symmetries (via the LEE proxy (Gruver
+et al., 2022)) without imposing architectural constraints. This distinction is akin to the difference
+between “performing surgery” (altering the model structure) and “conducting a health check” (diagnosing the learned state).
+
+
+**Identifiability** **and** **Disentanglement.** While disentangled representations are desirable for interpretability, theory suggests that fully unsupervised identification of ground-truth factors is impossible without inductive biases (Locatello et al., 2019). Acknowledging this limitation, we do not
+claim to recover unique causal factors. Instead, we employ Total Correlation (TC) (Chen et al.,
+2018; Watanabe, 1960) as a practical heuristic to monitor the _trend_ of latent independence, serving
+as a necessary (though not sufficient) condition for compact and structured representations.
+
+
+5 LIMITATIONS
+
+
+**Scope (sufficiency).** Our result is a sufficient upper bound: small proxy values imply a small gap,
+but the converse need not hold. Weak correlations in diagnostics therefore do not refute the theory.
+
+
+**Proxies and estimation.** We measure _κ_ via conservative spectral-product bounds. For identifiability, we acknowledge that the Gaussian TC estimator is a simplified proxy for true mutual information, especially under multimodal latents, but it effectively captures trends in disentanglement. For
+equivariance, our LEE implementation employs pixel-level augmentations as a proxy for perceptual equivariance; these may not fully capture intrinsic task symmetries in the underlying physics.
+Investigating task-level physical group actions is an important direction for future work.
+
+
+**Calibration** **and** **constants.** The scalar _β_ aligns units and absorbs unknown environment/model
+constants. Consequently, we emphasize coverage (existence of _β_ _[⋆]_ ) rather than tight equality.
+
+
+**Evidence strength.** Our empirical evidence is trend-level with dependence-aware CIs (block bootstrap), and currently limited to one agent family and a small set of environments. Extending to
+broader agents/domains and alternative proxies is promising future work.
+
+
+6 CONCLUSION
+
+
+We introduced a practical auditing framework for world-model representations in RL, grounded
+in a sufficient stability bound that decomposes performance degradation into three interpretable
+channels: geometric distortion _κ_, an identifiability gap proxied by TC, and an equivariance defect
+measured by LEE. Two mechanistic results further relate these proxies to structure in the underlying MDP, via quotient-space dimension reduction and a quantitative geometry–equivariance tradeoff. Empirically, we showed that these proxies can be computed post hoc on standard DreamerV3
+checkpoints without retraining, and that the resulting bound can be instantiated as a low-overhead
+diagnostic for representation quality.
+
+
+Looking ahead, we see several concrete directions. First, we aim for tighter constants via better surrogates for the environment/state-space metrics and learned Lipschitz certificates. Second, we plan
+to develop stronger and more task-aware proxies, such as symmetry discovery and interventional
+data for identifiability, to reduce estimator bias. Finally, we seek broader validation across agents
+and domains, including settings with learned group actions and alternative calibration strategies. We
+hope this diagnostic, coverage-oriented lens becomes a standard, low-risk way to audit the reliability
+of world-model representations.
+
+
+10
+
+
+**Ethics** **Statement.** We follow the ICLR Code of Ethics and related conference policies. [1] This
+work studies representation diagnostics for world models on public benchmarks and does not involve human subjects or personally identifiable information. We report dataset sources, licenses,
+and preprocessing. We did not collect or release sensitive data. We analyzed potential negative
+impacts (e.g., dual-use or misuse, privacy risks, bias and fairness, environmental footprint) and described mitigations: transparent documentation, conservative release of artifacts, and safeguards
+against obvious misuse. We disclose the use of large language models for grammar-only editing, all
+technical content, experiments, and claims were independently verified by the authors.
+
+
+**Reproducibility** **Statement.** Our code is open-source. We report all protocol choices
+in the main text and appendix: the natural-scale RHS construction, the singlescalar calibration on early checkpoints, and held-out validation, figure captions specify axis units and the block-bootstrap settings (block length = 2, _B_ =1000). We release scripts to compute _κ_ /TC/LEE and to reproduce the bound–vs–gap plots, available at our anonymous repository: [https://anonymous.4open.science/r/](https://anonymous.4open.science/r/Unified-Stability-Bounds-for-Structured-World-Models-EED4)
+[Unified-Stability-Bounds-for-Structured-World-Models-EED4.](https://anonymous.4open.science/r/Unified-Stability-Bounds-for-Structured-World-Models-EED4) The
+exact checkpoints and commands are listed in Appendix A.6.
+
+
+REFERENCES
+
+
+Alexander A Alemi, Ian Fischer, Joshua V Dillon, and Kevin Murphy. Deep variational information
+bottleneck. _arXiv preprint arXiv:1612.00410_, 2016.
+
+
+Kavosh Asadi, Dipendra Misra, and Michael Littman. Lipschitz continuity in model-based reinforcement learning. In _International Conference on Machine Learning (ICML)_, 2018.
+
+
+Richard G Baraniuk and Michael B Wakin. Random projections of smooth manifolds. _Foundations_
+_of Computational Mathematics_, 2009.
+
+
+Dimitri Bertsekas. _Dynamic programming and optimal control:_ _Volume I_, volume 4. Athena scientific, 2012.
+
+
+Michael M Bronstein, Joan Bruna, Taco Cohen, and Petar Veliˇckovi´c. Geometric deep learning:
+Grids, groups, graphs, geodesics, and gauges. _arXiv preprint arXiv:2104.13478_, 2021.
+
+
+Ricky TQ Chen, Xuechen Li, Roger B Grosse, and David K Duvenaud. Isolating sources of disentanglement in variational autoencoders. _Advances_ _in_ _Neural_ _Information_ _Processing_ _Systems_
+_(NeurIPS)_, 2018.
+
+
+Taco Cohen and Max Welling. Group equivariant convolutional networks. In _International Confer-_
+_ence on Machine Learning (ICML)_, 2016.
+
+
+Mahyar Fazlyab, Alexander Robey, Hamed Hassani, Manfred Morari, and George Pappas. Efficient
+and accurate estimation of lipschitz constants for deep neural networks. _Advances_ _in_ _Neural_
+_Information Processing Systems (NeurIPS)_, 2019.
+
+
+Norm Ferns, Prakash Panangaden, and Doina Precup. Bisimulation metrics for continuous markov
+decision processes. _SIAM Journal on Computing_, 2011.
+
+
+Carles Gelada, Saurabh Kumar, Jacob Buckman, Ofir Nachum, and Marc G Bellemare. Deepmdp:
+Learning continuous latent space models for representation learning. In _International Conference_
+_on Machine Learning (ICML)_, 2019.
+
+
+Robert Givan, Thomas Dean, and Matthew Greig. Equivalence notions and model minimization in
+markov decision processes. _Artificial intelligence (AI)_, 2003.
+
+
+Nate Gruver, Marc Finzi, Micah Goldblum, and Andrew Gordon Wilson. The lie derivative for
+measuring learned equivariance. _arXiv preprint arXiv:2210.02984_, 2022.
+
+
+Dongning Guo, Shlomo Shamai, and Sergio Verd´u. Mutual information and minimum mean-square
+error in gaussian channels. _IEEE Transactions on Information Theory (TIT)_, 2005.
+
+
+[1See https://iclr.cc/public/CodeOfEthics.](https://iclr.cc/public/CodeOfEthics)
+
+
+11
+
+
+Danijar Hafner. Benchmarking the spectrum of agent capabilities. _arXiv preprint arXiv:2109.06780_,
+2021.
+
+
+Danijar Hafner, Timothy Lillicrap, Jimmy Ba, and Mohammad Norouzi. Dream to control: Learning
+behaviors by latent imagination. _arXiv preprint arXiv:1912.01603_, 2019.
+
+
+Danijar Hafner, Timothy Lillicrap, Mohammad Norouzi, and Jimmy Ba. Mastering atari with discrete world models. _arXiv preprint arXiv:2010.02193_, 2020.
+
+
+Danijar Hafner, Jurgis Pasukonis, Jimmy Ba, and Timothy Lillicrap. Mastering diverse domains
+through world models. _arXiv preprint arXiv:2301.04104_, 2023.
+
+
+Aapo Hyvarinen and Hiroshi Morioka. Unsupervised feature extraction by time-contrastive learning
+and nonlinear ica. _Advances in neural information processing systems (NeurIPS)_, 2016.
+
+
+Aapo Hyvarinen, Hiroaki Sasaki, and Richard Turner. Nonlinear ica using auxiliary variables and
+generalized contrastive learning. In _The 22nd International Conference on Artificial Intelligence_
+_and Statistics (AISTATS)_, 2019.
+
+
+Hassan K Khalil and Jessy W Grizzle. _Nonlinear_ _systems_ . Prentice hall Upper Saddle River, NJ,
+2002.
+
+
+Ilyes Khemakhem, Diederik Kingma, Ricardo Monti, and Aapo Hyvarinen. Variational autoencoders and nonlinear ica: A unifying framework. In _International Conference on Artificial Intel-_
+_ligence and Statistics (AISTATS)_, 2020.
+
+
+Risi Kondor and Shubhendu Trivedi. On the generalization of equivariance and convolution in neural
+networks to the action of compact groups. In _International_ _Conference_ _on_ _Machine_ _Learning_
+_(ICML)_, 2018.
+
+
+Hans R K¨unsch. The jackknife and the bootstrap for general stationary observations. _The Annals of_
+_Statistics_, 1989.
+
+
+Francesco Locatello, Stefan Bauer, Mario Lucic, Gunnar Raetsch, Sylvain Gelly, Bernhard
+Sch¨olkopf, and Olivier Bachem. Challenging common assumptions in the unsupervised learning of disentangled representations. In _International Conference on Machine Learning (ICML)_,
+2019.
+
+
+Volodymyr Mnih, Koray Kavukcuoglu, David Silver, Andrei A. Rusu, Joel Veness, Marc G. Bellemare, Alex Graves, Martin Riedmiller, Andreas K. Fidjeland, Georg Ostrovski, Stig Petersen,
+Charles Beattie, Amir Sadik, Ioannis Antonoglou, Helen King, Dharshan Kumaran, Daan Wierstra, Shane Legg, and Demis Hassabis. Human-level control through deep reinforcement learning.
+_Nature_, 518(7540):529–533, 2015. doi: 10.1038/nature14236.
+
+
+Dimitris N Politis and Joseph P Romano. The stationary bootstrap. _Journal of the American Statis-_
+_tical association_, 1994.
+
+
+Charles Spearman. The proof and measurement of association between two things. _The American_
+_journal of psychology_, 1987.
+
+
+Aladin Virmaux and Kevin Scaman. Lipschitz regularity of deep neural networks: analysis and
+efficient estimation. In _Advances in Neural Information Processing Systems (NeurIPS)_, 2018.
+
+
+Satosi Watanabe. Information theoretical analysis of multivariate correlation. _IBM_ _Journal_ _of_ _re-_
+_search and development_, 1960.
+
+
+A APPENDIX
+
+
+A.1 THE USE OF LARGE LANGUAGE MODELS
+
+
+We utilized large language models (LLMs) to assist with grammar correction and spelling checks
+in this manuscript. Following the LLM-assisted revisions, the entire document was reviewed and
+double-checked by all authors to ensure the accuracy and clarity of the content.
+
+
+12
+
+
+A.2 PROOF OF THEOREM 2.5
+
+
+The proof aims to bound the performance loss _|JM_ ( _π_ _[⋆]_ ) _−_ _JM_ ( _π_ ) _|_ . Here, _M_ is the ground MDP,
+_π_ _[⋆]_ is its optimal policy. _M_ [˜] _ϕ_ is the abstract MDP induced by the encoder _ϕ_, and _π_ is the lift of the
+optimal abstract policy _π_ ˜ _[⋆]_ (Assumption 2.4). The proof leverages the framework of approximate
+dynamic programming and MDP homomorphisms.
+
+
+_Proof._ **Step (i):** **Value sensitivity yields Lipschitz scaling (Updated).** We first establish the sensitivity of the value functions, which governs error propagation. We assume the ground MDP _M_ is
+Lipschitz continuous with respect to a behaviorally relevant pseudometric _dS_ .
+
+
+**Dependency** **on State** **Visitation Distribution:** Crucially, to address the dependency between the
+policy _π_ (the lift of the abstract optimal policy ˜ _π_ _[∗]_ ) and the environment constants, we define the Lipschitz constants ( _Lr_ for rewards, _LP_ for transitions) with respect to the state visitation distribution
+_µ_ _[π]_ induced by this policy. This ensures the constants accurately reflect the regularity of the MDP
+over the regions of the state space actually visited by the agent.
+
+
+The condition _γLP_ _<_ 1 (under _µ_ _[π]_ ) ensures the Bellman operator is a contraction. Consequently,
+the optimal value function _V_ _[∗]_ is Lipschitz continuous with constant _LV_ (Asadi et al., 2018):
+
+_Lr_
+_LV_ _≤_ _._ (2)
+1 _−_ _γLP_
+
+
+**Assumption** **on** **Abstract** **Value** **Function** **(Formalized):** As stated in the revised Assumption
+2.4 (main text), we explicitly require the optimal abstract value function _V_ [˜] _[∗]_ to also be Lipschitz
+continuous with constant _LV_ ˜ . This is generally satisfied if the abstraction process ensures that the
+abstract MDP _M_ [˜] _ϕ_ inherits similar Lipschitz properties (i.e., _Lr_ ˜ _≤_ _Lr, LP_ ˜ _[≤]_ _[L][P]_ [ ),] [which] [holds] [if]
+the encoder _ϕ_ is well-behaved. This constant _LV_ ˜ represents the value sensitivity in the abstract
+space and is critical for scaling the impact of transition errors in the subsequent steps.
+
+
+**Step (ii):** **TC and LEE upper-bound the identifiability and equivariance channels.** We define
+the theoretical metrics corresponding to the three channels:
+
+
+1. **Geometry (** _κ_ **):** Represents intrinsic approximation error or metric distortion.
+
+
+2. **Identifiability** **(** _δ_ id **):** Bounds the immediate reward prediction error due to state aliasing.
+Since ˜ _r_ ( _z, a_ ) is the conditional expectation (Assumption 2.4), we define:
+
+_δ_ id = sup
+_s,a_ _[|][r]_ [(] _[s, a]_ [)] _[ −]_ _[r]_ [˜][(] _[ϕ]_ [(] _[s]_ [)] _[, a]_ [)] _[|][.]_
+
+
+3. **Equivariance (** _LF_ **):** Captures the inconsistency of the abstract dynamics.
+
+
+We utilize the assumption that fixed pre-processed bridges connect these metrics to the measurable
+proxies:
+_δ_ id _≤_ _A_ TC TC( _Z_ ) _,_ _LF_ _≤_ _A_ LEE LEE _._ (3)
+
+
+**Step (iii):** **Combine the three channels in an approximate homomorphism template.** We relate
+the performance loss to the error in value estimation. Let Π _ϕV_ [˜] _[⋆]_ ( _s_ ) = _V_ [˜] _[⋆]_ ( _ϕ_ ( _s_ )). The lifted policy
+_π_ is greedy with respect to Π _ϕV_ [˜] _[⋆]_ . A standard result in approximate dynamic programming (e.g.,
+(Bertsekas, 2012)) bounds the performance loss by the approximation error:
+
+_|JM_ ( _π_ _[⋆]_ ) _−_ _JM_ ( _π_ ) _| ≤_ _C_ 0 _[⋆]_ _[−]_ [Π] _[ϕ]_ [ ˜] _[V]_ _[⋆][∥][∞][,]_ (4)
+1 _−_ _γ_ _[∥][V]_
+
+where _C_ 0 is a constant (e.g., _C_ 0 = 2). Let _∥_ ∆ _∥∞_ = _∥V_ _[⋆]_ _−_ Π _ϕV_ [˜] _[⋆]_ _∥∞_ . We analyze the error ∆( _s_ )
+using the Bellman optimality equations:
+
+
+_|_ ∆( _s_ ) _|_ = _V_ _⋆_ ( _s_ ) _−_ _V_ ˜ _⋆_ ( _ϕ_ ( _s_ ))
+��� ���
+
+
+_≤_ max
+_a_
+
+
+= max - _r_ ( _s, a_ ) + _γ_ E _s′∼P_ ( _·|s,a_ )[ _V_ _[⋆]_ ( _s_ _[′]_ )]� _−_ max
+��� _a_ _a_
+
+
+_r_ ˜( _ϕ_ ( _s_ ) _, a_ ) + _γ_ E _z′∼P_ ˜ ( _·|ϕ_ ( _s_ ) _,a_ ) [[ ˜] _[V]_ _[⋆]_ [(] _[z][′]_ [)]] ����
+
+
+- _|r_ ( _s, a_ ) _−_ _r_ ˜( _ϕ_ ( _s_ ) _, a_ ) _|_ + _γ_ E _s′_ [ _V_ _⋆_ ( _s′_ )] _−_ E _z′_ [ ˜ _V_ _⋆_ ( _z′_ )] - _._
+��� ���
+
+
+13
+
+
+The first term is the reward error, bounded by the Identifiability channel _δ_ id.
+
+We decompose the second term (transition error) by adding and subtracting E _s′_ [ _V_ [˜] _[⋆]_ ( _ϕ_ ( _s_ _[′]_ ))]:
+
+E _s′_ [ _V_ _⋆_ ( _s′_ )] _−_ E _z′_ [ ˜ _V_ _⋆_ ( _z′_ )] = E _s′_ [ _V_ _⋆_ ( _s′_ ) _−_ _V_ ˜ _⋆_ ( _ϕ_ ( _s′_ ))] + �E _s_ _[′]_ [ _V_ [˜] _[⋆]_ ( _ϕ_ ( _s_ _[′]_ ))] _−_ E _z_ _[′]_ [ _V_ [˜] _[⋆]_ ( _z_ _[′]_ )]
+��� ��� ��� ����
+
+_≤_ E _s′|_ ∆( _s_ _[′]_ ) _|_ + _ϵT_ ( _s, a_ )
+_≤∥_ ∆ _∥∞_ + _ϵT_ ( _s, a_ ) _._
+
+
+The term _ϵT_ ( _s, a_ ) is the transition mismatch error. It compares the true latent transition _Pϕ_ ( _·|s, a_ ) =
+_L_ ( _ϕ_ ( _s_ _[′]_ ) _|s, a_ ) with the abstract model _P_ [˜] ( _·|ϕ_ ( _s_ ) _, a_ ).
+
+Here, the value sensitivity (Step i) introduces the Lipschitz scaling. Since _V_ [˜] _[⋆]_ is _LV_ ˜ -Lipschitz, we
+bound _ϵT_ ( _s, a_ ) using the Wasserstein-1 distance _W_ 1:
+
+
+_ϵT_ ( _s, a_ ) _≤_ _LV_ ˜ _· W_ 1( _Pϕ_ ( _·|s, a_ ) _,_ _P_ [˜] ( _·|ϕ_ ( _s_ ) _, a_ )) _._
+
+
+We now invoke the approximate homomorphism template, which assumes that this dynamic inconsistency is bounded by the remaining two channels, Geometry and Equivariance. We assume there
+exist constants _Cκ, CF_ such that:
+
+
+_W_ 1( _Pϕ_ ( _·|s, a_ ) _,_ _P_ [˜] ( _·|ϕ_ ( _s_ ) _, a_ )) _≤_ _Cκκ_ + _CF LF ._ (5)
+
+
+Combining the components:
+
+
+_|_ ∆( _s_ ) _| ≤_ _δ_ id + _γ_ ( _∥_ ∆ _∥∞_ + _LV_ ˜ ( _Cκκ_ + _CF LF_ )) _._
+
+
+Taking the supremum over _s_ and solving the recursive inequality for _∥_ ∆ _∥∞_ :
+
+
+_∥_ ∆ _∥∞_ (1 _−_ _γ_ ) _≤_ _δ_ id + _γLV_ ˜ ( _Cκκ_ + _CF LF_ )
+
+1
+_∥_ ∆ _∥∞_ _≤_
+1 _−_ _γ_ [(] _[δ]_ [id][ +] _[ γL][V]_ [ ˜] _[ C][κ][κ]_ [ +] _[ γL][V]_ [ ˜] _[ C][F][ L][F]_ [ )] _[ .]_
+
+
+**Step** **(iv):** **Fold** **constants** **into** **a** **single** _β_ nat **.** We substitute the bound on _∥_ ∆ _∥∞_ back into the
+performance bound (Eq. 4):
+
+
+_|JM_ ( _π_ _[⋆]_ ) _−_ _JM_ ( _π_ ) _| ≤_ _C_ 0
+(1 _−_ _γ_ ) [2] [(] _[δ]_ [id][ +] _[ γL][V]_ [ ˜] _[ C][κ][κ]_ [ +] _[ γL][V]_ [ ˜] _[ C][F][ L][F]_ [ )] _[ .]_
+
+
+Now, we substitute the bridges (Eq. 3):
+
+
+_|JM_ ( _π_ _[⋆]_ ) _−_ _JM_ ( _π_ ) _| ≤_ _C_ 0
+(1 _−_ _γ_ ) [2] [((] _[A]_ [TC][ TC(] _[Z]_ [)) + (] _[γL][V]_ [ ˜] _[ C][κ][κ]_ [) + (] _[γL][V]_ [ ˜] _[ C][F][ A]_ [LEE][ LEE))] _[ .]_
+
+
+To obtain the desired natural-scale form, we refactor the expression. Let the per-channel coefficients
+be:
+
+
+�� _JM_ ( _π_ ) _−_ _JM_ ( _π⋆_ )�� _≤_ _β_ nat
+1 _−_ _γ_
+
+
+14
+
+
+_[V]_ [˜] _[ C][κ]_
+_βκ_ = _[C]_ [0] _[γL]_
+
+
+[0] _[A]_ [TC] _[V]_ [˜] _[ C][F][ A]_ [LEE]
+
+_β_ LEE = _[C]_ [0] _[γL]_
+1 _−_ _γ_ _[,]_ 1 _−_ _γ_
+
+
+_[γL][V]_ [˜] _[ C][κ]_
+
+_,_ _β_ TC = _[C]_ [0] _[A]_ [TC]
+1 _−_ _γ_ 1 _−_ _γ_
+
+
+_._
+1 _−_ _γ_
+
+
+These coefficients depend on the MDP properties (via _LV_ ˜, which depends on _Lr, LP, γ_ ) and the
+fixed bridge constants ( _A_ TC _, A_ LEE).
+
+
+Finally, we define the constant _β_ nat = max( _βκ, β_ TC _, β_ LEE) to absorb the per-channel weights. This
+yields the final simplified result:
+
+
+- _κ_ + TC( _Z_ ) + LEE _._
+
+
+A.3 DETAILED PROOFS OF SUPPORTING LEMMAS
+
+
+A.3.1 DETAILED PROOF OF LEMMA A.2 (BRIDGE FROM TC TO IDENTIFIABILITY ERROR)
+
+
+This proof formalizes the connection between Total Correlation (TC) and the identifiability error
+_δ_ id. It relies on the assumptions of the Nonlinear ICA framework, where observations are assumed
+to be generated by independent factors.
+
+**Assumption A.1** (Nonlinear ICA Setting) **.** _We assume the following:_
+
+
+_1._ _**Independent**_ _**Factors:**_ _States_ _S_ _are_ _generated_ _via_ _a_ _smooth,_ _invertible_ _mixing_ _function_
+_h_ _from_ _statistically_ _independent_ _ground-truth_ _factors_ _F_ _,_ _i.e.,_ _S_ = _h_ ( _F_ ) _and_ _p_ ( _F_ ) =
+
+  _i_ _[p]_ [(] _[F][i]_ [)] _[.]_
+
+_2._ _**Lipschitz Rewards:**_ _The reward function depends on the factors, R_ ( _S, a_ ) = _r_ _[∗]_ ( _F, a_ ) _, and_
+_r_ _[∗]_ _is Lr∗_ _-Lipschitz w.r.t F_ _._
+
+
+_3._ _**Identifiability Conditions:**_ _Necessary structural or auxiliary conditions are met such that_
+_the factors F_ _are identifiable from S._
+
+**Lemma** **A.2** (Bridge from TC to Identifiability Error) **.** _Under_ _Assumption_ _A.1,_ _let_ _Z_ = _ϕ_ ( _S_ ) _._
+_Assuming_ _the_ _encoder_ _minimizes_ _a_ _loss_ _encouraging_ _high_ _information_ _capture_ _(low_ _information_
+_loss_ _ϵI_ _)_ _and_ _low_ TC( _Z_ ) _._ _Furthermore,_ _assume_ _a_ _fixed_ _preprocessing_ _protocol_ _ensuring_ _bounded_
+_domains._ _Then there exists a constant A_ TC _such that:_
+
+_δ_ id _≤_ _A_ TC�TC( _Z_ ) + _ϵI_ _._
+
+
+_Proof._ We aim to bound _δ_ id = sup _s,a |r_ ( _s, a_ ) _−_ _r_ ˜( _ϕ_ ( _s_ ) _, a_ ) _|_ .
+
+
+**1.** **From Supremum Error to Expected Error (RMMSE).** We first analyze the expected error,
+specifically the Root Minimum Mean Squared Error (RMMSE) of the reward prediction.
+
+
+RMMSE( _R|Z_ ) = E _S,a_ [( _r_ ( _S, a_ ) _−_ _r_ ˜( _ϕ_ ( _S_ ) _, a_ )) [2] ] [1] _[/]_ [2] _._
+
+
+The ”fixed pre-processing protocol” ensures that variables and rewards operate within a bounded
+domain. In bounded domains, the supremum norm ( _L∞_ ) can be related to the _L_ 2 norm (RMMSE)
+by a constant factor _C_ sup, which depends on the normalization scale.
+
+
+_δ_ id _≤_ _C_ sup _·_ RMMSE( _R|Z_ ) _._ (6)
+
+
+**2.** **Error Propagation via Lipschitz Continuity.** We leverage the Lipschitz property of _r_ _[∗]_ w.r.t.
+_F_ . We analyze the square of the RMMSE (suppressing the dependence on _a_ for clarity):
+
+RMMSE( _R|Z_ ) [2] = E[( _r_ _[∗]_ ( _F_ ) _−_ E[ _r_ _[∗]_ ( _F_ ) _|Z_ ]) [2] ] = E[Var( _r_ _[∗]_ ( _F_ ) _|Z_ )] _._
+
+
+We use the property that the variance of a Lipschitz function of a random variable is bounded by the
+variance of the variable itself, scaled by the squared Lipschitz constant.
+
+Var( _r_ _[∗]_ ( _F_ ) _|Z_ ) _≤_ _L_ [2] _r_ _[∗]_ _[·]_ [ E][[] _[∥][F]_ _[−]_ [E][[] _[F]_ _[|][Z]_ []] _[∥]_ [2] _[|][Z]_ []] _[.]_
+
+
+Taking the expectation over _Z_ :
+
+RMMSE( _R|Z_ ) [2] _≤_ _L_ [2] _r_ _[∗]_ _[·]_ [ E][[] _[∥][F]_ _[−]_ [E][[] _[F]_ _[|][Z]_ []] _[∥]_ [2][] =] _[ L]_ [2] _r_ _[∗]_ _[·]_ [ MMSE(] _[F]_ _[|][Z]_ [)] _[.]_
+
+
+Here, MMSE( _F_ _|Z_ ) is the minimum mean squared error of estimating _F_ from _Z_ .
+
+
+**3.** **Connecting MMSE to TC via Nonlinear ICA.** This is the crucial step connecting the metric
+estimation error to statistical properties. Under the identifiability conditions (Assumption A.1.3),
+minimizing TC while maximizing information capture forces the identification of the underlying
+factors (Khemakhem et al., 2020). We invoke theoretical results that bound the MMSE by these statistical quantities. The connection between the KL-divergence based TC and the metric MMSE often involves a linear relationship (e.g., derived via I-MMSE relations (Guo et al., 2005) or Pinsker’s
+inequality). We assume:
+
+
+MMSE( _F_ _|Z_ ) _≤_ _C_ Align _·_ (TC( _Z_ ) + _ϵI_ ) _,_ (7)
+
+
+where _C_ Align depends on the regularity of the generative process.
+
+
+15
+
+
+**4.** **Combining the Steps.** Substituting the bounds back:
+
+
+_δ_ id _≤_ _C_ sup _·_ RMMSE( _R|Z_ )
+
+
+          _≤_ _C_ sup _· Lr∗_ _·_ MMSE( _F_ _|Z_ )
+
+_≤_ _C_ sup _Lr∗_ ~~�~~ _C_ Align _·_ �TC( _Z_ ) + _ϵI_ _._
+
+
+_Proof._ We analyze the divergence between the actual encoded trajectory and the ideal equivariant
+trajectory.
+
+
+**1.** **Path Construction and Trajectories.** Let _g_ ( _t_ ) be a geodesic path parameterized by arc length
+_t ∈_ [0 _, L_ ], connecting _e_ to _g_ . The velocity corresponds to a normalized generator _ξ_ [ˆ] ( _∥ξ_ [ˆ] _∥_ = 1).
+
+
+We define two trajectories in _Z_ starting at _z_ 0 = _ϕ_ ( _s_ ):
+
+
+    - Actual encoded trajectory: _γA_ ( _t_ ) = _ϕ_ ( _g_ ( _t_ ) _· s_ ).
+
+
+    - Ideal equivariant trajectory: _γI_ ( _t_ ) = _ρz_ ( _g_ ( _t_ )) _ϕ_ ( _s_ ).
+
+
+We aim to bound _d_ ( _L_ ) = _dZ_ ( _γA_ ( _L_ ) _, γI_ ( _L_ )).
+
+
+**2.** **Analyzing Velocities and ODEs.** The ideal trajectory follows the flow generated by _Zξ_ ˆ:
+
+
+_γ_ ˙ _I_ ( _t_ ) = _Zξ_ ˆ( _γI_ ( _t_ )) _._ (8)
+
+
+For the actual trajectory, let _s_ ( _t_ ) = _g_ ( _t_ ) _· s_ . The velocity is the pushforward of _Xξ_ ˆ( _s_ ( _t_ )):
+
+
+_γ_ ˙ _A_ ( _t_ ) = _dϕs_ ( _t_ )( _Xξ_ ˆ( _s_ ( _t_ ))) _._
+
+
+We define the local deviation vector ∆( _t_ ):
+
+
+∆( _t_ ) = _dϕs_ ( _t_ )( _Xξ_ ˆ( _s_ ( _t_ ))) _−_ _Zξ_ ˆ( _ϕ_ ( _s_ ( _t_ ))) _._
+
+
+By definition, _∥_ ∆( _t_ ) _∥≤_ LEE. The dynamics of _γA_ ( _t_ ) are thus a perturbed version of the ideal
+dynamics:
+_γ_ ˙ _A_ ( _t_ ) = _Zξ_ ˆ( _γA_ ( _t_ )) + ∆( _t_ ) _._ (9)
+
+
+16
+
+
+We define the bridge constant _A_ TC = _C_ sup _Lr∗_ [�] _C_ Align. Assuming fixed _ϵI_, _δ_ id is controlled by
+
+TC( _Z_ ).
+
+
+A.3.2 DETAILED PROOF OF LEMMA A.4 (BRIDGE FROM LEE TO GLOBAL EQUIVARIANCE
+DEFECT)
+
+
+This proof uses stability analysis (Gr¨onwall’s inequality) to integrate the Local Equivariance Error
+(LEE) into a global bound ( _LF_ ), allowing for general Lipschitz dynamics in the latent space.
+**Assumption A.3** (Geometric Structure and Lipschitz Dynamics) **.** _We assume the following:_
+
+
+_1._ _G is a connected Lie group acting smoothly on Riemannian manifolds_ S _and_ Z _._
+
+
+_2._ _The encoder ϕ_ : S _→_ Z _is smooth._
+
+
+_3._ _The fundamental vector fields Zξ_ ( _z_ ) _induced by the action ρz_ _on Z_ _are uniformly Lipschitz_
+_continuous._ _Let LZ_ _be the Lipschitz constant such that for any ∥ξ∥_ = 1 _:_
+
+
+_∥Zξ_ ( _z_ 1) _−_ _Zξ_ ( _z_ 2) _∥≤_ _LZ∥z_ 1 _−_ _z_ 2 _∥._
+
+
+**Lemma** **A.4** (Bridge from LEE to Global Equivariance Defect) **.** _Under_ _Assumption_ _A.3,_ _for_ _any_
+_s ∈_ S _and g_ _∈_ _G reachable by a geodesic path of length L_ = _D_ ( _e, g_ ) _, the global equivariance error_
+_is bounded by:_
+
+
+_dZ_ ( _ϕ_ ( _g · s_ ) _, ρz_ ( _g_ ) _ϕ_ ( _s_ )) _≤_ _[e][L][Z]_ _[L][ −]_ [1]
+
+
+_·_ LEE _._
+_LZ_
+
+
+**3.** **Stability** **Analysis** **via** **Gr¨onwall’s** **Inequality.** We analyze the rate of change of the distance
+_d_ ( _t_ ) = _dZ_ ( _γA_ ( _t_ ) _, γI_ ( _t_ )).
+
+
+_d_
+_dt_ _[d]_ [(] _[t]_ [)] _[ ≤∥][γ]_ [˙] _[A]_ [(] _[t]_ [)] _[ −]_ _[γ]_ [˙] _[I]_ [(] _[t]_ [)] _[∥]_
+
+= _∥Zξ_ ˆ( _γA_ ( _t_ )) + ∆( _t_ ) _−_ _Zξ_ ˆ( _γI_ ( _t_ )) _∥_
+
+_≤∥Zξ_ ˆ( _γA_ ( _t_ )) _−_ _Zξ_ ˆ( _γI_ ( _t_ )) _∥_ + _∥_ ∆( _t_ ) _∥._
+
+
+We use the Lipschitz continuity of _Zξ_ ˆ (Assumption A.3.3) and the bound on ∆( _t_ ):
+
+
+_d_
+
+_[·][ d][Z]_ [(] _[γ][A]_ [(] _[t]_ [)] _[, γ][I]_ [(] _[t]_ [)) + LEE]
+_dt_ _[d]_ [(] _[t]_ [)] _[ ≤]_ _[L][Z]_
+
+= _LZd_ ( _t_ ) + LEE _._
+
+
+This is a first-order linear differential inequality. Since _d_ (0) = 0, we apply the differential form of
+Gr¨onwall’s inequality. The solution is bounded by:
+
+
+           - _t_
+_d_ ( _t_ ) _≤_ _e_ _[L][Z]_ [(] _[t][−][τ]_ [)] LEE _dτ_
+
+0
+
+
+**4.** **Final Bound.** Evaluating at _t_ = _L_ = _D_ ( _e, g_ ):
+
+_dZ_ ( _ϕ_ ( _g · s_ ) _, ρz_ ( _g_ ) _ϕ_ ( _s_ )) _≤_ _[e][L][Z]_ _[L][ −]_ [1] _·_ LEE _._
+
+_LZ_
+
+
+If we restrict actions to a compact set _K_ with diameter _DK_, the bridge constant is _A_ LEE =
+( _e_ _[L][Z]_ _[D][K]_ _−_ 1) _/LZ_ .
+
+
+**Corollary 1** (Isometric Latent Actions) **.** _If the representation ρz_ _is isometric, the induced flow pre-_
+_serves distances, corresponding to the limit LZ_ _→_ 0 _._ _In this case, the bound simplifies to the linear_
+_form:_
+_dZ_ ( _ϕ_ ( _g · s_ ) _, ρz_ ( _g_ ) _ϕ_ ( _s_ )) _≤_ _D_ ( _e, g_ ) _·_ LEE _._
+
+
+A.4 FURTHER DISCUSSION ON IDENTIFIABILITY AND PROXIES
+
+
+The relationship between Total Correlation (TC) and true latent factor identifiability is nuanced.
+Our theoretical bridge in Lemma A.2 relies on a Nonlinear ICA framework, which provides a constructive path to identifiability under certain conditions, such as the presence of auxiliary information (Khemakhem et al., 2020) or specific temporal structures (Hyvarinen & Morioka, 2016).
+
+
+However, in the purely unsupervised setting, strong impossibility results exist. Locatello et al.
+(2019) demonstrated that, without inductive biases on either the models or the data, learning disentangled representations that correspond to the true ground-truth factors is fundamentally impossible.
+
+
+Our use of TC as a proxy is therefore a practical compromise. Minimizing TC encourages a factorized latent space, which is a necessary but not sufficient condition for true identifiability. It serves as
+a valuable and measurable heuristic that aligns with the broader goal of disentanglement, even if theoretical guarantees are contingent on stronger assumptions than can be met in a purely unsupervised
+RL setting.
+
+
+A.5 DETAILED PROOFS OF THE BRIDGE LEMMAS
+
+
+This section provides rigorous proofs for the bridges connecting the measurable proxies (LEE and
+TC( _Z_ )) to the theoretical metrics ( _LF_ and _δ_ id), justifying the assumptions used in the stability
+bound (Theorem 2.5).
+
+
+17
+
+
+[1] _e_ _[L][Z]_ [(] _[t][−][τ]_ [)]  - _t_
+
+_LZ_
+
+
+( _e_ _[L][Z]_ _[t]_ _−_ 1) _._
+_LZ_
+
+
+    = LEE _·_ _−_ [1]
+
+
+= [LEE]
+0 _LZ_
+
+
+A.5.1 BRIDGE A: FROM LOCAL EQUIVARIANCE ERROR (LEE) TO GLOBAL DEFECT ( _LF_ )
+
+
+We formalize the bridge from LEE to _LF_ using stability analysis of dynamical systems and
+Gr¨onwall’s inequality (Khalil & Grizzle, 2002, Sec. 2.1.3).
+**Assumption** **A.5** (Geometric Structure and Dynamics) **.** _Let_ _G_ _be_ _a_ _connected_ _Lie_ _group_ _acting_
+_smoothly_ _on_ _Riemannian_ _manifolds_ S _and_ Z _(via_ _representation_ _ρz)._ _Let_ _ϕ_ : S _→_ Z _be_ _a_ _smooth_
+_encoder._ _Assume the fundamental vector fields Zξ_ ( _z_ ) _induced by the action ρz_ _on Z_ _are uniformly_
+_Lipschitz._ _That is, ∃LZ_ _≥_ 0 _such that for any normalized generator ξ (∥ξ∥_ =1 _):_
+_∥Zξ_ ( _z_ 1) _−_ _Zξ_ ( _z_ 2) _∥≤_ _LZ∥z_ 1 _−_ _z_ 2 _∥._
+_We_ _use_ _the_ _geodesic_ _distance_ _on_ (Z _, ⟨·, ·⟩_ ) _and_ _consider_ _absolutely_ _continuous_ _trajectories_ _so_ _that_
+_t �→_ _dZ_ ( _γA_ ( _t_ ) _, γI_ ( _t_ )) _is a.e. differentiable._
+**Corollary 2** (Isometric latent actions) **.** _If ρz_ _is isometric (LZ →_ 0 _), the bound linearizes to dZ_ ( _ϕ_ ( _g·_
+_s_ ) _, ρz_ ( _g_ ) _ϕ_ ( _s_ )) _≤_ _D_ ( _e, g_ ) _·_ LEE _._
+
+
+A.6 EXPERIMENTAL DETAILS
+
+
+A.6.1 ENVIRONMENT AND AGENT DETAILS
+
+
+CRAFTER. The environment is crafter version **1.2.2**, pinned from PyPI to ensure comparability (Hafner, 2021). Its design principles and evaluation protocol are detailed in (Hafner, 2021).
+Checkpoints for the main experiments were sampled from a training window of **50k–500k** steps,
+resulting in 10 checkpoints.
+
+
+ATARI PONG. The environment ID is PongNoFrameskip-v4 (ALE). We employ standard Atari preprocessing wrappers (Mnih et al., 2015), including _MaxAndSkip(4)_, grayscaling,
+_WarpFrame(84×84)_, _FrameStack(4)_, and _ClipReward_ . The order and parameters of these wrappers are fixed in our implementation. Checkpoints for Atari Pong were sampled every 50k steps
+over a training window of **50k–1,100k** steps.
+
+
+DREAMERV3 (WORLD MODEL AGENT). Our implementation and configuration follow the official DreamerV3 paper and public repository (Hafner et al., 2023). The world model consists of a
+_categorical_ Recurrent State-Space Model (RSSM), a convolutional encoder/decoder, and an actorcritic module trained on imagined rollouts. Key architectural choices are summarized in Table 3; all
+other settings follow the default visual-task configuration from the official repository.
+
+
+Table 3: **Key** **architectural** **parameters** **for** **DreamerV3.** All other options follow the default
+settings for visual tasks in the official configs.yaml (Hafner et al., 2023).
+
+
+**Component** **Setting**
+
+
+Image Encoder 4 convolutional layers, stride 2, ReLU (repository default)
+RSSM Latent **Stochastic size** : 32, **Classes** : 64 (categorical)
+RSSM Deterministic **Hidden size** : 8192 (GRU-style core)
+Image Decoder 4 deconvolutional layers, mirroring the encoder (repository default)
+Reward/Value/Actor Heads MLPs with default widths from the repository
+
+
+A.6.2 HYPERPARAMETER DETAILS
+
+
+TRAINING HYPERPARAMETERS (DREAMERV3). Unless otherwise noted, we adopt the default
+settings from the official configs.yaml (Hafner et al., 2023). This includes the Adam optimizer
+(no weight decay), a learning rate of 3e-4, a sequence length of 64, a batch size of 16 sequences,
+and a discount factor _γ_ determined by the task configuration. Differences between the crafter and
+atari configurations were kept to a minimum. Training steps and checkpoint sampling intervals
+are specified in Appendix A.6.1.
+
+
+DIAGNOSTIC PROTOCOL HYPERPARAMETERS (FIXED ACROSS CHECKPOINTS). The implementation details, numerical algorithms, and hyperparameters used for calculating the three operational proxies ( _κ_, TC, LEE) are fully detailed in the **Metric Implementation Protocol** presented in
+Section 3.2 of the main text.
+
+
+18
+
+
+**1000**
+
+**1001**
+
+**1002**
+
+
+**1003**
+
+**1004**
+
+**1005**
+
+**1006**
+
+**1007**
+
+**1008**
+
+
+**1009**
+
+**1010**
+
+**1011**
+
+**1012**
+
+**1013**
+
+
+**1014**
+
+**1015**
+
+**1016**
+
+**1017**
+
+**1018**
+
+**1019**
+
+
+**1020**
+
+**1021**
+
+**1022**
+
+**1023**
+
+**1024**
+
+**1025**
+
+
+RHS COMPOSITION AND CALIBRATION. The theoretical Right-Hand Side (RHS) of the bound
+was constructed as follows: each channel ( _κn,_ TC _n,_ LEE _n_ ) was first normalized using a robust minmax scaling based on the 5th and 95th percentiles. The final RHS was then a weighted sum of these
+normalized components, with unit weights ( _λ_ = 1 for all channels), calibrated with a single constant
+_β_ _[⋆]_ on early checkpoints (50k–500k) and validated on a held-out checkpoint (3.5M), consistent with
+the main text.
+
+
+A.6.3 COMPUTATIONAL RESOURCES
+
+
+All diagnostic experiments were conducted on a single NVIDIA A800 GPU, using the official JAX
+implementation of DreamerV3 and our diagnostic scripts (Hafner et al., 2023). For the Crafter
+experiment (10 checkpoints), the end-to-end pipeline (feature extraction, proxy computation, and
+plotting) took several GPU-hours. The Atari Pong analysis was comparable in computational cost.
+To ensure full reproducibility, random seeds, command-line arguments, configs.yaml files, and
+execution logs are provided in the supplementary code repository.
+
+
+A.6.4 ATARI PONG BOUND VS. MEASURED GAP
+
+
+Atari Pong — Bound vs. measured gap (percent axes)
+
+100
+
+
+80
+
+
+60
+
+
+40
+
+
+20
+
+
+Figure 8: **Atari** **Pong** **bound** **vs.** **measured** **gap** **(percent** **axes).** Both axes are normalized to the
+_calibration-window_ maxima (50k–500k). A single conservative constant _β_ is calibrated on early
+checkpoints and then held fixed for validation; _coverage—not linear fit—is the objective_ . Naturalscale values are _β_ 50% = 0 _._ 0047, _β_ 90% = 0 _._ 0103, and _β_ _[∗]_ = 0 _._ 0108; on percent axes these correspond to the lines _y_ = 0 _._ 0660 _x_, _y_ = 0 _._ 0928 _x_, and _y_ = 0 _._ 0981 _x_, respectively. All checkpoints lie
+below _y_ = _β_ _[∗]_ _x_ .
+
+
+B BACKGROUND ON LIE GROUPS, EQUIVARIANCE, AND LEE
+
+
+This section provides a brief, intuitive background on the concepts related to symmetry and equivariance used in our framework, aimed at readers less familiar with these topics.
+
+
+19
+
+
+0
+
+
+RHS (% of calibration-window max)
+
+
+**1026**
+
+**1027**
+
+
+**1028**
+
+**1029**
+
+**1030**
+
+**1031**
+
+**1032**
+
+**1033**
+
+
+**1034**
+
+**1035**
+
+**1036**
+
+**1037**
+
+**1038**
+
+**1039**
+
+
+**1040**
+
+**1041**
+
+**1042**
+
+**1043**
+
+**1044**
+
+
+**1045**
+
+**1046**
+
+**1047**
+
+**1048**
+
+**1049**
+
+**1050**
+
+
+**1051**
+
+**1052**
+
+**1053**
+
+**1054**
+
+**1055**
+
+**1056**
+
+
+**1057**
+
+**1058**
+
+**1059**
+
+**1060**
+
+**1061**
+
+**1062**
+
+
+**1063**
+
+**1064**
+
+**1065**
+
+**1066**
+
+**1067**
+
+
+**1068**
+
+**1069**
+
+**1070**
+
+**1071**
+
+**1072**
+
+**1073**
+
+
+**1074**
+
+**1075**
+
+**1076**
+
+**1077**
+
+**1078**
+
+**1079**
+
+
+Table 4: **Atari** **Pong** **(natural** **scale).** _β_ is calibrated on steps **50k–500k** as the minimal coverage
+constant (and its quantiles) and then held fixed for validation. RHS uses unit weights, RHS =
+_κ_ + TC( _Z_ ) + LEE; returns are aggregated in a _±_ 5k window around each checkpoint. Coverage—
+not linear fit—is the objective.
+
+
+**Factor** **Value** **Note**
+
+
+_β_ fit@origin 0.0039 _R_ [2] =0 _._ 498
+_β_ 50% 0.0047 median coverage
+_β_ 90% 0.0103 90% coverage
+_β_ _[⋆]_ 0.0108 cover all points
+
+
+**Lie Groups and Continuous Symmetries.** In the context of RL and world models, we are often
+interested in continuous symmetries present in the environment, such as rotations, translations, or
+scaling. A _Lie Group G_ is a mathematical structure that captures these continuous transformations.
+It is both a group (defining how transformations compose and invert) and a smooth manifold. For
+example, the group _SO_ (2) represents all 2D rotations around the origin. For a more detailed introduction to Lie groups and their role in geometric deep learning, see, e.g., (Bronstein et al., 2021).
+
+
+**Equivariance.** A representation _ϕ_ is equivariant if applying a symmetry transformation _Tg_ in the
+input space (e.g., rotating an image) corresponds predictably to a related transformation _ρ_ ( _g_ ) in the
+latent space. Formally:
+_ϕ_ ( _Tgs_ ) = _ρ_ ( _g_ ) _ϕ_ ( _s_ ) _,_ _∀s ∈S, g_ _∈_ _G._ (10)
+Intuitively, this means that transforming the input and then encoding it yields the same result as
+encoding the input and then transforming its latent representation. An equivariant representation
+preserves the structure of the symmetry. This is the standard notion of equivariance used in geometric deep learning (Cohen & Welling, 2016; Bronstein et al., 2021).
+
+
+**Local Equivariance Error (LEE).** For intuition, one can think of LEE as 11; in practice we use
+the symmetric finite-difference estimator described in Section 3.2. Verifying global equivariance
+(for all _g_ _∈_ _G_ ) is often intractable. For Lie groups, we can analyze the local behavior using the Lie
+algebra, which represents the ”generators” of the continuous transformations (e.g., the direction of
+rotation). The Local Equivariance Error (LEE) measures the failure of equivariance infinitesimally,
+utilizing the concept of the _Lie derivative_ (Gruver et al., 2022).
+
+
+In practice, we approximate the LEE using finite differences. We apply a small transformation (e.g.,
+a small rotation by angle _ϵ_ ) to the input and measure the corresponding change in the latent space.
+
+LEE _≈_ _[∥][ϕ]_ [(] _[T][ϵ][s]_ [)] _[ −]_ _[ϕ]_ [(] _[s]_ [)] _[∥]_ _._ (11)
+
+_ϵ_
+
+In our protocol 3.2, we use symmetric finite differences for improved numerical stability. A low
+LEE value indicates that the representation respects the continuous symmetry locally.
+
+
+C ADDITIONAL EXPERIMENTAL RESULTS
+
+
+This section presents the results of the additional experiments conducted during the rebuttal phase
+to further validate our framework and address specific reviewer questions.
+
+
+C.1 TC CONTROL EXPERIMENT: IMPACT OF OVER-COMPRESSION
+
+
+**Motivation.** To investigate the complex correlation between Total Correlation (TC) and performance (addressing concerns raised by Reviewer FhLj), we conducted a control experiment where
+TC was explicitly manipulated during training.
+
+
+**Setup.** We modified the DreamerV3 training objective by adding an explicit TC penalty term:
+_L_ Total = _L_ DreamerV3 + _λ_ TC _·_ TC( _Z_ ). We trained models with varying penalty weights: _λ_ TC = 0
+(Baseline), Medium, and High.
+
+
+20
+
+
+**1080**
+
+**1081**
+
+
+**1082**
+
+**1083**
+
+**1084**
+
+**1085**
+
+**1086**
+
+**1087**
+
+
+**1088**
+
+**1089**
+
+**1090**
+
+**1091**
+
+**1092**
+
+**1093**
+
+
+**1094**
+
+**1095**
+
+**1096**
+
+**1097**
+
+**1098**
+
+
+**1099**
+
+**1100**
+
+**1101**
+
+**1102**
+
+**1103**
+
+**1104**
+
+
+**1105**
+
+**1106**
+
+**1107**
+
+**1108**
+
+**1109**
+
+**1110**
+
+
+**1111**
+
+**1112**
+
+**1113**
+
+**1114**
+
+**1115**
+
+**1116**
+
+
+**1117**
+
+**1118**
+
+**1119**
+
+**1120**
+
+**1121**
+
+
+**1122**
+
+**1123**
+
+**1124**
+
+**1125**
+
+**1126**
+
+**1127**
+
+
+**1128**
+
+**1129**
+
+**1130**
+
+**1131**
+
+**1132**
+
+**1133**
+
+
+**Results** **and** **Interpretation.** The results are shown in Figure 9. As expected, higher _λ_ TC successfully reduced the measured TC (Panel B). However, the impact on performance (Panel A) was
+non-monotonic. The High penalty model showed an initial rise in performance but significantly
+degraded in the later stages of training compared to the Baseline. This suggests that excessive
+compression ( _over-compression_ ), while reducing the RHS of our sufficient bound, can harm the
+retention of task-relevant information, ultimately impairing control performance. This provides a
+deeper, mechanistic explanation for the complex correlation dynamics observed in standard training
+runs.
+
+
+Figure 9: TC Control Experiment. (A) Episode Returns and (B) Measured TC under different TC
+penalty weights ( _λT C_ ).
+
+
+C.2 _β_ STABILITY ABLATION STUDY
+
+
+**Motivation.** To validate the robustness of our ”Empirical Auditability” claim (addressing questions by Reviewer tX1o), we tested whether the calibration of the scaling constant _β_ is sensitive to
+the specific choice of the early training window.
+
+
+**Setup.** We calculated the required coverage constants ( _β_ 90% and _β_ _[∗]_ ) using three different early
+calibration windows: [50k-300k], [50k-500k] (Default), and [100k-500k].
+
+
+**Results and Interpretation.** As shown in Figure 10, the calculated _β_ values are remarkably consistent across the different windows. This low variance strongly supports the robustness of our
+calibration protocol and reinforces the claim that _β_ captures stable, underlying relationships rather
+than overfitting to a specific time interval.
+
+
+Figure 10: Visualization of _β_ stability ablation.
+
+
+21
+
+
+**1134**
+
+**1135**
+
+
+**1136**
+
+**1137**
+
+**1138**
+
+**1139**
+
+**1140**
+
+**1141**
+
+
+**1142**
+
+**1143**
+
+**1144**
+
+**1145**
+
+**1146**
+
+**1147**
+
+
+**1148**
+
+**1149**
+
+**1150**
+
+**1151**
+
+**1152**
+
+
+**1153**
+
+**1154**
+
+**1155**
+
+**1156**
+
+**1157**
+
+**1158**
+
+
+**1159**
+
+**1160**
+
+**1161**
+
+**1162**
+
+**1163**
+
+**1164**
+
+
+**1165**
+
+**1166**
+
+**1167**
+
+**1168**
+
+**1169**
+
+**1170**
+
+
+**1171**
+
+**1172**
+
+**1173**
+
+**1174**
+
+**1175**
+
+
+**1176**
+
+**1177**
+
+**1178**
+
+**1179**
+
+**1180**
+
+**1181**
+
+
+**1182**
+
+**1183**
+
+**1184**
+
+**1185**
+
+**1186**
+
+**1187**
+
+
+(a) Input Space (Pixel Perturbation) (b) Latent Space Trajectories (PCA) (c) Displacement Vectors (Centered)
+
+
+Original State (�����) Transformed State
+(����, + 5 ���)
+
+
+_Proof._ Let _g_ be an arbitrary element in _G_ . Consider any two distinct points _x, y_ _∈S_ .
+
+
+We start by applying the bi-Lipschitz lower bound (Eq. 1) to the transformed points _gx_ and _gy_ :
+
+_L_ _[′]_ _· dS_ ( _gx, gy_ ) _≤_ _dZ_ ( _ϕ_ ( _gx_ ) _, ϕ_ ( _gy_ )) _._ (14)
+
+
+Next, we use the equivariance property of _ϕ_, i.e., _ϕ_ ( _gx_ ) = _ρz_ ( _g_ ) _ϕ_ ( _x_ ) and _ϕ_ ( _gy_ ) = _ρz_ ( _g_ ) _ϕ_ ( _y_ ).
+Substituting this into the right-hand side (RHS) of Eq. 3:
+
+_L_ _[′]_ _· dS_ ( _gx, gy_ ) _≤_ _dZ_ ( _ρz_ ( _g_ ) _ϕ_ ( _x_ ) _, ρz_ ( _g_ ) _ϕ_ ( _y_ )) _._ (15)
+
+
+22
+
+
+PC 1 PC 1 Displacement
+
+
+Figure 11: LEE Visualization Analysis. (A) Input space perturbation (pixel rotation). (B) Latent
+space trajectories showing consistent directions. (C) Distribution of displacement vectors showing
+structured response.
+
+
+C.3 LEE VISUALIZATION: PERCEPTUAL EQUIVARIANCE VS. NOISE
+
+
+**Motivation.** Reviewer tX1o questioned whether using pixel transformations (which introduce visual artifacts) to compute LEE merely measures sensitivity to noise, rather than meaningful symmetry defects. This visualization aims to demonstrate that the model’s response to these transformations
+( _Perceptual Equivariance_ ) is structured and systematic.
+**Setup.** We applied the same pixel rotation ( _±_ 5 _[◦]_ ) used in our LEE calculation to various states from
+the Crafter environment (Panel A). We then visualized the corresponding latent space representations
+using PCA/t-SNE.
+
+**Results** **and** **Interpretation.** Figure 11 shows the results. In Panel B, we observe that applying
+the same perceptual perturbation to different base states results in highly consistent displacement
+directions in the latent space (arrows are nearly parallel). In Panel C, we plot these displacement
+vectors normalized to the origin. If the response were random noise, the vectors would be randomly
+distributed around the origin. Instead, we observe that the vectors are tightly clustered far from the
+origin. This confirms that the model responds to the pixel transformation in a structured manner,
+validating LEE as a meaningful proxy for perceptual equivariance.
+
+
+C.4 DERIVATION OF THE GEOMETRY-EQUIVARIANCE TRADE-OFF
+
+
+Here we provide the derivation for the inequality presented in Section 2.4.2.
+**Proposition** **1.** _Let_ _ϕ_ : _S_ _→Z_ _be_ _a_ _bi-Lipschitz_ _map_ _with_ _constants_ ( _L, L_ _[′]_ ) _such_ _that_ _for_ _all_
+_x, y_ _∈S:_
+_L_ _[′]_ _dS_ ( _x, y_ ) _≤_ _dZ_ ( _ϕ_ ( _x_ ) _, ϕ_ ( _y_ )) _≤_ _LdS_ ( _x, y_ ) _._ (12)
+_Assume_ _ϕ_ _is_ _equivariant_ _with_ _respect_ _to_ _a_ _group_ _G,_ _i.e.,_ _ϕ_ ( _gx_ ) = _ρz_ ( _g_ ) _ϕ_ ( _x_ ) _._ _Let_ _the_ _expansion_
+_factor of action g in space S_ _be DS_ ( _g_ ) = sup _x_ = _y_ _ddSS_ ( _gx,gy_ ( _x,y_ ) ) _[, and similarly][ D][Z]_ [(] _[ρ][z]_ [(] _[g]_ [))] _[ for the latent]_
+
+_space._ _Then the condition number κ_ = _L/L_ _[′]_ _satisfies:_
+
+
+_L_
+_L_ _[′]_ _[≥]_ _g_ [sup] _∈G_
+
+
+_DS_ ( _g_ )
+(13)
+_DZ_ ( _ρz_ ( _g_ )) _[.]_
+
+
+**1188**
+
+**1189**
+
+
+**1190**
+
+**1191**
+
+**1192**
+
+**1193**
+
+**1194**
+
+**1195**
+
+
+**1196**
+
+**1197**
+
+**1198**
+
+**1199**
+
+**1200**
+
+**1201**
+
+
+**1202**
+
+**1203**
+
+**1204**
+
+**1205**
+
+**1206**
+
+
+**1207**
+
+**1208**
+
+**1209**
+
+**1210**
+
+**1211**
+
+**1212**
+
+
+**1213**
+
+**1214**
+
+**1215**
+
+**1216**
+
+**1217**
+
+**1218**
+
+
+**1219**
+
+**1220**
+
+**1221**
+
+**1222**
+
+**1223**
+
+**1224**
+
+
+**1225**
+
+**1226**
+
+**1227**
+
+**1228**
+
+**1229**
+
+
+**1230**
+
+**1231**
+
+**1232**
+
+**1233**
+
+**1234**
+
+**1235**
+
+
+**1236**
+
+**1237**
+
+**1238**
+
+**1239**
+
+**1240**
+
+**1241**
+
+
+Now we utilize the definition of the expansion factor in the latent space _Z_ . By definition, _DZ_ ( _ρz_ ( _g_ ))
+bounds the expansion of the distance between any two points under the action _ρz_ ( _g_ ). Applied to _ϕ_ ( _x_ )
+and _ϕ_ ( _y_ ), we have:
+
+
+_dZ_ ( _ρz_ ( _g_ ) _ϕ_ ( _x_ ) _, ρz_ ( _g_ ) _ϕ_ ( _y_ )) _≤_ _DZ_ ( _ρz_ ( _g_ )) _· dZ_ ( _ϕ_ ( _x_ ) _, ϕ_ ( _y_ )) _._ (16)
+
+
+Combining Eq. 4 and Eq. 5 yields:
+
+
+_L_ _[′]_ _· dS_ ( _gx, gy_ ) _≤_ _DZ_ ( _ρz_ ( _g_ )) _· dZ_ ( _ϕ_ ( _x_ ) _, ϕ_ ( _y_ )) _._ (17)
+
+
+Finally, we apply the bi-Lipschitz upper bound (Eq. 1) to the original points _x_ and _y_ :
+
+
+_dZ_ ( _ϕ_ ( _x_ ) _, ϕ_ ( _y_ )) _≤_ _L · dS_ ( _x, y_ ) _._ (18)
+
+
+Substituting Eq. 7 into Eq. 6, we obtain:
+
+
+_L_ _[′]_ _· dS_ ( _gx, gy_ ) _≤_ _DZ_ ( _ρz_ ( _g_ )) _· L · dS_ ( _x, y_ ) _._ (19)
+
+
+We rearrange Eq. 8 to isolate the ratio of distances in _S_ :
+
+
+_dS_ ( _gx, gy_ )
+
+
+_L_ _[′]_ _[·][ D][Z]_ [(] _[ρ][z]_ [(] _[g]_ [))] _[.]_ (20)
+
+
+_S_ ( _gx, gy_ )
+
+_≤_ _[L]_
+_dS_ ( _x, y_ ) _L_
+
+
+This inequality holds for all _x_ = _y_ . Therefore, we can take the supremum over all _x_ = _y_ on the
+LHS:
+
+
+_L_ _[′]_ _[·][ D][Z]_ [(] _[ρ][z]_ [(] _[g]_ [))] _[.]_ (21)
+
+
+sup
+_x_ = _y_
+
+
+_dS_ ( _gx, gy_ )
+
+
+_S_ ( _gx, gy_ )
+
+_≤_ _[L]_
+_dS_ ( _x, y_ ) _L_
+
+
+The LHS is exactly the definition of _DS_ ( _g_ ). Thus:
+
+_DS_ ( _g_ ) _≤_ _[L]_ (22)
+
+_L_ _[′]_ _[·][ D][Z]_ [(] _[ρ][z]_ [(] _[g]_ [))] _[.]_
+
+
+Rearranging to bound the condition number _L/L_ _[′]_ :
+
+
+_L_ _DS_ ( _g_ )
+_L_ _[′]_ _[≥]_ _DZ_ ( _ρz_ ( _g_ )) _[.]_ (23)
+
+
+Since this holds for an arbitrary _g_ _∈_ _G_, it must also hold for the supremum over the entire group:
+
+
+_L_
+_L_ _[′]_ _[≥]_ _g_ [sup] _∈G_
+
+
+_DS_ ( _g_ )
+(24)
+_DZ_ ( _ρz_ ( _g_ )) _[.]_
+
+
+23
+
+
+This completes the derivation.

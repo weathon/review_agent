@@ -1,0 +1,1745 @@
+# TOUCH: TEXT-GUIDED CONTROLLABLE GENERA- TION OF FREE-FORM HAND-OBJECT INTERACTIONS
+
+
+**Guangyi Han** [1] _[,][†]_ **, Wei Zhai** [1] _[,][†]_ **, Yuhang Yang** [1] **, Yang Cao** [1] **, Zheng-Jun Zha** [1] _[,][∗]_
+
+1 MoE Key Laboratory of Brain-inspired Intelligent Perception and Cognition,
+University of Science and Technology of China
+_{_ hanguangyi@mail., wzhai056@, yyuhang@mail., forrest@, zhazj@ _}_ ustc.edu.cn
+
+
+ABSTRACT
+
+
+Hand-object interaction (HOI) is fundamental for humans to express intent. Existing HOI generation research is predominantly confined to fixed grasping patterns,
+where control is tied to physical priors such as force closure or generic intent instructions, even when expressed through elaborate language. Such an overly general conditioning imposes a strong inductive bias for stable grasps, thus failing to
+capture the rich diversity of daily HOI. To address these limitations, we introduce
+the new task of **Free-Form HOI generation**, which aims to generate controllable,
+diverse, and physically plausible HOI conditioned on fine-grained intent, including non-grasping actions like pushing, poking, and rotating. To support this task,
+we construct **WildO2**, the first large-scale, in-the-wild 3D HOI dataset, which includes non-grasping motions derived from internet videos; it contains 4.4k unique
+interactions across 92 intents and 610 object categories, each with detailed semantic annotations. Building on this rich dataset, we propose **TOUCH**, a three-stage
+framework centered on a multi-level diffusion model that facilitates fine-grained
+semantic control to generate versatile hand poses beyond grasping priors. This
+process leverages explicit contact modeling for conditioning and is subsequently
+refined with contact consistency and physical constraints to ensure realism. Comprehensive experiments demonstrate our method’s ability to generate controllable,
+diverse, and physically plausible hand interactions representative of daily activities. [Project page is https://guangyid.github.io/hoi123touch/.](https://guangyid.github.io/hoi123touch/)
+
+
+1 INTRODUCTION
+
+
+Hand-Object Interaction (HOI) is fundamental to expressing intent and executing tasks in human
+daily life, and the ability to generate controllable interactions is crucial for AR/VR, robotics, and
+embodied AI (Zheng et al., 2025). While existing HOI generation research has progressed from
+ensuring physical plausibility (Fang et al., 2020) to incorporating semantic controllability (Li et al.,
+2024b; Yang et al., 2023), its scope remains predominantly confined to a grasp-centric paradigm.
+The control signals in these methods, whether simple physical constraints like force closure or coarse
+high-level instructions (e.g., verb-noun pairs), are often overly general. This simplified conditioning
+imposes a strong inductive bias that primarily favors the generation of stable grasps (Taheri et al.,
+2020), sacrificing interaction diversity. Furthermore, even with more sophisticated control such as
+detailed natural language (via LLMs) (Zhang et al., 2025a;b), the underlying model designs and inherent inductive biases are still fundamentally geared towards generating only grasping interactions,
+driven by historical focus and prevailing representations. Consequently, these approaches lack the
+fine-grained control and inherent capability to capture the diverse non-grasping interactions found
+in the real world, including varied hand poses, contact details, and nuanced semantic intent.
+
+
+To bridge the gap between the limited scope of current methods and the complexity of real-world
+interactions, we introduce the task of **Free-Form** **HOI** **Generation** . The goal is to break graspcentric limitations and shift towards generating diverse interactions, including the vast array of nongrasping manipulations. This task emphasizes expressiveness and controllability in the generation
+
+
+  - Equal contribution.   - Corresponding author.
+
+
+1
+
+
+and is enriched with descriptive synthetic captions (DSCs) to support fine-grained semantic controllable HOI generation with our method, TOUCH.
+
+
+process, aiming to synthesize interactions that are not only physically plausible but also semantically
+rich and truly adaptable to complex human intentions.
+
+
+The core challenge of this task lies in two aspects: what to generate and how to generate it. The
+former pertains to spatial plausibility: the model must break free from restrictive grasping priors
+(e.g., palm position and orientation, contact region assumption (Ye et al., 2024; Jiang et al., 2021))
+to explore a vast yet physically valid interaction space. To address this, we propose that contact
+relationships serve as a powerful cue to constrain this high-dimensional space, offering a more nuanced understanding of physically valid interactions. The latter pertains to semantic controllability:
+the model must accurately map fine-grained textual instructions to specific hand configurations and
+contact regions. The prior knowledge within Large Language Models (LLMs) offers a promising
+pathway for this guidance (Tang et al., 2023). A major obstacle to learning this complex mapping is
+the lack of 3D training data for diverse daily interactions, as existing datasets (Zhan et al., 2024; Fu
+et al., 2025) are mostly limited to lab-based grasping and object instances. Hardware and capture
+challenges make large-scale real-world 3D data collection difficult. In contrast, abundant 2D HOI
+videos online provide rich and realistic daily interaction behaviors.
+
+
+To tackle the proposed task and challenges, we present TOUCH, a three-stage framework for controllable free-form HOI generation. First, we explicitly model the contact on the surfaces of the hand
+and the object separately by jointly encoding spatial point-cloud relations and semantic information,
+providing strong spatial priors to mitigate uncertainty from the high degrees of freedom in interaction position and pose. We further incorporate part-level hand modeling for more precise action
+control. Second, we employ a multi-level diffusion model with attention-based fusion of semantics
+and geometry: coarse-grained intent and global object geometry guide the early diffusion stages,
+while fine-grained text and local contact features refine detailed motions in deeper stages, enabling
+fine-grained semantic controllability. Finally, we introduce self-supervised contact consistency and
+physical plausibility constraints to optimize the generated interactions, ensuring realism and physical
+feasibility. Compared to prior methods restricted to grasp generation, TOUCH naturally generalizes
+to diverse free-form HOI such as pushing, pressing, and rotating.
+
+
+Additionally, based on 3D object reconstruction (Xu et al., 2024), we introduce an automated
+pipeline to build the dataset WildO2 that jointly recovers and optimizes high-quality 3D hand-object
+interaction samples from internet videos annotated with interaction intent. By leveraging visionlanguage models (Bai et al., 2023b), we generate fine-grained semantic annotations, resulting in the
+3D daily HOI dataset covering diverse interaction intents.
+
+
+Our main contributions are: (1) We propose to extend the HOI from constrained grasping to a
+broader, more realistic, and more diverse set of daily interactions. (2) We propose TOUCH, a new
+
+
+2
+
+
+framework that can generate natural, physically reasonable, and diverse free-form HOI under finegrained text guidance. (3) We build an automated pipeline and construct WildO2, an in-the-wild
+3D dataset for daily HOI, providing a critical resource that enables future research in this domain.
+Extensive experiments demonstrate the superiority of TOUCH.
+
+
+2 RELATED WORK
+
+
+2.1 HAND-OBJECT INTERACTION DATASETS.
+
+
+Existing 3D hand-object interaction (HOI) datasets are predominantly collected in controlled laboratory settings, relying either on physics-based simulation synthesis (Hasson et al., 2019) or motion
+capture systems to record real interactions (Hampali et al., 2020; Liu et al., 2022; Yang et al., 2022;
+Brahmbhatt et al., 2020). Although these datasets provide valuable support for modeling 3D HOI,
+they suffer from limited diversity due to constrained camera setups, a small number of participants,
+and a restricted set of object instances. In contrast, large-scale in-the-wild video datasets (Damen
+et al., 2020; Grauman et al., 2022; Shan et al., 2020) contain abundant HOI clips, but lack highquality 3D annotations. Some studies have attempted to annotate subsets of these videos in 3D
+using object template-based optimization methods (Cao et al., 2021; Patel et al., 2022); however,
+due to the high diversity of open-set objects, scaling such approaches remains challenging.
+
+
+2.2 TEMPLATE-FREE HOI RECONSTRUCTION.
+
+
+The core bottleneck in reconstructing HOIs in the wild has long been the recovery of diverse object geometries. While existing template-free approaches (Fan et al., 2024; Ye et al., 2022) avoid
+predefined object model constraints, they are typically trained on limited datasets and exhibit poor
+generalization to novel objects. In recent years, multi-view diffusion models (Liu et al., 2023a) and
+large-scale reconstruction models (LRMs) (Hong et al., 2024) have enabled high-quality 3D mesh
+reconstruction directly from single images (Xu et al., 2024; Liu et al., 2024b) or text prompts (Poole
+et al., 2022), demonstrating strong generalization capabilities. Motivated by these advances, several HOI studies have explored image-to-3D reconstruction pipelines to handle open-set objects in
+the wild. However, due to severe hand occlusion, these methods often rely on image inpainting to
+complete occluded regions (Tian et al., 2025; Liu et al., 2024a; Wen et al., 2025; Liu et al., 2024c),
+or employ text-to-3D generation to align with coarse reconstruction results (Wu et al., 2024; Chen
+et al., 2025). Nonetheless, most of these pipelines depend on heuristic completion or registration
+strategies, resulting in limited geometric consistency with the input, and have yet to be validated at
+scale in an automated manner.
+
+
+2.3 DATA-DRIVEN CONTROLLABLE HOI GENERATION.
+
+
+In the evolution of HOI generation, interaction guidance has progressively advanced: from coarse
+control based on grasp type (Feix et al., 2015), to object-conditioned generation (Karunratanakul
+et al., 2020; Jiang et al., 2021), and further to task/action-level intent constraints (Christen et al.,
+2024; Yang et al., 2024b;a; Yu et al., 2025). To enhance physical plausibility, contact penetration
+loss and hand anatomical constraints have been widely adopted (Wei et al., 2024). Additionally,
+explicit modeling of hand part segmentation and contact relationships with objects has been shown
+to improve physical realism and detailed expression of interactions (Liu et al., 2023b; Zhang et al.,
+2024; Li et al., 2024a). Building on these efforts, we propose a multi-level controllable generation
+framework trained on our newly constructed daily HOI dataset, enabling finer-grained semantic intent control and the flexible generation of free-form HOIs that align with complex human intentions.
+
+
+3 DATASET
+
+
+3.1 DATA COLLECTION AND PROCESSING
+
+
+Our goal is to construct a diverse dataset of 3D hand-object interactions from in-the-wild videos.
+A primary challenge in this process is the severe occlusion of the object by the hand, which compromises the quality of 3D object reconstruction. To address this, we introduce a semi-automated
+
+
+3
+
+
+Figure 2: The proposed data reconstruction and annotation pipeline for WildO2. The process begins
+with O2HOI frame pair extraction from in-the-wild videos, followed by a three-stage pipeline for 3D
+reconstruction, camera alignment, and hand-object refinement that produces high-fidelity interaction
+data.
+
+
+data reconstruction and annotation pipeline, centered around a novel Object-only to Hand-Object
+Interaction (O2HOI) frame pairing strategy.
+We begin by filtering the Something-Something V2 dataset (Goyal et al., 2017), which is rich in
+goal-directed human actions, to obtain 8k single-hand, single-object interaction clips. For each clip,
+we automatically extract an O2HOI pair (details in Appendix): an object-only frame _Iref_, where
+the object is unoccluded, and a corresponding interaction frame _Ihoi_ . To obtain a complete object mask in the interaction frame, we segment the object in _Iref_ using SAM2 (Ravi et al., 2024)
+and then transfer this mask to _Ihoi_ via a robust dense matching model (Edstedt et al., 2024), yielding **M** inpaint. This mask transfer strategy offers a distinct advantage over common alternatives: it
+avoids the geometric inconsistencies of diffusion-based inpainting (Liu et al., 2024a) while being
+significantly more scalable than manual completion (Wen et al., 2025). Consequently, our approach
+facilitates the automated, large-scale generation of high-fidelity 3D assets for reconstruction.
+
+
+3.2 DATA RECONSTRUCTION PIPELINE
+
+
+Based on the O2HOI pairs, we build a three-stage generation pipeline to recover 3D HOI.
+
+**Stage** **1:** **Initialization.** For each pair, we reconstruct a textured object mesh **V** recon _[O]_ [from] [the]
+object-only frame _Iref_ using an image-to-3D model (Xu et al., 2024). Concurrently, we estimate
+initial MANO (Romero et al., 2017) hand parameters **H** init from the interaction frame _Ihoi_ using a
+state-of-the-art hand reconstruction method (Pavlakos et al., 2024).
+**Stage 2:** **Camera Alignment.** A challenge arises from coordinate system misalignment: the object
+mesh **V** recon _[O]_ [is created in a canonical space of the object-only frame] _[ I][ref]_ [, while the hand exists in]
+the camera space of the interaction frame _Ihoi_ . To unify them, we align **V** recon _[O]_ [to an object-centric]
+global coordinate system relative to the interaction frame by optimizing the camera projection matrix
+**K** and extrinsics ( **R** _,_ **t** ). This is achieved by minimizing a camera alignment loss, _L_ cam, via differentiable rendering. The optimization proceeds in two phases: we initially use mask IoU, Sinkhorn
+(Cuturi, 2013) loss, and an edge penalty term (to prevent the object from moving out of view). Once
+the IoU surpasses a threshold, we introduce scale-invariant depth (Eigen et al., 2014) and RGB
+reconstruction losses for fine-tuning. The overall objective is formulated as:
+
+
+min [=] _[ L]_ [mask][ +] _[ L]_ [sinkhorn][ +] _[ L]_ [edge][ +] _[ λ]_ [fine][(] _[L]_ [depth][ +] _[ L]_ [rgb][)] _[.]_ (1)
+**K** _,_ **R** _,_ **t** [;] _[ L]_ [cam]
+
+
+**Stage 3:** **Hand-Object Refinement.** With the aligned camera and object, we refine the initial hand
+parameters **H** init to achieve physically plausible contact. Specifically, we cast rays from the camera
+center through pixels within the interaction mask **M** inpaint. The intersection points of these rays
+with the 3D hand and object geometries define a potential 3D contact zone. We then optimize **H**
+using a refinement objective _L_ align, which combines 2D evidence with 3D physical constraints: hand
+
+
+4
+
+
+(a)
+
+
+(b)
+
+
+**1** **0**
+
+
+(c)
+
+
+Figure 3: Dataset Statistics: (a) Breakdown of WildO2 reconstruction outcomes. (b) An illustration
+of the interplay between the most frequent object categories, interaction types, and hand contact
+regions. Object and action definitions are adapted and refined from (Goyal et al., 2017). Contact
+regions are derived based on our dataset analysis. (c) Specific segmentation of the 17 hand parts and
+their contact frequency distribution in the dataset, along with a contact heatmap of the entire hand.
+
+
+mask IoU ( _L_ _[H]_ mask [),] [2D] [joint] [reprojection] [error] [(] _[L]_ [j2d][),] [an] [ICP] [loss] [on] [the] [3D] [contact] [zone] [(] _[L]_ [icp][),]
+and physical constraints for contact, penetration, and anatomy based on (Yang et al., 2021).
+
+
+min [=] _[ L][H]_ mask [+] _[ L]_ [j2d] [+] _[ L]_ [icp] [+] _[ L]_ [phy] _[,]_ _L_ phy = _L_ contact + _L_ pene + _L_ anatomy + _L_ self _._ (2)
+**H** [;] _[ L]_ [align]
+
+
+This pipeline yields 4,414 high-quality 3D hand-object interaction samples after a final stage of
+manual inspection and refinement, which constitute the ground truth of our dataset.
+
+
+3.3 DATA ANNOTATION AND STATISTICS
+
+
+We enrich our dataset with a multi-level annotation system, generating over 44k annotations. A
+statistical overview is provided in Fig. 3, with further details in the Appendix.
+**3D Geometry and Transformation.** Each sample includes the final hand-object meshes ( **V** [ˆ] _H_ _,_ **V** [ˆ] _O_ )
+and the corresponding camera parameters derived from our generation pipeline. **Contact** **Maps.**
+We compute dense contact maps between the hand and object surfaces. To handle varying object
+scales, our method robustly identifies contact regions by combining relative and absolute distance
+thresholds with bidirectional nearest-neighbor filtering. **Multi-Level Language Descriptions.** We
+provide two levels of textual descriptions. We inherit the template-based Short Synthetic Captions
+(SSCs) from Something-Something V2 (e.g., “picking [Something] up”). Additionally, we use a
+Vision-Language Model (VLM) (Bai et al., 2023b) to generate more detailed Descriptive Synthetic
+Captions (DSCs), which are manually verified for quality and relevance. **Fine-Grained Hand Part**
+**Segmentation.** We segment the hand mesh into 17 parts, including finger pads, nails, knuckles,
+palmar, and the dorsal region. This partitioning scheme goes beyond the coarse divisions commonly
+used in grasp generation tasks (Hasson et al., 2019; Liu et al., 2023b)—which often focus only on
+contact on the inner hand—by also accounting for contact on the dorsal side. This fine-grained
+segmentation supports detailed local interaction analysis and facilitates alignment with the semantic
+descriptions in the DSCs.
+
+
+4 METHOD
+
+
+This work aims to generate natural and physically plausible hand-object interaction (HOI) poses, parameterized by **H**, along with corresponding contact maps **C** _H_ and **C** _O_, conditioned on a multi-level
+textual prompt **T** and an object mesh **V** _O_ . To tackle this problem, we propose a three-stage framework, as illustrated in Fig. 4. Specifically, the Contact Map Prediction module (Sec. 4.1) infers the
+potential contact regions on the hand and object surfaces based on the text and object geometry. The
+Multi-Level Conditioned Diffusion module (Sec. 4.2) synthesizes a coarse hand pose by integrating coarse-to-fine textual and geometric features within a diffusion framework, ensuring alignment
+with multi-level constraints. Finally, the Physical Constraints Refinement module (Sec. 4.3) further
+optimizes the coarse pose to enhance contact realism and prevent penetrations.
+
+
+5
+
+
+Figure 4: Overview of our three-stage framework TOUCH for generating hand-object interactions
+from multi-level text prompts and object meshes. CIM stands for the Condition Injection Module.
+
+
+4.1 CONTACT MAP PREDICTION
+
+
+To generate diverse interactions beyond simple grasping, we design two independent yet similar
+CVAEs (Sohn et al., 2015) to generate binary contact maps for the object and the hand, respectively.
+For the object branch, we sample a point cloud **P** _O_ _∈_ R _[N][O][×]_ [3] ( _NO_ = 3000) from its mesh **V** _O_,
+normalize it, and record the scale factor _sO_ . We use PointNet (Qi et al., 2016) to extract its geometric
+features, which are concatenated with _sO_ to form the object condition **F** _O_ . For the hand branch, we
+generate a canonical point cloud **P** [0] _H_ _[∈]_ [R] _[N][H]_ _[×]_ [3] [(] _[N][H]_ [=] [778)] [from] [MANO’s] [zero] [pose] [and] [shape]
+parameters **H** [0] . This point cloud, combined with a hand-part mask initialized from the fine-grained
+text **T** _DSC_, is processed by PointNet to obtain the hand condition **F** _H_ . This design integrates the
+topological structure of the point clouds with text-guided emphasis on interaction-relevant hand
+regions. Both CVAEs are trained conditioned on their respective geometric features ( **F** _O,_ **F** _H_ ) and a
+shared text feature **F** _DSC_ = _ftext_ ( **T** _DSC_ ), which is extracted using the Qwen-7B (Bai et al., 2023a)
+processed through a lightweight adapter. The optimization objective is a composite loss function:
+
+
+_Lcontact_ = _Lfocal_ + _Ldice_ + _βLKL,_ (3)
+
+
+where _Lfocal_ and _Ldice_ supervise the contact prediction, and _LKL_ structures the latent space. During
+inference, under the conditional features ( **F** _O,_ **F** _H_ _,_ **F** _DSC_ ), the model samples from a Gaussian
+prior _z_ _∼N_ (0 _, I_ ) and decodes it to produce the predicted binary contact maps **C** [ˆ] _O_ _∈{_ 0 _,_ 1 _}_ _[N][O][×]_ [1]
+
+and **C** [ˆ] _H_ _∈{_ 0 _,_ 1 _}_ _[N][H]_ _[×]_ [1] .
+
+
+4.2 MULTI-LEVEL CONDITIONED DIFFUSION
+
+
+The core of our method is a Transformer-based Denoising Diffusion Probabilistic Model (DDPM)
+(Ho et al., 2020) that synthesizes hand pose parameters **H** [ˆ] conditioned on the object point cloud
+**P** _O_, multi-level text **T**, and predicted contact maps **C** [ˆ] . Instead of predicting noise, our model _fθ_
+is trained to directly predict the denoised data **x** ˆ0 = _fθ_ ( **x** _t, t,_ **y** ), optimized with an L2 loss on the
+pose parameters: _L_ diff = E _t,ϵ_ - _∥_ **x** ˆ0 _−_ **x** 0 _∥_ [2][�] .
+
+
+**Condition Generation: Transformer Inputs.** To achieve precise control, our model extracts multilevel conditional features from both geometric and textual modalities. On the geometric side, we
+use PointNet to extract global features **F** _[O]_ glb _[,]_ **[ F]** _[H]_ glb [and point-wise local features from the object point]
+cloud **P** _O_, the initial hand point cloud **P** [0] _H_ [,] [and] [the] [predicted] [contact] [maps] **[C]** [ˆ] [from] [the] [previous]
+stage. To focus on interaction regions, we leverage **C** [ˆ] to adaptively select features of _N_ loc _[O]_ [=] [128]
+object points and _N_ loc _[H]_ [=] [64][ hand points near contact areas,] [yielding] **[F]** [˜] _[O]_ loc [and] **[F]** [˜] _[H]_ loc [.] [On the textual]
+side, we utilize _f_ text to extract both coarse-grained **F** [SSC] qwen [=] _[ f][text]_ [(] **[T]** [SSC][)][ and fine-grained] **[ F]** qwen [DSC] [text]
+features.
+
+
+**Conditional Injection:** **Coarse-to-Fine Control.** We inject these features into the _N_ inj = 8 blocks
+of our Transformer model in a hierarchical, coarse-to-fine fashion. This design ensures that global
+
+
+6
+
+
+context, defined by SSCs and global geometry, shapes the overall pose in early denoising stages,
+while local details, defined by DSCs and contact-point features, are refined in later stages. Specifically, for the _i_ -th Transformer block:
+Early Stages ( _i <_ 4): Global context is injected, with no local features.
+**y** glb _[i]_ [=][ concat][(] **[F]** glb _[O]_ _[,]_ **[ F]** _[H]_ glb _[, s][O][,]_ **[ F]** _[SSC]_ qwen _[, t]_ [)] _[,]_ **y** loc _[i]_ [=] _[ ∅][.]_ (4)
+Later Stages (4 _≤_ _i < N_ inj): Local details are injected, switching to fine-grained conditions.
+
+**y** glb _[i]_ [=][ concat][(] **[F]** glb _[H]_ _[, s][O][,]_ **[ F]** _[DSC]_ qwen _[, t]_ [)] _[,]_ **y** loc _[i]_ [=][ concat][(˜] **[F]** loc _[O]_ _[,]_ [ ˜] **[F]** _[H]_ loc [)] _[.]_ (5)
+To prevent over-reliance on any single condition and enhance robustness, we randomly drop each
+component of the global condition with a 10% probability during training. Within each block, the
+global condition **y** glb _[i]_ [modulates] [the] [main] [features] [via] [FiLM] [(Perez] [et] [al.,] [2018),] [while] [the] [local]
+condition **y** loc _[i]_ [is] [integrated] [through] [cross-attention] [to] [provide] [fine-grained] [spatial] [cues.] [This] [dual]
+mechanism effectively decouples global contextual guidance from local geometric refinement. Finally, the updated latent goes through self-attention and a Feed-Forward Network (FFN).
+
+
+**Training** **Loss.** To improve training stability and spatial alignment, we introduce two auxiliary
+losses alongside the primary diffusion loss _L_ diff. A global pose loss directly supervises the hand’s
+global rotation **r** rot and translation **T** to prevent overall pose drift, an issue exacerbated when directly
+regressing **H**, which comprises parameters with disparate numerical ranges (e.g., shape _**β**_, pose **Θ**,
+**r** rot, **T** ). A distance map loss ensures precise contact by supervising the distance map **d** map _∈_
+R [21] _[×][N][O]_ from the 21 hand joints to the object surface. The final objective is a weighted sum:
+
+            -             _L_ total = _L_ diff + _λ_ global _|_ ˆ **r** rot _−_ **r** [gt] rot _[|]_ [ +] _[ |]_ **[T]** [ˆ] _[ −]_ **[T]** [gt] _[|]_ + _λ_ dmap _|_ **d** [ˆ] map _−_ **d** [gt] map _[|][.]_ (6)
+
+
+4.3 PHYSICAL CONSTRAINTS REFINEMENT
+
+
+To address the common issue of global pose drift in free-form HOI generation, where the hand often
+fails to make contact with the object, we introduce an efficient physical refinement module. This
+module is powered by a refiner network, _f_ refiner, which inherits the Transformer architecture of our
+diffusion model. The process begins with a single forward pass to rapidly correct the global positioning of the initial pose **H** [ˆ] diff, establishing primary physical contact. Subsequently, this corrected
+pose undergoes _N_ tta iterations of test-time optimization (TTA) to fine-tune local contact details, such
+as finger placements.
+
+
+The entire optimization is guided by our self-supervised cycle-consistency loss ( _Lcyc_ ), which enforces bidirectional mapping consistency between hand and object contact surfaces. The core idea
+is that a hand contact point, after being mapped to the nearest object point via Φ (hand-to-object),
+should map back to its original location via the reverse mapping Ψ (object-to-hand), and vice versa.
+This loss acts as a powerful regularizer, effectively reducing the ambiguity inherent in the mappings.
+We combine this with _L_ phy (see Eq. 2). The total refinement loss is defined as:
+_L_ refiner = _L_ phy + _λcyc_ (E **P** _h∈_ **P** _CH ||_ Ψ(Φ( **P** _h_ )) _−_ **P** _h||_ 1 + E **P** _o∈_ **P** _CO ||_ Φ(Ψ( **P** _o_ )) _−_ **P** _o||_ 1) _._ (7)
+
+
+5 EXPERIMENTS
+
+
+5.1 EXPERIMENTAL SETTINGS
+
+
+Our experiments are conducted on the WildO2 dataset. For each hand part contact category, we
+perform a random 4:1 split, yielding approximately 3.7k training and 677 test samples. To address
+the long-tailed distribution of hand part labels, we aggregate 10 less frequent hand part categories
+and then apply resampling using unique 7-bit labels to balance the data. The model is trained for
+1000 epochs using the Adam optimizer with a learning rate of 1e-4 and a batch size of 128. The
+diffusion model’s parameters are frozen during the training of the refiner module. We evaluate
+our method from four perspectives: (1) Contact Accuracy, assessed by IoU and F1-score against
+ground-truth contacts parts. (2) Physical Plausibility, measured by Mean Per-Vertex Position Error
+(MPVPE), Penetration Depth (PD), and Penetration Volume (PV). Note that unlike works focusing
+on grasping (Jiang et al., 2021), we do not employ physics engine-based stability simulation metrics,
+as our scope of interactions is broader than force-closure grasps. (3) Diversity, quantified by entropy
+and cluster size. (4) Semantic Consistency, evaluated using a point cloud-based FID (P-FID) (Nichol
+et al., 2022), VLM assisted evaluation, and a perceptual score (PS) from 10 users.
+
+
+7
+
+
+**SSCs** **Obj** **Ours** **ContactGen** **Text2HOI** **GT** **I** _hoi_
+
+
+Figure 5: **Visualization** **Results.** Comparisons of different methods on samples from the WildO2
+test set. Each sample consists of SSCs and an object mesh as input, with the output being an
+interactive hand pose. The last row shows the original authentic 2D HOI frame from internet videos.
+
+
+5.2 COMPARISONS
+
+
+As existing methods have not explored fine-grained controlled HOI generation, we select two representative types of baselines: (1) _ContactGen_ (Liu et al., 2023b): an object-conditioned multi-layer
+CVAE using coarse hand part labels. (2) _Text2HOI_ (Cha et al., 2024): a transformer-based conditional diffusion model guided by coarse text conditions. We remove its temporal axis and adapt it
+for our setting. Compared to typical grasping datasets, hand poses in WildO2 exhibit higher degrees
+of freedom. Both baseline methods exhibit noticeable overall hand drift. To ensure fair comparison,
+we also augment them with an optimization-based post-processing module to correct hand poses.
+Experimental results in Tab. 1 show that our method outperforms baselines across most metrics.
+Visual results in Fig. 5 further demonstrate that our method generates more realistic HOI poses that
+better align with input text descriptions.
+
+
+**Method** **Contact Acc.** **Physical Plausibility** **Diversity** **Semantic Consistency**
+
+
+P-IoU _↑_ P-F1 _↑_ MPVPE _↓_ PD _↓_ PV _↓_ Ent. _↑_ CS _↑_ P-FID _↓_ VLM _↑_ PS _↑_
+
+
+Table 1: **Quantitative comparison on HOI synthesis.** We evaluate all methods on our test set using comprehensive metrics covering physical plausibility, contact accuracy, diversity, and semantic
+consistency. _↑_ indicates higher is better, _↓_ indicates lower is better.
+
+
+5.3 ABLATION STUDY
+
+
+To evaluate the effectiveness of our contact-guided generation of spatial relations in HOI and the
+coarse-to-fine text control design, we conduct ablation studies as shown in Tab. 2, ✗ means without.
+For clarity, TTA is disabled. We argue for the primacy of contact metrics, as penetration metrics,
+PD and PV are meaningful only after hand-object contact is established; otherwise, they can be
+misleading. This is starkly exemplified by the “✗ refiner” variant, which scores poorly on contact
+yet achieves deceptively low PD/PV values simply because the generated hand drifts away from the
+
+
+8
+
+
+**Metrics** P-IoU _↑_ P-F1 _↑_ MPVPE _↓_ PD _↓_ PV _↓_ P-FID _↓_
+
+
+**Ours(** ✗ **TTA)** 0.728 0.805 3.00 1.093 4.82 4.84
+
+|✗mul.<br>✗T<br>DSC<br>✗T<br>SSC|0.525 0.631 5.00 1.464 6.52 6.84<br>0.698 0.784 3.02 1.119 5.28 6.09<br>0.687 0.778 2.92 1.119 5.17 5.52|
+|---|---|
+|CLIP<br>BERT<br>MPNet|0.713<br>0.798<br>2.87<br>1.136<br>4.85<br>4.84<br>0.705<br>0.790<br>2.91<br>1.182<br>4.99<br>6.08<br>0.704<br>0.788<br>2.87<br>1.114<br>5.06<br>6.02|
+
+
+Table 2: Analyzes the contributions of various components, including the
+absence of **M** _O_ and **M** _H_ (hoc.) for guiding spatial relationship generation, the multi-level network structure (mul.), and the multi-level text (✗
+_TDSC_, ✗ _TSSC_ ).
+
+
+**Lift up [card], applying [thumb,**
+**index pad] to gently lift one end**
+**of the [edge] of [card] and then**
+
+
+Figure 6: Contact
+guidance visualization.
+
+
+**Lift up [green pen], applying**
+
+**[hand_contact_part] to grip**
+**the [handle] of [green pen]**
+**firmly, ensuring a secure hold**
+
+
+**(a)**
+
+
+**(b)**
+
+
+**(c)**
+
+
+**(d)**
+
+
+**DSCs** **obj mesh** **multi-view hoi**
+
+
+**Tip [stuffed toy] over, applying**
+
+**[index, middle, ring, pinky**
+**knuckle] to exert force on the**
+
+**[top] of [stuffed toy] to tip it over.**
+
+
+**Roll [nail] on a flat surface,**
+**applying [index, middle, ring**
+**pad] to roll the [tip] of [nail]**
+**smoothly across the surface.**
+
+
+**opposing pressure on the [toe**
+**box] of [shoe] to hold it firmly.**
+
+
+**Press [calculator], applying**
+
+**[index pad] to lightly press the**
+
+**[button] of [calculator] for**
+**precise engagement.**
+
+
+**Push [green pen], applying**
+
+**[hand_contact_part] to**
+**exert gentle force on the**
+
+**[body] of [green pen],**
+
+
+**index pad**
+
+
+Figure 7: **Out-of-Domain** **Generalization** **on**
+**Objaverse.** (a,b) Out-of-domain CAD models;
+(c,d) Verbs outside our primary annotated intents.
+
+
+Figure 8: **Controllable Semantic Generation.**
+Results for a green pen, demonstrating diverse
+and plausible hand poses generated by specifying different control signals, including interaction intent and contact geometry.
+
+
+object, thus avoiding interaction entirely. This distinguishes our complex task from traditional grasping, where contact is facilitated by priors. The consistent degradation in contact performance upon
+removing any module confirms their synergistic importance. Fig. 6 offers a qualitative visualization
+of the step-by-step improvements afforded by our contact guidance.
+
+
+5.4 DISCUSSION
+
+
+5.4.1 ABLATION ON TEXT ENCODERS.
+
+
+We replace the text encoder with other common token- or sentence-level encoders (e.g., CLIP (Radford et al., 2021), BERT (Devlin et al., 2019), MPNet (Song et al., 2020)) to analyze their impact
+on generation quality. Results indicate that Qwen-7B offers better performance in capturing finegrained semantic details, detailed in Tab. 2.
+
+
+5.4.2 OUT-OF-DOMAIN GENERATION.
+
+
+To evaluate generalization, we sample novel object CAD meshes from the large-scale 3D dataset
+Objaverse (Deitke et al., 2023), utilizing LLMs to generate captions that emulate our DSC format.
+As visualized in Fig. 7, our approach successfully produces plausible interaction poses for these
+out-of-domain models, demonstrating strong generalization capability.
+
+
+9
+
+
+5.4.3 SEMANTIC CONTROLLABILITY
+
+
+**Controllable** **Semantic** **Generation.** Our model demonstrates strong controllability and high semantic faithfulness in interpreting fine-grained user intents. As shown in Fig. 8, by varying textual
+control signals (such as contact regions and interaction semantics (e.g., Push/Lift) for an object), the
+model successfully produces diverse and physically plausible hand poses, validating its ability to
+execute multi-faceted semantic directives.
+
+
+**Semantic** **Nuances** **of** **Force** **Expression.** Although the model does not explicitly model physical
+forces, it learns to associate force-related terms like “firmly” and “gently” with contact geometry. It
+generates larger, denser contacts for “firm” prompts and more marginal, sparser contacts for “gentle”
+ones, as shown in Fig. 9. Quantitative analysis on WildO2 confirms this finding, revealing a 22-25%
+larger average contact area for “firm/tight” interactions.
+
+
+|Varying Hand Contact Parts|Varying Object Contact Parts|
+|---|---|
+|**Move [box] up, applying**<br>**[thumb, index, middle pad]**<br>**to lift the [top surface] of**<br>**box with a firm grip,**<br>**ensuring secure contact.**|**Move [fork] up, applying [thumb,**<br>**index, middle pad] to grasp the**<br>**[handle] of fork firmly, lifting it**<br>**upwards with controlled motion.**|
+|**Move [box] up, applying**<br>**[index, middle, ring pad] to**<br>**lift the [top surface] of box**<br>**with a gentle upward force.**|**Move [fork] up, applying**<br>**[thumb, index, middle pad] to**<br>**lift the handle of fork with a**<br>**gentle upward motion.**|
+
+
+Figure 9: **Interpreting force-related semantics.** The model associates “firm” prompts (Top Row)
+with larger contact areas and more encompassing interactions, while mapping “gentle” prompts
+(Bottom Row) to sparser, more marginal contact points.
+
+
+6 CONCLUSION
+
+
+In this paper, we addressed the limitations of grasp-centric approaches by introducing the Freeform HOI Generation task. Our work expands the synthesis paradigm beyond simple grasping
+to a broader, more semantically expressive spectrum of interactions. To support this, we built an
+automated pipeline to construct WildO2, an in-the-wild 3D dataset for daily HOIs, providing a
+critical resource to enable future research in this domain.
+
+
+**Limitations** **and** **Future** **Directions.** Our framework currently focuses on static HOI snapshots,
+which inherently limits its ability to capture the temporal dynamics of an interaction process.
+While our pipeline offers rapid expansion, the current dataset scale also presents an area for future
+growth. In the future, we plan to extend our work to dynamic sequences by leveraging large-scale
+video datasets and incorporating 6-DoF object pose estimation, thus modeling the entire humanenvironment interaction process.
+
+
+7 ACKNOWLEDGMENTS
+
+
+This work is supported by the National Natural Science Foundation of China (NSFC) under Grants
+62225207, 62436008, 62306295, 62576328, and 625B2175. The AI-driven experiments, simulations and model training were performed on the robotic AI-Scientist platform of Chinese Academy
+of Sciences.
+
+
+REFERENCES
+
+
+Jinze Bai, Shuai Bai, Yunfei Chu, Zeyu Cui, Kai Dang, Xiaodong Deng, Yang Fan, Wenbin Ge,
+Yu Han, Fei Huang, Binyuan Hui, Luo Ji, Mei Li, Junyang Lin, Runji Lin, Dayiheng Liu, Gao Liu,
+Chengqiang Lu, Keming Lu, Jianxin Ma, Rui Men, Xingzhang Ren, Xuancheng Ren, Chuanqi
+Tan, Sinan Tan, Jianhong Tu, Peng Wang, Shijie Wang, Wei Wang, Shengguang Wu, Benfeng
+Xu, Jin Xu, An Yang, Hao Yang, Jian Yang, Shusheng Yang, Yang Yao, Bowen Yu, Hongyi
+Yuan, Zheng Yuan, Jianwei Zhang, Xingxuan Zhang, Yichang Zhang, Zhenru Zhang, Chang
+
+
+10
+
+
+Zhou, Jingren Zhou, Xiaohuan Zhou, and Tianhang Zhu. Qwen technical report. _arXiv preprint_
+_arXiv:2309.16609_, 2023a.
+
+
+Jinze Bai, Shuai Bai, Shusheng Yang, Shijie Wang, Sinan Tan, Peng Wang, Junyang Lin, Chang
+Zhou, and Jingren Zhou. Qwen-vl: A versatile vision-language model for understanding, localization, text reading, and beyond. _arXiv preprint arXiv:2308.12966_, 2023b.
+
+
+Samarth Brahmbhatt, Chengcheng Tang, Christopher D Twigg, Charles C Kemp, and James Hays.
+Contactpose: A dataset of grasps with object contact and hand pose. In _European Conference on_
+_Computer Vision_, pp. 361–378. Springer, 2020.
+
+
+Zhe Cao, Ilija Radosavovic, Angjoo Kanazawa, and Jitendra Malik. Reconstructing hand-object
+interactions in the wild. _ICCV_, 2021.
+
+
+Junuk Cha, Jihyeon Kim, Jae Shin Yoon, and Seungryul Baek. Text2hoi: Text-guided 3d motion
+generation for hand-object interaction. In _Proceedings of the IEEE/CVF Conference on Computer_
+_Vision and Pattern Recognition_, pp. 1577–1585, 2024.
+
+
+Hongyi Chen, Yunchao Yao, Yufei Ye, Zhixuan Xu, Homanga Bharadhwaj, Jiashun Wang, Shubham
+Tulsiani, Zackory Erickson, and Jeffrey Ichnowski. Web2grasp: Learning functional grasps from
+web images of hand-object interactions, 2025. URL [https://arxiv.org/abs/2505.](https://arxiv.org/abs/2505.05517)
+[05517.](https://arxiv.org/abs/2505.05517)
+
+
+Sammy Christen, Shreyas Hampali, Fadime Sener, Edoardo Remelli, Tomas Hodan, Eric Sauser,
+Shugao Ma, and Bugra Tekin. Diffh2o: Diffusion-based synthesis of hand-object interactions
+from textual descriptions. In _SIGGRAPH Asia 2024 Conference Papers_, pp. 1–11, 2024.
+
+
+Marco Cuturi. Sinkhorn distances: Lightspeed computation of optimal transport. _Advances in neural_
+_information processing systems_, 26, 2013.
+
+
+Dima Damen, Hazel Doughty, Giovanni Maria Farinella, Sanja Fidler, Antonino Furnari, Evangelos Kazakos, Davide Moltisanti, Jonathan Munro, Toby Perrett, Will Price, and Michael Wray.
+The epic-kitchens dataset: Collection, challenges and baselines. _IEEE_ _Transactions_ _on_ _Pattern_
+_Analysis and Machine Intelligence (TPAMI)_, 2020.
+
+
+Matt Deitke, Ruoshi Liu, Matthew Wallingford, Huong Ngo, Oscar Michel, Aditya Kusupati,
+Alan Fan, Christian Laforte, Vikram Voleti, Samir Yitzhak Gadre, Eli VanderBilt, Aniruddha
+Kembhavi, Carl Vondrick, Georgia Gkioxari, Kiana Ehsani, Ludwig Schmidt, and Ali Farhadi.
+Objaverse-xl: A universe of 10m+ 3d objects. _arXiv preprint arXiv:2307.05663_, 2023.
+
+
+Jacob Devlin, Ming-Wei Chang, Kenton Lee, and Kristina Toutanova. Bert: Pre-training of deep
+bidirectional transformers for language understanding. In _Proceedings of the 2019 conference of_
+_the_ _North_ _American_ _chapter_ _of_ _the_ _association_ _for_ _computational_ _linguistics:_ _human_ _language_
+_technologies, volume 1 (long and short papers)_, pp. 4171–4186, 2019.
+
+
+Johan Edstedt, Qiyu Sun, Georg B¨okman, M˚arten Wadenb¨ack, and Michael Felsberg. RoMa: Robust
+Dense Feature Matching. _IEEE Conference on Computer Vision and Pattern Recognition_, 2024.
+
+
+David Eigen, Christian Puhrsch, and Rob Fergus. Depth map prediction from a single image using
+a multi-scale deep network. _Advances in neural information processing systems_, 27, 2014.
+
+
+Zicong Fan, Maria Parelli, Maria Eleni Kadoglou, Xu Chen, Muhammed Kocabas, Michael J Black,
+and Otmar Hilliges. Hold: Category-agnostic 3d reconstruction of interacting hands and objects
+from video. In _Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recog-_
+_nition_, pp. 494–504, 2024.
+
+
+Hao-Shu Fang, Chenxi Wang, Minghao Gou, and Cewu Lu. Graspnet-1billion: A large-scale benchmark for general object grasping. In _Proceedings of the IEEE/CVF conference on computer vision_
+_and pattern recognition_, pp. 11444–11453, 2020.
+
+
+Thomas Feix, Javier Romero, Heinz-Bodo Schmiedmayer, Aaron M Dollar, and Danica Kragic.
+The grasp taxonomy of human grasp types. _IEEE_ _Transactions_ _on_ _human-machine_ _systems_, 46
+(1):66–77, 2015.
+
+
+11
+
+
+Rao Fu, Dingxi Zhang, Alex Jiang, Wanjia Fu, Austin Funk, Daniel Ritchie, and Srinath Sridhar.
+Gigahands: A massive annotated dataset of bimanual hand activities. In _Proceedings of the Com-_
+_puter Vision and Pattern Recognition Conference_, pp. 17461–17474, 2025.
+
+
+Raghav Goyal, Samira Ebrahimi Kahou, Vincent Michalski, Joanna Materzynska, Susanne Westphal, Heuna Kim, Valentin Haenel, Ingo Fruend, Peter Yianilos, Moritz Mueller-Freitag, et al.
+The “something something” video database for learning and evaluating visual common sense. In
+_Proceedings of the IEEE international conference on computer vision_, pp. 5842–5850, 2017.
+
+
+Kristen Grauman, Andrew Westbury, Eugene Byrne, Zachary Chavis, Antonino Furnari, Rohit Girdhar, Jackson Hamburger, Hao Jiang, Miao Liu, Xingyu Liu, et al. Ego4d: Around the world in
+3,000 hours of egocentric video. In _Proceedings of the IEEE/CVF conference on computer vision_
+_and pattern recognition_, pp. 18995–19012, 2022.
+
+
+Shreyas Hampali, Mahdi Rad, Markus Oberweger, and Vincent Lepetit. Honnotate: A method for
+3d annotation of hand and object poses. In _CVPR_, 2020.
+
+
+Yana Hasson, G¨ul Varol, Dimitris Tzionas, Igor Kalevatykh, Michael J. Black, Ivan Laptev, and
+Cordelia Schmid. Learning joint reconstruction of hands and manipulated objects. In _CVPR_,
+2019.
+
+
+Jonathan Ho, Ajay Jain, and Pieter Abbeel. Denoising diffusion probabilistic models. _Advances in_
+_neural information processing systems_, 33:6840–6851, 2020.
+
+
+Yicong Hong, Kai Zhang, Jiuxiang Gu, Sai Bi, Yang Zhou, Difan Liu, Feng Liu, Kalyan Sunkavalli,
+Trung Bui, and Hao Tan. Lrm: Large reconstruction model for single image to 3d, 2024. URL
+[https://arxiv.org/abs/2311.04400.](https://arxiv.org/abs/2311.04400)
+
+
+Hanwen Jiang, Shaowei Liu, Jiashun Wang, and Xiaolong Wang. Hand-object contact consistency
+reasoning for human grasps generation. In _Proceedings of the International Conference on Com-_
+_puter Vision_, 2021.
+
+
+Korrawe Karunratanakul, Jinlong Yang, Yan Zhang, Michael Black, Krikamol Muandet, and Siyu
+Tang. Grasping field: Learning implicit representations for human grasps, 2020. [URL https:](https://arxiv.org/abs/2008.04451)
+[//arxiv.org/abs/2008.04451.](https://arxiv.org/abs/2008.04451)
+
+
+Hongxiang Li, Yaowei Li, Yuhang Yang, Junjie Cao, Zhihong Zhu, Xuxin Cheng, and Long Chen.
+Dispose: Disentangling pose guidance for controllable human image animation. _arXiv_ _preprint_
+_arXiv:2412.09349_, 2024a.
+
+
+Kailin Li, Jingbo Wang, Lixin Yang, Cewu Lu, and Bo Dai. Semgrasp: Semantic grasp generation
+via language aligned discretization. In _European Conference on Computer Vision_, pp. 109–127.
+Springer, 2024b.
+
+
+Ruoshi Liu, Rundi Wu, Basile Van Hoorick, Pavel Tokmakov, Sergey Zakharov, and Carl Vondrick.
+Zero-1-to-3: Zero-shot one image to 3d object. In _Proceedings_ _of_ _the_ _IEEE/CVF_ _international_
+_conference on computer vision_, pp. 9298–9309, 2023a.
+
+
+Shaowei Liu, Yang Zhou, Jimei Yang, Saurabh Gupta, and Shenlong Wang. Contactgen: Generative
+contact modeling for grasp generation. In _Proceedings of the IEEE/CVF International Conference_
+_on Computer Vision_, pp. 20609–20620, 2023b.
+
+
+Yumeng Liu, Xiaoxiao Long, Zemin Yang, Yuan Liu, Marc Habermann, Christian Theobalt, Yuexin
+Ma, and Wenping Wang. Easyhoi: Unleashing the power of large models for reconstructing
+hand-object interactions in the wild. _arXiv preprint arXiv:2411.14280_, 2024a.
+
+
+Yunze Liu, Yun Liu, Che Jiang, Kangbo Lyu, Weikang Wan, Hao Shen, Boqiang Liang, Zhoujie Fu,
+He Wang, and Li Yi. Hoi4d: A 4d egocentric dataset for category-level human-object interaction. In _Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition_
+_(CVPR)_, pp. 21013–21022, June 2022.
+
+
+Zhiheng Liu, Ka Leong Cheng, Qiuyu Wang, Shuzhe Wang, Hao Ouyang, Bin Tan, Kai Zhu, Yujun Shen, Qifeng Chen, and Ping Luo. Depthlab: From partial to complete. _arXiv_ _preprint_
+_arXiv:2412.18153_, 2024b.
+
+
+12
+
+
+Zhiheng Liu, Hao Ouyang, Qiuyu Wang, Ka Leong Cheng, Jie Xiao, Kai Zhu, Nan Xue, Yu Liu,
+Yujun Shen, and Yang Cao. Infusion: Inpainting 3d gaussians via learning depth completion from
+diffusion prior. _arXiv preprint arXiv:2404.11613_, 2024c.
+
+
+Joanna Materzynska, Tete Xiao, Roei Herzig, Huijuan Xu, Xiaolong Wang, and Trevor Darrell.
+Something-else: Compositional action recognition with spatial-temporal interaction networks. In
+_Proceedings of the IEEE/CVF conference on computer vision and pattern recognition_, pp. 1049–
+1059, 2020.
+
+
+Alex Nichol, Heewoo Jun, Prafulla Dhariwal, Pamela Mishkin, and Mark Chen. Point-e: A system
+for generating 3d point clouds from complex prompts, 2022. URL [https://arxiv.org/](https://arxiv.org/abs/2212.08751)
+[abs/2212.08751.](https://arxiv.org/abs/2212.08751)
+
+
+Austin Patel, Andrew Wang, Ilija Radosavovic, and Jitendra Malik. Learning to imitate object
+interactions from internet videos, 2022. [URL https://arxiv.org/abs/2211.13225.](https://arxiv.org/abs/2211.13225)
+
+
+Georgios Pavlakos, Dandan Shan, Ilija Radosavovic, Angjoo Kanazawa, David Fouhey, and Jitendra
+Malik. Reconstructing hands in 3D with transformers. In _CVPR_, 2024.
+
+
+Ethan Perez, Florian Strub, Harm De Vries, Vincent Dumoulin, and Aaron Courville. Film: Visual
+reasoning with a general conditioning layer. In _Proceedings of the AAAI conference on artificial_
+_intelligence_, volume 32, 2018.
+
+
+Ben Poole, Ajay Jain, Jonathan T. Barron, and Ben Mildenhall. Dreamfusion: Text-to-3d using 2d
+diffusion. _arXiv_, 2022.
+
+
+Charles R Qi, Hao Su, Kaichun Mo, and Leonidas J Guibas. Pointnet: Deep learning on point sets
+for 3d classification and segmentation. _arXiv preprint arXiv:1612.00593_, 2016.
+
+
+Alec Radford, Jong Wook Kim, Chris Hallacy, Aditya Ramesh, Gabriel Goh, Sandhini Agarwal, Girish Sastry, Amanda Askell, Pamela Mishkin, Jack Clark, Gretchen Krueger, and Ilya
+Sutskever. Learning transferable visual models from natural language supervision. _CoRR_,
+abs/2103.00020, 2021. [URL https://arxiv.org/abs/2103.00020.](https://arxiv.org/abs/2103.00020)
+
+
+Nikhila Ravi, Valentin Gabeur, Yuan-Ting Hu, Ronghang Hu, Chaitanya Ryali, Tengyu Ma, Haitham
+Khedr, Roman R¨adle, Chloe Rolland, Laura Gustafson, Eric Mintun, Junting Pan, Kalyan Vasudev Alwala, Nicolas Carion, Chao-Yuan Wu, Ross Girshick, Piotr Doll´ar, and Christoph Feichtenhofer. Sam 2: Segment anything in images and videos. _arXiv preprint arXiv:2408.00714_,
+2024. [URL https://arxiv.org/abs/2408.00714.](https://arxiv.org/abs/2408.00714)
+
+
+Javier Romero, Dimitrios Tzionas, and Michael J. Black. Embodied hands: Modeling and capturing
+hands and bodies together. _ACM Transactions on Graphics, (Proc. SIGGRAPH Asia)_, November
+2017. [URL http://doi.acm.org/10.1145/3130800.3130883.](http://doi.acm.org/10.1145/3130800.3130883)
+
+
+Dandan Shan, Jiaqi Geng, Michelle Shu, and David Fouhey. Understanding human hands in contact
+at internet scale. 2020.
+
+
+Kihyuk Sohn, Honglak Lee, and Xinchen Yan. Learning structured output representation using deep
+conditional generative models. _Advances in neural information processing systems_, 28, 2015.
+
+
+Kaitao Song, Xu Tan, Tao Qin, Jianfeng Lu, and Tie-Yan Liu. Mpnet: Masked and permuted pretraining for language understanding. _arXiv preprint arXiv:2004.09297_, 2020.
+
+
+Omid Taheri, Nima Ghorbani, Michael J Black, and Dimitrios Tzionas. Grab: A dataset of wholebody human grasping of objects. In _European_ _conference_ _on_ _computer_ _vision_, pp. 581–600.
+Springer, 2020.
+
+
+Chao Tang, Dehao Huang, Wenqi Ge, Weiyu Liu, and Hong Zhang. Graspgpt: Leveraging semantic knowledge from a large language model for task-oriented grasping. _IEEE_ _Robotics_ _and_
+_Automation Letters_, 8(11):7551–7558, 2023.
+
+
+Tencent Hunyuan3D Team. Hunyuan3d 2.5: Towards high-fidelity 3d assets generation with ultimate details, 2025. [URL https://arxiv.org/abs/2506.16504.](https://arxiv.org/abs/2506.16504)
+
+
+13
+
+
+Yongqi Tian, Xueyu Sun, Haoyuan He, Linji Hao, Ning Ding, and Caigui Jiang. Funhoi:
+Annotation-free 3d hand-object interaction generation via functional text guidanc, 2025. URL
+[https://arxiv.org/abs/2502.20805.](https://arxiv.org/abs/2502.20805)
+
+
+Yi-Lin Wei, Jian-Jian Jiang, Chengyi Xing, Xian-Tuo Tan, Xiao-Ming Wu, Hao Li, Mark Cutkosky,
+and Wei-Shi Zheng. Grasp as you say: Language-guided dexterous grasp generation. _Advances_
+_in Neural Information Processing Systems_, 37:46881–46907, 2024.
+
+
+Boran Wen, Dingbang Huang, Zichen Zhang, Jiahong Zhou, Jianbin Deng, Jingyu Gong, Yulong
+Chen, Lizhuang Ma, and Yong-Lu Li. Reconstructing in-the-wild open-vocabulary human-object
+interactions, 2025. [URL https://arxiv.org/abs/2503.15898.](https://arxiv.org/abs/2503.15898)
+
+
+Jane Wu, Georgios Pavlakos, Georgia Gkioxari, and Jitendra Malik. Reconstructing hand-held
+objects in 3d. _arXiv preprint arXiv:2404.06507_, 2024.
+
+
+Jiale Xu, Weihao Cheng, Yiming Gao, Xintao Wang, Shenghua Gao, and Ying Shan. Instantmesh:
+Efficient 3d mesh generation from a single image with sparse-view large reconstruction models.
+_arXiv preprint arXiv:2404.07191_, 2024.
+
+
+Lixin Yang, Xinyu Zhan, Kailin Li, Wenqiang Xu, Jiefeng Li, and Cewu Lu. CPF: Learning a
+contact potential field to model the hand-object interaction. In _ICCV_, 2021.
+
+
+Lixin Yang, Kailin Li, Xinyu Zhan, Fei Wu, Anran Xu, Liu Liu, and Cewu Lu. Oakink: A large-scale
+knowledge repository for understanding hand-object interaction. In _Proceedings of the IEEE/CVF_
+_conference on computer vision and pattern recognition_, pp. 20953–20962, 2022.
+
+
+Yuhang Yang, Wei Zhai, Hongchen Luo, Yang Cao, Jiebo Luo, and Zheng-Jun Zha. Grounding 3d
+object affordance from 2d interactions in images. In _Proceedings of the IEEE/CVF International_
+_Conference on Computer Vision (ICCV)_, pp. 10905–10915, October 2023.
+
+
+Yuhang Yang, Wei Zhai, Hongchen Luo, Yang Cao, and Zheng-Jun Zha. Lemon: Learning 3d
+human-object interaction relation from 2d images. In _Proceedings of the IEEE/CVF Conference_
+_on Computer Vision and Pattern Recognition_, pp. 16284–16295, 2024a.
+
+
+Yuhang Yang, Wei Zhai, Chengfeng Wang, Chengjun Yu, Yang Cao, and Zheng-Jun Zha. Egochoir: Capturing 3d human-object interaction regions from egocentric views. _arXiv_ _preprint_
+_arXiv:2405.13659_, 2024b.
+
+
+Yufei Ye, Abhinav Gupta, and Shubham Tulsiani. What’s in your hands? 3d reconstruction of
+generic objects in hands. In _Proceedings_ _of_ _the_ _IEEE/CVF_ _conference_ _on_ _computer_ _vision_ _and_
+_pattern recognition_, pp. 3895–3905, 2022.
+
+
+Yufei Ye, Abhinav Gupta, Kris Kitani, and Shubham Tulsiani. G-hop: Generative hand-object prior
+for interaction reconstruction and grasp synthesis. In _CVPR_, 2024.
+
+
+Chengjun Yu, Wei Zhai, Yuhang Yang, Yang Cao, and Zheng-Jun Zha. Hero: Human reaction
+generation from videos. In _Proceedings of the IEEE/CVF International Conference on Computer_
+_Vision_, pp. 10262–10274, 2025.
+
+
+Xinyu Zhan, Lixin Yang, Yifei Zhao, Kangrui Mao, Hanlin Xu, Zenan Lin, Kailin Li, and Cewu
+Lu. Oakink2: A dataset of bimanual hands-object manipulation in complex task completion.
+In _Proceedings_ _of_ _the_ _IEEE/CVF_ _Conference_ _on_ _Computer_ _Vision_ _and_ _Pattern_ _Recognition_, pp.
+445–456, 2024.
+
+
+Zhenhao Zhang, Ye Shi, Lingxiao Yang, Suting Ni, Qi Ye, and Jingya Wang. Openhoi: Openworld hand-object interaction synthesis with multimodal large language model. _arXiv_ _preprint_
+_arXiv:2505.18947_, 2025a.
+
+
+Zhongqun Zhang, Hengfei Wang, Ziwei Yu, Yihua Cheng, Angela Yao, and Hyung Jin Chang.
+Nl2contact: Natural language guided 3d hand-object contact modeling with diffusion model. In
+_European Conference on Computer Vision_, pp. 284–300. Springer, 2024.
+
+
+Zichen Zhang, Hongchen Luo, Wei Zhai, et al. Pear: phrase-based hand-object interaction anticipation. _Science China Information Sciences_, 68(150209), 2025b. doi: 10.1007/s11432-024-4405-4.
+
+
+14
+
+
+Ying Zheng, Lei Yao, Yuejiao Su, Yi Zhang, Yi Wang, Sicheng Zhao, Yiyi Zhang, and Lap-Pui Chau.
+A survey of embodied learning for object-centric robotic manipulation. _Machine_ _Intelligence_
+_Research_, pp. 1–39, 2025.
+
+
+A APPENDIX
+
+
+A.1 MORE EXPERIMENT RESULTS
+
+
+A.1.1 MORE ABLATION EXPERIMENTS
+
+
+**Action-Specific** **Analysis** We performed a per-category statistical analysis of the metrics for the
+most frequent verb categories in the test set, as detailed in Tab. 3. The results reveal significant
+variations across different verb categories, reflecting the distinct characteristics of each action.
+
+
+Push Poke Lift Pick Move Turn Pull Put Open Roll Spin
+
+
+P-IoU 0.762 0.811 0.805 0.752 0.773 0.725 0.830 0.753 0.778 0.739 0.763
+P-F1 0.833 0.852 0.872 0.834 0.844 0.821 0.891 0.828 0.866 0.819 0.834
+MPVPE 3.098 3.458 2.724 2.511 2.618 3.014 2.301 3.034 2.621 2.653 3.844
+PD 1.135 0.391 0.568 1.127 0.811 1.462 1.214 1.105 1.206 1.294 0.892
+PV 3.025 0.922 1.716 2.814 2.842 5.718 3.440 3.656 4.081 1.652 3.052
+
+
+Table 3: Per-category performance metrics for the most frequent verb categories in the test set.
+
+
+For instance, the Poke category, which typically involves a singular or highly localized contact area,
+consequently yields higher scores on contact-related metrics such as P-IoU and P-F1. However,
+this action imposes fewer constraints on the overall hand orientation and the configuration of noncontacting fingers, leading to a higher MPVPE for the generated hand poses. Conversely, the Lift
+category, which closely resembles a simple grasping motion, is generally less complex. As a result,
+it demonstrates strong performance across most metrics, which corroborates our earlier assertion
+regarding the relative simplicity of grasping operations. In general, for a given verb, greater diversity
+in the associated actions correlates with increased learning difficulty for the model.
+
+
+**Layer** **Injection** **Strategy** We conducted an ablation study on the coarse-to-fine layer injection
+strategy (Tab. 4) to justify the chosen 4/4 split against alternatives (e.g., 0/8, 2/6, 6/2).
+
+
+**Split Config** P-IOU _↑_ P-F1 _↑_ MPVPE _↓_ PD _↓_ PV _↓_
+
+
+0/8 (✗ mul) 0.766 0.836 2.97 0.950 2.55
+2/6 0.767 0.839 2.97 0.942 **2.52**
+**4/4 (Ours)** **0.776** **0.844** **2.89** **0.932** 2.67
+6/2 0.650 0.747 3.64 1.026 4.46
+
+
+Table 4: **Ablation on Coarse/Fine Layer Split.** Comparison of different layer allocation strategies
+for the coarse-to-fine injection. The 4/4 split yields the best trade-off between semantic structure
+and geometric precision.
+
+
+The results demonstrate two key points: (1) Optimal Balance: The 4/4 configuration achieves the
+best overall performance, confirming that a balanced injection strategy effectively handles both
+global semantics and local contact details. (2) Fine-grained Priority: The 2/6 split (late fine-grained
+injection bias) significantly outperforms the 6/2 split (early coarse injection bias). This indicates that
+for generating free-form HOI, conditioning on fine-grained information is more critical than early
+global coarse cues.
+
+
+**Impact** **of** **Detailed** **Contact** **Directives.** To qualitatively illustrate the findings from our ablation
+study (Tab. 2), we visualize the model’s behavior when fine-grained contact directives are omitted. As shown in Fig. 11, without this guidance, the model tends to collapse to common grasping
+
+
+15
+
+
+**WildO2** **TOUCH** **WildO2** **TOUCH**
+
+
+Figure 10: **Visualization** **Results.** More samples from the WildO2 test set. For each sample, the
+leftmost image represents the hand-object interaction frame ( _Ihoi_ ) extracted from Internet videos.
+The middle image shows our reconstruction of _Ihoi_, which serves as the ground truth for WildO2.
+The rightmost image illustrates the free-form HOI generated by our method, TOUCH, conditioned
+on object meshes and DSCs. The bottom row contains the corresponding DSCs.
+
+
+patterns, even for non-grasping prompts like “put tea bag on a surface”. This underscores the necessity of detailed contact information for generating nuanced and accurate interactions beyond simple
+grasps.
+
+
+16
+
+
+**GT** **DSC** **SSC**
+
+
+Figure 11: **Comparison of generations with and without detailed contact guidance. (Left)** Given
+a Short Synthetic Caption (SSC) that omits contact information, the model defaults to a generic and
+incorrect grasping pose. **(Right)** With a Detailed Synthetic Caption (DSC) specifying the intended
+contact points, the model successfully generates the correct, nuanced “placing” interaction.
+
+
+A.1.2 MORE COMPARISON EXPERIMENTS
+
+
+We evaluate our method on the OakInk dataset, as detailed in Tab.5. Using its CapGrasp (Li et al.,
+2024b) annotations and computed part contact information, we construct fine-grained text conditions
+through summarization via Qwen (Bai et al., 2023a) and verification.
+
+
+**Method** **Contact Acc.** **Physical Plausibility** **Diversity** **Semantic**
+
+
+P-IoU _↑_ P-F1 _↑_ MPVPE _↓_ PD _↓_ PV _↓_ Ent. _↑_ CS _↑_ P-FID _↓_
+
+
+Table 5: **Quantitative** **comparison** **on** **hand-object** **interaction** **synthesis** **in** **OakInk-Shape**
+**dataset.** _↑_ indicates higher is better, _↓_ indicates lower is better.
+
+
+A.1.3 FAILURE CASES ANALYSIS
+
+
+Despite its overall strong performance, our analysis reveals several recurring failure modes in the
+TOUCH model. These can be categorized into four main types, as illustrated in Fig. 12:
+
+
+    - **Pose Bias:** The model often defaults to a grasping pose, even when textual cues contradict
+this action (e.g., prompting a gentle touch without a thumb).
+
+    - **Orientation Error:** The generated hand exhibits an incorrect or unnatural palm orientation
+relative to the object.
+
+    - **Contact** **Mismatch:** The guided contact between the hand and the object is misplaced,
+leading to physically implausible interactions.
+
+    - **Penetration** **Artifacts:** The model produces significant penetration of the fingertips into
+the object’s surface.
+
+
+A.2 DETAILS OF WILDO2 ACQUISITION
+
+
+A.2.1 SCALABILITY OF THE PIPELINE
+
+
+Our pipeline’s design emphasizes three key properties: **evolvability**, allowing it to improve with
+stronger upstream models; **scalability**, enabling rapid data reconstruction from web-scale clips approximately less than 2 minutes per case; and **controllability**, ensured by our rigorous human-inthe-loop quality control.
+
+
+**Evolvability** **with** **Upstream** **Image-to-3D** **Models.** . Our pipeline’s performance is directly coupled with the upstream image-to-3D model, a modular design that allows us to benefit from ongoing
+advancements. We demonstrate this by replacing our default backbone, InstantMesh, with the more
+powerful Hunyuan3D 3.0 (Team, 2025) As shown in Fig. 13, this upgrade yields significant improvements. For samples that were already successfully reconstructed (first two rows), the new backbone
+enhances geometric details, such as refining object edges and correctly modeling the internal cavity
+
+
+17
+
+
+**DSCs** 𝑰𝒉𝒐𝒊 **WildO2** **TOUCH**
+
+
+**(a)**
+
+
+**(b)**
+
+
+**(c)**
+
+
+**(d)**
+
+
+**Push [bottle], applying [index, middle**
+**and ring pad] to exert a gentle force on**
+**the [body] of [bottle], causing it to shift**
+**slightly without falling.**
+
+
+**Push [cylindrical bottle], applying**
+
+**[thumb, index, middle, ring and pinky**
+**pad] to exert a gentle force on the [body]**
+**of [cylindrical bottle], guiding it towards**
+**the edge without causing it to fall.**
+
+
+**Poke [box], applying [index pad] to**
+**gently prod the [side] of [box], causing it**
+**to slightly shift.**
+
+
+**Put [mushroom lamp] on surface,**
+**applying [thumb, index, middle, ring**
+**pad and palm] to support the [base] of**
+
+**[mushroom lamp] and place it steadily**
+**on the surface.**
+
+
+Figure 12: **Qualitative** **examples** **of** **typical** **failure** **modes** **of** **the** **TOUCH** **model.** Each panel
+corresponds to a category discussed in the text: (a) a bias towards grasping poses, (b) incorrect palm
+orientation, (c) misplaced contact guidance, and (d) significant fingertip penetration.
+
+
+of a cup. More importantly, it successfully reconstructs instances that had previously failed (third
+and fourth rows), thereby increasing the overall success rate of our pipeline. Nevertheless, challenges persist even for advanced models, such as reconstructing transparent objects or fine-grained
+structures, highlighting the continued potential for future advancements to further enhance the quality of WildO2.
+
+
+𝐼𝑟𝑒𝑓 𝐼ℎ𝑜𝑖 _InstantMesh_ _WildO2_ _Hunyuan3D 3.0_ 𝑊𝑖𝑙𝑑𝑂2 [∗]
+
+
+Figure 13: **Qualitative comparison with a stronger reconstruction backbone.** WildO2* denotes
+results using the Hunyuan3D 3.0 backbone. The first two rows show refinements on previously successful reconstructions, (e.g., sharper details, correct topology) while the bottom two rows demonstrate recovery of previously failed cases. This highlights the pipeline’s ability to evolve with advancements in image-to-3D technology.
+
+
+**Computational** **and** **Time** **Cost** **Analysis.** On one NVIDIA A40 GPU, our automated steps are
+efficient: 3D object reconstruction averages 17s per sample with InstantMesh, (ranging from seconds
+to 3 minutes for other backbones) and our alignment module takes 14s. The subsequent manual
+verification and refinement, applied to every sample, requires an average of 50 seconds (std = 49s)
+per person. This commitment to manual oversight is a crucial investment in the final dataset’s quality
+and physical plausibility.
+
+
+**Human-in-the-Loop Quality Control.** . To ensure the highest data fidelity, every sample undergoes
+mandatory human review. This process is guided by automated quality metrics (CLIP similarity, 2D
+rendering scores) that assist annotators. Each review results in one of four outcomes:
+
+
+18
+
+
+- Accept: The reconstruction meets all quality standards.
+
+
+    - Refine: Minor inaccuracies are corrected using our dedicated UI (Fig. 14, left).
+
+
+    - Re-generate: A low-quality sample is re-processed with an alternative image-to-3D model.
+
+
+    - Discard: Intractable cases that fail to meet quality standards are removed.
+
+
+A.2.2 RECONSTRUCTION ANALYSIS
+
+
+The primary obstacle is Geometric Reconstruction Failure, where 3D mesh recovery is unsuccessful.
+Another category, Non-Interactive Cases, is defined for instances where the 2D HOI guide image
+itself showed no discernible contact. Explicit failures in Pose Estimation account for 2.1%. Finally,
+the Other Cases category contains various failures that bypassed initial rule-based screening; these
+include some of the most complex scenarios, such as interactions involving deformable or transparent objects, which fall outside the scope of our current reconstruction method. Details and examples
+of each failure type are provided in Fig. 14.
+
+
+Figure 14: **Examples of reconstruction failures.** (Left) A screenshot of our annotation UI showing a “Non-Interactive” failure, where the reconstructed hand and object do not interact. (Right
+Top) Examples of “Geometric Reconstruction Failure” for the object and the hand. This was the
+most common failure category, with object geometry being more challenging to reconstruct than the
+hand’s. (Right Middle) Examples of “Pose Estimation Failure”, where the 6DoF pose of the hand
+or object was incorrectly recovered. (Right Bottom) Examples of “Other Cases”. The first example shows a deformable object, and the second shows an object that is part of a larger structure (a
+drawer).
+
+
+A.2.3 SELECTION OF RECONSTRUCTABLE CLIPS FROM LARGE-SCALE IN-THE-WILD
+VIDEOS
+
+
+Our data reconstruction and annotation process commences with the Something-Something V2
+(SSv2) dataset (Goyal et al., 2017), a large-scale collection of over 220,847 videos. We chose
+this dataset for several key reasons. First, its vast scale and diversity, resulting from a crowdsourced
+effort where contributors enact specific verb-noun prompts, provide a rich variety of goal-oriented
+hand-object interactions. Second, many videos feature close-up shots of the hand-held object, which
+is advantageous for 3D reconstruction. Critically, the associated Something-Else dataset (Materzynska et al., 2020) furnishes bounding box annotations for hands and objects in approximately 180,049
+of these clips, offering an invaluable starting point. However, a primary challenge of SSv2 is its low
+resolution (typically 240 pixels in height), which necessitates a rigorous filtering pipeline to isolate
+clips suitable for high-fidelity reconstruction.
+
+
+To ensure the viability of our reconstruction pipeline, we implemented a multi-stage filtering process
+to distill the initial 180k annotated clips into a high-quality subset. The screening criteria were designed to simplify the interaction scenario (e.g., single hand, single object) and guarantee sufficient
+visual quality for reliable 3D modeling. This process effectively removes clips that are ambiguous, occluded, or otherwise intractable. The detailed steps and their impact on the dataset size are
+summarized in Tab. 6.
+
+
+19
+
+
+Table 6: The multi-stage filtering pipeline for selecting reconstructable clips from the SomethingSomething V2 dataset. The process starts with clips annotated by Something-Else and progressively
+refines the selection based on interaction complexity and visual quality.
+
+
+**Step** **Criterion** **Description** **Clips Remaining**
+
+
+1 Initial Annotated Set Clips from SSv2 with hand and object bounding box annotations. 180,049
+2 Single-Hand Interaction Exclude clips involving multi hands to simplify interaction modeling. 137,578
+3 Single-Object Interaction Retain only clips where a single object is being manipulated. 82,728
+4 Minimum Object Size Discard clips where the object is too small to be reliably reconstructed. 57,384
+5 Object Visibility Exclude clips where the object is too large or moves out of frame. 12,888
+6 Frame Stability Ensure stable pre-interaction and interaction frames can be identified. 8,551
+
+
+A.2.4 ACQUISITION OF O2HOI FRAME PAIRS
+
+
+This section details the automated procedure for extracting an “Object-only to Hand-Object Interaction” (O2HOI) frame pair, denoted as ( _I_ ref _, I_ hoi), from each video clip.
+
+
+**1.** **Mask** **Generation** **and** **Frame** **Selection** **Preliminaries.** For each frame in a given video
+sequence, we generate object masks ( _MO_ ) and hand masks ( _MH_ ) using the SAM2. The interaction
+period, _T_ HOI = [ _i_ first _, i_ last], is defined as the contiguous block of frames where the Intersection over
+Union (IoU) between the object mask and the hand mask, each expanded by several pixels, exceeds
+a predefined threshold. The reference frame, _I_ ref, is selected as the object-only frame temporally
+closest to this interaction period.
+
+
+**2.** **Optimal HOI Frame Selection.** The primary objective is to select an index _i_ hoi from _T_ HOI such
+that the object’s pose in frame _I_ hoi has undergone minimal change relative to its pose in _I_ ref. We
+achieve this by estimating the 2D affine transformation between the object in the reference frame
+and in every candidate frame within _T_ HOI. This estimation utilizes the RoMa dense feature matcher
+(Edstedt et al., 2024). The detailed steps for comparing a candidate frame _It_ (where _t ∈T_ HOI) to the
+reference frame _I_ ref are as follows:
+
+
+    - Feature Matching: For each pair ( _I_ ref _, It_ ), we extract robust keypoint correspondences
+( **k** ref _,_ **k** _t_ ) within their respective object masks, _M_ ref _[O]_ [and] _[ M][ O]_ _t_ [.]
+
+    - Transformation Estimation: The keypoints are used to robustly estimate an affine transformation matrix **A** _t_ using RANSAC.
+
+    - Rotation and IoU Calculation: The rotation angle sequence _θt_ and IoU metrics are computed as follows:
+
+_RS_ = **A** _t_ [0 : 2 _,_ 0 : 2] _,_ _U, S, V_ _[⊤]_ = SVD( _RS_ ) _,_ _R_ = _UV_ _[⊤]_ _,_ (8)
+
+[ne(] _[M][ O]_ ref _[,]_ **[ A]** _[t]_ [)] _[ ∩]_ _[M][t][|]_
+
+_θt_ = arctan 2( _R_ 21 _, R_ 11) _·_ [180] _π_ _[,]_ IoU _t_ = _|_ _[|]_ warpAffine( [warpAf] _M_ ref _[O]_ _[,]_ **[ A]** _[t]_ [)] _[ ∪]_ _[M][t][|]_ _[.]_ (9)
+
+
+    - Interaction Frame Selection: with IoU gradient ∆IoU _t_ . The selected HOI frame index _i_ hoi
+is determined by:
+
+
+_i_ hoi =
+
+
+
+
+
+
+arg min _t∈T_ HOI _|θt|,_ if min _t∈T_ HOI _|θt| >_ MAX ~~M~~ IN ~~A~~ NGLE
+arg min _t∈S_ stable _|t −_ _i_ max _|,_ if max _t∈T_ HOI _|θt| <_ MIN ~~M~~ AX ~~A~~ NGLE
+arg min _t∈T_ HOI _|t −_ _i_ max _|,_ otherwise
+_|θt|<_ MAX ~~M~~ IN ~~A~~ NGLE
+
+
+
+
+
+(10)
+where _S_ stable = _{t_ _∈T_ HOI _|_ _|_ ∆IoU _t|_ _<_ DT ~~I~~ OU ~~T~~ HRES _}_, and MAX ~~M~~ IN ~~A~~ NGLE=1,
+MIN ~~M~~ AX ~~A~~ NGLE=5
+
+    - Inpainting Mask Generation: In summary, we obtain the O2HOI frame pair ( _i_ ref _, i_ hoi) and
+the corresponding inpainting mask for subsequent processing:
+
+_M_ inpaint = warpAffine( _M_ ref _[O]_ _[,]_ **[ A]** [hoi][)] _[.]_ (11)
+
+
+This procedure ensures accurate spatial alignment between the object-only and interaction frames,
+facilitating efficient and reliable inpainting mask generation for downstream tasks.
+
+
+20
+
+
+A.2.5 ESTIMATION OF OBJECT ELEVATIONS
+
+
+The backbone of InstantMesh(Xu et al., 2024), Zero123(Liu et al., 2023a), generates novel views of
+objects; however, the predicted elevation angles may not precisely align with the control signals. To
+address this, we employ a rendering-based matching strategy to estimate the optimal elevation angle
+for the reconstructed 3D object mesh. Specifically, we render the mesh from candidate elevations
+and select the angle whose 2D projection best matches the HOI frame, providing a reliable initialization for subsequent optimization. The search is performed in two stages: (a) a coarse search over
+the range [ _−_ 40 _[◦]_ _,_ 60 _[◦]_ ] with 11 sampled angles, and (b) a fine search within [best _−_ 10 _[◦]_ _,_ best + 10 _[◦]_ ]
+using 21 samples. The selection criterion is the point-wise mean squared error (MSE) between the
+rendered projection and the aligned HOI frame.
+
+
+1
+elevation = arg min
+_θ∈_ Θ _N_
+
+
+_N_
+�( _I_ ref[ _i_ ] _−_ _I_ rendered( _θ_ )[ _i_ ]) [2] _._ (12)
+
+
+_i_ =1
+
+
+We employ the CLIP-similarity metric to automatically assess the reconstruction quality of imageto-3D methods. This enables efficient and coarse filtering of clips, ensuring that only those with
+high-quality and reliable 3D reconstructions are selected for subsequent processing and annotation.
+
+
+A.2.6 CONTACT MAP COMPUTATION
+
+
+Given an object point cloud **O** _∈_ R _[N][o][×]_ [3] and a hand point cloud **H** _∈_ R _[N][h][×]_ [3], we propose a robust
+four-stage contact map computation algorithm:
+
+
+**Stage 1: Bidirectional Nearest Neighbor Voting.** For each point, we compute the nearest neighbor
+in the opposite set and accumulate votes:
+
+
+vote _o_ ( _i_ ) = 
+
+
+**1** [NN( _hj_ ) = _oi_ ] _,_ vote _h_ ( _j_ ) =  
+_j_ _i_
+
+
+**1** [NN( _oi_ ) = _hj_ ] _._
+
+_i_
+
+
+**Stage** **2:** **Candidate** **Selection.** High-frequency candidate points are selected based on the upper
+quantile _α_ of the vote distribution:
+
+
+_Co_ = _{i |_ vote _o_ ( _i_ ) _≥_ _Q_ 1 _−α_ (vote _o_ ) _} ._
+
+
+**Stage 3: Distance Validation.** Core contact points are further filtered by requiring their hand-object
+distance _di_ to be below both a quantile threshold _β_ and an absolute threshold _ϵ_ :
+
+
+_So_ = _{i ∈Co_ _| di_ _<_ min( _Qβ_ ( _d_ ) _, ϵ_ ) _} ._
+
+
+**Stage** **4:** **Region** **Expansion.** The contact region is expanded by including points within a radius
+_γ ·_ _d_ [¯] of any core contact point, where _d_ [¯] is the mean _k_ -nearest neighbor distance:
+
+
+          -           _Mo_ = _i |_ min _[≤]_ _[γ][ ·]_ _[d]_ [¯] _._
+_s∈So_ _[∥][o][i][ −]_ _[o][s][∥]_ [2]
+
+
+A.2.7 WILDO2 DSCS PROMPT
+
+
+[Structured Output Protocol]
+
+As a hand-object interaction analyzer, generate JSON strictly like this:
+
+{
+
+"obj_category": "cylindrical",
+
+"general": "grip [obj_category]",
+
+"physical": "Apply [hand_contact] to establish stable three-point contact with
+
+[obj_contact] of [obj_category] while other fingers form loose sphere.",
+
+"hand_contact": ["thumb pad", "pinky nail", "palm"],
+
+"obj_contact": "body"
+
+}
+
+
+[Key Requirements]
+
+1. Mandatory placeholders: [hand_contact],[obj_contact],[obj_category]
+
+2. Physical Field Rules:
+
+
+21
+
+
+- Use ONLY [hand_contact] placeholder  - ABSOLUTELY NO explicit contact point
+
+enumeration
+
+  - must describe contact areas, interaction methods, and force levels
+
+considering object functionality
+
+3. hand_contact is where interaction is most likely to occur.Input hand_contact
+
+may contain sensing errors from point cloud analysis. Valid hand_contact
+
+options (17 total):[’thumb pad’,’index pad’,’middle pad’,’ring pad’,’pinky
+
+pad’,’thumb nail’,’index nail’,’middle nail’,’ring nail’,’pinky nail’,’thumb
+
+knuckle’,’index knuckle’,’middle knuckle’,’ring knuckle’,’pinky
+
+knuckle’,’palm’,’back of palm’,]
+
+4. ABSOLUTELY NO PREAMBLE/FOOTNOTES, only RAW JSON output
+
+
+Current Input Interaction Description: "hand_contact": xxx, "general_intention":
+
+xxx.
+
+
+A.2.8 DATASET ANALYSIS
+
+
+For data integration purposes, Tab. 7 outlines the mapping used to align labels from the SomethingSomething dataset with our defined action groups. A comprehensive comparison with existing handobject interaction datasets is presented in Tab. 8. We further analyze the statistical properties of
+our collected objects, including the scale distribution and its relationship with action categories, as
+visualized in Fig. 15.
+
+
+Table 7: The correspondence between the class labels of the Something-Something dataset and the
+action groups defined in this study.
+
+
+|Action Group|Class Label|
+|---|---|
+|**Picking**|Pretending to pick something up|
+|**Picking**|Picking something up|
+|**Pushing**|Pushing something from right to left|
+|**Pushing**|Pushing something from left to right|
+|**Pushing**|Pushing something so that it almost falls off but doesn’t|
+|**Pushing**|Pushing something so that it slightly moves|
+|**Pushing**|Pushing something so it spins|
+|**Pushing**|Pushing something so that it falls off the table|
+|**Pushing**|Pushing something off of something|
+|**Pushing**|Pushing something onto something|
+|**Pushing**|Pushing something with something|
+|**Pushing**|Something colliding with something and both are being defected|
+|**Poking**|Poking something so that it falls over|
+|**Poking**|Poking a stack of something so the stack collapses|
+|**Poking**|Poking something so it slightly moves|
+|**Poking**|Poking something so lightly that it doesn’t or almost doesn’t move|
+|**Poking**|Pretending to poke something|
+|**Poking**|Poking something so that it spins around|
+|**Poking**|Poking a stack of something without the stack collapsing|
+|**Poking**|Poking a hole into something soft|
+|**Poking**|Poking a hole into some substance|
+|**Lifting**|Lifting up one end of something without letting it drop down|
+|**Lifting**|Lifting something up completely without letting it drop down|
+|**Lifting**|Lifting up one end of something, then letting it drop down|
+|**Lifting**|Lifting something up completely, then letting it drop down|
+|**Lifting**|Lifting something with something on it|
+
+
+22
+
+
+|Col1|Lifting a surface with something on it but not enough for it to slide down|
+|---|---|
+|**Moving**|Moving something down|
+|**Moving**|Moving something towards the camera|
+|**Moving**|Moving something away from the camera|
+|**Moving**|Moving something across a surface without it falling down|
+|**Moving**|Moving something up|
+|**Moving**|Moving something across a surface until it falls down|
+|**Moving**|Moving part of something|
+|**Squeezing**|Pretending to squeeze something|
+|**Squeezing**|Squeezing something|
+|**Taking**|Taking one of many similar things on the table|
+|**Taking**|Pretending to take something from somewhere|
+|**Taking**|Pretending to take something out of something|
+|**Taking**|Taking something from somewhere|
+|**Touching**|Touching (without moving) part of something|
+|**Opening**|Opening something|
+|**Opening**|Pretending to open something without actually opening it|
+|**Laying**|Laying something on the table on its side, not upright|
+|**Turning**|Pretending to turn something upside down|
+|**Turning**|Turning something upside down|
+|**Rolling**|Rolling something on a fat surface|
+|**Rolling**|Letting something roll along a fat surface|
+|**Rolling**|Letting something roll down a slanted surface|
+|**Spinning**|Spinning something that quickly stops spinning|
+|**Spinning**|Spinning something so it continues spinning|
+|**Pulling**|Pulling something from right to left|
+|**Pulling**|Pulling something from left to right|
+|**Throwing**|Throwing something|
+|**Throwing**|Throwing something onto a surface|
+|**Throwing**|Throwing something in the air and letting it fall|
+|**Putting**|Putting something on a surface|
+|**Putting**|Putting something upright on the table|
+|**Putting**|Putting something on a fat surface without letting it roll|
+|**Putting**|Putting something onto a slanted surface but it doesn’t glide down|
+|**Putting**|Putting something into something|
+|**Putting**|Putting something that can’t roll onto a slanted surface, so it slides down|
+|**Putting**|Pretending to put something behind something|
+|**Putting**|Putting something that cannot actually stand upright upright on the table, so it<br>falls on its side|
+|**Putting**|Putting something similar to other things that are already on the table|
+|**Falling**|Something falling like a feather or paper|
+|**Falling**|Something falling like a rock|
+|**Bending**|Bending something so that it deforms|
+|**Tipping**|Tipping something over|
+|**Tipping**|Tipping something with something in it over, so something in it falls out|
+|**Closing**|Pretending to close something without actually closing it|
+|**Closing**|Closing something|
+|**Twisting**|Twisting something|
+
+
+23
+
+
+|Col1|Pretending or trying and failing to twist something|
+|---|---|
+|**Holdi**|**ng**<br>Holding something|
+|**Pilin**|**g**<br>Piling something up|
+|**Show**|**ing**<br>Showing that something is empty<br>Showing something to the camera|
+|**Sprink**|**ling**<br>Pretending to sprinkle air onto something|
+|**Teari**|**ng**<br>Tearing something just a little bit<br>Pretending to be tearing something that is not tearable<br>Tearing something into two pieces|
+|**Foldi**|**ng**<br>Folding something|
+|**Unfold**|**ing**<br>Unfolding something|
+|**Attach**|**ing**<br>Attaching something to something|
+|**Tilti**|**ng**<br>Tilting something with something on it slightly so it doesn’t fall down<br>Tilting something with something on it until it falls off|
+|**Stack**|**ing**<br>Stacking number of something|
+|**Cover**|**ing**<br>Covering something with something|
+|**Spread**|**ing**<br>Pretending to spread air onto something|
+|**Dropp**|**ing**<br>Dropping something onto something|
+|**Wipi**|**ng**<br>Pretending or failing to wipe something off of something|
+
+
+0.0 0.1 0.2 0.3 0.4 0.5 0.6
+Scale
+
+
+Figure 15: The left figure is KDE curves of object scales in different datasets. Our dataset, collected
+without object category bias, shows a more uniform scale distribution., while the right figure depicts
+the object size distribution across different verb categories. Actions like “squeezing” typically involve smaller objects, whereas “folding” tends to be associated with larger ones.
+
+
+A.3 DETAILS OF TOUCH
+
+
+A.3.1 IMPLEMENTATION DETAILS
+
+
+**Condition** **Injection** **Transformer** **Architecture** . Our diffusion model and refiner network _f_ refiner
+are both built upon an 8-layer, 4-head Transformer architecture. This architecture features a latent
+dimension of 512, a feed-forward network size of 1024, the GELU activation function, and a dropout
+rate of 0.1. To handle the variable number of input points for hands and objects, we designed an
+Adaptive Feature Selector, which employs a multi-head attention mechanism to aggregate features
+from the input point clouds into a fixed-size representation (64 for the hand and 128 for the object).
+**Text** **Encoder** . To facilitate effective feature alignment and representation learning, we designed
+and implemented customized encoder architectures tailored to different sources of textual features.
+
+
+24
+
+
+Dataset
+
+
+Data Collection Dataset Scale Dataset Anno.
+
+
+Environmnet Authentic Obj Cate. Obj Inst. Clips/Frames Act. Cate. Contact
+
+
+HO-3D lab ✓ 10 10 27/78k none ✗
+
+
+obman syn. ✗ 8 2.7k -/154K none ✗
+
+
+HOI4D lab ✓ 16 800 4K/2.4M 54 ✗
+
+
+Oakink* lab/syn. ✓/✗ 34/34 100/1.7k 793/230k 5 ✗
+
+
+ContactPose lab ✓ 25 25 2.3k/3M 25 ✓
+
+
+GRAB lab ✓ 37 51 1.3k/1.6M 4 ✗
+
+
+_**Ours**_ wild ✓ 403 4.4k 4.4k/- 92 ✓
+
+
+Table 8: **Comparison** **with** **existing** **hand-object** **interaction** **datasets:** HO-3D (Hampali et al.,
+2020), obman (Hasson et al., 2019), HOI4D (Liu et al., 2022), Oakink* (Yang et al., 2022), ContactPose (Brahmbhatt et al., 2020), GRAB (Taheri et al., 2020). “Authentic” indicates whether the
+hand-object interaction is genuine human behavior. The Oakink* dataset comprises two parts: real
+data collected in laboratory settings (img set) and synthetic data (shape set).
+
+
+For the 4096-dimensional features from the large language model Qwen-7B, we employed a nonlinear feature adapter. This module, inspired by established practices in cross-modal alignment,
+utilizes a Multi-Layer Perceptron (MLP) incorporating GELU activations and Layer Normalization
+to project the high-dimensional features into a unified 512-dimensional latent space. For the 768dimensional token-level sequence features from models such as BERT and MPNet, we diverged
+from the conventional mean-pooling strategy. Instead, we implemented an attention-based pooling
+mechanism.
+**Training** . The diffusion model is trained for 1000 epochs using the Adam optimizer with a learning
+rate of 1e-4 and a batch size of 128. Subsequently, the refiner network is trained using a distinct set
+of loss weights tailored for physical plausibility. During this phase, the parameters of the diffusion
+model are kept frozen.
+**Refinement** . At inference time, following a single forward pass through the refiner network, we
+perform Test-Time Adaptation (TTA) on the generated pose. This process directly optimizes the
+pose parameters for 500 iterations with a learning rate of 1e-2. The loss weight coefficients used
+during all training and refinement stages are detailed in Tab. 9.
+
+
+Table 9: Weight coefficients for each loss term during the training and refinement stages. - indicates
+that the loss term is not applicable to the corresponding stage.
+
+
+**Parameter** **Diffusion Model** **Refiner Network** **Description**
+
+
+_λ_ simple 1.0 5.0 Base L2 loss
+_λ_ dmap 0.1   - Hand-object distance map loss
+_λ_ global 0.1 0.1 Hand global pose loss
+_λ_ pene   - 100.0 Hand-object penetration loss
+_λ_ contact   - 100.0 Hand-object contact loss
+_λ_ cyc   - 10.0 Cycle-consistency loss
+_λ_ self   - 10000.0 Hand self-penetration loss
+_λ_ anatomy   - 0.1 Anatomical plausibility loss
+
+
+A.3.2 EXPERIMENT SETTINGS
+
+
+**Training** **Details.** We implement our model using Accelerate and train it on 8 NVIDIA 4090D
+GPUs with a batch size of 128. We first define 17 detailed hand parts (e.g., pad, nail, knuckle
+for each finger, palmar, dorsal). Due to the long-tailed distribution of their contact frequencies, we
+
+
+25
+
+
+aggregate these parts into 7 semantically coherent categories (pad of each finger, palmar and dorsal).
+The contact state for any interaction is then encoded as a 7-bit binary label, where each bit represents
+the contact status (1 for contact, 0 for non-contact) of one category. To create a balanced training
+set, we perform resampling based on these unique 7-bit labels.
+
+
+**Evaluation Metrics**
+
+
+    - **Physical** **Plausibility.** We employ three metrics to assess the physical plausibility of the
+generated hand-object interactions: (1) Mean Per-Vertex Position Error (MPVPE, mm),
+which computes the average L2 distance between the predicted hand mesh **H** [ˆ] and the
+ground truth **H** ; (2) Penetration Depth (PD, cm), measuring the maximum depth of hand
+vertices penetrating the object surface; (3) Penetration Volume (PV, cm [3] ), quantifying the
+volumetric intersection by voxelizing the object mesh and calculating the volume within
+the hand surface.
+
+
+    - **Contact Accuracy.** Contact accuracy is measured by comparing the predicted contact map
+**C** _H_ with the ground truth **C** _[∗]_ _H_ [using Intersection over Union (IoU) and F1 score.]
+
+    - **HOI Diversity.** Following (Liu et al., 2023b), we assess diversity by clustering generated
+grasps into 20 clusters using K-means, and report the entropy of cluster assignments and
+the average cluster size.
+
+
+    - **Semantic Consistency.** Semantic consistency is evaluated by: (1) P-FID, the Fr´echet Inception Distance between point clouds of predicted and ground truth hand meshes, using
+a pre-trained feature extractor (Nichol et al., 2022); (2) VLM assisted evaluation, where
+rendered hand-object interactions are scored for semantic alignment with input captions
+(0-10 scale); (3) Perceptual Score (PS), the mean rating from 10 volunteers (0-10 scale),
+reflecting the naturalness and semantic consistency of generated grasps.
+
+
+A.4 USE OF LLMS
+
+
+We utilized Large Language Models (LLMs) and Vision-Language Models (VLMs) to assist in
+various stages of this research. Specifically, their use can be broken down as follows:
+
+
+    - Dataset Annotation: During the dataset generation phase, we employed both LLMs and
+VLMs to automatically generate descriptive text annotations.
+
+
+    - Model Architecture: Our proposed model architecture directly incorporates prior knowledge from a pre-trained LLM (Qwen-7B) to enhance its reasoning and generation capabilities.
+
+
+    - Evaluation: We used a VLM as part of our automated pipeline for the quantitative evaluation of our model’s generated outputs.
+
+
+    - Manuscript Preparation: We used an LLM-based tool for proofreading to help.
+
+
+26

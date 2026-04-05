@@ -1,0 +1,2643 @@
+# BRIDGING PERCEPTION AND REASONING: TOKEN REWEIGHTING FOR RLVR IN MULTIMODAL LLMS
+
+
+**Anonymous authors**
+Paper under double-blind review
+
+
+ABSTRACT
+
+
+Extending Reinforcement Learning with Verifiable Rewards (RLVR) to multimodal large language models (MLLMs) faces a fundamental challenge: their
+responses inherently interleave **perception-related** **tokens**, which ground visual
+content, with **reasoning-related tokens**, which construct reasoning chains. These
+token types instantiate distinct yet interdependent capacities — _visual grounding_
+_and_ _symbolic_ _reasoning_    - making isolated optimization insufficient. Through
+token-level empirical analysis, we demonstrate that optimizing either perceptionor reasoning-only tokens consistently underperforms full optimization, underscoring their inherent coupling. To address this, we propose a _plug-and-play_ **To** ken**R** eweighting ( **ToR** ) strategy that explicitly models this interdependence by identifying critical tokens of both types and dynamically reweighting them during
+RLVR training. Applied on top of existing methods ( _e.g._, GRPO and DAPO),
+ToR delivers consistent performance gains across multiple multi-modal reasoning benchmarks, achieving state-of-the-art performance with both accurate visual
+grounding and coherent reasoning.
+
+
+1 INTRODUCTION
+
+
+Reinforcement Learning with Verifiable Rewards (RLVR) has substantially advanced the reasoning ability of large language models (LLMs) on complex tasks (Lambert et al., 2025; Shao et al.,
+2024; Guo et al., 2025; Yang et al., 2025a). Extending RLVR to multimodal large language models
+(MLLMs), however, is non-trivial: generated responses _interleave_ tokens that ground visual content
+( **perception** ) with tokens that drive symbolic inference ( **reasoning** ), as illustrated in Figure 1. Existing RLVR variants for MLLMs typically optimize these capabilities in isolation — either via chainof-thought objectives for reasoning (Huang et al., 2025; Wei et al., 2025) or perception-oriented
+rewards and augmentations for perception (Wang et al., 2025e; Xiao et al., 2025; **?** ) - leaving their
+interaction underexplored.
+
+
+der Group Relative Policy Optimization (GRPO) (Shao et al., 2024).
+We identify reasoning-related tokens
+
+|Image<br>Muli-<br>modal<br>LLM<br>Question: What event is<br>shown in this photo?|Response:<br>To … two rows of baseball players,<br>…<br>Moreover … “American” text jerseys<br>… …<br>Thus …indicate the MLB All-Star Game.|
+|---|---|
+|**Reasoning-related tokens**<br>**Perception-related tokens**|**Reasoning-related tokens**<br>**Perception-related tokens**|
+
+via high **next-token** **entropy** (fol- Figure 1: MLLM responses typically involve two types of
+lowing recent insights on reasoning critical tokens: **(1)** reasoning-related tokens to construct reaforks (Wang et al., 2025c; Cheng soning chains, and **(2)** perception-related tokens to ground
+et al., 2025)), and perception-related and represent visual content.
+tokens via **visual sensitivity**, measured as the change in token log-probability when conditioning on
+the image versus a text-only context (details in Section 3). We then train models while masking gradients on non-selected tokens, comparing three settings: optimizing only reasoning-related tokens,
+only perception-related tokens, and all tokens (vanilla GRPO).
+
+
+Figure 1: MLLM responses typically involve two types of
+critical tokens: **(1)** reasoning-related tokens to construct reasoning chains, and **(2)** perception-related tokens to ground
+and represent visual content.
+
+
+1
+
+
+|GRPO w/ Reasoning-related tokens：<br>Question: What event is<br>Response: To analyze this image, … two rows of baseball players …<br>shown in this photo?<br>Meanwhile, … the jerseys have “PLAYOFFS” text … indicating this is a<br>formal baseball game, likely before a decisive playoff.<br>Image<br>GRPO w/ Perception-related tokens：<br>Response: The image shows two rows of baseball players in formal<br>arrangement … professional uniforms … the field in good condition,<br>professional photographers … indicating a formal baseball game.<br>ToR-GRPO: Re-weight Reasoning- and Perception-related tokens：<br>Response: To understand this scene, … two rows of baseball players in formal arrangement.<br>Moreover, … “American” text on the jerseys, which is characteristic of All-Star Game attire. Thus, the<br>formal arrangement and the distinctive uniform markings indicate the MLB All-Star Game.|Acc w/ Reasoning tokens<br>70<br>Baseline: Qwen-VL-7B<br>68 R : token ratios<br>66<br>64<br>62<br>60<br>BaselineR=20% R=30% R=50%GRPO<br>Acc w/ Perception tokens<br>70<br>Baseline: Qwen-VL-7B<br>68 R : token ratios<br>66<br>64<br>62<br>60<br>BaselineR=20% R=30% R=50%GRPO|Col3|
+|---|---|---|
+|**Question:What event is**<br>**shown in this photo?**<br>**Image**<br>**Response:To analyze this image, … two rows of baseball players … **<br>**Meanwhile,… the jerseys have “PLAYOFFS” text …indicatingthis is a**<br>**formal baseball game, likely before a decisive playoff.**<br>**Response:The image showstwo rows of baseball players in formal**<br>**arrangement … professional uniforms … the field in good condition,**<br>**professional photographers …indicating a formal baseball game.**<br>**Response:To understand this scene,… two rows of baseball players in formal arrangement.**<br>**Moreover,… “American” text on the jerseys,which is characteristic of All-Star Game attire. Thus,the**<br>**formal arrangement and the distinctive uniform markings indicate the MLB All-Star Game.**<br>**GRPO w/ Reasoning-related tokens：**<br>**GRPO w/ Perception-related tokens：**<br>**ToR-GRPO: Re-weight Reasoning- and Perception-related tokens：**|**Acc w/ Reasoning tokens**<br>**Acc w/ Perception tokens**<br>**60**<br>**62**<br>**64**<br>**66**<br>**68**<br>**70**<br>**R : token ratios**<br>**GRPO**<br>**R=20% R=30% R=50%**<br>**Baseline**<br>**Baseline: Qwen-VL-7B**<br>**R : token ratios**<br>**GRPO**<br>**R=20% R=30% R=50%**<br>**Baseline**<br>**Baseline: Qwen-VL-7B**<br>**60**<br>**62**<br>**64**<br>**66**<br>**68**<br>**70**|<br>**R : token ratios**<br>**GRPO**<br>**R=20% R=30% R=50%**<br>**Baseline**<br>**Baseline: Qwen-VL-7B**<br>**60**<br>**62**<br>**64**<br>**66**<br>**68**<br>**70**|
+
+
+**(a) Qualitative results by optimizing with ( w/ ) different types of tokens** **(b) Quantitative results**
+
+
+Figure 2: Performance comparison over the wemath benchmark (Qiao et al., 2024) when optimizing
+different token types with GRPO (Shao et al., 2024). Results across selection ratios 20%, 30%, or
+50% show that optimizing either reasoning-only or perception-only tokens underperforms all tokens.
+Qualitative examples are selected from the best-performing checkpoints.
+
+
+Across selection ratios (20%, 30%, 50%), optimizing only reasoning tokens underperforms vanilla
+GRPO ( _e.g._, _∼_ 2% absolute drop on we-math benchmark), and optimizing only perception tokens
+fares worse ( _e.g._, _∼_ 3% drop, with 20% and 30% tokens even worse than the baseline model); neither
+matches training on all tokens (Figure 2). Qualitatively, reasoning-only models produce coherentlooking chains of thought yet misinterpret key visual content, while perception-only models preserve low-level grounding but fail to integrate it into coherent reasoning. These results support our
+hypothesis: _perception and reasoning are coupled capabilities that demand joint optimization_ .
+
+
+Building on this insight, we propose **To** ken- **R** eweighting ( **ToR** ), a lightweight, plug-and-play module for RLVR that jointly optimizes perception and reasoning. Instead of treating all tokens equally
+or optimizing subsets in isolation, ToR strategically identifies the most critical perception- and
+reasoning-related tokens and adaptively reweights their importance in the policy gradient calculation. This mechanism explicitly models their interdependence, encouraging the MLLM to integrate visual grounding into its logical deliberations. As shown in Figure 2, applying ToR to GRPO
+( **ToR-GRPO** ) not only recovers the performance lost from selective optimization but surpasses the
+standard GRPO baseline, confirming our effectiveness. Our contributions are threefold:
+
+
+ - We conduct the first systematic, token-level analysis to reveal the critical interdependence between perception and reasoning in MLLMs. Our controlled experiments quantitatively demonstrate that optimizing either capability in isolation is detrimental.
+
+ - We introduce **To** ken- **R** eweighting ( **ToR** ), a plug-and-play RLVR training strategy that explicitly models this interdependence by dynamically reweighting critical perception- and reasoningrelated tokens during policy optimization.
+
+ - We empirically demonstrate that ToR delivers consistent and substantial gains when integrated
+with state-of-the-art RLVR algorithms ( _e.g._, GRPO and DAPO), setting a new state-of-the-art
+across a diverse suite of both multi-modal reasoning and perception benchmarks.
+
+
+2 PRELIMINARIES
+
+
+In this section, we revisit Reinforcement Learning with Verifiable Rewards (RLVR) procedure and
+representative RLVR optimization strategies for Multi-modal Large Language Models (MLLMs).
+
+
+2.1 REINFORCEMENT LEARNING WITH VERIFIABLE REWARDS
+
+
+Reinforcement Learning with Verifiable Rewards (RLVR) enhances multi-modal large language
+models (MLLMs) by aligning model outputs with verifiable answers. Given a multi-modal input
+with ground truth from a batch of B samples, (I _[b]_ _,_ q _[b]_ )) _∈{_ I _[b]_ _,_ q _[b]_ _}_ _[B]_ _b_ =1 [, and] _[ y][b]_ _[∈{][y][b][}][B]_ _b_ =1 [, where][ I] _[b]_ [,]
+
+
+2
+
+
+q _[b]_, and _y_ _[b]_ denotes the image, question, and ground-truth respectively, the model _πθ_ generates output _**o**_ _[b]_ containing a reasoning process and a prediction. The prediction is enclosed in _\_ boxed _{_ . _}_
+while reasoning is delimited by <think>...</think>, enabling automated verification against
+the ground truth answers. RLVR employs a binary reward function **R** ( _·_ ) to determine whether the
+answer is correct by comparing the model output _**o**_ _[b]_ with ground truth _y_ _[b]_ . The goal of RLVR is to
+maximize the reward function, formalized as:
+
+
+_J_ RLVR( _θ_ ) = max _θ_ E _{_ (I _b,_ q _b_ ) _|yb_ ) _}Bb_ =1 [E] _**[o]**_ _[b][∼][π][θ]_ [(] _[·|]_ [I] _[b][,]_ [q] _[b]_ [)][[] **[R]** [(] _**[o]**_ _[b][, y][b]_ [)]] _[.]_ (1)
+
+
+2.2 RLVR OPTIMIZATION ALGORITHMS
+
+
+**Group Relative Policy Optimization (GRPO).** As a widely adopted RLVR optimization strategy,
+GRPO stabilizes training by computing advantages within response groups (Shao et al., 2024). Concretely, given a batch of samples _{_ (I _[b]_ _,_ q _[b]_ ) _| y_ _[b]_ _}_ _[B]_ _b_ =1 [, the GRPO objective is:]
+
+
+where _ϵ_ low and _ϵ_ high decouple the clipping thresholds for negative and positive advantages, respectively. In this work, we apply our token-reweighting strategy to both GRPO and DAPO, demonstrating its general applicability across various RLVR optimization strategies.
+
+
+3 APPROACH
+
+
+In this section, we elaborate on our token re-weighting strategy in detail. Firstly, we identify and
+analyze the effects of reasoning- and perception-related tokens; then, we illustrate our dynamic
+reweighting scheme based on the token types, and demonstrate the application to existing RLVR
+algorithms, such as GRPO and DAPO.
+
+
+3.1 TOKEN IDENTIFICATION
+
+
+In this subsection, we present our token identification strategy and analyze the effects of emphasizing
+different types of tokens during GRPO optimization.
+
+
+3
+
+
+_G_
+
+
+_i_ =1
+
+
+1
+_|o_ _[b]_ _i_ _[|]_
+
+
+_|o_ _[b]_ _i_ _[|]_
+
+
+_t_ =1
+
+
+_J_ GRPO( _θ_ ) = E _{_ (I _b,_ q _b_ ) _}Bb_ =1 [E] _[{][o]_ _i_ _[b][}]_ _i_ _[G]_ =1 _[∼][π][θ]_ old [(] _[o][b][|]_ [I] _[b][,]_ [q] _[b]_ [)]
+
+
+1
+_G_
+
+
+_A_ ˆ _[b]_ _i,t_
+
+
+_−_ _β_ D _KL_ [ _πθ ∥_ _π_ ref]
+
+
+_,_
+
+
+(2)
+
+
+min
+
+
+- _πθ_ ( _o_ _[b]_ _i,t_ _[|]_ [I] _[b][,]_ [ q] _[b][, o][b]_ _i,<t_ [)] _πθ_ ( _o_ _[b]_ _i,t_ _[|]_ [I] _[b][,]_ [ q] _[b][, o][b]_ _i,<t_ [)]
+_A_ ˆ _[b]_ _i,t_ _[,]_ [clip]
+_πθ_ old ( _o_ _[b]_ _i,t_ _[|]_ [I] _[b][,]_ [ q] _[b][, o][b]_ _i,<t_ [)] _πθ_ old ( _o_ _[b]_ _i,t_ _[|]_ [I] _[b][,]_ [ q] _[b][, o][b]_ _i,<t_ [)] _[,]_ [ 1] _[ −]_ _[ϵ,]_ [ 1 +] _[ ϵ]_
+
+
+where _G_ is the rollout group size for each input, and the clip function restricts the importance ratio
+within [1 _−_ _ϵ,_ 1 + _ϵ_ ]. Moreover, the advantage can be formulated as:
+
+
+_A_ ˆ _[b]_ _i,t_ [=] **[R]** _i_ _[b]_ _[−]_ [mean(] **[R]** [b][)] _,_ where **R** _[b]_ _i_ [=][ I][(][is] ~~[e]~~ [quivalent][(] _**[o]**_ _[b]_ _i_ _[, y][b]_ [))] _[,]_ (3)
+
+std( **R** [b] )
+
+
+where I( _·_ ) is the indicator function, is ~~e~~ quivalent( _·_ ) extracts the predictions from the model
+output _o_ _[b]_ _i_ [and compares with the ground truth] _[ y][b]_ [.]
+
+**Decoupled Clip and Dynamic Sampling Policy Optimization (DAPO)** . DAPO (Yu et al., 2025b)
+improves upon GRPO by removing KL regularization and introducing clip-higher, dynamic sampling, and token-level loss from the GRPO loss, achieving new state-of-the-art performance. Specifically, the DAPO objective for the batch of samples _{_ (I _[b]_ _,_ q _[b]_ ) _| y_ _[b]_ _}_ _[B]_ _b_ =1 [can be formalized as:]
+
+
+_|o_ _[b]_ _i_ _[|]_
+
+
+_t_ =1
+
+
+1
+_J_ DAPO( _θ_ ) = E _{_ (I _b,_ q _b_ ) _}Bb_ =1 [E] _[{][o]_ _i_ _[b][}]_ _i_ _[G]_ =1 _[∼][π][θ]_ old [(] _[o][b][|]_ [I] _[b][,]_ [q] _[b]_ [)] - _G_
+_i_ =1 _[|][o][i][|]_
+
+
+_G_
+
+
+_i_ =1
+
+
+(4)
+
+
+_A_ ˆ _[b]_ _i,t_
+
+
+��
+
+_,_
+
+
+min
+
+
+- _πθ_ ( _o_ _[b]_ _i,t_ _[|]_ [I] _[b][,]_ [ q] _[b][, o][b]_ _i,<t_ [)] _πθ_ ( _o_ _[b]_ _i,t_ _[|]_ [I] _[b][,]_ [ q] _[b][, o][b]_ _i,<t_ [)]
+_A_ ˆ _[b]_ _i,t_ _[,]_ [clip]
+_πθ_ old ( _o_ _[b]_ _i,t_ _[|]_ [I] _[b][,]_ [ q] _[b][, o][b]_ _i,<t_ [)] _πθ_ old ( _o_ _[b]_ _i,t_ _[|]_ [I] _[b][,]_ [ q] _[b][, o][b]_ _i,<t_ [)] _[,]_ [ 1] _[ −]_ _[ϵ]_ [low] _[,]_ [ 1 +] _[ ϵ]_ [high]
+
+
+3.1.1 REASONING-RELATED TOKENS
+
+
+**Identification of reasoning-related tokens.** Recent works (Wang et al., 2025c; Cheng et al., 2025)
+have shown that high-entropy tokens often correspond to critical “forking” points in reasoning
+chains, directly reflecting the model’s _decision uncertainty_ . Moreover, retaining gradients for only
+a small subset of such tokens has been shown to benefit optimization, highlighting their potential
+importance for reasoning.
+
+
+Motivated by this, we identify reasoning-related tokens using an entropy-based criterion. Given the
+_i_ -th generated response **o** _[b]_ _i_ [=] _[{][o][b]_ _i,_ 1 _[, o][b]_ _i,_ 2 _[. . ., o]_ _i,L_ _[b]_ _i_ _[}]_ [ conditioned on the image][ I] _[b]_ [,] [and then question]
+q _[b]_ from the input batch _{_ (I _[b]_ _,_ q _[b]_ ) _}_ _[B]_ _b_ =1 [, the prediction entropy at position] _[ t]_ [ is computed as:]
+
+_Hi,t_ _[b]_ [=] _[ −]_      - P _θ_ ( _o_ _[b]_ _i,t_ [=] _[ v]_ _[|]_ **[ o]** _[b]_ _i,<t_ _[,]_ [ I] _[b][,]_ [ q] _[b]_ [)] _[ ·]_ [ log P] _[θ]_ [(] _[o][b]_ _i,t_ [=] _[ v]_ _[|]_ **[ o]** _[b]_ _i,<t_ _[,]_ [ I] _[b]_ _i_ _[,]_ [ q] _[b]_ _i_ [)] _[,]_ (5)
+
+_v∈V_ top- _p_
+
+where _V_ top- _p_ denotes the set of vocabulary tokens within the top- _p_ cumulative probability ( _p_ = 0 _._ 95).
+This top- _p_ truncation avoids the influence of extremely low-probability tokens and is consistent with
+the rollout sampling process.
+
+
+To aggregate across the rollout batch, we collect all token entropies into a set:
+
+_H_ = _{Hi,t_ _[b]_ _[|][ b]_ [ = 1] _[, . . ., B]_ [;] _[i]_ [ = 1] _[, . . ., G]_ [;] _[t]_ [ = 1] _[, . . ., L][b]_ _i_ _[}][.]_ (6)
+The reasoning-token set is then defined by selecting the top- _αr_ fraction of tokens with the highest
+entropy across the batch:
+
+_T_ r = _{_ ( _b, i, t_ ) _| Hi,t_ _[b]_ _[≥]_ [Percentile][1] _[−][α]_ _r_ [(] _[H]_ [)] _[}][,]_ (7)
+where _αr_ controls the fraction of selected tokens. Intuitively, these high-uncertainty positions correspond to pivotal points where reasoning chains are shaped.
+
+
+Figure 3: Performance on the Geo3K
+
+**Identification** **of** **perception-related** **tokens.** While
+
+validation set for different ratios of
+
+reasoning-related tokens capture decision uncertainty,
+
+reasoning-related tokens during GRPO
+
+perception-related tokens highlight positions whose pre
+training, Training data: Geo3K training
+
+dictions strongly depend on visual inputs. To quantify
+
+set, Model: Qwen-VL-2.5 7B.
+
+this dependence, we compare the token log-probabilities
+under two conditions: (i) _with image_, conditioned on both
+I _[b]_ and q _[b]_ ; and (ii) _without image_, where the image channel is replaced by an empty placeholder **∅**
+and the model is conditioned only on q _[b]_ .
+
+Given the _i_ -th generated response **o** _[b]_ _i_ [=] _[ {][o]_ _i,_ _[b]_ 1 _[, . . ., o][b]_ _i,Ti_ _[}]_ [, the visual-sensitivity score at position] _[ t]_ [ is]
+computed as:
+
+_Si,t_ _[b]_ [=] �� log _πθ_ ( _obi,t_ _[|]_ **[ o]** _i,<t_ _[b]_ _[,]_ [ I] _[b]_ _i_ _[,]_ [ q] _[b]_ _i_ [)] _[ −]_ [log] _[ π][θ]_ [(] _[x][b]_ _i,t_ _[|]_ **[ o]** _i,<t_ _[b]_ _[,]_ **[∅]** _[,]_ **[ q]** _[b]_ _i_ [)] �� _,_ (8)
+
+where _πθ_ ( _ot_ _|_ _·_ ) is the token-level policy. A large _Si,t_ indicates a strong visual influence on token
+_oi,t_ . Aggregating across the rollout batch, the perception-token set is defined as the top- _αp_ fraction
+of tokens with the highest visual-sensitivity:
+
+_T_ p = _{_ ( _b, i, t_ ) _| Si,t_ _[b]_ _[≥]_ [Percentile][1] _[−][α]_ _p_ [(] _[{][S][b,i,t]_ _[|][ b]_ [ = 1] _[, . . ., B]_ [;] _[i]_ [ = 1] _[, . . ., G]_ [;] _[t]_ [ = 1] _[, . . ., L][b]_ _i_ _[}]_ [)] _[}][,]_
+(9)
+
+
+4
+
+
+**Influences of reasoning-related tokens.** We evaluate the
+practical effect of the reasoning-token set _T_ r by conducting GRPO training constrained to tokens in this set with
+_αr_ = 20% _,_ 30% _,_ 50%. As shown in Figure 3, all selection ratios underperform the baseline that optimizes
+over all tokens. Notably, the 30% and 50% settings converge to similar outcomes, both falling short of the fulltoken GRPO. These results indicate that while _T_ r captures
+critical decision points, optimizing solely on it fails to
+preserve sufficient contextual information — _particularly_
+_when errors originate from perception_ - motivating the
+investigation of perception-related tokens.
+
+
+3.1.2 PERCEPTION-RELATED TOKENS
+
+
+where _αp_ controls the selection ratio. This batch-level percentile selection ensures consistent token
+selection thresholds across rollout batches.
+
+
+_rθ_ ( _o_ _[b]_ _i,t_ [)][ is the importance sampling ratio, formalized as:]
+
+
+_i,t_ _[|]_ [ I] _i_ _[b][,]_ [ q] _[b]_ _i_ _[, o][b]_ _i,<t_ [)]
+_rθ_ ( _o_ _[b]_ _i,t_ [) =] _[π][θ]_ [(] _[o][b]_ (12)
+
+_πθ_ old ( _o_ _[b]_ _i,t_ _[|]_ [ I] _i_ _[b][,]_ [ q] _[b]_ _i_ _[, o][b]_ _i,<t_ [)] _[.]_
+
+
+Here, _γ_ r weights reasoning-related tokens, emphasizing critical decision points in reasoning chains;
+_γ_ p weights perception-related tokens, emphasizing the integration of visual context. Tokens outside
+these sets are excluded from optimization ( _i.e._, assigned a weight of zero). This reweighting ensures gradients focus on tokens essential for both reasoning and perception, improving both training
+efficiency and effectiveness.
+
+
+**Discussion** Compared with existing approaches, ToR offers several key advantages: ❶ **Plug-and-**
+**play** . A simple reweighting mask integrates seamlessly into standard RLVR objectives, without
+
+
+5
+
+
+**Influences** **of** **perception-related** **tokens.** We evaluate
+the practical effect of the perception-token set _T_ p by constraining GRPO optimization to tokens in this set with
+_αp_ = 20% _,_ 30% _,_ 50%. As shown in Figure 4, all selection ratios underperform the full-token baseline. In particular, 20% and 30% result in performance drops exceeding
+5%, whereas 50% shows the smallest performance gap
+but still underperforms the baseline. These results indicate that although perception-related tokens capture visually sensitive positions, optimizing solely on them is insufficient. _Effective GRPO training requires attending to_
+_both reasoning- and perception-related tokens to capture_
+_critical decision points while leveraging visual context._
+
+
+3.2 TOKEN REWEIGHTING
+
+
+Figure 4: Performance on the Geo3K
+validation set for different ratios of
+perception-related tokens during GRPO
+training, Training data: Geo3K training
+set, Model: Qwen-VL-2.5 7B.
+
+
+We unify reasoning- and perception-critical tokens into perception-related tokens during GRPO
+a single optimization framework by introducing _token_ training, Training data: Geo3K training
+_reweighting_, which selectively amplifies their contribu- set, Model: Qwen-VL-2.5 7B.
+tions while ignoring irrelevant tokens. Specifically, we
+integrate token-specific reweighting directly into the RL
+objectives. For the given input batch _{_ (I _[b]_ _,_ q _[b]_ ) _}_ _[B]_ _b_ =1 [,] [we constructed the reasoning-related token set]
+_T_ r and the perception-related token set _T_ p, and thus the GRPO objective with the token reweighting
+strategy ( **ToR-GRPO** ) is:
+
+
+_G_
+
+
+_i_ =1
+
+
+1
+_|o_ _[b]_ _i_ _[|]_
+
+
+_|o_ _[b]_ _i_ _[|]_
+
+
+_t_ =1
+
+
+_J_ ToR-GRPO( _θ_ ) = E _{_ (I _b,_ q _b_ ) _}Bb_ =1 [E] _[{]_ _**[o]**_ _i_ _[b][}]_ _i_ _[G]_ =1 _[∼][π][θ]_ old [(] _**[o]**_ _[b][|]_ [I] _[b][,]_ [q] _[b]_ [)]
+
+
+1
+_G_
+
+
+_**γ**_ r _**·**_ I **[(** _**b, i, t**_ **)** _**∈T**_ r **]**
+
+
+_−_ _β_ D _KL_ [ _πθ ∥_ _π_ ref]
+
+
+           **+** _**γ**_ p _**·**_ I **[(** _**b, i, t**_ **)** _**∈T**_ p **]** _·_ min
+
+
+_rθ_ ( _o_ _[b]_ _i,t_ [) ˆ] _[A][b]_ _i,t_ _[,]_ [ clip] - _rθ_ ( _o_ _[b]_ _i,t_ [)] _[,]_ [ 1] _[ −]_ _[ϵ,]_ [ 1 +] _[ ϵ]_ - _A_ ˆ _[b]_ _i,t_
+
+
+_._
+
+
+(10)
+
+
+Similarly, the DAPO objective with the token-weighting strategy ( **ToR-DAPO** ) is:
+
+
+_|oi|_
+
+
+_t_ =1
+
+
+��
+_**γ**_ r _**·**_ I **[(** _**b, i, t**_ **)** _**∈T**_ r **]**
+
+
+1
+_J_ ToR-DAPO( _θ_ ) = E _{_ (I _b,_ q _b_ ) _}Bb_ =1 [E] _[{]_ _**[o]**_ _i_ _[b][}]_ _i_ _[G]_ =1 _[∼][π][θ]_ old [(] _[·|]_ [I] _[b][,]_ [q] _[b]_ [)] - _G_
+_i_ =1 _[|][ o]_ _i_ _[b][|]_
+
+
+_G_
+
+
+_i_ =1
+
+
+��
+
+_._ (11)
+
+
+           **+** _**γ**_ p _**·**_ I **[(** _**b, i, t**_ **)** _**∈T**_ p **]** _·_ min
+
+
+         -         _rθ_ ( _o_ _[b]_ _i,t_ [)] _[ ·]_ _[A]_ [ˆ] _[b]_ _i,t_ _[,]_ [ clip] _rθ_ ( _o_ _[b]_ _i,t_ [)] _[,]_ [ 1] _[ −]_ _[ϵ]_ low _[,]_ [ 1 +] _[ ϵ]_ high _·_ _A_ [ˆ] _[b]_ _i,t_
+
+
+Figure 5: Performance comparison with different ratios of reasoning-related tokens ( _αr_ ).
+
+
+introducing extra pipeline modifications. ❷ **Self-contained.** Critical tokens are identified purely
+from the model’s intrinsic uncertainty and visual sensitivity, eliminating the need for external priors. ❸ **Joint** **optimization.** By explicitly modeling the interdependence between reasoning and
+perception tokens, ToR enables balanced and simultaneous enhancement of both capabilities.
+
+
+4 EXPERIMENT
+
+
+In this section, we elaborate on the effectiveness of our token reweighting strategy. Specifically, we
+first introduce the details of our experimental settings. Next, we present the ablation studies, and
+finally, we compare our results with those of state-of-the-art methods across various benchmarks.
+
+
+4.1 EXPERIMENTAL SETTINGS
+
+
+We adopt the Geometry3K (Lu et al., 2021) dataset for training and validation, following existing
+methods ( **?** Xiao et al., 2025), which consists of 2,100 training samples and 300 validation samples.
+Moreover, we employ the multi-modal framework EasyR1 (Yaowei et al., 2025) for reinforcement
+learning training, and following the works in ( **?** ) for evaluation. Evaluation is conducted with
+five benchmarks, including four for visual reasoning: MathVerse (Zhang et al., 2024), MathVision (Wang et al., 2024), MathVista (Lu et al., 2024), and WeMath (Qiao et al., 2024), and one for
+visual perception: HallusionBench (Guan et al., 2024).
+
+
+**Implementation** **details.** We adopt Qwen2.5-VL-7B (Bai et al., 2025) as our baseline model by
+following existing works in (Meng et al., 2025; **?** ). Specifically, all experiments are conducted using
+8 NVIDIA H800 GPUs (80 GB memory for each), with the default settings in EasyR1: a learning
+rate of 1 _e_ _[−]_ [6], a global batch size of 128, a rollout batch size of 512, a rollout _n_ as 12, and a rollout
+temperature of 0.95.
+
+
+4.2 ABLATION STUDIES
+
+
+In this section, we analyze the influences of different components on our token re-weighting strategy. Specifically, we utilize the Qwen-2.5-VL 7B (Bai et al., 2025) as the backbone, and conduct
+GRPO on the training set of Geometry3K. With the aim to evaluate the reasoning and perception
+ability, we select the Hallusion Bench (Guan et al., 2024), the Wemath (Qiao et al., 2024), and the
+MathVerse (Zhang et al., 2024) for evaluation, where Hallusion Bench focuses on the perception
+abilities, and MathVerse targets reasoning capabilities, whereas Wemath focuses on both.
+
+
+❶ **The effects of different ratios for reasoning and perception tokens.** In this section, we study
+the effect of varying token ratios ( _e.g._, the proportion of reasoning-related tokens _αr_ and perceptionrelated tokens _αp_ ). Results for reasoning-related tokens are presented in Figure 5, while those for
+perception-related tokens are shown in Figure 6. Specifically, we vary _αr_ and _αp_ from 20% to 80%
+over 60 GRPO steps, and report the performance of full-token GRPO as a dashed reference line.
+
+
+From Figure 5, two observations emerge: (1) On perception-intensive benchmarks such as HallusionBench, none of the ratios matches the performance of full-token GRPO. (2) On reasoning
+
+6
+
+
+**0.70**
+
+
+**0.68**
+
+
+**0.66**
+
+
+**0.64**
+
+
+**0.62**
+
+
+**0.68**
+
+
+**0.67**
+
+
+**0.66**
+
+
+**0.65**
+
+
+**0.64**
+
+
+**0.63**
+
+
+**0.52**
+
+
+**0.51**
+
+
+**0.5**
+
+
+**0.49**
+
+
+**0.48**
+
+
+**20%** **30%** **40%** **50%** **60%** **70%** **80%**
+
+```
+ (1) Hallubench
+
+```
+
+
+**20%** **30%** **40%** **50%** **60%** **70%** **80%**
+
+```
+  (2) WeMath
+
+```
+
+
+**20%** **30%** **40%** **50%** **60%** **70%** **80%**
+
+```
+  (3) MathVerse
+
+```
+
+```
+    (1) Hallubench (2) WeMath (3) MathVerse
+
+```
+
+Figure 7: Performance comparison with varying combination ratios of reasoning- and perceptionrelated tokens (reasoning weight _γ_ r fixed at 1, perception weight _γ_ p varying from 0.1 to 1.5).
+
+
+focused benchmarks ( _e.g._, WeMath and MathVerse), adjusting token ratios produces results comparable to direct GRPO, but yields little to no further improvement.
+
+
+Similarly, Figure 6 shows that while perception-only reweighting achieves performance close to
+full-token GRPO on perception-oriented benchmarks, it performs substantially worse on reasoningdemanding tasks, particularly on MathVerse, indicating a notable gap from full-token GRPO. These
+results collectively confirm that focusing exclusively on either reasoning- or perception-related tokens is insufficient for robust multimodal reasoning.
+
+
+By jointly considering both token types and their dynamics during training, we adopt a balanced
+ratio of 30% reasoning tokens and 30% perception tokens for re-weighting. Notably, in the initial
+stage of GRPO training on Geometry3K, about 12% of tokens overlap between the two categories,
+and this proportion evolves during optimization. For these overlapping tokens, our experiments
+show that while both reasoning- and perception-related tokens experience performance drops, the
+decrease is smaller for reasoning tokens; therefore, we assign them the weight of reasoning tokens
+during re-weighting.
+
+
+❷ **The** **effects** **of** **different** **combination** **ratios** **for** **different** **tokens.** In this section, we evaluate
+the impact of varying combination ratios between reasoning- and perception-related tokens. The
+results are shown in Figure 7, where the weight of reasoning tokens is fixed at 1, and the weight of
+perception tokens is varied from 0.1 to 1.5 in steps of 0.2. The performance of full-token GRPO is
+shown in a dashed reference line.
+
+
+From Figure 7, we make the following observations: (1) Combining reasoning- and perceptionrelated tokens consistently improves performance compared to using either type alone. (2) For
+reasoning-focused tasks, a relatively low proportion of perception tokens is preferable, whereas
+perception-oriented tasks benefit from a higher proportion. (3) Extremely low or high perception
+token weights tend to degrade performance. Overall, a weight of 0.5 for perception tokens provides
+a good balance across tasks, therefore, we adopt this ratio as a reference for subsequent experiments.
+
+
+7
+
+
+**0.72**
+
+
+**0.7**
+
+
+**0.68**
+
+
+**0.66**
+
+
+**0.64**
+
+
+**0.73**
+
+
+**0.71**
+
+
+**0.69**
+
+
+**0.67**
+
+
+**0.65**
+
+
+**0.68**
+
+
+**0.66**
+
+
+**0.64**
+
+
+**0.62**
+
+
+**0.6**
+
+
+**0.7**
+
+
+**0.69**
+
+
+**0.68**
+
+
+**0.67**
+
+
+**0.66**
+
+
+**0.65**
+
+
+**0.64**
+
+
+**0.5**
+
+
+**0.46**
+
+
+**0.42**
+
+
+**0.38**
+
+
+**20%** **30%** **40%** **50%** **60%** **70%** **80%**
+
+
+**20%** **30%** **40%** **50%** **60%** **70%** **80%**
+
+
+**20% 30% 40% 50% 60% 70% 80%**
+
+
+```
+  (1) Hallubench (2) WeMath (3) MathVerse
+
+```
+
+Figure 6: Performance comparison with different ratios of perception-related tokens ( _αp_ ).
+
+
+**0.54**
+
+
+**0.52**
+
+
+**0.5**
+
+
+**0.48**
+
+
+**0.1** **0.3** **0.5** **0.7** **0.9** **1.1** **1.3** **1.5**
+
+
+**0.1** **0.3** **0.5** **0.7** **0.9** **1.1** **1.3** **1.5**
+
+
+**0.1** **0.3** **0.5** **0.7** **0.9** **1.1** **1.3** **1.5**
+
+
+Table 1: Performance comparison of 7B-sized Multi-modal LLMs on different benchmarks. Following existing works in ( **?** Xiao et al., 2025), we highlight the data size with blue and red for SFT and
+RL, respectively. The best value in each column is shown in **bold**, and the second-best is underlined.
+
+
+**Model** **Data Size** **MathVerse** **MathVision** **MathVista** **WeMath** **HallusionBench**
+
+
+_Open-source Models_
+
+
+InternVL-2.5-8B (Chen et al., 2024) - 39.5 19.7 64.4 - 67.3
+InternVL-3-8B (Zhu et al., 2025) - 39.5 29.3 71.6 37.1 LLaVA-OneVision-7B (Li et al., 2025a) - 26.2 - 63.2 - 48.4
+Qwen2.5-VL-7B-Instruct (Bai et al., 2025) - 46.2 25.0 67.5 63.1 64.6
+
+
+_reinforcement learning with verifiable reward strategies_
+
+
+R1-VL-7B (Zhang et al., 2025a) 260K+10K 40.0 24.7 63.5 - Vision-R1-7B (Huang et al., 2025) 200K+10K 52.4 - **73.5** - R1-OneVision-7B (Yang et al., 2025b) 155K+10K 46.1 22.5 63.9 62.1 65.6
+OpenVLThinker-7B (Deng et al., 2025b) 35K+15K 48.0 25.0 71.5 67.8 70.8
+MM-Eureka-Qwen-7B (Meng et al., 2025) 15K 50.5 28.3 71.5 65.5 68.3
+ThinkLite-7B-VL (Wang et al., 2025d) 11K 50.2 27.6 72.7 69.2 71.0
+VLAA-Thinker-7B (Chen et al., 2025a) 25K 49.9 26.9 68.8 67.9 68.6
+NoisyRollout-7B (Liu et al., 2025a) 2.1K 53.2 28.5 72.6 69.6 72.1
+
+
+GRPO (Shao et al., 2024) 2.1K (Geometry3K) 50.8 27.3 70.5 67.4 69.8
+**ToR-GRPO** 2.1K (Geometry3K) 53.0 **28.6** 71.9 68.9 **72.4**
+
+
+DAPO (Yu et al., 2025b) 2.1K (Geometry3K) 50.6 26.5 70.3 69.3 67.9
+**ToR-DAPO** 2.1K (Geometry3K) **53.4** 27.9 72.6 **72.1** 71.8
+
+
+4.3 COMPARISON WITH STATE-OF-THE-ART APPROACHES
+
+
+In this section, we compare our token re-weighting strategies with state-of-the-art approaches,
+including open-source multi-modal LLMs: InternVL-2.5 (Chen et al., 2024), InternVL-3 (Chen
+et al., 2024), LLaVA-OneVision (Li et al., 2025a), and Qwen-2.5-VL 7B (Bai et al., 2025), as
+well as RLVR-based methods: R1-VL (Zhang et al., 2025a), Vision-R1 (Huang et al., 2025), R1OneVision (Yang et al., 2025b), Open-VLThinker (Deng et al., 2025b), MM-Eureka (Meng et al.,
+2025), ThinkLite (Wang et al., 2025d), VLAA-Thinker (Chen et al., 2025a), and NoisyRollout ( **?** ).
+The results are summarized in Table 1.
+
+
+Unlike existing approaches that often rely on large-scale data augmentation or extensive chain-ofthought distillation, our token re-weighting method achieves substantial improvements with only
+2.1K samples. Specifically, it yields an average gain of more than 1.5% over GRPO across benchmarks, with notable improvements of 2.2% on MathVerse and 2.6% on HallusionBench.
+
+
+Furthermore, our approach establishes new state-of-the-art results on multiple benchmarks. For
+example, on the WeMath benchmark, applying token re-weighting to DAPO ( **ToR-DAPO** ) achieves
+an improvement of about 3%, significantly surpassing state-of-the-art methods.
+
+
+5 RELATED WORK
+
+
+In this section, we first briefly summarize methods that focus on enhancing reasoning capabilities in
+Multi-modal LLMs, and then, we illustrate related methods for reinforcement learning with verifiable rewards. Finally, we enumerate the differences between our approach and related methods.
+
+
+5.1 REASONING IN MULTI-MODAL LLMS
+
+
+Existing approaches that focus on reasoning in multi-modal LLMs can be broadly categorized into:
+
+
+❶ **Extending** **reasoning** **LLMs** **with** **visual** **understanding.** Building upon the strong reasoning
+capabilities of recent LLMs, one research branch explores incorporating visual content into LLMs.
+Typical strategies include: **(1)** integrating visual encoders into LLMs to directly extend them to
+multimodal scenarios (Peng et al., 2025; Wang et al., 2025b); and **(2)** transforming images into
+captions and feeding them into LLMs, enhancing chain-of-thought generation to bridge perception
+and reasoning (Huang et al., 2025; Wang et al., 2025e).
+
+
+❷ **Enhancing** **reasoning** **abilities** **within** **MLLMs.** Another research branch seeks to endow existing MLLMs with reasoning skills. Representative approaches include: **(1)** transferring reasoning
+
+
+8
+
+
+priors from reasoning LLMs into MLLMs through model merging, thereby leveraging the complementary strengths of both models (Chen et al., 2025b); and **(2)** adapting RLVR algorithms, such as
+Group Relative Policy Optimization (GRPO) (Shao et al., 2024), to enhance reasoning capabilities
+in multimodal settings (Huang et al., 2025; Liu et al., 2025c).
+
+
+5.2 REINFORCEMENT LEARNING WITH VERIFIABLE REWARDS
+
+
+RLVR has recently demonstrated its effectiveness in aligning LLMs with verifiable reasoning outcomes. Among the implementations, GRPO (Shao et al., 2024) has shown great success with more
+stable advantage estimation. Subsequent refinements have further improved its efficiency and effectiveness (Yu et al., 2025b; Liu et al., 2025b; Wang et al., 2025c). When extending RLVR to
+multimodal settings, current methods primarily focus on two distinct branches:
+
+
+❶ **Emphasizing** **the** **importance** **of** **visual** **understanding** **within** **RLVR.** Specifically, works
+like (Xiao et al., 2025; Yu et al., 2025a) introduce perception-oriented rewards to incentivize accurate visual grounding and understanding. Moreover, works such as ( **?** Wang et al., 2025e; Li et al.,
+2025b) employ data augmentation strategies to improve model robustness and sensitivity against visual variations. Works like (Zhang et al., 2025c; Liu et al., 2025d) incorporate image manipulation
+tools like cropping and zooming in to focus on critical regions in the image during the reasoning
+process.
+
+
+❷ **Constructing** **coherent** **reasoning** **chains** **with** **RLVR.** Representative works include: **(1)** distilling chain-of-thought reasoning patterns from stronger reasoning models to improve reasoning
+coherence in multimodal tasks (Huang et al., 2025; Wei et al., 2025); and **(2)** modifying different components of GRPO (e.g., clip ratios or advantage estimation) to emphasize reasoning-critical
+tokens better and stabilize training (Zhang et al., 2025b; Meng et al., 2025; Wang et al., 2025a).
+
+
+**Differences.** Unlike existing methods that focus on optimizing either perception or reasoning abilities in isolation, our work systematically investigates and addresses the interdependence between
+these two capabilities. Specifically, through comprehensive token-level analysis, we demonstrate
+that perception and reasoning tokens exhibit complex interactions during training, where optimizing one type can inadvertently impair the other. To address this challenge, we propose a simple
+token-reweighting strategy that explicitly balances the optimization of both perception and reasoning tokens, leading to significant performance improvements across both capabilities.
+
+
+6 CONCLUSION
+
+
+In this work, through systematic token-wise analysis, we uncover a fundamental challenge in extending RLVR to multimodal LLMs: **the intrinsic interdependence between perception and rea-**
+**soning.** We show that overemphasizing either capability inevitably impairs the other, yet current
+approaches overlook this issue and optimize them in isolation.
+
+
+To address this, we proposed a simple yet effective **To** ken- **R** eweighting ( **ToR** ) strategy that identifies and reweights perception- and reasoning-related tokens during RLVR training. We apply ToR
+over current RLVR algorithms ( _e.g._, GRPO and DAPO), and achieves significant performance gains
+across diverse benchmarks, consistently enhancing both perception and reasoning.
+
+
+**Limitations** **and** **Future** **Work.** While ToR establishes a foundation for addressing perceptionreasoning interdependence, several promising directions remain open: ❶ **Fine-grained token iden-**
+**tification strategies** : Precisely localizing critical regions in images using models like SAM (Kirillov
+et al., 2023) to identify more fine-grained perception-critical tokens. ❷ **Dynamic token reweight-**
+**ing** : Dynamically assigning weights to tokens based on their gradient contributions or connections
+to final outcomes (Yu et al., 2025c). ❸ **Extending beyond tokens** : As tokens derive meaning from
+context, future work could explore perception-reasoning interdependence at broader contextual levels — optimizing tokens within their semantic context, preserving their contextual relationships. ❹
+**Exploring broader applications** : Extending this interdependence framework to more complex scenarios, _e.g._, unified multi-modal generation and understanding tasks (Wu et al., 2025; Deng et al.,
+2025a), where visual tokens participate in reasoning processes.
+
+
+9
+
+
+ETHICS STATEMENT
+
+
+Our token re-weighting (ToR) approach significantly enhances the reasoning capabilities of multimodal LLMs. As a simple, plug-and-play strategy, it can be readily integrated into existing RLVR
+frameworks, making it a practical tool for improving multi-modal reasoning performance. Given its
+focus on model optimization, this method does not introduce new ethical risks beyond those already
+inherent to large language models.
+
+
+REPRODUCIBILITY STATEMENT
+
+
+Our ToR strategy is easy to implement. We provide implementation details, including the framework, token selection criteria, and token weights used in our experiments. The code will be made
+publicly available upon acceptance to facilitate reproducibility and further research.
+
+
+REFERENCES
+
+
+Shuai Bai, Keqin Chen, Xuejing Liu, Jialin Wang, Wenbin Ge, Sibo Song, Kai Dang, Peng Wang,
+Shijie Wang, Jun Tang, et al. Qwen2. 5-vl technical report. _arXiv_ _preprint_ _arXiv:2502.13923_,
+2025.
+
+
+Hardy Chen, Haoqin Tu, Fali Wang, Hui Liu, Xianfeng Tang, Xinya Du, Yuyin Zhou, and Cihang
+Xie. SFT or RL? an early investigation into training r1-like reasoning large vision-language
+models. _Transactions on Machine Learning Research_, 2025a. ISSN 2835-8856. [URL https:](https://openreview.net/forum?id=wZI5qkQeDF)
+[//openreview.net/forum?id=wZI5qkQeDF.](https://openreview.net/forum?id=wZI5qkQeDF)
+
+
+Shiqi Chen, Jinghan Zhang, Tongyao Zhu, Wei Liu, Siyang Gao, Miao Xiong, Manling Li, and
+Junxian He. Bring reason to vision: Understanding perception and reasoning through model
+merging. In _Forty-second International Conference on Machine Learning_, 2025b. [URL https:](https://openreview.net/forum?id=ntCAP6tMoX)
+[//openreview.net/forum?id=ntCAP6tMoX.](https://openreview.net/forum?id=ntCAP6tMoX)
+
+
+Zhe Chen, Weiyun Wang, Yue Cao, Yangzhou Liu, Zhangwei Gao, Erfei Cui, Jinguo Zhu, Shenglong Ye, Hao Tian, Zhaoyang Liu, et al. Expanding performance boundaries of open-source
+multimodal models with model, data, and test-time scaling. _arXiv_ _preprint_ _arXiv:2412.05271_,
+2024.
+
+
+Daixuan Cheng, Shaohan Huang, Xuekai Zhu, Bo Dai, Wayne Xin Zhao, Zhenliang Zhang, and
+Furu Wei. Reasoning with exploration: An entropy perspective. _arXiv preprint arXiv:2506.14758_,
+2025.
+
+
+Chaorui Deng, Deyao Zhu, Kunchang Li, Chenhui Gou, Feng Li, Zeyu Wang, Shu Zhong, Weihao
+Yu, Xiaonan Nie, Ziang Song, et al. Emerging properties in unified multimodal pretraining. _arXiv_
+_preprint arXiv:2505.14683_, 2025a.
+
+
+Yihe Deng, Hritik Bansal, Fan Yin, Nanyun Peng, Wei Wang, and Kai-Wei Chang. OpenVLThinker:
+Complex vision-language reasoning via iterative SFT-RL cycles. In _The_ _Thirty-ninth_ _Annual_
+_Conference on Neural Information Processing Systems_ [, 2025b. URL https://openreview.](https://openreview.net/forum?id=gfX1nqBKtu)
+[net/forum?id=gfX1nqBKtu.](https://openreview.net/forum?id=gfX1nqBKtu)
+
+
+Tianrui Guan, Fuxiao Liu, Xiyang Wu, Ruiqi Xian, Zongxia Li, Xiaoyu Liu, Xijun Wang, Lichang
+Chen, Furong Huang, Yaser Yacoob, et al. Hallusionbench: an advanced diagnostic suite for
+entangled language hallucination and visual illusion in large vision-language models. In _Pro-_
+_ceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition_, pp. 14375–
+14385, 2024.
+
+
+Daya Guo, Dejian Yang, Haowei Zhang, Junxiao Song, Peiyi Wang, Qihao Zhu, Runxin Xu, Ruoyu
+Zhang, Shirong Ma, Xiao Bi, et al. Deepseek-r1 incentivizes reasoning in llms through reinforcement learning. _Nature_, 645(8081):633–638, 2025.
+
+
+Wenxuan Huang, Bohan Jia, Zijie Zhai, Shaosheng Cao, Zheyu Ye, Fei Zhao, Zhe Xu, Yao Hu, and
+Shaohui Lin. Vision-r1: Incentivizing reasoning capability in multimodal large language models.
+_arXiv preprint arXiv:2503.06749_, 2025.
+
+
+10
+
+
+Alexander Kirillov, Eric Mintun, Nikhila Ravi, Hanzi Mao, Chloe Rolland, Laura Gustafson, Tete
+Xiao, Spencer Whitehead, Alexander C Berg, Wan-Yen Lo, et al. Segment anything. In _Proceed-_
+_ings of the IEEE/CVF international conference on computer vision_, pp. 4015–4026, 2023.
+
+
+Nathan Lambert, Jacob Morrison, Valentina Pyatkin, Shengyi Huang, Hamish Ivison, Faeze Brahman, Lester James Validad Miranda, Alisa Liu, Nouha Dziri, Xinxi Lyu, Yuling Gu, Saumya
+Malik, Victoria Graf, Jena D. Hwang, Jiangjiang Yang, Ronan Le Bras, Oyvind Tafjord, Christopher Wilhelm, Luca Soldaini, Noah A. Smith, Yizhong Wang, Pradeep Dasigi, and Hannaneh Hajishirzi. Tulu 3: Pushing frontiers in open language model post-training. In _Second Conference on_
+_Language Modeling_, 2025. [URL https://openreview.net/forum?id=i1uGbfHHpH.](https://openreview.net/forum?id=i1uGbfHHpH)
+
+
+Bo Li, Yuanhan Zhang, Dong Guo, Renrui Zhang, Feng Li, Hao Zhang, Kaichen Zhang, Peiyuan
+Zhang, Yanwei Li, Ziwei Liu, and Chunyuan Li. LLaVA-onevision: Easy visual task transfer. _Transactions_ _on_ _Machine_ _Learning_ _Research_, 2025a. ISSN 2835-8856. URL [https:](https://openreview.net/forum?id=zKv8qULV6n)
+[//openreview.net/forum?id=zKv8qULV6n.](https://openreview.net/forum?id=zKv8qULV6n)
+
+
+Yuting Li, Lai Wei, Kaipeng Zheng, Jingyuan Huang, Linghe Kong, Lichao Sun, and Weiran Huang.
+Vision matters: Simple visual perturbations can boost multimodal math reasoning. _arXiv preprint_
+_arXiv:2506.09736_, 2025b.
+
+
+Xiangyan Liu, Jinjie Ni, Zijian Wu, Chao Du, Longxu Dou, Haonan Wang, Tianyu Pang, and
+Michael Qizhe Shieh. Noisyrollout: Reinforcing visual reasoning with data augmentation. In _2nd_
+_AI for Math Workshop @ ICML 2025_, 2025a. [URL https://openreview.net/forum?](https://openreview.net/forum?id=GdNm9PEAei)
+[id=GdNm9PEAei.](https://openreview.net/forum?id=GdNm9PEAei)
+
+
+Zichen Liu, Changyu Chen, Wenjun Li, Penghui Qi, Tianyu Pang, Chao Du, Wee Sun Lee, and Min
+Lin. Understanding r1-zero-like training: A critical perspective. In _2nd AI for Math Workshop @_
+_ICML 2025_, 2025b. [URL https://openreview.net/forum?id=jLpC1zavzn.](https://openreview.net/forum?id=jLpC1zavzn)
+
+
+Ziyu Liu, Zeyi Sun, Yuhang Zang, Xiaoyi Dong, Yuhang Cao, Haodong Duan, Dahua Lin, and Jiaqi
+Wang. Visual-rft: Visual reinforcement fine-tuning. In _Proceedings_ _of_ _the_ _IEEE/CVF_ _Interna-_
+_tional Conference on Computer Vision (ICCV)_, pp. 2034–2044, October 2025c.
+
+
+Ziyu Liu, Yuhang Zang, Yushan Zou, Zijian Liang, Xiaoyi Dong, Yuhang Cao, Haodong
+Duan, Dahua Lin, and Jiaqi Wang. Visual agentic reinforcement fine-tuning. _arXiv_ _preprint_
+_arXiv:2505.14246_, 2025d.
+
+
+Pan Lu, Ran Gong, Shibiao Jiang, Liang Qiu, Siyuan Huang, Xiaodan Liang, and Song-chun Zhu.
+Inter-gps: Interpretable geometry problem solving with formal language and symbolic reasoning.
+In _Proceedings_ _of_ _the_ _59th_ _Annual_ _Meeting_ _of_ _the_ _Association_ _for_ _Computational_ _Linguistics_
+_and_ _the_ _11th_ _International_ _Joint_ _Conference_ _on_ _Natural_ _Language_ _Processing_ _(Volume_ _1:_ _Long_
+_Papers)_, pp. 6774–6786, 2021.
+
+
+Pan Lu, Hritik Bansal, Tony Xia, Jiacheng Liu, Chunyuan Li, Hannaneh Hajishirzi, Hao Cheng, KaiWei Chang, Michel Galley, and Jianfeng Gao. Mathvista: Evaluating mathematical reasoning
+of foundation models in visual contexts. In _The_ _Twelfth_ _International_ _Conference_ _on_ _Learning_
+_Representations_, 2024. [URL https://openreview.net/forum?id=KUNzEQMWU7.](https://openreview.net/forum?id=KUNzEQMWU7)
+
+
+Fanqing Meng, Lingxiao Du, Zongkai Liu, Zhixiang Zhou, Quanfeng Lu, Daocheng Fu, Botian Shi,
+Wenhai Wang, Junjun He, Kaipeng Zhang, et al. Mm-eureka: Exploring visual aha moment with
+rule-based large-scale reinforcement learning. _CoRR_, 2025.
+
+
+Yi Peng, Peiyu Wang, Xiaokun Wang, Yichen Wei, Jiangbo Pei, Weijie Qiu, Ai Jian, Yunzhuo Hao,
+Jiachun Pan, Tianyidan Xie, et al. Skywork r1v: Pioneering multimodal reasoning with chain-ofthought. _arXiv preprint arXiv:2504.05599_, 2025.
+
+
+Runqi Qiao, Qiuna Tan, Guanting Dong, Minhui Wu, Chong Sun, Xiaoshuai Song, Zhuoma
+GongQue, Shanglin Lei, Zhe Wei, Miaoxuan Zhang, et al. We-math: Does your large multimodal model achieve human-like mathematical reasoning? _arXiv_ _preprint_ _arXiv:2407.01284_,
+2024.
+
+
+Zhihong Shao, Peiyi Wang, Qihao Zhu, Runxin Xu, Junxiao Song, Xiao Bi, Haowei Zhang,
+Mingchuan Zhang, YK Li, Yang Wu, et al. Deepseekmath: Pushing the limits of mathematical reasoning in open language models. _arXiv preprint arXiv:2402.03300_, 2024.
+
+
+11
+
+
+Haozhe Wang, Chao Qu, Zuming Huang, Wei Chu, Fangzhen Lin, and Wenhu Chen. VLrethinker: Incentivizing self-reflection of vision-language models with reinforcement learning.
+In _The Thirty-ninth Annual Conference on Neural Information Processing Systems_, 2025a. URL
+[https://openreview.net/forum?id=4oYxzssbVg.](https://openreview.net/forum?id=4oYxzssbVg)
+
+
+Ke Wang, Junting Pan, Weikang Shi, Zimu Lu, Houxing Ren, Aojun Zhou, Mingjie Zhan, and Hongsheng Li. Measuring multimodal mathematical reasoning with math-vision dataset. _Advances in_
+_Neural Information Processing Systems_, 37:95095–95169, 2024.
+
+
+Peiyu Wang, Yichen Wei, Yi Peng, Xiaokun Wang, Weijie Qiu, Wei Shen, Tianyidan Xie, Jiangbo
+Pei, Jianhao Zhang, Yunzhuo Hao, et al. Skywork r1v2: Multimodal hybrid reinforcement learning for reasoning. _arXiv preprint arXiv:2504.16656_, 2025b.
+
+
+Shenzhi Wang, Le Yu, Chang Gao, Chujie Zheng, Shixuan Liu, Rui Lu, Kai Dang, Xiong-Hui Chen,
+Jianxin Yang, Zhenru Zhang, Yuqiong Liu, An Yang, Andrew Zhao, Yang Yue, Shiji Song, Bowen
+Yu, Gao Huang, and Junyang Lin. Beyond the 80/20 rule: High-entropy minority tokens drive
+effective reinforcement learning for LLM reasoning. In _The Thirty-ninth Annual Conference on_
+_Neural Information Processing Systems_ [, 2025c. URL https://openreview.net/forum?](https://openreview.net/forum?id=yfcpdY4gMP)
+[id=yfcpdY4gMP.](https://openreview.net/forum?id=yfcpdY4gMP)
+
+
+Xiyao Wang, Zhengyuan Yang, Chao Feng, Hongjin Lu, Linjie Li, Chung-Ching Lin, Kevin Lin,
+Furong Huang, and Lijuan Wang. SoTA with less: MCTS-guided sample selection for dataefficient visual reasoning self-improvement. In _The_ _Thirty-ninth_ _Annual_ _Conference_ _on_ _Neural_
+_Information_ _Processing_ _Systems_, 2025d. URL [https://openreview.net/forum?id=](https://openreview.net/forum?id=PHu9xJeAum)
+[PHu9xJeAum.](https://openreview.net/forum?id=PHu9xJeAum)
+
+
+Zhenhailong Wang, Xuehang Guo, Sofia Stoica, Haiyang Xu, Hongru Wang, Hyeonjeong Ha, Xiusi
+Chen, Yangyi Chen, Ming Yan, Fei Huang, et al. Perception-aware policy optimization for multimodal reasoning. _arXiv preprint arXiv:2507.06448_, 2025e.
+
+
+Lai Wei, Yuting Li, Kaipeng Zheng, Chen Wang, Yue Wang, Linghe Kong, Lichao Sun, and Weiran
+Huang. Advancing multimodal reasoning via reinforcement learning with cold start. _arXiv_
+_preprint arXiv:2505.22334_, 2025.
+
+
+Chenfei Wu, Jiahao Li, Jingren Zhou, Junyang Lin, Kaiyuan Gao, Kun Yan, Sheng-ming Yin, Shuai
+Bai, Xiao Xu, Yilei Chen, et al. Qwen-image technical report. _arXiv preprint arXiv:2508.02324_,
+2025.
+
+
+Tong Xiao, Xin Xu, Zhenya Huang, Hongyu Gao, Quan Liu, Qi Liu, and Enhong Chen. Advancing
+multimodal reasoning capabilities of multimodal large language models via visual perception
+reward. _arXiv preprint arXiv:2506.07218_, 2025.
+
+
+An Yang, Anfeng Li, Baosong Yang, Beichen Zhang, Binyuan Hui, Bo Zheng, Bowen Yu,
+Chang Gao, Chengen Huang, Chenxu Lv, et al. Qwen3 technical report. _arXiv_ _preprint_
+_arXiv:2505.09388_, 2025a.
+
+
+Yi Yang, Xiaoxuan He, Hongkun Pan, Xiyan Jiang, Yan Deng, Xingtao Yang, Haoyu Lu, Dacheng
+Yin, Fengyun Rao, Minfeng Zhu, Bo Zhang, and Wei Chen. R1-onevision: Advancing generalized multimodal reasoning through cross-modal formalization. In _Proceedings of the IEEE/CVF_
+_International Conference on Computer Vision (ICCV)_, pp. 2376–2385, October 2025b.
+
+
+Zheng Yaowei, Lu Junting, Wang Shenzhi, Feng Zhangchi, Kuang Dongdong, and Xiong Yuwen.
+[Easyr1: An efficient, scalable, multi-modality rl training framework. https://github.com/](https://github.com/hiyouga/EasyR1)
+[hiyouga/EasyR1, 2025.](https://github.com/hiyouga/EasyR1)
+
+
+En Yu, Kangheng Lin, Liang Zhao, jisheng yin, Yana Wei, Yuang Peng, Haoran Wei, Jianjian Sun, Chunrui Han, Zheng Ge, Xiangyu Zhang, Daxin Jiang, Jingyu Wang, and Wenbing
+Tao. Perception-r1: Pioneering perception policy with reinforcement learning. In _The_ _Thirty-_
+_ninth_ _Annual_ _Conference_ _on_ _Neural_ _Information_ _Processing_ _Systems_, 2025a. URL [https:](https://openreview.net/forum?id=BeXcXrXetA)
+[//openreview.net/forum?id=BeXcXrXetA.](https://openreview.net/forum?id=BeXcXrXetA)
+
+
+Qiying Yu, Zheng Zhang, Ruofei Zhu, Yufeng Yuan, Xiaochen Zuo, Yu Yue, Weinan Dai, Tiantian
+Fan, Gaohong Liu, Lingjun Liu, et al. Dapo: An open-source llm reinforcement learning system
+at scale. _arXiv preprint arXiv:2503.14476_, 2025b.
+
+
+12
+
+
+Tianyu Yu, Bo Ji, Shouli Wang, Shu Yao, Zefan Wang, Ganqu Cui, Lifan Yuan, Ning Ding, Yuan
+Yao, Zhiyuan Liu, et al. Rlpr: Extrapolating rlvr to general domains without verifiers. _arXiv_
+_preprint arXiv:2506.18254_, 2025c.
+
+
+Jingyi Zhang, Jiaxing Huang, Huanjin Yao, Shunyu Liu, Xikun Zhang, Shijian Lu, and Dacheng Tao.
+R1-vl: Learning to reason with multimodal large language models via step-wise group relative
+policy optimization. In _Proceedings_ _of_ _the_ _IEEE/CVF_ _International_ _Conference_ _on_ _Computer_
+_Vision (ICCV)_, pp. 1859–1869, October 2025a.
+
+
+Renrui Zhang, Dongzhi Jiang, Yichi Zhang, Haokun Lin, Ziyu Guo, Pengshuo Qiu, Aojun Zhou,
+Pan Lu, Kai-Wei Chang, Yu Qiao, et al. Mathverse: Does your multi-modal llm truly see the
+diagrams in visual math problems? In _European Conference on Computer Vision_, pp. 169–186.
+Springer, 2024.
+
+
+Yi-Fan Zhang, Xingyu Lu, Xiao Hu, Chaoyou Fu, Bin Wen, Tianke Zhang, Changyi Liu, Kaiyu
+Jiang, Kaibing Chen, Kaiyu Tang, et al. R1-reward: Training multimodal reward model through
+stable reinforcement learning. _arXiv preprint arXiv:2505.02835_, 2025b.
+
+
+Yi-Fan Zhang, Xingyu Lu, Shukang Yin, Chaoyou Fu, Wei Chen, Xiao Hu, Bin Wen, Kaiyu
+Jiang, Changyi Liu, Tianke Zhang, et al. Thyme: Think beyond images. _arXiv_ _preprint_
+_arXiv:2508.11630_, 2025c.
+
+
+Jinguo Zhu, Weiyun Wang, Zhe Chen, Zhaoyang Liu, Shenglong Ye, Lixin Gu, Hao Tian, Yuchen
+Duan, Weijie Su, Jie Shao, et al. Internvl3: Exploring advanced training and test-time recipes for
+open-source multimodal models. _arXiv preprint arXiv:2504.10479_, 2025.
+
+
+A USAGE OF LLMS
+
+
+We employed large language models (LLMs) solely for polishing the language of this paper. All
+content was originally drafted by the authors, and the use of LLMs was limited to refining preorganized text and paragraphs. All suggested modifications were carefully reviewed by the authors
+to ensure accuracy and consistency with the intended meaning.
+
+
+B TOKEN DISTRIBUTION AND CHARACTERISTIC ANALYSIS
+
+
+To further investigate the characteristics of perception- and reasoning-related tokens, we analyze
+the token distribution of Qwen-2.5-VL-7B on both perception and reasoning benchmarks. Specifically, we report the entropy distribution (Figures 9, 11) and the image log-probability difference
+distribution (Figures 8, 10) on _HallusionBench_ (Guan et al., 2024) and _WeMath_ (Qiao et al., 2024),
+respectively. For each case, we further highlight the values corresponding to the top 20%, 30%, and
+50% of tokens, ranked by their entropy or log-probability differences.
+
+
+Our observations are as follows:
+
+
+13
+
+
+Figure 8: Distribution of log-probability differences for Qwen-2.5-VL-7B on HallusionBench, used to identify perception-related tokens (Guan et al., 2024).
+
+
+Figure 9: Distribution of entropy values for
+Qwen-2.5-VL-7B on HallusionBench, used
+to identify reasoning-related tokens (Guan
+et al., 2024).
+
+
+Figure 10: Distribution of log-probability
+differences for Qwen-2.5-VL-7B on WeMath, used to identify perception-related tokens (Qiao et al., 2024).
+
+
+```
+          (1) MathVision (2) MathVista
+
+```
+
+Figure 12: Additional experimental results with different ratios of perception-related tokens ( _αp_ ) on
+_MathVision_ and _MathVista_ .
+
+
+❶ Perception-related benchmark (Guan et al., 2024). High-entropy tokens exhibit large variations,
+with more than 50% of tokens exceeding 0 _._ 89. In contrast, the image log-probability difference of
+perception-related tokens is relatively stable: more than 70% of tokens are less than 0 _._ 916. This
+indicates that a small set of perception-related tokens is consistently stable and plays a critical role
+in capturing visual cues, suggesting that focusing on these tokens effectively enhances the model’s
+perceptual ability.
+
+
+❷ Reasoning-related benchmark (Qiao et al., 2024). In reasoning tasks, the distribution shows the
+opposite trend. Perception-related tokens present large variations, with more than 50% exceeding
+0 _._ 946. Meanwhile, high-entropy tokens remain relatively stable, with over 70% less than 0 _._ 248. This
+implies that a small subset of reasoning-related tokens is more robust and can effectively capture the
+key reasoning process, highlighting their importance in enhancing the model’s reasoning capability.
+
+
+These results demonstrate that perception and reasoning rely on different types of stable tokens:
+perception emphasizes stability in a small number of visually sensitive tokens, while reasoning relies
+on the robustness of high-entropy tokens. This contrast validates our token re-weighting strategy that
+explicitly leverages both perception- and reasoning-related tokens.
+
+
+C ADDITIONAL EXPERIMENTAL RESULTS
+
+
+In this section, we provide additional ablation results on two reasoning-focused benchmarks, MathVision (Wang et al., 2024) and MathVista (Lu et al., 2024). Specifically, we evaluate the impact of
+different ratios of perception-related tokens ( _αp_ ), reasoning-related tokens ( _αr_ ), and their combinations. The results are illustrated in Figure 12, Figure 13, and Figure 14, respectively.
+
+
+14
+
+
+**0.26**
+
+
+**0.24**
+
+
+**0.22**
+
+
+Figure 11: Distribution of entropy values
+for Qwen-2.5-VL-7B on WeMath, used to
+identify reasoning-related tokens (Qiao et al.,
+2024).
+
+
+**20%** **30%** **40%** **50%** **60%** **70%** **80%**
+
+
+**0.69**
+
+
+**0.67**
+
+
+**0.65**
+
+
+**20%** **30%** **40%** **50%** **60%** **70%** **80%**
+
+
+**0.28**
+
+
+```
+          (1) MathVision (2) MathVista
+
+```
+
+Figure 14: Additional experimental results with combined ratios of perception- and reasoningrelated tokens ( _γ_ p = 1 _, γ_ r from 0.1 to 1.5) on _MathVision_ and _MathVista_ .
+
+
+From Figure 12 and Figure 13, we can observe that relying solely on perception- or reasoning-related
+tokens underperforms the full GRPO optimization, while focusing on reasoning tokens achieves
+relatively better results than perception tokens. Moreover, from Figure 14, the re-weighting strategy
+consistently improves performance, and the effectiveness of using 0.5 perception tokens across both
+benchmarks further validates the robustness of our re-weighting strategy.
+
+
+D PERCEPTION-REASONING INTERDEPENDENCE
+
+
+In this section, we demonstrate the interdependence between perception and reasoning tokens.
+Specifically, we visualize the relationship between reasoning uncertainty and perception strength
+over the training and validation set of Geo3K (Figure 15 & Figure 16), where we can observe a
+strong push-pull dynamic relationship between the reasoning and perception. Moreover, for clear
+illustration, we illustrate the relationship in Figure 17, and the learning dynamics as in Figure 18.
+
+
+E PERCEPTION TOKEN IDENTIFICATION WITH VARIOUS CRITERIA
+
+
+In this section, we compare different perception tokens selection criteria, including: “logp-diff”,
+“probs-diff”, “entropy-diff”, and “attention scores” to the image, Experimental results across various
+datasets are listed in Figure 19 _→_ Figure 27, where we can observe that “logp-diff” better trades
+how much the image matter and how meaningful is the change.
+
+
+15
+
+
+**0.71**
+
+
+**0.7**
+
+
+**0.27**
+
+
+**0.26**
+
+
+**0.69**
+
+
+**0.68**
+
+
+**20%** **30%** **40%** **50%** **60%** **70%** **80%**
+
+
+**20%** **30%** **40%** **50%** **60%** **70%** **80%**
+
+
+```
+          (1) MathVision (2) MathVista
+
+```
+
+Figure 13: Additional experimental results with different ratios of reasoning-related tokens ( _αr_ ) on
+_MathVision_ and _MathVista_ .
+
+
+**0.29**
+
+
+**0.28**
+
+
+**0.27**
+
+
+**0.26**
+
+
+**0.25**
+
+
+**0.73**
+
+
+**0.72**
+
+
+**0.71**
+
+
+**0.7**
+
+
+**0.69**
+
+
+**0.68**
+
+
+**0.1** **0.3** **0.5** **0.7** **0.9** **1.1** **1.3** **1.5**
+
+
+**0.1** **0.3** **0.5** **0.7** **0.9** **1.1** **1.3** **1.5**
+
+
+Figure 16: Relationship between (1) reasoning uncertainty: the entropy value of reasoning tokens and (2) perceptron strength:
+the logp diff between perception tokens for
+each response over Geo3K validation set, response sampled from Qwen-2.5-VL 7B.
+
+```
+          Reasoning ( )
+          Uncertainty
+
+```
+
+
+Perception Strength vs Reasoning Entropy
+
+
+0.93
+
+
+0.92
+
+
+0.91
+
+
+0.90
+
+
+0.89
+
+
+0.88
+
+
+0.87
+
+
+0.86
+
+
+0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0
+P: Mean | log p| (bin average)
+
+
+Figure 15: Relationship between (1) reasoning uncertainty: the entropy value of reasoning tokens and (2) perceptron strength: the
+logp diff between perception tokens for each
+response over Geo3K training set, response
+sampled from Qwen-2.5-VL 7B.
+
+
+|Col1|:50%<br>:30%<br>:20%|
+|---|---|
+|||
+|**`(`**<br>**`Perception`**|**`(`**<br>**`Perception`**|
+
+
+|Col1|Col2|
+|---|---|
+|**`:50%`**<br>**`:30%`**<br>**`:20%`**||
+|**`(`**<br>|**`(`**<br>|
+
+
+|Col1|Col2|
+|---|---|
+|||
+||<br>|
+
+
+**(a) Reasoning token only** **(b) Perception token only** **(c) Token Reweighting**
+
+
+Figure 17: The comparison of perception strengths and reasoning uncertainty with different token
+ratios for GRPO optimization.
+
+
+F DISTRIBUTION OF SELECTED TOKENS OVER VARIOUS ROLLOUTS.
+
+
+In this section, we show the distribution of selected tokens over a batch of rollouts as in Figure 28.
+We can find that different rollouts receive a comparable overall amount of optimization, but with
+different mixtures of tokens: harder groups are optimized more on reasoning, easier groups more on
+perception, while both token types remain well represented across the rollout batch.
+
+
+16
+
+
+0.92
+
+
+0.90
+
+
+0.88
+
+
+0.86
+
+
+0.84
+
+
+Perception Strength vs Reasoning Entropy
+
+
+0.4 0.5 0.6 0.7 0.8 0.9 1.0
+P: Mean | log p| (bin average)
+
+
+```
+Reasoning ( )
+Uncertainty
+
+```
+
+```
+Strength
+
+```
+
+```
+Reasoning ( )
+Uncertainty
+
+```
+
+```
+Strength
+
+```
+
+
+```
+Strength
+
+```
+
+|GRPO|Reasoning-only|Perception-only|Token-reweighting|
+|---|---|---|---|
+|**`Perception`**<br>**`Reasoning`**|**`Perception`**<br>**`Reasoning`**|**`Perception`**<br>**`Reasoning`**|**`Perception`**<br>**`Reasoning`**|
+
+
+Figure 18: Comparison between vanilla GRPO, GRPO with reasoning-tokens only, GRPO with
+perception-tokens only, and GRPO with Token-reweighting.
+
+
+Correlation Analysis: Four Metrics
+(*** p<0.001, ** p<0.01, * p<0.05)
+
+
+Figure 21: Correlation heatmaps between different image token selection strategies over the wemath
+benchmark.
+
+
+17
+
+
+(a) Pearson Correlation
+
+
+(b) Spearman Correlation
+
+
+(c) Kendall Tau Correlation
+
+
+Logp Diff
+
+
+Prob Diff
+
+
+Entropy Diff
+
+
+Attention Score
+
+
+1.00
+
+
+0.75
+
+
+0.50
+
+
+0.25
+
+
+0.00
+
+
+0.25
+
+
+0.50
+
+
+0.75
+
+
+1.00
+
+
+Logp Diff
+
+
+Prob Diff
+
+
+Entropy Diff
+
+
+Attention Score
+
+
+1.00
+
+
+0.75
+
+
+0.50
+
+
+0.25
+
+
+0.00
+
+
+0.25
+
+
+0.50
+
+
+0.75
+
+
+1.00
+
+
+Logp Diff
+
+
+Prob Diff
+
+
+Entropy Diff
+
+
+Attention Score
+
+
+1.00
+
+
+0.75
+
+
+0.50
+
+
+0.25
+
+
+0.00
+
+
+0.25
+
+
+0.50
+
+
+0.75
+
+
+1.00
+
+
+Figure 19: Correlation heatmaps between different image token selection strategies over the validation set.
+
+
+Correlation Analysis: Four Metrics
+(*** p<0.001, ** p<0.01, * p<0.05)
+
+
+(a) Pearson Correlation
+
+
+(b) Spearman Correlation
+
+
+(c) Kendall Tau Correlation
+
+
+Logp Diff
+
+
+Prob Diff
+
+
+Entropy Diff
+
+
+Attention Score
+
+
+1.00
+
+
+0.75
+
+
+0.50
+
+
+0.25
+
+
+0.00
+
+
+0.25
+
+
+0.50
+
+
+0.75
+
+
+1.00
+
+
+Logp Diff
+
+
+Prob Diff
+
+
+Entropy Diff
+
+
+Attention Score
+
+
+1.00
+
+
+0.75
+
+
+0.50
+
+
+0.25
+
+
+0.00
+
+
+0.25
+
+
+0.50
+
+
+0.75
+
+
+1.00
+
+
+Logp Diff
+
+
+Prob Diff
+
+
+Entropy Diff
+
+
+Attention Score
+
+
+1.00
+
+
+0.75
+
+
+0.50
+
+
+0.25
+
+
+0.00
+
+
+0.25
+
+
+0.50
+
+
+0.75
+
+
+1.00
+
+
+Figure 20: Correlation heatmaps between different image token selection strategies over the hallubench benchmark.
+
+
+Correlation Analysis: Four Metrics
+(*** p<0.001, ** p<0.01, * p<0.05)
+
+
+(a) Pearson Correlation
+
+
+(b) Spearman Correlation
+
+
+(c) Kendall Tau Correlation
+
+
+Logp Diff
+
+
+Prob Diff
+
+
+Entropy Diff
+
+
+Attention Score
+
+
+1.00
+
+
+0.75
+
+
+0.50
+
+
+0.25
+
+
+0.00
+
+
+0.25
+
+
+0.50
+
+
+0.75
+
+
+1.00
+
+
+Logp Diff
+
+
+Prob Diff
+
+
+Entropy Diff
+
+
+Attention Score
+
+
+1.00
+
+
+0.75
+
+
+0.50
+
+
+0.25
+
+
+0.00
+
+
+0.25
+
+
+0.50
+
+
+0.75
+
+
+1.00
+
+
+Logp Diff
+
+
+Prob Diff
+
+
+Entropy Diff
+
+
+Attention Score
+
+
+1.00
+
+
+0.75
+
+
+0.50
+
+
+0.25
+
+
+0.00
+
+
+0.25
+
+
+0.50
+
+
+0.75
+
+
+1.00
+
+
+Correlation Trends Across Layers
+
+1.0
+
+
+0.8
+
+
+|Col1|Col2|Col3|Col4|Col5|
+|---|---|---|---|---|
+||||||
+||||||
+||||||
+|||<br> <br> <br>|<br> <br> <br>||
+|||Logp<br> Prob<br>Logp<br> Entropy<br>Logp<br> Attention<br>Prob<br> Entropy<br>Prob<br> Attention<br>Entropy<br> Atten|Logp<br> Prob<br>Logp<br> Entropy<br>Logp<br> Attention<br>Prob<br> Entropy<br>Prob<br> Attention<br>Entropy<br> Atten|<br> tion|
+
+
+|Col1|Col2|Col3|Col4|Col5|
+|---|---|---|---|---|
+||||||
+||||||
+||||||
+||<br>|<br>|<br>||
+||Logp<br> Prob<br>Logp<br> Entropy<br>Logp<br> Attention|Logp<br> Prob<br>Logp<br> Entropy<br>Logp<br> Attention|Prob<br> Entropy<br>Prob<br> Attention<br>Entropy<br> Attention||
+
+
+Figure 23: Correlation comparison across layers between different image token selection strategies
+over the hallubench benchmark.
+
+
+18
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+0.2
+
+
+Probability Layer
+
+
+Figure 22: Correlation comparison across layers between different image token selection strategies
+over the validation set.
+
+
+Correlation Trends Across Layers
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+0.2
+
+
+Probability Layer
+
+
+**1000**
+
+**1001**
+
+**1002**
+
+
+**1003**
+
+**1004**
+
+**1005**
+
+**1006**
+
+**1007**
+
+**1008**
+
+
+**1009**
+
+**1010**
+
+**1011**
+
+**1012**
+
+**1013**
+
+
+**1014**
+
+**1015**
+
+**1016**
+
+**1017**
+
+**1018**
+
+**1019**
+
+
+**1020**
+
+**1021**
+
+**1022**
+
+**1023**
+
+**1024**
+
+**1025**
+
+
+Correlation Trends Across Layers
+
+1.0
+
+
+0.8
+
+
+|Col1|Col2|Col3|Col4|Col5|
+|---|---|---|---|---|
+||||||
+||||||
+||||||
+|||<br> <br> <br>|<br> <br> <br>||
+|||Logp<br> Prob<br>Logp<br> Entropy<br>Logp<br> Attention<br>Prob<br> Entropy<br>Prob<br> Attention<br>Entropy<br> Atten|Logp<br> Prob<br>Logp<br> Entropy<br>Logp<br> Attention<br>Prob<br> Entropy<br>Prob<br> Attention<br>Entropy<br> Atten|<br> tion|
+
+
+|Col1|(a) Logp Diff|Col3|
+|---|---|---|
+|0<br>5<br>10<br>15|=3.42824<br>=0.62236<br>=0.00590|=3.42824<br>=0.62236<br>=0.00590|
+|0<br>5<br>10<br>15|~~=2.2~~|~~7810~~<br><br>~~=0.56487~~<br><br>~~=0.08471~~|
+|0<br>5<br>10<br>15|||
+|0<br>5<br>10<br>15|||
+|0<br>5<br>10<br>15|||
+
+
+|(b) Prob Diff|Col2|Col3|Col4|
+|---|---|---|---|
+|=0.62032<br>~~=0.27544~~<br>=0.00569|=0.62032<br>~~=0.27544~~<br>=0.00569|=0.62032<br>~~=0.27544~~<br>=0.00569|=0.62032<br>~~=0.27544~~<br>=0.00569|
+|=0.2|9713<br><br>=0.2|4861<br><br>=0.06003|4861<br><br>=0.06003|
+|||||
+|||||
+|||||
+|||||
+
+
+|Col1|(c) Entropy Diff|Col3|Col4|Col5|
+|---|---|---|---|---|
+|4<br>3<br>2<br>1<br>0<br>1<br>2|~~=-0.52962~~<br>~~=-0.37224~~<br>~~=-0.02400~~|~~=-0.52962~~<br>~~=-0.37224~~<br>~~=-0.02400~~|~~=-0.52962~~<br>~~=-0.37224~~<br>~~=-0.02400~~|~~=-0.52962~~<br>~~=-0.37224~~<br>~~=-0.02400~~|
+|4<br>3<br>2<br>1<br>0<br>1<br>2|=0.8|7199<br><br>=0.57325<br><br>=0.1|7199<br><br>=0.57325<br><br>=0.1|4378|
+|4<br>3<br>2<br>1<br>0<br>1<br>2|||||
+|4<br>3<br>2<br>1<br>0<br>1<br>2|||||
+|4<br>3<br>2<br>1<br>0<br>1<br>2|||||
+|4<br>3<br>2<br>1<br>0<br>1<br>2|||||
+
+
+|(d) Attention Score|Col2|Col3|Col4|
+|---|---|---|---|
+|=0.00033<br>=0.00022<br>=0.00011|=0.00033<br>=0.00022<br>=0.00011|=0.00033<br>=0.00022<br>=0.00011|=0.00033<br>=0.00022<br>=0.00011|
+|=0.0|0021<br><br>=0.00020<br><br>=0.0|0021<br><br>=0.00020<br><br>=0.0|0012|
+|||||
+|||||
+|||||
+|||||
+
+
+|10<br>5<br>0<br>5<br>10|==20..|2577303823 ==00..6122661042 ==-00..1081704587|Col4|Col5|
+|---|---|---|---|---|
+|10<br>5<br>0<br>5<br>10<br>|||||
+|10<br>5<br>0<br>5<br>10<br>|||||
+|10<br>5<br>0<br>5<br>10<br>|||||
+|10<br>5<br>0<br>5<br>10<br>|||||
+|10<br>5<br>0<br>5<br>10<br>|||||
+
+
+|==00..|2131657904 ==00..|1087347389 ==-00..0090105405|Col4|
+|---|---|---|---|
+|||||
+|||||
+|||||
+|||||
+|||||
+
+
+|=-0.|.09336 =-0.10437 =-0.01815|Col3|Col4|
+|---|---|---|---|
+|~~=-0.~~<br>=0.|~~09336~~<br>78176<br>~~=-0.10437~~<br>=0.45696<br>~~=-0.01815~~<br>=0.23663|~~09336~~<br>78176<br>~~=-0.10437~~<br>=0.45696<br>~~=-0.01815~~<br>=0.23663|~~09336~~<br>78176<br>~~=-0.10437~~<br>=0.45696<br>~~=-0.01815~~<br>=0.23663|
+|||||
+|||||
+|||||
+|||||
+
+
+|==00..|0000001194 ==00..00|00001140 ==00..|0000001029|
+|---|---|---|---|
+|||||
+|||||
+|||||
+|||||
+|||||
+
+
+Figure 26: violin plot between different image token selection strategies over the hallubench benchmark.
+
+
+19
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+0.2
+
+
+Probability Layer
+
+
+Figure 24: Correlation comparison across layers between different image token selection strategies
+over the wemath benchmark.
+
+
+Distribution Comparison: All Four Metrics Across Probability Layers
+
+
+(p<0.1)Low
+
+
+(p<0.1)Low
+
+
+(p<0.1)Low
+
+
+(0.1 Midp<0.5) (pHigh0.5)
+
+Probability Layer
+
+
+1.00
+
+
+0.75
+
+
+0.50
+
+
+0.25
+
+
+0.00
+
+
+0.25
+
+
+0.50
+
+
+0.75
+
+
+(0.1 Midp<0.5) (pHigh0.5)
+
+Probability Layer
+
+
+(0.1 Midp<0.5) (pHigh0.5)
+
+Probability Layer
+
+
+0.0014
+
+
+0.0012
+
+
+0.0010
+
+
+0.0008
+
+
+0.0006
+
+
+0.0004
+
+
+0.0002
+
+
+0.0000
+
+
+(0.1 Midp<0.5) (pHigh0.5)
+
+Probability Layer
+
+
+(p<0.1)Low
+
+
+Figure 25: violin plot between different image token selection strategies over the validation set.
+
+
+Distribution Comparison: All Four Metrics Across Probability Layers
+
+
+(p<0.1)Low
+
+
+(p<0.1)Low
+
+
+(p<0.1)Low
+
+
+(0.1 Midp<0.5) (pHigh0.5)
+
+Probability Layer
+
+
+(a) Logp Diff
+
+
+1.00
+
+
+0.75
+
+
+0.50
+
+
+0.25
+
+
+0.00
+
+
+0.25
+
+
+0.50
+
+
+0.75
+
+
+(0.1 Midp<0.5) (pHigh0.5)
+
+Probability Layer
+
+
+(b) Prob Diff
+
+
+4
+
+
+2
+
+
+0
+
+
+2
+
+
+4
+
+
+6
+
+
+(c) Entropy Diff
+
+
+(0.1 Midp<0.5) (pHigh0.5)
+
+Probability Layer
+
+
+0.00175
+
+
+0.00150
+
+
+0.00125
+
+
+0.00100
+
+
+0.00075
+
+
+0.00050
+
+
+0.00025
+
+
+0.00000
+
+
+(d) Attention Score
+
+
+(0.1 Midp<0.5) (pHigh0.5)
+
+Probability Layer
+
+
+(p<0.1)Low
+
+
+**1026**
+
+**1027**
+
+
+**1028**
+
+**1029**
+
+**1030**
+
+**1031**
+
+**1032**
+
+**1033**
+
+
+**1034**
+
+**1035**
+
+**1036**
+
+**1037**
+
+**1038**
+
+**1039**
+
+
+**1040**
+
+**1041**
+
+**1042**
+
+**1043**
+
+**1044**
+
+
+**1045**
+
+**1046**
+
+**1047**
+
+**1048**
+
+**1049**
+
+**1050**
+
+
+**1051**
+
+**1052**
+
+**1053**
+
+**1054**
+
+**1055**
+
+**1056**
+
+
+**1057**
+
+**1058**
+
+**1059**
+
+**1060**
+
+**1061**
+
+**1062**
+
+
+**1063**
+
+**1064**
+
+**1065**
+
+**1066**
+
+**1067**
+
+
+**1068**
+
+**1069**
+
+**1070**
+
+**1071**
+
+**1072**
+
+**1073**
+
+
+**1074**
+
+**1075**
+
+**1076**
+
+**1077**
+
+**1078**
+
+**1079**
+
+
+Distribution Comparison: All Four Metrics Across Probability Layers
+
+
+|(a) Logp Diff|Col2|
+|---|---|
+|=3.59801<br>=0.52307<br>=0.00464|=3.59801<br>=0.52307<br>=0.00464|
+|=2.2|9702<br><br>=0.51834<br><br>=0.08257|
+|||
+|||
+
+
+|(b) Prob Diff|Col2|Col3|Col4|
+|---|---|---|---|
+|=0.59784<br>~~=0.22948~~<br>=0.00460|=0.59784<br>~~=0.22948~~<br>=0.00460|=0.59784<br>~~=0.22948~~<br>=0.00460|=0.59784<br>~~=0.22948~~<br>=0.00460|
+|=0.2|6555<br><br>=0.2|2577<br><br>=0.05873|2577<br><br>=0.05873|
+|||||
+|||||
+|||||
+|||||
+
+
+|(c) Entropy Diff|Col2|Col3|Col4|
+|---|---|---|---|
+|=-0.14322<br>~~=-0.22669~~<br>=-0.01893|=-0.14322<br>~~=-0.22669~~<br>=-0.01893|=-0.14322<br>~~=-0.22669~~<br>=-0.01893|=-0.14322<br>~~=-0.22669~~<br>=-0.01893|
+|=0.7|2036<br><br>=0.4|3199<br><br>=0.1|3319|
+|||||
+|||||
+|||||
+|||||
+
+
+|(d) Attention Score|Col2|Col3|Col4|
+|---|---|---|---|
+|~~=0.00024~~<br>~~=0.00014~~<br>~~=0.00008~~|~~=0.00024~~<br>~~=0.00014~~<br>~~=0.00008~~|~~=0.00024~~<br>~~=0.00014~~<br>~~=0.00008~~|~~=0.00024~~<br>~~=0.00014~~<br>~~=0.00008~~|
+|=0.0|0018<br><br>~~=0.0~~|~~0014~~<br><br>=0.0|0009|
+|||||
+|||||
+|||||
+|||||
+
+
+Figure 27: violin plot between different image token selection strategies over the wemath benchmark.
+
+
+Figure 28: Distribution of selected tokens over the sampled rollouts, where we employ the QwenVL-2.5 7B model with a batch of 512 samples, each sample generates 16 rollout responses.
+
+
+20
+
+
+(p<0.1)Low
+
+
+(p<0.1)Low
+
+
+(p<0.1)Low
+
+
+(0.1 Midp<0.5) (pHigh0.5)
+
+Probability Layer
+
+
+1.00
+
+
+0.75
+
+
+0.50
+
+
+0.25
+
+
+0.00
+
+
+0.25
+
+
+0.50
+
+
+0.75
+
+
+(0.1 Midp<0.5) (pHigh0.5)
+
+Probability Layer
+
+
+2
+
+
+1
+
+
+0
+
+
+1
+
+
+2
+
+
+3
+
+
+4
+
+
+5
+
+
+(0.1 Midp<0.5) (pHigh0.5)
+
+Probability Layer
+
+
+0.0012
+
+
+0.0010
+
+
+0.0008
+
+
+0.0006
+
+
+0.0004
+
+
+0.0002
+
+
+0.0000
+
+
+(0.1 Midp<0.5) (pHigh0.5)
+
+Probability Layer
+
+
+15
+
+
+10
+
+
+5
+
+
+0
+
+
+5
+
+
+(p<0.1)Low

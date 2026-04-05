@@ -133,7 +133,7 @@ def _snap_score(raw: float) -> float:
 
 
 async def review_single_paper(
-    paper_id: str, paper_path: Path, parallel: bool = False, skip_related_work: bool = False, skip_spark: bool = False, skip_neutral: bool = False, calibration_context: str = "", cal_dir: str = "",
+    paper_id: str, paper_path: Path, parallel: bool = False, skip_related_work: bool = False, skip_spark: bool = False, skip_neutral: bool = False, calibration_context: str = "", cal_dir: str = "", gt_score: float | None = None,
 ) -> dict:
     """Run the full pipeline on one paper."""
     paper_content = paper_path.read_text(encoding="utf-8", errors="replace")
@@ -215,6 +215,7 @@ async def review_single_paper(
         skip_neutral=skip_neutral,
         skip_spark=skip_spark,
         skip_related_work=skip_related_work,
+        gt_score=gt_score
     )
     total_cost += merger_cost
     score = round(float(score), 1)
@@ -369,7 +370,7 @@ async def main(n_samples: int = 10, seed: int = 42, parallel: bool = False, skip
             for attempt in range(1, max_paper_retries + 1):
                 start = time.time()
                 try:
-                    review_result = await review_single_paper(pid, paper_path, parallel=parallel, skip_related_work=skip_related_work, skip_spark=skip_spark, skip_neutral=skip_neutral, calibration_context=calibration_context, cal_dir=cal_dir)
+                    review_result = await review_single_paper(pid, paper_path, parallel=parallel, skip_related_work=skip_related_work, skip_spark=skip_spark, skip_neutral=skip_neutral, calibration_context=calibration_context, cal_dir=cal_dir, gt_score=paper_info["avg_score"])
                     elapsed = time.time() - start
 
                     pred_score = review_result["predicted_score"]

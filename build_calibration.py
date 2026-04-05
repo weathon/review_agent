@@ -60,7 +60,7 @@ def sample_one_per_bin(papers: list[dict], seed: int) -> list[dict]:
         if not bins[k]:
             continue
         # Take more from borderline bins
-        n_take = 10 # + BORDERLINE_EXTRA if k in BORDERLINE_BINS else 1
+        n_take = 5 # + BORDERLINE_EXTRA if k in BORDERLINE_BINS else 1
         n_take = min(n_take, len(bins[k]))
         for j in range(n_take):
             samples.append(bins[k][j])
