@@ -30,6 +30,8 @@ Two separate checks:
 #### 7a. Internal Consistency: Does the review's own content justify the score it gives? A review that lists mostly strengths with minor weaknesses but gives a low score is internally inconsistent. Similarly, a review that identifies fundamental flaws but gives a high score is inconsistent. Ignore the GT score for this check — only look at whether the review's arguments match its own conclusion.
 #### 7b. GT Deviation: Compare the review's score against the ground truth score. If the deviation is large (3+ points on a 1-10 scale), check whether the review's content explains the gap. A large deviation is not automatically a failure — the review might have identified real issues that human reviewers missed, or vice versa. Flag this only if the deviation is large AND the review's reasoning does not provide a plausible explanation for it. Also consider whether the deviation stems from other failure modes (misunderstanding, scope creep, generic criticism).
 
+### Unrelated "related work"
+Are the related works suggested actually not related?
 
 `failure_count` is the number of failure modes flagged as true.
 """

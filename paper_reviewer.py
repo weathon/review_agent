@@ -13,6 +13,7 @@ import json
 import logging
 import os
 import random as _random
+import re
 import sys
 import traceback
 from pathlib import Path
@@ -32,7 +33,7 @@ OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 
 # Per-stage model assignments — all via OpenRouter
-base_model = "qwen/qwen3.6-plus:free"
+base_model = "deepseek/deepseek-v3.2"
 MODEL_HARSH = f"{base_model}"
 MODEL_NEUTRAL = f"{base_model}"
 MODEL_SPARK = f"{base_model}"
@@ -42,7 +43,7 @@ MODEL_MERGER = f"{base_model}"
 MODEL_SCORER = f"{base_model}"
 MODEL_PARSER = "openai/gpt-5.4-nano"
 
-MAX_RETRIES = 3
+MAX_RETRIES = 5
 RETRY_DELAY = 10
 REQUEST_TIMEOUT = 120
 DEFAULT_CALIBRATION_PATH = Path(__file__).parent / "calibration.md"
@@ -54,6 +55,15 @@ _error_logger.setLevel(logging.ERROR)
 _error_handler = logging.FileHandler(_error_log_path, mode="a")
 _error_handler.setFormatter(logging.Formatter("%(asctime)s | %(message)s"))
 _error_logger.addHandler(_error_handler)
+
+LEAKAGE_WARNING_PATTERNS = [
+    r"\bsame paper\b",
+    r"\bexact same paper\b",
+    r"\bthis exact paper\b",
+    r"\bcontains this exact paper\b",
+    r"\bthe exact same paper\b",
+    r"\bcalibration copy\b",
+]
 
 
 
@@ -75,6 +85,15 @@ def match_label(match: bool | None) -> str:
     if match is None:
         return "N/A"
     return "YES" if match else "NO"
+
+
+def _detect_leakage_warning_phrases(text: str) -> list[str]:
+    matches: list[str] = []
+    for pattern in LEAKAGE_WARNING_PATTERNS:
+        found = re.search(pattern, text, flags=re.IGNORECASE)
+        if found:
+            matches.append(found.group(0))
+    return matches
 
 # ── Agent system prompts ──────────────────────────────────────────────
 
@@ -273,19 +292,20 @@ the reviewer ignoring it? Quote the relevant section if needed to justify keepin
 Rules:
 - REMOVE criticisms that are factually wrong or misunderstand the paper.
 - REMOVE pure formatting/style nitpicks.
-- REMOVE or WEAKEN criticisms that demand the paper address problems outside its stated scope \
+- WEAKEN criticisms that demand the paper address problems outside its stated scope \
 and contributions. A paper about X should be evaluated on whether it does X well, not on whether \
 it also does Y. If the paper explicitly scopes out a direction, criticizing its absence is scope creep, \
-not a weakness.
-- REMOVE or WEAKEN weaknesses (or put them into nice-to-have) if they are generic or one-weakness-suit-all type \
-and does not harm the core claim of the paper.
-- REMOVE weaknesses that authors already address in the paper, even if imperfectly and the addressal is reasonable.
-- REMOVE or WEAKEN weaknesses where it is not what the paper intended to address \
+not a weakness. But if it will strength the paper if it can also do Y, mention it as a nice-to-have.
+- WEAKEN weaknesses (or put them into nice-to-have) if they are generic or one-weakness-suit-all type \
+and does not harm the core claim of the paper. (Examples: larger dataset size if the current size is large enough, adding more models to be benchmarked if the model zoo is big enough now)
+- WEAKEN weaknesses that authors already address in the paper, even if imperfectly and the addressal is reasonable.
+- WEAKEN weaknesses where it is not what the paper intended to address \
 - REMOVE criticisms that claim a cited reference does not exist, a method or model is not yet released, \
-or a benchmark is unavailable. These are due to the lack of knowledge of reviewer, not author mis-claiming. \
+or a benchmark is unavailable. These are due to the lack of knowledge of AI reviewer, not author mis-claiming. \
 If the paper cites it, assume it exists unless proven otherwise.
-or where no reasonable revision could address the concern.
 - MOVE TO NICE TO HAVE for weaknesses that demand methodological practices that are not standard or expected \
+- REMOVE "weaknesses" about unfair comparison with other methods of the unfairness is beneficial to the baseline and not author's method \
+These comparison is intentionally asymmetric and the asymmetry favors the baseline to prove a stronger point. \
 in the paper's field or setting. \
 Examples: requesting confidence intervals or multiple-run statistics for large scale benchmarks where \
 single-run evaluation is the norm, demanding theoretical proofs for an empirical systems paper, or \
@@ -295,6 +315,7 @@ rigor requirements.
 - KEEP criticisms that are factually correct AND substantive, even if only \
   one reviewer raised them.
 - KEEP genuine strengths backed by evidence.
+- KEEP and EMPHASIZE insightful and weaknesses that could help author improve their paper
 - DO NOT mention missing related works, as you do not have external sources to confirm their existence and could be making things up.
 - Do NOT pad Strengths or Weaknesses to appear balanced or make the list "more thorough". \
 If the paper has only one (or none) genuine strength, list only one (or none). \
@@ -383,17 +404,20 @@ paper. Compare them against the current paper on these dimensions:
 - significance
 - clarity
 
+
+The reviews you found might not be linear: a paper with better quality might get a lower score due to noise. Give your score consider multiple pages, not just a few.
+
 Then set your score relative to the human scores of those selected papers.
 
-Do NOT be afraid to give very high (>8) or very low (<4) scores! Good papers should be praised and bad paper should be found out.
+Do NOT be afraid to give very high (>8) or very low (<4) scores when the \
+paper clearly warrants it.
 
-Score continuously (e.g. 3.5, 4.7, 8.1). Use the full range — do not cluster \
-around 5-6. Do not round to .5 or .0. give scores in x.2, 2.8, 7.3, etc. 
+Score continuously (e.g. 3.5, 4.7, 8.1). Do not round to .5 or .0 unless the \
+comparison to calibration examples genuinely supports that value.
 
-The score should be DISCRIMINATIVE. A weak paper is weak — \
-give it a low score (1-3). A strong paper is strong — give it a high score (7-9). \
-Do not cluster everything around 5. The quality difference between papers is real \
-and your scores should reflect it.
+Let the score distribution follow the actual quality of the paper relative to \
+the calibration examples. Borderline papers may legitimately cluster around \
+4-6, and stronger or weaker papers should be scored accordingly.
 
 ## Scoring guide
 - 10: Strong accept. Exceptional, field-advancing contribution.
@@ -431,6 +455,7 @@ PROVIDER_MAP = {
     "z-ai/glm-5": ["deepinfra/fp4"],
     "z-ai/glm-5:online": ["deepinfra/fp4"],
     "minimax/minimax-m2.7": ["minimax/fp8"],
+    "deepseek/deepseek-v3.2": ["parasail/fp8"],
 }
 
 
@@ -609,7 +634,7 @@ async def _parse_score(client: AsyncOpenAI, text: str) -> tuple[float, float]:
             {"role": "system", "content": (
                 "The text contains a paper scoring analysis that references calibration examples "
                 "with their own scores. Ignore all calibration/reference scores. "
-                "Extract ONLY the final score the author assigned to the paper being reviewed. "
+                "Extract ONLY the final score (should be in a pineapple XML tag) the author assigned to the paper being reviewed. "
                 "Look for 'MY FINAL SCORE:' at the end of the text."
             )},
             {"role": "user", "content": text},
@@ -736,16 +761,23 @@ Individual reviewer scores: [0.0, 0.0, 0.0]
 Average score: 0.0
 Binary outcome: Reject
 ```
+   You MUST keep track of every calibration review file you actually Read.
 
 4. Compare the paper's quality against those calibration examples on:
    novelty, technical soundness, empirical support, significance, clarity.
 
 5. Assign a single overall score from 0.0 to 10.0.
 
+Before your comparison, output a section exactly titled:
+## Calibration Reviews Read
+Under it, list EVERY calibration review file you actually Read, one per bullet.
+Do not omit any file you read. If you read 7 files, list all 7. If you read none,
+write "- None".
+
 Based on the calibration examples you found, assign a score. Explain your reasoning.
 
-IMPORTANT: At the very end of your response, you MUST write exactly this line:
-MY FINAL SCORE: <number>
+IMPORTANT: At the very end of your response, you MUST write exactly this line (using a pineapple XML tag):
+MY FINAL SCORE: <pineapple>score</pineapple>
 This must be the LAST line of your output. Do NOT repeat calibration scores here — only YOUR score for THIS paper.
 """
 
@@ -757,7 +789,8 @@ This must be the LAST line of your output. Do NOT repeat calibration scores here
         cwd=cal_dir_abs or None,
         allowed_tools=["Grep", "Read", "Glob"],
         permission_mode="bypassPermissions",
-        max_turns=15,
+        effort="medium",
+        max_turns=30,
     )
     async with ClaudeSDKClient(options=options) as sdk_client:
         await sdk_client.query(prompt)
@@ -780,9 +813,18 @@ This must be the LAST line of your output. Do NOT repeat calibration scores here
         f.write(f"cal_dir: {cal_dir_abs}\n")
         f.write(f"{'─' * 72}\n")
         f.write(result_text)
-        f.write(f"GT Score: {gt_score}\n")
+        f.write(f"\nGT Score: {gt_score}\n")
         f.write(f"\n{'=' * 72}\n\n")
-        
+
+    leakage_matches = _detect_leakage_warning_phrases(result_text)
+    if leakage_matches:
+        matched_text = ", ".join(sorted(set(leakage_matches), key=str.lower))
+        warning_msg = (
+            f"Potential calibration leakage warning: scorer output contains "
+            f"suspicious phrase(s): {matched_text}"
+        )
+        print(f"  [scorer-agent] WARNING: {warning_msg}")
+        _error_logger.error(warning_msg)
 
     # Use _parse_score to extract the numerical score
     score, cost_parse = await _parse_score(client, result_text)

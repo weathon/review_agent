@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -euo pipefail
+# set -euo pipefail
 
-cd "$(dirname "$0")"
+# cd "$(dirname "$0")"
 python gradio_app.py

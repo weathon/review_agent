@@ -11,6 +11,42 @@ SCALE = [0, 2, 4, 6, 8, 10]
 def round_to_scale(x):
     return min(SCALE, key=lambda v: abs(v - x))
 
+
+def one_vs_rest_baseline(df, gt_score_cols):
+    """Estimate human reliability via leave-one-reviewer-out predictions."""
+    rest_means = []
+    heldout_scores = []
+    paper_pairs = 0
+
+    for _, row in df.iterrows():
+        human = [float(row[c]) for c in gt_score_cols if pd.notna(row[c])]
+        if len(human) < 2:
+            continue
+        paper_pairs += len(human)
+        for idx, heldout in enumerate(human):
+            others = human[:idx] + human[idx + 1:]
+            if not others:
+                continue
+            rest_means.append(float(np.mean(others)))
+            heldout_scores.append(float(heldout))
+
+    if len(rest_means) < 2:
+        return None
+
+    pearson, _ = stats.pearsonr(rest_means, heldout_scores)
+    spearman, _ = stats.spearmanr(rest_means, heldout_scores)
+    mae = float(np.mean(np.abs(np.array(rest_means) - np.array(heldout_scores))))
+
+    return {
+        "n_pairs": len(rest_means),
+        "n_papers": paper_pairs,
+        "pearson": float(pearson),
+        "spearman": float(spearman),
+        "mae": mae,
+        "rest_means": rest_means,
+        "heldout_scores": heldout_scores,
+    }
+
 def analyze_and_plot(path):
     df = pd.read_csv(path)
     gt_score_cols = [c for c in df.columns if c.startswith("gt_score_")]
@@ -32,6 +68,7 @@ def analyze_and_plot(path):
     mae_raw = np.mean(np.abs(pred - gt_avg))
     mae_rounded = np.mean(np.abs(pred_rounded - gt_avg))
     bias_raw = np.mean(pred - gt_avg)
+    one_vs_rest = one_vs_rest_baseline(df, gt_score_cols)
 
     # Weighted MAE: weight by inverse frequency of GT score bins
     # Bins: [0,2), [2,4), [4,6), [6,8), [8,10]
@@ -74,6 +111,12 @@ def analyze_and_plot(path):
     print(f"  Weighted MAE (raw):    {wmae_raw:.4f}")
     print(f"  Weighted MAE (rounded):{wmae_rounded:.4f}")
     print(f"  Bias (pred-gt):        {bias_raw:+.4f}")
+    if one_vs_rest is not None:
+        print(f"  {'─'*45}")
+        print(f"  Human one-vs-rest baseline ({one_vs_rest['n_pairs']} held-out reviews):")
+        print(f"    Spearman:            {one_vs_rest['spearman']:.4f}")
+        print(f"    Pearson:             {one_vs_rest['pearson']:.4f}")
+        print(f"    MAE:                 {one_vs_rest['mae']:.4f}")
     # Show bin breakdown
     print(f"  {'─'*45}")
     print(f"  Score bin weights (inverse freq):")
@@ -96,7 +139,10 @@ def analyze_and_plot(path):
     if n_pos > 0 and n_neg > 0:
         auroc = roc_auc_score(gt_binary, pred)
         fpr, tpr, thresholds = roc_curve(gt_binary, pred)
+        human_auroc = roc_auc_score(gt_binary, gt_avg)
+        human_fpr, human_tpr, _ = roc_curve(gt_binary, gt_avg)
         print(f"  AUROC (score→A/R):     {auroc:.4f}")
+        print(f"  AUROC (human avg):     {human_auroc:.4f}")
         # Find optimal threshold (Youden's J)
         j_scores = tpr - fpr
         best_idx = np.argmax(j_scores)
@@ -110,7 +156,9 @@ def analyze_and_plot(path):
     else:
         auroc = None
         auprc = None
+        human_auroc = None
         fpr, tpr = None, None
+        human_fpr, human_tpr = None, None
         print(f"  AUROC/AUPRC: N/A (only one class present: {n_pos} Accept, {n_neg} Reject)")
 
     if n_border > 0:
@@ -159,26 +207,50 @@ def analyze_and_plot(path):
     ax.set_title("Raw Scores", fontsize=13)
     ax.set_xlim(mn, mx); ax.set_ylim(mn, mx); ax.set_aspect("equal")
     ax.grid(True, alpha=0.2)
-    ax.text(0.05, 0.95, f"Spearman: {sp_raw:.3f}\nPearson: {pe_raw:.3f}\nMAE: {mae_raw:.3f}\nBias: {bias_raw:+.3f}\nn = {len(df)}",
+    ax.text(0.05, 0.95, f"Spearman: {sp_raw:.3f}\nPearson: {pe_raw:.3f}\nMAE: {mae_raw:.3f}\nBias: {bias_raw:+.3f}\nRounded human match: {match_any}/{len(df)} ({match_any/len(df):.0%})\nn = {len(df)}",
             transform=ax.transAxes, fontsize=10, va="top",
             bbox=dict(boxstyle="round,pad=0.4", facecolor="wheat", alpha=0.8))
     ax.legend(handles=legend_dots, fontsize=9, loc="lower right")
 
-    # Top-right: rounded
+    # Top-right: human one-vs-rest baseline scatter or ROC baseline if unavailable
     ax2 = axes[0, 1]
-    rng = np.random.default_rng(42)
-    jx, jy = rng.uniform(-0.15, 0.15, len(df)), rng.uniform(-0.15, 0.15, len(df))
-    ax2.scatter(gt_avg + jx, pred_rounded + jy, c=colors, s=80, edgecolors="white", linewidth=0.8, zorder=3)
-    ax2.plot([0, 11], [0, 11], "k--", alpha=0.3)
-    ax2.set_xlabel("Human Average Score", fontsize=12)
-    ax2.set_ylabel("Agent Rounded Score", fontsize=12)
-    ax2.set_title("Rounded to ICLR Scale {1,3,5,6,8,10}", fontsize=13)
-    ax2.set_yticks(SCALE); ax2.set_xlim(0, 11); ax2.set_ylim(0, 11); ax2.set_aspect("equal")
-    ax2.grid(True, alpha=0.2)
-    ax2.text(0.05, 0.95, f"Spearman: {sp_rnd:.3f}\nMAE: {mae_rounded:.3f}\nHuman match: {match_any}/{len(df)} ({match_any/len(df):.0%})",
-             transform=ax2.transAxes, fontsize=10, va="top",
-             bbox=dict(boxstyle="round,pad=0.4", facecolor="wheat", alpha=0.8))
-    ax2.legend(handles=legend_dots, fontsize=9, loc="lower right")
+    if one_vs_rest is not None and one_vs_rest.get("rest_means") and one_vs_rest.get("heldout_scores"):
+        left = np.array(one_vs_rest["rest_means"])
+        right = np.array(one_vs_rest["heldout_scores"])
+        ax2.scatter(left, right, color="#f39c12", s=70, edgecolors="white", linewidth=0.8, alpha=0.9)
+        mn2, mx2 = min(left.min(), right.min()) - 0.5, max(left.max(), right.max()) + 0.5
+        ax2.plot([mn2, mx2], [mn2, mx2], "k--", alpha=0.3)
+        if len(left) >= 2:
+            m2, b2 = np.polyfit(left, right, 1)
+            xs2 = np.linspace(mn2, mx2, 100)
+            ax2.plot(xs2, m2 * xs2 + b2, color="#c0392b", alpha=0.7)
+        ax2.set_xlabel("Mean of Other Reviewers", fontsize=12)
+        ax2.set_ylabel("Held-Out Reviewer Score", fontsize=12)
+        ax2.set_title("Human One-vs-Rest Baseline", fontsize=13)
+        ax2.set_xlim(mn2, mx2); ax2.set_ylim(mn2, mx2); ax2.set_aspect("equal")
+        ax2.grid(True, alpha=0.2)
+        ax2.text(
+            0.05, 0.95,
+            f"Pearson: {one_vs_rest['pearson']:.3f}\n"
+            f"Spearman: {one_vs_rest['spearman']:.3f}\n"
+            f"MAE: {one_vs_rest['mae']:.3f}\n"
+            f"{one_vs_rest['n_pairs']} held-out reviews",
+            transform=ax2.transAxes, fontsize=10, va="top",
+            bbox=dict(boxstyle="round,pad=0.4", facecolor="wheat", alpha=0.8)
+        )
+    elif has_curves:
+        ax2.plot(human_fpr, human_tpr, color="#f39c12", lw=2.5,
+                 label=f"Human Avg Baseline (AUROC={human_auroc:.3f})")
+        ax2.plot([0, 1], [0, 1], "k--", alpha=0.3, label="Random (0.500)")
+        ax2.set_xlabel("False Positive Rate", fontsize=12)
+        ax2.set_ylabel("True Positive Rate", fontsize=12)
+        ax2.set_title("ROC Curve (Human Average Score Baseline)", fontsize=13)
+        ax2.set_xlim(-0.02, 1.02); ax2.set_ylim(-0.02, 1.02)
+        ax2.set_aspect("equal")
+        ax2.grid(True, alpha=0.2)
+        ax2.legend(fontsize=9, loc="lower right")
+    else:
+        ax2.axis("off")
 
     # Bottom-left: ROC curve
     if has_curves:
@@ -207,6 +279,7 @@ def analyze_and_plot(path):
         ax4.grid(True, alpha=0.2)
         ax4.legend(fontsize=9, loc="lower left")
     else:
+        axes[0, 1].axis("off")
         axes[1, 0].axis("off")
         axes[1, 1].axis("off")
 

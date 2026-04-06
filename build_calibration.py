@@ -60,7 +60,7 @@ def sample_one_per_bin(papers: list[dict], seed: int) -> list[dict]:
         if not bins[k]:
             continue
         # Take more from borderline bins
-        n_take = 5 # + BORDERLINE_EXTRA if k in BORDERLINE_BINS else 1
+        n_take = 10 # + BORDERLINE_EXTRA if k in BORDERLINE_BINS else 1
         n_take = min(n_take, len(bins[k]))
         for j in range(n_take):
             samples.append(bins[k][j])
@@ -153,20 +153,6 @@ def shorten_title(title: str, max_len: int = 60) -> str:
     return name or "untitled"
 
 
-def build_calibration_md(results: list[dict]) -> str:
-    """Build compact calibration markdown from final review + human scores."""
-    parts = []
-    for i, r in enumerate(results, 1):
-        parts.append(f"=== CALIBRATION EXAMPLE {i} ===\n")
-        parts.append("# Final Consolidated Review")
-        parts.append(r["merged_review"])
-        parts.append("")
-        parts.append("# Actual Human Scores")
-        parts.append(f"Individual reviewer scores: {r['scores']}")
-        parts.append(f"Average score: {r['avg_score']:.1f}")
-        parts.append(f"Binary outcome: {r['gt_binary']}\n")
-    return "\n".join(parts)
-
 
 def save_calibration_files(results: list[dict], cal_dir: Path, papers_dir: Path) -> None:
     """Save each calibration example as {name}_review.md + {name}_paper.md in cal_dir."""
@@ -232,6 +218,15 @@ async def main(
     samples = sample_one_per_bin(available, seed)
 
     results = []
+    results_lock = asyncio.Lock()
+    cal_dir = Path(__file__).parent / "cal"
+    ids_path = Path(__file__).parent / "calibration_ids.json"
+
+    def _save_all(results_snapshot: list[dict]) -> None:
+        """Save all accumulated results to disk."""
+        save_calibration_files(results_snapshot, cal_dir, papers_dir)
+        ids = [r["paper_id"] for r in results_snapshot]
+        ids_path.write_text(json.dumps(ids, indent=2))
 
     async def process_one(i, paper_info):
         pid = paper_info["paper_id"]
@@ -255,7 +250,7 @@ async def main(
                 elapsed = time.time() - start
                 print(f"  [{pid}] Done in {elapsed:.1f}s (attempt {attempt})")
 
-                return {
+                result = {
                     **outputs,
                     "paper_id": pid,
                     "title": paper_info.get("title", pid),
@@ -265,6 +260,14 @@ async def main(
                     "gt_binary": paper_info["gt_binary"],
                     "error": None,
                 }
+
+                # Save incrementally after each paper completes
+                async with results_lock:
+                    results.append(result)
+                    _save_all(list(results))
+                    print(f"  [{pid}] Saved ({len(results)} papers so far)")
+
+                return result
             except Exception as e:
                 elapsed = time.time() - start
                 wait = min(30 * attempt, 120)
@@ -280,12 +283,11 @@ async def main(
             return await process_one(i, paper_info)
 
     print(f"Running {len(samples)} calibration papers (concurrency={CONCURRENCY}) ...")
-    all_results = await asyncio.gather(*(
+    await asyncio.gather(*(
         limited(i, p) for i, p in enumerate(samples, 1)
     ))
 
-    results = [r for r in all_results if not r.get("error")]
-    failures = [r for r in all_results if r.get("error")]
+    failures = [r for r in results if r.get("error")]
 
     if failures:
         print(f"\nSkipped {len(failures)} failed calibration papers:")
@@ -294,21 +296,8 @@ async def main(
     if not results:
         raise RuntimeError("No calibration papers completed successfully.")
 
-    # Save calibration.md (single file, kept for backward compat)
-    cal_md = build_calibration_md(results)
-    cal_path = Path(__file__).parent / "calibration.md"
-    cal_path.write_text(cal_md, encoding="utf-8")
-    print(f"\nCalibration doc saved to: {cal_path} ({len(cal_md):,} chars)")
-
-    # Save individual calibration files to cal/
-    cal_dir = Path(__file__).parent / "cal"
-    save_calibration_files(results, cal_dir, papers_dir)
-
-    # Save calibration_ids.json
-    ids = [r["paper_id"] for r in results]
-    ids_path = Path(__file__).parent / "calibration_ids.json"
-    ids_path.write_text(json.dumps(ids, indent=2))
-    print(f"Calibration IDs saved to: {ids_path} ({len(ids)} papers)")
+    print(f"\nCalibration files saved to: {cal_dir}")
+    print(f"Calibration IDs saved to: {ids_path} ({len(results)} papers)")
 
     # Summary
     print(f"\n{'=' * 72}")
@@ -317,8 +306,6 @@ async def main(
         print(f"  {r['paper_id']}: avg={r['avg_score']:.1f} scores={r['scores']} dec={r['gt_binary']}")
     if failures:
         print(f"Failed: {len(failures)}")
-    print(f"\nTo use in benchmark:")
-    print(f"  python run_iclr_bench.py 10 42 --parallel --data-dir {data_dir or 'AI-Scientist/...'} --calibration calibration.md")
 
 
 if __name__ == "__main__":
